@@ -228,6 +228,7 @@ export async function handleResolveConversationRewindBoundary(
       ...(result.checkpoint !== undefined ? { checkpoint: result.checkpoint } : {}),
       ...(result.target !== undefined ? { target: result.target } : {}),
       missingFacts: result.missingFacts,
+      diagnostics: result.diagnostics,
     } as unknown as DaemonOutboundMessage;
     transport.send(ws, correlateResponse(boundaryMsg, msg));
   } catch (error) {
@@ -267,6 +268,7 @@ export async function handlePreviewConversationRewindByBoundary(
       ...(result.checkpoint !== undefined ? { checkpoint: result.checkpoint } : {}),
       ...(result.target !== undefined ? { target: result.target } : {}),
       missingFacts: result.missingFacts,
+      diagnostics: result.diagnostics,
       ...(result.plan !== undefined ? { plan: result.plan } : {}),
       ...(result.runtimeTargetLeafId !== undefined ? { runtimeTargetLeafId: result.runtimeTargetLeafId } : {}),
     } as unknown as DaemonOutboundMessage;

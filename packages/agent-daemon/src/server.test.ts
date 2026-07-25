@@ -167,7 +167,7 @@ describe("DaemonServer orchestrated runs", () => {
         prompt: "stream benchmark cancel"
       })
     );
-    // 等待 turn-start 事件，确�?cancel-run �?provider streaming 期间被发�?
+    // 等待 turn-start 事件，确�?cancel-run �?provider streaming 期间被发�?
     await collectMessages(ws, (message) => {
       return message.type === "event" && message.runId === "run_stream_bench_cancel" && message.event?.type === "turn-start";
     });
@@ -3564,8 +3564,8 @@ async function seedWorkflowStore(
   sessionEventLogDir: string,
   workflow: WorkflowDefinition
 ): Promise<void> {
-  // WorkflowStore 拆分�?workflows.json (workflows only) + workflows-runs.json (runs only)�?
-  // seed 时无 runs，仅�?workflows 文件；runs 文件不存在时 store 会按空数组处理�?
+  // WorkflowStore 拆分�?workflows.json (workflows only) + workflows-runs.json (runs only)�?
+  // seed 时无 runs，仅�?workflows 文件；runs 文件不存在时 store 会按空数组处理�?
   await writeFile(
     join(sessionEventLogDir, "workflows.json"),
     `${JSON.stringify(

@@ -248,11 +248,13 @@ export class BackgroundCommandManager {
       }
     };
 
-    record.timeout = setTimeout(() => {
+    record.timeout = setTimeout(async () => {
       if (isTerminalState(record.state)) return;
       record.timedOut = true;
       record.updatedAt = Date.now();
-      terminateChild(child, this.guard()).then(diag => { record.terminationDiagnostics.push(...diag); });
+      const diag = await terminateChild(child, this.guard());
+      record.terminationDiagnostics.push(...diag);
+      this.finish(record, { state: "timed-out", error: `Command timed out after ${timeoutMs}ms` });
     }, timeoutMs);
     record.heartbeat = setInterval(() => {
       if (isTerminalState(record.state)) return;
@@ -276,7 +278,9 @@ export class BackgroundCommandManager {
           : exitCode === 0
             ? "succeeded"
             : "failed";
-      this.finish(record, { state, exitCode, signal });
+      const finalExitCode = record.cancelRequested ? null : exitCode;
+      const finalSignal = record.cancelRequested ? "cancelled" : signal;
+      this.finish(record, { state, exitCode: finalExitCode, signal: finalSignal });
     });
 
     return this.toSnapshot(record);
@@ -291,13 +295,16 @@ export class BackgroundCommandManager {
     return [...this.tasks.values()].map((record) => this.toSnapshot(record));
   }
 
-  cancel(taskId: string): BackgroundCommandSnapshot {
+  async cancel(taskId: string): Promise<BackgroundCommandSnapshot> {
     const record = this.requireRecord(taskId);
-    if (isTerminalState(record.state)) return this.toSnapshot(record);
+    if (isTerminalState(record.state)) {
+      return this.toSnapshot(record);
+    }
     record.cancelRequested = true;
     record.updatedAt = Date.now();
     if (record.child) {
-      terminateChild(record.child, this.guard()).then(diag => { record.terminationDiagnostics.push(...diag); });
+      const diag = await terminateChild(record.child, this.guard());
+      record.terminationDiagnostics.push(...diag);
     }
     this.finish(record, { state: "cancelled", exitCode: null, signal: "cancelled" });
     return this.toSnapshot(record);
@@ -643,7 +650,7 @@ export function createBackgroundCommandTools(
             tasks.length > 0
               ? tasks.map(formatBackgroundCommandLine).join("\n")
               : "当前没有后台任务",
-          json: { tasks: toJsonValue(tasks) },
+          json: { tasks: JSON.parse(JSON.stringify(tasks)) },
         };
       },
     }),
@@ -668,7 +675,7 @@ export function createBackgroundCommandTools(
         return `stop_task: ${stringField(input, "taskId") ?? "?"}`;
       },
       async execute(input) {
-        const task = manager.cancel(requireNonEmptyString(input.taskId, "taskId"));
+        const task = await manager.cancel(requireNonEmptyString(input.taskId, "taskId"));
         policy.registerEnd(task.id, task.durationMs);
         return backgroundTaskOutput("已请求停止任务", task);
       },

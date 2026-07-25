@@ -264,6 +264,5 @@ function unconfiguredProviderStatus(): DaemonProviderStatusSnapshot {
     apiKey: { hasApiKey: false, source: "unset" }, hasDirectApiKey: false, apiKeySource: "unset",
     gateway: { ready: false, credentialConfigured: false, routeDecision: ["provider_factory_missing"] },
     lastDiagnostic: { code: "provider_factory_missing", message: "Provider factory is not configured.", updatedAt }, updatedAt,
-    lastProbeOk: undefined, lastProbeAt: undefined,
   };
 }

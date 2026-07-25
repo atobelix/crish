@@ -51,7 +51,7 @@ export function serializeMessagesForSummary(messages: AgentMessage[], options: S
       const toolCalls: string[] = [];
       for (const block of message.blocks) {
         if (block.type === "text") text += block.text;
-        else if (block.type === "thought") { if (options.includeThought !== false) thought += block.text; }
+        else if (block.type === "thought") { if (options.includeThought === true) thought += block.text; }
         else if (block.type === "tool-call") toolCalls.push(`${block.toolName}(${JSON.stringify(block.input)})`);
       }
       if (thought.trim()) {

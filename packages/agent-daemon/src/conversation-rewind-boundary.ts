@@ -41,7 +41,7 @@ export interface DaemonConversationRewindBoundaryDiagnostic {
   fact: DaemonConversationRewindBoundaryMissingFact;
   message: string;
   blocked: boolean;
-  metadata: JsonObject | undefined;
+  metadata?: JsonObject;
 }
 
 export interface ResolveConversationRewindBoundaryInput {
@@ -184,7 +184,14 @@ export async function previewConversationRewindByBoundary(
     session: session!,
     entries,
     target: resolved.target!,
-    checkpoint: resolved.checkpoint as unknown as import("@crish/agent-orchestrator").ConversationRewindCheckpointTarget | undefined,
+    // 传递 undefined 让 planConversationRewindFromTargetFacts 通过
+    // checkpointTargetFromFacts(input.target) 正确生成 ConversationRewindCheckpointTarget。
+    // resolved.checkpoint 是 CheckpointManifestRecord（manifest 层记录），与
+    // ConversationRewindCheckpointTarget（plan 层目标）类型不兼容：source 取值不同
+    // （"runtime" vs "runtime-manifest"/"git-checkpoint"），字段集合也不同。
+    // 直接传递会导致 planWorkspaceRestore 走入 git-checkpoint 分支但 checkpoint 字段
+    // 为 undefined，最终出站消息协议验证失败。
+    checkpoint: undefined,
     runs: input.orchestrator.listRuns(),
     pendingApprovals: input.approvalQueue.getPendingApprovals().map((approval) => ({
       toolCallId: approval.toolCallId,
@@ -326,7 +333,7 @@ function diagnostic(
     fact,
     message,
     blocked: true,
-    metadata: metadata ?? undefined,
+    ...(metadata !== undefined ? { metadata } : {}),
   };
 }
 

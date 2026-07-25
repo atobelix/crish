@@ -73,7 +73,7 @@ describe("background command manager", () => {
       defaultTimeoutMs: 100
     });
 
-    const started = await manager.start({ command: 'node -e "setTimeout(() => {}, 30000)"' });
+    const started = await manager.start({ command: 'node -e "setTimeout(() => {}, 30000)"', timeoutMs: 1_000 });
     const finished = await manager.waitForTask(started.id, 5_000);
 
     expect(finished).toMatchObject({

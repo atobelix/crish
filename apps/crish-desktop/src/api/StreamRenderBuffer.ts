@@ -23,6 +23,8 @@ export interface RenderFrame {
   timestamp: number;
   html: string;
   chunkUpdates: ChunkUpdate[];
+  /** 当积压超过 maxBacklogBytes 且非 force 时为 true，表示跳帧降级 */
+  degraded: boolean;
 }
 
 export class StreamRenderBuffer {
@@ -35,6 +37,8 @@ export class StreamRenderBuffer {
   private frameBudgetMs = 12;
   /** 单帧输出字符上限；默认 8192 */
   private maxBytesPerFrame = 8192;
+  /** 积压降级阈值（字节）；超过此值时非 force flush 输出降级帧 */
+  private maxBacklogBytes: number | undefined;
   /** 收到 final 标记后不再接收 push，仅 flush 剩余 */
   private finalMarked = false;
   /** 增量 markdown 渲染桥接 */
@@ -43,13 +47,16 @@ export class StreamRenderBuffer {
   onFrame: ((frame: RenderFrame) => void) | null = null;
 
   constructor(
-    options?: { frameBudgetMs?: number; maxBytesPerFrame?: number },
+    options?: { frameBudgetMs?: number; maxBytesPerFrame?: number; maxBacklogBytes?: number },
   ) {
     if (options?.frameBudgetMs != null && options.frameBudgetMs > 0) {
       this.frameBudgetMs = Math.max(1, Math.floor(options.frameBudgetMs));
     }
     if (options?.maxBytesPerFrame != null && options.maxBytesPerFrame > 0) {
       this.maxBytesPerFrame = Math.max(64, Math.floor(options.maxBytesPerFrame));
+    }
+    if (options?.maxBacklogBytes != null && options.maxBacklogBytes > 0) {
+      this.maxBacklogBytes = Math.floor(options.maxBacklogBytes);
     }
   }
 
@@ -200,7 +207,12 @@ export class StreamRenderBuffer {
       this.fullText += delta;
       this.flushedLength = this.fullText.length;
 
-      const { html, updates } = this.bridge.push(this.fullText);
+      // 积压降级：非 force 且积压超过 maxBacklogBytes 时跳过渲染
+      const degraded = !force && this.maxBacklogBytes != null && this.bufferedLength() > this.maxBacklogBytes;
+
+      const { html, updates } = degraded
+        ? { html: '', updates: [] as ChunkUpdate[] }
+        : this.bridge.push(this.fullText);
 
       const frame: RenderFrame = {
         delta,
@@ -210,6 +222,7 @@ export class StreamRenderBuffer {
         timestamp: performance.now(),
         html,
         chunkUpdates: updates,
+        degraded,
       };
       this.onFrame?.(frame);
     }

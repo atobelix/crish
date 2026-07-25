@@ -149,6 +149,9 @@ export class DaemonClientRegistry {
     const encoded = encodeOutboundMessage(message);
     if (!encoded.ok) {
       const detail = formatProtocolValidationError(encoded.error);
+      if (process.env.DEBUG_BATCHER === '1') {
+        console.error('[Encode] Refusing:', detail);
+      }
       getDaemonLogger().error('Refusing invalid outbound message', { module: 'DaemonClientRegistry', detail });
       this.reportDiagnostic({
         code: "OUTBOUND_PROTOCOL_ERROR",

@@ -105,6 +105,11 @@ export class DaemonServer {
 
   getApprovalQueue(): ApprovalQueue { return this.approvalQueue; }
 
+  /** 手动触发工作流调度器 tick（用于测试或外部触发） */
+  async tickScheduler(now: Date = new Date()) {
+    return this.workflows.tickScheduler(now);
+  }
+
   async readSessionEvents(sessionId: string, afterSequence?: number): Promise<OrchestratorEvent[]> {
     return this.orchestrator.readSessionEvents(sessionId, afterSequence);
   }
@@ -220,10 +225,16 @@ export class DaemonServer {
         return;
       }
       this.activeRuns.set(sessionId, taskMsg.runId || `run-${Date.now()}`);
-      try {
-        await rh.handleRunTaskWithOrchestrator(ws, client.id, taskMsg);
-      } finally {
+      let sessionReleased = false;
+      const releaseSession = (): void => {
+        if (sessionReleased) return;
+        sessionReleased = true;
         this.activeRuns.delete(sessionId);
+      };
+      try {
+        await rh.handleRunTaskWithOrchestrator(ws, client.id, taskMsg, { onSessionRelease: releaseSession });
+      } finally {
+        releaseSession();
       }
     });
     const handleApproval = (handlerName: "handleApproveTool" | "handleDenyTool") => async (msg: import("../types.js").DaemonInboundMessage, ws: import("ws").WebSocket) => {
@@ -260,7 +271,7 @@ export class DaemonServer {
     });
 
     const fallbackTypes = [
-      "list-sessions", "list-runs", "get-run-snapshot", "read-events",
+      "list-sessions", "list-runs", "get-run-snapshot", "read-session-events", "read-run-events",
       "create-workflow", "list-workflows", "update-workflow", "delete-workflow",
       "trigger-workflow", "list-workflow-runs", "list-plan-documents",
       "create-plan-document", "create-requirements-alignment-plan", "get-plan-document",

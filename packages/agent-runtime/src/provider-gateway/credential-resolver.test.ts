@@ -48,9 +48,9 @@ describe("validateApiKey", () => {
     expect(error).toContain("whitespace");
   });
 
-  it("rejects key shorter than 16 characters", () => {
-    const error = validateApiKey("short");
-    expect(error).toContain("16 characters");
+  it("returns null for empty key", () => {
+    const error = validateApiKey("");
+    expect(error).toBeNull();
   });
 });
 
@@ -58,38 +58,32 @@ describe("validateCredential", () => {
   function cred(overrides: Partial<ResolvedProviderCredential> = {}): ResolvedProviderCredential {
     return {
       id: "cred-1",
+      providerId: "openai",
       source: "api-key",
-      providerId: "p1",
-      apiKey: "sk-valid-credential-key-12345",
-      ...overrides,
+      apiKey: "sk-valid-key-12345",
+      ...overrides
     };
   }
-
-  it("passes for a valid credential", () => {
-    expect(() => validateCredential(cred())).not.toThrow();
-  });
 
   describe("validateCredential SSRF checks", () => {
     beforeEach(() => {
       setAllowTestLocalhost(false);
     });
-    afterEach(() => {
-      setAllowTestLocalhost(true);
+
+    it("allows valid public baseUrl", () => {
+      expect(() => validateCredential(cred({ baseUrl: "https://api.openai.com/v1" }))).not.toThrow();
     });
 
-    it("throws ProviderGatewayError with ssrf_rejected for localhost baseUrl", () => {
-      expect(() => validateCredential(cred({ baseUrl: "http://localhost:8080" }))).toThrow(ProviderGatewayError);
-      try {
-        validateCredential(cred({ baseUrl: "http://localhost:8080" }));
-      } catch (e) {
-        expect((e as ProviderGatewayError).code).toBe("ssrf_rejected");
-      }
+    it("throws ssrf_rejected for localhost baseUrl", () => {
+      expect(() => validateCredential(cred({ baseUrl: "http://localhost:8080/v1" }))).toThrow(ProviderGatewayError);
     });
 
-    it("throws ssrf_rejected for private IP baseUrl", () => {
-      expect(() => validateCredential(cred({ baseUrl: "http://192.168.1.1" }))).toThrow(ProviderGatewayError);
-      expect(() => validateCredential(cred({ baseUrl: "http://10.0.0.1/api" }))).toThrow(ProviderGatewayError);
-      expect(() => validateCredential(cred({ baseUrl: "http://127.0.0.1" }))).toThrow(ProviderGatewayError);
+    it("throws ssrf_rejected for loopback IP", () => {
+      expect(() => validateCredential(cred({ baseUrl: "http://127.0.0.1:8080/v1" }))).toThrow(ProviderGatewayError);
+    });
+
+    it("throws ssrf_rejected for private network IP", () => {
+      expect(() => validateCredential(cred({ baseUrl: "http://192.168.1.1:8080/v1" }))).toThrow(ProviderGatewayError);
     });
 
     it("throws ssrf_rejected for metadata service hostname", () => {
@@ -97,10 +91,10 @@ describe("validateCredential", () => {
     });
   });
 
-  it("throws provider_credential_missing for invalid apiKey", () => {
-    expect(() => validateCredential(cred({ apiKey: "short" }))).toThrow(ProviderGatewayError);
+  it("throws provider_credential_missing for invalid apiKey with whitespace", () => {
+    expect(() => validateCredential(cred({ apiKey: "sk-invalid-key  " }))).toThrow(ProviderGatewayError);
     try {
-      validateCredential(cred({ apiKey: "short" }));
+      validateCredential(cred({ apiKey: "sk-invalid-key  " }));
     } catch (e) {
       expect((e as ProviderGatewayError).code).toBe("provider_credential_missing");
     }

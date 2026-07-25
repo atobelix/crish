@@ -51,10 +51,9 @@ export class DaemonWorkflowManager {
     this.schedulerTimer = undefined;
   }
 
-  async tickScheduler(now: Date = new Date()): Promise<void> {
+  async tickScheduler(now: Date = new Date()): Promise<WorkflowSchedulerTickResult> {
     if (this.schedulerTickTask) {
-      await this.schedulerTickTask;
-      return;
+      return this.schedulerTickTask;
     }
 
     const task = this.scheduler.tickScheduler(now).finally(() => {
@@ -63,7 +62,7 @@ export class DaemonWorkflowManager {
       }
     });
     this.schedulerTickTask = task;
-    await task;
+    return task;
   }
 
   async waitForTick(timeoutMs: number): Promise<void> {

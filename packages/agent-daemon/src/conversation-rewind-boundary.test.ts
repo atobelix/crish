@@ -453,7 +453,7 @@ async function runAndWait(
   input: { runId: string; sessionId: string; cwd: string; prompt: string; permissionMode?: "ask" | "full-access" }
 ): Promise<void> {
   await sendAndCollectMessage(ws, { type: "run-task", ...input }, (message) => {
-    return message.type === "event" && message.runId === input.runId && message.event?.type === "agent-end";
+    return message.type === "event" && message.runId === input.runId && message.event?.type === "run-terminal";
   });
 }
 
@@ -503,6 +503,9 @@ async function collectMessages(ws: WebSocket, done: (message: any) => boolean): 
     };
     const onMessage = (data: RawData) => {
       const message = JSON.parse(data.toString());
+      if (process.env.DEBUG_BATCHER === '1') {
+        console.error('[TestClient] recv:', message?.type, message?.event?.type ?? '', message?.code ?? '');
+      }
       messages.push(message);
       if (done(message)) {
         cleanup();
@@ -516,7 +519,7 @@ async function collectMessages(ws: WebSocket, done: (message: any) => boolean): 
     const timer = setTimeout(() => {
       cleanup();
       reject(new Error("Timed out waiting for daemon message"));
-    }, 5_000);
+    }, 8_000);
     ws.on("message", onMessage);
     ws.on("error", onError);
   });

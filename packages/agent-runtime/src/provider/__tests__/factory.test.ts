@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { setAllowTestLocalhost } from "../auth/base-url-validator";
 import { ProviderRegistryV2Impl, EngineProvider } from "../registry-v2";
 import { ProviderFactory } from "../factory";
 import { normalizeDeclarativeDef } from "../declarative-schema";
@@ -45,6 +46,7 @@ describe("ProviderFactory", () => {
   let factory: ProviderFactory;
 
   beforeEach(() => {
+    setAllowTestLocalhost(false);
     registry = new ProviderRegistryV2Impl();
     factory = new ProviderFactory(registry);
   });

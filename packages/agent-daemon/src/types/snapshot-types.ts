@@ -179,7 +179,7 @@ export interface DaemonClientDisconnectSnapshot {
 export interface DaemonEventStoreStatusSnapshot {
   status: "ok" | "failed";
   path: string;
-  failure: DaemonLifecycleDiagnostic | undefined;
+  failure?: DaemonLifecycleDiagnostic | undefined;
 }
 
 export type DaemonMcpReadiness =

@@ -390,17 +390,13 @@ async function terminateProcessTree(child: ChildProcess): Promise<ProcessTermina
   if (process.platform === "win32") {
     const diagnostics = [terminateWindowsProcessTree(child.pid)];
     const pid = child.pid;
-    // Phase 1: Soft kill - send WM_CLOSE / CTRL_BREAK_EVENT
     if (pid) {
       try {
-        execSync(`taskkill /PID ${pid} /T`, { timeout: 3000 });
+        execSync(`taskkill /F /PID ${pid} /T`, { timeout: 5000 });
       } catch {
-        // 进程可能未响应 WM_CLOSE，继续到 Phase 2
+        // 进程可能已经提前退出
       }
     }
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    // Phase 2: Hard kill - force terminate
-    execSync(`taskkill /F /PID ${pid} /T`, { timeout: 5000 });
     diagnostics.push({
       platform: process.platform,
       strategy: "taskkill",

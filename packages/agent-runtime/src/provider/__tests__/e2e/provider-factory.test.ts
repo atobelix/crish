@@ -24,6 +24,7 @@ describe("E2E: ProviderFactory with mock server", () => {
   });
 
   afterAll(async () => {
+    setAllowTestLocalhost(false);
     await server.stop();
   });
 

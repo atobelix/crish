@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { eventBus } from '../../src/services/EventBus';
 
 describe('EventBus Race Conditions', () => {

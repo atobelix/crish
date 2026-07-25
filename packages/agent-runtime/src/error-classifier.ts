@@ -100,10 +100,11 @@ export class ErrorClassifier {
 
     if (status === 400 || status === 422) {
       const isCtxOverflow = detectContextLengthExceeded(lowerMsg);
+      const isPayloadTooLarge = looksLikePayloadTooLargeMessage(lowerMsg);
       return buildResult(ErrorDomain.CLIENT_INVALID_INPUT, {
-        subType: isCtxOverflow ? "context_length_exceeded" : undefined,
+        subType: isCtxOverflow ? "context_length_exceeded" : isPayloadTooLarge ? "payload_too_large" : undefined,
         httpStatus: status, providerId, originalError: error,
-        legacyKind: isCtxOverflow ? "context-overflow" : "schema",
+        legacyKind: isCtxOverflow ? "context-overflow" : isPayloadTooLarge ? "payload-too-large" : "schema",
         retryable: isCtxOverflow,
       });
     }
@@ -230,6 +231,11 @@ function isAbortError(error: unknown): boolean {
 
 function detectContextLengthExceeded(msg: string): boolean {
   return /context.*length.*exceed|maximum.*context|too long|context_length_exceeded/i.test(msg);
+}
+
+export function looksLikePayloadTooLargeMessage(msg: string): boolean {
+  if (/4130\d*|model\s+version\s+4130/i.test(msg)) return false;
+  return /payload\s+too\s+large|request_too_large|entity\s+too\s+large|request\s+exceeds\s+the\s+maximum\s+size|413/i.test(msg);
 }
 
 function parseRetryAfter(headers?: Headers): number | undefined {

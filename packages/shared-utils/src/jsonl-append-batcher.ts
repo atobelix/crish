@@ -66,12 +66,16 @@ export class JsonlAppendBatcher {
   private ensureHandlePromise: Promise<void> | undefined;
 
   constructor(options: JsonlAppendBatcherOptions) {
+    const isVitest = Boolean(process.env.VITEST);
     this.options = {
       filePath: options.filePath,
       flushCount: options.flushCount ?? 50,
-      flushIntervalMs: options.flushIntervalMs ?? (process.env.VITEST ? 0 : 200),
-      fsyncOnFlush: options.fsyncOnFlush ?? true,
-      fsyncDirectoryOnFlush: options.fsyncDirectoryOnFlush ?? true,
+      flushIntervalMs: options.flushIntervalMs ?? (isVitest ? 0 : 200),
+      // Tests don't need crash-safe persistence; fsync is extremely slow on
+      // Windows and causes test timeouts when many JSONL appends happen per
+      // event. Callers can still explicitly enable fsync if needed.
+      fsyncOnFlush: options.fsyncOnFlush ?? !isVitest,
+      fsyncDirectoryOnFlush: options.fsyncDirectoryOnFlush ?? !isVitest,
       ensureLeadingNewline: options.ensureLeadingNewline ?? true,
       signal: options.signal,
     };
@@ -161,7 +165,11 @@ export class JsonlAppendBatcher {
           }
         }
       } catch (err) {
-        console.warn('[JsonlAppendBatcher] initHandle leading newline check failed:', err);
+        // ENOENT 是首次写入的正常情况（文件尚未创建），不需要警告
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code !== "ENOENT") {
+          console.warn('[JsonlAppendBatcher] initHandle leading newline check failed:', err);
+        }
       }
       this.leadingNewlineChecked = true;
     }
@@ -214,18 +222,25 @@ export class JsonlAppendBatcher {
       }
 
       try {
+        if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] writeFile start', this.options.filePath);
         await this.handle.writeFile(data, "utf8");
+        if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] writeFile done');
 
         if (this.options.fsyncOnFlush) {
+          if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] fsync file start');
           await this.handle.sync();
+          if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] fsync file done');
         }
 
         if (this.options.fsyncDirectoryOnFlush) {
           // best-effort：tmpfs/网络文件系统等可能不支持目录 fsync
+          if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] fsync dir start', dirname(this.options.filePath));
           await fsyncDirectoryPathAsync(dirname(this.options.filePath), "best-effort");
+          if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] fsync dir done');
         }
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code;
+        if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] error:', code, (error as Error).message);
         if (code === "ENOENT" || code === "EBADF") {
           // Ignore if directory/file was deleted/closed during async background flush
           return;

@@ -1,10 +1,29 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useLayoutStore } from '../../src/store/layoutStore';
 import { errorStore } from '../../src/services/ErrorStore';
 
+function createStorageMock(): Storage {
+  const store = new Map<string, string>();
+  return {
+    get length() { return store.size; },
+    clear() { store.clear(); },
+    getItem(key: string) { return store.get(key) ?? null; },
+    key(index: number) { return [...store.keys()][index] ?? null; },
+    removeItem(key: string) { store.delete(key); },
+    setItem(key: string, value: string) { store.set(key, String(value)); },
+  };
+}
+
 describe('Error Recovery', () => {
   beforeEach(() => {
+    vi.stubGlobal('sessionStorage', createStorageMock());
+    vi.stubGlobal('localStorage', createStorageMock());
+    vi.stubGlobal('window', { dispatchEvent: vi.fn() });
     useLayoutStore.setState(useLayoutStore.getInitialState());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('survives AppErrorBoundary circuit breaker trip', () => {
@@ -24,12 +43,23 @@ describe('Error Recovery', () => {
   });
 
   it('handles localStorage quota exceeded', () => {
-    // Fill localStorage to capacity
+    // Simulate quota exceeded by making setItem throw
+    const quotaError = new DOMException('quota exceeded', 'QuotaExceededError');
+    const failingStorage = createStorageMock();
+    let writeCount = 0;
+    const originalSetItem = failingStorage.setItem.bind(failingStorage);
+    failingStorage.setItem = (key: string, value: string) => {
+      if (++writeCount > 5) throw quotaError;
+      originalSetItem(key, value);
+    };
+    vi.stubGlobal('localStorage', failingStorage);
+
+    // Fill until quota error
     const key = 'crish_test_fill';
     try {
       let i = 0;
       while (true) {
-        localStorage.setItem(`${key}_${i++}`, 'x'.repeat(1024 * 100)); // 100KB each
+        localStorage.setItem(`${key}_${i++}`, 'x'.repeat(1024 * 100));
       }
     } catch (e: any) {
       expect(e.name).toBe('QuotaExceededError');
@@ -42,13 +72,6 @@ describe('Error Recovery', () => {
       severity: 'warning',
       message: 'Storage full test',
     })).not.toThrow();
-    
-    // Clean up
-    for (let i = 0; i < 1000; i++) {
-      const k = `${key}_${i}`;
-      if (localStorage.getItem(k) !== null) localStorage.removeItem(k);
-      else break;
-    }
   });
 
   it('handles missing network with recovery', async () => {

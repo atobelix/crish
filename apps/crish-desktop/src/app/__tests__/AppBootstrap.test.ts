@@ -96,17 +96,17 @@ interface PlanEntry {
 
 const PLANNED_12: PlanEntry[] = [
   { label: '#1  daemonClient → engineReady',         file: 'useEngineBootstrap.ts', type: 'useEffect',       lookupPos: 0 },
-  { label: '#4  initLayoutStorePersistence',           file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 2 },
-  { label: '#5  bootstrapServices',                    file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 3 },
-  { label: '#6  crash detection',                      file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 4 },
-  { label: '#7  bootstrapStores',                      file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 5 },
-  { label: '#8  project folder rebind (useLayoutEffect)', file: 'AppBootstrap.ts',   type: 'useLayoutEffect', lookupPos: 6 },
-  { label: '#9  initWorkspaceLayoutSync',              file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 7 },
-  { label: '#10 theme/font/settings/TabMode init',     file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 8 },
-  { label: '#2  AUTO_FOLD_DELAY',                     file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 9 },
-  { label: '#3  document.title + lang',               file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 10 },
+  { label: '#4  initLayoutStorePersistence',           file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 4 },
+  { label: '#5  bootstrapServices',                    file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 5 },
+  { label: '#6  crash detection',                      file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 6 },
+  { label: '#7  bootstrapStores',                      file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 7 },
+  { label: '#8  project folder rebind (useLayoutEffect)', file: 'AppBootstrap.ts',   type: 'useLayoutEffect', lookupPos: 9 },
+  { label: '#9  initWorkspaceLayoutSync',              file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 10 },
+  { label: '#10 theme/font/settings/TabMode init',     file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 11 },
+  { label: '#2  AUTO_FOLD_DELAY',                     file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 2 },
+  { label: '#3  document.title + lang',               file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 3 },
   { label: '#11 engine startup',                       file: 'useEngineBootstrap.ts', type: 'useEffect',       lookupPos: 1 },
-  { label: '#12 WindowResizeBridge',                   file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 11 },
+  { label: '#12 WindowResizeBridge',                   file: 'AppBootstrap.ts',       type: 'useEffect',       lookupPos: 13 },
 ];
 
 // ── Tests ──
@@ -123,13 +123,13 @@ describe('AppBootstrap — 结构分析 vs 规划 12 条 effect (R9-T10)', () =>
     expect(engine).toHaveLength(2);
   });
 
-  it('来源 effect 总数：AppBootstrap 15 个', () => {
+  it('来源 effect 总数：AppBootstrap 16 个', () => {
     const app = extractEffects(APP_SRC, 'AppBootstrap.ts');
-    expect(app).toHaveLength(15);
+    expect(app).toHaveLength(16);
   });
 
-  it('combined 顺序共 17 个 effect', () => {
-    expect(combined).toHaveLength(17);
+  it('combined 顺序共 18 个 effect', () => {
+    expect(combined).toHaveLength(18);
   });
 
   it('useLayoutEffect 仅有 1 个（project folder rebind）', () => {

@@ -126,7 +126,7 @@ export class ContextCompressor {
 
     const serializedConversation = serializeMessagesForSummary(compressed, {
       toolOutputBudget: this.options.toolOutputBudget ?? { inlineChars: 4_000 },
-      includeThought: true,
+      includeThought: this.options.includeThought ?? false,
       ...(thoughtSummary !== undefined ? { thoughtSummary } : {})
     });
 

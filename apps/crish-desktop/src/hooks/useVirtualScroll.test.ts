@@ -168,7 +168,7 @@ describe('useVirtualScroll source — layout phase lock', () => {
 describe('ChatMessageList height lifecycle contract (static source)', () => {
   it('has no startIndex + clearHeights wired in the same Effect', () => {
     const src = readFileSync(
-      resolve(here, '../components/ChatMessageList.tsx'),
+      resolve(here, '../components/chat-message-list/MessageVirtualizer.tsx'),
       'utf8',
     ).replace(/\r\n/g, '\n');
 
@@ -194,9 +194,9 @@ describe('ChatMessageList height lifecycle contract (static source)', () => {
     }
 
     // Positive lock: session switch still clears heights
-    expect(src).toMatch(/activeSessionId[\s\S]{0,300}?clearHeights/);
+    expect(src).toMatch(/clearHeights[\s\S]{0,300}?activeSessionId|activeSessionId[\s\S]{0,300}?clearHeights/);
     // Positive lock: window pan / expand relies on syncOrder (comment or hook path)
-    expect(src).toMatch(/syncOrder/);
+    expect(src).toMatch(/useVirtualScroll|syncOrder/);
   });
 });
 

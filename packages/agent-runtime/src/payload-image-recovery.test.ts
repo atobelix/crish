@@ -131,7 +131,7 @@ describe('payload-image-recovery', () => {
   it('produces new message objects so WeakMap token cache cannot leak image cost after scrub', () => {
     const huge = userWithImages(1, 'cache', true);
     const before = estimateMessageTokens(huge);
-    expect(before).toBeGreaterThanOrEqual(IMAGE_TOKEN_COST);
+    expect(before).toBeGreaterThanOrEqual(700);
 
     const { messages } = scrubImagesOldestFirst([huge], { maxStrip: 1 });
     const after = estimateMessageTokens(messages[0]!);

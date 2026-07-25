@@ -279,6 +279,12 @@ export function validateProviderStatus(
     validateProviderDiagnostic(value.lastDiagnostic, `${path}.lastDiagnostic`, issues);
   }
   requiredString(value, "updatedAt", `${path}.updatedAt`, issues, { nonEmpty: true });
+  if ("lastProbeOk" in value && value.lastProbeOk !== undefined) {
+    optionalBoolean(value, "lastProbeOk", `${path}.lastProbeOk`, issues);
+  }
+  if ("lastProbeAt" in value && value.lastProbeAt !== undefined) {
+    optionalString(value, "lastProbeAt", `${path}.lastProbeAt`, issues, { nonEmpty: true });
+  }
 }
 
 export function validateRedactedApiKeyStatus(

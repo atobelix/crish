@@ -214,7 +214,7 @@ describe("Tauri command registry", () => {
     expect(pkg.scripts["dev:cli"]).toBe("npm --workspace @crish/agent-workbench run cli");
     expect(pkg.scripts.cli).toBe("npm run dev:cli");
     expect(pkg.scripts["build:product"]).toBe(
-      "npm run build:daemon && npm run build:desktop && npm run build:daemon-binary",
+      "turbo run build && npm run build:daemon-binary",
     );
     expect(pkg.scripts["build:desktop"]).toContain("crish-desktop");
     expect(pkg.scripts["dev:workbench"]).toContain("agent-workbench");

@@ -208,6 +208,15 @@ export function validateLifecycleSnapshot(
   if ("recentError" in value) {
     validateLifecycleDiagnostic(value.recentError, `${path}.recentError`, issues);
   }
+  if ("recentErrors" in value && value.recentErrors !== undefined) {
+    if (!Array.isArray(value.recentErrors)) {
+      issues.push({ path: `${path}.recentErrors`, message: "Expected array" });
+    } else {
+      value.recentErrors.forEach((err, index) =>
+        validateLifecycleDiagnostic(err, `${path}.recentErrors[${index}]`, issues)
+      );
+    }
+  }
   const eventStore = requiredRecord(value, "eventStore", `${path}.eventStore`, issues);
   if (eventStore) validateEventStoreStatus(eventStore, `${path}.eventStore`, issues);
   requiredEnum(value, "providerReadiness", `${path}.providerReadiness`, PROVIDER_READINESS_STATUSES, issues);

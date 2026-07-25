@@ -115,18 +115,18 @@ export class DaemonLifecycleTracker {
       state,
       startedAt: toIso(this.startedAtMs),
       updatedAt: toIso(now),
-      readyAt: this.readyAtMs !== undefined ? toIso(this.readyAtMs) : undefined,
-      stoppingAt: this.stoppingAtMs !== undefined ? toIso(this.stoppingAtMs) : undefined,
-      stoppedAt: this.stoppedAtMs !== undefined ? toIso(this.stoppedAtMs) : undefined,
+      ...(this.readyAtMs !== undefined ? { readyAt: toIso(this.readyAtMs) } : {}),
+      ...(this.stoppingAtMs !== undefined ? { stoppingAt: toIso(this.stoppingAtMs) } : {}),
+      ...(this.stoppedAtMs !== undefined ? { stoppedAt: toIso(this.stoppedAtMs) } : {}),
       uptimeMs: Math.max(0, (this.stoppedAtMs ?? now) - this.startedAtMs),
       currentPort: this.currentPortValue,
       connectedClientCount: input.connectedClientCount,
       totalClientConnectionCount: this.totalClientConnectionCount,
       totalClientDisconnectCount: this.totalClientDisconnectCount,
       activeRunCount: input.activeRunCount,
-      recentDisconnect: this.recentDisconnect ?? undefined,
-      recentError: recentError ?? undefined,
-      recentErrors: errors.length > 0 ? errors : undefined,
+      ...(this.recentDisconnect !== undefined ? { recentDisconnect: this.recentDisconnect } : {}),
+      ...(recentError !== undefined ? { recentError } : {}),
+      ...(errors.length > 0 ? { recentErrors: errors } : {}),
       eventStore,
       providerReadiness: input.providerStatus.readiness,
       mcpReadiness: input.mcpStatus.readiness,
@@ -154,7 +154,6 @@ export class DaemonLifecycleTracker {
       return {
         status: "ok",
         path: eventLogPath,
-        failure: undefined,
       };
     }
 

@@ -48,9 +48,6 @@ export function validateApiKey(apiKey: string | undefined): string | null {
   if (apiKey !== apiKey.trim()) {
     return 'API Key must not have leading or trailing whitespace';
   }
-  if (apiKey.length < 16) {
-    return 'API Key must be at least 16 characters long';
-  }
   return null;
 }
 

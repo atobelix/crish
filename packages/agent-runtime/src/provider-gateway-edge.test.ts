@@ -216,6 +216,8 @@ describe("ProviderGateway — supplementary edge cases", () => {
       ],
     });
     const decision = {
+      candidates: [] as unknown[],
+      rejections: [] as unknown[],
       request: {
         required: [] as string[],
         preferred: [] as string[],
