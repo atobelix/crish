@@ -26,10 +26,10 @@ function tc(partial: Partial<MessageToolCall> & Pick<MessageToolCall, 'name'>): 
     id: partial.id || 't1',
     name: partial.name,
     arguments: partial.arguments || '',
-    explanation: partial.explanation,
     status: partial.status || 'success',
-    output: partial.output,
-    diffs: partial.diffs,
+    ...(partial.explanation !== undefined ? { explanation: partial.explanation } : {}),
+    ...(partial.output !== undefined ? { output: partial.output } : {}),
+    ...(partial.diffs !== undefined ? { diffs: partial.diffs } : {}),
   };
 }
 

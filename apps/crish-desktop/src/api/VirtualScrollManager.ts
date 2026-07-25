@@ -1,15 +1,15 @@
 /**
- * 虚拟滚动高度管理器：渐进精确的按项高度追踪。
+ * 虚拟滚动高度管理器：基于消息 ID 的渐进精确高度追踪。
  *
- * 替代现有基于 computeAverageRowHeight 的平均估算方案，
- * 为每一条消息维护 estimated（Pretext 预测量）和 actual（DOM 渲染后回写）高度，
- * 实现 O(log n) 下标查找与 O(n) 偏移量累积。
+ * 替代原来纯按数字下标存储的方案，改为以 string messageId 为键存储高度，
+ * 通过 syncOrder(ids) 维护 index→id 的映射。这使得窗口平移（expand older）时
+ * 已测量的高度能跨 syncOrder 调用保留，不需要 clear。
  *
  * 设计：
- * - estimated 来自 Pretext 文本预测量（setEstimated）
- * - actual 来自 ResizeObserver 渲染后回写（setActual — 覆盖 estimate）
+ * - estimated: Pretext 等纯文本预测量（setEstimated）
+ * - actual: ResizeObserver DOM 渲染后回写（setActual — 覆盖 estimate）
  * - fallbackHeight=120 兜底（无任何数据时）
- * - 所有方法防御 NaN/Infinity/负值，保证偏移量不漂移
+ * - generation: clear() 时递增，用于检测过时的异步 setActual 调用
  */
 
 export interface VisibleRange {
@@ -19,26 +19,161 @@ export interface VisibleRange {
   estimatedTotalHeight: number;
 }
 
+export interface VsmDebugInfo {
+  orderLength: number;
+  heightsSize: number;
+  generation: number;
+}
+
 const FALLBACK_HEIGHT = 120;
 
 export class VirtualScrollManager {
-  private heights = new Map<number, { estimated: number; actual: number | null; version: number }>();
-  private fallbackHeight = FALLBACK_HEIGHT;
-  private maxTrackedIndex = -1;
-
+  /** 以 messageId 为键存储高度；estimated 始终为正数，actual 可为 null（待测量） */
+  private heightsById = new Map<string, { estimated: number; actual: number | null }>();
+  /** 当前可见窗口的消息 ID 顺序 */
+  private order: string[] = [];
+  private fallbackHeight: number;
   /**
-   * 累积偏移缓存：惰性失效。
-   * offsets[i] = index i 之前（不含 i）的总高度。
-   * 当 heights 变更时标记 dirty，下次读取时重建。
+   * 代际编号：每次 clear 时（非空才）递增。
+   * 调用方在异步测量前捕获 generation，回写时若不一致则抛弃（过时写入）。
    */
+  private generation = 0;
+  /** 下标→偏移量的惰性缓存 */
   private offsetsCache: number[] | null = null;
   private dirty = false;
-  private dirtyFrom: number | undefined = undefined;
 
   constructor(fallbackHeight?: number) {
-    if (fallbackHeight != null && Number.isFinite(fallbackHeight) && fallbackHeight > 0) {
-      this.fallbackHeight = Math.floor(fallbackHeight);
+    this.fallbackHeight =
+      fallbackHeight != null && Number.isFinite(fallbackHeight) && fallbackHeight > 0
+        ? Math.floor(fallbackHeight)
+        : FALLBACK_HEIGHT;
+  }
+
+  /**
+   * 更新当前可见窗口的消息 ID 顺序。
+   * - 高度数据跨调用保留（已知 ID 的 estimated/actual 不丢失）
+   * - 完全相同的顺序跳过（防止不必要的偏移重建）
+   */
+  syncOrder(ids: string[]): void {
+    if (
+      ids.length === this.order.length &&
+      ids.every((id, i) => id === this.order[i])
+    ) {
+      return;
     }
+    this.order = ids.slice();
+    this.markDirty();
+  }
+
+  /** 按 messageId 获取高度（actual > estimated > fallback） */
+  getHeight(id: string): number {
+    const entry = this.heightsById.get(id);
+    if (!entry) return this.fallbackHeight;
+    return entry.actual ?? entry.estimated;
+  }
+
+  /** 按当前 order 下标获取高度 */
+  getHeightAt(index: number): number {
+    const safeIndex = normalizeNonNegInt(index);
+    const id = this.order[safeIndex];
+    return id !== undefined ? this.getHeight(id) : this.fallbackHeight;
+  }
+
+  /** 判断是否已有任何高度记录（estimated 或 actual） */
+  hasHeight(id: string): boolean {
+    return this.heightsById.has(id);
+  }
+
+  /** 返回当前 order 副本 */
+  getOrder(): string[] {
+    return this.order.slice();
+  }
+
+  /** 返回当前代际编号（clear() 时递增） */
+  getGeneration(): number {
+    return this.generation;
+  }
+
+  /** 调试信息快照 */
+  getDebugInfo(): VsmDebugInfo {
+    return {
+      orderLength: this.order.length,
+      heightsSize: this.heightsById.size,
+      generation: this.generation,
+    };
+  }
+
+  /**
+   * 回写实际 DOM 高度（ResizeObserver 渲染后调用）。
+   * @param callerGeneration 调用方捕获的 generation；若与当前不一致（过时）则忽略。
+   */
+  setActual(id: string, height: number, callerGeneration?: number): void {
+    if (callerGeneration !== undefined && callerGeneration !== this.generation) return;
+    if (!id) return;
+    if (!Number.isFinite(height) || height <= 0) return;
+    const safeHeight = height;
+    const entry = this.heightsById.get(id);
+    if (entry) {
+      entry.actual = safeHeight;
+      // 同步更新 estimated，使 invalidate 后仍能回落到此值
+      entry.estimated = safeHeight;
+    } else {
+      this.heightsById.set(id, { estimated: safeHeight, actual: safeHeight });
+    }
+    this.markDirty();
+  }
+
+  /** 设置预测量高度（actual 已存在时跳过） */
+  setEstimated(id: string, height: number): void {
+    if (!id) return;
+    if (!Number.isFinite(height) || height <= 0) return;
+    const entry = this.heightsById.get(id);
+    if (entry) {
+      if (entry.actual != null) return; // actual 已定，不覆盖
+      entry.estimated = height;
+    } else {
+      this.heightsById.set(id, { estimated: height, actual: null });
+    }
+    this.markDirty();
+  }
+
+  /** 标记 actual 为 stale，下次渲染后 ResizeObserver 重新测量 */
+  invalidateActual(id: string): void {
+    const entry = this.heightsById.get(id);
+    if (entry) {
+      entry.actual = null;
+      this.markDirty();
+    }
+  }
+
+  /**
+   * 清空所有高度数据（切换会话时调用）。
+   * 若当前状态非空则 generation 递增；空状态下双重 clear 幂等。
+   */
+  clear(): void {
+    if (this.heightsById.size > 0 || this.order.length > 0) {
+      this.generation++;
+    }
+    this.heightsById.clear();
+    this.order = [];
+    this.offsetsCache = null;
+    this.dirty = false;
+  }
+
+  /** 从 0 到 count-1 的总高度 */
+  getTotalHeight(count: number): number {
+    const safeCount = normalizeNonNegInt(count);
+    if (safeCount === 0) return 0;
+    this.ensureOffsets(safeCount + 1);
+    return this.offsetsCache![safeCount] ?? this.sumHeights(0, safeCount);
+  }
+
+  /** index 之前的总偏移（不含 index 自身高度） */
+  getOffset(index: number): number {
+    const safeIndex = normalizeNonNegInt(index);
+    if (safeIndex === 0) return 0;
+    this.ensureOffsets(safeIndex + 1);
+    return this.offsetsCache![safeIndex] ?? this.sumHeights(0, safeIndex);
   }
 
   /**
@@ -58,15 +193,12 @@ export class VirtualScrollManager {
     if (count === 0) {
       return { startIndex: 0, endIndex: 0, startOffset: 0, estimatedTotalHeight: 0 };
     }
-
     const safeScrollTop = normalizeNonNegFloat(scrollTop);
     const safeViewportHeight = normalizePositiveFloat(viewportHeight, 600);
     const safeOverscan = normalizeNonNegInt(overscan);
-
     const startIndex = Math.max(0, this.findIndexAtOffset(safeScrollTop) - safeOverscan);
     const visibleEnd = this.findIndexAtOffset(safeScrollTop + safeViewportHeight);
     const endIndex = Math.min(count, visibleEnd + 1 + safeOverscan);
-
     return {
       startIndex,
       endIndex,
@@ -75,90 +207,19 @@ export class VirtualScrollManager {
     };
   }
 
-  /** 获取指定下标的高度（actual > estimated > fallback） */
-  getHeight(index: number): number {
-    const safeIndex = normalizeNonNegInt(index);
-    const entry = this.heights.get(safeIndex);
-    if (!entry) return this.fallbackHeight;
-    return entry.actual ?? entry.estimated ?? this.fallbackHeight;
-  }
-
-  /** 设置预测量（Pretext 等纯文本估算） */
-  setEstimated(index: number, height: number): void {
-    const safeIndex = normalizeNonNegInt(index);
-    const safeHeight = normalizePositiveFloat(height, this.fallbackHeight);
-    const existing = this.heights.get(safeIndex);
-    if (existing) {
-      if (existing.actual != null) return; // actual 已定，不覆盖
-      existing.estimated = safeHeight;
-      existing.version++;
-    } else {
-      this.heights.set(safeIndex, { estimated: safeHeight, actual: null, version: 0 });
-    }
-    if (safeIndex > this.maxTrackedIndex) this.maxTrackedIndex = safeIndex;
-    this.markDirty();
-  }
-
-  /** 设置实际高度（ResizeObserver DOM 渲染后回写） */
-  setActual(index: number, height: number, callerVersion?: number): void {
-    const safeIndex = normalizeNonNegInt(index);
-    const safeHeight = normalizePositiveFloat(height, this.fallbackHeight);
-    const existing = this.heights.get(safeIndex);
-    if (existing) {
-      if (callerVersion != null && callerVersion < existing.version) return;
-      existing.actual = safeHeight;
-      existing.version++;
-    } else {
-      this.heights.set(safeIndex, { estimated: safeHeight, actual: safeHeight, version: 0 });
-    }
-    if (safeIndex > this.maxTrackedIndex) this.maxTrackedIndex = safeIndex;
-    this.markDirty();
-  }
-
-  /** 标记指定 index 的实际高度为 stale，下次渲染后 ResizeObserver 重新测量 */
-  invalidateActual(index: number): void {
-    const safeIndex = normalizeNonNegInt(index);
-    const existing = this.heights.get(safeIndex);
-    if (existing) {
-      existing.actual = null;
-      existing.version++;
-      this.markDirty();
-    }
-  }
-
-  /** 从 0 到 count-1 的总高度 */
-  getTotalHeight(count: number): number {
-    const safeCount = normalizeNonNegInt(count);
-    if (safeCount === 0) return 0;
-    this.ensureOffsets(safeCount);
-    return this.offsetsCache![safeCount] ?? this.sumHeights(0, safeCount);
-  }
-
-  /** index 之前的总偏移（不含 index 自身高度） */
-  getOffset(index: number): number {
-    const safeIndex = normalizeNonNegInt(index);
-    if (safeIndex <= 0) return 0;
-    this.ensureOffsets(safeIndex);
-    if (this.offsetsCache && safeIndex <= this.offsetsCache.length - 1) {
-      return this.offsetsCache[safeIndex]!;
-    }
-    return this.sumHeights(0, safeIndex);
-  }
-
   /**
    * 二分查找：给定 scrollTop 偏移，找到对应的行下标。
-   * O(log count) 在 offsetsCache 上。
+   * O(log n) 在 offsetsCache 上。
    */
   findIndexAtOffset(offset: number): number {
     const safeOffset = normalizeNonNegFloat(offset);
     if (safeOffset <= 0) return 0;
-    const count = this.maxTrackedIndex >= 0 ? this.maxTrackedIndex + 1 : 0;
+    const count = this.order.length;
     if (count === 0) return 0;
     this.ensureOffsets(count + 1);
     const offsets = this.offsetsCache!;
-
     let lo = 0;
-    let hi = offsets.length - 1;
+    let hi = Math.min(offsets.length - 1, count);
     while (lo < hi) {
       const mid = (lo + hi) >>> 1;
       if (offsets[mid]! <= safeOffset) {
@@ -167,87 +228,42 @@ export class VirtualScrollManager {
         hi = mid;
       }
     }
-    // lo is the first index where offset > scrollTop
     return Math.max(0, lo - 1);
   }
 
-  /** 清空全部高度数据（切会话时调用） */
-  clear(): void {
-    this.heights.clear();
-    this.offsetsCache = null;
-    this.dirty = true;
-    this.maxTrackedIndex = -1;
-  }
+  // ── 内部 ──────────────────────────────────────────────────────────────
 
-  /** 删除指定项的高度（消息移除/撤回时调用） */
-  delete(index: number): void {
-    const safeIndex = normalizeNonNegInt(index);
-    this.heights.delete(safeIndex);
-    if (safeIndex === this.maxTrackedIndex) {
-      let newMax = -1;
-      for (const k of this.heights.keys()) {
-        if (k > newMax) newMax = k;
-      }
-      this.maxTrackedIndex = newMax;
-    }
-    this.markDirty();
-  }
-
-  // ── 内部 ──
-
-  private markDirty(changedIndex?: number): void {
+  private markDirty(): void {
     this.dirty = true;
     this.offsetsCache = null;
-    if (changedIndex != null) {
-      this.dirtyFrom = Math.min(this.dirtyFrom ?? Infinity, changedIndex);
-    }
   }
 
   private ensureOffsets(upTo: number): void {
-    if (!this.dirty && this.offsetsCache != null && this.offsetsCache.length >= upTo) {
-      return;
-    }
+    if (!this.dirty && this.offsetsCache != null && this.offsetsCache.length >= upTo) return;
     this.rebuildOffsets(upTo);
   }
 
   private rebuildOffsets(upTo: number): void {
-    if (!this.dirty && this.offsetsCache != null && this.offsetsCache.length >= upTo) {
-      return;
+    const len = Math.max(upTo, this.order.length + 1);
+    const cache = new Array<number>(len);
+    cache[0] = 0;
+    for (let i = 1; i < len; i++) {
+      cache[i] = cache[i - 1]! + this.getHeightAt(i - 1);
     }
-
-    const startIdx = this.dirtyFrom ?? 0;
-    const len = Math.max(upTo, this.maxTrackedIndex + 2);
-
-    if (this.offsetsCache == null || startIdx === 0) {
-      this.offsetsCache = new Array<number>(len);
-      this.offsetsCache[0] = 0;
-      for (let i = 1; i < len; i++) {
-        this.offsetsCache[i] = this.offsetsCache[i - 1] + this.getHeight(i - 1);
-      }
-    } else {
-      if (this.offsetsCache.length < len) {
-        const oldLen = this.offsetsCache.length;
-        this.offsetsCache.length = len;
-        for (let i = oldLen; i < len; i++) {
-          this.offsetsCache[i] = this.offsetsCache[i - 1] + this.getHeight(i - 1);
-        }
-      }
-    }
-
+    this.offsetsCache = cache;
     this.dirty = false;
-    this.dirtyFrom = undefined;
   }
 
   private sumHeights(from: number, to: number): number {
     let total = 0;
     for (let i = from; i < to; i++) {
-      total += this.getHeight(i);
+      total += this.getHeightAt(i);
     }
     return total;
   }
 }
 
-// ── 归一化工具（与 messageWindow.ts 同风格）──
+// ── 归一化工具 ─────────────────────────────────────────────────────────
 
 function normalizeNonNegInt(value: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;

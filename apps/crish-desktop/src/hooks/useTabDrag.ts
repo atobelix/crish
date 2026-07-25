@@ -141,7 +141,10 @@ export function resolveTabInsertIndex(
 ): number {
   if (!tabs || tabs.length === 0) return 0;
   for (let i = 0; i < tabs.length; i++) {
+    // 治理防线 #3（noUncheckedIndexedAccess）：下标访问返回 T | undefined，
+    // 需显式守卫避免在 undefined 上访问属性
     const tab = tabs[i];
+    if (!tab) continue;
     const w = Number.isFinite(tab.width) ? tab.width : 0;
     const left = Number.isFinite(tab.left) ? tab.left : 0;
     if (mouseX < left + w / 2) return i;
@@ -159,7 +162,9 @@ export function findCardSnapshotAtPoint<T extends { rect: CardSnapRect }>(
 ): T | null {
   if (!snapshots || snapshots.length === 0) return null;
   for (let i = 0; i < snapshots.length; i++) {
+    // 治理防线 #3（noUncheckedIndexedAccess）
     const snap = snapshots[i];
+    if (!snap) continue;
     const r = snap.rect;
     if (
       mouseX >= r.left &&
@@ -174,6 +179,7 @@ export function findCardSnapshotAtPoint<T extends { rect: CardSnapRect }>(
   let minDistance = Infinity;
   for (let i = 0; i < snapshots.length; i++) {
     const snap = snapshots[i];
+    if (!snap) continue;
     const r = snap.rect;
     const centerX = r.left + r.width / 2;
     const centerY = r.top + r.height / 2;
@@ -295,9 +301,9 @@ export type TabDropResolveContext = {
   /** 是否存在 .tabs-bar（merge / self-reorder 需要） */
   hasTabsBar: boolean;
   /** 已算好的标签插入下标（仅 hasTabsBar 时有意义） */
-  tabInsertIdx?: number;
-  edgePaddingX?: number;
-  edgePaddingY?: number;
+  tabInsertIdx?: number | undefined;
+  edgePaddingX?: number | undefined;
+  edgePaddingY?: number | undefined;
 };
 
 export type TabDropResolveResult = {
@@ -305,7 +311,7 @@ export type TabDropResolveResult = {
   targetColIdx: number;
   targetGroupIdx: number;
   targetGroupId: string;
-  tabInsertIdx?: number;
+  tabInsertIdx?: number | undefined;
   preview: DropPreviewState | null;
 };
 
@@ -769,10 +775,10 @@ export function resolveTabDrop(
  */
 export function canCommitTabDrop(params: {
   dropType: DropType | null | undefined;
-  cancelled?: boolean;
+  cancelled?: boolean | undefined;
   sourceGroupId: string;
   targetGroupId: string | null | undefined;
-  tabInsertIdx?: number;
+  tabInsertIdx?: number | undefined;
 }): boolean {
   if (params.cancelled) return false;
   if (!isDropType(params.dropType)) return false;
@@ -874,9 +880,14 @@ export function findGroupIndicesInWorkspace(
 ): { colIdx: number; groupIdx: number } {
   if (!columns || !groupId) return { colIdx: -1, groupIdx: -1 };
   for (let cIdx = 0; cIdx < columns.length; cIdx++) {
-    const groups = columns[cIdx].groups;
+    // 治理防线 #3（noUncheckedIndexedAccess）
+    const col = columns[cIdx];
+    if (!col) continue;
+    const groups = col.groups;
     for (let gIdx = 0; gIdx < groups.length; gIdx++) {
-      if (groups[gIdx].id === groupId) {
+      const g = groups[gIdx];
+      if (!g) continue;
+      if (g.id === groupId) {
         return { colIdx: cIdx, groupIdx: gIdx };
       }
     }
@@ -896,9 +907,13 @@ export function isOnlyCardInSourceColumn(
 ): boolean {
   if (!columns) return false;
   for (let i = 0; i < columns.length; i++) {
+    // 治理防线 #3（noUncheckedIndexedAccess）
     const col = columns[i];
+    if (!col) continue;
     if (col.groups.some((g) => g.id === sourceGroupId)) {
-      return col.groups.length === 1 && col.groups[0].cards.length === 1;
+      if (col.groups.length !== 1) return false;
+      const firstGroup = col.groups[0];
+      return !!firstGroup && firstGroup.cards.length === 1;
     }
   }
   return false;
@@ -916,21 +931,23 @@ function findDropTargetCardEl(
       document.querySelectorAll('.workspace-card[data-group-id]')
     );
     for (let i = 0; i < cards.length; i++) {
-      const el = cards[i] as HTMLElement;
-      if (el.getAttribute('data-group-id') === preferredGroupId) return el;
+      const el = cards[i];
+      if (el instanceof HTMLElement && el.getAttribute('data-group-id') === preferredGroupId) {
+        return el;
+      }
     }
   }
   const tabs = Array.from(document.querySelectorAll('.card-tab[data-card-id]'));
   for (let i = 0; i < tabs.length; i++) {
-    const t = tabs[i] as HTMLElement;
-    if (t.getAttribute('data-card-id') === cardId) {
-      return t.closest('.workspace-card') as HTMLElement | null;
+    const t = tabs[i];
+    if (t instanceof HTMLElement && t.getAttribute('data-card-id') === cardId) {
+      const card = t.closest('.workspace-card');
+      return card instanceof HTMLElement ? card : null;
     }
   }
   if (cardId === 'chat') {
-    return document.querySelector(
-      '.workspace-card.flat-layout'
-    ) as HTMLElement | null;
+    const card = document.querySelector('.workspace-card.flat-layout');
+    return card instanceof HTMLElement ? card : null;
   }
   return null;
 }
@@ -967,13 +984,16 @@ export function useTabDrag({ wsId, groupId, cardsLength }: UseTabDragOptions) {
       }
       if (e.button !== 0) return;
       // 关闭钮已 stopPropagation；再挡一次非 tab 命中
-      if ((e.target as HTMLElement | null)?.closest?.('.tab-close-btn')) return;
+      // e.target 是 EventTarget | null，需 instanceof 守卫 narrowing 到 HTMLElement
+      const eventTarget = e.target;
+      if (eventTarget instanceof HTMLElement && eventTarget.closest('.tab-close-btn')) return;
 
-      const targetEl = e.currentTarget as HTMLElement;
+      // e.currentTarget 在 React.PointerEvent<HTMLDivElement> 下已是 HTMLDivElement，
+      // 无需 as HTMLElement 断言
+      const targetEl = e.currentTarget;
       const isDragFromTabButton = targetEl.classList.contains('card-tab');
-      const sourceCard = targetEl.closest(
-        '.workspace-card'
-      ) as HTMLElement | null;
+      const sourceCardCandidate = targetEl.closest('.workspace-card');
+      const sourceCard = sourceCardCandidate instanceof HTMLElement ? sourceCardCandidate : null;
       const pointerId = e.pointerId;
 
       // 捕获指针：移出窗口 / 跨 iframe 仍收 move/up，避免卡在 dragging 态
@@ -1014,11 +1034,12 @@ export function useTabDrag({ wsId, groupId, cardsLength }: UseTabDragOptions) {
             ? startY - cardRect.top
             : 0;
 
+      // querySelectorAll 返回 Element；用 instanceof 守卫过滤为 HTMLElement
       const cardElements = Array.from(
         document.querySelectorAll(
           '.workspace-card:not(.placeholder-card-group)'
         )
-      ) as HTMLElement[];
+      ).filter((el): el is HTMLElement => el instanceof HTMLElement);
       const cardSnapshots = cardElements.map((el) => {
         const r = el.getBoundingClientRect();
         return {
@@ -1050,10 +1071,10 @@ export function useTabDrag({ wsId, groupId, cardsLength }: UseTabDragOptions) {
         }
       };
 
-      const getIndicator = () =>
-        document.getElementById(
-          `drop-indicator-${wsId}`
-        ) as HTMLDivElement | null;
+      const getIndicator = (): HTMLDivElement | null => {
+        const el = document.getElementById(`drop-indicator-${wsId}`);
+        return el instanceof HTMLDivElement ? el : null;
+      };
 
       const removeInsertLine = () => {
         if (insertLineEl) {
@@ -1081,11 +1102,12 @@ export function useTabDrag({ wsId, groupId, cardsLength }: UseTabDragOptions) {
         tabsBar: HTMLElement,
         mouseX: number
       ): { insertX: number; insertIdx: number } => {
+        // querySelectorAll 返回 Element；用 instanceof 守卫过滤为 HTMLElement
         const tabs = Array.from(
           tabsBar.querySelectorAll(
             '.card-tab:not(.dragging-tab-hidden):not(.tab-placeholder-indicator)'
           )
-        ) as HTMLElement[];
+        ).filter((el): el is HTMLElement => el instanceof HTMLElement);
         const barRect = tabsBar.getBoundingClientRect();
         const tabRects = tabs.map((t) => {
           const tr = t.getBoundingClientRect();
@@ -1094,7 +1116,9 @@ export function useTabDrag({ wsId, groupId, cardsLength }: UseTabDragOptions) {
         const insertIdx = resolveTabInsertIndex(mouseX, tabRects);
         let insertX = barRect.right;
         if (insertIdx < tabs.length) {
-          insertX = tabs[insertIdx].getBoundingClientRect().left;
+          // 治理防线 #3（noUncheckedIndexedAccess）
+          const ref = tabs[insertIdx];
+          if (ref) insertX = ref.getBoundingClientRect().left;
         }
 
         // Clean up any placeholders that are either in other bars, or at a different position
@@ -1118,7 +1142,8 @@ export function useTabDrag({ wsId, groupId, cardsLength }: UseTabDragOptions) {
           placeholder.innerHTML = `<span class="tab-label" style="opacity: 0.85">${title}</span>`;
 
           if (insertIdx < tabs.length) {
-            tabsBar.insertBefore(placeholder, tabs[insertIdx]);
+            const ref = tabs[insertIdx];
+            if (ref) tabsBar.insertBefore(placeholder, ref);
           } else {
             tabsBar.appendChild(placeholder);
           }
@@ -1143,60 +1168,77 @@ export function useTabDrag({ wsId, groupId, cardsLength }: UseTabDragOptions) {
             isTabDrag: isDragFromTabButton,
           });
 
-          if (isDragFromTabButton && targetEl) {
-            dragOverlay = targetEl.cloneNode(true) as HTMLDivElement;
-            dragOverlay.className = 'card-tab is-dragging-ghost';
-            dragOverlay.removeAttribute('id');
-            const tabR = targetEl.getBoundingClientRect();
-            dragOverlay.style.cssText = `
-              position: fixed;
-              width: ${tabR.width}px;
-              height: ${tabR.height}px;
-              overflow: hidden;
-              box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
-              opacity: 0.95;
-              pointer-events: none;
-              z-index: 10000;
-              box-sizing: border-box;
-              border: 1px solid var(--border-color);
-              background: var(--bg-primary, #ffffff);
-              border-radius: var(--radius-sm, 6px);
-              display: flex;
-              align-items: center;
-              justify-content: center;
-            `;
-            // Remove close button from drag preview tab so it looks super clean
-            dragOverlay
-              .querySelectorAll('.tab-close-btn')
-              .forEach((btn) => btn.remove());
-            document.body.appendChild(dragOverlay);
-            document.body.classList.add('dragging-card');
+          if (isDragFromTabButton) {
+            // targetEl 由 e.currentTarget 赋值，在 PointerEvent 流程中恒为 HTMLElement；
+            // cloneNode 返回 Node，用 instanceof 守卫 narrowing 到 HTMLDivElement
+            const cloned = targetEl.cloneNode(true);
+            if (cloned instanceof HTMLDivElement) {
+              dragOverlay = cloned;
+              dragOverlay.className = 'card-tab is-dragging-ghost';
+              dragOverlay.removeAttribute('id');
+              const tabR = targetEl.getBoundingClientRect();
+              dragOverlay.style.cssText = `
+                position: fixed;
+                width: ${tabR.width}px;
+                height: ${tabR.height}px;
+                overflow: hidden;
+                box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
+                opacity: 0.95;
+                pointer-events: none;
+                z-index: 10000;
+                box-sizing: border-box;
+                border: 1px solid var(--border-color);
+                background: var(--bg-primary, #ffffff);
+                border-radius: var(--radius-sm, 6px);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              `;
+              // Remove close button from drag preview tab so it looks super clean
+              dragOverlay
+                .querySelectorAll('.tab-close-btn')
+                .forEach((btn) => btn.remove());
+              document.body.appendChild(dragOverlay);
+              document.body.classList.add('dragging-card');
+            }
           } else if (sourceCard) {
-            dragOverlay = sourceCard.cloneNode(true) as HTMLDivElement;
-            dragOverlay.className = 'drag-overlay-preview-card';
-            dragOverlay.removeAttribute('id');
-            dragOverlay.style.cssText = `
-              position: fixed;
-              width: ${startWidth}px;
-              height: ${startHeight}px;
-              overflow: hidden;
-              box-shadow: 0 0 16px rgba(0,0,0,0.12);
-              border-radius: 0;
-              border: 1.5px solid color-mix(in srgb, var(--accent-color, #1a73e8) 35%, var(--border-color));
-              background: var(--bg-card, var(--bg-primary));
-              opacity: 0.92;
-              pointer-events: none;
-              z-index: 10000;
-              transition: opacity 0.12s ease-out;
-              will-change: transform;
-            `;
-            dragOverlay
-              .querySelectorAll('input, textarea, button')
-              .forEach((el) => {
-                (el as HTMLInputElement).disabled = true;
-              });
-            document.body.appendChild(dragOverlay);
-            document.body.classList.add('dragging-card');
+            const cloned = sourceCard.cloneNode(true);
+            if (cloned instanceof HTMLDivElement) {
+              dragOverlay = cloned;
+              dragOverlay.className = 'drag-overlay-preview-card';
+              dragOverlay.removeAttribute('id');
+              dragOverlay.style.cssText = `
+                position: fixed;
+                width: ${startWidth}px;
+                height: ${startHeight}px;
+                overflow: hidden;
+                box-shadow: 0 0 16px rgba(0,0,0,0.12);
+                border-radius: 0;
+                border: 1.5px solid color-mix(in srgb, var(--accent-color, #1a73e8) 35%, var(--border-color));
+                background: var(--bg-card, var(--bg-primary));
+                opacity: 0.92;
+                pointer-events: none;
+                z-index: 10000;
+                transition: opacity 0.12s ease-out;
+                will-change: transform;
+              `;
+              dragOverlay
+                .querySelectorAll('input, textarea, button')
+                .forEach((el) => {
+                  // input/textarea/button 共享 HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement，
+                  // 三者都有 disabled 属性（继承自 HTMLElement 上的 IDL 属性），
+                  // 但 TS 类型层需分别处理。用 instanceof 守卫替代 as HTMLInputElement 断言。
+                  if (
+                    el instanceof HTMLInputElement ||
+                    el instanceof HTMLTextAreaElement ||
+                    el instanceof HTMLButtonElement
+                  ) {
+                    el.disabled = true;
+                  }
+                });
+              document.body.appendChild(dragOverlay);
+              document.body.classList.add('dragging-card');
+            }
           }
         }
 
@@ -1260,9 +1302,9 @@ export function useTabDrag({ wsId, groupId, cardsLength }: UseTabDragOptions) {
         );
 
         const isSelfHover = targetGroupId === currentSourceGroupId;
-        const tabsBar = matchedSnapshot.element.querySelector(
-          '.tabs-bar'
-        ) as HTMLElement | null;
+        // querySelector 返回 Element | null；用 instanceof 守卫 narrowing 到 HTMLElement
+        const tabsBarCandidate = matchedSnapshot.element.querySelector('.tabs-bar');
+        const tabsBar = tabsBarCandidate instanceof HTMLElement ? tabsBarCandidate : null;
         const hasTabsBar = !!tabsBar;
 
         let tabInsertIdx: number | undefined;

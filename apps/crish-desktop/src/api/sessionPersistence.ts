@@ -14,7 +14,11 @@ import type {
   SessionMessage,
   SessionState,
 } from '../store/layoutStore';
-import type { MessageToolCall } from '../store/types';
+import type {
+  FileDiff,
+  MessageToolApprovalMeta,
+  MessageToolCall,
+} from '../store/types';
 import type { WorkerPool } from '../workers/worker-pool';
 import { Priority } from '../workers/types';
 import { setAsyncItem, removeAsyncItem, keyIndexManager } from './asyncStorage';
@@ -253,9 +257,9 @@ function parseToolCall(raw: unknown): MessageToolCall | null {
   };
   if (typeof o.output === 'string') tc.output = o.output;
   if (typeof o.explanation === 'string') tc.explanation = o.explanation;
-  if (Array.isArray(o.diffs)) tc.diffs = o.diffs as MessageToolCall['diffs'];
+  if (Array.isArray(o.diffs)) tc.diffs = o.diffs as FileDiff[];
   if (o.approvalMeta && typeof o.approvalMeta === 'object') {
-    tc.approvalMeta = o.approvalMeta as MessageToolCall['approvalMeta'];
+    tc.approvalMeta = o.approvalMeta as MessageToolApprovalMeta;
   }
   return tc;
 }
@@ -315,7 +319,7 @@ export function parseSessionMessage(raw: unknown): SessionMessage | null {
         });
       } else if (bo.type === 'tool_call') {
         const bid = typeof bo.id === 'string' ? bo.id : undefined;
-        blocks.push({ type: 'tool_call', id: bid });
+        blocks.push({ type: 'tool_call', ...(bid !== undefined ? { id: bid } : {}) });
       }
     }
     if (blocks.length) msg.blocks = blocks;
@@ -368,6 +372,10 @@ export function parseSessionAgent(raw: unknown): SessionAgent | null {
     status,
     messages: parseSessionMessages(o.messages),
     startedAt: startedAt != null ? startedAt : 0,
+    depth: typeof o.depth === 'number' && o.depth >= 0 ? o.depth : 0,
+    subagentPath: Array.isArray(o.subagentPath)
+      ? (o.subagentPath as unknown[]).filter((s): s is string => typeof s === 'string')
+      : [id],
   };
 
   const parentToolCallId = asNonEmptyString(o.parentToolCallId);
@@ -471,7 +479,7 @@ export async function messagesToJsonlWorker(
         'messages.to-jsonl',
         { messages },
         Priority.Normal,
-        { signal }
+        signal !== undefined ? { signal } : {}
       );
     }
   } catch {
@@ -501,7 +509,7 @@ export async function jsonlToMessagesWorker(
         'jsonl.to-messages',
         { text: jsonl },
         Priority.Normal,
-        { signal }
+        signal !== undefined ? { signal } : {}
       );
       return parseSessionMessages(result);
     }
@@ -521,15 +529,15 @@ export function sanitizeMessagesForHydrate(
   return messages.map((m) => {
     let next = m;
     if (m.status === 'processing') {
+      const sanitizedText = m.text && m.text.trim()
+        ? m.text
+        : m.sender === 'assistant'
+          ? '（上次回复未完成）'
+          : undefined;
       next = {
         ...next,
         status: 'completed',
-        text:
-          m.text && m.text.trim()
-            ? m.text
-            : m.sender === 'assistant'
-              ? '（上次回复未完成）'
-              : m.text,
+        ...(sanitizedText !== undefined ? { text: sanitizedText } : {}),
       };
     }
     if (next.toolCalls?.length) {
@@ -554,7 +562,10 @@ export function sanitizeMessagesForHydrate(
       next.sender === 'assistant' &&
       (next.text || '').trim() === '已结束。'
     ) {
-      next = { ...next, text: '' };
+      next = {
+        ...next,
+        text: '',
+      };
     }
     // 对齐 blocks / toolCalls，保证重开会话时间线可渲染
     if (next.sender === 'assistant') {
@@ -569,15 +580,18 @@ export function sanitizeMessagesForHydrate(
  */
 export function hydrateSessionAgents(agents: SessionAgent[]): SessionAgent[] {
   if (!agents?.length) return [];
-  return agents.map((a) => ({
-    ...a,
-    messages: sanitizeMessagesForHydrate(a.messages || []),
-    status: a.status === 'running' ? ('stopped' as const) : a.status,
-    summary:
+  return agents.map((a) => {
+    const summaryVal =
       a.status === 'running'
         ? a.summary || '上次会话中断，协作 agent 未完成'
-        : a.summary,
-  }));
+        : a.summary;
+    return {
+      ...a,
+      messages: sanitizeMessagesForHydrate(a.messages || []),
+      status: a.status === 'running' ? ('stopped' as const) : a.status,
+      ...(summaryVal !== undefined ? { summary: summaryVal } : {}),
+    };
+  });
 }
 
 export function loadSessionIndex(): SessionIndexEntry[] {
@@ -877,17 +891,15 @@ export function hydrateSessionsFromDisk(): {
       folder: e.folder,
       isPinned: e.isPinned,
       isArchived: e.isArchived,
-      branchParentId: e.branchParentId,
+      ...(e.branchParentId !== undefined ? { branchParentId: e.branchParentId } : {}),
       // 纠正历史字面量「刚刚」等（与 sessionDiskMirror 一致）
       timestamp: coerceSessionTimestamp(e.id, e.timestamp, messages),
       messages,
-      pinnedMessageIds: e.pinnedMessageIds?.length
-        ? e.pinnedMessageIds
-        : undefined,
+      ...(e.pinnedMessageIds?.length ? { pinnedMessageIds: e.pinnedMessageIds } : {}),
       agents: loadSessionAgents(e.id),
-      engineCursor: e.engineCursor,
-      engineLastRunId: e.engineLastRunId,
-      hydratedFromEngine: e.hydratedFromEngine,
+      ...(e.engineCursor !== undefined ? { engineCursor: e.engineCursor } : {}),
+      ...(e.engineLastRunId !== undefined ? { engineLastRunId: e.engineLastRunId } : {}),
+      ...(e.hydratedFromEngine !== undefined ? { hydratedFromEngine: e.hydratedFromEngine } : {}),
     };
   });
 

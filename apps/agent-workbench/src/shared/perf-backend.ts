@@ -240,10 +240,10 @@ function jsParseDiff(content: string): DiffParseResult {
         (currentFile!.hunks ??= []).push(currentHunk as DiffHunk);
       }
       currentHunk = {
-        oldStart: parseInt(hunkMatch[1]),
-        oldCount: parseInt(hunkMatch[2] || "1"),
-        newStart: parseInt(hunkMatch[3]),
-        newCount: parseInt(hunkMatch[4] || "1"),
+        oldStart: parseInt(hunkMatch[1] ?? "0"),
+        oldCount: parseInt(hunkMatch[2] ?? "1"),
+        newStart: parseInt(hunkMatch[3] ?? "0"),
+        newCount: parseInt(hunkMatch[4] ?? "1"),
         header: hunkMatch[5]?.trim() ?? "",
         lines: [],
       };
@@ -394,7 +394,7 @@ export class PerfBackend {
   static async decodeToUtf8(data: Uint8Array, encoding?: string): Promise<string> {
     const rust = await tryRust<{ data: number[]; encoding?: string }, string>(
       "perf_encoding_decode",
-      { data: Array.from(data), encoding }
+      { data: Array.from(data), ...(encoding !== undefined ? { encoding } : {}) }
     );
     if (rust) return rust;
     return jsDecodeToUtf8(data, encoding);

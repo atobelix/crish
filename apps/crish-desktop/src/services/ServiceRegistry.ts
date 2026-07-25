@@ -9,7 +9,6 @@ export interface CrishService {
 
 export class ServiceRegistry {
   private services = new Map<string, CrishService>();
-  private started = false;
 
   register(service: CrishService): void {
     if (this.services.has(service.id)) throw new Error(`Service ${service.id} already registered`);
@@ -23,10 +22,9 @@ export class ServiceRegistry {
   }
 
   async startAll(): Promise<void> {
-    for (const [id, svc] of this.services) {
+    for (const [, svc] of this.services) {
       await svc.init();
     }
-    this.started = true;
   }
 
   async stopAll(): Promise<void> {
@@ -35,7 +33,6 @@ export class ServiceRegistry {
       await svc.destroy();
     }
     this.services.clear();
-    this.started = false;
   }
 
   async healthCheck(): Promise<Record<string, { status: string; latency: number }>> {

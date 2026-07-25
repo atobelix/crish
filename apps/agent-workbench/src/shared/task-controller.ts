@@ -24,10 +24,10 @@ export interface WorkbenchTaskAssessment {
 }
 
 export interface WorkbenchHeartbeatInput {
-  now?: number;
-  lastEventAt?: string;
-  memoryMb?: number;
-  cpuPercent?: number;
+  now: number | undefined;
+  lastEventAt: string | undefined;
+  memoryMb: number | undefined;
+  cpuPercent: number | undefined;
 }
 
 export interface WorkbenchContinuationOptions {
@@ -94,7 +94,7 @@ export function updateTaskHealth(snapshot: WorkbenchTaskSnapshot, input: Workben
     cpuPercent: input.cpuPercent ?? snapshot.health.cpuPercent,
     lastEventAt,
     stalledForMs
-  };
+  } as WorkbenchHealth;
 
   return {
     ...snapshot,

@@ -97,17 +97,17 @@ function parseDiff(text: string, offset?: number, limit?: number): Array<{ fileP
   };
 
   for (let i = startIdx; i < Math.min(lines.length, startIdx + maxLines); i++) {
-    const line = lines[i];
+    const line = lines[i]!;
     lineCount++;
 
     const gitHeader = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
-    if (gitHeader) { flush(); currentPath = gitHeader[2] || gitHeader[1]; continue; }
+    if (gitHeader) { flush(); currentPath = gitHeader[2]! || gitHeader[1]!; continue; }
 
     const plusFile = line.match(/^\+\+\+ (?:b\/)?(.+)$/);
-    if (plusFile && plusFile[1] !== '/dev/null') { if (!currentPath) currentPath = plusFile[1]; else if (currentPath.startsWith('a/')) currentPath = plusFile[1]; continue; }
+    if (plusFile && plusFile[1]! !== '/dev/null') { if (!currentPath) currentPath = plusFile[1]!; else if (currentPath.startsWith('a/')) currentPath = plusFile[1]!; continue; }
 
     const minusFile = line.match(/^--- (?:a\/)?(.+)$/);
-    if (minusFile && !currentPath && minusFile[1] !== '/dev/null') { currentPath = minusFile[1]; continue; }
+    if (minusFile && !currentPath && minusFile[1]! !== '/dev/null') { currentPath = minusFile[1]!; continue; }
 
     if (line.startsWith('@@')) { inHunk = true; changes.push({ type: 'normal', content: line }); continue; }
     if (!currentPath && !inHunk) continue;
@@ -132,7 +132,7 @@ function base64Encode(data: ArrayBuffer | string): string {
   const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
   let binary = '';
   for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+    binary += String.fromCharCode(bytes[i]!);
   }
   return btoa(binary);
 }
@@ -173,7 +173,7 @@ function sessionSearch(query: string, messages: Array<{ sender: string; text?: s
 }
 
 self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
-  const { id, type, payload, transferables } = e.data;
+  const { id, type, payload } = e.data;
   const t0 = performance.now();
 
   try {

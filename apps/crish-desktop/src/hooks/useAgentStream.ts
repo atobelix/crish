@@ -154,7 +154,7 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
                 id: toolId,
                 name,
                 arguments: args,
-                explanation,
+                ...(explanation !== undefined ? { explanation } : {}),
                 status: 'running',
               });
               m.blocks.push({ type: 'tool_call', id: toolId });
@@ -387,14 +387,11 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
               : /fail|error/i.test(raw)
                 ? 'failed'
                 : 'completed';
+            const summaryText = live.summary || st.latestError || st.progress || '上次会话中断，协作 agent 未完成';
             patchSessionAgent(sess.id, agentId, {
               status: nextStatus,
               endedAt: Date.now(),
-              summary:
-                live.summary ||
-                st.latestError ||
-                st.progress ||
-                (nextStatus === 'stopped' ? '已停止' : undefined),
+              ...(summaryText !== undefined ? { summary: summaryText } : {}),
             });
           }
         }

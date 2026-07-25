@@ -133,12 +133,13 @@ export class AppErrorBoundary extends React.Component<Props, State> {
     }
 
     try {
+      const technical = (info.componentStack || error.stack) ?? undefined;
       errorStore.push({
         code: 'REACT_RENDER_ERROR',
         module: 'AppErrorBoundary',
         severity: 'error',
         message: error.message || '渲染崩溃',
-        technical: info.componentStack || error.stack,
+        ...(technical !== undefined && { technical }),
         autoResolve: true,
       });
     } catch { /* prevent recursive crash */ }

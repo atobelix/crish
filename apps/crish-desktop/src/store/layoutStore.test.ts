@@ -354,8 +354,7 @@ describe('useLayoutStore actions — guards', () => {
     expect(useLayoutStore.getState().uiSize).toBe('large');
     s.setUiSize('small');
     expect(useLayoutStore.getState().uiSize).toBe('small');
-    // @ts-expect-error intentional invalid
-    s.setUiSize('gigantic');
+    s.setUiSize('gigantic' as unknown as UiSize);
     expect(useLayoutStore.getState().uiSize).toBe(DEFAULT_UI_SIZE);
   });
 
@@ -363,16 +362,14 @@ describe('useLayoutStore actions — guards', () => {
     const s = useLayoutStore.getState();
     s.setSettingsActiveTab('models');
     expect(useLayoutStore.getState().settingsActiveTab).toBe('models');
-    // @ts-expect-error intentional invalid
-    s.setSettingsActiveTab('not-real');
+    s.setSettingsActiveTab('not-real' as unknown as SettingsTabType);
     expect(useLayoutStore.getState().settingsActiveTab).toBe('models');
 
     s.openSettings('security');
     expect(useLayoutStore.getState().showSettingsOverlay).toBe(true);
     expect(useLayoutStore.getState().settingsActiveTab).toBe('security');
 
-    // @ts-expect-error intentional invalid
-    s.openSettings('___ghost___');
+    s.openSettings('___ghost___' as unknown as SettingsTabType);
     expect(useLayoutStore.getState().settingsActiveTab).toBe('security');
     expect(useLayoutStore.getState().showSettingsOverlay).toBe(true);
 
@@ -437,8 +434,7 @@ describe('useLayoutStore actions — guards', () => {
     expect(useLayoutStore.getState().providers).toEqual([]);
     s.setScheduledTasks(undefined as unknown as CronJob[]);
     expect(Array.isArray(useLayoutStore.getState().scheduledTasks)).toBe(true);
-    // @ts-expect-error intentional non-array
-    s.setMcpServers('nope');
+    s.setMcpServers('nope' as unknown as McpServer[]);
     expect(useLayoutStore.getState().mcpServers).toEqual([]);
   });
 

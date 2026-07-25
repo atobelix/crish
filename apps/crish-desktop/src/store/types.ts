@@ -99,6 +99,10 @@ export interface DiffChange {
  * 单文件 diff 快照。
  * 推入 store 前须通过 isFileDiff：filePath trim 非空、additions/deletions 为有限 number、
  * changes 每项为合法 DiffChange。空路径或非法 changes 会被 pushDiffFile 静默丢弃。
+ *
+ * 可选字段约定（exactOptionalPropertyTypes: true）：
+ * `field?: T` 表示字段可以不存在，若存在则必须是 T（不接受 undefined）。
+ * 调用方持有可能为 undefined 的源值时，应使用 compactObj / 条件展开剔除 undefined 键。
  */
 export interface FileDiff {
   /** 工作区相对或绝对路径；规范化侧会 trim */
@@ -176,14 +180,42 @@ export interface MessageToolApprovalMeta {
 }
 
 /**
+ * 审批 meta 的「显式可空」形态：所有字段都允许 undefined，
+ * 适用于从原始事件水合时部分字段未提供的场景。
+ * 转入 store 时应使用 compactObj 剔除 undefined 字段，得到 MessageToolApprovalMeta。
+ */
+export type MessageToolApprovalMetaInput = {
+  trustZone?: string | undefined;
+  risk?: string | undefined;
+  riskReason?: string | undefined;
+  riskLevel?: MessageApprovalRiskLevel | undefined;
+  requiresDoubleConfirm?: boolean | undefined;
+  recommendSnapshot?: boolean | undefined;
+  source?: MessageApprovalRiskSource | undefined;
+};
+
+/**
  * 工具调用生命周期状态。
  * running → success|error；审批路径可经 pending_approval。
+ *
+ * 语义单一性约定：
+ *   - 'success' / 'error' 仅表示「工具执行结果」，不含「用户审批决定」
+ *   - 用户审批决定（approved / rejected）由 {@link MessageToolCall.approvalDecision} 独立承载
+ *   - 当用户拒绝审批（approvalDecision='rejected'）时，status 仍保留为 'pending_approval'，
+ *     由调用方根据 approvalDecision 决定后续流转（重试 / 终止）
  */
 export type MessageToolCallStatus =
   | 'running'
   | 'success'
   | 'error'
   | 'pending_approval';
+
+/**
+ * 用户审批决定（与工具执行结果解耦）。
+ * - approved：用户批准，工具继续执行
+ * - rejected：用户拒绝，工具不会执行（与工具执行失败 status='error' 语义不同）
+ */
+export type MessageToolCallApprovalDecision = 'approved' | 'rejected';
 
 /** 助手消息上的单次工具调用（含可选 diff / 审批元数据） */
 export interface MessageToolCall {
@@ -197,12 +229,39 @@ export interface MessageToolCall {
   explanation?: string;
   /** approval-requested 带来的后端风险元数据 */
   approvalMeta?: MessageToolApprovalMeta;
+  /**
+   * 用户审批决定（与 status 解耦）。
+   * 仅在 status === 'pending_approval' 后用户已响应时存在；
+   * undefined 表示未走过审批路径或用户尚未响应。
+   * 调用方据此区分「拒绝」与「执行失败」两种语义。
+   */
+  approvalDecision?: MessageToolCallApprovalDecision;
   /** 开始执行时刻（epoch ms） */
   startedAt?: number;
   /** 完成时刻（epoch ms） */
   completedAt?: number;
   /** 同一轮并行调用的 turn 标识 */
   turnId?: string;
+}
+
+/**
+ * MessageToolCall 的「输入形态」：所有可选字段允许显式 undefined。
+ * 适用于从原始事件流构造 toolCall 时部分字段尚未提供的场景。
+ * 转入 store 前应使用 compactObj 剔除 undefined 字段，得到 MessageToolCall。
+ */
+export interface MessageToolCallInput {
+  id: string;
+  name: string;
+  arguments: string;
+  status: MessageToolCallStatus;
+  output?: string | undefined;
+  diffs?: FileDiff[] | undefined;
+  explanation?: string | undefined;
+  approvalMeta?: MessageToolApprovalMetaInput | undefined;
+  approvalDecision?: MessageToolCallApprovalDecision | undefined;
+  startedAt?: number | undefined;
+  completedAt?: number | undefined;
+  turnId?: string | undefined;
 }
 
 /** 消息发送方 */
@@ -213,6 +272,29 @@ export type MessageSender = 'user' | 'assistant';
  * queued=排队待发; processing=流式中; completed=终态（成功收口，不含 error 枚举）。
  */
 export type SessionMessageStatus = 'queued' | 'processing' | 'completed' | 'error';
+
+/**
+ * 工具调用结果回执：当一条消息是工具调用的「结果回执」时，
+ * 通过 toolCallResults 关联到对应的 toolCall.id。
+ *
+ * 设计动机：
+ *   - 助手消息携带 toolCalls（调用发起）
+ *   - 后续消息（user 或 tool 角色）可能携带 toolCallResults（调用结果）
+ *   - 消息淘汰时需要识别配对的「调用 + 结果」消息，一并清理避免孤儿结果
+ *
+ * 字段：
+ *   - id：对应 MessageToolCall.id（必填，用于配对）
+ *   - output：结果输出文本（可选）
+ *   - isError：是否为错误结果（可选）
+ */
+export interface SessionMessageToolCallResult {
+  /** 对应 MessageToolCall.id */
+  id: string;
+  /** 结果输出文本（可选） */
+  output?: string;
+  /** 是否为错误结果（可选） */
+  isError?: boolean;
+}
 
 /** 时间线块类型：正文段 vs 工具调用锚点 */
 export type MessageTimelineBlockType = 'text' | 'tool_call';
@@ -229,6 +311,27 @@ export interface MessageTimelineBlock {
   content?: string;
 }
 
+/**
+ * SessionMessage 的「输入形态」：从原始事件流构造消息时，
+ * 字段值可能为 undefined（事件未携带）。转入 store 前应使用 compactObj
+ * 剔除 undefined 字段，得到结构干净的 SessionMessage。
+ *
+ * 字段语义与 SessionMessage 一一对应，仅是允许显式 undefined。
+ */
+export interface SessionMessageInput {
+  id: string;
+  sender: MessageSender;
+  text?: string | undefined;
+  thinking?: string | undefined;
+  timestamp: number;
+  toolCalls?: MessageToolCallInput[] | undefined;
+  status?: SessionMessageStatus | undefined;
+  blocks?: MessageTimelineBlock[] | undefined;
+  streamTextOffset?: number | undefined;
+  thinkingTime?: number | undefined;
+  toolCallResults?: SessionMessageToolCallResult[] | undefined;
+}
+
 /** 会话内一条用户或助手消息 */
 export interface SessionMessage {
   id: string;
@@ -240,6 +343,13 @@ export interface SessionMessage {
   timestamp: number;
   toolCalls?: MessageToolCall[];
   status?: SessionMessageStatus;
+  /** 预计算 HTML 缓存（Worker 异步 markdown 渲染结果） */
+  precomputedHtml?: string;
+  /**
+   * 工具调用结果回执：本消息作为某些 toolCall 的结果时，
+   * 列出对应 toolCall.id。用于消息淘汰时识别「调用 + 结果」配对一并清理。
+   */
+  toolCallResults?: SessionMessageToolCallResult[];
   /**
    * 时间线：按发生顺序交错 text / tool_call。
    * 流式累计正文用 streamTextOffset 切分到当前 text 段。
@@ -280,7 +390,71 @@ export interface SessionAgent {
   startedAt: number;
   /** 结束时刻 epoch ms；运行中缺省 */
   endedAt?: number;
+  /** 嵌套深度：0=主会话直接子 agent，n=第 n+1 级嵌套子 agent */
+  depth: number;
+  /** 从根 agent 到当前 agent 的 id 路径链（含自身），用于树结构追踪 */
+  subagentPath: string[];
 }
+
+/**
+ * SessionAgent 的「输入形态」：从原始事件构造时部分字段可能为 undefined。
+ * 转入 store 前应使用 compactObj 剔除 undefined 字段，得到 SessionAgent。
+ */
+export interface SessionAgentInput {
+  id: string;
+  subagentRunId: string;
+  parentSessionId: string;
+  parentRunId: string;
+  parentToolCallId?: string | undefined;
+  description: string;
+  mode: string;
+  status: SessionAgentStatus;
+  summary?: string | undefined;
+  messages: SessionMessageInput[];
+  startedAt: number | undefined;
+  endedAt?: number | undefined;
+  depth?: number | undefined;
+  subagentPath?: string[] | undefined;
+}
+
+/**
+ * SessionAgent 的「可 patch 字段白名单」。
+ *
+ * 设计动机：
+ *   - {@link SessionAgent} 中 id / parentSessionId / parentRunId 是创建时确定的不可变身份字段，
+ *     禁止通过 patchSessionAgent 修改
+ *   - messages 是数组结构，应通过 appendSessionAgentMessage 增量更新，禁止整段覆盖
+ *   - 仅允许更新生命周期与展示字段（status / summary / endedAt / description 等）
+ *   - subagentRunId 例外：daemon 异步确认 run 时回填，仅允许由 onRunMeta 路径写入一次
+ *
+ * 治理防线 #1（类型逃逸）：用白名单类型替代 `Partial<SessionAgent>` + Object.assign，
+ * 编译期即杜绝任意 key 写入。
+ */
+export interface SessionAgentPatch {
+  /** agent 生命周期状态（running / completed / failed / stopped） */
+  status?: SessionAgentStatus;
+  /** 完成摘要（completed / failed / stopped 时由引擎或调用方写入） */
+  summary?: string;
+  /** 结束时刻 epoch ms（终态写入；running 时缺省） */
+  endedAt?: number;
+  /** 当前阶段描述（可随执行进度更新） */
+  description?: string;
+  /** 嵌套深度（极少 patch；保留以备父 agent 重链时调整） */
+  depth?: number;
+  /** 子 agent 路径链（极少 patch；保留以备父 agent 重链时调整） */
+  subagentPath?: string[];
+  /**
+   * 子 agent 的 runId（由 daemon 在 onRunMeta 事件中异步回填）。
+   *
+   * 治理防线 #1（身份字段例外）：
+   *   - id / parentSessionId / parentRunId 在 upsertSessionAgent 时一次性确定，永不 patch
+   *   - subagentRunId 由于 daemon 协议设计：onSubagentStarted 先创建本地 agent（占位 runId），
+   *     onRunMeta 随后回填真实 runId——是合法的「创建后一次性写入」字段
+   *   - 调用方应仅在 onRunMeta 路径写入；重复写入以最后一次为准（daemon runId 不会变更）
+   */
+  subagentRunId?: string;
+}
+
 
 /** /goal 任务清单项（与 TasksCard `- [ ]` 解析对齐） */
 export interface SessionGoalTask {
@@ -305,6 +479,17 @@ export interface SessionGoalMode {
 }
 
 /**
+ * 会话时间戳来源标记。
+ *
+ * 治理防线 #6（数据水合与时间戳类型漂移）& #35（状态枚举语义重载）：
+ *   - 旧实现中 `SessionState.timestamp` 字段同时承载 ISO 时间串与 `'远程'` 字面量，
+ *     既破坏类型语义又导致下游相对时间计算（`刚刚` / `5 分钟前`）拿到非数字 → NaN
+ *   - 改用独立 `timestampSource` discriminator 字段标记来源；timestamp 始终是 ISO 串
+ *   - 侧栏显示层根据 source 决定渲染「远程」徽标还是相对时间
+ */
+export type SessionTimestampSource = 'local' | 'remote';
+
+/**
  * 侧栏/主区会话权威形状（sessions[] 与 sessionsById 同引用）。
  * 持久化索引字段见 sessionPersistence.SessionIndexEntry（子集 + messageCount 等）。
  */
@@ -317,8 +502,18 @@ export interface SessionState {
   isArchived: boolean;
   /** 分叉来源会话 id */
   branchParentId?: string;
-  /** ISO 时间串（侧栏相对时间）；创建时用 nowIsoTimestamp，勿写死「刚刚」 */
+  /**
+   * ISO 时间串（侧栏相对时间计算源）。
+   * 始终为合法 ISO 串，禁止写入「刚刚」/「远程」等字面量。
+   * 来源由 {@link timestampSource} 标记；远程会话水合后由显示层根据 source 渲染徽标。
+   */
   timestamp: string;
+  /**
+   * 时间戳来源标记。
+   * - local：本机创建 / 本机活动触达更新（缺省）
+   * - remote：远程引擎水合后写入（侧栏展示「远程」徽标，相对时间仍由 timestamp 计算）
+   */
+  timestampSource?: SessionTimestampSource;
   messages: SessionMessage[];
   /** 本会话固定的消息 id 列表（置顶快捷跳转） */
   pinnedMessageIds?: string[];
@@ -332,6 +527,8 @@ export interface SessionState {
   hydratedFromEngine?: boolean;
   /** /goal 目标模式状态（会话级） */
   goalMode?: SessionGoalMode;
+  /** 已被截断的工具链 id 列表 */
+  truncatedToolChainIds?: string[];
 }
 
 /** 标签拖拽落点预览方向 */
@@ -347,4 +544,20 @@ export interface DropPreviewState {
   colIdx: number;
   groupIdx: number;
   direction: DropPreviewDirection;
+}
+
+/**
+ * 流式渲染运行态：仅承载与「正在流式输出的消息」相关的临时渲染指针。
+ *
+ * 设计动机：
+ *   - SessionMessage.streamTextOffset 是「消息自身持久化字段」，用于回放历史时切分 text 段
+ *   - StreamingMessageRenderState 是「会话级运行态」，由 session-actions 在工具插入 /
+ *     文本更新时同步维护，避免反复在 message 上读改写
+ *   - 二者语义相关但用途不同：前者是数据快照，后者是当前流式上下文
+ *
+ * 字段：
+ *   - streamTextOffset：当前已切分到 text 段的起始偏移；当文本被截断或回退时重置为 0
+ */
+export interface StreamingMessageRenderState {
+  streamTextOffset: number;
 }

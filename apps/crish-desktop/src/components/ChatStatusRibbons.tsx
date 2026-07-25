@@ -130,7 +130,7 @@ export function resolveSetupHintKind(opts: {
     shouldShowNeedsKeySoftHint({
       needsKeySetup: opts.needsKeySetup,
       firstRunOpen: false,
-      engineOk: opts.engineOk,
+      ...(opts.engineOk !== undefined && { engineOk: opts.engineOk }),
     })
   ) {
     return 'needs-key';
@@ -138,9 +138,9 @@ export function resolveSetupHintKind(opts: {
   if (
     shouldShowNeedsModelSoftHint({
       needsModelSetup: Boolean(opts.needsModelSetup),
-      needsKeySetup: opts.needsKeySetup,
       firstRunOpen: false,
-      engineOk: opts.engineOk,
+      ...(opts.needsKeySetup !== undefined && { needsKeySetup: opts.needsKeySetup }),
+      ...(opts.engineOk !== undefined && { engineOk: opts.engineOk }),
     })
   ) {
     return 'needs-model';

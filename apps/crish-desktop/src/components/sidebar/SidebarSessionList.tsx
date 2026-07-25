@@ -233,8 +233,8 @@ function useSessionListWindow(
           scrollTop: 0,
           viewportHeight: 400,
           listOffsetTop: 0,
-          ensureIndex,
-          getHeight,
+          ...(ensureIndex !== null ? { ensureIndex } : {}),
+          ...(getHeight !== undefined ? { getHeight } : {}),
         })
       );
       return;
@@ -250,8 +250,8 @@ function useSessionListWindow(
         scrollTop: scrollEl.scrollTop,
         viewportHeight: scrollEl.clientHeight || 400,
         listOffsetTop,
-        ensureIndex,
-        getHeight,
+        ...(ensureIndex !== null ? { ensureIndex } : {}),
+        ...(getHeight !== undefined ? { getHeight } : {}),
       });
       setRange((prev) =>
         sessionListWindowRangeEqual(prev, next) ? prev : next
@@ -283,7 +283,7 @@ type SessionRowProps = {
   s: SessionState;
   activeSessionId: string;
   searchQuery: string;
-  searchHit?: SessionSearchMatch;
+  searchHit?: SessionSearchMatch | undefined;
   isDraggingThis: boolean;
   isRenaming: boolean;
   isDraggable: boolean;
@@ -298,11 +298,11 @@ type SessionRowProps = {
     sessionId: string,
     folderName?: string
   ) => void;
-  onStartRename?: (sessionId: string) => void;
+  onStartRename?: ((sessionId: string) => void) | undefined;
   onCommitRename: (sessionId: string) => void;
-  onCancelRename?: () => void;
+  onCancelRename?: (() => void) | undefined;
   /** 列表内 ↑↓ 导航（跨置顶/项目/对话，由父级按可见顺序解析） */
-  onNavigateSession?: (fromId: string, delta: number) => void;
+  onNavigateSession?: ((fromId: string, delta: number) => void) | undefined;
   /** HTML5 拖拽句柄（useDragReorder） */
   dragHandlers?: {
     draggable: boolean;
@@ -490,7 +490,7 @@ const SessionRow = memo(function SessionRow({
               ) : (
                 <>
                   {/* 相对时间：由 NowTickContext 驱动，只有本元素因 tick 重渲染 */}
-                  <SessionRowTime s={s} className={styles.sessionTime} />
+                  <SessionRowTime s={s} className={styles.sessionTime ?? ''} />
                   <Tooltip content="更多操作">
                     <button
                       type="button"
@@ -696,18 +696,21 @@ function DragReorderSection({
                 className={`${styles.dropIndicator} ${styles.dropIndicatorActive}`}
               />
             )}
-            {React.cloneElement(renderRow(s) as React.ReactElement, {
-              dragHandlers: {
-                draggable: true,
-                onDragStart: (e: React.DragEvent) => onDragStart(idx, e),
-                onDragEnd,
-              },
-              dropHandlers: {
-                onDragOver: (e: React.DragEvent) => onDragOver(idx, e),
-                onDrop: () => onDrop(idx),
-              },
-              onReorderKeyboard: handleKeyboardReorder,
-            })}
+            {React.cloneElement(
+              renderRow(s) as React.ReactElement<Record<string, unknown>>,
+              {
+                dragHandlers: {
+                  draggable: true,
+                  onDragStart: (e: React.DragEvent) => onDragStart(idx, e),
+                  onDragEnd,
+                },
+                dropHandlers: {
+                  onDragOver: (e: React.DragEvent) => onDragOver(idx, e),
+                  onDrop: () => onDrop(idx),
+                },
+                onReorderKeyboard: handleKeyboardReorder,
+              }
+            )}
           </React.Fragment>
         );
       })}
@@ -1166,7 +1169,7 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = ({
         if (!dragging && Math.sqrt(dx * dx + dy * dy) > 6) {
           dragging = true;
           (e as unknown as PointerEvent).preventDefault?.();
-          setActiveDragItem({ type: 'session', sessionId, folderName });
+          setActiveDragItem({ type: 'session', sessionId, ...(folderName !== undefined ? { folderName } : {}) });
           if (el) {
             dragOverlay = el.cloneNode(true) as HTMLDivElement;
             dragOverlay.className =
@@ -1248,7 +1251,7 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = ({
           activeSessionId={activeSessionId}
           rowHeight={rh}
           searchQuery={searchQuery}
-          searchHit={searchHits.get(s.id)}
+          {...(searchHits.get(s.id) !== undefined ? { searchHit: searchHits.get(s.id)! } : {})}
           isDraggingThis={
             activeDragItem?.type === 'session' &&
             activeDragItem.sessionId === s.id

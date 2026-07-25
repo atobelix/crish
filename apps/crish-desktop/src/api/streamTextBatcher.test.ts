@@ -61,7 +61,7 @@ describe('StreamTextBatcher', () => {
     expect(batcher.isScheduled()).toBe(true);
     expect(flushed).toHaveLength(0);
     expect(mt.active()).toHaveLength(1);
-    expect(mt.active()[0].ms).toBe(50);
+    expect(mt!.active()[0]!.ms).toBe(50);
 
     // fire scheduled timer
     mt.fireActive();
@@ -372,7 +372,7 @@ describe('StreamValueBatcher', () => {
     expect(batcher.pendingCount()).toBe(2);
     expect(flushed).toHaveLength(0);
     expect(mt.active()).toHaveLength(1);
-    expect(mt.active()[0].ms).toBe(48);
+    expect(mt!.active()[0]!.ms).toBe(48);
 
     mt.fireActive();
     expect(flushed).toEqual([

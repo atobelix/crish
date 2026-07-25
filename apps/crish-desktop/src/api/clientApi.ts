@@ -393,20 +393,23 @@ export function normalizeSettingsPartial(raw: unknown): Partial<Settings> {
     !Array.isArray(o.fonts)
   ) {
     const f = o.fonts as Record<string, unknown>;
-    out.fonts = {
-      ...(o.fonts as Settings['fonts']),
-      uiFont:
+    const _uiFont =
         'uiFont' in f
           ? normalizeSettingsText(f.uiFont) || 'auto'
-          : (o.fonts as Settings['fonts'])?.uiFont,
-      monoFont:
+          : (o.fonts as Settings['fonts'])?.uiFont;
+    const _monoFont =
         'monoFont' in f
           ? normalizeSettingsText(f.monoFont) || 'auto'
-          : (o.fonts as Settings['fonts'])?.monoFont,
-      monoLigatures:
+          : (o.fonts as Settings['fonts'])?.monoFont;
+    const _monoLigatures =
         'monoLigatures' in f
           ? normalizeSettingsBool(f.monoLigatures, false)
-          : (o.fonts as Settings['fonts'])?.monoLigatures,
+          : (o.fonts as Settings['fonts'])?.monoLigatures;
+    out.fonts = {
+      ...(o.fonts as Settings['fonts']),
+      ...(_uiFont !== undefined && { uiFont: _uiFont }),
+      ...(_monoFont !== undefined && { monoFont: _monoFont }),
+      ...(_monoLigatures !== undefined && { monoLigatures: _monoLigatures }),
     };
   }
 

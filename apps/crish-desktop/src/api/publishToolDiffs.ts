@@ -52,7 +52,7 @@ export function normalizeDiffFilePath(
   let drive = '';
   let body = p;
   if (driveMatch) {
-    drive = driveMatch[1];
+    drive = driveMatch[1]!;
     body = driveMatch[2] || '';
   }
 

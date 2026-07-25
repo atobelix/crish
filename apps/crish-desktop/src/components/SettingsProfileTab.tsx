@@ -42,9 +42,6 @@ function readDaemonWsStored(): string {
 
 export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
   const cwd = getWorkspacePath() || '__global__';
-  const identityLabelId = useId();
-  const dataLabelId = useId();
-  const devLabelId = useId();
   const headMetaId = useId();
   const daemonWsInputId = useId();
   const daemonStatusId = useId();

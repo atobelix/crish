@@ -70,11 +70,12 @@ export async function refreshProductCapabilities(
     }
 
     const snap = getListCapabilitiesSnapshot();
+    const mcp = snap?.mcp ?? probe?.capabilityState;
     const next: CachedCapabilities = {
       at: Date.now(),
-      mcp: snap?.mcp ?? probe?.capabilityState,
-      raw: snap?.raw,
-      probe,
+      ...(mcp !== undefined && { mcp }),
+      ...(snap?.raw !== undefined && { raw: snap.raw }),
+      ...(probe !== undefined && { probe }),
     };
     cache = next;
     return next;

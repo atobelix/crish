@@ -233,6 +233,12 @@ fn dpapi_protect(input: &[u8]) -> Result<Vec<u8>, String> {
         cbData: 0,
         pbData: ptr::null_mut(),
     };
+    // SAFETY: CryptProtectData is an FFI call into Windows DPAPI. The caller guarantees that:
+    // - in_blob.pbData points to a valid buffer of in_blob.cbData bytes
+    // - out_blob is a valid CRYPT_INTEGER_BLOB that will be filled by the function
+    // - CRYPTPROTECT_UI_FORBIDDEN prevents any UI prompt
+    // POST: On success, out_blob contains the encrypted data (allocated by DPAPI).
+    // PANICS: None (errors are propagated via Result).
     let ok = unsafe {
         CryptProtectData(
             &mut in_blob,
@@ -247,8 +253,16 @@ fn dpapi_protect(input: &[u8]) -> Result<Vec<u8>, String> {
     if ok == 0 {
         return Err("Windows DPAPI CryptProtectData failed".to_string());
     }
+    // SAFETY: out_blob.pbData and cbData were set by CryptProtectData and are guaranteed
+    // valid on success. The slice is immediately copied into a Vec to avoid lifetime issues.
+    // POST: bytes is an owned Vec<u8> that does not borrow from the DPAPI allocation.
+    // PANICS: None (valid range guaranteed by DPAPI on success).
     let bytes =
         unsafe { std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize).to_vec() };
+    // SAFETY: LocalFree releases the memory allocated by CryptProtectData.
+    // The pointer must be the exact value returned by the API (not offset).
+    // POST: The DPAPI-allocated buffer is freed.
+    // PANICS: None.
     unsafe {
         LocalFree(out_blob.pbData.cast());
     }
@@ -273,6 +287,12 @@ fn dpapi_unprotect(input: &[u8]) -> Result<Vec<u8>, String> {
         cbData: 0,
         pbData: ptr::null_mut(),
     };
+    // SAFETY: CryptUnprotectData is an FFI call into Windows DPAPI. The caller guarantees that:
+    // - in_blob.pbData points to a valid encrypted buffer of in_blob.cbData bytes
+    // - out_blob is a valid CRYPT_INTEGER_BLOB that will be filled by the function
+    // - CRYPTPROTECT_UI_FORBIDDEN prevents any UI prompt
+    // POST: On success, out_blob contains the decrypted data (allocated by DPAPI).
+    // PANICS: None (errors are propagated via Result).
     let ok = unsafe {
         CryptUnprotectData(
             &mut in_blob,
@@ -287,8 +307,16 @@ fn dpapi_unprotect(input: &[u8]) -> Result<Vec<u8>, String> {
     if ok == 0 {
         return Err("Windows DPAPI CryptUnprotectData failed".to_string());
     }
+    // SAFETY: out_blob.pbData and cbData were set by CryptUnprotectData and are guaranteed
+    // valid on success. The slice is immediately copied into a Vec to avoid lifetime issues.
+    // POST: bytes is an owned Vec<u8> that does not borrow from the DPAPI allocation.
+    // PANICS: None (valid range guaranteed by DPAPI on success).
     let bytes =
         unsafe { std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize).to_vec() };
+    // SAFETY: LocalFree releases the memory allocated by CryptUnprotectData.
+    // The pointer must be the exact value returned by the API (not offset).
+    // POST: The DPAPI-allocated buffer is freed.
+    // PANICS: None.
     unsafe {
         LocalFree(out_blob.pbData.cast());
     }

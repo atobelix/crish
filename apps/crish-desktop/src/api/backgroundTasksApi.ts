@@ -269,9 +269,9 @@ export function parseBackgroundTask(raw: unknown): BackgroundTaskInfo | null {
     id,
     label,
     state,
-    command,
-    startedAt,
-    summary,
+    ...(command !== undefined && { command }),
+    ...(startedAt !== undefined && { startedAt }),
+    ...(summary !== undefined && { summary }),
   };
 }
 

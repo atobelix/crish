@@ -80,7 +80,7 @@ export const Tooltip: React.FC<{
   side?: 'top' | 'bottom' | 'left' | 'right';
 }> = ({ content, children, disabled, side }) => {
   return (
-    <UnifiedTooltip content={content} disabled={disabled} side={side}>
+    <UnifiedTooltip content={content} {...(disabled !== undefined ? { disabled } : {})} {...(side !== undefined ? { side } : {})}>
       {children}
     </UnifiedTooltip>
   );

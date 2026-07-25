@@ -37,22 +37,39 @@ const LATENCY_HISTORY_SIZE = 5;
 export class ConnectionManager {
   private static instance: ConnectionManager | null = null;
 
+  public static resetInstanceForTests(): void {
+    if (ConnectionManager.instance) {
+      ConnectionManager.instance.dispose();
+      ConnectionManager.instance = null;
+    }
+  }
+
+  public static createForTest(client: DesktopDaemonClient): ConnectionManager {
+    const cm = new ConnectionManager(client);
+    ConnectionManager.instance = cm;
+    return cm;
+  }
+
+  public dispose(): void {
+    if (this.probeTimer) clearInterval(this.probeTimer);
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.callbacks.clear();
+  }
+
   private client: DesktopDaemonClient;
   private state: ConnectionState;
   private callbacks = new Set<(state: ConnectionState) => void>();
-  private unsubDaemonState: () => void;
-  private unsubDaemonMessage: () => void;
   private probeTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private connectPromise: Promise<void> | null = null;
   private latencyHistory: number[] = [];
 
-  private constructor() {
-    this.client = getDesktopDaemonClient();
+  private constructor(client?: DesktopDaemonClient) {
+    this.client = client ?? getDesktopDaemonClient();
     this.state = this.createInitialState();
 
-    this.unsubDaemonState = this.client.onState((s, err?) => this.handleDaemonStateChange(s, err));
-    this.unsubDaemonMessage = this.client.onMessage((msg) => this.handleDaemonMessage(msg));
+    this.client.onState((s, err?) => this.handleDaemonStateChange(s, err));
+    this.client.onMessage((msg) => this.handleDaemonMessage(msg));
   }
 
   static getInstance(): ConnectionManager {

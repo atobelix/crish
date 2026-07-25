@@ -36,7 +36,6 @@ import {
   getSessionById,
   renameSession,
 } from '../api/storeAccess';
-import { useLayoutStore } from '../store/layoutStore';
 import { setComposerSeed } from '../api/composerSeed';
 import { closeSettings } from '../store/settingsUiStore';
 import styles from './SettingsScheduleTab.module.css';
@@ -163,20 +162,6 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
     [workflowsLoading, workflows.length, filtered.length],
   );
 
-  const stats = useMemo(() => {
-    const total = workflows.length;
-    const enabled = workflows.filter((w) => w.enabled !== false).length;
-    const disabled = total - enabled;
-    return { total, enabled, disabled };
-  }, [workflows]);
-
-  const scheduleTypeHint = useMemo(
-    () =>
-      WORKFLOW_SCHEDULE_TYPES.find((t) => t.value === wfDraft.scheduleType)?.hint ||
-      '',
-    [wfDraft.scheduleType],
-  );
-
   const refreshWorkflows = async () => {
     setWorkflowsLoading(true);
     try {
@@ -234,11 +219,6 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
     setWfOk('');
     resetDraft();
     setEditingWorkflow(null);
-  };
-
-  const openMainScheduled = () => {
-    useLayoutStore.getState().setShowSettingsOverlay(false);
-    emitUiEvent('open-scheduled');
   };
 
   const applyPreset = (presetId: string) => {
@@ -329,7 +309,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
           name: wfDraft.name.trim(),
           prompt: wfDraft.prompt.trim(),
           schedule: schedGuard.schedule,
-          cwd: workspacePath || undefined,
+          ...(workspacePath ? { cwd: workspacePath } : {}),
           enabled: true,
         });
         if (!res.ok) {

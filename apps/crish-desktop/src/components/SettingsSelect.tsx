@@ -7,9 +7,9 @@ import styles from './SettingsSelect.module.css';
 export type SettingsSelectOption = {
   value: string;
   label: string;
-  group?: string;
-  previewFamily?: string;
-  hint?: string;
+  group?: string | undefined;
+  previewFamily?: string | undefined;
+  hint?: string | undefined;
 };
 
 interface Props {
@@ -191,7 +191,8 @@ export const SettingsSelect: React.FC<Props> = ({
         e.preventDefault();
         const idx = focusedIdxRef.current;
         if (idx >= 0 && idx <= lastIdx) {
-          onChange(options[idx].value);
+          const opt = options![idx];
+          if (opt) onChange(opt.value);
           setOpen(false);
           triggerRef.current?.focus();
         }

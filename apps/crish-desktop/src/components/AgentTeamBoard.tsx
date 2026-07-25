@@ -159,8 +159,8 @@ function summarySnippet(agent: SessionAgent, maxLen: number): string {
   const msgs = agent.messages || [];
   for (let i = msgs.length - 1; i >= 0; i -= 1) {
     const m = msgs[i];
-    if (m.sender === 'assistant' && (m.text || '').trim()) {
-      const t = m.text!.trim();
+    if (m!.sender === 'assistant' && (m!.text || '').trim()) {
+      const t = m!.text!.trim();
       if (isNoiseAgentLine(t)) continue;
       return clip(t);
     }
@@ -168,8 +168,8 @@ function summarySnippet(agent: SessionAgent, maxLen: number): string {
   // 3) 用户任务句（跳过系统灌入）
   for (let i = msgs.length - 1; i >= 0; i -= 1) {
     const m = msgs[i];
-    if (m.sender === 'user' && (m.text || '').trim()) {
-      const t = m.text!.trim();
+    if (m!.sender === 'user' && (m!.text || '').trim()) {
+      const t = m!.text!.trim();
       if (isNoiseAgentLine(t)) continue;
       return clip(t);
     }
@@ -298,10 +298,12 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
           next = ids.length - 1;
         }
         e.preventDefault();
+        const targetId = ids[next];
+        if (!targetId) return;
         const safe =
           typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
-            ? CSS.escape(ids[next])
-            : ids[next].replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            ? CSS.escape(targetId)
+            : targetId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         const el = listRef.current?.querySelector<HTMLElement>(
           `[data-agent-id="${safe}"]`,
         );

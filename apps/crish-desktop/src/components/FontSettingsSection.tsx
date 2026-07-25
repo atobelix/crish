@@ -119,8 +119,8 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
     const base: SettingsSelectOption[] = uiFontOptions().map((o) => ({
       value: o.id,
       label: o.label,
-      previewFamily: o.previewFamily,
-      hint: o.kind === 'embedded' ? '内嵌' : o.kind === 'auto' ? platformLabel() : undefined,
+      ...(o.previewFamily !== undefined && { previewFamily: o.previewFamily }),
+      ...(o.kind === 'embedded' ? { hint: '内嵌' } : o.kind === 'auto' ? { hint: platformLabel() } : {}),
     }));
     const locals: SettingsSelectOption[] = localFonts.map((f) => ({
       value: `local:${f}`,
@@ -146,8 +146,8 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
     const base: SettingsSelectOption[] = monoFontOptions().map((o) => ({
       value: o.id,
       label: o.label,
-      previewFamily: o.previewFamily,
-      hint: o.kind === 'embedded' ? '内嵌' : o.kind === 'auto' ? platformLabel() : undefined,
+      ...(o.previewFamily !== undefined && { previewFamily: o.previewFamily }),
+      ...(o.kind === 'embedded' ? { hint: '内嵌' } : o.kind === 'auto' ? { hint: platformLabel() } : {}),
     }));
     const locals: SettingsSelectOption[] = localFonts.map((f) => ({
       value: `local:${f}`,
@@ -316,7 +316,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
               if ((v as UiFontChoice) === uiValue) return;
               void apply({ uiFont: v as UiFontChoice });
             }}
-            valuePreviewFamily={uiPreviewFamily}
+            {...(uiPreviewFamily !== undefined && { valuePreviewFamily: uiPreviewFamily })}
             footer={customHeader('ui')}
             maxHeight={320}
           />
@@ -352,7 +352,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
                 if ((v as MonoFontChoice) === monoValue) return;
                 void apply({ monoFont: v as MonoFontChoice });
               }}
-              valuePreviewFamily={monoPreviewFamily}
+              {...(monoPreviewFamily !== undefined && { valuePreviewFamily: monoPreviewFamily })}
               footer={customHeader('mono')}
               maxHeight={320}
             />

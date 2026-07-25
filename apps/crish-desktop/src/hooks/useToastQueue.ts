@@ -258,7 +258,7 @@ export function createToastItem(
   return {
     id: id ?? createToastId(),
     message: normalized,
-    onUndo,
+    ...(onUndo !== undefined ? { onUndo } : {}),
     ariaLive: isError ? 'assertive' : 'polite',
     type: onUndo ? 'info' : (isError ? 'error' : 'warning'),
     duration: TOAST_TTL_MS,

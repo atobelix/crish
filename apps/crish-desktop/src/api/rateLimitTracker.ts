@@ -91,7 +91,7 @@ export function recordRequestUsage(
 /** 清理滑动窗口之外的历史记录 */
 function pruneExpiredRecords(now: number): void {
   const cutoff = now - (SLIDING_WINDOW_MS * 30); // 保留最近 30 分钟历史用于统计
-  while (usageRecords.length > 0 && usageRecords[0].timestamp < cutoff) {
+  while (usageRecords.length > 0 && usageRecords![0]!.timestamp < cutoff) {
     usageRecords.shift();
   }
 }

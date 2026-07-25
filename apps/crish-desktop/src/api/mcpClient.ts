@@ -27,7 +27,7 @@ interface McpServerConfig {
 interface McpToolInfo {
   name: string;
   description?: string;
-  inputSchema: unknown;
+  inputSchema: Record<string, unknown>;
 }
 
 export class McpClientManager {
@@ -58,7 +58,7 @@ export class McpClientManager {
     const transport = new StdioClientTransport({
       command: config.command,
       args: config.args,
-      env: config.env,
+      ...(config.env !== undefined && { env: config.env }),
     });
 
     const client = new Client({
@@ -88,8 +88,8 @@ export class McpClientManager {
     const result = await entry.client.listTools();
     const tools: McpToolInfo[] = result.tools.map((t: Tool) => ({
       name: t.name,
-      description: t.description,
-      inputSchema: t.inputSchema,
+      ...(t.description !== undefined && { description: t.description }),
+      inputSchema: (t.inputSchema ?? {}) as Record<string, unknown>,
     }));
 
     this.toolCache.set(serverId, tools);

@@ -42,7 +42,7 @@ describe('agentProfiles', () => {
     ]);
     const list = loadAgentProfiles();
     expect(list).toHaveLength(1);
-    expect(list[0].name).toBe('自定义');
+    expect(list![0]!.name).toBe('自定义');
   });
 
   it('prompt hint tells model to use run_subagent', () => {

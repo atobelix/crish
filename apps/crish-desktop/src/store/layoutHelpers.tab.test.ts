@@ -29,7 +29,7 @@ function wsWithToolTabs(cards: string[], active: string): WorkspaceState {
     groups: [toolGroup('group-tools', cards, active)],
   });
   // chat 列收窄
-  ws.columns[0].widthRatio = 0.6;
+  ws!.columns[0]!.widthRatio = 0.6;
   return ws;
 }
 
@@ -62,36 +62,36 @@ describe('pickActiveCardIndexAfterRemove', () => {
 describe('afterCardRemovedFromGroup — 关 agent 不重开 chat', () => {
   it('关 agent 切到左侧工具 tab，不强制 chat', () => {
     const ws = wsWithToolTabs(['files', 'agent', 'terminal'], 'agent');
-    const g = ws.columns[1].groups[0];
-    const removedIndex = g.cards.findIndex((c) => c.id === 'agent');
-    g.cards = g.cards.filter((c) => c.id !== 'agent');
-    afterCardRemovedFromGroup(ws, g, g.id, 'agent', removedIndex);
+    const g = ws!.columns[1]!.groups[0];
+    const removedIndex = g!.cards.findIndex((c) => c.id === 'agent');
+    g!.cards = g!.cards.filter((c) => c.id !== 'agent');
+    afterCardRemovedFromGroup(ws, g!, g!.id, 'agent', removedIndex);
 
-    expect(g.activeCardId).toBe('files');
-    expect(g.cards.map((c) => c.id)).toEqual(['files', 'terminal']);
+    expect(g!.activeCardId).toBe('files');
+    expect(g!.cards.map((c) => c.id)).toEqual(['files', 'terminal']);
     // 主对话列仍只有 chat，未被复制
-    const chatCards = ws.columns[0].groups.flatMap((x) => x.cards.map((c) => c.id));
+    const chatCards = ws!.columns[0]!.groups.flatMap((x) => x.cards.map((c) => c.id));
     expect(chatCards).toEqual(['chat']);
   });
 
   it('关唯一 agent 删除空组，不 ensure chat 进工具列', () => {
     const ws = wsWithToolTabs(['agent'], 'agent');
-    const g = ws.columns[1].groups[0];
-    g.cards = [];
-    afterCardRemovedFromGroup(ws, g, g.id, 'agent', 0);
+    const g = ws!.columns[1]!.groups[0];
+    g!.cards = [];
+    afterCardRemovedFromGroup(ws, g!, g!.id, 'agent', 0);
 
-    expect(ws.columns[1].groups.some((x) => x.id === 'group-tools')).toBe(false);
+    expect(ws!.columns[1]!.groups.some((x) => x.id === 'group-tools')).toBe(false);
     // chat 列未变
-    expect(ws.columns[0].groups[0].activeCardId).toBe('chat');
-    expect(ws.columns[0].groups[0].cards.map((c) => c.id)).toEqual(['chat']);
+    expect(ws!.columns[0]!.groups[0]!.activeCardId).toBe('chat');
+    expect(ws!.columns[0]!.groups[0]!.cards.map((c) => c.id)).toEqual(['chat']);
   });
 
   it('非 active 被关时不改 activeCardId', () => {
     const ws = wsWithToolTabs(['files', 'agent'], 'files');
-    const g = ws.columns[1].groups[0];
-    g.cards = g.cards.filter((c) => c.id !== 'agent');
-    afterCardRemovedFromGroup(ws, g, g.id, 'agent', 1);
-    expect(g.activeCardId).toBe('files');
+    const g = ws!.columns[1]!.groups[0];
+    g!.cards = g!.cards.filter((c) => c.id !== 'agent');
+    afterCardRemovedFromGroup(ws, g!, g!.id, 'agent', 1);
+    expect(g!.activeCardId).toBe('files');
   });
 });
 

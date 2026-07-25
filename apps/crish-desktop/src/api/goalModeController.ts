@@ -107,7 +107,7 @@ export function parseChecklistTasks(
   const tasks: SessionGoalTask[] = [];
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^\s*[-*]\s+\[([ xX])\]\s+(.+?)\s*$/);
+    const m = lines[i]!.match(/^\s*[-*]\s+\[([ xX])\]\s+(.+?)\s*$/);
     if (!m) continue;
     const body = (m[2] || '').trim();
     if (!body) continue;
@@ -115,7 +115,7 @@ export function parseChecklistTasks(
     tasks.push({
       id: `goal-task-${i}-${body.slice(0, 48)}`,
       text: body,
-      done: m[1].toLowerCase() === 'x',
+      done: m![1]!.toLowerCase() === 'x',
     });
   }
   return tasks;
@@ -666,9 +666,9 @@ export function transitionGoalLifecycle(
 
     case 'update': {
       return applyGoalUpdate(state, {
-        completed: event.completed,
-        message: event.message,
-        blocked_reason: event.blocked_reason,
+        ...(event.completed !== undefined && { completed: event.completed }),
+        ...(event.message !== undefined && { message: event.message }),
+        ...(event.blocked_reason !== undefined && { blocked_reason: event.blocked_reason }),
       });
     }
 
@@ -782,7 +782,11 @@ export function enterGoalMode(
   goal: string,
   maxIterations?: number
 ): GoalTransitionResult {
-  return transitionGoalLifecycle(state, { type: 'enter', goal, maxIterations });
+  return transitionGoalLifecycle(state, {
+    type: 'enter',
+    goal,
+    ...(maxIterations !== undefined && { maxIterations }),
+  });
 }
 
 /** Convenience: exit / clear */
@@ -795,7 +799,10 @@ export function pauseGoalMode(
   state: GoalLifecycleState,
   reason?: string
 ): GoalTransitionResult {
-  return transitionGoalLifecycle(state, { type: 'pause', reason });
+  return transitionGoalLifecycle(state, {
+    type: 'pause',
+    ...(reason !== undefined && { reason }),
+  });
 }
 
 /** Convenience: resume from paused/blocked */

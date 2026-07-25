@@ -64,8 +64,8 @@ export async function getSubagentStatus(subagentRunId: string): Promise<{
     if (res?.type === 'error' || !res?.status) return null;
     return {
       status: res.status,
-      progress: res.progress,
-      latestError: res.latestError,
+      ...(res.progress !== undefined && { progress: res.progress }),
+      ...(res.latestError !== undefined && { latestError: res.latestError }),
     };
   } catch {
     return null;

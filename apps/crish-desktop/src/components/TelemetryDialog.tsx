@@ -49,7 +49,7 @@ interface TelemetryDialogProps {
 }
 
 export function TelemetryDialog({ onClose, isOpen = true }: TelemetryDialogProps) {
-  const { state, isMounted } = useAnimatedPresence({ visible: isOpen, exitDurationMs: 200 });
+  const { isMounted } = useAnimatedPresence({ visible: isOpen, exitDurationMs: 200 });
   useRestoreFocus(isOpen);
 
   const stats = useMemo(() => {

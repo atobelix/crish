@@ -2,22 +2,52 @@ import { describe, expect, it, vi } from "vitest";
 import { applyUserGoal, buildInitialTaskSnapshot, type WorkbenchRunEvent, type WorkbenchTaskSnapshot } from "../shared/workbench-contract";
 import { createDefaultWorkbenchSettings } from "../shared/workbench-config";
 import type { WorkbenchRuntimeFactoryResult } from "./runtime-factory";
-import { runWorkbenchGoal, type WorkbenchGoalRunTask } from "./goal-runner";
+import { runWorkbenchGoal, type WorkbenchGoalRunTask, type WorkbenchGoalRunnerOptions } from "./goal-runner";
+import type { WorkbenchRunnerBudgetOptions } from "./workbench-runner";
 
 const runtime = { settings: createDefaultWorkbenchSettings() } as WorkbenchRuntimeFactoryResult;
 const cwd = "C:/repo/demo";
 const goal = "\u5b8c\u6210\u9879\u76ee\u8d28\u91cf\u68c0\u67e5";
 
+function goalOpts(overrides: {
+  runtime: WorkbenchRuntimeFactoryResult;
+  cwd: string;
+  prompt: string;
+  runTask: WorkbenchGoalRunTask;
+  initialSnapshot?: WorkbenchTaskSnapshot;
+  maxRounds?: number;
+  maxStalledRounds?: number;
+  maxTransientProviderErrors?: number;
+  backgroundDrainTimeoutMs?: number;
+  providerRateLimitBackoffMs?: number;
+  runBudget?: WorkbenchRunnerBudgetOptions;
+}): WorkbenchGoalRunnerOptions {
+  return {
+    visibleGoal: undefined,
+    initialSnapshot: undefined,
+    maxRounds: undefined,
+    maxStalledRounds: undefined,
+    maxTransientProviderErrors: undefined,
+    backgroundDrainTimeoutMs: undefined,
+    providerRateLimitBackoffMs: undefined,
+    runBudget: undefined,
+    onRoundStart: undefined,
+    onYield: undefined,
+    onRoundEnd: undefined,
+    ...overrides
+  };
+}
+
 describe("workbench goal runner", () => {
   it("stops only after the audited task snapshot is complete", async () => {
     const runTask = scriptedRunTask([doneSnapshot()]);
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
       runTask
-    });
+    }));
 
     expect(result.stoppedReason).toBe("complete");
     expect(result.decision?.action).toBe("complete");
@@ -36,12 +66,12 @@ describe("workbench goal runner", () => {
       };
     };
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
       runTask
-    });
+    }));
 
     expect(result.stoppedReason).toBe("error");
     expect(result.decision?.action).toBe("pause");
@@ -55,14 +85,14 @@ describe("workbench goal runner", () => {
       yield yieldFor(incompleteSnapshot(options.prompt));
     };
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
       maxRounds: 2,
       maxStalledRounds: 10,
       runTask
-    });
+    }));
 
     expect(result.stoppedReason).toBe("max-rounds");
     expect(prompts).toHaveLength(2);
@@ -85,14 +115,14 @@ describe("workbench goal runner", () => {
       yield yieldFor({ ...saved, completionPercent: 10 });
     };
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: "\u7ee7\u7eed",
       initialSnapshot: saved,
       maxRounds: 1,
       runTask
-    });
+    }));
 
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain("\u81ea\u52a8\u7eed\u8dd1\u5ba1\u8ba1");
@@ -123,14 +153,14 @@ describe("workbench goal runner", () => {
       yield yieldFor({ ...saved, state: "planning", confirmations: [] });
     };
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: "\u7ee7\u7eed",
       initialSnapshot: saved,
       maxRounds: 1,
       runTask
-    });
+    }));
 
     expect(seenConfirmations).toEqual([0]);
     expect(result.stoppedReason).toBe("max-rounds");
@@ -149,14 +179,14 @@ describe("workbench goal runner", () => {
       yield yieldFor(initial);
     };
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: "\u7ee7\u7eed",
       initialSnapshot: saved,
       maxRounds: 1,
       runTask
-    });
+    }));
 
     expect(seen).toEqual([{ state: "planning", completionPercent: 0, passedRequired: 0 }]);
     expect(result.stoppedReason).toBe("max-rounds");
@@ -203,14 +233,14 @@ describe("workbench goal runner", () => {
       };
     };
 
-    await runWorkbenchGoal({
+    await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
       maxRounds: 2,
       maxStalledRounds: 10,
       runTask
-    });
+    }));
 
     expect(prompts[1]).toContain("\u6700\u8fd1\u8bc1\u636e");
     expect(prompts[1]).toContain("\u7c7b\u578b\u68c0\u67e5\u901a\u8fc7");
@@ -228,14 +258,14 @@ describe("workbench goal runner", () => {
     const snapshot = incompleteSnapshot(goal);
     const runTask = scriptedRunTask([snapshot, snapshot, snapshot]);
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
       maxRounds: 5,
       maxStalledRounds: 1,
       runTask
-    });
+    }));
 
     expect(result.stoppedReason).toBe("stalled");
     expect(result.decision?.action).toBe("pause");
@@ -265,12 +295,12 @@ describe("workbench goal runner", () => {
       }
     ]);
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
       runTask
-    });
+    }));
 
     expect(result.stoppedReason).toBe("pause");
     expect(result.decision?.action).toBe("pause");
@@ -295,7 +325,7 @@ describe("workbench goal runner", () => {
       });
     };
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime: {
         ...runtime,
         settings: {
@@ -310,7 +340,7 @@ describe("workbench goal runner", () => {
       prompt: `${goal}\nround:0`,
       maxStalledRounds: 100,
       runTask
-    });
+    }));
 
     expect(result.stoppedReason).toBe("max-rounds");
     expect(result.rounds).toHaveLength(30);
@@ -347,7 +377,7 @@ describe("workbench goal runner", () => {
       });
     };
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
@@ -355,7 +385,7 @@ describe("workbench goal runner", () => {
       maxStalledRounds: 10,
       providerRateLimitBackoffMs: 1,
       runTask
-    });
+    }));
 
     expect(prompts).toHaveLength(3);
     expect(prompts[1]).toBe(goal);
@@ -395,7 +425,7 @@ describe("workbench goal runner", () => {
       });
     };
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
@@ -403,7 +433,7 @@ describe("workbench goal runner", () => {
       maxStalledRounds: 10,
       providerRateLimitBackoffMs: 1,
       runTask
-    });
+    }));
 
     expect(prompts).toHaveLength(3);
     expect(prompts[1]).toBe(goal);
@@ -443,7 +473,7 @@ describe("workbench goal runner", () => {
       });
     };
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
@@ -452,7 +482,7 @@ describe("workbench goal runner", () => {
       maxStalledRounds: 10,
       providerRateLimitBackoffMs: 1,
       runTask
-    });
+    }));
 
     expect(prompts).toHaveLength(4);
     expect(result.rounds).toHaveLength(4);
@@ -477,7 +507,7 @@ describe("workbench goal runner", () => {
       };
     };
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
@@ -485,7 +515,7 @@ describe("workbench goal runner", () => {
       maxTransientProviderErrors: 2,
       providerRateLimitBackoffMs: 1,
       runTask
-    });
+    }));
 
     expect(prompts).toHaveLength(3);
     expect(result.stoppedReason).toBe("error");
@@ -499,12 +529,12 @@ describe("workbench goal runner", () => {
       throw new Error("provider failed");
     };
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
       runTask
-    });
+    }));
 
     expect(result.stoppedReason).toBe("error");
     expect(result.decision?.action).toBe("pause");
@@ -516,18 +546,20 @@ describe("workbench goal runner", () => {
       yield yieldFor(incompleteSnapshot(options.prompt));
     });
 
-    await runWorkbenchGoal({
+    await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
       maxRounds: 1,
       backgroundDrainTimeoutMs: 1234,
       runBudget: {
+        enabled: undefined,
+        difficulty: "longrun",
         maxTotalTokens: 4567,
-        difficulty: "longrun"
+        warnAtRatio: undefined
       },
       runTask
-    });
+    }));
 
     expect(runTask).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -562,14 +594,14 @@ describe("workbench goal runner", () => {
       };
     };
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
       maxRounds: 2,
       maxStalledRounds: 10,
       runTask
-    });
+    }));
 
     expect(result.stoppedReason).toBe("max-rounds");
     expect(prompts).toHaveLength(2);
@@ -596,13 +628,13 @@ describe("workbench goal runner", () => {
       };
     };
 
-    const result = await runWorkbenchGoal({
+    const result = await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
       maxRounds: 2,
       runTask
-    });
+    }));
 
     expect(result.stoppedReason).toBe("complete");
     expect(result.rounds).toHaveLength(1);
@@ -614,13 +646,13 @@ describe("workbench goal runner", () => {
       yield yieldFor(incompleteSnapshot(options.prompt));
     });
 
-    await runWorkbenchGoal({
+    await runWorkbenchGoal(goalOpts({
       runtime,
       cwd,
       prompt: goal,
       maxRounds: 1,
       runTask
-    });
+    }));
 
     expect(runTask).toHaveBeenCalledWith(
       expect.objectContaining({

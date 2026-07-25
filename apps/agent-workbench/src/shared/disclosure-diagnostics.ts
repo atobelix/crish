@@ -26,7 +26,7 @@ export interface WorkbenchDisclosureAnalysisInput {
   references?: WorkbenchOutputReference[];
   commandResults?: WorkbenchCommandDiagnosticInput[];
   renderedReferences?: WorkbenchRenderedReferenceStatus[];
-  fileExists?: (path: string) => Promise<boolean> | boolean;
+  fileExists?: ((path: string) => Promise<boolean> | boolean);
   now?: string;
   maxIssues?: number;
 }
@@ -184,7 +184,7 @@ function diagnoseCommand(command: WorkbenchCommandDiagnosticInput, now: string):
         suggestion: notFound
           ? `请检查命令是否拼写正确，或先确认当前环境是否已经安装：${firstCommandWord(command.command)}。`
           : "请先阅读错误输出，调整参数或执行路径后再继续，不要重复同一个失败命令。",
-        targetId: command.id,
+        ...(command.id !== undefined ? { targetId: command.id } : {}),
         now
       })
     );
@@ -198,7 +198,7 @@ function diagnoseCommand(command: WorkbenchCommandDiagnosticInput, now: string):
         title: "命令输出疑似乱码",
         detail: "命令输出里出现了常见乱码特征。",
         suggestion: "请使用 UTF-8 输出设置重新运行或用安全读取工具确认原始字节，不要直接依据乱码内容判断结果。",
-        targetId: command.id,
+        ...(command.id !== undefined ? { targetId: command.id } : {}),
         now
       })
     );
@@ -212,7 +212,7 @@ function diagnoseCommand(command: WorkbenchCommandDiagnosticInput, now: string):
         title: "命令没有可见输出",
         detail: `${command.command} 没有产生可见输出。`,
         suggestion: "如果这个命令本应生成文件，请再检查目标文件是否真实存在。",
-        targetId: command.id,
+        ...(command.id !== undefined ? { targetId: command.id } : {}),
         now
       })
     );
@@ -237,7 +237,7 @@ function createIssue(input: {
     title: input.title,
     detail: input.detail,
     suggestion: input.suggestion,
-    targetId: input.targetId,
+    ...(input.targetId !== undefined ? { targetId: input.targetId } : {}),
     createdAt: input.now
   };
 }

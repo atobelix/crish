@@ -29,8 +29,8 @@ export function parseMarkdownChecklist(text: string): SessionGoalTask[] {
   for (const line of lines) {
     const m = CHECKLIST_REGEX.exec(line);
     if (m) {
-      const isDone = m[1].toLowerCase() === 'x';
-      const taskText = m[2].trim();
+      const isDone = m![1]!.toLowerCase() === 'x';
+      const taskText = m![2]!.trim();
       if (taskText) {
         idx += 1;
         tasks.push({
@@ -56,8 +56,8 @@ export function resolveSessionProgressItems(session: Session | null | undefined)
   if (!session.messages?.length) return [];
   for (let i = session.messages.length - 1; i >= 0; i--) {
     const msg = session.messages[i];
-    if (msg.sender === 'assistant' && msg.text) {
-      const items = parseMarkdownChecklist(msg.text);
+    if (msg!.sender === 'assistant' && msg!.text) {
+      const items = parseMarkdownChecklist(msg!.text);
       if (items.length > 0) {
         return items;
       }
@@ -91,6 +91,7 @@ export function findCurrentLiveTool(session: Session | null | undefined): LiveTo
 
   for (let i = lastMsg.toolCalls.length - 1; i >= 0; i--) {
     const tc = lastMsg.toolCalls[i];
+    if (!tc) continue;
     if (tc.status === 'running' || tc.status === 'pending_approval') {
       const label = toolHumanLabel(tc);
       const isApproval = tc.status === 'pending_approval';

@@ -2,7 +2,7 @@ import { useLayoutStore } from './layoutStore';
 import { useSessionStore } from './sessionStore';
 import { useWorkspaceStore } from './workspaceStore';
 import { useSettingsUiStore } from './settingsUiStore';
-import { initStoreAccess } from '../api/storeAccess';
+import { initStoreAccess, type StoreLike } from '../api/storeAccess';
 
 const activeSyncs = new Set<string>();
 
@@ -180,7 +180,11 @@ export function bootstrapStores(): () => void {
     }
   }));
 
-  initStoreAccess(useSessionStore, useWorkspaceStore, useSettingsUiStore);
+  initStoreAccess(
+    useSessionStore,
+    useWorkspaceStore,
+    useSettingsUiStore,
+  );
 
   if (process.env.NODE_ENV === 'development') {
     const invariantInterval = setInterval(() => {

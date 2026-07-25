@@ -8,7 +8,7 @@ export function useIsVisible(): [React.RefObject<HTMLDivElement | null>, boolean
     const el = ref.current;
     if (!el) return;
     const observer = new IntersectionObserver(
-      ([entry]) => setIsVisible(entry.isIntersecting),
+      ([entry]) => setIsVisible(entry!.isIntersecting),
       { threshold: 0 },
     );
     observer.observe(el);

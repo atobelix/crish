@@ -106,11 +106,11 @@ describe('undo toast shape', () => {
   it('formatArchiveUndoToast / formatBranchUndoToast match policy prefixes', () => {
     expect(formatArchiveUndoToast('某会话')).toBe('已归档: 某会话');
     expect(formatBranchUndoToast('某会话 - 分支')).toBe(
-      '已分叉: 某会话 - 分支（仅本地副本，非引擎会话分叉）'
+      '已分叉: 某会话 - 分支'
     );
     expect(formatArchiveUndoToast('  ')).toBe('已归档: 会话');
     expect(formatBranchUndoToast('')).toBe(
-      '已分叉: 会话（仅本地副本，非引擎会话分叉）'
+      '已分叉: 会话'
     );
   });
 

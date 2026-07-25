@@ -1,10 +1,5 @@
 import { getWorkerPool, Priority } from './index';
 
-interface PendingDelta {
-  text: string;
-  timestamp: number;
-}
-
 interface StreamRenderOptions {
   onHtml: (html: string, isFinal: boolean) => void;
   frameIntervalMs?: number;
@@ -17,16 +12,9 @@ export class StreamingRenderer {
   private lastRenderedHtml = '';
   private frameTimer: ReturnType<typeof requestAnimationFrame> | null = null;
   private flushScheduled = false;
-  private readonly options: Required<Pick<StreamRenderOptions, 'frameIntervalMs' | 'maxDeltasPerFrame'>>;
   private readonly onHtml: (html: string, isFinal: boolean) => void;
-  private workerTaskId: string | null = null;
-
   constructor(options: StreamRenderOptions) {
     this.onHtml = options.onHtml;
-    this.options = {
-      frameIntervalMs: options.frameIntervalMs ?? 16,
-      maxDeltasPerFrame: options.maxDeltasPerFrame ?? 5,
-    };
   }
 
   appendDelta(delta: string): void {
@@ -48,7 +36,6 @@ export class StreamingRenderer {
     this.pendingBuffer = '';
     this.lastRenderedText = '';
     this.lastRenderedHtml = '';
-    this.workerTaskId = null;
   }
 
   private scheduleFlush(): void {

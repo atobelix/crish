@@ -601,7 +601,7 @@ export async function setSkillActivation(
   return {
     ok: true,
     daemonSynced: daemon.synced,
-    error: daemon.synced ? undefined : daemon.error,
+    ...(!daemon.synced && daemon.error !== undefined && { error: daemon.error }),
   };
 }
 

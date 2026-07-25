@@ -32,7 +32,11 @@ export function useWorkerTask<T>(options: UseWorkerTaskOptions<T>): {
     setLoading(true);
     setError(null);
 
-    pool.schedule<T>(workerType, type, payload, priority, { dedupKey })
+    pool.schedule<T>(workerType, type, payload, priority, {
+      // 治理防线 #2（exactOptionalPropertyTypes）：schedule options 的 dedupKey?: string
+      // 不接受 undefined 值；用条件展开剔除
+      ...(dedupKey !== undefined ? { dedupKey } : {}),
+    })
       .then((result) => {
         pendingRef.current = false;
         setLoading(false);

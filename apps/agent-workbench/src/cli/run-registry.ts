@@ -7,27 +7,27 @@ export type WorkbenchRunRecordStatus = "running" | "complete" | "paused" | "bloc
 export interface WorkbenchRunRecord {
   id: string;
   branchId: string;
-  parentRunId?: string;
-  parentBranchId?: string;
+  parentRunId: string | undefined;
+  parentBranchId: string | undefined;
   command: string;
   cwd: string;
   createdAt: string;
   updatedAt: string;
   status: WorkbenchRunRecordStatus;
-  providerId?: string;
-  modelId?: string;
-  sessionPath?: string;
-  eventLogPath?: string;
-  promptFile?: string;
-  configPath?: string;
-  outputRoot?: string;
-  userGoalPreview?: string;
-  snapshotId?: string;
-  completionPercent?: number;
-  lastEventAt?: string;
-  lastEventType?: string;
-  lastMessage?: string;
-  stoppedReason?: string;
+  providerId: string | undefined;
+  modelId: string | undefined;
+  sessionPath: string | undefined;
+  eventLogPath: string | undefined;
+  promptFile: string | undefined;
+  configPath: string | undefined;
+  outputRoot: string | undefined;
+  userGoalPreview: string | undefined;
+  snapshotId: string | undefined;
+  completionPercent: number | undefined;
+  lastEventAt: string | undefined;
+  lastEventType: string | undefined;
+  lastMessage: string | undefined;
+  stoppedReason: string | undefined;
 }
 
 export interface WorkbenchRunRegistry {
@@ -37,20 +37,20 @@ export interface WorkbenchRunRegistry {
 }
 
 export interface StartRunRecordInput {
-  id?: string;
-  branchId?: string;
-  parentRunId?: string;
-  parentBranchId?: string;
+  id: string | undefined;
+  branchId: string | undefined;
+  parentRunId: string | undefined;
+  parentBranchId: string | undefined;
   command: string;
   cwd: string;
-  providerId?: string;
-  modelId?: string;
-  sessionPath?: string;
-  eventLogPath?: string;
-  promptFile?: string;
-  configPath?: string;
-  outputRoot?: string;
-  userGoal?: string;
+  providerId: string | undefined;
+  modelId: string | undefined;
+  sessionPath: string | undefined;
+  eventLogPath: string | undefined;
+  promptFile: string | undefined;
+  configPath: string | undefined;
+  outputRoot: string | undefined;
+  userGoal: string | undefined;
 }
 
 export type UpdateRunRecordInput = Partial<
@@ -72,9 +72,9 @@ export type UpdateRunRecordInput = Partial<
 >;
 
 export interface LatestRunFilter {
-  cwd?: string;
-  status?: WorkbenchRunRecordStatus;
-  branchId?: string;
+  cwd: string | undefined;
+  status: WorkbenchRunRecordStatus | undefined;
+  branchId: string | undefined;
 }
 
 const REGISTRY_VERSION = 1;
@@ -113,25 +113,31 @@ export async function startRunRecord(path: string, input: StartRunRecordInput): 
   const now = new Date().toISOString();
   const id = input.id?.trim() || createRunId();
   const existing = registry.records.find((record) => record.id === id);
+  const existingRecord = existing as WorkbenchRunRecord | undefined;
   const record: WorkbenchRunRecord = {
-    ...existing,
     id,
-    branchId: input.branchId?.trim() || existing?.branchId || createBranchId(id),
-    parentRunId: input.parentRunId?.trim() || existing?.parentRunId,
-    parentBranchId: input.parentBranchId?.trim() || existing?.parentBranchId,
+    branchId: input.branchId?.trim() || existingRecord?.branchId || createBranchId(id),
+    parentRunId: input.parentRunId?.trim() || existingRecord?.parentRunId,
+    parentBranchId: input.parentBranchId?.trim() || existingRecord?.parentBranchId,
     command: input.command,
     cwd: resolve(input.cwd),
-    createdAt: existing?.createdAt ?? now,
+    createdAt: existingRecord?.createdAt ?? now,
     updatedAt: now,
-    status: "running",
-    providerId: input.providerId ?? existing?.providerId,
-    modelId: input.modelId ?? existing?.modelId,
-    sessionPath: input.sessionPath ?? existing?.sessionPath,
-    eventLogPath: input.eventLogPath ?? existing?.eventLogPath,
-    promptFile: input.promptFile ?? existing?.promptFile,
-    configPath: input.configPath ?? existing?.configPath,
-    outputRoot: input.outputRoot ?? existing?.outputRoot,
-    userGoalPreview: preview(input.userGoal) ?? existing?.userGoalPreview
+    status: "running" as const,
+    providerId: input.providerId ?? existingRecord?.providerId,
+    modelId: input.modelId ?? existingRecord?.modelId,
+    sessionPath: input.sessionPath ?? existingRecord?.sessionPath,
+    eventLogPath: input.eventLogPath ?? existingRecord?.eventLogPath,
+    promptFile: input.promptFile ?? existingRecord?.promptFile,
+    configPath: input.configPath ?? existingRecord?.configPath,
+    outputRoot: input.outputRoot ?? existingRecord?.outputRoot,
+    snapshotId: existingRecord?.snapshotId,
+    completionPercent: existingRecord?.completionPercent,
+    lastEventAt: existingRecord?.lastEventAt,
+    lastEventType: existingRecord?.lastEventType,
+    lastMessage: existingRecord?.lastMessage,
+    stoppedReason: existingRecord?.stoppedReason,
+    userGoalPreview: preview(input.userGoal) ?? existingRecord?.userGoalPreview
   };
   await writeRunRegistry(path, upsert(registry, record));
   return record;
@@ -174,7 +180,7 @@ export async function finishRunRecord(
   });
 }
 
-export function findLatestRun(registry: WorkbenchRunRegistry, filter: LatestRunFilter = {}): WorkbenchRunRecord | undefined {
+export function findLatestRun(registry: WorkbenchRunRegistry, filter: LatestRunFilter = { cwd: undefined, status: undefined, branchId: undefined }): WorkbenchRunRecord | undefined {
   const cwd = filter.cwd ? resolve(filter.cwd) : undefined;
   return [...registry.records]
     .reverse()
@@ -205,7 +211,7 @@ function upsert(registry: WorkbenchRunRegistry, record: WorkbenchRunRecord): Wor
 }
 
 function snapshotSummary(snapshot?: WorkbenchTaskSnapshot): Pick<WorkbenchRunRecord, "snapshotId" | "completionPercent"> {
-  if (!snapshot) return {};
+  if (!snapshot) return { snapshotId: undefined, completionPercent: undefined };
   return {
     snapshotId: snapshot.id,
     completionPercent: snapshot.completionPercent

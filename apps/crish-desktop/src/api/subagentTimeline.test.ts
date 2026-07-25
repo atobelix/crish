@@ -65,7 +65,7 @@ describe('applySubagentEventToMessages tool-start/end', () => {
       status: 'running',
       explanation: '读取 a.ts',
     });
-    expect(asst1!.toolCalls![0].arguments).toContain('src/a.ts');
+    expect(asst1!.toolCalls![0]!.arguments).toContain('src/a.ts');
     expect(asst1!.blocks?.some((b) => b.type === 'tool_call' && b.id === 'tc-1')).toBe(
       true,
     );

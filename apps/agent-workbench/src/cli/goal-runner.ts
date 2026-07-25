@@ -18,32 +18,32 @@ export interface WorkbenchGoalRunnerOptions {
   runtime: WorkbenchRuntimeFactoryResult;
   cwd: string;
   prompt: string;
-  visibleGoal?: string;
-  initialSnapshot?: WorkbenchTaskSnapshot;
-  maxRounds?: number;
-  maxStalledRounds?: number;
-  maxTransientProviderErrors?: number;
-  backgroundDrainTimeoutMs?: number;
-  providerRateLimitBackoffMs?: number;
-  runBudget?: WorkbenchRunnerBudgetOptions;
-  runTask?: WorkbenchGoalRunTask;
-  onRoundStart?(round: Pick<WorkbenchGoalRound, "index" | "prompt">): void | Promise<void>;
-  onYield?(input: { roundIndex: number; item: WorkbenchRunnerYield }): void | Promise<void>;
-  onRoundEnd?(round: WorkbenchGoalRound): void | Promise<void>;
+  visibleGoal: string | undefined;
+  initialSnapshot: WorkbenchTaskSnapshot | undefined;
+  maxRounds: number | undefined;
+  maxStalledRounds: number | undefined;
+  maxTransientProviderErrors: number | undefined;
+  backgroundDrainTimeoutMs: number | undefined;
+  providerRateLimitBackoffMs: number | undefined;
+  runBudget: WorkbenchRunnerBudgetOptions | undefined;
+  runTask: WorkbenchGoalRunTask | undefined;
+  onRoundStart: ((round: Pick<WorkbenchGoalRound, "index" | "prompt">) => void | Promise<void>) | undefined;
+  onYield: ((input: { roundIndex: number; item: WorkbenchRunnerYield }) => void | Promise<void>) | undefined;
+  onRoundEnd: ((round: WorkbenchGoalRound) => void | Promise<void>) | undefined;
 }
 
 export interface WorkbenchGoalRound {
   index: number;
   prompt: string;
   events: WorkbenchRunEvent[];
-  snapshot?: WorkbenchTaskSnapshot;
-  decision?: WorkbenchContinuationDecision;
+  snapshot: WorkbenchTaskSnapshot | undefined;
+  decision: WorkbenchContinuationDecision | undefined;
 }
 
 export interface WorkbenchGoalResult {
   rounds: WorkbenchGoalRound[];
-  snapshot?: WorkbenchTaskSnapshot;
-  decision?: WorkbenchContinuationDecision;
+  snapshot: WorkbenchTaskSnapshot | undefined;
+  decision: WorkbenchContinuationDecision | undefined;
   stoppedReason: "complete" | "pause" | "max-rounds" | "stalled" | "error";
 }
 
@@ -63,13 +63,15 @@ export async function runWorkbenchGoal(options: WorkbenchGoalRunnerOptions): Pro
     snapshotResolver: ({ roundContext }) => {
       const ctx = roundContext as SnapshotAwareRoundContext | undefined;
       return ctx?.latestSnapshot;
-    }
+    },
+    providerRateLimitBackoffMs: undefined,
+    maxTransientProviderErrors: undefined
   });
 
   // 初始 prompt：从快照恢复时使用策略的审计 prompt 构建能力
   const initialPrompt = snapshot
-    ? (strategy.buildNextRoundPrompt({
-        decision: {
+      ? (strategy.buildNextRoundPrompt({
+      decision: {
           action: "continue",
           reason: "从保存的任务快照恢复；旧完成标记只能作为参考，必须重新读取实际文件、事件日志和验收证据后再判断是否完成",
           prompt: options.prompt.trim() || "continue"
@@ -77,10 +79,13 @@ export async function runWorkbenchGoal(options: WorkbenchGoalRunnerOptions): Pro
         roundIndex: -1,
         goalState: {
           status: "running", maxRounds, maxStalledRounds: 2,
-          currentRound: -1, completedRounds: 0, stalledRounds: 0
+          currentRound: -1, completedRounds: 0, stalledRounds: 0,
+          visibleGoal: visibleGoal,
+          lastDecision: { action: "continue", reason: "" },
+          lastStalledRoundIndex: -1
         },
         events: [],
-        roundContext: { latestSnapshot: normalizeVisibleGoal(snapshot, visibleGoal) } as SnapshotAwareRoundContext
+        roundContext: { latestSnapshot: normalizeVisibleGoal(snapshot, visibleGoal), workbenchResumeDecision: undefined, workbenchEvents: undefined } as SnapshotAwareRoundContext
       }) ?? (options.prompt.trim() || visibleGoal))
     : options.prompt.trim() || visibleGoal;
   const rounds: WorkbenchGoalRound[] = [];
@@ -89,7 +94,7 @@ export async function runWorkbenchGoal(options: WorkbenchGoalRunnerOptions): Pro
     ? strategy.computeProgressSignature({
         decision: { action: "continue", reason: "" },
         events: [],
-        roundContext: { latestSnapshot: snapshot } as SnapshotAwareRoundContext
+        roundContext: { latestSnapshot: snapshot, workbenchResumeDecision: undefined, workbenchEvents: undefined } as SnapshotAwareRoundContext
       })
     : "";
   let stalledRounds = 0;
@@ -200,11 +205,13 @@ export async function runWorkbenchGoal(options: WorkbenchGoalRunnerOptions): Pro
       snapshotResolver: ({ roundContext }) => {
         const ctx = roundContext as SnapshotAwareRoundContext | undefined;
         return ctx?.latestSnapshot;
-      }
+      },
+      providerRateLimitBackoffMs: undefined,
+      maxTransientProviderErrors: undefined
     });
 
     const goalDecision = strategy.assessRound({
-      run: { status: "running" } as any,
+      run: { id: "", sessionId: "", turnIndex: 0, status: "running", createdAt: "", updatedAt: "" },
       session: { id: "", cwd: options.cwd, createdAt: "", updatedAt: "", status: "open" },
       roundIndex: index,
       prompt: currentPrompt,
@@ -236,13 +243,17 @@ export async function runWorkbenchGoal(options: WorkbenchGoalRunnerOptions): Pro
           maxStalledRounds,
           currentRound: index,
           completedRounds: productiveRounds,
-          stalledRounds
+          stalledRounds,
+          visibleGoal: visibleGoal,
+          lastDecision: { action: "continue", reason: "" },
+          lastStalledRoundIndex: -1
         },
         events: [],
         roundContext: {
-          latestSnapshot: snapshot,
-          workbenchEvents: events
-        } as SnapshotAwareRoundContext
+        latestSnapshot: snapshot,
+        workbenchEvents: events,
+        workbenchResumeDecision: undefined
+      } as SnapshotAwareRoundContext
       });
       decision.prompt = enrichedPrompt ?? decision.prompt;
     }
@@ -263,7 +274,7 @@ export async function runWorkbenchGoal(options: WorkbenchGoalRunnerOptions): Pro
     const signature = strategy.computeProgressSignature({
       decision: goalDecision,
       events: [],
-      roundContext: { latestSnapshot: snapshot } as SnapshotAwareRoundContext
+      roundContext: { latestSnapshot: snapshot, workbenchResumeDecision: undefined, workbenchEvents: undefined } as SnapshotAwareRoundContext
     });
     stalledRounds = signature === previousSignature ? stalledRounds + 1 : 0;
     previousSignature = signature;
@@ -370,7 +381,7 @@ function mapToGoalDecision(decision: WorkbenchContinuationDecision): GoalContinu
   return {
     action: decision.action === "pause" ? "block" : decision.action,
     reason: decision.reason,
-    ...(decision.prompt ? { prompt: decision.prompt } : {})
+    ...(decision.prompt !== undefined ? { prompt: decision.prompt } : {})
   };
 }
 

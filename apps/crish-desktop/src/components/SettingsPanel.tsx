@@ -63,7 +63,7 @@ type TabType = SettingsTabType;
 
 interface SettingsPanelProps {
   wsId: string;
-  onShowToast: (msg: string) => void;
+  onShowToast: (msg: string, onUndo?: () => void) => void;
   onClose?: () => void;
   initialTab?: SettingsTabType;
   isOpen?: boolean;
@@ -399,7 +399,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         next = ids.length - 1;
       }
       e.preventDefault();
-      const nextId = ids[next];
+      const nextId = ids[next]!;
       // 方向键：移动焦点并选中（设置页切换应即时可见）
       selectTab(nextId, { focusTab: true });
     },

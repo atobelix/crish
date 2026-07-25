@@ -122,7 +122,7 @@ export class StreamRenderBuffer {
 
   // ── 内部 ──
 
-  private markFinal(): void {
+  markFinal(): void {
     this.finalMarked = true;
   }
 
@@ -219,4 +219,81 @@ export class StreamRenderBuffer {
       this.scheduleFlush();
     }
   }
+}
+
+// ── 可测试的独立纯函数 ─────────────────────────────────────────────────────
+
+/**
+ * 在 UTF-16 代理对边界安全的位置截断字符串。
+ * 保证不在高代理（0xD800–0xDBFF）和低代理（0xDC00–0xDFFF）之间截断。
+ *
+ * @param s     原字符串
+ * @param maxLen 字节数（UTF-16 码元数）上限
+ * @returns 安全截断位置（不超过 maxLen 的最大安全下标）
+ */
+export function safeUnicodeCutPosition(s: string, maxLen: number): number {
+  if (maxLen <= 0) return 0;
+  if (maxLen >= s.length) return s.length;
+  // 若 maxLen 正好落在高代理上，回退一位
+  const cp = s.charCodeAt(maxLen - 1);
+  if (cp >= 0xd800 && cp <= 0xdbff) {
+    return Math.max(0, maxLen - 1);
+  }
+  return maxLen;
+}
+
+/**
+ * 单帧批处理的纯函数形式：从 pending 中提取本帧可处理的内容。
+ *
+ * @param pending       待处理的 delta 块数组（调用方 slice 传入）
+ * @param maxBytes      单帧字节上限
+ * @param deadlineMs    帧截止时间（performance.now() + budgetMs）
+ * @param force         是否强制处理全部（忽略 maxBytes 和 deadline）
+ * @returns {{ batch: string[]; remaining: string[] }} 本帧批次与剩余
+ */
+export function flushFrame(
+  pending: readonly string[],
+  maxBytes: number,
+  deadlineMs: number,
+  force: boolean,
+): { batch: string[]; remaining: string[] } {
+  if (pending.length === 0) return { batch: [], remaining: [] };
+
+  const batch: string[] = [];
+  let bytesInBatch = 0;
+  let splitAt = pending.length; // 默认全部消费
+
+  for (let i = 0; i < pending.length; i++) {
+    const chunk = pending[i]!;
+    const wouldExceed = bytesInBatch + chunk.length > maxBytes;
+
+    if (!force && wouldExceed && batch.length > 0) {
+      splitAt = i;
+      break;
+    }
+
+    batch.push(chunk);
+    bytesInBatch += chunk.length;
+
+    if (!force && performance.now() >= deadlineMs) {
+      splitAt = i + 1;
+      break;
+    }
+  }
+
+  // 单块超限：按 maxBytes 切分
+  if (batch.length === 0 && pending.length > 0) {
+    const chunk = pending[0]!;
+    const cutPos = safeUnicodeCutPosition(chunk, maxBytes);
+    if (cutPos >= chunk.length) {
+      batch.push(chunk);
+      splitAt = 1;
+    } else {
+      batch.push(chunk.slice(0, cutPos));
+      const remaining = [chunk.slice(cutPos), ...pending.slice(1)];
+      return { batch, remaining };
+    }
+  }
+
+  return { batch, remaining: pending.slice(splitAt) as string[] };
 }

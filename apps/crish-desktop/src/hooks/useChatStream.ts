@@ -1,3 +1,4 @@
+import { produce } from 'immer';
 import {
   useCallback,
   useEffect,
@@ -230,7 +231,7 @@ export type TerminalToolPatch = {
  */
 export function buildTerminalToolPatches(
   toolCalls:
-    Array<{ id: string; status?: string; output?: string }> | null | undefined,
+    Array<MessageToolCall | { id: string; status?: string; output?: string }> | null | undefined,
   reason: TerminalToolReason
 ): TerminalToolPatch[] {
   if (!toolCalls?.length) return [];
@@ -382,9 +383,9 @@ export type ChatAttachment = {
 
 export type RunNotice = {
   text: string;
-  kind?: string;
+  kind?: string | undefined;
   /** 可选诊断第二行（中断原因 / 引擎 scope） */
-  detail?: string;
+  detail?: string | undefined;
 };
 
 export interface UseChatStreamOptions {
@@ -509,8 +510,7 @@ export function useChatStream(
         const existing = getSessionById(sessionId)
           ?.messages?.find((m) => m.id === messageId)
           ?.toolCalls?.find((t) => t.id === toolId);
-        const updates = { ...patch };
-        delete updates.id;
+        const { id: _id, ...updates } = patch;
         if (existing) {
           live.updateMessageToolCall(sessionId, messageId, toolId, updates);
         } else {
@@ -518,11 +518,11 @@ export function useChatStream(
             id: toolId,
             name: patch.name || 'tool',
             arguments: patch.arguments || '',
-            explanation: patch.explanation,
+            ...(patch.explanation !== undefined ? { explanation: patch.explanation } : {}),
             status: patch.status || 'running',
-            output: patch.output,
-            diffs: patch.diffs,
-            approvalMeta: patch.approvalMeta,
+            ...(patch.output !== undefined ? { output: patch.output } : {}),
+            ...(patch.diffs !== undefined ? { diffs: patch.diffs } : {}),
+            ...(patch.approvalMeta !== undefined ? { approvalMeta: patch.approvalMeta } : {}),
           });
         }
       },
@@ -631,7 +631,7 @@ export function useChatStream(
 
     patchSession(sid, { goalMode: decision.goalMode });
     const userMsgId = `user-msg-goal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    useLayoutStore.setState((state) => {
+    useLayoutStore.setState(produce((state) => {
       const s = state.sessionsById[sid];
       if (!s) return;
       if (!s.messages) s.messages = [];
@@ -642,7 +642,7 @@ export function useChatStream(
         timestamp: Date.now(),
         status: 'processing',
       });
-    });
+    }));
 
     // queueMicrotask + bindStarter：不依赖 setTimeout(0)+ref 竞态
     mgr.scheduleStart(sid, decision.modelText, userMsgId);
@@ -817,12 +817,11 @@ export function useChatStream(
         {
           id: toolId,
           name,
-          arguments: args,
-          explanation,
+          ...(args !== undefined ? { arguments: args } : {}),
+          ...(explanation !== undefined ? { explanation } : {}),
           status,
           ...(approvalMeta ? { approvalMeta } : {}),
         },
-        // pending_approval 立刻露出审批 UI；running 可批合并
         status === 'pending_approval'
       );
       if (isShellToolName(name) && args) {
@@ -857,10 +856,10 @@ export function useChatStream(
           // 主路径：拿到真实 runId 即 register（bridge 也会 register；幂等覆盖）
           streamRecovery.registerStream(sid, runId);
           // 记在会话上，便于 H3 事后拉 usage
-          useLayoutStore.setState((state) => {
+          useLayoutStore.setState(produce((state) => {
             const s = state.sessionsById[sid];
             if (s) s.engineLastRunId = runId;
-          });
+          }));
         },
         onThought: (thought) => {
           if (!assertLive()) return;
@@ -918,13 +917,14 @@ export function useChatStream(
             subagentRunId: info.subagentRunId,
             parentSessionId: sid,
             parentRunId: info.parentRunId,
-            parentToolCallId: info.parentToolCallId,
+            ...(info.parentToolCallId !== undefined ? { parentToolCallId: info.parentToolCallId } : {}),
             description: taskLabel,
             mode: info.mode || 'research',
             status: 'running',
-            // 不再塞「主 agent 已拉起…」系统句进消息列表，减少噪音
             messages: [],
             startedAt: Date.now(),
+            depth: 0,
+            subagentPath: [info.subagentId],
           });
           // 父工具行标为进行中，便于时间线与子 agent 对齐
           if (info.parentToolCallId) {
@@ -942,7 +942,7 @@ export function useChatStream(
         onSubagentEvent: (info) => {
           if (!assertLive()) return;
           if (!info.subagentId) return;
-          useLayoutStore.setState((state) => {
+          useLayoutStore.setState(produce((state) => {
             const sess = state.sessionsById[sid];
             const ag = sess?.agents?.find(
               (a: SessionAgent) => a.id === info.subagentId
@@ -952,14 +952,14 @@ export function useChatStream(
               ag.messages || [],
               info.event
             );
-          });
+          }));
         },
         onSubagentEnded: (info) => {
           if (!assertLive()) return;
           if (!info.subagentId) return;
           let parentToolCallId: string | undefined;
           let summary = info.summary || '';
-          useLayoutStore.setState((state) => {
+          useLayoutStore.setState(produce((state) => {
             const sess = state.sessionsById[sid];
             const ag = sess?.agents?.find(
               (a: SessionAgent) => a.id === info.subagentId
@@ -997,7 +997,7 @@ export function useChatStream(
                   body.length > 1200 ? body.slice(0, 1199) + '…' : body;
               }
             }
-          });
+          }));
           void parentToolCallId;
         },
         onTerminalLine: (line) => {
@@ -1030,7 +1030,7 @@ export function useChatStream(
               id: toolId,
               status: 'success',
               output: displayOut || output || '完成',
-              diffs: resolvedDiffs.length ? resolvedDiffs : undefined,
+              ...(resolvedDiffs.length ? { diffs: resolvedDiffs } : {}),
             },
             true
           );
@@ -1232,7 +1232,7 @@ export function useChatStream(
               st.updateMessageThinking(sid, assistantMsgId, '');
             }
             // 收口时规范化时间线，保证持久化/重渲染与 live 一致
-            useLayoutStore.setState((state) => {
+            useLayoutStore.setState(produce((state) => {
               const sess = state.sessionsById[sid];
               const msg = sess?.messages.find(
                 (m: SessionMessage) => m.id === assistantMsgId
@@ -1241,7 +1241,7 @@ export function useChatStream(
               const n = normalizeAssistantTimeline({ ...msg });
               msg.blocks = n.blocks;
               msg.toolCalls = n.toolCalls;
-            });
+            }));
           } catch {
             /* ignore */
           }
@@ -1410,7 +1410,7 @@ export function useChatStream(
     // 运行中工具收成中断（不伪造 success）
     const stopPatches = buildTerminalToolPatches(asst?.toolCalls, 'stop');
     if (stopPatches.length) {
-      useLayoutStore.setState((state) => {
+      useLayoutStore.setState(produce((state) => {
         const msg = state.sessionsById[sid]?.messages.find(
           (m: SessionMessage) => m.id === cur.assistantMsgId
         );
@@ -1421,9 +1421,8 @@ export function useChatStream(
           tc.status = p.status;
           tc.output = p.output;
         }
-      });
+      }));
     }
-    // safe cancel：引擎 cancel 同步 onComplete 已因 delete 而 no-op
     safeCancelStream(cur.cancel);
   };
 
@@ -1562,7 +1561,7 @@ export function useChatStream(
         if (isPendingDraft(activeSessionId)) {
           learnSid =
             commitDraftIfNeeded({
-              title: rawInput ? deriveSessionTitle(rawInput) : undefined,
+              ...(rawInput ? { title: deriveSessionTitle(rawInput) } : {}),
             }) || '';
         } else {
           learnSid = resolveStreamSessionId(null, activeSessionId) || '';
@@ -1584,7 +1583,7 @@ export function useChatStream(
         const validLearnSid = learnSid;
         const userMsgId = `user-msg-${Date.now()}`;
         const asstMsgId = `assistant-msg-${Date.now()}-learn`;
-        useLayoutStore.setState((state) => {
+        useLayoutStore.setState(produce((state) => {
           const sess = state.sessionsById[validLearnSid];
           if (!ensureSessionMessages(sess)) return;
           sess.messages.push({
@@ -1601,7 +1600,7 @@ export function useChatStream(
             timestamp: Date.now() + 1,
             status: 'completed',
           });
-        });
+        }));
       } catch (e) {
         onShowToast(
           `记住规则失败：${e instanceof Error ? e.message : String(e)}`
@@ -1616,7 +1615,7 @@ export function useChatStream(
     if (isPendingDraft(activeSessionId)) {
       sessionId =
         commitDraftIfNeeded({
-          title: rawInput ? deriveSessionTitle(rawInput) : undefined,
+          ...(rawInput ? { title: deriveSessionTitle(rawInput) } : {}),
         }) || '';
     } else {
       sessionId = resolveStreamSessionId(null, activeSessionId) || '';
@@ -1734,9 +1733,8 @@ export function useChatStream(
 
     let enqueued = false;
     try {
-      useLayoutStore.setState((state) => {
+      useLayoutStore.setState(produce((state) => {
         const sess = state.sessionsById[sessionId];
-        // messages 缺省时就地初始化；session 已不存在则跳过（不 invent）
         if (!ensureSessionMessages(sess)) return;
         const newMsg: SessionMessage = {
           id: userMsgId,
@@ -1745,11 +1743,9 @@ export function useChatStream(
           timestamp: Date.now(),
           status: isAiBusy ? 'queued' : 'processing',
         };
-        // 正式版：统一入队或立即发送
-        // 侧栏时间由消息 timestamp 推算，不写死「刚刚」
         sess.messages.push(newMsg);
         enqueued = true;
-      });
+      }));
     } catch (err) {
       console.error('Failed to enqueue user message:', err);
     }

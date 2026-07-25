@@ -113,6 +113,8 @@ describe('storeAccess pure helpers (no zustand mock)', () => {
             status: 'running',
             messages: [],
             startedAt: 1,
+            depth: 0,
+            subagentPath: ['a1'],
           },
         ],
       },
@@ -126,7 +128,10 @@ describe('storeAccess pure helpers (no zustand mock)', () => {
         messages: [],
       },
     ];
-    const byId = { s1: sessions[0], s2: sessions[1] };
+    const byId: Readonly<Record<string, SessionState>> = {
+      s1: sessions[0]!,
+      s2: sessions[1]!,
+    };
 
     it('selectSessionById uses index then falls back; guards empty id', () => {
       expect(selectSessionById(sessions, null)).toBeUndefined();
@@ -621,7 +626,7 @@ describe('storeAccess + domain facades', () => {
 
     // 混入非法项时只保留合法 CronJob
     setScheduledTasks([
-      tasks[0],
+      tasks[0]!,
       { id: 'bad' } as CronJob,
       {
         id: 'cron-2',

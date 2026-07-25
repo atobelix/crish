@@ -10,7 +10,14 @@ export interface MultiStoreSnapshot {
 }
 
 function deepClone<T>(obj: T): T {
-  return structuredClone(obj);
+  try {
+    if (typeof structuredClone === 'function') {
+      return structuredClone(obj);
+    }
+  } catch {
+    /* fallback when Immer proxy or non-cloneable objects are present */
+  }
+  return JSON.parse(JSON.stringify(obj)) as T;
 }
 
 export class StoreTransaction {

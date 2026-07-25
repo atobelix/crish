@@ -449,7 +449,7 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
             <label className={`${styles.schedField} ${styles.schedFieldGrow}`}>
               <span className={styles.schedFieldLabel}>频率</span>
               <SettingsSelect
-                className={styles.schedSelect}
+                {...(styles.schedSelect !== undefined && { className: styles.schedSelect })}
                 value={draft.scheduleType}
                 disabled={busy}
                 options={WORKFLOW_SCHEDULE_TYPES.map((t) => ({

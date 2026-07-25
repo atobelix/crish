@@ -55,8 +55,8 @@ describe('windowMessages', () => {
     expect(r.hiddenCount).toBe(40);
     expect(r.hasOlder).toBe(true);
     expect(r.startIndex).toBe(40);
-    expect(r.visible[0].id).toBe('m40');
-    expect(r.visible[r.visible.length - 1].id).toBe('m119');
+    expect(r!.visible[0]!.id).toBe('m40');
+    expect(r!.visible[r.visible.length - 1]!.id).toBe('m119');
     expect(r.effectiveExpanded).toBe(0);
   });
 

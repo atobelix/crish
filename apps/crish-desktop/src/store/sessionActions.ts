@@ -1,6 +1,19 @@
 /**
  * 会话 / 消息 / agent 相关 action 实现。
  * 仍挂在同一 useLayoutStore（Phase 1）；对外请用 sessionStore.ts 的 useSessionStore 门面。
+ *
+ * 治理防线索引（本文件落地）：
+ *   #1  类型逃逸：禁止 as any / as unknown as；用白名单类型 + 逐字段赋值
+ *   #6  数据水合：timestamp 始终 ISO 串，来源由 timestampSource discriminator 标记
+ *   #7  死代码：移除未使用参数（如旧 respondToApproval 的 wsId）
+ *   #13 事务性：截断 + truncatedToolChainIds 累加 + pinnedMessageIds 清理同事务
+ *   #15 immutability：所有 mutate 在 immer recipe 内；纯函数返回新值
+ *   #32 store/view 职责：action 不写人类可读文案，由 view 层根据状态字段渲染
+ *   #33 DRY：toolCall patch / 消息截断逻辑主会话与子 agent 共用纯函数
+ *   #34 派生标记一致：截断时同步清理 pinnedMessageIds 中已删消息 id
+ *   #35 枚举语义单一：approvalDecision 与 status 解耦
+ *   #37 魔数治理：所有阈值命名常量集中
+ *   #39 热路径：maybeAutoTitleSession 保留 O(n) 但仅在首条用户消息触发
  */
 
 import {
@@ -24,7 +37,9 @@ import {
 import { nowIsoTimestamp } from '../api/sessionTime';
 import type {
   MessageToolCall,
+  MessageToolCallApprovalDecision,
   SessionAgent,
+  SessionAgentPatch,
   SessionGoalMode,
   SessionMessage,
   SessionMessageStatus,
@@ -82,10 +97,14 @@ export interface SessionActions {
    */
   commitDraftIfNeeded: (opts?: { title?: string; folder?: string }) => string;
   upsertSessionAgent: (sessionId: string, agent: SessionAgent) => void;
+  /**
+   * 按 {@link SessionAgentPatch} 白名单 patch agent 字段。
+   * 治理防线 #1：禁止任意 key 写入，编译期杜绝越权字段。
+   */
   patchSessionAgent: (
     sessionId: string,
     agentId: string,
-    patch: Partial<SessionAgent>
+    patch: SessionAgentPatch
   ) => void;
   appendSessionAgentMessage: (
     sessionId: string,
@@ -132,12 +151,22 @@ export interface SessionActions {
     message: SessionMessage
   ) => void;
   withdrawMessage: (wsId: string, sessionId: string, messageId: string) => void;
+  /**
+   * 用户响应审批请求。
+   *
+   * 治理防线 #7（死代码）：移除未使用的 wsId 参数（旧签名残留）。
+   * 治理防线 #32（store/view 职责）：store 不写「已批准，正在执行…」等人类可读文案，
+   *   仅更新 approvalDecision 字段；view 层根据 decision 渲染本地化文案。
+   * 治理防线 #35（枚举语义单一）：decision 与 status 解耦——
+   *   'rejected' 不再被强转为 status='error'，避免与「工具执行失败」混淆。
+   *   status 仍保留为 'pending_approval'，由调用方（daemonChatBridge）根据 decision
+   *   决定后续流转（重试 / 终止），最终由 tool-end 事件回写真实 status。
+   */
   respondToApproval: (
-    wsId: string,
     sessionId: string,
     messageId: string,
     toolCallId: string,
-    status: 'success' | 'error'
+    decision: MessageToolCallApprovalDecision
   ) => void;
   setSessions: (sessions: SessionState[]) => void;
   /**
@@ -219,22 +248,250 @@ function getSessionMessage(
   return { session, message };
 }
 
-/** 工具调用增量相对当前字段是否有实质变化（浅比较；diffs 比引用） */
-function toolCallPatchHasChanges(
-  tc: MessageToolCall,
-  updates: Partial<MessageToolCall>
-): boolean {
-  for (const key of Object.keys(updates) as Array<keyof MessageToolCall>) {
-    if (tc[key] !== updates[key]) return true;
-  }
-  return false;
-}
-
 function getSessionAgent(
   session: SessionState,
   agentId: string
 ): SessionAgent | undefined {
   return session.agents?.find((a) => a.id === agentId);
+}
+
+// ── 治理防线 #1 / #33：纯函数替代 Object.assign / as unknown as ─────────────
+//
+// 以下 6 个纯函数集中处理 toolCall / agent / message 的字段更新，
+// 主会话与子 agent 路径共用，避免分散实现导致行为漂移。
+// 全部逐字段显式赋值，无任何类型断言绕过编译期校验。
+
+/**
+ * 工具调用增量相对当前字段是否有实质变化（浅比较；diffs 比引用）。
+ *
+ * 仅判断 updates 中显式提供的字段（undefined 不算「变化意图」）。
+ */
+function toolCallPatchHasChanges(
+  tc: MessageToolCall,
+  updates: Partial<MessageToolCall>
+): boolean {
+  if (updates.id !== undefined && tc.id !== updates.id) return true;
+  if (updates.name !== undefined && tc.name !== updates.name) return true;
+  if (updates.arguments !== undefined && tc.arguments !== updates.arguments) return true;
+  if (updates.status !== undefined && tc.status !== updates.status) return true;
+  if (updates.output !== undefined && tc.output !== updates.output) return true;
+  if (updates.diffs !== undefined && tc.diffs !== updates.diffs) return true;
+  if (updates.explanation !== undefined && tc.explanation !== updates.explanation) return true;
+  if (updates.approvalMeta !== undefined && tc.approvalMeta !== updates.approvalMeta) return true;
+  if (updates.approvalDecision !== undefined && tc.approvalDecision !== updates.approvalDecision) return true;
+  if (updates.startedAt !== undefined && tc.startedAt !== updates.startedAt) return true;
+  if (updates.completedAt !== undefined && tc.completedAt !== updates.completedAt) return true;
+  if (updates.turnId !== undefined && tc.turnId !== updates.turnId) return true;
+  return false;
+}
+
+/**
+ * 清洗 toolCall 更新：终态后忽略 status 回退为 'running'。
+ *
+ * 治理防线 #33：updateMessageToolCall / patchAgentTool 共用此函数，
+ * 消除旧实现中 `delete rest.status` 不改变 rest 类型的语义漂移。
+ *
+ * 类型推导：用解构 `const { status: _status, ...rest } = updates` 让 rest
+ * 自动成为 `Omit<Partial<MessageToolCall>, 'status'>`，编译期保证 status 已被剔除。
+ *
+ * @returns sanitize 后的 updates（可能不包含 status 字段）
+ */
+function sanitizeToolCallUpdates(
+  tc: MessageToolCall,
+  updates: Partial<MessageToolCall>,
+): Partial<MessageToolCall> {
+  if (
+    (tc.status === 'success' || tc.status === 'error') &&
+    updates.status === 'running'
+  ) {
+    const { status: _droppedStatus, ...rest } = updates;
+    return rest;
+  }
+  return updates;
+}
+
+/**
+ * 按 updates 逐字段显式 patch 一个 toolCall。
+ *
+ * 治理防线 #1（类型逃逸）：完全消除 `Object.assign(tc, updates)` 与
+ * `as unknown as Record<keyof MessageToolCall, unknown>` 双重断言。
+ * 仅赋值 updates 中显式提供的字段（undefined 跳过，保留旧值）。
+ *
+ * @param target   被 mutate 的 toolCall（immer draft 内）
+ * @param updates  已经过 sanitizeToolCallUpdates 处理的 updates
+ */
+function applyMessageToolCallPatch(
+  target: MessageToolCall,
+  updates: Partial<MessageToolCall>,
+): void {
+  if (updates.id !== undefined) target.id = updates.id;
+  if (updates.name !== undefined) target.name = updates.name;
+  if (updates.arguments !== undefined) target.arguments = updates.arguments;
+  if (updates.status !== undefined) target.status = updates.status;
+  if (updates.output !== undefined) target.output = updates.output;
+  if (updates.diffs !== undefined) target.diffs = updates.diffs;
+  if (updates.explanation !== undefined) target.explanation = updates.explanation;
+  if (updates.approvalMeta !== undefined) target.approvalMeta = updates.approvalMeta;
+  if (updates.approvalDecision !== undefined) target.approvalDecision = updates.approvalDecision;
+  if (updates.startedAt !== undefined) target.startedAt = updates.startedAt;
+  if (updates.completedAt !== undefined) target.completedAt = updates.completedAt;
+  if (updates.turnId !== undefined) target.turnId = updates.turnId;
+}
+
+/**
+ * 按 SessionAgentPatch 白名单逐字段显式 patch 一个 agent。
+ *
+ * 治理防线 #1（类型逃逸）：完全消除 `Object.assign(ag, patch)` 与
+ * `as unknown as Record<string, unknown>` 双重断言。
+ * SessionAgentPatch 类型本身已编译期约束可 patch 字段集合。
+ *
+ * @param target  被 mutate 的 agent（immer draft 内）
+ * @param patch   白名单 patch（仅含可写字段）
+ */
+function applySessionAgentPatch(
+  target: SessionAgent,
+  patch: SessionAgentPatch,
+): void {
+  if (patch.status !== undefined) target.status = patch.status;
+  if (patch.summary !== undefined) target.summary = patch.summary;
+  if (patch.endedAt !== undefined) target.endedAt = patch.endedAt;
+  if (patch.description !== undefined) target.description = patch.description;
+  if (patch.depth !== undefined) target.depth = patch.depth;
+  if (patch.subagentPath !== undefined) target.subagentPath = patch.subagentPath;
+  // subagentRunId：daemon onRunMeta 异步回填；详见 SessionAgentPatch 字段注释
+  if (patch.subagentRunId !== undefined) target.subagentRunId = patch.subagentRunId;
+}
+
+/**
+ * 浅克隆消息数组（用于分叉会话时深拷贝 messages）。
+ *
+ * 治理防线 #15（immutability 反模式）：替换旧实现中
+ * `JSON.parse(JSON.stringify(...))` 序列化方案——
+ *   - 性能：大消息体序列化开销大；
+ *   - 类型安全：丢失 Date / Map / Set 等非 JSON 原生类型；
+ *   - immer 兼容：在 recipe 内做 JSON 序列化违反结构性共享约定
+ *
+ * 使用 structuredClone：现代浏览器（Chrome 98+ / FF 94+）与 Node 17+ 原生支持，
+ * 保留任意可结构化克隆的类型；如环境不支持则回落到 JSON 序列化。
+ *
+ * @param messages 待克隆的消息数组
+ * @returns 新数组（与原数组无引用共享）
+ */
+function cloneMessages(messages: SessionMessage[]): SessionMessage[] {
+  try {
+    if (typeof structuredClone === 'function') {
+      return structuredClone(messages);
+    }
+  } catch {
+    /* fallback when Immer proxy or non-cloneable objects are present */
+  }
+  return JSON.parse(JSON.stringify(messages)) as SessionMessage[];
+}
+
+/**
+ * 合并消息字段（子 agent upsert / append 路径共用）。
+ *
+ * 治理防线 #33（DRY）：替代旧实现 `Object.assign(existing, message)`——
+ *   - Object.assign 会覆盖 existing 中所有 message 显式提供的字段，
+ *     包括 undefined（若 message 含 undefined 字段，会清掉 existing 中的旧值）
+ *   - 显式逐字段判断 `!== undefined`，仅当 message 提供有效值时覆盖
+ *
+ * @param existing  被 mutate 的现有消息（immer draft 内）
+ * @param incoming  新到的消息（提供覆盖字段）
+ */
+function mergeSessionMessageFields(
+  existing: SessionMessage,
+  incoming: SessionMessage,
+): void {
+  existing.id = incoming.id;
+  existing.sender = incoming.sender;
+  existing.timestamp = incoming.timestamp;
+  if (incoming.text !== undefined) existing.text = incoming.text;
+  if (incoming.thinking !== undefined) existing.thinking = incoming.thinking;
+  if (incoming.toolCalls !== undefined) existing.toolCalls = incoming.toolCalls;
+  if (incoming.status !== undefined) existing.status = incoming.status;
+  if (incoming.precomputedHtml !== undefined) existing.precomputedHtml = incoming.precomputedHtml;
+  if (incoming.toolCallResults !== undefined) existing.toolCallResults = incoming.toolCallResults;
+  if (incoming.blocks !== undefined) existing.blocks = incoming.blocks;
+  if (incoming.streamTextOffset !== undefined) existing.streamTextOffset = incoming.streamTextOffset;
+  if (incoming.thinkingTime !== undefined) existing.thinkingTime = incoming.thinkingTime;
+}
+
+/**
+ * 截断消息数组以容纳新消息，并同步收集被截断的 toolCall id。
+ *
+ * 治理防线 #13（事务性）& #34（派生标记一致）& #33（DRY）：
+ *   - 主会话与子 agent 共用此函数，消除旧实现中两份不一致的截断逻辑
+ *   - 截断以「调用 + 结果」配对为单位：first 若有 toolCalls，连 second 一起删
+ *     （second 必然是该 toolCall 的结果消息或下一条用户消息，都应一并清理）
+ *   - 被删 toolCalls 的 id 累加到 truncatedToolChainIds（不重复）
+ *   - 同步清理 pinnedMessageIds 中被删消息的 id（避免孤儿 pinned 引用）
+ *
+ * 直接 mutate 入参的 messages / truncatedToolChainIdsAcc / pinnedMessageIds。
+ * 调用方需在 immer recipe 内调用。
+ *
+ * @param messages                   被 mutate 的消息数组
+ * @param maxMessages                消息数上限（达到即截断）
+ * @param truncatedToolChainIdsAccRef  持有 truncatedToolChainIds 的容器；
+ *   函数内若收集到 id 但容器值为 undefined，会 lazy-init 为新数组；
+ *   因 immer draft 中属性写入会自动 propagate，调用方传入 `sess` 容器即可让
+ *   新数组被持久化回 `sess.truncatedToolChainIds`。
+ * @param pinnedMessageIds           可选 pinned 列表（同步清理孤儿引用）
+ */
+function truncateMessagesForAppend(
+  messages: SessionMessage[],
+  maxMessages: number,
+  truncatedToolChainIdsAccRef: { truncatedToolChainIds?: string[] },
+  pinnedMessageIds?: string[],
+): void {
+  if (messages.length < maxMessages) return;
+  const first = messages[0];
+  if (!first) return;
+
+  // 收集 first 上终态 toolCall 的 id（这些 id 对应的「调用」即将被删除）
+  const collectedIds: string[] = [];
+  if (first.toolCalls?.length) {
+    for (const tc of first.toolCalls) {
+      if (tc.status === 'success' || tc.status === 'error') {
+        collectedIds.push(tc.id);
+      }
+    }
+  }
+  // 累加到会话级 truncatedToolChainIds（lazy-init + 去重）
+  if (collectedIds.length) {
+    let acc = truncatedToolChainIdsAccRef.truncatedToolChainIds;
+    if (!acc) {
+      acc = [];
+      truncatedToolChainIdsAccRef.truncatedToolChainIds = acc;
+    }
+    for (const id of collectedIds) {
+      if (!acc.includes(id)) {
+        acc.push(id);
+      }
+    }
+  }
+
+  // 收集即将被删除的消息 id（用于清理 pinnedMessageIds）
+  const removedMessageIds = new Set<string>();
+  removedMessageIds.add(first.id);
+  // first 有 toolCalls → second 必为配对结果或下一条用户消息，一并删除
+  if (first.toolCalls?.length && messages.length > 1) {
+    const second = messages[1];
+    if (second) removedMessageIds.add(second.id);
+    messages.splice(0, 2);
+  } else {
+    messages.shift();
+  }
+
+  // 同步清理 pinnedMessageIds 中已删消息的 id（避免孤儿引用）
+  if (pinnedMessageIds?.length) {
+    for (let i = pinnedMessageIds.length - 1; i >= 0; i--) {
+      const pid = pinnedMessageIds[i];
+      if (pid && removedMessageIds.has(pid)) {
+        pinnedMessageIds.splice(i, 1);
+      }
+    }
+  }
 }
 
 /**
@@ -404,16 +661,27 @@ export function createSessionActions<T extends SessionStoreSlice>(
           }
         }
 
-        if (sess.messages.length >= MAX_MESSAGES_PER_SESSION)
-          sess.messages.shift();
+        // 截断旧消息以容纳新消息（配对删 + truncatedToolChainIds 累加 + pinned 清理同事务）
+        // 治理防线 #13 / #34：派生标记与主数据原子变更
+        truncateMessagesForAppend(
+          sess.messages,
+          MAX_MESSAGES_PER_SESSION,
+          sess,
+          sess.pinnedMessageIds,
+        );
         sess.messages.push(newMsg);
         // 活动触达写 ISO，侧栏相对时间可老化；勿写「刚刚」字面量
+        // 治理防线 #6：timestamp 始终 ISO；本机活动 → timestampSource='local'
         const ts =
           typeof message.timestamp === 'number' &&
           Number.isFinite(message.timestamp)
             ? new Date(message.timestamp).toISOString()
             : nowIsoTimestamp();
         sess.timestamp = ts;
+        // 本机活动触达：来源标记为 local（覆盖可能的 'remote' 标记）
+        if (sess.timestampSource !== 'local') {
+          sess.timestampSource = 'local';
+        }
         // 首条用户消息：默认标题 → 中文安全短标题（用户手改不覆盖）
         if (message.sender === 'user') {
           maybeAutoTitleSession(state, sess);
@@ -447,7 +715,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
                 sessionId,
                 operation: 'withdraw',
                 messages: prevMessages,
-                pinnedMessageIds: prevPinned,
+                ...(prevPinned !== undefined ? { pinnedMessageIds: prevPinned } : {}),
                 diffFilePaths: [],
                 timestamp: Date.now(),
                 description: '撤回消息',
@@ -458,19 +726,20 @@ export function createSessionActions<T extends SessionStoreSlice>(
         }
       }),
 
-    respondToApproval: (_wsId, sessionId, messageId, toolCallId, status) =>
+    respondToApproval: (sessionId, messageId, toolCallId, decision) =>
       set((state) => {
         const hit = getSessionMessage(state, sessionId, messageId);
         if (!hit?.message.toolCalls) return;
         const tc = hit.message.toolCalls.find((t) => t.id === toolCallId);
         if (!tc) return;
-        if (status === 'success') {
-          // mock 流会轮询 status===success；daemon 路径随后 tool-end 会覆盖
-          tc.status = 'success';
-          tc.output = '已批准，正在执行\u2026';
-        } else {
-          tc.status = 'error';
-          tc.output = '权限被拒绝。';
+        // 治理防线 #32（store/view 职责）：store 只更新 approvalDecision；
+        // view 层根据 decision 渲染本地化文案（「已批准，正在执行…」/「权限被拒绝」）。
+        // 治理防线 #35（枚举语义单一）：不将 'rejected' 强转为 status='error'，
+        //   避免与「工具执行失败」混淆；status 仍保留 'pending_approval'，
+        //   由调用方（daemonChatBridge）根据 decision 决定后续流转。
+        // 仅当 decision 与已记录值不同时才写 draft，避免无变化触发 immer 通知
+        if (tc.approvalDecision !== decision) {
+          tc.approvalDecision = decision;
         }
       }),
 
@@ -629,18 +898,12 @@ export function createSessionActions<T extends SessionStoreSlice>(
         const tc = msg.toolCalls.find((t) => t.id === toolCallId);
         if (!tc) return;
         // 终态后忽略回退为 running 的 status，只吸收其余字段
-        let effective: Partial<MessageToolCall> = updates;
-        if (
-          (tc.status === 'success' || tc.status === 'error') &&
-          updates.status === 'running'
-        ) {
-          const rest = { ...updates };
-          delete rest.status;
-          effective = rest;
-        }
-        // 字段无实质变化：不 Object.assign
+        // 治理防线 #33：用 sanitizeToolCallUpdates 替代旧 delete rest.status
+        // 治理防线 #1：用 applyMessageToolCallPatch 替代 Object.assign（消除类型逃逸）
+        const effective = sanitizeToolCallUpdates(tc, updates);
+        // 字段无实质变化：不写 draft
         if (!toolCallPatchHasChanges(tc, effective)) return;
-        Object.assign(tc, effective);
+        applyMessageToolCallPatch(tc, effective);
         // 不对齐 id 时不猜「最近 running」，避免写错行
       }),
 
@@ -716,16 +979,11 @@ export function createSessionActions<T extends SessionStoreSlice>(
           if (!msg.toolCalls) continue;
           const tc = msg.toolCalls.find((t) => t.id === toolCallId);
           if (!tc) continue;
-          if (
-            (tc.status === 'success' || tc.status === 'error') &&
-            patch.status === 'running'
-          ) {
-            const rest = { ...patch };
-            delete rest.status;
-            Object.assign(tc, rest);
-          } else {
-            Object.assign(tc, patch);
-          }
+          // 治理防线 #33 / #1：用 sanitizeToolCallUpdates + applyMessageToolCallPatch
+          // 替代旧 delete rest.status + Object.assign（统一逻辑、消除类型逃逸）
+          const effective = sanitizeToolCallUpdates(tc, patch);
+          if (!toolCallPatchHasChanges(tc, effective)) return;
+          applyMessageToolCallPatch(tc, effective);
           return;
         }
       }),
@@ -759,13 +1017,21 @@ export function createSessionActions<T extends SessionStoreSlice>(
         if (!sess.agents) sess.agents = [];
         const i = sess.agents.findIndex((a) => a.id === agent.id);
         if (i >= 0) {
-          sess.agents[i] = {
-            ...sess.agents[i],
-            ...agent,
-            messages: agent.messages?.length
-              ? agent.messages
-              : sess.agents[i].messages,
-          };
+          // noUncheckedIndexedAccess：下标访问返回 T | undefined，需显式守卫
+          const existingAgent = sess.agents[i];
+          if (!existingAgent) {
+            // findIndex 命中但下标取不到：理论上不可达（immer draft 一致性）；
+            // 防御性直接 unshift，避免在 undefined 上展开
+            sess.agents.unshift(agent);
+          } else {
+            sess.agents[i] = {
+              ...existingAgent,
+              ...agent,
+              messages: agent.messages?.length
+                ? agent.messages
+                : existingAgent.messages,
+            };
+          }
         } else {
           sess.agents.unshift(agent);
           if (sess.agents.length > 40) sess.agents.length = 40;
@@ -778,7 +1044,9 @@ export function createSessionActions<T extends SessionStoreSlice>(
         if (!sess) return;
         const ag = getSessionAgent(sess, agentId);
         if (!ag) return;
-        Object.assign(ag, patch);
+        // 治理防线 #1（类型逃逸）：用 SessionAgentPatch 白名单 + applySessionAgentPatch
+        // 替代 Object.assign(ag, patch)——禁止任意 key 写入
+        applySessionAgentPatch(ag, patch);
       }),
 
     patchSession: (sessionId, patch) =>
@@ -803,9 +1071,19 @@ export function createSessionActions<T extends SessionStoreSlice>(
         if (!ag.messages) ag.messages = [];
         const existing = getMessageById(ag.messages, message.id);
         if (existing) {
-          Object.assign(existing, message);
+          // 治理防线 #33（DRY）：用 mergeSessionMessageFields 替代 Object.assign
+          // 仅当 message 显式提供有效字段时覆盖（undefined 不破坏 existing 旧值）
+          mergeSessionMessageFields(existing, message);
         } else {
-          if (ag.messages.length >= MAX_MESSAGES_PER_AGENT) ag.messages.shift();
+          // 治理防线 #13 / #34：截断 + truncatedToolChainIds 累加同事务
+          // 子 agent pinned 概念不存在，pinnedMessageIds 参数省略
+          // truncatedToolChainIds 累加到父会话级（与主会话路径一致）
+          truncateMessagesForAppend(
+            ag.messages,
+            MAX_MESSAGES_PER_AGENT,
+            sess,
+            undefined,
+          );
           ag.messages.push(message);
         }
       }),
@@ -866,7 +1144,11 @@ export function createSessionActions<T extends SessionStoreSlice>(
                     }
                     if (res.messages.length > 0) {
                       s.messages = res.messages;
-                      s.timestamp = '远程';
+                      // 治理防线 #6（数据水合）：timestamp 始终 ISO 串，
+                      // 来源由 timestampSource='remote' discriminator 标记
+                      // 旧实现 `s.timestamp = '远程'` 字面量污染下游相对时间计算 → NaN
+                      s.timestamp = nowIsoTimestamp();
+                      s.timestampSource = 'remote';
                       maybeAutoTitleSession(state, s);
                     }
                     s.engineCursor = res.nextAfterSequence;
@@ -927,7 +1209,7 @@ export function createSessionActions<T extends SessionStoreSlice>(
         GENERAL_FOLDER;
       // reuse 已删：直接 mint；createSession 激活时会清 draftFolder
       return actions.createSession({
-        title: opts?.title,
+        ...(opts?.title !== undefined ? { title: opts.title } : {}),
         folder,
         activate: true,
       });
@@ -1117,6 +1399,8 @@ export function createSessionActions<T extends SessionStoreSlice>(
           normalizeWritableSessionTitle(original.title) ||
           EMPTY_SESSION_TITLE;
 
+        // 治理防线 #15（immutability 反模式）：用 cloneMessages 替代
+        // JSON.parse(JSON.stringify(...))——保留非 JSON 类型、性能更优、immer 兼容
         const newSess: SessionState = {
           id: `sess-branch-${Date.now()}`,
           title,
@@ -1124,13 +1408,15 @@ export function createSessionActions<T extends SessionStoreSlice>(
           isPinned: false,
           isArchived: false,
           branchParentId: sessionId,
+          // 治理防线 #6：timestamp 始终 ISO 串；分叉是本机操作 → timestampSource='local'
           timestamp: nowIsoTimestamp(),
-          messages: original.messages
-            ? JSON.parse(JSON.stringify(original.messages))
-            : [],
-          pinnedMessageIds: original.pinnedMessageIds
-            ? [...original.pinnedMessageIds]
-            : undefined,
+          timestampSource: 'local',
+          messages: original.messages ? cloneMessages(original.messages) : [],
+          // 治理防线 #34（派生标记一致）：pinnedMessageIds 引用的消息 id 在新会话中
+          // 仍然存在（messages 已深拷贝），所以 pinned 引用同步复制无孤儿风险
+          ...(original.pinnedMessageIds?.length
+            ? { pinnedMessageIds: [...original.pinnedMessageIds] }
+            : {}),
         };
         // 分叉会话紧插在原会话之后
         const idx = getSessionIndex(state, sessionId);
@@ -1156,7 +1442,9 @@ export function createSessionActions<T extends SessionStoreSlice>(
         const sessIdx = getSessionIndex(state, sessionId);
         if (sessIdx === -1) return;
 
-        const [sess] = state.sessions.splice(sessIdx, 1);
+        const removed = state.sessions.splice(sessIdx, 1);
+        const sess = removed[0];
+        if (!sess) return;
         sess.isPinned = isPinned;
         sess.folder = targetFolder;
 

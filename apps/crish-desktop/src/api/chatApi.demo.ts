@@ -376,7 +376,7 @@ export interface LayoutStoreState {
   workspaces: WorkspaceState[];
   activeSessionId: string;
   commandPermissions: string[];
-  respondToApproval: (wsId: string, sessionId: string, messageId: string, toolCallId: string, status: 'success' | 'error') => void;
+  respondToApproval: (sessionId: string, messageId: string, toolCallId: string, decision: 'approved' | 'rejected') => void;
   // State reducer core is fully defined below...
 }`;
       if (isCancelled) return;

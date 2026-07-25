@@ -177,7 +177,7 @@ describe('dedupeRemoteSessions', () => {
     const remote = [{ title: 'no-id' }, { id: 'ok', title: 'OK' }];
     const next = dedupeRemoteSessions(remote);
     expect(next).toHaveLength(1);
-    expect(next[0].id).toBe('ok');
+    expect(next![0]!.id).toBe('ok');
     expect(dedupeRemoteSessions([{ title: 'only-ghost' }])).toEqual([]);
   });
 
@@ -187,7 +187,7 @@ describe('dedupeRemoteSessions', () => {
       { sessionId: ' x ', title: 'second' },
     ]);
     expect(next).toHaveLength(1);
-    expect(remoteSessionTitle(next[0])).toBe('second');
+    expect(remoteSessionTitle(next[0]!)).toBe('second');
   });
 });
 
@@ -223,7 +223,7 @@ describe('mergeDaemonSessions', () => {
       { id: 'ghost', title: '新会话', updatedAt: Date.now() },
     ]);
     expect(next.map((s) => s.id)).toEqual(['sched-1']);
-    expect(next[0].title).toBe('定时 · 巡检');
+    expect(next![0]!.title).toBe('定时 · 巡检');
   });
 
   it('inserts remote-only sessions that have a real title', () => {
@@ -233,12 +233,12 @@ describe('mergeDaemonSessions', () => {
     ];
     const next = mergeDaemonSessions(local, remote);
     expect(next).toHaveLength(1);
-    expect(next[0].id).toBe('eng-1');
-    expect(next[0].title).toBe('从引擎恢复的任务');
-    expect(next[0].messages).toEqual([]);
+    expect(next![0]!.id).toBe('eng-1');
+    expect(next![0]!.title).toBe('从引擎恢复的任务');
+    expect(next![0]!.messages).toEqual([]);
     // timestamp should be ISO-ish, not literal 刚刚
-    expect(next[0].timestamp).not.toBe('刚刚');
-    expect(next[0].timestamp.includes('T') || Date.parse(next[0].timestamp) > 0).toBe(true);
+    expect(next![0]!.timestamp).not.toBe('刚刚');
+    expect(next![0]!.timestamp.includes('T') || Date.parse(next![0]!.timestamp) > 0).toBe(true);
   });
 
   it('does not overwrite local messages when ids match', () => {
@@ -254,9 +254,9 @@ describe('mergeDaemonSessions', () => {
     const remote = [{ id: 'same', title: '引擎标题', updatedAt: Date.now() }];
     const next = mergeDaemonSessions(local, remote);
     expect(next).toHaveLength(1);
-    expect(next[0].messages[0].text).toBe('本地正文是真相');
+    expect(next![0]!.messages[0]!.text).toBe('本地正文是真相');
     // 有用户消息时应从消息推导标题，而不是盲目用远程默认
-    expect(next[0].title).toContain('本地正文');
+    expect(next![0]!.title).toContain('本地正文');
   });
 
   it('does not overwrite local scheduled or real titles with remote default', () => {
@@ -268,8 +268,8 @@ describe('mergeDaemonSessions', () => {
       { id: 'sched', title: 'New Session', updatedAt: Date.now() },
       { id: 'real', title: 'Untitled', updatedAt: Date.now() },
     ]);
-    expect(next[0].title).toBe('定时 · 本地名');
-    expect(next[1].title).toBe('用户改名');
+    expect(next![0]!.title).toBe('定时 · 本地名');
+    expect(next![1]!.title).toBe('用户改名');
     // 壳字段无变 → 同一引用
     expect(next).toBe(local);
   });
@@ -278,7 +278,7 @@ describe('mergeDaemonSessions', () => {
     const local: SessionState[] = [localShell({ id: 'same', title: '新会话' })];
     const remote = [{ id: 'same', title: '引擎真实名', updatedAt: Date.now() }];
     const next = mergeDaemonSessions(local, remote);
-    expect(next[0].title).toBe('引擎真实名');
+    expect(next![0]!.title).toBe('引擎真实名');
     expect(next).not.toBe(local);
   });
 
@@ -288,7 +288,7 @@ describe('mergeDaemonSessions', () => {
     const next = mergeDaemonSessions(local, remote);
     // 保持本地默认标题；关键是不额外插入远程幽灵
     expect(next).toHaveLength(1);
-    expect(next[0].id).toBe('same');
+    expect(next![0]!.id).toBe('same');
     expect(next).toBe(local);
   });
 
@@ -297,7 +297,7 @@ describe('mergeDaemonSessions', () => {
     const remote = [{ id: 'same', title: 'New Session', updatedAt: Date.now() }];
     const next = mergeDaemonSessions(local, remote);
     // 远程默认标题不得覆盖本地
-    expect(next[0].title).toBe('新会话');
+    expect(next![0]!.title).toBe('新会话');
     expect(next).toBe(local);
   });
 
@@ -315,7 +315,7 @@ describe('mergeDaemonSessions', () => {
       { id: 'x', title: '第二次', updatedAt: 2 },
     ]);
     expect(next).toHaveLength(1);
-    expect(next[0].title).toBe('第二次');
+    expect(next![0]!.title).toBe('第二次');
   });
 
   it('preserves object identity for untouched sessions when only one title changes', () => {
@@ -326,7 +326,7 @@ describe('mergeDaemonSessions', () => {
       { id: 'b', title: '引擎补全 B', updatedAt: Date.now() },
     ]);
     expect(next[0]).toBe(a);
-    expect(next[1].title).toBe('引擎补全 B');
+    expect(next![1]!.title).toBe('引擎补全 B');
     expect(next[1]).not.toBe(b);
   });
 
@@ -351,7 +351,7 @@ describe('mergeDaemonSessions', () => {
       { id: 'ghost', title: '新会话', updatedAt: Date.now() },
     ]);
     expect(next).toHaveLength(1);
-    expect(next[0].title).toContain('从消息补');
+    expect(next![0]!.title).toContain('从消息补');
     expect(next).not.toBe(local);
   });
 
@@ -365,11 +365,11 @@ describe('mergeDaemonSessions', () => {
       },
     ]);
     expect(next).toHaveLength(1);
-    expect(next[0].id).toBe('via-session-id');
-    expect(next[0].title).toBe('引擎仅有 name');
+    expect(next![0]!.id).toBe('via-session-id');
+    expect(next![0]!.title).toBe('引擎仅有 name');
     // 秒→毫秒后应是 2023 附近的 ISO
-    expect(next[0].timestamp).toMatch(/^2023-/);
-    expect(next[0].timestamp.includes('T')).toBe(true);
+    expect(next![0]!.timestamp).toMatch(/^2023-/);
+    expect(next![0]!.timestamp.includes('T')).toBe(true);
   });
 
   it('does not insert Untitled-1 / New Session N remote ghosts', () => {
@@ -394,7 +394,7 @@ describe('mergeDaemonSessions', () => {
     const next = mergeDaemonSessions(local, [
       { id: 'same', name: 'New Chat', title: '', updatedAt: Date.now() },
     ]);
-    expect(next[0].title).toBe('用户手改');
+    expect(next![0]!.title).toBe('用户手改');
     expect(next).toBe(local);
   });
 
@@ -404,8 +404,8 @@ describe('mergeDaemonSessions', () => {
       { sessionId: '  abc  ', title: '引擎补全', updatedAt: Date.now() },
     ]);
     expect(next).toHaveLength(1);
-    expect(next[0].id).toBe('abc');
-    expect(next[0].title).toBe('引擎补全');
+    expect(next![0]!.id).toBe('abc');
+    expect(next![0]!.title).toBe('引擎补全');
   });
 
   it('never deletes local sessions missing from remote (additive only)', () => {
@@ -511,8 +511,8 @@ describe('mergeDaemonSessions', () => {
     const next = mergeDaemonSessions(local, [
       { id: 's', title: '引擎', updatedAt: Date.now() },
     ]);
-    expect(next[0].messages).toBe(messages);
-    expect(next[0].title).toContain('body');
+    expect(next![0]!.messages).toBe(messages);
+    expect(next![0]!.title).toContain('body');
   });
 });
 

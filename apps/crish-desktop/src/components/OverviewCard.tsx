@@ -8,6 +8,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './OverviewCard.module.css';
 import * as Lucide from 'lucide-react';
+import { produce } from 'immer';
 import { useLayoutStore } from '../store/layoutStore';
 import {
   selectActiveSession,
@@ -17,7 +18,6 @@ import {
 import {
   fetchGitDiff,
   fetchGitStatus,
-  gitStatusBadgeClass,
   gitStatusLabel,
   gitStatusUserMessage,
   openGitDownloadPage,
@@ -26,8 +26,8 @@ import {
 } from '../api/gitApi';
 import { getWorkspacePath } from '../api/projectStore';
 import { openAgentInSidePanel, clearAgentPanelFocus } from '../api/openAgentPanel';
-import { toolHumanLabel } from '../api/toolPresentation';
 import { pushDiffFile, setActiveDiffSource, setActiveSessionId } from '../api/storeAccess';
+import type { FileDiff, MessageToolCall } from '../store/layoutStore';
 import {
   computeChecklistProgress,
   findCurrentLiveTool,
@@ -39,7 +39,7 @@ import { getActiveModelId, resolveDisplayModelId } from '../api/providerProfiles
 import {
   type PendingApprovalInfo,
 } from '../api/engineStatus';
-import { scheduleLabel, type WorkflowDefinition } from '../api/workflowApi';
+import { scheduleLabel } from '../api/workflowApi';
 import {
   BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
   backgroundTaskStateLabel,
@@ -48,7 +48,7 @@ import {
   type BackgroundTaskInfo,
 } from '../api/backgroundTasksApi';
 import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
-import { emitUiEvent } from '../api/uiEvents';
+
 import { detectFileKind } from '../api/workspaceFsApi';
 import { fileExtColor } from '../api/codeHighlight';
 import type { CronJob } from '../api/clientApi';
@@ -93,8 +93,8 @@ function formatElapsed(sec: number): string {
 
 function formatBgTaskMeta(opts: {
   state: unknown;
-  command?: string;
-  opening?: boolean;
+  command: string | undefined;
+  opening: boolean | undefined;
 }): string {
   if (opts.opening) return '打开中…';
   const label = backgroundTaskStateLabel(opts.state);
@@ -140,7 +140,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
   });
   const [git, setGit] = useState<GitStatusResult | null>(null);
   const [gitLoading, setGitLoading] = useState(false);
-  const [gitErr, setGitErr] = useState<string | null>(null);
+  const [, setGitErr] = useState<string | null>(null);
   const [openingPath, setOpeningPath] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
   const [showAllFiles, setShowAllFiles] = useState(false);
@@ -165,7 +165,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
     id: string;
     taskName: string;
     elapsedSeconds: number;
-    sessionId?: string;
+    sessionId?: string | undefined;
     kind: 'session' | 'run';
   };
 
@@ -259,10 +259,10 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
     output: string,
   ) => {
     if (!toolCallId) return;
-    useLayoutStore.setState((state) => {
+    useLayoutStore.setState(produce((state) => {
       for (const s of state.sessions) {
         for (const m of s.messages || []) {
-          const tc = m.toolCalls?.find((t) => t.id === toolCallId);
+          const tc = m.toolCalls?.find((t: MessageToolCall) => t.id === toolCallId);
           if (tc) {
             tc.status = status;
             tc.output = output;
@@ -270,7 +270,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
         }
         for (const ag of s.agents || []) {
           for (const m of ag.messages || []) {
-            const tc = m.toolCalls?.find((t) => t.id === toolCallId);
+            const tc = m.toolCalls?.find((t: MessageToolCall) => t.id === toolCallId);
             if (tc) {
               tc.status = status;
               tc.output = output;
@@ -278,7 +278,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
           }
         }
       }
-    });
+    }));
   };
 
   const handleApprovalAllow = (a: PendingApprovalInfo, e: React.MouseEvent) => {
@@ -345,11 +345,6 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
     tokenUsage.cost > 0
       ? tokenUsage.cost
       : estimateCostUsd(modelId, tokenUsage.input, tokenUsage.output);
-
-  const tokenPercent = Math.min(
-    100,
-    Math.max(0, Math.round((tokenUsage.input / (tokenUsage.inputMax || 160000)) * 100)),
-  );
 
   const actionErrTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastGitRefreshAtRef = useRef(0);
@@ -460,8 +455,8 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
     try {
       const diff = await fetchGitDiff({ path: f.path });
       if (diff.files.length > 0) {
-        const first = diff.files[0];
-        const merged = { ...first, filePath: first.filePath || f.path };
+        const first = diff.files[0]!;
+        const merged: FileDiff = { ...first, filePath: first.filePath || f.path };
         pushDiffFile(merged);
         setActiveDiffSource(merged);
         onOpenPanel('diff');
@@ -618,7 +613,7 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                           aria-label={`${name}，${st}`}
                           onClick={() => {
                             openAgentInSidePanel(a.id, {
-                              sessionId: activeSessionId || undefined,
+                              ...(activeSessionId ? { sessionId: activeSessionId } : {}),
                             });
                           }}
                         >
@@ -752,7 +747,6 @@ const OverviewCardInner: React.FC<Props> = ({ onOpenPanel }) => {
                 })}
                 {liveTasks.map((wk) => {
                   const elapsedText = formatElapsed(wk.elapsedSeconds);
-                  const clickable = Boolean(wk.sessionId);
                   return (
                     <li key={wk.id}>
                       <button

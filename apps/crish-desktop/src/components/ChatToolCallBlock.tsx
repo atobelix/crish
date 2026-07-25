@@ -55,7 +55,6 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleDot,
-  Clock,
   Copy,
   FileCode,
   PanelRightOpen,
@@ -100,16 +99,16 @@ export interface ChatToolStackProps {
   expandedTools: Record<string, boolean>;
   onToggleTool: (toolId: string, currentlyOpen: boolean) => void;
   approvalBusy: boolean;
-  pendingApprovalMsgId: string;
-  onOpenDiff: (diff: FileDiff) => void;
-  onOpenPath: (filePath: string) => void;
-  onOpenTerminal: () => void;
-  onApprovalAllow: (toolId: string, msgId: string, remember?: boolean) => void;
-  onApprovalDeny: (toolId: string, msgId: string) => void;
-  onRetryTool?: (toolId: string) => void;
+  pendingApprovalMsgId?: string | undefined;
+  onOpenDiff?: ((diff: FileDiff) => void) | undefined;
+  onOpenPath?: ((filePath: string) => void) | undefined;
+  onOpenTerminal?: (() => void) | undefined;
+  onApprovalAllow?: ((toolId: string, msgId: string, remember?: boolean) => void) | undefined;
+  onApprovalDeny?: ((toolId: string, msgId: string) => void) | undefined;
+  onRetryTool?: ((toolId: string) => void) | undefined;
   /** 批量批准：msgIds 与 toolIds 等长，按 bar 内相邻 pending 组 */
-  onBatchApprove?: (msgIds: string[], toolIds: string[]) => void;
-  onBatchDeny?: (msgIds: string[], toolIds: string[]) => void;
+  onBatchApprove?: ((msgIds: string[], toolIds: string[]) => void) | undefined;
+  onBatchDeny?: ((msgIds: string[], toolIds: string[]) => void) | undefined;
 }
 
 /**
@@ -144,12 +143,12 @@ function findAgentForTool(
   return null;
 }
 
-function renderGitDiff(diff: FileDiff, onOpenDiff: (diff: FileDiff) => void) {
+function renderGitDiff(diff: FileDiff, onOpenDiff?: ((diff: FileDiff) => void) | undefined) {
   return (
     <div className={styles.gitDiffCard} key={diff.filePath}>
       <div
         className={styles.gitDiffCardHeader}
-        onClick={() => onOpenDiff(diff)}
+        onClick={() => onOpenDiff?.(diff)}
       >
         <div className={styles.gitDiffFileInfo}>
           <FileCode size={16} style={{ color: 'var(--accent-color)' }} />
@@ -180,7 +179,7 @@ function renderGitDiff(diff: FileDiff, onOpenDiff: (diff: FileDiff) => void) {
         {diff.changes.length > 8 && (
           <div
             className={styles.gitDiffMoreIndicator}
-            onClick={() => onOpenDiff(diff)}
+            onClick={() => onOpenDiff?.(diff)}
           >
             还有 {diff.changes.length - 8} 行 · 点击在右侧查看完整 diff
           </div>
@@ -203,15 +202,15 @@ function ToolResultBody({
 }: {
   tc: {
     id?: string;
-    output?: string;
-    diffs?: FileDiff[];
+    output?: string | undefined;
+    diffs?: FileDiff[] | undefined;
     name?: string;
     status?: string;
     arguments?: string;
   };
   bodyId: string;
-  onOpenDiff: (diff: FileDiff) => void;
-  onOpenTerminal: () => void;
+  onOpenDiff?: ((diff: FileDiff) => void) | undefined;
+  onOpenTerminal?: (() => void) | undefined;
 }) {
   const [showFullOutput, setShowFullOutput] = useState(false);
   const raw = tc.output || '';
@@ -359,10 +358,10 @@ function ToolResultBody({
           <button
             type="button"
             className={styles.toolResultHintBtn}
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenTerminal();
-            }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenTerminal?.();
+              }}
           >
             在终端查看
           </button>
@@ -381,7 +380,7 @@ function ToolResultBody({
           ))}
         </div>
       )}
-      {tc.diffs?.map((d) => renderGitDiff(d, onOpenDiff))}
+      {tc.diffs?.map((d) => renderGitDiff(d, onOpenDiff!))}
     </div>
   );
 }
@@ -452,19 +451,21 @@ function CompactToolRow({
         data-tool-id={tc.id}
       >
         <ApprovalAskCard
-          msgId={mid}
+          msgId={mid ?? ''}
           toolId={tc.id}
           summary={summary}
           cmd={tech && tech !== summary ? tech : techFull || undefined}
           busy={approvalBusy}
           riskMeta={tc.approvalMeta}
           onAllow={() => {
-            onApprovalAllow(tc.id, mid, false);
+            if (tc.id && mid) onApprovalAllow?.(tc.id, mid, false);
           }}
           onAllowRemember={() => {
-            onApprovalAllow(tc.id, mid, true);
+            if (tc.id && mid) onApprovalAllow?.(tc.id, mid, true);
           }}
-          onDeny={() => onApprovalDeny(tc.id, mid)}
+          onDeny={() => {
+            if (tc.id && mid) onApprovalDeny?.(tc.id, mid);
+          }}
         />
       </div>
     );
@@ -551,7 +552,7 @@ function CompactToolRow({
             type="button"
             className={styles.toolPathAction}
             aria-label="在文件面板打开"
-            onClick={() => onOpenPath(filePath)}
+            onClick={() => onOpenPath?.(filePath)}
           >
             <PanelRightOpen size={14} />
           </button>
@@ -601,7 +602,7 @@ function CompactToolRow({
             className={styles.toolPathLink}
             onClick={(e) => {
               e.stopPropagation();
-              onOpenPath(filePath);
+              onOpenPath?.(filePath);
             }}
           >
             {pathLabel}
@@ -662,8 +663,6 @@ function CompactToolRow({
           color="var(--accent-red, #ef4444)"
         />
       );
-    } else if (tc.status === 'pending_approval') {
-      inner = <Clock size={sz} strokeWidth={sw} color="#f59e0b" />;
     } else {
       inner = (
         <CircleDot size={sz} strokeWidth={sw} color="var(--text-tertiary)" />
@@ -798,8 +797,8 @@ function BatchApprovalBar({
 }: {
   toolIds: string[];
   msgIds: string[];
-  onApprove?: (msgIds: string[], toolIds: string[]) => void;
-  onDeny?: (msgIds: string[], toolIds: string[]) => void;
+  onApprove?: ((msgIds: string[], toolIds: string[]) => void) | undefined;
+  onDeny?: ((msgIds: string[], toolIds: string[]) => void) | undefined;
 }) {
   return (
     <div
@@ -839,15 +838,18 @@ function renderToolsWithBatchBars(
   tools: MessageToolCall[],
   msgId: string | undefined,
   props: ChatToolStackProps
-): JSX.Element[] {
-  const elements: JSX.Element[] = [];
+): React.ReactElement[] {
+  const elements: React.ReactElement[] = [];
   let i = 0;
   while (i < tools.length) {
-    if (tools[i].status === 'pending_approval' && msgId) {
-      const pendingGroup: MessageToolCall[] = [tools[i]];
+    const ti = tools[i]!;
+    if (ti.status === 'pending_approval' && msgId) {
+      const pendingGroup: MessageToolCall[] = [ti];
       let j = i + 1;
-      while (j < tools.length && tools[j].status === 'pending_approval') {
-        pendingGroup.push(tools[j]);
+      while (j < tools.length) {
+        const tj = tools[j]!;
+        if (tj.status !== 'pending_approval') break;
+        pendingGroup.push(tj);
         j++;
       }
       if (pendingGroup.length >= 2) {
@@ -869,19 +871,20 @@ function renderToolsWithBatchBars(
             key={tc.id}
             tc={tc}
             rowKey={tc.id}
-            msgId={msgId}
+            {...(msgId !== undefined ? { msgId } : {})}
             props={props}
           />
         );
       }
       i = j;
     } else {
+      const ti = tools[i]!;
       elements.push(
         <CompactToolRow
-          key={tools[i].id}
-          tc={tools[i]}
-          rowKey={tools[i].id}
-          msgId={msgId}
+          key={ti.id}
+          tc={ti}
+          rowKey={ti.id}
+          {...(msgId !== undefined ? { msgId } : {})}
           props={props}
         />
       );
@@ -897,21 +900,17 @@ function renderToolStackItems(
   props: ChatToolStackProps
 ) {
   const tools = flattenRenderTools(items);
-  // Build parallel groups first, then render with batch bars inside each group
-  const segments: JSX.Element[] = [];
+  const segments: React.ReactElement[] = [];
   let i = 0;
   while (i < tools.length) {
-    const cur = tools[i];
+    const cur = tools[i]!;
     if (cur.turnId && cur.startedAt) {
       const group: MessageToolCall[] = [cur];
       let j = i + 1;
-      while (
-        j < tools.length &&
-        tools[j].turnId === cur.turnId &&
-        tools[j].startedAt != null &&
-        Math.abs(tools[j].startedAt! - cur.startedAt) <= 200
-      ) {
-        group.push(tools[j]);
+      while (j < tools.length) {
+        const tj = tools[j]!;
+        if (tj.turnId !== cur.turnId || tj.startedAt == null || Math.abs(tj.startedAt - cur.startedAt) > 200) break;
+        group.push(tj);
         j++;
       }
       if (group.length >= 2) {

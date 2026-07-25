@@ -5,14 +5,14 @@ export type CompareMode = 'git' | 'session-merged' | `turn-${string}` | 'plain';
 export interface ComputedChange {
   change: DiffChange;
   globalIdx: number;
-  oldLine?: number;
-  newLine?: number;
+  oldLine: number | undefined;
+  newLine: number | undefined;
   isHeader: boolean;
 }
 
 export interface SplitPair {
-  left?: ComputedChange;
-  right?: ComputedChange;
+  left: ComputedChange | undefined;
+  right: ComputedChange | undefined;
 }
 
 export interface PlaceholderRenderItem {

@@ -4,6 +4,7 @@
  */
 
 import { getWorkspacePath } from './projectStore';
+export { getWorkspacePath };
 import { invokeResult } from './tauriInvoke';
 
 export type FsDirEntry = {
@@ -105,8 +106,8 @@ export async function listDirectory(dirPath?: string): Promise<FsDirEntry[]> {
     return res.data.items.map((it) => ({
       name: String(it.name ?? ''),
       isDir: Boolean(it.isDir ?? it.is_dir),
-      size: typeof it.size === 'number' ? it.size : undefined,
-      modified: it.modified != null ? String(it.modified) : undefined,
+      ...(typeof it.size === 'number' && { size: it.size }),
+      ...(it.modified != null && { modified: String(it.modified) }),
       path: joinPath(path, String(it.name ?? '')),
     }));
   }

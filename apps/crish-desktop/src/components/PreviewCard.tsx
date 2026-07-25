@@ -92,10 +92,6 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
   );
 
   const blank = isAboutBlank(activeUrl);
-  const hostLabel = useMemo(
-    () => (blank ? '' : previewDisplayHost(activeUrl)),
-    [activeUrl, blank],
-  );
   const canEmbed = isEmbeddablePreviewUrl(activeUrl);
   const frameSrc = useMemo(() => safeIframeSrc(activeUrl), [activeUrl]);
   const showFrame = Boolean(frameSrc) && !loadError;

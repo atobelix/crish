@@ -48,12 +48,12 @@ function normalizeOpener(raw: RawHostOpener): HostOpener | null {
   return {
     id,
     displayName,
-    label: raw.label,
     kind: (raw.kind || 'editor') as HostOpenerKind,
     available: raw.available !== false,
-    reason: raw.reason,
     path,
     iconDataUrl: (raw as any).iconDataUrl || (raw as any).icon_data_url || null,
+    ...(raw.label !== undefined && { label: raw.label }),
+    ...(raw.reason !== undefined && { reason: raw.reason }),
   };
 }
 

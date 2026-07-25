@@ -35,7 +35,7 @@ pub(crate) fn resolve_pending_sidecar_response(event: &Value) -> bool {
         let mut pending = match pending_sidecar_responses().lock() {
             Ok(guard) => guard,
             Err(error) => {
-                eprintln!("[Sidecar] Failed to lock pending responses: {error}");
+                tracing::error!(target: "sidecar", error = %error, "Failed to lock pending responses");
                 return false;
             }
         };
@@ -87,7 +87,7 @@ pub(crate) fn reject_pending_sidecar_response_by_request_id(request_id: &str, me
         let mut pending = match pending_sidecar_responses().lock() {
             Ok(guard) => guard,
             Err(error) => {
-                eprintln!("[Sidecar] Failed to lock pending responses: {error}");
+                tracing::error!(target: "sidecar", error = %error, "Failed to lock pending responses");
                 return false;
             }
         };
@@ -143,7 +143,7 @@ pub(crate) fn reject_all_pending_sidecar_responses(message: String) -> usize {
         let mut pending = match pending_sidecar_responses().lock() {
             Ok(guard) => guard,
             Err(error) => {
-                eprintln!("[Sidecar] Failed to lock pending responses: {error}");
+                tracing::error!(target: "sidecar", error = %error, "Failed to lock pending responses");
                 return 0;
             }
         };

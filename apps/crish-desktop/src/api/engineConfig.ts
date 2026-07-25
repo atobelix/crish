@@ -31,12 +31,12 @@ export type EngineStatus = {
 };
 
 export type EngineConfigUpdate = {
-  apiKey?: string;
-  baseUrl?: string;
-  model?: string;
-  credentialMode?: string;
-  endpoint?: string;
-  stream?: boolean;
+  apiKey?: string | undefined;
+  baseUrl?: string | undefined;
+  model?: string | undefined;
+  credentialMode?: string | undefined;
+  endpoint?: string | undefined;
+  stream?: boolean | undefined;
 };
 
 /** OpenAI-compatible endpoint kind (daemon-aligned aliases). */
@@ -448,10 +448,10 @@ export function parseEngineStatusFromRaw(res: unknown): Omit<EngineStatus, 'raw'
 
   return {
     ok: true,
-    model,
-    baseUrl,
+    ...(model !== undefined && { model }),
+    ...(baseUrl !== undefined && { baseUrl }),
     hasApiKey,
-    credentialMode,
+    ...(credentialMode !== undefined && { credentialMode }),
   };
 }
 

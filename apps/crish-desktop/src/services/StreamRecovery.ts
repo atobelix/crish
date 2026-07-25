@@ -22,7 +22,7 @@ export interface StreamState {
 }
 
 interface InternalStreamState extends StreamState {
-  error?: string;
+  error?: string | undefined;
 }
 
 const STALL_TIMEOUT_MS = 10_000;
@@ -33,6 +33,7 @@ export class StreamRecovery {
   private streams = new Map<string, InternalStreamState>();
   private scanTimer: ReturnType<typeof setInterval> | null = null;
   private started = false;
+  private replayHandlers = new Map<string, ((payload: ReplayPayload) => void) | null>();
 
   registerStream(sessionId: string, runId: string): void {
     const existing = this.streams.get(sessionId);
@@ -55,14 +56,29 @@ export class StreamRecovery {
     eventBus.emit('stream:registered', { sessionId, runId }, 'daemon');
   }
 
-  updateHeartbeat(sessionId: string): void {
+  updateHeartbeat(sessionId: string, options?: { sequence?: number; bytes?: number }): void {
     const s = this.streams.get(sessionId);
     if (!s) return;
     s.lastMessageTime = Date.now();
+    if (options?.sequence !== undefined && options.sequence > s.lastSequenceNumber) {
+      s.lastSequenceNumber = options.sequence;
+    }
+    if (options?.bytes !== undefined) {
+      s.receivedBytes += options.bytes;
+    }
     if (s.status === 'paused') {
       s.status = 'streaming';
       eventBus.emit('stream:resumed', { sessionId }, 'daemon');
     }
+  }
+
+  getStream(sessionId: string): StreamState | undefined {
+    return this.streams.get(sessionId);
+  }
+
+  /** 记录渲染缓冲区大小（供背压观察用），当前为简化版留空 */
+  noteRenderBuffer(_sessionId: string, _bytes: number): void {
+    // 无背压逻辑；简化版 StreamRecovery 不实现 buffer 层
   }
 
   markCompleted(sessionId: string): void {
@@ -217,8 +233,40 @@ export class StreamRecovery {
     if (this.streams.delete(sessionId)) {
       eventBus.emit('stream:cleared', { sessionId }, 'daemon');
     }
+    this.replayHandlers.delete(sessionId);
     if (this.streams.size === 0) this.stopScanning();
   }
+
+  /**
+   * 更新指定 session 的最后一个已应用序列号，供流恢复时请求续接点使用。
+   */
+  setLastSequence(sessionId: string, sequence: number): void {
+    const s = this.streams.get(sessionId);
+    if (s && sequence > s.lastSequenceNumber) {
+      s.lastSequenceNumber = sequence;
+    }
+  }
+
+  /**
+   * 注册 / 清除指定 session 的重播事件处理器。
+   * handler 为 null 时清除已注册的处理器。
+   */
+  setReplayHandler(sessionId: string, handler: ((payload: ReplayPayload) => void) | null): void {
+    if (handler === null) {
+      this.replayHandlers.delete(sessionId);
+    } else {
+      this.replayHandlers.set(sessionId, handler);
+    }
+  }
+
+  /**
+   * 触发指定 session 的重播处理器（供内部流恢复逻辑调用）。
+   */
+  dispatchReplay(sessionId: string, payload: ReplayPayload): void {
+    const handler = this.replayHandlers.get(sessionId);
+    if (handler) handler(payload);
+  }
+
 
   clearAll(): void {
     this.streams.clear();
@@ -249,6 +297,65 @@ export class StreamRecovery {
     }
     this.started = false;
   }
+
+  // (backpressure queue: 已在重构中移除。旧版 backpressure 逻辑请参考 git history)
+}
+
+// ---- Helper types ----
+export interface ReplayEvent {
+  sequence: number;
+  type: string;
+  [key: string]: unknown;
+}
+
+export type ReplayPayload = Record<string, unknown>;
+
+// ---- Helper functions (restored for API compatibility) ----
+
+export function extractEventSequence(obj: unknown): number | null {
+  if (!obj || typeof obj !== 'object') return null;
+  const r = obj as Record<string, unknown>;
+  if (typeof r.sequence === 'number') return r.sequence;
+  if (typeof r.eventSequence === 'number') return r.eventSequence;
+  if (typeof r.seq === 'number') return r.seq;
+  return null;
+}
+
+export function orchestratorEventToAgentEvent(
+  event: unknown,
+): Record<string, unknown> | null {
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return null;
+  const ev = event as Record<string, unknown>;
+  const type = ev.type as string | undefined;
+  if (!type) return null;
+  if (type === 'runtime-event') {
+    return { ...(ev.payload as Record<string, unknown> ?? {}), type: 'message-delta' };
+  }
+  if (type === 'run-completed') {
+    return { type: 'run-terminal', terminal: 'completed', runId: ev.runId };
+  }
+  if (type === 'run-failed' || type === 'run-cancelled') {
+    return { type: 'run-terminal', terminal: type.replace('run-', ''), runId: ev.runId };
+  }
+  return ev;
+}
+
+export function projectAssistantTextFromEvents(events: unknown[]): string {
+  let text = '';
+  for (const item of events) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const ev = item as Record<string, unknown>;
+    const payload = ev.payload as Record<string, unknown> | undefined;
+    if (payload?.text && typeof payload.text === 'string') {
+      text += payload.text;
+    }
+  }
+  return text;
+}
+
+export function suffixDelta(existing: string, delta: string): string {
+  if (delta.startsWith(existing)) return delta.slice(existing.length);
+  return delta;
 }
 
 export const streamRecovery = new StreamRecovery();

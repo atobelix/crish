@@ -38,8 +38,7 @@ import {
   stripThoughtPlaceholders,
   escapeHtml,
 } from '../api/markdownRenderLite';
-import { parseMarkdownToHtmlAsync } from '../api/markdownRenderAsync';
-import { getMarkdownHtmlCache } from '../api/markdownCache';
+import { useAsyncMarkdownHtml } from '../api/markdownRenderAsync';
 import type { IncrementalMarkdownBridge } from '../api/incrementalMarkdownBridge';
 import { chunkUpdatesToDomPatches, applyDomPatches } from '../api/domPatch';
 import { Priority } from '../workers';
@@ -325,7 +324,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   );
 
   useEffect(() => {
-    virtualScrollManager?.invalidateActual(messageIndex);
+    virtualScrollManager?.invalidateActual(String(messageIndex));
   }, [msg.text, messageIndex, virtualScrollManager]);
 
   const handleCopy = useCallback(() => {
@@ -455,19 +454,19 @@ export type ChatAssistantMessageRowProps = {
   onRegenerate: (assistantMsgId: string) => void;
   onBranch: () => void;
   onOpenDiff: (diff: FileDiff) => void;
-  onOpenDiffPanel?: () => void;
+  onOpenDiffPanel?: (() => void) | undefined;
   setPermissionMode: (mode: PermissionMode) => void;
   setPlanApproved: (v: boolean) => void;
   /**
    * 后续引导：填入 composer（不发送）。
    * 缺省则不挂芯片，避免无发送能力的宿主（如只读预览）误展示。
    */
-  onFillFollowUp?: (prompt: string) => void;
+  onFillFollowUp?: ((prompt: string) => void) | undefined;
   /** 后续引导：直接发送 prompt（不经 composer 异步 state） */
-  onSendFollowUp?: (prompt: string) => void;
+  onSendFollowUp?: ((prompt: string) => void) | undefined;
   /** 本消息引导被用户关闭后 true */
-  followUpDismissed?: boolean;
-  onDismissFollowUp?: (msgId: string) => void;
+  followUpDismissed?: boolean | undefined;
+  onDismissFollowUp?: ((msgId: string) => void) | undefined;
   messageIndex: number;
   virtualScrollManager: VirtualScrollManager | null;
 };
@@ -609,7 +608,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
   );
 
   useEffect(() => {
-    virtualScrollManager?.invalidateActual(messageIndex);
+    virtualScrollManager?.invalidateActual(String(messageIndex));
   }, [msg.text, messageIndex, virtualScrollManager]);
 
   const thinkingBodyOpen = isThinkingMsg || thinkingOpen;
@@ -999,50 +998,6 @@ export const ChatAssistantMessageRow = React.memo(
 );
 
 // ─── Async Markdown ──────────────────────────────────────────────────────────
-
-function useAsyncMarkdownHtml(
-  markdown: string,
-  priority: Priority
-): { html: string; loading: boolean } {
-  const [html, setHtml] = useState('');
-  const [loading, setLoading] = useState(false);
-  const cancelledRef = useRef(false);
-
-  useEffect(() => {
-    if (!markdown) {
-      setHtml('');
-      setLoading(false);
-      return;
-    }
-
-    const cached = getMarkdownHtmlCache(markdown);
-    if (cached !== undefined) {
-      setHtml(cached);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    cancelledRef.current = false;
-
-    parseMarkdownToHtmlAsync(markdown, priority)
-      .then((result) => {
-        if (!cancelledRef.current) {
-          setHtml(result);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelledRef.current) setLoading(false);
-      });
-
-    return () => {
-      cancelledRef.current = true;
-    };
-  }, [markdown, priority]);
-
-  return { html, loading };
-}
 
 function AsyncMarkdownBlock({
   text,

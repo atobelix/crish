@@ -167,17 +167,19 @@ export function openProject(projectId: string): ProjectEntry | null {
   const list = loadRaw();
   const idx = list.findIndex((p) => p.id === projectId);
   if (idx < 0) return null;
-  list[idx] = { ...list[idx], lastOpenedAt: Date.now() };
+  const target = list[idx]!;
+  const updated: ProjectEntry = { ...target, lastOpenedAt: Date.now() };
+  list[idx] = updated;
   saveRaw(list);
   localStorage.setItem(ACTIVE_PROJECT_KEY, projectId);
-  localStorage.setItem(WORKSPACE_KEY, list[idx].path);
-  rememberProjectFolderAlias(list[idx].id, list[idx].path);
+  localStorage.setItem(WORKSPACE_KEY, target.path);
+  rememberProjectFolderAlias(target.id, target.path);
   window.dispatchEvent(
     new CustomEvent('crish-project-changed', {
-      detail: { projectId: list[idx].id, path: list[idx].path, reason: 'open' },
+      detail: { projectId: target.id, path: target.path, reason: 'open' },
     }),
   );
-  return list[idx];
+  return updated;
 }
 
 export function addProjectFromPath(path: string, name?: string): ProjectEntry {

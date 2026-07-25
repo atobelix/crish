@@ -25,7 +25,6 @@ import {
   getSubagentStatus,
 } from '../api/subagentApi';
 import { ComposerField } from './ChatComposer';
-import { ChatToolStack } from './ChatToolCallBlock';
 import { AgentTeamBoard } from './AgentTeamBoard';
 import { useAgentStream } from '../hooks/useAgentStream';
 import { useAgentToolApproval } from '../hooks/useAgentToolApproval';
@@ -122,8 +121,8 @@ function AgentBrowsePad({
   embedded,
 }: {
   parentSessionId?: string | null;
-  onClose?: () => void;
-  embedded?: boolean;
+  onClose?: (() => void) | undefined;
+  embedded?: boolean | undefined;
 }) {
   const sessionsById = useSessionField(selectSessionsById);
   const activeSessionId = useSessionField(selectActiveSessionId);
@@ -333,7 +332,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
     parentSessionId: parentId || '',
     agentId: id || '',
     isRunning: agent?.status === 'running',
-    subagentRunId: agent?.subagentRunId,
+    ...(agent?.subagentRunId !== undefined && { subagentRunId: agent.subagentRunId }),
   });
 
   const [input, setInput] = useState('');
@@ -409,14 +408,11 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
             : /fail|error/i.test(raw)
               ? 'failed'
               : 'completed';
+          const agentSummary = live.summary || st.latestError || st.progress || (nextStatus === 'stopped' ? '已停止' : undefined);
           patchSessionAgent(sess.id, agent.id, {
             status: nextStatus,
             endedAt: Date.now(),
-            summary:
-              live.summary ||
-              st.latestError ||
-              st.progress ||
-              (nextStatus === 'stopped' ? '已停止' : undefined),
+            ...(agentSummary !== undefined ? { summary: agentSummary } : {}),
           });
         }
       }

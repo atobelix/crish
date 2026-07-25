@@ -9,6 +9,7 @@ import { sidebarSessionsEqual } from './sessionListEqual';
 import type {
   SessionState,
   SessionAgent,
+  SessionMessage,
   SessionGoalTask,
   SessionGoalMode,
 } from './types';
@@ -67,6 +68,27 @@ export const selectPanelAgentId = (
 export const selectActiveSession = (
   s: Pick<SessionFacadeState, 'sessions' | 'sessionsById' | 'activeSessionId'>
 ): SessionState | undefined => getSessionByIdFromIndex(s, s.activeSessionId);
+
+/**
+ * 按会话 id + 消息 id 选择单条消息。
+ *
+ * 返回的是一个选择器函数（curried），便于配合 useShallow 在 hooks 中使用：
+ *   ```ts
+ *   const msg = useSessionField(useShallow(selectMessageById(sid, mid)));
+ *   ```
+ *
+ * 找不到会话或消息时返回 undefined。返回 undefined 时 useShallow 不会触发重渲染。
+ */
+export function selectMessageById(
+  sessionId: string,
+  messageId: string
+): (s: SessionFacade) => SessionMessage | undefined {
+  return (s: SessionFacade): SessionMessage | undefined => {
+    const session = getSessionByIdFromIndex(s, sessionId);
+    if (!session) return undefined;
+    return session.messages.find((m) => m.id === messageId);
+  };
+}
 
 export function useSessionField<T>(selector: (state: SessionFacade) => T): T {
   return useSessionStore(

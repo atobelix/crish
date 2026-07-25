@@ -614,7 +614,7 @@ export function downloadSessionMarkdown(
   const filename = sanitizeExportFilename(session.title || '会话', date, 'md');
   downloadTextFile(filename, content, {
     mimeType: 'text/markdown;charset=utf-8',
-    deps: options.downloadDeps,
+    ...(options.downloadDeps !== undefined && { deps: options.downloadDeps }),
   });
   return filename;
 }
@@ -631,7 +631,7 @@ export function downloadSessionJson(
   const filename = sanitizeExportFilename(session.title || '会话', date, 'json');
   downloadTextFile(filename, content, {
     mimeType: 'application/json;charset=utf-8',
-    deps: options.downloadDeps,
+    ...(options.downloadDeps !== undefined && { deps: options.downloadDeps }),
   });
   return filename;
 }

@@ -29,8 +29,6 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
 
   const totalItems = renderItems.length;
   const rowHeight = 22;
-  const totalHeight = totalItems * rowHeight;
-
   const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - 15);
   const endIndex = Math.min(totalItems, Math.ceil((scrollTop + containerHeight) / rowHeight) + 15);
 
@@ -83,11 +81,11 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
               let leftNum = '';
               if (left) {
                 if (left.change.type === 'deletion') {
-                  leftClass = styles.lineDeletion;
+                  leftClass = styles.lineDeletion ?? '';
                   leftMarker = '−';
                 }
                 leftText = left.change.content;
-                leftNum = String(left.oldLine || '');
+                leftNum = String(left.oldLine ?? '');
               }
 
               let rightClass = '';
@@ -96,11 +94,11 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
               let rightNum = '';
               if (right) {
                 if (right.change.type === 'addition') {
-                  rightClass = styles.lineAddition;
+                  rightClass = styles.lineAddition ?? '';
                   rightMarker = '+';
                 }
                 rightText = right.change.content;
-                rightNum = String(right.newLine || '');
+                rightNum = String(right.newLine ?? '');
               }
 
               return (

@@ -10,6 +10,8 @@ use super::resolution::non_empty_config_value;
 
 const DEFAULT_CONFIG_FILE_NAME: &str = "provider-config.json";
 const DEFAULT_SECRET_FILE_NAME: &str = "provider-direct-key.dpapi";
+/// 多 profile 密钥目录（DPAPI 文件：`secrets/{profileId}.dpapi`）
+const PROFILE_SECRETS_DIR_NAME: &str = "secrets";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,4 +73,32 @@ pub(crate) fn write_persisted_config(
     fs::rename(&tmp, path)
         .map_err(|error| format!("Failed to replace provider config: {error}"))?;
     Ok(())
+}
+
+pub(crate) fn profile_secrets_dir() -> PathBuf {
+    config_dir().join(PROFILE_SECRETS_DIR_NAME)
+}
+
+pub(crate) fn profile_secret_path(profile_id: &str) -> Result<PathBuf, String> {
+    let id = sanitize_profile_secret_id(profile_id)?;
+    Ok(profile_secrets_dir().join(format!("{id}.dpapi")))
+}
+
+fn sanitize_profile_secret_id(profile_id: &str) -> Result<String, String> {
+    let id = profile_id.trim();
+    if id.is_empty() {
+        return Err("profileId is empty".to_string());
+    }
+    if id.len() > 128 {
+        return Err("profileId is too long".to_string());
+    }
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(
+            "profileId must be ASCII alphanumeric, '-' or '_' only".to_string(),
+        );
+    }
+    Ok(id.to_string())
 }

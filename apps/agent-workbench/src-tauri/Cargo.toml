@@ -8,6 +8,9 @@ description.workspace = true
 repository.workspace = true
 build = "build.rs"
 
+[lints]
+workspace = true
+
 [build-dependencies]
 tauri-build.workspace = true
 
@@ -30,6 +33,20 @@ encoding_rs = "0.8"
 notify = { version = "8", features = [] }
 memmap2 = "0.9"
 itertools = "0.14"
+tracing.workspace = true
+anyhow.workspace = true
+regex = "1"
+async-trait.workspace = true
+conex-sandbox = { path = "../../../crates/conex-sandbox" }
+conex-ipc = { path = "../../../crates/conex-ipc" }
+conex-types = { path = "../../../crates/conex-types" }
+conex-compaction = { path = "../../../crates/conex-compaction" }
+conex-diff = { path = "../../../crates/conex-diff" }
+conex-search = { path = "../../../crates/conex-search" }
+conex-fs = { path = "../../../crates/conex-fs" }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_JobObjects", "Win32_System_Power"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

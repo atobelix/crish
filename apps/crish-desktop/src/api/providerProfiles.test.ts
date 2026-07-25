@@ -240,7 +240,7 @@ describe('providerProfiles', () => {
     setActiveModelId('m1');
     removeModelFromProfile('p1', 'm1');
     expect(getActiveModelId()).toBeNull();
-    expect(loadProfiles()[0].models).toEqual(['m2']);
+    expect(loadProfiles()![0]!.models).toEqual(['m2']);
   });
 
   it('addModelToProfile is idempotent', () => {
@@ -255,7 +255,7 @@ describe('providerProfiles', () => {
     ]);
     addModelToProfile('p1', 'a');
     addModelToProfile('p1', 'b');
-    expect(loadProfiles()[0].models).toEqual(['a', 'b']);
+    expect(loadProfiles()![0]!.models).toEqual(['a', 'b']);
   });
 
   it('falls back to first keyed profile model when active is empty', () => {
@@ -521,7 +521,7 @@ describe('providerProfiles', () => {
     const res = await saveProfileBaseUrl('p1', 'https://new.example/v1');
     expect(res.ok).toBe(true);
     expect(res.synced).toBe(true);
-    expect(loadProfiles()[0].baseUrl).toBe('https://new.example/v1');
+    expect(loadProfiles()![0]!.baseUrl).toBe('https://new.example/v1');
     expect(updateEngineConfig).toHaveBeenCalledWith(
       expect.objectContaining({
         baseUrl: 'https://new.example/v1',
@@ -625,7 +625,7 @@ describe('providerProfiles', () => {
     setProfileEnabled('p1', false);
     expect(getActiveProfileId()).toBeNull();
     expect(getActiveModelId()).toBeNull();
-    expect(loadProfiles()[0].enabled).toBe(false);
+    expect(loadProfiles()![0]!.enabled).toBe(false);
     // 禁用后不参与解析
     expect(resolvePreferredModelSelection()).toBeNull();
   });
@@ -704,8 +704,8 @@ describe('providerProfiles', () => {
         { id: 'b', name: 'B', models: [] },
       ]);
       expect(list.map((p) => p.id)).toEqual(['a', 'b']);
-      expect(list[0].name).toBe('First');
-      expect(list[0].models).toEqual(['m1']);
+      expect(list![0]!.name).toBe('First');
+      expect(list![0]!.models).toEqual(['m1']);
       expect(normalizeProviderProfiles(null)).toEqual([]);
       expect(normalizeProviderProfiles({})).toEqual([]);
     });
@@ -915,7 +915,7 @@ describe('providerProfiles', () => {
       ]);
       expect(choices.map((c) => c.model)).toEqual(['m1', 'm2']);
       // empty name + unknown id → id as label
-      expect(choices[0].profileName).toBe('a');
+      expect(choices![0]!.profileName).toBe('a');
       expect(choices.every((c) => c.hasKey)).toBe(true);
       expect(flattenModelChoicesFrom(null)).toEqual([]);
     });
@@ -951,9 +951,9 @@ describe('providerProfiles', () => {
         ]),
       );
       const loaded = loadProfiles();
-      expect(loaded[0].models).toEqual(['a', 'b']);
+      expect(loaded![0]!.models).toEqual(['a', 'b']);
       const stored = JSON.parse(localStorage.getItem('crish_provider_profiles_v1')!);
-      expect(stored[0].models).toEqual(['a', 'b']);
+      expect(stored[0]!.models).toEqual(['a', 'b']);
     });
 
     it('addModelToProfile uses merge/dedupe', () => {
@@ -969,7 +969,7 @@ describe('providerProfiles', () => {
       addModelToProfile('p1', '  a  ');
       addModelToProfile('p1', 'b');
       addModelToProfile('p1', '');
-      expect(loadProfiles()[0].models).toEqual(['a', 'b']);
+      expect(loadProfiles()![0]!.models).toEqual(['a', 'b']);
     });
   });
 });

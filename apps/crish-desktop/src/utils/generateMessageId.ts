@@ -17,7 +17,7 @@ export function generateMessageId(role: 'user' | 'assistant' | 'tool'): string {
   const ts = Date.now().toString(36);
   const rand = crypto.randomUUID().slice(0, 8);
   const seq = nextLocalSeq();
-  return `${role}-${ts}-${rand}-${seq.toString(16).padStart(4, '0')}`;
+  return `${role}-msg-${ts}-${rand}-${seq.toString(16).padStart(4, '0')}`;
 }
 
 /**

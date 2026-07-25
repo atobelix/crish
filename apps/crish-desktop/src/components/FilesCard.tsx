@@ -499,7 +499,8 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
     const walk = (list: FsDirEntry[], depth: number) => {
       for (const e of list) {
         out.push({ ...e, depth });
-        if (e.isDir && expanded[e.path]) walk(expanded[e.path], depth + 1);
+        const childEntries = expanded[e.path];
+        if (e.isDir && childEntries) walk(childEntries, depth + 1);
       }
     };
     walk(entries, 0);
@@ -701,10 +702,6 @@ export const FilesCard: React.FC<FilesCardProps> = ({ initialPath }) => {
       return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     });
   }, [bcFlyout]);
-
-  const defaultEditor = useMemo(() => {
-    return fileOpeners.find((op) => op.kind === 'editor' && op.id !== 'system-file-manager');
-  }, [fileOpeners]);
 
   if (!root) {
     return (

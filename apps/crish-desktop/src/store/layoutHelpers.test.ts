@@ -67,7 +67,7 @@ function wsWithToolTabs(cards: string[], active: string): WorkspaceState {
     widthRatio: 0.4,
     groups: [toolGroup('group-tools', cards, active)],
   });
-  ws.columns[0].widthRatio = 0.6;
+  ws!.columns[0]!.widthRatio = 0.6;
   return ws;
 }
 
@@ -109,7 +109,7 @@ describe('getPanelTitle / resolveWorkspacePanelKey / makePanelCard', () => {
     expect(g.id).toBe('g1');
     expect(g.activeCardId).toBe('files');
     expect(g.heightRatio).toBe(0.5);
-    expect(g.cards[0].title).toBe('文件');
+    expect(g!.cards[0]!.title).toBe('文件');
   });
 
   it('agent side panel title is 聊天 (not Agent)', () => {
@@ -128,7 +128,7 @@ describe('normalize / rebalance / empty workspace', () => {
       widthRatio: 0,
       groups: [toolGroup('g', ['diff'], 'diff')],
     });
-    ws.columns[0].widthRatio = -1;
+    ws!.columns[0]!.widthRatio = -1;
     normalizeColumnWidths(ws);
     const sum = ws.columns.reduce((a, c) => a + c.widthRatio, 0);
     expect(sum).toBeCloseTo(1, 6);
@@ -145,15 +145,15 @@ describe('normalize / rebalance / empty workspace', () => {
       ],
     };
     rebalanceGroupHeights(col);
-    expect(col.groups[0].heightRatio).toBeCloseTo(0.5);
-    expect(col.groups[1].heightRatio).toBeCloseTo(0.5);
+    expect(col!.groups[0]!.heightRatio).toBeCloseTo(0.5);
+    expect(col!.groups[1]!.heightRatio).toBeCloseTo(0.5);
   });
 
   it('isChatOnlyWorkspace / countWorkspaceCards', () => {
     const empty = bareChatWs();
     expect(isChatOnlyWorkspace(empty)).toBe(true);
     expect(countWorkspaceCards(empty)).toBe(1);
-    expect(isChatColumn(empty.columns[0])).toBe(true);
+    expect(isChatColumn(empty.columns[0]!)).toBe(true);
 
     const tools = wsWithToolTabs(['agent'], 'agent');
     expect(isChatOnlyWorkspace(tools)).toBe(false);
@@ -171,7 +171,7 @@ describe('normalize / rebalance / empty workspace', () => {
       ],
     });
     // strip the keeper so whole tool col becomes empty after prune
-    ws.columns[1].groups[1].cards = [];
+    ws!.columns[1]!.groups[1]!.cards = [];
     pruneEmptyWorkspaceLayout(ws, true);
     expect(ws.columns.every((c) => isChatColumn(c) || c.groups.length > 0)).toBe(true);
     expect(ws.columns.some((c) => isChatColumn(c))).toBe(true);
@@ -189,7 +189,7 @@ describe('normalize / rebalance / empty workspace', () => {
     };
     filterEmptyColumnsKeepingChat(ws, true);
     expect(ws.columns).toHaveLength(1);
-    expect(isChatColumn(ws.columns[0])).toBe(true);
+    expect(isChatColumn(ws.columns[0]!)).toBe(true);
   });
 
   it('pruneEmptyGroupsInColumn returns false when nothing removed', () => {
@@ -216,7 +216,7 @@ describe('findCardInWorkspace / focusCardInWorkspace', () => {
     expect(loc!.card.id).toBe('agent');
 
     expect(focusCardInWorkspace(ws, 'agent')).toBe(true);
-    expect(ws.columns[1].groups[0].activeCardId).toBe('agent');
+    expect(ws!.columns[1]!.groups[0]!.activeCardId).toBe('agent');
     expect(focusCardInWorkspace(ws, 'missing')).toBe(false);
   });
 
@@ -240,12 +240,12 @@ describe('placePanelCard / removePanelCard / ensureToolColumn', () => {
     expect(isChatOnlyWorkspace(ws)).toBe(false);
 
     // already there → focus only
-    ws.columns[1].groups[0].activeCardId = 'something-else' as string;
+    ws!.columns[1]!.groups[0]!.activeCardId = 'something-else' as string;
     // force non-active: put a second card then switch
-    ws.columns[1].groups[0].cards.push(makePanelCard('diff'));
-    ws.columns[1].groups[0].activeCardId = 'diff';
+    ws!.columns[1]!.groups[0]!.cards.push(makePanelCard('diff'));
+    ws!.columns[1]!.groups[0]!.activeCardId = 'diff';
     expect(placePanelCard(ws, 'terminal')).toBe('focused');
-    expect(ws.columns[1].groups[0].activeCardId).toBe('terminal');
+    expect(ws!.columns[1]!.groups[0]!.activeCardId).toBe('terminal');
   });
 
   it('browser key opens preview; settings/runtime skipped', () => {
@@ -266,8 +266,8 @@ describe('placePanelCard / removePanelCard / ensureToolColumn', () => {
     expect(placePanelCard(ws, 'tasks', { tabMode: true, stamp: 11 })).toBe('placed');
     const tool = ws.columns.find((c) => !isChatColumn(c))!;
     expect(tool.groups).toHaveLength(1);
-    expect(tool.groups[0].cards.map((c) => c.id)).toEqual(['diff', 'tasks']);
-    expect(tool.groups[0].activeCardId).toBe('tasks');
+    expect(tool!.groups[0]!.cards.map((c) => c.id)).toEqual(['diff', 'tasks']);
+    expect(tool!.groups[0]!.activeCardId).toBe('tasks');
   });
 
   it('tabMode collapses stacked groups then merges', () => {
@@ -281,10 +281,10 @@ describe('placePanelCard / removePanelCard / ensureToolColumn', () => {
     expect(placePanelCard(ws, 'terminal', { stamp: 22, tabMode: true })).toBe('placed');
     const tool = ws.columns.find((c) => !isChatColumn(c))!;
     expect(tool.groups).toHaveLength(1);
-    expect(tool.groups[0].cards.map((c) => c.id)).toEqual(
+    expect(tool!.groups[0]!.cards.map((c) => c.id)).toEqual(
       expect.arrayContaining(['diff', 'files', 'terminal']),
     );
-    expect(tool.groups[0].activeCardId).toBe('terminal');
+    expect(tool!.groups[0]!.activeCardId).toBe('terminal');
   });
 
   it('collapseToolColumnToTabs merges multi-group tool col', () => {
@@ -296,10 +296,10 @@ describe('placePanelCard / removePanelCard / ensureToolColumn', () => {
       heightRatio: 0.5,
       cards: [makePanelCard('files')],
     });
-    tool.groups[0].heightRatio = 0.5;
+    tool!.groups[0]!.heightRatio = 0.5;
     expect(collapseToolColumnToTabs(ws)).toBe(true);
     expect(tool.groups).toHaveLength(1);
-    expect(tool.groups[0].cards.map((c) => c.id)).toEqual(['diff', 'files']);
+    expect(tool!.groups[0]!.cards.map((c) => c.id)).toEqual(['diff', 'files']);
     expect(collapseToolColumnToTabs(ws)).toBe(false);
   });
 
@@ -313,8 +313,8 @@ describe('placePanelCard / removePanelCard / ensureToolColumn', () => {
     const ws = wsWithToolTabs(['files', 'agent'], 'agent');
     expect(removePanelCard(ws, 'agent')).toBe(true);
     const tools = ws.columns.find((c) => !isChatColumn(c));
-    expect(tools?.groups[0].activeCardId).toBe('files');
-    expect(tools?.groups[0].cards.map((c) => c.id)).toEqual(['files']);
+    expect(tools?.groups[0]!.activeCardId).toBe('files');
+    expect(tools?.groups[0]!.cards.map((c) => c.id)).toEqual(['files']);
 
     expect(removePanelCard(ws, 'files')).toBe(true);
     expect(isChatOnlyWorkspace(ws)).toBe(true);
@@ -521,9 +521,9 @@ describe('ensureChatColumn', () => {
 
   it('repairs invalid activeCardId inside chat group', () => {
     const ws = bareChatWs();
-    ws.columns[0].groups[0].activeCardId = 'ghost';
+    ws!.columns[0]!.groups[0]!.activeCardId = 'ghost';
     ensureChatColumn(ws);
-    expect(ws.columns[0].groups[0].activeCardId).toBe('chat');
+    expect(ws!.columns[0]!.groups[0]!.activeCardId).toBe('chat');
   });
 });
 
@@ -541,7 +541,7 @@ describe('upsertDiffFile / appendTerminalLine', () => {
     upsertDiffFile(list, mk('a.ts', 1));
     upsertDiffFile(list, mk('b.ts', 2));
     upsertDiffFile(list, mk('a.ts', 9));
-    expect(list[0].filePath).toBe('b.ts');
+    expect(list![0]!.filePath).toBe('b.ts');
     expect(list.find((f) => f.filePath === 'a.ts')?.additions).toBe(9);
 
     for (let i = 0; i < DIFF_LIST_MAX + 5; i++) {

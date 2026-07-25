@@ -29,7 +29,9 @@ import type {
   DropPreviewState,
   FileDiff,
   MessageToolCall,
+  MessageToolCallApprovalDecision,
   SessionAgent,
+  SessionAgentPatch,
   SessionGoalMode,
   SessionMessage,
   SessionState,
@@ -110,21 +112,43 @@ export type {
 
 // ── Store 引用（初始化时注入；三门面与 layout 同实例）─────────────────────────
 
-/** 与 useLayoutStore 同形的 bound store hook */
+/**
+ * 与 useLayoutStore 同形的 bound store hook。
+ *
+ * 治理防线 #15（store middleware 类型推导）：
+ *   旧实现 initStoreAccess 三参数均声明为 LayoutStoreHook（= typeof useLayoutStore），
+ *   但 useWorkspaceStore / useSettingsUiStore 是独立 create 的 store，
+ *   middleware 链不同（workspace 无 persist），导致 UseBoundStore 类型不兼容 → TS2345。
+ *   引入 StoreLike 最小接口（getState/setState/subscribe），仅约束 storeAccess 实际用到的
+ *   三个方法，允许不同 middleware 组合的 store 注入；域 actions 由调用方自行断言形状。
+ */
 export type LayoutStoreHook = typeof useLayoutStore;
 
-let _sessionStore: LayoutStoreHook | null = null;
-let _workspaceStore: LayoutStoreHook | null = null;
-let _settingsUiStore: LayoutStoreHook | null = null;
+/**
+ * storeAccess 实际依赖的 store 最小接口（与 zustand UseBoundStore 的公共子集）。
+ * 注入的 store 至少需提供 getState / setState / subscribe，不约束 state 形状。
+ */
+export interface StoreLike<S = unknown> {
+  getState: () => S;
+  setState: (...args: unknown[]) => void;
+  subscribe: (...args: unknown[]) => unknown;
+}
+
+let _sessionStore: StoreLike<unknown> | null = null;
+let _workspaceStore: StoreLike<unknown> | null = null;
+let _settingsUiStore: StoreLike<unknown> | null = null;
 
 /**
  * 注入 store 实例（三参数均为 layout 同引用 facade）。
  * 应用启动时调用一次；调用后跨域编排方法使用注入的 store 而非降级路径。
+ *
+ * 治理防线 #15：参数类型放宽为 StoreLike，允许不同 middleware 组合的 store 注入。
+ * 域 actions（createSession / moveCard 等）的形状校验由调用点负责（运行时若缺失会抛错）。
  */
 export function initStoreAccess(
-  session: LayoutStoreHook,
-  workspace: LayoutStoreHook,
-  settingsUi: LayoutStoreHook
+  session: StoreLike<any>,
+  workspace: StoreLike<any>,
+  settingsUi: StoreLike<any>
 ): void {
   _sessionStore = session;
   _workspaceStore = workspace;
@@ -144,19 +168,24 @@ export function getLayoutState(): LayoutStore {
 }
 
 // ── 内部状态解析（优先注入 store，否则降级到 getLayoutState）────────────────
+//
+// 治理防线 #15：注入的 store 类型为 StoreLike（state 形状为 unknown），
+// 实际 state 形状由调用方保证（useSessionStore === useLayoutStore，shapes 一致；
+// useWorkspaceStore 是独立 store，但其 WorkspaceStore 也包含 storeAccess 用到的字段）。
+// 此处用 as LayoutStore 断言形状，与旧实现行为一致；形状不匹配会在运行时暴露。
 
 function resolveSessionState(): LayoutStore {
-  if (_sessionStore) return _sessionStore.getState();
+  if (_sessionStore) return _sessionStore.getState() as LayoutStore;
   return getLayoutState();
 }
 
 function resolveWorkspaceState(): LayoutStore {
-  if (_workspaceStore) return _workspaceStore.getState();
+  if (_workspaceStore) return _workspaceStore.getState() as LayoutStore;
   return getLayoutState();
 }
 
 function resolveSettingsUiState(): LayoutStore {
-  if (_settingsUiStore) return _settingsUiStore.getState();
+  if (_settingsUiStore) return _settingsUiStore.getState() as LayoutStore;
   return getLayoutState();
 }
 
@@ -168,7 +197,9 @@ function resolveSettingsUiState(): LayoutStore {
  * 返回新会话 id。
  */
 export function createSessionAndOpenChat(folder?: string): string {
-  const sessionId = resolveSessionState().createSession({ folder });
+  const sessionId = resolveSessionState().createSession({
+    ...(folder !== undefined && { folder }),
+  });
   if (sessionId) {
     resolveWorkspaceState().setChatMainSurface('chat');
   }
@@ -364,7 +395,8 @@ export class StoreTransaction {
   private restoreSessions(snapshot: SessionsSnapshot): void {
     const store = _sessionStore;
     if (store) {
-      store.setState(snapshot);
+      // StoreLike<S=unknown> → setState 需断言 snapshot 为 Partial<unknown>
+      store.setState(snapshot as Partial<unknown>);
     } else {
       useLayoutStore.setState(snapshot);
     }
@@ -373,7 +405,7 @@ export class StoreTransaction {
   private restoreWorkspaces(snapshot: WorkspacesSnapshot): void {
     const store = _workspaceStore;
     if (store) {
-      store.setState(snapshot);
+      store.setState(snapshot as Partial<unknown>);
     } else {
       useLayoutStore.setState(snapshot);
     }
@@ -382,7 +414,7 @@ export class StoreTransaction {
   private restoreSettingsUi(snapshot: SettingsUiSnapshot): void {
     const store = _settingsUiStore;
     if (store) {
-      store.setState(snapshot);
+      store.setState(snapshot as Partial<unknown>);
     } else {
       useLayoutStore.setState(snapshot);
     }
@@ -876,20 +908,18 @@ export function setSessionMessageStatus(
 }
 
 export function respondToApproval(
-  wsId: string,
   sessionId: string,
   messageId: string,
   toolCallId: string,
-  status: 'success' | 'error'
+  decision: MessageToolCallApprovalDecision
 ): void {
   const sid = requireExistingSessionId(sessionId);
   if (!sid) return;
   getSessionStoreState().respondToApproval(
-    wsId,
     sid,
     messageId,
     toolCallId,
-    status
+    decision
   );
 }
 
@@ -914,14 +944,39 @@ export function upsertSessionAgent(
   getSessionStoreState().upsertSessionAgent(sid, agent);
 }
 
+/**
+ * 按 {@link SessionAgentPatch} 白名单 patch agent 字段。
+ *
+ * 治理防线 #1（类型逃逸）：用 SessionAgentPatch 替代 `Partial<SessionAgent>`，
+ * 编译期杜绝越权字段（id / parentSessionId / parentRunId / messages 等不可写）。
+ */
 export function patchSessionAgent(
   sessionId: string,
   agentId: string,
-  patch: Partial<SessionAgent>
+  patch: SessionAgentPatch
 ): void {
   const sid = requireExistingSessionId(sessionId);
   if (!sid) return;
   getSessionStoreState().patchSessionAgent(sid, agentId, patch);
+}
+
+/**
+ * Patch 子 agent 消息上的 toolCall（与 updateMessageToolCall 同语义，但作用于 agent timeline）。
+ *
+ * 治理防线 #33（DRY）：消除 useAgentToolApproval 中绕过 action 层、
+ * 直接 useLayoutStore.setState 修改 agent toolCall 的反模式。
+ * 治理防线 #1：内部走 sessionAction.patchAgentTool 的 sanitizeToolCallUpdates +
+ * applyMessageToolCallPatch 纯函数路径，杜绝类型逃逸。
+ */
+export function patchAgentTool(
+  sessionId: string,
+  agentId: string,
+  toolCallId: string,
+  patch: Partial<MessageToolCall>
+): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().patchAgentTool(sid, agentId, toolCallId, patch);
 }
 
 export function appendSessionAgentMessage(

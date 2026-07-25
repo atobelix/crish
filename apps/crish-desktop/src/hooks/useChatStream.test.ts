@@ -191,7 +191,7 @@ describe('ensureSessionMessages', () => {
   });
 
   it('replaces non-array messages with []', () => {
-    const sess = { messages: null as unknown as undefined };
+    const sess = { messages: null as unknown as SessionMessage[] | null };
     expect(ensureSessionMessages(sess)).toBe(true);
     expect(sess.messages).toEqual([]);
   });

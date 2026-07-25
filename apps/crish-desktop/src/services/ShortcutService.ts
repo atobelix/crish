@@ -47,7 +47,7 @@ export class ShortcutService {
   // ─── 生命周期 ────────────────────────────────────
 
   /** 初始化：在 container（默认 document）上注册 keydown/keyup 监听 */
-  init(container?: HTMLElement): void {
+  init(container?: HTMLElement | Document): void {
     if (this.boundKeyDown) return;
     this.container = container ?? document;
     this.boundKeyDown = (e: KeyboardEvent) => {
@@ -61,18 +61,18 @@ export class ShortcutService {
     this.boundKeyUp = () => {
       // reserved for future use
     };
-    this.container.addEventListener('keydown', this.boundKeyDown);
-    this.container.addEventListener('keyup', this.boundKeyUp);
+    this.container.addEventListener('keydown', this.boundKeyDown as EventListener);
+    this.container.addEventListener('keyup', this.boundKeyUp as EventListener);
     this.loadCustomOverrides();
   }
 
   /** 销毁：移除所有 DOM 监听，清空序列缓冲和回调 */
   destroy(): void {
     if (this.container && this.boundKeyDown) {
-      this.container.removeEventListener('keydown', this.boundKeyDown);
+      this.container.removeEventListener('keydown', this.boundKeyDown as EventListener);
     }
     if (this.container && this.boundKeyUp) {
-      this.container.removeEventListener('keyup', this.boundKeyUp);
+      this.container.removeEventListener('keyup', this.boundKeyUp as EventListener);
     }
     this.boundKeyDown = null;
     this.boundKeyUp = null;
@@ -201,12 +201,12 @@ export class ShortcutService {
     }
     if (matches.length === 0) return null;
     matches.sort((a, b) => (b.meta.priority ?? 0) - (a.meta.priority ?? 0));
-    return { actionId: matches[0].actionId, meta: matches[0].meta };
+    return { actionId: matches![0]!.actionId, meta: matches![0]!.meta };
   }
 
   private matchSingleKey(e: KeyboardEvent, binding: string): boolean {
     const parts = binding.split(' + ').map(p => p.trim());
-    const keyPart = parts[parts.length - 1];
+    const keyPart = parts[parts.length - 1]!;
     const mods = new Set(parts.slice(0, -1));
 
     // 修饰键匹配（Mac 上 "Ctrl" 对应 metaKey/⌘，Windows 上对应 ctrlKey）

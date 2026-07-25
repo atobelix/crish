@@ -16,7 +16,6 @@ type Props = {
 
 export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
   const cwd = getWorkspacePath() || '__global__';
-  const tabModeEnabled = useLayoutStore((s) => s.tabModeEnabled);
   const setTabModeEnabled = useLayoutStore((s) => s.setTabModeEnabled);
   const setAppSettings = useLayoutStore((s) => s.setAppSettings);
 

@@ -26,6 +26,37 @@ function makeMessage(
   };
 }
 
+/**
+ * 测试辅助：从 sessionsById 取某个 session，缺失时抛出明确错误。
+ * 用于在严格空检查下避免 `!` 断言，同时给出可读的失败信息。
+ */
+function getSessionOrThrow(
+  state: SessionStoreSlice,
+  id: string
+): SessionState {
+  const s = state.sessionsById[id];
+  if (!s) throw new Error(`test harness: expected session "${id}" to exist`);
+  return s;
+}
+
+/**
+ * 测试辅助：取某 session 的第 N 条消息，缺失时抛出明确错误。
+ */
+function getMessageOrThrow(
+  state: SessionStoreSlice,
+  sessionId: string,
+  index: number
+): SessionMessage {
+  const session = getSessionOrThrow(state, sessionId);
+  const msg = session.messages[index];
+  if (!msg) {
+    throw new Error(
+      `test harness: expected message at index ${index} in session "${sessionId}" to exist`
+    );
+  }
+  return msg;
+}
+
 function emptyShell(
   partial: Partial<SessionState> & { id: string }
 ): SessionState {
@@ -101,7 +132,7 @@ function makeHarnessFromState(initial: SessionStoreSlice) {
       return changed;
     },
     // Actions mutate via getSessionById → sessionsById; read the same path.
-    message: () => state.sessionsById.s1.messages[0],
+    message: () => getMessageOrThrow(state, 's1', 0),
   };
 }
 
@@ -197,7 +228,7 @@ describe('sessionActions create/prune paths', () => {
     expect(ids).toContain('content');
     expect(ids).not.toContain('ghost');
     // 有消息的默认标题被推导
-    expect(h.getState().sessionsById.content.title).toContain('有正文');
+    expect(getSessionOrThrow(h.getState(), 'content').title).toContain('有正文');
   });
 
   it('createSession activate:false keeps current active shell and scheduled title', () => {
@@ -414,7 +445,7 @@ describe('sessionActions create/prune paths', () => {
     expect(id).not.toBe('was-shell');
     const st = h.getState();
     expect(st.sessionsById['was-shell']).toBeDefined();
-    expect(st.sessionsById['was-shell'].messages).toHaveLength(1);
+    expect(getSessionOrThrow(st, 'was-shell').messages).toHaveLength(1);
     expect(st.activeSessionId).toBe(id);
     expect(st.sessionsById[id]).toBeDefined();
   });
@@ -557,8 +588,8 @@ describe('sessionActions create/prune paths', () => {
     const sess = h.getState().sessionsById[id];
     expect(sess).toBeDefined();
     // 契约：folder 取 enter 时的 draftFolder，非活动历史会话 folder
-    expect(sess.folder).toBe(enterFolder);
-    expect(sess.folder).not.toBe('other-folder');
+    expect(sess!.folder).toBe(enterFolder);
+    expect(sess!.folder).not.toBe('other-folder');
     expect(h.getState().draftFolder).toBe('');
   });
 
@@ -728,7 +759,7 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
     );
     h.actions.archiveSession('a');
     const st = h.getState();
-    expect(st.sessionsById.a.isArchived).toBe(true);
+    expect(getSessionOrThrow(st, 'a').isArchived).toBe(true);
     expect(st.activeSessionId).toBe('b');
   });
 
@@ -737,16 +768,16 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
       makeStateFromSessions([emptyShell({ id: 's1', title: '新会话' })], 's1')
     );
     h.actions.renameSession('s1', '  /cmd  \u200B帮我重构模块。  ');
-    expect(h.getState().sessionsById.s1.title).toBe('帮我重构模块');
+    expect(getSessionOrThrow(h.getState(), 's1').title).toBe('帮我重构模块');
 
     // 空清洗结果不覆盖
     h.actions.renameSession('s1', '  /help  ');
-    expect(h.getState().sessionsById.s1.title).toBe('帮我重构模块');
+    expect(getSessionOrThrow(h.getState(), 's1').title).toBe('帮我重构模块');
 
     // 码点截断（48）不劈半
     const longZh = '中'.repeat(60);
     h.actions.renameSession('s1', longZh);
-    const titled = h.getState().sessionsById.s1.title;
+    const titled = getSessionOrThrow(h.getState(), 's1').title;
     expect(Array.from(titled).length).toBe(49); // 48 + …
     expect(titled.endsWith('…')).toBe(true);
   });
@@ -758,14 +789,14 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
       folder: '常规会话',
       activate: true,
     });
-    expect(h.getState().sessionsById[id].title).toBe('修复登录崩溃');
+    expect(getSessionOrThrow(h.getState(), id).title).toBe('修复登录崩溃');
 
     const id2 = h.actions.createSession({
       id: 'plain-new',
       activate: false,
     });
     // 未给 title → 清晰「新会话」
-    expect(h.getState().sessionsById[id2].title).toBe('新会话');
+    expect(getSessionOrThrow(h.getState(), id2).title).toBe('新会话');
   });
 
   it('addMessage auto-titles default shell from first Chinese user text', () => {
@@ -781,7 +812,7 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
         text: '帮我写一个排序函数',
       })
     );
-    expect(h.getState().sessionsById.s1.title).toContain('帮我写');
+    expect(getSessionOrThrow(h.getState(), 's1').title).toContain('帮我写');
 
     // 用户手改后不再覆盖
     h.actions.renameSession('s1', '我的标题');
@@ -794,7 +825,7 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
         text: '另一句',
       })
     );
-    expect(h.getState().sessionsById.s1.title).toBe('我的标题');
+    expect(getSessionOrThrow(h.getState(), 's1').title).toBe('我的标题');
   });
 
   it('branchSession sanitizes title and clears agent focus', () => {
@@ -818,8 +849,8 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
     h.actions.branchSession('src', '  分叉标题。 ');
     const st = h.getState();
     expect(st.activeSessionId).not.toBe('src');
-    expect(st.sessionsById[st.activeSessionId].title).toBe('分叉标题');
+    expect(getSessionOrThrow(st, st.activeSessionId).title).toBe('分叉标题');
     expect(st.panelAgentId).toBeNull();
-    expect(st.sessionsById[st.activeSessionId].branchParentId).toBe('src');
+    expect(getSessionOrThrow(st, st.activeSessionId).branchParentId).toBe('src');
   });
 });

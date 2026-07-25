@@ -40,7 +40,7 @@ const MINIMAL_OPTIONS: WorkerPoolOptions = {
 export class WorkerPool {
   private readonly options: WorkerPoolOptions;
   private entries: WorkerEntry[] = [];
-  private taskQueue: Task[] = [];
+  private taskQueue: Task<unknown>[] = [];
   private pendingTasks = new Map<string, { resolve: (value: unknown) => void; reject: (reason: unknown) => void; timeout?: ReturnType<typeof setTimeout> }>();
   private dedupCache = new Map<string, { taskId: string; ts: number }>();
   private taskIdCounter = 0;
@@ -156,10 +156,12 @@ export class WorkerPool {
         workerType,
         resolve: resolve as (value: T) => void,
         reject,
-        signal: options?.signal,
-        transferables: options?.transferables,
+        // 治理防线 #2（exactOptionalPropertyTypes）：Task.signal/transferables/dedupKey
+        // 均为 `field?: T`，不接受 undefined 值；用条件展开剔除 undefined 键
+        ...(options?.signal !== undefined ? { signal: options.signal } : {}),
+        ...(options?.transferables !== undefined ? { transferables: options.transferables } : {}),
         createdAt: Date.now(),
-        dedupKey: options?.dedupKey,
+        ...(options?.dedupKey !== undefined ? { dedupKey: options.dedupKey } : {}),
       };
 
       if (options?.dedupKey) {
@@ -173,16 +175,22 @@ export class WorkerPool {
       }
 
       if (options?.signal) {
+        // 治理防线 #4（全局事件与资源缺少生命周期卸载闭环）：
+        // 旧实现注册了两个独立的 abort 监听器（第二个缺 { once: true }），
+        // 且职责重叠（都操作 pendingTasks）。合并为单一监听器，统一处理
+        // 「队列中移除 + 运行中 abort + pendingTasks 清理 + reject」四件事。
         options.signal.addEventListener('abort', () => {
           const idx = this.taskQueue.findIndex((t) => t.id === id);
           if (idx >= 0) {
             this.taskQueue.splice(idx, 1);
-            this.pendingTasks.delete(id);
-            reject(new DOMException('Task cancelled', 'AbortError'));
           }
           const entry = this.entries.find((e) => e.currentTaskId === id);
           if (entry && entry.abortController) {
             entry.abortController.abort();
+          }
+          if (this.pendingTasks.has(id)) {
+            this.pendingTasks.delete(id);
+            reject(new DOMException('Task cancelled', 'AbortError'));
           }
         }, { once: true });
       }
@@ -192,17 +200,15 @@ export class WorkerPool {
         reject,
       });
 
-      if (options?.signal) {
-        options.signal.addEventListener('abort', () => {
-          this.pendingTasks.delete(id);
-        }, { once: true });
-      }
-
-      this.enqueueTask(task);
+      // 队列内部只处理 dispatch / cancel / 排序，不关心 resolve 的 T 类型；
+      // Task<T> 的 resolve 在 T 上逆变，无法直接赋给 Task<unknown>，
+      // 但 enqueueTask / dispatchToWorker 内部从不调用 task.resolve（仅 pendingTasks 中存的 resolve 调用），
+      // 所以这里安全地把 Task<T> 视为 Task<unknown>
+      this.enqueueTask(task as Task<unknown>);
     });
   }
 
-  private enqueueTask(task: Task<any>): void {
+  private enqueueTask(task: Task<unknown>): void {
     const canDispatch = this.tryDispatchDirect(task);
     if (!canDispatch) {
       this.taskQueue.push(task);
@@ -210,7 +216,7 @@ export class WorkerPool {
     }
   }
 
-  private tryDispatchDirect(task: Task<any>): boolean {
+  private tryDispatchDirect(task: Task<unknown>): boolean {
     const entry = this.findIdleWorker(task.workerType);
     if (!entry) return false;
     this.dispatchToWorker(entry, task);
@@ -221,7 +227,7 @@ export class WorkerPool {
     return this.entries.find((e) => e.type === type && !e.busy);
   }
 
-  private dispatchToWorker(entry: WorkerEntry, task: Task<any>): void {
+  private dispatchToWorker(entry: WorkerEntry, task: Task<unknown>): void {
     entry.busy = true;
     entry.idleSince = 0;
     entry.currentTaskId = task.id;
@@ -331,8 +337,11 @@ export class WorkerPool {
   private startIdleMonitor(): void {
     this.idleTimer = setInterval(() => {
       const now = Date.now();
+      // 治理防线 #3：options.idleTimeoutMs 可选，缺省时跳过 idle 回收
+      const idleTimeoutMs = this.options.idleTimeoutMs;
+      if (idleTimeoutMs === undefined) return;
       for (const entry of this.entries) {
-        if (!entry.busy && entry.idleSince > 0 && (now - entry.idleSince) > this.options.idleTimeoutMs!) {
+        if (!entry.busy && entry.idleSince > 0 && (now - entry.idleSince) > idleTimeoutMs) {
           if (this.entries.filter((e) => e.type === entry.type && !e.busy).length > 1) {
             entry.worker.terminate();
             const idx = this.entries.indexOf(entry);

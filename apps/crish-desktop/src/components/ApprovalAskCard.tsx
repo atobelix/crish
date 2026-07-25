@@ -38,19 +38,19 @@ import type { MessageToolApprovalMeta } from '../store/types';
 type Props = {
   msgId: string;
   /** 工具调用 id，供底部审批条 scrollIntoView */
-  toolId?: string;
+  toolId?: string | undefined;
   summary: string;
-  cmd?: string;
-  busy?: boolean;
+  cmd?: string | undefined;
+  busy?: boolean | undefined;
   /** 后端审批风险事实 */
-  riskMeta?: MessageToolApprovalMeta | ApprovalRiskMeta | null;
+  riskMeta?: MessageToolApprovalMeta | ApprovalRiskMeta | null | undefined;
   onAllow: (note: string) => void;
   onAllowRemember: (note: string) => void;
   onDeny: () => void;
   /** 超时倒计时 ms（父级传入则渲染进度条） */
-  remainingMs?: number;
+  remainingMs?: number | undefined;
   /** 超时回调 */
-  onTimeout?: () => void;
+  onTimeout?: (() => void) | undefined;
 };
 
 function toRiskMeta(
@@ -58,9 +58,9 @@ function toRiskMeta(
 ): ApprovalRiskMeta | null {
   if (!riskMeta) return null;
   return {
-    trustZone: riskMeta.trustZone,
-    risk: riskMeta.risk,
-    riskReason: riskMeta.riskReason,
+    ...(riskMeta.trustZone !== undefined && { trustZone: riskMeta.trustZone }),
+    ...(riskMeta.risk !== undefined && { risk: riskMeta.risk }),
+    ...(riskMeta.riskReason !== undefined && { riskReason: riskMeta.riskReason }),
     riskLevel: riskMeta.riskLevel || 'unknown',
     requiresDoubleConfirm: Boolean(riskMeta.requiresDoubleConfirm),
     recommendSnapshot: Boolean(riskMeta.recommendSnapshot),
@@ -205,8 +205,8 @@ export const ApprovalAskCard: React.FC<Props> = ({
       shouldResetAllowConfirmArmed({
         confirmArmed: true,
         needsDouble,
-        prevToolId: prevTool,
-        nextToolId: nextTool,
+        ...(prevTool !== undefined && { prevToolId: prevTool }),
+        ...(nextTool !== undefined && { nextToolId: nextTool }),
       }) || msgChanged;
 
     if (shouldReset) {
@@ -259,7 +259,6 @@ export const ApprovalAskCard: React.FC<Props> = ({
     setTimeoutPercent(100);
 
     const interval = setInterval(() => {
-      const elapsed = timeoutTotalRef.current - remainingMs;
       const pct = Math.max(0, Math.min(100, (remainingMs / timeoutTotalRef.current) * 100));
       setTimeoutPercent(pct);
     }, 100);
@@ -291,12 +290,12 @@ export const ApprovalAskCard: React.FC<Props> = ({
       if (e.shiftKey) {
         if (active === first || !root.contains(active)) {
           e.preventDefault();
-          last.focus({ preventScroll: true });
+          last!.focus({ preventScroll: true });
         }
       } else {
         if (active === last) {
           e.preventDefault();
-          first.focus({ preventScroll: true });
+          first!.focus({ preventScroll: true });
         }
       }
     };

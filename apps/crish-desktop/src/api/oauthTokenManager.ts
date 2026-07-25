@@ -11,8 +11,6 @@
 import {
   loadProfiles,
   saveProfiles,
-  getActiveProfileId,
-  type ProviderProfile,
   type OAuthTokenData,
 } from './providerProfiles';
 
@@ -81,6 +79,7 @@ export async function refreshOAuthToken(profileId: string): Promise<OAuthTokenDa
           : DEFAULT_EXPIRY_MS;
       const now = Date.now();
 
+      const scopeVal = typeof data.scope === 'string' ? data.scope : oauthToken.scope;
       const updatedToken: OAuthTokenData = {
         accessToken: String(data.access_token || ''),
         refreshToken: String(data.refresh_token || oauthToken.refreshToken),
@@ -88,8 +87,8 @@ export async function refreshOAuthToken(profileId: string): Promise<OAuthTokenDa
           ? data.expires_at * 1000
           : now + expiresIn,
         tokenType: String(data.token_type || 'Bearer'),
-        scope: typeof data.scope === 'string' ? data.scope : oauthToken.scope,
         issuedAt: now,
+        ...(scopeVal !== undefined && { scope: scopeVal }),
       };
 
       if (!updatedToken.accessToken) {

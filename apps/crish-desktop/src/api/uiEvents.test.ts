@@ -345,7 +345,7 @@ describe('uiEvents bus', () => {
     it('emit/on/once degrade when addEventListener missing', () => {
       const win = globalThis.window as Window & typeof globalThis;
       const savedAdd = win.addEventListener;
-      (win as { addEventListener?: typeof win.addEventListener }).addEventListener =
+      (win as { addEventListener?: typeof win.addEventListener | undefined }).addEventListener =
         undefined;
 
       const off = onUiEvent('open-chat', vi.fn());
@@ -361,7 +361,7 @@ describe('uiEvents bus', () => {
     it('emit returns false when dispatchEvent missing', () => {
       const win = globalThis.window as Window & typeof globalThis;
       const saved = win.dispatchEvent;
-      (win as { dispatchEvent?: typeof win.dispatchEvent }).dispatchEvent = undefined;
+      (win as { dispatchEvent?: typeof win.dispatchEvent | undefined }).dispatchEvent = undefined;
       expect(emitUiEvent('open-chat')).toBe(false);
       win.dispatchEvent = saved;
     });

@@ -122,7 +122,11 @@ function parseMcpLifecycleFromCapsResponse(res: Record<string, unknown>): {
   const reason = typeof mcp.reason === 'string' ? mcp.reason : undefined;
   // unsupported 时常表示未配置 lifecycle manager
   const configuredHint = state !== 'unsupported';
-  return { state, reason, configuredHint };
+  return {
+    ...(state !== undefined && { state }),
+    ...(reason !== undefined && { reason }),
+    configuredHint,
+  };
 }
 
 function normalizeState(raw: unknown): McpServerState {
@@ -146,26 +150,29 @@ function mapServer(o: Record<string, unknown>, i: number): McpServerInfo {
         ? o.toolCount
         : tools.length || undefined;
   const state = normalizeState(o.state ?? o.status ?? o.readiness);
+  const transport =
+    typeof o.transport === 'string'
+      ? o.transport
+      : typeof o.type === 'string'
+        ? o.type
+        : undefined;
+  const lastError =
+    typeof o.lastError === 'string'
+      ? o.lastError
+      : typeof o.error === 'string'
+        ? o.error
+        : undefined;
+  const startedAt = typeof o.startedAt === 'string' ? o.startedAt : undefined;
   return {
     id,
     name,
     state,
     status: typeof o.status === 'string' ? o.status : state,
     tools,
-    toolCount,
-    transport:
-      typeof o.transport === 'string'
-        ? o.transport
-        : typeof o.type === 'string'
-          ? o.type
-          : undefined,
-    lastError:
-      typeof o.lastError === 'string'
-        ? o.lastError
-        : typeof o.error === 'string'
-          ? o.error
-          : undefined,
-    startedAt: typeof o.startedAt === 'string' ? o.startedAt : undefined,
+    ...(toolCount !== undefined && { toolCount }),
+    ...(transport !== undefined && { transport }),
+    ...(lastError !== undefined && { lastError }),
+    ...(startedAt !== undefined && { startedAt }),
   };
 }
 
@@ -225,8 +232,8 @@ export async function fetchMcpLifecycleCapability(opts?: {
     const lifecycle = parseMcpLifecycleFromCapsResponse(res);
     listCapsCache = {
       at: Date.now(),
-      mcp: lifecycle?.state,
-      raw: res,
+      ...(lifecycle?.state !== undefined && { mcp: lifecycle.state }),
+      ...(res !== undefined && { raw: res }),
       lifecycle,
     };
     return lifecycle;
@@ -235,8 +242,6 @@ export async function fetchMcpLifecycleCapability(opts?: {
     // 缓存失败结果的短窗口，避免设置页连打
     listCapsCache = {
       at: Date.now(),
-      mcp: undefined,
-      raw: undefined,
       lifecycle: null,
     };
     return null;
@@ -256,16 +261,19 @@ export async function fetchMcpStatus(): Promise<McpStatusSnapshot> {
     )) as Record<string, unknown>;
     const mcp = status.mcpStatus as Record<string, unknown> | undefined;
     if (!mcp || typeof mcp !== 'object') return { configured: false };
+    const readiness = typeof mcp.readiness === 'string' ? mcp.readiness : undefined;
+    const updatedAt = typeof mcp.updatedAt === 'string' ? mcp.updatedAt : undefined;
+    const serverCount =
+      typeof mcp.serverCount === 'number'
+        ? mcp.serverCount
+        : Array.isArray(mcp.servers)
+          ? mcp.servers.length
+          : undefined;
     return {
       configured: Boolean(mcp.configured),
-      readiness: typeof mcp.readiness === 'string' ? mcp.readiness : undefined,
-      updatedAt: typeof mcp.updatedAt === 'string' ? mcp.updatedAt : undefined,
-      serverCount:
-        typeof mcp.serverCount === 'number'
-          ? mcp.serverCount
-          : Array.isArray(mcp.servers)
-            ? mcp.servers.length
-            : undefined,
+      ...(readiness !== undefined && { readiness }),
+      ...(updatedAt !== undefined && { updatedAt }),
+      ...(serverCount !== undefined && { serverCount }),
     };
   } catch (e) {
     logInternalError('fetchMcpStatus', e);
@@ -387,8 +395,8 @@ export async function probeMcpControl(
     canList: true,
     canStartStop,
     configured,
-    capabilityState,
-    message,
+    ...(capabilityState !== undefined && { capabilityState }),
+    ...(message !== undefined && { message }),
   };
 }
 

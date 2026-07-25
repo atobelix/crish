@@ -5,6 +5,8 @@ import {
 } from '../api/VirtualScrollManager';
 
 export interface UseVirtualScrollOptions {
+  /** 消息 ID 序列 */
+  ids?: string[];
   /** 总项数 */
   itemCount: number;
   /** overscan 条数（默认 6，与 MESSAGE_VIEWPORT_OVERSCAN 对齐） */
@@ -20,10 +22,12 @@ export interface UseVirtualScrollResult {
   containerRef: React.RefObject<HTMLDivElement | null>;
   /** 滚动回调 */
   onScroll: React.UIEventHandler<HTMLDivElement>;
-  /** 设置预测量 */
-  setEstimated: (index: number, height: number) => void;
-  /** 设置实际高度 */
-  setActual: (index: number, height: number) => void;
+  /** 更新当前 order（窗口内的 messageId 列表，按展示顺序） */
+  syncOrder: (ids: string[]) => void;
+  /** 设置预测量（按 messageId） */
+  setEstimated: (id: string, height: number) => void;
+  /** 设置实际高度（按 messageId） */
+  setActual: (id: string, height: number) => void;
   /** 清空高度数据（切会话时调用） */
   clearHeights: () => void;
   /** 访问底层 VirtualScrollManager（高级场景） */
@@ -109,23 +113,28 @@ export function useVirtualScroll(
     }
   }, []);
 
-  const setEstimated = useCallback(
-    (index: number, height: number) => manager.setEstimated(index, height),
+  const syncOrder = useCallback(
+    (ids: string[]) => manager.syncOrder(ids),
     [manager],
   );
 
-  /** 待刷入的 index→height 映射，由 rAF 批量 flush */
-  const pendingActualRef = useRef<Map<number, number>>(new Map());
+  const setEstimated = useCallback(
+    (id: string, height: number) => manager.setEstimated(id, height),
+    [manager],
+  );
+
+  /** 待刷入的 id→height 映射，由 rAF 批量 flush */
+  const pendingActualRef = useRef<Map<string, number>>(new Map());
   const actualRafRef = useRef<number | null>(null);
 
   const setActual = useCallback(
-    (index: number, height: number) => {
-      pendingActualRef.current.set(index, height);
+    (id: string, height: number) => {
+      pendingActualRef.current.set(id, height);
       if (actualRafRef.current == null) {
         actualRafRef.current = requestAnimationFrame(() => {
           actualRafRef.current = null;
-          for (const [i, h] of pendingActualRef.current) {
-            manager.setActual(i, h);
+          for (const [msgId, h] of pendingActualRef.current) {
+            manager.setActual(msgId, h);
           }
           pendingActualRef.current.clear();
           setActualTick((t) => t + 1);
@@ -141,6 +150,7 @@ export function useVirtualScroll(
     visibleRange,
     containerRef,
     onScroll,
+    syncOrder,
     setEstimated,
     setActual,
     clearHeights,

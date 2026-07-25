@@ -36,8 +36,8 @@ import {
 
 export interface CliRunJsonOutput {
   events: WorkbenchRunEvent[];
-  snapshot?: WorkbenchTaskSnapshot;
-  decision?: WorkbenchContinuationDecision;
+  snapshot: WorkbenchTaskSnapshot | undefined;
+  decision: WorkbenchContinuationDecision | undefined;
 }
 
 interface CliEventLogWriter {
@@ -73,24 +73,31 @@ export function printContinuationPrompt(cwd = process.cwd(), prompt?: string): v
 
 export function printBackgroundTaskDemo(cwd = process.cwd(), prompt?: string): void {
   const base = createCliSnapshot(cwd, prompt ?? "检查项目并继续完成剩余任务");
+  const now = new Date().toISOString();
   const started = startBackgroundTask(base, {
     id: "demo-command",
     kind: "command",
     title: "运行长时间检查",
     cwd,
     command: "npm test",
-    detail: "命令已经交给后台处理，模型不需要同步等待。"
+    detail: "命令已经交给后台处理，模型不需要同步等待。",
+    now
   });
   const heartbeat = recordBackgroundTaskHeartbeat(started, {
     taskId: "demo-command",
     detail: "命令仍在运行，已经收到一次进度信号。",
-    outputPreview: "正在检查中文界面、类型契约和运行时桥接。"
+    outputPreview: "正在检查中文界面、类型契约和运行时桥接。",
+    now
   });
   const finished = finishBackgroundTask(heartbeat, {
     taskId: "demo-command",
     exitCode: 0,
     summary: "检查命令已经完成，可以根据结果继续未完成验收项。",
-    outputPreview: "所有关键检查通过。"
+    outputPreview: "所有关键检查通过。",
+    state: "succeeded",
+    signal: null,
+    evidenceIds: [],
+    now
   });
   const decision = createBackgroundTaskContinuationDecision(finished, "demo-command");
   console.log(JSON.stringify({ started, heartbeat, finished, decision }, null, 2));
@@ -129,7 +136,8 @@ async function runCliTask(cwd: string, prompt: string, argv = process.argv): Pro
     prompt,
     mode: modeArg("--mode", argv) ?? "execute",
     runBudget: runBudgetArg(argv),
-    initialSnapshot: resume?.snapshot
+    initialSnapshot: resume?.snapshot,
+    backgroundDrainTimeoutMs: undefined
   });
   const eventLog = await createCliEventLogWriter(argv, cwd);
   let finalSnapshot: WorkbenchTaskSnapshot | undefined;
@@ -156,7 +164,8 @@ async function runCliTaskJson(cwd: string, prompt: string, argv = process.argv):
     prompt,
     mode: modeArg("--mode", argv) ?? "execute",
     runBudget: runBudgetArg(argv),
-    initialSnapshot: resume?.snapshot
+    initialSnapshot: resume?.snapshot,
+    backgroundDrainTimeoutMs: undefined
   });
   const output = await collectCliRunJsonOutput(wrapRunEvents(task, runRecord));
   await finishCliRunRecord(runRecord, statusFromSnapshot(output.snapshot), output.snapshot);
@@ -179,7 +188,9 @@ async function runCliGoal(cwd: string, prompt: string, argv = process.argv): Pro
     maxStalledRounds: numberArg("--max-stalled-rounds", argv),
     backgroundDrainTimeoutMs: numberArg("--background-drain-timeout-ms", argv),
     providerRateLimitBackoffMs: numberArg("--provider-rate-limit-backoff-ms", argv),
+    maxTransientProviderErrors: undefined,
     runBudget: runBudgetArg(argv),
+    runTask: undefined,
     async onRoundStart(round) {
       await printJsonLine({ type: "goal-round-start", index: round.index }, eventLog);
     },
@@ -213,18 +224,10 @@ async function createCliRuntime(cwd: string, argv = process.argv, resume?: CliRe
     sessionPath: readPathArg("--session", argv, cwd) ?? resume?.record.sessionPath,
     apiKey: readArg("--api-key", argv),
     resumeSession: argv.includes("--resume") || !!resume?.record.sessionPath,
-    maxTurns: numberArg("--max-turns", argv)
-  });
-}
-
-async function createCliTaskIterable(cwd: string, prompt: string, argv = process.argv): Promise<AsyncIterable<WorkbenchRunnerYield>> {
-  const runtime = await createCliRuntime(cwd, argv);
-  return runWorkbenchTask({
-    runtime,
-    cwd,
-    prompt,
-    mode: modeArg("--mode", argv) ?? "execute",
-    runBudget: runBudgetArg(argv)
+    maxTurns: numberArg("--max-turns", argv),
+    settings: undefined,
+    provider: undefined,
+    permissionPolicy: undefined
   });
 }
 
@@ -243,7 +246,11 @@ async function createCliGoalResult(cwd: string, prompt: string, argv = process.a
     maxStalledRounds: numberArg("--max-stalled-rounds", argv),
     backgroundDrainTimeoutMs: numberArg("--background-drain-timeout-ms", argv),
     providerRateLimitBackoffMs: numberArg("--provider-rate-limit-backoff-ms", argv),
+    maxTransientProviderErrors: undefined,
     runBudget: runBudgetArg(argv),
+    runTask: undefined,
+    onRoundStart: undefined,
+    onRoundEnd: undefined,
     async onYield({ item }) {
       const event = withRunId(item.event, runRecord.record.id);
       await recordRunEvent(runRecord.path, runRecord.record.id, event, item.snapshot);
@@ -256,8 +263,10 @@ async function createCliGoalResult(cwd: string, prompt: string, argv = process.a
 
 function runBudgetArg(argv = process.argv) {
   return {
+    enabled: undefined,
     difficulty: difficultyArg("--budget-difficulty", argv),
-    maxTotalTokens: numberArg("--run-token-budget", argv)
+    maxTotalTokens: numberArg("--run-token-budget", argv),
+    warnAtRatio: undefined
   };
 }
 
@@ -293,7 +302,7 @@ interface CliRunRecord {
 interface CliResumeContext {
   registryPath: string;
   record: WorkbenchRunRecord;
-  snapshot?: WorkbenchTaskSnapshot;
+  snapshot: WorkbenchTaskSnapshot | undefined;
 }
 
 async function createCliRunRecord(
@@ -377,7 +386,7 @@ async function createCliResumeContext(argv = process.argv, cwd = process.cwd()):
   if (!argv.includes("--resume-latest")) return undefined;
   const registryPath = readPathArg("--run-registry", argv, cwd) ?? defaultRunRegistryPath(cwd);
   const registry = await readRunRegistry(registryPath);
-  const latest = findLatestRun(registry, { cwd });
+  const latest = findLatestRun(registry, { cwd, status: undefined, branchId: undefined });
   const record = latest ? selectResumeRecord(registry.records, latest) : undefined;
   if (!record) {
     throw new Error(`No previous run found in ${registryPath}`);

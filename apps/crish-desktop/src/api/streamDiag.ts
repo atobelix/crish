@@ -7,16 +7,16 @@ import { normalizeErrorText } from './userFacingErrors';
 
 export type StreamDiagEntry = {
   at: number;
-  sessionId?: string;
-  runId?: string;
+  sessionId?: string | undefined;
+  runId?: string | undefined;
   scope: string;
-  kind?: string;
+  kind?: string | undefined;
   /** 用户向短句 */
   message: string;
   /** 原始技术细节（截断） */
-  raw?: string;
+  raw?: string | undefined;
   /** 额外上下文（末工具名、检查点等） */
-  context?: Record<string, string | number | boolean | null | undefined>;
+  context?: Record<string, string | number | boolean | null | undefined> | undefined;
 };
 
 const MAX = 40;

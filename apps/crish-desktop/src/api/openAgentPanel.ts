@@ -28,7 +28,7 @@ export const DEFAULT_AGENT_PANEL_TITLE = '协作体对话';
 /** 打开侧栏 agent 时的可选参数 */
 export type AgentPanelOpenOpts = {
   /** 若与当前会话不同则先切换（切会话会清 panel，随后立刻重设） */
-  sessionId?: string;
+  sessionId?: string | undefined;
 };
 
 /** 侧栏 agent 焦点快照（命令式只读） */
@@ -256,7 +256,7 @@ export function planOpenAgentInSidePanel(
   if (input.mode === 'browse') {
     return {
       action: 'browse',
-      sessionId,
+      ...(sessionId !== undefined && { sessionId }),
       title: DEFAULT_AGENT_PANEL_LABEL,
       label: DEFAULT_AGENT_PANEL_LABEL,
       setActiveAgentId: false,
@@ -314,7 +314,7 @@ export function planOpenAgentInSidePanel(
   return {
     action: 'focus',
     agentId,
-    sessionId,
+    ...(sessionId !== undefined && { sessionId }),
     title,
     label,
     reused,
@@ -399,7 +399,7 @@ export function openAgentInSidePanel(agentId: string, opts?: AgentPanelOpenOpts)
   const plan = planOpenAgentInSidePanel({
     mode: 'focus',
     agentId,
-    sessionId: opts?.sessionId,
+    ...(opts?.sessionId !== undefined && { sessionId: opts.sessionId }),
   });
   if (plan.action === 'reject') return;
   if (plan.action !== 'focus') return;
@@ -413,7 +413,7 @@ export function openAgentInSidePanel(agentId: string, opts?: AgentPanelOpenOpts)
 export function openAgentPanelBrowse(opts?: AgentPanelOpenOpts): void {
   const plan = planOpenAgentInSidePanel({
     mode: 'browse',
-    sessionId: opts?.sessionId,
+    ...(opts?.sessionId !== undefined && { sessionId: opts.sessionId }),
   });
   if (plan.action !== 'browse') return;
   assertAgentPanelPlanSideOnly(plan);

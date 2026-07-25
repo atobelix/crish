@@ -51,7 +51,7 @@ export type SessionDiskMirrorMeta = {
   lastPath?: string;
   lastAt?: number;
   sessionCount?: number;
-  mode?: 'tauri' | 'localStorage-only' | 'unavailable';
+  mode?: 'tauri' | 'localStorage-only' | 'unavailable' | undefined;
 };
 
 /** 磁盘 index.json 根形状（写读对称契约） */
@@ -167,7 +167,7 @@ export function normalizeMirrorMeta(value: unknown): SessionDiskMirrorMeta {
     out.sessionCount = Math.floor(o.sessionCount);
   }
   if (typeof o.mode === 'string' && MIRROR_MODES.has(o.mode)) {
-    out.mode = o.mode as SessionDiskMirrorMeta['mode'];
+    out.mode = o.mode as 'tauri' | 'localStorage-only' | 'unavailable';
   }
   return out;
 }
@@ -485,20 +485,18 @@ export function mirrorEntryToSessionShell(
     folder: entry.folder || '常规会话',
     isPinned: Boolean(entry.isPinned),
     isArchived: Boolean(entry.isArchived),
-    branchParentId: entry.branchParentId,
+    ...(entry.branchParentId !== undefined ? { branchParentId: entry.branchParentId } : {}),
     timestamp: coerceSessionTimestamp(
       entry.id,
       entry.timestamp || '恢复',
       msgs,
     ),
     messages: msgs,
-    pinnedMessageIds: entry.pinnedMessageIds?.length
-      ? entry.pinnedMessageIds
-      : undefined,
+    ...(entry.pinnedMessageIds?.length ? { pinnedMessageIds: entry.pinnedMessageIds } : {}),
     agents: [],
-    engineCursor: entry.engineCursor,
-    engineLastRunId: entry.engineLastRunId,
-    hydratedFromEngine: entry.hydratedFromEngine,
+    ...(entry.engineCursor !== undefined ? { engineCursor: entry.engineCursor } : {}),
+    ...(entry.engineLastRunId !== undefined ? { engineLastRunId: entry.engineLastRunId } : {}),
+    ...(entry.hydratedFromEngine !== undefined ? { hydratedFromEngine: entry.hydratedFromEngine } : {}),
   };
 }
 

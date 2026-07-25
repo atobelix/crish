@@ -46,12 +46,12 @@ function task(
   partial: Partial<BackgroundTaskInfo> & Pick<BackgroundTaskInfo, 'id'>,
 ): BackgroundTaskInfo {
   return {
+    id: partial.id,
     label: partial.label ?? partial.id,
     state: partial.state ?? 'running',
-    command: partial.command,
-    startedAt: partial.startedAt,
-    summary: partial.summary,
-    id: partial.id,
+    ...(partial.command !== undefined && { command: partial.command }),
+    ...(partial.startedAt !== undefined && { startedAt: partial.startedAt }),
+    ...(partial.summary !== undefined && { summary: partial.summary }),
   };
 }
 
@@ -250,8 +250,8 @@ describe('extractBackgroundTaskArray & parseBackgroundTaskList', () => {
       ],
     });
     expect(list.map((t) => t.id)).toEqual(['ok', 'ok2']);
-    expect(list[0].state).toBe('succeeded');
-    expect(list[1].state).toBe('failed');
+    expect(list![0]!.state).toBe('succeeded');
+    expect(list![1]!.state).toBe('failed');
   });
 
   it('dedupes by id keeping first occurrence', () => {
@@ -262,7 +262,7 @@ describe('extractBackgroundTaskArray & parseBackgroundTaskList', () => {
     ]);
     expect(list).toHaveLength(2);
     expect(list[0]).toMatchObject({ id: 'dup', label: 'first', state: 'running' });
-    expect(list[1].id).toBe('other');
+    expect(list![1]!.id).toBe('other');
   });
 });
 
@@ -548,16 +548,16 @@ describe('openBackgroundTaskInTerminal', () => {
     try {
       openBackgroundTaskInTerminal('T', 'line1\nline2');
       expect(events).toHaveLength(2);
-      expect(events[0].type).toBe('crish-terminal-append');
-      expect(events[0].detail).toEqual({
+      expect(events![0]!.type).toBe('crish-terminal-append');
+      expect(events![0]!.detail).toEqual({
         title: 'T',
         lines: ['line1', 'line2'],
       });
-      expect(events[1].type).toBe('crish-open-terminal');
+      expect(events![1]!.type).toBe('crish-open-terminal');
 
       events.length = 0;
       openBackgroundTaskInTerminal('Empty', '');
-      expect(events[0].detail.lines).toEqual([BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER]);
+      expect(events![0]!.detail.lines).toEqual([BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER]);
     } finally {
       spy.mockRestore();
     }

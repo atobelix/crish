@@ -25,9 +25,9 @@ export function parseColorToOklch(colorStr: string, isDark?: boolean): OKLCH {
   } else if (str.startsWith('hsl')) {
     const match = str.match(/hsla?\((\d+),\s*(\d+)%,\s*(\d+)%/);
     if (match) {
-      const h = parseInt(match[1]) / 360;
-      const s = parseInt(match[2]) / 100;
-      const l = parseInt(match[3]) / 100;
+      const h = parseInt(match[1]!) / 360;
+      const s = parseInt(match[2]!) / 100;
+      const l = parseInt(match[3]!) / 100;
       
       // HSL to RGB conversion
       const q = l < 0.5 ? l * (1 + s) : l + s - l * s;

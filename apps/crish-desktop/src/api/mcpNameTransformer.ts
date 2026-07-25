@@ -51,7 +51,7 @@ export function parseMcpToolName(formattedToolName: string): ParsedMcpTool {
   if (parts.length >= 2) {
     return {
       isMcp: true,
-      serverName: parts[0],
+      serverName: parts[0]!,
       toolName: parts.slice(1).join('__'),
     };
   }

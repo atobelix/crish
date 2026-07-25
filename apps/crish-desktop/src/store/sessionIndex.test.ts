@@ -471,8 +471,8 @@ describe('sidebar empty-session helpers', () => {
       [inP1, byName, gen, alias],
       projects
     );
-    expect(byProjectId.p1.map((s) => s.id)).toEqual(['a']);
-    expect(byProjectId.p2.map((s) => s.id)).toEqual(['b']);
+    expect(byProjectId!.p1?.map((s) => s.id)).toEqual(['a']);
+    expect(byProjectId!.p2?.map((s) => s.id)).toEqual(['b']);
     expect(general.map((s) => s.id).sort()).toEqual(['c', 'd']);
   });
 });

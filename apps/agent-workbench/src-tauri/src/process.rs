@@ -196,11 +196,15 @@ const MAX_PATH: usize = 260;
 
 #[cfg(target_os = "windows")]
 fn current_process_memory_snapshot() -> Option<ProcessMemoryCounters> {
-    process_memory_snapshot_from_handle(unsafe { GetCurrentProcess() })
+    process_memory_snapshot_from_handle(
+        // SAFETY: GetCurrentProcess 始终返回伪句柄，无需释放
+        unsafe { GetCurrentProcess() },
+    )
 }
 
 #[cfg(target_os = "windows")]
 fn process_memory_snapshot(pid: u32) -> Option<ProcessMemoryCounters> {
+    // SAFETY: OpenProcess 句柄通过非 null 检查，CloseHandle 在 finally 中关闭
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid);
         if handle.is_null() {
@@ -214,6 +218,7 @@ fn process_memory_snapshot(pid: u32) -> Option<ProcessMemoryCounters> {
 
 #[cfg(target_os = "windows")]
 fn process_memory_snapshot_from_handle(handle: *mut c_void) -> Option<ProcessMemoryCounters> {
+    // SAFETY: process_handle 已验证有效
     unsafe {
         let mut counters = ProcessMemoryCounters {
             cb: std::mem::size_of::<ProcessMemoryCounters>() as u32,
@@ -284,6 +289,7 @@ fn process_tree_pids(root_pid: u32) -> Vec<u32> {
 
 #[cfg(target_os = "windows")]
 fn process_parent_map() -> HashMap<u32, u32> {
+    // SAFETY: 快照句柄在 finally 中关闭，枚举前检查 INVALID_HANDLE_VALUE
     unsafe {
         let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         if snapshot.is_null() || snapshot as isize == -1 {
@@ -409,6 +415,16 @@ pub(crate) async fn workbench_run_shell(
     }
     if command.len() > 32_000 {
         return Err("command too long".to_string());
+    }
+
+    let gatekeeper = conex_sandbox::gatekeeper::CommandGatekeeper::new();
+    if gatekeeper.check_command(&command, &[]) == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
+        || gatekeeper.patterns().is_match(&command)
+    {
+        return Err(
+            "PermissionDenied: Command blocked by safety red-line gatekeeper (InvalidCommand)"
+                .to_string(),
+        );
     }
 
     let cwd = resolve_shell_cwd(request.cwd.as_deref())?;
@@ -679,5 +695,148 @@ pub(crate) fn terminate_process_tree(pid: u32) -> Result<(), String> {
         Ok(())
     } else {
         Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
+// ==================== Daemon Job Object (Orphan Process Protection) ====================
+
+#[cfg(windows)]
+struct DaemonJobHandle(windows_sys::Win32::Foundation::HANDLE);
+
+#[cfg(windows)]
+// SAFETY: DaemonJobHandle 仅含整数句柄
+unsafe impl Send for DaemonJobHandle {}
+
+#[cfg(windows)]
+// SAFETY: DaemonJobHandle 仅含整数句柄
+unsafe impl Sync for DaemonJobHandle {}
+
+#[cfg(windows)]
+static DAEMON_JOB_OBJECT: OnceLock<DaemonJobHandle> = OnceLock::new();
+
+#[cfg(windows)]
+pub(crate) fn create_daemon_job_object() -> Result<windows_sys::Win32::Foundation::HANDLE, String> {
+    use core::mem;
+    use core::ptr;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::JobObjects::*;
+
+    // SAFETY: JOBOBJECT_EXTENDED_LIMIT_INFORMATION 栈分配
+    unsafe {
+        let job = CreateJobObjectW(ptr::null_mut(), ptr::null_mut());
+        if job.is_null() {
+            return Err("CreateJobObjectW failed: unable to create job object".to_string());
+        }
+
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = mem::zeroed();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+        let ret = SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info as *const _ as *const core::ffi::c_void,
+            mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        );
+        if ret == 0 {
+            let _ = CloseHandle(job);
+            return Err("SetInformationJobObject failed: unable to set kill-on-close".to_string());
+        }
+
+        Ok(job)
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn init_daemon_job_object() -> Result<(), String> {
+    let handle = create_daemon_job_object()?;
+    match DAEMON_JOB_OBJECT.set(DaemonJobHandle(handle)) {
+        Ok(()) => Ok(()),
+        Err(DaemonJobHandle(dup)) => {
+            // SAFETY: dup 来自 DuplicateHandle，已验证非 null
+            unsafe { windows_sys::Win32::Foundation::CloseHandle(dup); }
+            Ok(())
+        }
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn assign_child_to_daemon_job_object(
+    child_handle: std::os::windows::io::RawHandle,
+) -> Result<(), String> {
+    use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
+
+    let job = DAEMON_JOB_OBJECT
+        .get()
+        .ok_or_else(|| "daemon job object not initialized; call init_daemon_job_object() first".to_string())?;
+
+    // SAFETY: hJob 和 processHandle 均有效
+    unsafe {
+        if AssignProcessToJobObject(job.0, child_handle as windows_sys::Win32::Foundation::HANDLE) == 0 {
+            return Err("AssignProcessToJobObject failed: unable to assign child to job".to_string());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub(crate) fn set_child_process_group(pid: u32) -> Result<(), String> {
+    // SAFETY: POSIX 标准 API
+    unsafe {
+        if libc::setpgid(pid as libc::pid_t, pid as libc::pid_t) != 0 {
+            return Err(format!(
+                "setpgid failed for PID {pid}: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub(crate) fn kill_process_group(pid: u32) -> Result<(), String> {
+    // SAFETY: POSIX 标准 API
+    unsafe {
+        if libc::killpg(pid as libc::pid_t, libc::SIGTERM) != 0 {
+            return Err(format!(
+                "killpg failed for PID {pid}: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_workbench_run_shell_blocks_eleven_red_lines() {
+        let red_lines = vec![
+            "rm -rf /",
+            "rm -rf /*",
+            "rm --no-preserve-root -rf /",
+            "dd if=/dev/zero of=/dev/sda",
+            "dd if=/dev/random of=/dev/sdb",
+            "mkfs.ext4 /dev/sda",
+            "Remove-Item -Recurse -Path C:\\",
+            "Remove-Item -Recurse D:\\",
+            "format C:",
+            "del /f C:\\",
+            "rd /s C:\\",
+        ];
+
+        for cmd in red_lines {
+            let req = WorkbenchRunShellRequest {
+                command: cmd.to_string(),
+                cwd: None,
+                timeout_ms: Some(5000),
+            };
+            let res = workbench_run_shell(req).await;
+            assert!(res.is_err(), "Expected workbench_run_shell to block `{}`", cmd);
+            let err = res.unwrap_err();
+            assert!(err.contains("PermissionDenied"), "Err should contain PermissionDenied for `{}`", cmd);
+            assert!(err.contains("InvalidCommand"), "Err should contain InvalidCommand for `{}`", cmd);
+        }
     }
 }

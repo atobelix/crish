@@ -45,7 +45,11 @@ describe('Full Scenario End-to-End Test Pipeline', () => {
   });
 
   it('场景 3：消息撤回 100% 确认 Modal 与文件 Checkpoint', () => {
+<<<<<<< Updated upstream
     let modalState = {
+=======
+    const modalState = {
+>>>>>>> Stashed changes
       isOpen: false,
       confirmData: null as any
     };

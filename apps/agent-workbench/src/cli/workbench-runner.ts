@@ -29,7 +29,6 @@ import {
   buildInitialTaskSnapshot,
   calculateCompletion,
   type WorkbenchChangeItem,
-  type WorkbenchEvidenceItem,
   type WorkbenchRunEvent,
   type WorkbenchTaskSnapshot,
   type WorkbenchTokenBudgetSnapshot
@@ -37,20 +36,20 @@ import {
 import type { WorkbenchRuntimeFactoryResult } from "./runtime-factory";
 
 export interface WorkbenchRunnerBudgetOptions {
-  enabled?: boolean;
-  difficulty?: WorkbenchRunBudgetDifficulty;
-  maxTotalTokens?: number;
-  warnAtRatio?: number;
+  enabled: boolean | undefined;
+  difficulty: WorkbenchRunBudgetDifficulty | undefined;
+  maxTotalTokens: number | undefined;
+  warnAtRatio: number | undefined;
 }
 
 export interface WorkbenchRunnerOptions {
   runtime: WorkbenchRuntimeFactoryResult;
   cwd: string;
   prompt: string;
-  mode?: WorkbenchTaskSnapshot["mode"];
-  initialSnapshot?: WorkbenchTaskSnapshot;
-  backgroundDrainTimeoutMs?: number;
-  runBudget?: WorkbenchRunnerBudgetOptions;
+  mode: WorkbenchTaskSnapshot["mode"] | undefined;
+  initialSnapshot: WorkbenchTaskSnapshot | undefined;
+  backgroundDrainTimeoutMs: number | undefined;
+  runBudget: WorkbenchRunnerBudgetOptions | undefined;
 }
 
 export interface WorkbenchRunnerYield {
@@ -320,7 +319,7 @@ async function applyAgentEvent(
   agentEvent: AgentEvent
 ): Promise<{ snapshot: WorkbenchTaskSnapshot; events: WorkbenchRunEvent[] }> {
   const lastEventAt = timestampOf(agentEvent) ?? new Date().toISOString();
-  const base = updateTaskHealth(snapshot, { lastEventAt });
+  const base = updateTaskHealth(snapshot, { lastEventAt, now: undefined, memoryMb: undefined, cpuPercent: undefined });
 
   if (agentEvent.type === "turn-start") {
     return updateSnapshot(base, {
@@ -377,7 +376,7 @@ async function applyAgentEvent(
         : undefined;
     const inferredSnapshot = applyRuntimeEvidenceInference(disclosure.snapshot, {
       signals: reviewEvidence ? (isReadOnlyReview ? ["check", "review"] : ["review"]) : [],
-      evidence: reviewEvidence
+      ...(reviewEvidence !== undefined ? { evidence: reviewEvidence } : {})
     });
     return {
       snapshot: {
@@ -528,6 +527,7 @@ function updateSnapshot(
 ): { snapshot: WorkbenchTaskSnapshot; events: WorkbenchRunEvent[] } {
   const events = input.events ?? (input.event ? [input.event] : []);
   const lastEvent = events.at(-1);
+  const resolvedLastEventAt = lastEvent?.timestamp ?? snapshot.health.lastEventAt;
   return {
     snapshot: {
       ...snapshot,
@@ -537,7 +537,7 @@ function updateSnapshot(
         ...snapshot.health,
         state: input.state === "blocked" ? "degraded" : snapshot.health.state,
         summary: input.progressLabel,
-        lastEventAt: lastEvent?.timestamp ?? snapshot.health.lastEventAt
+        ...(resolvedLastEventAt !== undefined ? { lastEventAt: resolvedLastEventAt } : {})
       }
     },
     events
@@ -548,6 +548,7 @@ function recordToolEvidence(snapshot: WorkbenchTaskSnapshot, result: ToolBatchRe
   const now = new Date().toISOString();
   const evidenceId = `tool-${result.id}`;
   const diagnostic = commandDiagnosticFromToolResult(result);
+  const detail = result.output.text?.slice(0, 1_000);
   const withEvidence = {
     ...snapshot,
     evidence: [
@@ -556,7 +557,7 @@ function recordToolEvidence(snapshot: WorkbenchTaskSnapshot, result: ToolBatchRe
         id: evidenceId,
         kind: evidenceKindForTool(result),
         title: `${result.toolName}${result.isError ? " 执行失败" : " 执行完成"}`,
-        detail: result.output.text?.slice(0, 1_000),
+        ...(detail !== undefined ? { detail } : {}),
         metadata: {
           toolName: result.toolName,
           isError: result.isError,
@@ -727,12 +728,13 @@ function upsertChanges(
     const existingIndex = next.findIndex((item) => normalizeChangePath(item.path) === normalized);
     if (existingIndex >= 0) {
       const existing = next[existingIndex]!;
+      const resolvedCheckpointId = patch.checkpointId ?? existing.checkpointId;
       next[existingIndex] = {
         ...existing,
         path: existing.path || normalized,
         additions: additions ?? existing.additions,
         deletions: deletions ?? existing.deletions,
-        checkpointId: patch.checkpointId ?? existing.checkpointId,
+        ...(resolvedCheckpointId !== undefined ? { checkpointId: resolvedCheckpointId } : {}),
         state: patch.state
       };
       continue;
@@ -741,7 +743,7 @@ function upsertChanges(
       path: normalized,
       additions: additions ?? 0,
       deletions: deletions ?? 0,
-      checkpointId: patch.checkpointId,
+      ...(patch.checkpointId !== undefined ? { checkpointId: patch.checkpointId } : {}),
       state: patch.state
     });
   }
@@ -800,12 +802,15 @@ function commandDiagnosticFromToolResult(result: ToolBatchResult): WorkbenchComm
   const command = stringField(record.command) ?? result.toolName;
   const commandLike = /(?:command|shell|terminal)/i.test(result.toolName) || typeof record.command === "string" || exitCode !== undefined;
   if (!commandLike) return undefined;
+  const resolvedExitCode = result.isError && exitCode === undefined ? 1 : exitCode;
+  const resolvedOutput = typeof record.stdout === "string" ? record.stdout : undefined;
+  const resolvedError = typeof record.stderr === "string" ? record.stderr : result.isError ? result.output.text : undefined;
   return {
     id: result.id,
     command,
-    exitCode: result.isError && exitCode === undefined ? 1 : exitCode,
-    output: typeof record.stdout === "string" ? record.stdout : undefined,
-    error: typeof record.stderr === "string" ? record.stderr : result.isError ? result.output.text : undefined
+    ...(resolvedExitCode !== undefined ? { exitCode: resolvedExitCode } : {}),
+    ...(resolvedOutput !== undefined ? { output: resolvedOutput } : {}),
+    ...(resolvedError !== undefined ? { error: resolvedError } : {})
   };
 }
 
@@ -836,14 +841,14 @@ function timestampOf(event: AgentEvent): string | undefined {
 }
 
 interface TokenBudgetUpdate {
-  snapshot?: WorkbenchTokenBudgetSnapshot;
+  snapshot: WorkbenchTokenBudgetSnapshot | undefined;
   events: WorkbenchRunEvent[];
   reached: boolean;
 }
 
 function createTokenBudgetTracker(
   settings: WorkbenchRunBudgetSettings,
-  overrides: WorkbenchRunnerBudgetOptions = {}
+  overrides: WorkbenchRunnerBudgetOptions = { enabled: undefined, difficulty: undefined, maxTotalTokens: undefined, warnAtRatio: undefined }
 ): TokenBudgetTracker {
   return new TokenBudgetTracker(settings, overrides);
 }
@@ -897,7 +902,7 @@ class TokenBudgetTracker {
 
   recordAgentEvent(agentEvent: AgentEvent): TokenBudgetUpdate {
     if (!this.enabled || agentEvent.type !== "message-end" || agentEvent.message.role !== "assistant") {
-      return { events: [], reached: this.reachedBudget };
+      return { snapshot: undefined, events: [], reached: this.reachedBudget };
     }
 
     this.requestCount += 1;
@@ -946,12 +951,12 @@ function usageFromMessage(message: AgentMessage): ProviderUsage | undefined {
   if (!usage || typeof usage !== "object" || Array.isArray(usage)) return undefined;
   const record = usage as Record<string, unknown>;
   const parsed: ProviderUsage = {
-    promptTokens: numberField(record.promptTokens),
-    completionTokens: numberField(record.completionTokens),
-    totalTokens: numberField(record.totalTokens),
-    cacheReadTokens: numberField(record.cacheReadTokens),
-    cacheWriteTokens: numberField(record.cacheWriteTokens),
-    reasoningTokens: numberField(record.reasoningTokens)
+    ...(numberField(record.promptTokens) !== undefined ? { promptTokens: numberField(record.promptTokens)! } : {}),
+    ...(numberField(record.completionTokens) !== undefined ? { completionTokens: numberField(record.completionTokens)! } : {}),
+    ...(numberField(record.totalTokens) !== undefined ? { totalTokens: numberField(record.totalTokens)! } : {}),
+    ...(numberField(record.cacheReadTokens) !== undefined ? { cacheReadTokens: numberField(record.cacheReadTokens)! } : {}),
+    ...(numberField(record.cacheWriteTokens) !== undefined ? { cacheWriteTokens: numberField(record.cacheWriteTokens)! } : {}),
+    ...(numberField(record.reasoningTokens) !== undefined ? { reasoningTokens: numberField(record.reasoningTokens)! } : {})
   };
   return Object.values(parsed).some((value) => value !== undefined) ? parsed : undefined;
 }

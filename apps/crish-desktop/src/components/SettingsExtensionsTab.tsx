@@ -288,7 +288,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
         fromSystem: true,
         mcpId: m.id,
         mcpTools: tools,
-        mcpTransport: m.transport,
+        ...(m.transport !== undefined && { mcpTransport: m.transport }),
         mcpState: m.state,
       });
     }

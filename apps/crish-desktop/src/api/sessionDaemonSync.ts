@@ -267,7 +267,9 @@ function maybePrune(
   opts?: MergeDaemonSessionsOpts,
 ): SessionState[] {
   if (!opts?.pruneEmptyShells) return sessions;
-  return pruneEmptyShellSessions(sessions, { keepIds: opts.keepIds });
+  return pruneEmptyShellSessions(sessions, {
+    ...(opts.keepIds !== undefined && { keepIds: opts.keepIds }),
+  });
 }
 
 /**

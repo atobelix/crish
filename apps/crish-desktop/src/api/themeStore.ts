@@ -484,13 +484,10 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
   let currentActiveTheme = activeTheme;
   let adjust = p.themeBrightnessAdjust || 0;
   let solarWarmthMix = 0;
-  let solarLabel = '';
-
   if (p.themeAutoTimeTransition) {
     const solar = getDynamicSolarAdjustments();
     adjust = solar.brightnessAdjust;
     solarWarmthMix = solar.solarWarmthMix;
-    solarLabel = solar.periodLabel;
 
     const now = new Date();
     const currentHour = now.getHours() + now.getMinutes() / 60;
@@ -540,8 +537,8 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     if (!isDarkPreset) {
       const hslMatch = mixColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
       if (hslMatch) {
-        const h = parseInt(hslMatch[1]);
-        const originalSat = parseInt(hslMatch[2]);
+        const h = parseInt(hslMatch[1]!);
+        const originalSat = parseInt(hslMatch[2]!);
         let sat = 45;   // 默认极温柔饱和度（如暖灰、奶油、金沙等）
         let light = 90; // 默认极轻盈高明度，防刺眼/发黄
         if (originalSat <= 10) {
@@ -829,4 +826,9 @@ export function setTheme(theme: UiTheme | string): UiTheme {
     /* ignore */
   }
   return t;
+}
+
+/** 卸载时光守护定时器 */
+export function disposeSolarTimer(): void {
+  /* no-op when static interval */
 }

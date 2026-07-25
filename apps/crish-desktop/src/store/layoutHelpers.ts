@@ -208,8 +208,10 @@ export function findGroupInWorkspace(
 ): GroupLocation | null {
   for (let colIdx = 0; colIdx < ws.columns.length; colIdx++) {
     const col = ws.columns[colIdx];
+    if (!col) continue;
     for (let groupIdx = 0; groupIdx < col.groups.length; groupIdx++) {
       const group = col.groups[groupIdx];
+      if (!group) continue;
       if (group.id === groupId) {
         return { col, group, colIdx, groupIdx };
       }
@@ -225,8 +227,10 @@ export function findCardInWorkspace(
 ): CardLocation | null {
   for (let colIdx = 0; colIdx < ws.columns.length; colIdx++) {
     const col = ws.columns[colIdx];
+    if (!col) continue;
     for (let groupIdx = 0; groupIdx < col.groups.length; groupIdx++) {
       const group = col.groups[groupIdx];
+      if (!group) continue;
       const cardIdx = group.cards.findIndex((c) => c.id === cardId);
       if (cardIdx !== -1) {
         return {
@@ -234,7 +238,7 @@ export function findCardInWorkspace(
           group,
           colIdx,
           groupIdx,
-          card: group.cards[cardIdx],
+          card: group.cards[cardIdx]!,
           cardIdx,
         };
       }
@@ -274,6 +278,7 @@ export function extractCardFromGroup(
   const idx = loc.group.cards.findIndex((c) => c.id === cardId);
   if (idx === -1) return null;
   const [card] = loc.group.cards.splice(idx, 1);
+  if (!card) return null;
   return { card, sourceGroup: loc.group, sourceCol: loc.col, removedIndex: idx };
 }
 
@@ -325,7 +330,9 @@ export function afterCardRemovedFromGroup(
   if (sourceGroup.activeCardId !== removedCardId) return;
   const pick = pickActiveCardIndexAfterRemove(sourceGroup.cards.length, removedIndex);
   if (pick < 0) return;
-  sourceGroup.activeCardId = sourceGroup.cards[pick].id;
+  const next = sourceGroup.cards[pick];
+  if (!next) return;
+  sourceGroup.activeCardId = next.id;
 }
 
 // ── Panel / card placement（toggle 开面板 / 工具列；不触 store 闭包）────────
@@ -389,7 +396,7 @@ function readToolColState(wsId: string): ToolColRememberedState {
   } catch {
     /* ignore */
   }
-  return { widthRatio, activeCardId };
+  return { widthRatio, ...(activeCardId ? { activeCardId } : {}) };
 }
 
 function writeToolColState(wsId: string, state: ToolColRememberedState): void {
@@ -430,7 +437,7 @@ export function collapseToolColumnPreserve(ws: WorkspaceState): boolean {
 
   writeToolColState(ws.id, {
     widthRatio: tool.widthRatio > 0.05 ? tool.widthRatio : 0.34,
-    activeCardId: activeCardId || undefined,
+    ...(activeCardId ? { activeCardId } : {}),
   });
 
   tool.widthRatio = 0.001;
@@ -882,8 +889,11 @@ export function ensureChatColumn(ws: WorkspaceState): void {
           heightRatio: 1,
         });
       } else {
-        chatCol.groups[0].cards.unshift(chatCard());
-        chatCol.groups[0].activeCardId = 'chat';
+        const firstGroup = chatCol.groups[0];
+        if (firstGroup) {
+          firstGroup.cards.unshift(chatCard());
+          firstGroup.activeCardId = 'chat';
+        }
       }
     }
   }
@@ -1141,7 +1151,9 @@ export function populateBlocksForSessions(
   // 磁盘/演示种子：默认标题且已有用户消息 → 补短标题
   const titled = fillDefaultSessionTitles(normalized);
   // 剪掉落盘脏数据里的幽灵空壳（保留活动会话 id）
-  return pruneEmptyShellSessions(titled, { keepIds: opts?.keepSessionIds });
+  return pruneEmptyShellSessions(titled, {
+    ...(opts?.keepSessionIds != null ? { keepIds: opts.keepSessionIds } : {}),
+  });
 }
 
 export function seedSessions(): {

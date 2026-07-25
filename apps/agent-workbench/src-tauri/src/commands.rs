@@ -20,6 +20,13 @@ pub(crate) struct WorkbenchRunTaskRequest {
     pub(crate) permission_mode: Option<String>,
 }
 
+/// 安装更新 stub：当前仅返回成功，供前端闭环演示。
+/// TODO: 接入真实更新下载/安装流程。
+#[tauri::command]
+pub(crate) async fn workbench_apply_update() -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({ "ok": true }))
+}
+
 /// 桌面壳原生 HTTP：用于供应商 /models 与连通测试（无浏览器 CORS）
 #[tauri::command]
 pub(crate) async fn workbench_http_request(

@@ -12,7 +12,7 @@ import { getActiveModelId, resolveDisplayModelId } from '../api/providerProfiles
 import {
   type PendingApprovalInfo,
 } from '../api/engineStatus';
-import { scheduleLabel, type WorkflowDefinition } from '../api/workflowApi';
+import { scheduleLabel } from '../api/workflowApi';
 import {
   BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
   backgroundTaskStateLabel,
@@ -96,8 +96,8 @@ export function liveTaskAriaLabel(opts: {
 /** 后台行 meta：中文状态 + 可选命令摘要 */
 export function formatBgTaskMeta(opts: {
   state: unknown;
-  command?: string;
-  opening?: boolean;
+  command?: string | undefined;
+  opening?: boolean | undefined;
 }): string {
   if (opts.opening) return '打开中…';
   const label = backgroundTaskStateLabel(opts.state);
@@ -139,7 +139,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
     id: string;
     taskName: string;
     elapsedSeconds: number;
-    sessionId?: string;
+    sessionId?: string | undefined;
     kind: 'session' | 'run';
   };
 

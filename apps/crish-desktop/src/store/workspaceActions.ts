@@ -190,7 +190,10 @@ export function createWorkspaceActions<T extends WorkspaceStoreSlice>(
         const { group } = loc;
         const fromIdx = group.cards.findIndex((c) => c.id === cardId);
         if (fromIdx === -1) return;
+        // 治理防线 #3（noUncheckedIndexedAccess）：splice 返回数组，解构可能 undefined
+        // fromIdx !== -1 且 splice(fromIdx, 1) 必返回单元素数组，但需显式守卫
         const [card] = group.cards.splice(fromIdx, 1);
+        if (card === undefined) return;
         const toIdx = adjustSameGroupReorderIndex(
           fromIdx,
           targetIndex,
@@ -249,7 +252,7 @@ export function createWorkspaceActions<T extends WorkspaceStoreSlice>(
 
       // 源列仅 1 个空 group 时即将被删除，可继承其宽度
       const isSourceColGoingToBeDeleted =
-        sourceCol.groups.length === 1 && sourceCol.groups[0].cards.length === 0;
+        sourceCol.groups.length === 1 && sourceCol!.groups[0]!.cards.length === 0;
 
       const inheritedWidth = isSourceColGoingToBeDeleted ? sourceCol.widthRatio : 0.3;
       const stamp = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -397,7 +400,7 @@ export function createWorkspaceActions<T extends WorkspaceStoreSlice>(
         // 唯一工作区：不删；夹紧 index + ensure chat
         if (state.workspaces.length === 1) {
           state.activeWorkspaceIndex = 0;
-          ensureChatColumn(state.workspaces[0]);
+          ensureChatColumn(state.workspaces[0]!);
         } else if (state.workspaces.length === 0) {
           state.workspaces.push(createDefaultWorkspace('ws-0'));
           state.activeWorkspaceIndex = 0;
@@ -502,7 +505,7 @@ export function createWorkspaceActions<T extends WorkspaceStoreSlice>(
           const activeResolved = resolveWorkspacePanelKey(gSnap.activeCardId);
           const activeCardId = cards.some((c) => c.id === activeResolved)
             ? (activeResolved as string)
-            : cards[0].id;
+            : cards![0]!.id;
           groups.push({
             id: `group-snap-${ci}-${gi}-${stamp}-${ws.id}`,
             activeCardId,
@@ -540,13 +543,24 @@ export function createWorkspaceActions<T extends WorkspaceStoreSlice>(
       const chatCols = nextColumns.filter((c) => isChatColumn(c));
       const toolCols = nextColumns.filter((c) => !isChatColumn(c));
       if (chatCols.length > 1) {
+        // 治理防线 #3（noUncheckedIndexedAccess）：chatCols[0] 在 noUncheckedIndexedAccess 下为 T | undefined
+        // length > 1 已保证 [0] 存在，但需显式守卫
         const primary = chatCols[0];
+        if (!primary) {
+          ws.columns = toolCols;
+          return;
+        }
         for (let i = 1; i < chatCols.length; i++) {
+          const secondary = chatCols[i];
+          if (!secondary) continue;
           // 合并时去掉重复 chat 卡
-          for (const g of chatCols[i].groups) {
+          for (const g of secondary.groups) {
             g.cards = g.cards.filter((c) => c.id !== 'chat');
             if (g.cards.length === 0) continue;
-            if (g.activeCardId === 'chat') g.activeCardId = g.cards[0].id;
+            if (g.activeCardId === 'chat') {
+              const firstCard = g.cards[0];
+              if (firstCard) g.activeCardId = firstCard.id;
+            }
             primary.groups.push(g);
           }
         }
@@ -556,8 +570,15 @@ export function createWorkspaceActions<T extends WorkspaceStoreSlice>(
           g.heightRatio /= hSum;
         });
         ws.columns = [primary, ...toolCols];
+      } else if (chatCols.length === 1) {
+        const chatCol = chatCols[0];
+        if (chatCol) {
+          ws.columns = [chatCol, ...toolCols];
+        } else {
+          ws.columns = toolCols;
+        }
       } else {
-        ws.columns = chatCols.length ? [chatCols[0], ...toolCols] : toolCols;
+        ws.columns = toolCols;
       }
 
       ensureChatColumn(ws);

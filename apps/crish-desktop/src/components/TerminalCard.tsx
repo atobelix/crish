@@ -177,7 +177,7 @@ export const TerminalCard: React.FC = () => {
       runningRef.current = true;
       setRunning(true);
       try {
-        const res = await runTerminalShell({ command: input, cwd });
+        const res = await runTerminalShell({ command: input, ...(cwd !== undefined ? { cwd } : {}) });
         if (res.status === 'missing') {
           addTerminalLine(
             '（当前环境无法调用系统 PowerShell：请使用桌面应用）',
@@ -245,7 +245,7 @@ export const TerminalCard: React.FC = () => {
       if (!terminalHistory.length) return;
       const nextIdx = termHistIdx === -1 ? terminalHistory.length - 1 : Math.max(0, termHistIdx - 1);
       setTermHistIdx(nextIdx);
-      setTerminalInput(terminalHistory[nextIdx]);
+      setTerminalInput(terminalHistory[nextIdx]!);
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (termHistIdx === -1) return;
@@ -255,7 +255,7 @@ export const TerminalCard: React.FC = () => {
         setTerminalInput('');
       } else {
         setTermHistIdx(nextIdx);
-        setTerminalInput(terminalHistory[nextIdx]);
+        setTerminalInput(terminalHistory[nextIdx]!);
       }
     }
   };

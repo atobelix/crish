@@ -24,9 +24,8 @@ import {
 } from '../api/shellChrome';
 import { isDemoMode } from '../api/appMode';
 import { MAX_TERMINAL_SESSIONS, MAX_DIFF_FILES } from '@crish/shared-utils/browser';
-import { appendTerminalLine } from './layoutHelpers';
 import type { CronJob, McpServer, ProviderInfo, Settings } from '../api/clientApi';
-import type { SettingsTabType, SessionState } from './types';
+import type { SettingsTabType } from './types';
 import {
   DEFAULT_TOKEN_USAGE,
   DEMO_TOKEN_USAGE,
@@ -39,7 +38,7 @@ import {
   sanitizeActiveWorkers,
   sanitizeTokenUsage,
   UI_SIZE_STORAGE_KEY,
-  TAB_MODE_STORAGE_KEY,
+  useLayoutStore,
   type ActiveWorkerState,
   type TokenUsageState,
   type TelemetrySyncPayload,
@@ -121,17 +120,6 @@ function _readStoredShellChrome(): ShellChromeMode {
   }
 }
 
-function _readStoredTabModeEnabled(): boolean {
-  try {
-    const raw = localStorage.getItem(TAB_MODE_STORAGE_KEY);
-    if (raw == null || raw === '') return true;
-    if (raw === '0' || raw === 'false') return false;
-    if (raw === '1' || raw === 'true') return true;
-    return true;
-  } catch {
-    return true;
-  }
-}
 
 const _settingsData: SettingsUiStoreData = {
   showSettingsOverlay: false,
@@ -154,66 +142,6 @@ const _settingsData: SettingsUiStoreData = {
   manuallyTriggeredWorkers: [],
 };
 
-export const useSettingsUiStore = create<SettingsUiStore>()(
-  withDevtools(
-    withLogger(
-      immer((set, get) => ({
-        ..._settingsData,
-
-        setShowSettingsOverlay: (show) => set((state) => {
-          state.showSettingsOverlay = !!show;
-        }),
-        setSettingsActiveTab: (tab) => set((state) => {
-          if (isSettingsTabType(tab)) {
-            state.settingsActiveTab = tab;
-          }
-        }),
-        openSettings: (tab) => set((state) => {
-          if (tab !== undefined) {
-            state.settingsActiveTab = parseSettingsTab(tab, state.settingsActiveTab);
-          }
-          state.showSettingsOverlay = true;
-        }),
-        setPermissionMode: (mode) => {
-          set((state) => {
-            state.permissionMode = mode;
-            state.planModeEnabled = planModeEnabledFor(mode);
-            state.planApproved = false;
-          });
-          persistPermissionMode(mode);
-        },
-        setPlanModeEnabled: (enabled) => {
-          let nextMode: PermissionMode = 'ask';
-          set((state) => {
-            nextMode = permissionModeAfterPlanToggle(state.permissionMode, enabled);
-            state.permissionMode = nextMode;
-            state.planModeEnabled = planModeEnabledFor(nextMode);
-            state.planApproved = false;
-          });
-          persistPermissionMode(nextMode);
-        },
-        setPlanApproved: (approved) => set((state) => {
-          state.planApproved = approved;
-        }),
-
-        setUiSize: (size) => {
-          const next = parseUiSize(size);
-          set((state) => { state.uiSize = next; });
-          try { localStorage.setItem(UI_SIZE_STORAGE_KEY, next); } catch { /* ignore */ }
-        },
-        setShellChromeMode: (mode) => {
-          const next = parseShellChromeMode(mode);
-          set((state) => { state.shellChromeMode = next; });
-          try { localStorage.setItem(SHELL_CHROME_STORAGE_KEY, next); } catch { /* ignore */ }
-        },
-        setChatMainSurface: (surface) =>
-          set((state) => { state.chatMainSurface = surface === 'scheduled' ? 'scheduled' : 'chat'; }),
-        setSidebarCollapsed: (collapsed) => set((state) => { state.sidebarCollapsed = !!collapsed; }),
-
-        setAppSettings: (settings) => set((state) => { state.appSettings = settings; }),
-        setScheduledTasks: (tasks) => set((state) => { state.scheduledTasks = Array.isArray(tasks) ? tasks : []; }),
-        setMcpServers: (servers) => set((state) => { state.mcpServers = Array.isArray(servers) ? servers : []; }),
-        setProviders: (providers) => set((state) => { state.providers = Array.isArray(providers) ? providers : []; }),
 
         syncTelemetryData: (data) => set((state) => {
           if (data.tokenUsage) {
@@ -307,6 +235,8 @@ export const selectSetShowSettingsOverlay = (
 export const selectSetSettingsActiveTab = (
   s: Pick<SettingsUiActions, 'setSettingsActiveTab'>,
 ) => s.setSettingsActiveTab;
+
+export const useSettingsUiStore = useLayoutStore;
 
 export const selectSetPermissionMode = (
   s: Pick<SettingsUiActions, 'setPermissionMode'>,

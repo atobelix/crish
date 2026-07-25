@@ -203,7 +203,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                   value={getFileCompareMode(f.filePath)}
                   options={compareOptions}
                   onChange={(val) => onChangeCompareMode(f.filePath, val as any)}
-                  className={styles.inlineCompareSelect}
+                  className={styles.inlineCompareSelect ?? ''}
                 />
               </div>
 

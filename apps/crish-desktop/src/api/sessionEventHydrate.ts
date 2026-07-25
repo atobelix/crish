@@ -220,8 +220,8 @@ export function projectEventsToMessages(events: unknown[]): {
       const existing = a.toolCalls.find((t) => t.id === id);
       if (existing) {
         existing.name = name;
-        existing.arguments = args || existing.arguments;
-        existing.explanation = explanation || existing.explanation;
+        if (args) existing.arguments = args;
+        if (explanation) existing.explanation = explanation;
         if (existing.status !== 'success' && existing.status !== 'error') {
           existing.status = 'running';
         }
@@ -230,8 +230,8 @@ export function projectEventsToMessages(events: unknown[]): {
           id,
           name,
           arguments: args,
-          explanation,
           status: 'running',
+          ...(explanation ? { explanation } : {}),
         });
         if (!a.blocks.some((b) => b.type === 'tool_call' && b.id === id)) {
           a.blocks.push({ type: 'tool_call', id });
@@ -271,8 +271,13 @@ export function projectEventsToMessages(events: unknown[]): {
     m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m,
   );
 
-  return { messages: normalized, lastRunId, maxSequence };
+  return {
+    messages: normalized,
+    maxSequence,
+    ...(lastRunId !== undefined && { lastRunId }),
+  };
 }
+
 
 export async function fetchSessionEvents(
   sessionId: string,
@@ -333,9 +338,10 @@ export async function hydrateSessionMessagesFromDaemon(
     messages,
     nextAfterSequence: Math.max(page.nextAfterSequence, maxSequence),
     hasMore: page.hasMore,
-    lastRunId,
+    ...(lastRunId !== undefined && { lastRunId }),
   };
 }
+
 
 /**
  * H3 钩子：拉取 run snapshot 中的 usage（若协议可用）。
@@ -358,14 +364,18 @@ export async function fetchRunSnapshotUsage(runId: string): Promise<{
     const snap = asRec(res.snapshot) || res;
     const usage = asRec(snap?.usage);
     if (!usage) return null;
+    const promptTokens = typeof usage.promptTokens === 'number' ? usage.promptTokens : undefined;
+    const completionTokens = typeof usage.completionTokens === 'number' ? usage.completionTokens : undefined;
+    const totalTokens = typeof usage.totalTokens === 'number' ? usage.totalTokens : undefined;
+    const sampleCount = typeof usage.sampleCount === 'number' ? usage.sampleCount : undefined;
     return {
-      promptTokens: typeof usage.promptTokens === 'number' ? usage.promptTokens : undefined,
-      completionTokens:
-        typeof usage.completionTokens === 'number' ? usage.completionTokens : undefined,
-      totalTokens: typeof usage.totalTokens === 'number' ? usage.totalTokens : undefined,
-      sampleCount: typeof usage.sampleCount === 'number' ? usage.sampleCount : undefined,
+      ...(promptTokens !== undefined && { promptTokens }),
+      ...(completionTokens !== undefined && { completionTokens }),
+      ...(totalTokens !== undefined && { totalTokens }),
+      ...(sampleCount !== undefined && { sampleCount }),
     };
   } catch (e) {
+
     logInternalError('fetchRunSnapshotUsage', e);
     return null;
   }
@@ -375,20 +385,126 @@ export async function fetchRunSnapshotUsage(runId: string): Promise<{
  * 将 snapshot usage 并入本地 tokenUsage（累加）。
  * sampleCount 为 0 时视为无真实样本，调用方可回退估算。
  */
+/** usage delta 累加状态（4D：支持 cache read/write + savedCost） */
+export type UsageDeltaState = {
+  input: number;
+  output: number;
+  cost: number;
+  inputMax: number;
+  outputMax: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  savedCost?: number;
+};
+
+/** run-snapshot usage 解析结果（4D 可选字段） */
+export type RunSnapshotUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  sampleCount: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+};
+
+/**
+ * 同步解析 run-snapshot 原始数据为规范化 usage 结构。
+ * 支持 snapshot.cache.readTokens/writeTokens（优先）和
+ * usage.cacheReadTokens/cacheWriteTokens（兜底）两种字段路径。
+ */
+export function parseRunSnapshotUsage(raw: unknown): RunSnapshotUsage | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as AnyRec;
+  // 优先从 snapshot.usage 读
+  const snap = asRec(r.snapshot);
+  const usage = asRec(snap?.usage) ?? asRec(r.usage);
+  if (!usage) return null;
+
+  const promptTokens = typeof usage.promptTokens === 'number' ? usage.promptTokens : null;
+  const completionTokens = typeof usage.completionTokens === 'number' ? usage.completionTokens : null;
+  const totalTokens = typeof usage.totalTokens === 'number'
+    ? usage.totalTokens
+    : (promptTokens ?? 0) + (completionTokens ?? 0);
+  const sampleCount = typeof usage.sampleCount === 'number' ? usage.sampleCount : 0;
+
+  if (promptTokens === null && completionTokens === null) return null;
+
+  // cache 字段：优先 snapshot.cache.readTokens/writeTokens
+  const cache = snap ? asRec(snap.cache) : null;
+  let cacheReadTokens: number | undefined;
+  let cacheWriteTokens: number | undefined;
+
+  if (cache) {
+    const r = Number(cache.readTokens);
+    const w = Number(cache.writeTokens);
+    if (Number.isFinite(r) && r > 0) cacheReadTokens = r;
+    if (Number.isFinite(w) && w > 0) cacheWriteTokens = w;
+  } else {
+    // 兜底：直接在 usage 里找
+    const r = Number(usage.cacheReadTokens);
+    const w = Number(usage.cacheWriteTokens);
+    if (Number.isFinite(r) && r > 0) cacheReadTokens = r;
+    if (Number.isFinite(w) && w > 0) cacheWriteTokens = w;
+  }
+
+  return {
+    promptTokens: promptTokens ?? 0,
+    completionTokens: completionTokens ?? 0,
+    totalTokens,
+    sampleCount,
+    ...(cacheReadTokens !== undefined && { cacheReadTokens }),
+    ...(cacheWriteTokens !== undefined && { cacheWriteTokens }),
+  };
+}
+
+/**
+ * 将 usage delta 并入本地累计状态（4D：支持 cache read/write + savedCost）。
+ * sampleCount 为 0 时视为无真实样本，调用方可回退估算。
+ *
+ * @param current      当前累计状态
+ * @param usage        本次增量（promptTokens / completionTokens / cacheRead/WriteTokens）
+ * @param estimateCost (input, output, cacheRead?, cacheWrite?) => cost
+ * @param estimateSavings (input, output, cacheRead?, cacheWrite?) => savedCost（可选）
+ */
 export function applyUsageDelta(
-  current: { input: number; output: number; cost: number; inputMax: number; outputMax: number },
-  usage: { promptTokens?: number; completionTokens?: number },
-  estimateCost: (input: number, output: number) => number,
-): typeof current {
+  current: UsageDeltaState,
+  usage: {
+    promptTokens?: number;
+    completionTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  },
+  estimateCost: (input: number, output: number, cacheRead?: number, cacheWrite?: number) => number,
+  estimateSavings?: (input: number, output: number, cacheRead?: number, cacheWrite?: number) => number,
+): UsageDeltaState {
   const din = Math.max(0, usage.promptTokens ?? 0);
   const dout = Math.max(0, usage.completionTokens ?? 0);
-  if (din === 0 && dout === 0) return current;
+  const dcr = Math.max(0, usage.cacheReadTokens ?? 0);
+  const dcw = Math.max(0, usage.cacheWriteTokens ?? 0);
+  if (din === 0 && dout === 0 && dcr === 0 && dcw === 0) return current;
+
   const nextIn = current.input + din;
   const nextOut = current.output + dout;
+  const nextCost = current.cost + estimateCost(din, dout, dcr || undefined, dcw || undefined);
+
+  const hasCacheRead = dcr > 0;
+  const hasCacheWrite = dcw > 0;
+  const nextCacheRead = hasCacheRead ? (current.cacheRead ?? 0) + dcr : current.cacheRead;
+  const nextCacheWrite = hasCacheWrite ? (current.cacheWrite ?? 0) + dcw : current.cacheWrite;
+
+  let nextSavedCost = current.savedCost;
+  if (estimateSavings && (dcr > 0 || dcw > 0)) {
+    const ds = estimateSavings(din, dout, dcr || undefined, dcw || undefined);
+    nextSavedCost = (current.savedCost ?? 0) + ds;
+  }
+
   return {
     ...current,
     input: nextIn,
     output: nextOut,
-    cost: current.cost + estimateCost(din, dout),
+    cost: nextCost,
+    ...(nextCacheRead !== undefined && { cacheRead: nextCacheRead }),
+    ...(nextCacheWrite !== undefined && { cacheWrite: nextCacheWrite }),
+    ...(nextSavedCost !== undefined && { savedCost: nextSavedCost }),
   };
 }

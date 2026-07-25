@@ -12,6 +12,8 @@ use std::{
 use tauri::{AppHandle, Emitter};
 use tokio::sync::oneshot;
 
+use conex_fs::path_utils::safe_canonicalize;
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct FileChunk {
@@ -82,6 +84,13 @@ pub(crate) fn read_chunk(path: &Path, offset: u64, size: usize) -> Result<FileCh
     let mut data = vec![0u8; read_size];
 
     if read_size >= 65536 {
+        // SAFETY: Mmap::map creates a read-only memory mapping of the file. The caller
+        // guarantees that:
+        // - The file is not simultaneously truncated or mutated by another thread/process
+        // - The file handle remains valid for the duration of the mmap lifetime
+        // - The mmap region accessed via offset+read_size is within the file bounds
+        // POST: mmap provides a valid read-only view of the file's contents.
+        // PANICS: None (errors are propagated via Result).
         let mmap = unsafe {
             Mmap::map(&file).map_err(|e| format!("Failed to mmap file: {e}"))?
         };
@@ -138,8 +147,7 @@ fn start_watcher_internal(
     app_handle: AppHandle,
     recursive: bool,
 ) -> Result<String, String> {
-    let watch_path = Path::new(&path)
-        .canonicalize()
+    let watch_path = safe_canonicalize(Path::new(&path), 40)
         .map_err(|e| format!("Failed to canonicalize watch path: {e}"))?;
     let watcher_id = format!("perf-fs-watcher-{}", ts_id());
 

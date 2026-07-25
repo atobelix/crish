@@ -123,24 +123,36 @@ pub(crate) fn format_path_candidates(candidates: &[PathBuf]) -> String {
 }
 
 pub(crate) fn log_daemon_launch_plan(plan: &DaemonLaunchPlan) {
-    println!(
+    tracing::info!(
+        target: "sidecar",
+        runtime_kind = plan.mode.as_str(),
         "[Sidecar][daemon.launch] runtime_kind: {}",
         plan.mode.as_str()
     );
-    println!(
+    tracing::info!(
+        target: "sidecar",
+        command = %daemon_command_summary(&plan.launcher, &plan.args),
         "[Sidecar][daemon.launch] command: {}",
         daemon_command_summary(&plan.launcher, &plan.args)
     );
-    println!(
+    tracing::info!(
+        target: "sidecar",
+        work_dir = %plan.work_dir.display(),
         "[Sidecar][daemon.launch] work_dir: {}",
         plan.work_dir.display()
     );
-    println!(
+    tracing::info!(
+        target: "sidecar",
+        entry_path = %daemon_entry_summary(plan.entry.as_deref()),
         "[Sidecar][daemon.launch] entry_path: {}",
         daemon_entry_summary(plan.entry.as_deref())
     );
     if let Some(reason) = plan.selection_reason.as_deref() {
-        println!("[Sidecar][daemon.launch] selection_reason: {reason}");
+        tracing::info!(
+            target: "sidecar",
+            selection_reason = reason,
+            "[Sidecar][daemon.launch] selection_reason: {reason}"
+        );
     }
 }
 
@@ -337,7 +349,18 @@ fn resolve_production_daemon_launch_plan(
     //    The bundling script (build:daemon-binary) should be run for fully
     //    standalone distribution, but this fallback keeps the app functional
     //    during development and testing.
-    resolve_development_daemon_launch_plan(app_dir)
+    let root = workspace_root(app_dir);
+    Err(DaemonLaunchResolutionError {
+        code: "packaging-missing",
+        mode: DaemonLaunchMode::ProductionBundled,
+        work_dir: root,
+        launcher_candidates: candidates.bundled,
+        entry_candidates: Vec::new(),
+        selection_reason: Some(
+            "release mode requires a bundled daemon executable".to_string(),
+        ),
+        message: "release sidecar requires a bundled daemon executable".to_string(),
+    })
 }
 
 fn resolve_development_daemon_launch_plan(

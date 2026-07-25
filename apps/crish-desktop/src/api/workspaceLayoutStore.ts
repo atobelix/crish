@@ -100,7 +100,7 @@ export function normalizeLayoutSnapshot(raw: unknown): LayoutSnapshot | null {
               const activeCardId =
                 typeof g.activeCardId === 'string' && cards.includes(g.activeCardId)
                   ? g.activeCardId
-                  : cards[0];
+                  : cards[0]!;
               return {
                 heightRatio:
                   typeof g.heightRatio === 'number' && g.heightRatio > 0 ? g.heightRatio : 1,

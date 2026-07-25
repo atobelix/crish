@@ -4,11 +4,8 @@ import { useShallow } from './useShallowSelector';
 import { withDevtools } from './middleware/withDevtools';
 import { withLogger } from './middleware/withLogger';
 
-import { DEFAULT_WORKSPACE_ID, seedInitialWorkspaces, clampActiveWorkspaceIndex } from './layoutStore';
+import { DEFAULT_WORKSPACE_ID, seedInitialWorkspaces, clampActiveWorkspaceIndex, useLayoutStore } from './layoutStore';
 import type {
-  CardState,
-  CardGroupState,
-  ColumnState,
   DropPreviewState,
   FileDiff,
   WorkspaceState,
@@ -45,42 +42,7 @@ const _workspaceData: WorkspaceStoreData = {
   activeDiffSource: null,
 };
 
-export const useWorkspaceStore = create<WorkspaceStore>()(
-  withDevtools(
-    withLogger(
-      immer((set, get) => ({
-        ..._workspaceData,
-        ...createWorkspaceActions(set, get),
-
-        setActiveDiffSource: (diff) => set((state) => {
-          state.activeDiffSource = diff;
-          if (diff) {
-            upsertDiffFile(state.diffFiles, diff);
-          }
-        }),
-        setDiffFiles: (files) => set((state) => {
-          const next = typeof files === 'function'
-            ? (files as (prev: FileDiff[]) => FileDiff[])(state.diffFiles)
-            : files;
-          state.diffFiles = Array.isArray(next) ? next : [];
-          state.activeDiffSource = state.diffFiles[0] || null;
-        }),
-        pushDiffFile: (diff) => set((state) => {
-          upsertDiffFile(state.diffFiles, diff);
-          state.activeDiffSource = diff;
-        }),
-        removeDiffFile: (filePath) => set((state) => {
-          const path = filePath || '';
-          state.diffFiles = state.diffFiles.filter((f) => f.filePath !== path);
-          if (state.activeDiffSource?.filePath === path) {
-            state.activeDiffSource = state.diffFiles[0] || null;
-          }
-        }),
-      })),
-    ),
-    'WorkspaceStore',
-  ),
-);
+export const useWorkspaceStore = useLayoutStore;
 
 export type WorkspaceFacade = WorkspaceStoreSlice & WorkspaceActions;
 

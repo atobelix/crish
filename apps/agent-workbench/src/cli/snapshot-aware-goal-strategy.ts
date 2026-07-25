@@ -14,8 +14,7 @@ import {
 } from "@crish/agent-orchestrator";
 import {
   assessTask,
-  createContinuationDecision,
-  type WorkbenchTaskAssessment
+  createContinuationDecision
 } from "../shared/task-controller";
 import type {
   WorkbenchContinuationDecision,
@@ -34,7 +33,7 @@ import type {
  */
 export type SnapshotResolver = (input: {
   events: AgentEvent[];
-  roundContext?: unknown;
+  roundContext: unknown | undefined;
 }) => WorkbenchTaskSnapshot | undefined;
 
 /**
@@ -42,11 +41,11 @@ export type SnapshotResolver = (input: {
  * 引擎包装器应在 onRoundEvent 中将最新 snapshot 存入此结构。
  */
 export interface SnapshotAwareRoundContext {
-  latestSnapshot?: WorkbenchTaskSnapshot;
+  latestSnapshot: WorkbenchTaskSnapshot | undefined;
   /** Workbench 层面的 resume 决策（由 resume-requested 事件产生），优先于策略内部的 resume 检测 */
-  workbenchResumeDecision?: GoalContinuationDecision;
+  workbenchResumeDecision: GoalContinuationDecision | undefined;
   /** Workbench 层面的事件列表，用于审计 prompt 中的"本轮事件摘要" */
-  workbenchEvents?: Array<{ type: string; message: string; timestamp?: string }>;
+  workbenchEvents: Array<{ type: string; message: string; timestamp: string | undefined }> | undefined;
 }
 
 /**
@@ -54,19 +53,19 @@ export interface SnapshotAwareRoundContext {
  */
 export interface SnapshotAwareGoalStrategyOptions {
   /** 目标描述，用于审计 prompt 的标题区域 */
-  visibleGoal?: string;
+  visibleGoal: string | undefined;
 
   /**
    * Snapshot 解析器。当 roundContext 中不包含 snapshot 时，
    * 使用此函数从事件流或外部状态获取 snapshot。
    */
-  snapshotResolver?: SnapshotResolver;
+  snapshotResolver: SnapshotResolver | undefined;
 
   /** Provider 限频退避时间（毫秒），默认 90000 */
-  providerRateLimitBackoffMs?: number;
+  providerRateLimitBackoffMs: number | undefined;
 
   /** 最大连续瞬态 Provider 错误次数，默认 6 */
-  maxTransientProviderErrors?: number;
+  maxTransientProviderErrors: number | undefined;
 }
 
 // ── 策略实现 ─────────────────────────────────────────────────────
@@ -105,11 +104,11 @@ export class SnapshotAwareGoalStrategy implements GoalLoopStrategy {
   readonly name = "snapshot-aware";
 
   private readonly visibleGoal: string;
-  private readonly snapshotResolver?: SnapshotResolver;
+  private readonly snapshotResolver: SnapshotResolver | undefined;
   private readonly providerBackoffMs: number;
   private readonly maxTransientErrors: number;
 
-  constructor(options: SnapshotAwareGoalStrategyOptions = {}) {
+  constructor(options: SnapshotAwareGoalStrategyOptions = { visibleGoal: undefined, snapshotResolver: undefined, providerRateLimitBackoffMs: undefined, maxTransientProviderErrors: undefined }) {
     this.visibleGoal = options.visibleGoal ?? "";
     this.snapshotResolver = options.snapshotResolver;
     this.providerBackoffMs = options.providerRateLimitBackoffMs ?? 90_000;
@@ -124,7 +123,7 @@ export class SnapshotAwareGoalStrategy implements GoalLoopStrategy {
     roundIndex: number;
     prompt: string | AgentMessage;
     events: AgentEvent[];
-    roundContext?: unknown;
+    roundContext: unknown | undefined;
   }): GoalContinuationDecision {
     const snapshot = this.resolveSnapshot(input.events, input.roundContext);
 
@@ -163,7 +162,7 @@ export class SnapshotAwareGoalStrategy implements GoalLoopStrategy {
   computeProgressSignature(input: {
     decision: GoalContinuationDecision;
     events: AgentEvent[];
-    roundContext?: unknown;
+    roundContext: unknown | undefined;
   }): string {
     const snapshot = this.resolveSnapshot(input.events, input.roundContext);
     if (snapshot) {
@@ -179,7 +178,7 @@ export class SnapshotAwareGoalStrategy implements GoalLoopStrategy {
     roundIndex: number;
     goalState: OrchestratorGoalRunState;
     events: AgentEvent[];
-    roundContext?: unknown;
+    roundContext: unknown | undefined;
   }): string | undefined {
     if (input.decision.action !== "continue" || !input.decision.prompt) return undefined;
 
@@ -242,7 +241,7 @@ export class SnapshotAwareGoalStrategy implements GoalLoopStrategy {
   onRoundEvent(event: AgentEvent, previousContext?: unknown): SnapshotAwareRoundContext {
     const ctx: SnapshotAwareRoundContext = isRoundContext(previousContext)
       ? previousContext
-      : {};
+      : { latestSnapshot: undefined, workbenchResumeDecision: undefined, workbenchEvents: undefined };
 
     // 引擎包装器可通过 AgentEvent 的扩展字段传递 snapshot
     // 这里检测 runtime-event 中携带的 snapshot 数据
@@ -256,7 +255,7 @@ export class SnapshotAwareGoalStrategy implements GoalLoopStrategy {
 
   // ── 内部方法 ───────────────────────────────────────────────────
 
-  private resolveSnapshot(events: AgentEvent[], roundContext?: unknown): WorkbenchTaskSnapshot | undefined {
+  private resolveSnapshot(events: AgentEvent[], roundContext: unknown | undefined): WorkbenchTaskSnapshot | undefined {
     // 优先从 roundContext 获取
     if (isRoundContext(roundContext) && roundContext.latestSnapshot) {
       return roundContext.latestSnapshot;
@@ -280,7 +279,7 @@ export class SnapshotAwareGoalStrategy implements GoalLoopStrategy {
     return undefined;
   }
 
-  private extractResumeDecisionFromContext(roundContext?: unknown): GoalContinuationDecision | undefined {
+  private extractResumeDecisionFromContext(roundContext: unknown | undefined): GoalContinuationDecision | undefined {
     if (isRoundContext(roundContext) && roundContext.workbenchResumeDecision) {
       const d = roundContext.workbenchResumeDecision;
       if (d.action === "continue" && d.prompt) return d;
@@ -293,14 +292,14 @@ export class SnapshotAwareGoalStrategy implements GoalLoopStrategy {
     snapshot: WorkbenchTaskSnapshot,
     events: AgentEvent[],
     roundIndex: number,
-    resumeDecision?: GoalContinuationDecision
+    resumeDecision: GoalContinuationDecision | undefined
   ): GoalContinuationDecision {
     // complete → complete（映射一致）
     if (decision.action === "complete") {
       return {
         action: "complete",
         reason: decision.reason,
-        detail: { completionPercent: snapshot.completionPercent } as any
+        detail: { completionPercent: snapshot.completionPercent } as unknown as Record<string, unknown>
       };
     }
 
@@ -322,7 +321,7 @@ export class SnapshotAwareGoalStrategy implements GoalLoopStrategy {
     return {
       action: "continue",
       reason: resumeDecision?.reason ?? decision.reason,
-      prompt: finalPrompt
+      ...(finalPrompt !== undefined ? { prompt: finalPrompt } : {})
     };
   }
 
@@ -429,7 +428,7 @@ function buildAuditPrompt(input: {
   decision: GoalContinuationDecision;
   roundIndex: number;
   events: AgentEvent[];
-  workbenchEvents?: Array<{ type: string; message: string }>;
+  workbenchEvents: Array<{ type: string; message: string }> | undefined;
 }): string {
   const assessment = assessTask(input.snapshot);
   const lines: string[] = [
@@ -563,7 +562,7 @@ function extractEventSummaryText(event: AgentEvent): string {
   if ("error" in event && event.error) return String(event.error);
   if ("message" in event && typeof event.message === "string") return event.message;
   if ("reason" in event && event.reason) return String(event.reason);
-  if ("summary" in event && typeof (event as any).summary === "string") return (event as any).summary;
+  if ("summary" in event && typeof (event as { summary?: unknown }).summary === "string") return (event as { summary: string }).summary;
   return "";
 }
 

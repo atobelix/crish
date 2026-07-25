@@ -35,9 +35,8 @@ const HEARTBEAT_MS = 8_000;
  * 真实断连后用户需等近一分钟才重连，体验不可接受。
  * 3 次足以容忍单次网络抖动 / 心跳请求被长任务短暂阻塞。
  */
-const HEARTBEAT_MISS_TOLERANCE = 3;
+export const HEARTBEAT_MISS_TOLERANCE = 3;
 const RECONNECT_BASE_MS = 350;
-const RECONNECT_MAX_MS = 5_000;
 /** In product shell, restart sidecar more aggressively. */
 const SIDECAR_RESTART_EVERY_PRODUCT = 2;
 const SIDECAR_RESTART_EVERY_DEV = 4;
@@ -95,6 +94,15 @@ async function resolveWsUrl(): Promise<string> {
   return `ws://127.0.0.1:${port}`;
 }
 
+export interface DesktopDaemonClientOptions {
+  /** Override heartbeat interval in ms (for tests). Defaults to HEARTBEAT_MS. */
+  heartbeatMs?: number;
+  /** Override heartbeat miss tolerance (for tests). Defaults to HEARTBEAT_MISS_TOLERANCE. */
+  heartbeatMissTolerance?: number;
+  /** Override WebSocket constructor (for tests). */
+  webSocketFactory?: (url: string) => WebSocket;
+}
+
 export class DesktopDaemonClient {
   private socket: WebSocket | null = null;
   private state: DaemonConnState = 'disconnected';
@@ -112,6 +120,19 @@ export class DesktopDaemonClient {
   private suppressCloseReconnect = false;
   /** First successful engine connection in this process. */
   private everConnected = false;
+  private heartbeatMisses = 0;
+  private pendingPingId: string | null = null;
+  private lastLatencyMs = 0;
+  private pendingPingSentAt = 0;
+  private readonly heartbeatMs: number;
+  private readonly heartbeatMissTolerance: number;
+  private readonly webSocketFactory: (url: string) => WebSocket;
+
+  constructor(opts: DesktopDaemonClientOptions = {}) {
+    this.heartbeatMs = opts.heartbeatMs ?? HEARTBEAT_MS;
+    this.heartbeatMissTolerance = opts.heartbeatMissTolerance ?? HEARTBEAT_MISS_TOLERANCE;
+    this.webSocketFactory = opts.webSocketFactory ?? ((url) => new WebSocket(url));
+  }
 
   getState() {
     return this.state;
@@ -132,6 +153,26 @@ export class DesktopDaemonClient {
   /** 产品策略：已启动 keep-alive 则对 UI 视为「引擎在场」（可重连，不恐吓离线） */
   isKeepAliveStarted() {
     return this.keepAliveStarted;
+  }
+
+  /** Latest ping→pong RTT in ms (0 if none measured yet). */
+  getLastLatencyMs(): number {
+    return this.lastLatencyMs;
+  }
+
+  /** Consecutive heartbeat misses (outstanding ping with no pong). */
+  getHeartbeatMisses(): number {
+    return this.heartbeatMisses;
+  }
+
+  /** The requestId of the currently outstanding ping, or null if none. */
+  getPendingPingId(): string | null {
+    return this.pendingPingId;
+  }
+
+  /** Number of reconnect attempts since last successful connection. */
+  getReconnectAttempt(): number {
+    return this.reconnectAttempt;
   }
 
   isConnected() {
@@ -343,7 +384,7 @@ export class DesktopDaemonClient {
       let settled = false;
       let ws: WebSocket;
       try {
-        ws = new WebSocket(url);
+        ws = this.webSocketFactory(url);
       } catch (e) {
         reject(e instanceof Error ? e : new Error(String(e)));
         return;
@@ -420,6 +461,21 @@ export class DesktopDaemonClient {
           ? msg.correlationId
           : null;
 
+    // Handle pong: correlated (matching requestId) or simple uncorrelated {type:'pong'}
+    if (type === 'pong') {
+      const isCorrelated = requestId && requestId === this.pendingPingId;
+      const isUncorrelated = !requestId && this.pendingPingId !== null;
+      if (isCorrelated || isUncorrelated) {
+        if (this.pendingPingSentAt > 0) {
+          this.lastLatencyMs = Date.now() - this.pendingPingSentAt;
+        }
+        this.pendingPingId = null;
+        this.pendingPingSentAt = 0;
+        this.heartbeatMisses = 0;
+        return;
+      }
+    }
+
     if (requestId && this.pending.has(requestId)) {
       const p = this.pending.get(requestId)!;
       if (type === 'error' || matchesType(type, p.expected)) {
@@ -479,11 +535,11 @@ export class DesktopDaemonClient {
     this.scheduleReconnect();
   }
 
-  private heartbeatMisses = 0;
-
   private startHeartbeat() {
     this.stopHeartbeat();
     this.heartbeatMisses = 0;
+    this.pendingPingId = null;
+    this.pendingPingSentAt = 0;
     let lastHeartbeatTime = Date.now();
 
     this.heartbeatTimer = setInterval(() => {
@@ -492,23 +548,42 @@ export class DesktopDaemonClient {
       lastHeartbeatTime = now;
 
       // 自动识别系统休眠唤醒 / Event Loop 严重挂起状态 (时间差大于预期 2.5 倍)
-      if (elapsed > HEARTBEAT_MS * 2.5) {
+      if (elapsed > this.heartbeatMs * 2.5) {
         console.warn(`[DesktopDaemonClient] 心跳间隔异常大 (${elapsed}ms)，判定为系统休眠恢复或主线程严重阻塞，重置心跳未命中计数。`);
         this.heartbeatMisses = 0;
+        this.pendingPingId = null;
       }
 
       if (this.socket?.readyState === WebSocket.OPEN) {
-        this.socket.send(JSON.stringify({ type: 'ping' }));
-        this.heartbeatMisses = 0;
+        // If there was a pending ping from the previous tick that was not answered → miss
+        if (this.pendingPingId !== null) {
+          this.heartbeatMisses += 1;
+          if (this.heartbeatMisses >= this.heartbeatMissTolerance) {
+            this.lastError = new Error('Engine heartbeat failed');
+            this.pendingPingId = null;
+            this.closeSocket();
+            if (!this.explicitClose) this.scheduleReconnect();
+            return;
+          }
+        }
+        // Send new ping with a unique requestId
+        const pingId = rid('ping');
+        this.pendingPingId = pingId;
+        this.pendingPingSentAt = Date.now();
+        try {
+          this.socket.send(JSON.stringify({ type: 'ping', requestId: pingId }));
+        } catch {
+          /* socket may have closed between readyState check and send */
+        }
       } else {
         this.heartbeatMisses += 1;
-        if (this.heartbeatMisses >= HEARTBEAT_MISS_TOLERANCE) {
+        if (this.heartbeatMisses >= this.heartbeatMissTolerance) {
           this.lastError = new Error('Engine heartbeat failed');
           this.closeSocket();
           if (!this.explicitClose) this.scheduleReconnect();
         }
       }
-    }, HEARTBEAT_MS);
+    }, this.heartbeatMs);
   }
 
   private stopHeartbeat() {
@@ -569,4 +644,15 @@ export function bootstrapDesktopBackend(): DesktopDaemonClient {
   const client = getDesktopDaemonClient();
   client.startKeepAlive();
   return client;
+}
+
+/**
+ * Reset singleton for unit tests. Call in beforeEach/afterEach.
+ * @testonly
+ */
+export function resetDesktopDaemonClientForTests(): void {
+  if (singleton) {
+    try { singleton.disconnect(); } catch { /* ignore */ }
+  }
+  singleton = null;
 }

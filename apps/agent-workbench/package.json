@@ -5,6 +5,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "typecheck": "tsc --noEmit",
     "dev": "npm --prefix ../crish-desktop run dev",
     "build": "npm --prefix ../crish-desktop run build",
     "tauri": "tauri",

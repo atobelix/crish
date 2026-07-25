@@ -9,7 +9,17 @@
  * 实质标题由首条用户消息 sanitize + 长度截断推导，中文 UTF-8/CJK 安全。
  */
 
-/** 仅依赖消息形状，避免与 layoutStore 循环引用 */
+/**
+ * 仅依赖消息形状，避免与 layoutStore 循环引用。
+ *
+ * 设计：TitleMessage 是 SessionMessage 的「读取视角」结构子集。
+ * 由于 SessionMessage 的可选字段已统一为 `field?: T`（不含 | undefined），
+ * 此处保持同形态：`field?: T`，确保 SessionMessage 可直接赋给 TitleMessage。
+ *
+ * 注意：thinking 在 SessionMessage 中是 `thinking?: string`（不含 null），
+ * 此处允许 `string | null` 是为了兼容历史水合数据（落盘脏数据可能含 null）。
+ * 这是「读取侧更宽容」的合法设计。
+ */
 type TitleMessage = {
   sender?: string;
   text?: string;
@@ -104,7 +114,7 @@ export function isDefaultSessionTitle(
 }
 
 /** 单条消息是否有可展示的实质内容 */
-function messageHasSubstance(m: TitleMessage): boolean {
+export function messageHasSubstance(m: TitleMessage): boolean {
   if ((m.text || '').trim()) return true;
   if (m.toolCalls && m.toolCalls.length > 0) return true;
   if ((m.thinking || '').trim()) return true;
@@ -379,11 +389,13 @@ export function fillDefaultSessionTitles<T extends TitleSession>(
   }
 
   const next = sessions.map((s) => {
-    const title = maybeAutoTitleFromMessages(
-      s.title,
-      s.messages || undefined,
-      resolve ? { existingTitles: taken, excludeTitle: s.title } : undefined
-    );
+    const opts: MaybeAutoTitleOpts | undefined = resolve
+      ? {
+          existingTitles: taken,
+          ...(s.title !== undefined ? { excludeTitle: s.title } : {}),
+        }
+      : undefined;
+    const title = maybeAutoTitleFromMessages(s.title, s.messages || undefined, opts);
     if (!title || title === s.title) {
       // 未改时若已是真实标题，确保在池中（多会话同名用户标题）
       if (resolve) {

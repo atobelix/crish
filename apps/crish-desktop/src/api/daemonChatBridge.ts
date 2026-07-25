@@ -168,63 +168,57 @@ export function toolResultFields(result: unknown): {
   id: string;
   text: string;
   isError: boolean;
-  diffs?: FileDiff[];
-  filePath?: string;
+  diffs?: FileDiff[] | undefined;
+  filePath?: string | undefined;
 } {
   const basics = safeParseToolResult(result);
-  // Discriminant: only read data when ok === true
   const id = basics.ok === true ? basics.data.id : '';
   const isError = basics.ok === true ? basics.data.isError : false;
   const text = basics.ok === true ? basics.data.text : '';
-  const filePath = basics.ok === true ? basics.data.filePath : undefined;
 
   const r =
     result && typeof result === 'object' && !Array.isArray(result)
       ? (result as Record<string, unknown>)
       : ({} as Record<string, unknown>);
 
-  // 仅信任引擎结构化 diffs 或明确的 git unified diff 头，禁止用 path+输出瞎合成
-  let diffs: FileDiff[] | undefined;
-  if (Array.isArray(r.diffs)) {
-    diffs = r.diffs as FileDiff[];
-  } else if (
-    r.output &&
-    typeof r.output === 'object' &&
-    !Array.isArray(r.output)
-  ) {
-    const o = r.output as Record<string, unknown>;
-    if (Array.isArray(o.diffs)) diffs = o.diffs as FileDiff[];
-  }
+  const outputObj =
+    r.output && typeof r.output === 'object' && !Array.isArray(r.output)
+      ? (r.output as Record<string, unknown>)
+      : null;
 
-  if (!filePath) {
-    filePath =
-      (typeof r.path === 'string' && r.path.trim() ? r.path.trim() : '') ||
-      (typeof r.filePath === 'string' && r.filePath.trim()
-        ? r.filePath.trim()
-        : '') ||
-      (r.output &&
-      typeof r.output === 'object' &&
-      !Array.isArray(r.output) &&
-      typeof (r.output as { path?: string }).path === 'string' &&
-      String((r.output as { path: string }).path).trim()
-        ? String((r.output as { path: string }).path).trim()
-        : '') ||
-      undefined;
-    if (filePath === '') filePath = undefined;
-  }
+  // Resolve filePath: parsed basics → r.path → r.filePath → r.output.path
+  const filePath: string | undefined = (() => {
+    if (basics.ok === true && typeof basics.data.filePath === 'string' && basics.data.filePath.trim()) {
+      return basics.data.filePath.trim();
+    }
+    if (typeof r.path === 'string' && r.path.trim()) return r.path.trim();
+    if (typeof r.filePath === 'string' && r.filePath.trim()) return r.filePath.trim();
+    if (outputObj && typeof outputObj.path === 'string' && outputObj.path.trim()) {
+      return outputObj.path.trim();
+    }
+    return undefined;
+  })();
 
-  if (
-    !diffs &&
-    text &&
-    !isError &&
-    (/\bdiff --git\b/.test(text) || /^@@\s+-\d/m.test(text))
-  ) {
-    const parsed = parseUnifiedDiffs(text);
-    if (parsed.length) diffs = parsed;
-  }
+  // Resolve diffs: engine-provided → output.diffs → detected unified diff in text
+  const diffs: FileDiff[] | undefined = (() => {
+    if (Array.isArray(r.diffs)) return r.diffs as FileDiff[];
+    if (outputObj && Array.isArray(outputObj.diffs)) return outputObj.diffs as FileDiff[];
+    if (text && !isError && (/\bdiff --git\b/.test(text) || /^@@\s+-\d/m.test(text))) {
+      const parsed = parseUnifiedDiffs(text);
+      if (parsed.length) return parsed;
+    }
+    return undefined;
+  })();
 
-  return { id, text, isError, diffs, filePath };
+  return {
+    id,
+    text,
+    isError,
+    ...(diffs !== undefined && { diffs }),
+    ...(filePath !== undefined && { filePath }),
+  };
 }
+
 
 /**
  * Resolve event type via zod envelope, then light parser, then raw field.
@@ -415,9 +409,9 @@ export class EventRouter {
   applyReplayEvents(payload: ReplayPayload | ReplayEvent[]): void {
     if (this.state.cancelled || this.state.finished) return;
     const events = Array.isArray(payload) ? payload : payload.events;
-    if (!events.length) return;
+    if (!(events as unknown[]).length) return;
 
-    const sorted = [...events].sort((a, b) => {
+    const sorted = [...(events as unknown[])].sort((a, b) => {
       const sa = extractEventSequence(a) ?? 0;
       const sb = extractEventSequence(b) ?? 0;
       return sa - sb;
@@ -468,19 +462,26 @@ export class EventRouter {
     // 非文本事件（工具 / 审批 / 终态）仍走 handleAgentEvent；文本已处理则跳过 delta
     for (const raw of fresh) {
       const seq = extractEventSequence(raw);
-      const agent = orchestratorEventToAgentEvent(raw) ?? raw;
-      const type = String(agent.type ?? '');
-      if (
-        type === 'message-delta' ||
-        type === 'text-delta' ||
-        type === 'message-end'
-      ) {
-        // 文本已 suffix 合并；message-end 若带来更多内容再走一遍 merge
-        if (type === 'message-end') {
+      const agentOrNull = orchestratorEventToAgentEvent(raw);
+      const agent: Record<string, unknown> | null =
+        agentOrNull ??
+        (raw && typeof raw === 'object' && !Array.isArray(raw)
+          ? (raw as Record<string, unknown>)
+          : null);
+      if (agent) {
+        const type = String(agent.type ?? '');
+        if (
+          type === 'message-delta' ||
+          type === 'text-delta' ||
+          type === 'message-end'
+        ) {
+          // 文本已 suffix 合并；message-end 若带来更多内容再走一遍 merge
+          if (type === 'message-end') {
+            this.handleAgentEvent(agent);
+          }
+        } else {
           this.handleAgentEvent(agent);
         }
-      } else {
-        this.handleAgentEvent(agent);
       }
       if (seq != null && seq > this.lastAppliedSequence) {
         this.lastAppliedSequence = seq;
@@ -489,6 +490,7 @@ export class EventRouter {
         }
       }
     }
+
 
     if (
       !Array.isArray(payload) &&
@@ -848,9 +850,9 @@ export class EventRouter {
     // 序号心跳：外层帧 / 嵌套 event / runtime-event 均尝试提取
     const seq =
       extractEventSequence(msg) ??
-      extractEventSequence(msg.event) ??
+      extractEventSequence(msg.event as Record<string, unknown>) ??
       (msg.event && typeof msg.event === 'object'
-        ? extractEventSequence((msg.event as Record<string, unknown>).payload)
+        ? extractEventSequence((msg.event as Record<string, unknown>).payload as Record<string, unknown>)
         : null);
     if (seq != null && seq > this.lastAppliedSequence) {
       this.lastAppliedSequence = seq;
@@ -866,9 +868,9 @@ export class EventRouter {
         subagentId: String(msg.subagentId ?? ''),
         subagentRunId: String(msg.subagentRunId ?? ''),
         parentRunId: String(msg.runId ?? this.runId),
-        parentToolCallId: msg.parentToolCallId
-          ? String(msg.parentToolCallId)
-          : undefined,
+        ...(msg.parentToolCallId !== undefined && {
+          parentToolCallId: String(msg.parentToolCallId),
+        }),
         description: String(msg.description ?? '协作 agent'),
         mode: String(msg.mode ?? 'research'),
       });
@@ -898,7 +900,7 @@ export class EventRouter {
         subagentId: String(msg.subagentId ?? ''),
         subagentRunId: String(msg.subagentRunId ?? ''),
         status: st,
-        summary: msg.summary ? String(msg.summary) : undefined,
+        ...(msg.summary !== undefined && { summary: String(msg.summary) }),
       });
       return;
     }
@@ -1270,17 +1272,17 @@ export async function ensureDaemonConnected(): Promise<{
     if (!ready) {
       return {
         ok: false,
-        url: client.getUrl() ?? undefined,
+        ...(client.getUrl() !== undefined && { url: client.getUrl()! }),
         error: networkUserMessage(),
       };
     }
     await client.request({ type: 'get-status' }, 'status-response', 8_000);
-    return { ok: true, url: client.getUrl() ?? undefined };
+    return { ok: true, ...(client.getUrl() !== undefined && { url: client.getUrl()! }) };
   } catch (e) {
     logInternalError('ensureDaemonConnected', e);
     return {
       ok: false,
-      url: client.getUrl() ?? undefined,
+      ...(client.getUrl() !== undefined && { url: client.getUrl()! }),
       error: networkUserMessage(e),
     };
   }

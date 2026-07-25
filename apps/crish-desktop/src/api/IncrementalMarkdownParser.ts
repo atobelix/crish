@@ -159,7 +159,7 @@ export class IncrementalMarkdownParser {
       const hMatch = line.match(/^(#{1,6})\s/);
       if (hMatch) {
         const raw = text.slice(pos, pos + lineLen);
-        result.push({ type: 'heading', offset, length: raw.length, raw, level: hMatch[1].length });
+        result.push({ type: 'heading', offset, length: raw.length, raw, level: hMatch![1]!.length });
         pos += lineLen;
         continue;
       }
@@ -358,7 +358,7 @@ export class IncrementalMarkdownParser {
     const firstNl = raw.indexOf('\n');
     const firstLine = firstNl === -1 ? raw : raw.slice(0, firstNl);
     const fenceMatch = firstLine.match(/^(`+)/);
-    const fenceLen = fenceMatch ? fenceMatch[1].length : 3;
+    const fenceLen = fenceMatch ? fenceMatch![1]!.length : 3;
     const closeReg = new RegExp(`\n {0,3}\`{${fenceLen},}\\s*$`);
     const body = firstNl === -1 ? '' : raw.slice(firstNl + 1).replace(closeReg, '').replace(/\n$/, '');
     const lang = rc.lang ?? '';
@@ -390,7 +390,7 @@ export class IncrementalMarkdownParser {
       const taskMatch = content.match(taskCheckboxRegex);
       if (taskMatch) {
         isTaskList = true;
-        const checked = taskMatch[1].toLowerCase() === 'x';
+        const checked = taskMatch![1]!.toLowerCase() === 'x';
         const checkbox = checked
           ? '<input type="checkbox" checked disabled>'
           : '<input type="checkbox" disabled>';
@@ -406,7 +406,7 @@ export class IncrementalMarkdownParser {
     }
 
     const wrapper = isOrdered ? 'ol' : 'ul';
-    const cls = isOrdered ? 'md-ol' : 'md-ul';
+    const cls = isOrdered ? 'md-ol' : isTaskList ? 'md-ul md-task-list' : 'md-ul';
     return `<${wrapper} class="${cls}">${items.join('')}</${wrapper}>`;
   }
 

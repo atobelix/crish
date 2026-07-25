@@ -563,7 +563,7 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(
       const cards = group.cards;
       if (cards.length === 0) return;
       const safe = Math.max(0, Math.min(index, cards.length - 1));
-      const id = cards[safe].id;
+      const id = cards[safe]!.id;
       handleTabClick(id);
       requestAnimationFrame(() => {
         tabsBarRef.current

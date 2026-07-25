@@ -221,7 +221,7 @@ export const WIZARD_STEP_META: readonly WizardStepMeta[] = [
 /** 安全取步骤元数据（越界回落首步，无 as） */
 export function wizardStepMeta(step: WizardStep): WizardStepMeta {
   const found = WIZARD_STEP_META.find((s) => s.id === step);
-  return found ?? WIZARD_STEP_META[0];
+  return found ?? WIZARD_STEP_META[0]!;
 }
 
 /** 主按钮中文文案（按步密度区分，纯） */
@@ -522,7 +522,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
               </label>
               {hasProfiles ? (
                 <SettingsSelect
-                  className={styles.firstRunSelect}
+                  {...(styles.firstRunSelect !== undefined && { className: styles.firstRunSelect })}
                   value={profileId}
                   disabled={busy}
                   options={profiles.map((p) => ({
@@ -580,10 +580,10 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
               {hasListedModels ? (
                 <>
                   <SettingsSelect
-                    className={styles.firstRunSelect}
+                    {...(styles.firstRunSelect !== undefined && { className: styles.firstRunSelect })}
                     value={modelInList ? modelId : ''}
                     disabled={busy}
-                    placeholder="从本机列表选择…"
+                    {...('从本机列表选择…' !== undefined && { placeholder: '从本机列表选择…' })}
                     options={[
                       { value: '', label: '从本机列表选择…' },
                       ...listedModels.map((m) => ({ value: m, label: m })),

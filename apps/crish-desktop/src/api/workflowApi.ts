@@ -287,16 +287,17 @@ function isValidCronField(field: string, min: number, max: number): boolean {
     const step = Number(stepMatch[2]);
     if (!Number.isInteger(step) || step < 1) return false;
     if (stepMatch[1] === '*') return step <= max;
-    const range = stepMatch[1].split('-').map(Number);
+    const range = stepMatch[1]!.split('-').map(Number);
     if (range.length === 1) {
-      return cronPartInRange(range[0], min, max);
+      return cronPartInRange(range[0]!, min, max);
     }
     return (
-      cronPartInRange(range[0], min, max) &&
-      cronPartInRange(range[1], min, max) &&
-      range[0] <= range[1]
+      cronPartInRange(range[0]!, min, max) &&
+      cronPartInRange(range[1]!, min, max) &&
+      range[0]! <= range[1]!
     );
   }
+
   // list a,b,c 或 single / range
   const parts = f.split(',');
   if (parts.length === 0) return false;
@@ -357,12 +358,12 @@ export function validateCronExpression(expr: unknown): CronValidationResult {
     };
   }
   for (let i = 0; i < 5; i++) {
-    const [min, max] = CRON_FIELD_BOUNDS[i];
-    if (!isValidCronField(fields[i], min, max)) {
+    const [min, max] = CRON_FIELD_BOUNDS[i]!;
+    if (!isValidCronField(fields[i]!, min, max)) {
       const names = ['分钟', '小时', '日', '月', '周'];
       return {
         ok: false,
-        error: `cron ${names[i]}字段无效：${fields[i]}（范围 ${min}–${max}）`,
+        error: `cron ${names[i]}字段无效：${fields[i]!}（范围 ${min}–${max}）`,
       };
     }
   }
@@ -769,7 +770,11 @@ export async function triggerWorkflow(
         : typeof accepted?.sessionId === 'string'
           ? (accepted.sessionId as string)
           : undefined;
-    return { ok: true, runId, sessionId };
+    return {
+      ok: true,
+      ...(runId !== undefined && { runId }),
+      ...(sessionId !== undefined && { sessionId }),
+    };
   } catch (e) {
     logInternalError('triggerWorkflow', e);
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -780,11 +785,11 @@ export async function triggerWorkflow(
 export type WorkflowRunEntry = {
   workflowId: string;
   runId: string;
-  sessionId?: string;
-  scheduledFor?: string;
-  startedAt?: string;
-  status?: string;
-  error?: string;
+  sessionId?: string | undefined;
+  scheduledFor?: string | undefined;
+  startedAt?: string | undefined;
+  status?: string | undefined;
+  error?: string | undefined;
 };
 
 export async function listWorkflowRuns(

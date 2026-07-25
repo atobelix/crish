@@ -32,7 +32,7 @@ export type SessionSearchMatch = {
   /** 相关度分数（标题权重大）；空查询为 0 */
   score: number;
   /** 首条内容命中摘录（非标题命中时优先展示） */
-  snippet?: string;
+  snippet?: string | undefined;
   /** 展示标题或原始 title 是否命中 */
   titleMatch?: boolean;
 };
@@ -266,7 +266,7 @@ export function makeSearchSnippet(
 
 // ── 字段匹配（计 hits + score + 首条 snippet）────────────────────────
 
-type FieldHit = { hits: number; score: number; snippet?: string };
+type FieldHit = { hits: number; score: number; snippet?: string | undefined };
 
 function hitField(
   value: string | null | undefined,

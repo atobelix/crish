@@ -1,12 +1,20 @@
 /**
  * 会话侧栏相对时间：以用户输入 / 助手回复的最后时间戳为准。
  * 存盘一律 ISO；展示层动态换算，禁止把「刚刚」当静态字段永久显示。
+ *
+ * 治理防线 #6（数据水合与时间戳类型漂移）& #35（状态枚举语义重载）：
+ *   - timestamp 字段始终为合法 ISO 串，禁止写入「刚刚」/「远程」等字面量
+ *   - 来源由 `SessionState.timestampSource === 'remote'` discriminator 标记
+ *   - 老持久化数据中 timestamp 可能存有 `'远程'` 字面量，识别函数向后兼容
  */
 
 import type { SessionState } from '../store/layoutStore';
 
 /** 历史错误字面量：曾被当 timestamp 写入，展示时必须重算 */
 const BAD_LITERAL_TIMESTAMPS = new Set(['刚刚', '恢复', '刚才']);
+
+/** 历史远程占位字面量（旧持久化数据；新代码改用 timestampSource='remote'） */
+const REMOTE_TIMESTAMP_LITERAL = '远程';
 
 /** 近 N ms 内有活动 → 用更快 tick，避免「刚刚」卡满一分钟 */
 export const SESSION_LIST_RECENT_ACTIVITY_MS = 120_000;
@@ -26,9 +34,21 @@ export const SESSION_LIST_JUST_NOW_MS = 45_000;
  */
 export const SESSION_LIST_CLOCK_SKEW_MS = 5 * 60_000;
 
-/** 远程占位标记（非真实时间） */
-export function isRemoteSessionTimestamp(stored: string | undefined | null): boolean {
-  return (stored || '').trim() === '远程';
+/**
+ * 远程占位标记（非真实时间）。
+ *
+ * 优先检查 `SessionState.timestampSource === 'remote'`（新代码路径）；
+ * 兼容老持久化数据中 timestamp 字段为 `'远程'` 字面量的情况。
+ *
+ * @param stored   timestamp 字段值
+ * @param source   timestampSource 字段值（可选；老数据可能为 undefined）
+ */
+export function isRemoteSessionTimestamp(
+  stored: string | undefined | null,
+  source?: 'local' | 'remote' | null,
+): boolean {
+  if (source === 'remote') return true;
+  return (stored || '').trim() === REMOTE_TIMESTAMP_LITERAL;
 }
 
 /** 是否为历史坏字面量（禁止当永久展示） */
@@ -57,7 +77,9 @@ export function msFromSessionId(id: string | undefined): number {
 /** 解析已存时间戳字符串 → 毫秒；坏字面量 / 无效值返回 0 */
 export function parseStoredTimestampMs(stored: string | undefined | null): number {
   const t = (stored || '').trim();
-  if (!t || isRemoteSessionTimestamp(t) || isBadTimestampLiteral(t)) return 0;
+  if (!t || isBadTimestampLiteral(t)) return 0;
+  // 老数据 '远程' 字面量视为无效时间
+  if (t === REMOTE_TIMESTAMP_LITERAL) return 0;
   const parsed = Date.parse(t);
   if (Number.isFinite(parsed) && parsed > 0) return parsed;
   // 纯数字秒/毫秒
@@ -71,6 +93,10 @@ export function parseStoredTimestampMs(stored: string | undefined | null): numbe
 /**
  * 恢复 / 存盘时纠正历史字面量「刚刚」「恢复」「刚才」。
  * 优先消息时间，其次 id 内嵌时间戳，再否则保留可解析原值或当前 ISO。
+ *
+ * 治理防线 #6：返回值始终为合法 ISO 串，禁止 `'远程'` 字面量；
+ * 远程来源由调用方通过 `timestampSource='remote'` 标记。
+ * 老持久化数据中 `'远程'` 字面量会被规范化为当前 ISO（保留远程标记的职责在调用方）。
  */
 export function coerceSessionTimestamp(
   id: string,
@@ -78,10 +104,10 @@ export function coerceSessionTimestamp(
   messages?: Array<{ timestamp?: number }>,
 ): string {
   const t = (stored || '').trim();
-  if (isRemoteSessionTimestamp(t)) return '远程';
-
+  // 老数据兼容：识别字面量后回落到正常时间推导路径
   // 可解析的真实时间（含 ISO）直接规范化为 ISO，避免 locale 字符串再次入库
-  if (t && !isBadTimestampLiteral(t)) {
+  // 历史字面量（'刚刚' / '恢复' / '刚才' / '远程'）视为无效，走下方推导
+  if (t && !isBadTimestampLiteral(t) && t !== REMOTE_TIMESTAMP_LITERAL) {
     const parsed = parseStoredTimestampMs(t);
     if (parsed > 0) return new Date(parsed).toISOString();
     // 保留无法解析但非坏字面量的原值（极少数第三方标记）
@@ -260,7 +286,7 @@ export function msUntilRelativeLabelChange(activityMs: number, now = Date.now())
  * 「刚刚」仅当 now - activity < 45s（或近未来时钟漂移）时瞬时出现，随后由 tick 刷新为「N分钟前」。
  */
 export function formatSessionListTime(s: SessionState, now = Date.now()): string {
-  if (isRemoteSessionTimestamp(s.timestamp) && sessionLastActivityMs(s) <= 0) {
+  if (isRemoteSessionTimestamp(s.timestamp, s.timestampSource) && sessionLastActivityMs(s) <= 0) {
     return '远程';
   }
   const ms = sessionLastActivityMs(s);
@@ -273,7 +299,7 @@ export function formatSessionListTime(s: SessionState, now = Date.now()): string
  * 无效活动时间返回空串。
  */
 export function formatSessionListAbsoluteTime(s: SessionState, _now = Date.now()): string {
-  if (isRemoteSessionTimestamp(s.timestamp) && sessionLastActivityMs(s) <= 0) {
+  if (isRemoteSessionTimestamp(s.timestamp, s.timestampSource) && sessionLastActivityMs(s) <= 0) {
     return '远程';
   }
   const ms = sessionLastActivityMs(s);

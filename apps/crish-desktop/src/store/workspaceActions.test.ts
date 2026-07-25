@@ -72,19 +72,19 @@ describe('togglePanel — open / focus / close safely', () => {
     expect(ws.columns.length).toBe(2);
     expect(toolCards(ws)).toContain('terminal');
     expect(chatCols(ws)).toHaveLength(1);
-    expect(ws.columns[0].groups[0].cards.map((c) => c.id)).toEqual(['chat']);
+    expect(ws!.columns[0]!.groups[0]!.cards.map((c) => c.id)).toEqual(['chat']);
 
     h.actions.togglePanel(id, 'diff', true);
     ws = h.ws();
-    expect(ws.columns.find((c) => !isChatColumn(c))!.groups[0].activeCardId).toBe('diff');
+    expect(ws!.columns.find((c) => !isChatColumn(c))!.groups[0]!.activeCardId).toBe('diff');
 
     // second open of terminal → focus only, no duplicate card
     h.actions.togglePanel(id, 'terminal', true);
     ws = h.ws();
     const g = ws.columns.find((c) => !isChatColumn(c))!.groups[0];
-    expect(g.activeCardId).toBe('terminal');
-    expect(g.cards.filter((c) => c.id === 'terminal')).toHaveLength(1);
-    expect(g.cards.map((c) => c.id)).toEqual(['terminal', 'diff']);
+    expect(g!.activeCardId).toBe('terminal');
+    expect(g!.cards.filter((c) => c.id === 'terminal')).toHaveLength(1);
+    expect(g!.cards.map((c) => c.id)).toEqual(['terminal', 'diff']);
     expect(chatCols(ws)).toHaveLength(1);
   });
 
@@ -102,7 +102,7 @@ describe('togglePanel — open / focus / close safely', () => {
 
     // cannot hide chat
     h.actions.togglePanel(id, 'chat', false);
-    expect(h.ws().columns[0].groups[0].cards.some((c) => c.id === 'chat')).toBe(true);
+    expect(h!.ws().columns[0]!.groups[0]!.cards.some((c) => c.id === 'chat')).toBe(true);
 
     // close preview → chat-only, no empty tool shell
     h.actions.togglePanel(id, 'preview', false);
@@ -126,8 +126,8 @@ describe('togglePanel — open / focus / close safely', () => {
     h.actions.togglePanel(id, 'files', true);
     const tool = h.ws().columns.find((c) => !isChatColumn(c))!;
     expect(tool.groups).toHaveLength(1);
-    expect(tool.groups[0].cards.map((c) => c.id)).toEqual(['diff', 'files']);
-    expect(tool.groups[0].activeCardId).toBe('files');
+    expect(tool!.groups[0]!.cards.map((c) => c.id)).toEqual(['diff', 'files']);
+    expect(tool!.groups[0]!.activeCardId).toBe('files');
   });
 });
 
@@ -140,17 +140,17 @@ describe('closeTabInGroup — no chat strip, prune empty', () => {
     h.actions.togglePanel(id, 'terminal', true);
 
     const tool = h.ws().columns.find((c) => !isChatColumn(c))!;
-    const groupId = tool.groups[0].id;
+    const groupId = tool!.groups[0]!.id;
     h.actions.closeTabInGroup(id, groupId, 'agent');
 
     const after = h.ws().columns.find((c) => !isChatColumn(c))!.groups[0];
-    expect(after.cards.map((c) => c.id)).not.toContain('agent');
-    expect(after.activeCardId).not.toBe('chat');
+    expect(after!.cards.map((c) => c.id)).not.toContain('agent');
+    expect(after!.activeCardId).not.toBe('chat');
     expect(chatCols(h.ws())).toHaveLength(1);
 
     // close remaining tools → chat only
-    for (const cid of [...after.cards.map((c) => c.id)]) {
-      h.actions.closeTabInGroup(id, after.id, cid);
+    for (const cid of [...after!.cards.map((c) => c.id)]) {
+      h.actions.closeTabInGroup(id, after!.id, cid);
     }
     expect(isChatOnlyWorkspace(h.ws())).toBe(true);
     expect(chatCols(h.ws())).toHaveLength(1);
@@ -158,9 +158,9 @@ describe('closeTabInGroup — no chat strip, prune empty', () => {
 
   it('refuses to close chat card', () => {
     const h = makeHarness(makeSlice(bareWs()));
-    const chatGroup = h.ws().columns[0].groups[0];
-    h.actions.closeTabInGroup(h.ws().id, chatGroup.id, 'chat');
-    expect(h.ws().columns[0].groups[0].cards.map((c) => c.id)).toEqual(['chat']);
+    const chatGroup = h!.ws().columns[0]!.groups[0];
+    h.actions.closeTabInGroup(h.ws().id, chatGroup!.id, 'chat');
+    expect(h!.ws().columns[0]!.groups[0]!.cards.map((c) => c.id)).toEqual(['chat']);
   });
 });
 
@@ -201,7 +201,7 @@ describe('empty workspace guards', () => {
     const ids = h.getState().workspaces.map((w) => w.id);
     expect(ids.length).toBe(3);
     expect(h.getState().activeWorkspaceIndex).toBe(2);
-    const activeId = h.getState().workspaces[2].id;
+    const activeId = h!.getState().workspaces[2]!.id;
     h.actions.closeWorkspace(activeId);
     expect(h.getState().activeWorkspaceIndex).toBeLessThan(h.getState().workspaces.length);
     expect(h.getState().activeWorkspaceIndex).toBeGreaterThanOrEqual(0);
@@ -226,20 +226,20 @@ describe('empty workspace guards', () => {
   it('resizeColumns/Groups no-op on empty/single column or bad container size', () => {
     const h = makeHarness(makeSlice(bareWs()));
     const id = h.ws().id;
-    const before = h.ws().columns[0].widthRatio;
+    const before = h!.ws().columns[0]!.widthRatio;
     h.actions.resizeColumns(id, 0, 10, 0);
     h.actions.resizeColumns(id, 0, 10, 800);
-    expect(h.ws().columns[0].widthRatio).toBe(before);
+    expect(h!.ws().columns[0]!.widthRatio).toBe(before);
 
     h.actions.togglePanel(id, 'diff', true);
     h.actions.resizeColumns(id, 0, 40, 1000);
-    expect(h.ws().columns[0].widthRatio).not.toBe(before);
+    expect(h!.ws().columns[0]!.widthRatio).not.toBe(before);
 
     h.actions.resizeGroups(id, 1, 0, 10, 0);
     // single group col — no-op
-    const h2 = h.ws().columns[1].groups[0].heightRatio;
+    const h2 = h!.ws().columns[1]!.groups[0]!.heightRatio;
     h.actions.resizeGroups(id, 1, 0, 10, 500);
-    expect(h.ws().columns[1].groups[0].heightRatio).toBe(h2);
+    expect(h!.ws().columns[1]!.groups[0]!.heightRatio).toBe(h2);
   });
 });
 
@@ -249,15 +249,15 @@ describe('merge / detach / move — no ghost chat columns', () => {
     const id = h.ws().id;
     h.actions.togglePanel(id, 'files', true);
     h.actions.togglePanel(id, 'agent', true);
-    const groupId = h.ws().columns.find((c) => !isChatColumn(c))!.groups[0].id;
+    const groupId = h!.ws().columns.find((c) => !isChatColumn(c))!.groups[0]!.id;
 
     h.actions.mergeTab(id, 'agent', groupId, groupId, 0);
     expect(
-      h.ws().columns.find((c) => !isChatColumn(c))!.groups[0].cards.map((c) => c.id),
+      h!.ws().columns.find((c) => !isChatColumn(c))!.groups[0]!.cards.map((c) => c.id),
     ).toEqual(['agent', 'files']);
 
     // refuse moving chat across groups
-    const chatG = h.ws().columns[0].groups[0].id;
+    const chatG = h!.ws().columns[0]!.groups[0]!.id;
     h.actions.mergeTab(id, 'chat', chatG, groupId);
     expect(toolCards(h.ws())).not.toContain('chat');
     expect(chatCols(h.ws())).toHaveLength(1);
@@ -269,7 +269,7 @@ describe('merge / detach / move — no ghost chat columns', () => {
     h.actions.togglePanel(id, 'diff', true);
     h.actions.togglePanel(id, 'terminal', true);
     const tool = h.ws().columns.find((c) => !isChatColumn(c))!;
-    const gid = tool.groups[0].id;
+    const gid = tool!.groups[0]!.id;
 
     h.actions.detachTabToStandalone(id, 'terminal', gid, 0, 'new-col');
     const ws = h.ws();
@@ -288,12 +288,12 @@ describe('merge / detach / move — no ghost chat columns', () => {
     const id = h.ws().id;
     h.actions.togglePanel(id, 'files', true);
     h.actions.togglePanel(id, 'agent', true);
-    const gid = h.ws().columns.find((c) => !isChatColumn(c))!.groups[0].id;
+    const gid = h!.ws().columns.find((c) => !isChatColumn(c))!.groups[0]!.id;
 
     h.actions.moveTabOrGroupRealtime(id, 'agent', gid, 0, 0);
     const ws = h.ws();
     expect(chatCols(ws)).toHaveLength(1);
-    const chatIds = ws.columns[0].groups.flatMap((g) => g.cards.map((c) => c.id));
+    const chatIds = ws!.columns[0]!.groups.flatMap((g) => g.cards.map((c) => c.id));
     expect(chatIds).toEqual(['chat']);
     expect(toolCards(ws)).toContain('agent');
     expect(toolCards(ws)).toContain('files');

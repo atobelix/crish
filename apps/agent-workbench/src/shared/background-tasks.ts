@@ -47,9 +47,9 @@ export function startBackgroundTask(
     kind: input.kind ?? "command",
     title: input.title,
     state: "running",
-    cwd: input.cwd,
-    command: input.command,
-    detail: input.detail,
+    ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+    ...(input.command !== undefined ? { command: input.command } : {}),
+    ...(input.detail !== undefined ? { detail: input.detail } : {}),
     startedAt: now,
     updatedAt: now,
     heartbeatAt: now,
@@ -80,8 +80,8 @@ export function recordBackgroundTaskHeartbeat(
     task.id === input.taskId
       ? {
           ...task,
-          detail: input.detail ?? task.detail,
-          outputPreview: input.outputPreview ? compactPreview(input.outputPreview) : task.outputPreview,
+          ...(input.detail !== undefined ? { detail: input.detail } : {}),
+          ...(input.outputPreview !== undefined ? { outputPreview: compactPreview(input.outputPreview) } : {}),
           updatedAt: now,
           heartbeatAt: now,
           heartbeatCount: task.heartbeatCount + 1
@@ -115,14 +115,14 @@ export function finishBackgroundTask(
       ? {
           ...task,
           state: nextState,
-          exitCode: input.exitCode ?? task.exitCode,
-          signal: input.signal ?? task.signal,
-          summary: input.summary ?? task.summary,
-          outputPreview: input.outputPreview ? compactPreview(input.outputPreview) : task.outputPreview,
-          evidenceIds: input.evidenceIds ?? task.evidenceIds,
+          ...(input.exitCode !== undefined ? { exitCode: input.exitCode } : {}),
+          ...(input.signal !== undefined ? { signal: input.signal } : {}),
+          ...(input.summary !== undefined ? { summary: input.summary } : {}),
+          ...(input.outputPreview !== undefined ? { outputPreview: compactPreview(input.outputPreview) } : {}),
+          ...(input.evidenceIds !== undefined ? { evidenceIds: input.evidenceIds } : {}),
           updatedAt: now,
           finishedAt: now,
-          durationMs: task.startedAt ? Math.max(0, Date.parse(now) - Date.parse(task.startedAt)) : task.durationMs
+          ...(task.startedAt !== undefined ? { durationMs: Math.max(0, Date.parse(now) - Date.parse(task.startedAt)) } : {})
         }
       : task
   );

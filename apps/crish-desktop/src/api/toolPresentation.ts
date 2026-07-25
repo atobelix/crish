@@ -150,7 +150,7 @@ function primaryShellSegment(cmd: string): string {
       .map((p) => p.trim())
       .filter(Boolean)
       .filter((p) => !/^(?:cd|Set-Location|sl|pushd)\b/i.test(p));
-    if (parts.length) s = parts[parts.length - 1];
+    if (parts.length) s = parts[parts.length - 1]!;
   }
 
   // PowerShell / bash 管道：用管道第一段做主意图（| Select-Object 等多为过滤）
@@ -876,8 +876,8 @@ export function toolHasDiffStat(tc: MessageToolCall): boolean {
 export function isToolRowDefaultOpen(
   _tc?: {
     status?: string;
-    output?: string;
-    diffs?: unknown[];
+    output?: string | undefined;
+    diffs?: unknown[] | undefined;
   } | null,
 ): boolean {
   return false;
@@ -892,8 +892,8 @@ export function resolveToolRowOpen(
   toolId: string,
   tc?: {
     status?: string;
-    output?: string;
-    diffs?: unknown[];
+    output?: string | undefined;
+    diffs?: unknown[] | undefined;
   } | null,
 ): boolean {
   if (expandedTools != null && Object.prototype.hasOwnProperty.call(expandedTools, toolId)) {
@@ -1018,7 +1018,7 @@ export function normalizeAssistantTimeline(msg: SessionMessage): SessionMessage 
       // 有交错：缺失的 tool 插在最后一个 text 之前，或末尾
       let insertAt = blocks.length;
       for (let i = blocks.length - 1; i >= 0; i--) {
-        if (blocks[i].type === 'text') {
+        if (blocks[i]?.type === 'text') {
           insertAt = i;
           break;
         }
@@ -1057,22 +1057,22 @@ export function dedupeToolCalls(toolCalls: MessageToolCall[]): MessageToolCall[]
         ...prev,
         ...tc,
         arguments: tc.arguments || prev.arguments,
-        explanation: tc.explanation || prev.explanation,
-        output: tc.output || prev.output,
+        ...(tc.explanation || prev.explanation ? { explanation: tc.explanation || prev.explanation } : {}),
+        ...(tc.output || prev.output ? { output: tc.output || prev.output } : {}),
       });
     } else if (statusRank(tc.status) === statusRank(prev.status)) {
       byId.set(tc.id, {
         ...prev,
         ...tc,
         arguments: tc.arguments || prev.arguments,
-        output: tc.output || prev.output,
+        ...(tc.output || prev.output ? { output: tc.output || prev.output } : {}),
       });
     } else {
       byId.set(tc.id, {
         ...prev,
         arguments: prev.arguments || tc.arguments,
-        explanation: prev.explanation || tc.explanation,
-        output: prev.output || tc.output,
+        ...(prev.explanation || tc.explanation ? { explanation: prev.explanation || tc.explanation } : {}),
+        ...(prev.output || tc.output ? { output: prev.output || tc.output } : {}),
       });
     }
   }
@@ -1087,15 +1087,15 @@ export function buildToolRenderItems(toolCalls: MessageToolCall[]): ToolRenderIt
   const flush = () => {
     if (buf.length === 0) return;
     if (buf.length === 1) {
-      out.push({ kind: 'single', tc: buf[0] });
+      out.push({ kind: 'single', tc: buf[0]! });
     } else {
       const last = buf[buf.length - 1];
       const n = buf.length;
       out.push({
         kind: 'group',
-        id: `grp-${buf[0].id}`,
+        id: `grp-${buf![0]!.id}`,
         tools: [...buf],
-        label: `${toolHumanLabel(last)} · ${n} 步`,
+        label: `${toolHumanLabel(last!)} · ${n} 步`,
       });
     }
     buf = [];
@@ -1124,8 +1124,10 @@ export function buildToolRenderItems(toolCalls: MessageToolCall[]): ToolRenderIt
   return out;
 }
 
+export type TimelineTextItem = { kind: 'text'; content: string; key: string };
+
 export type AssistantTimelineItem =
-  | { kind: 'text'; content: string; key: string }
+  | TimelineTextItem
   | { kind: 'tools'; items: ToolRenderItem[]; key: string };
 
 /**

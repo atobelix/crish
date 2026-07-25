@@ -51,15 +51,15 @@ export type ProviderProfile = {
   id: string;
   name: string;
   baseUrl: string;
-  authType?: AuthType;
+  authType?: AuthType | undefined;
   models: string[];
   /** 是否已保存密钥或已完成 OAuth 授权 */
   hasKey: boolean;
-  apiKey?: string;
-  oauthConfig?: OAuthConfig;
-  oauthToken?: OAuthTokenData;
-  subscriptionPlan?: 'free' | 'go' | 'zen' | 'copilot_pro' | 'custom';
-  enabled?: boolean;
+  apiKey?: string | undefined;
+  oauthConfig?: OAuthConfig | undefined;
+  oauthToken?: OAuthTokenData | undefined;
+  subscriptionPlan?: 'free' | 'go' | 'zen' | 'copilot_pro' | 'custom' | undefined;
+  enabled?: boolean | undefined;
 };
 
 const PROFILES_KEY = 'crish_provider_profiles_v1';
@@ -552,7 +552,7 @@ export function getProviderSetupStatus(opts?: {
   const hasKey = hasLocalKey || hasEngineKey;
   const hasLocalModel = anyProfileHasModel();
   const resolved = resolvePreferredModelSelection({
-    engineModel: opts?.engineModel,
+    ...(opts?.engineModel !== undefined ? { engineModel: opts.engineModel } : {}),
   });
   const resolvedModel = resolved?.model || null;
   const resolvedProfileId = resolved?.profileId || null;
@@ -673,7 +673,7 @@ export async function saveProfileBaseUrl(
     ...(model ? { model } : {}),
   };
   const res = await updateEngineConfig(update);
-  return { ok: res.ok, error: res.error, synced: res.ok };
+  return { ok: res.ok, ...(res.error ? { error: res.error } : {}), synced: res.ok };
 }
 
 /**
@@ -712,11 +712,11 @@ export async function saveProfileKey(
       baseUrl: profile.baseUrl || undefined,
     });
     if (res.ok) setActiveProfileId(profileId);
-    return { ok: res.ok, error: res.error, synced: res.ok };
+    return { ok: res.ok, ...(res.error ? { error: res.error } : {}), synced: res.ok };
   }
 
   const res = await activateProfileModel(profileId, model);
-  return { ok: res.ok, error: res.error, synced: res.ok };
+  return { ok: res.ok, ...(res.error ? { error: res.error } : {}), synced: res.ok };
 }
 
 export function addModelToProfile(profileId: string, model: string) {
@@ -796,11 +796,11 @@ export type ResolvedModelSelection = {
 };
 
 export type PickDefaultModelOptions = {
-  storedProfileId?: string | null;
-  storedModel?: string | null;
-  engineModel?: string | null;
+  storedProfileId?: string | null | undefined;
+  storedModel?: string | null | undefined;
+  engineModel?: string | null | undefined;
   /** 为 true 时要求 model 必须在 profile.models 中 */
-  requireInList?: boolean;
+  requireInList?: boolean | undefined;
 };
 
 /**
@@ -905,7 +905,7 @@ export function pickDefaultModelSelection(
   if (keyed) {
     return {
       profileId: keyed.id,
-      model: keyed.models[0],
+      model: keyed.models[0]!,
       source: 'first_available',
     };
   }
@@ -915,7 +915,7 @@ export function pickDefaultModelSelection(
   if (withModels) {
     return {
       profileId: withModels.id,
-      model: withModels.models[0],
+      model: withModels.models[0]!,
       source: 'first_available',
     };
   }
@@ -950,7 +950,9 @@ export function resolvePreferredModelSelection(opts?: {
 
 /** 展示用：本机活动模型 id（解析后），无则空串 */
 export function resolveDisplayModelId(engineModel?: string | null): string {
-  const resolved = resolvePreferredModelSelection({ engineModel });
+  const resolved = resolvePreferredModelSelection(
+    engineModel !== undefined ? { engineModel } : {}
+  );
   if (resolved) return resolved.model;
   // 仍有裸存的 active model（profile 被删等）时展示它，但不当作权威
   return (getActiveModelId() || '').trim();
@@ -1029,14 +1031,14 @@ export async function activateProfileModel(
         return { ok: true, warning: 'model_mismatch' };
       }
       if (!hasLocalKey || (status.ok && status.hasApiKey === false)) {
-        return { ok: true, warning: hasLocalKey ? undefined : 'no_local_key' };
+        return { ok: true, ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}) };
       }
     } catch {
       /* ignore verify errors */
     }
     return {
       ok: true,
-      warning: hasLocalKey ? undefined : 'no_local_key',
+      ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}),
     };
   }
   return res;
@@ -1074,7 +1076,7 @@ export async function syncActiveProfileToEngine(): Promise<{
     if (res.ok) {
       return { ok: true, applied: { profileId: profile.id, model } };
     }
-    return { ok: false, error: res.error };
+    return { ok: false, ...(res.error ? { error: res.error } : {}) };
   }
 
   const res = await updateEngineConfig({
@@ -1082,7 +1084,7 @@ export async function syncActiveProfileToEngine(): Promise<{
     baseUrl: profile.baseUrl || undefined,
   });
   if (res.ok) setActiveProfileId(profile.id);
-  return { ok: res.ok, error: res.error };
+  return { ok: res.ok, ...(res.error ? { error: res.error } : {}) };
 }
 
 export type FlatModelChoice = {

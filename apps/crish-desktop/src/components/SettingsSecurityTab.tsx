@@ -16,7 +16,6 @@ import { getWorkspacePath, listProjects } from '../api/projectStore';
 import {
   PERMISSION_MODES,
   coercePermissionMode,
-  permissionModeMeta,
   transitionPermissionMode,
   type PermissionMode,
 } from '../api/permissionModes';
@@ -42,9 +41,6 @@ const QUICK_WHITELIST_CMDS = [
 
 const WHITELIST_MATCH_HINT =
   '按整条命令匹配；后面可带参数，不会误伤相似命令名';
-
-const WHITELIST_LOCAL_HINT =
-  '匹配后本机可自动放行，不会伪造命令结果';
 
 /** 风险短标签 */
 const RISK_LABEL_ZH: Record<ShellRiskLevel, string> = {
@@ -89,7 +85,6 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
       return 'ask' as PermissionMode;
     }
   }, [permissionModeRaw]);
-  const permissionMeta = useMemo(() => permissionModeMeta(permissionMode), [permissionMode]);
 
   const workspacePaths = useMemo(() => {
     try {
@@ -183,10 +178,6 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
       onShowToast('权限切换失败：' + String(err));
     }
   };
-
-  const permissionTitle = `${permissionMeta.label}：${permissionMeta.description}`;
-
-  const whitelistEmptyTitle = `${WHITELIST_MATCH_HINT}；${WHITELIST_LOCAL_HINT}`;
 
   const inputRiskTitle = draftTrimmed
     ? `${RISK_LABEL_ZH[draftRisk.level]}：${draftRisk.message} · 回车添加`

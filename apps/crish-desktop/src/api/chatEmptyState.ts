@@ -151,7 +151,7 @@ export type ChatEmptyCopy = {
   title: string;
   sub: string;
   /** 主行动按钮文案（无则只展示文案） */
-  actionLabel?: string;
+  actionLabel?: string | undefined;
   /** 与 actionLabel 同步的行动语义；便于组件 data-action / 测试 */
   primaryAction: ChatEmptyPrimaryAction;
   /** 欢迎面：项目选择条 */
@@ -162,26 +162,26 @@ export type ChatEmptyCopy = {
 
 export type ChatEmptyCopyInput = {
   kind: ChatEmptyKind;
-  filterQuery?: string | null;
+  filterQuery?: string | null | undefined;
   /**
    * 本地/引擎未配密钥：空态不重复密钥 CTA（soft-hint 负责）。
    * 快捷 prompt 仍可展示为草稿填入。
    */
-  needsKeySetup?: boolean;
+  needsKeySetup?: boolean | undefined;
   /** 有密钥无模型：文案略收紧 */
-  needsModelSetup?: boolean;
+  needsModelSetup?: boolean | undefined;
   /**
    * FirstRun 向导盖在上层时：空态极简，避免与向导抢注意力。
    * （向导关闭后 needsKey soft-hint 接管密钥引导）
    */
-  firstRunOpen?: boolean;
+  firstRunOpen?: boolean | undefined;
   /**
    * engineHint.ok；false = daemon/引擎离线。
    * 离线时欢迎面改草稿口径、隐藏快捷 prompt（避免暗示可跑工具）；
    * soft-hint 的 engine-down 条独占引擎引导。
    * null/undefined = 尚未探测或未知，按就绪欢迎面处理（不误伤）。
    */
-  engineOk?: boolean | null;
+  engineOk?: boolean | null | undefined;
 };
 
 /** 过滤关键词展示截断，避免长查询撑破空态 */
@@ -210,11 +210,12 @@ export function resolveChatEmptyCopy(input: ChatEmptyCopyInput): ChatEmptyCopy {
       const primaryAction = resolveChatEmptyPrimaryAction(kind, {
         firstRunOpen,
       });
+      const _actionLabel0 = resolveChatEmptyActionLabel(primaryAction);
       return {
         kind,
         title: CHAT_EMPTY_TITLES['no-session'],
         sub: firstRunOpen ? '完成引导后即可新建对话' : '新建一条开始对话',
-        actionLabel: resolveChatEmptyActionLabel(primaryAction),
+        ...(_actionLabel0 !== undefined && { actionLabel: _actionLabel0 }),
         primaryAction,
         showProjectBar: false,
         showQuickPrompts: false,
@@ -223,11 +224,12 @@ export function resolveChatEmptyCopy(input: ChatEmptyCopyInput): ChatEmptyCopy {
     case 'filter-empty': {
       const preview = truncateFilterPreview(input.filterQuery || '');
       const primaryAction = resolveChatEmptyPrimaryAction(kind);
+      const _actionLabel1 = resolveChatEmptyActionLabel(primaryAction);
       return {
         kind,
         title: CHAT_EMPTY_TITLES['filter-empty'],
         sub: preview ? `没有匹配「${preview}」的内容` : '没有匹配的消息',
-        actionLabel: resolveChatEmptyActionLabel(primaryAction),
+        ...(_actionLabel1 !== undefined && { actionLabel: _actionLabel1 }),
         primaryAction,
         showProjectBar: false,
         showQuickPrompts: false,

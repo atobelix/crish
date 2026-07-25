@@ -30,7 +30,6 @@ export type FontWeight = 'normal' | 'medium' | 'semibold';
 export type UiSize = 'small' | 'medium' | 'large';
 
 const fontSizeCache = new Map<string, number>();
-const fontFamilyCache = new Map<FontRole, string>();
 let probeElement: HTMLDivElement | null = null;
 
 function isGenericFont(name: string): boolean {
@@ -85,7 +84,6 @@ export function buildPretextFontForUiSize(
   role: FontRole = 'sans',
   weight: FontWeight = 'normal',
 ): string {
-  if (!fontSizeCache) fontSizeCache = new Map();
   const cacheKey = `${uiSize}:${role}:${weight}`;
   const cached = fontSizeCache.get(cacheKey);
   if (cached) return `${WEIGHT_MAP[weight]} ${cached}px ${getFontFamily(role)}`;

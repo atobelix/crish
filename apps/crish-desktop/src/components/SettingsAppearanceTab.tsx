@@ -1,7 +1,7 @@
 /**
  * 设置 · 外观：主题、密度、字体与阅读相关选项；改完即生效，仅失败提示。
  */
-import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Settings } from '../api/clientApi';
 import { clientApi } from '../api/clientApi';
 import { getWorkspacePath } from '../api/projectStore';
@@ -11,23 +11,18 @@ import {
   type ShellChromeMode,
 } from '../api/shellChrome';
 import { FontSettingsSection } from './FontSettingsSection';
-import { SettingsSelect } from './SettingsSelect';
-import styles from './SettingsAppearanceTab.module.css';
 import {
   readStoredTheme,
   readStoredPersonalization,
   writeStoredPersonalization,
   applyPersonalization,
   type PersonalizationSettings,
-  getDynamicSolarAdjustments,
-  SKIN_PRESETS,
 } from '../api/themeStore';
 import {
   SettingsPage,
   SettingsSection,
   SettingsCard,
   SettingsRow,
-  Tooltip,
 } from './settings/SettingsUI';
 import { SettingsSchemaRenderer } from './settings/SettingsSchemaRenderer';
 import type { SchemaSection } from './settings/SettingsSchemaRenderer';
@@ -39,52 +34,6 @@ type Props = {
 
 type UiSize = 'small' | 'medium' | 'large';
 type ThemeId = 'default' | 'dark';
-
-/** 密度三档 */
-const DENSITY_OPTS: {
-  id: UiSize;
-  label: string;
-  /** 控件 title + 辅助说明 */
-  hint: string;
-}[] = [
-  { id: 'small', label: '紧凑', hint: '更省空间' },
-  { id: 'medium', label: '标准', hint: '默认' },
-  { id: 'large', label: '宽松', hint: '更易阅读' },
-];
-
-const THEME_OPTS: { id: ThemeId; label: string; hint: string }[] = [
-  { id: 'default', label: '浅色', hint: '浅色' },
-  { id: 'dark', label: '深色', hint: '深色' },
-];
-
-const INDENT_OPTS = [
-  { value: '  ', label: '2 空格' },
-  { value: '    ', label: '4 空格' },
-  { value: '\t', label: 'Tab' },
-] as const;
-
-const CHROME_OPTS: {
-  id: ShellChromeMode;
-  label: string;
-  hint: string;
-}[] = [
-  {
-    id: 'classic',
-    label: '经典',
-    hint: '传统布局',
-  },
-  {
-    id: 'inset',
-    label: '工作台',
-    hint: '推荐布局',
-  },
-];
-
-const skinPresets = Object.entries(SKIN_PRESETS).map(([id, config]) => ({
-  id,
-  name: config.name,
-  preview: config.bgPrimary,
-}));
 
 /** 浅/深色主题各自的皮肤 ID 集合，用于皮肤回退校验（#237） */
 const DARK_SKIN_IDS = ['dark-cozy', 'deep-night', 'dark-forest', 'aurora', 'cocoa', 'burgundy', 'cyber', 'obsidian'];
@@ -135,7 +84,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
     }
   }, [activeTheme, personalization.skin]);
 
-  const [visibilityRef, isVisible] = useIsVisible();
+  const [visibilityRef] = useIsVisible();
 
   const updatePersonalization = (updates: Partial<PersonalizationSettings>) => {
     const next = { ...personalization, ...updates };
@@ -178,22 +127,6 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadTick, setLoadTick] = useState(0);
-  const [tick, setTick] = useState(0);
-
-  // 10 秒轮询——仅在 tab 可见时运行（#234）
-  useEffect(() => {
-    let interval: any = null;
-    if (personalization.themeAutoTimeTransition && isVisible) {
-      interval = setInterval(() => {
-        setTick((t) => t + 1);
-      }, 10000);
-    }
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
-  }, [personalization.themeAutoTimeTransition, isVisible]);
 
   useEffect(() => {
     let cancelled = false;
@@ -302,15 +235,6 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
       }
     },
     [onShowToast, setShellChromeMode, shellChromeMode],
-  );
-
-  const applyTheme = useCallback(
-    (id: ThemeId) => {
-      if (!settings) return;
-      if (normalizeTheme(settings.theme) === id) return;
-      void save({ theme: id });
-    },
-    [save, settings],
   );
 
   const allValues = React.useMemo<Record<string, any>>(() => {

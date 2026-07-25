@@ -69,7 +69,10 @@ function formatShortcutLabel(raw: string | undefined | null): string {
   if (!s) return '未设置';
   if (!s.includes('+') && /\s+/.test(s)) {
     const parts = s.split(/\s+/).map(normalizeKeyPart).filter(Boolean);
-    if (parts.length >= 2 && parts.every((p) => p === parts[0])) return `双击 ${KEY_PART_ZH[parts[0]] || parts[0]}`;
+    if (parts.length >= 2 && parts.every((p) => p === parts[0])) {
+      const k = parts[0];
+      if (k) return `双击 ${KEY_PART_ZH[k] || k}`;
+    }
     return parts.map((p) => KEY_PART_ZH[p] || p).join(' · ');
   }
   const combo = s.split(/\s*\+\s*/).map(normalizeKeyPart).filter(Boolean);
@@ -400,7 +403,6 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
       ) : (
         <div id={listId} aria-labelledby={`${listId}-title`} onKeyDown={onListKeyDown}>
           {grouped.map(([groupName, items]) => {
-            const groupLabelId = `${listId}-g-${groupName}`;
             return (
               <SettingsSection key={groupName} title={groupName}>
                 <SettingsCard>

@@ -22,8 +22,8 @@ import { Tooltip } from './Tooltip';
 export type ChangeOverviewCardProps = {
   message: SessionMessage;
   onOpenDiff: (diff: FileDiff) => void;
-  onOpenDiffPanel?: () => void;
-  onShowToast?: (message: string) => void;
+  onOpenDiffPanel?: (() => void) | undefined;
+  onShowToast?: ((message: string) => void) | undefined;
 };
 
 function basename(p: string): string {

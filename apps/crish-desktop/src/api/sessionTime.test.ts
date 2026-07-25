@@ -113,8 +113,18 @@ describe('coerceSessionTimestamp', () => {
     expect(fromGangcai).toBe(new Date(1712345678901).toISOString());
   });
 
-  it('keeps valid ISO and 远程; normalizes digits to ISO', () => {
-    expect(coerceSessionTimestamp('x', '远程')).toBe('远程');
+  it('keeps valid ISO; normalizes 远程 to now ISO; normalizes digits to ISO', () => {
+    // 治理防线 #6：coerceSessionTimestamp 始终返回合法 ISO 串，禁止 `'远程'` 字面量。
+    // 远程来源由调用方通过 timestampSource='remote' discriminator 标记。
+    // 'x' 无 epoch，无 messages → 回落到当前 ISO
+    const beforeRemote = Date.now();
+    const remoteIso = coerceSessionTimestamp('x', '远程');
+    const afterRemote = Date.now();
+    const remoteMs = Date.parse(remoteIso);
+    expect(Number.isFinite(remoteMs)).toBe(true);
+    expect(remoteMs).toBeGreaterThanOrEqual(beforeRemote);
+    expect(remoteMs).toBeLessThanOrEqual(afterRemote);
+
     const iso = '2024-01-02T03:04:05.000Z';
     expect(coerceSessionTimestamp('x', iso)).toBe(iso);
     expect(coerceSessionTimestamp('x', '1712345678901')).toBe(
@@ -459,6 +469,8 @@ describe('sessionLastActivityMs / shell / compare', () => {
           ],
           startedAt: 300,
           endedAt: 400,
+          depth: 0,
+          subagentPath: ['ag1'],
         },
       ],
     });
@@ -502,6 +514,8 @@ describe('sessionLastActivityMs / shell / compare', () => {
           messages: [{ id: 'am', sender: 'assistant', text: 'x', timestamp: Number.POSITIVE_INFINITY }],
           startedAt: Number.NaN,
           endedAt: -1,
+          depth: 0,
+          subagentPath: ['ag'],
         },
       ],
     });
@@ -546,6 +560,8 @@ describe('sessionLastActivityMs / shell / compare', () => {
           status: 'running',
           messages: [{ id: 'am', sender: 'assistant', text: 'x', timestamp: activity }],
           startedAt: activity - 1_000,
+          depth: 0,
+          subagentPath: ['ag'],
         },
       ],
     });

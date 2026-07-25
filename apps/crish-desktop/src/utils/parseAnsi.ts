@@ -24,13 +24,13 @@ const ANSI_CUBE = [0, 95, 135, 175, 215, 255];
 function get256Color(code: string): string {
   const n = parseInt(code, 10);
   if (Number.isNaN(n) || n < 0 || n > 255) return 'inherit';
-  if (n < 16) return ANSI_BASIC[n];
+  if (n < 16) return ANSI_BASIC[n]!;
   if (n < 232) {
     const idx = n - 16;
     const r = Math.floor(idx / 36);
     const g = Math.floor((idx % 36) / 6);
     const b = idx % 6;
-    const toHex = (v: number) => ANSI_CUBE[v].toString(16).padStart(2, '0');
+    const toHex = (v: number) => ANSI_CUBE[v]!.toString(16).padStart(2, '0');
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
   }
   const gray = (n - 232) * 10 + 8;
@@ -79,7 +79,7 @@ export function parseAnsi(text: string): React.ReactNode[] {
     const parts = codes.split(';');
     let i = 0;
     while (i < parts.length) {
-      const c = parts[i];
+      const c = parts[i]!;
       if (c === '' || c === '0') {
         fg = undefined; bg = undefined; bold = false; italic = false; underline = false;
       } else if (c === '1') bold = true;
@@ -93,9 +93,9 @@ export function parseAnsi(text: string): React.ReactNode[] {
       else if (ANSI_FG[c]) fg = ANSI_FG[c];
       else if (ANSI_BG[c]) bg = ANSI_BG[c];
       else if (c === '38' && parts[i + 1] === '5' && parts[i + 2]) {
-        i += 2; fg = get256Color(parts[i]);
+        i += 2; fg = get256Color(parts[i]!);
       } else if (c === '48' && parts[i + 1] === '5' && parts[i + 2]) {
-        i += 2; bg = get256Color(parts[i]);
+        i += 2; bg = get256Color(parts[i]!);
       }
       i++;
     }
@@ -104,7 +104,7 @@ export function parseAnsi(text: string): React.ReactNode[] {
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
     pushText(match.index);
-    applyCodes(match[1]);
+    applyCodes(match[1]!);
     last = re.lastIndex;
   }
   pushText(text.length);

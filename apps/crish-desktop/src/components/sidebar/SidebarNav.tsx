@@ -7,7 +7,7 @@ export interface SidebarNavProps {
   onNewSession: () => void;
   onOpenScheduled: () => void;
   searchInput?: string;
-  onSearchChange?: (val: string) => void;
+  onSearchChange?: ((val: string) => void) | undefined;
 }
 
 /** 顶部「新对话 / 定时任务」：默认安静，hover 或选中时才抬升 */

@@ -174,7 +174,8 @@ export function applySubagentEventToMessages(
     if (existing) {
       existing.name = name || existing.name;
       existing.arguments = args || existing.arguments;
-      existing.explanation = explanation || existing.explanation;
+      const exp = explanation || existing.explanation;
+      if (exp !== undefined) existing.explanation = exp;
       // 已终态的不因重放 tool-start 回退为 running
       if (existing.status !== 'success' && existing.status !== 'error') {
         existing.status = 'running';

@@ -35,6 +35,8 @@ export type UiEventMap = {
   'focus-composer': void;
   /** 快捷键：中断当前生成 */
   'stop-generation': void;
+  /** 全站 Popover 互斥关闭 */
+  'close-all-popovers': { exceptId?: string } | undefined;
 };
 
 export type UiEventName = keyof UiEventMap;
@@ -72,6 +74,7 @@ export const UI_EVENT_NAMES = [
   'profiles-changed',
   'focus-composer',
   'stop-generation',
+  'close-all-popovers',
 ] as const satisfies readonly UiEventName[];
 
 const UI_EVENT_NAME_SET: ReadonlySet<string> = new Set<string>(UI_EVENT_NAMES);

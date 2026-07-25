@@ -78,7 +78,7 @@ export const ModelPicker: React.FC<Props> = ({
 
   const resolved = useMemo(() => {
     void tick;
-    return resolvePreferredModelSelection({ engineModel });
+    return resolvePreferredModelSelection({ ...(engineModel !== undefined && { engineModel }) });
   }, [tick, engineModel]);
 
   const activeProfileId = resolved?.profileId ?? null;

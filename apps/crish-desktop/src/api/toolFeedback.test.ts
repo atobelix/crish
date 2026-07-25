@@ -148,8 +148,8 @@ describe('resolveToolDiffs shell safety', () => {
       output: out,
     });
     expect(files.length).toBe(1);
-    expect(files[0].filePath).toContain('foo.ts');
-    expect(files[0].additions).toBeGreaterThan(0);
+    expect(files![0]!.filePath).toContain('foo.ts');
+    expect(files![0]!.additions).toBeGreaterThan(0);
   });
 
   it('keeps structured diffs even when tool name is not edit-like', () => {
@@ -206,7 +206,7 @@ describe('fileDiffFromEditArgs', () => {
       output: 'OK',
     });
     expect(files.length).toBe(1);
-    expect(files[0].filePath).toBe('src/b.ts');
+    expect(files![0]!.filePath).toBe('src/b.ts');
   });
 });
 
@@ -313,8 +313,8 @@ describe('collectMessageDiffs (change overview path)', () => {
     };
     const files = collectMessageDiffs(msg);
     expect(files.length).toBe(1);
-    expect(files[0].filePath).toBe('src/app.ts');
-    expect(files[0].additions).toBeGreaterThan(0);
+    expect(files![0]!.filePath).toBe('src/app.ts');
+    expect(files![0]!.additions).toBeGreaterThan(0);
   });
 
   it('does not open overview from shell directory listing', () => {
@@ -378,10 +378,10 @@ describe('collectMessageDiffs (change overview path)', () => {
     };
     const files = collectMessageDiffs(msg);
     expect(files.length).toBe(1);
-    expect(files[0].filePath).toBe('src/prefer.ts');
-    expect(files[0].additions).toBe(3);
-    expect(files[0].deletions).toBe(1);
-    expect(files[0].changes).toEqual(structured.changes);
+    expect(files![0]!.filePath).toBe('src/prefer.ts');
+    expect(files![0]!.additions).toBe(3);
+    expect(files![0]!.deletions).toBe(1);
+    expect(files![0]!.changes).toEqual(structured.changes);
   });
 
   it('drops unpublishable structured diffs from overview', () => {
@@ -465,11 +465,11 @@ describe('collectMessageDiffs (change overview path)', () => {
     const byPath = Object.fromEntries(files.map((f) => [f.filePath, f]));
     expect(Object.keys(byPath).sort()).toEqual(['src/other.ts', 'src/shared.ts']);
     // 同路径两次 edit：additions/deletions 累加
-    expect(byPath['src/shared.ts'].additions).toBe(1 + 2);
-    expect(byPath['src/shared.ts'].deletions).toBe(1 + 1);
-    expect(byPath['src/shared.ts'].changes.length).toBeGreaterThanOrEqual(2);
-    expect(byPath['src/other.ts'].additions).toBe(2);
-    expect(byPath['src/other.ts'].deletions).toBe(0);
+    expect(byPath['src/shared.ts']!.additions).toBe(1 + 2);
+    expect(byPath['src/shared.ts']!.deletions).toBe(1 + 1);
+    expect(byPath['src/shared.ts']!.changes.length).toBeGreaterThanOrEqual(2);
+    expect(byPath['src/other.ts']!.additions).toBe(2);
+    expect(byPath['src/other.ts']!.deletions).toBe(0);
   });
 });
 

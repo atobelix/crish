@@ -4,13 +4,16 @@
 mod cli_bridge;
 mod commands;
 mod config;
+mod core_commands;
 mod daemon_discovery;
 mod fs_commands;
 mod host_openers;
 mod host_paths;
 mod perf;
+mod power;
 mod process;
 mod sidecar;
+use tauri::Manager;
 
 /// 公共命令列表。debug / release 共用，避免两份 ~55 项完全重复。
 /// `register_handlers!()` = 仅公共；`register_handlers!(dev)` = 公共 + cli_bridge 开发命令。
@@ -75,11 +78,16 @@ macro_rules! register_handlers {
             config::save_api_config,
             config::get_api_config,
             config::update_daemon_config,
+            config::workbench_profile_secret_set,
+            config::workbench_profile_secret_get,
+            config::workbench_profile_secret_has,
+            config::workbench_profile_secret_clear,
             fs_commands::list_directory,
             fs_commands::read_file_content,
             fs_commands::write_file_content,
             fs_commands::workbench_discover_skills,
             commands::workbench_http_request,
+            commands::workbench_apply_update,
             perf::hash::perf_hash_compute,
             perf::hash::perf_base64_encode,
             perf::hash::perf_base64_decode,
@@ -93,6 +101,14 @@ macro_rules! register_handlers {
             perf::fs::perf_fs_file_info,
             perf::fs::perf_fs_watch_start,
             perf::fs::perf_fs_watch_stop,
+            core_commands::core_check_command,
+            core_commands::core_search_files,
+            core_commands::core_rebuild_search_index,
+            core_commands::core_compact_messages,
+            core_commands::core_count_tokens,
+            core_commands::core_compute_diff,
+            core_commands::core_get_status,
+            power::workbench_set_keep_awake,
         ]
     };
     (dev) => {
@@ -155,11 +171,16 @@ macro_rules! register_handlers {
             config::save_api_config,
             config::get_api_config,
             config::update_daemon_config,
+            config::workbench_profile_secret_set,
+            config::workbench_profile_secret_get,
+            config::workbench_profile_secret_has,
+            config::workbench_profile_secret_clear,
             fs_commands::list_directory,
             fs_commands::read_file_content,
             fs_commands::write_file_content,
             fs_commands::workbench_discover_skills,
             commands::workbench_http_request,
+            commands::workbench_apply_update,
             perf::hash::perf_hash_compute,
             perf::hash::perf_base64_encode,
             perf::hash::perf_base64_decode,
@@ -181,6 +202,7 @@ macro_rules! register_handlers {
             cli_bridge::workbench_dev_cli_background_demo,
             cli_bridge::workbench_dev_cli_run_task,
             cli_bridge::workbench_dev_cli_run_goal,
+            power::workbench_set_keep_awake,
         ]
     };
 }
@@ -198,6 +220,7 @@ fn main() {
         .setup(|app| {
             sidecar::init_state();
             config::init_api_config_store();
+            app.manage(core_commands::SharedSearchState::new());
 
             // Product: engine is part of the app. Start sidecar immediately and
             // keep retrying so the UI never sits in a permanent "shell-only" state.
@@ -206,7 +229,7 @@ fn main() {
                 let app_dir = match crate::host_paths::app_dir() {
                     Ok(d) => d,
                     Err(e) => {
-                        eprintln!("[Sidecar][engine.startup] app_dir() failed: {e}");
+                        tracing::error!(target: "sidecar", error = %e, "[Sidecar][engine.startup] app_dir() failed");
                         return;
                     }
                 };
@@ -216,17 +239,21 @@ fn main() {
                     attempt = attempt.saturating_add(1);
                     match crate::sidecar::ensure_sidecar_connected(&handle, &app_dir).await {
                         Ok(sender) => {
-                            println!(
-                                "[Sidecar][engine.startup] ready (attempt={}, generation={}, pid={:?})",
+                            tracing::info!(
+                                target: "sidecar",
                                 attempt,
-                                sender.generation,
-                                crate::sidecar::sidecar_supervisor_snapshot().pid,
+                                generation = sender.generation,
+                                pid = ?crate::sidecar::sidecar_supervisor_snapshot().pid,
+                                "[Sidecar][engine.startup] ready"
                             );
                             break;
                         }
                         Err(e) => {
-                            eprintln!(
-                                "[Sidecar][engine.startup] attempt {} failed (will retry): {e}",
+                            tracing::error!(
+                                target: "sidecar",
+                                attempt,
+                                error = %e,
+                                "[Sidecar][engine.startup] attempt {} failed (will retry)",
                                 attempt
                             );
                             // Cap backoff so product recovers quickly after transient failures

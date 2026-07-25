@@ -336,8 +336,11 @@ describe('matchSessionSearch', () => {
           status: 'completed',
           messages: [msg({ id: 'am1', text: '发现 sessionSearch 模块' })],
           startedAt: 0,
+          depth: 0,
+          subagentPath: ['a1'],
         },
       ],
+
     });
     expect(matchSessionSearch(s, '代码库').match).toBe(true);
     const nested = matchSessionSearch(s, 'sessionSearch');
@@ -417,7 +420,7 @@ describe('compareSessionSearchRank / rankSessionsBySearch', () => {
     });
     const ranked = rankSessionsBySearch([bodyOnly, miss, titleHit], '重构');
     expect(ranked.map((x) => x.session.id)).toEqual(['title', 'body']);
-    expect(ranked[0].match.score).toBeGreaterThan(ranked[1].match.score);
+    expect(ranked![0]!.match.score).toBeGreaterThan(ranked![1]!.match.score);
   });
 
   it('stable id tiebreak when scores equal', () => {

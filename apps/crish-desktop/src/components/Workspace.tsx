@@ -37,8 +37,8 @@ function ratioToPercent(ratio: number): number {
   return Math.max(0, Math.min(100, Math.round(ratio * 100)));
 }
 
-type RenderedGroup = CardGroupState & { origGroupIdx: number };
-type RenderedColumn = Omit<ColumnState, 'groups'> & {
+export type RenderedGroup = CardGroupState & { origGroupIdx: number };
+export type RenderedColumn = Omit<ColumnState, 'groups'> & {
   origColIdx: number;
   groups: RenderedGroup[];
 };
@@ -129,7 +129,7 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(
           col.groups.some((g) => g.id === draggedTab.sourceGroupId)
         );
         if (sourceColIdx >= 0) {
-          isSourceColEmpty = ws.columns[sourceColIdx].groups.every((g) => {
+          isSourceColEmpty = ws.columns[sourceColIdx]!.groups.every((g) => {
             const isDraggingWholeGroup =
               g.id === draggedTab.sourceGroupId &&
               (!draggedTab.isTabDrag || g.cards.length === 1);
@@ -375,8 +375,8 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(
         splitterEl.getBoundingClientRect().left -
         canvasEl.getBoundingClientRect().left;
 
-      const colLeftRatio = ws.columns[colIdx].widthRatio;
-      const colRightRatio = ws.columns[colIdx + 1].widthRatio;
+      const colLeftRatio = ws.columns[colIdx]!.widthRatio;
+      const colRightRatio = ws.columns[colIdx + 1]!.widthRatio;
 
       splitterEl.classList.add('active');
       document.body.classList.add('resizing-active');
@@ -437,9 +437,9 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(
         splitterEl.getBoundingClientRect().top -
         colEl.getBoundingClientRect().top;
 
-      const groupTopRatio = ws.columns[colIdx].groups[groupIdx].heightRatio;
+      const groupTopRatio = ws.columns[colIdx]!.groups[groupIdx]!.heightRatio;
       const groupBottomRatio =
-        ws.columns[colIdx].groups[groupIdx + 1].heightRatio;
+        ws.columns[colIdx]!.groups[groupIdx + 1]!.heightRatio;
 
       splitterEl.classList.add('active');
       document.body.classList.add('resizing-active');
@@ -554,7 +554,7 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(
                 // Calculate cumulative width ratios to position col-splitter resizer elements
                 let leftOffsetPercent = 0;
                 for (let i = 0; i < colIdx; i++) {
-                  leftOffsetPercent += renderedColumns[i].widthRatio * 100;
+                    leftOffsetPercent += renderedColumns[i]!.widthRatio * 100;
                 }
 
                 const isPlaceholderCol = col.origColIdx === -1;
@@ -660,7 +660,7 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(
                       {col.groups.map((group, groupIdx) => {
                         let topOffsetPercent = 0;
                         for (let i = 0; i < groupIdx; i++) {
-                          topOffsetPercent += col.groups[i].heightRatio * 100;
+                          topOffsetPercent += col.groups[i]!.heightRatio * 100;
                         }
 
                         const isPlaceholderGroup = group.origGroupIdx === -1;
@@ -750,7 +750,7 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(
                                   strokeWidth={1.75}
                                   aria-hidden
                                 />
-                                <span>{group.cards[0].title}</span>
+                                <span>{group!.cards[0]!.title}</span>
                               </div>
                             ) : (
                               <CardPanel

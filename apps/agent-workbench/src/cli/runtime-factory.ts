@@ -29,14 +29,14 @@ import {
 
 export interface WorkbenchRuntimeFactoryOptions {
   cwd: string;
-  settings?: WorkbenchRuntimeSettings;
-  configPath?: string;
-  provider?: AgentProvider;
-  sessionPath?: string;
-  apiKey?: string;
-  resumeSession?: boolean;
-  maxTurns?: number;
-  permissionPolicy?: RuntimePermissionPolicy;
+  settings: WorkbenchRuntimeSettings | undefined;
+  configPath: string | undefined;
+  provider: AgentProvider | undefined;
+  sessionPath: string | undefined;
+  apiKey: string | undefined;
+  resumeSession: boolean | undefined;
+  maxTurns: number | undefined;
+  permissionPolicy: RuntimePermissionPolicy | undefined;
 }
 
 export interface WorkbenchRuntimeFactoryResult {
@@ -44,13 +44,13 @@ export interface WorkbenchRuntimeFactoryResult {
   settings: WorkbenchRuntimeSettings;
   contextState: InMemoryContextState;
   backgroundCommands: BackgroundCommandManager;
-  sessionPath?: string;
+  sessionPath: string | undefined;
 }
 
 export interface WorkbenchModelRefreshOptions {
   settings: WorkbenchRuntimeSettings;
-  apiKey?: string;
-  fetch?: typeof fetch;
+  apiKey: string | undefined;
+  fetch: typeof fetch | undefined;
 }
 
 export interface WorkbenchModelRefreshResult {
@@ -65,11 +65,6 @@ export async function createWorkbenchRuntime(options: WorkbenchRuntimeFactoryOpt
   const settings = options.settings ?? (options.configPath ? await loadWorkbenchRuntimeSettings(options.configPath) : createDefaultWorkbenchSettings());
   const budgetProfile = resolveRunBudgetProfile(settings.runBudget);
   const contextState = new InMemoryContextState();
-  const sessionStore = options.sessionPath
-    ? new JsonlSessionStore(resolve(options.sessionPath), {
-        mode: options.resumeSession ? "resume-or-create" : "create"
-      })
-    : undefined;
 
   if (options.sessionPath) {
     await mkdir(dirname(resolve(options.sessionPath)), { recursive: true });
@@ -100,8 +95,8 @@ export async function createWorkbenchRuntime(options: WorkbenchRuntimeFactoryOpt
     cwd,
     provider,
     tools,
-    sessionStore,
-    resumeSession: options.resumeSession,
+    ...(options.sessionPath ? { sessionStore: new JsonlSessionStore(resolve(options.sessionPath), { mode: options.resumeSession ? "resume-or-create" : "create" }) } : {}),
+    ...(options.resumeSession !== undefined ? { resumeSession: options.resumeSession } : {}),
     maxTurns: options.maxTurns ?? budgetProfile.maxTurns,
     permissionPolicy: options.permissionPolicy ?? createPermissionPolicy({ mode: "project" }), // TrustZone ask matrix (shared with daemon)
     ...createProductRuntimeDefaults({
@@ -132,24 +127,24 @@ export async function loadWorkbenchRuntimeSettings(filePath: string): Promise<Wo
 
 export async function refreshWorkbenchProviderModels(options: WorkbenchModelRefreshOptions): Promise<WorkbenchModelRefreshResult> {
   const apiKey = await resolveProviderApiKey(options.settings.provider, options.apiKey);
-  const remoteModels = await listOpenAICompatibleModels({
+  const modelsOpts: Parameters<typeof listOpenAICompatibleModels>[0] = {
     baseUrl: options.settings.provider.baseUrl,
-    modelsUrl: options.settings.provider.modelsUrl,
-    modelsPath: options.settings.provider.modelsPath,
-    apiKey,
-    authHeader: options.settings.provider.authHeader,
-    transport: options.settings.provider.transport,
-    rustReqwestCommand: options.settings.provider.rustReqwestCommand,
-    rustReqwestArgs: options.settings.provider.rustReqwestArgs,
-    rustReqwestCwd: options.settings.provider.rustReqwestCwd,
-    fetch: options.fetch
-  });
+    ...(options.settings.provider.modelsPath !== undefined ? { modelsPath: options.settings.provider.modelsPath } : {}),
+    ...(apiKey !== undefined ? { apiKey } : {}),
+    ...(options.settings.provider.authHeader !== undefined ? { authHeader: options.settings.provider.authHeader } : {}),
+    ...(options.settings.provider.transport !== undefined ? { transport: options.settings.provider.transport } : {}),
+    ...(options.settings.provider.rustReqwestCommand !== undefined ? { rustReqwestCommand: options.settings.provider.rustReqwestCommand } : {}),
+    ...(options.settings.provider.rustReqwestArgs !== undefined ? { rustReqwestArgs: options.settings.provider.rustReqwestArgs } : {}),
+    ...(options.settings.provider.rustReqwestCwd !== undefined ? { rustReqwestCwd: options.settings.provider.rustReqwestCwd } : {}),
+    ...(options.fetch !== undefined ? { fetch: options.fetch } : {})
+  };
+  const remoteModels = await listOpenAICompatibleModels(modelsOpts);
   const remoteProfiles = remoteModels.map((model) =>
     profileFromRemoteModel(
       {
         id: model.id,
         name: model.id,
-        vendor: model.ownedBy
+        ...(model.ownedBy !== undefined ? { vendor: model.ownedBy as string } : {})
       },
       options.settings.provider.id
     )
@@ -189,24 +184,24 @@ export async function toProviderOptions(
   const apiKey = await resolveProviderApiKey(provider, apiKeyOverride);
   const maxTokens = provider.maxTokens ?? Math.min(provider.model.maxOutputTokens, requestMaxOutputTokens ?? provider.model.maxOutputTokens);
   return {
-    id: provider.id,
+    ...(provider.id !== undefined ? { id: provider.id } : {}),
     baseUrl: provider.baseUrl,
-    apiKey,
+    ...(apiKey !== undefined ? { apiKey } : {}),
     model: provider.model.id,
-    endpoint: provider.endpoint,
-    authHeader: provider.authHeader,
-    maxTokensField: provider.maxTokensField,
-    reasoningEffort: provider.reasoningEffort,
-    reasoningEffortFormat: provider.reasoningEffortFormat,
-    stream: provider.stream,
-    diagnostics: provider.diagnostics,
-    transport: provider.transport,
-    rustReqwestCommand: provider.rustReqwestCommand,
-    rustReqwestArgs: provider.rustReqwestArgs,
-    rustReqwestCwd: provider.rustReqwestCwd,
-    topP: provider.model.defaultTopP,
-    temperature: provider.model.defaultTemperature,
-    maxTokens,
+    ...(provider.endpoint !== undefined ? { endpoint: provider.endpoint } : {}),
+    ...(provider.authHeader !== undefined ? { authHeader: provider.authHeader } : {}),
+    ...(provider.maxTokensField !== undefined ? { maxTokensField: provider.maxTokensField } : {}),
+    ...(provider.reasoningEffort !== undefined ? { reasoningEffort: provider.reasoningEffort } : {}),
+    ...(provider.reasoningEffortFormat !== undefined ? { reasoningEffortFormat: provider.reasoningEffortFormat } : {}),
+    ...(provider.stream !== undefined ? { stream: provider.stream } : {}),
+    ...(provider.diagnostics !== undefined ? { diagnostics: provider.diagnostics } : {}),
+    ...(provider.transport !== undefined ? { transport: provider.transport } : {}),
+    ...(provider.rustReqwestCommand !== undefined ? { rustReqwestCommand: provider.rustReqwestCommand } : {}),
+    ...(provider.rustReqwestArgs !== undefined ? { rustReqwestArgs: provider.rustReqwestArgs } : {}),
+    ...(provider.rustReqwestCwd !== undefined ? { rustReqwestCwd: provider.rustReqwestCwd } : {}),
+    ...(provider.model.defaultTopP !== undefined ? { topP: provider.model.defaultTopP } : {}),
+    ...(provider.model.defaultTemperature !== undefined ? { temperature: provider.model.defaultTemperature } : {}),
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
     requestTimeoutMs: 120_000,
     firstByteTimeoutMs: 60_000,
     streamIdleTimeoutMs: 180_000,
@@ -243,12 +238,14 @@ function resolveRelativeProviderPaths(
 ): WorkbenchRuntimeSettingsConfig {
   const provider = config.provider;
   if (!provider) return config;
+  const resolvedApiKeyFile = provider.apiKeyFile !== undefined ? resolveOptionalPath(provider.apiKeyFile, baseDir) : undefined;
+  const resolvedRustReqwestCwd = provider.rustReqwestCwd !== undefined ? resolveOptionalPath(provider.rustReqwestCwd, baseDir) : undefined;
   return {
     ...config,
     provider: {
       ...provider,
-      apiKeyFile: resolveOptionalPath(provider.apiKeyFile, baseDir),
-      rustReqwestCwd: resolveOptionalPath(provider.rustReqwestCwd, baseDir)
+      ...(resolvedApiKeyFile !== undefined ? { apiKeyFile: resolvedApiKeyFile } : {}),
+      ...(resolvedRustReqwestCwd !== undefined ? { rustReqwestCwd: resolvedRustReqwestCwd } : {})
     }
   };
 }

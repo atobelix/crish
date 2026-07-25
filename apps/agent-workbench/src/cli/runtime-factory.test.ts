@@ -31,7 +31,13 @@ describe("workbench runtime factory", () => {
     const runtime = await createWorkbenchRuntime({
       cwd: process.cwd(),
       settings: createDefaultWorkbenchSettings(),
-      maxTurns: 1
+      maxTurns: 1,
+      configPath: undefined,
+      provider: undefined,
+      sessionPath: undefined,
+      apiKey: undefined,
+      resumeSession: undefined,
+      permissionPolicy: undefined
     });
 
     for await (const _event of runtime.runtime.run("hi")) {
@@ -65,7 +71,13 @@ describe("workbench runtime factory", () => {
           maxTokens: 12_345
         }
       },
-      maxTurns: 1
+      maxTurns: 1,
+      configPath: undefined,
+      provider: undefined,
+      sessionPath: undefined,
+      apiKey: undefined,
+      resumeSession: undefined,
+      permissionPolicy: undefined
     });
 
     for await (const _event of runtime.runtime.run("hi")) {
@@ -90,7 +102,12 @@ describe("workbench runtime factory", () => {
       cwd: process.cwd(),
       settings: createDefaultWorkbenchSettings(),
       provider,
-      maxTurns: 1
+      maxTurns: 1,
+      configPath: undefined,
+      sessionPath: undefined,
+      apiKey: undefined,
+      resumeSession: undefined,
+      permissionPolicy: undefined
     });
 
     for await (const _event of runtime.runtime.run("hi")) {
@@ -119,7 +136,12 @@ describe("workbench runtime factory", () => {
       cwd: process.cwd(),
       settings,
       provider,
-      maxTurns: 1
+      maxTurns: 1,
+      configPath: undefined,
+      sessionPath: undefined,
+      apiKey: undefined,
+      resumeSession: undefined,
+      permissionPolicy: undefined
     });
     const options = (runtime.runtime as unknown as { options: { contextCompression?: unknown } }).options;
 
@@ -153,7 +175,13 @@ describe("workbench runtime factory", () => {
           reasoningEffortFormat: "responses"
         }
       },
-      maxTurns: 1
+      maxTurns: 1,
+      configPath: undefined,
+      provider: undefined,
+      sessionPath: undefined,
+      apiKey: undefined,
+      resumeSession: undefined,
+      permissionPolicy: undefined
     });
 
     for await (const _event of runtime.runtime.run("hi")) {
@@ -190,10 +218,10 @@ describe("workbench runtime factory", () => {
           ...settings.provider,
           baseUrl: "https://api.crish.me",
           apiKey: "test-key",
-          apiKeyEnv: undefined,
           modelsPath: "/models"
         }
       },
+      apiKey: undefined,
       fetch: fetchMock
     });
 
@@ -216,10 +244,10 @@ describe("workbench runtime factory", () => {
         provider: {
           ...settings.provider,
           baseUrl: "https://api.crish.me",
-          apiKey: "test-key",
-          apiKeyEnv: undefined
+          apiKey: "test-key"
         }
       },
+      apiKey: undefined,
       fetch: async () =>
         new Response(JSON.stringify({ data: [{ id: "remote-only-model", owned_by: "crish" }] }), {
           headers: { "content-type": "application/json" }

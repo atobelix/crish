@@ -73,7 +73,7 @@ function isSafeHref(url: string): boolean {
   for (const t of variants) {
     if (hasEmbeddedUrlWhitespace(t)) return false;
   }
-  const primary = variants[0];
+  const primary = variants[0]!;
   if (primary.startsWith('#')) return true;
   for (const t of variants) {
     if (/^https?:\/\//i.test(t) || /^mailto:/i.test(t)) return true;
@@ -177,7 +177,7 @@ function linkDestinationUrl(raw: string): string {
   }
   // url "title" / url 'title'
   const titled = dest.match(/^(\S+)\s+["'][\s\S]*["']\s*$/);
-  if (titled) return titled[1];
+  if (titled) return titled[1] ?? dest;
   // 无 title：整段（可含 alert(1) 的括号）视为 URL，仅在空白处截断首 token
   if (!/\s/.test(dest)) return dest;
   return dest.split(/\s+/)[0] || dest;
@@ -285,15 +285,15 @@ function extractTables(text: string): { text: string; tables: string[] } {
     // 需要：表头行 + 分隔行
     if (
       i + 1 < lines.length &&
-      isTableRowLine(lines[i]) &&
-      isTableSepLine(lines[i + 1])
+      isTableRowLine(lines[i]!) &&
+      isTableSepLine(lines[i + 1]!)
     ) {
-      const header = splitTableCells(lines[i]);
-      const rawAligns = parseTableAlignments(lines[i + 1]);
+      const header = splitTableCells(lines[i]!);
+      const rawAligns = parseTableAlignments(lines[i + 1]!);
       i += 2;
       const rows: string[][] = [];
-      while (i < lines.length && isTableRowLine(lines[i])) {
-        rows.push(splitTableCells(lines[i]));
+      while (i < lines.length && isTableRowLine(lines[i]!)) {
+        rows.push(splitTableCells(lines[i]!));
         i += 1;
       }
       // 对齐列数；单元格 escape 后再套行内格式 + CJK 断行（表格在列表解析后才还原）
@@ -326,12 +326,12 @@ function extractTables(text: string): { text: string; tables: string[] } {
       tables.push(html);
       out.push(`%%TABLE${idx}%%`);
       // 表格后补空行，方便段落切分
-      if (i < lines.length && lines[i].trim() !== '') {
+      if (i < lines.length && lines[i]!.trim() !== '') {
         // keep going
       }
       continue;
     }
-    out.push(lines[i]);
+    out.push(lines[i]!);
     i += 1;
   }
 
@@ -405,7 +405,7 @@ type MatchedListItem = {
 function matchListItem(line: string): MatchedListItem | null {
   const ul = line.match(RE_UL_ITEM);
   if (ul) {
-    const indent = visualIndent(ul[1]);
+    const indent = visualIndent(ul[1]!);
     const content = ul[4] ?? '';
     if (ul[3] !== undefined) {
       return {
@@ -419,9 +419,9 @@ function matchListItem(line: string): MatchedListItem | null {
   }
   const ol = line.match(RE_OL_ITEM);
   if (ol) {
-    const n = parseInt(ol[2], 10);
+    const n = parseInt(ol[2]!, 10);
     return {
-      indent: visualIndent(ol[1]),
+      indent: visualIndent(ol[1]!),
       kind: 'ol',
       content: ol[3] ?? '',
       olStart: Number.isFinite(n) && n > 0 ? n : 1,
@@ -435,7 +435,7 @@ function isIndentedContinuation(line: string, baseIndent: number): boolean {
   // 续行：视觉缩进严格大于列表基线（Tab 按 4 列展开）
   const m = line.match(/^(\s+)/);
   if (!m) return false;
-  return visualIndent(m[1]) > baseIndent;
+  return visualIndent(m[1] ?? '') > baseIndent;
 }
 
 function renderListItemHtml(
@@ -465,9 +465,9 @@ function processListBlocks(html: string): string {
   let i = 0;
 
   while (i < lines.length) {
-    const head = matchListItem(lines[i]);
+    const head = matchListItem(lines[i]!);
     if (!head) {
-      out.push(lines[i]);
+      out.push(lines[i]!);
       i += 1;
       continue;
     }
@@ -485,31 +485,31 @@ function processListBlocks(html: string): string {
     let cur: Item = {
       kind: head.kind,
       content: head.content,
-      taskChecked: head.taskChecked,
       indent: head.indent,
       children: [],
-      olStart: head.olStart,
+      ...(head.taskChecked !== undefined && { taskChecked: head.taskChecked }),
+      ...(head.olStart !== undefined && { olStart: head.olStart }),
     };
     const baseIndent = head.indent;
     i += 1;
 
     while (i < lines.length) {
-      const line = lines[i];
+      const line = lines[i]!;
       const trimmed = line.trim();
 
       if (!trimmed) {
         // 空行：若后面仍是列表项或续行，视为松散列表内部空白
         let j = i + 1;
-        while (j < lines.length && !lines[j].trim()) j += 1;
+        while (j < lines.length && !lines[j]!.trim()) j += 1;
         if (j >= lines.length) break;
-        const nextItem = matchListItem(lines[j]);
+        const nextItem = matchListItem(lines[j]!);
         if (nextItem && nextItem.indent <= baseIndent + 8) {
           i = j;
           continue;
         }
-        if (isIndentedContinuation(lines[j], baseIndent)) {
+        if (isIndentedContinuation(lines[j]!, baseIndent)) {
           // 空行 + 续段 → 项内换行
-          cur.content += `<br />${lines[j].trim()}`;
+          cur.content += `<br />${lines[j]!.trim()}`;
           i = j + 1;
           continue;
         }
@@ -524,10 +524,10 @@ function processListBlocks(html: string): string {
           cur = {
             kind: item.kind,
             content: item.content,
-            taskChecked: item.taskChecked,
             indent: item.indent,
             children: [],
-            olStart: item.olStart,
+            ...(item.taskChecked !== undefined && { taskChecked: item.taskChecked }),
+            ...(item.olStart !== undefined && { olStart: item.olStart }),
           };
           i += 1;
           continue;
@@ -537,14 +537,14 @@ function processListBlocks(html: string): string {
           const node: Item = {
             kind: item.kind,
             content: item.content,
-            taskChecked: item.taskChecked,
             indent: item.indent,
             children: [],
-            olStart: item.olStart,
+            ...(item.taskChecked !== undefined && { taskChecked: item.taskChecked }),
+            ...(item.olStart !== undefined && { olStart: item.olStart }),
           };
           let parent: Item = cur;
           while (parent.children.length) {
-            const last = parent.children[parent.children.length - 1];
+            const last = parent.children[parent.children.length - 1]!;
             if (item.indent >= last.indent + 2) {
               parent = last;
             } else {
@@ -660,11 +660,7 @@ function processListBlocks(html: string): string {
 
 /** fence info string → 语言 id（首 token；c++ 等别名归一） */
 function langFromFenceInfo(info: string): string {
-  const raw = String(info || '')
-    .trim()
-    .split(/\s+/)[0]
-    .replace(/^language-/, '')
-    .replace(/^\./, '');
+  const raw = (String(info || '').trim().split(/\s+/)[0] ?? '').replace(/^language-/, '').replace(/^\./, '');
   if (!raw) return '';
   const lower = raw.toLowerCase();
   const aliases: Record<string, string> = {

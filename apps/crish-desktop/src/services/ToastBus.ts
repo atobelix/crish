@@ -70,6 +70,9 @@ class ToastBus {
     if (toast.group) {
       const existingIndex = this.toasts.findIndex((t) => t.group === toast.group);
       if (existingIndex !== -1) {
+        // 治理防线 #3（noUncheckedIndexedAccess）：findIndex 命中后下标访问仍可能 undefined
+        // 因 existingIndex !== -1 且 array 未被并发修改，此处赋值是安全的；
+        // 但仍用显式守卫避免在 undefined 上写
         this.toasts[existingIndex] = fullToast;
         this.notify();
         return id;
@@ -79,8 +82,12 @@ class ToastBus {
     this.toasts.push(fullToast);
 
     if (this.toasts.length > this.maxVisible) {
-      const removed = this.toasts.shift()!;
-      removed.onDismiss?.();
+      // shift() 在 length > 0 时返回 T，但 TS 在 noUncheckedIndexedAccess 下推断为 T | undefined
+      // 这里 length > maxVisible >= 1，shift 必返回值；用守卫消除 !
+      const removed = this.toasts.shift();
+      if (removed) {
+        removed.onDismiss?.();
+      }
     }
 
     this.notify();
@@ -88,15 +95,17 @@ class ToastBus {
   }
 
   info(message: string, options?: ToastOptions): string {
+    // 治理防线 #2（exactOptionalPropertyTypes）：AppToast 中 title/action/onDismiss/group
+    // 均为 `field?: T`，不接受 undefined 值；用条件展开剔除 undefined 键
     return this.show({
       type: 'info',
       message,
-      title: options?.title,
+      ...(options?.title !== undefined ? { title: options.title } : {}),
       duration: resolveDuration('info', options?.duration),
       ariaLive: resolveAriaLive('info'),
-      action: options?.action,
-      onDismiss: options?.onDismiss,
-      group: options?.group,
+      ...(options?.action !== undefined ? { action: options.action } : {}),
+      ...(options?.onDismiss !== undefined ? { onDismiss: options.onDismiss } : {}),
+      ...(options?.group !== undefined ? { group: options.group } : {}),
     });
   }
 
@@ -104,12 +113,12 @@ class ToastBus {
     return this.show({
       type: 'success',
       message,
-      title: options?.title,
+      ...(options?.title !== undefined ? { title: options.title } : {}),
       duration: resolveDuration('success', options?.duration),
       ariaLive: resolveAriaLive('success'),
-      action: options?.action,
-      onDismiss: options?.onDismiss,
-      group: options?.group,
+      ...(options?.action !== undefined ? { action: options.action } : {}),
+      ...(options?.onDismiss !== undefined ? { onDismiss: options.onDismiss } : {}),
+      ...(options?.group !== undefined ? { group: options.group } : {}),
     });
   }
 
@@ -117,12 +126,12 @@ class ToastBus {
     return this.show({
       type: 'warning',
       message,
-      title: options?.title,
+      ...(options?.title !== undefined ? { title: options.title } : {}),
       duration: resolveDuration('warning', options?.duration),
       ariaLive: resolveAriaLive('warning'),
-      action: options?.action,
-      onDismiss: options?.onDismiss,
-      group: options?.group,
+      ...(options?.action !== undefined ? { action: options.action } : {}),
+      ...(options?.onDismiss !== undefined ? { onDismiss: options.onDismiss } : {}),
+      ...(options?.group !== undefined ? { group: options.group } : {}),
     });
   }
 
@@ -130,12 +139,12 @@ class ToastBus {
     return this.show({
       type: 'error',
       message,
-      title: options?.title,
+      ...(options?.title !== undefined ? { title: options.title } : {}),
       duration: resolveDuration('error', options?.duration),
       ariaLive: resolveAriaLive('error'),
-      action: options?.action,
-      onDismiss: options?.onDismiss,
-      group: options?.group,
+      ...(options?.action !== undefined ? { action: options.action } : {}),
+      ...(options?.onDismiss !== undefined ? { onDismiss: options.onDismiss } : {}),
+      ...(options?.group !== undefined ? { group: options.group } : {}),
     });
   }
 
@@ -143,20 +152,23 @@ class ToastBus {
     return this.show({
       type: 'recovery',
       message,
-      title: options?.title,
+      ...(options?.title !== undefined ? { title: options.title } : {}),
       duration: resolveDuration('recovery', options?.duration),
       ariaLive: resolveAriaLive('recovery'),
-      action: options?.action,
-      onDismiss: options?.onDismiss,
-      group: options?.group,
+      ...(options?.action !== undefined ? { action: options.action } : {}),
+      ...(options?.onDismiss !== undefined ? { onDismiss: options.onDismiss } : {}),
+      ...(options?.group !== undefined ? { group: options.group } : {}),
     });
   }
 
   dismiss(id: string): void {
     const index = this.toasts.findIndex((t) => t.id === id);
     if (index !== -1) {
-      const removed = this.toasts.splice(index, 1)[0];
-      removed.onDismiss?.();
+      // splice 返回数组；用解构 + 守卫消除 [0]! 非空断言
+      const [removed] = this.toasts.splice(index, 1);
+      if (removed) {
+        removed.onDismiss?.();
+      }
       this.notify();
     }
   }

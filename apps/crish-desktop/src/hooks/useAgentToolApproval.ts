@@ -3,6 +3,14 @@
  * 与主对话 ChatCard 同路径——乐观摘 pending、白名单 remember、busy 防双点。
  * 二次确认 UI 在 ApprovalAskCard（ChatToolStack 已挂载）；本 hook 只做决定落地。
  * deny/allow send 失败：回滚或标 error + 可选 toast（与 ChatCard 对称）。
+ *
+ * 治理防线 #33（DRY）：原实现绕过 action 层、直接 useLayoutStore.setState
+ * 修改 agent toolCall（含「残留 pending 防御」扫描其他消息），
+ * 现改走 storeAccess.patchAgentTool → sessionAction.patchAgentTool 纯函数路径：
+ *   - 类型安全：sanitizeToolCallUpdates + applyMessageToolCallPatch 消除类型逃逸
+ *   - 单一职责：终态后忽略 status 回退逻辑集中在 sanitizeToolCallUpdates
+ *   - 不再扫描「同 toolId 残留 pending」：daemon 协议保证 toolId 唯一，
+ *     若出现重复是 daemon bug，应在 daemonChatBridge 修复而非在视图层兜底
  */
 import { useCallback, useState } from 'react';
 import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
@@ -12,8 +20,8 @@ import {
   addCommandPermission,
   getSessionAgent,
   getSessionById,
+  patchAgentTool,
 } from '../api/storeAccess';
-import { useLayoutStore } from '../store/layoutStore';
 import type { MessageToolCallStatus } from '../store/types';
 
 function findAgentTool(
@@ -29,40 +37,6 @@ function findAgentTool(
   const m = ag?.messages?.find((x) => x.id === msgId);
   const t = m?.toolCalls?.find((x) => x.id === toolId);
   return { sess, ag, m, t };
-}
-
-function patchAgentTool(
-  parentSessionId: string,
-  agentId: string,
-  msgId: string,
-  toolId: string,
-  status: MessageToolCallStatus,
-  output: string
-) {
-  // agent 消息仍走 layout immer setState（session actions 尚无专用 patch agent tool）
-  useLayoutStore.setState((state) => {
-    const sess =
-      state.sessionsById[parentSessionId] ||
-      state.sessions.find((s) => s.id === parentSessionId);
-    const ag = sess?.agents?.find((a) => a.id === agentId);
-    const m = ag?.messages?.find((x) => x.id === msgId);
-    const t = m?.toolCalls?.find((x) => x.id === toolId);
-    if (t) {
-      t.status = status;
-      t.output = output;
-    }
-    // 同 toolId 残留 pending（防御）；回滚时勿误改其它消息终态
-    for (const other of ag?.messages || []) {
-      if (other.id === msgId) continue;
-      const ot = other.toolCalls?.find(
-        (x) => x.id === toolId && x.status === 'pending_approval'
-      );
-      if (ot) {
-        ot.status = status;
-        ot.output = output;
-      }
-    }
-  });
 }
 
 export type AgentApprovalHandlers = {
@@ -96,24 +70,18 @@ export function useAgentToolApproval(
         );
         if (prefix) addCommandPermission(prefix);
       }
-      patchAgentTool(
-        parentSessionId,
-        agentId,
-        msgId,
-        toolId,
-        'running',
-        '执行中…'
-      );
+      // 乐观标 running；send 失败回滚 error
+      // 治理防线 #33：走 patchAgentTool action，复用 sanitizeToolCallUpdates 终态守卫
+      patchAgentTool(parentSessionId, agentId, toolId, {
+        status: 'running' as MessageToolCallStatus,
+        output: '执行中…',
+      });
       void daemonApproveTool(toolId)
         .catch(() => {
-          patchAgentTool(
-            parentSessionId,
-            agentId,
-            msgId,
-            toolId,
-            'error',
-            '批准失败'
-          );
+          patchAgentTool(parentSessionId, agentId, toolId, {
+            status: 'error' as MessageToolCallStatus,
+            output: '批准失败',
+          });
           onShowToast?.('批准失败，请重试');
         })
         .finally(() => {
@@ -128,24 +96,16 @@ export function useAgentToolApproval(
       if (!parentSessionId || !agentId || !toolId) return;
       setApprovalBusy(true);
       // 乐观标已拒绝；send 失败回滚 pending_approval（与 ChatCard 对称）
-      patchAgentTool(
-        parentSessionId,
-        agentId,
-        msgId,
-        toolId,
-        'error',
-        '已拒绝'
-      );
+      patchAgentTool(parentSessionId, agentId, toolId, {
+        status: 'error' as MessageToolCallStatus,
+        output: '已拒绝',
+      });
       void daemonDenyTool(toolId)
         .catch(() => {
-          patchAgentTool(
-            parentSessionId,
-            agentId,
-            msgId,
-            toolId,
-            'pending_approval',
-            '拒绝未送达'
-          );
+          patchAgentTool(parentSessionId, agentId, toolId, {
+            status: 'pending_approval' as MessageToolCallStatus,
+            output: '拒绝未送达',
+          });
           onShowToast?.('拒绝未送达，请重试');
         })
         .finally(() => {

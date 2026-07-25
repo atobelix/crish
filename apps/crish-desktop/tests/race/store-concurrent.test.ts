@@ -10,7 +10,7 @@ describe('Store Race Conditions', () => {
 
   it('handles 50 concurrent mutations without data loss', async () => {
     const mutations = Array.from({ length: 50 }, (_, i) => 
-      () => useLayoutStore.setState(s => ({ activeWorkspaceIndex: i % 3 }))
+      () => useLayoutStore.setState((s: any) => { s.activeWorkspaceIndex = i % 3; })
     );
     
     await Promise.all(mutations.map(fn => Promise.resolve().then(fn)));
@@ -23,12 +23,15 @@ describe('Store Race Conditions', () => {
   it('handles concurrent session creation and deletion', async () => {
     const ops: (() => void)[] = [];
     for (let i = 0; i < 20; i++) {
-      ops.push(() => useSessionStore.setState(s => ({
-        sessions: [...s.sessions, { id: `sess-${i}`, title: `Session ${i}`, messages: [], agents: [] } as any]
-      })));
-      ops.push(() => useSessionStore.setState(s => ({
-        sessions: s.sessions.filter(x => x.id !== `sess-${i}`)
-      })));
+      ops.push(() => useSessionStore.setState((s: any) => {
+        if (!Array.isArray(s.sessions)) s.sessions = [];
+        s.sessions.push({ id: `sess-${i}`, title: `Session ${i}`, messages: [], agents: [] });
+      }));
+      ops.push(() => useSessionStore.setState((s: any) => {
+        if (Array.isArray(s.sessions)) {
+          s.sessions = s.sessions.filter((x: any) => x.id !== `sess-${i}`);
+        }
+      }));
     }
     
     await Promise.all(ops.map(fn => Promise.resolve().then(fn)));

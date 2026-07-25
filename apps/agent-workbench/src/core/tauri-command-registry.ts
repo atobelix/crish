@@ -462,7 +462,7 @@ export function extractRegisteredTauriCommands(source: string): string[] {
       const commandPath = part.trim();
       if (!commandPath) continue;
       const match = commandPath.match(/(?:^|::)([A-Za-z_][A-Za-z0-9_]*)$/);
-      if (match) commands.add(match[1]);
+      if (match) commands.add(match[1] as string);
     }
   }
 
@@ -563,7 +563,7 @@ export function createBackendNotWiredResult(command: string): BackendNotWiredRes
 }
 
 export function createBackendNotWiredArrayResult<T>(command: string): BackendNotWiredArrayResult<T> {
-  return Object.assign([] as T[], createBackendNotWiredResult(command));
+  return Object.assign([] as unknown as T[], createBackendNotWiredResult(command));
 }
 
 export function createBackendNotWiredTextResult(command: string): BackendNotWiredTextResult {
@@ -628,7 +628,7 @@ export function createBackendDiagnosticArrayResult<T>(
   cause: unknown,
   options?: { feature?: string; message?: string }
 ): BackendDiagnosticArrayResult<T> {
-  return Object.assign([] as T[], createBackendDiagnosticResult(command, cause, options));
+  return Object.assign([] as unknown as T[], createBackendDiagnosticResult(command, cause, options));
 }
 
 export function createBackendDiagnosticTextResult(
@@ -651,7 +651,7 @@ export function isBackendDiagnosticResult(value: unknown): value is BackendDiagn
   );
 }
 
-export function getBridgeViewStatus(value: unknown, command?: string): BridgeViewStatus {
+export function getBridgeViewStatus(value: unknown, command: string | undefined): BridgeViewStatus {
   if (isBackendDiagnosticResult(value)) {
     return {
       status: value.diagnostic.code,
@@ -676,7 +676,7 @@ export function getBridgeViewStatus(value: unknown, command?: string): BridgeVie
     status: Array.isArray(value) && value.length === 0 ? "empty" : "ok",
     ok: true,
     empty: Array.isArray(value) && value.length === 0,
-    command,
+    ...(command !== undefined ? { command } : {}),
   };
 }
 
@@ -753,12 +753,6 @@ export function isBackendNotWiredError(value: unknown): value is BackendNotWired
   );
 }
 
-function readGenerateHandlerBlock(source: string): string | null {
-  const blocks = readAllGenerateHandlerBlocks(source);
-  if (blocks.length === 0) return null;
-  return blocks.join(",\n");
-}
-
 function readAllGenerateHandlerBlocks(source: string): string[] {
   const marker = "generate_handler!";
   const blocks: string[] = [];
@@ -797,7 +791,7 @@ function extractMacroDefinitions(source: string): Map<string, string> {
   const macroPattern = /macro_rules!\s+(\w+)\s*\{[^}]*\(\)\s*=>\s*\{([^}]*)\}/g;
   let match: RegExpExecArray | null;
   while ((match = macroPattern.exec(source)) !== null) {
-    macros.set(match[1], match[2]);
+    macros.set(match[1] as string, match[2] as string);
   }
   return macros;
 }

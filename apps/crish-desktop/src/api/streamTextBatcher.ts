@@ -16,27 +16,27 @@ export type StreamValueFlush<T> = (key: string, value: T) => void;
 
 export type StreamValueBatcherOptions<T> = {
   /** 合并间隔（ms），默认 48；≤0 表示 push 后立即 flush（仍会先合并同 tick 内多次 push 需配合手动 flushNow） */
-  intervalMs?: number;
+  intervalMs?: number | undefined;
   /** 定时器工厂（可测） */
-  setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
-  clearTimer?: (id: ReturnType<typeof setTimeout>) => void;
+  setTimer?: ((fn: () => void, ms: number) => ReturnType<typeof setTimeout>) | undefined;
+  clearTimer?: ((id: ReturnType<typeof setTimeout>) => void) | undefined;
   /** 同 key 再次 push 时合并；默认覆盖为最新值 */
-  merge?: (prev: T, next: T) => T;
+  merge?: ((prev: T, next: T) => T) | undefined;
   /**
    * pending key 数达到此上限时强制 flushNow，防止 key 膨胀拖延迟。
    * 未设置则不限制。
    */
-  maxPendingKeys?: number;
+  maxPendingKeys?: number | undefined;
   /**
    * pending 累计 size 达到此上限时强制 flushNow。
    * size 由 estimateSize 计算；未设置则不限制。
    */
-  maxBufferedSize?: number;
+  maxBufferedSize?: number | undefined;
   /**
    * 单条 pending 的 size 估算；用于 maxBufferedSize。
    * 默认：string 用 length，其余按 1。
    */
-  estimateSize?: (value: T) => number;
+  estimateSize?: ((value: T) => number) | undefined;
 };
 
 /**
@@ -54,7 +54,7 @@ export class StreamValueBatcher<T> {
   private readonly setTimer: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
   private readonly clearTimer: (id: ReturnType<typeof setTimeout>) => void;
   private readonly onFlush: StreamValueFlush<T>;
-  private readonly merge?: (prev: T, next: T) => T;
+  private readonly merge?: ((prev: T, next: T) => T) | undefined;
   private readonly maxPendingKeys: number | null;
   private readonly maxBufferedSize: number | null;
   private readonly estimateSize: (value: T) => number;

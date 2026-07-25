@@ -200,9 +200,9 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
     }, [activeSessionId, setMainSurface]);
 
     const applyResolvedModelLabel = (engineHintModel?: string | null) => {
-      const resolved = resolvePreferredModelSelection({
-        engineModel: engineHintModel,
-      });
+      const resolved = resolvePreferredModelSelection(
+        engineHintModel !== undefined ? { engineModel: engineHintModel } : {},
+      );
       if (resolved) {
         setEngineModel(resolved.model);
         setActiveProfileId(resolved.profileId);
@@ -250,8 +250,8 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
 
     /** 本地优先就绪态：与 FirstRunWizard / providerProfiles 共用 */
     const setupStatus = getProviderSetupStatus({
-      engineOk: engineHint?.ok,
-      engineHasApiKey: engineHint?.hasApiKey,
+      ...(engineHint?.ok !== undefined ? { engineOk: engineHint.ok } : {}),
+      ...(engineHint?.hasApiKey !== undefined ? { engineHasApiKey: engineHint.hasApiKey } : {}),
       engineModel: engineHint?.model ?? engineModel,
     });
     const needsKeySetup = setupStatus.needsKeySetup;
@@ -445,7 +445,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
     }, []);
 
     const handlePasteImage = useCallback(
-      async (e: React.ClipboardEvent<HTMLElement>) => {
+      async (e: React.ClipboardEvent) => {
         const items = e.clipboardData?.items;
         if (!items?.length) return;
         const imageFiles: File[] = [];
@@ -851,7 +851,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             results.forEach((r, i) => {
               if (r.status === 'rejected') {
                 failCount += 1;
-                const { toolId, msgId } = pairs[i];
+                const { toolId, msgId } = pairs[i]!;
                 updateMessageToolCall(activeSessionId, msgId, toolId, {
                   status: 'error',
                   output: '批准失败',
@@ -903,7 +903,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             results.forEach((r, i) => {
               if (r.status === 'rejected') {
                 failCount += 1;
-                const { toolId, msgId } = pairs[i];
+                const { toolId, msgId } = pairs[i]!;
                 updateMessageToolCall(activeSessionId, msgId, toolId, {
                   status: 'pending_approval',
                   output: '拒绝未送达',
@@ -1043,7 +1043,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
                 }
                 next.push(await blobToImageAttachment(f, f.name));
               } catch {
-                next.push({ name: f.name, mime: f.type || undefined });
+                next.push({ name: f.name, ...(f.type ? { mime: f.type } : {}) });
               }
               continue;
             }

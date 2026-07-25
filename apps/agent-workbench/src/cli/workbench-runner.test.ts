@@ -6,6 +6,7 @@ import { createScriptedProvider, createPermissionPolicy } from "@crish/agent-run
 import { createDefaultWorkbenchSettings } from "../shared/workbench-config";
 import { createWorkbenchRuntime } from "./runtime-factory";
 import { runWorkbenchTask } from "./workbench-runner";
+import type { WorkbenchTaskSnapshot } from "../shared/workbench-contract";
 
 let workspaceRoot = "";
 
@@ -25,20 +26,20 @@ describe("workbench runner", () => {
         { type: "stop", reason: "stop" }
       ]
     ]);
-    const runtime = await createWorkbenchRuntime({
+    const runtime = await createWorkbenchRuntime(runtimeOpts({
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
       permissionPolicy: createPermissionPolicy({ mode: "full-access" })
-    });
+    }));
     const events = [];
     let finalSnapshot;
 
-    for await (const item of runWorkbenchTask({
+    for await (const item of runWorkbenchTask(runnerOpts({
       runtime,
       cwd: workspaceRoot,
       prompt: "生成中文界面检查结果"
-    })) {
+    }))) {
       events.push(item.event);
       finalSnapshot = item.snapshot;
     }
@@ -64,22 +65,22 @@ describe("workbench runner", () => {
         { type: "stop", reason: "tool-call" }
       ]
     ]);
-    const runtime = await createWorkbenchRuntime({
+    const runtime = await createWorkbenchRuntime(runtimeOpts({
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
       maxTurns: 1,
       permissionPolicy: createPermissionPolicy({ mode: "full-access" })
-    });
+    }));
     const events = [];
     let finalSnapshot;
 
-    for await (const item of runWorkbenchTask({
+    for await (const item of runWorkbenchTask(runnerOpts({
       runtime,
       cwd: workspaceRoot,
       prompt: "启动后台检查",
       backgroundDrainTimeoutMs: 2_000
-    })) {
+    }))) {
       events.push(item.event);
       finalSnapshot = item.snapshot;
     }
@@ -119,25 +120,27 @@ describe("workbench runner", () => {
         { type: "stop", reason: "stop", usage: { totalTokens: 10 } }
       ]
     ]);
-    const runtime = await createWorkbenchRuntime({
+    const runtime = await createWorkbenchRuntime(runtimeOpts({
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
       maxTurns: 4,
       permissionPolicy: createPermissionPolicy({ mode: "full-access" })
-    });
+    }));
     const events = [];
     let finalSnapshot;
 
-    for await (const item of runWorkbenchTask({
+    for await (const item of runWorkbenchTask(runnerOpts({
       runtime,
       cwd: workspaceRoot,
       prompt: "\u6d4b\u8bd5\u5355\u6b21\u4efb\u52a1 token \u9884\u7b97",
       runBudget: {
+        enabled: undefined,
+        difficulty: undefined,
         maxTotalTokens: 100,
         warnAtRatio: 0.5
       }
-    })) {
+    }))) {
       events.push(item.event);
       finalSnapshot = item.snapshot;
     }
@@ -175,21 +178,21 @@ describe("workbench runner", () => {
         { type: "stop", reason: "tool-call" }
       ]
     ]);
-    const runtime = await createWorkbenchRuntime({
+    const runtime = await createWorkbenchRuntime(runtimeOpts({
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
       maxTurns: 1,
       permissionPolicy: createPermissionPolicy({ mode: "full-access" })
-    });
+    }));
     const events = [];
     let finalSnapshot;
 
-    for await (const item of runWorkbenchTask({
+    for await (const item of runWorkbenchTask(runnerOpts({
       runtime,
       cwd: workspaceRoot,
       prompt: "\u8fd0\u884c\u547d\u4ee4\u8bca\u65ad"
-    })) {
+    }))) {
       events.push(item.event);
       finalSnapshot = item.snapshot;
     }
@@ -224,21 +227,21 @@ describe("workbench runner", () => {
         { type: "stop", reason: "stop" }
       ]
     ]);
-    const runtime = await createWorkbenchRuntime({
+    const runtime = await createWorkbenchRuntime(runtimeOpts({
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
       maxTurns: 3,
       permissionPolicy: createPermissionPolicy({ mode: "full-access" })
-    });
+    }));
     const events = [];
     let finalSnapshot;
 
-    for await (const item of runWorkbenchTask({
+    for await (const item of runWorkbenchTask(runnerOpts({
       runtime,
       cwd: workspaceRoot,
       prompt: "edit a file"
-    })) {
+    }))) {
       events.push(item.event);
       finalSnapshot = item.snapshot;
     }
@@ -301,20 +304,20 @@ describe("workbench runner", () => {
         { type: "stop", reason: "stop" }
       ]
     ]);
-    const runtime = await createWorkbenchRuntime({
+    const runtime = await createWorkbenchRuntime(runtimeOpts({
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
-      maxTurns: 8,
+      maxTurns: 3,
       permissionPolicy: createPermissionPolicy({ mode: "full-access" })
-    });
-    let finalSnapshot;
+    }));
+    let finalSnapshot: WorkbenchTaskSnapshot | undefined;
 
-    for await (const item of runWorkbenchTask({
+    for await (const item of runWorkbenchTask(runnerOpts({
       runtime,
       cwd: workspaceRoot,
-      prompt: "修改 a.js 并完成检查"
-    })) {
+      prompt: "edit a file"
+    }))) {
       finalSnapshot = item.snapshot;
     }
 
@@ -359,20 +362,20 @@ describe("workbench runner", () => {
         { type: "stop", reason: "stop" }
       ]
     ]);
-    const runtime = await createWorkbenchRuntime({
+    const runtime = await createWorkbenchRuntime(runtimeOpts({
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
       maxTurns: 5,
       permissionPolicy: createPermissionPolicy({ mode: "full-access" })
-    });
+    }));
     let finalSnapshot;
 
-    for await (const item of runWorkbenchTask({
+    for await (const item of runWorkbenchTask(runnerOpts({
       runtime,
       cwd: workspaceRoot,
       prompt: "\u8bf7\u53ea\u8bfb\u68c0\u67e5\u6839\u76ee\u5f55\u548c package.json\uff0c\u4e0d\u4fee\u6539\u6587\u4ef6"
-    })) {
+    }))) {
       finalSnapshot = item.snapshot;
     }
 
@@ -402,20 +405,20 @@ describe("workbench runner", () => {
         { type: "stop", reason: "stop" }
       ]
     ]);
-    const runtime = await createWorkbenchRuntime({
+    const runtime = await createWorkbenchRuntime(runtimeOpts({
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
-      maxTurns: 4,
+      maxTurns: 8,
       permissionPolicy: createPermissionPolicy({ mode: "full-access" })
-    });
+    }));
     let finalSnapshot;
 
-    for await (const item of runWorkbenchTask({
+    for await (const item of runWorkbenchTask(runnerOpts({
       runtime,
       cwd: workspaceRoot,
-      prompt: "运行一个普通命令"
-    })) {
+      prompt: "修改 a.js 并完成检查"
+    }))) {
       finalSnapshot = item.snapshot;
     }
 
@@ -471,21 +474,21 @@ describe("workbench runner", () => {
         { type: "stop", reason: "stop" }
       ]
     ]);
-    const runtime = await createWorkbenchRuntime({
+    const runtime = await createWorkbenchRuntime(runtimeOpts({
       cwd: workspaceRoot,
       settings: testSettings(),
       provider,
       maxTurns: 6,
       permissionPolicy: createPermissionPolicy({ mode: "full-access" })
-    });
+    }));
     const events = [];
     let finalSnapshot;
 
-    for await (const item of runWorkbenchTask({
+    for await (const item of runWorkbenchTask(runnerOpts({
       runtime,
       cwd: workspaceRoot,
       prompt: "edit then restore a file"
-    })) {
+    }))) {
       events.push(item.event);
       finalSnapshot = item.snapshot;
     }
@@ -503,6 +506,41 @@ describe("workbench runner", () => {
     );
   });
 });
+
+function runtimeOpts(overrides: {
+  cwd: string;
+  settings: ReturnType<typeof testSettings>;
+  provider?: import("@crish/agent-runtime").AgentProvider;
+  maxTurns?: number;
+  permissionPolicy?: import("@crish/agent-runtime").RuntimePermissionPolicy;
+}): import("./runtime-factory").WorkbenchRuntimeFactoryOptions {
+  return {
+    configPath: undefined,
+    sessionPath: undefined,
+    apiKey: undefined,
+    resumeSession: undefined,
+    provider: undefined,
+    maxTurns: undefined,
+    permissionPolicy: undefined,
+    ...overrides
+  };
+}
+
+function runnerOpts(overrides: {
+  runtime: import("./runtime-factory").WorkbenchRuntimeFactoryResult;
+  cwd: string;
+  prompt: string;
+  backgroundDrainTimeoutMs?: number;
+  runBudget?: import("./workbench-runner").WorkbenchRunnerBudgetOptions;
+}): import("./workbench-runner").WorkbenchRunnerOptions {
+  return {
+    mode: undefined,
+    initialSnapshot: undefined,
+    backgroundDrainTimeoutMs: undefined,
+    runBudget: undefined,
+    ...overrides
+  };
+}
 
 function testSettings() {
   const settings = createDefaultWorkbenchSettings();

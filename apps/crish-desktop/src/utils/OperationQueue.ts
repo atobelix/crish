@@ -147,7 +147,7 @@ export class OperationQueue {
    */
   private insertByPriority(queue: PendingOperation[], operation: PendingOperation): void {
     let i = queue.length;
-    while (i > 0 && queue[i - 1].priority < operation.priority) {
+    while (i > 0 && queue[i - 1]!.priority < operation.priority) {
       i--;
     }
     queue.splice(i, 0, operation);

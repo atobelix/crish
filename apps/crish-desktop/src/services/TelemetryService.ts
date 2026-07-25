@@ -6,9 +6,9 @@ export interface TelemetryEntry {
   level: TelemetryLevel;
   module: string;
   message: string;
-  data?: Record<string, unknown>;
-  error?: { message: string; stack?: string; code?: string };
-  sessionId?: string;
+  data?: Record<string, unknown> | undefined;
+  error?: { message: string; stack?: string; code?: string } | undefined;
+  sessionId?: string | undefined;
 }
 
 const MAX_BUFFER = 1000;
@@ -44,13 +44,15 @@ export class TelemetryService {
 
   log(level: TelemetryLevel, module: string, message: string, data?: Record<string, unknown>): void {
     if (!this.enabled) return;
+    // 治理防线 #2（exactOptionalPropertyTypes）：data?: Record<string, unknown>
+    // 不接受 undefined 值，必须用条件展开剔除 undefined 键
     const entry: TelemetryEntry = {
       id: this.generateEntryId(),
       timestamp: performance.now(),
       level,
       module,
       message,
-      data,
+      ...(data !== undefined ? { data } : {}),
       sessionId: this.sessionId,
     };
     this.buffer.push(entry);

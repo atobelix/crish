@@ -36,10 +36,10 @@ function isOpenTool(tc: MessageToolCall): boolean {
 export function shouldShowFollowUpSuggestions(opts: {
   isLastAssistant: boolean;
   isThinkingMsg: boolean;
-  status?: SessionMessage['status'];
-  toolCalls?: readonly MessageToolCall[] | null;
+  status?: SessionMessage['status'] | undefined;
+  toolCalls?: readonly MessageToolCall[] | null | undefined;
   /** 用户手动关闭后隐藏 */
-  dismissed?: boolean;
+  dismissed?: boolean | undefined;
 }): boolean {
   if (opts.dismissed) return false;
   if (!opts.isLastAssistant) return false;

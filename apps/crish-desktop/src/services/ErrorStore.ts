@@ -49,8 +49,12 @@ const MAX_HISTORY = 50;
 function activeErrorsEqual(a: UiError[], b: UiError[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
+    // 治理防线 #3（noUncheckedIndexedAccess）：下标访问返回 T | undefined，
+    // 长度已相等且 i < a.length，但 b[i] 仍可能为 undefined（理论上不会，
+    // 但需要显式守卫避免在 undefined 上访问属性
     const x = a[i];
     const y = b[i];
+    if (!x || !y) return false;
     if (x.id !== y.id) return false;
     if (x.code !== y.code) return false;
     if (x.severity !== y.severity) return false;
@@ -83,7 +87,8 @@ export class ErrorStore {
     const cutoff = Date.now() - 3600000;
     let i = 0;
     while (i < this.errorHistory.length) {
-      if (this.errorHistory[i].resolved && this.errorHistory[i].timestamp < cutoff) {
+      const entry = this.errorHistory[i]!;
+      if (entry.resolved && entry.timestamp < cutoff) {
         this.errorHistory.splice(i, 1);
       } else {
         i++;
@@ -128,12 +133,12 @@ export class ErrorStore {
       module: error.module,
       severity: error.severity,
       message: error.message,
-      technical: error.technical,
       timestamp: Date.now(),
       resolved: false,
-      autoResolve: error.autoResolve,
       reason: classified.reason,
       classified,
+      ...(error.technical !== undefined ? { technical: error.technical } : {}),
+      ...(error.autoResolve !== undefined ? { autoResolve: error.autoResolve } : {}),
     };
 
     this.errorHistory.push(entry);

@@ -483,7 +483,9 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const addFromTemplate = (format: 'openai' | 'anthropic') => {
     const p = createCustomProfile({
       name: format === 'openai' ? 'OpenAI 格式' : 'Anthropic 格式',
-      baseUrl: DEFAULT_PROVIDER_BASE_URLS[format],
+      ...(DEFAULT_PROVIDER_BASE_URLS[format] !== undefined && {
+        baseUrl: DEFAULT_PROVIDER_BASE_URLS[format],
+      }),
       models: [],
     });
     refresh();

@@ -132,7 +132,6 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   /** 额外目录默认折叠，避免空壳占满侧栏 */
   const [extraOpen, setExtraOpen] = useState(false);
 
-  const titleId = useId();
   const listLabelId = useId();
   const createBoxId = useId();
   const createNameId = useId();
@@ -478,7 +477,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     try {
       const r = await createProjectSkill({
         name: createName.trim(),
-        description: createDesc.trim() || undefined,
+        ...(createDesc.trim() ? { description: createDesc.trim() } : {}),
         workspacePath: getWorkspacePath(),
       });
       if (r.ok === false) {
@@ -551,7 +550,6 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   }, [selected, showRaw]);
 
   const selectedSlash = selected ? skillSlashCmd(selected.name) : '';
-  const anyBusy = loading || syncBusy || batchBusy || createBusy || discoverBusy;
   const batchEnableCount = filtered.filter((s) => s.activation !== 'enabled').length;
   const batchDisableCount = filtered.filter((s) => s.activation !== 'disabled').length;
 

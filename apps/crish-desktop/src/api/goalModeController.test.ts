@@ -61,9 +61,9 @@ describe('goalModeController', () => {
   it('parseChecklistTasks reads markdown tasks', () => {
     const tasks = parseChecklistTasks('- [ ] one\n- [x] two\n* [ ] three');
     expect(tasks).toHaveLength(3);
-    expect(tasks[0].done).toBe(false);
-    expect(tasks[1].done).toBe(true);
-    expect(tasks[1].text).toBe('two');
+    expect(tasks![0]!.done).toBe(false);
+    expect(tasks![1]!.done).toBe(true);
+    expect(tasks![1]!.text).toBe('two');
   });
 
   it('parseChecklistTasks drops 本轮总结 noise (TasksCard aligned)', () => {
@@ -841,17 +841,17 @@ describe('goal lifecycle pure helpers', () => {
 
     for (const phase of phases) {
       for (const { name, event } of events) {
-        it(`${phase} × ${name} → ${matrix[phase][name].outcome}`, () => {
+        it(`${phase} × ${name} → ${matrix[phase]![name]!.outcome}`, () => {
           const before = seed(phase);
           const r = transitionGoalLifecycle(before, event);
           const exp = matrix[phase][name];
-          expect(r.outcome).toBe(exp.outcome);
-          if (exp.reason) expect(r.reason).toBe(exp.reason);
-          expect(r.changed).toBe(exp.outcome === 'applied');
+          expect(r.outcome).toBe(exp!.outcome);
+          if (exp!.reason) expect(r.reason).toBe(exp!.reason);
+          expect(r.changed).toBe(exp!.outcome === 'applied');
           // Illegal / noop must not leave residual success+blocked
           if (r.outcome !== 'applied') {
             expect(r.state.completed && r.state.blockedReason).toBeFalsy();
-            if (exp.outcome === 'illegal' || exp.outcome === 'noop') {
+            if (exp!.outcome === 'illegal' || exp!.outcome === 'noop') {
               // No residual mutation on illegal/noop except we compare key exclusivity
               expect(r.state.phase).toBe(before.phase);
             }

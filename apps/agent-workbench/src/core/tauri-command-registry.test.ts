@@ -354,13 +354,13 @@ function readReleaseGenerateHandlerSource(source: string): string {
   if (!match) {
     throw new Error("Could not find macro_rules! register_handlers in main.rs");
   }
-  const macroContent = match[1];
+  const macroContent = match[1] as string;
   // Extract the () => { ... } block
   const branchMatch = macroContent.match(/\(\)\s*=>\s*\{([\s\S]*?)\}\s*;/);
   if (!branchMatch) {
     throw new Error("Could not find () branch in register_handlers macro");
   }
-  return branchMatch[1];
+  return branchMatch[1] as string;
 }
 
 function normalizeLineEndings(source: string): string {
@@ -387,6 +387,9 @@ function providerStatus(readiness: DaemonProviderStatusSnapshot["readiness"]): D
       credentialConfigured: readiness === "ready",
       routeDecision: ["route_a"],
     },
+    lastDiagnostic: undefined,
+    lastProbeOk: undefined,
+    lastProbeAt: undefined,
     updatedAt: timestamp(),
   };
 }

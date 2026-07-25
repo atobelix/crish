@@ -1,5 +1,4 @@
 import type {
-  WorkbenchMode,
   WorkbenchContinuationDecision,
   WorkbenchRunEvent,
   WorkbenchRuntimeStatus,

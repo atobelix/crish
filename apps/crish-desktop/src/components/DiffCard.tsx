@@ -30,13 +30,13 @@ import {
 } from '../api/gitApi';
 import {
   applyFileDiffToDisk,
-  applyFileDiffsToDisk,
   classifyFileDiff,
   formatApplyFailureToast,
 } from '../api/applyFileDiff';
 import { filterPublishableDiffs } from '../api/publishToolDiffs';
 import { collectMessageDiffs } from './ChangeOverviewCard';
 import { SettingsSelect } from './SettingsSelect';
+import { compactObj } from '../utils/compactObj';
 import {
   assistantTurnLabel,
   mergeSessionDiffFiles,
@@ -524,15 +524,17 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
 
       const statusMap = new Map(status.files.map((gf) => [gf.path.replace(/\\/g, '/'), gf]));
 
-      const placeholders = status.files.slice(0, 45).map((gf) => ({
+      const placeholders: FileDiff[] = status.files.slice(0, 45).map((gf): FileDiff => ({
         filePath: gf.path,
         additions: 0,
         deletions: 0,
         changes: [{ type: 'normal' as const, content: `（${gf.status}）加载 diff…` }],
-        staged: gf.staged,
-        unstaged: gf.unstaged,
-        untracked: gf.untracked,
         gitStatus: gf.status,
+        ...compactObj({
+          staged: gf.staged,
+          unstaged: gf.unstaged,
+          untracked: gf.untracked,
+        }),
       }));
       if (!silent) {
         applyFiles(placeholders, 'git');
@@ -542,14 +544,15 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
       const batch = await fetchGitDiff({});
       if (seq !== gitLoadSeqRef.current) return;
 
-      const enrich = (files: FileDiff[]) => files.map((f) => {
+      const enrich = (files: FileDiff[]): FileDiff[] => files.map((f): FileDiff => {
         const key = f.filePath.replace(/\\/g, '/');
         const gf = statusMap.get(key);
         return {
           ...f,
-          staged: gf ? gf.staged : false,
-          unstaged: gf ? gf.unstaged : true,
-          untracked: gf ? gf.untracked : false,
+          // 未在 statusMap 中找到时回退到合理的默认布尔值（避免 undefined 进入 store）
+          staged: gf ? Boolean(gf.staged) : false,
+          unstaged: gf ? Boolean(gf.unstaged) : true,
+          untracked: gf ? Boolean(gf.untracked) : false,
           gitStatus: gf ? gf.status : 'M',
         };
       });
@@ -663,20 +666,20 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     return f;
   };
 
-  const getComputedChanges = (f: FileDiff) => {
+  const getComputedChanges = (f: FileDiff): ComputedChange[] => {
     const target = getFileDiffData(f);
     if (!target) return [];
     let oldLineNum = 0;
     let newLineNum = 0;
-    
-    return target.changes.map((c, globalIdx) => {
+
+    return target.changes.map((c, globalIdx): ComputedChange => {
       let oldLine: number | undefined;
       let newLine: number | undefined;
       const isHeader = c.content.startsWith('@@') && c.type === 'normal';
-      
+
       if (isHeader) {
         const match = c.content.match(/^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
-        if (match) {
+        if (match && match[1] && match[2]) {
           oldLineNum = parseInt(match[1], 10) - 1;
           newLineNum = parseInt(match[2], 10) - 1;
         }
@@ -694,7 +697,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
           newLine = newLineNum;
         }
       }
-      
+
       return {
         change: c,
         globalIdx,
@@ -706,15 +709,16 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   };
 
   /** 🌟 Split View Lines Aligner 🌟 */
-  const getSplitPairs = (f: FileDiff, inputLines?: ReturnType<typeof getComputedChanges>) => {
+  const getSplitPairs = (f: FileDiff, inputLines?: ReturnType<typeof getComputedChanges>): SplitPair[] => {
     const lines = inputLines ?? getComputedChanges(f);
-    const pairs: Array<{
-      left?: typeof lines[0];
-      right?: typeof lines[0];
-    }> = [];
+    const pairs: SplitPair[] = [];
     let i = 0;
     while (i < lines.length) {
       const currentLine = lines[i];
+      if (!currentLine) {
+        i++;
+        continue;
+      }
       if (currentLine.isHeader) {
         i++;
         continue;
@@ -725,11 +729,11 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
           pairs.push({ left: currentLine, right: nextLine });
           i += 2;
         } else {
-          pairs.push({ left: currentLine });
+          pairs.push({ left: currentLine, right: undefined });
           i++;
         }
       } else if (currentLine.change.type === 'addition') {
-        pairs.push({ right: currentLine });
+        pairs.push({ left: undefined, right: currentLine });
         i++;
       } else {
         pairs.push({ left: currentLine, right: currentLine });
@@ -738,32 +742,6 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     }
     return pairs;
   };
-
-  const acceptAll = useCallback(async () => {
-    if (!fileList.length || applyBusy) return;
-    const safe = fileList.filter((f) => classifyFileDiff(f).ok);
-    if (!safe.length) {
-      toastFail('无法安全自动应用，请在编辑器确认');
-      return;
-    }
-    setApplyBusy(true);
-    try {
-      const { failed, results } = await applyFileDiffsToDisk(safe);
-      for (const r of results) {
-        if (r.result.ok) removeDiffFile(r.filePath);
-      }
-      if (failed > 0) {
-        toastFail(formatApplyFailureToast(failed, results));
-      } else {
-        setPanelErr('');
-      }
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      toastFail(detail ? `应用失败：${detail}` : '应用失败');
-    } finally {
-      setApplyBusy(false);
-    }
-  }, [applyBusy, fileList, removeDiffFile, toastFail]);
 
   const clearList = useCallback(() => {
     setDiffFiles([]);
@@ -783,7 +761,9 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
       {
         value: '__all__',
         label: '本会话全部 AI 改动',
-        hint: hasAiTurns ? `${aiTurns.reduce((n, t) => n + t.files.length, 0)} 文件` : undefined,
+        ...(hasAiTurns
+          ? { hint: `${aiTurns.reduce((n, t) => n + t.files.length, 0)} 文件` }
+          : {}),
       },
     ];
     for (const t of aiTurns) {
@@ -819,32 +799,36 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   };
 
   /** 🌟 Collapsible Diff Context Algoritm (Unified View) 🌟 */
-  const getUnifiedRenderItems = (f: FileDiff, inputComputed?: ReturnType<typeof getComputedChanges>) => {
+  const getUnifiedRenderItems = (f: FileDiff, inputComputed?: ReturnType<typeof getComputedChanges>): UnifiedRenderItem[] => {
     const computed = inputComputed ?? getComputedChanges(f);
     const q = diffSearchQuery.trim().toLowerCase();
     const changes = q ? computed.filter((item) => item.change.content.toLowerCase().includes(q)) : computed;
     const total = changes.length;
     const isVisible = new Array(total).fill(false);
-    
+
     if (q) {
       return changes.map((c, i) => ({
         isCollapsedPlaceholder: false as const,
         index: i,
         item: c,
-      })) as UnifiedRenderItem[];
+      }));
     }
 
     const contextCount = 3;
     for (let i = 0; i < total; i++) {
-      const type = changes[i].change.type;
-      const isHeader = changes[i].isHeader;
+      const entry = changes[i];
+      if (!entry) continue;
+      const type = entry.change.type;
+      const isHeader = entry.isHeader;
       if (type === 'addition' || type === 'deletion' || isHeader) {
         isVisible[i] = true;
         for (let j = Math.max(0, i - contextCount); j < i; j++) {
-          if (changes[j].change.type === 'normal') isVisible[j] = true;
+          const cj = changes[j];
+          if (cj && cj.change.type === 'normal') isVisible[j] = true;
         }
         for (let j = i + 1; j <= Math.min(total - 1, i + contextCount); j++) {
-          if (changes[j].change.type === 'normal') isVisible[j] = true;
+          const cj = changes[j];
+          if (cj && cj.change.type === 'normal') isVisible[j] = true;
         }
       }
     }
@@ -865,10 +849,12 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
           });
           collapsedStart = -1;
         }
+        const entry = changes[i];
+        if (!entry) continue;
         renderItems.push({
           isCollapsedPlaceholder: false,
           index: i,
-          item: changes[i],
+          item: entry,
         });
       } else {
         if (collapsedStart === -1) {
@@ -890,7 +876,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   };
 
   /** 🌟 Collapsible Diff Context Algoritm (Split View) 🌟 */
-  const getSplitRenderItems = (f: FileDiff, inputLines?: ReturnType<typeof getComputedChanges>) => {
+  const getSplitRenderItems = (f: FileDiff, inputLines?: ReturnType<typeof getComputedChanges>): SplitRenderItem[] => {
     const pairs = getSplitPairs(f, inputLines);
     const q = diffSearchQuery.trim().toLowerCase();
     if (q) {
@@ -898,7 +884,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
         isCollapsedPlaceholder: false as const,
         index: i,
         pair: p,
-      })) as SplitRenderItem[];
+      }));
     }
 
     const total = pairs.length;
@@ -907,9 +893,10 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     const contextCount = 3;
     for (let i = 0; i < total; i++) {
       const p = pairs[i];
+      if (!p) continue;
       const hasDiff = (p.left && p.left.change.type !== 'normal') || (p.right && p.right.change.type !== 'normal');
       const isHeader = (p.left && p.left.isHeader) || (p.right && p.right.isHeader);
-      
+
       if (hasDiff || isHeader) {
         isVisible[i] = true;
         for (let j = Math.max(0, i - contextCount); j < i; j++) {
@@ -937,10 +924,12 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
           });
           collapsedStart = -1;
         }
+        const pair = pairs[i];
+        if (!pair) continue;
         renderItems.push({
           isCollapsedPlaceholder: false,
           index: i,
-          pair: pairs[i],
+          pair,
         });
       } else {
         if (collapsedStart === -1) {
@@ -1221,7 +1210,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
         <div className={styles.toolbarRow2}>
           {sourceMode === 'session' ? (
             <SettingsSelect
-              className={styles.turnSettingsSelect}
+              {...(styles.turnSettingsSelect !== undefined ? { className: styles.turnSettingsSelect } : {})}
               disabled={busy}
               value={turnKey}
               options={turnOptions}
@@ -1231,7 +1220,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
             <div className={styles.branchSelectWrap}>
               <Lucide.GitBranch size={13} className={styles.branchIcon} aria-hidden />
               <SettingsSelect
-                className={styles.turnSettingsSelect}
+                {...(styles.turnSettingsSelect !== undefined ? { className: styles.turnSettingsSelect } : {})}
                 disabled={busy}
                 value={currentBranch}
                 options={branches.map((b) => ({ value: b, label: b }))}

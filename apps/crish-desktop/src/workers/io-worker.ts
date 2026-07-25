@@ -71,7 +71,7 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
       }
 
       case 'text.encode': {
-        const { text, encoding } = payload as { text: string; encoding?: string };
+        const { text } = payload as { text: string; encoding?: string };
         const encoder = new TextEncoder();
         const bytes = encoder.encode(text).buffer;
         self.postMessage({ id, type: 'success', payload: bytes, transferables: [bytes] } as any);

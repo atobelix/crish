@@ -99,6 +99,17 @@ fn run_workbench_cli_raw(
         return Err(format!("unsupported workbench CLI command: {command}"));
     }
 
+    let gatekeeper = conex_sandbox::gatekeeper::CommandGatekeeper::new();
+    let extra_refs: Vec<&str> = extra_args.iter().map(|s| s.as_str()).collect();
+    if gatekeeper.check_command(command, &extra_refs) == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
+        || extra_args.iter().any(|a| gatekeeper.patterns().is_match(a))
+    {
+        return Err(
+            "PermissionDenied: Command blocked by safety red-line gatekeeper (InvalidCommand)"
+                .to_string(),
+        );
+    }
+
     let app_dir = app_dir()?;
     let root_dir = workspace_root(&app_dir);
     let cwd = env::current_dir().unwrap_or_else(|_| root_dir.clone());
@@ -163,4 +174,38 @@ fn strip_npm_banner(stdout: &str) -> String {
         lines.push(line);
     }
     lines.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cli_bridge_blocks_red_line_commands() {
+        let red_lines = vec![
+            vec!["--prompt=rm -rf /".to_string()],
+            vec!["--prompt=rm -rf /*".to_string()],
+            vec!["--prompt=rm --no-preserve-root -rf /".to_string()],
+            vec!["--prompt=dd if=/dev/zero of=/dev/sda".to_string()],
+            vec!["--prompt=dd if=/dev/random of=/dev/sda".to_string()],
+            vec!["--prompt=mkfs.ext4 /dev/sda".to_string()],
+            vec!["--prompt=Remove-Item -Recurse -Path C:\\".to_string()],
+            vec!["--prompt=Remove-Item -Recurse C:\\".to_string()],
+            vec!["--prompt=format C:".to_string()],
+            vec!["--prompt=del /f C:\\".to_string()],
+            vec!["--prompt=rd /s C:\\".to_string()],
+        ];
+
+        for extra in red_lines {
+            let res = run_workbench_cli_raw("run", extra.clone());
+            assert!(
+                res.is_err(),
+                "Expected CLI bridge to block red line extra_args {:?}",
+                extra
+            );
+            let err = res.unwrap_err();
+            assert!(err.contains("PermissionDenied"), "Err should contain PermissionDenied");
+            assert!(err.contains("InvalidCommand"), "Err should contain InvalidCommand");
+        }
+    }
 }

@@ -177,7 +177,7 @@ describe('parseSessionIndexEntry / parseSessionIndexList', () => {
       { id: 'b', title: 'B' },
     ]);
     expect(list.map((x) => x.id)).toEqual(['a', 'b']);
-    expect(list[0].title).toBe('A');
+    expect(list![0]!.title).toBe('A');
   });
 });
 
@@ -310,19 +310,19 @@ describe('sanitizeMessagesForHydrate', () => {
         ],
       }),
     ]);
-    expect(out[0].status).toBe('completed');
-    expect(out[0].text).toBe('（上次回复未完成）');
-    expect(out[0].toolCalls?.[0].status).toBe('error');
-    expect(out[0].toolCalls?.[0].output).toContain('中断');
-    expect(out[0].toolCalls?.[1].output).toBe('partial');
-    expect(out[0].toolCalls?.[2].status).toBe('success');
+    expect(out![0]!.status).toBe('completed');
+    expect(out![0]!.text).toBe('（上次回复未完成）');
+    expect(out![0]!.toolCalls?.[0]!.status).toBe('error');
+    expect(out![0]!.toolCalls?.[0]!.output).toContain('中断');
+    expect(out![0]!.toolCalls?.[1]!.output).toBe('partial');
+    expect(out![0]!.toolCalls?.[2]!.status).toBe('success');
   });
 
   it('strips legacy 已结束。 assistant text', () => {
     const out = sanitizeMessagesForHydrate([
       baseMsg({ id: 'a', sender: 'assistant', text: '已结束。' }),
     ]);
-    expect(out[0].text).toBe('');
+    expect(out![0]!.text).toBe('');
   });
 
   it('empty input stays empty', () => {
@@ -368,12 +368,14 @@ describe('parseSessionAgent / hydrateSessionAgents', () => {
           }),
         ],
         startedAt: 1,
+        depth: 0,
+        subagentPath: ['ag1'],
       },
     ]);
-    expect(agents[0].status).toBe('stopped');
-    expect(agents[0].summary).toContain('中断');
-    expect(agents[0].messages[0].status).toBe('completed');
-    expect(agents[0].messages[0].text).toBe('half');
+    expect(agents![0]!.status).toBe('stopped');
+    expect(agents![0]!.summary).toContain('中断');
+    expect(agents![0]!.messages[0]!.status).toBe('completed');
+    expect(agents![0]!.messages[0]!.text).toBe('half');
   });
 
   it('parseSessionAgents dedupes and filters', () => {
@@ -393,7 +395,7 @@ describe('parseSessionAgent / hydrateSessionAgents', () => {
       { id: 'bad' },
     ]);
     expect(list).toHaveLength(1);
-    expect(list[0].subagentRunId).toBe('r');
+    expect(list![0]!.subagentRunId).toBe('r');
   });
 });
 
@@ -424,7 +426,7 @@ describe('localStorage load/save shape guards', () => {
     );
     const idx = loadSessionIndex();
     expect(idx).toHaveLength(1);
-    expect(idx[0].id).toBe('ok');
+    expect(idx![0]!.id).toBe('ok');
   });
 
   it('saveSessionIndex re-guards and round-trips', () => {
@@ -452,7 +454,7 @@ describe('localStorage load/save shape guards', () => {
     ]);
     const loaded = loadSessionIndex();
     expect(loaded).toHaveLength(1);
-    expect(loaded[0].title).toBe('A');
+    expect(loaded![0]!.title).toBe('A');
   });
 
   it('loadSessionBody: missing / JSON array / JSONL / corrupt', () => {
@@ -492,6 +494,8 @@ describe('localStorage load/save shape guards', () => {
         status: 'completed',
         messages: [],
         startedAt: 1,
+        depth: 0,
+        subagentPath: ['ag'],
       },
     ]);
     deleteSessionBody('d1');
@@ -521,7 +525,7 @@ describe('localStorage load/save shape guards', () => {
       ])
     );
     const agents = loadSessionAgents('s');
-    expect(agents[0].status).toBe('stopped');
+    expect(agents![0]!.status).toBe('stopped');
   });
 
   it('saveSessionAgents removes key when empty; caps length', () => {
@@ -535,6 +539,8 @@ describe('localStorage load/save shape guards', () => {
       status: 'completed' as const,
       messages: [],
       startedAt: i,
+      depth: 0,
+      subagentPath: [`ag${i}`],
     });
     saveSessionAgents('s', [make(1)]);
     expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 's')).toBeTruthy();
@@ -601,8 +607,8 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
       },
     ]);
     const idx = sessionsToIndex([s]);
-    expect(idx[0].updatedAt).toBe(999);
-    expect(idx[0].messageCount).toBe(1);
+    expect(idx![0]!.updatedAt).toBe(999);
+    expect(idx![0]!.messageCount).toBe(1);
   });
 
   it('hydrateSessionsFromDisk: empty index invents nothing', () => {
@@ -647,16 +653,16 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
 
     const h = hydrateSessionsFromDisk();
     expect(h.sessions).toHaveLength(1);
-    expect(h.sessions[0].id).toBe(id);
+    expect(h!.sessions[0]!.id).toBe(id);
     // must not invent remote shell for missing active
     expect(h.sessions.some((s) => s.id === 'ghost-remote-not-in-index')).toBe(
       false
     );
     expect(h.activeSessionId).toBeNull();
-    expect(h.sessions[0].messages[1].status).toBe('completed');
+    expect(h!.sessions[0]!.messages[1]!.status).toBe('completed');
     expect(h.folderOrder).toEqual([DEFAULT_SESSION_FOLDER]);
     // 刚刚 → coerced away
-    expect(h.sessions[0].timestamp).not.toBe('刚刚');
+    expect(h!.sessions[0]!.timestamp).not.toBe('刚刚');
   });
 
   it('hydrate keeps active empty shell when active is in index', () => {

@@ -84,11 +84,11 @@ export function applyBackgroundCommandEventToWorkbench(
 
   const finishedSnapshot = finishBackgroundTask(snapshot, {
     taskId: event.task.id,
-    state: mapBackgroundCommandState(event.task),
-    exitCode: event.task.exitCode,
-    signal: event.task.signal,
+    ...(event.task.state !== undefined ? { state: mapBackgroundCommandState(event.task) } : {}),
+    ...(event.task.exitCode !== undefined ? { exitCode: event.task.exitCode } : {}),
+    ...(event.task.signal !== undefined ? { signal: event.task.signal } : {}),
     summary: summarizeBackgroundCommand(event.task),
-    outputPreview: event.task.outputPreview,
+    ...(event.task.outputPreview !== undefined ? { outputPreview: event.task.outputPreview } : {}),
     now: event.timestamp
   });
   const nextSnapshot = applyRuntimeEvidenceInference(finishedSnapshot, {
@@ -96,11 +96,12 @@ export function applyBackgroundCommandEventToWorkbench(
     evidenceIds: [`evidence-${event.task.id}`]
   });
   const continuation = createBackgroundTaskContinuationDecision(nextSnapshot, event.task.id);
-  const snapshotWithContinuation = continuation.prompt
+  const continuationPrompt = continuation.prompt;
+  const snapshotWithContinuation = continuationPrompt
     ? {
         ...nextSnapshot,
         backgroundTasks: nextSnapshot.backgroundTasks.map((task) =>
-          task.id === event.task.id ? { ...task, continuationPrompt: continuation.prompt } : task
+          task.id === event.task.id ? { ...task, continuationPrompt } : task
         )
       }
     : nextSnapshot;

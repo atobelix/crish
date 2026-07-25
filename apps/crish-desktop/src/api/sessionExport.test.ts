@@ -178,7 +178,7 @@ describe('sessionExport', () => {
     expect(s!.command).not.toContain(huge);
     expect(s!.output).toMatch(/截断|已截断/);
     expect(s!.output).not.toMatch(/^Exit code:/m);
-    expect(s!.diffs?.[0].filePath).toBe('a.ts');
+    expect(s!.diffs?.[0]!.filePath).toBe('a.ts');
     expect(sanitizeToolCallForExport({ id: '', name: '', arguments: '', status: 'success' })).toBeNull();
   });
 
@@ -264,6 +264,8 @@ describe('sessionExport', () => {
             summary: 'ok',
             messages: [msg({ id: 'am', sender: 'assistant', text: 'agent 行' })],
             startedAt: 1,
+            depth: 0,
+            subagentPath: ['ag1'],
           },
         ],
       }),
@@ -277,12 +279,12 @@ describe('sessionExport', () => {
     expect(obj.version).toBe(1);
     expect(obj.session.empty).toBe(false);
     expect(obj.session.messages).toHaveLength(1);
-    expect(obj.session.messages[0].toolCalls?.[0].output).toMatch(/已省略/);
-    expect(obj.session.messages[0].toolCalls?.[0].output).not.toContain(huge);
+    expect(obj!.session.messages[0]!.toolCalls?.[0]!.output).toMatch(/已省略/);
+    expect(obj!.session.messages[0]!.toolCalls?.[0]!.output).not.toContain(huge);
     expect(obj.session.branchParentId).toBe('sess-parent');
     expect(obj.session.branchParentLabel).toContain('主线');
     expect(obj.session.agents).toHaveLength(1);
-    expect(obj.session.agents[0].messages[0].text).toBe('agent 行');
+    expect(obj!.session.agents[0]!.messages[0]!.text).toBe('agent 行');
 
     const text = exportSessionToJson(
       baseSession({ messages: [msg({ id: 'u', sender: 'user', text: 'hi' })] }),
@@ -357,6 +359,8 @@ describe('sessionExport', () => {
             summary: '完成',
             messages: [msg({ id: 'am1', sender: 'assistant', text: 'agent 正文' })],
             startedAt: 1,
+            depth: 0,
+            subagentPath: ['ag1'],
           },
         ],
       }),
@@ -414,8 +418,8 @@ describe('sessionExport', () => {
 
     downloadTextFile('t.md', '# hi', { mimeType: 'text/markdown;charset=utf-8', deps });
     expect(clicks).toHaveLength(1);
-    expect(clicks[0].filename).toBe('t.md');
-    expect(blobs[0].mime).toContain('markdown');
+    expect(clicks![0]!.filename).toBe('t.md');
+    expect(blobs![0]!.mime).toContain('markdown');
     expect(revokes).toHaveLength(1);
 
     const mdResult = tryDownloadSessionMarkdown(

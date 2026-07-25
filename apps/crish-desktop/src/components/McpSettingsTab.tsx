@@ -103,7 +103,6 @@ async function copyText(text: string): Promise<boolean> {
 export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityChange }) => {
   const demo = isDemoMode();
   const listLabelId = useId();
-  const statusBarId = useId();
   const toolsPanelPrefix = useId();
 
   const [loading, setLoading] = useState(true);
@@ -296,15 +295,16 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
         id: `mcp-${Date.now()}`,
         name: newName.trim(),
         type: newType,
-        command: newType === 'stdio' ? newCmd.trim() : undefined,
-        args:
-          newType === 'stdio'
-            ? newArgs
+        ...(newType === 'stdio' && newCmd.trim() ? { command: newCmd.trim() } : {}),
+        ...(newType === 'stdio' && newArgs.trim()
+          ? {
+              args: newArgs
                 .split(',')
                 .map((a) => a.trim())
-                .filter(Boolean)
-            : undefined,
-        url: newType === 'sse' ? newUrl.trim() : undefined,
+                .filter(Boolean),
+            }
+          : {}),
+        ...(newType === 'sse' && newUrl.trim() ? { url: newUrl.trim() } : {}),
         status: 'disconnected',
         tools: [],
       };
@@ -555,8 +555,8 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
                 className="mcp-add-type-select"
                 value={newType}
                 options={[
-                  { value: 'stdio', label: 'stdio', hint: transportTitle('stdio') },
-                  { value: 'sse', label: 'sse', hint: transportTitle('sse') },
+                  { value: 'stdio', label: 'stdio', ...(transportTitle('stdio') !== undefined ? { hint: transportTitle('stdio') } : {}) },
+                  { value: 'sse', label: 'sse', ...(transportTitle('sse') !== undefined ? { hint: transportTitle('sse') } : {}) },
                 ]}
                 onChange={(v) => setNewType(v as 'stdio' | 'sse')}
               />

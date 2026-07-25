@@ -30,19 +30,19 @@ export type ModelMeta = {
   profileId: string;
   model: string;
   /** 展示名称（可与 model id 不同） */
-  displayName?: string;
+  displayName?: string | undefined;
   /** 默认 true */
   enabled: boolean;
   /** 上下文 token 上限（可手改） */
-  contextLength?: number;
+  contextLength?: number | undefined;
   /** 支持的能力 */
-  capabilities?: ModelCapabilities;
+  capabilities?: ModelCapabilities | undefined;
   lastTest?: {
     ok: boolean;
-    latencyMs?: number;
+    latencyMs?: number | undefined;
     at: number;
-    error?: string;
-  };
+    error?: string | undefined;
+  } | undefined;
 };
 
 /**
@@ -151,7 +151,7 @@ export function dedupeCatalogEntries(
 
 export type UsableCatalogOpts = {
   /** 为 true 时仅保留已配密钥的项；默认 false */
-  requireKey?: boolean;
+  requireKey?: boolean | undefined;
 };
 
 /** 目录项是否可用（纯）：非空 id + 可选密钥要求 */
@@ -624,7 +624,7 @@ async function httpRequest(
   const res = await fetch(url, {
     method,
     headers,
-    body: init.body,
+    ...(init.body !== undefined && { body: init.body }),
   });
   const text = await res.text();
   return { ok: res.ok, status: res.status, text };
@@ -835,15 +835,31 @@ export async function testProviderModel(
         );
         if (res.ok) {
           upsertModelMeta(fresh.id, model, {
-            lastTest: { ok: true, latencyMs: res.latencyMs, at: Date.now() },
+            lastTest: {
+              ok: true,
+              at: Date.now(),
+              ...(res.latencyMs !== undefined && { latencyMs: res.latencyMs }),
+            },
           });
-          return { ok: true, latencyMs: res.latencyMs };
+          return {
+            ok: true,
+            ...(res.latencyMs !== undefined && { latencyMs: res.latencyMs }),
+          };
         } else {
           const error = res.error || '连通失败';
           upsertModelMeta(fresh.id, model, {
-            lastTest: { ok: false, latencyMs: res.latencyMs, at: Date.now(), error },
+            lastTest: {
+              ok: false,
+              at: Date.now(),
+              error,
+              ...(res.latencyMs !== undefined && { latencyMs: res.latencyMs }),
+            },
           });
-          return { ok: false, latencyMs: res.latencyMs, error };
+          return {
+            ok: false,
+            error,
+            ...(res.latencyMs !== undefined && { latencyMs: res.latencyMs }),
+          };
         }
       } catch (e: any) {
         console.warn('Daemon test model failed, falling back...', e);

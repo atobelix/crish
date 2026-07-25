@@ -165,8 +165,8 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   const subId = `chat-empty-sub-${kind}-${reactId}`;
 
   const actionFn = primaryActionHandler(primaryAction, {
-    onCreateSession,
-    onClearFilter,
+    ...(onCreateSession !== undefined && { onCreateSession }),
+    ...(onClearFilter !== undefined && { onClearFilter }),
   });
   // 与 copy.primaryAction 交叉校验：任一为 null / 无 handler 则隐藏
   const showAction = Boolean(

@@ -142,6 +142,7 @@ function asStatusFile(raw: unknown): GitStatusFile | null {
   const o = raw as Record<string, unknown>;
   const path = String(o.path ?? o.filePath ?? o.file ?? '').trim();
   if (!path) return null;
+  const originalPath = typeof o.originalPath === 'string' && o.originalPath ? o.originalPath : undefined;
   return {
     path,
     status: String(o.status ?? '?') as GitFileStatusCode,
@@ -149,7 +150,7 @@ function asStatusFile(raw: unknown): GitStatusFile | null {
     unstaged: Boolean(o.unstaged),
     untracked: Boolean(o.untracked),
     conflicted: Boolean(o.conflicted),
-    originalPath: typeof o.originalPath === 'string' ? o.originalPath : undefined,
+    ...(originalPath !== undefined && { originalPath }),
   };
 }
 
@@ -164,38 +165,33 @@ function normalizeStatus(raw: Record<string, unknown> | null | undefined): GitSt
     .filter((f): f is GitStatusFile => Boolean(f));
   const rawReason = typeof raw.reason === 'string' ? raw.reason : undefined;
   const reason = found ? rawReason : classifyGitReason(rawReason);
+  const cwd = typeof raw.cwd === 'string' ? raw.cwd : undefined;
+  const branch = typeof raw.branch === 'string' ? raw.branch : undefined;
+  const stagedCount = typeof raw.stagedCount === 'number'
+    ? raw.stagedCount
+    : typeof raw.staged === 'number' ? raw.staged : undefined;
+  const unstagedCount = typeof raw.unstagedCount === 'number'
+    ? raw.unstagedCount
+    : typeof raw.unstaged === 'number' ? raw.unstaged : undefined;
+  const untrackedCount = typeof raw.untrackedCount === 'number'
+    ? raw.untrackedCount
+    : typeof raw.untracked === 'number' ? raw.untracked : undefined;
+  const conflictedCount = typeof raw.conflictedCount === 'number'
+    ? raw.conflictedCount
+    : typeof raw.conflicted === 'number' ? raw.conflicted : undefined;
+  const detail = rawReason && reason !== rawReason ? rawReason : undefined;
   return {
     found,
-    cwd: typeof raw.cwd === 'string' ? raw.cwd : undefined,
-    branch: typeof raw.branch === 'string' ? raw.branch : undefined,
+    ...(cwd !== undefined && { cwd }),
+    ...(branch !== undefined && { branch }),
     clean: typeof raw.clean === 'boolean' ? raw.clean : files.length === 0,
     files,
-    stagedCount:
-      typeof raw.stagedCount === 'number'
-        ? raw.stagedCount
-        : typeof raw.staged === 'number'
-          ? raw.staged
-          : undefined,
-    unstagedCount:
-      typeof raw.unstagedCount === 'number'
-        ? raw.unstagedCount
-        : typeof raw.unstaged === 'number'
-          ? raw.unstaged
-          : undefined,
-    untrackedCount:
-      typeof raw.untrackedCount === 'number'
-        ? raw.untrackedCount
-        : typeof raw.untracked === 'number'
-          ? raw.untracked
-          : undefined,
-    conflictedCount:
-      typeof raw.conflictedCount === 'number'
-        ? raw.conflictedCount
-        : typeof raw.conflicted === 'number'
-          ? raw.conflicted
-          : undefined,
-    reason,
-    detail: rawReason && reason !== rawReason ? rawReason : undefined,
+    ...(stagedCount !== undefined && { stagedCount }),
+    ...(unstagedCount !== undefined && { unstagedCount }),
+    ...(untrackedCount !== undefined && { untrackedCount }),
+    ...(conflictedCount !== undefined && { conflictedCount }),
+    ...(reason !== undefined && { reason }),
+    ...(detail !== undefined && { detail }),
   };
 }
 
@@ -295,8 +291,8 @@ export function parseGitPorcelainStatus(
 
   return {
     found: true,
-    cwd,
-    branch,
+    ...(cwd !== undefined && { cwd }),
+    ...(branch !== undefined && { branch }),
     clean: files.length === 0,
     files,
     stagedCount: files.filter((f) => f.staged).length,
@@ -344,17 +340,18 @@ export async function fetchGitStatusLocal(cwd: string): Promise<GitStatusResult 
   }
   const err = `${r.stderr || ''}\n${r.stdout || ''}`;
   if (!r.ok && /not a git repository/i.test(err)) {
-    return { found: false, files: [], reason: 'not-a-repo', detail: r.stderr || undefined };
+    return { found: false, files: [], reason: 'not-a-repo', ...(r.stderr ? { detail: r.stderr } : {}) };
   }
   if (!r.ok && /not recognized|not found|enoent|no such file|is not installed|command not found/i.test(err)) {
-    return { found: false, files: [], reason: 'not-installed', detail: r.stderr || undefined };
+    return { found: false, files: [], reason: 'not-installed', ...(r.stderr ? { detail: r.stderr } : {}) };
   }
   if (!r.ok && !r.stdout.trim()) {
+    const detail = r.stderr || undefined;
     return {
       found: false,
       files: [],
       reason: classifyGitReason(r.stderr || 'error'),
-      detail: r.stderr || undefined,
+      ...(detail !== undefined && { detail }),
     };
   }
   return parseGitPorcelainStatus(r.stdout, cwd);
@@ -376,8 +373,8 @@ async function fetchGitDiffLocal(params: {
   if (!r.ok && /not a git repository/i.test(r.stderr || '')) {
     return { found: false, files: [] };
   }
-  const unified = r.stdout || '';
-  let files = unified.trim() ? parseUnifiedDiffs(unified) : [];
+  const unified = r.stdout || undefined;
+  let files = unified ? parseUnifiedDiffs(unified) : [];
   if (files.length === 0 && path) {
     files = [
       {
@@ -388,7 +385,7 @@ async function fetchGitDiffLocal(params: {
       },
     ];
   }
-  return { found: true, files, unified: unified || undefined };
+  return { found: true, files, ...(unified !== undefined && { unified }) };
 }
 
 /** 短缓存：同一 cwd 在 TTL 内复用成功结果，减轻总览/变更面板连点导致的超时 */
@@ -474,11 +471,12 @@ export async function fetchGitStatus(cwd?: string): Promise<GitStatusResult> {
         const local3 = await fetchGitStatusLocal(resolved);
         if (local3) return rememberGitStatus(resolved, local3);
         const msg = err instanceof Error ? err.message : String(err || '');
+        const detail = msg || undefined;
         return {
           found: false,
           files: [],
           reason: classifyGitReason(msg || 'error'),
-          detail: msg || undefined,
+          ...(detail !== undefined && { detail }),
         };
       }
     })(),
@@ -504,7 +502,7 @@ export async function fetchGitDiff(params?: {
 
   if (cwd) {
     try {
-      const local = await fetchGitDiffLocal({ cwd, path, staged });
+      const local = await fetchGitDiffLocal({ cwd, ...(path !== undefined && { path }), ...(staged !== undefined && { staged }) });
       if (local && (local.files.length > 0 || local.unified != null)) {
         return local;
       }
@@ -552,7 +550,11 @@ export async function fetchGitDiff(params?: {
   if (!raw) {
     // 引擎失败时再试本机
     if (cwd) {
-      const local = await fetchGitDiffLocal({ cwd, path, staged });
+      const local = await fetchGitDiffLocal({
+        cwd,
+        ...(path !== undefined && { path }),
+        ...(staged !== undefined && { staged }),
+      });
       if (local) return local;
     }
     return empty;
@@ -580,7 +582,7 @@ export async function fetchGitDiff(params?: {
   return {
     found: raw.found !== false,
     files,
-    unified,
+    ...(unified !== undefined && { unified }),
   };
 }
 
@@ -646,7 +648,7 @@ export async function fetchGitBranches(cwd: string): Promise<{ current: string; 
     }
   }
   if (!current && list.length > 0) {
-    current = list[0];
+    current = list[0]!;
   }
   return { current: current || 'main', list: list.length > 0 ? list : ['main'] };
 }

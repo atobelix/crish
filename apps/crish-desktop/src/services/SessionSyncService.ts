@@ -65,7 +65,6 @@ const DB_VERSION = 1;
 const PUSH_INTERVAL_MS = 5_000;
 const PUSH_BATCH_SIZE = 10;
 const MAX_RETRY = 5;
-const RETRY_BASE_MS = 1_000;
 const PULL_NORMAL_INTERVAL_MS = 300_000;
 const PULL_RECONNECT_INTERVAL_MS = 10_000;
 const PULL_RECONNECT_BURST = 3;
@@ -121,34 +120,6 @@ async function dbReadAll<T>(table: string): Promise<T[]> {
     const tx = db.transaction(table, 'readonly');
     const req = tx.objectStore(table).getAll();
     req.onsuccess = () => { db.close(); resolve(req.result as T[]); };
-    req.onerror = () => { db.close(); reject(req.error); };
-  });
-}
-
-async function dbReadByIndex<T>(
-  table: string,
-  indexName: string,
-  value: string,
-): Promise<T[]> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(table, 'readonly');
-    const req = tx.objectStore(table).index(indexName).getAll(value);
-    req.onsuccess = () => { db.close(); resolve(req.result as T[]); };
-    req.onerror = () => { db.close(); reject(req.error); };
-  });
-}
-
-async function dbCountByIndex(
-  table: string,
-  indexName: string,
-  value: string,
-): Promise<number> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(table, 'readonly');
-    const req = tx.objectStore(table).index(indexName).count(value);
-    req.onsuccess = () => { db.close(); resolve(req.result); };
     req.onerror = () => { db.close(); reject(req.error); };
   });
 }

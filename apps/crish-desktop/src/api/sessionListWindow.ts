@@ -193,7 +193,6 @@ export function sessionListWindowSpanHeight(
   const gh = resolveHeightGetter(getHeight, rowHeight);
   const start = range.start | 0;
   const end = range.end | 0;
-  const rows = Math.max(0, end - start);
   const top = Number.isFinite(range.topPad) ? range.topPad : 0;
   const bottom = Number.isFinite(range.bottomPad) ? range.bottomPad : 0;
   return top + sumHeights(gh, start, end) + bottom;

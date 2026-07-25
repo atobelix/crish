@@ -1,6 +1,9 @@
 /**
  * 用量历史：本机累计 token / 费用（按日 + 按模型），供设置「用量」页可视化。
  * 数据来源：对话流 telemetry 同步写入；不伪造演示数据。
+ *
+ * v2 新增 4D 字段：cacheRead / cacheWrite / savedCost（全部向下兼容：
+ * 老数据加载时缺失字段归零）。
  */
 
 export type UsageDayBucket = {
@@ -9,6 +12,9 @@ export type UsageDayBucket = {
   input: number;
   output: number;
   cost: number;
+  cacheRead: number;
+  cacheWrite: number;
+  savedCost: number;
 };
 
 export type UsageModelBucket = {
@@ -16,6 +22,9 @@ export type UsageModelBucket = {
   input: number;
   output: number;
   cost: number;
+  cacheRead: number;
+  cacheWrite: number;
+  savedCost: number;
 };
 
 export type UsageSnapshot = {
@@ -25,6 +34,9 @@ export type UsageSnapshot = {
   totalInput: number;
   totalOutput: number;
   totalCost: number;
+  totalCacheRead: number;
+  totalCacheWrite: number;
+  totalSavedCost: number;
   updatedAt: number;
 };
 
@@ -39,6 +51,9 @@ function emptySnapshot(): UsageSnapshot {
     totalInput: 0,
     totalOutput: 0,
     totalCost: 0,
+    totalCacheRead: 0,
+    totalCacheWrite: 0,
+    totalSavedCost: 0,
     updatedAt: 0,
   };
 }
@@ -62,13 +77,38 @@ export function loadUsageSnapshot(): UsageSnapshot {
     const o = JSON.parse(raw) as Partial<UsageSnapshot>;
     if (!o || typeof o !== 'object') return emptySnapshot();
     return {
-      days: Array.isArray(o.days) ? o.days.filter((x) => x && typeof x.day === 'string') : [],
+      days: Array.isArray(o.days)
+        ? o.days
+            .filter((x) => x && typeof x.day === 'string')
+            .map((x) => ({
+              day: x.day,
+              input: finite(x.input),
+              output: finite(x.output),
+              cost: finite(x.cost),
+              cacheRead: finite(x.cacheRead),
+              cacheWrite: finite(x.cacheWrite),
+              savedCost: finite(x.savedCost),
+            }))
+        : [],
       models: Array.isArray(o.models)
-        ? o.models.filter((x) => x && typeof x.model === 'string')
+        ? o.models
+            .filter((x) => x && typeof x.model === 'string')
+            .map((x) => ({
+              model: x.model,
+              input: finite(x.input),
+              output: finite(x.output),
+              cost: finite(x.cost),
+              cacheRead: finite(x.cacheRead),
+              cacheWrite: finite(x.cacheWrite),
+              savedCost: finite(x.savedCost),
+            }))
         : [],
       totalInput: finite(o.totalInput),
       totalOutput: finite(o.totalOutput),
       totalCost: finite(o.totalCost),
+      totalCacheRead: finite(o.totalCacheRead),
+      totalCacheWrite: finite(o.totalCacheWrite),
+      totalSavedCost: finite(o.totalSavedCost),
       updatedAt: typeof o.updatedAt === 'number' ? o.updatedAt : 0,
     };
   } catch {
@@ -92,12 +132,19 @@ export function recordUsageDelta(opts: {
   input?: number;
   output?: number;
   cost?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  savedCost?: number;
   model?: string | null;
 }): UsageSnapshot {
   const input = finite(opts.input);
   const output = finite(opts.output);
   const cost = finite(opts.cost);
-  if (input <= 0 && output <= 0 && cost <= 0) {
+  const cacheRead = finite(opts.cacheRead);
+  const cacheWrite = finite(opts.cacheWrite);
+  const savedCost = finite(opts.savedCost);
+
+  if (input <= 0 && output <= 0 && cost <= 0 && cacheRead <= 0 && cacheWrite <= 0 && savedCost <= 0) {
     return loadUsageSnapshot();
   }
   const snap = loadUsageSnapshot();
@@ -109,8 +156,11 @@ export function recordUsageDelta(opts: {
     dayRow.input += input;
     dayRow.output += output;
     dayRow.cost += cost;
+    dayRow.cacheRead += cacheRead;
+    dayRow.cacheWrite += cacheWrite;
+    dayRow.savedCost += savedCost;
   } else {
-    snap.days.push({ day, input, output, cost });
+    snap.days.push({ day, input, output, cost, cacheRead, cacheWrite, savedCost });
   }
   snap.days.sort((a, b) => a.day.localeCompare(b.day));
   if (snap.days.length > MAX_DAYS) {
@@ -122,8 +172,11 @@ export function recordUsageDelta(opts: {
     modelRow.input += input;
     modelRow.output += output;
     modelRow.cost += cost;
+    modelRow.cacheRead += cacheRead;
+    modelRow.cacheWrite += cacheWrite;
+    modelRow.savedCost += savedCost;
   } else {
-    snap.models.push({ model, input, output, cost });
+    snap.models.push({ model, input, output, cost, cacheRead, cacheWrite, savedCost });
   }
   snap.models.sort((a, b) => b.input + b.output - (a.input + a.output));
   if (snap.models.length > MAX_MODELS) {
@@ -133,6 +186,9 @@ export function recordUsageDelta(opts: {
   snap.totalInput += input;
   snap.totalOutput += output;
   snap.totalCost += cost;
+  snap.totalCacheRead += cacheRead;
+  snap.totalCacheWrite += cacheWrite;
+  snap.totalSavedCost += savedCost;
   snap.updatedAt = Date.now();
   saveUsageSnapshot(snap);
   return snap;
@@ -162,6 +218,9 @@ export function usageDaysForChart(days: number, snap?: UsageSnapshot): UsageDayB
         input: 0,
         output: 0,
         cost: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        savedCost: 0,
       },
     );
   }

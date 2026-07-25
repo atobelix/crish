@@ -469,7 +469,7 @@ describe('resolveChatEmptyCopy', () => {
     for (const c of cases) {
       const copy = resolveChatEmptyCopy(c);
       expect(copy.primaryAction).toBe(
-        resolveChatEmptyPrimaryAction(c.kind, { firstRunOpen: c.firstRunOpen })
+        resolveChatEmptyPrimaryAction(c.kind, { ...(c.firstRunOpen !== undefined && { firstRunOpen: c.firstRunOpen }) })
       );
       expect(copy.actionLabel).toBe(
         resolveChatEmptyActionLabel(copy.primaryAction)

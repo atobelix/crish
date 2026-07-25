@@ -37,12 +37,12 @@ function FocusTrap({ children, active, initialFocusRef }: FocusTrapProps) {
 
     const parent = container.parentElement;
     if (parent) {
-      for (const child of parent.children) {
+      for (const child of Array.from(parent.children)) {
         if (child !== container) {
           originalValues.current.set(child, child.getAttribute('aria-hidden'));
           child.setAttribute('aria-hidden', 'true');
-          if ('inert' in HTMLElement.prototype) {
-            (child as any).inert = true;
+          if ('inert' in HTMLElement.prototype && 'inert' in child) {
+            (child as HTMLElement & { inert: boolean }).inert = true;
           }
         }
       }
@@ -56,8 +56,8 @@ function FocusTrap({ children, active, initialFocusRef }: FocusTrapProps) {
       } else {
         el.setAttribute('aria-hidden', val);
       }
-      if ('inert' in HTMLElement.prototype) {
-        (el as any).inert = false;
+      if ('inert' in HTMLElement.prototype && 'inert' in el) {
+        (el as HTMLElement & { inert: boolean }).inert = false;
       }
     }
     originalValues.current.clear();
@@ -85,11 +85,11 @@ function FocusTrap({ children, active, initialFocusRef }: FocusTrapProps) {
       if (e.shiftKey) {
         if (document.activeElement === first) {
           e.preventDefault();
-          last.focus();
+          last!.focus();
         }
       } else if (document.activeElement === last) {
         e.preventDefault();
-        first.focus();
+        first!.focus();
       }
     };
 

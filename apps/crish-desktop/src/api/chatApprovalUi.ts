@@ -95,7 +95,7 @@ export function collectPendingApprovals(
             toolId: id,
             msgId: String(m.id || '').trim() || id,
             bucket,
-            summary,
+            ...(summary !== undefined && { summary }),
           };
         }
       }

@@ -111,18 +111,18 @@ export function parseUnifiedDiffs(text: string): FileDiff[] {
     const gitHeader = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
     if (gitHeader) {
       flush();
-      currentPath = gitHeader[2] || gitHeader[1];
+      currentPath = gitHeader[2]! || gitHeader[1]!;
       continue;
     }
     const plusFile = line.match(/^\+\+\+ (?:b\/)?(.+)$/);
     if (plusFile && plusFile[1] !== '/dev/null') {
-      if (!currentPath) currentPath = plusFile[1];
-      else if (currentPath.startsWith('a/') || currentPath === '/dev/null') currentPath = plusFile[1];
+      if (!currentPath) currentPath = plusFile[1]!;
+      else if (currentPath.startsWith('a/') || currentPath === '/dev/null') currentPath = plusFile[1]!;
       continue;
     }
     const minusFile = line.match(/^--- (?:a\/)?(.+)$/);
     if (minusFile && !currentPath && minusFile[1] !== '/dev/null') {
-      currentPath = minusFile[1];
+      currentPath = minusFile[1]!;
       continue;
     }
     if (line.startsWith('@@')) {
@@ -308,9 +308,9 @@ export function filterPublishableFileDiffs(
  */
 export function resolveToolDiffs(opts: {
   name: string;
-  args?: string;
-  output?: string;
-  structuredDiffs?: FileDiff[];
+  args?: string | undefined;
+  output?: string | undefined;
+  structuredDiffs?: FileDiff[] | undefined;
 }): FileDiff[] {
   if (opts.structuredDiffs?.length) {
     return filterPublishableFileDiffs(opts.structuredDiffs);
@@ -609,7 +609,7 @@ export function buildToolDiffHint(files: FileDiff[] | null | undefined): string 
   if (del > 0) parts.push(`−${del}`);
   const stat = parts.length ? parts.join(' ') : '有变更';
   if (list.length === 1) {
-    return `${stat} · ${basenamePath(list[0].filePath)}`;
+    return `${stat} · ${basenamePath(list![0]!.filePath)}`;
   }
   return `${stat} · ${list.length} 个文件`;
 }
@@ -702,8 +702,8 @@ export function buildToolFeedback(
       : String(input.stderr).trim();
   }
   const { text, truncated: detailTrunc } = truncateToolFeedbackOutput(rawDetail, {
-    maxChars: input.maxDetailChars,
-    maxLines: input.maxDetailLines,
+    ...(input.maxDetailChars !== undefined && { maxChars: input.maxDetailChars }),
+    ...(input.maxDetailLines !== undefined && { maxLines: input.maxDetailLines }),
   });
   const truncated = Boolean(input.truncated) || detailTrunc;
   // 若仅因 detail 截断且原 kind 为 success，与 classify 的 truncated 标志对齐
@@ -714,12 +714,12 @@ export function buildToolFeedback(
   const diffHint = buildToolDiffHint(diffs);
   const undoHint = buildToolUndoHint({
     kind: effectiveKind,
-    name: input.name,
-    diffs,
+    ...(input.name !== undefined && { name: input.name }),
+    ...(diffs !== undefined && { diffs }),
   });
   const message = formatToolFeedbackMessage(effectiveKind, {
     ...input,
-    truncated: truncated || input.truncated,
+    ...(truncated !== undefined && { truncated: truncated || input.truncated }),
   });
 
   return {

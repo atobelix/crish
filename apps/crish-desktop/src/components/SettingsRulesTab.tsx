@@ -76,7 +76,6 @@ export const SettingsRulesTab: React.FC<Props> = ({
   onShowToast,
   onBlockingOverlayChange,
 }) => {
-  const workspacePath = getWorkspacePath() || '';
   /** 已打开过的项目 + 当前 cwd（文件夹名） */
   const [scopeProjects, setScopeProjects] = useState(() => listSettingsScopeProjects());
 
@@ -109,7 +108,6 @@ export const SettingsRulesTab: React.FC<Props> = ({
   const titleId = useId();
   const descId = useId();
   const addInputId = useId();
-  const listLabelId = useId();
   const scopeSelectId = useId();
 
   const isGlobal = scopeKey === SCOPE_GLOBAL;
@@ -144,7 +142,6 @@ export const SettingsRulesTab: React.FC<Props> = ({
   }, [scopeProjects]);
 
   const ruleCount = customRules.length;
-  const emptyHint = '可点常用项，或自己输入一条规则';
 
   // 项目列表随打开/关闭变化
   useEffect(() => {
@@ -229,23 +226,6 @@ export const SettingsRulesTab: React.FC<Props> = ({
     }
     return undefined;
   }, [editingOpen]);
-
-  const handleScopeChange = (value: string) => {
-    if (!value) return;
-    if (value !== SCOPE_GLOBAL) {
-      const ok = scopeProjects.some(
-        (p) =>
-          p.path.replace(/\\/g, '/').toLowerCase() ===
-          value.replace(/\\/g, '/').toLowerCase(),
-      );
-      if (!ok && value !== workspacePath) {
-        onShowToast('未找到该项目，请先在侧栏打开');
-        return;
-      }
-    }
-    setScopeKey(value);
-    setLoaded(false);
-  };
 
   /**
    * 本机写入当前作用域 customRules；成功静默。

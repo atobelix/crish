@@ -220,9 +220,9 @@ describe('multi-file coalesce / filter', () => {
       placeholderDiff('src\\b.ts'),
     ]);
     expect(out.map((f) => f.filePath)).toEqual(['src/a.ts', 'src/b.ts']);
-    expect(out[0].changes.map((c) => c.content)).toEqual(['second-1', 'second-2']);
+    expect(out![0]!.changes.map((c) => c.content)).toEqual(['second-1', 'second-2']);
     // b 保留真实 addition，不被 placeholder 覆盖
-    expect(out[1].changes[0]?.type).toBe('addition');
+    expect(out![1]!.changes[0]?.type).toBe('addition');
   });
 });
 

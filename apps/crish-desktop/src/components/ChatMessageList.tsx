@@ -44,6 +44,7 @@ import { useVirtualScroll } from '../hooks/useVirtualScroll';
 import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../api/messageWindow';
 import { buildPretextFontForUiSize } from '../utils/pretextFontBridge';
 import { ChevronDown, Pin, PinOff } from 'lucide-react';
+import type { ChatToolStackSharedProps } from './ChatToolCallBlock';
 
 const EMPTY_PIN_IDS: string[] = [];
 const EMPTY_MSGS: SessionMessage[] = [];
@@ -62,8 +63,8 @@ function scrollToMessage(messageId: string) {
   ) as HTMLElement | null;
   if (!el) return false;
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  el.classList.add(styles.rowPinFlash);
-  window.setTimeout(() => el.classList.remove(styles.rowPinFlash), 1200);
+  el.classList.add(styles.rowPinFlash ?? '');
+  window.setTimeout(() => el.classList.remove(styles.rowPinFlash ?? ''), 1200);
   return true;
 }
 
@@ -217,7 +218,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     if (showAllMessages || messages.length === 0) return EMPTY_MUST_INDICES;
     return collectMustIncludeIndices(messages, {
       includePendingApprovals: true,
-      match: searchMatch,
+      ...(searchMatch !== undefined ? { match: searchMatch } : {}),
       matchOnlyFirst: true,
     });
   }, [messages, showAllMessages, searchMatch]);
@@ -232,7 +233,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       // 审批 ∪ 搜索 keep-alive 抬升；无命中时 resolve 内仍 clamp（截断/重生成）
       const { expandedOlder: next } = resolveExpandedForKeepAlive(messages, {
         includePendingApprovals: true,
-        match: searchMatch,
+        ...(searchMatch !== undefined ? { match: searchMatch } : {}),
         matchOnlyFirst: true,
         currentExpanded: prev,
         recentCount: DEFAULT_RECENT_MESSAGE_COUNT,
@@ -247,8 +248,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         recentCount: DEFAULT_RECENT_MESSAGE_COUNT,
         expandedOlder,
         showAll: showAllMessages,
-        // 同帧强制进窗，避免 effect 滞后一拍导致审批行 silent miss
-        mustIncludeIndices: showAllMessages ? undefined : mustIncludeIndices,
+        ...(!showAllMessages ? { mustIncludeIndices } : {}),
       }),
     [messages, expandedOlder, showAllMessages, mustIncludeIndices]
   );
@@ -469,8 +469,9 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     const idx = msgs.findIndex((m) => m.id === assistantMsgId);
     let userText = '';
     for (let i = idx - 1; i >= 0; i--) {
-      if (msgs[i].sender === 'user') {
-        userText = msgs[i].text || '';
+      const targetMsg = msgs[i];
+      if (targetMsg && targetMsg.sender === 'user') {
+        userText = targetMsg.text || '';
         break;
       }
     }
@@ -510,7 +511,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   }, []);
 
   const toolStackProps = useMemo(
-    () => ({
+    (): ChatToolStackSharedProps => ({
       agents,
       activeSessionId,
       expandedTools,
@@ -522,8 +523,8 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       onOpenTerminal,
       onApprovalAllow,
       onApprovalDeny,
-      onBatchApprove,
-      onBatchDeny,
+      ...(onBatchApprove !== undefined ? { onBatchApprove } : {}),
+      ...(onBatchDeny !== undefined ? { onBatchDeny } : {}),
     }),
     [
       agents,
@@ -599,7 +600,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       .map((msg, i) => ({ msg, i }))
       .filter(
         ({ msg, i }) =>
-          msg != null && manager.getHeight(i) === MESSAGE_ESTIMATED_ROW_HEIGHT
+          msg != null && manager.getHeight(String(i)) === MESSAGE_ESTIMATED_ROW_HEIGHT
       );
 
     if (pending.length === 0) return;
@@ -609,7 +610,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       const timeRemaining = deadline ? () => deadline.timeRemaining() : () => 1;
       while (cursor < pending.length && timeRemaining() > 0) {
         const { msg, i } = pending[cursor++]!;
-        if (manager.getHeight(i) !== MESSAGE_ESTIMATED_ROW_HEIGHT) continue; // RO 已测量，跳过
+        if (manager.getHeight(String(i)) !== MESSAGE_ESTIMATED_ROW_HEIGHT) continue; // RO 已测量，跳过
         let h = MESSAGE_ESTIMATED_ROW_HEIGHT;
         const text = msg!.text || '';
         if (text && availWidth > 0) {
@@ -624,7 +625,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         if (msg!.toolCalls?.length) {
           h += TOOL_CALL_OVERHEAD_PER_CALL * msg!.toolCalls.length;
         }
-        manager.setEstimated(i, h);
+        manager.setEstimated(String(i), h);
       }
       if (cursor < pending.length) {
         // 还有剩余，继续安排下一个 idle 帧
@@ -679,7 +680,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
           const el = entry.target as HTMLElement;
           const vindex = el.dataset.vindex;
           if (vindex != null && entry.contentRect.height > 0) {
-            setActual(Number(vindex), entry.contentRect.height);
+            setActual(vindex, entry.contentRect.height);
           }
         }
       });

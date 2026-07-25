@@ -128,7 +128,10 @@ export function reorderSessionById(
     : max;
   if (from === target) return sessions;
   const next = sessions.slice();
+  // 治理防线 #3（noUncheckedIndexedAccess）：splice 返回数组，解构后 item 可能 undefined
+  // from 已被 clamp 到 [0, sessions.length)，splice(from, 1) 在 length >= 1 时必返回单元素数组
   const [item] = next.splice(from, 1);
+  if (item === undefined) return sessions;
   next.splice(target, 0, item);
   return next;
 }
@@ -508,9 +511,11 @@ export function partitionSidebarSessions(
   sessions: SessionState[],
   opts: PartitionSidebarSessionsOpts = {}
 ): PartitionedSidebarSessions {
+  // 治理防线 #2（exactOptionalPropertyTypes）：FilterSidebarSessionsOpts 中
+  // activeSessionId?/searchQuery? 不接受 undefined 值，用条件展开剔除
   let visible = filterSidebarSessions(sessions, {
-    activeSessionId: opts.activeSessionId,
-    searchQuery: opts.searchQuery,
+    ...(opts.activeSessionId !== undefined ? { activeSessionId: opts.activeSessionId } : {}),
+    ...(opts.searchQuery !== undefined ? { searchQuery: opts.searchQuery } : {}),
   });
   if (opts.filterType === 'pinned') {
     visible = visible.filter((s) => s.isPinned);
@@ -541,18 +546,36 @@ export function groupUnpinnedByProject(
   for (const s of unpinned) {
     const folder = s.folder || '';
     if (projectIdSet.has(folder)) {
-      byProjectId[folder].push(s);
+      // 治理防线 #3（noUncheckedIndexedAccess）：byProjectId[folder] 在 Record 类型下
+      // 返回 T | undefined；上面 for 循环已为每个 p.id 初始化 []，此处必非空，
+      // 但需显式守卫避免在 undefined 上 push
+      const bucket = byProjectId[folder];
+      if (bucket) {
+        bucket.push(s);
+      } else {
+        general.push(s);
+      }
       continue;
     }
     const byName = nameToId.get(folder);
     if (byName) {
-      byProjectId[byName].push(s);
+      const bucket = byProjectId[byName];
+      if (bucket) {
+        bucket.push(s);
+      } else {
+        general.push(s);
+      }
       continue;
     }
     // 历史幽灵 proj-*：经别名/路径解析挂回现项目（修「对话丢了」）
     const resolved = resolveFolderToProjectId(folder);
     if (resolved && projectIdSet.has(resolved)) {
-      byProjectId[resolved].push(s);
+      const bucket = byProjectId[resolved];
+      if (bucket) {
+        bucket.push(s);
+      } else {
+        general.push(s);
+      }
       continue;
     }
     // GENERAL / 仍无法识别 → 对话区

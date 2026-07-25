@@ -80,15 +80,16 @@ export function createOutputReference(
   const label = candidate.label?.trim() || readableName(target) || "输出文件";
   const issues = absolute ? [] : ["建议使用绝对路径，避免桌面端无法定位文件。"];
 
+  const resolvedMimeType = inferMimeType(kind, target);
   return {
     id: createReferenceId(target, index),
     label,
     kind,
     render,
     source: candidate.source,
-    path,
-    url,
-    mimeType: inferMimeType(kind, target),
+    ...(path !== undefined ? { path } : {}),
+    ...(url !== undefined ? { url } : {}),
+    ...(resolvedMimeType !== undefined ? { mimeType: resolvedMimeType } : {}),
     previewable: isPreviewable(kind),
     editable: isEditable(kind),
     absolute,
@@ -137,13 +138,16 @@ function extractWorkbenchTags(markdown: string): ReferenceCandidate[] {
     const attrs = parseAttributes(match[2]!);
     const target = attrs.path ?? attrs.url ?? attrs.href;
     if (!target) continue;
-    candidates.push({
-      target,
-      label: attrs.label ?? attrs.title,
-      kind: normalizeKind(attrs.kind) ?? kindFromTag(tag),
-      render: normalizeRender(attrs.render),
-      source: "workbench-tag"
-    });
+      const resolvedKind = normalizeKind(attrs.kind) ?? kindFromTag(tag);
+      const resolvedRender = normalizeRender(attrs.render);
+      const resolvedLabel = attrs.label ?? attrs.title;
+      candidates.push({
+        target,
+        ...(resolvedLabel !== undefined ? { label: resolvedLabel } : {}),
+        ...(resolvedKind !== undefined ? { kind: resolvedKind } : {}),
+        ...(resolvedRender !== undefined ? { render: resolvedRender } : {}),
+        source: "workbench-tag"
+      });
   }
   return candidates;
 }
@@ -156,7 +160,7 @@ function extractMarkdownImages(markdown: string): ReferenceCandidate[] {
     const target = parseMarkdownDestination(match[2]!);
     if (!target) continue;
     candidates.push({
-      label: match[1],
+      ...(match[1] !== undefined ? { label: match[1] } : {}),
       target,
       source: "markdown-image",
       kind: "image",
@@ -174,7 +178,7 @@ function extractMarkdownLinks(markdown: string): ReferenceCandidate[] {
     const target = parseMarkdownDestination(match[2]!);
     if (!target) continue;
     candidates.push({
-      label: match[1],
+      ...(match[1] !== undefined ? { label: match[1] } : {}),
       target,
       source: "markdown-link"
     });

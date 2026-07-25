@@ -28,49 +28,44 @@ export type ComposerFieldProps = {
   onChange: (v: string) => void;
   onSend: () => void;
   canSend: boolean;
-  placeholder?: string;
-  disabled?: boolean;
+  placeholder?: string | undefined;
+  disabled?: boolean | undefined;
   isComposing: boolean;
   setIsComposing: (v: boolean) => void;
   /** 流式/子 agent 运行中：显示发送（或排队）+ 停止 */
-  isProcessing?: boolean;
-  onStop?: () => void;
-  /**
-   * 处理中时主按钮文案。主对话默认「排队」；子 agent 续聊用「发送」。
-   */
-  processingSendLabel?: string;
+  isProcessing?: boolean | undefined;
+  onStop?: (() => void) | undefined;
+  /** 处理中时主按钮文案。主对话默认「排队」；子 agent 续聊用「发送」。 */
+  processingSendLabel?: string | undefined;
   /** 处理中时的占位提示（中文） */
-  processingPlaceholder?: string;
-  onPaste?: (e: React.ClipboardEvent) => void;
+  processingPlaceholder?: string | undefined;
+  onPaste?: ((e: React.ClipboardEvent) => void) | undefined;
   /** 额外按键（slash 等）；返回 true 表示已处理 */
-  onKeyDownExtra?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean | void;
-  className?: string;
+  onKeyDownExtra?: ((e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean | void) | undefined;
+  className?: string | undefined;
   /** 输入框内前缀区（slash 菜单等） */
   leading?: React.ReactNode;
   /** 侧栏 / 内联 denser：收紧 pad + 略紧行高，仍同一套半透壳与 grow */
-  dense?: boolean;
+  dense?: boolean | undefined;
   /** 打开侧栏 agent 时自动聚焦 */
-  autoFocus?: boolean;
+  autoFocus?: boolean | undefined;
   /** 无障碍标签（默认随 placeholder） */
-  ariaLabel?: string;
-  /**
-   * 覆盖默认 maxLines（默认 COMPOSER_MAX_LINES=4；dense 侧栏/内联常传 3）。
-   * 仍走 useAutoGrowTextarea 同一测量路径。
-   */
-  maxLines?: number;
+  ariaLabel?: string | undefined;
+  /** 覆盖默认 maxLines（默认 COMPOSER_MAX_LINES=4；dense 侧栏/内联常传 3）。 */
+  maxLines?: number | undefined;
   /** 斜杠 / 弹出层：aria-expanded */
-  ariaExpanded?: boolean;
+  ariaExpanded?: boolean | undefined;
   /** 关联 listbox / menu id */
-  ariaControls?: string;
+  ariaControls?: string | undefined;
   /** listbox | menu 等 */
-  ariaHasPopup?: boolean | 'false' | 'true' | 'menu' | 'listbox' | 'tree' | 'grid' | 'dialog';
+  ariaHasPopup?: (boolean | 'false' | 'true' | 'menu' | 'listbox' | 'tree' | 'grid' | 'dialog') | undefined;
   /** 当前高亮 option id */
-  ariaActivedescendant?: string;
-  ariaAutocomplete?: 'none' | 'inline' | 'list' | 'both';
+  ariaActivedescendant?: string | undefined;
+  ariaAutocomplete?: ('none' | 'inline' | 'list' | 'both') | undefined;
   /** 可选 textarea id（供外部 label / controls） */
-  textAreaId?: string;
+  textAreaId?: string | undefined;
   /** 外壳 ref（便于父级 focus 回输入框） */
-  containerRef?: React.Ref<HTMLDivElement>;
+  containerRef?: React.Ref<HTMLDivElement> | undefined;
 };
 
 export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
@@ -451,7 +446,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         processingPlaceholder="输入排队消息…（当前回复结束后发送，可粘贴截图）"
         ariaLabel="主对话输入"
         ariaExpanded={slashMenuOpen}
-        ariaControls={slashMenuOpen ? listboxId : undefined}
+        {...(slashMenuOpen ? { ariaControls: listboxId } : {})}
         ariaHasPopup="listbox"
         ariaActivedescendant={slashActiveDesc}
         ariaAutocomplete="list"

@@ -13,7 +13,7 @@ import { getActiveModelId, getActiveProfile } from './providerProfiles';
 import { useLayoutStore } from '../store/layoutStore';
 
 /** 递归规范化与确定性排序 JSON Schema 键名与 required 数组 */
-function canonicalizeJsonSchema(schema: Record<string, unknown> | undefined): Record<string, unknown> {
+export function canonicalizeJsonSchema(schema: Record<string, unknown> | undefined): Record<string, unknown> {
   if (!schema || typeof schema !== 'object') {
     return { type: 'object', properties: {} };
   }
@@ -40,7 +40,7 @@ function canonicalizeJsonSchema(schema: Record<string, unknown> | undefined): Re
 }
 
 /** 格式化确定性排序的 Tool 定义 */
-function formatStableTools(tools?: Array<{ name: string; description: string; inputSchema?: Record<string, unknown> }>) {
+export function formatStableTools(tools?: Array<{ name: string; description: string; inputSchema?: Record<string, unknown> }>) {
   if (!tools || tools.length === 0) return undefined;
   
   const sorted = [...tools].sort((a, b) => a.name.localeCompare(b.name));
@@ -55,7 +55,7 @@ function formatStableTools(tools?: Array<{ name: string; description: string; in
 }
 
 /** 构建前缀 Hash 键，用于 OpenAI / DeepSeek Prompt Cache Affinity */
-function buildStableCacheKey(systemPrompt?: string, tools?: ReturnType<typeof formatStableTools>): string {
+export function buildStableCacheKey(systemPrompt?: string, tools?: ReturnType<typeof formatStableTools>): string {
   const payload = JSON.stringify({ systemPrompt: systemPrompt || '', tools: tools || [] });
   let hash = 0x811c9dc5;
   for (let i = 0; i < payload.length; i++) {

@@ -5,7 +5,7 @@ import styles from './DiffCard.module.css';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { useVirtualDiffScroll } from '../hooks/useVirtualDiffScroll';
 import type { FileDiff } from '../store/types';
-import type { ChangeRenderItem, PlaceholderRenderItem, ComputedChange } from './diffCardTypes';
+import type { ChangeRenderItem, PlaceholderRenderItem } from './diffCardTypes';
 import { highlightCode } from '../api/codeHighlight';
 
 type UnifiedRenderItem = PlaceholderRenderItem | ChangeRenderItem;

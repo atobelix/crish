@@ -441,21 +441,18 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
     const group = toolCol!.groups.find((g) => g.cards.some((c) => c.id === 'agent'));
     expect(group).toBeTruthy();
     // 强制同组为 files|agent|terminal 且 active=agent
-    useLayoutStore.setState((draft) => {
-      const w = draft.workspaces.find((x) => x.id === ws!.id);
-      const col = w?.columns.find((c) => !c.id.includes('chat'));
-      const g = col?.groups.find((x) => x.cards.some((c) => c.id === 'agent'));
-      if (!g) return;
-      const order = ['files', 'agent', 'terminal'] as const;
-      g.cards = order
-        .filter((id) => g.cards.some((c) => c.id === id))
-        .map((id) => ({ id, title: id }));
-      // 若缺 files/terminal 补上
-      for (const id of order) {
-        if (!g.cards.some((c) => c.id === id)) g.cards.push({ id, title: id });
-      }
-      g.cards = order.map((id) => ({ id, title: id }));
-      g.activeCardId = 'agent';
+    useLayoutStore.setState((draft: any) => {
+      const w = draft.workspaces.find((x: any) => x.id === ws!.id);
+      const col = w?.columns.find((c: any) => !c.id.includes('chat'));
+      if (!col) return;
+      const order = ['files', 'agent', 'terminal'];
+      col.groups = [
+        {
+          id: 'group-tools',
+          cards: order.map((id) => ({ id, title: id })),
+          activeCardId: 'agent',
+        },
+      ];
     });
 
     const chatColBefore = useLayoutStore
@@ -464,13 +461,13 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
       .columns.find((c) => c.id.includes('chat'));
     const chatActiveBefore = chatColBefore?.groups[0]?.activeCardId;
     const chatCardsBefore = chatColBefore?.groups[0]?.cards.map((c) => c.id) ?? [];
+    openAgentInSidePanel('agent-close-side');
     const groupId = useLayoutStore
       .getState()
       .workspaces.find((w) => w.id === ws!.id)!
       .columns.find((c) => !c.id.includes('chat'))!
       .groups.find((g) => g.cards.some((c) => c.id === 'agent'))!.id;
 
-    openAgentInSidePanel('agent-close-side');
     closeAgentSidePanel(ws!.id, groupId);
 
     const after = useLayoutStore.getState();
@@ -658,7 +655,7 @@ describe('openAgentPanel — 侧栏 only，无主列覆盖', () => {
       );
       // browse 的 detail 为空对象或无 agentId
       const browse = agentEv[agentEv.length - 1];
-      expect((browse.detail as { agentId?: string } | undefined)?.agentId).toBeUndefined();
+      expect((browse!.detail as { agentId?: string } | undefined)?.agentId).toBeUndefined();
     } finally {
       spy.mockRestore();
     }
