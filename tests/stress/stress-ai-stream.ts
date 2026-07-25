@@ -1,15 +1,15 @@
-import { runStressTest, type StressScenario } from "./stress-runner";
+import { runStressTest, SeededRandom, type StressScenario } from "./stress-runner";
 
-async function* aiStreamScenario(): AsyncGenerator<() => Promise<unknown>> {
+async function* aiStreamScenario(rng: SeededRandom): AsyncGenerator<() => Promise<unknown>> {
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 \n.,!?;:-()[]{}";
   let chunkIndex = 0;
 
   while (true) {
     yield async () => {
-      const chunkSize = Math.floor(Math.random() * 50) + 10;
+      const chunkSize = rng.nextIntRange(10, 60);
       let chunk = "";
       for (let i = 0; i < chunkSize; i++) {
-        chunk += chars[Math.floor(Math.random() * chars.length)];
+        chunk += chars[rng.nextInt(chars.length)];
       }
       const buffer = new TextEncoder().encode(chunk);
       const decoded = new TextDecoder().decode(buffer);
@@ -19,27 +19,29 @@ async function* aiStreamScenario(): AsyncGenerator<() => Promise<unknown>> {
 
     if (chunkIndex % 10 === 0) {
       yield async () => {
-        return simulateRender();
+        const paragraphCount = rng.nextIntRange(1, 6);
+        let totalLength = 0;
+        for (let i = 0; i < paragraphCount; i++) {
+          totalLength += rng.nextIntRange(50, 250);
+        }
+        return totalLength;
       };
     }
   }
 }
 
-function simulateRender(): number {
-  const paragraphCount = Math.floor(Math.random() * 5) + 1;
-  let totalLength = 0;
-  for (let i = 0; i < paragraphCount; i++) {
-    const paragraphLength = Math.floor(Math.random() * 200) + 50;
-    totalLength += paragraphLength;
-  }
-  return totalLength;
+function createAiStreamScenario(): () => AsyncGenerator<() => Promise<unknown>> {
+  const seed = AI_STREAM_STRESS.seed ?? 42;
+  const rng = new SeededRandom(seed);
+  return () => aiStreamScenario(rng);
 }
 
 export const AI_STREAM_STRESS: StressScenario = {
   name: "ai.streaming.with.rapid.scroll",
   duration: 30_000,
   concurrency: 3,
-  scenario: aiStreamScenario,
+  seed: 42,
+  scenario: createAiStreamScenario(),
   expectedErrorRate: 0.01,
   expected: {
     fps: { min: 30 },

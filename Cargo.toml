@@ -1,5 +1,19 @@
 [workspace]
-members = ["apps/agent-workbench/src-tauri", "packages/agent-provider-http"]
+members = [
+    "apps/agent-workbench/src-tauri",
+    "packages/agent-provider-http",
+    "crates/conex-compaction",
+    "crates/conex-db",
+    "crates/conex-diff",
+    "crates/conex-fs",
+    "crates/conex-ipc",
+    "crates/conex-net",
+    "crates/conex-sandbox",
+    "crates/conex-search",
+    "crates/conex-stream",
+    "crates/conex-test-utils",
+    "crates/conex-types",
+]
 resolver = "2"
 
 [workspace.package]
@@ -10,9 +24,32 @@ authors = ["Conex Community"]
 description = "Crish - Tauri Workbench and agent daemon runtime"
 repository = "https://github.com/conex-community/crish"
 
+# workspace 级 lint 基线：子 crate 通过 [lints] workspace = true 继承。
+# 不在此声明任何 clippy restriction lint（如 unwrap_used/expect_used），
+# 因为它们默认即为 allow；如需在测试中禁用，由各 crate 的测试模块自行 #[cfg_attr(test, allow(...))]。
+[workspace.lints]
+
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-build = { version = "2", features = [] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tracing = { version = "0.1", features = ["attributes"] }
+tracing-subscriber = "0.3"
+anyhow = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.24"
+notify = { version = "8", features = [] }
+ignore = "0.4"
+sha2 = "0.10"
+hex = "0.4"
+bytes = "1"
+futures-util = "0.3"
+tokio-tungstenite = "0.21"
+derive_builder = "0.20"
+similar = "2"

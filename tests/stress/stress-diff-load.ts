@@ -1,6 +1,6 @@
-import { runStressTest, type StressScenario } from "./stress-runner";
+import { runStressTest, SeededRandom, type StressScenario } from "./stress-runner";
 
-async function* diffLoadScenario(): AsyncGenerator<() => Promise<unknown>> {
+function diffLoadScenario(rng: SeededRandom): AsyncGenerator<() => Promise<unknown>> {
   const fileCount = 100;
   const linesPerFile = 5000;
 
@@ -9,7 +9,7 @@ async function* diffLoadScenario(): AsyncGenerator<() => Promise<unknown>> {
     const lines: string[] = [];
     for (let l = 0; l < linesPerFile; l++) {
       const type = l % 3 === 0 ? "+" : l % 3 === 1 ? "-" : " ";
-      const content = `line-${l}-${Math.random().toString(36).slice(2, 8)}`;
+      const content = `line-${l}-${rng.nextString(6)}`;
       lines.push(`${type}${content}`);
     }
     files.push(lines);
@@ -41,18 +41,25 @@ async function* diffLoadScenario(): AsyncGenerator<() => Promise<unknown>> {
       const prevIndex = (currentFile - 1 + files.length) % files.length;
       const prevFile = files[prevIndex];
       const prevSet = new Set(prevFile);
-      const additions = file.filter((l) => !prevSet.has(l)).length;
-      const deletions = prevFile.filter((l) => !new Set(file).has(l)).length;
+      const additions = files[currentFile].filter((l) => !prevSet.has(l)).length;
+      const deletions = prevFile.filter((l) => !new Set(files[currentFile]).has(l)).length;
       return { additions, deletions };
     };
   }
+}
+
+function createDiffLoadScenario(): () => AsyncGenerator<() => Promise<unknown>> {
+  const seed = DIFF_LOAD_STRESS.seed ?? 42;
+  const rng = new SeededRandom(seed);
+  return () => diffLoadScenario(rng);
 }
 
 export const DIFF_LOAD_STRESS: StressScenario = {
   name: "large.diff.loading",
   duration: 20_000,
   concurrency: 1,
-  scenario: diffLoadScenario,
+  seed: 42,
+  scenario: createDiffLoadScenario(),
   expectedErrorRate: 0.02,
   expected: {
     fps: { min: 20 },

@@ -1,3 +1,5 @@
+import { beforeEach, afterEach, vi } from 'vitest';
+
 /**
  * Node vitest 环境补齐 browser 全局，避免 seed layoutStore 时 localStorage 缺失。
  */
@@ -31,6 +33,12 @@ if (typeof globalThis.window === 'undefined') {
 if (typeof globalThis.window.dispatchEvent !== 'function') {
   globalThis.window.dispatchEvent = () => true;
 }
+if (typeof globalThis.requestAnimationFrame === 'undefined') {
+  globalThis.requestAnimationFrame = (cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 0) as unknown as number;
+}
+if (typeof globalThis.cancelAnimationFrame === 'undefined') {
+  globalThis.cancelAnimationFrame = (id: number) => clearTimeout(id);
+}
 if (typeof globalThis.CustomEvent === 'undefined') {
   // @ts-expect-error test env
   globalThis.CustomEvent = class CustomEvent {
@@ -42,3 +50,16 @@ if (typeof globalThis.CustomEvent === 'undefined') {
     }
   };
 }
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[vitest.setup] Unhandled Rejection:', reason);
+});

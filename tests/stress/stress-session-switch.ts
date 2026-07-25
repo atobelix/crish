@@ -1,6 +1,6 @@
-import { runStressTest, type StressScenario } from "./stress-runner";
+import { runStressTest, SeededRandom, type StressScenario } from "./stress-runner";
 
-async function* sessionSwitchScenario(): AsyncGenerator<() => Promise<unknown>> {
+function sessionSwitchScenario(rng: SeededRandom): AsyncGenerator<() => Promise<unknown>> {
   const sessionCount = 50;
   const messagesPerSession = 100;
 
@@ -11,7 +11,7 @@ async function* sessionSwitchScenario(): AsyncGenerator<() => Promise<unknown>> 
       messages.push({
         id: `msg-${s}-${m}`,
         role: m % 2 === 0 ? "user" : "assistant",
-        content: `Message ${m} content with some random data ${Math.random().toString(36).slice(2, 10)}`,
+        content: `Message ${m} content with some random data ${rng.nextString(8)}`,
         timestamp: Date.now() + m,
       });
     }
@@ -52,11 +52,18 @@ async function* sessionSwitchScenario(): AsyncGenerator<() => Promise<unknown>> 
   }
 }
 
+function createSessionSwitchScenario(): () => AsyncGenerator<() => Promise<unknown>> {
+  const seed = SESSION_SWITCH_STRESS.seed ?? 42;
+  const rng = new SeededRandom(seed);
+  return () => sessionSwitchScenario(rng);
+}
+
 export const SESSION_SWITCH_STRESS: StressScenario = {
   name: "rapid.session.switching",
   duration: 15_000,
   concurrency: 4,
-  scenario: sessionSwitchScenario,
+  seed: 42,
+  scenario: createSessionSwitchScenario(),
   expectedErrorRate: 0.01,
   expected: {
     fps: { min: 30 },

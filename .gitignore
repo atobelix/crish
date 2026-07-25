@@ -105,6 +105,8 @@ non_existent_dir/
 non_existent_dir*/
 _find_label_bug.py
 _commit_msg.txt
+debug-output.txt
+test-output.txt
 
 # Codex / MCP local scratch
 .codex/

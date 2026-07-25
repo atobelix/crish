@@ -1,6 +1,49 @@
 import { performance } from "node:perf_hooks";
 import { writeFileSync, mkdirSync } from "node:fs";
 
+export class SeededRandom {
+  private state: number;
+
+  constructor(seed: number) {
+    this.state = seed | 0;
+    if (this.state === 0) this.state = 1;
+  }
+
+  /** mulberry32 — 确定性的 32 位 PRNG */
+  next(): number {
+    this.state |= 0;
+    this.state = (this.state + 0x6d2b79f5) | 0;
+    let t = Math.imul(this.state ^ (this.state >>> 15), 1 | this.state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+
+  /** 返回 [0, max) 的整数 */
+  nextInt(max: number): number {
+    return Math.floor(this.next() * max);
+  }
+
+  /** 返回 [min, max) 的整数 */
+  nextIntRange(min: number, max: number): number {
+    return min + this.nextInt(max - min);
+  }
+
+  /** 返回指定长度的随机字母数字字符串 */
+  nextString(length: number): string {
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let result = "";
+    for (let i = 0; i < length; i++) {
+      result += chars[this.nextInt(chars.length)];
+    }
+    return result;
+  }
+
+  /** 从给定集合中随机取一个元素 */
+  pick<T>(items: readonly T[]): T {
+    return items[this.nextInt(items.length)]!;
+  }
+}
+
 export interface StressMetrics {
   fps: { current: number; min: number; samples: number[] };
   memory: {
@@ -19,6 +62,7 @@ export interface StressScenario {
   duration: number;
   concurrency: number;
   scenario: () => AsyncGenerator<() => Promise<unknown>>;
+  seed?: number;
   expectedErrorRate: number;
   expected: {
     fps: { min: number };
