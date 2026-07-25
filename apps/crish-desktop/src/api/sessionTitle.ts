@@ -74,12 +74,57 @@ const DEFAULT_TITLE_ZH =
   /^(?:新会话|新对话|会话|无标题|未命名(?:会话|对话|聊天)?)([\s\-#（(]*[\d].*)?$/;
 
 /**
- * 控制符 / 零宽 / 双向 / BOM — 与 sanitize 不可见剥离对齐。
- * 用于「是否有可见正文」判定（firstUser 跳过纯不可见行）。
+ * 不可见字符剥离 — 基于 Unicode 属性的系统性方案，而非字符范围黑名单。
+ *
+ * 设计动机：旧实现用枚举字符范围（\u200B-\u200F 等），遗漏了大量 Unicode Cf 类字符：
+ *   - Unicode 6.3 Bidi Isolate（U+2066–U+2069）— 可让标题视觉反转
+ *   - Variation Selectors（U+FE00–U+FE0F）— 构造「看似空但非空」标题
+ *   - Language Tag 块（U+E0000–U+E007F）— 隐藏元数据注入
+ *   - Mongolian Vowel Separator（U+180E）— Cf 类但不在旧范围
+ *   - Deprecated Bidi controls（U+206A–U+206F）
+ * 此外还遗漏了非 Cf 但视觉不可见的字符：
+ *   - Combining Grapheme Joiner（U+034F，category Mn）
+ *   - Hangul Filler（U+3164 / U+115F，category Lo）
+ *
+ * 方案：用 \p{Cf} 覆盖所有 Unicode 格式字符 + 显式追加非 Cf 但不可见的字符。
+ * 保留 ZWJ（U+200D）以不破坏 emoji 序列（如 👨‍👩‍👧‍👦）。
+ *
+ * ALL_INVISIBLE_CHARS：剥离所有 Cf（含 ZWJ），用于「可见性判定 / 默认标题识别」
+ *   — 这些场景不需要保留 emoji 序列内部 ZWJ，全剥更准确。
+ * TITLE_INVISIBLE_CHARS：剥离 Cf 但保留 ZWJ，用于 sanitize（标题原料清洗）
+ *   — 用户输入的 emoji 序列应原样保留。
  */
+const ALL_INVISIBLE_CHARS =
+  // eslint-disable-next-line no-control-regex -- intentional sanitization of C0 controls
+  /[\p{Cf}\u034F\u3164\u115F\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu;
+
 const TITLE_INVISIBLE_CHARS =
   // eslint-disable-next-line no-control-regex -- intentional sanitization of C0 controls
-  /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF\u00AD]/g;
+  /(?![\u200D])[\p{Cf}\u034F\u3164\u115F\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu;
+
+/**
+ * 孤立代理对（lone surrogate）清洗。
+ * 高代理（\uD800-\uDBFF）后无低代理，或低代理（\uDC00-\uDFFF）前无高代理。
+ * 落库 PostgreSQL/SQLite 会拒绝含 lone surrogate 的字符串，必须在 sanitize 阶段清洗。
+ */
+const LONE_SURROGATE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+/**
+ * 可见字符判定：Unicode 类别 L（字母）/ N（数字）/ P（标点）/ S（符号，含 emoji）。
+ * 用于「文本是否有可见正文」判定 — 取代旧的「strip 后非空」逻辑。
+ * 旧逻辑漏判纯组合标记（\u0301 等 Mn 类），它们 trim 后非空但视觉不可见。
+ */
+const VISIBLE_CHAR = /[\p{L}\p{N}\p{P}\p{S}]/u;
+
+/** 文本是否有可见正文（剥离不可见字符后是否含 L/N/P/S 类字符） */
+function hasVisibleContent(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const stripped = text
+    .replace(ALL_INVISIBLE_CHARS, '')
+    .replace(LONE_SURROGATE, '');
+  return VISIBLE_CHAR.test(stripped);
+}
 
 /** 定时任务侧栏标题（与 workflowApi.scheduledSessionTitle 产出对齐） */
 export function isScheduledSessionTitle(
@@ -90,11 +135,21 @@ export function isScheduledSessionTitle(
   return t.startsWith('定时 ·') || t.startsWith('定时·');
 }
 
-/** 是否仍是占位 / 默认标题（可安全被首条用户消息覆盖） */
+/**
+ * 是否仍是占位 / 默认标题（可安全被首条用户消息覆盖）。
+ *
+ * 重要：先剥离不可见字符（Bidi 控制符 / Variation Selectors / 零宽字符 / lone surrogate）
+ * 再判断。否则旧数据水合时，带 Bidi 前缀的「新会话」会被误判为真实标题，
+ * 导致空壳不被 prune、自动改名被跳过。
+ */
 export function isDefaultSessionTitle(
   title: string | undefined | null
 ): boolean {
-  const t = (title ?? '').trim();
+  // 剥离所有不可见字符（含 ZWJ）后再判断 — 默认标题识别不需要保留 emoji 序列
+  const t = (title ?? '')
+    .replace(ALL_INVISIBLE_CHARS, '')
+    .replace(LONE_SURROGATE, '')
+    .trim();
   if (!t) return true;
   // 定时占位永非默认（避免误覆盖 / 被当成可复用空壳）
   if (isScheduledSessionTitle(t)) return false;
@@ -113,11 +168,17 @@ export function isDefaultSessionTitle(
   return false;
 }
 
-/** 单条消息是否有可展示的实质内容 */
+/**
+ * 单条消息是否有可展示的实质内容。
+ *
+ * text / thinking 判定改用 hasVisibleContent：剥离不可见字符后检查是否含
+ * L/N/P/S 类可见字符。旧实现仅 trim()，纯组合标记 / 纯 Bidi 控制符的文本
+ * trim 后非空会被误判为有实质内容。
+ */
 export function messageHasSubstance(m: TitleMessage & { blocks?: unknown[] }): boolean {
-  if ((m.text || '').trim()) return true;
+  if (hasVisibleContent(m.text)) return true;
   if (m.toolCalls && m.toolCalls.length > 0) return true;
-  if ((m.thinking || '').trim()) return true;
+  if (hasVisibleContent(m.thinking)) return true;
   if (Array.isArray(m.blocks) && m.blocks.length > 0) return true;
   return false;
 }
@@ -126,6 +187,7 @@ export function messageHasSubstance(m: TitleMessage & { blocks?: unknown[] }): b
 export function sessionHasListableContent(s: ShellSessionLike): boolean {
   if (s.messages?.length) {
     for (const m of s.messages) {
+      if (!m) continue; // null / undefined 条目跳过（落盘脏数据防御）
       if (messageHasSubstance(m)) return true;
     }
   }
@@ -230,8 +292,10 @@ export function sanitizeSessionTitleText(
   text: string | null | undefined
 ): string {
   let s = String(text ?? '');
-  // 控制符 / 零宽 / 双向 / BOM（与 firstUser 可见性判定同源）
+  // 控制符 / 零宽 / 双向 / BOM / Variation Selectors / Tag 块（保留 ZWJ 以不破坏 emoji 序列）
   s = s.replace(TITLE_INVISIBLE_CHARS, '');
+  // 孤立代理对清洗（落库 PostgreSQL/SQLite 安全）
+  s = s.replace(LONE_SURROGATE, '');
   // 全角空格等空白 → 普通空格再折叠
   s = s.replace(
     /[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g,
@@ -254,11 +318,19 @@ export function sanitizeSessionTitleText(
 /**
  * 按 Unicode 码点截断标题（避免 UTF-16 半截 emoji / 代理对）。
  * CJK 与拉丁一视同仁按码点计数；超长追加省略号。
+ *
+ * 语义：maxLen 为「保留的可见码点数」，省略号在保留码点之外追加。
+ *   - maxLen=28 → 保留 28 码点 + '…' = 29 码点总数
+ *   - maxLen=1 → 保留 1 码点 + '…' = 2 码点总数
+ *   - maxLen=Infinity → 不截断，返回原文
+ *   - maxLen=0 / 负数 / NaN → 回落到 SESSION_TITLE_MAX_LEN
  */
 export function truncateSessionTitle(
   text: string,
   maxLen: number = SESSION_TITLE_MAX_LEN
 ): string {
+  // Infinity 视为「无限制」— 返回原文（与 Number.isFinite 不同分支）
+  if (maxLen === Infinity) return text;
   const limit =
     Number.isFinite(maxLen) && maxLen > 0
       ? Math.floor(maxLen)
@@ -313,18 +385,24 @@ export function withTitleCollisionSuffix(
   return `${title} ${Date.now()}`;
 }
 
-/** 从消息列表取首条用户正文（跳过空白 / 纯不可见控制符） */
+/**
+ * 从消息列表取首条用户正文（跳过空白 / 纯不可见控制符）。
+ *
+ * 可见性判定使用 hasVisibleContent：剥离 Cf / lone surrogate / 组合标记后
+ * 检查是否含 L/N/P/S 类可见字符。旧实现仅 replace(TITLE_INVISIBLE_CHARS).trim()，
+ * 漏判纯组合标记（\u0301 等）和 Unicode 6.3 Bidi Isolate（U+2066–U+2069）。
+ */
 export function firstUserMessageText(
   messages: TitleMessage[] | undefined
 ): string {
   if (!messages?.length) return '';
   for (const m of messages) {
+    if (!m) continue; // null / undefined 条目跳过（落盘脏数据防御）
     if (m.sender !== 'user') continue;
     const t = (m.text || '').trim();
     if (!t) continue;
-    // 仅控制符 / 零宽 / 双向 → 跳过，找下一条有可见内容的用户消息
-    const visible = t.replace(TITLE_INVISIBLE_CHARS, '').trim();
-    if (!visible) continue;
+    // 仅不可见字符（Bidi / 零宽 / 组合标记 / Variation Selector）→ 跳过
+    if (!hasVisibleContent(t)) continue;
     // 保留原文交给 derive（含 slash，由 sanitize 剥）
     return t;
   }
@@ -383,6 +461,7 @@ export function fillDefaultSessionTitles<T extends TitleSession>(
   const taken: string[] = [];
   if (resolve) {
     for (const s of sessions) {
+      if (!s) continue; // null / undefined 条目跳过（落盘脏数据防御）
       const t = (s.title || '').trim();
       // 仅真实标题占位；默认占位不阻塞碰撞池
       if (t && !isDefaultSessionTitle(t)) taken.push(t);
@@ -390,6 +469,7 @@ export function fillDefaultSessionTitles<T extends TitleSession>(
   }
 
   const next = sessions.map((s) => {
+    if (!s) return s; // null / undefined 条目保留原值（由 prepareSessionsForUi 过滤）
     const opts: MaybeAutoTitleOpts | undefined = resolve
       ? {
           existingTitles: taken,
