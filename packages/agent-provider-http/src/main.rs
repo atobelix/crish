@@ -36,7 +36,7 @@ async fn main() {
         .pool_idle_timeout(std::time::Duration::from_secs(60))
         .build()
         .unwrap_or_else(|e| {
-            eprintln!("Failed to build HTTP client: {e}");
+            tracing::error!(error = %e, "Failed to build HTTP client");
             std::process::exit(1);
         });
 
@@ -49,7 +49,7 @@ async fn main() {
         let line = match line {
             Ok(l) => l,
             Err(e) => {
-                eprintln!("Failed to read stdin: {e}");
+                tracing::error!(error = %e, "Failed to read stdin");
                 break;
             }
         };
@@ -73,8 +73,7 @@ async fn main() {
         };
 
         if let Err(e) = process_request(&client, &request, &mut stdout).await {
-            eprintln!("Request processing failed: {e}");
-            // daemon 不因单个请求失败而退出，继续服务下一个请求
+            tracing::error!(error = %e, "Request processing failed");
         }
     }
 }

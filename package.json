@@ -2,6 +2,7 @@
   "name": "crish",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@11.6.2",
   "license": "MIT",
   "description": "Crish - Tauri Workbench and agent daemon runtime",
   "workspaces": [
@@ -12,9 +13,12 @@
     "packages/agent-daemon",
     "packages/shared-types",
     "packages/shared-utils",
-    "packages/decision-engine"
+    "packages/decision-engine",
+    "packages/test-utils"
   ],
   "scripts": {
+    "build": "turbo run build",
+    "clean": "turbo run clean",
     "prepare": "husky",
     "dev:desktop": "npm --workspace @crish/crish-desktop run dev",
     "dev:workbench": "npm --workspace @crish/agent-workbench run tauri -- dev",
@@ -24,10 +28,9 @@
     "build:shared-types": "npm --workspace @crish/shared-types run build",
     "build:runtime": "npm --workspace @crish/agent-runtime run build",
     "build:orchestrator": "npm --workspace @crish/agent-orchestrator run build",
-    "build:packages": "npm run build:shared-types && npm --workspace @crish/shared-utils run build && npm --workspace @crish/decision-engine run build && npm run build:runtime && npm run build:orchestrator",
-    "build:daemon": "npm run build:packages && npm --workspace @crish/agent-daemon run build",
-    "build:daemon-binary": "node scripts/bundle-daemon.mjs",
-    "build:product": "npm run build:daemon && npm run build:desktop && npm run build:daemon-binary",
+    "build:packages": "turbo run build --filter='./packages/*'",
+    "build:daemon": "turbo run build --filter=@crish/agent-daemon...",
+    "build:product": "turbo run build && npm run build:daemon-binary",
     "cli": "npm run dev:cli",
     "daemon": "tsx --conditions development packages/agent-daemon/src/index.ts",
     "daemon:dist": "node packages/agent-daemon/dist/index.js",
@@ -49,26 +52,32 @@
     "check:orchestrator": "tsc -p packages/agent-orchestrator/tsconfig.json --noEmit",
     "check:daemon": "tsc -p packages/agent-daemon/tsconfig.json --noEmit",
     "check:workbench": "npm --workspace @crish/agent-workbench run cli:check",
+    "typecheck:ci": "turbo run typecheck",
     "typecheck": "tsc --noEmit --project apps/crish-desktop/tsconfig.json",
     "check:desktop": "npm --workspace @crish/crish-desktop run typecheck",
     "check:store-types": "node scripts/check-no-as-any-store.mjs",
+    "check:no-any": "node scripts/check-no-as-any.mjs",
     "test:core": "vitest run packages/agent-runtime/src packages/agent-orchestrator/src packages/agent-daemon/src",
     "test:desktop-helpers": "vitest run apps/crish-desktop/src/api apps/crish-desktop/src/store",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:fuzz": "vitest run tests/fuzz --reporter=verbose || echo 'No fuzz tests found'",
     "lint:all": "eslint . --ext .ts,.tsx --max-warnings 0 && stylelint 'apps/crish-desktop/src/**/*.css'",
     "lint:css": "npx --yes stylelint@16 \"apps/crish-desktop/src/styles/**/*.css\"",
     "lint": "eslint .",
+    "lint:depcruise": "depcruise --config .dependency-cruiser.cjs packages apps --ignore \"dist/\"",
+    "check:deps": "npm run lint:depcruise",
     "check:all": "npm run typecheck && npm run lint:all && npm run test:coverage",
     "format": "prettier --check .",
     "format:write": "prettier --write ."
   },
   "devDependencies": {
+    "dependency-cruiser": "^16.10.0",
     "@eslint/js": "^9.21.0",
     "@types/node": "^25.6.0",
     "@vitest/coverage-v8": "^3.2.7",
-    "esbuild": "^0.27.7",
+    "esbuild": "^0.28.1",
     "eslint": "^9.21.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.19",
@@ -82,10 +91,36 @@
     "typescript-eslint": "^8.25.0",
     "vitest": "^3.2.4"
   },
+  "overrides": {
+    "esbuild": "^0.28.1"
+  },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "ws": "^8.21.0"
+  },
+  "vitest": {
+    "coverage": {
+      "enabled": true,
+      "thresholds": {
+        "statements": 50,
+        "branches": 40,
+        "functions": 50,
+        "lines": 50
+      }
+    }
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml,css}": [
+      "prettier --write"
+    ],
+    "*.{ts,tsx,js,mjs,cjs,json,md,yml,yaml,css}": [
+      "git diff --check"
+    ]
   }
 }
