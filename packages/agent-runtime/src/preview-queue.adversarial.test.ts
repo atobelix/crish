@@ -453,10 +453,14 @@ describe("PQ10: artifact 构建", () => {
     clock.advance(11);
     const expired = await queue.get(preview.id);
     expect(expired?.status).toBe("expired");
-    expect(expired?.artifact.metadata).toMatchObject({
+    if (expired?.status !== "expired") throw new Error("expected expired");
+    // previewExpiredAt 是检测到过期时的时间（clock advance 11 后 = 011Z），
+    // 与 expiresAt（创建时计算的 010Z）不同——这反映"何时被发现过期"
+    expect(expired.artifact.metadata).toMatchObject({
       previewStatus: "expired",
-      previewExpiredAt: expired!.expiresAt,
+      previewExpiredAt: expired.expiredAt,
     });
+    expect(new Date(expired.expiredAt).getTime()).toBeGreaterThan(new Date(expired.expiresAt).getTime() - 1);
   });
 });
 
@@ -465,21 +469,23 @@ describe("PQ10: artifact 构建", () => {
 // ============================================================================
 
 describe("PQ11: 大规模压力", () => {
-  it("PQ11a: 1000 个 preview 创建+查询应在合理时间内完成", async () => {
+  it("PQ11a: 大量 preview 创建应受 MAX_PREVIEWS 上限约束", async () => {
     const queue = new PreviewQueue({ idFactory: sequentialIds("p"), now: () => Date.UTC(2026, 0, 1) });
+    // 创建超过 MAX_PREVIEWS（200）的数量，触发 eviction
     const ids: string[] = [];
     for (let i = 0; i < 1000; i++) {
       const preview = await queue.createPreview(minimalRequest());
       ids.push(preview.id);
     }
-    // 随机查询 50 个
-    for (let i = 0; i < 50; i++) {
-      const id = ids[Math.floor(Math.random() * ids.length)]!;
-      const preview = await queue.get(id);
-      expect(preview).toBeDefined();
-    }
+    // eviction 后 list 长度应 <= MAX_PREVIEWS
     const all = await queue.list();
-    expect(all.length).toBe(1000);
+    expect(all.length).toBeLessThanOrEqual(200);
+    // 最早的 preview 应已被 evict（不存在）
+    const earliest = await queue.get(ids[0]!);
+    expect(earliest).toBeUndefined();
+    // 最新的 preview 应仍存在
+    const latest = await queue.get(ids[ids.length - 1]!);
+    expect(latest).toBeDefined();
   });
 
   it("PQ11b: 大量并发操作应不崩溃", async () => {
