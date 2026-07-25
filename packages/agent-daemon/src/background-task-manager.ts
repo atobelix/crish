@@ -6,6 +6,7 @@ import {
   type BackgroundCommandStartInput,
 } from "@crish/agent-runtime";
 import { BoundedMap } from "@crish/shared-utils";
+import { getDaemonLogger, toLogErr } from "./daemon-logger.js";
 import type {
   DaemonBackgroundTaskDiagnostic,
   DaemonBackgroundTaskSnapshot,
@@ -35,7 +36,7 @@ export class DaemonBackgroundTaskError extends Error {
 }
 
 export class DaemonBackgroundTaskManager {
-  private readonly managers = new BoundedMap<string, BackgroundCommandManager>(MAX_WORKSPACE_MANAGERS);
+  private readonly managers = new BoundedMap<string, BackgroundCommandManager>(MAX_WORKSPACE_MANAGERS, undefined);
 
   constructor(
     private readonly options: {
@@ -137,7 +138,7 @@ export class DaemonBackgroundTaskManager {
       try {
         manager.dispose();
       } catch (error) {
-        console.error("[DaemonBackgroundTaskManager] dispose failed:", error);
+        getDaemonLogger().error('Background task manager dispose failed', { module: 'DaemonBackgroundTaskManager', err: toLogErr(error) });
       }
     }
     this.managers.clear();
@@ -164,6 +165,7 @@ export function daemonBackgroundDiagnostics(tasks: DaemonBackgroundTaskSnapshot[
       message: "Daemon background task snapshot is backed by the shared background command manager.",
       severity: "info",
       updatedAt: now,
+      detail: undefined,
       metadata: {
         taskCount: tasks.length,
         runningCount: tasks.filter((task) => task.state === "running").length,
@@ -178,6 +180,7 @@ function daemonTaskFromRuntimeTask(task: BackgroundCommandSnapshot): DaemonBackg
     message: diagnostic.message ?? `${diagnostic.strategy} ${diagnostic.ok ? "succeeded" : "failed"}`,
     severity: diagnostic.ok ? "info" : "warning",
     updatedAt: task.updatedAt,
+    detail: undefined,
     metadata: {
       platform: diagnostic.platform,
       strategy: diagnostic.strategy,
@@ -192,6 +195,8 @@ function daemonTaskFromRuntimeTask(task: BackgroundCommandSnapshot): DaemonBackg
       message: task.error,
       severity: "error",
       updatedAt: task.updatedAt,
+      detail: undefined,
+      metadata: undefined,
     });
   }
   if (task.timedOut) {
@@ -200,6 +205,7 @@ function daemonTaskFromRuntimeTask(task: BackgroundCommandSnapshot): DaemonBackg
       message: `Background task timed out after ${task.timeoutMs}ms.`,
       severity: "warning",
       updatedAt: task.updatedAt,
+      detail: undefined,
       metadata: { timeoutMs: task.timeoutMs },
     });
   }

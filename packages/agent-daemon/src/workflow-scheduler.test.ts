@@ -482,7 +482,7 @@ function workflowRun(patch: Partial<WorkflowRunEntry> & { workflowId: string; sc
     scheduledFor: patch.scheduledFor,
     startedAt: patch.startedAt ?? patch.scheduledFor,
     status: patch.status ?? "completed",
-    ...(patch.error !== undefined ? { error: patch.error } : {}),
+    error: patch.error,
   };
 }
 

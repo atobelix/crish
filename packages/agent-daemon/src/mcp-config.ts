@@ -60,13 +60,13 @@ export function normalizeDaemonMcpServers(
 
     out.push({
       name,
-      ...(label ? { label } : {}),
+      label: label ?? undefined,
       transport,
-      ...(command ? { command } : {}),
-      ...(args ? { args } : {}),
-      ...(env ? { env } : {}),
-      ...(cwd ? { cwd } : {}),
-      ...(url ? { url } : {}),
+      command: command ?? undefined,
+      args: args ?? undefined,
+      env: env ?? undefined,
+      cwd: cwd ?? undefined,
+      url: url ?? undefined,
     });
   }
 
@@ -173,17 +173,19 @@ export function resolveDaemonMcpServers(input: {
  * - 非 stdio：deferred adapter（明确不支持）
  */
 export function buildMcpServerDefinitions(
-  configs: DaemonMcpServerConfig[]
+  configs: DaemonMcpServerConfig[],
+  confirmStart?: (command: string, args: string[]) => boolean | Promise<boolean>,
 ): McpServerDefinition[] {
   return configs.map((config) => ({
     name: config.name,
     label: config.label ?? config.name,
-    adapter: createAdapterForConfig(config),
+    adapter: createAdapterForConfig(config, confirmStart),
   }));
 }
 
 function createAdapterForConfig(
-  config: DaemonMcpServerConfig
+  config: DaemonMcpServerConfig,
+  confirmStart?: (command: string, args: string[]) => boolean | Promise<boolean>,
 ): McpServerAdapter {
   const transport = (config.transport ?? 'stdio').toLowerCase();
   if (transport === 'stdio' && config.command?.trim()) {
@@ -193,6 +195,7 @@ function createAdapterForConfig(
       args: config.args ?? [],
       env: config.env,
       cwd: config.cwd,
+      confirmStart,
     });
   }
 

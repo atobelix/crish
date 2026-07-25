@@ -283,9 +283,9 @@ export class DaemonRequestHandlers {
             activeRunCount: this.options.runHandler.activeRunCount(),
             getLifecycleSnapshot: this.options.getLifecycleSnapshot,
             getConfigUpdateHandler: () => this.options.getConfigUpdateHandler(),
-            applyMcpServerConfigs: this.options.applyMcpServerConfigs
-              ? (configs) => this.options.applyMcpServerConfigs!(configs)
-              : undefined,
+            ...(this.options.applyMcpServerConfigs
+              ? { applyMcpServerConfigs: (configs: NonNullable<import('./types.js').UpdateConfigMessage['mcpServers']>) => this.options.applyMcpServerConfigs!(configs) }
+              : {}),
           },
           correlateResponse,
           correlationFrom
@@ -821,7 +821,7 @@ export class DaemonRequestHandlers {
           'UNKNOWN_MESSAGE_TYPE',
           `Unknown message type: ${(msg as unknown as Record<string, unknown>).type}`,
           undefined,
-          correlationFrom(msg)
+          correlationFrom(msg as unknown as import('./types.js').DaemonCorrelationFields)
         );
     }
   }

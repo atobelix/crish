@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { DaemonMcpServerConfig } from './types.js';
 import {
   buildMcpServerDefinitions,
   normalizeDaemonMcpServers,
@@ -11,7 +12,7 @@ describe('mcp-config', () => {
       normalizeDaemonMcpServers([
         { name: 'a', command: 'npx', args: ['-y', 'x'] },
         { id: 'b', transport: 'stdio', command: 'node' },
-        { name: 'a', command: 'dup' }, // duplicate dropped
+        { name: 'a', command: 'dup' },
         null,
         'skip',
       ])
@@ -29,7 +30,7 @@ describe('mcp-config', () => {
 
   it('resolveDaemonMcpServers prefers explicit config over env/file', () => {
     const resolved = resolveDaemonMcpServers({
-      configServers: [{ name: 'from-config', command: 'node', args: ['s.js'] }],
+      configServers: [{ name: 'from-config', command: 'node', args: ['s.js'] }] as DaemonMcpServerConfig[],
       env: {
         CRISH_MCP_SERVERS: JSON.stringify([{ name: 'from-env', command: 'x' }]),
       },
@@ -62,7 +63,7 @@ describe('mcp-config', () => {
       { name: 'stdio-ok', command: 'node', args: ['x.js'] },
       { name: 'no-cmd' },
       { name: 'sse', transport: 'sse', url: 'http://localhost:1' },
-    ]);
+    ] as unknown as DaemonMcpServerConfig[]);
     expect(defs).toHaveLength(3);
     expect(defs[0]?.name).toBe('stdio-ok');
     expect(typeof defs[0]?.adapter.connect).toBe('function');

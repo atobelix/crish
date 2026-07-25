@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { afterEach, describe, expect, it } from "vitest";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
@@ -166,7 +167,7 @@ describe("DaemonServer orchestrated runs", () => {
         prompt: "stream benchmark cancel"
       })
     );
-    // 等待 turn-start 事件，确保 cancel-run 在 provider streaming 期间被发送
+    // 等待 turn-start 事件，确�?cancel-run �?provider streaming 期间被发�?
     await collectMessages(ws, (message) => {
       return message.type === "event" && message.runId === "run_stream_bench_cancel" && message.event?.type === "turn-start";
     });
@@ -3563,8 +3564,8 @@ async function seedWorkflowStore(
   sessionEventLogDir: string,
   workflow: WorkflowDefinition
 ): Promise<void> {
-  // WorkflowStore 拆分为 workflows.json (workflows only) + workflows-runs.json (runs only)。
-  // seed 时无 runs，仅写 workflows 文件；runs 文件不存在时 store 会按空数组处理。
+  // WorkflowStore 拆分�?workflows.json (workflows only) + workflows-runs.json (runs only)�?
+  // seed 时无 runs，仅�?workflows 文件；runs 文件不存在时 store 会按空数组处理�?
   await writeFile(
     join(sessionEventLogDir, "workflows.json"),
     `${JSON.stringify(

@@ -7,7 +7,7 @@
  */
 
 import type { WebSocket } from "ws";
-import { errorMessage } from "@crish/shared-utils";
+import { errorMessage, toJsonObject } from "@crish/shared-utils";
 import type { JsonObject, AgentEvent } from "@crish/shared-types";
 import {
   JsonlSessionStore,
@@ -120,10 +120,10 @@ interface SessionTransport {
 interface ConversationRewindApplyPlanResolution {
   plan: ConversationRewindPlanSnapshot;
   source: "explicit" | "boundary";
-  boundary?: ConversationBoundaryManifestRecord;
-  target?: ConversationRewindTargetFacts;
-  runtimeTargetLeafId?: string;
-  missingFacts?: DaemonConversationRewindBoundaryMissingFact[];
+  boundary?: ConversationBoundaryManifestRecord | undefined;
+  target?: ConversationRewindTargetFacts | undefined;
+  runtimeTargetLeafId?: string | undefined;
+  missingFacts?: DaemonConversationRewindBoundaryMissingFact[] | undefined;
 }
 
 // ─── Handler functions ─────────────────────────────────────
@@ -213,11 +213,23 @@ export async function handleResolveConversationRewindBoundary(
     const result = await resolveConversationRewindBoundary({
       config,
       sessionId: msg.sessionId,
-      ...(msg.userMessageId !== undefined ? { userMessageId: msg.userMessageId } : {}),
-      ...(msg.latestUserMessage !== undefined ? { latestUserMessage: msg.latestUserMessage } : {}),
-      ...(msg.mode !== undefined ? { mode: msg.mode } : {}),
+      userMessageId: msg.userMessageId,
+      latestUserMessage: msg.latestUserMessage,
+      mode: msg.mode,
     });
-    transport.send(ws, correlateResponse({ type: "conversation-rewind-boundary", ...result }, msg));
+    const boundaryMsg: DaemonOutboundMessage = {
+      type: "conversation-rewind-boundary",
+      status: result.status,
+      sessionId: result.sessionId,
+      ...(result.userMessageId !== undefined ? { userMessageId: result.userMessageId } : {}),
+      latestUserMessage: result.latestUserMessage,
+      mode: result.mode,
+      ...(result.boundary !== undefined ? { boundary: result.boundary } : {}),
+      ...(result.checkpoint !== undefined ? { checkpoint: result.checkpoint } : {}),
+      ...(result.target !== undefined ? { target: result.target } : {}),
+      missingFacts: result.missingFacts,
+    } as unknown as DaemonOutboundMessage;
+    transport.send(ws, correlateResponse(boundaryMsg, msg));
   } catch (error) {
     sendConversationRewindError(ws, error, transport, msg);
   }
@@ -238,13 +250,27 @@ export async function handlePreviewConversationRewindByBoundary(
       orchestrator,
       approvalQueue,
       sessionId: msg.sessionId,
-      ...(msg.userMessageId !== undefined ? { userMessageId: msg.userMessageId } : {}),
-      ...(msg.latestUserMessage !== undefined ? { latestUserMessage: msg.latestUserMessage } : {}),
-      ...(msg.mode !== undefined ? { mode: msg.mode } : {}),
-      ...(msg.restorePolicy !== undefined ? { restorePolicy: msg.restorePolicy } : {}),
-      ...(msg.activeSubagents !== undefined ? { activeSubagents: msg.activeSubagents } : {}),
+      userMessageId: msg.userMessageId,
+      latestUserMessage: msg.latestUserMessage,
+      mode: msg.mode,
+      restorePolicy: msg.restorePolicy,
+    activeSubagents: (msg.activeSubagents ?? []).map((a) => ({ ...a, subagentId: a.subagentId ?? '' })),
     });
-    transport.send(ws, correlateResponse({ type: "conversation-rewind-boundary", ...result }, msg));
+    const boundaryMsg: DaemonOutboundMessage = {
+      type: "conversation-rewind-boundary",
+      status: result.status,
+      sessionId: result.sessionId,
+      ...(result.userMessageId !== undefined ? { userMessageId: result.userMessageId } : {}),
+      latestUserMessage: result.latestUserMessage,
+      mode: result.mode,
+      ...(result.boundary !== undefined ? { boundary: result.boundary } : {}),
+      ...(result.checkpoint !== undefined ? { checkpoint: result.checkpoint } : {}),
+      ...(result.target !== undefined ? { target: result.target } : {}),
+      missingFacts: result.missingFacts,
+      ...(result.plan !== undefined ? { plan: result.plan } : {}),
+      ...(result.runtimeTargetLeafId !== undefined ? { runtimeTargetLeafId: result.runtimeTargetLeafId } : {}),
+    } as unknown as DaemonOutboundMessage;
+    transport.send(ws, correlateResponse(boundaryMsg, msg));
   } catch (error) {
     sendConversationRewindError(ws, error, transport, msg);
   }
@@ -329,9 +355,9 @@ function createConversationRewindPlan(
       toolCallId: approval.toolCallId,
       runId: approval.runId,
     })),
-    activeSubagents: msg.activeSubagents ?? [],
-    ...(msg.checkpoint !== undefined ? { checkpoint: msg.checkpoint } : {}),
-    ...(msg.restorePolicy !== undefined ? { restorePolicy: msg.restorePolicy } : {}),
+    activeSubagents: (msg.activeSubagents ?? []).map((a) => ({ ...a, subagentId: a.subagentId ?? '' })),
+    checkpoint: msg.checkpoint,
+    restorePolicy: msg.restorePolicy,
   });
 }
 
@@ -351,11 +377,11 @@ async function createConversationRewindApplyPlan(
     orchestrator: deps.orchestrator,
     approvalQueue: deps.approvalQueue,
     sessionId: msg.sessionId,
-    ...(msg.userMessageId !== undefined ? { userMessageId: msg.userMessageId } : {}),
-    ...(msg.latestUserMessage !== undefined ? { latestUserMessage: msg.latestUserMessage } : {}),
-    ...(msg.mode !== undefined ? { mode: msg.mode } : {}),
-    ...(msg.restorePolicy !== undefined ? { restorePolicy: msg.restorePolicy } : {}),
-    ...(msg.activeSubagents !== undefined ? { activeSubagents: msg.activeSubagents } : {}),
+    userMessageId: msg.userMessageId,
+    latestUserMessage: msg.latestUserMessage,
+    mode: msg.mode,
+    restorePolicy: msg.restorePolicy,
+    activeSubagents: msg.activeSubagents ?? [],
   });
 
   if (result.status !== "ok" || !result.plan) {
@@ -421,7 +447,8 @@ async function applyConversationRewindPlan(
         status: affectedIds.length > 0 ? "applied" : "skipped",
         code: affectedIds.length > 0 ? "active-runs-cancelled" : "no-active-runs",
         affectedIds,
-        ...(affectedIds.length === 0 ? { message: "No active runs were cancelled." } : {}),
+        message: affectedIds.length === 0 ? "No active runs were cancelled." : undefined,
+        metadata: undefined,
       });
       continue;
     }
@@ -435,6 +462,8 @@ async function applyConversationRewindPlan(
         status: step.approvals.length > 0 ? "applied" : "skipped",
         code: step.approvals.length > 0 ? "pending-approvals-cleared" : "no-pending-approvals",
         affectedIds: step.approvals.map((approval) => approval.toolCallId),
+        message: undefined,
+        metadata: undefined,
       });
       continue;
     }
@@ -446,7 +475,8 @@ async function applyConversationRewindPlan(
         status: "applied",
         code: "workspace-restored",
         affectedIds: restored.affectedIds,
-        ...(restored.metadata !== undefined ? { metadata: restored.metadata } : {}),
+        message: undefined,
+        metadata: restored.metadata,
       });
       continue;
     }
@@ -457,8 +487,8 @@ async function applyConversationRewindPlan(
       status: result.changed ? "applied" : "skipped",
       code: result.changed ? "session-leaf-moved" : "session-leaf-unchanged",
       affectedIds: step.toLeafId === null ? [] : [step.toLeafId],
-      ...(result.runtimePointerId !== undefined ? { metadata: { runtimePointerId: result.runtimePointerId } } : {}),
-      ...(result.changed ? {} : { message: "Session leaf already points at the rewind target." }),
+      message: result.changed ? undefined : "Session leaf already points at the rewind target.",
+      ...(result.runtimePointerId !== undefined ? { metadata: { runtimePointerId: result.runtimePointerId } } : { metadata: undefined }),
     });
   }
   await recordConversationRewindAudit(resolution, results, deps);
@@ -639,10 +669,10 @@ async function recordConversationRewindAudit(
     payload: {
       kind: "conversation-rewind-applied",
       source: resolution.source,
-      plan: resolution.plan as unknown as JsonObject,
-      stepResults: stepResults as unknown as JsonObject[],
-      ...(resolution.boundary !== undefined ? { boundary: resolution.boundary as unknown as JsonObject } : {}),
-      ...(resolution.target !== undefined ? { target: resolution.target as unknown as JsonObject } : {}),
+      plan: toJsonObject(resolution.plan),
+      stepResults: stepResults.map(toJsonObject),
+      ...(resolution.boundary !== undefined ? { boundary: toJsonObject(resolution.boundary) } : {}),
+      ...(resolution.target !== undefined ? { target: toJsonObject(resolution.target) } : {}),
     },
   });
 }

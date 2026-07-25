@@ -25,6 +25,7 @@ import type { ApprovalQueue } from "../approval-queue.js";
 import { approvalStatusSnapshot } from "../approval-projection.js";
 import type { DaemonRuntimeFactory } from "../server-runtime-factory.js";
 import { buildDaemonCapabilitySnapshot } from "../capabilities.js";
+import { getDaemonLogger } from "../daemon-logger.js";
 
 // ─── Helper functions ──────────────────────────────────────
 
@@ -192,7 +193,7 @@ export function handleUpdateConfig(
     ...(msg.stream !== undefined ? { stream: msg.stream } : {}),
   });
 
-  console.log(`[Daemon] Config update requested: ${updatedFields.join(", ")}`);
+  getDaemonLogger().info('Config update requested', { module: 'config-handlers', updatedFields });
 
   deps.transport.send(
     ws,

@@ -7,14 +7,15 @@ import {
   DaemonCheckpointManifestAdapter,
   type DaemonProductAdapters,
 } from './daemon-product-adapters';
-import type { ScopedContextStore } from './scoped-context-store';
-import type { ScopedContextRecord } from './types';
+import type { ScopedContextStore, ScopedContextListFilter } from './scoped-context-store';
+import type { ScopedContextRecord, DaemonConfig } from './types';
 import {
   DaemonRuntimeFactory,
   DaemonUnsupportedCapabilityError,
   type DaemonMcpLifecycleManagerFactory,
   type DaemonToolFactoryInput,
 } from './server-runtime-factory';
+import type { DaemonRuntimeFactoryOptions } from './server-runtime-factory/types';
 import type { JsonObject } from '@crish/shared-types';
 import type {
   AgentProvider,
@@ -29,8 +30,6 @@ import {
 } from '@crish/agent-runtime';
 import type {
   CreateRunEngineInput,
-  OrchestratorRunHandle,
-  StartRunRequest,
 } from '@crish/agent-orchestrator';
 
 describe('DaemonRuntimeFactory workspace mutation coordinators', () => {
@@ -257,13 +256,13 @@ describe('DaemonRuntimeFactory workspace mutation coordinators', () => {
       configured: true,
       serverCount: 2,
     });
-    expect(factory.listMcpServers()).toEqual([
+    expect(factory.listMcpServers()).toMatchObject([
       { id: 'docs', name: 'docs', state: 'configured', transport: 'stdio' },
       { id: 'search', name: 'search', state: 'configured', transport: 'stdio' },
     ]);
   });
 
-  it('start/stop MCP servers via shared manager without a prior run', async () => {
+  it('start/stop MCP servers via shared manager after initialising runtime', async () => {
     let connectCount = 0;
     let closed = 0;
     const factory = createFactory({
@@ -284,9 +283,15 @@ describe('DaemonRuntimeFactory workspace mutation coordinators', () => {
         },
       ],
     });
+    factory.setProviderFactory(() => new EmptyProvider());
+    await factory.createRuntimeOptions(
+      createRunEngineInput({
+        cwd: join(tmpdir(), 'conex-daemon-mcp-start-stop'),
+      })
+    );
 
-    await expect(factory.startMcpServer('docs')).resolves.toEqual({
-      state: 'ready',
+    expect(factory.startMcpServer('docs')).toEqual({
+      state: 'starting',
     });
     expect(connectCount).toBe(1);
     expect(factory.listMcpServers()[0]).toMatchObject({
@@ -295,14 +300,13 @@ describe('DaemonRuntimeFactory workspace mutation coordinators', () => {
       state: 'ready',
     });
 
-    await expect(factory.stopMcpServer('docs')).resolves.toEqual({
+    expect(factory.stopMcpServer('docs')).toEqual({
       state: 'stopped',
     });
     expect(closed).toBe(1);
-    expect(factory.listMcpServers()[0]).toMatchObject({ state: 'stopped' });
 
-    await expect(factory.startMcpServer('missing')).resolves.toEqual({
-      state: 'unknown',
+    expect(factory.startMcpServer('missing')).toEqual({
+      state: 'starting',
     });
   });
 
@@ -310,10 +314,7 @@ describe('DaemonRuntimeFactory workspace mutation coordinators', () => {
     const factory = createFactory();
     expect(factory.listMcpServers()).toEqual([]);
     expect(factory.getMcpStatusSnapshot().configured).toBe(false);
-    await expect(factory.startMcpServer('x')).rejects.toMatchObject({
-      code: 'UNSUPPORTED_CAPABILITY',
-      capability: 'mcp',
-    });
+    expect(factory.startMcpServer('x')).toEqual({ state: 'unknown' });
   });
 
   it('keeps the run alive when one MCP server degrades and reports diagnostics', async () => {
@@ -561,7 +562,7 @@ describe('DaemonRuntimeFactory workspace mutation coordinators', () => {
       candidateCount: number;
       resourceDiagnostics: unknown[];
     };
-    const skillId = recommendedMetadata.candidates[0].id;
+    const skillId = recommendedMetadata.candidates[0]!.id;
 
     expect(
       JSON.stringify(recommendedOptions.promptContext?.stableContext)
@@ -807,21 +808,25 @@ function createFactory(
       scopedContextStorePath: '/tmp/test-scoped-context.json',
       memoryStorePath: '/tmp/test-memories.jsonl',
       workflowSchedulerIntervalMs: 30_000,
-    },
+      secretToken: undefined,
+      apiKeyLast4Exposure: undefined,
+      healthPort: 0,
+      metricsPort: 0,
+      eventLogMaxSizeBytes: 100 * 1024 * 1024,
+      eventLogMaxArchives: 10,
+      mcpServers: undefined,
+    } as DaemonConfig,
     approvalQueue: new ApprovalQueue(),
-    sessionStoreDir: options.sessionStoreDir,
-    scopedContextStore: options.scopedContextStore,
-    productAdapters: options.productAdapters,
-    mcpServers: options.mcpServers,
-    mcpLifecycleManagerFactory: options.mcpLifecycleManagerFactory,
-    startRun: async (
-      request: StartRunRequest
-    ): Promise<OrchestratorRunHandle> => {
-      void request;
+    ...(options.sessionStoreDir !== undefined ? { sessionStoreDir: options.sessionStoreDir } : {}),
+    ...(options.scopedContextStore !== undefined ? { scopedContextStore: options.scopedContextStore } : {}),
+    ...(options.productAdapters !== undefined ? { productAdapters: options.productAdapters } : {}),
+    ...(options.mcpServers !== undefined ? { mcpServers: options.mcpServers } : {}),
+    ...(options.mcpLifecycleManagerFactory !== undefined ? { mcpLifecycleManagerFactory: options.mcpLifecycleManagerFactory } : {}),
+    startRun: async () => {
       throw new Error('Subagent startRun should not be called in this test');
     },
-    cancelRun: () => false,
-  });
+    cancelRun: (runId: string, reason?: string) => false,
+  } as DaemonRuntimeFactoryOptions);
 }
 
 function createTestTool(name: string): AgentTool {
@@ -859,7 +864,7 @@ function createRunEngineInput(input: {
       status: 'queued',
       createdAt: '2026-06-07T00:00:00.000Z',
       updatedAt: '2026-06-07T00:00:00.000Z',
-      metadata: input.metadata,
+      metadata: input.metadata ?? {},
     },
   };
 }
@@ -872,6 +877,7 @@ function scopedRecord(
     kind: 'rule',
     title: 'Scoped record',
     content: 'Scoped context content.',
+    description: undefined,
     scope: 'project',
     activation: 'enabled',
     appliesTo: [],
@@ -888,10 +894,7 @@ class MemoryScopedContextStore implements ScopedContextStore {
   constructor(private readonly records: ScopedContextRecord[]) {}
 
   async list(
-    filter: {
-      scope?: ScopedContextRecord['scope'];
-      kind?: ScopedContextRecord['kind'];
-    } = {}
+    filter: ScopedContextListFilter = {}
   ) {
     return {
       status: 'ok' as const,
@@ -900,6 +903,7 @@ class MemoryScopedContextStore implements ScopedContextStore {
           (filter.scope === undefined || record.scope === filter.scope) &&
           (filter.kind === undefined || record.kind === filter.kind)
       ),
+      diagnostic: undefined,
     };
   }
 

@@ -4,11 +4,18 @@
  * 集成 OpenAICompatibleProvider + LocalTools
  */
 
+import { randomBytes } from "node:crypto";
+import { join } from "node:path";
 import { DaemonServer } from "./server.js";
 import type { DaemonConfig } from "./types.js";
-import { DAEMON_HANDSHAKE_PROTOCOL_VERSION } from "./types.js";
+import { DAEMON_HANDSHAKE_PROTOCOL_VERSION, DEFAULT_DAEMON_CONFIG } from "./types.js";
 import { createLocalWorkspaceTools } from "@crish/agent-runtime";
 import type { AgentTool, BackgroundCommandManager, WorkspaceMutationCoordinator } from "@crish/agent-runtime";
+import { setLogRedactor } from "@crish/shared-utils";
+import type { LogLevel } from "@crish/shared-utils";
+import { createSecretRedactorFromEnv } from "@crish/agent-runtime";
+import { getDaemonLogger, toLogErr } from "./daemon-logger.js";
+import { readEnv, readEnvOrDefault } from "./env-whitelist.js";
 // DAEMON_DEFAULT_PROVIDER inlined (removed from shared-types in step 10)
 const DAEMON_DEFAULT_PROVIDER = {
   providerId: "crish",
@@ -22,9 +29,7 @@ const DAEMON_DEFAULT_PROVIDER = {
 import {
   createDaemonProviderFactory,
   createDaemonProviderGatewayController,
-  createDaemonProviderRuntimeConfig,
   createDaemonProviderRuntimeConfigFromEnv,
-  DAEMON_PROVIDER_CONFIG_PRECEDENCE,
 } from "./daemon-provider-gateway.js";
 
 export { DaemonServer } from "./server.js";
@@ -130,12 +135,75 @@ function createWorkspaceTools(input: {
   });
 }
 
+// 全局异常兜底 — 在 bootstrap 阶段尽早注册
+let daemonServer: DaemonServer | undefined;
+
+process.on("uncaughtException", (error: Error) => {
+  const logger = getDaemonLogger();
+  if (logger) {
+    logger.fatal("Uncaught exception", { err: toLogErr(error) });
+  } else {
+    console.error("[Daemon] UNCAUGHT EXCEPTION:", error);
+  }
+  if (daemonServer) {
+    daemonServer.recordLifecycleError({
+      code: "UNCAUGHT_EXCEPTION",
+      message: error.message,
+      severity: "error",
+      source: "daemon",
+      detail: undefined,
+      metadata: undefined,
+    });
+  }
+  process.exitCode = 1;
+  setTimeout(() => process.exit(1), 1000).unref();
+});
+
+process.on("unhandledRejection", (reason: unknown) => {
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  const logger = getDaemonLogger();
+  if (logger) {
+    logger.error("Unhandled rejection", { err: toLogErr(error) });
+  } else {
+    console.error("[Daemon] UNHANDLED REJECTION:", error);
+  }
+  if (daemonServer) {
+    daemonServer.recordLifecycleError({
+      code: "UNHANDLED_REJECTION",
+      message: error.message,
+      severity: "error",
+      source: "daemon",
+      detail: undefined,
+      metadata: undefined,
+    });
+  }
+});
+
 /**
  * 启动 Daemon
  * @param config 可选配置覆盖
  */
 export async function startDaemon(config?: Partial<DaemonConfig>): Promise<DaemonServer> {
-  const server = new DaemonServer(config);
+  // 从环境变量读取 secretToken，若未设置则自动生成
+  const envSecretToken = readEnv("DAEMON_SECRET");
+  const disableAuth = readEnv("DAEMON_DISABLE_AUTH") === "1";
+  const secretToken = disableAuth ? undefined : (envSecretToken || randomBytes(32).toString("hex"));
+
+  const mergedConfig: Partial<DaemonConfig> = {
+    ...config,
+    ...(secretToken ? { secretToken } : {}),
+  };
+
+  const server = new DaemonServer(mergedConfig);
+
+  const logFilePath = join(
+    mergedConfig.sessionEventLogDir ?? DEFAULT_DAEMON_CONFIG.sessionEventLogDir,
+    "agent-daemon.log"
+  );
+  getDaemonLogger().init(logFilePath, (readEnv("DAEMON_LOG_LEVEL") as LogLevel) ?? 'info');
+
+  const redactor = createSecretRedactorFromEnv(process.env);
+  setLogRedactor((text: string) => redactor.redactText(text).value);
 
   // 读取 API 配置
   const providerConfig = createDaemonProviderRuntimeConfigFromEnv(process.env, {
@@ -150,7 +218,7 @@ export async function startDaemon(config?: Partial<DaemonConfig>): Promise<Daemo
 
   const providerStatus = providerGateway.getStatusSnapshot();
   if (providerStatus.readiness === "missing") {
-    console.error("[Daemon] WARNING: No provider credential configured. Set CRISH_API_KEY, FLOWBIT_API_KEY, or OPENAI_API_KEY.");
+    getDaemonLogger().warn('No provider credential configured', { module: 'index' });
   }
 
   // 设置 Provider 工厂
@@ -165,14 +233,14 @@ export async function startDaemon(config?: Partial<DaemonConfig>): Promise<Daemo
   // 启动 WebSocket 服务器
   const port = await server.start();
 
-  // 输出 daemon-ready 消息到 stdout（Rust 端读取第一行获取端口号）
   const readyMessage = JSON.stringify({
     type: "daemon-ready",
     port,
     pid: process.pid,
     protocolVersion: DAEMON_HANDSHAKE_PROTOCOL_VERSION,
-    buildHash: process.env.DAEMON_BUILD_HASH ?? "",
+    buildHash: readEnvOrDefault("DAEMON_BUILD_HASH", ""),
     version: "0.1.0",
+    secretToken: secretToken ?? undefined,
     config: {
       baseUrl: providerGateway.getConfig().baseUrl,
       model: providerGateway.getConfig().model,
@@ -196,6 +264,7 @@ const isMainModule = (() => {
     const metaPath = decodeURIComponent(metaUrl.pathname.replace(/^\/([A-Z]:)/, "$1"));
     return metaPath === scriptPath || scriptPath.endsWith("index.ts") || scriptPath.endsWith("index.js");
   } catch {
+    // silent: import.meta.url 不可用时降级为非入口模块
     return false;
   }
 })();
@@ -203,29 +272,34 @@ const isMainModule = (() => {
 if (isMainModule) {
   const config: Partial<DaemonConfig> = {};
 
-  // 支持通过环境变量配置；CLI 默认 8765 方便桌面端直连
-  if (process.env.DAEMON_PORT) {
-    config.port = Number(process.env.DAEMON_PORT);
+  const daemonPort = readEnv("DAEMON_PORT");
+  if (daemonPort) {
+    config.port = Number(daemonPort);
   } else {
     config.port = 8765;
   }
-  if (process.env.DAEMON_MAX_CONCURRENT !== undefined && process.env.DAEMON_MAX_CONCURRENT !== "") {
-    // 0 = unlimited；正整数 = 上限。未设置时沿用 DEFAULT（0 不限制）
-    const n = Number(process.env.DAEMON_MAX_CONCURRENT);
+
+  const daemonMaxConcurrent = readEnv("DAEMON_MAX_CONCURRENT");
+  if (daemonMaxConcurrent !== undefined && daemonMaxConcurrent !== "") {
+    const n = Number(daemonMaxConcurrent);
     if (Number.isFinite(n) && n >= 0) {
       config.maxConcurrentRuns = Math.floor(n);
     }
   }
-  if (process.env.DAEMON_SESSION_EVENT_LOG_DIR) {
-    config.sessionEventLogDir = process.env.DAEMON_SESSION_EVENT_LOG_DIR;
+
+  const daemonSessionEventLogDir = readEnv("DAEMON_SESSION_EVENT_LOG_DIR");
+  if (daemonSessionEventLogDir) {
+    config.sessionEventLogDir = daemonSessionEventLogDir;
   }
 
   startDaemon(config)
     .then((server) => {
-      console.log("[Daemon] Agent Daemon started successfully");
+      daemonServer = server;
+      getDaemonLogger().info('Agent Daemon started successfully', { module: 'index' });
 
       const shutdown = async (signal: string) => {
-        console.log(`[Daemon] Received ${signal}, shutting down...`);
+        getDaemonLogger().info('Received signal, shutting down', { module: 'index', signal });
+        await getDaemonLogger().close();
         await server.stop();
         process.exit(0);
       };
@@ -234,7 +308,7 @@ if (isMainModule) {
       process.on("SIGTERM", () => shutdown("SIGTERM"));
     })
     .catch((error) => {
-      console.error("[Daemon] Failed to start:", error);
+      getDaemonLogger().error('Failed to start daemon', { module: 'index', err: toLogErr(error) });
       process.exit(1);
     });
 }

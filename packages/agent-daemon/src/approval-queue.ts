@@ -1,4 +1,4 @@
-export const DEFAULT_APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
+export const DEFAULT_APPROVAL_TIMEOUT_MS = 120_000;
 export const DEFAULT_APPROVAL_RESOLUTION_RETENTION_MS = 5 * 60 * 1000;
 /** Floor for finite approval timeouts (avoids sub-100ms timer races). */
 export const MIN_APPROVAL_TIMEOUT_MS = 100;
@@ -35,11 +35,11 @@ export interface ApprovalQueueSnapshot {
   timeoutMs: number | null;
   expiresAt: number | null;
   remainingMs: number | null;
-  metadata?: ApprovalMetadata;
-  resolvedAt?: number;
-  expiredAt?: number;
-  reason?: string;
-  expiredReason?: string;
+  metadata: ApprovalMetadata | undefined;
+  resolvedAt: number | undefined;
+  expiredAt: number | undefined;
+  reason: string | undefined;
+  expiredReason: string | undefined;
 }
 
 export interface ApprovalQueueOptions {
@@ -58,18 +58,19 @@ interface PendingApproval {
   createdAt: number;
   timeoutMs: number | null;
   expiresAt: number | null;
-  metadata?: ApprovalMetadata;
+  metadata: ApprovalMetadata | undefined;
   promise: Promise<ApprovalResult>;
   resolve: (result: ApprovalResult) => void;
-  timer?: NodeJS.Timeout;
+  timer: NodeJS.Timeout | undefined;
 }
 
 import { BoundedMap } from "@crish/shared-utils";
+import { getDaemonLogger } from "./daemon-logger.js";
 
 export class ApprovalQueue {
   private pending = new Map<string, PendingApproval>();
-  private resolved = new BoundedMap<string, ApprovalQueueSnapshot>(1000);
-  private scopes = new BoundedMap<string, ApprovalScope>(1000);
+  private resolved = new BoundedMap<string, ApprovalQueueSnapshot>(1000, undefined);
+  private scopes = new BoundedMap<string, ApprovalScope>(1000, undefined);
   private defaultTimeoutMs: number | null;
   private resolvedRetentionMs: number;
   private readonly now: () => number;
@@ -111,7 +112,7 @@ export class ApprovalQueue {
   ): Promise<ApprovalResult> {
     const existing = this.pending.get(toolCallId);
     if (existing) {
-      console.warn(`[ApprovalQueue] Duplicate waitForApproval for toolCallId: ${toolCallId}`);
+      getDaemonLogger().warn('Duplicate waitForApproval', { module: 'ApprovalQueue', toolCallId, runId });
       return existing.promise;
     }
 
@@ -133,6 +134,7 @@ export class ApprovalQueue {
       metadata,
       promise,
       resolve: resolvePromise,
+      timer: undefined,
     };
 
     this.armTimer(pending);
@@ -167,16 +169,14 @@ export class ApprovalQueue {
     pending.timeoutMs = nextTimeout;
     pending.expiresAt = now + nextTimeout;
     this.armTimer(pending);
-    console.log(
-      `[ApprovalQueue] Extended ${toolCallId} by ${add}ms (remaining ${nextTimeout}ms)`
-    );
+    getDaemonLogger().info('Approval timeout extended', { module: 'ApprovalQueue', toolCallId, addMs: add, remainingMs: nextTimeout, runId: pending.runId });
     return this.pendingSnapshot(pending);
   }
 
   resolve(toolCallId: string, decision: ApprovalUserDecision, scope?: ApprovalScope): boolean {
     const pending = this.pending.get(toolCallId);
     if (!pending) {
-      console.warn(`[ApprovalQueue] No pending approval found for toolCallId: ${toolCallId}`);
+      getDaemonLogger().warn('No pending approval found', { module: 'ApprovalQueue', toolCallId });
       return false;
     }
 
@@ -189,7 +189,7 @@ export class ApprovalQueue {
       reason: decision === "approved" ? "user-approved" : "user-denied",
       resolvedAt: this.now(),
     });
-    console.log(`[ApprovalQueue] Resolved ${toolCallId} -> ${decision} (scope: ${scope || "project"})`);
+    getDaemonLogger().info('Approval resolved', { module: 'ApprovalQueue', toolCallId, decision, scope: scope || 'project' });
     return true;
   }
 
@@ -236,7 +236,7 @@ export class ApprovalQueue {
         reason,
         resolvedAt: this.now(),
       });
-      console.log(`[ApprovalQueue] Auto-denied ${toolCallId} (${reason})`);
+      getDaemonLogger().info('Approval auto-denied', { module: 'ApprovalQueue', toolCallId, reason, runId: pending.runId });
     }
     this.pending.clear();
     this.scopes.clear();
@@ -250,7 +250,7 @@ export class ApprovalQueue {
         reason,
         resolvedAt: this.now(),
       });
-      console.log(`[ApprovalQueue] Auto-denied ${pending.toolCallId} for run ${runId} (${reason})`);
+      getDaemonLogger().info('Approval auto-denied for run', { module: 'ApprovalQueue', toolCallId: pending.toolCallId, runId, reason });
     }
   }
 
@@ -283,7 +283,7 @@ export class ApprovalQueue {
       resolvedAt: expiredAt,
       expiredAt,
     });
-    console.warn(`[ApprovalQueue] Expired ${toolCallId} after ${pending.timeoutMs ?? 0}ms`);
+    getDaemonLogger().warn('Approval expired', { module: 'ApprovalQueue', toolCallId, runId: pending.runId, timeoutMs: pending.timeoutMs ?? 0 });
   }
 
   private settle(
@@ -326,6 +326,10 @@ export class ApprovalQueue {
           ? null
           : Math.max(0, pending.expiresAt - this.now()),
       metadata: pending.metadata,
+      resolvedAt: undefined,
+      expiredAt: undefined,
+      reason: undefined,
+      expiredReason: undefined,
     };
   }
 
@@ -341,9 +345,9 @@ export class ApprovalQueue {
       remainingMs: 0,
       metadata: pending.metadata,
       resolvedAt: result.resolvedAt,
-      ...(result.expiredAt !== undefined ? { expiredAt: result.expiredAt } : {}),
+      expiredAt: result.expiredAt ?? undefined,
       reason: result.reason,
-      ...(result.decision === "expired" ? { expiredReason: result.reason } : {}),
+      expiredReason: result.decision === "expired" ? result.reason : undefined,
     });
   }
 

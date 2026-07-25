@@ -46,7 +46,7 @@ function gitStatusFile(entry: GitStatusEntry) {
     unstaged,
     untracked,
     conflicted,
-    ...(entry.originalPath !== undefined ? { originalPath: entry.originalPath } : {}),
+    originalPath: entry.originalPath,
   };
 }
 
@@ -72,6 +72,8 @@ function changedFileFromGitDiff(file: GitCheckpointDiffFile): ChangedFileRecord 
   return {
     path: file.path,
     status: file.status,
+    addedLines: undefined,
+    removedLines: undefined,
   };
 }
 

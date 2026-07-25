@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
-import type { DaemonInboundMessage, ConnectedClient } from './types';
+import type { DaemonInboundMessage } from './types';
+import type { ConnectedClient } from './daemon-client-registry';
 import { DaemonRequestHandlers } from './server-handlers';
 
 type HandlersOptions = ConstructorParameters<typeof DaemonRequestHandlers>[0];
@@ -14,7 +15,7 @@ function createMockWebSocket(): WebSocket {
 }
 
 function createMockClient(id = 'client_1'): ConnectedClient {
-  return { id, label: 'test client', joinedAt: new Date().toISOString() };
+  return { id, ws: createMockWebSocket(), connectedAt: Date.now(), pendingMessagesCount: undefined, subscriptions: undefined };
 }
 
 function mockOptions(): HandlersOptions {
@@ -27,7 +28,7 @@ function mockOptions(): HandlersOptions {
       triggerDueWorkflow: vi.fn(),
       handleListMutationLeases: vi.fn(),
       waitForBackgroundWorkflowRuns: vi.fn(),
-    },
+    } as unknown as HandlersOptions['runHandler'],
     orchestrator: {} as HandlersOptions['orchestrator'],
     approvalQueue: {
       resolve: vi.fn().mockReturnValue(true),
@@ -154,7 +155,7 @@ describe('DaemonRequestHandlers', () => {
     const msg = {
       type: 'unknown-type',
       correlationId: 'corr_1',
-    } as DaemonInboundMessage;
+    } as unknown as DaemonInboundMessage;
     await handlers.handleInboundMessage(
       createMockWebSocket(),
       createMockClient(),

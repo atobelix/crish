@@ -209,6 +209,10 @@ describe("approvalStatusSnapshot", () => {
       timeoutMs: 60_000,
       expiresAt: 60_100,
       remainingMs: 50_000,
+      resolvedAt: undefined,
+      expiredAt: undefined,
+      reason: undefined,
+      expiredReason: undefined,
       metadata: {
         toolName: "edit",
         input: { path: "a.ts" },
@@ -246,6 +250,10 @@ describe("approvalStatusSnapshot", () => {
       timeoutMs: 1000,
       expiresAt: 1001,
       remainingMs: -5,
+      resolvedAt: undefined,
+      expiredAt: undefined,
+      reason: undefined,
+      expiredReason: undefined,
       metadata: {
         toolName: "  ",
         input: {},
@@ -331,6 +339,10 @@ describe("approvalStatusSnapshot", () => {
       timeoutMs: null,
       expiresAt: null,
       remainingMs: null,
+      resolvedAt: undefined,
+      expiredAt: undefined,
+      reason: undefined,
+      expiredReason: undefined,
       metadata: {
         toolName: "edit",
         input: { path: "b.ts" },

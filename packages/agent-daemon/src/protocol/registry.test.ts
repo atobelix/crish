@@ -274,7 +274,7 @@ function extractCases(
   // Accept both case "x": and case 'x': (server-handlers uses single quotes).
   return [
     ...source.slice(start, end).matchAll(/case\s+['"]([^'"]+)['"]\s*:/g),
-  ].map((match) => match[1]);
+  ].map((match) => match[1]).filter((m): m is string => m !== undefined);
 }
 
 function collectGroupMessageCapabilities(

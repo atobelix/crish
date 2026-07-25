@@ -210,6 +210,9 @@ function providerStatus(readiness: DaemonProviderStatusSnapshot["readiness"]): D
       credentialConfigured: readiness === "ready",
       routeDecision: ["route_a"],
     },
+    lastDiagnostic: undefined,
+    lastProbeOk: undefined,
+    lastProbeAt: undefined,
     updatedAt: timestamp(),
   };
 }
@@ -245,6 +248,8 @@ function productStatus(
         message: `${surface} adapter state`,
         severity: "info" as const,
         updatedAt: timestamp(),
+        detail: undefined,
+        metadata: undefined,
       },
     ],
   };
@@ -256,13 +261,18 @@ function lifecycle(): DaemonLifecycleSnapshot {
     startedAt: timestamp(),
     updatedAt: timestamp(),
     readyAt: timestamp(),
+    stoppingAt: undefined,
+    stoppedAt: undefined,
     uptimeMs: 1_000,
     currentPort: 12345,
     connectedClientCount: 1,
     totalClientConnectionCount: 1,
     totalClientDisconnectCount: 0,
     activeRunCount: 0,
-    eventStore: { status: "ok", path: "C:/workspace/crish/events.jsonl" },
+    recentDisconnect: undefined,
+    recentError: undefined,
+    recentErrors: undefined,
+    eventStore: { status: "ok", path: "C:/workspace/crish/events.jsonl", failure: undefined },
     providerReadiness: "ready",
     mcpReadiness: "unknown",
   };

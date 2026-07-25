@@ -6,16 +6,14 @@
  * workflow background runs, and related admission control.
  */
 
-import type { WebSocket } from 'ws';
-import { randomUUID } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
-import { errorMessage, compactJsonObject } from '@crish/shared-utils';
-import type {
-  JsonObject,
-  AgentEvent,
-  AgentMessage,
-  RuntimeCheckpointRecord,
-} from '@crish/shared-types';
+import type { WebSocket } from "ws";
+import { randomUUID } from "node:crypto";
+import { mkdir } from "node:fs/promises";
+import { errorMessage, compactJsonObject, toJsonObject } from "@crish/shared-utils";
+import { getDaemonLogger, toLogErr } from "../daemon-logger.js";
+import { readEnv } from "../env-whitelist.js";
+import type { JsonObject, AgentEvent, AgentMessage, RuntimeCheckpointRecord } from "@crish/shared-types";
+import { ProtocolError } from "@crish/shared-types";
 import {
   CheckpointManifestService,
   ConversationBoundaryManifestService,
@@ -81,43 +79,43 @@ export interface DaemonMessageTransport {
 // ─── Interfaces ────────────────────────────────────────────
 
 export interface OrchestratedRunInput {
-  ws?: WebSocket;
+  ws?: WebSocket | undefined;
   clientId: string;
   runId: string;
   sessionId: string;
   prompt: string;
   cwd: string;
-  mode?: string;
-  workspaceMode?: 'project' | 'none';
-  visibleGoal?: string;
-  budgetDifficulty?: string;
-  runTokenBudget?: number;
-  maxRounds?: number;
-  maxStalledRounds?: number;
-  backgroundDrainTimeoutMs?: number;
-  permissionMode?: 'ask' | 'auto' | 'full-access' | 'plan' | 'unattended';
-  workspaceRoot?: string;
-  projectRoot?: string;
-  projectMarkers?: string[];
-  projectFiles?: string[];
-  projectTags?: string[];
-  packageNames?: string[];
-  mcpDisabledTools?: Record<string, string[]>;
-  scopedContextConfig?: RunTaskMessage['scopedContextConfig'];
+  mode?: string | undefined;
+  workspaceMode?: 'project' | 'none' | undefined;
+  visibleGoal?: string | undefined;
+  budgetDifficulty?: string | undefined;
+  runTokenBudget?: number | undefined;
+  maxRounds?: number | undefined;
+  maxStalledRounds?: number | undefined;
+  backgroundDrainTimeoutMs?: number | undefined;
+  permissionMode?: 'ask' | 'auto' | 'full-access' | 'plan' | 'unattended' | undefined;
+  workspaceRoot?: string | undefined;
+  projectRoot?: string | undefined;
+  projectMarkers?: string[] | undefined;
+  projectFiles?: string[] | undefined;
+  projectTags?: string[] | undefined;
+  packageNames?: string[] | undefined;
+  mcpDisabledTools?: Record<string, string[]> | undefined;
+  scopedContextConfig?: RunTaskMessage['scopedContextConfig'] | undefined;
   /** OpenAI-style multimodal parts from desktop */
-  content?: RunTaskMessage['content'];
-  hasImages?: boolean;
-  attachments?: RunTaskMessage['attachments'];
+  content?: RunTaskMessage['content'] | undefined;
+  hasImages?: boolean | undefined;
+  attachments?: RunTaskMessage['attachments'] | undefined;
   /** Response-style / desktop system prompt → runtime systemPrompt */
-  systemPrompt?: string;
-  metadata?: JsonObject;
-  correlation?: DaemonCorrelationFields;
-  prechecked?: boolean;
-  detached?: boolean;
-  admissionLease?: RunAdmissionLease;
-  onStarted?(input: { runId: string; sessionId: string }): Promise<void> | void;
-  onWorkflowStatus?(status: WorkflowRunStatus): Promise<void> | void;
-  onTerminal?(status: WorkflowRunStatus, error?: string): Promise<void> | void;
+  systemPrompt?: string | undefined;
+  metadata?: JsonObject | undefined;
+  correlation?: DaemonCorrelationFields | undefined;
+  prechecked?: boolean | undefined;
+  detached?: boolean | undefined;
+  admissionLease?: RunAdmissionLease | undefined;
+  onStarted?: ((input: { runId: string; sessionId: string }) => Promise<void> | void) | undefined;
+  onWorkflowStatus?: ((status: WorkflowRunStatus) => Promise<void> | void) | undefined;
+  onTerminal?: ((status: WorkflowRunStatus, error?: string) => Promise<void> | void) | undefined;
 }
 
 export interface RunEventSink {
@@ -240,9 +238,9 @@ export class RunHandler {
 
   handleCancelRun(msg: CancelRunMessage): void {
     this.options.orchestrator.cancelRun(msg.runId);
-    this.options.approvalQueue.clearRun(msg.runId, 'run-cancelled');
+    this.options.approvalQueue.clearRun(msg.runId, "run-cancelled");
     this.backpressure.clearRun(msg.runId);
-    console.log(`[Daemon] Run cancelled: ${msg.runId}`);
+    getDaemonLogger().info('Run cancelled', { module: 'RunHandler', runId: msg.runId });
   }
 
   /**
@@ -394,10 +392,8 @@ export class RunHandler {
     );
     const timedOut = delay(timeoutMs).then(() => 'timed-out' as const);
     const result = await Promise.race([settled, timedOut]);
-    if (result === 'timed-out' && this.workflowBackgroundTasks.size > 0) {
-      console.warn(
-        `[Daemon] Timed out waiting for ${this.workflowBackgroundTasks.size} background workflow run(s)`
-      );
+    if (result === "timed-out" && this.workflowBackgroundTasks.size > 0) {
+      getDaemonLogger().warn('Timed out waiting for background workflow runs', { module: 'RunHandler', taskCount: this.workflowBackgroundTasks.size });
     }
   }
 
@@ -424,7 +420,7 @@ export class RunHandler {
     let boundaryContext: ConversationBoundaryEmissionContext | undefined;
     try {
       admissionLease ??= this.acquireRunAdmission(input.runId);
-      console.log(`[Daemon] Starting orchestrated run: ${input.runId}`);
+      getDaemonLogger().info('Starting orchestrated run', { module: 'RunHandler', runId: input.runId, sessionId: input.sessionId, clientId: input.clientId });
 
       const scopedContextConfig = scopedContextConfigJson(
         input.scopedContextConfig
@@ -436,7 +432,7 @@ export class RunHandler {
         initialUserMessageId,
         {
           content: input.content,
-          hasImages: input.hasImages,
+          ...(input.hasImages !== undefined ? { hasImages: input.hasImages } : {}),
           attachments: input.attachments,
         }
       );
@@ -496,7 +492,7 @@ export class RunHandler {
           clientId: input.clientId,
         },
       };
-      const handle = shouldStartGoalRun(input)
+      const handle = shouldStartGoalRun({ mode: input.mode ?? 'task', ...(input.visibleGoal !== undefined ? { visibleGoal: input.visibleGoal } : {}), ...(input.maxRounds !== undefined ? { maxRounds: input.maxRounds } : {}), ...(input.maxStalledRounds !== undefined ? { maxStalledRounds: input.maxStalledRounds } : {}) })
         ? await this.options.orchestrator.startGoalRun({
             ...runRequest,
             goal: {
@@ -573,12 +569,8 @@ export class RunHandler {
           continue;
         }
 
-        const event = orchestratorEvent.payload.event as unknown as AgentEvent;
-        if (
-          !event ||
-          typeof event !== 'object' ||
-          typeof (event as { type?: unknown }).type !== 'string'
-        ) {
+        const event = orchestratorEvent.payload.event as AgentEvent | undefined;
+        if (!event || typeof event !== "object" || typeof (event as { type?: unknown }).type !== "string") {
           continue;
         }
 
@@ -603,7 +595,7 @@ export class RunHandler {
       await input.onTerminal?.(terminal ?? 'completed', terminalError);
       eventSink.dispose();
 
-      console.log(`[Daemon] Completed orchestrated run: ${input.runId}`);
+      getDaemonLogger().info('Completed orchestrated run', { module: 'RunHandler', runId: input.runId, sessionId: input.sessionId });
     } catch (error) {
       eventSink?.dispose();
       if (error instanceof DaemonRunPreflightError) {
@@ -616,18 +608,9 @@ export class RunHandler {
         );
         return;
       }
-      console.error(
-        `[Daemon] Error in orchestrated run ${input.runId}:`,
-        error
-      );
-      this.sendError(
-        input.ws,
-        'RUN_ERROR',
-        errorMessage(error),
-        input.runId,
-        input.correlation
-      );
-      this.options.approvalQueue.clearRun(input.runId, 'run-error');
+      getDaemonLogger().error('Error in orchestrated run', { module: 'RunHandler', runId: input.runId, sessionId: input.sessionId, err: toLogErr(error) });
+      this.sendError(input.ws, "RUN_ERROR", errorMessage(error), input.runId, input.correlation);
+      this.options.approvalQueue.clearRun(input.runId, "run-error");
       DaemonApprovalHandler.clearRun(input.runId);
       await input.onTerminal?.('failed', errorMessage(error));
     } finally {
@@ -651,20 +634,18 @@ export class RunHandler {
 
   private assertCanStartRun(runId: string): void {
     if (!this.options.runtimeFactory.hasProviderFactory()) {
-      throw new DaemonRunPreflightError(
-        'NO_PROVIDER',
-        'Provider factory not configured. Call setProviderFactory() first.',
-        runId
+      throw new ProtocolError(
+        "Provider factory not configured. Call setProviderFactory() first.",
+        "NO_PROVIDER",
       );
     }
 
     // maxConcurrentRuns <= 0：不限制（多会话并行 + 单会话多 subagent）
     const max = this.options.config.maxConcurrentRuns;
     if (max > 0 && this.activeRunCount() >= max) {
-      throw new DaemonRunPreflightError(
-        'MAX_CONCURRENT_RUNS',
+      throw new ProtocolError(
         `Max concurrent runs (${max}) reached.`,
-        runId
+        "MAX_CONCURRENT_RUNS",
       );
     }
   }
@@ -745,7 +726,7 @@ export class RunHandler {
         type: 'error',
         code,
         message,
-        runId,
+        ...(runId !== undefined ? { runId } : {}),
         ...correlationFrom(correlation ?? {}),
       });
     }
@@ -761,10 +742,10 @@ export class RunHandler {
         send: (message) => {
           if (this.backpressure.tryBuffer(input.runId, message)) return;
           if (
-            !process.env.VITEST &&
-            message.type === 'event' &&
-            (message.event.type.startsWith('tool-batch-') ||
-              message.event.type.startsWith('checkpoint-'))
+            !readEnv("VITEST") &&
+            message.type === "event" &&
+            (message.event.type.startsWith("tool-batch-") ||
+              message.event.type.startsWith("checkpoint-"))
           ) {
             return;
           }
@@ -788,9 +769,7 @@ export class RunHandler {
     const markSubscriptionLost = (code?: number, reason?: Buffer): void => {
       if (!subscribed) return;
       subscribed = false;
-      console.warn(
-        `[Daemon] Run ${input.runId} lost originating WebSocket subscription; run remains daemon-owned`
-      );
+      getDaemonLogger().warn('Run lost originating WebSocket subscription', { module: 'RunHandler', runId: input.runId, sessionId: input.sessionId, clientId: input.clientId });
       this.options.recordDiagnostic?.({
         code: 'RUN_STREAM_SUBSCRIPTION_LOST',
         message: `Originating WebSocket subscription lost for run ${input.runId}; run remains active in daemon ownership`,
@@ -868,43 +847,29 @@ export class RunHandler {
         await this.updateAndBroadcastWorkflowRun(
           input.workflow.id,
           input.run.runId,
-          {
-            status,
-            error: undefined,
-          }
+          { status }
         );
       },
       onTerminal: async (status, error) => {
         await this.updateAndBroadcastWorkflowRun(
           input.workflow.id,
           input.run.runId,
-          {
-            status,
-            error,
-          }
+          { status, ...(error !== undefined ? { error } : {}) }
         );
       },
     });
 
     const tracked = task
       .catch(async (error) => {
-        console.error(
-          `[Daemon] Background workflow run ${input.run.runId} failed:`,
-          error
-        );
-        await this.updateAndBroadcastWorkflowRun(
-          input.workflow.id,
-          input.run.runId,
-          {
-            status: 'failed',
+        getDaemonLogger().error('Background workflow run failed', { module: 'RunHandler', runId: input.run.runId, err: toLogErr(error) });
+        await this
+          .updateAndBroadcastWorkflowRun(input.workflow.id, input.run.runId, {
+            status: "failed",
             error: errorMessage(error),
-          }
-        ).catch((storeError) => {
-          console.error(
-            `[Daemon] Failed to persist failed workflow run ${input.run.runId}:`,
-            storeError
-          );
-        });
+          })
+          .catch((storeError) => {
+            getDaemonLogger().error('Failed to persist failed workflow run', { module: 'RunHandler', runId: input.run.runId, err: toLogErr(storeError) });
+          });
       })
       .finally(() => {
         this.workflowBackgroundTasks.delete(tracked);
@@ -1181,12 +1146,11 @@ function createRunPromptMessage(
   };
   if (multimodal?.content?.length) {
     // OpenAI-style parts for provider vision path (array is valid JsonValue)
-    metadata.contentParts = multimodal.content as unknown as JsonObject[string];
+    metadata.contentParts = toJsonObject(multimodal.content);
   }
   if (hasImages) metadata.hasImages = true;
   if (multimodal?.attachments?.length) {
-    metadata.attachments =
-      multimodal.attachments as unknown as JsonObject[string];
+    metadata.attachments = toJsonObject(multimodal.attachments);
   }
   const message = createTextMessage('user', prompt, metadata);
   return {

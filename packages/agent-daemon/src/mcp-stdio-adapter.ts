@@ -20,9 +20,15 @@ import type {
 export interface StdioMcpAdapterOptions {
   name: string;
   command: string;
-  args?: string[];
-  env?: Record<string, string>;
-  cwd?: string;
+  args: string[] | undefined;
+  env: Record<string, string> | undefined;
+  cwd: string | undefined;
+  /**
+   * Optional confirmation hook called before the child process is spawned.
+   * Return false to abort startup; the caller should surface a dialog to the
+   * user (PP-4 / MC-2 flow).
+   */
+  confirmStart: ((command: string, args: string[]) => boolean | Promise<boolean>) | undefined;
 }
 
 type LazyMcpClient = {
@@ -31,7 +37,7 @@ type LazyMcpClient = {
   callTool: (args: {
     name: string;
     arguments?: Record<string, unknown>;
-  }) => Promise<unknown>;
+  }, options?: { signal?: AbortSignal }) => Promise<unknown>;
   close: () => Promise<void>;
 };
 
@@ -52,9 +58,19 @@ export function createStdioMcpAdapter(
 
   return {
     async connect(
-      _context: McpServerStartContext
+      context: McpServerStartContext
     ): Promise<McpServerConnection> {
-      void _context;
+
+      // PP-4 / MC-2: user confirmation check before spawning MCP child process
+      if (options.confirmStart) {
+        const allowed = await options.confirmStart(command, options.args ?? []);
+        if (!allowed) {
+          throw new Error(
+            `MCP server "${options.name}" startup denied: user did not confirm command "${command}"`
+          );
+        }
+      }
+
       let ClientCtor: new (info: {
         name: string;
         version: string;
@@ -64,6 +80,7 @@ export function createStdioMcpAdapter(
         args?: string[];
         env?: Record<string, string>;
         cwd?: string;
+        signal?: AbortSignal;
       }) => { close?: () => Promise<void> };
 
       try {
@@ -84,6 +101,7 @@ export function createStdioMcpAdapter(
       const transport = new StdioClientTransport({
         command,
         args: options.args ?? [],
+        signal: context.signal,
         ...(options.env ? { env: mergeProcessEnv(options.env) } : {}),
         ...(options.cwd ? { cwd: options.cwd } : {}),
       });
@@ -120,13 +138,24 @@ export function createStdioMcpAdapter(
   };
 }
 
+/** Whitelist of process env keys to inherit into MCP child processes. */
+const MCP_ENV_WHITELIST = new Set(['PATH', 'HOME']);
+
 function mergeProcessEnv(
   extra: Record<string, string>
 ): Record<string, string> {
-  // StdioClientTransport 在提供 env 时通常不自动继承；合并 process.env 并覆盖 extra
+  // Whitelist mode: only inherit PATH, HOME, and keys the config explicitly declares
   const base: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) {
-    if (typeof v === 'string') base[k] = v;
+  for (const key of MCP_ENV_WHITELIST) {
+    const val = process.env[key];
+    if (typeof val === 'string') base[key] = val;
+  }
+  // Also inherit env keys that the config declares (they may need resolution)
+  for (const key of Object.keys(extra)) {
+    const val = process.env[key];
+    if (typeof val === 'string' && !MCP_ENV_WHITELIST.has(key)) {
+      base[key] = val;
+    }
   }
   return { ...base, ...extra };
 }
@@ -154,19 +183,23 @@ function sdkToolToAgentTool(
     label: name,
     description,
     category: 'mcp',
-    inputSchema,
+    ...(inputSchema !== undefined ? { inputSchema } : {}),
     concurrency: 'parallel',
-    isReadOnly: () => false,
+    isReadOnly: () => {
+      const readOnlyKeys = ['list', 'get', 'read', 'search', 'query'];
+      return readOnlyKeys.some(k => name.toLowerCase().startsWith(k));
+    },
     summarize: () => `${serverName}/${name}`,
     async execute(
       input: JsonObject,
-      _context: ToolExecutionContext
+      context: ToolExecutionContext
     ): Promise<ToolOutput> {
-      void _context;
+      const timeoutSignal = AbortSignal.timeout(30000);
+      const combinedSignal = context.signal ? AbortSignal.any([context.signal, timeoutSignal]) : timeoutSignal;
       const result = await client.callTool({
         name,
         arguments: input as Record<string, unknown>,
-      });
+      }, { signal: combinedSignal });
       return formatToolResult(result);
     },
   };

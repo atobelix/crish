@@ -41,40 +41,40 @@ export interface DaemonConversationRewindBoundaryDiagnostic {
   fact: DaemonConversationRewindBoundaryMissingFact;
   message: string;
   blocked: boolean;
-  metadata?: JsonObject;
+  metadata: JsonObject | undefined;
 }
 
 export interface ResolveConversationRewindBoundaryInput {
   config: Pick<DaemonConfig, "sessionEventLogDir">;
   sessionId: string;
-  userMessageId?: string;
-  latestUserMessage?: boolean;
-  mode?: ConversationRewindBoundaryTargetMode;
+  userMessageId: string | undefined;
+  latestUserMessage: boolean | undefined;
+  mode: ConversationRewindBoundaryTargetMode | undefined;
 }
 
 export interface PreviewConversationRewindByBoundaryInput extends ResolveConversationRewindBoundaryInput {
   orchestrator: AgentOrchestrator;
   approvalQueue: ApprovalQueue;
-  restorePolicy?: ConversationRewindRestorePolicy;
-  activeSubagents?: ConversationRewindActiveSubagentRecord[];
+  restorePolicy: ConversationRewindRestorePolicy | undefined;
+  activeSubagents: ConversationRewindActiveSubagentRecord[] | undefined;
 }
 
 export interface DaemonConversationRewindBoundaryResult {
   status: "ok" | "blocked";
   sessionId: string;
-  userMessageId?: string;
+  userMessageId: string | undefined;
   latestUserMessage: boolean;
   mode: ConversationRewindBoundaryTargetMode;
-  boundary?: ConversationBoundaryManifestRecord;
-  checkpoint?: CheckpointManifestRecord;
-  target?: ConversationRewindTargetFacts;
+  boundary: ConversationBoundaryManifestRecord | undefined;
+  checkpoint: CheckpointManifestRecord | undefined;
+  target: ConversationRewindTargetFacts | undefined;
   missingFacts: DaemonConversationRewindBoundaryMissingFact[];
   diagnostics: DaemonConversationRewindBoundaryDiagnostic[];
 }
 
 export interface DaemonConversationRewindBoundaryPreviewResult extends DaemonConversationRewindBoundaryResult {
-  plan?: ConversationRewindPlanWithTargetFacts["plan"];
-  runtimeTargetLeafId?: string;
+  plan: ConversationRewindPlanWithTargetFacts["plan"] | undefined;
+  runtimeTargetLeafId: string | undefined;
 }
 
 export async function resolveConversationRewindBoundary(
@@ -94,7 +94,7 @@ export async function resolveConversationRewindBoundary(
   });
   const boundary = latestUserMessage
     ? await boundaryManifest.findLatest({ sessionId: input.sessionId })
-    : await boundaryManifest.findLatest({ sessionId: input.sessionId, userMessageId: input.userMessageId });
+    : await boundaryManifest.findLatest({ sessionId: input.sessionId, ...(input.userMessageId !== undefined ? { userMessageId: input.userMessageId } : {}) });
 
   if (!boundary) {
     diagnostics.push(
@@ -118,8 +118,8 @@ export async function resolveConversationRewindBoundary(
   let target: ConversationRewindTargetFacts | undefined;
   try {
     target = resolveConversationRewindTargetFacts({
-      boundary,
-      checkpoint,
+      boundary: boundary!,
+      ...(checkpoint !== undefined ? { checkpoint } : {}),
       mode,
     });
   } catch (error) {
@@ -175,6 +175,8 @@ export async function previewConversationRewindByBoundary(
       status: "blocked",
       missingFacts: mergeMissingFacts(resolved.missingFacts, diagnostics),
       diagnostics,
+      plan: undefined,
+      runtimeTargetLeafId: undefined,
     };
   }
 
@@ -182,13 +184,14 @@ export async function previewConversationRewindByBoundary(
     session: session!,
     entries,
     target: resolved.target!,
+    checkpoint: resolved.checkpoint as unknown as import("@crish/agent-orchestrator").ConversationRewindCheckpointTarget | undefined,
     runs: input.orchestrator.listRuns(),
     pendingApprovals: input.approvalQueue.getPendingApprovals().map((approval) => ({
       toolCallId: approval.toolCallId,
       runId: approval.runId,
     })),
-    activeSubagents: input.activeSubagents ?? [],
-    ...(input.restorePolicy !== undefined ? { restorePolicy: input.restorePolicy } : {}),
+    activeSubagents: (input.activeSubagents ?? []) as unknown as readonly import("@crish/agent-orchestrator").ConversationRewindActiveSubagent[],
+    restorePolicy: input.restorePolicy ?? undefined,
   });
 
   return {
@@ -197,7 +200,7 @@ export async function previewConversationRewindByBoundary(
     diagnostics,
     missingFacts: mergeMissingFacts(resolved.missingFacts, diagnostics),
     plan: planned.plan,
-    ...(planned.runtimeTargetLeafId !== undefined ? { runtimeTargetLeafId: planned.runtimeTargetLeafId } : {}),
+    runtimeTargetLeafId: planned.runtimeTargetLeafId ?? undefined,
   };
 }
 
@@ -216,9 +219,9 @@ function boundaryResult(
     userMessageId: boundary?.userMessageId ?? input.userMessageId,
     latestUserMessage,
     mode,
-    ...(boundary !== undefined ? { boundary } : {}),
-    ...(checkpoint !== undefined ? { checkpoint } : {}),
-    ...(target !== undefined ? { target } : {}),
+    boundary: boundary ?? undefined,
+    checkpoint: checkpoint ?? undefined,
+    target: target ?? undefined,
     missingFacts: mergeMissingFacts(target?.missingFacts ?? [], diagnostics),
     diagnostics,
   };
@@ -323,7 +326,7 @@ function diagnostic(
     fact,
     message,
     blocked: true,
-    ...(metadata !== undefined ? { metadata } : {}),
+    metadata: metadata ?? undefined,
   };
 }
 

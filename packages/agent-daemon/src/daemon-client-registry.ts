@@ -5,12 +5,14 @@ import {
   formatProtocolValidationError,
 } from "./protocol/protocol.js";
 import { BoundedMap, MAX_CLIENTS, MAX_PENDING_WS_MESSAGES } from "@crish/shared-utils";
+import { getDaemonLogger, toLogErr } from "./daemon-logger.js";
 
 export interface ConnectedClient {
   ws: WebSocket;
   id: string;
   connectedAt: number;
-  pendingMessagesCount?: number;
+  pendingMessagesCount: number | undefined;
+  subscriptions: Set<() => void> | undefined;
 }
 
 export type DaemonClientTransportDiagnosticCode =
@@ -23,9 +25,9 @@ export interface DaemonClientTransportDiagnostic {
   message: string;
   source: "daemon" | "client" | "websocket";
   severity: "warning" | "error";
-  clientId?: string;
-  detail?: string;
-  metadata?: Record<string, unknown>;
+  clientId: string | undefined;
+  detail: string | undefined;
+  metadata: Record<string, unknown> | undefined;
 }
 
 export interface DaemonClientRegistryOptions {
@@ -38,12 +40,12 @@ const SEND_BACKPRESSURE_CLOSE_CODE = 1013;
 const SEND_FAILURE_CLOSE_CODE = 1011;
 
 export class DaemonClientRegistry {
-  private readonly clients = new BoundedMap<WebSocket, ConnectedClient>(MAX_CLIENTS);
+  private readonly clients = new BoundedMap<WebSocket, ConnectedClient>(MAX_CLIENTS, undefined);
   private readonly maxBufferedBytes: number;
   private readonly maxClients: number;
   private readonly failedTransports = new WeakSet<WebSocket>();
   private clientIdCounter = 0;
-  private onDiagnostic?: (diagnostic: DaemonClientTransportDiagnostic) => void;
+  private onDiagnostic: ((diagnostic: DaemonClientTransportDiagnostic) => void) | undefined;
 
   constructor(options: DaemonClientRegistryOptions = {}) {
     this.maxBufferedBytes = Math.max(1, options.maxBufferedBytes ?? DEFAULT_MAX_BUFFERED_BYTES);
@@ -64,6 +66,8 @@ export class DaemonClientRegistry {
       ws,
       id: `client-${++this.clientIdCounter}`,
       connectedAt: Date.now(),
+      pendingMessagesCount: undefined,
+      subscriptions: undefined,
     };
     this.clients.set(ws, client);
     return client;
@@ -72,10 +76,20 @@ export class DaemonClientRegistry {
   disconnect(ws: WebSocket): ConnectedClient | undefined {
     const client = this.clients.get(ws);
     if (client) {
+      this.cleanupSubscriptions(client);
       this.clients.delete(ws);
     }
     this.failedTransports.delete(ws);
     return client;
+  }
+
+  remove(clientId: string): ConnectedClient | undefined {
+    for (const [ws, client] of this.clients) {
+      if (client.id === clientId) {
+        return this.disconnect(ws);
+      }
+    }
+    return undefined;
   }
 
   get(ws: WebSocket): ConnectedClient | undefined {
@@ -126,7 +140,7 @@ export class DaemonClientRegistry {
       type: "error",
       code,
       message,
-      runId,
+      ...(runId !== undefined ? { runId } : {}),
       ...correlationFields(correlation),
     });
   }
@@ -135,13 +149,15 @@ export class DaemonClientRegistry {
     const encoded = encodeOutboundMessage(message);
     if (!encoded.ok) {
       const detail = formatProtocolValidationError(encoded.error);
-      console.error(`[Daemon] Refusing invalid outbound message: ${detail}`);
+      getDaemonLogger().error('Refusing invalid outbound message', { module: 'DaemonClientRegistry', detail });
       this.reportDiagnostic({
         code: "OUTBOUND_PROTOCOL_ERROR",
         message: "Refusing invalid outbound message",
         source: "daemon",
         severity: "error",
+        clientId: undefined,
         detail,
+        metadata: undefined,
       });
       return undefined;
     }
@@ -163,6 +179,7 @@ export class DaemonClientRegistry {
         source: "client",
         severity: "warning",
         clientId: client.id,
+        detail: undefined,
         metadata: {
           clientId: client.id,
           operation,
@@ -183,6 +200,7 @@ export class DaemonClientRegistry {
         source: "client",
         severity: "warning",
         clientId: client.id,
+        detail: undefined,
         metadata: {
           clientId: client.id,
           operation,
@@ -251,6 +269,15 @@ export class DaemonClientRegistry {
     this.reportDiagnostic(diagnostic);
   }
 
+  private cleanupSubscriptions(client: ConnectedClient): void {
+    if (client.subscriptions) {
+      for (const unsubscribe of client.subscriptions) {
+        try { unsubscribe(); } catch { /* ignore cleanup errors */ }
+      }
+      client.subscriptions.clear();
+    }
+  }
+
   private reportDiagnostic(diagnostic: DaemonClientTransportDiagnostic): void {
     this.onDiagnostic?.(diagnostic);
   }
@@ -266,7 +293,7 @@ export class DaemonClientRegistry {
       }
       ws.terminate();
     } catch (error) {
-      console.error("[Daemon] Failed to close WebSocket after send failure:", error);
+      getDaemonLogger().error('Failed to close WebSocket after send failure', { module: 'DaemonClientRegistry', err: toLogErr(error) });
       ws.terminate();
     }
   }

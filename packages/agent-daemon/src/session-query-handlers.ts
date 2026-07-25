@@ -5,6 +5,7 @@ import type {
   OrchestratorSessionEventSummary,
   OrchestratorSessionRecord,
 } from "@crish/agent-orchestrator";
+import { toJsonObject } from "@crish/shared-utils";
 import type { JsonObject, RunStatus } from "@crish/shared-types";
 import type {
   DaemonEventCursorDiagnostic,
@@ -19,7 +20,7 @@ import type {
   ReadRunEventsMessage,
   ReadSessionEventsMessage,
 } from "./types.js";
-import { buildDaemonTaskSnapshot } from "./task-snapshot-projection.js";
+import { buildDaemonTaskSnapshot, type BuildDaemonTaskSnapshotInput } from "./task-snapshot-projection.js";
 import type { FileSessionMetadataStore, SessionMetadataRecord } from "./session-metadata-store.js";
 
 const DEFAULT_EVENT_PAGE_SIZE = 500;
@@ -107,14 +108,14 @@ export async function createReadSessionEventsResponse(
       sessionId: msg.sessionId,
       events,
       eventLog,
-      ...(cursorDiagnostic ? { cursorDiagnostic } : {}),
+      ...(cursorDiagnostic !== undefined ? { cursorDiagnostic } : {}),
       diagnostics,
       afterSequence: cursor.afterSequence,
       ...(msg.lastEventId !== undefined ? { lastEventId: msg.lastEventId } : {}),
       nextAfterSequence: nextAfterSequence(events, cursor.afterSequence),
       hasMore: truncated,
       ...(truncated ? { nextCursor: nextReplayCursor(eventLog, events, cursor.afterSequence) } : {}),
-    },
+    } as DaemonOutboundMessage,
   };
 }
 
@@ -159,7 +160,7 @@ export async function createReadRunEventsResponse(
       runId: msg.runId,
       events,
       eventLog,
-      ...(cursorDiagnostic ? { cursorDiagnostic } : {}),
+      ...(cursorDiagnostic !== undefined ? { cursorDiagnostic } : {}),
       diagnostics,
       afterSequence: cursor.afterSequence,
       ...(msg.lastEventId !== undefined ? { lastEventId: msg.lastEventId } : {}),
@@ -171,10 +172,10 @@ export async function createReadRunEventsResponse(
             snapshot: buildDaemonTaskSnapshot({
               run: orchestrator.getRun(msg.runId),
               events: initialCursor.snapshotComplete && needsFullCursorResolution ? allEvents : await orchestrator.readRunEvents(msg.runId),
-            }),
+            } as BuildDaemonTaskSnapshotInput),
           }
         : {}),
-    },
+    } as DaemonOutboundMessage,
   };
 }
 
@@ -198,8 +199,8 @@ export async function createGetRunSnapshotResponse(
     message: {
       type: "run-snapshot",
       runId: msg.runId,
-      snapshot: buildDaemonTaskSnapshot({ run, events: allEvents }),
-    },
+      snapshot: buildDaemonTaskSnapshot({ run, events: allEvents } as BuildDaemonTaskSnapshotInput),
+    } as DaemonOutboundMessage,
   };
 }
 
@@ -289,10 +290,10 @@ function buildEventReadDiagnostics(
     projectedAfterSequence,
     eventsFetched,
     eventsReturned,
-    ...(truncated ? { truncated: true } : {}),
+    truncated: truncated || undefined,
     maxEvents: cursor.maxEvents ?? pageSize,
     queryMs,
-  };
+  } as DaemonEventReadDiagnostics;
 }
 
 function eventReadMode(
@@ -320,7 +321,7 @@ function nextReplayCursor(
     schemaVersion: eventLog.schemaVersion,
     protocolVersion: eventLog.protocolVersion,
     afterSequence,
-    ...(events.at(-1)?.id ? { lastEventId: events.at(-1)!.id } : {}),
+    lastEventId: events.at(-1)?.id,
   };
 }
 
@@ -364,7 +365,7 @@ function mergeSessionSummaries(
       ...(eventSummary?.activeRunCount !== undefined ? { activeRunCount: eventSummary.activeRunCount } : {}),
       ...(eventSummary?.activeRunIds !== undefined ? { activeRunIds: eventSummary.activeRunIds } : {}),
       ...(eventSummary?.latestRunId !== undefined ? { latestRunId: eventSummary.latestRunId } : {}),
-      ...(eventSummary?.latestRunStatus !== undefined ? { latestRunStatus: eventSummary.latestRunStatus as unknown as RunStatus } : {}),
+      ...(eventSummary?.latestRunStatus !== undefined ? { latestRunStatus: eventSummary.latestRunStatus as RunStatus } : {}),
       ...(eventSummary?.latestRunUpdatedAt !== undefined ? { latestRunUpdatedAt: eventSummary.latestRunUpdatedAt } : {}),
       ...(eventSummary?.pendingInputCount !== undefined ? { pendingInputCount: eventSummary.pendingInputCount } : {}),
       ...(eventSummary?.pendingApprovalCount !== undefined ? { pendingApprovalCount: eventSummary.pendingApprovalCount } : {}),
@@ -373,7 +374,7 @@ function mergeSessionSummaries(
       ...(eventSummary?.lastMessagePreview ? { lastMessagePreview: eventSummary.lastMessagePreview } : {}),
       ...(metadata?.title !== undefined ? { title: metadata.title } : {}),
       ...(metadata ? { pinned: metadata.pinned, archived: metadata.archived, deleted: metadata.deleted, metadataUpdatedAt: metadata.updatedAt } : {}),
-    };
+    } as DaemonSessionSummary;
   });
 }
 
@@ -401,14 +402,14 @@ function applySessionMetadata(
   if (!metadata) return session;
   const sessionMetadata: JsonObject = {
     ...(session.metadata ?? {}),
-    sessionMetadata: {
+    sessionMetadata: toJsonObject({
       title: metadata.title,
       pinned: metadata.pinned,
       archived: metadata.archived,
       deleted: metadata.deleted,
       updatedAt: metadata.updatedAt,
       source: metadata.source,
-    } as unknown as JsonObject,
+    }),
   };
   return {
     ...session,

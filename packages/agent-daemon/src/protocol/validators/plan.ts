@@ -79,7 +79,7 @@ export function validateCreatePlanDocumentMessage(
   if (issues.length > 0) return invalid("Invalid create-plan-document message", issues);
 
   return ok({
-    type: "create-plan-document",
+    type: "create-plan-document" as const,
     ...(id !== undefined ? { id } : {}),
     title: title as string,
     goal: goal as string,
@@ -93,7 +93,7 @@ export function validateCreatePlanDocumentMessage(
     ...(createdAt !== undefined ? { createdAt } : {}),
     ...(updatedAt !== undefined ? { updatedAt } : {}),
     ...(metadata !== undefined ? { metadata } : {}),
-  });
+  } as CreatePlanDocumentMessage);
 }
 
 export function validateCreateRequirementsAlignmentPlanMessage(

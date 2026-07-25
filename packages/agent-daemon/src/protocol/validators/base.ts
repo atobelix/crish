@@ -2221,7 +2221,7 @@ export function readEventReplayCursor(
     schemaVersion,
     protocolVersion,
     afterSequence,
-    ...(lastEventId !== undefined ? { lastEventId } : {}),
+    lastEventId,
   };
 }
 
@@ -2304,7 +2304,7 @@ export function optionalEventCursorDiagnostic(
     code,
     message,
     severity,
-    ...(previous !== undefined ? { previous } : {}),
+    previous,
     current,
     replayedFromSequence,
   };

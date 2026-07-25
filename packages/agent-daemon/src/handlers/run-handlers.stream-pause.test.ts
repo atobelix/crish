@@ -110,7 +110,7 @@ function outbound(runId: string, label: string): DaemonOutboundMessage {
       delta: label,
       timestamp: Date.now(),
     },
-  } as DaemonOutboundMessage;
+  } as unknown as DaemonOutboundMessage;
 }
 
 describe('RunHandler stream pause / resume backpressure', () => {

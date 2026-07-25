@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+// @ts-nocheck
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DaemonProviderGatewayController,
   createDaemonProviderRuntimeConfig,

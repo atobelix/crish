@@ -36,6 +36,7 @@ export class PermissionStore {
       const raw = readFileSync(this.filePath, 'utf-8');
       this.rules = JSON.parse(raw);
     } catch {
+      // silent: JSON.parse 降级，损坏或空文件时重置为空规则列表
       this.rules = [];
     }
   }
@@ -84,11 +85,33 @@ export class PermissionStore {
     try {
       return new RegExp(regexPattern, 'i').test(target);
     } catch {
+      // silent: 用户输入的通配符表达式非合法 regex 时降级拒绝匹配
       return false;
     }
   }
 
   public getRules(): PersistentPermissionRule[] {
     return [...this.rules];
+  }
+
+  /**
+   * Check whether an MCP command has been previously approved.
+   * Builds a target string from command + args for pattern matching.
+   */
+  public isMcpCommandApproved(command: string, args: string[]): boolean {
+    const target = [command, ...args].join(' ');
+    return this.evaluate(target) === 'allow';
+  }
+
+  /**
+   * Record an MCP command approval so subsequent starts bypass the dialog.
+   */
+  public approveMcpCommand(
+    command: string,
+    args: string[],
+    scope: 'project' | 'session' | 'global' = 'project',
+  ): PersistentPermissionRule {
+    const target = [command, ...args].join(' ');
+    return this.addRule(scope, target, 'allow');
   }
 }

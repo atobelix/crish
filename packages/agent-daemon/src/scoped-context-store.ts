@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { JsonObject, JsonValue } from "@crish/shared-types";
+
 import { isRecord, errorMessage, isNodeError, clone, isJsonObject, deepFreeze } from "@crish/shared-utils";
 import { fsyncPathAsync } from "@crish/shared-utils/node";
+import { CrishError } from "@crish/shared-types";
 import type {
   DaemonScopedContextDiagnostic,
   DaemonScopedContextStoreStatus,
@@ -62,7 +63,7 @@ export class FileScopedContextStore implements ScopedContextStore {
     return {
       status: load.diagnostic ? "degraded" : this.status,
       records,
-      ...(load.diagnostic ?? this.diagnostic ? { diagnostic: load.diagnostic ?? this.diagnostic } : {}),
+      diagnostic: load.diagnostic ?? this.diagnostic ?? undefined,
     };
   }
 
@@ -195,12 +196,12 @@ export class FileScopedContextStore implements ScopedContextStore {
     try {
       parsed = JSON.parse(text);
     } catch (error) {
-      throw new Error(`Scoped context store is not valid JSON: ${errorMessage(error)}`);
+      throw new CrishError(`Scoped context store is not valid JSON: ${errorMessage(error)}`, "SCOPED_CONTEXT_ERROR", "permanent", false);
     }
 
     const issues = validateScopedContextStoreState(parsed);
     if (issues.length > 0) {
-      throw new Error(`Scoped context store has invalid data: ${issues.join("; ")}`);
+      throw new CrishError(`Scoped context store has invalid data: ${issues.join("; ")}`, "SCOPED_CONTEXT_ERROR", "permanent", false);
     }
 
     // JSON.parse 产出全新对象（无外部引用），可直接冻结作为不可变 state。
@@ -257,7 +258,7 @@ export class FileScopedContextStore implements ScopedContextStore {
       message,
       updatedAt: new Date().toISOString(),
       path: this.filePath,
-      ...(error instanceof Error && error.stack ? { detail: error.stack } : {}),
+      detail: (error instanceof Error && error.stack ? error.stack : undefined),
     };
     this.diagnostic = diagnostic;
     return diagnostic;
@@ -340,22 +341,20 @@ export function normalizeScopedContextRecord(
   const issues: string[] = [];
   validateScopedContextRecord(record, "$.record", issues);
   if (issues.length > 0) {
-    throw new Error(`Invalid scoped context record: ${issues.join("; ")}`);
+    throw new CrishError(`Invalid scoped context record: ${issues.join("; ")}`, "SCOPED_CONTEXT_ERROR", "permanent", false);
   }
   return {
     id: normalizeText(record.id, "id"),
     kind: record.kind,
     title: normalizeText(record.title, "title"),
     content: normalizeText(record.content, "content"),
-    ...(record.description !== undefined
-      ? { description: normalizeText(record.description, "description") }
-      : {}),
+    description: record.description !== undefined ? normalizeText(record.description, "description") : undefined,
     scope: record.scope,
     activation: record.activation,
     appliesTo: normalizeList(record.appliesTo),
     tags: normalizeList(record.tags),
-    ...(record.source ? { source: clone(record.source) } : {}),
-    ...(record.sourceMetadata ? { sourceMetadata: clone(record.sourceMetadata) } : {}),
+    source: record.source ? clone(record.source) : undefined,
+    sourceMetadata: record.sourceMetadata ? clone(record.sourceMetadata) : undefined,
     order: record.order,
     updatedAt: now.toISOString(),
   };
@@ -408,7 +407,7 @@ async function fsyncPathDiagnostic(
       message: `Failed to fsync scoped context store path ${path}: ${errorMessage(error)}`,
       updatedAt: new Date().toISOString(),
       path,
-      ...(error instanceof Error && error.stack ? { detail: error.stack } : {}),
+      detail: (error instanceof Error && error.stack ? error.stack : undefined),
     };
   }
 }
@@ -498,7 +497,7 @@ function requiredStringArray(
 
 function normalizeText(value: string, label: string): string {
   const normalized = value.trim().replace(/\s+/g, " ");
-  if (!normalized) throw new Error(`${label} must be non-empty`);
+  if (!normalized) throw new CrishError(`${label} must be non-empty`, "SCOPED_CONTEXT_ERROR", "permanent", false);
   return normalized;
 }
 

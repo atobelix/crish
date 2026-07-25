@@ -10,6 +10,7 @@ import {
   type ContentAddressedBlobRecord,
   type ContentAddressedBlobContent,
 } from "@crish/agent-orchestrator";
+import { CrishError } from "@crish/shared-types";
 import type {
   ArtifactRecord,
   ChangedFileRecord,
@@ -77,14 +78,16 @@ export function createUnsupportedProductSurfaceStatus(
     state: "unsupported",
     reason: unsupportedReason(surface),
     operations: [],
-    diagnostics: [
-      {
-        code: `${surface.toUpperCase()}_ADAPTER_UNWIRED`,
-        message: unsupportedReason(surface),
-        severity: "info",
-        updatedAt: now.toISOString(),
-      },
-    ],
+      diagnostics: [
+        {
+          code: `${surface.toUpperCase()}_ADAPTER_UNWIRED`,
+          message: unsupportedReason(surface),
+          severity: "info",
+          updatedAt: now.toISOString(),
+          detail: undefined,
+          metadata: undefined,
+        },
+      ],
   };
 }
 
@@ -92,7 +95,7 @@ export class DaemonBlobArtifactAdapter implements DaemonArtifactAdapter {
   private readonly store: BlobArtifactStore;
 
   constructor(private readonly options: { rootDir: string; uriPrefix?: string }) {
-    this.store = new BlobArtifactStore({ rootDir: options.rootDir, uriPrefix: options.uriPrefix });
+    this.store = new BlobArtifactStore(options.uriPrefix !== undefined ? { rootDir: options.rootDir, uriPrefix: options.uriPrefix } as import("@crish/agent-orchestrator").ContentAddressedBlobStoreOptions : options.rootDir);
   }
 
   status(now: Date = new Date()): DaemonProductSurfaceStatus {
@@ -107,6 +110,7 @@ export class DaemonBlobArtifactAdapter implements DaemonArtifactAdapter {
           message: "Daemon blob artifact adapter is configured.",
           severity: "info",
           updatedAt: now.toISOString(),
+          detail: undefined,
           metadata: {
             rootDir: this.options.rootDir,
             operations: ["list", "read"],
@@ -124,7 +128,7 @@ export class DaemonBlobArtifactAdapter implements DaemonArtifactAdapter {
   async getArtifactContent(artifactUri: string): Promise<DaemonArtifactContent> {
     const content = await this.store.get(artifactUri);
     if (!content) {
-      throw new Error(`Artifact not found: ${artifactUri}`);
+      throw new CrishError(`Artifact not found: ${artifactUri}`, "ADAPTER_ERROR", "permanent", false);
     }
     return {
       content: decodeBlobContent(content),
@@ -153,6 +157,7 @@ export class DaemonCheckpointManifestAdapter implements DaemonCheckpointAdapter 
           message: "Daemon checkpoint manifest adapter is configured.",
           severity: "info",
           updatedAt: now.toISOString(),
+          detail: undefined,
           metadata: {
             manifestPath: this.options.manifestPath,
             operations: ["list", "diff"],
@@ -171,12 +176,14 @@ export class DaemonCheckpointManifestAdapter implements DaemonCheckpointAdapter 
   async getCheckpointDiff(checkpointId: string): Promise<ChangedFileRecord[]> {
     const record = await this.manifest.findLatest({ checkpointId });
     if (!record) {
-      throw new Error(`Checkpoint not found in daemon manifest: ${checkpointId}`);
+      throw new CrishError(`Checkpoint not found in daemon manifest: ${checkpointId}`, "ADAPTER_ERROR", "permanent", false);
     }
 
     return record.changedPaths.map((path) => ({
       path,
       status: "changed",
+      addedLines: undefined,
+      removedLines: undefined,
     }));
   }
 }
@@ -200,6 +207,7 @@ export class DaemonJsonlMemoryAdapter implements DaemonMemoryAdapter {
           message: "Daemon JSONL memory adapter is configured.",
           severity: "info",
           updatedAt: now.toISOString(),
+          detail: undefined,
           metadata: {
             storePath: this.options.storePath,
             operations: ["list", "delete"],
@@ -220,7 +228,7 @@ export class DaemonJsonlMemoryAdapter implements DaemonMemoryAdapter {
   async deleteMemory(memoryId: string): Promise<void> {
     const deleted = await this.store.delete(memoryId);
     if (!deleted) {
-      throw new Error(`Memory not found: ${memoryId}`);
+      throw new CrishError(`Memory not found: ${memoryId}`, "ADAPTER_ERROR", "permanent", false);
     }
   }
 }
@@ -269,7 +277,7 @@ function memoryScope(value: string): MemoryScope {
   if (value === "session" || value === "project" || value === "user") {
     return value;
   }
-  throw new Error(`Invalid memory scope: ${value}`);
+  throw new CrishError(`Invalid memory scope: ${value}`, "ADAPTER_ERROR", "permanent", false);
 }
 
 function artifactRecordFromBlob(record: ContentAddressedBlobRecord, _sessionId?: string): ArtifactRecord {
@@ -279,6 +287,9 @@ function artifactRecordFromBlob(record: ContentAddressedBlobRecord, _sessionId?:
     type: metadata.mimeType,
     name: metadata.storagePath.split("/").pop() ?? metadata.uri,
     size: metadata.byteLength,
+    createdAt: undefined,
+    sessionId: undefined,
+    runId: undefined,
   };
 }
 

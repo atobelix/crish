@@ -1,5 +1,5 @@
 import type { JsonObject, JsonValue } from "@crish/shared-types";
-import { compactJsonObject } from "@crish/shared-utils";
+import { compactJsonObject, toJsonValue } from "@crish/shared-utils";
 import {
   composePromptContext,
   loadScopedContextResources,
@@ -68,19 +68,19 @@ export async function buildDaemonScopedPromptContext(
     status: resolved.status,
     composer: promptContextMetadataJson(composition.metadata),
     stableContext: contextBlocksToJson(composition.stableContext),
-    stableBlockIds: composition.metadata.stableBlockIds as unknown as JsonValue,
-    volatileBlockIds: composition.metadata.volatileBlockIds as unknown as JsonValue,
-    candidates: composition.recommended as unknown as JsonValue,
+    stableBlockIds: toJsonValue(composition.metadata.stableBlockIds),
+    volatileBlockIds: toJsonValue(composition.metadata.volatileBlockIds),
+    candidates: toJsonValue(composition.recommended),
     candidateCount: composition.recommended.length,
-    diagnostics: composition.diagnostics as unknown as JsonValue,
+    diagnostics: toJsonValue(composition.diagnostics),
     diagnosticCount:
       composition.diagnostics.length +
       resolved.resourceDiagnostics.length +
       (resolved.storeDiagnostic ? 1 : 0),
     storeRecordCount: resolved.storeRecordCount,
     resourceRecordCount: resolved.resourceRecordCount,
-    resourceDiagnostics: resolved.resourceDiagnostics as unknown as JsonValue,
-    storeDiagnostic: resolved.storeDiagnostic as unknown as JsonValue | undefined,
+    resourceDiagnostics: toJsonValue(resolved.resourceDiagnostics),
+    storeDiagnostic: resolved.storeDiagnostic != null ? toJsonValue(resolved.storeDiagnostic) : undefined,
   });
 
   return {
@@ -139,39 +139,11 @@ export async function resolveDaemonScopedContext(
   };
 }
 
-function degradedPromptContext(
-  diagnostic: DaemonScopedContextDiagnostic
-): DaemonScopedPromptContextResult {
-  const composition = composePromptContext({});
-  return {
-    status: "degraded",
-    stableContext: [],
-    volatileContext: [],
-    metadata: compactJsonObject({
-      version: DAEMON_SCOPED_PROMPT_CONTEXT_VERSION,
-      status: "degraded",
-      composer: promptContextMetadataJson(composition.metadata),
-      stableContext: [],
-      stableBlockIds: composition.metadata.stableBlockIds as unknown as JsonValue,
-      volatileBlockIds: composition.metadata.volatileBlockIds as unknown as JsonValue,
-      candidates: [],
-      candidateCount: 0,
-      diagnostics: [],
-      diagnosticCount: 1,
-      storeDiagnostic: diagnostic as unknown as JsonValue,
-    }),
-  };
-}
-
 function scopedContextDiagnostic(
   code: string,
   message: string
 ): DaemonScopedContextDiagnostic {
-  return {
-    code,
-    message,
-    updatedAt: new Date().toISOString(),
-  };
+  return { code, message, updatedAt: new Date().toISOString(), path: undefined, detail: undefined };
 }
 
 function sortRecordsForPrompt<T extends { id: string; kind: string; scope: ScopedContextRecord["scope"]; order: number }>(
@@ -267,16 +239,16 @@ async function loadDaemonScopedContextResources(
     ...project,
     includeAncestorContextFiles: config.includeAncestorContextFiles ?? true,
     globalRules: {
-      files: config.globalRuleFiles,
-      dirs: config.globalRuleDirs,
+      ...(config.globalRuleFiles !== undefined ? { files: config.globalRuleFiles } : {}),
+      ...(config.globalRuleDirs !== undefined ? { dirs: config.globalRuleDirs } : {}),
     },
     workspaceRules: {
-      files: config.workspaceRuleFiles,
-      dirs: config.workspaceRuleDirs,
+      ...(config.workspaceRuleFiles !== undefined ? { files: config.workspaceRuleFiles } : {}),
+      ...(config.workspaceRuleDirs !== undefined ? { dirs: config.workspaceRuleDirs } : {}),
     },
     projectRules: {
-      files: config.projectRuleFiles,
-      dirs: config.projectRuleDirs,
+      ...(config.projectRuleFiles !== undefined ? { files: config.projectRuleFiles } : {}),
+      ...(config.projectRuleDirs !== undefined ? { dirs: config.projectRuleDirs } : {}),
     },
     globalSkillDirs: globalSkillDirs.map((dir) => ({ dir, scope: "global", activation: "recommended" })),
     workspaceSkillDirs: workspaceSkillDirs.map((dir) => ({ dir, scope: "workspace", activation: "recommended" })),
@@ -318,7 +290,7 @@ function scopedContextRuntimeConfig(
 }
 
 function scopedContextRuntimeConfigFromJson(value: JsonObject | undefined): ScopedContextRuntimeConfig {
-  if (!value) return {};
+  if (!value) return {} as ScopedContextRuntimeConfig;
   return compactJsonObject({
     userEnabledIds: jsonStringArray(value.userEnabledIds),
     userDisabledIds: jsonStringArray(value.userDisabledIds),
@@ -336,7 +308,7 @@ function scopedContextRuntimeConfigFromJson(value: JsonObject | undefined): Scop
     globalRuleDirs: jsonStringArray(value.globalRuleDirs),
     workspaceRuleDirs: jsonStringArray(value.workspaceRuleDirs),
     projectRuleDirs: jsonStringArray(value.projectRuleDirs),
-  }) as ScopedContextRuntimeConfig;
+  }) as unknown as ScopedContextRuntimeConfig;
 }
 
 function toRuntimeRecord(record: ScopedContextRecord): RuntimeScopedContextRecord {
@@ -371,25 +343,25 @@ function recommendedContextBlocks(resolution: ScopedContextResolution): PromptAs
             title: candidate.title,
             description: candidate.description,
             scope: candidate.scope,
-            tags: candidate.tags as unknown as JsonValue,
+            tags: toJsonValue(candidate.tags),
             reason: candidate.reason,
-            source: candidate.source as unknown as JsonValue,
+            source: toJsonValue(candidate.source),
           })
-        ) as unknown as JsonValue,
+        ),
       },
     },
   ];
 }
 
 function contextBlocksToJson(blocks: PromptAssemblyContextBlock[]): JsonValue {
-  return blocks.map((block) =>
+  return toJsonValue(blocks.map((block) =>
     compactJsonObject({
       id: block.id,
       kind: block.kind,
       label: block.label,
       content: block.content,
     })
-  ) as unknown as JsonValue;
+  ));
 }
 
 async function existingDirectories(paths: string[]): Promise<string[]> {
@@ -415,6 +387,7 @@ async function inferPackageNames(root: string): Promise<string[]> {
     const parsed = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as { name?: unknown };
     return typeof parsed.name === "string" && parsed.name.trim() ? [parsed.name.trim()] : [];
   } catch {
+    // silent: JSON.parse 降级，缺少或损坏的 package.json 视为无包名
     return [];
   }
 }

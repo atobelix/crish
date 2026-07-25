@@ -32,13 +32,13 @@ export async function handleEnqueuePendingInput(
 ): Promise<void> {
   try {
     const result = await orchestrator.enqueuePendingInput({
-      id: msg.inputId,
+      ...(msg.inputId !== undefined ? { id: msg.inputId } : {}),
       sessionId: msg.sessionId,
-      runId: msg.runId,
+      ...(msg.runId !== undefined ? { runId: msg.runId } : {}),
       text: msg.text,
-      mode: msg.mode,
-      source: msg.source,
-      metadata: msg.metadata,
+      ...(msg.mode !== undefined ? { mode: msg.mode } : {}),
+      ...(msg.source !== undefined ? { source: msg.source } : {}),
+      ...(msg.metadata !== undefined ? { metadata: msg.metadata } : {}),
     });
     transport.send(
       ws,
@@ -66,8 +66,8 @@ export async function handleCancelPendingInput(
   try {
     const result = await orchestrator.cancelPendingInput({
       id: msg.inputId,
-      sessionId: msg.sessionId,
-      reason: msg.reason,
+      ...(msg.sessionId !== undefined ? { sessionId: msg.sessionId } : {}),
+      ...(msg.reason !== undefined ? { reason: msg.reason } : {}),
     });
     transport.send(
       ws,
@@ -95,8 +95,8 @@ export async function handleDispatchPendingInput(
   try {
     const result = await orchestrator.dispatchPendingInput({
       id: msg.inputId,
-      sessionId: msg.sessionId,
-      targetRunId: msg.targetRunId,
+      ...(msg.sessionId !== undefined ? { sessionId: msg.sessionId } : {}),
+      ...(msg.targetRunId !== undefined ? { targetRunId: msg.targetRunId } : {}),
     });
     transport.send(
       ws,

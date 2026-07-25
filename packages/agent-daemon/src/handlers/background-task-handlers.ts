@@ -46,9 +46,9 @@ export function handleListBackgroundTasks(
 ): void {
   try {
     const tasks = backgroundTasks.list({
-      includeHistory: msg.includeHistory,
-      state: msg.state,
-      limit: msg.limit,
+      ...(msg.includeHistory !== undefined ? { includeHistory: msg.includeHistory } : {}),
+      ...(msg.state !== undefined ? { state: msg.state } : {}),
+      ...(msg.limit !== undefined ? { limit: msg.limit } : {}),
     });
     transport.send(
       ws,
@@ -76,11 +76,11 @@ export async function handleStartBackgroundTask(
   try {
     const task = await backgroundTasks.start({
       command: msg.command,
-      cwd: msg.cwd,
-      workspaceRoot: msg.workspaceRoot,
-      timeoutMs: msg.timeoutMs,
-      maxOutputBytes: msg.maxOutputBytes,
-      heartbeatIntervalMs: msg.heartbeatIntervalMs,
+      ...(msg.cwd !== undefined ? { cwd: msg.cwd } : {}),
+      ...(msg.workspaceRoot !== undefined ? { workspaceRoot: msg.workspaceRoot } : {}),
+      ...(msg.timeoutMs !== undefined ? { timeoutMs: msg.timeoutMs } : {}),
+      ...(msg.maxOutputBytes !== undefined ? { maxOutputBytes: msg.maxOutputBytes } : {}),
+      ...(msg.heartbeatIntervalMs !== undefined ? { heartbeatIntervalMs: msg.heartbeatIntervalMs } : {}),
     });
     transport.send(
       ws,
@@ -132,8 +132,8 @@ export function handleGetBackgroundTaskHistory(
 ): void {
   try {
     const tasks = backgroundTasks.history({
-      state: msg.state,
-      limit: msg.limit,
+      ...(msg.state !== undefined ? { state: msg.state } : {}),
+      ...(msg.limit !== undefined ? { limit: msg.limit } : {}),
     });
     transport.send(
       ws,

@@ -18,6 +18,8 @@ export class DaemonApprovalHandler {
   private static readonly runIntentAllowlist = new Map<string, Set<string>>();
   /** 跨 run 的 always 意图放行（approve-tool scope=always） */
   private static readonly alwaysIntentAllowlist = new Set<string>();
+  /** runId → 已拒绝的 intentKey 集合 */
+  private static readonly runIntentDenylist = new Map<string, Set<string>>();
 
   constructor(
     private readonly approvalQueue: ApprovalQueue,
@@ -49,7 +51,7 @@ export class DaemonApprovalHandler {
         toolName: request.toolName || "tool",
         zone: resolution.zone,
         risk: String(resolution.risk),
-        command: resolution.command,
+        ...(resolution.command !== undefined ? { command: resolution.command } : {}),
       });
 
     const hardline =
@@ -69,6 +71,11 @@ export class DaemonApprovalHandler {
     const allowlist = DaemonApprovalHandler.runIntentAllowlist.get(runId);
     if (allowlist?.has(intentKey)) {
       return this.autoAllowDecision(request, intentKey, resolution.zone, resolution.risk, "run-intent-allowlist");
+    }
+
+    const deniedIntents = DaemonApprovalHandler.runIntentDenylist.get(runId);
+    if (deniedIntents?.has(intentKey)) {
+      return { behavior: "deny", reason: '意图已被拒绝', metadata: { retryable: false } };
     }
 
     const baseTimeout =
@@ -118,6 +125,7 @@ export class DaemonApprovalHandler {
 
   static clearRun(runId: string): void {
     DaemonApprovalHandler.runIntentAllowlist.delete(runId);
+    DaemonApprovalHandler.runIntentDenylist.delete(runId);
   }
 
   /** Drop process-wide always intent grants (tests / config reset). */
@@ -128,6 +136,7 @@ export class DaemonApprovalHandler {
   static clearAll(): void {
     DaemonApprovalHandler.runIntentAllowlist.clear();
     DaemonApprovalHandler.alwaysIntentAllowlist.clear();
+    DaemonApprovalHandler.runIntentDenylist.clear();
   }
 
   static hasAlwaysIntent(intentKey: string): boolean {
@@ -168,8 +177,8 @@ export class DaemonApprovalHandler {
     zone: string;
     risk: string;
     runId: string;
-    scope?: ApprovalScope;
-    timeoutMs: number | null;
+    scope: ApprovalScope | undefined;
+    timeoutMs: number | null | undefined;
   }): PermissionDecision {
     const { result, intentKey, zone, runId, scope, timeoutMs } = input;
 
@@ -180,7 +189,7 @@ export class DaemonApprovalHandler {
       resolvedAt: result.resolvedAt ?? null,
       intentKey,
       trustZone: zone,
-      timeoutMs: result.timeoutMs ?? timeoutMs,
+      timeoutMs: result.timeoutMs ?? timeoutMs ?? null,
       expiresAt: result.expiresAt,
     };
     if (result.expiredAt !== undefined) {
@@ -214,6 +223,13 @@ export class DaemonApprovalHandler {
 
     // 超时：软拒绝文案，便于模型跳过并继续，而不是「任务卡死」
     const expired = result.decision === "expired";
+
+    if (!expired && intentKey) {
+      const denied = DaemonApprovalHandler.runIntentDenylist.get(runId) ?? new Set();
+      denied.add(intentKey);
+      DaemonApprovalHandler.runIntentDenylist.set(runId, denied);
+    }
+
     return {
       behavior: "deny",
       reason: expired
@@ -224,6 +240,7 @@ export class DaemonApprovalHandler {
         softDeny: expired,
         intentKey,
         trustZone: zone,
+        retryable: false,
         ...(expired ? { expiredReason: "timeout" } : {}),
       } satisfies JsonObject,
     };

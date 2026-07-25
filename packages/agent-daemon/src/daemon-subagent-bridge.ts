@@ -6,6 +6,7 @@ import {
   readDaemonSubagentBridgeUpdateFromAgentEvent,
   type DaemonSubagentBridgeUpdate,
 } from "./subagent-runtime.js";
+import { getDaemonLogger } from "./daemon-logger.js";
 
 type Broadcast = (message: DaemonOutboundMessage) => void;
 
@@ -63,7 +64,7 @@ export class DaemonSubagentBridge {
         mode: update.mode,
       });
 
-      console.log(`[Daemon] Subagent started: ${update.subagentId} (run: ${update.subagentRunId})`);
+      getDaemonLogger().info('Subagent started', { module: 'DaemonSubagentBridge', subagentId: update.subagentId, subagentRunId: update.subagentRunId, runId });
       return;
     }
 
@@ -95,7 +96,7 @@ export class DaemonSubagentBridge {
     });
 
     this.activeSubagents.delete(update.subagentId);
-    console.log(`[Daemon] Subagent ended: ${update.subagentId} (${update.status})`);
+    getDaemonLogger().info('Subagent ended', { module: 'DaemonSubagentBridge', subagentId: update.subagentId, status: update.status, runId: subagentInfo?.runId ?? runId });
   }
 
   private broadcastApprovalRequested(
@@ -104,6 +105,7 @@ export class DaemonSubagentBridge {
   ): void {
     const snapshot = this.approvalQueue.getApproval(event.request.id);
     // Parity with session-handlers.broadcastApprovalRequested: risk facts on the wire
+    const riskFields = approvalRiskFields(event.request.metadata);
     this.broadcast({
       type: "approval-requested",
       runId,
@@ -114,7 +116,11 @@ export class DaemonSubagentBridge {
       timeoutMs: snapshot?.timeoutMs ?? this.approvalQueue.getDefaultTimeoutMs(),
       expiresAt: snapshot?.expiresAt ?? null,
       remainingMs: snapshot?.remainingMs ?? null,
-      ...approvalRiskFields(event.request.metadata),
+      ...(riskFields.risk !== undefined ? { risk: riskFields.risk } : {}),
+      ...(riskFields.riskReason !== undefined ? { riskReason: riskFields.riskReason } : {}),
+      ...(riskFields.requiresDoubleConfirm !== undefined ? { requiresDoubleConfirm: riskFields.requiresDoubleConfirm } : {}),
+      ...(riskFields.recommendSnapshot !== undefined ? { recommendSnapshot: riskFields.recommendSnapshot } : {}),
+      ...(riskFields.metadata !== undefined ? { metadata: riskFields.metadata } : {}),
     });
   }
 
@@ -134,9 +140,7 @@ export class DaemonSubagentBridge {
       if (info.runId !== runId) continue;
       this.activeSubagents.delete(subagentId);
       removed.push(subagentId);
-      console.log(
-        `[Daemon] Subagent cleared on run-finalize: ${subagentId} (run: ${runId})`
-      );
+      getDaemonLogger().info('Subagent cleared on run-finalize', { module: 'DaemonSubagentBridge', subagentId, runId });
     }
     return removed;
   }
@@ -149,7 +153,7 @@ export class DaemonSubagentBridge {
     const count = this.activeSubagents.size;
     this.activeSubagents.clear();
     if (count > 0) {
-      console.log(`[Daemon] Cleared ${count} active subagent(s) on shutdown`);
+      getDaemonLogger().info('Cleared active subagents on shutdown', { module: 'DaemonSubagentBridge', count });
     }
   }
 

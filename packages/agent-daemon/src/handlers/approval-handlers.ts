@@ -12,6 +12,7 @@ import type {
   DenyToolMessage,
 } from "../types.js";
 import type { ApprovalQueue } from "../approval-queue.js";
+import { getDaemonLogger } from "../daemon-logger.js";
 
 interface ApprovalHandlerTransport {
   send(ws: WebSocket, message: unknown): boolean;
@@ -48,7 +49,7 @@ export function handleApproveTool(
 ): void {
   const resolved = approvalQueue.resolve(msg.toolCallId, "approved", msg.scope);
   if (resolved) {
-    console.log(`[Daemon] Tool approved: ${msg.toolCallId} (scope: ${msg.scope || "project"})`);
+    getDaemonLogger().info('Tool approved', { module: 'approval-handlers', toolCallId: msg.toolCallId, scope: msg.scope || 'project' });
     transport.broadcast({
       type: "approval-resolved",
       toolCallId: msg.toolCallId,
@@ -60,9 +61,7 @@ export function handleApproveTool(
 
   // Late approve after timeout / unknown id: typed feedback for the requesting client.
   const late = lateResolvePayload(approvalQueue, msg.toolCallId);
-  console.warn(
-    `[Daemon] Late/unknown approve-tool for ${msg.toolCallId} (status=${late.status ?? "missing"})`
-  );
+  getDaemonLogger().warn('Late/unknown approve-tool', { module: 'approval-handlers', toolCallId: msg.toolCallId, status: late.status ?? 'missing' });
   if (ws && transport.sendError) {
     transport.sendError(
       ws,
@@ -82,7 +81,7 @@ export function handleDenyTool(
 ): void {
   const resolved = approvalQueue.resolve(msg.toolCallId, "denied");
   if (resolved) {
-    console.log(`[Daemon] Tool denied: ${msg.toolCallId}`);
+    getDaemonLogger().info('Tool denied', { module: 'approval-handlers', toolCallId: msg.toolCallId });
     transport.broadcast({
       type: "approval-resolved",
       toolCallId: msg.toolCallId,
@@ -93,9 +92,7 @@ export function handleDenyTool(
   }
 
   const late = lateResolvePayload(approvalQueue, msg.toolCallId);
-  console.warn(
-    `[Daemon] Late/unknown deny-tool for ${msg.toolCallId} (status=${late.status ?? "missing"})`
-  );
+  getDaemonLogger().warn('Late/unknown deny-tool', { module: 'approval-handlers', toolCallId: msg.toolCallId, status: late.status ?? 'missing' });
   if (ws && transport.sendError) {
     transport.sendError(
       ws,

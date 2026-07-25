@@ -2,6 +2,8 @@ import { join, resolve } from "node:path";
 import { DEFAULT_DAEMON_CONFIG, type DaemonConfig } from "./types.js";
 
 export const DAEMON_ORCHESTRATOR_EVENT_LOG_FILE = "orchestrator-events.jsonl";
+export const DAEMON_EVENT_LOG_MAX_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
+export const DAEMON_EVENT_LOG_MAX_ARCHIVES = 10;
 export const DAEMON_RUNTIME_SESSION_DIR = "runtime-sessions";
 export const DAEMON_CONVERSATION_BOUNDARY_MANIFEST_FILE = "conversation-boundaries.jsonl";
 export const DAEMON_CHECKPOINT_MANIFEST_FILE = "conversation-checkpoints.jsonl";

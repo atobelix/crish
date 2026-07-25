@@ -3,13 +3,13 @@ import type {
   GetScopedContextMessage,
   ResolveScopedContextMessage,
   ScopedContextDeletedMessage,
-  ScopedContextRecord,
   ScopedContextResolvedMessage,
   ScopedContextResponseMessage,
   ScopedContextUpsertedMessage,
   UpsertScopedContextMessage,
 } from "./types.js";
 import type { ScopedContextStore } from "./scoped-context-store.js";
+import type { ScopedContextRuntimeConfig } from "./types/entities.js";
 import { resolveDaemonScopedContext } from "./scoped-context-runtime.js";
 
 export async function createGetScopedContextResponse(
@@ -70,7 +70,7 @@ export async function createResolveScopedContextResponse(
       ...(msg.scopedContextConfig ?? {}),
       ...(msg.userEnabledIds !== undefined ? { userEnabledIds: msg.userEnabledIds } : {}),
       ...(msg.userDisabledIds !== undefined ? { userDisabledIds: msg.userDisabledIds } : {}),
-    },
+    } as ScopedContextRuntimeConfig,
   });
   const resolution = result.resolution;
 

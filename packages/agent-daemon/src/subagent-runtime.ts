@@ -1,6 +1,6 @@
 import type { OrchestratorEvent, OrchestratorRunHandle, StartRunRequest } from "@crish/agent-orchestrator";
-import { isRecord } from "@crish/shared-utils";
-import type { AgentEvent, AgentMessage, JsonObject, JsonValue, ToolOutput } from "@crish/shared-types";
+import { AsyncSemaphore, isRecord, toJsonValue } from "@crish/shared-utils";
+import type { AgentEvent, AgentMessage, JsonObject, ToolOutput } from "@crish/shared-types";
 import {
   buildSubagentContextPack,
   createId,
@@ -8,6 +8,7 @@ import {
   type AgentTool,
   type SubagentForkPolicy,
 } from "@crish/agent-runtime";
+import { getDaemonLogger } from "./daemon-logger.js";
 
 export const DAEMON_SUBAGENT_BRIDGE_KIND = "daemon-subagent-runtime";
 /** 默认子 agent 嵌套深度；可用 CRISH_MAX_SUBAGENT_DEPTH 覆盖，0 表示实际上限 32 */
@@ -42,6 +43,7 @@ export interface DaemonSubagentToolOptions {
   /** 与 DaemonPermissionMode / TrustPolicyMode 对齐（含 unattended） */
   permissionMode: "ask" | "auto" | "full-access" | "plan" | "unattended";
   maxTurns?: number;
+  parentRunAbortSignal?: AbortSignal;
   startRun(request: StartRunRequest): Promise<OrchestratorRunHandle>;
   cancelRun(runId: string, reason?: string): boolean;
 }
@@ -81,6 +83,8 @@ export function resolveMaxSubagentDepth(configured?: number): number {
   return Math.min(Math.floor(configured), SUBAGENT_DEPTH_HARD_CAP);
 }
 
+const DAEMON_SUBAGENT_SEMAPHORE = new AsyncSemaphore(32);
+
 export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): AgentTool {
   const maxDepth = resolveMaxSubagentDepth(options.maxDepth ?? DEFAULT_MAX_SUBAGENT_DEPTH);
 
@@ -118,6 +122,8 @@ export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): Ag
       if (options.depth >= maxDepth) {
         throw new Error(`Maximum sub-agent depth (${maxDepth}) reached`);
       }
+
+      const slot = await DAEMON_SUBAGENT_SEMAPHORE.acquire();
 
       const prompt = requireString(input, "prompt");
       const description = stringField(input, "description") ?? prompt.slice(0, 120);
@@ -170,7 +176,7 @@ export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): Ag
       };
 
       const emitBridge = (update: DaemonSubagentBridgeUpdate): void => {
-        context.emit({ json: update as unknown as JsonValue });
+        context.emit({ json: toJsonValue(update) });
       };
 
       const handle = await options.startRun({
@@ -198,10 +204,11 @@ export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): Ag
       const onAbort = (): void => {
         options.cancelRun(handle.runId, "parent-run-aborted");
       };
-      if (context.signal.aborted) {
+      const abortSignal = options.parentRunAbortSignal ?? context.signal;
+      if (abortSignal.aborted) {
         onAbort();
       } else {
-        context.signal.addEventListener("abort", onAbort, { once: true });
+        abortSignal.addEventListener("abort", onAbort, { once: true });
       }
 
       const state: SubagentRunState = {
@@ -217,12 +224,13 @@ export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): Ag
         consumeSubagentEvents(handle.events, base, emitBridge, state)
           .catch((cause) => {
             const errMsg = cause instanceof Error ? cause.message : String(cause);
-            console.error("[subagent-background] error:", errMsg);
+            getDaemonLogger().error('Subagent background error', { module: 'subagent-runtime', err: { message: errMsg } });
             state.status = "failed";
             state.error = errMsg;
           })
           .finally(() => {
-            context.signal.removeEventListener("abort", onAbort);
+            slot();
+            abortSignal.removeEventListener("abort", onAbort);
             try {
               const summary = buildCompletionSummary(description, mode, state);
               emitBridge({
@@ -260,7 +268,8 @@ export function createDaemonSubagentTool(options: DaemonSubagentToolOptions): Ag
         state.status = "failed";
         state.error = cause instanceof Error ? cause.message : String(cause);
       } finally {
-        context.signal.removeEventListener("abort", onAbort);
+        slot();
+        abortSignal.removeEventListener("abort", onAbort);
         if (started) {
           try {
             summary = buildCompletionSummary(description, mode, state);
@@ -321,7 +330,7 @@ export function readDaemonSubagentBridgeUpdate(value: unknown): DaemonSubagentBr
   }
 
   if (value.phase === "event" && isRecord(value.event) && typeof value.event.type === "string") {
-    return { ...base, phase: "event", event: value.event as unknown as AgentEvent };
+    return { ...base, phase: "event", event: value.event as AgentEvent };
   }
 
   if (
@@ -457,7 +466,7 @@ function observeSubagentEvent(event: AgentEvent, state: SubagentRunState): void 
 function readRuntimeEvent(payload: JsonObject): AgentEvent | undefined {
   const event = payload.event;
   if (!isRecord(event) || typeof event.type !== "string") return undefined;
-  return event as unknown as AgentEvent;
+  return event as AgentEvent;
 }
 
 function extractAssistantText(message: AgentMessage): string {
@@ -490,7 +499,8 @@ function buildCompletionSummary(description: string, mode: DaemonSubagentMode, s
   }
   // 技术诊断仅进日志，不进 summary
   try {
-    console.info("[subagent-summary-fallback]", {
+    getDaemonLogger().info("[subagent-summary-fallback]", {
+      module: "subagent-runtime",
       mode,
       turns: state.turns,
       tools: state.toolUses,
@@ -498,7 +508,7 @@ function buildCompletionSummary(description: string, mode: DaemonSubagentMode, s
       status: state.status,
     });
   } catch {
-    /* ignore */
+    // silent: 子 agent 状态快照非关键路径，降级显示原标题
   }
   return `${title}未完成`;
 }

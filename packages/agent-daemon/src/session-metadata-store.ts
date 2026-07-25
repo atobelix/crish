@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { JsonObject, JsonValue } from "@crish/shared-types";
+import type { JsonObject } from "@crish/shared-types";
 import type { SessionAction } from "@crish/shared-types";
-import { isRecord, errorMessage, isNodeError, clone, compactJsonObject, isJsonObject, deepFreeze, deepEqual } from "@crish/shared-utils";
+import { isRecord, errorMessage, isNodeError, compactJsonObject, isJsonObject, deepFreeze, deepEqual } from "@crish/shared-utils";
 import { fsyncPathAsync, fsyncDirectoryPathAsync } from "@crish/shared-utils/node";
 
 

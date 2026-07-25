@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { isRecord, errorMessage, isNodeError, clone, deepFreeze, deepEqual } from "@crish/shared-utils";
+import { isRecord, errorMessage, isNodeError, deepFreeze, deepEqual } from "@crish/shared-utils";
 import { fsyncPathAsync, fsyncDirectoryPathAsync } from "@crish/shared-utils/node";
 import {
   PlanDocumentPatchError,
@@ -194,11 +194,6 @@ export class FilePlanDocumentStore implements PlanDocumentStore {
   private async readIndex(): Promise<PlanDocumentIndexState> {
     await this.pending;
     return this.loadIndex();
-  }
-
-  private async readState(): Promise<PlanDocumentStoreState> {
-    await this.pending;
-    return this.load();
   }
 
   private async mutate<T>(operation: (state: PlanDocumentStoreState) => T): Promise<T> {

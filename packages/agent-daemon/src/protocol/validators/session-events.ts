@@ -5,7 +5,6 @@ import type {
   GetRunSnapshotMessage,
   ListPendingInputsMessage,
   ListRunsMessage,
-  ListSessionsMessage,
   PendingInputCancelledMessage,
   PendingInputDispatchedMessage,
   PendingInputQueuedMessage,
@@ -16,7 +15,6 @@ import type {
   RunSnapshotMessage,
   RunsListedMessage,
   SessionEventsMessage,
-  SessionsListedMessage,
   EnqueuePendingInputMessage,
 } from "../../types.js";
 import type {
@@ -24,7 +22,7 @@ import type {
   ProtocolValidationIssue,
   ProtocolValidationResult,
   UnknownRecord,
-} from "./common.js";
+} from "./base.js";
 import {
   CANCEL_PENDING_INPUT_FIELDS,
   DISPATCH_PENDING_INPUT_FIELDS,
@@ -37,7 +35,6 @@ import {
   GOAL_STOPPED_REASONS,
   LIST_PENDING_INPUTS_FIELDS,
   LIST_RUNS_FIELDS,
-  LIST_SESSIONS_FIELDS,
   ORCHESTRATOR_EVENT_FIELDS,
   ORCHESTRATOR_EVENT_TYPES,
   PENDING_INPUTS_LISTED_FIELDS,
@@ -56,10 +53,7 @@ import {
   RUN_RECORD_FIELDS,
   RUN_SNAPSHOT_FIELDS,
   RUN_STATUSES,
-  SESSIONS_LISTED_FIELDS,
   SESSION_EVENTS_FIELDS,
-  SESSION_RECORD_FIELDS,
-  SESSION_STATUSES,
   TASK_APPROVAL_FIELDS,
   TASK_BACKGROUND_TASK_FIELDS,
   TASK_CACHE_FIELDS,
@@ -72,7 +66,6 @@ import {
   invalid,
   isRecord,
   ok,
-  optionalArray,
   optionalBoolean,
   optionalEnum,
   optionalEventCursorDiagnostic,
@@ -82,7 +75,6 @@ import {
   optionalNullableString,
   optionalNumber,
   optionalString,
-  optionalStringArray,
   rejectUnknownFields,
   requiredArray,
   requiredBoolean,
@@ -92,24 +84,7 @@ import {
   requiredNumber,
   requiredRecord,
   requiredString,
-} from "./common.js";
-
-export function validateListSessionsMessage(
-  input: UnknownRecord
-): ProtocolValidationResult<ListSessionsMessage> {
-  const issues: ProtocolValidationIssue[] = [];
-  rejectUnknownFields(input, LIST_SESSIONS_FIELDS, issues);
-  const includeArchived = optionalBoolean(input, "includeArchived", "$.includeArchived", issues);
-  const includeDeleted = optionalBoolean(input, "includeDeleted", "$.includeDeleted", issues);
-
-  if (issues.length > 0) return invalid("Invalid list-sessions message", issues);
-
-  return ok({
-    type: "list-sessions",
-    ...(includeArchived !== undefined ? { includeArchived } : {}),
-    ...(includeDeleted !== undefined ? { includeDeleted } : {}),
-  });
-}
+} from "./base.js";
 
 export function validateListRunsMessage(
   input: UnknownRecord
@@ -323,40 +298,6 @@ export function validateListPendingInputsMessage(
   });
 }
 
-export function validateSessionsListedMessage(
-  input: UnknownRecord
-): ProtocolValidationResult<SessionsListedMessage> {
-  const issues: ProtocolValidationIssue[] = [];
-  rejectUnknownFields(input, SESSIONS_LISTED_FIELDS, issues);
-
-  const sessions = requiredArray(input, "sessions", "$.sessions", issues);
-  const summaries = optionalArray(input, "summaries", "$.summaries", issues);
-  const eventLog = "eventLog" in input ? requiredEventLogMetadata(input, "eventLog", "$.eventLog", issues) : undefined;
-  if ("diagnostics" in input) {
-    validateSessionListDiagnostics(input.diagnostics, "$.diagnostics", issues);
-  }
-  if (sessions) {
-    sessions.forEach((session, index) =>
-      validateSessionRecord(session, `$.sessions[${index}]`, issues)
-    );
-  }
-  if (summaries) {
-    summaries.forEach((summary, index) =>
-      validateSessionSummary(summary, `$.summaries[${index}]`, issues)
-    );
-  }
-
-  if (issues.length > 0) return invalid("Invalid sessions-listed message", issues);
-
-  return ok({
-    type: "sessions-listed",
-    sessions: sessions as SessionsListedMessage["sessions"],
-    ...(summaries !== undefined ? { summaries: summaries as SessionsListedMessage["summaries"] } : {}),
-    ...(eventLog !== undefined ? { eventLog } : {}),
-    ...("diagnostics" in input ? { diagnostics: input.diagnostics as SessionsListedMessage["diagnostics"] } : {}),
-  });
-}
-
 export function validateRunsListedMessage(
   input: UnknownRecord
 ): ProtocolValidationResult<RunsListedMessage> {
@@ -426,7 +367,7 @@ export function validateSessionEventsMessage(
   if (issues.length > 0) return invalid("Invalid session-events message", issues);
 
   return ok({
-    type: "session-events",
+    type: "session-events" as const,
     sessionId: sessionId as string,
     events: events as SessionEventsMessage["events"],
     eventLog: eventLog as SessionEventsMessage["eventLog"],
@@ -437,7 +378,7 @@ export function validateSessionEventsMessage(
     ...(nextCursor !== undefined ? { nextCursor } : {}),
     ...(afterSequence !== undefined ? { afterSequence } : {}),
     ...(lastEventId !== undefined ? { lastEventId } : {}),
-  });
+  } as SessionEventsMessage);
 }
 
 export function validateRunEventsMessage(
@@ -487,7 +428,7 @@ export function validateRunEventsMessage(
   if (issues.length > 0) return invalid("Invalid run-events message", issues);
 
   return ok({
-    type: "run-events",
+    type: "run-events" as const,
     runId: runId as string,
     events: events as RunEventsMessage["events"],
     eventLog: eventLog as RunEventsMessage["eventLog"],
@@ -499,7 +440,7 @@ export function validateRunEventsMessage(
     ...(afterSequence !== undefined ? { afterSequence } : {}),
     ...(lastEventId !== undefined ? { lastEventId } : {}),
     ...("snapshot" in input ? { snapshot: input.snapshot as RunEventsMessage["snapshot"] } : {}),
-  });
+  } as RunEventsMessage);
 }
 
 export function validateRunSnapshotMessage(
@@ -589,123 +530,6 @@ export function validatePendingInputsListedMessage(
     inputs: inputs as PendingInputsListedMessage["inputs"],
     ...(sessionId !== undefined ? { sessionId } : {}),
   });
-}
-
-export function validateSessionRecord(
-  value: unknown,
-  path: string,
-  issues: ProtocolValidationIssue[]
-): void {
-  if (!isRecord(value)) {
-    issues.push({ path, message: "Expected object" });
-    return;
-  }
-
-  rejectUnknownFields(value, SESSION_RECORD_FIELDS, issues, path);
-  requiredString(value, "id", `${path}.id`, issues, { nonEmpty: true });
-  requiredString(value, "cwd", `${path}.cwd`, issues);
-  requiredString(value, "createdAt", `${path}.createdAt`, issues, {
-    nonEmpty: true,
-  });
-  requiredString(value, "updatedAt", `${path}.updatedAt`, issues, {
-    nonEmpty: true,
-  });
-  requiredEnum(value, "status", `${path}.status`, SESSION_STATUSES, issues);
-  if ("currentLeafId" in value) {
-    optionalString(value, "currentLeafId", `${path}.currentLeafId`, issues, {
-      nonEmpty: true,
-    });
-  }
-  if ("metadata" in value && !isRecord(value.metadata)) {
-    issues.push({ path: `${path}.metadata`, message: "Expected object" });
-  }
-}
-
-export function validateSessionSummary(
-  value: unknown,
-  path: string,
-  issues: ProtocolValidationIssue[]
-): void {
-  if (!isRecord(value)) {
-    issues.push({ path, message: "Expected object" });
-    return;
-  }
-
-  rejectUnknownFields(
-    value,
-    [
-      "sessionId",
-      "lastUpdated",
-      "eventCount",
-      "runCount",
-      "activeRunCount",
-      "activeRunIds",
-      "latestRunId",
-      "latestRunStatus",
-      "latestRunUpdatedAt",
-      "pendingInputCount",
-      "pendingApprovalCount",
-      "lastEventId",
-      "lastSequence",
-      "lastMessagePreview",
-      "title",
-      "pinned",
-      "archived",
-      "deleted",
-      "metadataUpdatedAt",
-    ],
-    issues,
-    path
-  );
-  requiredString(value, "sessionId", `${path}.sessionId`, issues, { nonEmpty: true });
-  requiredString(value, "lastUpdated", `${path}.lastUpdated`, issues, { nonEmpty: true });
-  requiredInteger(value, "eventCount", `${path}.eventCount`, issues, { min: 0 });
-  requiredInteger(value, "runCount", `${path}.runCount`, issues, { min: 0 });
-  if ("activeRunCount" in value) {
-    optionalInteger(value, "activeRunCount", `${path}.activeRunCount`, issues, { min: 0 });
-  }
-  if ("activeRunIds" in value) {
-    optionalStringArray(value, "activeRunIds", `${path}.activeRunIds`, issues);
-  }
-  if ("latestRunId" in value) {
-    optionalString(value, "latestRunId", `${path}.latestRunId`, issues, { nonEmpty: true });
-  }
-  if ("latestRunStatus" in value) {
-    optionalEnum(value, "latestRunStatus", `${path}.latestRunStatus`, RUN_STATUSES, issues);
-  }
-  if ("latestRunUpdatedAt" in value) {
-    optionalString(value, "latestRunUpdatedAt", `${path}.latestRunUpdatedAt`, issues, { nonEmpty: true });
-  }
-  if ("pendingApprovalCount" in value) {
-    optionalInteger(value, "pendingApprovalCount", `${path}.pendingApprovalCount`, issues, { min: 0 });
-  }
-  if ("pendingInputCount" in value) {
-    optionalInteger(value, "pendingInputCount", `${path}.pendingInputCount`, issues, { min: 0 });
-  }
-  if ("lastEventId" in value) {
-    optionalString(value, "lastEventId", `${path}.lastEventId`, issues, { nonEmpty: true });
-  }
-  if ("lastSequence" in value) {
-    optionalInteger(value, "lastSequence", `${path}.lastSequence`, issues, { min: 1 });
-  }
-  if ("lastMessagePreview" in value) {
-    optionalString(value, "lastMessagePreview", `${path}.lastMessagePreview`, issues, { nonEmpty: true });
-  }
-  if ("title" in value) {
-    optionalString(value, "title", `${path}.title`, issues);
-  }
-  if ("pinned" in value) {
-    optionalBoolean(value, "pinned", `${path}.pinned`, issues);
-  }
-  if ("archived" in value) {
-    optionalBoolean(value, "archived", `${path}.archived`, issues);
-  }
-  if ("deleted" in value) {
-    optionalBoolean(value, "deleted", `${path}.deleted`, issues);
-  }
-  if ("metadataUpdatedAt" in value) {
-    optionalString(value, "metadataUpdatedAt", `${path}.metadataUpdatedAt`, issues, { nonEmpty: true });
-  }
 }
 
 export function validatePendingInputRecord(
@@ -1243,26 +1067,4 @@ export function validateEventReadDiagnostics(
   requiredInteger(input, "queryMs", `${path}.queryMs`, issues, { min: 0 });
 }
 
-export function validateSessionListDiagnostics(
-  input: unknown,
-  path: string,
-  issues: ProtocolValidationIssue[]
-): void {
-  if (!isRecord(input)) {
-    issues.push({ path, message: "Expected object" });
-    return;
-  }
 
-  rejectUnknownFields(
-    input,
-    ["queryMs", "sessionCount", "summaryCount", "metadataCount", "filteredOutCount", "summarySource"],
-    issues,
-    path
-  );
-  requiredInteger(input, "queryMs", `${path}.queryMs`, issues, { min: 0 });
-  requiredInteger(input, "sessionCount", `${path}.sessionCount`, issues, { min: 0 });
-  requiredInteger(input, "summaryCount", `${path}.summaryCount`, issues, { min: 0 });
-  requiredInteger(input, "metadataCount", `${path}.metadataCount`, issues, { min: 0 });
-  requiredInteger(input, "filteredOutCount", `${path}.filteredOutCount`, issues, { min: 0 });
-  requiredEnum(input, "summarySource", `${path}.summarySource`, ["event-store", "unavailable"] as const, issues);
-}

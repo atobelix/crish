@@ -521,7 +521,7 @@ export function validateResolveScopedContextMessage(
     ...("scopedContextConfig" in input
       ? { scopedContextConfig: input.scopedContextConfig as ResolveScopedContextMessage["scopedContextConfig"] }
       : {}),
-  });
+  }) as unknown as ProtocolValidationResult<ResolveScopedContextMessage>;
 }
 
 export function validateMutationLeasesListedMessage(
@@ -903,7 +903,7 @@ export function validateScopedContextResponseMessage(
     status: status as ScopedContextResponseMessage["status"],
     records: records as ScopedContextResponseMessage["records"],
     ...("diagnostic" in input ? { diagnostic: input.diagnostic as ScopedContextResponseMessage["diagnostic"] } : {}),
-  });
+  }) as unknown as ProtocolValidationResult<ScopedContextResponseMessage>;
 }
 
 export function validateScopedContextUpsertedMessage(
@@ -926,7 +926,7 @@ export function validateScopedContextUpsertedMessage(
     record: input.record as ScopedContextUpsertedMessage["record"],
     persisted: persisted as boolean,
     ...("diagnostic" in input ? { diagnostic: input.diagnostic as ScopedContextUpsertedMessage["diagnostic"] } : {}),
-  });
+  }) as unknown as ProtocolValidationResult<ScopedContextUpsertedMessage>;
 }
 
 export function validateScopedContextDeletedMessage(
@@ -951,7 +951,7 @@ export function validateScopedContextDeletedMessage(
     recordId: recordId as string,
     deleted: deleted as boolean,
     ...("diagnostic" in input ? { diagnostic: input.diagnostic as ScopedContextDeletedMessage["diagnostic"] } : {}),
-  });
+  }) as unknown as ProtocolValidationResult<ScopedContextDeletedMessage>;
 }
 
 export function validateScopedContextResolvedMessage(
@@ -1003,7 +1003,7 @@ export function validateScopedContextResolvedMessage(
     resourceRecordCount: resourceRecordCount as number,
     resourceDiagnostics: resourceDiagnostics as ScopedContextResolvedMessage["resourceDiagnostics"],
     ...("storeDiagnostic" in input ? { storeDiagnostic: input.storeDiagnostic as ScopedContextResolvedMessage["storeDiagnostic"] } : {}),
-  });
+  }) as unknown as ProtocolValidationResult<ScopedContextResolvedMessage>;
 }
 
 export function validateMutationLeaseSnapshot(

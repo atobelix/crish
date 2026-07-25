@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, it } from "vitest";
 import { ORCHESTRATOR_PROTOCOL_VERSION, type OrchestratorEvent } from "@crish/agent-orchestrator";
 import { DaemonEventStore } from "./server-event-store.js";

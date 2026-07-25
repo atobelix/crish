@@ -4,6 +4,12 @@
 //
 // This file is the stable public facade. Validator implementations live under
 // ./validators/ by message family; do not change validation logic when moving code.
+//
+// ── 四端同步清单（新增消息类型时需同步修改以下 4 处） ──
+// 1. registry.ts        → DAEMON_INBOUND_MESSAGE_TYPES / DAEMON_OUTBOUND_MESSAGE_TYPES
+// 2. validators/<file>.ts → 实现 validateXxxMessage 函数
+// 3. protocol.ts         → switch case + re-export 新 validator
+// 4. server-handlers.ts   → handleInboundMessage 中新增 case（仅 inbound）
 import type { DaemonInboundMessage, DaemonOutboundMessage } from '../types.js';
 import {
   type ProtocolValidationError,
@@ -24,25 +30,15 @@ import {
   validateStreamPauseMessage,
   validateStreamResumeMessage,
   validatePingMessage,
-  validateGetStatusMessage,
   validateListCapabilitiesMessage,
-  validateUpdateConfigMessage,
   validateDaemonReadyMessage,
   validateEventMessage,
   validateApprovalRequestedMessage,
   validateApprovalResolvedMessage,
   validateErrorMessage,
   validatePongMessage,
-  validateStatusResponseMessage,
-  validateCapabilitiesResponseMessage,
-  validateConfigUpdatedMessage,
-  validateProbeProviderModelsMessage,
-  validateProbeProviderChatMessage,
-  validateProviderModelsProbedMessage,
-  validateProviderChatProbedMessage,
 } from './validators/run.js';
 import {
-  validateListSessionsMessage,
   validateListRunsMessage,
   validateReadSessionEventsMessage,
   validateReadRunEventsMessage,
@@ -51,7 +47,6 @@ import {
   validateCancelPendingInputMessage,
   validateDispatchPendingInputMessage,
   validateListPendingInputsMessage,
-  validateSessionsListedMessage,
   validateRunsListedMessage,
   validateSessionEventsMessage,
   validateRunEventsMessage,
@@ -61,6 +56,23 @@ import {
   validatePendingInputDispatchedMessage,
   validatePendingInputsListedMessage,
 } from './validators/session-events.js';
+import {
+  validateGetStatusMessage,
+  validateStatusResponseMessage,
+  validateCapabilitiesResponseMessage,
+} from "./validators/status.js";
+import {
+  validateUpdateConfigMessage,
+  validateConfigUpdatedMessage,
+  validateProbeProviderModelsMessage,
+  validateProbeProviderChatMessage,
+  validateProviderModelsProbedMessage,
+  validateProviderChatProbedMessage,
+} from "./validators/provider.js";
+import {
+  validateListSessionsMessage,
+  validateSessionsListedMessage,
+} from "./validators/session.js";
 import {
   validateListWorkflowsMessage,
   validateCreateWorkflowMessage,
@@ -176,35 +188,15 @@ export {
   validateStreamPauseMessage,
   validateStreamResumeMessage,
   validatePingMessage,
-  validateGetStatusMessage,
   validateListCapabilitiesMessage,
-  validateUpdateConfigMessage,
   validateDaemonReadyMessage,
   validateEventMessage,
   validateApprovalRequestedMessage,
   validateApprovalResolvedMessage,
   validateErrorMessage,
   validatePongMessage,
-  validateStatusResponseMessage,
-  validateCapabilitiesResponseMessage,
-  validateConfigUpdatedMessage,
-  validateLifecycleSnapshot,
-  validateClientDisconnect,
-  validateEventStoreStatus,
-  validateLifecycleDiagnostic,
-  validateStatusActiveRun,
-  validatePendingApproval,
-  validateProviderStatus,
-  validateRedactedApiKeyStatus,
-  validateProviderGatewayStatus,
-  validateProviderDiagnostic,
-  validateMcpStatus,
-  validateCapabilitySnapshot,
-  validateCapabilityRecord,
-  validateCapabilityDiagnostic,
 } from './validators/run.js';
 export {
-  validateListSessionsMessage,
   validateListRunsMessage,
   validateReadSessionEventsMessage,
   validateReadRunEventsMessage,
@@ -213,7 +205,6 @@ export {
   validateCancelPendingInputMessage,
   validateDispatchPendingInputMessage,
   validateListPendingInputsMessage,
-  validateSessionsListedMessage,
   validateRunsListedMessage,
   validateSessionEventsMessage,
   validateRunEventsMessage,
@@ -222,8 +213,6 @@ export {
   validatePendingInputCancelledMessage,
   validatePendingInputDispatchedMessage,
   validatePendingInputsListedMessage,
-  validateSessionRecord,
-  validateSessionSummary,
   validatePendingInputRecord,
   validateRunRecord,
   validateGoalRunState,
@@ -240,8 +229,41 @@ export {
   validateTaskBackgroundTask,
   validateTaskCurrentRun,
   validateEventReadDiagnostics,
-  validateSessionListDiagnostics,
 } from './validators/session-events.js';
+export {
+  validateGetStatusMessage,
+  validateStatusResponseMessage,
+  validateCapabilitiesResponseMessage,
+  validateLifecycleSnapshot,
+  validateClientDisconnect,
+  validateEventStoreStatus,
+  validateLifecycleDiagnostic,
+  validateStatusActiveRun,
+  validatePendingApproval,
+  validateCapabilitySnapshot,
+  validateCapabilityRecord,
+  validateCapabilityDiagnostic,
+} from "./validators/status.js";
+export {
+  validateUpdateConfigMessage,
+  validateConfigUpdatedMessage,
+  validateProbeProviderModelsMessage,
+  validateProbeProviderChatMessage,
+  validateProviderModelsProbedMessage,
+  validateProviderChatProbedMessage,
+  validateProviderStatus,
+  validateRedactedApiKeyStatus,
+  validateProviderGatewayStatus,
+  validateProviderDiagnostic,
+  validateMcpStatus,
+} from "./validators/provider.js";
+export {
+  validateListSessionsMessage,
+  validateSessionsListedMessage,
+  validateSessionRecord,
+  validateSessionSummary,
+  validateSessionListDiagnostics,
+} from "./validators/session.js";
 export {
   validateListWorkflowsMessage,
   validateCreateWorkflowMessage,

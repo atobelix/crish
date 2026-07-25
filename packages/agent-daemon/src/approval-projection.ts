@@ -35,10 +35,10 @@ export function approvalStatusSnapshot(snapshot: ApprovalQueueSnapshot): Approva
     timeoutMs: snapshot.timeoutMs,
     expiresAt: snapshot.expiresAt,
     remainingMs: projectRemainingMs(snapshot),
-    ...(snapshot.resolvedAt !== undefined ? { resolvedAt: snapshot.resolvedAt } : {}),
-    ...(snapshot.expiredAt !== undefined ? { expiredAt: snapshot.expiredAt } : {}),
-    ...(reason !== undefined ? { reason } : {}),
-    ...(expiredReason !== undefined ? { expiredReason } : {}),
+    resolvedAt: snapshot.resolvedAt,
+    expiredAt: snapshot.expiredAt,
+    reason: reason,
+    expiredReason: expiredReason,
     ...riskFields,
   };
 }
@@ -49,7 +49,7 @@ export function approvalStatusSnapshot(snapshot: ApprovalQueueSnapshot): Approva
  * clients never guess risk from tool names (BE-04).
  */
 export function approvalRiskFields(metadata: JsonObject | undefined): ApprovalRiskProjection {
-  if (!metadata) return {};
+  if (!metadata) return { risk: undefined, riskReason: undefined, requiresDoubleConfirm: undefined, recommendSnapshot: undefined, metadata: undefined };
 
   // Prefer `risk`; fall back to `riskLevel` only when risk is blank/missing.
   const riskRaw =
@@ -97,10 +97,10 @@ export function approvalRiskFields(metadata: JsonObject | undefined): ApprovalRi
   }
 
   return {
-    ...(risk !== undefined ? { risk } : {}),
-    ...(riskReason !== undefined ? { riskReason } : {}),
-    ...(requiresDoubleConfirm !== undefined ? { requiresDoubleConfirm } : {}),
-    ...(recommendSnapshot !== undefined ? { recommendSnapshot } : {}),
+    risk: risk,
+    riskReason: riskReason,
+    requiresDoubleConfirm: requiresDoubleConfirm,
+    recommendSnapshot: recommendSnapshot,
     metadata: projectedMeta,
   };
 }

@@ -1,4 +1,5 @@
 import type { JsonObject } from "@crish/shared-types";
+import { RingBuffer } from "@crish/shared-utils";
 import type { OrchestratorEventStoreError } from "@crish/agent-orchestrator";
 import type { ConnectedClient } from "./daemon-client-registry.js";
 import type {
@@ -12,13 +13,15 @@ import type {
   DaemonProviderStatusSnapshot,
 } from "./types.js";
 
+const MAX_RECENT_ERRORS = 10;
+
 type BaseDaemonLifecycleState = Exclude<DaemonLifecycleState, "degraded">;
 
 export interface DaemonLifecycleSnapshotInput {
   activeRunCount: number;
   connectedClientCount: number;
   eventLogPath: string;
-  eventStoreFailure?: OrchestratorEventStoreError;
+  eventStoreFailure: OrchestratorEventStoreError | undefined;
   providerStatus: DaemonProviderStatusSnapshot;
   mcpStatus: DaemonMcpStatusSnapshot;
 }
@@ -27,9 +30,9 @@ export interface DaemonLifecycleErrorInput {
   code: string;
   message: string;
   source: DaemonLifecycleDiagnosticSource;
-  severity?: DaemonLifecycleDiagnosticSeverity;
-  detail?: string;
-  metadata?: JsonObject;
+  severity: DaemonLifecycleDiagnosticSeverity | undefined;
+  detail: string | undefined;
+  metadata: JsonObject | undefined;
 }
 
 export class DaemonLifecycleTracker {
@@ -42,7 +45,7 @@ export class DaemonLifecycleTracker {
   private totalClientConnectionCount = 0;
   private totalClientDisconnectCount = 0;
   private recentDisconnect?: DaemonLifecycleSnapshot["recentDisconnect"];
-  private recentError?: DaemonLifecycleDiagnostic;
+  private readonly recentErrors = new RingBuffer<DaemonLifecycleDiagnostic>(MAX_RECENT_ERRORS);
   private eventStoreFailure?: OrchestratorEventStoreError;
   private eventStoreFailureDiagnostic?: DaemonLifecycleDiagnostic;
 
@@ -86,37 +89,44 @@ export class DaemonLifecycleTracker {
   }
 
   recordError(input: DaemonLifecycleErrorInput, now = Date.now()): void {
-    this.recentError = {
+    const error: DaemonLifecycleDiagnostic = {
       code: input.code,
       message: input.message,
       updatedAt: toIso(now),
       source: input.source,
       severity: input.severity ?? "error",
-      ...(input.detail !== undefined ? { detail: input.detail } : {}),
-      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+      detail: input.detail ?? undefined,
+      metadata: input.metadata ?? undefined,
     };
+    this.recentErrors.pushOverwritingOldest(error);
+  }
+
+  getRecentErrors(): DaemonLifecycleDiagnostic[] {
+    return this.recentErrors.toArray();
   }
 
   snapshot(input: DaemonLifecycleSnapshotInput, now = Date.now()): DaemonLifecycleSnapshot {
     const eventStore = this.eventStoreStatus(input.eventLogPath, input.eventStoreFailure, now);
-    const recentError = this.recentError ?? eventStore.failure;
+    const recentError = this.recentErrors.peekLast() ?? eventStore.failure;
+    const errors = this.recentErrors.toArray();
     const state = this.deriveState(input.providerStatus, input.mcpStatus, eventStore);
 
     return {
       state,
       startedAt: toIso(this.startedAtMs),
       updatedAt: toIso(now),
-      ...(this.readyAtMs !== undefined ? { readyAt: toIso(this.readyAtMs) } : {}),
-      ...(this.stoppingAtMs !== undefined ? { stoppingAt: toIso(this.stoppingAtMs) } : {}),
-      ...(this.stoppedAtMs !== undefined ? { stoppedAt: toIso(this.stoppedAtMs) } : {}),
+      readyAt: this.readyAtMs !== undefined ? toIso(this.readyAtMs) : undefined,
+      stoppingAt: this.stoppingAtMs !== undefined ? toIso(this.stoppingAtMs) : undefined,
+      stoppedAt: this.stoppedAtMs !== undefined ? toIso(this.stoppedAtMs) : undefined,
       uptimeMs: Math.max(0, (this.stoppedAtMs ?? now) - this.startedAtMs),
       currentPort: this.currentPortValue,
       connectedClientCount: input.connectedClientCount,
       totalClientConnectionCount: this.totalClientConnectionCount,
       totalClientDisconnectCount: this.totalClientDisconnectCount,
       activeRunCount: input.activeRunCount,
-      ...(this.recentDisconnect ? { recentDisconnect: this.recentDisconnect } : {}),
-      ...(recentError ? { recentError } : {}),
+      recentDisconnect: this.recentDisconnect ?? undefined,
+      recentError: recentError ?? undefined,
+      recentErrors: errors.length > 0 ? errors : undefined,
       eventStore,
       providerReadiness: input.providerStatus.readiness,
       mcpReadiness: input.mcpStatus.readiness,
@@ -144,6 +154,7 @@ export class DaemonLifecycleTracker {
       return {
         status: "ok",
         path: eventLogPath,
+        failure: undefined,
       };
     }
 
@@ -180,7 +191,7 @@ function eventStoreFailureDiagnostic(
     updatedAt: toIso(now),
     source: "event-store",
     severity: "error",
-    ...(failure.stack ? { detail: failure.stack } : {}),
+    detail: failure.stack ?? undefined,
     metadata,
   };
 }

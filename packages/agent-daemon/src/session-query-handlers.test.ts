@@ -74,6 +74,7 @@ describe("session query snapshot responses", () => {
         schemaVersion: 1,
         protocolVersion: 1,
         afterSequence: 10,
+        lastEventId: undefined,
       },
     });
 
@@ -146,6 +147,7 @@ describe("session query snapshot responses", () => {
       cursor: {
         ...eventLogMetadata(),
         afterSequence: 2,
+        lastEventId: undefined,
       },
     });
     const cursorReplay = await createReadSessionEventsResponse(orchestrator, {
