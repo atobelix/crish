@@ -25,6 +25,7 @@ import type {
   ToolSource
 } from "./types";
 import type { InMemoryContextState } from "./context-state";
+import { AsyncSemaphore } from "@crish/shared-utils";
 
 export type SubagentMode = "research" | "implement" | "verify";
 export type SubagentStatus = "started" | "running" | "completed" | "failed";
@@ -50,8 +51,8 @@ export const DEFAULT_SUBAGENT_DEPTH_GUARD: SubagentDepthGuard = {
   maxConcurrent: 6,
 };
 
-/** 模块级全局活跃 subagent 计数（跨工具实例共享） */
-let activeSubagentCount = 0;
+/** AsyncSemaphore 实例（跨工具实例共享），最大并发 6 */
+const subagentSemaphore = new AsyncSemaphore(6);
 
 /**
  * 递归深度上下文
@@ -182,20 +183,8 @@ export function createSubagentTool(options: SubagentToolOptions): AgentTool {
         };
       }
 
-      // ─── 全局并发上限（检查与自增连续，避免 await 点竞态） ───────────────────────────────
-      const maxConcurrent = guard.maxConcurrent ?? DEFAULT_SUBAGENT_DEPTH_GUARD.maxConcurrent ?? 6;
-      if (activeSubagentCount >= maxConcurrent) {
-        return {
-          text: `Sub-agent creation denied: maximum concurrent sub-agents (${maxConcurrent}) exceeded. Active: ${activeSubagentCount}.`,
-          json: {
-            error: "max-concurrent-exceeded",
-            maxConcurrent,
-            active: activeSubagentCount,
-            description
-          }
-        };
-      }
-      activeSubagentCount += 1;
+      // ─── 全局并发上限（AsyncSemaphore 限流，等待直到有空闲槽位） ───────────────────────────────
+      const releaseSubagentSlot = await subagentSemaphore.acquire();
 
       const subagentId = createId("agent");
       const parentSessionId = context.sessionId;
@@ -241,12 +230,12 @@ export function createSubagentTool(options: SubagentToolOptions): AgentTool {
           cwd: options.cwd,
           parentSessionId,
           parentToolCallId,
-          baseSystemPrompt: options.systemPrompt,
+          ...(options.systemPrompt !== undefined ? { baseSystemPrompt: options.systemPrompt } : {}),
           policyPack,
           projectProgress,
           recentSubagentTasks,
-          contextState: parentContextState,
-          taskCard: options.taskCard
+          ...(parentContextState !== undefined ? { contextState: parentContextState } : {}),
+          ...(options.taskCard !== undefined ? { taskCard: options.taskCard } : {}),
         });
         contextPackMetadata = contextPack.metadata;
 
@@ -260,10 +249,10 @@ export function createSubagentTool(options: SubagentToolOptions): AgentTool {
           systemPrompt: `${contextPack.stablePrefix}\n\n${contextPack.volatileContext}`,
           provider,
           tools,
-          toolSources: options.toolSources,
-          permissionPolicy,
-          approvalHandler: options.approvalHandler,
-          maxTurns: options.maxTurns,
+          ...(options.toolSources !== undefined ? { toolSources: options.toolSources } : {}),
+          ...(permissionPolicy !== undefined ? { permissionPolicy } : {}),
+          ...(options.approvalHandler !== undefined ? { approvalHandler: options.approvalHandler } : {}),
+          ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
           subagentDepth: currentDepth,
         });
 
@@ -309,7 +298,7 @@ export function createSubagentTool(options: SubagentToolOptions): AgentTool {
           error: failure
         });
       } finally {
-        activeSubagentCount = Math.max(0, activeSubagentCount - 1);
+        releaseSubagentSlot();
       }
 
       const finalText = extractFinalAssistantText(messages);
@@ -328,8 +317,8 @@ export function createSubagentTool(options: SubagentToolOptions): AgentTool {
         status,
         event: "agent-end",
         summary: completionSummary,
-        error: failure || undefined,
-        finalReason
+        ...(failure ? { error: failure } : {}),
+        ...(finalReason !== undefined ? { finalReason } : {}),
       });
       if (setupStarted || status === "failed") {
         context.emit({
@@ -358,8 +347,8 @@ export function createSubagentTool(options: SubagentToolOptions): AgentTool {
         stats,
         finalText,
         completionSummary,
-        finalReason,
-        error: failure || undefined,
+        ...(finalReason !== undefined ? { finalReason } : {}),
+        ...(failure ? { error: failure } : {}),
         contextPack: contextPackMetadata,
         timeline
       };
@@ -434,10 +423,10 @@ function observeSubagentEvent(
       mode,
       status: failedEnd || event.type === "runtime-error" ? "failed" : "running",
       event: event.type,
-      summary: "summary" in event ? event.summary : undefined,
-      reason: "reason" in event ? event.reason : undefined,
-      error: "error" in event ? event.error : undefined,
-      finalReason: event.type === "agent-end" ? event.reason : undefined
+      ...("summary" in event ? { summary: event.summary } : {}),
+      ...("reason" in event ? { reason: event.reason } : {}),
+      ...("error" in event ? { error: event.error } : {}),
+      ...(event.type === "agent-end" ? { finalReason: event.reason } : {}),
     };
   }
   return null;
@@ -548,8 +537,6 @@ function extractDepthContext(context: ToolExecutionContext): SubagentDepthContex
     : 0;
   return {
     currentDepth: depth,
-    parentDepthContext: depth > 0
-      ? { currentDepth: depth - 1 }
-      : undefined,
+    ...(depth > 0 ? { parentDepthContext: { currentDepth: depth - 1 } } : {}),
   };
 }

@@ -107,7 +107,7 @@ export class PreviewQueue<TPayload extends JsonValue = JsonObject> {
   private readonly defaultTtlMs: number;
   private readonly idFactory: () => string;
   private readonly now: () => Date | number;
-  private readonly previews = new BoundedMap<string, Preview<TPayload>>(MAX_PREVIEWS);
+  private readonly previews = new BoundedMap<string, Preview<TPayload>>(MAX_PREVIEWS, undefined);
   private operationQueue: Promise<void> = Promise.resolve();
 
   constructor(options: PreviewQueueOptions = {}) {
@@ -244,10 +244,12 @@ export class PreviewQueue<TPayload extends JsonValue = JsonObject> {
     options: PreviewApplyOptions<TPayload, TResult> | PreviewDiscardOptions<TPayload, TResult>
   ): Promise<PreviewTransitionUpdate<TResult>> {
     const effectUpdate = (await options.effect?.(preview)) ?? {};
+    const result = effectUpdate.result !== undefined ? effectUpdate.result : options.result;
+    const artifact = mergeArtifactInputs(options.artifact, effectUpdate.artifact);
     return {
-      result: effectUpdate.result !== undefined ? effectUpdate.result : options.result,
+      ...(result !== undefined ? { result } : {}),
       metadata: mergeJsonObjects(options.metadata, effectUpdate.metadata),
-      artifact: mergeArtifactInputs(options.artifact, effectUpdate.artifact)
+      ...(artifact !== undefined ? { artifact } : {})
     };
   }
 
@@ -362,12 +364,21 @@ function mergeArtifactInputs(left?: PreviewArtifactInput, right?: PreviewArtifac
   if (!left && !right) {
     return undefined;
   }
+  const kind = right?.kind ?? left?.kind;
+  const title = right?.title ?? left?.title;
+  const uri = right?.uri ?? left?.uri;
+  const text = right?.text ?? left?.text;
+  const metadata = mergeJsonObjects(left?.metadata, right?.metadata);
+  const hasMetadata = Object.keys(metadata).length > 0;
+  if (kind === undefined && title === undefined && uri === undefined && text === undefined && !hasMetadata) {
+    return undefined;
+  }
   return {
-    kind: right?.kind ?? left?.kind,
-    title: right?.title ?? left?.title,
-    uri: right?.uri ?? left?.uri,
-    text: right?.text ?? left?.text,
-    metadata: mergeJsonObjects(left?.metadata, right?.metadata)
+    ...(kind !== undefined ? { kind } : {}),
+    ...(title !== undefined ? { title } : {}),
+    ...(uri !== undefined ? { uri } : {}),
+    ...(text !== undefined ? { text } : {}),
+    ...(hasMetadata ? { metadata } : {})
   };
 }
 

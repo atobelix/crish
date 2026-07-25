@@ -43,9 +43,15 @@ export async function* readSseJson(
   let cancelledError: Error | undefined;
 
   // 1. 单次绑定 Abort 监听器，取消 reader 并抛出异常
+  let cancellPendingRead: ((err: Error) => void) | undefined;
+  const cancelPendingRead = (err: Error) => {
+    cancellPendingRead?.(err);
+    cancellPendingRead = undefined;
+  };
   const abortHandler = () => {
     const error = createSseAbortError(signal);
     cancelledError = error;
+    cancelPendingRead(error);
     reader.cancel(error).catch(() => undefined);
   };
   if (signal) {
@@ -68,6 +74,7 @@ export async function* readSseJson(
     timeoutId = setTimeout(() => {
       const err = new Error(`${label} timed out after ${effective}ms`);
       cancelledError = err;
+      cancelPendingRead(err);
       reader.cancel(err).catch(() => undefined);
     }, effective);
   };
@@ -80,7 +87,12 @@ export async function* readSseJson(
         emittedFirstByte ? "stream idle" : "streaming first byte"
       );
 
-      const { done, value } = await reader.read();
+      const { done, value } = await new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
+        if (cancelledError) { reject(cancelledError); return; }
+        cancellPendingRead = reject;
+        reader.read().then(resolve, reject);
+      });
+      cancellPendingRead = undefined;
 
       // 读取成功，立即取消当前超时定时器
       if (timeoutId !== undefined) {
@@ -145,6 +157,11 @@ export async function* readSseJson(
       await reader.cancel(createSseAbortError(signal)).catch(() => undefined);
     }
     reader.releaseLock();
+  }
+
+  const flushed = decoder.decode();
+  if (flushed) {
+    buffer += flushed;
   }
 
   if (buffer.trim().length > 0) {

@@ -228,7 +228,7 @@ export class RenderingPipeline {
       domain: event.domain,
       sourceEventId: event.eventId,
       data,
-      diagnostics: event.diagnostics
+      ...(event.diagnostics !== undefined ? { diagnostics: event.diagnostics } : {}),
     });
   }
 
@@ -410,7 +410,7 @@ export interface RenderingPipelineDiagnostics {
  * 4. 生成诊断报告
  */
 export class DiagnosticInspector {
-  private inspections = new BoundedMap<string, InspectionRecord>(MAX_INSPECTION_RECORDS);
+  private inspections = new BoundedMap<string, InspectionRecord>(MAX_INSPECTION_RECORDS, undefined);
 
   /**
    * 开始检查一个渲染项
@@ -433,7 +433,7 @@ export class DiagnosticInspector {
     record.stages.push({
       stage,
       timestamp: Date.now(),
-      detail
+      ...(detail !== undefined ? { detail } : {}),
     });
   }
 

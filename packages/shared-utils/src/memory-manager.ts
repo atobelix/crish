@@ -48,13 +48,13 @@ export class MemoryManager {
 
     try {
       if (typeof process !== "undefined" && process.on) {
-        process.on("memory-pressure" as any, (level: string) => {
+        process.on("memory-pressure", (level: string) => {
           if (level === "low") this.handlePressure(2);
           if (level === "critical") this.handlePressure(3);
         });
       }
     } catch {
-      // not in Node.js
+      // silent: process.on 在非 Node 环境不可用时跳过
     }
   }
 
@@ -117,15 +117,15 @@ export class MemoryManager {
       try {
         cache.shrink(ratio);
       } catch {
-        // skip failing caches
+        // silent: cache.shrink 失败时跳过单个缓存
       }
     }
 
     if (level >= 2) {
       try {
-        (globalThis as any).gc?.();
+        (globalThis as { gc?: () => void }).gc?.();
       } catch {
-        // GC not available
+        // silent: globalThis.gc() 在非 V8 环境不可用时跳过
       }
     }
   }
@@ -141,12 +141,12 @@ export class MemoryManager {
 
 function getMemoryInfo(): { usedJSHeapSize: number; jsHeapSizeLimit: number } | null {
   try {
-    const mem = (performance as any).memory;
+    const mem = (performance as { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
     if (mem && typeof mem.usedJSHeapSize === "number" && typeof mem.jsHeapSizeLimit === "number") {
       return { usedJSHeapSize: mem.usedJSHeapSize, jsHeapSizeLimit: mem.jsHeapSizeLimit };
     }
   } catch {
-    // not available
+    // silent: performance.memory 在非 Chromium 环境不可用时返回 null
   }
   return null;
 }

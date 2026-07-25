@@ -13,14 +13,42 @@ export type {
   HookContext,
   TurnContext,
   ErrorContext,
-  AgentHooks,
   Extension,
   UIComponentRegistration,
   CommandRegistration,
 } from "./hook-types";
+
+export type { AgentHooks } from "./agent-hooks";
+
+// ─── ToolHook 类型 ─────────────────────────────────────────
+
+export type {
+  ToolHook,
+  BeforeExecuteResult,
+  BeforeExecuteStatus,
+  ToolResult,
+  OnErrorResult,
+} from "./tool-hook-types";
 
 // ─── ExtensionRegistry ────────────────────────────────────
 
 export {
   ExtensionRegistry,
 } from "./extension-registry";
+
+// ─── ToolHook 可观测性 ────────────────────────────────────
+
+export type {
+  ToolHookObservabilityEvent,
+  ToolHookEventHandler,
+  ToolHookBeforeExecuteEvent,
+  ToolHookOnResultEvent,
+  ToolHookOnErrorEvent,
+  ToolHookContext,
+} from "./tool-hook-observability";
+
+export {
+  ToolHookObserver,
+  observeToolHook,
+  TOOL_HOOK_EVENT_TYPES,
+} from "./tool-hook-observability";

@@ -1,36 +1,32 @@
 /**
- * Session 存储与分支模型
- *
+ * Session 存储与分支模�? *
  * 解决的问题：
  * 1. Session 消息线性存储，无法高效查询特定范围
  * 2. 分支切换逻辑散落在多处，缺乏统一管理
  * 3. 大量消息时的内存和性能问题
- * 4. 分支恢复时缺乏一致性保证
- *
- * 设计原则：
- * 1. 索引分片：消息按 turn 分片存储，支持快速范围查询
- * 2. BranchManager：统一的分支管理器，基于 SessionBranch 状态机
- * 3. 不可变消息：消息一旦写入不可修改
- * 4. 分支快照：每个分支有独立的快照，支持快速恢复
- */
+ * 4. 分支恢复时缺乏一致性保�? *
+ * 设计原则�? * 1. 索引分片：消息按 turn 分片存储，支持快速范围查�? * 2. BranchManager：统一的分支管理器，基�?SessionBranch 状态机
+ * 3. 不可变消息：消息一旦写入不可修�? * 4. 分支快照：每个分支有独立的快照，支持快速恢�? */
 
 import {
   createSessionBranchMachine,
   type SessionBranchState,
-  type SessionBranchEvent,
-  type SessionBranchContext,
 } from "../state-machine";
 import type { AgentMessage } from "@crish/shared-types";
 import { BoundedMap, MAX_BRANCHES, MAX_SHARDS_PER_BRANCH, MAX_MESSAGES_PER_SESSION } from "@crish/shared-utils";
+import type { ISessionStore } from "../ISessionStore";
+import { StoreCapacityError } from "./types";
+import type { AppendResult } from "./types";
+export type { ISessionStore, AppendResult };
 
 // ─── 消息分片 ─────────────────────────────────────────────
 
 export interface MessageShard {
   /** 分片 ID */
   shardId: string;
-  /** 所属 session */
+  /** 所�?session */
   sessionId: string;
-  /** 所属分支 */
+  /** 所属分�?*/
   branchId: string;
   /** 起始 turn 索引 */
   startTurnIndex: number;
@@ -40,9 +36,9 @@ export interface MessageShard {
   messages: AgentMessage[];
   /** 创建时间 */
   createdAt: string;
-  /** 消息数 */
+  /** 消息�?*/
   messageCount: number;
-  /** 估算 token 数 */
+  /** 估算 token �?*/
   estimatedTokens: number;
 }
 
@@ -51,23 +47,23 @@ export interface MessageShard {
 export interface SessionBranch {
   /** 分支 ID */
   branchId: string;
-  /** 父分支 ID（main 分支为 null） */
+  /** 父分�?ID（main 分支�?null�?*/
   parentBranchId: string | null;
-  /** 分叉点消息 ID */
+  /** 分叉点消�?ID */
   forkPointMessageId: string | null;
-  /** 分叉点 turn 索引 */
+  /** 分叉�?turn 索引 */
   forkPointTurnIndex: number | null;
-  /** 分支状态 */
+  /** 分支状�?*/
   state: SessionBranchState;
   /** 创建时间 */
   createdAt: string;
-  /** 最后活跃时间 */
+  /** 最后活跃时�?*/
   lastActiveAt: string;
   /** 消息分片列表 */
   shards: MessageShard[];
   /** 总消息数 */
   totalMessageCount: number;
-  /** 总估算 token 数 */
+  /** 总估�?token �?*/
   totalEstimatedTokens: number;
 }
 
@@ -86,9 +82,9 @@ export interface BranchSnapshot {
 // ─── 查询范围 ─────────────────────────────────────────────
 
 export interface MessageRangeQuery {
-  /** 起始 turn 索引（含） */
+  /** 起始 turn 索引（含�?*/
   fromTurn?: number;
-  /** 结束 turn 索引（含） */
+  /** 结束 turn 索引（含�?*/
   toTurn?: number;
   /** 最大消息数 */
   limit?: number;
@@ -109,13 +105,9 @@ export interface MessageRangeResult {
 /**
  * Session 存储引擎
  *
- * 使用索引分片策略管理消息：
- * - 消息按 turn 分片，每个分片包含一个 turn 的所有消息
- * - 查询时按 turn 范围定位分片，避免全量扫描
- * - 支持多分支，每个分支有独立的分片链
- */
-export class SessionStore {
-  private branches = new BoundedMap<string, SessionBranch>(MAX_BRANCHES);
+ * 使用索引分片策略管理消息�? * - 消息�?turn 分片，每个分片包含一�?turn 的所有消�? * - 查询时按 turn 范围定位分片，避免全量扫�? * - 支持多分支，每个分支有独立的分片�? */
+export class SessionStore implements ISessionStore {
+  private branches = new BoundedMap<string, SessionBranch>(MAX_BRANCHES, undefined);
   private activeBranchId: string;
 
   constructor(private readonly sessionId: string) {
@@ -143,15 +135,16 @@ export class SessionStore {
 
   /**
    * 追加消息到当前活跃分支
+   * @throws {StoreCapacityError} 当分支分片数或分片消息数达到上限时抛出
    */
-  appendMessage(message: AgentMessage, turnIndex: number, estimatedTokens: number = 0): void {
+  appendMessage(message: AgentMessage, turnIndex: number, estimatedTokens: number = 0): AppendResult {
     const branch = this.branches.get(this.activeBranchId);
     if (!branch) throw new Error(`Active branch "${this.activeBranchId}" not found`);
 
-    // 查找或创建当前 turn 的分片
+    // 查找或创建当前的 turn 的分片
     let shard = branch.shards.find((s) => s.endTurnIndex === turnIndex || s.startTurnIndex === turnIndex);
     if (!shard || shard.endTurnIndex < turnIndex) {
-      if (branch.shards.length >= MAX_SHARDS_PER_BRANCH) return;
+      if (branch.shards.length >= MAX_SHARDS_PER_BRANCH) throw new StoreCapacityError('branch shard limit reached');
       shard = {
         shardId: createShardId(),
         sessionId: this.sessionId,
@@ -166,7 +159,7 @@ export class SessionStore {
       branch.shards.push(shard);
     }
 
-    if (shard.messages.length >= MAX_MESSAGES_PER_SESSION) return;
+    if (shard.messages.length >= MAX_MESSAGES_PER_SESSION) throw new StoreCapacityError('shard message limit reached');
     shard.messages.push(message);
     shard.messageCount++;
     shard.endTurnIndex = turnIndex;
@@ -175,20 +168,46 @@ export class SessionStore {
     branch.totalMessageCount++;
     branch.totalEstimatedTokens += estimatedTokens;
     branch.lastActiveAt = new Date().toISOString();
+
+    return {
+      totalMessageCount: branch.totalMessageCount,
+      totalEstimatedTokens: branch.totalEstimatedTokens,
+    };
   }
 
   /**
-   * 批量追加消息
+   * 批量追加消息（全成功或全失败）
+   * @throws {StoreCapacityError} 当容量不足时抛出，不会部分写入
    */
-  appendMessages(messages: AgentMessage[], turnIndex: number, estimatedTokens: number = 0): void {
+  appendMessages(messages: AgentMessage[], turnIndex: number, estimatedTokens: number = 0): AppendResult {
+    const branch = this.branches.get(this.activeBranchId);
+    if (!branch) throw new Error(`Active branch "${this.activeBranchId}" not found`);
+
+    // 预检容量：全部通过才执行，保证全成功或全失败
+    let shard = branch.shards.find((s) => s.endTurnIndex === turnIndex || s.startTurnIndex === turnIndex);
+    if (!shard || shard.endTurnIndex < turnIndex) {
+      if (branch.shards.length >= MAX_SHARDS_PER_BRANCH) {
+        throw new StoreCapacityError('branch shard limit reached');
+      }
+    } else {
+      if (shard.messages.length + messages.length > MAX_MESSAGES_PER_SESSION) {
+        throw new StoreCapacityError('shard message limit reached');
+      }
+    }
+
     for (const message of messages) {
       this.appendMessage(message, turnIndex, estimatedTokens);
     }
+
+    const activeBranch = this.branches.get(this.activeBranchId)!;
+    return {
+      totalMessageCount: activeBranch.totalMessageCount,
+      totalEstimatedTokens: activeBranch.totalEstimatedTokens,
+    };
   }
 
   /**
-   * 按范围查询消息
-   */
+   * 按范围查询消�?   */
   queryRange(query: MessageRangeQuery = {}): MessageRangeResult {
     const branch = this.branches.get(this.activeBranchId);
     if (!branch) {
@@ -226,8 +245,7 @@ export class SessionStore {
   }
 
   /**
-   * 获取所有消息
-   */
+   * 获取所有消�?   */
   getAllMessages(): AgentMessage[] {
     return this.queryRange({}).messages;
   }
@@ -249,8 +267,7 @@ export class SessionStore {
   }
 
   /**
-   * 列出所有分支
-   */
+   * 列出所有分�?   */
   listBranches(): SessionBranch[] {
     return [...this.branches.values()];
   }
@@ -276,8 +293,7 @@ export class SessionStore {
   }
 
   /**
-   * 注册新分支
-   */
+   * 注册新分�?   */
   registerBranch(branch: SessionBranch): void {
     if (this.branches.has(branch.branchId)) {
       throw new Error(`Branch "${branch.branchId}" already exists`);
@@ -294,34 +310,34 @@ export class SessionStore {
     }
     this.activeBranchId = branchId;
   }
+
+  setArchiveStore(_store: import("./archive-store").ArchiveStore): void {
+    // no-op: archiving not yet implemented
+  }
 }
 
 // ─── BranchManager ────────────────────────────────────────
 
 /**
- * 分支管理器
- *
- * 基于 SessionBranch 状态机管理分支切换和恢复。
- * 确保分支操作的一致性和可追踪性。
- */
+ * 分支管理�? *
+ * 基于 SessionBranch 状态机管理分支切换和恢复�? * 确保分支操作的一致性和可追踪性�? */
 export class BranchManager {
-  private branchMachines = new BoundedMap<string, ReturnType<typeof createSessionBranchMachine>>(MAX_BRANCHES);
+  private branchMachines = new BoundedMap<string, ReturnType<typeof createSessionBranchMachine>>(MAX_BRANCHES, undefined);
 
-  constructor(private readonly store: SessionStore) {
-    // 为 main 分支创建状态机
+  constructor(private readonly store: ISessionStore) {
+    // �?main 分支创建状态机
     this.getOrCreateMachine("main");
   }
 
   /**
-   * 创建新分支
-   */
+   * 创建新分�?   */
   createBranch(branchId: string, forkPointMessageId: string, forkPointTurnIndex: number): SessionBranch {
     if (this.store.getBranch(branchId)) {
       throw new Error(`Branch "${branchId}" already exists`);
     }
 
     // 创建分支状态机
-    const machine = this.getOrCreateMachine(branchId);
+    this.getOrCreateMachine(branchId);
 
     // 创建分支
     const newBranch: SessionBranch = {
@@ -337,7 +353,7 @@ export class BranchManager {
       totalEstimatedTokens: 0
     };
 
-    // 注册到 store
+    // 注册�?store
     this.store.registerBranch(newBranch);
 
     // 通过状态机切换活跃分支
@@ -346,15 +362,13 @@ export class BranchManager {
       activeMachine.send("BRANCH_SWITCH", { targetBranchId: branchId, targetLeafId: forkPointMessageId });
     }
 
-    // 切换 store 的活跃分支
-    this.store.setActiveBranch(branchId);
+    // 切换 store 的活跃分�?    this.store.setActiveBranch(branchId);
 
     return newBranch;
   }
 
   /**
-   * 切换到指定分支
-   */
+   * 切换到指定分�?   */
   switchBranch(branchId: string): void {
     const branch = this.store.getBranch(branchId);
     if (!branch) throw new Error(`Branch "${branchId}" not found`);
@@ -369,8 +383,7 @@ export class BranchManager {
       targetMachine.send("BRANCH_RESTORE", { restoredLeafId: "" });
     }
 
-    // 更新 store 的活跃分支
-    this.store.setActiveBranch(branchId);
+    // 更新 store 的活跃分�?    this.store.setActiveBranch(branchId);
   }
 
   /**
@@ -386,8 +399,7 @@ export class BranchManager {
   }
 
   /**
-   * 获取分支状态
-   */
+   * 获取分支状�?   */
   getBranchState(branchId: string): SessionBranchState | undefined {
     return this.branchMachines.get(branchId)?.getCurrent();
   }

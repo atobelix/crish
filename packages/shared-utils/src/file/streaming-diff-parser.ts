@@ -38,8 +38,6 @@ export class StreamingDiffParser {
   private state: ParserState = "header";
   private oldLine = 0;
   private newLine = 0;
-  private oldCount = 0;
-  private newCount = 0;
   private changes: DiffChange[] = [];
 
   /**
@@ -68,8 +66,6 @@ export class StreamingDiffParser {
     this.state = "header";
     this.oldLine = 0;
     this.newLine = 0;
-    this.oldCount = 0;
-    this.newCount = 0;
     this.changes = [];
   }
 
@@ -98,9 +94,7 @@ export class StreamingDiffParser {
       if (hunkMatch) {
         this.state = "hunk";
         this.oldLine = parseInt(hunkMatch[1]!, 10);
-        this.oldCount = parseInt(hunkMatch[2] ?? "1", 10);
         this.newLine = parseInt(hunkMatch[3]!, 10);
-        this.newCount = parseInt(hunkMatch[4] ?? "1", 10);
       }
       return;
     }
@@ -111,9 +105,7 @@ export class StreamingDiffParser {
         const hunkMatch = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
         if (hunkMatch) {
           this.oldLine = parseInt(hunkMatch[1]!, 10);
-          this.oldCount = parseInt(hunkMatch[2] ?? "1", 10);
           this.newLine = parseInt(hunkMatch[3]!, 10);
-          this.newCount = parseInt(hunkMatch[4] ?? "1", 10);
         }
         return;
       }

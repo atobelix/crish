@@ -29,11 +29,11 @@ export class StreamingJsonlReader {
   private lineIterator: AsyncGenerator<string> | undefined;
 
   constructor(
-    private readonly filePath: string,
+    filePath: string,
     options?: StreamingJsonlReaderOptions,
   ) {
     this.reader = new StreamingFileReader(filePath, {
-      highWaterMark: options?.highWaterMark,
+      ...(options?.highWaterMark !== undefined ? { highWaterMark: options.highWaterMark } : {}),
     });
     this.hasHeader = options?.hasHeader ?? true;
   }

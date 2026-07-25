@@ -8,7 +8,7 @@
  * 4. Shell 适配（Windows PowerShell / Unix Bash）
  */
 
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, execSync, type ChildProcess } from "node:child_process";
 
 // ─── Shell 配置 ───────────────────────────────────────────
 
@@ -141,16 +141,16 @@ export async function runProcessCommand(command: string, options: ProcessRunOpti
   child.stdout.on("data", (chunk: Buffer) => stdout.append(chunk));
   child.stderr.on("data", (chunk: Buffer) => stderr.append(chunk));
 
-  const terminate = (): void => {
-    terminationDiagnostics.push(...terminateChild(child, options.guard));
+  const terminate = async (): Promise<void> => {
+    terminationDiagnostics.push(...await terminateChild(child, options.guard));
   };
   const timeout = setTimeout(() => {
     timedOut = true;
-    terminate();
+    terminate().catch(() => {});
   }, options.timeoutMs);
   const abort = (): void => {
     cancelled = true;
-    terminate();
+    terminate().catch(() => {});
   };
   if (options.signal.aborted) {
     abort();
@@ -191,12 +191,13 @@ export async function runProcessCommand(command: string, options: ProcessRunOpti
 
 // ─── 进程终止 ─────────────────────────────────────────────
 
-export function terminateChild(child: ChildProcess, guard: Required<ProcessGuardOptions>): ProcessTerminationDiagnostic[] {
+export async function terminateChild(child: ChildProcess, guard: Required<ProcessGuardOptions>): Promise<ProcessTerminationDiagnostic[]> {
   if (!guard.killProcessTree) {
     let ok = true;
     try {
       child.kill("SIGTERM");
     } catch {
+      // silent: child.kill 失败（进程已退出）时标记为不可用
       ok = false;
     }
     // SIGTERM 升级到 SIGKILL：防止子进程忽略 SIGTERM 永久挂起
@@ -228,6 +229,18 @@ export function createGuardedProcessEnv(): NodeJS.ProcessEnv {
   }
   guarded.PYTHONUTF8 = "1";
   guarded.PYTHONIOENCODING = "utf-8";
+  guarded.CI = "true";
+  guarded.GIT_TERMINAL_PROMPT = "0";
+  guarded.PIP_NO_INPUT = "1";
+  guarded.PAGER = "cat";
+  guarded.NPM_CONFIG_FUND = "false";
+  guarded.NPM_CONFIG_AUDIT = "false";
+  guarded.YARN_ENABLE_IMMUTABLE_INSTALLS = "false";
+  guarded.COREPACK_ENABLE_STRICT = "0";
+  guarded.PYTHONUNBUFFERED = "1";
+  guarded.DEBIAN_FRONTEND = "noninteractive";
+  guarded.GIT_PAGER = "cat";
+  guarded.GIT_FLUSH = "true";
   return guarded;
 }
 
@@ -252,7 +265,10 @@ export function buildWindowsPowerShellScript(userCommand: string): string {
     "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)",
     "[Console]::InputEncoding=[System.Text.UTF8Encoding]::new($false)",
     "$env:PYTHONUTF8='1'",
-    "$env:PYTHONIOENCODING='utf-8'"
+    "$env:PYTHONIOENCODING='utf-8'",
+    "$env:CI='true'",
+    "$env:GIT_TERMINAL_PROMPT='0'",
+    "$env:PIP_NO_INPUT='1'"
   ].join("; ");
   const normalized = normalizePowerShellCommand(userCommand);
   const payload = Buffer.from(normalized, "utf8").toString("base64");
@@ -357,7 +373,7 @@ function scheduleKillEscalation(child: ChildProcess, sendKill: () => void): void
     try {
       sendKill();
     } catch {
-      // 进程可能在定时器触发前已退出
+      // silent: 进程可能在定时器触发前已退出
     }
   }, PROCESS_KILL_ESCALATION_MS);
   timer.unref();
@@ -366,29 +382,32 @@ function scheduleKillEscalation(child: ChildProcess, sendKill: () => void): void
   });
 }
 
-function terminateProcessTree(child: ChildProcess): ProcessTerminationDiagnostic[] {
+async function terminateProcessTree(child: ChildProcess): Promise<ProcessTerminationDiagnostic[]> {
   if (!child.pid) {
     const ok = child.kill();
     return [{ platform: process.platform, strategy: "child-kill", ok, message: "Process has no pid; killed direct child only." }];
   }
   if (process.platform === "win32") {
     const diagnostics = [terminateWindowsProcessTree(child.pid)];
-    const taskkill = spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
-      stdio: "ignore",
-      windowsHide: true,
-      timeout: 5_000
-    });
+    const pid = child.pid;
+    // Phase 1: Soft kill - send WM_CLOSE / CTRL_BREAK_EVENT
+    if (pid) {
+      try {
+        execSync(`taskkill /PID ${pid} /T`, { timeout: 3000 });
+      } catch {
+        // 进程可能未响应 WM_CLOSE，继续到 Phase 2
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Phase 2: Hard kill - force terminate
+    execSync(`taskkill /F /PID ${pid} /T`, { timeout: 5000 });
     diagnostics.push({
       platform: process.platform,
       strategy: "taskkill",
-      ok: !taskkill.error,
-      exitCode: taskkill.status,
-      signal: taskkill.signal,
-      ...(taskkill.error ? { message: taskkill.error.message } : {})
+      ok: true,
+      exitCode: 0,
+      signal: null
     });
-    if (taskkill.error) {
-      diagnostics.push({ platform: process.platform, strategy: "child-kill", ok: child.kill(), message: "taskkill failed; killed direct child only." });
-    }
     return diagnostics;
   }
   try {

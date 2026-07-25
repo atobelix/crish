@@ -1,0 +1,71 @@
+{
+  "providerId": "openai",
+  "name": "OpenAI",
+  "description": "OpenAI API - Chat Completions and Responses API",
+  "website": "https://platform.openai.com",
+  "docsUrl": "https://platform.openai.com/docs/api-reference",
+  "engine": "openai-compatible",
+  "baseUrl": "https://api.openai.com/v1",
+  "auth": {
+    "type": "api-key",
+    "placement": "header",
+    "keyHeader": "Authorization",
+    "defaultEnvVar": "OPENAI_API_KEY"
+  },
+  "models": [
+    {
+      "id": "gpt-4o",
+      "aliases": ["gpt-4o-latest"],
+      "capabilities": [
+        "code",
+        "vision",
+        "tool-use",
+        "reasoning",
+        "long-context"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "costPer1kInput": 0.0025,
+      "costPer1kOutput": 0.01
+    },
+    {
+      "id": "gpt-4o-mini",
+      "capabilities": ["code", "vision", "tool-use"],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "costPer1kInput": 0.00015,
+      "costPer1kOutput": 0.0006
+    },
+    {
+      "id": "o3-mini",
+      "capabilities": ["code", "reasoning"],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "costPer1kInput": 0.0011,
+      "costPer1kOutput": 0.0044
+    },
+    {
+      "id": "gpt-4.1",
+      "capabilities": ["code", "tool-use", "long-context"],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 16384,
+      "costPer1kInput": 0.002,
+      "costPer1kOutput": 0.008
+    }
+  ],
+  "endpointType": "auto",
+  "capabilities": {
+    "toolUse": true,
+    "vision": true,
+    "reasoning": true,
+    "streaming": true,
+    "systemPrompt": true,
+    "jsonMode": true,
+    "parallelToolCalls": true
+  },
+  "engineOptions": {
+    "authHeader": "authorization",
+    "maxTokensField": "max_completion_tokens",
+    "reasoningContent": "thought-delta"
+  }
+}

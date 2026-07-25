@@ -1,23 +1,22 @@
 import type {
-  JsonObject, JsonValue, AgentMessage, AgentMessageBlock,
-  ToolDefinition, ToolCategory, ToolConcurrency,
-  ToolExecutionContext, ToolOutput, ToolArtifact, ToolProgressUpdate,
-  PermissionRequest, PermissionDecision, ApprovalHandler,
-  ProviderDiagnostic, ProviderErrorKind,
-  ToolBatchCall, ToolBatchResult, ToolBatchFailurePolicy,
-  RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord,
+  JsonObject, AgentMessage, AgentEvent,
+  ToolCategory, ToolConcurrency,
+  ToolExecutionContext, ToolOutput,
+  PermissionDecision, ApprovalHandler,
+  ProviderDiagnostic,
+  ToolBatchFailurePolicy,
+  RuntimeCheckpointRecord,
   ContextCompressionTrigger, ContextCompressionReason,
-  ContextCompressionPolicyMetadata, ContextCompressionPolicyTier, ContextCompressionPolicyAction,
-  ContextCompressionRecord, AgentEvent,
+  ContextCompressionPolicyMetadata,
+  ContextCompressionRecord,
 } from "@crish/shared-types";
 import type { PromptAssemblyContextBlock, PromptAssemblyMetadata } from "./prompt-assembly";
 import type { WorkspaceMutationCoordinator } from "./workspace-mutation-coordinator";
 
-// types.ts 不再重导出核心类型。请从 @crish/shared-types 直接导入。
-
+// types.ts 不再重导出核心类型。请�?@crish/shared-types 直接导入�?
 export type AgentRole = import("@crish/shared-types").AgentMessage["role"];
 
-// ─── 运行时持有的扩展工具接口（后续步骤将删除，统一使用 ToolDefinition） ─────
+// ─── 运行时持有的扩展工具接口（后续步骤将删除，统一使用 ToolDefinition�?─────
 export interface AgentTool {
   name: string;
   label: string;
@@ -56,9 +55,20 @@ export interface ProviderUsage {
   reasoningTokens?: number;
 }
 
+export interface HealthCheckResult {
+  healthy: boolean;
+  status?: "healthy" | "degraded" | "unhealthy";
+  latencyMs?: number;
+  error?: string;
+  lastCheckedAt?: number;
+}
+
 export interface AgentProvider {
   id: string;
   stream(request: AgentProviderRequest): AsyncIterable<ProviderStreamEvent>;
+  init?(): Promise<void>;
+  dispose?(): Promise<void>;
+  healthCheck?(): Promise<HealthCheckResult>;
 }
 
 export interface AgentProviderRequest {
@@ -98,9 +108,7 @@ export interface AgentRuntimeOptions {
   sessionId?: string;
   cwd: string;
   /**
-   * 可选回调：运行时在 preparing-turn 阶段调用此回调，从事件存储拉取待处理输入。
-   * 取代编排层主动的 injectSteerInput。
-   */
+   * 可选回调：运行时在 preparing-turn 阶段调用此回调，从事件存储拉取待处理输入�?   * 取代编排层主动的 injectSteerInput�?   */
   readPendingInputs?: (runId: string) => Promise<AgentMessage[]>;
   systemPrompt?: string;
   promptContext?: AgentRuntimePromptContext;
@@ -123,6 +131,7 @@ export interface AgentRuntimeOptions {
   connectionManager?: import("./provider-transport/connection-manager").ConnectionManager;
   tokenTracker?: import("./provider-transport/token-tracker").TokenTracker;
   extensionRegistry?: import("./hooks/extension-registry").ExtensionRegistry;
+  hooks?: import("./hooks").ToolHook<JsonObject, ToolOutput>[];
 }
 
 export interface AgentRuntimePromptContext {
@@ -143,10 +152,8 @@ export interface SessionPersistenceStore {
   append(entry: SessionEntry): Promise<void>;
   readAll?(): Promise<SessionEntry[]>;
   /**
-   * 释放底层资源（如持久化文件句柄）。
-   *
-   * 实现可选。运行结束时调用以确保资源不泄漏。
-   */
+   * 释放底层资源（如持久化文件句柄）�?   *
+   * 实现可选。运行结束时调用以确保资源不泄漏�?   */
   close?(): Promise<void>;
 }
 
@@ -250,7 +257,7 @@ export interface ContextStateSnapshot {
   pendingTasks: string[];
   sessionEvents: string[];
   fileSnapshotHints: string[];
-  previousCompressionSummary?: string;
+  previousCompressionSummary?: string | undefined;
 }
 
 export interface ContextStateReader {

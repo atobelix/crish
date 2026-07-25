@@ -28,11 +28,12 @@ describe("ProviderGateway", () => {
     const resolver: ProviderCredentialResolver = {
       resolveCredential({ request, credentialSource }) {
         expect(credentialSource.type).toBe("account");
+        const accountId = credentialSource.type === "account" ? credentialSource.accountId ?? request.accountId : request.accountId;
         return {
           id: "acct-runtime-key",
           source: "account",
           providerId: credentialSource.providerId ?? "account-center",
-          accountId: credentialSource.type === "account" ? credentialSource.accountId ?? request.accountId : request.accountId,
+          ...(accountId !== undefined ? { accountId } : {}),
           apiKey: "runtime-key",
           baseUrl: "https://gateway.example/v1",
           metadata: { quota: "account" }
@@ -363,11 +364,12 @@ describe("ProviderGateway", () => {
       ],
       credentialResolver: {
         resolveCredential({ route, credentialSource }) {
+          const accountId = credentialSource.type === "account" ? credentialSource.accountId : undefined;
           return {
             id: `${route.id}:credential`,
             source: credentialSource.type,
             providerId: route.providerId,
-            accountId: credentialSource.type === "account" ? credentialSource.accountId : undefined,
+            ...(accountId !== undefined ? { accountId } : {}),
             apiKey: `${route.providerId}-key`
           };
         }

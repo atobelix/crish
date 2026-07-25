@@ -109,17 +109,18 @@ export interface ScopedContextResolution {
 export function defineScopedRule(input: ScopedRuleInput): ScopedContextRecord {
   const title = normalizeText(input.title ?? input.text.slice(0, 80), "rule title");
   const content = normalizeText(input.text, "rule text");
+  const desc = optionalText(input.description);
   return {
     id: input.id ? normalizeId(input.id) : stableId("rule", `${input.scope ?? "project"}:${title}:${content}`),
     kind: "rule",
     title,
     content,
-    description: optionalText(input.description),
+    ...(desc !== undefined ? { description: desc } : {}),
     scope: input.scope ?? "project",
     activation: input.activation ?? "enabled",
     appliesTo: normalizeList(input.appliesTo),
     tags: normalizeList(input.tags),
-    source: input.source,
+    ...(input.source !== undefined ? { source: input.source } : {}),
     order: input.order ?? 0
   };
 }
@@ -131,12 +132,13 @@ export function skillToScopedContextRecord(input: AgentSkill | ScopedSkillInput)
   const activation = wrapped.activation ?? skill.activation ?? "recommended";
   const appliesTo = normalizeList(wrapped.appliesTo ?? skill.appliesTo);
   const tags = normalizeList(wrapped.tags ?? skill.tags);
+  const skillDesc = optionalText(skill.description);
   return {
     id: wrapped.id ? normalizeId(wrapped.id) : stableId("skill", `${skill.name}:${skill.filePath}`),
     kind: "skill",
     title: normalizeText(wrapped.title ?? skill.name, "skill title"),
     content: normalizeText(skill.content, "skill content"),
-    description: optionalText(skill.description),
+    ...(skillDesc !== undefined ? { description: skillDesc } : {}),
     scope,
     activation,
     appliesTo,
@@ -336,12 +338,12 @@ function candidateFromRecord(record: ScopedContextRecord, reason: string): Scope
     id: record.id,
     kind: record.kind,
     title: record.title,
-    description: record.description,
+    ...(record.description !== undefined ? { description: record.description } : {}),
     scope: record.scope,
     activation: record.activation,
     appliesTo: record.appliesTo,
     tags: record.tags,
-    source: record.source,
+    ...(record.source !== undefined ? { source: record.source } : {}),
     reason
   };
 }

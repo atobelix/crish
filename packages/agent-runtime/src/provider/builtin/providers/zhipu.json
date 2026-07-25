@@ -1,0 +1,47 @@
+{
+  "providerId": "zhipu",
+  "name": "Zhipu AI",
+  "description": "Zhipu AI API - GLM series models",
+  "website": "https://zhipu.ai",
+  "docsUrl": "https://open.bigmodel.cn/dev/api",
+  "engine": "openai-compatible",
+  "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+  "auth": {
+    "type": "api-key",
+    "placement": "header",
+    "keyHeader": "Authorization",
+    "defaultEnvVar": "ZHIPU_API_KEY"
+  },
+  "models": [
+    {
+      "id": "glm-5",
+      "capabilities": ["code", "tool-use", "reasoning", "long-context"],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "costPer1kInput": 0.002,
+      "costPer1kOutput": 0.008
+    },
+    {
+      "id": "glm-5-flash",
+      "capabilities": ["code", "tool-use", "reasoning"],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "costPer1kInput": 0.0002,
+      "costPer1kOutput": 0.0004
+    }
+  ],
+  "endpointType": "chat-completions",
+  "capabilities": {
+    "toolUse": true,
+    "vision": false,
+    "reasoning": true,
+    "streaming": true,
+    "systemPrompt": true,
+    "jsonMode": true,
+    "parallelToolCalls": true
+  },
+  "engineOptions": {
+    "authHeader": "authorization",
+    "maxTokensField": "max_tokens"
+  }
+}

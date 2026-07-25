@@ -37,8 +37,8 @@ describe("JsonlAppendBatcher", () => {
     const content = await readFile(filePath, "utf8");
     const lines = content.split("\n").filter((l) => l.length > 0);
     expect(lines).toHaveLength(2);
-    expect(JSON.parse(lines[0])).toEqual({ n: 1 });
-    expect(JSON.parse(lines[1])).toEqual({ n: 2 });
+    expect(JSON.parse(lines[0]!)).toEqual({ n: 1 });
+    expect(JSON.parse(lines[1]!)).toEqual({ n: 2 });
   });
 
   it("batches multiple lines into a single flush", async () => {

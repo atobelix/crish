@@ -86,7 +86,7 @@ export function guardToolOutputForContext(
 
   return {
     text,
-    artifacts: output.artifacts,
+    ...(output.artifacts !== undefined ? { artifacts: output.artifacts } : {}),
     json: {
       ...(typeof output.json === 'object' &&
       output.json !== null &&

@@ -1,17 +1,13 @@
 /**
  * Run Lifecycle 状态机
  *
- * 管理 Run 从创建到结束的完整生命周期。
- * 替代 orchestrator/src/state-machine.ts 中的手工转移矩阵。
- *
+ * 管理 Run 从创建到结束的完整生命周期�? * 替代 orchestrator/src/state-machine.ts 中的手工转移矩阵�? *
  * States:
- *   queued → initializing → running → awaiting-approval → cancelling → cancelled → completing → completed → failed
+ *   queued �?initializing �?running �?awaiting-approval �?cancelling �?cancelled �?completing �?completed �?failed
  *
- * 关键约束：
- * - 终态（cancelled / completed / failed）无出边
- * - awaiting-approval 可回到 running（审批通过）或进入 cancelling
- * - completing 是一个中间态，表示 agent 已停止但还需要执行收尾工作
- */
+ * 关键约束�? * - 终态（cancelled / completed / failed）无出边
+ * - awaiting-approval 可回�?running（审批通过）或进入 cancelling
+ * - completing 是一个中间态，表示 agent 已停止但还需要执行收尾工�? */
 
 import {
   ConexStateMachine,
@@ -19,7 +15,6 @@ import {
   type StateMachineDefinition,
   type StateMachineSnapshot,
   transitionTo,
-  transitionWith,
   transitionWithPatch,
 } from "./core";
 
@@ -52,7 +47,7 @@ export type RunLifecycleEvent =
   | "FINALIZE_ERROR"
   | "FORCE_INTERRUPT";
 
-// ─── 上下文 ───────────────────────────────────────────────
+// ─── 上下�?───────────────────────────────────────────────
 
 export interface RunLifecycleContext {
   sessionId: string;
@@ -166,8 +161,8 @@ export function createRunLifecycleMachine(
     runId,
     {
       initialContext: { sessionId, approvalCount: 0, turnCount: 0 },
-      snapshot: options?.snapshot
-    }
+      ...(options?.snapshot !== undefined ? { snapshot: options.snapshot } : {}),
+    } as any
   );
 }
 
@@ -180,7 +175,7 @@ export function isTerminalRunLifecycleState(state: RunLifecycleState): boolean {
 }
 
 /**
- * 将状态机的 endReason 映射为 Orchestrator 层的 RunOutcomeReason
+ * 将状态机�?endReason 映射�?Orchestrator 层的 RunOutcomeReason
  */
 export function mapEndReasonToOutcomeReason(
   endReason: RunEndReason | undefined,

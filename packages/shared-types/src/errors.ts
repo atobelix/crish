@@ -4,7 +4,7 @@ export class CrishError extends Error {
   readonly code: string;
   readonly category: "transient" | "permanent" | "security" | "protocol";
   readonly retryable: boolean;
-  readonly metadata?: JsonObject;
+  readonly metadata?: JsonObject | undefined;
 
   constructor(
     message: string,

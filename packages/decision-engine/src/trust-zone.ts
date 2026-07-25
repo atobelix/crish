@@ -442,9 +442,9 @@ export function resolveTrustZone(input: {
       zone,
       risk: "read",
       reason: "只读 shell 命令",
-      command,
-      intentKey: buildIntentKey({ toolName, zone, risk: "read", command }),
-    };
+      ...(command !== undefined ? { command } : {}),
+      intentKey: buildIntentKey({ toolName, zone, risk: "read", ...(command !== undefined ? { command } : {}) }),
+    } as TrustZoneResolution;
   }
 
   // 非 shell 且标记只读
@@ -534,8 +534,8 @@ export function decideByTrustZone(input: {
   const mode = coerceTrustPolicyMode(input.mode, "ask");
   const resolution = resolveTrustZone({
     toolName: typeof input.toolName === "string" ? input.toolName : "",
-    parameters: input.parameters,
-    isReadOnly: input.isReadOnly,
+    ...(input.parameters !== undefined ? { parameters: input.parameters } : {}),
+    ...(input.isReadOnly !== undefined ? { isReadOnly: input.isReadOnly } : {}),
   });
   // 解析结果若异常区代码，仍保守回落
   const zone = coerceTrustZone(resolution.zone, UNKNOWN_ZONE_FALLBACK);

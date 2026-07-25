@@ -1,0 +1,72 @@
+{
+  "providerId": "anthropic",
+  "name": "Anthropic",
+  "description": "Anthropic API - Messages API for Claude models",
+  "website": "https://www.anthropic.com",
+  "docsUrl": "https://docs.anthropic.com/en/docs",
+  "engine": "anthropic-messages",
+  "baseUrl": "https://api.anthropic.com/v1",
+  "auth": {
+    "type": "api-key",
+    "placement": "header",
+    "keyHeader": "x-api-key",
+    "defaultEnvVar": "ANTHROPIC_API_KEY"
+  },
+  "models": [
+    {
+      "id": "claude-sonnet-4-20250514",
+      "aliases": ["claude-sonnet-4"],
+      "capabilities": [
+        "code",
+        "vision",
+        "tool-use",
+        "reasoning",
+        "long-context"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "costPer1kInput": 0.003,
+      "costPer1kOutput": 0.015
+    },
+    {
+      "id": "claude-4-20250514",
+      "aliases": ["claude-4"],
+      "capabilities": [
+        "code",
+        "vision",
+        "tool-use",
+        "reasoning",
+        "long-context"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "costPer1kInput": 0.015,
+      "costPer1kOutput": 0.075
+    },
+    {
+      "id": "claude-3-5-haiku-20241022",
+      "aliases": ["claude-haiku-4"],
+      "capabilities": ["code", "tool-use", "vision"],
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "costPer1kInput": 0.0008,
+      "costPer1kOutput": 0.004
+    }
+  ],
+  "endpointType": "auto",
+  "capabilities": {
+    "toolUse": true,
+    "vision": true,
+    "reasoning": true,
+    "streaming": true,
+    "systemPrompt": true,
+    "jsonMode": true,
+    "parallelToolCalls": true
+  },
+  "engineOptions": {
+    "authHeader": "x-api-key",
+    "maxTokensField": "max_tokens",
+    "reasoningContent": "text-delta",
+    "anthropicVersion": "2023-06-01"
+  }
+}

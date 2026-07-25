@@ -93,12 +93,12 @@ export class GroupCommitWal {
 
   private scheduleCommit(): void {
     if (this.queue.length >= this.MAX_BATCH) {
-      this.commit().catch(() => {});
+      this.commit().catch((err) => console.warn('[Wal] commit failed:', err));
     } else if (!this.commitTimer) {
       this.commitTimer = setTimeout(() => {
         this.commitTimer = undefined;
         if (this.queue.length > 0) {
-          this.commit().catch(() => {});
+          this.commit().catch((err) => console.warn('[Wal] commit failed:', err));
         }
       }, this.MAX_LATENCY_MS);
     }

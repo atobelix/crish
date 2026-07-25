@@ -28,7 +28,6 @@ export type TransitionResult<S extends StateId, E extends EventId> = TransitionO
 
 export type SideEffect =
   | { kind: "patch-context"; patch: Record<string, unknown> }
-  /** updater 用 object 而非 Record，以兼容无索引签名的 context 接口 */
   | { kind: "update-context"; updater: (context: object) => object };
 
 export interface TransitionRecord<S extends StateId = StateId, E extends EventId = EventId> {
@@ -73,6 +72,12 @@ export interface StateMachineDefinition<S extends StateId, E extends EventId, C>
   createContext: () => C;
 }
 
+/**
+ * TransitionTable provides an explicit, human-readable view of all state transitions.
+ * For each current state, it enumerates every possible event and the resulting target state.
+ */
+export type TransitionTable<S extends StateId, E extends EventId> = Map<S, Map<E, S>>;
+
 export class StateMachineBuilder<S extends StateId, E extends EventId, C = unknown> {
   private states = new Map<S, StateDefinition<S, E, C>>();
   private initialState!: S;
@@ -80,9 +85,7 @@ export class StateMachineBuilder<S extends StateId, E extends EventId, C = unkno
   private machineType: string = "unnamed";
 
   type(name: string): this { this.machineType = name; return this; }
-
   initial(state: S): this { this.initialState = state; return this; }
-
   context(factory: () => C): this { this.contextFactory = factory; return this; }
 
   state(id: S, definition: {
@@ -95,8 +98,8 @@ export class StateMachineBuilder<S extends StateId, E extends EventId, C = unkno
       transitions.set(event, target);
     }
     this.states.set(id, {
-      onEnter: definition.onEnter,
-      onExit: definition.onExit,
+      ...(definition.onEnter !== undefined ? { onEnter: definition.onEnter } : {}),
+      ...(definition.onExit !== undefined ? { onExit: definition.onExit } : {}),
       transitions,
     });
     return this;
@@ -157,6 +160,19 @@ export class ConexStateMachine<S extends StateId, E extends EventId, C = unknown
 
   getHistory(): ReadonlyArray<TransitionRecord<S, E>> { return this.history.toArray(); }
 
+  /** Returns an explicit transition table: current state × event → target state. */
+  getTransitionTable(): TransitionTable<S, E> {
+    const table: TransitionTable<S, E> = new Map();
+    for (const [stateId, stateDef] of this.definition.states) {
+      const eventMap = new Map<E, S>();
+      for (const [event, target] of stateDef.transitions) {
+        eventMap.set(event, target.target);
+      }
+      table.set(stateId, eventMap);
+    }
+    return table;
+  }
+
   getSnapshot(): StateMachineSnapshot<S, C> {
     return {
       machineType: this.definition.machineType,
@@ -179,15 +195,18 @@ export class ConexStateMachine<S extends StateId, E extends EventId, C = unknown
   }
 
   send(event: E, payload?: unknown): TransitionResult<S, E> {
+    // Phase 1: Validate machine is alive
     if (this.destroyed) {
       return { ok: false, reason: "machine-destroyed", message: "Machine has been destroyed" };
     }
 
+    // Phase 2: Look up current state definition
     const stateDef = this.definition.states.get(this.current);
     if (!stateDef) {
       return { ok: false, reason: "no-transition-defined", message: `State "${this.current}" not defined` };
     }
 
+    // Phase 3: Look up transition target for event
     const transitionTarget = stateDef.transitions.get(event);
     if (!transitionTarget) {
       return {
@@ -196,10 +215,12 @@ export class ConexStateMachine<S extends StateId, E extends EventId, C = unknown
       };
     }
 
+    // Phase 4: Reject self-transitions
     if (transitionTarget.target === this.current) {
       return { ok: false, reason: "already-in-target-state", message: `Already in state "${this.current}"` };
     }
 
+    // Phase 5: Guard check
     const guardResult = transitionTarget.guard(this.context, payload);
     if (!guardResult.allowed) {
       return {
@@ -208,21 +229,21 @@ export class ConexStateMachine<S extends StateId, E extends EventId, C = unknown
       };
     }
 
+    // Phase 6: Execute transition pipeline: onExit → transition effect → update state → onEnter
     const from = this.current;
     const to = transitionTarget.target;
     const timestamp = nowIso();
-
     const allEffects: SideEffect[] = [];
 
-    // onExit effects
+    // 6a: Collect onExit effects from current state
     const exitEffects = stateDef.onExit?.(this.context, event, payload) ?? [];
     allEffects.push(...exitEffects);
 
-    // transition effects
+    // 6b: Collect transition effects
     const transitionEffects = transitionTarget.effect?.(this.context, payload) ?? [];
     allEffects.push(...transitionEffects);
 
-    // Apply all patch-context effects
+    // 6c: Apply patch-context and update-context effects
     for (const effect of allEffects) {
       if (effect.kind === "patch-context") {
         this.context = { ...this.context, ...effect.patch };
@@ -231,15 +252,15 @@ export class ConexStateMachine<S extends StateId, E extends EventId, C = unknown
       }
     }
 
+    // 6d: Update current state
     this.current = to;
     this.updatedAt = timestamp;
 
-    // onEnter effects
+    // 6e: Collect and apply onEnter effects from target state
     const targetStateDef = this.definition.states.get(to);
     const enterEffects = targetStateDef?.onEnter?.(this.context, event, payload) ?? [];
     allEffects.push(...enterEffects);
 
-    // Apply onEnter effects
     for (const effect of enterEffects) {
       if (effect.kind === "patch-context") {
         this.context = { ...this.context, ...effect.patch };
@@ -248,6 +269,7 @@ export class ConexStateMachine<S extends StateId, E extends EventId, C = unknown
       }
     }
 
+    // Phase 7: Record transition in history
     const record: TransitionRecord<S, E> = { from, to, event, timestamp, payload };
     this.history.pushOverwritingOldest(record);
 
@@ -285,7 +307,7 @@ export function transitionTo<S extends StateId, C>(
   return {
     target,
     guard: options?.guard ?? (() => ({ allowed: true })),
-    effect: options?.effect,
+    ...(options?.effect !== undefined ? { effect: options.effect } : {}),
   };
 }
 

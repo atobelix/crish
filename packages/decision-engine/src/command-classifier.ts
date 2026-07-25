@@ -318,7 +318,7 @@ function splitCommandSegments(command: string): string[] {
 function classifySingle(raw: string): CommandClassification {
   if (DESTRUCTIVE_PATTERNS.some((p) => p.test(raw))) {
     const matched = DESTRUCTIVE_PATTERNS.find((p) => p.test(raw));
-    return { risk: "destructive", reason: "Destructive command", matched: matched?.source };
+    return { risk: "destructive", reason: "Destructive command", ...(matched !== undefined ? { matched: matched.source } : {}) } as CommandClassification;
   }
   if (SECRET_PATTERNS.some((p) => p.test(raw))) {
     return { risk: "secret", reason: "Command may expose secrets" };

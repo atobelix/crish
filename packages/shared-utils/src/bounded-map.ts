@@ -13,12 +13,14 @@
 export class BoundedMap<K, V> {
   private readonly map = new Map<K, V>();
   private readonly capacity: number;
+  private readonly onEvict: ((key: K, value: V) => void) | undefined;
 
-  constructor(capacity: number) {
+  constructor(capacity: number, onEvict: ((key: K, value: V) => void) | undefined) {
     if (capacity <= 0 || !Number.isFinite(capacity)) {
       throw new RangeError(`BoundedMap capacity must be a positive finite number, got ${capacity}`);
     }
     this.capacity = Math.floor(capacity);
+    this.onEvict = onEvict;
   }
 
   get size(): number {
@@ -50,7 +52,9 @@ export class BoundedMap<K, V> {
       // Map 迭代器第一个元素即最旧（FIFO）
       const oldestKey = this.map.keys().next().value;
       if (oldestKey !== undefined) {
+        const oldestValue = this.map.get(oldestKey);
         this.map.delete(oldestKey);
+        this.onEvict?.(oldestKey, oldestValue as V);
       }
     }
     this.map.set(key, value);
@@ -166,7 +170,7 @@ export class LruMap<K, V> {
     for (const entry of this.map) entries.push(entry);
     // 反向遍历让最新在前
     for (let i = entries.length - 1; i >= 0; i--) {
-      const [key, value] = entries[i];
+      const [key, value] = entries[i]!;
       if (callback(value, key) === false) return;
     }
   }

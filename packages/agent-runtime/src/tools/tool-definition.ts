@@ -51,8 +51,8 @@ export class RegisteredTool {
     this.label = options?.label ?? definition.name;
     this.description = definition.description;
     this.category = options?.category ?? inferCategory(definition.name, definition.description);
-    this.inputSchema = definition.inputSchema;
-    this.inputAliases = options?.inputAliases;
+    if (definition.inputSchema !== undefined) this.inputSchema = definition.inputSchema;
+    if (options?.inputAliases !== undefined) this.inputAliases = options.inputAliases;
     this.concurrency = options?.concurrency ?? "parallel";
     this.allowParallel = options?.allowParallel ?? true;
     this.fatalOnError = options?.fatalOnError ?? false;
@@ -124,14 +124,14 @@ export class ToolRegistry {
       definitions.push({
         name: registered.name,
         description: registered.description,
-        inputSchema: registered.inputSchema,
+        ...(registered.inputSchema !== undefined ? { inputSchema: registered.inputSchema } : {}),
       });
     }
     for (const raw of this.rawAgentTools.values()) {
       definitions.push({
         name: raw.name,
         description: raw.description,
-        inputSchema: raw.inputSchema,
+        ...(raw.inputSchema !== undefined ? { inputSchema: raw.inputSchema } : {}),
       });
     }
     return definitions;
@@ -155,6 +155,7 @@ function defaultSummarize(input: JsonObject): string {
       ? text.slice(0, DEFAULT_SUMMARIZE_MAX_LENGTH) + "..."
       : text;
   } catch {
+    // silent: JSON.stringify 异常时返回无效输入标记
     return "(invalid input)";
   }
 }

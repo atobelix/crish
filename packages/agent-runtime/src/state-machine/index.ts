@@ -18,6 +18,7 @@ export type {
   StateDefinition,
   StateMachineDefinition,
   TransitionTarget,
+  TransitionTable,
   GuardResult,
   SideEffect,
 } from "./core";

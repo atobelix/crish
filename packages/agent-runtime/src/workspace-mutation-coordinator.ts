@@ -11,17 +11,17 @@ export type LeaseScope = { type: "workspace" } | { type: "files"; paths: string[
 export type NormalizedLeaseScope = { type: "workspace" } | { type: "files"; paths: string[] };
 
 export interface MutationLeaseOwner {
-  runId?: string;
-  sessionId?: string;
-  toolCallId?: string;
-  toolName?: string;
-  cwd?: string;
-  targetSummary?: string;
+  runId?: string | undefined;
+  sessionId?: string | undefined;
+  toolCallId?: string | undefined;
+  toolName?: string | undefined;
+  cwd?: string | undefined;
+  targetSummary?: string | undefined;
 }
 
 export interface MutationLease {
   token: string;
-  owner?: MutationLeaseOwner;
+  owner?: MutationLeaseOwner | undefined;
   scope: NormalizedLeaseScope;
   createdAt: string;
   expiresAt: string;
@@ -29,20 +29,20 @@ export interface MutationLease {
 }
 
 export interface WorkspaceMutationCoordinatorOptions {
-  workspaceRoot?: string;
-  defaultTtlMs?: number;
-  idFactory?: () => string;
-  now?: () => Date | number;
-  caseSensitivePaths?: boolean;
+  workspaceRoot?: string | undefined;
+  defaultTtlMs?: number | undefined;
+  idFactory?: (() => string) | undefined;
+  now?: (() => Date | number) | undefined;
+  caseSensitivePaths?: boolean | undefined;
 }
 
 export interface AcquireMutationLeaseRequest {
   scope: LeaseScope;
-  owner?: MutationLeaseOwner;
-  ttlMs?: number;
-  wait?: boolean;
-  timeoutMs?: number;
-  signal?: AbortSignal;
+  owner?: MutationLeaseOwner | undefined;
+  ttlMs?: number | undefined;
+  wait?: boolean | undefined;
+  timeoutMs?: number | undefined;
+  signal?: AbortSignal | undefined;
 }
 
 export type AcquireMutationLeaseFailureReason = "conflict" | "timeout" | "aborted";
@@ -59,12 +59,12 @@ export type ReleaseMutationLeaseResult = { ok: true; lease: MutationLease } | { 
 export type RenewMutationLeaseResult = { ok: true; lease: MutationLease } | { ok: false; reason: "not_found" };
 
 export interface RenewMutationLeaseOptions {
-  ttlMs?: number;
+  ttlMs?: number | undefined;
 }
 
 export interface WithMutationLeaseRequest extends AcquireMutationLeaseRequest {
-  heartbeatIntervalMs?: number;
-  renewTtlMs?: number;
+  heartbeatIntervalMs?: number | undefined;
+  renewTtlMs?: number | undefined;
 }
 
 export class WorkspaceMutationLeaseError extends Error {
@@ -86,27 +86,27 @@ interface ActiveMutationLease extends MutationLease {
 
 interface WaitingMutationLeaseRequest {
   scope: NormalizedLeaseScope;
-  owner?: MutationLeaseOwner;
+  owner: MutationLeaseOwner | undefined;
   ttlMs: number;
   resolve: (result: AcquireMutationLeaseResult) => void;
-  timeout?: ReturnType<typeof setTimeout>;
-  signal?: AbortSignal;
-  abortHandler?: () => void;
+  timeout: ReturnType<typeof setTimeout> | undefined;
+  signal: AbortSignal | undefined;
+  abortHandler: (() => void) | undefined;
 }
 
 const DEFAULT_LEASE_TTL_MS = 30_000;
 const MAX_TOKEN_ATTEMPTS = 20;
 
 export class WorkspaceMutationCoordinator {
-  private readonly workspaceRoot?: string;
+  private readonly workspaceRoot: string | undefined;
   private readonly defaultTtlMs: number;
   private readonly idFactory: () => string;
   private readonly now: () => Date | number;
   private readonly caseSensitivePaths: boolean;
-  private readonly leases = new BoundedMap<string, ActiveMutationLease>(1000);
-  private readonly readSnapshots = new BoundedMap<string, BoundedMap<string, string>>(MAX_READ_SNAPSHOT_SESSIONS);
+  private readonly leases = new BoundedMap<string, ActiveMutationLease>(1000, undefined);
+  private readonly readSnapshots = new BoundedMap<string, BoundedMap<string, string>>(MAX_READ_SNAPSHOT_SESSIONS, undefined);
   private waiters: WaitingMutationLeaseRequest[] = [];
-  private expiryTimer?: ReturnType<typeof setTimeout>;
+  private expiryTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(options: WorkspaceMutationCoordinatorOptions = {}) {
     this.workspaceRoot = options.workspaceRoot ? resolve(options.workspaceRoot) : undefined;
@@ -164,7 +164,9 @@ export class WorkspaceMutationCoordinator {
         owner: cloneOwner(request.owner),
         ttlMs,
         resolve: resolvePromise,
-        signal: request.signal
+        signal: request.signal,
+        timeout: undefined,
+        abortHandler: undefined
       };
 
       waiter.timeout = setTimeout(() => {
@@ -259,7 +261,7 @@ export class WorkspaceMutationCoordinator {
     const normalizedPath = this.normalizePath(path);
     let snapshots = this.readSnapshots.get(normalizedSessionId);
     if (!snapshots) {
-      snapshots = new BoundedMap<string, string>(MAX_READ_SNAPSHOTS_PER_SESSION);
+      snapshots = new BoundedMap<string, string>(MAX_READ_SNAPSHOTS_PER_SESSION, undefined);
       this.readSnapshots.set(normalizedSessionId, snapshots);
     }
     snapshots.set(normalizedPath, snapshotTag);

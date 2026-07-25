@@ -3,10 +3,10 @@ import { BoundedMap, LruMap } from "./bounded-map";
 
 describe("BoundedMap", () => {
   it("evicts oldest when capacity exceeded", () => {
-    const m = new BoundedMap<string, number>(2);
+    const m = new BoundedMap<string, number>(2, undefined);
     m.set("a", 1);
     m.set("b", 2);
-    m.set("c", 3); // 应淘汰 a
+    m.set("c", 3);
     expect(m.size).toBe(2);
     expect(m.has("a")).toBe(false);
     expect(m.get("b")).toBe(2);
@@ -14,19 +14,18 @@ describe("BoundedMap", () => {
   });
 
   it("updating existing key does not change insertion order", () => {
-    const m = new BoundedMap<string, number>(2);
+    const m = new BoundedMap<string, number>(2, undefined);
     m.set("a", 1);
     m.set("b", 2);
-    m.set("a", 100); // 更新，不新增
-    m.set("c", 3); // 淘汰最旧，应该是 a 被淘汰？不，a 在前面更新过
-    // 更新值不改变插入顺序，所以最旧仍然是 a
+    m.set("a", 100);
+    m.set("c", 3);
     expect(m.has("a")).toBe(false);
     expect(m.get("b")).toBe(2);
     expect(m.get("c")).toBe(3);
   });
 
   it("delete removes from order tracking", () => {
-    const m = new BoundedMap<string, number>(3);
+    const m = new BoundedMap<string, number>(3, undefined);
     m.set("a", 1);
     m.set("b", 2);
     m.set("c", 3);
@@ -38,12 +37,12 @@ describe("BoundedMap", () => {
   });
 
   it("forEach iterates in insertion order", () => {
-    const m = new BoundedMap<string, number>(3);
+    const m = new BoundedMap<string, number>(3, undefined);
     m.set("a", 1);
     m.set("b", 2);
     m.set("c", 3);
     const seen: Array<[string, number]> = [];
-    m.forEach((v, k) => seen.push([k, v]));
+    m.forEach((v, k) => { seen.push([k, v]); });
     expect(seen).toEqual([
       ["a", 1],
       ["b", 2],
@@ -52,7 +51,7 @@ describe("BoundedMap", () => {
   });
 
   it("clear empties the map", () => {
-    const m = new BoundedMap<string, number>(2);
+    const m = new BoundedMap<string, number>(2, undefined);
     m.set("a", 1);
     m.clear();
     expect(m.size).toBe(0);

@@ -17,6 +17,7 @@ export type {
   TrustPolicyMode,
   TrustZoneResolution,
 } from "./trust-zone";
+export { trustZoneDecision } from "./permissions";
 export { HardlineBlockRule } from "./rules/hardline-rule";
 export { ConfigMerger } from "./config-merger";
 export type {

@@ -1,0 +1,68 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 600);
+  color: var(--text-tertiary);
+  letter-spacing: var(--letter-spacing-snug);
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+
+.toggleRow span {
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-primary);
+}
+
+.toggleRow input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+  padding-top: 4px;
+}
+
+.formRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.formRow label {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-secondary);
+}
+
+.formRow input,
+.formRow select {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm, 13px);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.formRow input:focus,
+.formRow select:focus {
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}

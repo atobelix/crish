@@ -1,0 +1,7 @@
+{
+  "providerId": "minimal",
+  "name": "Minimal Provider",
+  "engine": "openai-compatible",
+  "baseUrl": "https://api.example.com",
+  "models": [{ "id": "default-model" }]
+}

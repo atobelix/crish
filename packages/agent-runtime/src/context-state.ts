@@ -1,12 +1,12 @@
-import { BoundedMap, BoundedArray } from "@crish/shared-utils";
+
+import { BoundedMap, BoundedArray, toJsonValue } from "@crish/shared-utils";
 import { createId, nowIso } from "./session";
 import { defineTool } from "./tools";
 import type {
   ContextCompressionRecord,
   JsonObject,
   JsonValue,
-  RuntimeCheckpointRecord,
-  ToolExecutionContext
+  RuntimeCheckpointRecord
 } from "@crish/shared-types";
 import type {
   AgentTool,
@@ -14,11 +14,11 @@ import type {
   ContextStateSnapshot
 } from "./types";
 
-/** 任务台账上限：保留最近的任务记录，超容量淘汰最旧。 */
+/** 任务台账上限：保留最近的任务记录，超容量淘汰最旧�?*/
 const MAX_CONTEXT_TASKS = 100;
-/** 会话事件上限：snapshotForCompression 只取最近 40 条，保留 5x 余量。 */
+/** 会话事件上限：snapshotForCompression 只取最�?40 条，保留 5x 余量�?*/
 const MAX_SESSION_EVENTS = 200;
-/** 文件快照提示上限：snapshotForCompression 只取最近 40 条，保留 5x 余量。 */
+/** 文件快照提示上限：snapshotForCompression 只取最�?40 条，保留 5x 余量�?*/
 const MAX_FILE_HINTS = 200;
 
 
@@ -26,7 +26,7 @@ export interface ContextTask {
   id: string;
   title: string;
   status: "pending" | "completed";
-  summary?: string;
+  summary?: string | undefined;
   createdAt: string;
   updatedAt: string;
 }
@@ -42,12 +42,12 @@ export interface FileSnapshotHint {
   id: string;
   path: string;
   reason: string;
-  snapshotId?: string;
+  snapshotId?: string | undefined;
   createdAt: string;
 }
 
 export class InMemoryContextState implements ContextStateReader {
-  private readonly tasks = new BoundedMap<string, ContextTask>(MAX_CONTEXT_TASKS);
+  private readonly tasks = new BoundedMap<string, ContextTask>(MAX_CONTEXT_TASKS, undefined);
   private readonly events = new BoundedArray<SessionEventNote>(MAX_SESSION_EVENTS);
   private readonly fileHints = new BoundedArray<FileSnapshotHint>(MAX_FILE_HINTS);
   private compressionWindow = 0;
@@ -164,7 +164,7 @@ export function createContextStateTools(state: InMemoryContextState): AgentTool[
       },
       async execute(input) {
         const task = state.addTask(requireString(input, "title"), stringField(input, "id") ?? undefined);
-        return { text: `Recorded task ${task.id}: ${task.title}`, json: task as unknown as JsonValue };
+        return { text: `Recorded task ${task.id}: ${task.title}`, json: toJsonValue(task) };
       }
     }),
     defineTool({
@@ -188,7 +188,7 @@ export function createContextStateTools(state: InMemoryContextState): AgentTool[
       },
       async execute(input) {
         const task = state.completeTask(requireString(input, "id"), requireString(input, "summary"));
-        return { text: `Completed task ${task.id}: ${task.summary}`, json: task as unknown as JsonValue };
+        return { text: `Completed task ${task.id}: ${task.summary}`, json: toJsonValue(task) };
       }
     }),
     defineTool({
@@ -211,7 +211,7 @@ export function createContextStateTools(state: InMemoryContextState): AgentTool[
       },
       async execute(input) {
         const event = state.recordEvent(requireString(input, "text"));
-        return { text: `Recorded event: ${event.text}`, json: event as unknown as JsonValue };
+        return { text: `Recorded event: ${event.text}`, json: toJsonValue(event) };
       }
     }),
     defineTool({
@@ -236,7 +236,7 @@ export function createContextStateTools(state: InMemoryContextState): AgentTool[
       },
       async execute(input) {
         const hint = state.markFileSnapshot(requireString(input, "path"), requireString(input, "reason"), stringField(input, "snapshotId"));
-        return { text: `Marked file snapshot: ${hint.path}`, json: hint as unknown as JsonValue };
+        return { text: `Marked file snapshot: ${hint.path}`, json: toJsonValue(hint) };
       }
     })
   ];

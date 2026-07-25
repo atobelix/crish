@@ -197,7 +197,7 @@ export class AsyncEventQueue {
   stopConsuming(): void {
     if (this.consumeTimer) {
       clearInterval(this.consumeTimer);
-      this.consumeTimer = undefined;
+      this.consumeTimer = undefined as unknown as ReturnType<typeof setInterval>;
     }
   }
 

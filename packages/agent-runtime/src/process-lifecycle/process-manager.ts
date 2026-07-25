@@ -129,7 +129,7 @@ export class ProcessManager {
       });
 
       record.childProcess = child;
-      record.pid = child.pid;
+      record.pid = child.pid ?? 0;
       record.state = "running";
       record.startedAt = new Date().toISOString();
 
@@ -316,11 +316,11 @@ export class ProcessManager {
   private disposeRecord(record: ManagedProcessRecord): void {
     if (record.runtimeTimer) {
       clearTimeout(record.runtimeTimer);
-      record.runtimeTimer = undefined;
+      delete record.runtimeTimer;
     }
     if (record.terminationTimer) {
       clearTimeout(record.terminationTimer);
-      record.terminationTimer = undefined;
+      delete record.terminationTimer;
     }
     record.childProcess?.removeAllListeners();
   }

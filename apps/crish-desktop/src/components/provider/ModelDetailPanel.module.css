@@ -1,0 +1,118 @@
+.panel {
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  animation: slideDown 0.15s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 400px;
+  }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4, 16px);
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+.column h4 {
+  margin: 0;
+  font-size: var(--font-size-xs, 11px);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.infoRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.infoRow label {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.infoRow span {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-primary);
+  text-align: right;
+  word-break: break-all;
+}
+
+.formRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.formRow label {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.formRow input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.formRow select {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: var(--font-size-xs, 12px);
+  outline: none;
+  cursor: pointer;
+}
+
+.capabilityGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.capBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs, 11px);
+  background: color-mix(in srgb, var(--accent, #3b82f6) 10%, transparent);
+  color: var(--accent, #3b82f6);
+  border: 1px solid color-mix(in srgb, var(--accent, #3b82f6) 20%, transparent);
+}
+
+.deprecatedBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs, 11px);
+  font-weight: var(--font-weight-medium, 500);
+  background: color-mix(in srgb, var(--error, #ef4444) 12%, transparent);
+  color: var(--error, #ef4444);
+}

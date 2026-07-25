@@ -11,13 +11,17 @@ import {
 } from "./types";
 import { ConversationEngine, ProviderCallGateway, ContextManager } from "./runtime-components";
 import { TokenTracker } from "./provider-transport/token-tracker";
+import { TokenLedger } from "./token-ledger";
+import { PricingEngine } from "./pricing-engine";
 import { createTrustZonePermissionPolicy } from "./permission/trust-zone-policy";
 import { buildSessionContextFromEntries, createId, findSessionLeafId, InMemorySessionStore, nowIso, SessionRecorder } from "./session";
 import { AgentInputQueue } from "./agent-input-queue";
 import { DEFAULT_MAX_TURNS, DEFAULT_TOOL_EXECUTION_TIMEOUT_MS } from "@crish/shared-types";
 import { AgentSessionLoop } from "./agent-session-loop";
 import { ToolRegistry } from "./tools/tool-definition";
+import type { IAgentRuntime } from "./IAgentRuntime";
 
+export type { IAgentRuntime };
 export { DEFAULT_TOOL_EXECUTION_TIMEOUT_MS };
 
 /** Default product policy: TrustZone "ask" (project-mode semantics). No default-allow bypass. */
@@ -25,7 +29,7 @@ function createDefaultPermissionPolicy(): RuntimePermissionPolicy {
   return createTrustZonePermissionPolicy("ask");
 }
 
-export class AgentRuntime {
+export class AgentRuntime implements IAgentRuntime {
   private readonly sessionId: string;
   private readonly abortController = new AbortController();
   private readonly permissionPolicy: RuntimePermissionPolicy;
@@ -43,12 +47,12 @@ export class AgentRuntime {
     this.permissionPolicy = options.permissionPolicy ?? createDefaultPermissionPolicy();
     this.tokenTracker = options.tokenTracker ?? new TokenTracker();
     this.providerGateway = new ProviderCallGateway({
-      connectionManager: options.connectionManager,
+      ...(options.connectionManager !== undefined ? { connectionManager: options.connectionManager } : {}),
       tokenTracker: this.tokenTracker,
     });
     this.contextManager = new ContextManager({
-      compression: options.contextCompression,
-      toolOutputBudget: options.toolOutputBudget,
+      ...(options.contextCompression !== undefined ? { compression: options.contextCompression } : {}),
+      ...(options.toolOutputBudget !== undefined ? { toolOutputBudget: options.toolOutputBudget } : {}),
       cwd: options.cwd,
       sessionId: this.sessionId,
     });
@@ -146,6 +150,7 @@ export class AgentRuntime {
     });
     this.pendingSteerInputs.clear();
 
+    const ledger = new TokenLedger(new PricingEngine());
     const loop = new AgentSessionLoop(
       this.options,
       inputQueue,
@@ -157,6 +162,7 @@ export class AgentRuntime {
       recorder,
       this.sessionId,
       this.tokenTracker,
+      ledger,
       this.permissionPolicy,
       this.options.extensionRegistry,
     );

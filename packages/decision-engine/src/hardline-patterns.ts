@@ -77,11 +77,9 @@ const DEFAULT_HARDLINE_ENTRIES: HardlineEntry[] = [
 
 export class HardlinePatternRegistry {
   private readonly entries: readonly HardlineEntry[];
-  private frozen = false;
 
   constructor(entries?: HardlineEntry[]) {
     this.entries = Object.freeze([...(entries ?? DEFAULT_HARDLINE_ENTRIES)]);
-    this.frozen = true;
   }
 
   isHardline(command: string): HardlineEntry | null {

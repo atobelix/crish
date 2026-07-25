@@ -1,6 +1,6 @@
 export function combineAbortSignals(...signals: AbortSignal[]): AbortSignal {
   if (signals.length === 0) return new AbortController().signal;
-  if (signals.length === 1) return signals[0];
+  if (signals.length === 1) return signals[0]!;
 
   if (typeof AbortSignal.any === "function") {
     return AbortSignal.any(signals);

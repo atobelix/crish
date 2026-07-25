@@ -1,4 +1,4 @@
-import { performance } from "node:perf_hooks";
+
 
 export interface MemBenchmark {
   name: string;
@@ -56,7 +56,6 @@ function getHeapUsed(): number {
 }
 
 function countEventListeners(): number {
-  const maxListeners = process.getMaxListeners();
   const eventNames = process.eventNames();
   let count = 0;
   for (const name of eventNames) {

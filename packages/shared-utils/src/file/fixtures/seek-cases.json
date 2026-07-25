@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "description": "Golden vectors for seekSequence (TS + Rust A1/A3). Passes: exact|rstrip|trim|normalized. Unique-only; multi-match = ambiguous. Empty pattern = missing.",
+  "cases": [
+    {
+      "id": "exact-multiline",
+      "haystack": ["a", "foo", "bar", "baz"],
+      "pattern": ["foo", "bar"],
+      "startIndex": 0,
+      "eof": false,
+      "expect": { "kind": "hit", "index": 1, "pass": "exact" }
+    },
+    {
+      "id": "rstrip-trailing-space",
+      "haystack": ["foo   ", "bar\t"],
+      "pattern": ["foo", "bar"],
+      "expect": { "kind": "hit", "index": 0, "pass": "rstrip" }
+    },
+    {
+      "id": "trim-indent",
+      "haystack": ["    const a = 1;", "    const b = 2;"],
+      "pattern": ["const a = 1;", "const b = 2;"],
+      "expect": { "kind": "hit", "index": 0, "pass": "trim" }
+    },
+    {
+      "id": "unicode-curly-double-quotes",
+      "haystack": ["say \u201Chello\u201D"],
+      "pattern": ["say \"hello\""],
+      "expect": { "kind": "hit", "index": 0, "pass": "normalized" }
+    },
+    {
+      "id": "unicode-em-dash",
+      "haystack": ["range 1\u20143"],
+      "pattern": ["range 1-3"],
+      "expect": { "kind": "hit", "index": 0, "pass": "normalized" }
+    },
+    {
+      "id": "unicode-nbsp",
+      "haystack": ["a\u00A0b"],
+      "pattern": ["a b"],
+      "expect": { "kind": "hit", "index": 0, "pass": "normalized" }
+    },
+    {
+      "id": "unicode-curly-single",
+      "haystack": ["it\u2019s fine"],
+      "pattern": ["it's fine"],
+      "expect": { "kind": "hit", "index": 0, "pass": "normalized" }
+    },
+    {
+      "id": "unicode-dash-and-nbsp",
+      "haystack": ["foo\u2014bar\u00A0baz"],
+      "pattern": ["foo-bar baz"],
+      "expect": { "kind": "hit", "index": 0, "pass": "normalized" }
+    },
+    {
+      "id": "ambiguous-exact",
+      "haystack": ["x", "x"],
+      "pattern": ["x"],
+      "expect": { "kind": "ambiguous", "matchCount": 2 }
+    },
+    {
+      "id": "ambiguous-trim",
+      "haystack": ["  foo", "  bar", "    foo", "    bar"],
+      "pattern": ["foo", "bar"],
+      "expect": { "kind": "ambiguous", "matchCount": 2 }
+    },
+    {
+      "id": "pattern-too-long",
+      "haystack": ["just one line"],
+      "pattern": ["too", "many", "lines"],
+      "expect": { "kind": "missing" }
+    },
+    {
+      "id": "empty-pattern-missing",
+      "haystack": ["a", "b"],
+      "pattern": [],
+      "startIndex": 1,
+      "expect": { "kind": "missing" }
+    },
+    {
+      "id": "eof-suffix-unique",
+      "haystack": ["tail", "mid", "tail"],
+      "pattern": ["tail"],
+      "eof": true,
+      "expect": { "kind": "hit", "index": 2, "pass": "exact" }
+    },
+    {
+      "id": "missing-all-passes",
+      "haystack": ["alpha", "beta"],
+      "pattern": ["gamma"],
+      "expect": { "kind": "missing" }
+    },
+    {
+      "id": "start-index-skips-first",
+      "haystack": ["x", "y", "x"],
+      "pattern": ["x"],
+      "startIndex": 1,
+      "expect": { "kind": "hit", "index": 2, "pass": "exact" }
+    },
+    {
+      "id": "exact-preferred-over-trim",
+      "haystack": ["foo", "  foo"],
+      "pattern": ["foo"],
+      "expect": { "kind": "hit", "index": 0, "pass": "exact" }
+    },
+    {
+      "id": "start-beyond-window",
+      "haystack": ["a", "b", "c"],
+      "pattern": ["b", "c"],
+      "startIndex": 2,
+      "expect": { "kind": "missing" }
+    }
+  ]
+}

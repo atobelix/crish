@@ -25,6 +25,7 @@ function getTiktokenMod(): TiktokenModule | null {
       const require = createRequire(import.meta.url);
       tiktokenMod = require("@dqbd/tiktoken") as TiktokenModule;
     } catch {
+      // silent: @dqbd/tiktoken 不可用时降级到纯 JS 估算
       tiktokenMod = null;
     }
   }
@@ -38,7 +39,6 @@ export interface TokenEstimateResult {
 
 export class WasmTokenEstimator {
   private enc: TiktokenInstance | null = null;
-  private loadFailed = false;
 
   constructor(model?: string) {
     const mod = getTiktokenMod();
@@ -47,7 +47,6 @@ export class WasmTokenEstimator {
       this.enc = mod.encodingForModel(m) ?? mod.encodingForModel("gpt-4") ?? null;
     }
     if (!this.enc) {
-      this.loadFailed = true;
     }
   }
 

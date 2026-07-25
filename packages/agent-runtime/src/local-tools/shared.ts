@@ -2,7 +2,7 @@ import type { Stats } from "node:fs";
 import { mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname, relative, resolve, sep } from "node:path";
 import { createHash } from "node:crypto";
-import type { JsonObject, JsonValue, ToolExecutionContext } from "@crish/shared-types";
+import { CrishError, type JsonObject, type JsonValue, type ToolExecutionContext } from "@crish/shared-types";
 import type { LeaseScope, MutationLeaseOwner } from "../workspace-mutation-coordinator";
 import type { LocalToolOptions } from "./types";
 
@@ -55,18 +55,18 @@ export function recordReadSnapshot(
 
 export function resolveWorkspacePath(workspaceRoot: string, inputPath: string): string {
   if (typeof inputPath !== "string" || inputPath.trim().length === 0) {
-    throw new Error("Path must be a non-empty string");
+    throw new CrishError("Path must be a non-empty string", "TOOL_ERROR", "permanent", false);
   }
   // Reject control chars early (null bytes, CR/LF, etc. — path traversal / odd FS behavior)
   if (/[\u0000-\u001f\u007f]/.test(inputPath)) {
-    throw new Error(`Invalid path (control character): ${JSON.stringify(inputPath)}`);
+    throw new CrishError(`Invalid path (control character): ${JSON.stringify(inputPath)}`, "TOOL_ERROR", "permanent", false);
   }
   const root = resolve(workspaceRoot);
   const candidate = resolve(root, inputPath);
   const normalizedRoot = normalizeForCompare(root);
   const normalizedCandidate = normalizeForCompare(candidate);
   if (normalizedCandidate !== normalizedRoot && !normalizedCandidate.startsWith(`${normalizedRoot}${sep}`)) {
-    throw new Error(`Path escapes workspace: ${inputPath}`);
+    throw new CrishError(`Path escapes workspace: ${inputPath}`, "TOOL_ERROR", "permanent", false);
   }
   return candidate;
 }
@@ -110,7 +110,7 @@ export async function statOrThrow(targetPath: string, display: string): Promise<
     return await stat(targetPath);
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") {
-      throw new Error(`Path does not exist: ${display}`);
+      throw new CrishError(`Path does not exist: ${display}`, "TOOL_ERROR", "permanent", false);
     }
     throw error;
   }
@@ -121,7 +121,7 @@ export async function readdirOrThrow(targetPath: string, display: string) {
     return await readdir(targetPath, { withFileTypes: true });
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") {
-      throw new Error(`Directory does not exist: ${display}`);
+      throw new CrishError(`Directory does not exist: ${display}`, "TOOL_ERROR", "permanent", false);
     }
     throw error;
   }
@@ -132,7 +132,7 @@ export async function readFileOrThrow(targetPath: string, display: string): Prom
     return await readFile(targetPath);
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") {
-      throw new Error(`File does not exist: ${display}`);
+      throw new CrishError(`File does not exist: ${display}`, "TOOL_ERROR", "permanent", false);
     }
     throw error;
   }
@@ -147,14 +147,17 @@ export async function ensureParentDirectoryForWrite(
   try {
     const parentStat = await stat(parent);
     if (!parentStat.isDirectory()) {
-      throw new Error(`Parent path is not a directory for ${options.relativePath}: ${parentDisplay}`);
+      throw new CrishError(`Parent path is not a directory for ${options.relativePath}: ${parentDisplay}`, "TOOL_ERROR", "permanent", false);
     }
     return { created: false, parentDisplay };
   } catch (error) {
     if (!isNodeError(error) || error.code !== "ENOENT") throw error;
     if (options.existed) {
-      throw new Error(
-        `Parent directory is missing for existing file ${options.relativePath}. Refusing to recreate directories unexpectedly.`
+      throw new CrishError(
+        `Parent directory is missing for existing file ${options.relativePath}. Refusing to recreate directories unexpectedly.`,
+        "TOOL_ERROR",
+        "permanent",
+        false
       );
     }
     await mkdir(parent, { recursive: true });
@@ -197,15 +200,15 @@ export function formatNumberedLines(lines: string[], startLine: number): string 
 export function requireString(input: JsonObject, key: string): string {
   const value = input[key];
   if (typeof value !== "string") {
-    throw new Error(`${key} must be a non-empty string`);
+    throw new CrishError(`${key} must be a non-empty string`, "TOOL_ERROR", "permanent", false);
   }
   const trimmed = value.trim();
   if (trimmed.length === 0) {
-    throw new Error(`${key} must be a non-empty string`);
+    throw new CrishError(`${key} must be a non-empty string`, "TOOL_ERROR", "permanent", false);
   }
   // Paths/commands with embedded control chars are never legitimate model args.
   if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) {
-    throw new Error(`${key} contains invalid control characters`);
+    throw new CrishError(`${key} contains invalid control characters`, "TOOL_ERROR", "permanent", false);
   }
   // Preserve original (non-trimmed) value for commands that may encode intentional padding,
   // but reject pure whitespace so blank shell/path inputs never reach the OS.
@@ -240,7 +243,7 @@ export function booleanField(input: JsonObject, key: string): boolean | undefine
 export function requireStringArray(input: JsonObject, key: string): string[] {
   const values = stringArrayField(input, key);
   if (values.length === 0) {
-    throw new Error(`${key} must contain at least one path`);
+    throw new CrishError(`${key} must contain at least one path`, "TOOL_ERROR", "permanent", false);
   }
   return values;
 }

@@ -105,12 +105,12 @@ export class AnthropicProvider implements AgentProvider {
     const url = resolveAnthropicMessagesUrl(this.baseUrl);
     const body = buildAnthropicMessagesBody({
       model: this.model,
-      systemPrompt: request.systemPrompt,
+      ...(request.systemPrompt !== undefined ? { systemPrompt: request.systemPrompt } : {}),
       messages: request.messages,
-      tools: request.tools,
+      ...(request.tools.length > 0 ? { tools: request.tools } : {}),
       maxTokens: this.maxTokens,
-      temperature: this.temperature,
-      topP: this.topP,
+      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
+      ...(this.topP !== undefined ? { topP: this.topP } : {}),
       stream: this.streamEnabled,
     });
 
@@ -220,20 +220,20 @@ export function createAnthropicProviderFromPlan(
   return new AnthropicProvider({
     id: plan.route.providerId || 'anthropic',
     baseUrl: plan.credential.baseUrl ?? overrides.baseUrl ?? DEFAULT_BASE_URL,
-    apiKey: plan.credential.apiKey ?? overrides.apiKey,
     model: plan.route.upstreamModel || plan.route.model,
-    maxTokens: maxTokens ?? overrides.maxTokens,
-    temperature: temperature ?? overrides.temperature,
-    topP: topP ?? overrides.topP,
-    stream: stream ?? overrides.stream,
-    requestTimeoutMs: requestTimeoutMs ?? overrides.requestTimeoutMs,
+    ...(plan.credential.apiKey ?? overrides.apiKey !== undefined ? { apiKey: plan.credential.apiKey ?? overrides.apiKey } : {}),
+    ...((maxTokens ?? overrides.maxTokens) !== undefined ? { maxTokens: maxTokens ?? overrides.maxTokens } : {}),
+    ...((temperature ?? overrides.temperature) !== undefined ? { temperature: temperature ?? overrides.temperature } : {}),
+    ...((topP ?? overrides.topP) !== undefined ? { topP: topP ?? overrides.topP } : {}),
+    ...((stream ?? overrides.stream) !== undefined ? { stream: stream ?? overrides.stream } : {}),
+    ...((requestTimeoutMs ?? overrides.requestTimeoutMs) !== undefined ? { requestTimeoutMs: requestTimeoutMs ?? overrides.requestTimeoutMs } : {}),
     headers: {
       ...headers,
       ...plan.credential.headers,
       ...overrides.headers,
     },
-    fetch: overrides.fetch,
-    anthropicVersion: overrides.anthropicVersion,
+    ...(overrides.fetch !== undefined ? { fetch: overrides.fetch } : {}),
+    ...(overrides.anthropicVersion !== undefined ? { anthropicVersion: overrides.anthropicVersion } : {}),
   });
 }
 

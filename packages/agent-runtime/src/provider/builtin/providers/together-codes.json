@@ -1,0 +1,49 @@
+{
+  "providerId": "together-codes",
+  "name": "Together Codes",
+  "description": "Together AI - specialized code generation models",
+  "website": "https://together.ai",
+  "docsUrl": "https://docs.together.ai",
+  "engine": "openai-compatible",
+  "baseUrl": "https://api.together.xyz/v1",
+  "auth": {
+    "type": "api-key",
+    "placement": "header",
+    "keyHeader": "Authorization",
+    "defaultEnvVar": "TOGETHER_API_KEY"
+  },
+  "models": [
+    {
+      "id": "codestral-2501",
+      "aliases": ["codestral"],
+      "capabilities": ["code", "tool-use", "long-context"],
+      "contextWindow": 256000,
+      "maxOutputTokens": 32768,
+      "costPer1kInput": 0.003,
+      "costPer1kOutput": 0.009
+    },
+    {
+      "id": "Qwen2.5-Coder-32B-Instruct",
+      "aliases": ["qwen-coder-32b"],
+      "capabilities": ["code", "tool-use"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "costPer1kInput": 0.0009,
+      "costPer1kOutput": 0.0009
+    }
+  ],
+  "endpointType": "chat-completions",
+  "capabilities": {
+    "toolUse": true,
+    "vision": false,
+    "reasoning": true,
+    "streaming": true,
+    "systemPrompt": true,
+    "jsonMode": true,
+    "parallelToolCalls": true
+  },
+  "engineOptions": {
+    "authHeader": "authorization",
+    "maxTokensField": "max_tokens"
+  }
+}

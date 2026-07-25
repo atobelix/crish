@@ -21,29 +21,17 @@ import type { AgentEvent } from "@crish/shared-types";
 import type {
   CoreAgentEvent,
   CoreEventBase,
-  AgentMeta,
-  AgentPhase,
-  TurnMeta,
-  TurnPhase,
-  MessageMeta,
-  MessagePhase,
-  ToolMeta,
-  ToolPhase,
-  CompressionMeta,
-  CompressionPhase,
-  DiagnosticMeta,
   DiagnosticSeverity,
-  DiagnosticDetails,
 } from "./core-event-types";
 
-// ─── Provider diagnostic phase → severity mapping ──────────
+// ─── Provider diagnostic phase �?severity mapping ──────────
 
 /**
  * Maps ProviderDiagnostic phase to DiagnosticSeverity.
  *
- * Progress phases → info
- * Recovery/fallback phases → warn
- * Error phases → error
+ * Progress phases �?info
+ * Recovery/fallback phases �?warn
+ * Error phases �?error
  */
 function providerDiagnosticSeverity(phase: string): DiagnosticSeverity {
   switch (phase) {
@@ -119,8 +107,8 @@ export class CoreEventProjector {
     const base: CoreEventBase = {
       sessionId: event.sessionId,
       timestamp: extractEventTimestamp(event),
-      traceId: tracing?.traceId,
-      spanId: tracing?.spanId,
+      ...(tracing?.traceId !== undefined ? { traceId: tracing.traceId } : {}),
+      ...(tracing?.spanId !== undefined ? { spanId: tracing.spanId } : {}),
     };
 
     switch (event.type) {
@@ -139,8 +127,8 @@ export class CoreEventProjector {
           type: "agent",
           phase: "end",
           meta: {
-            reason: event.reason,
-            error: event.error,
+            ...(event.reason !== undefined ? { reason: event.reason } : {}),
+            ...(event.error !== undefined ? { error: event.error } : {}),
           },
         };
 
@@ -287,9 +275,9 @@ export class CoreEventProjector {
           type: "compression",
           phase: "end",
           meta: {
-            result: event.result,
-            aborted: event.aborted,
-            error: event.error,
+            ...(event.result !== undefined ? { result: event.result } : {}),
+            ...(event.aborted !== undefined ? { aborted: event.aborted } : {}),
+            ...(event.error !== undefined ? { error: event.error } : {}),
           },
         };
 
@@ -434,7 +422,7 @@ export class CoreEventProjector {
               kind: "run-terminal",
               runId: event.runId,
               terminal: event.terminal,
-              error: event.error,
+              ...(event.error !== undefined ? { error: event.error } : {}),
             },
           },
         };
@@ -442,7 +430,6 @@ export class CoreEventProjector {
       default:
         // Exhaustive check: this should never happen if all 24 types are handled
         // but we provide a safe fallback for unknown types
-        const _exhaustive: never = event;
         return {
           ...base,
           type: "diagnostic",

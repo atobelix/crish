@@ -99,9 +99,9 @@ const STATUS_RANK: Record<ProjectProgressStatus, number> = {
 
 export class ProjectProgressLedger {
   private readonly now: () => string;
-  private readonly principles = new BoundedMap<string, StablePrincipleRecord>(MAX_STORED_PRINCIPLES);
-  private readonly progressItems = new BoundedMap<string, GlobalProgressItemRecord>(MAX_STORED_PROGRESS_ITEMS);
-  private readonly taskRecords = new BoundedMap<string, AgentTaskRecord>(MAX_STORED_TASK_RECORDS);
+  private readonly principles = new BoundedMap<string, StablePrincipleRecord>(MAX_STORED_PRINCIPLES, undefined);
+  private readonly progressItems = new BoundedMap<string, GlobalProgressItemRecord>(MAX_STORED_PROGRESS_ITEMS, undefined);
+  private readonly taskRecords = new BoundedMap<string, AgentTaskRecord>(MAX_STORED_TASK_RECORDS, undefined);
 
   constructor(options: ProjectProgressLedgerOptions = {}) {
     this.now = options.now ?? (() => new Date().toISOString());
@@ -133,11 +133,12 @@ export class ProjectProgressLedger {
     const existingByTitle = findByCanonicalTitle(this.progressItems, title);
     const existing = this.progressItems.get(id) ?? existingByTitle;
     const now = input.updatedAt ?? this.now();
+    const summary = optionalText(input.summary) ?? existing?.summary;
     const record: GlobalProgressItemRecord = {
       id: existing?.id ?? id,
       title,
       status: input.status ?? existing?.status ?? "pending",
-      summary: optionalText(input.summary) ?? existing?.summary,
+      ...(summary !== undefined ? { summary } : {}),
       order: input.order ?? existing?.order ?? this.progressItems.size,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now
@@ -155,12 +156,13 @@ export class ProjectProgressLedger {
     const id = input.id ? normalizeId(input.id) : stableId("task", `${agentId}:${title}`);
     const existing = this.taskRecords.get(id);
     const now = input.updatedAt ?? this.now();
+    const summary = optionalText(input.summary) ?? existing?.summary;
     const record: AgentTaskRecord = {
       id,
       agentId,
       title,
       status: input.status ?? existing?.status ?? "pending",
-      summary: optionalText(input.summary) ?? existing?.summary,
+      ...(summary !== undefined ? { summary } : {}),
       startedAt: input.startedAt ?? existing?.startedAt ?? now,
       updatedAt: now
     };

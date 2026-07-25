@@ -6,6 +6,7 @@ import type { ConversationBoundaryCheckpointSource, ConversationBoundaryManifest
 import type { GitCheckpoint, GitCheckpointToolCall } from "./git-versioning";
 import { nowIso } from "./session";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
+import { CrishError } from "@crish/shared-types";
 
 export type CheckpointManifestSource = ConversationBoundaryCheckpointSource;
 
@@ -200,7 +201,7 @@ export class CheckpointManifestService {
       try {
         await this.appendBatcher.close();
       } catch {
-        // 忽略关闭错误
+        // silent: close error ignored
       }
       this.appendBatcher = undefined;
     }
@@ -331,6 +332,7 @@ export class CheckpointManifestService {
       await rename(tmpPath, this.manifestPath);
     } catch (error) {
       // rename 失败时清理 tmp 残留，避免污染工作区
+      // silent: cleanup on rename failure
       await unlink(tmpPath).catch(() => undefined);
       throw error;
     }
@@ -374,13 +376,13 @@ export function createCheckpointManifestInputFromBoundary(
     sessionId: boundary.sessionId,
     runId: boundary.runId,
     userMessageId: boundary.userMessageId,
-    checkpointId: boundary.checkpointId,
-    checkpointRef: boundary.checkpointRef,
     workspaceRoot: boundary.workspaceRoot,
     changedPaths: boundary.changedPaths,
-    source: boundary.checkpointSource,
     createdAt: boundary.createdAt,
-    metadata: boundary.metadata,
+    ...(boundary.checkpointId !== undefined ? { checkpointId: boundary.checkpointId } : {}),
+    ...(boundary.checkpointRef !== undefined ? { checkpointRef: boundary.checkpointRef } : {}),
+    ...(boundary.checkpointSource !== undefined ? { source: boundary.checkpointSource } : {}),
+    ...(boundary.metadata !== undefined ? { metadata: boundary.metadata } : {}),
     ...overrides
   };
 }
@@ -396,7 +398,7 @@ export function parseCheckpointManifestRecord(value: string): CheckpointManifest
 
 export function validateCheckpointManifestRecord(value: unknown): CheckpointManifestRecord {
   if (!isJsonObject(value)) {
-    throw new Error("checkpoint manifest record must be a JSON object");
+    throw new CrishError("checkpoint manifest record must be a JSON object", "CHECKPOINT_ERROR", "permanent", false);
   }
 
   const workspaceRoot = resolve(requireNonEmpty(jsonString(value.workspaceRoot), "workspace root"));
@@ -603,7 +605,7 @@ function assertInside(root: string, candidate: string, label: string): void {
   const normalizedRoot = normalizeForCompare(root);
   const normalizedCandidate = normalizeForCompare(candidate);
   if (normalizedCandidate !== normalizedRoot && !normalizedCandidate.startsWith(`${normalizedRoot}${sep}`)) {
-    throw new Error(`${label} escapes workspace root`);
+    throw new CrishError(`${label} escapes workspace root`, "CHECKPOINT_ERROR", "permanent", false);
   }
 }
 
@@ -614,23 +616,26 @@ function normalizeForCompare(path: string): string {
 
 function validateToolCall(value: unknown): CheckpointManifestToolCall {
   if (!isJsonObject(value)) {
-    throw new Error("tool call must be a JSON object");
+    throw new CrishError("tool call must be a JSON object", "CHECKPOINT_ERROR", "permanent", false);
   }
+  const id = value.id !== undefined ? optionalNonEmpty(jsonString(value.id), "tool call id") : undefined;
+  const toolName = value.toolName !== undefined ? optionalNonEmpty(jsonString(value.toolName), "tool call tool name") : undefined;
+  const actor = value.actor !== undefined ? optionalNonEmpty(jsonString(value.actor), "tool call actor") : undefined;
+  const sessionId = value.sessionId !== undefined ? optionalNonEmpty(jsonString(value.sessionId), "tool call session id") : undefined;
+  const targetSummary = value.targetSummary !== undefined ? optionalNonEmpty(jsonString(value.targetSummary), "tool call target summary") : undefined;
   return {
-    ...(value.id !== undefined ? { id: optionalNonEmpty(jsonString(value.id), "tool call id") } : {}),
-    ...(value.toolName !== undefined ? { toolName: optionalNonEmpty(jsonString(value.toolName), "tool call tool name") } : {}),
-    ...(value.actor !== undefined ? { actor: optionalNonEmpty(jsonString(value.actor), "tool call actor") } : {}),
-    ...(value.sessionId !== undefined ? { sessionId: optionalNonEmpty(jsonString(value.sessionId), "tool call session id") } : {}),
-    ...(value.targetSummary !== undefined
-      ? { targetSummary: optionalNonEmpty(jsonString(value.targetSummary), "tool call target summary") }
-      : {})
+    ...(id !== undefined ? { id } : {}),
+    ...(toolName !== undefined ? { toolName } : {}),
+    ...(actor !== undefined ? { actor } : {}),
+    ...(sessionId !== undefined ? { sessionId } : {}),
+    ...(targetSummary !== undefined ? { targetSummary } : {})
   };
 }
 
 function requireNonEmpty(value: string | undefined, label: string): string {
   const normalized = value?.trim();
   if (!normalized) {
-    throw new Error(`${label} must be a non-empty string`);
+    throw new CrishError(`${label} must be a non-empty string`, "CHECKPOINT_ERROR", "permanent", false);
   }
   return normalized;
 }
@@ -645,7 +650,7 @@ function optionalNonEmpty(value: string | undefined, label: string): string | un
 function requireIsoLike(value: string | undefined, label: string): string {
   const normalized = requireNonEmpty(value, label);
   if (Number.isNaN(Date.parse(normalized))) {
-    throw new Error(`${label} must be a valid timestamp`);
+    throw new CrishError(`${label} must be a valid timestamp`, "CHECKPOINT_ERROR", "permanent", false);
   }
   return normalized;
 }
@@ -654,7 +659,7 @@ function requireCheckpointSource(value: string | undefined): CheckpointManifestS
   if (value === "runtime" || value === "tool" || value === "external" || value === "unknown") {
     return value;
   }
-  throw new Error("checkpoint source must be runtime, tool, external, or unknown");
+  throw new CrishError("checkpoint source must be runtime, tool, external, or unknown", "CHECKPOINT_ERROR", "permanent", false);
 }
 
 function jsonString(value: JsonValue | undefined): string | undefined {
@@ -663,14 +668,14 @@ function jsonString(value: JsonValue | undefined): string | undefined {
 
 function jsonStringArray(value: JsonValue | undefined, label: string): string[] {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-    throw new Error(`${label} must be an array of strings`);
+    throw new CrishError(`${label} must be an array of strings`, "CHECKPOINT_ERROR", "permanent", false);
   }
   return value as string[];
 }
 
 function requireJsonObject(value: JsonValue | undefined, label: string): JsonObject {
   if (!isJsonObject(value)) {
-    throw new Error(`${label} must be a JSON object`);
+    throw new CrishError(`${label} must be a JSON object`, "CHECKPOINT_ERROR", "permanent", false);
   }
   return value;
 }

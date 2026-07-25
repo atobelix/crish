@@ -1,8 +1,8 @@
 import type { JsonObject, JsonValue, ToolOutput } from "@crish/shared-types";
 
 export interface ToolOutputBudgetOptions {
-  inlineChars?: number;
-  headRatio?: number;
+  inlineChars?: number | undefined;
+  headRatio?: number | undefined;
 }
 
 export interface BudgetedText {
@@ -55,7 +55,7 @@ export function budgetToolOutputForContext(
 
   return {
     text: budgeted.text,
-    artifacts: output.artifacts,
+    ...(output.artifacts !== undefined ? { artifacts: output.artifacts } : {}),
     json: { contextBudget }
   };
 }

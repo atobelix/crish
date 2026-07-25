@@ -1,11 +1,9 @@
 /**
  * Session Branch 状态机
  *
- * 管理会话分支的切换与恢复。
- * 替代 session.ts 中 findSessionLeafId 的推断式分支管理。
- *
+ * 管理会话分支的切换与恢复�? * 替代 session.ts �?findSessionLeafId 的推断式分支管理�? *
  * States:
- *   active → suspended → abandoned → restored
+ *   active �?suspended �?abandoned �?restored
  */
 
 import {
@@ -31,7 +29,7 @@ export type SessionBranchEvent =
   | "BRANCH_ABANDON"
   | "BRANCH_VALIDATE";
 
-// ─── 上下文 ───────────────────────────────────────────────
+// ─── 上下�?───────────────────────────────────────────────
 
 export interface SessionBranchContext {
   sessionId: string;
@@ -57,7 +55,7 @@ function switchToBranch(ctx: SessionBranchContext, payload: unknown): SessionBra
 
 function restoreBranch(ctx: SessionBranchContext, payload: unknown): SessionBranchContext {
   const data = payload as { targetBranchId?: string; targetLeafId?: string } | undefined;
-  const previousBranch = ctx.branchStack.length > 0 ? ctx.branchStack[ctx.branchStack.length - 1] : ctx.activeBranchId;
+  const previousBranch = ctx.branchStack.length > 0 ? (ctx.branchStack[ctx.branchStack.length - 1] ?? ctx.activeBranchId) : ctx.activeBranchId;
   return {
     ...ctx,
     activeBranchId: data?.targetBranchId ?? previousBranch,
@@ -148,7 +146,7 @@ export function createSessionBranchMachine(
         activeLeafId: initialLeafId,
         branchStack: []
       },
-      snapshot: options?.snapshot
-    }
+      ...(options?.snapshot !== undefined ? { snapshot: options.snapshot } : {}),
+    } as any
   );
 }

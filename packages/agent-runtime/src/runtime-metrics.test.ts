@@ -62,7 +62,7 @@ describe("RuntimeMetrics", () => {
       p95: 480,
       p99: 496
     });
-    expect(snapshot.tools.byName.shell.durationMs.p95).toBe(480);
+    expect(snapshot.tools.byName.shell!.durationMs.p95).toBe(480);
   });
 
   it("calculates tool error rate and outcome counts from tool-end facts", () => {
@@ -93,7 +93,7 @@ describe("RuntimeMetrics", () => {
     expect(snapshot.tools.errorRate).toBeCloseTo(2 / 3);
     expect(snapshot.tools.timeoutCount).toBe(1);
     expect(snapshot.tools.cancelCount).toBe(1);
-    expect(snapshot.tools.byName.shell.errorRate).toBeCloseTo(1 / 2);
+    expect(snapshot.tools.byName.shell!.errorRate).toBeCloseTo(1 / 2);
     expect(snapshot.failures.errorCount).toBe(2);
     expect(snapshot.failures.timeoutCount).toBe(1);
     expect(snapshot.failures.cancelCount).toBe(1);

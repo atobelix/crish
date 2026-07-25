@@ -1,0 +1,23 @@
+{
+  "providerId": "lmstudio",
+  "name": "LM Studio",
+  "description": "LM Studio - local inference server for running models on your machine",
+  "website": "https://lmstudio.ai",
+  "docsUrl": "https://lmstudio.ai/docs",
+  "engine": "openai-compatible",
+  "baseUrl": "http://localhost:1234/v1",
+  "auth": null,
+  "models": [],
+  "endpointType": "chat-completions",
+  "metadata": { "dynamic_models": true, "local": true },
+  "capabilities": {
+    "toolUse": false,
+    "vision": false,
+    "reasoning": false,
+    "streaming": true,
+    "systemPrompt": true,
+    "jsonMode": true,
+    "parallelToolCalls": false
+  },
+  "engineOptions": { "authHeader": null, "maxTokensField": "max_tokens" }
+}

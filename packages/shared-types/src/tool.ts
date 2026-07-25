@@ -17,6 +17,11 @@ export interface ToolExecutionContext {
   signal: AbortSignal;
   emit(update: ToolProgressUpdate): void;
   metadata?: Record<string, unknown>;
+  traceId?: string;
+  runId?: string;
+  batchId?: string;
+  mode?: string;
+  providerId?: string;
 }
 
 export interface ToolOutput {
@@ -121,11 +126,11 @@ export interface RuntimeCheckpointRecord {
   label: string;
   toolCallId: string;
   toolName: string;
-  artifactUri?: string;
-  manifestPath?: string;
-  snapshotPath?: string;
-  sourcePath?: string;
-  metadata?: JsonObject;
+  artifactUri?: string | undefined;
+  manifestPath?: string | undefined;
+  snapshotPath?: string | undefined;
+  sourcePath?: string | undefined;
+  metadata?: JsonObject | undefined;
 }
 
 export interface RuntimeCheckpointRestoreRecord {
@@ -135,7 +140,7 @@ export interface RuntimeCheckpointRestoreRecord {
   restored: string[];
   deleted: string[];
   skipped: string[];
-  metadata?: JsonObject;
+  metadata?: JsonObject | undefined;
 }
 
 export type ContextCompressionTrigger = "auto" | "preflight" | "manual" | "threshold" | "overflow" | "idle" | "incomplete" | "handoff";

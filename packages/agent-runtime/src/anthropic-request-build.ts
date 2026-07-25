@@ -254,6 +254,18 @@ export function toAnthropicToolChoice(
   return { type: 'tool', name: choice.name };
 }
 
+export interface EnforceHardTokenLimitResult {
+  messages: AnthropicMessage[];
+  foldedCount: number;
+}
+
+export function enforceHardTokenLimit(
+  messages: AnthropicMessage[],
+  _maxTokens: number
+): EnforceHardTokenLimitResult {
+  return { messages, foldedCount: 0 };
+}
+
 export function buildAnthropicMessagesBody(
   options: BuildAnthropicMessagesBodyOptions
 ): JsonObject {

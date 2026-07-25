@@ -1,0 +1,7 @@
+{
+  "providerId": "sparse",
+  "name": "Sparse",
+  "engine": "ollama",
+  "baseUrl": "http://localhost:11434",
+  "models": [{ "id": "llama3" }]
+}

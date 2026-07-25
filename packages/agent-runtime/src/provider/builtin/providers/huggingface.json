@@ -1,0 +1,49 @@
+{
+  "providerId": "huggingface",
+  "name": "Hugging Face",
+  "description": "Hugging Face Inference API - OpenAI-compatible endpoint for thousands of models",
+  "website": "https://huggingface.co",
+  "docsUrl": "https://huggingface.co/docs/api-inference",
+  "engine": "openai-compatible",
+  "baseUrl": "https://api-inference.huggingface.co/v1",
+  "auth": {
+    "type": "api-key",
+    "placement": "header",
+    "keyHeader": "Authorization",
+    "defaultEnvVar": "HUGGINGFACE_API_KEY"
+  },
+  "models": [
+    {
+      "id": "meta-llama/Llama-3.3-70B-Instruct",
+      "aliases": ["llama-3.3-70b"],
+      "capabilities": ["code", "tool-use", "reasoning"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "costPer1kInput": 0.0005,
+      "costPer1kOutput": 0.0005
+    },
+    {
+      "id": "mistralai/Mistral-7B-Instruct",
+      "aliases": ["mistral-7b"],
+      "capabilities": ["code"],
+      "contextWindow": 32768,
+      "maxOutputTokens": 4096,
+      "costPer1kInput": 0.0001,
+      "costPer1kOutput": 0.0001
+    }
+  ],
+  "endpointType": "chat-completions",
+  "capabilities": {
+    "toolUse": false,
+    "vision": false,
+    "reasoning": true,
+    "streaming": true,
+    "systemPrompt": true,
+    "jsonMode": true,
+    "parallelToolCalls": false
+  },
+  "engineOptions": {
+    "authHeader": "authorization",
+    "maxTokensField": "max_tokens"
+  }
+}

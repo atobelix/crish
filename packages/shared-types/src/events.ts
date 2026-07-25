@@ -1,5 +1,5 @@
 import type { AgentMessage, AgentMessageBlock } from "./message";
-import type { ToolBatchCall, ToolBatchResult, ToolProgressUpdate, ToolOutput, ProviderDiagnostic, ContextCompressionRecord, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord } from "./tool";
+import type { ToolBatchCall, ToolBatchResult, ToolProgressUpdate, ProviderDiagnostic, ContextCompressionRecord, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord } from "./tool";
 import type { PermissionRequest, PermissionDecision } from "./permissions";
 
 export type AgentDomainEvent =
@@ -29,7 +29,7 @@ export type CompressionDomainEvent =
 
 export type DiagnosticDomainEvent =
   | { type: "provider-diagnostic"; sessionId: string; timestamp: string; diagnostic: ProviderDiagnostic }
-  | { type: "runtime-error"; sessionId: string; timestamp: string; error: string }
+  | { type: "runtime-error"; sessionId: string; timestamp: string; error: string; retryable?: boolean }
   | { type: "runtime-steering"; sessionId: string; timestamp: string; reason: string; message: AgentMessage }
   | { type: "runtime-intervention-required"; sessionId: string; timestamp: string; reason: string; choices: string[]; message: string }
   | { type: "approval-requested"; sessionId: string; request: PermissionRequest; timestamp: string }

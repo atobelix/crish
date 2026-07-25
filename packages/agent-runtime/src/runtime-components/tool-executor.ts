@@ -20,7 +20,6 @@ import type {
   JsonObject,
   ToolBatchCall,
   ToolBatchResult,
-  ToolBatchFailurePolicy,
   ToolCallBlock,
   ToolExecutionContext,
   ToolOutput,
@@ -30,19 +29,13 @@ import { validateToolInput, repairToolInput } from '../tools';
 import { createId, nowIso } from '../session';
 import { RingBuffer } from '@crish/shared-utils';
 import { SingleToolExecutor } from './single-tool-executor';
+import type { ToolExecutorOptions } from './tool-executor-options';
 
 // ─── 工具执行完成结果 ─────────────────────────────────────
 
 export type ToolExecutionCompletion =
   | { ok: true; output: ToolOutput }
   | { ok: false; kind: 'error' | 'timeout' | 'cancelled'; cause: unknown };
-
-// ─── 工具执行器配置 ───────────────────────────────────────
-
-export interface ToolExecutorOptions {
-  timeoutMs: number;
-  parallelFailurePolicy: ToolBatchFailurePolicy;
-}
 
 /**
  * 单工具执行钩子
@@ -113,6 +106,13 @@ export class ProgressEventQueue<T> {
     });
   }
 }
+
+// ─── 并行执行内部类型 ─────────────────────────────────────
+
+type ParallelItem =
+  | { type: 'event'; event: AgentEvent }
+  | { type: 'result'; index: number; result: ToolBatchResult }
+  | { type: 'error'; error: unknown };
 
 // ─── ToolExecutor ─────────────────────────────────────────
 
@@ -306,32 +306,32 @@ export class ToolExecutor {
     batchId: string,
     executeOne: ToolExecuteHook
   ): AsyncGenerator<AgentEvent, ToolBatchResult[]> {
-    // 并行执行需要使用 ProgressEventQueue 来收集事件
-    type ParallelItem =
-      | { type: 'event'; event: AgentEvent }
-      | { type: 'result'; index: number; result: ToolBatchResult }
-      | { type: 'error'; error: unknown };
-
     const queue = new ProgressEventQueue<ParallelItem>();
-    const results: Array<ToolBatchResult | undefined> = new Array(
-      toolCalls.length
-    );
+    const results: Array<ToolBatchResult | undefined> = new Array(toolCalls.length);
     const batchController = new AbortController();
 
-    // 链接外部 signal
     const onAbort = (): void => batchController.abort();
     signal.addEventListener('abort', onAbort, { once: true });
 
-    let completed = 0;
+    this.startParallelTasks(toolCalls, tools, sessionId, cwd, batchId, executeOne, queue, batchController);
+
+    yield* this.drainParallelQueue(queue, results, signal, batchController, onAbort);
+
+    return results.filter((result): result is ToolBatchResult => Boolean(result));
+  }
+
+  private startParallelTasks(
+    toolCalls: ToolCallBlock[],
+    tools: AgentTool[],
+    sessionId: string,
+    cwd: string,
+    batchId: string,
+    executeOne: ToolExecuteHook,
+    queue: ProgressEventQueue<ParallelItem>,
+    batchController: AbortController
+  ): void {
     for (let index = 0; index < toolCalls.length; index++) {
-      const iterator = executeOne(
-        toolCalls[index]!,
-        tools,
-        sessionId,
-        cwd,
-        batchController.signal,
-        batchId
-      );
+      const iterator = executeOne(toolCalls[index]!, tools, sessionId, cwd, batchController.signal, batchId);
       void (async () => {
         try {
           while (true) {
@@ -347,8 +347,17 @@ export class ToolExecutor {
         }
       })();
     }
+  }
 
-    while (completed < toolCalls.length) {
+  private async *drainParallelQueue(
+    queue: ProgressEventQueue<ParallelItem>,
+    results: Array<ToolBatchResult | undefined>,
+    signal: AbortSignal,
+    batchController: AbortController,
+    onAbort: () => void
+  ): AsyncGenerator<AgentEvent> {
+    let completed = 0;
+    while (completed < results.length) {
       const next = await queue.next();
       if (next.done) break;
       if (next.value.type === 'event') {
@@ -362,21 +371,24 @@ export class ToolExecutor {
         throw next.value.error;
       }
       results[next.value.index] = next.value.result;
-      if (
-        this.options.parallelFailurePolicy === 'cancel-siblings' &&
-        next.value.result.isError &&
-        !batchController.signal.aborted
-      ) {
-        batchController.abort();
-      }
+      this.maybeCancelSiblings(next.value.result, batchController);
       completed += 1;
     }
-
     signal.removeEventListener('abort', onAbort);
     queue.close();
-    return results.filter((result): result is ToolBatchResult =>
-      Boolean(result)
-    );
+  }
+
+  private maybeCancelSiblings(
+    result: ToolBatchResult,
+    batchController: AbortController
+  ): void {
+    if (
+      this.options.parallelFailurePolicy === 'cancel-siblings' &&
+      result.isError &&
+      !batchController.signal.aborted
+    ) {
+      batchController.abort();
+    }
   }
 
   private async *executeSingleWithEvents(
@@ -394,54 +406,83 @@ export class ToolExecutor {
 
     const tool = tools.find((t) => t.name === toolCall.toolName);
     if (!tool) {
-      const result: ToolBatchResult = {
-        id: call.id,
-        toolName: call.toolName,
-        output: { text: `Tool not found: ${toolCall.toolName}` },
-        isError: true,
-        durationMs: Date.now() - startedAt,
-      };
-      yield {
-        type: 'tool-end',
-        sessionId,
-        batchId,
-        result,
-        timestamp: nowIso(),
-      };
-      return result;
+      return yield* this.emitToolNotFoundError(toolCall, call, sessionId, batchId, startedAt);
     }
 
-    // 先修复再校验（与 AgentSessionLoop 一致）
-    const repair = repairToolInput(tool, toolCall.input);
-    const repairedInput = repair.input;
+    const repairedInput = repairToolInput(tool, toolCall.input).input;
     const validationErrors = validateToolInput(tool, repairedInput);
     if (validationErrors.length > 0) {
-      const result: ToolBatchResult = {
-        id: call.id,
-        toolName: call.toolName,
-        output: {
-          text: `Tool input validation failed:\n${validationErrors.join('\n')}`,
-        },
-        isError: true,
-        durationMs: Date.now() - startedAt,
-      };
-      yield {
-        type: 'tool-end',
-        sessionId,
-        batchId,
-        result,
-        timestamp: nowIso(),
-      };
-      return result;
+      return yield* this.emitValidationError(toolCall, call, validationErrors, sessionId, batchId, startedAt);
     }
 
-    // 执行并收集进度事件 — honor timeoutMs (was previously unused on this path)
+    const result = yield* this.executeToolWithProgress(
+      tool, toolCall, repairedInput, call, sessionId, cwd, signal, batchId, startedAt
+    );
+
+    yield { type: 'tool-end', sessionId, batchId, result, timestamp: nowIso() };
+    return result;
+  }
+
+  private async *emitToolNotFoundError(
+    toolCall: ToolCallBlock,
+    call: ToolBatchCall,
+    sessionId: string,
+    batchId: string,
+    startedAt: number
+  ): AsyncGenerator<AgentEvent, ToolBatchResult> {
+    const result: ToolBatchResult = {
+      id: call.id,
+      toolName: call.toolName,
+      output: { text: `Tool not found: ${toolCall.toolName}` },
+      isError: true,
+      durationMs: Date.now() - startedAt,
+    };
+    yield { type: 'tool-end', sessionId, batchId, result, timestamp: nowIso() };
+    return result;
+  }
+
+  private async *emitValidationError(
+    toolCall: ToolCallBlock,
+    call: ToolBatchCall,
+    validationErrors: string[],
+    sessionId: string,
+    batchId: string,
+    startedAt: number
+  ): AsyncGenerator<AgentEvent, ToolBatchResult> {
+    const result: ToolBatchResult = {
+      id: call.id,
+      toolName: call.toolName,
+      output: {
+        text: `Tool input validation failed:\n${validationErrors.join('\n')}`,
+      },
+      isError: true,
+      durationMs: Date.now() - startedAt,
+    };
+    yield { type: 'tool-end', sessionId, batchId, result, timestamp: nowIso() };
+    return result;
+  }
+
+  private async *executeToolWithProgress(
+    tool: AgentTool,
+    toolCall: ToolCallBlock,
+    repairedInput: JsonObject,
+    call: ToolBatchCall,
+    sessionId: string,
+    cwd: string,
+    signal: AbortSignal,
+    batchId: string,
+    startedAt: number
+  ): AsyncGenerator<AgentEvent, ToolBatchResult> {
     const progressQueue = new ProgressEventQueue<AgentEvent>();
     const context: ToolExecutionContext = {
       toolCallId: toolCall.id,
       sessionId,
       cwd,
       signal,
+      traceId: createId('trace'),
+      runId: createId('run'),
+      batchId,
+      mode: 'auto',
       emit(update) {
         progressQueue.push({
           type: 'tool-update',
@@ -457,17 +498,9 @@ export class ToolExecutor {
     const singleExecutor = new SingleToolExecutor(this.options.timeoutMs, []);
     const effectiveCall: ToolCallBlock = { ...toolCall, input: repairedInput };
     const executionPromise = singleExecutor
-      .execute(
-        effectiveCall,
-        (input, ctx) => tool.execute(input, ctx),
-        context,
-        signal
-      )
-      .finally(() => {
-        progressQueue.close();
-      });
+      .execute(effectiveCall, (input, ctx) => tool.execute(input, ctx), context, signal)
+      .finally(() => { progressQueue.close(); });
 
-    // 产出进度事件
     while (true) {
       const next = await progressQueue.next();
       if (next.done) break;
@@ -475,16 +508,13 @@ export class ToolExecutor {
     }
 
     const completed = await executionPromise;
-    const result: ToolBatchResult = {
+    return {
       id: call.id,
       toolName: call.toolName,
       output: completed.output,
       isError: completed.isError,
       durationMs: Date.now() - startedAt,
-    };
-
-    yield { type: 'tool-end', sessionId, batchId, result, timestamp: nowIso() };
-    return result;
+    } satisfies ToolBatchResult;
   }
 
   private toBatchCall(call: ToolCallBlock, tools: AgentTool[]): ToolBatchCall {
@@ -504,6 +534,7 @@ export class ToolExecutor {
       const summary = tool.summarize(input);
       return summary.trim() || tool.name;
     } catch {
+      // silent: tool.summarize 抛出异常时降级显示工具名
       return `${tool.name} (invalid input)`;
     }
   }

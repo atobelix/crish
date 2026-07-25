@@ -76,7 +76,7 @@ export async function evaluateDiskOracle(
         results.push({
           check,
           ok,
-          detail: ok ? undefined : 'substring not found',
+          ...(ok ? {} : { detail: 'substring not found' }),
         });
         continue;
       }
@@ -91,7 +91,7 @@ export async function evaluateDiskOracle(
         results.push({
           check,
           ok,
-          detail: ok ? undefined : `pointer ${check.pointer} mismatch`,
+          ...(ok ? {} : { detail: `pointer ${check.pointer} mismatch` }),
         });
         continue;
       }

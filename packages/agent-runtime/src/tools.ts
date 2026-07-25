@@ -1,8 +1,8 @@
+
 import type {
   JsonObject,
   JsonValue,
   PermissionDecision,
-  PermissionRequest,
   ToolCategory,
   ToolConcurrency,
   ToolOutput
@@ -138,6 +138,12 @@ function extractToolArgumentObject(tool: AgentTool, input: JsonObject): JsonObje
   if (!hasSchemaRelevantField(tool, input)) {
     if (isPlainObject(value)) return cloneJsonObject(value);
     if (typeof value === "string") return parseToolArgumentText(value);
+    // 如果 input.value 是原始值（null / []），直接使用而非返回 undefined
+    if (value === null) return {};
+    if (Array.isArray(value)) return { items: value };
+    if (typeof value === "string") {
+      try { return JSON.parse(value); } catch { return {}; }
+    }
   }
 
   return undefined;
@@ -161,6 +167,7 @@ function parseJsonObjectOrStringifiedObject(input: string): JsonObject | undefin
     try {
       current = JSON.parse(current) as unknown;
     } catch {
+      // silent: JSON.parse 降级，非 JSON 字符串视为未找到对象
       return undefined;
     }
   }
@@ -336,7 +343,8 @@ function coerceStringForTypes(value: string, types: string[], path: string): { v
         if (jsonValueMatchesType(parsed, type)) {
           return { value: parsed, changed: true, notes: [`parsed ${path} as ${type}`] };
         }
-      } catch {
+       } catch {
+        // silent: JSON.parse 降级，非 JSON 字符串跳�?
         continue;
       }
     }
@@ -388,7 +396,7 @@ export function defineTextTool(options: TextToolOptions): AgentTool {
     label: options.label ?? options.name,
     description: options.description,
     category: options.category ?? "internal",
-    inputSchema: options.inputSchema,
+    ...(options.inputSchema !== undefined ? { inputSchema: options.inputSchema } : {}),
     concurrency: options.concurrency ?? "parallel",
     isReadOnly(input) {
       return typeof readOnly === "function" ? readOnly(input) : readOnly;

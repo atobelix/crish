@@ -1,0 +1,49 @@
+{
+  "providerId": "sambanova",
+  "name": "SambaNova",
+  "description": "SambaNova Cloud API - fast inference on open-source models",
+  "website": "https://sambanova.ai",
+  "docsUrl": "https://docs.sambanova.ai",
+  "engine": "openai-compatible",
+  "baseUrl": "https://api.sambanova.ai/v1",
+  "auth": {
+    "type": "api-key",
+    "placement": "header",
+    "keyHeader": "Authorization",
+    "defaultEnvVar": "SAMBANOVA_API_KEY"
+  },
+  "models": [
+    {
+      "id": "Meta-Llama-3.3-70B-Instruct",
+      "aliases": ["llama-3.3-70b"],
+      "capabilities": ["code", "tool-use", "reasoning"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "costPer1kInput": 0.0005,
+      "costPer1kOutput": 0.0005
+    },
+    {
+      "id": "DeepSeek-V3-0324",
+      "aliases": ["deepseek-v3"],
+      "capabilities": ["code", "tool-use", "reasoning", "long-context"],
+      "contextWindow": 128000,
+      "maxOutputTokens": 8192,
+      "costPer1kInput": 0.001,
+      "costPer1kOutput": 0.001
+    }
+  ],
+  "endpointType": "chat-completions",
+  "capabilities": {
+    "toolUse": true,
+    "vision": false,
+    "reasoning": true,
+    "streaming": true,
+    "systemPrompt": true,
+    "jsonMode": true,
+    "parallelToolCalls": true
+  },
+  "engineOptions": {
+    "authHeader": "authorization",
+    "maxTokensField": "max_tokens"
+  }
+}

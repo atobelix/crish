@@ -1,0 +1,346 @@
+.accountSettingsTab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: var(--settings-content-max, 720px);
+  margin-left: auto;
+  margin-right: auto;
+  padding-bottom: 40px;
+  box-sizing: border-box;
+}
+
+.tabHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.tabHeader h2 {
+  margin: 0;
+  font-size: var(--font-size-2xl, 24px);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-tighter);
+  color: var(--text-primary);
+  line-height: var(--line-height-dense);
+}
+
+.accountSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.sectionHeader h3 {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-tertiary);
+  letter-spacing: var(--letter-spacing-snug);
+}
+
+.sectionDesc {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  line-height: var(--line-height-body);
+}
+
+.accountList {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl, 16px);
+  overflow: hidden;
+}
+
+.accountCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+}
+
+.accountCard:last-child {
+  border-bottom: none;
+}
+
+.accountInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.accountLabel {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountStatus {
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-dense);
+}
+
+.statusActive {
+  color: var(--accent-green, #16a34a);
+}
+
+.statusExpired {
+  color: var(--accent-orange, #ea580c);
+}
+
+.statusError {
+  color: var(--accent-red, #dc2626);
+}
+
+.accountActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.accountEmpty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+}
+
+.oauthProviders {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl, 16px);
+  overflow: hidden;
+}
+
+.oauthProviderCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+}
+
+.oauthProviderCard:last-child {
+  border-bottom: none;
+}
+
+.providerName {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+.flowIndicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 12px 16px;
+  background: var(--bg-subtle, rgba(128,128,128,0.08));
+  border-radius: var(--radius-lg, 8px);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.flowError {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 12px 16px;
+  background: var(--accent-red-bg, rgba(220,38,38,0.08));
+  border-radius: var(--radius-lg, 8px);
+  font-size: var(--font-size-sm);
+  color: var(--accent-red, #dc2626);
+}
+
+.flowError span {
+  flex: 1;
+}
+
+.manualInput {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 16px;
+  background: var(--bg-subtle, rgba(128,128,128,0.05));
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl, 12px);
+}
+
+.manualHint {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: var(--line-height-body);
+}
+
+.urlRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.authUrl {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--bg-base, #000);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+  word-break: break-all;
+  max-height: 60px;
+  overflow-y: auto;
+}
+
+.tokenInputRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tokenInput {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--bg-base, #000);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.tokenInput:focus {
+  border-color: var(--accent-blue, #3b82f6);
+}
+
+.oauthBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 12px;
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--font-size-sm);
+}
+
+.oauthBannerConnecting {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.oauthBannerError {
+  background: color-mix(in srgb, var(--accent-red, #dc2626) 10%, transparent);
+  color: var(--accent-red, #dc2626);
+}
+
+.oauthBannerSpinner {
+  animation: spin 1s linear infinite;
+}
+
+.spinnerInline {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.manualFlowPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 16px;
+  border: 1px solid var(--accent-blue, #3b82f6);
+  border-radius: var(--radius-xl, 16px);
+  background: var(--bg-subtle, rgba(59, 130, 246, 0.05));
+}
+
+.manualFlowHint {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: var(--line-height-body);
+}
+
+.urlRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 12px;
+  background: var(--bg-code, #1e1e1e);
+  border-radius: var(--radius-lg, 8px);
+  overflow: hidden;
+}
+
+.authUrl {
+  flex: 1;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono, monospace);
+  color: var(--accent-blue, #60a5fa);
+  word-break: break-all;
+  white-space: pre-wrap;
+  line-height: var(--line-height-body);
+}
+
+.codeInputRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.codeInput {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-mono, monospace);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg, 8px);
+  background: var(--bg-input, transparent);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.codeInput:focus {
+  border-color: var(--accent-blue, #3b82f6);
+}
+
+.errorBanner {
+  padding: 10px 14px;
+  font-size: var(--font-size-sm);
+  color: var(--accent-red, #ef4444);
+  background: var(--bg-error, rgba(239, 68, 68, 0.08));
+  border: 1px solid var(--border-error, rgba(239, 68, 68, 0.2));
+  border-radius: var(--radius-lg, 8px);
+}

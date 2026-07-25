@@ -37,11 +37,11 @@ export function createLocalWorkspaceTools(options: TerminalToolOptions): AgentTo
     options.backgroundManager ??
     new BackgroundCommandManager({
       workspaceRoot: options.workspaceRoot,
-      defaultTimeoutMs: options.backgroundDefaultTimeoutMs,
-      maxOutputBytes: options.maxOutputBytes,
-      heartbeatIntervalMs: options.backgroundHeartbeatIntervalMs,
-      shell: options.shell,
-      guard: options.guard,
+      ...(options.backgroundDefaultTimeoutMs !== undefined ? { defaultTimeoutMs: options.backgroundDefaultTimeoutMs } : {}),
+      ...(options.maxOutputBytes !== undefined ? { maxOutputBytes: options.maxOutputBytes } : {}),
+      ...(options.backgroundHeartbeatIntervalMs !== undefined ? { heartbeatIntervalMs: options.backgroundHeartbeatIntervalMs } : {}),
+      ...(options.shell !== undefined ? { shell: options.shell } : {}),
+      ...(options.guard !== undefined ? { guard: options.guard } : {}),
     });
 
   return [

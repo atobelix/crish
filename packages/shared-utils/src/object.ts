@@ -78,6 +78,30 @@ export function stripNonSerializable<T>(value: T): T {
 }
 
 /**
+ * 将 unknown 值安全断言为 JsonObject。
+ * 运行时检查确保输入是非 null 非数组的对象，避免错误的类型推断传播。
+ * 用于统一管理 JSON 序列化边界的 `as unknown as JsonObject` 类型断言。
+ */
+export function toJsonObject(value: unknown): JsonObject {
+  if (!isRecord(value)) {
+    throw new TypeError("Expected a non-null, non-array object for JsonObject conversion");
+  }
+  return value as JsonObject;
+}
+
+/**
+ * 将 unknown 值安全断言为 JsonValue。
+ * 运行时递归校验值及所有嵌套值为合法的 JSON 类型。
+ * 用于统一管理 JSON 序列化边界的 `as unknown as JsonValue` 类型断言。
+ */
+export function toJsonValue(value: unknown): JsonValue {
+  if (!isJsonValue(value)) {
+    throw new TypeError("Expected a valid JSON value");
+  }
+  return value;
+}
+
+/**
  * 判断值是否为合法的 JsonValue（递归校验，拒绝 NaN/Infinity/undefined/function）
  */
 export function isJsonValue(value: unknown): value is JsonValue {

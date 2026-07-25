@@ -507,7 +507,6 @@ describe("runtime probe", () => {
   });
 
   it("formats stage suite results and continues when stopOnRequirementFailure is false", async () => {
-    const provider = createScriptedTextProvider(["no tools here", "second stage"]);
     const suite = await runRuntimeStageSuite({
       workspaceRoot,
       stopOnRequirementFailure: false,

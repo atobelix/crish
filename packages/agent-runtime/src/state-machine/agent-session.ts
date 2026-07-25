@@ -253,8 +253,8 @@ export function createAgentSessionMachine(
         toolCallCount: 0,
         steeringCount: 0,
       },
-      snapshot: options?.snapshot,
-    }
+      ...(options?.snapshot !== undefined ? { snapshot: options.snapshot } : {}),
+    } as any
   );
 }
 

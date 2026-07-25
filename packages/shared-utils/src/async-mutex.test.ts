@@ -1,5 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { AsyncMutex, AsyncSemaphore } from "./async-mutex";
+
+beforeEach(() => {
+  vi.useRealTimers();
+});
 
 describe("AsyncMutex", () => {
   it("serializes critical sections", async () => {
@@ -85,5 +89,39 @@ describe("AsyncSemaphore", () => {
     ).rejects.toThrow("fail");
     const result = await sem.runExclusive(async () => "ok");
     expect(result).toBe("ok");
+  });
+});
+
+describe("AsyncMutex recursive release stack overflow", () => {
+  it("should not stack overflow when 500 aborted tasks are queued", async () => {
+    const mutex = new AsyncMutex();
+    const controller = new AbortController();
+    const firstRelease = await mutex.acquire();
+    const promises: Promise<unknown>[] = [];
+    for (let i = 0; i < 500; i++) {
+      promises.push(mutex.acquire(controller.signal).catch(() => {}));
+    }
+    controller.abort();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(() => firstRelease()).not.toThrow();
+    await Promise.allSettled(promises);
+    expect(mutex.isLocked).toBe(false);
+  });
+});
+
+describe("AsyncSemaphore recursive release stack overflow", () => {
+  it("should not stack overflow when 500 aborted tasks are queued", async () => {
+    const semaphore = new AsyncSemaphore(1);
+    const controller = new AbortController();
+    const firstRelease = await semaphore.acquire();
+    const promises: Promise<unknown>[] = [];
+    for (let i = 0; i < 500; i++) {
+      promises.push(semaphore.acquire(controller.signal).catch(() => {}));
+    }
+    controller.abort();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(() => firstRelease()).not.toThrow();
+    await Promise.allSettled(promises);
+    expect(semaphore.activeCount).toBe(0);
   });
 });

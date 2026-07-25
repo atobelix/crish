@@ -15,13 +15,6 @@ import {
 } from "./index";
 import type {
   CoreAgentEvent,
-  CoreEventBase,
-  AgentMeta,
-  TurnMeta,
-  MessageMeta,
-  ToolMeta,
-  CompressionMeta,
-  DiagnosticMeta,
 } from "./index";
 
 // ─── Helper factories ──────────────────────────────────────

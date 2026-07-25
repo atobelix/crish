@@ -7,8 +7,6 @@ import {
   createRunLifecycleMachine,
   isTerminalRunLifecycleState,
   mapEndReasonToOutcomeReason,
-  type RunLifecycleState,
-  type RunEndReason,
 } from "./run-lifecycle";
 
 describe("RunLifecycleStateMachine", () => {

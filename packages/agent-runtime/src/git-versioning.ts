@@ -3,7 +3,8 @@ import { access, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 import { createId, nowIso } from "./session";
-import { AsyncMutex, isRecord } from "@crish/shared-utils";
+import { AsyncMutex, isRecord, Logger, createConsoleTransport } from "@crish/shared-utils";
+import { CrishError } from "@crish/shared-types";
 
 export type GitCheckpointStrategy = "commit" | "snapshot";
 
@@ -210,6 +211,7 @@ const DEFAULT_AUTHOR: GitCheckpointAuthor = {
 };
 const DEFAULT_MAX_OUTPUT_BYTES = 2_000_000;
 const DEFAULT_GIT_TIMEOUT_MS = 30_000;
+const logger = new Logger({ module: "git-versioning", transports: [createConsoleTransport()] });
 
 export class GitCommandError extends Error {
   constructor(
@@ -396,7 +398,7 @@ export class GitCliVersioningService implements GitVersioningService {
 
   private async createCommitCheckpoint(repo: GitRepository, request: CreateGitCheckpointRequest): Promise<GitCheckpoint> {
     if (!(await this.checkGitignorePresent(repo.root))) {
-      console.warn(
+      logger.warn(
         `[git-versioning] git commit checkpoint created without .gitignore in ${repo.root}; ` +
           "worktree may contain generated files. Consider creating a .gitignore file."
       );
@@ -416,7 +418,7 @@ export class GitCliVersioningService implements GitVersioningService {
       baseCommit: repo.head,
       includeUntracked: false,
       statusBefore,
-      toolCall: request.toolCall
+      ...(request.toolCall !== undefined ? { toolCall: request.toolCall } : {})
     });
     const commit = await this.commitTree(repo, tree, repo.head ? [repo.head] : [], this.checkpointMessage(metadata));
     await this.git(["update-ref", refName, commit], { cwd: repo.root });
@@ -425,7 +427,7 @@ export class GitCliVersioningService implements GitVersioningService {
 
   private async createSnapshotCheckpoint(repo: GitRepository, request: CreateGitCheckpointRequest): Promise<GitCheckpoint> {
     if (!repo.head) {
-      throw new Error("Snapshot checkpoints require a repository with HEAD");
+      throw new CrishError("Snapshot checkpoints require a repository with HEAD", "TOOL_ERROR", "permanent", false);
     }
 
     const statusBefore = await this.readStatus(repo.root);
@@ -469,7 +471,7 @@ export class GitCliVersioningService implements GitVersioningService {
       baseCommit,
       includeUntracked,
       statusBefore,
-      toolCall: request.toolCall
+      ...(request.toolCall !== undefined ? { toolCall: request.toolCall } : {})
     });
     const commit = await this.commitTree(repo, wipTree, parents, this.checkpointMessage(metadata));
     await this.git(["update-ref", refName, commit], { cwd: repo.root });
@@ -576,7 +578,7 @@ export class GitCliVersioningService implements GitVersioningService {
   private async requireRepository(cwd: string): Promise<GitRepository> {
     const detected = await this.detectRepositoryLocked({ cwd });
     if (!detected.found) {
-      throw new Error(`Git repository not found: ${detected.reason}`);
+      throw new CrishError(`Git repository not found: ${detected.reason}`, "TOOL_ERROR", "transient", true);
     }
     return {
       root: detected.root,
@@ -615,7 +617,7 @@ export class GitCliVersioningService implements GitVersioningService {
 
   private async readStatus(cwd: string): Promise<GitWorkspaceStatus> {
     if (!(await this.checkGitignorePresent(cwd))) {
-      console.warn(
+      logger.warn(
         `[git-versioning] git status run without .gitignore in ${cwd}; ` +
           "untracked output may be large. Consider creating a .gitignore file."
       );
@@ -803,7 +805,7 @@ function parseNameStatus(output: string): GitCheckpointDiffFile[] {
 function parseCheckpointMetadata(message: string): GitCheckpointMetadata {
   const markerIndex = message.indexOf(CHECKPOINT_MARKER);
   if (markerIndex < 0) {
-    throw new Error("Commit is not an agent-runtime Git checkpoint");
+    throw new CrishError("Commit is not an agent-runtime Git checkpoint", "TOOL_ERROR", "permanent", false);
   }
   const metadataLine = message
     .slice(markerIndex + CHECKPOINT_MARKER.length)
@@ -811,11 +813,11 @@ function parseCheckpointMetadata(message: string): GitCheckpointMetadata {
     .map((line) => line.trim())
     .find((line) => line.startsWith("{"));
   if (!metadataLine) {
-    throw new Error("Git checkpoint metadata is missing");
+    throw new CrishError("Git checkpoint metadata is missing", "TOOL_ERROR", "permanent", false);
   }
   const parsed = JSON.parse(metadataLine) as unknown;
   if (!isCheckpointMetadata(parsed)) {
-    throw new Error("Git checkpoint metadata is invalid");
+    throw new CrishError("Git checkpoint metadata is invalid", "TOOL_ERROR", "permanent", false);
   }
   return parsed;
 }
@@ -855,14 +857,14 @@ function commitMessage(rawCommit: string): string {
 
 function trimRequired(result: GitCommandResult, label: string): string {
   const value = result.stdout.trim();
-  if (!value) throw new Error(`Git did not return ${label}`);
+  if (!value) throw new CrishError(`Git did not return ${label}`, "TOOL_ERROR", "transient", true);
   return value;
 }
 
 function normalizeRefNamespace(input: string | undefined): string {
   const value = (input ?? DEFAULT_REF_NAMESPACE).replace(/\/+$/g, "");
   if (!value.startsWith("refs/") || value.includes("..") || /[\s~^:?*[\\]/.test(value)) {
-    throw new Error(`Invalid Git ref namespace: ${input ?? DEFAULT_REF_NAMESPACE}`);
+    throw new CrishError(`Invalid Git ref namespace: ${input ?? DEFAULT_REF_NAMESPACE}`, "TOOL_ERROR", "permanent", false);
   }
   return value;
 }
@@ -885,7 +887,7 @@ function assertInside(root: string, candidate: string, label: string): void {
   const normalizedRoot = normalizeForCompare(root);
   const normalizedCandidate = normalizeForCompare(candidate);
   if (normalizedCandidate !== normalizedRoot && !normalizedCandidate.startsWith(`${normalizedRoot}${sep}`)) {
-    throw new Error(`${label} escapes repository root`);
+    throw new CrishError(`${label} escapes repository root`, "TOOL_ERROR", "permanent", false);
   }
 }
 
@@ -904,10 +906,13 @@ function assertExpectedChangedPaths(root: string, expectedPaths: string[], actua
   if (expected.length === actual.length && expected.every((path, index) => path === actual[index])) {
     return;
   }
-  throw new Error(
+  throw new CrishError(
     `Git checkpoint restore changed paths do not match expected paths. expected: ${expected.join(", ") || "(none)"}; actual: ${
       actual.join(", ") || "(none)"
-    }`
+    }`,
+    "TOOL_ERROR",
+    "permanent",
+    false
   );
 }
 

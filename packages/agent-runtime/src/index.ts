@@ -19,7 +19,7 @@ export * from './local-tools';
 export * from './memory';
 export * from './mcp-lifecycle';
 export * from './model-routing';
-// @deprecated 权限和命令分类已迁移至 @crish/decision-engine
+// @deprecated 权限和命令分类已迁移至 @crish/decision-engine @see @crish/decision-engine @removeWhen 所有外部消费者从 @crish/decision-engine 导入
 export {
   classifyTerminalCommand,
   getHardlineCommandBlock,
@@ -95,6 +95,7 @@ export * from './workspace-mutation-coordinator';
 export * from './state-machine';
 export * from './event-architecture';
 export * from './runtime-components';
+export * from './provider';
 export * from './provider-transport';
 export * from './provider-request-machine';
 export * from './path-handling';

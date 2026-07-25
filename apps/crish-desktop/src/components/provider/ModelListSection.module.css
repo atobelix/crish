@@ -1,0 +1,160 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sectionHeader h3 {
+  margin: 0;
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 600);
+  color: var(--text-tertiary);
+  letter-spacing: var(--letter-spacing-snug);
+}
+
+.sectionActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btnIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md, 6px);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.btnIcon:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btnIcon:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.modelList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: var(--radius-lg, 8px);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.modelListItem {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  transition: background var(--transition-fast);
+}
+
+.modelListItem:hover {
+  background: var(--bg-hover);
+}
+
+.modelListItem + .modelListItem {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.modelItemRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.modelItemHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.modelName {
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelCapabilities {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.capChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 11px;
+}
+
+.modelItemMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.modelContext {
+  font-size: var(--font-size-xs, 11px);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.modelPrice {
+  font-size: var(--font-size-xs, 11px);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.btnRemove {
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.modelListItem:hover .btnRemove {
+  opacity: 1;
+}
+
+.modelListEmpty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm, 13px);
+}

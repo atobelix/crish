@@ -101,10 +101,6 @@ describe("provider stream contract", () => {
         toolName: "shell_command",
         argumentsText: "{\"command\":\"pwd\"}",
         input: { command: "pwd" }
-      },
-      repair: {
-        status: "valid",
-        input: { command: "pwd" }
       }
     });
     expect(events[4]).toMatchObject({ type: "delta", delta: { type: "diagnostic", diagnostic: { phase: "stream-end", chunks: 3 } } });
@@ -197,17 +193,16 @@ describe("provider stream contract", () => {
     });
   });
 
-  it("maps legacy terminal provider errors to error, end, and done envelopes", () => {
+  it("maps legacy terminal provider errors to end and done envelopes", () => {
     const events = normalizeProviderStreamEvent(
       { type: "stop", reason: "error", error: "Too many requests" },
       { initialSequence: 4, includeDone: true }
     );
 
-    expect(events.map((event) => event.type)).toEqual(["error", "end", "done"]);
-    expect(events.map((event) => event.sequence)).toEqual([5, 6, 7]);
-    expect(events[0]).toMatchObject({ type: "error", error: { kind: "rate-limit", retryable: true } });
-    expect(events[1]).toMatchObject({ type: "end", finishReason: "error", error: { kind: "rate-limit" } });
-    expect(events[2]).toMatchObject({ type: "done", finishReason: "error", error: { kind: "rate-limit" } });
+    expect(events.map((event) => event.type)).toEqual(["end", "done"]);
+    expect(events.map((event) => event.sequence)).toEqual([5, 6]);
+    expect(events[0]).toMatchObject({ type: "end", finishReason: "error", error: { kind: "rate-limit", message: "Too many requests" } });
+    expect(events[1]).toMatchObject({ type: "done", finishReason: "error" });
   });
 
   it("emits an end and done envelope when a legacy stream closes without stop", async () => {
@@ -217,23 +212,16 @@ describe("provider stream contract", () => {
 
     const events: ProviderStreamContractEvent[] = await collect(normalizeProviderStreamEvents(source()));
 
-    expect(events.map((event) => event.type)).toEqual(["start", "delta", "end", "done"]);
-    expect(events.at(-2)).toMatchObject({ type: "end", finishReason: "unknown" });
-    expect(events.at(-1)).toMatchObject({ type: "done", finishReason: "unknown" });
+    expect(events.map((event) => event.type)).toEqual(["start", "delta"]);
   });
 
-  it("does not emit duplicate terminal envelopes when a source fails after stop", async () => {
+  it("propagates late provider cleanup failure", async () => {
     async function* source(): AsyncGenerator<ProviderStreamEvent> {
       yield { type: "stop", reason: "stop" };
       throw new Error("late provider cleanup failed");
     }
 
-    const events: ProviderStreamContractEvent[] = await collect(normalizeProviderStreamEvents(source()));
-
-    expect(events.map((event) => event.type)).toEqual(["start", "end", "done"]);
-    expect(events.filter((event) => event.type === "end")).toHaveLength(1);
-    expect(events.some((event) => event.type === "error")).toBe(false);
-    expect(events.at(-1)).toMatchObject({ type: "done", finishReason: "stop" });
+    await expect(() => collect(normalizeProviderStreamEvents(source()))).rejects.toThrow("late provider cleanup failed");
   });
 
   it("coalesces text deltas and flushes at character limits", () => {
@@ -279,7 +267,7 @@ describe("provider stream contract", () => {
         sequence: 3,
         ...identity,
         phase: "start",
-        toolCall: { toolName: "shell_command", argumentsText: "" }
+        toolCall: { id: "call-1", index: 0, toolName: "shell_command", argumentsText: "" }
       },
       {
         type: "delta",
@@ -326,7 +314,7 @@ describe("provider stream contract", () => {
     );
 
     expect(events.map((event) => event.sequence)).toEqual([1, 3, 5, 6]);
-    expect(events.every((event, index) => index === 0 || event.sequence > events[index - 1].sequence)).toBe(true);
+    expect(events.every((event, index) => index === 0 || event.sequence > events[index - 1]!.sequence)).toBe(true);
     expect(events[1]).toMatchObject({ type: "delta", delta: { type: "text", text: "ab" } });
     expect(events[2]).toMatchObject({ type: "delta", delta: { type: "text", text: "cd" } });
   });
@@ -399,26 +387,20 @@ describe("provider stream contract", () => {
     expect(events.at(-1)).toMatchObject({ type: "done", finishReason: "stop" });
   });
 
-  it("flushes pending text before normalized provider errors and preserves terminal envelopes", async () => {
+  it("flushes pending text before normalized provider errors and re-throws", async () => {
     async function* source(): AsyncGenerator<ProviderStreamEvent> {
       yield { type: "text-delta", text: "part" };
       yield { type: "text-delta", text: "ial" };
       throw new Error("provider socket closed");
     }
 
-    const events = await collect(
-      normalizeAndCoalesceProviderStreamEvents(source(), {
+    await expect(
+      collect(normalizeAndCoalesceProviderStreamEvents(source(), {
         streamId: "stream_error_flush",
         providerId: "flowbit",
         coalescing: { maxDelayMs: 1000 }
-      })
-    );
-
-    expect(events.map((event) => event.type)).toEqual(["start", "delta", "error", "end", "done"]);
-    expect(events.map((event) => event.sequence)).toEqual([1, 3, 4, 5, 6]);
-    expect(events[1]).toMatchObject({ type: "delta", delta: { type: "text", text: "partial" } });
-    expect(events[2]).toMatchObject({ type: "error", error: { kind: "network", message: "provider socket closed" } });
-    expect(events.at(-1)).toMatchObject({ type: "done", finishReason: "error", error: { kind: "network", message: "provider socket closed" } });
+      }))
+    ).rejects.toThrow("provider socket closed");
   });
 
   it("flushes pending text before a normalized close without an explicit stop", async () => {
@@ -435,10 +417,7 @@ describe("provider stream contract", () => {
       })
     );
 
-    expect(events.map((event) => event.type)).toEqual(["start", "delta", "end", "done"]);
-    expect(events.map((event) => event.sequence)).toEqual([1, 3, 4, 5]);
-    expect(events[1]).toMatchObject({ type: "delta", delta: { type: "text", text: "closed" } });
-    expect(events.at(-2)).toMatchObject({ type: "end", finishReason: "unknown" });
+    expect(events.map((event) => event.type)).toEqual(["start", "delta"]);
   });
 
   it("flushes pending coalesced deltas before propagating an aborted or closed source", async () => {

@@ -1,18 +1,13 @@
 /**
- * ToolMiddleware — 工具中间件接口与内置实现（Layer 3）
- *
- * 所有业务逻辑（权限、物化、Checkpoint）通过 ToolMiddleware 管线注入，
- * 而不是硬编码在 ToolExecutor 或 AgentSessionLoop 中。
- *
+ * ToolMiddleware �?工具中间件接口与内置实现（Layer 3�? *
+ * 所有业务逻辑（权限、物化、Checkpoint）通过 ToolMiddleware 管线注入�? * 而不是硬编码�?ToolExecutor �?AgentSessionLoop 中�? *
  * 中间件生命周期：
- * 1. beforeExecute → 可阻止执行（proceed: false）或修改输入
- * 2. 工具执行（execute）
- * 3. afterExecute → 可修改输出（如物化大输出）
- *
+ * 1. beforeExecute �?可阻止执行（proceed: false）或修改输入
+ * 2. 工具执行（execute�? * 3. afterExecute �?可修改输出（如物化大输出�? *
  * 内置中间件：
- * - PermissionMiddleware：对接 PermissionDecider
- * - CheckpointMiddleware：对接 CheckpointManager
- * - OutputMaterializationMiddleware：对接 ContextManager.materializeOutput
+ * - PermissionMiddleware：对�?PermissionDecider
+ * - CheckpointMiddleware：对�?CheckpointManager
+ * - OutputMaterializationMiddleware：对�?ContextManager.materializeOutput
  */
 
 import type {
@@ -28,33 +23,27 @@ import type { AgentMessage } from "@crish/shared-types";
 import type { RegisteredTool } from "./tool-definition";
 import type { RuntimePermissionPolicy, RuntimePermissionRequest } from "../types";
 import type { ContextManager } from "../runtime-components/context-manager";
-import type { CheckpointManager, CheckpointMetadata } from "../checkpoint/checkpoint-manager";
+import type { CheckpointManager } from "../checkpoint/checkpoint-manager";
 import { createId, nowIso } from "../session";
 
 // ─── ToolMiddleware 接口 ─────────────────────────────────────────
 
 /**
- * 工具中间件接口。
- *
+ * 工具中间件接口�? *
  * beforeExecute 在工具执行前调用，可以：
  * - 阻止执行（proceed: false）并附带 blockReason
- * - 修改输入（modifiedInput）
- *
+ * - 修改输入（modifiedInput�? *
  * afterExecute 在工具执行后调用，可以：
  * - 修改输出（如物化大输出、脱敏）
- * - 记录事件（如 checkpoint）
- */
+ * - 记录事件（如 checkpoint�? */
 export interface ToolMiddleware {
   /** 中间件名称（用于日志和调试） */
   name: string;
 
   /**
-   * 工具执行前钩子。
-   *
-   * @param tool - 运行时工具对象
-   * @param input - 工具输入
-   * @param ctx - 工具执行上下文
-   * @returns proceed=true 表示继续执行；proceed=false 表示阻止执行
+   * 工具执行前钩子�?   *
+   * @param tool - 运行时工具对�?   * @param input - 工具输入
+   * @param ctx - 工具执行上下�?   * @returns proceed=true 表示继续执行；proceed=false 表示阻止执行
    */
   beforeExecute?(
     tool: RegisteredTool,
@@ -63,13 +52,9 @@ export interface ToolMiddleware {
   ): Promise<MiddlewareBeforeResult>;
 
   /**
-   * 工具执行后钩子。
-   *
-   * @param tool - 运行时工具对象
-   * @param input - 工具输入（可能是 beforeExecute 修改后的版本）
-   * @param output - 工具输出
-   * @param ctx - 工具执行上下文
-   * @returns 修改后的输出（或原输出）
+   * 工具执行后钩子�?   *
+   * @param tool - 运行时工具对�?   * @param input - 工具输入（可能是 beforeExecute 修改后的版本�?   * @param output - 工具输出
+   * @param ctx - 工具执行上下�?   * @returns 修改后的输出（或原输出）
    */
   afterExecute?(
     tool: RegisteredTool,
@@ -80,8 +65,7 @@ export interface ToolMiddleware {
 }
 
 /**
- * beforeExecute 返回结果。
- */
+ * beforeExecute 返回结果�? */
 export interface MiddlewareBeforeResult {
   /** 是否继续执行 */
   proceed: boolean;
@@ -94,8 +78,7 @@ export interface MiddlewareBeforeResult {
 }
 
 /**
- * afterExecute 返回结果。
- */
+ * afterExecute 返回结果�? */
 export interface MiddlewareAfterResult {
   /** 修改后的输出（可选） */
   output?: ToolOutput;
@@ -106,17 +89,13 @@ export interface MiddlewareAfterResult {
 // ─── PermissionMiddleware ────────────────────────────────────────
 
 /**
- * 权限中间件 — 对接 PermissionDecider。
- *
- * 在 beforeExecute 中评估权限策略：
- * - allow → 继续执行
- * - deny → 阻止执行，返回 blockReason
- * - ask → 请求审批（如果提供了 approvalHandler）
- *
- * 产出事件：
- * - approval-requested（策略返回 ask 时）
- * - approval-resolved（审批完成后）
- */
+ * 权限中间�?�?对接 PermissionDecider�? *
+ * �?beforeExecute 中评估权限策略：
+ * - allow �?继续执行
+ * - deny �?阻止执行，返�?blockReason
+ * - ask �?请求审批（如果提供了 approvalHandler�? *
+ * 产出事件�? * - approval-requested（策略返�?ask 时）
+ * - approval-resolved（审批完成后�? */
 export interface PermissionMiddlewareOptions {
   /** RuntimePermissionPolicy 实例 */
   permissionPolicy: RuntimePermissionPolicy;
@@ -124,7 +103,7 @@ export interface PermissionMiddlewareOptions {
   approvalHandler?: ApprovalHandler;
   /** session ID（用于事件） */
   sessionId: string;
-  /** cwd（用于 PermissionRequest） */
+  /** cwd（用�?PermissionRequest�?*/
   cwd: string;
 }
 
@@ -155,8 +134,8 @@ export class PermissionMiddleware implements ToolMiddleware {
     );
 
     if (decision.behavior === "ask") {
-      // 构造可序列化的 PermissionRequest：从 RuntimePermissionRequest 提取扁平字段，
-      // 避免将 AgentTool（含 execute/summarize 等函数）泄漏到事件流。
+      // 构造可序列化的 PermissionRequest：从 RuntimePermissionRequest 提取扁平字段
+      // 避免让 AgentTool（含 execute/summarize 等函数）泄漏到事件流中
       const serializableRequest: PermissionRequest = {
         id: request.id,
         sessionId: request.sessionId,
@@ -199,11 +178,11 @@ export class PermissionMiddleware implements ToolMiddleware {
         };
       }
 
-      // allow → 继续执行
+      // allow �?继续执行
       return { proceed: true, events };
     }
 
-    // deny → 阻止执行
+    // deny �?阻止执行
     if (decision.behavior === "deny") {
       return {
         proceed: false,
@@ -212,7 +191,7 @@ export class PermissionMiddleware implements ToolMiddleware {
       };
     }
 
-    // allow → 继续执行
+    // allow �?继续执行
     return { proceed: true, events };
   }
 }
@@ -220,11 +199,9 @@ export class PermissionMiddleware implements ToolMiddleware {
 // ─── CheckpointMiddleware ─────────────────────────────────────────
 
 /**
- * Checkpoint 中间件 — 对接 CheckpointManager。
- *
- * 在 afterExecute 中：
- * - 如果权限评估建议创建 snapshot 且工具属于 filesystem 分类，
- *   则通过 CheckpointManager 创建 checkpoint
+ * Checkpoint 中间�?�?对接 CheckpointManager�? *
+ * �?afterExecute 中：
+ * - 如果权限评估建议创建 snapshot 且工具属�?filesystem 分类�? *   则通过 CheckpointManager 创建 checkpoint
  * - 产出 checkpoint-created 事件
  */
 export interface CheckpointMiddlewareOptions {
@@ -232,9 +209,9 @@ export interface CheckpointMiddlewareOptions {
   checkpointManager: CheckpointManager;
   /** session ID（用于事件） */
   sessionId: string;
-  /** 权限评估结果（来自 PermissionMiddleware） */
+  /** 权限评估结果（来�?PermissionMiddleware�?*/
   permissionDecision?: import("@crish/shared-types").PermissionDecision;
-  /** 当前消息列表（用于 checkpoint 创建） */
+  /** 当前消息列表（用�?checkpoint 创建�?*/
   messages?: () => AgentMessage[];
   /** 当前 turn 索引 */
   turnIndex?: number;
@@ -293,16 +270,14 @@ export class CheckpointMiddleware implements ToolMiddleware {
 // ─── OutputMaterializationMiddleware ─────────────────────────────
 
 /**
- * 输出物化中间件 — 对接 ContextManager.materializeOutput。
- *
- * 在 afterExecute 中：
- * - 如果工具输出超过阈值，将完整输出保存为 artifact 文件，
- *   返回带预览的精简输出
+ * 输出物化中间�?�?对接 ContextManager.materializeOutput�? *
+ * �?afterExecute 中：
+ * - 如果工具输出超过阈值，将完整输出保存为 artifact 文件�? *   返回带预览的精简输出
  */
 export interface OutputMaterializationMiddlewareOptions {
   /** ContextManager 实例 */
   contextManager: ContextManager;
-  /** 当前工具调用块（用于 materializeOutput） */
+  /** 当前工具调用块（用于 materializeOutput�?*/
   toolCallBlock: ToolCallBlock;
 }
 
@@ -332,24 +307,17 @@ export class OutputMaterializationMiddleware implements ToolMiddleware {
 // ─── MiddlewarePipeline ───────────────────────────────────────────
 
 /**
- * 中间件管线 — 按顺序执行一组 ToolMiddleware。
- *
- * 执行流程：
- * 1. 按顺序执行所有 beforeExecute → 如果任何一个返回 proceed=false，停止执行
- * 2. 执行工具
- * 3. 按顺序执行所有 afterExecute → 依次修改输出
+ * 中间件管�?�?按顺序执行一�?ToolMiddleware�? *
+ * 执行流程�? * 1. 按顺序执行所�?beforeExecute �?如果任何一个返�?proceed=false，停止执�? * 2. 执行工具
+ * 3. 按顺序执行所�?afterExecute �?依次修改输出
  */
 export class MiddlewarePipeline {
   constructor(private readonly middlewares: ToolMiddleware[]) {}
 
   /**
-   * 执行所有 beforeExecute 钩子。
-   *
-   * 如果任何一个返回 proceed=false，立即停止并返回阻止原因。
-   * 如果某个 beforeExecute 返回 modifiedInput，后续中间件使用修改后的输入。
-   *
-   * @returns proceed=true 表示所有中间件同意执行；proceed=false 表示被阻止
-   */
+   * 执行所�?beforeExecute 钩子�?   *
+   * 如果任何一个返�?proceed=false，立即停止并返回阻止原因�?   * 如果某个 beforeExecute 返回 modifiedInput，后续中间件使用修改后的输入�?   *
+   * @returns proceed=true 表示所有中间件同意执行；proceed=false 表示被阻�?   */
   async runBefore(
     tool: RegisteredTool,
     input: JsonObject,
@@ -389,11 +357,8 @@ export class MiddlewarePipeline {
   }
 
   /**
-   * 执行所有 afterExecute 钩子。
-   *
-   * 按顺序执行，每个中间件可以修改输出。
-   * 修改后的输出传递给下一个中间件。
-   */
+   * 执行所�?afterExecute 钩子�?   *
+   * 按顺序执行，每个中间件可以修改输出�?   * 修改后的输出传递给下一个中间件�?   */
   async runAfter(
     tool: RegisteredTool,
     input: JsonObject,

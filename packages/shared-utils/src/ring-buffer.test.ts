@@ -33,6 +33,7 @@ describe("RingBuffer", () => {
     rb.forEach((v) => {
       seen.push(v);
       if (v === 3) return false;
+      return;
     });
     expect(seen).toEqual([1, 2, 3]);
   });
@@ -41,7 +42,7 @@ describe("RingBuffer", () => {
     const rb = new RingBuffer<number>(5);
     for (let i = 1; i <= 5; i++) rb.push(i);
     const seen: number[] = [];
-    rb.forEachReverse((v) => seen.push(v));
+    rb.forEachReverse((v) => { seen.push(v); });
     expect(seen).toEqual([5, 4, 3, 2, 1]);
   });
 

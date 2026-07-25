@@ -1,4 +1,4 @@
-import { CONFIG_PRIORITY, type ConfigPriorityLevel, type ConfigSource, type JsonObject } from "@crish/shared-types";
+import type { ConfigSource } from "@crish/shared-types";
 
 export type MergeStrategy = "override" | "shallow-merge" | "deep-merge" | "append";
 

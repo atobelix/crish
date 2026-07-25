@@ -55,7 +55,7 @@ export async function* parseAnthropicMessagesStreamingResponse(
     if (eventType === 'error') {
       const error =
         anthropicPayloadError(payload) ?? 'Anthropic streaming error';
-      yield { type: 'stop', reason: 'error', error, usage };
+      yield { type: 'stop', reason: 'error', error, ...(usage !== undefined ? { usage } : {}) };
       return;
     }
 
@@ -199,7 +199,7 @@ export async function* parseAnthropicMessagesStreamingResponse(
     return;
   }
 
-  yield { ...stopReason, usage };
+  yield { ...stopReason, ...(usage !== undefined ? { usage } : {}) };
 }
 
 /** Parse a non-streaming Anthropic Messages JSON response. */
@@ -241,7 +241,7 @@ export async function* parseAnthropicMessagesJsonResponse(
           : {};
       yield {
         type: 'tool-call',
-        id: typeof block.id === 'string' ? block.id : undefined,
+        ...(typeof block.id === 'string' ? { id: block.id } : {}),
         toolName: name,
         input,
       };
@@ -256,12 +256,12 @@ export async function* parseAnthropicMessagesJsonResponse(
       type: 'stop',
       reason: 'error',
       error: 'Anthropic response did not include content',
-      usage,
+      ...(usage !== undefined ? { usage } : {}),
     };
     return;
   }
 
-  yield { type: 'stop', reason, usage };
+  yield { type: 'stop', reason, ...(usage !== undefined ? { usage } : {}) };
 }
 
 export function anthropicStopReasonToStop(
@@ -306,7 +306,7 @@ export function parseAnthropicUsage(raw: unknown): ProviderUsage | undefined {
     totalTokens: total,
     cacheReadTokens: cacheRead,
     cacheWriteTokens: cacheWrite,
-  });
+  }) as unknown as ProviderUsage;
 }
 
 export function anthropicPayloadError(payload: JsonObject): string | undefined {
@@ -371,12 +371,13 @@ function mergeAnthropicUsage(
       ? (promptTokens ?? 0) + (completionTokens ?? 0)
       : (next.totalTokens ?? base?.totalTokens);
 
-  return compactDefined({
+  const merged = compactDefined({
     promptTokens,
     completionTokens,
     totalTokens,
     cacheReadTokens,
     cacheWriteTokens,
     reasoningTokens,
-  }) as ProviderUsage;
+  });
+  return merged as unknown as ProviderUsage;
 }

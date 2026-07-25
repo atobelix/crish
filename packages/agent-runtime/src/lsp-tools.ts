@@ -1,7 +1,7 @@
 import { basename, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { defineTool } from "./tools";
-import type { JsonObject, JsonValue, ToolExecutionContext, ToolOutput } from "@crish/shared-types";
+import { CrishError, type JsonObject, type JsonValue, type ToolExecutionContext, type ToolOutput } from "@crish/shared-types";
 import type { AgentTool } from "./types";
 
 export type LspDiagnosticSeverity = "error" | "warning" | "information" | "hint";
@@ -196,7 +196,7 @@ export function createLspDefinitionTool(options: LspToolOptions): AgentTool {
         emptyText: `No definitions for ${request.path}:${request.position.line + 1}:${request.position.character + 1}.`,
         request,
         locations: definitions,
-        metadata: result.metadata
+        ...(result.metadata !== undefined ? { metadata: result.metadata } : {}),
       });
     }
   });
@@ -241,7 +241,7 @@ export function createLspReferencesTool(options: LspToolOptions): AgentTool {
         emptyText: `No references for ${request.path}:${request.position.line + 1}:${request.position.character + 1}.`,
         request,
         locations: references,
-        metadata: result.metadata
+        ...(result.metadata !== undefined ? { metadata: result.metadata } : {}),
       });
       output.json = {
         ...(output.json as JsonObject),
@@ -387,7 +387,7 @@ function positionRequest(workspaceRoot: string, input: JsonObject): LspPositionR
 function requirePosition(input: JsonObject): LspPosition {
   const position = input.position;
   if (!isPlainObject(position)) {
-    throw new Error("position must be an object with line and character.");
+    throw new CrishError("position must be an object with line and character.", "TOOL_ERROR", "permanent", false);
   }
   return normalizePosition(
     {
@@ -439,13 +439,13 @@ function normalizeLocation(workspaceRoot: string, location: LspLocation, label: 
 
 function normalizeWorkspaceEdit(workspaceRoot: string, workspaceEdit: LspWorkspaceEdit): LspWorkspaceEdit {
   if (!isPlainObject(workspaceEdit) || !Array.isArray(workspaceEdit.changes)) {
-    throw new Error("workspaceEdit.changes must be an array.");
+    throw new CrishError("workspaceEdit.changes must be an array.", "TOOL_ERROR", "permanent", false);
   }
   return {
     changes: workspaceEdit.changes.map((change, changeIndex): LspFileTextEdits => {
       const location = normalizePathFields(workspaceRoot, change.path, change.uri, `workspaceEdit.changes[${changeIndex}]`);
       if (!Array.isArray(change.edits)) {
-        throw new Error(`workspaceEdit.changes[${changeIndex}].edits must be an array.`);
+        throw new CrishError(`workspaceEdit.changes[${changeIndex}].edits must be an array.`, "TOOL_ERROR", "permanent", false);
       }
       return {
         path: location.path,
@@ -464,7 +464,7 @@ function normalizePathFields(workspaceRoot: string, path: string, uri: string | 
   const absolutePath = uri ? absolutePathFromUriOrPath(workspaceRoot, uri, label) : resolveWorkspacePath(workspaceRoot, inputPath);
   const pathFromField = resolveWorkspacePath(workspaceRoot, inputPath);
   if (normalizeForCompare(absolutePath) !== normalizeForCompare(pathFromField)) {
-    throw new Error(`${label}.path and ${label}.uri must refer to the same workspace path.`);
+    throw new CrishError(`${label}.path and ${label}.uri must refer to the same workspace path.`, "TOOL_ERROR", "permanent", false);
   }
   return {
     path: displayPath(workspaceRoot, absolutePath),
@@ -475,25 +475,25 @@ function normalizePathFields(workspaceRoot: string, path: string, uri: string | 
 function absolutePathFromUriOrPath(workspaceRoot: string, uri: string, label: string): string {
   const value = requireStringValue(uri, `${label}.uri`);
   if (!value.startsWith("file://")) {
-    throw new Error(`${label}.uri must be a file URI.`);
+    throw new CrishError(`${label}.uri must be a file URI.`, "TOOL_ERROR", "permanent", false);
   }
   return resolveWorkspacePath(workspaceRoot, fileURLToPath(value));
 }
 
 function normalizeRange(range: LspRange, label: string): LspRange {
-  if (!isPlainObject(range)) throw new Error(`${label} must be an object.`);
+  if (!isPlainObject(range)) throw new CrishError(`${label} must be an object.`, "TOOL_ERROR", "permanent", false);
   const normalized = {
     start: normalizePosition(range.start, `${label}.start`),
     end: normalizePosition(range.end, `${label}.end`)
   };
   if (comparePosition(normalized.end, normalized.start) < 0) {
-    throw new Error(`${label}.end must not be before ${label}.start.`);
+    throw new CrishError(`${label}.end must not be before ${label}.start.`, "TOOL_ERROR", "permanent", false);
   }
   return normalized;
 }
 
 function normalizePosition(position: unknown, label: string): LspPosition {
-  if (!isPlainObject(position)) throw new Error(`${label} must be an object.`);
+  if (!isPlainObject(position)) throw new CrishError(`${label} must be an object.`, "TOOL_ERROR", "permanent", false);
   return {
     line: requireNonNegativeInteger(position.line, `${label}.line`),
     character: requireNonNegativeInteger(position.character, `${label}.character`)
@@ -506,17 +506,17 @@ function comparePosition(left: LspPosition, right: LspPosition): number {
 
 function normalizeSeverity(severity: LspDiagnosticSeverity, label: string): LspDiagnosticSeverity {
   if (severity === "error" || severity === "warning" || severity === "information" || severity === "hint") return severity;
-  throw new Error(`${label} must be error, warning, information, or hint.`);
+  throw new CrishError(`${label} must be error, warning, information, or hint.`, "TOOL_ERROR", "permanent", false);
 }
 
 function normalizeTag(tag: LspDiagnosticTag, label: string): LspDiagnosticTag {
   if (tag === "unnecessary" || tag === "deprecated") return tag;
-  throw new Error(`${label} must be unnecessary or deprecated.`);
+  throw new CrishError(`${label} must be unnecessary or deprecated.`, "TOOL_ERROR", "permanent", false);
 }
 
 function normalizeCode(code: string | number, label: string): string | number {
   if (typeof code === "string" || (typeof code === "number" && Number.isFinite(code))) return code;
-  throw new Error(`${label} must be a string or finite number.`);
+  throw new CrishError(`${label} must be a string or finite number.`, "TOOL_ERROR", "permanent", false);
 }
 
 function renderLocationsOutput(input: {
@@ -583,7 +583,7 @@ function resolveWorkspacePath(workspaceRoot: string, inputPath: string): string 
   const normalizedRoot = normalizeForCompare(root);
   const normalizedCandidate = normalizeForCompare(candidate);
   if (normalizedCandidate !== normalizedRoot && !normalizedCandidate.startsWith(`${normalizedRoot}${sep}`)) {
-    throw new Error(`Path escapes workspace: ${inputPath}`);
+    throw new CrishError(`Path escapes workspace: ${inputPath}`, "TOOL_ERROR", "permanent", false);
   }
   return candidate;
 }
@@ -617,28 +617,28 @@ function stringField(input: JsonObject, key: string): string | undefined {
 function requireNonEmptyString(input: JsonObject, key: string): string {
   const value = input[key];
   if (typeof value !== "string" || value.length === 0) {
-    throw new Error(`${key} must be a non-empty string.`);
+    throw new CrishError(`${key} must be a non-empty string.`, "TOOL_ERROR", "permanent", false);
   }
   return value;
 }
 
 function requireStringValue(value: unknown, label: string): string {
   if (typeof value !== "string" || value.length === 0) {
-    throw new Error(`${label} must be a non-empty string.`);
+    throw new CrishError(`${label} must be a non-empty string.`, "TOOL_ERROR", "permanent", false);
   }
   return value;
 }
 
 function requireNonNegativeInteger(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
-    throw new Error(`${label} must be a non-negative integer.`);
+    throw new CrishError(`${label} must be a non-negative integer.`, "TOOL_ERROR", "permanent", false);
   }
   return value;
 }
 
 function requirePositiveInteger(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
-    throw new Error(`${label} must be a positive integer.`);
+    throw new CrishError(`${label} must be a positive integer.`, "TOOL_ERROR", "permanent", false);
   }
   return value;
 }

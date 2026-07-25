@@ -2,7 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import type { AgentEvent, AgentMessage } from "@crish/shared-types";
 import type { AgentProvider, AgentProviderRequest, ProviderStreamEvent } from "./types";
-import type { AgentRuntime } from "./runtime";
+import type { IAgentRuntime } from "./IAgentRuntime";
 
 export type ScriptedProviderStep =
   | ProviderStreamEvent[]
@@ -11,11 +11,11 @@ export type ScriptedProviderStep =
 export type ScriptedProviderExhaustPolicy = "repeat-last" | "empty" | "throw";
 
 export interface ScriptedProviderOptions {
-  id?: string;
+  id?: string | undefined;
   /** Behavior when callIndex exceeds the last step. Default: "repeat-last" (legacy). */
-  onExhausted?: ScriptedProviderExhaustPolicy;
+  onExhausted?: ScriptedProviderExhaustPolicy | undefined;
   /** Cap stored request snapshots (0 disables storage). Default: 32. */
-  maxStoredRequests?: number;
+  maxStoredRequests?: number | undefined;
 }
 
 export interface ScriptedAgentProvider extends AgentProvider {
@@ -111,26 +111,26 @@ export interface RuntimeProbeReport {
   toolCallCount: number;
   toolBatchCount: number;
   approvalCount: number;
-  /** Count of provider-diagnostic request-start events (≈ provider turns). */
+  /** Count of provider-diagnostic request-start events (== provider turns). */
   providerCallCount: number;
   maxEventGapMs: number;
   eventsByType: Record<string, number>;
   toolCallsByName: Record<string, number>;
   errors: string[];
   /** Set when the run ended with agent-end reason "aborted". */
-  abortReason?: string;
+  abortReason?: string | undefined;
 }
 
 export interface RuntimeProbeFirstEventTimings {
-  assistantDelta?: number;
-  textDelta?: number;
-  thoughtDelta?: number;
-  toolCallDelta?: number;
-  providerRequest?: number;
-  providerResponse?: number;
-  providerFirstByte?: number;
-  toolStart?: number;
-  toolEnd?: number;
+  assistantDelta?: number | undefined;
+  textDelta?: number | undefined;
+  thoughtDelta?: number | undefined;
+  toolCallDelta?: number | undefined;
+  providerRequest?: number | undefined;
+  providerResponse?: number | undefined;
+  providerFirstByte?: number | undefined;
+  toolStart?: number | undefined;
+  toolEnd?: number | undefined;
 }
 
 export interface RuntimeProbeResult {
@@ -149,25 +149,25 @@ export interface RuntimeProbeOptions {
 export interface RuntimeStage {
   name: string;
   prompt: string | AgentMessage;
-  maxAttempts?: number;
-  retryPrompt?: string | AgentMessage;
-  resetContextOnRetry?: boolean;
-  fallback?: RuntimeStageFallback;
-  requiredFiles?: string[];
-  requiredToolCalls?: string[];
-  requiredToolCallCounts?: Record<string, number>;
-  forbiddenToolCalls?: string[];
-  requiredFileIncludes?: RuntimeStageFileIncludeRequirement[];
+  maxAttempts?: number | undefined;
+  retryPrompt?: string | AgentMessage | undefined;
+  resetContextOnRetry?: boolean | undefined;
+  fallback?: RuntimeStageFallback | undefined;
+  requiredFiles?: string[] | undefined;
+  requiredToolCalls?: string[] | undefined;
+  requiredToolCallCounts?: Record<string, number> | undefined;
+  forbiddenToolCalls?: string[] | undefined;
+  requiredFileIncludes?: RuntimeStageFileIncludeRequirement[] | undefined;
   /** Substrings that must appear in assistant message text (joined). */
-  requiredAssistantIncludes?: string[];
-  stopWhenRequirementsMet?: boolean;
+  requiredAssistantIncludes?: string[] | undefined;
+  stopWhenRequirementsMet?: boolean | undefined;
 }
 
 export interface RuntimeStageFallbackInput {
   stage: RuntimeStage;
   index: number;
   attemptErrors: string[];
-  workspaceRoot?: string;
+  workspaceRoot?: string | undefined;
 }
 
 export type RuntimeStageFallback = (input: RuntimeStageFallbackInput) => void | Promise<void>;
@@ -181,7 +181,7 @@ export interface RuntimeStageRequirementResult {
   kind: "file" | "file-content" | "tool" | "assistant";
   target: string;
   passed: boolean;
-  reason?: string;
+  reason?: string | undefined;
 }
 
 export interface RuntimeStageResult {
@@ -218,13 +218,13 @@ export interface RuntimeStageSuiteOptions {
   maxContextMessages?: number;
   stopOnRequirementFailure?: boolean;
   probe?: RuntimeProbeOptions;
-  createRuntime(input: { stage: RuntimeStage; index: number; attempt: number; initialMessages: AgentMessage[] }): AgentRuntime | Promise<AgentRuntime>;
+  createRuntime(input: { stage: RuntimeStage; index: number; attempt: number; initialMessages: AgentMessage[] }): IAgentRuntime | Promise<IAgentRuntime>;
   onStageStart?(stage: RuntimeStage, index: number): void | Promise<void>;
   onStageComplete?(result: RuntimeStageResult, suite: RuntimeStageSuiteResult): void | Promise<void>;
 }
 
 export async function runRuntimeWithProbe(
-  runtime: AgentRuntime,
+  runtime: IAgentRuntime,
   input: string | AgentMessage,
   options: RuntimeProbeOptions = {}
 ): Promise<RuntimeProbeResult> {
@@ -552,8 +552,8 @@ export function formatRuntimeStageSuiteResult(suite: RuntimeStageSuiteResult): s
 }
 
 export interface EvaluateStageRequirementsOptions {
-  workspaceRoot?: string;
-  messages?: AgentMessage[];
+  workspaceRoot?: string | undefined;
+  messages?: AgentMessage[] | undefined;
 }
 
 /**
@@ -694,7 +694,7 @@ function updateReport(
     eventsByType: Record<string, number>;
     toolCallsByName: Record<string, number>;
     errors: string[];
-    abortReason?: string;
+    abortReason?: string | undefined;
     providerCallCount: number;
   }
 ): void {
@@ -810,3 +810,15 @@ function normalizeForCompare(path: string): string {
   const normalized = resolve(path);
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
+
+// Re-export testing subdirectory utilities via the barrel
+export { FauxAgentProvider } from "./testing/faux-provider";
+export {
+  FauxProviderCallGateway,
+  ProviderGatewayPlanNotFoundError,
+  ProviderGatewayProviderNotFoundError,
+} from "./testing/faux-call-gateway";
+export type { RoutingDecision, FauxCallGatewayOptions } from "./testing/faux-call-gateway";
+export { createMockTool } from "./testing/mock-tool";
+export type { MockToolOptions } from "./testing/mock-tool";
+export { loadFixture, clearFixtureCache } from "./testing/fixture-loader";

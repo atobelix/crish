@@ -80,6 +80,7 @@ export class TrustZonePermissionPolicy implements RuntimePermissionPolicy {
     try {
       isReadOnly = Boolean(request.tool?.isReadOnly?.(request.input));
     } catch {
+      // silent: tool.isReadOnly 抛出异常时降级为可写
       isReadOnly = false;
     }
 

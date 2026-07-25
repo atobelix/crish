@@ -118,8 +118,8 @@ export class TraceManager {
     this.maxSpansPerTrace = options?.maxSpansPerTrace ?? 500;
     this.maxActiveSpans = options?.maxActiveSpans ?? DEFAULT_MAX_ACTIVE_SPANS;
     this.maxEventsPerSpan = options?.maxEventsPerSpan ?? DEFAULT_MAX_EVENTS_PER_SPAN;
-    this.traces = new BoundedMap<string, TraceSpan[]>(this.maxTraces);
-    this.activeSpans = new BoundedMap<string, TraceSpan>(this.maxActiveSpans);
+    this.traces = new BoundedMap<string, TraceSpan[]>(this.maxTraces, undefined);
+    this.activeSpans = new BoundedMap<string, TraceSpan>(this.maxActiveSpans, undefined);
   }
 
   /**
@@ -210,7 +210,7 @@ export class TraceManager {
     span.events.pushOverwritingOldest({
       timestamp: Date.now(),
       name,
-      attributes
+      ...(attributes !== undefined ? { attributes } : {}),
     });
   }
 
@@ -342,10 +342,9 @@ export class TraceManager {
 const traceContextStorage = new AsyncLocalStorage<TraceContext>();
 
 export function setTraceContext(context: TraceContext | undefined): void {
-  // 此方法仅用于非 ALS 管理的场景（如顶层入口点）
-  // 在 ALS 管理的上下文中，应使用 withTraceContext
+  // 已废弃：请使用 withTraceContext(context, () => { ... }) 替代
   if (context) {
-    traceContextStorage.enterWith(context);
+    traceContextStorage.run(context, () => {});
   }
 }
 

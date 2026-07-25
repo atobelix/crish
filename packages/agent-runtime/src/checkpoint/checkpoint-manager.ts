@@ -81,8 +81,8 @@ export interface RestoreResult {
 // ─── CheckpointManager ────────────────────────────────────
 
 export class CheckpointManager {
-  private checkpoints = new BoundedMap<string, CheckpointMetadata>(MAX_CHECKPOINTS);
-  private backups = new BoundedMap<string, CheckpointMetadata>(MAX_BACKUPS);
+  private checkpoints = new BoundedMap<string, CheckpointMetadata>(MAX_CHECKPOINTS, undefined);
+  private backups = new BoundedMap<string, CheckpointMetadata>(MAX_BACKUPS, undefined);
   private currentSchemaVersion = 1;
 
   constructor(private readonly sessionId: string) {}
@@ -106,8 +106,8 @@ export class CheckpointManager {
       turnIndex,
       schemaVersion: this.currentSchemaVersion,
       referencedMessageIds,
-      label: options?.label,
-      description: options?.description
+      ...(options?.label !== undefined ? { label: options.label } : {}),
+      ...(options?.description !== undefined ? { description: options.description } : {})
     };
 
     this.checkpoints.set(checkpointId, metadata);

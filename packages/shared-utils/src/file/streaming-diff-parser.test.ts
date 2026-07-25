@@ -21,10 +21,10 @@ describe("StreamingDiffParser", () => {
 
     expect(changes).toHaveLength(4);
     expect(changes[0]).toMatchObject({ type: "normal", content: "line1", oldLine: 1, newLine: 1 });
-    expect(changes[1]).toMatchObject({ type: "deletion", content: "old line", oldLine: 2 });
-    expect(changes[1].newLine).toBeUndefined();
-    expect(changes[2]).toMatchObject({ type: "addition", content: "new line", newLine: 2 });
-    expect(changes[2].oldLine).toBeUndefined();
+    expect(changes[1]!).toMatchObject({ type: "deletion", content: "old line", oldLine: 2 });
+    expect(changes[1]!.newLine).toBeUndefined();
+    expect(changes[2]!).toMatchObject({ type: "addition", content: "new line", newLine: 2 });
+    expect(changes[2]!.oldLine).toBeUndefined();
     expect(changes[3]).toMatchObject({ type: "normal", content: "line3", oldLine: 3, newLine: 3 });
   });
 

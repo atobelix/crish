@@ -1,0 +1,31 @@
+{
+  "providerId": "vllm",
+  "name": "vLLM",
+  "description": "vLLM API - high-throughput LLM serving (self-hosted or cloud)",
+  "website": "https://vllm.ai",
+  "docsUrl": "https://docs.vllm.ai",
+  "engine": "openai-compatible",
+  "baseUrl": "https://api.vllm.ai/v1",
+  "auth": {
+    "type": "api-key",
+    "placement": "header",
+    "keyHeader": "Authorization",
+    "defaultEnvVar": "VLLM_API_KEY"
+  },
+  "models": [],
+  "endpointType": "chat-completions",
+  "metadata": { "dynamic_models": true },
+  "capabilities": {
+    "toolUse": false,
+    "vision": false,
+    "reasoning": false,
+    "streaming": true,
+    "systemPrompt": true,
+    "jsonMode": true,
+    "parallelToolCalls": false
+  },
+  "engineOptions": {
+    "authHeader": "authorization",
+    "maxTokensField": "max_tokens"
+  }
+}

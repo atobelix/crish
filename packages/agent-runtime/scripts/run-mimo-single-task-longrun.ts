@@ -817,7 +817,8 @@ function readResumeElapsedMs(path: string): number {
     return typeof parsed.elapsedMs === "number" && Number.isFinite(parsed.elapsedMs) && parsed.elapsedMs > 0
       ? Math.trunc(parsed.elapsedMs)
       : 0;
-  } catch {
+  } catch (err) {
+    console.error(`[run-mimo] readResumeElapsedMs error: ${err}`);
     return 0;
   }
 }

@@ -129,7 +129,7 @@ describe("ConexStateMachine", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.effects.length).toBeGreaterThan(0);
-      expect(result.effects[0].kind).toBe("patch-context");
+      expect(result.effects[0]!.kind).toBe("patch-context");
     }
   });
 

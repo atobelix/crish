@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import type { AgentMessage, AgentMessageBlock, JsonObject, JsonValue, ToolOutput } from "@crish/shared-types";
 import type { AgentRole, AgentTool } from "./types";
+import { ToolPresetRegistry, type ToolMode } from "./tools/tool-preset-registry";
 
 export const PROMPT_ASSEMBLY_VERSION = 1;
 
@@ -61,6 +62,7 @@ export interface PromptAssemblyInput extends PromptAssemblyPayload {
   providerFamily?: PromptProviderFamily;
   model?: string;
   modelFamily?: PromptModelFamily;
+  mode?: ToolMode;
   stableContext?: PromptAssemblyContextBlock[];
   volatileContext?: PromptAssemblyContextBlock[];
 }
@@ -136,9 +138,12 @@ export function assemblePromptForProvider(input: PromptAssemblyInput): PromptAss
   const volatileContextPrompt = renderPromptContextBlocks(volatileContext, "volatile");
   const { currentUserMessageId, currentUserMessageIndex } = analyzePromptMessages(input.messages);
   const materializedMessages = materializePromptMessages(input.messages, volatileContextPrompt, currentUserMessageIndex);
-  const tools = stableToolOrder(input.tools);
+  const mode = input.mode ?? "full-access";
+  const filtered = ToolPresetRegistry.filterTools(input.tools, mode);
+  const tools = stableToolOrder(filtered);
+  const systemPrompt = joinPromptParts([input.systemPrompt, stableContextPrompt]);
   const payload: PromptAssemblyPayload = {
-    systemPrompt: joinPromptParts([input.systemPrompt, stableContextPrompt]),
+    ...(systemPrompt !== undefined ? { systemPrompt } : {}),
     messages: materializedMessages,
     tools
   };
@@ -199,7 +204,7 @@ export function assemblePromptForProvider(input: PromptAssemblyInput): PromptAss
   }
 
   for (const block of stableContext) {
-    addBlock(block.kind, "stable", block.content, { id: block.id, label: block.label });
+    addBlock(block.kind, "stable", block.content, { id: block.id, ...(block.label !== undefined ? { label: block.label } : {}) });
   }
 
   // 单次遍历：当前用户消息之前的消息（按索引区间迭代，避免 findIndex/slice）
@@ -208,7 +213,7 @@ export function assemblePromptForProvider(input: PromptAssemblyInput): PromptAss
   }
 
   for (const block of volatileContext) {
-    addBlock(block.kind === "custom-stable" ? "custom-volatile" : block.kind, "volatile", block.content, { id: block.id, label: block.label });
+    addBlock(block.kind === "custom-stable" ? "custom-volatile" : block.kind, "volatile", block.content, { id: block.id, ...(block.label !== undefined ? { label: block.label } : {}) });
   }
 
   // 单次遍历：当前用户消息及其后的消息（按索引区间迭代，避免 findIndex/slice）

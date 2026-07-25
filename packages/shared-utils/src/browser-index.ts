@@ -64,7 +64,7 @@ export type { MemoryPressureLevel, MemoryManagerOptions } from "./memory-manager
 
 export { ObjectPool } from "./object-pool";
 
-export { TokenBucket, Semaphore, CircuitBreaker } from "./backpressure";
+export { TokenBucket, CircuitBreaker } from "./backpressure";
 export type { CircuitState, CircuitBreakerState } from "./backpressure";
 
 export { detectHardware } from "./hardware-profile";
@@ -94,6 +94,9 @@ export type {
   StorageAdaptation,
   FullPlatformAdaptation,
 } from "./platform-adaptation";
+
+// ── 技能 ID 算法（纯浏览器安全） ──
+export { skillStableId, ruleStableId, hashTextSha256Hex } from "./skill-id";
 
 // ── React 集成（纯浏览器安全） ──
 export {

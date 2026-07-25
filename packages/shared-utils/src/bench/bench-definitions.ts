@@ -54,7 +54,7 @@ export const BENCHMARKS: PerfBenchmark[] = [
     setup: noopSetup,
     run: async () => {
       const { BoundedMap } = await import("../bounded-map");
-      const map = new BoundedMap<number, number>(100);
+      const map = new BoundedMap<number, number>(100, undefined);
       for (let i = 0; i < 10000; i++) {
         map.set(i, i);
       }
@@ -93,7 +93,7 @@ export const BENCHMARKS: PerfBenchmark[] = [
     teardown: async () => {
       const { rm } = await import("node:fs/promises");
       const dir = (globalThis as unknown as Record<string, string>).__benchDir;
-      await rm(dir, { recursive: true, force: true });
+      await rm(dir!, { recursive: true, force: true });
     },
     iterations: 20,
     warmupIterations: 5,

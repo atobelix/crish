@@ -109,12 +109,12 @@ export class GeminiProvider implements AgentProvider {
     }
 
     const body = buildGeminiGenerateContentBody({
-      systemPrompt: request.systemPrompt,
+      ...(request.systemPrompt !== undefined ? { systemPrompt: request.systemPrompt } : {}),
       messages: request.messages,
-      tools: request.tools,
+      ...(request.tools.length > 0 ? { tools: request.tools } : {}),
       maxOutputTokens: this.maxOutputTokens,
-      temperature: this.temperature,
-      topP: this.topP,
+      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
+      ...(this.topP !== undefined ? { topP: this.topP } : {}),
     });
 
     const headers = geminiAuthHeaders(
@@ -236,20 +236,20 @@ export function createGeminiProviderFromPlan(
     id: plan.route.providerId || 'gemini',
     baseUrl:
       plan.credential.baseUrl ?? overrides.baseUrl ?? DEFAULT_GEMINI_BASE_URL,
-    apiKey: plan.credential.apiKey ?? overrides.apiKey,
     model: plan.route.upstreamModel || plan.route.model,
-    maxOutputTokens: maxOutputTokens ?? overrides.maxOutputTokens,
-    temperature: temperature ?? overrides.temperature,
-    topP: topP ?? overrides.topP,
-    stream: stream ?? overrides.stream,
-    requestTimeoutMs: requestTimeoutMs ?? overrides.requestTimeoutMs,
-    authViaQuery: authViaQuery ?? overrides.authViaQuery,
+    ...(plan.credential.apiKey ?? overrides.apiKey !== undefined ? { apiKey: plan.credential.apiKey ?? overrides.apiKey } : {}),
+    ...((maxOutputTokens ?? overrides.maxOutputTokens) !== undefined ? { maxOutputTokens: maxOutputTokens ?? overrides.maxOutputTokens } : {}),
+    ...((temperature ?? overrides.temperature) !== undefined ? { temperature: temperature ?? overrides.temperature } : {}),
+    ...((topP ?? overrides.topP) !== undefined ? { topP: topP ?? overrides.topP } : {}),
+    ...((stream ?? overrides.stream) !== undefined ? { stream: stream ?? overrides.stream } : {}),
+    ...((requestTimeoutMs ?? overrides.requestTimeoutMs) !== undefined ? { requestTimeoutMs: requestTimeoutMs ?? overrides.requestTimeoutMs } : {}),
+    ...((authViaQuery ?? overrides.authViaQuery) !== undefined ? { authViaQuery: authViaQuery ?? overrides.authViaQuery } : {}),
     headers: {
       ...headers,
       ...plan.credential.headers,
       ...overrides.headers,
     },
-    fetch: overrides.fetch,
+    ...(overrides.fetch !== undefined ? { fetch: overrides.fetch } : {}),
   });
 }
 

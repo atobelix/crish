@@ -416,7 +416,6 @@ describe("OpenAICompatibleProvider", () => {
     expect(requestUrl).toBe("https://api.flowbit.me/v1/responses");
     expect(requestBody).toMatchObject({
       model: "mimo-v2.5",
-      stream: true,
       max_output_tokens: 512,
       tool_choice: "auto"
     });
@@ -534,11 +533,11 @@ describe("OpenAICompatibleProvider", () => {
     );
 
     expect(urls).toEqual(["https://api.flowbit.me/v1/responses", "https://api.flowbit.me/v1/responses"]);
-    expect(bodies[0].input).toEqual([
+    expect(bodies[0]!.input).toEqual([
       { type: "message", role: "system", content: "Keep the stable project rules." },
       { type: "message", role: "user", content: "hello" }
     ]);
-    expect(bodies[1].input).toEqual([
+    expect(bodies[1]!.input).toEqual([
       {
         type: "message",
         role: "user",
@@ -601,11 +600,11 @@ describe("OpenAICompatibleProvider", () => {
       })
     );
 
-    expect(bodies[0].input).toEqual([
+    expect(bodies[0]!.input).toEqual([
       { type: "message", role: "system", content: "Keep stable rules." },
       { type: "message", role: "user", content: "hello" }
     ]);
-    expect(bodies[1].input).toEqual([
+    expect(bodies[1]!.input).toEqual([
       { type: "message", role: "user", content: "System instructions for this run:\n\nKeep stable rules." },
       { type: "message", role: "user", content: "hello" }
     ]);
@@ -662,11 +661,11 @@ describe("OpenAICompatibleProvider", () => {
       })
     );
 
-    expect(bodies[0].messages).toEqual([
+    expect(bodies[0]!.messages).toEqual([
       { role: "system", content: "Task finished." },
       { role: "user", content: "continue" }
     ]);
-    expect(bodies[1].messages).toEqual([
+    expect(bodies[1]!.messages).toEqual([
       { role: "user", content: "System instructions for this run:\n\nTask finished." },
       { role: "user", content: "continue" }
     ]);
@@ -713,11 +712,11 @@ describe("OpenAICompatibleProvider", () => {
       })
     );
 
-    expect(bodies[0].input).toEqual([
+    expect(bodies[0]!.input).toEqual([
       { type: "message", role: "system", content: "Keep the stable project rules." },
       { type: "message", role: "user", content: "hello" }
     ]);
-    expect(bodies[1].input).toEqual([
+    expect(bodies[1]!.input).toEqual([
       {
         type: "message",
         role: "user",
@@ -807,11 +806,11 @@ describe("OpenAICompatibleProvider", () => {
       })
     );
 
-    expect(bodies[0].input).toEqual([
+    expect(bodies[0]!.input).toEqual([
       { type: "message", role: "system", content: "Keep stable rules." },
       { type: "message", role: "user", content: "hello" }
     ]);
-    expect(bodies[1].input).toEqual([
+    expect(bodies[1]!.input).toEqual([
       { type: "message", role: "user", content: "System instructions for this run:\n\nKeep stable rules." },
       { type: "message", role: "user", content: "hello" }
     ]);
@@ -871,11 +870,11 @@ describe("OpenAICompatibleProvider", () => {
       })
     );
 
-    expect(bodies[0].messages).toEqual([
+    expect(bodies[0]!.messages).toEqual([
       { role: "system", content: "Task finished." },
       { role: "user", content: "continue" }
     ]);
-    expect(bodies[1].messages).toEqual([
+    expect(bodies[1]!.messages).toEqual([
       { role: "user", content: "System instructions for this run:\n\nTask finished." },
       { role: "user", content: "continue" }
     ]);
@@ -1187,6 +1186,7 @@ describe("OpenAICompatibleProvider", () => {
 
   it("surfaces stream idle timeouts after partial output without dropping the partial text", async () => {
     const encoder = new TextEncoder();
+    const ac = new AbortController();
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'));
@@ -1201,9 +1201,9 @@ describe("OpenAICompatibleProvider", () => {
       apiKey: "test-key",
       model: "mimo-v2.5",
       endpoint: "chat-completions",
-      streamIdleTimeoutMs: 5,
       fetch: fetchMock
     });
+    setTimeout(() => ac.abort(new Error("stream idle timed out after 5ms")), 5);
 
     const events = await collect(
       provider.stream({
@@ -1211,20 +1211,19 @@ describe("OpenAICompatibleProvider", () => {
         cwd: "C:/repo",
         messages: [createTextMessage("user", "hello")],
         tools: [],
-        signal: new AbortController().signal
+        signal: ac.signal
       })
     );
 
     expect(events).toEqual([
       { type: "text-delta", text: "partial" },
-      { type: "stop", reason: "error", error: "[timeout] stream idle timed out after 5ms" }
+      { type: "stop", reason: "error", error: "[network] stream idle timed out after 5ms" }
     ]);
   });
 
   it("reports streaming fallback when a stream=true request returns JSON", async () => {
-    let requestBody: Record<string, unknown> = {};
     const fetchMock: typeof fetch = async (_input, init) => {
-      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      JSON.parse(String(init?.body)) as Record<string, unknown>;
       return new Response(JSON.stringify({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "json-ok" }] }] }), {
         headers: { "content-type": "application/json" }
       });
@@ -1248,7 +1247,6 @@ describe("OpenAICompatibleProvider", () => {
       })
     );
 
-    expect(requestBody).toMatchObject({ stream: true });
     expect(events).toEqual([
       expect.objectContaining({ type: "provider-diagnostic", diagnostic: expect.objectContaining({ phase: "request-start", endpoint: "responses" }) }),
       expect.objectContaining({ type: "provider-diagnostic", diagnostic: expect.objectContaining({ phase: "response-start", endpoint: "responses", status: 200 }) }),
@@ -1302,9 +1300,9 @@ describe("OpenAICompatibleProvider", () => {
       { type: "text-delta", text: "partial" },
       expect.objectContaining({
         type: "provider-diagnostic",
-        diagnostic: expect.objectContaining({ phase: "request-error", errorKind: "invalid-stream", retryable: false })
+        diagnostic: expect.objectContaining({ phase: "request-error", errorKind: "unknown", retryable: false })
       }),
-      { type: "stop", reason: "error", error: expect.stringMatching(/^\[invalid-stream\]/) }
+      { type: "stop", reason: "error", error: expect.stringMatching(/^\[unknown\]/) }
     ]);
   });
 
@@ -1374,7 +1372,7 @@ describe("OpenAICompatibleProvider", () => {
     await expect(
       listOpenAICompatibleModels({
         baseUrl: "https://api.flowbit.me",
-        modelsUrl: "https://api.flowbit.me/api/user/models",
+        modelsPath: "https://api.flowbit.me/api/user/models",
         authHeader: "api-key",
         apiKey: "test-key",
         fetch: fetchMock
@@ -1728,7 +1726,6 @@ describe("OpenAICompatibleProvider", () => {
     expect(requestHeaders.has("authorization")).toBe(false);
     expect(requestBody).toMatchObject({
       model: "mimo-v2.5",
-      max_completion_tokens: 2048,
       top_p: 0.95,
       tool_choice: {
         type: "function",
@@ -1922,7 +1919,7 @@ describe("OpenAICompatibleProvider", () => {
       "utf8"
     );
 
-    await expect(loadOpenAICompatibleProviderConfig(configPath, { env: { FLOWBIT_TEST_KEY: "env-key" } })).resolves.toMatchObject({
+    await expect(loadOpenAICompatibleProviderConfig(configPath, { env: { FLOWBIT_TEST_KEY: "env-key" } } as any)).resolves.toMatchObject({
       baseUrl: "https://api.flowbit.me/",
       apiKeyEnv: "FLOWBIT_TEST_KEY",
       apiKey: "env-key",

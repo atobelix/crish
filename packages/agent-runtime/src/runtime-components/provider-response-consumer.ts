@@ -1,4 +1,4 @@
-import type { AgentMessage, AgentMessageBlock, ProviderDiagnostic, ToolCallBlock } from "@crish/shared-types";
+import type { AgentMessage, AgentMessageBlock, ProviderDiagnostic } from "@crish/shared-types";
 import type { AgentTool, ProviderUsage } from "../types";
 import type { ProviderStreamContractEvent } from "../provider-stream-contract";
 import { createId, nowIso } from "../session";
@@ -32,8 +32,8 @@ export class ProviderResponseConsumer {
     let textBuffer = "";
     let thoughtBuffer = "";
     let error: string | undefined;
-    let sawContent = false;
     let usage: ProviderUsage | undefined;
+    let finishReasonFromStream: string | undefined;
 
     for await (const event of callIterator) {
       if (signal.aborted) return { response: { type: "error", error: "aborted" }, diagnostics };
@@ -45,7 +45,6 @@ export class ProviderResponseConsumer {
 
         case "delta": {
           if (event.delta.type === "text") {
-            sawContent = true;
             textBuffer += event.delta.text;
             blocks.push({ type: "text", text: event.delta.text });
             try {
@@ -54,7 +53,6 @@ export class ProviderResponseConsumer {
               /* UI sink must not break stream */
             }
           } else if (event.delta.type === "thought") {
-            sawContent = true;
             thoughtBuffer += event.delta.text;
             blocks.push({
               type: "thought",
@@ -80,7 +78,6 @@ export class ProviderResponseConsumer {
           // 只在 phase=end 时收集完整的工具调用。
           // 输入 alias 修复留给 AgentSessionLoop（统一发 tool-input-repaired）。
           if (event.phase === "end") {
-            sawContent = true;
             const toolCall = event.toolCall;
             const input = toolCall.input ?? {};
             blocks.push({
@@ -104,6 +101,9 @@ export class ProviderResponseConsumer {
           if (event.usage) {
             usage = event.usage;
           }
+          if (event.finishReason) {
+            finishReasonFromStream = event.finishReason;
+          }
           break;
         }
 
@@ -118,7 +118,7 @@ export class ProviderResponseConsumer {
         ? { type: "empty-response" }
         : error && blocks.length === 0
           ? { type: "error", error }
-          : { type: "message", message: this.buildMessage(blocks, textBuffer, thoughtBuffer, error, usage) };
+          : { type: "message", message: this.buildMessage(blocks, textBuffer, thoughtBuffer, error, usage, finishReasonFromStream) };
 
     return { response, diagnostics };
   }
@@ -128,13 +128,14 @@ export class ProviderResponseConsumer {
     textBuffer: string,
     thoughtBuffer: string,
     error: string | undefined,
-    usage: ProviderUsage | undefined
+    usage: ProviderUsage | undefined,
+    finishReason?: string,
   ): AgentMessage {
     const stopReason = error
       ? "error"
       : blocks.some((b) => b.type === "tool-call")
         ? ("tool-call" as const)
-        : ("stop" as const);
+        : (finishReason ?? ("stop" as const));
 
     return {
       id: createId("assistant"),
@@ -147,6 +148,7 @@ export class ProviderResponseConsumer {
         text: textBuffer,
         ...(thoughtBuffer ? { thought: thoughtBuffer } : {}),
         ...(usage ? { usage: usage as unknown as import("@crish/shared-types").JsonObject } : {}),
+        ...(finishReason ? { providerFinishReason: finishReason } : {}),
       },
     };
   }

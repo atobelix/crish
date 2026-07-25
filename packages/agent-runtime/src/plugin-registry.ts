@@ -35,21 +35,21 @@ export interface PluginManifestContributions {
 export interface PluginManifest {
   id: string;
   name: string;
-  version?: string;
-  description?: string;
-  keywords?: readonly string[];
-  metadata?: JsonObject;
-  contributes?: PluginManifestContributions;
+  version?: string | undefined;
+  description?: string | undefined;
+  keywords?: readonly string[] | undefined;
+  metadata?: JsonObject | undefined;
+  contributes?: PluginManifestContributions | undefined;
 }
 
 export interface PluginToolContribution {
   tool: AgentTool;
-  activation?: PluginContributionActivation;
-  label?: string;
-  description?: string;
-  category?: string;
-  tokens?: readonly string[];
-  metadata?: JsonObject;
+  activation?: PluginContributionActivation | undefined;
+  label?: string | undefined;
+  description?: string | undefined;
+  category?: string | undefined;
+  tokens?: readonly string[] | undefined;
+  metadata?: JsonObject | undefined;
 }
 
 export type PluginToolContributionInput = AgentTool | PluginToolContribution;
@@ -447,7 +447,7 @@ function normalizeContributionInputs<T extends PluginContributionMetadata>(input
 function normalizeRendererInputs(inputs: Iterable<PluginRendererContribution>): PluginRendererContribution[] {
   return [...inputs].map((input) => ({
     ...cloneContribution(input),
-    mediaTypes: input.mediaTypes ? [...input.mediaTypes] : undefined
+    ...(input.mediaTypes ? { mediaTypes: [...input.mediaTypes] } : {}),
   }));
 }
 

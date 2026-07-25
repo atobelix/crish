@@ -30,7 +30,7 @@ function commandSchema(extra: JsonObject = {}): JsonObject {
 
 function assembled(providerFamily: Parameters<typeof assemblePromptForProvider>[0]["providerFamily"]) {
   return assemblePromptForProvider({
-    providerFamily,
+    ...(providerFamily !== undefined ? { providerFamily } : {}),
     modelFamily: providerFamily === "anthropic" ? "claude-4.6-plus" : providerFamily === "gemini" ? "gemini" : "unknown",
     systemPrompt: "Keep the stable prefix reusable.",
     stableContext: [

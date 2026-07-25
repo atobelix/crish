@@ -143,7 +143,7 @@ export class BoundedMapCache<K, V> implements CacheProvider<K, V> {
   private readonly map: BoundedMap<K, V>;
 
   constructor(capacity: number) {
-    this.map = new BoundedMap<K, V>(capacity);
+    this.map = new BoundedMap<K, V>(capacity, undefined);
   }
 
   get size(): number {

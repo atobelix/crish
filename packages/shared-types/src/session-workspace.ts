@@ -104,10 +104,10 @@ export interface SessionPaneBinding {
   paneId: string;
   sessionId: string;
   role: SessionPaneRole;
-  title?: string;
-  selectedEventId?: string;
-  selectedMessageId?: string;
-  pendingActionIds?: string[];
+  title?: string | undefined;
+  selectedEventId?: string | undefined;
+  selectedMessageId?: string | undefined;
+  pendingActionIds?: string[] | undefined;
 }
 
 export interface SplitLayout {

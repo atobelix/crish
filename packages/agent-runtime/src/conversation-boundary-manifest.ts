@@ -3,7 +3,7 @@ import { dirname, resolve, sep } from "node:path";
 import { nowIso } from "./session";
 import { AsyncMutex, isNodeError } from "@crish/shared-utils";
 import { JsonlAppendBatcher } from "@crish/shared-utils/node";
-import type { JsonObject, JsonValue } from "@crish/shared-types";
+import { CrishError, type JsonObject, type JsonValue } from "@crish/shared-types";
 
 export type ConversationBoundaryCheckpointSource = "runtime" | "tool" | "external" | "unknown";
 
@@ -206,7 +206,7 @@ export class ConversationBoundaryManifestService {
       try {
         await this.appendBatcher.close();
       } catch {
-        // 忽略关闭错误
+        // silent: close error ignored
       }
       this.appendBatcher = undefined;
     }
@@ -348,6 +348,18 @@ export function createConversationBoundaryManifestRecord(
   const checkpointId = optionalNonEmpty(input.checkpointId ?? input.checkpoint?.id, "checkpoint id");
   const checkpointRef = optionalNonEmpty(input.checkpointRef ?? input.checkpoint?.ref, "checkpoint ref");
   const checkpointSource = input.checkpointSource ?? input.checkpoint?.source;
+  const sessionTreeLeafIdBefore = input.sessionTreeLeafIdBefore !== undefined
+    ? optionalNonEmpty(input.sessionTreeLeafIdBefore, "session tree leaf id before")
+    : undefined;
+  const sessionTreeLeafIdAfter = input.sessionTreeLeafIdAfter !== undefined
+    ? optionalNonEmpty(input.sessionTreeLeafIdAfter, "session tree leaf id after")
+    : undefined;
+  const runtimeLeafIdBefore = input.runtimeLeafIdBefore !== undefined
+    ? optionalNonEmpty(input.runtimeLeafIdBefore, "runtime leaf id before")
+    : undefined;
+  const runtimeLeafIdAfter = input.runtimeLeafIdAfter !== undefined
+    ? optionalNonEmpty(input.runtimeLeafIdAfter, "runtime leaf id after")
+    : undefined;
   const record: ConversationBoundaryManifestRecord = {
     sessionId: requireNonEmpty(input.sessionId, "session id"),
     runId: requireNonEmpty(input.runId, "run id"),
@@ -356,18 +368,10 @@ export function createConversationBoundaryManifestRecord(
     workspaceRoot: resolve(requireNonEmpty(input.workspaceRoot, "workspace root")),
     changedPaths: normalizeChangedPaths(input.workspaceRoot, input.changedPaths ?? []),
     createdAt: input.createdAt ?? now(),
-    ...(input.sessionTreeLeafIdBefore !== undefined
-      ? { sessionTreeLeafIdBefore: optionalNonEmpty(input.sessionTreeLeafIdBefore, "session tree leaf id before") }
-      : {}),
-    ...(input.sessionTreeLeafIdAfter !== undefined
-      ? { sessionTreeLeafIdAfter: optionalNonEmpty(input.sessionTreeLeafIdAfter, "session tree leaf id after") }
-      : {}),
-    ...(input.runtimeLeafIdBefore !== undefined
-      ? { runtimeLeafIdBefore: optionalNonEmpty(input.runtimeLeafIdBefore, "runtime leaf id before") }
-      : {}),
-    ...(input.runtimeLeafIdAfter !== undefined
-      ? { runtimeLeafIdAfter: optionalNonEmpty(input.runtimeLeafIdAfter, "runtime leaf id after") }
-      : {}),
+    ...(sessionTreeLeafIdBefore !== undefined ? { sessionTreeLeafIdBefore } : {}),
+    ...(sessionTreeLeafIdAfter !== undefined ? { sessionTreeLeafIdAfter } : {}),
+    ...(runtimeLeafIdBefore !== undefined ? { runtimeLeafIdBefore } : {}),
+    ...(runtimeLeafIdAfter !== undefined ? { runtimeLeafIdAfter } : {}),
     ...(checkpointId !== undefined ? { checkpointId } : {}),
     ...(checkpointRef !== undefined ? { checkpointRef } : {}),
     ...(checkpointSource !== undefined ? { checkpointSource } : {}),
@@ -387,7 +391,7 @@ export function parseConversationBoundaryManifestRecord(value: string): Conversa
 
 export function validateConversationBoundaryManifestRecord(value: unknown): ConversationBoundaryManifestRecord {
   if (!isJsonObject(value)) {
-    throw new Error("conversation boundary manifest record must be a JSON object");
+    throw new CrishError("conversation boundary manifest record must be a JSON object", "BOUNDARY_ERROR", "permanent", false);
   }
 
   const workspaceRoot = requireNonEmpty(jsonString(value.workspaceRoot), "workspace root");
@@ -400,19 +404,23 @@ export function validateConversationBoundaryManifestRecord(value: unknown): Conv
     changedPaths: normalizeChangedPaths(workspaceRoot, jsonStringArray(value.changedPaths, "changed paths")),
     createdAt: requireIsoLike(jsonString(value.createdAt), "created at"),
     ...(value.sessionTreeLeafIdBefore !== undefined
-      ? { sessionTreeLeafIdBefore: optionalNonEmpty(jsonString(value.sessionTreeLeafIdBefore), "session tree leaf id before") }
+      ? (() => { const v = optionalNonEmpty(jsonString(value.sessionTreeLeafIdBefore), "session tree leaf id before"); return v !== undefined ? { sessionTreeLeafIdBefore: v } : {}; })()
       : {}),
     ...(value.sessionTreeLeafIdAfter !== undefined
-      ? { sessionTreeLeafIdAfter: optionalNonEmpty(jsonString(value.sessionTreeLeafIdAfter), "session tree leaf id after") }
+      ? (() => { const v = optionalNonEmpty(jsonString(value.sessionTreeLeafIdAfter), "session tree leaf id after"); return v !== undefined ? { sessionTreeLeafIdAfter: v } : {}; })()
       : {}),
     ...(value.runtimeLeafIdBefore !== undefined
-      ? { runtimeLeafIdBefore: optionalNonEmpty(jsonString(value.runtimeLeafIdBefore), "runtime leaf id before") }
+      ? (() => { const v = optionalNonEmpty(jsonString(value.runtimeLeafIdBefore), "runtime leaf id before"); return v !== undefined ? { runtimeLeafIdBefore: v } : {}; })()
       : {}),
     ...(value.runtimeLeafIdAfter !== undefined
-      ? { runtimeLeafIdAfter: optionalNonEmpty(jsonString(value.runtimeLeafIdAfter), "runtime leaf id after") }
+      ? (() => { const v = optionalNonEmpty(jsonString(value.runtimeLeafIdAfter), "runtime leaf id after"); return v !== undefined ? { runtimeLeafIdAfter: v } : {}; })()
       : {}),
-    ...(value.checkpointId !== undefined ? { checkpointId: optionalNonEmpty(jsonString(value.checkpointId), "checkpoint id") } : {}),
-    ...(value.checkpointRef !== undefined ? { checkpointRef: optionalNonEmpty(jsonString(value.checkpointRef), "checkpoint ref") } : {}),
+    ...(value.checkpointId !== undefined
+      ? (() => { const v = optionalNonEmpty(jsonString(value.checkpointId), "checkpoint id"); return v !== undefined ? { checkpointId: v } : {}; })()
+      : {}),
+    ...(value.checkpointRef !== undefined
+      ? (() => { const v = optionalNonEmpty(jsonString(value.checkpointRef), "checkpoint ref"); return v !== undefined ? { checkpointRef: v } : {}; })()
+      : {}),
     ...(value.checkpointSource !== undefined
       ? { checkpointSource: requireCheckpointSource(jsonString(value.checkpointSource)) }
       : {}),
@@ -584,7 +592,7 @@ function assertInside(root: string, candidate: string, label: string): void {
   const normalizedRoot = normalizeForCompare(root);
   const normalizedCandidate = normalizeForCompare(candidate);
   if (normalizedCandidate !== normalizedRoot && !normalizedCandidate.startsWith(`${normalizedRoot}${sep}`)) {
-    throw new Error(`${label} escapes workspace root`);
+    throw new CrishError(`${label} escapes workspace root`, "BOUNDARY_ERROR", "permanent", false);
   }
 }
 
@@ -596,7 +604,7 @@ function normalizeForCompare(path: string): string {
 function requireNonEmpty(value: string | undefined, label: string): string {
   const normalized = value?.trim();
   if (!normalized) {
-    throw new Error(`${label} must be a non-empty string`);
+    throw new CrishError(`${label} must be a non-empty string`, "BOUNDARY_ERROR", "permanent", false);
   }
   return normalized;
 }
@@ -610,7 +618,7 @@ function optionalNonEmpty(value: string | undefined, label: string): string | un
 
 function requireEventSequence(value: number | undefined): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
-    throw new Error("event sequence must be a non-negative integer");
+    throw new CrishError("event sequence must be a non-negative integer", "BOUNDARY_ERROR", "permanent", false);
   }
   return value;
 }
@@ -618,7 +626,7 @@ function requireEventSequence(value: number | undefined): number {
 function requireIsoLike(value: string | undefined, label: string): string {
   const normalized = requireNonEmpty(value, label);
   if (Number.isNaN(Date.parse(normalized))) {
-    throw new Error(`${label} must be a valid timestamp`);
+    throw new CrishError(`${label} must be a valid timestamp`, "BOUNDARY_ERROR", "permanent", false);
   }
   return normalized;
 }
@@ -627,7 +635,7 @@ function requireCheckpointSource(value: string | undefined): ConversationBoundar
   if (value === "runtime" || value === "tool" || value === "external" || value === "unknown") {
     return value;
   }
-  throw new Error("checkpoint source must be runtime, tool, external, or unknown");
+  throw new CrishError("checkpoint source must be runtime, tool, external, or unknown", "BOUNDARY_ERROR", "permanent", false);
 }
 
 function jsonString(value: JsonValue | undefined): string | undefined {
@@ -640,14 +648,14 @@ function jsonNumber(value: JsonValue | undefined): number | undefined {
 
 function jsonStringArray(value: JsonValue | undefined, label: string): string[] {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-    throw new Error(`${label} must be an array of strings`);
+    throw new CrishError(`${label} must be an array of strings`, "BOUNDARY_ERROR", "permanent", false);
   }
   return value as string[];
 }
 
 function requireJsonObject(value: JsonValue | undefined, label: string): JsonObject {
   if (!isJsonObject(value)) {
-    throw new Error(`${label} must be a JSON object`);
+    throw new CrishError(`${label} must be a JSON object`, "BOUNDARY_ERROR", "permanent", false);
   }
   return value;
 }

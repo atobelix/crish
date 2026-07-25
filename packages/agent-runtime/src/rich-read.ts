@@ -4,7 +4,7 @@ import { basename, extname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodeTextBuffer } from "./encoding";
 import { defineTool } from "./tools";
-import type { JsonObject, JsonValue, ToolExecutionContext, ToolOutput } from "@crish/shared-types";
+import { CrishError, type JsonObject, type JsonValue, type ToolExecutionContext, type ToolOutput } from "@crish/shared-types";
 import type { AgentTool } from "./types";
 
 export type RichReadLineFormat = "numbered" | "plain";
@@ -69,12 +69,12 @@ export interface RichReadByteResource extends RichReadResourceBase {
 export type RichReadProviderResource = RichReadDirectoryResource | RichReadByteResource;
 
 export interface RichReadArtifactResolution {
-  bytes?: Uint8Array | ArrayBuffer;
-  text?: string;
-  mimeType?: string;
-  contentType?: string;
-  metadata?: JsonObject;
-  name?: string;
+  bytes?: Uint8Array | ArrayBuffer | undefined;
+  text?: string | undefined;
+  mimeType?: string | undefined;
+  contentType?: string | undefined;
+  metadata?: JsonObject | undefined;
+  name?: string | undefined;
 }
 
 export interface RichReadArtifactResolver {
@@ -165,7 +165,7 @@ export function createRichReadTool(options: RichReadToolOptions): AgentTool {
       const provider = providers.find((candidate) => candidate.canRead(request));
       if (!provider) {
         const scope = request.scheme ? `${request.scheme}:` : "workspace";
-        throw new Error(`No rich read provider for ${scope} resource: ${request.originalResource}`);
+        throw new CrishError(`No rich read provider for ${scope} resource: ${request.originalResource}`, "TOOL_ERROR", "permanent", false);
       }
       const resource = await provider.read(request, context);
       return renderRichReadResource(resource, request);
@@ -180,7 +180,7 @@ export function createWorkspaceRichReadProvider(workspaceRoot: string): RichRead
     canRead(request) {
       return request.scheme === undefined || request.scheme === "workspace" || request.scheme === "file";
     },
-    async read(request) {
+    async read(request, context) {
       const workspacePath = workspacePathFromResource(request);
       const targetPath = resolveWorkspacePath(root, workspacePath);
       const path = displayPath(root, targetPath);
@@ -189,7 +189,7 @@ export function createWorkspaceRichReadProvider(workspaceRoot: string): RichRead
         targetStat = await stat(targetPath);
       } catch (error) {
         if (isNodeError(error) && error.code === "ENOENT") {
-          throw new Error(`Path does not exist: ${path}`);
+          throw new CrishError(`Path does not exist: ${path}`, "TOOL_ERROR", "permanent", false);
         }
         throw error;
       }
@@ -204,11 +204,11 @@ export function createWorkspaceRichReadProvider(workspaceRoot: string): RichRead
           entries = await readdir(targetPath, { withFileTypes: true });
         } catch (error) {
           if (isNodeError(error) && error.code === "ENOENT") {
-            throw new Error(`Directory does not exist: ${path}`);
+            throw new CrishError(`Directory does not exist: ${path}`, "TOOL_ERROR", "permanent", false);
           }
           throw error;
         }
-        return {
+        const dirResult: RichReadDirectoryResource = {
           providerId: "workspace",
           kind: "directory",
           uri,
@@ -221,10 +221,11 @@ export function createWorkspaceRichReadProvider(workspaceRoot: string): RichRead
             }))
             .sort((left, right) => `${left.kind}:${left.name}`.localeCompare(`${right.kind}:${right.name}`))
         };
+        return dirResult;
       }
 
       if (!targetStat.isFile()) {
-        throw new Error(`Path is not a file or directory: ${path}`);
+        throw new CrishError(`Path is not a file or directory: ${path}`, "TOOL_ERROR", "permanent", false);
       }
 
       let bytes: Buffer;
@@ -232,20 +233,22 @@ export function createWorkspaceRichReadProvider(workspaceRoot: string): RichRead
         bytes = await readFile(targetPath);
       } catch (error) {
         if (isNodeError(error) && error.code === "ENOENT") {
-          throw new Error(`File does not exist: ${path}`);
+          throw new CrishError(`File does not exist: ${path}`, "TOOL_ERROR", "permanent", false);
         }
         throw error;
       }
 
-      return {
+      const resolvedMime = mimeTypeFromPath(path);
+      const fileResult: RichReadByteResource = {
         providerId: "workspace",
         kind: "file",
         uri,
         path,
         metadata,
         bytes,
-        mimeType: mimeTypeFromPath(path)
-      };
+        ...(resolvedMime !== undefined ? { mimeType: resolvedMime } : {})
+      } as RichReadByteResource;
+      return fileResult;
     }
   };
 }
@@ -258,20 +261,21 @@ export function createArtifactRichReadProvider(resolver: RichReadArtifactResolve
     },
     async read(request, context) {
       if (!resolver) {
-        throw new Error(`No artifact resolver configured for ${request.originalResource}`);
+        throw new CrishError(`No artifact resolver configured for ${request.originalResource}`, "TOOL_ERROR", "permanent", false);
       }
       const artifact = await resolveArtifact(resolver, request.resource, context);
       if (!artifact) {
-        throw new Error(`Artifact not found: ${request.resource}`);
+        throw new CrishError(`Artifact not found: ${request.resource}`, "TOOL_ERROR", "permanent", false);
       }
+      const resolvedMimeType = normalizeMimeType(artifact.mimeType ?? artifact.contentType);
       return {
         providerId: "artifact",
         kind: "artifact",
         uri: request.resource,
-        label: artifact.name,
-        metadata: artifact.metadata,
+        ...(artifact.name !== undefined ? { label: artifact.name } : {}),
+        ...(artifact.metadata !== undefined ? { metadata: artifact.metadata } : {}),
         bytes: artifactBytes(artifact),
-        mimeType: normalizeMimeType(artifact.mimeType ?? artifact.contentType)
+        ...(resolvedMimeType !== undefined ? { mimeType: resolvedMimeType } : {})
       };
     }
   };
@@ -280,7 +284,7 @@ export function createArtifactRichReadProvider(resolver: RichReadArtifactResolve
 function parseRichReadRequest(input: JsonObject, defaults: RichReadDefaults): RichReadRequest {
   const originalResource = resourceField(input);
   if (!originalResource) {
-    throw new Error("resource, path, or uri must be a non-empty string");
+    throw new CrishError("resource, path, or uri must be a non-empty string", "TOOL_ERROR", "permanent", false);
   }
 
   const selector = uriScheme(originalResource) ? { path: originalResource } : parseReadPathSelector(originalResource);
@@ -291,17 +295,18 @@ function parseRichReadRequest(input: JsonObject, defaults: RichReadDefaults): Ri
   const directoryOffset = directoryOffsetField(input);
   const directoryLimit = directoryLimitField(input, defaults);
 
+  const cursorValue = stringField(input, "cursor");
   return {
     resource,
     originalResource,
-    scheme,
-    startLine,
-    endLine,
+    ...(scheme !== undefined ? { scheme } : {}),
+    ...(startLine !== undefined ? { startLine } : {}),
+    ...(endLine !== undefined ? { endLine } : {}),
     lineFormat: readLineFormat(input),
     maxBytes: Math.max(1, positiveIntegerField(input, "maxBytes") ?? defaults.maxBytes),
     directoryOffset,
     directoryLimit,
-    cursor: stringField(input, "cursor")
+    ...(cursorValue !== undefined ? { cursor: cursorValue } : {})
   };
 }
 
@@ -490,7 +495,7 @@ function positiveIntegerField(input: JsonObject, key: string): number | undefine
   const value = input[key];
   if (value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
-    throw new Error(`${key} must be a positive integer`);
+    throw new CrishError(`${key} must be a positive integer`, "TOOL_ERROR", "permanent", false);
   }
   return value;
 }
@@ -499,7 +504,7 @@ function nonNegativeIntegerField(input: JsonObject, key: string): number | undef
   const value = input[key];
   if (value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
-    throw new Error(`${key} must be a non-negative integer`);
+    throw new CrishError(`${key} must be a non-negative integer`, "TOOL_ERROR", "permanent", false);
   }
   return value;
 }
@@ -511,7 +516,7 @@ function directoryOffsetField(input: JsonObject): number {
   if (!cursor) return 0;
   const parsed = Number(cursor);
   if (!Number.isSafeInteger(parsed) || parsed < 0) {
-    throw new Error("cursor must be a non-negative integer string");
+    throw new CrishError("cursor must be a non-negative integer string", "TOOL_ERROR", "permanent", false);
   }
   return parsed;
 }
@@ -570,7 +575,7 @@ function resolveWorkspacePath(workspaceRoot: string, inputPath: string): string 
   const normalizedRoot = normalizeForCompare(root);
   const normalizedCandidate = normalizeForCompare(candidate);
   if (normalizedCandidate !== normalizedRoot && !normalizedCandidate.startsWith(`${normalizedRoot}${sep}`)) {
-    throw new Error(`Path escapes workspace: ${inputPath}`);
+    throw new CrishError(`Path escapes workspace: ${inputPath}`, "TOOL_ERROR", "permanent", false);
   }
   return candidate;
 }
@@ -602,7 +607,7 @@ function artifactBytes(artifact: RichReadArtifactResolution): Buffer {
   if (artifact.text !== undefined) return Buffer.from(artifact.text, "utf8");
   const bytes = artifact.bytes;
   if (!bytes) {
-    throw new Error("Artifact resolver must return bytes or text");
+    throw new CrishError("Artifact resolver must return bytes or text", "TOOL_ERROR", "permanent", false);
   }
   if (Buffer.isBuffer(bytes)) return bytes;
   if (bytes instanceof ArrayBuffer) return Buffer.from(bytes);

@@ -1,7 +1,8 @@
+
 import { spawn, type ChildProcess } from "node:child_process";
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
-import { basename, resolve, sep } from "node:path";
+import { resolve, sep } from "node:path";
 import { classifyTerminalCommand, getHardlineCommandBlock } from "./permission/command-classification";
 import {
   BoundedProcessOutput,
@@ -15,28 +16,30 @@ import {
   type ProcessTerminationDiagnostic
 } from "./process-lifecycle";
 import { defineTool } from "./tools";
-import type { JsonObject, JsonValue, ToolOutput } from "@crish/shared-types";
+import type { JsonObject, ToolOutput } from "@crish/shared-types";
+import { CrishError } from "@crish/shared-types";
 import type { AgentTool } from "./types";
-import { BoundedMap } from "@crish/shared-utils";
+import { BoundedMap, toJsonObject, toJsonValue } from "@crish/shared-utils";
 import {
   formatDuration,
   getSharedScriptWaitPolicy,
-  type ScriptRunMode,
   type ScriptWaitPolicy,
   PARALLEL_SOFT_LIMIT_MS,
 } from "./script-wait-policy";
 
-/** 后台任务记录上限：已完成任务保留供查询，超过后按 FIFO 淘汰最旧记录。 */
+/** Max background task records kept; FIFO eviction when exceeded. */
 const MAX_BACKGROUND_TASKS = 200;
 
 export type BackgroundCommandState = "running" | "succeeded" | "failed" | "cancelled" | "timed-out";
 
 export interface BackgroundCommandStartInput {
   command: string;
-  cwd?: string;
-  timeoutMs?: number;
-  maxOutputBytes?: number;
-  heartbeatIntervalMs?: number;
+  cwd?: string | undefined;
+  timeoutMs?: number | undefined;
+  maxOutputBytes?: number | undefined;
+  heartbeatIntervalMs?: number | undefined;
+  /** Run ID to associate this task with; used by cancelAllForRun. */
+  runId?: string | undefined;
 }
 
 export interface BackgroundCommandManagerOptions {
@@ -57,14 +60,14 @@ export interface BackgroundCommandSnapshot {
   command: string;
   cwd: string;
   state: BackgroundCommandState;
-  pid?: number;
+  pid?: number | undefined;
   startedAt: string;
   updatedAt: string;
-  finishedAt?: string;
-  durationMs?: number;
+  finishedAt?: string | undefined;
+  durationMs?: number | undefined;
   timeoutMs: number;
-  exitCode?: number | null;
-  signal?: string | null;
+  exitCode?: number | null | undefined;
+  signal?: string | null | undefined;
   timedOut: boolean;
   cancelled: boolean;
   truncated: boolean;
@@ -74,7 +77,7 @@ export interface BackgroundCommandSnapshot {
   stdoutBytes: number;
   stderrBytes: number;
   terminationDiagnostics: ProcessTerminationDiagnostic[];
-  error?: string;
+  error?: string | undefined;
 }
 
 export type BackgroundCommandEvent =
@@ -92,24 +95,32 @@ interface BackgroundCommandRecord {
   state: BackgroundCommandState;
   startedAt: number;
   updatedAt: number;
-  finishedAt?: number;
+  finishedAt: number | undefined;
   timeoutMs: number;
-  child?: ChildProcess;
+  child: ChildProcess | undefined;
   stdout: BoundedProcessOutput;
   stderr: BoundedProcessOutput;
-  exitCode?: number | null;
-  signal?: string | null;
+  exitCode: number | null | undefined;
+  signal: string | null | undefined;
   timedOut: boolean;
   cancelRequested: boolean;
   terminationDiagnostics: ProcessTerminationDiagnostic[];
-  error?: string;
-  timeout?: ReturnType<typeof setTimeout>;
-  heartbeat?: ReturnType<typeof setInterval>;
+  error: string | undefined;
+  timeout: ReturnType<typeof setTimeout> | undefined;
+  heartbeat: ReturnType<typeof setInterval> | undefined;
 }
 
 export class BackgroundCommandManager {
-  private readonly tasks = new BoundedMap<string, BackgroundCommandRecord>(MAX_BACKGROUND_TASKS);
+  private readonly tasks = new BoundedMap<string, BackgroundCommandRecord>(
+    MAX_BACKGROUND_TASKS,
+    (taskId, record) => {
+      if (record.child && !isTerminalState(record.state)) {
+        terminateChild(record.child, this.guard()).catch(() => {});
+      }
+    },
+  );
   private readonly listeners = new Set<BackgroundCommandListener>();
+  private readonly runIndex = new Map<string, Set<string>>();
 
   constructor(private readonly options: BackgroundCommandManagerOptions) {}
 
@@ -117,7 +128,7 @@ export class BackgroundCommandManager {
     const command = requireNonEmptyString(input.command, "command");
     const hardline = getHardlineCommandBlock(command);
     if (hardline) {
-      throw new Error(hardline.reason);
+      throw new CrishError(hardline.reason, "TOOL_ERROR", "transient", true);
     }
 
     const cwd = resolveWorkspacePath(this.options.workspaceRoot, input.cwd ?? ".");
@@ -136,11 +147,28 @@ export class BackgroundCommandManager {
       timeoutMs,
       stdout: new BoundedProcessOutput(maxOutputBytes),
       stderr: new BoundedProcessOutput(maxOutputBytes),
+      finishedAt: undefined,
+      child: undefined,
+      timeout: undefined,
+      heartbeat: undefined,
       timedOut: false,
       cancelRequested: false,
-      terminationDiagnostics: []
+      terminationDiagnostics: [],
+      exitCode: undefined,
+      signal: undefined,
+      error: undefined,
     };
     this.tasks.set(record.id, record);
+
+    // 关联 runId→taskId 以便 cancelAllForRun 批量取消
+    if (input.runId) {
+      const tasks = this.runIndex.get(input.runId);
+      if (tasks) {
+        tasks.add(record.id);
+      } else {
+        this.runIndex.set(input.runId, new Set([record.id]));
+      }
+    }
 
     let child: ChildProcess;
     try {
@@ -153,7 +181,7 @@ export class BackgroundCommandManager {
       });
     } catch (cause) {
       // spawn 同步抛错（极少见，但需兜底）：record 已在 tasks Map 中，
-      // 必须走 finish 收尾，否则会以 "running" 状态永久残留 + 定时器未挂无法清理。
+      // 必须�?finish 收尾，否则会�?"running" 状态永久残�?+ 定时器未挂无法清理�?
       this.finish(record, {
         state: "failed",
         error: cause instanceof Error ? cause.message : String(cause)
@@ -194,9 +222,9 @@ export class BackgroundCommandManager {
       }
     };
 
-    // 显式 null 守卫：spawn 配置 stdio: ["ignore","pipe","pipe"] 时 stdout/stderr 必为非空，
-    // 但 try/catch 中以 ChildProcess 类型存储丢失了字面量 narrowing；显式检查更稳健，
-    // 万一未来 stdio 配置变化也不会崩溃。
+    // 显式 null 守卫：spawn 配置 stdio: ["ignore","pipe","pipe"] �?stdout/stderr 必为非空�?
+    // �?try/catch 中以 ChildProcess 类型存储丢失了字面量 narrowing；显式检查更稳健�?
+    // 万一未来 stdio 配置变化也不会崩溃�?
     if (child.stdout) {
       child.stdout.on("data", (chunk: Buffer) => {
         handleData("stdout", chunk);
@@ -224,7 +252,7 @@ export class BackgroundCommandManager {
       if (isTerminalState(record.state)) return;
       record.timedOut = true;
       record.updatedAt = Date.now();
-      record.terminationDiagnostics.push(...terminateChild(child, this.guard()));
+      terminateChild(child, this.guard()).then(diag => { record.terminationDiagnostics.push(...diag); });
     }, timeoutMs);
     record.heartbeat = setInterval(() => {
       if (isTerminalState(record.state)) return;
@@ -269,10 +297,40 @@ export class BackgroundCommandManager {
     record.cancelRequested = true;
     record.updatedAt = Date.now();
     if (record.child) {
-      record.terminationDiagnostics.push(...terminateChild(record.child, this.guard()));
+      terminateChild(record.child, this.guard()).then(diag => { record.terminationDiagnostics.push(...diag); });
     }
     this.finish(record, { state: "cancelled", exitCode: null, signal: "cancelled" });
     return this.toSnapshot(record);
+  }
+
+  /**
+   * 将已有 taskId 关联到指定 runId。
+   * 用于 task 启动时未传入 runId、后续再建立关联的场景。
+   */
+  registerRunTask(runId: string, taskId: string): void {
+    const tasks = this.runIndex.get(runId);
+    if (tasks) {
+      tasks.add(taskId);
+    } else {
+      this.runIndex.set(runId, new Set([taskId]));
+    }
+  }
+
+  /**
+   * 批量取消指定 runId 关联的所有后台任务。
+   * 已终态的任务跳过，不抛错。
+   */
+  cancelAllForRun(runId: string): void {
+    const taskIds = this.runIndex.get(runId);
+    if (!taskIds) return;
+    for (const taskId of taskIds) {
+      try {
+        this.cancel(taskId);
+      } catch {
+        // 任务可能已自然结束
+      }
+    }
+    this.runIndex.delete(runId);
   }
 
   /**
@@ -318,21 +376,21 @@ export class BackgroundCommandManager {
   }
 
   /**
-   * 关停全部运行中任务并清理追踪状态。
+   * 关停全部运行中任务并清理追踪状态�?
    *
-   * 异常路径兜底：daemon 关停 / workspace 切换 / manager 替换时调用。
-   * - 终止所有运行中子进程（killProcessTree）
-   * - 清理 timeout / heartbeat 定时器（经 finish 路径）
+   * 异常路径兜底：daemon 关停 / workspace 切换 / manager 替换时调用�?
+   * - 终止所有运行中子进程（killProcessTree�?
+   * - 清理 timeout / heartbeat 定时器（�?finish 路径�?
    * - 清空 tasks Map，防止累积已完成记录导致内存增长
-   * - 清空 listeners，防止后续 emit 触发已卸载回调
+   * - 清空 listeners，防止后�?emit 触发已卸载回�?
    *
-   * 幂等：多次调用安全；已终态任务不会被再次终止。
+   * 幂等：多次调用安全；已终态任务不会被再次终止�?
    */
   dispose(): void {
     for (const record of this.tasks.values()) {
       if (!isTerminalState(record.state)) {
         if (record.child) {
-          record.terminationDiagnostics.push(...terminateChild(record.child, this.guard()));
+          terminateChild(record.child, this.guard()).then(diag => { record.terminationDiagnostics.push(...diag); });
         }
         this.finish(record, { state: "cancelled", exitCode: null, signal: "disposed" });
       }
@@ -360,13 +418,13 @@ export class BackgroundCommandManager {
     try {
       getSharedScriptWaitPolicy().registerEnd(record.id, snapshot.durationMs);
     } catch {
-      // never break process lifecycle on policy bookkeeping
+      // silent: fire-and-forget - never break process lifecycle on policy bookkeeping
     }
   }
 
   private requireRecord(taskId: string): BackgroundCommandRecord {
     const record = this.tasks.get(taskId);
-    if (!record) throw new Error(`Background command not found: ${taskId}`);
+    if (!record) throw new CrishError(`Background command not found: ${taskId}`, "TOOL_ERROR", "transient", true);
     return record;
   }
 
@@ -420,15 +478,15 @@ export interface BackgroundCommandToolsOptions {
 }
 
 /**
- * Clear AI-facing task tools (single surface — do not also put background APIs on shell_command).
+ * Clear AI-facing task tools (single surface �?do not also put background APIs on shell_command).
  *
  * Mental model for the model:
- *   shell_command     → run & wait (default for short work)
- *   run_background    → start long work, get taskId
- *   wait_for_task     → block until done (preferred)
- *   check_task        → peek (rarely)
- *   stop_task         → only if user asks / clearly stuck
- *   list_tasks        → see what's running
+ *   shell_command     �?run & wait (default for short work)
+ *   run_background    �?start long work, get taskId
+ *   wait_for_task     �?block until done (preferred)
+ *   check_task        �?peek (rarely)
+ *   stop_task         �?only if user asks / clearly stuck
+ *   list_tasks        �?see what's running
  */
 export function createBackgroundCommandTools(
   manager: BackgroundCommandManager,
@@ -508,7 +566,7 @@ export function createBackgroundCommandTools(
         return backgroundTaskOutput(
           "等待超时，任务仍在运行",
           finished,
-          "进程未被终止。可稍后再 wait_for_task，或先做不依赖该结果的其它工作。",
+          "进程未被终止。可稍后使用 wait_for_task，或先做不依赖该结果的其它工作",
         );
       },
     }),
@@ -534,7 +592,7 @@ export function createBackgroundCommandTools(
       async execute(input) {
         const taskId = requireNonEmptyString(input.taskId, "taskId");
         let task = manager.get(taskId);
-        if (!task) throw new Error(`Task not found: ${taskId}`);
+        if (!task) throw new CrishError(`Task not found: ${taskId}`, "TOOL_ERROR", "transient", true);
 
         if (isTerminalState(task.state)) {
           policy.registerEnd(taskId, task.durationMs);
@@ -584,8 +642,8 @@ export function createBackgroundCommandTools(
           text:
             tasks.length > 0
               ? tasks.map(formatBackgroundCommandLine).join("\n")
-              : "当前没有后台任务。",
-          json: { tasks: tasks as unknown as JsonValue },
+              : "当前没有后台任务",
+          json: { tasks: toJsonValue(tasks) },
         };
       },
     }),
@@ -618,7 +676,7 @@ export function createBackgroundCommandTools(
   ];
 }
 
-/** @deprecated Use createBackgroundCommandTools (clear names: run_background / wait_for_task / …). */
+/** @deprecated Use createBackgroundCommandTools. @see createBackgroundCommandTools @removeWhen 所有 import 迁移至 createBackgroundCommandTools */
 export const createBackgroundCommandToolsLegacy = createBackgroundCommandTools;
 
 function backgroundTaskOutput(
@@ -636,7 +694,7 @@ function backgroundTaskOutput(
   return {
     text: lines.join("\n").trim(),
     json: {
-      ...(task as unknown as JsonObject),
+      ...(toJsonObject(task)),
       ...(hint ? { hint } : {}),
     },
   };
@@ -654,7 +712,7 @@ function resolveWorkspacePath(workspaceRoot: string, inputPath: string): string 
   const normalizedRoot = normalizeForCompare(root);
   const normalizedCandidate = normalizeForCompare(candidate);
   if (normalizedCandidate !== normalizedRoot && !normalizedCandidate.startsWith(`${normalizedRoot}${sep}`)) {
-    throw new Error(`Path escapes workspace: ${inputPath}`);
+    throw new CrishError(`Path escapes workspace: ${inputPath}`, "TOOL_ERROR", "transient", true);
   }
   return candidate;
 }
@@ -670,14 +728,9 @@ function isTerminalState(state: BackgroundCommandState): boolean {
 
 function requireNonEmptyString(value: unknown, key: string): string {
   if (typeof value !== "string" || value.length === 0) {
-    throw new Error(`${key} must be a non-empty string`);
+    throw new CrishError(`${key} must be a non-empty string`, "TOOL_ERROR", "transient", true);
   }
   return value;
-}
-
-function booleanField(input: JsonObject, key: string): boolean | undefined {
-  const value = input[key];
-  return typeof value === "boolean" ? value : undefined;
 }
 
 function stringField(input: JsonObject, key: string): string | undefined {

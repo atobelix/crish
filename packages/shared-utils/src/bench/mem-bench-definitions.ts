@@ -5,7 +5,7 @@ export const MEM_BENCHMARKS: MemBenchmark[] = [
     name: "cache.eviction.no-leak",
     execute: async () => {
       const { BoundedMap } = await import("../bounded-map");
-      const map = new BoundedMap<number, Uint8Array>(100);
+      const map = new BoundedMap<number, Uint8Array>(100, undefined);
       for (let i = 0; i < 10000; i++) {
         map.set(i, new Uint8Array(1024));
       }

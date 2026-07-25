@@ -13,14 +13,14 @@ export interface ToolDiscoveryFieldScores {
 
 export interface ToolDiscoveryToolMetadata {
   tool: AgentTool;
-  label?: string;
-  description?: string;
-  category?: string;
-  tokens?: string[];
-  pluginId?: string;
-  pluginName?: string;
-  sourceId?: string;
-  metadata?: JsonObject;
+  label?: string | undefined;
+  description?: string | undefined;
+  category?: string | undefined;
+  tokens?: string[] | undefined;
+  pluginId?: string | undefined;
+  pluginName?: string | undefined;
+  sourceId?: string | undefined;
+  metadata?: JsonObject | undefined;
 }
 
 export type ToolDiscoveryToolInput = AgentTool | ToolDiscoveryToolMetadata;
@@ -30,13 +30,13 @@ export interface ToolDiscoveryMetadataSource extends ToolSource {
 }
 
 export interface ToolDiscoverySearchOptions {
-  maxResults?: number;
-  excludeNames?: Iterable<string>;
+  maxResults?: number | undefined;
+  excludeNames?: Iterable<string> | undefined;
 }
 
 export interface ToolDiscoveryIndexOptions {
-  maxResults?: number;
-  fieldWeights?: Partial<ToolDiscoveryFieldScores>;
+  maxResults?: number | undefined;
+  fieldWeights?: Partial<ToolDiscoveryFieldScores> | undefined;
 }
 
 export interface ToolDiscoverySearchResult {
@@ -227,8 +227,8 @@ export class DeferredToolSource implements ToolSource {
   readonly index: ToolDiscoveryIndex;
   private readonly staticActiveTools: AgentTool[];
   private readonly staticDeferredTools: ToolDiscoveryToolInput[];
-  private readonly activeSource?: ToolSource;
-  private readonly deferredSource?: ToolSource;
+  private readonly activeSource: ToolSource | undefined;
+  private readonly deferredSource: ToolSource | undefined;
   private readonly activatedNames = new Set<string>();
   private activeTools = new Map<string, AgentTool>();
 

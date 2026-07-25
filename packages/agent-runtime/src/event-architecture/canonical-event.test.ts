@@ -4,12 +4,10 @@
 
 import { describe, it, expect } from "vitest";
 import {
-  ConexCanonicalAdapter,
   RuntimeCanonicalAdapter,
   EventSchemaRegistry,
   createCanonicalEvent,
   createDefaultSchemaRegistry,
-  RUNTIME_EVENT_SCHEMAS,
   type AdapterContext,
   type ConexCanonicalEvent,
 } from "./canonical-event";

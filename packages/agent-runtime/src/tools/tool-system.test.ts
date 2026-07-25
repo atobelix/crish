@@ -3,14 +3,11 @@ import {
   type ToolDefinition,
   type ToolRegistrationOptions,
   RegisteredTool,
-  type LlmToolDefinition,
   ToolRegistry,
 } from "./tool-definition";
 import type { AgentTool } from "../types";
 import type {
   JsonObject,
-  ToolCategory,
-  ToolConcurrency,
   ToolExecutionContext,
   ToolOutput,
 } from "@crish/shared-types";

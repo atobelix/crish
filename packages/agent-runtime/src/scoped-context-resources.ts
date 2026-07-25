@@ -90,12 +90,12 @@ export async function loadScopedContextResources(options: LoadScopedContextResou
   const workspaceRoot = options.workspaceRoot ? resolve(options.workspaceRoot) : undefined;
   const project: ScopedContextResolverProject = {
     cwd,
-    workspaceRoot,
-    projectRoot,
-    projectMarkers: [...(options.projectMarkers ?? [])],
-    projectFiles: [...(options.projectFiles ?? [])],
-    projectTags: [...(options.projectTags ?? [])],
-    packageNames: [...(options.packageNames ?? [])]
+    ...(workspaceRoot !== undefined ? { workspaceRoot } : {}),
+    ...(projectRoot !== undefined ? { projectRoot } : {}),
+    ...(options.projectMarkers !== undefined ? { projectMarkers: [...options.projectMarkers] } : {}),
+    ...(options.projectFiles !== undefined ? { projectFiles: [...options.projectFiles] } : {}),
+    ...(options.projectTags !== undefined ? { projectTags: [...options.projectTags] } : {}),
+    ...(options.packageNames !== undefined ? { packageNames: [...options.packageNames] } : {})
   };
   const diagnostics: ScopedContextResourceDiagnostic[] = [];
   const ruleRecords: ScopedContextRecord[] = [];
@@ -195,8 +195,8 @@ export async function loadAndResolveScopedContextResources(
     resolution: await resolveScopedContext({
       ...loaded.project,
       records: loaded.records,
-      userEnabledIds: options.userEnabledIds,
-      userDisabledIds: options.userDisabledIds
+      ...(options.userEnabledIds !== undefined ? { userEnabledIds: options.userEnabledIds } : {}),
+      ...(options.userDisabledIds !== undefined ? { userDisabledIds: options.userDisabledIds } : {})
     })
   };
 }
@@ -222,22 +222,22 @@ async function readScopedRuleFile(
     }
     const parsed = parseFrontmatter(decoded.text);
     const title = stringField(parsed.data.title) ?? stringField(parsed.data.name) ?? basename(filePath).replace(/\.md$/i, "");
-    const ruleInput: ScopedRuleInput = {
+    const ruleInput = {
       id: stringField(parsed.data.id) ?? stableRuleId(sourceLabel, filePath),
       title,
       text: parsed.body.trim(),
-      description: stringField(parsed.data.description),
+      ...(parsed.data.description !== undefined ? { description: stringField(parsed.data.description) } : {}),
       scope: scopeField(parsed.data.scope) ?? fallbackScope,
       activation: activationField(parsed.data.activation) ?? "enabled",
-      appliesTo: stringList(parsed.data["applies-to"] ?? parsed.data.appliesTo),
-      tags: stringList(parsed.data.tags),
+      ...(parsed.data["applies-to"] !== undefined || parsed.data.appliesTo !== undefined ? { appliesTo: stringList(parsed.data["applies-to"] ?? parsed.data.appliesTo) } : {}),
+      ...(parsed.data.tags !== undefined ? { tags: stringList(parsed.data.tags) } : {}),
       source: {
         type: fallbackScope === "global" ? "global-rule" : fallbackScope === "workspace" ? "workspace-rule" : "project-rule",
         path: filePath,
         label: sourceLabel
       },
       order
-    };
+    } as ScopedRuleInput;
     return { record: await defineScopedRule(ruleInput) };
   } catch (error) {
     return { diagnostic: warning(filePath, `Failed to read scoped rule file: ${errorMessage(error)}`) };

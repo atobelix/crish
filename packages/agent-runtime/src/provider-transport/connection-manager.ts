@@ -1,15 +1,8 @@
 /**
- * ConnectionManager — 连接选择与历史学习
- *
- * 管理多条到同一 provider/model 的传输通道，根据历史表现自动选择最快的。
- *
+ * ConnectionManager �?连接选择与历史学�? *
+ * 管理多条到同一 provider/model 的传输通道，根据历史表现自动选择最快的�? *
  * 核心原则（来自三框架对比分析）：
- * - 不重试同一种连接，每次换通道。每条通道最多尝试一次。
- *   避免 Codex CLI 那种 "WebSocket 死磕 5 次" 的糟糕体验。
- * - 传输切换对上层透明。不通知用户。仅在 debug 日志中记录。
- * - 历史学习基于滑动窗口（近 10 次），让近期表现权重更高。
- * - 传输统计可序列化持久化，重启后保留历史。
- */
+ * - 不重试同一种连接，每次换通道。每条通道最多尝试一次�? *   避免 Codex CLI 那种 "WebSocket 死磕 5 �? 的糟糕体验�? * - 传输切换对上层透明。不通知用户。仅�?debug 日志中记录�? * - 历史学习基于滑动窗口（近 10 次），让近期表现权重更高�? * - 传输统计可序列化持久化，重启后保留历史�? */
 
 import type {
   AgentProvider,
@@ -22,11 +15,8 @@ import type {
 export type TransportKind = "https" | "http" | "websocket";
 
 /**
- * 表示一条到 provider 的传输通道。
- *
- * 每个 ProviderTransport 是一个 AgentProvider + 传输方式 + 性能历史 的组合体。
- * 多个 transport 可以指向同一个逻辑 provider 但使用不同协议/端点。
- */
+ * 表示一条到 provider 的传输通道�? *
+ * 每个 ProviderTransport 是一�?AgentProvider + 传输方式 + 性能历史 的组合体�? * 多个 transport 可以指向同一个逻辑 provider 但使用不同协�?端点�? */
 export interface ProviderTransport {
   /** 传输通道唯一标识 */
   readonly id: string;
@@ -34,23 +24,23 @@ export interface ProviderTransport {
   /** 传输协议类型 */
   readonly kind: TransportKind;
 
-  /** 此通道使用的 provider 实例 */
+  /** 此通道使用�?provider 实例 */
   readonly provider: AgentProvider;
 
-  /** 可选的端点 URL（用于诊断和日志） */
+  /** 可选的端点 URL（用于诊断和日志�?*/
   readonly endpoint?: string;
 
-  /** 滑动平均延迟（毫秒），基于近 10 次调用 */
+  /** 滑动平均延迟（毫秒），基于近 10 次调�?*/
   avgLatency: number;
 
-  /** 近 10 次成功率（0-1），滑动窗口 */
+  /** �?10 次成功率�?-1），滑动窗口 */
   successRate: number;
 
   /** 最近一次使用时间戳 */
   lastUsed: number;
 }
 
-// ─── 持久化格式 ────────────────────────────────────────────
+// ─── 持久化格�?────────────────────────────────────────────
 
 export interface TransportStatsSnapshot {
   id: string;
@@ -88,9 +78,7 @@ export class ConnectionManager {
   // ── 传输注册 ────────────────────────────────────────────
 
   /**
-   * 注册一条传输通道。
-   * 同一个 provider 可以有多个 transport（HTTP/HTTPS/WebSocket）。
-   */
+   * 注册一条传输通道�?   * 同一�?provider 可以有多�?transport（HTTP/HTTPS/WebSocket）�?   */
   addTransport(transport: ProviderTransport): void {
     this.transports.push(transport);
     if (!this.slidingWindows.has(transport.id)) {
@@ -99,16 +87,14 @@ export class ConnectionManager {
   }
 
   /**
-   * 移除一条传输通道。
-   */
+   * 移除一条传输通道�?   */
   removeTransport(transportId: string): void {
     this.transports = this.transports.filter((t) => t.id !== transportId);
     this.slidingWindows.delete(transportId);
   }
 
   /**
-   * 获取当前所有注册的传输通道（只读）。
-   */
+   * 获取当前所有注册的传输通道（只读）�?   */
   getTransports(): ReadonlyArray<ProviderTransport> {
     return this.transports;
   }
@@ -116,42 +102,30 @@ export class ConnectionManager {
   // ── 选择逻辑 ────────────────────────────────────────────
 
   /**
-   * 选择最佳传输通道。
-   *
-   * 排序规则：
-   * 1. successRate DESC（成功率高的优先）
-   * 2. avgLatency ASC（延迟低的优先）
-   * 3. lastUsed DESC（最近使用过的优先，打破平局）
-   */
-  select(): ProviderTransport {
+   * 选择最佳传输通道�?   *
+   * 排序规则�?   * 1. successRate DESC（成功率高的优先�?   * 2. avgLatency ASC（延迟低的优先）
+   * 3. lastUsed DESC（最近使用过的优先，打破平局�?   */
+  select(): ProviderTransport | null {
     if (this.transports.length === 0) {
-      throw new ConnectionError(
-        "没有可用的传输通道。请检查 provider 配置。",
-        "no-transports"
-      );
+      return null;
     }
 
     const sorted = [...this.transports].sort((a, b) => {
-      // 成功率优先
       if (b.successRate !== a.successRate) {
         return b.successRate - a.successRate;
       }
-      // 延迟次之
       if (a.avgLatency !== b.avgLatency) {
         return a.avgLatency - b.avgLatency;
       }
-      // 最近使用过的打破平局
       return b.lastUsed - a.lastUsed;
     });
 
-    return sorted[0];
+    return sorted[0] ?? null;
   }
 
   /**
-   * 选择下一个最佳传输通道（排除已尝试的）。
-   * 用于当前通道失败后切换到备用通道。
-   *
-   * Accepts one id or many — failover must exclude *all* already-tried
+   * 选择下一个最佳传输通道（排除已尝试的）�?   * 用于当前通道失败后切换到备用通道�?   *
+   * Accepts one id or many �?failover must exclude *all* already-tried
    * transports, otherwise a higher-ranked failed transport can be reselected
    * and the retry loop never advances.
    */
@@ -166,16 +140,14 @@ export class ConnectionManager {
       return b.lastUsed - a.lastUsed;
     });
 
-    return sorted[0];
+    return sorted[0] ?? null;
   }
 
   // ── 结果记录 ────────────────────────────────────────────
 
   /**
-   * 记录一次传输调用的结果。
-   *
-   * 更新滑动窗口并重新计算 avgLatency 和 successRate。
-   */
+   * 记录一次传输调用的结果�?   *
+   * 更新滑动窗口并重新计�?avgLatency �?successRate�?   */
   recordResult(
     transportId: string,
     success: boolean,
@@ -210,15 +182,12 @@ export class ConnectionManager {
     }
   }
 
-  // ── 流式调用（带通道切换） ────────────────────────────────
+  // ── 流式调用（带通道切换�?────────────────────────────────
 
   /**
-   * 使用最佳传输通道执行流式调用。
-   *
-   * 如果当前通道失败，自动切换到次优通道重试一次。
-   * 每条通道最多尝试一次——不重试同一种连接。
-   *
-   * @returns 成功时返回 provider 流事件，失败时抛出 ConnectionError
+   * 使用最佳传输通道执行流式调用�?   *
+   * 如果当前通道失败，自动切换到次优通道重试一次�?   * 每条通道最多尝试一次——不重试同一种连接�?   *
+   * @returns 成功时返�?provider 流事件，失败时抛�?ConnectionError
    */
   async *stream(
     request: AgentProviderRequest
@@ -269,7 +238,7 @@ export class ConnectionManager {
         if (streamError) {
           this.recordResult(transport.id, false, Date.now() - startTime);
           if (yieldedContent) {
-            // Already yielded text/tool-call deltas — must not append another transport's stream.
+            // Already yielded text/tool-call deltas �?must not append another transport's stream.
             throw new StreamInterruptedError(
               transport.id,
               streamError instanceof Error ? streamError.message : String(streamError),
@@ -312,16 +281,15 @@ export class ConnectionManager {
 
     // 所有通道都失败
     throw new ConnectionError(
-      "所有传输通道均无法连接。请检查网络后重试。",
+      "所有传输通道均无法连接。请检查网络后重试",
       "all-transports-exhausted"
     );
   }
 
-  // ── 持久化 ───────────────────────────────────────────────
+  // ── 持久�?───────────────────────────────────────────────
 
   /**
-   * 导出传输统计数据（用于持久化）。
-   */
+   * 导出传输统计数据（用于持久化）�?   */
   dumpSnapshot(): ConnectionManagerSnapshot {
     const transports: TransportStatsSnapshot[] = [];
 
@@ -330,7 +298,7 @@ export class ConnectionManager {
       transports.push({
         id: t.id,
         kind: t.kind,
-        endpoint: t.endpoint,
+        ...(t.endpoint !== undefined ? { endpoint: t.endpoint } : {}),
         avgLatency: t.avgLatency,
         successRate: t.successRate,
         successCount: window.filter((e) => e.success).length,
@@ -344,11 +312,9 @@ export class ConnectionManager {
   }
 
   /**
-   * 从持久化的快照恢复传输统计。
-   *
+   * 从持久化的快照恢复传输统计�?   *
    * 注意：快照中的统计会被合并到当前传输中。如果传输已经注册但快照中有更新的数据，
-   * 使用快照中的值。快照中不存在于当前传输列表的条目会被忽略。
-   */
+   * 使用快照中的值。快照中不存在于当前传输列表的条目会被忽略�?   */
   loadSnapshot(snapshot: ConnectionManagerSnapshot): void {
     if (!snapshot || !Array.isArray(snapshot.transports)) return;
 
@@ -400,8 +366,7 @@ function isContentBearingStreamEvent(event: ProviderStreamEvent): boolean {
 // ─── 错误类型 ──────────────────────────────────────────────
 
 /**
- * 连接错误：所有通道都已尝试但均失败。
- */
+ * 连接错误：所有通道都已尝试但均失败�? */
 export class ConnectionError extends Error {
   public readonly code: string;
 
@@ -413,9 +378,7 @@ export class ConnectionError extends Error {
 }
 
 /**
- * 流中断错误：已收到部分事件后流中断。
- * 上层（StreamRecovery）需要处理部分输出。
- */
+ * 流中断错误：已收到部分事件后流中断�? * 上层（StreamRecovery）需要处理部分输出�? */
 export class StreamInterruptedError extends Error {
   public readonly transportId: string;
   public readonly receivedEvents: boolean;

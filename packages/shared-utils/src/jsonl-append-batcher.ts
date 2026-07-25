@@ -53,7 +53,7 @@ export interface JsonlAppendBatcherOptions {
 
 export class JsonlAppendBatcher {
   private readonly options: Required<Omit<JsonlAppendBatcherOptions, "signal">> & {
-    signal?: AbortSignal;
+    signal: AbortSignal | undefined;
   };
   private handle: FileHandle | undefined;
   private pending = "";
@@ -149,7 +149,6 @@ export class JsonlAppendBatcher {
         const s = await stat(this.options.filePath);
         if (s.size > 0) {
           // 读最后一字节
-          const buf = Buffer.alloc(1);
           const existing = await readFile(this.options.filePath);
           if (existing.length > 0 && existing[existing.length - 1] !== 10) {
             // 文件末尾不是换行，先 append 一个换行
@@ -161,8 +160,8 @@ export class JsonlAppendBatcher {
             }
           }
         }
-      } catch {
-        // 文件不存在，open("a") 会创建
+      } catch (err) {
+        console.warn('[JsonlAppendBatcher] initHandle leading newline check failed:', err);
       }
       this.leadingNewlineChecked = true;
     }
@@ -173,12 +172,12 @@ export class JsonlAppendBatcher {
   private maybeScheduleFlush(): void {
     // 按数量触发
     if (this.pendingCount >= this.options.flushCount) {
-      this.doFlush().catch(() => {});
+      this.doFlush().catch((err) => console.warn('[JsonlAppendBatcher] flush failed:', err));
       return;
     }
 
     if (this.options.flushIntervalMs === 0) {
-      this.doFlush().catch(() => {});
+      this.doFlush().catch((err) => console.warn('[JsonlAppendBatcher] flush failed:', err));
       return;
     }
 
@@ -188,7 +187,7 @@ export class JsonlAppendBatcher {
       this.flushTimer = setTimeout(() => {
         this.flushTimer = undefined;
         if (this.pendingCount > 0) {
-          this.doFlush().catch(() => {});
+          this.doFlush().catch((err) => console.warn('[JsonlAppendBatcher] flush failed:', err));
         }
       }, delay);
     }

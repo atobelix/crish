@@ -5,7 +5,7 @@
  */
 
 export { isRecord, isPromiseLike, nonEmptyString, isNodeError } from "./guards";
-export { clone, deepFreeze, compactJsonObject, isJsonObject, isJsonValue, stripNonSerializable } from "./object";
+export { clone, deepFreeze, compactJsonObject, isJsonObject, isJsonValue, stripNonSerializable, toJsonObject, toJsonValue } from "./object";
 export { errorMessage } from "./error";
 export { combineAbortSignals } from "./abort-utils";
 export { RingBuffer } from "./ring-buffer";
@@ -15,6 +15,10 @@ export { deepEqual, shallowEqual } from "./deep-equal";
 export { BoundedArray } from "./bounded-array";
 export { retryWithBackoff, calculateBackoff } from "./retry";
 export type { RetryOptions } from "./retry";
+
+// ── 文件编辑 ──
+export { replaceViaSeekSequence } from "./file/seek-sequence";
+export type { SeekPass } from "./file/seek-sequence";
 
 // ── 内存管理 ──
 export {
@@ -65,10 +69,21 @@ export type { CacheProvider, CacheBudget, SizeEstimator } from "./cache";
 export { MemoryManager, memoryManager } from "./memory-manager";
 export type { MemoryPressureLevel, MemoryManagerOptions } from "./memory-manager";
 
+// ── 结构化日志 ──
+export { Logger, setLogRedactor, redactSensitive, shouldLog, createConsoleTransport } from "./logger";
+export type { LogLevel, LogEntry, LogTransport, LoggerOptions } from "./logger";
+
 export { ObjectPool } from "./object-pool";
 
+// ── 可观测性 ──
+export { PrometheusMetricsExporter } from "./prometheus-exporter";
+export type { MetricsExporter } from "./metrics-exporter";
+
+// ── 技能 ID 算法（与 agent-runtime 一致） ──
+export { skillStableId, ruleStableId, hashTextSha256Hex } from "./skill-id";
+
 // ── 背压系统 ──
-export { TokenBucket, Semaphore, CircuitBreaker, CircuitBreakerOpenError } from "./backpressure";
+export { TokenBucket, CircuitBreaker, CircuitBreakerOpenError } from "./backpressure";
 export type { CircuitState, CircuitBreakerState } from "./backpressure";
 
 // ── 平台自适应层 ──

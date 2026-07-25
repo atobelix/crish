@@ -18,35 +18,35 @@ export interface ParsedResourceUri {
   original: string;
   uri: string;
   scheme: InternalResourceScheme;
-  authority?: string;
+  authority?: string | undefined;
   path: string[];
   query: ResourceQuery;
-  fragment?: string;
+  fragment?: string | undefined;
 }
 
 export interface ResourceUriParts {
   scheme: InternalResourceScheme;
-  authority?: string;
-  path?: ResourcePathInput;
-  query?: ResourceQueryInput;
-  fragment?: string;
+  authority?: string | undefined;
+  path?: ResourcePathInput | undefined;
+  query?: ResourceQueryInput | undefined;
+  fragment?: string | undefined;
 }
 
 export interface ResourceMetadata {
-  uri?: string;
-  scheme?: InternalResourceScheme;
+  uri?: string | undefined;
+  scheme?: InternalResourceScheme | undefined;
   kind: ResourceKind;
-  title?: string;
-  name?: string;
-  mimeType?: string;
-  contentType?: string;
-  byteLength?: number;
-  metadata?: JsonObject;
+  title?: string | undefined;
+  name?: string | undefined;
+  mimeType?: string | undefined;
+  contentType?: string | undefined;
+  byteLength?: number | undefined;
+  metadata?: JsonObject | undefined;
 }
 
 export interface ResourceContent extends ResourceMetadata {
-  text?: string;
-  bytes?: Uint8Array | ArrayBuffer;
+  text?: string | undefined;
+  bytes?: Uint8Array | ArrayBuffer | undefined;
 }
 
 export interface BlobResourceStoreEntry {
@@ -100,7 +100,7 @@ export class ResourceUriParseError extends Error {
 export class ResourceUnsupportedError extends Error {
   readonly kind = "resource-unsupported" as const;
   readonly uri: string;
-  readonly scheme?: string;
+  readonly scheme: string | undefined;
   readonly operation: ResourceResolveOperation | "parse";
 
   constructor(uri: string, operation: ResourceResolveOperation | "parse", message?: string, scheme?: string) {
@@ -245,6 +245,7 @@ export function tryParseResourceUri(value: string): ParsedResourceUri | undefine
   try {
     return parseResourceUri(value);
   } catch {
+    // silent: URI 解析异常时返回 undefined
     return undefined;
   }
 }
@@ -479,6 +480,7 @@ function decodeUriComponent(uri: string, value: string, label: string): string {
   try {
     return decodeURIComponent(value);
   } catch {
+    // silent: decodeURIComponent 失败时抛出语义化错误
     throw new ResourceUriParseError(uri, `Invalid encoded ${label} in resource URI: ${uri}`);
   }
 }

@@ -1,0 +1,7 @@
+{
+  "providerId": "openai",
+  "name": "OpenAI",
+  "engine": "openai-compatible",
+  "baseUrl": "https://api.openai.com/v1",
+  "models": [{ "id": "gpt-4o" }]
+}

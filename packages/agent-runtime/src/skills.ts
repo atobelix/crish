@@ -162,7 +162,7 @@ async function loadSkillFile(filePath: string, result: LoadSkillsResult, options
       ? { appliesTo: stringList(parsed.data["applies-to"] ?? parsed.data.appliesTo) }
       : {}),
     ...(stringList(parsed.data.tags).length > 0 ? { tags: stringList(parsed.data.tags) } : {})
-  };
+  } as AgentSkill;
 }
 
 function parseFrontmatter(content: string): ParsedFrontmatter {

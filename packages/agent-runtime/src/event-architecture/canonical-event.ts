@@ -1,16 +1,11 @@
 /**
  * Conex Canonical Event Model
  *
- * 统一事件架构的核心：所有事件在产生时即映射到 Canonical 格式，
- * 每层只做 Canonical <-> 层特定格式 的双向转换，禁止层间直接转换。
- *
- * 设计原则：
- * 1. 单一真相源：Canonical Event 是事件的唯一定义
- * 2. 双向转换：每层有独立的 Adapter，只负责 Canonical <-> 层格式
- * 3. 事件溯源：每个事件携带 traceId / spanId / causationId
+ * 统一事件架构的核心：所有事件在产生时即映射�?Canonical 格式�? * 每层只做 Canonical <-> 层特定格�?的双向转换，禁止层间直接转换�? *
+ * 设计原则�? * 1. 单一真相源：Canonical Event 是事件的唯一定义
+ * 2. 双向转换：每层有独立�?Adapter，只负责 Canonical <-> 层格�? * 3. 事件溯源：每个事件携�?traceId / spanId / causationId
  * 4. 诊断友好：每个事件可附带 Diagnostic 信息
- * 5. Schema 校验：通过 Registry 校验事件格式，防止漂移
- */
+ * 5. Schema 校验：通过 Registry 校验事件格式，防止漂�? */
 
 // ─── Canonical Event 核心类型 ──────────────────────────────
 
@@ -25,15 +20,14 @@ export type ConexEventDomain =
   | "provider"       // Provider 通信相关
   | "checkpoint"     // 检查点/快照相关
   | "goal"           // Goal Run 相关
-  | "lifecycle"      // 生命周期状态转移
+  | "lifecycle"      // 生命周期状态转换
   | "diagnostic"     // 诊断信息
   | "background"     // 后台任务
   | "rendering"      // 渲染管线
   | "test";          // 测试专用
 
 /**
- * 事件来源层
- */
+ * 事件来源�? */
 export type ConexEventSourceLayer =
   | "runtime"
   | "orchestrator"
@@ -47,20 +41,18 @@ export interface ConexDiagnostic {
   code: string;
   severity: "info" | "warning" | "error";
   message: string;
-  detail?: unknown;
+  detail?: unknown | undefined;
 }
 
 /**
  * Canonical Event - 事件的统一表示
  *
- * 所有层的事件在跨层传输时必须转换为此格式。
- * 每个事件携带完整的追踪信息，支持端到端追踪。
- */
+ * 所有层的事件在跨层传输时必须转换为此格式�? * 每个事件携带完整的追踪信息，支持端到端追踪�? */
 export interface ConexCanonicalEvent {
   // ─── 身份 ───────────────────────────────────────────
   /** 全局唯一事件 ID */
   eventId: string;
-  /** 端到端追踪 ID（从用户操作到最终 UI 渲染） */
+  /** 端到端追�?ID（从用户操作到最�?UI 渲染�?*/
   traceId: string;
   /** 当前跨度 ID */
   spanId: string;
@@ -69,15 +61,15 @@ export interface ConexCanonicalEvent {
   /** 产生此事件的层 */
   sourceLayer: ConexEventSourceLayer;
   /** 来源状态机类型（如果事件由状态机转移产生） */
-  sourceMachineType?: string;
+  sourceMachineType?: string | undefined;
   /** 来源状态机实例 ID */
-  sourceMachineId?: string;
+  sourceMachineId?: string | undefined;
 
   // ─── 时间 ───────────────────────────────────────────
   /** 事件发生时间（ISO 8601） */
   occurredAt: string;
   /** 处理层接收时间（ISO 8601） */
-  receivedAt?: string;
+  receivedAt?: string | undefined;
 
   // ─── 分类 ───────────────────────────────────────────
   /** 事件领域 */
@@ -91,27 +83,24 @@ export interface ConexCanonicalEvent {
 
   // ─── 关联 ───────────────────────────────────────────
   /** 关联的请求/操作 ID */
-  correlationId?: string;
+  correlationId?: string | undefined;
   /** 导致此事件的上一个事件 ID（因果链） */
-  causationId?: string;
+  causationId?: string | undefined;
 
   // ─── 诊断 ───────────────────────────────────────────
-  diagnostics?: ConexDiagnostic[];
+  diagnostics?: ConexDiagnostic[] | undefined;
 }
 
 // ─── Adapter 接口 ─────────────────────────────────────────
 
 /**
- * 事件适配器接口
- *
- * 每层实现此接口，负责 Canonical <-> 层特定格式 的双向转换。
- * 新增事件类型时，只需在对应 Adapter 中增加映射，
- * 编译器通过 exhaustive check 提示遗漏。
- */
+ * 事件适配器接�? *
+ * 每层实现此接口，负责 Canonical <-> 层特定格�?的双向转换�? * 新增事件类型时，只需在对�?Adapter 中增加映射，
+ * 编译器通过 exhaustive check 提示遗漏�? */
 export interface ConexCanonicalAdapter<TLayerEvent> {
-  /** 将层特定事件转换为 Canonical 格式 */
+  /** 将层特定事件转换�?Canonical 格式 */
   toCanonical(event: TLayerEvent, context: AdapterContext): ConexCanonicalEvent;
-  /** 将 Canonical 格式转换为层特定事件 */
+  /** �?Canonical 格式转换为层特定事件 */
   fromCanonical(canonical: ConexCanonicalEvent): TLayerEvent;
 }
 
@@ -122,8 +111,8 @@ export interface AdapterContext {
   traceId: string;
   spanId: string;
   sessionId: string;
-  runId?: string;
-  causationId?: string;
+  runId?: string | undefined;
+  causationId?: string | undefined;
 }
 
 // ─── Event Schema Registry ────────────────────────────────
@@ -141,8 +130,8 @@ export interface SchemaValidationError {
   eventType: string;
   path: string;
   message: string;
-  expected?: string;
-  received?: string;
+  expected?: string | undefined;
+  received?: string | undefined;
 }
 
 /**
@@ -153,15 +142,13 @@ export interface EventSchemaDefinition {
   eventType: string;
   requiredFields: string[];
   fieldTypes: Record<string, string>;
-  description?: string;
+  description?: string | undefined;
 }
 
 /**
  * Event Schema Registry
  *
- * 注册和校验所有 Canonical Event 的格式。
- * 运行时可查询，防止格式漂移。
- */
+ * 注册和校验所�?Canonical Event 的格式�? * 运行时可查询，防止格式漂移�? */
 export class EventSchemaRegistry {
   private schemas = new Map<string, EventSchemaDefinition>();
 
@@ -183,7 +170,7 @@ export class EventSchemaRegistry {
   }
 
   /**
-   * 校验事件是否符合注册的 Schema
+   * 校验事件是否符合注册�?Schema
    */
   validate(event: ConexCanonicalEvent): SchemaValidationResult {
     const key = this.schemaKey(event.domain, event.eventType);
@@ -238,15 +225,14 @@ export class EventSchemaRegistry {
   }
 
   /**
-   * 获取指定领域/类型的 Schema
+   * 获取指定领域/类型�?Schema
    */
   getSchema(domain: string, eventType: string): EventSchemaDefinition | undefined {
     return this.schemas.get(this.schemaKey(domain, eventType));
   }
 
   /**
-   * 列出所有已注册的领域
-   */
+   * 列出所有已注册的领�?   */
   listDomains(): string[] {
     const domains = new Set<string>();
     for (const schema of this.schemas.values()) {
@@ -256,8 +242,7 @@ export class EventSchemaRegistry {
   }
 
   /**
-   * 列出指定领域的所有事件类型
-   */
+   * 列出指定领域的所有事件类�?   */
   listEventTypes(domain: string): string[] {
     const types: string[] = [];
     for (const schema of this.schemas.values()) {
@@ -276,17 +261,16 @@ export class EventSchemaRegistry {
 // ─── Canonical Event 工厂 ─────────────────────────────────
 
 /**
- * 创建 Canonical Event 的工厂函数
- */
+ * 创建 Canonical Event 的工厂函�? */
 export function createCanonicalEvent(options: {
   domain: ConexEventDomain;
   eventType: string;
   payload: unknown;
   context: AdapterContext;
   sourceLayer: ConexEventSourceLayer;
-  sourceMachineType?: string;
-  sourceMachineId?: string;
-  diagnostics?: ConexDiagnostic[];
+  sourceMachineType?: string | undefined;
+  sourceMachineId?: string | undefined;
+  diagnostics?: ConexDiagnostic[] | undefined;
 }): ConexCanonicalEvent {
   return {
     eventId: createEventId(),
@@ -463,14 +447,11 @@ export const RUNTIME_EVENT_SCHEMAS: EventSchemaDefinition[] = [
 /**
  * Runtime 层的 Canonical Adapter
  *
- * 将 AgentEvent 转换为 ConexCanonicalEvent，反之亦然。
- */
+ * �?AgentEvent 转换�?ConexCanonicalEvent，反之亦然�? */
 export class RuntimeCanonicalAdapter implements ConexCanonicalAdapter<unknown> {
   toCanonical(event: unknown, context: AdapterContext): ConexCanonicalEvent {
     const agentEvent = event as Record<string, unknown>;
     const type = agentEvent.type as string;
-    const sessionId = (agentEvent.sessionId as string) ?? context.sessionId;
-
     const { domain, eventType } = classifyRuntimeEvent(type);
 
     return createCanonicalEvent({
@@ -559,7 +540,7 @@ function checkType(value: unknown, expectedType: string): boolean {
 }
 
 /**
- * 创建全局默认的 Schema Registry 并注册内置 Schema
+ * 创建全局默认�?Schema Registry 并注册内�?Schema
  */
 export function createDefaultSchemaRegistry(): EventSchemaRegistry {
   const registry = new EventSchemaRegistry();

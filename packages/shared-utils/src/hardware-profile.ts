@@ -13,15 +13,15 @@ export interface HardwareProfile {
   };
   memory: {
     total: number;
-    deviceMemory?: number;
+    deviceMemory: number | undefined;
   };
   gpu: {
     available: boolean;
     webgpu: boolean;
     webgl: boolean;
     canvas2d: boolean;
-    vendor?: string;
-    renderer?: string;
+    vendor?: string | undefined;
+    renderer?: string | undefined;
   };
   storage: {
     type: 'ssd' | 'hdd' | 'unknown';
@@ -54,6 +54,7 @@ function detectCpuCores(): number {
     const c = navigator.hardwareConcurrency;
     return c > 0 ? c : 2;
   } catch {
+    // silent: navigator.hardwareConcurrency 不可用时降级为 2 核
     return 2;
   }
 }
@@ -70,7 +71,7 @@ async function detectCpuModel(): Promise<string | undefined> {
       }
     }
   } catch {
-    /* fall through */
+    // silent: GPU adapter info 不可用时返回 undefined
   }
   return undefined;
 }
@@ -81,6 +82,7 @@ async function detectGpu(): Promise<HardwareProfile['gpu']> {
       const c = document.createElement('canvas');
       return !!(c.getContext('2d'));
     } catch {
+      // silent: canvas 2d 不可用时降级为 false
       return false;
     }
   })();
@@ -93,6 +95,7 @@ async function detectGpu(): Promise<HardwareProfile['gpu']> {
       const gl1 = c.getContext('webgl') as WebGLRenderingContext | null;
       return !!gl1;
     } catch {
+      // silent: WebGL 不可用时降级为 false
       return false;
     }
   })();
@@ -115,7 +118,7 @@ async function detectGpu(): Promise<HardwareProfile['gpu']> {
       }
     }
   } catch {
-    /* WebGPU not available */
+    // silent: WebGPU API 不可用时跳过
   }
 
   // Fallback: try to get GPU from WebGL debug info
@@ -133,7 +136,7 @@ async function detectGpu(): Promise<HardwareProfile['gpu']> {
         }
       }
     } catch {
-      /* ignored */
+      // silent: WebGL debug info 不可用时忽略
     }
   }
 
@@ -151,7 +154,7 @@ function detectMemory(): HardwareProfile['memory'] {
       deviceMemory = (navigator as Navigator & { deviceMemory: number }).deviceMemory;
     }
   } catch {
-    /* not available */
+    // silent: navigator.deviceMemory 不可用时跳过
   }
 
   try {
@@ -164,7 +167,7 @@ function detectMemory(): HardwareProfile['memory'] {
       total = deviceMemory * 1024 * 1024 * 1024;
     }
   } catch {
-    /* fallback to deviceMemory */
+    // silent: performance.memory 不可用时降级到 deviceMemory
     if (deviceMemory) {
       total = deviceMemory * 1024 * 1024 * 1024;
     }
@@ -184,7 +187,7 @@ async function detectStorageType(): Promise<'ssd' | 'hdd' | 'unknown'> {
       // Already a good sign — modern browser, likely SSD on any modern device
     }
   } catch {
-    /* ignore */
+    // silent: StorageManager API 不可用时跳过
   }
 
   // Attempt benchmark via IndexedDB write + read latency
@@ -222,6 +225,7 @@ async function detectStorageType(): Promise<'ssd' | 'hdd' | 'unknown'> {
     // < 2ms for 1KB random write → SSD
     return elapsed < 2 ? 'ssd' : 'hdd';
   } catch {
+    // silent: IndexedDB 基准不可用时返回 unknown
     return 'unknown';
   }
 }
@@ -233,7 +237,7 @@ async function detectStorageQuota(): Promise<number | undefined> {
       return est.quota ?? undefined;
     }
   } catch {
-    /* ignore */
+    // silent: StorageManager estimate 不可用时返回 undefined
   }
   return undefined;
 }
@@ -268,6 +272,7 @@ function benchmarkCpuSpeed(): Promise<number> {
         const ghz = Math.round((avgOps * 100 / 1e7) * 10) / 10;
         resolve(Math.max(0.5, Math.min(ghz, 6.0)));
       } catch {
+        // silent: CPU 基准异常时返回默认 1.0 GHz
         resolve(1.0);
       }
     };

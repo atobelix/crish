@@ -2,6 +2,10 @@ import { readdir, readFile, access } from 'node:fs/promises';
 import { join, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 
+import { Logger, createConsoleTransport } from "@crish/shared-utils";
+
+const logger = new Logger({ module: "plugin-fs-registry", transports: [createConsoleTransport()] });
+
 export interface PluginManifest {
   name: string;
   version: string;
@@ -102,7 +106,7 @@ export class PluginRegistry {
 
   unload(name: string): void {
     this.plugins.delete(name);
-    console.info(`[PluginRegistry] unloaded: ${name}`);
+    logger.info(`[PluginRegistry] unloaded: ${name}`);
   }
 }
 

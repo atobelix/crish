@@ -27,6 +27,16 @@
       "import": "./dist/browser-index.js",
       "default": "./dist/browser-index.js"
     },
+    "./test/mockFactories": {
+      "development": {
+        "types": "./src/test/mockFactories.ts",
+        "import": "./src/test/mockFactories.ts",
+        "default": "./src/test/mockFactories.ts"
+      },
+      "types": "./dist/test/mockFactories.d.ts",
+      "import": "./dist/test/mockFactories.js",
+      "default": "./dist/test/mockFactories.js"
+    },
     "./node": {
       "development": {
         "types": "./src/node-index.ts",
@@ -42,6 +52,7 @@
     "dist"
   ],
   "scripts": {
+    "typecheck": "tsc --noEmit",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build:types": "node -e \"require('node:fs').rmSync('../../node_modules/.cache/shared-utils.tsbuildinfo', { force: true })\" && tsc -p tsconfig.build.json --emitDeclarationOnly --declarationMap false && tsc-alias -p tsconfig.build.json --resolve-full-paths",
     "build:js": "esbuild src/index.ts --bundle --platform=node --format=esm --target=es2022 --packages=external --outfile=dist/index.js --sourcemap",

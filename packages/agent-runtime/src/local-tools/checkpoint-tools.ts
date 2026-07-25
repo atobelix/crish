@@ -51,7 +51,7 @@ export function createRestoreFileSnapshotTool(options: LocalToolOptions & { name
         async () => {
           const artifact = await restoreFileSnapshot({
             workspaceRoot: options.workspaceRoot,
-            archiveRoot: options.snapshot && typeof options.snapshot === "object" ? options.snapshot.archiveRoot : undefined,
+            ...(options.snapshot && typeof options.snapshot === "object" ? { archiveRoot: options.snapshot.archiveRoot } : {}),
             snapshotPath: requireString(input, "snapshotPath"),
             targetPath
           });
@@ -90,11 +90,11 @@ export function createWorkspaceCheckpointTool(options: LocalToolOptions & { name
     async execute(input, context) {
       const checkpoint = await createWorkspaceCheckpoint({
         workspaceRoot: options.workspaceRoot,
-        archiveRoot: options.snapshot && typeof options.snapshot === "object" ? options.snapshot.archiveRoot : undefined,
+        ...(options.snapshot && typeof options.snapshot === "object" ? { archiveRoot: options.snapshot.archiveRoot } : {}),
         sessionId: options.sessionId ?? context.sessionId,
         label: requireString(input, "label"),
         files: requireStringArray(input, "files"),
-        maxFileBytes: options.maxFileBytes ?? (options.snapshot && typeof options.snapshot === "object" ? options.snapshot.maxFileBytes : undefined)
+        ...(options.snapshot && typeof options.snapshot === "object" && options.snapshot.maxFileBytes !== undefined ? { maxFileBytes: options.maxFileBytes ?? options.snapshot.maxFileBytes } : options.maxFileBytes !== undefined ? { maxFileBytes: options.maxFileBytes } : {})
       });
       return {
         text: `Created checkpoint ${checkpoint.id} for ${checkpoint.files.length} file(s)`,
@@ -143,7 +143,7 @@ export function createRestoreWorkspaceCheckpointTool(options: LocalToolOptions &
         async () => {
           const result = await restoreWorkspaceCheckpoint({
             workspaceRoot: options.workspaceRoot,
-            archiveRoot: options.snapshot && typeof options.snapshot === "object" ? options.snapshot.archiveRoot : undefined,
+            ...(options.snapshot && typeof options.snapshot === "object" ? { archiveRoot: options.snapshot.archiveRoot } : {}),
             checkpointPath
           });
           return {

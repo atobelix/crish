@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { decodeTextBuffer } from "./encoding";
 import { createId, nowIso } from "./session";
 import { defineTool } from "./tools";
-import { AsyncMutex, BoundedMap, isNodeError, RingBuffer, IN_MEMORY_MEMORY_ENTRIES } from "@crish/shared-utils";
+import { AsyncMutex, BoundedMap, isNodeError, RingBuffer, IN_MEMORY_MEMORY_ENTRIES, toJsonValue } from "@crish/shared-utils";
 import { JsonlAppendBatcher } from "@crish/shared-utils/node";
 import type { JsonObject, JsonValue } from "@crish/shared-types";
 import type { AgentTool } from "./types";
@@ -35,7 +35,7 @@ export interface MemoryStore {
 
 export class InMemoryMemoryStore implements MemoryStore {
   private readonly entries = new RingBuffer<MemoryEntry>(IN_MEMORY_MEMORY_ENTRIES);
-  private readonly deletedIds = new BoundedMap<string, true>(IN_MEMORY_MEMORY_ENTRIES);
+  private readonly deletedIds = new BoundedMap<string, true>(IN_MEMORY_MEMORY_ENTRIES, undefined);
 
   async remember(entry: Omit<MemoryEntry, "id" | "createdAt" | "updatedAt">): Promise<MemoryEntry> {
     const now = nowIso();
@@ -146,7 +146,7 @@ export class JsonlMemoryStore implements MemoryStore {
       try {
         await this.appendBatcher.close();
       } catch {
-        // 忽略关闭错误
+        // silent: close error ignored
       }
       this.appendBatcher = undefined;
     }
@@ -216,6 +216,7 @@ export class JsonlMemoryStore implements MemoryStore {
             entries.set(entry.id, entry);
           }
         } catch {
+          // silent: JSON.parse 降级，损坏行跳过
           continue;
         }
       }
@@ -287,7 +288,7 @@ export class JsonlMemoryStore implements MemoryStore {
       await writeFile(tmpPath, content, "utf8");
       await rename(tmpPath, this.filePath);
     } catch (error) {
-      // rename 失败时清理 tmp 残留，避免污染工作区
+      // silent: cleanup tmp on rename failure
       await unlink(tmpPath).catch(() => undefined);
       throw error;
     }
@@ -352,15 +353,16 @@ export function createMemoryTools(store: MemoryStore): AgentTool[] {
         return `remember ${stringField(input, "content")?.slice(0, 80) ?? "memory"}`;
       },
       async execute(input) {
+        const metadata = objectField(input, "metadata");
         const entry = await store.remember({
           content: requireString(input, "content"),
           scope: memoryScope(input.scope),
           tags: stringArray(input.tags),
-          metadata: objectField(input, "metadata")
+          ...(metadata !== undefined ? { metadata } : {})
         });
         return {
           text: `Remembered ${entry.id}`,
-          json: entry as unknown as JsonValue
+          json: toJsonValue(entry)
         };
       }
     }),
@@ -385,15 +387,19 @@ export function createMemoryTools(store: MemoryStore): AgentTool[] {
         return `search memory ${stringField(input, "query") ?? ""}`.trim();
       },
       async execute(input) {
+        const query = stringField(input, "query");
+        const scope = optionalMemoryScope(input.scope);
+        const tags = stringArray(input.tags);
+        const limit = numberField(input, "limit");
         const matches = await store.search({
-          query: stringField(input, "query"),
-          scope: optionalMemoryScope(input.scope),
-          tags: stringArray(input.tags),
-          limit: numberField(input, "limit")
+          ...(query !== undefined ? { query } : {}),
+          ...(scope !== undefined ? { scope } : {}),
+          ...(tags.length > 0 ? { tags } : {}),
+          ...(limit !== undefined ? { limit } : {})
         });
         return {
           text: matches.map((entry) => `${entry.id} [${entry.scope}] ${entry.content}`).join("\n"),
-          json: { matches: matches as unknown as JsonValue }
+          json: { matches: toJsonValue(matches) }
         };
       }
     })

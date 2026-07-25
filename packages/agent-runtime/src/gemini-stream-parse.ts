@@ -48,18 +48,19 @@ export async function* parseGeminiStreamingResponse(
     // Top-level error object (some proxies / API error frames)
     const topError = geminiPayloadError(payload);
     if (topError) {
-      yield { type: 'stop', reason: 'error', error: topError, usage };
+      yield { type: 'stop', reason: 'error', error: topError, ...(usage !== undefined ? { usage } : {}) };
       return;
     }
 
     // promptFeedback.blockReason without candidates → blocked
     const block = promptBlockReason(payload);
     if (block && !hasCandidates(payload)) {
+      const blockUsage = parseGeminiUsage(payload.usageMetadata) ?? usage;
       yield {
         type: 'stop',
         reason: 'error',
         error: block,
-        usage: parseGeminiUsage(payload.usageMetadata) ?? usage,
+        ...(blockUsage !== undefined ? { usage: blockUsage } : {}),
       };
       return;
     }
@@ -163,7 +164,7 @@ export async function* parseGeminiStreamingResponse(
   }
 
   if (streamError && stopReason.reason === 'error') {
-    yield { type: 'stop', reason: 'error', error: streamError, usage };
+    yield { type: 'stop', reason: 'error', error: streamError, ...(usage !== undefined ? { usage } : {}) };
     return;
   }
 
@@ -172,7 +173,7 @@ export async function* parseGeminiStreamingResponse(
     ...(streamError && stopReason.reason === 'error'
       ? { error: streamError }
       : {}),
-    usage,
+    ...(usage !== undefined ? { usage } : {}),
   };
 }
 
@@ -188,11 +189,12 @@ export async function* parseGeminiJsonResponse(
 
   const block = promptBlockReason(body);
   if (block && !hasCandidates(body)) {
+    const parseUsage = parseGeminiUsage(body.usageMetadata);
     yield {
       type: 'stop',
       reason: 'error',
       error: block,
-      usage: parseGeminiUsage(body.usageMetadata),
+      ...(parseUsage !== undefined ? { usage: parseUsage } : {}),
     };
     return;
   }
@@ -265,7 +267,7 @@ export async function* parseGeminiJsonResponse(
       type: 'stop',
       reason: 'error',
       error: streamError ?? 'Gemini response did not include content',
-      usage,
+      ...(usage !== undefined ? { usage } : {}),
     };
     return;
   }
@@ -275,7 +277,6 @@ export async function* parseGeminiJsonResponse(
       type: 'stop',
       reason: 'error',
       error: 'Gemini response did not include content',
-      usage,
     };
     return;
   }
@@ -287,7 +288,7 @@ export async function* parseGeminiJsonResponse(
     type: 'stop',
     reason,
     ...(reason === 'error' && streamError ? { error: streamError } : {}),
-    usage,
+    ...(usage !== undefined ? { usage } : {}),
   };
 }
 
@@ -363,7 +364,7 @@ export function parseGeminiUsage(raw: unknown): ProviderUsage | undefined {
     totalTokens: total,
     cacheReadTokens: cacheRead,
     reasoningTokens,
-  });
+  }) as unknown as ProviderUsage;
 }
 
 export function geminiPayloadError(payload: JsonObject): string | undefined {

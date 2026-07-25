@@ -87,18 +87,20 @@ export function createTerminalCommandTool(options: TerminalToolOptions): AgentTo
           signal: context.signal,
           shell: options.shell ?? defaultShell(),
           guard: normalizeProcessGuard(options.guard),
-          preMutationCheckpoint: shouldCheckpointTerminalCommand(command)
-            ? () =>
-                createPreMutationCheckpoint(options, {
-                  workspaceRoot: options.workspaceRoot,
-                  cwd,
-                  sessionId: context.sessionId,
-                  toolCallId: context.toolCallId,
-                  toolName,
-                  targetSummary,
-                  input,
-                })
-            : undefined,
+          ...(shouldCheckpointTerminalCommand(command)
+            ? {
+                preMutationCheckpoint: () =>
+                  createPreMutationCheckpoint(options, {
+                    workspaceRoot: options.workspaceRoot,
+                    cwd,
+                    sessionId: context.sessionId,
+                    toolCallId: context.toolCallId,
+                    toolName,
+                    targetSummary,
+                    input,
+                  }),
+              }
+            : {}),
         });
       };
 

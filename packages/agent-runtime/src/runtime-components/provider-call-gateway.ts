@@ -35,7 +35,7 @@ import { createId } from "../session";
 import type { ConnectionManager } from "../provider-transport/connection-manager";
 import { StreamRecovery, StreamRecoveryError } from "../provider-transport/stream-recovery";
 import type { TokenTracker } from "../provider-transport/token-tracker";
-import { CircuitBreaker, CircuitBreakerOpenError, retryWithBackoff } from "@crish/shared-utils";
+
 
 // ─── 调用结果 ─────────────────────────────────────────────
 
@@ -57,7 +57,6 @@ export class ProviderCallGateway {
   private readonly connectionManager: ConnectionManager | undefined;
   private readonly streamRecovery: StreamRecovery | undefined;
   private readonly tokenTracker: TokenTracker | undefined;
-  private readonly breakers = new Map<string, CircuitBreaker>();
 
   constructor(options?: ProviderCallGatewayOptions) {
     this.connectionManager = options?.connectionManager;
@@ -67,13 +66,6 @@ export class ProviderCallGateway {
     this.streamRecovery = this.connectionManager
       ? new StreamRecovery()
       : undefined;
-  }
-
-  private getBreaker(providerId: string): CircuitBreaker {
-    if (!this.breakers.has(providerId)) {
-      this.breakers.set(providerId, new CircuitBreaker(5, 30000, 1));
-    }
-    return this.breakers.get(providerId)!;
   }
 
   /**
@@ -92,9 +84,8 @@ export class ProviderCallGateway {
     provider: AgentProvider,
     request: AgentProviderRequest
   ): AsyncGenerator<ProviderStreamContractEvent, ProviderCallResult> {
-    const breaker = this.getBreaker(provider.id);
-    if (!breaker.allowRequest()) {
-      throw new CircuitBreakerOpenError(provider.id);
+    if (request.signal.aborted) {
+      return { response: { finishReason: "error", text: "", toolCalls: [], diagnostics: [], error: "aborted" }, streamEvents: [] };
     }
 
     const streamEvents: ProviderStreamContractEvent[] = [];
@@ -107,40 +98,10 @@ export class ProviderCallGateway {
     let usage: ProviderResponse["usage"];
     let error: string | undefined;
 
-    // ── 选择流源 ──────────────────────────────────────────
-
-    let rawStream: AsyncIterable<ProviderStreamEvent>;
-
-    if (this.connectionManager && this.streamRecovery) {
-      // 使用 StreamRecovery 驱动的流式调用：
-      // - ConnectionManager 自动传输选择
-      // - StreamRecovery 通道切换重试 + 流中断恢复
-      rawStream = this.streamRecovery.streamWithRecovery(
-        this.connectionManager,
-        request
-      );
-    } else {
-      // 向后兼容：直接使用 provider 的裸流
-      rawStream = await retryWithBackoff(
-        () => Promise.resolve(provider.stream(request)),
-        {
-          maxAttempts: 3,
-          baseMs: 1000,
-          shouldRetry: (err) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            return /network|timeout|5\d{2}|econnrefused|econnreset|socket/i.test(msg);
-          },
-        }
-      );
-    }
-
-    const contractStream = normalizeAndCoalesceProviderStreamEvents(rawStream, {
-      coalescing: {}
-    });
-
-    // ── 消费流事件 ────────────────────────────────────────
-
     try {
+      const rawStream = await this.selectStreamSource(provider, request);
+      const contractStream = normalizeAndCoalesceProviderStreamEvents(rawStream, { coalescing: {} });
+
       for await (const event of contractStream) {
         streamEvents.push(event);
         yield event;
@@ -170,61 +131,90 @@ export class ProviderCallGateway {
         }
       }
     } catch (err) {
-      // StreamRecovery 在所有恢复尝试均失败后抛出 StreamRecoveryError
-      if (err instanceof StreamRecoveryError) {
-        // 将部分输出作为响应返回（上层可以看到已输出的文字 / 未完成工具调用）
-        finishReason = "error";
-        error = err.message;
-        text = err.accumulator.text || text;
-        thought = err.accumulator.thought || thought;
-        // Promote pending tool calls so the session loop can pair error tool-results
-        // instead of leaving orphan tool_use blocks without results.
-        if (err.accumulator.pendingToolCalls.length > 0) {
-          const seen = new Set(toolCalls.map((call) => call.id));
-          for (const pending of err.accumulator.pendingToolCalls) {
-            if (seen.has(pending.id)) continue;
-            seen.add(pending.id);
-            toolCalls.push({
-              id: pending.id,
-              toolName: pending.toolName,
-              input: pending.input,
-            });
-          }
-        }
-        if (err.orphans.length > 0 && finishReason === "error") {
-          // Signal that tool-side recovery is preferred over a hard empty error.
-          finishReason = toolCalls.length > 0 ? "tool-call" : "error";
-        }
-      } else {
-        // 其他未知错误
-        finishReason = "error";
-        error = err instanceof Error ? err.message : String(err);
-      }
-    }
-
-    // 记录断路器结果
-    if (finishReason === "error" || error) {
-      breaker.onFailure();
-    } else {
-      breaker.onSuccess();
+      this.handleStreamError(err, toolCalls, (r, errorMsg, t, th) => {
+        finishReason = r;
+        if (errorMsg !== undefined) error = errorMsg;
+        if (t !== undefined) text = t;
+        if (th !== undefined) thought = th;
+      });
     }
 
     const response: ProviderResponse = {
       finishReason,
       text,
-      thought: thought || undefined,
+      ...(thought ? { thought } : {}),
       toolCalls,
       diagnostics,
-      usage,
-      error
+      ...(usage ? { usage } : {}),
+      ...(error ? { error } : {}),
     };
 
-    // 将 usage 数据传给 TokenTracker（如果有的话）
     if (usage && this.tokenTracker) {
       this.tokenTracker.record(usage);
     }
 
     return { response, streamEvents };
+  }
+
+  private async selectStreamSource(
+    provider: AgentProvider,
+    request: AgentProviderRequest
+  ): Promise<AsyncIterable<ProviderStreamEvent>> {
+    if (this.connectionManager && this.streamRecovery) {
+      return this.streamRecovery.streamWithRecovery(this.connectionManager, request);
+    }
+    return this.retryProviderStream(provider, request);
+  }
+
+  private async retryProviderStream(
+    provider: AgentProvider,
+    request: AgentProviderRequest
+  ): Promise<AsyncIterable<ProviderStreamEvent>> {
+    const { signal } = request;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      if (signal.aborted) {
+        throw new DOMException("The operation was aborted", "AbortError");
+      }
+      try {
+        return await Promise.resolve(provider.stream(request));
+      } catch (err) {
+        if (attempt >= 3) throw err;
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!/network|timeout|5\d{2}|econnrefused|econnreset|socket/i.test(msg)) throw err;
+        if (signal.aborted) {
+          throw new DOMException("The operation was aborted", "AbortError");
+        }
+        await new Promise((resolve) => setTimeout(resolve, Math.min(1000 * Math.pow(2, attempt - 1), 30000)));
+      }
+    }
+    throw new Error("retryProviderStream: unreachable");
+  }
+
+  private handleStreamError(
+    err: unknown,
+    toolCalls: Array<{ id: string; toolName: string; input: JsonObject }>,
+    setState: (finishReason: ProviderResponse["finishReason"], error?: string, text?: string, thought?: string) => void
+  ): void {
+    if (err instanceof StreamRecoveryError) {
+      setState("error", err.message, err.accumulator.text, err.accumulator.thought);
+      if (err.accumulator.pendingToolCalls.length > 0) {
+        const seen = new Set(toolCalls.map((call) => call.id));
+        for (const pending of err.accumulator.pendingToolCalls) {
+          if (seen.has(pending.id)) continue;
+          seen.add(pending.id);
+          toolCalls.push({
+            id: pending.id,
+            toolName: pending.toolName,
+            input: pending.input,
+          });
+        }
+      }
+      if (err.orphans.length > 0) {
+        setState(toolCalls.length > 0 ? "tool-call" : "error", err.message);
+      }
+    } else {
+      setState("error", err instanceof Error ? err.message : String(err));
+    }
   }
 
   /**

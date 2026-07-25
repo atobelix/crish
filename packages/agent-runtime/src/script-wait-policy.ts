@@ -82,9 +82,9 @@ export function suggestRunMode(command: string, avgDurationMs?: number): ScriptR
 }
 
 export class ScriptWaitPolicy {
-  private readonly tasks = new BoundedMap<string, ScriptTaskMeta>(MAX_SCRIPT_TASK_METAS);
+  private readonly tasks = new BoundedMap<string, ScriptTaskMeta>(MAX_SCRIPT_TASK_METAS, undefined);
   /** Rolling average duration by command family */
-  private readonly familyDurations = new BoundedMap<string, number[]>(100);
+  private readonly familyDurations = new BoundedMap<string, number[]>(100, undefined);
 
   registerStart(taskId: string, command: string, mode?: ScriptRunMode): ScriptTaskMeta {
     const family = commandFamily(command);

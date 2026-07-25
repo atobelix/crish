@@ -89,19 +89,31 @@ export function parseStructuredSummaryJson(value: string): StructuredSummary {
   if (!isRecord(parsed)) {
     throw new Error("structured summary must be a JSON object");
   }
+  const kind = parseKind(parsed.kind);
+  const goal = stringValue(parsed.goal);
+  const constraints = stringArray(parsed.constraints);
+  const progress = stringArray(parsed.progress);
+  const decisions = stringArray(parsed.decisions);
+  const nextSteps = stringArray(parsed.nextSteps);
+  const criticalContext = stringArray(parsed.criticalContext);
+  const readFiles = stringArray(parsed.readFiles);
+  const modifiedFiles = stringArray(parsed.modifiedFiles);
+  const pendingQuestions = stringArray(parsed.pendingQuestions);
+  const risks = stringArray(parsed.risks);
+  const sourceIds = stringArray(parsed.sourceIds);
   return createStructuredSummary({
-    kind: parseKind(parsed.kind),
-    goal: stringValue(parsed.goal),
-    constraints: stringArray(parsed.constraints),
-    progress: stringArray(parsed.progress),
-    decisions: stringArray(parsed.decisions),
-    nextSteps: stringArray(parsed.nextSteps),
-    criticalContext: stringArray(parsed.criticalContext),
-    readFiles: stringArray(parsed.readFiles),
-    modifiedFiles: stringArray(parsed.modifiedFiles),
-    pendingQuestions: stringArray(parsed.pendingQuestions),
-    risks: stringArray(parsed.risks),
-    sourceIds: stringArray(parsed.sourceIds)
+    ...(kind !== undefined ? { kind } : {}),
+    ...(goal !== undefined ? { goal } : {}),
+    ...(constraints !== undefined ? { constraints } : {}),
+    ...(progress !== undefined ? { progress } : {}),
+    ...(decisions !== undefined ? { decisions } : {}),
+    ...(nextSteps !== undefined ? { nextSteps } : {}),
+    ...(criticalContext !== undefined ? { criticalContext } : {}),
+    ...(readFiles !== undefined ? { readFiles } : {}),
+    ...(modifiedFiles !== undefined ? { modifiedFiles } : {}),
+    ...(pendingQuestions !== undefined ? { pendingQuestions } : {}),
+    ...(risks !== undefined ? { risks } : {}),
+    ...(sourceIds !== undefined ? { sourceIds } : {})
   });
 }
 

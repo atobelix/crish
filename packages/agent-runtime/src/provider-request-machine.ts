@@ -343,7 +343,7 @@ export function createProviderRequestMachine(
         lastRetryAfterMs: null,
         diagnostics: []
       },
-      snapshot: options?.snapshot
+      ...(options?.snapshot !== undefined ? { snapshot: options.snapshot } : {})
     }
   );
 }

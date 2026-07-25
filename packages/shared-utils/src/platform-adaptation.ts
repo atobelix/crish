@@ -8,7 +8,6 @@
 
 import type { TierConfig } from './performance-tier';
 import { PerformanceLevel, TIER_CONFIGS } from './performance-tier';
-import type { HardwareProfile } from './hardware-profile';
 
 // ── D1) 渲染子系统 ──────────────────────────────────────────────────────────
 

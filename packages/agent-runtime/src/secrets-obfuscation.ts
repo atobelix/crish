@@ -27,11 +27,11 @@ export interface SecretRegistryOptions {
 }
 
 export interface RegisterSecretOptions {
-  id?: string;
-  kind?: SecretKind;
-  label?: string;
-  source?: string;
-  minLength?: number;
+  id?: string | undefined;
+  kind?: SecretKind | undefined;
+  label?: string | undefined;
+  source?: string | undefined;
+  minLength?: number | undefined;
 }
 
 export interface RegisterEnvOptions {
@@ -91,7 +91,7 @@ interface RegisteredSecret {
   value: string;
   kind: SecretKind;
   label: string;
-  source?: string;
+  source: string | undefined;
   minLength: number;
 }
 
@@ -99,7 +99,7 @@ interface RegisteredPattern {
   id: string;
   kind: SecretKind;
   label: string;
-  source?: string;
+  source: string | undefined;
   pattern: RegExp;
   group: number;
   minLength: number;
@@ -111,7 +111,7 @@ interface CandidateSpan {
   value: string;
   kind: SecretKind;
   label: string;
-  source?: string;
+  source: string | undefined;
   priority: number;
 }
 
@@ -694,7 +694,7 @@ export class SecretRedactor {
       value: normalized,
       kind: span.kind,
       label: span.label,
-      source: span.source
+      ...(span.source !== undefined ? { source: span.source } : {}),
     };
     this.valueToRecord.set(normalized, record);
     this.placeholderToRecord.set(placeholder, record);

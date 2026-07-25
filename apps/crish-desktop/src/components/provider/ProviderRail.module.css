@@ -1,0 +1,195 @@
+.rail {
+  width: var(--sidebar-width, 260px);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-subtle);
+  contain: layout paint style;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.searchBox {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  height: var(--control-height-sm);
+  padding: 0 10px;
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
+  border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
+  color: var(--text-tertiary);
+  transition: border-color var(--transition-fast);
+}
+
+.searchBox:focus-within {
+  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
+}
+
+.searchBox input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  outline: none;
+  min-width: 0;
+}
+
+.searchBox input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.addBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.addBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-primary) 20%, transparent) transparent;
+}
+
+.list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-primary) 20%, transparent);
+  border-radius: 999px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2_5);
+  padding: 8px 10px;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  user-select: none;
+}
+
+.item:hover {
+  background: var(--sidebar-hover);
+}
+
+.item.active {
+  background: var(--sidebar-active);
+}
+
+.item.disabled {
+  opacity: var(--opacity-disabled);
+  pointer-events: none;
+}
+
+.iconWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  flex-shrink: 0;
+}
+
+.initial {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+}
+
+.healthDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.health_healthy {
+  background: var(--accent-green);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--accent-green) 40%, transparent);
+}
+
+.health_degraded {
+  background: var(--accent-orange);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--accent-orange) 40%, transparent);
+}
+
+.health_unhealthy {
+  background: var(--accent-red);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--accent-red) 40%, transparent);
+}
+
+.health_unknown {
+  background: var(--text-tertiary);
+}
+
+.empty {
+  padding: 24px 10px;
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}

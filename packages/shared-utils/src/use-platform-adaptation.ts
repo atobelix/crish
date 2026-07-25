@@ -8,7 +8,7 @@
  *   const ctx = usePlatformAdaptationCtx();
  */
 
-import { useEffect, useState, useRef, useSyncExternalStore, createContext, useContext } from 'react';
+import { useEffect, useRef, useSyncExternalStore, createContext, useContext } from 'react';
 import { detectHardware } from './hardware-profile';
 import type { HardwareProfile } from './hardware-profile';
 import { PerformanceLevel, assignTier, TIER_CONFIGS } from './performance-tier';
@@ -18,6 +18,7 @@ import type { MetricEvent } from './dynamic-adaptation';
 import { getFullAdaptation } from './platform-adaptation';
 import type { FullPlatformAdaptation } from './platform-adaptation';
 import { applyRenderAdaptation } from './platform-adaptation';
+import { Logger, createConsoleTransport } from './logger';
 
 // ── 状态形状 ──
 
@@ -39,6 +40,8 @@ export interface PlatformAdaptationState {
   /** 最近的自适应事件 */
   lastEvent: MetricEvent | null;
 }
+
+const logger = new Logger({ module: "use-platform-adaptation", transports: [createConsoleTransport()] });
 
 const INITIAL: PlatformAdaptationState = {
   hardwareReady: false,
@@ -161,7 +164,7 @@ export function usePlatformAdaptation(opts?: PlatformAdaptationOptions): UsePlat
           });
           globalStore.setState({ engine });
         } catch (err) {
-          console.warn('[PlatformAdaptation] Engine creation failed, continuing without dynamic adaptation:', err);
+          logger.warn('[PlatformAdaptation] Engine creation failed, continuing without dynamic adaptation:', { err: { message: err instanceof Error ? err.message : String(err) } });
         }
       }
     };

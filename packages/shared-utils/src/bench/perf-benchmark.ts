@@ -103,8 +103,8 @@ export async function runBenchmark(benchmark: PerfBenchmark): Promise<BenchmarkR
 
   const elapsedValues = samples.map((s) => s.elapsedMs).sort((a, b) => a - b);
   const avgMs = elapsedValues.reduce((a, b) => a + b, 0) / elapsedValues.length;
-  const minMs = elapsedValues[0];
-  const maxMs = elapsedValues[elapsedValues.length - 1];
+  const minMs = elapsedValues[0]!;
+  const maxMs = elapsedValues[elapsedValues.length - 1]!;
   const p50Ms = percentile(elapsedValues, 0.5);
   const p95Ms = percentile(elapsedValues, 0.95);
   const p99Ms = percentile(elapsedValues, 0.99);
@@ -162,7 +162,7 @@ function collectEnvironment() {
 
 function percentile(sortedValues: number[], rank: number): number {
   const index = Math.min(sortedValues.length - 1, Math.max(0, Math.ceil(sortedValues.length * rank) - 1));
-  return round2(sortedValues[index]);
+  return round2(sortedValues[index]!);
 }
 
 function round2(value: number): number {

@@ -51,6 +51,7 @@ export function decodeTextBuffer(bytes: Buffer): DecodedTextBuffer {
   try {
     return decodeWith("utf-8", bytes, "utf-8", false, true);
   } catch {
+    // silent: utf-8 解码失败时降级为 gb18030 解码
     return decodeWith("gb18030", bytes, "gb18030", false);
   }
 }

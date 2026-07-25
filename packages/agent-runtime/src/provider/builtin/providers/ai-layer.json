@@ -1,0 +1,59 @@
+{
+  "providerId": "ai-layer",
+  "name": "AI Layer",
+  "description": "AI Layer API - unified gateway to multiple LLM providers",
+  "website": "https://ai-layer.com",
+  "docsUrl": "https://docs.ai-layer.com",
+  "engine": "openai-compatible",
+  "baseUrl": "https://api.ai-layer.com/v1",
+  "auth": {
+    "type": "api-key",
+    "placement": "header",
+    "keyHeader": "Authorization",
+    "defaultEnvVar": "AI_LAYER_API_KEY"
+  },
+  "models": [
+    {
+      "id": "gpt-4o",
+      "capabilities": [
+        "code",
+        "vision",
+        "tool-use",
+        "reasoning",
+        "long-context"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "costPer1kInput": 0.0025,
+      "costPer1kOutput": 0.01
+    },
+    {
+      "id": "claude-sonnet-4",
+      "capabilities": [
+        "code",
+        "vision",
+        "tool-use",
+        "reasoning",
+        "long-context"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "costPer1kInput": 0.003,
+      "costPer1kOutput": 0.015
+    }
+  ],
+  "endpointType": "chat-completions",
+  "capabilities": {
+    "toolUse": true,
+    "vision": true,
+    "reasoning": true,
+    "streaming": true,
+    "systemPrompt": true,
+    "jsonMode": true,
+    "parallelToolCalls": true
+  },
+  "engineOptions": {
+    "authHeader": "authorization",
+    "maxTokensField": "max_tokens"
+  }
+}

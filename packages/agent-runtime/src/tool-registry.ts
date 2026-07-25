@@ -1,11 +1,14 @@
+import { Logger, createConsoleTransport } from "@crish/shared-utils";
 import type { AgentTool } from './types';
+
+const logger = new Logger({ module: "tool-registry", transports: [createConsoleTransport()] });
 
 export class ToolRegistry {
   private tools = new Map<string, AgentTool>();
 
   register(tool: AgentTool): void {
     if (this.tools.has(tool.name)) {
-      console.warn(`[ToolRegistry] Tool "${tool.name}" already registered, overwriting`);
+      logger.warn(`[ToolRegistry] Tool "${tool.name}" already registered, overwriting`);
     }
     this.tools.set(tool.name, tool);
   }

@@ -58,8 +58,21 @@ export function createTextMessage(role: AgentMessage["role"], text: string, meta
     role,
     createdAt: nowIso(),
     blocks: text ? [{ type: "text", text }] : [],
-    metadata
+    ...(metadata !== undefined ? { metadata } : {}),
   };
+}
+
+export function pruneHistoricalToolOutputs(messages: AgentMessage[], keepLastN: number = 10): void {
+  let toolOutputCount = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]!;
+    if (msg.role === 'tool') {
+      toolOutputCount++;
+      if (toolOutputCount > keepLastN) {
+        messages[i] = { ...msg, blocks: [{ type: "text", text: '[truncated]' }] };
+      }
+    }
+  }
 }
 
 export function createCompactionSummaryAgentMessage(record: ContextCompressionRecord): AgentMessage {
@@ -138,7 +151,7 @@ export async function moveSessionLeaf(
 
 export class InMemorySessionStore implements SessionPersistenceStore {
   header: SessionHeader | null = null;
-  private readonly entriesStore = new BoundedMap<string, SessionEntry>(IN_MEMORY_SESSION_STORE_CAPACITY);
+  private readonly entriesStore = new BoundedMap<string, SessionEntry>(IN_MEMORY_SESSION_STORE_CAPACITY, undefined);
 
   async open(session: SessionHeader): Promise<void> {
     this.header = session;
@@ -302,7 +315,7 @@ export class SessionRecorder {
 
   constructor(private readonly store: SessionPersistenceStore, initialLeafId: string | null = null) {
     this.leafId = initialLeafId;
-    this.usedIds = new BoundedMap<string, true>(IN_MEMORY_SESSION_STORE_CAPACITY);
+    this.usedIds = new BoundedMap<string, true>(IN_MEMORY_SESSION_STORE_CAPACITY, undefined);
     if (initialLeafId !== null) {
       this.usedIds.set(initialLeafId, true);
     }
@@ -367,7 +380,7 @@ export class SessionRecorder {
         parentId: this.leafId,
         timestamp: nowIso(),
         label,
-        metadata
+        ...(metadata !== undefined ? { metadata } : {}),
       };
       this.usedIds.set(entry.id, true);
       this.leafId = entry.id;
@@ -604,6 +617,7 @@ function parseJsonLine(line: string): unknown {
   try {
     return JSON.parse(line);
   } catch {
+    // silent: JSON.parse 降级，损坏行返回 null 由调用方处理
     return null;
   }
 }

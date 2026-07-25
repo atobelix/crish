@@ -20,11 +20,11 @@ import { createTextMessage } from "../session";
 
 export interface RecoverySteeringStrategyOptions {
   /** 最大连续工具错误数（默认 2） */
-  maxConsecutiveToolErrors?: number;
+  maxConsecutiveToolErrors?: number | undefined;
   /** 最大重复调用数（默认 3） */
-  maxRepeatedToolCalls?: number;
+  maxRepeatedToolCalls?: number | undefined;
   /** 最大纠偏消息数（默认 1） */
-  maxSteeringMessages?: number;
+  maxSteeringMessages?: number | undefined;
 }
 
 // ─── RecoverySteeringStrategy ──────────────────────────────

@@ -1,0 +1,77 @@
+import React from 'react';
+import styles from '../OverviewCard.module.css';
+import { Activity, ChevronDown } from 'lucide-react';
+import { formatElapsed } from './helpers';
+import type { PendingApprovalInfo } from '../../api/engineStatus';
+
+interface LiveTask {
+  id: string; taskName: string; elapsedSeconds: number;
+  sessionId?: string; kind: 'session' | 'run';
+}
+
+interface ActiveTasksSectionProps {
+  open: boolean;
+  liveTasks: LiveTask[];
+  pendingApprovals: PendingApprovalInfo[];
+  approvalBusyId: string | null;
+  onToggle: () => void;
+  onApprovalClick: (a: PendingApprovalInfo) => void;
+  onApprovalAllow: (a: PendingApprovalInfo, e: React.MouseEvent) => void;
+  onApprovalDeny: (a: PendingApprovalInfo, e: React.MouseEvent) => void;
+  onLiveTaskClick: (wk: LiveTask) => void;
+}
+
+export const ActiveTasksSection = React.memo(function ActiveTasksSection({
+  open, liveTasks, pendingApprovals, approvalBusyId,
+  onToggle, onApprovalClick, onApprovalAllow, onApprovalDeny, onLiveTaskClick,
+}: ActiveTasksSectionProps) {
+  const total = liveTasks.length + pendingApprovals.length;
+  return (
+    <section className={styles.sec} aria-labelledby="overview-sec-active">
+      <button type="button" id="overview-sec-active" className={styles.secH} aria-expanded={open} onClick={onToggle}>
+        <Activity size={15} strokeWidth={1.75} aria-hidden />
+        <span>活动任务</span>
+        {total > 0 ? <span className={styles.pill}>{total}</span> : null}
+        <ChevronDown size={14} className={`${styles.chev} ${open ? styles.open : ''}`} aria-hidden />
+      </button>
+      {open ? (
+        <div className={styles.secB}>
+          {total === 0 ? <p className={`${styles.empty} ${styles.emptyQuiet}`}>无</p>
+          : (
+            <ul className={styles.list}>
+              {pendingApprovals.map((a, i) => {
+                const busy = approvalBusyId === (a.toolCallId || '');
+                return (
+                  <li key={a.toolCallId || i} className={styles.actionRow}>
+                    <button type="button" className={styles.itemBtn} onClick={() => onApprovalClick(a)}>
+                      <span className={`${styles.dot} ${styles.warn}`} />
+                      <span className={styles.itemMain}>
+                        <span className={styles.itemName}>{a.toolName || '工具'} (待确认)</span>
+                        <em>{a.summary || '等待批准'}</em>
+                      </span>
+                    </button>
+                    <div className={styles.rowActions} onClick={(e) => e.stopPropagation()}>
+                      <button type="button" className="ui-btn ui-btn-primary ui-btn-xs" disabled={Boolean(approvalBusyId)} onClick={(e) => onApprovalAllow(a, e)}>{busy ? '…' : '允许'}</button>
+                      <button type="button" className="ui-btn ui-btn-ghost ui-btn-xs" disabled={Boolean(approvalBusyId)} onClick={(e) => onApprovalDeny(a, e)}>拒绝</button>
+                    </div>
+                  </li>
+                );
+              })}
+              {liveTasks.map((wk) => (
+                <li key={wk.id}>
+                  <button type="button" className={styles.itemBtn} onClick={() => { if (wk.sessionId) onLiveTaskClick(wk); }}>
+                    <span className={`${styles.dot} ${styles.live}`} />
+                    <span className={styles.itemMain}>
+                      <span className={styles.itemName}>{wk.taskName}</span>
+                      <em>{formatElapsed(wk.elapsedSeconds)}</em>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </section>
+  );
+});

@@ -85,7 +85,7 @@ async function createGitPreMutationCheckpoint(
     label: `Before ${request.toolName}: ${request.targetSummary}`,
     strategy,
     includeUntracked: options.includeUntracked ?? true,
-    refNamespace: options.refNamespace,
+    ...(options.refNamespace !== undefined ? { refNamespace: options.refNamespace } : {}),
     toolCall: {
       id: request.toolCallId,
       toolName: request.toolName,
@@ -132,9 +132,9 @@ export function withPreMutationCheckpointOutput(
   return {
     ...output,
     text: diagnosticLine ? [diagnosticLine, output.text].filter(Boolean).join("\n") : output.text,
-    artifacts: [...(output.artifacts ?? []), ...checkpointArtifacts],
+    ...(checkpointArtifacts.length > 0 ? { artifacts: [...(output.artifacts ?? []), ...checkpointArtifacts] } : {}),
     json: mergePreMutationCheckpointJson(output.json, checkpoint)
-  };
+  } as ToolOutput;
 }
 
 function mergePreMutationCheckpointJson(

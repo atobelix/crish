@@ -1,0 +1,55 @@
+{
+  "providerId": "perplexity",
+  "name": "Perplexity",
+  "description": "Perplexity API - AI search and chat",
+  "website": "https://www.perplexity.ai",
+  "docsUrl": "https://docs.perplexity.ai",
+  "engine": "openai-compatible",
+  "baseUrl": "https://api.perplexity.ai",
+  "auth": {
+    "type": "api-key",
+    "placement": "header",
+    "keyHeader": "Authorization",
+    "defaultEnvVar": "PERPLEXITY_API_KEY"
+  },
+  "models": [
+    {
+      "id": "sonar-pro",
+      "capabilities": ["code", "web-search", "reasoning"],
+      "contextWindow": 200000,
+      "maxOutputTokens": 4096,
+      "costPer1kInput": 0.003,
+      "costPer1kOutput": 0.015
+    },
+    {
+      "id": "sonar",
+      "capabilities": ["code", "web-search"],
+      "contextWindow": 127000,
+      "maxOutputTokens": 4096,
+      "costPer1kInput": 0.001,
+      "costPer1kOutput": 0.005
+    },
+    {
+      "id": "sonar-deep-research",
+      "capabilities": ["code", "web-search", "reasoning", "long-context"],
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "costPer1kInput": 0.005,
+      "costPer1kOutput": 0.025
+    }
+  ],
+  "endpointType": "chat-completions",
+  "capabilities": {
+    "toolUse": true,
+    "vision": false,
+    "reasoning": true,
+    "streaming": true,
+    "systemPrompt": true,
+    "jsonMode": true,
+    "parallelToolCalls": false
+  },
+  "engineOptions": {
+    "authHeader": "authorization",
+    "maxTokensField": "max_tokens"
+  }
+}

@@ -41,7 +41,7 @@ export interface StoredEventLogMetadata {
 }
 
 export interface StoredEventReadOptions {
-  maxEvents?: number;
+  maxEvents: number | undefined;
 }
 
 export interface EventStore {

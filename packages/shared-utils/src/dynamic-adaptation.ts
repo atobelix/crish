@@ -133,7 +133,7 @@ class FpsMonitor {
   private sample(): void {
     if (this.frameTimestamps.length < 2) return;
     const window = this.frameTimestamps;
-    const elapsed = window[window.length - 1] - window[0];
+    const elapsed = window[window.length - 1]! - window[0]!;
     const durationSec = elapsed / 1000;
     const frameCount = window.length - 1;
     const fps = frameCount / durationSec;
