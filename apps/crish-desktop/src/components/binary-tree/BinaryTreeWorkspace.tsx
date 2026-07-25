@@ -21,10 +21,13 @@ import { createPortal } from 'react-dom';
 import {
   useLayoutTreeStore,
   flattenToRenderList,
-  isBranch,
-  type LayoutBranch,
+  collectBranches,
+  findNodeById,
+  isLeaf,
+  type LayoutLeaf,
   type FlatPanel,
 } from '../../store/layout-tree';
+import { getPanelTitle } from '../../store/layoutHelpers';
 import { useTreeDrag } from '../../hooks/useTreeDrag';
 import { useTreeResize } from '../../hooks/useTreeResize';
 import { AppErrorBoundary } from '../AppErrorBoundary';
@@ -79,9 +82,9 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
       if (!draggedSource || !dragController.ghostPosition) return null;
       const panelTitle = (() => {
         if (draggedSource.type === 'tab' && draggedSource.tabId) {
-          return getPanelTitleSafe(draggedSource.tabId);
+          return getPanelTitle(draggedSource.tabId);
         }
-        return getPanelTitleSafe(draggedSource.panelId);
+        return getPanelTitle(draggedSource.panelId);
       })();
       return (
         <div className={styles.ghost}>
@@ -183,30 +186,42 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
             aria-label="二叉树布局画布"
           >
             {/* 渲染所有 leaf */}
-            {panels.map((panel) => (
-              <TreeLeafPanel
-                key={panel.leafId}
-                leaf={findLeafFromPanel(tree, panel.leafId)}
-                rect={panel.rect}
-                isActive={panel.leafId === activeLeafId}
-                isDragSource={panel.leafId === draggedLeafId}
-                dragController={dragController}
-                onShowToast={onShowToast}
-              />
-            ))}
+            {panels.map((panel) => {
+              const leafNode = findNodeById(tree.root, panel.leafId);
+              const leaf: LayoutLeaf =
+                leafNode && isLeaf(leafNode)
+                  ? leafNode
+                  : {
+                      type: 'leaf',
+                      id: panel.leafId,
+                      panelId: panel.panelId,
+                      tabs: panel.tabs,
+                      activeTab: panel.activeTab,
+                    };
+              return (
+                <TreeLeafPanel
+                  key={panel.leafId}
+                  leaf={leaf}
+                  rect={panel.rect}
+                  isActive={panel.leafId === activeLeafId}
+                  isDragSource={panel.leafId === draggedLeafId}
+                  dragController={dragController}
+                  onShowToast={onShowToast}
+                />
+              );
+            })}
 
             {/* 渲染所有 sash（branch 节点） */}
             {branches.map((branch) => (
               <TreeResizeSash
                 key={branch.id}
                 branch={branch}
-                containerRect={findBranchRect(panels, branch)}
                 resizeController={resizeController}
               />
             ))}
 
             {/* Drop zone 覆盖层 */}
-            <DropZoneOverlay canvasRef={canvasRef} />
+            <DropZoneOverlay />
           </div>
         </AppErrorBoundary>
 
@@ -231,108 +246,3 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
     );
   });
 BinaryTreeWorkspace.displayName = 'BinaryTreeWorkspace';
-
-// ── 辅助函数 ────────────────────────────────────────────────────────
-
-/** 收集树中所有 branch 节点（深度优先） */
-function collectBranches(
-  root: import('../../store/layout-tree').LayoutNode
-): LayoutBranch[] {
-  const result: LayoutBranch[] = [];
-  const visit = (node: import('../../store/layout-tree').LayoutNode) => {
-    if (isBranch(node)) {
-      result.push(node);
-      visit(node.children[0]);
-      visit(node.children[1]);
-    }
-  };
-  visit(root);
-  return result;
-}
-
-/** 从 tree 中按 leafId 查找 leaf */
-function findLeafFromPanel(
-  tree: import('../../store/layout-tree').LayoutTree,
-  leafId: string
-): import('../../store/layout-tree').LayoutLeaf {
-  // flattenToRenderList 已保证 leafId 存在；若意外丢失则返回占位
-  const node = findNodeInTree(tree, leafId);
-  if (node && !isBranch(node)) return node;
-  // 兜底：返回一个空 leaf（不应发生）
-  return {
-    type: 'leaf',
-    id: leafId,
-    panelId: 'unknown',
-    tabs: ['unknown'],
-    activeTab: 'unknown',
-    size: 1,
-  };
-}
-
-function findNodeInTree(
-  tree: import('../../store/layout-tree').LayoutTree,
-  id: string
-): import('../../store/layout-tree').LayoutNode | null {
-  const search = (
-    node: import('../../store/layout-tree').LayoutNode
-  ): import('../../store/layout-tree').LayoutNode | null => {
-    if (node.id === id) return node;
-    if (isBranch(node)) {
-      return search(node.children[0]) ?? search(node.children[1]);
-    }
-    return null;
-  };
-  return search(tree.root);
-}
-
-/** 计算 branch 的 rect（从 panels 列表中取两个 child 的并集） */
-function findBranchRect(
-  panels: FlatPanel[],
-  branch: LayoutBranch
-): { x: number; y: number; width: number; height: number } {
-  // branch 的 rect = 第一个 leaf child 与第二个 leaf child 的并集
-  // 简化：找到 branch 下所有 leaf，取最小外接矩形
-  const leaves = collectLeafIds(branch);
-  const leafPanels = panels.filter((p) => leaves.includes(p.leafId));
-  if (leafPanels.length === 0) {
-    return { x: 0, y: 0, width: 1, height: 1 };
-  }
-  const minX = Math.min(...leafPanels.map((p) => p.rect.x));
-  const minY = Math.min(...leafPanels.map((p) => p.rect.y));
-  const maxX = Math.max(...leafPanels.map((p) => p.rect.x + p.rect.width));
-  const maxY = Math.max(...leafPanels.map((p) => p.rect.y + p.rect.height));
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
-}
-
-function collectLeafIds(branch: LayoutBranch): string[] {
-  const ids: string[] = [];
-  const visit = (node: import('../../store/layout-tree').LayoutNode) => {
-    if (isBranch(node)) {
-      visit(node.children[0]);
-      visit(node.children[1]);
-    } else {
-      ids.push(node.id);
-    }
-  };
-  visit(branch);
-  return ids;
-}
-
-/** 安全获取面板标题（不依赖循环 import） */
-function getPanelTitleSafe(panelId: string): string {
-  // 与 layoutHelpers.getPanelTitle 对齐的最小子集
-  const map: Record<string, string> = {
-    chat: '对话',
-    diff: '变更',
-    files: '文件',
-    terminal: '终端',
-    preview: '预览',
-    overview: '概览',
-    runtime: '运行时',
-    agent: '协作',
-    settings: '设置',
-    plan: '计划',
-    tasks: '任务',
-  };
-  return map[panelId] ?? panelId;
-}

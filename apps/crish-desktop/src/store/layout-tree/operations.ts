@@ -13,8 +13,16 @@ import type {
   FlatPanel,
   SplitDirection,
   DropDirection,
+  TreeDragSource,
 } from './types';
-import { createBranch, createLeaf, isBranch, isLeaf } from './types';
+import {
+  createBranch,
+  createLeaf,
+  isBranch,
+  isLeaf,
+  clampSplitRatio,
+} from './types';
+import type { DropZone } from './dropDetection';
 
 // ── 查询操作 ──────────────────────────────────────────────────────────
 
@@ -46,6 +54,17 @@ export function collectLeaves(root: LayoutNode): LayoutLeaf[] {
   return [
     ...collectLeaves(root.children[0]),
     ...collectLeaves(root.children[1]),
+  ];
+}
+
+/** 收集所有分支节点（深度优先，与 collectLeaves 同型） */
+export function collectBranches(root: LayoutNode): LayoutBranch[] {
+  if (isLeaf(root)) return [];
+  const branch = root as LayoutBranch;
+  return [
+    branch,
+    ...collectBranches(branch.children[0]),
+    ...collectBranches(branch.children[1]),
   ];
 }
 
@@ -202,8 +221,10 @@ export function resizeBranch(
   const target = findNodeById(tree.root, branchId);
   if (!target || !isBranch(target)) return tree;
 
-  const clampedRatio = Math.max(0.1, Math.min(0.9, newRatio));
-  const updated: LayoutBranch = { ...target, splitRatio: clampedRatio };
+  const updated: LayoutBranch = {
+    ...target,
+    splitRatio: clampSplitRatio(newRatio),
+  };
   return { ...tree, root: replaceNode(tree.root, branchId, updated) };
 }
 
@@ -269,6 +290,110 @@ export function removeTabFromLeaf(
     activeTab: newActive,
   };
   return { ...tree, root: replaceNode(tree.root, leafId, updated) };
+}
+
+// ── 拖拽提交 ──────────────────────────────────────────────────────────
+
+/**
+ * DropZone.type → DropDirection 映射。
+ * 'merge-tab' 单独处理（不进入 moveLeaf/splitLeaf 路径）。
+ */
+function dropZoneToDirection(zoneType: DropZone['type']): DropDirection | null {
+  switch (zoneType) {
+    case 'split-left':
+      return 'left';
+    case 'split-right':
+      return 'right';
+    case 'split-top':
+      return 'top';
+    case 'split-bottom':
+      return 'bottom';
+    case 'merge-tab':
+      return null;
+    default:
+      return null;
+  }
+}
+
+/**
+ * 应用拖拽结果：根据拖拽源与 drop zone 计算新树。
+ *
+ * 纯函数，无副作用 — store 的 commitDrop 仅负责推历史 + 清理拖拽状态，
+ * 实际结构变更由本函数完成，便于单元测试。
+ *
+ * @returns 新树；若无可变更（同 leaf 拖拽、目标不存在等）返回原 tree
+ */
+export function applyDrop(
+  tree: LayoutTree,
+  source: TreeDragSource,
+  zone: DropZone
+): LayoutTree {
+  const {
+    type: srcType,
+    leafId: srcLeafId,
+    tabId: srcTabId,
+    panelId: srcPanelId,
+  } = source;
+  const { type: zoneType, targetLeafId } = zone;
+
+  // 不允许 drop 到自身 leaf（merge-tab 除外，同 leaf 内 tab 重排）
+  if (srcLeafId === targetLeafId && zoneType !== 'merge-tab') return tree;
+  // 同 leaf 且 leaf 拖拽：无操作
+  if (srcLeafId === targetLeafId && srcType === 'leaf') return tree;
+
+  const direction = dropZoneToDirection(zoneType);
+
+  if (direction !== null) {
+    // ── split 路径 ──────────────────────────────────────────
+    if (srcType === 'leaf') {
+      // leaf 拖拽到 split：移动整个 leaf
+      return moveLeaf(tree, srcLeafId, targetLeafId, direction);
+    }
+    // tab 拖拽到 split：从源 leaf 移除 tab，在 target 旁边 split 出新 leaf
+    const afterRemove = removeTabFromLeaf(tree, srcLeafId, srcTabId);
+    const targetStillExists = findNodeById(afterRemove.root, targetLeafId);
+    if (!targetStillExists) return afterRemove;
+
+    const splitDir: SplitDirection =
+      direction === 'left' || direction === 'right' ? 'horizontal' : 'vertical';
+    const position: 'before' | 'after' =
+      direction === 'left' || direction === 'top' ? 'before' : 'after';
+    return splitLeaf(
+      afterRemove,
+      targetLeafId,
+      splitDir,
+      srcPanelId,
+      position,
+      0.5
+    );
+  }
+
+  // ── merge-tab 路径 ──────────────────────────────────────────
+  if (srcType === 'leaf') {
+    // leaf 拖拽到 merge：将源 leaf 所有 tabs 转移到 target，然后移除源 leaf
+    const srcLeaf = findNodeById(tree.root, srcLeafId);
+    if (!srcLeaf || !isLeaf(srcLeaf)) return tree;
+
+    let working = tree;
+    // 逐个添加 tab 到 target
+    for (const tab of srcLeaf.tabs) {
+      working = addTabToLeaf(working, targetLeafId, tab);
+    }
+    // 循环移除源 leaf 所有 tab（最后一个触发 leaf 删除）
+    let checkLeaf = findNodeById(working.root, srcLeafId);
+    while (checkLeaf && isLeaf(checkLeaf) && checkLeaf.tabs.length > 0) {
+      const t = checkLeaf.tabs[checkLeaf.tabs.length - 1]!;
+      working = removeTabFromLeaf(working, srcLeafId, t);
+      checkLeaf = findNodeById(working.root, srcLeafId);
+    }
+    return working;
+  }
+
+  // tab 拖拽到 merge：将 tab 从源 leaf 移到 target leaf
+  const afterRemove = removeTabFromLeaf(tree, srcLeafId, srcTabId);
+  const targetStillExists = findNodeById(afterRemove.root, targetLeafId);
+  if (!targetStillExists) return afterRemove;
+  return addTabToLeaf(afterRemove, targetLeafId, srcTabId);
 }
 
 // ── 渲染辅助 ──────────────────────────────────────────────────────────

@@ -15,15 +15,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLayoutTreeStore } from '../store/layout-tree';
 import { findNodeById, isBranch } from '../store/layout-tree';
-import type { LayoutBranch } from '../store/layout-tree';
-
-// ── 常量 ────────────────────────────────────────────────────────────
-
-/** resize 最小比例（与 operations.ts clamp 一致） */
-const MIN_RATIO = 0.1;
-const MAX_RATIO = 0.9;
-/** sash 命中区域半宽（px） */
-const SASH_HIT_HALF_PX = 4;
 
 // ── Hook 签名 ───────────────────────────────────────────────────────
 
@@ -99,20 +90,12 @@ export function useTreeResize(): UseTreeResizeResult {
       if (direction === 'horizontal') {
         const containerWidth = containerRect.width || 1;
         const dx = e.clientX - containerRect.left;
-        const newRatio = Math.max(
-          MIN_RATIO,
-          Math.min(MAX_RATIO, dx / containerWidth)
-        );
-        // commit=false：拖拽中不重复推历史（已在 startResize 时推过一次）
-        resizeBranch(branchId, newRatio, false);
+        // 不在此处 clamp — store 的 resizeBranch 已通过 clampSplitRatio 统一钳制
+        resizeBranch(branchId, dx / containerWidth, false);
       } else {
         const containerHeight = containerRect.height || 1;
         const dy = e.clientY - containerRect.top;
-        const newRatio = Math.max(
-          MIN_RATIO,
-          Math.min(MAX_RATIO, dy / containerHeight)
-        );
-        resizeBranch(branchId, newRatio, false);
+        resizeBranch(branchId, dy / containerHeight, false);
       }
     },
     [resizeBranch]
@@ -159,52 +142,5 @@ export function useTreeResize(): UseTreeResizeResult {
     resizingBranchId,
     startResize,
     cancelResize,
-  };
-}
-
-// ── 辅助：判断 branch 是否需要渲染 sash ────────────────────────────
-
-export function shouldRenderSash(branch: LayoutBranch): boolean {
-  // 只有两个 child 都是 leaf 或 branch 时才需要 sash
-  // 严格二叉树保证 children.length === 2，故总是需要 sash
-  return branch.children.length === 2;
-}
-
-// ── 辅助：计算 sash 的位置（百分比） ───────────────────────────────
-
-export function computeSashPosition(branch: LayoutBranch): {
-  left?: string;
-  top?: string;
-} {
-  const ratio = branch.splitRatio;
-  if (branch.direction === 'horizontal') {
-    return { left: `${ratio * 100}%` };
-  }
-  return { top: `${ratio * 100}%` };
-}
-
-// ── 辅助：sash 命中区域扩展 ────────────────────────────────────────
-
-export function getSashHitStyle(branch: LayoutBranch): React.CSSProperties {
-  const pos = computeSashPosition(branch);
-  if (branch.direction === 'horizontal') {
-    return {
-      position: 'absolute',
-      top: 0,
-      bottom: 0,
-      width: `${SASH_HIT_HALF_PX * 2}px`,
-      transform: `translateX(-${SASH_HIT_HALF_PX}px)`,
-      cursor: 'col-resize',
-      ...pos,
-    };
-  }
-  return {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: `${SASH_HIT_HALF_PX * 2}px`,
-    transform: `translateY(-${SASH_HIT_HALF_PX}px)`,
-    cursor: 'row-resize',
-    ...pos,
   };
 }

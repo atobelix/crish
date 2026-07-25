@@ -13,6 +13,7 @@ export type {
   FlatPanel,
   SplitDirection,
   DropDirection,
+  TreeDragSource,
 } from './types';
 
 export {
@@ -22,12 +23,16 @@ export {
   generateNodeId,
   isLeaf,
   isBranch,
+  clampSplitRatio,
+  MIN_SPLIT_RATIO,
+  MAX_SPLIT_RATIO,
 } from './types';
 
 export {
   findNodeById,
   findParent,
   collectLeaves,
+  collectBranches,
   treeDepth,
   splitLeaf,
   mergeBranch,
@@ -36,6 +41,7 @@ export {
   addTabToLeaf,
   removeTabFromLeaf,
   setLeafActiveTab,
+  applyDrop,
   flattenToRenderList,
   migrateFromColumns,
   serializeTree,
@@ -65,7 +71,6 @@ export {
   type LayoutTreeStore,
   type LayoutTreeStoreState,
   type LayoutTreeStoreActions,
-  type TreeDragSource,
 } from './layoutTreeStore';
 
 // ── 迁移 ──────────────────────────────────────────────────────────

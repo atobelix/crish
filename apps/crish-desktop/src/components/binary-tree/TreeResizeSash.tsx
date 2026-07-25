@@ -10,14 +10,16 @@
 
 import React from 'react';
 import type { LayoutBranch } from '../../store/layout-tree';
-import { useLayoutTreeStore } from '../../store/layout-tree';
+import {
+  useLayoutTreeStore,
+  MIN_SPLIT_RATIO,
+  MAX_SPLIT_RATIO,
+} from '../../store/layout-tree';
 import { useTreeResize } from '../../hooks/useTreeResize';
 import styles from './BinaryTreeWorkspace.module.css';
 
 interface TreeResizeSashProps {
   branch: LayoutBranch;
-  /** branch 容器的 rect（百分比转 px 用） */
-  containerRect: { x: number; y: number; width: number; height: number };
   /** resize 控制器 */
   resizeController: ReturnType<typeof useTreeResize>;
 }
@@ -35,36 +37,39 @@ export const TreeResizeSash: React.FC<TreeResizeSashProps> = React.memo(
       ? { left: `${ratio * 100}%` }
       : { top: `${ratio * 100}%` };
 
+    // 键盘微调：Arrow 减/加步长，Home/End 跳到极值。
+    // 不在此处 clamp — store 的 resizeBranch 已通过 clampSplitRatio 统一钳制，
+    // 单一可信源避免常量散落。
     const handleKeyDown = React.useCallback(
       (e: React.KeyboardEvent) => {
         const step = 0.02; // 2%
         if (isHorizontal) {
           if (e.key === 'ArrowLeft') {
             e.preventDefault();
-            resizeBranch(branch.id, Math.max(0.1, ratio - step));
+            resizeBranch(branch.id, ratio - step);
           } else if (e.key === 'ArrowRight') {
             e.preventDefault();
-            resizeBranch(branch.id, Math.min(0.9, ratio + step));
+            resizeBranch(branch.id, ratio + step);
           } else if (e.key === 'Home') {
             e.preventDefault();
-            resizeBranch(branch.id, 0.1);
+            resizeBranch(branch.id, MIN_SPLIT_RATIO);
           } else if (e.key === 'End') {
             e.preventDefault();
-            resizeBranch(branch.id, 0.9);
+            resizeBranch(branch.id, MAX_SPLIT_RATIO);
           }
         } else {
           if (e.key === 'ArrowUp') {
             e.preventDefault();
-            resizeBranch(branch.id, Math.max(0.1, ratio - step));
+            resizeBranch(branch.id, ratio - step);
           } else if (e.key === 'ArrowDown') {
             e.preventDefault();
-            resizeBranch(branch.id, Math.min(0.9, ratio + step));
+            resizeBranch(branch.id, ratio + step);
           } else if (e.key === 'Home') {
             e.preventDefault();
-            resizeBranch(branch.id, 0.1);
+            resizeBranch(branch.id, MIN_SPLIT_RATIO);
           } else if (e.key === 'End') {
             e.preventDefault();
-            resizeBranch(branch.id, 0.9);
+            resizeBranch(branch.id, MAX_SPLIT_RATIO);
           }
         }
       },
@@ -86,8 +91,8 @@ export const TreeResizeSash: React.FC<TreeResizeSashProps> = React.memo(
             ? `调整左右面板宽度（当前 ${(ratio * 100).toFixed(0)}%）`
             : `调整上下面板高度（当前 ${(ratio * 100).toFixed(0)}%）`
         }
-        aria-valuemin={10}
-        aria-valuemax={90}
+        aria-valuemin={Math.round(MIN_SPLIT_RATIO * 100)}
+        aria-valuemax={Math.round(MAX_SPLIT_RATIO * 100)}
         aria-valuenow={Math.round(ratio * 100)}
         tabIndex={0}
         onPointerDown={(e) => startResize(branch.id, e)}

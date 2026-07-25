@@ -14,11 +14,6 @@ import { useLayoutTreeStore } from '../../store/layout-tree';
 import type { DropZone } from '../../store/layout-tree';
 import styles from './BinaryTreeWorkspace.module.css';
 
-interface DropZoneOverlayProps {
-  /** canvas 容器 ref（用于计算相对坐标） */
-  canvasRef: React.RefObject<HTMLDivElement | null>;
-}
-
 /** 覆盖层位置（屏幕坐标） */
 interface OverlayRect {
   left: number;
@@ -80,62 +75,60 @@ function computeOverlayRect(zone: DropZone, leafRect: DOMRect): OverlayRect {
   }
 }
 
-export const DropZoneOverlay: React.FC<DropZoneOverlayProps> = React.memo(
-  () => {
-    const dropZone = useLayoutTreeStore((s) => s.activeDropZone);
-    const draggedSource = useLayoutTreeStore((s) => s.draggedSource);
-    const [overlay, setOverlay] = React.useState<OverlayRect | null>(null);
+export const DropZoneOverlay: React.FC = React.memo(() => {
+  const dropZone = useLayoutTreeStore((s) => s.activeDropZone);
+  const draggedSource = useLayoutTreeStore((s) => s.draggedSource);
+  const [overlay, setOverlay] = React.useState<OverlayRect | null>(null);
 
-    // 监听 dropZone 变化，重新计算覆盖层位置
-    React.useEffect(() => {
-      if (!dropZone || !draggedSource) {
-        setOverlay(null);
-        return;
-      }
+  // 监听 dropZone 变化，重新计算覆盖层位置
+  React.useEffect(() => {
+    if (!dropZone || !draggedSource) {
+      setOverlay(null);
+      return;
+    }
+    const targetEl = document.querySelector<HTMLElement>(
+      `[data-leaf-id="${dropZone.targetLeafId}"]`
+    );
+    if (!targetEl) {
+      setOverlay(null);
+      return;
+    }
+    const rect = targetEl.getBoundingClientRect();
+    setOverlay(computeOverlayRect(dropZone, rect));
+  }, [dropZone, draggedSource]);
+
+  // 拖拽过程中 leaf 位置可能变化，用 rAF 持续更新
+  React.useEffect(() => {
+    if (!dropZone || !draggedSource) return;
+    let rafId = 0;
+    const update = () => {
       const targetEl = document.querySelector<HTMLElement>(
         `[data-leaf-id="${dropZone.targetLeafId}"]`
       );
-      if (!targetEl) {
-        setOverlay(null);
-        return;
+      if (targetEl) {
+        const rect = targetEl.getBoundingClientRect();
+        setOverlay(computeOverlayRect(dropZone, rect));
       }
-      const rect = targetEl.getBoundingClientRect();
-      setOverlay(computeOverlayRect(dropZone, rect));
-    }, [dropZone, draggedSource]);
-
-    // 拖拽过程中 leaf 位置可能变化，用 rAF 持续更新
-    React.useEffect(() => {
-      if (!dropZone || !draggedSource) return;
-      let rafId = 0;
-      const update = () => {
-        const targetEl = document.querySelector<HTMLElement>(
-          `[data-leaf-id="${dropZone.targetLeafId}"]`
-        );
-        if (targetEl) {
-          const rect = targetEl.getBoundingClientRect();
-          setOverlay(computeOverlayRect(dropZone, rect));
-        }
-        rafId = requestAnimationFrame(update);
-      };
       rafId = requestAnimationFrame(update);
-      return () => cancelAnimationFrame(rafId);
-    }, [dropZone, draggedSource]);
+    };
+    rafId = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(rafId);
+  }, [dropZone, draggedSource]);
 
-    if (!overlay) return null;
+  if (!overlay) return null;
 
-    return createPortal(
-      <div
-        className={`${styles.dropOverlay} ${overlay.className}`}
-        style={{
-          left: overlay.left,
-          top: overlay.top,
-          width: overlay.width,
-          height: overlay.height,
-        }}
-        aria-hidden="true"
-      />,
-      document.body
-    );
-  }
-);
+  return createPortal(
+    <div
+      className={`${styles.dropOverlay} ${overlay.className}`}
+      style={{
+        left: overlay.left,
+        top: overlay.top,
+        width: overlay.width,
+        height: overlay.height,
+      }}
+      aria-hidden="true"
+    />,
+    document.body
+  );
+});
 DropZoneOverlay.displayName = 'DropZoneOverlay';

@@ -15,8 +15,6 @@ export interface LayoutLeaf {
   tabs: string[];
   /** 当前激活的 tab id */
   activeTab: string;
-  /** 相对尺寸（兄弟间比例，branch 的 splitRatio 优先） */
-  size: number;
 }
 
 /** 分支节点：严格二叉分割 */
@@ -58,6 +56,35 @@ export type SplitDirection = 'horizontal' | 'vertical';
 /** 拖拽放置方向 */
 export type DropDirection = 'left' | 'right' | 'top' | 'bottom';
 
+/**
+ * 拖拽源描述（leaf 拖拽或 tab 拖拽）。
+ *
+ * 纯数据类型，放在 types.ts 以便 operations.ts 的 applyDrop 引用，
+ * 避免 operations → store 的循环依赖。
+ */
+export interface TreeDragSource {
+  /** 拖拽类型：整个 leaf 还是单个 tab */
+  type: 'leaf' | 'tab';
+  /** 源 leaf id */
+  leafId: string;
+  /** 源 tab id（leaf 拖拽时等于 leafId，tab 拖拽时为具体 tab） */
+  tabId: string;
+  /** 源面板类型（用于 ghost 标题、applyDrop 决策） */
+  panelId: string;
+}
+
+// ── 业务常量（单一来源，禁止在其它文件硬编码） ──────────────────────
+
+/** splitRatio 最小值（branch 第一个 child 占比下限） */
+export const MIN_SPLIT_RATIO = 0.1;
+/** splitRatio 最大值（branch 第一个 child 占比上限） */
+export const MAX_SPLIT_RATIO = 0.9;
+
+/** 将 ratio 钳制到 [MIN_SPLIT_RATIO, MAX_SPLIT_RATIO] */
+export function clampSplitRatio(ratio: number): number {
+  return Math.max(MIN_SPLIT_RATIO, Math.min(MAX_SPLIT_RATIO, ratio));
+}
+
 // ── 工厂函数 ──────────────────────────────────────────────────────────
 
 let idCounter = 0;
@@ -80,7 +107,6 @@ export function createLeaf(
     panelId,
     tabs: tabList,
     activeTab: activeTab ?? tabList[0] ?? panelId,
-    size: 1,
   };
 }
 
@@ -96,7 +122,7 @@ export function createBranch(
     id: generateNodeId('branch'),
     direction,
     children: [first, second],
-    splitRatio: Math.max(0.1, Math.min(0.9, splitRatio)),
+    splitRatio: clampSplitRatio(splitRatio),
   };
 }
 

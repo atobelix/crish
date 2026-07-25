@@ -24,7 +24,7 @@ import {
   isBranch,
   type LayoutTree,
 } from './types';
-import { findNodeById, flattenToRenderList, collectLeaves } from './operations';
+import { findNodeById, collectLeaves } from './operations';
 
 // ── 测试夹具 ────────────────────────────────────────────────────────
 
@@ -148,14 +148,13 @@ function legacyVerticalGroups() {
 /**
  * 复位 layoutTreeStore 到默认单 chat leaf 状态。
  * 直接 setState（不走 setTree，避免推历史污染 past 栈），
- * 然后重算 flatPanels + activeLeafId 保持 store 一致性。
+ * 同时修正 activeLeafId 保持 store 一致性。
  */
 function resetStoreFully(): void {
   const defaultTree = createDefaultTree('chat');
   useLayoutTreeStore.setState({
     tree: defaultTree,
     activeLeafId: defaultTree.root.id,
-    flatPanels: flattenToRenderList(defaultTree.root),
     past: [],
     future: [],
     draggedSource: null,

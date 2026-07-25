@@ -39,7 +39,6 @@ describe('LayoutTree types', () => {
     expect(leaf.panelId).toBe('terminal');
     expect(leaf.tabs).toEqual(['terminal', 'output']);
     expect(leaf.activeTab).toBe('terminal');
-    expect(leaf.size).toBe(1);
   });
 
   it('createBranch clamps splitRatio', () => {

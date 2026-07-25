@@ -133,18 +133,11 @@ export function useTreeDrag(): UseTreeDragResult {
       // 已在拖拽中：忽略
       if (phaseRef.current !== 'idle') return;
 
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const source: TreeDragSource = {
         type: 'leaf',
         leafId,
         tabId: leafId,
         panelId,
-        originRect: {
-          left: rect.left,
-          top: rect.top,
-          width: rect.width,
-          height: rect.height,
-        },
       };
       pendingRef.current = {
         source,
@@ -308,13 +301,19 @@ export function useTreeDrag(): UseTreeDragResult {
     handlePointerCancel();
   }, [handlePointerCancel]);
 
-  // ── 全局事件监听（仅在拖拽中挂载） ───────────────────────────
-
-  const isPendingOrActive = phaseRef.current !== 'idle';
+  // ── 全局事件监听（常驻挂载，handler 内按 phase 守卫） ─────────
+  //
+  // 设计理由：原先尝试"仅在 pending/active 时挂载"，但 phaseRef.current
+  // 的变更不会触发重渲染，导致 startDragLeaf 后 isPendingOrActive 仍为
+  // false、effect 不重新挂载 listener，拖拽永远无法进入 active 阶段。
+  // 改为常驻挂载 + handler 内 phaseRef 守卫，彻底消除时序依赖。
+  //
+  // body.tree-dragging 由 isDragging 状态驱动：
+  // - enterActive 调用 setIsDragging(true) → 重渲染 → effect 添加 class
+  // - handlePointerUp/Cancel 调用 setIsDragging(false) → 重渲染 → effect 移除 class
+  // pending 阶段不添加 class（尚未超过阈值，不算真正拖拽）。
 
   useEffect(() => {
-    if (!isPendingOrActive && !isDragging) return;
-
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('pointercancel', handlePointerCancel);
@@ -326,8 +325,11 @@ export function useTreeDrag(): UseTreeDragResult {
     };
     window.addEventListener('keydown', handleEscape);
 
-    // 拖拽中禁止文本选择
-    document.body.classList.add('tree-dragging');
+    if (isDragging) {
+      document.body.classList.add('tree-dragging');
+    } else {
+      document.body.classList.remove('tree-dragging');
+    }
 
     return () => {
       window.removeEventListener('pointermove', handlePointerMove);
@@ -336,13 +338,7 @@ export function useTreeDrag(): UseTreeDragResult {
       window.removeEventListener('keydown', handleEscape);
       document.body.classList.remove('tree-dragging');
     };
-  }, [
-    isPendingOrActive,
-    isDragging,
-    handlePointerMove,
-    handlePointerUp,
-    handlePointerCancel,
-  ]);
+  }, [isDragging, handlePointerMove, handlePointerUp, handlePointerCancel]);
 
   // 从 store 同步 activeDropZone（避免本地与 store 状态分叉）
   const activeDropZone = useLayoutTreeStore((s) => s.activeDropZone);

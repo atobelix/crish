@@ -6,7 +6,7 @@
  * 2. 纯函数更新：operations.ts 的纯函数返回新树，store 直接赋值（无需 immer）
  * 3. 历史栈：undo/redo（限 50 步，避免内存膨胀）
  * 4. 持久化：localStorage 保存 tree + activeLeafId（不保存 history/drag 状态）
- * 5. 拖拽集中化：commitDrop 在 store 内根据 draggedSource + activeDropZone 计算变更
+ * 5. 拖拽集中化：commitDrop 调用纯函数 applyDrop 计算变更，仅负责推历史 + 清理状态
  *
  * Action 命名约定：
  * - 结构操作（推历史）：splitLeaf / mergeBranch / moveLeaf / resetTree / setTree / commitDrop
@@ -20,6 +20,11 @@
  * - LayoutNode 是 LayoutLeaf | LayoutBranch 联合类型，immer 的 WritableDraft
  *   在 declaration: true 下无法被 TypeScript 命名（TS4023）
  * - 移除 immer 后类型更简洁，且无运行时开销
+ *
+ * 为何不缓存 flatPanels：
+ * - 仅有 BinaryTreeWorkspace 消费，且其已用 useMemo + flattenToRenderList 计算
+ * - 缓存意味着每次 tree 变更要同步重算，增加 store 复杂度与出错面
+ * - 真正的消费者少时，按需计算更简单
  */
 
 import { create } from 'zustand';
@@ -29,6 +34,7 @@ import type {
   LayoutLeaf,
   SplitDirection,
   DropDirection,
+  TreeDragSource,
 } from './types';
 import { createDefaultTree, isLeaf } from './types';
 import {
@@ -41,9 +47,8 @@ import {
   setLeafActiveTab,
   collectLeaves,
   findNodeById,
-  flattenToRenderList,
+  applyDrop,
 } from './operations';
-import type { FlatPanel } from './types';
 import type { DropZone } from './dropDetection';
 
 // ── 常量 ──────────────────────────────────────────────────────────
@@ -55,25 +60,6 @@ const STORAGE_KEY = 'crish-layout-tree-v1';
 
 // ── 类型 ──────────────────────────────────────────────────────────
 
-/** 拖拽源描述（leaf 拖拽或 tab 拖拽） */
-export interface TreeDragSource {
-  /** 拖拽类型：整个 leaf 还是单个 tab */
-  type: 'leaf' | 'tab';
-  /** 源 leaf id */
-  leafId: string;
-  /** 源 tab id（leaf 拖拽时等于 leafId，tab 拖拽时为具体 tab） */
-  tabId: string;
-  /** 源面板类型（用于 ghost 标题、commitDrop 决策） */
-  panelId: string;
-  /** pointerdown 时的源 rect（屏幕坐标，用于 ghost 起始位置/动画） */
-  originRect?: {
-    left: number;
-    top: number;
-    width: number;
-    height: number;
-  };
-}
-
 export interface LayoutTreeStoreState {
   /** 当前布局树 */
   tree: LayoutTree;
@@ -83,8 +69,6 @@ export interface LayoutTreeStoreState {
   draggedSource: TreeDragSource | null;
   /** 当前检测到的 drop zone */
   activeDropZone: DropZone | null;
-  /** 渲染用平坦列表（缓存，tree 变化时重算） */
-  flatPanels: FlatPanel[];
   /** 历史栈：过去的 tree 快照（undo 用） */
   past: LayoutTree[];
   /** 历史栈：未来的 tree 快照（redo 用） */
@@ -131,7 +115,7 @@ export interface LayoutTreeStoreActions {
   setDraggedSource: (source: TreeDragSource | null) => void;
   /** 设置当前 drop zone（拖拽移动时调用） */
   setActiveDropZone: (zone: DropZone | null) => void;
-  /** 提交拖拽：根据 draggedSource + activeDropZone 计算结构变更 */
+  /** 提交拖拽：调用 applyDrop 计算变更，推历史，清理拖拽状态 */
   commitDrop: () => void;
   /** 取消拖拽：清空拖拽状态，不变更结构 */
   cancelDrag: () => void;
@@ -153,11 +137,6 @@ export type LayoutTreeStore = LayoutTreeStoreState & LayoutTreeStoreActions;
 
 // ── 辅助函数 ──────────────────────────────────────────────────────
 
-/** 重新计算 flatPanels */
-function recomputeFlat(tree: LayoutTree): FlatPanel[] {
-  return flattenToRenderList(tree.root);
-}
-
 /** 找到树中第一个 leaf 的 id（用于初始化 activeLeafId） */
 function firstLeafId(tree: LayoutTree): string | null {
   const leaves = collectLeaves(tree.root);
@@ -174,27 +153,6 @@ function resolveActiveLeaf(
   return firstLeafId(tree);
 }
 
-/**
- * DropZone.type → DropDirection 映射。
- * 'merge-tab' 单独处理（不进入 moveLeaf 路径）。
- */
-function dropZoneToDirection(zoneType: DropZone['type']): DropDirection | null {
-  switch (zoneType) {
-    case 'split-left':
-      return 'left';
-    case 'split-right':
-      return 'right';
-    case 'split-top':
-      return 'top';
-    case 'split-bottom':
-      return 'bottom';
-    case 'merge-tab':
-      return null;
-    default:
-      return null;
-  }
-}
-
 // ── Store 实现 ────────────────────────────────────────────────────
 
 const initialTree = createDefaultTree('chat');
@@ -207,7 +165,6 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
       activeLeafId: firstLeafId(initialTree),
       draggedSource: null,
       activeDropZone: null,
-      flatPanels: recomputeFlat(initialTree),
       past: [],
       future: [],
 
@@ -218,7 +175,6 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
           past: [...state.past, state.tree].slice(-MAX_HISTORY),
           future: [],
           tree,
-          flatPanels: recomputeFlat(tree),
           activeLeafId: resolveActiveLeaf(tree, state.activeLeafId),
         })),
 
@@ -229,7 +185,6 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
             past: [...state.past, state.tree].slice(-MAX_HISTORY),
             future: [],
             tree: newTree,
-            flatPanels: recomputeFlat(newTree),
             activeLeafId: firstLeafId(newTree),
           };
         }),
@@ -258,7 +213,6 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
             past: [...state.past, state.tree].slice(-MAX_HISTORY),
             future: [],
             tree: result,
-            flatPanels: recomputeFlat(result),
             activeLeafId: newLeaf?.id ?? state.activeLeafId,
           };
         }),
@@ -271,7 +225,6 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
             past: [...state.past, state.tree].slice(-MAX_HISTORY),
             future: [],
             tree: result,
-            flatPanels: recomputeFlat(result),
             activeLeafId: resolveActiveLeaf(result, state.activeLeafId),
           };
         }),
@@ -284,7 +237,6 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
             past: [...state.past, state.tree].slice(-MAX_HISTORY),
             future: [],
             tree: result,
-            flatPanels: recomputeFlat(result),
           };
         }),
 
@@ -300,7 +252,6 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
               : state.past,
             future: commit ? [] : state.future,
             tree: result,
-            flatPanels: recomputeFlat(result),
           };
         }),
 
@@ -312,7 +263,6 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
             past: [...state.past, state.tree].slice(-MAX_HISTORY),
             future: [],
             tree: result,
-            flatPanels: recomputeFlat(result),
           };
         }),
 
@@ -324,7 +274,6 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
             past: [...state.past, state.tree].slice(-MAX_HISTORY),
             future: [],
             tree: result,
-            flatPanels: recomputeFlat(result),
             activeLeafId: resolveActiveLeaf(result, state.activeLeafId),
           };
         }),
@@ -337,11 +286,7 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
         set((state) => {
           const result = setLeafActiveTab(state.tree, leafId, tabId);
           if (result === state.tree) return {};
-          // 同步更新 flatPanels 中的 activeTab（rect 不变）
-          const flatPanels = state.flatPanels.map((p) =>
-            p.leafId === leafId ? { ...p, activeTab: tabId } : p
-          );
-          return { tree: result, flatPanels };
+          return { tree: result };
         }),
 
       // ── 拖拽状态 ──────────────────────────────────────────
@@ -362,99 +307,7 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
             return { draggedSource: null, activeDropZone: null };
           }
 
-          const {
-            type: srcType,
-            leafId: srcLeafId,
-            tabId: srcTabId,
-            panelId: srcPanelId,
-          } = draggedSource;
-          const { type: zoneType, targetLeafId } = activeDropZone;
-
-          // 不允许 drop 到自身 leaf（merge-tab 除外，同 leaf 内 tab 重排）
-          if (srcLeafId === targetLeafId && zoneType !== 'merge-tab') {
-            return { draggedSource: null, activeDropZone: null };
-          }
-          // 同 leaf 且 leaf 拖拽：无操作
-          if (srcLeafId === targetLeafId && srcType === 'leaf') {
-            return { draggedSource: null, activeDropZone: null };
-          }
-
-          const direction = dropZoneToDirection(zoneType);
-          let resultTree: LayoutTree = tree;
-
-          if (direction !== null) {
-            // ── split 路径 ──────────────────────────────────
-            if (srcType === 'leaf') {
-              // leaf 拖拽到 split：移动整个 leaf
-              resultTree = moveLeaf(tree, srcLeafId, targetLeafId, direction);
-            } else {
-              // tab 拖拽到 split：从源 leaf 移除 tab，在 target 旁边 split 出新 leaf
-              const afterRemove = removeTabFromLeaf(tree, srcLeafId, srcTabId);
-              const targetStillExists = findNodeById(
-                afterRemove.root,
-                targetLeafId
-              );
-              if (!targetStillExists) {
-                resultTree = afterRemove;
-              } else {
-                const splitDir: SplitDirection =
-                  direction === 'left' || direction === 'right'
-                    ? 'horizontal'
-                    : 'vertical';
-                const position: 'before' | 'after' =
-                  direction === 'left' || direction === 'top'
-                    ? 'before'
-                    : 'after';
-                resultTree = splitLeaf(
-                  afterRemove,
-                  targetLeafId,
-                  splitDir,
-                  srcPanelId,
-                  position,
-                  0.5
-                );
-              }
-            }
-          } else {
-            // ── merge-tab 路径 ───────────────────────────────
-            if (srcType === 'leaf') {
-              // leaf 拖拽到 merge：将源 leaf 所有 tabs 转移到 target，然后移除源 leaf
-              const srcLeaf = findNodeById(tree.root, srcLeafId);
-              if (!srcLeaf || !isLeaf(srcLeaf)) {
-                return { draggedSource: null, activeDropZone: null };
-              }
-              let working = tree;
-              // 逐个添加 tab 到 target
-              for (const tab of srcLeaf.tabs) {
-                working = addTabToLeaf(working, targetLeafId, tab);
-              }
-              // 循环移除源 leaf 所有 tab（最后一个触发 leaf 删除）
-              let checkLeaf = findNodeById(working.root, srcLeafId);
-              while (
-                checkLeaf &&
-                isLeaf(checkLeaf) &&
-                checkLeaf.tabs.length > 0
-              ) {
-                const t = checkLeaf.tabs[checkLeaf.tabs.length - 1]!;
-                working = removeTabFromLeaf(working, srcLeafId, t);
-                checkLeaf = findNodeById(working.root, srcLeafId);
-              }
-              resultTree = working;
-            } else {
-              // tab 拖拽到 merge：将 tab 从源 leaf 移到 target leaf
-              const afterRemove = removeTabFromLeaf(tree, srcLeafId, srcTabId);
-              const targetStillExists = findNodeById(
-                afterRemove.root,
-                targetLeafId
-              );
-              if (!targetStillExists) {
-                resultTree = afterRemove;
-              } else {
-                resultTree = addTabToLeaf(afterRemove, targetLeafId, srcTabId);
-              }
-            }
-          }
-
+          const resultTree = applyDrop(tree, draggedSource, activeDropZone);
           if (resultTree === tree) {
             return { draggedSource: null, activeDropZone: null };
           }
@@ -463,7 +316,6 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
             past: [...state.past, tree].slice(-MAX_HISTORY),
             future: [],
             tree: resultTree,
-            flatPanels: recomputeFlat(resultTree),
             activeLeafId: resolveActiveLeaf(resultTree, state.activeLeafId),
             draggedSource: null,
             activeDropZone: null,
@@ -488,7 +340,6 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
             past: state.past.slice(0, -1),
             future: [...state.future, state.tree].slice(-MAX_HISTORY),
             tree: previous,
-            flatPanels: recomputeFlat(previous),
             activeLeafId: resolveActiveLeaf(previous, state.activeLeafId),
           };
         }),
@@ -501,7 +352,6 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
             past: [...state.past, state.tree].slice(-MAX_HISTORY),
             future: state.future.slice(0, -1),
             tree: next,
-            flatPanels: recomputeFlat(next),
             activeLeafId: resolveActiveLeaf(next, state.activeLeafId),
           };
         }),
@@ -512,15 +362,14 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      // 仅持久化 tree + activeLeafId（不保存 history/drag/flatPanels）
+      // 仅持久化 tree + activeLeafId（不保存 history/drag 状态）
       partialize: (s) => ({
         tree: s.tree,
         activeLeafId: s.activeLeafId,
       }),
-      // hydrate 后重算 flatPanels + 清空临时状态
+      // hydrate 后清空临时状态 + 修正 activeLeafId
       onRehydrateStorage: () => (state) => {
         if (!state) return;
-        state.flatPanels = recomputeFlat(state.tree);
         state.activeLeafId = resolveActiveLeaf(state.tree, state.activeLeafId);
         state.past = [];
         state.future = [];
