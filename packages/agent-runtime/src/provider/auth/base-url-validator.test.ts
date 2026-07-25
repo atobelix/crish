@@ -1,7 +1,10 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { validateBaseUrl, setAllowTestLocalhost, isTestLocalhostAllowed } from "./base-url-validator";
 
 describe("validateBaseUrl", () => {
+  beforeEach(() => {
+    setAllowTestLocalhost(false);
+  });
   it("accepts valid public HTTPS URLs", () => {
     const result = validateBaseUrl("https://api.openai.com/v1");
     expect(result.valid).toBe(true);
