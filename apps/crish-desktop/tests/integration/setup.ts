@@ -1,17 +1,5 @@
-import { vi } from 'vitest';
+import { installBrowserStorageMocks } from '@crish/test-utils';
 
-if (typeof globalThis.localStorage === 'undefined') {
-  const store = new Map<string, string>();
-  Object.defineProperty(globalThis, 'localStorage', {
-    value: {
-      getItem: vi.fn((key: string) => store.get(key) ?? null),
-      setItem: vi.fn((key: string, value: string) => store.set(key, value)),
-      removeItem: vi.fn((key: string) => store.delete(key)),
-      clear: vi.fn(() => store.clear()),
-      get length() { return store.size; },
-      key: vi.fn((index: number) => [...store.keys()][index] ?? null),
-    },
-    writable: true,
-    configurable: true,
-  });
-}
+// 为集成测试环境安装统一的 localStorage / sessionStorage mock。
+// 原本在此处内联 vi.fn + Map 实现，现已下沉到 @crish/test-utils 以消除跨文件重复。
+installBrowserStorageMocks();
