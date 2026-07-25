@@ -122,14 +122,15 @@ export class EventStoreProjection {
       // 只提取 user/assistant/tool 角色的消息
       if (!["user", "assistant", "tool"].includes(msg.role)) continue;
 
+      const msgMeta = typeof msg.metadata === "object" && msg.metadata !== null
+        ? msg.metadata as JsonObject
+        : undefined;
       messages.push({
         id: typeof msg.id === "string" ? msg.id : `ctx-${event.sequence}`,
         role: msg.role as AgentMessage["role"],
         blocks: Array.isArray(msg.blocks) ? msg.blocks as AgentMessageBlock[] : [],
         createdAt: event.timestamp,
-        metadata: typeof msg.metadata === "object" && msg.metadata !== null
-          ? msg.metadata as JsonObject
-          : undefined,
+        ...(msgMeta !== undefined ? { metadata: msgMeta } : {}),
       });
     }
 
@@ -202,7 +203,7 @@ export class EventStoreProjection {
       for (const event of runtimeEvents) {
         const payload = event.payload as Record<string, unknown> | undefined;
         if (payload?.toolCall && typeof (payload.toolCall as Record<string, unknown>)?.toolName === "string") {
-          toolCallNames.add((payload.toolCall as Record<string, string>).toolName);
+          toolCallNames.add((payload.toolCall as Record<string, string>).toolName!);
         }
       }
 

@@ -2,7 +2,6 @@ import type { AgentEvent, AgentMessage } from "@crish/shared-types";
 import type {
   GoalContinuationDecision,
   GoalLoopStrategy,
-  GoalRoundAssessment,
   OrchestratorGoalRunState,
   OrchestratorRunRecord,
   OrchestratorSessionRecord,
@@ -27,9 +26,19 @@ export class EventScanGoalStrategy implements GoalLoopStrategy {
 
   // 显式声明接口中的可选方法，确保联合类型 GoalLoopStrategy | EventScanGoalStrategy
   // 下仍可安全访问这些属性（TypeScript 类型缩窄需要）。
-  buildNextRoundPrompt?: GoalLoopStrategy["buildNextRoundPrompt"];
-  handleProviderError?: GoalLoopStrategy["handleProviderError"];
-  onRoundEvent?: GoalLoopStrategy["onRoundEvent"];
+  declare buildNextRoundPrompt: (input: {
+    decision: GoalContinuationDecision;
+    roundIndex: number;
+    goalState: OrchestratorGoalRunState;
+    events: AgentEvent[];
+    roundContext?: unknown;
+  }) => string | undefined;
+  declare handleProviderError: (input: {
+    events: AgentEvent[];
+    roundIndex: number;
+    consecutiveTransientErrors: number;
+  }) => ProviderErrorResult | undefined;
+  declare onRoundEvent: (event: AgentEvent, previousContext?: unknown) => unknown;
 
   assessRound(input: {
     run: OrchestratorRunRecord;
@@ -37,6 +46,7 @@ export class EventScanGoalStrategy implements GoalLoopStrategy {
     roundIndex: number;
     prompt: string | AgentMessage;
     events: AgentEvent[];
+    roundContext?: unknown;
   }): GoalContinuationDecision {
     const assessment = assessGoalRound({
       run: input.run,
@@ -49,6 +59,7 @@ export class EventScanGoalStrategy implements GoalLoopStrategy {
   computeProgressSignature(input: {
     decision: GoalContinuationDecision;
     events: AgentEvent[];
+    roundContext?: unknown;
   }): string {
     // 优先使用 decision 中已经携带的签名（来自 assessGoalRound）
     if (input.decision.progressSignature) {
@@ -80,7 +91,7 @@ const TRANSIENT_RUST_REQWEST_CONTEXT = /http request failed|connect|connection|t
  */
 export function detectProviderRateLimit(events: AgentEvent[]): string | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
-    const text = extractEventText(events[i]);
+    const text = extractEventText(events[i]!);
     if (RATE_LIMIT_PATTERN.test(text)) {
       return trimReason(text || "429 Too Many Requests", 300);
     }
@@ -94,7 +105,7 @@ export function detectProviderRateLimit(events: AgentEvent[]): string | undefine
  */
 export function detectTransientNetworkError(events: AgentEvent[]): string | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
-    const event = events[i];
+    const event = events[i]!;
     if (event.type !== "runtime-error" && event.type !== "provider-diagnostic") continue;
     const text = extractEventText(event);
     if (TRANSIENT_NETWORK_PATTERNS.some((p) => p.test(text))) {
@@ -113,7 +124,7 @@ export function detectTransientNetworkError(events: AgentEvent[]): string | unde
  */
 export function detectFatalRuntimeError(events: AgentEvent[]): string | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
-    const event = events[i];
+    const event = events[i]!;
     if (event.type !== "runtime-error") continue;
     const text = extractEventText(event);
     if (RATE_LIMIT_PATTERN.test(text)) continue;
@@ -136,7 +147,7 @@ export function createDefaultProviderErrorHandler(options: {
   roundIndex: number;
   consecutiveTransientErrors: number;
 }) => ProviderErrorResult | undefined {
-  return (input) => {
+  return (input): ProviderErrorResult | undefined => {
     const rateLimit = detectProviderRateLimit(input.events);
     if (rateLimit) {
       return {
@@ -152,7 +163,7 @@ export function createDefaultProviderErrorHandler(options: {
       if (input.consecutiveTransientErrors >= options.maxTransientErrors) {
         return {
           action: "fatal",
-          reason: `Provider network remained unstable after ${input.consecutiveTransientErrors} transient failures: ${transientError}`
+          reason: `Provider network remained unstable after ${input.consecutiveTransientErrors} transient failures: ${transientError}`,
         };
       }
       return {

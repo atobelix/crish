@@ -1,6 +1,6 @@
 import type { JsonObject, JsonValue } from "@crish/shared-types";
 import type { AgentEvent, AgentMessage, ToolBatchResult, ToolOutput } from "@crish/shared-types";
-import { compactJsonObject, isRecord, nonEmptyString } from "@crish/shared-utils";
+import { compactJsonObject, isRecord, nonEmptyString, toJsonObject } from "@crish/shared-utils";
 import type {
   GoalContinuationDecision,
   GoalContinuationDecisionSource,
@@ -30,6 +30,8 @@ interface EventFailure {
   latestError?: string;
   providerFailure?: JsonObject;
 }
+
+type LooseAssessment = Partial<Record<keyof GoalRoundAssessment, unknown>>;
 
 export function assessGoalRound(input: AssessGoalRoundInput): GoalRoundAssessment {
   const progress = assessRoundProgress(input.events);
@@ -158,7 +160,7 @@ export function goalContinuationDecisionFromAssessment(assessment: GoalRoundAsse
     return decisionWithAssessmentDetail(
       {
         action: "complete",
-        reason: assessment.reason
+        reason: assessment.reason,
       },
       assessment
     );
@@ -170,6 +172,7 @@ export function goalContinuationDecisionFromAssessment(assessment: GoalRoundAsse
 export function structuredGoalContinuationDecisionFromEvents(events: readonly AgentEvent[]): DecisionMatch | undefined {
   for (let eventIndex = events.length - 1; eventIndex >= 0; eventIndex -= 1) {
     const event = events[eventIndex];
+    if (!event) continue;
     if (event.type === "tool-end") {
       const decision = goalContinuationDecisionFromJson(event.result.output.json);
       if (decision) return { decision, source: "tool-output" };
@@ -177,7 +180,9 @@ export function structuredGoalContinuationDecisionFromEvents(events: readonly Ag
     if (event.type === "tool-batch-end") {
       const calls = event.calls;
       for (let callIndex = calls.length - 1; callIndex >= 0; callIndex -= 1) {
-        const decision = goalContinuationDecisionFromJson(calls[callIndex].output.json);
+        const call = calls[callIndex];
+        if (!call) continue;
+        const decision = goalContinuationDecisionFromJson(call.output.json);
         if (decision) return { decision, source: "tool-output" };
       }
     }
@@ -192,6 +197,7 @@ export function structuredGoalContinuationDecisionFromEvents(events: readonly Ag
 export function goalContinuationDecisionFromEvents(events: readonly AgentEvent[]): GoalContinuationDecision | undefined {
   for (let eventIndex = events.length - 1; eventIndex >= 0; eventIndex -= 1) {
     const event = events[eventIndex];
+    if (!event) continue;
     if (event.type === "tool-end") {
       const decision = goalContinuationDecisionFromJson(event.result.output.json);
       if (decision) return decision;
@@ -199,7 +205,9 @@ export function goalContinuationDecisionFromEvents(events: readonly AgentEvent[]
     if (event.type === "tool-batch-end") {
       const calls = event.calls;
       for (let callIndex = calls.length - 1; callIndex >= 0; callIndex -= 1) {
-        const decision = goalContinuationDecisionFromJson(calls[callIndex].output.json);
+        const call = calls[callIndex];
+        if (!call) continue;
+        const decision = goalContinuationDecisionFromJson(call.output.json);
         if (decision) return decision;
       }
     }
@@ -225,6 +233,7 @@ export function goalContinuationDecisionFromMessage(message: AgentMessage): Goal
   const blocks = message.blocks;
   for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
     const block = blocks[blockIndex];
+    if (!block) continue;
     if (block.type !== "text") continue;
     const fromMarker = parseGoalDecisionMarker(block.text);
     if (fromMarker) return fromMarker;
@@ -237,8 +246,8 @@ function terminalAssessmentFromRun(run: OrchestratorRunRecord): EventFailure | u
     return {
       state: "cancelled",
       reason: run.error ?? "Goal run was cancelled.",
-      runReason: run.reason,
-      latestError: run.error
+      ...(run.reason !== undefined ? { runReason: run.reason } : {}),
+      ...(run.error !== undefined ? { latestError: run.error } : {}),
     };
   }
 
@@ -246,18 +255,19 @@ function terminalAssessmentFromRun(run: OrchestratorRunRecord): EventFailure | u
     return {
       state: "blocked",
       reason: run.error ?? `Goal run is blocked with reason: ${run.reason ?? "blocked"}`,
-      runReason: run.reason,
-      latestError: run.error
+      ...(run.reason !== undefined ? { runReason: run.reason } : {}),
+      ...(run.error !== undefined ? { latestError: run.error } : {}),
     };
   }
 
   if (run.outcome === "failed" || run.status === "failed") {
+    const providerFailure = providerFailureFromDetail(run.outcomeDetail);
     return {
       state: "failed",
       reason: run.error ?? `Goal run failed with reason: ${run.reason ?? "failed"}`,
-      runReason: run.reason,
-      latestError: run.error,
-      providerFailure: providerFailureFromDetail(run.outcomeDetail)
+      ...(run.reason !== undefined ? { runReason: run.reason } : {}),
+      ...(run.error !== undefined ? { latestError: run.error } : {}),
+      ...(providerFailure !== undefined ? { providerFailure } : {}),
     };
   }
 
@@ -265,7 +275,7 @@ function terminalAssessmentFromRun(run: OrchestratorRunRecord): EventFailure | u
     return {
       state: "completed",
       reason: "Goal run completed.",
-      runReason: run.reason
+      ...(run.reason !== undefined ? { runReason: run.reason } : {}),
     };
   }
 
@@ -277,13 +287,14 @@ function terminalAssessmentFromEvents(events: readonly AgentEvent[]): EventFailu
 
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
+    if (!event) continue;
     if (event.type === "runtime-error") {
       return {
         state: "failed",
         reason: event.error,
         runReason: providerFailure ? "provider-error" : "runtime-error",
         latestError: event.error,
-        providerFailure
+        ...(providerFailure !== undefined ? { providerFailure } : {}),
       };
     }
 
@@ -303,7 +314,7 @@ function terminalAssessmentFromEvents(events: readonly AgentEvent[]): EventFailu
           reason: event.error ?? "Goal round was aborted.",
           runReason: "aborted",
           latestAgentEndReason: event.reason,
-          latestError: event.error
+          ...(event.error !== undefined ? { latestError: event.error } : {}),
         };
       }
       if (event.reason === "max-turns") {
@@ -312,7 +323,7 @@ function terminalAssessmentFromEvents(events: readonly AgentEvent[]): EventFailu
           reason: event.error ?? "Goal round reached the maximum turn limit.",
           runReason: "max-turns",
           latestAgentEndReason: event.reason,
-          latestError: event.error
+          ...(event.error !== undefined ? { latestError: event.error } : {}),
         };
       }
       if (event.reason === "error") {
@@ -321,7 +332,7 @@ function terminalAssessmentFromEvents(events: readonly AgentEvent[]): EventFailu
           reason: event.error ?? "Goal round ended with an agent error.",
           runReason: "agent-error",
           latestAgentEndReason: event.reason,
-          latestError: event.error
+          ...(event.error !== undefined ? { latestError: event.error } : {}),
         };
       }
     }
@@ -335,12 +346,13 @@ function latestProviderFailure(events: readonly AgentEvent[]): JsonObject | unde
     (entry): entry is Extract<AgentEvent, { type: "provider-diagnostic" }> =>
       entry.type === "provider-diagnostic" && isProviderFailureDiagnostic(entry.diagnostic)
   );
-  return event?.diagnostic as unknown as JsonObject | undefined;
+  return event?.diagnostic != null ? toJsonObject(event.diagnostic) : undefined;
 }
 
 function latestToolErrorFromEvents(events: readonly AgentEvent[]): string | undefined {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
+    if (!event) continue;
     if (event.type === "tool-end" && event.result.isError) {
       return event.result.output.text ?? `Tool ${event.result.toolName} failed.`;
     }
@@ -489,7 +501,7 @@ function blockDecisionFromAssessment(assessment: GoalRoundAssessment): GoalConti
     {
       action: "block",
       reason: assessment.reason,
-      progressSignature: assessment.progress.signature
+      progressSignature: assessment.progress.signature,
     },
     assessment
   );
@@ -555,12 +567,15 @@ function parseGoalContinuationDecision(record: Record<string, JsonValue>): GoalC
   const reason = stringField(record, "reason") ?? stringField(record, "summary");
   if (!normalizedAction || !reason) return undefined;
 
+  const prompt = stringField(record, "prompt");
+  const progressSignature = stringField(record, "progressSignature");
+  const detail = isRecord(record.detail) ? (record.detail as JsonObject) : undefined;
   return {
     action: normalizedAction,
     reason,
-    ...(nonEmptyString(stringField(record, "prompt")) ? { prompt: stringField(record, "prompt") } : {}),
-    ...(nonEmptyString(stringField(record, "progressSignature")) ? { progressSignature: stringField(record, "progressSignature") } : {}),
-    ...(isRecord(record.detail) ? { detail: record.detail as JsonObject } : {})
+    ...(nonEmptyString(prompt) !== undefined ? { prompt: prompt! } : {}),
+    ...(nonEmptyString(progressSignature) !== undefined ? { progressSignature: progressSignature! } : {}),
+    ...(detail !== undefined ? { detail } : {}),
   };
 }
 
@@ -601,7 +616,7 @@ function latestEvent<TType extends AgentEvent["type"]>(
   return events.findLast((event): event is Extract<AgentEvent, { type: TType }> => event.type === type);
 }
 
-function compactAssessment(assessment: GoalRoundAssessment): GoalRoundAssessment {
+function compactAssessment(assessment: LooseAssessment): GoalRoundAssessment {
   const compacted: Partial<GoalRoundAssessment> = {};
   for (const [key, value] of Object.entries(assessment) as Array<[keyof GoalRoundAssessment, unknown]>) {
     if (value !== undefined) {
@@ -616,6 +631,7 @@ function tryParseJsonObject(text: string): Record<string, JsonValue> | undefined
     const parsed = JSON.parse(text);
     return isRecord(parsed) ? (parsed as Record<string, JsonValue>) : undefined;
   } catch {
+    // silent: JSON.parse 降级，非 JSON 字符串视为无结果
     return undefined;
   }
 }
@@ -639,8 +655,10 @@ function hashJson(value: JsonValue): string {
     if (Array.isArray(node)) {
       feed("[");
       for (let i = 0; i < node.length; i += 1) {
+        const item = node[i];
+        if (item === undefined) continue;
         if (i > 0) feed(",");
-        visit(node[i]);
+        visit(item);
       }
       feed("]");
       return;
@@ -649,10 +667,13 @@ function hashJson(value: JsonValue): string {
       const keys = Object.keys(node).sort();
       feed("{");
       for (let i = 0; i < keys.length; i += 1) {
+        const key = keys[i];
+        if (key === undefined) continue;
         if (i > 0) feed(",");
-        feed(JSON.stringify(keys[i]));
+        feed(JSON.stringify(key));
         feed(":");
-        visit(node[keys[i]]);
+        const val = node[key] as JsonValue;
+        if (val !== undefined) visit(val);
       }
       feed("}");
       return;

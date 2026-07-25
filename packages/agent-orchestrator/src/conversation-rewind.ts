@@ -34,11 +34,11 @@ export interface PlanConversationRewindInput<TPayload = JsonObject, TDetails = J
   session: Pick<OrchestratorSessionRecord, "id" | "currentLeafId">;
   entries: readonly SessionTreeEntry<TPayload, TDetails>[];
   targetLeafId: SessionTreeLeafId;
-  runs?: readonly OrchestratorRunRecord[];
-  pendingApprovals?: readonly ConversationRewindPendingApproval[];
-  activeSubagents?: readonly ConversationRewindActiveSubagent[];
-  checkpoint?: ConversationRewindCheckpointTarget;
-  restorePolicy?: ConversationRewindRestorePolicy;
+  runs: readonly OrchestratorRunRecord[] | undefined;
+  pendingApprovals: readonly ConversationRewindPendingApproval[] | undefined;
+  activeSubagents: readonly ConversationRewindActiveSubagent[] | undefined;
+  checkpoint: ConversationRewindCheckpointTarget | undefined;
+  restorePolicy: ConversationRewindRestorePolicy | undefined;
 }
 
 export interface ConversationRewindRunCancellation {
@@ -56,9 +56,9 @@ export interface ConversationRewindApprovalClearance {
 export interface ConversationRewindWorkspaceRestore {
   required: boolean;
   source: ConversationRewindCheckpointTarget["source"] | "none";
-  checkpointId?: string;
-  checkpoint?: string;
-  manifestPath?: string;
+  checkpointId: string | undefined;
+  checkpoint: string | undefined;
+  manifestPath: string | undefined;
   cleanUntracked: boolean;
 }
 
@@ -93,12 +93,12 @@ export interface ConversationRewindPlan<TPayload = JsonObject, TDetails = JsonOb
 export interface PlanConversationRewindFromTargetFactsInput<TPayload = JsonObject, TDetails = JsonObject>
   extends Omit<PlanConversationRewindInput<TPayload, TDetails>, "targetLeafId" | "checkpoint"> {
   target: ConversationRewindTargetFacts;
-  checkpoint?: ConversationRewindCheckpointTarget;
+  checkpoint: ConversationRewindCheckpointTarget | undefined;
 }
 
 export interface ConversationRewindPlanWithTargetFacts<TPayload = JsonObject, TDetails = JsonObject> {
   plan: ConversationRewindPlan<TPayload, TDetails>;
-  runtimeTargetLeafId?: string;
+  runtimeTargetLeafId: string | undefined;
   missingFacts: ConversationRewindTargetFacts["missingFacts"];
 }
 
@@ -167,7 +167,7 @@ export function planConversationRewindFromTargetFacts<TPayload = JsonObject, TDe
       targetLeafId: input.target.sessionTreeTargetLeafId,
       checkpoint: input.checkpoint ?? checkpointTargetFromFacts(input.target)
     }),
-    ...(input.target.runtimeTargetLeafId !== undefined ? { runtimeTargetLeafId: input.target.runtimeTargetLeafId } : {}),
+    runtimeTargetLeafId: input.target.runtimeTargetLeafId ?? undefined,
     missingFacts: [...input.target.missingFacts]
   };
 }
@@ -245,13 +245,13 @@ function planWorkspaceRestore(
   policy: ConversationRewindRestorePolicy
 ): ConversationRewindWorkspaceRestore {
   if (policy === "skip") {
-    return { required: false, source: "none", cleanUntracked: false };
+    return { required: false, source: "none", cleanUntracked: false, checkpointId: undefined, checkpoint: undefined, manifestPath: undefined };
   }
   if (!checkpoint) {
     if (policy === "required") {
       throw new Error("Conversation rewind requires a workspace checkpoint");
     }
-    return { required: false, source: "none", cleanUntracked: false };
+    return { required: false, source: "none", cleanUntracked: false, checkpointId: undefined, checkpoint: undefined, manifestPath: undefined };
   }
   if (checkpoint.source === "runtime-manifest") {
     return {
@@ -259,6 +259,7 @@ function planWorkspaceRestore(
       source: "runtime-manifest",
       checkpointId: checkpoint.checkpointId,
       manifestPath: checkpoint.manifestPath,
+      checkpoint: undefined,
       cleanUntracked: false
     };
   }
@@ -266,6 +267,8 @@ function planWorkspaceRestore(
     required: true,
     source: "git-checkpoint",
     checkpoint: checkpoint.checkpoint,
+    checkpointId: undefined,
+    manifestPath: undefined,
     cleanUntracked: checkpoint.cleanUntracked ?? false
   };
 }

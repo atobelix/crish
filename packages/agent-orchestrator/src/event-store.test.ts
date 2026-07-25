@@ -49,7 +49,14 @@ describe("FileOrchestratorEventStore", () => {
   it("exposes stable event log metadata from the JSONL header", async () => {
     const filePath = join(await tempDir(tempDirs), "events.jsonl");
     const header = createOrchestratorEventStoreHeader({ eventLogId: "eventlog_test", generation: 7 });
-    const store = new FileOrchestratorEventStore(filePath, { header });
+    const store = new FileOrchestratorEventStore(filePath, {
+      header,
+      sessionSummaryIndexPath: undefined,
+      maxCachedEvents: undefined,
+      indexFlushIntervalMs: undefined,
+      maxSizeBytes: undefined,
+      maxArchives: undefined,
+    });
 
     await store.append(event({ id: "event_1", sequence: 1, sessionId: "session_a", runId: "run_a" }));
 
@@ -426,7 +433,12 @@ describe("FileOrchestratorEventStore", () => {
     const dir = await tempDir(tempDirs);
     const filePath = join(dir, "events.jsonl");
     const store = new FileOrchestratorEventStore(filePath, {
-      sessionSummaryIndexPath: dir
+      header: undefined,
+      sessionSummaryIndexPath: join(dir, "session-index.json"),
+      maxCachedEvents: undefined,
+      indexFlushIntervalMs: undefined,
+      maxSizeBytes: undefined,
+      maxArchives: undefined,
     });
 
     await store.append(event({ id: "event_1", sequence: 1, sessionId: "session_a", runId: "run_a" }));
@@ -675,7 +687,7 @@ function event(
     sequence: input.sequence,
     type: input.type ?? "runtime-event",
     sessionId: input.sessionId,
-    runId: input.runId,
+    ...(input.runId !== undefined ? { runId: input.runId } : {}),
     timestamp: "2026-01-01T00:00:00.000Z",
     payload: input.payload ?? { ok: true }
   };

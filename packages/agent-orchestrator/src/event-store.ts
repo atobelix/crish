@@ -1,11 +1,11 @@
 import { constants } from "node:fs";
-import { mkdir, open as openFile, readFile, rename, stat as statFile, writeFile } from "node:fs/promises";
-import { createReadStream, type ReadStream } from "node:fs";
+import { mkdir, open as openFile, readFile, rename, stat as statFile, unlink, writeFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { createInterface } from "node:readline";
 import { AsyncMutex, isRecord, LruMap, MAX_ORCHESTRATOR_EVENTS, MAX_ORCHESTRATOR_SESSIONS, retryWithBackoff } from "@crish/shared-utils";
-import { JsonlAppendBatcher } from "@crish/shared-utils/node";
+import { JsonlAppendBatcher, type JsonlAppendBatcherOptions } from "@crish/shared-utils/node";
 import {
   ORCHESTRATOR_EVENT_LOG_SCHEMA_VERSION,
   ORCHESTRATOR_PROTOCOL_VERSION,
@@ -23,6 +23,7 @@ import {
   type MutableSessionEventSummary,
   type OrchestratorRunSummaryState
 } from "./session-summary";
+import { defaultStateSnapshotPath, loadStateSnapshotFile, writeStateSnapshotFile, type OrchestratorStateSnapshot } from "./state-snapshot";
 
 export const ORCHESTRATOR_EVENT_STORE_FILE_VERSION = 1;
 export const ORCHESTRATOR_SESSION_SUMMARY_INDEX_VERSION = 2;
@@ -37,15 +38,15 @@ export interface FileOrchestratorEventStoreHeader {
 }
 
 export interface FileOrchestratorEventStoreOptions {
-  header?: FileOrchestratorEventStoreHeader;
-  sessionSummaryIndexPath?: string;
+  header: FileOrchestratorEventStoreHeader | undefined;
+  sessionSummaryIndexPath: string | undefined;
   /**
    * 内存中缓存的最大事件数量
    *
    * 超过此限制后，最早的缓存事件将被释放。
    * 默认 10000。设置为 0 表示不缓存。
    */
-  maxCachedEvents?: number;
+  maxCachedEvents: number | undefined;
   /**
    * 索引刷盘间隔（毫秒）。
    *
@@ -53,7 +54,11 @@ export interface FileOrchestratorEventStoreOptions {
    * 设为 0 表示每次 append 都刷盘，设为 Infinity 表示只手动刷盘。
    * 默认 5000ms。
    */
-  indexFlushIntervalMs?: number;
+  indexFlushIntervalMs: number | undefined;
+  /** JSONL 文件轮转最大字节数（默认 100MB）。达到此大小后自动创建新文件。 */
+  maxSizeBytes: number | undefined;
+  /** 保留的归档文件最大数量（默认 10）。超过此数量的旧归档会被删除。 */
+  maxArchives: number | undefined;
 }
 
 export interface FileOrchestratorSessionSummaryIndex {
@@ -121,15 +126,15 @@ const LATCHING_FAILURE_KINDS = new Set<OrchestratorEventStoreFailureKind>(["writ
 export class OrchestratorEventStoreError extends Error {
   readonly kind: OrchestratorEventStoreFailureKind;
   readonly filePath: string;
-  readonly eventId?: string;
+  readonly eventId: string | undefined;
 
   constructor(
     message: string,
     options: {
       kind: OrchestratorEventStoreFailureKind;
       filePath: string;
-      eventId?: string;
-      cause?: unknown;
+      eventId: string | undefined;
+      cause: unknown | undefined;
     }
   ) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
@@ -141,11 +146,12 @@ export class OrchestratorEventStoreError extends Error {
 }
 
 export class OrchestratorEventStoreClosedError extends OrchestratorEventStoreError {
-  constructor(filePath: string, eventId?: string) {
+  constructor(filePath: string, eventId: string | undefined) {
     super(`Orchestrator event store is closed: ${filePath}`, {
       kind: "closed",
       filePath,
-      eventId
+      eventId,
+      cause: undefined
     });
     this.name = "OrchestratorEventStoreClosedError";
   }
@@ -168,6 +174,7 @@ export class OrchestratorEventStoreIndexWriteError extends OrchestratorEventStor
     super(`Failed to write session summary index for ${filePath}`, {
       kind: "index-write-failed",
       filePath,
+      eventId: undefined,
       cause
     });
     this.name = "OrchestratorEventStoreIndexWriteError";
@@ -179,7 +186,8 @@ export class OrchestratorEventStoreInvalidEventError extends OrchestratorEventSt
     super(`Invalid orchestrator event${eventId ? ` ${eventId}` : ""}: ${reason}`, {
       kind: "invalid-event",
       filePath,
-      eventId
+      eventId,
+      cause: undefined
     });
     this.name = "OrchestratorEventStoreInvalidEventError";
   }
@@ -190,7 +198,8 @@ export class OrchestratorEventStoreDuplicateIdError extends OrchestratorEventSto
     super(`Duplicate orchestrator event id ${eventId} in ${filePath}`, {
       kind: "duplicate-event-id",
       filePath,
-      eventId
+      eventId,
+      cause: undefined
     });
     this.name = "OrchestratorEventStoreDuplicateIdError";
   }
@@ -200,7 +209,9 @@ export class OrchestratorEventStoreInvalidReadError extends OrchestratorEventSto
   constructor(filePath: string, reason: string) {
     super(`Invalid orchestrator event store read: ${reason}`, {
       kind: "invalid-read",
-      filePath
+      filePath,
+      eventId: undefined,
+      cause: undefined
     });
     this.name = "OrchestratorEventStoreInvalidReadError";
   }
@@ -237,7 +248,7 @@ const EVENT_TYPES = new Set<OrchestratorEventType>([
 export class FileOrchestratorEventStore implements OrchestratorEventStore {
   private appendQueue: Promise<void> = Promise.resolve();
   private headerReady = false;
-  private metadata?: OrchestratorEventLogMetadata;
+  private metadata: OrchestratorEventLogMetadata | undefined;
   private acceptingAppends = true;
   private latchedFailure?: OrchestratorEventStoreError;
   private cachedEvents?: OrchestratorEvent[];
@@ -256,7 +267,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
    * 缓存文件句柄、累积写入并批量 fsync，相比逐条 writeFile+sync 显著提升吞吐。
    * 在 close() 时释放。
    */
-  private appendBatcher?: JsonlAppendBatcher;
+  private appendBatcher: JsonlAppendBatcher | undefined;
   private cachedEventsByRun = new Map<string, Set<OrchestratorEvent>>();
   private cachedSessionSummaries = new Map<string, MutableSessionEventSummary>();
   private sessionSummaryCacheReady = false;
@@ -267,7 +278,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
    * 调用方可以通过 healthCheck() 检测此状态。
    */
   private indexWriteFailureCount = 0;
-  private lastIndexWriteError?: Error;
+  private lastIndexWriteError: Error | undefined;
 
   /**
    * LRU session index cache for hot session summary lookups.
@@ -345,11 +356,25 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   /** 已注册的信号处理器 cleanup 函数，防止重复注册 */
   private signalCleanup: (() => void) | undefined;
 
+  private readonly maxSizeBytes: number;
+  private readonly maxArchives: number;
+  private nextGeneration: number;
+
   constructor(
     private readonly filePath: string,
-    private readonly options: FileOrchestratorEventStoreOptions = {}
+    private readonly options: FileOrchestratorEventStoreOptions = {
+      header: undefined,
+      sessionSummaryIndexPath: undefined,
+      maxCachedEvents: undefined,
+      indexFlushIntervalMs: undefined,
+      maxSizeBytes: undefined,
+      maxArchives: undefined
+    }
   ) {
     this.indexFlushIntervalMs = options.indexFlushIntervalMs ?? 5_000;
+    this.maxSizeBytes = options.maxSizeBytes ?? 100 * 1024 * 1024;
+    this.maxArchives = options.maxArchives ?? 10;
+    this.nextGeneration = (options.header?.generation ?? 1) + 1;
   }
 
   /**
@@ -366,7 +391,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
       try {
         await this.close();
       } catch {
-        // 尽力 flush，不阻塞进程退出
+        // silent: close 失败不阻塞进程退出
       }
     };
 
@@ -375,7 +400,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
     const onExit = () => {
       // 同步兜底：exit 事件中只能做同步操作
       if (this.appendBatcher?.pendingRecords && this.appendBatcher.pendingRecords > 0) {
-        try { this.appendBatcher.flush(); } catch { /* ignore */ }
+        try { this.appendBatcher.flush(); } catch { /* silent: exit 阶段同步 flush 尽力而为 */ }
       }
     };
 
@@ -398,7 +423,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
    *
    * 返回当前存储是否可写、索引是否同步等信息。
    */
-  healthCheck(): { writable: boolean; indexSynced: boolean; indexDirty: boolean; indexWriteFailureCount: number; lastIndexWriteError?: string } {
+  healthCheck(): { writable: boolean; indexSynced: boolean; indexDirty: boolean; indexWriteFailureCount: number; lastIndexWriteError: string | undefined } {
     return {
       writable: this.acceptingAppends && !this.latchedFailure,
       indexSynced: this.indexWriteFailureCount === 0,
@@ -438,9 +463,13 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
         await this.tryLoadSessionSummaryIndex();
         await this.tryLoadByteOffsetIndex();
 
-        // 计算字节偏移（当前文件大小即为新事件的起始偏移）
         const serialized = JSON.stringify(event);
         const byteLength = Buffer.byteLength(serialized, "utf8") + 1; // +1 for trailing newline
+        if (this.maxSizeBytes > 0 && this.currentFileSize + byteLength > this.maxSizeBytes) {
+          await this.rotateFile();
+          // 轮转后重新创建 header（新文件需要 header 行）
+          await this.ensureHeader();
+        }
         // ensureAppendBatcher 在首次构造 batcher 时同步 currentFileSize 并预测
         // batcher 是否会补首行 "\n" 前缀，将其计入 currentFileSize。此后 byteOffset
         // 直接取 currentFileSize，batcher.append 仅向 pending buffer 追加，不改变
@@ -476,7 +505,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
     });
   }
 
-  async readSession(sessionId: string, afterSequence = 0, options: OrchestratorEventReadOptions = {}): Promise<OrchestratorEvent[]> {
+  async readSession(sessionId: string, afterSequence = 0, options: OrchestratorEventReadOptions = { maxEvents: undefined }): Promise<OrchestratorEvent[]> {
     assertNonEmptyId(sessionId, "sessionId", this.filePath);
     const read = normalizeReadOptions(afterSequence, options, this.filePath);
 
@@ -506,7 +535,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
     );
   }
 
-  async readRun(runId: string, afterSequence = 0, options: OrchestratorEventReadOptions = {}): Promise<OrchestratorEvent[]> {
+  async readRun(runId: string, afterSequence = 0, options: OrchestratorEventReadOptions = { maxEvents: undefined }): Promise<OrchestratorEvent[]> {
     assertNonEmptyId(runId, "runId", this.filePath);
     const read = normalizeReadOptions(afterSequence, options, this.filePath);
 
@@ -563,7 +592,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
       .sort((left, right) => compareSessionSummaries(left, right));
   }
 
-  async readAll(afterSequence = 0, options: OrchestratorEventReadOptions = {}): Promise<OrchestratorEvent[]> {
+  async readAll(afterSequence = 0, options: OrchestratorEventReadOptions = { maxEvents: undefined }): Promise<OrchestratorEvent[]> {
     const read = normalizeReadOptions(afterSequence, options, this.filePath);
     await this.ensureEventCache();
     return collectAfterSequence(this.cachedEvents ?? [], read.afterSequence, read.maxEvents);
@@ -578,7 +607,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
    * @returns AsyncGenerator，逐个产出 OrchestratorEvent
    */
   async *readAllStreaming(afterSequence = 0): AsyncGenerator<OrchestratorEvent> {
-    const read = normalizeReadOptions(afterSequence, {}, this.filePath);
+    const read = normalizeReadOptions(afterSequence, { maxEvents: undefined }, this.filePath);
     await this.flush();
     await this.ensureHeader();
 
@@ -701,6 +730,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
       this.byteIndexLoaded = true;
       return true;
     } catch {
+      // silent: 字节偏移索引文件损坏或格式不兼容时跳过加载
       return false;
     }
   }
@@ -764,6 +794,41 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
 
   private byteIndexPath(): string {
     return `${this.filePath}.byte-index.json`;
+  }
+
+  private async rotateFile(): Promise<void> {
+    if (this.appendBatcher) {
+      await this.appendBatcher.flush();
+      await this.appendBatcher.close();
+      this.appendBatcher = undefined;
+    }
+
+    const archivePath = (n: number) => `${this.filePath}.${n}.jsonl`;
+
+    const oldestPath = archivePath(this.maxArchives);
+    try { await unlink(oldestPath); } catch { /* silent: 归档轮替中文件不存在时跳过 */ }
+
+    for (let i = this.maxArchives - 1; i >= 1; i--) {
+      try { await rename(archivePath(i), archivePath(i + 1)); } catch { /* silent: 归档轮替中源文件不存在时跳过 */ }
+    }
+
+    try { await rename(this.filePath, archivePath(1)); } catch { /* silent: 归档轮替中源文件不存在时跳过 */ }
+
+    // 从旧 metadata 或现有 options 中取 eventLogId
+    const existingId = this.metadata?.eventLogId ?? (this.options.header?.eventLogId || undefined);
+
+    this.headerReady = false;
+    this.metadata = undefined;
+    this.currentFileSize = 0;
+    this.byteOffsetIndex.clear();
+    this.byteIndexLoaded = false;
+    this.indexDirty = true;
+
+    // 更新 header 中的 generation（直接修改 options 对象属性）
+    (this.options as unknown as Record<string, unknown>).header = createOrchestratorEventStoreHeader({
+      eventLogId: existingId ?? undefined,
+      generation: this.nextGeneration++,
+    });
   }
 
   private applyMaxEvents(events: OrchestratorEvent[], maxEvents?: number): OrchestratorEvent[] {
@@ -956,7 +1021,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
         const parts = text.split("\n");
         // 将前一块的 carry 接到当前块的最后一段（靠近末尾的一端）
         parts[parts.length - 1] += carry;
-        carry = parts[0]; // 第一段可能不完整（前面无换行）
+        carry = parts[0]!; // 第一段可能不完整（前面无换行）
 
         // 从后往前推入完整行（parts[1..n-1] 都是完整行）
         for (let i = parts.length - 1; i >= 1; i--) {
@@ -1020,7 +1085,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
         const stat = await statFile(this.filePath);
         this.currentFileSize = stat.size;
       } catch {
-        // 文件可能尚不存在或暂时不可访问：保持现有 currentFileSize，不阻断读路径。
+        // silent: 文件尚不存在时保持现有 currentFileSize，不阻断读路径
       }
     });
     this.appendQueue = next.then(
@@ -1046,7 +1111,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
       try {
         await this.appendBatcher.close();
       } catch {
-        // 句柄释放失败不应阻断 close
+        // silent: 句柄释放失败不应阻断 close
       }
       this.appendBatcher = undefined;
     }
@@ -1082,7 +1147,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
         }
       }
       this.currentFileSize = (stat?.size ?? 0) + prefixBytes;
-      this.appendBatcher = new JsonlAppendBatcher({ filePath: this.filePath });
+      this.appendBatcher = new JsonlAppendBatcher({ filePath: this.filePath } as JsonlAppendBatcherOptions);
     }
     return this.appendBatcher;
   }
@@ -1188,7 +1253,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
       const content = headerBuffer.toString("utf8", 0, bytesRead);
       const headerLine = content.split(/\r?\n/).find((line) => line.trim().length > 0);
       if (!headerLine) {
-        throw new Error(`Invalid empty orchestrator event store file: ${this.filePath}`);
+        throw new OrchestratorEventStoreInvalidReadError(this.filePath, `Invalid empty orchestrator event store file: ${this.filePath}`);
       }
       this.applyHeader(parseHeader(headerLine, this.filePath));
       this.headerReady = true;
@@ -1422,6 +1487,20 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
       { maxAttempts: 3, baseMs: 200, maxMs: 1500 }
     );
   }
+
+  stateSnapshotPath(): string {
+    return defaultStateSnapshotPath(this.filePath);
+  }
+
+  async loadStateSnapshot(): Promise<OrchestratorStateSnapshot | null> {
+    await this.ensureHeader();
+    if (!this.metadata) return null;
+    return loadStateSnapshotFile(this.stateSnapshotPath(), this.metadata);
+  }
+
+  async writeStateSnapshot(snapshot: OrchestratorStateSnapshot): Promise<void> {
+    return writeStateSnapshotFile(this.stateSnapshotPath(), snapshot);
+  }
 }
 
 function appendIndexedEvent(
@@ -1530,33 +1609,33 @@ function normalizeReadOptions(
 function parseHeader(line: string, filePath: string): FileOrchestratorEventStoreHeader {
   const parsed = parseJsonLine(line);
   if (!isRecord(parsed) || parsed.type !== "orchestrator-event-store") {
-    throw new Error(`Invalid orchestrator event store header in ${filePath}`);
+    throw new OrchestratorEventStoreInvalidReadError(filePath, `Invalid orchestrator event store header in ${filePath}`);
   }
   if (parsed.version !== ORCHESTRATOR_EVENT_STORE_FILE_VERSION) {
-    throw new Error(`Unsupported orchestrator event store version ${String(parsed.version)} in ${filePath}`);
+    throw new OrchestratorEventStoreInvalidReadError(filePath, `Unsupported orchestrator event store version ${String(parsed.version)} in ${filePath}`);
   }
   if (parsed.protocolVersion !== ORCHESTRATOR_PROTOCOL_VERSION) {
-    throw new Error(`Unsupported orchestrator protocol version ${String(parsed.protocolVersion)} in ${filePath}`);
+    throw new OrchestratorEventStoreInvalidReadError(filePath, `Unsupported orchestrator protocol version ${String(parsed.protocolVersion)} in ${filePath}`);
   }
   return normalizeHeader(parsed, filePath);
 }
 
 function normalizeHeader(value: unknown, filePath: string): FileOrchestratorEventStoreHeader {
   if (!isRecord(value) || value.type !== "orchestrator-event-store") {
-    throw new Error(`Invalid orchestrator event store header in ${filePath}`);
+    throw new OrchestratorEventStoreInvalidReadError(filePath, `Invalid orchestrator event store header in ${filePath}`);
   }
   if (value.version !== ORCHESTRATOR_EVENT_STORE_FILE_VERSION) {
-    throw new Error(`Unsupported orchestrator event store version ${String(value.version)} in ${filePath}`);
+    throw new OrchestratorEventStoreInvalidReadError(filePath, `Unsupported orchestrator event store version ${String(value.version)} in ${filePath}`);
   }
   if (value.protocolVersion !== ORCHESTRATOR_PROTOCOL_VERSION) {
-    throw new Error(`Unsupported orchestrator protocol version ${String(value.protocolVersion)} in ${filePath}`);
+    throw new OrchestratorEventStoreInvalidReadError(filePath, `Unsupported orchestrator protocol version ${String(value.protocolVersion)} in ${filePath}`);
   }
   const schemaVersion =
     typeof value.schemaVersion === "number" && Number.isInteger(value.schemaVersion) && value.schemaVersion > 0
       ? value.schemaVersion
       : ORCHESTRATOR_EVENT_LOG_SCHEMA_VERSION;
   if (schemaVersion !== ORCHESTRATOR_EVENT_LOG_SCHEMA_VERSION) {
-    throw new Error(`Unsupported orchestrator event log schema version ${String(schemaVersion)} in ${filePath}`);
+    throw new OrchestratorEventStoreInvalidReadError(filePath, `Unsupported orchestrator event log schema version ${String(schemaVersion)} in ${filePath}`);
   }
   const generation =
     typeof value.generation === "number" && Number.isInteger(value.generation) && value.generation > 0
@@ -1660,7 +1739,7 @@ function deterministicEventLogId(filePath: string): string {
 }
 
 export function createOrchestratorEventStoreHeader(
-  input: Partial<Pick<FileOrchestratorEventStoreHeader, "eventLogId" | "generation">> = {}
+  input: { eventLogId: string | undefined; generation: number | undefined } = { eventLogId: undefined, generation: undefined }
 ): FileOrchestratorEventStoreHeader {
   return {
     ...DEFAULT_HEADER,
@@ -1673,6 +1752,7 @@ function parseJsonLine(line: string): unknown {
   try {
     return JSON.parse(line);
   } catch {
+    // silent: JSON.parse 降级，损坏行返回 null 由调用方处理
     return null;
   }
 }

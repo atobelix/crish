@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import type { JsonObject } from "@crish/shared-types";
+import { CrishError, type JsonObject } from "@crish/shared-types";
 
 export interface ContentAddressedBlobStoreOptions {
   rootDir: string;
@@ -36,7 +36,7 @@ export interface ContentAddressedBlobContent extends ContentAddressedBlobRecord 
   contentType: string;
   mimeType: string;
   bytes: Uint8Array;
-  encoding?: "utf8" | "binary";
+  encoding: "utf8" | "binary" | undefined;
 }
 
 export class BlobIntegrityError extends Error {
@@ -129,7 +129,7 @@ export class ContentAddressedBlobStore {
   async readBytes(uriOrSha256: string): Promise<Uint8Array> {
     const blob = await this.get(uriOrSha256);
     if (!blob) {
-      throw new Error(`Blob artifact not found: ${uriOrSha256}`);
+      throw new CrishError(`Blob artifact not found: ${uriOrSha256}`, "ARTIFACT_ERROR", "permanent", false);
     }
     return blob.bytes;
   }
@@ -163,10 +163,10 @@ export class ContentAddressedBlobStore {
         return normalizeSha256(parsed.pathname.replace(/^\/+/, ""));
       }
     } catch {
-      // Fall through to the uniform validation error below.
+      // silent: URI 解析降级，非标准 artifact: URI 由下层验证兜底
     }
 
-    throw new Error(`Invalid blob artifact URI or sha256: ${uriOrSha256}`);
+    throw new CrishError(`Invalid blob artifact URI or sha256: ${uriOrSha256}`, "ARTIFACT_ERROR", "permanent", false);
   }
 
   private async putBuffer(
@@ -341,7 +341,7 @@ function normalizeUriPrefix(prefix: string): string {
 function normalizeSha256(value: string): string {
   const normalized = value.toLowerCase();
   if (!SHA256_PATTERN.test(normalized)) {
-    throw new Error(`Invalid sha256 digest: ${value}`);
+    throw new CrishError(`Invalid sha256 digest: ${value}`, "ARTIFACT_ERROR", "permanent", false);
   }
   return normalized;
 }

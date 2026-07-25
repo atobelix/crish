@@ -1,8 +1,8 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import type { AgentEvent, AgentMessage } from '@crish/shared-types';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { AgentEvent, AgentMessage, ProviderDiagnostic } from '@crish/shared-types';
 import {
   ORCHESTRATOR_PROTOCOL_VERSION,
   type OrchestratorEvent,
@@ -86,6 +86,7 @@ describe('AgentOrchestrator', () => {
   });
 
   it('streams message-delta live without blocking the drive loop on event-store append', async () => {
+    vi.useRealTimers();
     const DELTA_COUNT = 120;
     const APPEND_DELAY_MS = 40;
     let appendCalls = 0;
@@ -1555,8 +1556,8 @@ describe('AgentOrchestrator', () => {
             providerId: 'test-provider',
             status: 429,
             errorKind: 'rate-limit',
-            message: '429 Too Many Requests',
-          },
+            ...({ message: '429 Too Many Requests' } as Record<string, string>),
+          } as ProviderDiagnostic,
         },
         // agentStopCompletes:false → reason:stop 不终结 goal run，留给 handleProviderError
         {
@@ -1854,7 +1855,7 @@ class BlockingRunEngine {
   }
 
   abort(reason?: string): void {
-    this.abortReason = reason;
+    if (reason !== undefined) { this.abortReason = reason; }
   }
 
   enqueueSteerInput(message: AgentMessage): void {

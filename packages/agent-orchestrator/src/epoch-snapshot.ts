@@ -7,6 +7,10 @@
  * - 提供 File Watcher 的静默锁定机制 (Mute/Unmute Gate)，防止物理回滚触发文件监视器向 Agent 上下文灌入变更噪音
  */
 
+import { Logger, createConsoleTransport } from "@crish/shared-utils";
+
+const logger = new Logger({ module: "epoch-snapshot", transports: [createConsoleTransport()] });
+
 export interface EpochSnapshot {
   epochId: string;
   leafId: string;
@@ -35,13 +39,13 @@ export class FileWatcherMuteGate {
   /** 静默锁定：开始物理回滚，屏蔽一切磁盘变化通知 */
   public static mute(): void {
     this.isMuted = true;
-    console.debug("[MuteGate] File watchers MUTED for physical workspace rollback.");
+    logger.debug("[MuteGate] File watchers MUTED for physical workspace rollback.");
   }
 
   /** 解除静默：回滚结束，恢复监听 */
   public static unmute(): void {
     this.isMuted = false;
-    console.debug("[MuteGate] File watchers UNMUTED.");
+    logger.debug("[MuteGate] File watchers UNMUTED.");
   }
 
   /** 代理分发文件变化事件。如果处于静默期，则直接丢弃事件 */
@@ -103,7 +107,7 @@ export class EpochSnapshotManager {
       // 2. 还原物理文件
       await rollbackFilesCallback(snapshot.workspaceCommitHash);
 
-      console.info(`[EpochSnapshot] Atomic rollback successfully completed for Epoch: ${snapshot.epochId}`);
+      logger.info(`[EpochSnapshot] Atomic rollback successfully completed for Epoch: ${snapshot.epochId}`);
     } finally {
       // 3. 解锁监视器
       FileWatcherMuteGate.unmute();

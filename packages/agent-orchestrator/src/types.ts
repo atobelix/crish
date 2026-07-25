@@ -1,6 +1,6 @@
-import type { JsonObject, AgentEvent, AgentMessage, StoredEvent, StoredEventType, StoredEventLogMetadata, StoredEventReadOptions, EventStore } from "@crish/shared-types";
-import type { OrchestratorSessionEventSummary } from "@crish/shared-types";
+﻿import type { JsonObject, AgentEvent, AgentMessage, StoredEvent, StoredEventType, StoredEventLogMetadata, StoredEventReadOptions, EventStore } from "@crish/shared-types";
 import { STORED_EVENT_PROTOCOL_VERSION, STORED_EVENT_LOG_SCHEMA_VERSION } from "@crish/shared-types";
+import type { BackgroundCommandManager } from "@crish/agent-runtime";
 
 export const ORCHESTRATOR_PROTOCOL_VERSION = STORED_EVENT_PROTOCOL_VERSION;
 
@@ -102,15 +102,16 @@ export interface GoalRunOptions {
 
 export interface OrchestratorGoalRunState {
   status: GoalRunStatus;
-  visibleGoal?: string;
-  maxRounds: number;
-  maxStalledRounds: number;
+  visibleGoal: string;
   currentRound: number;
   completedRounds: number;
+  maxRounds: number;
+  maxStalledRounds: number;
   stalledRounds: number;
   stoppedReason?: GoalStoppedReason;
-  lastProgressSignature?: string;
   lastDecision?: GoalContinuationDecision;
+  lastStalledRoundIndex?: number;
+  lastProgressSignature?: string;
 }
 
 export interface OrchestratorSessionRecord {
@@ -233,14 +234,14 @@ export interface StartRunRequest {
 
 export interface StartGoalRunRequest extends StartRunRequest {
   goal?: GoalRunOptions;
-  /** 可选的 Goal 循环策略；未提供时使用 orchestrator 内置的 EventScanGoalStrategy */
+  /** 鍙€夌殑 Goal 寰幆绛栫暐锛涙湭鎻愪緵鏃朵娇鐢?orchestrator 鍐呯疆鐨?EventScanGoalStrategy */
   goalLoopStrategy?: GoalLoopStrategy;
 }
 
 export interface RunEngine {
   run(input: string | AgentMessage): AsyncIterable<AgentEvent>;
   abort(reason?: string): void;
-  /** 将用户输入实时注入到正在运行的 runtime 中（steer 模式） */
+  /** 灏嗙敤鎴疯緭鍏ュ疄鏃舵敞鍏ュ埌姝ｅ湪杩愯鐨?runtime 涓紙steer 妯″紡锛?*/
   enqueueSteerInput(message: AgentMessage): void;
 }
 
@@ -264,19 +265,19 @@ export interface GoalContinuationDeciderInput {
 export type GoalContinuationDecider = (input: GoalContinuationDeciderInput) => GoalContinuationDecision | Promise<GoalContinuationDecision>;
 
 /**
- * Goal 循环策略——将 Goal 编排的「评估轮次结果」「检测停滞」「构建下一轮 prompt」
- * 和「Provider 容错」四个变化点抽象为可插拔接口。
+ * Goal 寰幆绛栫暐鈥斺€斿皢 Goal 缂栨帓鐨勩€岃瘎浼拌疆娆＄粨鏋溿€嶃€屾娴嬪仠婊炪€嶃€屾瀯寤轰笅涓€杞?prompt銆?
+ * 鍜屻€孭rovider 瀹归敊銆嶅洓涓彉鍖栫偣鎶借薄涓哄彲鎻掓嫈鎺ュ彛銆?
  *
- * orchestrator 内置 EventScanGoalStrategy（基于事件流扫描）。
- * workbench 可提供 SnapshotAwareGoalStrategy（基于 WorkbenchTaskSnapshot 的领域感知策略）。
+ * orchestrator 鍐呯疆 EventScanGoalStrategy锛堝熀浜庝簨浠舵祦鎵弿锛夈€?
+ * workbench 鍙彁渚?SnapshotAwareGoalStrategy锛堝熀浜?WorkbenchTaskSnapshot 鐨勯鍩熸劅鐭ョ瓥鐣ワ級銆?
  */
 export interface GoalLoopStrategy {
-  /** 策略名称，用于诊断日志 */
+  /** 绛栫暐鍚嶇О锛岀敤浜庤瘖鏂棩蹇?*/
   readonly name: string;
 
   /**
-   * 评估本轮结果，产出延续决策。
-   * @param roundContext 本轮运行期间由策略自身累积的领域上下文（如 snapshot），可为 undefined。
+   * 璇勪及鏈疆缁撴灉锛屼骇鍑哄欢缁喅绛栥€?
+   * @param roundContext 鏈疆杩愯鏈熼棿鐢辩瓥鐣ヨ嚜韬疮绉殑棰嗗煙涓婁笅鏂囷紙濡?snapshot锛夛紝鍙负 undefined銆?
    */
   assessRound(input: {
     run: OrchestratorRunRecord;
@@ -288,8 +289,8 @@ export interface GoalLoopStrategy {
   }): GoalContinuationDecision | Promise<GoalContinuationDecision>;
 
   /**
-   * 计算进度签名，用于 stall 检测。
-   * 签名相同的连续轮次视为「没有新进度」。
+   * 璁＄畻杩涘害绛惧悕锛岀敤浜?stall 妫€娴嬨€?
+   * 绛惧悕鐩稿悓鐨勮繛缁疆娆¤涓恒€屾病鏈夋柊杩涘害銆嶃€?
    */
   computeProgressSignature(input: {
     decision: GoalContinuationDecision;
@@ -298,8 +299,8 @@ export interface GoalLoopStrategy {
   }): string;
 
   /**
-   * 为下一轮构建 prompt。可在此注入审计信息、计划状态、验收准则等。
-   * 返回 undefined 表示使用 decision.prompt 原样传递。
+   * 涓轰笅涓€杞瀯寤?prompt銆傚彲鍦ㄦ娉ㄥ叆瀹¤淇℃伅銆佽鍒掔姸鎬併€侀獙鏀跺噯鍒欑瓑銆?
+   * 杩斿洖 undefined 琛ㄧず浣跨敤 decision.prompt 鍘熸牱浼犻€掋€?
    */
   buildNextRoundPrompt?(input: {
     decision: GoalContinuationDecision;
@@ -310,8 +311,8 @@ export interface GoalLoopStrategy {
   }): string | undefined;
 
   /**
-   * Provider 层容错策略。在每轮结束后、延续决策之前调用。
-   * 返回 undefined 表示本轮没有 Provider 错误。
+   * Provider 灞傚閿欑瓥鐣ャ€傚湪姣忚疆缁撴潫鍚庛€佸欢缁喅绛栦箣鍓嶈皟鐢ㄣ€?
+   * 杩斿洖 undefined 琛ㄧず鏈疆娌℃湁 Provider 閿欒銆?
    */
   handleProviderError?(input: {
     events: AgentEvent[];
@@ -320,19 +321,19 @@ export interface GoalLoopStrategy {
   }): ProviderErrorResult | undefined;
 
   /**
-   * 可选的生命周期钩子：在每轮事件收集过程中被调用，
-   * 允许策略累积领域上下文（如从事件流中构建 snapshot）。
-   * 返回值将作为后续方法调用的 roundContext。
+   * 鍙€夌殑鐢熷懡鍛ㄦ湡閽╁瓙锛氬湪姣忚疆浜嬩欢鏀堕泦杩囩▼涓璋冪敤锛?
+   * 鍏佽绛栫暐绱Н棰嗗煙涓婁笅鏂囷紙濡備粠浜嬩欢娴佷腑鏋勫缓 snapshot锛夈€?
+   * 杩斿洖鍊煎皢浣滀负鍚庣画鏂规硶璋冪敤鐨?roundContext銆?
    */
   onRoundEvent?(event: AgentEvent, previousContext?: unknown): unknown;
 }
 
-/** Provider 容错决策结果 */
+/** Provider 瀹归敊鍐崇瓥缁撴灉 */
 export interface ProviderErrorResult {
   action: "retry" | "backoff" | "fatal";
   reason: string;
   backoffMs?: number;
-  /** retry/backoff 不计算为 productive round */
+  /** retry/backoff 涓嶈绠椾负 productive round */
   countAsProductive?: boolean;
 }
 
@@ -341,13 +342,15 @@ export type OrchestratorEventStore = EventStore;
 export interface AgentOrchestratorOptions {
   createRunEngine: RunEngineFactory;
   decideGoalContinuation?: GoalContinuationDecider;
-  /** 默认 Goal 循环策略；未提供且 StartGoalRunRequest 也未指定时使用 EventScanGoalStrategy */
+  /** 榛樿 Goal 寰幆绛栫暐锛涙湭鎻愪緵涓?StartGoalRunRequest 涔熸湭鎸囧畾鏃朵娇鐢?EventScanGoalStrategy */
   defaultGoalLoopStrategy?: GoalLoopStrategy;
-  /** Provider 限频退避时间（毫秒），默认 90000 */
+  /** Provider 闄愰閫€閬挎椂闂达紙姣锛夛紝榛樿 90000 */
   providerRateLimitBackoffMs?: number;
   eventStore?: OrchestratorEventStore;
   now?: () => string;
   createId?: (prefix: string) => string;
+  /** 鏍规嵁 cwd 鑾峰彇 BackgroundCommandManager锛岀敤浜?cancelRun 鏃剁骇鑱斿彇娑堝叧鑱旂殑鍚庡彴浠诲姟銆?*/
+  getBackgroundCommandManager?: (cwd: string) => BackgroundCommandManager;
 }
 
 export interface OrchestratorRunHandle {

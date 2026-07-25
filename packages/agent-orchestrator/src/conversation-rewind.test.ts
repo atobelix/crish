@@ -27,7 +27,8 @@ describe("planConversationRewind", () => {
         { toolCallId: "approval_sub", runId: "run_sub" }
       ],
       activeSubagents: [{ parentRunId: "run_active", subagentRunId: "run_sub", subagentId: "sub_1" }],
-      checkpoint: { source: "git-checkpoint", checkpoint: "git_checkpoint_1" }
+      checkpoint: { source: "git-checkpoint", checkpoint: "git_checkpoint_1" },
+      restorePolicy: undefined,
     });
 
     expect(plan.fromLeafId).toBe("leaf_current");
@@ -66,7 +67,11 @@ describe("planConversationRewind", () => {
       session: { id: "session_a", currentLeafId: "leaf_current" },
       entries: entries(),
       targetLeafId: "leaf_target",
-      checkpoint
+      checkpoint,
+      runs: undefined,
+      pendingApprovals: undefined,
+      activeSubagents: undefined,
+      restorePolicy: undefined,
     });
 
     expect(plan.workspaceRestore).toEqual({
@@ -83,6 +88,10 @@ describe("planConversationRewind", () => {
       session: { id: "session_a", currentLeafId: "leaf_current" },
       entries: entries(),
       targetLeafId: "leaf_target",
+      runs: undefined,
+      pendingApprovals: undefined,
+      activeSubagents: undefined,
+      checkpoint: undefined,
       restorePolicy: "skip"
     });
 
@@ -126,6 +135,10 @@ describe("planConversationRewind", () => {
         session: { id: "session_a", currentLeafId: "leaf_current" },
         entries: entries(),
         targetLeafId: "leaf_target",
+        runs: undefined,
+        pendingApprovals: undefined,
+        activeSubagents: undefined,
+        checkpoint: undefined,
         restorePolicy: "required"
       })
     ).toThrow(/requires a workspace checkpoint/);
@@ -134,7 +147,12 @@ describe("planConversationRewind", () => {
       planConversationRewind({
         session: { id: "session_a", currentLeafId: "leaf_current" },
         entries: entries(),
-        targetLeafId: "missing"
+        targetLeafId: "missing",
+        runs: undefined,
+        pendingApprovals: undefined,
+        activeSubagents: undefined,
+        checkpoint: undefined,
+        restorePolicy: undefined,
       })
     ).toThrow(/not found/);
   });
@@ -163,6 +181,10 @@ describe("planConversationRewind", () => {
       session: { id: "session_a", currentLeafId: "leaf_current" },
       entries: entries(),
       target,
+      runs: undefined,
+      pendingApprovals: undefined,
+      activeSubagents: undefined,
+      checkpoint: undefined,
       restorePolicy: "if-present"
     });
 
@@ -195,7 +217,12 @@ describe("planConversationRewind", () => {
       planConversationRewindFromTargetFacts({
         session: { id: "session_a", currentLeafId: "leaf_current" },
         entries: entries(),
-        target
+        target,
+        runs: undefined,
+        pendingApprovals: undefined,
+        activeSubagents: undefined,
+        checkpoint: undefined,
+        restorePolicy: undefined,
       })
     ).toThrow(/session-tree-target-leaf/);
   });

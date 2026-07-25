@@ -1,5 +1,5 @@
 import { BoundedMap } from "@crish/shared-utils";
-import type { JsonObject } from "@crish/shared-types";
+import { SessionError, type JsonObject } from "@crish/shared-types";
 import type { OrchestratorSessionRecord } from "./types";
 
 /**
@@ -77,7 +77,7 @@ export class SessionTree<TPayload = JsonObject, TDetails = JsonObject> {
     this.now = options.now ?? (() => new Date().toISOString());
     this.createId = options.createId ?? defaultCreateId;
     this.maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
-    this.byId = new BoundedMap<string, SessionTreeEntry<TPayload, TDetails>>(this.maxEntries);
+    this.byId = new BoundedMap<string, SessionTreeEntry<TPayload, TDetails>>(this.maxEntries, undefined);
     this.loadEntries(options.entries ?? []);
     this.restoreLeaf(options.currentLeafId);
   }
@@ -144,7 +144,7 @@ export class SessionTree<TPayload = JsonObject, TDetails = JsonObject> {
 
   applyLeafToSession<TSession extends Pick<OrchestratorSessionRecord, "currentLeafId">>(session: TSession): TSession {
     if (this.currentLeafId === null) {
-      delete session.currentLeafId;
+      (session as Record<string, unknown>).currentLeafId = undefined;
     } else {
       session.currentLeafId = this.currentLeafId;
     }
@@ -160,11 +160,11 @@ export class SessionTree<TPayload = JsonObject, TDetails = JsonObject> {
     const path: SessionTreeEntry<TPayload, TDetails>[] = [];
     const seen = new Set<string>();
     let current = this.byId.get(leafId);
-    if (!current) throw new Error(`Session tree entry ${leafId} not found`);
+    if (!current) throw new SessionError(`Session tree entry ${leafId} not found`, "not_found");
 
     while (current) {
       if (seen.has(current.id)) {
-        throw new Error(`Session tree cycle detected at entry ${current.id}`);
+        throw new SessionError(`Session tree cycle detected at entry ${current.id}`, "invalid_state");
       }
       seen.add(current.id);
       // push 后整体 reverse，避免 unshift 的 O(depth²) 退化
@@ -191,13 +191,13 @@ export class SessionTree<TPayload = JsonObject, TDetails = JsonObject> {
     const seen = new Set<string>();
     for (const entry of entries) {
       if (seen.has(entry.id)) {
-        throw new Error(`Session tree entry ${entry.id} already exists`);
+        throw new SessionError(`Session tree entry ${entry.id} already exists`, "invalid_entry");
       }
       if (entry.parentId !== null && !seen.has(entry.parentId)) {
-        throw new Error(`Parent ${entry.parentId} for session tree entry ${entry.id} must appear before the child`);
+        throw new SessionError(`Parent ${entry.parentId} for session tree entry ${entry.id} must appear before the child`, "invalid_state");
       }
       if (entry.type === "branch_summary" && entry.abandonedLeafId !== null && !seen.has(entry.abandonedLeafId)) {
-        throw new Error(`Abandoned leaf ${entry.abandonedLeafId} for branch summary ${entry.id} not found`);
+        throw new SessionError(`Abandoned leaf ${entry.abandonedLeafId} for branch summary ${entry.id} not found`, "not_found");
       }
       seen.add(entry.id);
     }
@@ -237,13 +237,13 @@ export class SessionTree<TPayload = JsonObject, TDetails = JsonObject> {
 
   private assertAvailableId(id: string): void {
     if (this.byId.has(id)) {
-      throw new Error(`Session tree entry ${id} already exists`);
+      throw new SessionError(`Session tree entry ${id} already exists`, "invalid_entry");
     }
   }
 
   private assertValidLeafTarget(leafId: string | null): void {
     if (leafId !== null && !this.byId.has(leafId)) {
-      throw new Error(`Session tree entry ${leafId} not found`);
+      throw new SessionError(`Session tree entry ${leafId} not found`, "not_found");
     }
   }
 
