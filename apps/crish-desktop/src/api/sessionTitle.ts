@@ -78,29 +78,37 @@ const DEFAULT_TITLE_ZH =
  *
  * 设计动机：旧实现用枚举字符范围（\u200B-\u200F 等），遗漏了大量 Unicode Cf 类字符：
  *   - Unicode 6.3 Bidi Isolate（U+2066–U+2069）— 可让标题视觉反转
- *   - Variation Selectors（U+FE00–U+FE0F）— 构造「看似空但非空」标题
- *   - Language Tag 块（U+E0000–U+E007F）— 隐藏元数据注入
+ *   - Language Tag 块（U+E0000–U+E007F）— 隐藏元数据注入（Cf 类，\p{Cf} 已覆盖）
  *   - Mongolian Vowel Separator（U+180E）— Cf 类但不在旧范围
  *   - Deprecated Bidi controls（U+206A–U+206F）
  * 此外还遗漏了非 Cf 但视觉不可见的字符：
+ *   - Variation Selectors（U+FE00–U+FE0F）— category Mn，非 Cf，必须显式追加
+ *     用途：构造「看似空但非空」标题绕过空壳检测；附加到 emoji 后改变字形呈现。
  *   - Combining Grapheme Joiner（U+034F，category Mn）
  *   - Hangul Filler（U+3164 / U+115F，category Lo）
  *
  * 方案：用 \p{Cf} 覆盖所有 Unicode 格式字符 + 显式追加非 Cf 但不可见的字符。
- * 保留 ZWJ（U+200D）以不破坏 emoji 序列（如 👨‍👩‍👧‍👦）。
+ * 保留 ZWJ（U+200D）以不破坏 emoji 序列（如 👨‍👩‍👧‍👦）— 但首尾 ZWJ 仍需剥离（见 sanitize）。
  *
  * ALL_INVISIBLE_CHARS：剥离所有 Cf（含 ZWJ），用于「可见性判定 / 默认标题识别」
  *   — 这些场景不需要保留 emoji 序列内部 ZWJ，全剥更准确。
  * TITLE_INVISIBLE_CHARS：剥离 Cf 但保留 ZWJ，用于 sanitize（标题原料清洗）
- *   — 用户输入的 emoji 序列应原样保留。
+ *   — 用户输入的 emoji 序列应原样保留；首尾 ZWJ 由 sanitize 额外清理。
  */
 const ALL_INVISIBLE_CHARS =
   // eslint-disable-next-line no-control-regex -- intentional sanitization of C0 controls
-  /[\p{Cf}\u034F\u3164\u115F\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu;
+  /[\p{Cf}\u034F\u3164\u115F\uFE00-\uFE0F\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu;
 
 const TITLE_INVISIBLE_CHARS =
   // eslint-disable-next-line no-control-regex -- intentional sanitization of C0 controls
-  /(?![\u200D])[\p{Cf}\u034F\u3164\u115F\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu;
+  /(?![\u200D])[\p{Cf}\u034F\u3164\u115F\uFE00-\uFE0F\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu;
+
+/**
+ * 首尾 ZWJ（U+200D）剥离。
+ * ZWJ 在 emoji 序列内部（如 👨‍👩‍👧‍👦）须保留，但出现在首尾时无意义且构成
+ * 「看似空但非空」标题。sanitize 在剥完其他不可见字符后额外清理首尾 ZWJ。
+ */
+const BOUNDARY_ZWJ = /^\u200D+|\u200D+$/g;
 
 /**
  * 孤立代理对（lone surrogate）清洗。
@@ -302,6 +310,8 @@ export function sanitizeSessionTitleText(
   s = s.replace(TITLE_INVISIBLE_CHARS, '');
   // 孤立代理对清洗（落库 PostgreSQL/SQLite 安全）
   s = s.replace(LONE_SURROGATE, '');
+  // 首尾 ZWJ 剥离（中间 ZWJ 保留以不破坏 emoji 序列；首尾 ZWJ 无意义且可构造「看似空但非空」标题）
+  s = s.replace(BOUNDARY_ZWJ, '');
   // 全角空格等空白 → 普通空格再折叠
   s = s.replace(
     /[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g,
@@ -314,10 +324,16 @@ export function sanitizeSessionTitleText(
   s = s.replace(/^#{1,6}\s+/, '');
   // 有序/无序列表前缀（中文「1、」后常无空格）
   s = s.replace(/^(?:[-*•·]|\d+[.)、])\s*/, '');
-  // 首尾中西引号
-  s = s.replace(/^["'“”‘’「」『』]+|["'“”‘’「」『』]+$/g, '').trim();
-  // 句末标点（标题不必带句号）
-  s = s.replace(/[。！？.!?…‥]+$/u, '').trim();
+  // 后处理循环：剥引号 / 句末标点 / 首尾 ZWJ 可能互相暴露新的首尾噪声，
+  // 必须循环到稳定才能保证幂等性（如 `#".` → 剥 `.` → `#"` → 剥 `"` → `#`）。
+  // 上限 4 次迭代防止极端输入卡死（每次迭代至少剥 1 字符或退出）。
+  for (let i = 0; i < 4; i++) {
+    const before = s;
+    s = s.replace(/^["'“”‘’「」『』]+|["'“”‘’「」『』]+$/g, '').trim();
+    s = s.replace(/[。！？.!?…‥]+$/u, '').trim();
+    s = s.replace(BOUNDARY_ZWJ, '').trim();
+    if (s === before) break;
+  }
   return s;
 }
 
