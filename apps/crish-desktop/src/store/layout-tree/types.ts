@@ -46,8 +46,20 @@ export interface FlatPanel {
   activeTab: string;
   /** 相对于整个工作区的 rect（0-1 百分比） */
   rect: { x: number; y: number; width: number; height: number };
-  /** 从根到该 leaf 的路径（用于定位 branch 做 resize） */
-  path: string[];
+}
+
+/**
+ * 渲染用平坦分支描述（flattenBranches 输出）。
+ *
+ * 与 FlatPanel 对应，但面向 branch 节点 — 用于 sash 定位与 resize 计算。
+ * rect 是 branch 在 canvas 中的绝对占比（0-1），与 leaf rect 同坐标系。
+ */
+export interface FlatBranch {
+  branchId: string;
+  direction: 'horizontal' | 'vertical';
+  splitRatio: number;
+  /** branch 在 canvas 中的 rect（0-1 百分比，与 FlatPanel.rect 同坐标系） */
+  rect: { x: number; y: number; width: number; height: number };
 }
 
 /** 分割方向 */

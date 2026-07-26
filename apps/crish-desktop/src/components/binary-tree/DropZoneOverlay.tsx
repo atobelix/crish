@@ -6,6 +6,14 @@
  * - split-left/right/top/bottom：覆盖目标 leaf 的一半
  *
  * 渲染策略：portal 到 document.body，pointer-events: none，避免干扰拖拽
+ *
+ * 重计算时机（系统性约束）：
+ * 拖拽期间 tree 不可变（commitDrop 仅在 pointerUp 触发），故 leaf DOM rect
+ * 稳定。覆盖层仅需在以下场景重算：
+ * 1. dropZone 变化（目标 leaf 或 zone 类型改变）
+ * 2. viewport 变化（window resize / scroll 改变 leaf 屏幕坐标）
+ * 旧实现的 rAF 轮询每帧强制 getBoundingClientRect → 触发 layout，60fps 拖拽
+ * 下每秒 60 次无效布局计算，已移除。
  */
 
 import React from 'react';
@@ -80,9 +88,10 @@ export const DropZoneOverlay: React.FC = React.memo(() => {
   const draggedSource = useLayoutTreeStore((s) => s.draggedSource);
   const [overlay, setOverlay] = React.useState<OverlayRect | null>(null);
 
-  // 监听 dropZone 变化，重新计算覆盖层位置
-  React.useEffect(() => {
-    if (!dropZone || !draggedSource) {
+  // 重算覆盖层位置：dropZone 变化时计算一次
+  // （拖拽期间 tree 不可变，leaf DOM rect 稳定，无需 rAF 轮询）
+  const recompute = React.useCallback(() => {
+    if (!dropZone) {
       setOverlay(null);
       return;
     }
@@ -93,27 +102,27 @@ export const DropZoneOverlay: React.FC = React.memo(() => {
       setOverlay(null);
       return;
     }
-    const rect = targetEl.getBoundingClientRect();
-    setOverlay(computeOverlayRect(dropZone, rect));
-  }, [dropZone, draggedSource]);
+    setOverlay(computeOverlayRect(dropZone, targetEl.getBoundingClientRect()));
+  }, [dropZone]);
 
-  // 拖拽过程中 leaf 位置可能变化，用 rAF 持续更新
+  React.useEffect(() => {
+    if (!dropZone || !draggedSource) {
+      setOverlay(null);
+      return;
+    }
+    recompute();
+  }, [dropZone, draggedSource, recompute]);
+
+  // viewport 变化（resize/scroll）触发重算 — 唯一使 leaf 屏幕坐标变化的因素
   React.useEffect(() => {
     if (!dropZone || !draggedSource) return;
-    let rafId = 0;
-    const update = () => {
-      const targetEl = document.querySelector<HTMLElement>(
-        `[data-leaf-id="${dropZone.targetLeafId}"]`
-      );
-      if (targetEl) {
-        const rect = targetEl.getBoundingClientRect();
-        setOverlay(computeOverlayRect(dropZone, rect));
-      }
-      rafId = requestAnimationFrame(update);
+    window.addEventListener('resize', recompute);
+    window.addEventListener('scroll', recompute, true);
+    return () => {
+      window.removeEventListener('resize', recompute);
+      window.removeEventListener('scroll', recompute, true);
     };
-    rafId = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(rafId);
-  }, [dropZone, draggedSource]);
+  }, [dropZone, draggedSource, recompute]);
 
   if (!overlay) return null;
 

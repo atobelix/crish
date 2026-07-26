@@ -11,7 +11,18 @@
  * - 拖拽源由 startDragLeaf / startDragTab 显式启动，避免误触
  * - 拖拽阈值（DRAG_THRESHOLD_PX）用于区分点击与拖拽
  * - 拖拽过程中 pointer 事件挂在 window 上，避免被 leaf 元素拦截
- * - drop zone 检测使用 rAF 节流，避免高频更新导致性能问题
+ * - drop zone 检测使用时间节流（DROP_DETECT_INTERVAL_MS），避免高频更新
+ * - leaf rects 在 enterActive 时一次性缓存：拖拽过程中 tree 不变，
+ *   DOM rect 不会变化，无需每帧重新查询 DOM
+ *
+ * Ghost 位置更新（系统性优化）：
+ * 旧实现用 React state (ghostPosition) 存位置，每帧 setGhostPosition 触发
+ * re-render — 拖拽 60fps 下每秒 60 次 React reconciliation。
+ * 现改用 ref + 直接 DOM style 更新：
+ * - ghostPosRef 存逻辑位置（不触发 re-render）
+ * - ghostRef 指向 ghost DOM 元素（由 BinaryTreeWorkspace 通过 setGhostRef 挂载）
+ * - applyGhostPos 直接写 el.style.transform，跳过 React
+ * - isDragging 仍为 state（仅拖拽起止时切换，2 次 re-render/手势）
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -61,8 +72,11 @@ export interface UseTreeDragResult {
   isDragging: boolean;
   /** 拖拽源（拖拽中时非 null） */
   draggedSource: TreeDragSource | null;
-  /** 拖拽 ghost 的位置（屏幕坐标） */
-  ghostPosition: { x: number; y: number } | null;
+  /**
+   * Ghost 元素回调 ref — 由消费者挂在 ghost DOM 节点上。
+   * 元素挂载时自动应用当前位置（避免首帧闪现在 0,0）。
+   */
+  setGhostRef: (el: HTMLDivElement | null) => void;
   /** 当前 drop zone（拖拽预览） */
   activeDropZone: DropZone | null;
   /** 启动 leaf 拖拽（pointerdown 时调用） */
@@ -90,13 +104,33 @@ export function useTreeDrag(): UseTreeDragResult {
   const pendingRef = useRef<PendingDrag | null>(null);
   const activeRef = useRef<ActiveDrag | null>(null);
   const lastDropDetectRef = useRef(0);
+  /**
+   * leaf rect 缓存：在 enterActive 时一次性收集。
+   * 拖拽过程中 tree 不会变更（commitDrop 仅在 pointerUp 时调用），
+   * 故 DOM rect 保持稳定，无需每帧重新查询。
+   * 缓存在 handlePointerUp/Cancel 时清空。
+   */
+  const cachedLeafRectsRef = useRef<Array<{ id: string; rect: Rect }>>([]);
 
-  // React 状态（仅用于触发 re-render）
+  // ── Ghost 位置：ref + 直接 DOM 更新（非 React state） ────────
+  //
+  // ghostPosRef 存逻辑位置，ghostRef 指向 DOM 元素。
+  // applyGhostPos 把 posRef 写入 el.style.transform，跳过 React。
+  // 拖拽期间 pointermove 仅触发 DOM 写入，不触发 re-render。
+  const ghostRef = useRef<HTMLDivElement | null>(null);
+  const ghostPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  const applyGhostPos = useCallback(() => {
+    const el = ghostRef.current;
+    const pos = ghostPosRef.current;
+    if (el && pos) {
+      // translate 定位 + rotate 视觉倾斜（原 CSS 中的 rotate(1.5deg)）
+      el.style.transform = `translate(${pos.x}px, ${pos.y}px) rotate(1.5deg)`;
+    }
+  }, []);
+
+  // React 状态（仅用于触发 re-render — 拖拽起止时各 1 次）
   const [isDragging, setIsDragging] = useState(false);
-  const [ghostPosition, setGhostPosition] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
 
   // store actions（稳定引用，无需 useEffect 依赖）
   const setDraggedSource = useLayoutTreeStore((s) => s.setDraggedSource);
@@ -104,7 +138,7 @@ export function useTreeDrag(): UseTreeDragResult {
   const commitDrop = useLayoutTreeStore((s) => s.commitDrop);
   const cancelDragStore = useLayoutTreeStore((s) => s.cancelDrag);
 
-  // ── 收集所有 leaf 的 rect（用于 drop zone 检测） ──────────────
+  // ── 收集所有 leaf 的 rect（仅 enterActive 时调用一次） ────────
 
   const collectLeafRects = useCallback((): Array<{
     id: string;
@@ -184,14 +218,17 @@ export function useTreeDrag(): UseTreeDragResult {
       activeRef.current = active;
       pendingRef.current = null;
       phaseRef.current = 'active';
-      setIsDragging(true);
-      setGhostPosition({
+      // 一次性缓存 leaf rects — 拖拽期间 tree 不变，rect 稳定
+      cachedLeafRectsRef.current = collectLeafRects();
+      // 设置 ghost 逻辑位置 — DOM 元素由 setGhostRef 回调在挂载时应用
+      ghostPosRef.current = {
         x: clientX + GHOST_OFFSET_X,
         y: clientY + GHOST_OFFSET_Y,
-      });
+      };
+      setIsDragging(true);
       setDraggedSource(active.source);
     },
-    [setDraggedSource]
+    [collectLeafRects, setDraggedSource]
   );
 
   // ── 拖拽移动 ─────────────────────────────────────────────────
@@ -218,17 +255,20 @@ export function useTreeDrag(): UseTreeDragResult {
       if (!active) return;
       active.currentX = e.clientX;
       active.currentY = e.clientY;
-      setGhostPosition({
+      // 直接 DOM 更新 ghost 位置，跳过 React re-render
+      ghostPosRef.current = {
         x: e.clientX + GHOST_OFFSET_X,
         y: e.clientY + GHOST_OFFSET_Y,
-      });
+      };
+      applyGhostPos();
 
-      // rAF 节流：drop zone 检测
+      // 时间节流：drop zone 检测
       const now = performance.now();
       if (now - lastDropDetectRef.current < DROP_DETECT_INTERVAL_MS) return;
       lastDropDetectRef.current = now;
 
-      const leafRects = collectLeafRects();
+      // 使用缓存的 leaf rects，避免每帧 DOM 查询
+      const leafRects = cachedLeafRectsRef.current;
       const hit = findLeafAtPointer({ x: e.clientX, y: e.clientY }, leafRects);
       if (!hit) {
         setActiveDropZone(null);
@@ -253,7 +293,7 @@ export function useTreeDrag(): UseTreeDragResult {
       }
       setActiveDropZone(zone);
     },
-    [collectLeafRects, enterActive, setActiveDropZone]
+    [enterActive, applyGhostPos, setActiveDropZone]
   );
 
   // ── 拖拽结束 ─────────────────────────────────────────────────
@@ -278,9 +318,10 @@ export function useTreeDrag(): UseTreeDragResult {
     // 清理状态
     activeRef.current = null;
     pendingRef.current = null;
+    cachedLeafRectsRef.current = [];
+    ghostPosRef.current = null;
     phaseRef.current = 'idle';
     setIsDragging(false);
-    setGhostPosition(null);
     setDraggedSource(null);
   }, [commitDrop, setDraggedSource]);
 
@@ -292,14 +333,31 @@ export function useTreeDrag(): UseTreeDragResult {
     cancelDragStore();
     activeRef.current = null;
     pendingRef.current = null;
+    cachedLeafRectsRef.current = [];
+    ghostPosRef.current = null;
     phaseRef.current = 'idle';
     setIsDragging(false);
-    setGhostPosition(null);
   }, [cancelDragStore]);
 
   const cancelDrag = useCallback(() => {
     handlePointerCancel();
   }, [handlePointerCancel]);
+
+  // ── Ghost 元素回调 ref ───────────────────────────────────────
+  //
+  // 消费者把 setGhostRef 挂在 ghost DOM 节点上。
+  // 元素挂载时（drag 开始 → isDragging=true → ghost 渲染），
+  // 回调被调用，立即应用 ghostPosRef 中的位置，避免首帧闪现在 (0,0)。
+  // 元素卸载时回调以 null 调用，清理引用。
+  const setGhostRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      ghostRef.current = el;
+      if (el && ghostPosRef.current) {
+        applyGhostPos();
+      }
+    },
+    [applyGhostPos]
+  );
 
   // ── 全局事件监听（常驻挂载，handler 内按 phase 守卫） ─────────
   //
@@ -347,7 +405,7 @@ export function useTreeDrag(): UseTreeDragResult {
   return {
     isDragging,
     draggedSource,
-    ghostPosition,
+    setGhostRef,
     activeDropZone,
     startDragLeaf,
     startDragTab,

@@ -11,6 +11,7 @@ import type {
   LayoutNode,
   LayoutTree,
   FlatPanel,
+  FlatBranch,
   SplitDirection,
   DropDirection,
   TreeDragSource,
@@ -212,6 +213,135 @@ function removeLeafFromTree(
   return { ...tree, root: newRoot };
 }
 
+/**
+ * 将 srcLeaf 的所有 tabs 合并到 targetLeaf，然后移除 srcLeaf。
+ *
+ * 单次树重建（O(tree size)），替代旧实现的 O(n × tree size) 循环：
+ *   for (tab of srcLeaf.tabs) addTabToLeaf(...)
+ *   while (...) removeTabFromLeaf(...)
+ *
+ * 行为约定：
+ * - tabs 去重：targetLeaf 已有的 tab 不重复添加，srcLeaf 的 tabs 追加到末尾
+ * - activeTab：设为 srcLeaf.activeTab（用户拖过来时正在看的内容），
+ *   若该值不在合并后 tabs 中（违反不变量），回退到 targetLeaf.activeTab
+ * - srcLeaf 用其兄弟节点替代（移除其父 branch）
+ *
+ * 不变量：调用前应保证 srcLeafId !== targetLeafId（由 applyDrop 上游校验）。
+ */
+function mergeLeafInto(
+  tree: LayoutTree,
+  srcLeafId: string,
+  targetLeafId: string
+): LayoutTree {
+  if (srcLeafId === targetLeafId) return tree;
+
+  const srcLeaf = findNodeById(tree.root, srcLeafId);
+  const targetLeaf = findNodeById(tree.root, targetLeafId);
+  if (!srcLeaf || !isLeaf(srcLeaf) || !targetLeaf || !isLeaf(targetLeaf)) {
+    return tree;
+  }
+
+  // 1. 合并 tabs（去重，srcLeaf 的 tabs 追加到末尾）
+  const mergedTabs = [...targetLeaf.tabs];
+  for (const tab of srcLeaf.tabs) {
+    if (!mergedTabs.includes(tab)) {
+      mergedTabs.push(tab);
+    }
+  }
+
+  // 2. 决定合并后的 activeTab：优先 srcLeaf.activeTab（用户拖过来时正在看的内容）
+  const mergedActiveTab = mergedTabs.includes(srcLeaf.activeTab)
+    ? srcLeaf.activeTab
+    : targetLeaf.activeTab;
+
+  // 3. 替换 targetLeaf 为合并后的版本
+  const mergedTarget: LayoutLeaf = {
+    ...targetLeaf,
+    tabs: mergedTabs,
+    activeTab: mergedActiveTab,
+  };
+  const afterMerge = {
+    ...tree,
+    root: replaceNode(tree.root, targetLeafId, mergedTarget),
+  };
+
+  // 4. 移除 srcLeaf（用兄弟节点替代其父 branch）
+  //    若 srcLeaf 是根（不应发生，因为 targetLeaf 存在且不同），直接返回合并结果
+  if (afterMerge.root.id === srcLeafId) {
+    return afterMerge;
+  }
+  const parentInfo = findParent(afterMerge.root, srcLeafId);
+  if (!parentInfo) return afterMerge;
+  const { parent, index } = parentInfo;
+  const keepIndex: 0 | 1 = index === 0 ? 1 : 0;
+  const newRoot = removeBranch(afterMerge.root, parent.id, keepIndex);
+  return { ...afterMerge, root: newRoot };
+}
+
+/**
+ * 将单个 tab 从 srcLeaf 移到 targetLeaf（drag merge-tab 路径）。
+ *
+ * 与 addTabToLeaf 的差异：
+ * - addTabToLeaf 是通用 API：tab 已存在时返回原 tree（不切换 activeTab）
+ * - mergeTabIntoLeaf 是拖拽专用：tab 已存在时仍切换 activeTab 到 srcTabId
+ *   （用户拖入即表示"我要看这个"，应切换激活）
+ *
+ * 同 leaf 短路（系统性修复）：
+ * 旧实现无条件调用 removeTabFromLeaf，对 srcLeafId === targetLeafId 的同 leaf
+ * tab 重排场景致命：若 srcTab 是该 leaf 的唯一 tab，removeTabFromLeaf 会移除
+ * 整个 leaf，随后 findNodeById(targetLeafId) 返回 null，函数返回 afterRemove
+ * —— leaf 被静默删除，用户丢失面板。
+ *
+ * 同 leaf 重排的语义本就是"切换 activeTab 到被拖的 tab"，无需 remove+re-add。
+ * 直接委托 setLeafActiveTab 即可：tab 必在 tabs 中，仅切换 activeTab。
+ *
+ * 跨 leaf 路径保持原逻辑：
+ * 1. 从 srcLeaf 移除 tab（若为最后一个 tab，srcLeaf 被移除）
+ * 2. 若 targetLeaf 仍存在：将 tab 加入 targetLeaf（如已存在则不重复），
+ *    并将 activeTab 切换为 srcTabId
+ *
+ * 单次树重建（removeTabFromLeaf）+ 单次 replaceNode（合并），O(tree size)。
+ */
+function mergeTabIntoLeaf(
+  tree: LayoutTree,
+  srcLeafId: string,
+  srcTabId: string,
+  targetLeafId: string
+): LayoutTree {
+  // 同 leaf tab 重排：仅切换 activeTab，避免 removeTab 导致 leaf 被删除
+  if (srcLeafId === targetLeafId) {
+    return setLeafActiveTab(tree, srcLeafId, srcTabId);
+  }
+
+  // 1. 从 srcLeaf 移除 tab
+  const afterRemove = removeTabFromLeaf(tree, srcLeafId, srcTabId);
+
+  // 2. 检查 target 是否仍存在（srcLeaf 移除可能重组树）
+  const targetLeaf = findNodeById(afterRemove.root, targetLeafId);
+  if (!targetLeaf || !isLeaf(targetLeaf)) {
+    return afterRemove;
+  }
+
+  // 3. 若 activeTab 已是 srcTabId 且 tab 已在 target 中，无需更新
+  if (targetLeaf.activeTab === srcTabId && targetLeaf.tabs.includes(srcTabId)) {
+    return afterRemove;
+  }
+
+  // 4. 合并 tab（去重）+ 切换 activeTab 到 srcTabId
+  const newTabs = targetLeaf.tabs.includes(srcTabId)
+    ? targetLeaf.tabs
+    : [...targetLeaf.tabs, srcTabId];
+  const updatedTarget: LayoutLeaf = {
+    ...targetLeaf,
+    tabs: newTabs,
+    activeTab: srcTabId,
+  };
+  return {
+    ...afterRemove,
+    root: replaceNode(afterRemove.root, targetLeafId, updatedTarget),
+  };
+}
+
 /** 调整分支的分割比例 */
 export function resizeBranch(
   tree: LayoutTree,
@@ -371,63 +501,82 @@ export function applyDrop(
   // ── merge-tab 路径 ──────────────────────────────────────────
   if (srcType === 'leaf') {
     // leaf 拖拽到 merge：将源 leaf 所有 tabs 转移到 target，然后移除源 leaf
-    const srcLeaf = findNodeById(tree.root, srcLeafId);
-    if (!srcLeaf || !isLeaf(srcLeaf)) return tree;
-
-    let working = tree;
-    // 逐个添加 tab 到 target
-    for (const tab of srcLeaf.tabs) {
-      working = addTabToLeaf(working, targetLeafId, tab);
-    }
-    // 循环移除源 leaf 所有 tab（最后一个触发 leaf 删除）
-    let checkLeaf = findNodeById(working.root, srcLeafId);
-    while (checkLeaf && isLeaf(checkLeaf) && checkLeaf.tabs.length > 0) {
-      const t = checkLeaf.tabs[checkLeaf.tabs.length - 1]!;
-      working = removeTabFromLeaf(working, srcLeafId, t);
-      checkLeaf = findNodeById(working.root, srcLeafId);
-    }
-    return working;
+    return mergeLeafInto(tree, srcLeafId, targetLeafId);
   }
 
   // tab 拖拽到 merge：将 tab 从源 leaf 移到 target leaf
-  const afterRemove = removeTabFromLeaf(tree, srcLeafId, srcTabId);
-  const targetStillExists = findNodeById(afterRemove.root, targetLeafId);
-  if (!targetStillExists) return afterRemove;
-  return addTabToLeaf(afterRemove, targetLeafId, srcTabId);
+  // 使用 mergeTabIntoLeaf 而非 addTabToLeaf：拖拽场景下即使 tab 已存在也应切换 activeTab
+  return mergeTabIntoLeaf(tree, srcLeafId, srcTabId, targetLeafId);
 }
 
 // ── 渲染辅助 ──────────────────────────────────────────────────────────
 
+type Rect = { x: number; y: number; width: number; height: number };
+
 /**
- * 将树展平为渲染列表，计算每个 leaf 的百分比 rect。
- * 使用递归分割：branch 按 splitRatio 分配空间给两个 child。
+ * 将树展平为渲染列表，同时计算 leaf 与 branch 的百分比 rect。
+ *
+ * 单次递归遍历，输出两个数组：
+ * - leaves：每个 leaf 的 rect（用于绝对定位 leaf 面板）
+ * - branches：每个 branch 的 rect（用于 sash 定位 + resize 计算）
+ *
+ * branch rect 的意义：branch 在 canvas 中的绝对占比（0-1）。
+ * 例：根 branch 占满 canvas（rect={0,0,1,1}）；
+ * 嵌套在左半区的子 branch rect={0,0,0.5,1}。
+ * sash 位置 = branch.rect 的对应边 + splitRatio × branch.rect 的对应维度。
+ */
+export function flattenTree(root: LayoutNode): {
+  leaves: FlatPanel[];
+  branches: FlatBranch[];
+} {
+  const leaves: FlatPanel[] = [];
+  const branches: FlatBranch[] = [];
+  flattenRecursive(root, { x: 0, y: 0, width: 1, height: 1 }, leaves, branches);
+  return { leaves, branches };
+}
+
+/**
+ * 将树展平为 leaf 渲染列表（仅 leaves，向后兼容）。
+ * 内部委托 flattenTree，单次遍历。
  */
 export function flattenToRenderList(root: LayoutNode): FlatPanel[] {
-  const result: FlatPanel[] = [];
-  flattenRecursive(root, { x: 0, y: 0, width: 1, height: 1 }, [], result);
-  return result;
+  return flattenTree(root).leaves;
+}
+
+/**
+ * 将树展平为 branch 渲染列表（仅 branches，含 rect）。
+ * 用于 sash 定位与 resize 计算。
+ */
+export function flattenBranches(root: LayoutNode): FlatBranch[] {
+  return flattenTree(root).branches;
 }
 
 function flattenRecursive(
   node: LayoutNode,
-  rect: { x: number; y: number; width: number; height: number },
-  path: string[],
-  out: FlatPanel[]
+  rect: Rect,
+  leavesOut: FlatPanel[],
+  branchesOut: FlatBranch[]
 ): void {
   if (isLeaf(node)) {
-    out.push({
+    leavesOut.push({
       leafId: node.id,
       panelId: node.panelId,
       tabs: node.tabs,
       activeTab: node.activeTab,
       rect,
-      path,
     });
     return;
   }
 
   const { direction, splitRatio, children } = node;
-  const currentPath = [...path, node.id];
+
+  // 记录 branch rect（用于 sash 定位 + resize 计算）
+  branchesOut.push({
+    branchId: node.id,
+    direction,
+    splitRatio,
+    rect,
+  });
 
   if (direction === 'horizontal') {
     const firstWidth = rect.width * splitRatio;
@@ -439,8 +588,8 @@ function flattenRecursive(
         width: firstWidth,
         height: rect.height,
       },
-      currentPath,
-      out
+      leavesOut,
+      branchesOut
     );
     flattenRecursive(
       children[1],
@@ -450,8 +599,8 @@ function flattenRecursive(
         width: rect.width - firstWidth,
         height: rect.height,
       },
-      currentPath,
-      out
+      leavesOut,
+      branchesOut
     );
   } else {
     const firstHeight = rect.height * splitRatio;
@@ -463,8 +612,8 @@ function flattenRecursive(
         width: rect.width,
         height: firstHeight,
       },
-      currentPath,
-      out
+      leavesOut,
+      branchesOut
     );
     flattenRecursive(
       children[1],
@@ -474,8 +623,8 @@ function flattenRecursive(
         width: rect.width,
         height: rect.height - firstHeight,
       },
-      currentPath,
-      out
+      leavesOut,
+      branchesOut
     );
   }
 }
@@ -495,7 +644,19 @@ interface LegacyColumn {
 
 /**
  * 从旧 columns/groups 模型迁移到二叉树。
+ *
  * 策略：columns 从左到右依次水平分割，groups 从上到下垂直分割。
+ *
+ * splitRatio 计算（系统性修复）：
+ * 旧实现 group 用 `g.heightRatio / (g.heightRatio + (1 - g.heightRatio))`，
+ * 分母恒为 1 → ratio = g.heightRatio。对 3+ group 树致命错误：
+ * 嵌套 branch 的 ratio 是"当前 branch 内部"的分割比，不是"全局占比"。
+ *
+ * 正确公式（与 column 逻辑对齐）：
+ *   splitRatio_i = h_i / sum(h_i..h_{N-1})
+ * 即"当前 group 高度 / 当前 branch 及其所有后续 group 的总高度"。
+ *
+ * 列循环同样从 O(N²) slice+reduce 优化为 O(N) 右向累加。
  */
 export function migrateFromColumns(columns: LegacyColumn[]): LayoutTree {
   if (columns.length === 0) {
@@ -516,24 +677,28 @@ export function migrateFromColumns(columns: LegacyColumn[]): LayoutTree {
       );
     }
 
-    // 多 group：从上到下垂直分割
-    let node: LayoutNode = groupToLeaf(col.groups[col.groups.length - 1]!);
-    for (let i = col.groups.length - 2; i >= 0; i--) {
-      const g = col.groups[i]!;
-      const ratio = g.heightRatio / (g.heightRatio + (1 - g.heightRatio));
-      node = createBranch('vertical', groupToLeaf(g), node, ratio || 0.5);
+    // 多 group：自底向上构建垂直二叉树
+    // remainingHeight 始终维护"当前 node 已代表的 groups 高度之和"
+    const groups = col.groups;
+    let node: LayoutNode = groupToLeaf(groups[groups.length - 1]!);
+    let remainingHeight = groups[groups.length - 1]!.heightRatio;
+    for (let i = groups.length - 2; i >= 0; i--) {
+      const g = groups[i]!;
+      remainingHeight += g.heightRatio;
+      // splitRatio = 当前 group 高度 / (当前 + 已构建子树) 总高度
+      const ratio = remainingHeight > 0 ? g.heightRatio / remainingHeight : 0.5;
+      node = createBranch('vertical', groupToLeaf(g), node, ratio);
     }
     return node;
   });
 
-  // 列从左到右水平分割
+  // 列从左到右水平分割（自底向上，与 group 逻辑同构）
   let root = columnNodes[columnNodes.length - 1]!;
+  let remainingWidth = columns[columnNodes.length - 1]!.widthRatio;
   for (let i = columnNodes.length - 2; i >= 0; i--) {
     const col = columns[i]!;
-    const totalRemaining = columns
-      .slice(i)
-      .reduce((s, c) => s + c.widthRatio, 0);
-    const ratio = totalRemaining > 0 ? col.widthRatio / totalRemaining : 0.5;
+    remainingWidth += col.widthRatio;
+    const ratio = remainingWidth > 0 ? col.widthRatio / remainingWidth : 0.5;
     root = createBranch('horizontal', columnNodes[i]!, root, ratio);
   }
 

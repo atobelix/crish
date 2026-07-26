@@ -87,16 +87,12 @@
 }
 
 .sashHorizontal {
-  top: 0;
-  bottom: 0;
   width: 6px;
   cursor: col-resize;
   transform: translateX(-3px);
 }
 
 .sashVertical {
-  left: 0;
-  right: 0;
   height: 6px;
   cursor: row-resize;
   transform: translateY(-3px);
@@ -195,13 +191,17 @@
 }
 
 /* ── Ghost 浮层 ─────────────────────────────────────────────── */
+/*
+ * transform 不在此声明 — 位置由 useTreeDrag 通过 ref 直接写入
+ * el.style.transform = `translate(x,y) rotate(1.5deg)`（跳过 React）。
+ * CSS 中声明 transform 会被 inline style 覆盖，故仅保留视觉属性。
+ */
 
 .ghost {
   position: fixed;
   pointer-events: none;
   z-index: var(--z-drag-overlay-max, 99999);
   opacity: 0.85;
-  transform: rotate(1.5deg);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
   border-radius: var(--radius-md, 8px);
   overflow: hidden;

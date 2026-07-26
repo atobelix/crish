@@ -31,12 +31,11 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type {
   LayoutTree,
-  LayoutLeaf,
   SplitDirection,
   DropDirection,
   TreeDragSource,
 } from './types';
-import { createDefaultTree, isLeaf } from './types';
+import { createDefaultTree } from './types';
 import {
   splitLeaf,
   mergeBranch,
@@ -387,18 +386,3 @@ export const selectDraggedSource = (s: LayoutTreeStoreState) => s.draggedSource;
 export const selectActiveDropZone = (s: LayoutTreeStoreState) =>
   s.activeDropZone;
 export const selectActiveLeafId = (s: LayoutTreeStoreState) => s.activeLeafId;
-
-// ── Hooks ──────────────────────────────────────────────────────────
-
-/** 获取所有叶子面板 */
-export function useLeaves(): LayoutLeaf[] {
-  return useLayoutTreeStore((s) => collectLeaves(s.tree.root));
-}
-
-/** 按 id 获取叶子面板 */
-export function useLeafById(leafId: string): LayoutLeaf | null {
-  return useLayoutTreeStore((s) => {
-    const node = findNodeById(s.tree.root, leafId);
-    return node && isLeaf(node) ? node : null;
-  });
-}
