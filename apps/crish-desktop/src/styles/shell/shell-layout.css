@@ -8,29 +8,96 @@
   position: relative;
 }
 
-/* --- APP HEADER --- */
-.app-header {
-  height: var(--header-height);
-  background-color: var(--bg-primary);
-  border-bottom: 1px solid var(--border-subtle);
+/* --- APP TOP BAR (单一全宽顶栏，替代旧 app-header) --- */
+.app-top-bar {
+  height: var(--header-height, 44px);
+  min-height: var(--header-height, 44px);
+  max-height: var(--header-height, 44px);
   display: flex;
-  justify-content: space-between;
+  flex-direction: row;
   align-items: center;
-  padding: 0 12px;
+  flex-shrink: 0;
+  width: 100%;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  -webkit-app-region: drag;
+  app-region: drag;
+  box-sizing: border-box;
   user-select: none;
   z-index: var(--z-sidebar);
-  flex-shrink: 0;
 }
 
-.app-header-left, .app-header-right {
+/* 左侧 rail：宽度与 sidebar 同步 */
+.app-top-bar__rail {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  height: var(--header-height, 44px);
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  padding: 0 10px 0 13px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  transition: width 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+              min-width 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+/* 侧栏折叠时 rail 收缩至只容纳 toggle */
+.app-top-bar--collapsed .app-top-bar__rail {
+  width: 44px;
+  min-width: 44px;
+}
+
+/* sidebar toggle 按钮 */
+.app-top-bar__sidebar-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md, 6px);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  pointer-events: auto;
+}
+.app-top-bar__sidebar-btn:hover {
+  background-color: var(--sidebar-hover, rgba(0,0,0,0.06));
+  color: var(--text-primary);
+}
+.app-top-bar__sidebar-btn svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+/* 确保所有 no-drag 元素支持交互 */
+.app-top-bar .no-drag,
+.unified-top-bar .no-drag {
+  -webkit-app-region: no-drag !important;
+  app-region: no-drag !important;
+  pointer-events: auto !important;
+}
+
+/* 中间 main：占满剩余宽度，与 canvas 等宽，UnifiedTopBar 撑满 */
+.app-top-bar__main {
+  flex: 1;
   min-width: 0;
+  height: var(--header-height, 44px);
+  display: flex;
+  align-items: center;
+  overflow: hidden;
 }
-.app-header-left {
-  flex: 1 1 auto;
-}
+
 
 .header-btn {
   background: none;

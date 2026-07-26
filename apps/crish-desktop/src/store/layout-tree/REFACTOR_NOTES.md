@@ -1,7 +1,7 @@
 # 二叉树布局引擎重构笔记
 
 > 防上下文压缩丢失的进度文档。每次会话结束前更新"待办"与"已完成"。
-> 最新更新：2026-07-26（第四轮：跨域防护 + tab 重排 + mergeTabIntoLeaf 去重顺序 bug 修复）
+> 最新更新：2026-07-26（第五轮：顶部栏视觉升级 — 高度/字号/图标/圆角 tab）
 
 ---
 
@@ -131,6 +131,53 @@ if (targetLeaf.tabs.includes(srcTabId)) {
 **变量重命名**（语义清晰）：
 - `chatId` → `diffId`（左侧 leaf，panelId='diff'）
 - `diffId` → `terminalId`（右侧 leaf，panelId='terminal'）
+
+---
+
+### 第五轮：顶部栏视觉升级（AppTopBar + UnifiedTopBar + BinaryTreeWorkspace.module.css）
+
+**用户反馈**：当前软件顶部区域"不大气"。
+
+**问题诊断**：
+1. 顶栏高度仅 32px，图标/字号都偏小，显得拥挤
+2. 顶栏背景透明，与下方内容没有清晰层级区分
+3. tab 是 4px 小圆角 + 底部蓝色高亮，类似 VSCode 工具条
+4. 右侧窗口按钮挤在一起，缺乏分组和呼吸感
+5. 项目已有 `--header-height: 44px` token，但代码里硬编码了 32px
+
+**优化方案**（系统性改造，5 个文件）：
+
+1. **高度提升**：32px → 44px（统一使用 `--header-height` token）
+   - `shell-layout.css`：`.app-top-bar` / `__rail` / `__main` 高度改为 `var(--header-height, 44px)`
+   - `AppTopBar.tsx`：注释更新，sidebar toggle 图标 16px → 18px
+   - `UnifiedTopBar.tsx`：`HEADER_HEIGHT = 44`，所有内联高度引用改用常量
+
+2. **图标与字号放大**：
+   - 顶栏图标：16px → 18px（FolderOpen、Plus、MoreHorizontal、窗口控制按钮）
+   - 对话面包屑：11px → 12px（folder）/ 13px（session title）
+   - 工具 tab 字号：11px → 12px（由 CSS `.tab` 控制）
+
+3. **顶栏背景与层级**：
+   - `shell-layout.css`：`.app-top-bar` 背景由透明/secondary 改为 `var(--bg-secondary)`，并增加
+     - `border-bottom: 1px solid var(--border-color)`
+     - `box-shadow: var(--shadow-sm)`
+   - 形成与下方 canvas 的清晰分割
+
+4. **tab 视觉重塑**（`BinaryTreeWorkspace.module.css`）：
+   - `.tabBar` 高度 32px → 40px
+   - `.tab` 高度 32px → 28px，圆角 4px → 8px（`--radius-lg`）
+   - 移除底部蓝色高亮条（`[data-active]::after`）
+   - active tab 用 `bg-primary` + 柔和阴影区分
+   - 字体 11px → 12px，字重 500
+
+5. **右侧按钮区域**：
+   - 按钮尺寸 26px → 30px，hover 背景更明确
+   - 右面板开关/帮助 与 窗口控制 之间增加竖向分隔线
+   - 关闭按钮 hover 变红（沿用系统约定）
+
+**验证**：
+- `tsc -b`：0 错误
+- `vitest src/components`：仅 `FirstRunWizard.test.ts` 1 个预存失败（default seeds 期望空数组，与本次改动无关）
 
 ---
 
@@ -366,9 +413,8 @@ if (targetLeaf.tabs.includes(srcTabId)) {
   - 实现后可在同 leaf 内精确插入到指定 tab 之前
   - 依赖：tab DOM 元素需带 `data-tab-id` 属性
 
-- [ ] **样式调整**：移除 VSCode 风格直角边框，改为柔和圆角 tab
-  - 用户反馈：顶部功能区及标签样式变了，不要 vscode 那种带有直角的边框
-  - 待修改：`BinaryTreeWorkspace.module.css` 的 `.tab` / `.tabBar` / `.leaf` 边框与圆角
+- [x] **顶部栏视觉升级**：顶部功能区"不大气"优化
+  - 状态：**已完成** — 高度 32px → 44px，图标/字号放大，tab 改为 8px 柔和圆角并移除底部蓝线，顶栏增加背景/边框/阴影层级，右侧按钮分组
 
 ---
 
@@ -455,6 +501,32 @@ if (targetLeaf.tabs.includes(srcTabId)) {
 ---
 
 ## 文件修改清单
+
+### 第五轮（2026-07-26 顶部栏视觉升级）
+
+#### 修改
+
+- `src/styles/shell/shell-layout.css`：
+  - `.app-top-bar` 高度改为 `var(--header-height, 44px)`，增加背景/边框/阴影
+  - `.app-top-bar__rail` / `__main` 高度同步 44px
+  - `.app-top-bar__sidebar-btn` 尺寸 26px → 32px，图标 16px → 18px
+- `src/components/AppTopBar.tsx`：
+  - 注释更新（32px → 44px）
+  - sidebar toggle 图标 `size={16}` → `size={18}`
+- `src/components/binary-tree/UnifiedTopBar.tsx`：
+  - 引入 `HEADER_HEIGHT = 44` / `ICON_SIZE = 18` 常量
+  - 所有内联高度改为常量，字号 11px → 12-13px
+  - 工具 tab 减少 inline 覆盖，交由 CSS `.tab` 控制视觉
+  - 右侧图标按钮统一 30px，增加 hover 效果与竖向分隔线
+  - 关闭按钮 hover 变红
+- `src/components/binary-tree/BinaryTreeWorkspace.module.css`：
+  - `.tabBar` 高度 32px → 40px
+  - `.tab` 高度 32px → 28px，圆角 4px → 8px，字号 11px → 12px
+  - 移除 active tab 底部蓝色高亮条，改为 bg-primary + 柔和阴影
+  - 增加 font-weight: 500
+- `src/store/layout-tree/REFACTOR_NOTES.md`：本文档更新
+
+---
 
 ### 第四轮（2026-07-26 跨域防护 + tab 重排 + 去重顺序 bug 修复）
 
