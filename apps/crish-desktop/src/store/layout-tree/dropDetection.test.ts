@@ -3,7 +3,9 @@ import {
   detectDropZone,
   findLeafAtPointer,
   isPointerInRect,
+  isZoneSame,
   rectFromDOM,
+  type DropZone,
   type Rect,
 } from './dropDetection';
 
@@ -160,5 +162,111 @@ describe('rectFromDOM', () => {
       width: 100,
       height: 100,
     });
+  });
+});
+
+// ── isZoneSame ──────────────────────────────────────────────────────
+//
+// DropZone 浅相等比较的纯函数测试。
+//
+// 核心不变量：
+// 1. 仅比较语义字段（type + targetLeafId）— confidence 不参与
+// 2. null 安全（两侧 null / 单侧 null / 双侧非 null）
+// 3. 引用相等短路（a === b → true，避免深比较开销）
+//
+// 使用场景：useTreeDrag 在 pointermove 期间用 isZoneSame 做 zone 去重，
+// 避免 confidence 浮动触发无效 store setActiveDropZone → 订阅组件 re-render。
+
+describe('isZoneSame', () => {
+  it('两个 null → true', () => {
+    expect(isZoneSame(null, null)).toBe(true);
+  });
+
+  it('同引用 → true（短路）', () => {
+    const zone: DropZone = {
+      type: 'merge-tab',
+      targetLeafId: 'leaf-1',
+      confidence: 0.5,
+    };
+    expect(isZoneSame(zone, zone)).toBe(true);
+  });
+
+  it('同 type + 同 targetLeafId + 不同 confidence → true（confidence 不参与）', () => {
+    // 这是 useTreeDrag 去重的核心场景：
+    // pointermove 期间 detectDropZone 每次返回新对象引用 + 浮动 confidence，
+    // 但语义不变 → isZoneSame 短路 → 不触发 store 更新。
+    const a: DropZone = {
+      type: 'split-left',
+      targetLeafId: 'leaf-1',
+      confidence: 0.4,
+    };
+    const b: DropZone = {
+      type: 'split-left',
+      targetLeafId: 'leaf-1',
+      confidence: 0.9,
+    };
+    expect(isZoneSame(a, b)).toBe(true);
+  });
+
+  it('不同 type → false', () => {
+    const a: DropZone = {
+      type: 'split-left',
+      targetLeafId: 'leaf-1',
+      confidence: 1,
+    };
+    const b: DropZone = {
+      type: 'split-right',
+      targetLeafId: 'leaf-1',
+      confidence: 1,
+    };
+    expect(isZoneSame(a, b)).toBe(false);
+  });
+
+  it('不同 targetLeafId → false', () => {
+    const a: DropZone = {
+      type: 'merge-tab',
+      targetLeafId: 'leaf-1',
+      confidence: 1,
+    };
+    const b: DropZone = {
+      type: 'merge-tab',
+      targetLeafId: 'leaf-2',
+      confidence: 1,
+    };
+    expect(isZoneSame(a, b)).toBe(false);
+  });
+
+  it('一侧 null → false', () => {
+    const zone: DropZone = {
+      type: 'merge-tab',
+      targetLeafId: 'leaf-1',
+      confidence: 1,
+    };
+    expect(isZoneSame(zone, null)).toBe(false);
+    expect(isZoneSame(null, zone)).toBe(false);
+  });
+
+  it('覆盖所有 DropZoneType（5 种）— 同 type 同 leaf 即相等', () => {
+    // 验证 isZoneSame 对所有 zone 类型一致工作，无类型特殊处理
+    const types: DropZone['type'][] = [
+      'split-left',
+      'split-right',
+      'split-top',
+      'split-bottom',
+      'merge-tab',
+    ];
+    for (const type of types) {
+      const a: DropZone = {
+        type,
+        targetLeafId: 'leaf-x',
+        confidence: 0.1,
+      };
+      const b: DropZone = {
+        type,
+        targetLeafId: 'leaf-x',
+        confidence: 0.99,
+      };
+      expect(isZoneSame(a, b)).toBe(true);
+    }
   });
 });

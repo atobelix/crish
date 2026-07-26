@@ -32,6 +32,8 @@ export type DropZoneType =
 export interface DropZone {
   type: DropZoneType;
   targetLeafId: string;
+  /** 可选目标 tab id（用于同 leaf 内 tab 拖拽排序/目标位置计算） */
+  targetTabId?: string;
   /** 置信度 0-1，可用于指示器透明度/动画强度 */
   confidence: number;
 }
@@ -214,21 +216,43 @@ export function isPointerInRect(pointer: Pointer, rect: Rect): boolean {
  * 从多个 leaf rect 中找到指针所在的 leaf。
  * 返回最近中心的 leaf（如果有多个重叠）。
  */
-export function findLeafAtPointer(
+export function findLeafAtPointer<T extends { id: string; rect: Rect }>(
   pointer: Pointer,
-  leafRects: Array<{ id: string; rect: Rect }>
-): { id: string; rect: Rect } | null {
-  let best: { id: string; rect: Rect; dist: number } | null = null;
+  leafRects: T[]
+): T | null {
+  let best: { item: T; dist: number } | null = null;
 
-  for (const { id, rect } of leafRects) {
-    if (!isPointerInRect(pointer, rect)) continue;
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
+  for (const item of leafRects) {
+    if (!isPointerInRect(pointer, item.rect)) continue;
+    const cx = item.rect.left + item.rect.width / 2;
+    const cy = item.rect.top + item.rect.height / 2;
     const dist = Math.hypot(pointer.x - cx, pointer.y - cy);
     if (!best || dist < best.dist) {
-      best = { id, rect, dist };
+      best = { item, dist };
     }
   }
 
-  return best ? { id: best.id, rect: best.rect } : null;
+  return best ? best.item : null;
+}
+
+/**
+ * DropZone 浅相等比较 — 仅比较语义字段（type + targetLeafId）。
+ *
+ * confidence 是检测置信度（0-1），不参与相等判断：
+ * 同一目标 leaf + 同一 zone 类型即视为"未变化"，避免每次 pointermove
+ * 因 confidence 浮动触发 store setActiveDropZone → 订阅组件 re-render。
+ *
+ * 系统性约束：拖拽期间 tree 不可变（commitDrop 仅 pointerUp 触发），
+ * 故 targetLeafId 在单次拖拽内是稳定标识符，可作为相等判据。
+ *
+ * 放置位置选择（系统性设计）：
+ * isZoneSame 是 DropZone 类型的语义比较函数，与 DropZone 类型同模块。
+ * 旧实现放在 useTreeDrag.ts 内部 — 但 useTreeDrag 是 hook，不应承载
+ * 可独立的纯函数逻辑。移到 dropDetection.ts 让 hook 更聚焦于生命周期，
+ * 且测试可直接从 dropDetection 导入，无需通过 hook 间接验证。
+ */
+export function isZoneSame(a: DropZone | null, b: DropZone | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.type === b.type && a.targetLeafId === b.targetLeafId;
 }

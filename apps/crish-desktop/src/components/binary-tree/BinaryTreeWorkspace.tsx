@@ -7,7 +7,7 @@
  * 3. 遍历 branch 节点，在两个 child 之间渲染 TreeResizeSash
  * 4. 每个 leaf 用 TreeLeafPanel 渲染（绝对定位）
  * 5. DropZoneOverlay portal 到 body 显示落点预览
- * 6. GlobalDragOverlay portal 显示拖拽 ghost
+ * 6. ghost portal 显示拖拽 ghost（内联渲染，非独立组件）
  *
  * 设计要点：
  * - canvas 为 position: relative，所有 leaf/sash 绝对定位

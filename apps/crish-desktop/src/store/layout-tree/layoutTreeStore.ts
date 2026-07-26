@@ -380,9 +380,10 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
 );
 
 // ── Selectors ────────────────────────────────────────────────────
-
-export const selectTree = (s: LayoutTreeStoreState) => s.tree;
-export const selectDraggedSource = (s: LayoutTreeStoreState) => s.draggedSource;
-export const selectActiveDropZone = (s: LayoutTreeStoreState) =>
-  s.activeDropZone;
-export const selectActiveLeafId = (s: LayoutTreeStoreState) => s.activeLeafId;
+//
+// 不再提供 selector 工厂函数（selectTree / selectDraggedSource 等）。
+// 所有消费者统一使用内联 selector：`useLayoutTreeStore((s) => s.tree)`。
+//
+// 旧 selector 工厂从未被任何消费者采纳 — 4 个函数均为 0 引用孤儿。
+// 保留它们会造成"两种正确写法"的歧义，违背单一可信源原则。
+// 若未来需要跨组件共享 selector（如 zod schema 验证），再按需添加。

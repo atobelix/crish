@@ -10,7 +10,6 @@ import {
   findNodeById,
   findParent,
   collectLeaves,
-  treeDepth,
   splitLeaf,
   mergeBranch,
   moveLeaf,
@@ -20,11 +19,7 @@ import {
   setLeafActiveTab,
   applyDrop,
   flattenTree,
-  flattenToRenderList,
-  flattenBranches,
   migrateFromColumns,
-  serializeTree,
-  deserializeTree,
 } from './operations';
 import type { LayoutTree, LayoutBranch, LayoutLeaf } from './types';
 import type { TreeDragSource } from './types';
@@ -66,6 +61,71 @@ describe('LayoutTree types', () => {
   });
 });
 
+/**
+ * createLeaf 不变量归一化（H4 系统性防御）。
+ *
+ * H4 根因：migrateFromColumns 处理空 cards 旧 group 时，传入 tabs=[]，
+ * 旧实现 `tabs ?? [panelId]` 仅处理 undefined，对 [] 放行 → 产生
+ * `tabs=[] + activeTab='chat'` 的违反不变量 leaf。
+ *
+ * 修复在工厂函数层归一化：tabs 永远非空 + activeTab 必在 tabs 中。
+ * 所有调用方（migrateFromColumns、splitLeaf、mergeLeafInto 等）自动受益。
+ */
+describe('createLeaf 不变量归一化（H4 防御）', () => {
+  it('tabs=undefined → 回退到 [panelId]', () => {
+    const leaf = createLeaf('chat');
+    expect(leaf.tabs).toEqual(['chat']);
+    expect(leaf.activeTab).toBe('chat');
+  });
+
+  it('tabs=[] → 回退到 [panelId]（H4 核心修复点）', () => {
+    // 旧实现：tabs=[] 放行 → leaf.tabs=[] 违反"至少 1 个 tab"不变量
+    const leaf = createLeaf('chat', [], undefined);
+    expect(leaf.tabs).toEqual(['chat']);
+    expect(leaf.activeTab).toBe('chat');
+  });
+
+  it('activeTab 不在 tabs 中 → 回退到 tabs[0]', () => {
+    // 旧实现：activeTab='chat' 但 tabs=['diff'] → activeTab 不在 tabs 中
+    const leaf = createLeaf('diff', ['diff'], 'chat');
+    expect(leaf.tabs).toEqual(['diff']);
+    expect(leaf.activeTab).toBe('diff');
+  });
+
+  it('activeTab=undefined 且 tabs 非空 → 回退到 tabs[0]', () => {
+    const leaf = createLeaf('chat', ['chat', 'diff'], undefined);
+    expect(leaf.tabs).toEqual(['chat', 'diff']);
+    expect(leaf.activeTab).toBe('chat');
+  });
+
+  it('tabs 非空 + activeTab 在 tabs 中 → 保持原值', () => {
+    const leaf = createLeaf('chat', ['chat', 'diff', 'files'], 'diff');
+    expect(leaf.tabs).toEqual(['chat', 'diff', 'files']);
+    expect(leaf.activeTab).toBe('diff');
+  });
+
+  it('H4 场景复现：空 cards + 空 activeCardId 迁移路径', () => {
+    // 模拟 migrateFromColumns 的 groupToLeaf 调用：
+    //   createLeaf(activeCardId || cards[0]?.id || 'chat', cards.map(c => c.id), activeCardId || cards[0]?.id)
+    // 当 cards=[] + activeCardId='' 时：
+    //   createLeaf('chat', [], undefined)
+    const activeCardId = '';
+    const cards: Array<{ id: string }> = [];
+    const panelId = activeCardId || cards[0]?.id || 'chat';
+    const tabs = cards.map((c) => c.id);
+    const activeTab = activeCardId || cards[0]?.id;
+
+    const leaf = createLeaf(panelId, tabs, activeTab);
+    // 不变量：tabs 永远非空
+    expect(leaf.tabs.length).toBeGreaterThanOrEqual(1);
+    // 不变量：activeTab 必在 tabs 中
+    expect(leaf.tabs).toContain(leaf.activeTab);
+    // 回退到默认 chat
+    expect(leaf.tabs).toEqual(['chat']);
+    expect(leaf.activeTab).toBe('chat');
+  });
+});
+
 describe('Tree queries', () => {
   it('findNodeById finds leaf', () => {
     const tree = makeTestTree();
@@ -93,19 +153,6 @@ describe('Tree queries', () => {
     const tree = makeTestTree();
     const leaves = collectLeaves(tree.root);
     expect(leaves).toHaveLength(2);
-  });
-
-  it('treeDepth computes correctly', () => {
-    const single = createDefaultTree();
-    expect(treeDepth(single.root)).toBe(1);
-
-    const tree = makeTestTree();
-    expect(treeDepth(tree.root)).toBe(2);
-
-    // Nested: branch(branch(leaf, leaf), leaf)
-    const inner = createBranch('vertical', createLeaf('a'), createLeaf('b'));
-    const outer = createBranch('horizontal', inner, createLeaf('c'));
-    expect(treeDepth(outer)).toBe(3);
   });
 });
 
@@ -264,41 +311,8 @@ describe('setLeafActiveTab', () => {
   });
 });
 
-describe('flattenToRenderList', () => {
-  it('single leaf gets full rect', () => {
-    const tree = createDefaultTree();
-    const panels = flattenToRenderList(tree.root);
-    expect(panels).toHaveLength(1);
-    expect(panels[0]!.rect).toEqual({ x: 0, y: 0, width: 1, height: 1 });
-  });
-
-  it('horizontal split divides width', () => {
-    const tree = makeTestTree(); // 60/40 horizontal
-    const panels = flattenToRenderList(tree.root);
-    expect(panels).toHaveLength(2);
-
-    const first = panels.find((p) => p.panelId === 'chat')!;
-    const second = panels.find((p) => p.panelId === 'diff')!;
-    expect(first.rect.width).toBeCloseTo(0.6);
-    expect(second.rect.width).toBeCloseTo(0.4);
-    expect(second.rect.x).toBeCloseTo(0.6);
-  });
-
-  it('vertical split divides height', () => {
-    const a = createLeaf('a');
-    const b = createLeaf('b');
-    const branch = createBranch('vertical', a, b, 0.7);
-    const panels = flattenToRenderList(branch);
-
-    const first = panels.find((p) => p.panelId === 'a')!;
-    const second = panels.find((p) => p.panelId === 'b')!;
-    expect(first.rect.height).toBeCloseTo(0.7);
-    expect(second.rect.height).toBeCloseTo(0.3);
-    expect(second.rect.y).toBeCloseTo(0.7);
-  });
-});
-
-// ── flattenTree / flattenBranches 测试 ──────────────────────────────
+// flattenToRenderList 测试已删除：函数在第一轮孤儿清理中被移除（被 flattenTree
+// 的 leaves 输出取代）。flattenTree 测试已覆盖等价场景。
 //
 // flattenTree 是渲染层的核心：单次遍历同时输出 leaves 和 branches 的 rect。
 // branch rect 是 sash 定位 + resize 计算的基础，必须与 leaf rect 同坐标系。
@@ -307,7 +321,6 @@ describe('flattenToRenderList', () => {
 // 1. 根 branch rect = {0, 0, 1, 1}（占满 canvas）
 // 2. 嵌套 branch rect = 父 branch 分配给它的子区域
 // 3. leaves + branches 的总数 = 树中所有节点数
-// 4. flattenTree 的 leaves 输出与 flattenToRenderList 完全一致
 
 describe('flattenTree', () => {
   it('single leaf: no branches, one leaf with full rect', () => {
@@ -325,13 +338,6 @@ describe('flattenTree', () => {
     expect(branches[0]!.rect).toEqual({ x: 0, y: 0, width: 1, height: 1 });
     expect(branches[0]!.direction).toBe('horizontal');
     expect(branches[0]!.splitRatio).toBeCloseTo(0.6);
-  });
-
-  it('leaves output matches flattenToRenderList', () => {
-    const tree = makeTestTree();
-    const { leaves } = flattenTree(tree.root);
-    const panels = flattenToRenderList(tree.root);
-    expect(leaves).toEqual(panels);
   });
 
   it('nested branches get correct sub-rects', () => {
@@ -413,38 +419,8 @@ describe('flattenTree', () => {
   });
 });
 
-describe('flattenBranches', () => {
-  it('returns empty for single leaf', () => {
-    const tree = createDefaultTree();
-    expect(flattenBranches(tree.root)).toHaveLength(0);
-  });
-
-  it('returns all branches with rects', () => {
-    const tree = makeTestTree();
-    const branches = flattenBranches(tree.root);
-    expect(branches).toHaveLength(1);
-    expect(branches[0]!.rect).toEqual({ x: 0, y: 0, width: 1, height: 1 });
-  });
-
-  it('branchId and direction preserved', () => {
-    const inner = createBranch('vertical', createLeaf('a'), createLeaf('b'));
-    const root = createBranch('horizontal', inner, createLeaf('c'));
-    const branches = flattenBranches(root);
-
-    const horizontal = branches.find((b) => b.direction === 'horizontal')!;
-    const vertical = branches.find((b) => b.direction === 'vertical')!;
-    expect(horizontal.branchId).toBe(root.id);
-    expect(vertical.branchId).toBe(inner.id);
-  });
-
-  it('consistent with flattenTree output', () => {
-    const inner = createBranch('vertical', createLeaf('a'), createLeaf('b'));
-    const root = createBranch('horizontal', inner, createLeaf('c'), 0.5);
-    const { branches: fromTree } = flattenTree(root);
-    const fromBranches = flattenBranches(root);
-    expect(fromBranches).toEqual(fromTree);
-  });
-});
+// flattenBranches 测试已删除：函数在第一轮孤儿清理中被移除（被 flattenTree 的
+// branches 输出取代）。flattenTree 测试已覆盖等价场景。
 
 describe('migrateFromColumns', () => {
   it('migrates single column single group', () => {
@@ -500,6 +476,46 @@ describe('migrateFromColumns', () => {
   it('migrates empty columns to default', () => {
     const result = migrateFromColumns([]);
     expect(isLeaf(result.root)).toBe(true);
+  });
+
+  /**
+   * H4 直测：空 cards + 空 activeCardId 旧 group 经 migrateFromColumns
+   * 迁移后，leaf 满足不变量（tabs 非空 + activeTab in tabs）。
+   *
+   * 这条路径在 migrateLayoutIfNeeded 编排层会被 skip-if-default 短路
+   * （因为 H4 归一化后结果与默认树等价），故必须在操作层独立验证。
+   *
+   * 旧实现：createLeaf('chat', [], undefined) → tabs=[] 违反不变量
+   * H4 修复后：createLeaf 工厂函数归一化 tabs=[] → ['chat']
+   */
+  it('H4: 空 cards + 空 activeCardId → 归一化为 chat 默认 leaf（满足不变量）', () => {
+    const result = migrateFromColumns([
+      {
+        id: 'col-empty',
+        widthRatio: 1,
+        groups: [
+          {
+            id: 'g-empty',
+            heightRatio: 1,
+            activeCardId: '',
+            cards: [] as Array<{ id: string; title: string }>,
+          },
+        ],
+      },
+    ]);
+
+    // 结构：单 leaf（H4 归一化后与默认树等价，但此处直测操作层不涉及 skip 逻辑）
+    expect(isLeaf(result.root)).toBe(true);
+    const leaf = result.root as LayoutLeaf;
+
+    // 不变量：tabs 永远非空
+    expect(leaf.tabs.length).toBeGreaterThanOrEqual(1);
+    // 不变量：activeTab 必在 tabs 中
+    expect(leaf.tabs).toContain(leaf.activeTab);
+    // 归一化结果：回退到 chat 默认面板
+    expect(leaf.tabs).toEqual(['chat']);
+    expect(leaf.activeTab).toBe('chat');
+    expect(leaf.panelId).toBe('chat');
   });
 
   // ── 3+ group 迁移：splitRatio 系统性正确性验证 ───────────────────
@@ -735,21 +751,9 @@ describe('migrateFromColumns', () => {
   });
 });
 
-describe('Serialization', () => {
-  it('roundtrip serialize/deserialize', () => {
-    const tree = makeTestTree();
-    const json = serializeTree(tree);
-    const restored = deserializeTree(json);
-    expect(restored).not.toBeNull();
-    expect(restored!.version).toBe(2);
-    expect(collectLeaves(restored!.root)).toHaveLength(2);
-  });
-
-  it('deserialize rejects invalid json', () => {
-    expect(deserializeTree('not json')).toBeNull();
-    expect(deserializeTree('{"version":1}')).toBeNull();
-  });
-});
+// Serialization 测试已删除：serializeTree / deserializeTree 函数在第一轮孤儿
+// 清理中被移除（被 zustand persist 的 partialize + JSON.stringify 取代）。
+// 持久化路径由 layoutTreeStore.test.ts 的 onRehydrateStorage 测试覆盖。
 
 // ── applyDrop 测试 ───────────────────────────────────────────────────
 //
@@ -821,23 +825,28 @@ describe('applyDrop — 边界与无操作', () => {
 
 describe('applyDrop — leaf → split', () => {
   it('将 leaf 移动到 target 左侧（split-left）', () => {
-    // 初始：branch(chat, diff)
-    // 操作：把 diff 移到 chat 左侧
-    // 期望：根为 branch(diff, chat)
-    const tree = makeTestTree();
+    // 初始：branch(diff, terminal) — 同域（tool domain）
+    // 操作：把 terminal 移到 diff 左侧
+    // 期望：根为 branch(terminal, diff)
+    const diffLeaf = createLeaf('diff', ['diff'], 'diff');
+    const terminalLeaf = createLeaf('terminal', ['terminal'], 'terminal');
+    const tree: LayoutTree = {
+      root: createBranch('horizontal', diffLeaf, terminalLeaf, 0.5),
+      version: 2,
+    };
     const leaves = collectLeaves(tree.root);
-    const chatId = leaves.find((l) => l.panelId === 'chat')!.id;
     const diffId = leaves.find((l) => l.panelId === 'diff')!.id;
+    const terminalId = leaves.find((l) => l.panelId === 'terminal')!.id;
 
     const source: TreeDragSource = {
       type: 'leaf',
-      leafId: diffId,
-      tabId: diffId,
-      panelId: 'diff',
+      leafId: terminalId,
+      tabId: terminalId,
+      panelId: 'terminal',
     };
     const zone: DropZone = {
       type: 'split-left',
-      targetLeafId: chatId,
+      targetLeafId: diffId,
       confidence: 1,
     };
     const result = applyDrop(tree, source, zone);
@@ -846,17 +855,48 @@ describe('applyDrop — leaf → split', () => {
     expect(collectLeaves(result.root)).toHaveLength(2);
     // 根是 branch
     expect(isBranch(result.root)).toBe(true);
-    // diff 现在在第一个位置（左侧）
+    // terminal 现在在第一个位置（左侧）
     const branch = result.root as LayoutBranch;
     const firstLeaf = branch.children[0] as LayoutLeaf;
-    expect(firstLeaf.panelId).toBe('diff');
+    expect(firstLeaf.panelId).toBe('terminal');
   });
 
   it('将 leaf 移动到 target 右侧（split-right）', () => {
-    // 初始：branch(chat, diff)
-    // 操作：把 chat 移到 diff 右侧
-    // 期望：根为 branch(diff, chat)
-    const tree = makeTestTree();
+    // 初始：branch(diff, terminal) — 同域（tool domain）
+    // 操作：把 diff 移到 terminal 右侧
+    // 期望：根为 branch(terminal, diff)
+    const diffLeaf = createLeaf('diff', ['diff'], 'diff');
+    const terminalLeaf = createLeaf('terminal', ['terminal'], 'terminal');
+    const tree: LayoutTree = {
+      root: createBranch('horizontal', diffLeaf, terminalLeaf, 0.5),
+      version: 2,
+    };
+    const leaves = collectLeaves(tree.root);
+    const diffId = leaves.find((l) => l.panelId === 'diff')!.id;
+    const terminalId = leaves.find((l) => l.panelId === 'terminal')!.id;
+
+    const source: TreeDragSource = {
+      type: 'leaf',
+      leafId: diffId,
+      tabId: diffId,
+      panelId: 'diff',
+    };
+    const zone: DropZone = {
+      type: 'split-right',
+      targetLeafId: terminalId,
+      confidence: 1,
+    };
+    const result = applyDrop(tree, source, zone);
+
+    expect(collectLeaves(result.root)).toHaveLength(2);
+    const branch = result.root as LayoutBranch;
+    const firstLeaf = branch.children[0] as LayoutLeaf;
+    expect(firstLeaf.panelId).toBe('terminal');
+  });
+
+  it('跨域拖拽被拒绝：chat leaf → diff leaf（split-left）返回原 tree', () => {
+    // 跨域防护：chat 域不能拖到 tool 域
+    const tree = makeTestTree(); // branch(chat, diff)
     const leaves = collectLeaves(tree.root);
     const chatId = leaves.find((l) => l.panelId === 'chat')!.id;
     const diffId = leaves.find((l) => l.panelId === 'diff')!.id;
@@ -868,38 +908,38 @@ describe('applyDrop — leaf → split', () => {
       panelId: 'chat',
     };
     const zone: DropZone = {
-      type: 'split-right',
+      type: 'split-left',
       targetLeafId: diffId,
       confidence: 1,
     };
     const result = applyDrop(tree, source, zone);
 
-    expect(collectLeaves(result.root)).toHaveLength(2);
-    const branch = result.root as LayoutBranch;
-    const firstLeaf = branch.children[0] as LayoutLeaf;
-    expect(firstLeaf.panelId).toBe('diff');
+    // 跨域被拒绝：返回原 tree
+    expect(result).toBe(tree);
   });
 });
 
 describe('applyDrop — leaf → merge-tab', () => {
   it('合并 srcLeaf 到 targetLeaf：tabs 去重 + activeTab 切换', () => {
-    // 初始：branch(chatLeaf[tabs=chat], diffLeaf[tabs=diff])
-    // 操作：把 diffLeaf merge 到 chatLeaf
-    // 期望：单 leaf，tabs=['chat','diff']，activeTab='diff'
-    const tree = makeTestTree();
-    const leaves = collectLeaves(tree.root);
-    const chatLeaf = leaves.find((l) => l.panelId === 'chat')!;
-    const diffLeaf = leaves.find((l) => l.panelId === 'diff')!;
+    // 初始：branch(diffLeaf[tabs=diff], terminalLeaf[tabs=terminal]) — 同域 tool
+    // 操作：把 terminalLeaf merge 到 diffLeaf
+    // 期望：单 leaf，tabs=['diff','terminal']，activeTab='terminal'
+    const diffLeaf = createLeaf('diff', ['diff'], 'diff');
+    const terminalLeaf = createLeaf('terminal', ['terminal'], 'terminal');
+    const tree: LayoutTree = {
+      root: createBranch('horizontal', diffLeaf, terminalLeaf, 0.6),
+      version: 2,
+    };
 
     const source: TreeDragSource = {
       type: 'leaf',
-      leafId: diffLeaf.id,
-      tabId: diffLeaf.id,
-      panelId: 'diff',
+      leafId: terminalLeaf.id,
+      tabId: terminalLeaf.id,
+      panelId: 'terminal',
     };
     const zone: DropZone = {
       type: 'merge-tab',
-      targetLeafId: chatLeaf.id,
+      targetLeafId: diffLeaf.id,
       confidence: 1,
     };
     const result = applyDrop(tree, source, zone);
@@ -907,48 +947,48 @@ describe('applyDrop — leaf → merge-tab', () => {
     // 合并后只剩一个 leaf
     expect(isLeaf(result.root)).toBe(true);
     const merged = result.root as LayoutLeaf;
-    expect(merged.tabs).toEqual(['chat', 'diff']);
-    expect(merged.activeTab).toBe('diff'); // srcLeaf.activeTab
+    expect(merged.tabs).toEqual(['diff', 'terminal']);
+    expect(merged.activeTab).toBe('terminal'); // srcLeaf.activeTab
   });
 
   it('合并时 target 已有的 tab 不重复添加', () => {
-    // 初始：chatLeaf[tabs=chat,diff]，emptyLeaf[tabs=diff]
-    // 操作：把 emptyLeaf merge 到 chatLeaf
-    // 期望：tabs=['chat','diff']（diff 不重复），activeTab='diff'
-    const chatLeaf = createLeaf('chat', ['chat', 'diff'], 'chat');
-    const otherLeaf = createLeaf('other', ['diff'], 'diff');
+    // 初始：terminalLeaf[tabs=terminal,diff]，filesLeaf[tabs=diff] — 同域 tool
+    // 操作：把 filesLeaf merge 到 terminalLeaf
+    // 期望：tabs=['terminal','diff']（diff 不重复），activeTab='diff'
+    const terminalLeaf = createLeaf('terminal', ['terminal', 'diff'], 'terminal');
+    const filesLeaf = createLeaf('files', ['diff'], 'diff');
     const tree: LayoutTree = {
-      root: createBranch('horizontal', chatLeaf, otherLeaf, 0.5),
+      root: createBranch('horizontal', terminalLeaf, filesLeaf, 0.5),
       version: 2,
     };
 
     const source: TreeDragSource = {
       type: 'leaf',
-      leafId: otherLeaf.id,
-      tabId: otherLeaf.id,
-      panelId: 'other',
+      leafId: filesLeaf.id,
+      tabId: filesLeaf.id,
+      panelId: 'files',
     };
     const zone: DropZone = {
       type: 'merge-tab',
-      targetLeafId: chatLeaf.id,
+      targetLeafId: terminalLeaf.id,
       confidence: 1,
     };
     const result = applyDrop(tree, source, zone);
 
     expect(isLeaf(result.root)).toBe(true);
     const merged = result.root as LayoutLeaf;
-    expect(merged.tabs).toEqual(['chat', 'diff']);
+    expect(merged.tabs).toEqual(['terminal', 'diff']);
     expect(merged.activeTab).toBe('diff');
   });
 
   it('合并多 tab leaf：所有 tab 转移且去重', () => {
-    // 初始：chatLeaf[tabs=chat]，multiLeaf[tabs=diff,files,agent]
-    // 操作：把 multiLeaf merge 到 chatLeaf
-    // 期望：tabs=['chat','diff','files','agent']，activeTab='agent'
-    const chatLeaf = createLeaf('chat', ['chat'], 'chat');
+    // 初始：terminalLeaf[tabs=terminal]，multiLeaf[tabs=diff,files,agent] — 同域 tool
+    // 操作：把 multiLeaf merge 到 terminalLeaf
+    // 期望：tabs=['terminal','diff','files','agent']，activeTab='agent'
+    const terminalLeaf = createLeaf('terminal', ['terminal'], 'terminal');
     const multiLeaf = createLeaf('multi', ['diff', 'files', 'agent'], 'agent');
     const tree: LayoutTree = {
-      root: createBranch('horizontal', chatLeaf, multiLeaf, 0.5),
+      root: createBranch('horizontal', terminalLeaf, multiLeaf, 0.5),
       version: 2,
     };
 
@@ -960,25 +1000,25 @@ describe('applyDrop — leaf → merge-tab', () => {
     };
     const zone: DropZone = {
       type: 'merge-tab',
-      targetLeafId: chatLeaf.id,
+      targetLeafId: terminalLeaf.id,
       confidence: 1,
     };
     const result = applyDrop(tree, source, zone);
 
     expect(isLeaf(result.root)).toBe(true);
     const merged = result.root as LayoutLeaf;
-    expect(merged.tabs).toEqual(['chat', 'diff', 'files', 'agent']);
+    expect(merged.tabs).toEqual(['terminal', 'diff', 'files', 'agent']);
     expect(merged.activeTab).toBe('agent');
   });
 
   it('合并嵌套树中的 leaf：保留其他分支结构', () => {
-    // 初始：branch(branch(chat, diff), terminal)
-    // 操作：把 terminal merge 到 chat
-    // 期望：branch(chat[tabs=chat,terminal], diff)
-    const chatLeaf = createLeaf('chat', ['chat'], 'chat');
+    // 初始：branch(branch(diff, files), terminal) — 同域 tool
+    // 操作：把 terminal merge 到 diff
+    // 期望：branch(diff[tabs=diff,terminal], files)
     const diffLeaf = createLeaf('diff', ['diff'], 'diff');
+    const filesLeaf = createLeaf('files', ['files'], 'files');
     const terminalLeaf = createLeaf('terminal', ['terminal'], 'terminal');
-    const inner = createBranch('horizontal', chatLeaf, diffLeaf, 0.5);
+    const inner = createBranch('horizontal', diffLeaf, filesLeaf, 0.5);
     const tree: LayoutTree = {
       root: createBranch('vertical', inner, terminalLeaf, 0.7),
       version: 2,
@@ -992,20 +1032,20 @@ describe('applyDrop — leaf → merge-tab', () => {
     };
     const zone: DropZone = {
       type: 'merge-tab',
-      targetLeafId: chatLeaf.id,
+      targetLeafId: diffLeaf.id,
       confidence: 1,
     };
     const result = applyDrop(tree, source, zone);
 
-    // 结构：branch(chat[tabs=chat,terminal], diff)
+    // 结构：branch(diff[tabs=diff,terminal], files)
     expect(isBranch(result.root)).toBe(true);
     const root = result.root as LayoutBranch;
     expect(root.direction).toBe('horizontal');
-    const newChat = root.children[0] as LayoutLeaf;
-    expect(newChat.tabs).toEqual(['chat', 'terminal']);
-    expect(newChat.activeTab).toBe('terminal');
-    const preservedDiff = root.children[1] as LayoutLeaf;
-    expect(preservedDiff.panelId).toBe('diff');
+    const newDiff = root.children[0] as LayoutLeaf;
+    expect(newDiff.tabs).toEqual(['diff', 'terminal']);
+    expect(newDiff.activeTab).toBe('terminal');
+    const preservedFiles = root.children[1] as LayoutLeaf;
+    expect(preservedFiles.panelId).toBe('files');
   });
 });
 
@@ -1140,33 +1180,33 @@ describe('applyDrop — tab → merge-tab', () => {
   });
 
   it('tab 是源 leaf 的最后一个 → 源 leaf 被移除', () => {
-    // 初始：chatLeaf[tabs=chat]，targetLeaf[tabs=files]
-    // 操作：把 chatLeaf 的 chat tab merge 到 targetLeaf
-    // 期望：只剩 targetLeaf[tabs=files,chat]
-    const chatLeaf = createLeaf('chat', ['chat'], 'chat');
-    const targetLeaf = createLeaf('files', ['files'], 'files');
+    // 初始：terminalLeaf[tabs=terminal]，filesLeaf[tabs=files] — 同域 tool
+    // 操作：把 terminalLeaf 的 terminal tab merge 到 filesLeaf
+    // 期望：只剩 filesLeaf[tabs=files,terminal]
+    const terminalLeaf = createLeaf('terminal', ['terminal'], 'terminal');
+    const filesLeaf = createLeaf('files', ['files'], 'files');
     const tree: LayoutTree = {
-      root: createBranch('horizontal', chatLeaf, targetLeaf, 0.5),
+      root: createBranch('horizontal', terminalLeaf, filesLeaf, 0.5),
       version: 2,
     };
 
     const source: TreeDragSource = {
       type: 'tab',
-      leafId: chatLeaf.id,
-      tabId: 'chat',
-      panelId: 'chat',
+      leafId: terminalLeaf.id,
+      tabId: 'terminal',
+      panelId: 'terminal',
     };
     const zone: DropZone = {
       type: 'merge-tab',
-      targetLeafId: targetLeaf.id,
+      targetLeafId: filesLeaf.id,
       confidence: 1,
     };
     const result = applyDrop(tree, source, zone);
 
     expect(isLeaf(result.root)).toBe(true);
     const merged = result.root as LayoutLeaf;
-    expect(merged.tabs).toEqual(['files', 'chat']);
-    expect(merged.activeTab).toBe('chat');
+    expect(merged.tabs).toEqual(['files', 'terminal']);
+    expect(merged.activeTab).toBe('terminal');
   });
 });
 

@@ -143,6 +143,66 @@ function legacyVerticalGroups() {
   ];
 }
 
+/**
+ * H4 场景夹具：旧 group 的 cards 为空数组 + activeCardId 为空字符串。
+ *
+ * 这在旧数据中可能由以下原因产生：
+ * - 旧 store 在 tab 关闭后未正确清理 group
+ * - 数据迁移过程中 cards 字段丢失
+ * - 用户手动编辑 localStorage 留下空 group
+ *
+ * 旧 migrateFromColumns 调用 groupToLeaf 时：
+ *   createLeaf('' || undefined || 'chat', [].map(...), '' || undefined)
+ *   = createLeaf('chat', [], undefined)
+ * 旧 createLeaf 对 tabs=[] 放行 → 产生违反不变量的 leaf。
+ * H4 修复后 createLeaf 归一化 tabs=[] → ['chat']。
+ */
+function legacyEmptyCardsGroup() {
+  return [
+    {
+      id: 'col-empty',
+      widthRatio: 1,
+      groups: [
+        {
+          id: 'g-empty',
+          heightRatio: 1,
+          activeCardId: '',
+          cards: [] as Array<{ id: string; title: string }>,
+        },
+      ],
+    },
+  ];
+}
+
+/**
+ * H4 场景变体：多 group 中混入空 cards group。
+ *
+ * 测试空 cards group 在多 group 垂直分割路径中也能被正确归一化。
+ * 旧 groupToLeaf 在多 group 路径同样调用 createLeaf，H4 修复应覆盖。
+ */
+function legacyMixedEmptyAndNormalGroups() {
+  return [
+    {
+      id: 'col-mixed',
+      widthRatio: 1,
+      groups: [
+        {
+          id: 'g-normal',
+          heightRatio: 0.5,
+          activeCardId: 'chat',
+          cards: [{ id: 'chat', title: '对话' }],
+        },
+        {
+          id: 'g-empty',
+          heightRatio: 0.5,
+          activeCardId: '',
+          cards: [] as Array<{ id: string; title: string }>,
+        },
+      ],
+    },
+  ];
+}
+
 // ── 夹具：复位 store + localStorage ─────────────────────────────────
 
 /**
@@ -297,6 +357,80 @@ describe('migrateLayoutIfNeeded — 迁移执行', () => {
     const { tree } = useLayoutTreeStore.getState();
     expect(isLeaf(tree.root)).toBe(true);
     expect((tree.root as ReturnType<typeof createLeaf>).panelId).toBe('chat');
+  });
+
+  // ── H4：空 cards 不变量归一化 ──────────────────────────────
+
+  /**
+   * H4 + skip-if-default 联合行为验证。
+   *
+   * H4 修复（在 createLeaf 工厂函数层归一化）让空 cards 旧 group 产生
+   * tabs=['chat'] + activeTab='chat' 的合规 leaf。但这恰好与默认树等价
+   * （单 chat leaf + tabs=['chat']），触发 migrateLayoutIfNeeded 中的
+   * skip-if-default 短路：
+   *
+   *   migrateFromColumns(legacyEmptyCardsGroup)
+   *     → groupToLeaf → createLeaf('chat', [], undefined)
+   *     → H4 归一化 → { tabs: ['chat'], activeTab: 'chat', panelId: 'chat' }
+   *     → 迁移结果 = 默认树
+   *   isTreeInDefaultState(migratedTree) === true
+   *     → migrateLayoutIfNeeded 跳过写入（避免无意义历史），返回 false
+   *
+   * H4 不变量本身的直测在 operations.test.ts > migrateFromColumns > H4 中。
+   * 这里验证"skip-if-default 不破坏不变量"：即使迁移被跳过，store 中的
+   * 默认树（由 createDefaultTree('chat') 创建）仍满足所有不变量。
+   */
+  it('H4: 空 cards + 空 activeCardId → 归一化为默认树 → skip-if-default 跳过写入', () => {
+    setLegacyLayout(legacyEmptyCardsGroup() as never);
+
+    const result = migrateLayoutIfNeeded();
+
+    // skip-if-default：迁移结果与默认树等价 → 不写入（避免无意义历史）
+    expect(result).toBe(false);
+    const { tree } = useLayoutTreeStore.getState();
+    const leaves = collectLeaves(tree.root);
+    expect(leaves).toHaveLength(1);
+
+    const leaf = leaves[0]!;
+    // 不变量：tabs 永远非空（默认树由 createDefaultTree 创建，自动满足）
+    expect(leaf.tabs.length).toBeGreaterThanOrEqual(1);
+    // 不变量：activeTab 必在 tabs 中
+    expect(leaf.tabs).toContain(leaf.activeTab);
+    // 默认树：tabs=['chat'], activeTab='chat', panelId='chat'
+    expect(leaf.tabs).toEqual(['chat']);
+    expect(leaf.activeTab).toBe('chat');
+    expect(leaf.panelId).toBe('chat');
+  });
+
+  it('H4: 多 group 混入空 cards group → 所有 leaf 满足不变量', () => {
+    setLegacyLayout(legacyMixedEmptyAndNormalGroups() as never);
+
+    const result = migrateLayoutIfNeeded();
+
+    expect(result).toBe(true);
+    const { tree } = useLayoutTreeStore.getState();
+    const leaves = collectLeaves(tree.root);
+    expect(leaves).toHaveLength(2);
+
+    // 每个 leaf 都必须满足不变量：tabs 非空 + activeTab in tabs
+    for (const leaf of leaves) {
+      expect(leaf.tabs.length).toBeGreaterThanOrEqual(1);
+      expect(leaf.tabs).toContain(leaf.activeTab);
+    }
+
+    // 正常 group 保持原值
+    const normalLeaf = leaves.find((l) => l.panelId === 'chat');
+    expect(normalLeaf).toBeDefined();
+    expect(normalLeaf!.tabs).toEqual(['chat']);
+    expect(normalLeaf!.activeTab).toBe('chat');
+
+    // 注意：空 cards group 归一化后 panelId 也变为 'chat'，
+    // 故可能存在两个 panelId='chat' 的 leaf（这是合理的，因为旧数据已损坏）。
+    // 这里用 allLeavesValid 验证"所有 leaf（含归一化后的空 cards leaf）满足不变量"。
+    const allLeavesValid = leaves.every(
+      (l) => l.tabs.length > 0 && l.tabs.includes(l.activeTab)
+    );
+    expect(allLeavesValid).toBe(true);
   });
 });
 

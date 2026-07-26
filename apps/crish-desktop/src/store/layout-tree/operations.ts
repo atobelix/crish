@@ -22,6 +22,7 @@ import {
   isBranch,
   isLeaf,
   clampSplitRatio,
+  isSameDomain,
 } from './types';
 import type { DropZone } from './dropDetection';
 
@@ -56,23 +57,6 @@ export function collectLeaves(root: LayoutNode): LayoutLeaf[] {
     ...collectLeaves(root.children[0]),
     ...collectLeaves(root.children[1]),
   ];
-}
-
-/** 收集所有分支节点（深度优先，与 collectLeaves 同型） */
-export function collectBranches(root: LayoutNode): LayoutBranch[] {
-  if (isLeaf(root)) return [];
-  const branch = root as LayoutBranch;
-  return [
-    branch,
-    ...collectBranches(branch.children[0]),
-    ...collectBranches(branch.children[1]),
-  ];
-}
-
-/** 计算树的深度 */
-export function treeDepth(root: LayoutNode): number {
-  if (isLeaf(root)) return 1;
-  return 1 + Math.max(treeDepth(root.children[0]), treeDepth(root.children[1]));
 }
 
 // ── 不可变替换 ──────────────────────────────────────────────────────────
@@ -302,14 +286,49 @@ function mergeLeafInto(
  *
  * 单次树重建（removeTabFromLeaf）+ 单次 replaceNode（合并），O(tree size)。
  */
+/** 重排/移动叶子内部的 tab 顺序 */
+export function reorderTabInLeaf(
+  tree: LayoutTree,
+  leafId: string,
+  fromTabId: string,
+  targetTabId?: string
+): LayoutTree {
+  const target = findNodeById(tree.root, leafId);
+  if (!target || !isLeaf(target)) return tree;
+  if (!target.tabs.includes(fromTabId)) return tree;
+
+  const tabs = [...target.tabs];
+  const fromIdx = tabs.indexOf(fromTabId);
+  if (fromIdx < 0) return tree;
+
+  tabs.splice(fromIdx, 1);
+  if (targetTabId && tabs.includes(targetTabId)) {
+    const toIdx = tabs.indexOf(targetTabId);
+    tabs.splice(toIdx, 0, fromTabId);
+  } else {
+    tabs.push(fromTabId);
+  }
+
+  const updated: LayoutLeaf = {
+    ...target,
+    tabs,
+    activeTab: fromTabId,
+  };
+  return { ...tree, root: replaceNode(tree.root, leafId, updated) };
+}
+
 function mergeTabIntoLeaf(
   tree: LayoutTree,
   srcLeafId: string,
   srcTabId: string,
-  targetLeafId: string
+  targetLeafId: string,
+  targetTabId?: string
 ): LayoutTree {
-  // 同 leaf tab 重排：仅切换 activeTab，避免 removeTab 导致 leaf 被删除
+  // 同 leaf tab 重排：支持指定目标位置重排，避免 removeTab 导致 leaf 被删除
   if (srcLeafId === targetLeafId) {
+    if (targetTabId) {
+      return reorderTabInLeaf(tree, srcLeafId, srcTabId, targetTabId);
+    }
     return setLeafActiveTab(tree, srcLeafId, srcTabId);
   }
 
@@ -322,15 +341,24 @@ function mergeTabIntoLeaf(
     return afterRemove;
   }
 
-  // 3. 若 activeTab 已是 srcTabId 且 tab 已在 target 中，无需更新
-  if (targetLeaf.activeTab === srcTabId && targetLeaf.tabs.includes(srcTabId)) {
-    return afterRemove;
+  // 3. 合并 tab：
+  //    - srcTabId 已在 target.tabs 中（去重场景）：保持原顺序不变，仅切换 activeTab。
+  //      旧实现 filter+push 改变顺序，导致 ['diff','files'] 变成 ['files','diff']，
+  //      违反"已存在不重复添加"的语义（去重 ≠ 重排）。
+  //    - srcTabId 不在 target.tabs 中：按 targetTabId 插入指定位置，否则追加末尾。
+  let newTabs: string[];
+  if (targetLeaf.tabs.includes(srcTabId)) {
+    newTabs = targetLeaf.tabs;
+  } else {
+    newTabs = [...targetLeaf.tabs];
+    if (targetTabId && newTabs.includes(targetTabId)) {
+      const insertIdx = newTabs.indexOf(targetTabId);
+      newTabs.splice(insertIdx, 0, srcTabId);
+    } else {
+      newTabs.push(srcTabId);
+    }
   }
 
-  // 4. 合并 tab（去重）+ 切换 activeTab 到 srcTabId
-  const newTabs = targetLeaf.tabs.includes(srcTabId)
-    ? targetLeaf.tabs
-    : [...targetLeaf.tabs, srcTabId];
   const updatedTarget: LayoutLeaf = {
     ...targetLeaf,
     tabs: newTabs,
@@ -466,10 +494,32 @@ export function applyDrop(
   } = source;
   const { type: zoneType, targetLeafId } = zone;
 
-  // 不允许 drop 到自身 leaf（merge-tab 除外，同 leaf 内 tab 重排）
-  if (srcLeafId === targetLeafId && zoneType !== 'merge-tab') return tree;
+  // 跨域防护：对话域（Chat）只能与对话域拖拽，功能区只能与功能区拖拽。
+  //
+  // 同 leaf 操作（srcLeafId === targetLeafId）始终放行：
+  // - 该路径仅出现在 tab 拖拽到自身 leaf（merge-tab 同 leaf 重排）
+  // - tab 已在该 leaf 中，无跨域问题可言
+  // - 若强行校验 srcTabId 的域 vs leaf.panelId，会误伤 leaf 含混合域 tab
+  //   的边界场景（理论上不应存在，但测试可能构造）
+  const targetNode = findNodeById(tree.root, targetLeafId);
+  if (
+    targetNode &&
+    isLeaf(targetNode) &&
+    srcLeafId !== targetLeafId &&
+    !isSameDomain(srcPanelId, targetNode.panelId)
+  ) {
+    return tree;
+  }
+
   // 同 leaf 且 leaf 拖拽：无操作
   if (srcLeafId === targetLeafId && srcType === 'leaf') return tree;
+  // 同 leaf 且 tab 拖拽：若只有一个 tab，无法拆分自身
+  if (srcLeafId === targetLeafId && srcType === 'tab' && zoneType !== 'merge-tab') {
+    const srcNode = findNodeById(tree.root, srcLeafId);
+    if (srcNode && isLeaf(srcNode) && srcNode.tabs.length <= 1) {
+      return tree;
+    }
+  }
 
   const direction = dropZoneToDirection(zoneType);
 
@@ -504,9 +554,9 @@ export function applyDrop(
     return mergeLeafInto(tree, srcLeafId, targetLeafId);
   }
 
-  // tab 拖拽到 merge：将 tab 从源 leaf 移到 target leaf
+  // tab 拖拽到 merge：将 tab 从源 leaf 移到 target leaf（支持指定 targetTabId 插入/重排）
   // 使用 mergeTabIntoLeaf 而非 addTabToLeaf：拖拽场景下即使 tab 已存在也应切换 activeTab
-  return mergeTabIntoLeaf(tree, srcLeafId, srcTabId, targetLeafId);
+  return mergeTabIntoLeaf(tree, srcLeafId, srcTabId, targetLeafId, zone.targetTabId);
 }
 
 // ── 渲染辅助 ──────────────────────────────────────────────────────────
@@ -533,22 +583,6 @@ export function flattenTree(root: LayoutNode): {
   const branches: FlatBranch[] = [];
   flattenRecursive(root, { x: 0, y: 0, width: 1, height: 1 }, leaves, branches);
   return { leaves, branches };
-}
-
-/**
- * 将树展平为 leaf 渲染列表（仅 leaves，向后兼容）。
- * 内部委托 flattenTree，单次遍历。
- */
-export function flattenToRenderList(root: LayoutNode): FlatPanel[] {
-  return flattenTree(root).leaves;
-}
-
-/**
- * 将树展平为 branch 渲染列表（仅 branches，含 rect）。
- * 用于 sash 定位与 resize 计算。
- */
-export function flattenBranches(root: LayoutNode): FlatBranch[] {
-  return flattenTree(root).branches;
 }
 
 function flattenRecursive(
@@ -713,18 +747,3 @@ function groupToLeaf(group: LegacyColumn['groups'][number]): LayoutLeaf {
   );
 }
 
-// ── 序列化 ──────────────────────────────────────────────────────────
-
-export function serializeTree(tree: LayoutTree): string {
-  return JSON.stringify(tree);
-}
-
-export function deserializeTree(json: string): LayoutTree | null {
-  try {
-    const parsed = JSON.parse(json) as LayoutTree;
-    if (parsed.version !== 2 || !parsed.root) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}

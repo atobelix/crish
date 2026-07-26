@@ -85,6 +85,16 @@ export interface TreeDragSource {
   panelId: string;
 }
 
+/** 判定指定 panelId / tabId 是否属于对话域 */
+export function isChatDomain(panelId: string): boolean {
+  return panelId === 'chat';
+}
+
+/** 判定两个 panel 是否属于同域（对话域只能与对话域拖拽，功能区只能与功能区拖拽） */
+export function isSameDomain(panelId1: string, panelId2: string): boolean {
+  return isChatDomain(panelId1) === isChatDomain(panelId2);
+}
+
 // ── 业务常量（单一来源，禁止在其它文件硬编码） ──────────────────────
 
 /** splitRatio 最小值（branch 第一个 child 占比下限） */
@@ -106,19 +116,33 @@ export function generateNodeId(prefix = 'node'): string {
   return `${prefix}-${Date.now().toString(36)}-${(idCounter++).toString(36)}`;
 }
 
-/** 创建叶子节点 */
+/**
+ * 创建叶子节点。
+ *
+ * 不变量归一化（系统性防御 H4）：
+ * 1. tabs 永远非空 — undefined 或 [] 都回退到 [panelId]。
+ *    旧实现 `tabs ?? [panelId]` 仅处理 undefined，对 `tabs=[]` 放行，
+ *    导致 migrateFromColumns 处理空 cards 旧 group 时产生 `tabs=[]` leaf。
+ * 2. activeTab 必在 tabs 中 — 否则回退到 tabList[0]。
+ *    防止 activeTab 指向已被移除的 tab（如旧数据残留）。
+ *
+ * 在工厂函数层归一化是单一可信源：所有调用方（migrateFromColumns、
+ * splitLeaf、mergeLeafInto 等）自动受益，无需在各调用点重复防御。
+ */
 export function createLeaf(
   panelId: string,
   tabs?: string[],
   activeTab?: string
 ): LayoutLeaf {
-  const tabList = tabs ?? [panelId];
+  const tabList = tabs && tabs.length > 0 ? tabs : [panelId];
+  const activeTabResolved =
+    activeTab && tabList.includes(activeTab) ? activeTab : tabList[0]!;
   return {
     type: 'leaf',
     id: generateNodeId('leaf'),
     panelId,
     tabs: tabList,
-    activeTab: activeTab ?? tabList[0] ?? panelId,
+    activeTab: activeTabResolved,
   };
 }
 
