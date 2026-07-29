@@ -7,6 +7,8 @@
 > **下游依赖方**：Layer F (UI Components) 直接消费 Store selectors 和 Hooks、Layer G (Performance) 依赖 Store 的不可变更新模式
 > 
 > **本层与其它层的交叉引用**：E-1（useChatStream 拆分）完成后，Layer G 的 G-1（SSE 渲染节流）和 G-2（onFrame 闭包竞态修复）在其拆分子文件中执行。E-6（Zustand 状态审计）发现的全局状态突变模式需要 Layer H 的 ApprovalPipeline（H-3）和 Layer J 的测试隔离（J-20 provider-gateway 单例 reset）协作修复。
+>
+> **⚠️ HISTORICAL (OPT-E8 / W4-2):** 下文规划的 `session-actions/` 子目录拆分形态已过时——该目录在 W4-2 **物理删除**。现行为 flat 模块：`sessionCrudActions.ts` / `sessionMessageActions.ts` / `sessionOrderingActions.ts` / `sessionAgentActions.ts` + barrel `sessionActions.ts`（均在 `apps/crish-desktop/src/store/`）。代码示例与 `wc -l session-actions/*.ts` 验收项仅作历史方案参考。
 
 ---
 
@@ -447,7 +449,7 @@ E2 (ChatStream 拆分) ── 依赖 E1 完成（消费 sessionActions 路径变
 | V-2 | useStreamCallbacks 子 Hook | `wc -l chat-stream/useStreamCallbacks.ts` | ≤ 500 行 |
 | V-3 | useSlashSend 子 Hook | `wc -l chat-stream/useSlashSend.ts` | ≤ 400 行 |
 | V-4 | useChatStream 返回签名不变 | TypeScript 编译 | 零类型错误 |
-| V-5 | sessionActions 拆分 | `wc -l session-actions/*.ts` | 每个子文件 ≤ 300 行 |
+| V-5 | sessionActions 拆分 | `wc -l session*Actions.ts`（**historical plan used** `session-actions/*.ts`，dir deleted W4-2） | 每个子文件 ≤ 300 行 |
 | V-6 | layoutStore 瘦身 | `wc -l layoutStore.ts` | ≤ 400 行 |
 | V-7 | layoutHelpers 拆分 | `wc -l layout-helpers/*.ts` | 每个子文件 ≤ 300 行 |
 | V-8 | useTabDrag 拆分 | `wc -l tab-drag/*.ts` | 每个子文件 ≤ 500 行 |

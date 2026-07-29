@@ -3,6 +3,8 @@
 > 基于综合问题分析文档的解决方案
 > 仅包含逻辑顺序和系统化改进路径，不包含时间安排或人员分配
 > 所有问题无优先级区分——只要存在即同等重要
+>
+> **⚠️ HISTORICAL (OPT-E8 / W4-2):** 文中 `session-actions/`（`apps/crish-desktop/src/store/session-actions/`）为**已删除目录**的历史路径。现行 session store actions：`sessionCrudActions.ts` / `sessionMessageActions.ts` / `sessionOrderingActions.ts` / `sessionAgentActions.ts` / barrel `sessionActions.ts`。验证命令请改 grep 这些 live 文件，而非已删目录。
 
 ---
 
@@ -278,7 +280,7 @@ Rust crate 层：
 | OA-3 | `tool-actions.ts` | 93, 95 | 两个分支的 Object.assign 分别替换 |
 | OA-4 | `agent-actions.ts` | 49 | `Object.assign(ag, patch)` → `Object.entries(patch).forEach(([k, v]) => { ag[k] = v })` 或类型安全的字段级赋值 |
 | OA-5 | `agent-actions.ts` | 61 | `Object.assign(existing, message)` → 字段级拆分 |
-| OA-6 | 添加 eslint rule：`no-restricted-syntax` 禁止 `Object.assign(` 在 `session-actions/` 和 `slices/` 目录中使用 | CI 阻止新 Object.assign 引入 |
+| OA-6 | 添加 eslint rule：`no-restricted-syntax` 禁止 `Object.assign(` 在 session action 模块（**live:** `session*Actions.ts`；**historical:** `session-actions/` deleted W4-2）和 `slices/` 中使用 | CI 阻止新 Object.assign 引入 |
 
 **5-B：streamTextOffset 隔离**
 
@@ -529,9 +531,9 @@ AN-4/5（check-no-as-any 脚本扩展）从第 7 轮移至第 1 轮，消除跨�
 | 4 | V-40 | useAgentStream 使用 StreamRenderBuffer | 确认 `useAgentStream.ts` 中调用 `useStreamingText` | 无 `pa((m) => { m.text` 直写模式 |
 | 4 | V-41 | Session 并发控制 | `session-loop/index.ts` 包含 `asyncMutex.acquire()` | per-session 互斥 |
 | 4 | V-42 | SessionStreamManager 有界 | `SessionStreamManager.ts` 使用 `BoundedMap` | 无 `new Map<string, ...>` |
-| 5 | V-50 | Object.assign 清零 | `grep "Object.assign(" session-actions/ slices/` | 0 处 |
+| 5 | V-50 | Object.assign 清零 | `grep "Object.assign(" session*Actions.ts slices/`（**not** deleted `session-actions/`） | 0 处 |
 | 5 | V-51 | streamTextOffset 不在 SessionMessage 上 | `grep "streamTextOffset" types.ts` | 0 匹配 |
-| 5 | V-52 | messages.shift 有配对感知 | `grep "messages.shift()" session-actions/` | 0 处无条件 shift |
+| 5 | V-52 | messages.shift 有配对感知 | `grep "messages.shift()" sessionMessageActions.ts`（**historical path was** `session-actions/`） | 0 处无条件 shift |
 | 5 | V-53 | useChatCardSelectors useShallow | 代码审读确认 | 所有引用类型 selector 含 useShallow |
 | 6 | V-60 | OSKeychain 非 stub | `secret-store.ts` 无 "not available" throw | 真正调用系统 keychain |
 | 6 | V-61 | Master key 分离 | `encrypted-file-store.ts` 路径含不同 base | master key 与 vault 不同目录 |

@@ -3,6 +3,8 @@
 > 基于 Round 12 全部 12 份审计报告的分析，覆盖 AG-01 ~ AG-12 所有发现的问题。
 > 方案按逻辑轮次组织，所有问题同等重要，不包含时间安排、人员分配、优先级排序。
 > 共计 12 轮，每轮 ≤ 12 个 Agent，含验收标准。
+>
+> **⚠️ HISTORICAL (OPT-E8 / W4-2):** 文中 `session-actions/`（`apps/crish-desktop/src/store/session-actions/`）为**已删除目录**的历史任务路径。现行 session store actions：`sessionCrudActions.ts` / `sessionMessageActions.ts` / `sessionOrderingActions.ts` / `sessionAgentActions.ts` / barrel `sessionActions.ts`。勿按下文「切换 import 到 session-actions/」执行。
 
 ---
 

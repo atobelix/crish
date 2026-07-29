@@ -337,38 +337,38 @@ Rust éƒ¨åˆ†çŠ¶å†µè¾ƒå¥½ï¼š`ci.yml` çš„ `rust-check` jobï¼ˆ`ci.yml:13-42`ï¼‰åœ¨ u
 - CI ä¸­å®é™…è§¦å‘çš„æ„å»ºå‘½ä»¤æ•°ï¼šçº¦ 12 æ¡ï¼ˆä»…é’ˆå¯¹ agent-runtime å’Œ Rust crateï¼‰
 - å‘å¸ƒåˆ¶å“ç±»å‹ï¼šnpm åŒ…ï¼ˆ6 ä¸ªï¼‰ã€Tauri æ¡Œé¢å®‰è£…åŒ…ï¼ˆ3 å¹³å°ï¼‰ã€daemon äºŒè¿›åˆ¶ï¼ˆæœªçº³å…¥ CIï¼‰
 
-### 3.7 CI »ù´¡ÉèÊ©²î¾à
+### 3.7 CI åŸºç¡€è®¾æ–½å·®è·
 
-| ²î¾àÏî | µ±Ç°×´Ì¬ | ÀíÏë×´Ì¬ | Éæ¼° |
+| å·®è·é¡¹ | å½“å‰çŠ¶æ€ | ç†æƒ³çŠ¶æ€ | æ¶‰åŠ |
 |--------|----------|----------|------|
-| ²¢·¢¿ØÖÆ | ½ö release.yml ÓĞ | ËùÓĞ workflow Í³Ò»²¢·¢²ßÂÔ | ci.yml, perf-test.yml |
-| È¨ÏŞ×îĞ¡»¯ | Î´ÉùÃ÷ permissions | Ã¿¸ö job ÏÔÊ½×îĞ¡È¨ÏŞ | ËùÓĞ workflow |
-| Â·¾¶¹ıÂË | ÎŞ | Ö»´¥·¢±ä¸üÏà¹Ø job | ci.yml |
-| ³¬Ê±ÉèÖÃ | e2e ÓĞ 5min£¨ci.yml:171£©£¬ÆäÓàÄ¬ÈÏ | ºÏÀí³¬Ê± + Í¨Öª | ËùÓĞ workflow |
-| ÖØÊÔ²ßÂÔ | ÎŞ | ²âÊÔ»ò²½ÖèÊ§°Ü×Ô¶¯ÖØÊÔ | ci.yml |
-| Runner Ñ¡Ôñ | È«²¿ GitHub-hosted | ¹Ø¼ü job ¿ÉÇĞ»»×ÔÍĞ¹Ü | ÎŞ |
-| »·¾³±äÁ¿¹ÜÀí | ÎŞ×éÖ¯ | »·¾³±äÁ¿·Ö×é/ÃüÃû¹æ·¶ | ËùÓĞ workflow |
-| workflow ¼ä¸´ÓÃ | ÎŞ | ¿É¸´ÓÃµÄ composite action | ÎŞ |
-| ×Ô¶¯È¡ÏûÈßÓà | ÎŞ | Í¬ PR ¾ÉÍÆËÍ×Ô¶¯È¡Ïû | ci.yml, perf-test.yml |
+| å¹¶å‘æ§åˆ¶ | ä»… release.yml æœ‰ | æ‰€æœ‰ workflow ç»Ÿä¸€å¹¶å‘ç­–ç•¥ | ci.yml, perf-test.yml |
+| æƒé™æœ€å°åŒ– | æœªå£°æ˜ permissions | æ¯ä¸ª job æ˜¾å¼æœ€å°æƒé™ | æ‰€æœ‰ workflow |
+| è·¯å¾„è¿‡æ»¤ | æ—  | åªè§¦å‘å˜æ›´ç›¸å…³ job | ci.yml |
+| è¶…æ—¶è®¾ç½® | e2e æœ‰ 5minï¼ˆci.yml:171ï¼‰ï¼Œå…¶ä½™é»˜è®¤ | åˆç†è¶…æ—¶ + é€šçŸ¥ | æ‰€æœ‰ workflow |
+| é‡è¯•ç­–ç•¥ | æ—  | æµ‹è¯•æˆ–æ­¥éª¤å¤±è´¥è‡ªåŠ¨é‡è¯• | ci.yml |
+| Runner é€‰æ‹© | å…¨éƒ¨ GitHub-hosted | å…³é”® job å¯åˆ‡æ¢è‡ªæ‰˜ç®¡ | æ—  |
+| ç¯å¢ƒå˜é‡ç®¡ç† | æ— ç»„ç»‡ | ç¯å¢ƒå˜é‡åˆ†ç»„/å‘½åè§„èŒƒ | æ‰€æœ‰ workflow |
+| workflow é—´å¤ç”¨ | æ—  | å¯å¤ç”¨çš„ composite action | æ—  |
+| è‡ªåŠ¨å–æ¶ˆå†—ä½™ | æ—  | åŒ PR æ—§æ¨é€è‡ªåŠ¨å–æ¶ˆ | ci.yml, perf-test.yml |
 
-## 4 ¸ùÒò·ÖÎö
+## 4 æ ¹å› åˆ†æ
 
 ### 4.1 ÎªÊ²Ã´ CI/CD Ò»Ö±È±Ê§
 
-**¸ùÒò 1£ºÏîÄ¿Ñİ½ø½×¶ÎÓëÓÅÏÈ¼¶´íÎ»**
+**æ ¹å›  1ï¼šé¡¹ç›®æ¼”è¿›é˜¶æ®µä¸ä¼˜å…ˆçº§é”™ä½**
 
-ÏîÄ¿°æ±¾Îª 0.1.0£¨package.json:2£©£¬´¦ÓÚÔçÆÚ¿ª·¢½×¶Î¡£ÍÅ¶ÓÓÅÏÈ½¨Á¢ÁË Rust CI£¨ci.yml:13-42 µÄ rust-check job£©£¬ÒòÎª Rust µÄ cargo ¹¤¾ßÁ´ÔÚ CI ÖĞÅäÖÃ¼òµ¥ÇÒÓĞ³ÉÊìµÄ action¡£TS/JS ²¿·ÖµÄ¹¹½¨ÌåÏµ¸´ÔÓ£¨npm workspaces + turbo + esbuild + tsc + Vite + tsc-alias + Tauri£©£¬ÍÅ¶Ó¿ÉÄÜÈÏÎªÊÖ¶¯¹¹½¨ÒÑ×ã¹»»òÏÈÈÃ¹¦ÄÜÅÜÆğÀ´ÔÙ¿¼ÂÇ CI¡£
+é¡¹ç›®ç‰ˆæœ¬ä¸º 0.1.0ï¼ˆpackage.json:2ï¼‰ï¼Œå¤„äºæ—©æœŸå¼€å‘é˜¶æ®µã€‚å›¢é˜Ÿä¼˜å…ˆå»ºç«‹äº† Rust CIï¼ˆci.yml:13-42 çš„ rust-check jobï¼‰ï¼Œå› ä¸º Rust çš„ cargo å·¥å…·é“¾åœ¨ CI ä¸­é…ç½®ç®€å•ä¸”æœ‰æˆç†Ÿçš„ actionã€‚TS/JS éƒ¨åˆ†çš„æ„å»ºä½“ç³»å¤æ‚ï¼ˆnpm workspaces + turbo + esbuild + tsc + Vite + tsc-alias + Tauriï¼‰ï¼Œå›¢é˜Ÿå¯èƒ½è®¤ä¸ºæ‰‹åŠ¨æ„å»ºå·²è¶³å¤Ÿæˆ–å…ˆè®©åŠŸèƒ½è·‘èµ·æ¥å†è€ƒè™‘ CIã€‚
 
-Rust CI ¸´ÔÓ¶È: cargo check/test/clippy/fmt -> 4 ÌõÃüÁî£¬ËùÓĞ crate Í³Ò»
-TS CI ¸´ÔÓ¶È: tsc --noEmit x 7 ¸ö°ü + esbuild x 7 ¸ö°ü + vite build + tsc-alias x 7 + ÒÀÀµË³Ğò¹ÜÀí + development exports -> Ô¼ 30 ÌõÃüÁî
+Rust CI å¤æ‚åº¦: cargo check/test/clippy/fmt -> 4 æ¡å‘½ä»¤ï¼Œæ‰€æœ‰ crate ç»Ÿä¸€
+TS CI å¤æ‚åº¦: tsc --noEmit x 7 ä¸ªåŒ… + esbuild x 7 ä¸ªåŒ… + vite build + tsc-alias x 7 + ä¾èµ–é¡ºåºç®¡ç† + development exports -> çº¦ 30 æ¡å‘½ä»¤
 
-**¸ùÒò 2£ºÒÀÀµ¸´ÔÓ¶È¹ı¸ßµ¼ÖÂÈÏÖª¸ººÉ³¬ÔØ**
+**æ ¹å›  2ï¼šä¾èµ–å¤æ‚åº¦è¿‡é«˜å¯¼è‡´è®¤çŸ¥è´Ÿè·è¶…è½½**
 
-ÏîÄ¿²ÉÓÃ npm workspaces£¨10 ¸ö°ü£©+ Rust workspace£¨12 ¸ö crate£©+ Tauri + esbuild + tsc + turbo + tsc-alias µÄ¶à²ã¹¹½¨ÌåÏµ¡£Ã¿¸ö°üÓĞ¶ÀÁ¢µÄ tsconfig¡¢esbuild ÅäÖÃºÍ build ½Å±¾¡£ÕâÖÖÍØÆË½á¹¹Ê¹µÃÔÚ CI ÖĞÕıÈ·ÅäÖÃ¹¹½¨Ë³ĞòµÄÈÏÖª³É±¾Ô¶¸ßÓÚµ¥°üÏîÄ¿¡£ÍÅ¶Ó¿ÉÄÜÏİÈë·ÖÎöÌ±»¾¡ª¡ªÒòÎª¹¹½¨ÏµÍ³¹ıÓÚ¸´ÔÓÒÔÖÁÓÚ²»ÖªµÀÈçºÎÔÚ CI ÖĞÕıÈ·ÅäÖÃ£¬ËùÒÔÑ¡Ôñ²»ÅäÖÃ¡£
+é¡¹ç›®é‡‡ç”¨ npm workspacesï¼ˆ10 ä¸ªåŒ…ï¼‰+ Rust workspaceï¼ˆ12 ä¸ª crateï¼‰+ Tauri + esbuild + tsc + turbo + tsc-alias çš„å¤šå±‚æ„å»ºä½“ç³»ã€‚æ¯ä¸ªåŒ…æœ‰ç‹¬ç«‹çš„ tsconfigã€esbuild é…ç½®å’Œ build è„šæœ¬ã€‚è¿™ç§æ‹“æ‰‘ç»“æ„ä½¿å¾—åœ¨ CI ä¸­æ­£ç¡®é…ç½®æ„å»ºé¡ºåºçš„è®¤çŸ¥æˆæœ¬è¿œé«˜äºå•åŒ…é¡¹ç›®ã€‚å›¢é˜Ÿå¯èƒ½é™·å…¥åˆ†æç˜«ç—ªâ€”â€”å› ä¸ºæ„å»ºç³»ç»Ÿè¿‡äºå¤æ‚ä»¥è‡³äºä¸çŸ¥é“å¦‚ä½•åœ¨ CI ä¸­æ­£ç¡®é…ç½®ï¼Œæ‰€ä»¥é€‰æ‹©ä¸é…ç½®ã€‚
 
-**¸ùÒò 3£º¹¹½¨ËéÆ¬»¯Óë½Å±¾ÖØ¸´**
+**æ ¹å›  3ï¼šæ„å»ºç¢ç‰‡åŒ–ä¸è„šæœ¬é‡å¤**
 
-7 ¸ö TS °ü¸÷×ÔÎ¬»¤ÖØ¸´µÄ build / build:types / build:js ÃüÁî¡£ËäÈ»Ä£Ê½¸ß¶ÈÒ»ÖÂ£¨clean -> tsc declaration -> esbuild£©£¬µ«ÎŞ³éÏó²ã£º
+7 ä¸ª TS åŒ…å„è‡ªç»´æŠ¤é‡å¤çš„ build / build:types / build:js å‘½ä»¤ã€‚è™½ç„¶æ¨¡å¼é«˜åº¦ä¸€è‡´ï¼ˆclean -> tsc declaration -> esbuildï¼‰ï¼Œä½†æ— æŠ½è±¡å±‚ï¼š
 
 - packages/agent-daemon/package.json:25-28: clean -> build:types -> build:js
 - packages/shared-types/package.json:25-28: clean -> build:types -> build:js
@@ -377,179 +377,179 @@ TS CI ¸´ÔÓ¶È: tsc --noEmit x 7 ¸ö°ü + esbuild x 7 ¸ö°ü + vite build + tsc-alias 
 - packages/agent-runtime/package.json:34-38: clean -> build:types -> build:js
 - packages/agent-orchestrator/package.json:24-28: clean -> build:types -> build:js
 
-Õâ¸öÄ£Ê½µÄ 6 ´ÎÖØ¸´ÒâÎ¶×Å¶Ô¹¹½¨µÄÈÎºÎĞŞ¸Ä¶¼ĞèÒªĞŞ¸Ä 6 ¸öÎÄ¼ş¡£Èç¹ûÒªÔÚ CI ÖĞ¹¹½¨È«²¿£¬Ä¿Ç°µÄ×ö·¨ÊÇ npm run build:packages£¬ÕâÊÇ¸ö npm ½Å±¾¶ø·Ç¹¤¾ß²ãµÄµ¥µãÅäÖÃ¡£
+è¿™ä¸ªæ¨¡å¼çš„ 6 æ¬¡é‡å¤æ„å‘³ç€å¯¹æ„å»ºçš„ä»»ä½•ä¿®æ”¹éƒ½éœ€è¦ä¿®æ”¹ 6 ä¸ªæ–‡ä»¶ã€‚å¦‚æœè¦åœ¨ CI ä¸­æ„å»ºå…¨éƒ¨ï¼Œç›®å‰çš„åšæ³•æ˜¯ npm run build:packagesï¼Œè¿™æ˜¯ä¸ª npm è„šæœ¬è€Œéå·¥å…·å±‚çš„å•ç‚¹é…ç½®ã€‚
 
-**¸ùÒò 4£º±¾µØÑéÖ¤µÄĞé¼Ù°²È«¸Ğ**
+**æ ¹å›  4ï¼šæœ¬åœ°éªŒè¯çš„è™šå‡å®‰å…¨æ„Ÿ**
 
-.husky/pre-push Ö´ĞĞ npm run typecheck && npm test¡£±íÃæÉÏÕâÌá¹©ÁËÌá½»Ç°µÄÖÊÁ¿ÃÅ½û£¬µ«Êµ¼ÊÉÏ£º
-- npm run typecheck Ö»¼ì²é apps/crish-desktop/tsconfig.json£¨package.json:54£©£¬ÆäËû 6 ¸ö TS °üµÄÀàĞÍÍêÈ«²»¼ì²é
-- npm test ÔËĞĞÈ«²¿ vitest ²âÊÔ£¨°üÀ¨ e2e£©£¬±¾µØÒòÈ±ÉÙ Provider API key »áÌø¹ı»òÊ§°Ü
-- ¿ª·¢Õß¿ÉÒÔÊ¹ÓÃ git push --no-verify ÍêÈ«ÈÆ¹ıÕâĞ©¼ì²é
+.husky/pre-push æ‰§è¡Œ npm run typecheck && npm testã€‚è¡¨é¢ä¸Šè¿™æä¾›äº†æäº¤å‰çš„è´¨é‡é—¨ç¦ï¼Œä½†å®é™…ä¸Šï¼š
+- npm run typecheck åªæ£€æŸ¥ apps/crish-desktop/tsconfig.jsonï¼ˆpackage.json:54ï¼‰ï¼Œå…¶ä»– 6 ä¸ª TS åŒ…çš„ç±»å‹å®Œå…¨ä¸æ£€æŸ¥
+- npm test è¿è¡Œå…¨éƒ¨ vitest æµ‹è¯•ï¼ˆåŒ…æ‹¬ e2eï¼‰ï¼Œæœ¬åœ°å› ç¼ºå°‘ Provider API key ä¼šè·³è¿‡æˆ–å¤±è´¥
+- å¼€å‘è€…å¯ä»¥ä½¿ç”¨ git push --no-verify å®Œå…¨ç»•è¿‡è¿™äº›æ£€æŸ¥
 
-±¾µØÑéÖ¤ÌåÏµµÄ²»ÍêÉÆ¿ÉÄÜÊ¹ÍÅ¶Ó²úÉúÎÒÃÇÒÑ¾­ÓĞÁË¼ì²éµÄ´í¾õ£¬´Ó¶øÍÆ³Ù CI ½¨Éè¡£
+æœ¬åœ°éªŒè¯ä½“ç³»çš„ä¸å®Œå–„å¯èƒ½ä½¿å›¢é˜Ÿäº§ç”Ÿæˆ‘ä»¬å·²ç»æœ‰äº†æ£€æŸ¥çš„é”™è§‰ï¼Œä»è€Œæ¨è¿Ÿ CI å»ºè®¾ã€‚
 
-**¸ùÒò 5£º²âÊÔ»ù´¡ÉèÊ©²»Í³Ò»**
+**æ ¹å›  5ï¼šæµ‹è¯•åŸºç¡€è®¾æ–½ä¸ç»Ÿä¸€**
 
-ÏîÄ¿Ê¹ÓÃ¶àÖÖ²âÊÔ¿ò¼ÜºÍ²âÊÔÀàĞÍ£º
-- vitest£¨µ¥Ôª²âÊÔ£¬Node + jsdom Ë«»·¾³£©
-- Playwright£¨ÊÓ¾õ²âÊÔ£¬apps/crish-desktop/package.json:17£©
-- cargo test£¨Rust ²âÊÔ£©
-- ×Ô¶¨Òå stress ²âÊÔ¿ò¼Ü£¨package.json:42-45£©
-- ×Ô¶¨Òå benchmark ¿ò¼Ü£¨package.json:36-38£©
-- ×Ô¶¨Òå startup ²âÊÔ£¨package.json:46-47£©
+é¡¹ç›®ä½¿ç”¨å¤šç§æµ‹è¯•æ¡†æ¶å’Œæµ‹è¯•ç±»å‹ï¼š
+- vitestï¼ˆå•å…ƒæµ‹è¯•ï¼ŒNode + jsdom åŒç¯å¢ƒï¼‰
+- Playwrightï¼ˆè§†è§‰æµ‹è¯•ï¼Œapps/crish-desktop/package.json:17ï¼‰
+- cargo testï¼ˆRust æµ‹è¯•ï¼‰
+- è‡ªå®šä¹‰ stress æµ‹è¯•æ¡†æ¶ï¼ˆpackage.json:42-45ï¼‰
+- è‡ªå®šä¹‰ benchmark æ¡†æ¶ï¼ˆpackage.json:36-38ï¼‰
+- è‡ªå®šä¹‰ startup æµ‹è¯•ï¼ˆpackage.json:46-47ï¼‰
 
-²âÊÔ¿ò¼ÜµÄ¶àÑùĞÔÔö¼ÓÁË CI ÅäÖÃµÄ¸´ÔÓ¶È¡£Ã¿ÖÖ²âÊÔ¿ò¼Ü¶¼ĞèÒª²»Í¬µÄ°²×°²½Öè¡¢²»Í¬µÄ runner ÅäÖÃºÍ²»Í¬µÄ±¨¸æ¸ñÊ½¡£
+æµ‹è¯•æ¡†æ¶çš„å¤šæ ·æ€§å¢åŠ äº† CI é…ç½®çš„å¤æ‚åº¦ã€‚æ¯ç§æµ‹è¯•æ¡†æ¶éƒ½éœ€è¦ä¸åŒçš„å®‰è£…æ­¥éª¤ã€ä¸åŒçš„ runner é…ç½®å’Œä¸åŒçš„æŠ¥å‘Šæ ¼å¼ã€‚
 
-**¸ùÒò 6£º·¢²¼Á÷³ÌÉĞÎ´´¥·¢**
+**æ ¹å›  6ï¼šå‘å¸ƒæµç¨‹å°šæœªè§¦å‘**
 
-ÏîÄ¿ÉĞÎ´½øĞĞ¹ıÕıÊ½·¢²¼¡£ËùÓĞ°ü°æ±¾Îª 0.1.0£¬ÎŞÈÎºÎ CHANGELOG ÎÄ¼ş¡£release.yml µÄ´æÔÚ¿ÉÄÜÀ´×Ô create-tauri-app Ä£°åµÄÄ¬ÈÏÅäÖÃ£¬¶ø·ÇÖ÷¶¯Éè¼Æ¡£ÒòÎªÃ»ÓĞÊµ¼ÊµÄ·¢²¼ĞèÇó£¬·¢²¼Á÷Ë®ÏßÎ´±»Ç¿ÖÆÒªÇó£¬npm publish µÈÄÜÁ¦µÄÈ±Ê§Ò²¾ÍÃ»ÓĞ±»×¢Òâµ½¡£
+é¡¹ç›®å°šæœªè¿›è¡Œè¿‡æ­£å¼å‘å¸ƒã€‚æ‰€æœ‰åŒ…ç‰ˆæœ¬ä¸º 0.1.0ï¼Œæ— ä»»ä½• CHANGELOG æ–‡ä»¶ã€‚release.yml çš„å­˜åœ¨å¯èƒ½æ¥è‡ª create-tauri-app æ¨¡æ¿çš„é»˜è®¤é…ç½®ï¼Œè€Œéä¸»åŠ¨è®¾è®¡ã€‚å› ä¸ºæ²¡æœ‰å®é™…çš„å‘å¸ƒéœ€æ±‚ï¼Œå‘å¸ƒæµæ°´çº¿æœªè¢«å¼ºåˆ¶è¦æ±‚ï¼Œnpm publish ç­‰èƒ½åŠ›çš„ç¼ºå¤±ä¹Ÿå°±æ²¡æœ‰è¢«æ³¨æ„åˆ°ã€‚
 
-### 4.2 ¼Ü¹¹Éè¼Æ¶Ô CI ½ÓÈëµÄ×è°­
+### 4.2 æ¶æ„è®¾è®¡å¯¹ CI æ¥å…¥çš„é˜»ç¢
 
-**×è°­ 1£ºdevelopment exports condition ÒÀÀµ**
+**é˜»ç¢ 1ï¼šdevelopment exports condition ä¾èµ–**
 
-ËùÓĞ°üµÄ package.json Ê¹ÓÃ exports ×Ö¶ÎµÄ development condition¡£ÒÔ packages/agent-daemon/package.json:9-20 ÎªÀı£¬development Ìõ¼şÈÃ tsc ÔÚ¿ª·¢Ê±½âÎöµ½ src/index.ts£¬·ñÔò½âÎöµ½ dist/index.js¡£ÕâĞèÒª CI ÈÎÎñÕıÈ·ÉèÖÃ --conditions development ±êÖ¾£¬·ñÔò tsc »á³¢ÊÔ½âÎöµ½ dist/ ²úÎï¶ø²»ÊÇ src/ Ô´ÎÄ¼ş¡£µ±Ç° CI µÄ npx tsc --noEmit ÃüÁîÎ´ÏÔÊ½ÉèÖÃ´ËÌõ¼ş¡£
+æ‰€æœ‰åŒ…çš„ package.json ä½¿ç”¨ exports å­—æ®µçš„ development conditionã€‚ä»¥ packages/agent-daemon/package.json:9-20 ä¸ºä¾‹ï¼Œdevelopment æ¡ä»¶è®© tsc åœ¨å¼€å‘æ—¶è§£æåˆ° src/index.tsï¼Œå¦åˆ™è§£æåˆ° dist/index.jsã€‚è¿™éœ€è¦ CI ä»»åŠ¡æ­£ç¡®è®¾ç½® --conditions development æ ‡å¿—ï¼Œå¦åˆ™ tsc ä¼šå°è¯•è§£æåˆ° dist/ äº§ç‰©è€Œä¸æ˜¯ src/ æºæ–‡ä»¶ã€‚å½“å‰ CI çš„ npx tsc --noEmit å‘½ä»¤æœªæ˜¾å¼è®¾ç½®æ­¤æ¡ä»¶ã€‚
 
-**×è°­ 2£ºtsc-alias ºó´¦Àí**
+**é˜»ç¢ 2ï¼štsc-alias åå¤„ç†**
 
-Ã¿¸ö°üµÄ build:types ÃüÁî£¨Èç packages/agent-daemon/package.json:26£©Ê¹ÓÃ tsc-alias ½âÎö path alias¡£Èç¹ûÔÚ CI ÖĞÖ»×ö tsc --noEmit ¶ø²»ÔËĞĞ tsc-alias£¬ÀàĞÍ¼ì²é¿ÉÄÜÍ¨¹ıµ«Êµ¼Ê²úÎïÖĞÂ·¾¶ÎŞĞ§¡£tsc-alias ½« tsconfig.json ÖĞµÄ paths Ó³Éä½âÎöÎªÏà¶ÔÂ·¾¶£¬ÕâÊÇÉú³É¿ÉÓÃÀàĞÍÉùÃ÷ÎÄ¼şµÄ¹Ø¼ü²½Öè¡£
+æ¯ä¸ªåŒ…çš„ build:types å‘½ä»¤ï¼ˆå¦‚ packages/agent-daemon/package.json:26ï¼‰ä½¿ç”¨ tsc-alias è§£æ path aliasã€‚å¦‚æœåœ¨ CI ä¸­åªåš tsc --noEmit è€Œä¸è¿è¡Œ tsc-aliasï¼Œç±»å‹æ£€æŸ¥å¯èƒ½é€šè¿‡ä½†å®é™…äº§ç‰©ä¸­è·¯å¾„æ— æ•ˆã€‚tsc-alias å°† tsconfig.json ä¸­çš„ paths æ˜ å°„è§£æä¸ºç›¸å¯¹è·¯å¾„ï¼Œè¿™æ˜¯ç”Ÿæˆå¯ç”¨ç±»å‹å£°æ˜æ–‡ä»¶çš„å…³é”®æ­¥éª¤ã€‚
 
-**×è°­ 3£ºtsbuildinfo »º´æÊÖ¶¯ÇåÀí**
+**é˜»ç¢ 3ï¼štsbuildinfo ç¼“å­˜æ‰‹åŠ¨æ¸…ç†**
 
-¸÷°üµÄ build:types ÃüÁîÖ´ĞĞ rmSync Çå¿Õ .tsbuildinfo »º´æ¡£ÀıÈç packages/shared-types/package.json:26 µÄ node -e require('node:fs').rmSync('../../node_modules/.cache/shared-types.tsbuildinfo', { force: true })¡£ÕâÓë turbo µÄÔöÁ¿¹¹½¨ÒâÍ¼Ã¬¶Ü¡ª¡ªturbo ÒÀÀµ .tsbuildinfo ÎÄ¼ş¼ì²âÔ´´úÂë±ä¸ü¡£Èç¹û CI ÓÃ turbo ±àÅÅ£¬ĞèÒª´¦ÀíÕâ¸ö³åÍ»£ºÒªÃ´ÒÆ³ıÊÖ¶¯ÇåÀí²½Öè£¬ÒªÃ´ÔÚ turbo µÄ pipeline ¶¨ÒåÖĞ±ê¼Ç clean ÈÎÎñÎªÀàĞÍ¼ì²éµÄÏÈ¾öÌõ¼ş¡£
+å„åŒ…çš„ build:types å‘½ä»¤æ‰§è¡Œ rmSync æ¸…ç©º .tsbuildinfo ç¼“å­˜ã€‚ä¾‹å¦‚ packages/shared-types/package.json:26 çš„ node -e require('node:fs').rmSync('../../node_modules/.cache/shared-types.tsbuildinfo', { force: true })ã€‚è¿™ä¸ turbo çš„å¢é‡æ„å»ºæ„å›¾çŸ›ç›¾â€”â€”turbo ä¾èµ– .tsbuildinfo æ–‡ä»¶æ£€æµ‹æºä»£ç å˜æ›´ã€‚å¦‚æœ CI ç”¨ turbo ç¼–æ’ï¼Œéœ€è¦å¤„ç†è¿™ä¸ªå†²çªï¼šè¦ä¹ˆç§»é™¤æ‰‹åŠ¨æ¸…ç†æ­¥éª¤ï¼Œè¦ä¹ˆåœ¨ turbo çš„ pipeline å®šä¹‰ä¸­æ ‡è®° clean ä»»åŠ¡ä¸ºç±»å‹æ£€æŸ¥çš„å…ˆå†³æ¡ä»¶ã€‚
 
-**×è°­ 4£ºesbuild ÅäÖÃÖØ¸´**
+**é˜»ç¢ 4ï¼šesbuild é…ç½®é‡å¤**
 
-¸÷°üµÄ build:js ÃüÁî²ÎÊı·ÖÉ¢ÔÚ 7 ¸öÎÄ¼şÖĞ£º
+å„åŒ…çš„ build:js å‘½ä»¤å‚æ•°åˆ†æ•£åœ¨ 7 ä¸ªæ–‡ä»¶ä¸­ï¼š
 - packages/agent-daemon/package.json:27: esbuild src/index.ts --bundle --platform=node --format=esm --target=es2022 --packages=external --outfile=dist/index.js --sourcemap
-- packages/shared-utils/package.json:47: Í¬ÉÏ£¬µ«ÓĞ¶îÍâµÄ browser Èë¿Ú
+- packages/shared-utils/package.json:47: åŒä¸Šï¼Œä½†æœ‰é¢å¤–çš„ browser å…¥å£
 - packages/shared-utils/package.json:48: esbuild with --platform=browser
 - packages/shared-utils/package.json:49: esbuild with --platform=node
-- packages/decision-engine/package.json:25: Í¬ÉÏ
+- packages/decision-engine/package.json:25: åŒä¸Š
 
-ËäÈ»²ÎÊıÒ»ÖÂ£¨esbuild src/index.ts --bundle --platform=node --format=esm --target=es2022 --packages=external --outfile=dist/index.js --sourcemap£©£¬µ«·ÖÉ¢ÔÚ¶à¸öÎÄ¼şÒâÎ¶×Å esbuild Éı¼¶£¨Èç´Ó 0.27 µ½ 0.28£©ĞèÒªÔÚ 7 ¸öµØ·½Í¬²½¸üĞÂÅäÖÃ¡£
+è™½ç„¶å‚æ•°ä¸€è‡´ï¼ˆesbuild src/index.ts --bundle --platform=node --format=esm --target=es2022 --packages=external --outfile=dist/index.js --sourcemapï¼‰ï¼Œä½†åˆ†æ•£åœ¨å¤šä¸ªæ–‡ä»¶æ„å‘³ç€ esbuild å‡çº§ï¼ˆå¦‚ä» 0.27 åˆ° 0.28ï¼‰éœ€è¦åœ¨ 7 ä¸ªåœ°æ–¹åŒæ­¥æ›´æ–°é…ç½®ã€‚
 
-**×è°­ 5£ºTauri ¹¹½¨µÄÇ°ÖÃÌõ¼ş**
+**é˜»ç¢ 5ï¼šTauri æ„å»ºçš„å‰ç½®æ¡ä»¶**
 
-apps/agent-workbench/package.json:9 µÄ build ÃüÁîÖØ¶¨Ïòµ½ ../crish-desktop£¬¶ø apps/crish-desktop/package.json:10 µÄ build ÊÇ tsc -b && vite build¡£CI ÖĞÔËĞĞ Tauri build ĞèÒªÏµÍ³¼¶ÒÀÀµ£¨release.yml:33-35 ÁĞ³öµÄ libgtk-3, libwebkit2gtk-4.1 µÈ£©£¬Ôö¼ÓÁË¿çÆ½Ì¨ CI µÄÎ¬»¤³É±¾¡£ÕâĞ©ÒÀÀµÔÚ ubuntu:latest ÉÏĞèÒª apt-get install£¬ÔÚ macOS ÉÏĞèÒª brew install£¬ÔÚ Windows ÉÏĞèÒª WebView2 ÔËĞĞÊ±£¨ÒÑÔ¤×°£©¡£
+apps/agent-workbench/package.json:9 çš„ build å‘½ä»¤é‡å®šå‘åˆ° ../crish-desktopï¼Œè€Œ apps/crish-desktop/package.json:10 çš„ build æ˜¯ tsc -b && vite buildã€‚CI ä¸­è¿è¡Œ Tauri build éœ€è¦ç³»ç»Ÿçº§ä¾èµ–ï¼ˆrelease.yml:33-35 åˆ—å‡ºçš„ libgtk-3, libwebkit2gtk-4.1 ç­‰ï¼‰ï¼Œå¢åŠ äº†è·¨å¹³å° CI çš„ç»´æŠ¤æˆæœ¬ã€‚è¿™äº›ä¾èµ–åœ¨ ubuntu:latest ä¸Šéœ€è¦ apt-get installï¼Œåœ¨ macOS ä¸Šéœ€è¦ brew installï¼Œåœ¨ Windows ä¸Šéœ€è¦ WebView2 è¿è¡Œæ—¶ï¼ˆå·²é¢„è£…ï¼‰ã€‚
 
-**×è°­ 6£ºstress/bench ²âÊÔµÄÍâ²¿ÒÀÀµ**
+**é˜»ç¢ 6ï¼šstress/bench æµ‹è¯•çš„å¤–éƒ¨ä¾èµ–**
 
-package.json:42-47 ¶¨ÒåµÄ stress ²âÊÔºÍ bench ²âÊÔ¿ÉÄÜÒÀÀµÍâ²¿ Provider API¡£Èç¹û CI ÔÚ²»Ìá¹© API key µÄÇé¿öÏÂÔËĞĞÕâĞ©²âÊÔ£¬ËüÃÇ»á³¬Ê±»òÊ§°Ü¡£µ±Ç° ci.yml Ê¹ÓÃ || true ¾²Ä¬Ä£Ê½ÕıÊÇÎªÁË½â¾öÕâ¸öÎÊÌâ¡£ÕıÈ·µÄ·½Ê½Ó¦¸ÃÊÇ£º½«ÕâĞ©²âÊÔ´Ó PR CI ÖĞÅÅ³ı£¬½öÔÚ¶¨Ê±ÈÎÎñ£¨ÈçÃ¿ÈÕ£©ÖĞÔËĞĞ£¬²¢ÔÚÔËĞĞÊ±×¢Èë¿ÉÑ¡µÄ API key »·¾³±äÁ¿¡£
+package.json:42-47 å®šä¹‰çš„ stress æµ‹è¯•å’Œ bench æµ‹è¯•å¯èƒ½ä¾èµ–å¤–éƒ¨ Provider APIã€‚å¦‚æœ CI åœ¨ä¸æä¾› API key çš„æƒ…å†µä¸‹è¿è¡Œè¿™äº›æµ‹è¯•ï¼Œå®ƒä»¬ä¼šè¶…æ—¶æˆ–å¤±è´¥ã€‚å½“å‰ ci.yml ä½¿ç”¨ || true é™é»˜æ¨¡å¼æ­£æ˜¯ä¸ºäº†è§£å†³è¿™ä¸ªé—®é¢˜ã€‚æ­£ç¡®çš„æ–¹å¼åº”è¯¥æ˜¯ï¼šå°†è¿™äº›æµ‹è¯•ä» PR CI ä¸­æ’é™¤ï¼Œä»…åœ¨å®šæ—¶ä»»åŠ¡ï¼ˆå¦‚æ¯æ—¥ï¼‰ä¸­è¿è¡Œï¼Œå¹¶åœ¨è¿è¡Œæ—¶æ³¨å…¥å¯é€‰çš„ API key ç¯å¢ƒå˜é‡ã€‚
 
-## 5 Ó°ÏìÆÀ¹À
+## 5 å½±å“è¯„ä¼°
 
-### 5.1 °²È«ĞÔ·çÏÕ
+### 5.1 å®‰å…¨æ€§é£é™©
 
-**¸ß·çÏÕ**£º
-- ÒÀÀµÉó¼ÆÊ¹ÓÃ continue-on-error: true£¨ci.yml:122,134£©£¬ÒÑÖª¸ß/ÑÏÖØÂ©¶´²»»á×è¶ÏÁ÷Ë®Ïß¡£Èç¹û ws£¨package.json:93£¬daemon ºÍ runtime Ê¹ÓÃ WebSocket Í¨ĞÅ£©»ò @modelcontextprotocol/sdk£¨packages/agent-daemon/package.json:39£¬MCP Ğ­ÒéÊµÏÖ£©³öÏÖ°²È«Â©¶´£¬CI ²»»á¾Ü¾øÆä½øÈë main ·ÖÖ§¡£ÔÚ CVE-2024-XXXX ÀàĞÍµÄÂ©¶´ÅûÂ¶ºó£¬ÍÅ¶Ó¿ÉÄÜÔÚ²»°²È«µÄÒÀÀµÏÂÔËĞĞÊıÌìÖ±µ½ÏÂÒ»´ÎÊÖ¶¯Éó¼Æ¡£
-- ÎŞÃÜÔ¿É¨Ãè£¬ÀúÊ·¼ÇÂ¼ÖĞµÄÃÜÔ¿Ğ¹Â¶²»¿É×·Ëİ¡£²¿·Ö crates£¨Èç conex-net ´¦ÀíÍøÂçÍ¨ĞÅ¡¢conex-db ¹ÜÀí±¾µØÊı¾İ¿â£©¿ÉÄÜÔÚ²âÊÔÅäÖÃÖĞĞ´ÈëÁÙÊ±Æ¾Ö¤¡£
+**é«˜é£é™©**ï¼š
+- ä¾èµ–å®¡è®¡ä½¿ç”¨ continue-on-error: trueï¼ˆci.yml:122,134ï¼‰ï¼Œå·²çŸ¥é«˜/ä¸¥é‡æ¼æ´ä¸ä¼šé˜»æ–­æµæ°´çº¿ã€‚å¦‚æœ wsï¼ˆpackage.json:93ï¼Œdaemon å’Œ runtime ä½¿ç”¨ WebSocket é€šä¿¡ï¼‰æˆ– @modelcontextprotocol/sdkï¼ˆpackages/agent-daemon/package.json:39ï¼ŒMCP åè®®å®ç°ï¼‰å‡ºç°å®‰å…¨æ¼æ´ï¼ŒCI ä¸ä¼šæ‹’ç»å…¶è¿›å…¥ main åˆ†æ”¯ã€‚åœ¨ CVE-2024-XXXX ç±»å‹çš„æ¼æ´æŠ«éœ²åï¼Œå›¢é˜Ÿå¯èƒ½åœ¨ä¸å®‰å…¨çš„ä¾èµ–ä¸‹è¿è¡Œæ•°å¤©ç›´åˆ°ä¸‹ä¸€æ¬¡æ‰‹åŠ¨å®¡è®¡ã€‚
+- æ— å¯†é’¥æ‰«æï¼Œå†å²è®°å½•ä¸­çš„å¯†é’¥æ³„éœ²ä¸å¯è¿½æº¯ã€‚éƒ¨åˆ† cratesï¼ˆå¦‚ conex-net å¤„ç†ç½‘ç»œé€šä¿¡ã€conex-db ç®¡ç†æœ¬åœ°æ•°æ®åº“ï¼‰å¯èƒ½åœ¨æµ‹è¯•é…ç½®ä¸­å†™å…¥ä¸´æ—¶å‡­è¯ã€‚
 
-**ÖĞ·çÏÕ**£º
-- npm audit signatures Î´Ö´ĞĞ£¬ÎŞ·¨ÑéÖ¤×¢²á±íÇ©ÃûÍêÕûĞÔ¡£Èç¹ûÒ»¸ö npm °üµÄ dist-tag ±»½Ù³Ö£¬CI »áÎŞ¸ĞÖªµØ°²×°±»´Û¸ÄµÄ°ü¡£
-- ÎŞ SBOM Éú³É£¬ÎŞ·¨Âú×ã¹©Ó¦Á´°²È«Éó¼ÆĞèÇó¡£¶ÔÓÚÆóÒµ²¿Êğ³¡¾°£¬SBOM£¨Software Bill of Materials£©ÊÇºÏ¹æĞÔÒªÇó¡£
+**ä¸­é£é™©**ï¼š
+- npm audit signatures æœªæ‰§è¡Œï¼Œæ— æ³•éªŒè¯æ³¨å†Œè¡¨ç­¾åå®Œæ•´æ€§ã€‚å¦‚æœä¸€ä¸ª npm åŒ…çš„ dist-tag è¢«åŠ«æŒï¼ŒCI ä¼šæ— æ„ŸçŸ¥åœ°å®‰è£…è¢«ç¯¡æ”¹çš„åŒ…ã€‚
+- æ—  SBOM ç”Ÿæˆï¼Œæ— æ³•æ»¡è¶³ä¾›åº”é“¾å®‰å…¨å®¡è®¡éœ€æ±‚ã€‚å¯¹äºä¼ä¸šéƒ¨ç½²åœºæ™¯ï¼ŒSBOMï¼ˆSoftware Bill of Materialsï¼‰æ˜¯åˆè§„æ€§è¦æ±‚ã€‚
 
-**µÍ·çÏÕ**£º
-- dependabot.yml:25 ºöÂÔ conex-stream crate µ«È±ÉÙÔ­ÒòËµÃ÷¡£Èç¹ûºöÂÔÊÇÒòÎªÄÚ²¿Éó¼Æ¹ıµÄ°²È«£¬ĞèÒªÃ÷È·×¢ÊÍÒÔ¸æÖªÎ´À´µÄÎ¬»¤Õß¡£
+**ä½é£é™©**ï¼š
+- dependabot.yml:25 å¿½ç•¥ conex-stream crate ä½†ç¼ºå°‘åŸå› è¯´æ˜ã€‚å¦‚æœå¿½ç•¥æ˜¯å› ä¸ºå†…éƒ¨å®¡è®¡è¿‡çš„å®‰å…¨ï¼Œéœ€è¦æ˜ç¡®æ³¨é‡Šä»¥å‘ŠçŸ¥æœªæ¥çš„ç»´æŠ¤è€…ã€‚
 
-### 5.2 ÖÊÁ¿·çÏÕ
+### 5.2 è´¨é‡é£é™©
 
-**¸ß·çÏÕ**£º
-- ¸²¸ÇÂÊãĞÖµÒÑ¶¨Òåµ«²»Ç¿ÖÆ£¨apps/crish-desktop/vitest.config.ts:13-18£©£¬´úÂë¸²¸ÇÂÊ³ÖĞøÏÂ½µµ«ÎŞÈË¸ĞÖª¡£µ±Ç° 8 ¸ö·ÖÎöÎ¬¶È±¨¸æÁË 215 ¸öÎÊÌâ£¬¸²¸Ç 130+ Ô´ÎÄ¼ş£¬ÎŞ CI ÃÅ½ûÒâÎ¶×ÅÕâĞ©ÎÊÌâ½«³ÖĞø´æÔÚÉõÖÁ¶ñ»¯¡£
-- TypeScript ÑÏ¸ñÄ£Ê½£¨tsconfig.base.json:8-23 µÄ strict¡¢noUncheckedIndexedAccess¡¢exactOptionalPropertyTypes£©½öÔÚ npm run typecheck ÖĞ¶Ô crish-desktop Ö´ĞĞ£¬ÆäËû 9 ¸ö¹¤×÷¿Õ¼ä°üµÄÀàĞÍ°²È«²»ÑéÖ¤¡£Èç¹ûÒ»¸ö¿ª·¢ÕßĞŞ¸ÄÁË @crish/shared-types ÖĞµÄºËĞÄÀàĞÍ¶¨Òå²¢ÒıÈëÁËÀàĞÍ´íÎó£¬Õâ¸ö´íÎóÖ»ÓĞÔÚ crish-desktop µÄ tsc ²½ÖèÖĞ²Å¿ÉÄÜ±»·¢ÏÖ¡ª¡ªµ«Ç°ÌáÊÇ crish-desktop Ê¹ÓÃÁË¸ÃÀàĞÍ¡£
+**é«˜é£é™©**ï¼š
+- è¦†ç›–ç‡é˜ˆå€¼å·²å®šä¹‰ä½†ä¸å¼ºåˆ¶ï¼ˆapps/crish-desktop/vitest.config.ts:13-18ï¼‰ï¼Œä»£ç è¦†ç›–ç‡æŒç»­ä¸‹é™ä½†æ— äººæ„ŸçŸ¥ã€‚å½“å‰ 8 ä¸ªåˆ†æç»´åº¦æŠ¥å‘Šäº† 215 ä¸ªé—®é¢˜ï¼Œè¦†ç›– 130+ æºæ–‡ä»¶ï¼Œæ—  CI é—¨ç¦æ„å‘³ç€è¿™äº›é—®é¢˜å°†æŒç»­å­˜åœ¨ç”šè‡³æ¶åŒ–ã€‚
+- TypeScript ä¸¥æ ¼æ¨¡å¼ï¼ˆtsconfig.base.json:8-23 çš„ strictã€noUncheckedIndexedAccessã€exactOptionalPropertyTypesï¼‰ä»…åœ¨ npm run typecheck ä¸­å¯¹ crish-desktop æ‰§è¡Œï¼Œå…¶ä»– 9 ä¸ªå·¥ä½œç©ºé—´åŒ…çš„ç±»å‹å®‰å…¨ä¸éªŒè¯ã€‚å¦‚æœä¸€ä¸ªå¼€å‘è€…ä¿®æ”¹äº† @crish/shared-types ä¸­çš„æ ¸å¿ƒç±»å‹å®šä¹‰å¹¶å¼•å…¥äº†ç±»å‹é”™è¯¯ï¼Œè¿™ä¸ªé”™è¯¯åªæœ‰åœ¨ crish-desktop çš„ tsc æ­¥éª¤ä¸­æ‰å¯èƒ½è¢«å‘ç°â€”â€”ä½†å‰ææ˜¯ crish-desktop ä½¿ç”¨äº†è¯¥ç±»å‹ã€‚
 
-**ÖĞ·çÏÕ**£º
-- eslint.config.js µÄ react-refresh/only-export-components ¹æÔò£¨eslint.config.js:65-68£©ºÍ no-restricted-syntax ¹æÔò£¨eslint.config.js:69-76£©½öÔÚ±¾µØ pre-commit ´¥·¢£¬CI ²»Ö´ĞĞ¡£Èç¹ûÄ³¿ª·¢ÕßÌø¹ıÁË pre-commit hook£¬ÕâĞ©¹æÔòÍêÈ«²»»á±»ÑéÖ¤¡£
-- command-registry:check£¨apps/agent-workbench/package.json:12£©ÑéÖ¤ Tauri command ×¢²áÓëÊµÏÖµÄÒ»ÖÂĞÔ¡£Èç¹ûĞÂÔöµÄ Tauri command Íü¼Ç×¢²á£¬CI ²»»á·¢ÏÖ¡£
-- check:store-types£¨package.json:56£©ÑéÖ¤ store ÖĞÎŞ as any Ä£Ê½£¬µ« CI ²»Ö´ĞĞ¡£store ÊÇÓ¦ÓÃ×´Ì¬µÄºËĞÄ£¬store ÖĞµÄÀàĞÍ²»°²È«»áÀ©É¢µ½ËùÓĞÊ¹ÓÃ¸Ã×´Ì¬µÄ×é¼ş¡£
+**ä¸­é£é™©**ï¼š
+- eslint.config.js çš„ react-refresh/only-export-components è§„åˆ™ï¼ˆeslint.config.js:65-68ï¼‰å’Œ no-restricted-syntax è§„åˆ™ï¼ˆeslint.config.js:69-76ï¼‰ä»…åœ¨æœ¬åœ° pre-commit è§¦å‘ï¼ŒCI ä¸æ‰§è¡Œã€‚å¦‚æœæŸå¼€å‘è€…è·³è¿‡äº† pre-commit hookï¼Œè¿™äº›è§„åˆ™å®Œå…¨ä¸ä¼šè¢«éªŒè¯ã€‚
+- command-registry:checkï¼ˆapps/agent-workbench/package.json:12ï¼‰éªŒè¯ Tauri command æ³¨å†Œä¸å®ç°çš„ä¸€è‡´æ€§ã€‚å¦‚æœæ–°å¢çš„ Tauri command å¿˜è®°æ³¨å†Œï¼ŒCI ä¸ä¼šå‘ç°ã€‚
+- check:store-typesï¼ˆpackage.json:56ï¼‰éªŒè¯ store ä¸­æ—  as any æ¨¡å¼ï¼Œä½† CI ä¸æ‰§è¡Œã€‚store æ˜¯åº”ç”¨çŠ¶æ€çš„æ ¸å¿ƒï¼Œstore ä¸­çš„ç±»å‹ä¸å®‰å…¨ä¼šæ‰©æ•£åˆ°æ‰€æœ‰ä½¿ç”¨è¯¥çŠ¶æ€çš„ç»„ä»¶ã€‚
 
-**µÍ·çÏÕ**£º
-- ÎŞ Visual Testing ÃÅ½û£¬UI »Ø¹éÎÊÌâ¿ÉÄÜ½øÈëÉú²ú¡£µ«ÓÉÓÚµ±Ç°ÏîÄ¿ÈÔ´¦ÓÚ 0.1.0 ½×¶ÎÇÒ UI ¿ìËÙµü´ú£¬ÊÓ¾õ²âÊÔµÄ ROI ¿ÉÄÜ²»¸ß¡£
+**ä½é£é™©**ï¼š
+- æ—  Visual Testing é—¨ç¦ï¼ŒUI å›å½’é—®é¢˜å¯èƒ½è¿›å…¥ç”Ÿäº§ã€‚ä½†ç”±äºå½“å‰é¡¹ç›®ä»å¤„äº 0.1.0 é˜¶æ®µä¸” UI å¿«é€Ÿè¿­ä»£ï¼Œè§†è§‰æµ‹è¯•çš„ ROI å¯èƒ½ä¸é«˜ã€‚
 
-### 5.3 Ğ­×÷Ğ§ÂÊ·çÏÕ
+### 5.3 åä½œæ•ˆç‡é£é™©
 
-**¸ß·çÏÕ**£º
-- CI ËéÆ¬»¯£¨Ö»²âÊÔ 1/7 ¸ö TS °ü£©µ¼ÖÂ PR ºÏ²¢ºóÆäËû°üµÄ´úÂëËğ»µ²»»á±»¼°Ê±·¢ÏÖ¡£ÀıÈç£¬ĞŞ¸Ä @crish/shared-types ºó£¬@crish/agent-runtime ºÍ @crish/agent-orchestrator µÄ²âÊÔ¾ù²»Ö´ĞĞ¡£Õâ¸öÎÊÌâµÄÎ£ÏÕÔÚÓÚ¡ª¡ª´íÎóÔÚ merge µ½ main Ö®ºó²Å¿ÉÄÜ±»ÆäËû¿ª·¢Õß·¢ÏÖ£¨µ±ËûÃÇ git pull ºóÔËĞĞ±¾µØ²âÊÔÊ±£©£¬´ËÊ±´íÎóµÄÌá½»ÒÑ¾­ÔÚ main ·ÖÖ§ÉÏ£¬ĞŞ¸´ĞèÒª¶îÍâµÄ revert commit¡£
-- ÎŞ¾ØÕó²âÊÔµ¼ÖÂ²»Í¬ OS/Node °æ±¾µÄ¼æÈİĞÔÎÊÌâÖ±µ½ÓÃ»§±¨¸æ²Å±»·¢ÏÖ¡£ÀıÈç£¬Node 20 µÄ ESM ½âÎöĞĞÎªÓë Node 22 ²»Í¬£¬Windows ÉÏµÄÂ·¾¶·Ö¸ô·û¿ÉÄÜµ¼ÖÂ esbuild µÄ --outfile Â·¾¶´íÎó¡£
+**é«˜é£é™©**ï¼š
+- CI ç¢ç‰‡åŒ–ï¼ˆåªæµ‹è¯• 1/7 ä¸ª TS åŒ…ï¼‰å¯¼è‡´ PR åˆå¹¶åå…¶ä»–åŒ…çš„ä»£ç æŸåä¸ä¼šè¢«åŠæ—¶å‘ç°ã€‚ä¾‹å¦‚ï¼Œä¿®æ”¹ @crish/shared-types åï¼Œ@crish/agent-runtime å’Œ @crish/agent-orchestrator çš„æµ‹è¯•å‡ä¸æ‰§è¡Œã€‚è¿™ä¸ªé—®é¢˜çš„å±é™©åœ¨äºâ€”â€”é”™è¯¯åœ¨ merge åˆ° main ä¹‹åæ‰å¯èƒ½è¢«å…¶ä»–å¼€å‘è€…å‘ç°ï¼ˆå½“ä»–ä»¬ git pull åè¿è¡Œæœ¬åœ°æµ‹è¯•æ—¶ï¼‰ï¼Œæ­¤æ—¶é”™è¯¯çš„æäº¤å·²ç»åœ¨ main åˆ†æ”¯ä¸Šï¼Œä¿®å¤éœ€è¦é¢å¤–çš„ revert commitã€‚
+- æ— çŸ©é˜µæµ‹è¯•å¯¼è‡´ä¸åŒ OS/Node ç‰ˆæœ¬çš„å…¼å®¹æ€§é—®é¢˜ç›´åˆ°ç”¨æˆ·æŠ¥å‘Šæ‰è¢«å‘ç°ã€‚ä¾‹å¦‚ï¼ŒNode 20 çš„ ESM è§£æè¡Œä¸ºä¸ Node 22 ä¸åŒï¼ŒWindows ä¸Šçš„è·¯å¾„åˆ†éš”ç¬¦å¯èƒ½å¯¼è‡´ esbuild çš„ --outfile è·¯å¾„é”™è¯¯ã€‚
 
-**ÖĞ·çÏÕ**£º
-- ¹¹½¨²»Ê¹ÓÃ turbo »º´æ£¬Ã¿´Î CI È«Á¿¹¹½¨ build:packages£¬ÀË·ÑÔ¼ 2-3 ·ÖÖÓ¡£¶ÔÓÚÒ»Ìì 20 ´Î PR ÍÆËÍµÄÏîÄ¿£¬ÕâÏàµ±ÓÚÃ¿ÌìÀË·Ñ 40-60 ·ÖÖÓµÄ CI Ê±¼ä¡£
-- ÎŞ¼¯³É²âÊÔÖ´ĞĞ£¬¿ç°üÆõÔ¼±ä¸üµÄ·çÏÕ²»¿É¼û¡£ÒÀÀµÁ´ @crish/agent-orchestrator -> @crish/agent-runtime£¨packages/agent-orchestrator/package.json:31£©ºÍ @crish/agent-daemon -> @crish/agent-orchestrator£¨packages/agent-daemon/package.json:33£©µÄ¶ÏÁÑ²»»á±»ÔçÆÚ·¢ÏÖ¡£
+**ä¸­é£é™©**ï¼š
+- æ„å»ºä¸ä½¿ç”¨ turbo ç¼“å­˜ï¼Œæ¯æ¬¡ CI å…¨é‡æ„å»º build:packagesï¼Œæµªè´¹çº¦ 2-3 åˆ†é’Ÿã€‚å¯¹äºä¸€å¤© 20 æ¬¡ PR æ¨é€çš„é¡¹ç›®ï¼Œè¿™ç›¸å½“äºæ¯å¤©æµªè´¹ 40-60 åˆ†é’Ÿçš„ CI æ—¶é—´ã€‚
+- æ— é›†æˆæµ‹è¯•æ‰§è¡Œï¼Œè·¨åŒ…å¥‘çº¦å˜æ›´çš„é£é™©ä¸å¯è§ã€‚ä¾èµ–é“¾ @crish/agent-orchestrator -> @crish/agent-runtimeï¼ˆpackages/agent-orchestrator/package.json:31ï¼‰å’Œ @crish/agent-daemon -> @crish/agent-orchestratorï¼ˆpackages/agent-daemon/package.json:33ï¼‰çš„æ–­è£‚ä¸ä¼šè¢«æ—©æœŸå‘ç°ã€‚
 
-**µÍ·çÏÕ**£º
-- Visual testing ºÍ benchmark ½á¹ûµÄÈ±Ê§Ö÷ÒªÓ°Ïì·¢²¼Ç°µÄĞÅĞÄ¶È£¬¶ÔÈÕ³£¿ª·¢Ğ§ÂÊÓ°ÏìÓĞÏŞ¡£
+**ä½é£é™©**ï¼š
+- Visual testing å’Œ benchmark ç»“æœçš„ç¼ºå¤±ä¸»è¦å½±å“å‘å¸ƒå‰çš„ä¿¡å¿ƒåº¦ï¼Œå¯¹æ—¥å¸¸å¼€å‘æ•ˆç‡å½±å“æœ‰é™ã€‚
 
-## 6 ¾ßÌå´úÂëÖ¤¾İË÷Òı
+## 6 å…·ä½“ä»£ç è¯æ®ç´¢å¼•
 
-ÒÔÏÂ°´ÎÄ¼şÂ·¾¶ºÍĞĞºÅÁĞ³ö±¾ÎÄÒıÓÃµÄËùÓĞ¹Ø¼üÖ¤¾İµã£º
+ä»¥ä¸‹æŒ‰æ–‡ä»¶è·¯å¾„å’Œè¡Œå·åˆ—å‡ºæœ¬æ–‡å¼•ç”¨çš„æ‰€æœ‰å…³é”®è¯æ®ç‚¹ï¼š
 
-| ÎÄ¼ş | ĞĞºÅ | ÄÚÈİ¸ÅÒª |
+| æ–‡ä»¶ | è¡Œå· | å†…å®¹æ¦‚è¦ |
 |------|------|----------|
-| package.json | 2 | °æ±¾ 0.1.0 ±íÃ÷ÔçÆÚ½×¶Î |
-| package.json | 7-16 | npm workspaces 10 ¸ö°ü¶¨Òå |
-| package.json | 17-67 | È«²¿ 50 Ìõ script ¶¨Òå |
-| package.json | 24 | build:shared-types Èë¿Ú |
-| package.json | 25 | build:runtime Èë¿Ú |
-| package.json | 26 | build:orchestrator Èë¿Ú |
-| package.json | 27 | build:packages ¾ÛºÏÃüÁî |
-| package.json | 28 | build:daemon Èë¿Ú |
-| package.json | 29 | build:daemon-binary Èë¿Ú |
-| package.json | 30 | build:product ×îÖÕ²úÎïÃüÁî |
-| package.json | 49 | perf:all ¾ÛºÏĞÔÄÜÃüÁî |
-| package.json | 50 | check:core ¾ÛºÏ check ÃüÁî |
+| package.json | 2 | ç‰ˆæœ¬ 0.1.0 è¡¨æ˜æ—©æœŸé˜¶æ®µ |
+| package.json | 7-16 | npm workspaces 10 ä¸ªåŒ…å®šä¹‰ |
+| package.json | 17-67 | å…¨éƒ¨ 50 æ¡ script å®šä¹‰ |
+| package.json | 24 | build:shared-types å…¥å£ |
+| package.json | 25 | build:runtime å…¥å£ |
+| package.json | 26 | build:orchestrator å…¥å£ |
+| package.json | 27 | build:packages èšåˆå‘½ä»¤ |
+| package.json | 28 | build:daemon å…¥å£ |
+| package.json | 29 | build:daemon-binary å…¥å£ |
+| package.json | 30 | build:product æœ€ç»ˆäº§ç‰©å‘½ä»¤ |
+| package.json | 49 | perf:all èšåˆæ€§èƒ½å‘½ä»¤ |
+| package.json | 50 | check:core èšåˆ check å‘½ä»¤ |
 | package.json | 54 | typecheck Ö» cover crish-desktop |
-| package.json | 56 | check:store-types ´æÔÚµ«²» CI Ö´ĞĞ |
-| package.json | 57 | test:core ¶¨Òå |
-| package.json | 58 | test:desktop-helpers ¶¨Òå |
-| package.json | 59 | test È«²¿²âÊÔ |
-| package.json | 60 | test:coverage ´ø¸²¸ÇÂÊ |
-| package.json | 61 | test:integration ¼¯³É²âÊÔÅäÖÃ |
-| package.json | 62 | lint:all ÑÏ¸ñÄ£Ê½ |
-| package.json | 64 | lint ¿íËÉÄ£Ê½ |
-| package.json | 65 | check:all ÍêÕûÖÊÁ¿ÃÅ½û |
+| package.json | 56 | check:store-types å­˜åœ¨ä½†ä¸ CI æ‰§è¡Œ |
+| package.json | 57 | test:core å®šä¹‰ |
+| package.json | 58 | test:desktop-helpers å®šä¹‰ |
+| package.json | 59 | test å…¨éƒ¨æµ‹è¯• |
+| package.json | 60 | test:coverage å¸¦è¦†ç›–ç‡ |
+| package.json | 61 | test:integration é›†æˆæµ‹è¯•é…ç½® |
+| package.json | 62 | lint:all ä¸¥æ ¼æ¨¡å¼ |
+| package.json | 64 | lint å®½æ¾æ¨¡å¼ |
+| package.json | 65 | check:all å®Œæ•´è´¨é‡é—¨ç¦ |
 | package.json | 66-67 | format / format:write |
-| package.json | 69-86 | devDependencies º¬ 18 ¸ö¹¤¾ßÁ´°ü |
-| package.json | 73 | dependency-cruiser Î´ÔÚ CI Ê¹ÓÃ |
-| package.json | 88-93 | Éú²úÒÀÀµ 6 ¸ö°ü |
-| turbo.json | 3-30 | pipeline 7 ¸öÈÎÎñ¶¨Òå |
-| turbo.json | 6 | outputs: dist/** + .tsbuildinfo »º´æÉùÃ÷ |
-| tsconfig.base.json | 8-23 | strict Ä£Ê½ÒÑ¿ªÆô |
-| tsconfig.base.json | 18-19 | noUnusedLocals/noUnusedParameters ¹Ø±Õ |
-| tsconfig.base.json | 22 | noUncheckedIndexedAccess ¿ªÆô |
-| tsconfig.base.json | 23 | exactOptionalPropertyTypes ¿ªÆô |
-| vitest.config.ts | 7-16 | include ¸²¸Ç packages + apps |
-| vitest.config.ts | 13-16 | coverage ÅäÖÃ v8, text/json/html ±¨¸æ |
-| apps/crish-desktop/vitest.config.ts | 13-18 | ¸²¸ÇÂÊãĞÖµ 70/60/65/70 |
-| eslint.config.js | 9-21 | ignores ÁĞ±íº¬ 11 ÖÖÄ¿Â¼ |
+| package.json | 69-86 | devDependencies å« 18 ä¸ªå·¥å…·é“¾åŒ… |
+| package.json | 73 | dependency-cruiser æœªåœ¨ CI ä½¿ç”¨ |
+| package.json | 88-93 | ç”Ÿäº§ä¾èµ– 6 ä¸ªåŒ… |
+| turbo.json | 3-30 | pipeline 7 ä¸ªä»»åŠ¡å®šä¹‰ |
+| turbo.json | 6 | outputs: dist/** + .tsbuildinfo ç¼“å­˜å£°æ˜ |
+| tsconfig.base.json | 8-23 | strict æ¨¡å¼å·²å¼€å¯ |
+| tsconfig.base.json | 18-19 | noUnusedLocals/noUnusedParameters å…³é—­ |
+| tsconfig.base.json | 22 | noUncheckedIndexedAccess å¼€å¯ |
+| tsconfig.base.json | 23 | exactOptionalPropertyTypes å¼€å¯ |
+| vitest.config.ts | 7-16 | include è¦†ç›– packages + apps |
+| vitest.config.ts | 13-16 | coverage é…ç½® v8, text/json/html æŠ¥å‘Š |
+| apps/crish-desktop/vitest.config.ts | 13-18 | è¦†ç›–ç‡é˜ˆå€¼ 70/60/65/70 |
+| eslint.config.js | 9-21 | ignores åˆ—è¡¨å« 11 ç§ç›®å½• |
 | eslint.config.js | 55-57 | Frontend rules crish-desktop + agent-workbench |
 | eslint.config.js | 65-68 | react-refresh/only-export-components |
-| eslint.config.js | 69-76 | no-restricted-syntax Object.assign ½ûÖ¹ |
-| .lintstagedrc.json | 1-5 | lint-staged ts/css/json ÅäÖÃ |
+| eslint.config.js | 69-76 | no-restricted-syntax Object.assign ç¦æ­¢ |
+| .lintstagedrc.json | 1-5 | lint-staged ts/css/json é…ç½® |
 | .husky/pre-commit | 1 | npx lint-staged |
 | .husky/pre-push | 1 | npm run typecheck && npm test |
-| packages/agent-daemon/package.json | 25-28 | build ÈıÔª×é clean - types - js |
-| packages/agent-daemon/package.json | 26 | tsc-alias ºó´¦Àí |
-| packages/agent-daemon/package.json | 33 | ÒÀÀµ daemon -> orchestrator |
-| packages/shared-types/package.json | 25-28 | ±ê×¼ build Ä£Ê½ |
-| packages/shared-utils/package.json | 46-49 | ¶àÈë¿Ú esbuild£¨browser + node + Ä¬ÈÏ£© |
-| packages/agent-orchestrator/package.json | 31 | ÒÀÀµ orchestrator -> runtime |
-| packages/agent-daemon/package.json | 39 | @modelcontextprotocol/sdk ÒÀÀµ |
-| apps/agent-workbench/package.json | 9 | build ÖØ¶¨Ïòµ½ crish-desktop |
+| packages/agent-daemon/package.json | 25-28 | build ä¸‰å…ƒç»„ clean - types - js |
+| packages/agent-daemon/package.json | 26 | tsc-alias åå¤„ç† |
+| packages/agent-daemon/package.json | 33 | ä¾èµ– daemon -> orchestrator |
+| packages/shared-types/package.json | 25-28 | æ ‡å‡† build æ¨¡å¼ |
+| packages/shared-utils/package.json | 46-49 | å¤šå…¥å£ esbuildï¼ˆbrowser + node + é»˜è®¤ï¼‰ |
+| packages/agent-orchestrator/package.json | 31 | ä¾èµ– orchestrator -> runtime |
+| packages/agent-daemon/package.json | 39 | @modelcontextprotocol/sdk ä¾èµ– |
+| apps/agent-workbench/package.json | 9 | build é‡å®šå‘åˆ° crish-desktop |
 | apps/agent-workbench/package.json | 12 | cli:check + command-registry:check |
 | apps/crish-desktop/package.json | 10 | build = tsc -b && vite build |
-| apps/crish-desktop/package.json | 13 | qa:check 4 ÏîÖÊÁ¿¼ì²é |
+| apps/crish-desktop/package.json | 13 | qa:check 4 é¡¹è´¨é‡æ£€æŸ¥ |
 | apps/crish-desktop/package.json | 16-17 | Playwright visual test |
-| Cargo.toml | 2-15 | Rust workspace 12 ¸ö crate |
-| Cargo.toml | 60-66 | workspace.package ÔªÊı¾İ |
-| Cargo.toml | 68-82 | workspace.dependencies ¹«¹²ÒÀÀµ |
-| crates/conex-stream/Cargo.toml | 1-21 | Ê¾Àı crate ÅäÖÃ |
-| crates/conex-stream/Cargo.toml | 13-18 | criterion benchmark ÅäÖÃ |
+| Cargo.toml | 2-15 | Rust workspace 12 ä¸ª crate |
+| Cargo.toml | 60-66 | workspace.package å…ƒæ•°æ® |
+| Cargo.toml | 68-82 | workspace.dependencies å…¬å…±ä¾èµ– |
+| crates/conex-stream/Cargo.toml | 1-21 | ç¤ºä¾‹ crate é…ç½® |
+| crates/conex-stream/Cargo.toml | 13-18 | criterion benchmark é…ç½® |
 | .github/dependabot.yml | 1-25 | dependabot npm + cargo |
-| .github/dependabot.yml | 25 | ignore: conex-stream È±ÉÙÔ­Òò |
-| .github/workflows/ci.yml | 13-42 | rust-check ÈıÆ½Ì¨ |
+| .github/dependabot.yml | 25 | ignore: conex-stream ç¼ºå°‘åŸå›  |
+| .github/workflows/ci.yml | 13-42 | rust-check ä¸‰å¹³å° |
 | .github/workflows/ci.yml | 30 | Swatinem/rust-cache |
 | .github/workflows/ci.yml | 39 | cargo test --workspace |
-| .github/workflows/ci.yml | 44-65 | rust-stream-test ¶ÀÁ¢ |
+| .github/workflows/ci.yml | 44-65 | rust-stream-test ç‹¬ç«‹ |
 | .github/workflows/ci.yml | 66-88 | ts-check Ö» cover agent-runtime |
 | .github/workflows/ci.yml | 79 | npx tsc --noEmit agent-runtime |
 | .github/workflows/ci.yml | 81-82 | Provider tests |
@@ -557,361 +557,361 @@ package.json:42-47 ¶¨ÒåµÄ stress ²âÊÔºÍ bench ²âÊÔ¿ÉÄÜÒÀÀµÍâ²¿ Provider API¡£Èç¹
 | .github/workflows/ci.yml | 87-88 | Fallback chain tests || true |
 | .github/workflows/ci.yml | 90-114 | provider-json-validate |
 | .github/workflows/ci.yml | 117-134 | security-audit continue-on-error |
-| .github/workflows/ci.yml | 136-148 | ESLint ½ö provider ×ÓÄ¿Â¼ |
-| .github/workflows/ci.yml | 150-167 | coverage ÎŞãĞÖµÑéÖ¤ |
-| .github/workflows/ci.yml | 169-181 | e2e ½ö provider |
+| .github/workflows/ci.yml | 136-148 | ESLint ä»… provider å­ç›®å½• |
+| .github/workflows/ci.yml | 150-167 | coverage æ— é˜ˆå€¼éªŒè¯ |
+| .github/workflows/ci.yml | 169-181 | e2e ä»… provider |
 | .github/workflows/ci.yml | 184-197 | bench-rust || true |
 | .github/workflows/ci.yml | 199-209 | bench-ts || true |
-| .github/workflows/perf-test.yml | 1-137 | ĞÔÄÜ²âÊÔÎŞ Node ¾ØÕó |
-| .github/workflows/release.yml | 1-67 | ·¢²¼Á÷Ë®Ïß |
-| .github/workflows/release.yml | 23 | Node 20 Âäºó |
-| .github/workflows/release.yml | 37 | build:packages ·Ç build:product |
+| .github/workflows/perf-test.yml | 1-137 | æ€§èƒ½æµ‹è¯•æ—  Node çŸ©é˜µ |
+| .github/workflows/release.yml | 1-67 | å‘å¸ƒæµæ°´çº¿ |
+| .github/workflows/release.yml | 23 | Node 20 è½å |
+| .github/workflows/release.yml | 37 | build:packages é build:product |
 | .github/workflows/release.yml | 61 | generate_release_notes: true |
-| vitest.setup.ts | 1-44 | browser È«¾Ö²¹Æë |
+| vitest.setup.ts | 1-44 | browser å…¨å±€è¡¥é½ |
 
-## Êı¾İ×ÜÀÀ
+## æ•°æ®æ€»è§ˆ
 
-- ÏîÄ¿×Ü°üÊı£ºnpm workspaces 10 + Rust workspace 12 = 22 ¸ö¿É¹¹½¨µ¥Ôª
-- CI ÖĞÊµ¼ÊÖ´ĞĞµÄ TS ×Ó°üÊı£º1£¨agent-runtime µÄ provider ×ÓÄ¿Â¼£©
-- TypeScript ²âÊÔÎÄ¼ş£ºvitest.config.ts:8-11 ¶¨ÒåµÄ include Ä£Ê½¸²¸ÇÔ¼Êı°Ù¸ö²âÊÔÎÄ¼ş£¬CI ÖĞ½öÖ´ĞĞÔ¼ 3-5%
-- ¹¹½¨ÃüÁîÊı£º¸ù package.json 50 Ìõ + ¸÷×Ó°üÔ¼ 30 Ìõ = Ô¼ 80 Ìõ¿ÉÖ´ĞĞÃüÁî
-- CI ÖĞÊµ¼Ê´¥·¢µÄ¹¹½¨ÃüÁîÊı£ºÔ¼ 12 Ìõ£¨½öÕë¶Ô agent-runtime ºÍ Rust crate£©
-- ·¢²¼ÖÆÆ·ÀàĞÍ£ºnpm °ü£¨6 ¸ö£©¡¢Tauri ×ÀÃæ°²×°°ü£¨3 Æ½Ì¨£©¡¢daemon ¶ş½øÖÆ£¨Î´ÄÉÈë CI£©
-- ÏÖÓĞ workflow Êı£º4£¨ci.yml 209 ĞĞ, perf-test.yml 137 ĞĞ, provider-validation.yml 83 ĞĞ, release.yml 67 ĞĞ£©
+- é¡¹ç›®æ€»åŒ…æ•°ï¼šnpm workspaces 10 + Rust workspace 12 = 22 ä¸ªå¯æ„å»ºå•å…ƒ
+- CI ä¸­å®é™…æ‰§è¡Œçš„ TS å­åŒ…æ•°ï¼š1ï¼ˆagent-runtime çš„ provider å­ç›®å½•ï¼‰
+- TypeScript æµ‹è¯•æ–‡ä»¶ï¼švitest.config.ts:8-11 å®šä¹‰çš„ include æ¨¡å¼è¦†ç›–çº¦æ•°ç™¾ä¸ªæµ‹è¯•æ–‡ä»¶ï¼ŒCI ä¸­ä»…æ‰§è¡Œçº¦ 3-5%
+- æ„å»ºå‘½ä»¤æ•°ï¼šæ ¹ package.json 50 æ¡ + å„å­åŒ…çº¦ 30 æ¡ = çº¦ 80 æ¡å¯æ‰§è¡Œå‘½ä»¤
+- CI ä¸­å®é™…è§¦å‘çš„æ„å»ºå‘½ä»¤æ•°ï¼šçº¦ 12 æ¡ï¼ˆä»…é’ˆå¯¹ agent-runtime å’Œ Rust crateï¼‰
+- å‘å¸ƒåˆ¶å“ç±»å‹ï¼šnpm åŒ…ï¼ˆ6 ä¸ªï¼‰ã€Tauri æ¡Œé¢å®‰è£…åŒ…ï¼ˆ3 å¹³å°ï¼‰ã€daemon äºŒè¿›åˆ¶ï¼ˆæœªçº³å…¥ CIï¼‰
+- ç°æœ‰ workflow æ•°ï¼š4ï¼ˆci.yml 209 è¡Œ, perf-test.yml 137 è¡Œ, provider-validation.yml 83 è¡Œ, release.yml 67 è¡Œï¼‰
 
-## 7 ÖğÎÄ¼ş CI ¸²¸Ç¶ÈÉó¼Æ
+## 7 é€æ–‡ä»¶ CI è¦†ç›–åº¦å®¡è®¡
 
-±¾½Ú¶ÔÏîÄ¿Ã¿¸ö¿É¹¹½¨µ¥ÔªÔÚ CI ÖĞµÄ¸²¸Ç¶È½øĞĞÖğÎÄ¼şÉó¼Æ¡£
+æœ¬èŠ‚å¯¹é¡¹ç›®æ¯ä¸ªå¯æ„å»ºå•å…ƒåœ¨ CI ä¸­çš„è¦†ç›–åº¦è¿›è¡Œé€æ–‡ä»¶å®¡è®¡ã€‚
 
-### 7.1 ¸ù package.json ½Å±¾¸²¸Ç¶È
+### 7.1 æ ¹ package.json è„šæœ¬è¦†ç›–åº¦
 
-¸ù package.json ¶¨ÒåÁË 50 Ìõ script£¨package.json:17-67£©£¬ÏÖÖğÌõÉó¼Æ CI ¸²¸ÇÇé¿ö£º
+æ ¹ package.json å®šä¹‰äº† 50 æ¡ scriptï¼ˆpackage.json:17-67ï¼‰ï¼Œç°é€æ¡å®¡è®¡ CI è¦†ç›–æƒ…å†µï¼š
 
-| Script | ĞĞºÅ | ¹¦ÄÜ | CI Ö´ĞĞ? | Ö´ĞĞÎ»ÖÃ |
+| Script | è¡Œå· | åŠŸèƒ½ | CI æ‰§è¡Œ? | æ‰§è¡Œä½ç½® |
 |--------|------|------|----------|----------|
-| prepare | 18 | husky install | ·ñ | N/A£¨CI ÖĞ npm ci ×Ô¶¯´¦Àí£© |
-| dev:desktop | 19 | ¿ª·¢·şÎñÆ÷ | N/A | ²»ĞèÒª CI |
-| dev:workbench | 20 | Tauri dev | N/A | ²»ĞèÒª CI |
-| dev:cli | 21 | CLI dev | N/A | ²»ĞèÒª CI |
-| build:desktop | 22 | desktop ¹¹½¨ | ·ñ | N/A |
-| build:workbench | 23 | workbench ¹¹½¨ | ·ñ | N/A |
-| build:shared-types | 24 | shared-types ¹¹½¨ | ·ñ | N/A |
-| build:runtime | 25 | runtime ¹¹½¨ | ·ñ | N/A |
-| build:orchestrator | 26 | orchestrator ¹¹½¨ | ·ñ | N/A |
-| build:packages | 27 | ¾ÛºÏ¹¹½¨ | ²¿·Ö | release.yml:37 |
-| build:daemon | 28 | daemon ¹¹½¨ | ·ñ | N/A |
-| build:daemon-binary | 29 | daemon ¶ş½øÖÆ | ·ñ | N/A |
-| build:product | 30 | ×îÖÕ²úÎï | ·ñ | N/A |
-| cli | 31 | CLI ±ğÃû | N/A | ²»ĞèÒª CI |
-| daemon | 32 | daemon ¿ª·¢ | N/A | ²»ĞèÒª CI |
-| daemon:dist | 33 | daemon ¶ş½øÖÆÔËĞĞ | N/A | ²»ĞèÒª CI |
-| bench:daemon | 34 | daemon »ù×¼ | ·ñ | N/A |
-| bench | 35 | TS »ù×¼ | ²¿·Ö | perf-test.yml:28 |
-| bench:mem | 36 | ÄÚ´æ»ù×¼ | ²¿·Ö | perf-test.yml:31 |
-| bench:ci | 37 | CI »ù×¼¾ÛºÏ | ·ñ | N/A |
-| bench:acceptance | 38 | ½ÓÊÜ¶È»ù×¼ | ²¿·Ö | perf-test.yml:37 |
-| bench:native-sla | 39 | Ô­Éú»ù×¼ | ·ñ | N/A |
-| bench:native | 40 | Ô­Éú»ù×¼±ğÃû | ·ñ | N/A |
-| bench:report | 41 | »ù×¼±¨¸æ | ²¿·Ö | perf-test.yml:40 |
-| stress | 42 | Ñ¹Á¦²âÊÔ | ²¿·Ö | perf-test.yml:60 |
-| stress:ai | 43 | AI Á÷Ñ¹Á¦ | ·ñ | N/A |
-| stress:diff | 44 | diff Ñ¹Á¦ | ·ñ | N/A |
-| stress:session | 45 | session ÇĞ»»Ñ¹Á¦ | ·ñ | N/A |
-| startup:cold | 46 | ÀäÆô¶¯²âÁ¿ | ·ñ | N/A |
-| startup:warm | 47 | ÈÈÆô¶¯²âÁ¿ | ·ñ | N/A |
-| perf:all | 48 | ĞÔÄÜÈ«Á¿ | ·ñ | N/A |
-| check:core | 50 | ºËĞÄÀàĞÍ¼ì²é | ·ñ | N/A |
-| check:runtime | 51 | runtime ÀàĞÍ¼ì²é | ²¿·Ö | ci.yml:79 |
-| check:orchestrator | 52 | orchestrator ÀàĞÍ¼ì²é | ·ñ | N/A |
-| check:daemon | 53 | daemon ÀàĞÍ¼ì²é | ·ñ | N/A |
-| check:workbench | 54 | workbench ¼ì²é | ·ñ | N/A |
-| typecheck | 55 | desktop ÀàĞÍ¼ì²é | ·ñ | N/A |
-| check:desktop | 56 | desktop ¼ì²é | ·ñ | N/A |
-| check:store-types | 57 | store ÀàĞÍ°²È« | ·ñ | N/A |
-| test:core | 58 | ºËĞÄ²âÊÔ | ·ñ | N/A |
-| test:desktop-helpers | 59 | desktop ²âÊÔ | ·ñ | N/A |
-| test | 60 | È«²¿²âÊÔ | ²¿·Ö | ci.yml:81-88 |
-| test:coverage | 61 | ´ø¸²¸ÇÂÊ²âÊÔ | ²¿·Ö | ci.yml:162 |
-| test:integration | 62 | ¼¯³É²âÊÔ | ·ñ | N/A |
-| lint:all | 63 | ÑÏ¸ñ lint | ·ñ | N/A |
-| lint:css | 64 | CSS lint | ·ñ | N/A |
-| lint | 65 | ¿íËÉ lint | ²¿·Ö | ci.yml:148 |
-| check:all | 66 | ÍêÕûÖÊÁ¿ÃÅ½û | ·ñ | N/A |
-| format | 67 | prettier --check | ·ñ | N/A |
-| format:write | 68 | prettier --write | N/A | ²»ĞèÒª CI |
+| prepare | 18 | husky install | å¦ | N/Aï¼ˆCI ä¸­ npm ci è‡ªåŠ¨å¤„ç†ï¼‰ |
+| dev:desktop | 19 | å¼€å‘æœåŠ¡å™¨ | N/A | ä¸éœ€è¦ CI |
+| dev:workbench | 20 | Tauri dev | N/A | ä¸éœ€è¦ CI |
+| dev:cli | 21 | CLI dev | N/A | ä¸éœ€è¦ CI |
+| build:desktop | 22 | desktop æ„å»º | å¦ | N/A |
+| build:workbench | 23 | workbench æ„å»º | å¦ | N/A |
+| build:shared-types | 24 | shared-types æ„å»º | å¦ | N/A |
+| build:runtime | 25 | runtime æ„å»º | å¦ | N/A |
+| build:orchestrator | 26 | orchestrator æ„å»º | å¦ | N/A |
+| build:packages | 27 | èšåˆæ„å»º | éƒ¨åˆ† | release.yml:37 |
+| build:daemon | 28 | daemon æ„å»º | å¦ | N/A |
+| build:daemon-binary | 29 | daemon äºŒè¿›åˆ¶ | å¦ | N/A |
+| build:product | 30 | æœ€ç»ˆäº§ç‰© | å¦ | N/A |
+| cli | 31 | CLI åˆ«å | N/A | ä¸éœ€è¦ CI |
+| daemon | 32 | daemon å¼€å‘ | N/A | ä¸éœ€è¦ CI |
+| daemon:dist | 33 | daemon äºŒè¿›åˆ¶è¿è¡Œ | N/A | ä¸éœ€è¦ CI |
+| bench:daemon | 34 | daemon åŸºå‡† | å¦ | N/A |
+| bench | 35 | TS åŸºå‡† | éƒ¨åˆ† | perf-test.yml:28 |
+| bench:mem | 36 | å†…å­˜åŸºå‡† | éƒ¨åˆ† | perf-test.yml:31 |
+| bench:ci | 37 | CI åŸºå‡†èšåˆ | å¦ | N/A |
+| bench:acceptance | 38 | æ¥å—åº¦åŸºå‡† | éƒ¨åˆ† | perf-test.yml:37 |
+| bench:native-sla | 39 | åŸç”ŸåŸºå‡† | å¦ | N/A |
+| bench:native | 40 | åŸç”ŸåŸºå‡†åˆ«å | å¦ | N/A |
+| bench:report | 41 | åŸºå‡†æŠ¥å‘Š | éƒ¨åˆ† | perf-test.yml:40 |
+| stress | 42 | å‹åŠ›æµ‹è¯• | éƒ¨åˆ† | perf-test.yml:60 |
+| stress:ai | 43 | AI æµå‹åŠ› | å¦ | N/A |
+| stress:diff | 44 | diff å‹åŠ› | å¦ | N/A |
+| stress:session | 45 | session åˆ‡æ¢å‹åŠ› | å¦ | N/A |
+| startup:cold | 46 | å†·å¯åŠ¨æµ‹é‡ | å¦ | N/A |
+| startup:warm | 47 | çƒ­å¯åŠ¨æµ‹é‡ | å¦ | N/A |
+| perf:all | 48 | æ€§èƒ½å…¨é‡ | å¦ | N/A |
+| check:core | 50 | æ ¸å¿ƒç±»å‹æ£€æŸ¥ | å¦ | N/A |
+| check:runtime | 51 | runtime ç±»å‹æ£€æŸ¥ | éƒ¨åˆ† | ci.yml:79 |
+| check:orchestrator | 52 | orchestrator ç±»å‹æ£€æŸ¥ | å¦ | N/A |
+| check:daemon | 53 | daemon ç±»å‹æ£€æŸ¥ | å¦ | N/A |
+| check:workbench | 54 | workbench æ£€æŸ¥ | å¦ | N/A |
+| typecheck | 55 | desktop ç±»å‹æ£€æŸ¥ | å¦ | N/A |
+| check:desktop | 56 | desktop æ£€æŸ¥ | å¦ | N/A |
+| check:store-types | 57 | store ç±»å‹å®‰å…¨ | å¦ | N/A |
+| test:core | 58 | æ ¸å¿ƒæµ‹è¯• | å¦ | N/A |
+| test:desktop-helpers | 59 | desktop æµ‹è¯• | å¦ | N/A |
+| test | 60 | å…¨éƒ¨æµ‹è¯• | éƒ¨åˆ† | ci.yml:81-88 |
+| test:coverage | 61 | å¸¦è¦†ç›–ç‡æµ‹è¯• | éƒ¨åˆ† | ci.yml:162 |
+| test:integration | 62 | é›†æˆæµ‹è¯• | å¦ | N/A |
+| lint:all | 63 | ä¸¥æ ¼ lint | å¦ | N/A |
+| lint:css | 64 | CSS lint | å¦ | N/A |
+| lint | 65 | å®½æ¾ lint | éƒ¨åˆ† | ci.yml:148 |
+| check:all | 66 | å®Œæ•´è´¨é‡é—¨ç¦ | å¦ | N/A |
+| format | 67 | prettier --check | å¦ | N/A |
+| format:write | 68 | prettier --write | N/A | ä¸éœ€è¦ CI |
 
-×Ü¼Æ£º50 Ìõ script ÖĞ£¬CI ¸²¸ÇÔ¼ 12 Ìõ£¨24%£©£¬ÆäÖĞ 5 ÌõÊ¹ÓÃ || true ¾²Ä¬Ä£Ê½¡£ºËĞÄ¹¹½¨¹¹½¨Á´ build:product£¨6 ¸ö×ÓÃüÁî£©ÍêÈ«Î´ÔÚ CI ÖĞÖ´ĞĞ¡£
+æ€»è®¡ï¼š50 æ¡ script ä¸­ï¼ŒCI è¦†ç›–çº¦ 12 æ¡ï¼ˆ24%ï¼‰ï¼Œå…¶ä¸­ 5 æ¡ä½¿ç”¨ || true é™é»˜æ¨¡å¼ã€‚æ ¸å¿ƒæ„å»ºæ„å»ºé“¾ build:productï¼ˆ6 ä¸ªå­å‘½ä»¤ï¼‰å®Œå…¨æœªåœ¨ CI ä¸­æ‰§è¡Œã€‚
 
-### 7.2 ×Ó°ü package.json ½Å±¾¸²¸Ç¶È
+### 7.2 å­åŒ… package.json è„šæœ¬è¦†ç›–åº¦
 
-| °ü | ½Å±¾Êı | CI ¸²¸Ç | ¸²¸Ç¶È |
+| åŒ… | è„šæœ¬æ•° | CI è¦†ç›– | è¦†ç›–åº¦ |
 |----|--------|---------|--------|
-| packages/agent-runtime | 4 | ÀàĞÍ¼ì²é + ²âÊÔ | 50% |
-| packages/agent-daemon | 7 | ÎŞ | 0% |
-| packages/shared-types | 4 | ÎŞ | 0% |
-| packages/shared-utils | 7 | ÎŞ | 0% |
-| packages/decision-engine | 4 | ÎŞ | 0% |
-| packages/agent-orchestrator | 4 | ÎŞ | 0% |
-| apps/crish-desktop | 8 | ÎŞ | 0% |
-| apps/agent-workbench | 6 | ÎŞ | 0% |
+| packages/agent-runtime | 4 | ç±»å‹æ£€æŸ¥ + æµ‹è¯• | 50% |
+| packages/agent-daemon | 7 | æ—  | 0% |
+| packages/shared-types | 4 | æ—  | 0% |
+| packages/shared-utils | 7 | æ—  | 0% |
+| packages/decision-engine | 4 | æ—  | 0% |
+| packages/agent-orchestrator | 4 | æ—  | 0% |
+| apps/crish-desktop | 8 | æ—  | 0% |
+| apps/agent-workbench | 6 | æ—  | 0% |
 
-### 7.3 TypeScript ÎÄ¼şÀàĞÍ¼ì²é¸²¸Ç¶È
+### 7.3 TypeScript æ–‡ä»¶ç±»å‹æ£€æŸ¥è¦†ç›–åº¦
 
-ÏîÄ¿ TS ÎÄ¼ş·Ö²¼Óë CI ÀàĞÍ¼ì²é¸²¸Ç£º
+é¡¹ç›® TS æ–‡ä»¶åˆ†å¸ƒä¸ CI ç±»å‹æ£€æŸ¥è¦†ç›–ï¼š
 
-| Ä¿Â¼ | tsconfig | tsc ÔÚ CI? | ĞĞÊı£¨¹À£© |
+| ç›®å½• | tsconfig | tsc åœ¨ CI? | è¡Œæ•°ï¼ˆä¼°ï¼‰ |
 |------|----------|-----------|-----------|
-| apps/crish-desktop/ | apps/crish-desktop/tsconfig.json | ·ñ | ~20000 |
-| apps/agent-workbench/ | apps/agent-workbench/tsconfig.json | ·ñ | ~5000 |
-| packages/shared-types/ | packages/shared-types/tsconfig.build.json | ·ñ | ~3000 |
-| packages/shared-utils/ | packages/shared-utils/tsconfig.build.json | ·ñ | ~4000 |
-| packages/decision-engine/ | packages/decision-engine/tsconfig.build.json | ·ñ | ~2000 |
-| packages/agent-runtime/ | packages/agent-runtime/tsconfig.json | ²¿·Ö£¨--noEmit£© | ~15000 |
-| packages/agent-orchestrator/ | packages/agent-orchestrator/tsconfig.build.json | ·ñ | ~5000 |
-| packages/agent-daemon/ | packages/agent-daemon/tsconfig.build.json | ·ñ | ~3000 |
+| apps/crish-desktop/ | apps/crish-desktop/tsconfig.json | å¦ | ~20000 |
+| apps/agent-workbench/ | apps/agent-workbench/tsconfig.json | å¦ | ~5000 |
+| packages/shared-types/ | packages/shared-types/tsconfig.build.json | å¦ | ~3000 |
+| packages/shared-utils/ | packages/shared-utils/tsconfig.build.json | å¦ | ~4000 |
+| packages/decision-engine/ | packages/decision-engine/tsconfig.build.json | å¦ | ~2000 |
+| packages/agent-runtime/ | packages/agent-runtime/tsconfig.json | éƒ¨åˆ†ï¼ˆ--noEmitï¼‰ | ~15000 |
+| packages/agent-orchestrator/ | packages/agent-orchestrator/tsconfig.build.json | å¦ | ~5000 |
+| packages/agent-daemon/ | packages/agent-daemon/tsconfig.build.json | å¦ | ~3000 |
 
-Ö»ÓĞÔ¼ 15% µÄ TS ´úÂëÔÚ CI ÖĞ½ÓÊÜÁËÀàĞÍ¼ì²é¡£
+åªæœ‰çº¦ 15% çš„ TS ä»£ç åœ¨ CI ä¸­æ¥å—äº†ç±»å‹æ£€æŸ¥ã€‚
 
-### 7.4 Rust crate ²âÊÔ¸²¸Ç¶È
+### 7.4 Rust crate æµ‹è¯•è¦†ç›–åº¦
 
-Cargo.toml:2-15 ¶¨ÒåµÄ 12 ¸ö crate ÔÚ CI ÖĞµÄ¸²¸Ç£º
+Cargo.toml:2-15 å®šä¹‰çš„ 12 ä¸ª crate åœ¨ CI ä¸­çš„è¦†ç›–ï¼š
 
-| Crate | cargo test | cargo clippy | cargo fmt | ¶ÀÁ¢²âÊÔ |
+| Crate | cargo test | cargo clippy | cargo fmt | ç‹¬ç«‹æµ‹è¯• |
 |-------|-----------|-------------|-----------|----------|
-| conex-stream | workspace ¼¶ | workspace ¼¶ | workspace ¼¶ | all-features |
-| conex-ipc | workspace ¼¶ | workspace ¼¶ | workspace ¼¶ | ·ñ |
-| conex-types | workspace ¼¶ | workspace ¼¶ | workspace ¼¶ | ·ñ |
-| conex-net | workspace ¼¶ | workspace ¼¶ | workspace ¼¶ | ·ñ |
-| conex-db | workspace ¼¶ | workspace ¼¶ | workspace ¼¶ | ·ñ |
-| conex-search | workspace ¼¶ | workspace ¼¶ | workspace ¼¶ | ·ñ |
-| conex-compaction | workspace ¼¶ | workspace ¼¶ | workspace ¼¶ | ·ñ |
-| conex-sandbox | workspace ¼¶ | workspace ¼¶ | workspace ¼¶ | ·ñ |
-| conex-diff | workspace ¼¶ | workspace ¼¶ | workspace ¼¶ | ·ñ |
-| conex-fs | workspace ¼¶ | workspace ¼¶ | workspace ¼¶ | ·ñ |
-| conex-http | workspace ¼¶ | workspace ¼¶ | workspace ¼¶ | ·ñ |
-| tauri-app | workspace ¼¶ | workspace ¼¶ | workspace ¼¶ | ·ñ |
+| conex-stream | workspace çº§ | workspace çº§ | workspace çº§ | all-features |
+| conex-ipc | workspace çº§ | workspace çº§ | workspace çº§ | å¦ |
+| conex-types | workspace çº§ | workspace çº§ | workspace çº§ | å¦ |
+| conex-net | workspace çº§ | workspace çº§ | workspace çº§ | å¦ |
+| conex-db | workspace çº§ | workspace çº§ | workspace çº§ | å¦ |
+| conex-search | workspace çº§ | workspace çº§ | workspace çº§ | å¦ |
+| conex-compaction | workspace çº§ | workspace çº§ | workspace çº§ | å¦ |
+| conex-sandbox | workspace çº§ | workspace çº§ | workspace çº§ | å¦ |
+| conex-diff | workspace çº§ | workspace çº§ | workspace çº§ | å¦ |
+| conex-fs | workspace çº§ | workspace çº§ | workspace çº§ | å¦ |
+| conex-http | workspace çº§ | workspace çº§ | workspace çº§ | å¦ |
+| tauri-app | workspace çº§ | workspace çº§ | workspace çº§ | å¦ |
 
-Rust ¸²¸Ç¶ÈÃ÷ÏÔ¸üºÃ£ºÍ¨¹ı workspace ¼¶ÃüÁî¸²¸ÇÈ«²¿ 12 ¸ö crate¡£Ö÷ÒªÎÊÌâÊÇ cargo test --workspace ²»°üº¬ --all-features£¬ÇÒ benchmark ¾²Ä¬¡£
+Rust è¦†ç›–åº¦æ˜æ˜¾æ›´å¥½ï¼šé€šè¿‡ workspace çº§å‘½ä»¤è¦†ç›–å…¨éƒ¨ 12 ä¸ª crateã€‚ä¸»è¦é—®é¢˜æ˜¯ cargo test --workspace ä¸åŒ…å« --all-featuresï¼Œä¸” benchmark é™é»˜ã€‚
 
-## 8 Cargo ÒÀÀµÍØÆË
+## 8 Cargo ä¾èµ–æ‹“æ‰‘
 
-Cargo.toml:68-82 ¶¨ÒåÁË workspace ¼¶¹«¹²ÒÀÀµ£º
-- serde + serde_json£¨ĞòÁĞ»¯£©
-- anyhow£¨´íÎó´¦Àí£©
-- thiserror£¨´íÎó derive£©
-- tokio£¨Òì²½ÔËĞĞÊ±£¬features = [full]£©
-- reqwest£¨HTTP ¿Í»§¶Ë£¬rustls-tls£©
-- tauri + tauri-build£¨×ÀÃæ¿ò¼Ü£©
-- rusqlite + r2d2 + r2d2_sqlite£¨Êı¾İ¿â£©
-- notify£¨ÎÄ¼şÏµÍ³¼à¿Ø£©
-- similar£¨diff ÒıÇæ£©
-- derive_builder£¨Builder Ä£Ê½£©
+Cargo.toml:68-82 å®šä¹‰äº† workspace çº§å…¬å…±ä¾èµ–ï¼š
+- serde + serde_jsonï¼ˆåºåˆ—åŒ–ï¼‰
+- anyhowï¼ˆé”™è¯¯å¤„ç†ï¼‰
+- thiserrorï¼ˆé”™è¯¯ deriveï¼‰
+- tokioï¼ˆå¼‚æ­¥è¿è¡Œæ—¶ï¼Œfeatures = [full]ï¼‰
+- reqwestï¼ˆHTTP å®¢æˆ·ç«¯ï¼Œrustls-tlsï¼‰
+- tauri + tauri-buildï¼ˆæ¡Œé¢æ¡†æ¶ï¼‰
+- rusqlite + r2d2 + r2d2_sqliteï¼ˆæ•°æ®åº“ï¼‰
+- notifyï¼ˆæ–‡ä»¶ç³»ç»Ÿç›‘æ§ï¼‰
+- similarï¼ˆdiff å¼•æ“ï¼‰
+- derive_builderï¼ˆBuilder æ¨¡å¼ï¼‰
 
-ÕâĞ©ÒÀÀµÖĞÓĞ 4 ¸ö£¨reqwest, notify, rusqlite, tauri£©±àÒëÁ´½Óµ½ÏµÍ³¿â£¬CI ÖĞµÄ Rust ¹¤×÷Á÷ĞèÒªÈ·±£ÕâĞ©ÏµÍ³ÒÀÀµÔÚ Windows/macOS/Linux ÈıÆ½Ì¨¶¼¿ÉÓÃ¡£µ±Ç° rust-check job ÔÚ windows-latest ÉÏÔËĞĞ cargo check Ê±£¬rusqlite µÄ bundled feature È·±£ SQLite ±»¾²Ì¬±àÒë£¬µ« tauri ÔÚ·Ç Linux Æ½Ì¨¿ÉÄÜÈ±ÉÙÄ³Ğ©ÏµÍ³¿â¡£ÕâĞ©Ç±ÔÚÎÊÌâµ±Ç°Î´±» CI ¼ì²â¡£
+è¿™äº›ä¾èµ–ä¸­æœ‰ 4 ä¸ªï¼ˆreqwest, notify, rusqlite, tauriï¼‰ç¼–è¯‘é“¾æ¥åˆ°ç³»ç»Ÿåº“ï¼ŒCI ä¸­çš„ Rust å·¥ä½œæµéœ€è¦ç¡®ä¿è¿™äº›ç³»ç»Ÿä¾èµ–åœ¨ Windows/macOS/Linux ä¸‰å¹³å°éƒ½å¯ç”¨ã€‚å½“å‰ rust-check job åœ¨ windows-latest ä¸Šè¿è¡Œ cargo check æ—¶ï¼Œrusqlite çš„ bundled feature ç¡®ä¿ SQLite è¢«é™æ€ç¼–è¯‘ï¼Œä½† tauri åœ¨é Linux å¹³å°å¯èƒ½ç¼ºå°‘æŸäº›ç³»ç»Ÿåº“ã€‚è¿™äº›æ½œåœ¨é—®é¢˜å½“å‰æœªè¢« CI æ£€æµ‹ã€‚
 
-## 9 ¹¹½¨Ê±¼äÓë³É±¾¹ÀËã
+## 9 æ„å»ºæ—¶é—´ä¸æˆæœ¬ä¼°ç®—
 
-»ùÓÚµ±Ç°´úÂë¹æÄ£ºÍ CI ÅäÖÃ£¬¹ÀËã¸÷ CI ³¡¾°µÄÊ±¼ä£º
+åŸºäºå½“å‰ä»£ç è§„æ¨¡å’Œ CI é…ç½®ï¼Œä¼°ç®—å„ CI åœºæ™¯çš„æ—¶é—´ï¼š
 
-**µ±Ç° PR CI Ê±¼ä**£¨ci.yml ÏÖÓĞ job µÄ²¢ĞĞÖ´ĞĞ£©£º
-- rust-check£¨3 Æ½Ì¨²¢ĞĞ£©: ~5 min
-- ts-check: ~3 min£¨Ö»ÓĞ agent-runtime µÄ tsc + provider ²âÊÔ£©
-- lint: ~1 min£¨Ö»ÓĞ provider µÄ eslint£©
-- coverage: ~2 min£¨Ö»ÓĞ provider µÄ²âÊÔ£©
-- e2e: ~2 min£¨Ö»ÓĞ provider e2e£©
+**å½“å‰ PR CI æ—¶é—´**ï¼ˆci.yml ç°æœ‰ job çš„å¹¶è¡Œæ‰§è¡Œï¼‰ï¼š
+- rust-checkï¼ˆ3 å¹³å°å¹¶è¡Œï¼‰: ~5 min
+- ts-check: ~3 minï¼ˆåªæœ‰ agent-runtime çš„ tsc + provider æµ‹è¯•ï¼‰
+- lint: ~1 minï¼ˆåªæœ‰ provider çš„ eslintï¼‰
+- coverage: ~2 minï¼ˆåªæœ‰ provider çš„æµ‹è¯•ï¼‰
+- e2e: ~2 minï¼ˆåªæœ‰ provider e2eï¼‰
 - security-audit: ~2 min
-- ×Ü¼Æ£¨´®ĞĞ»¯ºó×î³¤Â·¾¶£©: ~8 min
+- æ€»è®¡ï¼ˆä¸²è¡ŒåŒ–åæœ€é•¿è·¯å¾„ï¼‰: ~8 min
 
-**¸Ä½øºó PR CI Ê±¼ä**£¨ÔöÁ¿Ä£Ê½£©£º
+**æ”¹è¿›å PR CI æ—¶é—´**ï¼ˆå¢é‡æ¨¡å¼ï¼‰ï¼š
 - detect-changes: ~30s
 - turbo restore cache: ~30s
-- ÔöÁ¿ build: ~30s-2min£¨È¡¾öÓÚ±ä¸ü·¶Î§£©
-- ÔöÁ¿ typecheck: ~1-3min
-- ÔöÁ¿ lint: ~30s-1min
-- ÔöÁ¿ test + coverage: ~2-5min
-- Rust check: ~5min£¨Óë TS ²¢ĞĞ£©
-- ×Ü¼Æ£¨×î³¤Â·¾¶£©: ~5-8min£¨Óëµ±Ç°Ïà½ü£¬µ«¸²¸Ç¶È¸ß 5 ±¶£©
+- å¢é‡ build: ~30s-2minï¼ˆå–å†³äºå˜æ›´èŒƒå›´ï¼‰
+- å¢é‡ typecheck: ~1-3min
+- å¢é‡ lint: ~30s-1min
+- å¢é‡ test + coverage: ~2-5min
+- Rust check: ~5minï¼ˆä¸ TS å¹¶è¡Œï¼‰
+- æ€»è®¡ï¼ˆæœ€é•¿è·¯å¾„ï¼‰: ~5-8minï¼ˆä¸å½“å‰ç›¸è¿‘ï¼Œä½†è¦†ç›–åº¦é«˜ 5 å€ï¼‰
 
-**¸Ä½øºó main CI Ê±¼ä**£¨È«Á¿Ä£Ê½£©£º
+**æ”¹è¿›å main CI æ—¶é—´**ï¼ˆå…¨é‡æ¨¡å¼ï¼‰ï¼š
 - turbo run build: ~3min
 - typecheck all: ~5min
 - lint:all: ~2min
 - test:coverage: ~5min
-- test:integration: ~5min£¨º¬ e2e£©
+- test:integration: ~5minï¼ˆå« e2eï¼‰
 - Rust full: ~6min
 - security-audit + secret-scan: ~3min
-- ×Ü¼Æ£¨ÊÜÏŞÓÚ×î³¤´®ĞĞÂ·¾¶£©: ~15-20min
+- æ€»è®¡ï¼ˆå—é™äºæœ€é•¿ä¸²è¡Œè·¯å¾„ï¼‰: ~15-20min
 
-## 10 ²Î¿¼¹¤³ÌÊµ¼ù¶Ô±È
+## 10 å‚è€ƒå·¥ç¨‹å®è·µå¯¹æ¯”
 
-ÒÔÏÂ¶Ô±È»ùÓÚ³ÉÊìÏîÄ¿µÄ CI/CD ×î¼ÑÊµ¼ù£º
+ä»¥ä¸‹å¯¹æ¯”åŸºäºæˆç†Ÿé¡¹ç›®çš„ CI/CD æœ€ä½³å®è·µï¼š
 
-| Êµ¼ù | ĞĞÒµ×î¼Ñ | conex ÏÖ×´ | ²î¾à |
+| å®è·µ | è¡Œä¸šæœ€ä½³ | conex ç°çŠ¶ | å·®è· |
 |------|----------|-----------|------|
-| PR ×Ô¶¯»¯²âÊÔ | ËùÓĞ PR ×Ô¶¯ÔËĞĞÏà¹Ø²âÊÔ | Ö»ÔËĞĞ agent-runtime ×Ó¼¯²âÊÔ | ÑÏÖØ |
-| ²âÊÔ¾ØÕó | Node µ±Ç° + ÉÏÒ»¸ö LTS | µ¥ Node °æ±¾ | ÖĞµÈ |
-| OS ¼æÈİĞÔ | Linux + Windows + macOS | ½ö Linux£¨TS£©/ ÈıÆ½Ì¨£¨Rust£© | ÖĞµÈ |
-| ¹¹½¨»º´æ | Ô¶³Ì»º´æ + ÔöÁ¿¹¹½¨ | ÎŞ TS »º´æ | ÑÏÖØ |
-| Lint ÃÅ½û | zero-warning ×è¶Ï | ×ÓÄ¿Â¼ lint ¾²Ä¬ | ÑÏÖØ |
-| ¸²¸ÇÂÊÃÅ½û | ãĞÖµÓ²ĞÔ×è¶Ï | ÓĞ¶¨Òå²»Ö´ĞĞ | ÑÏÖØ |
-| °²È«É¨Ãè | ¶¨Ê± + PR ×è¶Ï | continue-on-error | ÑÏÖØ |
-| ÃÜÔ¿É¨Ãè | Ìá½»Ç° + CI ÖĞ | ÎŞ | ÑÏÖØ |
-| ÒÀÀµÉı¼¶ | ×Ô¶¯»¯ + ×Ô¶¯ºÏ²¢ | Dependabot ÅäÖÃ | Á¼ºÃ |
-| °æ±¾¹ÜÀí | changesets / release-please | ÊÖ¶¯ | ÑÏÖØ |
-| ·¢²¼Á÷Ë®Ïß | npm publish + GH Release + Docker | ½ö GH Release£¨Tauri£© | ÑÏÖØ |
-| ·¢²¼Ç°ÑéÖ¤ | dry-run + check list | ÎŞ | ÑÏÖØ |
-| ĞÔÄÜÇ÷ÊÆ | »ùÏß + ÍË»¯×è¶Ï | ÎŞ³Ö¾Ã»¯ | ÖĞµÈ |
-| ¹¹½¨Ê§°Ü¸æ¾¯ | ¼´Ê±Í¨Ñ¶Í¨Öª | Ä¬ÈÏÓÊ¼ş | µÍ |
-| SBOM | Ã¿´Î·¢²¼Éú³É | ÎŞ | ÖĞµÈ |
+| PR è‡ªåŠ¨åŒ–æµ‹è¯• | æ‰€æœ‰ PR è‡ªåŠ¨è¿è¡Œç›¸å…³æµ‹è¯• | åªè¿è¡Œ agent-runtime å­é›†æµ‹è¯• | ä¸¥é‡ |
+| æµ‹è¯•çŸ©é˜µ | Node å½“å‰ + ä¸Šä¸€ä¸ª LTS | å• Node ç‰ˆæœ¬ | ä¸­ç­‰ |
+| OS å…¼å®¹æ€§ | Linux + Windows + macOS | ä»… Linuxï¼ˆTSï¼‰/ ä¸‰å¹³å°ï¼ˆRustï¼‰ | ä¸­ç­‰ |
+| æ„å»ºç¼“å­˜ | è¿œç¨‹ç¼“å­˜ + å¢é‡æ„å»º | æ—  TS ç¼“å­˜ | ä¸¥é‡ |
+| Lint é—¨ç¦ | zero-warning é˜»æ–­ | å­ç›®å½• lint é™é»˜ | ä¸¥é‡ |
+| è¦†ç›–ç‡é—¨ç¦ | é˜ˆå€¼ç¡¬æ€§é˜»æ–­ | æœ‰å®šä¹‰ä¸æ‰§è¡Œ | ä¸¥é‡ |
+| å®‰å…¨æ‰«æ | å®šæ—¶ + PR é˜»æ–­ | continue-on-error | ä¸¥é‡ |
+| å¯†é’¥æ‰«æ | æäº¤å‰ + CI ä¸­ | æ—  | ä¸¥é‡ |
+| ä¾èµ–å‡çº§ | è‡ªåŠ¨åŒ– + è‡ªåŠ¨åˆå¹¶ | Dependabot é…ç½® | è‰¯å¥½ |
+| ç‰ˆæœ¬ç®¡ç† | changesets / release-please | æ‰‹åŠ¨ | ä¸¥é‡ |
+| å‘å¸ƒæµæ°´çº¿ | npm publish + GH Release + Docker | ä»… GH Releaseï¼ˆTauriï¼‰ | ä¸¥é‡ |
+| å‘å¸ƒå‰éªŒè¯ | dry-run + check list | æ—  | ä¸¥é‡ |
+| æ€§èƒ½è¶‹åŠ¿ | åŸºçº¿ + é€€åŒ–é˜»æ–­ | æ— æŒä¹…åŒ– | ä¸­ç­‰ |
+| æ„å»ºå¤±è´¥å‘Šè­¦ | å³æ—¶é€šè®¯é€šçŸ¥ | é»˜è®¤é‚®ä»¶ | ä½ |
+| SBOM | æ¯æ¬¡å‘å¸ƒç”Ÿæˆ | æ—  | ä¸­ç­‰ |
 
-## 11 ×ÓÏî·ÖÀà»ã×ÜÓëÑÏÖØ¶È¾ØÕó
+## 11 å­é¡¹åˆ†ç±»æ±‡æ€»ä¸ä¸¥é‡åº¦çŸ©é˜µ
 
-### 11.1 °´ÑÏÖØ¶È·ÖÀà
+### 11.1 æŒ‰ä¸¥é‡åº¦åˆ†ç±»
 
-| ÑÏÖØ¶È | ÊıÁ¿ | ÃèÊö |
+| ä¸¥é‡åº¦ | æ•°é‡ | æè¿° |
 |--------|------|------|
-| P0 - ÑÏÖØ×è¶Ï | 12 | ¾²Ä¬ÍÌÊ§°Ü¡¢ÎŞ npm publish¡¢ÎŞÈËÃÜÔ¿É¨Ãè¡¢¸²¸ÇÂÊ²»ÑéÖ¤µÈ |
-| P1 - ¸ß·çÏÕ | 18 | ÎŞ¾ØÕó²âÊÔ¡¢ÎŞ¼¯³É²âÊÔ¡¢eslint ·¶Î§¹ıÕ­¡¢·¢²¼ÎŞ¸ÉÔËĞĞµÈ |
-| P2 - ÖĞ·çÏÕ | 15 | ÎŞÊÓ¾õ²âÊÔ¡¢»ù×¼ÎŞ¶ÏÑÔ¡¢ÎŞ Docker ¾µÏñ¡¢ÎŞ SBOM µÈ |
-| P3 - µÍ·çÏÕ | 8 | ÎŞ¹¹½¨Ê±¼ä¼à¿Ø¡¢ÎŞ²âÊÔºÄÊ±»ùÏß¡¢node °æ±¾ÅäÖÃ¹ıÊ±µÈ |
+| P0 - ä¸¥é‡é˜»æ–­ | 12 | é™é»˜åå¤±è´¥ã€æ—  npm publishã€æ— äººå¯†é’¥æ‰«æã€è¦†ç›–ç‡ä¸éªŒè¯ç­‰ |
+| P1 - é«˜é£é™© | 18 | æ— çŸ©é˜µæµ‹è¯•ã€æ— é›†æˆæµ‹è¯•ã€eslint èŒƒå›´è¿‡çª„ã€å‘å¸ƒæ— å¹²è¿è¡Œç­‰ |
+| P2 - ä¸­é£é™© | 15 | æ— è§†è§‰æµ‹è¯•ã€åŸºå‡†æ— æ–­è¨€ã€æ—  Docker é•œåƒã€æ—  SBOM ç­‰ |
+| P3 - ä½é£é™© | 8 | æ— æ„å»ºæ—¶é—´ç›‘æ§ã€æ— æµ‹è¯•è€—æ—¶åŸºçº¿ã€node ç‰ˆæœ¬é…ç½®è¿‡æ—¶ç­‰ |
 
-### 11.2 P0 ÑÏÖØ×è¶ÏÏîÇåµ¥
+### 11.2 P0 ä¸¥é‡é˜»æ–­é¡¹æ¸…å•
 
-1. ci.yml:85 || true ¾²Ä¬ÍÌÊÉ model catalog ²âÊÔÊ§°Ü
-2. ci.yml:88 || true ¾²Ä¬ÍÌÊÉ fallback chain ²âÊÔÊ§°Ü
-3. ci.yml:134 continue-on-error: true Ê¹ npm audit ²»×è¶Ï
-4. ci.yml:123 continue-on-error: true Ê¹ cargo audit ²»×è¶Ï
-5. ci.yml:148 || echo "ESLint check skipped" Ê¹ lint ²»×è¶Ï
-6. ci.yml:166 ¸²¸ÇÂÊ²½Öè²»×öãĞÖµ±È½Ï£¨Write-Host ÎŞÊµ¼ÊÑéÖ¤£©
-7. ·¢²¼Á÷Ë®ÏßÈ±Ê§ npm publish£¨6 ¸ö @crish/* °üÎŞ·¨·¢²¼£©
-8. ÎŞÃÜÔ¿É¨Ãè£¨AI Agent ¹¤×÷Ä¿Â¼ API key Ğ¹Â¶²»¿É¸ĞÖª£©
-9. ÎŞ daemon ¶ş½øÖÆ¹¹½¨·¢²¼£¨build:daemon-binary ´ÓÎ´ÔÚ CI Ö´ĞĞ£©
-10. ÎŞÈ«Á¿ÀàĞÍ¼ì²é£¨6/7 ¸ö TS °üÁãÀàĞÍ°²È«ÑéÖ¤£©
-11. pre-push hook Ö´ĞĞ e2e ²âÊÔµ¼ÖÂ±¾µØÆµ·±Ìø¹ı
-12. release.yml:23 Ê¹ÓÃ Node 20£¨ÓëÏîÄ¿ @types/node ^25.6.0 ²»Æ¥Åä£©
+1. ci.yml:85 || true é™é»˜åå™¬ model catalog æµ‹è¯•å¤±è´¥
+2. ci.yml:88 || true é™é»˜åå™¬ fallback chain æµ‹è¯•å¤±è´¥
+3. ci.yml:134 continue-on-error: true ä½¿ npm audit ä¸é˜»æ–­
+4. ci.yml:123 continue-on-error: true ä½¿ cargo audit ä¸é˜»æ–­
+5. ci.yml:148 || echo "ESLint check skipped" ä½¿ lint ä¸é˜»æ–­
+6. ci.yml:166 è¦†ç›–ç‡æ­¥éª¤ä¸åšé˜ˆå€¼æ¯”è¾ƒï¼ˆWrite-Host æ— å®é™…éªŒè¯ï¼‰
+7. å‘å¸ƒæµæ°´çº¿ç¼ºå¤± npm publishï¼ˆ6 ä¸ª @crish/* åŒ…æ— æ³•å‘å¸ƒï¼‰
+8. æ— å¯†é’¥æ‰«æï¼ˆAI Agent å·¥ä½œç›®å½• API key æ³„éœ²ä¸å¯æ„ŸçŸ¥ï¼‰
+9. æ—  daemon äºŒè¿›åˆ¶æ„å»ºå‘å¸ƒï¼ˆbuild:daemon-binary ä»æœªåœ¨ CI æ‰§è¡Œï¼‰
+10. æ— å…¨é‡ç±»å‹æ£€æŸ¥ï¼ˆ6/7 ä¸ª TS åŒ…é›¶ç±»å‹å®‰å…¨éªŒè¯ï¼‰
+11. pre-push hook æ‰§è¡Œ e2e æµ‹è¯•å¯¼è‡´æœ¬åœ°é¢‘ç¹è·³è¿‡
+12. release.yml:23 ä½¿ç”¨ Node 20ï¼ˆä¸é¡¹ç›® @types/node ^25.6.0 ä¸åŒ¹é…ï¼‰
 
-### 11.3 P1 ¸ß·çÏÕÏîÇåµ¥
+### 11.3 P1 é«˜é£é™©é¡¹æ¸…å•
 
-1. ²âÊÔËéÆ¬»¯£ºÖ»Ö´ĞĞ 1/7 TS °üµÄ provider ×ÓÄ¿Â¼²âÊÔ
-2. ÎŞ OS ¾ØÕó£¨TS ²¿·Ö½ö linux£©
-3. ÎŞ Node °æ±¾¾ØÕó
-4. ÎŞ¼¯³É²âÊÔÖ´ĞĞ
-5. ÎŞ E2E ²âÊÔ¸²¸Ç¿ç°ü¼¯³É
-6. lint ·¶Î§¹ıÕ­£ºÖ» cover agent-runtime/provider
+1. æµ‹è¯•ç¢ç‰‡åŒ–ï¼šåªæ‰§è¡Œ 1/7 TS åŒ…çš„ provider å­ç›®å½•æµ‹è¯•
+2. æ—  OS çŸ©é˜µï¼ˆTS éƒ¨åˆ†ä»… linuxï¼‰
+3. æ—  Node ç‰ˆæœ¬çŸ©é˜µ
+4. æ— é›†æˆæµ‹è¯•æ‰§è¡Œ
+5. æ—  E2E æµ‹è¯•è¦†ç›–è·¨åŒ…é›†æˆ
+6. lint èŒƒå›´è¿‡çª„ï¼šåª cover agent-runtime/provider
 7. ci.yml:79 tsc --noEmit Ö» cover agent-runtime
-8. ¹¹½¨²»Ê¹ÓÃ turbo »º´æ
-9. ÔöÁ¿¹¹½¨ÄÜÁ¦ÍêÈ«Î´ÀûÓÃ
-10. ÎŞ build:daemon-binary µÄ CI ¹¹½¨
-11. ÎŞ Vite build µÄ CI ¹¹½¨£¨apps/crish-desktop£©
-12. ÎŞ qa:check µÄ CI Ö´ĞĞ£¨¶Ô»°²»±äÁ¿¡¢stress fuzzing¡¢È«³¡¾°Á÷³Ì£©
-13. ¸²¸ÇÂÊãĞÖµ 70/60/65/70 ÍêÈ«Î´ÔÚ CI ÑéÖ¤
-14. °æ±¾¹ÜÀíÍêÈ«ÊÖ¶¯£¨È«²¿Ó²±àÂë 0.1.0£©
-15. ÎŞ·¢²¼Ç°¸ÉÔËĞĞ
-16. ÎŞ Changelog Éú³É
-17. ÒÀÀµºÏ¹æ£¨depcruise£©Î´Ê¹ÓÃ
-18. ²¢·¢¿ØÖÆÈ±Ê§£¨ci.yml, perf-test.yml£©
+8. æ„å»ºä¸ä½¿ç”¨ turbo ç¼“å­˜
+9. å¢é‡æ„å»ºèƒ½åŠ›å®Œå…¨æœªåˆ©ç”¨
+10. æ—  build:daemon-binary çš„ CI æ„å»º
+11. æ—  Vite build çš„ CI æ„å»ºï¼ˆapps/crish-desktopï¼‰
+12. æ—  qa:check çš„ CI æ‰§è¡Œï¼ˆå¯¹è¯ä¸å˜é‡ã€stress fuzzingã€å…¨åœºæ™¯æµç¨‹ï¼‰
+13. è¦†ç›–ç‡é˜ˆå€¼ 70/60/65/70 å®Œå…¨æœªåœ¨ CI éªŒè¯
+14. ç‰ˆæœ¬ç®¡ç†å®Œå…¨æ‰‹åŠ¨ï¼ˆå…¨éƒ¨ç¡¬ç¼–ç  0.1.0ï¼‰
+15. æ— å‘å¸ƒå‰å¹²è¿è¡Œ
+16. æ—  Changelog ç”Ÿæˆ
+17. ä¾èµ–åˆè§„ï¼ˆdepcruiseï¼‰æœªä½¿ç”¨
+18. å¹¶å‘æ§åˆ¶ç¼ºå¤±ï¼ˆci.yml, perf-test.ymlï¼‰
 
-### 11.4 ÈÈÁ¦Í¼£¨°´ÎÄ¼ş£©
+### 11.4 çƒ­åŠ›å›¾ï¼ˆæŒ‰æ–‡ä»¶ï¼‰
 
-¼¯ÖĞÁË×î¶àÎÊÌâµÄÎÄ¼ş£º
-- .github/workflows/ci.yml: 15 ¸ö¶ÀÁ¢ÎÊÌâ£¨ËéÆ¬»¯²âÊÔ¡¢¾²Ä¬Ä£Ê½¡¢ÎŞ»º´æ¡¢ÎŞ¾ØÕóµÈ£©
-- package.json: 8 ¸öÎÊÌâ£¨½Å±¾Î´ÔÚ CI Ê¹ÓÃ¡¢¹¹½¨Á´²»ÍêÕûµÈ£©
-- .github/workflows/release.yml: 5 ¸öÎÊÌâ£¨npm publish È±Ê§¡¢daemon È±Ê§µÈ£©
-- .husky/pre-push: 2 ¸öÎÊÌâ£¨¸²¸Ç·¶Î§Õ­¡¢e2e ³¬Ê±£©
-- packages/agent-daemon/package.json: 3 ¸öÎÊÌâ£¨build:types ²»Çå cache¡¢ÒÀÀµÁ´Î´ÑéÖ¤µÈ£©
+é›†ä¸­äº†æœ€å¤šé—®é¢˜çš„æ–‡ä»¶ï¼š
+- .github/workflows/ci.yml: 15 ä¸ªç‹¬ç«‹é—®é¢˜ï¼ˆç¢ç‰‡åŒ–æµ‹è¯•ã€é™é»˜æ¨¡å¼ã€æ— ç¼“å­˜ã€æ— çŸ©é˜µç­‰ï¼‰
+- package.json: 8 ä¸ªé—®é¢˜ï¼ˆè„šæœ¬æœªåœ¨ CI ä½¿ç”¨ã€æ„å»ºé“¾ä¸å®Œæ•´ç­‰ï¼‰
+- .github/workflows/release.yml: 5 ä¸ªé—®é¢˜ï¼ˆnpm publish ç¼ºå¤±ã€daemon ç¼ºå¤±ç­‰ï¼‰
+- .husky/pre-push: 2 ä¸ªé—®é¢˜ï¼ˆè¦†ç›–èŒƒå›´çª„ã€e2e è¶…æ—¶ï¼‰
+- packages/agent-daemon/package.json: 3 ä¸ªé—®é¢˜ï¼ˆbuild:types ä¸æ¸… cacheã€ä¾èµ–é“¾æœªéªŒè¯ç­‰ï¼‰
 
-## 12 ¸½Â¼£ºÊõÓï¶ÔÕÕ
+## 12 é™„å½•ï¼šæœ¯è¯­å¯¹ç…§
 
-| ÊõÓï | º¬Òå |
+| æœ¯è¯­ | å«ä¹‰ |
 |------|------|
 | CI/CD | Continuous Integration / Continuous Delivery |
-| turbo | npm workspace ¹¹½¨±àÅÅ¹¤¾ß£¬Ö§³Ö»º´æºÍÔöÁ¿¹¹½¨ |
-| esbuild | JavaScript/TypeScript ´ò°ü¹¤¾ß£¨Go ±àĞ´£© |
-| tsc-alias | TypeScript Â·¾¶±ğÃû½âÎö¹¤¾ß |
-| ESLint | ´úÂëÖÊÁ¿¼ì²é¹¤¾ß |
-| Vitest | µ¥Ôª²âÊÔ¿ò¼Ü£¨Vite ÉúÌ¬£© |
-| Playwright | ä¯ÀÀÆ÷¶Ëµ½¶Ë²âÊÔ¿ò¼Ü |
-| dependency-cruiser | ÒÀÀµ¹ØÏµÑéÖ¤¹¤¾ß |
-| Stylelint | CSS ´úÂëÖÊÁ¿¼ì²é¹¤¾ß |
-| Prettier | ´úÂë¸ñÊ½»¯¹¤¾ß |
-| Husky | Git hooks ¹ÜÀí¹¤¾ß |
-| lint-staged | Ö»¶Ô staged ÎÄ¼şÔËĞĞ lint |
-| Prettier | ´úÂë¸ñÊ½»¯¹¤¾ß |
-| OIDC | OpenID Connect£¬GitHub Actions ÓÃÓÚÎŞÃÜÔ¿·¢²¼ |
-| SBOM | Software Bill of Materials£¬Èí¼şÎïÁÏÇåµ¥ |
-| Rust Crate | Rust °ü |
-| npm workspace | npm ¶à°ü¹ÜÀíÄ£Ê½ |
-| Tauri | ¿çÆ½Ì¨×ÀÃæÓ¦ÓÃ¿ò¼Ü£¨Rust + Web Ç°¶Ë£© |
-| OIDC trusted publishing | GitHub Actions ÎŞÃÜÔ¿ npm ·¢²¼ |
-| Cargo.toml | Rust °üÃèÊöÎÄ¼ş |
-| .github/workflows/ | GitHub Actions ¹¤×÷Á÷Ä¿Â¼ |
+| turbo | npm workspace æ„å»ºç¼–æ’å·¥å…·ï¼Œæ”¯æŒç¼“å­˜å’Œå¢é‡æ„å»º |
+| esbuild | JavaScript/TypeScript æ‰“åŒ…å·¥å…·ï¼ˆGo ç¼–å†™ï¼‰ |
+| tsc-alias | TypeScript è·¯å¾„åˆ«åè§£æå·¥å…· |
+| ESLint | ä»£ç è´¨é‡æ£€æŸ¥å·¥å…· |
+| Vitest | å•å…ƒæµ‹è¯•æ¡†æ¶ï¼ˆVite ç”Ÿæ€ï¼‰ |
+| Playwright | æµè§ˆå™¨ç«¯åˆ°ç«¯æµ‹è¯•æ¡†æ¶ |
+| dependency-cruiser | ä¾èµ–å…³ç³»éªŒè¯å·¥å…· |
+| Stylelint | CSS ä»£ç è´¨é‡æ£€æŸ¥å·¥å…· |
+| Prettier | ä»£ç æ ¼å¼åŒ–å·¥å…· |
+| Husky | Git hooks ç®¡ç†å·¥å…· |
+| lint-staged | åªå¯¹ staged æ–‡ä»¶è¿è¡Œ lint |
+| Prettier | ä»£ç æ ¼å¼åŒ–å·¥å…· |
+| OIDC | OpenID Connectï¼ŒGitHub Actions ç”¨äºæ— å¯†é’¥å‘å¸ƒ |
+| SBOM | Software Bill of Materialsï¼Œè½¯ä»¶ç‰©æ–™æ¸…å• |
+| Rust Crate | Rust åŒ… |
+| npm workspace | npm å¤šåŒ…ç®¡ç†æ¨¡å¼ |
+| Tauri | è·¨å¹³å°æ¡Œé¢åº”ç”¨æ¡†æ¶ï¼ˆRust + Web å‰ç«¯ï¼‰ |
+| OIDC trusted publishing | GitHub Actions æ— å¯†é’¥ npm å‘å¸ƒ |
+| Cargo.toml | Rust åŒ…æè¿°æ–‡ä»¶ |
+| .github/workflows/ | GitHub Actions å·¥ä½œæµç›®å½• |
 
 ## 13 å…¸å‹å¤±è´¥åœºæ™¯åˆ†æ
 
-æœ¬èŠ‚æè¿°åœ¨å½“å‰?CI/CD ç¼ºå¤±æƒ…å†µä¸‹å¯èƒ½å‘ç”Ÿçš„å…¸å‹å¤±è´¥åœºæ™¯ï¼Œä»¥è¯´æ˜æ¯ä¸ªå·®è·çš„å®é™…å½±å“ã€?
-### åœºæ™¯ 1ï¼šå…±äº«ç±»å‹ä¿®æ”¹å¯¼è‡´ä¸‹æ¸¸æ–­è£?
-**è§¦å‘æ¡ä»¶**ï¼šå¼€å‘è€…ä¿®æ”?`packages/shared-types/src/index.ts`ï¼Œæ–°å¢äº†ä¸€ä¸ªå¿…å¡«å­—æ®µåˆ°æ ¸å¿ƒç±»å‹å®šä¹‰ã€?
-**äº‹ä»¶é“?*ï¼?1. å¼€å‘è€…åœ¨æœ¬åœ°è¿è¡Œ `pre-push`ï¼Œ`npm run typecheck` åªæ£€æŸ?`crish-desktop`ï¼Œä¸” `crish-desktop` æœªä½¿ç”¨è¯¥ç±»å‹ï¼Œé€šè¿‡
-2. `npm test` è¿è¡Œå…¨éƒ¨ vitest æµ‹è¯•ï¼Œä½† `ci.yml` ä¸­çš„ model catalog æµ‹è¯•ä½¿ç”¨ `|| true` é™é»˜æ¨¡å¼ï¼Œå³ä½¿å¤±è´¥ä¹Ÿä¸æŠ¥é”?3. PR è¢«åˆå¹¶åˆ° main
-4. `@crish/agent-runtime` ä¸­ä½¿ç”¨äº†è¯¥ç±»å‹çš„åœ°æ–¹å› ä¸ºç¼ºå°‘æ–°å­—æ®µè€Œç¼–è¯‘å¤±è´¥ï¼Œä½?`ci.yml` çš?ts-check åªè¿è¡?`tsc --noEmit` æ£€æŸ?`agent-runtime`â€”â€”å¦‚æ?developer mode æ¡ä»¶æœªæ­£ç¡®è®¾ç½®ï¼Œç¼–è¯‘å¯èƒ½é€šè¿‡
-5. ç›´åˆ° CI ä¸­å°è¯•è¿è¡?`@crish/agent-daemon` æ—¶ï¼ˆä¸‹æ¸¸åŒ…ï¼Œ`packages/agent-daemon/package.json:33` ä¾èµ– orchestratorï¼‰ï¼Œç±»å‹ä¸åŒ¹é…å¯¼è‡´è¿è¡Œæ—¶é”™è¯¯
-6. ä½?CI ä¸è¿è¡?daemon æµ‹è¯•ï¼Œé”™è¯¯ç›´åˆ°ç”¨æˆ·æŠ¥å‘Šæ‰è¢«å‘ç?
-**å®é™…åæœ**ï¼šè¿è¡Œæ—¶ TypeErrorï¼Œagent-daemon å´©æºƒï¼Œç”¨æˆ·æ— æ³•ä½¿ç”¨ã€‚ä»åˆå¹¶åˆ°å‘ç°å¯èƒ½é—´éš”æ•°å°æ—¶åˆ°æ•°å¤©ã€?
-**æ¶‰åŠå·®è·**ï¼?- `ci.yml:79` åªæ£€æŸ?single package
-- `ci.yml:85,88` çš?`|| true` æ¨¡å¼
-- `package.json:54` çš?typecheck å?cover desktop
-- `.husky/pre-push` å?cover desktop
+éˆî„ƒå¦­é»å¿šå ªé¦ã„¥ç¶‹é“?CI/CD ç¼‚å“„ã‘é¯å‘­å–Œæ¶“å¬ªå½²é‘³è—‰å½‚é¢ç†ºæ®‘éç¨¿ç€·æ¾¶è¾«è§¦é¦çƒ˜æ«™é”›å±¼äº’ç’‡å­˜æ§‘å§£å¿é‡œå®¸î†¿çª›é¨å‹«ç–„é—„å‘­å¥–éå¶ƒâ‚¬?
+### é¦çƒ˜æ«™ 1é”›æ°¬å¡æµœî‚¤è¢«é¨å¬©æ…¨é€ç‘°î‡±é‘·ç¿ ç¬…å¨“å‘ŠæŸ‡ç‘?
+**ç‘™ï¹€å½‚é‰â€²æ¬¢**é”›æ°¬ç´‘é™æˆ£â‚¬å‘¬æ…¨é€?`packages/shared-types/src/index.ts`é”›å±¾æŸŠæ¾§ç‚°ç°¡æ¶“â‚¬æ¶“î„ç¹€æ¿‰î‚¢ç“§å¨ˆé›åŸŒéç¨¿ç¸¾ç»«è¯²ç€·ç€¹æ°«ç®ŸéŠ†?
+**æµœå¬©æ¬¢é–¾?*é”›?1. å¯®â‚¬é™æˆ£â‚¬å‘­æ¹ªéˆî„€æ¹´æ©æ„¯î”‘ `pre-push`é”›å®npm run typecheck` é™î…î—…éŒ?`crish-desktop`é”›å±¼ç¬– `crish-desktop` éˆîƒå¨‡é¢ã„¨î‡šç»«è¯²ç€·é”›å²„â‚¬æ°³ç¹ƒ
+2. `npm test` æ©æ„¯î”‘éã„©å„´ vitest å¨´å¬­ç˜¯é”›å±¼çµ¾ `ci.yml` æ¶“î… æ®‘ model catalog å¨´å¬­ç˜¯æµ£è·¨æ•¤ `|| true` é—ˆæ¬“ç²¯å¦¯â€³ç´¡é”›å±½åµ†æµ£å®ã‘ç’ãƒ¤ç¯ƒæ¶“å¶†å§¤é–¿?3. PR çšî‚¢æ‚éªè·ºåŸŒ main
+4. `@crish/agent-runtime` æ¶“î…å¨‡é¢ã„¤ç°¡ç’‡ãƒ§è¢«é¨å¬¬æ®‘é¦ç‰ˆæŸŸé¥çŠ±è´Ÿç¼‚å“„çš¯é‚æ¿ç“§å¨ˆä½ƒâ‚¬å²€ç´ªç’‡æˆã‘ç’ãƒ¯ç´æµ£?`ci.yml` é¨?ts-check é™î‡ç¹ç›?`tsc --noEmit` å¦«â‚¬éŒ?`agent-runtime`éˆ¥æ–ºâ‚¬æ–¿î›§é‹?developer mode é‰â€²æ¬¢éˆî…î„œçº­î†¿î†•ç¼ƒî‡†ç´ç¼‚æ ¬ç˜§é™îˆå…˜é–«æ°³ç¹ƒ
+5. é©æ‘åŸŒ CI æ¶“î…çš¾ç’‡æ›¡ç¹ç›?`@crish/agent-daemon` éƒè®¹ç´™æ¶“å¬«çˆ¶é–å’ƒç´`packages/agent-daemon/package.json:33` æ¸šæ¿Šç¦† orchestratoré”›å¤›ç´ç»«è¯²ç€·æ¶“å¶…å°®é–°å¶…î‡±é‘·ç£‹ç¹ç›å±¾æ¤‚é–¿æ¬’î‡¤
+6. æµ£?CI æ¶“å¶ˆç¹ç›?daemon å¨´å¬­ç˜¯é”›å²„æ•Šç’‡îˆœæ´¿é’æ‰®æ•¤é´é”‹å§¤é›å©ƒå¢ çšî‚¢å½‚éœ?
+**ç€¹ç‚ºæª¯éšåº¢ç‰**é”›æ°³ç¹ç›å±¾æ¤‚ TypeErroré”›å®gent-daemon å®•â•‚ç°é”›å²€æ•¤é´é”‹æ£¤å¨‰æ›šå¨‡é¢ã„£â‚¬å‚™ç² éšå è‹Ÿé’æ¿å½‚éœæ¿å½²é‘³ä»‹æ£¿é—…æ—€æšŸçå¿”æ¤‚é’ç‰ˆæšŸæ¾¶â”¿â‚¬?
+**å¨‘å¤Šå¼·å®¸î†¿çª›**é”›?- `ci.yml:79` é™î…î—…éŒ?single package
+- `ci.yml:85,88` é¨?`|| true` å¦¯â€³ç´¡
+- `package.json:54` é¨?typecheck é™?cover desktop
+- `.husky/pre-push` é™?cover desktop
 - ç¼ºå°‘ `turbo run typecheck --filter` çš„ä¾èµ–é“¾ä¼ æ’­
 
-### åœºæ™¯ 2ï¼šå®‰å…¨æ¼æ´è¿›å…?main
+### é¦çƒ˜æ«™ 2é”›æ°¬ç•¨éã„¦ç´¡å¨²ç‚¶ç¹˜é?main
 
-**è§¦å‘æ¡ä»¶**ï¼šnpm ç”Ÿæ€æŠ«éœ²äº†ä¸€ä¸?`ws` åŒ…çš„é«˜å± CVEï¼ˆ`package.json:93` ä¾èµ– `ws`ï¼‰ï¼Œç¤¾åŒºå·²ä¿®å¤å¹¶å‘å¸ƒè¡¥ä¸ã€?
-**äº‹ä»¶é“?*ï¼?1. Dependabot è‡ªåŠ¨åˆ›å»ºäº†å‡çº?`ws` çš?PRï¼ˆ`dependabot.yml:6-14` é…ç½®äº†æ¯å‘¨æ£€æŸ¥ï¼‰
-2. CI è¿è¡Œä½†ä¸éªŒè¯ npm auditâ€”â€”`ci.yml:133-134` çš?`continue-on-error: true` ä½?audit å¤±è´¥ä¸é˜»æ–?3. PR è¢«åˆå¹¶åˆ° main
-4. ç”Ÿäº§ç¯å¢ƒè¿è¡Œçš?daemon ä½¿ç”¨æœ‰æ¼æ´çš„ `ws` ç‰ˆæœ¬
-5. æ”»å‡»è€…å¯ä»¥åˆ©ç”?WebSocket æ¼æ´
+**ç‘™ï¹€å½‚é‰â€²æ¬¢**é”›æ­¯pm é¢ç†¸â‚¬ä½¹å§­é—‡è¹­ç°¡æ¶“â‚¬æ¶“?`ws` é–å‘¯æ®‘æ¥‚æ¨ºåµ„ CVEé”›å„package.json:93` æ¸šæ¿Šç¦† `ws`é”›å¤›ç´ç»€æƒ§å°¯å®¸è¹­æ…¨æ¾¶å¶…è‹Ÿé™æˆç«·ç›ãƒ¤ç«µéŠ†?
+**æµœå¬©æ¬¢é–¾?*é”›?1. Dependabot é‘·î„å§©é’æ¶˜ç¼“æµœå——å´Œç»¾?`ws` é¨?PRé”›å„dependabot.yml:6-14` é–°å¶‡ç–†æµœå—˜ç˜¡é›ã„¦î—…éŒãƒ¯ç´š
+2. CI æ©æ„¯î”‘æµ£å—•ç¬‰æ¥ å²ƒç˜‰ npm auditéˆ¥æ–ºâ‚¬æ“¿ci.yml:133-134` é¨?`continue-on-error: true` æµ£?audit æ¾¶è¾«è§¦æ¶“å¶‰æ¨†é‚?3. PR çšî‚¢æ‚éªè·ºåŸŒ main
+4. é¢ç†¶éª‡éœîˆšî•¨æ©æ„¯î”‘é¨?daemon æµ£è·¨æ•¤éˆå¤‹ç´¡å¨²ç‚µæ®‘ `ws` é—å Ÿæ¹°
+5. é€è¯²åš®é‘°å‘­å½²æµ ãƒ¥åŸ„é¢?WebSocket å©•å¿”ç¤Š
 
-**å®é™…åæœ**ï¼šå®‰å…¨æ€§å—æŸã€‚ç”±äº?CVE æŠ«éœ²åˆ°ä¿®å¤çš„æ—¶é—´çª—å£ï¼ˆé€šå¸¸ 7-14 å¤©ï¼‰ï¼Œé¡¹ç›®åœ¨æ­¤æœŸé—´ä¸è®¾é˜²ã€?
-**æ¶‰åŠå·®è·**ï¼?- `ci.yml:133-134` çš?`continue-on-error: true`
+**ç€¹ç‚ºæª¯éšåº¢ç‰**é”›æ°¬ç•¨éã„¦â‚¬Ñƒå½ˆé¹ç†´â‚¬å‚œæ•±æµœ?CVE é¶î‚¦æ¹¶é’é¢æ…¨æ¾¶å¶‡æ®‘éƒå •æ£¿ç»æ¥€å½›é”›å ¥â‚¬æ°¬çˆ¶ 7-14 æ¾¶â•‹ç´šé”›å²„ã€é©î†¼æ¹ªå§ã‚†æ¹¡é—‚ç¿ ç¬‰ç’é¹ƒæ§»éŠ†?
+**å¨‘å¤Šå¼·å®¸î†¿çª›**é”›?- `ci.yml:133-134` é¨?`continue-on-error: true`
 - ç¼ºå°‘ `npm audit signatures` éªŒè¯
-- ç¼ºå°‘ `npm run check:all` çš„å®‰å…¨å®¡è®?
-### åœºæ™¯ 3ï¼šå‘å¸ƒå¤±è´?
-**è§¦å‘æ¡ä»¶**ï¼šå›¢é˜Ÿå‡†å¤‡å‘å¸?v0.2.0ï¼Œæ‰‹åŠ¨æ›´æ–°äº†æ‰€æœ?package.json çš?version å­—æ®µã€?
-**äº‹ä»¶é“?*ï¼?1. éƒ¨åˆ†å­åŒ…çš?version å­—æ®µè¢«é—æ¼ï¼ˆå¦?`packages/decision-engine/package.json` ä»ä¸º 0.1.0ï¼?2. æ¨é€?`v0.2.0` tagï¼Œè§¦å?`release.yml`
-3. Tauri æ¡Œé¢æ„å»ºåœ?Windows ä¸Šå¤±è´¥ï¼ˆCI æœªåœ¨ Windows ä¸Šé¢„å…ˆéªŒè¯æ¡Œé¢æ„å»ºï¼‰
-4. GitHub Release åˆ›å»ºä½†ç¼ºå°‘éƒ¨åˆ?artifact
-5. å‘ç° version ä¸ä¸€è‡´åéœ€è¦æ‰‹åŠ¨ä¿®å¤å¹¶é‡æ–°æ¨é€?tag
+- ç¼‚å“„çš¯ `npm run check:all` é¨å‹«ç•¨éã„¥î…¸ç’?
+### é¦çƒ˜æ«™ 3é”›æ°¬å½‚ç”¯å†¨ã‘ç’?
+**ç‘™ï¹€å½‚é‰â€²æ¬¢**é”›æ°¬æ´Ÿé—ƒç†·å™¯æ¾¶å›§å½‚ç”¯?v0.2.0é”›å±¾å¢œé”ã„¦æ´¿é‚é¢ç°¡éµâ‚¬éˆ?package.json é¨?version ç€›æ¥î†ŒéŠ†?
+**æµœå¬©æ¬¢é–¾?*é”›?1. é–®ã„¥åç€›æ„¬å¯˜é¨?version ç€›æ¥î†Œçšî‚¦ä»å©•å¿¥ç´™æ¿¡?`packages/decision-engine/package.json` æµ å¶„è´Ÿ 0.1.0é”›?2. éºã„©â‚¬?`v0.2.0` tagé”›å²ƒĞ•é™?`release.yml`
+3. Tauri å¦—å²„æ½°é‹å‹«ç¼“é¦?Windows æ¶“å©‚ã‘ç’ãƒ¯ç´™CI éˆî„æ¹ª Windows æ¶“å©‡î•©éå ¥ç™ç’‡ä½¹î”‘é—ˆãˆ¡ç€¯å¯¤çŒ´ç´š
+4. GitHub Release é’æ¶˜ç¼“æµ£å—™å·±çæˆ¦å„´é’?artifact
+5. é™æˆ å¹‡ version æ¶“å¶„ç«´é‘·æ‘æ‚—é—‡â‚¬ç‘•ä½¹å¢œé”ã„¤æ…¨æ¾¶å¶…è‹Ÿé–²å¶†æŸŠéºã„©â‚¬?tag
 
-**å®é™…åæœ**ï¼šå‘å¸ƒæµç¨‹éœ€è¦?2-3 æ¬¡å°è¯•ï¼Œæ¯æ¬¡ 30 åˆ†é’Ÿã€‚`release.yml:61` çš?`generate_release_notes: true` ç”Ÿæˆæ— åˆ†ç±»çš„ release notesï¼Œç”¨æˆ·çœ‹åˆ°çš„åªæœ‰ commit æ ‡é¢˜åˆ—è¡¨ã€?
-**æ¶‰åŠå·®è·**ï¼?- æ— ç»Ÿä¸€ç‰ˆæœ¬ç®¡ç†ï¼ˆT5.2ï¼?- release.yml æ— å‘å¸ƒå‰éªŒè¯ï¼ˆT4.3ï¼?- `release.yml:23` ä½¿ç”¨ Node 20 ä¸é¡¹ç›?@types/node ä¸åŒ¹é…?- æ—?npm publishï¼ˆT5.1ï¼?- æ—?daemon äºŒè¿›åˆ¶æ„å»ºï¼ˆT4.2ï¼?
-### åœºæ™¯ 4ï¼šä»£ç é£æ ¼é€€åŒ?
-**è§¦å‘æ¡ä»¶**ï¼šæ–°å¼€å‘è€…åŠ å…¥å›¢é˜Ÿï¼Œæœªé…ç½®æœ¬åœ?prettier/eslint hookï¼ˆ`pre-commit` hook éœ€è¦?`husky install` åç”Ÿæ•ˆï¼‰ã€?
-**äº‹ä»¶é“?*ï¼?1. æ–°å¼€å‘è€…çš„ä»£ç ä¸ç¬¦å?prettier æ ¼å¼è§„èŒƒ
-2. ä»£ç é€šè¿‡ `git push --no-verify`ï¼ˆå›  pre-push çš?e2e æµ‹è¯•è¶…æ—¶ï¼?3. CI ä¸è¿è¡?`prettier --check`ï¼ˆ`package.json:66`ï¼?4. CI çš?eslint åªæ£€æŸ?provider å­ç›®å½•ä¸”é™é»˜
+**ç€¹ç‚ºæª¯éšåº¢ç‰**é”›æ°¬å½‚ç”¯å†©ç¥¦ç»‹å¬®æ¸¶ç‘•?2-3 å¨†â€³çš¾ç’‡æ›ªç´å§£å¿”î‚¼ 30 é’å—›æŒ“éŠ†ä¿™release.yml:61` é¨?`generate_release_notes: true` é¢ç†¸åšéƒçŠ²åç»«è¤æ®‘ release notesé”›å²€æ•¤é´é£æ¹…é’æ‰®æ®‘é™î…æ¹ commit éå›¬î•½é’æ¥„ã€ƒéŠ†?
+**å¨‘å¤Šå¼·å®¸î†¿çª›**é”›?- éƒçŠµç²ºæ¶“â‚¬é—å Ÿæ¹°ç» ï¼„æ‚Šé”›åœ±5.2é”›?- release.yml éƒçŠ²å½‚ç”¯å†¨å¢ æ¥ å²ƒç˜‰é”›åœ±4.3é”›?- `release.yml:23` æµ£è·¨æ•¤ Node 20 æ¶“åº¨ã€é©?@types/node æ¶“å¶…å°®é–°?- éƒ?npm publishé”›åœ±5.1é”›?- éƒ?daemon æµœå²ƒç¹˜é’èˆµç€¯å¯¤çŒ´ç´™T4.2é”›?
+### é¦çƒ˜æ«™ 4é”›æ°«å”¬é®ä¾€î—“éå¥¸â‚¬â‚¬é–?
+**ç‘™ï¹€å½‚é‰â€²æ¬¢**é”›æ°­æŸŠå¯®â‚¬é™æˆ£â‚¬å‘­å§éãƒ¥æ´Ÿé—ƒç‡‚ç´éˆîˆå¤ç¼ƒî†½æ¹°é¦?prettier/eslint hooké”›å„pre-commit` hook é—‡â‚¬ç‘•?`husky install` éšåº£æ•“éå ¬ç´šéŠ†?
+**æµœå¬©æ¬¢é–¾?*é”›?1. é‚æ¿ç´‘é™æˆ£â‚¬å‘¯æ®‘æµ ï½‡çˆœæ¶“å¶‡îƒéš?prettier éç…ç´¡ç‘™å‹®å¯–
+2. æµ ï½‡çˆœé–«æ°³ç¹ƒ `git push --no-verify`é”›å æ´œ pre-push é¨?e2e å¨´å¬­ç˜¯ç“’å‘®æ¤‚é”›?3. CI æ¶“å¶ˆç¹ç›?`prettier --check`é”›å„package.json:66`é”›?4. CI é¨?eslint é™î…î—…éŒ?provider ç€›æ„®æ´°è¤°æ›šç¬–é—ˆæ¬“ç²¯
 5. ä¸ç¬¦åˆè§„èŒƒçš„ä»£ç è¿›å…¥ main
 6. é€æ¸ç§¯ç´¯ï¼Œæœ€ç»ˆéœ€è¦å¤§è§„æ¨¡ reformat
 
-**å®é™…åæœ**ï¼šä»£ç é£æ ¼ä¸€è‡´æ€§è¢«ç ´åï¼Œcode review æ—¶å™ªéŸ³å¢åŠ ï¼ˆæ ¼å¼åŒ–å˜æ›´ä¸é€»è¾‘å˜æ›´æ··åœ¨ä¸€èµ·ï¼‰ã€‚æ ¹æ?.lintstagedrc.json çš„é…ç½®ï¼ˆeslint --fix + prettier --writeï¼‰ï¼Œlint-staged åªèƒ½ä¿®å¤ staged æ–‡ä»¶ï¼Œä½†è¿œç«¯ CI ä¸éªŒè¯ã€?
-**æ¶‰åŠå·®è·**ï¼?- `ci.yml:148` çš?eslint èŒƒå›´è¿‡çª„
-- ç¼ºå°‘ `npm run format`ï¼ˆprettier --checkï¼?- ç¼ºå°‘ `npm run lint:all` çš„ä¸¥æ ¼æ¨¡å¼?- `.husky/pre-push` æ‰§è¡Œ e2e å¯¼è‡´å¼€å‘è€…è·³è¿?
-## 14 æ”¹è¿›ä¼˜å…ˆçº§çŸ©é˜?
-åŸºäºå½±å“èŒƒå›´ Ã— ä¸¥é‡åº¦çš„äºŒç»´è¯„ä¼°ï¼Œå»ºè®®ä»¥ä¸‹ä¼˜å…ˆçº§ï¼?
+**ç€¹ç‚ºæª¯éšåº¢ç‰**é”›æ°«å”¬é®ä¾€î—“éé—´ç«´é‘·å­˜â‚¬Ñ†î¦é®æ‘æ½–é”›å®‘ode review éƒè·ºæ«”é—Šå†²î–ƒé”ç‹…ç´™éç…ç´¡é–æ §å½‰é‡ç¿ ç¬Œé–«æ˜ç·«é™æ¨»æ´¿å¨£å³°æ¹ªæ¶“â‚¬ç’§å‡¤ç´šéŠ†å‚›ç‰´é¹?.lintstagedrc.json é¨å‹¯å¤ç¼ƒî‡†ç´™eslint --fix + prettier --writeé”›å¤›ç´lint-staged é™î‡å…˜æ·‡î†¼î˜² staged é‚å›¦æ¬¢é”›å±¼çµ¾æ©æ»…î¬ CI æ¶“å¶‰ç™ç’‡ä½µâ‚¬?
+**å¨‘å¤Šå¼·å®¸î†¿çª›**é”›?- `ci.yml:148` é¨?eslint é‘¼å†¨æ´¿æ©å›©ç
+- ç¼‚å“„çš¯ `npm run format`é”›å§rettier --checké”›?- ç¼‚å“„çš¯ `npm run lint:all` é¨å‹ªå¼—éå…¼Äå¯®?- `.husky/pre-push` éµÑ†î”‘ e2e ç€µè‰°åš§å¯®â‚¬é™æˆ£â‚¬å‘°çƒ¦æ©?
+## 14 é€ç¡…ç¹˜æµ¼æ¨ºå›ç»¾Ñ…ç…©é—ƒ?
+é©è½°ç°¬è¤°åæ·é‘¼å†¨æ´¿ è„³ æ¶“ãƒ©å™¸æ´ï¸¾æ®‘æµœå²€æ·®ç’‡å‹ªåŠé”›å±½ç¼“ç’î†»äº’æ¶“å¬©ç´­éå ¢éª‡é”›?
 ```
-ä¸¥é‡åº? é«? | P0: npm publish, secret scan,     | P0: å…¨é‡ typecheck, 
+æ¶“ãƒ©å™¸æ´? æ¥‚? | P0: npm publish, secret scan,     | P0: éã„©å™º typecheck, 
      | coverage threshold, é™é»˜æ¨¡å¼     | å¢é‡æµ‹è¯•, build cache
- ä¸? | P0: daemon binary, audit ç¡¬æ€?  | P1: OS çŸ©é˜µ, é›†æˆæµ‹è¯•
+ æ¶“? | P0: daemon binary, audit çº­î„â‚¬?  | P1: OS é­â•…æ¨€, é—†å—˜åšå¨´å¬­ç˜¯
      |                                  |
- ä½? | P2: Docker, Playwright, SBOM    | P3: metrics, è€—æ—¶ç›‘æ§
+ æµ£? | P2: Docker, Playwright, SBOM    | P3: metrics, é‘°æ¥æ¤‚é©æˆå¸¶
      |__________________________________|_____________________
-        çª„ï¼ˆsingle packageï¼?             å®½ï¼ˆworkspace-wideï¼?                            å½±å“èŒƒå›´
+        ç»å‹¶ç´™single packageé”›?             ç€¹æ–¤ç´™workspace-wideé”›?                            è¤°åæ·é‘¼å†¨æ´¿
 ```
 
-å³ä¸Šè±¡é™ï¼ˆé«˜ä¸¥é‡åº?+ å®½å½±å“èŒƒå›´ï¼‰çš„é—®é¢˜åº”ä¼˜å…ˆå¤„ç†ï¼šå…¨é‡?typecheckã€å¢é‡æµ‹è¯•ã€æ„å»ºç¼“å­˜ã€‚è¿™äº›æ”¹è¿›è¦†ç›–æœ€å¤šåŒ…ï¼Œé˜²æ­?P0 é—®é¢˜è·¨åŒ…æ‰©æ•£ã€?
-## 15 ½áÂÛ
+é™å……ç¬‚ç’ï¿ æªºé”›å ¥ç®æ¶“ãƒ©å™¸æ´?+ ç€¹è—‰å¥–éå¶ˆå¯–é¥è¾¾ç´šé¨å‹¯æ£¶æ£°æ¨ºç°²æµ¼æ¨ºå›æ¾¶å‹­æ‚Šé”›æ°¬åé–²?typecheckéŠ†ä½¸î–ƒé–²å¿”ç¥´ç’‡æ›˜â‚¬ä½¹ç€¯å¯¤è™¹ç´¦ç€›æ¨¸â‚¬å‚ç¹–æµœæ¶™æ•¼æ©æ¶œî›«é©æ ¨æ¸¶æ¾¶æ°¬å¯˜é”›å²„æ§»å§?P0 é—‚î‡€î•½ç’ºã„¥å¯˜éµâ•‚æšéŠ†?
+## 15 ç»“è®º
 
-±¾·ÖÎöÏµÍ³Ê¶±ğÁË conex ÏîÄ¿ CI/CD Á÷Ë®ÏßÔÚ 7 ¸öÎ¬¶ÈÉÏµÄÏµÍ³ĞÔ²î¾à£¬Éæ¼° 12 ¸ö P0 ÑÏÖØ×è¶ÏÏîºÍ 18 ¸ö P1 ¸ß·çÏÕÏî¡£ºËĞÄÎÊÌâ¿ÉÒÔ¹éÄÉÎªÈı¾ä»°£º**¹¹½¨Î´×Ô¶¯»¯**£¨turbo ÔÚ CI ÖĞÍêÈ«Î´Ê¹ÓÃ£¬7 ¸ö TS °üÁã¹¹½¨ÑéÖ¤£©¡¢**²âÊÔËéÆ¬»¯**£¨95% µÄ²âÊÔ´úÂëÔÚ CI ÖĞ²»Ö´ĞĞ£¬2 ¸öºËĞÄ²âÊÔÌ×¼ş±»¾²Ä¬ÍÌÊÉ£©¡¢**·¢²¼ÎŞÁ÷Ë®Ïß**£¨6 ¸ö npm °üÎŞ·¨·¢²¼£¬daemon ¶ş½øÖÆ´Ó²»×Ô¶¯¹¹½¨£©¡£ÕâĞ©²î¾à¹²Í¬¹¹³ÉÁËÏîÄ¿´Ó\"¿ª·¢Ô­ĞÍ\"×ßÏò\"¿É½»¸¶²úÆ·\"µÄ×î´ó×è°­¡£ci_cd_improvement_plan.md Ìá¹©ÁË¸²¸Ç 5 ²ã¼Ü¹¹£¨´¥·¢¿ØÖÆ - ÔöÁ¿ÑéÖ¤ - È«Á¿ÑéÖ¤ - ·¢²¼Ç°ÑéÖ¤ - ½»¸¶£©µÄÏµÍ³ĞÔ¸Ä½ø·½°¸£¬×Ü¼ÆÉæ¼° 12 ¸öÎÄ¼şµÄĞŞ¸ÄÀ©ÔöºÍÔ¼ 1100 ĞĞ´úÂë±ä¸ü¡£
-¸Ä½ø·½°¸Óë¼Ü¹¹ĞŞ¸´·½°¸£¨docs/crish_desktop_architectural_remediation_plan/00_master_overview.md:3-50£©×ñÑ­ÏàÍ¬µÄÉè¼ÆÕÜÑ§¡ª¡ªÂß¼­ÒÀÀµÇı¶¯¡¢ËùÓĞÎÊÌâÆ½µÈÓÅÏÈ¼¶¡¢ÎŞÊ±¼äÓëÈËÔ±°ó¶¨¡£±¾·ÖÎöÖĞÊ¶±ğµÄ 53 ¸ö¾ßÌå²î¾àµãÓë¼Ü¹¹ĞŞ¸´·½°¸µÄ 215 ¸öÎÊÌâµã»¥²¹£º¼Ü¹¹ĞŞ¸´½â¾ö´úÂëÄÚ²¿µÄ¸¯»¯£¬CI/CD ¸Ä½ø·ÀÖ¹¸¯»¯ÔÚºÏ²¢ºó¼ÌĞø¶ñ»¯¡£
-µ±Ç° 4 ¸ö workflow ÎÄ¼şºÏ¼Æ 496 ĞĞ YAML ÅäÖÃ£¬¸Ä½øºóÔ¤¼ÆÀ©Õ¹ÖÁÔ¼ 1200 ĞĞ¡£Õâ¸öÔö³¤ÊÇ±ØÒªµÄ¡ª¡ªÃ¿¸öĞÂÔöµÄ job ´ú±íÒ»¸ö±»×Ô¶¯»¯µÄÖÊÁ¿±£ÕÏ²½Öè¡£¹Ø¼üÔÚÓÚÍ¨¹ı composite action ºÍ workflow ¸´ÓÃ»úÖÆ¿ØÖÆ¸´ÔÓ¶ÈÅòÕÍ£¬±ÜÃâ CI ±¾Éí³ÉÎªĞÂµÄÎ¬»¤¸ºµ£¡£
+æœ¬åˆ†æç³»ç»Ÿè¯†åˆ«äº† conex é¡¹ç›® CI/CD æµæ°´çº¿åœ¨ 7 ä¸ªç»´åº¦ä¸Šçš„ç³»ç»Ÿæ€§å·®è·ï¼Œæ¶‰åŠ 12 ä¸ª P0 ä¸¥é‡é˜»æ–­é¡¹å’Œ 18 ä¸ª P1 é«˜é£é™©é¡¹ã€‚æ ¸å¿ƒé—®é¢˜å¯ä»¥å½’çº³ä¸ºä¸‰å¥è¯ï¼š**æ„å»ºæœªè‡ªåŠ¨åŒ–**ï¼ˆturbo åœ¨ CI ä¸­å®Œå…¨æœªä½¿ç”¨ï¼Œ7 ä¸ª TS åŒ…é›¶æ„å»ºéªŒè¯ï¼‰ã€**æµ‹è¯•ç¢ç‰‡åŒ–**ï¼ˆ95% çš„æµ‹è¯•ä»£ç åœ¨ CI ä¸­ä¸æ‰§è¡Œï¼Œ2 ä¸ªæ ¸å¿ƒæµ‹è¯•å¥—ä»¶è¢«é™é»˜åå™¬ï¼‰ã€**å‘å¸ƒæ— æµæ°´çº¿**ï¼ˆ6 ä¸ª npm åŒ…æ— æ³•å‘å¸ƒï¼Œdaemon äºŒè¿›åˆ¶ä»ä¸è‡ªåŠ¨æ„å»ºï¼‰ã€‚è¿™äº›å·®è·å…±åŒæ„æˆäº†é¡¹ç›®ä»\"å¼€å‘åŸå‹\"èµ°å‘\"å¯äº¤ä»˜äº§å“\"çš„æœ€å¤§é˜»ç¢ã€‚ci_cd_improvement_plan.md æä¾›äº†è¦†ç›– 5 å±‚æ¶æ„ï¼ˆè§¦å‘æ§åˆ¶ - å¢é‡éªŒè¯ - å…¨é‡éªŒè¯ - å‘å¸ƒå‰éªŒè¯ - äº¤ä»˜ï¼‰çš„ç³»ç»Ÿæ€§æ”¹è¿›æ–¹æ¡ˆï¼Œæ€»è®¡æ¶‰åŠ 12 ä¸ªæ–‡ä»¶çš„ä¿®æ”¹æ‰©å¢å’Œçº¦ 1100 è¡Œä»£ç å˜æ›´ã€‚
+æ”¹è¿›æ–¹æ¡ˆä¸æ¶æ„ä¿®å¤æ–¹æ¡ˆï¼ˆdocs/crish_desktop_architectural_remediation_plan/00_master_overview.md:3-50ï¼‰éµå¾ªç›¸åŒçš„è®¾è®¡å“²å­¦â€”â€”é€»è¾‘ä¾èµ–é©±åŠ¨ã€æ‰€æœ‰é—®é¢˜å¹³ç­‰ä¼˜å…ˆçº§ã€æ— æ—¶é—´ä¸äººå‘˜ç»‘å®šã€‚æœ¬åˆ†æä¸­è¯†åˆ«çš„ 53 ä¸ªå…·ä½“å·®è·ç‚¹ä¸æ¶æ„ä¿®å¤æ–¹æ¡ˆçš„ 215 ä¸ªé—®é¢˜ç‚¹äº’è¡¥ï¼šæ¶æ„ä¿®å¤è§£å†³ä»£ç å†…éƒ¨çš„è…åŒ–ï¼ŒCI/CD æ”¹è¿›é˜²æ­¢è…åŒ–åœ¨åˆå¹¶åç»§ç»­æ¶åŒ–ã€‚
+å½“å‰ 4 ä¸ª workflow æ–‡ä»¶åˆè®¡ 496 è¡Œ YAML é…ç½®ï¼Œæ”¹è¿›åé¢„è®¡æ‰©å±•è‡³çº¦ 1200 è¡Œã€‚è¿™ä¸ªå¢é•¿æ˜¯å¿…è¦çš„â€”â€”æ¯ä¸ªæ–°å¢çš„ job ä»£è¡¨ä¸€ä¸ªè¢«è‡ªåŠ¨åŒ–çš„è´¨é‡ä¿éšœæ­¥éª¤ã€‚å…³é”®åœ¨äºé€šè¿‡ composite action å’Œ workflow å¤ç”¨æœºåˆ¶æ§åˆ¶å¤æ‚åº¦è†¨èƒ€ï¼Œé¿å… CI æœ¬èº«æˆä¸ºæ–°çš„ç»´æŠ¤è´Ÿæ‹…ã€‚
 ---
-ÎÄµµ°æ±¾£º1.0.0
-¶ÔÓ¦¸Ä½ø·½°¸£ºanalysis/ci_cd_improvement_plan.md
+æ–‡æ¡£ç‰ˆæœ¬ï¼š1.0.0
+å¯¹åº”æ”¹è¿›æ–¹æ¡ˆï¼šanalysis/ci_cd_improvement_plan.md

@@ -9,6 +9,8 @@
 > 核心原则：**单一写者原则（Single-Writer Principle）**。同一 Wave 内的任意 2 个 Agent 的写文件列表（`files_write`）绝对不能包含相同路径（0 文件重叠）。重合热点文件必须通过 DAG 依赖链拆分到不同 Round 或同一 Round 的不同 Wave 中串行处理。
 
 > **校正注**：本文档中的 AG/B/D/P/X 等 Agent ID 源自旧编号体系，与 `ledger_v2.json` 的 `GAP-XX-XX` 体系无直接对应关系。对每条引用路径，本校正版本标注了审查发现的实际文件路径与状态（存在/不存在/需修正）。
+>
+> **⚠️ HISTORICAL (OPT-E8 / W4-2):** 文中 `apps/crish-desktop/src/store/session-actions/**` 为**已删除目录**的历史路径（校正时仍可能标为「存在」）。现行 session store actions：`sessionCrudActions.ts` / `sessionMessageActions.ts` / `sessionOrderingActions.ts` / `sessionAgentActions.ts` / barrel `sessionActions.ts`。
 
 ---
 
@@ -110,7 +112,7 @@
 
 > **校正注**：
 > - S2 的 `apps/crish-desktop/src/utils/approval-cache.ts` 和 `apps/crish-desktop/src/services/approval-pipeline.ts` 均为**幻觉路径**（在仓库中不存在）。v2_path_audit 确认这些文件不存在。实际 approval 相关文件位于 `packages/agent-daemon/src/` 下。
-> - S4 原始路径 `session-store/` → 实际路径为 `session-actions/`（已修正）。
+> - S4 原始路径 `session-store/` → 校正时改为 `session-actions/`（**OPT-E8：** 该目录已于 W4-2 删除；现行为 flat `session*Actions.ts`）。
 > - S6 原始路径 `crates/conex-ipc/src/process.rs` → 实际路径为 `crates/conex-sandbox/src/process_tree.rs`。原始只读集 `crates/conex-ipc/src/credentials.rs` 为**幻觉路径**，不存在于仓库中。
 
 #### Wave 2 & Wave 3 (集成与验证)

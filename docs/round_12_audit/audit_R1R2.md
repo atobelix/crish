@@ -3,6 +3,8 @@
 > 审计日期：2026-07-24
 > 对照文档：`analysis/2026-07-24-综合协同修复方案.md` §5–§6
 > 审计范围：R1-T01 ~ R1-T04、R2-T01 ~ R2-T06
+>
+> **⚠️ HISTORICAL (OPT-E8 / W4-2):** 下文 R1-T03 证据中的 `export * from './session-actions'` 与 `session-actions/types.ts` 描述的是当时落地形态；`store/session-actions/` 已于 W4-2 **物理删除**。现行：flat `session*Actions.ts` + barrel `sessionActions.ts`。
 
 ---
 

@@ -3,6 +3,8 @@
 > 基于 8+8=16 个 Agent 的多维度只读分析，结合 57 项 TECH_DEBT、12 份审计报告、11 份规划文档综合编译
 > 分析日期：2026-07-24
 > 本文件仅做问题分析与证据陈列，不包含解决方案
+>
+> **⚠️ HISTORICAL (OPT-E8 / W4-2):** 文中 `session-actions/`（`apps/crish-desktop/src/store/session-actions/`）为**已删除目录**的历史路径。现行 session store actions：`sessionCrudActions.ts` / `sessionMessageActions.ts` / `sessionOrderingActions.ts` / `sessionAgentActions.ts` / barrel `sessionActions.ts`。
 
 ---
 
@@ -77,7 +79,7 @@ TECH_DEBT.md 中 57 项债务的当前状态严重偏离实际：
 编排层（1 个）：
 - `packages/agent-orchestrator/src/orchestrator.ts` — 编排器
 
-**致命放大效应**：useChatStream.ts 的 Stashed 分支调用 `batchUpdateMessageText`，但该方法在 `session-actions/message-actions.ts` 中根本不存在（只实现了 `updateMessageText`）。若 Stashed 版本被合并，运行时会抛 `batchUpdateMessageText is not a function`。
+**致命放大效应**：useChatStream.ts 的 Stashed 分支调用 `batchUpdateMessageText`，但该方法在当时的 `session-actions/message-actions.ts`（**historical path; deleted W4-2 → live `sessionMessageActions.ts`**）中根本不存在（只实现了 `updateMessageText`）。若 Stashed 版本被合并，运行时会抛 `batchUpdateMessageText is not a function`。
 
 ---
 
@@ -92,7 +94,7 @@ TECH_DEBT.md 中 57 项债务的当前状态严重偏离实际：
 | `apps/crish-desktop/src/App.tsx` | 138 | 正常（已通过 app/ 子模块拆分） |
 | `packages/agent-daemon/src/server.ts` | 1 | 正常（barrel，已拆分到 server/ 目录） |
 | `apps/crish-desktop/src/store/layoutStore.ts` | 191 | 正常（已通过 slices/ 拆分） |
-| `apps/crish-desktop/src/store/sessionActions.ts` | 7 | 正常（barrel，已拆分到 session-actions/ 目录） |
+| `apps/crish-desktop/src/store/sessionActions.ts` | 7 | 正常（barrel；旧 `session-actions/` 目录已于 W4-2 删除，现拆为 `sessionCrudActions.ts` / `sessionMessageActions.ts` / `sessionOrderingActions.ts` / `sessionAgentActions.ts`） |
 | `apps/crish-desktop/src/api/clientApi.ts` | 887 | 偏高（Settings 类型 + Provider 转发桩 + DEAD/HONEST-HIDE 死代码） |
 | `apps/crish-desktop/src/api/daemonChatBridge.ts` | 1214 | 极高（20+ 导出函数 + EventRouter + streamViaDaemon，前端最大单体文件） |
 | `packages/agent-runtime/src/provider-openai-compatible.ts` | 623 | 中高（1 个 Provider 类 + 20 个模块级辅助函数） |

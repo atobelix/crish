@@ -3,6 +3,8 @@
 > 生成依据：全部 12 份 Round 12 审计报告（01_merge_conflicts 至 12_layer_fgj_deviation）
 > 方案设计原则：按逻辑轮次组织，每轮 ≤ 12 个 Agent，问题全覆盖，串联依赖显式标注
 > 总任务数：60 个修复单元，组织为 5 个逻辑轮次，覆盖 37 个源代码文件
+>
+> **⚠️ HISTORICAL (OPT-E8 / W4-2):** 文中 `session-actions/`（`apps/crish-desktop/src/store/session-actions/`）为**已删除目录**的历史任务路径。现行 session store actions：`sessionCrudActions.ts` / `sessionMessageActions.ts` / `sessionOrderingActions.ts` / `sessionAgentActions.ts` / barrel `sessionActions.ts`。
 
 **方案概述**：本方案将 12 份审计报告中发现的 60 个独立问题（含致命编译错误 2 个、高严重度 18 个、中严重度 22 个、低严重度 18 个）归类组织为 5 个逻辑轮次。每轮 12 个 Agent 并行工作，按依赖关系步进执行。核心设计理念是"先解阻断、后修管道、再调架构、强化安全、最终验证"——确保每轮输出都是下一轮的可靠基础。方案未包含时间安排、人员分配、优先级排序（按需求），但提供了完整的验收标准（每轮 12 项 × 5 轮 = 60 项）和端到端验证场景（12 个）以确保修复质量。
 

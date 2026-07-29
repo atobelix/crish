@@ -2,6 +2,8 @@
 
 > 审查范围：04_daemon_orchestrator.md（Layer D）& 05_state_api_layer.md（Layer E）
 > 审查日期：2026-07-24
+>
+> **⚠️ HISTORICAL (OPT-E8 / W4-2):** 文中 `session-actions/`（`apps/crish-desktop/src/store/session-actions/`）为**已删除目录**的历史布局与行数清单。现行 session store actions：`sessionCrudActions.ts` / `sessionMessageActions.ts` / `sessionOrderingActions.ts` / `sessionAgentActions.ts` / barrel `sessionActions.ts`。勿把下文「新路径 barrel」当作今日产品结构。
 
 ---
 

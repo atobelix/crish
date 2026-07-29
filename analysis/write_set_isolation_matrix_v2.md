@@ -4,6 +4,8 @@
 > 责任角色：Phase 2 - Agent 3（热点文件冲突分析与写集隔离矩阵）  
 > 分析目标：全仓库涉及修复任务的模块与热点文件（包含 `apps/crish-desktop/src/...`、`packages/agent-runtime/src/...`、`packages/agent-provider-http/src/...`、`packages/shared-types/src/...`、`crates/conex-*` 等）  
 > 核心原则：**单一写者原则（Single-Writer Principle）**。同一 Wave 内的任意 2 个 Agent 的写文件列表（`files_write`）绝对不能包含相同路径（0 文件重叠）。重合热点文件必须通过 DAG 依赖链拆分到不同 Round 或同一 Round 的不同 Wave 中串行处理。
+>
+> **⚠️ HISTORICAL (OPT-E8 / W4-2):** 文中 `apps/crish-desktop/src/store/session-actions/**` 路径为**已删除目录**的历史写集，不是现行代码树。现行 session store actions：`sessionCrudActions.ts` / `sessionMessageActions.ts` / `sessionOrderingActions.ts` / `sessionAgentActions.ts` / barrel `sessionActions.ts`（均在 `apps/crish-desktop/src/store/`）。
 
 ---
 

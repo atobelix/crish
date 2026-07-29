@@ -3,6 +3,8 @@
 > Agent 4 / Round 12
 > 审计范围：`packages/agent-runtime/src/session-store/index.ts`（appendMessage / appendMessages / getAllMessages）
 > 关联文件：`apps/crish-desktop/src/store/session-actions/message-actions.ts`（前端截断路径）
+>
+> **⚠️ HISTORICAL (OPT-E8 / W4-2):** `store/session-actions/` 目录已物理删除。本审计中的 `session-actions/*` 路径为历史快照。现行：`sessionMessageActions.ts` 等 + barrel `sessionActions.ts`。
 
 ## 1. 逐行验证结果
 

@@ -1,7 +1,0 @@
-CSS Audit Baseline
-==================
-Date: 2026-07-22
-Project: conex / apps/crish-desktop/src/styles
-
-contain: count  = 7
-!important count = 450

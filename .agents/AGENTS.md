@@ -24,7 +24,72 @@
   * **Exception – Flat Landing Layouts**: For full-page empty state composers or similarly prominent landing-style inputs (e.g. `data-empty-kind="session-empty"`), the focus state border should use a very subtle mix of the **exact same** `var(--border-color)` with at most 5% of `var(--text-primary)` — **virtually no darkening at all**. The visual context (cursor position, placeholder fading) is sufficient to signal focus. Do not add any border-color transition.
 * **Maximum 10% Focus Contrast Limit**: Under no circumstances should focus or active states apply hard solid lines. The focused border's grayness/darkening must never exceed **10% of the baseline background's text contrast mix** (e.g., maximum `color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%)`). Standard elements should preferentially use a soft **3% to 6% mix** to maintain visual softness.
 
-## 4. Hover Effects
-* **No Hover Jumping (translateY)**: When cards, chips, or prompt pills (such as `.quick-prompt-card`) are hovered, it is strictly forbidden to use vertical movement/jumping (such as `transform: translateY(-1px)`). Hover effects must be limited to soft background, border, and text color transitions.
+## 4. Debugging via Chrome DevTools Protocol (CDP)
+
+### Startup
+Run `npm run dev:workbench` from root. This launches the full Tauri desktop app including:
+- Rust backend (Tauri shell with Windows API)
+- Node.js daemon (WebSocket server on port 8765)
+- React frontend in WebView2 (Vite HMR enabled)
+
+### CDP Debug Port
+The WebView2 process (`msedgewebview2.exe`) is automatically started with `--remote-debugging-port=9222`.
+
+**Connect to CDP at:**
+```
+http://127.0.0.1:9222/json/list       → list available targets
+ws://127.0.0.1:9222/devtools/page/... → full CDP session (WebSocket)
+```
+
+**Available via CDP:**
+- Inspect DOM, read console logs, execute JS
+- Take screenshots of the app window
+- Monitor network requests (daemon WebSocket calls)
+- Read app state (React stores, Zustand state)
+
+### ⚠️ CRITICAL: Disable Browser-Side DevTools Inspection (禁用 DevTools 浏览器端检查)
+- **Disable Browser-Side Inspection**: Strictly forbid using browser-side DevTools plugins, standalone Chrome instances, or browser-side inspection tools for UI testing.
+- **Direct CDP 9222 Only**: All UI debugging, state inspection, DOM checks, and screenshots MUST be performed directly against the Tauri WebView2 process via port 9222 (`http://127.0.0.1:9222` / CDP WebSocket).
+- **Do NOT** open `http://localhost:5174` in a standalone browser to debug.
+- Browser mode has no Tauri APIs (no file dialogs, no shell, no sidecar daemon).
+- Browser mode cannot connect to the daemon — WebSocket connection will fail silently.
+- Browser mode gives false negatives: UI renders but features don't work, leading to wasted debugging.
+- **Only use CDP** via the `ws://127.0.0.1:9222` endpoint for accurate debugging and screenshots.
+
+### ⚠️ CRITICAL: Avoid Sandbox / Mock Seeding Environment in UI Testing (严禁在虚假/Mock 测试环境中测试)
+- **Bypass Mock Seeding**: By default, initial load or opening new windows in `npm run dev:workbench` may inject in-memory mock sandbox sessions (e.g. `测试会话 A/B/C`).
+- **Forbidden Mock Environment Testing**: All agents (including subagents and newly launched window instances) MUST NEVER test, inspect, screenshot, or evaluate features against isolated mock sandbox states or temporary seed data.
+- **Load Live User Data & Stores**: For accurate visual inspection and UI diagnostics, agents MUST evaluate or hydrate state from real window store facades (`window.__CRISH_SESSION_STORE__`, `window.__CRISH_LAYOUT_STORE__`, `window.__CRISH_TREE_STORE__`) or actual LocalStorage keys (`crish_session_index_v1`, `crish-layout-tree-v1`) to reflect actual user UI layouts and session history.
+- **New Window Mandatory Check**: Before taking screenshots or declaring verification pass in a newly opened window or subagent, agents MUST explicitly confirm that the workspace/session state is hydrated with real user data, NOT fallback mock sandbox sessions.
+
+### Other Running Services
+| Service | Port | Type |
+|---------|------|------|
+| Vite dev server | 5174 | HTTP (frontend source) |
+| Daemon WebSocket | 8765 | WebSocket (agent engine) |
+| CDP (WebView2) | 9222 | CDP/WebSocket (debugging) |
+| Tauri MCP Socket | 4000 | TCP (Tauri MCP Plugin) |
+
+### Debugging via Model Context Protocol (MCP)
+The Tauri app is configured to start a socket server for MCP debugging (via `tauri-plugin-mcp`) at `127.0.0.1:4000` (only in `debug_assertions` mode).
+
+**Connect to MCP at:**
+To allow AI assistants (like Cursor, Grok, or Antigravity) to connect via the `tauri-plugin-mcp-server` bridge:
+- Configure the MCP server with the following environment variables:
+  ```json
+  "tauri-mcp": {
+    "command": "npx",
+    "args": ["-y", "tauri-plugin-mcp-server"],
+    "env": {
+      "TAURI_MCP_CONNECTION_TYPE": "tcp",
+      "TAURI_MCP_TCP_PORT": "4000"
+    }
+  }
+  ```
+- This ensures the bridge connects via TCP to port `4000` instead of defaulting to Named Pipes (`\\.\pipe\tmp\tauri-mcp.sock`) on Windows.
+
+## 5. Mandatory Verification Command Suite Execution
+* **Full Verification After Major Changes**: All agents MUST strictly execute and pass the complete command verification suite defined in [FULL_CHECK_COMMANDS.md](file:///c:/Software/conex/FULL_CHECK_COMMANDS.md) after completing any major refactor, modification, or iteration round. Continuously append all required check commands to [FULL_CHECK_COMMANDS.md](file:///c:/Software/conex/FULL_CHECK_COMMANDS.md) and reference it across all agent directives.
+
 
 

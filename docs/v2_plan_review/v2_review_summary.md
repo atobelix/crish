@@ -1,6 +1,8 @@
 # V2 审查全景概览
 
 > 生成日期：2026-07-25 | 审查轮次：R1~R4 Agent 多轮协同
+>
+> **⚠️ HISTORICAL (OPT-E8 / W4-2):** 本目录下 JSON/矩阵中的 `apps/crish-desktop/src/store/session-actions/**` 为审查时路径快照；该目录已于 W4-2 **物理删除**。现行 session store actions：`sessionCrudActions.ts` / `sessionMessageActions.ts` / `sessionOrderingActions.ts` / `sessionAgentActions.ts` / barrel `sessionActions.ts`。JSON 审计原文保留不改，仅作历史机器记录。
 
 ---
 

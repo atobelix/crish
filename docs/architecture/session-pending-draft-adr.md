@@ -62,9 +62,10 @@
 
 ## 4. 后果
 
-- 删除 `findReusableEmptyShell` / `pruneEmptyShellSessions` / `shellPruneKeepIds` 及 create 内复用分支。
-- `shouldListSessionInSidebar` 空壳返回 false。
-- 测试契约从「复用空壳」改为「草稿不进列表、发送才 mint」。
+- 删除 `findReusableEmptyShell` 及 create 内复用分支（**禁止 reuse 空壳当新建**）。
+- **保留** `pruneEmptyShellSessions` / `shellPruneKeepIds` / `prepareSessionsForUi`：**仅 hydrate / list GC** 历史脏空壳（inventory #9 心智模型：draft ≠ empty-shell create）。
+- `shouldListSessionInSidebar` 空壳返回 false（隐藏 ≠ 复用）。
+- 测试契约从「复用空壳」改为「草稿不进列表、发送才 mint；空壳仅 GC」。
 
 ## 5. 执行
 

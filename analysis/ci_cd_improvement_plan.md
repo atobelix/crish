@@ -646,75 +646,75 @@ CI 流水线利用 turbo 的依赖图自动解析此链：
 | T6.5 | `.github/workflows/ci.yml` | 修改（新增 failure analysis） |
 ## 7 增量 roll-out 路径
 
-本节描述从当前状态逐步迁移到目�?CI/CD 架构的过渡路径�?
-### 7.1 阶段 0：修复已�?CI 中最严重的问�?
-在不增加�?workflow 的前提下，修复现�?ci.yml 中的 P0 问题�?
-1. 移除 ci.yml:85,88 �?|| true 静默模式，改为正常退出码检�?2. 移除 ci.yml:122-123,133-134 �?continue-on-error（先在本地验�?cargo audit �?npm audit 通过�?3. �?coverage job 中增加实际阈值验证逻辑
-4. 修复 ci.yml:148 �?eslint 命令，扩大扫描范围到全部 TS �?5. 移除 ci.yml:79 �?npx tsc --noEmit，替换为 npm run check:core
+鏈妭鎻忚堪浠庡綋鍓嶇姸鎬侀€愭杩佺Щ鍒扮洰鏍?CI/CD 鏋舵瀯鐨勮繃娓¤矾寰勩€?
+### 7.1 闃舵 0锛氫慨澶嶅凡鏈?CI 涓渶涓ラ噸鐨勯棶棰?
+鍦ㄤ笉澧炲姞鏂?workflow 鐨勫墠鎻愪笅锛屼慨澶嶇幇鏈?ci.yml 涓殑 P0 闂锛?
+1. 绉婚櫎 ci.yml:85,88 鐨?|| true 闈欓粯妯″紡锛屾敼涓烘甯搁€€鍑虹爜妫€鏌?2. 绉婚櫎 ci.yml:122-123,133-134 鐨?continue-on-error锛堝厛鍦ㄦ湰鍦伴獙璇?cargo audit 鍜?npm audit 閫氳繃锛?3. 鍦?coverage job 涓鍔犲疄闄呴槇鍊奸獙璇侀€昏緫
+4. 淇 ci.yml:148 鐨?eslint 鍛戒护锛屾墿澶ф壂鎻忚寖鍥村埌鍏ㄩ儴 TS 鍖?5. 绉婚櫎 ci.yml:79 鐨?npx tsc --noEmit锛屾浛鎹负 npm run check:core
 
 **前置条件**：无（直接在 ci.yml 上修改）
-**影响文件**�?github/workflows/ci.yml
+**褰卞搷鏂囦欢**锛?github/workflows/ci.yml
 
 ### 7.2 阶段 1：基础 CI 基础设施
 
-1. �?ci.yml 增加 concurrency 配置
-2. 为所�?workflow 声明最�?permissions
+1. 鍦?ci.yml 澧炲姞 concurrency 閰嶇疆
+2. 涓烘墍鏈?workflow 澹版槑鏈€灏?permissions
 3. 增加 paths-ignore 优化
 4. 引入 detect-changes job
-5. 恢复 turbo cache �?CI 步骤
+5. 鎭㈠ turbo cache 鍒?CI 姝ラ
 
-**前置条件**：阶�?0
-**影响文件**�?github/workflows/ci.yml, .github/workflows/perf-test.yml, .github/workflows/provider-validation.yml
+**鍓嶇疆鏉′欢**锛氶樁娈?0
+**褰卞搷鏂囦欢**锛?github/workflows/ci.yml, .github/workflows/perf-test.yml, .github/workflows/provider-validation.yml
 
-### 7.3 阶段 2：增量验�?
+### 7.3 闃舵 2锛氬閲忛獙璇?
 1. 引入 dorny/paths-filter
 2. 增量 typecheck
 3. 增量 lint
 4. 增量 unit test + coverage
-5. 扩展 OS 矩阵�?windows-latest
+5. 鎵╁睍 OS 鐭╅樀鍒?windows-latest
 
-**前置条件**：阶�?1
-**影响文件**�?github/workflows/ci.yml
+**鍓嶇疆鏉′欢**锛氶樁娈?1
+**褰卞搷鏂囦欢**锛?github/workflows/ci.yml
 
-### 7.4 阶段 3：全量验�?
+### 7.4 闃舵 3锛氬叏閲忛獙璇?
 1. main 分支全量构建
 2. 全量测试套件
-3. Rust 全量验证统一�?4. 安全审计硬性化
+3. Rust 鍏ㄩ噺楠岃瘉缁熶竴鍖?4. 瀹夊叏瀹¤纭€у寲
 5. 依赖合规 depcruise
 
-**前置条件**：阶�?2
-**影响文件**�?github/workflows/ci.yml, .dependency-cruiser.js
+**鍓嶇疆鏉′欢**锛氶樁娈?2
+**褰卞搷鏂囦欢**锛?github/workflows/ci.yml, .dependency-cruiser.js
 
-### 7.5 阶段 4：安全增�?
+### 7.5 闃舵 4锛氬畨鍏ㄥ寮?
 1. 密钥扫描集成
 2. 定时安全审计专用 workflow
 3. Playwright 视觉测试集成
-4. 基准测试持久�?
-**前置条件**：阶�?3
-**影响文件**�?github/workflows/ci.yml, .github/workflows/perf-test.yml
+4. 鍩哄噯娴嬭瘯鎸佷箙鍖?
+**鍓嶇疆鏉′欢**锛氶樁娈?3
+**褰卞搷鏂囦欢**锛?github/workflows/ci.yml, .github/workflows/perf-test.yml
 
 ### 7.6 阶段 5：发布流水线
 
-1. 发布干运�?2. daemon 二进制构�?3. 发布前清单检�?4. npm 包发�?5. 版本管理
+1. 鍙戝竷骞茶繍琛?2. daemon 浜岃繘鍒舵瀯寤?3. 鍙戝竷鍓嶆竻鍗曟鏌?4. npm 鍖呭彂甯?5. 鐗堟湰绠＄悊
 6. CHANGELOG 生成
 7. Docker 镜像
-8. GitHub Release 结构�?9. 发布前包验证
+8. GitHub Release 缁撴瀯鍖?9. 鍙戝竷鍓嶅寘楠岃瘉
 
-**前置条件**：阶�?0-4
-**影响文件**�?github/workflows/release.yml, package.json, Dockerfile, scripts/
+**鍓嶇疆鏉′欢**锛氶樁娈?0-4
+**褰卞搷鏂囦欢**锛?github/workflows/release.yml, package.json, Dockerfile, scripts/
 
-### 7.7 阶段 6：持续优�?
+### 7.7 闃舵 6锛氭寔缁紭鍖?
 1. Husky hooks 优化
 2. Dependabot 配置增强
 3. Metrics 与仪表盘
 4. 统一缓存策略
-5. 错误报告与失败分�?
-**前置条件**：阶�?5
-**影响文件**�?husky/pre-push, .lintstagedrc.json, .github/dependabot.yml
+5. 閿欒鎶ュ憡涓庡け璐ュ垎绫?
+**鍓嶇疆鏉′欢**锛氶樁娈?5
+**褰卞搷鏂囦欢**锛?husky/pre-push, .lintstagedrc.json, .github/dependabot.yml
 
 ## 8 关键配置示例
 
-### 8.1 建议�?ci.yml 骨架（增量模式）
+### 8.1 寤鸿鐨?ci.yml 楠ㄦ灦锛堝閲忔ā寮忥級
 
 ```yaml
 name: CI
@@ -813,7 +813,7 @@ jobs:
         run: npm run format
 ```
 
-### 8.2 建议�?dependabot.yml 增强
+### 8.2 寤鸿鐨?dependabot.yml 澧炲己
 
 ```yaml
 version: 2
@@ -860,12 +860,12 @@ updates:
         versions: [">=0.2.0"]
 ```
 
-### 8.3 建议�?.husky/pre-push 修改
+### 8.3 寤鸿鐨?.husky/pre-push 淇敼
 
-变更�? `npm run typecheck && npm test`
-变更�? `npm run typecheck:ci && npm run test:core`
+鍙樻洿鍓? `npm run typecheck && npm test`
+鍙樻洿鍚? `npm run typecheck:ci && npm run test:core`
 
-### 8.4 建议�?package.json 新增脚本
+### 8.4 寤鸿鐨?package.json 鏂板鑴氭湰
 
 ```json
 {
@@ -904,43 +904,43 @@ EXPOSE 31507
 CMD ["node", "packages/agent-daemon/dist/index.js"]
 ```
 
-## 9 验收检查清�?
+## 9 楠屾敹妫€鏌ユ竻鍗?
 ### 9.1 基础 CI 验收
 
-- 所�?workflow 声明了最�?permissions
-- ci.yml �?perf-test.yml �?concurrency 配置
-- docs/** �?*.md 的修改不触发 CI
-- turbo cache �?CI 中可用且命中�?> 50%
+- 鎵€鏈?workflow 澹版槑浜嗘渶灏?permissions
+- ci.yml 鍜?perf-test.yml 鏈?concurrency 閰嶇疆
+- docs/** 鍜?*.md 鐨勪慨鏀逛笉瑙﹀彂 CI
+- turbo cache 鍦?CI 涓彲鐢ㄤ笖鍛戒腑鐜?> 50%
 
 ### 9.2 增量验证验收
 
 - PR CI 只构建、类型检查和测试受影响的包及其依赖链
-- 修改 shared-types 自动触发 agent-runtime �?agent-orchestrator 的测�?- npm run lint:all 返回退出码 0
+- 淇敼 shared-types 鑷姩瑙﹀彂 agent-runtime 鍜?agent-orchestrator 鐨勬祴璇?- npm run lint:all 杩斿洖閫€鍑虹爜 0
 - prettier --check . 返回退出码 0
 - 覆盖率低于阈值时 CI 失败（红色）
-- 所�?TS 包通过�?tsc --noEmit
-- Rust crate �?cargo clippy -- -D warnings 零警�?
+- 鎵€鏈?TS 鍖呴€氳繃浜?tsc --noEmit
+- Rust crate 鐨?cargo clippy -- -D warnings 闆惰鍛?
 ### 9.3 全量验证验收
 
-- main 分支合并时执行全量构建（turbo run build�?- main 分支合并时执行全量测试（test:core + test:desktop-helpers + test:coverage�?- main 分支合并时执�?test:integration
+- main 鍒嗘敮鍚堝苟鏃舵墽琛屽叏閲忔瀯寤猴紙turbo run build锛?- main 鍒嗘敮鍚堝苟鏃舵墽琛屽叏閲忔祴璇曪紙test:core + test:desktop-helpers + test:coverage锛?- main 鍒嗘敮鍚堝苟鏃舵墽琛?test:integration
 - 集成测试通过 vitest.integration.config.ts
-- npm audit 失败�?CI 为红�?- cargo audit 失败�?CI 为红�?- dependency-cruiser 无循环依赖违�?- Playwright 视觉测试至少�?ubuntu-latest 上通过
+- npm audit 澶辫触鏃?CI 涓虹孩鑹?- cargo audit 澶辫触鏃?CI 涓虹孩鑹?- dependency-cruiser 鏃犲惊鐜緷璧栬繚瑙?- Playwright 瑙嗚娴嬭瘯鑷冲皯鍦?ubuntu-latest 涓婇€氳繃
 
 ### 9.4 安全扫描验收
 
-- 密钥扫描�?main 分支每次推送时执行
+- 瀵嗛挜鎵弿鍦?main 鍒嗘敮姣忔鎺ㄩ€佹椂鎵ц
 - 密钥扫描在定时任务中扫描全量历史
-- SBOM 在每�?release 时生�?
-### 9.5 发布流水线验�?
+- SBOM 鍦ㄦ瘡娆?release 鏃剁敓鎴?
+### 9.5 鍙戝竷娴佹按绾块獙鏀?
 - npm publish 使用 OIDC trusted publishing
-- 发布干运行通过（dry-run�?- 所�?@crish/* 包按依赖顺序发布
+- 鍙戝竷骞茶繍琛岄€氳繃锛坉ry-run锛?- 鎵€鏈?@crish/* 鍖呮寜渚濊禆椤哄簭鍙戝竷
 - GitHub Release 包含 CHANGELOG 内容
-- daemon 二进制在 3 平台自动构建并上�?- Docker 镜像 push �?ghcr.io
-- 发布前验证版本号一致�?
+- daemon 浜岃繘鍒跺湪 3 骞冲彴鑷姩鏋勫缓骞朵笂浼?- Docker 闀滃儚 push 鍒?ghcr.io
+- 鍙戝竷鍓嶉獙璇佺増鏈彿涓€鑷存€?
 ### 9.6 持续优化验收
 
-- pre-push 不执�?e2e 测试
-- dependabot 有合理的分组�?ignore 策略
+- pre-push 涓嶆墽琛?e2e 娴嬭瘯
+- dependabot 鏈夊悎鐞嗙殑鍒嗙粍鍜?ignore 绛栫暐
 - CI 运行摘要显示各阶段耗时
 - 失败 CI 自动分类错误类型
 
@@ -948,10 +948,10 @@ CMD ["node", "packages/agent-daemon/dist/index.js"]
 
 ### 新增文件
 
-| 文件 | 用�?| 估计行数 |
+| 鏂囦欢 | 鐢ㄩ€?| 浼拌琛屾暟 |
 |------|------|----------|
-| .dependency-cruiser.js | 循环依赖检测配�?| 40 |
-| Dockerfile | 多阶�?daemon 容器镜像 | 30 |
+| .dependency-cruiser.js | 寰幆渚濊禆妫€娴嬮厤缃?| 40 |
+| Dockerfile | 澶氶樁娈?daemon 瀹瑰櫒闀滃儚 | 30 |
 | scripts/version-bump.mjs | 统一版本管理 | 80 |
 | scripts/generate-changelog.mjs | CHANGELOG 自动生成 | 100 |
 | scripts/verify-publish.mjs | 发布前包内容验证 | 60 |
@@ -959,67 +959,67 @@ CMD ["node", "packages/agent-daemon/dist/index.js"]
 
 ### 修改文件
 
-| 文件 | 主要变更 | 估计修改�?|
+| 鏂囦欢 | 涓昏鍙樻洿 | 浼拌淇敼閲?|
 |------|----------|-----------|
-| .github/workflows/ci.yml | detect-changes, 矩阵, �?job | +400 �?|
-| .github/workflows/perf-test.yml | 并发控制, 持久�?| +50 �?|
-| .github/workflows/provider-validation.yml | 并发控制, 权限 | +10 �?|
-| .github/workflows/release.yml | npm publish, daemon, Docker | +300 �?|
-| .husky/pre-push | replace with typecheck:ci + test:core | 1 �?|
-| .lintstagedrc.json | add json eslint | 2 �?|
-| package.json | add 7 new scripts | +7 �?|
-| .github/dependabot.yml | groups, ignore comments, timezone | +15 �?|
+| .github/workflows/ci.yml | detect-changes, 鐭╅樀, 鏂?job | +400 琛?|
+| .github/workflows/perf-test.yml | 骞跺彂鎺у埗, 鎸佷箙鍖?| +50 琛?|
+| .github/workflows/provider-validation.yml | 骞跺彂鎺у埗, 鏉冮檺 | +10 琛?|
+| .github/workflows/release.yml | npm publish, daemon, Docker | +300 琛?|
+| .husky/pre-push | replace with typecheck:ci + test:core | 1 琛?|
+| .lintstagedrc.json | add json eslint | 2 琛?|
+| package.json | add 7 new scripts | +7 琛?|
+| .github/dependabot.yml | groups, ignore comments, timezone | +15 琛?|
 
 ### 总工作量估计
 
-- 新增代码：约 330 行（script + config + workflow�?- 修改代码：约 +780 行（现有文件的修改扩增）
-- 配置改动涉及：约 12 个文�?- **总量：约 1100 行新�?修改**
+- 鏂板浠ｇ爜锛氱害 330 琛岋紙script + config + workflow锛?- 淇敼浠ｇ爜锛氱害 +780 琛岋紙鐜版湁鏂囦欢鐨勪慨鏀规墿澧烇級
+- 閰嶇疆鏀瑰姩娑夊強锛氱害 12 涓枃浠?- **鎬婚噺锛氱害 1100 琛屾柊澧?淇敼**
 
 ## 11 风险缓解矩阵
 
-| 风险 | 概率 | 影响 | 缓解措施 | 触发后响�?|
+| 椋庨櫓 | 姒傜巼 | 褰卞搷 | 缂撹В鎺柦 | 瑙﹀彂鍚庡搷搴?|
 |------|------|------|----------|-----------|
-| turbo 缓存不一�?| �?| �?| cache key �?package-lock hash | 清空缓存重新 build |
-| OIDC 配置失败 | �?| �?| 先在测试 registry 验证 | 回退�?NPM_TOKEN |
-| 全量 CI 超时 | �?| �?| 设置 30 min timeout | 拆分串行 job |
-| OS 矩阵测试不稳�?| �?| �?| windows/macos 设为 continue-on-error | 修复后升�?blocking |
-| dependabot breaking change | �?| �?| 分组 + 人工 review | revert PR |
-| secret scan 误报 | �?| �?| 初始 continue-on-error + 排除 | 加排除规�?|
-| npm publish 顺序错误 | �?| �?| 按依赖拓扑严格排�?| unpublish 重新发布 |
-| 密钥泄露 | �?| �?| OIDC + 最小权�?+ 定期轮换 | 立即 revoke + 轮换 |
-| Docker 构建失败 | �?| �?| multi-stage 分离构建和运行时 | 回退�?npm 发布 |
+| turbo 缂撳瓨涓嶄竴鑷?| 浣?| 涓?| cache key 鍚?package-lock hash | 娓呯┖缂撳瓨閲嶆柊 build |
+| OIDC 閰嶇疆澶辫触 | 浣?| 楂?| 鍏堝湪娴嬭瘯 registry 楠岃瘉 | 鍥為€€鍒?NPM_TOKEN |
+| 鍏ㄩ噺 CI 瓒呮椂 | 涓?| 涓?| 璁剧疆 30 min timeout | 鎷嗗垎涓茶 job |
+| OS 鐭╅樀娴嬭瘯涓嶇ǔ瀹?| 涓?| 浣?| windows/macos 璁句负 continue-on-error | 淇鍚庡崌涓?blocking |
+| dependabot breaking change | 楂?| 涓?| 鍒嗙粍 + 浜哄伐 review | revert PR |
+| secret scan 璇姤 | 楂?| 浣?| 鍒濆 continue-on-error + 鎺掗櫎 | 鍔犳帓闄よ鍒?|
+| npm publish 椤哄簭閿欒 | 浣?| 楂?| 鎸変緷璧栨嫇鎵戜弗鏍兼帓搴?| unpublish 閲嶆柊鍙戝竷 |
+| 瀵嗛挜娉勯湶 | 浣?| 楂?| OIDC + 鏈€灏忔潈闄?+ 瀹氭湡杞崲 | 绔嬪嵆 revoke + 杞崲 |
+| Docker 鏋勫缓澶辫触 | 涓?| 涓?| multi-stage 鍒嗙鏋勫缓鍜岃繍琛屾椂 | 鍥為€€鍒?npm 鍙戝竷 |
 
 ## 12 与现有修复方案的集成
 
-�?CI/CD 改进方案�?docs/crish_desktop_architectural_remediation_plan �?Layer A-G 修复计划互补�?
-- **Layer A（共享基础设施�?*：CI/CD 中的 dependency-cruiser 验证可巩�?Layer A 的模块边界修�?- **Layer B（Rust 核心�?*：Rust crate �?cargo test --workspace --all-features 验证 B 层重�?- **Layer C-D（Runtime + Orchestrator�?*：增量测�?+ 集成测试验证 C/D 层的模块分解
-- **Layer E（状态管理）**：check:store-types �?CI 验证确保 E 层的 Store 安全重构不被后续 PR 破坏
-- **Layer F（UI 组件�?*：Playwright 视觉测试确保 F �?UI 重构不产生回�?- **Layer G（性能�?*：基准测试持久化确保 G 层优化后性能不退�?
-每个 Layer 完成重构后，应更�?CI 中的测试配置，将新重构的模块纳入增量测试范围�?
-## 13 设计原则执行检�?
-本节逐条检查改进方案是否遵循了�?1 章定义的设计原则�?
-**P1 �?原生融入现有构建体系**
-检查结果：通过。所�?CI 任务使用现有 npm scripts（package.json）、turbo pipeline（turbo.json）、cargo 命令（Cargo.toml）。未引入新的构建元框架。esbuild �?tsc 的调用通过各包已有 script 间接调用�?
-**P2 �?等价验证**
-检查结果：通过。CI 中执行的命令与本�?npm scripts 完全一致（turbo run build, npm run lint:all, prettier --check 等）。不出现 CI 独享的验证命令�?
-**P3 �?增量为主，全量为�?*
-检查结果：通过。T2.1-T2.6 �?PR 级别实现增量（turbo --filter）；T3.1-T3.9 �?main 合并时实现全量。增量模式通过 dorny/paths-filter + turbo --filter 联合实现�?
-**P4 �?门禁硬性化**
-检查结果：通过。消除所�?|| true �?continue-on-error 模式。覆盖率阈值、lint --max-warnings 0、tsc --noEmit 严格模式全部硬性阻断�?
-**P5 �?单一事实来源**
-检查结果：通过。版本信息从 package.json �?Cargo.toml 读取。CI workflow 中不硬编�?Node 版本字符串（�?matrix 读取）。发布时标签�?package.json 版本交叉验证�?
-**P6 �?最小权限与安全默认**
-检查结果：通过。所�?workflow 声明最�?permissions。npm publish 使用 OIDC trusted publishing。密钥扫描和 SBOM 纳入标准流程�?
-**P7 �?可观测性优�?*
-检查结果：通过。JUnit 测试报告、lcov 覆盖率报告、构建耗时 metrics、基准测试持久化全覆盖�?
+鏈?CI/CD 鏀硅繘鏂规涓?docs/crish_desktop_architectural_remediation_plan 鐨?Layer A-G 淇璁″垝浜掕ˉ锛?
+- **Layer A锛堝叡浜熀纭€璁炬柦锛?*锛欳I/CD 涓殑 dependency-cruiser 楠岃瘉鍙珐鍥?Layer A 鐨勬ā鍧楄竟鐣屼慨澶?- **Layer B锛圧ust 鏍稿績锛?*锛歊ust crate 鐨?cargo test --workspace --all-features 楠岃瘉 B 灞傞噸鏋?- **Layer C-D锛圧untime + Orchestrator锛?*锛氬閲忔祴璇?+ 闆嗘垚娴嬭瘯楠岃瘉 C/D 灞傜殑妯″潡鍒嗚В
+- **Layer E锛堢姸鎬佺鐞嗭級**锛歝heck:store-types 鐨?CI 楠岃瘉纭繚 E 灞傜殑 Store 瀹夊叏閲嶆瀯涓嶈鍚庣画 PR 鐮村潖
+- **Layer F锛圲I 缁勪欢锛?*锛歅laywright 瑙嗚娴嬭瘯纭繚 F 灞?UI 閲嶆瀯涓嶄骇鐢熷洖褰?- **Layer G锛堟€ц兘锛?*锛氬熀鍑嗘祴璇曟寔涔呭寲纭繚 G 灞備紭鍖栧悗鎬ц兘涓嶉€€鍖?
+姣忎釜 Layer 瀹屾垚閲嶆瀯鍚庯紝搴旀洿鏂?CI 涓殑娴嬭瘯閰嶇疆锛屽皢鏂伴噸鏋勭殑妯″潡绾冲叆澧為噺娴嬭瘯鑼冨洿銆?
+## 13 璁捐鍘熷垯鎵ц妫€鏌?
+鏈妭閫愭潯妫€鏌ユ敼杩涙柟妗堟槸鍚﹂伒寰簡绗?1 绔犲畾涔夌殑璁捐鍘熷垯锛?
+**P1 鈥?鍘熺敓铻嶅叆鐜版湁鏋勫缓浣撶郴**
+妫€鏌ョ粨鏋滐細閫氳繃銆傛墍鏈?CI 浠诲姟浣跨敤鐜版湁 npm scripts锛坧ackage.json锛夈€乼urbo pipeline锛坱urbo.json锛夈€乧argo 鍛戒护锛圕argo.toml锛夈€傛湭寮曞叆鏂扮殑鏋勫缓鍏冩鏋躲€俥sbuild 鍜?tsc 鐨勮皟鐢ㄩ€氳繃鍚勫寘宸叉湁 script 闂存帴璋冪敤銆?
+**P2 鈥?绛変环楠岃瘉**
+妫€鏌ョ粨鏋滐細閫氳繃銆侰I 涓墽琛岀殑鍛戒护涓庢湰鍦?npm scripts 瀹屽叏涓€鑷达紙turbo run build, npm run lint:all, prettier --check 绛夛級銆備笉鍑虹幇 CI 鐙韩鐨勯獙璇佸懡浠ゃ€?
+**P3 鈥?澧為噺涓轰富锛屽叏閲忎负杈?*
+妫€鏌ョ粨鏋滐細閫氳繃銆俆2.1-T2.6 鍦?PR 绾у埆瀹炵幇澧為噺锛坱urbo --filter锛夛紱T3.1-T3.9 鍦?main 鍚堝苟鏃跺疄鐜板叏閲忋€傚閲忔ā寮忛€氳繃 dorny/paths-filter + turbo --filter 鑱斿悎瀹炵幇銆?
+**P4 鈥?闂ㄧ纭€у寲**
+妫€鏌ョ粨鏋滐細閫氳繃銆傛秷闄ゆ墍鏈?|| true 鍜?continue-on-error 妯″紡銆傝鐩栫巼闃堝€笺€乴int --max-warnings 0銆乼sc --noEmit 涓ユ牸妯″紡鍏ㄩ儴纭€ч樆鏂€?
+**P5 鈥?鍗曚竴浜嬪疄鏉ユ簮**
+妫€鏌ョ粨鏋滐細閫氳繃銆傜増鏈俊鎭粠 package.json 鍜?Cargo.toml 璇诲彇銆侰I workflow 涓笉纭紪鐮?Node 鐗堟湰瀛楃涓诧紙浠?matrix 璇诲彇锛夈€傚彂甯冩椂鏍囩涓?package.json 鐗堟湰浜ゅ弶楠岃瘉銆?
+**P6 鈥?鏈€灏忔潈闄愪笌瀹夊叏榛樿**
+妫€鏌ョ粨鏋滐細閫氳繃銆傛墍鏈?workflow 澹版槑鏈€灏?permissions銆俷pm publish 浣跨敤 OIDC trusted publishing銆傚瘑閽ユ壂鎻忓拰 SBOM 绾冲叆鏍囧噯娴佺▼銆?
+**P7 鈥?鍙娴嬫€т紭鍏?*
+妫€鏌ョ粨鏋滐細閫氳繃銆侸Unit 娴嬭瘯鎶ュ憡銆乴cov 瑕嗙洊鐜囨姤鍛娿€佹瀯寤鸿€楁椂 metrics銆佸熀鍑嗘祴璇曟寔涔呭寲鍏ㄨ鐩栥€?
 ## 14 完整引用索引
 
-以下列出改进方案中引用的所有项目文件路径和行号�?
-| 引用路径 | 行号 | 用�?|
+浠ヤ笅鍒楀嚭鏀硅繘鏂规涓紩鐢ㄧ殑鎵€鏈夐」鐩枃浠惰矾寰勫拰琛屽彿锛?
+| 寮曠敤璺緞 | 琛屽彿 | 鐢ㄩ€?|
 |----------|------|------|
 | package.json | 7-16 | npm workspaces 定义 |
 | package.json | 17-67 | scripts 定义 |
-| package.json | 24-30 | 构建链定�?|
+| package.json | 24-30 | 鏋勫缓閾惧畾涔?|
 | package.json | 50 | check:core |
 | package.json | 54 | typecheck |
 | package.json | 56 | check:store-types |
@@ -1036,20 +1036,20 @@ CMD ["node", "packages/agent-daemon/dist/index.js"]
 | tsconfig.base.json | 23 | exactOptionalPropertyTypes |
 | vitest.config.ts | 7-16 | include 模式 |
 | vitest.config.ts | 13-16 | coverage 报告 |
-| apps/crish-desktop/vitest.config.ts | 13-18 | 覆盖率阈�?|
+| apps/crish-desktop/vitest.config.ts | 13-18 | 瑕嗙洊鐜囬槇鍊?|
 | eslint.config.js | 9-21 | ignores 列表 |
 | eslint.config.js | 55-57 | 前端规则范围 |
 | .lintstagedrc.json | 1-5 | lint-staged 配置 |
 | .husky/pre-commit | 1 | npx lint-staged |
 | .husky/pre-push | 1 | typecheck + test |
-| packages/agent-daemon/package.json | 25-28 | build 三元�?|
+| packages/agent-daemon/package.json | 25-28 | build 涓夊厓缁?|
 | packages/agent-daemon/package.json | 26 | tsc-alias |
-| packages/agent-daemon/package.json | 33 | 依赖�?|
+| packages/agent-daemon/package.json | 33 | 渚濊禆閾?|
 | packages/agent-daemon/package.json | 39 | MCP SDK |
 | packages/shared-types/package.json | 25-28 | build 模式 |
-| packages/shared-utils/package.json | 46-49 | 多入�?|
-| packages/agent-orchestrator/package.json | 31 | 依赖�?|
-| apps/agent-workbench/package.json | 9 | build 重定�?|
+| packages/shared-utils/package.json | 46-49 | 澶氬叆鍙?|
+| packages/agent-orchestrator/package.json | 31 | 渚濊禆閾?|
+| apps/agent-workbench/package.json | 9 | build 閲嶅畾鍚?|
 | apps/agent-workbench/package.json | 12 | cli:check |
 | apps/crish-desktop/package.json | 10 | tsc -b + vite |
 | apps/crish-desktop/package.json | 13 | qa:check |
@@ -1070,7 +1070,7 @@ CMD ["node", "packages/agent-daemon/dist/index.js"]
 | .github/workflows/ci.yml | 184-197 | bench-rust |
 | .github/workflows/ci.yml | 199-209 | bench-ts |
 | .github/workflows/perf-test.yml | 1-137 | 性能测试 |
-| .github/workflows/release.yml | 1-67 | 发布流水�?|
+| .github/workflows/release.yml | 1-67 | 鍙戝竷娴佹按绾?|
 | .github/workflows/release.yml | 23 | Node 20 |
 | .github/workflows/release.yml | 37 | build:packages |
 | .github/workflows/release.yml | 61 | generate_release_notes |

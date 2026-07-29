@@ -29,7 +29,7 @@ These documents detail specific sub-systems, protocol contracts, and technical c
 - [Daemon Runtime Selection](file:///c:/Software/conex/docs/architecture/daemon-runtime-selection.md): Architecture details on runtime environments and integration points.
 - [Observability & Session Loading](file:///c:/Software/conex/docs/architecture/observability-and-session-loading.md): Details on observability, logging, and session state rehydration.
 - [Streaming Transport Contract](file:///c:/Software/conex/docs/architecture/streaming-transport-contract.md): Specifications of streaming formats and event payloads over WebSockets.
-- [Workbench Session Actions and Split View](file:///c:/Software/conex/docs/architecture/workbench-session-actions-and-split-view.md): Frontend design and contract specifications for side-by-side view capabilities.
+- [Workbench Session Actions and Split View](file:///c:/Software/conex/docs/architecture/workbench-session-actions-and-split-view.md): Product SessionAction / Split View contracts (not the deleted `store/session-actions/` directory; see OPT-E8).
 
 ### 2. Implementation Plans (`docs/plans/`)
 

@@ -36,6 +36,11 @@ agent-workbench/src-tauri (壳) + agent-daemon (Node)
 - **消息正文与本地会话列表**：以 `crish-desktop` 本地状态 / 持久化为用户可见真相（见 `sessionDaemonSync`、`sessionPersistence` 等）。
 - **引擎侧会话**：daemon 提供列表、元数据、运行事件；UI 做**尽力合并**（补标题 / id、登记仅远端存在的会话壳），**不以引擎空壳覆盖本地消息正文**。
 - 运行中的流式内容、审批、工具卡片等来自 daemon 事件投影，与本地会话消息合成展示。
+- **流式热路径**：助手正文 / thinking 与工具 **intermediate** 进 `streamingStore`（无 immer）；工具 **terminal** 与终态消息写 session。详见 `docs/plans/progress/wave4-6-perf-notes.md`。
+
+## 控制面（Run Control）
+
+运行意图分 L0–L3（`continue` / `soft_inject` / `cooperative_stop` / `force_cancel`），经 runtime `ControlBus` 与 **force / steer / followUp** 三环队列在安全点消费；UI Stop 默认 L2，Force 为 L3。协议与队列语义见 `docs/architecture/run-control.md`；中控进度见 `docs/plans/progress/system-control-ledger.md`。PTY 侧 Windows **Job Object** + exit **`kill_all`** 收口子进程，与 shell residual 计划对齐。
 
 ## providerProfiles
 
@@ -67,3 +72,5 @@ cli (main / workbench-runner / goal-runner / runtime-factory)
 见根 `package.json`：`dev:desktop`、`dev:workbench`、`dev:cli`、`build:product`、`check:core`、`check:desktop`。
 
 专项设计与传输契约：`docs/architecture/`；阶段计划：`docs/plans/`。
+
+**一页系统地图（人类导航）：** [`docs/architecture/system-map-clear.md`](docs/architecture/system-map-clear.md) — 进程拓扑、四控制面（CP-UI/SESS/RUN/HOST）、新建/发送/停机/工具 hook/外部导入主路径、禁止双路径清单、样式 token 落点与新功能放哪。去重杀单见 `docs/plans/progress/architecture-dedup-inventory.md`。
