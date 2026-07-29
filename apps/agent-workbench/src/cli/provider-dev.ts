@@ -20,13 +20,13 @@ async function createProviderFromConfig(config: ProviderDefinition, modelOverrid
     apiKey = "";
   }
 
-  const providerBase = (endpoint: string) => ({
+  const providerBase = (endpoint: NonNullable<ProviderDefinition['endpoint']>) => ({
     ...(config.id !== undefined ? { id: config.id } : {}),
     baseUrl,
     ...(apiKey !== undefined ? { apiKey } : {}),
     ...(apiKeyEnv !== undefined ? { apiKeyEnv } : {}),
     model,
-    endpoint: endpoint as any,
+    endpoint,
     stream: config.stream !== false,
     ...(config.temperature !== undefined ? { temperature: config.temperature } : {}),
     ...(config.topP !== undefined ? { topP: config.topP } : {}),

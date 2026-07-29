@@ -698,30 +698,47 @@ pub(crate) fn terminate_process_tree(pid: u32) -> Result<(), String> {
     }
 }
 
-// ==================== Daemon Job Object (Orphan Process Protection) ====================
+// ==================== Job Objects (Orphan Process Protection) ====================
+//
+// Shared primitive: `create_kill_on_close_job_object` — JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE.
+// When the last handle to a job is closed (host exit or crash), Windows kills every process
+// still assigned to that job (and their descendants that inherited membership).
+//
+// Two separate jobs (do not merge):
+//   - Daemon/sidecar: assigned at spawn in sidecar/connection/lifecycle.rs
+//   - Interactive PTY shells: assigned at spawn in pty/session.rs (shared app-wide PTY job)
+//
+// Explicit kill paths remain:
+//   - PTY: `pty::kill_all_sessions()` on `RunEvent::Exit` (main.rs) and per-session kill
+//   - Dock unmount must NOT kill PTYs (frontend contract) — Job only fires on handle close
+//
+// Cross-ref: pty/mod.rs, pty/session.rs (Windows assign; Unix process-group best-effort).
+//
+
+/// Opaque job handle wrapper for OnceLock statics.
+#[cfg(windows)]
+struct JobHandle(windows_sys::Win32::Foundation::HANDLE);
 
 #[cfg(windows)]
-struct DaemonJobHandle(windows_sys::Win32::Foundation::HANDLE);
+// SAFETY: JobHandle 仅含整数句柄；Create/Assign/Close 由调用方串行化到 OnceLock
+unsafe impl Send for JobHandle {}
 
 #[cfg(windows)]
-// SAFETY: DaemonJobHandle 仅含整数句柄
-unsafe impl Send for DaemonJobHandle {}
+// SAFETY: JobHandle 仅含整数句柄
+unsafe impl Sync for JobHandle {}
 
+/// Create an anonymous job with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`.
+/// Caller owns the returned handle (CloseHandle when done, or store for process lifetime).
+/// Used by daemon and PTY orphan protection — see module comment above.
 #[cfg(windows)]
-// SAFETY: DaemonJobHandle 仅含整数句柄
-unsafe impl Sync for DaemonJobHandle {}
-
-#[cfg(windows)]
-static DAEMON_JOB_OBJECT: OnceLock<DaemonJobHandle> = OnceLock::new();
-
-#[cfg(windows)]
-pub(crate) fn create_daemon_job_object() -> Result<windows_sys::Win32::Foundation::HANDLE, String> {
+pub(crate) fn create_kill_on_close_job_object(
+) -> Result<windows_sys::Win32::Foundation::HANDLE, String> {
     use core::mem;
     use core::ptr;
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::System::JobObjects::*;
 
-    // SAFETY: JOBOBJECT_EXTENDED_LIMIT_INFORMATION 栈分配
+    // SAFETY: JOBOBJECT_EXTENDED_LIMIT_INFORMATION 栈分配；失败时 CloseHandle
     unsafe {
         let job = CreateJobObjectW(ptr::null_mut(), ptr::null_mut());
         if job.is_null() {
@@ -747,13 +764,44 @@ pub(crate) fn create_daemon_job_object() -> Result<windows_sys::Win32::Foundatio
 }
 
 #[cfg(windows)]
+fn assign_process_to_job(
+    job: windows_sys::Win32::Foundation::HANDLE,
+    child_handle: std::os::windows::io::RawHandle,
+) -> Result<(), String> {
+    use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
+
+    // SAFETY: hJob 与 processHandle 由调用方保证有效
+    unsafe {
+        if AssignProcessToJobObject(job, child_handle as windows_sys::Win32::Foundation::HANDLE) == 0
+        {
+            return Err(
+                "AssignProcessToJobObject failed: unable to assign child to job".to_string(),
+            );
+        }
+    }
+    Ok(())
+}
+
+// ── Daemon job (sidecar only) ────────────────────────────────────────────────
+
+#[cfg(windows)]
+static DAEMON_JOB_OBJECT: OnceLock<JobHandle> = OnceLock::new();
+
+#[cfg(windows)]
+pub(crate) fn create_daemon_job_object() -> Result<windows_sys::Win32::Foundation::HANDLE, String> {
+    create_kill_on_close_job_object()
+}
+
+#[cfg(windows)]
 pub(crate) fn init_daemon_job_object() -> Result<(), String> {
     let handle = create_daemon_job_object()?;
-    match DAEMON_JOB_OBJECT.set(DaemonJobHandle(handle)) {
+    match DAEMON_JOB_OBJECT.set(JobHandle(handle)) {
         Ok(()) => Ok(()),
-        Err(DaemonJobHandle(dup)) => {
-            // SAFETY: dup 来自 DuplicateHandle，已验证非 null
-            unsafe { windows_sys::Win32::Foundation::CloseHandle(dup); }
+        Err(JobHandle(dup)) => {
+            // SAFETY: 重复 init 时关闭多余句柄
+            unsafe {
+                windows_sys::Win32::Foundation::CloseHandle(dup);
+            }
             Ok(())
         }
     }
@@ -763,19 +811,43 @@ pub(crate) fn init_daemon_job_object() -> Result<(), String> {
 pub(crate) fn assign_child_to_daemon_job_object(
     child_handle: std::os::windows::io::RawHandle,
 ) -> Result<(), String> {
-    use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
+    let job = DAEMON_JOB_OBJECT.get().ok_or_else(|| {
+        "daemon job object not initialized; call init_daemon_job_object() first".to_string()
+    })?;
+    assign_process_to_job(job.0, child_handle)
+}
 
-    let job = DAEMON_JOB_OBJECT
-        .get()
-        .ok_or_else(|| "daemon job object not initialized; call init_daemon_job_object() first".to_string())?;
+// ── PTY job (interactive shells; shared app-wide) ────────────────────────────
+// One job for all PTY sessions: simplest correct tree lifecycle. Host crash closes
+// the handle → OS kills every assigned shell and descendants. Per-session kill and
+// kill_all still use portable-pty ChildKiller (independent of job membership).
 
-    // SAFETY: hJob 和 processHandle 均有效
-    unsafe {
-        if AssignProcessToJobObject(job.0, child_handle as windows_sys::Win32::Foundation::HANDLE) == 0 {
-            return Err("AssignProcessToJobObject failed: unable to assign child to job".to_string());
+#[cfg(windows)]
+static PTY_JOB_OBJECT: OnceLock<JobHandle> = OnceLock::new();
+
+#[cfg(windows)]
+pub(crate) fn init_pty_job_object() -> Result<(), String> {
+    let handle = create_kill_on_close_job_object()?;
+    match PTY_JOB_OBJECT.set(JobHandle(handle)) {
+        Ok(()) => Ok(()),
+        Err(JobHandle(dup)) => {
+            // SAFETY: 重复 init 时关闭多余句柄
+            unsafe {
+                windows_sys::Win32::Foundation::CloseHandle(dup);
+            }
+            Ok(())
         }
     }
-    Ok(())
+}
+
+#[cfg(windows)]
+pub(crate) fn assign_child_to_pty_job_object(
+    child_handle: std::os::windows::io::RawHandle,
+) -> Result<(), String> {
+    let job = PTY_JOB_OBJECT.get().ok_or_else(|| {
+        "pty job object not initialized; call init_pty_job_object() first".to_string()
+    })?;
+    assign_process_to_job(job.0, child_handle)
 }
 
 #[cfg(not(windows))]
@@ -838,5 +910,28 @@ mod tests {
             assert!(err.contains("PermissionDenied"), "Err should contain PermissionDenied for `{}`", cmd);
             assert!(err.contains("InvalidCommand"), "Err should contain InvalidCommand for `{}`", cmd);
         }
+    }
+
+    /// Empty job create: verifies CreateJobObjectW + KILL_ON_JOB_CLOSE limit flags.
+    /// Manual crash verification (Windows): spawn a PTY shell (`workbench_pty_create`), note
+    /// shell PID, force-kill the workbench process — shell tree should exit without orphans.
+    #[cfg(windows)]
+    #[test]
+    fn create_kill_on_close_job_object_empty_ok() {
+        let job = create_kill_on_close_job_object().expect("create empty kill-on-close job");
+        assert!(!job.is_null(), "job handle must be non-null");
+        // SAFETY: we own this handle from create_kill_on_close_job_object
+        unsafe {
+            let closed = windows_sys::Win32::Foundation::CloseHandle(job);
+            assert_ne!(closed, 0, "CloseHandle on empty job should succeed");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn init_pty_job_object_idempotent() {
+        init_pty_job_object().expect("first init");
+        init_pty_job_object().expect("second init is no-op success");
+        assert!(PTY_JOB_OBJECT.get().is_some());
     }
 }

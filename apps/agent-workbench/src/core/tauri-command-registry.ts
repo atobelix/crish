@@ -240,14 +240,6 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     reason: "Developer-only diagnostics; product continuation is not wired to the legacy CLI contract.",
   },
   {
-    command: "workbench_dev_cli_background_demo",
-    status: "implemented",
-    tauriRegistration: "debug-only",
-    surface: "developer-diagnostics",
-    feature: "legacy CLI background demo diagnostics",
-    reason: "Developer-only diagnostics for legacy background demo behavior.",
-  },
-  {
     command: "workbench_dev_cli_run_task",
     status: "implemented",
     tauriRegistration: "debug-only",
@@ -447,7 +439,7 @@ export function extractInvokedTauriCommands(source: string): string[] {
 
 export function extractRegisteredTauriCommands(source: string): string[] {
   const blocks = readAllGenerateHandlerBlocks(source);
-  if (blocks.length === 0) return [];
+  if (blocks.length === 0 && !source.includes("make_handlers!")) return [];
 
   const macros = extractMacroDefinitions(source);
 
@@ -464,6 +456,13 @@ export function extractRegisteredTauriCommands(source: string): string[] {
       const match = commandPath.match(/(?:^|::)([A-Za-z_][A-Za-z0-9_]*)$/);
       if (match) commands.add(match[1] as string);
     }
+  }
+
+  // make_handlers!(args) is a thin wrapper around generate_handler! — any command
+  // paths passed as arguments are registered Tauri commands (e.g. debug-only dev
+  // CLI commands injected via register_handlers!(dev) => make_handlers!(...)).
+  for (const cmd of extractMacroCallCommands(source, "make_handlers")) {
+    commands.add(cmd);
   }
 
   return [...commands].sort();
@@ -803,6 +802,76 @@ function expandMacrosInBlock(block: string, macros: Map<string, string>): string
     result = result.replace(invocationPattern, body);
   }
   return result;
+}
+
+/**
+ * Finds `macroName!(...)` call sites in `source` and extracts command paths from
+ * the call arguments. Used to resolve thin wrapper macros like `make_handlers!`
+ * that inject extra commands into `generate_handler!` via `$($extra,)*`.
+ *
+ * The macro *definition* (`macro_rules! macroName { ... }`) is skipped — only
+ * call sites (`macroName!(...)`) are processed. Arguments are split by comma and
+ * matched against the same `::path` trailing-segment pattern used for
+ * `generate_handler!` blocks.
+ */
+function extractMacroCallCommands(source: string, macroName: string): string[] {
+  const marker = `${macroName}!`;
+  const commands = new Set<string>();
+  let searchFrom = 0;
+
+  while (searchFrom < source.length) {
+    const idx = source.indexOf(marker, searchFrom);
+    if (idx === -1) break;
+
+    // Skip the macro definition itself: `macro_rules! macroName {`
+    const prefix = source.slice(Math.max(0, idx - "macro_rules! ".length), idx);
+    if (prefix.endsWith("macro_rules! ")) {
+      searchFrom = idx + marker.length;
+      continue;
+    }
+
+    let cursor = idx + marker.length;
+    while (/\s/.test(source[cursor] ?? "")) cursor += 1;
+    if (source[cursor] !== "(") {
+      searchFrom = idx + marker.length;
+      continue;
+    }
+
+    // Balanced paren matching to handle multi-line / nested call args.
+    let depth = 0;
+    let parenEnd = -1;
+    for (let i = cursor; i < source.length; i += 1) {
+      const char = source[i];
+      if (char === "(") depth += 1;
+      if (char === ")") {
+        depth -= 1;
+        if (depth === 0) {
+          parenEnd = i;
+          break;
+        }
+      }
+    }
+    if (parenEnd === -1) {
+      searchFrom = idx + marker.length;
+      continue;
+    }
+
+    const argsText = source.slice(cursor + 1, parenEnd);
+    const withoutComments = argsText
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+
+    for (const part of withoutComments.split(",")) {
+      const commandPath = part.trim();
+      if (!commandPath) continue;
+      const match = commandPath.match(/(?:^|::)([A-Za-z_][A-Za-z0-9_]*)$/);
+      if (match) commands.add(match[1] as string);
+    }
+
+    searchFrom = parenEnd + 1;
+  }
+
+  return [...commands].sort();
 }
 
 function skipWhitespace(source: string, start: number): number {

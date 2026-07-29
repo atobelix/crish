@@ -1,4 +1,5 @@
 use serde_json::Value;
+use tracing as log;
 
 use super::supervisor::*;
 use super::types::*;
@@ -43,7 +44,9 @@ pub(crate) fn resolve_pending_sidecar_response(event: &Value) -> bool {
     };
 
     if let Some(pending) = pending {
-        let _ = pending.sender.send(Ok(event.clone()));
+        if let Err(_) = pending.sender.send(Ok(event.clone())) {
+            log::warn!("[Pending] Response channel receiver dropped before success response could be sent for request_id: {}", pending.request_id);
+        }
         true
     } else {
         false
@@ -51,7 +54,13 @@ pub(crate) fn resolve_pending_sidecar_response(event: &Value) -> bool {
 }
 
 fn matching_pending_response_index(event: &Value) -> Option<usize> {
-    let pending = pending_sidecar_responses().lock().ok()?;
+    let pending = match pending_sidecar_responses().lock() {
+        Ok(guard) => guard,
+        Err(e) => {
+            log::warn!("[Pending] Failed to lock pending responses: {e}");
+            return None;
+        }
+    };
     if let Some(request_id) = response_request_id(event) {
         return pending
             .iter()
@@ -120,7 +129,9 @@ pub(crate) fn reject_pending_sidecar_response_by_request_id(request_id: &str, me
                 &message,
             )),
         ));
-        let _ = pending.sender.send(Err(rejection));
+        if let Err(_) = pending.sender.send(Err(rejection)) {
+            log::warn!("[Pending] Response channel receiver dropped before rejection could be sent for request_id: {}", pending.request_id);
+        }
         true
     } else {
         false
@@ -128,12 +139,17 @@ pub(crate) fn reject_pending_sidecar_response_by_request_id(request_id: &str, me
 }
 
 pub(crate) fn remove_pending_sidecar_response(request_id: u64) {
-    if let Ok(mut pending) = pending_sidecar_responses().lock() {
-        if let Some(index) = pending
-            .iter()
-            .position(|candidate| candidate.id == request_id)
-        {
-            pending.remove(index);
+    match pending_sidecar_responses().lock() {
+        Ok(mut pending) => {
+            if let Some(index) = pending
+                .iter()
+                .position(|candidate| candidate.id == request_id)
+            {
+                pending.remove(index);
+            }
+        }
+        Err(e) => {
+            log::warn!("[Pending] Failed to lock pending responses for removal: {e}");
         }
     }
 }
@@ -174,7 +190,9 @@ pub(crate) fn reject_all_pending_sidecar_responses(message: String) -> usize {
                 &message,
             )),
         ));
-        let _ = pending.sender.send(Err(rejection));
+        if let Err(_) = pending.sender.send(Err(rejection)) {
+            log::warn!("[Pending] Response channel receiver dropped before rejection could be sent for request_id: {}", pending.request_id);
+        }
     }
     rejected
 }

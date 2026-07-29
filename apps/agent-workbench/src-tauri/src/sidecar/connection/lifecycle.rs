@@ -8,6 +8,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::Emitter;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tracing as log;
 
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
@@ -173,8 +174,11 @@ fn apply_reconnect_jitter(base_delay_ms: u64) -> u64 {
         .duration_since(SystemTime::UNIX_EPOCH)
         .map(|d| d.subsec_nanos() as u64)
         .unwrap_or(0);
+    // Mix in PID to decorrelate concurrent processes
+    let pid_mix = std::process::id() as u64;
+    let entropy = nanos ^ (pid_mix.wrapping_mul(2654435761));
     let jitter_range = (base_delay_ms / 4).max(1);
-    let offset = nanos % (jitter_range * 2);
+    let offset = entropy % (jitter_range * 2);
     base_delay_ms.saturating_add(offset).saturating_sub(jitter_range)
 }
 
@@ -250,6 +254,18 @@ async fn connect_sidecar_websocket(
     tokio::spawn(async move {
         let mut disconnect_reason = "Daemon WebSocket read loop ended".to_string();
         while let Some(msg_result) = ws_read.next().await {
+            // Generation guard: stop processing if a newer connection superseded this one
+            let is_current = sidecar_connection().get()
+                .and_then(|conn| conn.lock().ok())
+                .map(|guard| guard.as_ref().is_some_and(|c| c.generation == reader_generation))
+                .unwrap_or(false);
+            if !is_current {
+                eprintln!(
+                    "[Sidecar][daemon.websocket] Reader for generation {reader_generation} stopping: superseded by newer connection"
+                );
+                return; // Exit silently — newer generation owns the event stream
+            }
+
             match msg_result {
                 Ok(msg) => {
                     if let Message::Text(text) = &msg {
@@ -392,12 +408,18 @@ async fn start_and_connect_sidecar(
     // B4: attach child to job object for orphan process protection
     #[cfg(windows)]
     {
-        let _ = process::init_daemon_job_object();
-        let _ = process::assign_child_to_daemon_job_object(child.as_raw_handle());
+        if let Err(e) = process::init_daemon_job_object() {
+            log::warn!("[Sidecar] Failed to initialize daemon job object: {e}");
+        }
+        if let Err(e) = process::assign_child_to_daemon_job_object(child.as_raw_handle()) {
+            log::warn!("[Sidecar] Failed to assign child to daemon job object: {e}");
+        }
     }
     #[cfg(not(windows))]
     {
-        let _ = process::set_child_process_group(child.id());
+        if let Err(e) = process::set_child_process_group(child.id()) {
+            log::warn!("[Sidecar] Failed to set child process group: {e}");
+        }
     }
 
     let stdout = child
@@ -406,6 +428,7 @@ async fn start_and_connect_sidecar(
         .ok_or_else(|| "sidecar.daemon.child-process stdout capture failed".to_string())?;
     let reader = BufReader::new(stdout);
     let mut startup_stdout: Vec<String> = Vec::new();
+    const MAX_STARTUP_LINES: usize = 50; // Prevent unbounded memory growth from noisy daemon output
 
     let result = read_daemon_stdout_line_with_timeout(reader, "waiting for daemon ready JSON");
     let (bytes_read, mut first_line, mut reader): (usize, String, BufReader<_>) = match result {
@@ -437,7 +460,7 @@ async fn start_and_connect_sidecar(
     let trimmed = first_line.trim();
     if !trimmed.starts_with('{') {
         loop {
-            if !first_line.trim().is_empty() {
+            if !first_line.trim().is_empty() && startup_stdout.len() < MAX_STARTUP_LINES {
                 startup_stdout.push(first_line.trim_end().to_string());
             }
 

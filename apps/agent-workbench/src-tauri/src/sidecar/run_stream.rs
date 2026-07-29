@@ -1,5 +1,6 @@
 use serde_json::Value;
 use tauri::Emitter;
+use tracing as log;
 
 use super::types::*;
 use crate::process;
@@ -163,7 +164,9 @@ pub(crate) fn emit_run_stream_diagnostic(
         "sessionId": stream.session_id,
         "diagnostic": diagnostic,
     });
-    let _ = app.emit("workbench-run-event", &event);
+    if let Err(e) = app.emit("workbench-run-event", &event) {
+        log::error!("[RunStream] Failed to emit run event to frontend: {e}");
+    }
 }
 
 // ==================== Replay Logic ====================
@@ -253,7 +256,9 @@ async fn replay_single_run_stream(
                 .unwrap_or_default();
             for event in &events {
                 observe_run_stream_event(event);
-                let _ = app.emit("workbench-run-event", event);
+                if let Err(e) = app.emit("workbench-run-event", event) {
+                    log::error!("[RunStream] Failed to emit run event to frontend: {e}");
+                }
             }
             page_replayed = page_replayed.saturating_add(events.len());
             total_replayed = total_replayed.saturating_add(events.len());

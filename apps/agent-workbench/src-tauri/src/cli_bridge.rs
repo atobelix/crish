@@ -49,15 +49,6 @@ pub(crate) fn workbench_dev_cli_continuation(prompt: Option<String>) -> Result<V
 }
 
 #[tauri::command]
-pub(crate) fn workbench_dev_cli_background_demo(prompt: Option<String>) -> Result<Value, String> {
-    let mut args = Vec::new();
-    if let Some(prompt) = prompt.filter(|v| !v.trim().is_empty()) {
-        args.push(format!("--prompt={prompt}"));
-    }
-    run_workbench_cli_json("background-demo", args)
-}
-
-#[tauri::command]
 pub(crate) fn workbench_dev_cli_run_task(prompt: String) -> Result<Value, String> {
     run_workbench_cli_json("run-json", prompt_extra_args(prompt))
 }

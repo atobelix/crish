@@ -20,6 +20,8 @@ serde_json.workspace = true
 # protocol-asset：文件管理器图片/PDF 预览（convertFileSrc + asset://）
 tauri = { workspace = true, features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
+# Dev MCP bridge (Grok/Cursor 调试 live workbench)。仅 debug 注册；插件自身 release 默认不启 socket。
+tauri-plugin-mcp = { git = "https://github.com/P3GLEG/tauri-plugin-mcp" }
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 futures-util = "0.3"
@@ -44,6 +46,10 @@ conex-compaction = { path = "../../../crates/conex-compaction" }
 conex-diff = { path = "../../../crates/conex-diff" }
 conex-search = { path = "../../../crates/conex-search" }
 conex-fs = { path = "../../../crates/conex-fs" }
+conex-db = { path = "../../../crates/conex-db" }
+conex-markdown = { path = "../../../crates/conex-markdown" }
+# Interactive terminal (Windows ConPTY / Unix PTY)
+portable-pty = "0.9"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_JobObjects", "Win32_System_Power"] }

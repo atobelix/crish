@@ -50,10 +50,12 @@ fn with_profile_secrets_mut<T>(
     operation(&mut guard)
 }
 
-fn with_profile_secrets<T>(operation: impl FnOnce(&CredentialStore) -> T) -> T {
+fn with_profile_secrets<T>(
+    operation: impl FnOnce(&CredentialStore) -> Result<T, String>,
+) -> Result<T, String> {
     let guard = profile_secret_store()
         .lock()
-        .expect("profile secret store lock");
+        .map_err(|e| format!("Config store lock poisoned: {e}"))?;
     operation(&guard)
 }
 

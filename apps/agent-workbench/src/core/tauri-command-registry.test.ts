@@ -118,7 +118,6 @@ describe("Tauri command registry", () => {
 
     const devCliEntries = REGISTERED_TAURI_COMMANDS.filter((entry) => entry.command.startsWith("workbench_dev_cli_"));
     expect(devCliEntries.map((entry) => entry.command).sort()).toEqual([
-      "workbench_dev_cli_background_demo",
       "workbench_dev_cli_bootstrap",
       "workbench_dev_cli_continuation",
       "workbench_dev_cli_probe",
@@ -350,6 +349,15 @@ function timestamp(): string {
 
 function readReleaseGenerateHandlerSource(source: string): string {
   const normalized = normalizeLineEndings(source);
+
+  // When main.rs uses the `make_handlers!` wrapper macro, the release surface is
+  // the `generate_handler![...]` block inside `make_handlers!` definition (base
+  // commands with `$($extra,)*` expanding to nothing). Extract that body so the
+  // release extraction sees the full base command list without dev-only extras.
+  const makeHandlersBody = extractMacroBodyByName(normalized, "make_handlers");
+  if (makeHandlersBody) return makeHandlersBody;
+
+  // Fallback: original register_handlers! () => branch (repos without make_handlers!).
   const match = normalized.match(/macro_rules!\s+register_handlers\s*\{([\s\S]*?)\}\s*fn main\(\)/);
   if (!match) {
     throw new Error("Could not find macro_rules! register_handlers in main.rs");
@@ -361,6 +369,33 @@ function readReleaseGenerateHandlerSource(source: string): string {
     throw new Error("Could not find () branch in register_handlers macro");
   }
   return branchMatch[1] as string;
+}
+
+/**
+ * Extracts the body of the first branch of `macro_rules! NAME { ... }`.
+ * The body is the text between the first `=> {` and its matching closing `}`.
+ * Returns `null` if the macro is not found.
+ */
+function extractMacroBodyByName(source: string, name: string): string | null {
+  const startPattern = new RegExp(`macro_rules!\\s+${name}\\s*\\{`);
+  const startMatch = startPattern.exec(source);
+  if (!startMatch) return null;
+
+  const arrowIndex = source.indexOf("=>", startMatch.index + startMatch[0].length);
+  if (arrowIndex === -1) return null;
+
+  const braceStart = source.indexOf("{", arrowIndex);
+  if (braceStart === -1) return null;
+
+  let depth = 0;
+  for (let i = braceStart; i < source.length; i += 1) {
+    if (source[i] === "{") depth += 1;
+    if (source[i] === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(braceStart + 1, i);
+    }
+  }
+  return null;
 }
 
 function normalizeLineEndings(source: string): string {

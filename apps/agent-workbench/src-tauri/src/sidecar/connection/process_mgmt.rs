@@ -1,5 +1,6 @@
 use std::io::{BufRead, BufReader, Read};
 use std::time::Duration;
+use tracing as log;
 
 use crate::daemon_discovery::*;
 use crate::process;
@@ -10,6 +11,8 @@ use super::super::types::*;
 pub(crate) fn clear_sidecar_process(kill_child: bool) {
     if kill_child {
         clear_sidecar_daemon_endpoint();
+    } else {
+        return;
     }
 
     let proc_store = sidecar_process().get();
@@ -33,11 +36,15 @@ pub(crate) fn clear_sidecar_process(kill_child: bool) {
                     eprintln!(
                         "[Sidecar][daemon.child-process] Process tree termination failed for PID {pid}: {error}; falling back to child.kill()"
                     );
-                    let _ = child.kill();
+                    if let Err(e) = child.kill() {
+                        log::warn!("[ProcessMgmt] Failed to kill child process (PID {pid}): {e}");
+                    }
                 }
             }
         }
-        let _ = child.wait();
+        if let Err(e) = child.wait() {
+            log::warn!("[ProcessMgmt] Failed to wait for child process (PID {pid}): {e}");
+        }
     }
 }
 
@@ -63,7 +70,9 @@ where
         let result = reader
             .read_line(&mut line)
             .map(|bytes| (bytes, line, reader));
-        let _ = tx.send(result);
+        if let Err(_) = tx.send(result) {
+            log::warn!("[ProcessMgmt] Failed to send stdout line result: receiver dropped");
+        }
     });
 
     match rx.recv_timeout(Duration::from_secs(DAEMON_READY_TIMEOUT_SECS)) {
@@ -85,16 +94,26 @@ pub(crate) fn collect_child_exit(
     kill_first: bool,
 ) -> (String, String) {
     if kill_first {
-        let _ = child.kill();
+        if let Err(e) = child.kill() {
+            log::warn!("[ProcessMgmt] Failed to kill child process before collecting exit status: {e}");
+        }
     }
 
     let mut stderr_msg = String::new();
     if let Some(err_stream) = child.stderr.take() {
         let mut err_reader = BufReader::new(err_stream);
-        let _ = err_reader.read_to_string(&mut stderr_msg);
+        if let Err(e) = err_reader.read_to_string(&mut stderr_msg) {
+            log::warn!("[ProcessMgmt] Failed to read child stderr stream: {e}");
+        }
     }
 
-    let status = child.wait().unwrap_or_default();
+    let status = match child.wait() {
+        Ok(status) => status,
+        Err(e) => {
+            log::warn!("[ProcessMgmt] Failed to wait for child exit status: {e}");
+            Default::default()
+        }
+    };
     let exit_code = status
         .code()
         .map(|code| code.to_string())

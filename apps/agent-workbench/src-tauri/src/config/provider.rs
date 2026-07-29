@@ -303,7 +303,7 @@ impl ApiConfigStore {
     }
 }
 
-fn with_store<T>(operation: impl FnOnce(&ApiConfigStore) -> T) -> T {
+fn with_store<T>(operation: impl FnOnce(&ApiConfigStore) -> T) -> Result<T, String> {
     let guard = API_CONFIG_STORE
         .get_or_init(|| {
             Mutex::new(ApiConfigStore::load(
@@ -312,8 +312,8 @@ fn with_store<T>(operation: impl FnOnce(&ApiConfigStore) -> T) -> T {
             ))
         })
         .lock()
-        .expect("api config store lock");
-    operation(&guard)
+        .map_err(|error| format!("Failed to lock API config store: {error}"))?;
+    Ok(operation(&guard))
 }
 
 fn with_store_mut<T>(
@@ -333,26 +333,28 @@ fn with_store_mut<T>(
 
 pub(crate) fn effective_credential_mode() -> String {
     with_store(|store| store.effective_credential_mode())
+        .unwrap_or_else(|_| DEFAULT_CREDENTIAL_MODE.to_string())
 }
 
 pub(crate) fn effective_api_key() -> Option<String> {
-    with_store(|store| store.effective_api_key().map(|secret| secret.value))
+    with_store(|store| store.effective_api_key().map(|secret| secret.value)).unwrap_or(None)
 }
 
 pub(crate) fn effective_api_base_url() -> Option<String> {
-    with_store(|store| store.effective_base_url())
+    with_store(|store| store.effective_base_url()).unwrap_or(None)
 }
 
 pub(crate) fn effective_model() -> Option<String> {
-    with_store(|store| store.effective_model())
+    with_store(|store| store.effective_model()).unwrap_or(None)
 }
 
 pub(crate) fn effective_provider_endpoint() -> String {
     with_store(|store| store.effective_endpoint())
+        .unwrap_or_else(|_| DEFAULT_PROVIDER_ENDPOINT.to_string())
 }
 
 pub(crate) fn effective_provider_stream() -> bool {
-    with_store(|store| store.effective_stream())
+    with_store(|store| store.effective_stream()).unwrap_or(DEFAULT_PROVIDER_STREAM)
 }
 
 #[allow(dead_code)]
@@ -366,6 +368,7 @@ fn api_key_source() -> &'static str {
             .map(|secret| secret.source.renderer_value())
             .unwrap_or("unset")
     })
+    .unwrap_or("unset")
 }
 
 pub(crate) fn daemon_api_key_source() -> &'static str {
@@ -378,6 +381,7 @@ pub(crate) fn daemon_api_key_source() -> &'static str {
             .map(|secret| secret.source.daemon_value())
             .unwrap_or("unset")
     })
+    .unwrap_or("unset")
 }
 
 #[tauri::command]
@@ -400,7 +404,7 @@ pub(crate) fn save_api_config(
 
 #[tauri::command]
 pub(crate) fn get_api_config() -> Result<Value, String> {
-    Ok(with_store(|store| store.snapshot()))
+    Ok(with_store(|store| store.snapshot())?)
 }
 
 #[tauri::command]
@@ -480,7 +484,7 @@ pub(crate) async fn update_daemon_config(
             snapshot["ok"] = serde_json::Value::Bool(true);
             snapshot["sentToDaemon"] = serde_json::Value::Bool(false);
             snapshot
-        }));
+        })?);
     }
 
     let sent_to_daemon = sidecar::send_current_sidecar_command(cmd, "daemon config update").await?;
@@ -490,7 +494,7 @@ pub(crate) async fn update_daemon_config(
         snapshot["ok"] = serde_json::Value::Bool(true);
         snapshot["sentToDaemon"] = serde_json::Value::Bool(sent_to_daemon);
         snapshot
-    }))
+    })?)
 }
 
 fn api_key_env_var_present_in_cmd(cmd: &Value) -> bool {

@@ -3,12 +3,6 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { AgentRuntime } from "@crish/agent-runtime";
 import { AsyncMutex } from "@crish/shared-utils";
 import {
-  createBackgroundTaskContinuationDecision,
-  finishBackgroundTask,
-  recordBackgroundTaskHeartbeat,
-  startBackgroundTask
-} from "../shared/background-tasks";
-import {
   applyUserGoal,
   buildInitialTaskSnapshot,
   createRuntimeCapabilities,
@@ -69,38 +63,6 @@ export function printContinuationPrompt(cwd = process.cwd(), prompt?: string): v
   const snapshot = createCliSnapshot(cwd, prompt);
   const decision = decideContinuation(snapshot);
   console.log(JSON.stringify({ snapshot, decision }, null, 2));
-}
-
-export function printBackgroundTaskDemo(cwd = process.cwd(), prompt?: string): void {
-  const base = createCliSnapshot(cwd, prompt ?? "检查项目并继续完成剩余任务");
-  const now = new Date().toISOString();
-  const started = startBackgroundTask(base, {
-    id: "demo-command",
-    kind: "command",
-    title: "运行长时间检查",
-    cwd,
-    command: "npm test",
-    detail: "命令已经交给后台处理，模型不需要同步等待。",
-    now
-  });
-  const heartbeat = recordBackgroundTaskHeartbeat(started, {
-    taskId: "demo-command",
-    detail: "命令仍在运行，已经收到一次进度信号。",
-    outputPreview: "正在检查中文界面、类型契约和运行时桥接。",
-    now
-  });
-  const finished = finishBackgroundTask(heartbeat, {
-    taskId: "demo-command",
-    exitCode: 0,
-    summary: "检查命令已经完成，可以根据结果继续未完成验收项。",
-    outputPreview: "所有关键检查通过。",
-    state: "succeeded",
-    signal: null,
-    evidenceIds: [],
-    now
-  });
-  const decision = createBackgroundTaskContinuationDecision(finished, "demo-command");
-  console.log(JSON.stringify({ started, heartbeat, finished, decision }, null, 2));
 }
 
 export function getRuntimeConstructor(): typeof AgentRuntime {
@@ -576,8 +538,6 @@ export async function runCliMain(argv = process.argv.slice(2)): Promise<void> {
 
   if (command === "continue") {
     printContinuationPrompt(cwd, prompt);
-  } else if (command === "background-demo") {
-    printBackgroundTaskDemo(cwd, prompt);
   } else {
     printCliStatus(cwd);
   }
@@ -599,7 +559,6 @@ function shouldRunCliMain(): boolean {
     command === undefined ||
     command === "status" ||
     command === "continue" ||
-    command === "background-demo" ||
     command === "run" ||
     command === "run-json" ||
     command === "goal-run" ||
