@@ -421,7 +421,16 @@ for (const facade of FACADE_REQUIRED) {
   if (!existsSync(storeAccessPath)) {
     fail(`missing file: ${accessRel}`);
   } else {
-    const src = scanForbidden(storeAccessPath, accessRel);
+    let src = scanForbidden(storeAccessPath, accessRel);
+    const storeAccessSubDir = resolve(dirname(storeAccessPath), 'store-access');
+    if (existsSync(storeAccessSubDir)) {
+      for (const subFile of readdirSync(storeAccessSubDir)) {
+        if (subFile.endsWith('.ts')) {
+          const subPath = join(storeAccessSubDir, subFile);
+          src += '\n' + scanForbidden(subPath, `apps/crish-desktop/src/api/store-access/${subFile}`);
+        }
+      }
+    }
     const accessRequired = [
       { re: /export\s+function\s+getLayoutState\b/, label: 'getLayoutState' },
       { re: /export\s+function\s+focusOrOpenPanel\b/, label: 'focusOrOpenPanel' },

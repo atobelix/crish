@@ -1,11 +1,11 @@
-<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-  <ellipse cx="100" cy="34" rx="22" ry="22" fill="#10B981" />
-  <g fill="none" stroke="#F4F4F5" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M 100 120 L 20 120" />
-    <path d="M 100 120 L 180 120" />
-    <path d="M 100 120 L 52 34" />
-    <path d="M 100 120 L 148 34" />
-    <path d="M 100 120 L 76 178" />
-    <path d="M 100 120 L 124 178" />
+﻿<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="100" cy="34" rx="16" ry="16" fill="#10B981" />
+  <g fill="none" stroke="#09090B" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 100 116 L 30 116" />
+    <path d="M 100 116 L 170 116" />
+    <path d="M 100 116 L 60 44" />
+    <path d="M 100 116 L 140 44" />
+    <path d="M 100 116 L 82 164" />
+    <path d="M 100 116 L 118 164" />
   </g>
 </svg>
