@@ -4,15 +4,22 @@
  * 浏览器安全子路径 —— 不包含任何 Node.js 原生模块依赖。
  * 适合 Web Worker / 纯浏览器环境使用。
  */
-export { isRecord, isPromiseLike, nonEmptyString, isNodeError } from "./guards";
-export { clone, deepFreeze, compactJsonObject, isJsonObject, isJsonValue, stripNonSerializable } from "./object";
-export { errorMessage } from "./error";
-export { combineAbortSignals } from "./abort-utils";
-export { RingBuffer } from "./ring-buffer";
-export { BoundedMap, LruMap } from "./bounded-map";
-export { AsyncMutex, AsyncSemaphore } from "./async-mutex";
-export { deepEqual, shallowEqual } from "./deep-equal";
-export { BoundedArray } from "./bounded-array";
+export { isRecord, isPromiseLike, nonEmptyString, isNodeError } from './guards';
+export {
+  clone,
+  deepFreeze,
+  compactJsonObject,
+  isJsonObject,
+  isJsonValue,
+  stripNonSerializable,
+} from './object';
+export { errorMessage } from './error';
+export { combineAbortSignals } from './abort-utils';
+export { RingBuffer } from './ring-buffer';
+export { BoundedMap, LruMap } from './bounded-map';
+export { AsyncMutex, AsyncSemaphore } from './async-mutex';
+export { deepEqual, shallowEqual } from './deep-equal';
+export { BoundedArray } from './bounded-array';
 
 export {
   MAX_SESSIONS,
@@ -54,27 +61,48 @@ export {
   TOTAL_MEMORY_BUDGET,
   MAX_BRANCHES,
   MAX_SHARDS_PER_BRANCH,
-} from "./bounds";
+} from './bounds';
 
-export { LruCache, BoundedMapCache } from "./cache";
-export type { CacheProvider, CacheBudget, SizeEstimator } from "./cache";
+export { LruCache, BoundedMapCache } from './cache';
+export type { CacheProvider, CacheBudget, SizeEstimator } from './cache';
 
-export { MemoryManager, memoryManager } from "./memory-manager";
-export type { MemoryPressureLevel, MemoryManagerOptions } from "./memory-manager";
+export { MemoryManager, memoryManager } from './memory-manager';
+export type {
+  MemoryPressureLevel,
+  MemoryManagerOptions,
+} from './memory-manager';
 
-export { ObjectPool } from "./object-pool";
+export { ObjectPool } from './object-pool';
 
-export { TokenBucket, CircuitBreaker } from "./backpressure";
-export type { CircuitState, CircuitBreakerState } from "./backpressure";
+export { TokenBucket } from './backpressure';
 
-export { detectHardware } from "./hardware-profile";
-export type { HardwareProfile, HardwareProfileInit, HardwareProfileChangeListener } from "./hardware-profile";
+export { detectHardware } from './hardware-profile';
+export type {
+  HardwareProfile,
+  HardwareProfileInit,
+  HardwareProfileChangeListener,
+} from './hardware-profile';
 
-export { PerformanceLevel, assignTier, shouldDowngrade, shouldUpgrade, TIER_CONFIGS } from "./performance-tier";
-export type { TierConfig, TierAssignment } from "./performance-tier";
+export {
+  PerformanceLevel,
+  assignTier,
+  shouldDowngrade,
+  shouldUpgrade,
+  TIER_CONFIGS,
+} from './performance-tier';
+export type { TierConfig, TierAssignment } from './performance-tier';
 
-export { DynamicAdaptationEngine, createAdaptationEngine } from "./dynamic-adaptation";
-export type { RuntimeMetrics, MetricEvent, MetricEventType, AdaptationListener, DynamicAdaptationOptions } from "./dynamic-adaptation";
+export {
+  DynamicAdaptationEngine,
+  createAdaptationEngine,
+} from './dynamic-adaptation';
+export type {
+  RuntimeMetrics,
+  MetricEvent,
+  MetricEventType,
+  AdaptationListener,
+  DynamicAdaptationOptions,
+} from './dynamic-adaptation';
 
 export {
   getFullAdaptation,
@@ -83,7 +111,7 @@ export {
   COMPUTE_ADAPTATIONS,
   NETWORK_ADAPTATIONS,
   STORAGE_ADAPTATIONS,
-} from "./platform-adaptation";
+} from './platform-adaptation';
 export type {
   RenderAdaptation,
   DomStrategy,
@@ -93,19 +121,19 @@ export type {
   NetworkAdaptation,
   StorageAdaptation,
   FullPlatformAdaptation,
-} from "./platform-adaptation";
+} from './platform-adaptation';
 
 // ── 技能 ID 算法（纯浏览器安全） ──
-export { skillStableId, ruleStableId, hashTextSha256Hex } from "./skill-id";
+export { skillStableId, ruleStableId, hashTextSha256Hex } from './skill-id';
 
 // ── React 集成（纯浏览器安全） ──
 export {
   PlatformAdaptationCtx,
   usePlatformAdaptationCtx,
   usePlatformAdaptation,
-} from "./use-platform-adaptation";
+} from './use-platform-adaptation';
 export type {
   PlatformAdaptationState,
   PlatformAdaptationOptions,
   UsePlatformAdaptationResult,
-} from "./use-platform-adaptation";
+} from './use-platform-adaptation';

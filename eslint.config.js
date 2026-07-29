@@ -96,7 +96,6 @@ export default tseslint.config(
   // Restrict Object.assign in Immer-based store files
   {
     files: [
-      'apps/crish-desktop/src/store/session-actions/**/*.{ts,tsx}',
       'apps/crish-desktop/src/store/slices/**/*.{ts,tsx}',
     ],
     rules: {

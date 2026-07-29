@@ -11,10 +11,10 @@ function loneSurrogates(s: string): number {
   let count = 0;
   for (let i = 0; i < s.length; i++) {
     const code = s.charCodeAt(i);
-    if (code >= 0xD800 && code <= 0xDFFF) {
-      const isHigh = code <= 0xDBFF;
+    if (code >= 0xd800 && code <= 0xdfff) {
+      const isHigh = code <= 0xdbff;
       const next = s.charCodeAt(i + 1);
-      if (isHigh && next >= 0xDC00 && next <= 0xDFFF) {
+      if (isHigh && next >= 0xdc00 && next <= 0xdfff) {
         i++;
         continue;
       }
@@ -49,7 +49,7 @@ describe('正常分帧', () => {
 
     await buf.flush(false); // → frame: "a"*60
     await buf.flush(false); // → frame: "b"*60
-    await buf.flush(true);  // → frame: "c"*60
+    await buf.flush(true); // → frame: "c"*60
 
     expect(frames.length).toBeGreaterThanOrEqual(2);
     for (const f of frames) {
@@ -90,17 +90,19 @@ describe('maxBacklogBytes 降级跳帧', () => {
     const buf = new StreamRenderBuffer({
       maxBytesPerFrame: 64,
       maxBacklogBytes: 30,
+      // Need HTML path so degraded actually gates bridge output
+      htmlNeeded: true,
     });
     const frames: RenderFrame[] = [];
     buf.onFrame = (f) => frames.push(f);
 
-    // 6 chunks × 10 B = 60 B total; backlog 30 B
-    for (let i = 0; i < 6; i++) {
-      buf.push('x'.repeat(10));
+    // Push well past maxBytesPerFrame so flush(false) leaves remaining pending.
+    // degraded = remaining bufferedLength() > maxBacklogBytes after this frame.
+    // 12 × 20 B = 240 B total → first frame takes ~60 B (3 chunks), remaining ~180 > 30.
+    for (let i = 0; i < 12; i++) {
+      buf.push('x'.repeat(20));
     }
 
-    // flush(false) processes up to 64 B (all 60 B fit), but pending NOT
-    // cleared on normal loop exit → bufferedLength() stays 60 > backlog 30
     await buf.flush(false);
 
     const degradedFrames = frames.filter((f) => f.degraded);

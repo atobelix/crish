@@ -5,7 +5,15 @@ export default defineWorkspace([
     test: {
       name: 'unit',
       environment: 'node',
-      setupFiles: ['./vitest.setup.ts'],
+      // globals 必须开启：test-setup.ts 通过 vi.mock + beforeEach 注入 Tauri invoke
+      // mock 基础设施，@testing-library/jest-dom 也依赖全局 expect。
+      globals: true,
+      // 顺序：先加载根 vitest.setup.ts（localStorage/RAF 等环境补齐），
+      // 再加载 crish-desktop test-setup.ts（Tauri invoke mock + jest-dom + ResizeObserver）。
+      setupFiles: [
+        './vitest.setup.ts',
+        './apps/crish-desktop/src/test-setup.ts',
+      ],
       retry: 2,
       testTimeout: 10000,
       include: [
@@ -66,7 +74,11 @@ export default defineWorkspace([
       setupFiles: ['./vitest.setup.ts'],
       retry: 2,
       testTimeout: 30000,
-      include: ['**/__tests__/e2e/**/*.test.ts', 'tests/e2e/**/*.spec.ts', 'tests/e2e/**/*.test.ts'],
+      include: [
+        '**/__tests__/e2e/**/*.test.ts',
+        'tests/e2e/**/*.spec.ts',
+        'tests/e2e/**/*.test.ts',
+      ],
       exclude: ['**/node_modules/**', '**/dist/**'],
       coverage: {
         provider: 'v8',
