@@ -13,11 +13,17 @@ export interface SecretStore {
 
 const ENV_PREFIX = "CONEX_SECRET_";
 
+type WindowWithTauri = typeof globalThis & {
+  __TAURI_INTERNALS__?: {
+    invoke?: (cmd: string, args: Record<string, unknown>) => Promise<unknown>;
+  };
+};
+
 function isTauriContext(): boolean {
   try {
     return (
       typeof window !== "undefined" &&
-      typeof (window as any).__TAURI_INTERNALS__ !== "undefined"
+      typeof (window as WindowWithTauri).__TAURI_INTERNALS__ !== "undefined"
     );
   } catch {
     return false;
@@ -25,7 +31,7 @@ function isTauriContext(): boolean {
 }
 
 async function tauriInvoke(cmd: string, args: Record<string, unknown>): Promise<unknown> {
-  const invoke = (window as any).__TAURI_INTERNALS__?.invoke;
+  const invoke = (window as WindowWithTauri).__TAURI_INTERNALS__?.invoke;
   if (!invoke) throw new Error("Tauri IPC not available");
   return invoke(cmd, args);
 }
@@ -71,7 +77,7 @@ class OSKeychainStore implements SecretStore {
       if (isTauriContext()) {
         const result = await tauriInvoke("workbench_profile_secret_get", {
           profileId: key,
-        }) as any;
+        }) as { apiKey?: string } | null | undefined;
         const apiKey: string | undefined = result?.apiKey;
         return apiKey ? createSecret(apiKey) : null;
       } else if (process.platform === "darwin") {
@@ -337,7 +343,7 @@ class EnvVarStore implements SecretStore {
 }
 
 export function wipeSecret(secret: SecretValue): void {
-  (secret as any).__wiped = true;
+  (secret as SecretValue & { __wiped?: boolean }).__wiped = true;
 }
 
 export class AutoSecretStore implements SecretStore {

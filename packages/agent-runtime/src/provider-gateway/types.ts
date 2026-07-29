@@ -152,6 +152,7 @@ export type RedactedProviderCredentialSource =
 
 export interface ProviderFactoryPlan {
   kind: "provider-factory-plan";
+  provider?: string;
   route: ProviderRouteSelection;
   credential: ResolvedProviderCredential;
   providerOptions?: JsonObject;

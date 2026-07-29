@@ -41,31 +41,48 @@ export interface CatalogModelEntry extends ModelCapabilityFlags {
   metadata?: Record<string, unknown>;
 }
 
+export interface LiteLLMModelEntry {
+  litellm_provider?: string;
+  mode?: string;
+  max_input_tokens?: number;
+  max_output_tokens?: number;
+  input_cost_per_token?: number;
+  output_cost_per_token?: number;
+  supports_function_calling?: boolean;
+  supports_vision?: boolean;
+  supports_reasoning?: boolean;
+  supports_parallel_function_calling?: boolean;
+  supports_response_schema?: boolean;
+  supports_prompt_caching?: boolean;
+  release_date?: string;
+  deprecation_date?: string;
+}
+
 // 能力目录——内存索引
 export class ModelCatalog {
   private byId = new Map<string, CatalogModelEntry>();
   private byProvider = new Map<string, CatalogModelEntry[]>();
 
   /** 从 LiteLLM 格式 JSON 加载 */
-  loadFromLiteLLM(json: Record<string, any>): void {
+  loadFromLiteLLM(json: Record<string, LiteLLMModelEntry>): void {
     for (const [key, entry] of Object.entries(json)) {
-      const e = entry as any;
+      const e = entry;
       const catalogEntry: CatalogModelEntry = {
         id: key,
         provider: e.litellm_provider ?? key.split("/")[0] ?? "unknown",
-        mode: e.mode ?? "chat",
+        mode: (e.mode as CatalogModelEntry["mode"]) ?? "chat",
         maxInputTokens: e.max_input_tokens ?? 4096,
         maxOutputTokens: e.max_output_tokens ?? 4096,
         inputCostPerToken: (e.input_cost_per_token ?? 0) * 1000,
         outputCostPerToken: (e.output_cost_per_token ?? 0) * 1000,
-        supportsFunctionCalling: e.supports_function_calling,
-        supportsVision: e.supports_vision,
-        supportsReasoning: e.supports_reasoning,
-        supportsParallelFunctionCalling: e.supports_parallel_function_calling,
-        supportsResponseSchema: e.supports_response_schema,
-        supportsPromptCaching: e.supports_prompt_caching,
-        releaseDate: e.release_date,
-        deprecationDate: e.deprecation_date,
+        ...(e.supports_function_calling !== undefined ? { supportsFunctionCalling: e.supports_function_calling } : {}),
+        ...(e.supports_vision !== undefined ? { supportsVision: e.supports_vision } : {}),
+        ...(e.supports_reasoning !== undefined ? { supportsReasoning: e.supports_reasoning } : {}),
+        ...(e.supports_parallel_function_calling !== undefined ? { supportsParallelFunctionCalling: e.supports_parallel_function_calling } : {}),
+        ...(e.supports_response_schema !== undefined ? { supportsResponseSchema: e.supports_response_schema } : {}),
+        ...(e.supports_prompt_caching !== undefined ? { supportsPromptCaching: e.supports_prompt_caching } : {}),
+        ...(e.release_date !== undefined ? { releaseDate: e.release_date } : {}),
+        ...(e.deprecation_date !== undefined ? { deprecationDate: e.deprecation_date } : {}),
       };
       this.byId.set(key, catalogEntry);
       const providerList = this.byProvider.get(catalogEntry.provider) ?? [];

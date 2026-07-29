@@ -1,9 +1,9 @@
 /**
  * Session Branch 状态机
  *
- * 管理会话分支的切换与恢复�? * 替代 session.ts �?findSessionLeafId 的推断式分支管理�? *
+ * 管理会话分支的切换与恢复 * 替代 session.ts 中 findSessionLeafId 的推断式分支管理? *
  * States:
- *   active �?suspended �?abandoned �?restored
+ *   active -> suspended -> abandoned -> restored
  */
 
 import {
@@ -29,7 +29,7 @@ export type SessionBranchEvent =
   | "BRANCH_ABANDON"
   | "BRANCH_VALIDATE";
 
-// ─── 上下�?───────────────────────────────────────────────
+// ─── 上下文───────────────────────────────────────────────
 
 export interface SessionBranchContext {
   sessionId: string;
@@ -147,6 +147,6 @@ export function createSessionBranchMachine(
         branchStack: []
       },
       ...(options?.snapshot !== undefined ? { snapshot: options.snapshot } : {}),
-    } as any
+    }
   );
 }

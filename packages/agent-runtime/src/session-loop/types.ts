@@ -65,7 +65,10 @@ export function conversationNeedsTextSynthesis(conversation: ConversationEngine)
     if (m.role === 'assistant') {
       for (const b of m.blocks ?? []) {
         if (b.type === 'tool-call') sawTool = true;
-        if (b.type === 'text' && typeof (b as any).text === 'string') proseChars += (b as any).text.trim().length;
+        if (b.type === 'text') {
+          const tb = b as { type: 'text'; text: string };
+          if (typeof tb.text === 'string') proseChars += tb.text.trim().length;
+        }
       }
     }
   }

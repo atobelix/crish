@@ -14,11 +14,11 @@ import type {
   ContextStateSnapshot
 } from "./types";
 
-/** 任务台账上限：保留最近的任务记录，超容量淘汰最旧�?*/
+/** 任务台账上限：保留最近的任务记录，超容量淘汰最旧的*/
 const MAX_CONTEXT_TASKS = 100;
-/** 会话事件上限：snapshotForCompression 只取最�?40 条，保留 5x 余量�?*/
+/** 会话事件上限：snapshotForCompression 只取最近 40 条，保留 5x 余量*/
 const MAX_SESSION_EVENTS = 200;
-/** 文件快照提示上限：snapshotForCompression 只取最�?40 条，保留 5x 余量�?*/
+/** 文件快照提示上限：snapshotForCompression 只取最?40 条，保留 5x 余量?*/
 const MAX_FILE_HINTS = 200;
 
 

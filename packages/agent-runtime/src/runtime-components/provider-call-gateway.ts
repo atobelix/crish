@@ -148,11 +148,13 @@ export class ProviderCallGateway {
       streamEvents.push(errorEvent);
       yield errorEvent;
     } finally {
-      if (contractStream && typeof (contractStream as any).return === "function") {
-        await (contractStream as any).return(undefined).catch(() => undefined);
+      const cs = contractStream as { return?: (value?: unknown) => Promise<unknown> } | null | undefined;
+      if (typeof cs?.return === "function") {
+        await cs.return(undefined).catch(() => undefined);
       }
-      if (rawStream && typeof (rawStream as any).return === "function") {
-        await (rawStream as any).return(undefined).catch(() => undefined);
+      const rs = rawStream as { return?: (value?: unknown) => Promise<unknown> } | null | undefined;
+      if (typeof rs?.return === "function") {
+        await rs.return(undefined).catch(() => undefined);
       }
     }
 

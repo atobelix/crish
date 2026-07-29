@@ -29,7 +29,8 @@ import { validateToolInput, repairToolInput } from '../tools';
 import { createId, nowIso } from '../session';
 import { RingBuffer } from '@crish/shared-utils';
 import { summarizeToolCall } from '../runtime-helpers';
-import { SingleToolExecutor } from './single-tool-executor';
+import { createLifecycleToolMiddleware } from '../hooks';
+import { SingleToolExecutor, type ToolMiddlewareHook } from './single-tool-executor';
 import type { ToolExecutorOptions } from './tool-executor-options';
 
 // ─── 工具执行完成结果 ─────────────────────────────────────
@@ -119,6 +120,21 @@ type ParallelItem =
 
 export class ToolExecutor {
   constructor(private readonly options: ToolExecutorOptions) {}
+
+  /** 默认 execute 路径：middlewareHooks + lifecycle → tool.pre/post 薄适配 */
+  private buildMiddlewareHooks(sessionId: string, cwd: string): ToolMiddlewareHook[] {
+    const hooks: ToolMiddlewareHook[] = [...(this.options.middlewareHooks ?? [])];
+    if (this.options.lifecycleHooks) {
+      hooks.push(
+        createLifecycleToolMiddleware(this.options.lifecycleHooks, () => ({
+          sessionId,
+          turnIndex: this.options.lifecycleTurnIndex ?? 0,
+          cwd,
+        })) as ToolMiddlewareHook,
+      );
+    }
+    return hooks;
+  }
 
   /**
    * 将工具调用按并发语义分区：
@@ -496,7 +512,10 @@ export class ToolExecutor {
       },
     };
 
-    const singleExecutor = new SingleToolExecutor(this.options.timeoutMs, []);
+    const singleExecutor = new SingleToolExecutor(
+      this.options.timeoutMs,
+      this.buildMiddlewareHooks(sessionId, cwd),
+    );
     const effectiveCall: ToolCallBlock = { ...toolCall, input: repairedInput };
     const executionPromise = singleExecutor
       .execute(effectiveCall, (input, ctx) => tool.execute(input, ctx), context, signal)

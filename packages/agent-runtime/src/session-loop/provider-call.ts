@@ -7,7 +7,7 @@
 import type { AgentMessage } from '@crish/shared-types';
 import type { ProviderStreamContractEvent } from '../provider-stream-contract';
 import type { ConversationEngine, ProviderCallGateway, ProviderResponseConsumer } from '../runtime-components';
-import type { AgentTool } from '../types';
+import type { AgentProvider, AgentTool } from '../types';
 import type { ContextManager } from '../runtime-components/context-manager';
 import { TokenLedger } from '../token-ledger';
 import { resolveProviderFamilyFromProviderId } from './types';
@@ -39,7 +39,7 @@ export class ProviderCallCoordinator {
   async buildProviderCall(
     conversation: ConversationEngine,
     contextManager: ContextManager,
-    options: { systemPrompt?: string; provider: { id: string }; cwd: string },
+    options: { systemPrompt?: string; provider: AgentProvider; cwd: string; maxOutputTokens?: number },
     tools: AgentTool[],
     sessionId: string,
     signal: AbortSignal,
@@ -48,24 +48,24 @@ export class ProviderCallCoordinator {
     const messages = conversation.getMessagesMutable();
     const providerSystemPrompt = contextManager.projectSystemPrompt(options.systemPrompt);
     const providerMessages = contextManager.projectForProvider(messages);
-    const promptContext = contextManager.projectPromptContext(options as any);
+    const promptContext = contextManager.projectPromptContext(options);
     const { assemblePromptForProvider } = await import('../prompt-assembly');
     const promptAssembly = assemblePromptForProvider({
       providerFamily: resolveProviderFamilyFromProviderId(options.provider.id),
-      systemPrompt: providerSystemPrompt,
+      ...(providerSystemPrompt !== undefined ? { systemPrompt: providerSystemPrompt } : {}),
       messages: providerMessages,
       tools,
       ...(Array.isArray(promptContext.stableContext) ? { stableContext: promptContext.stableContext } : {}),
       ...(Array.isArray(promptContext.volatileContext) ? { volatileContext: promptContext.volatileContext } : {}),
-    } as any);
+    });
 
     this.lastPromptAssembly = promptAssembly.metadata;
 
-    const maxTokens = this.resolveRequestMaxTokens(options as any);
+    const maxTokens = this.resolveRequestMaxTokens(options);
     const providerRequest = {
       sessionId,
       cwd: options.cwd,
-      systemPrompt: promptAssembly.payload.systemPrompt,
+      ...(promptAssembly.payload.systemPrompt !== undefined ? { systemPrompt: promptAssembly.payload.systemPrompt } : {}),
       messages: promptAssembly.payload.messages,
       tools: promptAssembly.payload.tools,
       promptAssembly: promptAssembly.metadata,
@@ -73,7 +73,7 @@ export class ProviderCallCoordinator {
       ...(maxTokens !== undefined ? { maxTokens } : {}),
     };
 
-    return (providerGateway as any).call(options.provider, providerRequest);
+    return providerGateway.call(options.provider, providerRequest);
   }
 
   recordTokenUsage(msg: AgentMessage | undefined, turnIndex: number, ledger: TokenLedger, providerId: string): void {

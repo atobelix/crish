@@ -11,5 +11,5 @@ export type { AssistantResponse, ConsumeResult } from "./provider-response-consu
 export { SingleToolExecutor } from "./single-tool-executor";
 export type { ToolMiddlewareHook } from "./single-tool-executor";
 export { ContextCompressionGate } from "./context-compression-gate";
-export type { CompressionResult } from "./context-compression-gate";
+export type { CompressionResult, ContextCompressionGateOptions } from "./context-compression-gate";
 export { ExecutionStrategy } from "./execution-strategy";

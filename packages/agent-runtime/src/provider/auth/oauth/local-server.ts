@@ -1,4 +1,5 @@
 import http from "node:http";
+import type { AddressInfo } from "node:net";
 import { URL } from "node:url";
 
 export interface LocalCallbackServerOptions {
@@ -47,7 +48,8 @@ export class LocalCallbackServer {
   start(): Promise<number> {
     return new Promise(resolve => {
       this.server.listen(0, () => {
-        this.port = (this.server.address() as any).port;
+        const addr = this.server.address() as AddressInfo | null;
+        this.port = addr?.port ?? 0;
         resolve(this.port);
       });
     });

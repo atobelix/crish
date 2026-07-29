@@ -12,6 +12,41 @@ function signal(): AbortSignal {
   return new AbortController().signal;
 }
 
+describe("ProviderResponseConsumer abort / L3 partial salvage", () => {
+  it("abort mid-stream with text keeps partial message (stopReason=aborted)", async () => {
+    const consumer = new ProviderResponseConsumer();
+    const ac = new AbortController();
+    async function* partialThenAbort(): AsyncIterable<ProviderStreamContractEvent> {
+      yield { type: "start", sequence: 0 };
+      yield { type: "delta", sequence: 1, delta: { type: "text", text: "kept-" } };
+      yield { type: "delta", sequence: 2, delta: { type: "text", text: "partial" } };
+      ac.abort("force_cancel");
+      // next event should hit signal.aborted at loop head
+      yield { type: "delta", sequence: 3, delta: { type: "text", text: "lost" } };
+    }
+    const result = await consumer.consume(partialThenAbort(), [], ac.signal);
+    expect(result.response.type).toBe("message");
+    if (result.response.type !== "message") return;
+    expect(result.response.message.metadata?.stopReason).toBe("aborted");
+    expect(result.response.message.metadata?.aborted).toBe(true);
+    expect(result.response.message.metadata?.text).toContain("partial");
+    expect(result.response.message.metadata?.text).not.toContain("lost");
+  });
+
+  it("abort with no content → error aborted", async () => {
+    const consumer = new ProviderResponseConsumer();
+    const ac = new AbortController();
+    ac.abort("force");
+    async function* empty(): AsyncIterable<ProviderStreamContractEvent> {
+      yield { type: "start", sequence: 0 };
+    }
+    const result = await consumer.consume(empty(), [], ac.signal);
+    expect(result.response.type).toBe("error");
+    if (result.response.type !== "error") return;
+    expect(result.response.error).toBe("aborted");
+  });
+});
+
 describe("ProviderResponseConsumer finishReason / stopReason fidelity", () => {
   it("end with finishReason length, text only → metadata.stopReason === length", async () => {
     const consumer = new ProviderResponseConsumer();

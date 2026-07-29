@@ -20,5 +20,4 @@ export {
   type CheckpointMiddlewareOptions,
   OutputMaterializationMiddleware,
   type OutputMaterializationMiddlewareOptions,
-  MiddlewarePipeline,
 } from "./tool-middleware";

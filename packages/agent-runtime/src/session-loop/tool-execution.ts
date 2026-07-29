@@ -12,7 +12,7 @@ import type { SessionRecorder } from '../session';
 import { createId } from '../session';
 import { validateToolInput, repairToolInput } from '../tools';
 import { withSessionEntryMetadata, checkpointRecordsFromToolResult, checkpointRestoreRecordFromToolResult, buildPermissionDenyToolOutput, summarizeToolCall, isToolTimeoutCause, abortReason, validationAdviceForToolInput } from '../runtime-helpers';
-import type { HookContext, AgentHooks as AgentHooksType, ToolHook, ToolResult } from '../hooks';
+import type { HookContext, AgentHooks as AgentHooksType, LifecycleHookRegistry, ToolHook, ToolResult } from '../hooks';
 import { ApprovalPipeline } from '../approval/approval-pipeline';
 import { findFatalToolError } from './types';
 import type { ToolExecutionReliabilityOptions } from './types';
@@ -24,6 +24,10 @@ export interface ToolExecCtx {
   signal: AbortSignal;
   recorder: SessionRecorder;
   composedHooks: Partial<AgentHooksType>;
+  /** 与 turn.start/end 同一 LifecycleHookRegistry 实例 */
+  lifecycleHooks?: LifecycleHookRegistry;
+  /** tool.post.terminate → L2 cooperative stop */
+  requestCooperativeStop?: (reason?: string) => void;
   permissionPolicy: RuntimePermissionPolicy;
   approvalPipeline: ApprovalPipeline;
   hooks?: ToolHook<JsonObject, ToolOutput>[];
@@ -45,9 +49,15 @@ export class ToolExecutionCoordinator {
   readonly toolExecution: ToolExecutionReliabilityOptions;
   sawToolsThisRun = false;
 
-  constructor(toolExecution: ToolExecutionReliabilityOptions) {
+  constructor(toolExecution: ToolExecutionReliabilityOptions, lifecycleHooks?: LifecycleHookRegistry) {
     this.toolExecution = toolExecution;
-    this.toolExecutor = new ToolExecutor({ timeoutMs: toolExecution.timeoutMs, parallelFailurePolicy: toolExecution.parallelFailurePolicy as ToolBatchFailurePolicy });
+    this.toolExecutor = new ToolExecutor({
+      timeoutMs: toolExecution.timeoutMs,
+      parallelFailurePolicy: toolExecution.parallelFailurePolicy as ToolBatchFailurePolicy,
+      // 默认路径（无 custom executeOne 时）也发出 tool.pre/post
+      ...(lifecycleHooks ? { lifecycleHooks } : {}),
+    });
+    // session-loop 真路径在 executeSingleTool 内直接 emit lifecycle（含 terminate）
     this.singleToolExecutor = new SingleToolExecutor(toolExecution.timeoutMs, []);
   }
 
@@ -98,7 +108,7 @@ export class ToolExecutionCoordinator {
           return r;
         }
         if (beforeResult.status === "pending_approval") {
-          const decision = yield* this.resolvePermission(tool, toolCall.input, toolCall.id, ctx);
+          const decision = yield* this.evaluatePermission(tool, toolCall.input, toolCall.id, ctx);
           if (decision.behavior !== "allow") {
             const r = this.toResult(call, startedAt, buildPermissionDenyToolOutput(decision), true);
             yield { type: 'tool-end', sessionId: ctx.sessionId, batchId, result: r, timestamp: new Date().toISOString() } as AgentEvent;
@@ -133,7 +143,7 @@ export class ToolExecutionCoordinator {
     const valError = yield* this.handleValidation(tool, effectiveInput, call, startedAt, batchId, ctx);
     if (valError) return valError;
 
-    const permission = yield* this.resolvePermission(tool, effectiveInput, toolCall.id, ctx);
+    const permission = yield* this.evaluatePermission(tool, effectiveInput, toolCall.id, ctx);
     if (permission.behavior !== 'allow') {
       const r = this.toResult(call, startedAt, buildPermissionDenyToolOutput(permission), true);
       yield { type: 'tool-end', sessionId: ctx.sessionId, batchId, result: r, timestamp: new Date().toISOString() } as AgentEvent;
@@ -179,8 +189,27 @@ export class ToolExecutionCoordinator {
 
   private async *handleBeforeHook(toolCall: ToolCallBlock, tool: AgentTool, batchId: string, startedAt: number, call: ToolBatchCall, ctx: ToolExecCtx): AsyncGenerator<AgentEvent, { effectiveInput: JsonObject; blocked: ToolBatchResult | null }> {
     let effectiveInput = toolCall.input;
+
+    // B2 residual：lifecycle tool.pre — block 则跳过 execute
+    if (ctx.lifecycleHooks) {
+      const pre = await ctx.lifecycleHooks.emit('tool.pre', {
+        sessionId: ctx.sessionId,
+        toolCallId: toolCall.id,
+        toolName: toolCall.toolName,
+        input: effectiveInput,
+        turnIndex: ctx.machine.getContext().turnIndex,
+        cwd: ctx.cwd ?? '',
+      });
+      if (pre.block) {
+        const r = this.toResult(call, startedAt, { text: pre.reason ?? `Tool call blocked by lifecycle hook: ${toolCall.toolName}` }, true);
+        yield { type: 'tool-end', sessionId: ctx.sessionId, batchId, result: r, timestamp: new Date().toISOString() } as AgentEvent;
+        return { effectiveInput, blocked: r };
+      }
+      if (pre.modifiedInput) effectiveInput = pre.modifiedInput;
+    }
+
     if (!ctx.composedHooks.beforeToolCall) return { effectiveInput, blocked: null };
-    const hookCtx: HookContext = { sessionId: ctx.sessionId, toolCallId: toolCall.id, toolName: toolCall.toolName, tool, input: toolCall.input, cwd: ctx.cwd ?? '', turnIndex: ctx.machine.getContext().turnIndex };
+    const hookCtx: HookContext = { sessionId: ctx.sessionId, toolCallId: toolCall.id, toolName: toolCall.toolName, tool, input: effectiveInput, cwd: ctx.cwd ?? '', turnIndex: ctx.machine.getContext().turnIndex };
     const beforeResult = await ctx.composedHooks.beforeToolCall(hookCtx);
     if (beforeResult.block) {
       const r = this.toResult(call, startedAt, { text: beforeResult.reason ?? `Tool call blocked by hook: ${toolCall.toolName}` }, true);
@@ -189,6 +218,34 @@ export class ToolExecutionCoordinator {
     }
     if (beforeResult.modifiedInput) effectiveInput = beforeResult.modifiedInput;
     return { effectiveInput, blocked: null };
+  }
+
+  /** emit tool.post（成功/失败均调用）；honor modifiedOutput + terminate→L2 */
+  private async emitToolPost(
+    toolCall: ToolCallBlock,
+    output: ToolOutput,
+    isError: boolean,
+    ctx: ToolExecCtx,
+  ): Promise<{ output: ToolOutput; terminate: boolean; reason?: string }> {
+    if (!ctx.lifecycleHooks) return { output, terminate: false };
+    const post = await ctx.lifecycleHooks.emit('tool.post', {
+      sessionId: ctx.sessionId,
+      toolCallId: toolCall.id,
+      toolName: toolCall.toolName,
+      input: toolCall.input,
+      output,
+      isError,
+      turnIndex: ctx.machine.getContext().turnIndex,
+      cwd: ctx.cwd ?? '',
+    });
+    if (post.terminate) {
+      ctx.requestCooperativeStop?.(post.reason ?? 'tool.post.terminate');
+    }
+    return {
+      output: post.modifiedOutput ?? output,
+      terminate: Boolean(post.terminate),
+      ...(post.reason !== undefined ? { reason: post.reason } : {}),
+    };
   }
 
   private async *handleValidation(tool: AgentTool, input: JsonObject, call: ToolBatchCall, startedAt: number, batchId: string, ctx: ToolExecCtx): AsyncGenerator<AgentEvent, ToolBatchResult | null> {
@@ -228,10 +285,16 @@ export class ToolExecutionCoordinator {
   private async *handleExecResult(toolCall: ToolCallBlock, call: ToolBatchCall, startedAt: number, batchId: string, execResult: any, ctx: ToolExecCtx): AsyncGenerator<AgentEvent, ToolBatchResult> {
     if (!execResult.isError) {
       let materialized = await ctx.contextManager.materializeOutput(toolCall, execResult.output);
+
+      // lifecycle tool.post（成功）
+      const lifePost = await this.emitToolPost(toolCall, materialized, false, ctx);
+      materialized = lifePost.output;
+
       if (ctx.composedHooks.afterToolCall) {
         const hc: HookContext = { sessionId: ctx.sessionId, toolCallId: toolCall.id, toolName: toolCall.toolName, tool: ctx.tools.find((t: AgentTool) => t.name === toolCall.toolName)!, input: toolCall.input, output: materialized, cwd: ctx.cwd ?? '', turnIndex: ctx.machine.getContext().turnIndex };
         const afterResult = await ctx.composedHooks.afterToolCall(hc);
         if (afterResult.terminate) {
+          ctx.requestCooperativeStop?.(afterResult.terminateReason ?? 'afterToolCall.terminate');
           const r = this.toResult(call, startedAt, afterResult.modifiedOutput ?? materialized, false);
           yield { type: 'tool-end', sessionId: ctx.sessionId, batchId, result: r, timestamp: new Date().toISOString() } as AgentEvent;
           return r;
@@ -252,13 +315,16 @@ export class ToolExecutionCoordinator {
     const isCancelled = rawJson.cancelled === true || (ctx.signal.aborted && !isTimeout);
     const causeText = isTimeout ? 'Tool execution timed out' : isCancelled ? (typeof execResult.output?.text === 'string' && execResult.output.text ? execResult.output.text : 'Tool execution cancelled') : (execResult.output?.text ?? 'Tool execution error');
     const structuredJson: JsonObject = { ...rawJson, timedOut: isTimeout, cancelled: isCancelled && !isTimeout } as JsonObject;
-    const errorOutput = await ctx.contextManager.materializeOutput(toolCall, { text: causeText, json: structuredJson });
+    let errorOutput = await ctx.contextManager.materializeOutput(toolCall, { text: causeText, json: structuredJson });
+    // lifecycle tool.post（失败路径也必须 emit）
+    const lifePost = await this.emitToolPost(toolCall, errorOutput, true, ctx);
+    errorOutput = lifePost.output;
     const r = this.toResult(call, startedAt, errorOutput, true);
     yield { type: 'tool-end', sessionId: ctx.sessionId, batchId, result: r, timestamp: new Date().toISOString() } as AgentEvent;
     return r;
   }
 
-  private async *resolvePermission(tool: AgentTool, input: JsonObject, toolCallId: string, ctx: ToolExecCtx): AsyncGenerator<AgentEvent, PermissionDecision> {
+  private async *evaluatePermission(tool: AgentTool, input: JsonObject, toolCallId: string, ctx: ToolExecCtx): AsyncGenerator<AgentEvent, PermissionDecision> {
     const sReq: PermissionRequest = { id: toolCallId, sessionId: ctx.sessionId, cwd: ctx.cwd ?? '', toolCallId, toolName: tool.name, parameters: input, summary: tool.summarize(input), toolMetadata: { category: tool.category, isReadOnly: tool.isReadOnly(input), fatalOnError: tool.fatalOnError ?? false, concurrency: tool.concurrency } } as PermissionRequest;
 
     // approval-requested 事件必须在 handler.requestApproval 等待用户审批期间发出。

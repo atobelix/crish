@@ -19,6 +19,7 @@ import { AgentInputQueue } from "./agent-input-queue";
 import { DEFAULT_MAX_TURNS, DEFAULT_TOOL_EXECUTION_TIMEOUT_MS } from "@crish/shared-types";
 import { AgentSessionLoop } from "./agent-session-loop";
 import { ToolRegistry } from "./tools/tool-definition";
+import { ControlBus } from "./control";
 import type { IAgentRuntime } from "./IAgentRuntime";
 
 export type { IAgentRuntime };
@@ -36,10 +37,17 @@ export class AgentRuntime implements IAgentRuntime {
   private readonly providerGateway: ProviderCallGateway;
   private readonly contextManager: ContextManager;
   private readonly tokenTracker: TokenTracker;
+  /**
+   * 跨 run() 生命周期的控制总线（L1/L2/L3）。
+   * 注入到 AgentSessionLoop，供 daemon cancel-run mode=cooperative 对接。
+   */
+  private readonly controlBus = new ControlBus();
 
-  /** 待处理的用户 steer 输入缓冲区（run() 调用前暂存）。RingBuffer 提供 O(1) shift 与背压保护。 */
+  /** 待处理的用户 steer（soft）输入缓冲区（run() 调用前暂存）。RingBuffer 提供 O(1) shift 与背压保护。 */
   private readonly pendingSteerInputs = new RingBuffer<AgentMessage>(STEER_INPUT_CAPACITY);
-  /** 当前活跃的输入队列（run() 创建后设置，用于外部 steer 转发） */
+  /** 待处理的 force 输入（run() 前暂存；仅 enqueueForceInput 写入） */
+  private readonly pendingForceInputs = new RingBuffer<AgentMessage>(STEER_INPUT_CAPACITY);
+  /** 当前活跃的输入队列（run() 创建后设置，用于外部 steer/force 转发） */
   private activeInputQueue: AgentInputQueue | null = null;
 
   constructor(private readonly options: AgentRuntimeOptions) {
@@ -63,23 +71,52 @@ export class AgentRuntime implements IAgentRuntime {
   }
 
   /**
-   * 获取 TokenTracker 实例（用于查询上下文压力、压缩阈值等）。
+   * L2 协作停：入队 ControlBus，session-loop 在安全点干净收尾（不立刻 abort provider）。
+   * @see packages/agent-runtime/src/control/control-bus.ts
+   */
+  requestCooperativeStop(reason?: string): void {
+    this.controlBus.requestCooperativeStop(reason, "external");
+  }
+
+  /** 暴露控制总线（测试 / 高级对接） */
+  getControlBus(): ControlBus {
+    return this.controlBus;
+  }
+
+  /**
+   * 获取 TokenTracker 实例（用于查询上下文压力、压缩负载等）。
    */
   getTokenTracker(): TokenTracker {
     return this.tokenTracker;
   }
 
   /**
-   * 将用户 steer 输入加入待处理队列。
+   * 将用户 steer 输入加入待处理队列（pi soft steer：安全点注入，不 mid-stream 打断）。
    *
-   * 如果 AgentSessionLoop 已激活，直接转发到其统一输入队列；
-   * 否则暂存到本地缓冲区，在 run() 调用时一并注入。
+   * 如果 AgentSessionLoop 已激活，直接转发到其统一输入队列的 **steer** 环；
+   * 否则暂存到本地缓冲区，在 run() 调用时以 steer 模式注入。
+   *
+   * 需要 mid-stream 可打断时请用 {@link enqueueForceInput}；L3 硬停走 abort / ControlBus force_cancel。
+   * @see docs/architecture/run-control.md
    */
   enqueueSteerInput(message: AgentMessage): void {
     if (this.activeInputQueue) {
-      this.activeInputQueue.enqueue(message);
+      this.activeInputQueue.enqueueSteer(message);
     } else {
       this.pendingSteerInputs.pushOverwritingOldest(message);
+    }
+  }
+
+  /**
+   * 显式 force 入队：streaming 中途可打断（legacy mid-stream 行为）。
+   * 公共 steer 路径不得走此通道；仅 force 语义或测试需要时使用。
+   */
+  enqueueForceInput(message: AgentMessage): void {
+    if (this.activeInputQueue) {
+      this.activeInputQueue.enqueueForce(message);
+    } else {
+      // 无活跃 loop：pre-run 缓冲；run() 启动时转入 force 环
+      this.pendingForceInputs.pushOverwritingOldest(message);
     }
   }
 
@@ -88,7 +125,7 @@ export class AgentRuntime implements IAgentRuntime {
    */
   hasPendingSteerInput(): boolean {
     if (this.activeInputQueue) return this.activeInputQueue.hasPending();
-    return this.pendingSteerInputs.size > 0;
+    return this.pendingSteerInputs.size > 0 || this.pendingForceInputs.size > 0;
   }
 
   /**
@@ -96,7 +133,8 @@ export class AgentRuntime implements IAgentRuntime {
    */
   peekSteerInput(): AgentMessage | null {
     if (this.activeInputQueue) return this.activeInputQueue.peek();
-    return this.pendingSteerInputs.peekFirst() ?? null;
+    // force 优先，与 AgentInputQueue.peek 一致
+    return this.pendingForceInputs.peekFirst() ?? this.pendingSteerInputs.peekFirst() ?? null;
   }
 
   /**
@@ -104,7 +142,7 @@ export class AgentRuntime implements IAgentRuntime {
    */
   dequeueSteerInput(): AgentMessage | undefined {
     if (this.activeInputQueue) return this.activeInputQueue.dequeue();
-    return this.pendingSteerInputs.shift();
+    return this.pendingForceInputs.shift() ?? this.pendingSteerInputs.shift();
   }
 
   async *run(userInput: string | AgentMessage): AsyncGenerator<AgentEvent, AgentMessage[]> {
@@ -144,9 +182,13 @@ export class AgentRuntime implements IAgentRuntime {
     const inputQueue = new AgentInputQueue();
     this.activeInputQueue = inputQueue;
 
-    // 将缓冲区中的 steer 输入转移到统一队列
+    // 将 pre-run 缓冲转入统一队列：force 环与 steer 环分轨（对齐 pi soft steer）
+    this.pendingForceInputs.forEach((msg) => {
+      inputQueue.enqueueForce(msg);
+    });
+    this.pendingForceInputs.clear();
     this.pendingSteerInputs.forEach((msg) => {
-      inputQueue.enqueue(msg);
+      inputQueue.enqueueSteer(msg);
     });
     this.pendingSteerInputs.clear();
 
@@ -165,6 +207,7 @@ export class AgentRuntime implements IAgentRuntime {
       ledger,
       this.permissionPolicy,
       this.options.extensionRegistry,
+      this.controlBus,
     );
 
     try {

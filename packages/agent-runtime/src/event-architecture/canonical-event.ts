@@ -1,11 +1,11 @@
 /**
  * Conex Canonical Event Model
  *
- * 统一事件架构的核心：所有事件在产生时即映射�?Canonical 格式�? * 每层只做 Canonical <-> 层特定格�?的双向转换，禁止层间直接转换�? *
- * 设计原则�? * 1. 单一真相源：Canonical Event 是事件的唯一定义
- * 2. 双向转换：每层有独立�?Adapter，只负责 Canonical <-> 层格�? * 3. 事件溯源：每个事件携�?traceId / spanId / causationId
+ * 统一事件架构的核心：所有事件在产生时即映射为 Canonical 格式 * 每层只做 Canonical <-> 层特定格?的双向转换，禁止层间直接转换? *
+ * 设计原则： * 1. 单一真相源：Canonical Event 是事件的唯一定义
+ * 2. 双向转换：每层有独立的 Adapter，只负责 Canonical <-> 层格式 * 3. 事件溯源：每个事件携带 traceId / spanId / causationId
  * 4. 诊断友好：每个事件可附带 Diagnostic 信息
- * 5. Schema 校验：通过 Registry 校验事件格式，防止漂�? */
+ * 5. Schema 校验：通过 Registry 校验事件格式，防止漂移 */
 
 // ─── Canonical Event 核心类型 ──────────────────────────────
 
@@ -27,7 +27,7 @@ export type ConexEventDomain =
   | "test";          // 测试专用
 
 /**
- * 事件来源�? */
+ * 事件来源： */
 export type ConexEventSourceLayer =
   | "runtime"
   | "orchestrator"
@@ -47,12 +47,12 @@ export interface ConexDiagnostic {
 /**
  * Canonical Event - 事件的统一表示
  *
- * 所有层的事件在跨层传输时必须转换为此格式�? * 每个事件携带完整的追踪信息，支持端到端追踪�? */
+ * 所有层的事件在跨层传输时必须转换为此格式 * 每个事件携带完整的追踪信息，支持端到端追踪? */
 export interface ConexCanonicalEvent {
   // ─── 身份 ───────────────────────────────────────────
   /** 全局唯一事件 ID */
   eventId: string;
-  /** 端到端追�?ID（从用户操作到最�?UI 渲染�?*/
+  /** 端到端追踪 ID（从用户操作到最终 UI 渲染）*/
   traceId: string;
   /** 当前跨度 ID */
   spanId: string;
@@ -94,13 +94,13 @@ export interface ConexCanonicalEvent {
 // ─── Adapter 接口 ─────────────────────────────────────────
 
 /**
- * 事件适配器接�? *
- * 每层实现此接口，负责 Canonical <-> 层特定格�?的双向转换�? * 新增事件类型时，只需在对�?Adapter 中增加映射，
- * 编译器通过 exhaustive check 提示遗漏�? */
+ * 事件适配器接口 *
+ * 每层实现此接口，负责 Canonical <-> 层特定的双向转换 * 新增事件类型时，只需在对?Adapter 中增加映射，
+ * 编译器通过 exhaustive check 提示遗漏 */
 export interface ConexCanonicalAdapter<TLayerEvent> {
-  /** 将层特定事件转换�?Canonical 格式 */
+  /** 将层特定事件转换为 Canonical 格式 */
   toCanonical(event: TLayerEvent, context: AdapterContext): ConexCanonicalEvent;
-  /** �?Canonical 格式转换为层特定事件 */
+  /** 从 Canonical 格式转换为层特定事件 */
   fromCanonical(canonical: ConexCanonicalEvent): TLayerEvent;
 }
 
@@ -148,7 +148,7 @@ export interface EventSchemaDefinition {
 /**
  * Event Schema Registry
  *
- * 注册和校验所�?Canonical Event 的格式�? * 运行时可查询，防止格式漂移�? */
+ * 注册和校验所有 Canonical Event 的格式 * 运行时可查询，防止格式漂移 */
 export class EventSchemaRegistry {
   private schemas = new Map<string, EventSchemaDefinition>();
 
@@ -170,7 +170,7 @@ export class EventSchemaRegistry {
   }
 
   /**
-   * 校验事件是否符合注册�?Schema
+   * 校验事件是否符合注册的 Schema
    */
   validate(event: ConexCanonicalEvent): SchemaValidationResult {
     const key = this.schemaKey(event.domain, event.eventType);
@@ -225,14 +225,14 @@ export class EventSchemaRegistry {
   }
 
   /**
-   * 获取指定领域/类型�?Schema
+   * 获取指定领域/类型的 Schema
    */
   getSchema(domain: string, eventType: string): EventSchemaDefinition | undefined {
     return this.schemas.get(this.schemaKey(domain, eventType));
   }
 
   /**
-   * 列出所有已注册的领�?   */
+   * 列出所有已注册的领域   */
   listDomains(): string[] {
     const domains = new Set<string>();
     for (const schema of this.schemas.values()) {
@@ -242,7 +242,7 @@ export class EventSchemaRegistry {
   }
 
   /**
-   * 列出指定领域的所有事件类�?   */
+   * 列出指定领域的所有事件类型   */
   listEventTypes(domain: string): string[] {
     const types: string[] = [];
     for (const schema of this.schemas.values()) {
@@ -261,7 +261,7 @@ export class EventSchemaRegistry {
 // ─── Canonical Event 工厂 ─────────────────────────────────
 
 /**
- * 创建 Canonical Event 的工厂函�? */
+ * 创建 Canonical Event 的工厂函数 */
 export function createCanonicalEvent(options: {
   domain: ConexEventDomain;
   eventType: string;
@@ -447,7 +447,7 @@ export const RUNTIME_EVENT_SCHEMAS: EventSchemaDefinition[] = [
 /**
  * Runtime 层的 Canonical Adapter
  *
- * �?AgentEvent 转换�?ConexCanonicalEvent，反之亦然�? */
+ * 将 AgentEvent 转换为 ConexCanonicalEvent，反之亦然? */
 export class RuntimeCanonicalAdapter implements ConexCanonicalAdapter<unknown> {
   toCanonical(event: unknown, context: AdapterContext): ConexCanonicalEvent {
     const agentEvent = event as Record<string, unknown>;
@@ -540,7 +540,7 @@ function checkType(value: unknown, expectedType: string): boolean {
 }
 
 /**
- * 创建全局默认�?Schema Registry 并注册内�?Schema
+ * 创建全局默认的 Schema Registry 并注册内置 Schema
  */
 export function createDefaultSchemaRegistry(): EventSchemaRegistry {
   const registry = new EventSchemaRegistry();

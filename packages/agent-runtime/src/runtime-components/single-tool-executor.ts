@@ -3,7 +3,7 @@ import { combineAbortSignals } from "@crish/shared-utils";
 
 export interface ToolMiddlewareHook {
   beforeExecute?(toolCall: ToolCallBlock, ctx: ToolExecutionContext): Promise<{ proceed: boolean; reason?: string; modifiedInput?: JsonObject }>;
-  afterExecute?(toolCall: ToolCallBlock, ctx: ToolExecutionContext, output: ToolOutput): Promise<ToolOutput>;
+  onResult?(toolCall: ToolCallBlock, ctx: ToolExecutionContext, output: ToolOutput): Promise<ToolOutput>;
 }
 
 /** Structured result of a single tool invocation (timeout / cancel / error metadata in output.json). */
@@ -91,8 +91,8 @@ export class SingleToolExecutor {
     }
 
     for (const hook of this.hooks) {
-      if (hook.afterExecute) {
-        output = await hook.afterExecute(toolCall, context, output);
+      if (hook.onResult) {
+        output = await hook.onResult(toolCall, context, output);
       }
     }
 

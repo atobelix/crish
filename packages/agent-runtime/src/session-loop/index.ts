@@ -1,7 +1,8 @@
 /**
  * AgentSessionLoop - 单状态机驱动的核心循环
  *
- * 本文件为瘦身后的主类，通过 4 个 Delegate 组件实现职责分离。
+ * 本文件为瘦身后的主类，通过 Delegate 组件实现职责分离。
+ * B0：ControlBus 安全点检查；B2：LifecycleHookRegistry turn 边界 emit。
  */
 
 import type { AgentEvent, AgentMessage, JsonObject, ToolCallBlock } from '@crish/shared-types';
@@ -19,12 +20,22 @@ import { AsyncMutex } from '@crish/shared-utils';
 import type { ConexStateMachine } from '../state-machine/core';
 import { createAgentSessionMachine, shouldStopForMaxTurns, type AgentSessionContext, type AgentSessionState, type AgentSessionEvent, type AgentEndReason } from '../state-machine/agent-session';
 import { AgentInputQueue } from '../agent-input-queue';
+import { ControlBus } from '../control';
 import { SteeringCoordinator, RecoverySteeringStrategy } from '../steering';
-import { ExtensionRegistry, type AgentHooks as AgentHooksType, type TurnContext } from '../hooks';
+import {
+  ExtensionRegistry,
+  LifecycleHookRegistry,
+  registerBuiltinHealthHooks,
+  type AgentHooks as AgentHooksType,
+  type HealthHookPack,
+  type HealthSnapshot,
+  type TurnContext,
+} from '../hooks';
 import { ProviderCallCoordinator } from './provider-call';
 import { ToolExecutionCoordinator, type ToolExecCtx } from './tool-execution';
 import { SteeringDelegate } from './steering-delegate';
 import { RecoveryCoordinator } from './recovery';
+import { checkControlAtSafePoint } from './control-check';
 import { DELTA_QUEUE_CAPACITY, isTransientProviderError, findFatalToolError, conversationNeedsTextSynthesis, normalizeToolExecutionOptions, sleepMs, createSynthesisNudgeMessage } from './types';
 import { ApprovalPipeline } from '../approval/approval-pipeline';
 import { ApprovalCache } from '../approval/approval-cache';
@@ -54,6 +65,12 @@ export class AgentSessionLoop {
   private readonly approvalPipeline: ApprovalPipeline;
   private readonly composedHooks: Partial<AgentHooksType>;
   private readonly compressionGate: ContextCompressionGate;
+  /** B0：L1/L2/L3 控制意图总线 */
+  private readonly controlBus: ControlBus;
+  /** B2：生命周期 hook 注册表 */
+  private readonly lifecycleHooks: LifecycleHookRegistry;
+  /** D2-2：内置 observe-only health 信号 */
+  private readonly healthPack: HealthHookPack;
   private readonly sessionMutex = new AsyncMutex();
   private static readonly MAX_LENGTH_CONTINUE_NUDGES = 1;
 
@@ -65,11 +82,17 @@ export class AgentSessionLoop {
     sessionId: string, _tokenTracker: import('../provider-transport/token-tracker').TokenTracker,
     ledger: TokenLedger, permissionPolicy: RuntimePermissionPolicy,
     extensionRegistry?: ExtensionRegistry,
+    controlBus?: ControlBus,
+    lifecycleHooks?: LifecycleHookRegistry,
   ) {
     this.options = options; this.inputQueue = inputQueue; this.conversation = conversation;
     this.contextManager = contextManager; this.providerGateway = providerGateway; this.tools = tools;
     this.abortController = abortController; this.recorder = recorder; this.sessionId = sessionId;
     this.ledger = ledger; this.permissionPolicy = permissionPolicy;
+    this.controlBus = controlBus ?? new ControlBus();
+    this.lifecycleHooks = lifecycleHooks ?? new LifecycleHookRegistry();
+    // D2-2：默认挂上 health observe pack（永不 block）
+    this.healthPack = registerBuiltinHealthHooks(this.lifecycleHooks);
     this.machine = createAgentSessionMachine(sessionId, options.maxTurns ?? DEFAULT_MAX_TURNS);
     const extReg = extensionRegistry ?? new ExtensionRegistry();
     this.composedHooks = extReg.collectHooks();
@@ -78,8 +101,16 @@ export class AgentSessionLoop {
       ...(this.options.approvalHandler ? { approvalHandler: this.options.approvalHandler } : {}),
       cache: new ApprovalCache(),
     });
-    this.compressionGate = new ContextCompressionGate(contextManager);
-    this.toolExec = new ToolExecutionCoordinator(normalizeToolExecutionOptions(options.toolExecution));
+    // W6-8：gate 挂 lifecycle 后，prepare-turn + recovery compact 均 emit context.compact.*
+    this.compressionGate = new ContextCompressionGate(contextManager, {
+      lifecycleHooks: this.lifecycleHooks,
+      sessionId,
+    });
+    // 同一 lifecycleHooks 实例用于 turn + tool 边界
+    this.toolExec = new ToolExecutionCoordinator(
+      normalizeToolExecutionOptions(options.toolExecution),
+      this.lifecycleHooks,
+    );
     this.providerCall = new ProviderCallCoordinator(new ProviderResponseConsumer());
     const ro = options.recovery;
     this.steering = new SteeringDelegate(new SteeringCoordinator(conversation, [new RecoverySteeringStrategy({
@@ -87,6 +118,26 @@ export class AgentSessionLoop {
       maxSteeringMessages: ro?.maxSteeringMessages ?? 1,
     })], { maxSteeringBudget: ro?.maxSteeringMessages ?? 1 }));
     this.recovery = new RecoveryCoordinator(AgentSessionLoop.MAX_LENGTH_CONTINUE_NUDGES);
+  }
+
+  /** 暴露控制总线（daemon / UI 发 L1/L2/L3） */
+  getControlBus(): ControlBus {
+    return this.controlBus;
+  }
+
+  /** 暴露生命周期 hook 注册表 */
+  getLifecycleHooks(): LifecycleHookRegistry {
+    return this.lifecycleHooks;
+  }
+
+  /** D2-2：内置 health pack（observe-only 计数） */
+  getHealthHookPack(): HealthHookPack {
+    return this.healthPack;
+  }
+
+  /** D2-2：健康快照（tests / dev） */
+  getHealthSnapshot(): HealthSnapshot {
+    return this.healthPack.getHealthSnapshot();
   }
 
   async *run(userInput: string | AgentMessage): AsyncGenerator<AgentEvent, AgentMessage[]> {
@@ -165,11 +216,18 @@ export class AgentSessionLoop {
     if (this.options.readPendingInputs) {
       for (const msg of await this.options.readPendingInputs(this.sessionId)) this.inputQueue.enqueue(msg);
     }
-    if (this.inputQueue.hasPending()) {
+    // 仅 force/steer；followUp 须经 idle promote 后再进入可运行环
+    if (this.inputQueue.hasRunnablePending()) {
       const si = this.inputQueue.dequeue();
       if (si) yield* this.recordMessage(si, this.conversation, this.recorder);
     }
-    yield* this.recordEvent({ type: 'turn-start', sessionId: this.sessionId, turnIndex: this.machine.getContext().turnIndex + 1, timestamp: nowIso() }, this.recorder);
+    const nextTurnIndex = this.machine.getContext().turnIndex + 1;
+    yield* this.recordEvent({ type: 'turn-start', sessionId: this.sessionId, turnIndex: nextTurnIndex, timestamp: nowIso() }, this.recorder);
+    // B2：turn.start 生命周期（observe/on）
+    await this.lifecycleHooks.emit('turn.start', {
+      sessionId: this.sessionId,
+      turnIndex: nextTurnIndex,
+    });
 
     const ro = this.options.recovery;
     if (ro?.enabled !== false) {
@@ -222,56 +280,94 @@ export class AgentSessionLoop {
     let consumeResult: ConsumeResult | undefined;
     const done = consumeImpl.then((r) => { consumeResult = r; wake(); return r; });
 
+    let abortRequested = false;
     try {
       while (true) {
         while (deltaQueue.size > 0) yield* this.emitEvent(deltaQueue.shift()!);
-        if (this.abortController.signal.aborted) {
-          this.dispatch('ABORT');
-          return { endReason: 'aborted' };
+        // L3 force_cancel 可立即打断 stream；L1/L2 等到安全点
+        if (this.controlBus.hasPending() && this.controlBus.peek()?.kind === 'force_cancel') {
+          const forceCtrl = yield* this.applySafePointControl();
+          if (forceCtrl) {
+            abortRequested = true;
+            break;
+          }
         }
-        if (this.inputQueue.hasPending()) {
-          const si = this.inputQueue.dequeue();
+        if (this.abortController.signal.aborted) {
+          abortRequested = true;
+          break;
+        }
+        // 仅 force 输入可打断 stream；soft inject 等到安全点
+        if (this.inputQueue.hasForcePending()) {
+          const si = this.inputQueue.dequeueForce();
           if (si) { yield* this.recordMessage(si, this.conversation, this.recorder); this.dispatch('INPUT_AVAILABLE' as AgentSessionEvent); return {}; }
         }
         if (consumeResult) break;
         await Promise.race([done, new Promise<void>((resolve) => deltaWaiters.push(resolve))]);
       }
-      if (this.machine.getCurrent() !== 'streaming') return {};
+      if (this.machine.getCurrent() !== 'streaming' && !abortRequested) return {};
       while (deltaQueue.size > 0) yield* this.emitEvent(deltaQueue.shift()!);
-      if (!consumeResult) consumeResult = await done;
-    } finally {
-      if (typeof (callIterator as any)?.return === 'function') {
-        await (callIterator as any).return(undefined).catch(() => undefined);
+      if (!consumeResult) {
+        try {
+          // Bound wait after abort so we can salvage partials without hanging
+          consumeResult = abortRequested
+            ? await Promise.race([
+                done,
+                new Promise<ConsumeResult | undefined>((resolve) => {
+                  setTimeout(() => resolve(undefined), 1500);
+                }),
+              ])
+            : await done;
+        } catch {
+          consumeResult = undefined;
+        }
       }
+    } finally {
+      const it = callIterator as { return?: (value?: unknown) => Promise<unknown> } | null | undefined;
+      if (typeof it?.return === 'function') {
+        await it.return(undefined).catch(() => undefined);
+      }
+    }
+
+    if (!consumeResult) {
+      if (abortRequested || this.abortController.signal.aborted) {
+        return yield* this.endStreamingAborted();
+      }
+      return {};
     }
 
     for (const d of consumeResult.diagnostics) {
       yield* this.emitEvent({ type: 'provider-diagnostic', sessionId: this.sessionId, diagnostic: d, timestamp: nowIso() } as AgentEvent);
     }
 
-    if (this.abortController.signal.aborted) {
-      this.dispatch('ABORT');
-      return { endReason: 'aborted' };
-    }
     const ar = consumeResult.response;
+    const streamAborted = abortRequested || this.abortController.signal.aborted;
+
     if (ar.type === 'error') {
-      if (this.abortController.signal.aborted || ar.error === 'aborted') {
-        this.dispatch('ABORT');
-        return { endReason: 'aborted' };
+      if (streamAborted || ar.error === 'aborted') {
+        return yield* this.endStreamingAborted();
       }
       return yield* this.handleStreamError(ar.error ?? 'Provider stream failed');
     }
+
+    // L3 partial salvage: consumer may return a message with stopReason=aborted
+    if (streamAborted) {
+      if (ar.type === 'message') {
+        yield* this.commitAssistantMessage(ar.message, turnIndex, { aborted: true });
+      }
+      return yield* this.endStreamingAborted({ messageCommitted: ar.type === 'message' });
+    }
+
     this.providerCall.providerTransientRetries = 0;
     if (ar.type === 'empty-response') { this.dispatch('STEERING_NEEDED'); return {}; }
     if (ar.type !== 'message') return {};
 
-    const msg = this.enrichMsg(ar.message);
-    this.conversation.appendMessage(msg);
-    const entry = await this.recorder.recordMessage(msg);
-    yield* this.recordEvent({ type: 'message-end', sessionId: this.sessionId, message: withSessionEntryMetadata(msg, entry) }, this.recorder);
-    this.providerCall.recordTokenUsage(msg, turnIndex, this.ledger, this.options.provider.id);
+    const msg = yield* this.commitAssistantMessage(ar.message, turnIndex);
 
     if (msg.metadata?.stopReason === 'error') { this.dispatch('PROVIDER_ERROR'); return { endReason: 'error', endError: typeof msg.metadata.error === 'string' ? msg.metadata.error : 'Provider stream failed' }; }
+
+    // 安全点：provider 消费结束且消息已落盘 — 检查 L1/L2/L3（不丢本轮输出）
+    const afterStreamCtrl = yield* this.applySafePointControl();
+    if (afterStreamCtrl) return afterStreamCtrl;
 
     const toolCalls = msg.blocks.filter((b): b is ToolCallBlock => b.type === 'tool-call');
     if (toolCalls.length === 0) return yield* this.handleNoToolCalls(msg);
@@ -279,6 +375,51 @@ export class AgentSessionLoop {
 
     this.dispatch('HAS_TOOL_CALLS' as AgentSessionEvent, { count: toolCalls.length });
     return {};
+  }
+
+  /**
+   * Commit assistant message (normal or L3 partial). Marks aborted when requested.
+   */
+  private async *commitAssistantMessage(
+    raw: AgentMessage,
+    turnIndex: number,
+    opts?: { aborted?: boolean },
+  ): AsyncGenerator<AgentEvent, AgentMessage> {
+    let msg = this.enrichMsg(raw);
+    if (opts?.aborted) {
+      msg = {
+        ...msg,
+        metadata: {
+          ...(msg.metadata ?? {}),
+          stopReason: 'aborted',
+          aborted: true,
+        },
+      };
+    }
+    this.conversation.appendMessage(msg);
+    const entry = await this.recorder.recordMessage(msg);
+    yield* this.recordEvent({ type: 'message-end', sessionId: this.sessionId, message: withSessionEntryMetadata(msg, entry) }, this.recorder);
+    this.providerCall.recordTokenUsage(msg, turnIndex, this.ledger, this.options.provider.id);
+    return msg;
+  }
+
+  /**
+   * L3 / AbortSignal stream exit: SM → aborted, endReason=aborted.
+   * Partial content must already be committed via commitAssistantMessage when available.
+   */
+  private async *endStreamingAborted(
+    _opts?: { messageCommitted?: boolean },
+  ): AsyncGenerator<AgentEvent, HandlerResult> {
+    try {
+      if (this.machine.getCurrent() === 'streaming') {
+        this.dispatch('ABORT');
+      } else if (this.machine.getCurrent() === 'turn-complete') {
+        this.dispatch('FINISH');
+      }
+    } catch {
+      // Illegal transition still ends the run with aborted
+    }
+    return { endReason: 'aborted' };
   }
 
   private async *handleStreamError(errMsg: string): AsyncGenerator<AgentEvent, HandlerResult> {
@@ -380,7 +521,13 @@ export class AgentSessionLoop {
     }
     const fatal = findFatalToolError(results, this.tools);
     if (fatal) { yield* this.emitEvent({ type: 'runtime-error', sessionId: this.sessionId, timestamp: nowIso(), error: fatal }); this.dispatch('ERROR'); return { endReason: 'error', endError: fatal }; }
-    if (this.inputQueue.hasPending()) {
+
+    // 安全点：tool 批处理后 — 检查 L1/L2/L3（steer 可在此注入；followUp 不在此消费）
+    const afterToolsCtrl = yield* this.applySafePointControl();
+    if (afterToolsCtrl) return afterToolsCtrl;
+
+    // pi steer：仅 force/steer（hasRunnablePending），不提前 drain followUp
+    if (this.inputQueue.hasRunnablePending()) {
       const si = this.inputQueue.dequeue();
       if (si) { yield* this.recordMessage(si, this.conversation, this.recorder); this.dispatch('INPUT_AVAILABLE' as AgentSessionEvent); return {}; }
     }
@@ -392,6 +539,16 @@ export class AgentSessionLoop {
     const ctx = this.machine.getContext();
     yield* this.recordEvent({ type: 'turn-end', sessionId: this.sessionId, turnIndex: ctx.turnIndex, timestamp: nowIso(), toolCallCount: ctx.toolCallCount }, this.recorder);
 
+    // B2：turn.end — 可建议 cooperative stop（与 shouldStopAfterTurn 兼容）
+    const turnEndResult = await this.lifecycleHooks.emit('turn.end', {
+      sessionId: this.sessionId,
+      turnIndex: ctx.turnIndex,
+      toolCallCount: ctx.toolCallCount,
+      maxTurns: ctx.maxTurns,
+      hasPendingInput: this.inputQueue.hasPending(),
+      isAborted: this.abortController.signal.aborted,
+    });
+
     if (ctx.abortReason || this.abortController.signal.aborted) {
       this.dispatch('FINISH');
       return { endReason: ctx.endReason === 'error' ? 'error' : 'aborted', endError: (ctx.abortReason as string | undefined) ?? (abortReason(this.abortController.signal) as string | undefined) };
@@ -399,25 +556,41 @@ export class AgentSessionLoop {
     if (ctx.endReason === 'error') { this.dispatch('FINISH'); return { endReason: 'error' }; }
     if (ctx.endReason === 'aborted') { this.dispatch('FINISH'); return { endReason: 'aborted' }; }
 
+    // maxTurns：清晰 budget 语义（endReason=max-turns），禁止静默 abort
     if (shouldStopForMaxTurns(ctx)) {
       if (!this.steering.synthesisNudgeUsed && this.toolExec.sawToolsThisRun && conversationNeedsTextSynthesis(this.conversation)) {
         this.steering.injectSynthesisNudge(this.inputQueue, '轮次将尽。请立刻基于已有工具结果给出完整中文总结与建议，不要再调用工具。');
         this.dispatch('INPUT_AVAILABLE'); return {};
       }
+      // budget 语义：可观测 + endReason=max-turns（非 silent abort）
+      yield* this.emitEvent({
+        type: 'runtime-error',
+        sessionId: this.sessionId,
+        timestamp: nowIso(),
+        error: `Turn budget exhausted: ${ctx.turnIndex}/${ctx.maxTurns}`,
+        retryable: true,
+      });
       this.dispatch('MAX_TURNS_REACHED');
       return { endReason: 'max-turns' };
+    }
+
+    // lifecycle turn.end 建议 stop → L2 cooperative（不 abort）
+    if (turnEndResult.stop) {
+      this.dispatch('SHOULD_STOP');
+      return {};
     }
 
     if (this.composedHooks.shouldStopAfterTurn) {
       const tc: TurnContext = { sessionId: this.sessionId, turnIndex: ctx.turnIndex, maxTurns: ctx.maxTurns, messages: this.conversation.getMessages(), toolCallCount: ctx.toolCallCount, toolCalls: [], cwd: this.options.cwd, hasPendingInput: this.inputQueue.hasPending(), isAborted: this.abortController.signal.aborted };
       if (this.composedHooks.shouldStopAfterTurn(tc)) { this.dispatch('SHOULD_STOP'); return {}; }
       if (ctx.toolCallCount > 0) { this.dispatch('NEXT_TURN'); return {}; }
-      if (this.inputQueue.hasPending()) { this.dispatch('INPUT_AVAILABLE'); return {}; }
+      // idle：steer 可运行；followUp 仅在此 promote（对齐 pi getFollowUpMessages）
+      if (this.consumeIdlePendingInput()) { this.dispatch('INPUT_AVAILABLE'); return {}; }
       this.dispatch('SHOULD_STOP'); return {};
     }
 
     if (ctx.toolCallCount > 0) { this.dispatch('NEXT_TURN'); return {}; }
-    if (this.inputQueue.hasPending()) { this.dispatch('INPUT_AVAILABLE'); return {}; }
+    if (this.consumeIdlePendingInput()) { this.dispatch('INPUT_AVAILABLE'); return {}; }
     if (!this.steering.synthesisNudgeUsed && this.toolExec.sawToolsThisRun && conversationNeedsTextSynthesis(this.conversation)) {
       this.steering.injectSynthesisNudge(this.inputQueue, '请基于以上工具结果，用完整中文给出分析结论与下一步建议。不要再调用工具；若信息不足请明确说明缺什么。');
       this.dispatch('INPUT_AVAILABLE'); return {};
@@ -426,10 +599,73 @@ export class AgentSessionLoop {
     return {};
   }
 
+  /**
+   * Run 即将 idle（无更多 tool）：消费 force/steer，或 promote followUp。
+   * 对齐 pi：followUp 仅在 agent 本将结束时注入。
+   */
+  private consumeIdlePendingInput(): boolean {
+    if (this.inputQueue.hasRunnablePending()) {
+      return true;
+    }
+    if (this.inputQueue.hasFollowUpPending()) {
+      this.inputQueue.promoteFollowUp();
+      return this.inputQueue.hasRunnablePending();
+    }
+    return false;
+  }
+
+  /**
+   * 安全点：drain ControlBus。
+   * - soft_inject / steer → inputQueue.steer（下一安全点可运行，不杀 stream）
+   * - follow_up → inputQueue.followUp（仅 idle promote）
+   * - cooperative_stop → endReason stop（L2，不 abort）
+   * - force_cancel → abort（L3）
+   */
+  private async *applySafePointControl(): AsyncGenerator<AgentEvent, HandlerResult | null> {
+    const ctrl = checkControlAtSafePoint(this.controlBus, this.inputQueue);
+
+    if (ctrl.kind === 'force_cancel') {
+      this.abortController.abort(ctrl.reason ?? 'force_cancel');
+      try {
+        this.dispatch('ABORT');
+      } catch {
+        // 状态不允许 ABORT 时仍以 aborted 收尾
+      }
+      return { endReason: 'aborted', endError: ctrl.reason };
+    }
+
+    if (ctrl.kind === 'cooperative_stop') {
+      // L2：干净停，不触发 abort；尽量把 SM 推到 done（endReason 默认 stop）
+      try {
+        const state = this.machine.getCurrent();
+        if (state === 'streaming') {
+          this.dispatch('NO_TOOL_CALLS');
+          this.dispatch('SHOULD_STOP');
+        } else if (state === 'executing-tools') {
+          this.dispatch('TOOLS_COMPLETE');
+          this.dispatch('SHOULD_STOP');
+        } else if (state === 'turn-complete') {
+          this.dispatch('SHOULD_STOP');
+        }
+      } catch {
+        // 非法转移时仍以 stop 返回，由外层 break
+      }
+      return { endReason: 'stop', ...(ctrl.reason !== undefined ? { endError: ctrl.reason } : {}) };
+    }
+
+    // soft_inject / steer / follow_up：已分环入队；steer 由 hasRunnablePending 消费，followUp 仅 idle
+    return null;
+  }
+
   private makeToolExecCtx(): ToolExecCtx {
     return {
       sessionId: this.sessionId, cwd: this.options.cwd, tools: this.tools, signal: this.abortController.signal,
-      recorder: this.recorder, composedHooks: this.composedHooks, permissionPolicy: this.permissionPolicy,
+      recorder: this.recorder, composedHooks: this.composedHooks,
+      lifecycleHooks: this.lifecycleHooks,
+      requestCooperativeStop: (reason?: string) => {
+        this.controlBus.requestCooperativeStop(reason ?? 'tool.post.terminate', 'lifecycle-hook');
+      },
+      permissionPolicy: this.permissionPolicy,
       approvalPipeline: this.approvalPipeline, ...(this.options.hooks !== undefined ? { hooks: this.options.hooks } : {}),
       contextManager: { materializeOutput: (tc, o) => this.contextManager.materializeOutput(tc, o), restoreProviderToolInput: (i) => this.contextManager.restoreProviderToolInput(i) },
       machine: { getContext: () => ({ turnIndex: this.machine.getContext().turnIndex }) },
@@ -441,11 +677,29 @@ export class AgentSessionLoop {
   private enrichMsg(message: AgentMessage): AgentMessage {
     const pm = this.options.promptContext?.metadata && typeof this.options.promptContext.metadata === 'object' ? this.options.promptContext.metadata as JsonObject : undefined;
     const assembly = this.providerCall.lastPromptAssembly;
-    if (!assembly && !pm) return message;
+    // UI assistant clientMessageId (from run-task → run metadata → promptContext)
+    // Stamp on assistant so hydrate rekey merges with local stream placeholder.
+    // Only assistantClientMessageId — never user clientMessageId from run meta.
+    const asstClientFromPm =
+      message.role === 'assistant' &&
+      pm &&
+      typeof pm.assistantClientMessageId === 'string' &&
+      pm.assistantClientMessageId.trim()
+        ? pm.assistantClientMessageId.trim()
+        : undefined;
+    const existingClient =
+      typeof (message as { clientMessageId?: unknown }).clientMessageId === 'string' &&
+      String((message as { clientMessageId?: string }).clientMessageId).trim()
+        ? String((message as { clientMessageId?: string }).clientMessageId).trim()
+        : undefined;
+    const clientMessageId = existingClient || asstClientFromPm;
+    if (!assembly && !pm && !clientMessageId) return message;
     return {
       ...message,
+      ...(clientMessageId ? { clientMessageId } : {}),
       metadata: {
         ...(message.metadata ?? {}),
+        ...(clientMessageId ? { clientMessageId } : {}),
         ...(assembly ? { promptAssembly: { stablePrefixHash: assembly.stablePrefixHash, toolSchemaHash: assembly.toolSchemaHash, cacheStrategy: assembly.cacheStrategy, version: assembly.version, layout: assembly.layout } } : {}),
         ...(pm ? { promptContext: pm } : {}),
       } as JsonObject,

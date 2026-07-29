@@ -1,7 +1,7 @@
 import { AbstractBaseEngine } from "./base-engine";
 import type { EngineOptions, EngineRequest } from "../types";
 import type { AgentProviderRequest, ProviderStreamEvent } from "../../types";
-import type { AgentMessage, TextBlock } from "@crish/shared-types";
+import type { AgentMessage, TextBlock, JsonObject } from "@crish/shared-types";
 import {
   buildChatCompletionsRequestBody,
   parseChatCompletionsStreamingResponse,
@@ -100,14 +100,14 @@ export class OpenAICompatibleEngine extends AbstractBaseEngine {
   }
 
   async *parseResponse(body: unknown): AsyncIterable<ProviderStreamEvent> {
-    const obj = body as Record<string, unknown>;
+    const obj = (body ?? {}) as JsonObject;
     const hasOutput = Array.isArray(obj.output);
     const hasChoices = Array.isArray(obj.choices) || Array.isArray(obj.data);
 
     if (hasOutput) {
-      yield* parseResponsesJsonResponse(obj as any);
+      yield* parseResponsesJsonResponse(obj);
     } else if (hasChoices) {
-      yield* parseChatCompletionsJsonResponse(obj as any);
+      yield* parseChatCompletionsJsonResponse(obj);
     } else {
       yield { type: "stop", reason: "error", error: "Unrecognized response format: expected `choices` or `output` array" };
     }

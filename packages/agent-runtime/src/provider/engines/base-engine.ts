@@ -101,7 +101,7 @@ export abstract class AbstractBaseEngine implements Engine {
   protected diagnostic(code: string, message: string, severity: "info" | "warning" | "error" = "info"): ProviderStreamEvent {
     return {
       type: "provider-diagnostic",
-      diagnostic: { code, message, severity, timestamp: Date.now() },
-    } as any;
+      diagnostic: { phase: "request-error", reason: `[${code}] ${message}` },
+    } satisfies ProviderStreamEvent;
   }
 }

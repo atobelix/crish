@@ -344,7 +344,7 @@ function coerceStringForTypes(value: string, types: string[], path: string): { v
           return { value: parsed, changed: true, notes: [`parsed ${path} as ${type}`] };
         }
        } catch {
-        // silent: JSON.parse 降级，非 JSON 字符串跳�?
+        // silent: JSON.parse 降级，非 JSON 字符串跳过
         continue;
       }
     }

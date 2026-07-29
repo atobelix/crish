@@ -1,5 +1,5 @@
 /**
- * Chat Completions API �?请求构建与响应解析�? */
+ * Chat Completions API — 请求构建与响应解析? */
 import type { JsonObject } from "@crish/shared-types";
 import type { ProviderStreamEvent, ProviderUsage } from "./types";
 import {

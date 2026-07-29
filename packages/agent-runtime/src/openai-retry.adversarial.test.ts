@@ -40,7 +40,7 @@
  *  OR34. delay 在等待中 abort 时 clearTimeout 并 reject
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   normalizeRetryOptions,
   parseRetryAfterMs,

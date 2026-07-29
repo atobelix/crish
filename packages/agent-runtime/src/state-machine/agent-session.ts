@@ -255,7 +255,7 @@ export function createAgentSessionMachine(
         steeringCount: 0,
       },
       ...(options?.snapshot !== undefined ? { snapshot: options.snapshot } : {}),
-    } as any
+    }
   );
 }
 

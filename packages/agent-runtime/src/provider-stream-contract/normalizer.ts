@@ -59,13 +59,13 @@ function normalizeProviderEvent(
   if (isContractEvent(event)) {
     const sequenced = sequencer.next(event as ProviderStreamContractEvent as ProviderStreamContractEventInput) as ProviderStreamContractEvent;
     if (event.type === "error") {
-      const errEvent = event as any;
+      const errEvent = event as { error?: ProviderStreamProviderError };
       const finishReason: ProviderStreamFinishReason = "error";
       const error: ProviderStreamProviderError = errEvent.error ?? { kind: "unknown", message: "", retryable: false };
       return [
         sequenced,
-        sequencer.next({ type: "end", finishReason, error } as any) as ProviderStreamContractEvent,
-        sequencer.next({ type: "done", finishReason } as any) as ProviderStreamContractEvent,
+        sequencer.next({ type: "end", finishReason, error }) as ProviderStreamContractEvent,
+        sequencer.next({ type: "done", finishReason }) as ProviderStreamContractEvent,
       ];
     }
     return [sequenced];
@@ -80,16 +80,17 @@ function normalizeProviderEvent(
       delta: { type: "text", text: raw.text },
     }) as ProviderStreamContractEvent);
   } else if (raw.type === "thought-delta") {
+    const redacted = (raw as { redacted?: boolean }).redacted;
     results.push(sequencer.next({
       type: "delta",
-      delta: { type: "thought", text: raw.text, ...((raw as any).redacted !== undefined ? { redacted: (raw as any).redacted } : {}) },
+      delta: { type: "thought", text: raw.text, ...(redacted !== undefined ? { redacted } : {}) },
     }) as ProviderStreamContractEvent);
   } else if (raw.type === "tool-call") {
     results.push(sequencer.next({
       type: "tool-call",
       phase: "end",
       toolCall: {
-        id: (raw as any).id ?? "",
+        id: (raw as { id?: string }).id ?? "",
         index: 0,
         toolName: raw.toolName,
         argumentsText: raw.input ? JSON.stringify(raw.input) : "",
@@ -99,7 +100,7 @@ function normalizeProviderEvent(
   } else if (raw.type === "provider-diagnostic") {
     results.push(sequencer.next({
       type: "delta",
-      delta: { type: "diagnostic", diagnostic: raw.diagnostic as any },
+      delta: { type: "diagnostic", diagnostic: (raw as { diagnostic: import("@crish/shared-types").ProviderDiagnostic }).diagnostic },
     }) as ProviderStreamContractEvent);
   } else if (raw.type === "stop") {
     const finishReason = legacyFinishReason(raw.reason);

@@ -84,12 +84,7 @@ export {
   type CheckpointMiddlewareOptions,
   OutputMaterializationMiddleware,
   type OutputMaterializationMiddlewareOptions,
-  MiddlewarePipeline,
 } from './tools/index';
-export {
-  createPermissionMiddlewarePipeline,
-  type CreatePermissionPipelineOptions,
-} from './tools/create-permission-pipeline';
 export * from './types';
 export * from './workspace-mutation-coordinator';
 export * from './state-machine';
@@ -105,9 +100,10 @@ export * from './config';
 export * from './session-store';
 export * from './process-lifecycle';
 export * from './checkpoint';
-export * from './model-routing-dynamic';
 export * from './event-queue';
 export * from './trace';
 export * from './steering';
 export * from './hooks';
+export * from './control';
+export * from './agent-input-queue';
 export * from './event-protocol';

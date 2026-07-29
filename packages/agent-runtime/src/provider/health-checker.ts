@@ -29,6 +29,10 @@ type HealthListener = (event: HealthStatusChangeEvent) => void;
 const DEFAULT_INTERVAL_MS = 30_000;
 const DEFAULT_FAILURE_THRESHOLD = 3;
 
+interface ProviderWithHealthCheck {
+  healthCheck?: () => Promise<{ healthy?: boolean; message?: string; lastChecked?: number; latencyMs?: number }>;
+}
+
 export class HealthChecker {
   private providers = new Map<string, ProviderHealthEntry>();
   private timerId: ReturnType<typeof setInterval> | null = null;
@@ -111,13 +115,14 @@ export class HealthChecker {
 
     let result: HealthCheckResult;
     try {
-      if (typeof (entry.provider as any).healthCheck === "function") {
-        const healthResult = await (entry.provider as any).healthCheck();
+      const p = entry.provider as ProviderWithHealthCheck;
+      if (typeof p.healthCheck === "function") {
+        const healthResult = await p.healthCheck();
         result = {
           healthy: healthResult.healthy !== false,
-          message: healthResult.message,
+          ...(healthResult.message !== undefined ? { message: healthResult.message } : {}),
           lastChecked: healthResult.lastChecked ?? Date.now(),
-          latencyMs: healthResult.latencyMs,
+          ...(healthResult.latencyMs !== undefined ? { latencyMs: healthResult.latencyMs } : {}),
         };
       } else {
         result = {

@@ -36,7 +36,11 @@ export class ProviderResponseConsumer {
     let finishReasonFromStream: string | undefined;
 
     for await (const event of callIterator) {
-      if (signal.aborted) return { response: { type: "error", error: "aborted" }, diagnostics };
+      // L3 / AbortSignal: keep partial tokens so continue-after-abort can resume context
+      // (pi-align: transcript retains what was already streamed).
+      if (signal.aborted) {
+        return this.finishAfterAbort(blocks, textBuffer, thoughtBuffer, usage, finishReasonFromStream, diagnostics);
+      }
 
       switch (event.type) {
         case "start":
@@ -113,6 +117,11 @@ export class ProviderResponseConsumer {
       }
     }
 
+    // Stream ended while already aborted — salvage partial content if any
+    if (signal.aborted) {
+      return this.finishAfterAbort(blocks, textBuffer, thoughtBuffer, usage, finishReasonFromStream, diagnostics, error);
+    }
+
     const response: AssistantResponse =
       blocks.length === 0 && !error
         ? { type: "empty-response" }
@@ -121,6 +130,42 @@ export class ProviderResponseConsumer {
           : { type: "message", message: this.buildMessage(blocks, textBuffer, thoughtBuffer, error, usage, finishReasonFromStream) };
 
     return { response, diagnostics };
+  }
+
+  /**
+   * After AbortSignal / L3 force_cancel: prefer a partial assistant message over a bare error
+   * so session transcript + UI keep streamed text for continue-after-abort.
+   */
+  private finishAfterAbort(
+    blocks: AgentMessageBlock[],
+    textBuffer: string,
+    thoughtBuffer: string,
+    usage: ProviderUsage | undefined,
+    finishReasonFromStream: string | undefined,
+    diagnostics: ProviderDiagnostic[],
+    error?: string,
+  ): ConsumeResult {
+    if (blocks.length === 0) {
+      return {
+        response: { type: "error", error: error === "aborted" || !error ? "aborted" : error },
+        diagnostics,
+      };
+    }
+    const message = this.buildMessage(
+      blocks,
+      textBuffer,
+      thoughtBuffer,
+      undefined,
+      usage,
+      finishReasonFromStream ?? "aborted",
+    );
+    message.metadata = {
+      ...(message.metadata ?? {}),
+      stopReason: "aborted",
+      aborted: true,
+      ...(error && error !== "aborted" ? { error } : {}),
+    };
+    return { response: { type: "message", message }, diagnostics };
   }
 
   private buildMessage(

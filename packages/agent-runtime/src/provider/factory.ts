@@ -1,18 +1,13 @@
 import type { AgentProvider } from "../types";
 import type { Engine } from "./types";
-import type { ProviderRegistryV2 } from "./registry-v2";
+import { ProviderRegistryV2Impl, type ProviderRegistryV2 } from "./registry-v2";
+import type { DirectApiKeyProviderCredentialSource } from "../provider-gateway/types";
 
-export class ProviderFactory {
-  private engineCache = new Map<string, Engine>();
-  private registry: ProviderRegistryV2;
+export class DefaultAgentProviderFactory {
+  private readonly registry: ProviderRegistryV2 = new ProviderRegistryV2Impl();
+  private readonly engineCache = new Map<string, Engine>();
 
-  constructor(registry: ProviderRegistryV2) {
-    this.registry = registry;
-  }
-
-  registerEngineClass(): void {
-    // Engine classes are managed by V2; this is a no-op stub
-  }
+  constructor() {}
 
   registerEngine(engine: Engine): void {
     this.engineCache.set(engine.id, engine);
@@ -30,13 +25,15 @@ export class ProviderFactory {
       headers?: Record<string, string>;
     },
   ): AgentProvider {
-    return this.registry.createProvider(providerId, {
+    const credSource: DirectApiKeyProviderCredentialSource = {
       type: "api-key",
       apiKey: credential.apiKey ?? "",
       ...(credential.baseUrl !== undefined ? { baseUrl: credential.baseUrl } : {}),
       ...(credential.headers !== undefined ? { headers: credential.headers } : {}),
-    } as const as any);
+    };
+    return this.registry.createProvider(providerId, credSource);
   }
 }
 
+export { DefaultAgentProviderFactory as ProviderFactory };
 export { EngineProvider } from "./registry-v2";

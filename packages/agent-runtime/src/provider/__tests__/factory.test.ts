@@ -48,7 +48,7 @@ describe("ProviderFactory", () => {
   beforeEach(() => {
     setAllowTestLocalhost(false);
     registry = new ProviderRegistryV2Impl();
-    factory = new ProviderFactory(registry);
+    factory = new ProviderFactory();
   });
 
   it("creates an OpenAI-compatible provider from registered def", () => {

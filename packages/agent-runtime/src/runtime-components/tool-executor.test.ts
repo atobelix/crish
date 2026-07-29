@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AgentEvent, JsonObject, ToolCallBlock } from "@crish/shared-types";
 import type { AgentTool } from "../types";
+import { LifecycleHookRegistry } from "../hooks";
 import { ToolExecutor, ProgressEventQueue, type ToolExecuteHook } from "./tool-executor";
 import { ExecutionStrategy } from "./execution-strategy";
 
@@ -236,6 +237,58 @@ describe("ToolExecutor", () => {
 
     expect(siblingAborted).toBe(true);
     expect(results.find((r) => r.id === "c1")?.isError).toBe(true);
+  });
+
+  it("lifecycle tool.pre block prevents executeFn", async () => {
+    const executeFn = vi.fn(async () => ({ text: "should-not-run" }));
+    const tool: AgentTool = {
+      name: "shell",
+      label: "shell",
+      description: "shell",
+      category: "terminal",
+      concurrency: "exclusive",
+      isReadOnly: () => true,
+      summarize: () => "shell",
+      execute: executeFn,
+    };
+    const lifecycleHooks = new LifecycleHookRegistry();
+    lifecycleHooks.on("tool.pre", () => ({ block: true, reason: "policy-deny" }));
+    const executor = new ToolExecutor({
+      timeoutMs: 5000,
+      parallelFailurePolicy: "continue-drain",
+      lifecycleHooks,
+    });
+    const { results } = await collectBatch(executor, [toolCall("c1", "shell", { command: "x" })], [tool]);
+
+    expect(executeFn).not.toHaveBeenCalled();
+    expect(results[0]!.isError).toBe(true);
+    expect(results[0]!.output.text).toMatch(/policy-deny|Blocked by lifecycle/i);
+  });
+
+  it("lifecycle tool.post receives output", async () => {
+    const lifecycleHooks = new LifecycleHookRegistry();
+    const posts: Array<{ toolName: string; text?: string }> = [];
+    lifecycleHooks.on("tool.post", (p) => {
+      const text = p.output?.text;
+      posts.push(
+        text !== undefined ? { toolName: p.toolName, text } : { toolName: p.toolName },
+      );
+      return { modifiedOutput: { text: `post:${p.output?.text}` } };
+    });
+    const executor = new ToolExecutor({
+      timeoutMs: 5000,
+      parallelFailurePolicy: "continue-drain",
+      lifecycleHooks,
+    });
+    const { results } = await collectBatch(
+      executor,
+      [toolCall("c1", "shell", { command: "pwd" })],
+      [shellTool()],
+    );
+
+    expect(posts).toEqual([{ toolName: "shell", text: "ok:pwd" }]);
+    expect(results[0]!.isError).toBe(false);
+    expect(results[0]!.output.text).toBe("post:ok:pwd");
   });
 });
 

@@ -1,6 +1,12 @@
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { legacyFinishReason } from './normalizer';
 
 describe('normalizer', () => {
-  it.todo('should pass through length finish reason');
-  it.todo('should map max_tokens to length');
+  it('should pass through length finish reason', () => {
+    expect(legacyFinishReason('length')).toBe('length');
+  });
+
+  it('should map max_tokens to length', () => {
+    expect(legacyFinishReason('max_tokens')).toBe('length');
+  });
 });

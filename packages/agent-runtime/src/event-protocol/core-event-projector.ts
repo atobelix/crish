@@ -24,14 +24,14 @@ import type {
   DiagnosticSeverity,
 } from "./core-event-types";
 
-// ─── Provider diagnostic phase �?severity mapping ──────────
+// ─── Provider diagnostic phase ?severity mapping ──────────
 
 /**
  * Maps ProviderDiagnostic phase to DiagnosticSeverity.
  *
- * Progress phases �?info
- * Recovery/fallback phases �?warn
- * Error phases �?error
+ * Progress phases -> info
+ * Recovery/fallback phases -> warn
+ * Error phases -> error
  */
 function providerDiagnosticSeverity(phase: string): DiagnosticSeverity {
   switch (phase) {

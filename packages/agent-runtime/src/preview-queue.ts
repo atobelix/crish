@@ -1,5 +1,5 @@
 import { createId } from "./session";
-import { BoundedMap, deepFreeze } from "@crish/shared-utils";
+import { BoundedMap, clone, deepFreeze } from "@crish/shared-utils";
 import type { JsonObject, JsonValue, ToolArtifact } from "@crish/shared-types";
 
 export type PreviewStatus = "pending" | "applied" | "discarded" | "expired";
@@ -332,9 +332,19 @@ export class PreviewQueue<TPayload extends JsonValue = JsonObject> {
   }
 }
 
+/**
+ * TTL 上限：Date 支持的范围是 ±8.64e15 ms（±100,000,000 天）。
+ * 超过此值的 ttlMs 会导致 new Date(nowMs + ttlMs).toISOString() 抛 RangeError。
+ * 8.64e15 ms ≈ 274,000 年，远超任何合理 TTL 需求。
+ */
+const MAX_SAFE_TTL_MS = 8.64e15;
+
 function normalizeTtlMs(value: number, label: string): number {
   if (!Number.isFinite(value) || value <= 0) {
     throw new Error(`${label} must be a positive finite number`);
+  }
+  if (value > MAX_SAFE_TTL_MS) {
+    throw new Error(`${label} is too large (max ${MAX_SAFE_TTL_MS} ms)`);
   }
   return value;
 }
@@ -387,7 +397,9 @@ function cloneJsonObject(value?: JsonObject): JsonObject {
 }
 
 function cloneJsonValue<TValue extends JsonValue>(value: TValue): TValue {
-  return structuredClone(value);
+  // 使用 shared-utils 的 clone()：structuredClone 失败时降级为 JSON roundtrip，
+  // 静默剥离函数/Symbol/undefined 等非 JSON 安全属性，避免 DataCloneError 崩溃。
+  return clone(value);
 }
 
 function toIso(timestamp: number): string {

@@ -181,7 +181,7 @@ export class BackgroundCommandManager {
       });
     } catch (cause) {
       // spawn 同步抛错（极少见，但需兜底）：record 已在 tasks Map 中，
-      // 必须�?finish 收尾，否则会�?"running" 状态永久残�?+ 定时器未挂无法清理�?
+      // 必须有 finish 收尾，否则会?"running" 状态永久残留 + 定时器未挂无法清理
       this.finish(record, {
         state: "failed",
         error: cause instanceof Error ? cause.message : String(cause)
@@ -222,9 +222,9 @@ export class BackgroundCommandManager {
       }
     };
 
-    // 显式 null 守卫：spawn 配置 stdio: ["ignore","pipe","pipe"] �?stdout/stderr 必为非空�?
-    // �?try/catch 中以 ChildProcess 类型存储丢失了字面量 narrowing；显式检查更稳健�?
-    // 万一未来 stdio 配置变化也不会崩溃�?
+    // 显式 null 守卫：spawn 配置 stdio: ["ignore","pipe","pipe"] ?stdout/stderr 必为非空
+    // ?try/catch 中以 ChildProcess 类型存储丢失了字面量 narrowing；显式检查更稳健
+    // 万一未来 stdio 配置变化也不会崩溃
     if (child.stdout) {
       child.stdout.on("data", (chunk: Buffer) => {
         handleData("stdout", chunk);
@@ -383,15 +383,15 @@ export class BackgroundCommandManager {
   }
 
   /**
-   * 关停全部运行中任务并清理追踪状态�?
+   * 关停全部运行中任务并清理追踪状态
    *
-   * 异常路径兜底：daemon 关停 / workspace 切换 / manager 替换时调用�?
-   * - 终止所有运行中子进程（killProcessTree�?
-   * - 清理 timeout / heartbeat 定时器（�?finish 路径�?
+   * 异常路径兜底：daemon 关停 / workspace 切换 / manager 替换时调用
+   * - 终止所有运行中子进程（killProcessTree）
+   * - 清理 timeout / heartbeat 定时器（在 finish 路径）
    * - 清空 tasks Map，防止累积已完成记录导致内存增长
-   * - 清空 listeners，防止后�?emit 触发已卸载回�?
+   * - 清空 listeners，防止后?emit 触发已卸载回调
    *
-   * 幂等：多次调用安全；已终态任务不会被再次终止�?
+   * 幂等：多次调用安全；已终态任务不会被再次终止
    */
   dispose(): void {
     for (const record of this.tasks.values()) {
@@ -485,15 +485,15 @@ export interface BackgroundCommandToolsOptions {
 }
 
 /**
- * Clear AI-facing task tools (single surface �?do not also put background APIs on shell_command).
+ * Clear AI-facing task tools (single surface ?do not also put background APIs on shell_command).
  *
  * Mental model for the model:
- *   shell_command     �?run & wait (default for short work)
- *   run_background    �?start long work, get taskId
- *   wait_for_task     �?block until done (preferred)
- *   check_task        �?peek (rarely)
- *   stop_task         �?only if user asks / clearly stuck
- *   list_tasks        �?see what's running
+ *   shell_command     -> run & wait (default for short work)
+ *   run_background    -> start long work, get taskId
+ *   wait_for_task     -> block until done (preferred)
+ *   check_task        -> peek (rarely)
+ *   stop_task         -> only if user asks / clearly stuck
+ *   list_tasks        -> see what's running
  */
 export function createBackgroundCommandTools(
   manager: BackgroundCommandManager,

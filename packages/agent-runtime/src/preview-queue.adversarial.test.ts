@@ -529,7 +529,7 @@ describe("PQ12: list 过滤", () => {
     const queue = new PreviewQueue({ idFactory: sequentialIds("p"), now: () => Date.UTC(2026, 0, 1) });
     const p1 = await queue.createPreview(minimalRequest());
     const p2 = await queue.createPreview(minimalRequest());
-    const p3 = await queue.createPreview(minimalRequest());
+    await queue.createPreview(minimalRequest());
     await queue.apply(p1.id);
     await queue.discard(p2.id);
 

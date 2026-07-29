@@ -13,10 +13,10 @@ import type {
 import type { PromptAssemblyContextBlock, PromptAssemblyMetadata } from "./prompt-assembly";
 import type { WorkspaceMutationCoordinator } from "./workspace-mutation-coordinator";
 
-// types.ts 不再重导出核心类型。请�?@crish/shared-types 直接导入�?
+// types.ts 不再重导出核心类型。请从?@crish/shared-types 直接导入
 export type AgentRole = import("@crish/shared-types").AgentMessage["role"];
 
-// ─── 运行时持有的扩展工具接口（后续步骤将删除，统一使用 ToolDefinition�?─────
+// ─── 运行时持有的扩展工具接口（后续步骤将删除，统一使用 ToolDefinition）─────
 export interface AgentTool {
   name: string;
   label: string;
@@ -108,7 +108,7 @@ export interface AgentRuntimeOptions {
   sessionId?: string;
   cwd: string;
   /**
-   * 可选回调：运行时在 preparing-turn 阶段调用此回调，从事件存储拉取待处理输入�?   * 取代编排层主动的 injectSteerInput�?   */
+   * 可选回调：运行时在 preparing-turn 阶段调用此回调，从事件存储拉取待处理输入   * 取代编排层主动的 injectSteerInput   */
   readPendingInputs?: (runId: string) => Promise<AgentMessage[]>;
   systemPrompt?: string;
   promptContext?: AgentRuntimePromptContext;
@@ -153,8 +153,8 @@ export interface SessionPersistenceStore {
   append(entry: SessionEntry): Promise<void>;
   readAll?(): Promise<SessionEntry[]>;
   /**
-   * 释放底层资源（如持久化文件句柄）�?   *
-   * 实现可选。运行结束时调用以确保资源不泄漏�?   */
+   * 释放底层资源（如持久化文件句柄）?   *
+   * 实现可选。运行结束时调用以确保资源不泄漏   */
   close?(): Promise<void>;
 }
 

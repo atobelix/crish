@@ -65,7 +65,7 @@ export function extractThinkingFromDelta(vendor: string, delta: Record<string, u
     case "deepseek":
       return (delta.reasoning_content as string) ?? null;
     case "gemini":
-      const thought = (delta as any).thought;
+      const thought = delta.thought;
       return thought === true ? (delta.text as string) : null;
     default:
       return null;

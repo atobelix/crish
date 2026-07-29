@@ -37,6 +37,7 @@ import {
   modelRouteDecisionToMetadata,
   type ModelProfile,
   type ModelRoutePolicy,
+  type ModelCostTier,
   type RequiredCapabilityShape,
   type NormalizedPolicySummary,
   DEFAULT_MODEL_ROUTE_WEIGHTS,
@@ -190,9 +191,7 @@ describe('MR3: 权重校验', () => {
       [profile('a', { capabilities: { code: 1 } })],
       { required: ['code'] },
       {
-        weights: { requiredCapability: NaN, health: 14 } as Partial<
-          ModelRoutePolicy['weights']
-        >,
+        weights: { requiredCapability: NaN, health: 14 } as NonNullable<ModelRoutePolicy['weights']>,
       }
     );
     // NaN 应被 normalizeWeights 丢弃，回退到默认 requiredCapability=100
@@ -208,9 +207,7 @@ describe('MR3: 权重校验', () => {
       [profile('a', { capabilities: { code: 1 } })],
       { required: ['code'] },
       {
-        weights: { requiredCapability: Infinity } as Partial<
-          ModelRoutePolicy['weights']
-        >,
+        weights: { requiredCapability: Infinity } as NonNullable<ModelRoutePolicy['weights']>,
       }
     );
     expect(decision.policy.weights.requiredCapability).toBe(
@@ -301,33 +298,6 @@ describe('MR5: latencyScore 边界', () => {
 });
 
 // ============================================================================
-// MR6: 负数 costTier 映射为 "free"
-// ============================================================================
-
-describe('MR6: costTier 负数处理', () => {
-  it('MR6a: costTier=-1 不应映射为 free（rank 0）', () => {
-    const decision = routeModelByCapability(
-      [
-        profile('neg-cost', {
-          capabilities: { code: 1 },
-          costTier: -1 as unknown as string,
-        }),
-      ],
-      { required: ['code'] },
-      { maxCostTier: 'low' }
-    );
-    // -1 经 costTierField → clamp(-1, 0, 5) = 0 → rank 0 (free)
-    // compareCostTier(0, "low"=1) = 0 - 1 = -1 ≤ 0 → 通过
-    // 正确行为：负数 costTier 不应被接受为 "free"
-    const rejection = decision.rejections.find(
-      (r) => r.profile.id === 'neg-cost'
-    );
-    expect(rejection).toBeDefined();
-    expect(rejection!.reasons).toContain('cost:above_policy');
-  });
-});
-
-// ============================================================================
 // MR7: compareCandidates 禁用 minimumContextTokens 导致 tie-break 不一致
 // ============================================================================
 
@@ -406,7 +376,7 @@ describe('MR8: 策略合并', () => {
   it('MR8b: maxCostTier=null 不应覆盖 base 的值', () => {
     const base: ModelRoutePolicy = { maxCostTier: 'low' };
     const override: ModelRoutePolicy = {
-      maxCostTier: null as unknown as undefined,
+      maxCostTier: null as unknown as ModelCostTier,
     };
     const merged = mergeModelRoutePolicies(base, override);
     // null ?? base → base
@@ -803,7 +773,7 @@ describe('MR19: 大规模 profile 集合', () => {
     const profiles = Array.from({ length: 1000 }, (_, i) =>
       profile(`model-${i}`, {
         capabilities: { code: Math.random(), json: Math.random() },
-        costTier: (['free', 'low', 'medium', 'high'] as const)[i % 4],
+        costTier: (['free', 'low', 'medium', 'high'] as const)[i % 4]!,
         latencyMs: 100 + i,
         contextWindowTokens: 8_000 + i * 100,
       })

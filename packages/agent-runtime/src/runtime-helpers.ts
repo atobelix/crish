@@ -1,6 +1,6 @@
 /**
- * runtime-helpers �?AgentRuntime 使用的独立辅助函�? *
- * �?runtime.ts 中提取的纯函数，减少 runtime.ts 的代码量�? * 这些函数不依�?AgentRuntime 实例，可独立测试�? */
+ * runtime-helpers — AgentRuntime 使用的独立辅助函数 *
+ * 从 runtime.ts 中提取的纯函数，减少 runtime.ts 的代码量 * 这些函数不依赖 AgentRuntime 实例，可独立测试 */
 
 import type {
   AgentEvent,
@@ -44,7 +44,7 @@ export function withSessionEntryMetadata(
   };
 }
 
-// ─── 错误检�?──────────────────────────────────────────────
+// ─── 错误检查──────────────────────────────────────────────
 
 export function detectRecentToolErrorLoop(
   messages: AgentMessage[],

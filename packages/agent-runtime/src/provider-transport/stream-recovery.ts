@@ -1,10 +1,10 @@
 /**
- * StreamRecovery �?流中断恢�? *
- * �?provider 流中断时，根据中断时机采取不同的恢复策略�? *
- * 三种情况�? *  A. 有未完成的工具调�?�?合成孤儿 tool_result（isError: true），�?AI 在下一轮看到并自行处理
- *  B. AI 已输出部分文�?�?不重试（文字已显示给用户，重试会导致模型重复�? *  C. 什么都没收�?�?换通道重试一�? *
+ * StreamRecovery — 流中断恢复 *
+ * 当 provider 流中断时，根据中断时机采取不同的恢复策略 *
+ * 三种情况： *  A. 有未完成的工具调用 -> 合成孤儿 tool_result（isError: true），由 AI 在下一轮看到并自行处理
+ *  B. AI 已输出部分文字 -> 不重试（文字已显示给用户，重试会导致模型重复 *  C. 什么都没收到 -> 换通道重试一次 *
  * 参考：
- * - Claude Code �?yieldMissingToolResultBlocks（孤�?tool_use 合成�? * - pi-agent-core 的错误走带内结果哲学�?优雅降级，不抛异�?�? */
+ * - Claude Code 的 yieldMissingToolResultBlocks（孤儿 tool_use 合成） * - pi-agent-core 的错误走带内结果哲学：优雅降级，不抛异常 */
 
 import type {
   AgentMessage,
@@ -23,24 +23,24 @@ import {
   type ProviderTransport,
 } from "./connection-manager";
 
-// ─── 流式累积状�?──────────────────────────────────────────
+// ─── 流式累积状态──────────────────────────────────────────
 
 /**
- * 在一次流式调用过程中累积的中间状态�? * 用于在流中断时判断情况（A/B/C）�? */
+ * 在一次流式调用过程中累积的中间状态 * 用于在流中断时判断情况（A/B/C） */
 export interface StreamAccumulator {
   /** 已累积的文本内容 */
   text: string;
 
-  /** 已累积的思考内�?*/
+  /** 已累积的思考内容*/
   thought: string;
 
-  /** 已识别但尚未配对的工具调�?*/
+  /** 已识别但尚未配对的工具调用*/
   pendingToolCalls: PendingToolCall[];
 
-  /** 已接收到�?provider 诊断 */
+  /** 已接收到接收到的 provider 诊断 */
   diagnostics: StreamDiagnostic[];
 
-  /** 流开始时间（用于计算延迟�?*/
+  /** 流开始时间（用于计算延迟）*/
   startedAt: number;
 
   /** 是否已收到至少一个非诊断事件 */
@@ -78,8 +78,8 @@ export interface RecoveryDecision {
 // ─── 流式会话 ──────────────────────────────────────────────
 
 /**
- * StreamSession 封装了一次带恢复能力的流式调用�? *
- * 不改�?ProviderCallGateway 的接口——Gateway 仍然�?for-await 消费事件�? * StreamSession �?Gateway 的外层或中间层注入�? */
+ * StreamSession 封装了一次带恢复能力的流式调用 *
+ * 不改变 ProviderCallGateway 的接口——Gateway 仍然用 for-await 消费事件 * StreamSession 在 Gateway 的外层或中间层注入 */
 export class StreamRecovery {
   private accumulator: StreamAccumulator;
   /** Stable counter for tool-call events missing an id (avoids Date.now collisions). */
@@ -94,9 +94,9 @@ export class StreamRecovery {
   // ── 公共 API ────────────────────────────────────────────
 
   /**
-   * 使用 ConnectionManager 发起带恢复能力的流式调用�?   *
-   * 正常路径：直�?yield provider 事件�?   * 中断路径：根据中断时机决定恢复策略�?   *
-   * @param connectionManager - 连接管理�?   * @param request - provider 请求
+   * 使用 ConnectionManager 发起带恢复能力的流式调用   *
+   * 正常路径：直接 yield provider 事件   * 中断路径：根据中断时机决定恢复策略   *
+   * @param connectionManager - 连接管理器   * @param request - provider 请求
    * @param existingResults - 已存在的 tool_result（来自之前的调用，用于孤儿检测）
    */
   async *streamWithRecovery(
@@ -115,7 +115,7 @@ export class StreamRecovery {
         yield event;
 
         if (request.signal.aborted) {
-          // 用户取消：若已有未配�?tool-call，把孤儿结果带出，避免下一轮悬�?tool_use
+          // 用户取消：若已有未配对 tool-call，把孤儿结果带出，避免下一轮悬空 tool_use
           const orphans = this.findOrphanToolCalls(existingResults);
           if (orphans.length > 0) {
             throw new StreamRecoveryError(
@@ -138,7 +138,7 @@ export class StreamRecovery {
         );
       }
     } catch (err) {
-      // Already a recovery decision with orphans/partial content �?rethrow as-is.
+      // Already a recovery decision with orphans/partial content -> rethrow as-is.
       if (err instanceof StreamRecoveryError) {
         throw err;
       }
@@ -157,7 +157,7 @@ export class StreamRecovery {
       // 执行恢复动作
       switch (decision.action.type) {
         case "retry": {
-          // 情况 C：什么都没收�?�?换通道重试（指数退避）
+          // 情况 C：什么都没收到 -> 换通道重试（指数退避）
           if (request.signal.aborted) {
             throw new StreamRecoveryError(
               "流恢复取消：备用通道重试前已 abort",
@@ -187,7 +187,7 @@ export class StreamRecovery {
             const orphansAfterRetry = this.findOrphanToolCalls(existingResults);
             if (orphansAfterRetry.length > 0) {
               throw new StreamRecoveryError(
-                "备用通道结束但仍有未配对工具调用，合成孤�?tool_result",
+                "备用通道结束但仍有未配对工具调用，合成孤儿 tool_result",
                 this.accumulator,
                 orphansAfterRetry
               );
@@ -196,7 +196,7 @@ export class StreamRecovery {
             if (retryErr instanceof StreamRecoveryError) throw retryErr;
             // 第二次也失败 — 上报给上层
             throw new StreamRecoveryError(
-              `流恢复失败：两个通道均无法完成调用�?{err instanceof Error ? err.message : String(err)}`,
+              `流恢复失败：两个通道均无法完成调用：{err instanceof Error ? err.message : String(err)}`,
               this.accumulator
             );
           }
@@ -221,7 +221,7 @@ export class StreamRecovery {
         }
 
         case "continue": {
-          // 不应该到达这里，但如果有就继�?          return;
+          // 不应该到达这里，但如果有就继续 return;
         }
       }
     } finally {
@@ -230,7 +230,7 @@ export class StreamRecovery {
   }
 
   /**
-   * 获取当前累积状态（只读）�?   */
+   * 获取当前累积状态（只读）   */
   getAccumulator(): Readonly<StreamAccumulator> {
     return this.accumulator;
   }
@@ -238,7 +238,7 @@ export class StreamRecovery {
   // ── 内部方法 ────────────────────────────────────────────
 
   /**
-   * 从流事件中累积状态�?   */
+   * 从流事件中累积状态   */
   private accumulate(event: ProviderStreamContractEvent): void {
     switch (event.type) {
       case "delta": {
@@ -297,8 +297,8 @@ export class StreamRecovery {
   }
 
   /**
-   * 找出没有配对的工具调用（孤儿）�?   *
-   * 孤儿 = pendingToolCalls �?resolved=false 且不�?existingResults 中的调用�?   * 同一 toolCallId 只合成一次�?   */
+   * 找出没有配对的工具调用（孤儿）   *
+   * 孤儿 = pendingToolCalls 中 resolved=false 且不在 existingResults 中的调用   * 同一 toolCallId 只合成一次   */
   private findOrphanToolCalls(
     existingResults: ToolResultBlock[]
   ): ToolResultBlock[] {
@@ -338,7 +338,7 @@ export class StreamRecovery {
   }
 
   /**
-   * 根据中断时的累积状态决定恢复策略�?   */
+   * 根据中断时的累积状态决定恢复策略   */
   private decideRecovery(
     error: unknown,
     connectionManager: ConnectionManager,
@@ -356,15 +356,16 @@ export class StreamRecovery {
       const toolNames = orphans.map((o) => o.toolName).join(", ");
       return {
         action: { type: "synthesize-orphans", orphans },
-        diagnostic: `流中断时有未完成的工具调�?[${toolNames}]，合成孤�?tool_result (isError: true) �?AI 自行处理`,
+        diagnostic: `流中断时有未完成的工具调用[${toolNames}]，合成孤儿?tool_result (isError: true) 由 AI 自行处理`,
       };
     }
 
     // Transient network errors check — before Case B so ECONNRESET etc get retry with backoff
     const TRANSIENT_ERRORS = ['ECONNRESET', 'socket hang up', 'ETIMEDOUT', 'ECONNREFUSED'];
-    const isTransientNetworkError = error && TRANSIENT_ERRORS.some(e =>
-      (error as any).message?.includes(e) || (error as any).code === e
-    );
+    const errObj = error as { message?: string; code?: string } | null | undefined;
+    const isTransientNetworkError = Boolean(errObj && TRANSIENT_ERRORS.some(e =>
+      errObj.message?.includes(e) || errObj.code === e
+    ));
 
     if (isTransientNetworkError) {
       const nextTransport = connectionManager.selectNext(transportId);
@@ -396,7 +397,7 @@ export class StreamRecovery {
       };
     }
 
-    // ConnectionManager already exhausted every transport �?do not re-pick a failed one.
+    // ConnectionManager already exhausted every transport — do not re-pick a failed one.
     if (error instanceof ConnectionError) {
       return {
         action: {
@@ -407,14 +408,14 @@ export class StreamRecovery {
       };
     }
 
-    // �?abort：无内容也不再换通道
+    // 若 abort：无内容也不再换通道
     if (signal?.aborted) {
       return {
         action: {
           type: "surface-error",
           message: "请求已取消",
         },
-        diagnostic: "流中断时 signal �?abort，跳过备用通道",
+        diagnostic: "流中断时 signal 已 abort，跳过备用通道",
       };
     }
 
@@ -525,9 +526,9 @@ function toContractEvent(event: ProviderStreamEvent): ProviderStreamContractEven
 // ─── 孤儿 tool_use 合成工具函数 ────────────────────────────
 
 /**
- * �?assistant message 中找出没有配对的 tool-call，合成为 tool-result�? *
- * 这是 StreamRecovery 的核心工具函数之一�? * �?ConversationEngine �?runtime.ts 的异常退出路径共同使用�? *
- * 参�?Claude Code �?yieldMissingToolResultBlocks 模式�? */
+ * 从 assistant message 中找出没有配对的 tool-call，合成为 tool-result *
+ * 这是 StreamRecovery 的核心工具函数之一 * 被 ConversationEngine 和 runtime.ts 的异常退出路径共同使用于? *
+ * 参考 Claude Code 的 yieldMissingToolResultBlocks 模式 */
 export function synthesizeOrphanedToolResults(
   assistantMessage: AgentMessage,
   existingResults: ToolResultBlock[]
@@ -567,7 +568,7 @@ export function synthesizeOrphanedToolResults(
 }
 
 /**
- * 从已累积�?pendingToolCalls 中合成孤�?tool_result�? * 用于流中断场景（情况 A）�? */
+ * 从从已累积的 pendingToolCalls 中合成孤儿 tool_result * 用于流中断场景（情况 A） */
 export function synthesizeOrphansFromPending(
   pendingToolCalls: PendingToolCall[],
   existingResults: ToolResultBlock[]
@@ -656,7 +657,7 @@ export class StreamRecoveryGlobalRegistry {
 // ─── 错误类型 ──────────────────────────────────────────────
 
 /**
- * 流恢复错误：经过所有恢复尝试后仍然失败�? * 包含累积状态以便上层做最终处理（如显示部分输出给用户）�? */
+ * 流恢复错误：经过所有恢复尝试后仍然失败 * 包含累积状态以便上层做最终处理（如显示部分输出给用户） */
 export class StreamRecoveryError extends Error {
   public readonly accumulator: StreamAccumulator;
   /** Orphan tool-results synthesized for incomplete tool_use (case A). */

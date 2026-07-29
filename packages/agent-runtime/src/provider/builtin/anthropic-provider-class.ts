@@ -1,6 +1,8 @@
 import type { AgentProvider, AgentProviderRequest, ProviderStreamEvent } from "../../types";
 import type { ProviderClass } from "../spi/provider-class";
 import type { ProviderCredentialSource } from "../../provider-gateway/types";
+import type { EngineOptions } from "../types";
+import { createSecret } from "../auth/types";
 import { AnthropicMessagesEngine } from "../engines/anthropic-messages-engine";
 
 const ANTHROPIC_DEFAULTS = {
@@ -74,15 +76,15 @@ class AnthropicProviderClassEngineProvider implements AgentProvider {
   ): AsyncIterable<ProviderStreamEvent> {
     if (request.signal.aborted) return;
 
-    const engineOptions: Record<string, unknown> = {
+    const engineOptions: EngineOptions = {
       model: this.model,
       baseUrl: this.baseUrl,
-      apiKey: this.apiKey,
+      ...(this.apiKey ? { apiKey: createSecret(this.apiKey) } : {}),
       stream: true,
     };
     if (Object.keys(this.extraHeaders).length > 0) engineOptions.headers = this.extraHeaders;
 
-    const engineRequest = this.engine.buildRequest(request, engineOptions as any);
+    const engineRequest = await this.engine.buildRequest(request, engineOptions);
 
     let response: Response;
     try {

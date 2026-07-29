@@ -122,7 +122,7 @@ export interface OpenAICompatibleModel {
 
 // ── Internal types ──
 
-/** 请求构建上下�?*/
+/** 请求构建上下文*/
 export interface RequestBuildContext {
   request: AgentProviderRequest;
   endpoint: ResolvedOpenAICompatibleEndpoint;
@@ -284,7 +284,7 @@ function sendRustReqwestDaemonRequest(daemon: RustReqwestDaemon, url: string, re
     let expectedBodyBytes = 0;
     let remaining = 0;
 
-    const killDaemon = (): void => { if (!daemon.child.killed) try { daemon.child.kill(); } catch { /* silent: 进程已退�?*/ } };
+    const killDaemon = (): void => { if (!daemon.child.killed) try { daemon.child.kill(); } catch { /* silent: 进程已退出*/ } };
     const cleanup = (): void => { signal.removeEventListener("abort", onAbort); daemon.reader = null; };
     const pauseStdout = (): void => { if (!stdoutPaused && daemon.child.stdout) { daemon.child.stdout.pause(); stdoutPaused = true; } };
     const resumeStdout = (): void => { if (stdoutPaused && daemon.child.stdout && !bodyClosed) { daemon.child.stdout.resume(); stdoutPaused = false; } };
@@ -360,7 +360,7 @@ function sendRustReqwestDaemonRequest(daemon: RustReqwestDaemon, url: string, re
 }
 
 function killAllRustReqwestDaemons(): void {
-  for (const daemon of rustReqwestDaemons.values()) { if (!daemon.child.killed) try { daemon.child.kill(); } catch { /* silent: 清理阶段进程已退�?*/ } }
+  for (const daemon of rustReqwestDaemons.values()) { if (!daemon.child.killed) try { daemon.child.kill(); } catch { /* silent: 清理阶段进程已退?*/ } }
   rustReqwestDaemons.clear();
 }
 

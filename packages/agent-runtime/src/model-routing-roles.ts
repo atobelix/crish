@@ -1,4 +1,4 @@
-import type { ModelProfile } from "./model-routing";
+import type { ModelProfile, EnhancedModelProfile } from "./model-routing";
 
 /**
  * Model role identifiers for multi-model task routing.
@@ -348,7 +348,7 @@ function meetsConstraints(
 
   // --- required capability flags (accessed via `any` for extensibility) ---
   if (constraints.requiredFlags) {
-    const anyProfile = profile as any;
+    const anyProfile = profile as EnhancedModelProfile;
     const flags: Record<string, boolean> = anyProfile.capabilityFlags ?? {};
     for (const [key, value] of Object.entries(constraints.requiredFlags)) {
       if (value) {
@@ -369,7 +369,7 @@ function meetsConstraints(
 
   // --- maximum cost per 1K input tokens ---
   if (constraints.maxCostPer1KInput !== undefined) {
-    const anyProfile = profile as any;
+    const anyProfile = profile as EnhancedModelProfile;
     const pricing = anyProfile.pricing;
     if (pricing && typeof pricing.inputCostPerToken === "number") {
       if (pricing.inputCostPerToken * 1000 > constraints.maxCostPer1KInput) {
@@ -399,7 +399,7 @@ function countPreferred(
   }
 
   if (constraints.preferredFlags) {
-    const anyProfile = profile as any;
+    const anyProfile = profile as EnhancedModelProfile;
     const flags: Record<string, boolean> = anyProfile.capabilityFlags ?? {};
     for (const [key, value] of Object.entries(constraints.preferredFlags)) {
       if (value) {

@@ -7,6 +7,7 @@ import type { ProviderFactory as SPIProviderFactory } from "./spi/provider-facto
 import type { EngineClass } from "./spi/engine-class";
 import type { ProviderCredentialSource, ProviderRouteOffer } from "../provider-gateway/types";
 import type { DeclarativeProviderDef, NormalizedDeclarativeDef } from "./declarative-schema";
+import type { ProviderStreamingSupport } from "../model-routing";
 import { normalizeDeclarativeDef } from "./declarative-schema";
 import { createSecret } from "./auth/types";
 import { validateBaseUrl } from "./auth/base-url-validator";
@@ -266,7 +267,7 @@ export class ProviderRegistryV2Impl implements ProviderRegistryV2 {
         apiKeyEnv: normalized.auth.defaultEnvVar,
         endpointType: raw.endpointType ?? "auto",
         streamingSupport: raw.streamingSupport ?? "streaming",
-      } as any,
+      } satisfies DeclarativeProviderEntry["metadata"],
       declarative: normalized,
     }, filePath);
   }
@@ -299,8 +300,9 @@ export class ProviderRegistryV2Impl implements ProviderRegistryV2 {
 
     info.state = "DRAINING";
 
-    if (typeof (info.provider as any).dispose === "function") {
-      await (info.provider as any).dispose();
+    const disposable = info.provider as { dispose?: () => Promise<void> | void };
+    if (typeof disposable.dispose === "function") {
+      await disposable.dispose();
     }
 
     info.state = "DISPOSED";
@@ -318,7 +320,7 @@ export class ProviderRegistryV2Impl implements ProviderRegistryV2 {
           providerId,
           credentialSource: { type: "api-key", apiKey: "" },
           endpointType: entry.metadata.endpointType,
-          streamingSupport: entry.metadata.streamingSupport as any,
+          streamingSupport: entry.metadata.streamingSupport as ProviderStreamingSupport,
           metadata: { engine: entry.engine, name: entry.metadata.name, ...(entry.metadata.description !== undefined ? { description: entry.metadata.description } : {}) },
         });
       }

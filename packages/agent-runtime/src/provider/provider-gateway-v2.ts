@@ -4,7 +4,7 @@ import { validateBaseUrl } from "./auth/base-url-validator";
 import { authMethodToCredentialSource } from "./auth/auth-method-bridge";
 import { CredentialResolver } from "./auth/credential-resolver";
 import { createSecret, type AuthMethod } from "./auth/types";
-import type { AgentProviderFactory, ProviderFactoryPlan, ProviderGatewayPlan, ProviderGatewayPlanCode } from "../provider-gateway";
+import type { AgentProviderFactory, DirectApiKeyProviderCredentialSource, ProviderFactoryPlan, ProviderGatewayPlan, ProviderGatewayPlanCode } from "../provider-gateway";
 import { ProviderGatewayError } from "../provider-gateway";
 import type { SecretStore } from "./auth/secret-store";
 
@@ -51,7 +51,7 @@ export class GatewayV2Bridge {
 
   getProviderFactory(): AgentProviderFactory {
     return async (plan: ProviderFactoryPlan) => {
-      const providerId = plan?.route?.providerId ?? (plan as any)?.provider;
+      const providerId = plan?.route?.providerId ?? plan?.provider;
       if (!providerId) throw new ProviderGatewayError("route_not_found", failurePlan("route_not_found", "No providerId in plan"));
 
       let resolvedApiKey = plan?.credential?.apiKey;
@@ -83,12 +83,13 @@ export class GatewayV2Bridge {
         if (!urlCheck.valid) throw new ProviderGatewayError("ssrf_rejected", failurePlan("ssrf_rejected", urlCheck.error ?? "SSRF validation failed"));
       }
 
-      return this.registry.createProvider(providerId, {
+      const credSource: DirectApiKeyProviderCredentialSource = {
         type: "api-key",
         apiKey: apiKey ?? "",
         ...(resolvedBaseUrl !== undefined ? { baseUrl: resolvedBaseUrl } : {}),
         ...(resolvedHeaders !== undefined ? { headers: resolvedHeaders } : {}),
-      } as const as any);
+      };
+      return this.registry.createProvider(providerId, credSource);
     };
   }
 

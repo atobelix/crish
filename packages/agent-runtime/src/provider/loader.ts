@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { type ProviderRegistryV2 } from "./registry-v2";
+import { type DeclarativeProviderEntry, type ProviderRegistryV2 } from "./registry-v2";
 import { DeclarativeProviderDef, normalizeDeclarativeDef } from "./declarative-schema";
 
 export class DeclarativeLoader {
@@ -66,7 +66,7 @@ export class DeclarativeLoader {
           apiKeyEnv: normalized.auth.defaultEnvVar,
           endpointType: raw.endpointType ?? "auto",
           streamingSupport: raw.streamingSupport ?? "streaming",
-        } as any,
+        } satisfies DeclarativeProviderEntry["metadata"],
         declarative: normalized,
       }, filePath);
     } catch (err) {

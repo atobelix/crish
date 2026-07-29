@@ -20,7 +20,7 @@ describe("E2E: ProviderFactory with mock server", () => {
     server.on("/v1/chat/completions", Scenarios.openaiChatText());
 
     registry = new ProviderRegistryV2Impl();
-    factory = new ProviderFactory(registry);
+    factory = new ProviderFactory();
   });
 
   afterAll(async () => {

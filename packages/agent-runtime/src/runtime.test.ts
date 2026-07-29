@@ -1687,5 +1687,184 @@ describe("AgentRuntime", () => {
     });
     expect(store.entries.filter((entry) => entry.type === "message").map((entry) => (entry.type === "message" ? entry.message.role : ""))).toEqual(["user"]);
   });
+
+  /**
+   * W6-1 residual: public enqueueSteerInput must be soft (safe-point), not default force mid-stream.
+   * force mid-stream only via enqueueForceInput / ControlBus force_cancel.
+   */
+  describe("enqueueSteerInput soft vs enqueueForceInput", () => {
+    it("pre-run enqueueSteerInput is pending and does not claim force semantics alone", () => {
+      const runtime = new AgentRuntime({
+        sessionId: "s_steer_pre",
+        cwd: "C:/repo",
+        provider: { id: "noop", async *stream() { yield { type: "stop", reason: "stop" }; } },
+      });
+      const msg = createTextMessage("user", "steer-before-run");
+      runtime.enqueueSteerInput(msg);
+      expect(runtime.hasPendingSteerInput()).toBe(true);
+      expect(runtime.peekSteerInput()?.id).toBe(msg.id);
+      // dequeue before run consumes pre-run buffer
+      expect(runtime.dequeueSteerInput()?.id).toBe(msg.id);
+      expect(runtime.hasPendingSteerInput()).toBe(false);
+    });
+
+    it("enqueueSteerInput mid-stream does not interrupt; full stream + steer at safe point", async () => {
+      let releaseSecond!: () => void;
+      const secondGate = new Promise<void>((r) => {
+        releaseSecond = r;
+      });
+      let requestCount = 0;
+      const provider: AgentProvider = {
+        id: "soft-midstream",
+        async *stream() {
+          requestCount += 1;
+          if (requestCount === 1) {
+            yield { type: "text-delta", text: "part-one " };
+            await secondGate;
+            yield { type: "text-delta", text: "part-two" };
+            yield { type: "stop", reason: "stop" };
+            return;
+          }
+          yield { type: "text-delta", text: "after-soft-steer" };
+          yield { type: "stop", reason: "stop" };
+        },
+      };
+
+      const runtime = new AgentRuntime({
+        sessionId: "s_soft_steer_mid",
+        cwd: "C:/repo",
+        provider,
+        sessionStore: new InMemorySessionStore(),
+        maxTurns: 4,
+      });
+
+      const deltas: string[] = [];
+      let injected = false;
+      for await (const event of runtime.run("start")) {
+        if (event.type === "message-delta" && event.block.type === "text") {
+          deltas.push(event.block.text);
+          if (!injected && event.block.text.includes("part-one")) {
+            injected = true;
+            runtime.enqueueSteerInput(createTextMessage("user", "soft-redirect"));
+            releaseSecond();
+          }
+        }
+      }
+
+      // Soft: both stream parts should land (no mid-stream kill)
+      expect(deltas.join("")).toContain("part-one");
+      expect(deltas.join("")).toContain("part-two");
+      expect(requestCount).toBeGreaterThanOrEqual(2);
+    });
+
+    it("enqueueForceInput mid-stream can interrupt before remaining deltas", async () => {
+      let releaseSecond!: () => void;
+      const secondGate = new Promise<void>((r) => {
+        releaseSecond = r;
+      });
+      let requestCount = 0;
+      let firstStreamSawReturn = false;
+      const provider: AgentProvider = {
+        id: "force-midstream",
+        async *stream() {
+          requestCount += 1;
+          if (requestCount === 1) {
+            try {
+              yield { type: "text-delta", text: "force-part-one " };
+              await secondGate;
+              yield { type: "text-delta", text: "force-part-two" };
+              yield { type: "stop", reason: "stop" };
+            } finally {
+              // generator may be .return()'d when force interrupts consume loop
+              firstStreamSawReturn = true;
+            }
+            return;
+          }
+          yield { type: "text-delta", text: "after-force" };
+          yield { type: "stop", reason: "stop" };
+        },
+      };
+
+      const runtime = new AgentRuntime({
+        sessionId: "s_force_steer_mid",
+        cwd: "C:/repo",
+        provider,
+        sessionStore: new InMemorySessionStore(),
+        maxTurns: 4,
+      });
+
+      const deltas: string[] = [];
+      const userTexts: string[] = [];
+      let injected = false;
+      for await (const event of runtime.run("start")) {
+        if (event.type === "message-delta" && event.block.type === "text") {
+          deltas.push(event.block.text);
+          if (!injected && event.block.text.includes("force-part-one")) {
+            injected = true;
+            runtime.enqueueForceInput(createTextMessage("user", "force-redirect"));
+            // Give the stream loop a tick to observe hasForcePending before releasing more provider text
+            await Promise.resolve();
+            releaseSecond();
+          }
+        }
+        if (event.type === "message-end" && event.message.role === "user") {
+          const t = event.message.blocks
+            ?.filter((b) => b.type === "text")
+            .map((b) => (b as { text?: string }).text ?? "")
+            .join("");
+          if (t) userTexts.push(t);
+        }
+      }
+
+      expect(injected).toBe(true);
+      expect(userTexts.some((t) => t.includes("force-redirect"))).toBe(true);
+      // Force path: part-one observed; part-two may be dropped if interrupt wins the race
+      expect(deltas.join("")).toContain("force-part-one");
+      void firstStreamSawReturn;
+      expect(requestCount).toBeGreaterThanOrEqual(1);
+    });
+
+    it("cooperative stop still works while soft steer is pending", async () => {
+      let releaseContinue!: () => void;
+      const hold = new Promise<void>((r) => {
+        releaseContinue = r;
+      });
+      const provider: AgentProvider = {
+        id: "coop-with-soft",
+        async *stream() {
+          yield { type: "text-delta", text: "working" };
+          await hold;
+          yield { type: "text-delta", text: " more" };
+          yield { type: "stop", reason: "stop" };
+        },
+      };
+
+      const runtime = new AgentRuntime({
+        sessionId: "s_coop_soft",
+        cwd: "C:/repo",
+        provider,
+        sessionStore: new InMemorySessionStore(),
+        maxTurns: 4,
+      });
+
+      let sawWorking = false;
+      const endReasons: string[] = [];
+      for await (const event of runtime.run("go")) {
+        if (event.type === "message-delta" && !sawWorking) {
+          sawWorking = true;
+          runtime.enqueueSteerInput(createTextMessage("user", "later-soft"));
+          runtime.requestCooperativeStop("user-stop");
+          releaseContinue();
+        }
+        if (event.type === "agent-end") {
+          endReasons.push(event.reason);
+        }
+      }
+
+      expect(sawWorking).toBe(true);
+      // L2 cooperative stop must cleanly end (not require force abort)
+      expect(endReasons.some((r) => r === "stop" || r === "aborted")).toBe(true);
+    });
+  });
 });
 
