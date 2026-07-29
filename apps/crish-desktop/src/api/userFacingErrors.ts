@@ -9,7 +9,10 @@ const NETWORK_RE =
   /network|websocket|timeout|offline|econn|enotfound|econnrefused|not connected|failed to connect|connect(?:ion)? (?:failed|refused|reset|closed)|disconnected|daemon (?:offline|not|unavailable)|unable to connect|proxy|dns|net::|fetch failed|socket/i;
 
 const NO_KEY_RE =
-  /no provider|missing.*(?:api.?key|credential)|api.?key.*(?:missing|unset|required)|NO_PROVIDER|credential.*not|hasApiKey.?false|unauthorized|401|invalid.?api.?key/i;
+  /no provider|missing.*(?:api.?key|credential)|api.?key.*(?:missing|unset|required)|NO_PROVIDER|credential.*not|hasApiKey.?false/i;
+
+const AUTH_RE =
+  /invalid.?api.?key|unauthorized|401|authentication|auth.?failed|api.?key.*invalid|key.*expired|credential.*invalid/i;
 
 const NO_PROJECT_RE =
   /no (?:project|workspace|cwd)|workspace (?:required|not set)|cwd (?:required|missing)/i;
@@ -17,7 +20,7 @@ const NO_PROJECT_RE =
 const BLOCKED_RE =
   /blocked|denied by policy|hardline|permission denied|not allowed|safety/i;
 
-export type SoftFailureKind = 'network' | 'no_key' | 'no_project' | 'blocked' | 'ended' | null;
+export type SoftFailureKind = 'network' | 'no_key' | 'auth' | 'no_project' | 'blocked' | 'ended' | null;
 
 export function normalizeErrorText(input: unknown): string {
   if (input == null) return '';
@@ -47,6 +50,7 @@ export function classifySoftFailure(input: unknown): SoftFailureKind {
   const text = normalizeErrorText(input);
   if (!text) return null;
   if (NO_KEY_RE.test(text)) return 'no_key';
+  if (AUTH_RE.test(text)) return 'auth';
   if (NO_PROJECT_RE.test(text)) return 'no_project';
   if (isNetworkishError(text)) return 'network';
   if (BLOCKED_RE.test(text)) return 'blocked';
@@ -69,6 +73,8 @@ export function softFailureMessage(kind: SoftFailureKind): string | null {
       return networkUserMessage();
     case 'no_key':
       return '还没有配置可用的模型密钥。请打开设置 → 模型，填写密钥后再试。';
+    case 'auth':
+      return '模型密钥无效或已过期，请打开设置 → 模型检查密钥与服务商地址。';
     case 'no_project':
       return '请先选择项目工作区，再继续对话。';
     case 'blocked':
@@ -81,7 +87,8 @@ export function softFailureMessage(kind: SoftFailureKind): string | null {
 }
 
 /**
- * Text for assistant bubble. Prefer soft setup/network hints; hide raw stacks.
+ * @deprecated 禁止再写入 assistant 气泡。错误/中断只走 onRunError → 横幅/toast。
+ * 仍返回文案供 surfaceStreamFailure 组 notice，勿 updateMessageText 进气泡。
  */
 export function assistantBubbleForFailure(input: unknown): string | null {
   const kind = classifySoftFailure(input);

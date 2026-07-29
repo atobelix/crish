@@ -208,7 +208,10 @@ export function shouldRestoreLayoutForProject(path: string): boolean {
  * 订阅布局变更自动保存 + 项目切换时保存/恢复。
  * 由 App mount 调用一次；返回 cleanup。
  *
- * 动态 import store，避免与 layoutStore → workspaceActions 形成静态循环依赖。
+ * 命令式 workspaces / applyWorkspaceLayout 走 compositionRoot（layout/workspace 门面，
+ * 同 layoutStore 实例）。subscribe 仍动态 import layoutStore（Zustand subscribe 在 hook 上，
+ * 非门面能力）；projectStore 动态 import 保持路径工具与 store 图解耦。
+ * compositionRoot 不导入本模块 → 无环。
  */
 export function initWorkspaceLayoutSync(opts?: {
   onRestored?: (path: string) => void;
@@ -222,9 +225,10 @@ export function initWorkspaceLayoutSync(opts?: {
   let onProject: (() => void) | null = null;
 
   void Promise.all([
+    import('../app/compositionRoot'),
     import('../store/layoutStore'),
     import('./projectStore'),
-  ]).then(([{ useLayoutStore }, { getWorkspacePath }]) => {
+  ]).then(([{ getCompositionRoot }, { useLayoutStore }, { getWorkspacePath }]) => {
     if (disposed) return;
 
     lastPath = normalizePath(getWorkspacePath() || '');
@@ -232,7 +236,8 @@ export function initWorkspaceLayoutSync(opts?: {
     const flushSave = (path: string) => {
       const key = normalizePath(path);
       if (!key || suppressSave) return;
-      const st = useLayoutStore.getState();
+      // 命令式读：workspace facade（legacy columns = layoutStore 同实例）
+      const st = getCompositionRoot().workspace.getState();
       const ws = st.workspaces[st.activeWorkspaceIndex];
       if (!ws) return;
       if (saveLayoutForProject(key, ws)) {
@@ -268,7 +273,7 @@ export function initWorkspaceLayoutSync(opts?: {
       }
       suppressSave = true;
       try {
-        useLayoutStore.getState().applyWorkspaceLayout(snap);
+        getCompositionRoot().workspace.getState().applyWorkspaceLayout(snap);
         setSessionAppliedLayoutPath(key);
         // 刚从快照恢复，不算「用户本会话自定义」
         clearLayoutCustomizedThisSession(key);
@@ -288,6 +293,7 @@ export function initWorkspaceLayoutSync(opts?: {
 
     if (disposed) return;
 
+    // 订阅仍走 store hook（非 command getState）
     unsub = useLayoutStore.subscribe((state, prev) => {
       if (suppressSave || disposed) return;
       if (

@@ -3,6 +3,10 @@ import { useLayoutStore } from '../store/layoutStore';
 import type { FileDiff, SessionState, WorkspaceState } from '../store/types';
 import type { CronJob } from './clientApi';
 import {
+  PENDING_DRAFT_SESSION_ID,
+  isPendingDraft,
+} from '../store/draftSession';
+import {
   addCommandPermission,
   addMessage,
   addMessageToolCall,
@@ -10,6 +14,8 @@ import {
   branchSession,
   closeSettings,
   createSession,
+  createSessionAndOpenChat,
+  enterDraftMode,
   filterCronJobs,
   findPanelCardLocation,
   findWorkspaceById,
@@ -378,6 +384,43 @@ describe('storeAccess + domain facades', () => {
     patchSession(id, { goalMode: null });
     // sessionActions 对 null/undefined 使用 delete，字段变为 undefined
     expect(getSessionById(id)?.goalMode).toBeUndefined();
+  });
+
+  it('createSessionAndOpenChat (deprecated): enterDraft only — no empty shell mint', () => {
+    // Compat shim：名似 mint，实际只 enterDraft + chat surface；产品入口应 openNewDraftTab
+    const seedId = getSessionStoreState().activeSessionId;
+    const beforeLen = getSessionStoreState().sessions.length;
+    const beforeIds = new Set(getSessionStoreState().sessions.map((s) => s.id));
+
+    const returned = createSessionAndOpenChat('proj-draft');
+    expect(returned).toBe(PENDING_DRAFT_SESSION_ID);
+    expect(isPendingDraft(returned)).toBe(true);
+
+    const st = getSessionStoreState();
+    const layout = getLayoutState();
+    expect(st.activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+    // draftFolder 在 layout 切片上（session facade 类型未暴露）
+    expect(layout.draftFolder).toBe('proj-draft');
+    // sessions 不增、不 mint 默认标题空壳
+    expect(st.sessions).toHaveLength(beforeLen);
+    expect(st.sessions.every((s) => beforeIds.has(s.id))).toBe(true);
+    expect(st.sessionsById[PENDING_DRAFT_SESSION_ID]).toBeUndefined();
+    // chat surface 打开
+    expect(layout.chatMainSurface).toBe('chat');
+
+    // 连点：sessions 仍不变
+    createSessionAndOpenChat('proj-draft-2');
+    createSessionAndOpenChat('proj-draft-3');
+    expect(getSessionStoreState().sessions).toHaveLength(beforeLen);
+    expect(getSessionStoreState().activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+    expect(getLayoutState().draftFolder).toBe('proj-draft-3');
+
+    // 恢复 seed 避免污染后续用例
+    if (seedId && !isPendingDraft(seedId)) {
+      setActiveSessionId(seedId);
+    } else {
+      enterDraftMode();
+    }
   });
 
   it('pinSession + unpinSession', () => {

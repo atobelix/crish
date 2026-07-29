@@ -1,6 +1,15 @@
 /**
  * 代码高亮（highlight.js）
  * 现代化、VS Code 风格主题兼容；用于对话 fenced code 与文件预览。
+ *
+ * 双路径设计：
+ *   - `highlightCode(code, lang)` 同步入口：走 highlight.js + LRU 缓存
+ *     用于无法异步的场景（markdownPlugins 内嵌、DiffCard 虚拟滚动同步渲染）
+ *   - `highlightCodeAsync(code, lang)` 异步入口：优先 Rust `highlight_code`
+ *     missing/error 时回退到同步实现；LRU 命中时不再调 IPC
+ *
+ * Rust 路径优势：syntect 渲染质量更高、CPU 走 spawn_blocking 不阻塞主线程；
+ * JS 路径必须保留：旧壳 / 测试环境 / Rust 未注册时仍可用。
  */
 
 import hljs from 'highlight.js/lib/core';
@@ -26,6 +35,7 @@ import swift from 'highlight.js/lib/languages/swift';
 import kotlin from 'highlight.js/lib/languages/kotlin';
 import dart from 'highlight.js/lib/languages/dart';
 import { LruCache, HIGHLIGHT_CACHE_ENTRIES, HIGHLIGHT_CACHE_BUDGET_BYTES, memoryManager } from '@crish/shared-utils/browser';
+import { highlightCode as highlightCodeRust } from './rustCore';
 
 let registered = false;
 
@@ -144,6 +154,39 @@ export function highlightCode(code: string, langHint?: string): string {
 
   highlightCache.set(cacheKey, html);
   return html;
+}
+
+/**
+ * 异步代码高亮：优先 Rust `highlight_code`（syntect），missing/error 时回退到
+ * 同步 `highlightCode`（highlight.js）。
+ *
+ * LRU 命中策略：缓存命中时直接返回，**不再调任何 IPC**，避免无意义往返。
+ *
+ * @param code     原始代码
+ * @param langHint 语言标识（js / ts / rust / ...）；空串走 Plain Text
+ * @returns 高亮后的 HTML 字符串（不含 `<pre>` 包装，仅 token span）
+ */
+export async function highlightCodeAsync(
+  code: string,
+  langHint?: string,
+): Promise<string> {
+  const raw = code.replace(/\r\n/g, '\n');
+  const lang = (langHint || '').toLowerCase().replace(/^\./, '').trim();
+
+  // 1. LRU 命中：跳过 IPC
+  const cacheKey = `${lang}:${raw}`;
+  const cached = highlightCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  // 2. 优先 Rust 渲染
+  const rustHtml = await highlightCodeRust(code, langHint || undefined);
+  if (rustHtml != null) {
+    highlightCache.set(cacheKey, rustHtml);
+    return rustHtml;
+  }
+
+  // 3. Rust missing/error → 回退到同步 highlight.js
+  return highlightCode(code, langHint);
 }
 
 

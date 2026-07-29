@@ -14,6 +14,11 @@ import {
   listProjects,
   type ProjectEntry,
 } from './projectStore';
+import {
+  readScopedLocalStorageWithLegacyMigrate,
+  scopedStorageKey,
+  writeScopedLocalStorage,
+} from './shellWindowScope';
 
 export type WorkspaceTabKind = 'project' | 'general';
 
@@ -34,8 +39,18 @@ export type SessionTab = {
 /** 打开中的会话标签：folderKey → sessionId[]（打开顺序，稳定；点击不重排） */
 export type OpenSessionTabsMap = Record<string, string[]>;
 
+/**
+ * Base localStorage key for open session tabs map.
+ * Runtime read/write uses the **window-scoped** form via `openSessionTabsStorageKey()`:
+ *   `crish_open_session_tabs_v1::${windowId}`
+ */
 export const OPEN_SESSION_TABS_KEY = 'crish_open_session_tabs_v1';
 export const MAX_OPEN_SESSION_TABS = 16;
+
+/** Per-window open-tabs key (`base::windowId`). */
+export function openSessionTabsStorageKey(): string {
+  return scopedStorageKey(OPEN_SESSION_TABS_KEY);
+}
 
 /** 当前工作区 key：活动项目 id 或 GENERAL_FOLDER */
 export function currentWorkspaceFolderKey(
@@ -89,7 +104,8 @@ export function sessionBelongsToWorkspace(
 
 function loadOpenTabsMap(): OpenSessionTabsMap {
   try {
-    const raw = localStorage.getItem(OPEN_SESSION_TABS_KEY);
+    // Window-scoped key; main window may one-shot migrate legacy unscoped value.
+    const raw = readScopedLocalStorageWithLegacyMigrate(OPEN_SESSION_TABS_KEY);
     if (!raw) return {};
     const obj = JSON.parse(raw);
     if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {};
@@ -109,7 +125,7 @@ function loadOpenTabsMap(): OpenSessionTabsMap {
 
 function saveOpenTabsMap(map: OpenSessionTabsMap): void {
   try {
-    localStorage.setItem(OPEN_SESSION_TABS_KEY, JSON.stringify(map));
+    writeScopedLocalStorage(OPEN_SESSION_TABS_KEY, JSON.stringify(map));
   } catch {
     /* quota */
   }
@@ -203,6 +219,32 @@ export function pruneOpenSessionTabs(
     map[key] = next;
     saveOpenTabsMap(map);
   }
+  return next;
+}
+
+/**
+ * 移动某工作区下的会话标签顺序：把 sessionId 拖动到 targetSessionId 之前。
+ * 若 targetSessionId 未提供，则拖到最后。
+ */
+export function moveSessionTab(
+  workspaceKey: string,
+  sessionId: string,
+  targetSessionId?: string,
+): string[] {
+  const key = (workspaceKey || GENERAL_FOLDER).trim() || GENERAL_FOLDER;
+  const sid = (sessionId || '').trim();
+  if (!sid) return getOpenSessionTabIds(key);
+  const map = loadOpenTabsMap();
+  const prev = map[key] || [];
+  const next = prev.filter((id) => id !== sid);
+  if (targetSessionId && targetSessionId !== sid && next.includes(targetSessionId)) {
+    const insertIdx = next.indexOf(targetSessionId);
+    next.splice(insertIdx, 0, sid);
+  } else {
+    next.push(sid);
+  }
+  map[key] = next;
+  saveOpenTabsMap(map);
   return next;
 }
 

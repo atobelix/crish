@@ -20,8 +20,8 @@ export type LayoutStoreHook = typeof useLayoutStore;
 
 export interface StoreLike<S = unknown> {
   getState: () => S;
-  setState: (...args: unknown[]) => void;
-  subscribe: (...args: unknown[]) => unknown;
+  setState: Function;
+  subscribe: Function;
 }
 
 let _sessionStore: StoreLike<unknown> | null = null;
@@ -29,9 +29,9 @@ let _workspaceStore: StoreLike<unknown> | null = null;
 let _settingsUiStore: StoreLike<unknown> | null = null;
 
 export function initStoreAccess(
-  session: StoreLike<any>,
-  workspace: StoreLike<any>,
-  settingsUi: StoreLike<any>
+  session: StoreLike<unknown>,
+  workspace: StoreLike<unknown>,
+  settingsUi: StoreLike<unknown>
 ): void {
   _sessionStore = session;
   _workspaceStore = workspace;

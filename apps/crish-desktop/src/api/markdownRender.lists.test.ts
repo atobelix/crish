@@ -669,7 +669,7 @@ describe('parseMarkdownToHtml lists & tables', () => {
     expect(html).toContain('world');
   });
 
-  it('passes img tags through (DOMPurify sanitizes event handlers at component level)', () => {
+  it('passes img tags through (Rust ammonia sanitizes event handlers at render time)', () => {
     const html = parseMarkdownToHtml('<img onerror=alert(1) src=x>');
     expect(html).toContain('<img');
   });

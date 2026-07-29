@@ -115,7 +115,7 @@ export class VirtualScrollManager {
     const entry = this.heightsById.get(id);
     if (entry) {
       entry.actual = safeHeight;
-      // 同步更新 estimated，使 invalidate 后仍能回落到此值
+      // 同步 estimated，作为「最后一次实测高度」的缓存（invalidateActual 会重置）
       entry.estimated = safeHeight;
     } else {
       this.heightsById.set(id, { estimated: safeHeight, actual: safeHeight });
@@ -137,11 +137,16 @@ export class VirtualScrollManager {
     this.markDirty();
   }
 
-  /** 标记 actual 为 stale，下次渲染后 ResizeObserver 重新测量 */
+  /**
+   * 标记 actual 为 stale，并重置 estimated 到 fallback，
+   * 使 getHeight 真正回落（而非残留旧 actual 同步写入的 estimated），
+   * 以便 ResizeObserver 重新测量。
+   */
   invalidateActual(id: string): void {
     const entry = this.heightsById.get(id);
     if (entry) {
       entry.actual = null;
+      entry.estimated = this.fallbackHeight;
       this.markDirty();
     }
   }

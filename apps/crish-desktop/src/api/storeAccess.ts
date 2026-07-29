@@ -79,7 +79,10 @@ export type {
   WorkspaceState,
 };
 
-// ── Re-exports from sub-modules ─────────────────────────────────────────────
+export { getLayoutState } from './store-access/storeAccessCore';
+export { unarchiveSession, setActiveAgentId, addMessageToolCall, updateMessageToolCall, updateMessageThinking, createSession, archiveSession } from './store-access/sessionAccess';
+export { setAppSettings, getAppSettings, getCommandPermissions, addCommandPermission, setPlanApproved } from './store-access/settingsAccess';
+export { setScheduledTasks, syncTelemetryData, pushDiffFile } from './store-access/telemetryAccess';
 
 export * from './store-access/storeAccessCore';
 export * from './store-access/sessionAccess';

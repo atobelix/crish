@@ -1,11 +1,10 @@
 import { lazy, Suspense } from 'react';
 import { AppErrorBoundary } from '../components/AppErrorBoundary';
 import { TelemetryDialog } from '../components/TelemetryDialog';
-import { telemetry } from '../services/TelemetryService';
 import { openSettings } from '../api/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
 import { getActiveModelId, getActiveProfileId } from '../api/providerProfiles';
-import type { Toast } from '../hooks/useToastQueue';
+import type { AppToast as Toast } from '../services/ToastBus';
 import type { SettingsTabType } from '../store/types';
 
 // Lazy loaded components
@@ -56,8 +55,6 @@ export interface AppGlobalDialogsProps {
   setShowFirstRun: (show: boolean) => void;
   toasts: Toast[];
   dismissToast: (id: string) => void;
-  showCrashPrompt: boolean;
-  setShowCrashPrompt: (show: boolean) => void;
   showTelemetry: boolean;
   setShowTelemetry: (show: boolean) => void;
   showCheatsheet: boolean;
@@ -74,8 +71,6 @@ export function AppGlobalDialogs({
   setShowFirstRun,
   toasts,
   dismissToast,
-  showCrashPrompt,
-  setShowCrashPrompt,
   showTelemetry,
   setShowTelemetry,
   showCheatsheet,
@@ -116,94 +111,6 @@ export function AppGlobalDialogs({
           </Suspense>
         </AppErrorBoundary>
       </div>
-
-      {showCrashPrompt && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,0.4)',
-          }}
-          role="presentation"
-          onClick={() => setShowCrashPrompt(false)}
-        >
-          <div
-            style={{
-              background: 'var(--bg-surface, #1e1e2e)',
-              borderRadius: 12,
-              padding: 24,
-              maxWidth: 420,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-              color: 'var(--fg-default, #e0e0e0)',
-              fontFamily: 'system-ui, sans-serif',
-            }}
-            role="alertdialog"
-            aria-label="异常退出检测"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3
-              style={{ margin: '0 0 12px 0', fontSize: 18, fontWeight: 600 }}
-            >
-              检测到上次异常退出
-            </h3>
-            <p
-              style={{
-                margin: '0 0 20px 0',
-                fontSize: 14,
-                lineHeight: 1.5,
-                color: 'var(--fg-muted, #999)',
-              }}
-            >
-              是否导出诊断日志以帮助排查问题？
-            </p>
-            <div
-              style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}
-            >
-              <button
-                type="button"
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  background: 'var(--bg-muted, rgba(255,255,255,0.08))',
-                  color: 'var(--fg-default, #e0e0e0)',
-                }}
-                onClick={() => {
-                  setShowCrashPrompt(false);
-                  telemetry.clear();
-                }}
-              >
-                忽略
-              </button>
-              <button
-                type="button"
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  background: 'var(--accent-color, #4a9eff)',
-                  color: '#fff',
-                }}
-                onClick={() => {
-                  telemetry.downloadLog();
-                  setShowCrashPrompt(false);
-                }}
-              >
-                导出诊断日志
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showTelemetry && (
         <TelemetryDialog onClose={() => setShowTelemetry(false)} />

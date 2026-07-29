@@ -111,14 +111,17 @@ describe('ST1-ST6: Unicode 不可见字符剥离覆盖（系统性）', () => {
 
   it('ST6（已修复）: Language Tag 块（U+E0000–U+E007F）被剥离', () => {
     // 修复前：Tag 块完全未覆盖，允许隐藏元数据注入
-    // 修复后：剥离 Tag 块
-    const langTag = '\uE0001'; // LANGUAGE TAG
-    const cancelTag = '\uE007F'; // CANCEL TAG
-    const tagA = '\uE0041'; // TAG LATIN CAPITAL LETTER A
+    // 修复后：剥离 Tag 块（\p{Cf} 已覆盖 Cf 类，含 Tag 块）
+    // 注意：U+E0000+ 码点超出 BMP，必须用 \u{XXXXX}（ES6）或代理对，\uXXXX 只取 4 位 hex
+    const langTag = '\u{E0001}'; // LANGUAGE TAG
+    const cancelTag = '\u{E007F}'; // CANCEL TAG
+    const tagA = '\u{E0041}'; // TAG LATIN CAPITAL LETTER A
     expect(
       sanitizeSessionTitleText(`${langTag}${tagA}${cancelTag}标题`)
     ).toBe('标题');
     expect(sanitizeSessionTitleText(`${langTag}${cancelTag}`)).toBe('');
+    // 纯 Tag 块字符 → 空
+    expect(sanitizeSessionTitleText('\u{E0001}\u{E0041}\u{E007F}')).toBe('');
   });
 
   it('ST7（已修复）: lone surrogate 被清洗，落库安全', () => {

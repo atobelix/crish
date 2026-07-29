@@ -2,7 +2,10 @@
  * bootstrap-services —— 统一服务初始化入口。
  *
  * 在应用启动时调用此函数，初始化所有新服务：
+ * - Composition Root：pty / session / shell / workspace / runControl / metrics 门面（B3）
  * - beforeunloadFlush：页面关闭时同步持久化保护
+ * - PTY exit kill：pagehide + cleanup 唯一走 compositionRoot.pty.killAll（关窗 best-effort；
+ *   权威杀进程在 Rust `RunEvent::Exit` → kill_all_sessions）
  * - ConnectionManager：Daemon 连接管理器
  * - StreamRecovery：流恢复协议
  * - SessionSyncService：会话双向同步
@@ -20,9 +23,54 @@ import { crossTabCoordinator } from './services/CrossTabCoordinator';
 import { errorStore } from './services/ErrorStore';
 import { eventBus } from './services/EventBus';
 import { telemetry } from './services/TelemetryService';
+import {
+  killAllPtysOnAppExit,
+  registerCompositionRoot,
+  resetCompositionRoot,
+} from './app/compositionRoot';
+
+// Re-export for callers/tests that keyed off bootstrap
+export { killAllPtysOnAppExit } from './app/compositionRoot';
 
 export function bootstrapServices(): () => void {
   const cleanups: Array<() => void> = [];
+
+  // 0a. Composition Root：登记 pty / session / shell / workspace / runControl / metrics（B3）
+  // reset 必须在 exit-kill 之后（见末尾 cleanups），否则 killAll 门面被清空。
+  registerCompositionRoot();
+
+  // 0b. PTY registry ↔ Tauri bridge（关 tab 时 kill 会话终端）
+  void import('./api/ptySessionApi').then(({ ptyCreate, ptyKill }) => {
+    void import('./api/ptyRegistry').then(({ registerPtyHandlers }) => {
+      registerPtyHandlers({
+        spawn: async (sessionId) => {
+          const res = await ptyCreate({
+            sessionKey: sessionId,
+            cols: 80,
+            rows: 24,
+          });
+          return res.status === 'ok' ? res.data.ptyId : null;
+        },
+        kill: async (ptyId) => {
+          await ptyKill(ptyId);
+        },
+      });
+    });
+  });
+
+  // 0c. App exit kill — 单路径：compositionRoot.pty.killAll
+  // 策略 A：折坞 / Terminal unmount **不** kill；仅 exit / closeTab / reset。
+  // pagehide 为 best-effort（IPC 可能赶不及）；Rust Exit 为权威。
+  const onPageHide = () => {
+    killAllPtysOnAppExit();
+  };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', onPageHide);
+    cleanups.push(() => {
+      window.removeEventListener('pagehide', onPageHide);
+      killAllPtysOnAppExit();
+    });
+  }
 
   // 1. EventBus is singleton — no init needed
 
@@ -51,7 +99,8 @@ export function bootstrapServices(): () => void {
 
   // 6b. Wire TelemetryService to EventBus — log all events for debugging
   const unsubTelemetry = eventBus.onAny((event) => {
-    if (process.env.NODE_ENV === 'development' || (event.payload as any)?.severity === 'error') {
+    const isErrorEvent = typeof event.payload === 'object' && event.payload !== null && (event.payload as Record<string, unknown>).severity === 'error';
+    if (process.env.NODE_ENV === 'development' || isErrorEvent) {
       telemetry.debug('eventbus', `Event: ${event.type}`, { source: event.source });
     }
   });
@@ -79,6 +128,11 @@ export function bootstrapServices(): () => void {
     }
   });
   cleanups.push(unsubErrorStore);
+
+  // Composition root teardown last（exit kill 已在 0c 跑过）
+  cleanups.push(() => {
+    resetCompositionRoot();
+  });
 
   return () => {
     for (const fn of cleanups) {

@@ -871,14 +871,6 @@ export function toolHumanLabel(tc: MessageToolCall): string {
 }
 
 /**
- * 折叠行主文案：人话优先。
- * @deprecated 语义等同 toolHumanLabel
- */
-export function toolSummaryLabel(tc: MessageToolCall): string {
-  return toolHumanLabel(tc);
-}
-
-/**
  * 次要技术预览：真实命令/路径。
  */
 export function toolCommandPreview(tc: MessageToolCall, max = 72): string {

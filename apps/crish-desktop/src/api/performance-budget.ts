@@ -16,8 +16,8 @@ export function checkBudget(name: string, duration: number): void {
     if (process.env.NODE_ENV === 'development') {
       console.warn(`[Perf] ${name}: ${duration.toFixed(1)}ms (${pct}% of ${budget}ms budget)`);
     }
-    if (typeof window !== 'undefined' && (window as any).__crish_perf) {
-      (window as any).__crish_perf.budgetExceeded({ name, duration, budget });
+    if (typeof window !== 'undefined' && window.__crish_perf?.budgetExceeded) {
+      window.__crish_perf.budgetExceeded({ name, duration, budget });
     }
   }
 }

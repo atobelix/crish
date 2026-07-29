@@ -146,16 +146,17 @@ describe('VirtualScrollManager (messageId + suffix rebuild)', () => {
     expect(vsm.getHeight('x')).toBe(222);
   });
 
-  it('invalidateActual only clears that id and suffix-rebuilds', () => {
+  it('invalidateActual resets actual and estimated so height truly recomputes', () => {
     const vsm = new VirtualScrollManager(100);
     vsm.syncOrder(['a', 'b', 'c']);
     vsm.setActual('a', 40);
     vsm.setActual('b', 60);
     vsm.setActual('c', 80);
     vsm.invalidateActual('b');
-    // b falls back to estimated (was set via setActual which also sets estimated)
-    expect(vsm.getHeight('b')).toBe(60); // estimated remains 60, actual null → estimated
-    vsm.setEstimated('b', 70); // actual null, so estimated can update
+    // setActual 曾把 estimated 同步为 60；invalidate 必须一并重置，否则 getHeight 仍回落旧值
+    expect(vsm.getHeight('b')).toBe(100); // fallback
+    expect(vsm.getOffset(2)).toBe(40 + 100);
+    vsm.setEstimated('b', 70); // actual null，允许新的 estimated
     expect(vsm.getHeight('b')).toBe(70);
     expect(vsm.getOffset(2)).toBe(40 + 70);
   });

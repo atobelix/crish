@@ -120,17 +120,20 @@ export class EventRouter {
     for (const raw of fresh) {
       const seq = extractEventSequence(raw);
       const agent = orchestratorEventToAgentEvent(raw) ?? raw;
-      const type = String(agent.type ?? '');
-      if (
-        type === 'message-delta' ||
-        type === 'text-delta' ||
-        type === 'message-end'
-      ) {
-        if (type === 'message-end') {
-          this.handleAgentEvent(agent);
+      if (agent && typeof agent === 'object') {
+        const agentRec = agent as Record<string, unknown>;
+        const type = String(agentRec.type ?? '');
+        if (
+          type === 'message-delta' ||
+          type === 'text-delta' ||
+          type === 'message-end'
+        ) {
+          if (type === 'message-end') {
+            this.handleAgentEvent(agentRec);
+          }
+        } else {
+          this.handleAgentEvent(agentRec);
         }
-      } else {
-        this.handleAgentEvent(agent);
       }
       if (seq != null && seq > this.lastAppliedSequence) {
         this.lastAppliedSequence = seq;
@@ -442,7 +445,9 @@ export class EventRouter {
     if (
       type === 'run-terminal' ||
       type === 'run-completed' ||
-      type === 'run-failed'
+      type === 'run-failed' ||
+      // Orchestrator L3 terminal (was missing → stuck isProcessing until agent-end 8s timer)
+      type === 'run-cancelled'
     ) {
       const termParsed = safeParseRunTerminal(event);
       const termOk = termParsed.ok === true;
@@ -452,11 +457,13 @@ export class EventRouter {
       const failed = termOk
         ? termParsed.data.failed
         : type === 'run-failed' ||
+          type === 'run-cancelled' ||
           term === 'failed' ||
           term === 'error' ||
           term === 'cancelled' ||
           term === 'canceled';
-      if (failed) {
+      if (failed && type !== 'run-cancelled') {
+        // L3 cancel: keep partial assistant text; do not surface as stream failure toast
         const errPayload = termOk
           ? termParsed.data.error
           : (event.error ?? event.message ?? event);
@@ -473,7 +480,8 @@ export class EventRouter {
         return;
       }
       this.approvalFlow.dispatch({ type: 'clear_all' });
-      this.finish(failed);
+      // run-cancelled / failed both close the stream; failed only for true errors
+      this.finish(failed && type !== 'run-cancelled');
       return;
     }
 
@@ -500,6 +508,17 @@ export class EventRouter {
           this.runId
         );
         this.finish(true);
+        return;
+      }
+      // L2 stop / L3 aborted / max-turns: settle immediately so isProcessing clears.
+      // (Previously only deferred 8s when run-terminal lagged — stuck Stop / cannot send.)
+      if (
+        reason === 'stop' ||
+        reason === 'aborted' ||
+        reason === 'max-turns'
+      ) {
+        this.approvalFlow.dispatch({ type: 'clear_all' });
+        this.finish(false);
         return;
       }
       if (this.approvalFlow.snapshot().sawRunTerminal) {
@@ -604,7 +623,12 @@ export class EventRouter {
       return;
     }
 
-    if (type === 'run-ended' || type === 'run-failed') {
+    if (
+      type === 'run-ended' ||
+      type === 'run-failed' ||
+      type === 'run-cancelled' ||
+      type === 'run-completed'
+    ) {
       if (type === 'run-failed') {
         surfaceStreamFailure(
           msg.error ?? msg.message ?? msg,
@@ -615,6 +639,7 @@ export class EventRouter {
       }
       this.approvalFlow.dispatch({ type: 'run_terminal_seen' });
       this.approvalFlow.dispatch({ type: 'clear_all' });
+      // L3 run-cancelled: finish without error surface (partial content kept in UI)
       this.finish(type === 'run-failed');
       return;
     }

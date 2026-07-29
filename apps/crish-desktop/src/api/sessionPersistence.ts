@@ -1,12 +1,19 @@
 /**
- * 正式版会话持久化（门面层）
+ * 会话持久化门面层（Stream D 改造后）
  *
- * - 索引：紧凑元数据列表（localStorage，后续可换 SQLite / 磁盘）
- * - 正文：按会话 JSONL 消息日志（localStorage blob，可映射到 ~/.crish/sessions）
- * - 本地消息正文为真相源；引擎 list-sessions 仅作元数据补全
+ * 架构变更：
+ *   - 主存储：SQLite（conex-db），通过 Tauri invoke 调用
+ *   - 回退存储：localStorage（invoke 缺失 / 浏览器 / 测试环境）
+ *   - 已删除：IndexedDB（asyncStorage）、磁盘镜像（sessionDiskMirror）—— 三层冗余消除
  *
- * 加载侧纯守卫：坏 JSON / 非数组 / 缺 id 条目 → 丢弃并恢复为空列表，
- * 不发明远程空壳会话。
+ * 索引策略（过渡期）：
+ *   - localStorage 仍是会话索引的真相源（侧栏元数据）
+ *   - bodies / agents 走 SQLite，localStorage 仅作回退
+ *   - 未来增补 upsert_session_entry 命令后，索引可彻底迁移到 SQLite
+ *
+ * 数据迁移：
+ *   - ensureMigrated() 检测 schema_version，未迁移时一次性导入 localStorage → SQLite
+ *   - 保留 localStorage 30 天作为回滚保险
  */
 
 export {
@@ -23,11 +30,6 @@ export {
 
 export {
   hydrateSessionAgents,
-  jsonlToMessages,
-  messagesToJsonl,
-  messagesToJsonlFallback,
-  messagesToJsonlWorker,
-  jsonlToMessagesWorker,
   normalizePinnedMessageIds,
   parseFolderOrder,
   parseSessionAgent,
@@ -41,12 +43,8 @@ export {
 } from './session-persistence/sessionHydration';
 
 export {
-  cleanupOrphanSessionsAsync,
-  saveSessionBodyAsync,
-} from './session-persistence/sessionIndexedDb';
-
-export {
   deleteSessionBody,
+  filterPersistableSessions,
   hydrateSessionsFromDisk,
   loadActiveSessionId,
   loadFolderOrder,
@@ -63,3 +61,33 @@ export {
   saveSessionIndex,
   sessionsToIndex,
 } from './session-persistence/sessionLocalStorage';
+
+// ── Stream D 新增：SQLite 持久化层 + 数据迁移 ──────────────────────────────
+export {
+  cleanupOrphanSessions,
+  deleteSession as deleteSessionRust,
+  getSessionMeta,
+  hydrateSessionsFromRust,
+  importFromLocalStorage,
+  listSessions,
+  loadSessionAgents as loadSessionAgentsRust,
+  loadSessionBody as loadSessionBodyRust,
+  persistAllSessionsRust,
+  persistAllSessionsSyncViaLocalStorage,
+  saveSessionAgents as saveSessionAgentsRust,
+  saveSessionBody as saveSessionBodyRust,
+  setSessionMeta,
+  touchSession,
+  toRustSessionIndexEntry,
+  type ImportFromLocalStorageData,
+} from './session-persistence/sessionRustDb';
+
+export {
+  cleanupLegacyLocalStorageSessions,
+  ensureMigrated,
+  migrateFromLocalStorage,
+  runMigrationCleanupIfNeeded,
+  LOCALSTORAGE_ROLLBACK_TTL_MS,
+  SCHEMA_VERSION_KEY,
+  SCHEMA_VERSION_V3,
+} from './session-persistence/migrateFromLocalStorage';

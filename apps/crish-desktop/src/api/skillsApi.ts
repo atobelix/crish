@@ -13,6 +13,7 @@ import { getWorkspacePath } from './projectStore';
 import { getDesktopDaemonClient } from './daemonClient';
 import { tryInvokeTauri } from './tauriInvoke';
 import { skillStableId } from './skillId';
+import { openDirectoryDialogSafe } from './openDirectoryDialog';
 import {
   isAbsoluteFsPath,
   listDirectory,
@@ -631,18 +632,7 @@ export async function skillsFsAvailable(): Promise<boolean> {
 
 /** 选择额外技能目录（原生对话框） */
 export async function pickSkillDirectory(): Promise<string | null> {
-  try {
-    const mod: any = await (Function('return import("@tauri-apps/plugin-dialog")')() as Promise<any>).catch(
-      () => null,
-    );
-    if (mod?.open) {
-      const selected = await mod.open({ directory: true, multiple: false, title: '选择技能目录' });
-      if (typeof selected === 'string' && selected) return selected;
-    }
-  } catch {
-    /* browser */
-  }
-  return null;
+  return openDirectoryDialogSafe('选择技能目录');
 }
 
 /** 在系统资源管理器中显示路径 */

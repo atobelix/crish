@@ -38,15 +38,14 @@ import {
   SESSION_FOLDER_KEY,
   SESSION_INDEX_KEY,
   deleteSessionBody,
+  filterPersistableSessions,
   hydrateSessionAgents,
   hydrateSessionsFromDisk,
-  jsonlToMessages,
   loadActiveSessionId,
   loadFolderOrder,
   loadSessionAgents,
   loadSessionBody,
   loadSessionIndex,
-  messagesToJsonl,
   normalizePinnedMessageIds,
   parseFolderOrder,
   parseSessionAgent,
@@ -67,6 +66,7 @@ import {
   type SessionIndexEntry,
 } from './sessionPersistence';
 import { EMPTY_SESSION_TITLE } from './sessionTitle';
+import { PENDING_DRAFT_SESSION_ID } from '../store/draftSession';
 
 function baseMsg(
   partial: Partial<SessionMessage> & Pick<SessionMessage, 'id' | 'sender'>
@@ -115,6 +115,18 @@ describe('parseSessionIndexEntry / parseSessionIndexList', () => {
     expect(parseSessionIndexEntry({})).toBeNull();
     expect(parseSessionIndexEntry({ id: '  ' })).toBeNull();
     expect(parseSessionIndexEntry({ id: 9 })).toBeNull();
+  });
+
+  it('I-DRAFT: rejects PENDING_DRAFT sentinel id', () => {
+    expect(
+      parseSessionIndexEntry({ id: PENDING_DRAFT_SESSION_ID, title: 'draft' })
+    ).toBeNull();
+    expect(
+      parseSessionIndexList([
+        { id: PENDING_DRAFT_SESSION_ID, title: 'draft' },
+        { id: 'real', title: 'R' },
+      ]).map((e) => e.id)
+    ).toEqual(['real']);
   });
 
   it('fills migration defaults for partial entries', () => {
@@ -235,36 +247,6 @@ describe('parseSessionMessage / parseSessionMessages / jsonl', () => {
       { type: 'text', content: 'a' },
       { type: 'tool_call', id: 't1' },
     ]);
-  });
-
-  it('messagesToJsonl / jsonlToMessages round-trip and skip bad lines', () => {
-    const msgs = [
-      baseMsg({ id: '1', sender: 'user', text: 'a' }),
-      baseMsg({ id: '2', sender: 'assistant', text: 'b' }),
-    ];
-    const jsonl = messagesToJsonl(msgs);
-    expect(jsonl.split('\n')).toHaveLength(2);
-    expect(jsonlToMessages(jsonl)).toEqual(msgs);
-
-    expect(jsonlToMessages('')).toEqual([]);
-    expect(jsonlToMessages('   \n\n  ')).toEqual([]);
-    expect(
-      jsonlToMessages(
-        [
-          JSON.stringify(msgs[0]),
-          '{bad',
-          JSON.stringify({ id: 'x' }), // no sender
-          JSON.stringify(msgs[1]),
-          '',
-        ].join('\n')
-      ).map((m) => m.id)
-    ).toEqual(['1', '2']);
-  });
-
-  it('jsonl path migrates accidental JSON array payload', () => {
-    const arr = [baseMsg({ id: 'j1', sender: 'user', text: 'array' })];
-    expect(jsonlToMessages(JSON.stringify(arr))).toEqual(arr);
-    expect(jsonlToMessages('{not-array')).toEqual([]);
   });
 
   it('parseSessionMessages drops non-array and bad rows', () => {
@@ -457,7 +439,7 @@ describe('localStorage load/save shape guards', () => {
     expect(loaded![0]!.title).toBe('A');
   });
 
-  it('loadSessionBody: missing / JSON array / JSONL / corrupt', () => {
+  it('loadSessionBody: missing / JSON array / corrupt', () => {
     expect(loadSessionBody('')).toEqual([]);
     expect(loadSessionBody('missing')).toEqual([]);
 
@@ -470,15 +452,6 @@ describe('localStorage load/save shape guards', () => {
 
     saveSessionBody('s2', msgs);
     expect(loadSessionBody('s2')).toEqual(msgs);
-    expect(
-      localStorage.getItem(SESSION_BODY_PREFIX + 's2')?.includes('\n') || true
-    ).toBe(true);
-
-    localStorage.setItem(
-      SESSION_BODY_PREFIX + 's3',
-      [JSON.stringify(msgs[0]), '@@@'].join('\n')
-    );
-    expect(loadSessionBody('s3')).toHaveLength(1);
   });
 
   it('deleteSessionBody removes body + agents', () => {
@@ -736,7 +709,7 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
   it('persistAllSessions writes index/body and purges orphan bodies', async () => {
     localStorage.setItem(
       SESSION_BODY_PREFIX + 'orphan',
-      messagesToJsonl([baseMsg({ id: 'o', sender: 'user', text: 'gone' })])
+      JSON.stringify([baseMsg({ id: 'o', sender: 'user', text: 'gone' })])
     );
     localStorage.setItem(
       SESSION_AGENTS_PREFIX + 'orphan',
@@ -788,5 +761,115 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
     expect(loadActiveSessionId()).toBeNull();
     const h = hydrateSessionsFromDisk();
     expect(h.sessions).toEqual([]);
+  });
+
+  // ── I-DRAFT / C3：PENDING_DRAFT 永不落盘 sessions[] ─────────────────
+  it('I-DRAFT: sessionsToIndex / filterPersistableSessions drop sentinel', () => {
+    const draft = baseSession({
+      id: PENDING_DRAFT_SESSION_ID,
+      title: 'should-not-persist',
+      messages: [baseMsg({ id: 'm', sender: 'user', text: 'nope' })],
+    });
+    const real = baseSession({
+      id: 'real-1',
+      title: 'Real',
+      messages: [baseMsg({ id: 'm2', sender: 'user', text: 'ok' })],
+    });
+    expect(filterPersistableSessions([draft, real]).map((s) => s.id)).toEqual([
+      'real-1',
+    ]);
+    expect(sessionsToIndex([draft, real]).map((e) => e.id)).toEqual(['real-1']);
+    expect(sessionsToIndex([draft])).toEqual([]);
+  });
+
+  it('I-DRAFT: persistAllSessions never writes PENDING_DRAFT to index/body/active', async () => {
+    const draft = baseSession({
+      id: PENDING_DRAFT_SESSION_ID,
+      title: 'ghost-draft',
+      messages: [baseMsg({ id: 'md', sender: 'user', text: 'draft body' })],
+    });
+    const real = baseSession({
+      id: 'keep-real',
+      title: 'Keep',
+      messages: [baseMsg({ id: 'mr', sender: 'user', text: 'real body' })],
+    });
+    await persistAllSessions(
+      [draft, real],
+      PENDING_DRAFT_SESSION_ID,
+      [DEFAULT_SESSION_FOLDER]
+    );
+
+    expect(loadSessionIndex().map((e) => e.id)).toEqual(['keep-real']);
+    expect(loadSessionBody(PENDING_DRAFT_SESSION_ID)).toEqual([]);
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + PENDING_DRAFT_SESSION_ID)).toBeNull();
+    expect(loadActiveSessionId()).toBeNull();
+    expect(loadSessionBody('keep-real')).toHaveLength(1);
+  });
+
+  it('I-DRAFT: hydrate drops dirty draft index entry; prunes empty shells when active null', () => {
+    const contentId = `content-${Date.now()}`;
+    const ghostShell = `shell-ghost-${Date.now()}`;
+    // 绕过 parse：直接写入脏索引（模拟旧 bug / 手写盘）
+    localStorage.setItem(
+      SESSION_INDEX_KEY,
+      JSON.stringify([
+        {
+          id: PENDING_DRAFT_SESSION_ID,
+          title: 'Draft leak',
+          folder: DEFAULT_SESSION_FOLDER,
+          isPinned: false,
+          isArchived: false,
+          timestamp: '',
+          updatedAt: 99,
+          messageCount: 1,
+        },
+        {
+          id: ghostShell,
+          title: EMPTY_SESSION_TITLE,
+          folder: DEFAULT_SESSION_FOLDER,
+          isPinned: false,
+          isArchived: false,
+          timestamp: '',
+          updatedAt: 1,
+          messageCount: 0,
+        },
+        {
+          id: contentId,
+          title: '真实标题',
+          folder: DEFAULT_SESSION_FOLDER,
+          isPinned: false,
+          isArchived: false,
+          timestamp: '',
+          updatedAt: 10,
+          messageCount: 1,
+        },
+      ])
+    );
+    saveSessionBody(PENDING_DRAFT_SESSION_ID, [
+      baseMsg({ id: 'md', sender: 'user', text: 'should not hydrate' }),
+    ]);
+    saveSessionBody(contentId, [
+      baseMsg({ id: 'm1', sender: 'user', text: 'hello hydrate' }),
+    ]);
+    saveActiveSessionId(PENDING_DRAFT_SESSION_ID);
+
+    const h = hydrateSessionsFromDisk();
+    expect(h.sessions.map((s) => s.id)).toEqual([contentId]);
+    expect(h.sessions.some((s) => s.id === PENDING_DRAFT_SESSION_ID)).toBe(
+      false
+    );
+    expect(h.sessions.some((s) => s.id === ghostShell)).toBe(false);
+    expect(h.activeSessionId).toBeNull();
+  });
+
+  it('I-DRAFT: saveActiveSessionId / saveSessionBody no-op for sentinel', () => {
+    saveActiveSessionId(PENDING_DRAFT_SESSION_ID);
+    expect(loadActiveSessionId()).toBeNull();
+    saveSessionBody(PENDING_DRAFT_SESSION_ID, [
+      baseMsg({ id: 'm', sender: 'user', text: 'x' }),
+    ]);
+    expect(
+      localStorage.getItem(SESSION_BODY_PREFIX + PENDING_DRAFT_SESSION_ID)
+    ).toBeNull();
   });
 });

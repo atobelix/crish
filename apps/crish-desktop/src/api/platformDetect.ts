@@ -26,7 +26,7 @@ export function getPlatformInfo(): PlatformInfo {
 
 export async function detectPlatform(): Promise<PlatformInfo> {
   try {
-    const mem = (navigator as any).deviceMemory || 4;
+    const mem = navigator.deviceMemory || 4;
     const cores = navigator.hardwareConcurrency || 4;
     const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 

@@ -24,6 +24,31 @@ export class TelemetryService {
     this.loadPersisted();
   }
 
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+  }
+
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /** 静默发送崩溃/异常诊断报告；当前环境无远端接收器时以自定义事件暴露 */
+  sendReport(): void {
+    if (!this.enabled) return;
+    const payload = {
+      sessionId: this.sessionId,
+      timestamp: Date.now(),
+      context: this.captureContext(),
+      entries: this.buffer.slice(),
+    };
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('crish-crash-report', { detail: payload }));
+    }
+    console.info('[crish] crash telemetry report dispatched silently', payload.context);
+    // 发送后清空旧日志，避免下次启动重复上报
+    this.clear();
+  }
+
   private generateSessionId(): string {
     try { return crypto.randomUUID(); } catch { return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }
   }
@@ -72,7 +97,9 @@ export class TelemetryService {
   error(module: string, message: string, error?: Error, data?: Record<string, unknown>): void {
     this.log('error', module, message, {
       ...data,
-      error: error ? { message: error.message, stack: error.stack, code: (error as any).code } : undefined,
+      error: error
+        ? { message: error.message, stack: error.stack, code: 'code' in error ? (error as { code?: unknown }).code : undefined }
+        : undefined,
     });
   }
 

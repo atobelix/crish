@@ -15,6 +15,8 @@
  */
 
 import { eventBus } from './EventBus';
+import { getCompositionRoot } from '../app/compositionRoot';
+import type { SessionMessage, SessionMessageStatus } from '../store/types';
 
 /* ============================================================
  * 类型定义
@@ -196,6 +198,9 @@ export class SessionSyncService {
   private pullTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectPullCount = 0;
   private engineCursor: number = 0;
+  /** 引擎不支持 sync-pull 时停表，避免每 10s 刷 error */
+  private pullUnsupported = false;
+  private pullUnsupportedLogged = false;
 
   private constructor() {
     // 私有构造，使用 getInstance
@@ -251,6 +256,7 @@ export class SessionSyncService {
   }
 
   async pullFromEngine(): Promise<number> {
+    if (this.pullUnsupported) return 0;
     try {
       const res = await daemonRequest('sync-pull', {
         since: this.engineCursor,
@@ -269,12 +275,31 @@ export class SessionSyncService {
       this.emitStatus();
       return changes.length;
     } catch (err) {
-      if (!String(err).includes('Daemon not connected')) {
-        console.error('[SessionSync] pullFromEngine failed:', err);
+      const msg = String(err);
+      if (msg.includes('Daemon not connected')) {
+        return 0;
       }
+      // 引擎尚未实现 sync-pull：静默停表，只记一次
+      if (
+        /Unsupported message type|Unknown message type|sync-pull/i.test(msg)
+      ) {
+        this.pullUnsupported = true;
+        if (this.pullTimer) {
+          clearTimeout(this.pullTimer);
+          this.pullTimer = null;
+        }
+        if (!this.pullUnsupportedLogged) {
+          this.pullUnsupportedLogged = true;
+          console.info(
+            '[SessionSync] engine does not support sync-pull; pull disabled (local-only sync)'
+          );
+        }
+        return 0;
+      }
+      console.error('[SessionSync] pullFromEngine failed:', err);
       eventBus.emit(SYNC_ERROR_EVENT, {
         operation: 'pull',
-        error: String(err),
+        error: msg,
       }, 'daemon');
       return 0;
     }
@@ -431,7 +456,8 @@ export class SessionSyncService {
     const { mergeDaemonSessions, isOfflineOrEmptyRemote } = await import(
       '../api/sessionDaemonSync'
     );
-    const { useLayoutStore } = await import('../store/layoutStore');
+    // 命令式 sessions 读/写经 compositionRoot.layout（与 useEngineBootstrap daemon sync 同源）
+    const layout = getCompositionRoot().layout;
 
     // 分组：会话元数据变更 vs 消息变更
     const metaChanges: Record<string, unknown>[] = [];
@@ -448,8 +474,8 @@ export class SessionSyncService {
 
     // 处理消息级变更（引擎优先）
     if (messageChanges.length > 0) {
-      const store = useLayoutStore.getState();
-      const sessions = store.sessions ?? [];
+      // 浅拷贝数组再改下标，避免直接改 getSessions 返回的引用
+      const sessions = [...(layout.getSessions() ?? [])];
       let modified = false;
 
       for (const change of messageChanges) {
@@ -466,11 +492,11 @@ export class SessionSyncService {
         const op = change.operation as string;
 
         if (op === 'add-message') {
-          const msg = change.message as Record<string, unknown>;
+          const msg = change.message as SessionMessage;
           if (!msg || !msg.id) continue;
           // 引擎优先：如果本地已有同 id 消息则覆盖内容
           const existingIdx = session.messages.findIndex(
-            (m: any) => m.id && String(m.id) === String(msg.id),
+            (m) => m.id && String(m.id) === String(msg.id),
           );
           if (existingIdx !== -1) {
             // 引擎优先 — 覆盖本地（AI 回复/tool output 以引擎为准）
@@ -478,7 +504,7 @@ export class SessionSyncService {
               ...session,
               messages: [
                 ...session.messages.slice(0, existingIdx),
-                { ...session.messages[existingIdx]!, ...msg } as any,
+                { ...session.messages[existingIdx]!, ...msg } satisfies SessionMessage,
                 ...session.messages.slice(existingIdx + 1),
               ],
             };
@@ -486,16 +512,16 @@ export class SessionSyncService {
             // 新消息追加
             sessions[idx] = {
               ...session,
-              messages: [...session.messages, msg as any],
+              messages: [...session.messages, msg],
             };
           }
           modified = true;
         } else if (op === 'update-status') {
           const msgId = change.messageId as string;
-          const status = change.status as any;
+          const status = change.status as SessionMessageStatus;
           if (!msgId) continue;
           const msgIdx = session.messages.findIndex(
-            (m: any) => m.id && String(m.id) === String(msgId),
+            (m) => m.id && String(m.id) === String(msgId),
           );
           if (msgIdx !== -1) {
             sessions[idx] = {
@@ -512,13 +538,13 @@ export class SessionSyncService {
       }
 
       if (modified) {
-        useLayoutStore.setState({ sessions });
+        layout.setSessions(sessions);
       }
     }
 
     // 处理会话元数据变更（走 mergeDaemonSessions LWW）
     if (metaChanges.length > 0) {
-      const store = useLayoutStore.getState();
+      const currentSessions = layout.getSessions() ?? [];
       const remoteList = metaChanges
         .filter((c) => c.sessionId)
         .map((c) => ({
@@ -528,9 +554,9 @@ export class SessionSyncService {
           cwd: (c.cwd as string) ?? '',
         }));
       if (!isOfflineOrEmptyRemote(remoteList)) {
-        const merged = mergeDaemonSessions(store.sessions ?? [], remoteList);
-        if (merged !== store.sessions) {
-          useLayoutStore.setState({ sessions: merged });
+        const merged = mergeDaemonSessions(currentSessions, remoteList);
+        if (merged !== currentSessions) {
+          layout.setSessions(merged);
         }
       }
     }
@@ -592,6 +618,7 @@ export class SessionSyncService {
   }
 
   private schedulePull(isReconnect: boolean): void {
+    if (this.pullUnsupported) return;
     if (this.pullTimer) clearTimeout(this.pullTimer);
 
     const delay = isReconnect
@@ -600,7 +627,9 @@ export class SessionSyncService {
 
     this.pullTimer = setTimeout(() => {
       this.pullTimer = null;
+      if (this.pullUnsupported) return;
       void this.pullFromEngine().then(() => {
+        if (this.pullUnsupported) return;
         // 重连后爆发式拉取：10s 间隔连续 3 次
         if (isReconnect && this.reconnectPullCount < PULL_RECONNECT_BURST) {
           this.reconnectPullCount += 1;

@@ -21,6 +21,21 @@ async function startup() {
     console.warn('[crish] bootstrap-core failed, continuing startup:', e);
   }
 
+  // 将核心 store 暴露到 window，便于浏览器环境调试与自动化测试
+  //（不影响生产构建安全性，只提供与 UI 同等的 API 入口）
+  try {
+    const { useLayoutStore } = await import('./store/layoutStore');
+    const { useSessionStore } = await import('./store/sessionStore');
+    const { useLayoutTreeStore } = await import('./store/layout-tree');
+    // __CRISH_STORE__ 保持为会话 store（与既有测试脚本、手动调试习惯一致）
+    (window as any).__CRISH_STORE__ = useSessionStore;
+    (window as any).__CRISH_SESSION_STORE__ = useSessionStore;
+    (window as any).__CRISH_LAYOUT_STORE__ = useLayoutStore;
+    (window as any).__CRISH_TREE_STORE__ = useLayoutTreeStore;
+  } catch (e) {
+    console.warn('[crish] exposing stores failed:', e);
+  }
+
   // Phase 1.5: 动态加载 React + App（失败则展示错误边界 fallback）
   let StrictMode: any;
   let createRoot: any;
@@ -90,16 +105,38 @@ async function startup() {
     firstPaint: performance.now(),
   };
 
+  // Tauri MCP guest bindings (debug only): console/DOM/IPC capture for AI agents
+  // Requires agent-workbench debug build with tauri-plugin-mcp + MCP server CLI.
   if (import.meta.env.DEV) {
-    const p = (window as any).__crish_perf;
-    p.marks = {} as Record<string, number[]>;
+    void import('tauri-plugin-mcp')
+      .then((m) => m.setupPluginListeners())
+      .then(() => {
+        console.info('[crish] tauri-plugin-mcp guest listeners ready');
+        // shell helpers for app_bridge (open_session / shell_snapshot)
+        return import('./dev/mcpBridge').then((b) => b.registerCrishMcpBridge());
+      })
+      .catch((e) => {
+        // Browser-only / plugin not linked: non-fatal
+        console.debug('[crish] tauri-plugin-mcp guest not available:', e);
+      });
+  }
+
+  if (import.meta.env.DEV) {
+    if (!window.__crish_perf) {
+      window.__crish_perf = {};
+    }
+    const p = window.__crish_perf;
+    const marks: Record<string, number[]> = {};
+    p.marks = marks;
     p.budgetExceeded = (entry: { name: string; duration: number; budget: number }) => {
-      if (!p.marks[entry.name]) {
-        p.marks[entry.name] = [];
+      let list = marks[entry.name];
+      if (!list) {
+        list = [];
+        marks[entry.name] = list;
       }
-      p.marks[entry.name].push(entry.duration);
-      if (p.marks[entry.name].length > 100) {
-        p.marks[entry.name].shift();
+      list.push(entry.duration);
+      if (list.length > 100) {
+        list.shift();
       }
     };
   }

@@ -6,6 +6,12 @@
  * 引擎 list-sessions 常含大量未命名占位，盲目 merge 会刷出幽灵「新会话」。
  *
  * 离线 / 空远程 / 全幽灵远程：不得据此删除或伪造本地会话。
+ *
+ * ## 懒水合（intentional lazy，非丢消息）
+ * 新插入的远程会话固定 `messages: []`，仅带真实 title 等元数据。
+ * 正文在 `setActiveSessionId` → `hydrateSessionMessagesFromDaemon` 时补齐。
+ * prepareSessionsForUi / 侧栏 list **不会** strip 消息；MCP 若见
+ * sessions[].messages 全为 length 0 而 titles 存在，通常是尚未 activate 的远程壳。
  */
 
 import { getDesktopDaemonClient } from './daemonClient';

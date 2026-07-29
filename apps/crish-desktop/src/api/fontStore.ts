@@ -89,25 +89,31 @@ export function platformLabel(p: PlatformId = detectPlatform()): string {
 
 /* ---------- stacks ---------- */
 
-const CJK_FALLBACK =
-  "'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Noto Sans CJK SC', 'Source Han Sans SC', 'HarmonyOS Sans SC', sans-serif";
+/**
+ * 中英文统一：优先使用同一套「含 CJK 字形」的 UI 字体作为主族，
+ * 避免 Inter/Segoe 只覆盖西文、中文再 fallback 到另一字体造成缝合感。
+ * 西文回退仅作该平台缺字时的兜底。
+ */
+const CJK_UI =
+  "'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Noto Sans CJK SC', 'Source Han Sans SC', 'HarmonyOS Sans SC'";
 
 function platformUiStack(platform: PlatformId): string {
   switch (platform) {
     case 'windows':
-      return `system-ui, 'Segoe UI', 'Segoe UI Variable Text', ${CJK_FALLBACK}`;
+      // 微软雅黑 UI 同时承担中/英文，避免 Segoe + YaHei 混排字重不一致
+      return `'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, 'Segoe UI', 'Segoe UI Variable Text', ${CJK_UI}, sans-serif`;
     case 'macos':
-      return `-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', ${CJK_FALLBACK}`;
+      return `'PingFang SC', 'Hiragino Sans GB', -apple-system, BlinkMacSystemFont, 'SF Pro Text', ${CJK_UI}, sans-serif`;
     case 'ios':
-      return `-apple-system, 'SF Pro Text', 'PingFang SC', ${CJK_FALLBACK}`;
+      return `'PingFang SC', -apple-system, 'SF Pro Text', ${CJK_UI}, sans-serif`;
     case 'linux':
-      return `system-ui, 'Noto Sans', 'Ubuntu', 'DejaVu Sans', ${CJK_FALLBACK}`;
+      return `'Noto Sans CJK SC', 'Noto Sans SC', 'Noto Sans', system-ui, 'Ubuntu', 'DejaVu Sans', ${CJK_UI}, sans-serif`;
     case 'android':
-      return `'Roboto', 'Noto Sans', ${CJK_FALLBACK}`;
+      return `'Noto Sans CJK SC', 'Noto Sans SC', 'Noto Sans', 'Roboto', ${CJK_UI}, sans-serif`;
     case 'harmony':
-      return `'HarmonyOS Sans', 'HarmonyOS Sans SC', 'Noto Sans', ${CJK_FALLBACK}`;
+      return `'HarmonyOS Sans SC', 'HarmonyOS Sans', 'Noto Sans SC', 'Noto Sans', ${CJK_UI}, sans-serif`;
     default:
-      return `system-ui, -apple-system, 'Segoe UI', ${CJK_FALLBACK}`;
+      return `${CJK_UI}, system-ui, -apple-system, 'Segoe UI', sans-serif`;
   }
 }
 
@@ -150,7 +156,10 @@ export function toLocalChoice(family: string): `local:${string}` {
 
 export function resolveUiStack(choice: UiFontChoice, platform: PlatformId = detectPlatform()): string {
   if (choice === 'auto') return platformUiStack(platform);
-  if (choice === 'system-ui') return `system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', ${CJK_FALLBACK}`;
+  if (choice === 'system-ui') {
+    // 仍以 CJK UI 为主，system-ui 仅作回退
+    return `${CJK_UI}, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+  }
   if (choice === 'inter') return `'Inter', ${platformUiStack(platform)}`;
   if (choice === 'ibm-plex-sans') return `'IBM Plex Sans', ${platformUiStack(platform)}`;
   if (isLocalFontChoice(choice)) {
@@ -192,27 +201,27 @@ export function uiFontOptions(): FontOptionMeta[] {
       id: 'auto',
       label: '自动（系统优化）',
       kind: 'auto',
-      desc: `跟随 ${platformLabel()} 系统字体，中文清晰、零体积`,
+      desc: `跟随 ${platformLabel()}：中英文同一主字体，零体积`,
     },
     {
       id: 'system-ui',
       label: '系统 UI',
       kind: 'system',
-      desc: '通用 system-ui 栈',
+      desc: '中英文统一主字体 + system-ui 回退',
     },
     {
       id: 'inter',
       label: 'Inter（内嵌）',
       kind: 'embedded',
       previewFamily: 'Inter',
-      desc: '免费 OFL · 界面常用',
+      desc: '免费 OFL · 西文为主，中文回退系统字体',
     },
     {
       id: 'ibm-plex-sans',
       label: 'IBM Plex Sans（内嵌）',
       kind: 'embedded',
       previewFamily: 'IBM Plex Sans',
-      desc: '免费 OFL · 产品感',
+      desc: '免费 OFL · 西文为主，中文回退系统字体',
     },
   ];
 }

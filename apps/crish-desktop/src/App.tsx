@@ -5,59 +5,78 @@ import {
   lazy,
   Suspense,
   useMemo,
-  useCallback,
 } from 'react';
 import { useLayoutStore } from './store/layoutStore';
-import { focusOrOpenPanel } from './api/storeAccess';
-import { isDemoModeFast, isProductShellFast } from './createSsrGlobals';
+import { isDemoModeFast, isProductShellFast, isTreeWorkspaceFast } from './createSsrGlobals';
 import {
   PlatformAdaptationCtx,
   usePlatformAdaptation,
 } from '@crish/shared-utils/browser';
-import { emitUiEvent } from './api/uiEvents';
 import { createDebounced } from './api/debouncedValue';
-import { collapseToolColumnPreserve } from './store/layoutHelpers';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
-import { Tooltip } from './components/Tooltip';
 import { useToastQueue } from './hooks/useToastQueue';
 import { shouldShowFirstRunWizard } from './components/FirstRunWizard';
 import styles from './App.module.css';
 
-import { useAppBootstrap, winCtl } from './app/AppBootstrap';
+import { useAppBootstrap } from './app/AppBootstrap';
 import { useAppShortcuts } from './app/AppShortcuts';
 import { AppGlobalDialogs, SkeletonFallback } from './app/AppGlobalDialogs';
+import { useWorkspaceShellStore } from './store/workspace-shell';
 
 // ── 关键路径组件：同步导入，与 App 同 chunk ──
 import { Sidebar } from './components/Sidebar';
 import { Workspace } from './components/Workspace';
+import { Tooltip } from './components/Tooltip';
+import { AppTopBar } from './components/AppTopBar';
+import { SessionTabDragProvider } from './components/shell/SessionTabDragContext';
+
+// D2-3：仅 DEV 懒加载；旗标关闭时不 import chunk、无 interval / store
+const DevHealthOverlayLazy = import.meta.env.DEV
+  ? lazy(() =>
+      import('./dev/DevHealthOverlay').then((m) => ({
+        default: m.DevHealthOverlay,
+      }))
+    )
+  : null;
+
+/** 同步门控：避免 DEV 下未开旗标仍拉 DevHealthOverlay chunk */
+function DevHealthOverlayMount() {
+  if (!DevHealthOverlayLazy) return null;
+  let on = false;
+  try {
+    on =
+      localStorage.getItem('crish_dev_health') === '1' ||
+      localStorage.getItem('crish_show_engine_settings') === '1';
+  } catch {
+    /* ignore */
+  }
+  if (!on) return null;
+  const Overlay = DevHealthOverlayLazy;
+  return (
+    <Suspense fallback={null}>
+      <Overlay />
+    </Suspense>
+  );
+}
+
+const IconSidebarLeft = lazy(() =>
+  import('./components/SidebarToggleIcons').then((m) => ({
+    default: m.IconSidebarLeft,
+  }))
+);
+
+// 二叉树工作区（重构后默认入口；代码分割避免影响旧路径首屏）
+const BinaryTreeWorkspace = lazy(() =>
+  import('./components/binary-tree/BinaryTreeWorkspace').then((m) => ({
+    default: m.BinaryTreeWorkspace,
+  }))
+);
 
 // ── 非关键路径组件：代码分割，按需加载 ──
 const WorkspaceChromeBars = lazy(() =>
   import('./components/WorkspaceChromeBars').then((m) => ({
     default: m.WorkspaceChromeBars,
   }))
-);
-const IconSidebarLeft = lazy(() =>
-  import('./components/SidebarToggleIcons').then((m) => ({
-    default: m.IconSidebarLeft,
-  }))
-);
-const IconSidebarRight = lazy(() =>
-  import('./components/SidebarToggleIcons').then((m) => ({
-    default: m.IconSidebarRight,
-  }))
-);
-const LucideHelpCircle = lazy(() =>
-  import('./components/WindowIcons').then((m) => ({ default: m.HelpCircle }))
-);
-const LucideMinus = lazy(() =>
-  import('./components/WindowIcons').then((m) => ({ default: m.Minus }))
-);
-const LucideSquare = lazy(() =>
-  import('./components/WindowIcons').then((m) => ({ default: m.Square }))
-);
-const LucideX = lazy(() =>
-  import('./components/WindowIcons').then((m) => ({ default: m.X }))
 );
 
 function App() {
@@ -86,42 +105,11 @@ function App() {
   const settingsActiveTab = useLayoutStore((s) => s.settingsActiveTab);
   const setAppSettings = useLayoutStore((s) => s.setAppSettings);
 
-  const isRightSidebarCollapsed = useLayoutStore((s) => {
-    const w = s.workspaces[s.activeWorkspaceIndex];
-    if (!w) return true;
-    const toolCol = w.columns.find(
-      (c) => c.id !== 'col-chat' && !c.id.startsWith('col-chat-')
-    );
-    if (!toolCol) return true;
-    return toolCol.widthRatio < 0.08;
-  });
 
-  const toggleRightSidebar = useCallback(() => {
-    const state = useLayoutStore.getState();
-    const activeWorkspace = state.workspaces[state.activeWorkspaceIndex];
-    if (!activeWorkspace) return;
-    const wsId = activeWorkspace.id;
-    const toolCol = activeWorkspace.columns.find(
-      (c) => c.id !== 'col-chat' && !c.id.startsWith('col-chat-')
-    );
-    const isCollapsed = !toolCol || toolCol.widthRatio < 0.08;
-
-    if (isCollapsed) {
-      const activeCardId = toolCol?.groups[0]?.activeCardId || 'overview';
-      focusOrOpenPanel(wsId, activeCardId);
-    } else {
-      useLayoutStore.setState((st) => {
-        const w = st.workspaces.find((x) => x.id === wsId);
-        if (!w) return;
-        collapseToolColumnPreserve(w);
-      });
-    }
-  }, []);
 
   const { toasts, showToast: handleShowToast, dismissToast } = useToastQueue();
   const [showCheatsheet, setShowCheatsheet] = useState(false);
   const [showTelemetry, setShowTelemetry] = useState(false);
-  const [showCrashPrompt, setShowCrashPrompt] = useState(false);
   const [sessionSearchInput, setSessionSearchInput] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
   const searchDebounceRef = useRef(
@@ -133,6 +121,8 @@ function App() {
   }, [sessionSearchInput]);
 
   const productShell = isProductShellFast();
+  const useTreeWorkspace = isTreeWorkspaceFast();
+  const shellReady = useWorkspaceShellStore((s) => s.shellReady);
   const [showFirstRun, setShowFirstRun] = useState(
     () => !isDemoModeFast() && shouldShowFirstRunWizard()
   );
@@ -145,7 +135,6 @@ function App() {
   useAppBootstrap({
     setAppSettings,
     setEngineReady,
-    setShowCrashPrompt,
     productShell,
     uiSize,
     shellChromeMode,
@@ -195,6 +184,7 @@ function App() {
 
   return (
     <PlatformAdaptationCtx.Provider value={platformAdaptation}>
+      <SessionTabDragProvider>
       <div
         className={`app-container ${appModeClass}`}
         data-ui-size={uiSize}
@@ -212,177 +202,16 @@ function App() {
           跳转到主要内容
         </a>
 
-        {shellChromeMode !== 'inset' ? (
-          <header
-            className="app-header"
-            role="banner"
-            aria-label="应用顶栏"
-            data-tauri-drag-region
-          >
-            <div className="app-header-left" data-tauri-drag-region>
-              <Tooltip content={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}>
-                <button
-                  type="button"
-                  className="header-btn no-drag"
-                  data-testid="sidebar-toggle"
-                  aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
-                  aria-expanded={!sidebarCollapsed}
-                  aria-controls="crish-sidebar"
-                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                >
-                  <Suspense
-                    fallback={<SkeletonFallback width={15} height={15} />}
-                  >
-                    <IconSidebarLeft size={15} aria-hidden="true" />
-                  </Suspense>
-                </button>
-              </Tooltip>
-            </div>
-            <div
-              className="app-header-right no-drag"
-              role="toolbar"
-              aria-label="顶栏操作"
-            >
-              <Tooltip
-                content={isRightSidebarCollapsed ? '展开右面板' : '收起右面板'}
-              >
-                <button
-                  type="button"
-                  className={`header-btn no-drag ${!isRightSidebarCollapsed ? 'active' : ''}`}
-                  aria-label={
-                    isRightSidebarCollapsed ? '展开右面板' : '收起右面板'
-                  }
-                  aria-pressed={!isRightSidebarCollapsed}
-                  onClick={toggleRightSidebar}
-                >
-                  <Suspense
-                    fallback={<SkeletonFallback width={15} height={15} />}
-                  >
-                    <IconSidebarRight size={15} aria-hidden="true" />
-                  </Suspense>
-                </button>
-              </Tooltip>
-              <Tooltip content="快捷键与帮助">
-                <button
-                  type="button"
-                  className="header-btn"
-                  onClick={() => setShowCheatsheet(true)}
-                  aria-label="快捷键与帮助"
-                  aria-haspopup="dialog"
-                >
-                  <Suspense
-                    fallback={<SkeletonFallback width={16} height={16} />}
-                  >
-                    <LucideHelpCircle size={16} aria-hidden="true" />
-                  </Suspense>
-                </button>
-              </Tooltip>
-
-              <div
-                className="window-controls no-drag"
-                role="group"
-                aria-label="窗口控制"
-                data-tauri-drag-region="false"
-              >
-                <Tooltip content="最小化">
-                  <button
-                    type="button"
-                    className="win-btn no-drag"
-                    aria-label="最小化窗口"
-                    data-tauri-drag-region="false"
-                    onClick={() => void winCtl('minimize')}
-                  >
-                    <Suspense
-                      fallback={<SkeletonFallback width={16} height={16} />}
-                    >
-                      <LucideMinus size={16} aria-hidden="true" />
-                    </Suspense>
-                  </button>
-                </Tooltip>
-                <Tooltip content="最大化">
-                  <button
-                    type="button"
-                    className="win-btn no-drag"
-                    aria-label="最大化或还原窗口"
-                    data-tauri-drag-region="false"
-                    onClick={() => void winCtl('toggleMaximize')}
-                  >
-                    <Suspense
-                      fallback={<SkeletonFallback width={14} height={14} />}
-                    >
-                      <LucideSquare size={14} aria-hidden="true" />
-                    </Suspense>
-                  </button>
-                </Tooltip>
-                <Tooltip content="关闭">
-                  <button
-                    type="button"
-                    className="win-btn close no-drag"
-                    aria-label="关闭窗口"
-                    data-tauri-drag-region="false"
-                    onClick={() => void winCtl('close')}
-                  >
-                    <Suspense
-                      fallback={<SkeletonFallback width={16} height={16} />}
-                    >
-                      <LucideX size={16} aria-hidden="true" />
-                    </Suspense>
-                  </button>
-                </Tooltip>
-              </div>
-            </div>
-          </header>
-        ) : (
-          <div
-            className={`ws-titlebar-host${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}
-            role="banner"
-            aria-label="项目顶栏"
-            data-tauri-drag-region
-          >
-            <div className="ws-titlebar-rail" data-tauri-drag-region>
-              <Tooltip content={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}>
-                <button
-                  type="button"
-                  className="header-btn no-drag ws-titlebar-sidebar-btn"
-                  aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
-                  aria-expanded={!sidebarCollapsed}
-                  aria-controls="crish-sidebar"
-                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                >
-                  <Suspense
-                    fallback={<SkeletonFallback width={15} height={15} />}
-                  >
-                    <IconSidebarLeft size={15} aria-hidden="true" />
-                  </Suspense>
-                </button>
-              </Tooltip>
-            </div>
-            <div className="ws-titlebar-main" data-tauri-drag-region>
-              <AppErrorBoundary compact title="工作区标签出错">
-                <Suspense fallback={<SkeletonFallback height={32} />}>
-                  <WorkspaceChromeBars
-                    variant="workspace"
-                    className="ws-chrome-row--titlebar"
-                    onAddProject={() => emitUiEvent('pick-workspace')}
-                    onOpenHelp={() => setShowCheatsheet(true)}
-                    onWinMinimize={() => void winCtl('minimize')}
-                    onWinMaximize={() => void winCtl('toggleMaximize')}
-                    onWinClose={() => void winCtl('close')}
-                  />
-                </Suspense>
-              </AppErrorBoundary>
-            </div>
-          </div>
-        )}
+        <AppTopBar
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onShowCheatsheet={() => setShowCheatsheet(true)}
+        />
 
         <main
           id="crish-main"
           className="main-layout"
           aria-label="主工作区"
-          style={{
-            position: 'relative',
-            width: '100%',
-          }}
         >
           {sidebarCollapsed && (
             <div
@@ -401,21 +230,27 @@ function App() {
             />
           )}
 
+
+
           <div
             id="crish-sidebar"
-            className={`sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''}`}
+            className={`sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''} ${sidebarCollapsed && isHoveredExpanded ? 'hoverExpanded' : ''}`}
             role="navigation"
             aria-label="会话侧栏"
             aria-hidden={
               sidebarCollapsed && !isHoveredExpanded ? true : undefined
             }
             style={{
-              width: sidebarCollapsed ? 0 : 'var(--sidebar-width)',
+              width:
+                sidebarCollapsed && !isHoveredExpanded
+                  ? 0
+                  : 'var(--sidebar-width)',
               height: '100%',
               flexShrink: 0,
               transition: 'width 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
               overflow: 'visible',
               position: 'relative',
+              zIndex: sidebarCollapsed && isHoveredExpanded ? 'var(--z-sidebar)' : undefined,
             }}
           >
             <AppErrorBoundary compact title="侧栏出错">
@@ -449,15 +284,23 @@ function App() {
                 aria-label="工作区面板"
               >
                 <AppErrorBoundary compact title="工作区出错">
-                  <Suspense fallback={<SkeletonFallback height={400} />}>
-                    {workspaceIds.map((id) => (
-                      <Workspace
-                        key={id}
-                        wsId={id}
-                        onShowToast={handleShowToast}
-                      />
-                    ))}
-                  </Suspense>
+                  {!shellReady ? (
+                    <SkeletonFallback height={400} />
+                  ) : (
+                    <Suspense fallback={<SkeletonFallback height={400} />}>
+                      {useTreeWorkspace ? (
+                        <BinaryTreeWorkspace onShowToast={handleShowToast} />
+                      ) : (
+                        workspaceIds.map((id) => (
+                          <Workspace
+                            key={id}
+                            wsId={id}
+                            onShowToast={handleShowToast}
+                          />
+                        ))
+                      )}
+                    </Suspense>
+                  )}
                 </AppErrorBoundary>
               </div>
             </div>
@@ -469,8 +312,6 @@ function App() {
           setShowFirstRun={setShowFirstRun}
           toasts={toasts}
           dismissToast={dismissToast}
-          showCrashPrompt={showCrashPrompt}
-          setShowCrashPrompt={setShowCrashPrompt}
           showTelemetry={showTelemetry}
           setShowTelemetry={setShowTelemetry}
           showCheatsheet={showCheatsheet}
@@ -481,7 +322,10 @@ function App() {
           settingsActiveTab={settingsActiveTab}
           handleShowToast={handleShowToast}
         />
+
+        <DevHealthOverlayMount />
       </div>
+      </SessionTabDragProvider>
     </PlatformAdaptationCtx.Provider>
   );
 }

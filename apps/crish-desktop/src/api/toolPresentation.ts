@@ -46,6 +46,5 @@ export {
   toolPathDisplayName,
   toolResultPreview,
   toolRowTone,
-  toolSummaryLabel,
   truncateToolOutput,
 } from './tool-presentation/toolCardPresenter';

@@ -7,13 +7,16 @@
  *
  * 设计：
  * - push(delta) 攒增量，start/stop 控制 rAF 开关
- * - flush 每帧最多处理 maxBytesPerFrame/12ms，剩余排到下一帧
+ * - flush 每帧最多处理 maxBytesPerFrame/6ms（120 FPS 适配），剩余排到下一帧
  * - reset 清空累计状态（切会话/新 run 时调用）
  * - isFinal=true 的帧不会再有后续 delta
+ *
+ * 字段演进：
+ * - frame.html：预留 JS 增量解析器（IncrementalMarkdownParser）产出的 HTML；
+ *   当前阶段解析器尚未接入，flush 暂写 ''，待解析器接入后由调用方在 onFrame
+ *   之前填充。消费方应同时支持 '' 与非空字符串两条路径。
+ * - frame.chunkUpdates：chunk 级 DOM 更新通道，当前不用，保留以备细粒度 patch。
  */
-
-import { IncrementalMarkdownBridge } from './incrementalMarkdownBridge';
-import type { ChunkUpdate } from './IncrementalMarkdownParser';
 
 export interface RenderFrame {
   delta: string;
@@ -21,8 +24,10 @@ export interface RenderFrame {
   lastOffset: number;
   isFinal: boolean;
   timestamp: number;
+  /** JS 增量解析器产出的 HTML（流式期渲染用）；解析器接入前为 '' */
   html: string;
-  chunkUpdates: ChunkUpdate[];
+  /** chunk 级 DOM 更新（保留字段，当前不用） */
+  chunkUpdates: never[];
   /** 当积压超过 maxBacklogBytes 且非 force 时为 true，表示跳帧降级 */
   degraded: boolean;
 }
@@ -33,21 +38,27 @@ export class StreamRenderBuffer {
   private rafId: number | null = null;
   /** 最近一次 flush 时 fullText.length（用于 lastOffset） */
   private flushedLength = 0;
-  /** 单帧执行预算（ms）；默认 12ms — 让出主线程给 layout/paint */
-  private frameBudgetMs = 12;
+  /**
+   * 单帧执行预算（ms）；默认 6ms — 120 FPS 适配。
+   * 120 FPS 帧预算约 8.3ms，留 2.3ms 余量给 layout/paint 与 rAF 调度抖动。
+   * 60 FPS 场景下也只占用约 36% 帧预算，仍能保持流畅交互。
+   */
+  private frameBudgetMs = 6;
   /** 单帧输出字符上限；默认 8192 */
   private maxBytesPerFrame = 8192;
   /** 积压降级阈值（字节）；超过此值时非 force flush 输出降级帧 */
   private maxBacklogBytes: number | undefined;
   /** 收到 final 标记后不再接收 push，仅 flush 剩余 */
   private finalMarked = false;
-  /** 增量 markdown 渲染桥接 */
-  private bridge = new IncrementalMarkdownBridge();
 
   onFrame: ((frame: RenderFrame) => void) | null = null;
 
   constructor(
-    options?: { frameBudgetMs?: number; maxBytesPerFrame?: number; maxBacklogBytes?: number },
+    options?: {
+      frameBudgetMs?: number;
+      maxBytesPerFrame?: number;
+      maxBacklogBytes?: number;
+    },
   ) {
     if (options?.frameBudgetMs != null && options.frameBudgetMs > 0) {
       this.frameBudgetMs = Math.max(1, Math.floor(options.frameBudgetMs));
@@ -97,7 +108,6 @@ export class StreamRenderBuffer {
     this.fullText = '';
     this.flushedLength = 0;
     this.finalMarked = false;
-    this.bridge.reset();
   }
 
   /** 启动 rAF 调度（reset 后重新开始接收 delta） */
@@ -160,6 +170,7 @@ export class StreamRenderBuffer {
     const batch: string[] = [];
     let bytesInBatch = 0;
     const deadline = performance.now() + this.frameBudgetMs;
+    let consumed = 0;
 
     for (let i = 0; i < this.pending.length; i++) {
       const chunk = this.pending[i]!;
@@ -167,22 +178,23 @@ export class StreamRenderBuffer {
 
       if (!force && wouldExceed && batch.length > 0) {
         // 已攒了一批且超上限：剩余留到下一帧
-        this.pending = this.pending.slice(i);
         break;
       }
 
       batch.push(chunk);
       bytesInBatch += chunk.length;
+      consumed = i + 1;
 
       if (!force && performance.now() >= deadline) {
-        this.pending = this.pending.slice(i + 1);
         break;
       }
+    }
 
-      // force 模式下取全部
-      if (force && i === this.pending.length - 1) {
-        this.pending = [];
-      }
+    // 总是移除已消费项；force 模式下消费全部 pending
+    if (force || consumed >= this.pending.length) {
+      this.pending = [];
+    } else {
+      this.pending = this.pending.slice(consumed);
     }
 
     if (batch.length === 0) {
@@ -210,18 +222,14 @@ export class StreamRenderBuffer {
       // 积压降级：非 force 且积压超过 maxBacklogBytes 时跳过渲染
       const degraded = !force && this.maxBacklogBytes != null && this.bufferedLength() > this.maxBacklogBytes;
 
-      const { html, updates } = degraded
-        ? { html: '', updates: [] as ChunkUpdate[] }
-        : this.bridge.push(this.fullText);
-
       const frame: RenderFrame = {
         delta,
         full: this.fullText,
         lastOffset: this.flushedLength,
         isFinal: this.finalMarked && this.pending.length === 0,
         timestamp: performance.now(),
-        html,
-        chunkUpdates: updates,
+        html: '',
+        chunkUpdates: [],
         degraded,
       };
       this.onFrame?.(frame);
@@ -274,15 +282,23 @@ export function flushFrame(
 
   const batch: string[] = [];
   let bytesInBatch = 0;
-  let splitAt = pending.length; // 默认全部消费
+  let splitAt = pending.length;
 
   for (let i = 0; i < pending.length; i++) {
     const chunk = pending[i]!;
     const wouldExceed = bytesInBatch + chunk.length > maxBytes;
 
-    if (!force && wouldExceed && batch.length > 0) {
-      splitAt = i;
-      break;
+    if (!force && wouldExceed) {
+      if (batch.length > 0) {
+        splitAt = i;
+        break;
+      }
+      const cutPos = safeUnicodeCutPosition(chunk, maxBytes);
+      if (cutPos < chunk.length) {
+        batch.push(chunk.slice(0, cutPos));
+        const remaining = [chunk.slice(cutPos), ...pending.slice(i + 1)];
+        return { batch, remaining };
+      }
     }
 
     batch.push(chunk);
@@ -291,20 +307,6 @@ export function flushFrame(
     if (!force && performance.now() >= deadlineMs) {
       splitAt = i + 1;
       break;
-    }
-  }
-
-  // 单块超限：按 maxBytes 切分
-  if (batch.length === 0 && pending.length > 0) {
-    const chunk = pending[0]!;
-    const cutPos = safeUnicodeCutPosition(chunk, maxBytes);
-    if (cutPos >= chunk.length) {
-      batch.push(chunk);
-      splitAt = 1;
-    } else {
-      batch.push(chunk.slice(0, cutPos));
-      const remaining = [chunk.slice(cutPos), ...pending.slice(1)];
-      return { batch, remaining };
     }
   }
 

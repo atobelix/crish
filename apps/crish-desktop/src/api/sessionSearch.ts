@@ -47,12 +47,21 @@ const SNIPPET_MAX_CP = 72;
 const UNICODE_SPACE_RE = /[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g;
 
 /**
- * 控制符 / 零宽 / 双向 / BOM / soft-hyphen。
+ * 控制符 / 零宽 / 双向 / BOM / Variation Selectors / soft-hyphen / Tag 块。
  * 中文网页粘贴常夹带 U+200B 等，残留会破坏 NFKC 后的子串 includes。
  * 与 sessionTitle.TITLE_INVISIBLE_CHARS 对齐（搜索侧独立拷贝，避免 api 环依赖）。
+ *
+ * 系统性覆盖（与 sessionTitle 同源）：
+ *   - \p{Cf}：所有 Unicode 格式字符（含 Bidi Isolate U+2066–U+2069、Language Tag 块 U+E0000–U+E007F）
+ *   - U+FE00–U+FE0F：Variation Selectors（Mn 类，非 Cf，必须显式追加）
+ *   - U+034F：Combining Grapheme Joiner（Mn 类）
+ *   - U+3164 / U+115F：Hangul Filler（Lo 类）
+ *   - C0 / C1 控制符
+ * 保留 ZWJ（U+200D）以不破坏 emoji 序列（搜索侧不需剥 ZWJ，因 NFKC + lower 不影响 ZWJ 语义）。
  */
 const SEARCH_INVISIBLE_RE =
-  /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF\u00AD]/g;
+  // eslint-disable-next-line no-control-regex -- intentional sanitization of C0 controls
+  /(?![\u200D])[\p{Cf}\u034F\u3164\u115F\uFE00-\uFE0F\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu;
 
 /**
  * 搜索串折叠（query / haystack 共用）：
@@ -169,9 +178,12 @@ export function textMatchesSearch(
 // ── 码点安全截断 / 摘录 ──────────────────────────────────────────────
 
 /** 按 Unicode 码点截断并可选追加 …（CJK / emoji 安全）。
- *  结果码点数恒 ≤ maxCp（maxCp=1 时返回 "…"，maxCp=0/负/NaN/Infinity 回落到默认 72）。
+ *  结果码点数恒 ≤ maxCp（maxCp=1 时返回 "…"，maxCp=0/负/NaN 回落到默认 72）。
+ *  maxCp=Infinity → 不截断，返回原文（与 truncateSessionTitle 语义对齐）。
  */
 export function ellipsizeCodepoints(text: string, maxCp: number): string {
+  // Infinity 视为「无限制」— 返回原文（与 truncateSessionTitle 一致）
+  if (maxCp === Infinity) return text;
   const limit =
     Number.isFinite(maxCp) && maxCp > 0 ? Math.floor(maxCp) : SNIPPET_MAX_CP;
   const chars = Array.from(text);
@@ -246,7 +258,7 @@ export function makeSearchSnippet(
   const cpEnd = utf16IndexToCodepointIndex(raw, range.end);
   let from = Math.max(0, cpStart - SNIPPET_RADIUS_CP);
   let to = Math.min(chars.length, cpEnd + SNIPPET_RADIUS_CP);
-  // 控制总长度
+  // 控制总长度（第一轮：按 maxCp 裁切）
   if (to - from > maxCp) {
     // 以命中中心裁切
     const matchMid = Math.floor((cpStart + cpEnd) / 2);
@@ -256,12 +268,28 @@ export function makeSearchSnippet(
     from = Math.max(0, to - maxCp);
   }
 
+  // 第二轮：为前缀/后缀省略号预留空间，避免加省略号后超限
+  // 旧实现在加完省略号后用 ellipsizeCodepoints 硬截断，会错误地追加后缀省略号
+  // （即使命中在文末、本不应有后缀省略号）。
+  const needPrefix = from > 0;
+  const needSuffix = to < chars.length;
+  const ellipsisCount = (needPrefix ? 1 : 0) + (needSuffix ? 1 : 0);
+  if (ellipsisCount > 0) {
+    const contentBudget = Math.max(1, maxCp - ellipsisCount);
+    if (to - from > contentBudget) {
+      const matchMid = Math.floor((cpStart + cpEnd) / 2);
+      const half = Math.floor(contentBudget / 2);
+      from = Math.max(0, matchMid - half);
+      to = Math.min(chars.length, from + contentBudget);
+      from = Math.max(0, to - contentBudget);
+    }
+  }
+
   let snip = chars.slice(from, to).join('');
   if (from > 0) snip = `…${snip}`;
   if (to < chars.length) snip = `${snip}…`;
-  // 前缀/后缀省略号后仍可能略超：再码点裁一次
-  const withEllipsisBudget = maxCp + (from > 0 ? 1 : 0) + (to < chars.length ? 1 : 0);
-  if (Array.from(snip).length > withEllipsisBudget) {
+  // 防御性最终保险：理论不应触发（前两轮已确保 ≤ maxCp）
+  if (Array.from(snip).length > maxCp) {
     snip = ellipsizeCodepoints(snip, maxCp);
   }
   return snip;

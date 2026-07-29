@@ -2,11 +2,15 @@ import { useEffect, useLayoutEffect } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
 import { bootstrapStores } from '../store/bootstrapStores';
 import { bootstrapServices } from '../bootstrap-services';
-import { emitUiEvent, onUiEvent } from '../api/uiEvents';
+import { onUiEvent } from '../api/uiEvents';
+import { pickWorkspaceFolder } from '../api/pickWorkspaceFolder';
 import { syncTelemetryData } from '../api/storeAccess';
 import { telemetry } from '../services/TelemetryService';
 import { isDemoModeFast } from '../createSsrGlobals';
 import type { AppSettings } from '../store/types';
+import { hydrateWorkspaceShell } from './hydrateWorkspaceShell';
+import { waitLayoutTreeHydration } from '../store/layout-tree';
+import { getCompositionRoot } from './compositionRoot';
 
 /** Devtools / internal globals attached to window */
 export type CrishWindow = Window & {
@@ -21,30 +25,8 @@ if (typeof window !== 'undefined') {
 /** 浏览器标签 / 任务栏标题 */
 export const APP_DOCUMENT_TITLE = 'Crish · AI 工作台';
 
-export async function pickWorkspaceFolder(): Promise<void> {
-  try {
-    const dialogSpec = '@tauri-apps/plugin-dialog';
-    const mod = (await import(/* @vite-ignore */ dialogSpec).catch(
-      () => null
-    )) as {
-      open?: (opts: {
-        directory: boolean;
-        multiple: boolean;
-      }) => Promise<string | string[] | null>;
-    } | null;
-    if (mod?.open) {
-      const selected = await mod.open({ directory: true, multiple: false });
-      if (typeof selected === 'string' && selected) {
-        const { addProjectFromPath } = await import('../api/projectStore');
-        addProjectFromPath(selected);
-        return;
-      }
-    }
-  } catch {
-    /* native picker unavailable — fall back to in-app picker */
-  }
-  emitUiEvent('open-project-picker');
-}
+/** 兼容旧 import：实现见 api/pickWorkspaceFolder */
+export { pickWorkspaceFolder };
 
 export async function winCtl(
   action: 'minimize' | 'toggleMaximize' | 'close'
@@ -63,9 +45,13 @@ export async function winCtl(
 }
 
 export interface UseAppBootstrapOptions {
-  setAppSettings: (settings: AppSettings) => void;
+  /**
+   * Optional React-owned setter; when omitted, bootstrap writes via
+   * `getCompositionRoot().layout.setAppSettings` (command path).
+   * App.tsx may still pass store setter for backward compatibility.
+   */
+  setAppSettings?: (settings: AppSettings) => void;
   setEngineReady: (ready: boolean | ((prev: boolean) => boolean)) => void;
-  setShowCrashPrompt: (show: boolean) => void;
   productShell: boolean;
   uiSize: string;
   shellChromeMode: string | undefined;
@@ -74,7 +60,6 @@ export interface UseAppBootstrapOptions {
 export function useAppBootstrap({
   setAppSettings,
   setEngineReady,
-  setShowCrashPrompt,
   productShell,
   uiSize,
   shellChromeMode,
@@ -104,6 +89,27 @@ export function useAppBootstrap({
     );
   }, []);
 
+  // 2b. Shell chrome 冷启动门闩（默认 clean draft；设置可 restore）
+  // 必须等 layout-tree persist rehydrate 完成，否则脏多 leaf 会覆盖 resetTree
+  useLayoutEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        await waitLayoutTreeHydration();
+        if (cancelled) return;
+        hydrateWorkspaceShell();
+      } catch (e) {
+        console.warn('[hydrateWorkspaceShell]', e);
+        if (!cancelled) {
+          getCompositionRoot().shell.setShellReady(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     const cleanup = bootstrapServices();
     return () => {
@@ -111,11 +117,26 @@ export function useAppBootstrap({
     };
   }, []);
 
+  // 异常退出：静默处理，不再弹窗打扰用户。
+  // 默认开启错误数据采集，用户可在设置中关闭；关闭时直接清空旧日志。
   useEffect(() => {
-    if (telemetry.hasPreviousCrash()) {
-      setShowCrashPrompt(true);
-    }
-  }, [setShowCrashPrompt]);
+    if (!telemetry.hasPreviousCrash()) return;
+    void (async () => {
+      try {
+        const { clientApi } = await import('../api/clientApi');
+        const settings = await clientApi.getSettings();
+        telemetry.setEnabled(settings.enableCrashTelemetry !== false);
+        if (telemetry.isEnabled()) {
+          telemetry.sendReport();
+        } else {
+          telemetry.clear();
+        }
+      } catch {
+        // 读取设置失败时仍按默认开启处理
+        telemetry.sendReport();
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     const cleanup = bootstrapStores();
@@ -173,7 +194,7 @@ export function useAppBootstrap({
       });
     });
 
-    let prevSessions = useLayoutStore.getState().sessions;
+    let prevSessions = getCompositionRoot().layout.getSessions();
     const unsubStore = useLayoutStore.subscribe((state) => {
       if (state.sessions !== prevSessions) {
         prevSessions = state.sessions;
@@ -221,7 +242,12 @@ export function useAppBootstrap({
         const { clientApi } = await import('../api/clientApi');
         const settings = await clientApi.getSettings();
         if (settings) {
-          setAppSettings(settings);
+          // Bootstrap command: prefer prop when App wires React setter; else layout facade
+          if (setAppSettings) {
+            setAppSettings(settings);
+          } else {
+            getCompositionRoot().layout.setAppSettings(settings);
+          }
           if (settings.theme) {
             const { applyTheme, persistTheme, normalizeTheme } =
               await import('../api/themeStore');
@@ -235,11 +261,11 @@ export function useAppBootstrap({
             await setFontPreferences(normalizeFontPrefs(settings.fonts));
           }
           if (typeof settings.tabModeEnabled === 'boolean') {
-            useLayoutStore
-              .getState()
-              .setTabModeEnabled(settings.tabModeEnabled);
+            getCompositionRoot().layout.setTabModeEnabled(
+              settings.tabModeEnabled
+            );
           } else {
-            useLayoutStore.getState().setTabModeEnabled(true);
+            getCompositionRoot().layout.setTabModeEnabled(true);
           }
         }
       } catch (err) {
@@ -278,9 +304,10 @@ export function useAppBootstrap({
           );
           void import('../api/sessionDaemonSync').then(
             ({ syncSessionsFromDaemon }) => {
+              const layout = getCompositionRoot().layout;
               void syncSessionsFromDaemon(
-                () => useLayoutStore.getState().sessions,
-                (sessions) => useLayoutStore.getState().setSessions(sessions)
+                () => layout.getSessions(),
+                (sessions) => layout.setSessions(sessions)
               );
             }
           );

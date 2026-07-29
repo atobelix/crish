@@ -1,0 +1,957 @@
+/**
+ * Stream D: Rust SQLite 会话持久化层
+ *
+ * 设计目标（系统化改造，非补丁式）：
+ *   - 用 SQLite（conex-db）作为唯一会话存储，替代 localStorage + IndexedDB + 磁盘镜像三层冗余
+ *   - 全部 14 个 API 走 Tauri invoke → Rust spawn_blocking → SQLite
+ *   - 命令缺失（浏览器 / 旧壳 / 测试环境）→ 回退到 localStorage 同步路径
+ *   - JS ↔ Rust 数据形状转换在此层完成（toolCalls/blocks 数组 ↔ JSON 字符串）
+ *
+ * 数据形状差异：
+ *   - JS SessionMessage.toolCalls   ↔ Rust SessionMessage.tool_calls_json  (JSON 字符串)
+ *   - JS SessionMessage.blocks      ↔ Rust SessionMessage.blocks_json     (JSON 字符串)
+ *   - JS SessionMessage.toolCallResults ↔ Rust SessionMessage.tool_call_results_json
+ *   - JS SessionMessage.streamTextOffset ↔ Rust SessionMessage.stream_text_offset (仅命名差异，serde camelCase 已对齐)
+ *   - JS SessionMessage.thinkingTime ↔ Rust SessionMessage.thinking_time (serde camelCase 已对齐)
+ *   - JS SessionAgent.subagentPath  ↔ Rust SessionAgent.subagent_path_json (JSON 字符串)
+ *   - JS SessionIndexEntry.pinnedMessageIds: string[] ↔ Rust SessionIndexEntry.pinned_message_ids: Option<String> (JSON 字符串)
+ *
+ * 命令错误协议：invokeResult 三态（ok/missing/error）。
+ *   - ok → 返回 Rust 数据
+ *   - missing → 返回 null，调用方回退到 localStorage
+ *   - error → 返回 null，调用方回退到 localStorage（错误细节仅日志记录）
+ * Rust 侧 CoreError（serde tagged enum）序列化形态保留，但 JS 侧不按 kind 路由——
+ * 当前所有错误一律回退 localStorage，避免单点错误阻塞会话读写。
+ */
+
+import type { SessionAgent, SessionMessage, SessionState } from '../../store/layoutStore';
+import type {
+  MessageTimelineBlock,
+  MessageToolCall,
+  SessionMessageToolCallResult,
+} from '../../store/types';
+import { isPendingDraft } from '../../store/draftSession';
+import { coerceSessionTimestamp } from '../sessionTime';
+import { prepareSessionsForUi } from '../sessionTitle';
+import { normalizeAssistantTimeline } from '../toolPresentation';
+
+import {
+  parseSessionAgent,
+  parseSessionAgents,
+  parseSessionIndexEntry,
+  parseSessionIndexList,
+  parseSessionMessage,
+  parseSessionMessages,
+  sanitizeMessagesForHydrate,
+  hydrateSessionAgents,
+  safeParseJson,
+  parseFolderOrder,
+} from './sessionHydration';
+import {
+  SESSION_ACTIVE_KEY,
+  SESSION_AGENTS_PREFIX,
+  SESSION_AGENTS_SAVE_CAP,
+  SESSION_BODY_PREFIX,
+  SESSION_FOLDER_KEY,
+  SESSION_INDEX_KEY,
+  type SessionIndexEntry,
+} from './sessionPersistenceTypes';
+import { invokeResult } from '../tauriInvoke';
+
+// ── Rust 侧类型（serde camelCase 反序列化产物） ─────────────────────────────
+
+/**
+ * Rust SessionMessage 形状（conex-types::SessionMessage 的 JS 投影）。
+ * 与 store/types.ts 的 SessionMessage 区别：
+ *   - toolCalls/blocks/toolCallResults 在 Rust 侧序列化为 JSON 字符串
+ *   - streamTextOffset/thinkingTime 仅命名差异（serde camelCase 已对齐）
+ */
+interface RustSessionMessage {
+  id: string;
+  sender: string;
+  text?: string | null;
+  thinking?: string | null;
+  timestamp: number;
+  status?: string | null;
+  streamTextOffset?: number | null;
+  thinkingTime?: number | null;
+  toolCallsJson?: string | null;
+  blocksJson?: string | null;
+  toolCallResultsJson?: string | null;
+}
+
+/**
+ * Rust SessionAgent 形状。
+ * - subagentPath 在 Rust 侧序列化为 subagent_path_json 字符串
+ */
+interface RustSessionAgent {
+  id: string;
+  subagentRunId: string;
+  parentSessionId: string;
+  parentRunId: string;
+  parentToolCallId?: string | null;
+  description: string;
+  mode: string;
+  status: string;
+  summary?: string | null;
+  messages: RustSessionMessage[];
+  startedAt: number;
+  endedAt?: number | null;
+  depth?: number | null;
+  subagentPathJson?: string | null;
+}
+
+/**
+ * Rust SessionIndexEntry 形状。
+ * - pinnedMessageIds 在 Rust 侧为 JSON 字符串
+ */
+interface RustSessionIndexEntry {
+  id: string;
+  title: string;
+  folder: string;
+  isPinned: boolean;
+  isArchived: boolean;
+  branchParentId?: string | null;
+  timestamp: string;
+  updatedAt: number;
+  messageCount: number;
+  pinnedMessageIds?: string | null;
+  engineCursor?: number | null;
+  engineLastRunId?: string | null;
+  hydratedFromEngine?: boolean | null;
+}
+
+interface RustImportStats {
+  sessions: number;
+  messages: number;
+  agents: number;
+}
+
+// ── 形状转换：JS → Rust ────────────────────────────────────────────────────
+
+function messageToolCallsToJson(toolCalls: MessageToolCall[] | undefined): string | null {
+  if (!toolCalls || toolCalls.length === 0) return null;
+  try {
+    return JSON.stringify(toolCalls);
+  } catch {
+    return null;
+  }
+}
+
+function messageBlocksToJson(blocks: MessageTimelineBlock[] | undefined): string | null {
+  if (!blocks || blocks.length === 0) return null;
+  try {
+    return JSON.stringify(blocks);
+  } catch {
+    return null;
+  }
+}
+
+function toolCallResultsToJson(
+  results: SessionMessageToolCallResult[] | undefined,
+): string | null {
+  if (!results || results.length === 0) return null;
+  try {
+    return JSON.stringify(results);
+  } catch {
+    return null;
+  }
+}
+
+/** JS SessionMessage → Rust SessionMessage（数组字段序列化为 JSON 字符串） */
+function toRustSessionMessage(msg: SessionMessage): RustSessionMessage {
+  const out: RustSessionMessage = {
+    id: msg.id,
+    sender: msg.sender,
+    timestamp: msg.timestamp,
+  };
+  if (msg.text != null) out.text = msg.text;
+  if (msg.thinking != null) out.thinking = msg.thinking;
+  if (msg.status != null) out.status = msg.status;
+  if (msg.streamTextOffset != null) out.streamTextOffset = msg.streamTextOffset;
+  if (msg.thinkingTime != null) out.thinkingTime = msg.thinkingTime;
+  const tc = messageToolCallsToJson(msg.toolCalls);
+  if (tc != null) out.toolCallsJson = tc;
+  const bl = messageBlocksToJson(msg.blocks);
+  if (bl != null) out.blocksJson = bl;
+  const tr = toolCallResultsToJson(msg.toolCallResults);
+  if (tr != null) out.toolCallResultsJson = tr;
+  return out;
+}
+
+function toRustSessionAgent(agent: SessionAgent): RustSessionAgent {
+  const out: RustSessionAgent = {
+    id: agent.id,
+    subagentRunId: agent.subagentRunId,
+    parentSessionId: agent.parentSessionId,
+    parentRunId: agent.parentRunId,
+    description: agent.description,
+    mode: agent.mode,
+    status: agent.status,
+    messages: (agent.messages || []).map(toRustSessionMessage),
+    startedAt: agent.startedAt,
+  };
+  if (agent.parentToolCallId != null) out.parentToolCallId = agent.parentToolCallId;
+  if (agent.summary != null) out.summary = agent.summary;
+  if (agent.endedAt != null) out.endedAt = agent.endedAt;
+  if (agent.depth != null) out.depth = agent.depth;
+  if (agent.subagentPath && agent.subagentPath.length) {
+    try {
+      out.subagentPathJson = JSON.stringify(agent.subagentPath);
+    } catch {
+      /* ignore */
+    }
+  }
+  return out;
+}
+
+function pinnedIdsToJson(ids: string[] | undefined): string | null {
+  if (!ids || ids.length === 0) return null;
+  try {
+    return JSON.stringify(ids);
+  } catch {
+    return null;
+  }
+}
+
+export function toRustSessionIndexEntry(entry: SessionIndexEntry): RustSessionIndexEntry {
+  const out: RustSessionIndexEntry = {
+    id: entry.id,
+    title: entry.title,
+    folder: entry.folder,
+    isPinned: entry.isPinned,
+    isArchived: entry.isArchived,
+    timestamp: entry.timestamp,
+    updatedAt: entry.updatedAt,
+    messageCount: entry.messageCount,
+  };
+  if (entry.branchParentId != null) out.branchParentId = entry.branchParentId;
+  const pins = pinnedIdsToJson(entry.pinnedMessageIds);
+  if (pins != null) out.pinnedMessageIds = pins;
+  if (entry.engineCursor != null) out.engineCursor = entry.engineCursor;
+  if (entry.engineLastRunId != null) out.engineLastRunId = entry.engineLastRunId;
+  if (entry.hydratedFromEngine != null) out.hydratedFromEngine = entry.hydratedFromEngine;
+  return out;
+}
+
+// ── 形状转换：Rust → JS ────────────────────────────────────────────────────
+
+function parseJsonArray<T>(raw: string | null | undefined, fallback: T): T {
+  if (raw == null || raw === '') return fallback;
+  return safeParseJson<T>(raw, fallback);
+}
+
+/** Rust SessionMessage → JS SessionMessage（JSON 字符串字段还原为数组） */
+function fromRustSessionMessage(rust: RustSessionMessage): SessionMessage | null {
+  // 复用 sessionHydration 的形状守卫，确保数据干净
+  const normalized: unknown = {
+    id: rust.id,
+    sender: rust.sender,
+    timestamp: rust.timestamp,
+    ...(rust.text != null ? { text: rust.text } : {}),
+    ...(rust.thinking != null ? { thinking: rust.thinking } : {}),
+    ...(rust.status != null ? { status: rust.status } : {}),
+    ...(rust.streamTextOffset != null ? { streamTextOffset: rust.streamTextOffset } : {}),
+    ...(rust.thinkingTime != null ? { thinkingTime: rust.thinkingTime } : {}),
+    ...(rust.toolCallsJson != null
+      ? { toolCalls: parseJsonArray<unknown[]>(rust.toolCallsJson, []) }
+      : {}),
+    ...(rust.blocksJson != null
+      ? { blocks: parseJsonArray<unknown[]>(rust.blocksJson, []) }
+      : {}),
+    ...(rust.toolCallResultsJson != null
+      ? { toolCallResults: parseJsonArray<unknown[]>(rust.toolCallResultsJson, []) }
+      : {}),
+  };
+  return parseSessionMessage(normalized);
+}
+
+function fromRustSessionMessages(list: RustSessionMessage[]): SessionMessage[] {
+  if (!Array.isArray(list)) return [];
+  const out: SessionMessage[] = [];
+  for (const r of list) {
+    const m = fromRustSessionMessage(r);
+    if (m) out.push(m);
+  }
+  return out;
+}
+
+/** Rust SessionAgent → JS SessionAgent */
+function fromRustSessionAgent(rust: RustSessionAgent): SessionAgent | null {
+  const subagentPath = rust.subagentPathJson
+    ? parseJsonArray<unknown[]>(rust.subagentPathJson, [])
+    : undefined;
+  const normalized: unknown = {
+    id: rust.id,
+    subagentRunId: rust.subagentRunId,
+    parentSessionId: rust.parentSessionId,
+    parentRunId: rust.parentRunId,
+    description: rust.description,
+    mode: rust.mode,
+    status: rust.status,
+    messages: fromRustSessionMessages(rust.messages || []),
+    startedAt: rust.startedAt,
+    ...(rust.parentToolCallId != null ? { parentToolCallId: rust.parentToolCallId } : {}),
+    ...(rust.summary != null ? { summary: rust.summary } : {}),
+    ...(rust.endedAt != null ? { endedAt: rust.endedAt } : {}),
+    ...(rust.depth != null ? { depth: rust.depth } : {}),
+    ...(subagentPath && Array.isArray(subagentPath) ? { subagentPath } : {}),
+  };
+  return parseSessionAgent(normalized);
+}
+
+function fromRustSessionAgents(list: RustSessionAgent[]): SessionAgent[] {
+  if (!Array.isArray(list)) return [];
+  const out: SessionAgent[] = [];
+  for (const r of list) {
+    const a = fromRustSessionAgent(r);
+    if (a) out.push(a);
+  }
+  return out;
+}
+
+/** Rust SessionIndexEntry → JS SessionIndexEntry */
+function fromRustSessionIndexEntry(rust: RustSessionIndexEntry): SessionIndexEntry | null {
+  const pinnedIds = rust.pinnedMessageIds
+    ? parseJsonArray<string[]>(rust.pinnedMessageIds, [])
+    : undefined;
+  const normalized: unknown = {
+    id: rust.id,
+    title: rust.title,
+    folder: rust.folder,
+    isPinned: rust.isPinned,
+    isArchived: rust.isArchived,
+    timestamp: rust.timestamp,
+    updatedAt: rust.updatedAt,
+    messageCount: rust.messageCount,
+    ...(rust.branchParentId != null ? { branchParentId: rust.branchParentId } : {}),
+    ...(pinnedIds && pinnedIds.length ? { pinnedMessageIds: pinnedIds } : {}),
+    ...(rust.engineCursor != null ? { engineCursor: rust.engineCursor } : {}),
+    ...(rust.engineLastRunId != null ? { engineLastRunId: rust.engineLastRunId } : {}),
+    ...(rust.hydratedFromEngine != null ? { hydratedFromEngine: rust.hydratedFromEngine } : {}),
+  };
+  return parseSessionIndexEntry(normalized);
+}
+
+function fromRustSessionIndexEntries(list: RustSessionIndexEntry[]): SessionIndexEntry[] {
+  if (!Array.isArray(list)) return [];
+  const out: SessionIndexEntry[] = [];
+  for (const r of list) {
+    const e = fromRustSessionIndexEntry(r);
+    if (e) out.push(e);
+  }
+  return out;
+}
+
+// ── localStorage 同步回退路径 ──────────────────────────────────────────────
+//
+// 当 Tauri invoke 不可用（浏览器 / 旧壳 / 测试 missing 状态）时，所有 API 降级到
+// localStorage 同步读写。这保证 dev / test 环境与渐进迁移期不阻塞。
+//
+// 这层回退只读 / 写 localStorage，不再触碰 IndexedDB 或磁盘镜像（已删除）。
+
+function lsLoadSessionIndex(): SessionIndexEntry[] {
+  try {
+    const raw = localStorage.getItem(SESSION_INDEX_KEY);
+    if (!raw) return [];
+    return parseSessionIndexList(safeParseJson<unknown>(raw, null));
+  } catch {
+    return [];
+  }
+}
+
+function lsSaveSessionIndex(entries: SessionIndexEntry[]): void {
+  try {
+    localStorage.setItem(SESSION_INDEX_KEY, JSON.stringify(parseSessionIndexList(entries)));
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+function lsLoadSessionBody(sessionId: string): SessionMessage[] {
+  try {
+    const raw = localStorage.getItem(SESSION_BODY_PREFIX + sessionId);
+    if (!raw) return [];
+    // 兼容 JSON 数组与 JSONL 两种历史格式
+    if (raw.trimStart().startsWith('[')) {
+      return parseSessionMessages(safeParseJson<unknown>(raw, null));
+    }
+    // JSONL 路径：用 parseSessionMessage 逐行解析（与 sessionHydration 历史行为一致）
+    const out: SessionMessage[] = [];
+    for (const line of raw.split(/\r?\n/)) {
+      const t = line.trim();
+      if (!t) continue;
+      try {
+        const m = parseSessionMessage(JSON.parse(t));
+        if (m) out.push(m);
+      } catch {
+        /* skip bad line */
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+function lsSaveSessionBody(sessionId: string, messages: SessionMessage[]): void {
+  try {
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + sessionId,
+      JSON.stringify(messages),
+    );
+  } catch {
+    /* quota */
+  }
+}
+
+function lsDeleteSessionBody(sessionId: string): void {
+  try {
+    localStorage.removeItem(SESSION_BODY_PREFIX + sessionId);
+    localStorage.removeItem(SESSION_AGENTS_PREFIX + sessionId);
+  } catch {
+    /* ignore */
+  }
+}
+
+function lsLoadSessionAgents(sessionId: string): SessionAgent[] {
+  try {
+    const raw = localStorage.getItem(SESSION_AGENTS_PREFIX + sessionId);
+    if (!raw) return [];
+    return hydrateSessionAgents(parseSessionAgents(safeParseJson<unknown>(raw, null)));
+  } catch {
+    return [];
+  }
+}
+
+function lsSaveSessionAgents(sessionId: string, agents: SessionAgent[]): void {
+  try {
+    if (!agents || agents.length === 0) {
+      localStorage.removeItem(SESSION_AGENTS_PREFIX + sessionId);
+      return;
+    }
+    localStorage.setItem(
+      SESSION_AGENTS_PREFIX + sessionId,
+      JSON.stringify(agents.slice(0, SESSION_AGENTS_SAVE_CAP)),
+    );
+  } catch {
+    /* quota */
+  }
+}
+
+function lsLoadActiveSessionId(): string | null {
+  try {
+    const raw = localStorage.getItem(SESSION_ACTIVE_KEY);
+    if (raw == null) return null;
+    const id = raw.trim();
+    return id || null;
+  } catch {
+    return null;
+  }
+}
+
+function lsSaveActiveSessionId(id: string): void {
+  try {
+    if (!id?.trim() || isPendingDraft(id)) {
+      localStorage.removeItem(SESSION_ACTIVE_KEY);
+      return;
+    }
+    localStorage.setItem(SESSION_ACTIVE_KEY, String(id).trim());
+  } catch {
+    /* quota */
+  }
+}
+
+function lsLoadFolderOrder(): string[] | null {
+  try {
+    const raw = localStorage.getItem(SESSION_FOLDER_KEY);
+    if (!raw) return null;
+    return parseFolderOrder(safeParseJson<unknown>(raw, null));
+  } catch {
+    return null;
+  }
+}
+
+function lsSaveFolderOrder(order: string[]): void {
+  try {
+    localStorage.setItem(SESSION_FOLDER_KEY, JSON.stringify(order || []));
+  } catch {
+    /* quota */
+  }
+}
+
+// ── 14 个 async API（invoke + localStorage 回退） ──────────────────────────
+
+/**
+ * 加载会话索引列表。
+ * 命令缺失 → 回退 localStorage。
+ */
+export async function listSessions(): Promise<SessionIndexEntry[]> {
+  const res = await invokeResult<RustSessionIndexEntry[]>('list_sessions');
+  if (res.status === 'ok') return fromRustSessionIndexEntries(res.data || []);
+  return lsLoadSessionIndex();
+}
+
+/**
+ * 加载会话正文消息。
+ * 命令缺失 → 回退 localStorage。
+ */
+export async function loadSessionBody(sessionId: string): Promise<SessionMessage[]> {
+  if (!sessionId?.trim() || isPendingDraft(sessionId)) return [];
+  const res = await invokeResult<RustSessionMessage[]>('load_session_body', { sessionId });
+  if (res.status === 'ok') return fromRustSessionMessages(res.data || []);
+  return lsLoadSessionBody(sessionId);
+}
+
+/**
+ * 全量保存会话正文（先删后插，事务原子）。
+ * 命令缺失 → 回退 localStorage（同步）。
+ * I-DRAFT：PENDING_DRAFT 哨兵永不写 body。
+ */
+export async function saveSessionBody(
+  sessionId: string,
+  messages: SessionMessage[],
+): Promise<void> {
+  if (!sessionId?.trim() || isPendingDraft(sessionId)) return;
+  const msgs = messages || [];
+  const rustMessages = msgs.map(toRustSessionMessage);
+  const res = await invokeResult<void>('save_session_body', {
+    sessionId,
+    messages: rustMessages,
+  });
+  if (res.status === 'ok') {
+    // Stream D 主存 SQLite；非空正文额外镜像到 LS，供 seedSessions 同步路径与 MCP 观测。
+    // 空数组不写 LS：避免远程懒壳把 crish_session_body_v1:* 刷成 [] 误报「丢消息」。
+    if (msgs.length > 0) {
+      lsSaveSessionBody(sessionId, msgs);
+    }
+    return;
+  }
+  // missing / error → localStorage 回退
+  lsSaveSessionBody(sessionId, msgs);
+}
+
+/**
+ * 删除会话（级联删除 messages / agents / agent_messages）。
+ */
+export async function deleteSession(sessionId: string): Promise<void> {
+  if (!sessionId?.trim()) return;
+  const res = await invokeResult<void>('delete_session', { sessionId });
+  if (res.status === 'ok') return;
+  lsDeleteSessionBody(sessionId);
+}
+
+/**
+ * 加载会话下的协作子 agent。
+ */
+export async function loadSessionAgents(sessionId: string): Promise<SessionAgent[]> {
+  if (!sessionId?.trim() || isPendingDraft(sessionId)) return [];
+  const res = await invokeResult<RustSessionAgent[]>('load_session_agents', { sessionId });
+  if (res.status === 'ok') return hydrateSessionAgents(fromRustSessionAgents(res.data || []));
+  return lsLoadSessionAgents(sessionId);
+}
+
+/**
+ * 保存会话下的协作子 agent。
+ * I-DRAFT：PENDING_DRAFT 哨兵永不写 agents。
+ */
+export async function saveSessionAgents(
+  sessionId: string,
+  agents: SessionAgent[],
+): Promise<void> {
+  if (!sessionId?.trim() || isPendingDraft(sessionId)) return;
+  if (!agents || agents.length === 0) {
+    // 空列表仍调 invoke 让 Rust 侧清空；missing 时回退到 localStorage
+    const res = await invokeResult<void>('save_session_agents', {
+      sessionId,
+      agents: [],
+    });
+    if (res.status === 'ok') return;
+    lsSaveSessionAgents(sessionId, []);
+    return;
+  }
+  const rustAgents = agents.slice(0, SESSION_AGENTS_SAVE_CAP).map(toRustSessionAgent);
+  const res = await invokeResult<void>('save_session_agents', {
+    sessionId,
+    agents: rustAgents,
+  });
+  if (res.status === 'ok') return;
+  lsSaveSessionAgents(sessionId, agents);
+}
+
+/**
+ * 读取会话级元数据键。
+ * 用于 schema_version / active_session_id / folder_order 等。
+ */
+export async function getSessionMeta(key: string): Promise<string | null> {
+  if (!key?.trim()) return null;
+  const res = await invokeResult<string | null>('get_session_meta', { key });
+  if (res.status === 'ok') return res.data ?? null;
+  // localStorage 回退：active / folder 有专用 key
+  if (key === 'active_session_id') return lsLoadActiveSessionId();
+  if (key === 'folder_order') {
+    const order = lsLoadFolderOrder();
+    return order ? JSON.stringify(order) : null;
+  }
+  if (key === 'schema_version') return null; // localStorage 时代无 schema_version
+  return null;
+}
+
+/**
+ * 写入会话级元数据键。
+ */
+export async function setSessionMeta(key: string, value: string): Promise<void> {
+  if (!key?.trim()) return;
+  const res = await invokeResult<void>('set_session_meta', { key, value });
+  if (res.status === 'ok') return;
+  // localStorage 回退
+  if (key === 'active_session_id') lsSaveActiveSessionId(value);
+  if (key === 'folder_order') {
+    const order = parseFolderOrder(safeParseJson<unknown>(value, null));
+    if (order) lsSaveFolderOrder(order);
+  }
+}
+
+/**
+ * 清理不在 activeIds 中的会话（孤儿清理）。
+ */
+export async function cleanupOrphanSessions(activeIds: string[]): Promise<number> {
+  const res = await invokeResult<number>('cleanup_orphan_sessions', {
+    activeIds: activeIds || [],
+  });
+  if (res.status === 'ok') return res.data || 0;
+  // localStorage 回退：扫描 body/agents key，删除不在 keep 集合中的
+  try {
+    const keep = new Set(activeIds || []);
+    let deleted = 0;
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k) keys.push(k);
+    }
+    for (const k of keys) {
+      let id: string | null = null;
+      if (k.startsWith(SESSION_BODY_PREFIX)) {
+        id = k.slice(SESSION_BODY_PREFIX.length);
+      } else if (k.startsWith(SESSION_AGENTS_PREFIX)) {
+        id = k.slice(SESSION_AGENTS_PREFIX.length);
+      }
+      if (id != null && !keep.has(id)) {
+        localStorage.removeItem(k);
+        deleted++;
+      }
+    }
+    return deleted;
+  } catch {
+    return 0;
+  }
+}
+
+export interface ImportFromLocalStorageData {
+  indexJson: string;
+  bodies: Record<string, string>;
+  agents: Record<string, string>;
+  activeSessionId?: string | null;
+  folderOrder: string[];
+}
+
+/**
+ * 从 localStorage 历史数据一次性迁移到 SQLite。
+ * 返回迁移统计；命令缺失时返回 null（调用方应直接走 localStorage 路径）。
+ */
+export async function importFromLocalStorage(
+  data: ImportFromLocalStorageData,
+): Promise<RustImportStats | null> {
+  const res = await invokeResult<RustImportStats>('import_from_localstorage', {
+    indexJson: data.indexJson,
+    bodies: data.bodies,
+    agents: data.agents,
+    activeSessionId: data.activeSessionId ?? null,
+    folderOrder: data.folderOrder || [],
+  });
+  if (res.status === 'ok') return res.data;
+  return null;
+}
+
+/** 触发会话 updated_at 刷新（用于侧栏排序热更新） */
+export async function touchSession(sessionId: string): Promise<void> {
+  if (!sessionId?.trim()) return;
+  const res = await invokeResult<void>('touch_session', { sessionId });
+  if (res.status === 'ok') return;
+  // localStorage 路径无对应操作（ updatedAt 由 sessionsToIndex 维护）
+}
+
+// ── 复合 API：hydrateSessionsFromRust ──────────────────────────────────────
+
+/**
+ * 从存储层加载全部会话（index + bodies + agents），构造 SessionState[]。
+ *
+ * 索引加载策略（Stream D 过渡期）：
+ *   1. 优先读 localStorage 索引（侧栏元数据真相源，由 persistAllSessionsRust 维护）
+ *   2. localStorage 为空时回退到 SQLite list_sessions（30 天清理后或新装机场景）
+ *   3. 两者都为空 → 返回空会话列表
+ *
+ * bodies / agents 加载策略：
+ *   - 优先 SQLite（load_session_body / load_session_agents）
+ *   - invoke 缺失时回退 localStorage
+ *
+ * 注意：此 API 在 boot 时调用一次。为兼容现有 store 初始化（同步 seedSessions），
+ * seedSessions 仍调用同步回退路径；此 async 版本供 store-persistence 使用。
+ */
+export async function hydrateSessionsFromRust(): Promise<{
+  sessions: SessionState[];
+  activeSessionId: string | null;
+  folderOrder: string[] | null;
+}> {
+  // 1. 索引：localStorage 优先（真相源），回退 SQLite
+  let index = lsLoadSessionIndex();
+  if (!index.length) {
+    index = await listSessions();
+  }
+  if (!index.length) {
+    return {
+      sessions: [],
+      activeSessionId: await getSessionMeta('active_session_id'),
+      folderOrder: parseFolderOrder(
+        safeParseJson<unknown>(await getSessionMeta('folder_order'), null),
+      ),
+    };
+  }
+
+  // I-DRAFT：索引层再滤哨兵；parseSessionIndexEntry 已拒，双保险
+  const ordered = [...index]
+    .filter((e) => e.id && !isPendingDraft(e.id))
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+  // 并行加载每个会话的 body 与 agents
+  const sessions: SessionState[] = await Promise.all(
+    ordered.map(async (e) => {
+      const [messages, agents] = await Promise.all([
+        loadSessionBody(e.id),
+        loadSessionAgents(e.id),
+      ]);
+      const sanitized = sanitizeMessagesForHydrate(messages);
+      const state: SessionState = {
+        id: e.id,
+        title: e.title,
+        folder: e.folder,
+        isPinned: e.isPinned,
+        isArchived: e.isArchived,
+        timestamp: coerceSessionTimestamp(e.id, e.timestamp, sanitized),
+        messages: sanitized,
+        agents,
+        ...(e.branchParentId !== undefined ? { branchParentId: e.branchParentId } : {}),
+        ...(e.pinnedMessageIds?.length ? { pinnedMessageIds: e.pinnedMessageIds } : {}),
+        ...(e.engineCursor !== undefined ? { engineCursor: e.engineCursor } : {}),
+        ...(e.engineLastRunId !== undefined ? { engineLastRunId: e.engineLastRunId } : {}),
+        ...(e.hydratedFromEngine !== undefined ? { hydratedFromEngine: e.hydratedFromEngine } : {}),
+        // importMeta 仅存 localStorage 索引；SQLite 行无此列，从 LS 索引水合时带回
+        ...(e.importMeta ? { importMeta: e.importMeta } : {}),
+      };
+      return state;
+    }),
+  );
+
+  const activeRaw = await getSessionMeta('active_session_id');
+  const active = activeRaw && !isPendingDraft(activeRaw) ? activeRaw : null;
+  // prepareSessionsForUi：加载后 prune 非 keep 空壳
+  const prepared = prepareSessionsForUi(sessions, active);
+  const activeSessionId =
+    active && prepared.some((s) => s.id === active) ? active : null;
+  const folderOrderRaw = await getSessionMeta('folder_order');
+  const folderOrder = parseFolderOrder(safeParseJson<unknown>(folderOrderRaw, null));
+
+  return { sessions: prepared, activeSessionId, folderOrder };
+}
+
+// ── 复合 API：persistAllSessionsRust ────────────────────────────────────────
+
+/**
+ * 全量持久化所有会话到 SQLite（per-session invoke，避免单次 IPC 携带所有数据）。
+ *
+ * 设计要点：
+ *   - 每个会话单独 save_session_body / save_session_agents（细粒度并发）
+ *   - activeSessionId / folderOrder 写入 session_meta 表
+ *   - 孤儿清理走 cleanup_orphan_sessions
+ *   - assistant 消息统一走 normalizeAssistantTimeline（与原 persistAllSessions 对齐）
+ *
+ * 命令缺失时回退到 localStorage 同步路径（persistAllSessionsSync 等价行为）。
+ */
+export async function persistAllSessionsRust(
+  sessions: SessionState[],
+  activeSessionId: string,
+  folderOrder: string[],
+  options?: {
+    /** 把 SessionState[] 投影为索引条目（侧栏元数据真相源） */
+    sessionsToIndex?: (sessions: SessionState[]) => SessionIndexEntry[];
+  },
+): Promise<void> {
+  // I-DRAFT：persist 路径剔除 PENDING_DRAFT，永不写 sessions[]/body
+  const list = (sessions || []).filter(
+    (s) => Boolean(s?.id) && !isPendingDraft(s.id),
+  );
+  const activePersistable =
+    activeSessionId && !isPendingDraft(activeSessionId) ? activeSessionId : '';
+
+  // 索引层：始终写一份到 localStorage（侧栏元数据真相源，过渡期设计）。
+  // invoke 缺失时，这就是唯一的索引落盘点。
+  if (options?.sessionsToIndex) {
+    try {
+      const entries = options.sessionsToIndex(list);
+      lsSaveSessionIndex(entries);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // 检测 invoke 可用性（用 list_sessions 作为探针）
+  const probe = await invokeResult<RustSessionIndexEntry[]>('list_sessions');
+  if (probe.status !== 'ok') {
+    // 回退：localStorage 同步路径（索引已写入，只需写 body/agents/meta）
+    persistAllSessionsLocalFallback(list, activePersistable, folderOrder);
+    return;
+  }
+
+  // 1. 写入每个会话的 body + agents（并发）
+  // 空 messages 不调用 save_session_body：Rust 侧是先删后插，空数组会擦掉已落盘正文。
+  // boot 窗口里 seed 的远程懒壳 messages=[] 很常见；等 SQLite 回灌 / 引擎 hydrate 后再写。
+  const keepIds = new Set<string>();
+  const bodyJobs: Promise<void>[] = [];
+  for (const s of list) {
+    if (!s?.id) continue;
+    keepIds.add(s.id);
+    const msgs = (s.messages || []).map((m) =>
+      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m,
+    );
+    if (msgs.length > 0) {
+      bodyJobs.push(saveSessionBody(s.id, msgs));
+    }
+    bodyJobs.push(saveSessionAgents(s.id, s.agents || []));
+  }
+  await Promise.allSettled(bodyJobs);
+
+  // 2. 元数据：active_session_id / folder_order
+  const metaJobs: Promise<void>[] = [];
+  if (activePersistable) {
+    metaJobs.push(setSessionMeta('active_session_id', activePersistable));
+  }
+  if (folderOrder && folderOrder.length) {
+    metaJobs.push(setSessionMeta('folder_order', JSON.stringify(folderOrder)));
+  }
+  await Promise.allSettled(metaJobs);
+
+  // 3. 孤儿清理
+  await cleanupOrphanSessions(Array.from(keepIds));
+}
+
+/**
+ * localStorage 同步回退：仅在 invoke 不可用时使用。
+ * 索引已由调用方（persistAllSessionsRust）写入 localStorage，此处仅写 body/agents/meta。
+ */
+function persistAllSessionsLocalFallback(
+  sessions: SessionState[],
+  activeSessionId: string,
+  folderOrder: string[],
+): void {
+  // 调用方已 filter；再拒一次 draft
+  const list = (sessions || []).filter(
+    (s) => Boolean(s?.id) && !isPendingDraft(s.id),
+  );
+  const keep = new Set(list.map((s) => s.id).filter(Boolean) as string[]);
+
+  // 写入 keep 集合中的 body / agents（空 body 不覆盖，防懒壳擦掉已有 LS 正文）
+  for (const s of list) {
+    if (!s?.id) continue;
+    const msgs = (s.messages || []).map((m) =>
+      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m,
+    );
+    if (msgs.length > 0) {
+      lsSaveSessionBody(s.id, msgs);
+    }
+    lsSaveSessionAgents(s.id, s.agents || []);
+  }
+
+  // 清理孤儿
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k) keys.push(k);
+    }
+    for (const k of keys) {
+      let id: string | null = null;
+      if (k.startsWith(SESSION_BODY_PREFIX)) id = k.slice(SESSION_BODY_PREFIX.length);
+      else if (k.startsWith(SESSION_AGENTS_PREFIX)) id = k.slice(SESSION_AGENTS_PREFIX.length);
+      if (id != null && !keep.has(id)) localStorage.removeItem(k);
+    }
+  } catch {
+    /* ignore */
+  }
+
+  lsSaveActiveSessionId(activeSessionId || '');
+  lsSaveFolderOrder(folderOrder || []);
+}
+
+// ── 同步辅助：供 beforeunload flush 使用 ───────────────────────────────────
+
+/**
+ * 同步持久化全部会话（beforeunload 场景，禁止 await）。
+ *
+ * 此函数始终走 localStorage（同步），因为 beforeunload 事件中无法 await IPC。
+ * Rust 侧数据由后续 persistAllSessionsRust 在正常生命周期内同步。
+ */
+export function persistAllSessionsSyncViaLocalStorage(
+  sessions: SessionState[],
+  activeSessionId: string,
+  folderOrder: string[],
+  options?: {
+    sessionsToIndex?: (sessions: SessionState[]) => SessionIndexEntry[];
+  },
+): void {
+  // I-DRAFT：sync flush 同样剔除 PENDING_DRAFT
+  const list = (sessions || []).filter(
+    (s) => Boolean(s?.id) && !isPendingDraft(s.id),
+  );
+  const keep = new Set(list.map((s) => s.id).filter(Boolean) as string[]);
+  const activePersistable =
+    activeSessionId && !isPendingDraft(activeSessionId) ? activeSessionId : '';
+
+  if (options?.sessionsToIndex) {
+    try {
+      lsSaveSessionIndex(options.sessionsToIndex(list));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  for (const s of list) {
+    if (!s?.id) continue;
+    const msgs = (s.messages || []).map((m) =>
+      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m,
+    );
+    // beforeunload 同步路径：仅镜像非空正文，避免把未 hydrate 懒壳写成 []
+    if (msgs.length > 0) {
+      lsSaveSessionBody(s.id, msgs);
+    }
+    lsSaveSessionAgents(s.id, s.agents || []);
+  }
+
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k) keys.push(k);
+    }
+    for (const k of keys) {
+      let id: string | null = null;
+      if (k.startsWith(SESSION_BODY_PREFIX)) id = k.slice(SESSION_BODY_PREFIX.length);
+      else if (k.startsWith(SESSION_AGENTS_PREFIX)) id = k.slice(SESSION_AGENTS_PREFIX.length);
+      if (id != null && !keep.has(id)) localStorage.removeItem(k);
+    }
+  } catch {
+    /* ignore */
+  }
+
+  lsSaveActiveSessionId(activePersistable);
+  lsSaveFolderOrder(folderOrder || []);
+}

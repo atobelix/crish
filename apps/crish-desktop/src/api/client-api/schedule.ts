@@ -19,11 +19,6 @@ function isCronJob(obj: unknown): obj is CronJob {
 
 export const scheduleApi = {
   getScheduledTasks: async (): Promise<CronJob[]> => {
-    const { isDemoMode } = await import('../appMode');
-    if (isDemoMode()) {
-      const { clientApiDemo } = await import('../clientApi.demo');
-      return clientApiDemo.getScheduledTasks();
-    }
     try {
       const { getDesktopDaemonClient } = await import('../daemonClient');
       const client = getDesktopDaemonClient();
@@ -46,11 +41,6 @@ export const scheduleApi = {
   },
 
   saveScheduledTask: async (task: CronJob): Promise<CronJob[]> => {
-    const { isDemoMode } = await import('../appMode');
-    if (isDemoMode()) {
-      const { clientApiDemo } = await import('../clientApi.demo');
-      return clientApiDemo.saveScheduledTask(task);
-    }
     try {
       const { getDesktopDaemonClient } = await import('../daemonClient');
       const client = getDesktopDaemonClient();
@@ -67,11 +57,6 @@ export const scheduleApi = {
   },
 
   deleteScheduledTask: async (id: string): Promise<CronJob[]> => {
-    const { isDemoMode } = await import('../appMode');
-    if (isDemoMode()) {
-      const { clientApiDemo } = await import('../clientApi.demo');
-      return clientApiDemo.deleteScheduledTask(id);
-    }
     try {
       const { getDesktopDaemonClient } = await import('../daemonClient');
       const client = getDesktopDaemonClient();

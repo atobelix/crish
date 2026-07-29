@@ -1,3 +1,31 @@
+/**
+ * Daemon stream connection lifecycle — primary transport + degraded fallback switch.
+ *
+ * ## Transport SoT (inventory #10)
+ * - **Primary:** `streamViaDaemon` → WS `run-task` + EventRouter (full tools/approvals/L2/L3).
+ * - **Degraded:** `streamViaDirectFetch` only when daemon WS not ready within 1.5s.
+ * - **Single switch:** {@link ALLOW_AUTO_DIRECT_FETCH_FALLBACK} (soft-deprecated auto path).
+ * - Product entry: `chatApi.streamAssistantResponseApi` always calls `streamViaDaemon` first.
+ *
+ * ## When directFetch is chosen
+ * ```
+ * createStreamSession:
+ *   waitUntilConnected(1500ms)
+ *   if ready && isConnected → daemon run-task          [PRIMARY]
+ *   else if ALLOW_AUTO_DIRECT_FETCH_FALLBACK
+ *        → streamViaDirectFetch + state.transportAbort [DEGRADED, soft-deprecated]
+ *   else → onRunError(network) + finish                [refuse]
+ * ```
+ *
+ * ## Cancel parity
+ * - Daemon: {@link createStreamCancel} → compositionRoot.runControl L2/L3 + cleanup + onComplete.
+ * - Degraded: same outer `StreamCancelFn` also calls `state.transportAbort` (HTTP AbortController).
+ * - Direct path has **no** cooperative L2 (abort ≈ force); do not ship features that need L2-only.
+ *
+ * @see docs/plans/progress/architecture-dedup-inventory.md #10
+ * @see ../directFetchBridge.ts
+ * @see ../chatApi.ts
+ */
 import { getDesktopDaemonClient } from '../daemonClient';
 import type { StreamCallbacks, StreamRequestOptions } from '../chatApi';
 import { toDaemonPermissionMode } from '../permissionModes';
@@ -8,6 +36,46 @@ import { streamRecovery } from '../../services/StreamRecovery';
 import { normalizeStreamSessionId } from './handlers/eventUtils';
 import { type StreamState, cleanupStreamState } from './handlers/streamState';
 import { EventRouter } from './EventRouter';
+import { getCompositionRoot } from '../../app/compositionRoot';
+import { recordTransportDegradedDirectFetch } from '../controlMetrics';
+import { RUN_CONTROL_LEVEL } from '@crish/shared-types';
+/** Single SoT for cancel mode literals — do not redeclare in this package. */
+import type { StreamCancelMode } from '../runControlClient';
+
+export type { StreamCancelMode };
+
+/**
+ * Inventory #10 — **single switch** for auto HTTP SSE when daemon WS is down.
+ *
+ * - `true` (default, transitional): degrade to `streamViaDirectFetch` so chat still works
+ *   offline/dev without agent-daemon. Soft-deprecated: silent dual transport confuses
+ *   cancel/metrics/tool support expectations.
+ * - `false` (preferred end state): refuse start with `onRunError` until daemon is reachable.
+ *
+ * Flip to `false` after product UX for “engine offline” is acceptable and E0 no longer
+ * relies on silent direct for smoke. Do **not** add a second product entry that calls
+ * directFetch outside this flag.
+ *
+ * @see architecture-dedup-inventory.md #10
+ */
+export const ALLOW_AUTO_DIRECT_FETCH_FALLBACK = true as const;
+
+/** Soft console notice once per process when first degraded fallback fires (dev only). */
+let degradedTransportNoticeShown = false;
+
+function noticeDegradedTransportOnce(): void {
+  if (degradedTransportNoticeShown) return;
+  degradedTransportNoticeShown = true;
+  const isDev =
+    (typeof import.meta !== 'undefined' &&
+      (import.meta as { env?: { DEV?: boolean } }).env?.DEV) ||
+    (typeof process !== 'undefined' && process.env.NODE_ENV === 'development');
+  if (!isDev) return;
+  // eslint-disable-next-line no-console
+  console.info(
+    '[transport] degraded to directFetch (daemon WS not ready); metric=transport_degraded_direct_fetch · inventory #10',
+  );
+}
 
 export async function ensureDaemonConnected(): Promise<{
   ok: boolean;
@@ -45,7 +113,7 @@ export function createFinishController(
   callbacks: StreamCallbacks,
   cleanup: () => void,
   state: StreamState,
-  timeoutMs = 8000
+  timeoutMs = 120000
 ): { finish: (force?: boolean) => void; tryResumeFinish: () => void } {
   const finish = (force = false) => {
     if (state.finished) return;
@@ -85,6 +153,16 @@ export function createFinishController(
   return { finish, tryResumeFinish };
 }
 
+/**
+ * Stream cancel 句柄（对齐 Run 控制 L2/L3）：
+ * - cooperative：L2 cooperative_stop（经 compositionRoot.runControl）
+ * - force：L3 force_cancel
+ *
+ * mode 字面量真源：`runControlClient.StreamCancelMode`（本模块 re-export）。
+ * @see apps/crish-desktop/src/api/runControlClient.ts
+ */
+export type StreamCancelFn = (opts?: { mode?: StreamCancelMode }) => void;
+
 export function createStreamCancel(
   client: ReturnType<typeof getDesktopDaemonClient>,
   runId: string,
@@ -92,21 +170,51 @@ export function createStreamCancel(
   approvalFlow: ApprovalFlowMachine,
   cleanup: () => void,
   state: StreamState
-): () => void {
-  return () => {
+): StreamCancelFn {
+  return (opts) => {
     if (state.finished) return;
+    const mode: StreamCancelMode = opts?.mode ?? 'force';
     state.cancelled = true;
     approvalFlow.dispatch({ type: 'clear_all' });
     approvalFlow.dispatch({ type: 'force_finish' });
+
+    // Inventory #10 cancel parity: if we degraded to direct HTTP SSE, abort that
+    // fetch first. L2/L3 run-control below is a no-op for pure-direct runs (no daemon task).
+    // Cooperative mode is force-equivalent on direct path (no ControlBus).
+    const localAbort = state.transportAbort;
+    state.transportAbort = null;
+    if (localAbort) {
+      try {
+        localAbort();
+      } catch {
+        /* ignore */
+      }
+    }
+
     cleanup();
-    void Promise.resolve(client.send({ type: 'cancel-run', runId })).catch(
-      () => undefined
-    );
+
+    // L2/L3 经 compositionRoot.runControl（metrics + EventBus + wire）
+    // `client` 保留签名兼容；WS 由 runControlClient → getDesktopDaemonClient 发出
+    // （与本参数通常为同一单例；测试 mock daemonClient 仍命中）
+    void client;
+    void getCompositionRoot().runControl.dispatch({
+      level:
+        mode === 'cooperative'
+          ? RUN_CONTROL_LEVEL.L2
+          : RUN_CONTROL_LEVEL.L3,
+      runId,
+      reason: mode === 'cooperative' ? 'ui-stop' : 'ui-force-cancel',
+    });
+
     state.finished = true;
-    try {
-      callbacks.onComplete();
-    } catch {
-      /* ignore */
+    // If localAbort already called onComplete (directFetch cancel parity), skip double-fire.
+    // Daemon path: transportAbort is null → onComplete once here.
+    if (!localAbort) {
+      try {
+        callbacks.onComplete();
+      } catch {
+        /* ignore */
+      }
     }
   };
 }
@@ -120,13 +228,40 @@ export async function createStreamSession(
   options: StreamRequestOptions | undefined,
   state: StreamState,
   onMessage: (msg: Record<string, unknown>) => void,
-  finish: (force?: boolean) => void
+  finish: (force?: boolean) => void,
+  /** 本地助手 placeholder id（= clientMessageId），经 run-task 下发 */
+  assistantClientMessageId?: string,
 ): Promise<void> {
   try {
     const ready = await client.waitUntilConnected(1_500);
+    // --- inventory #10: transport branch (primary vs degraded) ---
     if (!ready || !client.isConnected()) {
+      if (!ALLOW_AUTO_DIRECT_FETCH_FALLBACK) {
+        // Preferred end state: refuse rather than a second silent transport.
+        logInternalError(
+          'stream-start-refuse-direct',
+          new Error('daemon unreachable; ALLOW_AUTO_DIRECT_FETCH_FALLBACK=false')
+        );
+        if (callbacks.onRunError) {
+          callbacks.onRunError(networkUserMessage(), 'network');
+        } else {
+          callbacks.onChunk(networkUserMessage());
+        }
+        finish();
+        return;
+      }
+      // DEGRADED (soft-deprecated auto): HTTP SSE. Retain abort on state for Stop parity.
+      // OPT-F7: one controlMetrics counter per fallback (kill #10 residual observability).
+      recordTransportDegradedDirectFetch();
+      noticeDegradedTransportOnce();
       const { streamViaDirectFetch } = await import('../directFetchBridge');
-      streamViaDirectFetch(prompt, callbacks, sessionId, runId, options);
+      state.transportAbort = streamViaDirectFetch(
+        prompt,
+        callbacks,
+        sessionId,
+        runId,
+        options
+      );
       return;
     }
 
@@ -224,6 +359,19 @@ export async function createStreamSession(
         ? options.systemPrompt.trim()
         : undefined);
 
+    const userClientMessageId =
+      typeof options?.clientMessageId === 'string' && options.clientMessageId.trim()
+        ? options.clientMessageId.trim()
+        : undefined;
+    const asstClientMessageId =
+      (typeof assistantClientMessageId === 'string' && assistantClientMessageId.trim()
+        ? assistantClientMessageId.trim()
+        : undefined) ||
+      (typeof options?.assistantClientMessageId === 'string' &&
+      options.assistantClientMessageId.trim()
+        ? options.assistantClientMessageId.trim()
+        : undefined);
+
     await client.send({
       type: 'run-task',
       runId,
@@ -243,6 +391,11 @@ export async function createStreamSession(
       ...(maxRounds !== undefined ? { maxRounds } : {}),
       ...(maxStalledRounds !== undefined ? { maxStalledRounds } : {}),
       ...(systemPrompt ? { systemPrompt } : {}),
+      // 幂等键：与本地乐观 message.id 对齐，供 message-end / hydrate rekey
+      ...(userClientMessageId ? { clientMessageId: userClientMessageId } : {}),
+      ...(asstClientMessageId
+        ? { assistantClientMessageId: asstClientMessageId }
+        : {}),
     });
   } catch (e) {
     logInternalError('stream-start', e);
@@ -272,10 +425,16 @@ export function streamViaDaemon(
     assistantThought: '',
     unsub: null,
     endTimer: null,
+    transportAbort: null,
   };
   const approvalFlow = new ApprovalFlowMachine();
   const runId = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  void assistantMsgId;
+  // assistantMsgId = 本地 clientMessageId：热路径 upsert + run-task 下发
+  const assistantClientMessageId =
+    (typeof assistantMsgId === 'string' && assistantMsgId.trim()) ||
+    (typeof options?.assistantClientMessageId === 'string' &&
+      options.assistantClientMessageId.trim()) ||
+    '';
   try {
     callbacks.onRunMeta?.({ runId });
   } catch {
@@ -321,7 +480,7 @@ export function streamViaDaemon(
     trackedCallbacks,
     cleanup,
     state,
-    options?.finishTimeoutMs ?? 8000
+    options?.finishTimeoutMs ?? 120000
   );
 
   const router = new EventRouter(
@@ -355,7 +514,8 @@ export function streamViaDaemon(
     options,
     state,
     (msg) => router.onMsg(msg),
-    finish
+    finish,
+    assistantClientMessageId || undefined,
   ).then(() => {
     ensureLiveSubscription();
   });
@@ -369,8 +529,10 @@ export function streamViaDaemon(
     state
   );
 
-  return () => {
-    markTerminal('failed', 'cancelled');
-    cancel();
+  // 透传 L2/L3 mode；无参默认 force 保持 replace/旧路径兼容
+  const cancelWithMode: StreamCancelFn = (opts) => {
+    markTerminal('failed', opts?.mode === 'cooperative' ? 'cancelled' : 'force_cancelled');
+    cancel(opts);
   };
+  return cancelWithMode;
 }

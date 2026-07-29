@@ -14,6 +14,13 @@ export interface StreamState {
   assistantThought: string;
   unsub: (() => void) | null;
   endTimer: ReturnType<typeof setTimeout> | null;
+  /**
+   * Inventory #10 — degraded direct-fetch local abort only.
+   * Set when `ALLOW_AUTO_DIRECT_FETCH_FALLBACK` path starts HTTP SSE;
+   * null on primary daemon WS. Cancel must invoke this (AbortController)
+   * because L2/L3 run-control has no provider run on direct path.
+   */
+  transportAbort?: (() => void) | null;
 }
 
 export function cleanupStreamState(state: StreamState): void {
@@ -23,6 +30,8 @@ export function cleanupStreamState(state: StreamState): void {
     clearTimeout(state.endTimer);
     state.endTimer = null;
   }
+  // Do not auto-fire transportAbort here — cancel path owns abort + onComplete.
+  state.transportAbort = null;
 }
 
 export function surfaceStreamFailure(

@@ -88,10 +88,13 @@ describe('SS1-SS2: normalizeSearchQuery 对非字符串输入', () => {
     expect(normalizeSearchQuery(noProto)).toBe('');
   });
 
-  it('SS2: 函数输入被 String() 转为 "function (){}" 之类', () => {
+  it('SS2: 函数输入被 String() 转为可打印字符串（防御性兜底）', () => {
+    // String(() => {}) 在 V8 中返回 "() => { }"（箭头函数）或 "function () {}"（传统）
+    // 不假定具体格式，仅断言不抛且返回非空字符串
     const fn = (() => {}) as unknown as string;
     const result = normalizeSearchQuery(fn);
-    expect(result).toMatch(/^function/);
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
   });
 });
 
@@ -176,16 +179,24 @@ describe('SS7-SS10: makeSearchSnippet 边界', () => {
   });
 
   it('SS10: 查询未命中返回文首截断', () => {
-    const text = '这是一段很长的文本内容用于测试摘录功能是否能在查询未命中时正确截断到指定长度';
+    // 文本须超过 maxLen(72) 才会触发截断 + 省略号；短文本原样返回
+    const text = '这是一段很长的文本内容用于测试摘录功能是否能在查询未命中时正确截断到指定长度'.repeat(3);
     const result = makeSearchSnippet(text, '不存在的查询');
     expect(Array.from(result).length).toBeLessThanOrEqual(72);
     expect(result.endsWith('…')).toBe(true);
   });
 
   it('SS10: 空查询返回文首截断', () => {
-    const text = '这是一段很长的文本内容用于测试摘录功能是否能在空查询时正确截断到指定长度';
+    const text = '这是一段很长的文本内容用于测试摘录功能是否能在空查询时正确截断到指定长度'.repeat(3);
     const result = makeSearchSnippet(text, '');
     expect(Array.from(result).length).toBeLessThanOrEqual(72);
+  });
+
+  it('SS10: 短文本查询未命中原样返回（不追加省略号）', () => {
+    const text = '短文本';
+    const result = makeSearchSnippet(text, '不存在的查询');
+    expect(result).toBe('短文本');
+    expect(result.endsWith('…')).toBe(false);
   });
 
   it('SS7（已修复）: prefix+suffix 双省略号时结果 ≤ maxCp', () => {

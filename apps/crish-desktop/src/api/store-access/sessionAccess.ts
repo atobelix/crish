@@ -10,6 +10,7 @@ import type {
   SessionMessage,
   SessionState,
 } from '../../store/types';
+import { PENDING_DRAFT_SESSION_ID } from '../../store/draftSession';
 import {
   getActiveSessionId as getActiveSessionIdFromFacade,
   getSessionById,
@@ -110,14 +111,24 @@ function requireExistingSessionId(
   return id;
 }
 
+/**
+ * @deprecated Name lies — **does not create a session**. Redirects to pending draft only.
+ *
+ * Prefer product entry:
+ * - `getCompositionRoot().shell.openNewDraftTab(folder?)` (tab + enterDraft)
+ * - `getCompositionRoot().session.enterDraft(folder?)` / `enterDraftMode(folder?)`
+ *
+ * Implementation: `enterDraftMode` + chat surface. **No empty-shell mint.**
+ * Returns draft sentinel id (`PENDING_DRAFT_SESSION_ID`) for legacy callers.
+ * Real session id only via `commitDraftIfNeeded` on first send.
+ *
+ * @see docs/architecture/session-pending-draft-adr.md
+ */
 export function createSessionAndOpenChat(folder?: string): string {
-  const sessionId = resolveSessionState().createSession({
-    ...(folder !== undefined && { folder }),
-  });
-  if (sessionId) {
-    resolveWorkspaceState().setChatMainSurface('chat');
-  }
-  return sessionId;
+  // Compat shim → draft path only (do not mint sessions[])
+  resolveSessionState().enterDraftMode(folder);
+  resolveWorkspaceState().setChatMainSurface('chat');
+  return PENDING_DRAFT_SESSION_ID;
 }
 
 export function deleteSessionWithCleanup(sessionId: string): boolean {
@@ -148,6 +159,17 @@ export function deleteSessionAndSwitch(sessionId: string): boolean {
   return removed;
 }
 
+/**
+ * 创建 / 附加真会话（写入 sessions[]）。
+ *
+ * **允许**：commitDraftIfNeeded、系统/定时占位（建议带真实 title + activate:false）、
+ * 测试、显式 id attach。
+ *
+ * **禁止**：用户「新对话」入口直接调用本函数 mint 默认标题空壳
+ * （应 `getCompositionRoot().shell.openNewDraftTab` / `session.enterDraft` / `enterDraftMode`）。
+ *
+ * 语义：mint 新 id | attach explicitId | activate:false 后台占位；**不 reuse 空壳**。
+ */
 export function createSession(opts?: {
   title?: string;
   folder?: string;
@@ -197,6 +219,13 @@ export function patchSession(
   const sid = requireExistingSessionId(sessionId);
   if (!sid) return;
   getSessionStoreState().patchSession(sid, patch);
+}
+
+/** 清空会话消息（不删会话） */
+export function clearSessionMessages(sessionId: string): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().clearSessionMessages(sid);
 }
 
 export function branchSession(sessionId: string, newTitle: string): void {
@@ -397,4 +426,8 @@ export function appendSessionAgentMessage(
 
 export function addTerminalLine(line: string, sessionId?: string): void {
   resolveSessionState().addTerminalLine(line, sessionId);
+}
+
+export function addTerminalLines(lines: string[], sessionId?: string): void {
+  resolveSessionState().addTerminalLines(lines, sessionId);
 }

@@ -1,22 +1,11 @@
 /**
- * clientApi — localStorage-backed client preferences + demo-gated stubs.
+ * clientApi — localStorage-backed client preferences.
  *
  * 正式路径（保留实现）：
  * - Settings：getSettings / updateSettings / getSettingsEx / saveSettingsEx
  *   → SettingsPanel / SettingsRulesTab / SkillsSettingsTab / App / ChatCard
- * - subscribeTelemetry：正式安静 no-op；demo 转发 clientApi.demo
- *
- * 正式勿走（DEAD / HONEST-HIDE，实现在 clientApi.demo.ts）：
- * - getProviders / updateProvider* / fetchLatestModels → 用 providerProfiles + ModelsSettingsTab
- * - getMcpServers* / saveMcpServer / deleteMcpServer → 正式用 mcpApi；demo 用 localStorage
- * - getScheduledTasks / saveScheduledTask / deleteScheduledTask → 正式无假定时；demo localStorage
- *
- * 转发约定：
- *   if (isDemoMode()) return clientApiDemo.xxx(...)
- *   else return [] | no-op  // HONEST-HIDE
+ * - subscribeTelemetry：正式安静 no-op
  */
-import { isDemoMode } from './appMode';
-import { clientApiDemo } from './clientApi.demo';
 import { getDesktopDaemonClient } from './daemonClient';
 
 export interface CompactionSettings {
@@ -104,6 +93,8 @@ export interface Settings {
   collapseChangelog?: boolean;
   enableInstallTelemetry?: boolean;
   enableAnalytics?: boolean;
+  /** 是否允许在检测到异常退出时自动收集并发送诊断日志（默认开启，可关闭） */
+  enableCrashTelemetry?: boolean;
   packages?: (string | PackageSource)[];
   extensions?: string[];
   skills?: string[];
@@ -127,6 +118,8 @@ export interface Settings {
   shortcuts?: Record<string, string>;
   /** 优先合并工具标签页（与 layoutStore.tabModeEnabled 双写） */
   tabModeEnabled?: boolean;
+  /** 排队发送模式：AI 回复中时，新消息进入队列而不是直接插入对话 */
+  queueMode?: boolean;
   /**
    * MCP 工具禁用表：serverId → toolName[]。
    * 写入本机设置；run-task 时下发给引擎，过滤不注入的 MCP 工具。
@@ -323,6 +316,9 @@ export function normalizeSettingsPartial(raw: unknown): Partial<Settings> {
     // 默认合并标签：缺失/非法时 true
     out.tabModeEnabled = normalizeSettingsBool(o.tabModeEnabled, true);
   }
+  if ('queueMode' in o) {
+    out.queueMode = normalizeSettingsBool(o.queueMode, false);
+  }
   if ('quietStartup' in o) {
     out.quietStartup = normalizeSettingsBool(o.quietStartup, true);
   }
@@ -334,6 +330,12 @@ export function normalizeSettingsPartial(raw: unknown): Partial<Settings> {
   }
   if ('enableAnalytics' in o) {
     out.enableAnalytics = normalizeSettingsBool(o.enableAnalytics, false);
+  }
+  if ('enableCrashTelemetry' in o) {
+    out.enableCrashTelemetry = normalizeSettingsBool(
+      o.enableCrashTelemetry,
+      true
+    );
   }
   if ('collapseChangelog' in o) {
     out.collapseChangelog = normalizeSettingsBool(o.collapseChangelog, false);
@@ -443,6 +445,7 @@ export function normalizeSettingsPayload(raw: unknown): Settings {
     defaultThinkingLevel: normalizeThinkingLevel(merged.defaultThinkingLevel),
     hideThinkingBlock: normalizeSettingsBool(merged.hideThinkingBlock, false),
     tabModeEnabled: normalizeSettingsBool(merged.tabModeEnabled, true),
+    queueMode: normalizeSettingsBool(merged.queueMode, false),
     quietStartup: normalizeSettingsBool(merged.quietStartup, true),
     sendShortcut: merged.sendShortcut === 'ctrlEnter' ? 'ctrlEnter' : 'enter',
     enableSkillCommands: normalizeSettingsBool(
@@ -450,6 +453,10 @@ export function normalizeSettingsPayload(raw: unknown): Settings {
       true
     ),
     enableAnalytics: normalizeSettingsBool(merged.enableAnalytics, false),
+    enableCrashTelemetry: normalizeSettingsBool(
+      merged.enableCrashTelemetry,
+      true
+    ),
     customRules: normalizeCustomRules(merged.customRules),
     defaultProvider: normalizeSettingsText(merged.defaultProvider),
     defaultModel: normalizeSettingsText(merged.defaultModel),
@@ -488,7 +495,7 @@ export interface McpServer {
   tools: string[];
 }
 
-// LocalStorage Keys (settings only — providers/cron/mcp live in clientApi.demo)
+// LocalStorage Keys (settings only)
 const SETTINGS_KEY = 'crish_settings';
 const SETTINGS_KEY_LEGACY = 'conex_pi_settings';
 
@@ -503,6 +510,7 @@ const DEFAULT_SETTINGS: Settings = {
   quietStartup: true,
   enableSkillCommands: true,
   enableAnalytics: false,
+  enableCrashTelemetry: true,
   compaction: { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000 },
   branchSummary: { reserveTokens: 16384, skipPrompt: false },
   retry: { enabled: true, maxRetries: 3, baseDelayMs: 2000 },
@@ -795,51 +803,45 @@ export const clientApi = {
     });
   },
 
-  // ── Telemetry：正式 no-op；demo → clientApi.demo ───────────────────────
+  // ── Telemetry：正式 no-op ───────────────────────
 
   subscribeTelemetry: (
-    onData: (data: import('../store/layoutStore').TelemetrySyncPayload) => void
+    _onData: (data: import('../store/layoutStore').TelemetrySyncPayload) => void
   ): (() => void) => {
-    if (!isDemoMode()) return () => undefined;
-    return clientApiDemo.subscribeTelemetry(onData);
+    return () => undefined;
   },
 
-  // ── Providers — DEAD formal（providerProfiles）；demo mock ──────────────
+  // ── Providers — DEAD formal（providerProfiles） ──────────────
   // HONEST: 正式路径永不返回假「已支持 Anthropic/Gemini 原生」列表。
   // 真实配置轨 = providerProfiles + update-config；引擎仅 OpenAI-compatible。
 
   /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. */
   getProviders: async (): Promise<ProviderInfo[]> => {
-    if (!isDemoMode()) return [];
-    return clientApiDemo.getProviders();
+    return [];
   },
 
   /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. */
   updateProviderKey: async (
-    id: string,
-    apiKey: string
+    _id: string,
+    _apiKey: string
   ): Promise<ProviderInfo[]> => {
-    if (!isDemoMode()) return [];
-    return clientApiDemo.updateProviderKey(id, apiKey);
+    return [];
   },
 
   /** @deprecated DEAD formal — use providerProfiles. HONEST-HIDE: formal returns []. */
   updateProviderModels: async (
-    id: string,
-    models: string[]
+    _id: string,
+    _models: string[]
   ): Promise<ProviderInfo[]> => {
-    if (!isDemoMode()) return [];
-    return clientApiDemo.updateProviderModels(id, models);
+    return [];
   },
 
   /** @deprecated DEAD formal — use providerProfiles / ModelsSettingsTab. HONEST-HIDE: formal returns []. */
-  fetchLatestModels: async (id: string): Promise<string[]> => {
-    if (!isDemoMode()) return [];
-    return clientApiDemo.fetchLatestModels(id);
+  fetchLatestModels: async (_id: string): Promise<string[]> => {
+    return [];
   },
 
   getScheduledTasks: async (): Promise<CronJob[]> => {
-    if (isDemoMode()) return clientApiDemo.getScheduledTasks();
     try {
       const client = getDesktopDaemonClient();
       const res = (await client.request(
@@ -863,7 +865,6 @@ export const clientApi = {
   },
 
   saveScheduledTask: async (task: CronJob): Promise<CronJob[]> => {
-    if (isDemoMode()) return clientApiDemo.saveScheduledTask(task);
     try {
       const client = getDesktopDaemonClient();
       await client.request(
@@ -879,7 +880,6 @@ export const clientApi = {
   },
 
   deleteScheduledTask: async (id: string): Promise<CronJob[]> => {
-    if (isDemoMode()) return clientApiDemo.deleteScheduledTask(id);
     try {
       const client = getDesktopDaemonClient();
       await client.request(
@@ -897,7 +897,6 @@ export const clientApi = {
   // ── MCP — Daemon RPC 通信链路 ────
 
   getMcpServers: async (): Promise<McpServer[]> => {
-    if (isDemoMode()) return clientApiDemo.getMcpServers();
     try {
       const client = getDesktopDaemonClient();
       const res = (await client.request(
@@ -921,7 +920,6 @@ export const clientApi = {
   },
 
   saveMcpServer: async (server: McpServer): Promise<McpServer[]> => {
-    if (isDemoMode()) return clientApiDemo.saveMcpServer(server);
     try {
       const client = getDesktopDaemonClient();
       await client.request(
@@ -943,7 +941,6 @@ export const clientApi = {
   },
 
   deleteMcpServer: async (id: string): Promise<McpServer[]> => {
-    if (isDemoMode()) return clientApiDemo.deleteMcpServer(id);
     try {
       const client = getDesktopDaemonClient();
       await client.request(

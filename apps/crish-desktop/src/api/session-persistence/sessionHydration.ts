@@ -1,5 +1,10 @@
 /**
  * 会话反序列化、格式补齐与水合校验纯函数集
+ *
+ * Stream D 改造后职责：仅保留「形状守卫」与「水合校验」纯函数。
+ * - JSONL 序列化 / 反序列化（messagesToJsonl / jsonlToMessages / *Worker）已删除：
+ *   SQLite 直接以结构化行存储 SessionMessage，无需 JS 侧 JSONL 中间层。
+ * - 大数据量异步解析下沉到 Rust 侧（save_session_body / load_session_body）。
  */
 
 import type {
@@ -11,30 +16,34 @@ import type {
   MessageToolApprovalMeta,
   MessageToolCall,
 } from '../../store/types';
-import type { WorkerPool } from '../../workers/worker-pool';
-import { Priority } from '../../workers/types';
+import { isPendingDraft } from '../../store/draftSession';
 import { EMPTY_SESSION_TITLE } from '../sessionTitle';
 import { normalizeAssistantTimeline } from '../toolPresentation';
 import {
   DEFAULT_SESSION_FOLDER,
-  WORKER_BATCH_THRESHOLD,
   type SessionIndexEntry,
+  type SessionIndexImportMeta,
 } from './sessionPersistenceTypes';
 
-let _poolPromise: Promise<WorkerPool | null> | null = null;
-
-function getPoolAsync(): Promise<WorkerPool | null> {
-  if (!_poolPromise) {
-    _poolPromise = (async () => {
-      try {
-        const { getWorkerPool } = await import('../../workers/index');
-        return getWorkerPool();
-      } catch {
-        return null;
-      }
-    })();
+/** 规范化索引侧 importMeta；非法则 undefined */
+export function parseSessionIndexImportMeta(
+  raw: unknown,
+): SessionIndexImportMeta | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const o = raw as Record<string, unknown>;
+  const source =
+    o.source === 'claude-code' || o.source === 'codex' ? o.source : null;
+  const sourceSessionId =
+    typeof o.sourceSessionId === 'string' ? o.sourceSessionId.trim() : '';
+  if (!source || !sourceSessionId) return undefined;
+  const meta: SessionIndexImportMeta = { source, sourceSessionId };
+  if (typeof o.sourcePath === 'string' && o.sourcePath.trim()) {
+    meta.sourcePath = o.sourcePath.trim();
   }
-  return _poolPromise;
+  if (typeof o.importedAt === 'string' && o.importedAt.trim()) {
+    meta.importedAt = o.importedAt.trim();
+  }
+  return meta;
 }
 
 const TOOL_STATUSES = new Set<MessageToolCall['status']>([
@@ -108,12 +117,15 @@ export function normalizePinnedMessageIds(raw: unknown): string[] | undefined {
 /**
  * 将未知值规范为 SessionIndexEntry。
  * 缺 id → null；其余字段填安全默认（不发明远程会话）。
+ * I-DRAFT：PENDING_DRAFT 哨兵永不进入 sessions[] / 索引（C3）。
  */
 export function parseSessionIndexEntry(raw: unknown): SessionIndexEntry | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
   const id = asNonEmptyString(o.id);
   if (!id) return null;
+  // draft 哨兵禁止水合为索引条目（脏盘 / 旧 bug 兜底）
+  if (isPendingDraft(id)) return null;
 
   const title =
     typeof o.title === 'string' && o.title.trim()
@@ -159,6 +171,8 @@ export function parseSessionIndexEntry(raw: unknown): SessionIndexEntry | null {
   if (typeof o.hydratedFromEngine === 'boolean') {
     entry.hydratedFromEngine = o.hydratedFromEngine;
   }
+  const importMeta = parseSessionIndexImportMeta(o.importMeta);
+  if (importMeta) entry.importMeta = importMeta;
 
   return entry;
 }
@@ -372,105 +386,6 @@ export function parseFolderOrder(raw: unknown): string[] | null {
   // 原数组非空但无一合法 → 视为损坏
   if (raw.length > 0 && out.length === 0) return null;
   return out;
-}
-
-/** 序列化为 JSONL（每行一条消息） */
-export function messagesToJsonl(messages: SessionMessage[]): string {
-  if (!messages?.length) return '';
-  return messages.map((m) => JSON.stringify(m)).join('\n');
-}
-
-/**
- * JSONL → 消息；坏行跳过；空/空白 → []。
- * 兼容：整段若是 JSON 数组字符串则走数组路径。
- */
-export function jsonlToMessages(text: string): SessionMessage[] {
-  if (text == null || !String(text).trim()) return [];
-  const s = String(text);
-  // 迁移边缘：误把 JSON 数组塞进 JSONL 读取路径
-  const trimmedStart = s.trimStart();
-  if (trimmedStart.startsWith('[')) {
-    const parsed = safeParseJson<unknown>(s, null);
-    return parseSessionMessages(parsed);
-  }
-  const out: SessionMessage[] = [];
-  for (const line of s.split(/\r?\n/)) {
-    const t = line.trim();
-    if (!t) continue;
-    try {
-      const m = parseSessionMessage(JSON.parse(t));
-      if (m) out.push(m);
-    } catch {
-      /* 跳过坏行 */
-    }
-  }
-  return out;
-}
-
-/** 兜底同步消息序列化（与 messagesToJsonl 同逻辑，保证 worker 不可用时一致） */
-export function messagesToJsonlFallback(messages: SessionMessage[]): string {
-  return messagesToJsonl(messages);
-}
-
-/**
- * 异步 Worker 版 messagesToJsonl。
- * 消息数 > WORKER_BATCH_THRESHOLD 时走 Web Worker，小数据量直接同步。
- * Worker 不可用或出错时自动降级为同步。
- */
-export async function messagesToJsonlWorker(
-  messages: SessionMessage[],
-  signal?: AbortSignal
-): Promise<string> {
-  if (!messages?.length) return '';
-  if (messages.length <= WORKER_BATCH_THRESHOLD) {
-    return messagesToJsonl(messages);
-  }
-  try {
-    const pool = await getPoolAsync();
-    if (pool) {
-      return await pool.schedule<string>(
-        'io',
-        'messages.to-jsonl',
-        { messages },
-        Priority.Normal,
-        signal !== undefined ? { signal } : {}
-      );
-    }
-  } catch {
-    // fallback to sync
-  }
-  return messagesToJsonlFallback(messages);
-}
-
-/**
- * 异步 Worker 版 jsonlToMessages。
- * 大数据量时走 Worker，小数据量直接同步。
- */
-export async function jsonlToMessagesWorker(
-  jsonl: string,
-  signal?: AbortSignal
-): Promise<SessionMessage[]> {
-  if (!jsonl?.trim()) return [];
-  // 长度阈值：~200 条消息 ≈ 200KB，超过走 worker
-  if (jsonl.length <= 200 * 1024) {
-    return jsonlToMessages(jsonl);
-  }
-  try {
-    const pool = await getPoolAsync();
-    if (pool) {
-      const result = await pool.schedule<unknown[]>(
-        'io',
-        'jsonl.to-messages',
-        { text: jsonl },
-        Priority.Normal,
-        signal !== undefined ? { signal } : {}
-      );
-      return parseSessionMessages(result);
-    }
-  } catch {
-    // fallback
-  }
-  return jsonlToMessages(jsonl);
 }
 
 /**

@@ -34,7 +34,11 @@ export const MCP_TOOL_DISABLED_CACHE_KEY = 'crish_mcp_tool_disabled_cache_v1';
 export const MODEL_META_KEY = 'crish_model_meta_v1';
 /** 模型价格缓存 */
 export const MODEL_PRICES_KEY = 'crish_model_prices_v1';
-/** 当前打开的会话 tab id 列表 */
+/**
+ * 当前打开的会话 tab id 列表（base key）。
+ * 运行时读写使用 window-scoped：`crish_open_session_tabs_v1::${windowId}`
+ * （见 api/shellWindowScope.ts / workspaceChromeTabs.openSessionTabsStorageKey）。
+ */
 export const OPEN_SESSION_TABS_KEY = 'crish_open_session_tabs_v1';
 /** 权限模式（契约：localStorage crish_permission_mode 供 ENGINE-RUN + LS 读） */
 export const PERMISSION_MODE_KEY = 'crish_permission_mode';
@@ -72,6 +76,8 @@ export const SHELL_CHROME_KEY = 'crish_shell_chrome';
 export const SHORTCUT_OVERRIDES_KEY = 'crish_shortcut_overrides';
 /** 显示引擎设置标志 */
 export const SHOW_ENGINE_SETTINGS_KEY = 'crish_show_engine_settings';
+/** Dev 角落 controlMetrics 健康条（D2-3）；值为 '1' 时启用 */
+export const DEV_HEALTH_LS_KEY = 'crish_dev_health';
 /** 侧栏折叠状态 */
 export const SIDEBAR_COLLAPSED_KEY = 'crish_sidebar_collapsed';
 /** 侧栏宽度（px，拖拽/键盘调整后持久化） */
@@ -82,6 +88,10 @@ export const SIDEBAR_LIST_PREFS_KEY = 'crish_sidebar_list_prefs';
 export const SKILL_ACTIVATION_KEY = 'crish_skill_activation_v1';
 /** 技能额外搜索目录 */
 export const SKILL_EXTRA_DIRS_KEY = 'crish_skill_extra_dirs_v1';
+/** 外部会话导入：自定义 Claude Code 配置根目录（非默认 ~/.claude） */
+export const IMPORT_CLAUDE_ROOT_KEY = 'crish_import_claude_root';
+/** 外部会话导入：自定义 Codex 配置根目录（非默认 ~/.codex） */
+export const IMPORT_CODEX_ROOT_KEY = 'crish_import_codex_root';
 /** Tab 模式（0=关闭，1=开启） */
 export const TAB_MODE_KEY = 'crish_tab_mode';
 /** 主题模式：'default' | 'dark' */

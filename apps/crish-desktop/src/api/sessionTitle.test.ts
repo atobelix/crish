@@ -57,7 +57,7 @@ describe('sessionTitle shell helpers', () => {
     expect(isDefaultSessionTitle('未命名对话')).toBe(true);
     expect(isDefaultSessionTitle('未命名聊天')).toBe(true);
     expect(isDefaultSessionTitle('未命名会话 2')).toBe(true);
-    // 定时任务占位标题不是默认，勿被当成可复用空壳
+    // 定时任务占位标题不是默认，勿被 hydrate GC 当默认空壳剪掉
     expect(isDefaultSessionTitle('定时 · 每日 PR 总结')).toBe(false);
     expect(isDefaultSessionTitle('定时 · 任务')).toBe(false);
     expect(isDefaultSessionTitle('定时·紧凑')).toBe(false);
@@ -361,6 +361,68 @@ describe('sessionTitle shell helpers', () => {
     expect(prepareSessionsForUi(sessions, '').map((s) => s.id)).toEqual([
       'content',
     ]);
+  });
+
+  it('I-DRAFT: prepareSessionsForUi strips PENDING_DRAFT entry from sessions[]', () => {
+    const sessions = [
+      {
+        id: '__pending_draft__',
+        title: 'leak',
+        messages: [{ sender: 'user', text: 'nope' }],
+      },
+      {
+        id: 'content',
+        title: '真实',
+        messages: [{ sender: 'user', text: 'hi' }],
+      },
+    ];
+    expect(prepareSessionsForUi(sessions, null).map((s) => s.id)).toEqual([
+      'content',
+    ]);
+    expect(
+      prepareSessionsForUi(sessions, '__pending_draft__').map((s) => s.id)
+    ).toEqual(['content']);
+  });
+
+  /**
+   * inventory #9 单一心智模型契约：
+   * - draft 永不进 sessions[]（I-DRAFT strip）
+   * - 默认标题空壳仅 hydrate GC（active=draft 时剪尽）
+   * - 空壳隐藏 ≠ 复用当新建（shouldList=false 与 prune 同源判定）
+   */
+  it('inventory #9 mental model: draft never listed; empty shells hydrate-GC only', () => {
+    const dirty = [
+      {
+        id: '__pending_draft__',
+        title: EMPTY_SESSION_TITLE,
+        messages: [] as [],
+      },
+      { id: 'ghost', title: EMPTY_SESSION_TITLE, messages: [] as [] },
+      {
+        id: 'content',
+        title: '真实',
+        messages: [{ sender: 'user', text: 'hi' }],
+      },
+      { id: 'sched', title: '定时 · 巡检', messages: [] as [] },
+    ];
+    // 用户草稿 active：不 keep 空壳；哨兵行剥离
+    const hydrated = prepareSessionsForUi(dirty, '__pending_draft__');
+    expect(hydrated.map((s) => s.id).sort()).toEqual(['content', 'sched']);
+    expect(hydrated.every((s) => s.id !== '__pending_draft__')).toBe(true);
+    // 侧栏：幽灵「新会话」不展示；草稿不在列表
+    expect(
+      shouldListSessionInSidebar(
+        { id: 'ghost', title: EMPTY_SESSION_TITLE, messages: [] },
+        '__pending_draft__'
+      )
+    ).toBe(false);
+    // 定时占位保留（系统路径，非用户「新建」空壳）
+    expect(
+      shouldListSessionInSidebar(
+        { id: 'sched', title: '定时 · 巡检', messages: [] },
+        '__pending_draft__'
+      )
+    ).toBe(true);
   });
 
   it('prepareSessionsForUi returns same ref when nothing to change', () => {

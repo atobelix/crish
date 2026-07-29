@@ -29,6 +29,8 @@ type RawHostOpener = {
   reason?: string | null;
   path?: string | null;
   command?: string | null;
+  iconDataUrl?: string | null;
+  icon_data_url?: string | null;
   diagnostic?: { path?: string | null; command?: string | null };
 };
 
@@ -51,7 +53,7 @@ function normalizeOpener(raw: RawHostOpener): HostOpener | null {
     kind: (raw.kind || 'editor') as HostOpenerKind,
     available: raw.available !== false,
     path,
-    iconDataUrl: (raw as any).iconDataUrl || (raw as any).icon_data_url || null,
+    iconDataUrl: raw.iconDataUrl || raw.icon_data_url || null,
     ...(raw.label !== undefined && { label: raw.label }),
     ...(raw.reason !== undefined && { reason: raw.reason }),
   };

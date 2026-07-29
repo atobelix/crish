@@ -1,11 +1,32 @@
 /**
  * Direct HTTP SSE fetch bridge for OpenAI/DeepSeek-compatible LLM endpoints.
- * Fallback path when agent-daemon binary is unreachable or running in browser dev mode.
- * 
+ *
+ * ## Transport role (inventory #10) — DEGRADED ONLY, not product SoT
+ * - **Primary SoT:** `streamViaDaemon` via `chatApi.streamAssistantResponseApi`.
+ * - **This module:** last-resort HTTP SSE when agent-daemon WS is unreachable
+ *   (auto-gated by `ALLOW_AUTO_DIRECT_FETCH_FALLBACK` in ConnectionLifecycle).
+ * - **Do not** wire product features that only work on this path (tools/approvals/
+ *   L2 cooperative stop / subagents need daemon).
+ * - **Soft-deprecated as auto product path:** prefer refuse-start + user notice
+ *   over silent direct; keep implementation for offline/dev/degraded recovery.
+ *
+ * ## Cancel parity vs daemon
+ * | Concern | Daemon (`createStreamCancel`) | Direct (this file) |
+ * |---------|-------------------------------|--------------------|
+ * | Stop wire | L2/L3 via `runControlClient` | N/A — no daemon run |
+ * | Local stop | cleanup + onComplete | `AbortController.abort()` + onComplete |
+ * | Cooperative L2 | runtime safe-point drain | **Not supported** (abort ≈ force) |
+ * | Outer handle | `StreamCancelFn` from `streamViaDaemon` | must be stored on `state.transportAbort` |
+ *
+ * Caller cancel **must** invoke the returned abort; fire-and-forget starts leak streams.
+ *
  * 性能与缓存增强：
  * - 规范化与确定性排序 Tool Schema (JSON Schema Canonicalization) 确保前缀字节级一致
  * - 注入 FNV-1a Hash 派生的 prompt_cache_key (适用于 DeepSeek / OpenAI / OpenCode)
  * - 捕获增量流中的 Prompt Cache Hit/Miss 用量统计并实时透传
+ *
+ * @see docs/plans/progress/architecture-dedup-inventory.md #10
+ * @see ./daemon-chat-bridge/ConnectionLifecycle.ts (`ALLOW_AUTO_DIRECT_FETCH_FALLBACK`)
  */
 
 import type { StreamCallbacks, StreamRequestOptions } from './chatApi';
@@ -106,7 +127,15 @@ function buildThinkingParams(thinkingLevel?: string): Record<string, unknown> {
 }
 
 /**
- * Direct SSE Streaming client using native fetch with prompt caching and tool canonicalization.
+ * Direct SSE streaming client (prompt cache + tool canonicalization).
+ *
+ * @deprecated **Not product primary transport** (inventory #10). Call only from
+ * `ConnectionLifecycle.createStreamSession` degraded branch, or explicit tests/dev.
+ * Prefer `chatApi.streamAssistantResponseApi` → `streamViaDaemon`.
+ *
+ * Cancel: returned `() => void` aborts the fetch and calls `onComplete` once
+ * (force-equivalent only; no L2 cooperative). Callers must retain the handle
+ * (`state.transportAbort`) — dropping it breaks Stop parity with daemon path.
  */
 export function streamViaDirectFetch(
   prompt: string,
@@ -115,6 +144,8 @@ export function streamViaDirectFetch(
   assistantMsgId: string,
   options?: StreamRequestOptions,
 ): () => void {
+  void sessionId;
+  void assistantMsgId;
   const controller = new AbortController();
   let finished = false;
 
@@ -140,7 +171,7 @@ export function streamViaDirectFetch(
 
   // 1. Stable System Prompt & Tools
   const systemPrompt = options?.systemPrompt || undefined;
-  const formattedTools = formatStableTools(options?.tools as any);
+  const formattedTools = formatStableTools(options?.tools);
   const cacheAffinityKey = buildStableCacheKey(systemPrompt, formattedTools);
 
   // 2. Format Messages History + User Turn
@@ -281,7 +312,8 @@ export function streamViaDirectFetch(
       finished = true;
       callbacks.onComplete();
     } catch (err: unknown) {
-      if (controller.signal.aborted) return;
+      // Cancel path sets finished + onComplete; AbortError is expected — do not double-complete.
+      if (controller.signal.aborted || finished) return;
       const msg = err instanceof Error ? err.message : String(err);
       if (callbacks.onRunError) callbacks.onRunError(msg, 'network');
       else callbacks.onChunk(`\n⚠️ ${msg}`);
@@ -290,10 +322,16 @@ export function streamViaDirectFetch(
     }
   })();
 
+  // Cancel parity with createStreamCancel: always terminal + onComplete (force-equivalent).
+  // L2 cooperative is unavailable without daemon ControlBus.
   return () => {
-    if (!finished) {
-      finished = true;
-      controller.abort();
+    if (finished) return;
+    finished = true;
+    controller.abort();
+    try {
+      callbacks.onComplete();
+    } catch {
+      /* ignore */
     }
   };
 }

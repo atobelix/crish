@@ -207,6 +207,9 @@ export function hasEffectiveDiffChanges(
 
 /** 判断 FileDiff 是否可安全自动应用到磁盘 */
 export function classifyFileDiff(diff: FileDiff | null | undefined): ClassifyFileDiffResult {
+  if (diff?.provisional) {
+    return { ok: false, reason: '包含 provisional 临时改动' };
+  }
   const pathCheck = isSafeApplyPath(diff?.filePath);
   if (pathCheck.ok === false) {
     return { ok: false, reason: pathCheck.reason };

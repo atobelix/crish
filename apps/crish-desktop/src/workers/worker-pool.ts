@@ -19,11 +19,26 @@ interface WorkerEntry {
   abortController: AbortController | null;
 }
 
+// =============================================================================
+// Stream E 改造后的默认配置
+//
+// 系统化设计：worker pool 仅保留 render 通道作为 Rust 渲染的 fallback。
+// compute / io / network 任务的 worker 不再创建：
+//   - compute 任务（sha256 / base64 / encoding / diff 等）已下沉到 Rust 命令，
+//     api-adapters.ts 在 Rust 缺失时回退到主线程 JS 实现（不依赖 worker pool）
+//   - io 任务（messages.to-jsonl / jsonl.to-messages / text.decode 等）同上
+//   - network 任务原本就指向 compute-worker.ts（无独立 network-worker.ts 文件），
+//     现统一废弃
+//
+// 保留 compute-worker / io-worker 文件用于轻量任务（budget.text / json.stringify /
+// json.parse / json.parse / ping），但默认不创建 worker 实例。
+// 若未来需要 worker 路径（例如 benchmark 验证），可通过 WorkerPoolOptions 显式启用。
+// =============================================================================
 const DEFAULT_OPTIONS: WorkerPoolOptions = {
   renderWorkers: 2,
-  computeWorkers: Math.max(1, (navigator.hardwareConcurrency || 4) - 2),
-  ioWorkers: 2,
-  networkWorkers: 1,
+  computeWorkers: 0,
+  ioWorkers: 0,
+  networkWorkers: 0,
   idleTimeoutMs: 60_000,
   taskTimeoutMs: 30_000,
 };
@@ -31,7 +46,7 @@ const DEFAULT_OPTIONS: WorkerPoolOptions = {
 const MINIMAL_OPTIONS: WorkerPoolOptions = {
   renderWorkers: 1,
   computeWorkers: 0,
-  ioWorkers: 1,
+  ioWorkers: 0,
   networkWorkers: 0,
   idleTimeoutMs: 60_000,
   taskTimeoutMs: 30_000,
@@ -363,7 +378,13 @@ export class WorkerPool {
     return `task_${++this.taskIdCounter}_${Date.now().toString(36)}`;
   }
 
-  /** Phase 2 扩容：补充 Worker 至完整数量 */
+  /**
+   * Phase 2 扩容：补充 Worker 至完整数量。
+   *
+   * Stream E 后：compute / io / network 默认目标为 0（任务下沉 Rust + 主线程 JS fallback），
+   * 因此 scaleUp 实际只补充 render worker。若调用方需要恢复 worker 路径，
+   * 可通过 `new WorkerPool({ computeWorkers: N })` 显式启用。
+   */
   scaleUp(): void {
     const current = new Map<WorkerType, number>();
     for (const e of this.entries) {
@@ -372,7 +393,7 @@ export class WorkerPool {
 
     const targets: Array<{ type: WorkerType; target: number; url: string }> = [
       { type: 'render', target: DEFAULT_OPTIONS.renderWorkers, url: './render-worker.ts' },
-      { type: 'compute', target: Math.max(1, (navigator.hardwareConcurrency || 4) - 2), url: './compute-worker.ts' },
+      { type: 'compute', target: DEFAULT_OPTIONS.computeWorkers, url: './compute-worker.ts' },
       { type: 'io', target: DEFAULT_OPTIONS.ioWorkers, url: './io-worker.ts' },
       { type: 'network', target: DEFAULT_OPTIONS.networkWorkers, url: './compute-worker.ts' },
     ];

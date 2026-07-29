@@ -1,10 +1,24 @@
 /**
- * localStorage 会话读写与主持久化编排
+ * localStorage 会话读写（同步回退层）+ 持久化编排入口
+ *
+ * Stream D 改造后职责：
+ *   - 同步 localStorage 读写函数：作为 Tauri invoke 缺失时的回退路径
+ *   - `persistAllSessions` 编排：委托 `persistAllSessionsRust`（SQLite 主路径 + localStorage 回退）
+ *   - `persistAllSessionsSync`：beforeunload 场景的同步 flush（仅 localStorage）
+ *
+ * 已删除的依赖：
+ *   - asyncStorage / IndexedDB（setAsyncItem / keyIndexManager）—— 三层冗余已消除
+ *   - sessionIndexedDb（persistedMessageCounts / cleanupOrphanSessionsAsync）—— SQLite 取代
+ *   - messagesToJsonlWorker —— JSONL 序列化下沉到 Rust 侧
+ *
+ * 索引策略：
+ *   - Stream D 过渡期，localStorage 仍是会话索引的真相源（侧栏元数据）
+ *   - bodies / agents 走 SQLite（conex-db），localStorage 仅作回退
+ *   - 未来增补 upsert_session_entry 命令后，索引可彻底迁移到 SQLite
  */
 
 import type { SessionAgent, SessionMessage, SessionState } from '../../store/layoutStore';
 import { isPendingDraft } from '../../store/draftSession';
-import { keyIndexManager, removeAsyncItem, setAsyncItem } from '../asyncStorage';
 import { coerceSessionTimestamp } from '../sessionTime';
 import { prepareSessionsForUi } from '../sessionTitle';
 import { normalizeAssistantTimeline } from '../toolPresentation';
@@ -16,15 +30,11 @@ import {
   SESSION_BODY_PREFIX,
   SESSION_FOLDER_KEY,
   SESSION_INDEX_KEY,
-  WORKER_BATCH_THRESHOLD,
   type SessionIndexEntry,
 } from './sessionPersistenceTypes';
 
 import {
   hydrateSessionAgents,
-  jsonlToMessages,
-  messagesToJsonl,
-  messagesToJsonlWorker,
   parseFolderOrder,
   parseSessionAgents,
   parseSessionIndexEntry,
@@ -35,9 +45,9 @@ import {
 } from './sessionHydration';
 
 import {
-  cleanupOrphanSessionsAsync,
-  persistedMessageCounts,
-} from './sessionIndexedDb';
+  persistAllSessionsRust,
+  persistAllSessionsSyncViaLocalStorage,
+} from './sessionRustDb';
 
 function asNonEmptyString(v: unknown): string | null {
   if (typeof v !== 'string') return null;
@@ -64,65 +74,34 @@ export function saveSessionIndex(entries: SessionIndexEntry[]): void {
 
 export function loadSessionBody(sessionId: string): SessionMessage[] {
   const id = asNonEmptyString(sessionId);
-  if (!id) return [];
+  if (!id || isPendingDraft(id)) return [];
   const raw = localStorage.getItem(SESSION_BODY_PREFIX + id);
   if (!raw) return [];
-  let msgs: SessionMessage[];
-  if (raw.trimStart().startsWith('[')) {
-    const parsed = safeParseJson<unknown>(raw, null);
-    msgs = parseSessionMessages(parsed);
-  } else {
-    msgs = jsonlToMessages(raw);
-  }
-  persistedMessageCounts.set(id, msgs.length);
-  return msgs;
+  // 仅支持 JSON 数组格式（Stream D 后已弃用 JSONL 中间格式）
+  const parsed = safeParseJson<unknown>(raw, null);
+  return parseSessionMessages(parsed);
 }
 
 export function saveSessionBody(
   sessionId: string,
   messages: SessionMessage[],
-  serializedJsonl?: string | null
 ): void {
   const id = asNonEmptyString(sessionId);
-  if (!id) return;
+  // I-DRAFT：哨兵永不写 body
+  if (!id || isPendingDraft(id)) return;
   const msgs = messages || [];
-  const prevCount = persistedMessageCounts.get(id) ?? 0;
   const key = SESSION_BODY_PREFIX + id;
 
-  let content: string;
-  if (serializedJsonl != null) {
-    content = serializedJsonl;
-  } else if (prevCount === 0 || msgs.length < prevCount) {
-    content = messagesToJsonl(msgs);
-  } else if (msgs.length > prevCount) {
-    const newMsgs = msgs.slice(prevCount);
-    const existing = localStorage.getItem(key) ?? '';
-    const append = newMsgs.map((m) => JSON.stringify(m)).join('\n');
-    const sep = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
-    content = existing + sep + append;
-  } else {
-    content = localStorage.getItem(key) ?? messagesToJsonl(msgs);
-  }
-
-  setAsyncItem(key, content)
-    .then(() => {
-      keyIndexManager.addKey(key);
-    })
-    .catch(() => {
-      /* ignore */
-    });
-
   try {
-    localStorage.setItem(key, content);
-    persistedMessageCounts.set(id, msgs.length);
+    localStorage.setItem(key, JSON.stringify(msgs));
   } catch {
+    // quota — 保留最后 100 条
     const fallback = msgs.slice(-100);
-    const fbContent = messagesToJsonl(fallback);
-    localStorage.setItem(key, fbContent);
-    setAsyncItem(key, fbContent).catch(() => {
-      /* ignore */
-    });
-    persistedMessageCounts.set(id, fallback.length);
+    try {
+      localStorage.setItem(key, JSON.stringify(fallback));
+    } catch {
+      /* quota — drop silently */
+    }
   }
 }
 
@@ -131,18 +110,17 @@ export function deleteSessionBody(sessionId: string): void {
   if (!id) return;
   const bodyKey = SESSION_BODY_PREFIX + id;
   const agentsKey = SESSION_AGENTS_PREFIX + id;
-  removeAsyncItem(bodyKey);
-  removeAsyncItem(agentsKey);
-  keyIndexManager.deleteKey(bodyKey);
-  keyIndexManager.deleteKey(agentsKey);
-  localStorage.removeItem(bodyKey);
-  localStorage.removeItem(agentsKey);
-  persistedMessageCounts.delete(id);
+  try {
+    localStorage.removeItem(bodyKey);
+    localStorage.removeItem(agentsKey);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function loadSessionAgents(sessionId: string): SessionAgent[] {
   const id = asNonEmptyString(sessionId);
-  if (!id) return [];
+  if (!id || isPendingDraft(id)) return [];
   const raw = localStorage.getItem(SESSION_AGENTS_PREFIX + id);
   if (!raw) return [];
   const parsed = safeParseJson<unknown>(raw, null);
@@ -155,9 +133,14 @@ export function saveSessionAgents(
   agents: SessionAgent[]
 ): void {
   const id = asNonEmptyString(sessionId);
-  if (!id) return;
+  // I-DRAFT：哨兵永不写 agents
+  if (!id || isPendingDraft(id)) return;
   if (!agents?.length) {
-    localStorage.removeItem(SESSION_AGENTS_PREFIX + id);
+    try {
+      localStorage.removeItem(SESSION_AGENTS_PREFIX + id);
+    } catch {
+      /* ignore */
+    }
     return;
   }
   try {
@@ -179,7 +162,11 @@ export function loadActiveSessionId(): string | null {
 
 export function saveActiveSessionId(id: string): void {
   if (!id?.trim() || isPendingDraft(id)) {
-    localStorage.removeItem(SESSION_ACTIVE_KEY);
+    try {
+      localStorage.removeItem(SESSION_ACTIVE_KEY);
+    } catch {
+      /* ignore */
+    }
     return;
   }
   try {
@@ -216,12 +203,26 @@ function lastMessageTime(
   return null;
 }
 
-export function sessionsToIndex(sessions: SessionState[]): SessionIndexEntry[] {
+/**
+ * 可持久化会话过滤：剔除 PENDING_DRAFT 哨兵（I-DRAFT / C3）。
+ * persist / index 路径统一入口。
+ */
+export function filterPersistableSessions(
+  sessions: SessionState[] | null | undefined
+): SessionState[] {
   if (!sessions?.length) return [];
+  return sessions.filter((s) => Boolean(s?.id) && !isPendingDraft(s.id));
+}
+
+export function sessionsToIndex(sessions: SessionState[]): SessionIndexEntry[] {
+  const persistable = filterPersistableSessions(sessions);
+  if (!persistable.length) return [];
   const prev = new Map(loadSessionIndex().map((e) => [e.id, e]));
-  return sessions
+  return persistable
     .map((s) => {
       if (!s?.id) return null;
+      // 双保险：index 层再拒一次 draft
+      if (isPendingDraft(s.id)) return null;
       const old = prev.get(s.id);
       const messageCount = s.messages?.length ?? 0;
       const pinnedIds = s.pinnedMessageIds?.length
@@ -231,6 +232,12 @@ export function sessionsToIndex(sessions: SessionState[]): SessionIndexEntry[] {
       const pinsChanged =
         (pinnedIds?.length ?? 0) !== (oldPinned?.length ?? 0) ||
         (pinnedIds || []).some((id, i) => id !== oldPinned?.[i]);
+      const importMetaKey = s.importMeta
+        ? `${s.importMeta.source}::${s.importMeta.sourceSessionId}`
+        : '';
+      const oldImportMetaKey = old?.importMeta
+        ? `${old.importMeta.source}::${old.importMeta.sourceSessionId}`
+        : '';
       const metaChanged =
         !old ||
         old.title !== s.title ||
@@ -239,6 +246,7 @@ export function sessionsToIndex(sessions: SessionState[]): SessionIndexEntry[] {
         old.isArchived !== s.isArchived ||
         old.messageCount !== messageCount ||
         old.branchParentId !== s.branchParentId ||
+        importMetaKey !== oldImportMetaKey ||
         pinsChanged;
 
       let updatedAt = old?.updatedAt ?? Date.now();
@@ -260,6 +268,20 @@ export function sessionsToIndex(sessions: SessionState[]): SessionIndexEntry[] {
         engineCursor: s.engineCursor,
         engineLastRunId: s.engineLastRunId,
         hydratedFromEngine: s.hydratedFromEngine,
+        ...(s.importMeta
+          ? {
+              importMeta: {
+                source: s.importMeta.source,
+                sourceSessionId: s.importMeta.sourceSessionId,
+                ...(s.importMeta.sourcePath
+                  ? { sourcePath: s.importMeta.sourcePath }
+                  : {}),
+                ...(s.importMeta.importedAt
+                  ? { importedAt: s.importMeta.importedAt }
+                  : {}),
+              },
+            }
+          : {}),
       });
     })
     .filter(Boolean) as SessionIndexEntry[];
@@ -270,7 +292,8 @@ export function hydrateSessionsFromDisk(): {
   activeSessionId: string | null;
   folderOrder: string[] | null;
 } {
-  const index = loadSessionIndex();
+  // parseSessionIndexList 已拒 PENDING_DRAFT；再 filter 一次防漏
+  const index = loadSessionIndex().filter((e) => !isPendingDraft(e.id));
   if (!index.length) {
     return {
       sessions: [],
@@ -283,28 +306,32 @@ export function hydrateSessionsFromDisk(): {
     (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
   );
 
-  const sessions: SessionState[] = ordered.map((e) => {
-    const messages = sanitizeMessagesForHydrate(loadSessionBody(e.id));
-    return {
-      id: e.id,
-      title: e.title,
-      folder: e.folder,
-      isPinned: e.isPinned,
-      isArchived: e.isArchived,
-      ...(e.branchParentId !== undefined ? { branchParentId: e.branchParentId } : {}),
-      timestamp: coerceSessionTimestamp(e.id, e.timestamp, messages),
-      messages,
-      ...(e.pinnedMessageIds?.length ? { pinnedMessageIds: e.pinnedMessageIds } : {}),
-      agents: loadSessionAgents(e.id),
-      ...(e.engineCursor !== undefined ? { engineCursor: e.engineCursor } : {}),
-      ...(e.engineLastRunId !== undefined ? { engineLastRunId: e.engineLastRunId } : {}),
-      ...(e.hydratedFromEngine !== undefined ? { hydratedFromEngine: e.hydratedFromEngine } : {}),
-    };
-  });
+  const sessions: SessionState[] = ordered
+    .filter((e) => e.id && !isPendingDraft(e.id))
+    .map((e) => {
+      const messages = sanitizeMessagesForHydrate(loadSessionBody(e.id));
+      return {
+        id: e.id,
+        title: e.title,
+        folder: e.folder,
+        isPinned: e.isPinned,
+        isArchived: e.isArchived,
+        ...(e.branchParentId !== undefined ? { branchParentId: e.branchParentId } : {}),
+        timestamp: coerceSessionTimestamp(e.id, e.timestamp, messages),
+        messages,
+        ...(e.pinnedMessageIds?.length ? { pinnedMessageIds: e.pinnedMessageIds } : {}),
+        agents: loadSessionAgents(e.id),
+        ...(e.engineCursor !== undefined ? { engineCursor: e.engineCursor } : {}),
+        ...(e.engineLastRunId !== undefined ? { engineLastRunId: e.engineLastRunId } : {}),
+        ...(e.hydratedFromEngine !== undefined ? { hydratedFromEngine: e.hydratedFromEngine } : {}),
+        ...(e.importMeta ? { importMeta: e.importMeta } : {}),
+      };
+    });
 
   const activeLoaded = loadActiveSessionId();
   const activeRaw =
     activeLoaded && !isPendingDraft(activeLoaded) ? activeLoaded : null;
+  // prepareSessionsForUi：prune 非 keep 空壳；active=null/draft 不 keep 任何空壳
   const prepared = prepareSessionsForUi(sessions, activeRaw);
   const activeSessionId =
     activeRaw && prepared.some((s) => s.id === activeRaw) ? activeRaw : null;
@@ -316,115 +343,40 @@ export function hydrateSessionsFromDisk(): {
   };
 }
 
+/**
+ * 全量持久化所有会话（异步）。
+ *
+ * Stream D 改造后：委托 `persistAllSessionsRust`，主路径走 SQLite，
+ * invoke 缺失时自动回退到 localStorage 同步写入。
+ *
+ * 索引仍写一份到 localStorage（侧栏元数据真相源，过渡期设计）。
+ */
 export async function persistAllSessions(
   sessions: SessionState[],
   activeSessionId: string,
   folderOrder: string[]
 ): Promise<void> {
-  const list = sessions ?? [];
-  saveSessionIndex(sessionsToIndex(list));
-  const workerJobs: Promise<void>[] = [];
-  for (const s of list) {
-    if (!s?.id) continue;
-    const msgs = (s.messages || []).map((m) =>
-      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
-    );
-    if (msgs.length > WORKER_BATCH_THRESHOLD) {
-      const job = messagesToJsonlWorker(msgs).then(
-        (jsonl) => {
-          saveSessionBody(s.id, msgs, jsonl);
-        },
-        () => {
-          saveSessionBody(s.id, msgs);
-        }
-      );
-      workerJobs.push(job);
-    } else {
-      saveSessionBody(s.id, msgs);
-    }
-    saveSessionAgents(s.id, s.agents || []);
-  }
-  if (workerJobs.length > 0) {
-    await Promise.allSettled(workerJobs);
-  }
-  try {
-    const keep = new Set(list.map((s) => s.id).filter(Boolean));
-    await cleanupOrphanSessionsAsync(keep);
-    const keys: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k) keys.push(k);
-    }
-    const toRemove: string[] = [];
-    for (const k of keys) {
-      if (k.startsWith(SESSION_BODY_PREFIX)) {
-        const id = k.slice(SESSION_BODY_PREFIX.length);
-        if (!keep.has(id)) toRemove.push(k);
-      }
-      if (k.startsWith(SESSION_AGENTS_PREFIX)) {
-        const id = k.slice(SESSION_AGENTS_PREFIX.length);
-        if (!keep.has(id)) toRemove.push(k);
-      }
-    }
-    for (const k of toRemove) {
-      localStorage.removeItem(k);
-      if (k.startsWith(SESSION_BODY_PREFIX)) {
-        persistedMessageCounts.delete(k.slice(SESSION_BODY_PREFIX.length));
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  saveActiveSessionId(activeSessionId || '');
-  saveFolderOrder(folderOrder || []);
+  await persistAllSessionsRust(sessions, activeSessionId, folderOrder, {
+    sessionsToIndex,
+  });
 }
 
+/**
+ * 同步持久化全部会话（beforeunload 场景，禁止 await）。
+ *
+ * Stream D 改造后：仅走 localStorage（同步），不触碰 SQLite。
+ * SQLite 侧数据由后续 `persistAllSessions` 在正常生命周期内同步。
+ */
 export function persistAllSessionsSync(
   sessions: SessionState[],
   activeSessionId: string,
   folderOrder: string[]
 ): void {
-  const list = sessions ?? [];
-  saveSessionIndex(sessionsToIndex(list));
-  for (const s of list) {
-    if (!s?.id) continue;
-    const msgs = (s.messages || []).map((m) =>
-      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
-    );
-    saveSessionBody(s.id, msgs);
-    saveSessionAgents(s.id, s.agents || []);
-  }
-  try {
-    const keep = new Set(list.map((s) => s.id).filter(Boolean));
-    const keys: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k) keys.push(k);
-    }
-    const toRemove: string[] = [];
-    for (const k of keys) {
-      if (k.startsWith(SESSION_BODY_PREFIX)) {
-        const id = k.slice(SESSION_BODY_PREFIX.length);
-        if (!keep.has(id)) toRemove.push(k);
-      }
-      if (k.startsWith(SESSION_AGENTS_PREFIX)) {
-        const id = k.slice(SESSION_AGENTS_PREFIX.length);
-        if (!keep.has(id)) toRemove.push(k);
-      }
-    }
-    for (const k of toRemove) {
-      localStorage.removeItem(k);
-      if (k.startsWith(SESSION_BODY_PREFIX)) {
-        persistedMessageCounts.delete(k.slice(SESSION_BODY_PREFIX.length));
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  saveActiveSessionId(activeSessionId || '');
-  saveFolderOrder(folderOrder || []);
+  persistAllSessionsSyncViaLocalStorage(sessions, activeSessionId, folderOrder, {
+    sessionsToIndex,
+  });
 }
 
 export function resetOrphanScanCache(): void {
-  /* no-op */
+  /* no-op — Stream D 后孤儿清理走 SQLite，无 JS 侧缓存 */
 }

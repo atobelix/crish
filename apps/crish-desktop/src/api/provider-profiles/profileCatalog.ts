@@ -80,8 +80,7 @@ export const DEFAULT_PROFILES: ProviderProfile[] = [
     name: 'OpenCode Go 订阅',
     baseUrl: 'https://opencode.ai/zen/go/v1',
     models: ['deepseek-v4-flash'],
-    hasKey: true,
-    apiKey: 'sk-4AtRgbObFKWBB0UZJfddwcxCjLWJ4UppExWePVKcB0F4EFtN4rDpde1FKgfCwdIb',
+    hasKey: false,
     enabled: true,
   },
   {

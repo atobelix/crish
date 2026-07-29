@@ -12,8 +12,7 @@
  * 2) 命令式写路径 — 只写 panelAgentId，强制主列 null
  */
 
-import { getSessionStoreState } from '../store/sessionStore';
-import { getWorkspaceStoreState } from '../store/workspaceStore';
+import { getCompositionRoot } from '../app/compositionRoot';
 import { emitUiEvent } from './uiEvents';
 
 /** 侧栏「聊天」面板 card id（关 tab 用；禁止当主对话 chat 处理） */
@@ -345,11 +344,11 @@ function normalizeId(id: string | undefined | null): string {
  * 先清主列再写侧栏，并再断言主列 null（防脏状态残留）。
  */
 function applySidePanelFocus(panelAgentId: string | null): void {
-  const st = getSessionStoreState();
+  const st = getCompositionRoot().session.getState();
   st.setActiveAgentId(null);
   st.setPanelAgentId(panelAgentId);
   // 防御：任何遗留路径若把 active 写脏，强制再清
-  if (getSessionStoreState().activeAgentId !== null) {
+  if (getCompositionRoot().session.getState().activeAgentId !== null) {
     st.setActiveAgentId(null);
   }
 }
@@ -358,7 +357,7 @@ function applySidePanelFocus(panelAgentId: string | null): void {
 function maybeSwitchSession(sessionId?: string): void {
   const sid = normalizeId(sessionId);
   if (!sid) return;
-  const st = getSessionStoreState();
+  const st = getCompositionRoot().session.getState();
   if (st.activeSessionId !== sid) {
     // 注意：setActiveSessionId 会清 panelAgentId；调用方须立刻重设
     st.setActiveSessionId(sid);
@@ -367,7 +366,7 @@ function maybeSwitchSession(sessionId?: string): void {
 
 /** 当前侧栏 agent 焦点快照（命令式；组件请用 selectPanelAgentId 订阅） */
 export function getAgentSidePanelFocus(): AgentSidePanelFocus {
-  const st = getSessionStoreState();
+  const st = getCompositionRoot().session.getState();
   const panelAgentId = st.panelAgentId;
   const activeAgentId = st.activeAgentId;
   return {
@@ -437,12 +436,12 @@ export function closeAgentSidePanel(wsId: string, groupId: string): void {
   const g = normalizeId(groupId);
   if (!w || !g) return;
   // 单一写路径：workspace closeTab（left-neighbor active，不 ensureChat）
-  getWorkspaceStoreState().closeTabInGroup(w, g, AGENT_SIDE_PANEL_CARD_ID);
+  getCompositionRoot().workspace.getState().closeTabInGroup(w, g, AGENT_SIDE_PANEL_CARD_ID);
 }
 
 /** 当前是否在侧栏聚焦某子 agent（非主列） */
 export function isAgentSidePanelFocused(agentId?: string | null): boolean {
-  const st = getSessionStoreState();
+  const st = getCompositionRoot().session.getState();
   if (st.activeAgentId) return false; // 主列路径应始终为 null
   if (agentId == null || agentId === '') return Boolean(st.panelAgentId);
   const id = normalizeAgentPanelAgentId(agentId);

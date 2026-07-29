@@ -378,16 +378,26 @@ export function takePendingOpenPath(): string | null {
   return p;
 }
 
+let fileViewerOpener: ((filePath: string, mode?: 'plain' | 'diff') => void) | null = null;
+
+export function registerFileViewerOpener(opener: typeof fileViewerOpener): void {
+  fileViewerOpener = opener;
+}
+
 /**
  * 打开右侧文件面板并定位到路径。
  * 由对话工具行等入口调用；FilesCard 未挂载时先缓存路径。
  * 相对路径会接到当前工作区根下。
  */
-export function openFileInPanel(filePath: string): void {
+export function openFileInPanel(filePath: string, mode?: 'plain' | 'diff'): void {
   if (!filePath?.trim()) return;
   const path = resolveWorkspacePath(filePath.trim());
-  pendingOpenPath = path;
-  window.dispatchEvent(new CustomEvent('crish-open-file', { detail: { path } }));
+  if (fileViewerOpener) {
+    fileViewerOpener(path, mode);
+  } else {
+    pendingOpenPath = path;
+    window.dispatchEvent(new CustomEvent('crish-open-file', { detail: { path } }));
+  }
 }
 
 /** 从工具参数中尽量抽出文件路径（相对或绝对） */

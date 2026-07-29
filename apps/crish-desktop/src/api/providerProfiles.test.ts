@@ -93,13 +93,20 @@ describe('providerProfiles', () => {
     vi.clearAllMocks();
   });
 
-  it('DEFAULT_PROFILES seed has empty models (no hardcoded mimo)', () => {
+  it('DEFAULT_PROFILES: only opencode-go seeds deepseek-v4-flash (no mimo)', () => {
+    // Product SoT (profileCatalog DEFAULT_PROFILES): only opencode-go is
+    // pre-seeded with the intentional default model; other shells stay empty
+    // so users scan/hand-fill — never legacy mimo hardcode.
     const defaults = getDefaultProviderProfiles();
     expect(defaults.length).toBeGreaterThanOrEqual(3);
+    const go = defaults.find((p) => p.id === 'opencode-go');
+    expect(go?.models).toEqual(['deepseek-v4-flash']);
     for (const p of defaults) {
-      expect(p.models).toEqual([]);
+      expect(p.models.includes('mimo-v2.5')).toBe(false);
+      if (p.id !== 'opencode-go') {
+        expect(p.models).toEqual([]);
+      }
     }
-    expect(defaults.some((p) => p.models.includes('mimo-v2.5'))).toBe(false);
 
     const loaded = loadProfiles();
     for (const p of loaded) {
@@ -291,7 +298,8 @@ describe('providerProfiles', () => {
   });
 
   it('getProviderSetupStatus: fresh install needs key, hides picker', () => {
-    // empty defaults from loadProfiles seed
+    // Defaults seed opencode-go with deepseek-v4-flash (intentional product default)
+    // but no keys — so needs key setup, picker hidden, model shell already present.
     loadProfiles();
     const s = getProviderSetupStatus({ engineOk: true, engineHasApiKey: false });
     expect(s.needsKeySetup).toBe(true);
@@ -299,7 +307,8 @@ describe('providerProfiles', () => {
     expect(s.showModelPicker).toBe(false);
     expect(s.hasLocalKey).toBe(false);
     expect(anyProfileHasKey()).toBe(false);
-    expect(anyProfileHasModel()).toBe(false);
+    // opencode-go pre-seeds deepseek-v4-flash → catalog not empty
+    expect(anyProfileHasModel()).toBe(true);
   });
 
   it('getProviderSetupStatus: key without models → needsModelSetup, picker visible', () => {

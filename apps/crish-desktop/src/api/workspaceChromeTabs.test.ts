@@ -7,6 +7,7 @@ import {
   closeSessionTab,
   currentWorkspaceFolderKey,
   openSessionTab,
+  openSessionTabsStorageKey,
   pruneOpenSessionTabs,
   sessionBelongsToWorkspace,
   OPEN_SESSION_TABS_KEY,
@@ -71,7 +72,9 @@ describe('workspaceChromeTabs', () => {
     openSessionTab(GENERAL_FOLDER, 'b');
     const next = pruneOpenSessionTabs(GENERAL_FOLDER, new Set(['b']));
     expect(next).toEqual(['b']);
-    expect(localStorage.getItem(OPEN_SESSION_TABS_KEY)).toContain('b');
+    expect(localStorage.getItem(openSessionTabsStorageKey())).toContain('b');
+    // base key is not written (window-scoped isolation)
+    expect(localStorage.getItem(OPEN_SESSION_TABS_KEY)).toBeNull();
   });
 
   it('buildSessionTabsForWorkspace filters by folder and open order', () => {

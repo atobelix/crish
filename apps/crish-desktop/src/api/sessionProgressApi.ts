@@ -1,4 +1,5 @@
 import type { SessionState as Session, SessionGoalTask } from '../store/layoutStore';
+import { getStreamTools } from '../store/streamingStore';
 import { toolHumanLabel } from './toolPresentation';
 
 export interface ProgressSummary {
@@ -82,21 +83,48 @@ export function computeChecklistProgress(items: SessionGoalTask[] | null | undef
 }
 
 /**
- * 查找最新的活动工具状态（用于步骤感知）
+ * 查找最新的活动工具状态（用于步骤感知）。
+ * Durable session toolCalls first; intermediate running tools may live only
+ * in streamingStore (tool-stream-lite-store path).
  */
 export function findCurrentLiveTool(session: Session | null | undefined): LiveToolInfo | null {
   if (!session?.messages?.length) return null;
   const lastMsg = session.messages[session.messages.length - 1];
-  if (!lastMsg || lastMsg.sender !== 'assistant' || !lastMsg.toolCalls?.length) return null;
+  if (!lastMsg || lastMsg.sender !== 'assistant') return null;
 
-  for (let i = lastMsg.toolCalls.length - 1; i >= 0; i--) {
-    const tc = lastMsg.toolCalls[i];
+  const tools = lastMsg.toolCalls || [];
+  for (let i = tools.length - 1; i >= 0; i--) {
+    const tc = tools[i];
     if (!tc) continue;
     if (tc.status === 'running' || tc.status === 'pending_approval') {
       const label = toolHumanLabel(tc);
       const isApproval = tc.status === 'pending_approval';
       const statusLabel = isApproval ? '待审批' : '执行中';
       return { label, statusLabel, isApproval };
+    }
+  }
+
+  if (lastMsg.status === 'processing' && session.id) {
+    const live = getStreamTools(session.id, lastMsg.id);
+    if (live) {
+      const ids = Object.keys(live);
+      for (let i = ids.length - 1; i >= 0; i--) {
+        const row = live[ids[i]!];
+        if (!row) continue;
+        const st = row.status || 'running';
+        if (st !== 'running' && st !== 'pending_approval') continue;
+        const label = toolHumanLabel({
+          id: row.id,
+          name: row.name || 'tool',
+          status: st,
+          arguments: row.arguments,
+        });
+        return {
+          label,
+          statusLabel: st === 'pending_approval' ? '待审批' : '执行中',
+          isApproval: st === 'pending_approval',
+        };
+      }
     }
   }
   return null;

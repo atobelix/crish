@@ -5,7 +5,9 @@
  * H3：可在此基础上挂 lastSequence 增量同步与 run snapshot usage。
  */
 
+import { pickStableMessageId } from '@crish/shared-types';
 import type { SessionMessage } from '../store/layoutStore';
+import { mergeSessionMessageFields } from '../store/sessionSharedHelpers';
 import { getDesktopDaemonClient } from './daemonClient';
 import { normalizeAssistantTimeline } from './toolPresentation';
 import { logInternalError } from './userFacingErrors';
@@ -84,6 +86,77 @@ function toolResult(result: unknown): { id: string; text: string; isError: boole
 }
 
 /**
+ * 从引擎 message 载荷解析稳定 id（clientMessageId / messageId / id）。
+ * 字段优先级与 shared-types pickStableMessageId 对齐。
+ * 无稳定 id 时回退到确定性 hyd 前缀 + 序号（同事件流重放 id 不变）。
+ */
+function resolveProjectedMessageId(
+  msg: AnyRec | null,
+  role: 'user' | 'assistant',
+  msgSeq: number,
+): string {
+  const stable = pickStableMessageId(msg);
+  if (stable) return stable;
+  return role === 'user' ? `hyd-user-${msgSeq}` : `hyd-asst-${msgSeq}`;
+}
+
+/**
+ * message-end 带来稳定 client id 时，把 delta 阶段的 hyd-* 助手 id 重键到稳定 id，
+ * 便于与本地 stream final 同 id merge（不双气泡）。
+ */
+function rekeyAssistantIfStable(
+  messages: SessionMessage[],
+  assistant: SessionMessage,
+  stableId: string,
+): void {
+  if (!stableId || stableId.startsWith('hyd-') || assistant.id === stableId) {
+    return;
+  }
+  // 仅当当前是 hyd 临时 id 且目标 id 未被占用时重键
+  if (!assistant.id.startsWith('hyd-')) return;
+  if (messages.some((m) => m !== assistant && m.id === stableId)) return;
+  assistant.id = stableId;
+}
+
+/**
+ * 按 id 合并消息列表：同 id 原地 merge，否则 append。
+ * 用于 hydrate 与本地乐观消息合并 / 重放去重（重放 length 不增）。
+ * existing 为空时也对 incoming 自身按 id 折叠（对抗重复事件数组）。
+ */
+export function mergeMessagesById(
+  existing: SessionMessage[],
+  incoming: SessionMessage[],
+): SessionMessage[] {
+  if (!incoming.length) return existing.slice();
+
+  const out: SessionMessage[] = existing.map((m) => ({ ...m }));
+  const indexById = new Map<string, number>();
+  for (let i = 0; i < out.length; i++) {
+    const id = out[i]?.id;
+    if (id) indexById.set(id, i);
+  }
+
+  for (const msg of incoming) {
+    const id = typeof msg.id === 'string' ? msg.id : '';
+    if (!id) {
+      out.push(msg);
+      continue;
+    }
+    const idx = indexById.get(id);
+    if (idx === undefined) {
+      indexById.set(id, out.length);
+      // 浅拷贝，避免调用方改写 incoming 元素污染 out
+      out.push({ ...msg });
+    } else {
+      const target = { ...out[idx]! };
+      mergeSessionMessageFields(target, msg);
+      out[idx] = target;
+    }
+  }
+  return out;
+}
+
+/**
  * 将 orchestrator session-events 投影为 Chat 消息列表。
  * 只保证文本 + 工具主路径；复杂分支可后续增强。
  */
@@ -98,10 +171,19 @@ export function projectEventsToMessages(events: unknown[]): {
   let maxSequence = 0;
   let msgSeq = 0;
 
-  const pushUser = (text: string, ts: number) => {
+  const pushUser = (text: string, ts: number, stableId?: string) => {
     currentAssistant = null;
+    const id = stableId || `hyd-user-${++msgSeq}`;
+    // 同 id 已存在则 update（事件流内幂等）
+    const existing = messages.find((m) => m.id === id);
+    if (existing) {
+      existing.text = text;
+      existing.timestamp = ts;
+      existing.status = 'completed';
+      return;
+    }
     messages.push({
-      id: `hyd-user-${++msgSeq}`,
+      id,
       sender: 'user',
       text,
       timestamp: ts,
@@ -109,10 +191,18 @@ export function projectEventsToMessages(events: unknown[]): {
     });
   };
 
-  const ensureAssistant = (ts: number) => {
+  const ensureAssistant = (ts: number, stableId?: string) => {
     if (!currentAssistant) {
+      const id = stableId || `hyd-asst-${++msgSeq}`;
+      const existing = messages.find(
+        (m) => m.id === id && m.sender === 'assistant',
+      );
+      if (existing) {
+        currentAssistant = existing;
+        return currentAssistant;
+      }
       currentAssistant = {
-        id: `hyd-asst-${++msgSeq}`,
+        id,
         sender: 'assistant',
         text: '',
         timestamp: ts,
@@ -165,9 +255,19 @@ export function projectEventsToMessages(events: unknown[]): {
       text = text.trim();
       thought = thought.trim();
       if (role === 'user') {
-        if (text) pushUser(text, ts);
+        if (text) {
+          // 优先用引擎/客户端稳定 id，便于与本地乐观消息 upsert 合并
+          const id = resolveProjectedMessageId(msg, 'user', msgSeq + 1);
+          if (id.startsWith('hyd-')) msgSeq += 1;
+          pushUser(text, ts, id);
+        }
       } else if (role === 'assistant') {
-        const a = ensureAssistant(ts);
+        const id = resolveProjectedMessageId(msg, 'assistant', msgSeq + 1);
+        if (!currentAssistant && id.startsWith('hyd-')) msgSeq += 1;
+        const a = ensureAssistant(ts, id);
+        rekeyAssistantIfStable(messages, a, id);
+        // message-end 为终态；后续 partial 不得经 merge 回退
+        a.status = 'completed';
         if (thought) a.thinking = thought;
         if (text) {
           a.text = text;
@@ -242,9 +342,9 @@ export function projectEventsToMessages(events: unknown[]): {
 
     if (type === 'tool-end') {
       const { id, text, isError } = toolResult(agent.result);
-      const a = currentAssistant as any;
-      if (!a?.toolCalls) continue;
-      const tc = a.toolCalls.find((t: any) => t.id === id) || a.toolCalls[a.toolCalls.length - 1];
+      const a = currentAssistant as SessionMessage | null;
+      if (!a || !a.toolCalls) continue;
+      const tc = a.toolCalls.find((t) => t.id === id) || a.toolCalls[a.toolCalls.length - 1];
       if (tc) {
         tc.status = isError ? 'error' : 'success';
         tc.output = text || (isError ? 'failed' : 'OK');

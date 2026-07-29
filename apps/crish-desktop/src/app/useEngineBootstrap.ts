@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { isProductShellFast } from '../createSsrGlobals';
-import { useLayoutStore } from '../store/layoutStore';
+import { getCompositionRoot } from './compositionRoot';
 
 export function useEngineBootstrap(): boolean {
   const [engineReady, setEngineReady] = useState(false);
@@ -38,9 +38,10 @@ export function useEngineBootstrap(): boolean {
             void syncActiveProfileToEngine();
           });
           void import('../api/sessionDaemonSync').then(({ syncSessionsFromDaemon }) => {
+            const layout = getCompositionRoot().layout;
             void syncSessionsFromDaemon(
-              () => useLayoutStore.getState().sessions,
-              (sessions) => useLayoutStore.getState().setSessions(sessions)
+              () => layout.getSessions(),
+              (sessions) => layout.setSessions(sessions)
             );
           });
         }

@@ -1,27 +1,19 @@
 import type { WorkerRequest, WorkerResponse } from './types';
-import { ComputationCache } from './computation-cache';
 
-const decodeCache = new ComputationCache(100, 1 * 1024 * 1024);
-
-function messagesToJsonl(messages: unknown[]): string {
-  if (!messages?.length) return '';
-  return messages.map((m) => JSON.stringify(m)).join('\n');
-}
-
-function jsonlToMessages(text: string): unknown[] {
-  if (!text?.trim()) return [];
-  const s = text.trim();
-  if (s.startsWith('[')) {
-    try { return JSON.parse(s); } catch { return []; }
-  }
-  const out: unknown[] = [];
-  for (const line of s.split(/\r?\n/)) {
-    const t = line.trim();
-    if (!t) continue;
-    try { out.push(JSON.parse(t)); } catch { /* skip bad lines */ }
-  }
-  return out;
-}
+// =============================================================================
+// Stream E 改造后的 io-worker
+//
+// 已下沉到 Rust 的 case（在 api-adapters.ts 中通过 rustCore.* 调用）：
+//   - messages.to-jsonl  → core_messages_to_jsonl
+//   - jsonl.to-messages  → core_jsonl_to_messages
+//   - text.decode        → core_decode_text
+//   - text.encode        → core_text_encode（原 io-worker 实现忽略 encoding 参数，是 bug；
+//                          Rust 版本用 encoding_rs 正确处理多编码）
+//
+// 保留的 case（与 compute-worker 重叠的轻量任务）：
+//   - json.parse  V8 原生 JSON 引擎（与 compute-worker.json.parse 重复，但保留兼容）
+//   - ping       worker 健康检查
+// =============================================================================
 
 function safeJsonParse<T>(text: string, fallback: T): T {
   try { return JSON.parse(text) as T; } catch { return fallback; }
@@ -33,48 +25,10 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
 
   try {
     switch (type) {
-      case 'messages.to-jsonl': {
-        const { messages } = payload as { messages: unknown[] };
-        const result = messagesToJsonl(messages);
-        self.postMessage({ id, type: 'success', payload: result, metrics: { wallTime: performance.now() - t0, cpuTime: 0, transferredBytes: result.length } } as WorkerResponse);
-        break;
-      }
-
-      case 'jsonl.to-messages': {
-        const { text } = payload as { text: string };
-        const result = jsonlToMessages(text);
-        self.postMessage({ id, type: 'success', payload: result, metrics: { wallTime: performance.now() - t0, cpuTime: 0, transferredBytes: text.length } } as WorkerResponse);
-        break;
-      }
-
       case 'json.parse': {
         const { json } = payload as { json: string };
         const obj = safeJsonParse(json, null);
         self.postMessage({ id, type: 'success', payload: obj, metrics: { wallTime: performance.now() - t0, cpuTime: 0, transferredBytes: json.length } } as WorkerResponse);
-        break;
-      }
-
-      case 'text.decode': {
-        const { bytes, encoding } = payload as { bytes: ArrayBuffer; encoding?: string };
-        const label = encoding || 'utf-8';
-        const cacheKey = `${label}:${bytes.byteLength}`;
-        const cached = decodeCache.get<string>(cacheKey);
-        if (cached) {
-          self.postMessage({ id, type: 'success', payload: cached, metrics: { wallTime: performance.now() - t0, cpuTime: 0, transferredBytes: bytes.byteLength } } as WorkerResponse);
-          break;
-        }
-        const decoder = new TextDecoder(label);
-        const text = decoder.decode(bytes);
-        decodeCache.set(cacheKey, text, bytes.byteLength);
-        self.postMessage({ id, type: 'success', payload: text, metrics: { wallTime: performance.now() - t0, cpuTime: 0, transferredBytes: bytes.byteLength } } as WorkerResponse);
-        break;
-      }
-
-      case 'text.encode': {
-        const { text } = payload as { text: string; encoding?: string };
-        const encoder = new TextEncoder();
-        const bytes = encoder.encode(text).buffer;
-        self.postMessage({ id, type: 'success', payload: bytes, transferables: [bytes] } as any);
         break;
       }
 

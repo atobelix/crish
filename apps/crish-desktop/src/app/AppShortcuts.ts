@@ -1,19 +1,18 @@
 import { useEffect } from 'react';
-import { useLayoutStore } from '../store/layoutStore';
 import { getSessionById } from '../store/sessionStore';
 import {
   archiveSession,
   branchSession,
-  enterDraftMode,
-  getSessionStoreState,
   openSettings,
   setActiveSessionId,
   toggleSettingsOverlay,
 } from '../api/storeAccess';
+import { getActiveProjectId } from '../api/projectStore';
 import { ShortcutService } from '../services/ShortcutService';
 import { emitUiEvent } from '../api/uiEvents';
 import { formatBranchUndoToast } from '../hooks/useToastQueue';
 import type { SettingsTabType } from '../store/types';
+import { getCompositionRoot } from './compositionRoot';
 
 export interface UseAppShortcutsOptions {
   handleShowToast: (msg: string, undoAction?: () => void) => void;
@@ -92,7 +91,9 @@ export function useAppShortcuts({
           return;
         case 'new_session':
           e.preventDefault();
-          enterDraftMode();
+          getCompositionRoot().shell.openNewDraftTab(
+            getActiveProjectId() || undefined
+          );
           return;
         case 'focus_composer':
           e.preventDefault();
@@ -126,25 +127,28 @@ export function useAppShortcuts({
           e.preventDefault();
           openTab('schedule');
           return;
-        case 'toggle_sidebar':
+        case 'toggle_sidebar': {
           e.preventDefault();
-          setSidebarCollapsed(!useLayoutStore.getState().sidebarCollapsed);
+          // 写经 compositionRoot；同步 prop setter（与 useLayoutStore selector 同源）
+          const layout = getCompositionRoot().layout;
+          layout.toggleSidebarCollapsed();
+          setSidebarCollapsed(layout.getSidebarCollapsed());
           return;
-
+        }
         case 'toggle_plan_mode': {
           e.preventDefault();
-          const st = useLayoutStore.getState();
-          st.setPlanModeEnabled(!st.planModeEnabled);
+          getCompositionRoot().layout.togglePlanMode();
           return;
         }
         case 'branch_session': {
           e.preventDefault();
-          const oldSessionId = getSessionStoreState().activeSessionId;
+          const session = getCompositionRoot().session;
+          const oldSessionId = session.getActiveSessionId();
           const activeSess = getSessionById(oldSessionId);
           if (activeSess) {
             const forkTitle = `${activeSess.title} - 双击ESC分叉`;
             branchSession(activeSess.id, forkTitle);
-            const newBranchId = getSessionStoreState().activeSessionId;
+            const newBranchId = session.getActiveSessionId();
             handleShowToast(formatBranchUndoToast(activeSess.title), () => {
               if (newBranchId && newBranchId !== oldSessionId) {
                 archiveSession(newBranchId);

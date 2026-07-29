@@ -1,15 +1,31 @@
 /**
- * Chat streaming API surface.
+ * Chat streaming API surface — **single product entry** for assistant streams.
  *
- * Production path: streamViaDaemon (daemon WebSocket).
- * Demo path: mock sessions + stream pipeline live in chatApi.demo.ts.
+ * ## Transport SoT (inventory #10)
+ * - **Primary:** `streamViaDaemon` (daemon WebSocket → `run-task` + event stream).
+ * - **Degraded only:** `streamViaDirectFetch` (HTTP SSE to provider). Not a second product path.
+ * - Auto fallback lives in `daemon-chat-bridge/ConnectionLifecycle.createStreamSession`
+ *   behind `ALLOW_AUTO_DIRECT_FETCH_FALLBACK` (soft-deprecated; see flag).
+ *
+ * ## Decision tree (call graph)
+ * ```
+ * streamAssistantResponseApi(prompt, callbacks, sessionId?, asstId?, options?)
+ *   └─ streamViaDaemon  (always; this module never imports directFetch)
+ *        └─ createStreamSession
+ *             ├─ daemon WS ready within 1.5s → run-task  [PRIMARY]
+ *             └─ !ready || !connected
+ *                  ├─ ALLOW_AUTO_DIRECT_FETCH_FALLBACK=true  → streamViaDirectFetch [DEGRADED]
+ *                  └─ flag=false → onRunError + finish (refuse start)
+ * ```
+ *
+ * Cancel: primary uses L2/L3 via `createStreamCancel` / `compositionRoot.runControl`.
+ * Degraded: local AbortController only (see ConnectionLifecycle + directFetchBridge headers).
+ *
+ * @see docs/plans/progress/architecture-dedup-inventory.md #10
+ * @see docs/architecture/system-map-clear.md §3.2
  */
 import { streamViaDaemon } from './daemonChatBridge';
 import { getDesktopDaemonClient } from './daemonClient';
-import {
-  shouldUseMockStream,
-  streamMockAssistantResponse,
-} from './chatApi.demo';
 import type { FileDiff, MessageToolApprovalMeta } from '../store/types';
 
 import type { SessionMessage, SessionState } from '../store/layoutStore';
@@ -107,6 +123,16 @@ export type StreamRequestOptions = {
   maxRounds?: number;
   /** 引擎 stall 上限（默认 2） */
   maxStalledRounds?: number;
+  /**
+   * 用户消息 clientMessageId（= 本地乐观 message.id）。
+   * 经 run-task 下发；daemon 用作 user message id，hydrate 按 id upsert。
+   */
+  clientMessageId?: string;
+  /**
+   * 助手 placeholder clientMessageId（= 本地 assistant message.id）。
+   * 经 run-task 下发；message-end 带回后 hydrate rekey 与 stream final 合并。
+   */
+  assistantClientMessageId?: string;
 };
 
 export interface StreamCallbacks {
@@ -161,8 +187,9 @@ export interface StreamCallbacks {
 }
 
 /**
- * Stream assistant response.
- * Prefer daemon WebSocket when available; mock only for demo commands or crish_use_mock=1.
+ * Stream assistant response — product entry (inventory #10).
+ * Always starts via `streamViaDaemon` (primary). Direct HTTP SSE is never chosen here;
+ * ConnectionLifecycle may degrade only when daemon WS is unreachable and the flag allows it.
  */
 export const streamAssistantResponseApi = (
   prompt: string,
@@ -171,18 +198,9 @@ export const streamAssistantResponseApi = (
   assistantMsgId?: string,
   options?: StreamRequestOptions
 ) => {
-  if (!shouldUseMockStream(prompt)) {
-    const sid = sessionId || `sess-${Date.now()}`;
-    const aid = assistantMsgId || `asst-${Date.now()}`;
-    // Prefer real backend for desktop product path
-    void getDesktopDaemonClient();
-    return streamViaDaemon(prompt, callbacks, sid, aid, options);
-  }
-  return streamMockAssistantResponse(
-    prompt,
-    callbacks,
-    sessionId,
-    assistantMsgId,
-    options
-  );
+  const sid = sessionId || `sess-${Date.now()}`;
+  const aid = assistantMsgId || `asst-${Date.now()}`;
+  // Touch client so keep-alive / URL resolution start; transport choice is inside streamViaDaemon.
+  void getDesktopDaemonClient();
+  return streamViaDaemon(prompt, callbacks, sid, aid, options);
 };

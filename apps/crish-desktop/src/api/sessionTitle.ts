@@ -1,13 +1,30 @@
 /**
- * 会话标题工具：默认标题识别 + 从首条用户消息推导 + 空壳会话判定。
+ * 会话标题工具：默认标题识别 + 从首条用户消息推导 + 空壳判定 / hydrate GC。
  * 自动改名仅在标题仍为默认时触发，保留用户手动 rename。
  *
- * 空壳（ghost）：无实质消息、无子 agent、标题仍为默认、未置顶。
- * 来源：点「新建」未发送、daemon list-sessions 插入、落盘脏数据。
+ * ## 单一心智模型（dedup inventory #9 / Pending Draft ADR）
  *
- * 空会话标题规则：只用清晰的「新会话」占位，不发明幽灵标签；
+ * | 关切 | 机制 | 何时 |
+ * |------|------|------|
+ * | 用户「新对话」 | `PENDING_DRAFT` 哨兵（`activeSessionId` only） | `enterDraftMode` / `openNewDraftTab` — **永不**写入 `sessions[]` |
+ * | `sessions[]` 里的「新会话」空壳 | **历史脏数据 GC only** | hydrate / `setSessions` → `prepareSessionsForUi` prune；dev `emptyShellAssert` |
+ * | 真会话 mint | `commitDraftIfNeeded` 或系统 `createSession({ id, title, activate:false })` | 首条发送 / 定时·导入占位（须非默认标题） |
+ *
+ * **空壳不是创建路径**：`isEmptyShellSession` / `shouldListSessionInSidebar` / `pruneEmptyShellSessions`
+ * / `prepareSessionsForUi` 只做列表过滤与 hydrate GC；**禁止**「复用空壳当新建」。
+ * `findReusableEmptyShell` 已删除。
+ *
+ * 空壳（ghost）定义：无实质消息、无子 agent、标题仍为默认、未置顶、非定时标题。
+ * 残留来源：旧版「新建即 mint」脏盘、daemon list 插入、commit 后未发消息的短暂壳、落盘半成品。
+ *
+ * 空会话标题规则：只用清晰的「新会话」占位（`EMPTY_SESSION_TITLE`），不发明幽灵标签；
  * 实质标题由首条用户消息 sanitize + 长度截断推导，中文 UTF-8/CJK 安全。
+ *
+ * @see docs/architecture/session-pending-draft-adr.md
+ * @see docs/plans/progress/architecture-dedup-inventory.md #9
  */
+
+import { recordHydratePrune } from './controlMetrics';
 
 /**
  * 仅依赖消息形状，避免与 layoutStore 循环引用。
@@ -28,7 +45,11 @@ type TitleMessage = {
   /** 仅有思考内容亦视为实质（水合半成品勿当空壳剪掉） */
   thinking?: string | null | undefined;
 };
-type TitleSession = { title?: string | null | undefined; messages?: TitleMessage[] | null | undefined };
+type TitleSession = {
+  title?: string | null | undefined;
+  /** readonly 兼容 store 投影 / chrome selector，只读推导标题 */
+  messages?: readonly TitleMessage[] | null | undefined;
+};
 
 /** 空壳判定所需的最小会话形状 */
 export type ShellSessionLike = {
@@ -159,7 +180,7 @@ export function isDefaultSessionTitle(
     .replace(LONE_SURROGATE, '')
     .trim();
   if (!t) return true;
-  // 定时占位永非默认（避免误覆盖 / 被当成可复用空壳）
+  // 定时占位永非默认（避免误覆盖 / 被 hydrate GC 当默认空壳剪掉）
   if (isScheduledSessionTitle(t)) return false;
   // 中文占位：新会话 / 新对话 / 无标题 / 未命名* + 编号（对齐 Untitled-1）
   if (DEFAULT_TITLE_ZH.test(t)) return true;
@@ -205,6 +226,7 @@ export function sessionHasListableContent(s: ShellSessionLike): boolean {
 
 /**
  * 幽灵空壳：默认标题 + 无实质消息/agent + 未置顶。
+ * **仅用于 hydrate GC / 侧栏隐藏**，不是「可复用的新建槽」。
  * 置顶视为用户主动保留，不当空壳丢弃。
  * 定时标题永非空壳（后台 activate:false 占位不得被剪）。
  * 归档会话另走归档筛选，此处仍可判定为壳（hydrate 时剪掉）。
@@ -221,9 +243,11 @@ export function isEmptyShellSession(s: ShellSessionLike): boolean {
 /**
  * 侧栏是否展示：
  * - 置顶 / 定时标题 / 有实质内容 / 非默认标题 → 显示
- * - 空壳默认标题 → 不显示（草稿由 PENDING_DRAFT 处理）
+ * - 空壳默认标题 → 不显示（用户草稿由 PENDING_DRAFT 处理，不进 sessions[]）
  * - activeSessionId 不参与判定（保留签名兼容 filterSidebarSessions）
  * 归档由 filterSidebarSessions 剔除；此处 isArchived 为双重保险。
+ *
+ * 与 create 无关：隐藏空壳 ≠ 把空壳当新建。
  */
 export function shouldListSessionInSidebar(
   s: ShellSessionLike & { id: string },
@@ -240,7 +264,8 @@ export function shouldListSessionInSidebar(
 }
 
 /**
- * 去掉非保留的空壳。keepIds 通常含 activeSessionId（当前编辑中的空白会话）。
+ * Hydrate/list GC：去掉非保留的空壳（非 reuse、非 create）。
+ * keepIds 通常含真实 activeSessionId（当前活动的短暂空白会话可保留到切换/再 hydrate）。
  *
  * Null 安全：sessions 中的 null / undefined 条目被过滤（落盘脏数据防御）。
  */
@@ -292,7 +317,7 @@ export function shellPruneKeepIds(
 }
 
 // ── 标题推导：sanitize / 长度 / 碰撞 ─────────────────────────────────
-// findReusableEmptyShell 已删除（Phase2 / pending-draft ADR：禁止 reuse 空壳；prune 仅 GC）
+// findReusableEmptyShell 已删除（inventory #9 / pending-draft ADR：prune = hydrate GC only）
 
 /**
  * 清洗用户输入为侧栏标题原料（不截断、不回落默认）。
@@ -415,7 +440,7 @@ export function withTitleCollisionSuffix(
  * 漏判纯组合标记（\u0301 等）和 Unicode 6.3 Bidi Isolate（U+2066–U+2069）。
  */
 export function firstUserMessageText(
-  messages: TitleMessage[] | undefined
+  messages: readonly TitleMessage[] | undefined
 ): string {
   if (!messages?.length) return '';
   for (const m of messages) {
@@ -443,7 +468,7 @@ export type MaybeAutoTitleOpts = {
  */
 export function maybeAutoTitleFromMessages(
   title: string | undefined | null,
-  messages: TitleMessage[] | undefined,
+  messages: readonly TitleMessage[] | undefined,
   opts?: MaybeAutoTitleOpts
 ): string | null {
   if (!isDefaultSessionTitle(title)) return null;
@@ -517,13 +542,21 @@ export function fillDefaultSessionTitles<T extends TitleSession>(
 }
 
 /**
- * hydrate / setSessions / disk restore 共用：
- * 先从消息补默认标题，再按 active 剪非保留空壳（GC，非 reuse）。
- * - keepIds：显式 opts.keepIds 优先；否则仅 keep 真实 active（activating）
- * - active 为 pending draft 哨兵 `__pending_draft__` 或 null/空 → 不 keep 任何空壳
- * - 非空壳 / 置顶 / 定时真实标题 本就不会被 prune
- * 与侧栏 shouldListSessionInSidebar=false 的幽灵空壳对齐：hydrate 后尽量不残留。
+ * hydrate / setSessions / disk restore 共用入口（inventory #9 心智模型收口）：
  *
+ * 1. **I-DRAFT**：从 `sessions[]` 剥离 `__pending_draft__` 哨兵行（draft 永不入列表）
+ * 2. 从消息补默认/推导标题（`fillDefaultSessionTitles`）
+ * 3. **GC only**：`pruneEmptyShellSessions` 剪非 keep 的默认标题空壳（非 reuse、非 create）
+ *
+ * keep 规则：
+ * - keepIds：显式 opts.keepIds 优先；否则仅 keep 真实 active（activating）
+ * - active 为 pending draft 哨兵 `__pending_draft__` 或 null/空 → **不 keep 任何空壳**
+ * - 非空壳 / 置顶 / 定时真实标题 本就不会被 prune
+ *
+ * 与侧栏 `shouldListSessionInSidebar=false` 对齐：hydrate 后尽量不残留幽灵「新会话」。
+ * 用户「新对话」不经过本函数 mint；本函数只净化历史/落盘脏数据。
+ *
+ * **不** strip / 清空 messages：真实标题 + messages=[] 的远程懒壳会保留。
  * Null 安全：sessions 中的 null / undefined 条目被过滤（落盘脏数据防御）。
  */
 export function prepareSessionsForUi<
@@ -534,8 +567,15 @@ export function prepareSessionsForUi<
   opts?: { keepIds?: Iterable<string> | null }
 ): T[] {
   // 过滤 null / undefined 条目（落盘脏数据防御）
-  const cleanSessions = sessions.some((s) => s == null)
-    ? sessions.filter((s): s is T => s != null)
+  // I-DRAFT：PENDING_DRAFT 哨兵永不进入 sessions[]（字符串比较避免 api→store 环依赖）
+  const needsFilter = sessions.some(
+    (s) => s == null || (s as { id?: string }).id === '__pending_draft__'
+  );
+  const cleanSessions = needsFilter
+    ? sessions.filter(
+        (s): s is T =>
+          s != null && (s as { id?: string }).id !== '__pending_draft__'
+      )
     : sessions;
   const filled = fillDefaultSessionTitles(cleanSessions) as T[];
   // pending draft 哨兵不对应 sessions[] 条目；勿当 keep id（语义收口，避免误 keep）
@@ -546,7 +586,13 @@ export function prepareSessionsForUi<
       : null;
   const keepIds =
     opts?.keepIds ?? shellPruneKeepIds(active, null, { activating: true });
-  return pruneEmptyShellSessions(filled, { keepIds });
+  const pruned = pruneEmptyShellSessions(filled, { keepIds });
+  // D2：hydrate/list 剪壳计数（removed 个数；无 prune 则 0）
+  const removed = filled.length - pruned.length;
+  if (removed > 0) {
+    recordHydratePrune(removed);
+  }
+  return pruned;
 }
 
 /**

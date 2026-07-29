@@ -12,6 +12,7 @@
  */
 
 import type { FileDiff } from '../store/types';
+import type { QueuedMessage } from '../hooks/chat-stream/types';
 
 export interface Attachment {
   id: string;
@@ -28,6 +29,7 @@ export interface SessionRuntimeState {
   diffFiles: FileDiff[];
   chatMainSurface: 'chat' | 'scheduled' | null;
   attachments: Attachment[];
+  queuedMessages: QueuedMessage[];
   fileCompareModes: Record<string, 'split' | 'unified'>;
   composerDraft: string;
   scrollPosition: number;
@@ -78,10 +80,11 @@ export class SessionRuntimeRegistry {
   remove(sessionId: string): void {
     const state = this.states.get(sessionId);
     if (state) {
-      (state as any).diffFiles = null;
-      (state as any).attachments = null;
-      (state as any).composerDraft = '';
-      (state as any).fileCompareModes = {};
+      state.diffFiles = [];
+      state.attachments = [];
+      state.queuedMessages = [];
+      state.composerDraft = '';
+      state.fileCompareModes = {};
     }
     this.states.delete(sessionId);
     this.refCounts.delete(sessionId);
@@ -166,6 +169,7 @@ export class SessionRuntimeRegistry {
       diffFiles: [],
       chatMainSurface: null,
       attachments: [],
+      queuedMessages: [],
       fileCompareModes: {},
       composerDraft: '',
       scrollPosition: 0,
