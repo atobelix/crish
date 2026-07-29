@@ -3,31 +3,31 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-1, 4px);
+  gap: var(--space-1);
   height: 100%;
   width: 100%;
-  max-width: min(var(--chat-col-max, 520px), 100%);
+  max-width: min(var(--chat-col-max), 100%);
   margin-left: auto;
   margin-right: auto;
   align-self: center;
   box-sizing: border-box;
-  padding: var(--space-6, 20px) var(--space-5, 16px);
+  padding: var(--space-6) var(--space-5);
   background: transparent;
 }
 
 .noSession,
 .filterEmpty {
-  gap: var(--space-2, 6px);
+  gap: var(--space-2);
 }
 
 .sessionEmpty {
   height: auto;
   flex: none;
-  padding: 0;
-  margin-bottom: 28px;
+  padding: calc(var(--space-6) + var(--space-1)) 0 var(--space-3);
+  margin-bottom: 0;
   width: 100%;
-  max-width: var(--chat-col-max, 760px);
-  gap: var(--space-4, 12px);
+  max-width: none; /* 宽度由外层 .chatCol 约束，与 composer 对齐 */
+  gap: var(--space-4);
   text-align: center;
 }
 
@@ -37,12 +37,12 @@
 
 .chatEmptyIconWrap {
   display: none;
-  width: 40px;
-  height: 40px;
-  margin-bottom: var(--space-3, 8px);
-  border-width: var(--hairline-width, 1px);
+  width: var(--space-10);
+  height: var(--space-10);
+  margin-bottom: var(--space-3);
+  border-width: var(--hairline-width);
   border-style: solid;
-  border-color: var(--hairline, var(--border-subtle, var(--border-color)));
+  border-color: var(--hairline, var(--border-subtle));
   background: color-mix(in srgb, var(--text-primary) 2%, transparent);
 }
 
@@ -53,10 +53,10 @@
 .chatEmptyTitle {
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-medium);
-  letter-spacing: -0.01em;
+  letter-spacing: var(--letter-spacing-tight);
   color: var(--text-primary);
-  margin: 0 0 var(--space-2, 6px);
-  line-height: var(--line-height-ui, 1.35);
+  margin: 0 0 var(--space-2);
+  line-height: var(--line-height-ui);
 }
 
 .chatEmptyHero {
@@ -68,8 +68,9 @@
 }
 
 .chatEmptyTitleHero {
-  font-size: 34px; /* 婢х偛銇囩€涙褰块敍灞肩�?Kimi 缁鎶€閻ㄥ嫭鐨垫�?*/
+  font-size: clamp(22px, 3.2vw, 34px);
   font-weight: var(--font-weight-content);
+  font-family: var(--font-sans);
   color: var(--text-primary);
   letter-spacing: var(--letter-spacing-tightest);
   margin-bottom: var(--space-2);
@@ -78,6 +79,10 @@
   justify-content: center;
   align-items: center;
   gap: var(--space-2_5);
+  text-align: center;
+  line-height: var(--line-height-tight);
+  /* 中英文同一主字体，避免字重/字面宽不一致的缝合感 */
+  font-synthesis: none;
 }
 
 .chatEmptyProjectInline {
@@ -87,10 +92,10 @@
 }
 
 .chatEmptyProjectBtnInline {
-  font-size: 26px;
+  font-size: calc(var(--font-size-2xl) + var(--space-1));
   font-weight: var(--font-weight-content);
-  padding: 4px 14px;
-  border-radius: var(--radius-md, 12px);
+  padding: var(--space-1) var(--space-3_5);
+  border-radius: var(--radius-md);
   background: transparent;
   border: none;
   color: var(--text-primary);
@@ -108,57 +113,54 @@
 .chatEmptyProjectText {
   color: var(--text-primary);
   background: var(--control-soft-bg);
-  padding: 4px 12px;
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-2xl);
-  font-size: 24px;
+  font-size: calc(var(--font-size-2xl) + var(--space-0_5));
   font-weight: var(--font-weight-content);
+  font-family: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
 }
 
 .chatEmptySub {
   font-size: var(--font-size-sm);
   color: var(--text-tertiary);
-  margin: 0 0 var(--space-5, 16px);
+  margin: 0 0 var(--space-5);
   text-align: center;
   max-width: 28em;
-  line-height: var(--line-height-body, 1.55);
+  line-height: var(--line-height-body);
   display: none; /* Hide for cleaner look globally, user found it too noisy */
 }
 
-/* 娑撴槒顢戦崝?/ 妞ゅ湱锟?/ 韫囶偅宓庨敍姘宠拫婵夘偄�?pill閿涘本妫ゆ鎴炲伎锟?*/
+/* pill action — soft control, no elevation */
 .chatEmptyAction {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-1_5);
-  margin: 0 0 var(--space-1, 4px);
-  padding: var(--space-2, 6px) var(--space-5, 16px);
+  margin: 0 0 var(--space-1);
+  padding: var(--space-2) var(--space-5);
   border: none;
-  border-radius: 999px;
-  background: var(--control-soft-bg, var(--bg-secondary));
+  border-radius: var(--radius-full);
+  background: var(--control-soft-bg);
   color: var(--text-primary);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
   font-family: inherit;
   cursor: pointer;
   box-shadow: none;
-  min-height: var(--control-height, 32px);
-  line-height: var(--line-height-ui, 1.35);
+  min-height: var(--control-height);
+  line-height: var(--line-height-ui);
 }
 
 .chatEmptyAction:hover {
-  background: var(--control-soft-bg-hover, var(--bg-hover));
+  background: var(--control-soft-bg-hover);
 }
 
 .chatEmptyAction:focus-visible {
   outline: none;
-  background: var(--control-soft-bg-active, var(--bg-active));
-}
-
-.chatEmptyComposerWrap {
-  width: 100%;
-  max-width: var(--chat-col-max, 760px);
-  margin: 0 auto;
-  box-sizing: border-box;
+  background: var(--control-soft-bg-active);
+  box-shadow: var(--focus-ring);
 }
 
 /* emptyComposer style migrated to ChatCard.module.css emptyComposer */
@@ -168,8 +170,8 @@
   flex-direction: column;
   gap: var(--space-2);
   width: 100%;
-  max-width: var(--chat-col-max, 760px);
-  margin: 20px auto 0 auto;
+  max-width: var(--chat-col-max);
+  margin: var(--space-5) auto 0 auto;
   box-sizing: border-box;
 }
 
@@ -178,7 +180,7 @@
   flex-direction: column;
   gap: var(--space-2);
   width: 100%;
-  max-width: var(--chat-col-max, 760px);
+  max-width: var(--chat-col-max);
   margin-top: var(--space-5);
   box-sizing: border-box;
 }
@@ -188,9 +190,9 @@
   align-items: center;
   justify-content: flex-start;
   text-align: left;
-  padding: 12px 18px;
+  padding: var(--space-3) calc(var(--space-4) + var(--space-0_5));
   background: transparent !important;
-  border: 1px solid var(--border-color, rgba(0,0,0,0.04)) !important;
+  border: 1px solid var(--border-color) !important;
   border-radius: var(--radius-2xl) !important;
   cursor: pointer;
   color: var(--text-primary);
@@ -201,8 +203,8 @@
   min-width: unset;
   box-shadow: none !important;
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
-  min-height: var(--control-height-sm, 36px);
-  line-height: var(--line-height-ui, 1.35);
+  min-height: var(--control-height-sm);
+  line-height: var(--line-height-ui);
   box-sizing: border-box;
 }
 
@@ -211,9 +213,9 @@
   align-items: center;
   justify-content: flex-start;
   text-align: left;
-  padding: 12px 18px;
+  padding: var(--space-3) calc(var(--space-4) + var(--space-0_5));
   background: transparent !important;
-  border: 1px solid var(--border-color, rgba(0,0,0,0.04)) !important;
+  border: 1px solid var(--border-color) !important;
   border-radius: var(--radius-2xl) !important;
   font-size: var(--font-size-sm);
   color: var(--text-primary);
@@ -244,22 +246,21 @@
   background: var(--control-soft-bg-hover) !important;
   border-color: var(--border-color);
   color: var(--text-primary);
-  /* 娑撱儳锟?translateY 娑撳﹣绗呯捄鍐插З */
+  /* 濞戞挶鍎抽敓?translateY 濞戞挸锕ｇ粭鍛崉閸愭彃袟 */
 }
 
 .quickPromptCard:focus-visible {
   outline: none;
-  border-color: var(--focus-ring, blue);
+  border-color: var(--border-color);
+  box-shadow: var(--focus-ring);
 }
 
 .quickPromptCard svg {
   display: block;
 }
 
-
-
 @media (max-width: 720px) {
   .chatEmptyState {
-    padding: var(--space-5, 16px) var(--space-4, 12px);
+    padding: var(--space-5) var(--space-4);
   }
 }

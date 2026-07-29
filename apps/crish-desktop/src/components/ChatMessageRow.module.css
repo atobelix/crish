@@ -20,7 +20,7 @@
 }
 
 .row.searchHit {
-  background: color-mix(in srgb, var(--accent, #3b82f6) 8%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
   border-radius: var(--radius-xl);
   padding: 4px 6px;
   margin-left: -6px;
@@ -59,7 +59,7 @@
 }
 
 .userBubble {
-  background: color-mix(in srgb, var(--bg-secondary) 88%, #e8e8e6 12%);
+  background: color-mix(in srgb, var(--bg-secondary) 88%, var(--bg-elevated) 12%);
   color: var(--text-primary);
   border-radius: 20px 20px var(--radius-xs) 20px;
   padding: 12px 16px;
@@ -434,7 +434,7 @@
 
 @keyframes pinFlash {
   0% {
-    background: color-mix(in srgb, var(--accent-color, #6af) 18%, transparent);
+    background: color-mix(in srgb, var(--accent-color) 18%, transparent);
   }
   100% {
     background: transparent;

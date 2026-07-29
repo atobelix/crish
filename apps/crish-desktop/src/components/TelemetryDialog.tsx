@@ -8,18 +8,18 @@ const dialogStyle: Record<string, React.CSSProperties> = {
   overlay: {
     position: 'fixed', inset: 0, zIndex: 9999,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'rgba(0,0,0,0.4)',
+    background: 'color-mix(in srgb, var(--shadow-color) 40%, transparent)',
   },
   modal: {
-    background: 'var(--bg-surface, #1e1e2e)',
+    background: 'var(--bg-card)',
     borderRadius: 12, padding: 24, minWidth: 420, maxWidth: 520,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-    color: 'var(--fg-default, #e0e0e0)',
+    boxShadow: '0 8px 32px color-mix(in srgb, var(--shadow-color) 40%, transparent)',
+    color: 'var(--text-primary)',
     fontFamily: 'system-ui, sans-serif',
   },
   title: { fontSize: 18, fontWeight: 600, margin: '0 0 16px 0' },
   row: { display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 14 },
-  label: { color: 'var(--fg-muted, #999)' },
+  label: { color: 'var(--text-tertiary)' },
   value: { fontWeight: 500 },
   actions: { display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' },
   btn: {
@@ -27,20 +27,20 @@ const dialogStyle: Record<string, React.CSSProperties> = {
     fontSize: 14, fontWeight: 500,
   },
   btnPrimary: {
-    background: 'var(--accent-color, #4a9eff)', color: '#fff',
+    background: 'var(--accent-blue)', color: 'var(--text-on-accent)',
   },
   btnDanger: {
-    background: 'var(--bg-danger, rgba(239,68,68,0.2))', color: 'var(--fg-danger, #ef4444)',
+    background: 'var(--color-error-bg)', color: 'var(--color-error)',
   },
   btnSecondary: {
-    background: 'var(--bg-muted, rgba(255,255,255,0.08))', color: 'var(--fg-default, #e0e0e0)',
+    background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)', color: 'var(--text-primary)',
   },
   badge: {
     display: 'inline-block', padding: '2px 8px', borderRadius: 4,
     fontSize: 12, fontWeight: 600,
   },
-  badgeError: { background: 'rgba(239,68,68,0.2)', color: '#ef4444' },
-  badgeWarn: { background: 'rgba(234,179,8,0.2)', color: '#eab308' },
+  badgeError: { background: 'var(--color-error-bg)', color: 'var(--color-error)' },
+  badgeWarn: { background: 'var(--color-warning-bg)', color: 'var(--color-warning)' },
 };
 
 interface TelemetryDialogProps {

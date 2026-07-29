@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { collectMessageDiffs } from '../ChangeOverviewCard';
 import { assistantTurnLabel, mergeSessionDiffFiles, type DiffSourceMode } from '../../api/diffPanelHelpers';
 import { readTextFile } from '../../api/workspaceFsApi';
-import type { FileDiff } from '../../store/types';
+import type { FileDiff, SessionMessage, MessageSender, SessionMessageStatus } from '../../store/types';
 import type { CompareMode, ComputedChange, SplitPair, UnifiedRenderItem, SplitRenderItem } from '../diffCardTypes';
 
 type SourceMode = DiffSourceMode;
@@ -12,7 +12,10 @@ function getComputedChanges(f: FileDiff): ComputedChange[] {
   return f.changes.map((c, i) => {
     let ol: number | undefined, nl: number | undefined;
     const h = c.content.startsWith('@@') && c.type === 'normal';
-    if (h) { const m = c.content.match(/^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/); if (m) { o = parseInt(m[1], 10) - 1; n = parseInt(m[2], 10) - 1; } }
+    if (h) {
+      const m = c.content.match(/^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
+      if (m && m[1] != null && m[2] != null) { o = parseInt(m[1], 10) - 1; n = parseInt(m[2], 10) - 1; }
+    }
     else if (c.type === 'addition') { n++; nl = n; } else if (c.type === 'deletion') { o++; ol = o; } else { o++; n++; ol = o; nl = n; }
     return { change: c, globalIdx: i, oldLine: ol, newLine: nl, isHeader: h };
   });
@@ -22,13 +25,15 @@ function getSplitPairs(f: FileDiff, inputLines?: ComputedChange[]): SplitPair[] 
   const lines = inputLines ?? getComputedChanges(f);
   const pairs: SplitPair[] = [];
   for (let i = 0; i < lines.length;) {
-    if (lines[i].isHeader) { i++; continue; }
-    if (lines[i].change.type === 'deletion') {
+    const item = lines[i];
+    if (!item) { i++; continue; }
+    if (item.isHeader) { i++; continue; }
+    if (item.change.type === 'deletion') {
       const nx = lines[i + 1];
-      if (nx?.change.type === 'addition') { pairs.push({ left: lines[i], right: nx }); i += 2; }
-      else { pairs.push({ left: lines[i] }); i++; }
-    } else if (lines[i].change.type === 'addition') { pairs.push({ right: lines[i] }); i++; }
-    else { pairs.push({ left: lines[i], right: lines[i] }); i++; }
+      if (nx?.change.type === 'addition') { pairs.push({ left: item, right: nx }); i += 2; }
+      else { pairs.push({ left: item, right: undefined }); i++; }
+    } else if (item.change.type === 'addition') { pairs.push({ left: undefined, right: item }); i++; }
+    else { pairs.push({ left: item, right: item }); i++; }
   }
   return pairs;
 }
@@ -40,16 +45,26 @@ function getUnifiedItems(f: FileDiff, q: string, eb: Record<string, Record<numbe
   if (qt) return cs.map((item, i) => ({ isCollapsedPlaceholder: false as const, index: i, item }));
   const vis = new Array(cs.length).fill(false);
   for (let i = 0; i < cs.length; i++) {
-    if (cs[i].change.type !== 'normal' || cs[i].isHeader) {
-      for (let j = Math.max(0, i - 3); j <= Math.min(cs.length - 1, i + 3); j++) if (cs[j].change.type === 'normal') vis[j] = true;
+    const item = cs[i];
+    if (item && (item.change.type !== 'normal' || item.isHeader)) {
+      for (let j = Math.max(0, i - 3); j <= Math.min(cs.length - 1, i + 3); j++) {
+        const neighbor = cs[j];
+        if (neighbor && neighbor.change.type === 'normal') vis[j] = true;
+      }
       vis[i] = true;
     }
   }
   const key = f.filePath, items: UnifiedRenderItem[] = [];
   let start = -1;
   for (let i = 0; i < cs.length; i++) {
-    if (vis[i] || eb[key]?.[i]) { if (start !== -1) { items.push({ isCollapsedPlaceholder: true, startIndex: start, count: i - start }); start = -1; } items.push({ isCollapsedPlaceholder: false, index: i, item: cs[i] }); }
-    else if (start === -1) start = i;
+    const item = cs[i];
+    if (!item) continue;
+    if (vis[i] || eb[key]?.[i]) {
+      if (start !== -1) { items.push({ isCollapsedPlaceholder: true, startIndex: start, count: i - start }); start = -1; }
+      items.push({ isCollapsedPlaceholder: false, index: i, item });
+    } else if (start === -1) {
+      start = i;
+    }
   }
   if (start !== -1) items.push({ isCollapsedPlaceholder: true, startIndex: start, count: cs.length - start });
   return items;
@@ -61,14 +76,18 @@ function getSplitItems(f: FileDiff, q: string, eb: Record<string, Record<number,
   if (qt) return pairs.map((pair, i) => ({ isCollapsedPlaceholder: false as const, index: i, pair }));
   const vis = new Array(pairs.length).fill(false);
   for (let i = 0; i < pairs.length; i++) {
-    const hd = (pairs[i].left?.change.type !== 'normal' && pairs[i].left != null) || (pairs[i].right?.change.type !== 'normal' && pairs[i].right != null);
-    const hs = (pairs[i].left?.isHeader) || (pairs[i].right?.isHeader);
+    const pair = pairs[i];
+    if (!pair) continue;
+    const hd = (pair.left?.change.type !== 'normal' && pair.left != null) || (pair.right?.change.type !== 'normal' && pair.right != null);
+    const hs = (pair.left?.isHeader) || (pair.right?.isHeader);
     if (hd || hs) { for (let j = Math.max(0, i - 3); j <= Math.min(pairs.length - 1, i + 3); j++) vis[j] = true; vis[i] = true; }
   }
   const key = f.filePath, items: SplitRenderItem[] = [];
   let start = -1;
   for (let i = 0; i < pairs.length; i++) {
-    if (vis[i] || eb[key]?.[i]) { if (start !== -1) { items.push({ isCollapsedPlaceholder: true, startIndex: start, count: i - start }); start = -1; } items.push({ isCollapsedPlaceholder: false, index: i, pair: pairs[i] }); }
+    const pair = pairs[i];
+    if (!pair) continue;
+    if (vis[i] || eb[key]?.[i]) { if (start !== -1) { items.push({ isCollapsedPlaceholder: true, startIndex: start, count: i - start }); start = -1; } items.push({ isCollapsedPlaceholder: false, index: i, pair }); }
     else if (start === -1) start = i;
   }
   if (start !== -1) items.push({ isCollapsedPlaceholder: true, startIndex: start, count: pairs.length - start });
@@ -76,7 +95,7 @@ function getSplitItems(f: FileDiff, q: string, eb: Record<string, Record<number,
 }
 
 export function useDiffData(opts: {
-  session: { messages: Array<{ sender: string; status: string; id: string }> } | null;
+  session: { messages: Array<{ sender: string; status?: string; id: string; timestamp?: number }> } | null;
   diffFiles: FileDiff[]; activeDiffSource: FileDiff | null;
   diffSearchQuery: string; diffViewMode: 'unified' | 'split'; sourceMode: SourceMode;
 }) {
@@ -88,7 +107,15 @@ export function useDiffData(opts: {
 
   const aiTurns = useMemo(() => {
     const msgs = (session?.messages || []).filter((m) => m.sender === 'assistant' && m.status !== 'processing');
-    return msgs.map((m, i) => ({ msg: m, index: i, files: collectMessageDiffs(m) })).filter((t) => t.files.length > 0).reverse();
+    return msgs.map((m, i) => {
+      const msg: SessionMessage = {
+        id: m.id,
+        sender: m.sender as MessageSender,
+        status: m.status as SessionMessageStatus,
+        timestamp: m.timestamp ?? 0,
+      };
+      return { msg, index: i, files: collectMessageDiffs(msg) };
+    }).filter((t) => t.files.length > 0).reverse();
   }, [session?.messages]);
 
   const mergedSessionFiles = useMemo(() => mergeSessionDiffFiles(aiTurns), [aiTurns]);

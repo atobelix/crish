@@ -31,8 +31,8 @@ export function useWorkspaceResize(
       const startX = e.clientX;
       const containerWidth = canvasEl.clientWidth || 1;
       const startLeft = splitterEl.getBoundingClientRect().left - canvasEl.getBoundingClientRect().left;
-      const colLeftRatio = ws.columns[colIdx].widthRatio;
-      const colRightRatio = ws.columns[colIdx + 1].widthRatio;
+      const colLeftRatio = ws.columns[colIdx]?.widthRatio ?? 0.5;
+      const colRightRatio = ws.columns[colIdx + 1]?.widthRatio ?? 0.5;
 
       splitterEl.classList.add('active');
       document.body.classList.add('resizing-active');
@@ -85,8 +85,8 @@ export function useWorkspaceResize(
       const startY = e.clientY;
       const containerHeight = colEl.clientHeight || 1;
       const startTop = splitterEl.getBoundingClientRect().top - colEl.getBoundingClientRect().top;
-      const groupTopRatio = ws.columns[colIdx].groups[groupIdx].heightRatio;
-      const groupBottomRatio = ws.columns[colIdx].groups[groupIdx + 1].heightRatio;
+      const groupTopRatio = ws.columns[colIdx]?.groups?.[groupIdx]?.heightRatio ?? 0.5;
+      const groupBottomRatio = ws.columns[colIdx]?.groups?.[groupIdx + 1]?.heightRatio ?? 0.5;
 
       splitterEl.classList.add('active');
       document.body.classList.add('resizing-active');

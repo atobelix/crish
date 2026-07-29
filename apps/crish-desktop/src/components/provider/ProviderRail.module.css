@@ -32,7 +32,7 @@
 }
 
 .searchBox:focus-within {
-  border-color: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
 }
 
 .searchBox input {

@@ -1,6 +1,5 @@
 import React from 'react';
 import styles from './SettingsUI.module.css';
-import { Tooltip as UnifiedTooltip } from '../Tooltip';
 
 export const SettingsPage: React.FC<{
   title: string;
@@ -65,23 +64,5 @@ export const SettingsRow: React.FC<{
         </div>
       )}
     </Component>
-  );
-};
-
-/**
- * @deprecated Use `Tooltip` from `../Tooltip` instead.
- * This component is kept for backward compatibility and delegates to the new unified Tooltip.
- */
-export const Tooltip: React.FC<{
-  content: React.ReactNode;
-  children: React.ReactElement;
-  disabled?: boolean;
-  /** @deprecated side is always 'top' in this legacy wrapper; use the new Tooltip for custom sides */
-  side?: 'top' | 'bottom' | 'left' | 'right';
-}> = ({ content, children, disabled, side }) => {
-  return (
-    <UnifiedTooltip content={content} {...(disabled !== undefined ? { disabled } : {})} {...(side !== undefined ? { side } : {})}>
-      {children}
-    </UnifiedTooltip>
   );
 };

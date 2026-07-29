@@ -44,8 +44,8 @@ import {
   SettingsSection,
   SettingsCard,
   SettingsRow,
-  Tooltip,
 } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import { SettingsSelect } from './SettingsSelect';
 
 type Props = {
@@ -590,9 +590,11 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
             </button>
           </div>
           {workspacePath ? (
-            <div className="sched-settings-path" title={workspacePath}>
-              {workspacePath}
-            </div>
+            <Tooltip content={workspacePath}>
+              <div className="sched-settings-path">
+                {workspacePath}
+              </div>
+            </Tooltip>
           ) : null}
         </div>
         ) : null}
@@ -617,15 +619,20 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
                 return (
                   <SettingsRow
                     key={w.id}
-                    title={<span className="sched-settings-row-name" title={w.prompt || w.name}>{w.name}</span>}
+                    title={
+                      <Tooltip content={w.prompt || w.name}>
+                        <span className="sched-settings-row-name">{w.name}</span>
+                      </Tooltip>
+                    }
                     desc={
-                      <span
-                        className="sched-settings-row-schedule"
-                        title={`${schedText}${enabled ? '' : ` · ${statusLabel}`}`}
-                      >
-                        {schedText}
-                        {!enabled ? ` · ${statusLabel}` : ''}
-                      </span>
+                      <Tooltip content={`${schedText}${enabled ? '' : ` · ${statusLabel}`}`}>
+                        <span
+                          className="sched-settings-row-schedule"
+                        >
+                          {schedText}
+                          {!enabled ? ` · ${statusLabel}` : ''}
+                        </span>
+                      </Tooltip>
                     }
                     control={
                       <div className={styles.controlGroup}>

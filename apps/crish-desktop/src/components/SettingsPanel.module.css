@@ -37,7 +37,7 @@
   gap: var(--space-2);
   height: var(--header-height);
   min-height: var(--header-height);
-  padding: 0 14px;
+  padding: 0 var(--space-3_5);
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
   background: var(--bg-primary);
   flex-shrink: 0;
@@ -45,8 +45,8 @@
 }
 
 .coverHeaderSlim {
-  min-height: calc(var(--header-height) - 4px);
-  height: calc(var(--header-height) - 4px);
+  min-height: calc(var(--header-height) - var(--space-1));
+  height: calc(var(--header-height) - var(--space-1));
 }
 
 .coverHeaderSpacer {
@@ -59,8 +59,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  height: 36px;
-  padding: 0 12px 0 10px;
+  height: var(--control-height-lg);
+  padding: 0 var(--space-3) 0 var(--space-2_5);
   border: 1px solid transparent;
   border-radius: var(--radius-xl);
   background: transparent;
@@ -84,13 +84,13 @@
 
 .searchWrap {
   position: relative;
-  margin: 4px 0 10px;
+  margin: var(--space-1) 0 var(--space-2_5);
   flex-shrink: 0;
 }
 
 .searchIco {
   position: absolute;
-  left: 12px;
+  left: var(--space-3);
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-tertiary);
@@ -101,7 +101,7 @@
   width: 100%;
   height: var(--control-height-sm);
   min-height: var(--control-height-sm);
-  padding: 0 10px 0 30px;
+  padding: 0 var(--space-2_5) 0 calc(var(--space-6) + var(--space-1_5));
   border: 1px solid color-mix(in srgb, var(--text-primary) 6%, transparent);
   border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
@@ -122,7 +122,7 @@
 .search:focus-visible {
   border-color: transparent;
   background: color-mix(in srgb, var(--text-primary) 5%, var(--bg-primary));
-  box-shadow: none;
+  box-shadow: none; /* soft focus: border/bg only, no heavy input shadow */
 }
 
 .navScroll {
@@ -138,7 +138,7 @@
 .navEmpty {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  padding: 12px 10px;
+  padding: var(--space-3) var(--space-2_5);
 }
 
 .coverBody {
@@ -149,11 +149,11 @@
 }
 
 .coverNav {
-  width: var(--sidebar-width, 260px);
+  width: var(--sidebar-width);
   flex-shrink: 0;
   border-right: 1px solid var(--hairline, var(--border-subtle));
   background: transparent;
-  padding: 10px 12px 14px;
+  padding: var(--space-2_5) var(--space-3) var(--space-3_5);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -165,7 +165,7 @@
   font-weight: var(--font-weight-normal);
   letter-spacing: var(--letter-spacing-wide);
   color: var(--text-tertiary);
-  padding: 12px 10px 6px;
+  padding: var(--space-3) var(--space-2_5) var(--space-1_5);
   text-transform: none;
 }
 
@@ -179,10 +179,10 @@
   /*
    * scrollbar-gutter: stable 闂冨弶顒涢崷銊︽箒/閺冪姵绮撮崝銊︽蒋閺冭泛鍞寸€圭懓灏€硅棄瀹崇捄鍐插З閿涘澅ab 閸掑洦宕查幎鏍уЗ閿?   * both-edges 鐠佲晛鍞寸€圭懓鍨锕€褰搁崸鍥╃搼缂傗晞绻橀敍宀冾潒鐟欏绗夐崑蹇曅?   */
   scrollbar-gutter: stable both-edges;
-  padding: 24px 20px 40px;
+  padding: var(--space-6) var(--space-5) var(--space-10);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-3_5);
   position: relative;
   background: var(--bg-primary);
   max-width: none;
@@ -195,7 +195,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-xl);
   border: none;
   cursor: pointer;
@@ -207,7 +207,7 @@
   color: var(--text-secondary);
   transition: background var(--transition-micro), color var(--transition-micro);
   box-sizing: border-box;
-  min-height: 36px;
+  min-height: var(--control-height-lg);
 }
 
 .sidebarTab:hover {
@@ -226,8 +226,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: calc(var(--icon-size) + var(--space-1));
+  height: calc(var(--icon-size) + var(--space-1));
   flex-shrink: 0;
   color: inherit;
   opacity: 0.88;

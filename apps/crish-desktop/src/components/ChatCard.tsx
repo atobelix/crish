@@ -8,6 +8,7 @@ import { ModelBadgePicker } from './chat-card/ChatHeaderControls';
 import { useChatCardState } from './chat-card/useChatCardState';
 import { ChatHeader } from './chat-card/ChatHeader';
 import { ChatComposerWrapper } from './chat-card/ChatComposerWrapper';
+import { WithdrawConfirmDialog } from './WithdrawConfirmDialog';
 
 const ScheduledTasksPanel = lazy(() =>
   import('./ScheduledTasksPanel').then((m) => ({
@@ -21,14 +22,20 @@ interface ChatCardProps {
   groupIdx: number;
   onShowToast: ShowToastFn;
   handleGlobalTabClick: (cardId: string) => void;
+  /**
+   * 绑定的会话 id（Shell redesign：TabSurface.sessionId）。
+   * 未传时回退全局 activeSessionId（兼容旧调用）。
+   */
+  sessionId?: string | null;
 }
 
 export const ChatCard: React.FC<ChatCardProps> = React.memo(
-  ({ wsId, onShowToast, handleGlobalTabClick }) => {
+  ({ wsId, onShowToast, handleGlobalTabClick, sessionId }) => {
     const state = useChatCardState({
       wsId,
       onShowToast,
       handleGlobalTabClick,
+      sessionId,
     });
 
     const composerElement = (
@@ -44,10 +51,13 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         filteredCommands={state.composerProps.filteredCommands}
         loadSkillSlash={state.composerProps.loadSkillSlash}
         onPasteImage={state.composerProps.handlePasteImage}
-        onSend={() => {
-          void state.composerProps.handleSendChat(false);
-        }}
+        onSend={state.composerProps.onSend}
         onStop={state.composerProps.handleStopGeneration}
+        onForceStop={state.composerProps.handleForceCancelGeneration}
+        queuedMessages={state.composerProps.queuedMessages}
+        onSendQueuedNow={state.composerProps.sendQueuedMessageNow}
+        onEditQueued={state.composerProps.editQueuedMessage}
+        onDeleteQueued={state.composerProps.deleteQueuedMessage}
         canSend={state.composerProps.canSend}
         isProcessing={state.isProcessing}
         attachments={state.composerProps.attachments}
@@ -79,8 +89,10 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
     );
 
     return (
+      <>
       <div
         className={styles.chatBody}
+        data-testid="chat-body"
         role="region"
         aria-label={state.chatRegionAria}
         aria-busy={state.messagesLoading || undefined}
@@ -101,10 +113,24 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           displayCount={state.displayMessages.length}
           totalCount={state.messages.length}
           inputRef={state.msgFilterInputRef}
+          activeSessionId={state.activeSessionId}
+          onExportMarkdown={state.handleExportMarkdown}
+          onClearHistory={
+            state.activeSessionId && !state.activeSessionId.startsWith('__pending')
+              ? () => {
+                  // 清空当前会话消息（不删会话）
+                  const sid = state.activeSessionId;
+                  if (!sid) return;
+                  state.clearSessionMessages(sid);
+                }
+              : undefined
+          }
         />
 
         <div
           className={styles.chatDocFlow}
+          data-testid="chat-doc-flow"
+          data-empty={state.emptyKind != null ? 'true' : undefined}
           ref={state.chatFlowRef}
           aria-busy={state.messagesLoading || undefined}
         >
@@ -116,42 +142,35 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
               />
             </Suspense>
           ) : state.emptyKind != null ? (
-            <ChatEmptyState
-              kind={state.emptyKind}
-              filterQuery={state.localMsgFilter}
-              needsKeySetup={state.needsKeySetup}
-              needsModelSetup={state.needsModelSetup}
-              firstRunOpen={state.firstRunOpen}
-              engineOk={state.engineOk}
-              messagesLoading={state.messagesLoading}
-              showProjectPicker={state.showProjectPicker}
-              onShowProjectPicker={state.setShowProjectPicker}
-              onProjectChanged={() => state.setProjectTick((n) => n + 1)}
-              onSetChatInput={state.composerProps.setChatInput}
-              onCreateSession={state.handleCreateSessionFromEmpty}
-              onClearFilter={() => state.setLocalMsgFilter('')}
-              composer={
-                state.emptyKind === 'session-empty'
-                  ? React.cloneElement(composerElement, {
-                      className: styles.emptyComposer,
-                    })
-                  : undefined
-              }
-            />
+            <div className={styles.chatCol} data-empty-col="true">
+              <ChatEmptyState
+                kind={state.emptyKind}
+                filterQuery={state.localMsgFilter}
+                needsKeySetup={state.needsKeySetup}
+                needsModelSetup={state.needsModelSetup}
+                firstRunOpen={state.firstRunOpen}
+                engineOk={state.engineOk}
+                messagesLoading={state.messagesLoading}
+                showProjectPicker={state.showProjectPicker}
+                onShowProjectPicker={state.setShowProjectPicker}
+                onProjectChanged={() => state.setProjectTick((n) => n + 1)}
+                onSetChatInput={state.composerProps.setChatInput}
+                onCreateSession={state.handleCreateSessionFromEmpty}
+                onClearFilter={() => state.setLocalMsgFilter('')}
+              />
+            </div>
           ) : (
             <ChatMessageList
               messages={state.displayMessages}
+              allMessages={state.messages}
               agents={state.agents}
               activeSessionId={state.activeSessionId || ''}
-              thinkingSeconds={state.thinkingSeconds}
               showAllMessages={state.isFiltering}
               showProjectPicker={state.showProjectPicker}
               onShowProjectPicker={state.setShowProjectPicker}
-              onProjectChanged={() => state.setProjectTick((n) => n + 1)}
+              onProjectChanged={state.handleProjectChanged}
               onSetChatInput={state.composerProps.setChatInput}
-              onSendFollowUp={(prompt) => {
-                void state.composerProps.handleSendChat(false, prompt);
-              }}
+              onSendFollowUp={state.handleSendFollowUp}
               onWithdraw={state.handleWithdraw}
               onRegenerate={state.handleRegenerate}
               onBranch={state.handleBranch}
@@ -160,8 +179,8 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
               pendingApprovalMsgId={state.approvalState.pendingApprovalMsgId}
               onOpenDiff={state.openDiffInRightPanel}
               onOpenPath={state.openPathInFilesPanel}
-              onOpenTerminal={() => state.openSidePanel('terminal')}
-              onOpenDiffPanel={() => state.openSidePanel('diff')}
+              onOpenTerminal={state.handleOpenTerminal}
+              onOpenDiffPanel={state.handleOpenDiffPanel}
               onApprovalAllow={state.approvalState.handleApprovalAllow}
               onApprovalDeny={state.approvalState.handleApprovalDeny}
               onBatchApprove={state.approvalState.handleBatchApprove}
@@ -210,6 +229,18 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           handleGlobalTabClick={handleGlobalTabClick}
         />
       </div>
+
+      {state.pendingWithdraw ? (
+        <WithdrawConfirmDialog
+          scope={state.pendingWithdraw}
+          isOpen={!!state.pendingWithdraw}
+          onConfirm={() => {
+            void state.confirmWithdraw();
+          }}
+          onCancel={state.cancelWithdraw}
+        />
+      ) : null}
+      </>
     );
   }
 );

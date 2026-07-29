@@ -18,7 +18,7 @@ import {
   MODEL_CAPABILITY_OPTIONS,
   setModelEnabled,
 } from '../../api/modelCatalog';
-import { Tooltip } from '../settings/SettingsUI';
+import { Tooltip } from '../Tooltip';
 import styles from '../ModelsSettingsTab.module.css';
 import type { AddDraft, CfgDraft } from './useModelProfilesState';
 
@@ -190,9 +190,9 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                   fontSize: '12px',
                   fontWeight: 500,
                   borderRadius: '6px',
-                  border: selected.enabled !== false ? '1px solid color-mix(in srgb, #22c55e 30%, transparent)' : '1px solid var(--border-subtle)',
-                  background: selected.enabled !== false ? 'color-mix(in srgb, #22c55e 12%, transparent)' : 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
-                  color: selected.enabled !== false ? '#15803d' : 'var(--text-tertiary)',
+                  border: selected.enabled !== false ? '1px solid color-mix(in srgb, var(--color-active) 30%, transparent)' : '1px solid var(--border-subtle)',
+                  background: selected.enabled !== false ? 'color-mix(in srgb, var(--color-active) 12%, transparent)' : 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
+                  color: selected.enabled !== false ? 'var(--color-active)' : 'var(--text-tertiary)',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
                 }}
@@ -503,12 +503,12 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                                 marginRight: '6px',
                                 userSelect: 'none',
                                 color: !meta.lastTest.ok
-                                  ? 'var(--accent-red, #ef4444)'
+                                  ? 'var(--accent-red)'
                                   : (meta.lastTest.latencyMs || 0) < 400
-                                  ? 'var(--accent-green, #10b981)'
+                                  ? 'var(--accent-green)'
                                   : (meta.lastTest.latencyMs || 0) < 1200
-                                  ? 'var(--accent-orange, #f59e0b)'
-                                  : 'var(--accent-red, #ef4444)'
+                                  ? 'var(--accent-orange)'
+                                  : 'var(--accent-red)'
                               }}
                               title={meta.lastTest.error || (meta.lastTest.ok ? '测试成功' : '测试失败')}
                             >

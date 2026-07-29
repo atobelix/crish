@@ -43,7 +43,7 @@ import {
 } from '../api/storeAccess';
 import { SettingsSelect } from './SettingsSelect';
 import styles from './ScheduledTasksPanel.module.css';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -404,9 +404,11 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
       {/* 状态：aria-live 行内；成功永不 toast */}
       <div className="sched-status-live" aria-live="polite" aria-relevant="additions text">
         {error ? (
-          <div className={`${styles.schedStatusLine} ${styles.isErr}`} role="alert" title={error}>
-            {error}
-          </div>
+          <Tooltip content={error}>
+            <div className={`${styles.schedStatusLine} ${styles.isErr}`} role="alert">
+              {error}
+            </div>
+          </Tooltip>
         ) : null}
         {ok && !error ? (
           <div className={`${styles.schedStatusLine} ${styles.isOk}`} role="status">
@@ -540,9 +542,11 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
             return (
               <li key={w.id} className={`${styles.schedItem} ${styles.schedItemDense}`}>
                 <div className={styles.schedItemMain}>
-                  <div className={styles.schedItemName} title={w.prompt || w.name}>
-                    {w.name}
-                  </div>
+                  <Tooltip content={w.prompt || w.name}>
+                    <div className={styles.schedItemName}>
+                      {w.name}
+                    </div>
+                  </Tooltip>
                   <div className={styles.schedItemMeta}>
                     {scheduleLabel(w.schedule)}
                     {paused ? ` · ${workflowEnabledLabel(false)}` : ''}
@@ -619,10 +623,12 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
                 >
                   <div className={styles.schedItemMain}>
                     <div className={styles.schedItemName}>{wfName}</div>
-                    <div className={styles.schedItemMeta} title={r.error || undefined}>
-                      {workflowRunStatusLabel(r.status)} · {whenLabel}
-                      {r.error ? ` · ${r.error.slice(0, 24)}` : ''}
-                    </div>
+                    <Tooltip content={r.error || ''} disabled={!r.error}>
+                      <div className={styles.schedItemMeta}>
+                        {workflowRunStatusLabel(r.status)} · {whenLabel}
+                        {r.error ? ` · ${r.error.slice(0, 24)}` : ''}
+                      </div>
+                    </Tooltip>
                   </div>
                   <div className={styles.schedItemActions}>
                     <Tooltip content={canOpen ? '打开会话' : '无关联会话'}>

@@ -97,7 +97,7 @@ export function useFileTreeState(getIsDirty?: () => boolean) {
       const data = (ev as CustomEvent<GitStatusFile[]>).detail;
       if (data) buildMap(data);
     };
-    const fromWindow = (window as any).__crish_git_status as GitStatusFile[] | undefined;
+    const fromWindow = window.__crish_git_status as GitStatusFile[] | undefined;
     if (fromWindow) buildMap(fromWindow);
     window.addEventListener('crish-git-status-changed', onGitUpdate);
     void fetchGitStatus().then((r) => {

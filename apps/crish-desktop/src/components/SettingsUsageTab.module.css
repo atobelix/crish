@@ -1,4 +1,4 @@
-/* SettingsUsageTab.module.css ï¿?extracted from inline styles in SettingsUsageTab.tsx */
+/* SettingsUsageTab.module.css extracted from inline styles in SettingsUsageTab.tsx */
 
 /* ----- Price row ----- */
 .priceRow {
@@ -45,7 +45,7 @@
 .modalOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: color-mix(in srgb, var(--bg-overlay) 40%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -57,11 +57,11 @@
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-primary, #ffffff);
-  border: 1px solid var(--border-subtle, #e5e7eb);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-2xl);
   padding: var(--space-5);
-  box-shadow: var(--shadow-lg, 0 10px 25px rgba(0, 0, 0, 0.15));
+  box-shadow: var(--shadow-lg);
 }
 
 .modalHeader {
@@ -227,7 +227,6 @@
 .chartSegmentBtn.active {
   background: var(--bg-elevated);
   color: var(--text-primary);
-  box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--border-subtle);
 }
 
 .chartBars {
@@ -376,7 +375,7 @@
 /* bar fill width set dynamically via inline style */
 .modelBarFill {
   height: 100%;
-  background: var(--accent-primary, #4f46e5);
+  background: var(--accent-primary);
   border-radius: 3px;
 }
 

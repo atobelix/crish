@@ -25,7 +25,7 @@
 }
 
 .sidebar.collapsed.tempExpanded {
-  width: var(--sidebar-width) !important;
+  width: var(--sidebar-visible-width, var(--sidebar-width)) !important;
   border-right: none; /* Removed vertical border line */
   box-shadow: var(--shadow-lg);
 }
@@ -48,13 +48,14 @@
 }
 
 .sidebarFooter {
-  padding: 10px 18px; /* Balanced left/right footer padding */
+  padding: 4px 14px; /* Thinner bottom settings row */
   border-top: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
   background: transparent;
   box-sizing: border-box;
+  min-height: 0;
 }
 
 .modeChip {
@@ -64,11 +65,11 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
   font-family: inherit;
-  padding: 5px 10px;
+  padding: 3px 8px;
   border-radius: 999px;
   cursor: pointer;
-  min-height: 30px;
-  height: 30px;
+  min-height: 26px;
+  height: 26px;
   box-sizing: border-box;
 }
 
@@ -94,12 +95,12 @@
   align-items: center;
   gap: var(--space-1);
   font-size: var(--font-size-xs);
-  padding: 0 10px;
+  padding: 0 8px;
   min-width: auto;
-  height: 30px;
+  height: 26px;
   border-radius: 999px;
   border: 1px solid var(--hairline, var(--border-subtle));
-  background: color-mix(in srgb, var(--accent-green, #2dbe6c) 12%, transparent);
+  background: color-mix(in srgb, var(--accent-green) 12%, transparent);
   color: var(--text-primary);
   cursor: pointer;
   box-sizing: border-box;
@@ -110,7 +111,7 @@
 }
 
 .footerUpdate:hover {
-  background: color-mix(in srgb, var(--accent-green, #2dbe6c) 18%, transparent);
+  background: color-mix(in srgb, var(--accent-green) 18%, transparent);
 }
 
 .footerUpdateLabel {
@@ -202,5 +203,84 @@
 
 .iconCollapse.tempExpanded {
   width: var(--sidebar-width) !important;
+}
+
+/* ── 图标折叠模式：隐藏文字，仅保留图标，避免窄边栏文字竖排 ── */
+.iconCollapse .sidebarTop {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.iconCollapse .sidebarTop :global([class*="topActions"]) {
+  gap: var(--space-2, 6px);
+}
+
+.iconCollapse .sidebarTop :global([class*="navItem"]) {
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md, 8px);
+}
+
+.iconCollapse .sidebarTop :global([class*="navItem"]) > span,
+.iconCollapse .sidebarTop :global([class*="navItem"]) > input,
+.iconCollapse .sidebarTop :global([class*="navItem"]) > [role="search"] {
+  display: none;
+}
+
+.iconCollapse .sidebarScroll {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.iconCollapse .sidebarScroll :global([class*="sectionLabel"]) > :not(svg),
+.iconCollapse .sidebarScroll :global([class*="folderHeader"]) > :not(svg),
+.iconCollapse .sidebarScroll :global([class*="folderName"]),
+.iconCollapse .sidebarScroll :global([class*="folderCount"]),
+.iconCollapse .sidebarScroll :global([class*="sessionText"]),
+.iconCollapse .sidebarScroll :global([class*="sessionSearchSnippet"]),
+.iconCollapse .sidebarScroll :global([class*="sessionTime"]),
+.iconCollapse .sidebarScroll :global([class*="sessionActionsBtn"]),
+.iconCollapse .sidebarScroll :global([class*="emptyHint"]),
+.iconCollapse .sidebarScroll :global([class*="sessionItemFoldBtn"]) {
+  display: none;
+}
+
+.iconCollapse .sidebarScroll :global([class*="sessionItem"]) {
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md, 8px);
+  margin: 0 auto;
+}
+
+.iconCollapse .sidebarScroll :global([class*="sessionItem"])::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+.iconCollapse .sidebarScroll :global([class*="sessionItem"].active)::before {
+  opacity: 1;
+  background: var(--accent-primary);
+}
+
+.iconCollapse .sidebarFooter {
+  padding: 10px 8px;
+  justify-content: center;
+}
+
+.iconCollapse .sidebarFooter > :global(*) {
+  justify-content: center;
+}
+
+.iconCollapse .sidebarFooter :global([class*="modeChip"]) > span,
+.iconCollapse .sidebarFooter :global([class*="footerActions"]) > span {
+  display: none;
 }
 

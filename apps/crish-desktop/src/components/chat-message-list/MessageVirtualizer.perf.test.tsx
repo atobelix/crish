@@ -76,7 +76,6 @@ function createDefaultProps(messages: SessionMessage[]) {
     onToggleExpandUser: vi.fn(),
     onWithdraw: vi.fn(),
     onShowToast: vi.fn(),
-    thinkingSeconds: 0,
     hideThinkingBlock: false,
     inPlanMode: false,
     planApproved: false,

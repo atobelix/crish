@@ -24,7 +24,7 @@ export function ProviderDetail({ providerId }: ProviderDetailProps) {
   };
 
   // const provider = useProviderStore(s => s.providers.get(providerId));
-  const provider: ProviderConfig | null = null;
+  const provider = null as ProviderConfig | null;
 
   if (!provider) return <div className={styles.loading}>加载中...</div>;
 
@@ -57,13 +57,13 @@ export function ProviderDetail({ providerId }: ProviderDetailProps) {
         )}
       </section>
 
-      <AuthConfigSection auth={provider.auth} expanded={expandedSections.auth} onToggle={() => toggleSection('auth')} />
+      <AuthConfigSection auth={provider.auth} expanded={expandedSections.auth ?? false} onToggle={() => toggleSection('auth')} />
 
-      <ModelListSection models={provider.models} providerId={provider.id} expanded={expandedSections.models} onToggle={() => toggleSection('models')} />
+      <ModelListSection models={provider.models} providerId={provider.id} expanded={expandedSections.models ?? false} onToggle={() => toggleSection('models')} />
 
-      <RateLimitConfig rateLimit={provider.rateLimit} expanded={expandedSections.rateLimit} onToggle={() => toggleSection('rateLimit')} />
+      <RateLimitConfig rateLimit={provider.rateLimit} expanded={expandedSections.rateLimit ?? false} onToggle={() => toggleSection('rateLimit')} />
 
-      <FallbackConfigSection fallback={provider.fallback} expanded={expandedSections.fallback} onToggle={() => toggleSection('fallback')} />
+      <FallbackConfigSection fallback={provider.fallback} expanded={expandedSections.fallback ?? false} onToggle={() => toggleSection('fallback')} />
     </div>
   );
 }

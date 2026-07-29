@@ -152,13 +152,13 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(function Fil
                       style={{
                         color:
                           gitStatusMap[e.path] === 'M'
-                            ? '#eab308'
+                            ? 'var(--color-warning)'
                             : gitStatusMap[e.path] === 'A'
-                            ? '#22c55e'
+                            ? 'var(--color-success)'
                             : gitStatusMap[e.path] === 'D'
-                            ? '#ef4444'
+                            ? 'var(--color-error)'
                             : gitStatusMap[e.path] === '?'
-                            ? '#9ca3af'
+                            ? 'var(--text-tertiary)'
                             : undefined,
                       }}
                     >

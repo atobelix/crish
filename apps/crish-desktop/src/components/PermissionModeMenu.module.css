@@ -12,6 +12,13 @@
   font-size: var(--font-size-sm);
   cursor: pointer;
   transition: background var(--transition-micro), color var(--transition-micro);
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+.permPill > span {
+  white-space: nowrap;
 }
 
 .permPill:hover {

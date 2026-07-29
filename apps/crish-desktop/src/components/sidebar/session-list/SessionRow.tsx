@@ -17,9 +17,13 @@ import {
   storeSessionSearchQuery,
   type SessionSearchMatch,
 } from '../../../api/sessionSearch';
-import { Tooltip } from '../../settings/SettingsUI';
+import type { ProjectEntry } from '../../../api/projectStore';
+import { Tooltip } from '../../Tooltip';
 import styles from '../SidebarSessionList.module.css';
 import { MoreHorizontal } from 'lucide-react';
+
+/** Drop indicator place; local type avoids circular runtime import with useSessionListDrag */
+export type SessionRowDropPlace = 'before' | 'after';
 
 /**
  * NowTickContext – 时间刻度上下文。
@@ -61,7 +65,8 @@ export const SessionRowTime = memo(function SessionRowTime({
 /** 从行元素合成右键坐标（键盘菜单 / 更多按钮） */
 export function syntheticContextMenuEvent(
   el: HTMLElement | null,
-  base?: React.MouseEvent | React.KeyboardEvent
+  base?: React.MouseEvent | React.KeyboardEvent,
+  opts?: { anchor?: 'bottom-left' | 'right-center' }
 ): React.MouseEvent {
   const targetEl =
     base && base.currentTarget && base.currentTarget !== el
@@ -69,17 +74,22 @@ export function syntheticContextMenuEvent(
       : el;
   const rect = targetEl?.getBoundingClientRect();
   const isTargetButton = Boolean(targetEl && targetEl !== el);
+  const anchor = opts?.anchor;
   const clientX =
     rect != null
-      ? isTargetButton
-        ? rect.left
-        : rect.left + Math.min(rect.width * 0.7, rect.width - 8)
+      ? anchor === 'right-center'
+        ? rect.right + 4
+        : isTargetButton
+          ? rect.left
+          : rect.left + Math.min(rect.width * 0.7, rect.width - 8)
       : 0;
   const clientY =
     rect != null
-      ? isTargetButton
-        ? rect.bottom + 4
-        : rect.top + rect.height / 2
+      ? anchor === 'right-center'
+        ? rect.top + rect.height / 2
+        : isTargetButton
+          ? rect.bottom + 4
+          : rect.top + rect.height / 2
       : 0;
   const preventDefault = () => {
     if (base && 'preventDefault' in base) base.preventDefault();
@@ -120,45 +130,42 @@ export type SessionRowProps = {
   onCancelRename?: (() => void) | undefined;
   /** 列表内 ↑↓ 导航（跨置顶/项目/对话，由父级按可见顺序解析） */
   onNavigateSession?: ((fromId: string, delta: number) => void) | undefined;
-  /** HTML5 拖拽句柄（useDragReorder） */
-  dragHandlers?: {
-    draggable: boolean;
-    onDragStart: (e: React.DragEvent) => void;
-    onDragEnd: () => void;
-  } | undefined;
-  /** 放置目标句柄 */
-  dropHandlers?: {
-    onDragOver: (e: React.DragEvent) => void;
-    onDrop: () => void;
-  } | undefined;
+  /** @deprecated 项目副行已移除；保留 prop 以免破坏调用方 */
+  projects?: readonly ProjectEntry[] | undefined;
+  /** @deprecated 项目副行已移除；保留 prop 以免破坏调用方 */
+  projectLabel?: string | undefined;
   /** 键盘重排（Alt+↑/↓） */
   onReorderKeyboard?: ((sessionId: string, direction: -1 | 1) => void) | undefined;
+  /** Live drop line: insert before/after this row */
+  dropPlace?: SessionRowDropPlace | null | undefined;
 };
 
 /** memo：长列表下避免无关 tick/state 整表重渲每一行 */
-export const SessionRow = memo(function SessionRow({
-  s,
-  activeSessionId,
-  searchQuery,
-  searchHit,
-  isDraggingThis,
-  isRenaming,
-  isDraggable,
-  rowHeight,
-  renameDraft,
-  renameInputRef,
-  onRenameDraftChange,
-  onSelectSession,
-  onContextMenuSession,
-  onStartSessionDrag,
-  onStartRename,
-  onCommitRename,
-  onCancelRename,
-  onNavigateSession,
-  dragHandlers,
-  dropHandlers,
-  onReorderKeyboard,
-}: SessionRowProps) {
+export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
+  const {
+    s,
+    activeSessionId,
+    searchQuery,
+    searchHit,
+    isDraggingThis,
+    isRenaming,
+    isDraggable,
+    rowHeight,
+    renameDraft,
+    renameInputRef,
+    onRenameDraftChange,
+    onSelectSession,
+    onContextMenuSession,
+    onStartSessionDrag,
+    onStartRename,
+    onCommitRename,
+    onCancelRename,
+    onNavigateSession,
+    onReorderKeyboard,
+  } = props;
+  // 显式从 props 读取，避免解构默认值/HMR 边界导致 ReferenceError
+  const dropPlace: SessionRowDropPlace | null = props.dropPlace ?? null;
+
   const isBranched = !!s.branchParentId;
   const baseTitle = sessionListDisplayTitle(s);
   const displayText = isBranched
@@ -166,7 +173,7 @@ export const SessionRow = memo(function SessionRow({
     : baseTitle;
   const isRunning = s.messages?.some((m) => m.status === 'processing') ?? false;
   const sessionActive = s.id === activeSessionId;
-  const snippet = searchHit?.snippet;
+  void searchHit; // 保留 prop 以兼容搜索 API，UI 强制单行不渲染 snippet
   const q = searchQuery.trim();
   const rowRef = useRef<HTMLDivElement>(null);
 
@@ -177,25 +184,35 @@ export const SessionRow = memo(function SessionRow({
 
   const openRowMenu = useCallback(
     (base?: React.MouseEvent | React.KeyboardEvent) => {
-      const ev = syntheticContextMenuEvent(rowRef.current, base);
+      const isMoreButton = Boolean(base?.currentTarget && (base.currentTarget as HTMLElement).dataset?.testid === 'session-more-button');
+      const ev = syntheticContextMenuEvent(rowRef.current, base, {
+        anchor: isMoreButton ? 'right-center' : 'bottom-left',
+      });
       onContextMenuSession(ev, s.id);
     },
     [onContextMenuSession, s.id]
   );
 
-  const isMultiLine = rowHeight > SIDEBAR_SESSION_ROW_HEIGHT;
+  // 产品约束：每条对话固定单行，禁止 multiLine / 项目副行 / 搜索副行撑高
+  const ariaLabel = isRunning ? `${displayText}，处理中` : displayText;
+  const tipContent = displayText;
+
+  const dropClass =
+    dropPlace === 'before'
+      ? styles.dropBefore
+      : dropPlace === 'after'
+        ? styles.dropAfter
+        : '';
+
+  const fixedH = SIDEBAR_SESSION_ROW_HEIGHT;
 
   return (
     <li
       data-session-id={s.id}
-      className={`${styles.sessionItemWrap} ${isDraggingThis ? 'drag-ghost-hidden' : ''} ${isRunning ? styles.isRunning : ''}`}
-      style={{ height: rowHeight, minHeight: rowHeight }}
+      data-drop-place={dropPlace || undefined}
+      className={`${styles.sessionItemWrap} ${isDraggingThis ? 'drag-ghost-hidden' : ''} ${isRunning ? styles.isRunning : ''} ${dropClass || ''}`.trim()}
+      style={{ height: fixedH, minHeight: fixedH, maxHeight: fixedH }}
       role="presentation"
-      draggable={dragHandlers?.draggable ?? false}
-      onDragStart={dragHandlers?.onDragStart}
-      onDragEnd={dragHandlers?.onDragEnd}
-      onDragOver={dropHandlers?.onDragOver}
-      onDrop={dropHandlers?.onDrop}
     >
       <div
         ref={rowRef}
@@ -203,11 +220,14 @@ export const SessionRow = memo(function SessionRow({
         data-testid="sidebar-session-item"
         data-testid-session-id={s.id}
         aria-selected={sessionActive}
-        aria-label={isRunning ? `${displayText}，处理中` : displayText}
+        aria-label={ariaLabel}
         tabIndex={sessionActive ? 0 : -1}
-        className={`${styles.sessionItem} ${sessionActive ? styles.active : ''} ${isBranched ? styles.branchSession : ''} ${isRunning ? styles.isRunning : ''} ${snippet ? styles.hasSearchSnippet : ''} ${isRenaming ? styles.isRenaming : ''} ${isMultiLine ? styles.multiLine : ''}`}
-        onClick={() => {
+        className={`${styles.sessionItem} ${sessionActive ? styles.active : ''} ${isBranched ? styles.branchSession : ''} ${isRunning ? styles.isRunning : ''} ${isRenaming ? styles.isRenaming : ''}`}
+        onClick={(e) => {
           if (isRenaming) return;
+          // 仅拒绝明确的中/右键；合成 click（MCP/自动化）常不带 button 或为 0。
+          // 旧逻辑 `button !== 0` 会把 button===undefined 也挡掉 → 界面“点了没反应”。
+          if (typeof e.button === 'number' && e.button !== 0) return;
           selectThis();
         }}
         onContextMenu={(e) => {
@@ -216,7 +236,11 @@ export const SessionRow = memo(function SessionRow({
         }}
         onPointerDown={
           isDraggable && !isRenaming
-            ? (e) => onStartSessionDrag(e, s.id, s.folder)
+            ? (e) => {
+                // 仅左键启动拖拽；不 preventDefault，保证 click 仍可触发
+                if (typeof e.button === 'number' && e.button !== 0) return;
+                onStartSessionDrag(e, s.id, s.folder);
+              }
             : undefined
         }
         onDoubleClick={(e) => {
@@ -280,20 +304,9 @@ export const SessionRow = memo(function SessionRow({
           />
         ) : (
           <>
-            <Tooltip
-              content={snippet ? `${displayText}\n${snippet}` : displayText}
-            >
+            <Tooltip content={tipContent}>
               <span className={styles.sessionTextCol}>
-                <span
-                  className={`${styles.sessionText} ${isMultiLine ? styles.sessionTextMultiLine : ''}`}
-                >
-                  {displayText}
-                </span>
-                {snippet ? (
-                  <span className={styles.sessionSearchSnippet} aria-hidden>
-                    {snippet}
-                  </span>
-                ) : null}
+                <span className={styles.sessionText}>{displayText}</span>
               </span>
             </Tooltip>
             <span className={styles.sessionTrailing}>
@@ -312,12 +325,17 @@ export const SessionRow = memo(function SessionRow({
                     <button
                       type="button"
                       className={styles.sessionActionsBtn}
+                      data-testid="session-more-button"
                       aria-label="更多操作"
                       aria-haspopup="menu"
                       tabIndex={-1}
                       onClick={(e) => {
                         e.stopPropagation();
                         openRowMenu(e);
+                      }}
+                      onDoubleClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                       }}
                     >
                       <MoreHorizontal

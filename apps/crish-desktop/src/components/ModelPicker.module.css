@@ -1,10 +1,10 @@
-/* 婵☆垪鈧磭鈧兘鏌呮径瀣仴闁挎稒姘ㄩ幓锝夊礄閹存繄娼旂€殿喒鍋撻梻鍫涘灪濠㈡﹢鏁嶉崼鐔插亾濠靛ň鍋撻崘銊ョ箒閹?+ 闁瑰吀绀侀柦鈺呭礆濡ゅ嫨鈧啴鏁嶇仦鐐骏濞戞挸顑嗘�?闁哄啰濮垫晶婊勭�?id�?*/
+/* 婵☆垪鈧磭鈧兘鏌呮径瀣仴闁挎稒姘ㄩ幓锝夊礄閹存繄娼旂€殿喒鍋撻梻鍫涘灪濠㈡﹢鏁嶉崼鐔插亾濠靛ň鍋撻崘銊ョ箒閹+ 闁瑰吀绀侀柦鈺呭礆濡ゅ嫨鈧啴鏁嶇仦鐐骏濞戞挸顑嗘闁哄啰濮垫晶婊勭id */
 .mpick {
   position: absolute;
   bottom: calc(100% + 6px);
   right: 0;
   width: min(260px, 90vw);
-  max-height: min(360px, 52vh);
+  max-height: min(360px, 52dvh);
   display: flex;
   flex-direction: column;
   background: var(--bg-elevated);
@@ -184,8 +184,8 @@
   margin: 6px 8px 0;
   padding: 7px 8px;
   border-radius: var(--radius-lg);
-  background: var(--accent-red-light, #fef2f2);
-  color: var(--accent-red, #b91c1c);
+  background: var(--accent-red-light);
+  color: var(--accent-red);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-base);
 }

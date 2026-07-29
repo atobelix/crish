@@ -9,7 +9,11 @@ import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { useLayoutStore } from '../../store/layoutStore';
 import { sessionRuntimeRegistry } from '../../api/SessionRuntimeRegistry';
 import type { Attachment } from '../../api/SessionRuntimeRegistry';
-import { useChatStream, type ChatAttachment } from '../../hooks/useChatStream';
+import {
+  useChatStream,
+  type ChatAttachment,
+  type QueuedMessage,
+} from '../../hooks/useChatStream';
 import { isDemoMode } from '../../api/appMode';
 import type { SkillSlashCommand } from '../../api/skillsApi';
 import { clientApi } from '../../api/clientApi';
@@ -27,6 +31,7 @@ export interface UseChatComposerPropsOptions {
   activeSessionId: string | null;
   needsKeySetup: boolean;
   needsModelSetup: boolean;
+  isProcessing: boolean;
   onShowToast: ShowToastFn;
   handleGlobalTabClick: (cardId: string) => void;
   setShowModelDropdown: React.Dispatch<React.SetStateAction<boolean>>;
@@ -38,13 +43,16 @@ export function useChatComposerProps({
   activeSessionId,
   needsKeySetup,
   needsModelSetup,
+  isProcessing,
   onShowToast,
   handleGlobalTabClick,
   setShowModelDropdown,
   setPickerInlineError,
 }: UseChatComposerPropsOptions) {
   const setComposerDraft = useLayoutStore((s) => s.setComposerDraft);
-  const composerDrafts = useLayoutStore((s) => s.composerDrafts);
+  // Do not subscribe to the full composerDrafts map — it re-renders on every keystroke persist.
+  // Session restore reads drafts via getState() only.
+  const appSettings = useLayoutStore((s) => s.appSettings);
 
   // Keyboard and Input states
   const [chatInput, setChatInputState] = useState('');
@@ -55,6 +63,9 @@ export function useChatComposerProps({
 
   const prevSessionIdRef = useRef(activeSessionId);
   const activeSessionIdRef = useRef(activeSessionId);
+  const draftPersistTimerRef = useRef<number | null>(null);
+  /** Latest draft text pending debounce flush (so session switch / unmount can flush). */
+  const pendingDraftRef = useRef<{ sid: string; text: string } | null>(null);
 
   const [attachments, setAttachments] = useState<ChatAttachment[]>(() => {
     if (activeSessionId) {
@@ -63,29 +74,82 @@ export function useChatComposerProps({
     }
     return [];
   });
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>(() => {
+    if (activeSessionId) {
+      return sessionRuntimeRegistry.get(activeSessionId).queuedMessages ?? [];
+    }
+    return [];
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const flushComposerDraft = useCallback(() => {
+    if (draftPersistTimerRef.current != null) {
+      window.clearTimeout(draftPersistTimerRef.current);
+      draftPersistTimerRef.current = null;
+    }
+    const pending = pendingDraftRef.current;
+    pendingDraftRef.current = null;
+    if (pending) {
+      setComposerDraft(pending.sid, pending.text);
+    }
+  }, [setComposerDraft]);
+
+  const scheduleComposerDraft = useCallback(
+    (sid: string, text: string) => {
+      pendingDraftRef.current = { sid, text };
+      if (draftPersistTimerRef.current != null) {
+        window.clearTimeout(draftPersistTimerRef.current);
+      }
+      // Debounce store writes so typing does not churn layout/persist subscribers every key.
+      draftPersistTimerRef.current = window.setTimeout(() => {
+        draftPersistTimerRef.current = null;
+        const pending = pendingDraftRef.current;
+        pendingDraftRef.current = null;
+        if (pending) setComposerDraft(pending.sid, pending.text);
+      }, 350);
+    },
+    [setComposerDraft]
+  );
+
   useEffect(() => {
+    // Flush any in-flight draft for the previous session before switching.
+    flushComposerDraft();
     activeSessionIdRef.current = activeSessionId;
     const restored = activeSessionId
-      ? composerDrafts[activeSessionId] || ''
+      ? useLayoutStore.getState().composerDrafts[activeSessionId] || ''
       : '';
     setChatInputState(restored);
-  }, [activeSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeSessionId, flushComposerDraft]);
+
+  useEffect(() => {
+    const onLeave = () => flushComposerDraft();
+    window.addEventListener('beforeunload', onLeave);
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') onLeave();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('beforeunload', onLeave);
+      document.removeEventListener('visibilitychange', onVis);
+      flushComposerDraft();
+    };
+  }, [flushComposerDraft]);
 
   const setChatInput = useCallback(
     (textOrFn: React.SetStateAction<string>) => {
+      const sid = activeSessionIdRef.current;
       setChatInputState((prev) => {
         const next =
           typeof textOrFn === 'function' ? textOrFn(prev) : textOrFn;
-        const sid = activeSessionIdRef.current;
         if (sid) {
-          setComposerDraft(sid, next);
+          // Local state updates immediately; store draft is debounced.
+          // schedule via microtask so functional updater never calls setState mid-render.
+          queueMicrotask(() => scheduleComposerDraft(sid, next));
         }
         return next;
       });
     },
-    [setComposerDraft]
+    [scheduleComposerDraft]
   );
 
   useEffect(() => {
@@ -109,17 +173,25 @@ export function useChatComposerProps({
     if (prevId && prevId !== activeSessionId) {
       sessionRuntimeRegistry.save(prevId, {
         attachments: attachments as Attachment[],
+        queuedMessages,
       });
     }
     prevSessionIdRef.current = activeSessionId || '';
     if (activeSessionId) {
-      const restored =
-        sessionRuntimeRegistry.get(activeSessionId).attachments ?? [];
-      setAttachments(restored as ChatAttachment[]);
+      const restored = sessionRuntimeRegistry.get(activeSessionId);
+      setAttachments((restored.attachments ?? []) as ChatAttachment[]);
+      setQueuedMessages(restored.queuedMessages ?? []);
     } else {
       setAttachments([]);
+      setQueuedMessages([]);
     }
   }, [activeSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (activeSessionId) {
+      sessionRuntimeRegistry.save(activeSessionId, { queuedMessages });
+    }
+  }, [activeSessionId, queuedMessages]);
 
   const addAttachments = useCallback((items: ChatAttachment[]) => {
     if (!items.length) return;
@@ -220,6 +292,11 @@ export function useChatComposerProps({
   );
   const [skillSlash, setSkillSlash] = useState<SkillSlashCommand[]>([]);
   const [skillCommandsEnabled, setSkillCommandsEnabled] = useState(true);
+  const [queueMode, setQueueMode] = useState(false);
+
+  useEffect(() => {
+    setQueueMode(Boolean(appSettings?.queueMode));
+  }, [appSettings]);
 
   useEffect(() => {
     let cancelled = false;
@@ -229,6 +306,7 @@ export function useChatComposerProps({
         if (cancelled) return;
         const on = settings?.enableSkillCommands !== false;
         setSkillCommandsEnabled(on);
+        setQueueMode(Boolean(settings?.queueMode));
         if (!on) setSkillSlash([]);
       } catch {
         /* ignore */
@@ -291,6 +369,7 @@ export function useChatComposerProps({
     runStreamingAssistant,
     handleSendChat,
     handleStopGeneration,
+    handleForceCancelGeneration,
   } = useChatStream({
     wsId,
     onShowToast,
@@ -308,6 +387,100 @@ export function useChatComposerProps({
   });
 
   const canSend = Boolean(chatInput.trim() || attachments.length > 0);
+
+  const generateQueueId = useCallback(
+    () => `queued-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    []
+  );
+
+  const enqueueMessage = useCallback(
+    (text: string, items: ChatAttachment[]) => {
+      const trimmed = text.trim();
+      if (!trimmed && items.length === 0) return;
+      setQueuedMessages((prev) => [
+        ...prev,
+        {
+          id: generateQueueId(),
+          text: trimmed,
+          attachments: items,
+          createdAt: Date.now(),
+        },
+      ]);
+      setChatInput('');
+      setAttachments([]);
+    },
+    [generateQueueId, setChatInput, setAttachments]
+  );
+
+  const deleteQueuedMessage = useCallback((id: string) => {
+    setQueuedMessages((prev) => prev.filter((m) => m.id !== id));
+  }, []);
+
+  const editQueuedMessage = useCallback(
+    (id: string) => {
+      const msg = queuedMessages.find((m) => m.id === id);
+      if (!msg) return;
+      setChatInput(msg.text);
+      setAttachments(msg.attachments);
+      setQueuedMessages((prev) => prev.filter((m) => m.id !== id));
+    },
+    [queuedMessages, setChatInput, setAttachments]
+  );
+
+  const sendQueuedMessageNow = useCallback(
+    async (id: string) => {
+      const msg = queuedMessages.find((m) => m.id === id);
+      if (!msg) return;
+      setQueuedMessages((prev) => prev.filter((m) => m.id !== id));
+      await handleSendChat(false, msg.text, msg.attachments);
+    },
+    [queuedMessages, handleSendChat]
+  );
+
+  // 运行中发送：queueMode 走 composer 队列（L1 follow_up 语义，不 abort 当前 stream）
+  const onSend = useCallback(() => {
+    if (queueMode && isProcessing) {
+      const text = chatInput;
+      enqueueMessage(text, attachments);
+      // 与 useSlashSend 同源：compositionRoot.runControl.followUp（不 cancel）
+      void import('../../app/compositionRoot').then(({ getCompositionRoot }) => {
+        void getCompositionRoot().runControl.followUp({
+          sessionId: activeSessionId || null,
+          text: text.trim(),
+          reason: 'ui-composer-queue-mode',
+        });
+      });
+    } else {
+      // handleSendChat 内部 isAiBusy 时也会 follow_up + status=queued
+      void handleSendChat(false);
+    }
+  }, [
+    queueMode,
+    isProcessing,
+    chatInput,
+    attachments,
+    enqueueMessage,
+    handleSendChat,
+    activeSessionId,
+  ]);
+
+  const prevIsProcessingRef = useRef(isProcessing);
+  const drainLockRef = useRef(false);
+  useEffect(() => {
+    const wasProcessing = prevIsProcessingRef.current;
+    prevIsProcessingRef.current = isProcessing;
+    if (!queueMode || !wasProcessing || isProcessing || queuedMessages.length === 0) {
+      return;
+    }
+    if (drainLockRef.current) return;
+    const first = queuedMessages[0];
+    if (!first) return;
+    drainLockRef.current = true;
+    void (async () => {
+      await sendQueuedMessageNow(first.id);
+      drainLockRef.current = false;
+    })();
+  }, [isProcessing, queueMode, queuedMessages, sendQueuedMessageNow]);
 
   return {
     chatInput,
@@ -333,5 +506,13 @@ export function useChatComposerProps({
     runStreamingAssistant,
     handleSendChat,
     handleStopGeneration,
+    handleForceCancelGeneration,
+    onSend,
+    queueMode,
+    queuedMessages,
+    enqueueMessage,
+    deleteQueuedMessage,
+    editQueuedMessage,
+    sendQueuedMessageNow,
   };
 }

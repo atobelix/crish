@@ -1,7 +1,8 @@
 import React from 'react';
 import { useLayoutStore } from '../store/layoutStore';
 import styles from './CardPanel.module.css';
-import { useSessionStore, selectActiveSession } from '../store/sessionStore';
+import { useSessionStore } from '../store/sessionStore';
+import { useShallow } from '../store/useShallowSelector';
 import { useTabDrag } from '../hooks/useTabDrag';
 import { getPanelTitle } from '../store/layoutHelpers';
 import type { ShowToastFn } from '../hooks/useToastQueue';
@@ -24,6 +25,57 @@ interface CardPanelProps {
   heightRatio?: number;
 }
 
+/**
+ * 面板 chrome 所需的最小 active-session 投影。
+ * 故意不订阅整 session（含 messages）：流式 token 不应重绘 CardPanel 外壳。
+ */
+type ActiveSessionChrome = {
+  hasSession: boolean;
+  folder: string;
+  sessionLabel: string;
+  /** 无会话，或 messages 为空且未置顶 */
+  isEmptySession: boolean;
+};
+
+const EMPTY_ACTIVE_CHROME: ActiveSessionChrome = {
+  hasSession: false,
+  folder: '',
+  sessionLabel: EMPTY_SESSION_TITLE,
+  isEmptySession: true,
+};
+
+type SessionChromeSource = {
+  activeSessionId: string;
+  sessionsById: Record<
+    string,
+    {
+      folder?: string;
+      title?: string | null;
+      isPinned?: boolean;
+      messages?: ReadonlyArray<{
+        sender?: string;
+        text?: string;
+        toolCalls?: unknown[] | null;
+        thinking?: string | null;
+      }> | null;
+    }
+  >;
+};
+
+function selectActiveSessionChrome(s: SessionChromeSource): ActiveSessionChrome {
+  const sess = s.sessionsById[s.activeSessionId];
+  if (!sess) return EMPTY_ACTIVE_CHROME;
+  const label =
+    (sessionListDisplayTitle(sess) || sess.title || '').trim() ||
+    EMPTY_SESSION_TITLE;
+  return {
+    hasSession: true,
+    folder: sess.folder || '',
+    sessionLabel: label,
+    isEmptySession: (sess.messages?.length ?? 0) === 0 && !sess.isPinned,
+  };
+}
+
 export const CardPanel: React.FC<CardPanelProps> = React.memo(
   ({ wsId, colIdx, groupIdx, onShowToast, heightRatio }) => {
     const wsSelector = React.useMemo(
@@ -34,7 +86,8 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(
     const ws = useLayoutStore(wsSelector);
     const shellChrome = useLayoutStore((s) => s.shellChromeMode || 'classic');
     const chatMainSurface = useLayoutStore((s) => s.chatMainSurface || 'chat');
-    const activeSession = useSessionStore(selectActiveSession);
+    // 细粒度 chrome 投影 + useShallow：仅 folder / label / empty 变化时重绘
+    const activeChrome = useSessionStore(useShallow(selectActiveSessionChrome));
     const draggedTab = useLayoutStore((s) => s.draggedTab);
 
     const reactId = React.useId();
@@ -89,25 +142,18 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(
       (!draggedTab.isTabDrag || group.cards.length === 1);
 
     const activeTitle = getPanelTitle(activeCardId);
-    const folderRaw = (activeSession?.folder || '').trim();
+    const folderRaw = activeChrome.folder.trim();
     const folderLabel =
       folderRaw && folderRaw !== GENERAL_FOLDER
         ? folderRaw
         : getActiveProject()?.name || GENERAL_FOLDER;
-    const sessionLabel =
-      (activeSession
-        ? sessionListDisplayTitle(activeSession) || activeSession.title
-        : ''
-      )?.trim() || EMPTY_SESSION_TITLE;
+    const sessionLabel = activeChrome.sessionLabel;
     const regionLabel =
       activeCardId === 'chat' ? `对话 · ${sessionLabel}` : `${activeTitle}面板`;
     const hasKnownBody = KNOWN_BODY_IDS.has(activeCardId);
     const isEmptyGroup = cardsLen === 0;
 
-    const isEmptyChat =
-      activeCardId === 'chat' &&
-      (!activeSession ||
-        (activeSession.messages.length === 0 && !activeSession.isPinned));
+    const isEmptyChat = activeCardId === 'chat' && activeChrome.isEmptySession;
 
     return (
       <div
@@ -126,7 +172,7 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(
         <CardPanelHeader
           activeCardId={activeCardId}
           group={group}
-          activeSession={activeSession}
+          activeSession={activeChrome.hasSession}
           sessionLabel={sessionLabel}
           folderLabel={folderLabel}
           insetChatChrome={insetChatChrome}

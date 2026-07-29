@@ -11,6 +11,8 @@ import type { ShowToastFn } from '../hooks/useToastQueue';
 import { useResponsiveLayout } from '../hooks/useResponsiveLayout';
 import {
   loadSidebarListPrefs,
+  loadSidebarSectionsState,
+  saveSidebarSectionsState,
   SIDEBAR_LIST_PREFS_KEY,
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
@@ -50,17 +52,62 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
     const setSidebarCollapsed = useLayoutStore((s) => s.setSidebarCollapsed);
     const moveSessionRealtime = useLayoutStore((s) => s.moveSessionRealtime);
 
-    const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
+    const [sectionsState, setSectionsState] = useState(() => loadSidebarSectionsState());
+    const pinnedCollapsed = sectionsState.pinned;
+    const generalCollapsed = sectionsState.general;
+    const projectsSectionCollapsed = sectionsState.projects;
+    const collapsedProjects = sectionsState.projectIds;
+    const setPinnedCollapsed = React.useCallback((val: React.SetStateAction<boolean>) => {
+      setSectionsState((prev) => ({
+        ...prev,
+        pinned: typeof val === 'function' ? val(prev.pinned) : val,
+      }));
+    }, []);
+    const setGeneralCollapsed = React.useCallback((val: React.SetStateAction<boolean>) => {
+      setSectionsState((prev) => ({
+        ...prev,
+        general: typeof val === 'function' ? val(prev.general) : val,
+      }));
+    }, []);
+    const setProjectsSectionCollapsed = React.useCallback((val: React.SetStateAction<boolean>) => {
+      setSectionsState((prev) => ({
+        ...prev,
+        projects: typeof val === 'function' ? val(prev.projects) : val,
+      }));
+    }, []);
+    const setCollapsedProjects = React.useCallback(
+      (val: React.SetStateAction<Record<string, boolean>>) => {
+        setSectionsState((prev) => ({
+          ...prev,
+          projectIds: typeof val === 'function' ? val(prev.projectIds) : val,
+        }));
+      },
+      []
+    );
     const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
     const [sortDropdownCoords, setSortDropdownCoords] = useState<{ x: number; y: number } | null>(null);
-    const [sortType, setSortType] = useState<SortType>(() => loadSidebarListPrefs().sortType);
-    const [groupType, setGroupType] = useState<GroupType>(() => loadSidebarListPrefs().groupType);
-    const [filterType, setFilterType] = useState<FilterType>(() => loadSidebarListPrefs().filterType);
+    const [listPrefs, setListPrefs] = useState<{
+      sortType: SortType;
+      groupType: GroupType;
+      filterType: FilterType;
+    }>(() => {
+      const prefs = loadSidebarListPrefs();
+      return { sortType: prefs.sortType, groupType: prefs.groupType, filterType: prefs.filterType };
+    });
+    const sortType = listPrefs.sortType;
+    const groupType = listPrefs.groupType;
+    const filterType = listPrefs.filterType;
+    const setSortType = React.useCallback((val: React.SetStateAction<SortType>) => {
+      setListPrefs((prev) => ({ ...prev, sortType: typeof val === 'function' ? val(prev.sortType) : val }));
+    }, []);
+    const setGroupType = React.useCallback((val: React.SetStateAction<GroupType>) => {
+      setListPrefs((prev) => ({ ...prev, groupType: typeof val === 'function' ? val(prev.groupType) : val }));
+    }, []);
+    const setFilterType = React.useCallback((val: React.SetStateAction<FilterType>) => {
+      setListPrefs((prev) => ({ ...prev, filterType: typeof val === 'function' ? val(prev.filterType) : val }));
+    }, []);
     const [projects, setProjects] = useState<ProjectEntry[]>(() => listProjects());
     const [, setActiveProjectId] = useState<string | null>(() => getActiveProjectId());
-    const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
-    const [projectsSectionCollapsed, setProjectsSectionCollapsed] = useState(false);
-    const [generalCollapsed, setGeneralCollapsed] = useState(false);
     const [updateAvailable, setUpdateAvailableState] = useState(() => isUpdateAvailable());
 
     const sidebarRef = useRef<HTMLDivElement>(null);
@@ -125,8 +172,12 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
     }, [sortType, groupType, filterType]);
 
     useEffect(() => {
+      saveSidebarSectionsState(sectionsState);
+    }, [sectionsState]);
+
+    useEffect(() => {
       if (filterType === 'pinned') setPinnedCollapsed(false);
-    }, [filterType]);
+    }, [filterType, setPinnedCollapsed]);
 
     useEffect(() => {
       return onUiEvent('project-changed', () => {

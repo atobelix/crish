@@ -4,7 +4,7 @@
   justify-content: center;
   min-height: 100vh;
   width: 100%;
-  background: var(--bg-primary, #fafafa);
+  background: var(--bg-primary);
   padding: var(--space-6);
   box-sizing: border-box;
 }
@@ -14,7 +14,7 @@
   width: 100%;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-2xl);
-  background: var(--bg-secondary, #fff);
+  background: var(--bg-secondary);
   padding: 24px 22px;
   display: flex;
   flex-direction: column;
@@ -44,7 +44,7 @@
   margin-top: var(--space-1);
 }
 
-/* 闂堛垺锟?瀹搞儰缍旈崠鍝勫敶瀹撳矉绱版稉宥呭窗濠娐ゎ潒閸欙綇绱濋崣顖涙嫼濠婏紕鍩楃痪褔鐝惔?*/
+/* 闂傚牄鍨洪敓?鐎规悶鍎扮紞鏃堝礌閸濆嫬鏁剁€规挸鐭夌槐鐗堢▔瀹ュ懎绐楁繝濞愩値娼掗柛娆欑秶缁辨繈宕ｉ娑欏婵犲绱曢崺妤冪棯瑜旈悵顔芥償?*/
 .appErrorBoundary.appErrorBoundaryCompact {
   min-height: 0;
   height: 100%;
@@ -68,7 +68,7 @@
   font-size: var(--font-size-xs, 12px);
 }
 
-/* Minimal variant: 鐞涘苯鍞撮弰鍓с仛閿涘奔绗夎ぐ鍗炴惙閸涖劌娲跨敮鍐ㄧ湰 */
+/* Minimal variant: 閻炴稑鑻崬鎾及閸撗佷粵闁挎稑濂旂粭澶庛亹閸楃偞鎯欓柛娑栧妼濞茶法鏁崘銊ф拱 */
 .appErrorMinimal {
   display: inline-flex;
   align-items: center;
@@ -86,18 +86,18 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--color-error-bg, var(--accent-red-light, #fef2f2));
-  color: var(--color-error, var(--accent-red, #dc2626));
+  background: var(--color-error-bg);
+  color: var(--color-error);
   font-size: var(--font-size-nano);
   font-weight: var(--font-weight-heavy);
   line-height: var(--line-height-none);
 }
 
 .appErrorMinimalText {
-  color: var(--text-tertiary, #999);
+  color: var(--text-tertiary);
 }
 
-/* 閸欘垱濮岄崣鐘绘晩鐠囶垵顕涢幆鍜冪礄�?fullscreen�?*/
+/* 闁告瑯鍨辨慨宀勫矗閻樼粯鏅╅悹鍥跺灥椤曟盯骞嗛崪鍐閿?fullscreen閿?*/
 .appErrorDetails {
   margin-top: var(--space-2);
   border-top: 1px solid var(--border-subtle);
@@ -118,7 +118,7 @@
 .appErrorDetailsPre {
   margin: 8px 0 0;
   padding: var(--space-2);
-  background: var(--bg-tertiary, #f5f5f5);
+  background: var(--bg-tertiary);
   border-radius: var(--radius-md);
   font-size: var(--font-size-xs, 11px);
   font-family: var(--font-mono, monospace);
@@ -130,13 +130,13 @@
   color: var(--text-secondary);
 }
 
-/* Compact �?闁插秵鏌婇崝鐘烘�?闁剧偓甯撮弽宄扮础 */
+/* Compact 閿?闂佹彃绉甸弻濠囧礉閻樼儤绁?闂佸墽鍋撶敮鎾冀瀹勬壆纭€ */
 .appErrorReloadLink {
   background: none;
   border: none;
   padding: 0;
   font: inherit;
-  color: var(--accent-color, #3b82f6);
+  color: var(--accent-color);
   text-decoration: underline;
   cursor: pointer;
   font-size: var(--font-size-xs, 12px);
@@ -144,5 +144,5 @@
 }
 
 .appErrorReloadLink:hover {
-  color: var(--accent-hover, #2563eb);
+  color: var(--accent-hover);
 }

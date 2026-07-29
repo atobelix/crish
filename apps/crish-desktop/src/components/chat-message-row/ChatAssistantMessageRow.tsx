@@ -1,7 +1,6 @@
 import React, {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -11,8 +10,6 @@ import type { ChatToolStackSharedProps } from '../ChatToolCallBlock';
 import { assistantCopyText } from '../../api/toolPresentation';
 import type { PermissionMode } from '../../api/permissionModes';
 import { THINKING_DOM_CHAR_CAP, budgetDomText } from '../../api/messageWindow';
-import { useBubbleShrinkWidth } from '../../hooks/useTextMeasure';
-import { buildPretextFontForUiSize } from '../../utils/pretextFontBridge';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
 
 import {
@@ -21,10 +18,14 @@ import {
   toolStackSharedPropsEqual,
 } from './chatMessageRowUtils';
 
-import { MessageAvatar } from '../chat-message/MessageAvatar';
 import { MessageThinkingBlock } from '../chat-message/MessageThinkingBlock';
 import { MessageContent } from '../chat-message/MessageContent';
 import { MessageActions } from '../chat-message/MessageActions';
+import {
+  getStreamText,
+  streamStoreKey,
+  useStreamingStore,
+} from '../../store/streamingStore';
 
 export type ChatAssistantMessageRowProps = {
   msg: SessionMessage;
@@ -32,7 +33,6 @@ export type ChatAssistantMessageRowProps = {
   isPinned: boolean;
   isSearchHit: boolean;
   isThinkingMsg: boolean;
-  thinkingSeconds: number;
   hideThinkingBlock: boolean;
   inPlanMode: boolean;
   planApproved: boolean;
@@ -58,9 +58,8 @@ function assistantRowPropsEqual(
   prev: ChatAssistantMessageRowProps,
   next: ChatAssistantMessageRowProps
 ): boolean {
-  if (prev.isThinkingMsg || next.isThinkingMsg) {
-    if (prev.thinkingSeconds !== next.thinkingSeconds) return false;
-  }
+  // Live thinking ticks are owned by ThinkingTimer inside MessageThinkingBlock
+  // so the full row does not re-render every second.
   return (
     prev.msg.id === next.msg.id &&
     prev.msg.status === next.msg.status &&
@@ -100,7 +99,6 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
   isPinned,
   isSearchHit,
   isThinkingMsg,
-  thinkingSeconds,
   hideThinkingBlock,
   inPlanMode,
   planApproved,
@@ -118,29 +116,28 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
   onSendFollowUp,
   followUpDismissed = false,
   onDismissFollowUp,
-  messageIndex,
+  messageIndex: _messageIndex,
   virtualScrollManager,
 }) => {
   void _onBranch;
-  const assistantRowRef = useRef<HTMLDivElement>(null);
-  const assistantBubbleFont = useMemo(
-    () => buildPretextFontForUiSize('medium', 'sans', 'normal'),
-    []
-  );
-  const assistantPlainText = msg.text || '';
-  const assistantBubbleWidth = useBubbleShrinkWidth(
-    assistantPlainText,
-    assistantBubbleFont,
-    assistantRowRef,
-    0
-  );
+  void _messageIndex;
 
+  const sessionId = toolStackProps.activeSessionId;
+  const live = isThinkingMsg || msg.status === 'processing';
+  // S4.4: row owns thinking only. Body text/tools live in MessageContent's
+  // single shallow streamingStore sub so streamText is not dual-subscribed.
+  const streamThinking = useStreamingStore((s) => {
+    if (!live || !sessionId) return undefined;
+    return s.byKey[streamStoreKey(sessionId, msg.id)]?.thinking;
+  });
+
+  const effectiveThinking = streamThinking ?? msg.thinking;
   const thinkingRaw =
-    msg.thinking &&
-    msg.thinking.trim() &&
-    msg.thinking !== '正在处理…' &&
-    msg.thinking !== '正在思考中...'
-      ? msg.thinking.trim()
+    effectiveThinking &&
+    effectiveThinking.trim() &&
+    effectiveThinking !== '正在处理…' &&
+    effectiveThinking !== '正在思考中...'
+      ? effectiveThinking.trim()
       : '';
   const thinkingText = thinkingRaw || (isThinkingMsg ? '…' : '');
   const thinkingLineCount = thinkingText
@@ -171,14 +168,24 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
     []
   );
 
+  // Streaming: ResizeObserver owns live height. Invalidating on every token thrashs layout.
+  // Only invalidate when stream ends or non-stream content updates.
   useEffect(() => {
-    virtualScrollManager?.invalidateActual(String(messageIndex));
-  }, [msg.text, messageIndex, virtualScrollManager]);
+    if (isThinkingMsg || msg.status === 'processing') return;
+    virtualScrollManager?.invalidateActual(msg.id);
+  }, [msg.text, msg.id, msg.status, isThinkingMsg, virtualScrollManager]);
 
   const thinkingBudget = budgetDomText(thinkingText, THINKING_DOM_CHAR_CAP);
 
   const handleCopy = useCallback(() => {
-    const text = assistantCopyText(msg);
+    // Imperative read — no streamText subscription on the row (S4.4).
+    const streamText =
+      sessionId != null ? getStreamText(sessionId, msg.id) : undefined;
+    const copyMsg =
+      streamText != null && streamText !== (msg.text || '')
+        ? { ...msg, text: streamText }
+        : msg;
+    const text = assistantCopyText(copyMsg);
     if (!text.trim()) {
       onShowToast('没有可复制的正文');
       return;
@@ -192,12 +199,11 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
       if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current);
       copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
     });
-  }, [msg, onShowToast]);
+  }, [msg, sessionId, onShowToast]);
 
   return (
     <div
       className={`${styles.row} ${styles.rowAssistant} msg-row msg-row-assistant ${isFollowUp ? styles.isFollowup : ''}${isSearchHit ? ` ${styles.searchHit} msg-search-hit` : ''}${isPinned ? ` ${styles.isPinned}` : ''}`}
-      ref={assistantRowRef}
       data-msg-id={msg.id}
       data-role="assistant"
       data-pinned={isPinned ? 'true' : undefined}
@@ -205,12 +211,9 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
       role="article"
       aria-label={rowAria}
     >
-      <MessageAvatar role="assistant" isPinned={isPinned} />
-
       <MessageThinkingBlock
         showThinking={showThinking}
         isThinkingMsg={isThinkingMsg}
-        thinkingSeconds={thinkingSeconds}
         thinkingText={thinkingText}
         thinkingBodyId={thinkingBodyId}
         thinkingOpen={thinkingOpen}
@@ -220,7 +223,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
 
       <div
         className={styles.assistantBody}
-        style={{ maxWidth: assistantBubbleWidth ?? undefined }}
+        data-message-body="assistant"
       >
         <MessageContent
           msg={msg}

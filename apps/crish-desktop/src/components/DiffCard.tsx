@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useDeferredValue, useState } from 'react';
 import styles from './DiffCard.module.css';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import { useLayoutStore, type FileDiff } from '../store/layoutStore';
 import { selectActiveSession, useSessionField } from '../store/sessionStore';
 import * as Lucide from 'lucide-react';
@@ -12,12 +12,14 @@ import { applyFileDiffToDisk, classifyFileDiff, formatApplyFailureToast } from '
 import { filterPublishableDiffs } from '../api/publishToolDiffs';
 import type { DiffSourceMode } from '../api/diffPanelHelpers';
 import { readTextFile } from '../api/workspaceFsApi';
+import { openPathDefault } from '../api/hostOpenersApi';
 import { DiffCardFileList } from './DiffCardFileList';
 import { DiffCardGitActions } from './DiffCardGitActions';
 import { DiffHeaderControls } from './diff/DiffHeaderControls';
 import { DiffCodeViewer } from './diff/DiffCodeViewer';
 import { useDiffData } from './diff/useDiffData';
 import { useDiffGitActions } from './diff/useDiffGitActions';
+import { getWorkspacePath } from '../api/projectStore';
 
 interface DiffCardProps {
   onShowToast: (message: string) => void;
@@ -51,7 +53,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     aiTurns, hasAiTurns, mergedSessionFiles, fileList, computedChangesByFile, turnOptions,
     plainLoading, plainFileContents, changeFileCompareMode, getFileCompareMode,
     handleExpandBlock, unifiedRenderCache, splitRenderCache, stagedCount, unstagedCount,
-  } = useDiffData({ session, diffFiles, activeDiffSource, diffSearchQuery, diffViewMode, sourceMode });
+  } = useDiffData({ session: session ?? null, diffFiles, activeDiffSource, diffSearchQuery, diffViewMode, sourceMode });
 
   const showSoftHint = useCallback((message: string) => {
     const m = (message || '').trim();
@@ -78,7 +80,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     setCommitMsg, loadFromGit, handleSwitchBranch, handleCommit, handlePush,
     handleStageFile, handleUnstageFile, handleDiscardChanges, handleStageAll, handleUnstageAll,
   } = useDiffGitActions({
-    sessionWorkspacePath: session?.workspacePath, sourceMode, stagedCount,
+    sessionWorkspacePath: getWorkspacePath(), sourceMode, stagedCount,
     setDiffFiles, setActiveDiffSource, setSourceMode, setPanelErr, showSoftHint, dismissSoftHint, toastFail, applyFiles, setTurnKey,
   });
 

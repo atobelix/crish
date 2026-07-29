@@ -27,6 +27,10 @@ import {
 import { SettingsSchemaRenderer } from './settings/SettingsSchemaRenderer';
 import type { SchemaSection } from './settings/SettingsSchemaRenderer';
 import { useIsVisible } from '../hooks/useIsVisible';
+import {
+  readRestoreLastWorkspace,
+  setRestoreLastWorkspace,
+} from '../app/hydrateWorkspaceShell';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -251,6 +255,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
       fontSize: 14 + (personalization.fontSizeAdjust ?? 0),
       transitionEnabled: personalization.themeAutoTimeTransition ?? false,
       vibrantMode: personalization.themeBrightnessVibrant ?? false,
+      restoreLastWorkspace: readRestoreLastWorkspace(),
     };
   }, [settings, uiSize, shellChromeMode, personalization]);
 
@@ -287,6 +292,12 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
       properties: [
         { key: 'transitionEnabled', type: 'boolean' as const, title: '智能时光温感过渡', desc: '根据当地日出日落时间，自动调节亮度与色温' },
         { key: 'vibrantMode', type: 'boolean' as const, title: '氛围色彩融合', desc: '调暗时融入暗影，调亮时融入奶霜高光，避免偏灰偏脏' },
+        {
+          key: 'restoreLastWorkspace',
+          type: 'boolean' as const,
+          title: '启动时恢复上次工作台',
+          desc: '默认关闭：每次启动为干净单对话。开启后尝试恢复标签与多 unit 分屏（布局损坏时仍回落干净启动；会话消息始终保留）',
+        },
       ],
     },
   ], [activeTheme, skinOptions, allValues.skinPreset]);
@@ -346,6 +357,14 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
     if ('fontSize' in updates) updatePersonalization({ fontSizeAdjust: (updates.fontSize as number) - 14 });
     if ('transitionEnabled' in updates) updatePersonalization({ themeAutoTimeTransition: updates.transitionEnabled as boolean });
     if ('vibrantMode' in updates) updatePersonalization({ themeBrightnessVibrant: updates.vibrantMode as boolean });
+    if ('restoreLastWorkspace' in updates) {
+      setRestoreLastWorkspace(Boolean(updates.restoreLastWorkspace));
+      onShowToast(
+        updates.restoreLastWorkspace
+          ? '已开启：下次启动将尝试恢复工作台布局'
+          : '已关闭：下次启动为干净新对话'
+      );
+    }
   };
 
   return (

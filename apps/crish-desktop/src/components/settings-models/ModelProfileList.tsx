@@ -8,6 +8,7 @@ import {
 } from '../../api/providerProfiles';
 import { formatModelDisplayName } from '../../api/modelCatalog';
 import styles from '../ModelsSettingsTab.module.css';
+import { Tooltip } from '../Tooltip';
 
 interface ModelsCascadeSelectProps {
   profiles: ProviderProfile[];
@@ -260,17 +261,20 @@ export const ModelProfileList: React.FC<ModelProfileListProps> = ({
                 onClick={() => onSelectProfile(p.id)}
               >
                 <div className={`${styles.mrlItemRowTop} mrl-item-row-top`}>
-                  <span className={`${styles.mrlItemName} mrl-item-name`} title={label}>
-                    {label}
-                  </span>
-                  <span
-                    className={`${styles.mrlItemDot} mrl-item-dot`}
-                    title={!keyOk ? '缺少密钥' : !enabled ? '已停用' : '已配置并启用'}
-                    style={{
-                      background: !keyOk ? '#e6a817' : !enabled ? 'var(--text-tertiary)' : '#22c55e',
-                      opacity: !enabled ? 0.6 : 1,
-                    }}
-                  />
+                  <Tooltip content={label}>
+                    <span className={`${styles.mrlItemName} mrl-item-name`}>
+                      {label}
+                    </span>
+                  </Tooltip>
+                  <Tooltip content={!keyOk ? '缺少密钥' : !enabled ? '已停用' : '已配置并启用'}>
+                    <span
+                      className={`${styles.mrlItemDot} mrl-item-dot`}
+                      style={{
+                        background: !keyOk ? 'var(--color-warning)' : !enabled ? 'var(--text-tertiary)' : 'var(--color-active)',
+                        opacity: !enabled ? 0.6 : 1,
+                      }}
+                    />
+                  </Tooltip>
                 </div>
               </button>
             );

@@ -1,6 +1,5 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
-import DOMPurify from 'dompurify';
 import styles from './DiffCard.module.css';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { useVirtualDiffScroll } from '../hooks/useVirtualDiffScroll';
@@ -103,7 +102,7 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
                     {newLineNum}
                   </div>
                   <div className={styles.gutterMarker}>{marker}</div>
-                  <div className={styles.lineText} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(highlightCode(change.content, 'diff')) }} />
+                  <div className={styles.lineText} dangerouslySetInnerHTML={{ __html: highlightCode(change.content, 'diff') }} />
                 </div>
               );
             })}

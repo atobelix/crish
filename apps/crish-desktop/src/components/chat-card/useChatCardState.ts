@@ -10,11 +10,13 @@ import {
   useSessionField,
 } from '../../store/sessionStore';
 import {
-  enterDraftMode,
   openSettings,
   patchSession,
+  clearSessionMessages,
   setActiveDiffSource as setActiveDiffSourceAccess,
 } from '../../api/storeAccess';
+import { getActiveProjectId } from '../../api/projectStore';
+import { getCompositionRoot } from '../../app/compositionRoot';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { isDemoMode } from '../../api/appMode';
 import { getProviderSetupStatus } from '../../api/providerProfiles';
@@ -35,34 +37,86 @@ export interface UseChatCardStateOptions {
   wsId: string;
   onShowToast: ShowToastFn;
   handleGlobalTabClick: (cardId: string) => void;
+  /** 渲染真源；缺省则用全局 activeSessionId */
+  sessionId?: string | null;
 }
 
 export function useChatCardState({
   wsId,
   onShowToast,
   handleGlobalTabClick,
+  sessionId: sessionIdProp,
 }: UseChatCardStateOptions) {
-  const activeSessionId = useSessionField(selectActiveSessionId);
+  // Resolve session id inside the selector so prop changes rebind correctly
+  // and store activeSessionId updates still notify when prop is absent.
+  const activeSessionId = useSessionField(
+    useCallback(
+      (s) => sessionIdProp ?? selectActiveSessionId(s),
+      [sessionIdProp]
+    )
+  );
   const messages = useSessionField(
-    (s) => s.sessionsById[s.activeSessionId]?.messages || EMPTY_ARRAY
+    useCallback(
+      (s) => {
+        const sid = (sessionIdProp ?? selectActiveSessionId(s)) || '';
+        return s.sessionsById[sid]?.messages || EMPTY_ARRAY;
+      },
+      [sessionIdProp]
+    )
   );
   const agents = useSessionField(
-    (s) => s.sessionsById[s.activeSessionId]?.agents || EMPTY_ARRAY
+    useCallback(
+      (s) => {
+        const sid = (sessionIdProp ?? selectActiveSessionId(s)) || '';
+        return s.sessionsById[sid]?.agents || EMPTY_ARRAY;
+      },
+      [sessionIdProp]
+    )
   );
   const goalMode = useSessionField(
-    (s) => s.sessionsById[s.activeSessionId]?.goalMode
+    useCallback(
+      (s) => {
+        const sid = (sessionIdProp ?? selectActiveSessionId(s)) || '';
+        return s.sessionsById[sid]?.goalMode;
+      },
+      [sessionIdProp]
+    )
   );
   const hydratedFromEngine = useSessionField(
-    (s) => s.sessionsById[s.activeSessionId]?.hydratedFromEngine
+    useCallback(
+      (s) => {
+        const sid = (sessionIdProp ?? selectActiveSessionId(s)) || '';
+        return s.sessionsById[sid]?.hydratedFromEngine;
+      },
+      [sessionIdProp]
+    )
   );
   const engineCursor = useSessionField(
-    (s) => s.sessionsById[s.activeSessionId]?.engineCursor
+    useCallback(
+      (s) => {
+        const sid = (sessionIdProp ?? selectActiveSessionId(s)) || '';
+        return s.sessionsById[sid]?.engineCursor;
+      },
+      [sessionIdProp]
+    )
   );
   const engineLastRunId = useSessionField(
-    (s) => s.sessionsById[s.activeSessionId]?.engineLastRunId
+    useCallback(
+      (s) => {
+        const sid = (sessionIdProp ?? selectActiveSessionId(s)) || '';
+        return s.sessionsById[sid]?.engineLastRunId;
+      },
+      [sessionIdProp]
+    )
   );
   const activeSessionTitle = useSessionField(
-    (s) => s.sessionsById[s.activeSessionId]?.title
+    useCallback(
+      (s) => {
+        const sid = (sessionIdProp ?? selectActiveSessionId(s)) || '';
+        return s.sessionsById[sid]?.title;
+      },
+      [sessionIdProp]
+    )
   );
 
   const appSettings = useLayoutStore((s) => s.appSettings);
@@ -83,7 +137,7 @@ export function useChatCardState({
     showModelDropdown,
     setShowModelDropdown,
     engineHint,
-  } = useModelSelection(appSettings, projectTick);
+  } = useModelSelection(appSettings ?? undefined, projectTick);
 
   useEffect(() => {
     const offs = [
@@ -186,7 +240,7 @@ export function useChatCardState({
     [openSidePanel]
   );
 
-  const { chatFlowRef, showScrollToBottom, scrollToBottom, thinkingSeconds } =
+  const { chatFlowRef, showScrollToBottom, scrollToBottom } =
     useChatScrollAnchor({
       messages,
       isProcessing,
@@ -199,6 +253,7 @@ export function useChatCardState({
     activeSessionId,
     needsKeySetup,
     needsModelSetup,
+    isProcessing,
     onShowToast,
     handleGlobalTabClick,
     setShowModelDropdown,
@@ -209,6 +264,10 @@ export function useChatCardState({
     handleWithdraw,
     handleRegenerate,
     handleBranch,
+    handleExportMarkdown,
+    pendingWithdraw,
+    confirmWithdraw,
+    cancelWithdraw,
   } = useChatHandlers({
     wsId,
     activeSessionId,
@@ -252,8 +311,31 @@ export function useChatCardState({
   const engineOk: boolean | null = engineHint == null ? null : engineHint.ok;
 
   const handleCreateSessionFromEmpty = useCallback(() => {
-    enterDraftMode();
+    // 必须走 shell，否则 ChatCardBound 仍绑定旧 sessionId；不 wipe 其它顶栏 tab
+    getCompositionRoot().shell.openNewDraftTab(
+      getActiveProjectId() || undefined
+    );
   }, []);
+
+  // Stable callbacks for ChatMessageList props (avoid inline arrows breaking React.memo)
+  const handleProjectChanged = useCallback(() => {
+    setProjectTick((n) => n + 1);
+  }, []);
+
+  const handleSendFollowUp = useCallback(
+    (prompt: string) => {
+      void composerProps.handleSendChat(false, prompt);
+    },
+    [composerProps.handleSendChat]
+  );
+
+  const handleOpenTerminal = useCallback(() => {
+    openSidePanel('terminal');
+  }, [openSidePanel]);
+
+  const handleOpenDiffPanel = useCallback(() => {
+    openSidePanel('diff');
+  }, [openSidePanel]);
 
   return {
     activeSessionId,
@@ -298,19 +380,27 @@ export function useChatCardState({
     chatFlowRef,
     showScrollToBottom,
     scrollToBottom,
-    thinkingSeconds,
     composerProps,
     handleWithdraw,
     handleRegenerate,
     handleBranch,
+    handleExportMarkdown,
+    pendingWithdraw,
+    confirmWithdraw,
+    cancelWithdraw,
     approvalState,
     openDiffInRightPanel,
     isFiltering,
     firstRunOpen,
     engineOk,
     handleCreateSessionFromEmpty,
+    handleProjectChanged,
+    handleSendFollowUp,
+    handleOpenTerminal,
+    handleOpenDiffPanel,
     openSettings,
     patchSession,
+    clearSessionMessages,
   };
 }
 

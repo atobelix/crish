@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useLayoutStore } from '../../store/layoutStore';
+import { getCompositionRoot } from '../../app/compositionRoot';
 import { configService } from '../../services/ConfigService';
 import {
   SIDEBAR_RESIZE_STEP,
@@ -28,6 +29,10 @@ export function useSidebarResize() {
           '--sidebar-width',
           `${restoredWidth}px`
         );
+        document.documentElement.style.setProperty(
+          '--sidebar-visible-width',
+          `${restoredWidth}px`
+        );
         setSidebarWidthPx(restoredWidth);
         return;
       }
@@ -42,6 +47,10 @@ export function useSidebarResize() {
           '--sidebar-width',
           `${n}px`
         );
+        document.documentElement.style.setProperty(
+          '--sidebar-visible-width',
+          `${n}px`
+        );
         setSidebarWidthPx(n);
       } else {
         const cssW = parseInt(
@@ -51,7 +60,12 @@ export function useSidebarResize() {
           10
         );
         if (!Number.isNaN(cssW) && cssW >= SIDEBAR_WIDTH_MIN) {
-          setSidebarWidthPx(Math.min(cssW, SIDEBAR_WIDTH_MAX));
+          const visibleW = Math.min(cssW, SIDEBAR_WIDTH_MAX);
+          document.documentElement.style.setProperty(
+            '--sidebar-visible-width',
+            `${visibleW}px`
+          );
+          setSidebarWidthPx(visibleW);
         }
       }
     } catch {
@@ -64,14 +78,22 @@ export function useSidebarResize() {
       return;
     }
     if (sidebarCollapsed) {
-      document.documentElement.style.setProperty('--sidebar-width', '0px');
-    } else {
-      document.documentElement.style.setProperty(
-        '--sidebar-width',
-        `${sidebarWidthPx}px`
-      );
-      window.dispatchEvent(new Event('crish-sidebar-resize'));
-    }
+        document.documentElement.style.setProperty('--sidebar-width', '0px');
+        document.documentElement.style.setProperty(
+          '--sidebar-visible-width',
+          `${sidebarWidthPx}px`
+        );
+      } else {
+        document.documentElement.style.setProperty(
+          '--sidebar-width',
+          `${sidebarWidthPx}px`
+        );
+        document.documentElement.style.setProperty(
+          '--sidebar-visible-width',
+          `${sidebarWidthPx}px`
+        );
+        window.dispatchEvent(new Event('crish-sidebar-resize'));
+      }
   }, [sidebarCollapsed, sidebarWidthPx]);
 
   const persistSidebarWidth = useCallback((px: number) => {
@@ -88,25 +110,34 @@ export function useSidebarResize() {
 
   const applySidebarWidth = useCallback(
     (px: number, opts?: { persist?: boolean; collapse?: boolean }) => {
+      const layout = getCompositionRoot().layout;
       if (opts?.collapse) {
-        useLayoutStore.setState({ sidebarCollapsed: true });
+        layout.setSidebarCollapsed(true);
         document.documentElement.style.setProperty('--sidebar-width', '0px');
+        document.documentElement.style.setProperty(
+          '--sidebar-visible-width',
+          `${sidebarWidthPx}px`
+        );
         return;
       }
       const capped = Math.min(
         Math.max(px, SIDEBAR_WIDTH_MIN),
         SIDEBAR_WIDTH_MAX
       );
-      useLayoutStore.setState({ sidebarCollapsed: false });
+      layout.setSidebarCollapsed(false);
       document.documentElement.style.setProperty(
         '--sidebar-width',
+        `${capped}px`
+      );
+      document.documentElement.style.setProperty(
+        '--sidebar-visible-width',
         `${capped}px`
       );
       setSidebarWidthPx(capped);
       window.dispatchEvent(new Event('crish-sidebar-resize'));
       if (opts?.persist !== false) persistSidebarWidth(capped);
     },
-    [persistSidebarWidth]
+    [persistSidebarWidth, sidebarWidthPx]
   );
 
   const handleSidebarResizeStart = (e: React.PointerEvent) => {
@@ -120,24 +151,29 @@ export function useSidebarResize() {
         ),
         10
       ) || SIDEBAR_WIDTH_DEFAULT;
-    let isCurrentlyCollapsed = useLayoutStore.getState().sidebarCollapsed;
+    const layout = getCompositionRoot().layout;
+    let isCurrentlyCollapsed = layout.getSidebarCollapsed();
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const dx = moveEvent.clientX - startX;
       let newWidth = startWidth + dx;
       if (newWidth < 80) {
         if (!isCurrentlyCollapsed) {
           isCurrentlyCollapsed = true;
-          useLayoutStore.setState({ sidebarCollapsed: true });
+          layout.setSidebarCollapsed(true);
         }
         document.documentElement.style.setProperty('--sidebar-width', '0px');
       } else {
         if (newWidth > SIDEBAR_WIDTH_MAX) newWidth = SIDEBAR_WIDTH_MAX;
         if (isCurrentlyCollapsed) {
           isCurrentlyCollapsed = false;
-          useLayoutStore.setState({ sidebarCollapsed: false });
+          layout.setSidebarCollapsed(false);
         }
         document.documentElement.style.setProperty(
           '--sidebar-width',
+          `${newWidth}px`
+        );
+        document.documentElement.style.setProperty(
+          '--sidebar-visible-width',
           `${newWidth}px`
         );
         window.dispatchEvent(new Event('crish-sidebar-resize'));

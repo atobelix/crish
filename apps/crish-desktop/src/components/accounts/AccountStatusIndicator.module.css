@@ -15,40 +15,40 @@
 }
 
 .active {
-  color: var(--accent-green, #22c55e);
+  color: var(--accent-green);
 }
 
 .active .dot {
-  background: var(--accent-green, #22c55e);
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-green, #22c55e) 40%, transparent);
+  background: var(--accent-green);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-green) 40%, transparent);
   animation: breathe 2s ease-out infinite;
 }
 
 .expired {
-  color: var(--accent-orange, #ea580c);
+  color: var(--accent-orange);
 }
 
 .expired .dot {
-  background: var(--accent-orange, #ea580c);
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-orange, #ea580c) 40%, transparent);
+  background: var(--accent-orange);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-orange) 40%, transparent);
   animation: breathe 2s ease-out infinite;
 }
 
 .error {
-  color: var(--accent-red, #dc2626);
+  color: var(--accent-red);
   cursor: pointer;
 }
 
 .error .dot {
-  background: var(--accent-red, #dc2626);
+  background: var(--accent-red);
 }
 
 .cooling {
-  color: var(--accent-orange, #f59e0b);
+  color: var(--accent-orange);
 }
 
 .cooling .dot {
-  background: var(--accent-orange, #f59e0b);
+  background: var(--accent-orange);
   animation: breathe 2s ease-out infinite;
 }
 
@@ -61,9 +61,9 @@
 
 @keyframes breathe {
   0%, 100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-green, #22c55e) 40%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-green) 40%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-green, #22c55e) 0%, transparent);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-green) 0%, transparent);
   }
 }

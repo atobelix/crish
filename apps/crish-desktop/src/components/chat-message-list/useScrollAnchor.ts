@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import styles from '../ChatMessageList.module.css';
 import {
   DEFAULT_RECENT_MESSAGE_COUNT,
@@ -77,7 +77,12 @@ export function scrollToMessageAfterPaint(
 }
 
 export interface UseScrollAnchorOptions {
+  /** Display / filtered list. */
   messages: SessionMessage[];
+  /**
+   * Full unfiltered session messages (parent-owned). Used when pin target is
+   * outside the filtered display list. Prefer props over a second store sub.
+   */
   sessionAllMessages: SessionMessage[];
   showAllMessages: boolean;
   onShowToast: (message: string) => void;
@@ -91,46 +96,62 @@ export function useScrollAnchor({
   onShowToast,
   setExpandedOlder,
 }: UseScrollAnchorOptions) {
-  const jumpToPinned = useCallback(
-    (messageId: string) => {
-      const idx = messages.findIndex((m) => m.id === messageId);
-      if (idx < 0 && showAllMessages) {
-        const exists = sessionAllMessages.some((m) => m.id === messageId);
-        onShowToast(exists ? '该消息不在当前过滤结果中' : '未找到该固定消息');
-        return;
-      }
-      const listForPin = idx >= 0 ? messages : sessionAllMessages;
-      const inList = listForPin.some((m) => m.id === messageId);
-      if (!inList) {
-        onShowToast('未找到该固定消息');
-        return;
-      }
+  // Refs keep jumpToPinned identity stable across stream token message array churn
+  // so MessageVirtualizer memo is not busted every token (pin path only reads on click).
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const allMessagesRef = useRef(sessionAllMessages);
+  allMessagesRef.current = sessionAllMessages;
+  const showAllRef = useRef(showAllMessages);
+  showAllRef.current = showAllMessages;
+  const onShowToastRef = useRef(onShowToast);
+  onShowToastRef.current = onShowToast;
+  const setExpandedOlderRef = useRef(setExpandedOlder);
+  setExpandedOlderRef.current = setExpandedOlder;
 
-      const raisePinWindow = (prev: number) =>
-        expandedOlderForPinJump(
-          listForPin,
-          messageId,
-          prev,
-          DEFAULT_RECENT_MESSAGE_COUNT
-        );
+  const jumpToPinned = useCallback((messageId: string) => {
+    const display = messagesRef.current;
+    const all = allMessagesRef.current;
+    const showAll = showAllRef.current;
+    const toast = onShowToastRef.current;
+    const setExpanded = setExpandedOlderRef.current;
 
-      if (!showAllMessages) {
-        setExpandedOlder(raisePinWindow);
+    const idx = display.findIndex((m) => m.id === messageId);
+    if (idx < 0 && showAll) {
+      const exists = all.some((m) => m.id === messageId);
+      toast(exists ? '该消息不在当前过滤结果中' : '未找到该固定消息');
+      return;
+    }
+    const listForPin = idx >= 0 ? display : all;
+    const inList = listForPin.some((m) => m.id === messageId);
+    if (!inList) {
+      toast('未找到该固定消息');
+      return;
+    }
+
+    const raisePinWindow = (prev: number) =>
+      expandedOlderForPinJump(
+        listForPin,
+        messageId,
+        prev,
+        DEFAULT_RECENT_MESSAGE_COUNT
+      );
+
+    if (!showAll) {
+      setExpanded(raisePinWindow);
+    }
+
+    scrollToMessageAfterPaint(messageId, () => {
+      if (!showAllRef.current) {
+        setExpandedOlderRef.current(raisePinWindow);
       }
-
-      scrollToMessageAfterPaint(messageId, () => {
-        if (!showAllMessages) {
-          setExpandedOlder(raisePinWindow);
+      window.setTimeout(() => {
+        if (!scrollToMessage(messageId)) {
+          onShowToastRef.current('未找到该固定消息');
         }
-        window.setTimeout(() => {
-          if (!scrollToMessage(messageId)) {
-            onShowToast('未找到该固定消息');
-          }
-        }, 50);
-      });
-    },
-    [messages, sessionAllMessages, showAllMessages, onShowToast, setExpandedOlder]
-  );
+      }, 50);
+    });
+  }, []);
 
   return {
     jumpToPinned,

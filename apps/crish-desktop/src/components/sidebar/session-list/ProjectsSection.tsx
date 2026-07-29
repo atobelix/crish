@@ -2,10 +2,9 @@ import React from 'react';
 import type { SessionState } from '../../../store/layoutStore';
 import type { ProjectEntry } from '../../../api/projectStore';
 import { openProject } from '../../../api/projectStore';
-import { enterDraftMode } from '../../../api/storeAccess';
 import { emitUiEvent } from '../../../api/uiEvents';
-import { DragReorderSection } from './DragReorderSection';
-import { Tooltip } from '../../settings/SettingsUI';
+import { getCompositionRoot } from '../../../app/compositionRoot';
+import { Tooltip } from '../../Tooltip';
 import styles from '../SidebarSessionList.module.css';
 import { ChevronDown, FilePlus2, Folder, FolderOpen, FolderPlus } from 'lucide-react';
 
@@ -18,6 +17,7 @@ export interface ProjectsSectionProps {
   onToggleProjectsSection: () => void;
   onToggleProjectCollapsed: (id: string) => void;
   onOpenProject: (id: string) => void;
+  /** Kept for SidebarSessionList API; reorder is pointer drop-only via SessionRow. */
   onMoveSessionRealtime: (
     sessionId: string,
     targetSessionId: string | null,
@@ -37,10 +37,11 @@ export function ProjectsSection({
   onToggleProjectsSection,
   onToggleProjectCollapsed,
   onOpenProject,
-  onMoveSessionRealtime,
+  onMoveSessionRealtime: _onMoveSessionRealtime,
   onToggleExpandedProjectFolder,
   renderSessionItem,
 }: ProjectsSectionProps) {
+  void _onMoveSessionRealtime;
   return (
     <section className={styles.section} aria-label="项目">
       <div
@@ -87,6 +88,7 @@ export function ProjectsSection({
       <div
         className={styles.accordionWrapper}
         data-expanded={!projectsSectionCollapsed ? 'true' : 'false'}
+        hidden={projectsSectionCollapsed || undefined}
       >
         <div className={styles.accordionInner}>
           {projects.map((p) => {
@@ -125,11 +127,12 @@ export function ProjectsSection({
                       className={styles.folderNewSession}
                       aria-label={`在 ${p.name} 新建对话`}
                       onClick={(e) => {
-                        e.stopPropagation();
-                        openProject(p.id);
-                        onOpenProject(p.id);
-                        enterDraftMode(p.id);
-                      }}
+                          e.stopPropagation();
+                          openProject(p.id);
+                          onOpenProject(p.id);
+                          getCompositionRoot().shell.openNewDraftTab(p.id);
+                          emitUiEvent('open-chat');
+                        }}
                     >
                       <FilePlus2
                         size={14}
@@ -142,6 +145,7 @@ export function ProjectsSection({
                 <div
                   className={styles.accordionWrapper}
                   data-expanded={open ? 'true' : 'false'}
+                  hidden={!open || undefined}
                 >
                   <div className={styles.accordionInner}>
                     {sess.length > 0 ? (
@@ -151,47 +155,36 @@ export function ProjectsSection({
                         aria-label={`${p.name} 会话`}
                       >
                         {sess.length <= 6 ? (
-                          <DragReorderSection
-                            sessions={sess}
-                            folderName={p.id}
-                            onMoveSessionRealtime={onMoveSessionRealtime}
-                            renderRow={(s) => renderSessionItem(s, true)}
-                          />
+                          sess.map((s) => renderSessionItem(s, true))
                         ) : (
                           <>
-                            <DragReorderSection
-                              sessions={
-                                isExpanded
-                                  ? sess
-                                  : sess.slice(0, 6)
-                              }
-                              folderName={p.id}
-                              onMoveSessionRealtime={
-                                onMoveSessionRealtime
-                              }
-                              renderRow={(s) =>
-                                renderSessionItem(s, true)
-                              }
-                            />
-                            <div
-                              className={styles.accordionWrapper}
-                              data-expanded={
-                                isExpanded ? 'true' : 'false'
-                              }
-                            >
-                              <div className={styles.accordionInner}>
-                                <ul
-                                  className={`${styles.pinnedList} ${styles.folderSessions}`}
-                                  style={{ paddingTop: 3 }}
-                                >
-                                  {sess
-                                    .slice(6)
-                                    .map((s) =>
-                                      renderSessionItem(s, true)
-                                    )}
-                                </ul>
+                            {/*
+                              展开时主列表渲染全量；收起时主列表仅前 6 条，
+                              溢出条只在收起态挂到折叠手风琴（与 GeneralSection 一致）。
+                              禁止展开态同时 render sess 与 sess.slice(6) — 会双重渲染同一 session。
+                            */}
+                            {(isExpanded ? sess : sess.slice(0, 6)).map((s) =>
+                              renderSessionItem(s, true)
+                            )}
+                            {!isExpanded ? (
+                              <div
+                                className={styles.accordionWrapper}
+                                data-expanded="false"
+                              >
+                                <div className={styles.accordionInner}>
+                                  <ul
+                                    className={`${styles.pinnedList} ${styles.folderSessions}`}
+                                    style={{ paddingTop: 3 }}
+                                  >
+                                    {sess
+                                      .slice(6)
+                                      .map((s) =>
+                                        renderSessionItem(s, true)
+                                      )}
+                                  </ul>
+                                </div>
                               </div>
-                            </div>
+                            ) : null}
                             <li className={styles.sessionItemWrap}>
                               <button
                                 type="button"

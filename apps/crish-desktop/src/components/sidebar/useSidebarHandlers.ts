@@ -1,15 +1,13 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { useLayoutStore } from '../../store/layoutStore';
 import { getActiveProjectId } from '../../api/projectStore';
-import {
-  enterDraftMode,
-  getSessionStoreState,
-  setDraftFolder,
-} from '../../api/storeAccess';
+import { setDraftFolder } from '../../api/storeAccess';
 import { isPendingDraft } from '../../store/draftSession';
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
 import { emitUiEvent } from '../../api/uiEvents';
 import type { FilterType } from './sidebarHelpers';
+import { getCompositionRoot } from '../../app/compositionRoot';
+import { currentWorkspaceFolderKey } from '../../api/workspaceChromeTabs';
 
 export interface UseSidebarHandlersOptions {
   filterType: FilterType;
@@ -48,7 +46,6 @@ export function useSidebarHandlers({
   sidebarCollapsed,
   setSidebarCollapsed,
 }: UseSidebarHandlersOptions) {
-  const setActiveSessionId = useLayoutStore((s) => s.setActiveSessionId);
   const renameSession = useLayoutStore((s) => s.renameSession);
 
   const [activeNav, setActiveNav] = useState('chat');
@@ -60,7 +57,9 @@ export function useSidebarHandlers({
     try {
       if (filterType === 'pinned') setFilterType('all');
       setGeneralCollapsed(false);
-      enterDraftMode(getActiveProjectId() || undefined);
+      getCompositionRoot().shell.openNewDraftTab(
+        getActiveProjectId() || undefined
+      );
       setActiveNav('chat');
       setRenamingSessionId(null);
       emitUiEvent('open-chat');
@@ -87,11 +86,16 @@ export function useSidebarHandlers({
 
   const handleSelectSession = useCallback(
     (id: string) => {
-      setActiveSessionId(id);
+      const root = getCompositionRoot();
+      const target = root.session.getState().sessionsById[id];
+      root.session.openOrFocusSession(id, {
+        title: target?.title,
+        workspaceKey:
+          target?.folder || currentWorkspaceFolderKey(getActiveProjectId()),
+      });
       clearAgentPanelFocus();
       setActiveNav('chat');
       setRenamingSessionId(null);
-      const target = getSessionStoreState().sessionsById[id];
       if (target && !target.isPinned) {
         setGeneralCollapsed(false);
         if (target.folder) {
@@ -102,13 +106,13 @@ export function useSidebarHandlers({
       }
       emitUiEvent('open-chat');
     },
-    [setActiveSessionId, setRenamingSessionId, setGeneralCollapsed, setCollapsedProjects]
+    [setRenamingSessionId, setGeneralCollapsed, setCollapsedProjects]
   );
 
   const handleOpenProject = useCallback((id: string) => {
     setActiveProjectId(id);
     setCollapsedProjects((prev) => ({ ...prev, [id]: false }));
-    if (isPendingDraft(getSessionStoreState().activeSessionId)) {
+    if (isPendingDraft(getCompositionRoot().session.getActiveSessionId())) {
       setDraftFolder(id);
     }
   }, [setActiveProjectId, setCollapsedProjects]);

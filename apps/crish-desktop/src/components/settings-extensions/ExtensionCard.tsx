@@ -9,6 +9,7 @@ import {
 } from '../../api/extensionCatalog';
 import { mcpStateLabel } from '../../api/mcpApi';
 import type { ExpandMode, ManageKind } from './types';
+import { Tooltip } from '../Tooltip';
 
 export type ExtensionCardProps = {
   scope: 'installed' | 'catalog';
@@ -66,9 +67,11 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
       return (
         <div className="ext-inline-panel">
           {installedItem?.skillPath ? (
-            <div className="ext-detail-meta" title={installedItem.skillPath}>
-              {installedItem.skillPath}
-            </div>
+            <Tooltip content={installedItem.skillPath}>
+              <div className="ext-detail-meta">
+                {installedItem.skillPath}
+              </div>
+            </Tooltip>
           ) : null}
           <pre className="ext-detail-md" tabIndex={0}>
             {(installedItem &&
@@ -213,9 +216,11 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
                     className={`ext-tool-row${off ? ' is-off' : ''}`}
                     role="listitem"
                   >
-                    <span className="ext-tool-name" title={tool}>
-                      {tool}
-                    </span>
+                    <Tooltip content={tool}>
+                      <span className="ext-tool-name">
+                        {tool}
+                      </span>
+                    </Tooltip>
                     <label className="settings-list-control">
                       <span className={`ext-detail-meta ${styles.detailMeta}`}>
                         {off ? '禁用' : '启用'}

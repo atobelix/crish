@@ -12,8 +12,8 @@ import {
   SettingsSection,
   SettingsCard,
   SettingsRow,
-  Tooltip,
 } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import styles from './SettingsProfileTab.module.css';
 import { Archive, Eye, RefreshCw, Trash2, X } from 'lucide-react';
 
@@ -72,7 +72,7 @@ export const SettingsArchiveTab: React.FC<SettingsArchiveTabProps> = ({ onShowTo
       <SettingsSection title={`已归档会话 (${archivedSessions.length})`}>
         {archivedSessions.length === 0 ? (
           <SettingsCard>
-            <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-secondary, #666)', fontSize: '13px' }}>
+            <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>
               <Archive size={28} strokeWidth={1.5} style={{ marginBottom: 8, opacity: 0.6 }} />
               <div>暂无归档会话</div>
               <div style={{ fontSize: '12px', marginTop: 4, opacity: 0.8 }}>在侧边栏右键选中对话点击「归档」后，可在此集中归档管理</div>
@@ -122,7 +122,7 @@ export const SettingsArchiveTab: React.FC<SettingsArchiveTabProps> = ({ onShowTo
                         <button
                           type="button"
                           className="ui-btn ui-btn-ghost ui-btn-sm"
-                          style={{ height: '28px', padding: '0 8px', color: 'var(--status-err, #ef4444)' }}
+                          style={{ height: '28px', padding: '0 8px', color: 'var(--color-error)' }}
                           onClick={() => setDeleteConfirmSession(session)}
                         >
                           <Trash2 size={14} style={{ marginRight: 4 }} />
@@ -157,12 +157,12 @@ export const SettingsArchiveTab: React.FC<SettingsArchiveTabProps> = ({ onShowTo
             style={{
               width: '720px',
               maxHeight: '80vh',
-              background: 'var(--bg-card, #ffffff)',
-              border: '1px solid var(--border-color, #e5e7eb)',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
               borderRadius: '12px',
               display: 'flex',
               flexDirection: 'column',
-              boxShadow: '0 12px 32px rgba(0, 0, 0, 0.15)',
+              boxShadow: '0 12px 32px color-mix(in srgb, var(--shadow-color) 15%, transparent)',
               overflow: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}
@@ -171,17 +171,17 @@ export const SettingsArchiveTab: React.FC<SettingsArchiveTabProps> = ({ onShowTo
             <div
               style={{
                 padding: '14px 18px',
-                borderBottom: '1px solid var(--border-color, #eee)',
+                borderBottom: '1px solid var(--border-color)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
               }}
             >
               <div>
-                <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary, #111)' }}>
+                <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>
                   {previewSession.title || '无标题会话'}
                 </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary, #666)', marginTop: '2px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
                   只读快照 · {previewSession.messages?.length || 0} 条消息
                 </div>
               </div>
@@ -193,7 +193,7 @@ export const SettingsArchiveTab: React.FC<SettingsArchiveTabProps> = ({ onShowTo
                     border: 'none',
                     cursor: 'pointer',
                     padding: '4px',
-                    color: 'var(--text-secondary, #666)',
+                    color: 'var(--text-secondary)',
                   }}
                   onClick={() => setPreviewSession(null)}
                 >
@@ -221,14 +221,14 @@ export const SettingsArchiveTab: React.FC<SettingsArchiveTabProps> = ({ onShowTo
                     borderRadius: '8px',
                     fontSize: '13px',
                     lineHeight: '1.5',
-                    background: msg.sender === 'user' ? 'var(--bg-user-bubble, #f0f4f9)' : 'var(--bg-assistant-bubble, #fafafa)',
-                    border: '1px solid var(--border-color, #eee)',
+                    background: msg.sender === 'user' ? 'var(--accent-blue-light)' : 'var(--bg-secondary)',
+                    border: '1px solid var(--border-color)',
                   }}
                 >
-                  <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '4px', color: 'var(--text-secondary, #666)' }}>
+                  <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '4px', color: 'var(--text-secondary)' }}>
                     {msg.sender === 'user' ? '你' : '助手'}
                   </div>
-                  <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text-primary, #222)' }}>
+                  <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text-primary)' }}>
                     {msg.text || (msg.status === 'processing' ? '生成中…' : '（空正文）')}
                   </div>
                 </div>
@@ -239,7 +239,7 @@ export const SettingsArchiveTab: React.FC<SettingsArchiveTabProps> = ({ onShowTo
             <div
               style={{
                 padding: '12px 18px',
-                borderTop: '1px solid var(--border-color, #eee)',
+                borderTop: '1px solid var(--border-color)',
                 display: 'flex',
                 justifyContent: 'flex-end',
                 gap: '8px',
@@ -287,18 +287,18 @@ export const SettingsArchiveTab: React.FC<SettingsArchiveTabProps> = ({ onShowTo
           <div
             style={{
               width: '420px',
-              background: 'var(--bg-card, #ffffff)',
-              border: '1px solid var(--border-color, #e5e7eb)',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
               borderRadius: '12px',
               padding: '20px',
-              boxShadow: '0 12px 32px rgba(0, 0, 0, 0.2)',
+              boxShadow: '0 12px 32px color-mix(in srgb, var(--shadow-color) 20%, transparent)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ fontWeight: 600, fontSize: '16px', color: 'var(--status-err, #ef4444)', marginBottom: '8px' }}>
+            <div style={{ fontWeight: 600, fontSize: '16px', color: 'var(--color-error)', marginBottom: '8px' }}>
               确认彻底删除此会话？
             </div>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary, #555)', lineHeight: '1.5', marginBottom: '20px' }}>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5', marginBottom: '20px' }}>
               确定要删除「<strong>{deleteConfirmSession.title || '无标题会话'}</strong>」吗？此操作将永久清理磁盘上的会话事件日志与快照，<strong>删除后无法恢复</strong>。
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
@@ -312,7 +312,7 @@ export const SettingsArchiveTab: React.FC<SettingsArchiveTabProps> = ({ onShowTo
               <button
                 type="button"
                 className="ui-btn ui-btn-danger ui-btn-sm"
-                style={{ background: 'var(--status-err, #ef4444)', color: '#fff', border: 'none' }}
+                style={{ background: 'var(--color-error)', color: 'var(--text-on-accent)', border: 'none' }}
                 onClick={handleConfirmPermanentDelete}
               >
                 确认彻底删除

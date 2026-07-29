@@ -11,7 +11,7 @@ import { useLayoutStore } from '../store/layoutStore';
 import type { SettingsTabType } from '../store/types';
 import { readStoredTheme, setTheme, type UiTheme } from '../api/themeStore';
 import styles from './SettingsQuickMenu.module.css';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 
 interface Props {
   onShowToast?: (msg: string) => void;

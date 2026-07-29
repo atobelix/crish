@@ -44,8 +44,8 @@
 }
 
 .rowDeleteBtn:hover {
-  color: var(--accent-red, #ef4444);
-  background-color: color-mix(in srgb, var(--accent-red, #ef4444) 10%, transparent);
+  color: var(--accent-red);
+  background-color: color-mix(in srgb, var(--accent-red) 10%, transparent);
 }
 
 /* Hover States: Swap checkmark with delete button on hover to prevent overlapping */
@@ -100,4 +100,41 @@
   font-size: var(--font-size-sm);
   color: var(--text-primary);
   font-family: inherit;
+}
+
+/* Divider between project list and footer actions */
+.divider {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border-subtle, var(--border-color));
+  flex-shrink: 0;
+}
+
+/* Cascade: "添加项目" row hosts a right-side floating submenu */
+.addCascadeWrapper {
+  position: relative;
+  width: 100%;
+}
+
+.addBtn {
+  width: 100%;
+}
+
+/* Floating submenu to the RIGHT of "添加项目" — not flattened into main list */
+.cascadeSubmenu {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 4px;
+  min-width: 160px;
+  padding: var(--space-1_5, 6px);
+  background: var(--bg-elevated, var(--bg-primary));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+  z-index: var(--z-sticky-bar, 50);
+  box-sizing: border-box;
 }

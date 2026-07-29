@@ -291,10 +291,10 @@
   align-items: center;
 }
 .fileStat :global(.add) {
-  color: var(--accent-green, #22c55e);
+  color: var(--accent-green);
 }
 .fileStat :global(.del) {
-  color: var(--accent-red, #ef4444);
+  color: var(--accent-red);
 }
 .backBtn {
   display: inline-flex;
@@ -431,7 +431,7 @@
 }
 
 .branchIcon {
-  color: var(--text-muted, #71717a);
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
@@ -481,7 +481,7 @@
 .inlineBody {
   display: flex;
   flex-direction: column;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   border-top: none;
 }
 
@@ -595,8 +595,8 @@
 
 .inlineActionAccept:hover:not(:disabled) {
   background: var(--accent-green-light-adaptive);
-  color: var(--accent-green, #22c55e);
-  border-color: var(--accent-green, #22c55e);
+  color: var(--accent-green);
+  border-color: var(--accent-green);
 }
 
 .inlineActionBtn:disabled {
@@ -643,7 +643,7 @@
   height: 48px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  background: var(--bg-primary, #ffffff);
+  background: var(--bg-primary);
   padding: 8px 10px;
   font-size: var(--font-size-xs);
   font-family: inherit;
@@ -667,25 +667,25 @@
   padding: 6px 12px;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  background: color-mix(in srgb, var(--accent-orange, #f59e0b) 8%, transparent);
+  background: color-mix(in srgb, var(--accent-orange) 8%, transparent);
   border-bottom: 1px solid var(--border-subtle);
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 .iconBtnAccept {
-  color: var(--accent-green, #22c55e);
+  color: var(--accent-green);
 }
 .iconBtnAccept:hover:not(:disabled) {
-  color: var(--accent-green, #22c55e);
-  background: color-mix(in srgb, var(--accent-green, #22c55e) 12%, transparent);
+  color: var(--accent-green);
+  background: color-mix(in srgb, var(--accent-green) 12%, transparent);
 }
 .scrollParent {
   height: 380px !important;
   max-height: 380px !important;
   overflow-y: auto !important;
   position: relative;
-  background: var(--bg-card, #ffffff) !important;
+  background: var(--bg-card) !important;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -751,25 +751,25 @@
 }
 
 .lineAddition {
-  background: var(--accent-green-light-adaptive, color-mix(in srgb, var(--accent-green, #22c55e) 6%, transparent));
+  background: var(--accent-green-light-adaptive, var(--accent-green-light));
 }
 .lineAddition .gutterNum {
-  background: var(--accent-green-light-adaptive, color-mix(in srgb, var(--accent-green, #22c55e) 10%, var(--bg-primary)));
-  color: color-mix(in srgb, var(--accent-green, #22c55e) 70%, var(--text-secondary));
+  background: var(--accent-green-light-adaptive, color-mix(in srgb, var(--accent-green) 10%, var(--bg-primary)));
+  color: color-mix(in srgb, var(--accent-green) 70%, var(--text-secondary));
 }
 .lineAddition .gutterMarker {
-  color: var(--accent-green, #22c55e);
+  color: var(--accent-green);
 }
 
 .lineDeletion {
-  background: var(--accent-red-light-adaptive, color-mix(in srgb, var(--accent-red, #ef4444) 6%, transparent));
+  background: var(--accent-red-light-adaptive, var(--accent-red-light));
 }
 .lineDeletion .gutterNum {
-  background: var(--accent-red-light-adaptive, color-mix(in srgb, var(--accent-red, #ef4444) 10%, var(--bg-primary)));
-  color: color-mix(in srgb, var(--accent-red, #ef4444) 70%, var(--text-secondary));
+  background: var(--accent-red-light-adaptive, color-mix(in srgb, var(--accent-red) 10%, var(--bg-primary)));
+  color: color-mix(in srgb, var(--accent-red) 70%, var(--text-secondary));
 }
 .lineDeletion .gutterMarker {
-  color: var(--accent-red, #ef4444);
+  color: var(--accent-red);
 }
 
 .lineNormal {
@@ -777,14 +777,14 @@
 }
 
 .lineHeader {
-  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 4%, transparent);
+  background: color-mix(in srgb, var(--accent-blue) 4%, transparent);
   border-top: 1px solid var(--border-subtle);
   border-bottom: 1px solid var(--border-subtle);
   margin: 3px 0;
 }
 .lineHeader .gutterNum,
 .lineHeader .gutterMarker {
-  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 8%, var(--bg-primary));
+  background: color-mix(in srgb, var(--accent-blue) 8%, var(--bg-primary));
 }
 .lineHeader .lineText {
   color: var(--text-tertiary);
@@ -804,6 +804,8 @@
   font-size: var(--font-size-sm);
   text-align: center;
   box-sizing: border-box;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
 }
 .emptySub {
   font-size: var(--font-size-xs);
@@ -833,7 +835,7 @@
 
 .fileNameLink:hover {
   text-decoration: underline;
-  color: var(--accent-blue, #3b82f6);
+  color: var(--accent-blue);
 }
 
 .accordionHeaderRow {
@@ -890,8 +892,8 @@
 
 .hoverActBtn.danger:hover {
   background: var(--accent-red-light-adaptive);
-  color: var(--accent-red, #ef4444);
-  border-color: var(--accent-red, #ef4444);
+  color: var(--accent-red);
+  border-color: var(--accent-red);
 }
 
 /* --- Git Groups Sectioning --- */
@@ -1045,7 +1047,7 @@
 }
 
 .tabActive {
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   color: var(--text-primary);
   border-color: var(--hairline, var(--border-subtle));
   font-weight: var(--font-weight-medium);
@@ -1081,7 +1083,7 @@
   height: 36px;
   padding: 0 12px;
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   box-sizing: border-box;
   width: 100%;
 }
@@ -1102,7 +1104,7 @@
   border-radius: var(--radius-xs);
   padding: 2px 6px;
   font-size: var(--font-size-xs, 12px);
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   color: var(--text-primary);
   outline: none;
   cursor: pointer;
@@ -1157,7 +1159,7 @@
   justify-content: center;
   gap: var(--space-2);
   background-color: var(--bg-secondary, rgba(0, 0, 0, 0.02));
-  color: var(--text-muted, #71717a);
+  color: var(--text-muted);
   font-size: var(--font-size-xs, 12px);
   padding: 8px 12px;
   cursor: pointer;
@@ -1262,4 +1264,163 @@
   display: inline-block;
   margin-right: var(--space-1);
   flex-shrink: 0;
+}
+
+/* --- Single File Code View --- */
+.singleFileHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--hairline, var(--border-subtle));
+  background: var(--card-header-bg, var(--bg-secondary));
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.backBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.titleArea {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  margin-left: 4px;
+}
+
+.singleFileName {
+  font-size: 12px;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compareToggleRow {
+  display: flex;
+  align-items: center;
+  background: color-mix(in srgb, var(--border-subtle) 35%, transparent);
+  padding: 2px;
+  border-radius: 8px;
+  margin: 0 8px;
+}
+
+.toggleTab {
+  padding: 3px 8px;
+  font-size: 11px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.toggleTabActive {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium, 500);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.headerRightActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.headerActBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.headerActBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.headerActionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.acceptBtn {
+  background: transparent;
+  color: var(--text-success, #2e7d32);
+}
+
+.acceptBtn:hover {
+  background: color-mix(in srgb, var(--text-success, #2e7d32) 10%, transparent);
+}
+
+.rejectBtn {
+  background: transparent;
+  color: var(--text-danger, #c62828);
+}
+
+.rejectBtn:hover {
+  background: color-mix(in srgb, var(--text-danger, #c62828) 10%, transparent);
+}
+
+.actionSep {
+  width: 1px;
+  height: 14px;
+  background: var(--border-subtle);
+  margin: 0 4px;
+}
+
+.singleFileWarning {
+  padding: 6px 12px;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--text-danger, #c62828) 8%, transparent);
+  color: var(--text-danger, #c62828);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.singleBodyWrap {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-primary);
 }

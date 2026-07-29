@@ -1,6 +1,5 @@
 import React from 'react';
 import type { SessionState } from '../../../store/layoutStore';
-import { DragReorderSection } from './DragReorderSection';
 import styles from '../SidebarSessionList.module.css';
 import { ChevronDown } from 'lucide-react';
 
@@ -11,6 +10,7 @@ export interface PinnedSectionProps {
   dragOverPinned: boolean;
   filterType: 'all' | 'pinned';
   onTogglePinned: () => void;
+  /** Kept for SidebarSessionList API; reorder is pointer drop-only via SessionRow. */
   onMoveSessionRealtime: (
     sessionId: string,
     targetSessionId: string | null,
@@ -27,34 +27,47 @@ export function PinnedSection({
   dragOverPinned,
   filterType,
   onTogglePinned,
-  onMoveSessionRealtime,
+  onMoveSessionRealtime: _onMoveSessionRealtime,
   renderSessionItem,
 }: PinnedSectionProps) {
+  void _onMoveSessionRealtime;
   return (
     <section className={styles.section} aria-label="置顶会话">
-      <button
-        type="button"
-        className={styles.sectionLabel}
+      <div
+        className={styles.sectionLabelRow}
         onClick={onTogglePinned}
-        aria-expanded={!pinnedCollapsed}
-        aria-controls="sb-pinned-zone"
-        style={{ width: '100%', cursor: 'pointer' }}
+        style={{ cursor: 'pointer' }}
       >
-        <span>置顶</span>
-        <ChevronDown
-          size={14}
-          className={pinnedCollapsed ? styles.chevCollapsed : ''}
-          aria-hidden
-        />
-      </button>
+        <div className={styles.sectionLabelLeft}>
+          <button
+            type="button"
+            className={styles.sectionLabel}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePinned();
+            }}
+            aria-expanded={!pinnedCollapsed}
+            aria-controls="sb-pinned-zone"
+          >
+            <span>置顶</span>
+            <ChevronDown
+              size={14}
+              className={pinnedCollapsed ? styles.chevCollapsed : ''}
+              aria-hidden
+            />
+          </button>
+        </div>
+      </div>
       <div
         className={styles.accordionWrapper}
         data-expanded={!pinnedCollapsed ? 'true' : 'false'}
+        hidden={pinnedCollapsed || undefined}
       >
         <div className={styles.accordionInner}>
           <div
             id="sb-pinned-zone"
             ref={pinnedZoneRef}
+            data-drop-zone="pinned"
             className={`${styles.pinnedDropZone} ${dragOverPinned ? styles.dragOver : ''}`}
           >
             {pinnedSessions.length > 0 ? (
@@ -63,12 +76,7 @@ export function PinnedSection({
                 role="tree"
                 aria-label="置顶会话列表"
               >
-                <DragReorderSection
-                  sessions={pinnedSessions}
-                  isPinned
-                  onMoveSessionRealtime={onMoveSessionRealtime}
-                  renderRow={(s) => renderSessionItem(s)}
-                />
+                {pinnedSessions.map((s) => renderSessionItem(s))}
               </ul>
             ) : (
               <div
@@ -76,7 +84,7 @@ export function PinnedSection({
                 role="status"
               >
                 {filterType === 'pinned'
-                  ? '还没有置顶 of 对话'
+                  ? '还没有置顶的对话'
                   : '置顶的对话会出现在这里'}
               </div>
             )}

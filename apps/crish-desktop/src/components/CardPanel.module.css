@@ -7,7 +7,7 @@
   padding: 20px 16px;
   min-height: 120px;
   text-align: center;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   font-size: var(--font-size-sm, 13px);
   line-height: 1.45;
 }
@@ -18,7 +18,7 @@
 
 .emptyTitle {
   font-weight: var(--font-weight-medium);
-  color: var(--text-primary, #111);
+  color: var(--text-primary);
 }
 
 .emptyHint {

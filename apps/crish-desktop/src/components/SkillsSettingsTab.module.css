@@ -27,7 +27,7 @@
 
 .skillsFsWarn {
   font-size: var(--font-size-xs);
-  color: var(--accent-orange, #f59e0b);
+  color: var(--accent-orange);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -139,7 +139,7 @@
   flex-shrink: 0;
 }
 
-/* 闁瑰灈鍋撻柤宕囨櫕閻☆偊鏌呮径娑氱獥濞达絾绮庨弫銈夊春閻斿墎鐟撻�?+ 闁瑰吋绮庨崒銊╂晬鐏炶偐鐟濋柛顐㈡椤戝洦绂嶅畝鍐炬斀 segment */
+/* 闂佺懓鐏堥崑鎾绘煠瀹曞洦娅曢柣鈽嗗亰閺屽懏寰勫☉姘辩崶婵炶揪绲剧划搴ㄥ极閵堝鏄ラ柣鏂垮閻熸捇鏌?+ 闂佺懓鍚嬬划搴ㄥ磼閵娾晜鏅悘鐐跺亹閻熸繈鏌涢銏☆棤妞ゆ垵娲︾粋宥呯暆閸愮偓鏂€ segment */
 .skillsToolbarFocus {
   display: flex;
   flex-wrap: nowrap;
@@ -207,7 +207,7 @@
 }
 
 .skillsMoreItem.isActive {
-  background: color-mix(in srgb, var(--accent-green, #2dbe6c) 12%, transparent);
+  background: color-mix(in srgb, var(--accent-green) 12%, transparent);
 }
 
 .skillsEmptyInlineCta {
@@ -306,7 +306,7 @@
 }
 
 .skillsStats :global(.act-recommended) {
-  color: var(--accent-orange, #f59e0b);
+  color: var(--accent-orange);
 }
 
 .skillsToolbar {
@@ -572,7 +572,7 @@
 }
 
 .skillsActDot.actRecommended {
-  background: var(--accent-orange, #f59e0b);
+  background: var(--accent-orange);
 }
 
 .skillsActDot.actDisabled {
@@ -796,7 +796,7 @@
   word-break: break-word;
 }
 
-/* 闁瑰灈鍋撻柤铏灊閺呭爼寮借箛娑辨澓濠㈣埖鐗滃ú鎷屻亹閺囶亞绐楅柛妤佹礉椤㈡垹鎮伴妸銉ョ闁挎稑鏈Λ?inline style */
+/* 闂佺懓鐏堥崑鎾绘煠閾忣偄鐏婇柡鍛埣瀵€熺疀濞戣鲸婢撴繝銏ｅ煐閻楁粌煤閹峰被浜归柡鍥朵簽缁愭鏌涘Δ浣圭妞ゃ垺鍨归幃浼村Ω閵夈儳顦伴梺鎸庣☉閺堫剙螞?inline style */
 .skillsExtraSection {
   padding: 6px 6px 8px;
   border-top: 1px solid var(--border-subtle);

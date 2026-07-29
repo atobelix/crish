@@ -13,7 +13,7 @@ import React, {
 } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ApprovalAskCard.module.css';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import {
   approvalRiskBadgeLabel,
   approvalRiskKindLabel,
@@ -408,10 +408,12 @@ export const ApprovalAskCard: React.FC<Props> = ({
         >
           {statusText}
           {zoneHint ? (
-            <span className={styles.approvalCardZone} title={zoneTitle}>
-              {' '}
-              · {zoneHint}
-            </span>
+            <Tooltip content={zoneTitle}>
+              <span className={styles.approvalCardZone}>
+                {' '}
+                · {zoneHint}
+              </span>
+            </Tooltip>
           ) : null}
         </span>
       </div>
@@ -423,25 +425,27 @@ export const ApprovalAskCard: React.FC<Props> = ({
           {summary}
         </div>
       ) : showReason ? (
-        <div
-          className={`${styles.approvalCardDesc} ${styles.approvalCardReason}`}
-          id={descId}
-          title={riskMeta?.riskReason}
-        >
-          {riskMeta?.riskReason}
-        </div>
+        <Tooltip content={riskMeta?.riskReason || ''} disabled={!riskMeta?.riskReason}>
+          <div
+            className={`${styles.approvalCardDesc} ${styles.approvalCardReason}`}
+            id={descId}
+          >
+            {riskMeta?.riskReason}
+          </div>
+        </Tooltip>
       ) : riskAriaSummary && riskAriaSummary !== question ? (
         <div className={styles.approvalCardDesc} id={descId} hidden>
           {riskAriaSummary}
         </div>
       ) : null}
       {showSummary && showReason ? (
-        <div
-          className={`${styles.approvalCardDesc} ${styles.approvalCardReason}`}
-          title={riskMeta?.riskReason}
-        >
-          {riskMeta?.riskReason}
-        </div>
+        <Tooltip content={riskMeta?.riskReason || ''} disabled={!riskMeta?.riskReason}>
+          <div
+            className={`${styles.approvalCardDesc} ${styles.approvalCardReason}`}
+          >
+            {riskMeta?.riskReason}
+          </div>
+        </Tooltip>
       ) : null}
       {chips.length > 0 ? (
         <div
@@ -451,24 +455,24 @@ export const ApprovalAskCard: React.FC<Props> = ({
           aria-label="风险标签"
         >
           {chips.map((chip) => (
-            <span
-              key={chip.key}
-              role="listitem"
-              className={`${styles.approvalCardChip} ${
-                chip.tone === 'warn'
-                  ? styles.approvalCardChipWarn
-                  : chip.tone === 'danger'
-                    ? styles.approvalCardChipDanger
-                    : chip.tone === 'info'
-                      ? styles.approvalCardChipInfo
-                      : chip.tone === 'neutral'
-                        ? styles.approvalCardChipNeutral
-                        : ''
-              }`}
-              title={chip.label}
-            >
-              {chip.label}
-            </span>
+            <Tooltip key={chip.key} content={chip.label}>
+              <span
+                role="listitem"
+                className={`${styles.approvalCardChip} ${
+                  chip.tone === 'warn'
+                    ? styles.approvalCardChipWarn
+                    : chip.tone === 'danger'
+                      ? styles.approvalCardChipDanger
+                      : chip.tone === 'info'
+                        ? styles.approvalCardChipInfo
+                        : chip.tone === 'neutral'
+                          ? styles.approvalCardChipNeutral
+                          : ''
+                }`}
+              >
+                {chip.label}
+              </span>
+            </Tooltip>
           ))}
         </div>
       ) : null}

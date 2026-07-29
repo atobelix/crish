@@ -25,10 +25,17 @@ import { useChatMessageState } from './chat-message-list/useChatMessageState';
 const EMPTY_MUST_INDICES: number[] = [];
 
 export interface ChatMessageListProps {
+  /** Display / filtered list (further windowed inside). */
   messages: SessionMessage[];
+  /**
+   * Full unfiltered session messages for pin resolve when filter is active.
+   * Parent already owns the store subscription — pass through to avoid a second
+   * `sessionsById[sid].messages` sub in useChatMessageState (OPT-D8).
+   * Defaults to `messages` when omitted.
+   */
+  allMessages?: SessionMessage[];
   agents: SessionAgent[];
   activeSessionId: string;
-  thinkingSeconds: number;
   showAllMessages?: boolean;
   showProjectPicker: boolean;
   onShowProjectPicker: (open: boolean | ((v: boolean) => boolean)) => void;
@@ -53,9 +60,9 @@ export interface ChatMessageListProps {
 
 const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   messages,
+  allMessages,
   agents,
   activeSessionId,
-  thinkingSeconds,
   showAllMessages = false,
   onSetChatInput,
   onSendFollowUp,
@@ -77,11 +84,15 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   const [pinsOpen, setPinsOpen] = useState(true);
   const [expandedOlder, setExpandedOlder] = useState(0);
 
+  // Full list for pin resolve; when not filtering, same ref as display messages.
+  // Parent (ChatCard) owns the store sub — do not re-select messages here.
+  const sessionAllMessages = allMessages ?? messages;
+
   const {
     expandedUserMsgs,
     dismissedFollowUps,
     setDismissedFollowUps,
-    sessionAllMessages,
+    sessionAllMessages: pinSourceMessages,
     pinnedItems,
     togglePin,
     handleMarkdownClick,
@@ -93,6 +104,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     toolStackProps,
   } = useChatMessageState({
     messages,
+    allMessages: sessionAllMessages,
     agents,
     activeSessionId,
     onSetChatInput,
@@ -118,7 +130,9 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
 
   const { jumpToPinned } = useScrollAnchor({
     messages,
-    sessionAllMessages,
+    // pinSourceMessages is the prop-backed full list from useChatMessageState
+    // (allMessages ?? messages) — not a store subscription.
+    sessionAllMessages: pinSourceMessages,
     showAllMessages,
     onShowToast,
     setExpandedOlder,
@@ -246,6 +260,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     return null;
   }
 
+  // 思考秒数由行内 ThinkingTimer 自管，不经 ChatMessageList / Virtualizer props
   return (
     <AppErrorBoundary variant="compact" title="消息列表出错">
       <MessageVirtualizer
@@ -266,7 +281,6 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         onToggleExpandUser={onToggleExpandUser}
         onWithdraw={onWithdraw}
         onShowToast={onShowToast}
-        thinkingSeconds={thinkingSeconds}
         hideThinkingBlock={hideThinkingBlock}
         inPlanMode={inPlanMode}
         planApproved={planApproved}

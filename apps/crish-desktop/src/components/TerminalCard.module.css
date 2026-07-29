@@ -43,6 +43,115 @@
   box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
   color: var(--text-primary);
 }
+
+/* 助手命令镜像条：侧栏缓冲，默认不注入交互式 PTY */
+.mirrorStrip {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  flex-shrink: 0;
+  border-bottom: var(--hairline-width, 1px) solid var(--terminal-border, var(--hairline, var(--border-subtle)));
+  box-sizing: border-box;
+}
+.mirrorStrip[data-expanded='true'] {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* 交互式 PTY 已挂载时：镜像限高，主区域留给 xterm */
+.panel[data-interactive-pty='true'] .mirrorStrip[data-expanded='true'] {
+  flex: 0 1 auto;
+  max-height: min(40%, 220px);
+}
+.mirrorStrip[data-expanded='false'] {
+  flex: 0 0 auto;
+}
+.mirrorHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  padding: 2px var(--card-header-pad-x, 8px);
+  min-height: 26px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  background: var(--terminal-bar-fill, var(--terminal-bg));
+}
+.mirrorToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  min-width: 0;
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--terminal-fg);
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium, 500);
+  cursor: pointer;
+  padding: var(--space-0_5) 0;
+  text-align: left;
+  line-height: var(--line-height-ui, 1.35);
+}
+.mirrorToggle:hover {
+  color: var(--text-primary, var(--terminal-fg));
+}
+.mirrorToggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
+  border-radius: var(--radius-sm, 4px);
+}
+.mirrorTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mirrorCount {
+  color: var(--terminal-muted);
+  font-weight: var(--font-weight-normal, 400);
+  flex-shrink: 0;
+}
+.mirrorHint {
+  flex-shrink: 0;
+  font-size: var(--font-size-xxs);
+  color: var(--terminal-muted);
+  opacity: 0.85;
+  user-select: none;
+}
+.mirrorPanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+/* 交互模式下镜像 body 限高，避免挤掉 xterm */
+.mirrorBody {
+  max-height: 160px;
+}
+.panel[data-interactive-pty='false'] .mirrorBody {
+  max-height: none;
+}
+/* 交互宿主：纯终端时占满面板；镜像/顶栏已移除 */
+.interactiveHost {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  box-sizing: border-box;
+}
+.panel[data-interactive-pty='true'] .interactiveHost,
+.panel[data-interactive-pty='false'] .interactiveHost {
+  flex: 1 1 auto;
+}
+.interactivePlaceholder {
+  padding: var(--space-1, 4px) var(--panel-pad-x, 12px) var(--space-1_5);
+  font-size: var(--font-size-xxs);
+  color: var(--terminal-muted);
+  line-height: var(--line-height-ui, 1.35);
+  opacity: 0.9;
+}
 .body {
   flex: 1;
   min-height: 0;
@@ -61,6 +170,7 @@
   user-select: text;
   -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
+  background: var(--terminal-bg);
 }
 .line {
   margin: 0;
@@ -80,7 +190,7 @@
   margin-bottom: var(--space-0_5);
 }
 .line.isErr {
-  color: var(--terminal-err, #f87171);
+  color: var(--terminal-err);
 }
 .inputRow {
   display: flex;
@@ -92,6 +202,7 @@
   min-width: 0;
   min-height: var(--control-height, 32px);
   box-sizing: border-box;
+  background: var(--terminal-bg);
 }
 .prompt {
   color: var(--terminal-muted);
@@ -117,7 +228,6 @@
 }
 .input:focus-visible {
   outline: none;
-  /* 閬靛惊璁捐瑙勮寖锛氶伩鍏嶅己鐑堢殑闃村奖鐜笌鍘氶粦锟?*/
   box-shadow: none;
 }
 .bar {
@@ -126,7 +236,7 @@
   gap: var(--space-1_5);
   padding: var(--card-header-pad-y, 4px) var(--card-header-pad-x, 8px);
   min-height: var(--card-header-min-height, 36px);
-  background: var(--terminal-bg);
+  background: var(--terminal-bar-fill, var(--terminal-bg));
   border-bottom: var(--hairline-width, 1px) solid var(--terminal-border, var(--hairline, var(--border-subtle)));
   min-width: 0;
   box-sizing: border-box;
@@ -157,6 +267,10 @@
 }
 .barShell {
   flex-shrink: 0;
+}
+.barStatus {
+  flex-shrink: 0;
+  color: var(--terminal-muted);
 }
 .barSep {
   opacity: 0.45;
@@ -269,11 +383,91 @@
 .searchClear:hover {
   color: var(--terminal-fg);
 }
+
+/* ── 交互式 xterm 区域 ─────────────────────────────────────────── */
+.xtermWrap {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--terminal-bg, hsl(0, 0%, 5%));
+  position: relative;
+}
+.xtermWrap[hidden],
+.xtermWrap[data-hidden-for-fallback='true'] {
+  display: none;
+}
+
+.xtermHost {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 4px 6px 6px;
+  box-sizing: border-box;
+  background: var(--terminal-bg, hsl(0, 0%, 5%));
+  cursor: text;
+}
+
+/* xterm 内部 DOM 撑满 */
+.xtermHost :global(.xterm) {
+  height: 100%;
+  width: 100%;
+  padding: 0;
+}
+.xtermHost :global(.xterm-viewport) {
+  background-color: transparent !important;
+  overflow-y: auto !important;
+}
+.xtermHost :global(.xterm-screen) {
+  background-color: transparent !important;
+}
+.xtermHost :global(.xterm-helpers textarea) {
+  /* 保证可聚焦接收键盘 */
+  opacity: 0;
+}
+
+.fallbackBanner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  padding: 6px var(--panel-pad-x, 12px);
+  font-size: var(--font-size-xs);
+  color: var(--terminal-muted);
+  background: color-mix(in srgb, var(--terminal-bar-fill, rgba(255, 255, 255, 0.04)) 80%, transparent);
+  border-bottom: var(--hairline-width, 1px) solid var(--terminal-border, var(--hairline, var(--border-subtle)));
+  line-height: var(--line-height-ui, 1.35);
+}
+.fallbackBanner strong {
+  color: var(--terminal-fg);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 @media (max-width: 360px) {
   .body {
     line-height: var(--line-height-ui, 1.35);
   }
   .bar :global(.files-path-crumbs) {
     display: none;
+  }
+  .barCwd {
+    max-width: 28%;
   }
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Columns2, GitBranch, GitCommit, List, Search, Trash2 } from 'lucide-react';
-import { Tooltip } from '../settings/SettingsUI';
+import { Tooltip } from '../Tooltip';
 import { SettingsSelect } from '../SettingsSelect';
 import styles from '../DiffCard.module.css';
 import type { FileDiff } from '../../store/types';

@@ -543,14 +543,84 @@ button.liveRow:hover {
 
 /* 閻樿埖鈧礁娓鹃悙?*/
 .dot.warn {
-  background: var(--accent-orange, #f97316);
+  background: var(--accent-orange);
 }
 
 .dot.on {
-  background: var(--accent-green, #22c55e);
+  background: var(--accent-green);
 }
 
 .dot.off {
   background: var(--text-tertiary);
   opacity: 0.5;
+}
+
+/* 总览快捷入口：与对话空态 quickPrompt 视觉对齐（此前缺 class 导致原生按钮外观） */
+.quickPromptsList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5, 6px);
+  width: 100%;
+  min-width: 0;
+  margin: var(--space-1, 4px) 0 0;
+  box-sizing: border-box;
+}
+
+.quickPromptCard {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-2, 8px);
+  width: 100%;
+  min-width: 0;
+  min-height: var(--control-height-sm, 28px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  margin: 0;
+  border: 1px solid var(--border-color, var(--hairline, var(--border-subtle)));
+  border-radius: var(--radius-lg, 10px);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-normal, 400);
+  line-height: var(--line-height-ui, 1.35);
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  transition:
+    background-color var(--transition-fast, 150ms ease),
+    border-color var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
+}
+
+.quickPromptCard:hover {
+  background: var(--control-soft-bg-hover, var(--bg-hover));
+  border-color: var(--border-color, var(--hairline));
+  color: var(--text-primary);
+}
+
+.quickPromptCard:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.quickPromptCard .ico {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.quickPromptCard:hover .ico {
+  color: var(--text-secondary);
+}
+
+.quickPromptTitle {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--font-weight-medium, 500);
+  color: inherit;
 }

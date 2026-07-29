@@ -5,7 +5,7 @@
 }
 
 .settingsHeadMetaError {
-  color: var(--danger-color, #c44);
+  color: var(--danger-color);
 }
 
 .settingsPathEllipsis {
@@ -31,4 +31,8 @@
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
+}
+
+.settingsImportBody {
+  padding: 16px 20px;
 }

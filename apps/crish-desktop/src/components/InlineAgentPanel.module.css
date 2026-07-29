@@ -11,7 +11,7 @@
 }
 
 
-/* 婢剁顢戦敍姘閸欑娀�?+ 閸嬫粍顒?娓氀勭埉閸斻劋缍旈敍鍫熷閸欑姵鈧椒绡冮懗钘変�?/ 娓氀勭埉 only�?*/
+/* 濠㈠墎顥愰、鎴︽晬濮橆厼顫戦柛娆戝█閹?+ 闁稿绮嶉?濞撴皜鍕焿闁告柣鍔嬬紞鏃堟晬閸喎顫戦柛娆戝У閳ь兛妞掔弧鍐嚄閽樺绮?/ 濞撴皜鍕焿 only闁?*/
 .inlineAgentHeadRow {
   display: flex;
   align-items: stretch;
@@ -102,7 +102,7 @@
 }
 
 .inlineAgentStopBtn {
-  color: var(--accent-red, #c44);
+  color: var(--accent-red);
 }
 .inlineAgentStopBtn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent-red) 12%, transparent);
@@ -110,11 +110,11 @@
 }
 
 .inlineAgentLinkStop {
-  color: var(--danger-color, #c44);
+  color: var(--danger-color);
 }
 
 .inlineAgentLinkStop:hover:not(:disabled) {
-  color: var(--danger-color, #c44);
+  color: var(--danger-color);
   text-decoration: underline;
 }
 
@@ -162,7 +162,7 @@
 }
 
 .inlineAgentBadgePending {
-  border-color: color-mix(in srgb, var(--accent-orange, #f59e0b) 50%, var(--hairline, var(--border-subtle)));
+  border-color: color-mix(in srgb, var(--accent-orange) 50%, var(--hairline, var(--border-subtle)));
   color: var(--accent-orange, var(--text-secondary));
 }
 
@@ -273,7 +273,7 @@
   margin-bottom: 0;
 }
 
-/* 閸愬懓浠?agent 鏉堟挸鍙嗛敍姘槻閻?.chat-footer.agent-card-composer + ComposerField */
+/* 闁告劕鎳撴禒?agent 閺夊牊鎸搁崣鍡涙晬濮橆剦妲婚柣?.chat-footer.agent-card-composer + ComposerField */
 .inlineAgentComposerWrap {
   padding: var(--space-2, 6px);
   width: 100%;
@@ -281,7 +281,7 @@
   box-sizing: border-box;
 }
 
-/* denser 閸愬懓浠堥敍姘晙閺�?pad閿涘矂鍘ら崥?maxLines=3 */
+/* denser 闁告劕鎳撴禒鍫ユ晬濮橆剙鏅欓柡鈧?pad闁挎稑鐭傞崢銈夊触?maxLines=3 */
 .inlineAgentComposerWrapDense {
   padding: var(--space-1, 4px) var(--space-2, 5px) var(--space-2, 5px);
 }
@@ -298,7 +298,7 @@
   margin: 0;
 }
 
-/* 娓氀勭埉鐎光剝澹掗崡鈽呯窗閻ｃ儲鏁规潏纭呯獩閿涘奔绗夐崡鐘冲姬瀹搞儱鍙块崚?*/
+/* 濞撴皜鍕焿閻庡厜鍓濇竟鎺楀础閳藉懐绐楅柣锝冨劜閺佽娼忕涵鍛崺闁挎稑濂旂粭澶愬础閻樺啿濮€规悶鍎遍崣鍧楀礆?*/
 .inlineAgent.inlineAgentDense :global(.approval-card) {
   margin: 4px 0;
   padding: 8px 8px 7px;

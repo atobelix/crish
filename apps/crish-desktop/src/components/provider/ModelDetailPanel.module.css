@@ -101,9 +101,9 @@
   padding: 2px 8px;
   border-radius: var(--radius-full);
   font-size: var(--font-size-xs, 11px);
-  background: color-mix(in srgb, var(--accent, #3b82f6) 10%, transparent);
-  color: var(--accent, #3b82f6);
-  border: 1px solid color-mix(in srgb, var(--accent, #3b82f6) 20%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  color: var(--accent-color);
+  border: 1px solid color-mix(in srgb, var(--accent-color) 20%, transparent);
 }
 
 .deprecatedBadge {
@@ -113,6 +113,6 @@
   border-radius: var(--radius-full);
   font-size: var(--font-size-xs, 11px);
   font-weight: var(--font-weight-medium, 500);
-  background: color-mix(in srgb, var(--error, #ef4444) 12%, transparent);
-  color: var(--error, #ef4444);
+  background: color-mix(in srgb, var(--accent-red) 12%, transparent);
+  color: var(--accent-red);
 }

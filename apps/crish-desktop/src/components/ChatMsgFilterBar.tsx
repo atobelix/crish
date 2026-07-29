@@ -9,7 +9,7 @@
 import React, { useId } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatMsgFilterBar.module.css';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 
 export type ChatMsgFilterBarProps = {
   localMsgFilter: string;
@@ -109,17 +109,18 @@ export const ChatMsgFilterBar: React.FC<ChatMsgFilterBarProps> = ({
           }
         }}
       />
-      <span
-        id={countId}
-        className={`${styles.count}${noMatch ? ` ${styles.isEmpty}` : ''}${!hasQuery ? ` ${styles.isMuted}` : ''}`}
-        title={countTitle}
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        aria-label={countA11y}
-      >
-        {countText}
-      </span>
+      <Tooltip content={countTitle}>
+        <span
+          id={countId}
+          className={`${styles.count}${noMatch ? ` ${styles.isEmpty}` : ''}${!hasQuery ? ` ${styles.isMuted}` : ''}`}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-label={countA11y}
+        >
+          {countText}
+        </span>
+      </Tooltip>
       {hasDraft ? (
         <Tooltip content="清除筛选（Esc）">
           <button

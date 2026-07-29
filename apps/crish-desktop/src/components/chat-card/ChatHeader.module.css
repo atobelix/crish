@@ -1,0 +1,139 @@
+/* ConversationUnit 对话条：unit 标识 + 工具入口 + 右坞开关（非全局顶栏）
+ * 与 RightToolDockHeader 同高 + 同 hairline，unit 内 chat|tool 顶栏齐平。
+ */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  flex-shrink: 0;
+  min-height: 30px;
+  height: 30px;
+  max-height: 30px;
+  padding: 0 6px 0 10px;
+  box-sizing: border-box;
+  /* 与消息列表明确分隔；与 RightToolDockHeader 高度对齐但不叠双重 chrome */
+  border-bottom: var(--hairline-width, 1px) solid
+    var(--hairline, var(--border-subtle, var(--border-color)));
+  background: var(--shell-inset-bg, var(--bg-primary));
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky-bar, 2);
+  isolation: isolate;
+}
+
+.toolbarLeft {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+/* 左：项目名 or「对话」（单标签，过长省略） */
+.unitLabel {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  user-select: none;
+}
+
+.unitType {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary, var(--text-tertiary));
+  line-height: 1.2;
+}
+
+/* 右：工具组 + 右坞开关（dock 在 actions 最右） */
+.toolbarActions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-left: auto;
+  height: 100%;
+}
+
+.toolGroup {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.dockGroup {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* 工具组与右坞开关之间的细分隔 */
+.toolbarDivider {
+  width: 1px;
+  height: 14px;
+  margin: 0 5px;
+  background: var(--hairline, var(--border-subtle, var(--border-color)));
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.toolBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.toolBtn:hover {
+  background: var(--sidebar-hover);
+  color: var(--text-primary);
+}
+
+/* 当前激活面板 / 展开态 */
+.toolBtn[data-active='true'] {
+  background: var(--bg-active, var(--bg-hover));
+  color: var(--text-primary);
+}
+
+/* 已在坞中打开但非当前 tab：轻提示，避免与 RightToolDockHeader tab 抢视觉 */
+.toolBtn[data-open='true']:not([data-active='true']) {
+  color: var(--text-primary);
+  opacity: 0.85;
+}
+
+.toolBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* 筛选条嵌在 toolbar 内时去掉 sticky/底边，避免双线 */
+.toolbarLeft :global([role='search']) {
+  position: static;
+  top: auto;
+  border-bottom: none;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  padding-left: 4px;
+  padding-right: 4px;
+}

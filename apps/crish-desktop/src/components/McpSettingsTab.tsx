@@ -11,6 +11,7 @@ import { SettingsPage } from './settings/SettingsUI';
 import { useMcpSettings } from './settings-mcp/useMcpSettings';
 import { McpServerForm } from './settings-mcp/McpServerForm';
 import { McpServerList } from './settings-mcp/McpServerList';
+import { Tooltip } from './Tooltip';
 
 type Props = {
   onShowToast?: ((msg: string) => void) | undefined;
@@ -142,33 +143,40 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
       title="扩展服务"
       meta={
         <div className={`${styles.mcpHeadStats} mcp-head-stats`}>
-          <span
-            className={`${styles.mcpStatusPill} mcp-status-pill ${status?.configured ? 'is-on' : ''}`}
-            title={
+          <Tooltip
+            content={
               status?.configured
                 ? '引擎已配置扩展服务'
                 : '引擎侧未配置扩展服务'
             }
           >
-            {status?.configured ? '已配置' : '未配置'}
-          </span>
-          {status?.readiness ? (
             <span
-              className={`${styles.mcpStatusPill} mcp-status-pill kind-${mcpStateKind(status.readiness)}`}
-              title={`就绪：${mcpStateLabel(status.readiness)}`}
+              className={`${styles.mcpStatusPill} mcp-status-pill ${status?.configured ? 'is-on' : ''}`}
             >
-              {mcpStateLabel(status.readiness)}
+              {status?.configured ? '已配置' : '未配置'}
             </span>
+          </Tooltip>
+          {status?.readiness ? (
+            <Tooltip content={`就绪：${mcpStateLabel(status.readiness)}`}>
+              <span
+                className={`${styles.mcpStatusPill} mcp-status-pill kind-${mcpStateKind(status.readiness)}`}
+              >
+                {mcpStateLabel(status.readiness)}
+              </span>
+            </Tooltip>
           ) : null}
-          <span className={`${styles.mcpStatusPill} mcp-status-pill`} title={`共 ${servers.length} 个服务`}>
-            服务 {servers.length}
-          </span>
-          <span
-            className={`${styles.mcpStatusPill} mcp-status-pill ${canStartStop ? 'is-on' : ''}`}
-            title={canStartStop ? '可从界面启动/停止' : stopHint}
-          >
-            {canStartStop ? '启停可用' : '启停不可用'}
-          </span>
+          <Tooltip content={`共 ${servers.length} 个服务`}>
+            <span className={`${styles.mcpStatusPill} mcp-status-pill`}>
+              服务 {servers.length}
+            </span>
+          </Tooltip>
+          <Tooltip content={canStartStop ? '可从界面启动/停止' : stopHint}>
+            <span
+              className={`${styles.mcpStatusPill} mcp-status-pill ${canStartStop ? 'is-on' : ''}`}
+            >
+              {canStartStop ? '启停可用' : '启停不可用'}
+            </span>
+          </Tooltip>
           {filterActive ? (
             <span className={`${styles.mcpStatusPill} mcp-status-pill`} aria-label="当前筛选结果数">
               显示 {filtered.length}
@@ -183,9 +191,11 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
       }
     >
       {error ? (
-        <div className={`${styles.mcpErrorLine} mcp-error-line`} role="alert" title={error}>
-          {error}
-        </div>
+        <Tooltip content={error}>
+          <div className={`${styles.mcpErrorLine} mcp-error-line`} role="alert">
+            {error}
+          </div>
+        </Tooltip>
       ) : null}
 
       <McpServerList

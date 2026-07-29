@@ -103,7 +103,7 @@
   overflow: visible;
   background: transparent;
   border: none;
-  color: var(--accent-green, #2dbe6c);
+  color: var(--accent-green);
   box-sizing: border-box;
 }
 
@@ -140,7 +140,7 @@
 .toolRowHead:hover .toolRowIcoSlot {
   background: transparent;
   border: none;
-  color: var(--accent-green, #2dbe6c);
+  color: var(--accent-green);
 }
 
 .toolRowHead:hover .toolRowChevronSlot.isToggle {
@@ -221,7 +221,7 @@
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--accent-red, #ef4444);
+  color: var(--accent-red);
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
@@ -232,7 +232,7 @@
 
 .retryBtn:hover {
   opacity: 1;
-  background: color-mix(in srgb, var(--accent-red, #ef4444) 12%, transparent);
+  background: color-mix(in srgb, var(--accent-red) 12%, transparent);
 }
 
 /* Diff stats in collapsed row */
@@ -245,11 +245,11 @@
 }
 
 .diffStatsAdd {
-  color: var(--accent-green, #22c55e);
+  color: var(--accent-green);
 }
 
 .diffStatsDel {
-  color: var(--accent-red, #ef4444);
+  color: var(--accent-red);
 }
 
 /* Parallel group */
@@ -306,21 +306,21 @@
 }
 
 .batchBarApprove {
-  color: var(--accent-green, #22c55e);
-  border-color: color-mix(in srgb, var(--accent-green, #22c55e) 40%, transparent);
+  color: var(--accent-green);
+  border-color: color-mix(in srgb, var(--accent-green) 40%, transparent);
 }
 
 .batchBarApprove:hover {
-  background: color-mix(in srgb, var(--accent-green, #22c55e) 10%, var(--bg-hover));
+  background: color-mix(in srgb, var(--accent-green) 10%, var(--bg-hover));
 }
 
 .batchBarDeny {
-  color: var(--accent-red, #ef4444);
-  border-color: color-mix(in srgb, var(--accent-red, #ef4444) 40%, transparent);
+  color: var(--accent-red);
+  border-color: color-mix(in srgb, var(--accent-red) 40%, transparent);
 }
 
 .batchBarDeny:hover {
-  background: color-mix(in srgb, var(--accent-red, #ef4444) 10%, var(--bg-hover));
+  background: color-mix(in srgb, var(--accent-red) 10%, var(--bg-hover));
 }
 
 

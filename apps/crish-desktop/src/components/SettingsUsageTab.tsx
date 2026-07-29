@@ -22,6 +22,7 @@ import {
   SettingsSection,
   SettingsCard,
 } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -61,12 +62,11 @@ const EditablePriceRow: React.FC<{
 
   return (
     <div className={styles.priceRow}>
-      <span
-        className={styles.priceRowModel}
-        title={row.model}
-      >
-        {row.model}
-      </span>
+      <Tooltip content={row.model}>
+        <span className={styles.priceRowModel}>
+          {row.model}
+        </span>
+      </Tooltip>
       <input
         value={inputVal}
         onChange={(e) => setInputVal(e.target.value)}
@@ -372,11 +372,13 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
                     const dateLabel = d.day.slice(5);
 
                     return (
-                      <div
+                      <Tooltip
                         key={d.day}
-                        className={styles.chartBarCol}
-                        title={`${d.day}\n输入: ${formatTokenCount(d.input)}\n输出: ${formatTokenCount(d.output)}`}
+                        content={`${d.day}\n输入: ${formatTokenCount(d.input)}\n输出: ${formatTokenCount(d.output)}`}
                       >
+                        <div
+                          className={styles.chartBarCol}
+                        >
                         <div className={styles.chartBarInner}>
                           {total > 0 ? (
                             <div
@@ -398,7 +400,8 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
                         </div>
                         <span className={styles.chartBarLabel}>{dateLabel}</span>
                       </div>
-                    );
+                    </Tooltip>
+                  );
                   })}
                 </div>
 
@@ -427,9 +430,11 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
                       const barWidth = Math.max(4, Math.round((t / maxM) * 100));
                       return (
                         <div key={m.model} className={styles.modelRow}>
-                          <span className={styles.modelName} title={m.model}>
-                            {m.model}
-                          </span>
+                          <Tooltip content={m.model}>
+                            <span className={styles.modelName}>
+                              {m.model}
+                            </span>
+                          </Tooltip>
                           <div className={styles.modelBarTrack}>
                             <div
                               className={styles.modelBarFill}

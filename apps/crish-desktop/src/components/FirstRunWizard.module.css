@@ -5,14 +5,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(15, 23, 42, 0.28);
+  background: color-mix(in srgb, var(--bg-overlay) 28%, transparent);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   padding: var(--space-6);
 }
 
 .firstRunCard {
-  width: min(440px, 100%);
+  width: min(480px, 100%);
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
@@ -35,7 +35,7 @@
   height: 40px;
   border-radius: var(--radius-2xl);
   background: var(--text-primary);
-  color: #fff;
+  color: var(--text-on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -96,7 +96,7 @@
 
 .firstRunStep.isActive .firstRunStepNum {
   background: var(--text-primary);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .firstRunBody {
@@ -113,7 +113,7 @@
   margin-top: var(--space-1);
 }
 
-/* 閸氭垵顕辨稉瀣閿涙瓔ettingsSelect 閸忋劌顔旀潪顖澬曢�?*/
+/* 閸氭垵顕辨稉瀣閿涙瓔ettingsSelect 閸忋劌顔旀潪顖澬曢 */
 .firstRunSelect :global(.settings-select) {
   width: 100%;
   max-width: none;
@@ -193,7 +193,7 @@
   padding-bottom: var(--space-1);
 }
 
-/* 濡€崇€峰銉︻偧缁狙嗙熅瀵板嫸绱扮粙宥呮倵閹靛�?/ 閹垫挸绱戠拋鍓х枂閿涘牊妫?toast�?*/
+/* 濡€崇€峰銉︻偧缁狙嗙熅瀵板嫸绱扮粙宥呮倵閹靛/ 閹垫挸绱戠拋鍓х枂閿涘牊妫toast */
 .firstRunModelAlt {
   display: flex;
   flex-direction: column;
@@ -222,7 +222,7 @@
 
 .firstRunBtn.primary {
   background: var(--text-primary);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .firstRunBtn.primary:disabled {
@@ -266,5 +266,5 @@
 :global([data-perf-tier='eco']) .firstRunRoot {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  background: color-mix(in srgb, var(--bg-overlay, #000) 72%, transparent);
+  background: color-mix(in srgb, var(--bg-overlay) 72%, transparent);
 }

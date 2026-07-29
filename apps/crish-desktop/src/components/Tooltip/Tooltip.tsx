@@ -1,7 +1,25 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAnimatedPresence } from '../../hooks/useAnimatedPresence';
 import styles from './Tooltip.module.css';
+
+function setRef<T>(ref: React.ForwardedRef<T> | React.Ref<T> | undefined, value: T | null) {
+  if (typeof ref === 'function') {
+    ref(value);
+  } else if (ref && 'current' in ref) {
+    (ref as React.MutableRefObject<T | null>).current = value;
+  }
+}
+
+function useMergeRefs<T>(...refs: Array<React.ForwardedRef<T> | React.Ref<T> | undefined>) {
+  return useCallback(
+    (value: T | null) => {
+      refs.forEach((ref) => setRef(ref, value));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    refs
+  );
+}
 
 export type TooltipSide = 'top' | 'bottom' | 'left' | 'right';
 
@@ -43,67 +61,83 @@ function getPositionStyle(side: TooltipSide, rect: DOMRect): React.CSSProperties
   }
 }
 
-export function Tooltip({
-  content,
-  children,
-  side = 'top',
-  disabled = false,
-  delayHide = 0,
-}: TooltipProps) {
-  const [visible, setVisible] = useState(false);
-  const [rect, setRect] = useState<DOMRect | null>(null);
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
+  ({
+    content,
+    children,
+    side = 'top',
+    disabled = false,
+    delayHide = 0,
+    ...restProps
+  }, forwardedRef) => {
+    const [visible, setVisible] = useState(false);
+    const [rect, setRect] = useState<DOMRect | null>(null);
+    const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const { state, isMounted } = useAnimatedPresence({ visible, exitDurationMs: 120 });
+    const { state, isMounted } = useAnimatedPresence({ visible, exitDurationMs: 120 });
 
-  const clearHideTimer = useCallback(() => {
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = undefined;
-    }
-  }, []);
+    const clearHideTimer = useCallback(() => {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = undefined;
+      }
+    }, []);
 
-  useEffect(() => () => clearHideTimer(), [clearHideTimer]);
+    useEffect(() => () => clearHideTimer(), [clearHideTimer]);
 
-  if (disabled || !content) return children;
+    if (disabled || !content) return children;
 
-  const child = children as React.ReactElement<any>;
+    const child = children as React.ReactElement<any>;
 
-  const handleMouseEnter = (e: React.MouseEvent) => {
-    clearHideTimer();
-    setRect(e.currentTarget.getBoundingClientRect());
-    setVisible(true);
-    child.props.onMouseEnter?.(e);
-  };
+    const handleMouseEnter = (e: React.MouseEvent) => {
+      clearHideTimer();
+      setRect(e.currentTarget.getBoundingClientRect());
+      setVisible(true);
+      child.props.onMouseEnter?.(e);
+      (restProps as any).onMouseEnter?.(e);
+    };
 
-  const handleMouseLeave = (e: React.MouseEvent) => {
-    if (delayHide > 0) {
-      hideTimerRef.current = setTimeout(() => {
+    const handleMouseLeave = (e: React.MouseEvent) => {
+      if (delayHide > 0) {
+        hideTimerRef.current = setTimeout(() => {
+          setVisible(false);
+        }, delayHide);
+      } else {
         setVisible(false);
-      }, delayHide);
-    } else {
-      setVisible(false);
-    }
-    child.props.onMouseLeave?.(e);
-  };
+      }
+      child.props.onMouseLeave?.(e);
+      (restProps as any).onMouseLeave?.(e);
+    };
 
-  return (
-    <>
-      {React.cloneElement(child, {
-        onMouseEnter: handleMouseEnter,
-        onMouseLeave: handleMouseLeave,
-      })}
-      {isMounted && rect && createPortal(
-        <div
-          role="tooltip"
-          className={`${styles.tooltip} ${styles[side]} ${state === 'exiting' ? styles.tooltipExit : styles.tooltipEnter}`}
-          style={getPositionStyle(side, rect)}
-        >
-          <div className={styles.tooltipContent}>{content}</div>
-          <div className={styles.arrow} />
-        </div>,
-        document.body
-      )}
-    </>
-  );
-}
+    // 系统化修复：Tooltip 必须把自己收到的 props/ref 透传给子元素，
+    // 否则外部（如 UnifiedSelectPopover 通过 cloneElement 注入的 onClick/
+    // onPointerDown 事件）会被 Tooltip 截断，导致 Plus 下拉菜单等按钮点击无响应。
+    // 同时必须合并子元素自身的 ref 与本组件 forwardRef，避免 SettingsQuickMenu
+    // 等需要 btnRef 定位菜单的场景中 ref 被覆盖而失效。
+    const childRef = (child.props as any).ref ?? (child as any).ref;
+    const mergedRef = useMergeRefs(forwardedRef, childRef);
+
+    return (
+      <>
+        {React.cloneElement(child, {
+          ref: mergedRef,
+          ...restProps,
+          onMouseEnter: handleMouseEnter,
+          onMouseLeave: handleMouseLeave,
+        })}
+        {isMounted && rect && createPortal(
+          <div
+            role="tooltip"
+            className={`${styles.tooltip} ${styles[side]} ${state === 'exiting' ? styles.tooltipExit : styles.tooltipEnter}`}
+            style={getPositionStyle(side, rect)}
+          >
+            <div className={styles.tooltipContent}>{content}</div>
+            <div className={styles.arrow} />
+          </div>,
+          document.body
+        )}
+      </>
+    );
+  }
+);
+Tooltip.displayName = 'Tooltip';

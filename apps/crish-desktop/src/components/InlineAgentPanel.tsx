@@ -5,7 +5,7 @@
  * - 打开详情只走 openAgentInSidePanel（侧栏 only，永不 setActiveAgentId / 新窗口）
  * - 开面板前用 planOpenAgentInSidePanel 纯规划（空 id reject；reuse 感知）
  * - 输入区 ComposerField dense + maxLines=3，壳与侧栏 AgentCard 同轨
- * - 运行中可停止：折叠头 / 工具条 / Composer 停止钮共用 handleStop
+ * - 运行中可停止：折叠头 / 工具条 / Composer 默认 Stop=L2；Composer Force=L3 onForceStop
  * - 卸载安全：取消 follow-up 流，迟到 setState 不写回
  */
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -13,14 +13,13 @@ import { ChevronRight } from 'lucide-react';
 import * as Lucide from 'lucide-react';
 import type { SessionAgent } from '../store/layoutStore';
 import styles from './InlineAgentPanel.module.css';
-import DOMPurify from 'dompurify';
 import {
   selectActiveAgentId,
   selectPanelAgentId,
   useSessionField,
 } from '../store/sessionStore';
 import { buildAssistantTimeline } from '../api/toolPresentation';
-import { parseMarkdownToHtml, stripThoughtPlaceholders } from '../api/markdownRender';
+import { stripThoughtPlaceholders } from '../api/markdownRenderLite';
 import {
   normalizeAgentPanelAgentId,
   openAgentInSidePanel,
@@ -30,11 +29,13 @@ import {
   resolveAgentPanelTitle,
   shouldReuseAgentPanelFocus,
 } from '../api/openAgentPanel';
+import { Priority } from '../workers';
 import { ComposerField } from './ChatComposer';
 import { ChatToolStack } from './ChatToolCallBlock';
+import { AsyncMarkdownBlock } from './chat-message-row/AsyncMarkdownBlock';
 import { useAgentPanel } from '../hooks/useAgentStream';
 import { useAgentToolApproval } from '../hooks/useAgentToolApproval';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 
 /** 内联 denser：比主列 / 侧栏默认 4 行再收一行，避免时间线被撑爆 */
 const INLINE_COMPOSER_MAX_LINES = 3;
@@ -101,6 +102,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
   const {
     handleSend,
     handleStop,
+    handleForceStop,
     sending,
     stopping,
     expandedTools,
@@ -366,31 +368,44 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                         <SubagentThinkingFold thinkingText={msg.thinking} isLive={running} />
                       ) : null}
                       {(() => {
+                        // Stream = plain text (no per-token HTML). Completed = Rust async.
+                        const isStreamingMsg =
+                          msg.status === 'processing' || msg.status === 'queued';
+                        const mdPriority = isStreamingMsg
+                          ? Priority.Normal
+                          : Priority.High;
                         const timeline = buildAssistantTimeline(msg);
                         if (!timeline.length && (msg.text || '').trim()) {
+                          const fallback = stripThoughtPlaceholders(msg.text || '');
+                          if (!fallback.trim()) return null;
                           return (
-                            <div
-                              className="msg-assistant-text md-rendered"
-                              dangerouslySetInnerHTML={{
-                                __html: DOMPurify.sanitize(parseMarkdownToHtml(
-                                  stripThoughtPlaceholders(msg.text || ''),
-                                )),
-                              }}
-                            />
+                            <div className="msg-assistant-text">
+                              <AsyncMarkdownBlock
+                                text={fallback}
+                                isStreaming={isStreamingMsg}
+                                priority={mdPriority}
+                              />
+                            </div>
                           );
                         }
+                        const textItems = timeline.filter((i) => i.kind === 'text');
+                        const lastTextKey = textItems.length
+                          ? textItems[textItems.length - 1]!.key
+                          : null;
                         return timeline.map((item) => {
                           if (item.kind === 'text') {
                             const body = stripThoughtPlaceholders(item.content || '');
                             if (!body.trim()) return null;
+                            const streaming =
+                              isStreamingMsg && item.key === lastTextKey;
                             return (
-                              <div
-                                key={item.key}
-                                className="msg-timeline-text msg-assistant-text md-rendered"
-                                dangerouslySetInnerHTML={{
-                                  __html: DOMPurify.sanitize(parseMarkdownToHtml(body)),
-                                }}
-                              />
+                              <div key={item.key} className="msg-timeline-text">
+                                <AsyncMarkdownBlock
+                                  text={body}
+                                  isStreaming={streaming}
+                                  priority={mdPriority}
+                                />
+                              </div>
                             );
                           }
                           return (
@@ -442,6 +457,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
               setIsComposing={setIsComposing}
               isProcessing={running}
               onStop={() => handleStop(live.summary)}
+              onForceStop={() => handleForceStop(live.summary)}
               processingSendLabel="发送"
               maxLines={INLINE_COMPOSER_MAX_LINES}
               placeholder={

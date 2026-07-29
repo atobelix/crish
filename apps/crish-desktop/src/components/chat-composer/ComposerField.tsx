@@ -1,13 +1,27 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from '../ChatComposer.module.css';
-import { Tooltip } from '../settings/SettingsUI';
+import { Tooltip } from '../Tooltip';
 import {
   COMPOSER_DENSE_LINE_HEIGHT,
   COMPOSER_LINE_HEIGHT,
   COMPOSER_MAX_LINES,
   useAutoGrowTextarea,
 } from '../../hooks/useAutoGrowTextarea';
+
+/**
+ * Stop UX 文案（产品：默认 Stop = L2 cooperative；Force = L3 force_cancel）。
+ * 用 Tooltip content / aria-label，禁止 native title=（避免双提示）。
+ */
+export const STOP_TOOLTIP =
+  '停止生成（协作停止）。Shift+点击或长按：强制取消';
+export const STOP_ARIA_LABEL =
+  '停止生成（协作停止）。Shift+点击或长按可强制取消';
+/** 强制取消二次确认文案（L3） */
+export const FORCE_CANCEL_CONFIRM =
+  '强制取消将立即中断模型与工具，未完成结果可能丢失。确定强制取消？';
+/** 长按 Stop → L3 的毫秒阈值 */
+export const FORCE_STOP_LONG_PRESS_MS = 550;
 
 /** 与主对话同款输入壳：input-container + 发送钮 + 自动增高（默认 ≤4 行滚动） */
 export type ComposerFieldProps = {
@@ -21,7 +35,13 @@ export type ComposerFieldProps = {
   setIsComposing: (v: boolean) => void;
   /** 流式/子 agent 运行中：显示发送（或排队）+ 停止 */
   isProcessing?: boolean | undefined;
+  /** 默认 Stop = L2 cooperative_stop（单击） */
   onStop?: (() => void) | undefined;
+  /**
+   * 强制取消 = L3 force_cancel（Shift+点击 / 长按，二次确认后）。
+   * 未传时 Shift+点击 / 长按会在确认后回落 onStop（过渡期）。
+   */
+  onForceStop?: (() => void) | undefined;
   /** 处理中时主按钮文案。主对话默认「排队」；子 agent 续聊用「发送」。 */
   processingSendLabel?: string | undefined;
   /** 处理中时的占位提示（中文） */
@@ -66,6 +86,7 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
   setIsComposing,
   isProcessing,
   onStop,
+  onForceStop,
   processingSendLabel = '排队',
   processingPlaceholder,
   onPaste,
@@ -94,6 +115,64 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
     lines,
   );
   const lineHeightToken = dense ? COMPOSER_DENSE_LINE_HEIGHT : COMPOSER_LINE_HEIGHT;
+
+  // 长按 Stop → L3 force（与 Shift+点击同源）
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = useRef(false);
+
+  const clearLongPress = useCallback(() => {
+    if (longPressTimerRef.current != null) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearLongPress(), [clearLongPress]);
+
+  /** @returns 是否已真正执行 force（用户确认后） */
+  const invokeForceStop = useCallback((): boolean => {
+    const run = onForceStop ?? onStop;
+    if (!run) return false;
+    if (typeof window !== 'undefined' && !window.confirm(FORCE_CANCEL_CONFIRM)) {
+      return false;
+    }
+    run();
+    return true;
+  }, [onForceStop, onStop]);
+
+  const handleStopClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (!onStop) return;
+      // 长按已触发 force 时忽略 mouseup 后的 click
+      if (longPressFiredRef.current) {
+        longPressFiredRef.current = false;
+        e.preventDefault();
+        return;
+      }
+      // Shift+点击 = L3 force_cancel（二次确认）
+      if (e.shiftKey) {
+        e.preventDefault();
+        invokeForceStop();
+        return;
+      }
+      // 默认单击 = L2 cooperative_stop
+      onStop();
+    },
+    [onStop, invokeForceStop]
+  );
+
+  const handleStopPointerDown = useCallback(() => {
+    if (!onStop) return;
+    longPressFiredRef.current = false;
+    clearLongPress();
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTimerRef.current = null;
+      // 仅确认后吞掉后续 click；用户取消确认仍可单击 L2
+      if (invokeForceStop()) {
+        longPressFiredRef.current = true;
+      }
+    }, FORCE_STOP_LONG_PRESS_MS);
+  }, [onStop, clearLongPress, invokeForceStop]);
 
   // autoFocus 挂载后字体/布局可能尚未稳定，再量一次避免首帧单行假矮
   useEffect(() => {
@@ -153,6 +232,7 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
         id={textAreaId}
         ref={taRef}
         className={styles.textarea}
+        data-testid="chat-input"
         placeholder={resolvedPlaceholder}
         rows={1}
         value={value}
@@ -225,14 +305,20 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
               </button>
             </Tooltip>
             {onStop ? (
-              <Tooltip content="停止生成">
+              <Tooltip content={STOP_TOOLTIP}>
                 <button
                   type="button"
                   className={`${styles.sendBtn} ${styles.stop}`}
-                  aria-label="停止生成"
-                  onClick={onStop}
+                  data-testid="composer-stop"
+                  data-stop-level="l2"
+                  aria-label={STOP_ARIA_LABEL}
+                  onClick={handleStopClick}
+                  onPointerDown={handleStopPointerDown}
+                  onPointerUp={clearLongPress}
+                  onPointerLeave={clearLongPress}
+                  onPointerCancel={clearLongPress}
                 >
-                  <Lucide.Square size={16} fill="currentColor" />
+                  <Lucide.Square size={16} fill="currentColor" aria-hidden />
                 </button>
               </Tooltip>
             ) : null}

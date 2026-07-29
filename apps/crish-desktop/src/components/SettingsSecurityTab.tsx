@@ -9,8 +9,8 @@ import {
   SettingsSection,
   SettingsCard,
   SettingsRow,
-  Tooltip,
 } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import { useLayoutStore } from '../store/layoutStore';
 import { getWorkspacePath, listProjects } from '../api/projectStore';
 import {
@@ -221,7 +221,11 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                 return (
                   <SettingsRow
                     key={path}
-                    title={<span className="settings-path-ellipsis" title={path}>{leaf}</span>}
+                    title={
+                      <Tooltip content={path}>
+                        <span className="settings-path-ellipsis">{leaf}</span>
+                      </Tooltip>
+                    }
                     desc={<span className="settings-security-path">{path}</span>}
                   />
                 );

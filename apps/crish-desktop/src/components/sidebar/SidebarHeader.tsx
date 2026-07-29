@@ -20,6 +20,10 @@ export interface SidebarHeaderProps {
   onSearchChange?: ((val: string) => void) | undefined;
 }
 
+/**
+ * 左栏工具区（LeftToolRegion）：新建/定时/搜索。
+ * 折叠入口仅在 AbsoluteTopBar（PR-1 / K3），此处不再放第二颗折叠钮。
+ */
 export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
   ({
     sidebarBehavior,

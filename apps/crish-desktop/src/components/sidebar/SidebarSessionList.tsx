@@ -56,13 +56,14 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
     renderSessionItem,
     toggleExpandedProjectFolder,
     toggleShowAllGeneralSessions,
+    listClassName,
   } = useSidebarSessionList(props);
 
   return (
     <NowTickContext.Provider value={nowTick}>
       <div
         ref={sessionListRef}
-        className={styles.listScroll}
+        className={`${styles.listScroll}${listClassName ? ` ${listClassName}` : ''}`}
         data-shell-hidden={shellHiddenCount}
         data-session-input={inputListedCount}
         data-session-visible={visibleSessions.length}

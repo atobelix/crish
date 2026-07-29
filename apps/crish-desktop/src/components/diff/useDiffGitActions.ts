@@ -56,7 +56,7 @@ export function useDiffGitActions({
 
   const loadBranches = useCallback(async () => {
     try {
-      const res = await fetchGitBranches(sessionWorkspacePath);
+      const res = await fetchGitBranches(sessionWorkspacePath ?? '');
       setBranches(res.list);
       setCurrentBranch(res.current);
     } catch {
@@ -162,7 +162,7 @@ export function useDiffGitActions({
     setPanelErr('');
     dismissSoftHint();
     try {
-      const res = await switchGitBranch(undefined, branch);
+      const res = await switchGitBranch(sessionWorkspacePath ?? '', branch);
       if (!res.ok) {
         toastFail(res.error || '切换分支失败');
         await loadBranches();
@@ -188,7 +188,7 @@ export function useDiffGitActions({
     setPanelErr('');
     dismissSoftHint();
     try {
-      const res = await commitGitChanges(undefined, msg, stagedCount > 0);
+      const res = await commitGitChanges(sessionWorkspacePath ?? '', msg, stagedCount > 0);
       if (!res.ok) {
         toastFail(res.error || '提交失败');
         return;
@@ -208,7 +208,7 @@ export function useDiffGitActions({
     setPanelErr('');
     dismissSoftHint();
     try {
-      const res = await pushGitChanges();
+      const res = await pushGitChanges(sessionWorkspacePath ?? '');
       if (!res.ok) {
         toastFail(res.error || '推送失败');
         return;
@@ -225,7 +225,7 @@ export function useDiffGitActions({
     setStagingPaths((prev) => ({ ...prev, [filePath]: true }));
     setDiffFiles((prev) => prev.map((f) => (f.filePath === filePath ? { ...f, staged: true, unstaged: false } : f)));
     try {
-      const res = await stageGitPath(undefined, filePath);
+      const res = await stageGitPath(sessionWorkspacePath ?? '', filePath);
       if (!res.ok) {
         toastFail(res.error || '暂存失败');
         await loadFromGit();
@@ -244,7 +244,7 @@ export function useDiffGitActions({
     setStagingPaths((prev) => ({ ...prev, [filePath]: true }));
     setDiffFiles((prev) => prev.map((f) => (f.filePath === filePath ? { ...f, staged: false, unstaged: true } : f)));
     try {
-      const res = await unstageGitPath(undefined, filePath);
+      const res = await unstageGitPath(sessionWorkspacePath ?? '', filePath);
       if (!res.ok) {
         toastFail(res.error || '取消暂存失败');
         await loadFromGit();
@@ -263,7 +263,7 @@ export function useDiffGitActions({
     const name = filePath.replace(/^.*[\\/]/, '') || filePath;
     if (!window.confirm(`确定要放弃对 "${name}" 的所有本地未暂存修改吗？此操作不可逆。`)) return;
     try {
-      const res = await discardGitPath(undefined, filePath);
+      const res = await discardGitPath(sessionWorkspacePath ?? '', filePath);
       if (!res.ok) toastFail(res.error || '放弃修改失败');
       else await loadFromGit();
     } catch (err) {
@@ -274,7 +274,7 @@ export function useDiffGitActions({
   const handleStageAll = async () => {
     setDiffFiles((prev) => prev.map((f) => ({ ...f, staged: true, unstaged: false })));
     try {
-      const res = await stageAllGit();
+      const res = await stageAllGit(sessionWorkspacePath ?? '');
       if (!res.ok) {
         toastFail(res.error || '暂存全部失败');
         await loadFromGit();
@@ -290,7 +290,7 @@ export function useDiffGitActions({
   const handleUnstageAll = async () => {
     setDiffFiles((prev) => prev.map((f) => ({ ...f, staged: false, unstaged: true })));
     try {
-      const res = await unstageAllGit();
+      const res = await unstageAllGit(sessionWorkspacePath ?? '');
       if (!res.ok) {
         toastFail(res.error || '取消暂存全部失败');
         await loadFromGit();

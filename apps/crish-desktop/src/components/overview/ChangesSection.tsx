@@ -125,7 +125,7 @@ export const ChangesSection = React.memo(function ChangesSection({
             <>
               <ul className={styles.list} aria-label="对话改动文件">
                 {(showAllFiles ? convoFiles : convoFiles.slice(0, 8)).map((f) => {
-                  const statusColor = f.additions > 0 ? 'var(--accent-green, #22c55e)' : 'var(--accent-orange, #f97316)';
+                  const statusColor = f.additions > 0 ? 'var(--accent-green)' : 'var(--accent-orange)';
                   return (
                     <li key={f.filePath}>
                       <button type="button" className={styles.itemBtn}

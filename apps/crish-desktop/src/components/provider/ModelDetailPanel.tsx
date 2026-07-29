@@ -1,5 +1,5 @@
 import React from "react";
-import type { ModelMeta } from "../../store/provider/types";
+import type { ModelCap, ModelMeta } from "../../store/provider/types";
 import styles from "./ModelDetailPanel.module.css";
 
 interface ModelDetailPanelProps {
@@ -33,7 +33,7 @@ export function ModelDetailPanel({ model }: ModelDetailPanelProps) {
           <h4>能力</h4>
           <div className={styles.capabilityGrid}>
             {allCapabilities.map(cap => {
-              const enabled = model.capabilities?.includes(cap);
+              const enabled = model.capabilities?.includes(cap as ModelCap);
               const labels: Record<string, string> = {
                 tool_call: "工具调用",
                 vision: "视觉",

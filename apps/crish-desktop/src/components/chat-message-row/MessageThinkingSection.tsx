@@ -2,11 +2,11 @@ import React from 'react';
 import { ChevronRight } from 'lucide-react';
 import styles from '../ChatMessageRow.module.css';
 import { thinkingFoldAria } from './chatMessageRowUtils';
+import { ThinkingTimer } from './ThinkingTimer';
 
 export interface MessageThinkingSectionProps {
   showThinking: boolean;
   isThinkingMsg: boolean;
-  thinkingSeconds: number;
   thinkingText: string;
   thinkingBodyId: string;
   thinkingOpen: boolean;
@@ -17,7 +17,6 @@ export interface MessageThinkingSectionProps {
 export const MessageThinkingSection: React.FC<MessageThinkingSectionProps> = ({
   showThinking,
   isThinkingMsg,
-  thinkingSeconds,
   thinkingBodyId,
   thinkingOpen,
   setThinkingOpen,
@@ -62,10 +61,7 @@ export const MessageThinkingSection: React.FC<MessageThinkingSectionProps> = ({
         <span className={styles.thinkingFoldLabel}>
           {isThinkingMsg ? '思考中' : '思考'}
           {isThinkingMsg ? (
-            <span className={styles.thinkingSec}>
-              {' '}
-              · {thinkingSeconds}s
-            </span>
+            <ThinkingTimer isLive />
           ) : thinkingBudget.truncated && thinkingBodyOpen ? (
             <span className={styles.thinkingSec}> · 已截断</span>
           ) : null}

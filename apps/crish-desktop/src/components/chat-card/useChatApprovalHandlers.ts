@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { SessionMessage } from '../../store/layoutStore';
-import { getSessionById, type AgentStoreItem } from '../../store/sessionStore';
+import { getSessionById, type SessionAgent } from '../../store/sessionStore';
 import {
   addCommandPermission,
   updateMessageToolCall,
@@ -18,7 +18,7 @@ import type { ShowToastFn } from '../../hooks/useToastQueue';
 export interface UseChatApprovalHandlersOptions {
   activeSessionId: string | null;
   messages: SessionMessage[];
-  agents: AgentStoreItem[];
+  agents: SessionAgent[];
   onShowToast: ShowToastFn;
 }
 

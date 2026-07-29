@@ -16,7 +16,8 @@ import {
   uiFontOptions,
 } from '../api/fontStore';
 import { SettingsSelect, type SettingsSelectOption } from './SettingsSelect';
-import { SettingsRow, Tooltip } from './settings/SettingsUI';
+import { SettingsRow } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import styles from './FontSettingsSection.module.css';
 
 interface Props {

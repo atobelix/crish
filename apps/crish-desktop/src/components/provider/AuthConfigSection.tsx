@@ -20,13 +20,13 @@ export function AuthConfigSection({ auth, expanded, onToggle }: AuthConfigSectio
         <div className={styles.sectionBody}>
           <div className={styles.formRow}>
             <label className={styles.label}>认证方式</label>
-            <select className={styles.select} value={auth.type} disabled>
+            <select className={styles.select} value={auth.mode} disabled>
               <option value="api_key">API Key</option>
               <option value="oauth2">OAuth 2.0</option>
               <option value="none">无需认证</option>
             </select>
           </div>
-          {auth.type === 'api_key' && (
+          {auth.mode === 'api_key' && (
             <div className={styles.formRow}>
               <label className={styles.label}>API Key</label>
               <div className={styles.input} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -37,15 +37,15 @@ export function AuthConfigSection({ auth, expanded, onToggle }: AuthConfigSectio
               </div>
             </div>
           )}
-          {auth.type === 'oauth2' && (
+          {auth.mode === 'oauth2' && (
             <>
               <div className={styles.formRow}>
                 <label className={styles.label}>Client ID</label>
-                <input className={styles.input} type="text" value={auth.oauthClientId || ''} readOnly />
+                <input className={styles.input} type="text" value={auth.oauth2?.clientId || ''} readOnly />
               </div>
               <div className={styles.formRow}>
                 <label className={styles.label}>授权端点</label>
-                <input className={styles.input} type="url" value={auth.oauthTokenUrl || ''} readOnly />
+                <input className={styles.input} type="url" value={auth.oauth2?.tokenUrl || ''} readOnly />
               </div>
             </>
           )}

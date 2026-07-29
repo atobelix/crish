@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 
 interface DiffCardGitActionsProps {
   open: boolean;

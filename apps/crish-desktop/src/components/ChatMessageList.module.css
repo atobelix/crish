@@ -1,16 +1,27 @@
+/* 全宽滚动容器：滚动条贴在 chat 面板右缘，不贴消息列 */
 .list {
   width: 100%;
-  max-width: min(var(--chat-col-max, 760px), 100%);
+  max-width: none;
   min-width: 0;
+  margin: 0;
+  align-self: stretch;
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* 消息列：与 footer .chatCol 同 max-width / 水平 padding */
+.listInner {
+  width: 100%;
+  max-width: min(var(--chat-col-max, 760px), 100%);
   margin-left: auto;
   margin-right: auto;
-  align-self: center;
+  padding: 20px 20px 16px;
   box-sizing: border-box;
-  overflow-y: auto;
-  position: relative;
-  min-height: 0;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 120px;
+  min-width: 0;
 }
 
 .pinnedBar {
@@ -18,7 +29,7 @@
   top: 0;
   z-index: var(--z-pinned-bar);
   width: 100%;
-  max-width: min(var(--chat-col-max, 760px), 100%);
+  max-width: none;
   border: var(--hairline-width, 1px) solid
     var(--hairline, var(--border-subtle, var(--border-color)));
   border-radius: var(--radius-md);
@@ -134,19 +145,13 @@
 }
 
 @media (max-width: 720px) {
-  .list {
-    max-width: 100%;
-  }
-  .pinnedBar {
+  .listInner {
     max-width: 100%;
   }
 }
 
 @media (min-width: 1200px) {
-  .list {
-    max-width: min(var(--chat-col-max-wide, 840px), 100%);
-  }
-  .pinnedBar {
+  .listInner {
     max-width: min(var(--chat-col-max-wide, 840px), 100%);
   }
 }

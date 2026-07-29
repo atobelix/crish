@@ -5,7 +5,6 @@ import { ExternalLink, X } from 'lucide-react';
 import { openPathDefault, pathBasename } from '../../api/workspaceFsApi';
 import { highlightCode, langFromFilename } from '../../api/codeHighlight';
 import { useAsyncMarkdownHtml } from '../../api/markdownRenderAsync';
-import DOMPurify from 'dompurify';
 import { addPendingFileAnnotation, countPendingFileAnnotations, parseCsvPreview } from '../../api/workspaceFsApi';
 import { FileEditor } from './FileEditor';
 import type { ViewMode } from './hooks/useFilePreview';
@@ -139,7 +138,7 @@ export const FilePreview = React.memo(function FilePreview({
           ) : isMd && mdMode === 'render' ? (
             <div className={styles.filesMdWrap}>
               <div className={`${styles.filesMdBody} md-rendered msg-assistant-text`}
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(mdHtml) }}
+                dangerouslySetInnerHTML={{ __html: mdHtml }}
               />
               {canLoadMore ? (
                 <button type="button" className={styles.filesLoadMore} disabled={loadingMore} onClick={onLoadMore}>
@@ -152,7 +151,7 @@ export const FilePreview = React.memo(function FilePreview({
               <pre ref={textRef} className={`${styles.filesTextPre} hljs`}
                 onMouseUp={onTextSelect} onKeyUp={onTextSelect}
                 dangerouslySetInnerHTML={{
-                  __html: DOMPurify.sanitize(highlightCode(content || '（空文件）', langFromFilename(selected || '')) || ''),
+                  __html: highlightCode(content || '（空文件）', langFromFilename(selected || '')) || '',
                 }}
               />
               {canLoadMore ? (

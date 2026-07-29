@@ -1,11 +1,11 @@
 import React from 'react';
 import type { SessionState } from '../../../store/layoutStore';
 import { GENERAL_FOLDER } from '../../../api/projectStore';
-import { enterDraftMode } from '../../../api/storeAccess';
+import { emitUiEvent } from '../../../api/uiEvents';
+import { getCompositionRoot } from '../../../app/compositionRoot';
 import type { SessionListWindowRange } from '../../../api/sessionListWindow';
 import { WindowedSessionUl } from './WindowedSessionUl';
-import { DragReorderSection } from './DragReorderSection';
-import { Tooltip } from '../../settings/SettingsUI';
+import { Tooltip } from '../../Tooltip';
 import styles from '../SidebarSessionList.module.css';
 import { ChevronDown, ChevronsUpDown, MessageCirclePlus } from 'lucide-react';
 
@@ -19,6 +19,7 @@ export interface GeneralSectionProps {
   onToggleGeneral: () => void;
   onSortBtnClick: (e: React.MouseEvent) => void;
   onToggleShowAllGeneralSessions: () => void;
+  /** Kept for SidebarSessionList API; reorder is pointer drop-only via SessionRow. */
   onMoveSessionRealtime: (
     sessionId: string,
     targetSessionId: string | null,
@@ -38,9 +39,15 @@ export function GeneralSection({
   onToggleGeneral,
   onSortBtnClick,
   onToggleShowAllGeneralSessions,
-  onMoveSessionRealtime,
+  onMoveSessionRealtime: _onMoveSessionRealtime,
   renderSessionItem,
 }: GeneralSectionProps) {
+  void _onMoveSessionRealtime;
+  const visibleSessions =
+    showAllGeneralSessions || generalSessions.length <= 10
+      ? generalSessions
+      : generalSessions.slice(0, 10);
+
   return (
     <section className={styles.section} aria-label="对话">
       <div
@@ -88,7 +95,8 @@ export function GeneralSection({
               aria-label="新建常规对话"
               onClick={(e) => {
                 e.stopPropagation();
-                enterDraftMode(GENERAL_FOLDER);
+                getCompositionRoot().shell.openNewDraftTab(GENERAL_FOLDER);
+                emitUiEvent('open-chat');
               }}
             >
               <MessageCirclePlus
@@ -103,17 +111,18 @@ export function GeneralSection({
       <div
         className={styles.accordionWrapper}
         data-expanded={!generalCollapsed ? 'true' : 'false'}
+        hidden={generalCollapsed || undefined}
       >
-        <div className={styles.accordionInner}>
+        <div
+          className={styles.accordionInner}
+          data-drop-zone="general"
+          data-folder-name={GENERAL_FOLDER}
+        >
           {generalSessions.length > 0 ? (
             <>
               {generalWindowEnabled ? (
                 <WindowedSessionUl
-                  sessions={
-                    showAllGeneralSessions || generalSessions.length <= 10
-                      ? generalSessions
-                      : generalSessions.slice(0, 10)
-                  }
+                  sessions={visibleSessions}
                   range={generalRenderRange}
                   listRef={generalListRef}
                   className={`${styles.pinnedList} ${styles.folderSessions}`}
@@ -127,18 +136,10 @@ export function GeneralSection({
                   aria-label="对话列表"
                   data-windowed="0"
                   data-window-count={generalSessions.length}
+                  data-drop-zone="general"
+                  data-folder-name={GENERAL_FOLDER}
                 >
-                  <DragReorderSection
-                    sessions={
-                      showAllGeneralSessions ||
-                      generalSessions.length <= 10
-                        ? generalSessions
-                        : generalSessions.slice(0, 10)
-                    }
-                    folderName={GENERAL_FOLDER}
-                    onMoveSessionRealtime={onMoveSessionRealtime}
-                    renderRow={(s) => renderSessionItem(s)}
-                  />
+                  {visibleSessions.map((s) => renderSessionItem(s))}
                 </ul>
               )}
               {generalSessions.length > 10 && !showAllGeneralSessions && (

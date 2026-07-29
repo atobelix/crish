@@ -87,7 +87,7 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
     const walk = (list: FsDirEntry[], depth: number) => {
       for (const e of list) {
         out.push({ ...e, depth });
-        if (e.isDir && expanded[e.path]) walk(expanded[e.path], depth + 1);
+        if (e.isDir && expanded[e.path]) walk(expanded[e.path] ?? [], depth + 1);
       }
     };
     walk(entries, 0);
@@ -105,7 +105,7 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
       const data = (ev as CustomEvent<GitStatusFile[]>).detail;
       if (data) buildMap(data);
     };
-    const fromWindow = (window as any).__crish_git_status;
+    const fromWindow = window.__crish_git_status as GitStatusFile[] | undefined;
     if (fromWindow) buildMap(fromWindow);
     window.addEventListener('crish-git-status-changed', onGitUpdate);
     void fetchGitStatus().then((r) => {

@@ -198,5 +198,5 @@
 /* eco: disable overlay glass */
 :global([data-perf-tier='eco']) .cheatsheetOverlay {
   backdrop-filter: none;
-  background: color-mix(in srgb, var(--bg-overlay, #000) 65%, transparent);
+  background: color-mix(in srgb, var(--bg-overlay) 65%, transparent);
 }

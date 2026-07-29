@@ -1,6 +1,5 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
-import DOMPurify from 'dompurify';
 import { revealSkillPath, type DesktopSkill, type SkillActivation } from '../../api/skillsApi';
 import { Tooltip } from '../Tooltip';
 import styles from '../SkillsSettingsTab.module.css';
@@ -46,9 +45,11 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
           <div className={`${styles.skillsDetailTop} skills-detail-top`}>
             <div className={`${styles.skillsDetailMain} skills-detail-main`}>
               <div className={`${styles.skillsDetailNameRow} skills-detail-name-row`}>
-                <div className={`${styles.skillsDetailName} skills-detail-name`} title={selected.name}>
-                  {selected.name}
-                </div>
+                <Tooltip content={selected.name}>
+                  <div className={`${styles.skillsDetailName} skills-detail-name`}>
+                    {selected.name}
+                  </div>
+                </Tooltip>
                 <div className={`${styles.skillsDetailMeta} skills-detail-meta`}>
                   <span className={`${styles.skillsScope} skills-scope`}>
                     {scopeGroupLabel(selected.scope, activeScopeProjectName)}
@@ -69,9 +70,11 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
                 </div>
               </div>
               <div className={`${styles.skillsDetailCmdRow} skills-detail-cmd-row`}>
-                <code className="settings-kbd" title={selectedSlash}>
-                  {selectedSlash}
-                </code>
+                <Tooltip content={selectedSlash}>
+                  <code className="settings-kbd">
+                    {selectedSlash}
+                  </code>
+                </Tooltip>
                 <Tooltip content="复制斜杠命令">
                   <button
                     type="button"
@@ -82,9 +85,11 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
                     <Lucide.Copy size={14} aria-hidden />
                   </button>
                 </Tooltip>
-                <span className={`${styles.skillsPathInline} skills-path-inline`} title={selected.filePath}>
-                  {selected.filePath}
-                </span>
+                <Tooltip content={selected.filePath}>
+                  <span className={`${styles.skillsPathInline} skills-path-inline`}>
+                    {selected.filePath}
+                  </span>
+                </Tooltip>
                 <Tooltip content="在文件管理器中打开位置">
                   <button
                     type="button"
@@ -143,7 +148,7 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
           ) : (
             <div
               className={`${styles.skillsPreview} skills-preview md-rendered msg-assistant-text`}
-              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml) }}
+              dangerouslySetInnerHTML={{ __html: previewHtml }}
               aria-label="技能预览"
             />
           )}

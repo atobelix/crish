@@ -7,6 +7,8 @@ export const SIDEBAR_RESIZE_STEP = 12;
 export const SIDEBAR_RESIZE_STEP_LARGE = 24;
 
 export const SIDEBAR_LIST_PREFS_KEY = 'crish_sidebar_list_prefs';
+/** 侧栏分区折叠状态（pinned / general / projects / 各 projectId） */
+export const SIDEBAR_SECTIONS_KEY = 'crish_sidebar_sections_v1';
 
 export type SortType = 'active' | 'name';
 export type GroupType = 'folder' | 'none';
@@ -18,10 +20,24 @@ export interface SidebarListPrefs {
   filterType: FilterType;
 }
 
+export interface SidebarSectionsState {
+  pinned: boolean;
+  general: boolean;
+  projects: boolean;
+  projectIds: Record<string, boolean>;
+}
+
 export const DEFAULT_LIST_PREFS: SidebarListPrefs = {
   sortType: 'active',
   groupType: 'folder',
   filterType: 'all',
+};
+
+export const DEFAULT_SECTIONS_STATE: SidebarSectionsState = {
+  pinned: false,
+  general: false,
+  projects: false,
+  projectIds: {},
 };
 
 export function loadSidebarListPrefs(): SidebarListPrefs {
@@ -45,6 +61,36 @@ export function loadSidebarListPrefs(): SidebarListPrefs {
     };
   } catch {
     return { ...DEFAULT_LIST_PREFS };
+  }
+}
+
+export function loadSidebarSectionsState(): SidebarSectionsState {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_SECTIONS_KEY);
+    if (!raw) return { ...DEFAULT_SECTIONS_STATE, projectIds: {} };
+    const parsed = JSON.parse(raw) as Partial<SidebarSectionsState>;
+    const projectIds =
+      parsed.projectIds &&
+      typeof parsed.projectIds === 'object' &&
+      !Array.isArray(parsed.projectIds)
+        ? (parsed.projectIds as Record<string, boolean>)
+        : {};
+    return {
+      pinned: Boolean(parsed.pinned),
+      general: Boolean(parsed.general),
+      projects: Boolean(parsed.projects),
+      projectIds,
+    };
+  } catch {
+    return { ...DEFAULT_SECTIONS_STATE, projectIds: {} };
+  }
+}
+
+export function saveSidebarSectionsState(state: SidebarSectionsState): void {
+  try {
+    localStorage.setItem(SIDEBAR_SECTIONS_KEY, JSON.stringify(state));
+  } catch {
+    /* ignore quota / private mode */
   }
 }
 

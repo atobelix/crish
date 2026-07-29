@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './PreviewCard.module.css';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import {
   canOpenExternally,
   clearPreviewHistory,

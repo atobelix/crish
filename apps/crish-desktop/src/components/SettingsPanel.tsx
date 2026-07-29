@@ -8,7 +8,7 @@ import {
   refreshProductCapabilities,
 } from '../api/capabilitiesStore';
 import { AppErrorBoundary } from './AppErrorBoundary';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import type { SettingsTabType } from '../store/types';
 import { useAnimatedPresence } from '../hooks/useAnimatedPresence';
 
@@ -118,7 +118,23 @@ const TAB_META: TabMeta[] = [
     label: '账户',
     icon: Lucide.User,
     group: '个人',
-    keywords: ['账户', '账号', '个人资料', '工作区', '导出', 'profile', 'account'],
+    keywords: [
+      '账户',
+      '账号',
+      '个人资料',
+      '工作区',
+      '导出',
+      '导入',
+      '外部对话',
+      'Claude',
+      'Codex',
+      'profile',
+      'account',
+      'UserView',
+      '投影',
+      'debug',
+      '调试',
+    ],
   },
   {
     id: 'appearance',

@@ -21,6 +21,7 @@ type Props = {
 export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
   const {
     profiles,
+    setProfiles,
     selectedId,
     setSelectedId,
     selected,
@@ -47,6 +48,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     confirmDeleteId,
     setConfirmDeleteId,
     refresh,
+    notify,
     saveKey,
     addFromTemplate,
     addFromPreset,
@@ -64,8 +66,6 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     activeProfileId,
     globalActiveModelId,
     addRef,
-    notify,
-    setProfiles,
   } = useModelsSettings(onShowToast);
 
   const headerMeta = (

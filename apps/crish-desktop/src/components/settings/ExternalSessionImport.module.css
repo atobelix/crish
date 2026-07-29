@@ -1,0 +1,221 @@
+.importRoot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.importRoots {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary, var(--bg-primary));
+}
+
+.importRootRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.importRootInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.importRootLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-secondary);
+}
+
+.importRootBadge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  color: var(--text-primary);
+}
+
+.importRootBadgeMuted {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-tertiary, transparent);
+  color: var(--text-tertiary);
+}
+
+.importRootPath {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.importRootBtns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  flex-shrink: 0;
+}
+
+.importActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.importHint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: var(--line-height-ui, 1.35);
+}
+
+.importStatus {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: var(--line-height-ui, 1.35);
+}
+
+.importError {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+  padding: 8px 10px;
+}
+
+.importListToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.importListMeta {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.importList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: min(280px, 40vh);
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
+}
+
+.importItem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+}
+
+.importItem:last-child {
+  border-bottom: none;
+}
+
+.importCheck {
+  margin-top: 2px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  accent-color: var(--text-primary);
+  cursor: pointer;
+}
+
+.importCheck:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 12%, transparent));
+  border-radius: 3px;
+}
+
+.importItemBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.importItemTitle {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium, 500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.importItemMeta {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.importItemSource {
+  color: var(--text-secondary);
+}
+
+.importEmpty {
+  padding: 14px 12px;
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.importFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* wizard 变体：略紧凑，贴合向导卡片（含自定义 roots 区） */
+.importRootWizard {
+  gap: var(--space-2);
+}
+
+.importRootWizard .importRoots {
+  padding: 8px 10px;
+}
+
+.importRootWizard .importList {
+  max-height: min(200px, 32vh);
+}
+
+.importRootWizard .importItem {
+  padding: 8px 10px;
+}

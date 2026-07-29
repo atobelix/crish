@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import DOMPurify from 'dompurify';
 import {
   addExtraSkillDir,
   createProjectSkill,
@@ -74,39 +73,157 @@ export function skillSlashCmd(name: string): string {
 
 
 export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
-  const [skills, setSkills] = useState<DesktopSkill[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [filter, setFilter] = useState('');
-  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>(SCOPE_ALL);
+  const [listState, setListState] = useState<{
+    skills: DesktopSkill[];
+    loading: boolean;
+    loadError: string | null;
+    selectedId: string | null;
+    fsOk: boolean;
+    enableCommands: boolean;
+  }>({
+    skills: [],
+    loading: true,
+    loadError: null,
+    selectedId: null,
+    fsOk: true,
+    enableCommands: true,
+  });
+
+  const skills = listState.skills;
+  const loading = listState.loading;
+  const loadError = listState.loadError;
+  const selectedId = listState.selectedId;
+  const fsOk = listState.fsOk;
+  const enableCommands = listState.enableCommands;
+
+  const setSkills = (val: React.SetStateAction<DesktopSkill[]>) =>
+    setListState((prev) => ({ ...prev, skills: typeof val === 'function' ? val(prev.skills) : val }));
+  const setLoading = (val: React.SetStateAction<boolean>) =>
+    setListState((prev) => ({ ...prev, loading: typeof val === 'function' ? val(prev.loading) : val }));
+  const setLoadError = (val: React.SetStateAction<string | null>) =>
+    setListState((prev) => ({ ...prev, loadError: typeof val === 'function' ? val(prev.loadError) : val }));
+  const setSelectedId = (val: React.SetStateAction<string | null>) =>
+    setListState((prev) => ({ ...prev, selectedId: typeof val === 'function' ? val(prev.selectedId) : val }));
+  const setFsOk = (val: React.SetStateAction<boolean>) =>
+    setListState((prev) => ({ ...prev, fsOk: typeof val === 'function' ? val(prev.fsOk) : val }));
+  const setEnableCommands = (val: React.SetStateAction<boolean>) =>
+    setListState((prev) => ({ ...prev, enableCommands: typeof val === 'function' ? val(prev.enableCommands) : val }));
+
+  const [filterState, setFilterState] = useState<{
+    filter: string;
+    scopeFilter: ScopeFilter;
+    scopeProjects: ReturnType<typeof listSettingsScopeProjects>;
+    extraDir: string;
+    extraDirs: string[];
+  }>(() => ({
+    filter: '',
+    scopeFilter: SCOPE_ALL,
+    scopeProjects: listSettingsScopeProjects(),
+    extraDir: '',
+    extraDirs: (() => {
+      try {
+        return getExtraSkillDirs();
+      } catch {
+        return [];
+      }
+    })(),
+  }));
+
+  const filter = filterState.filter;
+  const scopeFilter = filterState.scopeFilter;
+  const scopeProjects = filterState.scopeProjects;
+  const extraDir = filterState.extraDir;
+  const extraDirs = filterState.extraDirs;
+
   const scopeFilterRef = useRef(scopeFilter);
   scopeFilterRef.current = scopeFilter;
-  const [scopeProjects, setScopeProjects] = useState(() => listSettingsScopeProjects());
-  const [extraDir, setExtraDir] = useState('');
-  const [extraDirs, setExtraDirs] = useState<string[]>(() => {
-    try {
-      return getExtraSkillDirs();
-    } catch {
-      return [];
-    }
+
+  const setFilter = (val: React.SetStateAction<string>) =>
+    setFilterState((prev) => ({ ...prev, filter: typeof val === 'function' ? val(prev.filter) : val }));
+  const setScopeFilter = (val: React.SetStateAction<ScopeFilter>) =>
+    setFilterState((prev) => ({ ...prev, scopeFilter: typeof val === 'function' ? val(prev.scopeFilter) : val }));
+  const setScopeProjects = (val: React.SetStateAction<ReturnType<typeof listSettingsScopeProjects>>) =>
+    setFilterState((prev) => ({ ...prev, scopeProjects: typeof val === 'function' ? val(prev.scopeProjects) : val }));
+  const setExtraDir = (val: React.SetStateAction<string>) =>
+    setFilterState((prev) => ({ ...prev, extraDir: typeof val === 'function' ? val(prev.extraDir) : val }));
+  const setExtraDirs = (val: React.SetStateAction<string[]>) =>
+    setFilterState((prev) => ({ ...prev, extraDirs: typeof val === 'function' ? val(prev.extraDirs) : val }));
+
+  const [actionState, setActionState] = useState<{
+    busyId: string | null;
+    showRaw: boolean;
+    createMode: 'none' | 'paths' | 'manual';
+    createName: string;
+    createDesc: string;
+    createBusy: boolean;
+    syncBusy: boolean;
+    batchBusy: boolean;
+    discoverBusy: boolean;
+    batchConfirm: 'enabled' | 'disabled' | null;
+    discoverCandidates: DesktopSkill[] | null;
+    discoverPick: Record<string, boolean>;
+    moreOpen: boolean;
+    extraOpen: boolean;
+  }>({
+    busyId: null,
+    showRaw: false,
+    createMode: 'none',
+    createName: '',
+    createDesc: '',
+    createBusy: false,
+    syncBusy: false,
+    batchBusy: false,
+    discoverBusy: false,
+    batchConfirm: null,
+    discoverCandidates: null,
+    discoverPick: {},
+    moreOpen: false,
+    extraOpen: false,
   });
-  const [fsOk, setFsOk] = useState(true);
-  const [enableCommands, setEnableCommands] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [showRaw, setShowRaw] = useState(false);
-  const [createMode, setCreateMode] = useState<'none' | 'paths' | 'manual'>('none');
-  const [createName, setCreateName] = useState('');
-  const [createDesc, setCreateDesc] = useState('');
-  const [createBusy, setCreateBusy] = useState(false);
-  const [syncBusy, setSyncBusy] = useState(false);
-  const [batchBusy, setBatchBusy] = useState(false);
-  const [discoverBusy, setDiscoverBusy] = useState(false);
-  const [batchConfirm, setBatchConfirm] = useState<'enabled' | 'disabled' | null>(null);
-  const [discoverCandidates, setDiscoverCandidates] = useState<DesktopSkill[] | null>(null);
-  const [discoverPick, setDiscoverPick] = useState<Record<string, boolean>>({});
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [extraOpen, setExtraOpen] = useState(false);
+
+  const busyId = actionState.busyId;
+  const showRaw = actionState.showRaw;
+  const createMode = actionState.createMode;
+  const createName = actionState.createName;
+  const createDesc = actionState.createDesc;
+  const createBusy = actionState.createBusy;
+  const syncBusy = actionState.syncBusy;
+  const batchBusy = actionState.batchBusy;
+  const discoverBusy = actionState.discoverBusy;
+  const batchConfirm = actionState.batchConfirm;
+  const discoverCandidates = actionState.discoverCandidates;
+  const discoverPick = actionState.discoverPick;
+  const moreOpen = actionState.moreOpen;
+  const extraOpen = actionState.extraOpen;
+
+  const setBusyId = (val: React.SetStateAction<string | null>) =>
+    setActionState((prev) => ({ ...prev, busyId: typeof val === 'function' ? val(prev.busyId) : val }));
+  const setShowRaw = (val: React.SetStateAction<boolean>) =>
+    setActionState((prev) => ({ ...prev, showRaw: typeof val === 'function' ? val(prev.showRaw) : val }));
+  const setCreateMode = (val: React.SetStateAction<'none' | 'paths' | 'manual'>) =>
+    setActionState((prev) => ({ ...prev, createMode: typeof val === 'function' ? val(prev.createMode) : val }));
+  const setCreateName = (val: React.SetStateAction<string>) =>
+    setActionState((prev) => ({ ...prev, createName: typeof val === 'function' ? val(prev.createName) : val }));
+  const setCreateDesc = (val: React.SetStateAction<string>) =>
+    setActionState((prev) => ({ ...prev, createDesc: typeof val === 'function' ? val(prev.createDesc) : val }));
+  const setCreateBusy = (val: React.SetStateAction<boolean>) =>
+    setActionState((prev) => ({ ...prev, createBusy: typeof val === 'function' ? val(prev.createBusy) : val }));
+  const setSyncBusy = (val: React.SetStateAction<boolean>) =>
+    setActionState((prev) => ({ ...prev, syncBusy: typeof val === 'function' ? val(prev.syncBusy) : val }));
+  const setBatchBusy = (val: React.SetStateAction<boolean>) =>
+    setActionState((prev) => ({ ...prev, batchBusy: typeof val === 'function' ? val(prev.batchBusy) : val }));
+  const setDiscoverBusy = (val: React.SetStateAction<boolean>) =>
+    setActionState((prev) => ({ ...prev, discoverBusy: typeof val === 'function' ? val(prev.discoverBusy) : val }));
+  const setBatchConfirm = (val: React.SetStateAction<'enabled' | 'disabled' | null>) =>
+    setActionState((prev) => ({ ...prev, batchConfirm: typeof val === 'function' ? val(prev.batchConfirm) : val }));
+  const setDiscoverCandidates = (val: React.SetStateAction<DesktopSkill[] | null>) =>
+    setActionState((prev) => ({ ...prev, discoverCandidates: typeof val === 'function' ? val(prev.discoverCandidates) : val }));
+  const setDiscoverPick = (val: React.SetStateAction<Record<string, boolean>>) =>
+    setActionState((prev) => ({ ...prev, discoverPick: typeof val === 'function' ? val(prev.discoverPick) : val }));
+  const setMoreOpen = (val: React.SetStateAction<boolean>) =>
+    setActionState((prev) => ({ ...prev, moreOpen: typeof val === 'function' ? val(prev.moreOpen) : val }));
+  const setExtraOpen = (val: React.SetStateAction<boolean>) =>
+    setActionState((prev) => ({ ...prev, extraOpen: typeof val === 'function' ? val(prev.extraOpen) : val }));
 
   const selected = useMemo(
     () => skills.find((s) => s.id === selectedId) || null,

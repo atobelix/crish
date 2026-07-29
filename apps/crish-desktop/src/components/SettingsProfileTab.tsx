@@ -1,14 +1,17 @@
 /**
- * 设置 · 账户：本机环境、数据备份；成功静默，仅错误提示。
+ * 设置 · 账户：本机环境、数据备份、导入外部对话；成功静默，仅错误提示。
+ *
+ * Stream D 改造后：磁盘镜像已删除，存储位置统一显示「本机 SQLite 数据库」。
+ * 外部对话：点击扫描 Claude Code / Codex → 勾选 → 导入所选（禁止自动导入）。
  */
-import React, { useEffect, useId, useState } from 'react';
+import React, { useId, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import { clientApi } from '../api/clientApi';
 import { ensureDaemonConnected } from '../api/daemonChatBridge';
 import { getDesktopDaemonClient } from '../api/daemonClient';
+import { isUserViewDebugEnabled } from '../api/messageUserProjection';
 import { isDeveloperEngineUiEnabled } from '../api/productMode';
 import { getWorkspacePath } from '../api/projectStore';
-import { loadMirrorMeta } from '../api/sessionDiskMirror';
 import { networkUserMessage } from '../api/userFacingErrors';
 import { toastBus } from '../services/ToastBus';
 import {
@@ -16,8 +19,10 @@ import {
   SettingsSection,
   SettingsCard,
   SettingsRow,
-  Tooltip,
 } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
+import { ExternalSessionImport } from './settings/ExternalSessionImport';
+import { UserViewDebugPanel } from './settings/UserViewDebugPanel';
 import styles from './SettingsProfileTab.module.css';
 
 type Props = {
@@ -46,7 +51,6 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
   const daemonWsInputId = useId();
   const daemonStatusId = useId();
 
-  const [diskMeta, setDiskMeta] = useState(() => loadMirrorMeta());
   const [daemonWsDraft, setDaemonWsDraft] = useState(readDaemonWsStored);
   const [daemonWsSaved, setDaemonWsSaved] = useState(readDaemonWsStored);
   const [daemonConnHint, setDaemonConnHint] = useState('');
@@ -54,18 +58,10 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
 
-  useEffect(() => {
-    setDiskMeta(loadMirrorMeta());
-  }, [cwd]);
-
   const hasWorkspace = cwd !== '__global__' && Boolean(cwd);
-  const diskPath =
-    diskMeta.mode === 'tauri' && diskMeta.lastPath ? diskMeta.lastPath : '';
-  const dataLocation = diskPath
-    ? diskPath
-    : diskMeta.mode === 'localStorage-only'
-      ? '本机浏览器存储'
-      : '本机浏览器存储';
+  // Stream D 改造后：存储统一为 SQLite（本机数据库），不再有磁盘镜像 / localStorage 分支
+  const diskPath = '';
+  const dataLocation = '本机 SQLite 数据库';
 
   const handleExportSettings = async () => {
     if (exporting) return;
@@ -188,16 +184,14 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
     ? cwd
     : '可在空对话页选择项目；工具与 shell 将以该目录为工作区';
   /** 短显示：路径叶名 / 本机；长说明进 title */
-  const storageDisplay = diskPath
-    ? pathLeaf(diskPath)
-    : diskMeta.mode === 'localStorage-only'
-      ? '浏览器'
-      : '本机';
-  const storageIsPath = Boolean(diskPath);
+  const storageDisplay = 'SQLite';
+  const storageIsPath = false;
 
   const daemonOnline = getDesktopDaemonClient().isConnected();
   const daemonStatus = daemonConnHint || (daemonOnline ? '在线' : '离线');
   const showDeveloper = isDeveloperEngineUiEnabled();
+  /** 投影调试：开发者引擎 UI 或既有 crish:userViewDebug / VITE_USER_VIEW_DEBUG */
+  const showUserViewDebug = showDeveloper || isUserViewDebugEnabled();
   const engineMeta =
     showDeveloper && !daemonOnline
       ? '服务未连接'
@@ -304,6 +298,17 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
         </SettingsCard>
       </SettingsSection>
 
+      <SettingsSection title="导入外部对话">
+        <SettingsCard>
+          <div className={styles.settingsImportBody}>
+            <ExternalSessionImport
+              variant="settings"
+              onShowToast={onShowToast}
+            />
+          </div>
+        </SettingsCard>
+      </SettingsSection>
+
       {showDeveloper ? (
         <SettingsSection title="高级">
           <SettingsCard>
@@ -364,6 +369,10 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
             />
           </SettingsCard>
         </SettingsSection>
+      ) : null}
+
+      {showUserViewDebug ? (
+        <UserViewDebugPanel onShowToast={onShowToast} />
       ) : null}
     </SettingsPage>
   );

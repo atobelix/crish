@@ -123,7 +123,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
             discoverBusy={discoverBusy}
             enableCommands={enableCommands}
             setEnableCommands={setEnableCommands}
-            batchConfirm={batchConfirm}
+            batchConfirm={batchConfirm ?? 'none'}
             batchBusy={batchBusy}
             batchEnableCount={batchEnableCount}
             batchDisableCount={batchDisableCount}
@@ -137,7 +137,9 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     >
       {loadError ? (
         <div className={`${styles.skillsFsWarn} skills-fs-warn`} role="alert">
-          <span title={loadError}>{loadError}</span>{' '}
+          <Tooltip content={loadError}>
+            <span>{loadError}</span>
+          </Tooltip>{' '}
           <button
             type="button"
             className="ui-btn ui-btn-ghost ui-btn-sm"

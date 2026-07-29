@@ -28,16 +28,15 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
 
   return (
     <div ref={containerRef} className={styles.scrollParent} onScroll={onScroll} tabIndex={0}
-      style={{ position: 'relative', overflowY: 'auto', outline: 'none' }}>
-      <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
+      style={{ position: 'relative', overflowY: 'auto', outline: 'none', width: '100%', height: '100%', flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
+      <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative', flex: 1, background: 'var(--bg-primary)' }}>
         <pre className={styles.linesContainer}
           style={{ position: 'absolute', top: 0, left: 0, right: 0, transform: `translateY(${offsetTop}px)`, margin: 0, background: 'transparent' }}
           aria-label={`${basename(filePath)} 的源码`}>
           {visibleLines.map((l) => (
-            <div key={l.num} className={styles.line} style={{ minHeight: `${rowHeight}px` }}>
-              <div className={styles.gutterNum} data-num={l.num}>{l.num}</div>
-              <div className={styles.gutterMarker}> </div>
-              <div className={styles.lineText} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{l.content}</div>
+            <div key={l.num} className={styles.line} style={{ minHeight: `${rowHeight}px`, gridTemplateColumns: '45px 1fr' }}>
+              <div className={styles.gutterNum} data-num={l.num} style={{ width: '45px', minWidth: '45px', textAlign: 'right', paddingRight: '8px', boxSizing: 'border-box' }}>{l.num}</div>
+              <div className={styles.lineText} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', overflowWrap: 'anywhere' }}>{l.content}</div>
             </div>
           ))}
         </pre>

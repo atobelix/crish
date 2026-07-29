@@ -1,14 +1,9 @@
-import React, { lazy, Suspense } from 'react';
+import React from 'react';
 import styles from '../ChatCard.module.css';
 import { ChatStatusRibbons } from '../ChatStatusRibbons';
-import { isDemoMode } from '../../api/appMode';
 import { anyProfileHasKey } from '../../api/providerProfiles';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import type { FileDiff } from '../../store/layoutStore';
-
-const ChatDemoChrome = lazy(() =>
-  import('../ChatDemoChrome').then((m) => ({ default: m.ChatDemoChrome }))
-);
 
 export interface ChatComposerWrapperProps {
   mainSurface: string;
@@ -76,51 +71,49 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
   return (
     <div
       className={styles.chatFooter}
+      data-testid="chat-footer"
       style={{
         display: mainSurface === 'scheduled' ? 'none' : undefined,
       }}
     >
-      <ChatStatusRibbons
-        onOpenTerminal={() => openSidePanel('terminal')}
-        onOpenDiff={() => openSidePanel('diff')}
-        diffCount={diffFiles.length}
-        engineHint={engineHint}
-        needsKeySetup={needsKeySetup}
-        needsModelSetup={needsModelSetup}
-        onEmptySurface={onEmptySurface}
-        localHasKey={anyProfileHasKey()}
-        onOpenModelSettings={onOpenModelSettings}
-        onOpenModelDropdown={onOpenModelDropdown}
-        inPlanMode={inPlanMode}
-        planApproved={planApproved}
-        onApprovePlan={onApprovePlan}
-        goalModeActive={goalModeActive}
-        goalText={goalMode?.goal || ''}
-        goalIteration={goalMode?.iteration ?? 0}
-        goalTasksDone={(goalMode?.tasks || []).filter((t: any) => t.done).length}
-        goalTasksTotal={(goalMode?.tasks || []).length}
-        onStopGoal={onStopGoal}
-        showScrollToBottom={showScrollToBottom}
-        onScrollToBottom={onScrollToBottom}
-        runNotice={runNotice}
-        onDismissRunNotice={onDismissRunNotice}
-        pendingApprovalCount={pendingApprovalCount}
-        showApprovalDock={showApprovalDock}
-        pendingApprovalSummary={pendingApprovalSummary}
-        pendingApprovalToolId={pendingApprovalToolId}
-        pendingApprovalMsgId={pendingApprovalMsgId}
-        activeSessionId={activeSessionId}
-        onShowToast={onShowToast}
-        between={
-          isDemoMode() ? (
-            <Suspense fallback={null}>
-              <ChatDemoChrome handleGlobalTabClick={handleGlobalTabClick} />
-            </Suspense>
-          ) : null
-        }
-      />
+      {/* chatCol 与消息 listInner 同 max-width / 水平 padding，对齐 stream + composer */}
+      <div className={styles.chatCol}>
+        <ChatStatusRibbons
+          onOpenTerminal={() => openSidePanel('terminal')}
+          onOpenDiff={() => openSidePanel('diff')}
+          diffCount={diffFiles.length}
+          engineHint={engineHint}
+          needsKeySetup={needsKeySetup}
+          needsModelSetup={needsModelSetup}
+          onEmptySurface={onEmptySurface}
+          localHasKey={anyProfileHasKey()}
+          onOpenModelSettings={onOpenModelSettings}
+          onOpenModelDropdown={onOpenModelDropdown}
+          inPlanMode={inPlanMode}
+          planApproved={planApproved}
+          onApprovePlan={onApprovePlan}
+          goalModeActive={goalModeActive}
+          goalText={goalMode?.goal || ''}
+          goalIteration={goalMode?.iteration ?? 0}
+          goalTasksDone={(goalMode?.tasks || []).filter((t: any) => t.done).length}
+          goalTasksTotal={(goalMode?.tasks || []).length}
+          onStopGoal={onStopGoal}
+          showScrollToBottom={showScrollToBottom}
+          onScrollToBottom={onScrollToBottom}
+          runNotice={runNotice}
+          onDismissRunNotice={onDismissRunNotice}
+          pendingApprovalCount={pendingApprovalCount}
+          showApprovalDock={showApprovalDock}
+          pendingApprovalSummary={pendingApprovalSummary}
+          pendingApprovalToolId={pendingApprovalToolId}
+          pendingApprovalMsgId={pendingApprovalMsgId}
+          activeSessionId={activeSessionId}
+          onShowToast={onShowToast}
+        />
 
-      {emptyKind !== 'session-empty' && composerElement}
+        {/* composer 始终在 .chatFooter 渲染（不再注入到 ChatEmptyState 内）。 */}
+        {composerElement}
+      </div>
     </div>
   );
 });

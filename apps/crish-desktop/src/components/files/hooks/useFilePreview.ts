@@ -8,23 +8,80 @@ export type ViewMode = 'browse' | 'detail';
 export function useFilePreview() {
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>('browse');
-  const [content, setContent] = useState('');
-  const [editBuf, setEditBuf] = useState('');
-  const [editing, setEditing] = useState(false);
-  const [dirty, setDirty] = useState(false);
-  const [truncated, setTruncated] = useState(false);
-  const [lineBudget, setLineBudget] = useState(FILE_PREVIEW_CHUNK_LINES);
-  const [loadingMore, setLoadingMore] = useState(false);
+
+  const [editState, setEditState] = useState<{
+    content: string;
+    editBuf: string;
+    editing: boolean;
+    dirty: boolean;
+  }>({
+    content: '',
+    editBuf: '',
+    editing: false,
+    dirty: false,
+  });
+  const content = editState.content;
+  const editBuf = editState.editBuf;
+  const editing = editState.editing;
+  const dirty = editState.dirty;
+
+  const setContent = (val: React.SetStateAction<string>) =>
+    setEditState((prev) => ({ ...prev, content: typeof val === 'function' ? val(prev.content) : val }));
+  const setEditBuf = (val: React.SetStateAction<string>) =>
+    setEditState((prev) => ({ ...prev, editBuf: typeof val === 'function' ? val(prev.editBuf) : val }));
+  const setEditing = (val: React.SetStateAction<boolean>) =>
+    setEditState((prev) => ({ ...prev, editing: typeof val === 'function' ? val(prev.editing) : val }));
+  const setDirty = (val: React.SetStateAction<boolean>) =>
+    setEditState((prev) => ({ ...prev, dirty: typeof val === 'function' ? val(prev.dirty) : val }));
+
+  const [loadState, setLoadState] = useState<{
+    detailLoading: boolean;
+    loadingMore: boolean;
+    truncated: boolean;
+    lineBudget: number;
+  }>({
+    detailLoading: false,
+    loadingMore: false,
+    truncated: false,
+    lineBudget: FILE_PREVIEW_CHUNK_LINES,
+  });
+  const detailLoading = loadState.detailLoading;
+  const loadingMore = loadState.loadingMore;
+  const truncated = loadState.truncated;
+  const lineBudget = loadState.lineBudget;
+
+  const setDetailLoading = (val: React.SetStateAction<boolean>) =>
+    setLoadState((prev) => ({ ...prev, detailLoading: typeof val === 'function' ? val(prev.detailLoading) : val }));
+  const setLoadingMore = (val: React.SetStateAction<boolean>) =>
+    setLoadState((prev) => ({ ...prev, loadingMore: typeof val === 'function' ? val(prev.loadingMore) : val }));
+  const setTruncated = (val: React.SetStateAction<boolean>) =>
+    setLoadState((prev) => ({ ...prev, truncated: typeof val === 'function' ? val(prev.truncated) : val }));
+  const setLineBudget = (val: React.SetStateAction<number>) =>
+    setLoadState((prev) => ({ ...prev, lineBudget: typeof val === 'function' ? val(prev.lineBudget) : val }));
+
   const [mdMode, setMdMode] = useState<'render' | 'source'>('render');
   const [assetUrl, setAssetUrl] = useState<string | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [fileOpeners, setFileOpeners] = useState<HostOpener[]>([]);
-  const [openDefaultLabel, setOpenDefaultLabel] = useState('打开');
+
+  const [openersState, setOpenersState] = useState<{
+    fileOpeners: HostOpener[];
+    openDefaultLabel: string;
+  }>({
+    fileOpeners: [],
+    openDefaultLabel: '打开',
+  });
+  const fileOpeners = openersState.fileOpeners;
+  const openDefaultLabel = openersState.openDefaultLabel;
+
+  const setFileOpeners = (val: React.SetStateAction<HostOpener[]>) =>
+    setOpenersState((prev) => ({ ...prev, fileOpeners: typeof val === 'function' ? val(prev.fileOpeners) : val }));
+  const setOpenDefaultLabel = (val: React.SetStateAction<string>) =>
+    setOpenersState((prev) => ({ ...prev, openDefaultLabel: typeof val === 'function' ? val(prev.openDefaultLabel) : val }));
+
   const [actionHint, setActionHint] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(() => countPendingFileAnnotations());
   const openedContentRef = useRef<string>('');
   const actionHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const onDirtyChangeRef = useRef<((dirty: boolean) => void) | undefined>();
+  const onDirtyChangeRef = useRef<((dirty: boolean) => void) | undefined>(undefined);
 
   const showActionHint = useCallback((msg: string) => {
     setActionHint(msg);

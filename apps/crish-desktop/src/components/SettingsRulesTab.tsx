@@ -28,8 +28,8 @@ import {
   SettingsSection,
   SettingsCard,
   SettingsRow,
-  Tooltip,
 } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -501,7 +501,11 @@ export const SettingsRulesTab: React.FC<Props> = ({
             customRules.map((rule, idx) => (
               <SettingsRow
                 key={`${idx}-${rule.slice(0, 24)}`}
-                title={<span className="settings-rule-item-text" title={rule}>{rule}</span>}
+                title={
+                  <Tooltip content={rule}>
+                    <span className="settings-rule-item-text">{rule}</span>
+                  </Tooltip>
+                }
                 control={
                   <Tooltip content="删除此规则">
                     <button

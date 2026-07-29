@@ -44,7 +44,7 @@
 .settingsSelectTrigger:focus-visible,
 .settingsSelectTrigger[aria-expanded='true'],
 .settingsSelect.isOpen .settingsSelectTrigger {
-  border-color: color-mix(in srgb, var(--border-color) 70%, var(--text-primary) 30%);
+  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
   background: color-mix(in srgb, var(--text-primary) 2%, transparent);
   box-shadow: var(--focus-ring);
 }
@@ -228,7 +228,7 @@
 }
 
 .settingsSelectCustomInput:focus {
-  border-color: color-mix(in srgb, var(--border-color) 70%, var(--text-primary) 30%);
+  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
   outline: none;
   box-shadow: none;
 }

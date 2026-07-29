@@ -1,28 +1,35 @@
 /**
- * 二叉树叶子面板 — 渲染单个 leaf（含 tab 条与面板内容）。
+ * 二叉树叶子面板 — 渲染单个 leaf 的面板内容。
  *
- * 与旧 CardPanel 的区别：
- * 1. 以 leafId 为唯一索引，不依赖 colIdx/groupIdx
- * 2. tab 拖拽走 useTreeDrag.startDragTab（与 leaf 拖拽统一）
- * 3. 面板内容（ChatCard/DiffCard 等）按 activeTab 渲染，懒加载
+ * chrome 行契约：
+ * - 单 unit：AppTopBar 全局会话标签；leaf 内 ChatHeader / LeafToolTabStrip
+ * - 多 unit：每个 chat leaf 顶挂 UnitSessionTabStrip（per-unit 标签，替代全局条）；
+ *   工具 leaf 顶挂 LeafToolTabStrip（基于 leaf.tabs，替代 rightDock 模型）
  *
- * 拖拽交互：
- * - tab 元素 onPointerDown → startDragTab
- * - leaf 标题区 onPointerDown → startDragLeaf（拖整个 leaf）
- * - leaf 激活（onPointerDownCapture）→ setActiveLeaf
+ * 功能区 leaf 必须带所属 session 的 sessionId（owner），与对话 unit 绑定。
  */
 
-import React, { lazy, Suspense } from 'react';
-import { X, GripVertical } from 'lucide-react';
-import { useLayoutTreeStore } from '../../store/layout-tree';
+import React, { lazy, Suspense, useCallback, useLayoutEffect, useRef } from 'react';
+import { useLayoutTreeStore, isChatDomain } from '../../store/layout-tree';
 import type { LayoutLeaf } from '../../store/layout-tree';
 import { getPanelTitle } from '../../store/layoutHelpers';
-import { useTreeDrag } from '../../hooks/useTreeDrag';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { AppErrorBoundary } from '../AppErrorBoundary';
+import { UnitSessionTabStrip } from './UnitSessionTabStrip';
+import { LeafToolTabStrip } from './LeafToolTabStrip';
+import { useSessionTabDrag } from '../shell/SessionTabDragContext';
 import styles from './BinaryTreeWorkspace.module.css';
+import {
+  useWorkspaceShellStore,
+  openToolInSession,
+} from '../../store/workspace-shell';
+import {
+  selectActiveSessionId,
+  useSessionField,
+} from '../../store/sessionStore';
+import { isPendingDraft } from '../../store/draftSession';
 
-// ── 面板内容懒加载（与 CardPanelLayout 对齐） ──────────────────────
+// ── 面板内容懒加载 ──────────────────────────────────────────────────
 
 const ChatCard = lazy(() =>
   import('../ChatCard').then((m) => ({ default: m.ChatCard }))
@@ -42,6 +49,9 @@ const FilesCard = lazy(() =>
 const DiffCard = lazy(() =>
   import('../DiffCard').then((m) => ({ default: m.DiffCard }))
 );
+const FileViewerCard = lazy(() =>
+  import('../FileViewerCard').then((m) => ({ default: m.FileViewerCard }))
+);
 const RuntimePanel = lazy(() =>
   import('../RuntimePanel').then((m) => ({ default: m.RuntimePanel }))
 );
@@ -59,162 +69,129 @@ interface TreeLeafPanelProps {
   isActive: boolean;
   /** 是否为拖拽源 */
   isDragSource: boolean;
-  /** 拖拽控制器（由父组件注入，避免每个 leaf 自建 hook） */
-  dragController: ReturnType<typeof useTreeDrag>;
-  /** Toast 回调（与 app 全局 ShowToastFn 对齐） */
+  /** Toast 回调 */
   onShowToast: ShowToastFn;
+  /** 当前是否多 chat 分屏（>1 chat leaf） */
+  isMultiChat?: boolean;
+}
+
+function rectPropsEqual(
+  a: TreeLeafPanelProps['rect'],
+  b: TreeLeafPanelProps['rect']
+): boolean {
+  return (
+    a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+  );
+}
+
+function leafPropsEqual(a: LayoutLeaf, b: LayoutLeaf): boolean {
+  if (a === b) return true;
+  if (
+    a.id !== b.id ||
+    a.panelId !== b.panelId ||
+    a.activeTab !== b.activeTab ||
+    a.sessionId !== b.sessionId
+  ) {
+    return false;
+  }
+  if (a.tabs === b.tabs) return true;
+  if (a.tabs.length !== b.tabs.length) return false;
+  for (let i = 0; i < a.tabs.length; i++) {
+    if (a.tabs[i] !== b.tabs[i]) return false;
+  }
+  return true;
 }
 
 // ── 组件实现 ─────────────────────────────────────────────────────────
 
 export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
-  ({ leaf, rect, isActive, isDragSource, dragController, onShowToast }) => {
-    const setActiveTab = useLayoutTreeStore((s) => s.setActiveTab);
-    const removeTabFromLeaf = useLayoutTreeStore((s) => s.removeTabFromLeaf);
+  ({ leaf, rect, isActive, isDragSource, onShowToast, isMultiChat = false }) => {
     const setActiveLeaf = useLayoutTreeStore((s) => s.setActiveLeaf);
+    const leafElRef = useRef<HTMLDivElement>(null);
+    const { startSessionDrag } = useSessionTabDrag();
 
-    const { startDragLeaf, startDragTab } = dragController;
-
-    const handleTabClick = React.useCallback(
-      (tabId: string) => {
-        setActiveTab(leaf.id, tabId);
-      },
-      [leaf.id, setActiveTab]
-    );
-
-    const handleTabClose = React.useCallback(
-      (tabId: string) => {
-        // chat / overview 不可关闭
-        if (tabId === 'chat' || tabId === 'overview') return;
-        removeTabFromLeaf(leaf.id, tabId);
-      },
-      [leaf.id, removeTabFromLeaf]
-    );
-
-    const handleTabPointerDown = React.useCallback(
-      (tabId: string, e: React.PointerEvent) => {
-        // 中键关闭
-        if (e.button === 1) {
-          e.preventDefault();
-          handleTabClose(tabId);
-          return;
-        }
-        startDragTab(leaf.id, tabId, leaf.panelId, e);
-      },
-      [leaf.id, leaf.panelId, startDragTab, handleTabClose]
-    );
-
-    const handleLeafHeaderPointerDown = React.useCallback(
-      (e: React.PointerEvent) => {
-        // 仅在 grip 区域或标题区启动 leaf 拖拽
-        startDragLeaf(leaf.id, leaf.panelId, e);
-      },
-      [leaf.id, leaf.panelId, startDragLeaf]
-    );
-
-    const handleActivate = React.useCallback(() => {
+    const handleActivate = useCallback(() => {
       if (!isActive) setActiveLeaf(leaf.id);
-    }, [isActive, leaf.id, setActiveLeaf]);
+      // 多 chat：点击 pane 时把 shell active 切到该 leaf 绑定的 session
+      if (leaf.sessionId) {
+        const shell = useWorkspaceShellStore.getState();
+        const tab = shell.openTabs.find((t) => t.sessionId === leaf.sessionId);
+        if (tab) {
+          if (shell.activeTabId !== tab.tabId) shell.activateTab(tab.tabId);
+        } else {
+          shell.openOrFocusSession(leaf.sessionId);
+        }
+      }
+    }, [isActive, leaf.id, leaf.sessionId, setActiveLeaf]);
 
-    const activeTab = leaf.activeTab;
-    const activeTitle = getPanelTitle(activeTab);
-    const leafStyle: React.CSSProperties = {
-      top: `${rect.y * 100}%`,
-      left: `${rect.x * 100}%`,
-      width: `${rect.width * 100}%`,
-      height: `${rect.height * 100}%`,
-    };
+    /**
+     * 几何由 layoutEffect 写 DOM，不用 React style prop。
+     * live resize（body.tree-resizing）期间 useTreeResize 直接刷 leaf 几何；
+     * 若此处用 style={}，任意 re-render 会把两侧面板拽回 store 旧 rect，
+     * 表现为「拖 sash 时右侧不跟手」。
+     */
+    useLayoutEffect(() => {
+      const el = leafElRef.current;
+      if (!el) return;
+      if (document.body.classList.contains('tree-resizing')) return;
+      el.style.top = `${rect.y * 100}%`;
+      el.style.left = `${rect.x * 100}%`;
+      el.style.width = `${rect.width * 100}%`;
+      el.style.height = `${rect.height * 100}%`;
+    }, [rect.x, rect.y, rect.width, rect.height]);
+
+    const isChat = isChatDomain(leaf.panelId);
 
     return (
       <div
+        ref={leafElRef}
         className={styles.leaf}
         data-leaf-id={leaf.id}
         data-panel-id={leaf.panelId}
+        data-tab-count={leaf.tabs.length}
+        data-session-id={leaf.sessionId || undefined}
         data-active={isActive ? 'true' : 'false'}
         data-dragging-source={isDragSource ? 'true' : 'false'}
-        style={leafStyle}
+        data-unit-tab-strip={isChat && isMultiChat ? 'true' : 'false'}
         onPointerDownCapture={handleActivate}
         role="region"
-        aria-label={`${activeTitle} 面板`}
+        aria-label={`${getPanelTitle(leaf.activeTab)} 面板`}
       >
-        {/* 控制条：grip + 标题 + 关闭 */}
-        <div className={styles.controlBar}>
-          <span
-            className={styles.controlBtn}
-            role="button"
-            aria-label="拖动此面板"
-            onPointerDown={handleLeafHeaderPointerDown}
-            style={{ cursor: 'grab' }}
-          >
-            <GripVertical size={14} aria-hidden />
-          </span>
-          <span className={styles.leafTitle} aria-hidden>
-            {activeTitle}
-          </span>
-          <span className={styles.controlSpacer} />
-          {leaf.tabs.length > 1 && (
-            <button
-              type="button"
-              className={styles.controlBtn}
-              aria-label={`关闭 ${activeTitle} 面板`}
-              onClick={() => handleTabClose(activeTab)}
-              disabled={activeTab === 'chat' || activeTab === 'overview'}
-            >
-              <X size={12} aria-hidden />
-            </button>
-          )}
-        </div>
+        {/* 多 unit chat leaf：per-unit 会话标签栏（第 1 行） */}
+        {isChat && isMultiChat ? (
+          <UnitSessionTabStrip
+            leafId={leaf.id}
+            leafSessionId={leaf.sessionId}
+            startSessionDrag={startSessionDrag}
+          />
+        ) : null}
 
-        {/* Tab 条（多 tab 时显示） */}
-        {leaf.tabs.length > 1 && (
-          <div className={styles.tabBar} role="tablist">
-            {leaf.tabs.map((tabId) => {
-              const isActiveTab = tabId === activeTab;
-              const title = getPanelTitle(tabId);
-              return (
-                <div
-                  key={tabId}
-                  className={styles.tab}
-                  data-active={isActiveTab ? 'true' : 'false'}
-                  role="tab"
-                  aria-selected={isActiveTab}
-                  tabIndex={isActiveTab ? 0 : -1}
-                  onClick={() => handleTabClick(tabId)}
-                  onPointerDown={(e) => handleTabPointerDown(tabId, e)}
-                >
-                  <span>{title}</span>
-                  {tabId !== 'chat' && tabId !== 'overview' && (
-                    <span
-                      className={styles.tabClose}
-                      role="button"
-                      aria-label={`关闭 ${title}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTabClose(tabId);
-                      }}
-                    >
-                      <X size={10} aria-hidden />
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {/* 工具 leaf：基于 leaf.tabs 的独立标签栏 */}
+        {!isChat ? <LeafToolTabStrip leaf={leaf} /> : null}
 
-        {/* 面板内容（懒加载 + 错误边界） */}
         <div className={styles.leafBody}>
           <AppErrorBoundary compact>
-            <Suspense
-              fallback={<div className={styles.emptyState}>加载中…</div>}
-            >
-              <LeafBody panelId={activeTab} onShowToast={onShowToast} />
+            <Suspense fallback={<div className={styles.emptyState}>加载中…</div>}>
+              <LeafBody
+                panelId={leaf.activeTab}
+                leafId={leaf.id}
+                leafSessionId={leaf.sessionId}
+                isActiveLeaf={isActive}
+                onShowToast={onShowToast}
+              />
             </Suspense>
           </AppErrorBoundary>
         </div>
       </div>
     );
-  }
+  },
+  (prev, next) =>
+    leafPropsEqual(prev.leaf, next.leaf) &&
+    rectPropsEqual(prev.rect, next.rect) &&
+    prev.isActive === next.isActive &&
+    prev.isDragSource === next.isDragSource &&
+    prev.onShowToast === next.onShowToast &&
+    prev.isMultiChat === next.isMultiChat
 );
 TreeLeafPanel.displayName = 'TreeLeafPanel';
 
@@ -222,39 +199,71 @@ TreeLeafPanel.displayName = 'TreeLeafPanel';
 
 interface LeafBodyProps {
   panelId: string;
+  /** 当前 leaf id（布局标识；工具打开走 leafSessionId） */
+  leafId: string;
+  /** 多 chat 分屏：leaf 绑定的 sessionId → openToolInSession 作用域 */
+  leafSessionId?: string;
+  isActiveLeaf: boolean;
   onShowToast: ShowToastFn;
 }
 
-const LeafBody: React.FC<LeafBodyProps> = React.memo(
-  ({ panelId, onShowToast }) => {
-    switch (panelId) {
-      case 'chat':
-        return (
-          <ChatCard
-            wsId="default"
-            colIdx={0}
-            groupIdx={0}
-            handleGlobalTabClick={() => {}}
-            onShowToast={onShowToast}
-          />
-        );
-      case 'terminal':
-        return <TerminalCard />;
-      case 'preview':
-        return <PreviewCard wsId="default" onShowToast={onShowToast} />;
-      case 'overview':
-        return <OverviewCard wsId="default" onOpenPanel={() => {}} />;
-      case 'files':
-        return <FilesCard />;
-      case 'diff':
-        return <DiffCard onShowToast={onShowToast} />;
-      case 'runtime':
-        return <RuntimePanel wsId="default" onShowToast={onShowToast} />;
-      case 'agent':
-        return <AgentCard />;
-      default:
-        return <div className={styles.emptyState}>未知面板类型：{panelId}</div>;
-    }
+function LeafBody({
+  panelId,
+  leafSessionId,
+  isActiveLeaf,
+  onShowToast,
+}: LeafBodyProps) {
+  const activeSessionId = useSessionField(selectActiveSessionId);
+  // 新对话草稿态：活动 pane 必须跟 PENDING_DRAFT（空白欢迎面），不能被 leaf.sessionId 钉死
+  // 非活动分屏 pane 仍显示自己的 leaf 会话
+  const inDraft = isPendingDraft(activeSessionId || '');
+  const sessionForPanel =
+    inDraft && isActiveLeaf
+      ? activeSessionId
+      : leafSessionId || activeSessionId;
+
+  if (panelId.startsWith('file-viewer:')) {
+    const filePath = panelId.substring('file-viewer:'.length);
+    return <FileViewerCard filePath={filePath} onShowToast={onShowToast} />;
   }
-);
-LeafBody.displayName = 'LeafBody';
+
+  switch (panelId) {
+    case 'chat':
+      return (
+        <ChatCard
+          wsId="default"
+          colIdx={0}
+          groupIdx={0}
+          handleGlobalTabClick={() => {}}
+          onShowToast={onShowToast}
+          // draft 时传 PENDING_DRAFT；否则优先 leaf 绑定
+          sessionId={sessionForPanel ?? undefined}
+        />
+      );
+    case 'terminal':
+      return <TerminalCard sessionId={sessionForPanel ?? undefined} />;
+    case 'preview':
+      return <PreviewCard wsId="default" onShowToast={onShowToast} />;
+    case 'overview':
+      return (
+        <OverviewCard
+          wsId="default"
+          onOpenPanel={(pid: string) => {
+            if (sessionForPanel) openToolInSession(sessionForPanel, pid);
+          }}
+        />
+      );
+    case 'files':
+      return <FilesCard />;
+    case 'diff':
+      return <DiffCard onShowToast={onShowToast} />;
+    case 'runtime':
+      return <RuntimePanel wsId="default" onShowToast={onShowToast} />;
+    case 'agent':
+      return <AgentCard />;
+    default:
+      return (
+        <div className={styles.emptyState}>未知面板类型：{panelId}</div>
+      );
+  }
+}

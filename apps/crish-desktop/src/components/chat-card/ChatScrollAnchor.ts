@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import type { SessionMessage } from '../../store/layoutStore';
 import { useChatAutoScroll } from '../../hooks/useChatAutoScroll';
-import { useThinkingTimer } from '../../hooks/useThinkingTimer';
 
 export interface UseChatScrollAnchorOptions {
   messages: SessionMessage[];
@@ -18,7 +17,6 @@ export function useChatScrollAnchor({
 }: UseChatScrollAnchorOptions) {
   const { chatFlowRef, showScrollToBottom, scrollToBottom } =
     useChatAutoScroll(messages, isProcessing);
-  const thinkingSeconds = useThinkingTimer(isProcessing);
 
   useEffect(() => {
     const root = chatFlowRef.current;
@@ -41,6 +39,5 @@ export function useChatScrollAnchor({
     chatFlowRef,
     showScrollToBottom,
     scrollToBottom,
-    thinkingSeconds,
   };
 }

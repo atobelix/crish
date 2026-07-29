@@ -1,8 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useLayoutStore } from '../../store/layoutStore';
-import { getSessionStoreState } from '../../api/storeAccess';
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
+import { getCompositionRoot } from '../../app/compositionRoot';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
+import {
+  findChatLeafBySessionId,
+  listChatLeaves,
+  collectLeaves,
+  isChatDomain,
+} from '../../store/layout-tree';
 import {
   archiveUndoToastMessage,
   branchUndoToastMessage,
@@ -13,6 +18,63 @@ import {
 } from './SidebarContextMenus';
 import { openSessionInNewWindow } from './sidebarHelpers';
 
+/**
+ * 侧栏「拆分视图」：在 layout-tree 上 split 出第二个 chat leaf 并绑定 session。
+ * 已有该 session 的 chat leaf 时仅 focus（1 session ↔ 0..1 leaf）。
+ * 不再走 legacy splitScreenWorkspace（只增 workspaces[]，不会产生 multi-unit）。
+ */
+function openSessionInChatSplit(
+  sessionId: string,
+  opts?: { title?: string; workspaceKey?: string }
+): void {
+  const sid = (sessionId || '').trim();
+  if (!sid) return;
+
+  const root = getCompositionRoot();
+  const tree = root.tree.getState();
+  const existing = findChatLeafBySessionId(tree.tree.root, sid);
+  if (existing) {
+    root.session.openOrFocusSession(sid, opts);
+    return;
+  }
+
+  const chats = listChatLeaves(tree.tree.root);
+  if (chats.length === 0) {
+    root.session.openOrFocusSession(sid, opts);
+    return;
+  }
+
+  const target =
+    chats.find((c) => c.id === tree.activeLeafId) ?? chats[0]!;
+
+  // 目标 leaf 未绑定时，先绑 shell active，避免两 pane 都跟 shell 漂
+  const shell = root.shell.getState();
+  const shellSid =
+    shell.openTabs.find((t) => t.tabId === shell.activeTabId)?.sessionId ??
+    null;
+  if (!target.sessionId && shellSid && shellSid !== sid) {
+    root.tree.setLeafSessionId(target.id, shellSid);
+  }
+
+  const beforeIds = new Set(
+    collectLeaves(root.tree.getState().tree.root).map((l) => l.id)
+  );
+  // splitLeaf 未上 tree 门面（E5）；经 tree.getState 单一命令入口
+  root.tree.getState().splitLeaf(target.id, 'horizontal', 'chat', 'after', 0.5);
+
+  const after = root.tree.getState();
+  const newLeaf = collectLeaves(after.tree.root).find(
+    (l) => isChatDomain(l.panelId) && !beforeIds.has(l.id)
+  );
+  if (newLeaf) {
+    root.tree.setLeafSessionId(newLeaf.id, sid);
+    after.setActiveLeaf(newLeaf.id);
+  }
+
+  // 开/聚焦 shell tab；多 chat 时 bind 会 focus 已绑定 leaf，不会 rebind 邻居
+  root.session.openOrFocusSession(sid, opts);
+}
+
 export interface UseSidebarContextMenuOptions {
   onShowToast: ShowToastFn;
   setSortDropdownOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -22,14 +84,7 @@ export function useSidebarContextMenu({
   onShowToast,
   setSortDropdownOpen,
 }: UseSidebarContextMenuOptions) {
-  const setActiveSessionId = useLayoutStore((s) => s.setActiveSessionId);
-  const pinSession = useLayoutStore((s) => s.pinSession);
-  const unpinSession = useLayoutStore((s) => s.unpinSession);
-  const archiveSession = useLayoutStore((s) => s.archiveSession);
-  const unarchiveSession = useLayoutStore((s) => s.unarchiveSession);
-  const branchSession = useLayoutStore((s) => s.branchSession);
-  const splitScreenWorkspace = useLayoutStore((s) => s.splitScreenWorkspace);
-
+  // pin/archive/branch 等命令式写走 compositionRoot.session；列表渲染仍用 selectors
   const [contextMenu, setContextMenu] =
     useState<SessionContextMenuState | null>(null);
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(
@@ -76,37 +131,44 @@ export function useSidebarContextMenu({
   const handleAction = (action: SessionMenuAction) => {
     if (!contextMenu) return;
     const { sessionId } = contextMenu;
-    const targetSession = getSessionStoreState().sessionsById[sessionId];
+    const root = getCompositionRoot();
+    const targetSession = root.session.getState().sessionsById[sessionId];
     setContextMenu(null);
     if (!targetSession) return;
 
     switch (action) {
       case 'open-current':
-        setActiveSessionId(sessionId);
+        root.session.openOrFocusSession(sessionId, {
+          title: targetSession.title,
+          workspaceKey: targetSession.folder,
+        });
         break;
       case 'open-split':
-        setActiveSessionId(sessionId);
         clearAgentPanelFocus();
-        splitScreenWorkspace(sessionId);
+        openSessionInChatSplit(sessionId, {
+          title: targetSession.title,
+          workspaceKey: targetSession.folder,
+        });
         break;
       case 'open-new': {
-        openSessionInNewWindow(targetSession as any);
+        openSessionInNewWindow(targetSession);
         break;
       }
       case 'rename':
         setRenamingSessionId(sessionId);
         break;
       case 'pin':
-        pinSession(sessionId);
+        // 仅 pin，不 open/focus；经 session 门面 → getSessionStoreState().pinSession
+        root.session.pinSession(sessionId);
         break;
       case 'unpin':
-        unpinSession(sessionId);
+        root.session.unpinSession(sessionId);
         break;
       case 'archive': {
         const title = targetSession.title || '未命名会话';
-        archiveSession(sessionId);
+        root.session.archiveSession(sessionId);
         onShowToast(archiveUndoToastMessage(title), () => {
-          unarchiveSession(sessionId);
+          root.session.unarchiveSession(sessionId);
         });
         break;
       }
@@ -114,13 +176,14 @@ export function useSidebarContextMenu({
         const title = targetSession.title || '未命名会话';
         const newTitle = `${title}${BRANCH_TITLE_SUFFIX}`;
         const oldId = sessionId;
-        branchSession(sessionId, newTitle);
-        const newBranchId = getSessionStoreState().activeSessionId;
+        root.session.branchSession(sessionId, newTitle);
+        const newBranchId = root.session.getActiveSessionId();
         onShowToast(branchUndoToastMessage(title), () => {
           if (newBranchId && newBranchId !== oldId) {
-            archiveSession(newBranchId);
+            root.session.archiveSession(newBranchId);
           }
-          setActiveSessionId(oldId);
+          // 回焦点用 getState 命令式写（setActive 非门面入口，避免 god DI）
+          root.session.getState().setActiveSessionId(oldId);
         });
         break;
       }
@@ -131,7 +194,7 @@ export function useSidebarContextMenu({
             const { tryDownloadSessionMarkdown } =
               await import('../../api/sessionExport');
             const result = tryDownloadSessionMarkdown(session, new Date(), {
-              sessionsById: useLayoutStore.getState().sessionsById,
+              sessionsById: root.session.getState().sessionsById,
             });
             if (result.ok === false) {
               onShowToast(result.error || '导出失败');
@@ -140,6 +203,18 @@ export function useSidebarContextMenu({
             onShowToast('导出失败');
           }
         })();
+        break;
+      }
+      case 'copy-id':
+        navigator.clipboard.writeText(sessionId);
+        onShowToast('会话 ID 已复制到剪贴板');
+        break;
+      case 'delete': {
+        const title = targetSession.title || '未命名会话';
+        if (window.confirm(`确定要彻底删除对话“${title}”吗？删除后数据将永久丢失。`)) {
+          root.session.deleteSession(sessionId);
+          onShowToast(`已删除对话: ${title}`);
+        }
         break;
       }
       default:

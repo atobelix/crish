@@ -1,9 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from '../ChatMessageRow.module.css';
-import { Tooltip } from '../settings/SettingsUI';
+import { Tooltip } from '../Tooltip';
 import type { SessionMessage } from '../../store/layoutStore';
-import { useBubbleShrinkWidth } from '../../hooks/useTextMeasure';
-import { buildPretextFontForUiSize } from '../../utils/pretextFontBridge';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
 import { Pin } from 'lucide-react';
 import {
@@ -54,27 +52,16 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   isExpanded,
   onToggleExpand,
   onTogglePin,
-  onWithdraw: _onWithdraw,
+  onWithdraw,
   onShowToast,
-  messageIndex,
+  messageIndex: _messageIndex,
   virtualScrollManager,
 }) => {
-  void _onWithdraw;
+  void _messageIndex;
   const isLong = isUserBubbleLong(msg.text);
   const displayText = userBubbleDisplayText(msg.text, isExpanded);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<number | null>(null);
-  const userRowRef = useRef<HTMLDivElement>(null);
-  const userBubbleFont = useMemo(
-    () => buildPretextFontForUiSize('medium', 'sans', 'normal'),
-    []
-  );
-  const userBubbleWidth = useBubbleShrinkWidth(
-    displayText,
-    userBubbleFont,
-    userRowRef,
-    32
-  );
   const rowAria = messageRowAriaLabel({
     role: 'user',
     isPinned,
@@ -88,9 +75,11 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
     []
   );
 
+  // Skip while message is still processing; RO owns live height. Invalidate on settle / text edits.
   useEffect(() => {
-    virtualScrollManager?.invalidateActual(String(messageIndex));
-  }, [msg.text, messageIndex, virtualScrollManager]);
+    if (msg.status === 'processing') return;
+    virtualScrollManager?.invalidateActual(msg.id);
+  }, [msg.text, msg.id, msg.status, virtualScrollManager]);
 
   const handleCopy = useCallback(() => {
     const text = msg.text || '';
@@ -105,6 +94,11 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
       copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
     });
   }, [msg.text, onShowToast]);
+
+  // 撤回：委托上层 handleWithdraw，由其收集范围 + 弹二次确认 + 反向还原
+  const handleWithdrawClick = useCallback(() => {
+    onWithdraw(msg.id, msg.text || '');
+  }, [msg.id, msg.text, onWithdraw]);
 
   const toggleExpand = useCallback(() => {
     if (isLong) {
@@ -128,7 +122,6 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   return (
     <div
       className={`${styles.row} ${styles.rowUser} msg-row msg-row-user${isSearchHit ? ` ${styles.searchHit} msg-search-hit` : ''}${isPinned ? ` ${styles.isPinned}` : ''}`}
-      ref={userRowRef}
       data-msg-id={msg.id}
       data-role="user"
       data-pinned={isPinned ? 'true' : undefined}
@@ -150,7 +143,6 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
           onKeyDown={onBubbleKeyDown}
           style={{
             cursor: isLong ? 'pointer' : 'default',
-            maxWidth: userBubbleWidth ?? undefined,
           }}
           role={isLong ? 'button' : undefined}
           tabIndex={isLong ? 0 : undefined}
@@ -168,6 +160,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
           copied={copied}
           onCopy={handleCopy}
           onTogglePin={() => onTogglePin(msg.id)}
+          onWithdraw={handleWithdrawClick}
         />
       </div>
     </div>

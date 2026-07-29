@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './CheatsheetModal.module.css';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import { useAnimatedPresence } from '../hooks/useAnimatedPresence';
 import { useRestoreFocus } from '../hooks/useRestoreFocus';
 import { FocusTrap } from './FocusTrap';

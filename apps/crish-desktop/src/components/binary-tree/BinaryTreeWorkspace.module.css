@@ -7,6 +7,7 @@
  * - drop overlay 绝对定位，pointer-events: none
  *
  * 视觉风格：与现有 Workspace.module.css 保持一致（hairline sash、accent drop 指示）
+ * multi-unit：leaf 去 radius、overflow clip、sash 宽命中窄可视线、chat/tool 同高对齐。
  */
 
 .section {
@@ -17,29 +18,58 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg-primary, #fff);
+  background: var(--bg-primary);
+}
+
+/* Global session tab bar row — shrink-0 above tree body */
+.section > [data-global-session-tab-bar] {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .canvas {
   position: relative;
   width: 100%;
-  height: 100%;
+  /* flex child of column section: fill remaining height under global tab bar */
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
   overflow: hidden;
-  background: var(--bg-primary, #fff);
+  background: var(--bg-primary);
   /* container query 边界，便于 leaf 内部响应式 */
   container-type: size;
   container-name: tree-canvas;
 }
 
+.treeBody {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .leaf {
   position: absolute;
-  /* rect 由 inline style 写入（top/left/width/height 百分比） */
+  /* rect 由 useTreeResize.paintFlatLayout / TreeLeafPanel layoutEffect 写 inline
+   * （勿用 React style prop，否则 live resize re-render 会覆盖两侧几何）。
+   * 不设 px min-width：绝对定位 % rect 的 min-size 由 useTreeResize
+   * 像素感知 clamp（MIN_CHILD_PX）保证非重叠；此处 min-width:0 让 flex
+   * 子项可收缩，overflow:hidden 防止内容画出 sibling 边界。 */
+  box-sizing: border-box;
   min-width: 0;
   min-height: 0;
+  /* 顶边无 padding：leaf 贴 canvas；单 unit 标签在 AppTopBar */
+  padding: 0;
+  margin: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: var(--bg-primary, #fff);
+  align-items: stretch;
+  background: var(--bg-primary);
+  /* multi-unit / 邻接 leaf：禁止圆角造成与 sibling 间的空隙或叠层 */
+  border-radius: 0;
+  isolation: isolate;
   /* 拖拽时禁用过渡，避免跟手延迟 */
   transition:
     top var(--transition-fast),
@@ -48,20 +78,66 @@
     height var(--transition-fast);
 }
 
+/*
+ * Tool dock header：作为 tool leaf 首子时贴顶、不参与 body 伸缩。
+ * 多 unit 时与 UnitSessionTabStrip（含 inline tools）同高 30px。
+ */
+.leaf > [data-right-tool-dock-header],
+.leaf > [data-unit-session-tab-strip],
+.leafToolHeader {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  align-self: stretch;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+/* live resize：关过渡 + 提示合成层，两侧 leaf 同帧跟手 */
 :global(.tree-resizing) .leaf,
 :global(.tree-dragging) .leaf {
   transition: none !important;
+  will-change: left, width, top, height;
 }
 
-/* 焦点 leaf 高亮（与现有 split 工作区一致） */
+/* 单 leaf：轻量焦点描边 */
 .leaf[data-active='true'] {
   outline: 1px solid
-    color-mix(in srgb, var(--text-primary, #111) 8%, transparent);
+    color-mix(in srgb, var(--text-primary) 8%, transparent);
   outline-offset: -1px;
 }
 
 .leaf[data-active='false'] {
   opacity: 0.96;
+}
+
+/*
+ * multi-unit：canvas 内 ≥2 leaf 时，用 inset hairline 划界，
+ * 取消 outline/半透明叠影，避免邻接单位 chrome 重叠发虚。
+ */
+.canvas:has(.leaf ~ .leaf) .leaf {
+  opacity: 1;
+  outline: none;
+  /* 不占布局盒宽，避免 % rect 与 border 双重扣减导致缝隙 */
+  box-shadow: inset 0 0 0 var(--hairline-width)
+    color-mix(
+      in srgb,
+      var(--hairline) 85%,
+      transparent
+    );
+}
+
+.canvas:has(.leaf ~ .leaf) .leaf[data-active='true'] {
+  opacity: 1;
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px
+    color-mix(in srgb, var(--text-primary) 16%, transparent);
+  z-index: 1;
+}
+
+.canvas:has(.leaf ~ .leaf) .leaf[data-active='false'] {
+  opacity: 1;
 }
 
 /* 拖拽中的源 leaf 隐藏（ghost 浮层接管） */
@@ -71,11 +147,17 @@
 }
 
 /* ── Sash（分割线） ──────────────────────────────────────────── */
+/*
+ * 命中区加宽（10px）+ 几何居中 translate，可视线仍为 ::after 1px hairline，
+ * 无 bulk 竖条，仅 hover/active 时略增对比。
+ */
 
 .sash {
   position: absolute;
   z-index: var(--z-splitter, 5);
   background: transparent;
+  /* 扩大可点区域但不绘制实底 */
+  touch-action: none;
   transition:
     top var(--transition-fast),
     left var(--transition-fast);
@@ -87,15 +169,15 @@
 }
 
 .sashHorizontal {
-  width: 6px;
+  width: 10px;
   cursor: col-resize;
-  transform: translateX(-3px);
+  transform: translateX(-5px);
 }
 
 .sashVertical {
-  height: 6px;
+  height: 10px;
   cursor: row-resize;
-  transform: translateY(-3px);
+  transform: translateY(-5px);
 }
 
 .sash::after {
@@ -112,7 +194,8 @@
   opacity: 0.5;
   transition:
     opacity var(--transition-fast),
-    width var(--transition-fast);
+    width var(--transition-fast),
+    height var(--transition-fast);
   pointer-events: none;
 }
 
@@ -163,15 +246,15 @@
   position: absolute;
   pointer-events: none;
   z-index: var(--z-drag-highlight, 100);
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-md);
   background-color: color-mix(
     in srgb,
-    var(--accent-color, #1a73e8) 12%,
+    var(--accent-color) 12%,
     transparent
   );
-  border: 1.5px solid var(--accent-color, #1a73e8);
+  border: 1.5px solid var(--accent-color);
   box-shadow: 0 0 8px
-    color-mix(in srgb, var(--accent-color, #1a73e8) 25%, transparent);
+    color-mix(in srgb, var(--accent-color) 25%, transparent);
   transition:
     top var(--transition-fast),
     left var(--transition-fast),
@@ -202,119 +285,79 @@
   pointer-events: none;
   z-index: var(--z-drag-overlay-max, 99999);
   opacity: 0.85;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--shadow-color) 18%, transparent);
+  border-radius: var(--radius-md);
   overflow: hidden;
-  background: var(--bg-primary, #fff);
-  border: 1px solid var(--border-color, #e5e5e5);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
   min-width: 120px;
   max-width: 280px;
-  padding: var(--space-2, 6px) var(--space-3, 12px);
-  font-size: var(--font-size-sm, 12px);
-  color: var(--text-primary, #111);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: var(--space-2, 6px);
+  gap: var(--space-2);
 }
 
 .ghostLabel {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: var(--font-weight-medium, 500);
-}
-
-/* ── Tab 条 ─────────────────────────────────────────────────── */
-
-.tabBar {
-  display: flex;
-  align-items: center;
-  height: 40px !important;
-  min-height: 40px !important;
-  max-height: 40px !important;
-  background: var(--bg-secondary, #f7f7f7);
-  border-bottom: var(--hairline-width, 1px) solid var(--border-color, #e5e5e5);
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-  flex-shrink: 0;
-  box-sizing: border-box;
-}
-
-.tabBar::-webkit-scrollbar {
-  display: none;
-}
-
-.tab {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1_5, 6px);
-  padding: 0 var(--space-3, 12px);
-  height: 28px;
-  box-sizing: border-box;
-  cursor: pointer;
-  border-radius: var(--radius-lg, 8px);
-  color: var(--text-secondary, #666);
-  font-size: var(--font-size-xs, 12px);
-  font-weight: var(--font-weight-medium, 500);
-  white-space: nowrap;
-  user-select: none;
-  transition:
-    background-color var(--transition-fast),
-    color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-.tab:hover {
-  background: var(--bg-tertiary, #efefef);
-  color: var(--text-primary, #111);
-}
-
-.tab[data-active='true'] {
-  background: var(--bg-primary, #fff);
-  color: var(--text-primary, #111);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 6%, transparent);
-}
-
-.tabClose {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  margin-left: var(--space-1, 4px);
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  opacity: 0.6;
-  transition:
-    opacity var(--transition-fast),
-    background var(--transition-fast);
-}
-
-.tabClose:hover {
-  opacity: 1;
-  background: var(--bg-tertiary, #efefef);
+  font-weight: var(--font-weight-medium);
 }
 
 /* ── Leaf body ──────────────────────────────────────────────── */
+/*
+ * chat / tool 同 unit：可选 dock header(30) + body 填满剩余高度。
+ * flex 列 + 子项 1fr，保证 Terminal/Files/Chat 根节点吃满 leafBody。
+ */
 
 .leafBody {
-  flex: 1;
+  /* 与可选 strip / RightToolDockHeader 并列：只吃剩余高度，勿 height:100% 以免顶栏+body 溢出 clip */
+  flex: 1 1 0%;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  /* strip 在 leaf 顶缘；body 不再垫顶 padding，避免与 strip hairline 双重空隙 */
+  padding-top: 0;
+  margin-top: 0;
 }
 
-/* ── 空状态 ─────────────────────────────────────────────────── */
+/* ErrorBoundary / Suspense 透传后的面板根：吃满 body 高度 */
+.leafBody > *,
+.leafBody > * > * {
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  width: 100%;
+}
+
+/* ── 空状态（含空坞 / 加载） ───────────────────────────────── */
 
 .emptyState {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 1 1 0%;
+  width: 100%;
   height: 100%;
-  color: var(--text-tertiary, #999);
-  font-size: var(--font-size-sm, 12px);
-  background: var(--bg-secondary, #f7f7f7);
+  min-height: 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  background: var(--bg-secondary);
+  box-sizing: border-box;
+  padding: var(--space-4);
+  text-align: center;
+  user-select: none;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
 }
 
 /* ── 窄屏自适应 ─────────────────────────────────────────────── */
@@ -330,6 +373,14 @@
   min-height: 300px;
   top: auto !important;
   left: auto !important;
+  /* 窄屏纵向堆叠：保留底部分隔，取消 multi-unit inset 双线感 */
+  box-shadow: none;
+  border-bottom: var(--hairline-width) solid var(--hairline);
+  outline: none;
+}
+
+:global(.is-narrow) .leaf:last-child {
+  border-bottom: none;
 }
 
 :global(.is-narrow) .sash {

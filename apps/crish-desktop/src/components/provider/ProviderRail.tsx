@@ -46,7 +46,7 @@ export function ProviderRail({ providers, activeId, searchQuery, onSearchChange,
             onClick={() => onSelect(p.id)}
           >
             <div className={styles.iconWrap}>
-              <span className={styles.initial}>{p.name[0].toUpperCase()}</span>
+              <span className={styles.initial}>{p.name[0]?.toUpperCase()}</span>
             </div>
             <div className={styles.info}>
               <div className={styles.name}>{p.name}</div>

@@ -14,6 +14,7 @@ import {
   Scroll,
   Settings,
   Terminal,
+  Users,
   X,
 } from 'lucide-react';
 import { getPanelTitle } from '../../store/layoutHelpers';
@@ -51,7 +52,7 @@ export function getPanelHint(cardId: string): string {
     case 'diff':
       return '变更 · Git 与 AI 改动';
     case 'agent':
-      return '聊天';
+      return '协作体';
     case 'files':
       return '文件 · 工作区浏览';
     case 'terminal':
@@ -79,7 +80,7 @@ export function getCloseAriaLabel(cardId: string): string {
   return `关闭「${getPanelTitle(cardId)}」`;
 }
 
-const TAB_ICON_SIZE = 14;
+const TAB_ICON_SIZE = 16;
 const TAB_ICON_STROKE = 1.75;
 
 export function renderCardIcon(id: string) {
@@ -110,7 +111,7 @@ export function renderCardIcon(id: string) {
     case 'runtime':
       return <Gauge {...props} />;
     case 'agent':
-      return <MessageSquare {...props} />;
+      return <Users {...props} />;
     default:
       return <Layout {...props} />;
   }
@@ -118,6 +119,7 @@ export function renderCardIcon(id: string) {
 
 export const PANEL_ADD_IDS = [
   'overview',
+  'agent',
   'files',
   'diff',
   'terminal',

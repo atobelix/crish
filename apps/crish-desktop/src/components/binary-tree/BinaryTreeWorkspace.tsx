@@ -2,18 +2,12 @@
  * 二叉树工作区 — 拖拽式布局工作区主入口。
  *
  * 渲染流程：
- * 1. 从 layoutTreeStore 读取 LayoutTree
- * 2. 调用 flattenToRenderList 计算 FlatPanel[]（含 rect 百分比）
- * 3. 遍历 branch 节点，在两个 child 之间渲染 TreeResizeSash
- * 4. 每个 leaf 用 TreeLeafPanel 渲染（绝对定位）
- * 5. DropZoneOverlay portal 到 body 显示落点预览
- * 6. ghost portal 显示拖拽 ghost（内联渲染，非独立组件）
- *
- * 设计要点：
- * - canvas 为 position: relative，所有 leaf/sash 绝对定位
- * - leaf rect 为百分比（0-1），由 flattenToRenderList 计算
- * - sash 仅在 branch 节点上渲染，位置由 splitRatio 决定
- * - 拖拽控制器在主入口创建一次，注入到所有 leaf（避免重复挂载全局事件）
+ * 1. layoutTreeStore → flattenTree
+ * 2. leaf 内容：
+ *    - 单 unit chat：ChatHeader（第 2 行）
+ *    - 多 unit chat：UnitSessionTabStrip（per-unit 标签行）+ ChatHeader
+ *    - 工具 leaf：LeafToolTabStrip（基于 leaf.tabs）
+ * 3. sash / DropZoneOverlay / 面板 ghost
  */
 
 import React, { useRef } from 'react';
@@ -21,18 +15,19 @@ import { createPortal } from 'react-dom';
 import {
   useLayoutTreeStore,
   flattenTree,
+  listChatLeaves,
   type LayoutLeaf,
+  type FlatBranch,
 } from '../../store/layout-tree';
 import { getPanelTitle } from '../../store/layoutHelpers';
 import { useTreeDrag } from '../../hooks/useTreeDrag';
 import { useTreeResize } from '../../hooks/useTreeResize';
+import { useTreePanelEvents } from '../../hooks/useTreePanelEvents';
+import { useChatPanelSync } from '../../hooks/useChatPanelSync';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Tooltip } from '../Tooltip';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
-import { Columns, Plus, RotateCcw } from 'lucide-react';
-
 import { TreeLeafPanel } from './TreeLeafPanel';
-import { TreeResizeSash } from './TreeResizeSash';
+import { TreeResizeSash, flatBranchEqual } from './TreeResizeSash';
 import { DropZoneOverlay } from './DropZoneOverlay';
 import styles from './BinaryTreeWorkspace.module.css';
 
@@ -43,180 +38,198 @@ export interface BinaryTreeWorkspaceProps {
   onShowToast: ShowToastFn;
 }
 
+// ── 稳定 leaf / branch 身份 ─────────────────────────────────────────
+//
+// flattenTree 每次产出新 FlatPanel / FlatBranch / rect 字面量；map 内再
+// new LayoutLeaf 会使 TreeLeafPanel / TreeResizeSash 的 React.memo 浅比较
+// 永远失败（sibling resize commit、activeLeaf 切换等父级 re-render 都会
+// 重绘所有 leaf/sash）。按 id 复用引用：内容未变则保持同一对象。
+
+type FlatPanelItem = ReturnType<typeof flattenTree>['leaves'][number];
+type LeafRect = FlatPanelItem['rect'];
+
+interface StableLeafEntry {
+  leaf: LayoutLeaf;
+  rect: LeafRect;
+}
+
+function tabsEqual(a: readonly string[], b: readonly string[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function rectEqual(a: LeafRect, b: LeafRect): boolean {
+  return (
+    a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+  );
+}
+
+function toLayoutLeaf(panel: FlatPanelItem): LayoutLeaf {
+  return {
+    type: 'leaf',
+    id: panel.leafId,
+    panelId: panel.panelId,
+    tabs: panel.tabs,
+    activeTab: panel.activeTab,
+    ...(panel.sessionId ? { sessionId: panel.sessionId } : {}),
+  };
+}
+
+function stabilizeLeafEntries(
+  panels: FlatPanelItem[],
+  prev: Map<string, StableLeafEntry>
+): Map<string, StableLeafEntry> {
+  const next = new Map<string, StableLeafEntry>();
+  for (const panel of panels) {
+    const cached = prev.get(panel.leafId);
+    let leaf: LayoutLeaf;
+    if (
+      cached &&
+      cached.leaf.panelId === panel.panelId &&
+      cached.leaf.activeTab === panel.activeTab &&
+      cached.leaf.sessionId === panel.sessionId &&
+      tabsEqual(cached.leaf.tabs, panel.tabs)
+    ) {
+      leaf = cached.leaf;
+    } else {
+      leaf = toLayoutLeaf(panel);
+    }
+
+    const rect =
+      cached && rectEqual(cached.rect, panel.rect) ? cached.rect : panel.rect;
+
+    next.set(panel.leafId, { leaf, rect });
+  }
+  return next;
+}
+
+/** 按 branchId 复用 FlatBranch 引用（几何未变则同一对象） */
+function stabilizeBranches(
+  branches: FlatBranch[],
+  prev: Map<string, FlatBranch>
+): Map<string, FlatBranch> {
+  const next = new Map<string, FlatBranch>();
+  for (const branch of branches) {
+    const cached = prev.get(branch.branchId);
+    next.set(
+      branch.branchId,
+      cached && flatBranchEqual(cached, branch) ? cached : branch
+    );
+  }
+  return next;
+}
+
 // ── 主组件 ───────────────────────────────────────────────────────────
 
 export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
   React.memo(({ onShowToast }) => {
     const tree = useLayoutTreeStore((s) => s.tree);
     const activeLeafId = useLayoutTreeStore((s) => s.activeLeafId);
+    const toolColumnCollapsed = useLayoutTreeStore((s) => s.toolColumnCollapsed);
     const draggedSource = useLayoutTreeStore((s) => s.draggedSource);
-    const resetTree = useLayoutTreeStore((s) => s.resetTree);
-    const splitLeaf = useLayoutTreeStore((s) => s.splitLeaf);
-    const undo = useLayoutTreeStore((s) => s.undo);
-    const redo = useLayoutTreeStore((s) => s.redo);
-    // 直接订阅 past/future 长度，避免在 selector 中调用 action（get() 反模式）
-    const canUndo = useLayoutTreeStore((s) => s.past.length > 0);
-    const canRedo = useLayoutTreeStore((s) => s.future.length > 0);
+    // 注意：勿订 past/future 长度 — 历史栈变化与 canvas 渲染无关，
+    // 曾导致每次 resize commit / 其它写历史动作全树 leaf+sash re-render。
 
     const canvasRef = useRef<HTMLDivElement>(null);
     const dragController = useTreeDrag();
     const resizeController = useTreeResize();
+    useTreePanelEvents();
+    useChatPanelSync();
 
-    // 单次遍历计算 leaf + branch 渲染列表（含 rect）
-    // flattenTree 同时输出 leaves 和 branches，共享同一递归，
-    // 替代旧实现的 flattenToRenderList + collectBranches 两次遍历
-    const { leaves: panels, branches } = React.useMemo(
-      () => flattenTree(tree.root),
-      [tree]
-    );
+    const { leaves: panels, branches, isMultiChat } = React.useMemo(() => {
+      // multi-chat：禁止全局 toolColumnCollapsed 压掉所有 unit 右坞
+      const multi = listChatLeaves(tree.root).length > 1;
+      const result = flattenTree(tree.root, {
+        collapsedDomain:
+          !multi && toolColumnCollapsed ? 'tool' : undefined,
+      });
+      return { ...result, isMultiChat: multi };
+    }, [tree.root, toolColumnCollapsed]);
 
-    // 拖拽源 leaf id（用于隐藏源 leaf）
-    const draggedLeafId = draggedSource?.leafId ?? null;
+    // 跨 render 复用 leaf / rect 引用，供 TreeLeafPanel React.memo 跳过
+    const leafEntryCacheRef = useRef<Map<string, StableLeafEntry>>(new Map());
+    const stableLeafEntries = React.useMemo(() => {
+      const next = stabilizeLeafEntries(panels, leafEntryCacheRef.current);
+      leafEntryCacheRef.current = next;
+      return next;
+    }, [panels]);
 
-    // 拖拽 ghost 内容（仅 label，外层 .ghost 容器由 portal 统一提供）
-    // 仅依赖 draggedSource — ghostPosition 每帧变化但 label 内容不变，
-    // 由 JSX 处的 ghostPosition 检查决定是否渲染 portal
+    // 跨 render 复用 branch 引用，供 TreeResizeSash React.memo 跳过
+    const branchCacheRef = useRef<Map<string, FlatBranch>>(new Map());
+    const stableBranches = React.useMemo(() => {
+      const next = stabilizeBranches(branches, branchCacheRef.current);
+      branchCacheRef.current = next;
+      return next;
+    }, [branches]);
+
+    const draggedLeafId =
+      draggedSource && draggedSource.type === 'leaf' ? draggedSource.leafId : null;
+
     const ghostLabel = React.useMemo(() => {
       if (!draggedSource) return null;
-      return draggedSource.type === 'tab' && draggedSource.tabId
-        ? getPanelTitle(draggedSource.tabId)
-        : getPanelTitle(draggedSource.panelId);
+      if (draggedSource.type === 'leaf') {
+        return getPanelTitle(draggedSource.panelId);
+      }
+      return getPanelTitle(draggedSource.tabId);
     }, [draggedSource]);
 
-    const handleReset = React.useCallback(() => {
-      resetTree('chat');
-      onShowToast('已重置为单面板布局');
-    }, [resetTree, onShowToast]);
-
-    const handleSplitDemo = React.useCallback(() => {
-      // 演示：在当前激活 leaf 旁边 split 出一个 diff 面板
-      if (!activeLeafId) return;
-      splitLeaf(activeLeafId, 'horizontal', 'diff', 'after', 0.5);
-    }, [activeLeafId, splitLeaf]);
-
-    const handleUndo = React.useCallback(() => {
-      if (canUndo) {
-        undo();
-      }
-    }, [canUndo, undo]);
-
-    const handleRedo = React.useCallback(() => {
-      if (canRedo) {
-        redo();
-      }
-    }, [canRedo, redo]);
+    // 解构稳定字段，避免把整包 controller 对象传给 sash（破 memo）
+    const { startResize, resizingBranchId } = resizeController;
 
     return (
-      <div className={styles.section} data-tree-workspace="true">
-        {/* 顶部控制条 */}
-        <div
-          className={styles.controlBar}
-          role="toolbar"
-          aria-label="工作区工具栏"
-        >
-          <span className={styles.leafTitle}>
-            二叉树工作区 · {panels.length} 面板 · {branches.length} 分割
-          </span>
-          <span className={styles.controlSpacer} />
-          <Tooltip content={canUndo ? '撤销' : '无可撤销操作'}>
-            <button
-              type="button"
-              className={styles.controlBtn}
-              onClick={handleUndo}
-              disabled={!canUndo}
-              aria-label="撤销布局变更"
-            >
-              <RotateCcw size={12} aria-hidden />
-            </button>
-          </Tooltip>
-          <Tooltip content={canRedo ? '重做' : '无可重做操作'}>
-            <button
-              type="button"
-              className={styles.controlBtn}
-              onClick={handleRedo}
-              disabled={!canRedo}
-              aria-label="重做布局变更"
-            >
-              <RotateCcw
-                size={12}
-                aria-hidden
-                style={{ transform: 'scaleX(-1)' }}
-              />
-            </button>
-          </Tooltip>
-          <Tooltip content="添加 diff 面板（演示）">
-            <button
-              type="button"
-              className={styles.controlBtn}
-              onClick={handleSplitDemo}
-              aria-label="添加 diff 面板"
-            >
-              <Plus size={12} aria-hidden />
-            </button>
-          </Tooltip>
-          <Tooltip content="重置为单面板">
-            <button
-              type="button"
-              className={styles.controlBtn}
-              onClick={handleReset}
-              aria-label="重置布局"
-            >
-              <Columns size={12} aria-hidden />
-            </button>
-          </Tooltip>
-        </div>
-
-        {/* Canvas：渲染所有 leaf 与 sash */}
+      <div
+        className={styles.section}
+        data-tree-workspace="true"
+        style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}
+      >
         <AppErrorBoundary compact>
           <div
             ref={canvasRef}
-            className={styles.canvas}
+            className={`${styles.canvas} ${styles.treeBody}`}
             data-tree-canvas="true"
             role="group"
             aria-label="二叉树布局画布"
+            style={{ flex: 1, position: 'relative', width: '100%', minHeight: 0 }}
           >
-            {/* 渲染所有 leaf */}
             {panels.map((panel) => {
-              // FlatPanel 已包含全部 leaf 数据（flattenToRenderList 与 tree 同步），
-              // 无需再 findNodeById — 直接构造 LayoutLeaf 即可，避免 O(n log n) 查找
-              const leaf: LayoutLeaf = {
-                type: 'leaf',
-                id: panel.leafId,
-                panelId: panel.panelId,
-                tabs: panel.tabs,
-                activeTab: panel.activeTab,
-              };
+              const entry = stableLeafEntries.get(panel.leafId)!;
               return (
                 <TreeLeafPanel
                   key={panel.leafId}
-                  leaf={leaf}
-                  rect={panel.rect}
+                  leaf={entry.leaf}
+                  rect={entry.rect}
                   isActive={panel.leafId === activeLeafId}
                   isDragSource={panel.leafId === draggedLeafId}
-                  dragController={dragController}
                   onShowToast={onShowToast}
+                  isMultiChat={isMultiChat}
                 />
               );
             })}
 
-            {/* 渲染所有 sash（branch 节点，使用 flattenTree 计算的 rect 定位） */}
-            {branches.map((branch) => (
-              <TreeResizeSash
-                key={branch.branchId}
-                branch={branch}
-                resizeController={resizeController}
-              />
-            ))}
+            {/* 渲染所有 sash（branch 经 branchId 缓存稳定；startResize 稳定 + isResizing 布尔） */}
+            {branches.map((branch) => {
+              const stable =
+                stableBranches.get(branch.branchId) ?? branch;
+              return (
+                <TreeResizeSash
+                  key={branch.branchId}
+                  branch={stable}
+                  startResize={startResize}
+                  isResizing={resizingBranchId === branch.branchId}
+                />
+              );
+            })}
 
             {/* Drop zone 覆盖层 */}
             <DropZoneOverlay />
           </div>
         </AppErrorBoundary>
 
-        {/* 拖拽 ghost 浮层（单层 .ghost 容器，避免重复包裹）
-            位置由 useTreeDrag 通过 ref + 直接 DOM 更新（跳过 React re-render）。
-            初始 transform 把 ghost 移出视口，setGhostRef 回调在挂载时立即
-            应用 ghostPosRef 中的真实位置，避免首帧闪现在 (0,0)。 */}
+        {/* 面板拖拽 ghost（useTreeDrag）：ref + 直接 DOM transform，跳过 React re-render */}
         {ghostLabel !== null &&
           dragController.isDragging &&
           createPortal(

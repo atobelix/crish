@@ -4,16 +4,15 @@
  * 契约：仅侧栏展示；打开/切换一律 openAgentInSidePanel / browseAgentSidePanel，
  * 永不覆盖主对话、不 spawn 主会话 ghost。
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './AgentCard.module.css';
 import { Tooltip } from './Tooltip';
 import * as Lucide from 'lucide-react';
 import { browseAgentSidePanel, openAgentInSidePanel } from '../api/openAgentPanel';
 import { useLayoutStore } from '../store/layoutStore';
-import type { SessionAgent, SessionMessage, FileDiff } from '../store/layoutStore';
+import type { FileDiff } from '../store/layoutStore';
 import { focusOrOpenPanel, setActiveDiffSource as setActiveDiffSourceAccess } from '../api/storeAccess';
 import { openFileInPanel } from '../api/workspaceFsApi';
-import { ChatUserMessageRow, ChatAssistantMessageRow } from './ChatMessageRow';
 import {
   getSessionAgent,
   selectActiveSessionId,
@@ -26,257 +25,19 @@ import {
 } from '../api/subagentApi';
 import { ComposerField } from './ChatComposer';
 import { AgentTeamBoard } from './AgentTeamBoard';
-import { useAgentStream } from '../hooks/useAgentStream';
-import { useAgentToolApproval } from '../hooks/useAgentToolApproval';
+import { useAgentPanel } from '../hooks/useAgentStream';
+import { AgentStatusChip } from './agent-card/AgentStatusChip';
+import { AgentBrowsePad } from './agent-card/AgentBrowsePad';
+import { AgentMessageRow } from './agent-card/AgentMessageRow';
+import {
+  STATUS_LABEL,
+  agentDisplayName,
+  countPendingApprovals,
+  formatAgentDuration,
+  openAgentInNewWindow,
+} from './agent-card/agentCardUtils';
 
-/** 状态芯片文案（中文唯一来源） */
-const STATUS_LABEL: Record<SessionAgent['status'], string> = {
-  running: '运行中',
-  completed: '完成',
-  failed: '失败',
-  stopped: '已停止',
-};
-
-/** 浏览列表排序：运行中 → 失败 → 已停止 → 完成；同组新在前 */
-function rankAgentStatus(st: SessionAgent['status']): number {
-  if (st === 'running') return 0;
-  if (st === 'failed') return 1;
-  if (st === 'stopped') return 2;
-  return 3;
-}
-
-function sortAgentsForBrowse(agents: SessionAgent[]): SessionAgent[] {
-  return [...agents].sort((a, b) => {
-    const d = rankAgentStatus(a.status) - rankAgentStatus(b.status);
-    if (d !== 0) return d;
-    return (b.startedAt || 0) - (a.startedAt || 0);
-  });
-}
-
-/** 紧凑时长：侧栏密度用 */
-function formatAgentDuration(agent: SessionAgent): string | null {
-  const start = agent.startedAt;
-  if (!start || !Number.isFinite(start)) return null;
-  const end = agent.endedAt && Number.isFinite(agent.endedAt) ? agent.endedAt : Date.now();
-  const sec = Math.max(0, Math.round((end - start) / 1000));
-  if (sec < 60) return `${sec} 秒`;
-  if (sec < 3600) {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return s > 0 ? `${m} 分 ${s} 秒` : `${m} 分钟`;
-  }
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  return m > 0 ? `${h} 小时 ${m} 分` : `${h} 小时`;
-}
-
-function agentDisplayName(agent: SessionAgent): string {
-  return (agent.description || agent.mode || agent.id || '子智能体').trim() || '子智能体';
-}
-
-function countPendingApprovals(agent: SessionAgent): number {
-  let n = 0;
-  for (const m of agent.messages || []) {
-    for (const t of m.toolCalls || []) {
-      if (t.status === 'pending_approval') n += 1;
-    }
-  }
-  return n;
-}
-
-/** 状态芯片：统一中文 + a11y role/status */
-function AgentStatusChip({
-  status,
-  mode,
-  compact,
-}: {
-  status: SessionAgent['status'];
-  mode?: string;
-  /** 列表行更紧时不读冗长 title */
-  compact?: boolean;
-}) {
-  const label = STATUS_LABEL[status] || '未知';
-  const modeHint = mode ? `模式：${mode}` : undefined;
-  return (
-    <span
-      className={`${styles.agentCardBadge} ${styles['agentCardBadge' + status.charAt(0).toUpperCase() + status.slice(1)] || ''}`}
-      role="status"
-      data-agent-status={status}
-      aria-label={`状态：${label}${mode ? `，${modeHint}` : ''}`}
-      title={compact ? label : modeHint || label}
-    >
-      {label}
-    </span>
-  );
-}
-
-/**
- * Agent 侧栏空态 / 浏览列表：仅浏览本会话已有、由主 AI 拉起的子 agent。
- * 无「人类协作任务」表单；创建只发生在 run_subagent。
- * 打开详情仅 openAgentInSidePanel（侧栏 only）。
- */
-function AgentBrowsePad({
-  parentSessionId,
-  onClose,
-  embedded,
-}: {
-  parentSessionId?: string | null;
-  onClose?: (() => void) | undefined;
-  embedded?: boolean | undefined;
-}) {
-  const sessionsById = useSessionField(selectSessionsById);
-  const activeSessionId = useSessionField(selectActiveSessionId);
-  const parentId = parentSessionId || activeSessionId;
-  const parent = parentId ? sessionsById[parentId] : undefined;
-  const agents = parent?.agents || [];
-  const sorted = useMemo(() => sortAgentsForBrowse(agents), [agents]);
-  const runningCount = useMemo(
-    () => agents.filter((a) => a.status === 'running').length,
-    [agents],
-  );
-  const pendingTotal = useMemo(
-    () => agents.reduce((n, a) => n + countPendingApprovals(a), 0),
-    [agents],
-  );
-
-  return (
-    <div
-      className={`${styles.agentCard} ${styles.agentCardLaunch} ${styles.agentCardDense}`}
-      data-agent-side-only="1"
-      data-agent-panel="browse"
-      role="region"
-      aria-label="协作体聊天列表"
-    >
-      <header className={`${styles.agentCardHeader} ${styles.agentCardHeaderSlim}`}>
-        <div className={styles.agentCardTitleRow}>
-          <Lucide.Bot size={14} strokeWidth={1.75} aria-hidden />
-          <span className={styles.agentCardTitle}>聊天</span>
-          {agents.length > 0 ? (
-            <span
-              className={styles.agentCardBadge}
-              title={`共 ${agents.length} 个`}
-              aria-label={`共 ${agents.length} 个子智能体`}
-            >
-              {agents.length}
-            </span>
-          ) : null}
-          {runningCount > 0 ? (
-            <span
-              className={`${styles.agentCardBadge} ${styles.agentCardBadgeRunning}`}
-              role="status"
-              aria-label={`${runningCount} 个运行中`}
-              title="运行中"
-            >
-              {runningCount} 运行
-            </span>
-          ) : null}
-          {pendingTotal > 0 ? (
-            <span
-              className={styles.agentCardBadge}
-              role="status"
-              aria-label={`${pendingTotal} 项待审批`}
-              title="待审批工具"
-            >
-              {pendingTotal} 待批
-            </span>
-          ) : null}
-        </div>
-        {onClose ? (
-          <Tooltip content={embedded ? '返回' : '关闭侧栏'}>
-            <button
-              type="button"
-              className={styles.agentCardBtn}
-              aria-label={embedded ? '返回' : '关闭侧栏'}
-              onClick={onClose}
-            >
-              {embedded ? <Lucide.ChevronLeft size={14} aria-hidden /> : <Lucide.X size={14} aria-hidden />}
-            </button>
-          </Tooltip>
-        ) : null}
-      </header>
-
-      <div className={styles.agentLaunchBody}>
-        {agents.length === 0 ? (
-          <div
-            className={styles.skeletonContainer}
-            role="status"
-            aria-live="polite"
-          >
-            <div className={styles.skeletonTitleRow}>
-              <Lucide.Bot size={13} className={styles.skeletonBotIcon} aria-hidden />
-              <span>暂无活跃协作</span>
-            </div>
-            <div className={styles.skeletonGrid}>
-              {[1, 2, 3].map((i) => (
-                <div key={i} className={styles.skeletonCard}>
-                  <div className={styles.skeletonCardHeader}>
-                    <div className={styles.skeletonDot} />
-                    <div className={styles.skeletonLineShort} />
-                  </div>
-                  <div className={styles.skeletonLineLong} />
-                  <div className={styles.skeletonLineMedium} />
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className={styles.agentLaunchList} role="list" aria-label="本会话子智能体">
-            <div className={styles.agentLaunchListH} id="agent-launch-list-heading">
-              本会话 · AI 已拉起
-            </div>
-            {sorted.map((a) => {
-              const name = agentDisplayName(a);
-              const pending = countPendingApprovals(a);
-              const dur = formatAgentDuration(a);
-              const titleBits = [
-                name,
-                STATUS_LABEL[a.status],
-                a.mode ? `模式 ${a.mode}` : '',
-                pending ? `${pending} 项待批` : '',
-                dur || '',
-                (a.summary || '').trim().slice(0, 80),
-              ].filter(Boolean);
-              return (
-                <Tooltip content={titleBits.join(' · ')}>
-                <button
-                  key={a.id}
-                  type="button"
-                  role="listitem"
-                  className={styles.agentLaunchItem}
-                  data-agent-id={a.id}
-                  data-agent-status={a.status}
-                  aria-label={`${name}，${STATUS_LABEL[a.status]}${
-                    pending ? `，${pending} 项待批` : ''
-                  }。在侧栏打开`}
-                  onClick={() => {
-                    // 侧栏 only：禁止主列全屏 / 新会话 ghost
-                    openAgentInSidePanel(a.id, {
-                      sessionId: parentId || undefined,
-                    });
-                  }}
-                >
-                  <Lucide.Bot size={13} strokeWidth={1.75} aria-hidden />
-                  <span className={styles.agentLaunchItemT}>{name}</span>
-                  {pending > 0 ? (
-                    <span
-                      className={styles.agentCardBadge}
-                      aria-hidden
-                      title={`${pending} 项待批`}
-                    >
-                      待批
-                    </span>
-                  ) : null}
-                  <AgentStatusChip status={a.status} mode={a.mode} compact />
-                </button>
-              </Tooltip>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+export { openAgentInNewWindow };
 
 interface AgentCardProps {
   agentId?: string | null;
@@ -324,15 +85,15 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
   const {
     handleSend: hookHandleSend,
     handleStop: hookHandleStop,
+    handleForceStop: hookHandleForceStop,
     sending,
     sendError,
     setSendError,
     incrementEpoch,
-  } = useAgentStream({
+  } = useAgentPanel({
     parentSessionId: parentId || '',
     agentId: id || '',
     isRunning: agent?.status === 'running',
-    ...(agent?.subagentRunId !== undefined && { subagentRunId: agent.subagentRunId }),
   });
 
   const [input, setInput] = useState('');
@@ -477,9 +238,8 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
             </Tooltip>
           ) : null}
           <Lucide.Bot size={14} strokeWidth={1.75} aria-hidden />
-          <span
-            className={styles.agentCardTitle}
-            title={[
+          <Tooltip
+            content={[
               titleName,
               agent.mode ? `模式：${agent.mode}` : '',
               durationLabel || '',
@@ -488,27 +248,31 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
               .filter(Boolean)
               .join(' · ')}
           >
-            {titleName}
-          </span>
+            <span className={styles.agentCardTitle}>
+              {titleName}
+            </span>
+          </Tooltip>
           <AgentStatusChip status={agent.status} mode={agent.mode} />
           {pendingApproval > 0 ? (
-            <span
-              className={styles.agentCardBadge}
-              role="status"
-              aria-label={`${pendingApproval} 项工具待审批`}
-              title="待审批"
-            >
-              {pendingApproval} 待批
-            </span>
+            <Tooltip content="待审批">
+              <span
+                className={styles.agentCardBadge}
+                role="status"
+                aria-label={`${pendingApproval} 项工具待审批`}
+              >
+                {pendingApproval} 待批
+              </span>
+            </Tooltip>
           ) : null}
           {durationLabel ? (
-            <span
-              className={styles.agentCardBadge}
-              title={running ? '已运行时长' : '总时长'}
-              aria-label={running ? `已运行 ${durationLabel}` : `用时 ${durationLabel}`}
-            >
-              {durationLabel}
-            </span>
+            <Tooltip content={running ? '已运行时长' : '总时长'}>
+              <span
+                className={styles.agentCardBadge}
+                aria-label={running ? `已运行 ${durationLabel}` : `用时 ${durationLabel}`}
+              >
+                {durationLabel}
+              </span>
+            </Tooltip>
           ) : null}
         </div>
         <div className={styles.agentCardActions}>
@@ -640,6 +404,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
           setIsComposing={setIsComposing}
           isProcessing={running}
           onStop={() => hookHandleStop(agent.summary)}
+          onForceStop={() => hookHandleForceStop(agent.summary)}
           processingSendLabel="发送"
           placeholder={running ? '补充指示…' : '继续对话…'}
           ariaLabel={running ? '向子智能体补充指示' : '继续与子智能体对话'}
@@ -653,161 +418,3 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
 });
 
 AgentCard.displayName = 'AgentCard';
-
-function AgentMessageRow({
-  msg,
-  parentSessionId,
-  agentId,
-  idx,
-  totalMsgs,
-  onOpenDiff,
-  onOpenPath,
-  onOpenTerminal,
-}: {
-  msg: SessionMessage;
-  parentSessionId: string;
-  agentId: string;
-  idx: number;
-  totalMsgs: number;
-  onOpenDiff: (diff: FileDiff) => void;
-  onOpenPath: (filePath: string) => void;
-  onOpenTerminal: () => void;
-}) {
-  const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
-  const onToggleTool = useCallback((toolId: string, currentlyOpen: boolean) => {
-    setExpandedTools((prev) => ({ ...prev, [toolId]: !currentlyOpen }));
-  }, []);
-  // ApprovalAskCard 二次确认后落地：busy + remember 白名单
-  const { approvalBusy, onApprovalAllow, onApprovalDeny } = useAgentToolApproval(
-    parentSessionId,
-    agentId,
-  );
-
-  if (msg.sender === 'user') {
-    return (
-      <ChatUserMessageRow
-        msg={msg}
-        isPinned={false}
-        isSearchHit={false}
-        isExpanded={true}
-        onToggleExpand={() => {}}
-        onTogglePin={() => {}}
-        onWithdraw={() => {}}
-        messageIndex={idx}
-        virtualScrollManager={null}
-      />
-    );
-  }
-
-  const isLastAssistant = idx === totalMsgs - 1;
-  const isThinkingMsg = msg.status === 'processing' || msg.status === 'queued';
-
-  return (
-    <ChatAssistantMessageRow
-      msg={msg}
-      isFollowUp={false}
-      isPinned={false}
-      isSearchHit={false}
-      isThinkingMsg={isThinkingMsg}
-      thinkingSeconds={0}
-      hideThinkingBlock={false}
-      inPlanMode={false}
-      planApproved={false}
-      isLastAssistant={isLastAssistant}
-      messageIndex={idx}
-      virtualScrollManager={null}
-      toolStackProps={{
-        agents: [],
-        activeSessionId: parentSessionId,
-        expandedTools: expandedTools,
-        onToggleTool: onToggleTool,
-        approvalBusy: approvalBusy,
-        pendingApprovalMsgId: msg.id,
-        onOpenDiff: onOpenDiff,
-        onOpenPath: onOpenPath,
-        onOpenTerminal: onOpenTerminal,
-        onApprovalAllow: onApprovalAllow,
-        onApprovalDeny: onApprovalDeny,
-      }}
-      onTogglePin={() => {}}
-      onShowToast={() => {}}
-      onRegenerate={() => {}}
-      onBranch={() => {}}
-      onOpenDiff={onOpenDiff}
-      onOpenDiffPanel={() => {}}
-      setPermissionMode={() => {}}
-      setPlanApproved={() => {}}
-    />
-  );
-}
-
-/** 新窗口打开 agent 只读快照（Blob URL，避免 document.write）；非侧栏主路径 */
-export function openAgentInNewWindow(agent: SessionAgent): void {
-  const w = window.open('', '_blank', 'noopener,noreferrer,width=720,height=900');
-  if (!w) return;
-  const esc = (s: string) =>
-    s
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  const statusLabel = STATUS_LABEL[agent.status] || '完成';
-  const lines: string[] = [];
-  lines.push(`<h1>${esc(agent.description || '协作智能体')}</h1>`);
-  lines.push(
-    `<p class="meta">${esc(agent.mode || '')} · ${esc(statusLabel)}${
-      agent.summary ? ' · ' + esc(agent.summary) : ''
-    }</p>`,
-  );
-  for (const m of agent.messages || []) {
-    if (m.sender === 'user') {
-      lines.push(`<div class="u">${esc(m.text || '')}</div>`);
-    } else {
-      lines.push(`<div class="a">${esc(m.text || '')}</div>`);
-      for (const tc of m.toolCalls || []) {
-        const tcStatus =
-          tc.status === 'success'
-            ? '成功'
-            : tc.status === 'error'
-              ? '失败'
-              : tc.status === 'running'
-                ? '执行中'
-                : tc.status === 'pending_approval'
-                  ? '待审批'
-                  : String(tc.status || '');
-        lines.push(
-          `<div class="t"><b>${esc(tc.name)}</b> ${esc(tcStatus)}<pre>${esc(
-            (tc.output || '').slice(0, 2000),
-          )}</pre></div>`,
-        );
-      }
-    }
-  }
-  const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"/><title>${esc(
-    agent.description || '子智能体',
-  )}</title>
-<style>
-body{font-family:system-ui,sans-serif;padding:20px;max-width:720px;margin:0 auto;color:#222;background:#fafafa}
-h1{font-size:18px;margin:0 0 8px}.meta{color:#888;font-size:12px;margin:0 0 20px}
-.u{background:#e8eef8;padding:10px 12px;border-radius:12px;margin:10px 0 10px auto;max-width:85%;width:fit-content}
-.a{background:#fff;border:1px solid #eee;padding:10px 12px;border-radius:12px;margin:10px 0;white-space:pre-wrap}
-.t{font-size:12px;color:#666;margin:6px 0 6px 8px}pre{white-space:pre-wrap;font-size:11px;background:#f4f4f5;padding:8px;border-radius:6px}
-</style></head><body>${lines.join('\n')}</body></html>`;
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const revoke = () => {
-    try {
-      URL.revokeObjectURL(url);
-    } catch {
-      /* ignore */
-    }
-  };
-  try {
-    w.addEventListener('load', revoke, { once: true });
-  } catch {
-    /* ignore */
-  }
-  // 兜底：部分环境 load 不可靠
-  window.setTimeout(revoke, 60_000);
-  w.location.href = url;
-}

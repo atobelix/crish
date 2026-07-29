@@ -1,92 +1,73 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import styles from '../ChatMessageRow.module.css';
 import { useAsyncMarkdownHtml } from '../../api/markdownRenderAsync';
-import type { IncrementalMarkdownBridge } from '../../api/incrementalMarkdownBridge';
-import { chunkUpdatesToDomPatches, applyDomPatches } from '../../api/domPatch';
-import { Priority } from '../../workers';
-import { escapeHtml } from '../../api/markdownRenderLite';
-import { usePreparedText } from '../../hooks/useTextMeasure';
-import { buildPretextFontForUiSize } from '../../utils/pretextFontBridge';
+import type { Priority } from '../../workers';
 
 export interface AsyncMarkdownBlockProps {
   text: string;
-  priority: Priority;
+  /** 渲染优先级（仅 fallback worker 路径消费；Rust 命令忽略优先级）。 */
+  priority?: Priority;
+  /** 流式期间 true：显示纯文本 + caret 占位，跳过 Rust 渲染以避免每帧 IPC；
+   *  流式结束 false：触发 Rust 渲染（或 worker fallback）。 */
+  isStreaming?: boolean;
 }
 
-export function AsyncMarkdownBlock({ text, priority }: AsyncMarkdownBlockProps) {
-  const { html, loading } = useAsyncMarkdownHtml(text, priority);
-  const skeletonRef = useRef<HTMLDivElement>(null);
+/**
+ * 异步 Markdown 渲染块（完成态 SoT：Rust async via markdownRenderAsync）。
+ *
+ * 渲染策略：
+ *   - 流式期间（isStreaming=true）：纯文本 div + caret，零 IPC；strip 在 MessageContent
+ *   - 完成态（isStreaming=false）：useAsyncMarkdownHtml → Rust md_render
+ *     （worker highlight.js 仅作 missing/offline fallback）
+ *   - 渲染完成前 skeleton；缓存命中时 hook 同步返回，不进 loading
+ *
+ * 已删除路径：IncrementalMarkdownParser / Bridge / domPatch（D0 residual）。
+ */
+export function AsyncMarkdownBlock({
+  text,
+  isStreaming = false,
+  priority,
+}: AsyncMarkdownBlockProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const bridgeRef = useRef<IncrementalMarkdownBridge | null>(null);
-  const initializedRef = useRef(false);
-  const font = useMemo(
-    () => buildPretextFontForUiSize('medium', 'sans', 'normal'),
-    []
-  );
-  const { measureHeight } = usePreparedText({ text, font });
-  const [skeletonMinH, setSkeletonMinH] = useState<number | undefined>(
-    undefined
+
+  // 流式期间不调 hook（避免每帧重渲染），完成态才请求 Rust 渲染
+  const renderTarget = isStreaming ? '' : text;
+  const { html, loading } = useAsyncMarkdownHtml(
+    renderTarget,
+    priority,
   );
 
-  useLayoutEffect(() => {
-    if (!loading || !skeletonRef.current || !text) {
-      setSkeletonMinH(undefined);
-      return;
-    }
-    const parentW = skeletonRef.current.parentElement?.clientWidth ?? 0;
-    const fontSize = parseFloat(font.match(/([\d.]+)px/)?.[0] ?? '14');
-    const lineHeightPx = fontSize * 1.65;
-    const h = measureHeight(Math.max(1, parentW), lineHeightPx);
-    setSkeletonMinH(h > 0 ? Math.ceil(h * 1.15) : undefined);
-  }, [loading, measureHeight, font, text]);
-
-  useLayoutEffect(() => {
-    if (!containerRef.current || loading || !html) return;
-    let cancelled = false;
-
-    void import('../../api/incrementalMarkdownBridge').then(
-      ({ IncrementalMarkdownBridge }) => {
-        if (cancelled || !containerRef.current) return;
-        const bridge =
-          bridgeRef.current ??
-          (bridgeRef.current = new IncrementalMarkdownBridge());
-        const result = bridge.push(text);
-
-        if (!initializedRef.current) {
-          initializedRef.current = true;
-          const wrappedHtml = result.updates
-            .map((u) => `<span data-chunk-id="${u.id}">${u.html}</span>`)
-            .join('');
-          containerRef.current.innerHTML = wrappedHtml;
-        } else if (result.updates.length > 0) {
-          const patches = chunkUpdatesToDomPatches(
-            containerRef.current,
-            result.updates,
-            false
-          );
-          applyDomPatches(containerRef.current, patches);
-        }
-      }
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [html, loading, text]);
+  // 完成态：渲染结果写入 DOM
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (isStreaming) return; // 流式期间由下方纯文本分支处理
+    el.innerHTML = html;
+  }, [html, isStreaming]);
 
   if (!text) return null;
-  if (loading) {
+
+  // 流式期间：纯文本 div + caret，零 IPC、零 HTML 解析
+  if (isStreaming) {
     return (
       <div
-        ref={skeletonRef}
-        className={styles.assistantText}
-        style={{ whiteSpace: 'pre-wrap', minHeight: skeletonMinH }}
+        ref={containerRef}
+        className={`${styles.assistantText} md-rendered ${styles.isStreaming}`}
       >
-        {escapeHtml(text)}
+        {text}
       </div>
     );
   }
+
+  // 完成态：渲染中显示 skeleton 占位；渲染完成 innerHTML 由 effect 写入
   return (
-    <div ref={containerRef} className={`${styles.assistantText} md-rendered`} />
+    <div
+      ref={containerRef}
+      className={`${styles.assistantText} md-rendered`}
+    >
+      {loading && !html ? (
+        <div className={styles.skeletonLine} aria-hidden />
+      ) : null}
+    </div>
   );
 }

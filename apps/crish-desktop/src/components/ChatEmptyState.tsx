@@ -12,9 +12,10 @@
  * - messagesLoading + 非 no-session → 不挂载（防幽灵「开始对话」）
  * - CTA 文案只走 resolveChatEmptyActionLabel 中文标签
  */
-import React, { useId } from 'react';
+import React, { useCallback, useEffect, useId, useRef } from 'react';
 import styles from './ChatEmptyState.module.css';
 import { AppErrorBoundary } from './AppErrorBoundary';
+import { Tooltip } from './Tooltip';
 import {
   CHAT_EMPTY_QUICK_PROMPTS,
   chatEmptyKindAriaLabel,
@@ -36,6 +37,9 @@ import {
   SearchX,
   Sparkles,
 } from 'lucide-react';
+
+/** 项目菜单悬停关闭延迟（ms）：离开 trigger/菜单后启动，进入菜单取消 */
+const PROJECT_PICKER_CLOSE_DELAY_MS = 400;
 
 export type ChatEmptyStateProps = {
   kind: ChatEmptyKind;
@@ -63,8 +67,6 @@ export type ChatEmptyStateProps = {
   onCreateSession?: () => void;
   /** filter-empty */
   onClearFilter?: () => void;
-  /** Centered composer element for session-empty state */
-  composer?: React.ReactNode;
 };
 
 function EmptyIcon({ kind }: { kind: ChatEmptyKind }) {
@@ -131,9 +133,45 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   onSetChatInput,
   onCreateSession,
   onClearFilter,
-  composer,
 }) => {
   const reactId = useId();
+  const projectPickerCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  const cancelProjectPickerClose = useCallback(() => {
+    if (projectPickerCloseTimerRef.current != null) {
+      clearTimeout(projectPickerCloseTimerRef.current);
+      projectPickerCloseTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleProjectPickerClose = useCallback(() => {
+    if (!onShowProjectPicker) return;
+    cancelProjectPickerClose();
+    projectPickerCloseTimerRef.current = setTimeout(() => {
+      onShowProjectPicker(false);
+      projectPickerCloseTimerRef.current = null;
+    }, PROJECT_PICKER_CLOSE_DELAY_MS);
+  }, [onShowProjectPicker, cancelProjectPickerClose]);
+
+  const openProjectPicker = useCallback(() => {
+    if (!onShowProjectPicker) return;
+    cancelProjectPickerClose();
+    onShowProjectPicker(true);
+  }, [onShowProjectPicker, cancelProjectPickerClose]);
+
+  const handleProjectPickerOpenChange = useCallback(
+    (next: boolean) => {
+      cancelProjectPickerClose();
+      onShowProjectPicker?.(next);
+    },
+    [onShowProjectPicker, cancelProjectPickerClose]
+  );
+
+  useEffect(() => {
+    return () => cancelProjectPickerClose();
+  }, [cancelProjectPickerClose]);
 
   // 运行时守卫：非法 kind 不挂载，避免 class/data 污染
   if (!isChatEmptyKind(kind)) return null;
@@ -247,30 +285,32 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                   className={styles.chatEmptyProjectInline}
                   data-empty-region="project-bar"
                 >
-                  <button
-                    type="button"
-                    className={`${styles.chatEmptyProjectBtnInline}`}
-                    aria-expanded={showProjectPicker}
-                    aria-haspopup="menu"
-                    aria-label={
-                      activeProject
-                        ? `当前项目：${projectName}，点击切换`
-                        : getWorkspacePath()
-                          ? '当前目录，点击选择项目'
-                          : '选择项目'
-                    }
-                    onClick={() => onShowProjectPicker((v) => !v)}
-                    onMouseEnter={() => onShowProjectPicker(true)}
+                  <ProjectPickerMenu
+                    open={showProjectPicker}
+                    onOpenChange={handleProjectPickerOpenChange}
+                    onClose={() => onShowProjectPicker(false)}
+                    onChanged={() => onProjectChanged?.()}
+                    onContentMouseEnter={cancelProjectPickerClose}
+                    onContentMouseLeave={scheduleProjectPickerClose}
                   >
-                    <span>{projectName}</span>
-                  </button>
-                  {showProjectPicker ? (
-                    <ProjectPickerMenu
-                      open
-                      onClose={() => onShowProjectPicker(false)}
-                      onChanged={() => onProjectChanged?.()}
-                    />
-                  ) : null}
+                    <button
+                      type="button"
+                      className={`${styles.chatEmptyProjectBtnInline}`}
+                      aria-expanded={showProjectPicker}
+                      aria-haspopup="menu"
+                      aria-label={
+                        activeProject
+                          ? `当前项目：${projectName}，点击切换`
+                          : getWorkspacePath()
+                            ? '当前目录，点击选择项目'
+                            : '选择项目'
+                      }
+                      onMouseEnter={openProjectPicker}
+                      onMouseLeave={scheduleProjectPickerClose}
+                    >
+                      <span>{projectName}</span>
+                    </button>
+                  </ProjectPickerMenu>
                 </div>
               ) : (
                 <span className={styles.chatEmptyProjectText}>
@@ -310,10 +350,6 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
           </button>
         ) : null}
 
-        {composer && (
-          <div className={styles.chatEmptyComposerWrap}>{composer}</div>
-        )}
-
         {showPrompts && onSetChatInput ? (
           <div
             className={styles.chatEmptyPrompts}
@@ -322,27 +358,27 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
             aria-label="快捷提示"
           >
             {CHAT_EMPTY_QUICK_PROMPTS.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                className={styles.quickPromptCard}
-                role="listitem"
-                data-quick-prompt={item.label}
-                aria-label={`填入提示：${item.label}`}
-                title={item.prompt}
-                onClick={() => {
-                  onSetChatInput(item.prompt);
-                  focusChatComposer();
-                }}
-              >
-                <span className={styles.quickPromptLabel}>{item.label}</span>
-                <span className={styles.quickPromptDesc}>{item.prompt}</span>
-                <ChevronRight
-                  size={14}
-                  className={styles.promptArrow}
-                  style={{ opacity: 0.4, flexShrink: 0, marginLeft: 'auto' }}
-                />
-              </button>
+              <Tooltip key={item.label} content={item.prompt}>
+                <button
+                  type="button"
+                  className={styles.quickPromptCard}
+                  role="listitem"
+                  data-quick-prompt={item.label}
+                  aria-label={`填入提示：${item.label}`}
+                  onClick={() => {
+                    onSetChatInput(item.prompt);
+                    focusChatComposer();
+                  }}
+                >
+                  <span className={styles.quickPromptLabel}>{item.label}</span>
+                  <span className={styles.quickPromptDesc}>{item.prompt}</span>
+                  <ChevronRight
+                    size={14}
+                    className={styles.promptArrow}
+                    style={{ opacity: 0.4, flexShrink: 0, marginLeft: 'auto' }}
+                  />
+                </button>
+              </Tooltip>
             ))}
           </div>
         ) : null}

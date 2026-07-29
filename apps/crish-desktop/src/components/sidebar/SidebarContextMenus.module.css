@@ -168,11 +168,11 @@
 }
 
 .sortFilterOption.isOn {
-  color: var(--accent-green, #22c55e);
+  color: var(--accent-green);
   font-weight: var(--font-weight-medium);
 }
 
 .sortFilterCheck {
-  color: var(--accent-green, #22c55e);
+  color: var(--accent-green);
   flex-shrink: 0;
 }

@@ -75,16 +75,51 @@ function packageName(pkg: string | PackageSource): string {
 
 export function useExtensionMarket(onShowToast: (msg: string) => void) {
   const [view, setView] = useState<MainView>('installed');
-  const [kindFilter, setKindFilter] = useState<KindFilter>('all');
-  const [query, setQuery] = useState('');
+
+  const [searchFilter, setSearchFilter] = useState<{
+    kindFilter: KindFilter;
+    query: string;
+  }>({ kindFilter: 'all', query: '' });
+  const kindFilter = searchFilter.kindFilter;
+  const query = searchFilter.query;
+  const setKindFilter = (val: React.SetStateAction<KindFilter>) =>
+    setSearchFilter((prev) => ({ ...prev, kindFilter: typeof val === 'function' ? val(prev.kindFilter) : val }));
+  const setQuery = (val: React.SetStateAction<string>) =>
+    setSearchFilter((prev) => ({ ...prev, query: typeof val === 'function' ? val(prev.query) : val }));
+
   const [loading, setLoading] = useState(
     () => loadSkillsCache().length === 0 && loadMcpServersCache().length === 0
   );
   const hydratedRef = useRef(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const [busyState, setBusyState] = useState<{
+    busyId: string | null;
+    mcpToolBusy: boolean;
+    mcpServerBusy: boolean;
+  }>({ busyId: null, mcpToolBusy: false, mcpServerBusy: false });
+  const busyId = busyState.busyId;
+  const mcpToolBusy = busyState.mcpToolBusy;
+  const mcpServerBusy = busyState.mcpServerBusy;
+  const setBusyId = (val: React.SetStateAction<string | null>) =>
+    setBusyState((prev) => ({ ...prev, busyId: typeof val === 'function' ? val(prev.busyId) : val }));
+  const setMcpToolBusy = (val: React.SetStateAction<boolean>) =>
+    setBusyState((prev) => ({ ...prev, mcpToolBusy: typeof val === 'function' ? val(prev.mcpToolBusy) : val }));
+  const setMcpServerBusy = (val: React.SetStateAction<boolean>) =>
+    setBusyState((prev) => ({ ...prev, mcpServerBusy: typeof val === 'function' ? val(prev.mcpServerBusy) : val }));
+
   const [manage, setManage] = useState<ManageKind>(null);
-  const [expand, setExpand] = useState<ExpandTarget | null>(null);
-  const [pendingExpand, setPendingExpand] = useState<PendingExpand | null>(null);
+
+  const [expandState, setExpandState] = useState<{
+    expand: ExpandTarget | null;
+    pendingExpand: PendingExpand | null;
+  }>({ expand: null, pendingExpand: null });
+  const expand = expandState.expand;
+  const pendingExpand = expandState.pendingExpand;
+  const setExpand = (val: React.SetStateAction<ExpandTarget | null>) =>
+    setExpandState((prev) => ({ ...prev, expand: typeof val === 'function' ? val(prev.expand) : val }));
+  const setPendingExpand = (val: React.SetStateAction<PendingExpand | null>) =>
+    setExpandState((prev) => ({ ...prev, pendingExpand: typeof val === 'function' ? val(prev.pendingExpand) : val }));
+
   const [toolTick, setToolTick] = useState(0);
   const [expandedMcpTools, setExpandedMcpTools] = useState<Set<string>>(
     new Set()
@@ -120,17 +155,31 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
     [query]
   );
 
-  const [skills, setSkills] = useState<DesktopSkill[]>(() => loadSkillsCache());
-  const [mcpServers, setMcpServers] = useState<McpServerInfo[]>(() =>
-    loadMcpServersCache()
-  );
-  const [packages, setPackages] = useState<(string | PackageSource)[]>([]);
-  const [catalogInstalled, setCatalogInstalled] = useState<Set<string>>(() =>
-    loadCatalogInstalledIds()
-  );
+  const [dataState, setDataState] = useState<{
+    skills: DesktopSkill[];
+    mcpServers: McpServerInfo[];
+    packages: (string | PackageSource)[];
+    catalogInstalled: Set<string>;
+  }>(() => ({
+    skills: loadSkillsCache(),
+    mcpServers: loadMcpServersCache(),
+    packages: [],
+    catalogInstalled: loadCatalogInstalledIds(),
+  }));
+  const skills = dataState.skills;
+  const mcpServers = dataState.mcpServers;
+  const packages = dataState.packages;
+  const catalogInstalled = dataState.catalogInstalled;
+  const setSkills = (val: React.SetStateAction<DesktopSkill[]>) =>
+    setDataState((prev) => ({ ...prev, skills: typeof val === 'function' ? val(prev.skills) : val }));
+  const setMcpServers = (val: React.SetStateAction<McpServerInfo[]>) =>
+    setDataState((prev) => ({ ...prev, mcpServers: typeof val === 'function' ? val(prev.mcpServers) : val }));
+  const setPackages = (val: React.SetStateAction<(string | PackageSource)[]>) =>
+    setDataState((prev) => ({ ...prev, packages: typeof val === 'function' ? val(prev.packages) : val }));
+  const setCatalogInstalled = (val: React.SetStateAction<Set<string>>) =>
+    setDataState((prev) => ({ ...prev, catalogInstalled: typeof val === 'function' ? val(prev.catalogInstalled) : val }));
+
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [mcpToolBusy, setMcpToolBusy] = useState(false);
-  const [mcpServerBusy, setMcpServerBusy] = useState(false);
 
   const cwd = getWorkspacePath() || '';
 

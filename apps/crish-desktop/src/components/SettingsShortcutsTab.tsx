@@ -10,8 +10,8 @@ import {
   SettingsSection,
   SettingsCard,
   SettingsRow,
-  Tooltip,
 } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -175,7 +175,7 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
         try {
           clientApi.saveSettingsEx('__global__', 'global', {
             shortcuts: updated,
-          } as any).catch(() => {});
+          }).catch(() => {});
         } catch {}
         return true;
       } catch {

@@ -160,7 +160,7 @@
   text-align: center;
 }
 
-/* 閸欏厖鏅剁拠锔藉�?Canvas */
+/* 闁告瑥鍘栭弲鍓佹嫚閿旇棄锟?Canvas */
 .modelsDetail {
   flex: 1;
   min-width: 0;
@@ -204,7 +204,7 @@
 }
 
 .mrdPillOn {
-  background: color-mix(in srgb, #22c55e 12%, transparent);
+  background: color-mix(in srgb, var(--color-active) 12%, transparent);
   color: var(--color-active);
 }
 
@@ -272,7 +272,7 @@
   gap: 3px;
   font-size: var(--font-size-xxs);
   color: var(--color-active);
-  background: color-mix(in srgb, #22c55e 10%, transparent);
+  background: color-mix(in srgb, var(--color-active) 10%, transparent);
   padding: 1px 6px;
   border-radius: var(--radius-xs);
 }
@@ -454,8 +454,8 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background-color: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  background-color: var(--text-on-accent);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 15%, transparent);
   transition: left var(--transition-fast);
 }
 
@@ -464,8 +464,8 @@
 }
 
 .modelsBtn.dangerText:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent-red, #b91c1c) 8%, transparent);
-  color: var(--accent-red, #b91c1c);
+  background: color-mix(in srgb, var(--accent-red) 8%, transparent);
+  color: var(--accent-red);
 }
 
 .modelsModelsHead {
@@ -576,7 +576,7 @@
   box-shadow: none;
 }
 
-/* 濞喡ゎ洣閹垮秳缍旈敍姘瘜閸掓銆冩慨瀣矒閸欘垳鍋ｉ敍鍫ヤ缉閸忓秳绗岄柊宥囩枂闂堛垺婢橀幎顫秴閺冨墎鍋ｆ稉宥呭煂閿涘绱遍�?model-row �?hover �?*/
+/* 婵炲枴銈庢矗闁瑰灝绉崇紞鏃堟晬濮橆偄鐦滈柛鎺擃殙閵嗗啯鎱ㄧ€ｎ剛鐭掗柛娆樺灣閸嬶綁鏁嶉崼銉ょ級闁稿繐绉崇粭宀勬煀瀹ュ洨鏋傞梻鍫涘灪濠㈡﹢骞庨～顓犵Т闁哄啫澧庨崑锝嗙▔瀹ュ懎鐓傞柨娑橆檧缁遍亶锟?model-row 锟?hover 锟?*/
 .modelsIconBtn {
   width: 28px;
   height: 28px;
@@ -620,7 +620,7 @@
   color: var(--accent-red);
 }
 
-/* 閸氼垰浠犳稉搴㈢ゴ鐠囨洜鈼㈡导妯哄帥閿涙over 閺冩湹绮涢崗鍫ユ苟閸?*/
+/* 闁告凹鍨版禒鐘崇▔鎼淬垻銈撮悹鍥ㄦ礈閳笺垺瀵煎Ο鍝勫弗闁挎稒顒ver 闁哄啯婀圭划娑㈠礂閸儲鑻熼柛?*/
 .modelsIconBtnPrimary {
   opacity: 0.35;
   pointer-events: auto;
@@ -640,7 +640,7 @@
   flex: 1;
 }
 
-/* 鐠伮ゅ瀭閸楁洑鐜敍姘瑢濡€崇€烽崚妤勩€冭ぐ璇茬俺閸掑棗灏敍宀勭帛鐠併倖濮岄崣鐙呯礉娑撳秳绗岀悰灞炬惙娴ｆ粍濮犳担?*/
+/* 閻犱籍銈呯€柛妤佹磻閻滎垶鏁嶅顐ょ憿婵☆垪鈧磭鈧兘宕氬Δ鍕┾偓鍐亹鐠囪尙淇洪柛鎺戞鐏忣垶鏁嶅畝鍕笡閻犱降鍊栨慨宀勫矗閻欏懐绀夊☉鎾崇С缁楀瞼鎮扮仦鐐儥濞达絾绮嶆慨鐘虫媴?*/
 .modelsBilling {
   margin-top: 14px;
   padding-top: 14px;

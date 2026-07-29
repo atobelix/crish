@@ -1,0 +1,179 @@
+/* 仅工具列内：tab 条，无折叠按钮。
+ * 与 ChatHeader.toolbar 同高（30px）+ 同 hairline 底边，保证 unit 内 chat/tool 顶栏齐平。
+ * sticky：leaf 内纵向滚动时 tabs 钉住；tabs 横向滚动且细滚动条，避免溢出乱层。
+ * B2：tab 支持 pointer 拖拽（grab / ghost / dragging 态）。
+ */
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border-bottom: var(--hairline-width, 1px) solid
+    var(--hairline, var(--border-subtle, var(--border-color)));
+  background: var(--shell-inset-bg, var(--bg-primary, var(--bg-secondary, transparent)));
+  flex-shrink: 0;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky-bar, 2);
+  /* 防止子项画出 leaf 右缘 */
+  isolation: isolate;
+}
+
+/* 空坞占位：无 open 工具时的轻量提示（data-empty / .empty） */
+.header[data-empty='true'],
+.empty {
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  user-select: none;
+  background: var(--shell-inset-bg, var(--bg-secondary, transparent));
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  /* 细滚动条 / 隐藏 bulk，避免 tab 条下方出现第二层轨道 */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-primary) 18%, transparent)
+    transparent;
+}
+
+.tabs::-webkit-scrollbar {
+  height: 3px;
+}
+
+.tabs::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  border-radius: 999px;
+}
+
+.tabs::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  max-width: 140px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs, 12px);
+  font-family: inherit;
+  cursor: grab;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  touch-action: none;
+  user-select: none;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.tabLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tab:active {
+  cursor: grabbing;
+}
+
+.tabActive {
+  background: var(--bg-active, var(--bg-hover));
+  color: var(--text-primary);
+}
+
+.tabDragging {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+
+.tab:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.tabClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.55;
+  border-radius: 999px;
+  padding: 1px;
+  flex-shrink: 0;
+  line-height: 0;
+  cursor: pointer;
+  touch-action: auto;
+}
+
+.tabClose:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+/* 拖拽 ghost（portal 到 body） */
+.ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: var(--z-drag-overlay-max, 99999);
+  opacity: 0.9;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--shadow-color) 18%, transparent);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  min-width: 64px;
+  max-width: 200px;
+  padding: 4px 12px;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  font-family: inherit;
+}
+
+.ghostLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+/* 全局拖拽中：禁止选中文字 */
+:global(body.tool-dock-tab-dragging) {
+  cursor: grabbing;
+  user-select: none;
+}

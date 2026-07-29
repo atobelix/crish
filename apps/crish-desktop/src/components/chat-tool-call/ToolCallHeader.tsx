@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import styles from '../ChatToolCallBlock.module.css';
 import type { MessageToolCall } from '../../store/layoutStore';
-import { Tooltip } from '../settings/SettingsUI';
+import { Tooltip } from '../Tooltip';
 
 export interface ToolCallHeaderProps {
   tc: MessageToolCall;
@@ -155,7 +155,7 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
         <CheckCircle2
           size={sz}
           strokeWidth={sw}
-          color="var(--accent-green, #22c55e)"
+          color="var(--accent-green)"
         />
       );
     } else if (tc.status === 'error') {
@@ -163,7 +163,7 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
         <XCircle
           size={sz}
           strokeWidth={sw}
-          color="var(--accent-red, #ef4444)"
+          color="var(--accent-red)"
         />
       );
     } else {

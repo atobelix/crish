@@ -220,12 +220,12 @@
 }
 
 .changeOverviewMiniBtn.accept {
-  color: var(--accent-green, #22c55e);
-  border-color: color-mix(in srgb, var(--accent-green, #22c55e) 35%, transparent);
+  color: var(--accent-green);
+  border-color: color-mix(in srgb, var(--accent-green) 35%, transparent);
 }
 
 .changeOverviewMiniBtn.accept:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent-green, #22c55e) 12%, transparent);
+  background: color-mix(in srgb, var(--accent-green) 12%, transparent);
 }
 
 .changeOverviewMiniBtn:disabled {

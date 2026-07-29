@@ -140,8 +140,10 @@ export const McpServerList: React.FC<McpServerListProps> = ({
     if (!hasAny) return null;
     if (!filterActive) return null;
     return (
-      <div className={`${styles.mcpEmptyLine} mcp-empty-line`} role="status" aria-live="polite" title={EMPTY_FILTER_HINT}>
-        <span>无匹配</span>
+      <div className={`${styles.mcpEmptyLine} mcp-empty-line`} role="status" aria-live="polite">
+        <Tooltip content={EMPTY_FILTER_HINT}>
+          <span>无匹配</span>
+        </Tooltip>
         <Tooltip content={EMPTY_FILTER_HINT}>
           <button
             type="button"
@@ -294,11 +296,12 @@ export const McpServerList: React.FC<McpServerListProps> = ({
             return (
               <div key={srv.id} className={`${styles.mcpRow} mcp-row`} role="listitem">
                 <div className={`${styles.mcpRowMain} mcp-row-main`}>
-                  <span
-                    className={`${styles.mcpDot} mcp-dot kind-${on ? 'ok' : 'idle'}`}
-                    aria-hidden
-                    title={on ? '已启用' : '已禁用'}
-                  />
+                  <Tooltip content={on ? '已启用' : '已禁用'}>
+                    <span
+                      className={`${styles.mcpDot} mcp-dot kind-${on ? 'ok' : 'idle'}`}
+                      aria-hidden
+                    />
+                  </Tooltip>
                   <Tooltip content={`复制标识 ${srv.id}`}>
                     <button
                       type="button"
@@ -312,20 +315,23 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                   <span className={`${styles.mcpStateBadge} mcp-state-badge kind-${on ? 'ok' : 'idle'}`}>
                     {on ? '启用' : '禁用'}
                   </span>
-                  <span className={`${styles.mcpRowMeta} mcp-row-meta`} title={typeTitle}>
-                    {transportLabel(srv.type)}
-                    {srv.command ? ` · ${srv.command}` : ''}
-                    {srv.url ? ` · ${srv.url}` : ''}
-                  </span>
+                  <Tooltip content={typeTitle}>
+                    <span className={`${styles.mcpRowMeta} mcp-row-meta`}>
+                      {transportLabel(srv.type)}
+                      {srv.command ? ` · ${srv.command}` : ''}
+                      {srv.url ? ` · ${srv.url}` : ''}
+                    </span>
+                  </Tooltip>
                   <div className={`${styles.mcpRowActions} mcp-row-actions`}>
-                    <input
-                      type="checkbox"
-                      className="settings-switch"
-                      checked={on}
-                      title={on ? '禁用' : '启用'}
-                      aria-label={on ? `禁用 ${srv.name}` : `启用 ${srv.name}`}
-                      onChange={() => onToggleDemoEnabled(srv.id)}
-                    />
+                    <Tooltip content={on ? '禁用' : '启用'}>
+                      <input
+                        type="checkbox"
+                        className="settings-switch"
+                        checked={on}
+                        aria-label={on ? `禁用 ${srv.name}` : `启用 ${srv.name}`}
+                        onChange={() => onToggleDemoEnabled(srv.id)}
+                      />
+                    </Tooltip>
                     <Tooltip content="删除">
                       <button
                         type="button"
@@ -355,9 +361,11 @@ export const McpServerList: React.FC<McpServerListProps> = ({
         loading,
         emptyContent: (
           <>
-            <span title={liveEmptyHint}>
-              {status?.configured ? '暂无服务实例' : '暂无扩展服务'}
-            </span>
+            <Tooltip content={liveEmptyHint}>
+              <span>
+                {status?.configured ? '暂无服务实例' : '暂无扩展服务'}
+              </span>
+            </Tooltip>
             <Tooltip content="重新向引擎查询列表">
               <button
                 type="button"
@@ -389,11 +397,12 @@ export const McpServerList: React.FC<McpServerListProps> = ({
           return (
             <div key={srv.id} className={`${styles.mcpRow} mcp-row`} role="listitem">
               <div className={`${styles.mcpRowMain} mcp-row-main`}>
-                <span
-                  className={`${styles.mcpDot} mcp-dot kind-${kind}`}
-                  aria-hidden
-                  title={mcpStateLabel(srv.state)}
-                />
+                <Tooltip content={mcpStateLabel(srv.state)}>
+                  <span
+                    className={`${styles.mcpDot} mcp-dot kind-${kind}`}
+                    aria-hidden
+                  />
+                </Tooltip>
                 <Tooltip content={`复制标识 ${srv.id}`}>
                   <button
                     type="button"
@@ -404,19 +413,25 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                     {srv.name}
                   </button>
                 </Tooltip>
-                <span className={`${styles.mcpStateBadge} mcp-state-badge kind-${kind}`} title={mcpStateLabel(srv.state)}>
-                  {mcpStateLabel(srv.state)}
-                </span>
-                <span className={`${styles.mcpRowMeta} mcp-row-meta`} title={tpTitle}>
-                  {tp ? `${tp} · ` : ''}
-                  工具 {toolN}
-                  {srv.lastError ? (
-                    <span className={`${styles.mcpRowErr} mcp-row-err`} title={srv.lastError}>
-                      {' '}
-                      · 错误
-                    </span>
-                  ) : null}
-                </span>
+                <Tooltip content={mcpStateLabel(srv.state)}>
+                  <span className={`${styles.mcpStateBadge} mcp-state-badge kind-${kind}`}>
+                    {mcpStateLabel(srv.state)}
+                  </span>
+                </Tooltip>
+                <Tooltip content={tpTitle}>
+                  <span className={`${styles.mcpRowMeta} mcp-row-meta`}>
+                    {tp ? `${tp} · ` : ''}
+                    工具 {toolN}
+                    {srv.lastError ? (
+                      <Tooltip content={srv.lastError}>
+                        <span className={`${styles.mcpRowErr} mcp-row-err`}>
+                          {' '}
+                          · 错误
+                        </span>
+                      </Tooltip>
+                    ) : null}
+                  </span>
+                </Tooltip>
                 <div className={`${styles.mcpRowActions} mcp-row-actions`}>
                   <Tooltip content={isOpen ? '收起工具' : `展开工具（${toolN}）`}>
                     <button

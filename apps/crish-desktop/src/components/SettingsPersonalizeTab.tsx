@@ -103,6 +103,12 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
           title: '默认折叠思考过程',
           desc: '在对话流中默认隐藏或折叠深度思考模型的大段推理内容',
         },
+        {
+          key: 'queueMode',
+          type: 'boolean',
+          title: '排队发送模式',
+          desc: 'AI 回复中时，新消息进入队列而不是直接插入对话；可在输入框上方手动发送、编辑或删除排队消息',
+        },
       ],
     },
     {
@@ -142,6 +148,12 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
           type: 'boolean',
           title: '分享匿名产品分析',
           desc: '传输安全脱敏、完全不包含任何代码或隐私的遥测数据以帮助改进本软件',
+        },
+        {
+          key: 'enableCrashTelemetry',
+          type: 'boolean',
+          title: '自动收集错误日志',
+          desc: '检测到异常退出时自动收集诊断日志并上传，用于排查崩溃与稳定性问题',
         },
       ],
     },

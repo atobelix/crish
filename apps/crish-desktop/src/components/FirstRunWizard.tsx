@@ -1,10 +1,11 @@
 /**
- * 正式版首次向导：密钥 → 模型（可手填）→ 项目 → 开始
+ * 正式版首次向导：密钥 → 模型（可手填）→ 导入对话（可选）→ 项目 → 开始
  *
  * 契约：写入 providerProfiles（LS）+ activateProfileModel（ENGINE-CONFIG）。
  * 引导态只用页内 error/hint，成功路径禁止 toast。
  * 默认服务商不预置模型 id（无 mimo 硬编码 / 不发明远程演示默认）。
  * 模型步可「稍后手填」——由底栏 ModelPicker / needsModel soft-hint 接手。
+ * 导入步可跳过，稍后在设置 · 账户完成。
  */
 
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -23,9 +24,11 @@ import {
   getActiveProject,
   getWorkspacePath,
 } from '../api/projectStore';
+import { openDirectoryDialogSafe } from '../api/openDirectoryDialog';
 import { networkUserMessage } from '../api/userFacingErrors';
 import { fetchEngineStatus } from '../api/engineConfig';
 import { SettingsSelect } from './SettingsSelect';
+import { ExternalSessionImport } from './settings/ExternalSessionImport';
 import styles from './FirstRunWizard.module.css';
 
 const DONE_KEY = 'crish_first_run_done_v1';
@@ -181,10 +184,13 @@ export function wizardActivatePageError(res: {
   return '启用失败，请检查密钥与地址';
 }
 
-/** 向导步（字面量联合，禁止任意 number） */
-export type WizardStep = 0 | 1 | 2 | 3;
+/**
+ * 向导步（字面量联合，禁止任意 number）
+ * 0 密钥 → 1 模型 → 2 导入外部对话（可选）→ 3 项目 → 4 开始
+ */
+export type WizardStep = 0 | 1 | 2 | 3 | 4;
 
-const WIZARD_STEPS: readonly WizardStep[] = [0, 1, 2, 3];
+const WIZARD_STEPS: readonly WizardStep[] = [0, 1, 2, 3, 4];
 
 export function isWizardStep(n: number): n is WizardStep {
   return (WIZARD_STEPS as readonly number[]).includes(n);
@@ -197,11 +203,11 @@ export function prevWizardStep(s: WizardStep): WizardStep {
   return isWizardStep(prev) ? prev : 0;
 }
 
-/** 下一步：到 3 为止，无 as 断言 */
+/** 下一步：到 4 为止，无 as 断言 */
 export function nextWizardStep(s: WizardStep): WizardStep {
-  if (s === 3) return 3;
+  if (s === 4) return 4;
   const next = s + 1;
-  return isWizardStep(next) ? next : 3;
+  return isWizardStep(next) ? next : 4;
 }
 
 /** 中文步骤元数据（标题 + 简述；纯，供轨与副标题共用） */
@@ -214,8 +220,9 @@ export type WizardStepMeta = {
 export const WIZARD_STEP_META: readonly WizardStepMeta[] = [
   { id: 0, title: '配置密钥', desc: '选择服务商并粘贴 API 密钥' },
   { id: 1, title: '启用模型', desc: '手填或选择模型 id 并写入引擎' },
-  { id: 2, title: '选择项目', desc: '可选，也可稍后选择' },
-  { id: 3, title: '开始使用', desc: '进入主界面' },
+  { id: 2, title: '导入对话', desc: '可选：从 Claude Code / Codex 导入' },
+  { id: 3, title: '选择项目', desc: '可选，也可稍后选择' },
+  { id: 4, title: '开始使用', desc: '进入主界面' },
 ];
 
 /** 安全取步骤元数据（越界回落首步，无 as） */
@@ -230,6 +237,7 @@ export function wizardPrimaryCtaLabel(step: WizardStep, busy: boolean): string {
   if (step === 0) return '保存并继续';
   if (step === 1) return '启用并继续';
   if (step === 2) return '继续';
+  if (step === 3) return '继续';
   return '进入 Crish';
 }
 
@@ -254,23 +262,6 @@ type Props = {
   onDone: () => void;
   onOpenSettings?: () => void;
 };
-
-async function pickFolderNative(): Promise<string | null> {
-  try {
-    // Optional desktop plugin; avoid Function() dynamic import
-    const dialogSpec = '@tauri-apps/plugin-dialog';
-    const mod = (await import(/* @vite-ignore */ dialogSpec).catch(() => null)) as {
-      open?: (opts: { directory: boolean; multiple: boolean }) => Promise<string | string[] | null>;
-    } | null;
-    if (mod?.open) {
-      const selected = await mod.open({ directory: true, multiple: false });
-      if (typeof selected === 'string' && selected) return selected;
-    }
-  } catch {
-    /* browser */
-  }
-  return null;
-}
 
 export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
   const reactId = useId();
@@ -369,6 +360,12 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
     setStep(nextWizardStep(1));
   };
 
+  /** 导入步跳过：可选，不强制扫描 */
+  const skipImportStep = () => {
+    setError('');
+    setStep(nextWizardStep(2));
+  };
+
   const goPrev = () => {
     setError('');
     setStep((s) => prevWizardStep(s));
@@ -433,11 +430,16 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
       return;
     }
     if (step === 2) {
+      // 导入步：可选，点「继续」即跳过未导入项
+      setStep(nextWizardStep(2));
+      return;
+    }
+    if (step === 3) {
       if (!hasProject && pathDraft.trim()) {
         addProjectFromPath(pathDraft.trim());
         setProjectTick((n) => n + 1);
       }
-      setStep(nextWizardStep(2));
+      setStep(nextWizardStep(3));
     }
   };
 
@@ -652,6 +654,15 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
           {step === 2 && (
             <>
               <p className={styles.firstRunHint} style={{ marginTop: 0 }}>
+                可从本机 Claude Code 或 Codex 导入历史对话。也可跳过，稍后在设置 · 账户中导入。
+              </p>
+              <ExternalSessionImport variant="wizard" />
+            </>
+          )}
+
+          {step === 3 && (
+            <>
+              <p className={styles.firstRunHint} style={{ marginTop: 0 }}>
                 选择工作目录后，助手会在该项目下读写文件。也可跳过，无项目直接对话。
               </p>
               {hasProject ? (
@@ -672,7 +683,10 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                       setBusy(true);
                       setError('');
                       try {
-                        const path = await pickFolderNative();
+                        // 首次向导：选择项目文件夹
+                        const path = await openDirectoryDialogSafe(
+                          '选择项目文件夹',
+                        );
                         if (path) {
                           addProjectFromPath(path);
                           setProjectTick((n) => n + 1);
@@ -716,7 +730,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
             </>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <div className={styles.firstRunReady}>
               <Lucide.CheckCircle2
                 size={28}
@@ -751,7 +765,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                 上一步
               </button>
             )}
-            {step < 3 ? (
+            {step < 4 ? (
               <button
                 type="button"
                 className={`${styles.firstRunBtn} ${styles.primary}`}
@@ -769,7 +783,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                 className={`${styles.firstRunBtn} ${styles.primary}`}
                 onClick={finish}
               >
-                {wizardPrimaryCtaLabel(3, false)}
+                {wizardPrimaryCtaLabel(4, false)}
               </button>
             )}
           </div>
@@ -799,6 +813,19 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                 打开设置获取模型列表
               </button>
             ) : null}
+          </div>
+        ) : null}
+
+        {step === 2 ? (
+          <div className={styles.firstRunModelAlt} role="group" aria-label="导入其它方式">
+            <button
+              type="button"
+              className={`${styles.firstRunLink} ${styles.firstRunLinkCenter}`}
+              disabled={busy}
+              onClick={skipImportStep}
+            >
+              跳过，稍后在设置中导入
+            </button>
           </div>
         ) : null}
       </div>

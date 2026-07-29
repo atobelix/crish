@@ -14,6 +14,7 @@
 import React from 'react';
 import styles from './AppErrorBoundary.module.css';
 import { errorStore } from '../services/ErrorStore';
+import { Tooltip } from './Tooltip';
 
 type Variant = 'fullscreen' | 'compact' | 'minimal';
 
@@ -270,9 +271,11 @@ export class AppErrorBoundary extends React.Component<Props, State> {
         <div className={`${styles.appErrorBoundary} ${styles.appErrorBoundaryCompact}`}>
           <div className={`${styles.appErrorCard} ${styles.appErrorCardCompact}`}>
             <div className={styles.appErrorTitle}>{compactTitle}</div>
-            <div className={styles.appErrorMsg} role="alert" title={msg}>
-              {msg}
-            </div>
+            <Tooltip content={msg}>
+              <div className={styles.appErrorMsg} role="alert">
+                {msg}
+              </div>
+            </Tooltip>
             <div className={styles.appErrorActions}>
               {/* Fix #19: 按钮顺序 [重试] [其他操作] */}
               <button
@@ -310,9 +313,11 @@ export class AppErrorBoundary extends React.Component<Props, State> {
       <div className={styles.appErrorBoundary}>
         <div className={styles.appErrorCard}>
           <div className={styles.appErrorTitle}>{fullscreenTitle}</div>
-          <div className={styles.appErrorMsg} role="alert" title={msg}>
-            {msg}
-          </div>
+          <Tooltip content={msg}>
+            <div className={styles.appErrorMsg} role="alert">
+              {msg}
+            </div>
+          </Tooltip>
           {/* Fix #19: 按钮顺序 [重试] [其他操作] */}
           <div className={styles.appErrorActions}>
             <button

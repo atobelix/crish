@@ -43,7 +43,7 @@
 }
 
 .input:focus {
-  border-color: color-mix(in srgb, var(--border-color) 75%, var(--text-primary) 25%);
+  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
   background: transparent;
   box-shadow: none;
 }
@@ -65,7 +65,7 @@
 }
 
 .count.isEmpty {
-  color: var(--accent-orange, #f59e0b);
+  color: var(--accent-orange);
   font-weight: var(--font-weight-medium, 500);
 }
 

@@ -1,14 +1,14 @@
 /**
  * 输入区「+」菜单：附件 / 技能 / 插件 / MCP / 扩展中心
- * 紧凑单列，与模型选择菜单同气质。
+ * 接入 UnifiedSelectPopover 统一面板管理，继承自动碰撞避让与标准键盘导航。
  */
-import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ComposePlusMenu.module.css';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import { openSettings } from '../api/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
+import { UnifiedSelectPopover, type SelectOptionItem } from './common/UnifiedSelectPopover';
 
 type Props = {
   open: boolean;
@@ -20,122 +20,20 @@ type Props = {
   restoreFocusRef?: React.RefObject<HTMLElement | null>;
 };
 
-type MenuItem = {
-  id: string;
-  label: string;
-  hint?: string;
-  icon: React.ReactNode;
-  onPick: () => void;
-};
-
 export const ComposePlusMenu: React.FC<Props> = ({
   open,
   onClose,
   onAddFiles,
   onInsertSkillSlash,
-  id: idProp,
   restoreFocusRef,
 }) => {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const firstItemRef = useRef<HTMLButtonElement>(null);
-  const autoId = useId();
-  const menuId = idProp || autoId;
-  const restoreOnCloseRef = useRef(false);
-
-  useEffect(() => {
-    if (!open) return;
-    restoreOnCloseRef.current = false;
-    requestAnimationFrame(() => {
-      const first = rootRef.current?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      first?.focus();
-    });
-
-    const onDoc = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        restoreOnCloseRef.current = false;
-        onClose();
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        restoreOnCloseRef.current = true;
-        onClose();
-        queueMicrotask(() => {
-          restoreFocusRef?.current?.focus?.();
-        });
-        return;
-      }
-      if (
-        e.key === 'ArrowDown' ||
-        e.key === 'ArrowUp' ||
-        e.key === 'Home' ||
-        e.key === 'End'
-      ) {
-        e.preventDefault();
-        const items = rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
-        if (!items || items.length === 0) return;
-        const list = Array.from(items);
-        const cur = list.indexOf(document.activeElement as HTMLButtonElement);
-        let next = 0;
-        if (e.key === 'End') next = list.length - 1;
-        else if (e.key === 'ArrowUp') next = cur <= 0 ? list.length - 1 : cur - 1;
-        else if (e.key === 'ArrowDown') next = cur < 0 || cur >= list.length - 1 ? 0 : cur + 1;
-        list[next]?.focus();
-      }
-    };
-    document.addEventListener('mousedown', onDoc);
-    window.addEventListener('keydown', onKey);
-    const t = window.setTimeout(() => firstItemRef.current?.focus(), 0);
-    return () => {
-      window.clearTimeout(t);
-      document.removeEventListener('mousedown', onDoc);
-      window.removeEventListener('keydown', onKey);
-      if (restoreOnCloseRef.current) {
-        restoreFocusRef?.current?.focus?.();
-        restoreOnCloseRef.current = false;
-      }
-    };
-  }, [open, onClose, restoreFocusRef]);
-
-  const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
-
-  useLayoutEffect(() => {
-    if (!open || !restoreFocusRef?.current) {
-      setPos(null);
-      return;
-    }
-    const r = restoreFocusRef.current.getBoundingClientRect();
-    setPos({ left: r.left, bottom: window.innerHeight - r.top + 6 });
-  }, [open, restoreFocusRef]);
-
-  useEffect(() => {
-    if (!open || !restoreFocusRef?.current) return;
-    const updatePos = () => {
-      const r = restoreFocusRef.current?.getBoundingClientRect();
-      if (r) setPos({ left: r.left, bottom: window.innerHeight - r.top + 6 });
-    };
-    window.addEventListener('resize', updatePos);
-    window.addEventListener('scroll', updatePos, true);
-    return () => {
-      window.removeEventListener('resize', updatePos);
-      window.removeEventListener('scroll', updatePos, true);
-    };
-  }, [open, restoreFocusRef]);
-
-  if (!open) return null;
-
-  const items: MenuItem[] = [
+  const items: SelectOptionItem[] = [
     {
       id: 'file',
       label: '添加文件',
       hint: '图片或文档',
       icon: <Lucide.Paperclip size={13} strokeWidth={1.75} />,
-      onPick: () => {
-        restoreOnCloseRef.current = false;
+      onClick: () => {
         onAddFiles();
         onClose();
       },
@@ -145,7 +43,7 @@ export const ComposePlusMenu: React.FC<Props> = ({
       label: '使用技能',
       hint: '输入 / 选择技能',
       icon: <Lucide.Sparkles size={13} strokeWidth={1.75} />,
-      onPick: () => {
+      onClick: () => {
         onInsertSkillSlash?.();
         onClose();
         queueMicrotask(() => restoreFocusRef?.current?.focus?.());
@@ -156,7 +54,7 @@ export const ComposePlusMenu: React.FC<Props> = ({
       label: '插件',
       hint: '扩展包',
       icon: <Lucide.Puzzle size={13} strokeWidth={1.75} />,
-      onPick: () => {
+      onClick: () => {
         onClose();
         openSettings('plugins');
       },
@@ -166,7 +64,7 @@ export const ComposePlusMenu: React.FC<Props> = ({
       label: 'MCP 工具',
       hint: '服务与工具开关',
       icon: <Lucide.Cable size={13} strokeWidth={1.75} />,
-      onPick: () => {
+      onClick: () => {
         onClose();
         openSettings('plugins');
       },
@@ -176,7 +74,7 @@ export const ComposePlusMenu: React.FC<Props> = ({
       label: '扩展中心',
       hint: '发现 / 安装',
       icon: <Lucide.Blocks size={13} strokeWidth={1.75} />,
-      onPick: () => {
+      onClick: () => {
         onClose();
         openSettings('plugins');
       },
@@ -185,50 +83,64 @@ export const ComposePlusMenu: React.FC<Props> = ({
       id: 'schedule',
       label: '定时任务',
       icon: <Lucide.Clock size={13} strokeWidth={1.75} />,
-      onPick: () => {
+      onClick: () => {
         onClose();
         emitUiEvent('open-scheduled');
       },
     },
   ];
 
-  if (!pos) return null;
+  if (!open) return null;
 
-  return createPortal(
-    <div
-      ref={rootRef}
-      id={menuId}
-      className={`${styles.root} ${styles.slim}`}
-      role="menu"
-      aria-label="添加"
-      data-cplus-density="compact"
-      style={{ position: 'fixed', left: pos.left, bottom: pos.bottom }}
-    >
-      <div className={styles.main} role="none">
-        {items.map((item, idx) => (
-          <Tooltip key={item.id} content={item.hint || item.label}>
-            <button
-              ref={idx === 0 ? firstItemRef : undefined}
-              type="button"
-              className={styles.item}
-              role="menuitem"
-              aria-label={item.hint ? `${item.label}，${item.hint}` : item.label}
-              onClick={item.onPick}
-            >
-              <span className={styles.icon} aria-hidden>
-                {item.icon}
-              </span>
-              <span className={styles.text}>
-                <span className={styles.title}>{item.label}</span>
-                {item.hint ? (
-                  <span className={styles.desc}>{item.hint}</span>
-                ) : null}
-              </span>
-            </button>
-          </Tooltip>
-        ))}
-      </div>
-    </div>,
-    document.body,
+  const anchorEl = restoreFocusRef?.current;
+
+  return (
+    <UnifiedSelectPopover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
+      trigger={
+        <div
+          ref={(node) => {
+            if (node && anchorEl) {
+              // 挂载锚点
+            }
+          }}
+          style={{ display: 'none' }}
+        />
+      }
+      options={items}
+      align="start"
+      side="top"
+      sideOffset={6}
+      contentClassName={`${styles.root} ${styles.slim} no-drag`}
+      renderItem={(item) => (
+        <Tooltip key={item.id} content={item.hint || item.label}>
+          <button
+            type="button"
+            className={styles.item}
+            role="menuitem"
+            aria-label={item.hint ? `${item.label}，${item.hint}` : item.label}
+            onClick={(e) => {
+              e.stopPropagation();
+              item.onClick?.();
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <span className={styles.icon} aria-hidden>
+              {item.icon}
+            </span>
+            <span className={styles.text}>
+              <span className={styles.title}>{item.label}</span>
+              {item.hint ? (
+                <span className={styles.desc}>{item.hint}</span>
+              ) : null}
+            </span>
+          </button>
+        </Tooltip>
+      )}
+    />
   );
 };

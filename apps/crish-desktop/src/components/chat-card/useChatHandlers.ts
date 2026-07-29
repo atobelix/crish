@@ -1,17 +1,17 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
-import {
-  addMessage,
-  archiveSession,
-  branchSession,
-  getSessionById,
-  getSessionStoreState,
-  setActiveSessionId,
-  setSessionMessageStatus,
-} from '../../api/storeAccess';
+import { getCompositionRoot } from '../../app/compositionRoot';
 import { formatBranchUndoToast } from '../../hooks/useToastQueue';
 import { onUiEvent } from '../../api/uiEvents';
-import { useLayoutStore } from '../../store/layoutStore';
+import { generateMessageId } from '../../utils/generateMessageId';
+import {
+  collectRewindScope,
+  type RewindScopeSummary,
+} from '../../api/collectRewindScope';
+import {
+  reverseFileDiffsToDisk,
+  formatReverseFailureToast,
+} from '../../api/reverseFileDiff';
 
 export interface UseChatHandlersOptions {
   wsId: string;
@@ -20,7 +20,12 @@ export interface UseChatHandlersOptions {
   onShowToast: ShowToastFn;
   handleStopGeneration: () => void;
   setChatInput: (textOrFn: React.SetStateAction<string>) => void;
-  runStreamingAssistant: (text: string, msgId: string) => void;
+  runStreamingAssistant: (
+    text: string,
+    msgId: string,
+    sessionIdOverride?: string,
+    streamOptions?: { clientMessageId?: string }
+  ) => void;
 }
 
 export function useChatHandlers({
@@ -32,11 +37,11 @@ export function useChatHandlers({
   setChatInput,
   runStreamingAssistant,
 }: UseChatHandlersOptions) {
-  const withdrawMessage = useLayoutStore((s) => s.withdrawMessage);
+  const lastRetryTimeRef = useRef<Record<string, number>>({});
 
   const handleExportMarkdown = useCallback(() => {
-    const byId = getSessionStoreState().sessionsById;
-    const session = getSessionStoreState().sessionsById[activeSessionId ?? ''];
+    const byId = getCompositionRoot().session.getState().sessionsById;
+    const session = byId[activeSessionId ?? ''];
     if (!session) return;
     void (async () => {
       try {
@@ -97,24 +102,100 @@ export function useChatHandlers({
     });
   }, [activeSessionId, onShowToast]);
 
+  // ── 撤回编排：收集范围 → 弹二次确认 → 反向还原文件 + 截断消息 ──
+  // 撤回待确认范围：非 null 时显示 WithdrawConfirmDialog
+  const [pendingWithdraw, setPendingWithdraw] =
+    useState<RewindScopeSummary | null>(null);
+
   const handleWithdraw = useCallback(
-    (msgId: string, text: string) => {
+    (msgId: string, _text: string) => {
+      if (!activeSessionId) return;
       handleStopGeneration();
-      setChatInput(text);
-      withdrawMessage(wsId, activeSessionId, msgId);
+      const session = getCompositionRoot().session.getState();
+      const sess = session.sessionsById[activeSessionId];
+      const scope = collectRewindScope(sess, msgId);
+      if (!scope) {
+        onShowToast('找不到要撤回的消息');
+        return;
+      }
+      // 弹二次确认；text 回填推迟到确认后（避免取消时覆盖输入框）
+      setPendingWithdraw(scope);
     },
-    [handleStopGeneration, setChatInput, withdrawMessage, wsId, activeSessionId]
+    [activeSessionId, handleStopGeneration, onShowToast]
   );
+
+  const confirmWithdraw = useCallback(async () => {
+    const scope = pendingWithdraw;
+    if (!scope || !activeSessionId) return;
+    setPendingWithdraw(null);
+
+    // 1. 反向还原文件（逆序；失败不阻断消息撤回，仅 toast）
+    if (scope.fileDiffs.length) {
+      try {
+        const result = await reverseFileDiffsToDisk(scope.fileDiffs);
+        const failToast = formatReverseFailureToast(
+          result.failed,
+          result.results
+        );
+        if (failToast) onShowToast(failToast);
+        // 从 diff 面板移除已还原文件
+        const layoutStore = getCompositionRoot().layout;
+        for (const fp of scope.filePaths) {
+          layoutStore.getState().removeDiffFile(fp);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        onShowToast(`还原文件失败：${msg}`);
+      }
+    }
+
+    // 2. 截断消息（withdrawMessage 内部会保存快照）
+    getCompositionRoot()
+      .session.getState()
+      .withdrawMessage(wsId, activeSessionId, scope.targetMessageId);
+
+    // 3. 回填被撤回的用户消息文本到输入框（保留输入框已有内容）
+    if (scope.lastUserMessageText) {
+      setChatInput((prev) => {
+        const trimmed = (prev || '').trim();
+        if (!trimmed) return scope.lastUserMessageText;
+        // 已有内容：被撤回文本置前（更早的用户意图），现有内容保留在后
+        return `${scope.lastUserMessageText}\n${trimmed}`;
+      });
+    }
+  }, [
+    pendingWithdraw,
+    activeSessionId,
+    onShowToast,
+    wsId,
+    setChatInput,
+  ]);
+
+  const cancelWithdraw = useCallback(() => {
+    setPendingWithdraw(null);
+  }, []);
 
   const handleRegenerate = useCallback(
     (userText: string, assistantMsgId: string) => {
+      if (!activeSessionId) return;
+
+      const now = Date.now();
+      const lastTime = lastRetryTimeRef.current[activeSessionId] || 0;
+      if (now - lastTime < 1500) {
+        console.warn('[handleRegenerate] clicks too fast, throttling duplicate submit');
+        return;
+      }
+      lastRetryTimeRef.current[activeSessionId] = now;
+
       handleStopGeneration();
-      withdrawMessage(wsId, activeSessionId, assistantMsgId);
-      const msgs = getSessionById(activeSessionId)?.messages || [];
+      const session = getCompositionRoot().session.getState();
+      session.withdrawMessage(wsId, activeSessionId, assistantMsgId);
+      const msgs = session.sessionsById[activeSessionId]?.messages || [];
       let userMsgId = msgs.findLast((m) => m.sender === 'user')?.id;
       if (!userMsgId) {
-        userMsgId = `user-msg-${Date.now()}`;
-        addMessage(wsId, activeSessionId, {
+        // 发送前固定 clientMessageId
+        userMsgId = generateMessageId('user');
+        session.addMessage(wsId, activeSessionId, {
           id: userMsgId,
           sender: 'user',
           text: userText,
@@ -122,13 +203,19 @@ export function useChatHandlers({
           status: 'processing',
         });
       } else {
-        setSessionMessageStatus(activeSessionId, userMsgId, 'processing');
+        session.setSessionMessageStatus(
+          activeSessionId,
+          userMsgId,
+          'processing'
+        );
       }
-      runStreamingAssistant(userText, userMsgId);
+      // 透传用户 clientMessageId；助手 id 在 runStreamingAssistant 内 mint 并经 run-task 下发
+      runStreamingAssistant(userText, userMsgId, activeSessionId, {
+        clientMessageId: userMsgId,
+      });
     },
     [
       handleStopGeneration,
-      withdrawMessage,
       wsId,
       activeSessionId,
       runStreamingAssistant,
@@ -140,13 +227,14 @@ export function useChatHandlers({
     const oldId = activeSessionId;
     const base = activeSessionTitle || '会话';
     const newTitle = `${base} - 分支`;
-    branchSession(activeSessionId, newTitle);
-    const newBranchId = getSessionStoreState().activeSessionId;
+    const session = getCompositionRoot().session;
+    session.getState().branchSession(activeSessionId, newTitle);
+    const newBranchId = session.getState().activeSessionId;
     onShowToast(formatBranchUndoToast(base), () => {
       if (newBranchId && newBranchId !== oldId) {
-        archiveSession(newBranchId);
+        session.getState().archiveSession(newBranchId);
       }
-      setActiveSessionId(oldId);
+      session.getState().setActiveSessionId(oldId);
     });
   }, [activeSessionId, activeSessionTitle, onShowToast]);
 
@@ -155,5 +243,8 @@ export function useChatHandlers({
     handleWithdraw,
     handleRegenerate,
     handleBranch,
+    pendingWithdraw,
+    confirmWithdraw,
+    cancelWithdraw,
   };
 }

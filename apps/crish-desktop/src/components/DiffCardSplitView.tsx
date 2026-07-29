@@ -1,6 +1,5 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
-import DOMPurify from 'dompurify';
 import styles from './DiffCard.module.css';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { useVirtualDiffScroll } from '../hooks/useVirtualDiffScroll';
@@ -112,14 +111,14 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                       {leftNum}
                     </div>
                     <div className={styles.gutterMarker}>{leftMarker}</div>
-                    <div className={styles.lineText} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(highlightCode(leftText, 'diff')) }} />
+                    <div className={styles.lineText} dangerouslySetInnerHTML={{ __html: highlightCode(leftText, 'diff') }} />
                   </div>
                   <div className={`${styles.splitColumn} ${rightClass}`} style={{ padding: 0 }}>
                     <div className={styles.gutterNum} data-num={rightNum}>
                       {rightNum}
                     </div>
                     <div className={styles.gutterMarker}>{rightMarker}</div>
-                    <div className={styles.lineText} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(highlightCode(rightText, 'diff')) }} />
+                    <div className={styles.lineText} dangerouslySetInnerHTML={{ __html: highlightCode(rightText, 'diff') }} />
                   </div>
                 </div>
               );

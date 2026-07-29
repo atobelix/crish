@@ -2,25 +2,22 @@ import React, {
   useEffect,
   useMemo,
   useRef,
-  useState,
 } from 'react';
 import styles from '../ChatMessageList.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Tooltip } from '../settings/SettingsUI';
+import { Tooltip } from '../Tooltip';
 import type {
   FileDiff,
-  SessionAgent,
   SessionMessage,
 } from '../../store/layoutStore';
 import { messageMatchesSearch } from '../../api/sessionSearch';
 import { ChatAssistantMessageRow, ChatUserMessageRow } from '../ChatMessageRow';
-import { prepare, layout } from '@chenglou/pretext';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../../api/messageWindow';
-import { buildPretextFontForUiSize } from '../../utils/pretextFontBridge';
 import { ChevronDown, Pin, PinOff } from 'lucide-react';
 import type { ChatToolStackSharedProps } from '../ChatToolCallBlock';
-import { scheduleIdle } from './useScrollAnchor';
+
+import type { PermissionMode } from '../../api/permissionModes';
 
 export interface PinnedItem {
   id: string;
@@ -53,7 +50,6 @@ export interface MessageVirtualizerProps {
   onToggleExpandUser: (msgId: string) => void;
   onWithdraw: (msgId: string, text: string) => void;
   onShowToast: (message: string) => void;
-  thinkingSeconds: number;
   hideThinkingBlock: boolean;
   inPlanMode: boolean;
   planApproved: boolean;
@@ -64,7 +60,7 @@ export interface MessageVirtualizerProps {
   onBranch: () => void;
   onOpenDiff: (diff: FileDiff) => void;
   onOpenDiffPanel?: () => void;
-  setPermissionMode: (mode: 'plan' | 'normal') => void;
+  setPermissionMode: (mode: PermissionMode) => void;
   setPlanApproved: (v: boolean) => void;
   handleFillFollowUp: (prompt: string) => void;
   onSendFollowUp?: (prompt: string) => void;
@@ -77,7 +73,7 @@ export interface MessageVirtualizerProps {
   clearHeightsSignal?: number;
 }
 
-export const MessageVirtualizer: React.FC<MessageVirtualizerProps> = ({
+const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
   visibleMessages,
   messageWindow,
   olderStep,
@@ -94,7 +90,6 @@ export const MessageVirtualizer: React.FC<MessageVirtualizerProps> = ({
   onToggleExpandUser,
   onWithdraw,
   onShowToast,
-  thinkingSeconds,
   hideThinkingBlock,
   inPlanMode,
   planApproved,
@@ -132,88 +127,8 @@ export const MessageVirtualizer: React.FC<MessageVirtualizerProps> = ({
     clearHeights();
   }, [activeSessionId, clearHeights]);
 
-  const pretextFont = useMemo(() => {
-    try {
-      return buildPretextFontForUiSize('medium', 'sans', 'normal');
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const [containerWidth, setContainerWidth] = useState(680);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const update = () => setContainerWidth(el.clientWidth);
-    update();
-    const ro = new ResizeObserver(() => update());
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [containerRef]);
-
-  const pretextIdleRef = useRef<{ cancel: () => void } | null>(null);
-  useEffect(() => {
-    if (!pretextFont || containerWidth <= 0) return;
-    if (pretextIdleRef.current) {
-      pretextIdleRef.current.cancel();
-      pretextIdleRef.current = null;
-    }
-    const TEXT_LINE_HEIGHT = 22;
-    const TEXT_PADDING = 40;
-    const TOOL_CALL_OVERHEAD_PER_CALL = 80;
-    const availWidth = Math.max(1, containerWidth - 32);
-    const pending = visibleMessages
-      .map((msg, i) => ({ msg, i }))
-      .filter(
-        ({ msg, i }) =>
-          msg != null &&
-          manager.getHeight(String(i)) === MESSAGE_ESTIMATED_ROW_HEIGHT
-      );
-
-    if (pending.length === 0) return;
-
-    let cursor = 0;
-    const processChunk = (deadline?: IdleDeadline) => {
-      const timeRemaining = deadline ? () => deadline.timeRemaining() : () => 1;
-      while (cursor < pending.length && timeRemaining() > 0) {
-        const item = pending[cursor++];
-        if (!item) continue;
-        const { msg, i } = item;
-        if (manager.getHeight(String(i)) !== MESSAGE_ESTIMATED_ROW_HEIGHT) continue;
-        let h = MESSAGE_ESTIMATED_ROW_HEIGHT;
-        const text = msg.text || '';
-        if (text && availWidth > 0) {
-          try {
-            const prepared = prepare(text, pretextFont);
-            const result = layout(prepared, availWidth, TEXT_LINE_HEIGHT);
-            h = result.height + TEXT_PADDING;
-          } catch {
-            h = MESSAGE_ESTIMATED_ROW_HEIGHT;
-          }
-        }
-        if (msg.toolCalls?.length) {
-          h += TOOL_CALL_OVERHEAD_PER_CALL * msg.toolCalls.length;
-        }
-        manager.setEstimated(String(i), h);
-      }
-      if (cursor < pending.length) {
-        const next = scheduleIdle(processChunk, { timeout: 500 });
-        pretextIdleRef.current = next;
-      } else {
-        pretextIdleRef.current = null;
-      }
-    };
-
-    pretextIdleRef.current = scheduleIdle(processChunk, { timeout: 300 });
-
-    return () => {
-      if (pretextIdleRef.current) {
-        pretextIdleRef.current.cancel();
-        pretextIdleRef.current = null;
-      }
-    };
-  }, [visibleMessages, pretextFont, containerWidth, manager]);
+  // Heights: MESSAGE_ESTIMATED_ROW_HEIGHT fallback until ResizeObserver setActual.
+  // No @chenglou/pretext on this path — RO owns measured heights after paint.
 
   const roRef = useRef<ResizeObserver | null>(null);
   const observedRowsRef = useRef<Set<Element>>(new Set());
@@ -225,9 +140,10 @@ export const MessageVirtualizer: React.FC<MessageVirtualizerProps> = ({
         for (const entry of entries) {
           const el = entry.target;
           if (!(el instanceof HTMLElement)) continue;
-          const vindex = el.dataset.vindex;
-          if (vindex != null && entry.contentRect.height > 0) {
-            setActual(vindex, entry.contentRect.height);
+          // data-vindex 存 messageId（稳定键），不再用数字下标
+          const msgId = el.dataset.vindex;
+          if (msgId != null && entry.contentRect.height > 0) {
+            setActual(msgId, entry.contentRect.height);
           }
         }
       });
@@ -249,7 +165,7 @@ export const MessageVirtualizer: React.FC<MessageVirtualizerProps> = ({
         observed.delete(row);
       }
     }
-  }, [visibleMessages, containerRef, setActual]);
+  }, [visibleMsgIds, containerRef, setActual]);
 
   useEffect(() => {
     return () => {
@@ -287,191 +203,262 @@ export const MessageVirtualizer: React.FC<MessageVirtualizerProps> = ({
       onClick={handleMarkdownClick}
       onScroll={vs.onScroll}
     >
-      {messageWindow.hasOlder && olderStep > 0 ? (
-        <div
-          className="chat-msg-window-older"
-          role="region"
-          aria-label="更早消息"
-        >
-          <div className="chat-msg-window-older-actions">
-            <Tooltip content={olderAria}>
-              <button
-                type="button"
-                className="chat-msg-window-older-btn"
-                onClick={expandOlderStep}
-                aria-label={olderAria}
-              >
-                显示更早的 {olderStep} 条
-                <span
-                  className="chat-msg-window-older-meta"
-                  aria-hidden="true"
-                >
-                  （另有 {messageWindow.hiddenCount} 条未显示）
-                </span>
-              </button>
-            </Tooltip>
-            {offerShowAllOlder ? (
-              <Tooltip content={showAllAria}>
+      <div className={styles.listInner}>
+        {messageWindow.hasOlder && olderStep > 0 ? (
+          <div
+            className="chat-msg-window-older"
+            role="region"
+            aria-label="更早消息"
+          >
+            <div className="chat-msg-window-older-actions">
+              <Tooltip content={olderAria}>
                 <button
                   type="button"
-                  className="chat-msg-window-older-btn chat-msg-window-older-btn--all"
-                  onClick={expandOlderAll}
-                  aria-label={showAllAria}
+                  className="chat-msg-window-older-btn"
+                  onClick={expandOlderStep}
+                  aria-label={olderAria}
                 >
-                  全部展开
+                  显示更早的 {olderStep} 条
                   <span
                     className="chat-msg-window-older-meta"
                     aria-hidden="true"
                   >
-                    （{messageWindow.hiddenCount} 条）
+                    （另有 {messageWindow.hiddenCount} 条未显示）
                   </span>
                 </button>
               </Tooltip>
+              {offerShowAllOlder ? (
+                <Tooltip content={showAllAria}>
+                  <button
+                    type="button"
+                    className="chat-msg-window-older-btn chat-msg-window-older-btn--all"
+                    onClick={expandOlderAll}
+                    aria-label={showAllAria}
+                  >
+                    全部展开
+                    <span
+                      className="chat-msg-window-older-meta"
+                      aria-hidden="true"
+                    >
+                      （{messageWindow.hiddenCount} 条）
+                    </span>
+                  </button>
+                </Tooltip>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        {pinnedItems.length > 0 ? (
+          <div
+            className={styles.pinnedBar}
+            role="region"
+            aria-label="已固定消息"
+          >
+            <Tooltip content={pinsOpen ? '收起固定列表' : '展开固定列表'}>
+              <button
+                type="button"
+                className={styles.pinnedBarToggle}
+                onClick={() => setPinsOpen((v) => !v)}
+                aria-expanded={pinsOpen}
+                aria-controls="chat-pinned-list"
+                aria-label={
+                  pinsOpen
+                    ? `收起已固定消息列表，共 ${pinnedItems.length} 条`
+                    : `展开已固定消息列表，共 ${pinnedItems.length} 条`
+                }
+              >
+                <Pin size={13} strokeWidth={2} aria-hidden />
+                <span>已固定 · {pinnedItems.length}</span>
+                <ChevronDown
+                  size={14}
+                  className={`${styles.pinnedChevron}${pinsOpen ? ` ${styles.isOpen}` : ''}`}
+                  aria-hidden
+                />
+              </button>
+            </Tooltip>
+            {pinsOpen ? (
+              <ul id="chat-pinned-list" className={styles.pinnedList}>
+                {pinnedItems.map((item) => (
+                  <li key={item.id} className={styles.pinnedItem}>
+                    <Tooltip content="跳转到消息">
+                      <button
+                        type="button"
+                        className={styles.pinnedJump}
+                        aria-label={`跳转到${item.sender === 'user' ? '你' : '助手'}的固定消息：${item.snippet}`}
+                        onClick={() => jumpToPinned(item.id)}
+                      >
+                        <span className={styles.pinnedSnippet}>
+                          {item.snippet}
+                        </span>
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="取消固定">
+                      <button
+                        type="button"
+                        className={styles.pinnedUnpin}
+                        aria-label={`取消固定：${item.snippet}`}
+                        onClick={() => togglePin(item.id)}
+                      >
+                        <PinOff size={14} aria-hidden />
+                      </button>
+                    </Tooltip>
+                  </li>
+                ))}
+              </ul>
             ) : null}
           </div>
-        </div>
-      ) : null}
-      {pinnedItems.length > 0 ? (
-        <div
-          className={styles.pinnedBar}
-          role="region"
-          aria-label="已固定消息"
-        >
-          <Tooltip content={pinsOpen ? '收起固定列表' : '展开固定列表'}>
-            <button
-              type="button"
-              className={styles.pinnedBarToggle}
-              onClick={() => setPinsOpen((v) => !v)}
-              aria-expanded={pinsOpen}
-              aria-controls="chat-pinned-list"
-              aria-label={
-                pinsOpen
-                  ? `收起已固定消息列表，共 ${pinnedItems.length} 条`
-                  : `展开已固定消息列表，共 ${pinnedItems.length} 条`
-              }
-            >
-              <Pin size={13} strokeWidth={2} aria-hidden />
-              <span>已固定 · {pinnedItems.length}</span>
-              <ChevronDown
-                size={14}
-                className={`${styles.pinnedChevron}${pinsOpen ? ` ${styles.isOpen}` : ''}`}
-                aria-hidden
-              />
-            </button>
-          </Tooltip>
-          {pinsOpen ? (
-            <ul id="chat-pinned-list" className={styles.pinnedList}>
-              {pinnedItems.map((item) => (
-                <li key={item.id} className={styles.pinnedItem}>
-                  <Tooltip content="跳转到消息">
-                    <button
-                      type="button"
-                      className={styles.pinnedJump}
-                      aria-label={`跳转到${item.sender === 'user' ? '你' : '助手'}的固定消息：${item.snippet}`}
-                      onClick={() => jumpToPinned(item.id)}
-                    >
-                      <span className={styles.pinnedSnippet}>
-                        {item.snippet}
-                      </span>
-                    </button>
-                  </Tooltip>
-                  <Tooltip content="取消固定">
-                    <button
-                      type="button"
-                      className={styles.pinnedUnpin}
-                      aria-label={`取消固定：${item.snippet}`}
-                      onClick={() => togglePin(item.id)}
-                    >
-                      <PinOff size={14} aria-hidden />
-                    </button>
-                  </Tooltip>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
+        ) : null}
 
-      <div style={{ height: startOffset, flexShrink: 0 }} aria-hidden />
+        <div style={{ height: startOffset, flexShrink: 0 }} aria-hidden />
 
-      {visibleMessages.slice(startIndex, endIndex).map((msg, i) => {
-        const virtualIndex = startIndex + i;
-        const prevMsg =
-          virtualIndex > 0 ? visibleMessages[virtualIndex - 1] : null;
-        const isFollowUp =
-          msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
-        const isPinnedMsg = pinnedIdSet.has(msg.id);
-        const isSearchHit =
-          !!searchHighlightQuery &&
-          messageMatchesSearch(msg, searchHighlightQuery);
+        {/* 渲染身份（C2）：key / 高度缓存键 = message.id；stream 与 final 共用同一行 id */}
+        {visibleMessages.slice(startIndex, endIndex).map((msg, i) => {
+          const virtualIndex = startIndex + i;
+          const prevMsg =
+            virtualIndex > 0 ? visibleMessages[virtualIndex - 1] : null;
+          const isFollowUp =
+            msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
+          const isPinnedMsg = pinnedIdSet.has(msg.id);
+          const isSearchHit =
+            !!searchHighlightQuery &&
+            messageMatchesSearch(msg, searchHighlightQuery);
 
-        if (msg.sender === 'user') {
+          if (msg.sender === 'user') {
+            return (
+              <AppErrorBoundary key={msg.id} variant="minimal" title="消息出错">
+                <div data-vindex={msg.id}>
+                  <ChatUserMessageRow
+                    msg={msg}
+                    isPinned={isPinnedMsg}
+                    isSearchHit={isSearchHit}
+                    isExpanded={!!expandedUserMsgs[msg.id]}
+                    onToggleExpand={onToggleExpandUser}
+                    onTogglePin={togglePin}
+                    onWithdraw={onWithdraw}
+                    onShowToast={onShowToast}
+                    messageIndex={virtualIndex}
+                    virtualScrollManager={manager}
+                  />
+                </div>
+              </AppErrorBoundary>
+            );
+          }
+
           return (
             <AppErrorBoundary key={msg.id} variant="minimal" title="消息出错">
-              <div data-vindex={virtualIndex}>
-                <ChatUserMessageRow
+              <div data-vindex={msg.id}>
+                <ChatAssistantMessageRow
                   msg={msg}
+                  isFollowUp={isFollowUp}
                   isPinned={isPinnedMsg}
                   isSearchHit={isSearchHit}
-                  isExpanded={!!expandedUserMsgs[msg.id]}
-                  onToggleExpand={onToggleExpandUser}
+                  isThinkingMsg={msg.id === thinkingMsgId}
+                  hideThinkingBlock={hideThinkingBlock}
+                  inPlanMode={inPlanMode}
+                  planApproved={planApproved}
+                  isLastAssistant={msg.id === lastAssistantId}
+                  toolStackProps={toolStackProps}
                   onTogglePin={togglePin}
-                  onWithdraw={onWithdraw}
                   onShowToast={onShowToast}
+                  onRegenerate={handleRegenerateRow}
+                  onBranch={onBranch}
+                  onOpenDiff={onOpenDiff}
+                  onOpenDiffPanel={onOpenDiffPanel}
+                  setPermissionMode={setPermissionMode}
+                  setPlanApproved={setPlanApproved}
+                  onFillFollowUp={handleFillFollowUp}
+                  onSendFollowUp={
+                    onSendFollowUp ? handleSendFollowUp : undefined
+                  }
+                  followUpDismissed={!!dismissedFollowUps[msg.id]}
+                  onDismissFollowUp={handleDismissFollowUp}
                   messageIndex={virtualIndex}
                   virtualScrollManager={manager}
                 />
               </div>
             </AppErrorBoundary>
           );
-        }
+        })}
 
-        return (
-          <AppErrorBoundary key={msg.id} variant="minimal" title="消息出错">
-            <div data-vindex={virtualIndex}>
-              <ChatAssistantMessageRow
-                msg={msg}
-                isFollowUp={isFollowUp}
-                isPinned={isPinnedMsg}
-                isSearchHit={isSearchHit}
-                isThinkingMsg={msg.id === thinkingMsgId}
-                thinkingSeconds={thinkingSeconds}
-                hideThinkingBlock={hideThinkingBlock}
-                inPlanMode={inPlanMode}
-                planApproved={planApproved}
-                isLastAssistant={msg.id === lastAssistantId}
-                toolStackProps={toolStackProps}
-                onTogglePin={togglePin}
-                onShowToast={onShowToast}
-                onRegenerate={handleRegenerateRow}
-                onBranch={onBranch}
-                onOpenDiff={onOpenDiff}
-                onOpenDiffPanel={onOpenDiffPanel}
-                setPermissionMode={setPermissionMode}
-                setPlanApproved={setPlanApproved}
-                onFillFollowUp={handleFillFollowUp}
-                onSendFollowUp={
-                  onSendFollowUp ? handleSendFollowUp : undefined
-                }
-                followUpDismissed={!!dismissedFollowUps[msg.id]}
-                onDismissFollowUp={handleDismissFollowUp}
-                messageIndex={virtualIndex}
-                virtualScrollManager={manager}
-              />
-            </div>
-          </AppErrorBoundary>
-        );
-      })}
-
-      <div
-        style={{
-          height: Math.max(0, estimatedTotalHeight - endOffset),
-          flexShrink: 0,
-        }}
-        aria-hidden
-      />
+        <div
+          style={{
+            height: Math.max(0, estimatedTotalHeight - endOffset),
+            flexShrink: 0,
+          }}
+          aria-hidden
+        />
+      </div>
     </div>
   );
 };
+
+/** 仅在可见消息身份/长度、思考中消息、窗口与关键 UI 状态变化时放行重渲染 */
+function messageVirtualizerPropsEqual(
+  prev: MessageVirtualizerProps,
+  next: MessageVirtualizerProps
+): boolean {
+  if (prev.visibleMessages !== next.visibleMessages) return false;
+  if (prev.visibleMessages.length !== next.visibleMessages.length) return false;
+  if (prev.thinkingMsgId !== next.thinkingMsgId) return false;
+  if (prev.activeSessionId !== next.activeSessionId) return false;
+  if (prev.lastAssistantId !== next.lastAssistantId) return false;
+  if (prev.hideThinkingBlock !== next.hideThinkingBlock) return false;
+  if (prev.inPlanMode !== next.inPlanMode) return false;
+  if (prev.planApproved !== next.planApproved) return false;
+  if (prev.showAllMessages !== next.showAllMessages) return false;
+  if (prev.pinsOpen !== next.pinsOpen) return false;
+  if (prev.searchHighlightQuery !== next.searchHighlightQuery) return false;
+  if (prev.olderStep !== next.olderStep) return false;
+  if (prev.offerShowAllOlder !== next.offerShowAllOlder) return false;
+  if (prev.clearHeightsSignal !== next.clearHeightsSignal) return false;
+  if (prev.pinnedItems !== next.pinnedItems) return false;
+  if (prev.expandedUserMsgs !== next.expandedUserMsgs) return false;
+  if (prev.dismissedFollowUps !== next.dismissedFollowUps) return false;
+  if (prev.toolStackProps !== next.toolStackProps) return false;
+  if (prev.messageWindow !== next.messageWindow) {
+    const a = prev.messageWindow;
+    const b = next.messageWindow;
+    if (
+      a.startIndex !== b.startIndex ||
+      a.hiddenCount !== b.hiddenCount ||
+      a.visibleCount !== b.visibleCount ||
+      a.totalCount !== b.totalCount ||
+      a.hasOlder !== b.hasOlder ||
+      a.effectiveExpanded !== b.effectiveExpanded
+    ) {
+      return false;
+    }
+  }
+  // messages 全量仅用于少数路径；身份变化时父级通常会换 visibleMessages
+  if (prev.messages !== next.messages && prev.messages.length !== next.messages.length) {
+    return false;
+  }
+  return (
+    prev.expandOlderStep === next.expandOlderStep &&
+    prev.expandOlderAll === next.expandOlderAll &&
+    prev.setPinsOpen === next.setPinsOpen &&
+    prev.jumpToPinned === next.jumpToPinned &&
+    prev.togglePin === next.togglePin &&
+    prev.onToggleExpandUser === next.onToggleExpandUser &&
+    prev.onWithdraw === next.onWithdraw &&
+    prev.onShowToast === next.onShowToast &&
+    prev.handleRegenerateRow === next.handleRegenerateRow &&
+    prev.onBranch === next.onBranch &&
+    prev.onOpenDiff === next.onOpenDiff &&
+    prev.onOpenDiffPanel === next.onOpenDiffPanel &&
+    prev.setPermissionMode === next.setPermissionMode &&
+    prev.setPlanApproved === next.setPlanApproved &&
+    prev.handleFillFollowUp === next.handleFillFollowUp &&
+    prev.onSendFollowUp === next.onSendFollowUp &&
+    prev.handleSendFollowUp === next.handleSendFollowUp &&
+    prev.handleDismissFollowUp === next.handleDismissFollowUp &&
+    prev.handleMarkdownClick === next.handleMarkdownClick
+  );
+}
+
+export const MessageVirtualizer = React.memo(
+  MessageVirtualizerInner,
+  messageVirtualizerPropsEqual
+);
 
 MessageVirtualizer.displayName = 'MessageVirtualizer';

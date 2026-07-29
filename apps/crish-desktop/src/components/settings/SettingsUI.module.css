@@ -3,7 +3,7 @@
   flex-direction: column;
   gap: var(--space-6);
   /*
-   * width: 100% 婵夘偅寮?stretch 閻栬泛鍨敍?   * max-width 闁俺绻?token 缂佺喍绔撮幒褍鍩楅敍瀹產rgin: auto 鐎圭偟骞囩仦鍛厬閵?   * 缁備焦顒涢崘宥呮躬閸?tab CSS 闁插苯鎮囬崘娆庣娴?max-width: 680/720px�?   */
+   * width: 100% 濠靛鍋呭?stretch 闁绘牞娉涢崹顏堟晬?   * max-width 闂侇偅淇虹换?token 缂備胶鍠嶇粩鎾箳瑜嶉崺妤呮晬鐎圭敘rgin: auto 閻庡湱鍋熼獮鍥╀沪閸涱剝鍘柕?   * 缂佸倷鐒﹂娑㈠礃瀹ュ懏韬柛?tab CSS 闂佹彃鑻幃鍥礃濞嗗海顏卞ù?max-width: 680/720px闁?   */
   width: 100%;
   max-width: var(--settings-content-max, 720px);
   margin-left: auto;
@@ -62,7 +62,7 @@
   gap: var(--space-4);
 }
 
-/* 缂備胶鍠嶇粩鎾儍閸曨垳褰紒鐙欏啫骞㈤柣妤€娲ら鎰板闯椤帞绀夊☉鎾卞劜閻楁悂鏌嗛棃娑氭殦闁哄绀佹禍鏇烆嚕鏉堚晙绱楅幖杈捐�?=4%闁挎稑顧€缁辨繈寮悩鎻掕⒈闂佹彃绉瑰Σ鎹愩亹閹插绀夌紒缁㈠灣鐞涖儵鎯冮崟顐ｅ閻熸瑦甯婄粭?1px hairline */
+/* 缂傚倷鑳堕崰宥囩博閹绢喗鍎嶉柛鏇ㄥ灣瑜邦垳绱掗悪娆忓暙楠炪垽鏌ｅΔ鈧ú銈夘敊閹版澘闂い顓熷笧缁€澶娾槈閹惧崬鍔滈柣妤佹倐閺屽棝妫冨☉姘闂佸搫顑勭粈浣圭閺囩儐鍤曢弶鍫氭櫃缁辨骞栨潏鎹愵吅缂?=4%闂佹寧绋戦¨鈧紒杈ㄧ箞瀵噣鎮╅幓鎺曗拡闂備焦褰冪粔鐟拔ｉ幑鎰╀汗闁规彃顑囩粈澶岀磼缂併垹鐏ｉ悶娑栧劦閹啴宕熼锝咁洭闁荤喐鐟︾敮濠勭箔?1px hairline */
 .settingsUiCard {
   background: transparent;
   border: 1px solid var(--border-color);
@@ -166,15 +166,17 @@
 }
 
 .modernSelectTooltipInner {
-  background: var(--bg-primary, #ffffff);
-  border: 1px solid var(--border-subtle, #e5e7eb);
-  color: var(--text-primary, #1f2937);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
   padding: 6px 12px;
   border-radius: var(--radius-lg);
   font-size: var(--font-size-xs);
   line-height: var(--line-height-base);
   white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  box-shadow:
+    0 4px 12px color-mix(in srgb, var(--shadow-color) 8%, transparent),
+    0 2px 4px color-mix(in srgb, var(--shadow-color) 4%, transparent);
 }
 
 .modernSelectTooltipArrow {
@@ -184,22 +186,24 @@
   transform: translateX(-50%) rotate(45deg);
   width: 8px;
   height: 8px;
-  background: var(--bg-primary, #ffffff);
-  border-right: 1px solid var(--border-subtle, #e5e7eb);
-  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 /* Dark mode theme support */
 :global(html[data-theme="dark"]) .modernSelectTooltipInner {
-  background: var(--bg-elevated, #1f2937);
-  border-color: var(--border-subtle, #374151);
-  color: var(--text-primary, #f9fafb);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
+  background: var(--bg-elevated);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  box-shadow:
+    0 4px 16px color-mix(in srgb, var(--shadow-color) 30%, transparent),
+    0 2px 8px color-mix(in srgb, var(--shadow-color) 20%, transparent);
 }
 
 :global(html[data-theme="dark"]) .modernSelectTooltipArrow {
-  background: var(--bg-elevated, #1f2937);
-  border-color: var(--border-subtle, #374151);
+  background: var(--bg-elevated);
+  border-color: var(--border-subtle);
 }
 
 .settingsUiRowLabel {

@@ -114,7 +114,7 @@
 }
 
 .agentCardBtnDanger {
-  color: var(--accent-red, #ff6b6b);
+  color: var(--accent-red);
 }
 
 .agentCardBtnDanger:hover {

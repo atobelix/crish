@@ -2,7 +2,7 @@ import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { ChevronDown } from 'lucide-react';
 import styles from '../ChatCard.module.css';
-import { Tooltip } from '../settings/SettingsUI';
+import { Tooltip } from '../Tooltip';
 import {
   getActiveModelId,
   getActiveProfile,
@@ -65,6 +65,15 @@ export function useModelSelection(appSettings: AppSettings | undefined, projectT
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectTick, appSettings?.defaultModel]);
 
+  // 引擎连接超时回退：15 秒后 engineHint 仍为 null → 标记离线
+  useEffect(() => {
+    if (engineHint !== null) return;
+    const timer = setTimeout(() => {
+      setEngineHint({ ok: false, connected: false, error: 'not_connected' });
+    }, 15_000);
+    return () => clearTimeout(timer);
+  }, [engineHint]);
+
   useEffect(() => {
     const off = onUiEvent('model-changed', (detail) => {
       if (detail?.model) setEngineModel(detail.model);
@@ -90,14 +99,20 @@ interface ModelBadgePickerProps {
   engineModel: string;
   needsModelSetup: boolean;
   activeProfileId?: string | null;
+  showModelDropdown?: boolean;
+  setShowModelDropdown?: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
   engineModel,
   needsModelSetup,
   activeProfileId,
+  showModelDropdown: showModelDropdownProp,
+  setShowModelDropdown: setShowModelDropdownProp,
 }) => {
-  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [internalShow, setInternalShow] = useState(false);
+  const showModelDropdown = showModelDropdownProp ?? internalShow;
+  const setShowModelDropdown = setShowModelDropdownProp ?? setInternalShow;
 
   const getModelDisplayName = (modelId: string) => {
     if (!modelId) return '选择模型';

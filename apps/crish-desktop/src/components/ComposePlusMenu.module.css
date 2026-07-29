@@ -94,6 +94,8 @@
 }
 .slim .main {
   width: 188px;
+  max-height: min(340px, 60dvh);
+  overflow-y: auto;
   padding: var(--space-1);
   border-radius: var(--radius-xl);
   gap: 1px;

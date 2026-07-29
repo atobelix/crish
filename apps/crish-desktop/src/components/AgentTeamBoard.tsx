@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useId, useMemo, useRef } from 'react';
 import styles from './AgentCard.module.css';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import * as Lucide from 'lucide-react';
 import type { SessionAgent } from '../store/layoutStore';
 import { openAgentInSidePanel } from '../api/openAgentPanel';
@@ -33,19 +33,20 @@ function AgentStatusDot({ status }: { status: SessionAgent['status'] }) {
   let dotColor = 'var(--text-tertiary)'; // default/stopped
   let label = '已停止';
   if (status === 'completed') {
-    dotColor = '#10b981'; // green dot
+    dotColor = 'var(--accent-green)'; // green dot
     label = '已完成';
   } else if (status === 'failed') {
-    dotColor = '#f97316'; // orange dot
+    dotColor = 'var(--accent-orange)'; // orange dot
     label = '有错误';
   }
   return (
-    <span
-      className={styles.statusDot}
-      style={{ backgroundColor: dotColor }}
-      title={label}
-      aria-hidden="true"
-    />
+    <Tooltip content={label}>
+      <span
+        className={styles.statusDot}
+        style={{ backgroundColor: dotColor }}
+        aria-hidden="true"
+      />
+    </Tooltip>
   );
 }
 
@@ -406,9 +407,9 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
                 </svg>
               </span>
             ) : boardStats.pendingN > 0 || boardStats.failedN > 0 ? (
-              <span className={styles.statusDot} style={{ backgroundColor: '#f97316' }} aria-label="有待审批或失败的协作" />
+              <span className={styles.statusDot} style={{ backgroundColor: 'var(--accent-orange)' }} aria-label="有待审批或失败的协作" />
             ) : (
-              <span className={styles.statusDot} style={{ backgroundColor: '#10b981' }} aria-label="所有协作已完成" />
+              <span className={styles.statusDot} style={{ backgroundColor: 'var(--accent-green)' }} aria-label="所有协作已完成" />
             )}
           </div>
         </div>

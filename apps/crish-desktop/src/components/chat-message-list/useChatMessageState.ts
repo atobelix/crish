@@ -10,8 +10,68 @@ import type { ChatToolStackSharedProps } from '../ChatToolCallBlock';
 import type { PinnedItem } from './MessageVirtualizer';
 import { pinSnippet } from './useScrollAnchor';
 
+// Stable references for selector fallbacks (React 19 useSyncExternalStore requires
+// getSnapshot to return the same reference when the underlying data hasn't changed).
+const EMPTY_PINNED_IDS: string[] = [];
+const EMPTY_PINNED_ITEMS: PinnedItem[] = [];
+
+/**
+ * Build pin-bar items from pinned ids + full session messages.
+ * Pure helper so pin chrome can recompute without a second store sub on messages.
+ * Uses message identity (id) + sender/snippet only — streaming token text on
+ * non-pinned rows must not force a new array when pin source is unchanged.
+ */
+export function buildPinnedItems(
+  pinnedMessageIds: readonly string[],
+  allMessages: readonly SessionMessage[]
+): PinnedItem[] {
+  if (!pinnedMessageIds.length) return EMPTY_PINNED_ITEMS;
+  const byId = new Map(allMessages.map((m) => [m.id, m]));
+  const items: PinnedItem[] = [];
+  for (const id of pinnedMessageIds) {
+    const m = byId.get(id);
+    if (!m) continue;
+    if (m.sender !== 'user' && m.sender !== 'assistant') continue;
+    const text =
+      m.sender === 'assistant'
+        ? assistantCopyText(m) || m.text || ''
+        : m.text || '';
+    items.push({
+      id,
+      sender: m.sender,
+      snippet: pinSnippet(text),
+    });
+  }
+  return items.length === 0 ? EMPTY_PINNED_ITEMS : items;
+}
+
+/** Content equality for pin bar — keeps MessageVirtualizer memo when only non-pin text streams. */
+export function pinnedItemsEqual(
+  a: readonly PinnedItem[],
+  b: readonly PinnedItem[]
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (x.id !== y.id || x.sender !== y.sender || x.snippet !== y.snippet) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export interface UseChatMessageStateOptions {
+  /** Display / filtered list (windowed further in list). */
   messages: SessionMessage[];
+  /**
+   * Full unfiltered session messages for pin resolve / jump-when-filtered.
+   * Parent (ChatCard) already subscribes — pass through; do **not** re-select
+   * `sessionsById[sid].messages` here (OPT-D8 dual-sub residual).
+   * Defaults to `messages` when omitted (no filter / same list).
+   */
+  allMessages?: SessionMessage[];
   agents: SessionAgent[];
   activeSessionId: string;
   onSetChatInput: (text: string) => void;
@@ -31,6 +91,7 @@ export interface UseChatMessageStateOptions {
 
 export function useChatMessageState({
   messages,
+  allMessages: allMessagesProp,
   agents,
   activeSessionId,
   onSetChatInput,
@@ -67,6 +128,9 @@ export function useChatMessageState({
     [expandedUserMsgsBySession, sessionKey]
   );
 
+  // Prefer parent-passed full list; avoid second store sub on session messages.
+  const sessionAllMessages = allMessagesProp ?? messages;
+
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const onShowToastRef = useRef(onShowToast);
@@ -78,37 +142,25 @@ export function useChatMessageState({
 
   const pinMessage = useLayoutStore((s) => s.pinMessage);
   const unpinMessage = useLayoutStore((s) => s.unpinMessage);
+  // Pin ids only — does not fire on stream token text updates to messages[].
   const pinnedMessageIds = useLayoutStore(
-    (s) => s.sessionsById[activeSessionId]?.pinnedMessageIds || []
-  );
-  const sessionAllMessages = useLayoutStore(
-    (s) => s.sessionsById[activeSessionId]?.messages || []
+    (s) => s.sessionsById[activeSessionId]?.pinnedMessageIds ?? EMPTY_PINNED_IDS
   );
   const pinnedIdSet = useMemo(
     () => new Set(pinnedMessageIds),
     [pinnedMessageIds]
   );
 
-  const pinnedItems = useMemo(() => {
-    if (!pinnedMessageIds.length) return [];
-    const byId = new Map(sessionAllMessages.map((m) => [m.id, m]));
-    const items: PinnedItem[] = [];
-    for (const id of pinnedMessageIds) {
-      const m = byId.get(id);
-      if (!m) continue;
-      const text =
-        m.sender === 'assistant'
-          ? assistantCopyText(m) || m.text || ''
-          : m.text || '';
-      if (m.sender !== 'user' && m.sender !== 'assistant') continue;
-      items.push({
-        id,
-        sender: m.sender,
-        snippet: pinSnippet(text),
-      });
-    }
-    return items;
-  }, [pinnedMessageIds, sessionAllMessages]);
+  const pinnedItemsRaw = useMemo(
+    () => buildPinnedItems(pinnedMessageIds, sessionAllMessages),
+    [pinnedMessageIds, sessionAllMessages]
+  );
+  // Stabilize identity when pin bar content is unchanged (stream thrash guard).
+  const pinnedItemsRef = useRef(pinnedItemsRaw);
+  if (!pinnedItemsEqual(pinnedItemsRef.current, pinnedItemsRaw)) {
+    pinnedItemsRef.current = pinnedItemsRaw;
+  }
+  const pinnedItems = pinnedItemsRef.current;
 
   const togglePin = useCallback(
     (messageId: string) => {

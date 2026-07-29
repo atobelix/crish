@@ -1,0 +1,315 @@
+/**
+ * Global session tab bar — full width of workspaces main content.
+ *
+ * Spec: docs/plans/progress/shell-global-tab-bar.md
+ * - One row above BinaryTree canvas
+ * - Uniform tab widths (flex 1 1 0 / equal share; min/max clamp)
+ * - Not under AppTopBar sidebar rail
+ */
+
+.bar {
+  --global-tab-strip-h: 32px;
+  --global-tab-h: 26px;
+  --global-tab-radius: var(--radius-md);
+  --global-tab-gap: var(--space-0_5);
+  --global-tab-pad-x: var(--space-1);
+  --global-strip-bg: var(--card-header-bg);
+  --global-tab-active-bg: var(--shell-inset-bg, var(--bg-primary));
+  --global-strip-line: var(--hairline);
+  --global-tab-min-w: 72px;
+  --global-tab-max-w: 200px;
+
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: var(--global-tab-strip-h);
+  min-height: var(--global-tab-strip-h);
+  max-height: var(--global-tab-strip-h);
+  box-sizing: border-box;
+  padding: 0 var(--global-tab-pad-x);
+  margin: 0;
+  background: var(--global-strip-bg);
+  border: none;
+  border-bottom: var(--hairline-width) solid var(--global-strip-line);
+  user-select: none;
+  overflow: hidden;
+  isolation: isolate;
+  position: relative;
+  z-index: var(--z-sticky-bar, 2);
+  /* 顶栏内必须可点：覆盖父级 app-region drag */
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  pointer-events: auto;
+}
+
+/* 嵌在 AppTopBar 中间：与 caption 同高，背景对齐顶栏 */
+/* 空白区域继承顶栏 drag，便于拖动窗口；tab 等控件单独 no-drag */
+.barCaption {
+  --global-tab-strip-h: 100%;
+  --global-tab-h: calc(var(--header-height) - 8px);
+  --global-strip-bg: transparent;
+  --global-tab-active-bg: var(--bg-primary, var(--shell-inset-bg));
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  border-bottom: none;
+  background: transparent;
+  padding: 0 var(--space-1);
+  z-index: auto;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.barCaption .tab,
+.barCaption .addWrap,
+.barCaption .tabAdd,
+.barCaption .tabMain,
+.barCaption .tabClose,
+.barCaption button {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  pointer-events: auto;
+}
+
+.barStandalone {
+  /* 默认 .bar 样式 */
+}
+
+.scroll {
+  display: flex;
+  align-items: center;
+  gap: var(--global-tab-gap);
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.scroll::-webkit-scrollbar {
+  display: none;
+  height: 0;
+}
+
+/* Edge fade */
+.bar[data-overflow-start='true']::before,
+.bar[data-overflow-end='true']::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 1px;
+  width: 16px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.bar[data-overflow-start='true']::before {
+  left: 0;
+  background: linear-gradient(to right, var(--global-strip-bg), transparent);
+}
+
+.bar[data-overflow-end='true']::after {
+  right: 0;
+  background: linear-gradient(to left, var(--global-strip-bg), transparent);
+}
+
+/* Uniform widths: equal flex share, clamped */
+.tab {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  font-weight: var(--font-weight-normal);
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  height: var(--global-tab-h);
+  min-height: var(--global-tab-h);
+  max-height: var(--global-tab-h);
+  /* uniform: grow/shrink equally */
+  flex: 1 1 0;
+  min-width: var(--global-tab-min-w);
+  max-width: var(--global-tab-max-w);
+  padding: 0 2px 0 10px;
+  margin: 0;
+  border-radius: var(--global-tab-radius);
+  cursor: pointer;
+  line-height: var(--line-height-dense);
+  white-space: nowrap;
+  overflow: hidden;
+  position: relative;
+  box-sizing: border-box;
+  touch-action: none;
+  transition:
+    background-color var(--transition-micro, 100ms ease-out),
+    color var(--transition-micro, 100ms ease-out),
+    border-color var(--transition-micro, 100ms ease-out),
+    box-shadow var(--transition-micro, 100ms ease-out);
+}
+
+.tab:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+.tab:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.tab.isActive {
+  background: var(--global-tab-active-bg);
+  color: var(--text-primary);
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 55%,
+    transparent
+  );
+  box-shadow: 0 1px 2px
+    color-mix(in srgb, var(--shadow-color) 4%, transparent);
+  font-weight: var(--font-weight-medium);
+  z-index: 1;
+}
+
+.tab.isActive:hover {
+  background: var(--global-tab-active-bg);
+  color: var(--text-primary);
+}
+
+.tabMain {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 0 2px 0 0;
+  margin: 0;
+  cursor: inherit;
+  height: 100%;
+  overflow: hidden;
+}
+
+.tabLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-weight: inherit;
+  pointer-events: none;
+}
+
+.pinIcon {
+  opacity: 0.55;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.tab.isActive .pinIcon {
+  opacity: 0.85;
+  color: var(--text-secondary);
+}
+
+.tabClose {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  padding: 0;
+  margin: 0 4px 0 2px;
+  border-radius: var(--radius-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--transition-micro, 100ms ease-out),
+    background-color var(--transition-micro, 100ms ease-out),
+    color var(--transition-micro, 100ms ease-out);
+}
+
+.tab:hover .tabClose,
+.tab.isActive .tabClose,
+.tab:focus-within .tabClose {
+  opacity: 0.72;
+  pointer-events: auto;
+}
+
+.tabClose:hover {
+  opacity: 1 !important;
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  color: var(--text-primary);
+}
+
+.tabClose:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.addWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 100%;
+}
+
+.tabAdd {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-tertiary);
+  width: var(--global-tab-h);
+  height: var(--global-tab-h);
+  min-width: var(--global-tab-h);
+  max-width: var(--global-tab-h);
+  padding: 0;
+  margin: 0;
+  border-radius: var(--global-tab-radius);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  align-self: center;
+  transition:
+    background-color var(--transition-micro, 100ms ease-out),
+    color var(--transition-micro, 100ms ease-out);
+}
+
+.tabAdd:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+.tabAdd:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}

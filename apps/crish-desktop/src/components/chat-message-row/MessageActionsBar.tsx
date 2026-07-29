@@ -1,7 +1,7 @@
 import React from 'react';
-import { Check, Copy, PinOff, RefreshCw, Send, X } from 'lucide-react';
+import { Check, Copy, PinOff, RefreshCw, Send, Undo2, X } from 'lucide-react';
 import styles from '../ChatMessageRow.module.css';
-import { Tooltip } from '../settings/SettingsUI';
+import { Tooltip } from '../Tooltip';
 import type { SessionMessage } from '../../store/layoutStore';
 import type { PermissionMode } from '../../api/permissionModes';
 import {
@@ -24,6 +24,8 @@ export interface UserMessageActionsBarProps {
   copied: boolean;
   onCopy: () => void;
   onTogglePin: () => void;
+  /** 撤回此消息及之后所有消息，并反向还原文件改动 */
+  onWithdraw?: () => void;
 }
 
 export const UserMessageActionsBar: React.FC<UserMessageActionsBarProps> = ({
@@ -32,6 +34,7 @@ export const UserMessageActionsBar: React.FC<UserMessageActionsBarProps> = ({
   copied,
   onCopy,
   onTogglePin,
+  onWithdraw,
 }) => {
   const pinLabels = pinToggleLabels(isPinned);
   return (
@@ -47,6 +50,18 @@ export const UserMessageActionsBar: React.FC<UserMessageActionsBarProps> = ({
           {copied ? <Check size={14} /> : <Copy size={14} />}
         </button>
       </Tooltip>
+      {onWithdraw ? (
+        <Tooltip content="撤回到此处">
+          <button
+            type="button"
+            className={styles.iconBtn}
+            aria-label="撤回到此处"
+            onClick={onWithdraw}
+          >
+            <Undo2 size={14} />
+          </button>
+        </Tooltip>
+      ) : null}
       {isPinned ? (
         <Tooltip content={pinLabels.title}>
           <button

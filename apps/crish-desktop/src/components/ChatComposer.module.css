@@ -420,7 +420,7 @@
 }
 
 .slashItem.isActive .slashCmd {
-  color: var(--accent-color, #6c8cff);
+  color: var(--accent-color);
 }
 
 .slashDesc {
@@ -433,7 +433,7 @@
 }
 
 .slashItem.isActive .slashDesc {
-  color: color-mix(in srgb, var(--accent-color, #6c8cff) 72%, var(--text-tertiary));
+  color: color-mix(in srgb, var(--accent-color) 72%, var(--text-tertiary));
 }
 
 .slashEmpty {

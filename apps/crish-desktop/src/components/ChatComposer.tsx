@@ -10,9 +10,9 @@ import { AppErrorBoundary } from './AppErrorBoundary';
 import { slashMenuPick } from '../api/resolveSlashCommand';
 import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import type { PermissionMode } from '../api/permissionModes';
-import type { ChatAttachment } from '../hooks/useChatStream';
+import type { ChatAttachment, QueuedMessage } from '../hooks/useChatStream';
 import { ComposerField } from './chat-composer/ComposerField';
 import {
   ComposerSlashMenu,
@@ -20,10 +20,17 @@ import {
   type SlashCommandItem,
 } from './chat-composer/ComposerSlashMenu';
 import { ComposerAttachmentBar } from './chat-composer/ComposerAttachmentBar';
+import { ChatQueuePanel } from './chat-composer/ChatQueuePanel';
 
 export type { SlashCommandItem } from './chat-composer/ComposerSlashMenu';
 export type { ComposerFieldProps } from './chat-composer/ComposerField';
-export { ComposerField } from './chat-composer/ComposerField';
+export {
+  ComposerField,
+  STOP_TOOLTIP,
+  STOP_ARIA_LABEL,
+  FORCE_CANCEL_CONFIRM,
+  FORCE_STOP_LONG_PRESS_MS,
+} from './chat-composer/ComposerField';
 
 export type ChatComposerProps = {
   chatInput: string;
@@ -38,7 +45,10 @@ export type ChatComposerProps = {
   loadSkillSlash: () => void | Promise<void>;
   onPasteImage: (e: React.ClipboardEvent) => void;
   onSend: () => void;
+  /** 默认 Stop = L2 cooperative_stop（单击） */
   onStop: () => void;
+  /** 强制取消 = L3 force_cancel（Shift+点击 / 长按，二次确认后由 ComposerField 调用） */
+  onForceStop?: () => void;
   canSend: boolean;
   isProcessing: boolean;
   attachments: ChatAttachment[];
@@ -53,6 +63,10 @@ export type ChatComposerProps = {
   onCloseSiblingMenus?: () => void;
   rightActions?: React.ReactNode;
   className?: string;
+  queuedMessages?: QueuedMessage[];
+  onSendQueuedNow?: (id: string) => void;
+  onEditQueued?: (id: string) => void;
+  onDeleteQueued?: (id: string) => void;
 };
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -69,6 +83,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onPasteImage,
   onSend,
   onStop,
+  onForceStop,
   canSend,
   isProcessing,
   attachments,
@@ -83,6 +98,10 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onCloseSiblingMenus,
   rightActions,
   className,
+  queuedMessages = [],
+  onSendQueuedNow,
+  onEditQueued,
+  onDeleteQueued,
 }) => {
   const listboxId = useId();
   const plusMenuId = useId();
@@ -165,6 +184,12 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   return (
     <AppErrorBoundary variant="compact" title="输入区出错">
       <div className={`${styles.composerWrapper}${className ? ` ${className}` : ''}`}>
+        <ChatQueuePanel
+          queue={queuedMessages}
+          onSendNow={onSendQueuedNow ?? (() => {})}
+          onEdit={onEditQueued ?? (() => {})}
+          onDelete={onDeleteQueued ?? (() => {})}
+        />
         <ComposerField
           containerRef={fieldContainerRef}
           textAreaId={textAreaDomId}
@@ -186,6 +211,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           setIsComposing={setIsComposing}
           isProcessing={isProcessing}
           onStop={onStop}
+          onForceStop={onForceStop}
           onPaste={(e) => {
             void onPasteImage(e);
           }}

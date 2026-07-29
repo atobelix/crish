@@ -13,6 +13,11 @@
  * 2. sash 位置由 branch.rect + splitRatio 决定（canvas 百分比）
  * 3. pointerdown 时调用 useTreeResize.startResize（传递 branch.rect 供 ratio 计算）
  * 4. 键盘可访问：ArrowLeft/Right/Up/Down 微调 splitRatio
+ *
+ * 性能（D0-7 / sash-memo）：
+ * - 不接收整包 resizeController（每次 hook 返回新对象会破默认 memo）
+ * - 传入稳定 startResize + 本 sash 的 isResizing 布尔
+ * - 自定义 memo：branch 按值比较，避免 flatten 新字面量 thrash
  */
 
 import React from 'react';
@@ -22,88 +27,165 @@ import {
   MIN_SPLIT_RATIO,
   MAX_SPLIT_RATIO,
 } from '../../store/layout-tree';
-import { useTreeResize } from '../../hooks/useTreeResize';
+import type { BranchRect } from '../../hooks/useTreeResize';
+import {
+  clampSplitRatioForParent,
+  parentPxAlongAxis,
+  splitRatioBounds,
+} from '../../hooks/treeResizeClamp';
 import styles from './BinaryTreeWorkspace.module.css';
 
-interface TreeResizeSashProps {
+export interface TreeResizeSashProps {
   /** branch 渲染描述（含 rect，来自 flattenTree） */
   branch: FlatBranch;
-  /** resize 控制器 */
-  resizeController: ReturnType<typeof useTreeResize>;
+  /** 稳定的 startResize（useTreeResize 的 useCallback） */
+  startResize: (
+    branchId: string,
+    branchRect: BranchRect,
+    e: React.PointerEvent
+  ) => void;
+  /** 本 branch 是否正在被拖拽（非整包 controller） */
+  isResizing: boolean;
+}
+
+/** branch 几何/身份按值相等 — 导出供测试锁定 D0-7 契约 */
+export function flatBranchEqual(a: FlatBranch, b: FlatBranch): boolean {
+  if (a === b) return true;
+  return (
+    a.branchId === b.branchId &&
+    a.direction === b.direction &&
+    a.splitRatio === b.splitRatio &&
+    a.rect.x === b.rect.x &&
+    a.rect.y === b.rect.y &&
+    a.rect.width === b.rect.width &&
+    a.rect.height === b.rect.height
+  );
+}
+
+function sashPropsEqual(
+  prev: TreeResizeSashProps,
+  next: TreeResizeSashProps
+): boolean {
+  return (
+    flatBranchEqual(prev.branch, next.branch) &&
+    prev.startResize === next.startResize &&
+    prev.isResizing === next.isResizing
+  );
 }
 
 export const TreeResizeSash: React.FC<TreeResizeSashProps> = React.memo(
-  ({ branch, resizeController }) => {
+  ({ branch, startResize, isResizing }) => {
+    // store action 引用稳定；勿订 tree / past 等会扰动的状态
     const resizeBranch = useLayoutTreeStore((s) => s.resizeBranch);
-    const { startResize, resizingBranchId } = resizeController;
+    const sashElRef = React.useRef<HTMLDivElement>(null);
 
     const isHorizontal = branch.direction === 'horizontal';
-    const isActive = resizingBranchId === branch.branchId;
     const ratio = branch.splitRatio;
     const { rect } = branch;
 
-    // sash 定位：基于 branch.rect（canvas 绝对占比）+ splitRatio
-    // horizontal：sash 在 branch 内部的水平分割点，纵向 span = branch 高度
-    // vertical：sash 在 branch 内部的垂直分割点，横向 span = branch 宽度
-    const sashStyle: React.CSSProperties = isHorizontal
-      ? {
-          left: `${(rect.x + rect.width * ratio) * 100}%`,
-          top: `${rect.y * 100}%`,
-          height: `${rect.height * 100}%`,
-        }
-      : {
-          top: `${(rect.y + rect.height * ratio) * 100}%`,
-          left: `${rect.x * 100}%`,
-          width: `${rect.width * 100}%`,
-        };
+    /**
+     * sash 几何同样避开 React style prop：live resize 时 paintFlatLayout
+     * 写 inline；re-render 若用 style={} 会把 sash 弹回 store ratio。
+     */
+    React.useLayoutEffect(() => {
+      const el = sashElRef.current;
+      if (!el) return;
+      if (document.body.classList.contains('tree-resizing')) return;
+      if (isHorizontal) {
+        el.style.left = `${(rect.x + rect.width * ratio) * 100}%`;
+        el.style.top = `${rect.y * 100}%`;
+        el.style.height = `${rect.height * 100}%`;
+        el.style.width = '';
+      } else {
+        el.style.top = `${(rect.y + rect.height * ratio) * 100}%`;
+        el.style.left = `${rect.x * 100}%`;
+        el.style.width = `${rect.width * 100}%`;
+        el.style.height = '';
+      }
+    }, [isHorizontal, ratio, rect.x, rect.y, rect.width, rect.height]);
 
-    // 键盘微调：Arrow 减/加步长，Home/End 跳到极值。
-    // 不在此处 clamp — store 的 resizeBranch 已通过 clampSplitRatio 统一钳制，
-    // 单一可信源避免常量散落。
+    // 键盘微调：Arrow 减/加步长，Home/End 跳到像素感知极值。
+    // store 的 resizeBranch 仍会再 clamp 到 [0.1,0.9]；此处先按 branch 像素
+    // 尺寸收紧，避免 Home 在大 parent 上把子面板压到 < MIN_CHILD_PX。
     const handleKeyDown = React.useCallback(
       (e: React.KeyboardEvent) => {
+        const canvas = document.querySelector<HTMLElement>(
+          '[data-tree-canvas="true"]'
+        );
+        const canvasW = canvas?.clientWidth ?? 0;
+        const canvasH = canvas?.clientHeight ?? 0;
+        const parentPx = parentPxAlongAxis(
+          {
+            width: rect.width * canvasW,
+            height: rect.height * canvasH,
+          },
+          branch.direction
+        );
+        const bounds = splitRatioBounds(parentPx);
         const step = 0.02; // 2%
+        const apply = (next: number) => {
+          resizeBranch(
+            branch.branchId,
+            clampSplitRatioForParent(next, parentPx)
+          );
+        };
+
         if (isHorizontal) {
           if (e.key === 'ArrowLeft') {
             e.preventDefault();
-            resizeBranch(branch.branchId, ratio - step);
+            apply(ratio - step);
           } else if (e.key === 'ArrowRight') {
             e.preventDefault();
-            resizeBranch(branch.branchId, ratio + step);
+            apply(ratio + step);
           } else if (e.key === 'Home') {
             e.preventDefault();
-            resizeBranch(branch.branchId, MIN_SPLIT_RATIO);
+            apply(bounds.min);
           } else if (e.key === 'End') {
             e.preventDefault();
-            resizeBranch(branch.branchId, MAX_SPLIT_RATIO);
+            apply(bounds.max);
           }
         } else {
           if (e.key === 'ArrowUp') {
             e.preventDefault();
-            resizeBranch(branch.branchId, ratio - step);
+            apply(ratio - step);
           } else if (e.key === 'ArrowDown') {
             e.preventDefault();
-            resizeBranch(branch.branchId, ratio + step);
+            apply(ratio + step);
           } else if (e.key === 'Home') {
             e.preventDefault();
-            resizeBranch(branch.branchId, MIN_SPLIT_RATIO);
+            apply(bounds.min);
           } else if (e.key === 'End') {
             e.preventDefault();
-            resizeBranch(branch.branchId, MAX_SPLIT_RATIO);
+            apply(bounds.max);
           }
         }
       },
-      [branch.branchId, isHorizontal, ratio, resizeBranch]
+      [
+        branch.branchId,
+        branch.direction,
+        isHorizontal,
+        ratio,
+        rect.height,
+        rect.width,
+        resizeBranch,
+      ]
+    );
+
+    const onPointerDown = React.useCallback(
+      (e: React.PointerEvent) => {
+        startResize(branch.branchId, rect, e);
+      },
+      [startResize, branch.branchId, rect]
     );
 
     return (
       <div
+        ref={sashElRef}
         className={`${styles.sash} ${
           isHorizontal ? styles.sashHorizontal : styles.sashVertical
         }`}
-        data-active={isActive ? 'true' : 'false'}
+        data-active={isResizing ? 'true' : 'false'}
         data-branch-id={branch.branchId}
-        style={sashStyle}
         role="separator"
         aria-orientation={isHorizontal ? 'vertical' : 'horizontal'}
         aria-label={
@@ -115,10 +197,11 @@ export const TreeResizeSash: React.FC<TreeResizeSashProps> = React.memo(
         aria-valuemax={Math.round(MAX_SPLIT_RATIO * 100)}
         aria-valuenow={Math.round(ratio * 100)}
         tabIndex={0}
-        onPointerDown={(e) => startResize(branch.branchId, rect, e)}
+        onPointerDown={onPointerDown}
         onKeyDown={handleKeyDown}
       />
     );
-  }
+  },
+  sashPropsEqual
 );
 TreeResizeSash.displayName = 'TreeResizeSash';

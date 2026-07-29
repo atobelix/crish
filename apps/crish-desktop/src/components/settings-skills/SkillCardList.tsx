@@ -216,9 +216,11 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
           {extraDirs.map((d) => (
             <div key={d} className="settings-list-row" role="listitem">
               <div className="settings-list-copy">
-                <div className="settings-list-title settings-path-ellipsis" title={d}>
-                  {d}
-                </div>
+                <Tooltip content={d}>
+                  <div className="settings-list-title settings-path-ellipsis">
+                    {d}
+                  </div>
+                </Tooltip>
               </div>
               <div className="settings-list-control">
                 <Tooltip content="移除此目录">

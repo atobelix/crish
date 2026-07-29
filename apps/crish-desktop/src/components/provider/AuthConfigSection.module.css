@@ -40,9 +40,9 @@
 }
 
 .authModeTab.active {
-  background: color-mix(in srgb, var(--accent, #3b82f6) 10%, transparent);
-  border-color: color-mix(in srgb, var(--accent, #3b82f6) 30%, var(--border-color));
-  color: var(--accent, #3b82f6);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent-color) 30%, var(--border-color));
+  color: var(--accent-color);
 }
 
 .authConfigFields {

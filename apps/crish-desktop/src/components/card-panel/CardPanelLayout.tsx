@@ -3,11 +3,24 @@ import styles from '../CardPanel.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { ChatCard } from '../ChatCard';
 import { TerminalCard } from '../TerminalCard';
-import { focusOrOpenPanel, openSettings } from '../../api/storeAccess';
-import { LayoutPanelLeft } from 'lucide-react';
 import { getPanelTitle } from '../../store/layoutHelpers';
 import type { CardState, GroupState } from '../../store/layoutStore';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
+
+import { PanelLazyFallback } from './PanelLazyFallback';
+import { SettingsLegacyRedirect } from './SettingsLegacyRedirect';
+import { PlanLegacyRedirect } from './PlanLegacyRedirect';
+import { PanelBodyEmpty } from './PanelBodyEmpty';
+import { KNOWN_BODY_IDS, getDockOverlayStyle } from './cardPanelHelpers';
+
+export {
+  PanelLazyFallback,
+  SettingsLegacyRedirect,
+  PlanLegacyRedirect,
+  PanelBodyEmpty,
+  KNOWN_BODY_IDS,
+  getDockOverlayStyle,
+};
 
 const PreviewCard = lazy(() =>
   import('../PreviewCard').then((m) => ({ default: m.PreviewCard }))
@@ -27,143 +40,6 @@ const RuntimePanel = lazy(() =>
 const AgentCard = lazy(() =>
   import('../AgentCard').then((m) => ({ default: m.AgentCard }))
 );
-
-export function PanelLazyFallback() {
-  return (
-    <div
-      className="skel-shimmer"
-      style={{ height: '100%', minHeight: 48, borderRadius: 6 }}
-      aria-hidden="true"
-    />
-  );
-}
-
-export const KNOWN_BODY_IDS = new Set([
-  'chat',
-  'preview',
-  'overview',
-  'files',
-  'diff',
-  'terminal',
-  'settings',
-  'runtime',
-  'agent',
-]);
-
-export function SettingsLegacyRedirect() {
-  React.useEffect(() => {
-    openSettings();
-  }, []);
-  return (
-    <div className="panel-legacy-redirect" role="status" aria-live="polite">
-      <span>正在打开设置…</span>
-    </div>
-  );
-}
-
-export function PlanLegacyRedirect({ wsId }: { wsId: string }) {
-  React.useEffect(() => {
-    focusOrOpenPanel(wsId, 'overview');
-  }, [wsId]);
-  return (
-    <div className="panel-legacy-redirect" role="status" aria-live="polite">
-      <span>已自动跳转到项目总览…</span>
-    </div>
-  );
-}
-
-export function PanelBodyEmpty({
-  title,
-  hint,
-  onOpenOverview,
-}: {
-  title: string;
-  hint: string;
-  onOpenOverview: () => void;
-}) {
-  return (
-    <div
-      className={`${styles.empty} panel-body-empty`}
-      role="status"
-      aria-live="polite"
-    >
-      <LayoutPanelLeft
-        size={22}
-        strokeWidth={1.5}
-        aria-hidden
-        className={styles.emptyIcon}
-      />
-      <div className={styles.emptyTitle}>{title}</div>
-      <div className={styles.emptyHint}>{hint}</div>
-      <button
-        type="button"
-        className={`${styles.emptyBtn} card-action-btn`}
-        onClick={onOpenOverview}
-        aria-label="打开总览侧栏"
-      >
-        打开总览
-      </button>
-    </div>
-  );
-}
-
-export function getDockOverlayStyle(
-  showDockOverlay: boolean,
-  dropPreview: { direction: 'merge' | 'top' | 'bottom' } | null
-): React.CSSProperties | null {
-  if (!showDockOverlay || !dropPreview) return null;
-  const { direction } = dropPreview;
-  if (direction === 'merge') {
-    return {
-      position: 'absolute',
-      top: '6px',
-      left: '10px',
-      right: '10px',
-      height: '32px',
-      borderRadius: '6px',
-      backgroundColor:
-        'color-mix(in srgb, var(--accent-color, #1a73e8) 6%, transparent)',
-      border:
-        '1px dashed color-mix(in srgb, var(--accent-color, #1a73e8) 45%, transparent)',
-      animation: 'pulse-merge-highlight 1.5s infinite ease-in-out',
-      pointerEvents: 'none',
-      zIndex: 'var(--z-drag-highlight)',
-    };
-  } else if (direction === 'top') {
-    return {
-      position: 'absolute',
-      top: '48px',
-      left: '10px',
-      right: '10px',
-      height: 'calc((100% - 58px) / 2)',
-      borderRadius: '6px',
-      backgroundColor:
-        'color-mix(in srgb, var(--accent-color, #1a73e8) 6%, transparent)',
-      border:
-        '1px dashed color-mix(in srgb, var(--accent-color, #1a73e8) 45%, transparent)',
-      animation: 'pulse-merge-highlight 1.5s infinite ease-in-out',
-      pointerEvents: 'none',
-      zIndex: 'var(--z-drag-highlight)',
-    };
-  } else if (direction === 'bottom') {
-    return {
-      position: 'absolute',
-      top: 'calc(48px + (100% - 58px) / 2)',
-      bottom: '10px',
-      left: '10px',
-      right: '10px',
-      borderRadius: '6px',
-      backgroundColor:
-        'color-mix(in srgb, var(--accent-color, #1a73e8) 6%, transparent)',
-      border:
-        '1px dashed color-mix(in srgb, var(--accent-color, #1a73e8) 45%, transparent)',
-      animation: 'pulse-merge-highlight 1.5s infinite ease-in-out',
-      pointerEvents: 'none',
-      zIndex: 'var(--z-drag-highlight)',
-    };
-  }
-  return null;
-}
 
 export interface CardPanelLayoutProps {
   wsId: string;

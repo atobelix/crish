@@ -34,11 +34,6 @@ import {
 } from './chat-message-row/ChatAssistantMessageRow';
 
 import {
-  MessageAvatar,
-  type MessageAvatarProps,
-} from './chat-message/MessageAvatar';
-
-import {
   MessageContent,
   type MessageContentProps,
 } from './chat-message/MessageContent';
@@ -74,8 +69,6 @@ export {
   type ChatUserMessageRowProps,
   ChatAssistantMessageRow,
   type ChatAssistantMessageRowProps,
-  MessageAvatar,
-  type MessageAvatarProps,
   MessageContent,
   type MessageContentProps,
   MessageActions,

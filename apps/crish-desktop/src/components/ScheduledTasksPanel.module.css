@@ -66,7 +66,7 @@
 }
 
 .schedStatusLine.isErr {
-  color: var(--accent-orange, #f59e0b);
+  color: var(--accent-orange);
 }
 
 .schedStatusLine.isOk {
@@ -92,7 +92,7 @@
   min-width: 0;
 }
 
-/* 濡剝婢橀懞顖滃閿涙俺钂嬫惔鏇熸￥閹诲繗绔熼敍鍫㈩洣濮濄垽绮︽潏鐧哥�?*/
+/* 婵☆垪鍓濆姗€鎳為婊冾暬闁挎稒淇洪拏瀣償閺囩喐锟ラ柟璇茬箺缁旂喖鏁嶉崼銏╂矗婵縿鍨界划锔芥綇閻у摜绀?*/
 .schedPresetChip {
   display: inline-flex;
   align-items: center;
@@ -121,7 +121,7 @@
   box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
 }
 
-/* 閺傛澘缂撶拋鈥冲灊閿涙氨鐝幒鎺戠摟濞堢绱濇潪顖濈翻閸忋儻绱濋弮鐘甸兇缂佺喎甯悽鐔剁�?select */
+/* 闁哄倹婢樼紓鎾舵媼閳ュ啿鐏婇柨娑欐皑閻濐偊骞掗幒鎴犳憻婵炲牏顣槐婵囨姜椤栨繄缈婚柛蹇嬪劵缁辨繈寮悩鐢稿厙缂備胶鍠庣敮顐︽偨閻斿墎鐟?select */
 .schedForm {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-2xl);

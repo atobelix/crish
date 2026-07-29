@@ -5,7 +5,6 @@ import { type budgetDomText } from '../../api/messageWindow';
 export interface MessageThinkingBlockProps {
   showThinking: boolean;
   isThinkingMsg: boolean;
-  thinkingSeconds: number;
   thinkingText: string;
   thinkingBodyId: string;
   thinkingOpen: boolean;
@@ -13,8 +12,24 @@ export interface MessageThinkingBlockProps {
   thinkingBudget: ReturnType<typeof budgetDomText>;
 }
 
-export const MessageThinkingBlock: React.FC<MessageThinkingBlockProps> = React.memo((props) => {
-  return <MessageThinkingSection {...props} />;
-});
+function thinkingBlockPropsEqual(
+  prev: MessageThinkingBlockProps,
+  next: MessageThinkingBlockProps
+): boolean {
+  return (
+    prev.showThinking === next.showThinking &&
+    prev.isThinkingMsg === next.isThinkingMsg &&
+    prev.thinkingText === next.thinkingText &&
+    prev.thinkingBodyId === next.thinkingBodyId &&
+    prev.thinkingOpen === next.thinkingOpen &&
+    prev.setThinkingOpen === next.setThinkingOpen &&
+    prev.thinkingBudget === next.thinkingBudget
+  );
+}
+
+export const MessageThinkingBlock: React.FC<MessageThinkingBlockProps> =
+  React.memo((props) => {
+    return <MessageThinkingSection {...props} />;
+  }, thinkingBlockPropsEqual);
 
 MessageThinkingBlock.displayName = 'MessageThinkingBlock';

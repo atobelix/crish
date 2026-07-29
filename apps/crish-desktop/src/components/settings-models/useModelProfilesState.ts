@@ -140,16 +140,42 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
 
   const [keyDraft, setKeyDraft] = useState('');
   const [addOpen, setAddOpen] = useState(false);
-  const [testBusy, setTestBusy] = useState<string | null>(null);
-  const [scanBusy, setScanBusy] = useState(false);
-  const [checkBusy, setCheckBusy] = useState(false);
+  const [busyState, setBusyState] = useState<{
+    testBusy: string | null;
+    scanBusy: boolean;
+    checkBusy: boolean;
+  }>({ testBusy: null, scanBusy: false, checkBusy: false });
+
+  const testBusy = busyState.testBusy;
+  const scanBusy = busyState.scanBusy;
+  const checkBusy = busyState.checkBusy;
+
+  const setTestBusy = (val: React.SetStateAction<string | null>) =>
+    setBusyState((prev) => ({ ...prev, testBusy: typeof val === 'function' ? val(prev.testBusy) : val }));
+  const setScanBusy = (val: React.SetStateAction<boolean>) =>
+    setBusyState((prev) => ({ ...prev, scanBusy: typeof val === 'function' ? val(prev.scanBusy) : val }));
+  const setCheckBusy = (val: React.SetStateAction<boolean>) =>
+    setBusyState((prev) => ({ ...prev, checkBusy: typeof val === 'function' ? val(prev.checkBusy) : val }));
+
   const [modelFilter, setModelFilter] = useState('');
   const [configOpenId, setConfigOpenId] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
   const [addDraft, setAddDraft] = useState<AddDraft>(() => emptyAddDraft());
   const [cfgDraft, setCfgDraft] = useState<CfgDraft | null>(null);
-  const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState('');
+
+  const [nameEditState, setNameEditState] = useState<{ editing: boolean; draft: string }>({
+    editing: false,
+    draft: '',
+  });
+
+  const editingName = nameEditState.editing;
+  const nameDraft = nameEditState.draft;
+
+  const setEditingName = (val: React.SetStateAction<boolean>) =>
+    setNameEditState((prev) => ({ ...prev, editing: typeof val === 'function' ? val(prev.editing) : val }));
+  const setNameDraft = (val: React.SetStateAction<string>) =>
+    setNameEditState((prev) => ({ ...prev, draft: typeof val === 'function' ? val(prev.draft) : val }));
+
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const selected = useMemo(
@@ -441,6 +467,7 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
 
   return {
     profiles,
+    setProfiles,
     selectedId,
     setSelectedId,
     selected,
@@ -468,6 +495,7 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
     confirmDeleteId,
     setConfirmDeleteId,
     refresh,
+    notify,
     saveKey,
     addFromTemplate,
     addFromPreset,

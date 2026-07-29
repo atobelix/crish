@@ -83,7 +83,6 @@
 .sbQuickSegment :global(.ui-segment-item.active) {
   background-color: var(--bg-elevated) !important;
   color: var(--text-primary) !important;
-  box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--border-subtle) !important;
 }
 
 .sbQuickDivider {

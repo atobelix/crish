@@ -1,0 +1,131 @@
+/* UserView 投影调试面板 — 对齐 SettingsUsage 统计栅格风格 */
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+}
+
+.statItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.statLabel {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statValue {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-content, 600);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.metaMono {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.metaMuted {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.badgeOk,
+.badgeWarn {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xxs, 11px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.badgeOk {
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+}
+
+.badgeWarn {
+  color: var(--warning-color);
+  background: color-mix(in srgb, var(--warning-color) 12%, transparent);
+}
+
+.bucketList {
+  list-style: none;
+  margin: 0;
+  padding: 8px 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.bucketItem {
+  display: grid;
+  grid-template-columns: 96px 56px minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--font-size-xs);
+  min-width: 0;
+}
+
+.bucketKind {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.bucketChars {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  text-align: right;
+}
+
+.bucketPreview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+}
+
+.actionsBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 12px 20px;
+  flex-wrap: wrap;
+}
+
+.actionsBar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 640px) {
+  .statsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bucketItem {
+    grid-template-columns: 80px 48px minmax(0, 1fr);
+  }
+}

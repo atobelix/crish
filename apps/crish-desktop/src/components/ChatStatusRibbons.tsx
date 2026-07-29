@@ -652,7 +652,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
               {progressItems.map((item) => (
                 <li key={item.id} className={`${styles.dynamicPlanItem}${item.done ? ` ${styles.isDone}` : ''}`}>
                   {item.done ? (
-                    <Lucide.CheckCircle2 size={13} style={{ color: 'var(--accent-green, #22c55e)' }} />
+                    <Lucide.CheckCircle2 size={13} style={{ color: 'var(--accent-green)' }} />
                   ) : (
                     <Lucide.Circle size={13} style={{ color: 'var(--text-tertiary)' }} />
                   )}
@@ -778,9 +778,11 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
           aria-label={planAria}
         >
           <Lucide.ListChecks size={14} strokeWidth={1.75} aria-hidden />
-          <span className={styles.planModeRibbonText} title={planTitle}>
-            {planLabel}
-          </span>
+          <Tooltip content={planTitle}>
+            <span className={styles.planModeRibbonText}>
+              {planLabel}
+            </span>
+          </Tooltip>
           {showPlanApprove ? (
             <Tooltip content="批准执行">
               <button
@@ -807,23 +809,23 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
           data-goal-tasks-total={goalTasksTotal}
         >
           <Lucide.Target size={14} strokeWidth={1.75} aria-hidden />
-          <span
-            className={styles.planModeRibbonText}
-            title={(goalText || '').trim() || '目标模式'}
-          >
-            {goalLabel}
-          </span>
-          {goalProgressPct != null ? (
-            <span
-              className={styles.goalModeRibbonMeter}
-              aria-hidden
-              title={`${goalTasksDone}/${goalTasksTotal}`}
-            >
-              <span
-                className={styles.goalModeRibbonMeterFill}
-                style={{ width: `${goalProgressPct}%` }}
-              />
+          <Tooltip content={(goalText || '').trim() || '目标模式'}>
+            <span className={styles.planModeRibbonText}>
+              {goalLabel}
             </span>
+          </Tooltip>
+          {goalProgressPct != null ? (
+            <Tooltip content={`${goalTasksDone}/${goalTasksTotal}`}>
+              <span
+                className={styles.goalModeRibbonMeter}
+                aria-hidden
+              >
+                <span
+                  className={styles.goalModeRibbonMeterFill}
+                  style={{ width: `${goalProgressPct}%` }}
+                />
+              </span>
+            </Tooltip>
           ) : null}
           <Tooltip content="停止目标">
             <button
@@ -867,9 +869,11 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
             <span className={styles.runNoticeKicker}>运行提示</span>
             <span className={styles.runNoticeText}>{runNoticeText}</span>
             {runNotice?.detail ? (
-              <span className={styles.runNoticeDetail} title={runNotice.detail}>
-                {runNotice.detail}
-              </span>
+              <Tooltip content={runNotice.detail}>
+                <span className={styles.runNoticeDetail}>
+                  {runNotice.detail}
+                </span>
+              </Tooltip>
             ) : null}
           </div>
           <button

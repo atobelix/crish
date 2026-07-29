@@ -38,20 +38,66 @@ export function useMcpSettings({
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [filter, setFilter] = useState('');
-  const [sortMode, setSortMode] = useState<SortMode>('name');
-  const [canStartStop, setCanStartStop] = useState(false);
-  const [controlHint, setControlHint] = useState<string | undefined>();
+  const [filterSortState, setFilterSortState] = useState<{
+    filter: string;
+    sortMode: SortMode;
+  }>({ filter: '', sortMode: 'name' });
+  const filter = filterSortState.filter;
+  const sortMode = filterSortState.sortMode;
+  const setFilter = (val: React.SetStateAction<string>) =>
+    setFilterSortState((prev) => ({ ...prev, filter: typeof val === 'function' ? val(prev.filter) : val }));
+  const setSortMode = (val: React.SetStateAction<SortMode>) =>
+    setFilterSortState((prev) => ({ ...prev, sortMode: typeof val === 'function' ? val(prev.sortMode) : val }));
+
+  const [probeState, setProbeState] = useState<{
+    canStartStop: boolean;
+    controlHint: string | undefined;
+  }>({ canStartStop: false, controlHint: undefined });
+  const canStartStop = probeState.canStartStop;
+  const controlHint = probeState.controlHint;
+  const setCanStartStop = (val: React.SetStateAction<boolean>) =>
+    setProbeState((prev) => ({ ...prev, canStartStop: typeof val === 'function' ? val(prev.canStartStop) : val }));
+  const setControlHint = (val: React.SetStateAction<string | undefined>) =>
+    setProbeState((prev) => ({ ...prev, controlHint: typeof val === 'function' ? val(prev.controlHint) : val }));
 
   // demo 本地 mock
   const [demoServers, setDemoServers] = useState<McpServer[]>([]);
   const [demoEnabled, setDemoEnabled] = useState<Record<string, boolean>>({});
-  const [showAdd, setShowAdd] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newType, setNewType] = useState<DemoTransport>('stdio');
-  const [newCmd, setNewCmd] = useState('');
-  const [newArgs, setNewArgs] = useState('');
-  const [newUrl, setNewUrl] = useState('');
+
+  const [addFormState, setAddFormState] = useState<{
+    showAdd: boolean;
+    newName: string;
+    newType: DemoTransport;
+    newCmd: string;
+    newArgs: string;
+    newUrl: string;
+  }>({
+    showAdd: false,
+    newName: '',
+    newType: 'stdio',
+    newCmd: '',
+    newArgs: '',
+    newUrl: '',
+  });
+  const showAdd = addFormState.showAdd;
+  const newName = addFormState.newName;
+  const newType = addFormState.newType;
+  const newCmd = addFormState.newCmd;
+  const newArgs = addFormState.newArgs;
+  const newUrl = addFormState.newUrl;
+
+  const setShowAdd = (val: React.SetStateAction<boolean>) =>
+    setAddFormState((prev) => ({ ...prev, showAdd: typeof val === 'function' ? val(prev.showAdd) : val }));
+  const setNewName = (val: React.SetStateAction<string>) =>
+    setAddFormState((prev) => ({ ...prev, newName: typeof val === 'function' ? val(prev.newName) : val }));
+  const setNewType = (val: React.SetStateAction<DemoTransport>) =>
+    setAddFormState((prev) => ({ ...prev, newType: typeof val === 'function' ? val(prev.newType) : val }));
+  const setNewCmd = (val: React.SetStateAction<string>) =>
+    setAddFormState((prev) => ({ ...prev, newCmd: typeof val === 'function' ? val(prev.newCmd) : val }));
+  const setNewArgs = (val: React.SetStateAction<string>) =>
+    setAddFormState((prev) => ({ ...prev, newArgs: typeof val === 'function' ? val(prev.newArgs) : val }));
+  const setNewUrl = (val: React.SetStateAction<string>) =>
+    setAddFormState((prev) => ({ ...prev, newUrl: typeof val === 'function' ? val(prev.newUrl) : val }));
 
   const refreshLive = useCallback(async () => {
     setLoading(true);

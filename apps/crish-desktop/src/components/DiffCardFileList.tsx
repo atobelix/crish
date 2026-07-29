@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
-import { Tooltip } from './settings/SettingsUI';
+import { Tooltip } from './Tooltip';
 import { SettingsSelect } from './SettingsSelect';
 import { classifyFileDiff } from '../api/applyFileDiff';
 import { openPathDefault } from '../api/hostOpenersApi';
@@ -14,6 +14,10 @@ type SourceMode = DiffSourceMode;
 
 function basename(p: string): string {
   return p.replace(/^.*[\\/]/, '') || p;
+}
+
+function isCompareMode(val: string): val is CompareMode {
+  return val === 'git' || val === 'session-merged' || val === 'plain' || val.startsWith('turn-');
 }
 
 interface DiffCardFileListProps {
@@ -202,7 +206,11 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                 <SettingsSelect
                   value={getFileCompareMode(f.filePath)}
                   options={compareOptions}
-                  onChange={(val) => onChangeCompareMode(f.filePath, val as any)}
+                  onChange={(val) => {
+                    if (isCompareMode(val)) {
+                      onChangeCompareMode(f.filePath, val);
+                    }
+                  }}
                   className={styles.inlineCompareSelect ?? ''}
                 />
               </div>

@@ -7,8 +7,9 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import styles from './SidebarContextMenus.module.css';
-import { getSessionStoreState } from '../../api/storeAccess';
+import { getCompositionRoot } from '../../app/compositionRoot';
 import { Tooltip } from '../Tooltip';
+import { UnifiedSelectPopover } from '../common/UnifiedSelectPopover';
 import {
   Archive,
   Check,
@@ -21,6 +22,8 @@ import {
   PenLine,
   Pin,
   PinOff,
+  Copy,
+  Trash2,
 } from 'lucide-react';
 
 export type SessionContextMenuState = {
@@ -47,7 +50,9 @@ export type SessionMenuAction =
   | 'unpin'
   | 'archive'
   | 'branch'
-  | 'export';
+  | 'export'
+  | 'copy-id'
+  | 'delete';
 
 /** 归档/分叉可撤销 toast 文案（与 useToastQueue 策略 /^已归档:/ /^已分叉:/ 一致） */
 export function archiveUndoToastMessage(title: string): string {
@@ -222,7 +227,10 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
   }, []);
   const target = contextMenu
     ? (() => {
-        const s = getSessionStoreState().sessionsById[contextMenu.sessionId];
+        const s =
+          getCompositionRoot().session.getState().sessionsById[
+            contextMenu.sessionId
+          ];
         return s && !s.isArchived ? s : undefined;
       })()
     : undefined;
@@ -430,6 +438,31 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
 
             <div className={styles.contextMenuDivider} role="separator" />
 
+            <button
+              type="button"
+              className={styles.contextMenuItem}
+              role="menuitem"
+              data-action="copy-id"
+              onClick={() => onSessionAction('copy-id')}
+            >
+              <Copy size={14} strokeWidth={1.75} aria-hidden />
+              <span>复制会话 ID</span>
+            </button>
+
+            <button
+              type="button"
+              className={styles.contextMenuItem}
+              role="menuitem"
+              data-action="delete"
+              onClick={() => onSessionAction('delete')}
+              style={{ color: 'var(--text-danger, #f85149)' }}
+            >
+              <Trash2 size={14} strokeWidth={1.75} aria-hidden />
+              <span>删除当前对话</span>
+            </button>
+
+            <div className={styles.contextMenuDivider} role="separator" />
+
             <Tooltip content="导出为 Markdown">
               <button
                 type="button"
@@ -446,212 +479,215 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
           document.body
         )}
 
-      {sortDropdownOpen &&
-        sortDropdownCoords &&
-        createPortal(
+      {sortDropdownOpen && (
+        <UnifiedSelectPopover
+          open={sortDropdownOpen}
+          onOpenChange={(open) => {
+            if (!open) onCloseSortDropdown();
+          }}
+          trigger={<div style={{ display: 'none' }} />}
+          align="start"
+          side="bottom"
+          sideOffset={4}
+          contentClassName={`${styles.sortFilterMenu} ${styles.open} no-drag`}
+          contentStyle={
+            sortDropdownCoords
+              ? {
+                  position: 'fixed',
+                  left: sortDropdownCoords.x,
+                  top: sortDropdownCoords.y,
+                }
+              : undefined
+          }
+        >
+          <div className={styles.sortFilterMenuTitle} id="sort-filter-title">
+            排序与过滤
+          </div>
+
           <div
-            ref={sortMenuRef}
-            className={`${styles.sortFilterMenu} ${styles.open}`}
-            style={{
-              position: 'fixed',
-              left: sortDropdownCoords.x,
-              top: sortDropdownCoords.y,
-              zIndex: 'var(--z-first-run)',
-            }}
-            role="menu"
-            aria-label="排序与过滤"
-            onMouseLeave={handleFlyLeave}
-            onKeyDown={onMenuKeyDown}
+            className={`${styles.sortFilterRow} ${fly === 'sort' ? styles.isOpen : ''}`}
+            onMouseEnter={() => handleFlyEnter('sort')}
           >
-            <div className={styles.sortFilterMenuTitle} id="sort-filter-title">
-              排序与过滤
-            </div>
-
-            <div
-              className={`${styles.sortFilterRow} ${fly === 'sort' ? styles.isOpen : ''}`}
-              onMouseEnter={() => handleFlyEnter('sort')}
-            >
-              <span className={styles.sortFilterRowLabel}>排序方式</span>
-              <ChevronRight
-                size={14}
-                strokeWidth={1.75}
-                className={styles.sortFilterChev}
-                aria-hidden
-              />
-              {fly === 'sort' ? (
-                <div
-                  className={styles.sortFilterFlyout}
-                  role="group"
-                  aria-label="排序方式"
+            <span className={styles.sortFilterRowLabel}>排序方式</span>
+            <ChevronRight
+              size={14}
+              strokeWidth={1.75}
+              className={styles.sortFilterChev}
+              aria-hidden
+            />
+            {fly === 'sort' ? (
+              <div
+                className={styles.sortFilterFlyout}
+                role="group"
+                aria-label="排序方式"
+              >
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={sortType === 'active'}
+                  className={`${styles.sortFilterOption} ${sortType === 'active' ? styles.isOn : ''}`}
+                  onClick={() => {
+                    onSetSortType('active');
+                    onCloseSortDropdown();
+                  }}
                 >
-                  <button
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={sortType === 'active'}
-                    className={`${styles.sortFilterOption} ${sortType === 'active' ? styles.isOn : ''}`}
-                    onClick={() => {
-                      onSetSortType('active');
-                      onCloseSortDropdown();
-                    }}
-                  >
-                    <span>按最近活跃</span>
-                    {sortType === 'active' ? (
-                      <Check
-                        size={16}
-                        strokeWidth={2}
-                        className={styles.sortFilterCheck}
-                        aria-hidden
-                      />
-                    ) : null}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={sortType === 'name'}
-                    className={`${styles.sortFilterOption} ${sortType === 'name' ? styles.isOn : ''}`}
-                    onClick={() => {
-                      onSetSortType('name');
-                      onCloseSortDropdown();
-                    }}
-                  >
-                    <span>按名称</span>
-                    {sortType === 'name' ? (
-                      <Check
-                        size={16}
-                        strokeWidth={2}
-                        className={styles.sortFilterCheck}
-                        aria-hidden
-                      />
-                    ) : null}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-
-            <div
-              className={`${styles.sortFilterRow} ${fly === 'group' ? styles.isOpen : ''}`}
-              onMouseEnter={() => handleFlyEnter('group')}
-            >
-              <span className={styles.sortFilterRowLabel}>分组方式</span>
-              <ChevronRight
-                size={14}
-                strokeWidth={1.75}
-                className={styles.sortFilterChev}
-                aria-hidden
-              />
-              {fly === 'group' ? (
-                <div
-                  className={styles.sortFilterFlyout}
-                  role="group"
-                  aria-label="分组方式"
+                  <span>按最近活跃</span>
+                  {sortType === 'active' ? (
+                    <Check
+                      size={16}
+                      strokeWidth={2}
+                      className={styles.sortFilterCheck}
+                      aria-hidden
+                    />
+                  ) : null}
+                </button>
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={sortType === 'name'}
+                  className={`${styles.sortFilterOption} ${sortType === 'name' ? styles.isOn : ''}`}
+                  onClick={() => {
+                    onSetSortType('name');
+                    onCloseSortDropdown();
+                  }}
                 >
-                  <button
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={groupType === 'folder'}
-                    className={`${styles.sortFilterOption} ${groupType === 'folder' ? styles.isOn : ''}`}
-                    onClick={() => {
-                      onSetGroupType('folder');
-                      onCloseSortDropdown();
-                    }}
-                  >
-                    <span>按项目分组</span>
-                    {groupType === 'folder' ? (
-                      <Check
-                        size={16}
-                        strokeWidth={2}
-                        className={styles.sortFilterCheck}
-                        aria-hidden
-                      />
-                    ) : null}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={groupType === 'none'}
-                    className={`${styles.sortFilterOption} ${groupType === 'none' ? styles.isOn : ''}`}
-                    onClick={() => {
-                      onSetGroupType('none');
-                      onCloseSortDropdown();
-                    }}
-                  >
-                    <span>平铺列表</span>
-                    {groupType === 'none' ? (
-                      <Check
-                        size={16}
-                        strokeWidth={2}
-                        className={styles.sortFilterCheck}
-                        aria-hidden
-                      />
-                    ) : null}
-                  </button>
-                </div>
-              ) : null}
-            </div>
+                  <span>按名称</span>
+                  {sortType === 'name' ? (
+                    <Check
+                      size={16}
+                      strokeWidth={2}
+                      className={styles.sortFilterCheck}
+                      aria-hidden
+                    />
+                  ) : null}
+                </button>
+              </div>
+            ) : null}
+          </div>
 
-            <div
-              className={`${styles.sortFilterRow} ${fly === 'filter' ? styles.isOpen : ''}`}
-              onMouseEnter={() => handleFlyEnter('filter')}
-            >
-              <span className={styles.sortFilterRowLabel}>列表范围</span>
-              <ChevronRight
-                size={14}
-                strokeWidth={1.75}
-                className={styles.sortFilterChev}
-                aria-hidden
-              />
-              {fly === 'filter' ? (
-                <div
-                  className={styles.sortFilterFlyout}
-                  role="group"
-                  aria-label="列表范围"
+          <div
+            className={`${styles.sortFilterRow} ${fly === 'group' ? styles.isOpen : ''}`}
+            onMouseEnter={() => handleFlyEnter('group')}
+          >
+            <span className={styles.sortFilterRowLabel}>分组方式</span>
+            <ChevronRight
+              size={14}
+              strokeWidth={1.75}
+              className={styles.sortFilterChev}
+              aria-hidden
+            />
+            {fly === 'group' ? (
+              <div
+                className={styles.sortFilterFlyout}
+                role="group"
+                aria-label="分组方式"
+              >
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={groupType === 'folder'}
+                  className={`${styles.sortFilterOption} ${groupType === 'folder' ? styles.isOn : ''}`}
+                  onClick={() => {
+                    onSetGroupType('folder');
+                    onCloseSortDropdown();
+                  }}
                 >
-                  <button
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={filterType === 'all'}
-                    className={`${styles.sortFilterOption} ${filterType === 'all' ? styles.isOn : ''}`}
-                    onClick={() => {
-                      onSetFilterType('all');
-                      onCloseSortDropdown();
-                    }}
-                  >
-                    <span>全部会话</span>
-                    {filterType === 'all' ? (
-                      <Check
-                        size={16}
-                        strokeWidth={2}
-                        className={styles.sortFilterCheck}
-                        aria-hidden
-                      />
-                    ) : null}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={filterType === 'pinned'}
-                    className={`${styles.sortFilterOption} ${filterType === 'pinned' ? styles.isOn : ''}`}
-                    onClick={() => {
-                      onSetFilterType('pinned');
-                      onCloseSortDropdown();
-                    }}
-                  >
-                    <span>仅置顶</span>
-                    {filterType === 'pinned' ? (
-                      <Check
-                        size={16}
-                        strokeWidth={2}
-                        className={styles.sortFilterCheck}
-                        aria-hidden
-                      />
-                    ) : null}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          </div>,
-          document.body
-        )}
+                  <span>按项目分组</span>
+                  {groupType === 'folder' ? (
+                    <Check
+                      size={16}
+                      strokeWidth={2}
+                      className={styles.sortFilterCheck}
+                      aria-hidden
+                    />
+                  ) : null}
+                </button>
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={groupType === 'none'}
+                  className={`${styles.sortFilterOption} ${groupType === 'none' ? styles.isOn : ''}`}
+                  onClick={() => {
+                    onSetGroupType('none');
+                    onCloseSortDropdown();
+                  }}
+                >
+                  <span>平铺列表</span>
+                  {groupType === 'none' ? (
+                    <Check
+                      size={16}
+                      strokeWidth={2}
+                      className={styles.sortFilterCheck}
+                      aria-hidden
+                    />
+                  ) : null}
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          <div
+            className={`${styles.sortFilterRow} ${fly === 'filter' ? styles.isOpen : ''}`}
+            onMouseEnter={() => handleFlyEnter('filter')}
+          >
+            <span className={styles.sortFilterRowLabel}>列表范围</span>
+            <ChevronRight
+              size={14}
+              strokeWidth={1.75}
+              className={styles.sortFilterChev}
+              aria-hidden
+            />
+            {fly === 'filter' ? (
+              <div
+                className={styles.sortFilterFlyout}
+                role="group"
+                aria-label="列表范围"
+              >
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={filterType === 'all'}
+                  className={`${styles.sortFilterOption} ${filterType === 'all' ? styles.isOn : ''}`}
+                  onClick={() => {
+                    onSetFilterType('all');
+                    onCloseSortDropdown();
+                  }}
+                >
+                  <span>全部会话</span>
+                  {filterType === 'all' ? (
+                    <Check
+                      size={16}
+                      strokeWidth={2}
+                      className={styles.sortFilterCheck}
+                      aria-hidden
+                    />
+                  ) : null}
+                </button>
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={filterType === 'pinned'}
+                  className={`${styles.sortFilterOption} ${filterType === 'pinned' ? styles.isOn : ''}`}
+                  onClick={() => {
+                    onSetFilterType('pinned');
+                    onCloseSortDropdown();
+                  }}
+                >
+                  <span>仅置顶</span>
+                  {filterType === 'pinned' ? (
+                    <Check
+                      size={16}
+                      strokeWidth={2}
+                      className={styles.sortFilterCheck}
+                      aria-hidden
+                    />
+                  ) : null}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </UnifiedSelectPopover>
+      )}
     </>
   );
 };

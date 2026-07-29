@@ -83,10 +83,18 @@ describe('FirstRunWizard gate', () => {
     expect(shouldShowFirstRunWizard()).toBe(false);
   });
 
-  it('default seeds have empty models (no mimo hardcode)', () => {
+  it('default seeds: opencode-go has deepseek-v4-flash; others empty (no mimo)', () => {
+    // Product SoT (profileCatalog DEFAULT_PROFILES): only opencode-go is
+    // pre-seeded with the intentional default model; other shells stay empty
+    // so users scan/hand-fill — never legacy mimo hardcode.
     const defaults = getDefaultProviderProfiles();
+    const go = defaults.find((p) => p.id === 'opencode-go');
+    expect(go?.models).toEqual(['deepseek-v4-flash']);
     for (const p of defaults) {
-      expect(p.models).toEqual([]);
+      expect(p.models.includes('mimo-v2.5')).toBe(false);
+      if (p.id !== 'opencode-go') {
+        expect(p.models).toEqual([]);
+      }
     }
   });
 
@@ -219,11 +227,12 @@ describe('page error mappers (no toast)', () => {
 });
 
 describe('WizardStep union navigation', () => {
-  it('isWizardStep accepts only 0..3', () => {
+  it('isWizardStep accepts only 0..4', () => {
     expect(isWizardStep(0)).toBe(true);
     expect(isWizardStep(3)).toBe(true);
+    expect(isWizardStep(4)).toBe(true);
     expect(isWizardStep(-1)).toBe(false);
-    expect(isWizardStep(4)).toBe(false);
+    expect(isWizardStep(5)).toBe(false);
     expect(isWizardStep(1.5)).toBe(false);
   });
 
@@ -233,7 +242,9 @@ describe('WizardStep union navigation', () => {
     expect(nextWizardStep(start)).toBe(1);
     expect(nextWizardStep(1)).toBe(2);
     expect(nextWizardStep(2)).toBe(3);
-    expect(nextWizardStep(3)).toBe(3);
+    expect(nextWizardStep(3)).toBe(4);
+    expect(nextWizardStep(4)).toBe(4);
+    expect(prevWizardStep(4)).toBe(3);
     expect(prevWizardStep(3)).toBe(2);
     expect(prevWizardStep(1)).toBe(0);
   });
