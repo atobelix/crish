@@ -1,20 +1,38 @@
 /**
- * 统一 Agent 面板 hook：合并 AgentCard 与 InlineAgentPanel 的流式处理与状态轮询逻辑。
+ * useAgentPanel — 子 Agent 面板流式 hook（AgentCard / InlineAgentPanel 唯一入口）。
  *
- * 覆盖：
- * - streamCollaboratorRun 回调处理（thinking -> chunks -> toolCalls 组装）
- * - handleStop 停止流程
- * - handleSend send / follow-up 处理
- * - 流状态管理（isStreaming / isComplete / stopping）
- * - daemon 状态轮询（useDaemonSync=true 时自动启动）
+ * ## 边界（与 useChatStream / chat-stream/ 互斥）
+ * | 表面 | 模块 | 消费者 |
+ * |------|------|--------|
+ * | **主对话** SSE/daemon 流 | `hooks/chat-stream/*`（门面 `useChatStream`） | ChatCard / Composer |
+ * | **子 Agent 面板** | **本文件** `useAgentPanel` | AgentCard / InlineAgentPanel |
+ *
+ * 禁止：主对话 import 本 hook；子 Agent 面板 import `chat-stream/` 的 stop/send。
+ * 共享点：`api/streamStop`（L2/L3 wire + markStreamingActive）、`StreamCancelFn`、
+ * store actions。两 UI hook 保留各自 finalize partials。
+ *
+ * ## Stop 语义（与主对话同轨，不同 handler 名）
+ * - `handleStop` = L2 cooperative_stop
+ * - `handleForceStop` = L3 force_cancel
+ * - wire：`dispatchStreamStopCancel` → live StreamCancelFn XOR runId→root（勿双发）
+ * - 主对话对应名：`handleStopGeneration` / `handleForceCancelGeneration`
+ *
+ * ## 覆盖
+ * - streamCollaboratorRun（thinking → chunks → toolCalls）
+ * - handleSend / follow-up
+ * - isStreaming / isComplete / stopping
+ * - daemon 状态轮询（useDaemonSync=true）
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
-import type { SessionMessage, FileDiff } from '../store/layoutStore';
+import type { SessionMessage, FileDiff, MessageToolCall } from '../store/layoutStore';
 import { sendToSubagent, streamCollaboratorRun, getSubagentStatus } from '../api/subagentApi';
 import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback';
 import { publishToolDiffs } from '../api/publishToolDiffs';
+import type { StreamCancelFn } from '../api/daemonChatBridge';
+import { dispatchStreamStopCancel, markStreamingActive } from '../api/streamStop';
+import { getCompositionRoot } from '../app/compositionRoot';
 
 export interface UseAgentPanelOptions {
   parentSessionId: string;
@@ -24,14 +42,12 @@ export interface UseAgentPanelOptions {
   useDaemonSync?: boolean;
 }
 
-export interface UseAgentStreamOptions extends UseAgentPanelOptions {
-  /** @deprecated derived from store automatically */
-  subagentRunId?: string | null;
-}
-
 export interface UseAgentPanelReturn {
-  handleSend: (text: string) => Promise<void>;
+  /** 默认 Stop = L2 cooperative_stop（单击） */
   handleStop: (summary?: string) => void;
+  /** 强制取消 = L3 force_cancel（Shift+点击 / 长按，二次确认后） */
+  handleForceStop: (summary?: string) => void;
+  handleSend: (text: string) => Promise<void>;
   incrementEpoch: () => void;
   sending: boolean;
   stopping: boolean;
@@ -60,7 +76,8 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
   }, []);
 
   const epochRef = useRef(0);
-  const cancelRef = useRef<null | (() => void)>(null);
+  /** follow-up stream cancel；支持 L2/L3 mode（streamViaDaemon → StreamCancelFn） */
+  const cancelRef = useRef<null | StreamCancelFn>(null);
   const localRunIdRef = useRef<string | null>(null);
   const cooldownRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
@@ -97,7 +114,8 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
 
   const getSubagentRunId = useCallback((): string | null => {
     if (!parentSessionId || !agentId) return null;
-    const state = useLayoutStore.getState();
+    // 命令式读：compositionRoot.session（= session facade / layout alias）
+    const state = getCompositionRoot().session.getState();
     const sess =
       state.sessionsById[parentSessionId] ||
       state.sessions.find((s) => s.id === parentSessionId);
@@ -105,6 +123,9 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
     return ag?.subagentRunId ?? null;
   }, [parentSessionId, agentId]);
 
+  // OPT-H4: stream patches stay on useLayoutStore.setState immer recipes — LayoutFacade
+  // intentionally has no setState/patchState (see opt-h4-layout-setstate-residual.md).
+  // Reads for runId use getCompositionRoot().session.getState() above.
   const buildPatchAsst = useCallback(
     (asstId: string) =>
       (fn: (m: SessionMessage) => void) => {
@@ -203,7 +224,7 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
               if (explanation) existing.explanation = explanation;
               if (approvalMeta) existing.approvalMeta = approvalMeta;
             } else {
-              const entry: Record<string, unknown> = {
+              const entry: MessageToolCall = {
                 id: toolId,
                 name,
                 arguments: args,
@@ -211,7 +232,7 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
                 status: 'pending_approval',
               };
               if (approvalMeta) entry.approvalMeta = approvalMeta;
-              m.toolCalls.push(entry as any);
+              m.toolCalls.push(entry);
               if (!m.blocks.some((b) => b.type === 'tool_call' && b.id === toolId)) {
                 m.blocks.push({ type: 'tool_call', id: toolId });
               }
@@ -254,6 +275,7 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
   );
 
   const finalizeInFlight = useCallback(() => {
+    // OPT-H4: multi-message finalize recipe — intentional store.setState residual.
     useLayoutStore.setState((state) => {
       const sess =
         state.sessionsById[parentSessionId] ||
@@ -291,11 +313,12 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
         toolCalls: [],
         blocks: [],
       });
+      // streamViaDaemon 返回 StreamCancelFn；subagentApi 签名仍为 () => void
       cancelRef.current = streamCollaboratorRun(
         text,
         agentId,
         buildStreamCallbacks(asstId, onStreamDone),
-      );
+      ) as StreamCancelFn;
     },
     [parentSessionId, agentId, patchSessionAgent, appendSessionAgentMessage, buildStreamCallbacks],
   );
@@ -335,21 +358,34 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
     [parentSessionId, agentId, sending, stopping, appendSessionAgentMessage, startFollowUp, getSubagentRunId],
   );
 
-  const handleStop = useCallback(
-    (summary?: string) => {
+  /**
+   * 停止子 agent：默认 L2 cooperative；force=true 时 L3。
+   * UI 默认 Stop → handleStop()；强制取消 → handleForceStop()（ComposerField 二次确认）。
+   *
+   * Wire：shared `dispatchStreamStopCancel`（live StreamCancelFn XOR runId→root）。
+   * Agent partials：epoch / stopping / patchSessionAgent / cooldown。
+   */
+  const finalizeAgentStop = useCallback(
+    (force: boolean, summary?: string) => {
       if (stopping) return;
       setStopping(true);
       epochRef.current += 1;
-      cancelRef.current?.();
+      const cancel = cancelRef.current;
       cancelRef.current = null;
+      markStreamingActive(false);
+      dispatchStreamStopCancel({
+        force,
+        cancel,
+        // live cancel already wires L2/L3; only pass runId when no cancel handle
+        runId: cancel ? null : getSubagentRunId(),
+        sessionId: parentSessionId,
+        reasonCooperative: 'ui-agent-stop',
+        reasonForce: 'ui-agent-force-cancel',
+      });
       finalizeInFlight();
-      const runId = getSubagentRunId();
-      if (runId) {
-        void cancelDaemonRun(runId);
-      }
       patchSessionAgent(parentSessionId, agentId, {
         status: 'stopped',
-        summary: summary || '已停止',
+        summary: summary || (force ? '已强制取消' : '已停止'),
         endedAt: Date.now(),
       });
       if (cooldownRef.current != null) {
@@ -363,6 +399,22 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
     [parentSessionId, agentId, stopping, finalizeInFlight, patchSessionAgent, getSubagentRunId],
   );
 
+  /** 默认 Stop = L2 cooperative_stop */
+  const handleStop = useCallback(
+    (summary?: string) => {
+      finalizeAgentStop(false, summary);
+    },
+    [finalizeAgentStop],
+  );
+
+  /** 强制取消 = L3 force_cancel（UI 应二次确认） */
+  const handleForceStop = useCallback(
+    (summary?: string) => {
+      finalizeAgentStop(true, summary);
+    },
+    [finalizeAgentStop],
+  );
+
   const startStatusSync = useCallback(() => {
     let cancelled = false;
     const poll = async () => {
@@ -373,7 +425,7 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
         const st = await getSubagentStatus(runId);
         if (!st || cancelled) return;
         if (st.status && st.status !== 'running' && st.status !== 'unknown') {
-          const state = useLayoutStore.getState();
+          const state = getCompositionRoot().session.getState();
           const sess =
             state.sessionsById[parentSessionId] ||
             state.sessions.find((s) => s.id === parentSessionId);
@@ -416,6 +468,7 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
   return {
     handleSend,
     handleStop,
+    handleForceStop,
     incrementEpoch,
     sending,
     stopping,
@@ -427,15 +480,4 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
     expandedTools,
     onToggleTool,
   };
-}
-
-export const useAgentStream: (options: UseAgentStreamOptions) => UseAgentPanelReturn = useAgentPanel;
-
-async function cancelDaemonRun(runId: string): Promise<void> {
-  try {
-    const { getDesktopDaemonClient } = await import('../api/daemonClient');
-    await getDesktopDaemonClient().send({ type: 'cancel-run', runId });
-  } catch {
-    /* ignore */
-  }
 }

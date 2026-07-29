@@ -18,7 +18,7 @@
  */
 
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
-import { useLayoutTreeStore } from './layoutTreeStore';
+import { useLayoutTreeStore, layoutTreeStorageKey } from './layoutTreeStore';
 import {
   createDefaultTree,
   createLeaf,
@@ -35,7 +35,8 @@ import type { DropZone } from './dropDetection';
 
 // ── 夹具 ────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'crish-layout-tree-v1';
+/** Window-scoped persist key (multi-window isolation). */
+const STORAGE_KEY = layoutTreeStorageKey();
 
 /**
  * 复位 store 到指定 tree（绕过 setTree 避免推历史污染 past 栈）。
@@ -160,21 +161,22 @@ describe('持久化', () => {
       state: Record<string, unknown>;
       version?: number;
     };
-    // 持久化的 state 仅含 tree + activeLeafId
-    expect(Object.keys(parsed.state).sort()).toEqual(['activeLeafId', 'tree']);
+    // 持久化的 state 仅含 tree + activeLeafId + toolColumnCollapsed
+    expect(Object.keys(parsed.state).sort()).toEqual([
+      'activeLeafId',
+      'toolColumnCollapsed',
+      'tree',
+    ]);
   });
 
-  it('onRehydrateStorage 清空临时状态 + 修正 activeLeafId', async () => {
+  it('onRehydrateStorage 清空临时状态 + 修正 activeLeafId（restore=true）', async () => {
     // 真实触发 hydrate：在 localStorage 写入脏数据，调用 persist.rehydrate()
-    // 旧测试用 setState 直写绕过 onRehydrateStorage — 是伪测试。
-    // 正确做法：persist.rehydrate() 读取 storage 并触发 onRehydrateStorage 回调。
+    // restore=true 时保留持久化 tree，仅 normalize + 清临时状态
     const tree = makeTwoLeafTree();
     const realLeafIds = collectLeaves(tree.root).map((l) => l.id);
     const staleActiveLeafId = 'leaf-does-not-exist-xyz';
 
-    // 写入 localStorage：activeLeafId 指向不存在的 leaf（脏数据）
-    // past/future/draggedSource 不应被持久化（partialize 仅保存 tree+activeLeafId），
-    // 但若人为写入脏数据，onRehydrateStorage 应清空
+    localStorage.setItem('crish_restore_last_workspace', 'true');
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -199,7 +201,6 @@ describe('持久化', () => {
       })
     );
 
-    // 触发真正的 hydrate（onRehydrateStorage 回调将被执行）
     await useLayoutTreeStore.persist.rehydrate();
 
     const {
@@ -211,18 +212,79 @@ describe('持久化', () => {
       activeDropZone,
     } = useLayoutTreeStore.getState();
 
-    // 1. activeLeafId 被修正为真实存在的 leaf id
     expect(activeLeafId).not.toBe(staleActiveLeafId);
     expect(realLeafIds).toContain(activeLeafId);
-
-    // 2. 临时状态被清空（即使 localStorage 中写入了脏数据）
     expect(past).toEqual([]);
     expect(future).toEqual([]);
     expect(draggedSource).toBeNull();
     expect(activeDropZone).toBeNull();
-
-    // 3. tree 正确加载
     expect(currentTree).toEqual(tree);
+
+    localStorage.removeItem('crish_restore_last_workspace');
+  });
+
+  it('onRehydrateStorage restore=false 强制 clean 单 chat tree', async () => {
+    const dirty = makeTwoLeafTree();
+    localStorage.setItem('crish_restore_last_workspace', 'false');
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: {
+          tree: dirty,
+          activeLeafId: collectLeaves(dirty.root)[0]?.id ?? null,
+          toolColumnCollapsed: false,
+        },
+        version: 0,
+      })
+    );
+
+    await useLayoutTreeStore.persist.rehydrate();
+
+    const { tree, activeLeafId, toolColumnCollapsed, past, future } =
+      useLayoutTreeStore.getState();
+    const leaves = collectLeaves(tree.root);
+    expect(leaves).toHaveLength(1);
+    expect(leaves[0]?.panelId).toBe('chat');
+    expect(activeLeafId).toBe(leaves[0]?.id);
+    expect(toolColumnCollapsed).toBe(true);
+    expect(past).toEqual([]);
+    expect(future).toEqual([]);
+
+    localStorage.removeItem('crish_restore_last_workspace');
+  });
+
+  it('onRehydrateStorage restore=true 但 invalid multi-unit → clean 单 chat', async () => {
+    // multi chat 缺 session 绑定 → validateRestorableLayoutTree 拒绝
+    const bad: LayoutTree = {
+      version: 2,
+      root: createBranch(
+        'horizontal',
+        createLeaf('chat', ['chat'], 'chat', 'sess-a'),
+        createLeaf('chat', ['chat'], 'chat'),
+        0.5
+      ),
+    };
+    localStorage.setItem('crish_restore_last_workspace', 'true');
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: {
+          tree: bad,
+          activeLeafId: collectLeaves(bad.root)[0]?.id ?? null,
+          toolColumnCollapsed: false,
+        },
+        version: 0,
+      })
+    );
+
+    await useLayoutTreeStore.persist.rehydrate();
+
+    const leaves = collectLeaves(useLayoutTreeStore.getState().tree.root);
+    expect(leaves).toHaveLength(1);
+    expect(leaves[0]?.panelId).toBe('chat');
+    expect(useLayoutTreeStore.getState().toolColumnCollapsed).toBe(true);
+
+    localStorage.removeItem('crish_restore_last_workspace');
   });
 
   it('partialize 不持久化临时状态 — 验证写入 localStorage 的数据', () => {
@@ -243,9 +305,13 @@ describe('持久化', () => {
       version?: number;
     };
 
-    // 持久化的 state 仅含 tree + activeLeafId
+    // 持久化的 state 仅含 tree + activeLeafId + toolColumnCollapsed
     const persistedKeys = Object.keys(parsed.state).sort();
-    expect(persistedKeys).toEqual(['activeLeafId', 'tree']);
+    expect(persistedKeys).toEqual([
+      'activeLeafId',
+      'toolColumnCollapsed',
+      'tree',
+    ]);
     // 临时状态确实未写入
     expect(parsed.state).not.toHaveProperty('past');
     expect(parsed.state).not.toHaveProperty('future');

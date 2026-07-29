@@ -54,7 +54,11 @@ export function useChatStream(
     };
   }, [clearRunNoticeTimer, renderBufferRef]);
 
-  const { runStreamingAssistant, handleStopGeneration } = useStreamCallbacks(
+  const {
+    runStreamingAssistant,
+    handleStopGeneration,
+    handleForceCancelGeneration,
+  } = useStreamCallbacks(
     options,
     refs,
     { pushRunNotice, dismissRunNotice },
@@ -81,5 +85,6 @@ export function useChatStream(
     runStreamingAssistant,
     handleSendChat,
     handleStopGeneration,
+    handleForceCancelGeneration,
   };
 }

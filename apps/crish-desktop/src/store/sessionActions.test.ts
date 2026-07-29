@@ -1,8 +1,9 @@
 import { produce } from 'immer';
 import { describe, expect, it, vi } from 'vitest';
 import { GENERAL_FOLDER } from '../api/projectStore';
+import { shouldListSessionInSidebar } from '../api/sessionTitle';
 import { createSessionActions, type SessionStoreSlice } from './sessionActions';
-import { buildSessionsById } from './sessionIndex';
+import { buildSessionsById, filterSidebarSessions } from './sessionIndex';
 import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from './draftSession';
 import type { SessionMessage, SessionState } from './types';
 
@@ -531,6 +532,60 @@ describe('sessionActions create/prune paths', () => {
     expect(st.sessionsById[PENDING_DRAFT_SESSION_ID]).toBeUndefined();
   });
 
+  it('empty default-title shell is not listed in sidebar (active or not)', () => {
+    const shell = emptyShell({ id: 'ghost-shell' });
+    const hist = emptyShell({
+      id: 'hist',
+      title: '历史',
+      messages: [makeMessage({ id: 'm', sender: 'user', text: 'hi' })],
+    });
+    // shouldList：空壳默认标题恒 false（active 不参与判定）
+    expect(shouldListSessionInSidebar(shell, 'ghost-shell')).toBe(false);
+    expect(shouldListSessionInSidebar(shell, PENDING_DRAFT_SESSION_ID)).toBe(
+      false
+    );
+    expect(shouldListSessionInSidebar(hist, 'hist')).toBe(true);
+
+    const listed = filterSidebarSessions([shell, hist], {
+      activeSessionId: PENDING_DRAFT_SESSION_ID,
+    });
+    expect(listed.map((s) => s.id)).toEqual(['hist']);
+  });
+
+  it('setSessions while pending draft prunes all default empty shells', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [
+          emptyShell({
+            id: 'hist',
+            title: '历史',
+            messages: [makeMessage({ id: 'm', sender: 'user', text: 'x' })],
+          }),
+          emptyShell({ id: 'ghost-a' }),
+          emptyShell({ id: 'ghost-b' }),
+        ],
+        'hist'
+      )
+    );
+    h.actions.enterDraftMode('proj-x');
+    expect(h.getState().activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+
+    // 模拟 hydrate 回灌含幽灵空壳：draft active 时全部剪掉
+    h.actions.setSessions([
+      emptyShell({
+        id: 'hist',
+        title: '历史',
+        messages: [makeMessage({ id: 'm', sender: 'user', text: 'x' })],
+      }),
+      emptyShell({ id: 'ghost-a' }),
+      emptyShell({ id: 'ghost-b' }),
+      emptyShell({ id: 'sched', title: '定时 · keep' }),
+    ]);
+    const ids = h.getState().sessions.map((s) => s.id).sort();
+    expect(ids).toEqual(['hist', 'sched'].sort());
+    expect(h.getState().activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+  });
+
   it('commitDraftIfNeeded: sessions+1; active real id; draftFolder cleared', () => {
     const h = makeHarnessFromState(
       makeStateFromSessions(
@@ -593,6 +648,39 @@ describe('sessionActions create/prune paths', () => {
     expect(h.getState().draftFolder).toBe('');
   });
 
+  it('commitDraftIfNeeded on dirty active always mints real id (no createSession fallback needed)', () => {
+    // 脏 active（空 / 指向不存在）：commit 必须直接 mint，调用方无需 createSession 兜底
+    const h = makeHarnessFromState(makeStateFromSessions([], ''));
+    const beforeLen = h.getState().sessions.length;
+    const id = h.actions.commitDraftIfNeeded({ title: '首条发送' });
+    expect(id).toBeTruthy();
+    expect(isPendingDraft(id)).toBe(false);
+    expect(id).not.toBe(PENDING_DRAFT_SESSION_ID);
+    const st = h.getState();
+    expect(st.activeSessionId).toBe(id);
+    expect(st.sessions).toHaveLength(beforeLen + 1);
+    expect(st.sessionsById[id]?.title).toBe('首条发送');
+
+    // 未知 active id 同样 mint，不返回空串
+    const h2 = makeHarnessFromState(
+      makeStateFromSessions(
+        [
+          emptyShell({
+            id: 'hist',
+            title: '历史',
+            messages: [makeMessage({ id: 'm', sender: 'user', text: 'x' })],
+          }),
+        ],
+        'missing-ghost-id'
+      )
+    );
+    const id2 = h2.actions.commitDraftIfNeeded();
+    expect(id2).toBeTruthy();
+    expect(isPendingDraft(id2)).toBe(false);
+    expect(id2).not.toBe('missing-ghost-id');
+    expect(h2.getState().sessionsById[id2]).toBeDefined();
+  });
+
   it('setActive to real session clears draftFolder', () => {
     const h = makeHarnessFromState(
       makeStateFromSessions([emptyShell({ id: 'a' })], 'a')
@@ -623,14 +711,18 @@ describe('sessionActions create/prune paths', () => {
   });
 
   it('setDraftFolder / clearDraft manage draft binding', () => {
+    // 不变量：activeSessionId 绝不允许为空字符串。
+    // makeStateFromSessions([], '') 创建遗留脏态，但 clearDraft 会修复为草稿态。
     const h = makeHarnessFromState(makeStateFromSessions([], ''));
     h.actions.enterDraftMode('folder-1');
     h.actions.setDraftFolder('folder-2');
     expect(h.getState().draftFolder).toBe('folder-2');
     h.actions.clearDraft();
     const st = h.getState();
-    expect(st.draftFolder).toBe('');
-    expect(st.activeSessionId).toBe('');
+    // clearDraft 语义：退出当前草稿、进入全新空白草稿态（绝不留空 activeSessionId）
+    expect(st.activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+    // enterDraftMode 无参时 draftFolder 回退到 GENERAL_FOLDER
+    expect(st.draftFolder).toBe(GENERAL_FOLDER);
   });
 
   it('setActiveSessionId switches terminal view without dropping peer shells', () => {
@@ -826,6 +918,95 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
       })
     );
     expect(getSessionOrThrow(h.getState(), 's1').title).toBe('我的标题');
+  });
+
+  it('addMessage same id is upsert: length stays 1 and fields update', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions([emptyShell({ id: 's1', title: '新会话' })], 's1')
+    );
+    h.actions.addMessage(
+      'ws',
+      's1',
+      makeMessage({
+        id: 'user-stable-1',
+        sender: 'user',
+        text: 'first',
+        status: 'processing',
+      })
+    );
+    h.actions.addMessage(
+      'ws',
+      's1',
+      makeMessage({
+        id: 'user-stable-1',
+        sender: 'user',
+        text: 'first (echo)',
+        status: 'completed',
+      })
+    );
+    const msgs = getSessionOrThrow(h.getState(), 's1').messages;
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]?.id).toBe('user-stable-1');
+    expect(msgs[0]?.text).toBe('first (echo)');
+    expect(msgs[0]?.status).toBe('completed');
+  });
+
+  it('addMessage adversarial: completed stream final then partial echo does not double or regress', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions([emptyShell({ id: 's1', title: 't' })], 's1')
+    );
+    h.actions.addMessage(
+      'ws',
+      's1',
+      makeMessage({
+        id: 'asst-client-1',
+        sender: 'assistant',
+        text: 'full stream final',
+        status: 'completed',
+      })
+    );
+    // 迟到 partial / daemon 回显中间态
+    h.actions.addMessage(
+      'ws',
+      's1',
+      makeMessage({
+        id: 'asst-client-1',
+        sender: 'assistant',
+        text: 'full',
+        status: 'processing',
+      })
+    );
+    h.actions.addMessage(
+      'ws',
+      's1',
+      makeMessage({
+        id: 'asst-client-1',
+        sender: 'assistant',
+        text: 'full stream final',
+        status: 'completed',
+      })
+    );
+    const msgs = getSessionOrThrow(h.getState(), 's1').messages;
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]?.status).toBe('completed');
+    expect(msgs[0]?.text).toBe('full stream final');
+  });
+
+  it('addMessage different ids still append', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions([emptyShell({ id: 's1', title: 't' })], 's1')
+    );
+    h.actions.addMessage(
+      'ws',
+      's1',
+      makeMessage({ id: 'a', sender: 'user', text: 'u' })
+    );
+    h.actions.addMessage(
+      'ws',
+      's1',
+      makeMessage({ id: 'b', sender: 'assistant', text: 'r' })
+    );
+    expect(getSessionOrThrow(h.getState(), 's1').messages).toHaveLength(2);
   });
 
   it('branchSession sanitizes title and clears agent focus', () => {

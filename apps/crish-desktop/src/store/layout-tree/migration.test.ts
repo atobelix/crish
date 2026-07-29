@@ -15,7 +15,7 @@ import {
   migrateLayoutIfNeeded,
   __resetMigrationFlagForTests,
 } from './migration';
-import { useLayoutTreeStore } from './layoutTreeStore';
+import { useLayoutTreeStore, layoutTreeStorageKey } from './layoutTreeStore';
 import {
   createDefaultTree,
   createLeaf,
@@ -29,7 +29,8 @@ import { findNodeById, collectLeaves } from './operations';
 // ── 测试夹具 ────────────────────────────────────────────────────────
 
 const LEGACY_KEY = 'crish-layout-v1';
-const TREE_KEY = 'crish-layout-tree-v1';
+/** Window-scoped tree persist key */
+const TREE_KEY = layoutTreeStorageKey();
 
 /** 旧 store 的 localStorage 持久化格式 */
 interface LegacyPersisted {

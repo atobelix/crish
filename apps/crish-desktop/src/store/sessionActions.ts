@@ -1,6 +1,10 @@
 /**
  * 会话 / 消息 / agent 相关 action 工厂与 Store 切片契约。
- * 内部逻辑已重构拆分到：
+ *
+ * **唯一入口**：本文件 + 下方同级 `session*Actions.ts`。
+ * `session-actions/` 目录树已于 W4-2 删除；禁止再引入平行 barrel/死路径。
+ *
+ * 内部逻辑拆分：
  * - sessionCrudActions.ts (CRUD/草稿/状态)
  * - sessionOrderingActions.ts (排序/分支/归档/固定/拖拽)
  * - sessionMessageActions.ts (消息/工具调用/状态)
@@ -15,6 +19,7 @@ import type {
   SessionAgent,
   SessionAgentPatch,
   SessionGoalMode,
+  SessionImportMeta,
   SessionMessage,
   SessionMessageStatus,
   SessionState,
@@ -53,8 +58,9 @@ export interface SessionActions {
   /** 退出草稿：清空 draftFolder；若 active 为草稿则清空 active */
   clearDraft: () => void;
   /**
-   * 若 active 为草稿则 mint 真会话并返回 id；
-   * 否则返回当前真实 active 或 ''。
+   * 草稿 / 脏 active → mint 真会话并返回 id；
+   * 已有真实 active → 原样返回该 id。
+   * 契约：始终返回可用 session id（不再依赖调用方 createSession 兜底）。
    */
   commitDraftIfNeeded: (opts?: { title?: string; folder?: string }) => string;
   upsertSessionAgent: (sessionId: string, agent: SessionAgent) => void;
@@ -69,11 +75,17 @@ export interface SessionActions {
     message: SessionMessage
   ) => void;
   renameSession: (sessionId: string, title: string) => void;
+  /**
+   * 创建/附加真会话。系统·测试·commit 用；**禁止**用户「新建」直调 mint 空壳
+   * （用户入口 → enterDraftMode / openNewDraftTab）。
+   */
   createSession: (opts?: {
     title?: string;
     folder?: string;
     id?: string;
     activate?: boolean;
+    /** 外部导入溯源（软去重 key） */
+    importMeta?: SessionImportMeta;
   }) => string;
   deleteSession: (sessionId: string) => boolean;
   pinSession: (sessionId: string) => void;
@@ -112,6 +124,8 @@ export interface SessionActions {
       goalMode?: SessionGoalMode | null;
     }
   ) => void;
+  /** 清空会话消息（不删会话） */
+  clearSessionMessages: (sessionId: string) => void;
   updateMessageText: (
     sessionId: string,
     messageId: string,
@@ -139,7 +153,10 @@ export interface SessionActions {
     messageId: string,
     status: SessionMessageStatus,
     thinkingTime?: number,
-    opts?: { force?: boolean }
+    opts?: {
+      force?: boolean;
+      errorDetail?: { message: string; kind: string; technical?: string };
+    }
   ) => void;
   patchAgentTool: (
     sessionId: string,

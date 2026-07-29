@@ -249,11 +249,11 @@ describe('resizeBranch', () => {
 
 describe('Tab operations', () => {
   it('addTabToLeaf adds tab', () => {
-    const tree = createDefaultTree('chat');
-    const result = addTabToLeaf(tree, tree.root.id, 'agent');
-    const leaf = result.root as LayoutBranch;
-    expect(leaf.tabs).toContain('agent');
-    expect(leaf.activeTab).toBe('agent');
+    const tree = createDefaultTree('overview');
+    const result = addTabToLeaf(tree, tree.root.id, 'files');
+    const leaf = result.root as LayoutLeaf;
+    expect(leaf.tabs).toContain('files');
+    expect(leaf.activeTab).toBe('files');
   });
 
   it('addTabToLeaf ignores duplicate', () => {
@@ -1351,5 +1351,207 @@ describe('applyDrop — tab → merge-tab（同 leaf 重排）', () => {
     const newDiff = leaves.find((l) => l.panelId === 'diff')!;
     expect(newDiff.tabs).toEqual(['diff']);
     expect(newDiff.activeTab).toBe('diff');
+  });
+});
+
+// ── applyDrop — Conversation Unit 跨 session 拒绝 ───────────────────
+//
+// 不变量（Phase 2 / B5）：
+// - tool 源带 ownerSessionId 时，不得 merge/split 到其它 session 的 tool leaf
+// - 同 session tool merge 保留 ownerSessionId
+// - tool tab→split 新 leaf 继承 ownerSessionId
+// - chat 跨 session 不受此守卫影响（多 unit 并排）
+
+describe('applyDrop — cross-session unit scope rejection', () => {
+  /** 两 unit 并排：各含 chat + tool（标准 multi-chat 形状的简化） */
+  function makeTwoUnitTree() {
+    const chatA = createLeaf('chat', ['chat'], 'chat', 'sess-a');
+    const toolA = createLeaf('diff', ['diff', 'terminal'], 'diff', 'sess-a');
+    const unitA = createBranch('horizontal', chatA, toolA, 0.6);
+
+    const chatB = createLeaf('chat', ['chat'], 'chat', 'sess-b');
+    const toolB = createLeaf('files', ['files'], 'files', 'sess-b');
+    const unitB = createBranch('horizontal', chatB, toolB, 0.6);
+
+    const tree: LayoutTree = {
+      root: createBranch('vertical', unitA, unitB, 0.5),
+      version: 2,
+    };
+    return { tree, chatA, toolA, chatB, toolB };
+  }
+
+  it('tool leaf merge 跨 session → 拒绝，返回原 tree', () => {
+    const { tree, toolA, toolB } = makeTwoUnitTree();
+    const source: TreeDragSource = {
+      type: 'leaf',
+      leafId: toolA.id,
+      tabId: toolA.id,
+      panelId: 'diff',
+    };
+    const zone: DropZone = {
+      type: 'merge-tab',
+      targetLeafId: toolB.id,
+      confidence: 1,
+    };
+    expect(applyDrop(tree, source, zone)).toBe(tree);
+  });
+
+  it('tool leaf split 跨 session → 拒绝', () => {
+    const { tree, toolA, toolB } = makeTwoUnitTree();
+    const source: TreeDragSource = {
+      type: 'leaf',
+      leafId: toolA.id,
+      tabId: toolA.id,
+      panelId: 'diff',
+    };
+    const zone: DropZone = {
+      type: 'split-right',
+      targetLeafId: toolB.id,
+      confidence: 1,
+    };
+    expect(applyDrop(tree, source, zone)).toBe(tree);
+  });
+
+  it('tool tab merge 跨 session → 拒绝', () => {
+    const { tree, toolA, toolB } = makeTwoUnitTree();
+    const source: TreeDragSource = {
+      type: 'tab',
+      leafId: toolA.id,
+      tabId: 'terminal',
+      panelId: 'terminal',
+    };
+    const zone: DropZone = {
+      type: 'merge-tab',
+      targetLeafId: toolB.id,
+      confidence: 1,
+    };
+    expect(applyDrop(tree, source, zone)).toBe(tree);
+  });
+
+  it('tool tab split 跨 session → 拒绝', () => {
+    const { tree, toolA, toolB } = makeTwoUnitTree();
+    const source: TreeDragSource = {
+      type: 'tab',
+      leafId: toolA.id,
+      tabId: 'terminal',
+      panelId: 'terminal',
+    };
+    const zone: DropZone = {
+      type: 'split-left',
+      targetLeafId: toolB.id,
+      confidence: 1,
+    };
+    expect(applyDrop(tree, source, zone)).toBe(tree);
+  });
+
+  it('同 session tool leaf merge → 允许且保留 ownerSessionId', () => {
+    // unit 内两个 tool leaf 同属 sess-a
+    const toolLeft = createLeaf('diff', ['diff'], 'diff', 'sess-a');
+    const toolRight = createLeaf('terminal', ['terminal'], 'terminal', 'sess-a');
+    const tree: LayoutTree = {
+      root: createBranch('horizontal', toolLeft, toolRight, 0.5),
+      version: 2,
+    };
+    const source: TreeDragSource = {
+      type: 'leaf',
+      leafId: toolRight.id,
+      tabId: toolRight.id,
+      panelId: 'terminal',
+    };
+    const zone: DropZone = {
+      type: 'merge-tab',
+      targetLeafId: toolLeft.id,
+      confidence: 1,
+    };
+    const result = applyDrop(tree, source, zone);
+    expect(isLeaf(result.root)).toBe(true);
+    const merged = result.root as LayoutLeaf;
+    expect(merged.tabs).toEqual(['diff', 'terminal']);
+    expect(merged.sessionId).toBe('sess-a');
+  });
+
+  it('同 session tool tab→split → 新 leaf 继承 ownerSessionId', () => {
+    const multi = createLeaf(
+      'diff',
+      ['diff', 'terminal'],
+      'diff',
+      'sess-a'
+    );
+    const sibling = createLeaf('files', ['files'], 'files', 'sess-a');
+    const tree: LayoutTree = {
+      root: createBranch('horizontal', multi, sibling, 0.5),
+      version: 2,
+    };
+    const source: TreeDragSource = {
+      type: 'tab',
+      leafId: multi.id,
+      tabId: 'terminal',
+      panelId: 'terminal',
+    };
+    const zone: DropZone = {
+      type: 'split-right',
+      targetLeafId: sibling.id,
+      confidence: 1,
+    };
+    const result = applyDrop(tree, source, zone);
+    const leaves = collectLeaves(result.root);
+    const newTerminal = leaves.find(
+      (l) => l.tabs.includes('terminal') && l.panelId === 'terminal'
+    );
+    expect(newTerminal).toBeDefined();
+    expect(newTerminal!.sessionId).toBe('sess-a');
+    // 源 multi 仍保留 owner
+    const remaining = leaves.find((l) => l.id === multi.id || (l.tabs.includes('diff') && !l.tabs.includes('terminal')));
+    expect(remaining?.sessionId).toBe('sess-a');
+  });
+
+  it('merge 时 target 无 sessionId、src 有 → 结果继承 src owner', () => {
+    const target = createLeaf('diff', ['diff'], 'diff'); // 无 sessionId
+    const src = createLeaf('terminal', ['terminal'], 'terminal', 'sess-a');
+    const tree: LayoutTree = {
+      root: createBranch('horizontal', target, src, 0.5),
+      version: 2,
+    };
+    const source: TreeDragSource = {
+      type: 'leaf',
+      leafId: src.id,
+      tabId: src.id,
+      panelId: 'terminal',
+    };
+    const zone: DropZone = {
+      type: 'merge-tab',
+      targetLeafId: target.id,
+      confidence: 1,
+    };
+    const result = applyDrop(tree, source, zone);
+    expect(isLeaf(result.root)).toBe(true);
+    expect((result.root as LayoutLeaf).sessionId).toBe('sess-a');
+  });
+
+  it('chat leaf 跨 session split → 允许（多 unit 并排）', () => {
+    const chatA = createLeaf('chat', ['chat'], 'chat', 'sess-a');
+    const chatB = createLeaf('chat', ['chat'], 'chat', 'sess-b');
+    // 再加一个占位 leaf 以便 move 有空间（branch of 2 chats）
+    const tree: LayoutTree = {
+      root: createBranch('horizontal', chatA, chatB, 0.5),
+      version: 2,
+    };
+    // moveLeaf chatA 到 chatB 右侧：同域 chat，应允许
+    const source: TreeDragSource = {
+      type: 'leaf',
+      leafId: chatA.id,
+      tabId: chatA.id,
+      panelId: 'chat',
+    };
+    const zone: DropZone = {
+      type: 'split-right',
+      targetLeafId: chatB.id,
+      confidence: 1,
+    };
+    const result = applyDrop(tree, source, zone);
+    expect(result).not.toBe(tree);
+    const leaves = collectLeaves(result.root);
+    expect(leaves).toHaveLength(2);
+    expect(leaves.map((l) => l.sessionId).sort()).toEqual(['sess-a', 'sess-b']);
   });
 });

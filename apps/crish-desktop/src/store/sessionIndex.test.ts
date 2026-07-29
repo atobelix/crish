@@ -11,6 +11,7 @@ import {
   filterSidebarSessions,
   getSessionById,
   getSessionEmptyShellFlags,
+  getSessionForWrite,
   getSessionIndex,
   groupUnpinnedByProject,
   isPlaceholderEmptySession,
@@ -70,6 +71,21 @@ describe('sessionIndex', () => {
     };
     expect(getSessionById(state, 'a')).toBe(a);
     expect(state.sessionsById.a).toBe(a);
+  });
+
+  it('getSessionForWrite rebinds forked sessionsById to sessions[] element', () => {
+    const a = sess('a');
+    const forked = { ...a, messages: [] as SessionState['messages'] };
+    const state: SessionsIndexed = {
+      sessions: [a],
+      // 模拟 immer 只 fork 了 map 值
+      sessionsById: { a: forked },
+    };
+    expect(getSessionById(state, 'a')).toBe(forked);
+    const w = getSessionForWrite(state, 'a');
+    expect(w).toBe(a);
+    expect(state.sessionsById.a).toBe(a);
+    expect(w).toBe(state.sessions[0]);
   });
 
   it('reindexSessionsById rebuilds after structural change', () => {
@@ -452,6 +468,228 @@ describe('sidebar empty-session helpers', () => {
     expect(part.visible.map((s) => s.id)).toEqual(['n']);
     expect(part.pinned).toEqual([]);
     expect(part.unpinned.map((s) => s.id)).toEqual(['n']);
+  });
+
+  /**
+   * PR-5 分区唯一性不变量：
+   * ∀ session id，在 pinned ∪ unpinned 中恰好出现 1 次（互补、无交叉）。
+   * isPinned=true 只进 pinned；unpinned 永不为 pinned。
+   */
+  function assertPartitionExclusive(
+    part: ReturnType<typeof partitionSidebarSessions>
+  ): void {
+    const pinIds = part.pinned.map((s) => s.id);
+    const unpinIds = part.unpinned.map((s) => s.id);
+    const pinSet = new Set(pinIds);
+    const unpinSet = new Set(unpinIds);
+
+    // 无 id 同时出现在 pinned 与 unpinned
+    for (const id of pinIds) {
+      expect(unpinSet.has(id), `pinned id "${id}" also in unpinned`).toBe(
+        false
+      );
+    }
+    for (const id of unpinIds) {
+      expect(pinSet.has(id), `unpinned id "${id}" also in pinned`).toBe(
+        false
+      );
+    }
+
+    // 分区内自身不重复
+    expect(pinIds.length).toBe(pinSet.size);
+    expect(unpinIds.length).toBe(unpinSet.size);
+
+    // isPinned 标志与分区一致
+    for (const s of part.pinned) {
+      expect(s.isPinned, `pinned partition contains unpinned ${s.id}`).toBe(
+        true
+      );
+    }
+    for (const s of part.unpinned) {
+      expect(s.isPinned, `unpinned partition contains pinned ${s.id}`).toBe(
+        false
+      );
+    }
+
+    // visible === pinned ⊔ unpinned（顺序保留 visible 扫描序）
+    expect([...pinIds, ...unpinIds].sort()).toEqual(
+      part.visible.map((s) => s.id).sort()
+    );
+    expect(part.pinned.length + part.unpinned.length).toBe(
+      part.visible.length
+    );
+  }
+
+  function listed(id: string, title: string, extra?: Partial<SessionState>): SessionState {
+    const s = sess(id, title);
+    s.messages = [{ id: `m-${id}`, sender: 'user', text: 'x', timestamp: 1 }];
+    if (extra) Object.assign(s, extra);
+    return s;
+  }
+
+  it('partition: isPinned=true appears ONLY in pinned; unpinned never in pinned', () => {
+    const pinA = listed('pin-a', 'Pinned A', { isPinned: true });
+    const pinB = listed('pin-b', 'Pinned B', { isPinned: true, folder: 'p1' });
+    const free = listed('free', 'Free', { isPinned: false });
+    const inProj = listed('proj', 'In Project', {
+      isPinned: false,
+      folder: 'p1',
+    });
+
+    const part = partitionSidebarSessions([pinA, free, pinB, inProj]);
+    assertPartitionExclusive(part);
+
+    expect(part.pinned.map((s) => s.id).sort()).toEqual(['pin-a', 'pin-b']);
+    expect(part.unpinned.map((s) => s.id).sort()).toEqual(['free', 'proj']);
+    // 置顶即使 folder=project 也只在 pinned，不进 unpinned
+    expect(part.unpinned.some((s) => s.id === 'pin-b')).toBe(false);
+    expect(part.pinned.every((s) => s.isPinned)).toBe(true);
+    expect(part.unpinned.every((s) => !s.isPinned)).toBe(true);
+  });
+
+  it('partition: no session id in both pinned and unpinned/projects/general pipeline', () => {
+    const projects = [
+      { id: 'p1', name: 'Alpha' },
+      { id: 'p2', name: 'Beta' },
+    ];
+    const pin = listed('pin', 'Pin', { isPinned: true, folder: 'p1' });
+    const p1 = listed('s-p1', 'P1 sess', { folder: 'p1' });
+    const p2 = listed('s-p2', 'P2 sess', { folder: 'Beta' });
+    const gen = listed('s-gen', 'General', { folder: 'general' });
+
+    const part = partitionSidebarSessions([pin, p1, p2, gen]);
+    assertPartitionExclusive(part);
+
+    const { byProjectId, general } = groupUnpinnedByProject(
+      part.unpinned,
+      projects
+    );
+
+    const renderBuckets: string[][] = [
+      part.pinned.map((s) => s.id),
+      ...(Object.values(byProjectId).map((arr) => arr.map((s) => s.id))),
+      general.map((s) => s.id),
+    ];
+    const seen = new Map<string, number>();
+    for (const bucket of renderBuckets) {
+      for (const id of bucket) {
+        seen.set(id, (seen.get(id) ?? 0) + 1);
+      }
+    }
+    // ∀ id 渲染出现次数 === 1
+    for (const [id, count] of seen) {
+      expect(count, `session "${id}" appears ${count} times across partitions`).toBe(
+        1
+      );
+    }
+    // pinned 不进任何 project / general
+    expect(seen.get('pin')).toBe(1);
+    expect(byProjectId.p1?.some((s) => s.id === 'pin')).toBe(false);
+    expect(general.some((s) => s.id === 'pin')).toBe(false);
+  });
+
+  it('partition: search mode keeps pinned/unpinned exclusive uniqueness', () => {
+    const pinHit = listed('pin-hit', 'Rust Pin', { isPinned: true });
+    const pinMiss = listed('pin-miss', 'Other Pin', { isPinned: true });
+    const freeHit = listed('free-hit', 'Rust Free', { isPinned: false });
+    const freeMiss = listed('free-miss', 'Python Free', { isPinned: false });
+
+    const part = partitionSidebarSessions(
+      [pinHit, pinMiss, freeHit, freeMiss],
+      { searchQuery: 'rust' }
+    );
+    assertPartitionExclusive(part);
+    expect(part.visible.map((s) => s.id).sort()).toEqual([
+      'free-hit',
+      'pin-hit',
+    ]);
+    expect(part.pinned.map((s) => s.id)).toEqual(['pin-hit']);
+    expect(part.unpinned.map((s) => s.id)).toEqual(['free-hit']);
+  });
+
+  it('partition: filterType=pinned empties unpinned and keeps exclusivity', () => {
+    const pin = listed('pin', 'Pin', { isPinned: true });
+    const free = listed('free', 'Free', { isPinned: false });
+    const part = partitionSidebarSessions([pin, free], {
+      filterType: 'pinned',
+    });
+    assertPartitionExclusive(part);
+    expect(part.pinned.map((s) => s.id)).toEqual(['pin']);
+    expect(part.unpinned).toEqual([]);
+    expect(part.visible.map((s) => s.id)).toEqual(['pin']);
+  });
+
+  it('partition: search + filterType=pinned still exclusive', () => {
+    const pinHit = listed('pin-hit', 'Alpha Pin', { isPinned: true });
+    const pinMiss = listed('pin-miss', 'Beta Pin', { isPinned: true });
+    const freeHit = listed('free-hit', 'Alpha Free', { isPinned: false });
+
+    const part = partitionSidebarSessions([pinHit, pinMiss, freeHit], {
+      searchQuery: 'alpha',
+      filterType: 'pinned',
+    });
+    assertPartitionExclusive(part);
+    // free 命中搜索但仍被 filterType=pinned 剔除
+    expect(part.visible.map((s) => s.id)).toEqual(['pin-hit']);
+    expect(part.unpinned).toEqual([]);
+  });
+
+  it('partition: active session retained by search still respects pin XOR', () => {
+    const activePin = listed('active-pin', 'NotMatch Title', {
+      isPinned: true,
+    });
+    const activeFree = listed('active-free', 'NotMatch Free', {
+      isPinned: false,
+    });
+    const hit = listed('hit', 'Rust Book', { isPinned: false });
+
+    const partPin = partitionSidebarSessions([activePin, hit], {
+      activeSessionId: 'active-pin',
+      searchQuery: 'rust',
+    });
+    assertPartitionExclusive(partPin);
+    expect(partPin.pinned.map((s) => s.id)).toEqual(['active-pin']);
+    expect(partPin.unpinned.map((s) => s.id)).toEqual(['hit']);
+
+    const partFree = partitionSidebarSessions([activeFree, hit], {
+      activeSessionId: 'active-free',
+      searchQuery: 'rust',
+    });
+    assertPartitionExclusive(partFree);
+    expect(partFree.pinned).toEqual([]);
+    expect(partFree.unpinned.map((s) => s.id).sort()).toEqual([
+      'active-free',
+      'hit',
+    ]);
+  });
+
+  it('groupUnpinnedByProject: no id in both a project bucket and general', () => {
+    const projects = [
+      { id: 'p1', name: 'Alpha' },
+      { id: 'p2', name: 'Beta' },
+    ];
+    const inP1 = sess('a');
+    inP1.folder = 'p1';
+    const byName = sess('b');
+    byName.folder = 'Beta';
+    const gen = sess('c');
+    gen.folder = 'general';
+    const alias = sess('d');
+    alias.folder = '常规会话';
+    const { byProjectId, general } = groupUnpinnedByProject(
+      [inP1, byName, gen, alias],
+      projects
+    );
+
+    const allIds = [
+      ...(byProjectId.p1 ?? []).map((s) => s.id),
+      ...(byProjectId.p2 ?? []).map((s) => s.id),
+      ...general.map((s) => s.id),
+    ];
+    expect(new Set(allIds).size).toBe(allIds.length);
+    expect(byProjectId.p1?.map((s) => s.id)).toEqual(['a']);
+    expect(byProjectId.p2?.map((s) => s.id)).toEqual(['b']);
+    expect(general.map((s) => s.id).sort()).toEqual(['c', 'd']);
   });
 
   it('groupUnpinnedByProject routes by id / name / general', () => {

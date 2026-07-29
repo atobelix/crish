@@ -1,6 +1,18 @@
 /**
  * 会话域 facade — 与 useLayoutStore **同一 zustand 实例**（非独立 create）。
  * 权威状态与 actions 在 layoutStore + sessionActions；本文件只导出域 API。
+ *
+ * ## Ownership note (OPT-C1)
+ *
+ * Sessions **still live on layoutStore** (god-object). This is intentional residual —
+ * do not dual-write a second sessions map. New code:
+ * - Read/subscribe: `useSessionStore` / `useSessionField` / storeAccess
+ * - Commands that open UI: `compositionRoot.session` / `.shell` (not raw setActive only)
+ * - Tab strip open/focus/new-draft: **workspaceShellStore** owns TabSurface; shell may
+ *   call `setActiveSessionId` as an internal side-effect — components must not pair both.
+ *
+ * @see ./storeOwnership.ts (`SESSION_OWNERSHIP`)
+ * @see ./layoutStore.ts package header
  */
 import { useEffect, useMemo, useReducer, useRef } from 'react';
 import { useShallow } from '../store/useShallowSelector';

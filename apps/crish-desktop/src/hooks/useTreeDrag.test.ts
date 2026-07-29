@@ -26,7 +26,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { useTreeDrag } from './useTreeDrag';
-import { useLayoutTreeStore } from '../store/layout-tree';
+import { useLayoutTreeStore, layoutTreeStorageKey } from '../store/layout-tree';
 import {
   createDefaultTree,
   createLeaf,
@@ -38,7 +38,8 @@ import type { DropZone } from '../store/layout-tree/dropDetection';
 
 // ── 夹具 ────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'crish-layout-tree-v1';
+/** Window-scoped persist key (multi-window isolation). */
+const STORAGE_KEY = layoutTreeStorageKey();
 
 /**
  * 时间控制 — useTreeDrag 用 performance.now() 做 drop zone 检测节流

@@ -16,7 +16,7 @@
  */
 import type { Settings } from '../api/clientApi';
 export type AppSettings = Settings;
-export type GroupState = { id: string; cards: any[]; activeCardId: string | null };
+export type GroupState = { id: string; cards: CardState[]; activeCardId: string | null };
 
 export type SettingsTabType =
   | 'profile'
@@ -124,6 +124,8 @@ export interface FileDiff {
   untracked?: boolean;
   /** Git 状态字母标识（M/A/D/?? 等） */
   gitStatus?: string;
+  /** 临时/预测 diff 标记（未落盘/不可直接 accept） */
+  provisional?: boolean;
 }
 
 // ── CronJob 形态（layout scheduledTasks / RuntimePanel；与 clientApi 结构兼容）──
@@ -198,6 +200,42 @@ export type MessageToolApprovalMetaInput = {
   source?: MessageApprovalRiskSource | undefined;
 };
 
+// ── 图片引用 ───────────────────────────────────────────────────────────────
+
+/**
+ * 结构化图片引用。
+ *
+ * 设计动机：
+ *   - 流式期间从 Markdown/工具输出中增量解析出图片占位，避免每帧全量 reflow
+ *   - source 是原始来源（路径/URL/data URI/SVG 文本），id 为 source hash 用于去重
+ *   - status 字段支撑异步解析：pending → resolved/error（如本地文件转 blob URL）
+ *   - originToolCallId 关联产出该图片的工具调用，便于溯源与按工具分组展示
+ *
+ * 与 extractImageRefs 的关系：
+ *   旧路径返回 string[]（原始来源串），新路径用 MessageImageRef 承载结构化状态，
+ *   流式与终态共享同一形状，避免视图层二次归一化。
+ */
+export interface MessageImageRef {
+  /** source hash，用于去重与稳定 key */
+  id: string;
+  /** 原始来源：本地路径 / http(s) URL / data URI / SVG 文本 / 不安全串 */
+  source: string;
+  /** 来源类别，决定解析路径与渲染策略 */
+  kind: 'local' | 'http' | 'data' | 'svg' | 'unsafe';
+  /** 异步解析完成后的可渲染 URL（blob: / object URL / 远端 URL） */
+  resolvedUrl?: string;
+  /** 异步解析状态；缺省视为 pending */
+  status?: 'pending' | 'resolved' | 'error';
+  /** MIME 类型（如 image/png），用于选择渲染器与降级 */
+  mime?: string;
+  /** alt 文本（无障碍 / 加载失败时展示） */
+  alt?: string;
+  /** 产出该图片的工具调用 id（便于溯源与按工具分组） */
+  originToolCallId?: string;
+  /** 字节大小（用于配额展示/日志；可能缺省） */
+  byteSize?: number;
+}
+
 /**
  * 工具调用生命周期状态。
  * running → success|error；审批路径可经 pending_approval。
@@ -220,6 +258,35 @@ export type MessageToolCallStatus =
  * - rejected：用户拒绝，工具不会执行（与工具执行失败 status='error' 语义不同）
  */
 export type MessageToolCallApprovalDecision = 'approved' | 'rejected';
+
+/**
+ * 结构化图片引用（替代在 output 字符串里塞路径/base64）。
+ * 用于 AI 输出图片的结构化传递。
+ */
+export interface MessageImageRef {
+  /** 唯一 id（基于 source 哈希，用于 React key、缓存、去重） */
+  id: string;
+  /** 原始来源：本地路径 / http URL / data URL / 工具临时文件路径 */
+  source: string;
+  /** 来源类型判别（前端据此选择解析策略） */
+  kind: 'local' | 'http' | 'data' | 'svg' | 'unsafe';
+  /** 解析后可直接写入 <img src> 的 URL（asset:// / data: / http://） */
+  resolvedUrl?: string;
+  /** 解析状态（流式期间异步解析） */
+  status?: 'pending' | 'resolved' | 'error';
+  /** MIME（用于安全判定） */
+  mime?: string;
+  /** 展示用 alt 文本 */
+  alt?: string;
+  /** 来源工具调用 id（便于追溯） */
+  originToolCallId?: string;
+  /** 字节大小（用于限制） */
+  byteSize?: number;
+  /** 图片宽度（可选，用于布局） */
+  width?: number;
+  /** 图片高度（可选，用于布局） */
+  height?: number;
+}
 
 /** 助手消息上的单次工具调用（含可选 diff / 审批元数据） */
 export interface MessageToolCall {
@@ -248,6 +315,8 @@ export interface MessageToolCall {
   completedAt?: number | undefined;
   /** 同一轮并行调用的 turn 标识 */
   turnId?: string | undefined;
+  /** 结构化图片输出（替代在 output 字符串中塞图片） */
+  images?: MessageImageRef[] | undefined;
 }
 
 /**
@@ -302,19 +371,22 @@ export interface SessionMessageToolCallResult {
   isError?: boolean;
 }
 
-/** 时间线块类型：正文段 vs 工具调用锚点 */
-export type MessageTimelineBlockType = 'text' | 'tool_call';
+/** 时间线块类型：正文段 / 工具调用锚点 / 图片块 */
+export type MessageTimelineBlockType = 'text' | 'tool_call' | 'image';
 
 /**
- * 消息时间线块（按发生顺序交错 text / tool_call）。
+ * 消息时间线块（按发生顺序交错 text / tool_call / image）。
  * - text：content 为该段正文；流式时由 streamTextOffset 切分
  * - tool_call：id 对齐 MessageToolCall.id；content 可选摘要
+ * - image：images 承载结构化图片引用
  */
 export interface MessageTimelineBlock {
   type: MessageTimelineBlockType;
   /** tool_call 时对应 toolCall.id；text 段可省略 */
   id?: string;
   content?: string;
+  /** type === 'image' 时承载结构化图片引用 */
+  images?: MessageImageRef[];
 }
 
 /**
@@ -365,6 +437,14 @@ export interface SessionMessage {
   streamTextOffset?: number | undefined;
   /** 思考耗时（秒或 ms，由 setSessionMessageStatus 写入侧约定） */
   thinkingTime?: number | undefined;
+  /** 本条消息中所有图片的结构化索引（跨 text block + tool call 汇总） */
+  images?: MessageImageRef[] | undefined;
+  /** 运行错误诊断详情 */
+  errorDetail?: {
+    message: string;
+    kind: string;
+    technical?: string;
+  } | undefined;
 }
 
 /**
@@ -496,6 +576,19 @@ export interface SessionGoalMode {
 export type SessionTimestampSource = 'local' | 'remote';
 
 /**
+ * 外部会话导入溯源（Claude Code / Codex）。
+ * 单可选字段挂在 SessionState，避免 schema 膨胀；用于软去重（source + sourceSessionId）。
+ */
+export type SessionImportMeta = {
+  source: 'claude-code' | 'codex';
+  sourceSessionId: string;
+  /** 源文件路径（可选，仅展示/调试） */
+  sourcePath?: string;
+  /** 导入时间 ISO */
+  importedAt?: string;
+};
+
+/**
  * 侧栏/主区会话权威形状（sessions[] 与 sessionsById 同引用）。
  * 持久化索引字段见 sessionPersistence.SessionIndexEntry（子集 + messageCount 等）。
  */
@@ -535,6 +628,11 @@ export interface SessionState {
   goalMode?: SessionGoalMode;
   /** 已被截断的工具链 id 列表 */
   truncatedToolChainIds?: string[];
+  /**
+   * 外部导入溯源。有值时表示该会话由 Claude Code / Codex 导入；
+   * 再导入同一 source+sourceSessionId 时软跳过。
+   */
+  importMeta?: SessionImportMeta;
 }
 
 /** 标签拖拽落点预览方向 */
@@ -550,6 +648,12 @@ export interface DropPreviewState {
   colIdx: number;
   groupIdx: number;
   direction: DropPreviewDirection;
+  // 可选像素坐标（由调用方计算填入后用于渲染）
+  left?: number;
+  top?: number;
+  width?: number;
+  height?: number;
+  className?: string;
 }
 
 /**
@@ -557,7 +661,7 @@ export interface DropPreviewState {
  *
  * 设计动机：
  *   - SessionMessage.streamTextOffset 是「消息自身持久化字段」，用于回放历史时切分 text 段
- *   - StreamingMessageRenderState 是「会话级运行态」，由 session-actions 在工具插入 /
+ *   - StreamingMessageRenderState 是「会话级运行态」，由 sessionActions 在工具插入 /
  *     文本更新时同步维护，避免反复在 message 上读改写
  *   - 二者语义相关但用途不同：前者是数据快照，后者是当前流式上下文
  *

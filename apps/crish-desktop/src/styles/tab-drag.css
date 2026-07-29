@@ -1,5 +1,5 @@
 :root {
-  --dnd-indicator-color: var(--accent-color, #4a9eff);
+  --dnd-indicator-color: var(--accent-color);
   --dnd-indicator-width: 2px;
   --dnd-overlay-opacity: 0.92;
   --dnd-transition-duration: 0.12s;
@@ -9,14 +9,16 @@
   position: fixed;
   overflow: hidden;
   will-change: transform;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 4px 14px color-mix(in srgb, var(--shadow-color) 12%, transparent),
+    0 2px 4px color-mix(in srgb, var(--shadow-color) 6%, transparent);
   opacity: 0.95;
   pointer-events: none;
   z-index: var(--z-drag-overlay);
   box-sizing: border-box;
   border: 1px solid var(--border-color);
-  background: var(--bg-primary, #ffffff);
-  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -25,9 +27,9 @@
 .drag-overlay-preview-card {
   position: fixed;
   overflow: hidden;
-  box-shadow: 0 0 16px rgba(0,0,0,0.12);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--shadow-color) 12%, transparent);
   border-radius: 0;
-  border: 1.5px solid color-mix(in srgb, var(--accent-color, #1a73e8) 35%, var(--border-color));
+  border: 1.5px solid color-mix(in srgb, var(--accent-color) 35%, var(--border-color));
   background: var(--bg-card, var(--bg-primary));
   opacity: var(--dnd-overlay-opacity);
   pointer-events: none;

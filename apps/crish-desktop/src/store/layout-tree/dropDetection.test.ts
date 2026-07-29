@@ -3,6 +3,7 @@ import {
   detectDropZone,
   findLeafAtPointer,
   isPointerInRect,
+  isUnitScopedDropAllowed,
   isZoneSame,
   rectFromDOM,
   type DropZone,
@@ -176,6 +177,62 @@ describe('rectFromDOM', () => {
 //
 // 使用场景：useTreeDrag 在 pointermove 期间用 isZoneSame 做 zone 去重，
 // 避免 confidence 浮动触发无效 store setActiveDropZone → 订阅组件 re-render。
+
+// ── isUnitScopedDropAllowed ─────────────────────────────────────────
+//
+// Conversation Unit 作用域：tool 拖拽不得跨 session。
+// 与 applyDrop 共用，保证预览 zone 与 commit 拒绝规则一致。
+
+describe('isUnitScopedDropAllowed — unit scope rejection matrix', () => {
+  it('chat 源：任意目标 session → 允许', () => {
+    expect(isUnitScopedDropAllowed('chat', 's1', 'chat', 's2')).toBe(true);
+    expect(isUnitScopedDropAllowed('chat', 's1', 'diff', 's2')).toBe(true);
+    expect(isUnitScopedDropAllowed('chat', undefined, 'chat', 's2')).toBe(true);
+  });
+
+  it('tool 源无 owner：任意目标 → 允许（兼容旧单坞）', () => {
+    expect(isUnitScopedDropAllowed('diff', undefined, 'terminal', 's2')).toBe(
+      true
+    );
+    expect(isUnitScopedDropAllowed('terminal', '', 'files', 's1')).toBe(true);
+    expect(isUnitScopedDropAllowed('files', undefined, 'diff', undefined)).toBe(
+      true
+    );
+  });
+
+  it('tool 源 s1 → tool 目标 s1 → 允许', () => {
+    expect(isUnitScopedDropAllowed('diff', 's1', 'terminal', 's1')).toBe(true);
+    expect(isUnitScopedDropAllowed('terminal', 's1', 'files', 's1')).toBe(true);
+  });
+
+  it('tool 源 s1 → tool 目标 s2 → 拒绝（跨 session tool merge/split）', () => {
+    expect(isUnitScopedDropAllowed('diff', 's1', 'terminal', 's2')).toBe(false);
+    expect(isUnitScopedDropAllowed('files', 'sess-a', 'agent', 'sess-b')).toBe(
+      false
+    );
+  });
+
+  it('tool 源 s1 → chat 目标 s2 → 拒绝（他 session 的 chat）', () => {
+    expect(isUnitScopedDropAllowed('diff', 's1', 'chat', 's2')).toBe(false);
+  });
+
+  it('tool 源 s1 → chat 目标 s1 → 允许（域隔离另由 isSameDomain 拒绝）', () => {
+    // 本函数只管 session 层；同 session 的 chat 目标在 session 上合法
+    expect(isUnitScopedDropAllowed('diff', 's1', 'chat', 's1')).toBe(true);
+  });
+
+  it('tool 源 s1 → 未绑定 session 的目标 → 允许（merge 时回写 owner）', () => {
+    expect(isUnitScopedDropAllowed('diff', 's1', 'terminal', undefined)).toBe(
+      true
+    );
+    expect(isUnitScopedDropAllowed('diff', 's1', 'terminal', '')).toBe(true);
+  });
+
+  it('sessionId 空白字符视为未绑定', () => {
+    expect(isUnitScopedDropAllowed('diff', '  ', 'terminal', 's2')).toBe(true);
+    expect(isUnitScopedDropAllowed('diff', 's1', 'terminal', '  ')).toBe(true);
+  });
+});
 
 describe('isZoneSame', () => {
   it('两个 null → true', () => {

@@ -76,6 +76,8 @@ type SettingsUiStoreData = SettingsUiSlice & {
   manuallyTriggeredWorkers: ActiveWorkerState[];
 };
 
+export type SettingsUiState = SettingsUiStoreData;
+
 export type SettingsUiStore = SettingsUiStoreData & SettingsUiActions & {
   setUiSize: (size: UiSize) => void;
   setShellChromeMode: (mode: ShellChromeMode) => void;
@@ -133,21 +135,21 @@ const _settingsData: SettingsUiStoreData = {
   manuallyTriggeredWorkers: [],
 };
 
-export const createSettingsUiSlice = (set: any) => ({
+export const createSettingsUiSlice = (set: (fn: (state: SettingsUiState) => void) => void) => ({
   ..._settingsData,
 
-  syncTelemetryData: (data: any) => set((state: any) => {
+  syncTelemetryData: (data: TelemetrySyncPayload) => set((state: SettingsUiState) => {
           if (data.tokenUsage) {
             state.tokenUsage = sanitizeTokenUsage(data.tokenUsage, state.tokenUsage);
           }
-          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.map((w: any) => ({
+          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.map((w: ActiveWorkerState) => ({
             id: w.id,
             taskName: w.taskName,
             elapsedSeconds: Math.max(0, finiteNumber(w.elapsedSeconds, 0) + 2),
           }));
           if (data.activeWorkers) {
             const live = sanitizeActiveWorkers(data.activeWorkers).filter(
-              (w: any) => !state.killedWorkerIds.includes(w.id),
+              (w: ActiveWorkerState) => !state.killedWorkerIds.includes(w.id),
             );
             state.activeWorkers = [...live, ...state.manuallyTriggeredWorkers];
           }
@@ -159,22 +161,22 @@ export const createSettingsUiSlice = (set: any) => ({
           }
         }),
 
-        addCommandPermission: (cmd: string) => set((state: any) => {
+        addCommandPermission: (cmd: string) => set((state: SettingsUiState) => {
           state.commandPermissions = persistAddCommandPermission(state.commandPermissions, cmd);
         }),
-        removeCommandPermission: (cmd: string) => set((state: any) => {
+        removeCommandPermission: (cmd: string) => set((state: SettingsUiState) => {
           state.commandPermissions = persistRemoveCommandPermission(state.commandPermissions, cmd);
         }),
-        setCommandPermissions: (list: string[]) => set((state: any) => {
-          const next = Array.isArray(list) ? list.filter((c: any) => typeof c === 'string') : [];
+        setCommandPermissions: (list: string[]) => set((state: SettingsUiState) => {
+          const next = Array.isArray(list) ? list.filter((c: unknown): c is string => typeof c === 'string') : [];
           state.commandPermissions = next;
           saveCommandPermissions(next);
         }),
 
-        killWorker: (id: string, _taskName: string) => set((state: any) => {
+        killWorker: (id: string, _taskName: string) => set((state: SettingsUiState) => {
           if (!id) return;
-          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.filter((w: any) => w.id !== id);
-          state.activeWorkers = state.activeWorkers.filter((w: any) => w.id !== id);
+          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.filter((w: ActiveWorkerState) => w.id !== id);
+          state.activeWorkers = state.activeWorkers.filter((w: ActiveWorkerState) => w.id !== id);
           if (!state.killedWorkerIds.includes(id) && state.killedWorkerIds.length < MAX_TERMINAL_SESSIONS * 4) {
             state.killedWorkerIds.push(id);
           }
@@ -183,7 +185,7 @@ export const createSettingsUiSlice = (set: any) => ({
           state.tokenUsage.cost = Math.max(0, parseFloat(nextCost.toFixed(4)));
         }),
 
-        triggerCronJobNow: (prompt: string) => set((state: any) => {
+        triggerCronJobNow: (prompt: string) => set((state: SettingsUiState) => {
           const label = typeof prompt === 'string' && prompt.trim() ? prompt.trim() : 'task';
           const newWorker: ActiveWorkerState = {
             id: `worker-manual-${Date.now()}`,

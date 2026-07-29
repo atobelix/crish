@@ -1,12 +1,35 @@
 /**
- * 二叉树布局 — 公共 API barrel。
+ * layout-tree package — **binary geometry write owner**.
  *
- * 仅再导出外部消费者实际使用的符号。
- * 内部跨模块互引应直接走深路径（如 operations.ts → types.ts），
- * 不经过 barrel — barrel 是对外契约，不是内部依赖图。
+ * ## Ownership
  *
- * 维护规则：新增内部 API 不自动加入 barrel；仅当外部消费者实际需要时才导出。
- * 这避免"全量再导出"反模式导致的孤儿 API 堆积。
+ * Owns: LayoutTree root, activeLeafId, history, drag/drop zone, leaf sessionId bind
+ * (via setLeafSessionId / conversation unit helpers). Mutations only through
+ * layoutTreeStore actions + pure `operations.ts` (split/merge/move/resize/applyDrop).
+ *
+ * Does **not** own:
+ * - Tab bar order / openTabs → workspaceShellStore
+ * - Session messages / sessions[] → layoutStore (session facade)
+ * - UI chrome (sidebar, tabMode) → layoutStore
+ *
+ * ## Forbidden writes
+ *
+ * - Components: do not open/focus sessions by mutating the tree alone — shell owns tab lifecycle.
+ * - Do not mirror tree into layoutStore.workspaces for the tree workspace path.
+ * - Do not invent a second tree store; hydrate/restore must go through this package.
+ *
+ * ## compositionRoot naming trap
+ *
+ * `compositionRoot.layout` = **layoutStore** (god chrome/sessions), **not** this package.
+ * Tree has no compositionRoot facade yet (residual — hydrate still uses getState).
+ *
+ * @see ./layoutTreeStore.ts
+ * @see ../storeOwnership.ts (`LAYOUT_TREE_OWNERSHIP`)
+ *
+ * ---
+ * Barrel rules: only re-export symbols external consumers use.
+ * Internal cross-imports use deep paths (e.g. operations → types), not this barrel.
+ * New internal APIs are not auto-exported.
  */
 
 // ── 类型（外部消费者实际引用的） ─────────────────────────────────────
@@ -20,6 +43,7 @@ export type {
 export {
   MIN_SPLIT_RATIO,
   MAX_SPLIT_RATIO,
+  isLeaf,
   isBranch,
   isChatDomain,
   isSameDomain,
@@ -32,18 +56,46 @@ export {
   flattenTree,
 } from './operations';
 
+// ── Conversation Unit（session ↔ chat leaf 1:1 绑定） ────────────────
+export {
+  findChatLeafBySessionId,
+  listChatLeaves,
+  listToolLeaves,
+  findDuplicateSessionChatLeaves,
+  hasChatLeafForSession,
+  findUnitRootId,
+  removeUnitBySessionId,
+  dedupeDuplicateSessionChatLeaves,
+} from './conversationUnit';
+
 // ── Drop Detection ──────────────────────────────────────────────────
 export {
   detectDropZone,
   findLeafAtPointer,
   rectFromDOM,
   isZoneSame,
+  isUnitScopedDropAllowed,
   type DropZone,
   type Rect,
 } from './dropDetection';
 
 // ── Store ───────────────────────────────────────────────────────────
-export { useLayoutTreeStore } from './layoutTreeStore';
+export {
+  useLayoutTreeStore,
+  waitLayoutTreeHydration,
+  layoutTreeStorageKey,
+  LAYOUT_TREE_STORAGE_KEY_BASE,
+} from './layoutTreeStore';
+
+// ── Cold-start restore policy（pure validation） ────────────────────
+export {
+  validateRestorableLayoutTree,
+  isLayoutNodeStructurallyValid,
+  RESTORE_LAST_WORKSPACE_LS_KEY,
+  RESTORE_LAST_WORKSPACE_SETTING_KEY,
+  type LayoutRestoreVerdict,
+  type LayoutRestoreFailReason,
+} from './layoutRestorePolicy';
 
 // ── 迁移 ───────────────────────────────────────────────────────────
 export {

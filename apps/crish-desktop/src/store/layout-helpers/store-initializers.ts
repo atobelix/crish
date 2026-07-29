@@ -17,7 +17,10 @@ import { loadStoredPermissionMode } from '../../api/permissionModes';
 import { createDefaultWorkspace, resolveWorkspacePanelKey } from './ui-selectors';
 import { seedSessions } from './session-selectors';
 import { buildSessionsById } from '../sessionIndex';
-import { isPendingDraft } from '../draftSession';
+import {
+  PENDING_DRAFT_SESSION_ID,
+  isPendingDraft,
+} from '../draftSession';
 import {
   DEFAULT_SETTINGS_TAB,
   DEFAULT_TOKEN_USAGE,
@@ -231,12 +234,20 @@ export function clampActiveWorkspaceIndex(
 
 /**
  * 会话种子后处理：sessionsById 对齐、active 仅在存在时保留、
- * 空列表无 ghost active；pending draft 哨兵归一为空；folderOrder 去空串。
+ * folderOrder 去空串。
+ *
+ * 不变量（系统级）：activeSessionId 在稳态下绝不允许为空字符串。
+ * 必须始终是有效会话 ID 或 PENDING_DRAFT_SESSION_ID（草稿态）。
+ * - 若 active 无效但 sessions 非空：取首个 session 作后备
+ * - 若 sessions 为空或 active 仍无效：进入草稿态
+ * - 草稿哨兵不落盘：持久化层在写入时应剥离，但读取时若遇到则归一为草稿态
+ *
+ * 这样确保应用启动 / 持久化恢复 / 会话删除后绝不会触发"暂无会话"空屏。
  */
 export function sanitizeSessionSeed(seed: {
   sessions: SessionState[];
-  activeSessionId: string;
-  folderOrder: string[];
+  activeSessionId: string | null;
+  folderOrder: string[] | null;
 }): {
   sessions: SessionState[];
   sessionsById: Record<string, SessionState>;
@@ -247,15 +258,18 @@ export function sanitizeSessionSeed(seed: {
   const sessionsById = buildSessionsById(sessions);
   let activeSessionId =
     typeof seed.activeSessionId === 'string' ? seed.activeSessionId : '';
-  // 草稿不落盘/启动归一：pending 哨兵 → 无活动
+  // 草稿哨兵：保持草稿态（不归一为空，避免触发 no-session 空屏）
   if (isPendingDraft(activeSessionId)) {
-    activeSessionId = '';
+    activeSessionId = PENDING_DRAFT_SESSION_ID;
   }
+  // active 指向不存在的会话：优先取首个 session 作后备，否则进入草稿态
   if (!activeSessionId || !sessionsById[activeSessionId]) {
-    activeSessionId = '';
+    activeSessionId =
+      sessions.length > 0 ? (sessions[0]?.id ?? PENDING_DRAFT_SESSION_ID) : PENDING_DRAFT_SESSION_ID;
   }
+  // sessions 为空时强制草稿态（覆盖 active 指向首个 session 但 sessions 已清空的边界）
   if (sessions.length === 0) {
-    activeSessionId = '';
+    activeSessionId = PENDING_DRAFT_SESSION_ID;
   }
   const folderOrder = Array.isArray(seed.folderOrder)
     ? seed.folderOrder.filter((f) => typeof f === 'string' && f.length > 0)

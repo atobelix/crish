@@ -3,16 +3,19 @@ import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import {
   StreamTextBatcher,
   StreamValueBatcher,
-  streamBatchKey,
-  streamToolBatchKey,
   parseStreamToolBatchKey,
   mergeToolCallPatch,
+  isImmediateToolStatus,
   type StreamToolCallPatch,
 } from '../../api/streamTextBatcher';
 import { SessionStreamManager } from '../../api/sessionStreamManager';
-import { useLayoutStore } from '../../store/layoutStore';
-import { getSessionById } from '../../store/sessionStore';
-import { updateMessageText, updateMessageThinking } from '../../api/storeAccess';
+import {
+  clearStreamTool,
+  setStreamText,
+  setStreamThinking,
+  setStreamTool,
+} from '../../store/streamingStore';
+import { commitToolPatchToSession } from './helpers';
 import { registerStreamBatcher, unregisterStreamBatcher } from '../../api/beforeunloadFlush';
 
 export interface StreamBatcherRefs {
@@ -33,6 +36,8 @@ export function useStreamBatchers(): StreamBatcherRefs {
 
   const openSidePanelOnceRef = useRef({ terminal: false, diff: false });
 
+  // Text/thinking flush into lightweight streamingStore (no immer) so token
+  // ticks do not rewrite session messages. Durable commit happens on end/cancel/tool.
   const textBatcherRef = useRef<StreamTextBatcher | null>(null);
   if (!textBatcherRef.current) {
     const batcher = new StreamTextBatcher(
@@ -41,7 +46,7 @@ export function useStreamBatchers(): StreamBatcherRefs {
         if (sep < 0) return;
         const sessionId = key.slice(0, sep);
         const messageId = key.slice(sep + 2);
-        updateMessageText(sessionId, messageId, text);
+        setStreamText(sessionId, messageId, text);
       },
       { intervalMs: 48, maxBufferedChars: 8000 }
     );
@@ -57,7 +62,7 @@ export function useStreamBatchers(): StreamBatcherRefs {
         if (sep < 0) return;
         const sessionId = key.slice(0, sep);
         const messageId = key.slice(sep + 2);
-        updateMessageThinking(sessionId, messageId, thinking);
+        setStreamThinking(sessionId, messageId, thinking);
       },
       { intervalMs: 48, maxBufferedChars: 4000 }
     );
@@ -65,6 +70,8 @@ export function useStreamBatchers(): StreamBatcherRefs {
     thinkingBatcherRef.current = batcher;
   }
 
+  // Intermediate tool progress → streamingStore (no immer). Durable terminal
+  // statuses (success/error/pending_approval) → single session write + clear lite.
   const toolBatcherRef = useRef<StreamValueBatcher<StreamToolCallPatch> | null>(null);
   if (!toolBatcherRef.current) {
     const batcher = new StreamValueBatcher<StreamToolCallPatch>(
@@ -72,25 +79,29 @@ export function useStreamBatchers(): StreamBatcherRefs {
         const parsed = parseStreamToolBatchKey(key);
         if (!parsed) return;
         const { sessionId, messageId, toolId } = parsed;
-        const live = useLayoutStore.getState();
-        const existing = getSessionById(sessionId)
-          ?.messages?.find((m) => m.id === messageId)
-          ?.toolCalls?.find((t) => t.id === toolId);
-        const { id: _id, ...updates } = patch;
-        if (existing) {
-          live.updateMessageToolCall(sessionId, messageId, toolId, updates);
-        } else {
-          live.addMessageToolCall(sessionId, messageId, {
-            id: toolId,
-            name: patch.name || 'tool',
-            arguments: patch.arguments || '',
-            explanation: patch.explanation,
-            status: patch.status || 'running',
-            output: patch.output,
-            diffs: patch.diffs,
-            approvalMeta: patch.approvalMeta,
-          });
+        if (isImmediateToolStatus(patch.status)) {
+          commitToolPatchToSession(sessionId, messageId, toolId, patch);
+          clearStreamTool(sessionId, messageId, toolId);
+          return;
         }
+        setStreamTool(sessionId, messageId, toolId, {
+          id: toolId,
+          ...(patch.name !== undefined ? { name: patch.name } : {}),
+          ...(patch.arguments !== undefined
+            ? { arguments: patch.arguments }
+            : {}),
+          ...(patch.explanation !== undefined
+            ? { explanation: patch.explanation }
+            : {}),
+          ...(patch.status !== undefined ? { status: patch.status } : {}),
+          ...(patch.output !== undefined ? { output: patch.output } : {}),
+          ...(patch.startedAt !== undefined
+            ? { startedAt: patch.startedAt }
+            : {}),
+          ...(patch.approvalMeta !== undefined
+            ? { approvalMeta: patch.approvalMeta }
+            : {}),
+        });
       },
       { intervalMs: 48, merge: mergeToolCallPatch }
     );

@@ -3,7 +3,7 @@ import { nowIsoTimestamp } from '../api/sessionTime';
 import type {
   MessageToolCall,
 } from './types';
-import { getSessionById } from './sessionIndex';
+import { getSessionForWrite, rebindSessionById } from './sessionIndex';
 import { validateStatusTransition } from '../utils/StatusTransitionGuard';
 import { saveMessageSnapshot } from './messageSnapshotsBridge';
 import type { SessionActions, SessionStoreSlice, SessionImmerSet } from './sessionActions';
@@ -15,6 +15,7 @@ import {
   sanitizeToolCallUpdates,
   toolCallPatchHasChanges,
   truncateMessagesForAppend,
+  upsertMessageById,
 } from './sessionSharedHelpers';
 
 export function createSessionMessageActions<T extends SessionStoreSlice>(
@@ -35,7 +36,8 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
   return {
     addMessage: (_wsId, sessionId, message) =>
       set((state) => {
-        const sess = getSessionById(state, sessionId);
+        // getSessionForWrite：经 sessions[] 写，避免 immer 只 fork sessionsById
+        const sess = getSessionForWrite(state, sessionId);
         if (!sess) return;
         if (!sess.messages) sess.messages = [];
 
@@ -54,13 +56,17 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
           }
         }
 
-        truncateMessagesForAppend(
-          sess.messages,
-          MAX_MESSAGES_PER_SESSION,
-          sess,
-          sess.pinnedMessageIds
-        );
-        sess.messages.push(newMsg);
+        // 同 id 已存在 → 原地 update，不 push（幂等 / 防 daemon 回显双写）
+        const existing = getMessageById(sess.messages, newMsg.id);
+        if (!existing) {
+          truncateMessagesForAppend(
+            sess.messages,
+            MAX_MESSAGES_PER_SESSION,
+            sess,
+            sess.pinnedMessageIds
+          );
+        }
+        upsertMessageById(sess.messages, newMsg);
         const ts =
           typeof message.timestamp === 'number' &&
           Number.isFinite(message.timestamp)
@@ -73,11 +79,12 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
         if (message.sender === 'user') {
           maybeAutoTitleSession(state, sess);
         }
+        rebindSessionById(state, sessionId, sess);
       }),
 
     withdrawMessage: (_wsId, sessionId, messageId) =>
       set((state) => {
-        const sess = getSessionById(state, sessionId);
+        const sess = getSessionForWrite(state, sessionId);
         if (sess?.messages) {
           const idx = sess.messages.findIndex((m) => m.id === messageId);
           if (idx !== -1) {
@@ -85,6 +92,15 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
             const prevPinned = sess.pinnedMessageIds
               ? sess.pinnedMessageIds.slice()
               : undefined;
+            // 收集被撤回消息影响的文件路径（轻量：仅取 toolCalls[].diffs[].filePath）
+            const pathSet = new Set<string>();
+            for (const m of prevMessages.slice(idx)) {
+              for (const tc of m.toolCalls || []) {
+                for (const d of tc.diffs || []) {
+                  if (d.filePath) pathSet.add(d.filePath);
+                }
+              }
+            }
             sess.messages = sess.messages.slice(0, idx);
             if (sess.pinnedMessageIds?.length) {
               const keep = new Set(sess.messages.map((m) => m.id));
@@ -101,12 +117,13 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
                 operation: 'withdraw',
                 messages: prevMessages,
                 ...(prevPinned !== undefined ? { pinnedMessageIds: prevPinned } : {}),
-                diffFilePaths: [],
+                diffFilePaths: [...pathSet],
                 timestamp: Date.now(),
                 description: '撤回消息',
               },
               { afterMessages: sess.messages }
             );
+            rebindSessionById(state, sessionId, sess);
           }
         }
       }),
@@ -119,6 +136,7 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
         if (!tc) return;
         if (tc.approvalDecision !== decision) {
           tc.approvalDecision = decision;
+          rebindSessionById(state, sessionId, hit.session);
         }
       }),
 
@@ -157,6 +175,7 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
         } else if (segment.length > 0) {
           msg.blocks.push({ type: 'text' as const, content: segment });
         }
+        rebindSessionById(state, sessionId, hit.session);
       }),
 
     updateMessageThinking: (sessionId, messageId, thinking) =>
@@ -165,6 +184,7 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
         if (!hit) return;
         if (hit.message.thinking === thinking) return;
         hit.message.thinking = thinking;
+        rebindSessionById(state, sessionId, hit.session);
       }),
 
     addMessageToolCall: (sessionId, messageId, toolCall) =>
@@ -203,6 +223,7 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
         const existing = msg.toolCalls.find((t) => t.id === toolCall.id);
         if (existing) {
           mergeInto(existing);
+          rebindSessionById(state, sessionId, hit.session);
           return;
         }
 
@@ -219,6 +240,7 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
         ) {
           msg.blocks.push({ type: 'tool_call' as const, id: toolCall.id });
         }
+        rebindSessionById(state, sessionId, hit.session);
       }),
 
     updateMessageToolCall: (sessionId, messageId, toolCallId, updates) =>
@@ -232,6 +254,7 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
         const effective = sanitizeToolCallUpdates(tc, updates);
         if (!toolCallPatchHasChanges(tc, effective)) return;
         applyMessageToolCallPatch(tc, effective);
+        rebindSessionById(state, sessionId, hit.session);
       }),
 
     setSessionMessageStatus: (
@@ -247,7 +270,8 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
         if (
           hit.message.status === status &&
           (thinkingTime === undefined ||
-            hit.message.thinkingTime === thinkingTime)
+            hit.message.thinkingTime === thinkingTime) &&
+          !opts?.errorDetail
         ) {
           return;
         }
@@ -268,11 +292,15 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
         if (thinkingTime !== undefined) {
           hit.message.thinkingTime = thinkingTime;
         }
+        if (opts?.errorDetail) {
+          hit.message.errorDetail = opts.errorDetail;
+        }
+        rebindSessionById(state, sessionId, hit.session);
       }),
 
     pinMessage: (sessionId, messageId) =>
       set((state) => {
-        const sess = getSessionById(state, sessionId);
+        const sess = getSessionForWrite(state, sessionId);
         if (!sess) return;
         if (!getMessageById(sess.messages, messageId)) return;
         if (!sess.pinnedMessageIds) sess.pinnedMessageIds = [];
@@ -281,17 +309,19 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
           sess.pinnedMessageIds.length < MAX_MESSAGES_PER_SESSION
         ) {
           sess.pinnedMessageIds.push(messageId);
+          rebindSessionById(state, sessionId, sess);
         }
       }),
 
     unpinMessage: (sessionId, messageId) =>
       set((state) => {
-        const sess = getSessionById(state, sessionId);
+        const sess = getSessionForWrite(state, sessionId);
         if (!sess?.pinnedMessageIds?.length) return;
-        sess.pinnedMessageIds = sess.pinnedMessageIds.filter(
-          (id) => id !== messageId
-        );
+        const next = sess.pinnedMessageIds.filter((id) => id !== messageId);
+        if (next.length === sess.pinnedMessageIds.length) return;
+        sess.pinnedMessageIds = next;
         if (sess.pinnedMessageIds.length === 0) delete sess.pinnedMessageIds;
+        rebindSessionById(state, sessionId, sess);
       }),
   };
 }

@@ -1,38 +1,20 @@
 /**
- * 自动会话索引中间件：监听 sessions 变化，自动重建 sessionsById 映射。
+ * 自动会话索引中间件：在 set 路径内维护 sessionsById。
  *
- * 纯透传中间件（不添加 / 消费 mutator），泛型 Mps / Mcs 完整透传，
- * 确保 immer / devtools / persist 等其他中间件的 mutator 元组不丢失。
+ * 布局：withAutoIndex(immer(...))。
  *
- * 工作原理：在 store 创建后注册 subscribe 监听器，当 sessions 数组
- * 引用变化时，重建 id → session 映射并写入 state.sessionsById。
- * 使用引用比较（!==）避免无变化的冗余重建。
- *
- * 类型约束说明：
- *   - S 必须 extends SessionsAwareState：本中间件需要读写 sessions / sessionsById
- *   - set 在 immer + persist + devtools 组合下类型退化为不可调用的 union（TS2349），
- *     需通过 unknown 中转断言为 recipe-only 签名（见 subscribe 回调内注释）。
- *     这是 zustand middleware 类型增广的已知限制，运行时 set 仍支持 recipe 形式。
- *   - withAutoIndex 必须应用在 immer（或其他支持 recipe 形式的中间件）之后。
- *     layoutStore 的中间件组合已满足此约束：
- *     withDevtools(withLogger(withPersist(withAutoIndex(immer(...)))))
+ * 约束：
+ * - 绝不对 frozen immer 结果做原地赋值
+ * - 只要 sessions 数组引用发生变化，就重建 map，防止 sessionsById 里的 session 对象引用过时
+ * - 禁止 subscribe 静默改 state
  */
 import type { StateCreator, StoreMutatorIdentifier } from 'zustand/vanilla';
 
-/**
- * 本中间件要求 state 形状包含 sessions 数组与 sessionsById 映射。
- * 泛型 S 必须 extends 此接口，使 set/subscribe 内可安全读写这两个字段。
- */
 export interface SessionsAwareState {
   sessions: ReadonlyArray<{ id: string }>;
   sessionsById: Record<string, unknown>;
 }
 
-/**
- * 从 sessions 数组构建 id → session 映射。
- * - 跳过无 id 或 id 非字符串的元素
- * - 使用 Object.create(null) 避免 prototype 污染
- */
 function buildSessionsMap(
   sessions: ReadonlyArray<{ id: string }>
 ): Record<string, unknown> {
@@ -45,24 +27,79 @@ function buildSessionsMap(
   return map;
 }
 
+/** 稳定的 id 集合键：顺序敏感 */
+function sessionsIdKey(sessions: ReadonlyArray<{ id: string }>): string {
+  let key = '';
+  for (let i = 0; i < sessions.length; i++) {
+    const id = sessions[i]?.id;
+    if (typeof id === 'string' && id.length > 0) {
+      if (key) key += '\0';
+      key += id;
+    }
+  }
+  return key;
+}
+
+type AnySet = (partial: unknown, replace?: boolean) => void;
+
 export const withAutoIndex = <
   S extends SessionsAwareState,
   Mps extends [StoreMutatorIdentifier, unknown][] = [],
   Mcs extends [StoreMutatorIdentifier, unknown][] = [],
 >(
-  config: StateCreator<S, Mps, Mcs>,
+  config: StateCreator<S, Mps, Mcs>
 ): StateCreator<S, Mps, Mcs> =>
   (set, get, api) => {
-    const store = config(set, get, api);
-    let prevSessions: ReadonlyArray<{ id: string }> | null = null;
+    let prevSessions: ReadonlyArray<unknown> | null = null;
+    const rawSet = set as never as AnySet;
 
-    api.subscribe((state) => {
-      if (!state || !Array.isArray(state.sessions)) return;
-      if (state.sessions === prevSessions) return;
-      prevSessions = state.sessions;
-      const newMap = buildSessionsMap(state.sessions);
-      (state as SessionsAwareState).sessionsById = newMap;
-    });
+    const setWithIndex: AnySet = (partial, replace) => {
+      if (typeof partial === 'function') {
+        rawSet((state: S) => {
+          const fn = partial as (s: S) => S | void;
+          const produced = fn(state);
+          const next =
+            produced != null && typeof produced === 'object'
+              ? (produced as S)
+              : state;
+
+          if (!next || !Array.isArray(next.sessions) || next.sessions === prevSessions) {
+            return next;
+          }
+          prevSessions = next.sessions;
+          return {
+            ...next,
+            sessionsById: buildSessionsMap(next.sessions),
+          };
+        }, replace);
+        return;
+      }
+
+      rawSet(partial, replace);
+
+      // partial merge 后根据 get() 校正索引
+      const after = get() as (S & SessionsAwareState) | undefined;
+      if (!after || !Array.isArray(after.sessions) || after.sessions === prevSessions) return;
+      prevSessions = after.sessions;
+      rawSet({
+        sessionsById: buildSessionsMap(after.sessions),
+      } as Partial<S>);
+    };
+
+    const store = config(setWithIndex as never as typeof set, get, api);
+
+    const seed = store as (S & SessionsAwareState) | undefined;
+    if (seed && Array.isArray(seed.sessions)) {
+      prevSessions = seed.sessions;
+      if (!seed.sessionsById || Object.keys(seed.sessionsById).length === 0) {
+        return {
+          ...store,
+          sessionsById: buildSessionsMap(seed.sessions),
+        };
+      }
+    }
 
     return store;
   };
+
+export { sessionsIdKey, buildSessionsMap };

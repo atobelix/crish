@@ -1,8 +1,41 @@
 # store 架构说明
 
+## Layout identity ownership（OPT-C1 · write owners）
+
+Three **real** store instances matter for “what is open / where is it painted / what is the session body”. Facades on layout are **aliases**, not extra create().
+
+| Instance | Path | Write owner for | Forbidden for new code |
+|----------|------|-----------------|------------------------|
+| **layoutStore** (god) | `layoutStore.ts` | sessions[], messages, agents, chrome (sidebar/tabMode/plan), appSettings, legacy columns | Opening tabs by `setActiveSessionId` alone; mutating layout-tree |
+| **workspaceShellStore** | `workspace-shell/*` | openTabs / TabSurface, activeTabId, rightDock, shellReady; open/focus/close/new-draft | Session message body; raw tree split as “open chat” |
+| **layoutTreeStore** | `layout-tree/*` | binary tree geometry, activeLeafId, history, leaf↔session bind | Tab strip order; sessions[] CRUD |
+
+| Alias (same zustand as layoutStore) | Path |
+|-------------------------------------|------|
+| `useSessionStore` | `sessionStore.ts` |
+| `useWorkspaceStore` | `workspaceStore.ts` — **≠** workspace-shell |
+| `useSettingsUiStore` | `settingsUiStore.ts` |
+
+### Command entry (compositionRoot naming trap)
+
+| Want | Use | Do **not** confuse with |
+|------|-----|-------------------------|
+| New draft / open tab | `compositionRoot.shell` / `session.openOrFocusSession` | `compositionRoot.layout` |
+| Sessions list / sidebar / plan / appSettings | `compositionRoot.layout` / session facade | **layout-tree** (no facade yet) |
+| Split / merge / drop panels | `useLayoutTreeStore` + layout-tree ops | `compositionRoot.layout` |
+| Legacy card columns | `compositionRoot.workspace` | workspace-shell |
+
+**One owner per gesture:** open/focus/new-draft → **shell only** (shell may call `setActiveSessionId` internally). Components must not call `setActiveSessionId` *and* shell activate for the same open.
+
+Type tags: `storeOwnership.ts` (`StoreOwnership`, `SHELL_TAB_OWNERSHIP`, …).
+
+**Current truth:** sessions **still live on layoutStore** (not mass-split this wave). Phase 2 may extract message stream; until then session facade is the API.
+
+---
+
 ## 现状（Phase 0/1 · facade 收尾）
 
-桌面 UI 状态仍是 **单一** zustand + immer 实例：`useLayoutStore`（`layoutStore.ts`）。
+桌面 UI **会话/chrome/legacy workspace** 仍是 **单一** zustand + immer 实例：`useLayoutStore`（`layoutStore.ts`）。Tab 条与二叉树是 sibling stores（上表）。
 
 | 层 | 文件 | 职责 |
 |----|------|------|
@@ -12,10 +45,13 @@
 | 纯函数 | `layoutHelpers.ts` | 默认工作区、列宽、group 查找、diff/终端缓冲 |
 | 索引 | `sessionIndex.ts` | `sessionsById` O(1) + 一致性校验 + 侧栏投影（空壳过滤） |
 | 类型 | `types.ts` | 公共类型 |
+| ownership tags | `storeOwnership.ts` | domain / write-owner aliases（文档用） |
 | barrel | `index.ts` | 统一 re-export |
 | 命令式 api | `api/storeAccess.ts` | 非 React 热路径集中 getState / action |
+| TabSurface | `workspace-shell/*` | open tabs / dock（独立 store） |
+| Geometry | `layout-tree/*` | binary tree（独立 store） |
 
-**兼容约定**：`import { useLayoutStore } from '../store/layoutStore'` **不得破坏**。新代码优先 facade / barrel / `storeAccess`。
+**兼容约定**：`import { useLayoutStore } from '../store/layoutStore'` **不得破坏**。新代码优先 facade / barrel / `storeAccess` / compositionRoot。
 
 ### 域 facade（薄代理 → 未来 multi-store）
 
@@ -66,6 +102,23 @@ api/* 可 → store；store 避免 → 组件
 - 结构变更后：`reindexSessionsById` / `buildSessionsById` / create·branch 时点写索引。
 - 查找：`getSessionById`（索引未命中则线性回退并回填）。
 - 一致性：`checkSessionsIndex` / `isSessionsIndexConsistent` / `assertSessionsIndexConsistent`（测试与调试；热路径勿 assert）。
+
+## 会话消息水合（lazy vs eager）
+
+| 路径 | messages | 说明 |
+|------|----------|------|
+| 本地 disk / SQLite `hydrateSessionsFrom*` | **eager** 全量 body | `loadSessionBody` 与 index 一并回灌 |
+| daemon `list-sessions` merge | **lazy** `messages: []` + title | 见 `sessionDaemonSync` |
+| `setActiveSessionId` | 空且 `!hydratedFromEngine` → 拉 `session-events` | `needsEngineMessageHydrate` |
+| `prepareSessionsForUi` | **不** strip messages | 只补默认标题 + prune 幽灵空壳（I-DRAFT） |
+
+因此调试/MCP 见 `sessions[].messages` 全 length 0 而 titles 存在：**对未 activate 的远程壳是预期**，不是 sessions 丢消息。
+activate 后 `sessions[]` 与 `sessionsById` 同引用同时有正文；`hydratedFromEngine=true`。
+
+**Immer 写路径注意**：只经 `sessionsById[id]` mutate 时，immer 可能把 map 值 fork 成新对象，
+`sessions[]` 仍持旧引用 → 看起来像「列表丢消息」。activate 水合与结构性写入须用
+`getSessionForWrite`（优先 `sessions[]` 再 rebind map），或依赖 `withAutoIndex` 在
+sessions 数组引用变化时从数组重建 map。
 
 ```ts
 // ✅

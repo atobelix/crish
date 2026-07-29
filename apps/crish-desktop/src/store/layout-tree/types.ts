@@ -15,6 +15,11 @@ export interface LayoutLeaf {
   tabs: string[];
   /** 当前激活的 tab id */
   activeTab: string;
+  /**
+   * 多 chat 分屏：leaf 绑定的会话 id。
+   * 有值时 ChatCard 优先用此 session，而非 shell 全局 active。
+   */
+  sessionId?: string;
 }
 
 /** 分支节点：严格二叉分割 */
@@ -44,6 +49,8 @@ export interface FlatPanel {
   panelId: string;
   tabs: string[];
   activeTab: string;
+  /** 多 chat 分屏绑定的会话 id（透传自 LayoutLeaf.sessionId） */
+  sessionId?: string;
   /** 相对于整个工作区的 rect（0-1 百分比） */
   rect: { x: number; y: number; width: number; height: number };
 }
@@ -132,18 +139,21 @@ export function generateNodeId(prefix = 'node'): string {
 export function createLeaf(
   panelId: string,
   tabs?: string[],
-  activeTab?: string
+  activeTab?: string,
+  sessionId?: string
 ): LayoutLeaf {
   const tabList = tabs && tabs.length > 0 ? tabs : [panelId];
   const activeTabResolved =
     activeTab && tabList.includes(activeTab) ? activeTab : tabList[0]!;
-  return {
+  const leaf: LayoutLeaf = {
     type: 'leaf',
     id: generateNodeId('leaf'),
     panelId,
     tabs: tabList,
     activeTab: activeTabResolved,
   };
+  if (sessionId) leaf.sessionId = sessionId;
+  return leaf;
 }
 
 /** 创建分支节点 */

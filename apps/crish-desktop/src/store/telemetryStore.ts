@@ -14,13 +14,13 @@ import {
   type ActiveWorkerState,
   type TelemetrySyncPayload,
 } from './layoutStore';
-import type { CronJob, McpServer } from '../api/clientApi';
+import type { CronJob, McpServer, ProviderInfo } from '../api/clientApi';
 
 type TelemetryStoreData = {
-  appSettings: any | null;
+  appSettings: Record<string, unknown> | null;
   scheduledTasks: CronJob[];
   mcpServers: McpServer[];
-  providers: any[];
+  providers: ProviderInfo[];
   activeWorkers: ActiveWorkerState[];
   tokenUsage: TokenUsageState;
   killedWorkerIds: string[];
@@ -29,10 +29,10 @@ type TelemetryStoreData = {
 };
 
 type TelemetryStore = TelemetryStoreData & {
-  setAppSettings: (settings: any | null) => void;
+  setAppSettings: (settings: Record<string, unknown> | null) => void;
   setScheduledTasks: (tasks: CronJob[]) => void;
   setMcpServers: (servers: McpServer[]) => void;
-  setProviders: (providers: any[]) => void;
+  setProviders: (providers: ProviderInfo[]) => void;
   syncTelemetryData: (data: TelemetrySyncPayload) => void;
   killWorker: (id: string, taskName: string) => void;
   triggerCronJobNow: (prompt: string) => void;
@@ -58,34 +58,34 @@ const _telemetryData: TelemetryStoreData = {
 export const useTelemetryStore = create<TelemetryStore>()(
   withDevtools(
     withLogger(
-      immer((set: any, get: any) => ({
+      immer((set, _get) => ({
         ..._telemetryData,
         killWorkerIds: [],
 
-        setAppSettings: (settings: any) => set((state: any) => {
+        setAppSettings: (settings: Record<string, unknown> | null) => set((state: TelemetryStore) => {
           state.appSettings = settings;
         }),
-        setScheduledTasks: (tasks: any) => set((state: any) => {
+        setScheduledTasks: (tasks: CronJob[]) => set((state: TelemetryStore) => {
           state.scheduledTasks = Array.isArray(tasks) ? tasks : [];
         }),
-        setMcpServers: (servers: any) => set((state: any) => {
+        setMcpServers: (servers: McpServer[]) => set((state: TelemetryStore) => {
           state.mcpServers = Array.isArray(servers) ? servers : [];
         }),
-        setProviders: (providers: any) => set((state: any) => {
+        setProviders: (providers: ProviderInfo[]) => set((state: TelemetryStore) => {
           state.providers = Array.isArray(providers) ? providers : [];
         }),
-        syncTelemetryData: (data: TelemetrySyncPayload) => set((state: any) => {
+        syncTelemetryData: (data: TelemetrySyncPayload) => set((state: TelemetryStore) => {
           if (data.tokenUsage) {
             state.tokenUsage = sanitizeTokenUsage(data.tokenUsage, state.tokenUsage);
           }
-          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.map((w: any) => ({
+          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.map((w) => ({
             id: w.id,
             taskName: w.taskName,
             elapsedSeconds: Math.max(0, finiteNumber(w.elapsedSeconds, 0) + 2),
           }));
           if (data.activeWorkers) {
             const live = sanitizeActiveWorkers(data.activeWorkers).filter(
-              (w: any) => !state.killedWorkerIds.includes(w.id),
+              (w) => !state.killedWorkerIds.includes(w.id),
             );
             state.activeWorkers = [...live, ...state.manuallyTriggeredWorkers];
           }
@@ -96,10 +96,10 @@ export const useTelemetryStore = create<TelemetryStore>()(
             state.scheduledTasks = Array.isArray(data.cronJobs) ? data.cronJobs : state.scheduledTasks;
           }
         }),
-        killWorker: (id: string, _taskName: string) => set((state: any) => {
+        killWorker: (id: string, _taskName: string) => set((state: TelemetryStore) => {
           if (!id) return;
-          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.filter((w: any) => w.id !== id);
-          state.activeWorkers = state.activeWorkers.filter((w: any) => w.id !== id);
+          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.filter((w) => w.id !== id);
+          state.activeWorkers = state.activeWorkers.filter((w) => w.id !== id);
           if (!state.killedWorkerIds.includes(id) && state.killedWorkerIds.length < MAX_TERMINAL_SESSIONS * 4) {
             state.killedWorkerIds.push(id);
           }
@@ -107,7 +107,7 @@ export const useTelemetryStore = create<TelemetryStore>()(
           const nextCost = finiteNumber(state.tokenUsage.cost, 0) - 0.0045;
           state.tokenUsage.cost = Math.max(0, parseFloat(nextCost.toFixed(4)));
         }),
-        triggerCronJobNow: (prompt: string) => set((state: any) => {
+        triggerCronJobNow: (prompt: string) => set((state: TelemetryStore) => {
           const label = typeof prompt === 'string' && prompt.trim() ? prompt.trim() : 'task';
           const newWorker: ActiveWorkerState = {
             id: `worker-manual-${Date.now()}`,
@@ -117,7 +117,7 @@ export const useTelemetryStore = create<TelemetryStore>()(
           if (state.manuallyTriggeredWorkers.length < MAX_TERMINAL_SESSIONS) state.manuallyTriggeredWorkers.push(newWorker);
           if (state.activeWorkers.length < MAX_DIFF_FILES * 2) state.activeWorkers.push(newWorker);
         }),
-      })) as any,
+      }))
     ),
     'TelemetryStore',
   ),

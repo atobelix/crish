@@ -1,3 +1,22 @@
+/**
+ * 工作区域 facade — 与 useLayoutStore **同一 zustand 实例**（非独立 create）。
+ *
+ * Owns (API surface): legacy workspaces / columns / groups / cards, DnD preview,
+ * tabMode flags that still live on layoutStore.
+ *
+ * ## Not the shell
+ *
+ * **workspaceStore ≠ workspaceShellStore.**
+ * - This facade: pre-tree card columns + workspace DnD on the god layout instance.
+ * - `workspace-shell`: TabSurface open tabs + rightDock (separate zustand).
+ * - `layout-tree`: binary geometry (separate zustand).
+ *
+ * compositionRoot.`workspace` → this facade; compositionRoot.`shell` → workspace-shell.
+ *
+ * @see ./storeOwnership.ts
+ * @see ./layoutStore.ts package header
+ */
+
 import { useShallow } from './useShallowSelector';
 
 import { DEFAULT_WORKSPACE_ID, seedInitialWorkspaces, clampActiveWorkspaceIndex, useLayoutStore } from './layoutStore';

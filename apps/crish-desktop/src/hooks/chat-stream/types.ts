@@ -8,6 +8,13 @@ export type ChatAttachment = {
   mime?: string;
 };
 
+export interface QueuedMessage {
+  id: string;
+  text: string;
+  attachments: ChatAttachment[];
+  createdAt: number;
+}
+
 export type RunNotice = {
   text: string;
   kind?: string | undefined;
@@ -39,8 +46,15 @@ export interface UseChatStreamResult {
     sessionIdOverride?: string,
     streamOptions?: StreamRequestOptions
   ) => void;
-  handleSendChat: (isInsert?: boolean, textOverride?: string) => Promise<void>;
+  handleSendChat: (
+    isInsert?: boolean,
+    textOverride?: string,
+    attachmentsOverride?: ChatAttachment[]
+  ) => Promise<void>;
+  /** 默认 Stop = L2 cooperative_stop */
   handleStopGeneration: () => void;
+  /** 强制取消 = L3 force_cancel（UI 二次确认后调用） */
+  handleForceCancelGeneration: () => void;
 }
 
 export type TerminalToolReason = 'stop' | 'complete' | 'error';

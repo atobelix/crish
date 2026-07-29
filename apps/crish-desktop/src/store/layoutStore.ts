@@ -1,3 +1,48 @@
+/**
+ * layoutStore — **god-object** (single zustand + immer instance).
+ *
+ * ## Ownership (write authority)
+ *
+ * This store is the **authority** for:
+ * - **Session domain**: sessions[], sessionsById, activeSessionId, draftFolder,
+ *   agents, messages, composer drafts (also via `sessionStore` facade — same instance)
+ * - **Legacy workspace columns**: workspaces / groups / cards / DnD preview
+ *   (also via `workspaceStore` facade — same instance; pre-tree fallback UI)
+ * - **Layout chrome**: sidebarCollapsed, tabModeEnabled, shellChromeMode,
+ *   chatMainSurface, uiSize, settings overlay, permission/plan mode
+ * - **App settings & telemetry**: appSettings, cron, mcp, tokenUsage, workers
+ * - **Cross-cutting UI buffers**: diffFiles, terminalLines / terminalBySession
+ *
+ * ## Does NOT own (sibling stores — do not dual-write from here)
+ *
+ * | Concern | Owner store | Entry for new code |
+ * |---------|-------------|--------------------|
+ * | Open tabs / TabSurface / rightDock / shellReady | `workspaceShellStore` | `compositionRoot.shell` / shell actions |
+ * | Binary tree geometry (split/merge/drop/activeLeaf) | `layoutTreeStore` | layout-tree ops / `useLayoutTreeStore` |
+ *
+ * ## Forbidden writes (components / features)
+ *
+ * - **Do not** open/focus/new-draft by only calling `setActiveSessionId` — go through
+ *   shell (`openOrFocusSession` / `openNewDraftTab`); shell may call session activate internally.
+ * - **Do not** mutate layout-tree geometry from layoutStore actions.
+ * - **Do not** invent a third layout store; facades (`sessionStore` / `workspaceStore` /
+ *   `settingsUiStore`) are **aliases**, not separate create() instances.
+ *
+ * ## compositionRoot naming trap
+ *
+ * `getCompositionRoot().layout` = **this** store (chrome + sessions + settings).
+ * It is **not** `layoutTreeStore`. Shell tabs = `.shell`; tree = no facade yet.
+ *
+ * ## Current truth (OPT-C1)
+ *
+ * Sessions **still live here** (not mass-split to a separate session store this wave).
+ * Phase 2 may extract message stream; until then treat session facade as the API.
+ *
+ * @see store/README.md § Layout identity ownership
+ * @see store/storeOwnership.ts
+ * @see docs/architecture/desktop-composition-and-stores.md
+ */
+
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { withDevtools } from './middleware/withDevtools';
@@ -43,6 +88,7 @@ import {
 import {
   initStorePersistence,
   waitForStoreHydration,
+  type StoreApiLike,
 } from './layout-helpers/store-persistence';
 import { createLayoutCoreActions } from './layout-helpers/layout-core-actions';
 
@@ -191,6 +237,7 @@ export interface LayoutStore extends SessionActions, WorkspaceActions {
   /** 按会话隔离的终端缓冲（H2） */
   terminalBySession: Record<string, string[]>;
   addTerminalLine: (line: string, sessionId?: string) => void;
+  addTerminalLines: (lines: string[], sessionId?: string) => void;
   clearTerminalLines: (sessionId?: string) => void;
   manuallyTriggeredWorkers: ActiveWorkerState[];
   triggerCronJobNow: (prompt: string) => void;
@@ -278,10 +325,10 @@ export const useLayoutStore = create<LayoutStore>()(
 );
 
 if (typeof window !== 'undefined') {
-  (window as any).useLayoutStore = useLayoutStore;
-  (window as any).__storeUpdateCount = 0;
+  window.useLayoutStore = useLayoutStore;
+  window.__storeUpdateCount = 0;
   useLayoutStore.subscribe(() => {
-    (window as any).__storeUpdateCount = ((window as any).__storeUpdateCount || 0) + 1;
+    window.__storeUpdateCount = (window.__storeUpdateCount || 0) + 1;
   });
 }
 
@@ -328,7 +375,7 @@ export type LayoutStoreState = Pick<
 
 /** 等待 store 会话回灌完成 */
 export function waitForHydration(): Promise<void> {
-  return waitForStoreHydration(useLayoutStore as any);
+  return waitForStoreHydration(useLayoutStore as StoreApiLike<LayoutStore>);
 }
 
 /**
@@ -338,7 +385,7 @@ export function waitForHydration(): Promise<void> {
  * （window.useLayoutStore 由 App.tsx 以 CrishWindow 类型挂载，此处不再重复 attach）
  */
 export function initLayoutStorePersistence(): () => void {
-  return initStorePersistence(useLayoutStore as any);
+  return initStorePersistence(useLayoutStore as StoreApiLike<LayoutStore>);
 }
 
 export type { GroupState, AppSettings } from './types';

@@ -37,12 +37,12 @@
 
 /* ── Drag & Drop Indicators ─────────────────────────────────────────────── */
 
-/* The main drop zone indicator (side/top/bottom strips) — positioned via JS */
+/* The main drop zone indicator (side/top/bottom strips) �?positioned via JS */
 .drop-indicator {
   position: fixed;
   background-color: color-mix(
     in srgb,
-    var(--accent-color, #1a73e8) 15%,
+    var(--accent-color) 15%,
     transparent
   );
   border: 2px solid var(--accent-color);
@@ -55,7 +55,7 @@
     border-color var(--transition-fast);
 }
 
-/* Tab insert position line — rendered via JS into document.body */
+/* Tab insert position line �?rendered via JS into document.body */
 .tab-insert-line {
   position: fixed;
   width: 2px;
@@ -66,7 +66,7 @@
   box-shadow: none;
 }
 
-/* Drag preview overlay — cloned card following cursor */
+/* Drag preview overlay �?cloned card following cursor */
 .drag-overlay-preview-card {
   position: fixed;
   pointer-events: none;
@@ -85,6 +85,19 @@ body.dragging-card * {
   cursor: grabbing !important;
 }
 
+/* 顶栏会话标签拖拽：保�?tab 可命中（reorder），ghost 永不拦截 pointer */
+body.topbar-dragging {
+  cursor: grabbing !important;
+}
+body.topbar-dragging .topbar-drag-ghost,
+body.topbar-dragging .topbar-drag-ghost * {
+  pointer-events: none !important;
+}
+/* 拖拽中仍允许命中其它 session tab（勿全局 none�?*/
+body.topbar-dragging [data-topbar-session-id] {
+  pointer-events: auto !important;
+}
+
 /* Disable layout transition during window resize to prevent black gaps and maximize performance */
 .window-resizing .main-layout {
   transition: none !important;
@@ -93,5 +106,15 @@ body.dragging-card * {
 /* Hide the source element in the list during drag */
 .drag-ghost-hidden {
   opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Sidebar session list pointer-drag */
+body.sidebar-dragging {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+body.sidebar-dragging .sidebar-drag-ghost,
+body.sidebar-dragging .sidebar-drag-ghost * {
   pointer-events: none !important;
 }

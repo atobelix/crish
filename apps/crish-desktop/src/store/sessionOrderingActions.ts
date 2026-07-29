@@ -6,6 +6,7 @@ import { nowIsoTimestamp } from '../api/sessionTime';
 import type { SessionState } from './types';
 import {
   getSessionById,
+  getSessionForWrite,
   getSessionIndex,
 } from './sessionIndex';
 import type { SessionActions, SessionStoreSlice, SessionImmerSet } from './sessionActions';
@@ -34,23 +35,35 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
     pinSession: (sessionId: string) =>
       set((state) => {
         if (!sessionId) return;
-        const sess = getSessionById(state, sessionId);
-        if (sess) sess.isPinned = true;
+        // 走 sessions 数组下标，确保 immer 对 sessions 引用变更可被 useSidebarSessions 感知
+        const idx = getSessionIndex(state, sessionId);
+        if (idx < 0) return;
+        const sess = state.sessions[idx]!;
+        sess.isPinned = true;
+        // 移到 sessions 顶部，置顶区稳定「最近 pin 在上」
+        state.sessions.splice(idx, 1);
+        state.sessions.splice(0, 0, sess);
+        state.sessionsById[sess.id] = sess;
       }),
 
     unpinSession: (sessionId: string) =>
       set((state) => {
         if (!sessionId) return;
-        const sess = getSessionById(state, sessionId);
-        if (sess) sess.isPinned = false;
+        const idx = getSessionIndex(state, sessionId);
+        if (idx < 0) return;
+        const sess = state.sessions[idx]!;
+        // 仅取消置顶，folder 保持原样，由 groupUnpinnedByProject 归入项目/通用
+        sess.isPinned = false;
+        state.sessionsById[sess.id] = sess;
       }),
 
     archiveSession: (sessionId: string) =>
       set((state) => {
         if (!sessionId) return;
-        const sess = getSessionById(state, sessionId);
+        const sess = getSessionForWrite(state, sessionId);
         if (!sess || sess.isArchived) return;
         sess.isArchived = true;
+        state.sessionsById[sessionId] = sess;
         if (state.activeSessionId === sessionId) {
           const idx = getSessionIndex(state, sessionId);
           const fallback = pickFallbackActiveSessionId(
@@ -74,9 +87,10 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
     unarchiveSession: (sessionId: string) =>
       set((state) => {
         if (!sessionId) return;
-        const sess = getSessionById(state, sessionId);
+        const sess = getSessionForWrite(state, sessionId);
         if (!sess || !sess.isArchived) return;
         sess.isArchived = false;
+        state.sessionsById[sessionId] = sess;
       }),
 
     branchSession: (sessionId: string, newTitle: string) =>
@@ -134,10 +148,17 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
         const removed = state.sessions.splice(sessIdx, 1);
         const sess = removed[0];
         if (!sess) return;
-        sess.isPinned = isPinned;
-        sess.folder = targetFolder;
 
-        if (targetSessionId) {
+        const folder =
+          typeof targetFolder === 'string' && targetFolder.trim()
+            ? targetFolder.trim()
+            : sess.folder;
+        sess.isPinned = isPinned;
+        sess.folder = folder;
+
+        // Insert before targetSessionId; null / missing / self → append.
+        // Callers throttle on (target, folder, isPinned) to limit mid-drag churn.
+        if (targetSessionId && targetSessionId !== sessionId) {
           const tIdx = getSessionIndex(state, targetSessionId);
           if (tIdx !== -1) {
             state.sessions.splice(tIdx, 0, sess);

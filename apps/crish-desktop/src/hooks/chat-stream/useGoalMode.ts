@@ -1,8 +1,7 @@
 import { type MutableRefObject } from 'react';
 import type { SessionStreamManager } from '../../api/sessionStreamManager';
-import { useLayoutStore } from '../../store/layoutStore';
 import { getSessionById } from '../../store/sessionStore';
-import { patchSession } from '../../api/storeAccess';
+import { addMessage, patchSession } from '../../api/storeAccess';
 import {
   decideGoalContinuation,
   GOAL_DEFAULT_MAX_ITERATIONS,
@@ -10,7 +9,9 @@ import {
   mergeGoalTasksFromAssistantText,
   buildGoalModePrefix,
 } from '../../api/goalModeController';
+import { generateMessageId } from '../../utils/generateMessageId';
 import type { SessionMessage, SessionGoalMode } from '../../store/types';
+import { getCompositionRoot } from '../../app/compositionRoot';
 
 function syncGoalTasksFromAssistantText(
   sid: string,
@@ -61,18 +62,14 @@ export function useGoalMode(
     }
 
     patchSession(sid, { goalMode: decision.goalMode });
-    const userMsgId = `user-msg-goal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    useLayoutStore.setState((state) => {
-      const s = state.sessionsById[sid];
-      if (!s) return;
-      if (!s.messages) s.messages = [];
-      s.messages.push({
-        id: userMsgId,
-        sender: 'user',
-        text: decision.displayText,
-        timestamp: Date.now(),
-        status: 'processing',
-      });
+    // 发送前固定 clientMessageId，经 addMessage upsert 防双写（wsId 在 action 内忽略）
+    const userMsgId = generateMessageId('user');
+    addMessage('ws', sid, {
+      id: userMsgId,
+      sender: 'user',
+      text: decision.displayText,
+      timestamp: Date.now(),
+      status: 'processing',
     });
 
     mgr.scheduleStart(sid, decision.modelText, userMsgId);
@@ -83,7 +80,7 @@ export function useGoalMode(
     const mgr = streamManagerRef.current!;
     if (!mgr.beginDrain(sid)) return;
     try {
-      const st = useLayoutStore.getState();
+      const st = getCompositionRoot().layout.getState();
       const sess = getSessionById(sid);
       const stillBusy = sess?.messages?.some(
         (m: SessionMessage) =>

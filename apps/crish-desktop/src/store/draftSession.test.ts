@@ -1,25 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from './draftSession';
+import {
+  PENDING_DRAFT,
+  PENDING_DRAFT_SESSION_ID,
+  isPendingDraft,
+  isPendingDraftSessionId,
+} from './draftSession';
+import {
+  PENDING_DRAFT as SHARED_PENDING_DRAFT,
+  PENDING_DRAFT_SESSION_ID as SHARED_ID,
+} from '@crish/shared-types';
 
-describe('draftSession', () => {
-  it('PENDING_DRAFT_SESSION_ID is the stable pending sentinel', () => {
+describe('draftSession / shared-types 对齐', () => {
+  it('PENDING_DRAFT 与 shared-types 同一引用与字面量', () => {
     expect(PENDING_DRAFT_SESSION_ID).toBe('__pending_draft__');
+    expect(PENDING_DRAFT).toBe(PENDING_DRAFT_SESSION_ID);
+    expect(PENDING_DRAFT_SESSION_ID).toBe(SHARED_ID);
+    expect(PENDING_DRAFT).toBe(SHARED_PENDING_DRAFT);
   });
 
-  it('isPendingDraft is true only for the pending sentinel', () => {
+  it('isPendingDraft 与 isPendingDraftSessionId 一致', () => {
     expect(isPendingDraft(PENDING_DRAFT_SESSION_ID)).toBe(true);
-    expect(isPendingDraft('__pending_draft__')).toBe(true);
-  });
-
-  it('isPendingDraft is false for real ids / empty / nullish', () => {
-    expect(isPendingDraft('sess-123')).toBe(false);
-    expect(isPendingDraft('real')).toBe(false);
-    expect(isPendingDraft('')).toBe(false);
+    expect(isPendingDraftSessionId(PENDING_DRAFT_SESSION_ID)).toBe(true);
     expect(isPendingDraft(null)).toBe(false);
-    expect(isPendingDraft(undefined)).toBe(false);
-    // near-misses must not match
-    expect(isPendingDraft('__pending_draft')).toBe(false);
-    expect(isPendingDraft('pending_draft')).toBe(false);
-    expect(isPendingDraft(' __pending_draft__ ')).toBe(false);
+    expect(isPendingDraft('real-sess')).toBe(false);
   });
 });

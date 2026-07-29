@@ -23,8 +23,10 @@ import {
   isLeaf,
   clampSplitRatio,
   isSameDomain,
+  isChatDomain,
 } from './types';
 import type { DropZone } from './dropDetection';
+import { isUnitScopedDropAllowed } from './dropDetection';
 
 // ── 查询操作 ──────────────────────────────────────────────────────────
 
@@ -108,12 +110,19 @@ export function splitLeaf(
   direction: SplitDirection,
   newPanelId: string,
   position: 'before' | 'after' = 'after',
-  splitRatio = 0.5
+  splitRatio = 0.5,
+  /** 新 leaf 绑定的 sessionId（tool 叶 = ownerSessionId；tab→split 时透传源 unit） */
+  newLeafSessionId?: string
 ): LayoutTree {
   const target = findNodeById(tree.root, leafId);
   if (!target || !isLeaf(target)) return tree;
 
-  const newLeaf = createLeaf(newPanelId);
+  const newLeaf = createLeaf(
+    newPanelId,
+    undefined,
+    undefined,
+    newLeafSessionId
+  );
   const [first, second] =
     position === 'after' ? [target, newLeaf] : [newLeaf, target];
 
@@ -147,14 +156,43 @@ export function moveLeaf(
   targetId: string,
   direction: DropDirection
 ): LayoutTree {
+  return moveNode(tree, sourceId, targetId, direction);
+}
+
+/**
+ * 判断 nodeId 是否等于 ancestorId，或位于 ancestor 子树内。
+ */
+function isNodeUnder(root: LayoutNode, ancestorId: string, nodeId: string): boolean {
+  if (ancestorId === nodeId) return true;
+  const ancestor = findNodeById(root, ancestorId);
+  if (!ancestor || isLeaf(ancestor)) return false;
+  return findNodeById(ancestor, nodeId) !== null;
+}
+
+/**
+ * 移动任意节点（leaf 或 Conversation Unit branch）：
+ * 从原位置摘下，插到 target 节点旁按 direction 分割。
+ *
+ * 会话分屏必须用 unit root（H(chat|tools)），不能只移 chat leaf，
+ * 否则 tool 子树会变成与多对话并列的「孤儿功能区」。
+ */
+export function moveNode(
+  tree: LayoutTree,
+  sourceId: string,
+  targetId: string,
+  direction: DropDirection
+): LayoutTree {
   if (sourceId === targetId) return tree;
 
   const source = findNodeById(tree.root, sourceId);
   const target = findNodeById(tree.root, targetId);
   if (!source || !target) return tree;
 
-  // 1. 从原位置移除 source
-  const treeWithout = removeLeafFromTree(tree, sourceId);
+  // 禁止把父节点塞进自己的子孙（会环）
+  if (isNodeUnder(tree.root, sourceId, targetId)) return tree;
+
+  // 1. 从原位置移除 source（leaf 或 branch）
+  const treeWithout = removeNodeFromTree(tree, sourceId);
   if (!treeWithout) return tree;
 
   // 2. 在 target 旁边插入 source
@@ -176,17 +214,56 @@ export function moveLeaf(
   };
 }
 
-/** 从树中移除一个 leaf，自动合并其父 branch */
-function removeLeafFromTree(
+/**
+ * 在 anchor 节点旁插入新 leaf（或已有节点旁挂新 leaf），用于「首次放入会话」分屏。
+ * anchor 应为 Conversation Unit root（chat-only 或 H(chat|tools)），
+ * 禁止直接 split  unit 内的 chat leaf（会把 tools 变成全局右栏）。
+ */
+export function insertLeafBesideNode(
   tree: LayoutTree,
-  leafId: string
+  anchorNodeId: string,
+  direction: DropDirection,
+  newPanelId: string,
+  newLeafSessionId?: string,
+  splitRatio = 0.5
+): LayoutTree {
+  const anchor = findNodeById(tree.root, anchorNodeId);
+  if (!anchor) return tree;
+
+  const splitDir: SplitDirection =
+    direction === 'left' || direction === 'right' ? 'horizontal' : 'vertical';
+  const position: 'before' | 'after' =
+    direction === 'left' || direction === 'top' ? 'before' : 'after';
+
+  const newLeaf = createLeaf(
+    newPanelId,
+    undefined,
+    undefined,
+    newLeafSessionId
+  );
+  const [first, second] =
+    position === 'after' ? [anchor, newLeaf] : [newLeaf, anchor];
+  const branch = createBranch(splitDir, first, second, splitRatio);
+  return {
+    ...tree,
+    root: replaceNode(tree.root, anchorNodeId, branch),
+  };
+}
+
+/**
+ * 从树中移除任意节点（leaf 或 branch），用兄弟节点替代其父 branch。
+ * 若目标就是 root，返回 null（至少保留一棵子树由调用方兜底）。
+ */
+export function removeNodeFromTree(
+  tree: LayoutTree,
+  nodeId: string
 ): LayoutTree | null {
   const { root } = tree;
 
-  // 如果根就是目标 leaf，无法移除（至少保留一个面板）
-  if (root.id === leafId) return null;
+  // 根节点无法“移除”——调用方应自行替换整树
+  if (root.id === nodeId) return null;
 
-  const parentInfo = findParent(root, leafId);
+  const parentInfo = findParent(root, nodeId);
   if (!parentInfo) return null;
 
   const { parent, index } = parentInfo;
@@ -195,6 +272,14 @@ function removeLeafFromTree(
   // 用兄弟节点替代父 branch
   const newRoot = removeBranch(root, parent.id, keepIndex);
   return { ...tree, root: newRoot };
+}
+
+/** 从树中移除一个 leaf，自动合并其父 branch */
+export function removeLeafFromTree(
+  tree: LayoutTree,
+  leafId: string
+): LayoutTree | null {
+  return removeNodeFromTree(tree, leafId);
 }
 
 /**
@@ -239,11 +324,18 @@ function mergeLeafInto(
     : targetLeaf.activeTab;
 
   // 3. 替换 targetLeaf 为合并后的版本
+  //    owner sessionId：优先保留 target，否则继承 src（tool 叶 = 所属 unit）
+  const ownerSessionId = targetLeaf.sessionId ?? srcLeaf.sessionId;
   const mergedTarget: LayoutLeaf = {
     ...targetLeaf,
     tabs: mergedTabs,
     activeTab: mergedActiveTab,
   };
+  if (ownerSessionId) {
+    mergedTarget.sessionId = ownerSessionId;
+  } else {
+    delete mergedTarget.sessionId;
+  }
   const afterMerge = {
     ...tree,
     root: replaceNode(tree.root, targetLeafId, mergedTarget),
@@ -412,6 +504,10 @@ export function addTabToLeaf(
   if (!target || !isLeaf(target)) return tree;
   if (target.tabs.includes(tabId)) return tree;
 
+  // 域隔离：对话域（chat）与功能区不能混在同一个 leaf 里。
+  // 这样能保证「对话只能在对话区域内相互排版，功能区在功能区域内排版」。
+  if (isChatDomain(tabId) !== isChatDomain(target.panelId)) return tree;
+
   const updated: LayoutLeaf = {
     ...target,
     tabs: [...target.tabs, tabId],
@@ -447,6 +543,29 @@ export function removeTabFromLeaf(
     tabs: newTabs,
     activeTab: newActive,
   };
+  return { ...tree, root: replaceNode(tree.root, leafId, updated) };
+}
+
+// ── leaf 会话绑定 ─────────────────────────────────────────────────────
+
+/**
+ * 设置 chat leaf 绑定的 sessionId（多 chat 分屏）。
+ * sessionId 为 undefined 时清除绑定。
+ */
+export function setLeafSessionId(
+  tree: LayoutTree,
+  leafId: string,
+  sessionId: string | undefined
+): LayoutTree {
+  const target = findNodeById(tree.root, leafId);
+  if (!target || !isLeaf(target)) return tree;
+  if (target.sessionId === sessionId) return tree;
+  const updated: LayoutLeaf = { ...target };
+  if (sessionId) {
+    updated.sessionId = sessionId;
+  } else {
+    delete updated.sessionId;
+  }
   return { ...tree, root: replaceNode(tree.root, leafId, updated) };
 }
 
@@ -494,6 +613,30 @@ export function applyDrop(
   } = source;
   const { type: zoneType, targetLeafId } = zone;
 
+  // 多 chat 分屏：允许 chat→chat split。
+  // 仅拒绝「同 session 再拆一份」：目标 leaf 已绑定同一 sessionId（若可判定）。
+  if (
+    zoneType !== 'merge-tab' &&
+    isChatDomain(srcPanelId) &&
+    (zoneType === 'split-left' ||
+      zoneType === 'split-right' ||
+      zoneType === 'split-top' ||
+      zoneType === 'split-bottom')
+  ) {
+    const sameSessionTarget = findNodeById(tree.root, targetLeafId);
+    if (
+      sameSessionTarget &&
+      isLeaf(sameSessionTarget) &&
+      isChatDomain(sameSessionTarget.panelId) &&
+      sameSessionTarget.sessionId &&
+      // top-bar session drag 用 sessionId 作为 leafId/tabId
+      (srcLeafId === sameSessionTarget.sessionId ||
+        srcTabId === sameSessionTarget.sessionId)
+    ) {
+      return tree;
+    }
+  }
+
   // 跨域防护：对话域（Chat）只能与对话域拖拽，功能区只能与功能区拖拽。
   //
   // 同 leaf 操作（srcLeafId === targetLeafId）始终放行：
@@ -507,6 +650,28 @@ export function applyDrop(
     isLeaf(targetNode) &&
     srcLeafId !== targetLeafId &&
     !isSameDomain(srcPanelId, targetNode.panelId)
+  ) {
+    return tree;
+  }
+
+  // Conversation Unit 作用域：tool 源带 ownerSessionId 时不得跨 session。
+  // 源 leaf 的 sessionId 即 tool 的 ownerSessionId（adapterShape.makeToolLeaf）。
+  // top-bar session drag 的 leafId 不是树内 id → find 失败 → srcOwner 为空 → 本守卫跳过。
+  const srcNodeForScope = findNodeById(tree.root, srcLeafId);
+  const srcOwnerSessionId =
+    srcNodeForScope && isLeaf(srcNodeForScope)
+      ? srcNodeForScope.sessionId
+      : undefined;
+  if (
+    targetNode &&
+    isLeaf(targetNode) &&
+    srcLeafId !== targetLeafId &&
+    !isUnitScopedDropAllowed(
+      srcPanelId,
+      srcOwnerSessionId,
+      targetNode.panelId,
+      targetNode.sessionId
+    )
   ) {
     return tree;
   }
@@ -530,6 +695,10 @@ export function applyDrop(
       return moveLeaf(tree, srcLeafId, targetLeafId, direction);
     }
     // tab 拖拽到 split：从源 leaf 移除 tab，在 target 旁边 split 出新 leaf
+    // 新 leaf 继承源 unit 的 ownerSessionId（tool 拆分不得丢 session 归属）
+    const ownerForNewLeaf =
+      srcOwnerSessionId ??
+      (targetNode && isLeaf(targetNode) ? targetNode.sessionId : undefined);
     const afterRemove = removeTabFromLeaf(tree, srcLeafId, srcTabId);
     const targetStillExists = findNodeById(afterRemove.root, targetLeafId);
     if (!targetStillExists) return afterRemove;
@@ -544,7 +713,8 @@ export function applyDrop(
       splitDir,
       srcPanelId,
       position,
-      0.5
+      0.5,
+      ownerForNewLeaf
     );
   }
 
@@ -563,6 +733,37 @@ export function applyDrop(
 
 type Rect = { x: number; y: number; width: number; height: number };
 
+/** 可折叠的域：对话域（chat）或功能区（tool） */
+type CollapsedDomain = 'chat' | 'tool';
+
+/** 判断单个 leaf 是否属于被折叠的域 */
+function leafMatchesCollapsedDomain(
+  leaf: LayoutLeaf,
+  collapsedDomain?: CollapsedDomain
+): boolean {
+  if (!collapsedDomain) return false;
+  const isTool = !isChatDomain(leaf.panelId);
+  return collapsedDomain === 'tool' ? isTool : !isTool;
+}
+
+/**
+ * 判断整棵子树是否完全处于被折叠的域。
+ * 用于在 flatten 时把该子树整体压缩为 0 面积，把空间全交给另一侧。
+ */
+function isCollapsedSubtree(
+  node: LayoutNode,
+  collapsedDomain?: CollapsedDomain
+): boolean {
+  if (!collapsedDomain) return false;
+  if (isLeaf(node)) {
+    return leafMatchesCollapsedDomain(node, collapsedDomain);
+  }
+  return (
+    isCollapsedSubtree(node.children[0], collapsedDomain) &&
+    isCollapsedSubtree(node.children[1], collapsedDomain)
+  );
+}
+
 /**
  * 将树展平为渲染列表，同时计算 leaf 与 branch 的百分比 rect。
  *
@@ -574,14 +775,28 @@ type Rect = { x: number; y: number; width: number; height: number };
  * 例：根 branch 占满 canvas（rect={0,0,1,1}）；
  * 嵌套在左半区的子 branch rect={0,0,0.5,1}。
  * sash 位置 = branch.rect 的对应边 + splitRatio × branch.rect 的对应维度。
+ *
+ * 折叠域（collapsedDomain）：
+ * - 当传入 'tool' 时，所有功能 leaf/branch 的 rect 压缩为 0，对话域扩展至全画布。
+ * - 当传入 'chat' 时，对话域压缩为 0，功能域扩展至全画布。
+ * - 该能力服务于右侧面板折叠/展开按钮与顶部标签行宽度联动。
  */
-export function flattenTree(root: LayoutNode): {
+export function flattenTree(
+  root: LayoutNode,
+  options?: { collapsedDomain?: CollapsedDomain }
+): {
   leaves: FlatPanel[];
   branches: FlatBranch[];
 } {
   const leaves: FlatPanel[] = [];
   const branches: FlatBranch[] = [];
-  flattenRecursive(root, { x: 0, y: 0, width: 1, height: 1 }, leaves, branches);
+  flattenRecursive(
+    root,
+    { x: 0, y: 0, width: 1, height: 1 },
+    leaves,
+    branches,
+    options?.collapsedDomain
+  );
   return { leaves, branches };
 }
 
@@ -589,7 +804,8 @@ function flattenRecursive(
   node: LayoutNode,
   rect: Rect,
   leavesOut: FlatPanel[],
-  branchesOut: FlatBranch[]
+  branchesOut: FlatBranch[],
+  collapsedDomain?: CollapsedDomain
 ): void {
   if (isLeaf(node)) {
     leavesOut.push({
@@ -597,7 +813,10 @@ function flattenRecursive(
       panelId: node.panelId,
       tabs: node.tabs,
       activeTab: node.activeTab,
-      rect,
+      ...(node.sessionId ? { sessionId: node.sessionId } : {}),
+      rect: leafMatchesCollapsedDomain(node, collapsedDomain)
+        ? { x: rect.x, y: rect.y, width: 0, height: 0 }
+        : rect,
     });
     return;
   }
@@ -612,55 +831,202 @@ function flattenRecursive(
     rect,
   });
 
+  const firstCollapsed = isCollapsedSubtree(children[0], collapsedDomain);
+  const secondCollapsed = isCollapsedSubtree(children[1], collapsedDomain);
+
   if (direction === 'horizontal') {
-    const firstWidth = rect.width * splitRatio;
-    flattenRecursive(
-      children[0],
-      {
-        x: rect.x,
-        y: rect.y,
-        width: firstWidth,
-        height: rect.height,
-      },
-      leavesOut,
-      branchesOut
-    );
-    flattenRecursive(
-      children[1],
-      {
-        x: rect.x + firstWidth,
-        y: rect.y,
-        width: rect.width - firstWidth,
-        height: rect.height,
-      },
-      leavesOut,
-      branchesOut
-    );
+    if (firstCollapsed && secondCollapsed) {
+      // 整棵分支都在折叠域：子树继续递归，但分配 0 宽度
+      flattenRecursive(
+        children[0],
+        { x: rect.x, y: rect.y, width: 0, height: rect.height },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+      flattenRecursive(
+        children[1],
+        { x: rect.x, y: rect.y, width: 0, height: rect.height },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+    } else if (firstCollapsed) {
+      flattenRecursive(
+        children[0],
+        { x: rect.x, y: rect.y, width: 0, height: rect.height },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+      flattenRecursive(
+        children[1],
+        { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+    } else if (secondCollapsed) {
+      flattenRecursive(
+        children[0],
+        { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+      flattenRecursive(
+        children[1],
+        { x: rect.x + rect.width, y: rect.y, width: 0, height: rect.height },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+    } else {
+      const firstWidth = rect.width * splitRatio;
+      flattenRecursive(
+        children[0],
+        { x: rect.x, y: rect.y, width: firstWidth, height: rect.height },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+      flattenRecursive(
+        children[1],
+        {
+          x: rect.x + firstWidth,
+          y: rect.y,
+          width: rect.width - firstWidth,
+          height: rect.height,
+        },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+    }
   } else {
-    const firstHeight = rect.height * splitRatio;
-    flattenRecursive(
-      children[0],
-      {
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: firstHeight,
-      },
-      leavesOut,
-      branchesOut
-    );
-    flattenRecursive(
-      children[1],
-      {
-        x: rect.x,
-        y: rect.y + firstHeight,
-        width: rect.width,
-        height: rect.height - firstHeight,
-      },
-      leavesOut,
-      branchesOut
-    );
+    if (firstCollapsed && secondCollapsed) {
+      flattenRecursive(
+        children[0],
+        { x: rect.x, y: rect.y, width: rect.width, height: 0 },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+      flattenRecursive(
+        children[1],
+        { x: rect.x, y: rect.y, width: rect.width, height: 0 },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+    } else if (firstCollapsed) {
+      flattenRecursive(
+        children[0],
+        { x: rect.x, y: rect.y, width: rect.width, height: 0 },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+      flattenRecursive(
+        children[1],
+        { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+    } else if (secondCollapsed) {
+      flattenRecursive(
+        children[0],
+        { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+      flattenRecursive(
+        children[1],
+        { x: rect.x, y: rect.y + rect.height, width: rect.width, height: 0 },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+    } else {
+      const firstHeight = rect.height * splitRatio;
+      flattenRecursive(
+        children[0],
+        { x: rect.x, y: rect.y, width: rect.width, height: firstHeight },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+      flattenRecursive(
+        children[1],
+        {
+          x: rect.x,
+          y: rect.y + firstHeight,
+          width: rect.width,
+          height: rect.height - firstHeight,
+        },
+        leavesOut,
+        branchesOut,
+        collapsedDomain
+      );
+    }
   }
+}
+
+// ── 树规范化 ────────────────────────────────────────────────────────
+
+/**
+ * 清理叶子中的跨域 tab，保证「对话域」与「功能区」不混在同一 leaf。
+ *
+ * 规则：
+ * 1. 以 leaf.panelId 判定 leaf 所属域（chat / tool）。
+ * 2. 过滤掉与 leaf 域不符的 tab。
+ * 3. 若过滤后 tabs 为空，回退到 [panelId]。
+ * 4. 修正 activeTab，使其一定在 tabs 中。
+ * 5. 若 leaf.panelId 与剩余 tabs 的域不一致（如 panelId='chat' 但只剩 tool tab），
+ *    把 panelId 也修正为第一个剩余 tab 的 id。
+ *
+ * 该函数在 store 从 localStorage 恢复时调用，避免旧数据/迁移产生的混合 leaf
+ * 继续污染 UI。
+ */
+export function normalizeTree(tree: LayoutTree): LayoutTree {
+  const newRoot = normalizeNode(tree.root);
+  if (newRoot === tree.root) return tree;
+  return { ...tree, root: newRoot };
+}
+
+function normalizeNode(node: LayoutNode): LayoutNode {
+  if (isBranch(node)) {
+    const first = normalizeNode(node.children[0]);
+    const second = normalizeNode(node.children[1]);
+    if (first === node.children[0] && second === node.children[1]) return node;
+    return { ...node, children: [first, second] };
+  }
+
+  const leafDomainChat = isChatDomain(node.panelId);
+  const filteredTabs = node.tabs.filter(
+    (tab) => isChatDomain(tab) === leafDomainChat
+  );
+
+  const tabs = filteredTabs.length > 0 ? filteredTabs : [node.panelId];
+  const panelId =
+    filteredTabs.length > 0 && isChatDomain(node.panelId) !== isChatDomain(tabs[0]!)
+      ? tabs[0]!
+      : node.panelId;
+  const activeTab = tabs.includes(node.activeTab)
+    ? node.activeTab
+    : tabs[0]!;
+
+  if (
+    tabs.length === node.tabs.length &&
+    panelId === node.panelId &&
+    activeTab === node.activeTab
+  ) {
+    return node;
+  }
+
+  return { ...node, panelId, tabs, activeTab };
 }
 
 // ── 迁移 ──────────────────────────────────────────────────────────

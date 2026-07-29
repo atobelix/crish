@@ -274,7 +274,7 @@ describe('empty workspace seed & no ghost panels', () => {
       activeSessionId: 'missing',
       folderOrder: ['f', '', 'g'],
     });
-    expect(a.activeSessionId).toBe('');
+    expect(a.activeSessionId).toBe('s1');
     expect(a.sessionsById.s1?.id).toBe('s1');
     expect(a.folderOrder).toEqual(['f', 'g']);
 
@@ -283,7 +283,7 @@ describe('empty workspace seed & no ghost panels', () => {
       activeSessionId: 'ghost',
       folderOrder: [],
     });
-    expect(empty.activeSessionId).toBe('');
+    expect(empty.activeSessionId).toBe('__pending_draft__');
     expect(Object.keys(empty.sessionsById)).toHaveLength(0);
   });
 
@@ -303,7 +303,7 @@ describe('empty workspace seed & no ghost panels', () => {
       activeSessionId: '__pending_draft__',
       folderOrder: ['f'],
     });
-    expect(s.activeSessionId).toBe('');
+    expect(s.activeSessionId).toBe('s1');
     expect(s.sessionsById.s1?.id).toBe('s1');
   });
 });
@@ -331,7 +331,7 @@ describe('useLayoutStore initial invariants', () => {
     expect(ids).not.toContain('settings');
     expect(ids).not.toContain('runtime');
     // active session fidelity
-    if (s.activeSessionId) {
+    if (s.activeSessionId && s.activeSessionId !== '__pending_draft__') {
       expect(s.sessionsById[s.activeSessionId]?.id).toBe(s.activeSessionId);
     }
   });

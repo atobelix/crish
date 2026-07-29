@@ -1,7 +1,7 @@
-/* chat-approval.css �?soft-hint / approval-dock / run-notice / plan-goal ribbons
- * (ChatStatusRibbons 閹碘偓閺堝娼堥敍姝砳bbon / dock / soft-hint) */
+/* chat-approval.css 闁?soft-hint / approval-dock / run-notice / plan-goal ribbons
+ * (ChatStatusRibbons 闁圭鍋撻柡鍫濐槹濞煎牓鏁嶅鐮砨bon / dock / soft-hint) */
 
-/* 閳光偓閳光偓 Soft setup banner閿涙airline only閿涘矂銆夐崘鍛穿鐎电》绱欑粋浣诡�?toast�?閳光偓閳光偓 */
+/* 闁冲厜鍋撻柍鍏夊亾 Soft setup banner闁挎稒顒irline only闁挎稑鐭傞妴澶愬礃閸涱厾绌块悗鐢点€嬬槐娆戠矉娴ｈ鍓?toast闁?闁冲厜鍋撻柍鍏夊亾 */
 /* --- CENTERED PERMISSION DIALOG OVERLAYS --- */
 .global-approval-backdrop {
   position: fixed;
@@ -138,11 +138,11 @@
   color: var(--text-primary);
 }
 
-/* 鐎电鐦介弮鍫曟？缁惧灝鍞撮惃鍕綀闂勬劕宕遍悧鍥风窗娑?tool-row 閸氬苯鍨敍灞戒箯娓氀呯矎瀵缚鐨熺痪?*/
+/* 閻庣數顢婇惁浠嬪籍閸洘锛熺紒鎯х仢閸炴挳鎯冮崟顒佺秬闂傚嫭鍔曞畷閬嶆偋閸ラ绐楀☉?tool-row 闁告艾鑻崹顏堟晬鐏炴垝绠〒姘€鍛煄鐎殿噣缂氶惃鐔虹棯?*/
 .tool-row--approval {
   margin: 4px 0 8px;
 }
-/* 鐎光剝澹掗崠鐚寸窗閻欘剛鐝涙�?footer 韫囶偅宓庨弽蹇ョ幢闂堢姴涔忛敍宀勪缉閸忓秳绗岄妴灞芥礀閸掔増娓堕弬鑸偓宀禔B 闁插秴褰?*/
+/* 閻庡厜鍓濇竟鎺楀礌閻氬绐楅柣娆樺墰閻濇稒绂?footer 闊浂鍋呭畵搴ㄥ冀韫囥儳骞㈤梻鍫㈠Т娑斿繘鏁嶅畝鍕級闁稿繐绉崇粭宀勫Υ鐏炶姤绀€闁告帞澧楀〒鍫曞棘閼割兘鍋撳畝绂擝 闂佹彃绉磋ぐ?*/
 .inline-approval {
   display: flex;
   flex-direction: column;

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
-import { useLayoutStore } from '../../store/layoutStore';
 import { ShortcutService } from '../../services/ShortcutService';
 import { openSettings, toggleSettingsOverlay } from '../../api/storeAccess';
+import { getCompositionRoot } from '../../app/compositionRoot';
 import type { UseAppKeyboardOpts } from './keyboard-types';
 import type { SettingsTabType } from '../../store/types';
 
@@ -93,14 +93,17 @@ export function useKeyboardNavigation(opts: UseAppKeyboardOpts): void {
           e.preventDefault();
           openTab('schedule');
           return;
-        case 'toggle_sidebar':
+        case 'toggle_sidebar': {
           e.preventDefault();
-          setSidebarCollapsed(!useLayoutStore.getState().sidebarCollapsed);
+          // 写经 compositionRoot；同步 prop setter（与 useLayoutStore selector 同源）
+          const layout = getCompositionRoot().layout;
+          layout.toggleSidebarCollapsed();
+          setSidebarCollapsed(layout.getSidebarCollapsed());
           return;
+        }
         case 'toggle_plan_mode': {
           e.preventDefault();
-          const st = useLayoutStore.getState();
-          st.setPlanModeEnabled(!st.planModeEnabled);
+          getCompositionRoot().layout.togglePlanMode();
           return;
         }
         case 'cheatsheet':

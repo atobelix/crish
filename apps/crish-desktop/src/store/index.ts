@@ -1,13 +1,31 @@
 /**
  * store 公共入口（barrel）。
  *
- * 权威实现仍是单一 immer store：`useLayoutStore`。
- * session / workspace / settingsUi 为域 facade，便于未来 multi-store 迁移。
+ * 权威实现仍是单一 immer store：`useLayoutStore`（god-object）。
+ * session / workspace / settingsUi 为域 facade（**aliases**，非第二实例）。
+ *
+ * Sibling stores (separate create):
+ * - `workspace-shell` — TabSurface / dock write owner
+ * - `layout-tree` — binary geometry write owner
+ *
+ * Ownership map: `./storeOwnership.ts` + README § Layout identity ownership.
+ * compositionRoot.`layout` = layoutStore; `.shell` = workspace-shell; tree has no facade yet.
  *
  * 兼容：既有 `from '../store/layoutStore'` 路径勿删、勿改语义。
  */
 
 export { useLayoutStore, initLayoutStorePersistence } from './layoutStore';
+
+export type {
+  StoreOwnershipDomain,
+  StoreWriteOwner,
+  StoreOwnership,
+} from './storeOwnership';
+export {
+  SHELL_TAB_OWNERSHIP,
+  LAYOUT_TREE_OWNERSHIP,
+  SESSION_OWNERSHIP,
+} from './storeOwnership';
 
 export {
   useSessionStore,

@@ -113,8 +113,8 @@ describe('getPanelTitle / resolveWorkspacePanelKey / makePanelCard', () => {
   });
 
   it('agent side panel title is 聊天 (not Agent)', () => {
-    expect(getPanelTitle('agent')).toBe('聊天');
-    expect(makePanelCard('agent').title).toBe('聊天');
+    expect(getPanelTitle('agent')).toBe('协作体');
+    expect(makePanelCard('agent').title).toBe('协作体');
   });
 });
 

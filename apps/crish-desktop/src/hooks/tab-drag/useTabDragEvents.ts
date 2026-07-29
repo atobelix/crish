@@ -1,22 +1,61 @@
 import React from 'react';
 import { closeAgentSidePanel } from '../../api/openAgentPanel';
 import { getWorkspaceStoreState, setDropPreview } from '../../store/workspaceStore';
-import { exceedsDragThreshold, type DropType } from './tabDragGeometry';
+import { exceedsDragThreshold, resolveTabBarHeight, type DropType } from './tabDragGeometry';
 import {
   animateOverlayAway,
   clearDropIndicator,
   createCardDragOverlay,
   createTabDragOverlay,
+  setDragOverlayPosition,
 } from './tabDragGhost';
 import {
   useTabDragReorder,
   type CardSnapshot,
 } from './useTabDragReorder';
+import type { TabBarTabRect } from './tabDragTypes';
 
 export interface UseTabDragOptions {
   wsId: string;
   groupId: string;
   cardsLength: number;
+}
+
+function snapshotTabBarGeometry(cardEl: HTMLElement): {
+  tabBarH: number;
+  tabsBar: HTMLElement | null;
+  tabRects: TabBarTabRect[];
+  barRight: number;
+} {
+  const header = cardEl.querySelector('.card-header');
+  const tabsBarCandidate = cardEl.querySelector('.tabs-bar');
+  const tabsBar =
+    tabsBarCandidate instanceof HTMLElement ? tabsBarCandidate : null;
+
+  let measuredH: number | null = null;
+  if (header instanceof HTMLElement) {
+    measuredH = header.getBoundingClientRect().height;
+  } else if (tabsBar) {
+    measuredH = tabsBar.getBoundingClientRect().height;
+  }
+  const tabBarH = resolveTabBarHeight(measuredH);
+
+  let tabRects: TabBarTabRect[] = [];
+  let barRight = 0;
+  if (tabsBar) {
+    barRight = tabsBar.getBoundingClientRect().right;
+    const tabs = Array.from(
+      tabsBar.querySelectorAll(
+        '.card-tab:not(.dragging-tab-hidden):not(.tab-placeholder-indicator)'
+      )
+    ).filter((el): el is HTMLElement => el instanceof HTMLElement);
+    tabRects = tabs.map((t) => {
+      const tr = t.getBoundingClientRect();
+      return { left: tr.left, width: tr.width };
+    });
+  }
+
+  return { tabBarH, tabsBar, tabRects, barRight };
 }
 
 export function useTabDragEvents({
@@ -28,7 +67,7 @@ export function useTabDragEvents({
     useTabDragReorder();
 
   const handleTabPointerDown = React.useCallback(
-    (e: React.PointerEvent<HTMLDivElement>, cardId: string) => {
+    (e: React.PointerEvent, cardId: string) => {
       if (e.button === 1) {
         // Middle click: close tab / active card in group
         if (cardId !== 'chat') {
@@ -50,6 +89,7 @@ export function useTabDragEvents({
       )
         return;
 
+      if (!(e.currentTarget instanceof HTMLElement)) return;
       const targetEl = e.currentTarget;
       const isDragFromTabButton = targetEl.classList.contains('card-tab');
       const sourceCardCandidate = targetEl.closest('.workspace-card');
@@ -94,6 +134,7 @@ export function useTabDragEvents({
             ? startY - cardRect.top
             : 0;
 
+      // pointerdown 时一次性快照卡片/tab 栏几何，move 路径只读缓存
       const cardElements = Array.from(
         document.querySelectorAll(
           '.workspace-card:not(.placeholder-card-group)'
@@ -101,6 +142,7 @@ export function useTabDragEvents({
       ).filter((el): el is HTMLElement => el instanceof HTMLElement);
       const cardSnapshots: CardSnapshot[] = cardElements.map((el) => {
         const r = el.getBoundingClientRect();
+        const barGeom = snapshotTabBarGeometry(el);
         return {
           element: el,
           rect: {
@@ -114,14 +156,22 @@ export function useTabDragEvents({
           colIdx: parseInt(el.getAttribute('data-col-idx') || '0', 10),
           groupIdx: parseInt(el.getAttribute('data-group-idx') || '0', 10),
           groupId: el.getAttribute('data-group-id') || '',
+          tabBarH: barGeom.tabBarH,
+          tabsBar: barGeom.tabsBar,
+          tabRects: barGeom.tabRects,
+          barRight: barGeom.barRight,
         };
       });
 
-      const handlePointerMove = (moveEvent: PointerEvent) => {
+      let rafId: number | null = null;
+      let pendingClientX = 0;
+      let pendingClientY = 0;
+      let hasPendingMove = false;
+
+      const processMove = (clientX: number, clientY: number) => {
         if (finished) return;
-        if (moveEvent.pointerId !== pointerId) return;
-        const dx = moveEvent.clientX - startX;
-        const dy = moveEvent.clientY - startY;
+        const dx = clientX - startX;
+        const dy = clientY - startY;
 
         if (!isDragging && exceedsDragThreshold(dx, dy)) {
           isDragging = true;
@@ -145,15 +195,16 @@ export function useTabDragEvents({
 
         if (!isDragging || !dragOverlay) return;
 
-        dragOverlay.style.left = `${moveEvent.clientX - clickOffsetX}px`;
-        dragOverlay.style.top = `${moveEvent.clientY - clickOffsetY}px`;
-
-        const mouseX = moveEvent.clientX;
-        const mouseY = moveEvent.clientY;
+        // compositor 友好：transform，不写 left/top
+        setDragOverlayPosition(
+          dragOverlay,
+          clientX - clickOffsetX,
+          clientY - clickOffsetY
+        );
 
         const resolved = evaluateMoveDrop({
-          mouseX,
-          mouseY,
+          mouseX: clientX,
+          mouseY: clientY,
           cardSnapshots,
           wsId,
           sourceGroupId: groupId,
@@ -173,6 +224,28 @@ export function useTabDragEvents({
         lastTargetGroupIdx = resolved.targetGroupIdx;
         lastTargetGroupId = resolved.targetGroupId;
         lastTabInsertIdx = resolved.tabInsertIdx;
+      };
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        if (finished) return;
+        if (moveEvent.pointerId !== pointerId) return;
+        pendingClientX = moveEvent.clientX;
+        pendingClientY = moveEvent.clientY;
+        hasPendingMove = true;
+        if (rafId != null) return;
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          if (!hasPendingMove || finished) return;
+          hasPendingMove = false;
+          processMove(pendingClientX, pendingClientY);
+        });
+      };
+
+      const cancelPendingRaf = () => {
+        if (rafId != null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
       };
 
       const detachListeners = () => {
@@ -197,6 +270,22 @@ export function useTabDragEvents({
           (ev as PointerEvent).pointerId !== pointerId
         )
           return;
+
+        // 提交前取消 rAF；若有未刷帧或已在拖，用最终坐标再评估一次
+        cancelPendingRaf();
+        const endX =
+          ev && 'clientX' in ev
+            ? (ev as PointerEvent).clientX
+            : pendingClientX;
+        const endY =
+          ev && 'clientY' in ev
+            ? (ev as PointerEvent).clientY
+            : pendingClientY;
+        if (isDragging || hasPendingMove) {
+          hasPendingMove = false;
+          processMove(endX, endY);
+        }
+
         finished = true;
         detachListeners();
 

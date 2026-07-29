@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { prepare, layout } from '@chenglou/pretext';
-import { buildPretextFont } from '../utils/pretextFontBridge';
 
 export interface UseChatAutoScrollResult {
   chatFlowRef: RefObject<HTMLDivElement | null>;
@@ -9,6 +7,18 @@ export interface UseChatAutoScrollResult {
   scrollToBottom: () => void;
 }
 
+/** 实际滚动节点：优先虚拟列表 .list（data-virtual-scroll），否则 chatDocFlow 自身 */
+function resolveScrollEl(root: HTMLElement | null): HTMLElement | null {
+  if (!root) return null;
+  const list = root.querySelector<HTMLElement>('[data-virtual-scroll="true"]');
+  return list ?? root;
+}
+
+/**
+ * Chat auto-scroll via DOM scrollHeight deltas only.
+ * Multiple message updates in a frame are merged into one rAF apply.
+ * No Pretext prepare/layout path — pure incremental scrollTop.
+ */
 export function useChatAutoScroll(
   messages: unknown[],
   isProcessing = false,
@@ -17,78 +27,63 @@ export function useChatAutoScroll(
   const userScrolledRef = useRef(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
-  // Pretext streaming prediction state
-  const fontRef = useRef('');
-  const prevTextRef = useRef('');
-  const prevHeightRef = useRef(0);
+  /** Last observed scrollHeight of the active scroller */
+  const prevScrollHeightRef = useRef(0);
+  /** Pending coalesced auto-scroll frame */
+  const rafIdRef = useRef<number | null>(null);
 
-  const getFont = useCallback((): string => {
-    if (fontRef.current) return fontRef.current;
-    try {
-      fontRef.current = buildPretextFont('sans', 'normal', 15);
-    } catch {
-      fontRef.current = '400 15px Inter';
-    }
-    return fontRef.current;
-  }, []);
-
-  // Smart scroll: during AI streaming use Pretext delta; otherwise scrollHeight
+  // Coalesce token/message updates: one scroll apply per animation frame
   useEffect(() => {
-    const el = chatFlowRef.current;
-    if (!el || userScrolledRef.current) return;
+    if (rafIdRef.current != null) {
+      cancelAnimationFrame(rafIdRef.current);
+    }
 
-    if (isProcessing) {
-      const msgs = messages as Array<{ sender?: string; text?: string }>;
-      const asstMsg = [...msgs].reverse().find((m) => m.sender === 'assistant');
-      const currentText = asstMsg?.text || '';
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      const el = resolveScrollEl(chatFlowRef.current);
+      if (!el) return;
 
-      if (currentText && currentText !== prevTextRef.current) {
-        const font = getFont();
-        if (font) {
-          try {
-            const containerWidth = el.clientWidth;
-            const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 22;
-            const pretextHeight = layout(
-              prepare(currentText, font),
-              containerWidth,
-              lineHeight,
-            ).height;
-            const actualHeight = el.scrollHeight;
+      const scrollHeight = el.scrollHeight;
+      const prevHeight = prevScrollHeightRef.current;
 
-            const markdownOverhead = actualHeight - pretextHeight;
-            const buffer = markdownOverhead > 0 ? markdownOverhead * 0.15 : 0;
-            const estimatedHeight = pretextHeight + markdownOverhead + buffer;
-
-            if (prevHeightRef.current > 0) {
-              const dh = estimatedHeight - prevHeightRef.current;
-              if (dh > 0) {
-                el.scrollTop = Math.min(el.scrollTop + dh, actualHeight);
-              }
-            }
-
-            prevTextRef.current = currentText;
-            prevHeightRef.current = estimatedHeight;
-          } catch {
-            el.scrollTop = el.scrollHeight;
+      if (!userScrolledRef.current) {
+        if (isProcessing && prevHeight > 0) {
+          // Incremental: advance by content growth only
+          const dh = scrollHeight - prevHeight;
+          if (dh > 0) {
+            el.scrollTop = Math.min(el.scrollTop + dh, scrollHeight);
           }
+        } else {
+          // Idle / first sample: snap to real bottom (also calibrates after stream)
+          el.scrollTop = scrollHeight;
         }
+        setShowScrollToBottom(false);
       }
-    } else {
-      // Calibration: use real scrollHeight when not streaming
-      el.scrollTop = el.scrollHeight;
-      prevTextRef.current = '';
-      prevHeightRef.current = 0;
-    }
 
-    setShowScrollToBottom(false);
-  }, [messages, getFont, isProcessing]);
+      prevScrollHeightRef.current = scrollHeight;
+    });
 
-  // Detect user scroll-up to stop auto-scroll
+    return () => {
+      if (rafIdRef.current != null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, [messages, isProcessing]);
+
+  // Detect user scroll-up to stop auto-scroll（绑在实际滚动容器上）
   useEffect(() => {
-    const el = chatFlowRef.current;
-    if (!el) return;
+    const root = chatFlowRef.current;
+    if (!root) return;
+
+    let el = resolveScrollEl(root);
+    let attached: HTMLElement | null = null;
+
     const handleScroll = () => {
-      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+      const scroller = attached;
+      if (!scroller) return;
+      const atBottom =
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 60;
       if (atBottom) {
         userScrolledRef.current = false;
         setShowScrollToBottom(false);
@@ -97,18 +92,45 @@ export function useChatAutoScroll(
         setShowScrollToBottom(true);
       }
     };
-    el.addEventListener('scroll', handleScroll, { passive: true });
-    return () => el.removeEventListener('scroll', handleScroll);
-  }, []);
+
+    const attach = (target: HTMLElement | null) => {
+      if (attached === target) return;
+      if (attached) {
+        attached.removeEventListener('scroll', handleScroll);
+      }
+      attached = target;
+      if (attached) {
+        attached.addEventListener('scroll', handleScroll, { passive: true });
+      }
+    };
+
+    attach(el);
+
+    // 消息列表从 empty 挂载后出现 .list，需重新绑定
+    const mo = new MutationObserver(() => {
+      const next = resolveScrollEl(root);
+      if (next !== attached) attach(next);
+    });
+    mo.observe(root, { childList: true, subtree: true });
+
+    return () => {
+      mo.disconnect();
+      if (attached) {
+        attached.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, [messages.length]);
 
   const scrollToBottom = useCallback(() => {
     userScrolledRef.current = false;
     setShowScrollToBottom(false);
-    if (chatFlowRef.current) {
-      chatFlowRef.current.scrollTop = chatFlowRef.current.scrollHeight;
+    const el = resolveScrollEl(chatFlowRef.current);
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+      prevScrollHeightRef.current = el.scrollHeight;
+    } else {
+      prevScrollHeightRef.current = 0;
     }
-    prevTextRef.current = '';
-    prevHeightRef.current = 0;
   }, []);
 
   return { chatFlowRef, showScrollToBottom, scrollToBottom };

@@ -49,7 +49,7 @@ describe('useStreamCallbacks', () => {
     };
   };
 
-  it('returns runStreamingAssistant and handleStopGeneration functions', () => {
+  it('returns runStreamingAssistant / handleStopGeneration / handleForceCancelGeneration', () => {
     const refs = createMockRefs();
     const pushRunNotice = vi.fn();
     const dismissRunNotice = vi.fn();
@@ -70,6 +70,7 @@ describe('useStreamCallbacks', () => {
 
     expect(typeof result.current.runStreamingAssistant).toBe('function');
     expect(typeof result.current.handleStopGeneration).toBe('function');
+    expect(typeof result.current.handleForceCancelGeneration).toBe('function');
   });
 
   it('handleStopGeneration no-ops when active session has no live stream', () => {
@@ -92,5 +93,6 @@ describe('useStreamCallbacks', () => {
     );
 
     expect(() => result.current.handleStopGeneration()).not.toThrow();
+    expect(() => result.current.handleForceCancelGeneration()).not.toThrow();
   });
 });

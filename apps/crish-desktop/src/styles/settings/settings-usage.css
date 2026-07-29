@@ -1,10 +1,10 @@
 /* === usage polish-v1 === */
-/* 鏉堣锟?�?1%閿涙稓绮虹拋鈥冲幢閻楀洩浜ら幓蹇氱珶閿涙稑鍨悰銊ょ瑢閸忚泛鐣犵拋鍓х枂妞ゅ吀绔撮�?*/
+/* 閺夊牐顫夐敓?閿?1%闁挎稒绋撶划铏规媼閳ュ啿骞㈤柣妤€娲╂禍銈夊箵韫囨氨鐝堕柨娑欑☉閸亞鎮伴妸銈囩憿闁稿繗娉涢悾鐘垫媼閸撗呮瀭濡炪倕鍚€缁旀挳鎳?*/
 
 .settings-pane--usage {
   gap: var(--space-4);
   width: 100%;
-  max-width: var(--settings-content-max, 720px);
+  max-width: var(--settings-content-max);
   padding-bottom: 36px;
 }
 .settings-pane--usage .settings-page-title {
@@ -28,7 +28,7 @@
   opacity: 0.9;
 }
 
-/* 閺堫兛绱扮拠婵呯瑏锟?*/
+/* 闁哄牜鍏涚槐鎵嫚濠靛懐鐟忛敓?*/
 .settings-pane--usage .settings-usage-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -67,7 +67,7 @@
   background: color-mix(in srgb, var(--text-primary) 28%, transparent);
 }
 .settings-pane--usage .settings-usage-bar-fill.is-out {
-  background: color-mix(in srgb, #22b671 55%, transparent);
+  background: color-mix(in srgb, var(--accent-green) 55%, transparent);
 }
 .settings-pane--usage .settings-usage-bar-fill.is-cost {
   background: color-mix(in srgb, var(--text-primary) 22%, transparent);
@@ -86,7 +86,7 @@
   background: color-mix(in srgb, var(--text-primary) 22%, transparent);
 }
 .settings-pane--usage .settings-usage-ratio-out {
-  background: color-mix(in srgb, #22b671 45%, transparent);
+  background: color-mix(in srgb, var(--accent-green) 45%, transparent);
 }
 .settings-pane--usage .settings-usage-meta-row {
   display: flex;
@@ -102,7 +102,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 閸樺棗褰跺銉ュ徔锟?*/
+/* 闁告ê妫楄ぐ璺侯啅閵夈儱寰旈敓?*/
 .settings-pane--usage .settings-usage-chart-tools {
   display: flex;
   flex-wrap: wrap;
@@ -134,7 +134,7 @@
   border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
 }
 
-/* 鐎规矮鐜幎妯哄�?*/
+/* 閻庤鐭悳顖炲箮濡搫缍?*/
 .settings-pane--usage .settings-usage-prices {
   border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
   padding-top: var(--space-2_5);

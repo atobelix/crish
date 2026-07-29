@@ -24,7 +24,6 @@
   background: var(--bg-elevated, #fff);
   color: var(--text-primary, #111);
   border-radius: 6px;
-  box-shadow: var(--shadow-sm);
   text-decoration: none;
   font-size: 13px;
 }

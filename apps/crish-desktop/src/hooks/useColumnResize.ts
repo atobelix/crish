@@ -68,6 +68,10 @@ export function useColumnResize(wsId: string) {
     const endResize = (upEvent: PointerEvent) => {
       if (ended) return; ended = true;
       try {
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
         try {
           if (splitterEl.hasPointerCapture?.(upEvent.pointerId)) {
             splitterEl.releasePointerCapture(upEvent.pointerId);
@@ -139,14 +143,18 @@ export function useColumnResize(wsId: string) {
     const restoreIframes = disableIframePointerEvents();
     const cursorStyle = createGlobalCursorStyle('row-resize');
 
+    let rafId: number | null = null;
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const dy = moveEvent.clientY - startY;
       const ratioDelta = dy / containerHeight;
       const ratioTop = (topPct / 100) + ratioDelta;
       const ratioBottom = (bottomPct / 100) - ratioDelta;
       if (ratioTop > 0.1 && ratioBottom > 0.1) {
-        topCardEl.style.height = `${ratioTop * 100}%`;
-        bottomCardEl.style.height = `${ratioBottom * 100}%`;
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          topCardEl.style.height = `${ratioTop * 100}%`;
+          bottomCardEl.style.height = `${ratioBottom * 100}%`;
+        });
       }
     };
 
@@ -156,6 +164,10 @@ export function useColumnResize(wsId: string) {
     const endResize = (upEvent: PointerEvent) => {
       if (ended) return; ended = true;
       try {
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
         try {
           if (splitterEl.hasPointerCapture?.(upEvent.pointerId)) {
             splitterEl.releasePointerCapture(upEvent.pointerId);

@@ -4,11 +4,13 @@
  * immer 下 sessionsById[id] 与数组内对象须为同一 draft 引用（reindex 同步）。
  *
  * 另含：
- * - 侧栏空壳 / 占位「新会话」过滤（与 sessionTitle 同源）
+ * - 侧栏空壳 / 占位「新会话」过滤（与 sessionTitle 同源；**hydrate GC + list hide only**，
+ *   非 create/reuse — 用户「新对话」走 PENDING_DRAFT，见 inventory #9）
  * - 纯函数重排（数组保序 + 索引同步）
  * - 轻量搜索 filter keys（标题 / folder / id，非全文）
  */
 
+import { original } from 'immer';
 import {
   EMPTY_SESSION_TITLE,
   isDefaultSessionTitle,
@@ -19,6 +21,24 @@ import {
 } from '../api/sessionTitle';
 import { resolveFolderToProjectId } from '../api/projectStore';
 import type { SessionState } from './types';
+
+/** 比较是否同一底层对象：plain 用 ===；immer draft 用 original()。 */
+function isSameSessionBase(
+  a: SessionState | undefined,
+  b: SessionState | undefined
+): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  try {
+    const oa = original(a);
+    const ob = original(b);
+    // 同 base 的不同 draft proxy：original 相同且非 undefined
+    if (oa !== undefined && ob !== undefined && oa === ob) return true;
+  } catch {
+    /* non-draft / frozen */
+  }
+  return false;
+}
 
 export type SessionsIndexed = {
   sessions: SessionState[];
@@ -80,6 +100,62 @@ export function getSessionById(
     }
   }
   return found;
+}
+
+/**
+ * Immer 写路径取会话：始终返回 `sessions[]` 元素，必要时把 `sessionsById[id]` 绑回同一对象。
+ *
+ * 为何不用 getSessionById：
+ * - getSessionById 先读 sessionsById；若仅经 map 路径 mutate，immer 会把 map 值 fork 成
+ *   新对象，而 sessions[] 仍保留旧引用 → 调试/MCP 见 sessions[].messages 空、UI（读 byId）有正文。
+ * - 经数组元素写入会弄脏 sessions 分支，withAutoIndex 在数组引用变化时从 sessions 重建 map。
+ *
+ * 为何不用 indexOf(hit)：
+ * - immer 下 sessionsById[id] 与 sessions[i] 即使同源也是不同 draft proxy，indexOf 恒为 -1，
+ *   误 rebind 会弄脏 state，破坏 message no-op short-circuit。
+ * - 用 original() 判断同源；仅在真正 fork / 缺失时写回 map。
+ */
+export function getSessionForWrite(
+  state: SessionsIndexed,
+  sessionId: string
+): SessionState | undefined {
+  if (!sessionId) return undefined;
+  const idx = state.sessions.findIndex((s) => s?.id === sessionId);
+  if (idx < 0) return undefined;
+  const sess = state.sessions[idx]!;
+  const byId = state.sessionsById;
+  if (byId && Object.isExtensible(byId)) {
+    const hit = byId[sessionId];
+    // 已 fork / 缺失才 rebind；同源 draft 不写 map，避免 no-op 路径弄脏 state
+    if (!isSameSessionBase(hit, sess)) {
+      try {
+        byId[sessionId] = sess;
+      } catch {
+        /* frozen / sealed */
+      }
+    }
+  }
+  return sess;
+}
+
+/**
+ * 写完 sessions[] 元素后把 map 绑回同一引用。
+ * immer 下即使同源，只动 sessions[] 也会让 sessionsById 留下旧 finalized 对象。
+ */
+export function rebindSessionById(
+  state: SessionsIndexed,
+  sessionId: string,
+  sess?: SessionState
+): void {
+  if (!sessionId || !state.sessionsById) return;
+  const target =
+    sess ?? state.sessions.find((s) => s?.id === sessionId);
+  if (!target || !Object.isExtensible(state.sessionsById)) return;
+  try {
+    state.sessionsById[sessionId] = target;
+  } catch {
+    /* frozen / sealed */
+  }
 }
 
 /** 数组下标（需要重排时）；优先索引定位 */
@@ -520,13 +596,19 @@ export function partitionSidebarSessions(
   if (opts.filterType === 'pinned') {
     visible = visible.filter((s) => s.isPinned);
   }
+  // id 去重：同一 session 只出现一次（防 hydrate / 双写幽灵重复）
+  const seen = new Set<string>();
   const pinned: SessionState[] = [];
   const unpinned: SessionState[] = [];
+  const visibleDeduped: SessionState[] = [];
   for (const s of visible) {
+    if (!s?.id || seen.has(s.id)) continue;
+    seen.add(s.id);
+    visibleDeduped.push(s);
     if (s.isPinned) pinned.push(s);
     else unpinned.push(s);
   }
-  return { visible, pinned, unpinned };
+  return { visible: visibleDeduped, pinned, unpinned };
 }
 
 /**

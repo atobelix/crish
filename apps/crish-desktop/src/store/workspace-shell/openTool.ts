@@ -1,0 +1,185 @@
+/**
+ * 在活动 Tab 的 RightToolDock 中打开工具面板。
+ * 替换 focusOrOpenTreePanel 对 tool 的主路径。
+ *
+ * ## compositionRoot (OPT-G4)
+ * Imperative getState here is **same-store only** (`useWorkspaceShellStore`).
+ * Keep direct store access — no cross-store tree/session getState in this module.
+ * Tree projection stays via `adapterShape` (internal; not rewritten).
+ * Migrating shell → `getCompositionRoot().shell` would add store→root coupling
+ * with no cross-store benefit.
+ */
+
+import { useWorkspaceShellStore } from './workspaceShellStore';
+import { ensureChatOnlyTree, applyDockToTree } from './adapterShape';
+import { useLayoutTreeStore } from '../layout-tree';
+import { registerFileViewerOpener } from '../../api/workspaceFsApi';
+
+const TOOL_ALIASES: Record<string, string> = {
+  tasks: 'overview',
+  plan: 'overview',
+};
+
+/** 在指定 session 的 RightToolDock 中打开工具（多 unit 时不抢其它会话） */
+export function openToolInSession(sessionId: string, panelId: string): void {
+  const mapped = TOOL_ALIASES[panelId] || panelId;
+  const sid = (sessionId || '').trim();
+  const store = useWorkspaceShellStore.getState();
+  const tab = sid
+    ? store.openTabs.find((t) => t.sessionId === sid) ?? store.getActiveTab()
+    : store.getActiveTab();
+
+  if (mapped === 'chat') {
+    ensureChatOnlyTree(tab?.sessionId || sid || undefined);
+    return;
+  }
+
+  if (!tab) {
+    ensureChatOnlyTree();
+    return;
+  }
+
+  const openPanelIds = tab.rightDock.openPanelIds.includes(mapped)
+    ? tab.rightDock.openPanelIds
+    : [...tab.rightDock.openPanelIds, mapped];
+
+  const dock = {
+    ...tab.rightDock,
+    openPanelIds,
+    activePanelId: mapped,
+    collapsed: false,
+  };
+  store.updateRightDock(tab.tabId, dock);
+  applyDockToTree(dock, tab.sessionId);
+
+  // 打开终端面板：ensure 该 session 的 PTY（折叠坞不 kill；C2 未就绪时 no-op）
+  if (mapped === 'terminal') {
+    const ensureSid = tab.sessionId || sid;
+    void import('../../api/ptyRegistry')
+      .then((m) => m.ensurePtyForSession(ensureSid))
+      .catch(() => {
+        /* ignore */
+      });
+  }
+
+  // 确保全局侧栏没有被折叠，如果折叠了就将其展开
+  if (useLayoutTreeStore.getState().toolColumnCollapsed) {
+    useLayoutTreeStore.getState().setToolColumnCollapsed(false);
+  }
+}
+
+export function openToolInActiveTab(panelId: string): void {
+  const tab = useWorkspaceShellStore.getState().getActiveTab();
+  openToolInSession(tab?.sessionId ?? '', panelId);
+}
+
+export function toggleActiveTabRightDock(): void {
+  const store = useWorkspaceShellStore.getState();
+  const tab = store.getActiveTab();
+  if (!tab) return;
+  const collapsed = !tab.rightDock.collapsed;
+  const dock = {
+    ...tab.rightDock,
+    collapsed,
+    // 展开且无 active 时默认 overview
+    activePanelId:
+      !collapsed && !tab.rightDock.activePanelId
+        ? 'overview'
+        : tab.rightDock.activePanelId,
+    openPanelIds:
+      !collapsed && !tab.rightDock.openPanelIds.length
+        ? ['overview']
+        : tab.rightDock.openPanelIds,
+  };
+  store.updateRightDock(tab.tabId, dock);
+  applyDockToTree(dock, tab.sessionId);
+}
+
+export const fileViewerInitialModeMap = new Map<string, 'plain' | 'diff'>();
+
+export function openFileViewerInSession(filePath: string, initialMode: 'plain' | 'diff' = 'plain'): void {
+  const store = useWorkspaceShellStore.getState();
+  const tab = store.getActiveTab();
+  if (!tab) return;
+
+  const tabId = `file-viewer:${filePath}`;
+  fileViewerInitialModeMap.set(filePath, initialMode);
+
+  const treeStore = useLayoutTreeStore.getState();
+  if (treeStore.toolColumnCollapsed) {
+    treeStore.setToolColumnCollapsed(false);
+  }
+
+  const root = treeStore.tree.root;
+  function collectToolLeaves(node: any): any[] {
+    if (node.type === 'leaf') {
+      return node.panelId !== 'chat' ? [node] : [];
+    }
+    return [...collectToolLeaves(node.children[0]), ...collectToolLeaves(node.children[1])];
+  }
+  const toolLeaves = collectToolLeaves(root);
+  let targetLeafId = treeStore.activeLeafId;
+
+  const chatLeaves = (() => {
+    function collect(node: any): any[] {
+      if (node.type === 'leaf') return node.panelId === 'chat' ? [node] : [];
+      return [...collect(node.children[0]), ...collect(node.children[1])];
+    }
+    return collect(root);
+  })();
+
+  if (chatLeaves.some(c => c.id === targetLeafId)) {
+    targetLeafId = toolLeaves[0]?.id || null;
+  }
+
+  if (!targetLeafId && toolLeaves[0]) {
+    targetLeafId = toolLeaves[0].id;
+  }
+
+  if (targetLeafId) {
+    treeStore.addTabToLeaf(targetLeafId, tabId);
+    treeStore.setActiveTab(targetLeafId, tabId);
+  } else {
+    const activeChat = chatLeaves[0];
+    if (activeChat) {
+      treeStore.splitLeaf(activeChat.id, 'horizontal', tabId, 'after', 0.5);
+    }
+  }
+
+  const openPanelIds = tab.rightDock.openPanelIds.includes(tabId)
+    ? tab.rightDock.openPanelIds
+    : [...tab.rightDock.openPanelIds, tabId];
+  const dock = {
+    ...tab.rightDock,
+    openPanelIds,
+    activePanelId: tabId,
+    collapsed: false,
+  };
+  store.updateRightDock(tab.tabId, dock);
+  applyDockToTree(dock, tab.sessionId);
+}
+
+export function collapseActiveTabRightDock(collapsed: boolean): void {
+  const store = useWorkspaceShellStore.getState();
+  const tab = store.getActiveTab();
+  if (!tab) return;
+  const dock = {
+    ...tab.rightDock,
+    collapsed,
+    activePanelId:
+      !collapsed && !tab.rightDock.activePanelId
+        ? 'overview'
+        : tab.rightDock.activePanelId,
+    openPanelIds:
+      !collapsed && !tab.rightDock.openPanelIds.length
+        ? ['overview']
+        : tab.rightDock.openPanelIds,
+  };
+  store.updateRightDock(tab.tabId, dock);
+  applyDockToTree(dock, tab.sessionId);
+}
+
+// 注册回调解耦循环依赖
+registerFileViewerOpener((path, mode) => {
+  openFileViewerInSession(path, mode || 'plain');
+});

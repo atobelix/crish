@@ -3,7 +3,6 @@ import { hydrateSessionsFromDisk } from '../../api/sessionPersistence';
 import { GENERAL_FOLDER } from '../../api/projectStore';
 import { normalizeAssistantTimeline } from '../../api/toolPresentation';
 import { fillDefaultSessionTitles, pruneEmptyShellSessions } from '../../api/sessionTitle';
-import { mirrorSessionsToDisk } from '../../api/sessionDiskMirror';
 import type { SessionState } from '../types';
 
 export const DEFAULT_SESSIONS: SessionState[] = [
@@ -66,7 +65,6 @@ export function seedSessions(): { sessions: SessionState[]; activeSessionId: str
     const folders = disk.folderOrder && disk.folderOrder.length > 0
       ? Array.from(new Set([...disk.folderOrder, ...fromSessions, GENERAL_FOLDER]))
       : [GENERAL_FOLDER, ...fromSessions.filter((f) => f !== GENERAL_FOLDER)];
-    mirrorSessionsToDisk(sessions, active, folders);
     return { sessions, activeSessionId: active, folderOrder: folders };
   }
   return { sessions: [], activeSessionId: '', folderOrder: [GENERAL_FOLDER] };

@@ -7,12 +7,14 @@ import type { SessionMessage } from '../store/layoutStore';
 import {
   buildTerminalToolPatches,
   canStreamLocalSession,
+  decideSendWhileRunning,
   ensureSessionMessages,
   isLiveStreamRun,
+  isSessionAiBusy,
   resolveStreamSessionId,
   safeCancelStream,
   stopAssistantPlaceholderText,
-} from './useChatStream';
+} from './chat-stream/helpers';
 
 describe('resolveStreamSessionId (empty session — no invent remote)', () => {
   it('prefers override over active', () => {
@@ -69,6 +71,35 @@ describe('isLiveStreamRun', () => {
   });
 });
 
+describe('decideSendWhileRunning / isSessionAiBusy (W8-3 follow_up)', () => {
+  it('busy → follow_up；idle → start（永不 force abort）', () => {
+    expect(decideSendWhileRunning(true)).toBe('follow_up');
+    expect(decideSendWhileRunning(false)).toBe('start');
+  });
+
+  it('isSessionAiBusy: live stream 或 processing 助手', () => {
+    expect(isSessionAiBusy({ hasLiveStream: true, messages: [] })).toBe(true);
+    expect(
+      isSessionAiBusy({
+        hasLiveStream: false,
+        messages: [{ sender: 'assistant', status: 'processing' }],
+      })
+    ).toBe(true);
+    expect(
+      isSessionAiBusy({
+        hasLiveStream: false,
+        messages: [
+          { sender: 'user', status: 'queued' },
+          { sender: 'assistant', status: 'completed' },
+        ],
+      })
+    ).toBe(false);
+    expect(isSessionAiBusy({ hasLiveStream: false, messages: null })).toBe(
+      false
+    );
+  });
+});
+
 describe('safeCancelStream', () => {
   it('calls cancel and returns true', () => {
     const cancel = vi.fn();
@@ -92,11 +123,11 @@ describe('safeCancelStream', () => {
 });
 
 describe('stopAssistantPlaceholderText', () => {
-  it('returns 已停止。 only when text empty', () => {
-    expect(stopAssistantPlaceholderText('')).toBe('已停止。');
-    expect(stopAssistantPlaceholderText('   ')).toBe('已停止。');
-    expect(stopAssistantPlaceholderText(null)).toBe('已停止。');
-    expect(stopAssistantPlaceholderText(undefined)).toBe('已停止。');
+  it('never injects system stop text into assistant bubble', () => {
+    expect(stopAssistantPlaceholderText('')).toBeNull();
+    expect(stopAssistantPlaceholderText('   ')).toBeNull();
+    expect(stopAssistantPlaceholderText(null)).toBeNull();
+    expect(stopAssistantPlaceholderText(undefined)).toBeNull();
     expect(stopAssistantPlaceholderText('已有正文')).toBeNull();
   });
 });

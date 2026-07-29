@@ -133,9 +133,9 @@ export function bootstrapStores(): () => void {
   }));
 
   initStoreAccess(
-    useSessionStore as any,
-    useWorkspaceStore as any,
-    useSettingsUiStore as any,
+    useSessionStore,
+    useWorkspaceStore,
+    useSettingsUiStore,
   );
 
   return () => {

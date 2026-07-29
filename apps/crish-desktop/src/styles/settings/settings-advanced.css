@@ -1,10 +1,10 @@
 /* === shortcuts polish-v1 === */
-/* 鏉堣锟?�?1%閿涙稑涔忛崥宥囷�?缁犫偓鏉╁府绱濋崣铏瘻闁款噯绱辫ぐ鏇炲煑閹浇浜ら幓鎰仛 */
+/* 鏉堣锟1%閿涙稑涔忛崥宥囷缁犫偓鏉╁府绱濋崣铏瘻闁款噯绱辫ぐ鏇炲煑閹浇浜ら幓鎰仛 */
 
 .settings-pane--shortcuts {
   gap: var(--space-4);
   width: 100%;
-  max-width: var(--settings-content-max, 720px);
+  max-width: var(--settings-content-max);
   padding-bottom: 36px;
 }
 .settings-pane--shortcuts .settings-page-title {
@@ -30,7 +30,7 @@
 }
 .settings-pane--shortcuts .settings-shortcuts-filter:focus,
 .settings-pane--shortcuts .settings-shortcuts-filter:focus-visible {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
   background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-primary));
 }
 
@@ -98,7 +98,7 @@
   align-items: center;
 }
 
-/* 閹稿鏁幐澶愭尦閿涙氨绮忔潏瑙勵攱 �?1% */
+/* 閹稿鏁幐澶愭尦閿涙氨绮忔潏瑙勵攱 1% */
 .settings-pane--shortcuts .shortcut-key-btn {
   min-width: 92px;
   max-width: 200px;
@@ -160,12 +160,12 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 }
 
 /* === security polish-v1 === */
-/* 鏉堣锟?�?1%閿涙稑涔忛弽鍥�?缁犫偓鏉╁府绱濋崣铏付娴犺绱遍懞顖滃鏉炵粯寮挎�?*/
+/* 鏉堣锟1%閿涙稑涔忛弽鍥缁犫偓鏉╁府绱濋崣铏付娴犺绱遍懞顖滃鏉炵粯寮挎 */
 
 .settings-pane--security {
   gap: var(--space-4);
   width: 100%;
-  max-width: var(--settings-content-max, 720px);
+  max-width: var(--settings-content-max);
   padding-bottom: 36px;
 }
 .settings-pane--security .settings-page-title {
@@ -268,11 +268,11 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 .settings-pane--security .settings-security-input:focus-visible,
 .settings-pane--security .settings-field-input:focus,
 .settings-pane--security .settings-field-input:focus-visible {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
   box-shadow: none;
 }
 
-/* 閼侯垳澧栭敍姘辩矎鏉堣�?*/
+/* 閼侯垳澧栭敍姘辩矎鏉堣 */
 .settings-pane--security .settings-chip-btn,
 .settings-pane--security .settings-chip {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
@@ -323,12 +323,12 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 
 
 /* === rules polish-v1 === */
-/* 鏉堣锟?�?1%閿涙稑鍨悰銊︾閺呭府绱辨０鍕啎閼侯垳澧栨潪缁樺伎锟?*/
+/* 鏉堣锟1%閿涙稑鍨悰銊︾閺呭府绱辨０鍕啎閼侯垳澧栨潪缁樺伎锟 */
 
 .settings-pane--rules {
   gap: var(--space-4);
   width: 100%;
-  max-width: var(--settings-content-max, 720px);
+  max-width: var(--settings-content-max);
   padding-bottom: 36px;
 }
 .settings-pane--rules .settings-page-title {
@@ -438,7 +438,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   max-width: min(480px, 78%);
 }
 
-/* 妫板嫯顔曢懞顖滃�?*/
+/* 妫板嫯顔曢懞顖滃 */
 .settings-pane--rules .settings-rule-preset {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
   background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-primary)) !important;
@@ -471,7 +471,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 }
 .settings-pane--rules .settings-field-input:focus,
 .settings-pane--rules .settings-field-input:focus-visible {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
   box-shadow: none;
 }
 .settings-pane--rules .ui-btn-secondary,
@@ -479,10 +479,10 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
 }
 .settings-pane--rules .ui-btn.danger:hover {
-  color: var(--accent-red, #b91c1c);
+  color: var(--accent-red);
 }
 
-/* 閸忋劍鏋冨鐟扮湴鏉堟挸�?*/
+/* 閸忋劍鏋冨鐟扮湴鏉堟挸 */
 .settings-pane--rules .settings-dialog-textarea,
 .settings-dialog--rules .settings-dialog-textarea {
   border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
@@ -505,13 +505,13 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 }
 
 /* === schedule polish-v1 === */
-/* 鏉堣锟?�?1%閿涙稑浼愰崗閿嬫�?閸掓锟?閺傛澘缂撶捄顖氱窞缂佺喍绔存潪缁樺伎�?*/
+/* 鏉堣锟1%閿涙稑浼愰崗閿嬫閸掓锟閺傛澘缂撶捄顖氱窞缂佺喍绔存潪缁樺伎 */
 
 .sched-settings.settings-pane--modern,
 .settings-pane--modern.sched-settings {
   gap: 14px;
   width: 100%;
-  max-width: var(--settings-content-max, 720px);
+  max-width: var(--settings-content-max);
   padding-bottom: 36px;
 }
 .sched-settings .settings-page-title {
@@ -572,7 +572,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
 }
 
-/* 閺傛澘缂撻崣宀冪熅�?*/
+/* 閺傛澘缂撻崣宀冪熅 */
 .sched-settings .settings-create-paths {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -620,7 +620,7 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 }
 .sched-settings .settings-field-input:focus,
 .sched-settings .settings-field-input:focus-visible {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
   box-shadow: none;
 }
 .sched-preset-chip {

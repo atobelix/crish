@@ -10,7 +10,14 @@
  * 3. 中心区域 → merge-tab（合并为 tab）
  * 4. 过渡区 → 按距离梯度加权取最高分
  * 5. 窄面板自适应：面板越窄/矮，边缘区域占比越大
+ *
+ * Conversation Unit 作用域：
+ * - isUnitScopedDropAllowed 约束 tool 拖拽不得跨 session（同 unit 内 split/merge）
+ * - chat 源不做 session 隔离（多 unit 并排由 session drag 负责）
+ * - 域隔离（chat vs tool）由 types.isSameDomain 另行处理
  */
+
+import { isChatDomain } from './types';
 
 export interface Rect {
   left: number;
@@ -50,6 +57,43 @@ export interface DropDetectionOptions {
 const DEFAULT_EDGE_THRESHOLD = 0.15;
 const DEFAULT_CENTER_BIAS = 0.35;
 const DEFAULT_MIN_ADAPTIVE_SIZE = 200;
+
+/**
+ * Conversation Unit 作用域：判断 tool 拖放是否允许落在目标 leaf。
+ *
+ * 规则（与 applyDrop / useTreeDrag 共用，单一可信源）：
+ * 1. chat 域源：不按 session 隔离 → 允许（多 unit 并排由 session drag 负责）
+ * 2. tool 源无 ownerSessionId：无 unit 约束 → 允许（兼容旧单坞）
+ * 3. tool 源有 ownerSessionId：
+ *    - 目标有不同的非空 sessionId → 拒绝（跨 session tool / 他 session 的 chat）
+ *    - 目标同 session 或未绑定 → 允许（merge 时再回写 owner）
+ *
+ * 注意：域隔离（tool→chat）由 isSameDomain 在上游处理；本函数是 session 层防御。
+ *
+ * @param srcPanelId 拖拽源 panelId
+ * @param srcOwnerSessionId 源 leaf 的 sessionId（tool 叶 = ownerSessionId）
+ * @param targetPanelId 目标 leaf panelId
+ * @param targetOwnerSessionId 目标 leaf 的 sessionId
+ */
+export function isUnitScopedDropAllowed(
+  srcPanelId: string,
+  srcOwnerSessionId: string | undefined,
+  _targetPanelId: string,
+  targetOwnerSessionId: string | undefined
+): boolean {
+  // chat 源：不在此做 session 隔离
+  if (isChatDomain(srcPanelId)) return true;
+
+  const srcSid = (srcOwnerSessionId || '').trim();
+  if (!srcSid) return true;
+
+  const tgtSid = (targetOwnerSessionId || '').trim();
+  // 目标已绑定其它 session（tool 或 chat）→ 跨 unit，拒绝
+  // 域隔离（tool→chat）由 isSameDomain 上游处理；此处是 session 层防御
+  if (tgtSid && tgtSid !== srcSid) return false;
+
+  return true;
+}
 
 /**
  * 检测指针相对于目标 leaf 的 drop zone。

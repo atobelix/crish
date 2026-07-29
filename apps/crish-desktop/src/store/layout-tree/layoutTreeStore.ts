@@ -5,13 +5,18 @@
  * 1. 单一可信源：所有 tree 结构变更通过此 store 流转
  * 2. 纯函数更新：operations.ts 的纯函数返回新树，store 直接赋值（无需 immer）
  * 3. 历史栈：undo/redo（限 50 步，避免内存膨胀）
- * 4. 持久化：localStorage 保存 tree + activeLeafId（不保存 history/drag 状态）
+ * 4. 持久化：localStorage 保存 tree + activeLeafId + toolColumnCollapsed
+ *    （不保存 history/drag 状态）；window-scoped key 支持多窗口隔离
  * 5. 拖拽集中化：commitDrop 调用纯函数 applyDrop 计算变更，仅负责推历史 + 清理状态
+ * 6. 冷启动 restore 策略：onRehydrateStorage 读取 crish_restore_last_workspace
+ *    开关，配合 validateRestorableLayoutTree 决定保留 multi-unit 树或回退 clean 单 chat
  *
  * Action 命名约定：
- * - 结构操作（推历史）：splitLeaf / mergeBranch / moveLeaf / resetTree / setTree / commitDrop
+ * - 结构操作（推历史）：splitLeaf / mergeBranch / moveLeaf / resetTree / setTree /
+ *   commitDrop / setTreeWithDock / setLeafSessionId
  * - 焦点操作（不推历史）：setActiveLeaf / setActiveTab
  * - 拖拽状态（不推历史）：setDraggedSource / setActiveDropZone / cancelDrag
+ * - 工具栏折叠（不推历史）：toggleToolColumnCollapsed / setToolColumnCollapsed
  * - resize：resizeBranch(branchId, ratio, commit=true) — 键盘默认推历史，拖拽传 false
  * - 历史：undo / redo / canUndo / canRedo / pushHistory（手势前置快照）
  *
@@ -44,18 +49,39 @@ import {
   addTabToLeaf,
   removeTabFromLeaf,
   setLeafActiveTab,
+  setLeafSessionId as setLeafSessionIdOp,
   collectLeaves,
   findNodeById,
   applyDrop,
 } from './operations';
 import type { DropZone } from './dropDetection';
+import {
+  validateRestorableLayoutTree,
+  RESTORE_LAST_WORKSPACE_LS_KEY,
+} from './layoutRestorePolicy';
+import { migrateScopedStorageKeyIfNeeded } from '../../api/shellWindowScope';
 
 // ── 常量 ──────────────────────────────────────────────────────────
 
 /** 历史栈最大长度（避免内存膨胀） */
 const MAX_HISTORY = 50;
-/** localStorage 持久化 key */
-const STORAGE_KEY = 'crish-layout-tree-v1';
+/**
+ * localStorage 持久化 base key。
+ * 运行时实际使用 window-scoped 形式：`${base}::${windowId}`
+ * （见 layoutTreeStorageKey() / api/shellWindowScope.ts）
+ */
+export const LAYOUT_TREE_STORAGE_KEY_BASE = 'crish-layout-tree-v1';
+
+/**
+ * 返回当前窗口的 layout-tree 持久化 key。
+ *
+ * 多窗口隔离：每个 workbench 窗口保留独立的 tree 快照。
+ * 首次访问时若 scoped key 为空且 legacy 未 scope key 有数据，会一次性迁移
+ * （仅主窗口受益；次窗口从空开始）。
+ */
+export function layoutTreeStorageKey(): string {
+  return migrateScopedStorageKeyIfNeeded(LAYOUT_TREE_STORAGE_KEY_BASE);
+}
 
 // ── 类型 ──────────────────────────────────────────────────────────
 
@@ -72,6 +98,8 @@ export interface LayoutTreeStoreState {
   past: LayoutTree[];
   /** 历史栈：未来的 tree 快照（redo 用） */
   future: LayoutTree[];
+  /** 右侧面板（功能区）是否折叠 */
+  toolColumnCollapsed: boolean;
 }
 
 export interface LayoutTreeStoreActions {
@@ -102,12 +130,30 @@ export interface LayoutTreeStoreActions {
   addTabToLeaf: (leafId: string, tabId: string) => void;
   /** 从叶子移除 tab */
   removeTabFromLeaf: (leafId: string, tabId: string) => void;
+  /** 绑定 chat leaf → sessionId（多 chat 分屏；不推历史） */
+  setLeafSessionId: (
+    leafId: string,
+    sessionId: string | undefined
+  ) => void;
+  /**
+   * 同时更新 tree + toolColumnCollapsed + activeLeafId（推历史）。
+   * 用于 dock 展开/折叠等需要原子性更新多个字段的场景。
+   */
+  setTreeWithDock: (
+    tree: LayoutTree,
+    toolColumnCollapsed: boolean,
+    activeLeafId?: string | null
+  ) => void;
 
   // ── 焦点操作（不推历史） ────────────────────────────────────
   /** 设置激活 leaf */
   setActiveLeaf: (leafId: string | null) => void;
   /** 设置激活 tab */
   setActiveTab: (leafId: string, tabId: string) => void;
+  /** 折叠/展开右侧面板（功能区） */
+  toggleToolColumnCollapsed: () => void;
+  /** 显式设置功能区折叠（Adapter / RightToolDock 用） */
+  setToolColumnCollapsed: (collapsed: boolean) => void;
 
   // ── 拖拽状态（不推历史） ────────────────────────────────────
   /** 设置拖拽源（拖拽开始时调用） */
@@ -152,6 +198,39 @@ function resolveActiveLeaf(
   return firstLeafId(tree);
 }
 
+/**
+ * 读取 restore-last-workspace 开关（同步 localStorage 直读，避免 appSettings race）。
+ *
+ * - 'true' / '1' → true（opt-in restore multi-unit）
+ * - 'false' / '0' → false（默认 clean 单 chat）
+ * - 缺失 / 脏值 → false（安全默认）
+ */
+function readRestoreLastWorkspaceFlag(): boolean {
+  try {
+    const raw = localStorage.getItem(RESTORE_LAST_WORKSPACE_LS_KEY);
+    if (raw === 'true' || raw === '1') return true;
+    if (raw === 'false' || raw === '0') return false;
+  } catch {
+    /* private mode / SSR */
+  }
+  return false;
+}
+
+/**
+ * 强制 clean 单 chat tree + toolColumnCollapsed=true。
+ * 用于 onRehydrateStorage 在 restore=false 或 tree 校验失败时归一化状态。
+ */
+function applyCleanColdStartOnState(state: LayoutTreeStoreState): void {
+  const cleanTree = createDefaultTree('chat');
+  state.tree = cleanTree;
+  state.activeLeafId = firstLeafId(cleanTree);
+  state.toolColumnCollapsed = true;
+  state.past = [];
+  state.future = [];
+  state.draggedSource = null;
+  state.activeDropZone = null;
+}
+
 // ── Store 实现 ────────────────────────────────────────────────────
 
 const initialTree = createDefaultTree('chat');
@@ -166,6 +245,7 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
       activeDropZone: null,
       past: [],
       future: [],
+      toolColumnCollapsed: false,
 
       // ── 结构操作 ──────────────────────────────────────────
 
@@ -277,6 +357,35 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
           };
         }),
 
+      setLeafSessionId: (leafId, sessionId) =>
+        set((state) => {
+          const result = setLeafSessionIdOp(state.tree, leafId, sessionId);
+          if (result === state.tree) return {};
+          // leaf↔session 绑定是元数据更新，不推历史（与 setActiveTab 同级）
+          return { tree: result };
+        }),
+
+      /**
+       * 同时更新 tree + toolColumnCollapsed + activeLeafId（推历史）。
+       * 用于 applyDockToSession 等需要原子性更新多个字段的场景，
+       * 避免独立 setState 之间产生中间态 re-render。
+       */
+      setTreeWithDock: (
+        tree: LayoutTree,
+        toolColumnCollapsed: boolean,
+        activeLeafId?: string | null
+      ) =>
+        set((state) => ({
+          past: [...state.past, state.tree].slice(-MAX_HISTORY),
+          future: [],
+          tree,
+          activeLeafId:
+            activeLeafId !== undefined
+              ? activeLeafId
+              : resolveActiveLeaf(tree, state.activeLeafId),
+          toolColumnCollapsed,
+        })),
+
       // ── 焦点操作（不推历史） ──────────────────────────────
 
       setActiveLeaf: (leafId) => set({ activeLeafId: leafId }),
@@ -287,6 +396,14 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
           if (result === state.tree) return {};
           return { tree: result };
         }),
+
+      toggleToolColumnCollapsed: () =>
+        set((state) => ({
+          toolColumnCollapsed: !state.toolColumnCollapsed,
+        })),
+
+      setToolColumnCollapsed: (collapsed) =>
+        set({ toolColumnCollapsed: collapsed }),
 
       // ── 拖拽状态 ──────────────────────────────────────────
 
@@ -359,16 +476,37 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
       canRedo: () => get().future.length > 0,
     }),
     {
-      name: STORAGE_KEY,
+      name: layoutTreeStorageKey(),
       storage: createJSONStorage(() => localStorage),
-      // 仅持久化 tree + activeLeafId（不保存 history/drag 状态）
+      // 仅持久化 tree + activeLeafId + toolColumnCollapsed
+      // （不保存 history/drag 状态）
       partialize: (s) => ({
         tree: s.tree,
         activeLeafId: s.activeLeafId,
+        toolColumnCollapsed: s.toolColumnCollapsed,
       }),
-      // hydrate 后清空临时状态 + 修正 activeLeafId
+      /**
+       * hydrate 后处理冷启动 restore 策略（D-D / S3）：
+       *
+       * - restore=false（默认）：强制 clean 单 chat + toolColumnCollapsed=true
+       * - restore=true + tree 校验通过：保留持久化 tree，仅 normalize + 清临时状态
+       * - restore=true + tree 校验失败：同 restore=false，安全回退
+       *
+       * 无论分支：临时状态（past/future/draggedSource/activeDropZone）必清空。
+       */
       onRehydrateStorage: () => (state) => {
         if (!state) return;
+        const restore = readRestoreLastWorkspaceFlag();
+        const verdict = restore
+          ? validateRestorableLayoutTree(state.tree)
+          : { ok: false as const };
+
+        if (!restore || !verdict.ok) {
+          applyCleanColdStartOnState(state);
+          return;
+        }
+
+        // restore 通过：保留 tree，仅 normalize activeLeafId + 清临时状态
         state.activeLeafId = resolveActiveLeaf(state.tree, state.activeLeafId);
         state.past = [];
         state.future = [];
@@ -378,6 +516,27 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
     }
   )
 );
+
+// ── Hydration 门闩 ────────────────────────────────────────────────
+
+/**
+ * 等待 layout-tree persist rehydrate 完成。
+ *
+ * AppBootstrap 在调用 hydrateWorkspaceShell 前必须等待，否则脏多 leaf
+ * 持久化数据会覆盖 resetTree 的 clean 单 chat 写入。
+ *
+ * 幂等：已 hydrate 时立即 resolve；未完成时订阅 onFinishHydration。
+ */
+export function waitLayoutTreeHydration(): Promise<void> {
+  const api = useLayoutTreeStore.persist;
+  if (api.hasHydrated()) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const unsub = api.onFinishHydration(() => {
+      unsub();
+      resolve();
+    });
+  });
+}
 
 // ── Selectors ────────────────────────────────────────────────────
 //

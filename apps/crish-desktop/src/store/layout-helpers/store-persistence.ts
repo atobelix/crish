@@ -1,10 +1,11 @@
 import type { SessionState, WorkspaceState } from '../types';
 import { isDemoMode } from '../../api/appMode';
-import { persistAllSessions } from '../../api/sessionPersistence';
 import {
-  mirrorSessionsToDisk,
-  restoreSessionsFromDiskMirror,
-} from '../../api/sessionDiskMirror';
+  ensureMigrated,
+  hydrateSessionsFromRust,
+  persistAllSessions,
+  runMigrationCleanupIfNeeded,
+} from '../../api/sessionPersistence';
 import {
   pickSessionDomain,
   sessionDomainChanged,
@@ -85,8 +86,15 @@ export function waitForStoreHydration<S extends PersistableStoreState>(
 }
 
 /**
- * 挂载会话持久化订阅（session index + 磁盘镜像）与空会话磁盘回灌。
+ * 挂载会话持久化订阅（SQLite 主路径 + localStorage 回退）。
  * demo 模式不持久化，直接返回 no-op cleanup。
+ *
+ * Stream D 改造后：
+ *   - 启动时先 `ensureMigrated`（localStorage → SQLite 一次性迁移）
+ *   - 再用 `hydrateSessionsFromRust` 从 SQLite 回灌会话（替代磁盘镜像）
+ *   - 订阅变更时走 `persistAllSessions`（委托 SQLite，回退 localStorage）
+ *   - 已删除磁盘镜像（mirrorSessionsToDisk / restoreSessionsFromDiskMirror）
+ *
  * 由 App 在 mount 时调用一次，unmount 时执行返回的 cleanup。
  */
 export function initStorePersistence<S extends PersistableStoreState>(
@@ -99,7 +107,6 @@ export function initStorePersistence<S extends PersistableStoreState>(
   const abortController = new AbortController();
 
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
-  let diskTimer: ReturnType<typeof setTimeout> | null = null;
   /** 上一份会话域切片：遥测等字段变更时引用不变 → 跳过落盘 */
   let lastDomain: SessionDomainSlice | null = pickSessionDomain(
     store.getState()
@@ -117,35 +124,31 @@ export function initStorePersistence<S extends PersistableStoreState>(
     persistTimer = setTimeout(() => {
       try {
         const cur = store.getState();
-        persistAllSessions(cur.sessions, cur.activeSessionId, cur.folderOrder);
+        void persistAllSessions(cur.sessions, cur.activeSessionId, cur.folderOrder);
       } catch (e) {
         console.warn('[sessionPersistence] save failed', e);
       }
     }, 350);
-    // H3：磁盘镜像更低频，避免每键写文件
-    if (diskTimer) clearTimeout(diskTimer);
-    diskTimer = setTimeout(() => {
-      const cur = store.getState();
-      void mirrorSessionsToDisk(
-        cur.sessions,
-        cur.activeSessionId,
-        cur.folderOrder
-      );
-    }, 2500);
   });
 
-  // localStorage 空时尝试从磁盘镜像回灌（compare-and-swap：写入前再次确认仍为空）
-  if (store.getState().sessions.length === 0) {
-    void restoreSessionsFromDiskMirror()
-      .then((restored) => {
-        if (abortController.signal.aborted) return;
+  // 启动时：先迁移，再从 SQLite 回灌会话（替代磁盘镜像）
+  void ensureMigrated()
+    .then(async () => {
+      const restored = await hydrateSessionsFromRust();
+      // 迁移完成 30 天后清理 localStorage（非阻塞，不影响首屏）
+      void runMigrationCleanupIfNeeded();
+      return restored;
+    })
+    .then((restored) => {
+      if (abortController.signal.aborted) return;
 
-        if (restored?.sessions?.length) {
-          const cur = store.getState();
-          // 用户已新建会话则不覆盖
-          if (cur.sessions.length > 0) return;
+      if (restored?.sessions?.length) {
+        const cur = store.getState();
+        let applied = false;
+        let filledBodies = false;
 
-          let applied = false;
+        if (cur.sessions.length === 0) {
+          // 冷启动无 seed：全量回灌 SQLite
           store.setState((state: PersistableStoreState) => {
             // 二次检查：recipe 内仍空才写入
             if (state.sessions.length > 0) return;
@@ -172,38 +175,116 @@ export function initStorePersistence<S extends PersistableStoreState>(
             );
             applied = true;
           });
+        } else {
+          // Stream D 关键：seedSessions 只读 localStorage body，而 body 主存 SQLite。
+          // 若 LS 壳 messages=[]、SQLite 有正文，旧逻辑 early-return 会永久跳过回灌，
+          // 随后 350ms persist 还会用空数组把 SQLite 擦掉。此处仅补全空正文，不覆盖
+          // 用户已在内存中的消息 / 新建会话。
+          store.setState((state: PersistableStoreState) => {
+            const byId = new Map(
+              restored.sessions.map((s) => [s.id, s] as const),
+            );
+            let any = false;
+            const next = state.sessions.map((s) => {
+              if (!s?.id) return s;
+              const localLen = s.messages?.length ?? 0;
+              if (localLen > 0) return s;
+              const r = byId.get(s.id);
+              if (!r || !(r.messages?.length > 0)) return s;
+              any = true;
+              return {
+                ...s,
+                messages: r.messages,
+                agents: r.agents?.length ? r.agents : s.agents,
+                ...(r.engineCursor !== undefined
+                  ? { engineCursor: r.engineCursor }
+                  : {}),
+                ...(r.engineLastRunId !== undefined
+                  ? { engineLastRunId: r.engineLastRunId }
+                  : {}),
+                ...(r.hydratedFromEngine !== undefined
+                  ? { hydratedFromEngine: r.hydratedFromEngine }
+                  : {}),
+                ...(r.pinnedMessageIds?.length
+                  ? { pinnedMessageIds: r.pinnedMessageIds }
+                  : {}),
+              };
+            });
+            if (!any) return;
+            const sanitized = sanitizeSessionSeed({
+              sessions: next,
+              activeSessionId: state.activeSessionId,
+              folderOrder: state.folderOrder,
+            });
+            state.sessions = sanitized.sessions;
+            state.sessionsById = sanitized.sessionsById;
+            filledBodies = true;
+          });
+        }
 
-          // 仅在真正写入后落盘；避免旧逻辑用 activeSessionId 巧合匹配误 persist
-          if (!applied) return;
+        // 全量回灌或补正文后：再 activate 触发引擎懒水合；有写入则落盘对齐 LS 镜像
+        if (!applied && !filledBodies) {
+          // 即便未改 sessions，active 仍可能是 seed 直接写入、未走 setActiveSessionId，
+          // 空正文远程壳需要一次 activate 才拉 read-session-events。
           try {
             const after = store.getState();
-            persistAllSessions(
-              after.sessions,
-              after.activeSessionId,
-              after.folderOrder
-            );
+            const setActive = (
+              after as PersistableStoreState & {
+                setActiveSessionId?: (id: string) => void;
+              }
+            ).setActiveSessionId;
+            if (
+              typeof setActive === 'function' &&
+              after.activeSessionId &&
+              after.sessionsById[after.activeSessionId]
+            ) {
+              setActive(after.activeSessionId);
+            }
           } catch {
             /* ignore */
           }
+          return;
         }
-      })
-      .finally(() => {
-        if (!abortController.signal.aborted) {
-          store.setState((state: PersistableStoreState) => {
-            state.hydrationComplete = true;
-          });
+        try {
+          const after = store.getState();
+          // 直接写 activeSessionId 绕过 setActiveSessionId，空正文远程壳不会拉引擎。
+          // 再走一遍 setActive：焦点幂等，且触发 needsEngineMessageHydrate 懒水合。
+          const setActive = (
+            after as PersistableStoreState & {
+              setActiveSessionId?: (id: string) => void;
+            }
+          ).setActiveSessionId;
+          if (
+            typeof setActive === 'function' &&
+            after.activeSessionId &&
+            after.sessionsById[after.activeSessionId]
+          ) {
+            setActive(after.activeSessionId);
+          }
+          void persistAllSessions(
+            after.sessions,
+            after.activeSessionId,
+            after.folderOrder
+          );
+        } catch {
+          /* ignore */
         }
-      });
-  } else {
-    store.setState((state: PersistableStoreState) => {
-      state.hydrationComplete = true;
+      }
+    })
+    .catch((e) => {
+      console.warn('[sessionPersistence] migrate/hydrate failed', e);
+    })
+    .finally(() => {
+      if (!abortController.signal.aborted) {
+        store.setState((state: PersistableStoreState) => {
+          state.hydrationComplete = true;
+        });
+      }
     });
-  }
 
   return () => {
     abortController.abort();
     if (persistTimer) clearTimeout(persistTimer);
-    if (diskTimer) clearTimeout(diskTimer);
     unsub();
   };
 }

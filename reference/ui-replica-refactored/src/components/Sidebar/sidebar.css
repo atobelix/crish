@@ -3,18 +3,18 @@
  * 3-level visual hierarchy system (font-size bumped +1)
  *
  * Level 1 (Primary):
- *   - .quick-chat-btn          �?font-size: 14px
- *   - .feature-accordion-trigger �?font-size: 14px
- *   - .section-header          �?font-size: 13px (uppercase)
+ *   - .quick-chat-btn          \uFFFD?font-size: 14px
+ *   - .feature-accordion-trigger \uFFFD?font-size: 14px
+ *   - .section-header          \uFFFD?font-size: 13px (uppercase)
  *
  * Level 2 (Secondary):
- *   - .project-item .item-text �?font-size: 13px
- *   - .feature-item            �?font-size: 14px
- *   - .search-input            �?font-size: 14px
+ *   - .project-item .item-text \uFFFD?font-size: 13px
+ *   - .feature-item            \uFFFD?font-size: 14px
+ *   - .search-input            \uFFFD?font-size: 14px
  *
  * Level 3 (Tertiary - ALL chat items unified):
- *   - .chat-item .chat-title   �?font-size: 14px
- *   - .nested-item .nested-text �?font-size: 14px
+ *   - .chat-item .chat-title   \uFFFD?font-size: 14px
+ *   - .nested-item .nested-text \uFFFD?font-size: 14px
  */
 
 /* Sidebar icons: 14px consistent */

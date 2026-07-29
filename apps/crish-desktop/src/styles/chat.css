@@ -1,4 +1,4 @@
-/* --- chat.css (flow / messages / tools / breadcrumbs) �?modules under ./chat/ --- */
+/* --- chat.css (flow / messages / tools / breadcrumbs) 闁?modules under ./chat/ --- */
 @import './chat/chat-markdown.css';
 @import './chat/chat-composer.css';
 @import './chat/chat-approval.css';
@@ -14,7 +14,7 @@
   flex: 1 1 0%;
 }
 
-/* 閺堫兛绱扮拠婵囩Х閹垵绻冨銈嗘蒋閿涙氨鎻ｉ崙鎴濆礋�?hairline閿涘矂鐝惔锕佸垱鏉?card-header */
+/* 闁哄牜鍏涚槐鎵嫚濠靛洨啸闁诡収鍨电换鍐煥閵堝棙钂嬮柨娑欐皑閹伙綁宕欓幋婵嗙閻?hairline闁挎稑鐭傞悵顔芥償閿曚礁鍨遍弶?card-header */
 .chat-msg-filter-bar {
   display: flex;
   align-items: center;
@@ -53,14 +53,14 @@
   box-sizing: border-box;
 }
 
-/* 閸樼粯绁荤憴鍫濇�?search 閹貉傛姒涙顓诲〒鍛存珟闁筋噯绱濈紒鐔剁閻劍娼崘鍛瘻�?*/
+/* 闁告绮粊鑽ゆ喆閸繃鐝?search 闁硅矇鍌涱偨濮掓稒顭堥璇层€掗崨瀛樼彑闂佺瓔鍣槐婵堢磼閻斿墎顏遍柣顫妽濞碱垶宕橀崨顔肩樆闂?*/
 .chat-msg-filter-input::-webkit-search-cancel-button,
 .chat-msg-filter-input::-webkit-search-decoration {
   -webkit-appearance: none;
   appearance: none;
 }
 
-/* focus �?settings-field-input / composer 閸氬苯顨栫痪锔肩窗text-tertiary + --focus-ring */
+/* focus 濞?settings-field-input / composer 闁告艾鑻〃鏍棯閿旇偐绐梩ext-tertiary + --focus-ring */
 .chat-msg-filter-input:focus {
   border-color: var(--text-tertiary);
   background: transparent;
@@ -82,7 +82,7 @@
   opacity: 0.65;
 }
 .chat-msg-filter-count.is-empty {
-  color: var(--accent-orange, #f59e0b);
+  color: var(--accent-orange);
   font-weight: var(--font-weight-medium, 500);
 }
 
@@ -110,7 +110,7 @@
   opacity: 0.8;
 }
 
-/* 鏉╁洦鎶ら弮鐘叉嚒娑擃叏绱版�?chat-empty-state 閸氬苯鍨€?鐏炲懍鑵戦敍宀勪缉閸忓秲鈧瞼缂夐崷銊ヤ箯娑撳�?*/
+/* 閺夆晛娲﹂幎銈夊籍閻樺弶鍤掑☉鎿冨弿缁辩増绋?chat-empty-state 闁告艾鑻崹顏嗏偓?閻忕偛鎳嶉懙鎴︽晬瀹€鍕級闁稿繐绉查埀顒€鐬肩紓澶愬捶閵娿儰绠☉鎾愁焾閳?*/
 .chat-msg-filter-empty {
   display: flex;
   flex-direction: column;
@@ -141,16 +141,16 @@
   flex-direction: column;
   align-items: center;
   gap: 0;
-  /* 閸忋劌顔旈敍姘泊閸斻劍娼拹鏉戞躬鐎电鐦介崠楦跨珶缂傛﹫绱濇稉宥堝垱濞戝牊浼呴崚?*/
+  /* 闁稿繈鍔岄鏃堟晬濮橆厾娉婇柛鏂诲妽濞碱垳鎷归弶鎴炶含閻庣數顢婇惁浠嬪礌妤﹁法鐝剁紓鍌涳公缁辨繃绋夊鍫濆灡婵炴垵鐗婃导鍛村礆?*/
   max-width: none;
   width: 100%;
   margin: 0;
-  /* 閺囧鏋忛妴浣规纯鐏?chrome閿涙艾顕�?Kimi / ChatGPT 娑撹顕拠婵堟殌閻?*/
+  /* 闁哄洤顕弸蹇涘Υ娴ｈ绾悘?chrome闁挎稒鑹鹃顕€寮?Kimi / ChatGPT 濞戞捁顕ч顔炬嫚濠靛牊娈岄柣?*/
   padding: 28px 20px 20px;
   box-sizing: border-box;
   background-color: var(--shell-inset-bg, var(--bg-primary));
   color: var(--text-primary);
-  /* 閸烆垯绔寸痪闈涙倻濠婃艾濮╃€圭懓娅掗敍娑氼洣濮濄垺铆閸氭垶鎷洪惍鏉戝灙�?*/
+  /* 闁哥儐鍨粩瀵哥棯闂堟稒鍊绘繝濠冭壘婵晝鈧湱鎳撳▍鎺楁晬濞戞凹娲ｆ慨婵勫灪閾嗛柛姘灦閹锋椽鎯嶉弶鎴濈仚閻?*/
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -197,7 +197,7 @@
   white-space: nowrap;
 }
 
-/* --- BREADCRUMBS --- folder / title+�?閸氬本甯撻敍娑㈢彯鎼达箒�?card-header token */
+/* --- BREADCRUMBS --- folder / title+闁?闁告艾鏈敮鎾绘晬濞戙垻褰幖杈剧畳缁?card-header token */
 .card-header-left.chat-breadcrumb-header,
 .chat-breadcrumb-header {
   display: flex;
@@ -208,7 +208,7 @@
   line-height: 1.35;
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
-  /* allow �?dropdown; title ellipsis lives on .session-name-txt */
+  /* allow 闁?dropdown; title ellipsis lives on .session-name-txt */
   overflow: visible;
   max-width: calc(100% - 40px);
   flex: 1 1 auto;
@@ -270,7 +270,7 @@
   max-width: 24ch;
 }
 
-/* 娴兼俺鐦介弽鍥�?+ �?缁毖嗗垱閹存劗鐨ｉ敍灞肩瑝鐞?flex 閹峰绱?*/
+/* 濞村吋淇洪惁浠嬪冀閸ヮ剦鏆?+ 闁?缂佹瘱鍡楀灡闁瑰瓨鍔楅惃锝夋晬鐏炶偐鐟濋悶?flex 闁瑰嘲顦槐?*/
 .chat-title-cluster {
   display: inline-flex;
   align-items: center;
@@ -281,13 +281,13 @@
 }
 
 .chat-title-cluster .breadcrumb-item.session-trigger {
-  /* 閺嶅洭顣介崣顖涙暪缂傗晪绱遍�?婵绮撶拹鏉戞躬閺傚洤鐡ч崣鍏呮�?*/
+  /* 闁哄秴娲。浠嬪矗椤栨稒鏆紓鍌楁櫔缁遍亶鍩?濠殿喖顑囩划鎾舵嫻閺夋垶韬柡鍌氭搐閻⊙囧矗閸忓懏娅?*/
   flex: 0 1 auto;
   min-width: 0;
   padding-right: 1px;
 }
 
-/* Header �?more: 缁毖嗗垱娴兼俺鐦介弽鍥暯閿涙稖褰嶉崡鏇炴倻娑撳鐫嶅鈧敍灞肩瑝閹嘎ょ翻閸?*/
+/* Header 闁?more: 缂佹瘱鍡楀灡濞村吋淇洪惁浠嬪冀閸ヮ剦鏆柨娑欑瑜板秹宕￠弴鐐村€诲☉鎾愁儏閻秴顕ｉ埀顒勬晬鐏炶偐鐟濋柟鍢庛倗缈婚柛?*/
 .chat-header-more-wrap {
   position: relative;
   flex: 0 0 auto;
@@ -298,7 +298,7 @@
   align-self: center;
 }
 
-/* Composer閿涙矮绗屽☉鍫熶紖閸掓鎮撶€硅棄鐪虫稉顓ㄧ幢妞ゅ墎绱柅蹇旀鎼达附绗庨崣姗堢礉娑撳秷顩﹂弫鏉戞健閻ц棄绨?*/
+/* Composer闁挎稒鐭粭灞解槈閸喍绱栭柛鎺擃殔閹挾鈧妫勯惇铏▔椤撱劎骞㈠銈呭缁鳖參鏌呰箛鏃€顫栭幖杈鹃檮缁楀酣宕ｅ鍫㈢濞戞挸绉烽々锕傚极閺夋垶鍋ラ柣褑妫勭花?*/
 .chat-footer {
   display: flex;
   flex-direction: column;
@@ -306,7 +306,7 @@
   gap: var(--space-1_5);
   padding: 18px 14px 4px;
   border-top: none;
-  /* 閼奉亙绗傞懓灞肩瑓閿涙岸鈧繑妲?�?鎼存洝澹婇敍灞剧Х閹垰褰叉禒搴濈瑓閺傝璐伴崗銉礄token �?agent composer 閸忚京鏁ら敍?*/
+  /* 闁煎浜欑粭鍌炴嚀鐏炶偐鐟撻柨娑欏哺閳ь剙绻戝Σ?闁?閹煎瓨娲濇竟濠囨晬鐏炲墽啸闁诡収鍨拌ぐ鍙夌鎼存繄鐟撻柡鍌濐潐鐠愪即宕楅妷顖滅token 濞?agent composer 闁稿繗浜弫銈夋晬?*/
   background: var(--chat-footer-fade);
   position: relative;
   z-index: var(--z-card-footer);
@@ -320,12 +320,12 @@
   margin-right: auto;
 }
 
-/* 閸ョ偛鍩岄張鈧弬甯窗鐎电鐦介崠鍝勫礁娑撳顫楅幃顒佽癁閸ョ偓鐖ｉ敍娑楃秵娴滃骸顓搁幍瑙勬蒋闁灝鍘ら幐鈩冨瘻闁?*/
+/* 闁搞儳鍋涢崺宀勫嫉閳ь剟寮敮顔剧獥閻庣數顢婇惁浠嬪礌閸濆嫬绀佸☉鎾愁儓椤骞冮浣界檨闁搞儳鍋撻悥锝夋晬濞戞绉靛ù婊冮椤撴悂骞嶇憴鍕拫闂侇剙鐏濋崢銈夊箰閳╁啫鐦婚梺?*/
 .chat-scroll-fab {
   position: absolute;
   right: 18px;
   bottom: 148px;
-  z-index: var(--z-scroll-fab); /* 妤傛ü绨€光剝澹掗弶鈽呯礉闁灝鍘ゆ稉搴☆吀閹电懓灏禍鎺旀祲闁喗�?*/
+  z-index: var(--z-scroll-fab); /* 濡ゅ倹眉缁剛鈧厜鍓濇竟鎺楀级閳藉懐绀夐梺顒€鐏濋崢銈嗙▔鎼粹槅鍚€闁圭數鎳撶亸顖涚閹烘梹绁查梺顒夊枟鐏?*/
   width: 34px;
   height: 34px;
   border-radius: 50%;
@@ -345,9 +345,9 @@
   border-color: var(--border-color) !important;
 }
 
-/* 瀹搞儱鍙跨拫鍐暏閿涙碍绁﹀蹇撳灙鐞涱煉绱濋弮鐘插瀻閸撹尙鍤庨妴浣规￥婵傛鈻?*/
+/* 鐎规悶鍎遍崣璺ㄦ嫬閸愵亝鏆忛柨娑欑缁侊箑顕ｈ箛鎾崇仚閻炴侗鐓夌槐婵嬪籍閻樻彃鐎婚柛鎾瑰皺閸ゅ酣濡存担瑙勶骏濠靛倹顨呴埢?*/
 
-/* Panel dropdown �?hairline elevated surface閿涙稑顦绘竟鍐插讲娴溿倓绨板?strong */
+/* Panel dropdown 闁?hairline elevated surface闁挎稒绋戦ˇ缁樼珶閸愭彃璁插ù婧垮€撶花鏉款浖?strong */
 .panel-dropdown {
   background: var(--bg-primary);
   border: 1px solid var(--hairline-strong, var(--border-color));
@@ -373,7 +373,7 @@
   background: var(--bg-hover);
 }
 
-/* 瀹搞儱鍙跨悰灞剧垽閿涙矮绗屾稉璇差嚠鐠囨繂鎮撻懞鍌氼殧閿涘瞼顩﹀銏犲竾閹典礁顕遍懛鏉戞禈閺嶅洣绗夐�?*/
+/* 鐎规悶鍎遍崣璺ㄦ偘鐏炲墽鍨介柨娑欑煯缁楀本绋夌拠宸殸閻犲洦绻傞幃鎾绘嚍閸屾凹娈ч柨娑樼灱椤╋箑顫㈤姀鐘茬闁瑰吀绀侀閬嶆嚊閺夋垶绂堥柡宥呮矗缁楀宕?*/
 .agent-tool-stack {
   margin: 2px 0;
   gap: 1px;
@@ -391,7 +391,7 @@
   border: none !important;
 }
 .agent-card-btn--danger {
-  color: var(--danger-color, #c44);
+  color: var(--danger-color);
 }
 .agent-more-wrap {
   position: relative;
@@ -523,7 +523,7 @@
   background: var(--bg-hover);
   color: var(--text-primary);
 }
-/* Soft setup banner �?chat/chat-approval.css閿涘湑hatStatusRibbons 閹碘偓閺堝娼堥�?*/
+/* Soft setup banner 闁?chat/chat-approval.css闁挎稑婀慼atStatusRibbons 闁圭鍋撻柡鍫濐槹濞煎牓鏁?*/
 .model-picker-error {
   margin: 4px 8px 8px;
   padding: 8px 10px;
@@ -570,8 +570,8 @@
   background: var(--bg-hover);
   color: var(--text-primary);
 }
-/* Empty chat �?閺囨潙鍘犻崚璁圭窗鐏忔垵娴橀弽鍥棅妤楄埇鈧胶鐓弬鍥攳閵嗕礁銇囬悾娆戞�?*/
-/* is-active-project: transparent only �?no loud highlight (session row owns attention) */
+/* Empty chat 闁?闁哄洦娼欓崢鐘诲礆鐠佸湱绐楅悘蹇斿灥濞存﹢寮介崶顏嶆濡ゆ鍩囬埀顑胯兌閻擃參寮崶顭戞敵闁靛棔绀侀妵鍥偩濞嗘垶顏?*/
+/* is-active-project: transparent only 闁?no loud highlight (session row owns attention) */
 .folder-header.is-active-project {
   background: transparent;
   color: var(--text-secondary);
@@ -582,9 +582,9 @@
   opacity: 0.85;
 }
 
-/* Compact runtime float 闁瀚ㄩ崳銊ュ嚒閺€璺哄經閸?panels.css�?runtime-float-*�?*/
+/* Compact runtime float 闂侇偄顦扮€氥劑宕抽妸銉ュ殥闁衡偓鐠哄搫缍撻柛?panels.css闁?runtime-float-*闁?*/
 
-/* light/dark 閸忚京鏁ら敍姘充喊婢垛晛鍨竟鍐茬湴缂佺喍绔存稉顓熲�?token閿涘矂浼╅崗宥嗘閼硅尙娅у畝?*/
+/* light/dark 闁稿繗浜弫銈夋晬濮樺厖鍠婂鍨涙櫅閸亝绔熼崘鑼勾缂備胶鍠嶇粩瀛樼▔椤撶啿鍋?token闁挎稑鐭傛导鈺呭礂瀹ュ棙顔傞柤纭呭皺濞呇冪暆?*/
 .chat-body,
 .chat-doc-flow,
 .workspace-card.flat-layout,
@@ -593,7 +593,7 @@
   background-color: var(--bg-primary);
   color: var(--text-primary);
 }
-/* agent 娓氀勭埉 / 閸愬懓浠?composer閿涙矮绗屾稉?footer 閸氬本绗庨崣?chrome + ComposerField 閸楀﹪鈧繐锛?*/
+/* agent 濞撴皜鍕焿 / 闁告劕鎳撴禒?composer闁挎稒鐭粭灞剧▔?footer 闁告艾鏈粭搴ㄥ矗?chrome + ComposerField 闁告锕埀顒€绻愰敍?*/
 .agent-card-composer {
   width: 100%;
   max-width: none;
@@ -602,14 +602,14 @@
   border-top: 1px solid transparent;
   background: var(--chat-footer-fade);
 }
-/* �?娓氀勭埉 denser composer pad */
+/* 闁?濞撴皜鍕焿 denser composer pad */
 .agent-card-composer--dense {
   padding: 8px 6px 6px;
 }
 .agent-card-composer .input-container {
   max-width: min(var(--chat-col-max, 760px), 100%);
   margin: 0 auto;
-  /* 娑撳簼瀵岀€电鐦芥稉鈧懛杈剧窗婢跺秶鏁?--composer-shell-bg閿涘矂娼涵顒傜椽閻胶娅ч崸?*/
+  /* 濞戞挸绨肩€靛瞼鈧數顢婇惁鑺ョ▔閳ь剟鎳涙潏鍓х獥濠㈣泛绉堕弫?--composer-shell-bg闁挎稑鐭傚顏嗘兜椤掑倻妞介柣顔昏兌濞呇囧锤?*/
   background: var(
     --composer-shell-bg,
     color-mix(in srgb, var(--bg-primary) 72%, transparent)
@@ -626,9 +626,9 @@
   max-width: min(var(--chat-col-max, 760px), 100%);
   margin: 0 auto 4px;
   font-size: var(--font-size-xxs);
-  color: var(--accent-red, #c44);
+  color: var(--accent-red);
 }
-/* 娓氀勭埉鐎光剝澹掗崡鈽呯窗閻ｃ儲鏁规潏纭呯獩閿涘奔绗夐崡鐘冲姬瀹搞儱鍙块崚?*/
+/* 濞撴皜鍕焿閻庡厜鍓濇竟鎺楀础閳藉懐绐楅柣锝冨劜閺佽娼忕涵鍛崺闁挎稑濂旂粭澶愬础閻樺啿濮€规悶鍎遍崣鍧楀礆?*/
 .agent-card--dense .approval-card,
 .inline-agent--dense .approval-card {
   margin: 4px 0;
@@ -659,7 +659,7 @@
   outline: none;
 }
 
-/* tool stack / timeline閿涙艾鐣ㄩ棃娆戠彨閸氭垼濡總蹇ョ幢閸愬懘鍎村Ο顏呯泊娑撳秵鎷洪惍鏉戝�?*/
+/* tool stack / timeline闁挎稒鑹鹃悾銊╂濞嗘垹褰ㄩ柛姘灱婵☆厽绺借箛銉у耿闁告劕鎳橀崕鏉懳熼鍛硦濞戞挸绉甸幏娲儘閺夋垵鐏?*/
 .tool-stack,
 .msg-timeline-tools,
 .agent-tool-stack {
@@ -678,7 +678,7 @@
   overflow-x: auto;
 }
 
-/* 瀹搞儱鍙块崶鐐垼閿涙氨绮烘稉鈧亸鍝勵�?+ 閸﹀棜顫楅幓蹇氱珶妞嬪孩鐗搁敍鍧坅p/join round�?*/
+/* 鐎规悶鍎遍崣鍧楀炊閻愵剛鍨奸柨娑欐皑缁儤绋夐埀顒備焊閸濆嫷鍤?+ 闁革箑妫滈～妤呭箵韫囨氨鐝跺瀣閻楁悂鏁嶉崸鍧卲/join round闁?*/
 .tool-row-type-ico,
 .tool-row-type-ico.ico-read,
 .tool-row-type-ico.ico-search,
@@ -708,7 +708,7 @@
   width: 12px !important;
   height: 12px !important;
   color: var(--text-tertiary);
-  /* 閸欘垵顫嗛幀褏鏁?.tool-row-chevron-slot 閹貉冨煑閿涘牓绮拋銈夋閽樺骏绱漢over/focus 閹靛秹婀堕敍?*/
+  /* 闁告瑯鍨甸～鍡涘箑瑜忛弫?.tool-row-chevron-slot 闁硅矇鍐ㄧ厬闁挎稑鐗撶划顖滄媼閵堝顓洪柦妯洪獜缁辨饥over/focus 闁归潧绉瑰﹢鍫曟晬?*/
   opacity: 1;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -729,9 +729,9 @@
   border-color: color-mix(in srgb, var(--accent-red) 30%, var(--border-subtle));
 }
 
-/* ---- Change overview閿涙airline 閸掓銆冮敍宀勬姜閻忔澘绨抽崡鈽呯幢閹稿宕遍悧鍥ь啍鎼达箒鍤滈柅鍌氱安 ---- */
+/* ---- Change overview闁挎稒顒irline 闁告帗顨夐妴鍐晬瀹€鍕闁诲繑婢樼花鎶藉础閳藉懐骞㈤柟绋款槸瀹曢亶鎮ч崶褜鍟嶉幖杈剧畳閸ゆ粓鏌呴崒姘卞畨 ---- */
 
-/* 閻厽鈧繆鈧喛绱版稉宥嗗閸欑媴绱辨稉搴㈠閸欑姵鈧繆鈧啫鎮撶粵鏍�?�?閺冪姾鍎楅弲?鏉堣顢嬮敍瀹糴rtiary 閸忓鍩?*/
+/* 闁活収鍘介埀顒佺箚閳ь剙鍠涚槐鐗堢▔瀹ュ棗顫戦柛娆戝缁辫鲸绋夋惔銏狀潙闁告瑧濮甸埀顒佺箚閳ь剙鍟幃鎾剁驳閺嶎偅娈?闁?闁哄啰濮鹃崕妤呭疾?閺夊牐顫夐、瀣晬鐎圭炒rtiary 闁稿繐顑呴崺?*/
 .msg-thinking-plain {
   margin: 0 0 6px;
   padding: 0;
@@ -760,7 +760,7 @@
   user-select: text;
 }
 
-/* 闂€鍨嚠鐠囨繄鐛ラ崣锝忕窗閺勫墽銇氶弴瀛樻－濞戝牊�?*/
+/* 闂傗偓閸噮鍤犻悹鍥ㄧ箘閻涖儵宕ｉ敐蹇曠獥闁哄嫬澧介妵姘跺即鐎涙ɑ锛嶆繛鎴濈墛娴?*/
 .chat-msg-window-older {
   display: flex;
   justify-content: center;
@@ -799,7 +799,7 @@
   margin-left: var(--space-1);
 }
 
-/* ===== Responsive閿涙氨鐛庨崚?/ 鐎硅棄鍨稉宥囧�?===== */
+/* ===== Responsive闁挎稒姘ㄩ悰搴ㄥ礆?/ 閻庣妫勯崹顏呯▔瀹ュ洤浠?===== */
 @media (max-width: 720px) {
   .chat-doc-flow {
     padding: 12px 10px 10px;
@@ -885,12 +885,12 @@
 }
 
 /* =============================================================================
- * FD polish (additive) �?density / hairline / focus-visible / empty shell /
+ * FD polish (additive) 闁?density / hairline / focus-visible / empty shell /
  * tool-row default fold / Chinese UI line-heights via tokens
  * Tokens from tokens.css; no component edits. Cascade overrides only.
  * ============================================================================= */
 
-/* --- 1. Chinese UI line-heights閿涙矮鑵戦弬鍥劀閺傚洨鏆愰幎顒婄礉閹貉傛閻?ui/tight --- */
+/* --- 1. Chinese UI line-heights闁挎稒鐭懙鎴﹀棘閸ヮ煈鍔€闁哄倸娲ㄩ弳鎰板箮椤掑﹦绀夐柟璨夊倹顐介柣?ui/tight --- */
 .msg-user-bubble {
   line-height: var(--line-height-body, 1.55);
 }
@@ -935,10 +935,10 @@
   line-height: var(--line-height-ui, 1.35);
 }
 
-/* --- 2. Composer / footer 鐎靛棗瀹抽敍姝磒ace 闂冭埖顫敍灞肩瑢濞戝牊浼呴崚妤勫Ν婵傚繐顕�?--- */
+/* --- 2. Composer / footer 閻庨潧妫楃€规娊鏁嶅纾抋ce 闂傚啳鍩栭～顏堟晬鐏炶偐鐟㈡繛鎴濈墛娴煎懘宕氬Δ鍕濆┑鍌氱箰椤曨喗顬?--- */
 .chat-footer {
   gap: var(--space-2, 6px);
-  /* �?padding 閸欘亞鏆€閸戠姴鍎氱槐鐙呯礉閸掝偄鐏氭径顏堢�?*/
+  /* 閹?padding 闁告瑯浜為弳鈧柛鎴犲Т閸庢氨妲愰悪鍛闁告帩鍋勯悘姘緞椤忓牏褰?*/
   padding: var(--space-5, 16px) var(--space-4, 12px) 4px;
 }
 .agent-card-composer {
@@ -976,7 +976,7 @@
   margin-top: var(--space-0_5);
 }
 
-/* --- 3. Tool row 閹舵ê�?鐏炴洖绱戠€涙澹婇敍娑㈢帛鐠併倖妫ゆ惔鏇礉閸曞灝鍟€閸樺澧庣悰宀勭彯 --- */
+/* --- 3. Tool row 闁硅埖锚瑜?閻忕偞娲栫槐鎴犫偓娑欘殙婢瑰﹪鏁嶅☉銏㈠笡閻犱降鍊栧Λ銈嗘償閺囶亞绀夐柛鏇炵仢閸熲偓闁告ê顑嗘晶搴ｆ偘瀹€鍕蒋 --- */
 .tool-row {
   min-height: 0;
 }
@@ -987,7 +987,7 @@
 .tool-row-text {
   gap: var(--space-2);
 }
-/* 閹舵ê�?鐏炴洖绱戦敍姘喅鐟曚礁鐡ч懝鑼旂€规熬绱眂hevron 閸欘亪娼?head hover 閺勯箖娈ｉ敍灞藉瑏鐢悂�?opacity */
+/* 闁硅埖锚瑜?閻忕偞娲栫槐鎴︽晬濮橆厽鍠呴悷鏇氱閻⊙囨嚌閼碱儮鏃傗偓瑙勭啲缁辩渹hevron 闁告瑯浜?head hover 闁哄嫰绠栧▓锝夋晬鐏炶棄鐟忛悽顖涙倐閳?opacity */
 .tool-row.is-collapsed .tool-row-summary,
 .tool-row.is-open .tool-row-summary {
   color: var(--text-secondary);
@@ -1002,7 +1002,7 @@
   margin-top: 0;
   margin-bottom: var(--space-1);
 }
-/* 鏉╃偟鐢诲銉ュ徔鐞涘矉绱伴弮鐘插瀻閸撹尙鍤庨妴浣规￥妫版繂顦?padding閿涘牆鐫嶅鈧稉宥嗘暭閸忓嫬绱电悰灞藉殤娴ｆ洩�?*/
+/* 閺夆晝鍋熼悽璇差啅閵夈儱寰旈悶娑樼焿缁变即寮悩鎻掔€婚柛鎾瑰皺閸ゅ酣濡存担瑙勶骏濡増绻傞ˇ?padding闁挎稑鐗嗛惈宥咁嚕閳ь剚绋夊鍡樻毉闁稿繐瀚槐鐢垫偘鐏炶棄娈ゅù锝嗘穿缁?*/
 .tool-stack > .tool-row + .tool-row,
 .msg-timeline-tools > .tool-row + .tool-row,
 .agent-tool-stack > .tool-row + .tool-row {
@@ -1010,7 +1010,7 @@
   margin-top: 0;
   padding-top: 0;
 }
-/* 闂堟瑦鈧椒绗夐崣顖涘鐞涘矉绱伴弮鐘冲瘹闁藉牞绱濇稉宥嗘缁€鍝勫讲閻愮櫢绱県over 娴犲秴褰?2% 閻忔澘寮芥＃?*/
+/* 闂傚牊鐟﹂埀顑挎缁楀宕ｉ娑橆潙閻炴稑鐭夌槐浼村籍閻樺啿鐦归梺钘夌墳缁辨繃绋夊鍡橆唫缂佲偓閸濆嫬璁查柣鎰缁辩湆over 濞寸姴绉磋ぐ?2% 闁诲繑婢樺鑺ワ純?*/
 .tool-row-head--static {
   cursor: default;
 }
@@ -1024,7 +1024,7 @@
   padding: 4px 6px;
 }
 
-/* --- 4. Hairline 缂佺喍绔寸紒鎾寸€痪鍖＄礄--hairline-width + hairline 濡楋綇绱?--- */
+/* --- 4. Hairline 缂備胶鍠嶇粩瀵哥磼閹惧鈧垳鐥崠锛勭--hairline-width + hairline 婵℃缍囩槐?--- */
 .chat-msg-filter-bar {
   border-bottom-width: var(--hairline-width, 1px);
   border-bottom-style: solid;
@@ -1105,7 +1105,7 @@
   border-color: var(--hairline-strong, var(--border-color));
 }
 
-/* --- 5. focus-visible閿涙岸鏁惄妯哄讲鏉堟拝�?-focus-ring / --focus-ring-strong --- */
+/* --- 5. focus-visible闁挎稒宀搁弫顓㈡儎濡搫璁查弶鍫熸嫕缁?-focus-ring / --focus-ring-strong --- */
 .tool-row-head:focus-visible {
   outline: none;
   color: var(--text-secondary);
@@ -1115,7 +1115,7 @@
 .tool-row-head:focus-visible .tool-row-summary {
   color: var(--text-primary);
 }
-/* 闁款喚娲忛悞锔惧仯閺冭泛鎮撻弽鐑芥苟閸戠儤濮岄崣鐘殿唲婢惰揪绱欐�?hover 娑撯偓閼疯揪�?*/
+/* 闂佹鍠氬ú蹇涙倿閿旀儳浠柡鍐硾閹捇寮介悜鑺ヨ嫙闁告垹鍎ゆ慨宀勫矗閻樻鍞插鎯版彧缁辨瑦绋?hover 濞戞挴鍋撻柤鐤彧缁?*/
 .tool-row-head:focus-visible .tool-row-chevron-slot.is-toggle {
   opacity: 0.55;
 }
@@ -1150,7 +1150,7 @@
   color: var(--text-primary);
   box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
 }
-/* filter 鏉堟挸鍙嗛敍姘舵暛閻?focus �?strong 閻滎垽绱濇稉?settings 閸氬苯顨栫痪?*/
+/* filter 閺夊牊鎸搁崣鍡涙晬濮樿埖鏆涢柣?focus 闁?strong 闁绘粠鍨界槐婵囩▔?settings 闁告艾鑻〃鏍棯?*/
 .chat-msg-filter-input:focus-visible {
   border-color: var(--text-tertiary);
   background: transparent;
@@ -1200,14 +1200,14 @@
 .quick-prompt-card:focus-visible {
   box-shadow: var(--focus-ring-strong, var(--focus-ring));
 }
-/* 闁款喚娲忛崣顖濇彧閿涙碍绉烽�?meta 閸ョ偓鐖ｉ崷?focus-within 閺冭埖妯夐悳甯礄娑撳秳绶风�?hover�?*/
+/* 闂佹鍠氬ú蹇涘矗椤栨繃褰ч柨娑欑缁夌兘骞?meta 闁搞儳鍋撻悥锝夊捶?focus-within 闁哄啳鍩栧Ο澶愭偝鐢喚绀勫☉鎾崇С缁堕鎸?hover闁?*/
 .msg-user-stack:focus-within .msg-user-meta,
 .msg-row-assistant:focus-within .msg-assistant-meta {
   opacity: 1;
 }
 
-/* --- 6. Empty shell閿涙艾鍨€硅棄鐪虫�?+ 鐎靛棗�?+ 娑擃厽鏋冪悰宀勭彯 + hairline chip --- */
-/* 鏉╁洦鎶ら弮鐘叉嚒娑擃厾鈹栨竟绛圭窗�?session empty 閸氬苯鍨€?鐞涘矂鐝總鎴犲�?*/
+/* --- 6. Empty shell闁挎稒鑹鹃崹顏嗏偓纭呮閻櫕绋?+ 閻庨潧妫楃€?+ 濞戞搩鍘介弸鍐偘瀹€鍕蒋 + hairline chip --- */
+/* 閺夆晛娲﹂幎銈夊籍閻樺弶鍤掑☉鎿冨幘閳规牗绔熺粵鍦獥濞?session empty 闁告艾鑻崹顏嗏偓?閻炴稑鐭傞悵顔界附閹寸姴顔?*/
 .chat-msg-filter-empty {
   gap: var(--space-3, 8px);
   padding: var(--space-6, 20px) var(--space-5, 16px);
@@ -1217,7 +1217,7 @@
   max-width: 28em;
 }
 
-/* 閹繆鈧啯濮岄崣鐘层仈閿涙矮�?tool-row 閸氬苯鐦戞惔锔藉付娴犲爼�?*/
+/* 闁诡剚绻嗛埀顒€鍟慨宀勫矗閻樺眰浠堥柨娑欑煯缁?tool-row 闁告艾鑻惁鎴炴償閿旇棄浠樺ù鐘茬埣閻?*/
 .msg-thinking-fold-sum {
   gap: var(--space-2, 6px);
   min-height: var(--control-height-xs, 24px);
@@ -1231,7 +1231,7 @@
   box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-primary) 10%, transparent));
 }
 
-/* 缁愬嫬鍨敍姝爋oter/缁岀儤鈧?padding �?space 闂冭埖顫弨鏈电濡?*/
+/* 缂佹劕瀚崹顏堟晬濮濈垕oter/缂佸瞼鍎ら埀?padding 閻?space 闂傚啳鍩栭～顏堝绩閺堢數顏辨俊?*/
 @media (max-width: 720px) {
   .chat-footer {
     padding: var(--space-4, 12px) var(--space-3, 10px) 4px;

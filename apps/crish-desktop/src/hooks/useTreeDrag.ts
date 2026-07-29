@@ -30,12 +30,15 @@ import {
   useLayoutTreeStore,
   type TreeDragSource,
   isSameDomain,
+  isLeaf,
+  findNodeById,
 } from '../store/layout-tree';
 import {
   detectDropZone,
   findLeafAtPointer,
   rectFromDOM,
   isZoneSame,
+  isUnitScopedDropAllowed,
   type DropZone,
   type Rect,
 } from '../store/layout-tree';
@@ -131,7 +134,14 @@ export function useTreeDrag(): UseTreeDragResult {
    * 拖拽期间若窗口 resize，缓存失效。由专门的 resize effect 重新收集。
    */
   const cachedLeafRectsRef = useRef<
-    Array<{ id: string; panelId: string; tabCount: number; rect: Rect }>
+    Array<{
+      id: string;
+      panelId: string;
+      tabCount: number;
+      /** leaf.sessionId（tool = ownerSessionId；chat = 绑定会话） */
+      sessionId?: string;
+      rect: Rect;
+    }>
   >([]);
 
   /**
@@ -176,6 +186,7 @@ export function useTreeDrag(): UseTreeDragResult {
     id: string;
     panelId: string;
     tabCount: number;
+    sessionId?: string;
     rect: Rect;
   }> => {
     const container = document.querySelector(
@@ -183,14 +194,27 @@ export function useTreeDrag(): UseTreeDragResult {
     ) as HTMLElement | null;
     if (!container) return [];
     const leafEls = container.querySelectorAll<HTMLElement>('[data-leaf-id]');
-    const result: Array<{ id: string; panelId: string; tabCount: number; rect: Rect }> = [];
+    const result: Array<{
+      id: string;
+      panelId: string;
+      tabCount: number;
+      sessionId?: string;
+      rect: Rect;
+    }> = [];
     leafEls.forEach((el) => {
       const id = el.dataset.leafId;
       const panelId = el.dataset.panelId || 'chat';
       const tabCount = parseInt(el.dataset.tabCount || '1', 10);
+      const sessionId = el.dataset.sessionId || undefined;
       if (!id) return;
       const rect = rectFromDOM(el.getBoundingClientRect());
-      result.push({ id, panelId, tabCount, rect });
+      result.push({
+        id,
+        panelId,
+        tabCount,
+        ...(sessionId ? { sessionId } : {}),
+        rect,
+      });
     });
     return result;
   }, []);
@@ -347,6 +371,25 @@ export function useTreeDrag(): UseTreeDragResult {
       if (!isSameDomain(active.source.panelId, hit.panelId)) {
         updateZone(null);
         return;
+      }
+      // 1b. Conversation Unit 作用域：tool 不得跨 session 落点
+      //     源 owner 从当前 tree 查（拖拽期间 tree 不变）
+      {
+        const tree = useLayoutTreeStore.getState().tree;
+        const srcNode = findNodeById(tree.root, active.source.leafId);
+        const srcOwner =
+          srcNode && isLeaf(srcNode) ? srcNode.sessionId : undefined;
+        if (
+          !isUnitScopedDropAllowed(
+            active.source.panelId,
+            srcOwner,
+            hit.panelId,
+            hit.sessionId
+          )
+        ) {
+          updateZone(null);
+          return;
+        }
       }
       // 2. 不允许 drop 到自身（leaf 拖拽时）
       if (active.source.type === 'leaf' && hit.id === active.source.leafId) {

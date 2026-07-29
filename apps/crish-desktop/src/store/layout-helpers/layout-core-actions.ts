@@ -185,6 +185,24 @@ export function createLayoutCoreActions(
           state.terminalLines = state.terminalBySession[sid];
         }
       }),
+    addTerminalLines: (lines: string[], sessionId?: string) =>
+      set((state) => {
+        if (!Array.isArray(lines) || lines.length === 0) return;
+        const sid = sessionId || state.activeSessionId || '_global';
+        if (!state.terminalBySession[sid]) state.terminalBySession[sid] = [];
+        const buf = state.terminalBySession[sid];
+        for (const line of lines) {
+          const text = typeof line === 'string' ? line : String(line ?? '');
+          appendTerminalLine(buf, text);
+        }
+        if (
+          !sessionId ||
+          sessionId === state.activeSessionId ||
+          !state.activeSessionId
+        ) {
+          state.terminalLines = state.terminalBySession[sid];
+        }
+      }),
     clearTerminalLines: (sessionId?: string) =>
       set((state) => {
         const sid = sessionId || state.activeSessionId || '_global';

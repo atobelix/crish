@@ -5,7 +5,6 @@ import {
   useWorkspaceStore,
 } from '../../store/workspaceStore';
 import type { DropPreviewState } from '../../store/types';
-import { DEFAULT_TAB_BAR_H } from '../../store/layoutHelpers';
 import {
   canCommitTabDrop,
   dropPreviewEquals,
@@ -21,6 +20,7 @@ import {
   type TabDropResolveResult,
 } from './tabDragGeometry';
 import { removeInsertLine, showTabInsertLine } from './tabDragGhost';
+import type { TabBarTabRect } from './tabDragTypes';
 
 export interface CardSnapshot {
   element: HTMLElement;
@@ -35,6 +35,11 @@ export interface CardSnapshot {
   colIdx: number;
   groupIdx: number;
   groupId: string;
+  /** pointerdown 快照的 tab 栏高度，move 时不再 gBCR */
+  tabBarH?: number;
+  tabsBar?: HTMLElement | null;
+  tabRects?: readonly TabBarTabRect[];
+  barRight?: number;
 }
 
 export function safeSetDropPreview(nextPreview: DropPreviewState | null): void {
@@ -119,21 +124,16 @@ export function useTabDragReorder() {
       );
       const sourceColGroupsLength = sourceCol?.groups.length ?? 0;
 
-      const tabBarH = resolveTabBarHeight(
-        matchedSnapshot.element
-          .querySelector('.card-header')
-          ?.getBoundingClientRect().height ??
-          matchedSnapshot.element
-            .querySelector('.tabs-bar')
-            ?.getBoundingClientRect().height ??
-          DEFAULT_TAB_BAR_H
-      );
+      // 优先用 pointerdown 缓存高度，避免 move 路径 getBoundingClientRect
+      const tabBarH = resolveTabBarHeight(matchedSnapshot.tabBarH);
 
       const isSelfHover = targetGroupId === currentSourceGroupId;
-      const tabsBarCandidate =
-        matchedSnapshot.element.querySelector('.tabs-bar');
       const tabsBar =
-        tabsBarCandidate instanceof HTMLElement ? tabsBarCandidate : null;
+        matchedSnapshot.tabsBar ??
+        (() => {
+          const candidate = matchedSnapshot.element.querySelector('.tabs-bar');
+          return candidate instanceof HTMLElement ? candidate : null;
+        })();
       const hasTabsBar = !!tabsBar;
 
       let tabInsertIdx: number | undefined;
@@ -144,13 +144,12 @@ export function useTabDragReorder() {
         (isSelfHover || !isChatGroupTarget(targetGroupId));
 
       if (needsInsert && tabsBar) {
-        if (isSelfHover) {
-          removeInsertLine();
-        }
-        const shown = showTabInsertLine(tabsBar, mouseX, cardId);
+        // 复用/移动单个 placeholder；不在 self-hover 时每帧 remove 再造
+        const shown = showTabInsertLine(tabsBar, mouseX, cardId, {
+          cachedTabRects: matchedSnapshot.tabRects,
+          barRight: matchedSnapshot.barRight,
+        });
         tabInsertIdx = shown.insertIdx;
-      } else if (!isSelfHover) {
-        removeInsertLine();
       } else {
         removeInsertLine();
       }

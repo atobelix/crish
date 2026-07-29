@@ -72,7 +72,7 @@ export const useProviderStore = create<ProviderStoreState>()(
       }),
       updateModel: (providerId, modelId, patch) => set((state) => {
         const p = state.providers.get(providerId);
-        if (p) { const mi = p.models.findIndex(m => m.id === modelId); if (mi !== -1) { p.models[mi] = { ...p.models[mi], ...patch } as any; } }
+        if (p) { const m = p.models.find(m => m.id === modelId); if (m) Object.assign(m, patch); }
       }),
       removeModel: (providerId, modelId) => set((state) => {
         const p = state.providers.get(providerId);
@@ -82,16 +82,16 @@ export const useProviderStore = create<ProviderStoreState>()(
       routes: [],
       addRoute: (route) => set((state) => { state.routes.push(route); }),
       updateRoute: (id, patch) => set((state) => {
-        const ri = state.routes.findIndex(r => r.id === id);
-        if (ri !== -1) { state.routes[ri] = { ...state.routes[ri], ...patch } as any; }
+        const r = state.routes.find(r => r.id === id);
+        if (r) Object.assign(r, patch);
       }),
       removeRoute: (id) => set((state) => { state.routes = state.routes.filter(r => r.id !== id); }),
 
       accounts: [],
       addAccount: (account) => set((state) => { state.accounts.push(account); }),
       updateAccount: (id, patch) => set((state) => {
-        const ai = state.accounts.findIndex(a => a.id === id);
-        if (ai !== -1) { state.accounts[ai] = { ...state.accounts[ai], ...patch } as any; }
+        const a = state.accounts.find(a => a.id === id);
+        if (a) Object.assign(a, patch);
       }),
       removeAccount: (id) => set((state) => { state.accounts = state.accounts.filter(a => a.id !== id); }),
 

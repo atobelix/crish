@@ -1,4 +1,4 @@
-/* --- panels.css (preview / diff / tasks / terminal / overview / runtime) �?split from index.css (selectors preserved) --- */
+/* --- panels.css (preview / diff / tasks / terminal / overview / runtime) �?split from index.css (selectors preserved) --- */
 .filepath-text {
   text-decoration: underline;
   cursor: pointer;
@@ -88,7 +88,7 @@
 }
 
 .term-prompt {
-  color: #4ade80;
+  color: var(--terminal-prompt);
 }
 
 .term-success {
@@ -96,11 +96,11 @@
 }
 
 .term-command {
-  color: var(--terminal-cmd, var(--text-primary));
+  color: var(--terminal-cmd);
 }
 
 .term-cursor {
-  color: var(--terminal-cmd, var(--text-primary));
+  color: var(--terminal-cmd);
   animation: blink 1s step-end infinite;
 }
 
@@ -140,9 +140,9 @@
   display: inline-block;
 }
 
-.mac-dots .dot.red { background-color: #ff5f56; }
-.mac-dots .dot.yellow { background-color: #ffbd2e; }
-.mac-dots .dot.green { background-color: #27c93f; }
+.mac-dots .dot.red { background-color: var(--mac-dot-red); }
+.mac-dots .dot.yellow { background-color: var(--mac-dot-yellow); }
+.mac-dots .dot.green { background-color: var(--mac-dot-green); }
 
 .mac-title {
   position: absolute;
@@ -184,7 +184,7 @@
   background-color: var(--bg-primary);
 }
 
-/* --- DIFF CARD �?clean canvas, soft add/del tints --- */
+/* --- DIFF CARD �?clean canvas, soft add/del tints --- */
 
 
 
@@ -214,7 +214,7 @@
   margin: 0;
   padding: 2px 10px;
   white-space: pre;
-  overflow-x: visible; /* 濠婃艾濮╂禍銈囩舶鐎圭懓娅掗敍宀勪缉閸忓秵鐦＄悰灞肩閺夆剝铆锟?*/
+  overflow-x: visible; /* 婵犲﹥鑹炬慨鈺傜閵堝洨鑸堕悗鍦嚀濞呮帡鏁嶅畝鍕級闁稿繐绉甸惁锛勬偘鐏炶偐顏遍柡澶嗗墲閾嗛敓?*/
   flex: 1;
   color: var(--text-primary);
   font-weight: var(--font-weight-code, 400);
@@ -223,16 +223,16 @@
 
 
 .loading-spinner {
-  border: 2px solid color-mix(in srgb, var(--accent-green, #2dbe6c) 22%, transparent);
-  border-top: 2px solid var(--accent-green, #2dbe6c);
+  border: 2px solid color-mix(in srgb, var(--accent-green) 22%, transparent);
+  border-top: 2px solid var(--accent-green);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
-/* 瀹搞儱鍙块幗妯款洣鐞涘苯鍞撮敍姘毈娑撯偓閸欓璞㈤�?*/
+/* 鐎规悶鍎遍崣鍧楀箺濡娲ｉ悶娑樿嫰閸炴挳鏁嶅顒傛瘓濞戞挴鍋撻柛娆擃棑鐠炪垽宕?*/
 .tool-row-ico-slot .loading-spinner {
   border-width: 1.5px;
-  border-color: color-mix(in srgb, var(--accent-green, #2dbe6c) 28%, transparent);
-  border-top-color: var(--accent-green, #2dbe6c);
+  border-color: color-mix(in srgb, var(--accent-green) 28%, transparent);
+  border-top-color: var(--accent-green);
 }
 
 @keyframes spin {
@@ -302,7 +302,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #d2d2d2;
+  background: var(--border-color);
   margin-left: 2.5px;
   margin-right: 2.5px;
 }
@@ -326,7 +326,7 @@
   border-color: var(--border-color);
 }
 
-/* --- 鏉╂劘顢戦悩鑸碘偓渚€娼伴弶鍖＄窗缁毖冨櫨閸掑棗灏妴浣哥毌閺傚洦顢嶉妴浣稿礋濠婃艾�?--- */
+/* --- 閺夆晜鍔橀、鎴︽偐閼哥鍋撴笟鈧浼村级閸栵紕绐楃紒姣栧啫娅ㄩ柛鎺戞鐏忣垶濡存担鍝ユ瘜闁哄倸娲﹂、宥夊Υ娴ｇ绀嬫繝濠冭壘閿?--- */
 
 
 
@@ -340,7 +340,7 @@
 
 
 
-/* 鐠佲€冲灊娴犺�?/ 濞茶濮╂禒璇插�?/ 閸氬骸褰撮敍姘隘濞堥潧鍞撮悪顒傜彌濠婃艾濮╅敍宀勪缉閸忓秵鏆ｉ棃銏℃緲閺冪娀妾洪幏澶愭毐 */
+/* 閻犱讲鈧啿鐏婂ù鐘侯嚙�?/ 婵炶尪顕ф慨鈺傜鐠囨彃顫?/ 闁告艾楠歌ぐ鎾晬濮橆剙闅樻繛鍫ユ涧閸炴挳鎮鍌滃綄婵犲﹥鑹炬慨鈺呮晬瀹€鍕級闁稿繐绉甸弳锝夋閵忊剝绶查柡鍐█濡炬椽骞忔径鎰瘣 */
 
 
 
@@ -349,7 +349,7 @@
 
 
 
-/* 瀵板懐鈥樼拋銈堫攽閿涙碍瀵滈柦顔肩埗閺勬拝绱濋柆鍨帳缁愬嫭鐖棁锟?hover 閹靛秷鍏橀幍鐟板櫙 */
+/* 鐎垫澘鎳愰垾妯兼媼閵堝牜鏀介柨娑欑鐎垫粓鏌﹂鑲╁煑闁哄嫭鎷濈槐婵嬫焼閸喖甯崇紒鎰閻栴噣妫侀�?hover 闁归潧绉烽崗姗€骞嶉悷鏉挎珯 */
 
 
 
@@ -357,8 +357,8 @@
 
 
 
-/* 濞茶濮╂禒璇插閿涙艾鐣ㄩ棃娆忕槕鎼达讣绱濇稉宥嗗鐟欏棛�?*/
-/* 閸欘垳鍋ｇ粚鍨煂娴兼俺鐦介敍姘瑢閸氬骸褰存禒璇插娑撯偓閼峰娈戠€瑰�?hover */
+/* 婵炶尪顕ф慨鈺傜鐠囨彃顫ら柨娑欒壘閻ｃ劑妫冨▎蹇曟閹艰揪璁ｇ槐婵囩▔瀹ュ棗顫ラ悷娆忔閿?*/
+/* 闁告瑯鍨抽崑锝囩矚閸喖鐓傚ù鍏间亢閻︿粙鏁嶅顐ょ憿闁告艾楠歌ぐ瀛樼鐠囨彃顫ゅ☉鎾亾闁煎嘲顕▓鎴犫偓鐟邦樀�?hover */
 
 /* Cron jobs as quiet rows */
 
@@ -493,14 +493,14 @@
   font-weight: var(--font-weight-code, 400);
 }
 
-/* Runtime floating sheet �?header 鐎靛綊锟?card-header tokens閿涙稑宕熷姘З闂堛垹锟?.rt-panel */
+/* Runtime floating sheet �?header 閻庨潧缍婇敓?card-header tokens闁挎稒绋戝畷鐔奉煥濮橆剙袟闂傚牄鍨归�?.rt-panel */
 /* Demo context ribbon quieter in footer */
 .app-mode-normal .chat-context-ribbon .context-pill.git,
 .app-mode-normal .chat-context-ribbon .context-pill.server {
   display: none;
 }
 
-/* 閸欏厖鏅堕幀鏄忣潔閿涙碍鐎粻鈧敍灞炬￥闁插秴顦查弽鍥暯閵嗕焦妫ょ粚杞扮瑐娑撳鏋冮妴浣规￥缁佺偟顫濋崶鐐垼锟?*/
+/* 闁告瑥鍘栭弲鍫曞箑閺勫浚娼旈柨娑欑閻庮剛绮婚埀顒勬晬鐏炵偓锟ラ梺鎻掔Т椤︽煡寮介崶顒夋毌闁靛棔鐒﹀Λ銈囩矚鏉炴壆鐟愬☉鎾愁儐閺嬪啴濡存担瑙勶骏缂佷胶鍋熼～婵嬪炊閻愵剛鍨奸敓?*/
 /* [Migrated to OverviewCard.module.css]
 button.overview-live-row {
   cursor: pointer;
@@ -510,21 +510,21 @@ button.overview-live-row:hover {
   color: var(--text-primary);
 }
 
-/* 娴犺濮熼棃銏℃�?/ AI 婢舵碍顒炴潻娑樺閺夊尅绱欐�?overview 閸氬瞼锟?token�?*/
-/* 缁岀儤鈧緤绱伴惌顓熸瀮濡楀牞绱濋棃鐐茬湷娑擃厼銇囬悘鏉挎健 */
-/* 鐎瑰娼ら惃鍕┾偓灞界秼閸撳秵顒炴銈冣偓宥忕窗閸楁洝顢戦妴浣告€ョ€佃鐦敍灞肩瑝�?checklist 娑撴槒顫嬬憴?*/
-/* 瑜版挸澧犲銉ュ徔娴犲懍绔寸悰宀嬬窗�?+ 閺嶅洨锟?+ 閻樿埖鈧緤绱濇稉宥呭灙閸涙垝鎶ら崢鍡楀�?*/
+/* 濞寸姾顕ф慨鐔兼閵忊剝绶?/ AI 濠㈣埖纰嶉鐐存交濞戞ê顔婇柡澶婂皡缁辨瑦�?overview 闁告艾鐬奸敓?token�?*/
+/* 缂佸瞼鍎ら埀顑跨筏缁变即鎯岄鐔哥€俊妤€鐗炵槐婵嬫閻愯尙婀峰☉鎿冨幖閵囧洭鎮橀弶鎸庡仴 */
+/* 閻庣懓顦靛銈夋儍閸曗斁鍋撶仦鐣岀Ъ闁告挸绉甸鐐搭殽閵堝啠鍋撳蹇曠獥闁告娲濋、鎴﹀Υ娴ｅ憡鈧儳鈧絻顫夐惁顕€鏁嶇仦鑲╃憹�?checklist 濞戞挻妲掗～瀣�?*/
+/* 鐟滅増鎸告晶鐘差啅閵夈儱寰斿ù鐘叉噸缁斿鎮板畝瀣獥閿?+ 闁哄秴娲ㄩ敓?+ 闁绘鍩栭埀顑跨筏缁辨繃绋夊鍛仚闁告稒鍨濋幎銈夊储閸℃�?*/
 
-/* 缁愬嫪鏅堕弽蹇ョ窗娑撳�?+ 鏉╂劘顢戦棃銏℃緲閸欘垵顕伴妴浣风瑝濠с垹鍤妴浣风瑝閸欑姴锟?*/
+/* 缂佹劕瀚弲鍫曞冀韫囥儳绐楀☉鎾愁槸�?+ 閺夆晜鍔橀、鎴︽閵忊剝绶查柛娆樺灥椤曚即濡存担椋庣憹婵犙佸灩閸ゎ參濡存担椋庣憹闁告瑧濮撮�?*/
 @media (max-width: 360px) {
-  /* 缁愬嫪鏅堕弽蹇ョ窗閻劑鍣洪悳顖滅級鐏忓骏绱眕adding/gap 缂佈呯敾�?panel tokens閿涘奔绗夌涵顒傜椽锟?*/
+  /* 缂佹劕瀚弲鍫曞冀韫囥儳绐楅柣顫姂閸ｆ椽鎮抽婊呯礆閻忓繐楠忕槐鐪昦dding/gap 缂備綀鍛暰閿?panel tokens闁挎稑濂旂粭澶屾兜椤掑倻妞介敓?*/
   .runtime-float-sheet--compact {
     width: min(300px, calc(100vw - 24px));
     right: 12px;
   }
 }
 
-/* Git 閻樿埖鈧浇顫楅弽鍥风窗缂佺喍绔撮悘鏉垮閿涘奔绗夐幐澶婎杻閸掔姳绗傞懝?*/
+/* Git 闁绘鍩栭埀顑挎祰椤寮介崶椋庣獥缂備胶鍠嶇粩鎾倶閺夊灝顔婇柨娑樺缁楀骞愭径濠庢澔闁告帞濮崇粭鍌炴嚌?*/
 .git-badge {
   display: inline-flex;
   align-items: center;
@@ -557,12 +557,12 @@ button.overview-live-row:hover {
 }
 
 /* =============================================================================
- * FA panels polish �?additive density / hairline / focus-visible / empty states
+ * FA panels polish �?additive density / hairline / focus-visible / empty states
  * Consumes tokens only (--hairline* / --space-* / --focus-ring* / --line-height-*
  * / --card-header-* / --panel-* / --control-height* / --row-height*). No token edits.
  * ============================================================================= */
 
-/* 1) Structural hairlines閿涙岸娼伴弶鍨瀻閻ｅ瞼绮烘稉锟?--hairline-width + --hairline */
+/* 1) Structural hairlines闁挎稒宀稿浼村级閸喖鐎婚柣锝呯灱缁儤绋夐敓?--hairline-width + --hairline */
 .line-num-col {
   border-right: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
 }
@@ -627,7 +627,7 @@ button.overview-live-row:hover {
   }
 }
 
-/* 2) Card / list density閿涙碍绉风拹?panel + space + row-height閿涘矂浼╅崗?magic number */
+/* 2) Card / list density闁挎稒纰嶇粔椋庢�?panel + space + row-height闁挎稑鐭傛导鈺呭�?magic number */
 .line-num-col {
   width: var(--control-height-xs, 24px);
   padding: 1px 0;
@@ -671,17 +671,17 @@ button.overview-live-row:hover {
   padding: var(--space-1, 4px) var(--space-2, 6px);
 }
 
-/* 3) focus-visible閿涙岸娼伴弶鎸庡付娴犲墎绮烘稉锟?--focus-ring / --focus-ring-strong */
+/* 3) focus-visible闁挎稒宀稿浼村级閹稿骸浠樺ù鐘插缁儤绋夐�?--focus-ring / --focus-ring-strong */
 .diff-icon-btn:focus-visible,
 .diff-file-item:focus-visible,
 .diff-file-item.is-active:focus-visible {
   background: color-mix(in srgb, var(--text-primary) 7%, transparent);
 }
 
-/* 闁款喚娲忛崣顖濇彧閿涙over-only 閸斻劋缍旈崷?focus-within 閺冭埖妯夐悳?*/
+/* 闂佹鍠氬ú蹇涘矗椤栨繃褰ч柨娑欘劇over-only 闁告柣鍔嬬紞鏃堝�?focus-within 闁哄啳鍩栧Ο澶愭偝?*/
 
 
-/* 4) Empty states閿涙艾鐦戞惔?token + 娑擃厽鏋冪悰宀勭彯閿涙盯娼仦鍛厬婢堆呬紗锟?*/
+/* 4) Empty states闁挎稒鑹鹃惁鎴炴�?token + 濞戞搩鍘介弸鍐偘瀹€鍕蒋闁挎稒鐩顏嗕沪閸涱剝鍘鍫嗗懍绱楅�?*/
 .diff-empty {
   padding: var(--space-6, 20px) var(--panel-pad-x, 12px);
   gap: var(--space-2, 6px);
@@ -698,7 +698,7 @@ button.overview-live-row:hover {
   margin-top: var(--space-2, 6px);
 }
 
-/* 5) Files / Diff / Tasks 閹貉傛鐏炲偊绱伴崣顖欐唉娴滄帗寮挎�?+ 閻戭厼灏€靛棗�?*/
+/* 5) Files / Diff / Tasks 闁硅矇鍌涱偨閻忕偛鍋婄槐浼村矗椤栨瑦鍞夊ù婊勫笚瀵寧娼?+ 闁绘埈鍘肩亸顖溾偓闈涙�?*/
 .diff-toolbar-actions {
   gap: var(--space-1, 4px);
 }
@@ -730,7 +730,7 @@ button.overview-live-row:hover {
 
 /* 6) Chinese UI line-height on panel chrome (titles / meta / mono paths) */
 
-/* 7) prefers-reduced-motion閿涙岸娼伴弶鍨簳閸斻劍鏅ラ崗瀣�?*/
+/* 7) prefers-reduced-motion闁挎稒宀稿浼村级閸喕绨抽柛鏂诲妽閺呫儵宕楃€ｎ亜�?*/
 @media (prefers-reduced-motion: reduce) {
   .loading-spinner,
   .setup-loading .loading-spinner,
@@ -739,7 +739,7 @@ button.overview-live-row:hover {
   }
 }
 
-/* 8) 閺嬩胶鐛庢笟褎鐖敍姘瑏�?+ files 閸愬秵鏁圭€靛棗瀹抽敍鍧卍ditive閿涘苯褰旈崷銊︽＆锟?@media 娑斿绗傞敍?*/
+/* 8) 闁哄鑳堕悰搴㈢瑹瑜庨悥顕€鏁嶅顐ょ憦�?+ files 闁告劕绉甸弫鍦偓闈涙鐎规娊鏁嶉崸鍗峝itive闁挎稑鑻ぐ鏃堝捶閵婏附锛嗛�?@media 濞戞柨顑勭粭鍌炴�?*/
 @media (max-width: 360px) {
 
   .diff-empty {

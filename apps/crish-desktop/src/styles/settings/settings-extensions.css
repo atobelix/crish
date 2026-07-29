@@ -1,5 +1,5 @@
 /* === extensions polish-v1 === */
-/* 鏉堣锟?�?1%閿涙稑鍨悰銊攽鏉炵粯寮挎潏鐧哥幢瀹搞儱鍙块弶鈥茬瑢鐠佸墽鐤嗘い鐢电埠娑撯�?*/
+/* 閺夊牐顫夐敓?閿?1%闁挎稒绋戦崹顏嗘偘閵婎煈鏀介弶鐐电帛瀵寧娼忛惂鍝ュ耿鐎规悶鍎遍崣鍧楀级閳ヨ尙鐟㈤悹浣稿⒔閻ゅ棙銇勯悽鐢靛煚濞戞挴鍋?*/
 
 .settings-pane--extensions {
   gap: 14px;
@@ -149,14 +149,11 @@
   background: transparent;
   line-height: var(--line-height-compact);
 }
+/* status pill — align with settings-plugins / models green family */
 .ext-installed-mark {
-  color: #22b671;
-  border-color: color-mix(in srgb, #22b671 30%, transparent);
-  background: #f0fdf4;
-}
-html[data-theme="dark"] .ext-installed-mark {
-  background: color-mix(in srgb, #22b671 14%, transparent);
-  color: color-mix(in srgb, #22b671 80%, #fff);
+  color: var(--accent-green);
+  border-color: color-mix(in srgb, var(--accent-green) 30%, transparent);
+  background: var(--accent-green-light);
 }
 
 .ext-empty {
@@ -210,7 +207,7 @@ html[data-theme="dark"] .ext-installed-mark {
   font-size: var(--font-size-xs);
 }
 
-/* 闂呮劘妫屾妯款�?essay 鐠囧瓨妲戦敍鍫ｅ閸掝偄顦╂禒宥嗚閺屾搫锟?*/
+/* 闂傚懏鍔樺Λ灞绢渶濡鍚?essay 閻犲洤鐡ㄥΣ鎴︽晬閸絽顏熼柛鎺濆亜椤︹晜绂掑鍡氼洬闁哄本鎼敓?*/
 .settings-pane--extensions .ext-detail-desc {
   display: none;
 }

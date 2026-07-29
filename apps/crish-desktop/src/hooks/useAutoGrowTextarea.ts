@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { usePreparedText } from './useTextMeasure';
-import { buildPretextFont, getResolvedFontSizePx } from '../utils/pretextFontBridge';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 
 export const COMPOSER_MIN_LINES = 2;
 export const COMPOSER_MAX_LINES = 10;
@@ -33,8 +31,8 @@ export function resolveComposerLineHeightPx(
 }
 
 /**
- * Standalone DOM-based fallback (unchanged). Used externally and as
- * Pretext fallback when the text is empty or font isn't yet cached.
+ * Pure DOM auto-grow: measure scrollHeight after collapsing height to 0.
+ * No @chenglou/pretext — keeps keystroke path free of layout prep work.
  */
 export function applyAutoGrowHeight(
   el: HTMLTextAreaElement,
@@ -58,77 +56,23 @@ export function applyAutoGrowHeight(
   el.style.overflowY = contentH > maxH + 1 ? 'auto' : 'hidden';
 }
 
+/**
+ * Auto-grow textarea via DOM scrollHeight only (no pretext measure path).
+ * ResizeObserver + window resize keep height correct after layout changes.
+ */
 export function useAutoGrowTextarea(value: string, maxLines = COMPOSER_MAX_LINES) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const maxLinesSafe = Math.max(1, Math.floor(maxLines) || COMPOSER_MAX_LINES);
 
-  const [fontStr, setFontStr] = useState('');
-  const fontSizePxRef = useRef(0);
-  const lhPxRef = useRef(0);
-  const padYRef = useRef(0);
-  const padXRef = useRef(0);
-  const elWidthRef = useRef(0);
-  const initDone = useRef(false);
-
-  const { measureHeight } = usePreparedText({
-    text: value,
-    font: fontStr,
-    whiteSpace: 'pre-wrap',
-  });
-
-  const measureHeightRef = useRef(measureHeight);
-  measureHeightRef.current = measureHeight;
-
-  useLayoutEffect(() => {
-    if (initDone.current) return;
-    const el = ref.current;
-    if (!el) return;
-    const cs = getComputedStyle(el);
-    const px = parseFloat(cs.fontSize) || getResolvedFontSizePx('--font-size-base');
-    fontSizePxRef.current = px;
-    lhPxRef.current = resolveComposerLineHeightPx(cs, COMPOSER_LINE_HEIGHT);
-    padYRef.current =
-      (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
-    padXRef.current =
-      (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
-    elWidthRef.current = el.clientWidth - padXRef.current;
-    initDone.current = true;
-    setFontStr(buildPretextFont('sans', 'normal', px));
-  }, []);
-
   const applyHeight = useCallback(() => {
     const el = ref.current;
     if (!el) return;
-
-    const line = lhPxRef.current || COMPOSER_LINE_HEIGHT * 16;
-    const padY = padYRef.current;
-    const minH = composerMaxHeightPx(line, COMPOSER_MIN_LINES, padY);
-    const maxH = composerMaxHeightPx(line, maxLinesSafe, padY);
-    const width = elWidthRef.current;
-
-    let contentH = 0;
-
-    if (width > 0 && line > 0 && fontSizePxRef.current > 0) {
-      contentH = measureHeightRef.current(width, line);
-    }
-
-    if (!contentH) {
-      const prevMax = el.style.maxHeight;
-      el.style.maxHeight = 'none';
-      el.style.height = '0px';
-      contentH = el.scrollHeight;
-      el.style.maxHeight = prevMax || `${maxH}px`;
-    }
-
-    const next = Math.min(Math.max(contentH, minH), maxH);
-    el.style.height = `${next}px`;
-    el.style.maxHeight = `${maxH}px`;
-    el.style.overflowY = contentH > maxH + 1 ? 'auto' : 'hidden';
+    applyAutoGrowHeight(el, maxLinesSafe, COMPOSER_MIN_LINES);
   }, [maxLinesSafe]);
 
   useLayoutEffect(() => {
     applyHeight();
-  }, [value, fontStr, applyHeight]);
+  }, [value, applyHeight]);
 
   useEffect(() => {
     const onWin = () => applyHeight();
@@ -138,7 +82,6 @@ export function useAutoGrowTextarea(value: string, maxLines = COMPOSER_MAX_LINES
     const el = ref.current;
     if (el && typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(() => {
-        elWidthRef.current = el.clientWidth - padXRef.current;
         applyHeight();
       });
       ro.observe(el);

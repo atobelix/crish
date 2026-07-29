@@ -2,12 +2,13 @@ import { useLayoutStore } from '../../store/layoutStore';
 import { getSessionById } from '../../store/sessionStore';
 import { isPendingDraft } from '../../store/draftSession';
 import {
+  addMessage,
   commitDraftIfNeeded,
-  createSession as createSessionCmd,
   openSettings,
   patchSession,
   setPermissionMode,
 } from '../../api/storeAccess';
+import { generateMessageId } from '../../utils/generateMessageId';
 import type { ChatContentPart, StreamRequestOptions } from '../../api/chatApi';
 import { clientApi } from '../../api/clientApi';
 import { getWorkspacePath } from '../../api/projectStore';
@@ -25,8 +26,10 @@ import { buildMultimodalFromAttachments } from './multimodal';
 import {
   resolveStreamSessionId,
   canStreamLocalSession,
-  ensureSessionMessages,
+  decideSendWhileRunning,
+  isSessionAiBusy,
 } from './helpers';
+import { getCompositionRoot } from '../../app/compositionRoot';
 import type { UseChatStreamOptions, ChatAttachment } from './types';
 import type { StreamBatcherRefs } from './useStreamBatchers';
 import type { SessionMessage } from '../../store/layoutStore';
@@ -41,10 +44,14 @@ export function useSlashSend(
     streamOptions?: StreamRequestOptions
   ) => void,
 ): {
-  handleSendChat: (isInsert?: boolean, textOverride?: string) => Promise<void>;
+  handleSendChat: (
+    isInsert?: boolean,
+    textOverride?: string,
+    attachmentsOverride?: ChatAttachment[]
+  ) => Promise<void>;
 } {
   const {
-    wsId: _wsId,
+    wsId,
     onShowToast,
     handleGlobalTabClick,
     chatInput,
@@ -59,18 +66,20 @@ export function useSlashSend(
     onOpenModelPicker,
   } = options;
 
+  // 渲染订阅：仅 activeSessionId（rename 等命令走 compositionRoot.session）
   const activeSessionId = useLayoutStore((s) => s.activeSessionId);
-  const renameSession = useLayoutStore((s) => s.renameSession);
   const { streamManagerRef } = refs;
 
   const handleSendChat = async (
     isInsert: boolean = false,
-    textOverride?: string
+    textOverride?: string,
+    attachmentsOverride?: ChatAttachment[]
   ) => {
     void isInsert;
     const fromOverride = typeof textOverride === 'string';
     const rawInput = (fromOverride ? textOverride : chatInput).trim();
-    const activeAttachments = fromOverride ? [] : attachments;
+    const activeAttachments =
+      attachmentsOverride ?? (fromOverride ? [] : attachments);
     if (!rawInput && activeAttachments.length === 0) return;
 
     if (needsKeySetup) {
@@ -116,6 +125,24 @@ export function useSlashSend(
       else if (slash.kind === 'grill-me') onShowToast('用法：/grill-me <要对齐的主题>');
       return;
     }
+
+    // 草稿 → 真会话：commit 后补建 shell tab + 绑 chat leaf。
+    // openNewDraftTab 解绑了 chat leaf.sessionId 且 draft 不进 openTabs；
+    // 若不补 openOrFocusSession，顶栏工具按钮找不到 tab、右侧坞无法展开。
+    const commitDraftAndOpenShell = (
+      opts?: { title?: string; folder?: string }
+    ): string => {
+      const newId = commitDraftIfNeeded(opts);
+      if (!newId || isPendingDraft(newId)) return newId;
+      const shell = getCompositionRoot().shell.getState();
+      if (!shell.openTabs.some((t) => t.sessionId === newId)) {
+        const sess = getSessionById(newId);
+        getCompositionRoot().session.openOrFocusSession(newId, {
+          title: sess?.title,
+        });
+      }
+      return newId;
+    };
 
     let modelText = rawInput;
     let displayText = rawInput;
@@ -169,15 +196,16 @@ export function useSlashSend(
         const globalText = rulesLinesToText(next, '# 全局规则');
         void syncRulesToDaemon({ globalText });
 
+        // 真 session id 仅经 commitDraftAndOpenShell（草稿/脏 active → mint + 补 shell tab；已有真 active → 原样）
         let learnSid = '';
         if (isPendingDraft(activeSessionId)) {
-          learnSid = commitDraftIfNeeded({
-            title: (rawInput ? deriveSessionTitle(rawInput) : undefined) as string | undefined,
-          }) || '';
+          learnSid = commitDraftAndOpenShell({
+            title: rawInput ? deriveSessionTitle(rawInput) : undefined,
+          });
         } else {
           learnSid = resolveStreamSessionId(null, activeSessionId) || '';
           if (!learnSid) {
-            learnSid = commitDraftIfNeeded() || createSessionCmd({ title: '新会话' }) || '';
+            learnSid = commitDraftAndOpenShell();
           }
         }
         learnSid = resolveStreamSessionId(learnSid, null) || '';
@@ -186,25 +214,22 @@ export function useSlashSend(
           return;
         }
         const validLearnSid = learnSid;
-        const userMsgId = `user-msg-${Date.now()}`;
-        const asstMsgId = `assistant-msg-${Date.now()}-learn`;
-        useLayoutStore.setState((state) => {
-          const sess = state.sessionsById[validLearnSid];
-          if (!ensureSessionMessages(sess)) return;
-          sess.messages.push({
-            id: userMsgId,
-            sender: 'user',
-            text: `/learn ${ruleText}`,
-            timestamp: Date.now(),
-            status: 'completed',
-          });
-          sess.messages.push({
-            id: asstMsgId,
-            sender: 'assistant',
-            text: `已记录用户偏好：${ruleText}`,
-            timestamp: Date.now() + 1,
-            status: 'completed',
-          });
+        // 发送前固定 clientMessageId，回显/重放按 id upsert
+        const userMsgId = generateMessageId('user');
+        const asstMsgId = generateMessageId('assistant');
+        addMessage(wsId, validLearnSid, {
+          id: userMsgId,
+          sender: 'user',
+          text: `/learn ${ruleText}`,
+          timestamp: Date.now(),
+          status: 'completed',
+        });
+        addMessage(wsId, validLearnSid, {
+          id: asstMsgId,
+          sender: 'assistant',
+          text: `已记录用户偏好：${ruleText}`,
+          timestamp: Date.now() + 1,
+          status: 'completed',
         });
       } catch (e) {
         onShowToast(`记住规则失败：${e instanceof Error ? e.message : String(e)}`);
@@ -212,15 +237,16 @@ export function useSlashSend(
       return;
     }
 
+    // 用户首条 / 缺 sid：只 commitDraftAndOpenShell，禁止 createSession 默认空壳 mint
     let sessionId = '';
     if (isPendingDraft(activeSessionId)) {
-      sessionId = commitDraftIfNeeded({
-        title: (rawInput ? deriveSessionTitle(rawInput) : undefined) as string | undefined,
-      }) || '';
+      sessionId = commitDraftAndOpenShell({
+        title: rawInput ? deriveSessionTitle(rawInput) : undefined,
+      });
     } else {
       sessionId = resolveStreamSessionId(null, activeSessionId) || '';
       if (!sessionId) {
-        sessionId = commitDraftIfNeeded() || createSessionCmd({ title: '新会话' }) || '';
+        sessionId = commitDraftAndOpenShell();
       }
     }
     if (!sessionId || !canStreamLocalSession(sessionId, !!getSessionById(sessionId))) {
@@ -283,14 +309,28 @@ export function useSlashSend(
       displayText = `${displayText}${displayText ? '\n\n' : ''}📎 ${activeAttachments.map((a: ChatAttachment) => a.name).join('、')}`;
     }
 
-    const userMsgId = `user-msg-${Date.now()}`;
+    // 发送前固定 clientMessageId（= message.id），daemon/hydrate 回显按 id upsert 不双写
+    const userMsgId = generateMessageId('user');
+    // 透传用户幂等键到 run-task（助手 id 在 runStreamingAssistant 内 mint 并下发）
+    finalStreamOptions = {
+      ...(finalStreamOptions ?? {}),
+      clientMessageId: userMsgId,
+    };
     const sessLookup = getSessionById(sessionId);
     if (!sessLookup) {
       setPickerInlineError('会话不可用，请新建会话后重试');
       return;
     }
     const sessMsgs = Array.isArray(sessLookup.messages) ? sessLookup.messages : [];
-    const isAiBusy = streamManagerRef.current?.hasStream(sessionId) ?? false;
+    // L1 follow_up（pi）：运行中再发送 → 入队 status=queued，不 abort 当前 stream
+    // （composer queueMode 同源；drainQueuedAfterComplete 在 idle 时再开 stream）
+    const liveHandle = streamManagerRef.current?.get(sessionId);
+    const isAiBusy = isSessionAiBusy({
+      hasLiveStream: streamManagerRef.current?.hasStream(sessionId) ?? false,
+      messages: sessMsgs,
+    });
+    const sendAction = decideSendWhileRunning(isAiBusy);
+    const isFollowUp = sendAction === 'follow_up';
 
     {
       const sess = sessLookup;
@@ -301,26 +341,25 @@ export function useSlashSend(
         const seed = (priorUser?.text || rawInput).trim();
         const nextTitle = deriveSessionTitle(seed);
         if (!isDefaultSessionTitle(nextTitle)) {
-          renameSession(sessionId, nextTitle);
+          getCompositionRoot().session.getState().renameSession(sessionId, nextTitle);
         }
       }
     }
 
     let enqueued = false;
     try {
-      useLayoutStore.setState((state) => {
-        const sess = state.sessionsById[sessionId];
-        if (!ensureSessionMessages(sess)) return;
-        const newMsg: SessionMessage = {
-          id: userMsgId,
-          sender: 'user',
-          text: displayText,
-          timestamp: Date.now(),
-          status: isAiBusy ? 'queued' : 'processing',
-        };
-        sess.messages.push(newMsg);
-        enqueued = true;
+      // 经 store.addMessage upsert：同 id 回显只 update（action 内会初始化 messages）
+      addMessage(wsId, sessionId, {
+        id: userMsgId,
+        sender: 'user',
+        text: displayText,
+        timestamp: Date.now(),
+        // follow_up：queued 待 idle drain；start：processing 并立刻 stream
+        status: isFollowUp ? 'queued' : 'processing',
       });
+      enqueued = !!getSessionById(sessionId)?.messages?.some(
+        (m: SessionMessage) => m.id === userMsgId
+      );
     } catch (err) {
       console.error('Failed to enqueue user message:', err);
     }
@@ -331,18 +370,30 @@ export function useSlashSend(
     }
 
     setChatInput('');
-    useLayoutStore.getState().setComposerDraft(sessionId, '');
+    // 命令式 session 写：经 compositionRoot.session（勿散落 useLayoutStore.getState）
+    const sessionFacade = getCompositionRoot().session.getState();
+    sessionFacade.setComposerDraft(sessionId, '');
     setSlashMenuOpen(false);
     if (!fromOverride) setAttachments([]);
     setPickerInlineError('');
 
-    if (!isAiBusy) {
-      const store = useLayoutStore.getState();
-      if (store.activeSessionId !== sessionId) {
-        store.setActiveSessionId(sessionId);
-      }
-      runStreamingAssistant(input, userMsgId, sessionId, finalStreamOptions);
+    if (isFollowUp) {
+      // 观测 + 可选 daemon 接线：L1 经 compositionRoot.runControl（不 cancel）
+      void getCompositionRoot().runControl.followUp({
+        runId: liveHandle?.runId ?? null,
+        sessionId,
+        text: displayText,
+        clientMessageId: userMsgId,
+        reason: 'ui-send-while-running',
+      });
+      return;
     }
+
+    // 仅空闲时启动 stream；激活经 session facade（send 路径，非 shell open/focus 手势）
+    if (sessionFacade.activeSessionId !== sessionId) {
+      sessionFacade.setActiveSessionId(sessionId);
+    }
+    runStreamingAssistant(input, userMsgId, sessionId, finalStreamOptions);
   };
 
   return { handleSendChat };

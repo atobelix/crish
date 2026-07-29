@@ -55,7 +55,7 @@ export function collapseToolColumnPreserve(ws: WorkspaceState): boolean {
   writeToolColState(ws.id, {
     widthRatio: tool.widthRatio > 0.05 ? tool.widthRatio : 0.34,
     activeCardId: activeCardId || undefined,
-  } as any);
+  });
   tool.widthRatio = 0.001;
   const chat = ws.columns.find((c) => isChatColumn(c));
   if (chat) chat.widthRatio = 0.999;

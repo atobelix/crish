@@ -1,12 +1,10 @@
 import { useEffect } from 'react';
 import { ShortcutService } from '../../services/ShortcutService';
-import {
-  branchSession,
-  enterDraftMode,
-  getSessionStoreState,
-} from '../../api/storeAccess';
+import { branchSession } from '../../api/storeAccess';
+import { getActiveProjectId } from '../../api/projectStore';
 import { emitUiEvent } from '../../api/uiEvents';
-import { getSessionById } from '../../store/sessionIndex';
+import { getSessionById } from '../../store/sessionStore';
+import { getCompositionRoot } from '../../app/compositionRoot';
 import { formatBranchUndoToast } from '../useToastQueue';
 import type { UseAppKeyboardOpts } from './keyboard-types';
 
@@ -31,7 +29,9 @@ export function useKeyboardEditing(opts: UseAppKeyboardOpts): void {
       switch (actionId) {
         case 'new_session':
           e.preventDefault();
-          enterDraftMode();
+          getCompositionRoot().shell.openNewDraftTab(
+            getActiveProjectId() || undefined
+          );
           return;
         case 'focus_composer':
           e.preventDefault();
@@ -43,15 +43,12 @@ export function useKeyboardEditing(opts: UseAppKeyboardOpts): void {
           return;
         case 'branch_session': {
           e.preventDefault();
-          const oldSessionId = getSessionStoreState().activeSessionId;
-          const activeSess = getSessionById(
-            getSessionStoreState(),
-            oldSessionId,
-          );
+          const session = getCompositionRoot().session;
+          const oldSessionId = session.getActiveSessionId();
+          const activeSess = getSessionById(oldSessionId);
           if (activeSess) {
             const forkTitle = `${activeSess.title} - 双击ESC分叉`;
             branchSession(activeSess.id, forkTitle);
-            const newBranchId = getSessionStoreState().activeSessionId;
             handleShowToast?.(formatBranchUndoToast(activeSess.title));
           }
           return;

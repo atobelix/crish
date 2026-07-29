@@ -40,8 +40,8 @@ export function finiteNumber(n: unknown, fallback: number): number {
 
 function isWorkerLike(w: unknown): w is { id: string; taskName?: unknown; elapsedSeconds?: unknown } {
   if (w == null || typeof w !== 'object') return false;
-  if (!('id' in w)) return false;
-  return typeof (w as any).id === 'string' && (w as any).id.length > 0;
+  const item = w as Record<string, unknown>;
+  return typeof item.id === 'string' && item.id.length > 0;
 }
 
 export function sanitizeActiveWorkers(list: unknown): ActiveWorkerState[] {

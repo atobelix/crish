@@ -1,5 +1,4 @@
 import { useRef } from 'react';
-import type { MutableRefObject } from 'react';
 import { useLayoutStore } from '../../store/layoutStore';
 import { getSessionById } from '../../store/sessionStore';
 import { streamAssistantResponseApi } from '../../api/chatApi';
@@ -11,6 +10,7 @@ import {
 } from '../../api/toolFeedback';
 import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
 import { normalizeAssistantTimeline } from '../../api/toolPresentation';
+import { checkAndAlertSilentComplete } from '../../api/silentComplete';
 import { recordStreamDiag } from '../../api/streamDiag';
 import { applyUsageDelta, fetchRunSnapshotUsage } from '../../api/sessionEventHydrate';
 import { applySubagentEventToMessages } from '../../api/subagentTimeline';
@@ -25,11 +25,18 @@ import type { StreamToolCallPatch } from '../../api/streamTextBatcher';
 import { buildGoalRunTaskFields } from '../../api/goalModeController';
 import {
   addTerminalLine,
-  updateMessageText,
+  addTerminalLines,
   patchSession,
-  getActiveSessionId,
   syncTelemetryData,
 } from '../../api/storeAccess';
+import { getCompositionRoot } from '../../app/compositionRoot';
+import {
+  clearStream,
+  getStreamText,
+  getStreamTool,
+  setStreamText,
+} from '../../store/streamingStore';
+import { generateMessageId } from '../../utils/generateMessageId';
 import { streamRecovery } from '../../services/StreamRecovery';
 import type { MessageToolApprovalMeta, MessageToolCall, SessionAgent } from '../../store/types';
 import type { SessionMessage } from '../../store/layoutStore';
@@ -39,13 +46,18 @@ import {
   resolveStreamSessionId,
   canStreamLocalSession,
   isLiveStreamRun,
-  safeCancelStream,
-  stopAssistantPlaceholderText,
   buildTerminalToolPatches,
   scheduleFinalMarkdownHtml,
   preloadPublishToolDiffs,
   publishToolDiffsLazy,
+  commitStreamToSession,
+  commitStreamToolsToSession,
+  snapshotStreamTextToSession,
 } from './helpers';
+import {
+  dispatchStreamStopCancel,
+  markStreamingActive,
+} from '../../api/streamStop';
 import { useGoalMode } from './useGoalMode';
 
 export function useStreamCallbacks(
@@ -67,7 +79,10 @@ export function useStreamCallbacks(
     sessionIdOverride?: string,
     streamOptions?: StreamRequestOptions
   ) => void;
+  /** 默认 Stop = L2 cooperative */
   handleStopGeneration: () => void;
+  /** 强制取消 = L3 force（UI 二次确认后调用） */
+  handleForceCancelGeneration: () => void;
 } {
   const { onShowToast } = options;
   const { wsId, setActiveDiffSource, upsertSessionAgent } = queryHelpers;
@@ -95,29 +110,39 @@ export function useStreamCallbacks(
     sessionIdOverride?: string,
     streamOptions?: StreamRequestOptions
   ) => {
-    const sid = resolveStreamSessionId(sessionIdOverride, getActiveSessionId());
+    const sid = resolveStreamSessionId(
+      sessionIdOverride,
+      getCompositionRoot().session.getActiveSessionId()
+    );
     if (!sid || !canStreamLocalSession(sid, !!getSessionById(sid))) return;
 
+    // W8-3：live stream 存在时禁止 hard replace/cancel。
+    // 发送路径应走 useSlashSend follow_up 入队；此处 fail-closed 拒绝第二路 stream。
     const prevStream = streamManagerRef.current!.get(sid);
     if (prevStream) {
-      streamManagerRef.current!.delete(sid);
-      const prevBuf = renderBufferRef.current;
-      prevBuf?.push('', true);
-      prevBuf?.flush(true);
-      prevBuf?.stop();
-      flushStreamBatchers();
-      const prevText =
-        getSessionById(sid)?.messages?.find(
-          (m: SessionMessage) => m.id === prevStream.assistantMsgId
-        )?.text || prevBuf?.currentText() || '';
-      if ((prevText || '').trim()) {
-        scheduleFinalMarkdownHtml(sid, prevStream.assistantMsgId, prevText);
+      try {
+        const st = getCompositionRoot().layout.getState();
+        const userMsg = getSessionById(sid)?.messages?.find(
+          (m: SessionMessage) => m.id === userMsgId
+        );
+        if (userMsg?.sender === 'user' && userMsg.status === 'processing') {
+          st.setSessionMessageStatus(sid, userMsgId, 'queued');
+        }
+      } catch {
+        /* ignore */
       }
-      safeCancelStream(prevStream.cancel);
+      console.warn(
+        '[runStreamingAssistant] refuse start while stream live (L1 follow_up, no abort)',
+        sid,
+        userMsgId
+      );
+      return;
     }
 
-    const assistantMsgId = `assistant-msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const store = useLayoutStore.getState();
+    // 发送前固定 assistant clientMessageId（= message.id）：
+    // 热路径 streamingStore / 终态 commit / run-task 下发 / hydrate rekey 同一键
+    const assistantMsgId = generateMessageId('assistant');
+    const store = getCompositionRoot().layout.getState();
     const toolNames: Record<string, string> = {};
     const startTime = Date.now();
     dismissRunNotice();
@@ -150,24 +175,28 @@ export function useStreamCallbacks(
       if (runClosed && !frame.isFinal) return;
       if (!assertLive() && !frame.isFinal) return;
       if (myGen !== generationMapRef.current.get(sid)) return;
-      updateMessageText(sid, assistantMsgId, frame.full);
+      // Lightweight store only — avoid immer/session messages ref churn per token.
+      setStreamText(sid, assistantMsgId, frame.full);
       if (myGen !== generationMapRef.current.get(sid)) return;
       streamRecovery.noteRenderBuffer(sid, buffer.bufferedLength());
     };
     buffer.start();
     preloadPublishToolDiffs();
-    if (useLayoutStore.getState().activeSessionId === sid) {
+    if (getCompositionRoot().session.getActiveSessionId() === sid) {
       openSidePanelOnceRef.current = { terminal: false, diff: false };
       setActiveDiffSource(null);
     }
 
-    const cancelRef = useRef<() => void>(() => {});
+    // cancel 支持 L2/L3 mode；协议对接见 runControlClient / createStreamCancel
+    let cancelStreamFn: (opts?: { mode?: 'cooperative' | 'force' }) => void = () => {};
     streamManagerRef.current!.set(sid, {
-      cancel: () => cancelRef.current(),
+      cancel: (opts) => cancelStreamFn(opts),
       userMsgId,
       assistantMsgId,
       runId: null,
     });
+    // 上文已拒绝 live replace；此处恒为 net-new start
+    markStreamingActive(true);
 
     store.addMessage(wsId, sid, {
       id: assistantMsgId,
@@ -200,6 +229,8 @@ export function useStreamCallbacks(
       status: 'running' | 'pending_approval',
       approvalMeta?: MessageToolApprovalMeta
     ) => {
+      // Durable text snapshot before tool so blocks/streamTextOffset interleave correctly.
+      snapshotStreamTextToSession(sid, assistantMsgId, streamedFullText);
       toolNames[toolId] = name;
       queueToolCallPatch(
         toolId,
@@ -222,11 +253,15 @@ export function useStreamCallbacks(
         maxIterations: liveGm.maxIterations ?? 5,
       });
     })();
-    const mergedStreamOptions: StreamRequestOptions | undefined = goalOpts
-      ? { ...streamOptions, ...goalOpts } as StreamRequestOptions
-      : streamOptions;
+    // 助手 placeholder 幂等键始终下发；用户 clientMessageId 由 send 路径注入 options
+    const mergedStreamOptions: StreamRequestOptions = {
+      ...(streamOptions ?? {}),
+      ...(goalOpts ?? {}),
+      assistantClientMessageId:
+        streamOptions?.assistantClientMessageId || assistantMsgId,
+    };
 
-    cancelRef.current = streamAssistantResponseApi(
+    cancelStreamFn = streamAssistantResponseApi(
       input,
       {
         onRunMeta: ({ runId }) => {
@@ -237,6 +272,8 @@ export function useStreamCallbacks(
             entry.runId = runId;
           }
           streamRecovery.registerStream(sid, runId);
+          // OPT-H4: immer recipe residual — intentional; LayoutFacade has no setState/patchState.
+          // Command reads use getCompositionRoot().layout.getState() (see above).
           useLayoutStore.setState((state) => {
             const s = state.sessionsById[sid];
             if (s) s.engineLastRunId = runId;
@@ -292,6 +329,7 @@ export function useStreamCallbacks(
         onSubagentEvent: (info) => {
           if (!assertLive()) return;
           if (!info.subagentId) return;
+          // OPT-H4: nested agent message immer patch (no facade method for this recipe).
           useLayoutStore.setState((state) => {
             const sess = state.sessionsById[sid];
             const ag = sess?.agents?.find((a: SessionAgent) => a.id === info.subagentId);
@@ -304,6 +342,7 @@ export function useStreamCallbacks(
           if (!info.subagentId) return;
           let parentToolCallId: string | undefined;
           let summary = info.summary || '';
+          // OPT-H4: multi-field agent terminal patch via immer (intentional residual).
           useLayoutStore.setState((state) => {
             const sess = state.sessionsById[sid];
             const ag = sess?.agents?.find((a: SessionAgent) => a.id === info.subagentId);
@@ -338,19 +377,32 @@ export function useStreamCallbacks(
         },
         onToolSuccess: (toolId, output, diffs) => {
           if (!assertLive()) return;
-          const name = toolNames[toolId] || '';
-          const args = getSessionById(sid)
-            ?.messages?.find((m: SessionMessage) => m.id === assistantMsgId)
-            ?.toolCalls?.find((t: MessageToolCall) => t.id === toolId)
-            ?.arguments || '';
+          const name =
+            toolNames[toolId] ||
+            getStreamTool(sid, assistantMsgId, toolId)?.name ||
+            getSessionById(sid)
+              ?.messages?.find((m: SessionMessage) => m.id === assistantMsgId)
+              ?.toolCalls?.find((t: MessageToolCall) => t.id === toolId)
+              ?.name ||
+            '';
+          const args =
+            getStreamTool(sid, assistantMsgId, toolId)?.arguments ||
+            getSessionById(sid)
+              ?.messages?.find((m: SessionMessage) => m.id === assistantMsgId)
+              ?.toolCalls?.find((t: MessageToolCall) => t.id === toolId)
+              ?.arguments ||
+            '';
           const displayOut = sanitizeToolDisplayOutput(output || '');
           const resolvedDiffs = resolveToolDiffs({ name, args, output: displayOut, structuredDiffs: diffs });
           queueToolCallPatch(toolId, {
-            id: toolId, status: 'success', output: displayOut || output || '完成',
+            id: toolId,
+            ...(name ? { name } : {}),
+            status: 'success',
+            output: displayOut || output || '完成',
             diffs: resolvedDiffs.length ? resolvedDiffs : undefined,
           }, true);
           if (isShellToolName(name) && displayOut) {
-            displayOut.split('\n').slice(0, 80).forEach((line: string) => addTerminalLine(line, sid));
+            addTerminalLines(displayOut.split('\n').slice(0, 80), sid);
           }
           if (resolvedDiffs.length > 0) {
             publishToolDiffsLazy(resolvedDiffs);
@@ -405,11 +457,28 @@ export function useStreamCallbacks(
               toolCount: asstErr?.toolCalls?.length ?? 0,
             },
           });
-          pushRunNotice({ text: message, kind, detail: detail || undefined }, 14000);
+          // 错误只走横幅/toast，禁止写入 assistant 气泡（用户要求：勿把错误当 AI 输出）
+          pushRunNotice(
+            { text: message, kind: kind || 'error', detail: detail || undefined },
+            14000
+          );
           onShowToast(message);
-          if (asstErr && !(asstErr.text || '').trim()) {
-            store.updateMessageText(sid, assistantMsgId, message);
-            store.setSessionMessageStatus(sid, assistantMsgId, 'error');
+          if (asstErr) {
+            const hadText =
+              !!(asstErr.text || '').trim() ||
+              !!getStreamText(sid, assistantMsgId)?.trim();
+            if (!hadText) {
+              store.withdrawMessage(wsId, sid, assistantMsgId);
+              clearStream(sid, assistantMsgId);
+            } else {
+              store.setSessionMessageStatus(sid, assistantMsgId, 'error', undefined, {
+                errorDetail: {
+                  message: message || '服务暂时不可用，请检查网络或后端配置',
+                  kind: kind || 'stream-error',
+                  technical: typeof detail === 'string' ? detail : detail ? JSON.stringify(detail) : undefined
+                }
+              });
+            }
           }
           flushStreamBatchers();
         },
@@ -417,16 +486,26 @@ export function useStreamCallbacks(
           if (runClosed) return;
           if (!isLiveStreamRun(streamManagerRef.current!.get(sid), assistantMsgId)) {
             runClosed = true;
+            // Replaced by a newer run — that run owns streamingActive; do not clear.
             return;
           }
           runClosed = true;
+          markStreamingActive(false);
           streamRecovery.markCompleted(sid);
 
           buffer.push('', true);
           buffer.flush(true);
           flushStreamBatchers();
+          // ONE durable commit of final stream text + thinking; clear streaming entry.
+          const committedText = commitStreamToSession(sid, assistantMsgId, {
+            text:
+              getStreamText(sid, assistantMsgId) ||
+              buffer.currentText() ||
+              streamedFullText ||
+              '',
+          });
           const elapsed = Math.round((Date.now() - startTime) / 1000);
-          const st = useLayoutStore.getState();
+          const st = getCompositionRoot().layout.getState();
           const asst = getSessionById(sid)?.messages.find(
             (m: SessionMessage) => m.id === assistantMsgId
           );
@@ -448,7 +527,7 @@ export function useStreamCallbacks(
               elapsedSec: elapsed,
             },
           });
-          if (asst && !gotRealText && !(asst.text || '').trim()) {
+          if (asst && !gotRealText && !(asst.text || committedText || '').trim()) {
             const hasTools = (asst.toolCalls || []).some(
               (t: MessageToolCall) =>
                 t.status === 'success' || t.status === 'error' || t.status === 'running'
@@ -458,7 +537,7 @@ export function useStreamCallbacks(
             } else {
               dismissRunNotice();
             }
-          } else if (gotRealText || (asst?.text || '').trim()) {
+          } else if (gotRealText || (asst?.text || committedText || '').trim()) {
             dismissRunNotice();
           }
           const toolPatches = buildTerminalToolPatches(asst?.toolCalls, 'complete');
@@ -472,7 +551,7 @@ export function useStreamCallbacks(
             const latest = getSessionById(sid)?.messages.find(
               (m: SessionMessage) => m.id === assistantMsgId
             );
-            const raw = latest?.text || streamedFullText || '';
+            const raw = latest?.text || committedText || streamedFullText || '';
             const cleaned = stripThoughtPlaceholders(raw);
             if (cleaned !== raw) st.updateMessageText(sid, assistantMsgId, cleaned);
             finalTextForHtml = cleaned || raw;
@@ -481,6 +560,7 @@ export function useStreamCallbacks(
               thinkingBatcherRef.current?.drop(streamBatchKey(sid, assistantMsgId));
               st.updateMessageThinking(sid, assistantMsgId, '');
             }
+            // OPT-H4: timeline normalize mutates msg in place — keep store.setState recipe.
             useLayoutStore.setState((state) => {
               const sess = state.sessionsById[sid];
               const msg = sess?.messages.find((m: SessionMessage) => m.id === assistantMsgId);
@@ -491,8 +571,33 @@ export function useStreamCallbacks(
             });
           } catch { /* ignore */ }
           scheduleRunFinalHtml(finalTextForHtml);
-          st.setSessionMessageStatus(sid, userMsgId, 'completed');
-          st.setSessionMessageStatus(sid, assistantMsgId, 'completed', elapsed);
+          const latestUserMsg = getSessionById(sid)?.messages.find(
+            (m: SessionMessage) => m.id === userMsgId
+          );
+          const latestAssistantMsg = getSessionById(sid)?.messages.find(
+            (m: SessionMessage) => m.id === assistantMsgId
+          );
+          // 只在消息仍处于 processing 时标记完成；error/cancelled 等终态保持原状，
+          // 避免触发 error → completed 这类非法状态转换。
+          if (latestUserMsg?.status === 'processing') {
+            st.setSessionMessageStatus(sid, userMsgId, 'completed');
+          }
+          if (latestAssistantMsg?.status === 'processing') {
+            st.setSessionMessageStatus(sid, assistantMsgId, 'completed', elapsed);
+          }
+          // D2-5：终态后检测 silent complete（无 UserView 可见正文/工具）；仅 metric + dev warn，不改成功语义
+          try {
+            const finalizedAsst = getSessionById(sid)?.messages.find(
+              (m: SessionMessage) => m.id === assistantMsgId
+            );
+            checkAndAlertSilentComplete(finalizedAsst, {
+              sessionId: sid,
+              runId: localRunId || undefined,
+              messageId: assistantMsgId,
+            });
+          } catch {
+            /* ignore alert failures */
+          }
           const curStream = streamManagerRef.current!.get(sid);
           if (curStream?.assistantMsgId === assistantMsgId) {
             streamManagerRef.current!.delete(sid);
@@ -508,7 +613,7 @@ export function useStreamCallbacks(
                 const usage = await fetchRunSnapshotUsage(runId);
                 if (usage && (usage.sampleCount ?? 0) > 0 && (usage.promptTokens || usage.completionTokens)) {
                   const model = getActiveModelId() || 'unknown';
-                  const cur = useLayoutStore.getState().tokenUsage;
+                  const cur = getCompositionRoot().layout.getState().tokenUsage;
                   const next = applyUsageDelta(cur, usage, (i: number, o: number) => estimateCostUsd(model, i, o));
                   const dIn = Math.max(0, (next.input || 0) - (cur.input || 0));
                   const dOut = Math.max(0, (next.output || 0) - (cur.output || 0));
@@ -528,7 +633,7 @@ export function useStreamCallbacks(
                 const approxIn = Math.max(1, Math.ceil(userText.length / 4));
                 const approxOut = Math.max(0, Math.ceil(asstText.length / 4));
                 const model = getActiveModelId() || 'unknown';
-                const cur = useLayoutStore.getState().tokenUsage;
+                const cur = getCompositionRoot().layout.getState().tokenUsage;
                 const dCost = estimateCostUsd(model, approxIn, approxOut);
                 syncTelemetryData({
                   tokenUsage: {
@@ -557,46 +662,77 @@ export function useStreamCallbacks(
 
     const stillMine = streamManagerRef.current!.get(sid);
     if (stillMine?.assistantMsgId === assistantMsgId) {
-      stillMine.cancel = () => cancelRef.current?.();
+      stillMine.cancel = (opts) => cancelStreamFn?.(opts);
       if (localRunId) stillMine.runId = localRunId;
     }
   };
 
   streamManagerRef.current!.bindStarter(runStreamingAssistant);
 
-  const handleStopGeneration = () => {
-    const sid = resolveStreamSessionId(null, getActiveSessionId());
+  /**
+   * 停止生成：默认 L2 cooperative；force=true 时 L3。
+   * UI 默认 Stop → handleStopGeneration()；强制取消 → handleForceCancelGeneration()。
+   * 共享 wire：api/streamStop.dispatchStreamStopCancel → createStreamCancel / compositionRoot
+   *（TRANSITIONAL：daemon L2 未全量时仍成对 cancel-run.mode）。
+   * 本函数保留 chat 专属 partials（buffer / goalMode / message status / telemetry）。
+   */
+  const finalizeStopGeneration = (force: boolean) => {
+    const sid = resolveStreamSessionId(
+      null,
+      getCompositionRoot().session.getActiveSessionId()
+    );
     if (!sid) return;
     const cur = streamManagerRef.current!.get(sid);
     if (!cur) return;
-    streamRecovery.markFailed(sid, 'cancelled');
+    streamRecovery.markFailed(sid, force ? 'force_cancelled' : 'cancelled');
     streamManagerRef.current!.delete(sid);
     generationMapRef.current.delete(sid);
+    markStreamingActive(false);
     const stopBuf = renderBufferRef.current;
     stopBuf?.push('', true);
     stopBuf?.flush(true);
     stopBuf?.stop();
     flushStreamBatchers();
-    const st = useLayoutStore.getState();
+    const st = getCompositionRoot().layout.getState();
     if (getSessionById(sid)?.goalMode?.active) {
       streamManagerRef.current!.markGoalCancelled(sid);
       patchSession(sid, { goalMode: null });
     }
+    // Persist partial stream text only（禁止把「已停止」等系统句写入气泡）
+    const partialText =
+      getStreamText(sid, cur.assistantMsgId) ||
+      stopBuf?.currentText() ||
+      getSessionById(sid)?.messages.find(
+        (m: SessionMessage) => m.id === cur.assistantMsgId
+      )?.text ||
+      '';
+    const stopText = (partialText || '').trim();
+    commitStreamToolsToSession(sid, cur.assistantMsgId);
+    if (stopText) {
+      commitStreamToSession(sid, cur.assistantMsgId, { text: stopText });
+    } else {
+      // 无正文：清空占位，用横幅提示停止（不写 assistant 正文）
+      st.updateMessageText(sid, cur.assistantMsgId, '');
+      clearStream(sid, cur.assistantMsgId);
+      pushRunNotice(
+        {
+          text: force ? '已强制停止本轮生成。' : '已停止本轮生成。',
+          kind: 'ended',
+        },
+        5000
+      );
+    }
     const asst = getSessionById(sid)?.messages.find(
       (m: SessionMessage) => m.id === cur.assistantMsgId
     );
-    const placeholder = stopAssistantPlaceholderText(asst?.text);
-    if (placeholder) {
-      st.updateMessageText(sid, cur.assistantMsgId, placeholder);
-    }
     st.setSessionMessageStatus(sid, cur.userMsgId, 'completed');
     st.setSessionMessageStatus(sid, cur.assistantMsgId, 'completed');
-    const stopText = placeholder || asst?.text || stopBuf?.currentText() || '';
-    if ((stopText || '').trim()) {
+    if (stopText) {
       scheduleFinalMarkdownHtml(sid, cur.assistantMsgId, stopText);
     }
     const stopPatches = buildTerminalToolPatches(asst?.toolCalls, 'stop');
     if (stopPatches.length) {
+      // OPT-H4: batch tool-terminal status via immer (no LayoutFacade.setState).
       useLayoutStore.setState((state) => {
         const msg = state.sessionsById[sid]?.messages.find(
           (m: SessionMessage) => m.id === cur.assistantMsgId
@@ -620,7 +756,7 @@ export function useStreamCallbacks(
         const approxIn = Math.max(1, Math.ceil(userTxt.length / 4));
         const approxOut = Math.max(0, Math.ceil(asstTxt.length / 4));
         const model = getActiveModelId() || 'unknown';
-        const curUsage = useLayoutStore.getState().tokenUsage;
+        const curUsage = getCompositionRoot().layout.getState().tokenUsage;
         const dCost = estimateCostUsd(model, approxIn, approxOut);
         syncTelemetryData({
           tokenUsage: {
@@ -636,8 +772,19 @@ export function useStreamCallbacks(
         } catch { /* ignore */ }
       } catch { /* ignore */ }
     })();
-    safeCancelStream(cur.cancel);
+    // L2/L3 wire：shared helper（chat has live cancel; no runId double-dispatch）
+    dispatchStreamStopCancel({ force, cancel: cur.cancel });
   };
 
-  return { runStreamingAssistant, handleStopGeneration };
+  /** 默认 Stop = L2 cooperative_stop */
+  const handleStopGeneration = () => {
+    finalizeStopGeneration(false);
+  };
+
+  /** 强制取消 = L3 force_cancel（UI 应二次确认） */
+  const handleForceCancelGeneration = () => {
+    finalizeStopGeneration(true);
+  };
+
+  return { runStreamingAssistant, handleStopGeneration, handleForceCancelGeneration };
 }

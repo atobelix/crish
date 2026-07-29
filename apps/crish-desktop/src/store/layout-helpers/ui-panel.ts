@@ -1,7 +1,7 @@
 import type { CardState, CardGroupState } from '../types';
 
 export const PANEL_TITLE_MAP: Record<string, string> = {
-  agent: '聊天', overview: '总览', files: '文件', preview: '预览',
+  agent: '协作体', overview: '总览', files: '文件', preview: '预览',
   diff: '变更', terminal: '终端', tasks: '任务', runtime: '运行',
   chat: '对话', settings: '设置', plan: '计划',
 };
