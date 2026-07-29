@@ -238,11 +238,19 @@ export interface StartGoalRunRequest extends StartRunRequest {
   goalLoopStrategy?: GoalLoopStrategy;
 }
 
+/** cancel-run 模式：对齐 desktop L2/L3 */
+export type CancelRunMode = "cooperative" | "force";
+
 export interface RunEngine {
   run(input: string | AgentMessage): AsyncIterable<AgentEvent>;
   abort(reason?: string): void;
-  /** 灏嗙敤鎴疯緭鍏ュ疄鏃舵敞鍏ュ埌姝ｅ湪杩愯鐨?runtime 涓紙steer 妯″紡锛?*/
+  /** 将用户输入实时注入到正在运行的 runtime 中（steer 模式） */
   enqueueSteerInput(message: AgentMessage): void;
+  /**
+   * L2 协作停：通过 ControlBus 请求干净收尾，不立刻 abort provider。
+   * 未实现时 cancelRun(mode=cooperative) 回落为 force abort。
+   */
+  requestCooperativeStop?(reason?: string): void;
 }
 
 export interface CreateRunEngineInput {

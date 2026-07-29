@@ -1115,6 +1115,115 @@ describe('AgentOrchestrator', () => {
     });
   });
 
+  it('cooperative cancel uses ControlBus injection and does not hard abort', async () => {
+    const engine = new BlockingRunEngine();
+    const orchestrator = new AgentOrchestrator({
+      createRunEngine: () => engine,
+    });
+
+    const handle = await orchestrator.startRun({
+      id: 'run_coop',
+      sessionId: 'session_coop',
+      cwd: 'C:/tmp',
+      input: 'hello',
+    });
+    const iterator = handle.events[Symbol.asyncIterator]();
+    await iterator.next();
+    await iterator.next();
+
+    expect(
+      orchestrator.cancelRun('run_coop', 'ui-stop', 'cooperative')
+    ).toBe(true);
+    // L2：不触发 abort
+    expect(engine.abortReason).toBeUndefined();
+    expect(engine.cooperativeStopReason).toBe('ui-stop');
+
+    engine.release();
+    const rest = await drain(iterator);
+    const cancelRequested = rest.find((event) => event.type === 'run-cancel-requested');
+    expect(cancelRequested).toMatchObject({
+      type: 'run-cancel-requested',
+      payload: { reason: 'ui-stop', mode: 'cooperative' },
+    });
+    // cooperative + agent-end reason=stop → completed
+    expect(orchestrator.getRun('run_coop')).toMatchObject({
+      status: 'completed',
+      outcome: 'completed',
+    });
+  });
+
+  it('force cancel (L3) hard-aborts provider and emits mode=force', async () => {
+    const engine = new BlockingRunEngine();
+    const orchestrator = new AgentOrchestrator({
+      createRunEngine: () => engine,
+    });
+
+    const handle = await orchestrator.startRun({
+      id: 'run_force',
+      sessionId: 'session_force',
+      cwd: 'C:/tmp',
+      input: 'hello',
+    });
+    const iterator = handle.events[Symbol.asyncIterator]();
+    await iterator.next();
+    await iterator.next();
+
+    expect(
+      orchestrator.cancelRun('run_force', 'ui-force', 'force')
+    ).toBe(true);
+    expect(engine.abortReason).toBe('ui-force');
+    expect(engine.cooperativeStopReason).toBeUndefined();
+
+    engine.release();
+    const rest = await drain(iterator);
+    expect(rest.find((event) => event.type === 'run-cancel-requested')).toMatchObject({
+      type: 'run-cancel-requested',
+      payload: { reason: 'ui-force', mode: 'force' },
+    });
+    expect(orchestrator.getRun('run_force')).toMatchObject({
+      status: 'cancelled',
+      outcome: 'cancelled',
+      reason: 'aborted',
+    });
+  });
+
+  it('cooperative cancel without ControlBus falls back to force abort', async () => {
+    // Engine with abort only — no requestCooperativeStop → L2 回落 L3
+    const engine = new FakeBlockingAbortOnlyEngine();
+    const orchestrator = new AgentOrchestrator({
+      createRunEngine: () => engine,
+    });
+
+    const handle = await orchestrator.startRun({
+      id: 'run_coop_fallback',
+      sessionId: 'session_coop_fallback',
+      cwd: 'C:/tmp',
+      input: 'hello',
+    });
+    const iterator = handle.events[Symbol.asyncIterator]();
+    await iterator.next();
+    await iterator.next();
+
+    expect(
+      orchestrator.cancelRun('run_coop_fallback', 'no-bus', 'cooperative')
+    ).toBe(true);
+    expect(engine.abortReason).toBe('no-bus');
+
+    engine.release();
+    const rest = await drain(iterator);
+    expect(rest.find((event) => event.type === 'run-cancel-requested')).toMatchObject({
+      type: 'run-cancel-requested',
+      payload: {
+        reason: 'no-bus',
+        mode: 'cooperative-fallback-force',
+      },
+    });
+    expect(orchestrator.getRun('run_coop_fallback')).toMatchObject({
+      status: 'cancelled',
+      outcome: 'cancelled',
+    });
+  });
+
   it('marks max-turns agent endings as failed instead of completed', async () => {
     const orchestrator = new AgentOrchestrator({
       createRunEngine: () =>
@@ -1838,7 +1947,43 @@ class RecordingRunEngine extends FakeRunEngine {
 
 class BlockingRunEngine {
   abortReason?: string;
+  cooperativeStopReason?: string;
   steered: AgentMessage[] = [];
+  private releaseRun!: () => void;
+  private readonly released = new Promise<void>((resolve) => {
+    this.releaseRun = resolve;
+  });
+
+  async *run(): AsyncIterable<AgentEvent> {
+    await this.released;
+    yield {
+      type: 'agent-end',
+      sessionId: 'session_c',
+      timestamp: '2026-01-01T00:00:01.000Z',
+      reason: this.cooperativeStopReason ? 'stop' : 'aborted',
+    };
+  }
+
+  abort(reason?: string): void {
+    if (reason !== undefined) { this.abortReason = reason; }
+  }
+
+  requestCooperativeStop(reason?: string): void {
+    this.cooperativeStopReason = reason ?? 'cooperative-stop';
+  }
+
+  enqueueSteerInput(message: AgentMessage): void {
+    this.steered.push(message);
+  }
+
+  release(): void {
+    this.releaseRun();
+  }
+}
+
+/** L2 fallback fixture: no requestCooperativeStop → cancelRun cooperative 必须 hard abort */
+class FakeBlockingAbortOnlyEngine {
+  abortReason?: string;
   private releaseRun!: () => void;
   private readonly released = new Promise<void>((resolve) => {
     this.releaseRun = resolve;
@@ -1855,12 +2000,12 @@ class BlockingRunEngine {
   }
 
   abort(reason?: string): void {
-    if (reason !== undefined) { this.abortReason = reason; }
+    if (reason !== undefined) {
+      this.abortReason = reason;
+    }
   }
 
-  enqueueSteerInput(message: AgentMessage): void {
-    this.steered.push(message);
-  }
+  enqueueSteerInput(_message: AgentMessage): void {}
 
   release(): void {
     this.releaseRun();

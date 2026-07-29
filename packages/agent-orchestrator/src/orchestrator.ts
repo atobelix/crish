@@ -87,8 +87,12 @@ export class AgentOrchestrator {
     return this.dispatcher.startGoalRun(request);
   }
 
-  cancelRun(runId: string, reason?: string) {
-    return this.dispatcher.cancelRun(runId, reason);
+  cancelRun(
+    runId: string,
+    reason?: string,
+    mode?: "cooperative" | "force"
+  ) {
+    return this.dispatcher.cancelRun(runId, reason, mode);
   }
 
   steerRun(runId: string, text: string) {
