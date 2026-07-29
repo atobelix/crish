@@ -1,0 +1,15 @@
+[package]
+name = "conex-ipc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
+conex-types = { path = "../conex-types" }

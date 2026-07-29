@@ -1,0 +1,16 @@
+[package]
+name = "conex-stream"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+bytes = { workspace = true }
+conex-types = { path = "../conex-types" }
