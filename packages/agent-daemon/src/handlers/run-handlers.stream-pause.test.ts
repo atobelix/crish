@@ -218,13 +218,66 @@ describe('RunHandler stream pause / resume backpressure', () => {
     expect(waiterDone).toBe(true);
     expect(streamBackpressure.isPaused(runId)).toBe(false);
     expect(streamBackpressure.bufferedCount(runId)).toBe(0);
-    expect(cancelRun).toHaveBeenCalledWith(runId);
+    // 默认 force：reason=cancelled-by-user, mode=force
+    expect(cancelRun).toHaveBeenCalledWith(runId, 'cancelled-by-user', 'force');
     expect(clearRun).toHaveBeenCalledWith(runId, 'run-cancelled');
 
     // resume after cancel must not flush the dropped buffer
     handler.resumeStream(runId);
     expect(send).not.toHaveBeenCalled();
     expect(broadcast).not.toHaveBeenCalled();
+  });
+
+  it('cancel-run mode=cooperative 透传 mode 且不默认 force reason', () => {
+    const { handler, cancelRun, clearRun } = createHarness();
+    const runId = 'run-coop';
+
+    handler.handleCancelRun({
+      type: 'cancel-run',
+      runId,
+      mode: 'cooperative',
+      reason: 'ui-stop',
+    });
+
+    expect(cancelRun).toHaveBeenCalledWith(runId, 'ui-stop', 'cooperative');
+    expect(clearRun).toHaveBeenCalledWith(runId, 'run-cooperative-stop');
+  });
+
+  it('run-control cooperative_stop 映射为 cancel mode=cooperative', () => {
+    const { handler, cancelRun, clearRun } = createHarness();
+    const runId = 'run-l2';
+
+    handler.handleRunControl({
+      type: 'run-control',
+      level: 'cooperative_stop',
+      runId,
+      reason: 'desktop-stop',
+    });
+
+    expect(cancelRun).toHaveBeenCalledWith(
+      runId,
+      'desktop-stop',
+      'cooperative'
+    );
+    expect(clearRun).toHaveBeenCalledWith(runId, 'run-cooperative-stop');
+  });
+
+  it('run-control force_cancel 映射为 cancel mode=force', () => {
+    const { handler, cancelRun, clearRun } = createHarness();
+    const runId = 'run-l3';
+
+    handler.handleRunControl({
+      type: 'run-control',
+      level: 'force_cancel',
+      runId,
+    });
+
+    expect(cancelRun).toHaveBeenCalledWith(
+      runId,
+      'cancelled-by-user',
+      'force'
+    );
+    expect(clearRun).toHaveBeenCalledWith(runId, 'run-cancelled');
   });
 
   it('empty runId is ignored', () => {

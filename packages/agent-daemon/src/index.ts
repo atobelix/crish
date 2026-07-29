@@ -306,6 +306,21 @@ if (isMainModule) {
       process.on("SIGTERM", () => shutdown("SIGTERM"));
     })
     .catch((error) => {
+      const errStr = String(error?.message || error || '');
+      if (errStr.includes('EADDRINUSE') || errStr.includes('address already in use')) {
+        getDaemonLogger().info('Port already in use, reusing running daemon instance', { module: 'index' });
+        console.log(JSON.stringify({
+          type: "daemon-ready",
+          port: config.port || 8765,
+          pid: process.pid,
+          protocolVersion: DAEMON_HANDSHAKE_PROTOCOL_VERSION,
+          buildHash: readEnvOrDefault("DAEMON_BUILD_HASH", ""),
+          version: "0.1.0",
+          reused: true
+        }));
+        process.exit(0);
+        return;
+      }
       getDaemonLogger().error('Failed to start daemon', { module: 'index', err: toLogErr(error) });
       process.exit(1);
     });

@@ -11,6 +11,7 @@ import type {
   ListCapabilitiesMessage,
   PingMessage,
   PongMessage,
+  RunControlMessage,
   RunTaskMessage,
   StreamPauseMessage,
   StreamResumeMessage,
@@ -31,6 +32,7 @@ import {
   EMPTY_COMMAND_FIELDS,
   ERROR_FIELDS,
   EVENT_FIELDS,
+  RUN_CONTROL_FIELDS,
   RUN_TASK_FIELDS,
   STREAM_PAUSE_FIELDS,
   STREAM_RESUME_FIELDS,
@@ -40,6 +42,7 @@ import {
   optionalBoolean,
   optionalEnum,
   optionalInteger,
+  optionalJsonObject,
   optionalString,
   optionalStringArray,
   rejectUnknownFields,
@@ -241,6 +244,21 @@ export function validateRunTaskMessage(
     issues,
     { nonEmpty: true }
   );
+  // Optional UI message identity (W7-6 hydrate rekey); non-empty when present
+  const clientMessageId = optionalString(
+    input,
+    'clientMessageId',
+    '$.clientMessageId',
+    issues,
+    { nonEmpty: true }
+  );
+  const assistantClientMessageId = optionalString(
+    input,
+    'assistantClientMessageId',
+    '$.assistantClientMessageId',
+    issues,
+    { nonEmpty: true }
+  );
 
   if (issues.length > 0) return invalid('Invalid run-task message', issues);
 
@@ -278,6 +296,10 @@ export function validateRunTaskMessage(
     ...(content !== undefined ? { content } : {}),
     ...(hasImages !== undefined ? { hasImages } : {}),
     ...(attachments !== undefined ? { attachments } : {}),
+    ...(clientMessageId !== undefined ? { clientMessageId } : {}),
+    ...(assistantClientMessageId !== undefined
+      ? { assistantClientMessageId }
+      : {}),
   } as RunTaskMessage);
 }
 
@@ -336,6 +358,14 @@ export function validateDenyToolMessage(
   });
 }
 
+const CANCEL_RUN_MODES = ['cooperative', 'force'] as const;
+const RUN_CONTROL_LEVELS = [
+  'continue',
+  'soft_inject',
+  'cooperative_stop',
+  'force_cancel',
+] as const;
+
 export function validateCancelRunMessage(
   input: UnknownRecord
 ): ProtocolValidationResult<CancelRunMessage> {
@@ -345,10 +375,58 @@ export function validateCancelRunMessage(
   const runId = requiredString(input, 'runId', '$.runId', issues, {
     nonEmpty: true,
   });
+  // mode 可选：旧客户端省略时等价 force
+  const mode = optionalEnum(
+    input,
+    'mode',
+    '$.mode',
+    CANCEL_RUN_MODES,
+    issues
+  );
+  const reason = optionalString(input, 'reason', '$.reason', issues);
 
   if (issues.length > 0) return invalid('Invalid cancel-run message', issues);
 
-  return ok({ type: 'cancel-run', runId: runId as string });
+  return ok({
+    type: 'cancel-run',
+    runId: runId as string,
+    ...(mode !== undefined ? { mode } : {}),
+    ...(reason !== undefined ? { reason } : {}),
+  });
+}
+
+export function validateRunControlMessage(
+  input: UnknownRecord
+): ProtocolValidationResult<RunControlMessage> {
+  const issues: ProtocolValidationIssue[] = [];
+  rejectUnknownFields(input, RUN_CONTROL_FIELDS, issues);
+
+  const level = requiredEnum(
+    input,
+    'level',
+    '$.level',
+    RUN_CONTROL_LEVELS,
+    issues
+  );
+  const runId = optionalString(input, 'runId', '$.runId', issues, {
+    nonEmpty: true,
+  });
+  const sessionId = optionalString(input, 'sessionId', '$.sessionId', issues, {
+    nonEmpty: true,
+  });
+  const reason = optionalString(input, 'reason', '$.reason', issues);
+  const payload = optionalJsonObject(input, 'payload', '$.payload', issues);
+
+  if (issues.length > 0) return invalid('Invalid run-control message', issues);
+
+  return ok({
+    type: 'run-control',
+    level: level as RunControlMessage['level'],
+    ...(runId !== undefined ? { runId } : {}),
+    ...(sessionId !== undefined ? { sessionId } : {}),
+    ...(reason !== undefined ? { reason } : {}),
+    ...(payload !== undefined ? { payload } : {}),
+  });
 }
 
 export function validateStreamPauseMessage(

@@ -32,6 +32,20 @@ import type {
   CreateRunEngineInput,
 } from '@crish/agent-orchestrator';
 
+describe('DaemonRuntimeFactory W5-5 health pack wire', () => {
+  it('exposes observe-only getHealthSnapshot from registerBuiltinHealthHooks', () => {
+    const factory = createFactory();
+    const snap = factory.getHealthSnapshot();
+    expect(snap).toMatchObject({
+      turnStartCount: 0,
+      turnEndCount: 0,
+      toolPreCount: 0,
+      toolPostCount: 0,
+      toolErrorCount: 0,
+    });
+  });
+});
+
 describe('DaemonRuntimeFactory workspace mutation coordinators', () => {
   it('reuses one coordinator for the same cwd', () => {
     const factory = createFactory();

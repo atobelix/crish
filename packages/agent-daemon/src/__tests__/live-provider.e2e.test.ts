@@ -9,16 +9,18 @@ describe('Real Live LLM Provider E2E Integration', () => {
 
     const provider = new OpenAICompatibleProvider({
       id: 'opencode-go-live',
-      name: 'OpenCode Go Real Provider',
       baseUrl,
       apiKey,
       model,
     });
 
     const stream = provider.stream({
+      sessionId: 'test-session',
+      cwd: process.cwd(),
+      signal: new AbortController().signal,
       messages: [
-        { role: 'system', blocks: [{ type: 'text', text: 'You are an AI assistant.' }] },
-        { role: 'user', blocks: [{ type: 'text', text: 'Confirm real API connection by saying "Real DeepSeek Provider Operational!"' }] },
+        { id: 'm1', role: 'system', createdAt: '2026-01-01T00:00:00Z', blocks: [{ type: 'text', text: 'You are an AI assistant.' }] },
+        { id: 'm2', role: 'user', createdAt: '2026-01-01T00:00:00Z', blocks: [{ type: 'text', text: 'Confirm real API connection by saying "Real DeepSeek Provider Operational!"' }] },
       ],
       tools: [],
     });

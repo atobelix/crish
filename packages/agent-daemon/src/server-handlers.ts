@@ -214,6 +214,10 @@ export class DaemonRequestHandlers {
         this.options.runHandler.handleCancelRun(msg);
         break;
 
+      case 'run-control':
+        this.options.runHandler.handleRunControl(msg);
+        break;
+
       case 'stream-pause':
         this.options.runHandler.pauseStream(msg.runId);
         this.options.transport.send(

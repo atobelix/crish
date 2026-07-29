@@ -38,6 +38,9 @@ export const RUN_TASK_FIELDS = [
   'attachments',
   // responseStyle / desktop system guidance → runtime systemPrompt
   'systemPrompt',
+  // W7-6 hydrate rekey: UI optimistic user/assistant message ids
+  'clientMessageId',
+  'assistantClientMessageId',
 ] as const;
 
 export const APPROVE_TOOL_FIELDS = [
@@ -56,6 +59,18 @@ export const CANCEL_RUN_FIELDS = [
   'type',
   ...CORRELATION_FIELDS,
   'runId',
+  'mode',
+  'reason',
+] as const;
+/** desktop run-control（L0–L3） */
+export const RUN_CONTROL_FIELDS = [
+  'type',
+  ...CORRELATION_FIELDS,
+  'level',
+  'runId',
+  'sessionId',
+  'reason',
+  'payload',
 ] as const;
 export const STREAM_PAUSE_FIELDS = [
   'type',

@@ -60,6 +60,7 @@ const CAPABILITY_DEFINITIONS: CapabilityDefinition[] = [
     relatedMessageTypes: [
       'run-task',
       'cancel-run',
+      'run-control',
       'get-run-snapshot',
       'run-snapshot',
     ],

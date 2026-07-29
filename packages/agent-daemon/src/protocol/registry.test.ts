@@ -58,18 +58,25 @@ describe('daemon protocol registry', () => {
   });
 
   it('has inbound schema validators for every registered message type', () => {
-    const source = readFileSync(resolve(__dirname, 'protocol-codec.ts'), 'utf8');
+    // switch 实现位于 codec/decode.ts（protocol-codec 仅为 facade re-export）
+    const source = readFileSync(
+      resolve(__dirname, 'codec/decode.ts'),
+      'utf8'
+    );
     const schemaCases = extractCases(
       source,
       'export function validateInboundMessage',
-      'export function validateOutboundMessage'
+      'Unhandled message type'
     );
 
     expect(new Set(schemaCases)).toEqual(new Set(DAEMON_INBOUND_MESSAGE_TYPES));
   });
 
   it('has outbound schema validators for every registered message type', () => {
-    const source = readFileSync(resolve(__dirname, 'protocol-codec.ts'), 'utf8');
+    const source = readFileSync(
+      resolve(__dirname, 'codec/encode.ts'),
+      'utf8'
+    );
     const schemaCases = extractCases(
       source,
       'export function validateOutboundMessage',
@@ -82,14 +89,21 @@ describe('daemon protocol registry', () => {
   });
 
   it('keeps capability groups aligned with registry and schema validators', () => {
-    const source = readFileSync(resolve(__dirname, 'protocol-codec.ts'), 'utf8');
+    const inboundSource = readFileSync(
+      resolve(__dirname, 'codec/decode.ts'),
+      'utf8'
+    );
+    const outboundSource = readFileSync(
+      resolve(__dirname, 'codec/encode.ts'),
+      'utf8'
+    );
     const inboundSchemaCases = extractCases(
-      source,
+      inboundSource,
       'export function validateInboundMessage',
-      'export function validateOutboundMessage'
+      'Unhandled message type'
     );
     const outboundSchemaCases = extractCases(
-      source,
+      outboundSource,
       'export function validateOutboundMessage',
       'export function encodeOutboundMessage'
     );
@@ -208,6 +222,43 @@ describe('daemon protocol registry', () => {
     }
   });
 
+  it('accepts optional clientMessageId + assistantClientMessageId on run-task', () => {
+    const valid = validateInboundMessage({
+      type: 'run-task',
+      runId: 'run_client_ids',
+      prompt: 'Hello with hydrate ids',
+      clientMessageId: 'user-msg-fixed-1',
+      assistantClientMessageId: 'assistant-msg-fixed-1',
+    });
+    expect(valid).toMatchObject({
+      ok: true,
+      value: {
+        type: 'run-task',
+        runId: 'run_client_ids',
+        prompt: 'Hello with hydrate ids',
+        clientMessageId: 'user-msg-fixed-1',
+        assistantClientMessageId: 'assistant-msg-fixed-1',
+      },
+    });
+
+    const emptyIds = validateInboundMessage({
+      type: 'run-task',
+      runId: 'run_client_ids_empty',
+      prompt: 'empty ids should fail nonEmpty',
+      clientMessageId: '',
+      assistantClientMessageId: '',
+    });
+    expect(emptyIds.ok).toBe(false);
+    if (!emptyIds.ok) {
+      expect(emptyIds.error.issues.map((issue) => issue.path)).toEqual(
+        expect.arrayContaining([
+          '$.clientMessageId',
+          '$.assistantClientMessageId',
+        ])
+      );
+    }
+  });
+
   it('marks subagent control as implemented collaborative capability', () => {
     expect(DAEMON_INBOUND_MESSAGE_REGISTRY['send-to-subagent'].state).toBe(
       'implemented'
@@ -305,6 +356,11 @@ function inboundMessageSamples(): Array<{
     { type: 'approve-tool', toolCallId: 'tool_1', scope: 'project' },
     { type: 'deny-tool', toolCallId: 'tool_1' },
     { type: 'cancel-run', runId: 'run_1' },
+    {
+      type: 'run-control',
+      level: 'cooperative_stop',
+      runId: 'run_1',
+    },
     { type: 'stream-pause', runId: 'run_1' },
     { type: 'stream-resume', runId: 'run_1' },
     { type: 'ping' },

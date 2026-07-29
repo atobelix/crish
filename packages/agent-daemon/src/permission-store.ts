@@ -7,7 +7,7 @@
  * - 支持通配符匹配 (如 `git *`, `npm test`, `read_file:*`)
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, openSync, closeSync, fsyncSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, openSync, closeSync, fsyncSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { randomBytes } from 'node:crypto';
 

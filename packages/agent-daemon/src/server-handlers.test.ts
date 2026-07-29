@@ -23,6 +23,7 @@ function mockOptions(): HandlersOptions {
     runHandler: {
       handleRunTaskWithOrchestrator: vi.fn(),
       handleCancelRun: vi.fn(),
+      handleRunControl: vi.fn(),
       activeRunCount: vi.fn().mockReturnValue(0),
       triggerWorkflowRun: vi.fn(),
       triggerDueWorkflow: vi.fn(),
@@ -113,6 +114,18 @@ describe('DaemonRequestHandlers', () => {
       msg
     );
     expect(opts.runHandler.handleCancelRun).toHaveBeenCalledWith(msg);
+  });
+
+  it('handles run-control by delegating to runHandler', async () => {
+    const opts = mockOptions();
+    const handlers = new DaemonRequestHandlers(opts);
+    const msg = createMessage('run-control');
+    await handlers.handleInboundMessage(
+      createMockWebSocket(),
+      createMockClient(),
+      msg
+    );
+    expect(opts.runHandler.handleRunControl).toHaveBeenCalledWith(msg);
   });
 
   it('handles list-mutation-leases by delegating', async () => {

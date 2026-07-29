@@ -1,5 +1,12 @@
-import type { AgentRuntimeOptions, AgentTool } from "@crish/agent-runtime";
-import { InMemoryContextState, JsonlSessionStore, McpLifecycleManager, createProductRuntimeDefaults } from "@crish/agent-runtime";
+import type { AgentRuntimeOptions, AgentTool, HealthSnapshot } from "@crish/agent-runtime";
+import {
+  InMemoryContextState,
+  JsonlSessionStore,
+  LifecycleHookRegistry,
+  McpLifecycleManager,
+  createProductRuntimeDefaults,
+  registerBuiltinHealthHooks,
+} from "@crish/agent-runtime";
 import { createAgentRuntimeRunEngineFactory, type CreateRunEngineInput, type RunEngineFactory } from "@crish/agent-orchestrator";
 import { compactJsonObject, toJsonObject } from "@crish/shared-utils";
 import type { JsonObject } from "@crish/shared-types";
@@ -26,8 +33,20 @@ export class DaemonRuntimeFactory {
   private readonly mcpManagers = new Set<McpLifecycleManager>();
   private sharedMcpManager: McpLifecycleManager | undefined;
   private lastMcpStatus?: DaemonMcpStatusSnapshot;
+  /**
+   * W6-5 / D2-2: factory-scoped observe-only health pack (W5-5 export).
+   * Per-run turn/tool signals are also auto-registered inside AgentSessionLoop;
+   * this pack is the daemon factory surface for tests / future status scrape.
+   */
+  private readonly lifecycleHooks = new LifecycleHookRegistry();
+  private readonly healthPack = registerBuiltinHealthHooks(this.lifecycleHooks);
 
   constructor(private readonly options: DaemonRuntimeFactoryOptions) {}
+
+  /** D2-2 health snapshot (observe-only counters; never blocks runs). */
+  getHealthSnapshot(): HealthSnapshot {
+    return this.healthPack.getHealthSnapshot();
+  }
 
   setProviderFactory(factory: DaemonProviderFactory): void {
     this.providerFactory = factory;
@@ -167,10 +186,28 @@ export class DaemonRuntimeFactory {
     const disabledMcp = parseMcpDisabledTools(run.metadata);
     const filteredMcpTools = disabledMcp.size === 0 ? mcpTools : mcpTools.filter((tool) => !isMcpToolDisabledName(tool.name, disabledMcp));
 
+    // Lift assistantClientMessageId into promptContext so session-loop enrichMsg
+    // can stamp it on assistant message-end (hydrate rekey ↔ UI placeholder).
+    // Do NOT alias user clientMessageId here — that would mis-stamp assistants.
+    const assistantClientMessageId = stringMetadata(
+      run.metadata,
+      "assistantClientMessageId"
+    );
+    const promptMeta = {
+      ...(scopedPromptContext.metadata ?? {}),
+      ...(assistantClientMessageId
+        ? { assistantClientMessageId }
+        : {}),
+    };
+
     return {
       sessionId: session.id, cwd: run.cwd,
       systemPrompt: stringMetadata(run.metadata, "systemPrompt"),
-      promptContext: { stableContext: scopedPromptContext.stableContext, volatileContext: scopedPromptContext.volatileContext, metadata: scopedPromptContext.metadata },
+      promptContext: {
+        stableContext: scopedPromptContext.stableContext,
+        volatileContext: scopedPromptContext.volatileContext,
+        metadata: promptMeta,
+      },
       provider: await this.providerFactory(runId, run.cwd),
       tools: [...createToolsForRun({ runId, sessionId: session.id, cwd: run.cwd, mutationCoordinator, backgroundManager, permissionMode, subagentDepth, maxTurns, ...(this.toolFactory !== undefined ? { toolFactory: this.toolFactory } : {}), startRun: (r) => this.options.startRun(r), cancelRun: (id, reason) => this.options.cancelRun(id, reason) }), ...filteredMcpTools],
       maxTurns, permissionPolicy,

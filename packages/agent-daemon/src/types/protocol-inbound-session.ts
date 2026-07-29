@@ -33,6 +33,7 @@ import type {
   ApproveToolMessage,
   DenyToolMessage,
   CancelRunMessage,
+  RunControlMessage,
   StreamPauseMessage,
   StreamResumeMessage,
 } from "./protocol-inbound-run.js";
@@ -372,6 +373,7 @@ export type DaemonInboundMessage = (
   | ApproveToolMessage
   | DenyToolMessage
   | CancelRunMessage
+  | RunControlMessage
   | StreamPauseMessage
   | StreamResumeMessage
   | HelloMessage

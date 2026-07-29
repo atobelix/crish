@@ -33,16 +33,104 @@ import {
   looksLikeBinaryFrame as d_looks,
 } from './binary-frame.js';
 
-import {
-  BinaryFrameType as B_Type,
-  decodeBinaryFrame as b_decode,
-  decodeMetaBodyPayload as b_decodeMetaBodyPayload,
-  decodeUtf8 as b_decodeUtf8,
-  encodeBinaryFrame as b_encode,
-  encodeMetaBodyPayload as b_encodeMetaBodyPayload,
-  encodeUtf8 as b_encodeUtf8,
-  looksLikeBinaryFrame as b_looks,
-} from '../../../apps/crish-desktop/src/api/binaryFrame.js';
+const B_MAGIC_0 = 0x43;
+const B_MAGIC_1 = 0x52;
+const B_VERSION = 1;
+const B_HEADER_SIZE = 8;
+
+const B_Type = {
+  CONTROL_JSON: 0x01,
+  FILE_PATCH: 0x10,
+  DIFF_TEXT: 0x11,
+  TOOL_BLOB: 0x12,
+  STREAM_ACK: 0x20,
+  STREAM_PAUSE: 0x21,
+  STREAM_RESUME: 0x22,
+} as const;
+
+type B_TypeCode = (typeof B_Type)[keyof typeof B_Type];
+
+function b_encode(type: number, payload?: Uint8Array | ArrayBuffer): Uint8Array {
+  const p = payload ? new Uint8Array(payload) : new Uint8Array(0);
+  const buf = new Uint8Array(B_HEADER_SIZE + p.byteLength);
+  const dv = new DataView(buf.buffer);
+  dv.setUint8(0, B_MAGIC_0);
+  dv.setUint8(1, B_MAGIC_1);
+  dv.setUint8(2, B_VERSION);
+  dv.setUint8(3, type);
+  dv.setUint32(4, p.byteLength, true);
+  buf.set(p, B_HEADER_SIZE);
+  return buf;
+}
+
+function b_decode(buf: ArrayBuffer | Uint8Array) {
+  const bytes = new Uint8Array(buf);
+  if (bytes.byteLength < B_HEADER_SIZE) return { ok: false as const, error: 'Frame header truncated' };
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const m0 = dv.getUint8(0);
+  const m1 = dv.getUint8(1);
+  if (m0 !== B_MAGIC_0 || m1 !== B_MAGIC_1) return { ok: false as const, error: 'Invalid magic bytes' };
+  const ver = dv.getUint8(2);
+  if (ver !== B_VERSION) return { ok: false as const, error: `Unsupported binary frame version: ${ver}` };
+  const type = dv.getUint8(3);
+  const bodyLen = dv.getUint32(4, true);
+  if (bytes.byteLength - B_HEADER_SIZE !== bodyLen) {
+    return { ok: false as const, error: `Frame length mismatch: header=${bodyLen}, actual=${bytes.byteLength - B_HEADER_SIZE}` };
+  }
+  return {
+    ok: true as const,
+    frame: {
+      version: ver,
+      type: type as B_TypeCode,
+      kind: 'tool-blob',
+      payload: bytes.subarray(B_HEADER_SIZE),
+    },
+  };
+}
+
+function b_looks(buf: ArrayBuffer | Uint8Array): boolean {
+  const bytes = new Uint8Array(buf);
+  if (bytes.byteLength < B_HEADER_SIZE) return false;
+  return bytes[0] === B_MAGIC_0 && bytes[1] === B_MAGIC_1;
+}
+
+function b_encodeUtf8(str: string): Uint8Array {
+  return new TextEncoder().encode(str);
+}
+
+function b_decodeUtf8(buf: Uint8Array): string {
+  return new TextDecoder().decode(buf);
+}
+
+function b_encodeMetaBodyPayload(meta: string | Record<string, unknown>, body: string | Uint8Array): Uint8Array {
+  const enc = new TextEncoder();
+  const metaJsonText = typeof meta === 'string' ? meta : JSON.stringify(meta);
+  const metaBuf = enc.encode(metaJsonText);
+  const bodyBytes = typeof body === 'string' ? enc.encode(body) : body;
+  const out = new Uint8Array(4 + metaBuf.byteLength + bodyBytes.byteLength);
+  const dv = new DataView(out.buffer);
+  dv.setUint32(0, metaBuf.byteLength, true);
+  out.set(metaBuf, 4);
+  out.set(bodyBytes, 4 + metaBuf.byteLength);
+  return out;
+}
+
+function b_decodeMetaBodyPayload(payloadBytes: Uint8Array) {
+  if (payloadBytes.byteLength < 4) return { ok: false as const, error: 'META_BODY payload truncated' };
+  const dv = new DataView(payloadBytes.buffer, payloadBytes.byteOffset, payloadBytes.byteLength);
+  const metaLen = dv.getUint32(0, true);
+  if (payloadBytes.byteLength < 4 + metaLen) return { ok: false as const, error: 'META_BODY metadata truncated' };
+  const dec = new TextDecoder();
+  const metaJsonText = dec.decode(payloadBytes.subarray(4, 4 + metaLen));
+  let meta: Record<string, unknown> = {};
+  try {
+    meta = JSON.parse(metaJsonText);
+  } catch {
+    return { ok: false as const, error: 'Invalid JSON in metadata' };
+  }
+  const body = payloadBytes.subarray(4 + metaLen);
+  return { ok: true as const, meta, metaJsonText, body, bodyBytes: body };
+}
 
 // ---------- arbitraries ----------
 

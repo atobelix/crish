@@ -244,11 +244,16 @@ export class DaemonServer {
     });
     const handleApproval = (handlerName: "handleApproveTool" | "handleDenyTool") => async (msg: import("../types.js").DaemonInboundMessage, ws: import("ws").WebSocket) => {
       const mod = await import("../handlers/approval-handlers.js");
-      mod[handlerName](msg as any, this.approvalQueue, transport, ws);
+      if (handlerName === "handleApproveTool") {
+        mod.handleApproveTool(msg as import("../types.js").ApproveToolMessage, this.approvalQueue, transport, ws);
+      } else {
+        mod.handleDenyTool(msg as import("../types.js").DenyToolMessage, this.approvalQueue, transport, ws);
+      }
     };
     this.messageRouter.register("approve-tool", handleApproval("handleApproveTool"));
     this.messageRouter.register("deny-tool", handleApproval("handleDenyTool"));
     this.messageRouter.register("cancel-run", async (msg) => { rh.handleCancelRun(msg as import("../types.js").CancelRunMessage); });
+    this.messageRouter.register("run-control", async (msg) => { rh.handleRunControl(msg as import("../types.js").RunControlMessage); });
     this.messageRouter.register("stream-pause", async (msg, ws) => { rh.pauseStream((msg as unknown as Record<string, unknown>).runId as string); transport.send(ws, correlateResponse({ type: "pong" }, msg)); });
     this.messageRouter.register("stream-resume", async (msg, ws) => { rh.resumeStream((msg as unknown as Record<string, unknown>).runId as string); transport.send(ws, correlateResponse({ type: "pong" }, msg)); });
     this.messageRouter.register("ping", async (msg, ws) => { transport.send(ws, correlateResponse({ type: "pong" }, msg)); });

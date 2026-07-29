@@ -133,6 +133,7 @@ export const DAEMON_PROTOCOL_MESSAGE_GROUPS = {
     inbound: [
       'run-task',
       'cancel-run',
+      'run-control',
       'stream-pause',
       'stream-resume',
       'list-runs',

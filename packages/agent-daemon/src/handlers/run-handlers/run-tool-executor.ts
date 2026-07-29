@@ -287,6 +287,8 @@ export function createRunPromptMessage(
     kind: 'daemon-user-message-boundary',
     boundaryId: userMessageId,
     generatedBy: 'agent-daemon',
+    // Align with UI clientMessageId for hydrate pickStableMessageId
+    clientMessageId: userMessageId,
   };
   if (multimodal?.content?.length) {
     metadata.contentParts = toJsonObject(multimodal.content);
@@ -299,6 +301,7 @@ export function createRunPromptMessage(
   return {
     ...message,
     id: userMessageId,
+    clientMessageId: userMessageId,
   };
 }
 

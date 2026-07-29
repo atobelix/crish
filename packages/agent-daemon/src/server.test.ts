@@ -167,7 +167,7 @@ describe("DaemonServer orchestrated runs", () => {
         prompt: "stream benchmark cancel"
       })
     );
-    // 等待 turn-start 事件，确�?cancel-run �?provider streaming 期间被发�?
+    // 等待 turn-start 事件，确保 cancel-run 在 provider streaming 期间被发送
     await collectMessages(ws, (message) => {
       return message.type === "event" && message.runId === "run_stream_bench_cancel" && message.event?.type === "turn-start";
     });

@@ -39,6 +39,7 @@ export {
   validateApproveToolMessage,
   validateDenyToolMessage,
   validateCancelRunMessage,
+  validateRunControlMessage,
   validateStreamPauseMessage,
   validateStreamResumeMessage,
   validatePingMessage,
