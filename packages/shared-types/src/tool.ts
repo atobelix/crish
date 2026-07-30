@@ -1,7 +1,14 @@
-import type { JsonObject, JsonValue } from "./primitive-types";
+import type { JsonObject, JsonValue } from './primitive-types';
 
-export type ToolCategory = "terminal" | "filesystem" | "network" | "mcp" | "skill" | "agent" | "internal";
-export type ToolConcurrency = "parallel" | "sequential" | "exclusive";
+export type ToolCategory =
+  | 'terminal'
+  | 'filesystem'
+  | 'network'
+  | 'mcp'
+  | 'skill'
+  | 'agent'
+  | 'internal';
+export type ToolConcurrency = 'parallel' | 'sequential' | 'exclusive';
 
 export interface ToolDefinition {
   name: string;
@@ -31,7 +38,7 @@ export interface ToolOutput {
 }
 
 export interface ToolArtifact {
-  kind: "file" | "diff" | "image" | "link" | "log";
+  kind: 'file' | 'diff' | 'image' | 'link' | 'log';
   title: string;
   uri?: string;
   text?: string;
@@ -61,34 +68,34 @@ export interface ToolBatchResult {
   durationMs: number;
 }
 
-export type ToolBatchFailurePolicy = "continue-drain" | "cancel-siblings";
+export type ToolBatchFailurePolicy = 'continue-drain' | 'cancel-siblings';
 
 export type ProviderErrorKind =
-  | "network"
-  | "gateway-challenge"
-  | "rate-limit"
-  | "auth"
-  | "quota"
-  | "endpoint-unavailable"
-  | "schema"
-  | "server"
-  | "timeout"
-  | "cancelled"
-  | "invalid-stream"
-  | "unknown";
+  | 'network'
+  | 'gateway-challenge'
+  | 'rate-limit'
+  | 'auth'
+  | 'quota'
+  | 'endpoint-unavailable'
+  | 'schema'
+  | 'server'
+  | 'timeout'
+  | 'cancelled'
+  | 'invalid-stream'
+  | 'unknown';
 
 export interface ProviderDiagnostic {
   phase:
-    | "request-start"
-    | "response-start"
-    | "sse-first-byte"
-    | "retry"
-    | "request-error"
-    | "stream-end"
-    | "endpoint-fallback"
-    | "transport-fallback"
-    | "model-selected"
-    | "model-mismatch";
+    | 'request-start'
+    | 'response-start'
+    | 'sse-first-byte'
+    | 'retry'
+    | 'request-error'
+    | 'stream-end'
+    | 'endpoint-fallback'
+    | 'transport-fallback'
+    | 'model-selected'
+    | 'model-mismatch';
   providerId?: string;
   endpoint?: string;
   url?: string;
@@ -108,7 +115,7 @@ export interface ProviderDiagnostic {
   actualModel?: string;
   modelMismatch?: boolean;
   streamRequested?: boolean;
-  systemPromptWireMode?: "native-system-role" | "user-prefix";
+  systemPromptWireMode?: 'native-system-role' | 'user-prefix';
   hasSystemRole?: boolean;
   systemPromptPresent?: boolean;
   systemMessageCount?: number;
@@ -118,7 +125,8 @@ export interface ProviderDiagnostic {
   messageRoleCounts?: Record<string, number>;
 }
 
-export type RuntimeCheckpointKind = "workspace-checkpoint" | "git-checkpoint" | "file-snapshot";
+export type RuntimeCheckpointKind =
+  'workspace-checkpoint' | 'git-checkpoint' | 'file-snapshot';
 
 export interface RuntimeCheckpointRecord {
   id: string;
@@ -143,10 +151,20 @@ export interface RuntimeCheckpointRestoreRecord {
   metadata?: JsonObject | undefined;
 }
 
-export type ContextCompressionTrigger = "auto" | "preflight" | "manual" | "threshold" | "overflow" | "idle" | "incomplete" | "handoff";
-export type ContextCompressionReason = "manual" | "threshold" | "overflow" | "idle" | "incomplete" | "handoff";
-export type ContextCompressionPolicyTier = "manual" | "proactive" | "recovery" | "background" | "handoff";
-export type ContextCompressionPolicyAction = "compact" | "promote-handoff";
+export type ContextCompressionTrigger =
+  | 'auto'
+  | 'preflight'
+  | 'manual'
+  | 'threshold'
+  | 'overflow'
+  | 'idle'
+  | 'incomplete'
+  | 'handoff';
+export type ContextCompressionReason =
+  'manual' | 'threshold' | 'overflow' | 'idle' | 'incomplete' | 'handoff';
+export type ContextCompressionPolicyTier =
+  'manual' | 'proactive' | 'recovery' | 'background' | 'handoff';
+export type ContextCompressionPolicyAction = 'compact' | 'promote-handoff';
 
 export interface ContextCompressionPolicyMetadata {
   tier: ContextCompressionPolicyTier;
@@ -180,13 +198,18 @@ export interface ContextCompressionHandoffMetadata {
 }
 
 export interface ContextCompressionCacheBoundaryMetadata {
-  kind: "context-compression-cache-boundary";
+  kind: 'context-compression-cache-boundary';
   version: 1;
   stablePrefixHash: string;
   cacheKey: string;
   structuredSummaryCacheKey: string;
   structuredSummaryStableHash: string;
-  invalidates: Array<"prompt-stable-prefix" | "message-history" | "usage-baseline" | "volatile-context">;
+  invalidates: Array<
+    | 'prompt-stable-prefix'
+    | 'message-history'
+    | 'usage-baseline'
+    | 'volatile-context'
+  >;
   invalidationReason: ContextCompressionReason;
   compressedMessageIds: string[];
   keptMessageIds: string[];
@@ -228,4 +251,60 @@ export interface ToolOutputBudgetRuntimeOptions {
   headRatio?: number;
   artifactChars?: number;
   artifactDir?: string;
+}
+
+// ─── 运行时工具接口（从 agent-runtime/types.ts 下沉）─────────
+
+export interface AgentTool {
+  name: string;
+  label: string;
+  description: string;
+  category: ToolCategory;
+  inputSchema?: JsonObject | undefined;
+  inputAliases?: Record<string, string[]> | undefined;
+  concurrency: ToolConcurrency;
+  allowParallel?: boolean | undefined;
+  fatalOnError?: boolean | undefined;
+  isReadOnly(input: JsonObject): boolean;
+  summarize(input: JsonObject): string;
+  execute(
+    input: JsonObject,
+    context: ToolExecutionContext
+  ): Promise<ToolOutput>;
+}
+
+export interface ToolSource {
+  id: string;
+  label: string;
+  listTools(): Promise<AgentTool[]>;
+  dispose?(): Promise<void>;
+}
+
+export interface ProviderUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  reasoningTokens?: number;
+}
+
+export type ProviderStreamEvent =
+  | { type: 'text-delta'; text: string }
+  | { type: 'thought-delta'; text: string; redacted?: boolean }
+  | { type: 'tool-call'; id?: string; toolName: string; input: JsonObject }
+  | { type: 'provider-diagnostic'; diagnostic: ProviderDiagnostic }
+  | {
+      type: 'stop';
+      reason: 'stop' | 'tool-call' | 'length' | 'error';
+      error?: string;
+      usage?: ProviderUsage;
+    };
+
+export interface HealthCheckResult {
+  healthy: boolean;
+  status?: 'healthy' | 'degraded' | 'unhealthy';
+  latencyMs?: number;
+  error?: string;
+  lastCheckedAt?: number;
 }

@@ -182,7 +182,7 @@ export class SessionStore implements ISessionStore {
       throw new Error(`Active branch "${this.activeBranchId}" not found`);
 
     // 查找或创建当前的 turn 的分片
-    const shard = branch.shards.find(
+    let shard = branch.shards.find(
       (s) => s.endTurnIndex === turnIndex || s.startTurnIndex === turnIndex
     );
     if (!shard || shard.endTurnIndex < turnIndex) {

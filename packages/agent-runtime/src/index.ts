@@ -1,3 +1,24 @@
+/**
+ * @deprecated @crish/agent-runtime is deprecated.
+ * Import from @crish/agent-tools, @crish/agent-model, @crish/agent-mcp directly.
+ * This shim will be removed in v0.3.0.
+ *
+ * 共存阶段（guardrails 禁令 23）：被迁移的源文件保留在本包中，
+ * 现有 `export *` 暂时指向本地源文件。删除阶段在 Round 5（agent-core 创建后）执行，
+ * 届时本 shim 将改为从 @crish/agent-tools / @crish/agent-model / @crish/agent-mcp re-export。
+ *
+ * @see @crish/agent-tools
+ * @see @crish/agent-model
+ * @see @crish/agent-mcp
+ * @removeWhen Round 5 agent-core 创建后删除本地源文件并改为 re-export
+ */
+
+if (typeof console !== 'undefined') {
+  console.warn(
+    '[deprecated] @crish/agent-runtime is deprecated, import from @crish/agent-tools / @crish/agent-model / @crish/agent-mcp directly'
+  );
+}
+
 export * from './runtime';
 export * from './runtime-defaults';
 export * from './runtime-metrics';

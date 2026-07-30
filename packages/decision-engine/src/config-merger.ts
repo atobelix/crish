@@ -1,6 +1,8 @@
-import type { ConfigSource } from "@crish/shared-types";
+import type { ConfigSource } from '@crish/shared-types';
+export type { ConfigSource };
 
-export type MergeStrategy = "override" | "shallow-merge" | "deep-merge" | "append";
+export type MergeStrategy =
+  'override' | 'shallow-merge' | 'deep-merge' | 'append';
 
 export interface ConfigFieldPolicy {
   mergeStrategy: MergeStrategy;
@@ -52,7 +54,9 @@ export class ConfigMerger {
   constructor(private readonly schema: ConfigSchema) {}
 
   merge(sources: ConfigSource[]): MergeResult {
-    const sorted = [...sources].sort((a, b) => (a.priority as number) - (b.priority as number));
+    const sorted = [...sources].sort(
+      (a, b) => (a.priority as number) - (b.priority as number)
+    );
     const conflicts: ConflictReportEntry[] = [];
     let result: Record<string, unknown> = {};
 
@@ -68,19 +72,27 @@ export class ConfigMerger {
     for (const source of sorted) {
       // 防御：source.value 为 null/undefined/非对象时跳过，避免 Object.entries 崩溃
       if (source.value === null || source.value === undefined) continue;
-      if (typeof source.value !== "object" || Array.isArray(source.value)) continue;
+      if (typeof source.value !== 'object' || Array.isArray(source.value))
+        continue;
       const sourceConfig = source.value as Record<string, unknown>;
       for (const [key, value] of Object.entries(sourceConfig)) {
         if (value === undefined) continue;
         const policy = this.schema.fields[key];
-        const strategy = policy?.mergeStrategy ?? "override";
+        const strategy = policy?.mergeStrategy ?? 'override';
         const hadPrevious = key in result && result[key] !== undefined;
         const hadDefault = defaultKeys.has(key);
         // 仅在 override 策略下报告冲突；默认值不算"冲突前驱"
-        if (hadPrevious && !hadDefault && (!policy || strategy === "override")) {
+        if (
+          hadPrevious &&
+          !hadDefault &&
+          (!policy || strategy === 'override')
+        ) {
           conflicts.push({
-            key, winner: source.name, loser: "previous",
-            winnerValue: value, loserValue: result[key],
+            key,
+            winner: source.name,
+            loser: 'previous',
+            winnerValue: value,
+            loserValue: result[key],
           });
         }
         result = { ...result, [key]: applyMerge(result[key], value, strategy) };
@@ -100,7 +112,11 @@ export class ConfigMerger {
     for (const [field, policy] of Object.entries(this.schema.fields)) {
       const value = config[field];
       if (policy.required && (value === undefined || value === null)) {
-        errors.push({ path: field, message: `Required field "${field}" is missing`, received: value });
+        errors.push({
+          path: field,
+          message: `Required field "${field}" is missing`,
+          received: value,
+        });
         continue;
       }
       // value === undefined 时跳过 validate（无值可校验）
@@ -109,12 +125,21 @@ export class ConfigMerger {
       if (policy.validate) {
         try {
           if (!policy.validate(value)) {
-            errors.push({ path: field, message: policy.validateMessage ?? `Field "${field}" failed validation`, received: value });
+            errors.push({
+              path: field,
+              message:
+                policy.validateMessage ?? `Field "${field}" failed validation`,
+              received: value,
+            });
           }
         } catch (err) {
           // validate 函数抛异常时转为 error，而非向上传播
           const msg = err instanceof Error ? err.message : String(err);
-          errors.push({ path: field, message: `Field "${field}" validate threw: ${msg}`, received: value });
+          errors.push({
+            path: field,
+            message: `Field "${field}" validate threw: ${msg}`,
+            received: value,
+          });
         }
       }
     }
@@ -124,7 +149,10 @@ export class ConfigMerger {
         errors.push(...this.schema.validate(config));
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        errors.push({ path: "_schema", message: `Schema validate threw: ${msg}` });
+        errors.push({
+          path: '_schema',
+          message: `Schema validate threw: ${msg}`,
+        });
       }
     }
 
@@ -132,21 +160,38 @@ export class ConfigMerger {
   }
 }
 
-function applyMerge(base: unknown, overlay: unknown, strategy: MergeStrategy): unknown {
+function applyMerge(
+  base: unknown,
+  overlay: unknown,
+  strategy: MergeStrategy
+): unknown {
   switch (strategy) {
-    case "override": return overlay;
-    case "shallow-merge":
-      if (typeof base === "object" && base !== null && !Array.isArray(base) &&
-          typeof overlay === "object" && overlay !== null && !Array.isArray(overlay)) {
-        return { ...(base as Record<string, unknown>), ...(overlay as Record<string, unknown>) };
+    case 'override':
+      return overlay;
+    case 'shallow-merge':
+      if (
+        typeof base === 'object' &&
+        base !== null &&
+        !Array.isArray(base) &&
+        typeof overlay === 'object' &&
+        overlay !== null &&
+        !Array.isArray(overlay)
+      ) {
+        return {
+          ...(base as Record<string, unknown>),
+          ...(overlay as Record<string, unknown>),
+        };
       }
       return overlay;
-    case "deep-merge": return deepMerge(base, overlay);
-    case "append":
-      if (Array.isArray(base) && Array.isArray(overlay)) return [...base, ...overlay];
+    case 'deep-merge':
+      return deepMerge(base, overlay);
+    case 'append':
+      if (Array.isArray(base) && Array.isArray(overlay))
+        return [...base, ...overlay];
       if (Array.isArray(overlay)) return overlay;
       return overlay;
-    default: return overlay;
+    default:
+      return overlay;
   }
 }
 
@@ -156,10 +201,14 @@ function deepMerge(base: unknown, overlay: unknown): unknown {
   if (overlay === undefined) return base;
   if (overlay === null) return null;
   if (base === null || base === undefined) return overlay;
-  if (typeof base !== "object" || typeof overlay !== "object") return overlay;
+  if (typeof base !== 'object' || typeof overlay !== 'object') return overlay;
   if (Array.isArray(base) || Array.isArray(overlay)) return overlay;
-  const result: Record<string, unknown> = { ...(base as Record<string, unknown>) };
-  for (const [key, value] of Object.entries(overlay as Record<string, unknown>)) {
+  const result: Record<string, unknown> = {
+    ...(base as Record<string, unknown>),
+  };
+  for (const [key, value] of Object.entries(
+    overlay as Record<string, unknown>
+  )) {
     if (value !== undefined) result[key] = deepMerge(result[key], value);
   }
   return result;

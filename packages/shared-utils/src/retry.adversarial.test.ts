@@ -14,8 +14,8 @@
  *  R8. jitterFactor 为极大值时 delay 远超 maxMs
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { calculateBackoff, retryWithBackoff, type RetryOptions } from './retry';
+import { describe, it, expect } from 'vitest';
+import { calculateBackoff, retryWithBackoff } from './retry';
 
 describe('retry — 对抗性测试', () => {
   describe('R1: jitterFactor 未传入时的行为验证', () => {
@@ -27,7 +27,7 @@ describe('retry — 对抗性测试', () => {
       const delay = calculateBackoff(0, 1000, 5000, undefined);
       expect(Number.isNaN(delay)).toBe(false);
       expect(delay).toBeGreaterThanOrEqual(1000); // baseMs * 2^0 * 1 = 1000
-      expect(delay).toBeLessThanOrEqual(1200);   // baseMs * 2^0 * 1.2 = 1200
+      expect(delay).toBeLessThanOrEqual(1200); // baseMs * 2^0 * 1.2 = 1200
     });
 
     it('验证: retryWithBackoff 不传 jitterFactor 时退避正常工作', async () => {
@@ -59,7 +59,9 @@ describe('retry — 对抗性测试', () => {
 
   describe('R2: maxAttempts=0 → throw undefined', () => {
     it('暴露 bug: maxAttempts=0 时 throw undefined（非 Error 对象）', async () => {
-      const fn = async () => { throw new Error('real error'); };
+      const fn = async () => {
+        throw new Error('real error');
+      };
 
       // Bug: for 循环不执行，lastError 是 undefined
       // throw undefined 而非 throw new Error('real error')
@@ -73,7 +75,9 @@ describe('retry — 对抗性测试', () => {
     });
 
     it('暴露 bug: maxAttempts 为负数时同样 throw undefined', async () => {
-      const fn = async () => { throw new Error('real error'); };
+      const fn = async () => {
+        throw new Error('real error');
+      };
 
       try {
         await retryWithBackoff(fn, { maxAttempts: -5 });
@@ -107,7 +111,9 @@ describe('retry — 对抗性测试', () => {
       // Bug: maxObserved 应该 > maxMs（jitter 突破上限）
       expect(maxObserved).toBeGreaterThan(maxMs);
       // 理论上限: maxMs * 1.2 = 6000
-      expect(maxObserved).toBeLessThanOrEqual(Math.ceil(maxMs * (1 + jitterFactor)));
+      expect(maxObserved).toBeLessThanOrEqual(
+        Math.ceil(maxMs * (1 + jitterFactor))
+      );
     });
   });
 
@@ -222,7 +228,9 @@ describe('retry — 对抗性测试', () => {
   describe('基本功能验证（确保不是误报）', () => {
     it('成功时不重试', async () => {
       let attempts = 0;
-      const fn = async () => { attempts++; };
+      const fn = async () => {
+        attempts++;
+      };
 
       await retryWithBackoff(fn, { maxAttempts: 3 });
       expect(attempts).toBe(1);

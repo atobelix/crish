@@ -1,6 +1,7 @@
-import type { JsonObject } from "./primitive-types";
+import type { JsonObject } from './primitive-types';
+import type { AgentTool } from './tool';
 
-export type PermissionBehavior = "allow" | "deny" | "ask";
+export type PermissionBehavior = 'allow' | 'deny' | 'ask';
 
 export interface ToolMetadata {
   category?: string;
@@ -34,4 +35,26 @@ export interface PermissionRule {
 
 export interface ApprovalHandler {
   requestApproval(request: PermissionRequest): Promise<PermissionDecision>;
+}
+
+// ─── 运行时权限接口（从 agent-runtime/types.ts 下沉）─────────
+
+export interface RuntimePermissionRequest {
+  id: string;
+  sessionId: string;
+  cwd: string;
+  tool: AgentTool;
+  input: JsonObject;
+  summary: string;
+  metadata?: JsonObject;
+}
+
+export interface RuntimePermissionPolicy {
+  decide(
+    request: RuntimePermissionRequest
+  ): Promise<PermissionDecision> | PermissionDecision;
+  recordDecision?(
+    request: RuntimePermissionRequest,
+    decision: PermissionDecision
+  ): void;
 }

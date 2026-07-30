@@ -58,6 +58,11 @@ export type {
   ContextCompressionCacheBoundaryMetadata,
   ContextCompressionOptions,
   ToolOutputBudgetRuntimeOptions,
+  AgentTool,
+  ToolSource,
+  ProviderUsage,
+  ProviderStreamEvent,
+  HealthCheckResult,
 } from './tool';
 
 // 权限
@@ -68,6 +73,8 @@ export type {
   PermissionRule,
   ApprovalHandler,
   ToolMetadata,
+  RuntimePermissionRequest,
+  RuntimePermissionPolicy,
 } from './permissions';
 
 // 存储事件
@@ -202,6 +209,29 @@ export {
   isForceCancelRunControl,
   createRunControlIntent,
 } from './run-control';
+
+// 运行时辅助类型（从 agent-runtime 下沉的纯类型）
+export type {
+  ToolMode,
+  StreamRecoveryGlobalStats,
+  TokenLedgerStats,
+  SessionBranchState,
+} from './runtime-aux';
+
+// 技能类型（从 agent-runtime/src/skills.ts 下沉）
+export type { AgentSkill, SkillDiagnostic } from './skill';
+
+// Git 检查点类型（从 agent-runtime/src/git-versioning/git-types.ts 下沉）
+export type {
+  GitCheckpoint,
+  GitCheckpointToolCall,
+  GitCheckpointStrategy,
+  GitWorkspaceStatus,
+  GitStatusEntry,
+} from './git-checkpoint';
+
+// 媒体内容类型（从 agent-runtime/src/media/media-types.ts 下沉）
+export type { MediaSource, MediaType, ImageContent } from './media';
 
 // 校验器
 export * as validators from './validators';

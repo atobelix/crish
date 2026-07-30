@@ -15,8 +15,8 @@
  *  W9. payload 含合法 base64 但无法 round-trip 的边界数据（含 null byte）
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtemp, rm, readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { mkdtemp, rm, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -29,7 +29,11 @@ vi.mock('./fsync', () => ({
 
 import { GroupCommitWal, type WalRecord } from './wal';
 
-function makeRecord(seq: number | bigint, eventType: string, payload: Uint8Array): WalRecord {
+function makeRecord(
+  seq: number | bigint,
+  eventType: string,
+  payload: Uint8Array
+): WalRecord {
   return { sequence: BigInt(seq), eventType, payload };
 }
 
@@ -66,7 +70,9 @@ describe('GroupCommitWal — 对抗性测试', () => {
 
         let resolved = false;
         const race = Promise.race([
-          result.then(() => { resolved = true; }),
+          result.then(() => {
+            resolved = true;
+          }),
           new Promise<void>((r) => setTimeout(() => r(), 500)),
         ]);
 
@@ -88,8 +94,12 @@ describe('GroupCommitWal — 对抗性测试', () => {
         let resolved = false;
         let rejected = false;
         result.then(
-          () => { resolved = true; },
-          () => { rejected = true; },
+          () => {
+            resolved = true;
+          },
+          () => {
+            rejected = true;
+          }
         );
 
         await new Promise((r) => setTimeout(r, 200));
@@ -117,10 +127,8 @@ describe('GroupCommitWal — 对抗性测试', () => {
         const walFile = files.find((f) => f.endsWith('.wal'));
         expect(walFile).toBeDefined();
 
-        const content = await readFile(join(dir, walFile!), 'utf-8');
         // 编码后: "1|event|with|pipes|aGVsbG8="
         // 解码时第二个 "|" 被当作 eventType 的终止符
-        const replayed = await wal.replay(0n);
         // 由于 WAL 已 close，需要新建实例来 replay
         const wal2 = new GroupCommitWal(dir);
         const records = await wal2.replay(0n);
@@ -171,7 +179,11 @@ describe('GroupCommitWal — 对抗性测试', () => {
         const walFile = files.find((f) => f.endsWith('.wal'))!;
         const content = await readFile(join(dir, walFile), 'utf-8');
         // 追加一行没有分隔符的数据
-        await writeFile(join(dir, walFile), content + 'garbage_no_separator\n', 'utf-8');
+        await writeFile(
+          join(dir, walFile),
+          content + 'garbage_no_separator\n',
+          'utf-8'
+        );
 
         const wal2 = new GroupCommitWal(dir);
         // Bug: line.indexOf("|") 返回 -1，slice(0, -1) 产生错误结果
@@ -209,7 +221,9 @@ describe('GroupCommitWal — 对抗性测试', () => {
         wal = new GroupCommitWal(dir);
 
         // append 一条记录（不满 64 条，10ms 内不会 commit）
-        const appendPromise = wal.append([makeRecord(1, 'pending', makePayload('data'))]);
+        const appendPromise = wal.append([
+          makeRecord(1, 'pending', makePayload('data')),
+        ]);
 
         // 立即 replay — 记录还在内存 queue 中，未写入磁盘
         const wal2 = new GroupCommitWal(dir);
@@ -289,7 +303,9 @@ describe('GroupCommitWal — 对抗性测试', () => {
 
         // append 入队后，commit 会尝试 ensureDir + writeFile
         // writeFile 对含 null byte 的路径会抛异常
-        const appendPromise = wal.append([makeRecord(1, 'test', makePayload('data'))]);
+        const appendPromise = wal.append([
+          makeRecord(1, 'test', makePayload('data')),
+        ]);
 
         // Bug: performCommit 的 catch 块只 reject callbacks，不清理 tmp 文件
         // 由于 writeFile 在创建 tmp 文件时就失败，tmp 文件可能未创建或部分创建
@@ -343,14 +359,18 @@ describe('GroupCommitWal — 对抗性测试', () => {
         const appendPromises: Promise<void>[] = [];
         for (let i = 0; i < totalRecords; i++) {
           appendPromises.push(
-            wal.append([makeRecord(i + 1, `event-${i}`, makePayload(`payload-${i}`))])
+            wal.append([
+              makeRecord(i + 1, `event-${i}`, makePayload(`payload-${i}`)),
+            ])
           );
         }
 
         const results = await Promise.allSettled(appendPromises);
         await wal.close();
 
-        const fulfilled = results.filter((r) => r.status === 'fulfilled').length;
+        const fulfilled = results.filter(
+          (r) => r.status === 'fulfilled'
+        ).length;
 
         const wal2 = new GroupCommitWal(dir);
         const replayed = await wal2.replay(0n);
@@ -420,9 +440,9 @@ describe('GroupCommitWal — 对抗性测试', () => {
         await wal.close();
 
         // Bug: 错误信息只是 "GroupCommitWal is closed"，无上下文
-        await expect(wal.append([makeRecord(1, 'x', makePayload('y'))])).rejects.toThrow(
-          'GroupCommitWal is closed',
-        );
+        await expect(
+          wal.append([makeRecord(1, 'x', makePayload('y'))])
+        ).rejects.toThrow('GroupCommitWal is closed');
       });
     });
   });

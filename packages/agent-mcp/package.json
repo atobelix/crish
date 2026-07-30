@@ -30,7 +30,8 @@
   },
   "dependencies": {
     "@crish/shared-types": "file:../shared-types",
-    "@crish/shared-utils": "file:../shared-utils"
+    "@crish/shared-utils": "file:../shared-utils",
+    "@crish/agent-tools": "file:../agent-tools"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

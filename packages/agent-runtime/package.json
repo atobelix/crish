@@ -39,6 +39,9 @@
     "build": "npm run clean && npm run build:types && npm run build:js"
   },
   "dependencies": {
+    "@crish/agent-tools": "*",
+    "@crish/agent-model": "*",
+    "@crish/agent-mcp": "*",
     "@crish/decision-engine": "*",
     "@crish/shared-types": "*"
   },

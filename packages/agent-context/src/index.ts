@@ -426,3 +426,29 @@ export type {
   AgentContextBase,
   AgentContextView,
 } from './agent-context';
+
+// state-machine/ 目录（Round 4：agent-model 通过 @crish/agent-context 引用，避免跨包复制）
+export {
+  ConexStateMachine,
+  StateMachineBuilder,
+  denyTransition,
+  transitionTo,
+  transitionWith,
+  transitionWithPatch,
+} from './state-machine/core';
+export type {
+  StateId,
+  EventId,
+  RejectionReason,
+  TransitionOk,
+  TransitionRejected,
+  TransitionResult,
+  SideEffect,
+  TransitionRecord,
+  StateMachineSnapshot,
+  GuardResult,
+  TransitionTarget,
+  StateDefinition,
+  StateMachineDefinition,
+  TransitionTable,
+} from './state-machine/core';
