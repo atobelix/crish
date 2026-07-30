@@ -56,6 +56,7 @@ describe("FileOrchestratorEventStore", () => {
       indexFlushIntervalMs: undefined,
       maxSizeBytes: undefined,
       maxArchives: undefined,
+      logger: undefined,
     });
 
     await store.append(event({ id: "event_1", sequence: 1, sessionId: "session_a", runId: "run_a" }));
@@ -439,6 +440,7 @@ describe("FileOrchestratorEventStore", () => {
       indexFlushIntervalMs: undefined,
       maxSizeBytes: undefined,
       maxArchives: undefined,
+      logger: undefined,
     });
 
     await store.append(event({ id: "event_1", sequence: 1, sessionId: "session_a", runId: "run_a" }));

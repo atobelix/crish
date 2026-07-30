@@ -1,4 +1,4 @@
-import { SessionError } from "@crish/shared-types";
+import { CrishError } from "@crish/shared-types";
 import { toJsonObject } from "@crish/shared-utils";
 import type {
   CancelPendingInputRequest,
@@ -19,12 +19,14 @@ export function listPendingInputs(loop: AgentLoop, sessionId?: string): PendingI
 export async function enqueuePendingInput(loop: AgentLoop, request: EnqueuePendingInputRequest): Promise<PendingInputResult> {
   const session = loop.sessions.get(request.sessionId);
   if (!session) {
-    throw new SessionError(`Session not found: ${request.sessionId}`, "not_found");
+    // R6: migrated from SessionError(not_found) -> session.not_found
+    throw new CrishError(`Session not found: ${request.sessionId}`, "session.not_found", "permanent", false);
   }
 
   const text = request.text.trim();
   if (!text) {
-    throw new SessionError("Pending input text cannot be empty", "invalid_entry");
+    // R6: migrated from SessionError(invalid_entry) -> session.invalid_entry
+    throw new CrishError("Pending input text cannot be empty", "session.invalid_entry", "permanent", false);
   }
 
   const now = loop.now();
@@ -53,10 +55,12 @@ export async function enqueuePendingInput(loop: AgentLoop, request: EnqueuePendi
 export async function cancelPendingInput(loop: AgentLoop, request: CancelPendingInputRequest): Promise<PendingInputResult> {
   const input = loop.pendingInputs.get(request.id);
   if (!input || input.status !== "pending") {
-    throw new SessionError(`Pending input not found: ${request.id}`, "not_found");
+    // R6: migrated from SessionError(not_found) -> session.not_found
+    throw new CrishError(`Pending input not found: ${request.id}`, "session.not_found", "permanent", false);
   }
   if (request.sessionId && input.sessionId !== request.sessionId) {
-    throw new SessionError(`Pending input ${request.id} does not belong to session ${request.sessionId}`, "invalid_state");
+    // R6: migrated from SessionError(invalid_state) -> session.invalid_state
+    throw new CrishError(`Pending input ${request.id} does not belong to session ${request.sessionId}`, "session.invalid_state", "permanent", false);
   }
 
   const updated = updatePendingInputStatus(loop, input, "cancelled");
@@ -74,10 +78,12 @@ export async function cancelPendingInput(loop: AgentLoop, request: CancelPending
 export async function dispatchPendingInput(loop: AgentLoop, request: DispatchPendingInputRequest): Promise<PendingInputResult> {
   const input = loop.pendingInputs.get(request.id);
   if (!input || input.status !== "pending") {
-    throw new SessionError(`Pending input not found: ${request.id}`, "not_found");
+    // R6: migrated from SessionError(not_found) -> session.not_found
+    throw new CrishError(`Pending input not found: ${request.id}`, "session.not_found", "permanent", false);
   }
   if (request.sessionId && input.sessionId !== request.sessionId) {
-    throw new SessionError(`Pending input ${request.id} does not belong to session ${request.sessionId}`, "invalid_state");
+    // R6: migrated from SessionError(invalid_state) -> session.invalid_state
+    throw new CrishError(`Pending input ${request.id} does not belong to session ${request.sessionId}`, "session.invalid_state", "permanent", false);
   }
 
   const updated = updatePendingInputStatus(loop, input, "dispatched", request.targetRunId);

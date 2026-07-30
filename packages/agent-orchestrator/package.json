@@ -29,7 +29,10 @@
     "build": "npm run clean && npm run build:types && npm run build:js"
   },
   "dependencies": {
+    "@crish/agent-core": "file:../agent-core",
     "@crish/agent-runtime": "file:../agent-runtime",
+    "@crish/logger": "file:../logger",
+    "@crish/shared-types": "file:../shared-types",
     "@crish/shared-utils": "file:../shared-utils"
   },
   "devDependencies": {

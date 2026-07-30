@@ -164,7 +164,7 @@ pub enum CoreError {
 
 ---
 
-## 2. 新 CrishErrorCode 体系（64 正式码 + 10 reserved 码 / 19 域）
+## 2. 新 CrishErrorCode 体系（67 正式码 + 10 reserved 码 / 20 域）
 
 ### 2.1 设计原则
 
@@ -357,6 +357,21 @@ pub enum CoreError {
 
 > `security` 域为新增域，专门承载安全策略拦截类错误（如 SSRF 防护、路径越界已在 `tool.path_escape` 中承载）。`public=false` 因为安全拦截细节不应直接暴露给终端用户。
 
+#### goal 域（Goal 循环）— 3 码 [R6 新增域]
+
+| 码值                 | title             | category  | retryable | public | action                            |
+| -------------------- | ----------------- | --------- | --------- | ------ | --------------------------------- |
+| `goal.stalled`       | Goal 循环停滞     | permanent | false     | true   | `action.goal.review_progress`     |
+| `goal.loop_detected` | Goal 循环签名重复 | permanent | false     | true   | `action.goal.break_loop`          |
+| `goal.max_rounds`    | Goal 达到最大轮次 | permanent | false     | true   | `action.goal.increase_max_rounds` |
+
+> `goal` 域为 R6 新增域（由 Agent 6-C 执行权威注册表扩展），专门承载 `GoalLoopStrategy` 的 FNV-1a 进度签名检测类错误。
+>
+> **与现有码的边界**：
+> - `goal.stalled` vs `agent.no_progress`：前者是 FNV-1a 签名级检测（确定性，orchestrator 域），后者是泛化无进展（可能含 LLM 输出质量下降等模糊判定，agent-core 域）。orchestrator 的 `GoalLoopStrategy` 用 `goal.stalled`；agent-core 的 SessionLoop 用 `agent.no_progress`。
+> - `goal.max_rounds` vs `agent.max_turns_reached`：前者是 goal 循环的轮次上限（orchestrator 域），后者是 agent 单次 turn 的上限（agent-core 域）。
+> - `goal.loop_detected`：进度签名循环重复（A→B→A 模式），区别于 `goal.stalled`（连续 N 轮签名不变）。
+
 **码数汇总**：
 
 | 域          | 正式码 | reserved | 小计   |
@@ -380,9 +395,10 @@ pub enum CoreError {
 | telemetry   | 1      | 2        | 3      |
 | common      | 3      | 0        | 3      |
 | security    | 1      | 0        | 1      |
-| **合计**    | **64** | **10**   | **74** |
+| goal        | 3      | 0        | 3      |
+| **合计**    | **67** | **10**   | **77** |
 
-> 从 v1.0 的 60 码扩展到 64 正式码 + 10 reserved 码。新增 13 个正式码用于覆盖 31 个之前未映射的 Error 子类（见 §3.5）与 4 个 Rust 错误枚举（见 §3.7-§3.10）。10 个无场景码降级为 reserved，待真实场景出现后升级。
+> 从 v1.0 的 60 码扩展到 67 正式码 + 10 reserved 码。新增 16 个正式码用于覆盖 31 个之前未映射的 Error 子类（见 §3.5）与 4 个 Rust 错误枚举（见 §3.7-§3.10）。10 个无场景码降级为 reserved，待真实场景出现后升级。R6 由 Agent 6-C 新增 `goal` 域 3 码（`goal.stalled` / `goal.loop_detected` / `goal.max_rounds`），`event_store.read_failed` 已在 R1 注册。
 
 ### 2.3 CrishErrorInfo 注册表
 
@@ -473,7 +489,11 @@ export type CrishErrorCode =
   | 'common.unsupported'
   | 'common.not_found'
   // security 域（1）
-  | 'security.ssrf_rejected';
+  | 'security.ssrf_rejected'
+  // goal 域（3，R6 新增）
+  | 'goal.stalled'
+  | 'goal.loop_detected'
+  | 'goal.max_rounds';
 
 /** Reserved 错误码（10 码）：真实代码中无直接 throw 场景，仅作为字符串常量保留。
  *  不进入 CrishErrorCode 联合类型必选集。未来出现真实场景时升级为正式码。 */

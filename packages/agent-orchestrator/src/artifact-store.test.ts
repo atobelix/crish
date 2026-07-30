@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { CrishError } from "@crish/shared-types";
 import { BlobArtifactStore, BlobIntegrityError, ContentAddressedBlobStore } from "./artifact-store";
 
 describe("BlobArtifactStore", () => {
@@ -81,10 +82,62 @@ describe("BlobArtifactStore", () => {
     await expect(store.get(record.uri)).rejects.toBeInstanceOf(BlobIntegrityError);
     await expect(store.has(record.uri)).rejects.toBeInstanceOf(BlobIntegrityError);
   });
+
+  // R6: 以下测试覆盖 ARTIFACT_ERROR -> artifact.not_found / artifact.invalid_uri 迁移
+  it("throws CrishError(artifact.not_found) when readBytes targets a missing blob", async () => {
+    const store = new BlobArtifactStore(await tempDir(tempDirs));
+
+    const error = await captureAsyncError(() => store.readBytes("0".repeat(64)));
+
+    expect(error).toBeInstanceOf(CrishError);
+    expect((error as CrishError).code).toBe("artifact.not_found");
+    expect((error as CrishError).category).toBe("permanent");
+    expect((error as CrishError).retryable).toBe(false);
+  });
+
+  it("throws CrishError(artifact.invalid_uri) when sha256FromUri receives a non-parseable URI", async () => {
+    const store = new BlobArtifactStore(await tempDir(tempDirs));
+
+    const error = await captureAsyncError(() => store.readBytes("not-a-valid-uri:::"));
+
+    expect(error).toBeInstanceOf(CrishError);
+    expect((error as CrishError).code).toBe("artifact.invalid_uri");
+    expect((error as CrishError).category).toBe("protocol");
+    expect((error as CrishError).retryable).toBe(false);
+  });
+
+  it("throws CrishError(artifact.invalid_uri) when uriForSha256 receives a malformed digest", async () => {
+    const store = new BlobArtifactStore(await tempDir(tempDirs));
+
+    const error = captureSyncError(() => store.uriForSha256("not-a-sha256"));
+
+    expect(error).toBeInstanceOf(CrishError);
+    expect((error as CrishError).code).toBe("artifact.invalid_uri");
+    expect((error as CrishError).category).toBe("protocol");
+    expect((error as CrishError).retryable).toBe(false);
+  });
 });
 
 async function tempDir(tempDirs: string[]): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "orchestrator-artifacts-"));
   tempDirs.push(dir);
   return dir;
+}
+
+async function captureAsyncError(fn: () => Promise<unknown>): Promise<unknown> {
+  try {
+    await fn();
+  } catch (e) {
+    return e;
+  }
+  throw new Error("expected promise to reject but it resolved");
+}
+
+function captureSyncError(fn: () => unknown): unknown {
+  try {
+    fn();
+  } catch (e) {
+    return e;
+  }
+  throw new Error("expected function to throw but it did not");
 }

@@ -4,6 +4,21 @@ import type {
   RunStatus
 } from "./types";
 import { isRecord } from "@crish/shared-utils";
+import { Logger } from "@crish/logger";
+
+// R6: 模块级 Logger（通过 setSessionSummaryLogger 注入，不自行 createLogger）
+// 设计依据：ROUND-06-orchestrator.md §3.2 + §5.1 Logger 注入策略
+// session-summary 是纯函数模块，无法通过构造函数注入 Logger，
+// 因此采用模块级 setter 模式，由 AgentOrchestrator 构造时调用 setSessionSummaryLogger。
+let sessionSummaryLogger: Logger = new Logger({ level: "error" });
+
+/**
+ * R6: 注入 Logger 到 session-summary 模块。
+ * 由 AgentOrchestrator 构造时调用，将 orchestrator 的 Logger 实例共享给纯函数模块。
+ */
+export function setSessionSummaryLogger(logger: Logger): void {
+  sessionSummaryLogger = logger;
+}
 
 export interface OrchestratorRunSummaryState {
   runId: string;
@@ -45,10 +60,28 @@ const ACTIVE_RUN_STATUSES = new Set<RunStatus>([
 
 export function summarizeOrchestratorSessionEvents(events: OrchestratorEvent[]): OrchestratorSessionEventSummary[] {
   const summaries = new Map<string, MutableSessionEventSummary>();
-  for (const event of events) {
-    updateSessionSummary(summaries, event);
+  try {
+    for (const event of events) {
+      updateSessionSummary(summaries, event);
+    }
+    const result = [...summaries.values()].map(toOrchestratorSessionEventSummary).sort(compareSessionSummaries);
+    sessionSummaryLogger.debug("session_summary.generated", {
+      eventCount: events.length,
+      sessionCount: result.length
+    });
+    return result;
+  } catch (cause) {
+    // R6: summary 生成失败用 store.read_failed 语义（summary 依赖事件流读取）
+    const message = cause instanceof Error ? cause.message : String(cause);
+    sessionSummaryLogger.warn("session_summary.generate_failed", {
+      eventCount: events.length,
+      errorCode: "store.read_failed",
+      category: "transient",
+      retryable: true,
+      ...(cause instanceof Error ? { err: { message, name: cause.name } } : {})
+    });
+    return [];
   }
-  return [...summaries.values()].map(toOrchestratorSessionEventSummary).sort(compareSessionSummaries);
 }
 
 export function updateSessionSummary(index: Map<string, MutableSessionEventSummary>, event: OrchestratorEvent): void {

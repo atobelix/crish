@@ -1,5 +1,5 @@
 import type { JsonObject, AgentEvent } from "@crish/shared-types";
-import { ProtocolError } from "@crish/shared-types";
+import { CrishError } from "@crish/shared-types";
 import { compactJsonObject, toJsonObject, MAX_ORCHESTRATOR_EVENTS } from "@crish/shared-utils";
 import type {
   AgentOrchestratorOptions,
@@ -376,7 +376,14 @@ export function goalStoppedReasonFromRun(run: OrchestratorRunRecord): NonNullabl
 
 export function requiredGoal(run: OrchestratorRunRecord): OrchestratorGoalRunState {
   if (!run.goal) {
-    throw new ProtocolError(`Run ${run.id} is not a goal run`, "NOT_A_GOAL_RUN");
+    // R6: migrated from ProtocolError "NOT_A_GOAL_RUN" -> CrishError "run.not_goal_run"
+    throw new CrishError(
+      `Run ${run.id} is not a goal run`,
+      "run.not_goal_run",
+      "protocol",
+      false,
+      { runId: run.id }
+    );
   }
   return run.goal;
 }

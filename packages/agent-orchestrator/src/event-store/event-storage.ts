@@ -5,6 +5,10 @@ import { dirname } from "node:path";
 import { createInterface } from "node:readline";
 import { retryWithBackoff } from "@crish/shared-utils";
 import { JsonlAppendBatcher, type JsonlAppendBatcherOptions } from "@crish/shared-utils/node";
+import { CrishError } from "@crish/shared-types";
+import type { CrishResult, JsonObject } from "@crish/shared-types";
+import { ok } from "@crish/shared-types";
+import { Logger } from "@crish/logger";
 import type {
   OrchestratorEvent,
   OrchestratorEventLogMetadata,
@@ -42,6 +46,9 @@ import {
 } from "./event-types";
 import { EventIndexer } from "./event-indexer";
 
+// R6: 静默 Logger 兜底（不自行 createLogger，仅作为未注入时的 fallback）
+const NOOP_LOGGER = new Logger({ level: "error" });
+
 export class FileOrchestratorEventStore implements OrchestratorEventStore {
   private appendQueue: Promise<void> = Promise.resolve();
   private headerReady = false;
@@ -66,6 +73,7 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
   private readonly maxSizeBytes: number;
   private readonly maxArchives: number;
   private nextGeneration: number;
+  private readonly logger: Logger;
 
   constructor(
     private readonly filePath: string,
@@ -75,13 +83,15 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
       maxCachedEvents: undefined,
       indexFlushIntervalMs: undefined,
       maxSizeBytes: undefined,
-      maxArchives: undefined
+      maxArchives: undefined,
+      logger: undefined
     }
   ) {
     this.indexFlushIntervalMs = options.indexFlushIntervalMs ?? 5_000;
     this.maxSizeBytes = options.maxSizeBytes ?? 100 * 1024 * 1024;
     this.maxArchives = options.maxArchives ?? 10;
     this.nextGeneration = (options.header?.generation ?? 1) + 1;
+    this.logger = options.logger ?? NOOP_LOGGER;
   }
 
   installSignalHandlers(): () => void {
@@ -174,12 +184,223 @@ export class FileOrchestratorEventStore implements OrchestratorEventStore {
           await this.flushIndex();
         }
       } catch (cause) {
+        if (cause instanceof CrishError) {
+          throw cause;
+        }
         if (cause instanceof OrchestratorEventStoreError) {
           throw cause;
         }
         throw new OrchestratorEventStoreWriteError(this.filePath, event.id, cause);
       }
     });
+  }
+
+  // ─── R6: CrishResult 公共 API（供 orchestrator 层调用） ────────────────────
+  // 这些方法包装现有 throwing 实现，返回 CrishResult 并产出结构化日志。
+  // 保留原 append/readSession/readRun/readAll 方法以满足 OrchestratorEventStore 接口契约。
+  // 设计依据：ROUND-06-orchestrator.md §3.2 + §5.3 日志埋点清单
+
+  /**
+   * R6: append 的 CrishResult 版本。失败时返回 err(CrishError) 并记录 warn 日志。
+   * Windows 文件锁场景（EBUSY/EACCES）映射到 store.write_failed + retryable=true。
+   */
+  async appendResult(event: OrchestratorEvent): Promise<CrishResult<void>> {
+    const startTime = Date.now();
+    try {
+      await this.append(event);
+      this.logger.debug("event_store.append", {
+        sessionId: event.sessionId,
+        ...(event.runId !== undefined ? { runId: event.runId } : {}),
+        eventType: event.type,
+        sequence: event.sequence,
+        durationMs: Date.now() - startTime
+      });
+      return ok();
+    } catch (cause) {
+      const error = this.toAppendFailure(cause, event);
+      this.logger.warn("event_store.append_failed", {
+        sessionId: event.sessionId,
+        ...(event.runId !== undefined ? { runId: event.runId } : {}),
+        eventType: event.type,
+        errorCode: error.code,
+        category: error.category,
+        retryable: error.retryable,
+        ...(error.metadata ?? {}),
+        durationMs: Date.now() - startTime
+      });
+      return { ok: false, error };
+    }
+  }
+
+  /**
+   * R6: readSession 的 CrishResult 版本。失败时返回 err(CrishError) 并记录 warn 日志。
+   */
+  async readSessionResult(
+    sessionId: string,
+    afterSequence = 0,
+    options: OrchestratorEventReadOptions = { maxEvents: undefined }
+  ): Promise<CrishResult<OrchestratorEvent[]>> {
+    const startTime = Date.now();
+    try {
+      const events = await this.readSession(sessionId, afterSequence, options);
+      this.logger.debug("event_store.read", {
+        sessionId,
+        fromSeq: afterSequence,
+        eventCount: events.length,
+        durationMs: Date.now() - startTime
+      });
+      return ok(events);
+    } catch (cause) {
+      const error = this.toReadFailure(cause);
+      this.logger.warn("event_store.read_failed", {
+        sessionId,
+        errorCode: error.code,
+        category: error.category,
+        retryable: error.retryable,
+        ...(error.metadata ?? {}),
+        durationMs: Date.now() - startTime
+      });
+      return { ok: false, error };
+    }
+  }
+
+  /**
+   * R6: readRun 的 CrishResult 版本。失败时返回 err(CrishError) 并记录 warn 日志。
+   */
+  async readRunResult(
+    runId: string,
+    afterSequence = 0,
+    options: OrchestratorEventReadOptions = { maxEvents: undefined }
+  ): Promise<CrishResult<OrchestratorEvent[]>> {
+    const startTime = Date.now();
+    try {
+      const events = await this.readRun(runId, afterSequence, options);
+      this.logger.debug("event_store.read", {
+        runId,
+        fromSeq: afterSequence,
+        eventCount: events.length,
+        durationMs: Date.now() - startTime
+      });
+      return ok(events);
+    } catch (cause) {
+      const error = this.toReadFailure(cause);
+      this.logger.warn("event_store.read_failed", {
+        runId,
+        errorCode: error.code,
+        category: error.category,
+        retryable: error.retryable,
+        ...(error.metadata ?? {}),
+        durationMs: Date.now() - startTime
+      });
+      return { ok: false, error };
+    }
+  }
+
+  /**
+   * R6: readAll 的 CrishResult 版本。失败时返回 err(CrishError) 并记录 warn 日志。
+   */
+  async readAllResult(
+    afterSequence = 0,
+    options: OrchestratorEventReadOptions = { maxEvents: undefined }
+  ): Promise<CrishResult<OrchestratorEvent[]>> {
+    const startTime = Date.now();
+    try {
+      const events = await this.readAll(afterSequence, options);
+      this.logger.debug("event_store.read", {
+        fromSeq: afterSequence,
+        eventCount: events.length,
+        durationMs: Date.now() - startTime
+      });
+      return ok(events);
+    } catch (cause) {
+      const error = this.toReadFailure(cause);
+      this.logger.warn("event_store.read_failed", {
+        errorCode: error.code,
+        category: error.category,
+        retryable: error.retryable,
+        ...(error.metadata ?? {}),
+        durationMs: Date.now() - startTime
+      });
+      return { ok: false, error };
+    }
+  }
+
+  // ─── R6: CrishError 转换辅助 ────────────────────────────────────────────
+
+  /**
+   * 将 append 路径的异常转换为 CrishError。
+   * - CrishError 直接透传
+   * - Windows 文件锁（EBUSY/EACCES）→ store.write_failed + retryable=true
+   * - OrchestratorEventStoreWriteError → event_store.append_failed + retryable=true
+   * - 其他 → event_store.append_failed + retryable=true（transient 兜底）
+   */
+  private toAppendFailure(cause: unknown, event: OrchestratorEvent): CrishError {
+    if (cause instanceof CrishError) {
+      return cause;
+    }
+    const errno = this.extractErrno(cause);
+    const isWindowsFileLock = errno === "EBUSY" || errno === "EACCES";
+    const message = cause instanceof Error ? cause.message : String(cause);
+    const metadata: JsonObject = {
+      path: this.filePath,
+      eventId: event.id,
+      ...(errno !== undefined ? { errno } : {})
+    };
+    if (isWindowsFileLock) {
+      return new CrishError(
+        message,
+        "store.write_failed",
+        "transient",
+        true,
+        metadata
+      );
+    }
+    return new CrishError(
+      message,
+      "event_store.append_failed",
+      "transient",
+      true,
+      metadata
+    );
+  }
+
+  /**
+   * 将 read 路径的异常转换为 CrishError。
+   * - CrishError 直接透传
+   * - OrchestratorEventStoreInvalidReadError → event_store.read_failed + retryable=true
+   * - 其他 → event_store.read_failed + retryable=true（transient 兜底）
+   */
+  private toReadFailure(cause: unknown): CrishError {
+    if (cause instanceof CrishError) {
+      return cause;
+    }
+    const errno = this.extractErrno(cause);
+    const message = cause instanceof Error ? cause.message : String(cause);
+    const metadata: JsonObject = {
+      path: this.filePath,
+      ...(errno !== undefined ? { errno } : {})
+    };
+    return new CrishError(
+      message,
+      "event_store.read_failed",
+      "transient",
+      true,
+      metadata
+    );
+  }
+
+  /**
+   * 从 NodeJS.ErrnoException 或 Error 中提取 errno 字段。
+   * 用于 Windows 文件锁场景（EBUSY/EACCES）的诊断日志。
+   */
+  private extractErrno(cause: unknown): string | undefined {
+    if (cause && typeof cause === "object") {
+      const errno = (cause as { code?: unknown }).code;
+      if (typeof errno === "string" && errno.length > 0) {
+        return errno;
+      }
+    }
+    return undefined;
   }
 
   async readSession(sessionId: string, afterSequence = 0, options: OrchestratorEventReadOptions = { maxEvents: undefined }): Promise<OrchestratorEvent[]> {

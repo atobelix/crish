@@ -1,4 +1,4 @@
-import type { JsonObject } from "@crish/shared-types";
+import { CrishError, type JsonObject } from "@crish/shared-types";
 import type { ConversationRewindTargetFacts } from "@crish/agent-context";
 import { SessionTree, type SessionTreeEntry, type SessionTreeLeafId } from "./session-tree";
 import { isTerminalRunStatus } from "./state-machine";
@@ -158,7 +158,13 @@ export function planConversationRewindFromTargetFacts<TPayload = JsonObject, TDe
   input: PlanConversationRewindFromTargetFactsInput<TPayload, TDetails>
 ): ConversationRewindPlanWithTargetFacts<TPayload, TDetails> {
   if (!input.target.sessionTreeTargetLeafId) {
-    throw new Error("Conversation rewind target is missing session-tree-target-leaf");
+    // R6: migrated from throw new Error -> session.invalid_state (rewind target 缺失)
+    throw new CrishError(
+      "Conversation rewind target is missing session-tree-target-leaf",
+      "session.invalid_state",
+      "permanent",
+      false
+    );
   }
 
   return {
@@ -249,7 +255,13 @@ function planWorkspaceRestore(
   }
   if (!checkpoint) {
     if (policy === "required") {
-      throw new Error("Conversation rewind requires a workspace checkpoint");
+      // R6: migrated from throw new Error -> store.write_failed (checkpoint 写入失败, transient)
+      throw new CrishError(
+        "Conversation rewind requires a workspace checkpoint",
+        "store.write_failed",
+        "transient",
+        true
+      );
     }
     return { required: false, source: "none", cleanUntracked: false, checkpointId: undefined, checkpoint: undefined, manifestPath: undefined };
   }

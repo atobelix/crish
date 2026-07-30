@@ -1,5 +1,5 @@
 import type { JsonObject, AgentEvent, AgentMessage } from "@crish/shared-types";
-import { ProtocolError } from "@crish/shared-types";
+import { CrishError } from "@crish/shared-types";
 import {
   compactJsonObject, BoundedMap, toJsonObject,
   MAX_ORCHESTRATOR_EVENTS,
@@ -320,7 +320,14 @@ export class TaskDispatcher {
       this.emitToRun(active, "run-completed", terminalPayload(run));
       return;
     }
-    throw new ProtocolError(`Run ${run.id} ended with non-terminal status ${run.status}`, "INVALID_RUN_STATE");
+    // R6: migrated from ProtocolError "INVALID_RUN_STATE" -> CrishError "run.invalid_state"
+    throw new CrishError(
+      `Run ${run.id} ended with non-terminal status ${run.status}`,
+      "run.invalid_state",
+      "protocol",
+      false,
+      { runId: run.id, status: run.status }
+    );
   }
 
   private emitToRun(active: ActiveRun, type: OrchestratorEvent["type"], payload: JsonObject): void {

@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { isRecord } from "@crish/shared-utils";
+import type { CrishError } from "@crish/shared-types";
+import type { Logger } from "@crish/logger";
 export {
   ORCHESTRATOR_EVENT_LOG_SCHEMA_VERSION,
   ORCHESTRATOR_PROTOCOL_VERSION,
@@ -48,6 +50,11 @@ export interface FileOrchestratorEventStoreOptions {
   maxSizeBytes: number | undefined;
   /** 保留的归档文件最大数量（默认 10）。超过此数量的旧归档会被删除。 */
   maxArchives: number | undefined;
+  /**
+   * R6: Logger 实例（依赖注入）。不提供时使用静默记录器。
+   * daemon（R7）创建 Logger 后通过此字段传入，与 EventStore 共享 transport。
+   */
+  logger: Logger | undefined;
 }
 
 export interface FileOrchestratorSessionSummaryIndex {
@@ -501,3 +508,41 @@ export function normalizeReadOptions(
   }
   return { afterSequence, maxEvents };
 }
+
+// ─── R6: EventStore 失败类型别名（供 6-C indexer 引用） ────────────────────
+// 这些别名用于在 CrishResult.err 分支中缩窄错误码域，便于 6-C 在 indexer/projection
+// 中通过 instanceof / code 判定失败类型，并产出对应的 telemetry span。
+//
+// 权威定义：03-ERROR-MIGRATION.md §2.2 event_store 域
+//   - event_store.append_failed: transient, retryable=true
+//   - event_store.read_failed:   transient, retryable=true
+//   - event_store.consistency_violation: permanent, retryable=false
+//   - store.write_failed:        transient, retryable=true（Windows 文件锁 EBUSY/EACCES）
+
+/**
+ * EventStore append 操作失败时抛出的 CrishError 类型别名。
+ * 涵盖码值：
+ *   - event_store.append_failed  （底层 IO 失败，transient）
+ *   - store.write_failed         （Windows 文件锁 EBUSY/EACCES，transient）
+ *   - event_store.consistency_violation（索引与日志不一致，permanent）
+ */
+export type EventStoreAppendFailure = CrishError & {
+  readonly code:
+    | "event_store.append_failed"
+    | "store.write_failed"
+    | "event_store.consistency_violation";
+};
+
+/**
+ * EventStore read 操作失败时抛出的 CrishError 类型别名。
+ * 涵盖码值：
+ *   - event_store.read_failed    （底层 IO 失败，transient）
+ *   - store.read_failed          （文件不可读，transient）
+ *   - event_store.consistency_violation（索引与日志不一致，permanent）
+ */
+export type EventStoreReadFailure = CrishError & {
+  readonly code:
+    | "event_store.read_failed"
+    | "store.read_failed"
+    | "event_store.consistency_violation";
+};

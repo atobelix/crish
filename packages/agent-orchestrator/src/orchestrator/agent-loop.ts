@@ -1,5 +1,5 @@
 import type { JsonObject, AgentEvent, DiagnosticRecord } from "@crish/shared-types";
-import { SessionError, ProtocolError } from "@crish/shared-types";
+import { CrishError } from "@crish/shared-types";
 import {
   compactJsonObject, isRecord, BoundedMap, RingBuffer, toJsonObject,
   MAX_ORCHESTRATOR_SESSIONS, MAX_ORCHESTRATOR_RUNS, MAX_ORCHESTRATOR_PENDING_INPUTS, MAX_ORCHESTRATOR_DIAGNOSTICS, MAX_ORCHESTRATOR_EVENTS,
@@ -196,14 +196,19 @@ export class AgentLoop {
   async moveSessionLeaf(request: MoveSessionLeafRequest): Promise<MoveSessionLeafResult> {
     const session = this.sessions.get(request.sessionId);
     if (!session) {
-      throw new SessionError(`Session not found: ${request.sessionId}`, "not_found");
+      // R6: migrated from SessionError(not_found) -> session.not_found
+      throw new CrishError(`Session not found: ${request.sessionId}`, "session.not_found", "permanent", false);
     }
 
     const fromLeafId = session.currentLeafId;
     if (request.expectedCurrentLeafId !== undefined && fromLeafId !== request.expectedCurrentLeafId) {
-      throw new ProtocolError(
+      // R6: migrated from ProtocolError(LEAF_MISMATCH) -> session.invalid_state
+      // (per 03-ERROR-MIGRATION.md §3.4: LEAF_MISMATCH 归会话树叶节点状态非法)
+      throw new CrishError(
         `Session ${request.sessionId} current leaf mismatch: expected ${request.expectedCurrentLeafId}, got ${fromLeafId ?? "none"}`,
-        "LEAF_MISMATCH"
+        "session.invalid_state",
+        "protocol",
+        false
       );
     }
 
@@ -244,7 +249,8 @@ export class AgentLoop {
     request: RecordConversationRewindAuditRequest
   ): Promise<RecordConversationRewindAuditResult> {
     if (!this.sessions.has(request.sessionId)) {
-      throw new SessionError(`Session not found: ${request.sessionId}`, "not_found");
+      // R6: migrated from SessionError(not_found) -> session.not_found
+      throw new CrishError(`Session not found: ${request.sessionId}`, "session.not_found", "permanent", false);
     }
 
     const event = this.event("conversation-rewind-audit", request.sessionId, undefined, request.payload);
@@ -291,7 +297,13 @@ export class AgentLoop {
   async persistStateSnapshot(): Promise<void> {
     const snapshotStore = asStateSnapshotStore(this.eventStore);
     if (!snapshotStore) {
-      throw new Error("Event store does not support state snapshots");
+      // R6: migrated from throw new Error -> runtime.unexpected_state (EventStore 能力缺失)
+      throw new CrishError(
+        "Event store does not support state snapshots",
+        "runtime.unexpected_state",
+        "permanent",
+        false
+      );
     }
     const metadata = await this.getEventLogMetadata();
     const snapshot: OrchestratorStateSnapshot = {

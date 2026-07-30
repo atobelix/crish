@@ -1,5 +1,5 @@
 import { BoundedMap } from "@crish/shared-utils";
-import { SessionError, type JsonObject } from "@crish/shared-types";
+import { CrishError, type JsonObject } from "@crish/shared-types";
 import type { OrchestratorSessionRecord } from "./types";
 
 /**
@@ -160,11 +160,13 @@ export class SessionTree<TPayload = JsonObject, TDetails = JsonObject> {
     const path: SessionTreeEntry<TPayload, TDetails>[] = [];
     const seen = new Set<string>();
     let current = this.byId.get(leafId);
-    if (!current) throw new SessionError(`Session tree entry ${leafId} not found`, "not_found");
+    // R6: migrated from SessionError(not_found) -> session.not_found
+    if (!current) throw new CrishError(`Session tree entry ${leafId} not found`, "session.not_found", "permanent", false);
 
     while (current) {
       if (seen.has(current.id)) {
-        throw new SessionError(`Session tree cycle detected at entry ${current.id}`, "invalid_state");
+        // R6: migrated from SessionError(invalid_state) -> session.invalid_state
+        throw new CrishError(`Session tree cycle detected at entry ${current.id}`, "session.invalid_state", "permanent", false);
       }
       seen.add(current.id);
       // push 后整体 reverse，避免 unshift 的 O(depth²) 退化
@@ -191,13 +193,16 @@ export class SessionTree<TPayload = JsonObject, TDetails = JsonObject> {
     const seen = new Set<string>();
     for (const entry of entries) {
       if (seen.has(entry.id)) {
-        throw new SessionError(`Session tree entry ${entry.id} already exists`, "invalid_entry");
+        // R6: migrated from SessionError(invalid_entry) -> session.invalid_entry
+        throw new CrishError(`Session tree entry ${entry.id} already exists`, "session.invalid_entry", "permanent", false);
       }
       if (entry.parentId !== null && !seen.has(entry.parentId)) {
-        throw new SessionError(`Parent ${entry.parentId} for session tree entry ${entry.id} must appear before the child`, "invalid_state");
+        // R6: migrated from SessionError(invalid_state) -> session.invalid_state
+        throw new CrishError(`Parent ${entry.parentId} for session tree entry ${entry.id} must appear before the child`, "session.invalid_state", "permanent", false);
       }
       if (entry.type === "branch_summary" && entry.abandonedLeafId !== null && !seen.has(entry.abandonedLeafId)) {
-        throw new SessionError(`Abandoned leaf ${entry.abandonedLeafId} for branch summary ${entry.id} not found`, "not_found");
+        // R6: migrated from SessionError(not_found) -> session.not_found
+        throw new CrishError(`Abandoned leaf ${entry.abandonedLeafId} for branch summary ${entry.id} not found`, "session.not_found", "permanent", false);
       }
       seen.add(entry.id);
     }
@@ -237,13 +242,15 @@ export class SessionTree<TPayload = JsonObject, TDetails = JsonObject> {
 
   private assertAvailableId(id: string): void {
     if (this.byId.has(id)) {
-      throw new SessionError(`Session tree entry ${id} already exists`, "invalid_entry");
+      // R6: migrated from SessionError(invalid_entry) -> session.invalid_entry
+      throw new CrishError(`Session tree entry ${id} already exists`, "session.invalid_entry", "permanent", false);
     }
   }
 
   private assertValidLeafTarget(leafId: string | null): void {
     if (leafId !== null && !this.byId.has(leafId)) {
-      throw new SessionError(`Session tree entry ${leafId} not found`, "not_found");
+      // R6: migrated from SessionError(not_found) -> session.not_found
+      throw new CrishError(`Session tree entry ${leafId} not found`, "session.not_found", "permanent", false);
     }
   }
 

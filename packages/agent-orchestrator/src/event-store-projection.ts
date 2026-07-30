@@ -12,8 +12,49 @@
  */
 
 import type { JsonObject } from "@crish/shared-types";
+import { CrishError } from "@crish/shared-types";
+import { TraceManager } from "@crish/telemetry";
 import type { AgentMessage, AgentMessageBlock } from "@crish/shared-types";
 import type { OrchestratorEvent, OrchestratorEventStore } from "./types";
+
+// 模块级 TraceManager，用于 event_store.project span 埋点。
+// R6 阶段：6-B/6-D 后续将通过 OrchestratorDeps.telemetry 注入替换此实例。
+const traceManager = new TraceManager();
+
+/**
+ * 构造并抛出 projection 读取失败错误（event_store.read_failed）。
+ *
+ * 系统性处理 exactOptionalPropertyTypes 约束：仅当 cause 为 CrishError 时
+ * 传入 { cause } 选项，避免向可选参数显式传递 undefined。
+ * 同时集中 projection 错误构造逻辑，保证 4 个投影方法的错误格式一致。
+ */
+function throwProjectionReadFailure(
+  operation: string,
+  cause: unknown,
+  extraMetadata: JsonObject
+): never {
+  const message = `EventStore projection ${operation} failed: ${
+    cause instanceof Error ? cause.message : String(cause)
+  }`;
+  const metadata: JsonObject = { operation, ...extraMetadata };
+  if (cause instanceof CrishError) {
+    throw new CrishError(
+      message,
+      "event_store.read_failed",
+      "transient",
+      true,
+      metadata,
+      { cause }
+    );
+  }
+  throw new CrishError(
+    message,
+    "event_store.read_failed",
+    "transient",
+    true,
+    metadata
+  );
+}
 
 // ─── 时间线条目 ────────────────────────────────────────────
 
@@ -102,39 +143,61 @@ export class EventStoreProjection {
    * @returns AgentMessage[] 可用于 Provider 调用的消息列表
    */
   async buildContext(startEventSequence = 0): Promise<AgentMessage[]> {
-    const events = await this.eventStore.readSession?.(
-      "", // 全量
-      startEventSequence,
-      { maxEvents: undefined }
-    ) ?? [];
+    // R6: projection 重建埋 telemetry span event_store.project
+    const spanCtx = traceManager.startTrace("event_store.project", "orchestrator", {
+      sessionId: "",
+      operation: "buildContext",
+    });
+    try {
+      const events = await this.eventStore.readSession?.(
+        "", // 全量
+        startEventSequence,
+        { maxEvents: undefined }
+      ) ?? [];
 
-    const messages: AgentMessage[] = [];
+      const messages: AgentMessage[] = [];
 
-    for (const event of events) {
-      if (event.type !== "runtime-event") continue;
+      for (const event of events) {
+        if (event.type !== "runtime-event") continue;
 
-      const payload = event.payload as Record<string, unknown> | undefined;
-      if (!payload?.message) continue;
+        const payload = event.payload as Record<string, unknown> | undefined;
+        if (!payload?.message) continue;
 
-      const msg = payload.message as Record<string, unknown>;
-      if (typeof msg.role !== "string") continue;
+        const msg = payload.message as Record<string, unknown>;
+        if (typeof msg.role !== "string") continue;
 
-      // 只提取 user/assistant/tool 角色的消息
-      if (!["user", "assistant", "tool"].includes(msg.role)) continue;
+        // 只提取 user/assistant/tool 角色的消息
+        if (!["user", "assistant", "tool"].includes(msg.role)) continue;
 
-      const msgMeta = typeof msg.metadata === "object" && msg.metadata !== null
-        ? msg.metadata as JsonObject
-        : undefined;
-      messages.push({
-        id: typeof msg.id === "string" ? msg.id : `ctx-${event.sequence}`,
-        role: msg.role as AgentMessage["role"],
-        blocks: Array.isArray(msg.blocks) ? msg.blocks as AgentMessageBlock[] : [],
-        createdAt: event.timestamp,
-        ...(msgMeta !== undefined ? { metadata: msgMeta } : {}),
+        const msgMeta = typeof msg.metadata === "object" && msg.metadata !== null
+          ? msg.metadata as JsonObject
+          : undefined;
+        messages.push({
+          id: typeof msg.id === "string" ? msg.id : `ctx-${event.sequence}`,
+          role: msg.role as AgentMessage["role"],
+          blocks: Array.isArray(msg.blocks) ? msg.blocks as AgentMessageBlock[] : [],
+          createdAt: event.timestamp,
+          ...(msgMeta !== undefined ? { metadata: msgMeta } : {}),
+        });
+      }
+
+      traceManager.addSpanEvent(spanCtx.spanId, "projected", {
+        sessionId: "",
+        eventsProjected: events.length,
+        consistencyViolation: false,
       });
+      traceManager.endSpan(spanCtx.spanId);
+      return messages;
+    } catch (cause) {
+      // R6: projection 读取失败用 event_store.read_failed（transient）
+      traceManager.addSpanEvent(spanCtx.spanId, "read_failed", {
+        sessionId: "",
+        eventsProjected: 0,
+        consistencyViolation: false,
+      });
+      traceManager.endSpan(spanCtx.spanId, "error");
+      throwProjectionReadFailure("buildContext", cause, { startEventSequence });
     }
-
-    return messages;
   }
 
   /**
@@ -147,8 +210,30 @@ export class EventStoreProjection {
    * @returns TimelineEntry[] 按时间排序的时间线
    */
   async buildTimeline(sessionId: string): Promise<TimelineEntry[]> {
-    const events = await this.eventStore.readSession(sessionId);
-    return this.buildTimelineFromEvents(events);
+    // R6: projection 重建埋 telemetry span event_store.project
+    const spanCtx = traceManager.startTrace("event_store.project", "orchestrator", {
+      sessionId,
+      operation: "buildTimeline",
+    });
+    try {
+      const events = await this.eventStore.readSession(sessionId);
+      const timeline = this.buildTimelineFromEvents(events);
+      traceManager.addSpanEvent(spanCtx.spanId, "projected", {
+        sessionId,
+        eventsProjected: events.length,
+        consistencyViolation: false,
+      });
+      traceManager.endSpan(spanCtx.spanId);
+      return timeline;
+    } catch (cause) {
+      traceManager.addSpanEvent(spanCtx.spanId, "read_failed", {
+        sessionId,
+        eventsProjected: 0,
+        consistencyViolation: false,
+      });
+      traceManager.endSpan(spanCtx.spanId, "error");
+      throwProjectionReadFailure("buildTimeline", cause, { sessionId });
+    }
   }
 
   private buildTimelineFromEvents(events: OrchestratorEvent[]): TimelineEntry[] {
@@ -171,8 +256,30 @@ export class EventStoreProjection {
    * @returns SessionPatterns 成功和失败模式
    */
   async buildPatterns(sessionId: string): Promise<SessionPatterns> {
-    const events = await this.eventStore.readSession(sessionId);
-    return this.buildPatternsFromEvents(events);
+    // R6: projection 重建埋 telemetry span event_store.project
+    const spanCtx = traceManager.startTrace("event_store.project", "orchestrator", {
+      sessionId,
+      operation: "buildPatterns",
+    });
+    try {
+      const events = await this.eventStore.readSession(sessionId);
+      const patterns = this.buildPatternsFromEvents(events);
+      traceManager.addSpanEvent(spanCtx.spanId, "projected", {
+        sessionId,
+        eventsProjected: events.length,
+        consistencyViolation: false,
+      });
+      traceManager.endSpan(spanCtx.spanId);
+      return patterns;
+    } catch (cause) {
+      traceManager.addSpanEvent(spanCtx.spanId, "read_failed", {
+        sessionId,
+        eventsProjected: 0,
+        consistencyViolation: false,
+      });
+      traceManager.endSpan(spanCtx.spanId, "error");
+      throwProjectionReadFailure("buildPatterns", cause, { sessionId });
+    }
   }
 
   private buildPatternsFromEvents(events: OrchestratorEvent[]): SessionPatterns {
@@ -238,21 +345,65 @@ export class EventStoreProjection {
     sessionId: string,
     cutPointSequence: number
   ): Promise<CompressionInput> {
-    const allEvents = await this.eventStore.readSession(sessionId);
+    // R6: projection 重建埋 telemetry span event_store.project
+    const spanCtx = traceManager.startTrace("event_store.project", "orchestrator", {
+      sessionId,
+      operation: "buildCompressionInput",
+    });
+    try {
+      const allEvents = await this.eventStore.readSession(sessionId);
 
-    const events = allEvents.filter((e) => e.sequence <= cutPointSequence);
-    const timeline = this.buildTimelineFromEvents(events);
-    const patterns = this.buildPatternsFromEvents(allEvents);
-    const eventIdSet = new Set(events.map((e) => e.id));
+      const events = allEvents.filter((e) => e.sequence <= cutPointSequence);
+      const timeline = this.buildTimelineFromEvents(events);
+      const patterns = this.buildPatternsFromEvents(allEvents);
+      const eventIdSet = new Set(events.map((e) => e.id));
 
-    return {
-      events,
-      timeline: timeline.filter((t) =>
-        t.relatedEventIds.some((id) => eventIdSet.has(id))
-      ),
-      patterns,
-      cutPointSequence,
-    };
+      // R6: 一致性检查 — 若 cutPointSequence 大于最大事件 sequence，标记 consistencyViolation
+      const maxSequence = allEvents.length > 0
+        ? Math.max(...allEvents.map((e) => e.sequence))
+        : 0;
+      const consistencyViolation = cutPointSequence > maxSequence + 1;
+
+      traceManager.addSpanEvent(spanCtx.spanId, "projected", {
+        sessionId,
+        eventsProjected: events.length,
+        consistencyViolation,
+      });
+      traceManager.endSpan(spanCtx.spanId);
+
+      if (consistencyViolation) {
+        // R6: 索引与日志不一致用 event_store.consistency_violation（permanent）
+        throw new CrishError(
+          `EventStore projection consistency violation: cutPointSequence=${cutPointSequence} exceeds maxSequence=${maxSequence}`,
+          "event_store.consistency_violation",
+          "permanent",
+          false,
+          { sessionId, cutPointSequence, maxSequence }
+        );
+      }
+
+      return {
+        events,
+        timeline: timeline.filter((t) =>
+          t.relatedEventIds.some((id) => eventIdSet.has(id))
+        ),
+        patterns,
+        cutPointSequence,
+      };
+    } catch (cause) {
+      // 已抛出的 consistency_violation 不再包装
+      if (cause instanceof CrishError && cause.code === "event_store.consistency_violation") {
+        traceManager.endSpan(spanCtx.spanId, "error");
+        throw cause;
+      }
+      traceManager.addSpanEvent(spanCtx.spanId, "read_failed", {
+        sessionId,
+        eventsProjected: 0,
+        consistencyViolation: false,
+      });
+      traceManager.endSpan(spanCtx.spanId, "error");
+      throwProjectionReadFailure("buildCompressionInput", cause, { sessionId, cutPointSequence });
+    }
   }
 
   // ─── 内部方法 ────────────────────────────────────────────

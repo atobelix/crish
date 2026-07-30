@@ -129,7 +129,8 @@ export class ContentAddressedBlobStore {
   async readBytes(uriOrSha256: string): Promise<Uint8Array> {
     const blob = await this.get(uriOrSha256);
     if (!blob) {
-      throw new CrishError(`Blob artifact not found: ${uriOrSha256}`, "ARTIFACT_ERROR", "permanent", false);
+      // R6: migrated from ARTIFACT_ERROR -> artifact.not_found
+      throw new CrishError(`Blob artifact not found: ${uriOrSha256}`, "artifact.not_found", "permanent", false);
     }
     return blob.bytes;
   }
@@ -166,7 +167,8 @@ export class ContentAddressedBlobStore {
       // silent: URI 解析降级，非标准 artifact: URI 由下层验证兜底
     }
 
-    throw new CrishError(`Invalid blob artifact URI or sha256: ${uriOrSha256}`, "ARTIFACT_ERROR", "permanent", false);
+    // R6: migrated from ARTIFACT_ERROR -> artifact.invalid_uri
+    throw new CrishError(`Invalid blob artifact URI or sha256: ${uriOrSha256}`, "artifact.invalid_uri", "protocol", false);
   }
 
   private async putBuffer(
@@ -341,7 +343,8 @@ function normalizeUriPrefix(prefix: string): string {
 function normalizeSha256(value: string): string {
   const normalized = value.toLowerCase();
   if (!SHA256_PATTERN.test(normalized)) {
-    throw new CrishError(`Invalid sha256 digest: ${value}`, "ARTIFACT_ERROR", "permanent", false);
+    // R6: migrated from ARTIFACT_ERROR -> artifact.invalid_uri
+    throw new CrishError(`Invalid sha256 digest: ${value}`, "artifact.invalid_uri", "protocol", false);
   }
   return normalized;
 }

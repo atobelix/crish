@@ -1,6 +1,7 @@
 // packages/shared-types/src/errors/info.ts
 // 错误码元信息注册表，来源：./03-ERROR-MIGRATION.md §2.2
-// 实测条目数：64 正式码 + 10 reserved 码 = 74 条
+// 实测条目数：67 正式码 + 10 reserved 码 = 77 条
+// （R6 扩展：新增 goal 域 3 码）
 
 import type { CrishErrorCode, CrishErrorCategory } from './codes';
 
@@ -626,6 +627,33 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     retryable: false,
     public: false,
     action: 'action.security.check_target',
+  },
+  // ── goal 域（3 正式码，R6 新增域）──
+  // 用于 GoalLoopStrategy 的 FNV-1a 进度签名检测：
+  // goal.stalled 与 agent.no_progress 边界见 03-ERROR-MIGRATION.md §4.2
+  'goal.stalled': {
+    code: 'goal.stalled',
+    title: 'Goal 循环停滞',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.goal.review_progress',
+  },
+  'goal.loop_detected': {
+    code: 'goal.loop_detected',
+    title: 'Goal 循环签名重复',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.goal.break_loop',
+  },
+  'goal.max_rounds': {
+    code: 'goal.max_rounds',
+    title: 'Goal 达到最大轮次',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.goal.increase_max_rounds',
   },
 };
 

@@ -28,4 +28,11 @@ export {
   createProtocolRunControlIntent,
 } from './types';
 
-export { ControlBus, type ControlDrainAction } from './control-bus';
+export {
+  ControlBus,
+  type ControlDrainAction,
+  type ControlBusTargetHandler,
+  type ControlBusEventType,
+  type ControlBusEventHandler,
+  type ControlBusAnyEventHandler,
+} from './control-bus';

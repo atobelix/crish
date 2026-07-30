@@ -1,5 +1,6 @@
 import type { JsonObject, AgentEvent, AgentMessage, StoredEvent, StoredEventType, StoredEventLogMetadata, StoredEventReadOptions, EventStore } from "@crish/shared-types";
 import { STORED_EVENT_PROTOCOL_VERSION, STORED_EVENT_LOG_SCHEMA_VERSION } from "@crish/shared-types";
+import type { Logger } from "@crish/logger";
 import type { BackgroundCommandManager } from "@crish/agent-tools";
 
 export const ORCHESTRATOR_PROTOCOL_VERSION = STORED_EVENT_PROTOCOL_VERSION;
@@ -359,6 +360,11 @@ export interface AgentOrchestratorOptions {
   createId?: (prefix: string) => string;
   /** 鏍规嵁 cwd 鑾峰彇 BackgroundCommandManager锛岀敤浜?cancelRun 鏃剁骇鑱斿彇娑堝叧鑱旂殑鍚庡彴浠诲姟銆?*/
   getBackgroundCommandManager?: (cwd: string) => BackgroundCommandManager;
+  /**
+   * R6: Logger 实例（依赖注入）。不提供时使用静默记录器；不自行 createLogger（设计原则）。
+   * daemon（R7）创建 Logger 实例后通过此字段传入，与 orchestrator 共享 transport。
+   */
+  logger?: Logger;
 }
 
 export interface OrchestratorRunHandle {

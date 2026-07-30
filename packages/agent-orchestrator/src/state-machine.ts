@@ -9,7 +9,13 @@ import {
   RUN_LIFECYCLE_DEFINITION,
   type RunLifecycleState,
 } from "@crish/agent-core";
+import { CrishError } from "@crish/shared-types";
+import { TraceManager } from "@crish/telemetry";
 import type { RunStatus } from "./types";
+
+// 模块级 TraceManager，用于状态转换失败 span 埋点。
+// R6 阶段：6-B/6-D 后续将通过 OrchestratorDeps.telemetry 注入替换此实例。
+const traceManager = new TraceManager();
 
 // ─── 状态映射 ─────────────────────────────────────────────
 
@@ -90,7 +96,25 @@ export function assertRunStatusTransition(current: RunStatus, next: RunStatus): 
   if (current === next) return;
   const allowed = RUN_STATUS_TRANSITIONS[current];
   if (allowed?.has(next)) return;
-  throw new Error(`Invalid run status transition: ${current} -> ${next}`);
+  // R6: migrated from throw new Error(...) -> CrishError("runtime.transition_failed")
+  // 状态转换失败埋 telemetry span，字段：from/to/reason
+  const spanCtx = traceManager.startTrace("state_machine.transition", "orchestrator", {
+    from: current,
+    to: next,
+  });
+  traceManager.addSpanEvent(spanCtx.spanId, "transition_failed", {
+    from: current,
+    to: next,
+    reason: "illegal-transition",
+  });
+  traceManager.endSpan(spanCtx.spanId, "error");
+  throw new CrishError(
+    `Invalid run status transition: ${current} -> ${next}`,
+    "runtime.transition_failed",
+    "permanent",
+    false,
+    { from: current, to: next }
+  );
 }
 
 export function transitionRunStatus(current: RunStatus, next: RunStatus): RunStatus {

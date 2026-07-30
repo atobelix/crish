@@ -4,11 +4,10 @@
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { LlmApiMockServer, Scenarios } from './mock-server';
-// @ts-expect-error Round 4: agent-core 模块未创建，Round 5 重新启用
 import {
   executeWithFallback,
   type RecoveryPipelineConfig,
-} from '../../../recovery-pipeline';
+} from '@crish/agent-core';
 import type { ProviderStreamEvent } from '@crish/shared-types';
 import type { AgentProvider, AgentProviderRequest } from '../../types';
 

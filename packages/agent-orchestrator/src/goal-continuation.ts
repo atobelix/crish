@@ -43,6 +43,11 @@ export function advanceGoalStallState(
   goal: OrchestratorGoalRunState,
   decision: GoalContinuationDecision
 ): OrchestratorGoalRunState {
+  // R6: continuation 决策失败使用 goal.stalled / goal.loop_detected 错误码
+  // - goal.stalled：FNV-1a 签名连续 N 轮不变（stalledRounds 累加到达 maxStalledRounds）
+  // - goal.loop_detected：进度签名循环重复（A→B→A 模式，由 event-scan-goal-strategy.ts span 检测）
+  // 错误码注册于 shared-types/src/errors/codes.ts（R6 新增 goal 域）
+  // 评估逻辑不动：stall 状态通过返回值传递，不抛出异常（保持现有 return-based 控制流）
   if (decision.action !== "continue" || !decision.progressSignature) {
     return {
       status: goal.status,

@@ -1,6 +1,7 @@
 // packages/shared-types/src/errors/codes.ts
 // 错误码权威定义，来源：./03-ERROR-MIGRATION.md §2.2
-// 实测码数：64 正式码 + 10 reserved 码 = 74 码 / 19 域
+// 实测码数：67 正式码 + 10 reserved 码 = 77 码 / 20 域
+// （R6 扩展：新增 goal 域 3 码，event_store.read_failed 已在 R1 注册）
 
 export type CrishErrorCode =
   // ── config 域（3 正式码）──
@@ -96,13 +97,18 @@ export type CrishErrorCode =
   | 'common.unsupported'
   | 'common.not_found'
   // ── security 域（1 正式码，新增域）──
-  | 'security.ssrf_rejected';
+  | 'security.ssrf_rejected'
+  // ── goal 域（3 正式码，R6 新增域）──
+  // 用于 GoalLoopStrategy 的 FNV-1a 进度签名检测（与 agent.no_progress 语义不同）
+  | 'goal.stalled'
+  | 'goal.loop_detected'
+  | 'goal.max_rounds';
 
 /** 故障类别，保留现有 4 类（设计约束 1） */
 export type CrishErrorCategory =
   'transient' | 'permanent' | 'security' | 'protocol';
 
-/** 错误域枚举（19 域），用于按域聚合与路由 */
+/** 错误域枚举（20 域），用于按域聚合与路由 */
 export const CRISH_ERROR_DOMAINS = [
   'config',
   'session',
@@ -123,6 +129,7 @@ export const CRISH_ERROR_DOMAINS = [
   'telemetry',
   'common',
   'security',
+  'goal',
 ] as const;
 
 export type CrishErrorDomain = (typeof CRISH_ERROR_DOMAINS)[number];

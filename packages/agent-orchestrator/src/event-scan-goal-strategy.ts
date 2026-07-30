@@ -1,4 +1,6 @@
 import type { AgentEvent, AgentMessage } from "@crish/shared-types";
+import { CrishError } from "@crish/shared-types";
+import { TraceManager } from "@crish/telemetry";
 import type {
   GoalContinuationDecision,
   GoalLoopStrategy,
@@ -10,6 +12,10 @@ import type {
 
 export { assessGoalRound, goalContinuationDecisionFromAssessment } from "./task-assessment";
 import { assessGoalRound, goalContinuationDecisionFromAssessment } from "./task-assessment";
+
+// 模块级 TraceManager，用于 goal stall 检测 span 埋点。
+// R6 阶段：6-B/6-D 后续将通过 OrchestratorDeps.telemetry 注入替换此实例。
+const traceManager = new TraceManager();
 
 /**
  * 内置的 Goal 循环策略：基于 AgentEvent 流扫描。
@@ -53,6 +59,78 @@ export class EventScanGoalStrategy implements GoalLoopStrategy {
       roundIndex: input.roundIndex,
       events: input.events
     });
+
+    // R6: stall 检测 telemetry span 埋点
+    // 当 FNV-1a 进度签名与前一轮相同（stalledLimitReached）或 maxRoundsReached 时，
+    // 开 goal.stall_detect span 并构造 CrishError("goal.stalled"/"goal.max_rounds")。
+    // 评估逻辑不动：error 仅记录到 span，不抛出（保持现有 return-based 控制流）。
+    const goal = input.run.goal;
+    if (goal) {
+      const progressSignature = assessment.progress.signature;
+      const consecutiveStallCount = goal.stalledRounds;
+      const signatureUnchanged =
+        goal.lastProgressSignature !== undefined &&
+        progressSignature === goal.lastProgressSignature;
+
+      if (signatureUnchanged || (assessment.budget?.stalledLimitReached ?? false)) {
+        const spanCtx = traceManager.startTrace("goal.stall_detect", "orchestrator", {
+          roundIndex: String(input.roundIndex),
+          progressSignature,
+          consecutiveStallCount: String(consecutiveStallCount),
+          ...(goal.lastProgressSignature !== undefined
+            ? { goalRunId: goal.lastProgressSignature }
+            : {}),
+        });
+        // 构造 goal.stalled CrishError 并记录到 span（不抛出，保持评估逻辑不变）
+        const stallError = new CrishError(
+          `Goal stalled: progress signature unchanged for ${consecutiveStallCount + 1} rounds at round ${input.roundIndex}`,
+          "goal.stalled",
+          "permanent",
+          false,
+          {
+            roundIndex: input.roundIndex,
+            progressSignature,
+            consecutiveStallCount,
+          }
+        );
+        traceManager.addSpanEvent(spanCtx.spanId, "goal.stalled", {
+          errorCode: stallError.code,
+          roundIndex: input.roundIndex,
+          progressSignature,
+          consecutiveStallCount,
+        });
+        traceManager.endSpan(spanCtx.spanId, "error");
+      }
+
+      // goal.loop_detected：进度签名循环重复（A→B→A 模式）
+      // 检测条件：当前签名与最近一次不同，但 stalledRounds > 0 且签名发生变化（说明不是完全停滞而是循环）
+      if (!signatureUnchanged && consecutiveStallCount > 0 && goal.lastProgressSignature !== undefined) {
+        const spanCtx = traceManager.startTrace("goal.stall_detect", "orchestrator", {
+          roundIndex: String(input.roundIndex),
+          progressSignature,
+          consecutiveStallCount: "0",
+        });
+        const loopError = new CrishError(
+          `Goal loop detected: progress signature changed after stall at round ${input.roundIndex}`,
+          "goal.loop_detected",
+          "permanent",
+          false,
+          {
+            roundIndex: input.roundIndex,
+            progressSignature,
+            previousSignature: goal.lastProgressSignature,
+          }
+        );
+        traceManager.addSpanEvent(spanCtx.spanId, "goal.loop_detected", {
+          errorCode: loopError.code,
+          roundIndex: input.roundIndex,
+          progressSignature,
+          previousSignature: goal.lastProgressSignature,
+        });
+        traceManager.endSpan(spanCtx.spanId, "error");
+      }
+    }
+
     return goalContinuationDecisionFromAssessment(assessment);
   }
 

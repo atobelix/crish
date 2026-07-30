@@ -1,15 +1,23 @@
 /**
- * ControlBus — Run 控制意图队列
+ * ControlBus — Run 控制消息基础设施（三层）
  *
  * 在 session-loop 安全点 drain，避免用 Abort 实现「想停就停」。
- * 优先级（drain 聚合后）：force_cancel > cooperative_stop > soft_inject/steer/follow_up
  *
- * L1 分环（对齐 pi）：
+ * 三层消息基础设施（S9）：
+ * - L1 send(target, message)：点对点投递，用于直接指令传递（如 control intent）
+ * - L2 subscribe(eventType, handler)：AgentEvent 流订阅，返回 unsubscribe
+ * - L3 request(input)：request-response，入队控制意图并返回带稳定 id 的 intent
+ *
+ * 注意：此处 L1/L2/L3 指「消息基础设施层级」，与 RunControlLevelCode（L0–L3 协议级别）
+ * 是两个正交轴。RunControlLevelCode 见 ./types.ts levelForKind()。
+ *
+ * L3 drain 聚合后优先级：force_cancel > cooperative_stop > soft_inject/steer/follow_up
+ * L3 分环（对齐 pi）：
  * - soft_inject / steer → inputQueue.steer（下一安全点）
  * - follow_up → inputQueue.followUp（仅 run idle）
  */
 
-import type { AgentMessage } from '@crish/shared-types';
+import type { AgentEvent, AgentMessage } from '@crish/shared-types';
 import {
   injectRingForKind,
   isL1InjectKind,
@@ -51,8 +59,111 @@ export type ControlDrainAction =
       intents: RunControlIntent[];
     };
 
+// ─── L1 点对点 / L2 AgentEvent 流订阅 类型 ────────────────────
+
+/** L1 点对点接收器：接收 send() 投递的 AgentMessage */
+export type ControlBusTargetHandler = (message: AgentMessage) => void | Promise<void>;
+
+/** L2 AgentEvent 类型（取自 shared AgentEvent union 的 type 字段） */
+export type ControlBusEventType = AgentEvent['type'];
+
+/** L2 事件处理器：按订阅的 eventType 收窄事件类型 */
+export type ControlBusEventHandler<E extends ControlBusEventType = ControlBusEventType> = (
+  event: Extract<AgentEvent, { type: E }>,
+) => void | Promise<void>;
+
+/** L2 通配订阅处理器（接收任意 AgentEvent） */
+export type ControlBusAnyEventHandler = (event: AgentEvent) => void | Promise<void>;
+
+interface ControlBusSubscriber {
+  eventType: ControlBusEventType | '*';
+  handler: (event: AgentEvent) => void | Promise<void>;
+}
+
 export class ControlBus {
   private readonly queue: RunControlIntent[] = [];
+  private readonly targets = new Map<string, ControlBusTargetHandler>();
+  private readonly subscribers: ControlBusSubscriber[] = [];
+
+  // ─── L1：点对点 send ────────────────────────────────────────
+
+  /**
+   * 注册一个 L1 点对点接收目标；返回 unregister 函数。
+   * 同一 target 重复注册会覆盖前一个；旧 unregister 不会误删新注册者。
+   */
+  registerTarget(target: string, handler: ControlBusTargetHandler): () => void {
+    this.targets.set(target, handler);
+    return () => {
+      if (this.targets.get(target) === handler) {
+        this.targets.delete(target);
+      }
+    };
+  }
+
+  /**
+   * L1 点对点发送：将 message 投递到名为 target 的接收器。
+   * handler 同步调用；若返回 Promise 则 fire-and-forget（异步错误吞掉，调用方需在 handler 内自行 try/catch）。
+   * 返回是否成功投递（即 target 是否存在）。
+   */
+  send(target: string, message: AgentMessage): boolean {
+    const handler = this.targets.get(target);
+    if (handler === undefined) return false;
+    const result: unknown = handler(message);
+    if (result && typeof (result as Promise<void>).then === 'function') {
+      void (result as Promise<void>).catch(() => {
+        /* L1 fire-and-forget：异步错误不阻断总线 */
+      });
+    }
+    return true;
+  }
+
+  // ─── L2：AgentEvent 流订阅 ──────────────────────────────────
+
+  /** L2 订阅指定类型的 AgentEvent；返回 unsubscribe 函数。 */
+  subscribe<E extends ControlBusEventType>(
+    eventType: E,
+    handler: ControlBusEventHandler<E>,
+  ): () => void;
+  /** L2 订阅所有 AgentEvent（通配）；返回 unsubscribe 函数。 */
+  subscribe(eventType: '*', handler: ControlBusAnyEventHandler): () => void;
+  subscribe(
+    eventType: ControlBusEventType | '*',
+    handler: (event: AgentEvent) => void | Promise<void>,
+  ): () => void {
+    const entry: ControlBusSubscriber = {
+      eventType,
+      handler: handler as (event: AgentEvent) => void | Promise<void>,
+    };
+    this.subscribers.push(entry);
+    return () => {
+      const idx = this.subscribers.indexOf(entry);
+      if (idx >= 0) this.subscribers.splice(idx, 1);
+    };
+  }
+
+  /**
+   * L2 发布 AgentEvent：按 eventType 分发到所有匹配订阅者。
+   * 同步遍历；订阅器同步抛错 / 异步 reject 均被吞掉（observe 语义，不污染总线），
+   * 与 LifecycleHookRegistry.observe 容错一致。
+   */
+  publish(event: AgentEvent): void {
+    for (const sub of this.subscribers) {
+      if (sub.eventType === '*' || sub.eventType === event.type) {
+        try {
+          const result: unknown = sub.handler(event);
+          if (result && typeof (result as Promise<void>).then === 'function') {
+            void (result as Promise<void>).catch(() => {
+              /* L2 observe：异步订阅器失败不阻断总线 */
+            });
+          }
+        } catch {
+          /* L2 observe：同步订阅器失败不阻断总线 */
+        }
+      }
+    }
+  }
+
+  // ─── L3：request-response（控制意图队列） ───────────────────
 
   /** 入队一条控制意图；返回规范化后的 intent */
   request(input: RunControlIntentInput): RunControlIntent {
@@ -141,6 +252,15 @@ export class ControlBus {
 
   clear(): void {
     this.queue.length = 0;
+  }
+
+  /**
+   * 释放 L1/L2 资源（target handlers / subscribers）。
+   * 不影响 L3 queue；如需清空队列请用 clear()。
+   */
+  dispose(): void {
+    this.targets.clear();
+    this.subscribers.length = 0;
   }
 
   /**

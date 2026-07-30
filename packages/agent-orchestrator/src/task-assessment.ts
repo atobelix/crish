@@ -1,6 +1,7 @@
 import type { JsonObject, JsonValue } from "@crish/shared-types";
 import type { AgentEvent, AgentMessage, ToolBatchResult, ToolOutput } from "@crish/shared-types";
 import { compactJsonObject, isRecord, nonEmptyString, toJsonObject } from "@crish/shared-utils";
+import { TraceManager } from "@crish/telemetry";
 import type {
   GoalContinuationDecision,
   GoalContinuationDecisionSource,
@@ -10,6 +11,10 @@ import type {
   OrchestratorRunRecord,
   RunOutcomeReason
 } from "./types";
+
+// 模块级 TraceManager，用于 goal round 评估 span 埋点。
+// R6 阶段：6-B/6-D 后续将通过 OrchestratorDeps.telemetry 注入替换此实例。
+const traceManager = new TraceManager();
 
 export interface AssessGoalRoundInput {
   run: OrchestratorRunRecord;
@@ -34,6 +39,24 @@ interface EventFailure {
 type LooseAssessment = Partial<Record<keyof GoalRoundAssessment, unknown>>;
 
 export function assessGoalRound(input: AssessGoalRoundInput): GoalRoundAssessment {
+  // R6: 埋 telemetry span goal.round_assess（评估逻辑不动，仅外包一层 instrumentation）
+  const assessment = assessGoalRoundImpl(input);
+  const spanCtx = traceManager.startTrace("goal.round_assess", "orchestrator", {
+    roundIndex: String(input.roundIndex),
+    progressSignature: assessment.progress.signature,
+    eventCount: String(assessment.progress.eventCount),
+  });
+  traceManager.addSpanEvent(spanCtx.spanId, "assessed", {
+    roundIndex: input.roundIndex,
+    decision: assessment.state,
+    progressSignature: assessment.progress.signature,
+    eventCount: assessment.progress.eventCount,
+  });
+  traceManager.endSpan(spanCtx.spanId, assessment.state === "failed" ? "error" : "ok");
+  return assessment;
+}
+
+function assessGoalRoundImpl(input: AssessGoalRoundInput): GoalRoundAssessment {
   const progress = assessRoundProgress(input.events);
   const explicit = structuredGoalContinuationDecisionFromEvents(input.events);
   const budget = budgetAssessment(input.run);
@@ -97,7 +120,8 @@ export function assessGoalRound(input: AssessGoalRoundInput): GoalRoundAssessmen
   }
 
   if (budget?.maxRoundsReached) {
-    issues.push(`Goal reached the maximum round limit: ${budget.maxRounds}`);
+    // R6: maxRounds 达到时 issues 携带 goal.max_rounds 错误码
+    issues.push(`[errorCode=goal.max_rounds] Goal reached the maximum round limit: ${budget.maxRounds}`);
     return compactAssessment({
       state: "blocked",
       reason: `Goal reached the maximum round limit: ${budget.maxRounds}`,
@@ -114,6 +138,10 @@ export function assessGoalRound(input: AssessGoalRoundInput): GoalRoundAssessmen
   if (latestToolError) {
     const reason = "Goal round ended with tool errors and no typed continuation decision.";
     issues.push(reason);
+    // R6: stalledLimitReached 时 issues 携带 goal.stalled 错误码
+    if (budget?.stalledLimitReached) {
+      issues.push(`[errorCode=goal.stalled] Goal stalled limit reached: ${budget.stalledRounds}/${budget.maxStalledRounds}`);
+    }
     return compactAssessment({
       state: "no-progress",
       reason,
@@ -133,6 +161,10 @@ export function assessGoalRound(input: AssessGoalRoundInput): GoalRoundAssessmen
       ? "Goal round stopped after observable work but did not emit a typed continuation decision."
       : "Goal round ended without observable progress or a typed continuation decision.";
   issues.push(reason);
+  // R6: stalledLimitReached 时 issues 携带 goal.stalled 错误码
+  if (budget?.stalledLimitReached) {
+    issues.push(`[errorCode=goal.stalled] Goal stalled limit reached: ${budget.stalledRounds}/${budget.maxStalledRounds}`);
+  }
 
   return compactAssessment({
     state: progress.observed ? "blocked" : "no-progress",

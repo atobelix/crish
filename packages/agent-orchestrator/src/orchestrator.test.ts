@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AgentEvent, AgentMessage, ProviderDiagnostic } from '@crish/shared-types';
+import { getOrThrow, type AgentEvent, type AgentMessage, type ProviderDiagnostic } from '@crish/shared-types';
 import {
   ORCHESTRATOR_PROTOCOL_VERSION,
   type OrchestratorEvent,
@@ -49,12 +49,12 @@ describe('AgentOrchestrator', () => {
         ]),
     });
 
-    const handle = await orchestrator.startRun({
+    const handle = getOrThrow(await orchestrator.startRun({
       id: 'run_a',
       sessionId: 'session_a',
       cwd: 'C:/tmp',
       input: 'hello',
-    });
+    }));
     const events = await collect(handle.events);
 
     expect(events.map((event) => event.type)).toEqual([
@@ -80,9 +80,7 @@ describe('AgentOrchestrator', () => {
       outcome: 'completed',
       reason: 'completed',
     });
-    await expect(orchestrator.readRunEvents('run_a', 3)).resolves.toHaveLength(
-      3
-    );
+    expect(getOrThrow(await orchestrator.readRunEvents('run_a', 3))).toHaveLength(3);
   });
 
   it('streams message-delta live without blocking the drive loop on event-store append', async () => {
@@ -142,12 +140,12 @@ describe('AgentOrchestrator', () => {
     });
 
     const startedAt = Date.now();
-    const handle = await orchestrator.startRun({
+    const handle = getOrThrow(await orchestrator.startRun({
       id: 'run_delta',
       sessionId: 'session_delta',
       cwd: 'C:/tmp',
       input: 'stream please',
-    });
+    }));
     const events = await collect(handle.events);
     const elapsedMs = Date.now() - startedAt;
 
@@ -174,7 +172,7 @@ describe('AgentOrchestrator', () => {
     expect(appendCalls).toBeLessThan(DELTA_COUNT);
     expect(appendCalls).toBeGreaterThan(0);
 
-    const stored = await orchestrator.readRunEvents('run_delta');
+    const stored = getOrThrow(await orchestrator.readRunEvents('run_delta'));
     const storedRuntimeTypes = stored
       .filter((event) => event.type === 'runtime-event')
       .map((event) => (event.payload.event as { type?: string }).type);
@@ -206,12 +204,12 @@ describe('AgentOrchestrator', () => {
         }),
     });
 
-    const handle = await orchestrator.startRun({
+    const handle = getOrThrow(await orchestrator.startRun({
       id: 'run_delta_approval',
       sessionId: 'session_delta_approval',
       cwd: 'C:/tmp',
       input: 'hello',
-    });
+    }));
     const iterator = handle.events[Symbol.asyncIterator]();
 
     while (true) {
@@ -253,12 +251,12 @@ describe('AgentOrchestrator', () => {
         ]),
     });
 
-    const handle = await orchestrator.startRun({
+    const handle = getOrThrow(await orchestrator.startRun({
       id: 'run_durable_failure',
       sessionId: 'session_durable_failure',
       cwd: 'C:/tmp',
       input: 'hello',
-    });
+    }));
     const events = await collect(handle.events);
 
     expect(events).toHaveLength(1);
@@ -279,9 +277,10 @@ describe('AgentOrchestrator', () => {
       reason: 'event-store-write-failed',
       error: 'disk is read-only',
     });
-    await expect(
-      orchestrator.readRunEvents('run_durable_failure')
-    ).rejects.toThrow('disk is read-only');
+    const readResult = await orchestrator.readRunEvents('run_durable_failure');
+    expect(readResult.ok).toBe(false);
+    if (readResult.ok) throw new Error('expected readRunEvents to fail');
+    expect(readResult.error.message).toContain('disk is read-only');
   });
 
   it('marks a run as awaiting approval while runtime waits', async () => {
@@ -306,12 +305,12 @@ describe('AgentOrchestrator', () => {
         }),
     });
 
-    const handle = await orchestrator.startRun({
+    const handle = getOrThrow(await orchestrator.startRun({
       id: 'run_b',
       sessionId: 'session_b',
       cwd: 'C:/tmp',
       input: 'hello',
-    });
+    }));
     const iterator = handle.events[Symbol.asyncIterator]();
     const statuses: string[] = [];
 
@@ -360,13 +359,13 @@ describe('AgentOrchestrator', () => {
     });
     await orchestrator.createSession({ id: 'session_pending', cwd: 'C:/tmp' });
 
-    const queued = await orchestrator.enqueuePendingInput({
+    const queued = getOrThrow(await orchestrator.enqueuePendingInput({
       id: 'pending_1',
       sessionId: 'session_pending',
       runId: 'run_pending',
       text: ' continue after current run ',
       mode: 'after-current-run',
-    });
+    }));
 
     expect(queued.input).toMatchObject({
       id: 'pending_1',
@@ -583,9 +582,7 @@ describe('AgentOrchestrator', () => {
       },
     });
 
-    await expect(
-      orchestrator.readRunEvents(queuedRun.id)
-    ).resolves.toMatchObject([
+    expect(getOrThrow(await orchestrator.readRunEvents(queuedRun.id))).toMatchObject([
       { type: 'run-queued' },
       {
         type: 'run-failed',
@@ -595,9 +592,7 @@ describe('AgentOrchestrator', () => {
         },
       },
     ]);
-    await expect(
-      orchestrator.readRunEvents(runningRun.id)
-    ).resolves.toMatchObject([
+    expect(getOrThrow(await orchestrator.readRunEvents(runningRun.id))).toMatchObject([
       { type: 'run-queued' },
       { type: 'run-started' },
       {
@@ -608,9 +603,7 @@ describe('AgentOrchestrator', () => {
         },
       },
     ]);
-    await expect(
-      orchestrator.readRunEvents(approvalRun.id)
-    ).resolves.toMatchObject([
+    expect(getOrThrow(await orchestrator.readRunEvents(approvalRun.id))).toMatchObject([
       { type: 'run-queued' },
       { type: 'run-started' },
       { type: 'runtime-event' },
@@ -622,9 +615,7 @@ describe('AgentOrchestrator', () => {
         },
       },
     ]);
-    await expect(
-      orchestrator.readRunEvents(cancellingRun.id)
-    ).resolves.toMatchObject([
+    expect(getOrThrow(await orchestrator.readRunEvents(cancellingRun.id))).toMatchObject([
       { type: 'run-queued' },
       { type: 'run-started' },
       { type: 'run-cancel-requested' },
@@ -697,7 +688,7 @@ describe('AgentOrchestrator', () => {
         stoppedReason: 'blocked',
       },
     });
-    await expect(orchestrator.readRunEvents(run.id)).resolves.toHaveLength(1);
+    expect(getOrThrow(await orchestrator.readRunEvents(run.id))).toHaveLength(1);
   });
 
   it('preserves completed failed and cancelled records while restoring terminal history', async () => {
@@ -799,16 +790,14 @@ describe('AgentOrchestrator', () => {
       error: 'aborted by user',
       finishedAt: '2026-01-01T00:00:04.000Z',
     });
-    await expect(
-      orchestrator.readSessionEvents('session_restore_terminal')
-    ).resolves.toHaveLength(3);
-    await expect(orchestrator.readRunEvents(completedRun.id)).resolves.toEqual([
+    expect(getOrThrow(await orchestrator.readSessionEvents('session_restore_terminal'))).toHaveLength(3);
+    expect(getOrThrow(await orchestrator.readRunEvents(completedRun.id))).toEqual([
       terminalEvents[0],
     ]);
-    await expect(orchestrator.readRunEvents(failedRun.id)).resolves.toEqual([
+    expect(getOrThrow(await orchestrator.readRunEvents(failedRun.id))).toEqual([
       terminalEvents[1],
     ]);
-    await expect(orchestrator.readRunEvents(cancelledRun.id)).resolves.toEqual([
+    expect(getOrThrow(await orchestrator.readRunEvents(cancelledRun.id))).toEqual([
       terminalEvents[2],
     ]);
   });
@@ -824,12 +813,12 @@ describe('AgentOrchestrator', () => {
     });
     await orchestrator.createSession({ id: 'session_leaf', cwd: 'C:/tmp' });
 
-    const moved = await orchestrator.moveSessionLeaf({
+    const moved = getOrThrow(await orchestrator.moveSessionLeaf({
       sessionId: 'session_leaf',
       targetLeafId: 'leaf_target',
       reason: 'conversation-rewind',
       metadata: { boundaryId: 'boundary_1' },
-    });
+    }));
 
     expect(moved).toMatchObject({
       changed: true,
@@ -872,13 +861,14 @@ describe('AgentOrchestrator', () => {
       cwd: 'C:/tmp',
     });
 
-    await expect(
-      orchestrator.moveSessionLeaf({
-        sessionId: 'session_leaf_failure',
-        targetLeafId: 'leaf_target',
-        reason: 'conversation-rewind',
-      })
-    ).rejects.toThrow('disk is read-only');
+    const moveResult = await orchestrator.moveSessionLeaf({
+      sessionId: 'session_leaf_failure',
+      targetLeafId: 'leaf_target',
+      reason: 'conversation-rewind',
+    });
+    expect(moveResult.ok).toBe(false);
+    if (moveResult.ok) throw new Error('expected moveSessionLeaf to fail');
+    expect(moveResult.error.message).toContain('disk is read-only');
     expect(
       orchestrator.getSession('session_leaf_failure')?.currentLeafId
     ).toBeUndefined();
@@ -919,12 +909,12 @@ describe('AgentOrchestrator', () => {
         createId: (prefix) => `${prefix}_s_${++nextId}`,
       });
       await orch.createSession({ id: 'session_snap', cwd: 'C:/tmp' });
-      const handle = await orch.startRun({
+      const handle = getOrThrow(await orch.startRun({
         id: 'run_snap',
         sessionId: 'session_snap',
         cwd: 'C:/tmp',
         input: 'hi',
-      });
+      }));
       await collect(handle.events);
       expect(orch.getRun('run_snap')?.status).toBe('completed');
 
@@ -961,12 +951,12 @@ describe('AgentOrchestrator', () => {
         createId: (prefix) => `${prefix}_i_${++nextId}`,
       });
       await seed.createSession({ id: 'session_incr', cwd: 'C:/tmp' });
-      const handle = await seed.startRun({
+      const handle = getOrThrow(await seed.startRun({
         id: 'run_incr',
         sessionId: 'session_incr',
         cwd: 'C:/tmp',
         input: 'hi',
-      });
+      }));
       await collect(handle.events);
       await seed.persistStateSnapshot();
       const snap = await store.loadStateSnapshot();
@@ -1042,12 +1032,12 @@ describe('AgentOrchestrator', () => {
         createId: (prefix) => `${prefix}_f_${++nextId}`,
       });
       await seed.createSession({ id: 'session_fb', cwd: 'C:/tmp' });
-      const handle = await seed.startRun({
+      const handle = getOrThrow(await seed.startRun({
         id: 'run_fb',
         sessionId: 'session_fb',
         cwd: 'C:/tmp',
         input: 'hi',
-      });
+      }));
       await collect(handle.events);
       await seed.persistStateSnapshot();
       // Corrupt the snapshot sidecar
@@ -1081,28 +1071,28 @@ describe('AgentOrchestrator', () => {
       createRunEngine: () => engine,
     });
 
-    expect(orchestrator.steerRun('missing', 'hello')).toBe(false);
+    expect((await orchestrator.steerRun('missing', 'hello')).ok).toBe(true);
     expect(orchestrator.isRunActive('missing')).toBe(false);
 
-    const handle = await orchestrator.startRun({
+    const handle = getOrThrow(await orchestrator.startRun({
       id: 'run_c',
       sessionId: 'session_c',
       cwd: 'C:/tmp',
       input: 'hello',
-    });
+    }));
     const iterator = handle.events[Symbol.asyncIterator]();
     await iterator.next();
     await iterator.next();
 
     expect(orchestrator.isRunActive('run_c')).toBe(true);
-    expect(orchestrator.steerRun('run_c', 'nudge')).toBe(true);
+    expect((await orchestrator.steerRun('run_c', 'nudge')).ok).toBe(true);
     expect(engine.steered).toHaveLength(1);
     expect(engine.steered[0]?.blocks?.[0]).toMatchObject({
       type: 'text',
       text: 'nudge',
     });
 
-    expect(orchestrator.cancelRun('run_c')).toBe(true);
+    expect((await orchestrator.cancelRun('run_c')).ok).toBe(true);
     engine.release();
 
     const rest = await drain(iterator);
@@ -1121,18 +1111,18 @@ describe('AgentOrchestrator', () => {
       createRunEngine: () => engine,
     });
 
-    const handle = await orchestrator.startRun({
+    const handle = getOrThrow(await orchestrator.startRun({
       id: 'run_coop',
       sessionId: 'session_coop',
       cwd: 'C:/tmp',
       input: 'hello',
-    });
+    }));
     const iterator = handle.events[Symbol.asyncIterator]();
     await iterator.next();
     await iterator.next();
 
     expect(
-      orchestrator.cancelRun('run_coop', 'ui-stop', 'cooperative')
+      (await orchestrator.cancelRun('run_coop', 'ui-stop', 'cooperative')).ok
     ).toBe(true);
     // L2：不触发 abort
     expect(engine.abortReason).toBeUndefined();
@@ -1158,18 +1148,18 @@ describe('AgentOrchestrator', () => {
       createRunEngine: () => engine,
     });
 
-    const handle = await orchestrator.startRun({
+    const handle = getOrThrow(await orchestrator.startRun({
       id: 'run_force',
       sessionId: 'session_force',
       cwd: 'C:/tmp',
       input: 'hello',
-    });
+    }));
     const iterator = handle.events[Symbol.asyncIterator]();
     await iterator.next();
     await iterator.next();
 
     expect(
-      orchestrator.cancelRun('run_force', 'ui-force', 'force')
+      (await orchestrator.cancelRun('run_force', 'ui-force', 'force')).ok
     ).toBe(true);
     expect(engine.abortReason).toBe('ui-force');
     expect(engine.cooperativeStopReason).toBeUndefined();
@@ -1194,18 +1184,18 @@ describe('AgentOrchestrator', () => {
       createRunEngine: () => engine,
     });
 
-    const handle = await orchestrator.startRun({
+    const handle = getOrThrow(await orchestrator.startRun({
       id: 'run_coop_fallback',
       sessionId: 'session_coop_fallback',
       cwd: 'C:/tmp',
       input: 'hello',
-    });
+    }));
     const iterator = handle.events[Symbol.asyncIterator]();
     await iterator.next();
     await iterator.next();
 
     expect(
-      orchestrator.cancelRun('run_coop_fallback', 'no-bus', 'cooperative')
+      (await orchestrator.cancelRun('run_coop_fallback', 'no-bus', 'cooperative')).ok
     ).toBe(true);
     expect(engine.abortReason).toBe('no-bus');
 
@@ -1242,12 +1232,12 @@ describe('AgentOrchestrator', () => {
         ]),
     });
 
-    const handle = await orchestrator.startRun({
+    const handle = getOrThrow(await orchestrator.startRun({
       id: 'run_d',
       sessionId: 'session_d',
       cwd: 'C:/tmp',
       input: 'hello',
-    });
+    }));
     const events = await collect(handle.events);
 
     expect(events.map((event) => event.type)).toEqual([
@@ -1301,12 +1291,12 @@ describe('AgentOrchestrator', () => {
         ]),
     });
 
-    const handle = await orchestrator.startRun({
+    const handle = getOrThrow(await orchestrator.startRun({
       id: 'run_e',
       sessionId: 'session_e',
       cwd: 'C:/tmp',
       input: 'hello',
-    });
+    }));
     const events = await collect(handle.events);
 
     expect(events.map((event) => event.type)).toEqual([
@@ -1384,13 +1374,13 @@ describe('AgentOrchestrator', () => {
         }),
     });
 
-    const handle = await orchestrator.startGoalRun({
+    const handle = getOrThrow(await orchestrator.startGoalRun({
       id: 'run_goal',
       sessionId: 'session_goal',
       cwd: 'C:/tmp',
       input: 'ship the feature',
       goal: { maxRounds: 3 },
-    });
+    }));
     const events = await collect(handle.events);
 
     expect(inputs).toEqual(['ship the feature', 'verify the result']);
@@ -1480,13 +1470,13 @@ describe('AgentOrchestrator', () => {
         ]),
     });
 
-    const handle = await orchestrator.startGoalRun({
+    const handle = getOrThrow(await orchestrator.startGoalRun({
       id: 'run_no_progress',
       sessionId: 'session_no_progress',
       cwd: 'C:/tmp',
       input: 'finish a task',
       goal: { maxRounds: 3 },
-    });
+    }));
     const events = await collect(handle.events);
     const decision = events.find(
       (event) => event.type === 'goal-continuation-decided'
@@ -1543,13 +1533,13 @@ describe('AgentOrchestrator', () => {
         ]),
     });
 
-    const handle = await orchestrator.startGoalRun({
+    const handle = getOrThrow(await orchestrator.startGoalRun({
       id: 'run_budget',
       sessionId: 'session_budget',
       cwd: 'C:/tmp',
       input: 'long task',
       goal: { maxRounds: 1 },
-    });
+    }));
     const events = await collect(handle.events);
 
     expect(events.at(-1)?.type).toBe('run-failed');
@@ -1583,13 +1573,13 @@ describe('AgentOrchestrator', () => {
         ]),
     });
 
-    const handle = await orchestrator.startGoalRun({
+    const handle = getOrThrow(await orchestrator.startGoalRun({
       id: 'run_max',
       sessionId: 'session_max',
       cwd: 'C:/tmp',
       input: 'long task',
       goal: { maxRounds: 3 },
-    });
+    }));
     const events = await collect(handle.events);
 
     expect(events.at(-1)?.type).toBe('run-failed');
@@ -1628,13 +1618,13 @@ describe('AgentOrchestrator', () => {
         ]),
     });
 
-    const handle = await orchestrator.startGoalRun({
+    const handle = getOrThrow(await orchestrator.startGoalRun({
       id: 'run_goal_provider',
       sessionId: 'session_goal_provider',
       cwd: 'C:/tmp',
       input: 'long task',
       goal: { maxRounds: 3 },
-    });
+    }));
     const events = await collect(handle.events);
 
     expect(events.map((event) => event.type)).not.toContain(
@@ -1708,13 +1698,13 @@ describe('AgentOrchestrator', () => {
       createRunEngine: () => new FakeRunEngine(patched.shift() ?? []),
     });
 
-    const handle = await orchestrator.startGoalRun({
+    const handle = getOrThrow(await orchestrator.startGoalRun({
       id: 'run_goal_retry_rounds',
       sessionId: 'session_goal_retry',
       cwd: 'C:/tmp',
       input: 'long task',
       goal: { maxRounds: 3 },
-    });
+    }));
     const events = await collect(handle.events);
 
     // 退避轮不发 goal-round-completed；成功轮才计数
@@ -1747,13 +1737,13 @@ describe('AgentOrchestrator', () => {
         ]),
     });
 
-    const handle = await orchestrator.startGoalRun({
+    const handle = getOrThrow(await orchestrator.startGoalRun({
       id: 'run_goal_runtime',
       sessionId: 'session_goal_runtime',
       cwd: 'C:/tmp',
       input: 'long task',
       goal: { maxRounds: 3 },
-    });
+    }));
     const events = await collect(handle.events);
 
     expect(events.map((event) => event.type)).not.toContain(
@@ -1817,13 +1807,13 @@ describe('AgentOrchestrator', () => {
       createRunEngine: () => new FakeRunEngine(roundEvents.shift() ?? []),
     });
 
-    const handle = await orchestrator.startGoalRun({
+    const handle = getOrThrow(await orchestrator.startGoalRun({
       id: 'run_stalled',
       sessionId: 'session_stalled',
       cwd: 'C:/tmp',
       input: 'keep working',
       goal: { maxRounds: 5, maxStalledRounds: 1 },
-    });
+    }));
     const events = await collect(handle.events);
 
     expect(
@@ -1849,19 +1839,19 @@ describe('AgentOrchestrator', () => {
       createRunEngine: () => engine,
     });
 
-    const handle = await orchestrator.startGoalRun({
+    const handle = getOrThrow(await orchestrator.startGoalRun({
       id: 'run_cancel_goal',
       sessionId: 'session_cancel_goal',
       cwd: 'C:/tmp',
       input: 'keep working',
       goal: { maxRounds: 3 },
-    });
+    }));
     const iterator = handle.events[Symbol.asyncIterator]();
     await iterator.next();
     await iterator.next();
     await iterator.next();
 
-    expect(orchestrator.cancelRun('run_cancel_goal')).toBe(true);
+    expect((await orchestrator.cancelRun('run_cancel_goal')).ok).toBe(true);
     engine.release();
 
     const rest = await drain(iterator);

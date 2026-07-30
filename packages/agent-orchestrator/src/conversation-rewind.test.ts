@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CrishError } from "@crish/shared-types";
 import {
   planConversationRewind,
   planConversationRewindFromTargetFacts,
@@ -130,7 +131,8 @@ describe("planConversationRewind", () => {
   });
 
   it("rejects missing required workspace checkpoints and invalid tree targets", () => {
-    expect(() =>
+    // R6: throw new Error -> CrishError("store.write_failed", transient, retryable=true)
+    const checkpointError = captureThrow(() =>
       planConversationRewind({
         session: { id: "session_a", currentLeafId: "leaf_current" },
         entries: entries(),
@@ -141,9 +143,14 @@ describe("planConversationRewind", () => {
         checkpoint: undefined,
         restorePolicy: "required"
       })
-    ).toThrow(/requires a workspace checkpoint/);
+    );
+    expect(checkpointError).toBeInstanceOf(CrishError);
+    expect((checkpointError as CrishError).code).toBe("store.write_failed");
+    expect((checkpointError as CrishError).category).toBe("transient");
+    expect((checkpointError as CrishError).retryable).toBe(true);
 
-    expect(() =>
+    // R6: readBranchPath 在 session-tree.ts 中抛出 session.not_found
+    const missingTargetError = captureThrow(() =>
       planConversationRewind({
         session: { id: "session_a", currentLeafId: "leaf_current" },
         entries: entries(),
@@ -154,7 +161,9 @@ describe("planConversationRewind", () => {
         checkpoint: undefined,
         restorePolicy: undefined,
       })
-    ).toThrow(/not found/);
+    );
+    expect(missingTargetError).toBeInstanceOf(CrishError);
+    expect((missingTargetError as CrishError).code).toBe("session.not_found");
   });
 
   it("plans from resolved runtime rewind target facts without changing the daemon plan shape", () => {
@@ -213,7 +222,8 @@ describe("planConversationRewind", () => {
       })
     });
 
-    expect(() =>
+    // R6: throw new Error -> CrishError("session.invalid_state", permanent, retryable=false)
+    const error = captureThrow(() =>
       planConversationRewindFromTargetFacts({
         session: { id: "session_a", currentLeafId: "leaf_current" },
         entries: entries(),
@@ -224,7 +234,11 @@ describe("planConversationRewind", () => {
         checkpoint: undefined,
         restorePolicy: undefined,
       })
-    ).toThrow(/session-tree-target-leaf/);
+    );
+    expect(error).toBeInstanceOf(CrishError);
+    expect((error as CrishError).code).toBe("session.invalid_state");
+    expect((error as CrishError).category).toBe("permanent");
+    expect((error as CrishError).retryable).toBe(false);
   });
 });
 
@@ -255,4 +269,13 @@ function run(input: Pick<OrchestratorRunRecord, "id" | "sessionId" | "status">):
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z"
   };
+}
+
+function captureThrow(fn: () => unknown): unknown {
+  try {
+    fn();
+  } catch (e) {
+    return e;
+  }
+  throw new Error("expected function to throw but it did not");
 }
