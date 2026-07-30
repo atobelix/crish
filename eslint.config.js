@@ -82,6 +82,15 @@ export default tseslint.config(
     },
     rules: {
       'local/deprecated-requires-reference': 'error',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+      '@typescript-eslint/no-explicit-any': 'warn',
     },
     languageOptions: {
       ecmaVersion: 'latest',

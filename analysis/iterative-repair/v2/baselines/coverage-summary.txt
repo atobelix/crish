@@ -1,0 +1,27 @@
+﻿
+      [2mCoverage enabled with [22m[33mv8[39m
+[31m     → expected 'hsl(0, 0%, 94%)' to be 'hsl(35, 12%, 11%)' // Object.is equality[39m
+[31m     → expected 'hsl(0, 0%, 94%)' to be 'hsl(35, 12%, 11%)' // Object.is equality[39m
+[31m     → expected 'hsl(0, 0%, 94%)' to be 'hsl(35, 12%, 11%)' // Object.is equality[39m
+[90mstdout[2m | apps/crish-desktop/src/api/binaryFrame.test.ts[2m > [22m[2mbandwidth comparison: binary vs JSON tr
+ansports[2m > [22m[2m100KB raw: binary beats JSON+base64 (~25%) and giant JSON-array (≥65%)
+[22m[39m[bandwidth] 100KB raw → JSON+b64=136586B giantJSON≈371100B binary=102408B | vs b64: ratio=74.98% savings=25.0
+2% | vs giantJSON: ratio=27.60% savings=72.40%
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 54 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+    [90m112| [39m    [35mconst[39m r [33m=[39m [34mparseColorToOklch[39m([32m'hsl(35, 10%, 50% / 50%)'[39m)[
+33m;[39m
+[31m[1mAssertionError[22m: expected 'hsl(0, 0%, 94%)' to be 'hsl(35, 12%, 11%)' // Object.is equality[39m
+Expected: [32m"hsl([7m35, 12[27m%, [7m11[27m%)"[39m
+Received: [31m"hsl([7m0, 0[27m%, [7m94[27m%)"[39m
+    [90m258| [39m    [34mexpect[39m(below)[33m.[39m[34mtoBe[39m([32m'hsl(0, 0%, 94%)'[39m)[33m;[39m [90m//
+ 浅色文字[39m
+    [90m259| [39m    [34mexpect[39m(above)[33m.[39m[34mtoBe[39m([32m'hsl(35, 12%, 11%)'[39m)[33m;[39m [90m
+// 深色文字[39m
+[2m Test Files [22m [1m[31m16 failed[39m[22m[2m | [22m[1m[32m417 passed[39m[22m[2m | [22m[33m1 skipped[
+39m[90m (434)[39m
+[2m      Tests [22m [1m[31m54 failed[39m[22m[2m | [22m[1m[32m6132 passed[39m[22m[2m | [22m[33m5 skipped
+[39m[90m (6191)[39m
+[2m   Duration [22m 110.28s[2m (transform 50.49s, setup 134.31s, collect 175.61s, tests 271.07s, environment 80.11s,
+ prepare 90.17s)[22m
+
+

@@ -1,0 +1,98 @@
+﻿
+=== TSC PROJECT: packages/shared-types/tsconfig.json ===
+packages/shared-types/src/errors/classes.ts(4,32): error TS6133: 'getErrorInfo' is declared but its value is never read.
+packages/shared-types/src/errors/result.ts(91,32): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/result.ts(91,53): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/serialize.ts(44,13): error TS2540: Cannot assign to 'metadata' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(47,13): error TS2540: Cannot assign to 'cause' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(50,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(88,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+=== END: packages/shared-types/tsconfig.json (exit=2) ===
+=== TSC PROJECT: packages/shared-utils/tsconfig.json ===
+packages/shared-types/src/errors/classes.ts(4,32): error TS6133: 'getErrorInfo' is declared but its value is never read.
+packages/shared-types/src/errors/result.ts(91,32): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/result.ts(91,53): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/serialize.ts(44,13): error TS2540: Cannot assign to 'metadata' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(47,13): error TS2540: Cannot assign to 'cause' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(50,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(88,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+packages/shared-utils/src/retry.adversarial.test.ts(17,32): error TS6133: 'vi' is declared but its value is never read.
+packages/shared-utils/src/retry.adversarial.test.ts(17,36): error TS6133: 'beforeEach' is declared but its value is never read.
+packages/shared-utils/src/retry.adversarial.test.ts(17,48): error TS6133: 'afterEach' is declared but its value is never read.
+packages/shared-utils/src/retry.adversarial.test.ts(18,51): error TS6133: 'RetryOptions' is declared but its value is never read.
+packages/shared-utils/src/wal.adversarial.test.ts(18,32): error TS6133: 'beforeEach' is declared but its value is never read.
+packages/shared-utils/src/wal.adversarial.test.ts(19,53): error TS6133: 'mkdir' is declared but its value is never read.
+packages/shared-utils/src/wal.adversarial.test.ts(120,15): error TS6133: 'content' is declared but its value is never read.
+packages/shared-utils/src/wal.adversarial.test.ts(123,15): error TS6133: 'replayed' is declared but its value is never read.
+=== END: packages/shared-utils/tsconfig.json (exit=2) ===
+=== TSC PROJECT: packages/decision-engine/tsconfig.json ===
+packages/decision-engine/src/config-merger.adversarial.test.ts(30,48): error TS2459: Module '"./config-merger"' declares 'ConfigSource' locally, but it is not exported.
+packages/shared-types/src/errors/classes.ts(4,32): error TS6133: 'getErrorInfo' is declared but its value is never read.
+packages/shared-types/src/errors/result.ts(91,32): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/result.ts(91,53): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/serialize.ts(44,13): error TS2540: Cannot assign to 'metadata' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(47,13): error TS2540: Cannot assign to 'cause' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(50,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(88,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+=== END: packages/decision-engine/tsconfig.json (exit=2) ===
+=== TSC PROJECT: packages/agent-runtime/tsconfig.json ===
+packages/shared-types/src/errors/classes.ts(4,32): error TS6133: 'getErrorInfo' is declared but its value is never read.
+packages/shared-types/src/errors/result.ts(91,32): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/result.ts(91,53): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/serialize.ts(44,13): error TS2540: Cannot assign to 'metadata' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(47,13): error TS2540: Cannot assign to 'cause' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(50,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(88,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+=== END: packages/agent-runtime/tsconfig.json (exit=2) ===
+=== TSC PROJECT: packages/agent-orchestrator/tsconfig.json ===
+packages/shared-types/src/errors/classes.ts(4,32): error TS6133: 'getErrorInfo' is declared but its value is never read.
+packages/shared-types/src/errors/result.ts(91,32): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/result.ts(91,53): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/serialize.ts(44,13): error TS2540: Cannot assign to 'metadata' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(47,13): error TS2540: Cannot assign to 'cause' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(50,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(88,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+=== END: packages/agent-orchestrator/tsconfig.json (exit=2) ===
+=== TSC PROJECT: packages/agent-daemon/tsconfig.json ===
+packages/shared-types/src/errors/classes.ts(4,32): error TS6133: 'getErrorInfo' is declared but its value is never read.
+packages/shared-types/src/errors/result.ts(91,32): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/result.ts(91,53): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/serialize.ts(44,13): error TS2540: Cannot assign to 'metadata' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(47,13): error TS2540: Cannot assign to 'cause' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(50,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(88,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+=== END: packages/agent-daemon/tsconfig.json (exit=2) ===
+=== TSC PROJECT: packages/test-utils/tsconfig.json ===
+packages/shared-types/src/errors/classes.ts(4,32): error TS6133: 'getErrorInfo' is declared but its value is never read.
+packages/shared-types/src/errors/result.ts(91,32): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/result.ts(91,53): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/serialize.ts(44,13): error TS2540: Cannot assign to 'metadata' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(47,13): error TS2540: Cannot assign to 'cause' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(50,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(88,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+=== END: packages/test-utils/tsconfig.json (exit=2) ===
+=== TSC PROJECT: packages/plugin-sdk/tsconfig.json ===
+=== END: packages/plugin-sdk/tsconfig.json (exit=0) ===
+=== TSC PROJECT: apps/crish-desktop/tsconfig.app.json ===
+apps/crish-desktop/src/components/FileViewerCard.tsx(110,71): error TS2339: Property 'workspacePath' does not exist on type 'SessionState'.
+apps/crish-desktop/src/components/FileViewerCard.tsx(184,15): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+apps/crish-desktop/src/components/FileViewerCard.tsx(187,15): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+apps/crish-desktop/src/components/sidebar/useSidebarContextMenu.ts(215,24): error TS2339: Property 'deleteSession' does not exist on type 'SessionFacade'.
+packages/shared-types/src/errors/result.ts(91,32): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/result.ts(91,53): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/serialize.ts(44,13): error TS2540: Cannot assign to 'metadata' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(47,13): error TS2540: Cannot assign to 'cause' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(50,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(88,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+=== END: apps/crish-desktop/tsconfig.app.json (exit=2) ===
+=== TSC PROJECT: apps/agent-workbench/tsconfig.json ===
+packages/shared-types/src/errors/classes.ts(4,32): error TS6133: 'getErrorInfo' is declared but its value is never read.
+packages/shared-types/src/errors/result.ts(91,32): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/result.ts(91,53): error TS1361: 'CrishError' cannot be used as a value because it was imported using 'import type'.
+packages/shared-types/src/errors/serialize.ts(44,13): error TS2540: Cannot assign to 'metadata' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(47,13): error TS2540: Cannot assign to 'cause' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(50,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+packages/shared-types/src/errors/serialize.ts(88,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
+=== END: apps/agent-workbench/tsconfig.json (exit=2) ===

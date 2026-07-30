@@ -1,0 +1,25 @@
+﻿=== TSC PROJECT: packages\shared-types\tsconfig.json ===
+=== END: packages\shared-types\tsconfig.json (exit=0) ===
+=== TSC PROJECT: packages\shared-utils\tsconfig.json ===
+packages/shared-utils/src/retry.adversarial.test.ts(17,32): error TS6133: 'vi' is declared but its value is never read.
+packages/shared-utils/src/retry.adversarial.test.ts(17,36): error TS6133: 'beforeEach' is declared but its value is never read.
+packages/shared-utils/src/retry.adversarial.test.ts(17,48): error TS6133: 'afterEach' is declared but its value is never read.
+packages/shared-utils/src/retry.adversarial.test.ts(18,51): error TS6133: 'RetryOptions' is declared but its value is never read.
+packages/shared-utils/src/wal.adversarial.test.ts(18,32): error TS6133: 'beforeEach' is declared but its value is never read.
+packages/shared-utils/src/wal.adversarial.test.ts(19,53): error TS6133: 'mkdir' is declared but its value is never read.
+packages/shared-utils/src/wal.adversarial.test.ts(120,15): error TS6133: 'content' is declared but its value is never read.
+packages/shared-utils/src/wal.adversarial.test.ts(123,15): error TS6133: 'replayed' is declared but its value is never read.
+=== END: packages\shared-utils\tsconfig.json (exit=2) ===
+=== TSC PROJECT: packages\decision-engine\tsconfig.json ===
+packages/decision-engine/src/config-merger.adversarial.test.ts(30,48): error TS2459: Module '"./config-merger"' declares 'ConfigSource' locally, but it is not exported.
+=== END: packages\decision-engine\tsconfig.json (exit=1) ===
+=== TSC PROJECT: packages\agent-runtime\tsconfig.json ===
+=== END: packages\agent-runtime\tsconfig.json (exit=0) ===
+=== TSC PROJECT: packages\agent-orchestrator\tsconfig.json ===
+=== END: packages\agent-orchestrator\tsconfig.json (exit=0) ===
+=== TSC PROJECT: packages\agent-daemon\tsconfig.json ===
+=== END: packages\agent-daemon\tsconfig.json (exit=0) ===
+=== TSC PROJECT: packages\logger\tsconfig.json ===
+=== END: packages\logger\tsconfig.json (exit=0) ===
+=== TSC PROJECT: packages\telemetry\tsconfig.json ===
+=== END: packages\telemetry\tsconfig.json (exit=0) ===

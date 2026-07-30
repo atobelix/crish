@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "../../node_modules/.cache/agent-mcp.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts", "src/**/*.test.ts", "src/**/*.json"],
+  "exclude": []
+}

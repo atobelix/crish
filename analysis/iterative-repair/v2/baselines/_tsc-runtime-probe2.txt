@@ -1,0 +1,1 @@
+﻿packages/shared-types/src/errors/serialize.ts(88,13): error TS2540: Cannot assign to 'stack' because it is a read-only property.
