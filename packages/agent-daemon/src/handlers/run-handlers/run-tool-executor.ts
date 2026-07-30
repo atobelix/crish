@@ -8,7 +8,7 @@ import type { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
 import type { JsonObject, AgentEvent, AgentMessage } from "@crish/shared-types";
 import { toJsonObject } from "@crish/shared-utils";
-import { createTextMessage } from "@crish/agent-runtime";
+import { createTextMessage } from "@crish/agent-context";
 import type { OrchestratorEvent } from "@crish/agent-orchestrator";
 import { readEnv } from "../../env-whitelist.js";
 import { getDaemonLogger } from "../../daemon-logger.js";

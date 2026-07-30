@@ -1,13 +1,6 @@
-import {
-  ConfigMerger,
-  PROVIDER_CONFIG_SCHEMA,
-  type ConfigValidationResult,
-  type ConfigSourcePriority,
-} from '@crish/agent-runtime';
-import type {
-  OpenAICompatibleEndpoint,
-  SystemPromptWireMode,
-} from "@crish/agent-runtime";
+import { ConfigMerger, PROVIDER_CONFIG_SCHEMA } from "@crish/agent-core";
+import type { ConfigValidationResult, ConfigSourcePriority } from "@crish/agent-core";
+import type { OpenAICompatibleEndpoint, SystemPromptWireMode } from "@crish/agent-model";
 import { redactSensitive } from "@crish/shared-utils";
 import { getDaemonLogger } from "../daemon-logger.js";
 import {

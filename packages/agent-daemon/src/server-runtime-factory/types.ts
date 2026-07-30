@@ -1,13 +1,10 @@
-import type { AgentRuntimeOptions, AgentTool } from "@crish/agent-runtime";
+import type { AgentRuntimeOptions } from "@crish/agent-core";
+import type { AgentTool } from "@crish/shared-types";
 import type { JsonObject } from "@crish/shared-types";
 import type { DaemonConfig } from "../types.js";
 import type { ScopedContextStore } from "../scoped-context-store.js";
-import type {
-  BackgroundCommandManager,
-  McpLifecycleManager,
-  McpServerDefinition,
-  WorkspaceMutationCoordinator,
-} from "@crish/agent-runtime";
+import type { BackgroundCommandManager, WorkspaceMutationCoordinator } from "@crish/agent-tools";
+import type { McpLifecycleManager, McpServerDefinition } from "@crish/agent-mcp";
 import type {
   OrchestratorRunHandle,
   StartRunRequest,

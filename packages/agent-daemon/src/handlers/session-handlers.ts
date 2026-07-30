@@ -9,11 +9,7 @@
 import type { WebSocket } from "ws";
 import { errorMessage, toJsonObject } from "@crish/shared-utils";
 import type { JsonObject, AgentEvent } from "@crish/shared-types";
-import {
-  JsonlSessionStore,
-  moveSessionLeaf as moveRuntimeSessionLeaf,
-  restoreWorkspaceCheckpoint,
-} from "@crish/agent-runtime";
+import { JsonlSessionStore, moveSessionLeaf as moveRuntimeSessionLeaf, restoreWorkspaceCheckpoint } from "@crish/agent-context";
 import {
   AgentOrchestrator,
   planConversationRewind,
@@ -41,10 +37,7 @@ import {
   runtimeSessionStorePath,
   type DaemonConversationRewindBoundaryMissingFact,
 } from "../conversation-rewind-boundary.js";
-import type {
-  ConversationBoundaryManifestRecord,
-  ConversationRewindTargetFacts,
-} from "@crish/agent-runtime";
+import type { ConversationBoundaryManifestRecord, ConversationRewindTargetFacts } from "@crish/agent-context";
 import {
   createReadSessionEventsResponse,
   createReadRunEventsResponse,
@@ -554,7 +547,7 @@ async function restoreConversationRewindWorkspace(
           "Git checkpoint restore is missing checkpoint ref."
         );
       }
-      const { GitCliVersioningService } = await import("@crish/agent-runtime");
+      const { GitCliVersioningService } = await import("@crish/agent-tools");
       const result = await new GitCliVersioningService().restoreCheckpoint({
         cwd: workspaceRootForRestore(resolution, deps),
         checkpoint: restore.checkpoint,

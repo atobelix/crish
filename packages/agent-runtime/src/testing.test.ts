@@ -2,21 +2,23 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { AgentRuntime } from ".";
 import {
-  AgentRuntime,
   allowAllPermissionPolicy,
-  createScriptedProvider,
-  createScriptedTextProvider,
   createWriteFileTool,
   defineTextTool,
+} from "@crish/agent-tools";
+import {
+  createScriptedProvider,
+  createScriptedTextProvider,
   evaluateRuntimeStageRequirements,
   formatRuntimeStageSuiteResult,
+  runRuntimeStageSuite,
+  runRuntimeWithProbe,
   stageRequirementsPassed,
   summarizeRuntimeProbeReport,
-  type ProviderStreamEvent,
-  runRuntimeStageSuite,
-  runRuntimeWithProbe
-} from ".";
+} from "@crish/agent-core";
+import type { ProviderStreamEvent } from "@crish/shared-types";
 
 let workspaceRoot = "";
 

@@ -1,4 +1,4 @@
-import { AgentRuntime, type AgentRuntimeOptions } from "@crish/agent-runtime";
+import { AgentRuntime, type AgentRuntimeOptions } from "@crish/agent-core";
 import type { CreateRunEngineInput, RunEngine, RunEngineFactory } from "./types";
 
 export type AgentRuntimeOptionsFactory = (input: CreateRunEngineInput) => AgentRuntimeOptions | Promise<AgentRuntimeOptions>;

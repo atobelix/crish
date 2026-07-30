@@ -1,8 +1,5 @@
-import type { AgentTool } from "@crish/agent-runtime";
-import {
-  BackgroundCommandManager,
-  WorkspaceMutationCoordinator,
-} from "@crish/agent-runtime";
+import type { AgentTool } from "@crish/shared-types";
+import { BackgroundCommandManager, WorkspaceMutationCoordinator } from "@crish/agent-tools";
 import { BoundedMap } from "@crish/shared-utils";
 import { resolve } from "node:path";
 import type {

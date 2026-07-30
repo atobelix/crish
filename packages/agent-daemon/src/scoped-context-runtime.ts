@@ -5,13 +5,15 @@ import {
   loadScopedContextResources,
   promptContextMetadataJson,
   resolveScopedContext,
-  type LoadScopedContextResourcesOptions,
-  type PromptAssemblyContextBlock,
-  type ScopedContextResolution,
-  type ScopedContextResolverProject,
-  type ScopedContextResourceDiagnostic,
-  type ScopedContextRecord as RuntimeScopedContextRecord,
-} from "@crish/agent-runtime";
+} from "@crish/agent-context";
+import type {
+  LoadScopedContextResourcesOptions,
+  PromptAssemblyContextBlock,
+  ScopedContextResolution,
+  ScopedContextResolverProject,
+  ScopedContextResourceDiagnostic,
+  ScopedContextRecord as RuntimeScopedContextRecord,
+} from "@crish/agent-context";
 import { stat, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";

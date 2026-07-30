@@ -1,130 +1,92 @@
 /**
- * @deprecated @crish/agent-runtime is deprecated.
- * Import from @crish/agent-tools, @crish/agent-model, @crish/agent-mcp directly.
- * This shim will be removed in v0.3.0.
+ * @deprecated @crish/agent-runtime is deprecated. This shim will be removed in v0.3.0.
  *
- * 共存阶段（guardrails 禁令 23）：被迁移的源文件保留在本包中，
- * 现有 `export *` 暂时指向本地源文件。删除阶段在 Round 5（agent-core 创建后）执行，
- * 届时本 shim 将改为从 @crish/agent-tools / @crish/agent-model / @crish/agent-mcp re-export。
+ * Import from the split sub-packages directly:
+ * - @crish/agent-core        — AgentRuntime, SessionLoop, ControlBus, SteeringCoordinator,
+ *                              ErrorClassifier, RecoveryPipeline, Hooks, ContextManager
+ * - @crish/agent-subagent    — SubagentDepthGuard, SubagentScheduler, RecursionGuard
+ * - @crish/agent-tools       — ToolDefinition, ToolRegistry, ToolMiddleware, local-tools
+ * - @crish/agent-model       — Engine, ProviderFactory, ProviderRegistry, provider gateway
+ * - @crish/agent-mcp         — McpLifecycleManager, McpServerController
+ * - @crish/agent-context     — ContextCompressor, CheckpointManager, SessionStore, session
+ * - @crish/agent-permissions — ApprovalPipeline, TrustZonePermissionPolicy, SecretRedactor
  *
+ * 依据禁令 24（Legacy Shim 约束）：
+ * - 使用显式命名导出，禁止 `export *`（避免符号冲突）
+ * - 模块加载时输出一次 deprecation warning
+ * - 移除时间表：v0.3.0（删除阶段 R12）
+ *
+ * @see @crish/agent-core
+ * @see @crish/agent-subagent
  * @see @crish/agent-tools
  * @see @crish/agent-model
  * @see @crish/agent-mcp
- * @removeWhen Round 5 agent-core 创建后删除本地源文件并改为 re-export
+ * @see @crish/agent-context
+ * @see @crish/agent-permissions
+ * @removeWhen v0.3.0 — 所有消费者完成 import 路径迁移后删除本 shim（R12 CI 门禁强制）
  */
 
 if (typeof console !== 'undefined') {
   console.warn(
-    '[deprecated] @crish/agent-runtime is deprecated, import from @crish/agent-tools / @crish/agent-model / @crish/agent-mcp directly'
+    '[deprecated] @crish/agent-runtime is deprecated. Import from @crish/agent-core / @crish/agent-subagent / @crish/agent-tools / @crish/agent-model / @crish/agent-mcp / @crish/agent-context / @crish/agent-permissions directly. This shim will be removed in v0.3.0.'
   );
 }
 
-export * from './runtime';
-export * from './runtime-defaults';
-export * from './runtime-metrics';
-export * from './background-command';
-export * from './script-wait-policy';
-export * from './blob-externalization';
-export * from './checkpoints';
-export * from './checkpoint-manifest';
-export * from './context-compression';
-export * from './context-projection';
-export * from './context-state';
-export * from './conversation-boundary-manifest';
-export * from './conversation-rewind-target';
-export * from './encoding';
-export * from './git-versioning';
-export * from './session';
-export * from './skills';
-export * from './local-tools';
-export * from './memory';
-export * from './mcp-lifecycle';
-export * from './model-routing';
-// @deprecated 权限和命令分类已迁移至 @crish/decision-engine @see @crish/decision-engine @removeWhen 所有外部消费者从 @crish/decision-engine 导入
+// ─── agent-core（运行时执行内核） ───
+export { type IAgentRuntime, AgentRuntime } from '@crish/agent-core';
+export { AgentSessionLoop } from '@crish/agent-core';
+export { ControlBus } from '@crish/agent-core';
+export { SteeringCoordinator, type SteeringStrategy } from '@crish/agent-core';
 export {
-  classifyTerminalCommand,
-  getHardlineCommandBlock,
-  type CommandRisk,
-  type CommandClassification,
-} from './permission/command-classification';
-export * from './plan-document';
-export * from './prompt-context';
-export * from './prompt-assembly';
-export * from './project-progress-ledger';
-export * from './provider-gateway';
-export * from './provider-cache-hints';
-export * from './provider-openai-compatible';
-export * from './provider-anthropic';
-export * from './anthropic-request-build';
-export * from './anthropic-stream-parse';
-export * from './provider-gemini';
-export * from './gemini-request-build';
-export * from './gemini-stream-parse';
-export * from './provider-stream-contract';
-export * from './preview-queue';
-export * from './plugin-registry';
-export type {
-  PluginManifest as FsPluginManifest,
-  PluginAPI,
-} from './plugin-fs-registry';
+  ErrorClassifier,
+  type ClassifiedError,
+  type ErrorDomain,
+} from '@crish/agent-core';
+export { type RecoveryPipelineConfig, type PipelineResult } from '@crish/agent-core';
 export {
-  PluginRegistry as FsPluginRegistry,
-  pluginRegistry,
-} from './plugin-fs-registry';
-export * from './rich-read';
-export * from './resource-uri';
-export * from './lsp-tools';
-export * from './scoped-context';
-export * from './scoped-context-resources';
-export * from './secrets-obfuscation';
-export * from './snapshots';
-export * from './structured-summary';
-export * from './subagent-context-pack';
-export * from './subagents';
-export * from './testing';
-export * from './tool-discovery';
-export * from './tool-output-budget';
-export * from './tool-output-guard';
-export * from './goal-disk-oracle';
-export * from './response-style';
-export * from './tools';
+  LifecycleHookRegistry,
+  type LifecycleEventType,
+} from '@crish/agent-core';
+
+// ─── agent-subagent（子代理调度骨架） ───
+export {
+  type SubagentDepthGuard,
+  type SubagentMode,
+  type SubagentStatus,
+} from '@crish/agent-subagent';
+
+// ─── agent-tools（工具系统） ───
 export {
   type ToolDefinition,
   type ToolRegistrationOptions,
   RegisteredTool,
-  type LlmToolDefinition,
-  ToolRegistry as AdvancedToolRegistry,
-} from './tools/index';
-export {
   type ToolMiddleware,
-  type MiddlewareBeforeResult,
-  type MiddlewareAfterResult,
-  PermissionMiddleware,
-  type PermissionMiddlewareOptions,
-  CheckpointMiddleware,
-  type CheckpointMiddlewareOptions,
-  OutputMaterializationMiddleware,
-  type OutputMaterializationMiddlewareOptions,
-} from './tools/index';
-export * from './types';
-export * from './workspace-mutation-coordinator';
-export * from './state-machine';
-export * from './event-architecture';
-export * from './runtime-components';
-export * from './provider';
-export * from './provider-transport';
-export * from './provider-request-machine';
-export * from './path-handling';
-export * from './rendering';
-export * from './config';
-// Permission modules moved to @crish/decision-engine in Step 2
-export * from './session-store';
-export * from './process-lifecycle';
-export * from './checkpoint';
-export * from './event-queue';
-export * from './trace';
-export * from './steering';
-export * from './hooks';
-export * from './control';
-export * from './agent-input-queue';
-export * from './event-protocol';
+  ToolRegistry,
+} from '@crish/agent-tools';
+
+// ─── agent-model（Provider 系统） ───
+export {
+  type Engine,
+  type ProviderDef,
+  ProviderFactory,
+  ProviderRegistry,
+} from '@crish/agent-model';
+
+// ─── agent-mcp（MCP 生命周期） ───
+export {
+  McpLifecycleManager,
+  type McpServerDefinition,
+} from '@crish/agent-mcp';
+
+// ─── agent-context（上下文域） ───
+export {
+  CheckpointManager,
+  type SessionStore,
+} from '@crish/agent-context';
+
+// ─── agent-permissions（信任执行） ───
+export {
+  ApprovalPipeline,
+  TrustZonePermissionPolicy,
+  SecretRedactor,
+} from '@crish/agent-permissions';

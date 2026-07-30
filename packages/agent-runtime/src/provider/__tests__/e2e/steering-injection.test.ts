@@ -1,10 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { LlmApiMockServer, Scenarios } from "./mock-server";
-import {
-  AgentRuntime,
-  createTextMessage,
-  InMemorySessionStore,
-} from "../../..";
+import { AgentRuntime } from "../../..";
+import { createTextMessage, InMemorySessionStore } from "@crish/agent-context";
 import type { AgentEvent } from "@crish/shared-types";
 import type { AgentProvider } from "../../../types";
 

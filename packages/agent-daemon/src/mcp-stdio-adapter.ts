@@ -5,12 +5,8 @@
  * 失败时抛出明确错误，由 lifecycle 记为 degraded）。
  */
 
-import type {
-  AgentTool,
-  McpServerAdapter,
-  McpServerConnection,
-  McpServerStartContext,
-} from '@crish/agent-runtime';
+import type { AgentTool } from "@crish/shared-types";
+import type { McpServerAdapter, McpServerConnection, McpServerStartContext } from "@crish/agent-mcp";
 import type {
   JsonObject,
   ToolExecutionContext,

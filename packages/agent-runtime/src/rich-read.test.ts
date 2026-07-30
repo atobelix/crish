@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createRichReadTool, type RichReadProvider } from ".";
+import { createRichReadTool, type RichReadProvider } from "@crish/agent-tools";
 import type { ToolExecutionContext } from "@crish/shared-types";
 
 let workspaceRoot = "";

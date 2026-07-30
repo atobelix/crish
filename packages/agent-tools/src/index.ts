@@ -124,6 +124,11 @@ export {
   createBackgroundCommandTools,
   createBackgroundCommandToolsLegacy,
 } from './background-command';
+export type {
+  BackgroundCommandManagerOptions,
+  BackgroundCommandSnapshot,
+  BackgroundCommandStartInput,
+} from './background-command';
 
 export {
   WorkspaceMutationLeaseError,
@@ -168,10 +173,15 @@ export {
   createRichReadArtifactResolver,
   isResourceNotFoundError,
   isResourceUnsupportedError,
+  type ResourceMetadata,
 } from './resource-uri';
 
 export { GitCliVersioningService } from './git-versioning/git-service';
-export type { GitVersioningService } from './git-versioning/git-types';
+export type {
+  GitVersioningService,
+  GitCheckpointDiffFile,
+  GitStatusEntry,
+} from './git-versioning/git-types';
 
 export { formatSkillInvocation } from './skills';
 

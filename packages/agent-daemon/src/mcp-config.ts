@@ -6,10 +6,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import type {
-  McpServerAdapter,
-  McpServerDefinition,
-} from '@crish/agent-runtime';
+import type { McpServerAdapter, McpServerDefinition } from "@crish/agent-mcp";
 import type { DaemonMcpServerConfig } from './types.js';
 import { createStdioMcpAdapter } from './mcp-stdio-adapter.js';
 

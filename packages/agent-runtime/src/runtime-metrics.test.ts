@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   calculateRuntimeMetricPercentile,
   collectRuntimeMetricsSnapshot,
-  createTextMessage,
   RuntimeMetricsCollector,
-} from ".";
+} from "@crish/agent-core";
+import { createTextMessage } from "@crish/agent-context";
 import type { AgentEvent, JsonObject, ToolBatchResult } from "@crish/shared-types";
 
 const timestamp = "2026-06-08T00:00:00.000Z";

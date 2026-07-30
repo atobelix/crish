@@ -127,6 +127,31 @@ export {
   ProtocolError,
 } from './errors';
 export type { SessionErrorCode } from './errors';
+export type {
+  CrishErrorCode,
+  CrishErrorCategory,
+  CrishErrorDomain,
+} from './errors/codes';
+export {
+  CRISH_ERROR_DOMAINS,
+  domainOf,
+  isCrishErrorCode,
+} from './errors/codes';
+export type { CrishResult } from './errors/result';
+export {
+  ok,
+  err,
+  getOrThrow,
+  unwrapOr,
+  mapResult,
+  flatMapResult,
+  mapErr,
+  match,
+  isOk,
+  isErr,
+  fromPromise,
+  promiseResult,
+} from './errors/result';
 
 // Provider 默认配置
 export type {

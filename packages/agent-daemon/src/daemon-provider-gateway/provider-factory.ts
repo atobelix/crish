@@ -1,18 +1,5 @@
-import {
-  createAnthropicProviderFromPlan,
-  createGeminiProviderFromPlan,
-  OpenAICompatibleProvider,
-  type AgentProvider,
-  type OpenAICompatibleEndpoint,
-  type OpenAICompatibleProviderOptions,
-  type ProviderEndpointSupport,
-  type ProviderFactoryPlan,
-  type ProviderGatewayPlan,
-  type ProviderRouteOffer,
-  type ProviderStreamingSupport,
-  stringField,
-  profileFromProviderRouteOffer,
-} from "@crish/agent-runtime";
+import { createAnthropicProviderFromPlan, createGeminiProviderFromPlan, OpenAICompatibleProvider, stringField, profileFromProviderRouteOffer } from "@crish/agent-model";
+import type { AgentProvider, OpenAICompatibleEndpoint, OpenAICompatibleProviderOptions, ProviderEndpointSupport, ProviderFactoryPlan, ProviderGatewayPlan, ProviderRouteOffer, ProviderStreamingSupport, TaskCapabilityRequest } from "@crish/agent-model";
 import type { JsonObject } from "@crish/shared-types";
 import { toJsonObject } from "@crish/shared-utils";
 import type {
@@ -135,7 +122,7 @@ export function streamingSupportFromConfig(
 
 export function capabilityRequestFromConfig(
   config: Pick<NormalizedDaemonProviderRuntimeConfig, 'endpoint' | 'stream'>
-): import("@crish/agent-runtime").TaskCapabilityRequest {
+): TaskCapabilityRequest {
   return {
     requiredEndpointSupport: [config.endpoint!],
     requiredStreamingSupport: [streamingSupportFromConfig(config)],

@@ -3,10 +3,7 @@
  * （desktop L2/L3 对接；daemon 不改 UI）
  */
 import { describe, expect, it, vi } from 'vitest';
-import {
-  LifecycleHookRegistry,
-  registerBuiltinHealthHooks,
-} from '@crish/agent-runtime';
+import { LifecycleHookRegistry, registerBuiltinHealthHooks } from "@crish/agent-core";
 import { validateInboundMessage } from '../protocol/protocol.js';
 import { RunHandler, type RunHandlerOptions } from './run-handlers.js';
 import { StreamBackpressureRegistry } from '../stream-backpressure.js';

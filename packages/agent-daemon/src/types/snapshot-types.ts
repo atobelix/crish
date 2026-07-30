@@ -1,5 +1,5 @@
 import type { JsonObject } from "@crish/shared-types";
-import type { OpenAICompatibleEndpoint } from "@crish/agent-runtime";
+import type { OpenAICompatibleEndpoint } from "@crish/agent-model";
 import type {
   DaemonProviderCredentialMode,
   DaemonProviderReadiness,

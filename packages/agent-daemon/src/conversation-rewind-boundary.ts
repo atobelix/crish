@@ -2,18 +2,8 @@ import { createHash } from "node:crypto";
 import { resolve, join } from "node:path";
 import { errorMessage } from "@crish/shared-utils";
 import type { JsonObject } from "@crish/shared-types";
-import {
-  CheckpointManifestService,
-  ConversationBoundaryManifestService,
-  JsonlSessionStore,
-  resolveConversationRewindTargetFacts,
-  type CheckpointManifestRecord,
-  type ConversationBoundaryManifestRecord,
-  type ConversationRewindBoundaryTargetMode,
-  type ConversationRewindMissingFact,
-  type ConversationRewindTargetFacts,
-  type SessionEntry,
-} from "@crish/agent-runtime";
+import { CheckpointManifestService, ConversationBoundaryManifestService, JsonlSessionStore, resolveConversationRewindTargetFacts } from "@crish/agent-context";
+import type { CheckpointManifestRecord, ConversationBoundaryManifestRecord, ConversationRewindBoundaryTargetMode, ConversationRewindMissingFact, ConversationRewindTargetFacts, SessionEntry } from "@crish/agent-context";
 import {
   planConversationRewindFromTargetFacts,
   type AgentOrchestrator,

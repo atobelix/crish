@@ -2,14 +2,14 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { AgentRuntime } from ".";
+import { allowAllPermissionPolicy } from "@crish/agent-tools";
 import {
-  AgentRuntime,
-  allowAllPermissionPolicy,
   createTextMessage,
   InMemorySessionStore,
   nowIso,
   SessionRecorder,
-} from ".";
+} from "@crish/agent-context";
 import type { AgentEvent, ContextCompressionRecord, JsonObject } from "@crish/shared-types";
 import type { AgentProvider, AgentProviderRequest, AgentTool } from "./types";
 

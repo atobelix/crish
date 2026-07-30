@@ -1,5 +1,5 @@
-import { ProviderGatewayError } from "@crish/agent-runtime";
-import type { ProviderGatewayPlan } from "@crish/agent-runtime";
+import { ProviderGatewayError } from "@crish/agent-model";
+import type { ProviderGatewayPlan } from "@crish/agent-model";
 import type { JsonObject } from "@crish/shared-types";
 import { toJsonObject } from "@crish/shared-utils";
 import type {

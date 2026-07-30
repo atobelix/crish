@@ -16,7 +16,8 @@ import { DaemonLifecycleTracker, type DaemonLifecycleErrorInput } from "../daemo
 import type { DaemonRuntimeConfigUpdate } from "../server-handlers.js";
 import { RunHandler, correlateResponse } from "../handlers/run-handlers.js";
 import { DaemonRequestHandlers } from "../server-handlers.js";
-import type { AgentRuntimeOptions, McpServerDefinition } from "@crish/agent-runtime";
+import type { AgentRuntimeOptions } from "@crish/agent-core";
+import type { McpServerDefinition } from "@crish/agent-mcp";
 import { DaemonStoreRegistry } from "./store-registry.js";
 import { DaemonConnectionManager } from "./connection-manager.js";
 import { DaemonMessageRouter } from "./message-router.js";

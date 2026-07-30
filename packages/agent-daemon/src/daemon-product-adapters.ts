@@ -1,10 +1,5 @@
-import {
-  CheckpointManifestService,
-  JsonlMemoryStore,
-  type MemoryEntry,
-  type MemoryScope,
-  type CheckpointManifestRecord,
-} from "@crish/agent-runtime";
+import { CheckpointManifestService, JsonlMemoryStore } from "@crish/agent-context";
+import type { MemoryEntry, MemoryScope, CheckpointManifestRecord } from "@crish/agent-context";
 import {
   BlobArtifactStore,
   type ContentAddressedBlobRecord,

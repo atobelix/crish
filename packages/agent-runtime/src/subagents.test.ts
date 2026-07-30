@@ -1,5 +1,8 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { createScriptedProvider, createSubagentTool, defineTextTool, InMemoryContextState, ProjectProgressLedger, resetSubagentActiveCount } from ".";
+import { createScriptedProvider } from "@crish/agent-core";
+import { createSubagentTool, resetSubagentActiveCount } from "@crish/agent-subagent";
+import { defineTextTool } from "@crish/agent-tools";
+import { InMemoryContextState, ProjectProgressLedger } from "@crish/agent-context";
 import type { AgentProviderRequest } from "./types";
 import type { ToolExecutionContext, ToolProgressUpdate } from "@crish/shared-types";
 

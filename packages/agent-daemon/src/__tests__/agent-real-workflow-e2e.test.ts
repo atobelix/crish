@@ -16,15 +16,9 @@ import {
   resolveConversationRewindBoundary,
   previewConversationRewindByBoundary,
 } from "../conversation-rewind-boundary.js";
-import {
-  CheckpointManifestService,
-  ConversationBoundaryManifestService,
-  type AgentProvider,
-  type AgentProviderRequest,
-  type ProviderStreamEvent,
-  type ToolExecutionContext,
-  type ToolProgressUpdate,
-} from "@crish/agent-runtime";
+import { CheckpointManifestService, ConversationBoundaryManifestService } from "@crish/agent-context";
+import type { AgentProvider, AgentProviderRequest } from "@crish/agent-model";
+import type { ProviderStreamEvent, ToolExecutionContext, ToolProgressUpdate } from "@crish/shared-types";
 import {
   resolveDaemonCheckpointManifestPath,
   resolveDaemonConversationBoundaryManifestPath,

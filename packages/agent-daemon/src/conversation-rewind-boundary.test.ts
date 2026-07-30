@@ -4,15 +4,10 @@ import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket, { type RawData } from "ws";
-import {
-  CheckpointManifestService,
-  ConversationBoundaryManifestService,
-  createScriptedProvider,
-  checkpointToArtifact,
-  createWorkspaceCheckpoint,
-  type AgentProvider,
-  type AgentTool,
-} from "@crish/agent-runtime";
+import { CheckpointManifestService, ConversationBoundaryManifestService, checkpointToArtifact, createWorkspaceCheckpoint } from "@crish/agent-context";
+import { createScriptedProvider } from "@crish/agent-core";
+import type { AgentProvider } from "@crish/agent-model";
+import type { AgentTool } from "@crish/shared-types";
 import { DaemonServer } from "./server.js";
 import { removeTempDirs } from "./test-temp-cleanup.js";
 import {

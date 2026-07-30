@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { assemblePromptForProvider, createTextMessage, defineTextTool, selectPromptCacheStrategy } from ".";
+import { assemblePromptForProvider, createTextMessage, selectPromptCacheStrategy } from "@crish/agent-context";
+import { defineTextTool } from "@crish/agent-tools";
 import type { JsonObject } from "@crish/shared-types";
 
 function shellTool(inputSchema: JsonObject = commandSchema()): ReturnType<typeof defineTextTool> {

@@ -1,12 +1,6 @@
 import type { JsonObject } from "@crish/shared-types";
-import {
-  ConfigMerger,
-  RUNTIME_CONFIG_SCHEMA,
-  CONFIG_SOURCE_PRIORITIES,
-  type ConfigSource,
-  type ConfigSourcePriority,
-  type ConfigValidationResult,
-} from "@crish/agent-runtime";
+import { ConfigMerger, RUNTIME_CONFIG_SCHEMA, CONFIG_SOURCE_PRIORITIES } from "@crish/agent-core";
+import type { ConfigSource, ConfigSourcePriority, ConfigValidationResult } from "@crish/agent-core";
 import type { DaemonConfig } from "../types.js";
 import { normalizeDaemonPermissionMode } from "../daemon-permission-policy.js";
 import { getDaemonLogger } from "../daemon-logger.js";

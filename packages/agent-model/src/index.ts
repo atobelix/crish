@@ -37,6 +37,8 @@ export type {
   EngineOptions,
   EngineRequest,
   ProviderDef,
+  AgentProvider,
+  AgentProviderRequest,
 } from './provider/types';
 export { GatewayV2Bridge } from './provider/provider-gateway-v2';
 
@@ -73,6 +75,14 @@ export type {
   ValidationResult,
 } from './provider/auth';
 
+// ─── OAuth State Machine ───────────────────────────────────────
+export {
+  OAuthStateMachine,
+  OAuthStateError,
+  OAuthDeadlockError,
+} from './provider/auth/oauth';
+export type { OAuthState, OAuthStateMachineOptions } from './provider/auth/oauth';
+
 // ─── CLI ───────────────────────────────────────────────────────
 export {
   validateProviderFile,
@@ -101,22 +111,41 @@ export type {
 } from './provider/faux-provider';
 
 // ─── Provider Gateway ──────────────────────────────────────────
-export {
-  DefaultProviderGateway,
-  createProviderGateway,
-} from './provider-gateway';
-export { StaticProviderRouteCatalog } from './provider-gateway/route-selector';
-export {
-  initProviderEngine,
-  resolveProviderViaBridge,
-  resetProviderEngine,
-} from './provider-gateway/factory';
+// Re-export the full provider-gateway barrel (types + DefaultProviderGateway +
+// createProviderGateway + StaticProviderRouteCatalog + factory helpers).
+// Per Round 5 barrel fix: previously used NAMED exports which trapped
+// ProviderGatewayError / ProviderGatewayPlan / ProviderGateway /
+// ProviderRouteRequest / ProviderRouteOffer / ProviderFactoryPlan behind
+// sub-barrels.
+export * from './provider-gateway';
+
+// ─── Model Routing (provider gateway companion types) ──────────
+// ProviderEndpointSupport / ProviderStreamingSupport are referenced by
+// provider-gateway/types.ts but live in model-routing; profileFromProviderRouteOffer
+// is the public helper used to derive a ModelProfile from a route offer.
+export type {
+  ProviderEndpointSupport,
+  ProviderStreamingSupport,
+  TaskCapabilityRequest,
+  ModelProfile,
+} from './model-routing';
+export { profileFromProviderRouteOffer } from './model-routing';
+
+// ─── Provider field helpers ────────────────────────────────────
+export { stringField } from './provider-openai-base';
 
 // ─── Provider Transport ────────────────────────────────────────
 export {
   ConnectionManager,
   StreamRecovery,
+  StreamRecoveryError,
   TokenTracker,
+  ConnectionError,
+  StreamInterruptedError,
+  type ProviderTransport,
+  type TransportKind,
+  type TransportStatsSnapshot,
+  type ConnectionManagerSnapshot,
 } from './provider-transport';
 
 // ─── Provider Stream Contract ─────────────────────────────────
@@ -124,6 +153,7 @@ export type { ProviderStreamSequencer } from './provider-stream-contract';
 export {
   repairToolCallJsonArguments,
   normalizeProviderStreamEvent,
+  normalizeAndCoalesceProviderStreamEvents,
 } from './provider-stream-contract';
 
 // ─── Stream（streaming-tool-executor）──────────────────────────
@@ -158,7 +188,7 @@ export type {
 } from './provider-request-machine';
 
 // ─── Cache Hints ───────────────────────────────────────────────
-export { createProviderCacheHintPlan } from './provider-cache-hints';
+export { createProviderCacheHintPlan, DEFAULT_GEMINI_CONTEXT_CACHE_MIN_BYTES } from './provider-cache-hints';
 export type { ProviderCacheHintPlan } from './provider-cache-hints';
 
 // ─── Provider Stream Contract（事件类型）──────────────────────

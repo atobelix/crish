@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { OpenAICompatibleProvider } from '@crish/agent-runtime';
+import { OpenAICompatibleProvider } from "@crish/agent-model";
 
 describe('Real Live LLM Provider E2E Integration', () => {
   test('应向真实 OpenCode Zen 供应商 (https://opencode.ai/zen/go/v1) 发起真实 HTTP 流式请求并获得真实 Token', async () => {

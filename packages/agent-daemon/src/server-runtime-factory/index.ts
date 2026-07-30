@@ -1,12 +1,9 @@
-import type { AgentRuntimeOptions, AgentTool, HealthSnapshot } from "@crish/agent-runtime";
-import {
-  InMemoryContextState,
-  JsonlSessionStore,
-  LifecycleHookRegistry,
-  McpLifecycleManager,
-  createProductRuntimeDefaults,
-  registerBuiltinHealthHooks,
-} from "@crish/agent-runtime";
+import type { AgentRuntimeOptions, HealthSnapshot, ProductRuntimeDefaultsOptions } from "@crish/agent-core";
+import type { AgentTool } from "@crish/shared-types";
+import { InMemoryContextState, JsonlSessionStore } from "@crish/agent-context";
+import { LifecycleHookRegistry, createProductRuntimeDefaults, registerBuiltinHealthHooks } from "@crish/agent-core";
+import { McpLifecycleManager } from "@crish/agent-mcp";
+import type { McpLifecycleManagerOptions, McpServerDefinition } from "@crish/agent-mcp";
 import { createAgentRuntimeRunEngineFactory, type CreateRunEngineInput, type RunEngineFactory } from "@crish/agent-orchestrator";
 import { compactJsonObject, toJsonObject } from "@crish/shared-utils";
 import type { JsonObject } from "@crish/shared-types";
@@ -73,7 +70,7 @@ export class DaemonRuntimeFactory {
     return this.lastMcpStatus;
   }
 
-  async setMcpServers(servers: import("@crish/agent-runtime").McpServerDefinition[]): Promise<void> {
+  async setMcpServers(servers: McpServerDefinition[]): Promise<void> {
     this.options.mcpServers = servers;
     if (this.sharedMcpManager) { this.mcpManagers.delete(this.sharedMcpManager); try { await this.sharedMcpManager.teardown(); } catch {} this.sharedMcpManager = undefined; }
     this.lastMcpStatus = servers.length === 0 ? unconfiguredMcpStatusSnapshot() : idleMcpStatusSnapshot(servers.length, configuredServersFromDefinitions(servers));
@@ -213,7 +210,7 @@ export class DaemonRuntimeFactory {
       maxTurns, permissionPolicy,
       approvalHandler: new DaemonApprovalHandler(this.options.approvalQueue, runId),
       sessionStore, resumeSession: true, workspaceMutationCoordinator: mutationCoordinator,
-      ...createProductRuntimeDefaults({ cwd: run.cwd, contextWindowTokens: numberMetadata(run.metadata, "contextWindowTokens"), thresholdTokens: numberMetadata(run.metadata, "autoCompactAtTokens"), preferredWorkingTokens: numberMetadata(run.metadata, "preferredWorkingTokens"), contextState } as unknown as import("@crish/agent-runtime").ProductRuntimeDefaultsOptions),
+      ...createProductRuntimeDefaults({ cwd: run.cwd, contextWindowTokens: numberMetadata(run.metadata, "contextWindowTokens"), thresholdTokens: numberMetadata(run.metadata, "autoCompactAtTokens"), preferredWorkingTokens: numberMetadata(run.metadata, "preferredWorkingTokens"), contextState } as unknown as ProductRuntimeDefaultsOptions),
     } as unknown as Promise<AgentRuntimeOptions>;
   }
 
@@ -266,7 +263,7 @@ export class DaemonRuntimeFactory {
     }
     if (!this.options.mcpServers?.length) return undefined;
     if (!this.sharedMcpManager) {
-      this.sharedMcpManager = new McpLifecycleManager({ id: "daemon-mcp", label: "Daemon MCP", servers: this.options.mcpServers, startupGateTimeoutMs: this.options.mcpStartupGateTimeoutMs } as unknown as import("@crish/agent-runtime").McpLifecycleManagerOptions);
+      this.sharedMcpManager = new McpLifecycleManager({ id: "daemon-mcp", label: "Daemon MCP", servers: this.options.mcpServers, startupGateTimeoutMs: this.options.mcpStartupGateTimeoutMs } as unknown as McpLifecycleManagerOptions);
     }
     return this.sharedMcpManager;
   }

@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
-import {
-  assemblePromptForProvider,
-  createProviderCacheHintPlan,
-  createTextMessage,
-  DEFAULT_GEMINI_CONTEXT_CACHE_MIN_BYTES,
-  defineTextTool,
-} from ".";
+import { assemblePromptForProvider, createTextMessage } from "@crish/agent-context";
+import { createProviderCacheHintPlan, DEFAULT_GEMINI_CONTEXT_CACHE_MIN_BYTES } from "@crish/agent-model";
+import { defineTextTool } from "@crish/agent-tools";
 import type { JsonObject } from "@crish/shared-types";
 
 function shellTool(inputSchema: JsonObject = commandSchema()): ReturnType<typeof defineTextTool> {

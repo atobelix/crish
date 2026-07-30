@@ -9,11 +9,12 @@ import { join } from "node:path";
 import { DaemonServer } from "./server.js";
 import type { DaemonConfig } from "./types.js";
 import { DAEMON_HANDSHAKE_PROTOCOL_VERSION, DEFAULT_DAEMON_CONFIG } from "./types.js";
-import { createLocalWorkspaceTools } from "@crish/agent-runtime";
-import type { AgentTool, BackgroundCommandManager, WorkspaceMutationCoordinator } from "@crish/agent-runtime";
+import { createLocalWorkspaceTools } from "@crish/agent-tools";
+import type { AgentTool } from "@crish/shared-types";
+import type { BackgroundCommandManager, WorkspaceMutationCoordinator } from "@crish/agent-tools";
 import { setLogRedactor } from "@crish/shared-utils";
 import type { LogLevel } from "@crish/shared-utils";
-import { createSecretRedactorFromEnv } from "@crish/agent-runtime";
+import { createSecretRedactorFromEnv } from "@crish/agent-permissions";
 import { getDaemonLogger, toLogErr } from "./daemon-logger.js";
 import { readEnv, readEnvOrDefault } from "./env-whitelist.js";
 // DAEMON_DEFAULT_PROVIDER inlined (removed from shared-types in step 10)

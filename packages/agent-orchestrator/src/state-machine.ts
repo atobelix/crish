@@ -8,7 +8,7 @@
 import {
   RUN_LIFECYCLE_DEFINITION,
   type RunLifecycleState,
-} from "@crish/agent-runtime";
+} from "@crish/agent-core";
 import type { RunStatus } from "./types";
 
 // ─── 状态映射 ─────────────────────────────────────────────

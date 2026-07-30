@@ -39,14 +39,18 @@
     "build": "npm run clean && npm run build:types && npm run build:js"
   },
   "dependencies": {
+    "@crish/agent-core": "*",
+    "@crish/agent-subagent": "*",
     "@crish/agent-tools": "*",
     "@crish/agent-model": "*",
     "@crish/agent-mcp": "*",
+    "@crish/agent-context": "*",
+    "@crish/agent-permissions": "*",
     "@crish/decision-engine": "*",
-    "@crish/shared-types": "*"
+    "@crish/shared-types": "*",
+    "@crish/shared-utils": "*"
   },
   "devDependencies": {
-    "@crish/shared-utils": "*",
     "@types/node": "^25.6.0",
     "typescript": "^5.9.2"
   }

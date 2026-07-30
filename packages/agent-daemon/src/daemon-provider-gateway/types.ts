@@ -1,12 +1,5 @@
 import type { JsonObject } from "@crish/shared-types";
-import type {
-  OpenAICompatibleAuthHeader,
-  OpenAICompatibleEndpoint,
-  OpenAICompatibleMaxTokensField,
-  OpenAICompatibleTransport,
-  ProviderRouteOffer,
-  SystemPromptWireMode,
-} from "@crish/agent-runtime";
+import type { AgentProvider, OpenAICompatibleAuthHeader, OpenAICompatibleEndpoint, OpenAICompatibleMaxTokensField, OpenAICompatibleTransport, ProviderRouteOffer, SystemPromptWireMode } from "@crish/agent-model";
 import type {
   DaemonProviderStatusSnapshot,
 } from '../types.js';
@@ -119,7 +112,7 @@ export interface NormalizedDaemonProviderRuntimeConfig extends Required<
 }
 
 export interface DaemonProviderFactoryWithStatus {
-  (runId: string, cwd: string): Promise<import("@crish/agent-runtime").AgentProvider>;
+  (runId: string, cwd: string): Promise<AgentProvider>;
   getProviderStatusSnapshot(): DaemonProviderStatusSnapshot;
 }
 

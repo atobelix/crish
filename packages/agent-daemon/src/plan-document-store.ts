@@ -3,18 +3,8 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { isRecord, errorMessage, isNodeError, deepFreeze, deepEqual } from "@crish/shared-utils";
 import { fsyncPathAsync, fsyncDirectoryPathAsync } from "@crish/shared-utils/node";
-import {
-  PlanDocumentPatchError,
-  PlanDocumentValidationError,
-  applyPlanDocumentPatch,
-  createPlanDocument,
-  summarizePlanDocument,
-  validatePlanDocument,
-  type CreatePlanDocumentInput,
-  type PlanDocument,
-  type PlanDocumentPatch,
-  type PlanDocumentSummary,
-} from "@crish/agent-runtime";
+import { PlanDocumentPatchError, PlanDocumentValidationError, applyPlanDocumentPatch, createPlanDocument, summarizePlanDocument, validatePlanDocument } from "@crish/agent-core";
+import type { CreatePlanDocumentInput, PlanDocument, PlanDocumentPatch, PlanDocumentSummary } from "@crish/agent-core";
 
 export const PLAN_DOCUMENT_STORE_VERSION = 1;
 

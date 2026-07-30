@@ -21,7 +21,7 @@ import {
   WorkspaceMutationCoordinator,
   createWorkspaceCheckpointTool,
   createWriteFileTool
-} from ".";
+} from "@crish/agent-tools";
 import { encodeTextBuffer } from "./encoding";
 import type { ToolExecutionContext } from "@crish/shared-types";
 import type { AgentTool } from "./types";

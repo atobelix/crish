@@ -1,13 +1,5 @@
-import {
-  DefaultProviderGateway,
-  ProviderGatewayError,
-  type AgentProvider,
-  type ProviderGateway,
-  type ProviderGatewayPlan,
-  type ProviderRouteOffer,
-  type ProviderRouteRequest,
-  routeModelByCapability,
-} from "@crish/agent-runtime";
+import { DefaultProviderGateway, ProviderGatewayError, routeModelByCapability } from "@crish/agent-model";
+import type { AgentProvider, ProviderCredentialSource, ProviderGateway, ProviderGatewayPlan, ProviderRouteOffer, ProviderRouteRequest } from "@crish/agent-model";
 import type { JsonObject } from "@crish/shared-types";
 import { normalizeConfig } from "./credential-modes.js";
 import type { NormalizedDaemonProviderRuntimeConfig } from "./types.js";
@@ -265,7 +257,7 @@ export class DaemonProviderGatewayController {
   }
 
   private createRoute(): ProviderRouteOffer {
-    const credentialSource: import("@crish/agent-runtime").ProviderCredentialSource =
+    const credentialSource: ProviderCredentialSource =
       this.activeCredentialMode() === 'direct'
         ? {
             type: 'api-key' as const,

@@ -1,6 +1,6 @@
-﻿import type { JsonObject, AgentEvent, AgentMessage, StoredEvent, StoredEventType, StoredEventLogMetadata, StoredEventReadOptions, EventStore } from "@crish/shared-types";
+import type { JsonObject, AgentEvent, AgentMessage, StoredEvent, StoredEventType, StoredEventLogMetadata, StoredEventReadOptions, EventStore } from "@crish/shared-types";
 import { STORED_EVENT_PROTOCOL_VERSION, STORED_EVENT_LOG_SCHEMA_VERSION } from "@crish/shared-types";
-import type { BackgroundCommandManager } from "@crish/agent-runtime";
+import type { BackgroundCommandManager } from "@crish/agent-tools";
 
 export const ORCHESTRATOR_PROTOCOL_VERSION = STORED_EVENT_PROTOCOL_VERSION;
 

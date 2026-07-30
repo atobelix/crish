@@ -15,11 +15,8 @@ import type {
   GitDiffMessage,
   GitStatusMessage,
 } from "../types.js";
-import {
-  GitCliVersioningService,
-  type GitCheckpointDiffFile,
-  type GitStatusEntry,
-} from "@crish/agent-runtime";
+import { GitCliVersioningService } from "@crish/agent-tools";
+import type { GitCheckpointDiffFile, GitStatusEntry } from "@crish/agent-tools";
 
 interface GitHandlerTransport {
   send(ws: WebSocket, message: unknown): boolean;

@@ -1,12 +1,7 @@
 import type { JsonObject } from "@crish/shared-types";
 import { compactJsonObject } from "@crish/shared-utils";
-import {
-  McpLifecycleManager,
-  type McpLifecycleDiagnostic,
-  type McpLifecycleSnapshot,
-  type McpLifecycleStartResult,
-  type McpServerDefinition,
-} from "@crish/agent-runtime";
+import { McpLifecycleManager } from "@crish/agent-mcp";
+import type { McpLifecycleDiagnostic, McpLifecycleSnapshot, McpLifecycleStartResult, McpServerDefinition } from "@crish/agent-mcp";
 import type { DaemonMcpStatusSnapshot } from "./types.js";
 
 interface IMcpServerManager {

@@ -1,13 +1,11 @@
 import type { OrchestratorEvent, OrchestratorRunHandle, StartRunRequest } from "@crish/agent-orchestrator";
 import { AsyncSemaphore, isRecord, toJsonValue } from "@crish/shared-utils";
 import type { AgentEvent, AgentMessage, JsonObject, ToolOutput } from "@crish/shared-types";
-import {
-  buildSubagentContextPack,
-  createId,
-  defineTool,
-  type AgentTool,
-  type SubagentForkPolicy,
-} from "@crish/agent-runtime";
+import { buildSubagentContextPack } from "@crish/agent-subagent";
+import type { SubagentForkPolicy } from "@crish/agent-subagent";
+import { createId } from "@crish/agent-context";
+import { defineTool } from "@crish/agent-tools";
+import type { AgentTool } from "@crish/shared-types";
 import { getDaemonLogger } from "./daemon-logger.js";
 
 export const DAEMON_SUBAGENT_BRIDGE_KIND = "daemon-subagent-runtime";

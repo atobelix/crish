@@ -11,18 +11,11 @@ import { DaemonServer } from "./server";
 import { DaemonClientRegistry } from "./daemon-client-registry";
 import { WORKFLOW_STORE_VERSION } from "./workflow-store";
 import type { WorkflowDefinition, WorkflowRunEntry, WorkflowRunStatus } from "./types";
-import {
-  CheckpointManifestService,
-  ConversationBoundaryManifestService,
-  JsonlMemoryStore,
-  McpLifecycleManager,
-  createWorkspaceCheckpoint,
-  createScriptedProvider,
-  type AgentProvider,
-  type AgentProviderRequest,
-  type AgentTool,
-  type ProviderStreamEvent,
-} from "@crish/agent-runtime";
+import { CheckpointManifestService, ConversationBoundaryManifestService, JsonlMemoryStore, createWorkspaceCheckpoint } from "@crish/agent-context";
+import { McpLifecycleManager } from "@crish/agent-mcp";
+import { createScriptedProvider } from "@crish/agent-core";
+import type { AgentProvider, AgentProviderRequest } from "@crish/agent-model";
+import type { AgentTool, ProviderStreamEvent } from "@crish/shared-types";
 import { removeTempDirs } from "./test-temp-cleanup";
 
 const execFileAsync = promisify(execFile);

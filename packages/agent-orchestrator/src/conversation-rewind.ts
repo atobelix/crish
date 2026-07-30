@@ -1,5 +1,5 @@
 import type { JsonObject } from "@crish/shared-types";
-import type { ConversationRewindTargetFacts } from "@crish/agent-runtime";
+import type { ConversationRewindTargetFacts } from "@crish/agent-context";
 import { SessionTree, type SessionTreeEntry, type SessionTreeLeafId } from "./session-tree";
 import { isTerminalRunStatus } from "./state-machine";
 import type { OrchestratorRunRecord, OrchestratorSessionRecord } from "./types";

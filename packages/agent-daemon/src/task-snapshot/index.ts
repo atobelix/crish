@@ -1,4 +1,4 @@
-import { collectRuntimeMetricsSnapshot } from "@crish/agent-runtime";
+import { collectRuntimeMetricsSnapshot } from "@crish/agent-core";
 import type { OrchestratorRunRecord } from "@crish/agent-orchestrator";
 import type { DaemonTaskSnapshot } from "../types.js";
 import {

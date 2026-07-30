@@ -1,5 +1,5 @@
 // Protocol validators: plan message family
-import { validatePlanDocument } from "@crish/agent-runtime";
+import { validatePlanDocument } from "@crish/agent-core";
 import type {
   CreateRequirementsAlignmentPlanMessage,
   CreatePlanDocumentMessage,

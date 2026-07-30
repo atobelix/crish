@@ -7,7 +7,7 @@ import {
 } from "./conversation-rewind";
 import type { SessionTreeEntry } from "./session-tree";
 import type { OrchestratorRunRecord } from "./types";
-import { createConversationBoundaryManifestRecord, resolveConversationRewindTargetFacts } from "@crish/agent-runtime";
+import { createConversationBoundaryManifestRecord, resolveConversationRewindTargetFacts } from "@crish/agent-context";
 
 describe("planConversationRewind", () => {
   it("plans run cancellation, approval clearing, checkpoint restore, and leaf movement in order", () => {

@@ -1,16 +1,6 @@
 import type { SessionActionReceipt } from "@crish/shared-types";
-import type {
-  PlanDocument,
-  PlanDocumentSummary,
-  CheckpointManifestRecord,
-  ConversationBoundaryManifestRecord,
-  ConversationRewindBoundaryTargetMode,
-  ConversationRewindTargetFacts,
-  ScopedContextCandidate,
-  ScopedContextDiagnostic,
-  ScopedContextResolvedItem,
-  PromptAssemblyContextBlock,
-} from "@crish/agent-runtime";
+import type { PlanDocument, PlanDocumentSummary } from "@crish/agent-core";
+import type { CheckpointManifestRecord, ConversationBoundaryManifestRecord, ConversationRewindBoundaryTargetMode, ConversationRewindTargetFacts, ScopedContextCandidate, ScopedContextDiagnostic, ScopedContextResolvedItem, PromptAssemblyContextBlock } from "@crish/agent-context";
 import type { OrchestratorEvent, OrchestratorEventLogMetadata, OrchestratorRunRecord, OrchestratorSessionRecord } from "@crish/agent-orchestrator";
 import type { DaemonTaskSnapshot, DaemonBackgroundTaskSnapshot, DaemonBackgroundTaskDiagnostic } from "./snapshot-types.js";
 import type {

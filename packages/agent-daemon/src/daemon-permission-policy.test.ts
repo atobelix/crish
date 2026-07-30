@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defineTextTool } from "@crish/agent-runtime";
+import { defineTextTool } from "@crish/agent-tools";
 import {
   DaemonPermissionPolicy,
   describeDaemonPermissionMode,

@@ -17,17 +17,11 @@ import {
 } from './server-runtime-factory';
 import type { DaemonRuntimeFactoryOptions } from './server-runtime-factory/types';
 import type { JsonObject } from '@crish/shared-types';
-import type {
-  AgentProvider,
-  AgentProviderRequest,
-  AgentTool,
-  McpServerDefinition,
-  ProviderStreamEvent,
-} from '@crish/agent-runtime';
-import {
-  CheckpointManifestService,
-  McpLifecycleManager,
-} from '@crish/agent-runtime';
+import type { AgentProvider, AgentProviderRequest } from "@crish/agent-model";
+import type { AgentTool, ProviderStreamEvent } from "@crish/shared-types";
+import type { McpServerDefinition } from "@crish/agent-mcp";
+import { CheckpointManifestService } from "@crish/agent-context";
+import { McpLifecycleManager } from "@crish/agent-mcp";
 import type {
   CreateRunEngineInput,
 } from '@crish/agent-orchestrator';

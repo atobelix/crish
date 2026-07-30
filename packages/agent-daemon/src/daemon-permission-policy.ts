@@ -1,7 +1,5 @@
-import {
-  TrustZonePermissionPolicy,
-  type TrustZonePermissionMode,
-} from "@crish/agent-runtime";
+import { TrustZonePermissionPolicy } from "@crish/agent-permissions";
+import type { TrustZonePermissionMode } from "@crish/agent-permissions";
 import {
   DEFAULT_APPROVAL_TIMEOUT_MS,
   MAX_APPROVAL_TIMEOUT_MS,

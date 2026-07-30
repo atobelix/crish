@@ -1,12 +1,6 @@
 import type { JsonObject, SessionAction } from "@crish/shared-types";
-import type {
-  CreatePlanDocumentInput,
-  PlanDocumentPatch,
-  ConversationRewindBoundaryTargetMode,
-  ScopedContextResolverProject,
-  ScopedContextScope,
-  ScopedContextKind,
-} from "@crish/agent-runtime";
+import type { CreatePlanDocumentInput, PlanDocumentPatch } from "@crish/agent-core";
+import type { ConversationRewindBoundaryTargetMode, ScopedContextResolverProject, ScopedContextScope, ScopedContextKind } from "@crish/agent-context";
 import type {
   ConversationRewindCheckpointTarget,
   ConversationRewindRestorePolicy,

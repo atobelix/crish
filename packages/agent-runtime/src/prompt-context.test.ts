@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assemblePromptForProvider, createTextMessage } from ".";
+import { assemblePromptForProvider, createTextMessage } from "@crish/agent-context";
 import { ProjectProgressLedger } from "./project-progress-ledger";
 import { composePromptContext } from "./prompt-context";
 import { resolveScopedContext } from "./scoped-context";

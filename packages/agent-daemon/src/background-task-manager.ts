@@ -1,10 +1,6 @@
 import { relative, resolve } from "node:path";
-import {
-  BackgroundCommandManager,
-  type BackgroundCommandManagerOptions,
-  type BackgroundCommandSnapshot,
-  type BackgroundCommandStartInput,
-} from "@crish/agent-runtime";
+import { BackgroundCommandManager } from "@crish/agent-tools";
+import type { BackgroundCommandManagerOptions, BackgroundCommandSnapshot, BackgroundCommandStartInput } from "@crish/agent-tools";
 import { BoundedMap } from "@crish/shared-utils";
 import { getDaemonLogger, toLogErr } from "./daemon-logger.js";
 import type {

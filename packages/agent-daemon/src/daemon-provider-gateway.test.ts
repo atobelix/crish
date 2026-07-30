@@ -5,10 +5,8 @@ import {
   createDaemonProviderRuntimeConfig,
   createDaemonProviderRuntimeConfigFromEnv,
 } from './daemon-provider-gateway';
-import {
-  createTextMessage,
-  type ProviderStreamEvent,
-} from '@crish/agent-runtime';
+import { createTextMessage } from "@crish/agent-context";
+import type { ProviderStreamEvent } from "@crish/shared-types";
 
 afterEach(() => {
   vi.unstubAllGlobals();

@@ -170,6 +170,9 @@ export type {
 // ISessionStore 契约
 export type { ISessionStore } from './ISessionStore';
 
+// SessionEntry — session 持久化条目类型（Round 5 barrel 修复：消费者需从此包导入）
+export type { SessionEntry } from './_runtime-types';
+
 // session/ 目录（通过 session.ts barrel 转出）
 export {
   createId,

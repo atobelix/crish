@@ -1,11 +1,5 @@
 import type { JsonObject } from "@crish/shared-types";
-import type {
-  ScopedContextActivation,
-  ScopedContextKind,
-  ScopedContextScope,
-  ScopedContextSource,
-  ConversationRewindTargetFacts,
-} from "@crish/agent-runtime";
+import type { ScopedContextActivation, ScopedContextKind, ScopedContextScope, ScopedContextSource, ConversationRewindTargetFacts } from "@crish/agent-context";
 import type {
   ConversationRewindPlan,
   OrchestratorEventLogMetadata,

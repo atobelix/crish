@@ -3,13 +3,13 @@ import {
   GeminiProvider,
   buildGeminiGenerateContentBody,
   createGeminiProviderFromPlan,
-  createTextMessage,
-  defineTextTool,
   resolveGeminiGenerateContentUrl,
   shouldUseGeminiProvider,
   toGeminiContents,
-  type ProviderStreamEvent,
-} from '.';
+} from '@crish/agent-model';
+import { createTextMessage } from '@crish/agent-context';
+import { defineTextTool } from '@crish/agent-tools';
+import type { ProviderStreamEvent } from '@crish/shared-types';
 
 async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   const items: T[] = [];

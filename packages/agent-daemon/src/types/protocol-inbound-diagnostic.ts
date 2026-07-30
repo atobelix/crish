@@ -1,4 +1,4 @@
-import type { OpenAICompatibleEndpoint } from "@crish/agent-runtime";
+import type { OpenAICompatibleEndpoint } from "@crish/agent-model";
 import type { DaemonMcpServerConfig } from "./config.js";
 import type {
   DaemonProviderCredentialMode,

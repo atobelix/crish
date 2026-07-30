@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeTextBuffer, encodeTextBuffer } from ".";
+import { decodeTextBuffer, encodeTextBuffer } from "@crish/agent-context";
 
 describe("text encoding helpers", () => {
   it("detects and preserves utf-8 bom text", () => {

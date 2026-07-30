@@ -5,13 +5,8 @@
 
 import { compactJsonObject } from "@crish/shared-utils";
 import type { JsonObject, AgentEvent, AgentMessage, RuntimeCheckpointRecord } from "@crish/shared-types";
-import {
-  CheckpointManifestService,
-  ConversationBoundaryManifestService,
-  findSessionLeafId,
-  JsonlSessionStore,
-  type SessionEntry,
-} from "@crish/agent-runtime";
+import { CheckpointManifestService, ConversationBoundaryManifestService, findSessionLeafId, JsonlSessionStore } from "@crish/agent-context";
+import type { SessionEntry } from "@crish/agent-context";
 import type { OrchestratorEvent, RunStatus } from "@crish/agent-orchestrator";
 import type { DaemonConfig, WorkflowRunStatus } from "../../../types.js";
 import { runtimeSessionStorePath } from "../../../conversation-rewind-boundary.js";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assemblePromptForProvider, createTextMessage } from ".";
+import { assemblePromptForProvider, createTextMessage } from "@crish/agent-context";
 import { defineScopedRule, resolveScopedContext, skillToScopedContextRecord } from "./scoped-context";
 import type { AgentSkill } from "./skills";
 

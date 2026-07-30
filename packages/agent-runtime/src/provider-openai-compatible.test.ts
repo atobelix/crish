@@ -4,12 +4,12 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createOpenAICompatibleProviderFromConfig,
-  createTextMessage,
-  defineTextTool,
   listOpenAICompatibleModels,
   loadOpenAICompatibleProviderConfig,
   OpenAICompatibleProvider
-} from ".";
+} from "@crish/agent-model";
+import { createTextMessage } from "@crish/agent-context";
+import { defineTextTool } from "@crish/agent-tools";
 
 let tempRoot = "";
 
