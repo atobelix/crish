@@ -1,0 +1,27 @@
+[package]
+name = "session-loop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+agent-tools = { path = "../agent-tools" }
+conex-types = { path = "../conex-types" }
+futures = "0.3"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# 测试所需 feature（macros/rt/time）已由 workspace 最小集覆盖（PE-10 T10.3）
+tokio = { workspace = true }
+# 日志捕获测试（PE-04 T04.2）
+tracing-subscriber = { workspace = true }
