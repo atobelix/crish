@@ -1,0 +1,25 @@
+[package]
+name = "conex-telemetry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tracing = { workspace = true }
+# env-filter feature is required for tracing_subscriber::EnvFilter; the workspace
+# baseline declares tracing-subscriber without features, so enable it here.
+# fmt feature: subscriber.rs 用 tracing_subscriber::fmt()（with_writer stderr + MakeWriterExt），
+# 缺 fmt feature 时 io::Stderr 不实现 MakeWriter（编译报 E0599）。
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# CrishErrorPayload / CrishErrorCategory are produced by Agent 10-A in
+# crates/conex-types/src/error.rs (ROUND-10-rust.md §3.2). This dependency is
+# the sole bridge to conex-types; conex-telemetry otherwise stays leaf-level.
+conex-types = { path = "../conex-types" }
