@@ -33,6 +33,7 @@ import {
 import { findParent } from '../layout-tree/operations';
 import type { RightToolDockState } from './types';
 import { useWorkspaceShellStore } from './workspaceShellStore';
+import { withTreeDockProjectionSuppressed } from './treeDockProjection';
 import { getActiveSessionId } from '../../api/storeAccess';
 
 // ── 计数 / 查询 ──────────────────────────────────────────────────────
@@ -471,26 +472,31 @@ function resolveTargetSessionId(explicit?: string): string | null {
 /**
  * 将 rightDock 投影到指定 session 的 Conversation Unit。
  * @param sessionId 省略时回退到活动 shell tab / 活动 chat leaf
+ *
+ * T06.9.1：投影期间置位抑制标志，跳过 tree→shell 反向订阅，
+ * 消除 applyDockToTree ↔ syncShellDocksFromTree 互触发回环。
  */
 export function applyDockToTree(
   dock: RightToolDockState,
   sessionId?: string
 ): void {
-  const sid = resolveTargetSessionId(sessionId);
-  if (!sid) {
-    // 无 session 可定位：兼容旧路径 — 全局折叠或单 chat+tool
-    if (dock.collapsed || !dock.activePanelId) {
-      ensureChatOnlyTree();
+  withTreeDockProjectionSuppressed(() => {
+    const sid = resolveTargetSessionId(sessionId);
+    if (!sid) {
+      // 无 session 可定位：兼容旧路径 — 全局折叠或单 chat+tool
+      if (dock.collapsed || !dock.activePanelId) {
+        ensureChatOnlyTree();
+        return;
+      }
+      ensureChatPlusSingleToolLeaf(
+        dock.openPanelIds.length ? dock.openPanelIds : [dock.activePanelId],
+        dock.activePanelId,
+        dock.widthRatio
+      );
       return;
     }
-    ensureChatPlusSingleToolLeaf(
-      dock.openPanelIds.length ? dock.openPanelIds : [dock.activePanelId],
-      dock.activePanelId,
-      dock.widthRatio
-    );
-    return;
-  }
-  applyDockToSession(sid, dock);
+    applyDockToSession(sid, dock);
+  });
 }
 
 /**
@@ -515,61 +521,65 @@ function stripLegacyGlobalToolColumn(tree: LayoutTree): LayoutTree {
  * 按 shell openTabs 的 rightDock 重投影全部会话 unit。
  * 先剥掉所有 tool leaf（保留 multi-chat 结构），再按 dock 逐 session 展开。
  * 用于：分屏/移动后纠偏「功能区脱离对话 unit」的脏树。
+ * T06.9.1：整段投影受抑制标志保护（见 applyDockToTree 说明）。
  */
 export function reprojectAllSessionDocks(): void {
-  const treeStore = useLayoutTreeStore.getState();
-  let base = stripLegacyGlobalToolColumn(treeStore.tree);
-  // 剥掉全部 tool，只留 chat 分屏骨架
-  base = stripToolLeavesPreserveChats(base);
-  if (base !== treeStore.tree) {
-    treeStore.setTree(base);
-  }
-
-  let current = treeStore.tree;
-  try {
-    const tabs = useWorkspaceShellStore.getState().openTabs;
-    for (const tab of tabs) {
-      const sid = (tab.sessionId || '').trim();
-      if (!sid) continue;
-      const dock = tab.rightDock;
-      if (!dock || dock.collapsed || !dock.activePanelId) continue;
-      const next = projectDockOntoTree(
-        current,
-        dock,
-        sid,
-        treeStore.activeLeafId
-      );
-      if (next !== current) current = next;
+  withTreeDockProjectionSuppressed(() => {
+    const treeStore = useLayoutTreeStore.getState();
+    let base = stripLegacyGlobalToolColumn(treeStore.tree);
+    // 剥掉全部 tool，只留 chat 分屏骨架
+    base = stripToolLeavesPreserveChats(base);
+    if (base !== treeStore.tree) {
+      treeStore.setTree(base);
     }
-  } catch {
-    /* shell 未就绪时跳过 */
-  }
 
-  if (current !== treeStore.tree) {
-    treeStore.setTree(current);
-  }
+    let current = treeStore.tree;
+    try {
+      const tabs = useWorkspaceShellStore.getState().openTabs;
+      for (const tab of tabs) {
+        const sid = (tab.sessionId || '').trim();
+        if (!sid) continue;
+        const dock = tab.rightDock;
+        if (!dock || dock.collapsed || !dock.activePanelId) continue;
+        const next = projectDockOntoTree(
+          current,
+          dock,
+          sid,
+          treeStore.activeLeafId
+        );
+        if (next !== current) current = next;
+      }
+    } catch {
+      /* shell 未就绪时跳过 */
+    }
 
-  const chatCount = countChatLeaves(current.root);
-  const toolCount = countToolLeaves(current.root);
-  if (chatCount <= 1) {
-    treeStore.setToolColumnCollapsed(toolCount === 0);
-  } else {
-    treeStore.setToolColumnCollapsed(toolCount === 0);
-  }
+    if (current !== treeStore.tree) {
+      treeStore.setTree(current);
+    }
+
+    const chatCount = countChatLeaves(current.root);
+    const toolCount = countToolLeaves(current.root);
+    if (chatCount <= 1) {
+      treeStore.setToolColumnCollapsed(toolCount === 0);
+    } else {
+      treeStore.setToolColumnCollapsed(toolCount === 0);
+    }
+  });
 }
 
-/** 明确按 session 投影 dock（applyDockToTree 的语义别名） */
+/** 明确按 session 投影 dock（applyDockToTree 的语义别名；受投影抑制保护） */
 export function applyDockToSession(
   sessionId: string,
   dock: RightToolDockState
 ): void {
-  const sid = (sessionId || '').trim();
-  if (!sid) return;
+  withTreeDockProjectionSuppressed(() => {
+    const sid = (sessionId || '').trim();
+    if (!sid) return;
 
-  const store = useLayoutTreeStore.getState();
-  const originalTree = store.tree;
-  let base = stripLegacyGlobalToolColumn(originalTree);
-  const next = projectDockOntoTree(base, dock, sid, store.activeLeafId);
+    const store = useLayoutTreeStore.getState();
+    const originalTree = store.tree;
+    let base = stripLegacyGlobalToolColumn(originalTree);
+    const next = projectDockOntoTree(base, dock, sid, store.activeLeafId);
 
   // ── 统一计算所有状态变更（避免独立 setState 之间的中间态 re-render） ──
   const chatCount = countChatLeaves(next.root);
@@ -631,65 +641,70 @@ export function applyDockToSession(
   } else {
     store.setToolColumnCollapsed(targetCollapsed);
   }
+  });
 }
 
 /**
  * 确保 chat-only。
  * - 传入 sessionId：仅折叠该 session 的 unit dock
  * - 省略：全局剥离所有 tool（冷启动 / resetToCleanDraft）
+ * T06.9.1：投影受抑制标志保护（见 applyDockToTree 说明）。
  */
 export function ensureChatOnlyTree(sessionId?: string): void {
-  const sid = (sessionId || '').trim();
-  if (sid) {
-    applyDockToSession(sid, {
-      collapsed: true,
-      openPanelIds: [],
-      activePanelId: null,
-      widthRatio: 0.38,
-    });
-    return;
-  }
+  withTreeDockProjectionSuppressed(() => {
+    const sid = (sessionId || '').trim();
+    if (sid) {
+      applyDockToSession(sid, {
+        collapsed: true,
+        openPanelIds: [],
+        activePanelId: null,
+        widthRatio: 0.38,
+      });
+      return;
+    }
 
-  const store = useLayoutTreeStore.getState();
-  const leaves = collectLeaves(store.tree.root);
-  const chatLeaves = leaves.filter((l) => isChatDomain(l.panelId));
-  const hasTools = leaves.some((l) => !isChatDomain(l.panelId));
+    const store = useLayoutTreeStore.getState();
+    const leaves = collectLeaves(store.tree.root);
+    const chatLeaves = leaves.filter((l) => isChatDomain(l.panelId));
+    const hasTools = leaves.some((l) => !isChatDomain(l.panelId));
 
-  // 多 chat：保留分屏；剥掉全部 tool
-  if (chatLeaves.length > 1) {
-    store.setToolColumnCollapsed(true);
-    if (hasTools) {
-      const next = stripToolLeavesPreserveChats(store.tree);
-      if (next !== store.tree) {
-        store.setTree(next);
+    // 多 chat：保留分屏；剥掉全部 tool
+    if (chatLeaves.length > 1) {
+      store.setToolColumnCollapsed(true);
+      if (hasTools) {
+        const next = stripToolLeavesPreserveChats(store.tree);
+        if (next !== store.tree) {
+          store.setTree(next);
+        }
       }
+      return;
     }
-    return;
-  }
 
-  // 单 chat 且无 tool：保持（保留 sessionId）
-  if (chatLeaves.length === 1 && !hasTools) {
+    // 单 chat 且无 tool：保持（保留 sessionId）
+    if (chatLeaves.length === 1 && !hasTools) {
+      store.setToolColumnCollapsed(true);
+      const only = chatLeaves[0]!;
+      if (store.activeLeafId !== only.id) {
+        store.setActiveLeaf(only.id);
+      }
+      return;
+    }
+
+    // 单 chat + tool 或无 chat：折叠为干净单 chat（保留原 chat 的 sessionId 若有）
+    const keepSessionId = chatLeaves[0]?.sessionId;
+    const chatLeaf = createLeaf('chat', undefined, undefined, keepSessionId);
+    const tree: LayoutTree = { root: chatLeaf, version: 2 };
+    store.setTree(tree);
     store.setToolColumnCollapsed(true);
-    const only = chatLeaves[0]!;
-    if (store.activeLeafId !== only.id) {
-      store.setActiveLeaf(only.id);
-    }
-    return;
-  }
-
-  // 单 chat + tool 或无 chat：折叠为干净单 chat（保留原 chat 的 sessionId 若有）
-  const keepSessionId = chatLeaves[0]?.sessionId;
-  const chatLeaf = createLeaf('chat', undefined, undefined, keepSessionId);
-  const tree: LayoutTree = { root: chatLeaf, version: 2 };
-  store.setTree(tree);
-  store.setToolColumnCollapsed(true);
-  store.setActiveLeaf(chatLeaf.id);
+    store.setActiveLeaf(chatLeaf.id);
+  });
 }
 
 /**
  * 确保 chat + 单 tool leaf。
  * - 传入 sessionId：仅扩展该 session unit
  * - 省略：回退到活动 session；再无则旧单/多 chat 全局挂 tool（兼容）
+ * T06.9.1：投影受抑制标志保护（见 applyDockToTree 说明）。
  */
 export function ensureChatPlusSingleToolLeaf(
   openPanelIds: string[],
@@ -697,93 +712,97 @@ export function ensureChatPlusSingleToolLeaf(
   widthRatio: number,
   sessionId?: string
 ): void {
-  const panels = openPanelIds.length ? openPanelIds : [activePanelId];
-  const active =
-    (panels.includes(activePanelId) ? activePanelId : panels[0]) ??
-    activePanelId;
+  withTreeDockProjectionSuppressed(() => {
+    const panels = openPanelIds.length ? openPanelIds : [activePanelId];
+    const active =
+      (panels.includes(activePanelId) ? activePanelId : panels[0]) ??
+      activePanelId;
 
-  const sid = resolveTargetSessionId(sessionId);
-  if (sid) {
-    applyDockToSession(sid, {
-      collapsed: false,
-      openPanelIds: panels,
-      activePanelId: active,
-      widthRatio,
-    });
-    return;
-  }
-
-  // 无 session：禁止把 tool 挂到「整棵 chat 树」右侧（会变成全局共享右栏）
-  const store = useLayoutTreeStore.getState();
-  const existingChats = collectLeaves(store.tree.root).filter((l) =>
-    isChatDomain(l.panelId)
-  );
-
-  if (existingChats.length >= 1) {
-    // 优先活动 chat leaf → 绑定/解析 session 后走 per-unit 投影
-    const activeId = store.activeLeafId;
-    const target =
-      existingChats.find((c) => c.id === activeId) ??
-      existingChats.find((c) => !!c.sessionId) ??
-      existingChats[0]!;
-    let bindSid = (target.sessionId || '').trim();
-    if (!bindSid) {
-      // 未绑 session 的 leaf：用活动会话，再 per-unit 展开
-      bindSid = (getActiveSessionId() || '').trim();
-      if (!bindSid) {
-        // 无活动会话：不创建全局 tool 列
-        return;
-      }
-      const bound: LayoutLeaf = { ...target, sessionId: bindSid };
-      const rooted = replaceNode(store.tree.root, target.id, bound);
-      store.setTree({ version: store.tree.version, root: rooted });
+    const sid = resolveTargetSessionId(sessionId);
+    if (sid) {
+      applyDockToSession(sid, {
+        collapsed: false,
+        openPanelIds: panels,
+        activePanelId: active,
+        widthRatio,
+      });
+      return;
     }
-    applyDockToSession(bindSid, {
-      collapsed: false,
-      openPanelIds: panels,
-      activePanelId: active,
-      widthRatio,
-    });
-    return;
-  }
 
-  const prevChat = existingChats[0];
-  const chatLeaf = createLeaf(
-    'chat',
-    undefined,
-    undefined,
-    prevChat?.sessionId
-  );
-  const toolWithTabs = makeToolLeaf(panels, active);
-  const ratio = clampDockWidthRatio(widthRatio);
-  const tree: LayoutTree = {
-    version: 2,
-    root: createBranch('horizontal', chatLeaf, toolWithTabs, 1 - ratio),
-  };
-  store.setTree(tree);
-  store.setToolColumnCollapsed(false);
-  store.setActiveLeaf(toolWithTabs.id);
+    // 无 session：禁止把 tool 挂到「整棵 chat 树」右侧（会变成全局共享右栏）
+    const store = useLayoutTreeStore.getState();
+    const existingChats = collectLeaves(store.tree.root).filter((l) =>
+      isChatDomain(l.panelId)
+    );
+
+    if (existingChats.length >= 1) {
+      // 优先活动 chat leaf → 绑定/解析 session 后走 per-unit 投影
+      const activeId = store.activeLeafId;
+      const target =
+        existingChats.find((c) => c.id === activeId) ??
+        existingChats.find((c) => !!c.sessionId) ??
+        existingChats[0]!;
+      let bindSid = (target.sessionId || '').trim();
+      if (!bindSid) {
+        // 未绑 session 的 leaf：用活动会话，再 per-unit 展开
+        bindSid = (getActiveSessionId() || '').trim();
+        if (!bindSid) {
+          // 无活动会话：不创建全局 tool 列
+          return;
+        }
+        const bound: LayoutLeaf = { ...target, sessionId: bindSid };
+        const rooted = replaceNode(store.tree.root, target.id, bound);
+        store.setTree({ version: store.tree.version, root: rooted });
+      }
+      applyDockToSession(bindSid, {
+        collapsed: false,
+        openPanelIds: panels,
+        activePanelId: active,
+        widthRatio,
+      });
+      return;
+    }
+
+    const prevChat = existingChats[0];
+    const chatLeaf = createLeaf(
+      'chat',
+      undefined,
+      undefined,
+      prevChat?.sessionId
+    );
+    const toolWithTabs = makeToolLeaf(panels, active);
+    const ratio = clampDockWidthRatio(widthRatio);
+    const tree: LayoutTree = {
+      version: 2,
+      root: createBranch('horizontal', chatLeaf, toolWithTabs, 1 - ratio),
+    };
+    store.setTree(tree);
+    store.setToolColumnCollapsed(false);
+    store.setActiveLeaf(toolWithTabs.id);
+  });
 }
 
-/** 在 dev 下校验不变量；始终 normalize 后写回 */
+/** 在 dev 下校验不变量；始终 normalize 后写回（投影受抑制标志保护） */
 export function ensureAdapterShape(): void {
-  const store = useLayoutTreeStore.getState();
-  const before = store.tree;
-  const chatCount = countChatLeaves(before.root);
-  if (chatCount < 1 && import.meta.env?.DEV) {
-    console.warn(
-      '[workspace-shell] adapter invariant: chat leaf count =',
-      chatCount,
-      '→ normalize'
-    );
-  }
-  const next = normalizeToAdapterShape(before);
-  if (next !== before) {
-    store.setTree(next);
-    const leaves = collectLeaves(next.root);
-    const chat = leaves.find((l) => isChatDomain(l.panelId));
-    if (chat) store.setActiveLeaf(chat.id);
-  }
+  withTreeDockProjectionSuppressed(() => {
+    const store = useLayoutTreeStore.getState();
+    const before = store.tree;
+    const chatCount = countChatLeaves(before.root);
+    if (chatCount < 1 && import.meta.env?.DEV) {
+      console.warn(
+        '[workspace-shell] adapter invariant: chat leaf count =',
+        chatCount,
+        '→ normalize'
+      );
+    }
+    const next = normalizeToAdapterShape(before);
+    if (next !== before) {
+      store.setTree(next);
+      const leaves = collectLeaves(next.root);
+      const chat = leaves.find((l) => isChatDomain(l.panelId));
+      if (chat) store.setActiveLeaf(chat.id);
+    }
+  });
 }
 
 export function findChatLeafId(): string | null {

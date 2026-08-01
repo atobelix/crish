@@ -389,9 +389,10 @@ export function useSlashSend(
       return;
     }
 
-    // 仅空闲时启动 stream；激活经 session facade（send 路径，非 shell open/focus 手势）
+    // 仅空闲时启动 stream；激活经 shell.openOrFocusSession（单一 open/focus 手势：
+    // 已开 tab 时聚焦 + 对齐 activeSessionId + 绑 leaf；未开则建 tab）
     if (sessionFacade.activeSessionId !== sessionId) {
-      sessionFacade.setActiveSessionId(sessionId);
+      getCompositionRoot().session.openOrFocusSession(sessionId);
     }
     runStreamingAssistant(input, userMsgId, sessionId, finalStreamOptions);
   };

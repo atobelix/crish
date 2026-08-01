@@ -19,7 +19,7 @@ import {
   parseShellChromeMode,
   type ShellChromeMode,
 } from '../../api/shellChrome';
-import type { FileDiff, SettingsTabType } from '../types';
+import type { FileDiff, SettingsTabType, WorkspaceState } from '../types';
 import { appendTerminalLine, upsertDiffFile } from './diff-selectors';
 import { collapseToolColumnToTabs } from './ui-selectors';
 import {
@@ -34,12 +34,45 @@ import {
   UI_SIZE_STORAGE_KEY,
   type ActiveWorkerState,
   type TelemetrySyncPayload,
+  type TokenUsageState,
   type UiSize,
 } from './store-types';
 
+/**
+ * layout-core-actions 依赖的 state 面（AA-03 Q09 门禁：禁止 `: any`）。
+ * 只声明本模块 recipe 读写的字段；layoutStore 结构上包含全部字段（结构子类型）。
+ */
+export interface LayoutCoreState {
+  activeDiffSource: FileDiff | null;
+  diffFiles: FileDiff[];
+  permissionMode: PermissionMode;
+  planModeEnabled: boolean;
+  planApproved: boolean;
+  commandPermissions: string[];
+  providers: ProviderInfo[];
+  appSettings: Settings | null;
+  scheduledTasks: CronJob[];
+  mcpServers: McpServer[];
+  tokenUsage: TokenUsageState;
+  manuallyTriggeredWorkers: ActiveWorkerState[];
+  activeWorkers: ActiveWorkerState[];
+  killedWorkerIds: string[];
+  terminalBySession: Record<string, string[]>;
+  terminalLines: string[];
+  activeSessionId: string;
+  uiSize: UiSize;
+  shellChromeMode: ShellChromeMode;
+  chatMainSurface: 'chat' | 'scheduled';
+  sidebarCollapsed: boolean;
+  tabModeEnabled: boolean;
+  workspaces: WorkspaceState[];
+  showSettingsOverlay: boolean;
+  settingsActiveTab: SettingsTabType;
+}
+
 export function createLayoutCoreActions(
-  set: (updater: (state: any) => void) => void,
-  get: () => any
+  set: (updater: (state: LayoutCoreState) => void) => void,
+  get: () => LayoutCoreState
 ) {
   return {
     setActiveDiffSource: (diff: FileDiff | null) =>

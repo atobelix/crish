@@ -34,6 +34,7 @@
  * - `compositionRoot.shell` → this store (openNewDraftTab, setShellReady, getState)
  * - `compositionRoot.session.openOrFocusSession` → delegates here
  * - `compositionRoot.layout` is **layoutStore**, not this module
+ * - T06.9.1：跨 store 读树一律经 `compositionRoot.tree`（不再直取 useLayoutTreeStore）
  *
  * @see store/storeOwnership.ts (`SHELL_TAB_OWNERSHIP`)
  * @see docs/architecture/desktop-composition-and-stores.md
@@ -76,13 +77,17 @@ import {
   removeUnitBySessionId,
   dedupeDuplicateSessionChatLeaves,
 } from '../layout-tree';
+import type { LayoutTree } from '../layout-tree/types';
+import { isTreeDockProjectionSuppressed } from './treeDockProjection';
+import { getCompositionRoot } from '../../app/compositionRoot';
 
 /**
  * 归一化：去掉同 session 重复 chat leaf，写回 store（有变更才 setTree）。
  * 任意 lifecycle 写树后应调用。
+ * T06.9.1：跨 store 读经 compositionRoot.tree 门面（阻断对 layoutTreeStore 的直接 import 环）。
  */
 function dedupeSessionLeavesInStore(): void {
-  const store = useLayoutTreeStore.getState();
+  const store = getCompositionRoot().tree.getState();
   const next = dedupeDuplicateSessionChatLeaves(store.tree);
   if (next !== store.tree) {
     store.setTree(next);
@@ -96,7 +101,7 @@ function dedupeSessionLeavesInStore(): void {
 function removeSessionUnitFromTree(sessionId: string): void {
   const sid = (sessionId || '').trim();
   if (!sid) return;
-  const store = useLayoutTreeStore.getState();
+  const store = getCompositionRoot().tree.getState();
   const next = removeUnitBySessionId(store.tree, sid);
   if (next !== store.tree) {
     store.setTree(next);
@@ -118,7 +123,7 @@ function neighborDockNeedsProject(
   // 折叠 / 无 active 面板：不因 focus 去剥树
   if (dock.collapsed || !dock.activePanelId) return false;
 
-  const layout = useLayoutTreeStore.getState();
+  const layout = getCompositionRoot().tree.getState();
   const unitId = findUnitRootId(layout.tree.root, sid);
   if (!unitId) return true;
   const unit = findNodeById(layout.tree.root, unitId);
@@ -147,12 +152,12 @@ function bindActiveChatLeafSession(sessionId: string): void {
 
   dedupeSessionLeavesInStore();
 
-  let store = useLayoutTreeStore.getState();
+  let store = getCompositionRoot().tree.getState();
   let chats = listChatLeaves(store.tree.root);
 
   if (chats.length === 0) {
     ensureAdapterShape();
-    store = useLayoutTreeStore.getState();
+    store = getCompositionRoot().tree.getState();
     chats = listChatLeaves(store.tree.root);
   }
 
@@ -511,7 +516,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     // 关键：ChatCard 若钉死 leaf.sessionId，会忽略 PENDING_DRAFT → 看起来「点了没反应」
     // 解绑当前活动 chat leaf，让面板跟全局 draft 空态
     try {
-      const treeStore = useLayoutTreeStore.getState();
+      const treeStore = getCompositionRoot().tree.getState();
       const chats = listChatLeaves(treeStore.tree.root);
       const target =
         chats.find((c) => c.id === treeStore.activeLeafId) ??
@@ -607,18 +612,40 @@ export function selectActiveTabSessionId(
   return t?.sessionId ?? null;
 }
 
-// ── 监听 layoutTreeStore 的变化并反向同步 rightDock ──
-// 在浏览器/应用运行时，用户进行拖拽分屏、关闭 tab 等二叉树结构变更后，
-// 需要实时将 layout-tree 中的最新 tabs 拓扑更新同步回 shell 的 rightDock metadata，
-// 否则后续的 applyDockToTree 重投影会用旧的 shell dock openPanelIds 将二叉树覆盖为未分屏的初始形态。
-let lastTree = useLayoutTreeStore.getState().tree;
-useLayoutTreeStore.subscribe((state) => {
-  if (state.tree !== lastTree) {
-    lastTree = state.tree;
-    try {
-      syncShellDocksFromTree(state.tree);
-    } catch (e) {
-      /* ignore */
+// ── tree→shell dock 反向投影（显式生命周期，T06.9.1）────────────────
+// 原模块级永久订阅（AA-03 Q06：L610-624，永不退订）改为显式注册/退订：
+// - bootstrapServices 启动时 registerTreeDockSync()，cleanup 时退订；
+// - 重复注册幂等（StrictMode 双执行安全）；
+// - 投影抑制：shell→tree 投影（adapterShape 的 applyDockToTree 等）写树期间
+//   经 withTreeDockProjectionSuppressed 置位 → 本订阅跳过反向同步，
+//   消除 shell↔tree 双向投影互触发回环。
+// 语义：用户拖拽 / 分屏等纯 tree 变更（非 shell 投影路径）仍照常反推
+// shell rightDock 元数据，保证后续 applyDockToTree 重投影不拿旧 dock 覆盖树。
+let treeDockSyncRegistered = false;
+let lastSyncedTree: LayoutTree | null = null;
+
+/**
+ * 注册 tree→shell dock 反向投影订阅，返回退订函数。
+ * 幂等：已注册时返回 no-op；退订后可重新注册。
+ */
+export function registerTreeDockSync(): () => void {
+  if (treeDockSyncRegistered) return () => {};
+  treeDockSyncRegistered = true;
+  lastSyncedTree = useLayoutTreeStore.getState().tree;
+  const unsubscribe = useLayoutTreeStore.subscribe((state) => {
+    if (state.tree !== lastSyncedTree) {
+      lastSyncedTree = state.tree;
+      if (isTreeDockProjectionSuppressed()) return;
+      try {
+        syncShellDocksFromTree(state.tree);
+      } catch {
+        /* 反向投影失败不阻断 tree 渲染 */
+      }
     }
-  }
-});
+  });
+  return () => {
+    unsubscribe();
+    treeDockSyncRegistered = false;
+    lastSyncedTree = null;
+  };
+}

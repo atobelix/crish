@@ -39,6 +39,7 @@ import {
 import { generateMessageId } from '../../utils/generateMessageId';
 import { streamRecovery } from '../../services/StreamRecovery';
 import type { MessageToolApprovalMeta, MessageToolCall, SessionAgent } from '../../store/types';
+import type { FileDiff } from '../../store/types';
 import type { SessionMessage } from '../../store/layoutStore';
 import type { UseChatStreamOptions, RunNotice } from './types';
 import type { StreamBatcherRefs } from './useStreamBatchers';
@@ -69,7 +70,7 @@ export function useStreamCallbacks(
   },
   queryHelpers: {
     wsId: string;
-    setActiveDiffSource: (source: unknown) => void;
+    setActiveDiffSource: (source: FileDiff | null) => void;
     upsertSessionAgent: (sessionId: string, agent: SessionAgent) => void;
   },
 ): {

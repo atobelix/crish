@@ -27,6 +27,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
 import type { SessionMessage, FileDiff, MessageToolCall } from '../store/layoutStore';
+import type { MessageToolApprovalMeta } from '../store/types';
 import { sendToSubagent, streamCollaboratorRun, getSubagentStatus } from '../api/subagentApi';
 import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback';
 import { publishToolDiffs } from '../api/publishToolDiffs';
@@ -212,7 +213,7 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
           name: string,
           args: string,
           explanation: string,
-          approvalMeta?: any,
+          approvalMeta?: MessageToolApprovalMeta,
         ) =>
           pa((m) => {
             if (!m.toolCalls) m.toolCalls = [];

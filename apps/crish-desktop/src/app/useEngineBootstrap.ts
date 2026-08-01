@@ -34,9 +34,6 @@ export function useEngineBootstrap(): boolean {
           console.warn('[crish-desktop] engine offline after boot wait (keep-alive continues)');
         }
         if (res.ok) {
-          void import('../api/providerProfiles').then(({ syncActiveProfileToEngine }) => {
-            void syncActiveProfileToEngine();
-          });
           void import('../api/sessionDaemonSync').then(({ syncSessionsFromDaemon }) => {
             const layout = getCompositionRoot().layout;
             void syncSessionsFromDaemon(

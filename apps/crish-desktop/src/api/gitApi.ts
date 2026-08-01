@@ -302,27 +302,39 @@ export function parseGitPorcelainStatus(
   };
 }
 
-/** 本机 git 命令（经 workbench_run_shell，不经 daemon 审批） */
+/** 本机 git 命令（经 workbench_git_run 参数数组执行，不经 shell——PE-07 T07.3 C-02 修复） */
 async function runLocalGit(
   cwd: string,
   gitArgs: string[],
   timeoutMs = GIT_LOCAL_TIMEOUT_MS,
 ): Promise<{ ok: boolean; stdout: string; stderr: string; timedOut?: boolean } | null> {
   try {
-    const { runTerminalShell } = await import('./terminalShellApi');
-    // 不逐参数 escapeShellArg：workbench_run_shell 经 base64 → [scriptblock]::Create，
-    // PowerShell 脚本块解析器中 "git" "-C" "path" 多段引号为非法语法。
-    // 仅在参数含空格时加引号，其余保持原样即可适配 bash / PowerShell 双平台。
-    const q = (a: string) => (a.includes(' ') ? `"${a}"` : a);
-    const cmd = `git -C ${q(cwd)} ${gitArgs.map(q).join(' ')}`;
-    const res = await runTerminalShell({ command: cmd, cwd, timeoutMs });
-    if (res.status !== 'ok') return null;
-    return {
-      ok: res.data.ok,
-      stdout: res.data.stdout || '',
-      stderr: res.data.stderr || '',
-      timedOut: res.data.timedOut,
-    };
+    const { getTransport } = await import('./transport');
+    // 参数数组直传：文件名/提交信息中的 `; | & $ ( ) 反引号 " ' %` 等元字符
+    // 由 Rust 侧 std::process::Command::args 原样传递，无任何外壳解释面；
+    // `--` 之后的路径由 Rust 侧统一加 `:(literal)` pathspec 前缀防魔法注入。
+    const res = await getTransport().call<{
+      ok?: boolean;
+      stdout?: string;
+      stderr?: string;
+      timedOut?: boolean;
+      truncated?: boolean;
+    }>('workbench_git_run', { cwd, gitArgs, timeoutMs });
+    if (res.status === 'ok') {
+      const d = res.data || {};
+      return {
+        ok: Boolean(d.ok),
+        stdout: String(d.stdout ?? ''),
+        stderr: String(d.stderr ?? ''),
+        timedOut: Boolean(d.timedOut),
+      };
+    }
+    if (res.status === 'error') {
+      // 服务端拒绝（arg_not_allowed / workspace_not_granted）→ 错误信息回传供诊断
+      return { ok: false, stdout: '', stderr: res.message, timedOut: false };
+    }
+    // missing：非桌面壳 → 回落引擎路径
+    return null;
   } catch {
     return null;
   }

@@ -28,6 +28,53 @@ vi.mock('./engineConfig', () => ({
   })),
 }));
 
+// PE-07 T07.4：profileStore 密钥读写改走 rustProfileStore（config_secret_* /
+// config_profile_apply）——mock 三态（ok / missing / error）由用例控制。
+vi.mock('./provider-profiles/rustProfileStore', () => ({
+  configSecretSet: vi.fn(async (profileId: string, apiKey: string) => ({
+    status: 'ok' as const,
+    data: { ok: true, profileId, hasKey: Boolean(apiKey.trim()), persistence: 'persisted' },
+  })),
+  configSecretClear: vi.fn(async (profileId: string) => ({
+    status: 'ok' as const,
+    data: { ok: true, profileId, hasKey: false, persistence: 'persisted' },
+  })),
+  configSecretGet: vi.fn(async (profileId: string) => ({
+    status: 'ok' as const,
+    data: { ok: true, profileId, hasKey: false, apiKeyLast4: null },
+  })),
+  configSecretHas: vi.fn(async (profileId: string) => ({
+    status: 'ok' as const,
+    data: { ok: true, profileId, hasKey: false },
+  })),
+  configSecretReveal: vi.fn(async (profileId: string, uiConfirm: boolean) => ({
+    status: 'ok' as const,
+    data: {
+      ok: true,
+      profileId,
+      hasKey: uiConfirm,
+      apiKeyLast4: 'st4',
+      revealed: uiConfirm,
+    },
+  })),
+  configProfileApply: vi.fn(async (args: { profileId: string; apiKey?: string }) => ({
+    status: 'ok' as const,
+    data: {
+      ok: true,
+      profileId: args.profileId,
+      hasApiKey: Boolean(args.apiKey),
+      apiKeyLast4: 'st4',
+      credentialMode: 'direct',
+      credentialPersistence: 'persisted',
+    },
+  })),
+  configGet: vi.fn(async () => ({ status: 'ok' as const, data: { ok: true } })),
+  configUpdate: vi.fn(async (u: Record<string, unknown>) => ({
+    status: 'ok' as const,
+    data: { ok: true, ...u },
+  })),
+}));
+
 vi.mock('./clientApi', () => ({
   clientApi: {
     updateSettings: vi.fn(async (u: Record<string, unknown>) => ({
@@ -72,6 +119,7 @@ import {
   profileHasUsableModels,
   removeModelFromProfile,
   removeProfile,
+  resetLegacyMigrationForTests,
   resolveDisplayModelId,
   resolvePreferredModelSelection,
   saveProfileBaseUrl,
@@ -86,10 +134,12 @@ import {
   truncateProfileLabel,
 } from './providerProfiles';
 import { updateEngineConfig } from './engineConfig';
+import { configProfileApply, configSecretSet } from './provider-profiles/rustProfileStore';
 
 describe('providerProfiles', () => {
   beforeEach(() => {
     localStorage.clear();
+    resetLegacyMigrationForTests();
     vi.clearAllMocks();
   });
 
@@ -265,7 +315,7 @@ describe('providerProfiles', () => {
     expect(loadProfiles()![0]!.models).toEqual(['a', 'b']);
   });
 
-  it('falls back to first keyed profile model when active is empty', () => {
+  it('falls back to first keyed profile model when active is empty', async () => {
     saveProfiles([
       {
         id: 'empty',
@@ -283,7 +333,7 @@ describe('providerProfiles', () => {
         apiKey: 'k',
       },
     ]);
-    setProfileKey('keyed', 'k');
+    await setProfileKey('keyed', 'k');
     try {
       localStorage.removeItem('crish_active_profile_id');
       localStorage.removeItem('crish_active_model_id');
@@ -531,13 +581,16 @@ describe('providerProfiles', () => {
     expect(res.ok).toBe(true);
     expect(res.synced).toBe(true);
     expect(loadProfiles()![0]!.baseUrl).toBe('https://new.example/v1');
-    expect(updateEngineConfig).toHaveBeenCalledWith(
-      expect.objectContaining({
-        baseUrl: 'https://new.example/v1',
-        model: 'm1',
-        apiKey: 'sk-1',
-      }),
-    );
+    // PE-07 T07.4（K-01）：同步改走 config_profile_apply，payload 不含 apiKey
+    expect(updateEngineConfig).not.toHaveBeenCalled();
+    expect(configProfileApply).toHaveBeenCalledWith({
+      profileId: 'p1',
+      baseUrl: 'https://new.example/v1',
+      model: 'm1',
+    });
+    expect(
+      JSON.stringify(vi.mocked(configProfileApply).mock.calls[0])
+    ).not.toContain('sk-1');
   });
 
   it('saveProfileBaseUrl does not sync when profile is not active', async () => {
@@ -591,6 +644,31 @@ describe('providerProfiles', () => {
     expect(getActiveProfileId()).toBe('ds');
     expect(getActiveModelId()).toBe('deepseek-chat');
     expect(anyProfileHasKey()).toBe(true);
+    // K-01：密钥经 config_secret_set 落 DPAPI；激活经 config_profile_apply（无明文）
+    expect(configSecretSet).toHaveBeenCalledWith('ds', 'sk-new');
+    expect(configProfileApply).toHaveBeenCalledWith(
+      expect.objectContaining({ profileId: 'ds', model: 'deepseek-chat' })
+    );
+    expect(
+      JSON.stringify(vi.mocked(configProfileApply).mock.calls[0])
+    ).not.toContain('sk-new');
+    // localStorage 全程无明文
+    expect(localStorage.getItem('crish_provider_profiles_v1')).not.toContain('sk-new');
+  });
+
+  it('PE-07 T07.4 用例 3：setProfileKey 后 localStorage 无明文（仅 hasKey）', async () => {
+    saveProfiles([
+      { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', models: [], hasKey: false },
+    ]);
+    await setProfileKey('openai', 'sk-x');
+    const stored = localStorage.getItem('crish_provider_profiles_v1') || '';
+    expect(stored).not.toContain('sk-x');
+    const parsed = JSON.parse(stored);
+    expect(parsed[0].hasKey).toBe(true);
+    expect('apiKey' in parsed[0]).toBe(false);
+    expect(configSecretSet).toHaveBeenCalledWith('openai', 'sk-x');
+    // 会话内存缓存：模型扫描/连通测试可读
+    expect(loadProfiles().find((p) => p.id === 'openai')?.hasKey).toBe(true);
   });
 
   it('removeProfile clears active model when removing active profile', () => {

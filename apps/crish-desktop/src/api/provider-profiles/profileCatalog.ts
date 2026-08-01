@@ -34,6 +34,12 @@ export type ProviderProfile = {
   models: string[];
   /** 是否已保存密钥或已完成 OAuth 授权 */
   hasKey: boolean;
+  /**
+   * @deprecated legacy 明文字段（PE-07 T07.4 / K-01）：明文 key 下线后
+   * 规范化输出不再携带本字段（normalizeProviderProfile 剥离并丢弃）；
+   * 明文只存 DPAPI 凭据槽（config_secret_set / config_profile_apply）。
+   * 本字段仅用于读取旧数据 / hasKey 判定 / 一次性迁移。
+   */
   apiKey?: string | undefined;
   oauthConfig?: OAuthConfig | undefined;
   oauthToken?: OAuthTokenData | undefined;

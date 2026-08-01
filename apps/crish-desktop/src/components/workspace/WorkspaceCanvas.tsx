@@ -5,8 +5,11 @@ import type { WorkspaceState } from '../../store/layoutStore';
 import { CardPanel } from '../CardPanel';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { WorkspaceResizer } from './WorkspaceResizer';
-import { useWorkspaceResize } from './useWorkspaceResize';
-import { useColumnResize } from '../../hooks/useColumnResize';
+import {
+  useColumnResize,
+  nudgeColumnByKey,
+  nudgeGroupByKey,
+} from '../../hooks/useColumnResize';
 import type { RenderedColumn } from '../Workspace';
 
 interface WorkspaceCanvasProps {
@@ -75,13 +78,6 @@ export const WorkspaceCanvas: React.FC<WorkspaceCanvasProps> = React.memo(
   }) => {
     const { handleColResizerPointerDown, handleGroupResizerPointerDown } =
       useColumnResize(ws.id);
-    const { nudgeColumnByKey, nudgeGroupByKey } = useWorkspaceResize(
-      ws,
-      containerRef,
-      focusThisWorkspace,
-      resizeColumns,
-      resizeGroups,
-    );
 
     /**
      * 列分割器键盘交互：ArrowLeft/Right 微调；Home/End 极化到 13%/87%。
@@ -97,13 +93,13 @@ export const WorkspaceCanvas: React.FC<WorkspaceCanvasProps> = React.memo(
         if (e.key === 'ArrowLeft') {
           e.preventDefault();
           focusThisWorkspace();
-          nudgeColumnByKey(splitterLeftIdx, -1);
+          nudgeColumnByKey(containerRef, ws.id, resizeColumns, splitterLeftIdx, -1);
           return;
         }
         if (e.key === 'ArrowRight') {
           e.preventDefault();
           focusThisWorkspace();
-          nudgeColumnByKey(splitterLeftIdx, 1);
+          nudgeColumnByKey(containerRef, ws.id, resizeColumns, splitterLeftIdx, 1);
           return;
         }
         if (e.key !== 'Home' && e.key !== 'End') return;
@@ -140,16 +136,16 @@ export const WorkspaceCanvas: React.FC<WorkspaceCanvasProps> = React.memo(
         if (e.key === 'ArrowUp') {
           e.preventDefault();
           focusThisWorkspace();
-          nudgeGroupByKey(colIdx, topGroupIdx, -1);
+          nudgeGroupByKey(containerRef, ws.id, resizeGroups, colIdx, topGroupIdx, -1);
           return;
         }
         if (e.key === 'ArrowDown') {
           e.preventDefault();
           focusThisWorkspace();
-          nudgeGroupByKey(colIdx, topGroupIdx, 1);
+          nudgeGroupByKey(containerRef, ws.id, resizeGroups, colIdx, topGroupIdx, 1);
         }
       },
-      [focusThisWorkspace, nudgeGroupByKey],
+      [containerRef, focusThisWorkspace, resizeGroups, ws.id],
     );
 
     return (

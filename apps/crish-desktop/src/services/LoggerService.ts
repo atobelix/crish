@@ -1,4 +1,5 @@
 import { RingBuffer } from "@crish/shared-utils";
+import { redactDeep, redactSecrets } from "../utils/redact";
 
 export type LogLevel = "debug" | "info" | "warn" | "error" | "fatal";
 
@@ -10,6 +11,29 @@ export interface LogEntry {
   sessionId?: string;
   runId?: string;
   err?: { message: string; stack?: string; code?: string; name?: string };
+}
+
+/**
+ * 错误对象 → 日志安全载荷（PE-04 T04.4-1；K-05 脱敏面）。
+ * Error / string / 含 message 对象归一；null / undefined → undefined。
+ */
+export function toErrMeta(err: unknown): LogEntry["err"] | undefined {
+  if (err == null) return undefined;
+  if (err instanceof Error) {
+    return { message: err.message, stack: err.stack, name: err.name };
+  }
+  if (typeof err === "string") {
+    return { message: err };
+  }
+  if (typeof err === "object") {
+    const o = err as Record<string, unknown>;
+    return {
+      message: typeof o.message === "string" ? o.message : String(err),
+      ...(typeof o.code === "string" ? { code: o.code } : {}),
+      ...(typeof o.name === "string" ? { name: o.name } : {}),
+    };
+  }
+  return { message: String(err) };
 }
 
 const LEVEL_PRIORITY: Record<LogLevel, number> = {
@@ -31,12 +55,19 @@ const STYLE_MAP: Record<LogLevel, string> = {
 const isDev = (): boolean =>
   typeof process !== "undefined" && process.env.NODE_ENV === "development";
 
+/** 深度脱敏 meta（err.message / query 参数 / 嵌套字符串叶子；K-05 全局钩子） */
+function redactMeta(meta?: Partial<Omit<LogEntry, "level" | "time" | "msg">>): Partial<Omit<LogEntry, "level" | "time" | "msg">> | undefined {
+  if (!meta) return undefined;
+  return redactDeep(meta) as Partial<Omit<LogEntry, "level" | "time" | "msg">>;
+}
+
 export class LoggerService {
   static getInstance(): LoggerService {
     return logger;
   }
   private buffer = new RingBuffer<LogEntry>(200);
   private level: LogLevel = "debug";
+  private sessionContext: { sessionId?: string; runId?: string } = {};
 
   setLevel(level: LogLevel): void {
     this.level = level;
@@ -46,25 +77,45 @@ export class LoggerService {
     return this.buffer.toArray();
   }
 
+  /** 清空环形缓冲（测试 / 日志导出后重置用） */
+  clearLogs(): void {
+    this.buffer.clear();
+  }
+
+  /** 全局 sessionId/runId 上下文（调用点 meta 优先于全局） */
+  setSessionContext(ctx: { sessionId?: string; runId?: string }): void {
+    this.sessionContext = { ...this.sessionContext, ...ctx };
+  }
+
+  resetSessionContext(): void {
+    this.sessionContext = {};
+  }
+
   private shouldLog(level: LogLevel): boolean {
     return LEVEL_PRIORITY[level] >= LEVEL_PRIORITY[this.level];
   }
 
   private log(level: LogLevel, msg: string, meta?: Partial<Omit<LogEntry, "level" | "time" | "msg">>): void {
     if (!this.shouldLog(level)) return;
+    // K-05：全局脱敏钩子——msg 与 meta 在写库/输出前统一过脱敏层
+    const safeMsg = redactSecrets(msg);
+    const safeMeta = {
+      ...this.sessionContext,
+      ...redactMeta(meta),
+    };
     const entry: LogEntry = {
       level,
       time: new Date().toISOString(),
-      msg,
-      ...meta,
+      msg: safeMsg,
+      ...safeMeta,
     };
     this.buffer.pushOverwritingOldest(entry);
 
     if (isDev()) {
       const style = STYLE_MAP[level];
       const prefix = entry.module ? `[${entry.module}]` : "";
-      const args: unknown[] = [`%c${prefix} ${msg}`, style];
-      if (meta) args.push(meta);
+      const args: unknown[] = [`%c${prefix} ${safeMsg}`, style];
+      if (safeMeta) args.push(safeMeta);
       switch (level) {
         case "debug":
           console.debug(...args);

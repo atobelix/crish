@@ -13,9 +13,12 @@
  * 与 useTreeDrag 的区别：
  * - useTreeDrag：面板 leaf/tab handle 启动
  * - 本 hook：GlobalSessionTabBar 会话 tab 启动，额外处理条带内重排 + 会话分屏
+ *
+ * 手势机制（阈值 / phase / pointerId 隔离 / ghost / 监听）收敛到
+ * `usePointerDragBase`（PE-06 T06.8 组 3），本 hook 只保留 drop 语义差异层。
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import {
   useLayoutTreeStore,
@@ -38,6 +41,10 @@ import {
 } from '../../store/layout-tree/operations';
 import type { DropDirection, LayoutNode } from '../../store/layout-tree/types';
 import type { TreeDragSource } from '../../store/layout-tree';
+import {
+  usePointerDragBase,
+  DROP_DETECT_INTERVAL_MS,
+} from '../../hooks/usePointerDragBase';
 
 /** 延迟加载，避免 useTopBarDrag ↔ adapterShape 在 HMR 时形成循环依赖导致缺导出崩溃 */
 function reprojectAllSessionDocksSafe(): void {
@@ -52,32 +59,11 @@ function reprojectAllSessionDocksSafe(): void {
     });
 }
 
-// ── 常量 ────────────────────────────────────────────────────────────
-
-const DRAG_THRESHOLD_PX = 5;
-const GHOST_OFFSET_X = 16;
-const GHOST_OFFSET_Y = 16;
-const DROP_DETECT_INTERVAL_MS = 16;
-
 // ── 拖拽源类型 ───────────────────────────────────────────────────────
 
 type TopBarDragSource =
   | { kind: 'session'; sessionId: string; title: string }
   | { kind: 'tool'; leafId: string; tabId: string; panelId: string; title: string };
-
-interface PendingDrag {
-  source: TopBarDragSource;
-  startX: number;
-  startY: number;
-  pointerId: number;
-}
-
-interface ActiveDrag {
-  source: TopBarDragSource;
-  currentX: number;
-  currentY: number;
-  pointerId: number;
-}
 
 interface LeafRectItem {
   id: string;
@@ -243,10 +229,6 @@ export type SessionCanvasDropPlan =
   | { action: 'none' };
 
 /**
- * 纯决策：根据当前树与 drop zone 决定会话拖放结果。
- * 可单测；commitSessionSplit 只执行本计划。
- */
-/**
  * 会话落点锚点 = Conversation Unit root（H(chat|tools) 或 chat-only），
  * 禁止锚到 unit 内部的 chat leaf（会把 tools 拆成全局孤儿列）。
  */
@@ -333,17 +315,10 @@ export function useTopBarDrag(
   _folderKey: string,
   refreshTabs: () => void
 ): UseTopBarDragResult {
-  const phaseRef = useRef<'idle' | 'pending' | 'active' | 'committed' | 'cancelled'>('idle');
-  const pendingRef = useRef<PendingDrag | null>(null);
-  const activeRef = useRef<ActiveDrag | null>(null);
   const cachedLeafRectsRef = useRef<LeafRectItem[]>([]);
   const lastZoneRef = useRef<DropZone | null>(null);
   const lastDropDetectRef = useRef(0);
 
-  const ghostRef = useRef<HTMLDivElement | null>(null);
-  const ghostPosRef = useRef<{ x: number; y: number } | null>(null);
-
-  const [isDragging, setIsDragging] = useState(false);
   const [ghostLabel, setGhostLabel] = useState<string | null>(null);
 
   const setDraggedSource = useLayoutTreeStore((s) => s.setDraggedSource);
@@ -351,14 +326,6 @@ export function useTopBarDrag(
   const commitDrop = useLayoutTreeStore((s) => s.commitDrop);
   const setActiveLeaf = useLayoutTreeStore((s) => s.setActiveLeaf);
   const setLeafSessionId = useLayoutTreeStore((s) => s.setLeafSessionId);
-
-  const applyGhostPos = useCallback(() => {
-    const el = ghostRef.current;
-    const pos = ghostPosRef.current;
-    if (el && pos) {
-      el.style.transform = `translate(${pos.x}px, ${pos.y}px) rotate(1.5deg)`;
-    }
-  }, []);
 
   const updateZone = useCallback(
     (zone: DropZone | null) => {
@@ -382,168 +349,6 @@ export function useTopBarDrag(
       return null;
     },
     []
-  );
-
-  const startSessionDrag = useCallback(
-    (sessionId: string, title: string, e: React.PointerEvent) => {
-      if (e.button !== 0) return;
-      if (phaseRef.current !== 'idle') return;
-      pendingRef.current = {
-        source: { kind: 'session', sessionId, title },
-        startX: e.clientX,
-        startY: e.clientY,
-        pointerId: e.pointerId,
-      };
-      phaseRef.current = 'pending';
-    },
-    []
-  );
-
-  const startToolDrag = useCallback(
-    (
-      leafId: string,
-      tabId: string,
-      panelId: string,
-      title: string,
-      e: React.PointerEvent
-    ) => {
-      if (e.button !== 0) return;
-      if (phaseRef.current !== 'idle') return;
-      pendingRef.current = {
-        source: { kind: 'tool', leafId, tabId, panelId, title },
-        startX: e.clientX,
-        startY: e.clientY,
-        pointerId: e.pointerId,
-      };
-      phaseRef.current = 'pending';
-    },
-    []
-  );
-
-  const enterActive = useCallback(
-    (clientX: number, clientY: number) => {
-      const pending = pendingRef.current;
-      if (!pending) return;
-      const active: ActiveDrag = {
-        source: pending.source,
-        currentX: clientX,
-        currentY: clientY,
-        pointerId: pending.pointerId,
-      };
-      activeRef.current = active;
-      pendingRef.current = null;
-      phaseRef.current = 'active';
-      cachedLeafRectsRef.current = collectLeafRects();
-      lastZoneRef.current = null;
-      lastDropDetectRef.current = 0;
-      ghostPosRef.current = {
-        x: clientX + GHOST_OFFSET_X,
-        y: clientY + GHOST_OFFSET_Y,
-      };
-      setGhostLabel(pending.source.title);
-      setIsDragging(true);
-
-      if (pending.source.kind === 'tool') {
-        const treeSrc = toTreeDragSource(pending.source);
-        if (treeSrc) setDraggedSource(treeSrc);
-      } else {
-        // 会话标签拖拽：用特殊 draggedSource（panelId='chat'）让 DropZoneOverlay 能渲染 ghost
-        setDraggedSource({
-          type: 'tab',
-          leafId: pending.source.sessionId,
-          tabId: pending.source.sessionId,
-          panelId: 'chat',
-        });
-      }
-    },
-    [setDraggedSource, toTreeDragSource]
-  );
-
-  const handlePointerMove = useCallback(
-    (e: PointerEvent) => {
-      const phase = phaseRef.current;
-      if (phase === 'idle' || phase === 'committed' || phase === 'cancelled') return;
-
-      if (phase === 'pending') {
-        const pending = pendingRef.current;
-        if (!pending || e.pointerId !== pending.pointerId) return;
-        const dx = e.clientX - pending.startX;
-        const dy = e.clientY - pending.startY;
-        if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
-        enterActive(e.clientX, e.clientY);
-      } else {
-        const active = activeRef.current;
-        if (!active || e.pointerId !== active.pointerId) return;
-      }
-
-      const active = activeRef.current;
-      if (!active) return;
-      active.currentX = e.clientX;
-      active.currentY = e.clientY;
-      ghostPosRef.current = {
-        x: e.clientX + GHOST_OFFSET_X,
-        y: e.clientY + GHOST_OFFSET_Y,
-      };
-      applyGhostPos();
-
-      const now = performance.now();
-      if (now - lastDropDetectRef.current < DROP_DETECT_INTERVAL_MS) return;
-      lastDropDetectRef.current = now;
-
-      if (active.source.kind === 'tool') {
-        const leafRects = cachedLeafRectsRef.current;
-        const hit = findLeafAtPointer({ x: e.clientX, y: e.clientY }, leafRects);
-        if (
-          !hit ||
-          isChatDomain(active.source.panelId) !== isChatDomain(hit.panelId)
-        ) {
-          updateZone(null);
-          return;
-        }
-        if (active.source.leafId === hit.id) {
-          // 同 leaf：若只有 1 个 tab 只能 merge-tab（重排），否则正常检测
-          if (hit.tabCount <= 1) {
-            updateZone({ type: 'merge-tab', targetLeafId: hit.id, confidence: 1 });
-            return;
-          }
-        }
-        updateZone(detectDropZone({ x: e.clientX, y: e.clientY }, hit.rect, hit.id));
-      } else {
-        // 会话标签：优先检测是否悬停在另一个会话标签上（重排）
-        const tabEl = findSessionTabAt({ x: e.clientX, y: e.clientY });
-        if (tabEl) {
-          const targetId = tabEl.dataset.topbarSessionId;
-          if (targetId && targetId !== active.source.sessionId) {
-            updateZone({
-              type: 'merge-tab',
-              targetLeafId: `session-tab-${targetId}`,
-              confidence: 1,
-              targetTabId: targetId,
-            });
-            return;
-          }
-          // 悬停在自身标签上：清除 zone
-          if (targetId === active.source.sessionId) {
-            updateZone(null);
-            return;
-          }
-        }
-        // 拖到 chat 画布：显示 split 落点（多 chat 分屏）
-        const leafRects = cachedLeafRectsRef.current;
-        const hit = findChatLeafAt(
-          { x: e.clientX, y: e.clientY },
-          leafRects
-        );
-        if (!hit) {
-          updateZone(null);
-          return;
-        }
-        updateZone(
-          detectDropZone({ x: e.clientX, y: e.clientY }, hit.rect, hit.id)
-        );
-      }
-    },
-    [enterActive, applyGhostPos, updateZone]
   );
 
   const commitSessionReorder = useCallback(
@@ -676,111 +481,141 @@ export function useTopBarDrag(
     [setLeafSessionId, activateSessionOnLeaf]
   );
 
-  const handlePointerUp = useCallback(
-    (e: PointerEvent) => {
-      const phase = phaseRef.current;
-      if (phase === 'idle') return;
+  // ── 手势基座（阈值 / phase / pointerId 隔离 / ghost / 监听） ──
 
-      const expectedPointerId =
-        pendingRef.current?.pointerId ?? activeRef.current?.pointerId;
-      if (expectedPointerId !== undefined && e.pointerId !== expectedPointerId) return;
+  const base = usePointerDragBase<TopBarDragSource>({
+    bodyClass: 'topbar-dragging',
+    onDragStart: (source) => {
+      cachedLeafRectsRef.current = collectLeafRects();
+      lastZoneRef.current = null;
+      lastDropDetectRef.current = 0;
+      setGhostLabel(source.title);
 
-      if (phase === 'pending') {
-        pendingRef.current = null;
-        phaseRef.current = 'idle';
-        return;
+      if (source.kind === 'tool') {
+        const treeSrc = toTreeDragSource(source);
+        if (treeSrc) setDraggedSource(treeSrc);
+      } else {
+        // 会话标签拖拽：用特殊 draggedSource（panelId='chat'）让 DropZoneOverlay 能渲染 ghost
+        setDraggedSource({
+          type: 'tab',
+          leafId: source.sessionId,
+          tabId: source.sessionId,
+          panelId: 'chat',
+        });
       }
+    },
+    onDragMove: (source, clientX, clientY) => {
+      const now = performance.now();
+      if (now - lastDropDetectRef.current < DROP_DETECT_INTERVAL_MS) return;
+      lastDropDetectRef.current = now;
 
-      const active = activeRef.current;
-      const zone = lastZoneRef.current;
-
-      if (phase === 'active' && active) {
-        if (active.source.kind === 'tool') {
-          // 功能标签：直接复用 store commitDrop
-          commitDrop();
-        } else if (zone) {
-          if (zone.type === 'merge-tab' && zone.targetTabId) {
-            commitSessionReorder(active.source.sessionId, zone.targetTabId);
-          } else if (zone.type.startsWith('split-')) {
-            commitSessionSplit(active.source.sessionId, zone);
+      if (source.kind === 'tool') {
+        const leafRects = cachedLeafRectsRef.current;
+        const hit = findLeafAtPointer({ x: clientX, y: clientY }, leafRects);
+        if (
+          !hit ||
+          isChatDomain(source.panelId) !== isChatDomain(hit.panelId)
+        ) {
+          updateZone(null);
+          return;
+        }
+        if (source.leafId === hit.id) {
+          // 同 leaf：若只有 1 个 tab 只能 merge-tab（重排），否则正常检测
+          if (hit.tabCount <= 1) {
+            updateZone({ type: 'merge-tab', targetLeafId: hit.id, confidence: 1 });
+            return;
           }
         }
+        updateZone(detectDropZone({ x: clientX, y: clientY }, hit.rect, hit.id));
+      } else {
+        // 会话标签：优先检测是否悬停在另一个会话标签上（重排）
+        const tabEl = findSessionTabAt({ x: clientX, y: clientY });
+        if (tabEl) {
+          const targetId = tabEl.dataset.topbarSessionId;
+          if (targetId && targetId !== source.sessionId) {
+            updateZone({
+              type: 'merge-tab',
+              targetLeafId: `session-tab-${targetId}`,
+              confidence: 1,
+              targetTabId: targetId,
+            });
+            return;
+          }
+          // 悬停在自身标签上：清除 zone
+          if (targetId === source.sessionId) {
+            updateZone(null);
+            return;
+          }
+        }
+        // 拖到 chat 画布：显示 split 落点（多 chat 分屏）
+        const leafRects = cachedLeafRectsRef.current;
+        const hit = findChatLeafAt(
+          { x: clientX, y: clientY },
+          leafRects
+        );
+        if (!hit) {
+          updateZone(null);
+          return;
+        }
+        updateZone(
+          detectDropZone({ x: clientX, y: clientY }, hit.rect, hit.id)
+        );
       }
+    },
+    onDrop: (source) => {
+      const zone = lastZoneRef.current;
 
-      activeRef.current = null;
-      pendingRef.current = null;
-      cachedLeafRectsRef.current = [];
-      ghostPosRef.current = null;
-      lastZoneRef.current = null;
-      phaseRef.current = 'idle';
-      setIsDragging(false);
-      setGhostLabel(null);
+      if (source.kind === 'tool') {
+        // 功能标签：直接复用 store commitDrop
+        commitDrop();
+      } else if (zone) {
+        if (zone.type === 'merge-tab' && zone.targetTabId) {
+          commitSessionReorder(source.sessionId, zone.targetTabId);
+        } else if (zone.type.startsWith('split-')) {
+          commitSessionSplit(source.sessionId, zone);
+        }
+      }
       setDraggedSource(null);
       setActiveDropZone(null);
     },
-    [
-      commitDrop,
-      commitSessionReorder,
-      commitSessionSplit,
-      setDraggedSource,
-      setActiveDropZone,
-    ]
-  );
-
-  const handlePointerCancel = useCallback(() => {
-    if (phaseRef.current === 'idle') return;
-    activeRef.current = null;
-    pendingRef.current = null;
-    cachedLeafRectsRef.current = [];
-    ghostPosRef.current = null;
-    lastZoneRef.current = null;
-    phaseRef.current = 'idle';
-    setIsDragging(false);
-    setGhostLabel(null);
-    setDraggedSource(null);
-    setActiveDropZone(null);
-  }, [setDraggedSource, setActiveDropZone]);
-
-  const setGhostRef = useCallback(
-    (el: HTMLDivElement | null) => {
-      ghostRef.current = el;
-      if (el && ghostPosRef.current) {
-        applyGhostPos();
-      }
+    onCancel: () => {
+      setDraggedSource(null);
+      setActiveDropZone(null);
     },
-    [applyGhostPos]
+    onGestureEnd: () => {
+      cachedLeafRectsRef.current = [];
+      lastZoneRef.current = null;
+      setGhostLabel(null);
+    },
+  });
+
+  // ── 拖拽启动 ──────────────────────────────────────────────────
+
+  const startSessionDrag = useCallback(
+    (sessionId: string, title: string, e: React.PointerEvent) => {
+      base.start({ kind: 'session', sessionId, title }, e);
+    },
+    [base]
   );
 
-  useEffect(() => {
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('pointercancel', handlePointerCancel);
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handlePointerCancel();
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerCancel);
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [handlePointerMove, handlePointerUp, handlePointerCancel]);
-
-  useEffect(() => {
-    if (isDragging) {
-      document.body.classList.add('topbar-dragging');
-    } else {
-      document.body.classList.remove('topbar-dragging');
-    }
-    return () => document.body.classList.remove('topbar-dragging');
-  }, [isDragging]);
+  const startToolDrag = useCallback(
+    (
+      leafId: string,
+      tabId: string,
+      panelId: string,
+      title: string,
+      e: React.PointerEvent
+    ) => {
+      base.start({ kind: 'tool', leafId, tabId, panelId, title }, e);
+    },
+    [base]
+  );
 
   return {
-    isDragging,
+    isDragging: base.isDragging,
     startSessionDrag,
     startToolDrag,
-    setGhostRef,
+    setGhostRef: base.setGhostRef,
     ghostLabel,
   };
 }

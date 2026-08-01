@@ -326,10 +326,14 @@ export const useLayoutStore = create<LayoutStore>()(
 
 if (typeof window !== 'undefined') {
   window.useLayoutStore = useLayoutStore;
-  window.__storeUpdateCount = 0;
-  useLayoutStore.subscribe(() => {
-    window.__storeUpdateCount = (window.__storeUpdateCount || 0) + 1;
-  });
+  // T06.9.1（AA-03 Q11）：更新计数订阅仅 DEV 分支生效（开发期可观测，
+  // 生产不再持有永久计数订阅）
+  if (import.meta.env?.DEV) {
+    window.__storeUpdateCount = 0;
+    useLayoutStore.subscribe(() => {
+      window.__storeUpdateCount = (window.__storeUpdateCount || 0) + 1;
+    });
+  }
 }
 
 // ── Layout state shape (state-only, excludes actions) ─────────────────────────

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { flushSync } from 'react-dom';
+import { ResizeObserverManager } from '../services/ResizeObserverManager';
 
 /** 动画/拖拽类型枚举 */
 export type LayoutAnimationType =
@@ -349,10 +350,26 @@ export function isLayoutFrozenNow(): boolean {
   return useLayoutAnimationStore.getState().isLayoutFrozen;
 }
 
-// 🌟 核心连接点：自动将 isLayoutFrozen 桥接至 ResizeObserverManager 🌟
-import { ResizeObserverManager } from '../services/ResizeObserverManager';
-useLayoutAnimationStore.subscribe((state, prevState) => {
-  if (state.isLayoutFrozen !== prevState.isLayoutFrozen) {
-    ResizeObserverManager.getInstance().setSuspended(state.isLayoutFrozen);
-  }
-});
+// 核心连接点：自动将 isLayoutFrozen 桥接至 ResizeObserverManager。
+// T06.9.1：原模块级永久订阅（AA-03 Q06，永不退订）改为显式生命周期——
+// bootstrapServices 调用 registerLayoutAnimationBridge() 注册，cleanup 退订；
+// 重复注册幂等（StrictMode 双执行安全）。
+let layoutAnimationBridgeRegistered = false;
+
+/**
+ * 注册 isLayoutFrozen → ResizeObserverManager.setSuspended 桥接订阅，
+ * 返回退订函数（幂等；退订后可重新注册）。
+ */
+export function registerLayoutAnimationBridge(): () => void {
+  if (layoutAnimationBridgeRegistered) return () => {};
+  layoutAnimationBridgeRegistered = true;
+  const unsubscribe = useLayoutAnimationStore.subscribe((state, prevState) => {
+    if (state.isLayoutFrozen !== prevState.isLayoutFrozen) {
+      ResizeObserverManager.getInstance().setSuspended(state.isLayoutFrozen);
+    }
+  });
+  return () => {
+    unsubscribe();
+    layoutAnimationBridgeRegistered = false;
+  };
+}

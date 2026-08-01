@@ -69,7 +69,9 @@ describe('AppBootstrap — 结构分析 (R9-T10 + shell hydrate)', () => {
 
   it('AppBootstrap effect 数量（含 shell hydrate layout effect）', () => {
     // 2026-07 shell redesign：hydrateWorkspaceShell useLayoutEffect + migration useEffect
-    expect(app.length).toBeGreaterThanOrEqual(16);
+    // T06.10：E13 手动 resize class 双写已删除（WindowResizeBridge 接管）
+    // PE-07 T07.4-B：+1（7b 旧明文密钥迁移 migrateLegacyProfiles）→ 18
+    expect(app.length).toBeGreaterThanOrEqual(17);
     expect(app.length).toBe(18);
   });
 
@@ -94,6 +96,12 @@ describe('AppBootstrap — 结构分析 (R9-T10 + shell hydrate)', () => {
     expect(body).toContain('hydrateWorkspaceShell');
     expect(body).toContain('waitLayoutTreeHydration');
     expect(body).toContain('pickWorkspaceFolder');
+  });
+
+  it('T06.10：E13 手动 window-resizing class 双写已删除（WindowResizeBridge 单一接管）', () => {
+    const body = APP_SRC;
+    expect(body).not.toContain('window-resizing');
+    expect(body).not.toContain("classList.add('window-resizing')");
   });
 
   it('engine bootstrap 仍在 combined 前端', () => {

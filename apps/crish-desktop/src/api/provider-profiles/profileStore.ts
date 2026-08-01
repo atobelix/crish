@@ -1,13 +1,20 @@
 /**
  * 本地与磁盘配置加密读写与引擎同步 Store 机制。
+ *
+ * PE-07 T07.4（K-01）改造：明文 key 下线——
+ * - key 读写改走 config_secret_* / config_profile_apply（DPAPI），不再明文落 LS；
+ * - 本地仅存 hasKey 布尔标记与元数据；
+ * - 展示用 last4 掩码（maskSecretLast4 / rustProfileStore 返回的 apiKeyLast4）。
  */
 
-import {
-  pushRecentModel,
-  updateEngineConfig,
-  type EngineConfigUpdate,
-} from '../engineConfig';
+import { pushRecentModel } from '../engineConfig';
 import { emitUiEvent } from '../uiEvents';
+import { maskSecretLast4 } from '../../utils/redact';
+import {
+  configProfileApply,
+  configSecretClear,
+  configSecretSet,
+} from './rustProfileStore';
 import {
   DEFAULT_PROFILES,
   type FlatModelChoice,
@@ -26,10 +33,30 @@ import {
   profileHasKey,
   stripLegacySeedModels,
 } from './profileValidation';
+import { ensureLegacyProfilesMigration, LEGACY_MIGRATION_FLAG_KEY } from './migrateLegacyProfiles';
 
 const PROFILES_KEY = 'crish_provider_profiles_v1';
 const ACTIVE_PROFILE_KEY = 'crish_active_profile_id';
 const ACTIVE_MODEL_KEY = 'crish_active_model_id';
+
+/**
+ * 会话内密钥内存缓存（K-01 明文下线的唯一例外持有面）：
+ * 仅用户主动输入密钥（saveProfileKey / setProfileKey）时写入，
+ * 供模型扫描 / 连通测试（modelCatalog）使用；永不落 localStorage。
+ */
+const profileKeyCache = new Map<string, string>();
+
+/** 读取会话内密钥内存缓存（无 → undefined；仅限模型扫描/连通测试等必需场景） */
+export function getProfileKeyInMemory(profileId: string): string | undefined {
+  return profileKeyCache.get(profileId);
+}
+
+/** 展示用密钥掩码（last4 风格；无密钥 → 空串） */
+export function maskProfileKeyForDisplay(apiKeyLast4?: string | null): string {
+  const last = (apiKeyLast4 || '').trim();
+  if (!last) return '';
+  return maskSecretLast4(`sk-...${last}`);
+}
 
 /** @internal 兼容旧内部名 */
 function normalizeProfile(
@@ -112,6 +139,26 @@ export function saveProfiles(list: ProviderProfile[]) {
 }
 
 export function loadProfiles(): ProviderProfile[] {
+  // PE-07 T07.4-B：首次 loadProfiles 前置钩子——幂等标记未置时触发一次性
+  // 明文迁移（模块级门控；失败不阻断启动）。迁移完成前不写回 LS，
+  // 防止「剥离明文时未落 DPAPI」造成密钥丢失（见下方 changed 写回守卫）。
+  void ensureLegacyProfilesMigration();
+  const migrationPending = () => {
+    try {
+      return localStorage.getItem(LEGACY_MIGRATION_FLAG_KEY) !== '1';
+    } catch {
+      return false;
+    }
+  };
+  const rawHasPlaintextKey = () => {
+    try {
+      const raw = localStorage.getItem(PROFILES_KEY);
+      return Boolean(raw && /"apiKey"\s*:/.test(raw));
+    } catch {
+      return false;
+    }
+  };
+
   try {
     const raw = localStorage.getItem(PROFILES_KEY);
     if (!raw) {
@@ -161,14 +208,18 @@ export function loadProfiles(): ProviderProfile[] {
       }
     }
     if (changed) {
-      localStorage.setItem(
-        PROFILES_KEY,
-        JSON.stringify(migrated.map((p) => normalizeProviderProfile(p)))
-      );
-      try {
-        emitUiEvent('profiles-changed');
-      } catch {
-        /* ignore */
+      // 明文迁移守卫：存量仍含 apiKey 且未置幂等标记 → 本次写回交给迁移负责
+      // （迁移确认 DPAPI 落盘后自行剥离写回），此处跳过防密钥丢失。
+      if (!(migrationPending() && rawHasPlaintextKey())) {
+        localStorage.setItem(
+          PROFILES_KEY,
+          JSON.stringify(migrated.map((p) => normalizeProviderProfile(p)))
+        );
+        try {
+          emitUiEvent('profiles-changed');
+        } catch {
+          /* ignore */
+        }
       }
     }
     sanitizeGhostActiveModel(migrated);
@@ -307,18 +358,44 @@ export function setProfileEnabled(
   return loadProfiles();
 }
 
-export function setProfileKey(profileId: string, apiKey: string) {
+/**
+ * 保存密钥（K-01）：明文经 config_secret_set 落 DPAPI 凭据槽，
+ * 本地仅写 hasKey 标记（不再写 p.apiKey 明文）；
+ * 会话内同时写入内存缓存（模型扫描/连通测试用）。
+ * 返回：DPAPI 结果 ok → hasKey=true；invoke missing（非 Tauri 环境）→
+ * 降级为本地草稿标记（不落明文）；invoke 错误 → hasKey=false（不谎报已保存）。
+ */
+export async function setProfileKey(
+  profileId: string,
+  apiKey: string
+): Promise<ProviderProfile[]> {
+  const key = apiKey.trim();
   const list = loadProfiles();
   const p = list.find((x) => x.id === profileId);
   if (!p) return list;
-  p.apiKey = apiKey;
-  p.hasKey = Boolean(apiKey.trim());
+
+  if (key) profileKeyCache.set(profileId, key);
+  else profileKeyCache.delete(profileId);
+
+  const res = key
+    ? await configSecretSet(profileId, key)
+    : await configSecretClear(profileId);
+  if (res.status === 'ok') {
+    p.hasKey = Boolean(res.data?.hasKey);
+  } else if (res.status === 'missing') {
+    // 非 Tauri 环境（浏览器 dev）：降级为本地草稿标记（25-audit 允许）
+    p.hasKey = Boolean(key);
+  } else {
+    p.hasKey = false;
+  }
   saveProfiles(list);
   return list;
 }
 
 /**
  * 保存 Base URL；若该 profile 为当前活动项，同步到引擎（保存即生效）。
+ * K-01：同步走 config_profile_apply（密钥由 Rust 从 DPAPI 槽读取），
+ * 不再携带明文 key。
  */
 export async function saveProfileBaseUrl(
   profileId: string,
@@ -336,17 +413,22 @@ export async function saveProfileBaseUrl(
   }
 
   const model = (getActiveModelId() || p.models[0] || '').trim();
-  const update: EngineConfigUpdate = {
-    baseUrl: p.baseUrl || undefined,
-    ...(p.apiKey?.trim() ? { apiKey: p.apiKey } : {}),
+  const res = await configProfileApply({
+    profileId,
+    ...(p.baseUrl ? { baseUrl: p.baseUrl } : {}),
     ...(model ? { model } : {}),
-  };
-  const res = await updateEngineConfig(update);
-  return { ok: res.ok, ...(res.error ? { error: res.error } : {}), synced: res.ok };
+  });
+  if (res.status !== 'ok' || res.data?.ok !== true) {
+    const error = res.status === 'missing' ? 'engine_unavailable' : res.message;
+    return { ok: false, ...(error ? { error } : {}), synced: false };
+  }
+  return { ok: true, synced: true };
 }
 
 /**
  * 保存密钥；若该 profile 已是活动项（或尚无活动项），同步到引擎。
+ * K-01：密钥落 DPAPI（setProfileKey），同步走 config_profile_apply，
+ * 全程无明文经 webview。
  */
 export async function saveProfileKey(
   profileId: string,
@@ -356,9 +438,10 @@ export async function saveProfileKey(
   const key = apiKey.trim();
   if (!key) return { ok: false, error: 'empty_key', synced: false };
 
-  setProfileKey(profileId, key);
+  await setProfileKey(profileId, key);
   const profile = loadProfiles().find((p) => p.id === profileId);
   if (!profile) return { ok: false, error: 'profile_not_found', synced: false };
+  if (!profile.hasKey) return { ok: false, error: 'key_save_failed', synced: false };
 
   const activeId = getActiveProfileId();
   const shouldSync =
@@ -375,12 +458,16 @@ export async function saveProfileKey(
     ''
   ).trim();
   if (!model) {
-    const res = await updateEngineConfig({
-      apiKey: key,
-      baseUrl: profile.baseUrl || undefined,
+    const res = await configProfileApply({
+      profileId,
+      ...(profile.baseUrl ? { baseUrl: profile.baseUrl } : {}),
     });
-    if (res.ok) setActiveProfileId(profileId);
-    return { ok: res.ok, ...(res.error ? { error: res.error } : {}), synced: res.ok };
+    if (res.status === 'ok' && res.data?.ok === true) {
+      setActiveProfileId(profileId);
+      return { ok: true, synced: true };
+    }
+    const error = res.status === 'missing' ? 'engine_unavailable' : res.message;
+    return { ok: false, ...(error ? { error } : {}), synced: false };
   }
 
   const res = await activateProfileModel(profileId, model);
@@ -505,7 +592,11 @@ function notifyModelChanged(profileId: string, model: string) {
   }
 }
 
-/** 将指定 profile + 模型应用到引擎 */
+/**
+ * 将指定 profile + 模型应用到引擎。
+ * K-01：密钥由 Rust 从 DPAPI 槽读取（config_profile_apply），
+ * webview 不再持有明文（hasLocalKey 仅由 hasKey 标记判定）。
+ */
 export async function activateProfileModel(
   profileId: string,
   model: string
@@ -525,80 +616,41 @@ export async function activateProfileModel(
   }
 
   const fresh = loadProfiles().find((x) => x.id === profileId) || p;
-  const hasLocalKey = Boolean(fresh.apiKey?.trim());
-  const update: EngineConfigUpdate = {
+  const hasLocalKey = profileHasKey(fresh);
+
+  const res = await configProfileApply({
+    profileId,
+    ...(fresh.baseUrl ? { baseUrl: fresh.baseUrl } : {}),
     model: m,
-    baseUrl: fresh.baseUrl || undefined,
-    ...(hasLocalKey ? { apiKey: fresh.apiKey } : {}),
-  };
-
-  const res = await updateEngineConfig(update);
-  if (res.ok) {
-    setActiveProfileId(profileId);
-    setActiveModelId(m);
-    pushRecentModel(m);
-    notifyModelChanged(profileId, m);
-    void persistSelectionToAppSettings(profileId, m);
-    try {
-      const { fetchEngineStatus } = await import('../engineConfig');
-      const status = await fetchEngineStatus();
-      if (status.ok && status.model && status.model !== m) {
-        return { ok: true, warning: 'model_mismatch' };
-      }
-      if (!hasLocalKey || (status.ok && status.hasApiKey === false)) {
-        return { ok: true, ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}) };
-      }
-    } catch {
-      /* ignore verify errors */
-    }
-    return {
-      ok: true,
-      ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}),
-    };
-  }
-  return res;
-}
-
-/**
- * 引擎就绪后：把本地活动 profile 写回引擎。
- */
-export async function syncActiveProfileToEngine(): Promise<{
-  ok: boolean;
-  error?: string;
-  applied?: { profileId: string; model: string };
-}> {
-  const profiles = loadProfiles();
-  const resolved = resolvePreferredModelSelection();
-  let profileId = resolved?.profileId || getActiveProfileId();
-  let model = resolved?.model || getActiveModelId() || '';
-
-  if (!profileId) {
-    const withKey = profiles.find((p) => p.hasKey || p.apiKey?.trim());
-    if (!withKey) return { ok: true };
-    profileId = withKey.id;
-    model = withKey.models[0] || '';
-  }
-
-  const profile = profiles.find((p) => p.id === profileId);
-  if (!profile) return { ok: true };
-
-  if (!model) model = profile.models[0] || '';
-  if (!model && !profile.apiKey?.trim()) return { ok: true };
-
-  if (model) {
-    const res = await activateProfileModel(profile.id, model);
-    if (res.ok) {
-      return { ok: true, applied: { profileId: profile.id, model } };
-    }
-    return { ok: false, ...(res.error ? { error: res.error } : {}) };
-  }
-
-  const res = await updateEngineConfig({
-    apiKey: profile.apiKey,
-    baseUrl: profile.baseUrl || undefined,
   });
-  if (res.ok) setActiveProfileId(profile.id);
-  return { ok: res.ok, ...(res.error ? { error: res.error } : {}) };
+  if (res.status !== 'ok' || res.data?.ok !== true) {
+    const error = res.status === 'missing' ? 'engine_unavailable' : res.message;
+    return { ok: false, ...(error ? { error } : {}) };
+  }
+  const applied = res.data;
+
+  setActiveProfileId(profileId);
+  setActiveModelId(m);
+  pushRecentModel(m);
+  notifyModelChanged(profileId, m);
+  void persistSelectionToAppSettings(profileId, m);
+  try {
+    const { fetchEngineStatus } = await import('../engineConfig');
+    const status = await fetchEngineStatus();
+    if (status.ok && status.model && status.model !== m) {
+      return { ok: true, warning: 'model_mismatch' };
+    }
+    if (!hasLocalKey || (status.ok && status.hasApiKey === false)) {
+      return { ok: true, ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}) };
+    }
+  } catch {
+    /* ignore verify errors */
+  }
+  return {
+    ok: true,
+    ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}),
+    ...(applied.apiKeyLast4 ? { apiKeyLast4: applied.apiKeyLast4 } : {}),
+  };
 }
 
 /**

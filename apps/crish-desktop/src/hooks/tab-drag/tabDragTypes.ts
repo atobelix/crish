@@ -48,8 +48,8 @@ export function isMergeLikeDropType(
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-/** 指针移动超过此像素才进入 dragging */
-export const TAB_DRAG_THRESHOLD_PX = 5;
+/** 指针移动超过此像素才进入 dragging（单源：usePointerDragBase.DRAG_THRESHOLD_PX） */
+export { DRAG_THRESHOLD_PX as TAB_DRAG_THRESHOLD_PX } from '../usePointerDragBase';
 
 /** 与 card-header min-height 对齐的 tab 栏下限 */
 export const TAB_BAR_HEIGHT_MIN = 32;

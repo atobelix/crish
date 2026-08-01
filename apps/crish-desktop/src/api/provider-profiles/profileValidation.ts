@@ -124,6 +124,11 @@ export function isEmptyModelCatalog(
 /**
  * 规范化单条 profile（纯，无副作用、不 emit profiles-changed）。
  * id 必填；models 去重；name 中文安全 trim。
+ *
+ * PE-07 T07.4（K-01）：规范化输出**剥离并丢弃** `apiKey` 明文——
+ * 明文只进 DPAPI 凭据槽（config_secret_set / config_profile_apply）与会话内
+ * 内存缓存，绝不落 localStorage；`hasKey` 布尔保留。旧对象携带的 apiKey
+ * 仅用于 hasKey 判定与一次性迁移（migrateLegacyProfiles 直读原始 JSON）。
  */
 export function normalizeProviderProfile(
   p: Partial<ProviderProfile> & { id: string }
@@ -138,7 +143,6 @@ export function normalizeProviderProfile(
     baseUrl: typeof p.baseUrl === 'string' ? p.baseUrl.trim() : '',
     models: normalizeModelIds(p.models),
     hasKey: profileHasKey(p),
-    apiKey: typeof p.apiKey === 'string' ? p.apiKey : undefined,
     enabled: p.enabled !== false,
   };
 }

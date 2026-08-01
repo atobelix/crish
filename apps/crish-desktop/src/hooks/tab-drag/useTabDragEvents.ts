@@ -1,7 +1,7 @@
 import React from 'react';
 import { closeAgentSidePanel } from '../../api/openAgentPanel';
 import { getWorkspaceStoreState, setDropPreview } from '../../store/workspaceStore';
-import { exceedsDragThreshold, resolveTabBarHeight, type DropType } from './tabDragGeometry';
+import { resolveTabBarHeight, type DropType } from './tabDragGeometry';
 import {
   animateOverlayAway,
   clearDropIndicator,
@@ -14,6 +14,7 @@ import {
   type CardSnapshot,
 } from './useTabDragReorder';
 import type { TabBarTabRect } from './tabDragTypes';
+import { usePointerDragBase } from '../usePointerDragBase';
 
 export interface UseTabDragOptions {
   wsId: string;
@@ -58,6 +59,23 @@ function snapshotTabBarGeometry(cardEl: HTMLElement): {
   return { tabBarH, tabsBar, tabRects, barRight };
 }
 
+/** pointerdown 一次性快照，move / drop 路径只读缓存 */
+interface TabDragPayload {
+  cardId: string;
+  wsId: string;
+  groupId: string;
+  cardsLength: number;
+  isDragFromTabButton: boolean;
+  /** pointerdown 的 e.currentTarget（tab 元素） */
+  targetEl: HTMLElement;
+  sourceCard: HTMLElement | null;
+  cardSnapshots: CardSnapshot[];
+  clickOffsetX: number;
+  clickOffsetY: number;
+  startWidth: number;
+  startHeight: number;
+}
+
 export function useTabDragEvents({
   wsId,
   groupId,
@@ -65,6 +83,210 @@ export function useTabDragEvents({
 }: UseTabDragOptions) {
   const { setDraggedTab, closeTabInGroup, evaluateMoveDrop, commitTabDrop } =
     useTabDragReorder();
+
+  // 手势进行中的状态（ref，避免 re-render）
+  const finishedRef = React.useRef(false);
+  const draggingRef = React.useRef(false);
+  const dragOverlayRef = React.useRef<HTMLDivElement | null>(null);
+  const rafIdRef = React.useRef<number | null>(null);
+  const pendingClientXRef = React.useRef(0);
+  const pendingClientYRef = React.useRef(0);
+  const hasPendingMoveRef = React.useRef(false);
+  const captureElRef = React.useRef<HTMLElement | null>(null);
+  const wsIdRef = React.useRef(wsId);
+  wsIdRef.current = wsId;
+
+  const lastDropTypeRef = React.useRef<DropType | null>(null);
+  const lastTargetColIdxRef = React.useRef(0);
+  const lastTargetGroupIdxRef = React.useRef<number | undefined>(undefined);
+  const lastTargetGroupIdRef = React.useRef<string | null>(null);
+  const lastTabInsertIdxRef = React.useRef<number | undefined>(undefined);
+
+  const cancelPendingRaf = () => {
+    if (rafIdRef.current != null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+  };
+
+  const detachListeners = () => {
+    const el = captureElRef.current;
+    if (el) {
+      el.removeEventListener('lostpointercapture', handleLostCapture);
+      captureElRef.current = null;
+      try {
+        if (el.hasPointerCapture?.(lastPointerIdRef.current)) {
+          el.releasePointerCapture(lastPointerIdRef.current);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  const lastPointerIdRef = React.useRef(0);
+
+  /** 统一收尾（幂等）：取消 rAF、解绑 lostpointercapture、清 drop 指示 */
+  const cleanupGesture = () => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    cancelPendingRaf();
+    detachListeners();
+    clearDropIndicator(wsIdRef.current);
+    setDropPreview(null);
+    if (dragOverlayRef.current) {
+      dragOverlayRef.current.remove();
+      dragOverlayRef.current = null;
+    }
+    document.body.classList.remove('dragging-card');
+  };
+
+  const processMove = React.useCallback(
+    (payload: TabDragPayload, clientX: number, clientY: number) => {
+      if (finishedRef.current) return;
+      const overlay = dragOverlayRef.current;
+      if (!overlay) return;
+
+      // compositor 友好：transform，不写 left/top
+      setDragOverlayPosition(
+        overlay,
+        clientX - payload.clickOffsetX,
+        clientY - payload.clickOffsetY
+      );
+
+      const resolved = evaluateMoveDrop({
+        mouseX: clientX,
+        mouseY: clientY,
+        cardSnapshots: payload.cardSnapshots,
+        wsId: payload.wsId,
+        sourceGroupId: payload.groupId,
+        cardsLength: payload.cardsLength,
+        isDragFromTabButton: payload.isDragFromTabButton,
+        cardId: payload.cardId,
+      });
+
+      if (!resolved) {
+        clearDropIndicator(payload.wsId);
+        lastDropTypeRef.current = null;
+        return;
+      }
+
+      lastDropTypeRef.current = resolved.dropType;
+      lastTargetColIdxRef.current = resolved.targetColIdx;
+      lastTargetGroupIdxRef.current = resolved.targetGroupIdx;
+      lastTargetGroupIdRef.current = resolved.targetGroupId;
+      lastTabInsertIdxRef.current = resolved.tabInsertIdx;
+    },
+    [evaluateMoveDrop]
+  );
+
+  /** 提交（drop / pointercancel 共用；cancelled 语义与 commitTabDrop 对齐） */
+  const commitDropNow = React.useCallback(
+    (payload: TabDragPayload, cancelled: boolean) => {
+      if (!draggingRef.current) return;
+
+      const latestDraggedTab = getWorkspaceStoreState().draggedTab;
+      const latestSourceGroupId =
+        latestDraggedTab?.sourceGroupId ?? payload.groupId;
+
+      setDraggedTab(null);
+
+      const { destGroupId } = commitTabDrop({
+        wsId: payload.wsId,
+        cardId: payload.cardId,
+        sourceGroupId: latestSourceGroupId,
+        lastDropType: lastDropTypeRef.current,
+        cancelled,
+        lastTargetGroupId: lastTargetGroupIdRef.current,
+        lastTargetColIdx: lastTargetColIdxRef.current,
+        lastTargetGroupIdx: lastTargetGroupIdxRef.current,
+        lastTabInsertIdx: lastTabInsertIdxRef.current,
+      });
+
+      const overlay = dragOverlayRef.current;
+      dragOverlayRef.current = null;
+      if (overlay) {
+        animateOverlayAway(overlay, payload.cardId, destGroupId);
+      } else {
+        document.body.classList.remove('dragging-card');
+      }
+      draggingRef.current = false;
+    },
+    [commitTabDrop]
+  );
+
+  const handleLostCapture = React.useCallback(() => {
+    // capture 丢失：按取消收尾（带 cancelled 标记提交，与旧实现一致）
+    baseRef.current?.endGesture(true);
+  }, []);
+
+  // 基座引用（在 hook 内定义后回填，供 lostpointercapture 使用）
+  const baseRef = React.useRef<{
+    endGesture: (cancelled?: boolean, clientX?: number, clientY?: number) => void;
+  } | null>(null);
+
+  const base = usePointerDragBase<TabDragPayload>({
+    // 卡片拖拽自建 DOM overlay（tabDragGhost），不走基座 ghost 跟随
+    followGhost: false,
+    // 旧实现无 Escape 取消（卡片拖拽由 capture 收尾）
+    handleEscape: false,
+    onDragStart: (payload) => {
+      draggingRef.current = true;
+      finishedRef.current = false;
+      setDraggedTab({
+        cardId: payload.cardId,
+        sourceGroupId: payload.groupId,
+        workspaceId: payload.wsId,
+        isTabDrag: payload.isDragFromTabButton,
+      });
+
+      if (payload.isDragFromTabButton) {
+        dragOverlayRef.current = createTabDragOverlay(payload.targetEl);
+      } else if (payload.sourceCard) {
+        dragOverlayRef.current = createCardDragOverlay(
+          payload.sourceCard,
+          payload.startWidth,
+          payload.startHeight
+        );
+      }
+    },
+    onDragMove: (payload, clientX, clientY) => {
+      pendingClientXRef.current = clientX;
+      pendingClientYRef.current = clientY;
+      hasPendingMoveRef.current = true;
+      if (rafIdRef.current != null) return;
+      rafIdRef.current = requestAnimationFrame(() => {
+        rafIdRef.current = null;
+        if (!hasPendingMoveRef.current || finishedRef.current) return;
+        hasPendingMoveRef.current = false;
+        processMove(payload, pendingClientXRef.current, pendingClientYRef.current);
+      });
+    },
+    onDrop: (payload, clientX, clientY, cancelled) => {
+      // 提交前取消 rAF；若有未刷帧或已在拖，用最终坐标再评估一次
+      cancelPendingRaf();
+      if (draggingRef.current || hasPendingMoveRef.current) {
+        hasPendingMoveRef.current = false;
+        processMove(payload, clientX, clientY);
+      }
+      commitDropNow(payload, cancelled);
+    },
+    onCancel: (payload) => {
+      // pointercancel：与旧 finishPointer(cancelled=true) 语义一致
+      cancelPendingRaf();
+      if (payload && draggingRef.current) {
+        if (hasPendingMoveRef.current) {
+          hasPendingMoveRef.current = false;
+          processMove(payload, pendingClientXRef.current, pendingClientYRef.current);
+        }
+        commitDropNow(payload, true);
+      }
+    },
+    onGestureEnd: () => {
+      cleanupGesture();
+    },
+  });
+  baseRef.current = base;
 
   const handleTabPointerDown = React.useCallback(
     (e: React.PointerEvent, cardId: string) => {
@@ -98,41 +320,13 @@ export function useTabDragEvents({
           ? sourceCardCandidate
           : null;
       const pointerId = e.pointerId;
+      lastPointerIdRef.current = pointerId;
 
       try {
         targetEl.setPointerCapture(pointerId);
       } catch {
         /* fallback to window listener */
       }
-
-      const startX = e.clientX;
-      const startY = e.clientY;
-      let isDragging = false;
-      let finished = false;
-      let dragOverlay: HTMLDivElement | null = null;
-
-      let lastDropType: DropType | null = null;
-      let lastTargetColIdx = 0;
-      let lastTargetGroupIdx: number | undefined = undefined;
-      let lastTargetGroupId: string | null = null;
-      let lastTabInsertIdx: number | undefined = undefined;
-
-      const cardRect = sourceCard ? sourceCard.getBoundingClientRect() : null;
-      const tabRect = targetEl ? targetEl.getBoundingClientRect() : null;
-      const startWidth = cardRect ? cardRect.width : 0;
-      const startHeight = cardRect ? cardRect.height : 0;
-      const clickOffsetX =
-        isDragFromTabButton && tabRect
-          ? startX - tabRect.left
-          : cardRect
-            ? startX - cardRect.left
-            : 0;
-      const clickOffsetY =
-        isDragFromTabButton && tabRect
-          ? startY - tabRect.top
-          : cardRect
-            ? startY - cardRect.top
-            : 0;
 
       // pointerdown 时一次性快照卡片/tab 栏几何，move 路径只读缓存
       const cardElements = Array.from(
@@ -163,184 +357,54 @@ export function useTabDragEvents({
         };
       });
 
-      let rafId: number | null = null;
-      let pendingClientX = 0;
-      let pendingClientY = 0;
-      let hasPendingMove = false;
+      const cardRect = sourceCard ? sourceCard.getBoundingClientRect() : null;
+      const tabRect = targetEl ? targetEl.getBoundingClientRect() : null;
+      const startWidth = cardRect ? cardRect.width : 0;
+      const startHeight = cardRect ? cardRect.height : 0;
+      const clickOffsetX =
+        isDragFromTabButton && tabRect
+          ? e.clientX - tabRect.left
+          : cardRect
+            ? e.clientX - cardRect.left
+            : 0;
+      const clickOffsetY =
+        isDragFromTabButton && tabRect
+          ? e.clientY - tabRect.top
+          : cardRect
+            ? e.clientY - cardRect.top
+            : 0;
 
-      const processMove = (clientX: number, clientY: number) => {
-        if (finished) return;
-        const dx = clientX - startX;
-        const dy = clientY - startY;
+      // 手势状态复位（幂等：上次手势已由 cleanupGesture 收尾）
+      finishedRef.current = false;
+      draggingRef.current = false;
+      dragOverlayRef.current = null;
+      lastDropTypeRef.current = null;
+      lastTargetColIdxRef.current = 0;
+      lastTargetGroupIdxRef.current = undefined;
+      lastTargetGroupIdRef.current = null;
+      lastTabInsertIdxRef.current = undefined;
+      captureElRef.current = targetEl;
+      targetEl.addEventListener('lostpointercapture', handleLostCapture);
 
-        if (!isDragging && exceedsDragThreshold(dx, dy)) {
-          isDragging = true;
-          setDraggedTab({
-            cardId,
-            sourceGroupId: groupId,
-            workspaceId: wsId,
-            isTabDrag: isDragFromTabButton,
-          });
-
-          if (isDragFromTabButton) {
-            dragOverlay = createTabDragOverlay(targetEl);
-          } else if (sourceCard) {
-            dragOverlay = createCardDragOverlay(
-              sourceCard,
-              startWidth,
-              startHeight
-            );
-          }
-        }
-
-        if (!isDragging || !dragOverlay) return;
-
-        // compositor 友好：transform，不写 left/top
-        setDragOverlayPosition(
-          dragOverlay,
-          clientX - clickOffsetX,
-          clientY - clickOffsetY
-        );
-
-        const resolved = evaluateMoveDrop({
-          mouseX: clientX,
-          mouseY: clientY,
-          cardSnapshots,
+      base.start(
+        {
+          cardId,
           wsId,
-          sourceGroupId: groupId,
+          groupId,
           cardsLength,
           isDragFromTabButton,
-          cardId,
-        });
-
-        if (!resolved) {
-          clearDropIndicator(wsId);
-          lastDropType = null;
-          return;
-        }
-
-        lastDropType = resolved.dropType;
-        lastTargetColIdx = resolved.targetColIdx;
-        lastTargetGroupIdx = resolved.targetGroupIdx;
-        lastTargetGroupId = resolved.targetGroupId;
-        lastTabInsertIdx = resolved.tabInsertIdx;
-      };
-
-      const handlePointerMove = (moveEvent: PointerEvent) => {
-        if (finished) return;
-        if (moveEvent.pointerId !== pointerId) return;
-        pendingClientX = moveEvent.clientX;
-        pendingClientY = moveEvent.clientY;
-        hasPendingMove = true;
-        if (rafId != null) return;
-        rafId = requestAnimationFrame(() => {
-          rafId = null;
-          if (!hasPendingMove || finished) return;
-          hasPendingMove = false;
-          processMove(pendingClientX, pendingClientY);
-        });
-      };
-
-      const cancelPendingRaf = () => {
-        if (rafId != null) {
-          cancelAnimationFrame(rafId);
-          rafId = null;
-        }
-      };
-
-      const detachListeners = () => {
-        window.removeEventListener('pointermove', handlePointerMove);
-        window.removeEventListener('pointerup', finishPointer);
-        window.removeEventListener('pointercancel', finishPointer);
-        targetEl.removeEventListener('lostpointercapture', finishPointer);
-        try {
-          if (targetEl.hasPointerCapture?.(pointerId)) {
-            targetEl.releasePointerCapture(pointerId);
-          }
-        } catch {
-          /* ignore */
-        }
-      };
-
-      const finishPointer = (ev?: Event) => {
-        if (finished) return;
-        if (
-          ev &&
-          'pointerId' in ev &&
-          (ev as PointerEvent).pointerId !== pointerId
-        )
-          return;
-
-        // 提交前取消 rAF；若有未刷帧或已在拖，用最终坐标再评估一次
-        cancelPendingRaf();
-        const endX =
-          ev && 'clientX' in ev
-            ? (ev as PointerEvent).clientX
-            : pendingClientX;
-        const endY =
-          ev && 'clientY' in ev
-            ? (ev as PointerEvent).clientY
-            : pendingClientY;
-        if (isDragging || hasPendingMove) {
-          hasPendingMove = false;
-          processMove(endX, endY);
-        }
-
-        finished = true;
-        detachListeners();
-
-        clearDropIndicator(wsId);
-        setDropPreview(null);
-
-        if (!isDragging) {
-          if (dragOverlay) dragOverlay.remove();
-          document.body.classList.remove('dragging-card');
-          return;
-        }
-
-        const latestDraggedTab = getWorkspaceStoreState().draggedTab;
-        const latestSourceGroupId = latestDraggedTab?.sourceGroupId ?? groupId;
-
-        setDraggedTab(null);
-
-        const cancelled =
-          ev?.type === 'pointercancel' || ev?.type === 'lostpointercapture';
-
-        const { destGroupId } = commitTabDrop({
-          wsId,
-          cardId,
-          sourceGroupId: latestSourceGroupId,
-          lastDropType,
-          cancelled,
-          lastTargetGroupId,
-          lastTargetColIdx,
-          lastTargetGroupIdx,
-          lastTabInsertIdx,
-        });
-
-        if (dragOverlay) {
-          const overlay = dragOverlay;
-          dragOverlay = null;
-          animateOverlayAway(overlay, cardId, destGroupId);
-        } else {
-          document.body.classList.remove('dragging-card');
-        }
-      };
-
-      window.addEventListener('pointermove', handlePointerMove);
-      window.addEventListener('pointerup', finishPointer);
-      window.addEventListener('pointercancel', finishPointer);
-      targetEl.addEventListener('lostpointercapture', finishPointer);
+          targetEl,
+          sourceCard,
+          cardSnapshots,
+          clickOffsetX,
+          clickOffsetY,
+          startWidth,
+          startHeight,
+        },
+        e
+      );
     },
-    [
-      wsId,
-      groupId,
-      cardsLength,
-      setDraggedTab,
-      closeTabInGroup,
-      evaluateMoveDrop,
-      commitTabDrop,
-    ]
+    [base, wsId, groupId, cardsLength, setDraggedTab, closeTabInGroup, evaluateMoveDrop, commitTabDrop, handleLostCapture]
   );
 
   return { handleTabPointerDown };

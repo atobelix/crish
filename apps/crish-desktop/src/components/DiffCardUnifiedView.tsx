@@ -2,7 +2,7 @@ import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
 import { AppErrorBoundary } from './AppErrorBoundary';
-import { useVirtualDiffScroll } from '../hooks/useVirtualDiffScroll';
+import { useVirtualScroll } from '../hooks/useVirtualScroll';
 import type { FileDiff } from '../store/types';
 import type { ChangeRenderItem, PlaceholderRenderItem } from './diffCardTypes';
 import { highlightCode } from '../api/codeHighlight';
@@ -24,9 +24,11 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
   renderItems,
   onExpandBlock,
 }) => {
-  const { containerRef, scrollTop, containerHeight, onScroll } = useVirtualDiffScroll();
-
   const totalItems = renderItems.length;
+  const { containerRef, scrollTop, containerHeight, onScroll } = useVirtualScroll({
+    itemCount: totalItems,
+    heightOnly: true,
+  });
   const rowHeight = 22;
   const totalHeight = totalItems * rowHeight;
 

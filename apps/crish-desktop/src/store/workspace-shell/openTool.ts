@@ -12,7 +12,7 @@
 
 import { useWorkspaceShellStore } from './workspaceShellStore';
 import { ensureChatOnlyTree, applyDockToTree } from './adapterShape';
-import { useLayoutTreeStore } from '../layout-tree';
+import { useLayoutTreeStore, collectLeaves } from '../layout-tree';
 import { registerFileViewerOpener } from '../../api/workspaceFsApi';
 
 const TOOL_ALIASES: Record<string, string> = {
@@ -111,22 +111,10 @@ export function openFileViewerInSession(filePath: string, initialMode: 'plain' |
   }
 
   const root = treeStore.tree.root;
-  function collectToolLeaves(node: any): any[] {
-    if (node.type === 'leaf') {
-      return node.panelId !== 'chat' ? [node] : [];
-    }
-    return [...collectToolLeaves(node.children[0]), ...collectToolLeaves(node.children[1])];
-  }
-  const toolLeaves = collectToolLeaves(root);
+  // 类型化收集（AA-03 Q18 消除 node: any）：复用 layout-tree 唯一 collectLeaves
+  const toolLeaves = collectLeaves(root).filter((l) => l.panelId !== 'chat');
+  const chatLeaves = collectLeaves(root).filter((l) => l.panelId === 'chat');
   let targetLeafId = treeStore.activeLeafId;
-
-  const chatLeaves = (() => {
-    function collect(node: any): any[] {
-      if (node.type === 'leaf') return node.panelId === 'chat' ? [node] : [];
-      return [...collect(node.children[0]), ...collect(node.children[1])];
-    }
-    return collect(root);
-  })();
 
   if (chatLeaves.some(c => c.id === targetLeafId)) {
     targetLeafId = toolLeaves[0]?.id || null;

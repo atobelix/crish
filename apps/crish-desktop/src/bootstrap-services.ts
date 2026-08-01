@@ -22,7 +22,11 @@ import { sessionSyncService } from './services/SessionSyncService';
 import { crossTabCoordinator } from './services/CrossTabCoordinator';
 import { errorStore } from './services/ErrorStore';
 import { eventBus } from './services/EventBus';
-import { telemetry } from './services/TelemetryService';
+import { WindowResizeBridge } from './services/WindowResizeBridge';
+import { sessionRuntimeRegistry } from './api/SessionRuntimeRegistry';
+import { getActiveSessionId } from './api/storeAccess';
+import { registerLayoutAnimationBridge } from './store/layoutAnimationStore';
+import { registerTreeDockSync } from './store/workspace-shell/workspaceShellStore';
 import {
   killAllPtysOnAppExit,
   registerCompositionRoot,
@@ -97,15 +101,6 @@ export function bootstrapServices(): () => void {
   // 6. Start CrossTabCoordinator (leader election, cross-tab sync)
   crossTabCoordinator.init();
 
-  // 6b. Wire TelemetryService to EventBus — log all events for debugging
-  const unsubTelemetry = eventBus.onAny((event) => {
-    const isErrorEvent = typeof event.payload === 'object' && event.payload !== null && (event.payload as Record<string, unknown>).severity === 'error';
-    if (process.env.NODE_ENV === 'development' || isErrorEvent) {
-      telemetry.debug('eventbus', `Event: ${event.type}`, { source: event.source });
-    }
-  });
-  cleanups.push(unsubTelemetry);
-
   // 7. Wire ErrorStore to EventBus — map daemon connection state
   const unsubErrorStore = eventBus.on('daemon:connection:change', (payload) => {
     const p = payload as { phase?: string };
@@ -128,6 +123,29 @@ export function bootstrapServices(): () => void {
     }
   });
   cleanups.push(unsubErrorStore);
+
+  // 8. WindowResizeBridge（T06.10 接线）：窗口缩放冻结状态机唯一入口。
+  // connect 幂等，StrictMode 双执行安全；disconnect 随 cleanup 对称清理。
+  // 原 AppBootstrap E13 手动 classList 双写已删除，is-layout-frozen 自此单源。
+  void WindowResizeBridge.getInstance().connect().catch(() => {});
+  cleanups.push(() => {
+    WindowResizeBridge.getInstance().disconnect();
+  });
+
+  // 9. 布局动画桥（T06.9.1）：isLayoutFrozen → ResizeObserverManager 挂起，
+  // 原模块级永久订阅改为显式生命周期（注册幂等，cleanup 退订）。
+  cleanups.push(registerLayoutAnimationBridge());
+
+  // 10. tree→shell dock 反向投影（T06.9.1）：原 workspaceShellStore 模块级
+  // 永久订阅归位为显式注册/退订（cleanup 时退订）。
+  cleanups.push(registerTreeDockSync());
+
+  // 11. 活动会话解析器（T06.9.1）：sessionStore 模块级注册补注销，
+  // 统一挂 bootstrap 生命周期（cleanup 时注销）。
+  sessionRuntimeRegistry.registerActiveIdResolver(() => getActiveSessionId());
+  cleanups.push(() => {
+    sessionRuntimeRegistry.unregisterActiveIdResolver();
+  });
 
   // Composition root teardown last（exit kill 已在 0c 跑过）
   cleanups.push(() => {

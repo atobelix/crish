@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useVirtualDiffScroll } from '../../hooks/useVirtualDiffScroll';
+import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import styles from '../DiffCard.module.css';
 
 function basename(p: string): string {
@@ -12,13 +12,16 @@ interface VirtualPlainCodeViewerProps {
 }
 
 export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = React.memo(({ content, filePath }) => {
-  const { containerRef, scrollTop, containerHeight, onScroll } = useVirtualDiffScroll();
   const lines = useMemo(() => content.split('\n').map((line, idx) => ({
     num: idx + 1,
     content: line,
   })), [content]);
 
   const totalLines = lines.length;
+  const { containerRef, scrollTop, containerHeight, onScroll } = useVirtualScroll({
+    itemCount: totalLines,
+    heightOnly: true,
+  });
   const rowHeight = 20;
   const totalHeight = totalLines * rowHeight;
   const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - 15);

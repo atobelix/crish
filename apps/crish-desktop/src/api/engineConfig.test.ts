@@ -185,7 +185,6 @@ describe('normalizeEngineConfigUpdate', () => {
     ).toEqual({
       model: 'deepseek-chat',
       baseUrl: 'https://api.deepseek.com',
-      apiKey: 'sk-x',
       credentialMode: 'account-center',
       endpoint: 'chat-completions',
       stream: true,
@@ -202,6 +201,19 @@ describe('normalizeEngineConfigUpdate', () => {
     });
     expect(n).toEqual({});
     expect(n.model).toBeUndefined();
+  });
+
+  it('PE-07 T07.4（K-01）：apiKey 兼容层剥离——任何密钥值都不进入规范化载荷', () => {
+    const n = normalizeEngineConfigUpdate({
+      model: 'm1',
+      apiKey: 'sk-top-secret-value',
+      baseUrl: 'https://x',
+    });
+    expect(n.apiKey).toBeUndefined();
+    expect('apiKey' in n).toBe(false);
+    expect(JSON.stringify(n)).not.toContain('sk-top-secret-value');
+    // isEmpty 判定同样不受 apiKey 影响
+    expect(isEmptyEngineConfigUpdate({ apiKey: 'k' })).toBe(true);
   });
 });
 
@@ -262,16 +274,18 @@ describe('mergeEngineConfigPartial + buildUpdateConfigPayload', () => {
     );
     expect(merged.model).toBe('b');
     expect(merged.baseUrl).toBe('https://a.test');
-    expect(merged.apiKey).toBe('k');
+    // K-01：apiKey 兼容层剥离——merge 结果不得携带明文
+    expect(merged.apiKey).toBeUndefined();
   });
 
-  it('buildUpdateConfigPayload always sets type and omits empties', () => {
+  it('buildUpdateConfigPayload always sets type and omits empties (apiKey never emitted)', () => {
     expect(buildUpdateConfigPayload({})).toEqual({ type: 'update-config' });
     expect(
       buildUpdateConfigPayload({
         model: ' m ',
         baseUrl: 'https://x.test/',
         endpoint: 'response',
+        apiKey: 'sk-never-sent',
       }),
     ).toEqual({
       type: 'update-config',
@@ -279,6 +293,10 @@ describe('mergeEngineConfigPartial + buildUpdateConfigPayload', () => {
       baseUrl: 'https://x.test',
       endpoint: 'responses',
     });
+    const withKey = JSON.stringify(
+      buildUpdateConfigPayload({ model: 'm', apiKey: 'sk-never-sent' })
+    );
+    expect(withKey).not.toContain('sk-never-sent');
   });
 });
 

@@ -50,6 +50,11 @@ vi.mock('../../api/projectStore', () => ({
 vi.mock('../../api/storeAccess', () => ({
   enterDraftMode: vi.fn(),
   setActiveSessionId: vi.fn(),
+  // compositionRoot 门面依赖（T06.9.1：workspaceShellStore 经 compositionRoot.tree）
+  getSessionStoreState: vi.fn(() => ({})),
+  getActiveSessionId: vi.fn(() => null),
+  getWorkspaceStoreState: vi.fn(() => ({})),
+  getLayoutState: vi.fn(() => ({})),
 }));
 
 vi.mock('../../api/workspaceChromeTabs', () => ({

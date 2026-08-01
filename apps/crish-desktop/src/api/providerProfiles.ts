@@ -57,8 +57,10 @@ export {
   getActiveModelId,
   getActiveProfile,
   getActiveProfileId,
+  getProfileKeyInMemory,
   getProviderSetupStatus,
   loadProfiles,
+  maskProfileKeyForDisplay,
   removeModelFromProfile,
   removeProfile,
   renameModelInProfile,
@@ -73,9 +75,18 @@ export {
   setActiveProfileId,
   setProfileEnabled,
   setProfileKey,
-  syncActiveProfileToEngine,
   upsertProfile,
 } from './provider-profiles/profileStore';
+
+export {
+  ensureLegacyProfilesMigration,
+  isLegacyMigrationDone,
+  LEGACY_MIGRATION_FLAG_KEY,
+  migrateLegacyProfiles,
+  resetLegacyMigrationForTests,
+  scanLocalStorageForPlaintextKeys,
+  type LegacyMigrationResult,
+} from './provider-profiles/migrateLegacyProfiles';
 
 // Model meta helpers re-exported from modelCatalog for backward compatibility
 export {

@@ -2,7 +2,7 @@ export async function bootstrapFull(): Promise<void> {
   const start = performance.now();
 
   await Promise.all([
-    // 1. 后台连接 daemon WebSocket
+    // 1. 核心就绪探测（C3.5：transport「核心已初始化」语义；WS 回退路径内部含 keep-alive）
     (async () => {
       const { ensureDaemonConnected } = await import('./api/daemonChatBridge');
       await ensureDaemonConnected().catch(() => {});
@@ -18,12 +18,6 @@ export async function bootstrapFull(): Promise<void> {
           applyTheme(normalizeTheme(settings.theme));
         }
       } catch {}
-    })(),
-
-    // 3. 会话元数据加载（不加载消息正文）
-    (async () => {
-      const { loadSessionIndexOnly } = await import('./store/sessionIndexLoader');
-      await loadSessionIndexOnly();
     })(),
   ]);
 

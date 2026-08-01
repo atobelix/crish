@@ -13,6 +13,12 @@ export interface UseVirtualScrollOptions {
   overscan?: number;
   /** 兜底行高（默认 120） */
   fallbackHeight?: number;
+  /**
+   * 仅高度同步模式（原 useVirtualDiffScroll 职责收敛）：
+   * diff 虚拟滚动消费方只需 containerRef / scrollTop / containerHeight / onScroll，
+   * 不做窗口化渲染（visibleRange / totalHeight 不随内容更新）。
+   */
+  heightOnly?: boolean;
 }
 
 export interface UseVirtualScrollResult {
@@ -38,6 +44,8 @@ export interface UseVirtualScrollResult {
   viewportHeight: number;
   /** 总滚动内容高度 */
   totalHeight: number;
+  /** heightOnly 兼容别名（原 useVirtualDiffScroll 字段名） */
+  containerHeight: number;
 }
 
 const DEFAULT_OVERSCAN = 6;
@@ -58,7 +66,7 @@ export function useVirtualScroll(
   const [viewportHeight, setViewportHeight] = useState(600);
   const [actualTick, setActualTick] = useState(0);
 
-  // container 尺寸变化时更新 viewportHeight
+  // container 尺寸变化时更新 viewportHeight（高度同步核心，heightOnly 共用）
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -165,5 +173,6 @@ export function useVirtualScroll(
     scrollTop,
     viewportHeight,
     totalHeight,
+    containerHeight: viewportHeight,
   };
 }

@@ -62,7 +62,7 @@ export function useChatStream(
     options,
     refs,
     { pushRunNotice, dismissRunNotice },
-    { wsId, setActiveDiffSource: setActiveDiffSource as (source: any) => void, upsertSessionAgent },
+    { wsId, setActiveDiffSource, upsertSessionAgent },
   );
 
   const { handleSendChat } = useSlashSend(options, refs, runStreamingAssistant);

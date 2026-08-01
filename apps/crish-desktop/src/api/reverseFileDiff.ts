@@ -25,8 +25,6 @@ import {
   reconstructSearchReplace,
 } from './applyFileDiff';
 import { readTextFile, writeTextFile } from './workspaceFsApi';
-import { runTerminalShell } from './terminalShellApi';
-import { getWorkspacePath } from './projectStore';
 
 export type ReverseFileDiffResult =
   | { ok: true; mode: 'delete' | 'search_replace'; alreadyApplied?: boolean }
@@ -38,29 +36,29 @@ export type ReverseFileDiffOutcome = {
 };
 
 /**
- * 删除单个文件（经 workbench_run_shell，工作区沙箱外不可用）。
- * Windows: Remove-Item；POSIX: rm -f。
+ * 删除单个文件（经 workbench_fs_delete_file：Rust 侧 fs::remove_file + 工作区注册表沙箱，
+ * 不经任何外壳——PE-07 T07.3 C-03 修复。原 PowerShell `Remove-Item -LiteralPath
+ * "${...}"` 双引号内 `$(...)` / 反引号仍会被求值，恶意文件名可注入命令）。
  */
 async function deleteFileOnDisk(filePath: string): Promise<{ ok: boolean; error?: string }> {
-  const cwd = getWorkspacePath() || undefined;
-  // 经 shell 删除：跨平台、不需新增 Tauri 命令
-  const isWindows = typeof navigator !== 'undefined'
-    ? /windows/i.test(navigator.userAgent)
-    : process?.platform === 'win32';
-  const command = isWindows
-    ? `Remove-Item -LiteralPath "${filePath.replace(/"/g, '""')}" -Force`
-    : `rm -f -- "${filePath.replace(/"/g, '\\"')}"`;
-  const res = await runTerminalShell({ command, cwd, timeoutMs: 10_000 });
-  if (res.status === 'ok' && res.data.ok && res.data.exitCode === 0) {
-    return { ok: true };
+  try {
+    const { getTransport } = await import('./transport');
+    const res = await getTransport().call<{ path?: string; deleted?: boolean }>(
+      'workbench_fs_delete_file',
+      { path: filePath },
+    );
+    if (res.status === 'ok') {
+      return { ok: true };
+    }
+    if (res.status === 'error') {
+      // 越界（outside_workspace）等拒绝信息直接传播给调用方
+      return { ok: false, error: res.message };
+    }
+    return { ok: false, error: '删除文件失败（需桌面壳）' };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: `删除文件失败：${msg}` };
   }
-  const stderr = res.status === 'ok' ? res.data.stderr : '';
-  return {
-    ok: false,
-    error: res.status === 'error'
-      ? res.message
-      : (stderr || `删除失败（exit=${res.status === 'ok' ? res.data.exitCode : 'n/a'}）`),
-  };
 }
 
 /**

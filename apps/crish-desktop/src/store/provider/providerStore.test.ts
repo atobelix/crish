@@ -21,12 +21,23 @@ vi.hoisted(() => {
   });
 });
 
+// T06.9.2：providerStore 不再直连网络——mock api 层，断言 store 只经 api 调用
+const { refreshAccountStatusMock } = vi.hoisted(() => ({
+  refreshAccountStatusMock: vi.fn(),
+}));
+
+vi.mock('../../api/accountStatusApi', () => ({
+  refreshAccountStatus: refreshAccountStatusMock,
+}));
+
 import { useProviderStore } from './providerStore';
+import { refreshAccountStatus as apiRefreshAccountStatus } from '../../api/accountStatusApi';
 import type { ProviderConfig, ModelMeta, Account } from './types';
 
 describe('providerStore', () => {
   beforeEach(() => {
     localStorage.clear();
+    refreshAccountStatusMock.mockReset();
     useProviderStore.setState({
       providers: new Map(),
       activeProviderId: null,
@@ -173,7 +184,7 @@ describe('providerStore', () => {
       expect(useProviderStore.getState().accounts).toHaveLength(0);
     });
 
-    it('refreshes account status with fetch success and error fallbacks', async () => {
+    it('refreshes account status via api layer with success and error fallbacks', async () => {
       const account: Account = {
         id: 'acc-fetch',
         name: 'Account Fetch Test',
@@ -182,27 +193,25 @@ describe('providerStore', () => {
       };
       useProviderStore.getState().addAccount(account);
 
-      const fetchMock = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          status: 'active',
-          usageScore: 95,
-          cooldownUntil: 0,
-        }),
+      // 成功路径：api 返回类型化结果 → store 落字段
+      refreshAccountStatusMock.mockResolvedValueOnce({
+        status: 'active',
+        usageScore: 95,
+        cooldownUntil: 0,
       });
-      vi.stubGlobal('fetch', fetchMock);
-
       await useProviderStore.getState().refreshAccountStatus('acc-fetch');
       const acc = useProviderStore.getState().accounts[0];
       expect(acc.lastCheckedAt).toBeDefined();
       expect(acc.usageScore).toBe(95);
 
-      // Test fetch error fallback
-      fetchMock.mockRejectedValueOnce(new Error('Network error'));
+      // 调用路径断言：store 只经 api 层，无裸 fetch
+      expect(apiRefreshAccountStatus).toHaveBeenCalledWith('acc-fetch');
+      expect(refreshAccountStatusMock).toHaveBeenCalledWith('acc-fetch');
+
+      // 失败路径：api 抛错 → store 置 error 态
+      refreshAccountStatusMock.mockRejectedValueOnce(new Error('Network error'));
       await useProviderStore.getState().refreshAccountStatus('acc-fetch');
       expect(useProviderStore.getState().accounts[0].status).toBe('error');
-
-      vi.unstubAllGlobals();
     });
   });
 });

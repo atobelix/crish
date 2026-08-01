@@ -10,6 +10,7 @@ import {
   useWorkspaceShellStore,
   createDefaultDock,
 } from '../../store/workspace-shell';
+import { useLayoutTreeStore } from '../../store/layout-tree';
 import { GENERAL_FOLDER } from '../../api/projectStore';
 
 const dock = () => createDefaultDock();
@@ -21,6 +22,10 @@ vi.mock('../../app/compositionRoot', () => ({
     shell: {
       openNewDraftTab,
       getState: () => useWorkspaceShellStore.getState(),
+    },
+    // T06.9.1：workspaceShellStore 跨 store 读树经 compositionRoot.tree
+    tree: {
+      getState: () => useLayoutTreeStore.getState(),
     },
   }),
 }));

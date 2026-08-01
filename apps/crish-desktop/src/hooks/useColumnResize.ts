@@ -4,6 +4,7 @@ import {
   beginLayoutInteraction,
   endLayoutInteraction,
 } from '../store/layoutAnimationStore';
+import { logger, toErrMeta } from '../services/LoggerService';
 import {
   createDragOverlay,
   removeDragOverlay,
@@ -11,6 +12,55 @@ import {
   removeGlobalCursorStyle,
   disableIframePointerEvents,
 } from '../utils/dragOverlay';
+
+export type ResizeColumnsFn = (
+  wsId: string,
+  colIdx: number,
+  dx: number,
+  containerWidth: number
+) => void;
+
+export type ResizeGroupsFn = (
+  wsId: string,
+  colIdx: number,
+  groupIdx: number,
+  dy: number,
+  containerHeight: number
+) => void;
+
+/** 键盘微调列宽（原 useWorkspaceResize 职责迁入；方向 -1=左/窄，1=右/宽） */
+export function nudgeColumnByKey(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  wsId: string,
+  resizeColumns: ResizeColumnsFn,
+  leftColIdx: number,
+  dir: -1 | 1,
+): void {
+  const canvasEl = containerRef.current?.querySelector('.workspace-canvas') as HTMLElement | null;
+  if (!canvasEl) return;
+  const containerWidth = canvasEl.clientWidth || 1;
+  const dx = dir * Math.max(8, Math.round(containerWidth * 0.02));
+  resizeColumns(wsId, leftColIdx, dx, containerWidth);
+}
+
+/** 键盘微调组高度（原 useWorkspaceResize 职责迁入；方向 -1=上/矮，1=下/高） */
+export function nudgeGroupByKey(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  wsId: string,
+  resizeGroups: ResizeGroupsFn,
+  colIdx: number,
+  topGroupIdx: number,
+  dir: -1 | 1,
+): void {
+  const canvasEl = containerRef.current?.querySelector('.workspace-canvas') as HTMLElement | null;
+  if (!canvasEl) return;
+  const cols = canvasEl.querySelectorAll('.workspace-column');
+  const colEl = cols[colIdx] as HTMLElement | undefined;
+  if (!colEl) return;
+  const containerHeight = colEl.clientHeight || 1;
+  const dy = dir * Math.max(8, Math.round(containerHeight * 0.02));
+  resizeGroups(wsId, colIdx, topGroupIdx, dy, containerHeight);
+}
 
 export function useColumnResize(wsId: string) {
   const resizeColumns = useLayoutStore((s) => s.resizeColumns);

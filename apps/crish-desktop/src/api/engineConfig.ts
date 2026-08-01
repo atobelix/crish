@@ -31,6 +31,11 @@ export type EngineStatus = {
 };
 
 export type EngineConfigUpdate = {
+  /**
+   * @deprecated PE-07 T07.4（K-01）：明文 key 下线后仅接受 undefined——
+   * normalizeEngineConfigUpdate 会剥离任何 apiKey 值（兼容层剥离），
+   * 密钥一律经 config_secret_set / config_profile_apply 走 DPAPI。
+   */
   apiKey?: string | undefined;
   baseUrl?: string | undefined;
   model?: string | undefined;
@@ -50,6 +55,7 @@ export type EngineCredentialMode = 'direct' | 'auto' | 'account-center';
  * Optional fields stay undefined when unset — **no** default remote model id.
  */
 export type NormalizedEngineConfig = {
+  /** @deprecated 明文 key 已下线（K-01）：规范化输出恒不含本字段 */
   apiKey?: string;
   baseUrl?: string;
   model?: string;
@@ -224,6 +230,7 @@ export function defaultEngineConfigShell(): NormalizedEngineConfig {
  * - trim 字符串；空串丢弃（不写入 payload）
  * - endpoint / credentialMode 别名归一
  * - model 永不发明
+ * - **apiKey 恒被剥离（K-01 兼容层剥离：任何密钥值都不进入 update-config 载荷）**
  * - 非法入参 → {}
  */
 export function normalizeEngineConfigUpdate(
@@ -232,11 +239,8 @@ export function normalizeEngineConfigUpdate(
   if (!update || typeof update !== 'object') return {};
   const out: EngineConfigUpdate = {};
 
-  if (update.apiKey !== undefined) {
-    // 允许显式空串表示「清除」时由调用方决定；此处仅 trim，空 → 不写入
-    const key = typeof update.apiKey === 'string' ? update.apiKey.trim() : '';
-    if (key) out.apiKey = key;
-  }
+  // PE-07 T07.4（K-01）：apiKey 兼容层剥离——明文只经 config_secret_set /
+  // config_profile_apply 落 DPAPI，禁止进入 update-config / config_update。
 
   if (update.baseUrl !== undefined) {
     const base = normalizeEngineBaseUrl(update.baseUrl);
@@ -272,7 +276,6 @@ export function isEmptyEngineConfigUpdate(
 ): boolean {
   const n = normalizeEngineConfigUpdate(update);
   return (
-    n.apiKey === undefined &&
     n.baseUrl === undefined &&
     n.model === undefined &&
     n.credentialMode === undefined &&
@@ -303,6 +306,9 @@ export function mergeEngineConfigPartial(
  * - partial：有部分字段但未 usable
  * - usable：有 model，且 baseUrl 为空或合法
  * - ready：usable + hasApiKey（或 account-center / auto 凭证模式可暂无本地 key）
+ *
+ * K-01 注记：update 载荷中的 apiKey 已剥离（不参与下发）；本纯函数仍接受
+ * 调用方原始配置对象中的 apiKey 字段做就绪度分类（legacy 只读兼容）。
  */
 export function engineConfigReadiness(
   config: Partial<EngineConfigUpdate> | null | undefined,
@@ -311,7 +317,10 @@ export function engineConfigReadiness(
   const hasModel = Boolean(n.model);
   const hasBaseUrl = Boolean(n.baseUrl);
   const baseUrlValid = hasBaseUrl ? isValidEngineBaseUrl(n.baseUrl) : false;
-  const hasApiKey = Boolean(n.apiKey && n.apiKey.trim());
+  const rawKey = (config as { apiKey?: unknown } | null | undefined)?.apiKey;
+  const hasApiKey = Boolean(
+    typeof rawKey === 'string' && rawKey.trim()
+  );
   const mode = normalizeEngineCredentialMode(n.credentialMode);
   const empty = !hasModel && !hasBaseUrl && !hasApiKey && mode === undefined && n.endpoint === undefined;
   // baseUrl 可选：有则必须合法；无 baseUrl 仍可 usable（本机已配引擎默认地址时）

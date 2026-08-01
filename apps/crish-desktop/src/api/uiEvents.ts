@@ -37,6 +37,16 @@ export type UiEventMap = {
   'stop-generation': void;
   /** 全站 Popover 互斥关闭 */
   'close-all-popovers': { exceptId?: string } | undefined;
+  /**
+   * 旧明文密钥迁移失败（PE-07 T07.4-B；失败不阻断启动，明文保留下次重试）。
+   * 载荷不含任何密钥明文。
+   */
+  'security-migration-failed': {
+    attempts: number;
+    migrated: number;
+    degraded: number;
+    failed: string[];
+  };
 };
 
 export type UiEventName = keyof UiEventMap;
@@ -75,6 +85,7 @@ export const UI_EVENT_NAMES = [
   'focus-composer',
   'stop-generation',
   'close-all-popovers',
+  'security-migration-failed',
 ] as const satisfies readonly UiEventName[];
 
 const UI_EVENT_NAME_SET: ReadonlySet<string> = new Set<string>(UI_EVENT_NAMES);

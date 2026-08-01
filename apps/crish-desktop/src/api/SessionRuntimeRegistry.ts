@@ -46,6 +46,11 @@ export class SessionRuntimeRegistry {
     this.activeIdResolver = resolver;
   }
 
+  /** 注销活动会话解析器（T06.9.1：模块级注册补注销，供 bootstrap cleanup / HMR 使用） */
+  unregisterActiveIdResolver(): void {
+    this.activeIdResolver = undefined;
+  }
+
   private states = new Map<string, SessionRuntimeState>();
   private refCounts = new Map<string, number>();
   private retainTimestamps = new Map<string, number>();

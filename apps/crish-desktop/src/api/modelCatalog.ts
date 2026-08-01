@@ -6,7 +6,11 @@
  * 空 catalog 不得回落 mimo 等硬编码默认。
  */
 
-import { loadProfiles, type ProviderProfile } from './providerProfiles';
+import {
+  getProfileKeyInMemory,
+  loadProfiles,
+  type ProviderProfile,
+} from './providerProfiles';
 import { getDesktopDaemonClient } from './daemonClient';
 import { invokeResult } from './tauriInvoke';
 
@@ -687,7 +691,8 @@ export async function scanProviderModels(
 ): Promise<{ ok: boolean; models: string[]; error?: string }> {
   // 始终用本地最新 profile（含密钥），避免 UI 态过期
   const fresh = loadProfiles().find((p) => p.id === profile.id) || profile;
-  const key = fresh.apiKey?.trim();
+  // K-01：明文只经会话内内存缓存（saveProfileKey 写入）；profile 对象不再带 apiKey
+  const key = getProfileKeyInMemory(fresh.id) || fresh.apiKey?.trim();
   if (!key) {
     return {
       ok: false,
@@ -799,7 +804,8 @@ export async function testProviderModel(
   model: string,
 ): Promise<{ ok: boolean; latencyMs?: number; error?: string }> {
   const fresh = loadProfiles().find((p) => p.id === profile.id) || profile;
-  const key = fresh.apiKey?.trim();
+  // K-01：明文只经会话内内存缓存（saveProfileKey 写入）；profile 对象不再带 apiKey
+  const key = getProfileKeyInMemory(fresh.id) || fresh.apiKey?.trim();
   if (!key) {
     const r = {
       ok: false,

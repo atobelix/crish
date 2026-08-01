@@ -297,11 +297,6 @@ export function useAppBootstrap({
           );
         }
         if (res.ok) {
-          void import('../api/providerProfiles').then(
-            ({ syncActiveProfileToEngine }) => {
-              void syncActiveProfileToEngine();
-            }
-          );
           void import('../api/sessionDaemonSync').then(
             ({ syncSessionsFromDaemon }) => {
               const layout = getCompositionRoot().layout;
@@ -330,27 +325,20 @@ export function useAppBootstrap({
     };
   }, [productShell, setEngineReady]);
 
-  // 8. Resize listener
+  // 7b. 旧明文密钥一次性迁移（PE-07 T07.4-B；幂等标记门控，失败不阻断启动）
+  // syncActiveProfileToEngine 已按 F5/C6 整体删除（密钥生效仅限用户主动路径）。
   useEffect(() => {
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const handleResize = () => {
-      document.body.classList.add('window-resizing');
-
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        document.body.classList.remove('window-resizing');
-      }, 100);
-    };
-
-    window.addEventListener('resize', handleResize);
+    let cancelled = false;
+    void import('../api/providerProfiles').then(({ migrateLegacyProfiles }) => {
+      if (cancelled) return;
+      void migrateLegacyProfiles();
+    });
     return () => {
-      window.removeEventListener('resize', handleResize);
-      if (debounceTimer) clearTimeout(debounceTimer);
+      cancelled = true;
     };
   }, []);
 
-  // 9. Root data-attributes setup
+  // 8. Root data-attributes setup
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute('data-ui-size', uiSize);
@@ -368,14 +356,14 @@ export function useAppBootstrap({
     document.body.setAttribute('data-shell-chrome', chrome);
   }, [uiSize, shellChromeMode]);
 
-  // 10. App mode attribute
+  // 9. App mode attribute
   useEffect(() => {
     const mode = isDemoModeFast() ? 'demo' : 'normal';
     document.body.setAttribute('data-app-mode', mode);
     document.documentElement.setAttribute('data-app-mode', mode);
   }, []);
 
-  // 11. Telemetry subscription
+  // 10. Telemetry subscription
   useEffect(() => {
     const unsubPromise = import('../api/clientApi').then(({ clientApi }) =>
       clientApi.subscribeTelemetry((data) => {
@@ -387,14 +375,14 @@ export function useAppBootstrap({
     };
   }, []);
 
-  // 12. Pick workspace UI event listener
+  // 11. Pick workspace UI event listener
   useEffect(() => {
     return onUiEvent('pick-workspace', () => {
       void pickWorkspaceFolder();
     });
   }, []);
 
-  // 13. 二叉树布局迁移：旧 columns/groups → 新 LayoutTree
+  // 12. 二叉树布局迁移：旧 columns/groups → 新 LayoutTree
   // 触发条件：新 store 处于默认状态 + localStorage 存在旧布局数据
   // 幂等：本次会话仅执行一次；新 store 已有自定义布局则跳过
   // 安全：任何步骤失败都静默回退（不阻断启动），结果可 undo

@@ -19,7 +19,7 @@ import {
   listOpenOptionsForFile,
 } from './hostOpenersApi';
 import { invokeCmd, invokeResult, tryInvokeTauri } from './tauriInvoke';
-import { useWindowControls } from '../hooks/useWindowControls';
+import { winCtl } from '../app/AppBootstrap';
 import { renderHook, act } from '@testing-library/react';
 import capabilitiesManifest from '../../../agent-workbench/src-tauri/capabilities/default.json';
 
@@ -33,9 +33,13 @@ vi.mock('./tauriInvoke', async (importOriginal) => {
   };
 });
 
-// Mock projectStore getWorkspacePath
+// Mock projectStore getWorkspacePath（winCtl 测试经 AppBootstrap 挂载全链路，
+// 需补齐 workspaceShell 依赖的导出）
 vi.mock('./projectStore', () => ({
   getWorkspacePath: vi.fn(() => 'C:\\Users\\dev\\project'),
+  GENERAL_FOLDER: 'general',
+  canonicalSessionFolder: (k?: string) => (k || '').trim() || 'general',
+  getActiveProjectId: () => null,
 }));
 
 import { getWorkspacePath } from './projectStore';
@@ -262,34 +266,54 @@ describe('Desktop Native Features - Tauri Native Commands Suite', () => {
     });
   });
 
-  describe('Window Control & Minimization (useWindowControls)', () => {
+  describe('Window Control & Minimization (winCtl)', () => {
     it('executes window minimization, maximization, and close safely', async () => {
       const mockMinimize = vi.fn().mockResolvedValue(undefined);
       const mockIsMaximized = vi.fn().mockResolvedValue(false);
       const mockMaximize = vi.fn().mockResolvedValue(undefined);
+      const mockUnmaximize = vi.fn().mockResolvedValue(undefined);
       const mockClose = vi.fn().mockResolvedValue(undefined);
 
-      // Verify winCtl handles minimize, toggleMaximize, and close actions safely
-      const winCtlAction = async (action: 'minimize' | 'toggleMaximize' | 'close') => {
-        try {
-          if (action === 'minimize') await mockMinimize();
-          else if (action === 'toggleMaximize') {
-            if (await mockIsMaximized()) await mockMaximize();
-            else await mockMaximize();
-          } else await mockClose();
-        } catch {
-          /* fallback */
-        }
+      const mockWindow = {
+        minimize: mockMinimize,
+        isMaximized: mockIsMaximized,
+        maximize: mockMaximize,
+        unmaximize: mockUnmaximize,
+        close: mockClose,
       };
 
-      await winCtlAction('minimize');
+      const getCurrentWindowMock = vi.fn(() => mockWindow);
+      vi.doMock('@tauri-apps/api/window', () => ({
+        getCurrentWindow: getCurrentWindowMock,
+      }));
+      // 重新导入 winCtl，使动态 import('@tauri-apps/api/window') 命中上述 mock
+      const mod = await import('../app/AppBootstrap');
+      const winCtlUnderTest = mod.winCtl;
+
+      await winCtlUnderTest('minimize');
       expect(mockMinimize).toHaveBeenCalledTimes(1);
 
-      await winCtlAction('toggleMaximize');
+      await winCtlUnderTest('toggleMaximize');
+      expect(mockIsMaximized).toHaveBeenCalledTimes(1);
       expect(mockMaximize).toHaveBeenCalledTimes(1);
 
-      await winCtlAction('close');
+      mockIsMaximized.mockResolvedValueOnce(true);
+      await winCtlUnderTest('toggleMaximize');
+      expect(mockUnmaximize).toHaveBeenCalledTimes(1);
+
+      await winCtlUnderTest('close');
       expect(mockClose).toHaveBeenCalledTimes(1);
+
+      vi.doUnmock('@tauri-apps/api/window');
+    });
+
+    it('falls back silently when Tauri window API is unavailable', async () => {
+      vi.doMock('@tauri-apps/api/window', () => {
+        throw new Error('module not found');
+      });
+      const mod = await import('../app/AppBootstrap');
+      await expect(mod.winCtl('minimize')).resolves.toBeUndefined();
+      vi.doUnmock('@tauri-apps/api/window');
     });
 
     it('verifies window permissions are explicitly allowed in Tauri capabilities default.json', () => {

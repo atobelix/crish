@@ -69,9 +69,11 @@ describe('FirstRunWizard gate', () => {
     expect(shouldShowFirstRunWizard()).toBe(true);
   });
 
-  it('hides and marks done when any profile has key', () => {
+  it('hides and marks done when any profile has key', async () => {
     saveProfiles(getDefaultProviderProfiles());
-    setProfileKey('deepseek', 'sk-test');
+    // PE-07 T07.4：setProfileKey 已改异步（config_secret_set 落 DPAPI；
+    // 非 Tauri 环境降级为本地 hasKey 草稿标记，不落明文）
+    await setProfileKey('deepseek', 'sk-test');
     expect(shouldShowFirstRunWizard()).toBe(false);
     expect(localStorage.getItem(DONE_KEY)).toBe('1');
     expect(isFirstRunDone()).toBe(true);

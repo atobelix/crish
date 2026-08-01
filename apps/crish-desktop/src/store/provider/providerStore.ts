@@ -3,6 +3,7 @@ import { immer } from "zustand/middleware/immer";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { ProviderConfig, ModelMeta, ModelRoute, Account, HealthStatus } from "./types";
 import { migrateFromV1 } from "./migration";
+import { refreshAccountStatus as fetchAccountStatus } from "../../api/accountStatusApi";
 
 function mapReviver(_key: string, value: unknown): unknown {
   if (_key === 'providers' && value && typeof value === 'object' && !(value instanceof Map)) {
@@ -102,9 +103,8 @@ export const useProviderStore = create<ProviderStoreState>()(
           a.lastCheckedAt = Date.now();
         });
         try {
-          const res = await fetch(`/api/accounts/${id}/status`, { method: 'POST' });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
+          // T06.9.2：网络调用收口到 api 层（accountStatusApi，transport 优先），store 不再直连 fetch
+          const data = await fetchAccountStatus(id);
           set((state) => {
             const a = state.accounts.find(a => a.id === id);
             if (!a) return;

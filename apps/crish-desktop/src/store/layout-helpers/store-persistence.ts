@@ -1,5 +1,6 @@
 import type { SessionState, WorkspaceState } from '../types';
 import { isDemoMode } from '../../api/appMode';
+import { logger, toErrMeta } from '../../services/LoggerService';
 import {
   ensureMigrated,
   hydrateSessionsFromRust,
@@ -33,7 +34,10 @@ export interface PersistableStoreState {
 
 export interface StoreApiLike<S extends PersistableStoreState> {
   getState: () => S;
-  setState: (partial: any, replace?: any) => void;
+  setState: (
+    partial: S | Partial<S> | ((state: S) => void),
+    replace?: boolean
+  ) => void;
   subscribe: (listener: (state: S) => void) => () => void;
 }
 
@@ -139,13 +143,16 @@ export function initStorePersistence<S extends PersistableStoreState>(
       void runMigrationCleanupIfNeeded();
       return restored;
     })
-    .then((restored) => {
+    .then(async (restored) => {
       if (abortController.signal.aborted) return;
 
       if (restored?.sessions?.length) {
         const cur = store.getState();
         let applied = false;
         let filledBodies = false;
+        // 经 storeAccess 命名 action 激活（动态 import 防 store↔api 循环依赖：
+        // storeAccess → sessionStore → layoutStore → store-persistence 回环）
+        const { setActiveSessionId } = await import('../../api/storeAccess');
 
         if (cur.sessions.length === 0) {
           // 冷启动无 seed：全量回灌 SQLite
@@ -226,19 +233,13 @@ export function initStorePersistence<S extends PersistableStoreState>(
         if (!applied && !filledBodies) {
           // 即便未改 sessions，active 仍可能是 seed 直接写入、未走 setActiveSessionId，
           // 空正文远程壳需要一次 activate 才拉 read-session-events。
+          // 仅 hydrate 激活、不建 shell tab：建 tab / 绑 leaf 由 shell 手势统一决策
+          // （PE-01 T04.4 回灌编排主责；此处避免 E2 阶段抢先写 shell openTabs 与
+          //  E4 hydrateWorkspaceShell 的 restore 路径竞态）。
           try {
             const after = store.getState();
-            const setActive = (
-              after as PersistableStoreState & {
-                setActiveSessionId?: (id: string) => void;
-              }
-            ).setActiveSessionId;
-            if (
-              typeof setActive === 'function' &&
-              after.activeSessionId &&
-              after.sessionsById[after.activeSessionId]
-            ) {
-              setActive(after.activeSessionId);
+            if (after.activeSessionId && after.sessionsById[after.activeSessionId]) {
+              setActiveSessionId(after.activeSessionId);
             }
           } catch {
             /* ignore */
@@ -249,17 +250,9 @@ export function initStorePersistence<S extends PersistableStoreState>(
           const after = store.getState();
           // 直接写 activeSessionId 绕过 setActiveSessionId，空正文远程壳不会拉引擎。
           // 再走一遍 setActive：焦点幂等，且触发 needsEngineMessageHydrate 懒水合。
-          const setActive = (
-            after as PersistableStoreState & {
-              setActiveSessionId?: (id: string) => void;
-            }
-          ).setActiveSessionId;
-          if (
-            typeof setActive === 'function' &&
-            after.activeSessionId &&
-            after.sessionsById[after.activeSessionId]
-          ) {
-            setActive(after.activeSessionId);
+          // 同上：仅 hydrate 激活，不建 shell tab（open/focus 归 shell 单一手势）。
+          if (after.activeSessionId && after.sessionsById[after.activeSessionId]) {
+            setActiveSessionId(after.activeSessionId);
           }
           void persistAllSessions(
             after.sessions,

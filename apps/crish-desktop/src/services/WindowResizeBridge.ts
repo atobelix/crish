@@ -57,6 +57,7 @@ export class WindowResizeBridge {
   }
 
   private startRafPollingFallback(): void {
+    if (typeof window === 'undefined') return;
     let lastX = window.screenX;
     let lastY = window.screenY;
     let rafId: number;
@@ -74,6 +75,7 @@ export class WindowResizeBridge {
   }
 
   private connectWebFallback(): void {
+    if (typeof window === 'undefined') return;
     const handler = () => this.handleWindowChange();
     window.addEventListener('resize', handler, { passive: true });
     this.cleanupFns.push(() => window.removeEventListener('resize', handler));

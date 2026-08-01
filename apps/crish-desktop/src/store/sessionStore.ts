@@ -14,7 +14,7 @@
  * @see ./storeOwnership.ts (`SESSION_OWNERSHIP`)
  * @see ./layoutStore.ts package header
  */
-import { useEffect, useMemo, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useShallow } from '../store/useShallowSelector';
 import { useLayoutStore } from './layoutStore';
 import { sidebarSessionsEqual } from './sessionListEqual';
@@ -109,37 +109,30 @@ export function useSessionField<T>(selector: (state: SessionFacade) => T): T {
 }
 
 export function useSidebarSessions(searching: boolean): SessionState[] {
-  const equal = (a: SessionState[], b: SessionState[]) =>
-    sidebarSessionsEqual(a, b, searching);
+  // useSyncExternalStore 模板（AA-03 Q19）：订阅单一 store 快照 + 相等函数拦截，
+  // 流式改 message 正文时 sessions 引用变化但侧栏壳字段不变 → 不重渲染。
   const snapshotRef = useRef<SessionState[]>(
     useSessionStore.getState().sessions
   );
-  if (
-    searching ||
-    !equal(snapshotRef.current, useSessionStore.getState().sessions)
-  ) {
-    snapshotRef.current = useSessionStore.getState().sessions;
-  }
-  const [, bump] = useReducer((n: number) => n + 1, 0);
   const searchingRef = useRef(searching);
   searchingRef.current = searching;
 
-  useEffect(() => {
-    return useSessionStore.subscribe((state) => {
-      const next = state.sessions;
-      const eq = sidebarSessionsEqual(
-        snapshotRef.current,
-        next,
-        searchingRef.current
-      );
-      if (!eq) {
-        snapshotRef.current = next;
-        bump();
-      }
-    });
+  const getSnapshot = useCallback((): SessionState[] => {
+    const cur = useSessionStore.getState().sessions;
+    if (
+      searchingRef.current ||
+      !sidebarSessionsEqual(snapshotRef.current, cur)
+    ) {
+      snapshotRef.current = cur;
+    }
+    return snapshotRef.current;
   }, []);
 
-  return snapshotRef.current;
+  return useSyncExternalStore(
+    useCallback((cb: () => void) => useSessionStore.subscribe(cb), []),
+    getSnapshot,
+    getSnapshot,
+  );
 }
 
 export function useSessions(): SessionState[] {
