@@ -1,7 +1,0 @@
-{
-  "providerId": "claude",
-  "name": "Claude",
-  "engine": "anthropic-messages",
-  "baseUrl": "https://api.anthropic.com",
-  "models": [{ "id": "claude-sonnet-4" }]
-}

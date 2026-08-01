@@ -1,7 +1,0 @@
-{
-  "providerId": "temp",
-  "name": "Temp",
-  "engine": "openai-compatible",
-  "baseUrl": "https://api.example.com",
-  "models": [{ "id": "m" }]
-}
