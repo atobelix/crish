@@ -3,12 +3,13 @@ use crate::fs_commands::types::{
     ERR_WRITE_FILE, MAX_TEXT_FILE_BYTES,
 };
 
+/// 写入文件内容（PE-07 T07.2：无 workspace_root 参数，根由 WorkspaceRegistry 解析）。
 pub(crate) fn write_file_content(
+    app: &tauri::AppHandle,
     path: String,
     content: String,
-    workspace_root: Option<String>,
 ) -> Result<WriteFileContentResult, FileCommandError> {
-    let guard = WorkspaceFsGuard::from_optional_root(workspace_root.as_deref())?;
+    let guard = crate::workspace::resolve_guard(app, &path)?;
     write_file_content_with_guard(&guard, &path, &content)
 }
 

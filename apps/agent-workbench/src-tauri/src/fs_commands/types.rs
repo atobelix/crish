@@ -2,7 +2,6 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 use crate::host_paths;
-use conex_fs::path_utils::safe_canonicalize;
 
 pub(crate) const MAX_TEXT_FILE_BYTES: usize = 1024 * 1024;
 pub(crate) const DEFAULT_MAX_TEXT_FILE_LINES: usize = 2_000;
@@ -18,6 +17,7 @@ pub(crate) const ERR_OUTSIDE_WORKSPACE: &str = "outside_workspace";
 pub(crate) const ERR_READ_DIRECTORY: &str = "read_directory_failed";
 pub(crate) const ERR_READ_FILE: &str = "read_file_failed";
 pub(crate) const ERR_WRITE_FILE: &str = "write_file_failed";
+pub(crate) const ERR_DELETE_FILE: &str = "delete_file_failed";
 pub(crate) const ERR_FILE_TOO_LARGE: &str = "file_too_large";
 pub(crate) const ERR_BINARY_FILE: &str = "binary_file";
 pub(crate) const ERR_UNSUPPORTED_ENCODING: &str = "unsupported_encoding";
@@ -74,6 +74,20 @@ pub(crate) struct WriteFileContentResult {
     pub(crate) bytes_written: usize,
 }
 
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DeleteFileResult {
+    pub(crate) path: String,
+    pub(crate) deleted: bool,
+}
+
+/// 工作区文件沙箱守卫（PE-07 T07.2 严格化）。
+///
+/// 变更点（对齐 P-02 关闭）：
+/// - `from_optional_root` 已删除：根只能来自 WorkspaceRegistry（B1 信任锚）；
+/// - `new` 严格化：canonicalize 全失败 → 返回错误（不再退化裸用传入根，
+///   根不可达场景明确拒绝，T07.2 用例 13）；
+/// - `for_default_workspace` 保留：仅内部用于默认应用根。
 #[derive(Debug, Clone)]
 pub(crate) struct WorkspaceFsGuard {
     root: PathBuf,
@@ -90,17 +104,27 @@ impl WorkspaceFsGuard {
         Self::new(host_paths::workspace_root(&app_dir))
     }
 
-    pub(crate) fn from_optional_root(workspace_root: Option<&str>) -> Result<Self, FileCommandError> {
-        match workspace_root {
-            Some(root) if !root.trim().is_empty() => Self::new(Path::new(root.trim())),
-            _ => Self::for_default_workspace(),
-        }
-    }
+/// 严格构造：canonicalize 失败即拒绝（不裸用传入根，P-02 关闭）；
+/// Windows 下剥离 `\\?\` 前缀，保证跨会话路径比较一致。
+pub(crate) fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
+    let p = root.as_ref();
+    let canonical = p.canonicalize().map_err(|e| {
+        FileCommandError::new(
+            ERR_INTERNAL,
+            format!(
+                "Workspace root is unreachable and cannot be used: `{}` ({e})",
+                p.display()
+            ),
+        )
+    })?;
+    Ok(Self {
+        root: strip_verbatim_prefix(&canonical),
+    })
+}
 
-    pub(crate) fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
-        let p = root.as_ref();
-        let root = p.canonicalize().unwrap_or_else(|_| safe_canonicalize(p, 40).unwrap_or_else(|_| p.to_path_buf()));
-        Ok(Self { root })
+    /// 已授权根（canonical 绝对路径）。
+    pub(crate) fn root(&self) -> &Path {
+        &self.root
     }
 
     pub(crate) fn resolve_existing(&self, requested_path: &str) -> Result<PathBuf, FileCommandError> {
@@ -197,7 +221,35 @@ fn lexically_normalize(path: &Path) -> PathBuf {
     out
 }
 
-fn path_is_same_or_child(path: &Path, root: &Path) -> bool {
+/// 剥离 Windows 卷设备前缀（`\\?\` / `\\.\`）：canonicalize 产物含此前缀，
+/// 剥离后跨会话比较/持久化语义一致；非 Windows 平台原样返回。
+pub(crate) fn strip_verbatim_prefix(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let s = path.to_string_lossy();
+        let stripped = if let Some(rest) = s.strip_prefix(r"\\?\") {
+            Some(rest)
+        } else if let Some(rest) = s.strip_prefix(r"\\.\") {
+            Some(rest)
+        } else {
+            None
+        };
+        match stripped {
+            Some(rest) => PathBuf::from(rest),
+            None => path.to_path_buf(),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        path.to_path_buf()
+    }
+}
+
+/// 路径包含性判断（组件边界语义）：
+/// Windows：`/` 归一化、剥离 `\\?\`/`\\.\` 前缀、大小写不敏感；
+/// 其它平台：starts_with 组件比较。
+/// 供 WorkspaceRegistry（git cwd / skills 校验）复用。
+pub(crate) fn path_is_same_or_child(path: &Path, root: &Path) -> bool {
     #[cfg(windows)]
     {
         let normalize = |value: &Path| {

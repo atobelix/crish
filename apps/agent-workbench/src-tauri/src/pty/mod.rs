@@ -12,9 +12,14 @@
 //! Events:
 //! - `workbench://pty-output` — `{ ptyId, data }`
 //! - `workbench://pty-exit`   — `{ ptyId, exitCode? }`
+//!
+//! 错误统一为 `CoreError`（IPC 面唯一协议，PE-03 T03.3）：
+//! 创建命令（含进程拉起 / Job 分配）走 `spawn_blocking` 避免阻塞命令线程；
+//! 写入 / 调整 / 终止为轻量注册表操作，保持同步。
 
 mod session;
 
+use conex_types::CoreError;
 use serde::Serialize;
 use tauri::AppHandle;
 
@@ -37,35 +42,40 @@ pub(crate) struct PtyCreateResult {
 ///
 /// Frontend: `invoke('workbench_pty_create', { sessionKey, cols, rows, cwd? })`
 #[tauri::command]
-pub(crate) fn workbench_pty_create(
+pub(crate) async fn workbench_pty_create(
     app: AppHandle,
     session_key: String,
     cols: u16,
     rows: u16,
     cwd: Option<String>,
-) -> Result<PtyCreateResult, String> {
+) -> Result<PtyCreateResult, CoreError> {
     let cols = cols.max(1);
     let rows = rows.max(1);
-    let pty_id = session::create_session(app, session_key, cols, rows, cwd)?;
+    // 进程拉起（openpty + spawn shell + Job 分配）为阻塞 IO，走 spawn_blocking。
+    let pty_id = tokio::task::spawn_blocking(move || {
+        session::create_session(app, session_key, cols, rows, cwd)
+    })
+    .await
+    .map_err(|e| CoreError::Internal(format!("workbench_pty_create join: {e}")))??;
     Ok(PtyCreateResult { pty_id })
 }
 
 /// Write UTF-8 data to the PTY master (user keystrokes / paste).
 /// Cap: 64 KiB per call.
 #[tauri::command]
-pub(crate) fn workbench_pty_write(pty_id: String, data: String) -> Result<(), String> {
+pub(crate) fn workbench_pty_write(pty_id: String, data: String) -> Result<(), CoreError> {
     if data.len() > MAX_WRITE_BYTES {
-        return Err(format!(
+        return Err(CoreError::InvalidInput(format!(
             "write too large: {} bytes (max {MAX_WRITE_BYTES})",
             data.len()
-        ));
+        )));
     }
     session::write_session(&pty_id, data.as_bytes())
 }
 
 /// Resize the PTY window (cols × rows).
 #[tauri::command]
-pub(crate) fn workbench_pty_resize(pty_id: String, cols: u16, rows: u16) -> Result<(), String> {
+pub(crate) fn workbench_pty_resize(pty_id: String, cols: u16, rows: u16) -> Result<(), CoreError> {
     let cols = cols.max(1);
     let rows = rows.max(1);
     session::resize_session(&pty_id, cols, rows)
@@ -73,7 +83,7 @@ pub(crate) fn workbench_pty_resize(pty_id: String, cols: u16, rows: u16) -> Resu
 
 /// Kill the PTY child and remove it from the registry.
 #[tauri::command]
-pub(crate) fn workbench_pty_kill(pty_id: String) -> Result<(), String> {
+pub(crate) fn workbench_pty_kill(pty_id: String) -> Result<(), CoreError> {
     session::kill_session(&pty_id)
 }
 
@@ -110,5 +120,16 @@ mod tests {
         // Exit hook may run with zero PTYs; must not panic.
         kill_all_sessions();
         kill_all_sessions();
+    }
+
+    #[test]
+    fn pty_write_rejects_oversized_payload() {
+        // 命令层校验：超过 64 KiB 的写入在触碰注册表之前即拒绝（InvalidInput）。
+        let oversized = "x".repeat(MAX_WRITE_BYTES + 1);
+        let result = workbench_pty_write("pty-any".to_string(), oversized);
+        match result {
+            Err(CoreError::InvalidInput(msg)) => assert!(msg.contains("write too large")),
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
     }
 }

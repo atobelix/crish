@@ -1,3 +1,9 @@
+//! 性能工具 - 文件系统：分块读取 / 文件信息 / 目录监听。
+//!
+//! 路径解析（PE-07 T07.2 变更）：不再接收 `workspace_root` 参数（该参数入口已删除），
+//! 统一经 `crate::workspace` 的 WorkspaceRegistry 解析（信任锚，B1）——
+//! 前端多余参数被 Tauri 忽略，Rust 侧只认注册表授权的活动根。
+
 use memmap2::Mmap;
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
@@ -11,8 +17,6 @@ use std::{
 };
 use tauri::{AppHandle, Emitter};
 use tokio::sync::oneshot;
-
-use conex_fs::path_utils::safe_canonicalize;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,13 +58,11 @@ fn watchers() -> &'static Mutex<HashMap<String, ActiveWatcher>> {
     WATCHERS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn resolve_path(path: &str, workspace_root: Option<&str>) -> Result<std::path::PathBuf, String> {
-    use crate::fs_commands::WorkspaceFsGuard;
-    let guard = WorkspaceFsGuard::from_optional_root(workspace_root)
+/// 注册表解析：经 WorkspaceRegistry 活动根解析已存在的文件路径。
+fn resolve_existing(app: &AppHandle, path: &str) -> Result<std::path::PathBuf, String> {
+    let guard = crate::workspace::resolve_guard(app, "")
         .map_err(|e| format!("Workspace guard error: {}", e.message))?;
-    guard
-        .resolve_existing(path)
-        .map_err(|e| e.message)
+    guard.resolve_existing(path).map_err(|e| e.message)
 }
 
 pub(crate) fn read_chunk(path: &Path, offset: u64, size: usize) -> Result<FileChunk, String> {
@@ -84,13 +86,11 @@ pub(crate) fn read_chunk(path: &Path, offset: u64, size: usize) -> Result<FileCh
     let mut data = vec![0u8; read_size];
 
     if read_size >= 65536 {
-        // SAFETY: Mmap::map creates a read-only memory mapping of the file. The caller
-        // guarantees that:
-        // - The file is not simultaneously truncated or mutated by another thread/process
-        // - The file handle remains valid for the duration of the mmap lifetime
-        // - The mmap region accessed via offset+read_size is within the file bounds
-        // POST: mmap provides a valid read-only view of the file's contents.
-        // PANICS: None (errors are propagated via Result).
+        // SAFETY: Mmap::map 创建文件只读内存映射。调用方保证：
+        // - 文件未被另一线程/进程同时截断或改写
+        // - 文件句柄在 mmap 生命周期内保持有效
+        // - 经 offset+read_size 访问的映射区间在文件边界内
+        // 成功后 mmap 提供文件内容的只读视图。
         let mmap = unsafe {
             Mmap::map(&file).map_err(|e| format!("Failed to mmap file: {e}"))?
         };
@@ -147,7 +147,7 @@ fn start_watcher_internal(
     app_handle: AppHandle,
     recursive: bool,
 ) -> Result<String, String> {
-    let watch_path = safe_canonicalize(Path::new(&path), 40)
+    let watch_path = std::fs::canonicalize(Path::new(&path))
         .map_err(|e| format!("Failed to canonicalize watch path: {e}"))?;
     let watcher_id = format!("perf-fs-watcher-{}", ts_id());
 
@@ -263,35 +263,31 @@ fn ts_id() -> String {
 
 #[tauri::command]
 pub(crate) fn perf_fs_read_chunk(
+    app: AppHandle,
     path: String,
     offset: u64,
     size: u32,
-    workspace_root: Option<String>,
 ) -> Result<FileChunk, String> {
-    let resolved = resolve_path(&path, workspace_root.as_deref())?;
+    let resolved = resolve_existing(&app, &path)?;
     read_chunk(&resolved, offset, size as usize)
 }
 
 #[tauri::command]
-pub(crate) fn perf_fs_file_info(
-    path: String,
-    workspace_root: Option<String>,
-) -> Result<FileInfo, String> {
-    let resolved = resolve_path(&path, workspace_root.as_deref())?;
+pub(crate) fn perf_fs_file_info(app: AppHandle, path: String) -> Result<FileInfo, String> {
+    let resolved = resolve_existing(&app, &path)?;
     file_info(&resolved)
 }
 
 #[tauri::command]
 pub(crate) fn perf_fs_watch_start(
+    app: AppHandle,
     path: String,
     recursive: Option<bool>,
-    workspace_root: Option<String>,
-    app_handle: AppHandle,
 ) -> Result<String, String> {
-    let resolved = resolve_path(&path, workspace_root.as_deref())?;
+    let resolved = resolve_existing(&app, &path)?;
     start_watcher_internal(
         resolved.to_string_lossy().to_string(),
-        app_handle,
+        app,
         recursive.unwrap_or(false),
     )
 }

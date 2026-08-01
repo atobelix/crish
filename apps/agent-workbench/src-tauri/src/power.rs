@@ -1,4 +1,8 @@
-// 跨平台系统唤醒锁模块（Keep-Awake）
+// 跨平台系统唤醒锁模块（Keep-Awake）。
+// 命令错误统一为 CoreError（IPC 面唯一协议）。
+
+use conex_types::CoreError;
+
 #[cfg(target_os = "windows")]
 mod platform {
     pub fn set_keep_awake(enabled: bool) -> Result<(), String> {
@@ -39,6 +43,6 @@ mod platform {
 }
 
 #[tauri::command]
-pub fn workbench_set_keep_awake(enabled: bool) -> Result<(), String> {
-    platform::set_keep_awake(enabled)
+pub fn workbench_set_keep_awake(enabled: bool) -> Result<(), CoreError> {
+    platform::set_keep_awake(enabled).map_err(CoreError::Internal)
 }

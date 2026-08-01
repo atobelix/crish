@@ -16,7 +16,10 @@ use conex_types::CoreError;
 /// - 输入超长（>100KB）由 crate 内部截断，不返回错误
 /// - CPU 密集（pulldown-cmark 解析 + syntect 高亮 + ammonia sanitize），走 spawn_blocking
 /// - 结果自带 LRU 缓存（moka），重复输入 O(1) 命中
-#[tauri::command]
+///
+/// wire 名 = `core_md_render`（T03.4 更名 core_md_*，并入 core 族；与
+/// command_manifest.rs / 前端 BUILTIN_COMMAND_MANIFEST 保持一致）。
+#[tauri::command(rename = "core_md_render")]
 pub async fn md_render(text: String) -> Result<String, CoreError> {
     tokio::task::spawn_blocking(move || conex_markdown::render_markdown(&text))
         .await
@@ -27,7 +30,9 @@ pub async fn md_render(text: String) -> Result<String, CoreError> {
 ///
 /// 用于首屏一次性渲染整个会话的多条消息，避免 N 次 IPC 往返。
 /// 内部串行调用 `render_markdown`（每条独立缓存命中）。
-#[tauri::command]
+///
+/// wire 名 = `core_md_render_batch`（T03.4 更名 core_md_*）。
+#[tauri::command(rename = "core_md_render_batch")]
 pub async fn md_render_batch(texts: Vec<String>) -> Result<Vec<String>, CoreError> {
     tokio::task::spawn_blocking(move || conex_markdown::render_markdown_batch(texts))
         .await
@@ -41,7 +46,9 @@ pub async fn md_render_batch(texts: Vec<String>) -> Result<Vec<String>, CoreErro
 /// - `stream_mode = false`：等价于 `md_render`（完整渲染 + 缓存）。
 ///
 /// CPU 密集（pulldown-cmark 解析 + 可选 syntect 高亮 + ammonia sanitize），走 spawn_blocking。
-#[tauri::command]
+///
+/// wire 名 = `core_md_render_stream`（T03.4 更名 core_md_*）。
+#[tauri::command(rename = "core_md_render_stream")]
 pub async fn md_render_stream(text: String, stream_mode: bool) -> Result<String, CoreError> {
     tokio::task::spawn_blocking(move || {
         conex_markdown::render_markdown_stream(&text, stream_mode)
@@ -55,7 +62,9 @@ pub async fn md_render_stream(text: String, stream_mode: bool) -> Result<String,
 /// - 已知语言：syntect class style 输出 `<span class="...">`
 /// - 未知/无语言：HTML escape
 /// - 结果自带 LRU 缓存
-#[tauri::command]
+///
+/// wire 名 = `core_highlight_code`（T03.4 更名 core_*）。
+#[tauri::command(rename = "core_highlight_code")]
 pub async fn highlight_code(code: String, lang: Option<String>) -> Result<String, CoreError> {
     tokio::task::spawn_blocking(move || {
         conex_markdown::highlight_code(&code, lang.as_deref())
@@ -67,7 +76,9 @@ pub async fn highlight_code(code: String, lang: Option<String>) -> Result<String
 /// 清空 markdown 渲染缓存与代码高亮缓存。
 ///
 /// 用于内存压力场景或测试隔离。正常运行时无需调用（moka 自动 LRU 淘汰）。
-#[tauri::command]
+///
+/// wire 名 = `core_md_clear_cache`（T03.4 更名 core_md_*）。
+#[tauri::command(rename = "core_md_clear_cache")]
 pub async fn md_clear_cache() -> Result<(), CoreError> {
     tokio::task::spawn_blocking(|| conex_markdown::clear_cache())
         .await

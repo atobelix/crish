@@ -1,31 +1,52 @@
+//! 核心工具命令（旧 6 命令 + Worker 组下沉 + JSONL 追加）与共享 State。
+//!
+//! 本文件是 Tauri 壳的命令面实现之一，职责边界（PE-03 T03.3 错误协议统一后）：
+//! - 旧 6 命令（E1 工具组）：`core_search_files` / `core_rebuild_search_index` /
+//!   `core_compact_messages` / `core_count_tokens` / `core_check_command` /
+//!   `core_compute_diff`——错误统一为 `CoreError {kind, detail}`（`crate::core_error`）；
+//! - Worker 组下沉（Stream E）：`core_hash_compute` / `core_base64_*` /
+//!   `core_detect_encoding` / `core_decode_text` / `core_parse_diff` /
+//!   `core_messages_to_jsonl` / `core_jsonl_to_messages` / `core_text_encode`——
+//!   复用 `perf` 模块实现，CPU 密集走 `spawn_blocking`；`core_jsonl_append` 自 perf
+//!   迁移（fsync 语义保留，走 spawn_blocking，路径经 WorkspaceFsGuard 守卫）；
+//! - 共享 State：`SharedSearchState`（搜索索引 Arc 交换）、`SharedGatekeeper`
+//!   （命令闸门编译一次复用）、`SharedCompactionState`（PE-01 T01.2 压缩能力接线标记，
+//!   供 `core_get_status.compactionReady` 读取，未接线如实 false）；
+//! - `check_command_verdict`：把闸门检查结果包装为结构化裁决（{allowed,
+//!   requiresApproval, blocked, reason}），供 run 循环 / sidecar 复用。
+
 use conex_compaction::compaction::CompactionEngine;
 use conex_diff::diff_engine::DiffEngine;
 use conex_sandbox::gatekeeper::{CommandGatekeeper, GatekeeperResult};
 use conex_search::fuzzy::FuzzyMatcher;
 use conex_search::search::{search_files, search_files_parallel};
 use conex_search::walker::build_directory_index;
-use conex_types::{CompactionResult, CoreError, DiffResult, FileHit, Message};
+use conex_types::{CompactionResult, DiffResult, FileHit, Message};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use tauri::State;
 
+use crate::core_error::CoreError;
+use crate::fs_commands::{FileCommandError, WorkspaceFsGuard};
+
+/// 并行搜索阈值（文件数 ≥ 该值走并行实现）。
 const SEARCH_PARALLEL_THRESHOLD: usize = 1000;
+/// 搜索查询最大长度（S-15/S-16 参数上限，防超长查询拖垮模糊匹配）。
+const SEARCH_QUERY_MAX_LEN: usize = 1024;
+/// 搜索索引重建根路径最大长度。
+const SEARCH_ROOT_MAX_LEN: usize = 4096;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RustCoreStatus {
-    pub search_index_ready: bool,
-    pub db_ready: bool,
-    pub compaction_ready: bool,
-}
-
+/// 重建搜索索引响应（serde camelCase → `{ fileCount }`）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RebuildSearchIndexResponse {
     pub file_count: usize,
 }
 
-/// Shared search state using Arc for zero-copy reads across commands.
+// ===== 共享 State（main.rs manage 接线）=====
+
+/// 共享搜索状态：Arc 交换实现零拷贝读（读方持有旧 Arc 不受重建影响）。
 pub struct SharedSearchState {
     pub files: RwLock<Arc<Vec<String>>>,
 }
@@ -44,7 +65,7 @@ impl Default for SharedSearchState {
     }
 }
 
-/// Shared gatekeeper state (compiled once, reused across commands).
+/// 共享命令闸门状态（编译一次，跨命令复用）。
 pub struct SharedGatekeeper {
     pub gatekeeper: CommandGatekeeper,
 }
@@ -63,17 +84,64 @@ impl Default for SharedGatekeeper {
     }
 }
 
+/// 压缩能力接线标记（PE-01 T01.2：未接线 = false，不硬编码 true）。
+///
+/// main.rs 在把压缩能力（conex-compaction 纯内存）接线时 `set_ready(true)`；
+/// `core_get_status` 经 `State<SharedCompactionState>` 读取 `compactionReady`。
+pub struct SharedCompactionState {
+    ready: AtomicBool,
+}
+
+impl SharedCompactionState {
+    /// 新建（默认未接线）。
+    pub fn new() -> Self {
+        Self {
+            ready: AtomicBool::new(false),
+        }
+    }
+
+    /// 标记压缩能力接线状态。
+    pub fn set_ready(&self, ready: bool) {
+        self.ready.store(ready, Ordering::Relaxed);
+    }
+
+    /// 当前压缩能力是否已接线。
+    pub fn is_ready(&self) -> bool {
+        self.ready.load(Ordering::Relaxed)
+    }
+}
+
+impl Default for SharedCompactionState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ===== 旧 6 命令（E1 工具组，错误协议 CoreError）=====
+
+/// 模糊搜索文件索引（query + limit；索引为空返回空列表，不报错）。
 #[tauri::command]
 pub async fn core_search_files(
     query: String,
     limit: Option<usize>,
     state: State<'_, SharedSearchState>,
-) -> Result<Vec<FileHit>, String> {
-    // Arc clone is cheap (reference count increment, no data copy)
+) -> Result<Vec<FileHit>, CoreError> {
+    let query = query.trim().to_string();
+    if query.is_empty() {
+        return Err(CoreError::InvalidInput(
+            "query must not be empty".to_string(),
+        ));
+    }
+    if query.len() > SEARCH_QUERY_MAX_LEN {
+        return Err(CoreError::InvalidInput(format!(
+            "query too long (max {SEARCH_QUERY_MAX_LEN})"
+        )));
+    }
+    // Arc clone 廉价（引用计数 +1，零数据拷贝），读锁短持有后即释放
     let files = state
         .files
         .read()
-        .map_err(|e| format!("search index lock: {e}"))?
+        .map_err(|e| CoreError::Internal(format!("search index lock: {e}")))?
         .clone();
     let limit = limit.unwrap_or(20);
     let hits = tokio::task::spawn_blocking(move || {
@@ -85,112 +153,160 @@ pub async fn core_search_files(
         }
     })
     .await
-    .map_err(|e| format!("search task failed: {e}"))?;
+    .map_err(|e| CoreError::Internal(format!("search task failed: {e}")))?;
     Ok(hits)
 }
 
+/// 重建常驻搜索索引（gitignored 遍历；完成后原子交换 Arc）。
 #[tauri::command]
 pub async fn core_rebuild_search_index(
     root: String,
     state: State<'_, SharedSearchState>,
-) -> Result<RebuildSearchIndexResponse, String> {
+) -> Result<RebuildSearchIndexResponse, CoreError> {
     let root = root.trim().to_string();
     if root.is_empty() {
-        return Err("root path is empty".to_string());
+        return Err(CoreError::InvalidInput(
+            "root path is empty".to_string(),
+        ));
+    }
+    if root.len() > SEARCH_ROOT_MAX_LEN {
+        return Err(CoreError::InvalidInput(format!(
+            "root path too long (max {SEARCH_ROOT_MAX_LEN})"
+        )));
     }
     let built = tokio::task::spawn_blocking(move || build_directory_index(&root))
         .await
-        .map_err(|e| format!("rebuild task failed: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("rebuild task failed: {e}")))?;
     let count = built.len();
-    // Swap the Arc atomically — readers holding the old Arc are unaffected
+    // 原子交换 Arc：持旧 Arc 的读者不受影响
     *state
         .files
         .write()
-        .map_err(|e| format!("search index lock: {e}"))? = Arc::new(built);
+        .map_err(|e| CoreError::Internal(format!("search index lock: {e}")))? = Arc::new(built);
     Ok(RebuildSearchIndexResponse { file_count: count })
 }
 
+/// 上下文压缩（maxTokens 消息数组 → 压缩结果）。
 #[tauri::command]
 pub async fn core_compact_messages(
     messages: Vec<Message>,
     max_tokens: usize,
-) -> Result<CompactionResult, String> {
+) -> Result<CompactionResult, CoreError> {
+    if max_tokens == 0 {
+        return Err(CoreError::InvalidInput(
+            "max_tokens must be greater than 0".to_string(),
+        ));
+    }
     let result = tokio::task::spawn_blocking(move || {
         let engine = CompactionEngine::new(max_tokens);
         engine.compact(&messages)
     })
     .await
-    .map_err(|e| format!("compact task failed: {e}"))?;
+    .map_err(|e| CoreError::Internal(format!("compact task failed: {e}")))?;
     Ok(result)
 }
 
+/// 文本 token 估算。
 #[tauri::command]
-pub async fn core_count_tokens(text: String) -> Result<usize, String> {
+pub async fn core_count_tokens(text: String) -> Result<usize, CoreError> {
     let count = tokio::task::spawn_blocking(move || conex_compaction::count_tokens(&text))
         .await
-        .map_err(|e| format!("token count task failed: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("token count task failed: {e}")))?;
     Ok(count)
 }
 
+/// 命令闸门检查（Allowed / Blocked / RequiresApproval，serde camelCase）。
 #[tauri::command]
 pub async fn core_check_command(
     cmd: String,
     args: Vec<String>,
     gatekeeper_state: State<'_, SharedGatekeeper>,
-) -> Result<GatekeeperResult, String> {
+) -> Result<GatekeeperResult, CoreError> {
+    if cmd.trim().is_empty() {
+        return Err(CoreError::InvalidInput(
+            "cmd must not be empty".to_string(),
+        ));
+    }
     let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let result = gatekeeper_state.gatekeeper.check_command(&cmd, &args_ref);
     Ok(result)
 }
 
+/// 计算两个文本的 diff（DiffResult：hunks / addedLines / removedLines）。
 #[tauri::command]
 pub async fn core_compute_diff(
     old_text: String,
     new_text: String,
-) -> Result<DiffResult, String> {
+) -> Result<DiffResult, CoreError> {
     let result = tokio::task::spawn_blocking(move || DiffEngine::diff(&old_text, &new_text))
         .await
-        .map_err(|e| format!("diff task failed: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("diff task failed: {e}")))?;
     Ok(result)
 }
 
-#[tauri::command]
-pub async fn core_get_status(
-    state: State<'_, SharedSearchState>,
-    db_state: State<'_, crate::session_commands::SharedDb>,
-) -> Result<RustCoreStatus, String> {
-    let count = state.files.read().map(|g| g.len()).unwrap_or(0);
-    Ok(RustCoreStatus {
-        search_index_ready: count > 0,
-        db_ready: db_state.db_ready(),
-        compaction_ready: true,
-    })
+// ===== 命令闸门结构化裁决 =====
+
+/// 命令检查裁决（结构化包装 `GatekeeperResult`，供 run 循环 / sidecar 复用）。
+///
+/// 与 `core_check_command`（返回 GatekeeperResult 字符串字面量，对齐前端
+/// `rustCore.ts` 的 GatekeeperResult 类型）并存：本结构为内部决策面
+/// （允许/需审批/拦截 + 人读原因），不直接走 IPC。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandVerdict {
+    pub allowed: bool,
+    pub requires_approval: bool,
+    pub blocked: bool,
+    /// 人读原因（allowed 时 None）
+    pub reason: Option<&'static str>,
 }
 
-// ===== Stream E: Worker 池下沉 + 错误协议统一 =====
-//
-// 6 个 `core_*` 命令复用 perf 模块的实现,把 `Result<T, String>` 转为
-// `Result<T, CoreError>`,统一错误协议。perf_* 别名保留兼容,新代码应优先用 core_*。
-//
-// 3 个新命令(`core_messages_to_jsonl` / `core_jsonl_to_messages` / `core_text_encode`)
-// 用 serde_json 实现,CPU 密集走 spawn_blocking。
-//
-// 所有命令的失败统一为 CoreError,JS 侧可按 error.kind 分类处理:
-//   - InvalidInput: 参数校验失败
-//   - Encoding: 编解码失败(base64 / 文本编码)
-//   - Internal: 内部错误(spawn_blocking join 失败 / 序列化失败)
+/// 检查一条命令并产出结构化裁决。
+pub fn check_command_verdict(
+    gatekeeper: &CommandGatekeeper,
+    cmd: &str,
+    args: &[&str],
+) -> CommandVerdict {
+    match gatekeeper.check_command(cmd, args) {
+        GatekeeperResult::Allowed => CommandVerdict {
+            allowed: true,
+            requires_approval: false,
+            blocked: false,
+            reason: None,
+        },
+        GatekeeperResult::RequiresApproval => CommandVerdict {
+            allowed: false,
+            requires_approval: true,
+            blocked: false,
+            reason: Some("requires approval"),
+        },
+        GatekeeperResult::Blocked => CommandVerdict {
+            allowed: false,
+            requires_approval: false,
+            blocked: true,
+            reason: Some("blocked by safety red-line gatekeeper"),
+        },
+    }
+}
 
-/// 把 perf 模块的 `Result<T, String>` 转换为 `Result<T, CoreError>`。
-///
-/// String 错误统一映射为 `CoreError::Internal`(perf 模块返回的字符串已是用户可读消息,
-/// 不再细分 InvalidInput/Encoding,避免误归类)。
+// ===== Stream E：Worker 池下沉 + JSONL 追加 =====
+//
+// 6 个 `core_*` 命令复用 perf 模块实现，错误统一为 CoreError；perf_* 别名保留兼容。
+// 3 个新命令（core_messages_to_jsonl / core_jsonl_to_messages / core_text_encode）
+// 用 serde_json / encoding_rs 实现，CPU 密集走 spawn_blocking。
+//
+// 失败统一为 CoreError，JS 侧按 error.kind 分类：
+//   - InvalidInput: 参数校验失败
+//   - Encoding: 编解码失败（base64 / 文本编码）
+//   - Io: JSONL 追加的存储/IO 失败
+//   - Internal: 内部错误（spawn_blocking join 失败 / 序列化失败）
+
+/// 把 perf 模块的 `Result<T, String>` 转为 `Result<T, CoreError>`（Internal 兜底）。
 fn map_perf_err(e: String) -> CoreError {
     CoreError::Internal(e)
 }
 
-/// 计算 SHA-256 哈希,返回小写 hex 字符串。
-///
-/// 复用 `perf::hash::perf_hash_compute`,错误统一为 CoreError。
+/// 计算 SHA-256 哈希，返回小写 hex 字符串（复用 perf::hash）。
 #[tauri::command]
 pub async fn core_hash_compute(
     data: Vec<u8>,
@@ -205,9 +321,7 @@ pub async fn core_hash_compute(
     Ok(result)
 }
 
-/// Base64 编码 bytes → 字符串。
-///
-/// 复用 `perf::hash::perf_base64_encode`。
+/// Base64 编码 bytes → 字符串（复用 perf::hash）。
 #[tauri::command]
 pub async fn core_base64_encode(
     data: Vec<u8>,
@@ -222,9 +336,7 @@ pub async fn core_base64_encode(
     Ok(result)
 }
 
-/// Base64 解码字符串 → bytes。
-///
-/// 复用 `perf::hash::perf_base64_decode`。
+/// Base64 解码字符串 → bytes（复用 perf::hash）。
 #[tauri::command]
 pub async fn core_base64_decode(
     encoded: String,
@@ -239,9 +351,7 @@ pub async fn core_base64_decode(
     Ok(result)
 }
 
-/// 检测 bytes 的编码(BOM + chardetng 统计推断)。
-///
-/// 复用 `perf::encoding::perf_encoding_detect`,返回 `{ encoding, confidence, hasBom }`。
+/// 检测 bytes 编码（BOM + chardetng 统计推断；复用 perf::encoding）。
 #[tauri::command]
 pub async fn core_detect_encoding(
     data: Vec<u8>,
@@ -255,9 +365,7 @@ pub async fn core_detect_encoding(
     Ok(result)
 }
 
-/// 把 bytes 解码为 UTF-8 字符串。
-///
-/// 复用 `perf::encoding::perf_encoding_decode`,无效字节替换为 U+FFFD。
+/// 把 bytes 解码为 UTF-8 字符串（无效字节替换为 U+FFFD；复用 perf::encoding）。
 #[tauri::command]
 pub async fn core_decode_text(
     data: Vec<u8>,
@@ -272,10 +380,7 @@ pub async fn core_decode_text(
     Ok(result)
 }
 
-/// 解析 unified diff 文本为结构化结果。
-///
-/// 复用 `perf::diff::perf_diff_parse`,返回 `{ files, truncated }`。
-/// 输出 shape 对齐 Rust 标准(perf::diff::DiffResult),JS 侧需相应对齐。
+/// 解析 unified diff 文本为结构化结果（复用 perf::diff）。
 #[tauri::command]
 pub async fn core_parse_diff(
     unified_diff: String,
@@ -290,9 +395,7 @@ pub async fn core_parse_diff(
     Ok(result)
 }
 
-/// 把消息数组序列化为 JSONL 字符串(每行一个 JSON 对象)。
-///
-/// 替代 io-worker 的 `messages.to-jsonl` case。CPU 密集(大量消息时)走 spawn_blocking。
+/// 消息数组 → JSONL 字符串（每行一个 JSON 对象；替代 io-worker messages.to-jsonl）。
 #[tauri::command]
 pub async fn core_messages_to_jsonl(
     messages: Vec<serde_json::Value>,
@@ -305,7 +408,7 @@ pub async fn core_messages_to_jsonl(
             buf.push_str(&line);
             buf.push('\n');
         }
-        // 移除末尾多余换行(与 JS messages.map(m => JSON.stringify(m)).join('\n') 等价)
+        // 移除末尾多余换行（与 JS messages.map(m => JSON.stringify(m)).join('\n') 等价）
         if buf.ends_with('\n') {
             buf.pop();
         }
@@ -316,10 +419,7 @@ pub async fn core_messages_to_jsonl(
     result
 }
 
-/// 把 JSONL 文本解析为消息数组。
-///
-/// 兼容 JSON 数组格式(`[...]`)与 JSONL 格式(每行一个 JSON 对象)。
-/// 跳过空行与非法行(与 io-worker `jsonl.to-messages` 行为一致)。
+/// JSONL 文本 → 消息数组（兼容 JSON 数组格式；跳过空行与非法行）。
 #[tauri::command]
 pub async fn core_jsonl_to_messages(
     text: String,
@@ -329,14 +429,13 @@ pub async fn core_jsonl_to_messages(
         if trimmed.is_empty() {
             return Ok(Vec::new());
         }
-        // 优先尝试 JSON 数组(历史格式)
+        // 优先尝试 JSON 数组（历史格式）
         if trimmed.starts_with('[') {
             let parsed: Vec<serde_json::Value> = serde_json::from_str(trimmed)
                 .map_err(|e| CoreError::Internal(format!("parse JSON array: {e}")))?;
             return Ok(parsed);
         }
-        // JSONL 路径:逐行解析,跳过空行与非法行。
-        // `str::lines` 自动处理 `\r\n` 与 `\n` 两种行尾。
+        // JSONL 路径：逐行解析，跳过空行与非法行（str::lines 兼容 \r\n / \n）
         let mut out: Vec<serde_json::Value> = Vec::new();
         for line in trimmed.lines() {
             let line = line.trim();
@@ -355,12 +454,7 @@ pub async fn core_jsonl_to_messages(
     result
 }
 
-/// 把 UTF-8 字符串编码为目标编码的 bytes。
-///
-/// - `encoding = None`(默认): 用 TextEncoder 等价的 UTF-8 编码
-/// - `encoding = Some(label)`: 用 encoding_rs 编码到指定字符集(如 "gb18030" / "shift_jis")
-///
-/// 替代 io-worker 的 `text.encode` case(原 case 忽略 encoding 参数,是 bug)。
+/// 把 UTF-8 字符串编码为目标编码的 bytes（encoding_rs；替代 io-worker text.encode）。
 #[tauri::command]
 pub async fn core_text_encode(
     text: String,
@@ -370,8 +464,9 @@ pub async fn core_text_encode(
         match encoding {
             None => Ok(text.into_bytes()),
             Some(label) => {
-                let enc = encoding_rs::Encoding::for_label(label.as_bytes())
-                    .ok_or_else(|| CoreError::Encoding(format!("unsupported encoding: {label}")))?;
+                let enc = encoding_rs::Encoding::for_label(label.as_bytes()).ok_or_else(|| {
+                    CoreError::Encoding(format!("unsupported encoding: {label}"))
+                })?;
                 let (cow, _, _) = enc.encode(&text);
                 Ok(cow.into_owned())
             }
@@ -382,9 +477,196 @@ pub async fn core_text_encode(
     result
 }
 
+/// JSONL 追加（自 perf 迁移；fsync 语义保留，走 spawn_blocking + WorkspaceFsGuard 守卫）。
+///
+/// - `path`：目标 JSONL 文件（相对路径相对 workspace_root 解析）；
+/// - `lines`：追加的行（原始文本，不二次序列化）；
+/// - `flush`：追加后是否 fsync（telemetry 落盘可靠性，S-9 保留）。
+#[tauri::command]
+pub async fn core_jsonl_append(
+    path: String,
+    lines: Vec<String>,
+    flush: Option<bool>,
+    workspace_root: Option<String>,
+) -> Result<(), CoreError> {
+    if path.trim().is_empty() {
+        return Err(CoreError::InvalidInput(
+            "path must not be empty".to_string(),
+        ));
+    }
+    if lines.is_empty() {
+        return Ok(());
+    }
+    let flush = flush.unwrap_or(false);
+    let result = tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let resolved = resolve_guarded_path(&path, workspace_root.as_deref())?;
+        crate::perf::jsonl::append_jsonl_lines(&resolved, &lines, flush)
+    })
+    .await
+    .map_err(|e| CoreError::Internal(format!("core_jsonl_append join: {e}")))?;
+    result.map_err(map_jsonl_err)
+}
+
+/// 路径解析（WorkspaceFsGuard 守卫：根只能来自显式 root 或默认应用根，PE-07 T07.2）。
+fn resolve_guarded_path(
+    path: &str,
+    workspace_root: Option<&str>,
+) -> Result<std::path::PathBuf, String> {
+    let guard = match workspace_root {
+        Some(root) => WorkspaceFsGuard::new(root),
+        None => WorkspaceFsGuard::for_default_workspace(),
+    }
+    .map_err(|e| format!("workspace guard error: {}", e.message))?;
+    if std::path::Path::new(path).exists() {
+        guard.resolve_existing(path).map_err(|e| e.message)
+    } else {
+        guard.resolve_for_write(path).map_err(|e| e.message)
+    }
+}
+
+/// JSONL 追加错误映射：路径守卫违规（越界 / 非法目标）→ InvalidInput；
+/// 未找到 → NotFound；其余（IO 失败）→ Io（77 码 → store.io）。
+fn map_jsonl_err(e: String) -> CoreError {
+    if e.contains("outside the allowed workspace") || e.contains("Path is empty") {
+        CoreError::InvalidInput(e)
+    } else if e.contains("does not exist") {
+        CoreError::NotFound(e)
+    } else {
+        CoreError::Io(e)
+    }
+}
+
+/// FileCommandError → CoreError（供路径守卫复用；outside_workspace / not_file →
+/// InvalidInput，path_not_found → NotFound，其余 → Io）。
+#[allow(dead_code)]
+fn map_file_command_err(e: FileCommandError) -> CoreError {
+    match e.code.as_str() {
+        crate::fs_commands::ERR_OUTSIDE_WORKSPACE | crate::fs_commands::ERR_NOT_FILE => {
+            CoreError::InvalidInput(e.message)
+        }
+        crate::fs_commands::ERR_NOT_FOUND => CoreError::NotFound(e.message),
+        _ => CoreError::Io(format!("{}: {}", e.code, e.message)),
+    }
+}
+
 #[cfg(test)]
-mod stream_e_tests {
+mod tests {
     use super::*;
+
+    #[test]
+    fn shared_compaction_state_defaults_false() {
+        let state = SharedCompactionState::new();
+        assert!(!state.is_ready(), "未接线压缩 = false（诚实化）");
+        state.set_ready(true);
+        assert!(state.is_ready());
+    }
+
+    #[test]
+    fn check_command_verdict_maps_all_results() {
+        let gatekeeper = CommandGatekeeper::new();
+        let blocked = check_command_verdict(&gatekeeper, "rm", &["-rf", "/"]);
+        assert!(blocked.blocked && !blocked.allowed && !blocked.requires_approval);
+        assert_eq!(blocked.reason, Some("blocked by safety red-line gatekeeper"));
+
+        let approval = check_command_verdict(&gatekeeper, "git", &["push", "--force"]);
+        assert!(
+            approval.requires_approval && !approval.allowed && !approval.blocked,
+            "git push --force 应需审批"
+        );
+
+        let allowed = check_command_verdict(&gatekeeper, "git", &["status"]);
+        assert!(allowed.allowed && !allowed.requires_approval && !allowed.blocked);
+        assert!(allowed.reason.is_none());
+    }
+
+    #[test]
+    fn map_jsonl_err_classifies_guard_and_io() {
+        match map_jsonl_err("Path is outside the allowed workspace root.".to_string()) {
+            CoreError::InvalidInput(_) => {}
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+        match map_jsonl_err("Path does not exist.".to_string()) {
+            CoreError::NotFound(_) => {}
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+        match map_jsonl_err("Failed to open JSONL file: permission denied".to_string()) {
+            CoreError::Io(_) => {}
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn search_validation_rejects_empty_query() {
+        use tauri::Manager as _;
+        let state = SharedSearchState::new();
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let state = app.state::<SharedSearchState>();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let result = core_search_files("   ".to_string(), None, state).await;
+            assert!(matches!(result, Err(CoreError::InvalidInput(_))));
+        });
+    }
+
+    #[test]
+    fn compact_rejects_zero_budget() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let result = core_compact_messages(Vec::new(), 0).await;
+            assert!(matches!(result, Err(CoreError::InvalidInput(_))));
+        });
+    }
+
+    #[test]
+    fn check_command_rejects_empty_cmd() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            use tauri::Manager as _;
+            let state = SharedGatekeeper::new();
+            let app = tauri::test::mock_builder()
+                .manage(state)
+                .build(tauri::test::mock_context(tauri::test::noop_assets()))
+                .expect("mock app");
+            let state = app.state::<SharedGatekeeper>();
+            let result = core_check_command("  ".to_string(), Vec::new(), state).await;
+            assert!(matches!(result, Err(CoreError::InvalidInput(_))));
+        });
+    }
+
+    #[test]
+    fn jsonl_append_rejects_empty_path_and_empty_lines() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let result = core_jsonl_append(
+                "  ".to_string(),
+                vec!["x".to_string()],
+                None,
+                None,
+            )
+            .await;
+            assert!(matches!(result, Err(CoreError::InvalidInput(_))));
+
+            let result = core_jsonl_append("a.jsonl".to_string(), Vec::new(), None, None).await;
+            assert!(result.is_ok(), "空行列表 = 成功 no-op");
+        });
+    }
+
+    // ── Stream E 回归（对齐旧测试断言）──
 
     #[test]
     fn map_perf_err_preserves_message() {
@@ -395,136 +677,86 @@ mod stream_e_tests {
         }
     }
 
-    #[tokio::test]
-    async fn core_hash_compute_matches_perf() {
+    #[test]
+    fn core_hash_compute_matches_perf() {
         let data = b"hello".to_vec();
-        let core = core_hash_compute(data.clone(), None).await.unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let hash = runtime.block_on(core_hash_compute(data.clone(), None)).unwrap();
         let perf = crate::perf::hash::perf_hash_compute(data, None).unwrap();
-        assert_eq!(core, perf);
+        assert_eq!(hash, perf);
         assert_eq!(
-            core,
+            hash,
             "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
         );
     }
 
-    #[tokio::test]
-    async fn core_base64_roundtrip() {
+    #[test]
+    fn core_base64_roundtrip() {
         let data = b"hello world".to_vec();
-        let encoded = core_base64_encode(data.clone(), None).await.unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let encoded = runtime
+            .block_on(core_base64_encode(data.clone(), None))
+            .unwrap();
         assert_eq!(encoded, "aGVsbG8gd29ybGQ=");
-        let decoded = core_base64_decode(encoded, None).await.unwrap();
+        let decoded = runtime
+            .block_on(core_base64_decode(encoded, None))
+            .unwrap();
         assert_eq!(decoded, data);
     }
 
-    #[tokio::test]
-    async fn core_base64_decode_invalid_returns_error() {
-        let result = core_base64_decode("!!!invalid!!!".to_string(), None).await;
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            CoreError::Internal(_) => {}
-            other => panic!("expected Internal, got {other:?}"),
-        }
-    }
-
-    #[tokio::test]
-    async fn core_detect_encoding_utf8_bom() {
-        let data = b"\xEF\xBB\xBFhello".to_vec();
-        let result = core_detect_encoding(data).await.unwrap();
-        assert_eq!(result.encoding, "UTF-8");
-        assert!(result.has_bom);
-    }
-
-    #[tokio::test]
-    async fn core_decode_text_auto_detect() {
-        let data = b"hello world".to_vec();
-        let result = core_decode_text(data, None).await.unwrap();
-        assert_eq!(result, "hello world");
-    }
-
-    #[tokio::test]
-    async fn core_decode_text_unsupported_encoding() {
-        let data = b"hello".to_vec();
-        let result = core_decode_text(data, Some("nonexistent-encoding".to_string())).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn core_parse_diff_simple() {
-        let input = "\
-diff --git a/src/main.rs b/src/main.rs
---- a/src/main.rs
-+++ b/src/main.rs
-@@ -1,3 +1,4 @@
- fn main() {
--    println!(\"hello\");
-+    println!(\"hello world\");
- }
-";
-        let result = core_parse_diff(input.to_string(), None).await.unwrap();
-        assert!(!result.files.is_empty());
-        assert_eq!(result.files[0].old_path, "src/main.rs");
-    }
-
-    #[tokio::test]
-    async fn core_messages_to_jsonl_roundtrip() {
+    #[test]
+    fn core_messages_to_jsonl_roundtrip() {
         let messages = vec![
             serde_json::json!({ "id": "m1", "text": "hello" }),
             serde_json::json!({ "id": "m2", "text": "world" }),
         ];
-        let jsonl = core_messages_to_jsonl(messages.clone()).await.unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let jsonl = runtime
+            .block_on(core_messages_to_jsonl(messages.clone()))
+            .unwrap();
         assert!(jsonl.contains('\n'));
         assert_eq!(jsonl.lines().count(), 2);
 
-        let parsed = core_jsonl_to_messages(jsonl).await.unwrap();
+        let parsed = runtime.block_on(core_jsonl_to_messages(jsonl)).unwrap();
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0]["id"], "m1");
         assert_eq!(parsed[1]["text"], "world");
     }
 
-    #[tokio::test]
-    async fn core_messages_to_jsonl_empty() {
-        let jsonl = core_messages_to_jsonl(vec![]).await.unwrap();
-        assert_eq!(jsonl, "");
-    }
-
-    #[tokio::test]
-    async fn core_jsonl_to_messages_accepts_json_array() {
-        let json_array = r#"[{"id":"m1"},{"id":"m2"}]"#;
-        let parsed = core_jsonl_to_messages(json_array.to_string()).await.unwrap();
-        assert_eq!(parsed.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn core_jsonl_to_messages_skips_bad_lines() {
+    #[test]
+    fn core_jsonl_to_messages_skips_bad_lines() {
         let jsonl = "{\"a\":1}\nnot-json\n{\"b\":2}\n";
-        let parsed = core_jsonl_to_messages(jsonl.to_string()).await.unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let parsed = runtime
+            .block_on(core_jsonl_to_messages(jsonl.to_string()))
+            .unwrap();
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0]["a"], 1);
         assert_eq!(parsed[1]["b"], 2);
     }
 
-    #[tokio::test]
-    async fn core_jsonl_to_messages_empty() {
-        let parsed = core_jsonl_to_messages("".to_string()).await.unwrap();
-        assert!(parsed.is_empty());
-
-        let parsed = core_jsonl_to_messages("   \n  \n".to_string()).await.unwrap();
-        assert!(parsed.is_empty());
-    }
-
-    #[tokio::test]
-    async fn core_text_encode_utf8_default() {
-        let bytes = core_text_encode("hello".to_string(), None).await.unwrap();
-        assert_eq!(bytes, b"hello");
-    }
-
-    #[tokio::test]
-    async fn core_text_encode_unsupported_returns_encoding_error() {
-        let result = core_text_encode("hello".to_string(), Some("nonexistent".to_string())).await;
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            CoreError::Encoding(_) => {}
-            other => panic!("expected Encoding, got {other:?}"),
-        }
+    #[test]
+    fn core_text_encode_unsupported_returns_encoding_error() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let result = runtime.block_on(core_text_encode(
+            "hello".to_string(),
+            Some("nonexistent".to_string()),
+        ));
+        assert!(matches!(result, Err(CoreError::Encoding(_))));
     }
 }

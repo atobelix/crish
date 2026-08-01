@@ -1,3 +1,4 @@
+use conex_types::CoreError;
 use serde::{Deserialize, Serialize};
 use std::{
     env,
@@ -131,5 +132,15 @@ pub(crate) fn host_opener_diagnostic(
         os: env::consts::OS.to_string(),
         command,
         path,
+    }
+}
+
+/// 统一错误协议映射：`HostOpenerError` → `CoreError`（IPC 面唯一协议）。
+/// 红线拦截（PermissionDenied）→ `InvalidInput`；其余 → `Internal`（保留 code 前缀）。
+pub(crate) fn to_core_error(e: HostOpenerError) -> CoreError {
+    if e.code == "PermissionDenied" {
+        CoreError::InvalidInput(e.message)
+    } else {
+        CoreError::Internal(format!("{}: {}", e.code, e.message))
     }
 }

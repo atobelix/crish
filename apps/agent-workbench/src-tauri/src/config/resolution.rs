@@ -1,4 +1,8 @@
 //! 配置解析：字段规范化与有效值来源标记。
+//!
+//! - `normalize_*` 系列：对前端 / 环境变量传入的字符串做别名归一（Endpoint 解析）；
+//! - `ApiKeySource`：API key 生效来源标记（渲染层 / daemon 层展示名）；
+//! - `last4`：脱敏展示工具（K-02：保留末 4 位，不回明文）。
 
 use std::env;
 
@@ -89,6 +93,8 @@ pub(crate) fn normalize_credential_mode(value: String) -> Option<String> {
     }
 }
 
+/// Endpoint 解析 / 归一（与 daemon 端 `Endpoint::parse` 别名对齐）：
+/// `chat`→chat-completions、`response`→responses、`_`/`/` 归一为 `-`、大小写不敏感。
 pub(crate) fn normalize_provider_endpoint(value: String) -> Option<String> {
     match value
         .trim()
@@ -103,6 +109,7 @@ pub(crate) fn normalize_provider_endpoint(value: String) -> Option<String> {
     }
 }
 
+/// 脱敏展示：取字符串末 4 位；空串返回 None（K-02 展示面）。
 pub(crate) fn last4(value: &str) -> Option<String> {
     let chars: Vec<char> = value.chars().collect();
     if chars.is_empty() {

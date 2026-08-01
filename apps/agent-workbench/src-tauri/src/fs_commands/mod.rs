@@ -1,3 +1,4 @@
+pub(crate) mod delete;
 pub(crate) mod dialog;
 pub(crate) mod directory;
 pub(crate) mod read;
@@ -5,8 +6,12 @@ pub(crate) mod skills;
 pub(crate) mod types;
 pub(crate) mod write;
 
-pub(crate) use types::{FileCommandError, WorkspaceFsGuard};
+pub(crate) use types::{
+    FileCommandError, WorkspaceFsGuard, ERR_NOT_FILE, ERR_NOT_FOUND, ERR_OUTSIDE_WORKSPACE,
+};
 
+/// 原生目录选择器：唯一「新授权」入口（PE-07 T07.2）。
+/// 选中路径 → WorkspaceRegistry::register(Dialog) → 返回 canonical 路径。
 #[tauri::command]
 pub(crate) async fn select_folder(
     app: tauri::AppHandle,
@@ -14,38 +19,52 @@ pub(crate) async fn select_folder(
     dialog::select_folder(app).await
 }
 
+/// 列出目录（PE-07 T07.2：无 workspace_root 参数，根由 WorkspaceRegistry 解析）。
 #[tauri::command]
 pub(crate) fn list_directory(
+    app: tauri::AppHandle,
     path: String,
-    workspace_root: Option<String>,
 ) -> Result<types::ListDirectoryResult, FileCommandError> {
-    directory::list_directory(path, workspace_root)
+    directory::list_directory(&app, path)
 }
 
+/// 读取文件内容（PE-07 T07.2：无 workspace_root 参数，根由 WorkspaceRegistry 解析）。
 #[tauri::command]
 pub(crate) fn read_file_content(
+    app: tauri::AppHandle,
     path: String,
     max_lines: Option<usize>,
-    workspace_root: Option<String>,
 ) -> Result<types::ReadFileContentResult, FileCommandError> {
-    read::read_file_content(path, max_lines, workspace_root)
+    read::read_file_content(&app, path, max_lines)
 }
 
+/// 写入文件内容（PE-07 T07.2：无 workspace_root 参数，根由 WorkspaceRegistry 解析）。
 #[tauri::command]
 pub(crate) fn write_file_content(
+    app: tauri::AppHandle,
     path: String,
     content: String,
-    workspace_root: Option<String>,
 ) -> Result<types::WriteFileContentResult, FileCommandError> {
-    write::write_file_content(path, content, workspace_root)
+    write::write_file_content(&app, path, content)
 }
 
+/// 删除单个文件（PE-07 T07.3 C-03：替代 PowerShell Remove-Item 拼串）。
+#[tauri::command]
+pub(crate) fn workbench_fs_delete_file(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<types::DeleteFileResult, FileCommandError> {
+    delete::delete_file(&app, path)
+}
+
+/// 发现技能（PE-07 T07.2：workspace_path / extra_dirs 经注册表包含性校验）。
 #[tauri::command]
 pub(crate) fn workbench_discover_skills(
+    app: tauri::AppHandle,
     workspace_path: Option<String>,
     extra_dirs: Vec<String>,
 ) -> Result<Vec<skills::RustSkill>, String> {
-    skills::workbench_discover_skills(workspace_path, extra_dirs)
+    skills::workbench_discover_skills(&app, workspace_path, extra_dirs)
 }
 
 #[cfg(test)]
@@ -264,6 +283,15 @@ mod tests {
             read_file_content_at_root(&root, "link.txt", None),
             types::ERR_OUTSIDE_WORKSPACE,
         );
+    }
+
+    #[test]
+    fn guard_new_rejects_unreachable_root() {
+        // T07.2 用例 13（P-02 关闭）：根不可达 → 构造失败，不裸用传入根
+        let temp = TestDir::new();
+        let missing = temp.path().join("no-such-root");
+        let err = WorkspaceFsGuard::new(&missing).expect_err("unreachable root must be rejected");
+        assert_eq!(err.code, types::ERR_INTERNAL);
     }
 
     #[cfg(unix)]

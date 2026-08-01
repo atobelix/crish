@@ -5,7 +5,11 @@
 //! - A dedicated OS thread reads master → emits `workbench://pty-output`.
 //! - On EOF / read error the reader waits for the child and emits `workbench://pty-exit`.
 //! - Kill removes the session and signals the child.
+//!
+//! 错误统一为 `CoreError`（IPC 面唯一协议）：会话不存在 → `NotFound`，
+//! 其余内部失败 → `Internal`。
 
+use conex_types::CoreError;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use std::{
@@ -178,6 +182,11 @@ fn build_shell_command(cwd: &Path) -> CommandBuilder {
     }
 }
 
+/// PTY 会话不存在的统一错误（NotFound 语义）。
+fn not_found_error(pty_id: &str) -> CoreError {
+    CoreError::NotFound(format!("pty not found: {pty_id}"))
+}
+
 // ── lifecycle ────────────────────────────────────────────────────────────────
 
 pub(crate) fn create_session(
@@ -186,7 +195,7 @@ pub(crate) fn create_session(
     cols: u16,
     rows: u16,
     cwd: Option<String>,
-) -> Result<String, String> {
+) -> Result<String, CoreError> {
     let cwd_path = resolve_cwd(cwd.as_deref());
     let pty_id = next_pty_id();
 
@@ -198,13 +207,13 @@ pub(crate) fn create_session(
             pixel_width: 0,
             pixel_height: 0,
         })
-        .map_err(|e| format!("pty open failed: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("pty open failed: {e}")))?;
 
     let cmd = build_shell_command(&cwd_path);
     let mut child = pair
         .slave
         .spawn_command(cmd)
-        .map_err(|e| format!("pty spawn shell failed: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("pty spawn shell failed: {e}")))?;
 
     // Orphan protection (crash path). Graceful Exit still uses kill_all; dock unmount does not kill.
     // Windows: shared PTY Job Object + KILL_ON_JOB_CLOSE — see process.rs (cross-ref daemon job).
@@ -257,11 +266,11 @@ pub(crate) fn create_session(
     let mut reader = pair
         .master
         .try_clone_reader()
-        .map_err(|e| format!("pty clone reader failed: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("pty clone reader failed: {e}")))?;
     let writer = pair
         .master
         .take_writer()
-        .map_err(|e| format!("pty take writer failed: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("pty take writer failed: {e}")))?;
 
     let killer = child.clone_killer();
 
@@ -275,7 +284,7 @@ pub(crate) fn create_session(
     {
         let mut reg = registry()
             .lock()
-            .map_err(|e| format!("pty registry lock: {e}"))?;
+            .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
         reg.insert(pty_id.clone(), session);
     }
 
@@ -344,7 +353,7 @@ pub(crate) fn create_session(
                 reg.remove(&emit_id);
             }
         })
-        .map_err(|e| format!("pty reader thread spawn failed: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("pty reader thread spawn failed: {e}")))?;
 
     tracing::info!(
         target: "pty",
@@ -358,33 +367,33 @@ pub(crate) fn create_session(
     Ok(pty_id)
 }
 
-pub(crate) fn write_session(pty_id: &str, data: &[u8]) -> Result<(), String> {
+pub(crate) fn write_session(pty_id: &str, data: &[u8]) -> Result<(), CoreError> {
     let reg = registry()
         .lock()
-        .map_err(|e| format!("pty registry lock: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
     let session = reg
         .get(pty_id)
-        .ok_or_else(|| format!("pty not found: {pty_id}"))?;
+        .ok_or_else(|| not_found_error(pty_id))?;
     let mut writer = session
         .writer
         .lock()
-        .map_err(|e| format!("pty writer lock: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("pty writer lock: {e}")))?;
     writer
         .write_all(data)
-        .map_err(|e| format!("pty write failed: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("pty write failed: {e}")))?;
     writer
         .flush()
-        .map_err(|e| format!("pty flush failed: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("pty flush failed: {e}")))?;
     Ok(())
 }
 
-pub(crate) fn resize_session(pty_id: &str, cols: u16, rows: u16) -> Result<(), String> {
+pub(crate) fn resize_session(pty_id: &str, cols: u16, rows: u16) -> Result<(), CoreError> {
     let reg = registry()
         .lock()
-        .map_err(|e| format!("pty registry lock: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
     let session = reg
         .get(pty_id)
-        .ok_or_else(|| format!("pty not found: {pty_id}"))?;
+        .ok_or_else(|| not_found_error(pty_id))?;
     session
         .master
         .resize(PtySize {
@@ -393,13 +402,13 @@ pub(crate) fn resize_session(pty_id: &str, cols: u16, rows: u16) -> Result<(), S
             pixel_width: 0,
             pixel_height: 0,
         })
-        .map_err(|e| format!("pty resize failed: {e}"))
+        .map_err(|e| CoreError::Internal(format!("pty resize failed: {e}")))
 }
 
-pub(crate) fn kill_session(pty_id: &str) -> Result<(), String> {
+pub(crate) fn kill_session(pty_id: &str) -> Result<(), CoreError> {
     let mut reg = registry()
         .lock()
-        .map_err(|e| format!("pty registry lock: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
     match reg.remove(pty_id) {
         Some(session) => {
             // Drop kills via Drop impl; also explicit for clarity.
@@ -410,7 +419,7 @@ pub(crate) fn kill_session(pty_id: &str) -> Result<(), String> {
             tracing::info!(target: "pty", pty_id = %pty_id, "pty session killed");
             Ok(())
         }
-        None => Err(format!("pty not found: {pty_id}")),
+        None => Err(not_found_error(pty_id)),
     }
 }
 

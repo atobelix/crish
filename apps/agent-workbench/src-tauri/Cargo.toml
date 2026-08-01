@@ -17,8 +17,9 @@ tauri-build.workspace = true
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-# protocol-asset：文件管理器图片/PDF 预览（convertFileSrc + asset://）
-tauri = { workspace = true, features = ["protocol-asset"] }
+# protocol-asset：文件管理器图片/PDF 预览（convertFileSrc + asset://）；
+# test：壳测试（tauri::test 依赖，PE-11 测试策略）
+tauri = { workspace = true, features = ["protocol-asset", "test"] }
 tauri-plugin-dialog = "2"
 # Dev MCP bridge (Grok/Cursor 调试 live workbench)。仅 debug 注册；插件自身 release 默认不启 socket。
 tauri-plugin-mcp = { git = "https://github.com/P3GLEG/tauri-plugin-mcp" }
@@ -48,6 +49,14 @@ conex-search = { path = "../../../crates/conex-search" }
 conex-fs = { path = "../../../crates/conex-fs" }
 conex-db = { path = "../../../crates/conex-db" }
 conex-markdown = { path = "../../../crates/conex-markdown" }
+# R 轮重写接线：事件存储 / 恢复快照（orchestrator）、会话循环与审批
+# （session-loop）、provider 适配（agent-provider）、内置工具（agent-tools）、
+# 结构化日志与崩溃文件（conex-telemetry）
+orchestrator = { path = "../../../crates/orchestrator" }
+session-loop = { path = "../../../crates/session-loop" }
+agent-provider = { path = "../../../crates/agent-provider" }
+agent-tools = { path = "../../../crates/agent-tools" }
+conex-telemetry = { path = "../../../crates/conex-telemetry" }
 # Interactive terminal (Windows ConPTY / Unix PTY)
 portable-pty = "0.9"
 

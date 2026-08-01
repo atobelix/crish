@@ -1,6 +1,13 @@
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
+/// 技能发现命令（PE-07 T07.2 审计面：skills.rs）。
+///
+/// - `workspace_path`：改为经 WorkspaceRegistry 解析——必须位于已授权根内
+///   （canonicalize + 前缀包含校验），否则 `workspace_not_granted`；
+/// - `extra_dirs`：每个目录必须 ⊆ 已授权根，否则整体拒绝；
+/// - 用户主目录全局技能（只读发现）保持既有行为。
+
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RustSkill {
@@ -17,6 +24,9 @@ pub(crate) struct RustSkill {
     disable_model_invocation: bool,
     file_activation: Option<String>,
 }
+
+/// 错误码：路径未在已授权根内
+const ERR_WORKSPACE_NOT_GRANTED: &str = "workspace_not_granted";
 
 fn parse_frontmatter(content: &str) -> (std::collections::HashMap<String, String>, String) {
     let mut data = std::collections::HashMap::new();
@@ -202,15 +212,21 @@ fn get_home_dir() -> Option<PathBuf> {
         .or_else(|| std::env::var("HOME").ok().map(PathBuf::from))
 }
 
+/// 发现技能（PE-07 T07.2：workspace_path / extra_dirs 经注册表包含性校验）。
 pub(crate) fn workbench_discover_skills(
+    app: &tauri::AppHandle,
     workspace_path: Option<String>,
     extra_dirs: Vec<String>,
 ) -> Result<Vec<RustSkill>, String> {
+    let reg = crate::workspace::registry(app).map_err(|e| format!("{}: {}", e.code, e.message))?;
+    let roots = reg.roots();
     let mut skills = Vec::new();
 
-    if let Some(ref ws) = workspace_path {
-        let ws_path = Path::new(ws);
-        if ws_path.is_dir() {
+    // 项目技能：workspace_path 必须位于已授权根内（canonicalize + 前缀包含）
+    if let Some(ws) = workspace_path {
+        let ws = ws.trim();
+        if !ws.is_empty() {
+            let ws_path = canonicalize_within_roots(ws, &roots)?;
             let roots = [
                 ws_path.join(".conex").join("skills"),
                 ws_path.join(".codex").join("skills"),
@@ -225,6 +241,7 @@ pub(crate) fn workbench_discover_skills(
         }
     }
 
+    // 全局技能：用户主目录（只读发现，保持既有行为）
     if let Some(home) = get_home_dir() {
         let roots = [
             home.join(".codex").join("skills"),
@@ -241,13 +258,32 @@ pub(crate) fn workbench_discover_skills(
         }
     }
 
+    // 附加目录：每个必须 ⊆ 已授权根，否则整体拒绝
     for dir in extra_dirs {
-        let path = Path::new(&dir);
-        if path.is_dir() {
-            let scope = if path.is_absolute() { "global" } else { "project" };
-            discover_in_dir_rust(path, scope, 0, false, &mut skills);
-        }
+        let path = canonicalize_within_roots(&dir, &roots)?;
+        let scope = if path.is_absolute() { "global" } else { "project" };
+        discover_in_dir_rust(&path, scope, 0, false, &mut skills);
     }
 
     Ok(skills)
+}
+
+/// canonicalize 后校验 ∈ 已授权根（任一即可）；失败 → `workspace_not_granted`。
+fn canonicalize_within_roots(path: &str, roots: &[PathBuf]) -> Result<PathBuf, String> {
+    if path.contains('\0') {
+        return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: path contains NUL byte"));
+    }
+    let p = Path::new(path);
+    let canonical = p.canonicalize().map_err(|e| {
+        format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot resolve path `{path}`: {e}")
+    })?;
+    if roots
+        .iter()
+        .any(|root| crate::fs_commands::types::path_is_same_or_child(&canonical, root))
+    {
+        return Ok(canonical);
+    }
+    Err(format!(
+        "{ERR_WORKSPACE_NOT_GRANTED}: path is outside the authorized workspace root: `{path}`"
+    ))
 }

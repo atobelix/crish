@@ -1,33 +1,40 @@
+//! 主机「打开方式」命令入口：扫描本机已安装应用 / 快捷方式，并执行打开。
+//!
+//! 错误统一 `CoreError`（IPC 面唯一协议）：内部 `HostOpenerError` 经
+//! `to_core_error` 映射后上抛；红线拦截（PermissionDenied）→ `InvalidInput`。
+
 pub(crate) mod types;
 pub(crate) mod discovery;
 pub(crate) mod resolve;
 pub(crate) mod execute;
 
+use conex_types::CoreError;
+
 use crate::host_openers::discovery::discover_host_openers;
 use crate::host_openers::execute::{open_host_target, open_path_with_default_app};
-use crate::host_openers::types::{HostOpenerError, HostOpenResult, HostOpenTarget, HostOpener};
+use crate::host_openers::types::{to_core_error, HostOpenResult, HostOpenTarget, HostOpener};
 
 #[tauri::command]
-pub(crate) fn workbench_list_host_openers() -> Result<Vec<HostOpener>, HostOpenerError> {
-    discover_host_openers()
+pub(crate) fn workbench_list_host_openers() -> Result<Vec<HostOpener>, CoreError> {
+    discover_host_openers().map_err(to_core_error)
 }
 
 #[tauri::command]
 pub(crate) fn workbench_open_host_target(
     opener_id: String,
     target: HostOpenTarget,
-) -> Result<HostOpenResult, HostOpenerError> {
+) -> Result<HostOpenResult, CoreError> {
     open_host_target(opener_id, target)
 }
 
 #[tauri::command]
-pub(crate) fn workbench_open_path_default(path: String) -> Result<HostOpenResult, HostOpenerError> {
+pub(crate) fn workbench_open_path_default(path: String) -> Result<HostOpenResult, CoreError> {
     open_path_with_default_app(path)
 }
 
 #[tauri::command]
-pub(crate) fn workbench_list_file_openers(path: String) -> Result<Vec<HostOpener>, HostOpenerError> {
-    crate::host_openers::discovery::list_file_openers_for_path(path)
+pub(crate) fn workbench_list_file_openers(path: String) -> Result<Vec<HostOpener>, CoreError> {
+    crate::host_openers::discovery::list_file_openers_for_path(path).map_err(to_core_error)
 }
 
 #[cfg(test)]

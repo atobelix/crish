@@ -1,10 +1,18 @@
-//! Stream B: Tauri 命令层 —— 会话 SQLite 持久化入口
+//! Stream B + PE-08：Tauri 命令层 —— 会话 SQLite 持久化入口
 //!
-//! 本模块提供 11 个 `#[tauri::command]`，包装 `conex_db::LocalDb` 的会话存储方法，
-//! 对齐 `crish-desktop/src/api/session-persistence/sessionLocalStorage.ts` 的 13 个 API。
-//! CPU/IO 密集操作统一走 `tokio::task::spawn_blocking`，参考 `core_commands.rs` 模式。
+//! 本模块提供 12 个 `#[tauri::command]`，包装 `conex_db::LocalDb` 的会话存储方法，
+//! 对齐 `crish-desktop/src/api/session-persistence/sessionRustDb.ts` 的调用面。
+//! CPU/IO 密集操作统一走 `tokio::task::spawn_blocking`，避免阻塞 Tauri 命令线程。
+//! 命令错误统一为 `CoreError`（serde tagged enum，`{kind, detail}`），JS 侧可按
+//! `error.kind` 分类处理（77 码显式映射经 `conex_types::core_error_code` 展开）。
 //!
-//! 命令错误统一为 `CoreError`（serde tagged enum），JS 侧可按 `error.kind` 分类处理。
+//! PE-08 冻结签名：
+//! - F3（T08.1）：`upsert_session_entry(entry: SessionIndexEntry)`（对象签名，
+//!   session 族第 12 个命令）；`save_session_body` 执行前自愈补建会话行
+//!   （`INSERT OR IGNORE`，FK 写路径兜底，不改变「索引先行」语义）；
+//! - F4（T08.2）：`cleanup_orphan_sessions(active_ids, confirm_empty)` ——
+//!   空 keepIds 默认拒绝（`InvalidInput: cleanup_orphan_empty_keep`），
+//!   `confirm_empty = true` 才允许显式清空（仅测试 / 显式用户清空入口）。
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -19,7 +27,7 @@ use tauri::State;
 /// - `LocalDb` 内部已是 `Arc<Mutex<Connection>>`，Clone 廉价；此处再包一层 Arc
 ///   是为了让 `SharedDb` 自身 Clone 廉价（State<'_, SharedDb> 拿到的是引用，无需 Clone）。
 /// - `db_ready()` 暴露给 `core_get_status`，让 `db_ready` 字段反映真实状态而非硬编码。
-/// - `inner()` 返回 `LocalDb` clone（Arc 引用计数 +1），供 `spawn_blocking` 闭包拥有数据。
+/// - `local_db()` 返回 `LocalDb` clone（Arc 引用计数 +1），供 `spawn_blocking` 闭包拥有数据。
 #[derive(Clone)]
 pub struct SharedDb {
     db: Arc<LocalDb>,
@@ -57,7 +65,9 @@ impl SharedDb {
     }
 }
 
-/// 把 `DbFailure` 转换为 `CoreError`。
+/// 把 `DbFailure` 映射为统一 IPC 错误协议 `CoreError`。
+/// kind 携带操作名（lock / *_prepare / *_commit 等），拼接进消息便于诊断；
+/// 需要 77 码时经 `conex_types::core_error_code` 显式展开（IPC 面仍为 CoreError）。
 fn map_db_err(e: DbFailure) -> CoreError {
     CoreError::Internal(format!("{}: {}", e.kind, e.message))
 }
@@ -68,6 +78,29 @@ fn require_session_id(session_id: &str) -> Result<(), CoreError> {
         return Err(CoreError::invalid_input("session_id must not be empty"));
     }
     Ok(())
+}
+
+/// F4 冻结（T08.2）：空 keepIds 默认拒绝——防止 boot 窗口 / 未 hydrate 场景
+/// 触发全库清空（AA-07 P02）；`confirm_empty = true` 仅测试 / 显式清空入口使用。
+fn guard_cleanup_keep(active_ids: &[String], confirm_empty: bool) -> Result<(), CoreError> {
+    if active_ids.is_empty() && !confirm_empty {
+        return Err(CoreError::InvalidInput(
+            "cleanup_orphan_empty_keep".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// 自愈写正文（T08.1）：先 `INSERT OR IGNORE` 补建会话行（空标题），再全量替换正文。
+/// 等价于「`INSERT OR IGNORE INTO sessions (id, title) VALUES (?1, '')` 再写正文」，
+/// 避免 FK 失败；upsert 主路径失败时的兜底，不改变「索引先行」语义。
+fn self_heal_then_save_body(
+    db: &LocalDb,
+    session_id: &str,
+    messages: &[SessionMessage],
+) -> Result<(), DbFailure> {
+    db.insert_session(session_id, "")?;
+    db.save_session_body(session_id, messages)
 }
 
 #[tauri::command]
@@ -102,7 +135,7 @@ pub async fn save_session_body(
 ) -> Result<(), CoreError> {
     require_session_id(&session_id)?;
     let db = db_state.inner().local_db();
-    tokio::task::spawn_blocking(move || db.save_session_body(&session_id, &messages))
+    tokio::task::spawn_blocking(move || self_heal_then_save_body(&db, &session_id, &messages))
         .await
         .map_err(|e| CoreError::Internal(format!("save_session_body join: {e}")))?
         .map_err(map_db_err)?;
@@ -185,11 +218,22 @@ pub async fn set_session_meta(
     Ok(())
 }
 
+/// 清理不在 keepIds 中的会话（孤儿清理，F4 冻结签名）。
+///
+/// - `active_ids` 非空：删除不在集合内的孤儿行，返回删除行数；
+/// - `active_ids` 为空且 `confirm_empty = false`：**不执行任何 DELETE**，返回
+///   `Err(InvalidInput, "cleanup_orphan_empty_keep")`（前端可见，防 P02 全库清空）；
+/// - `active_ids` 为空且 `confirm_empty = true`：显式清空（仅测试 / 显式清空入口）。
+///
+/// 宽限期（`ORPHAN_GRACE_MS`，session_meta `orphan_grace_ms` 可配）与
+/// `confirm_empty` 的库层实现由 conex-db 侧承接（PE-08 T08.2 产出）。
 #[tauri::command]
 pub async fn cleanup_orphan_sessions(
     active_ids: Vec<String>,
+    confirm_empty: Option<bool>,
     db_state: State<'_, SharedDb>,
 ) -> Result<usize, CoreError> {
+    guard_cleanup_keep(&active_ids, confirm_empty.unwrap_or(false))?;
     let db = db_state.inner().local_db();
     let deleted = tokio::task::spawn_blocking(move || db.cleanup_orphan_sessions(&active_ids))
         .await
@@ -233,6 +277,24 @@ pub async fn touch_session(
     tokio::task::spawn_blocking(move || db.touch_session(&session_id))
         .await
         .map_err(|e| CoreError::Internal(format!("touch_session join: {e}")))?
+        .map_err(map_db_err)?;
+    Ok(())
+}
+
+/// 幂等写入会话索引条目（F3 冻结签名，session 族第 12 个命令）。
+///
+/// 语义 = `ON CONFLICT(id) DO UPDATE`：只更新索引列，不级联删除消息 /
+/// agents（`upsert_does_not_cascade_delete_messages` 先例锚定）。
+#[tauri::command]
+pub async fn upsert_session_entry(
+    entry: SessionIndexEntry,
+    db_state: State<'_, SharedDb>,
+) -> Result<(), CoreError> {
+    require_session_id(&entry.id)?;
+    let db = db_state.inner().local_db();
+    tokio::task::spawn_blocking(move || db.upsert_session_entry(&entry))
+        .await
+        .map_err(|e| CoreError::Internal(format!("upsert_session_entry join: {e}")))?
         .map_err(map_db_err)?;
     Ok(())
 }
@@ -302,7 +364,8 @@ mod tests {
     fn map_db_err_preserves_message() {
         let e = DbFailure {
             message: "locked".to_string(),
-            kind: "lock".to_string(),
+            // kind 现为 DbFailureKind 枚举（R6 收敛）；Display 仍输出操作名
+            kind: conex_db::DbFailureKind::Lock,
         };
         let core = map_db_err(e);
         match core {
@@ -311,9 +374,94 @@ mod tests {
         }
     }
 
+    // ── F4：空 keepIds 默认拒绝（PE-08 T08.2）──
+
+    #[test]
+    fn cleanup_guard_rejects_empty_keep_without_confirm() {
+        let err = guard_cleanup_keep(&[], false).expect_err("must reject");
+        match err {
+            CoreError::InvalidInput(detail) => assert_eq!(detail, "cleanup_orphan_empty_keep"),
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cleanup_guard_allows_explicit_empty_confirm() {
+        guard_cleanup_keep(&[], true).expect("explicit confirm allows clear");
+        guard_cleanup_keep(&["s1".to_string()], false).expect("non-empty keep is allowed");
+    }
+
+    // ── T08.1：save_session_body 自愈补建会话行 ──
+
+    #[test]
+    fn save_session_body_self_heals_missing_session_row() {
+        let db = LocalDb::open_in_memory().unwrap();
+        let messages = [
+            sample_message("m1", "user", 1),
+            sample_message("m2", "assistant", 2),
+        ];
+
+        // 全新内存库：无索引行，自愈后正文可写入（不再 FK 失败）。
+        self_heal_then_save_body(&db, "s1", &messages).expect("self-heal save");
+
+        let body = db.load_session_body("s1").unwrap();
+        assert_eq!(body.len(), 2);
+        let list = db.list_sessions().unwrap();
+        assert_eq!(list[0].id, "s1");
+        // 触发器维护 message_count。
+        assert_eq!(list[0].message_count, 2);
+    }
+
+    #[test]
+    fn save_session_body_self_heal_keeps_existing_row() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.upsert_session_entry(&sample_entry("s1")).unwrap();
+
+        let messages = [sample_message("m1", "user", 1)];
+        self_heal_then_save_body(&db, "s1", &messages).expect("save with existing row");
+
+        // 既有索引行不被覆盖（INSERT OR IGNORE 幂等）。
+        let list = db.list_sessions().unwrap();
+        assert_eq!(list[0].title, "Title s1");
+    }
+
+    // ── F3：upsert_session_entry 命令层校验 ──
+
+    #[test]
+    fn upsert_requires_non_empty_entry_id() {
+        let mut entry = sample_entry("s1");
+        entry.id = "   ".to_string();
+        assert!(require_session_id(&entry.id).is_err());
+    }
+
+    #[test]
+    fn upsert_does_not_cascade_delete_messages() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.upsert_session_entry(&sample_entry("s1")).unwrap();
+        db.save_session_body(
+            "s1",
+            &[
+                sample_message("m1", "user", 1),
+                sample_message("m2", "assistant", 2),
+            ],
+        )
+        .unwrap();
+
+        // 再次 upsert 同一会话，不应丢失消息。
+        let mut entry = sample_entry("s1");
+        entry.title = "Updated Title".to_string();
+        db.upsert_session_entry(&entry).unwrap();
+
+        let body = db.load_session_body("s1").unwrap();
+        assert_eq!(body.len(), 2);
+        let list = db.list_sessions().unwrap();
+        assert_eq!(list[0].title, "Updated Title");
+        assert_eq!(list[0].message_count, 2);
+    }
+
     #[test]
     fn end_to_end_via_shared_db() {
-        // 验证 SharedDb.inner() 与 LocalDb 行为一致
+        // 验证 SharedDb.local_db() 与 LocalDb 行为一致
         let db = LocalDb::open_in_memory().unwrap();
         let shared = SharedDb::new(db);
         let inner = shared.local_db();

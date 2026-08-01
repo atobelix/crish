@@ -1,23 +1,34 @@
+//! 主机打开器执行：解析打开器命令与目标，经安全闸门（双防线）校验后拉起进程。
+//!
+//! 安全模型（PE-07 T07.3）：
+//! - 第一道防线：`CommandGatekeeper::check_command`（命令 + 参数整行正则）；
+//! - 第二道防线：`gatekeeper.patterns().is_match` 逐参 / 逐路径匹配；
+//! - 任一命中 → `CoreError::InvalidInput`（"Command blocked by safety red-line
+//!   gatekeeper (InvalidCommand)"），不执行任何进程。
+//!
+//! 错误统一 `CoreError`（IPC 面唯一协议），`HostOpenerError` 经 `to_core_error` 映射。
+
 use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
-use crate::host_paths::{app_dir, workspace_root};
+use conex_types::CoreError;
+
 use crate::host_openers::discovery::opener_candidates;
 use crate::host_openers::resolve::{
     open_target_display, opener_args, resolve_candidate_command, resolve_open_target_for_roots,
     unavailable_diagnostic,
 };
 use crate::host_openers::types::{
-    host_opener_diagnostic, host_opener_error, HostOpenerError, HostOpenResult,
+    host_opener_diagnostic, host_opener_error, to_core_error, HostOpenerError, HostOpenResult,
     HostOpenTarget, HostOpenTargetKindForResult, ResolvedOpenTarget,
 };
 
 pub(crate) fn open_host_target(
     opener_id: String,
     target: HostOpenTarget,
-) -> Result<HostOpenResult, HostOpenerError> {
+) -> Result<HostOpenResult, CoreError> {
     if let Some(lnk_path) = opener_id.strip_prefix("lnk:") {
         let lnk_owned = lnk_path.to_string();
         return open_with_shortcut(&lnk_owned, target, opener_id);
@@ -33,28 +44,29 @@ pub(crate) fn open_host_target(
         .iter()
         .find(|candidate| candidate.id == opener_id)
         .ok_or_else(|| {
-            host_opener_error(
+            to_core_error(host_opener_error(
                 "host-opener-not-found",
                 format!("Host opener id is not known on this OS: {opener_id}"),
                 None,
                 None,
-            )
+            ))
         })?;
     let resolved = resolve_candidate_command(candidate, &path_dirs, &path_exists).ok_or_else(|| {
         let diagnostic = unavailable_diagnostic(candidate);
-        HostOpenerError {
+        to_core_error(HostOpenerError {
             code: "host-opener-unavailable".to_string(),
             message: diagnostic.message.clone(),
             diagnostic,
-        }
+        })
     })?;
-    let app_dir = app_dir().map_err(|message| {
-        host_opener_error("host-path-root-unavailable", message, None, None)
-    })?;
-    let workspace = workspace_root(&app_dir);
+    let app_dir = crate::host_paths::app_dir()
+        .map_err(|message| to_core_error(host_opener_error(
+            "host-path-root-unavailable", message, None, None,
+        )))?;
+    let workspace = crate::host_paths::workspace_root(&app_dir);
     let roots = [workspace.as_path()];
-    let resolved_target = resolve_open_target_for_roots(&target, &roots)?;
-    let args = opener_args(candidate, &resolved_target)?;
+    let resolved_target = resolve_open_target_for_roots(&target, &roots).map_err(to_core_error)?;
+    let args = opener_args(candidate, &resolved_target).map_err(to_core_error)?;
 
     let command_display = resolved.command.display().to_string();
     let gatekeeper = conex_sandbox::gatekeeper::CommandGatekeeper::new();
@@ -62,12 +74,12 @@ pub(crate) fn open_host_target(
     if gatekeeper.check_command(&command_display, &args_strs) == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
         || args.iter().any(|a| gatekeeper.patterns().is_match(a))
     {
-        return Err(host_opener_error(
+        return Err(to_core_error(host_opener_error(
             "PermissionDenied",
             "Command blocked by safety red-line gatekeeper (InvalidCommand)",
             Some(command_display),
             None,
-        ));
+        )));
     }
 
     Command::new(&resolved.command)
@@ -77,12 +89,12 @@ pub(crate) fn open_host_target(
         .stderr(Stdio::null())
         .spawn()
         .map_err(|error| {
-            host_opener_error(
+            to_core_error(host_opener_error(
                 "host-opener-spawn-failed",
                 format!("Failed to launch host opener {opener_id}: {error}"),
                 Some(command_display.clone()),
                 None,
-            )
+            ))
         })?;
 
     Ok(HostOpenResult {
@@ -107,22 +119,23 @@ fn open_with_shortcut(
     lnk_path: &str,
     target: HostOpenTarget,
     opener_id: String,
-) -> Result<HostOpenResult, HostOpenerError> {
+) -> Result<HostOpenResult, CoreError> {
     let lnk = PathBuf::from(lnk_path);
     if !lnk.exists() {
-        return Err(host_opener_error(
+        return Err(to_core_error(host_opener_error(
             "host-opener-not-found",
             format!("Shortcut not found: {lnk_path}"),
             Some(lnk_path.to_string()),
             None,
-        ));
+        )));
     }
-    let app_dir = app_dir().map_err(|message| {
-        host_opener_error("host-path-root-unavailable", message, None, None)
-    })?;
-    let workspace = workspace_root(&app_dir);
+    let app_dir = crate::host_paths::app_dir()
+        .map_err(|message| to_core_error(host_opener_error(
+            "host-path-root-unavailable", message, None, None,
+        )))?;
+    let workspace = crate::host_paths::workspace_root(&app_dir);
     let roots = [workspace.as_path()];
-    let resolved_target = resolve_open_target_for_roots(&target, &roots)?;
+    let resolved_target = resolve_open_target_for_roots(&target, &roots).map_err(to_core_error)?;
     let file_arg = match &resolved_target {
         ResolvedOpenTarget::Path(p) => p.display().to_string(),
         ResolvedOpenTarget::Url(u) => u.clone(),
@@ -133,12 +146,12 @@ fn open_with_shortcut(
         || gatekeeper.patterns().is_match(lnk_path)
         || gatekeeper.patterns().is_match(&file_arg)
     {
-        return Err(host_opener_error(
+        return Err(to_core_error(host_opener_error(
             "PermissionDenied",
             "Command blocked by safety red-line gatekeeper (InvalidCommand)",
             Some(lnk_path.to_string()),
             Some(file_arg),
-        ));
+        )));
     }
 
     #[cfg(windows)]
@@ -168,58 +181,58 @@ fn open_with_shortcut(
                     Some(file_arg),
                 ),
             }),
-            Err(error) => Err(host_opener_error(
+            Err(error) => Err(to_core_error(host_opener_error(
                 "host-opener-spawn-failed",
                 format!("Failed to launch shortcut: {error}"),
                 Some(lnk_path.to_string()),
                 Some(file_arg),
-            )),
+            ))),
         }
     }
 
     #[cfg(not(windows))]
     {
         let _ = file_arg;
-        Err(host_opener_error(
+        Err(to_core_error(host_opener_error(
             "host-opener-unavailable",
             "Shortcut open is only implemented on Windows.",
             Some(lnk_path.to_string()),
             None,
-        ))
+        )))
     }
 }
 
-pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult, HostOpenerError> {
+pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult, CoreError> {
     let target = path.trim().to_string();
     if target.is_empty() {
-        return Err(host_opener_error(
+        return Err(to_core_error(host_opener_error(
             "host-path-empty",
             "Path is empty.",
             None,
             None,
-        ));
+        )));
     }
 
     let gatekeeper = conex_sandbox::gatekeeper::CommandGatekeeper::new();
     if gatekeeper.check_command("start", &[&target]) == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
         || gatekeeper.patterns().is_match(&target)
     {
-        return Err(host_opener_error(
+        return Err(to_core_error(host_opener_error(
             "PermissionDenied",
             "Command blocked by safety red-line gatekeeper (InvalidCommand)",
             None,
             Some(target.clone()),
-        ));
+        )));
     }
 
     let p = PathBuf::from(&target);
     if !p.exists() {
-        return Err(host_opener_error(
+        return Err(to_core_error(host_opener_error(
             "host-path-missing",
             format!("Path does not exist: {target}"),
             None,
             Some(target.clone()),
-        ));
+        )));
     }
 
     #[cfg(windows)]
@@ -244,12 +257,12 @@ pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult,
                     Some(target),
                 ),
             }),
-            Err(error) => Err(host_opener_error(
+            Err(error) => Err(to_core_error(host_opener_error(
                 "host-opener-spawn-failed",
                 format!("Failed to open with system default: {error}"),
                 Some("cmd /C start".to_string()),
                 Some(target),
-            )),
+            ))),
         }
     }
 
@@ -275,12 +288,12 @@ pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult,
                     Some(target),
                 ),
             }),
-            Err(error) => Err(host_opener_error(
+            Err(error) => Err(to_core_error(host_opener_error(
                 "host-opener-spawn-failed",
                 format!("Failed to open with system default: {error}"),
                 Some("open".to_string()),
                 Some(target),
-            )),
+            ))),
         }
     }
 
@@ -306,12 +319,12 @@ pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult,
                     Some(target),
                 ),
             }),
-            Err(error) => Err(host_opener_error(
+            Err(error) => Err(to_core_error(host_opener_error(
                 "host-opener-spawn-failed",
                 format!("Failed to open with system default: {error}"),
                 Some("xdg-open".to_string()),
                 Some(target),
-            )),
+            ))),
         }
     }
 }
@@ -344,8 +357,43 @@ mod tests {
                 target
             );
             let err = res.unwrap_err();
-            assert_eq!(err.code, "PermissionDenied");
-            assert!(err.message.contains("InvalidCommand"));
+            match err {
+                CoreError::InvalidInput(detail) => {
+                    assert!(
+                        detail.contains("InvalidCommand"),
+                        "detail should contain InvalidCommand: {detail}"
+                    );
+                }
+                other => panic!("expected InvalidInput, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn to_core_error_maps_permission_denied_to_invalid_input() {
+        let e = host_opener_error(
+            "PermissionDenied",
+            "Command blocked by safety red-line gatekeeper (InvalidCommand)",
+            None,
+            None,
+        );
+        match to_core_error(e) {
+            CoreError::InvalidInput(msg) => assert!(msg.contains("InvalidCommand")),
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn to_core_error_keeps_code_for_other_errors() {
+        let e = host_opener_error(
+            "host-opener-spawn-failed",
+            "Failed to launch host opener",
+            None,
+            None,
+        );
+        match to_core_error(e) {
+            CoreError::Internal(msg) => assert!(msg.contains("host-opener-spawn-failed")),
+            other => panic!("expected Internal, got {other:?}"),
         }
     }
 }

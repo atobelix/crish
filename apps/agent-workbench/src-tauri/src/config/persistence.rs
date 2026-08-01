@@ -1,4 +1,8 @@
 //! 配置持久化：provider 非敏感配置的 JSON 读写与配置路径解析。
+//!
+//! - 原子写：先写 `*.json.tmp` 再 `rename` 原位替换（避免半写文件被读到）；
+//! - 路径布局：`config_dir()/provider-config.json` + `config_dir()/secrets/{id}.dpapi`；
+//! - `sanitize_profile_secret_id`：密钥槽 id 白名单校验（防路径穿越）。
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -57,6 +61,7 @@ pub(crate) fn read_persisted_config(path: &Path) -> Result<PersistedProviderConf
     }
 }
 
+/// 原子写配置 JSON：tmp 文件 + rename 原位替换（对齐 `workspace.rs` 的 recent 列表写法）。
 pub(crate) fn write_persisted_config(
     path: &Path,
     config: &PersistedProviderConfig,
@@ -84,7 +89,8 @@ pub(crate) fn profile_secret_path(profile_id: &str) -> Result<PathBuf, String> {
     Ok(profile_secrets_dir().join(format!("{id}.dpapi")))
 }
 
-fn sanitize_profile_secret_id(profile_id: &str) -> Result<String, String> {
+/// 密钥槽 id 白名单：trim 后 ASCII 字母数字 / `-` / `_`，长度上限 128（防路径穿越）。
+pub(crate) fn sanitize_profile_secret_id(profile_id: &str) -> Result<String, String> {
     let id = profile_id.trim();
     if id.is_empty() {
         return Err("profileId is empty".to_string());

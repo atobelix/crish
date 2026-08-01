@@ -1,4 +1,17 @@
-//! 凭证存储：OS/DPAPI 加密密钥读写，以及进程内降级内存存储。
+//! 凭证存储与密钥槽命令（K-01 / K-02）。
+//!
+//! - `CredentialStore`：Windows DPAPI 加密后 hex 落盘；非 Windows 纯内存降级；
+//!   进程内缓存避免重复解密，缓存仅存于内存（进程退出即失效）。
+//! - 密钥槽布局：`config_dir()/secrets/{profileId}.dpapi`（persistence.rs 解析，
+//!   id 经白名单校验，防路径穿越）。
+//! - 命令面（PE-07 F5 终态名）：`config_secret_set / get / has / clear / reveal`。
+//! - 安全约束：
+//!   - K-02：除 `config_secret_reveal(ui_confirm = true)` 外，任何命令都不回传明文，
+//!     只回 `{ hasKey, apiKeyLast4 }`；
+//!   - K-05：成功日志只记 last4，不记明文。
+//!
+//! 说明：crates/agent-provider 的 `CredentialStore`（T07.4 已确认在 crates 侧完好）
+//! 提供等价能力；本壳保留进程内实现（DPAPI + 内存降级 + 缓存），不引入新依赖。
 
 use std::{
     cell::RefCell,
@@ -7,7 +20,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::resolution::ApiKeySource;
+use conex_types::CoreError;
+use serde_json::Value;
+
+use super::persistence::profile_secret_path;
+use super::resolution::{last4, normalize_config_value};
+use super::{with_profile_secrets, with_profile_secrets_mut};
 
 #[derive(Debug, Clone)]
 pub(crate) struct CredentialStore {
@@ -137,9 +155,9 @@ impl CredentialStore {
         }
     }
 
-    pub(crate) fn persistence_for_key(&self, source: ApiKeySource) -> CredentialPersistence {
+    pub(crate) fn persistence_for_key(&self, source: super::resolution::ApiKeySource) -> CredentialPersistence {
         match source {
-            ApiKeySource::RuntimeUpdate => {
+            super::resolution::ApiKeySource::RuntimeUpdate => {
                 if self.mode == CredentialStoreMode::Os && !self.unavailable {
                     CredentialPersistence::Persisted
                 } else if self.unavailable {
@@ -148,7 +166,7 @@ impl CredentialStore {
                     CredentialPersistence::MemoryOnly
                 }
             }
-            ApiKeySource::UserConfig => {
+            super::resolution::ApiKeySource::UserConfig => {
                 if self.unavailable {
                     CredentialPersistence::Degraded
                 } else if self.mode == CredentialStoreMode::Os {
@@ -157,10 +175,167 @@ impl CredentialStore {
                     CredentialPersistence::MemoryOnly
                 }
             }
-            ApiKeySource::Env => CredentialPersistence::Unset,
-            ApiKeySource::Unset => CredentialPersistence::Unset,
+            super::resolution::ApiKeySource::Env => CredentialPersistence::Unset,
+            super::resolution::ApiKeySource::Unset => CredentialPersistence::Unset,
         }
     }
+
+    /// 读取场景下的落盘状态展示：无密钥 = Unset；有密钥按存储模式归类。
+    pub(crate) fn persistence_for_read(&self, has_key: bool) -> CredentialPersistence {
+        if !has_key {
+            return CredentialPersistence::Unset;
+        }
+        if self.unavailable {
+            CredentialPersistence::Degraded
+        } else if self.mode == CredentialStoreMode::Os {
+            CredentialPersistence::Persisted
+        } else {
+            CredentialPersistence::MemoryOnly
+        }
+    }
+}
+
+// ── 密钥槽命令（PE-07 F5 终态名；错误统一 CoreError）─────────────────────
+
+/// 错误映射：密钥槽 id 校验失败 → InvalidInput。
+fn profile_id_err(error: String) -> CoreError {
+    CoreError::InvalidInput(error)
+}
+
+/// 错误映射：存储读写失败 → Internal（保留可诊断消息）。
+fn store_err(error: String) -> CoreError {
+    CoreError::Internal(error)
+}
+
+/// 组装脱敏状态响应（K-02：无明文 apiKey 字段）。
+fn secret_status(
+    profile_id: String,
+    has_key: bool,
+    api_key_last4: Option<String>,
+    persistence: Option<CredentialPersistence>,
+) -> Value {
+    let mut out = serde_json::json!({
+        "ok": true,
+        "profileId": profile_id,
+        "hasKey": has_key,
+    });
+    if let Some(last4) = api_key_last4 {
+        out["apiKeyLast4"] = Value::String(last4);
+    }
+    if let Some(persistence) = persistence {
+        out["persistence"] = Value::String(persistence.as_str().to_string());
+    }
+    out
+}
+
+/// 写指定 profile 的 API key 到 DPAPI 密钥槽（空串 = 清除）。
+///
+/// 返回 `{ ok, profileId, hasKey, apiKeyLast4, persistence }`；成功日志只记 last4（K-05）。
+#[tauri::command]
+pub(crate) fn config_secret_set(
+    profile_id: String,
+    api_key: String,
+) -> Result<Value, CoreError> {
+    let path = profile_secret_path(&profile_id).map_err(profile_id_err)?;
+    let key = normalize_config_value(api_key);
+    if key.is_empty() {
+        return with_profile_secrets_mut(|store| {
+            let persistence = store.clear(&path).map_err(store_err)?;
+            Ok(secret_status(profile_id, false, None, Some(persistence)))
+        });
+    }
+    with_profile_secrets_mut(|store| {
+        let persistence = match store.write(&path, &key) {
+            Ok(persistence) => persistence,
+            // 落盘失败降级为内存：密钥仍可用，展示层标记 degraded。
+            Err(_) => CredentialPersistence::Degraded,
+        };
+        let last4 = last4(&key);
+        // K-05：成功日志只记 last4，不记明文。
+        tracing::info!(
+            target: "config",
+            profile_id = %profile_id,
+            api_key_last4 = ?last4,
+            persistence = persistence.as_str(),
+            "config_secret_set: 密钥已写入 DPAPI 密钥槽"
+        );
+        Ok(secret_status(profile_id, true, last4, Some(persistence)))
+    })
+}
+
+/// 读取指定 profile 的密钥状态（K-02：只回 `{ hasKey, apiKeyLast4 }`，不回明文）。
+#[tauri::command]
+pub(crate) fn config_secret_get(profile_id: String) -> Result<Value, CoreError> {
+    let path = profile_secret_path(&profile_id).map_err(profile_id_err)?;
+    with_profile_secrets(|store| {
+        let value = store.read(&path).map_err(store_err)?;
+        let has_key = value.as_ref().is_some_and(|v| !v.is_empty());
+        // K-02：默认不回明文，只回 last4。
+        let last4 = value.as_deref().and_then(last4);
+        Ok(secret_status(
+            profile_id,
+            has_key,
+            last4,
+            Some(store.persistence_for_read(has_key)),
+        ))
+    })
+}
+
+/// 仅探测指定 profile 是否已有密钥（不回明文，也不回 last4）。
+#[tauri::command]
+pub(crate) fn config_secret_has(profile_id: String) -> Result<Value, CoreError> {
+    let path = profile_secret_path(&profile_id).map_err(profile_id_err)?;
+    with_profile_secrets(|store| {
+        let value = store.read(&path).map_err(store_err)?;
+        let has_key = value.as_ref().is_some_and(|v| !v.is_empty());
+        Ok(serde_json::json!({
+            "ok": true,
+            "profileId": profile_id,
+            "hasKey": has_key,
+        }))
+    })
+}
+
+/// 清除指定 profile 密钥。
+#[tauri::command]
+pub(crate) fn config_secret_clear(profile_id: String) -> Result<Value, CoreError> {
+    let path = profile_secret_path(&profile_id).map_err(profile_id_err)?;
+    with_profile_secrets_mut(|store| {
+        let persistence = store.clear(&path).map_err(store_err)?;
+        tracing::info!(
+            target: "config",
+            profile_id = %profile_id,
+            "config_secret_clear: 密钥已清除"
+        );
+        Ok(secret_status(profile_id, false, None, Some(persistence)))
+    })
+}
+
+/// 「显示密钥」一次性确认入口（K-02）：`ui_confirm = true` 才回明文；
+/// `false` 仅回 `{ hasKey, apiKeyLast4 }` 且 `revealed = false`。
+#[tauri::command]
+pub(crate) fn config_secret_reveal(
+    profile_id: String,
+    ui_confirm: bool,
+) -> Result<Value, CoreError> {
+    let path = profile_secret_path(&profile_id).map_err(profile_id_err)?;
+    with_profile_secrets(|store| {
+        let plain = store.read(&path).map_err(store_err)?.unwrap_or_default();
+        let has_key = !plain.is_empty();
+        let last4 = last4(&plain);
+        let mut out = secret_status(
+            profile_id,
+            has_key,
+            last4,
+            Some(store.persistence_for_read(has_key)),
+        );
+        // K-02：仅在 webview 携带一次性 UI 确认参数时回明文。
+        out["revealed"] = Value::Bool(ui_confirm && has_key);
+        if ui_confirm && has_key {
+            out["apiKey"] = Value::String(plain);
+        }
+        Ok(out)
+    })
 }
 
 #[cfg(windows)]
@@ -233,12 +408,11 @@ fn dpapi_protect(input: &[u8]) -> Result<Vec<u8>, String> {
         cbData: 0,
         pbData: ptr::null_mut(),
     };
-    // SAFETY: CryptProtectData is an FFI call into Windows DPAPI. The caller guarantees that:
-    // - in_blob.pbData points to a valid buffer of in_blob.cbData bytes
-    // - out_blob is a valid CRYPT_INTEGER_BLOB that will be filled by the function
-    // - CRYPTPROTECT_UI_FORBIDDEN prevents any UI prompt
-    // POST: On success, out_blob contains the encrypted data (allocated by DPAPI).
-    // PANICS: None (errors are propagated via Result).
+    // SAFETY: CryptProtectData 是进入 Windows DPAPI 的 FFI 调用，调用方保证：
+    // - in_blob.pbData 指向长度为 in_blob.cbData 的合法缓冲区；
+    // - out_blob 是合法的 CRYPT_INTEGER_BLOB，由函数填充；
+    // - CRYPTPROTECT_UI_FORBIDDEN 禁止任何 UI 弹窗。
+    // 成功后 out_blob 持有 DPAPI 分配的加密数据。
     let ok = unsafe {
         CryptProtectData(
             &mut in_blob,
@@ -253,16 +427,11 @@ fn dpapi_protect(input: &[u8]) -> Result<Vec<u8>, String> {
     if ok == 0 {
         return Err("Windows DPAPI CryptProtectData failed".to_string());
     }
-    // SAFETY: out_blob.pbData and cbData were set by CryptProtectData and are guaranteed
-    // valid on success. The slice is immediately copied into a Vec to avoid lifetime issues.
-    // POST: bytes is an owned Vec<u8> that does not borrow from the DPAPI allocation.
-    // PANICS: None (valid range guaranteed by DPAPI on success).
+    // SAFETY: 成功时 out_blob.pbData/cbData 由 DPAPI 设置并保证有效；
+    // 立即拷贝进 Vec 避免生命周期问题。
     let bytes =
         unsafe { std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize).to_vec() };
-    // SAFETY: LocalFree releases the memory allocated by CryptProtectData.
-    // The pointer must be the exact value returned by the API (not offset).
-    // POST: The DPAPI-allocated buffer is freed.
-    // PANICS: None.
+    // SAFETY: LocalFree 释放 CryptProtectData 分配的内存，指针必须原样返回。
     unsafe {
         LocalFree(out_blob.pbData.cast());
     }
@@ -287,12 +456,10 @@ fn dpapi_unprotect(input: &[u8]) -> Result<Vec<u8>, String> {
         cbData: 0,
         pbData: ptr::null_mut(),
     };
-    // SAFETY: CryptUnprotectData is an FFI call into Windows DPAPI. The caller guarantees that:
-    // - in_blob.pbData points to a valid encrypted buffer of in_blob.cbData bytes
-    // - out_blob is a valid CRYPT_INTEGER_BLOB that will be filled by the function
-    // - CRYPTPROTECT_UI_FORBIDDEN prevents any UI prompt
-    // POST: On success, out_blob contains the decrypted data (allocated by DPAPI).
-    // PANICS: None (errors are propagated via Result).
+    // SAFETY: CryptUnprotectData 是进入 Windows DPAPI 的 FFI 调用，调用方保证：
+    // - in_blob.pbData 指向长度为 in_blob.cbData 的合法密文缓冲区；
+    // - out_blob 是合法的 CRYPT_INTEGER_BLOB，由函数填充；
+    // - CRYPTPROTECT_UI_FORBIDDEN 禁止任何 UI 弹窗。
     let ok = unsafe {
         CryptUnprotectData(
             &mut in_blob,
@@ -307,16 +474,11 @@ fn dpapi_unprotect(input: &[u8]) -> Result<Vec<u8>, String> {
     if ok == 0 {
         return Err("Windows DPAPI CryptUnprotectData failed".to_string());
     }
-    // SAFETY: out_blob.pbData and cbData were set by CryptUnprotectData and are guaranteed
-    // valid on success. The slice is immediately copied into a Vec to avoid lifetime issues.
-    // POST: bytes is an owned Vec<u8> that does not borrow from the DPAPI allocation.
-    // PANICS: None (valid range guaranteed by DPAPI on success).
+    // SAFETY: 成功时 out_blob.pbData/cbData 由 DPAPI 设置并保证有效；
+    // 立即拷贝进 Vec 避免生命周期问题。
     let bytes =
         unsafe { std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize).to_vec() };
-    // SAFETY: LocalFree releases the memory allocated by CryptUnprotectData.
-    // The pointer must be the exact value returned by the API (not offset).
-    // POST: The DPAPI-allocated buffer is freed.
-    // PANICS: None.
+    // SAFETY: LocalFree 释放 CryptUnprotectData 分配的内存，指针必须原样返回。
     unsafe {
         LocalFree(out_blob.pbData.cast());
     }

@@ -1,0 +1,887 @@
+//! 引擎装配层（B6.4：EngineHandle / HttpProviderCall / SessionLoopProducer /
+//! BufferedRunEventBridge / DeltaSink 桥，PE-09 T09.1 增量流）
+//!
+//! 模块职责（B6.4 第 3 点：main.rs setup 重写的引擎面）：
+//! - [EngineHandle]：provider 生效配置（baseUrl/model/apiKey 三件套，
+//!   25-ipc-contract-audit.md:101）+ 工具注册表 + `engineReady`；
+//! - [HttpProviderCall]：[session_loop::provider::ProviderCall] 的真实适配层
+//!   ——chat-completions 请求体同步构建（返回流前完成序列化，PE-02 §3.1.1），
+//!   增量帧流逐帧解析、逐事件产出（T09.1.2 步骤 2，unfold 状态机）；
+//! - [SessionLoopProducer]：每 run 重建 [AgentSessionLoop]（PE-09 §4：
+//!   真实接线跨 run 重建语义），装配 options / approval / delta_sink；
+//! - [BufferedRunEventBridge]：[crate::core_event_bridge::EventBridge] +
+//!   [crate::buffer::EventBuffer] 背压组装（入队时序列化，flush 直接发射，
+//!   AA-06 P9）；
+//! - [BridgeDeltaSink]：T09.1 实时轨 [session_loop::DeltaSink] 桥——信封
+//!   `{event, runId: Some, sequence: None}` → 缓冲 → 立即 flush（丢帧由
+//!   buffer 的 Delta 类目兜底，message-end 必达）。
+//!
+//! TODO(集成 agent)：main.rs 声明 `mod engine` 等本批模块并完成接线
+//! （本文件不声明 mod）。
+
+use std::collections::VecDeque;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use agent_provider::config::Endpoint;
+use agent_provider::error::{
+    classify_provider_error, source_from_reqwest_error, source_from_sse_read_error,
+};
+use agent_provider::events::{ProviderStreamEvent as WireEvent, StreamParseError};
+use agent_provider::parse::chat::ChatCompletionsParser;
+use agent_provider::request::{
+    build_chat_completions_request_body, ChatCompletionsRequestOptions, MaxTokensField,
+    RequestBuildContext, ToolDefinition as WireToolDefinition,
+};
+use agent_provider::sse::{AbortFlag, StreamDiagnosticContext, StreamReadOptions};
+use agent_provider::transport::{stream_frames, StreamFrameEvent};
+use agent_tools::registry::ToolRegistry;
+use async_trait::async_trait;
+use conex_types::error::ProviderErrorKind;
+use conex_types::events::{AgentEvent, AgentEventEnvelope};
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+use conex_types::response::ClassifiedStreamError;
+use conex_types::tool::SystemPromptWireMode;
+use futures_util::{Stream, StreamExt};
+use session_loop::provider::{DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest};
+use session_loop::stream::{
+    ProviderStreamEvent, ProviderUsage, StopReason as LoopStopReason,
+};
+use session_loop::{
+    AgentSessionLoop, ApprovalGate, RunOutcome, SessionLoopOptions, ToolBatchOptions,
+};
+
+use crate::buffer::{drop_class_of, EventBuffer};
+use crate::core_event_bridge::{EmitReport, EventBridge};
+
+/// 首字节超时（等待流首个字节到达；None = 不设限，对齐 normalizeStreamTimeoutMs）
+const DEFAULT_FIRST_BYTE_TIMEOUT: Duration = Duration::from_secs(30);
+/// 流块间空闲超时
+const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+
+// ── 时间戳与消息 id ───────────────────────────────────────────────
+
+/// 当前 UTC 时间 ISO8601 字符串（毫秒精度，`2026-07-31T08:00:00.000Z`）
+///
+/// 无 chrono 依赖，手工换算（Howard Hinnant civil-from-days 算法，
+/// 与 orchestrator / session-loop 同源）。
+pub(crate) fn now_iso_utc() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = now.as_secs();
+    let millis = now.subsec_millis();
+    let (hours, mins, sec) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
+    let (year, month, day) = civil_from_days((secs / 86400) as i64);
+    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{millis:03}Z")
+}
+
+/// 从 Unix 天数换算公历年月日（Howard Hinnant 算法）
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (y + if m <= 2 { 1 } else { 0 }, m, d)
+}
+
+/// 消息 id 生成（前缀 + 毫秒时间戳 + 计数器，进程内唯一）
+pub(crate) fn new_message_id(prefix: &str) -> String {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or_default();
+    format!("{prefix}-{now_ms}-{}", COUNTER.fetch_add(1, Ordering::SeqCst))
+}
+
+/// 用户消息构造（run-task 下发 prompt）
+///
+/// 21-log §5.2 缺口 2 修复：`client_message_id` 填 run-task 下发的 user id
+/// （03 §5.3-4：message-end 稳定幂等键）。
+pub(crate) fn user_message(prompt: &str, client_message_id: Option<&str>) -> AgentMessage {
+    AgentMessage {
+        id: new_message_id("user"),
+        role: AgentMessageRole::User,
+        created_at: now_iso_utc(),
+        blocks: vec![AgentMessageBlock::Text {
+            text: prompt.to_string(),
+        }],
+        metadata: None,
+        client_message_id: client_message_id.map(str::to_string),
+        content: None,
+    }
+}
+
+// ── Provider 生效配置 ─────────────────────────────────────────────
+
+/// 生效的 provider 配置（EngineHandle 加载；baseUrl/model/apiKey 三件套齐备
+/// 即可发起调用，25-ipc-contract-audit.md:101）
+#[derive(Debug, Clone)]
+pub(crate) struct EngineProviderConfig {
+    /// 服务端基础地址（chat-completions 端点在其下）
+    pub base_url: String,
+    /// API key（Authorization: Bearer）
+    pub api_key: String,
+    /// 模型名
+    pub model: String,
+    /// 端点（缺省 chat-completions，00 D3）
+    pub endpoint: Endpoint,
+    /// 是否流式
+    pub stream: bool,
+}
+
+/// 从 config 模块的 effective_* 源加载生效配置（engine.rs:169-179 等价）
+///
+/// 源 = `crate::config::effective_*`（ApiConfigStore；env 覆盖在 config 层
+/// 完成）；三件套任一缺失 → None（引擎降级未就绪，仅记录不 panic，
+/// engine.rs:112-125 语义）。
+pub(crate) fn load_provider_endpoint() -> Option<EngineProviderConfig> {
+    let base_url = crate::config::effective_api_base_url()?;
+    let api_key = crate::config::effective_api_key()?;
+    let model = crate::config::effective_model()?;
+    if base_url.trim().is_empty() || api_key.trim().is_empty() || model.trim().is_empty() {
+        return None;
+    }
+    let endpoint = Endpoint::parse(&crate::config::effective_provider_endpoint())
+        .unwrap_or(Endpoint::ChatCompletions);
+    let stream = crate::config::effective_provider_stream();
+    Some(EngineProviderConfig {
+        base_url,
+        api_key,
+        model,
+        endpoint,
+        stream,
+    })
+}
+
+// ── HttpProviderCall：真实 provider 适配层 ─────────────────────────
+
+/// chat-completions 请求的端点路径（endpoint 缺省恒 chat-completions，00 D3）
+fn provider_url(config: &EngineProviderConfig) -> String {
+    let base = config.base_url.trim_end_matches('/');
+    match config.endpoint {
+        Endpoint::Responses => format!("{base}/responses"),
+        _ => format!("{base}/chat/completions"),
+    }
+}
+
+/// provider 调用适配层（B6.4：ProviderCall 的真实实现，T09.1 增量流）
+///
+/// 流式契约（PE-02 §3.1，冻结 v1）：
+/// - 流前 Err：传输层 / HTTP / 非 2xx 错误（尚未产出任何事件，进重试阶梯）；
+/// - 流中 Err 条目：中途读取 / 解析错误（已产出内容 → 内容保留收场，
+///   由消费方按 [session_loop::stream::ConsumeBuilder] 裁决）；
+/// - 每流恰好一个 Stop，Stop 后流立即结束（解析器保证）；
+/// - 返回流为 `'static`：请求体在返回流之前同步序列化完毕。
+pub(crate) struct HttpProviderCall {
+    /// 共享 reqwest 客户端（连接池 / TLS 会话跨 run 复用，AA-02 S-7）
+    client: reqwest::Client,
+    /// 生效配置（EngineHandle 重载时重建本适配层）
+    config: EngineProviderConfig,
+    /// 首字节超时
+    first_byte_timeout: Option<Duration>,
+    /// 流块间空闲超时
+    idle_timeout: Option<Duration>,
+}
+
+impl HttpProviderCall {
+    /// 新建适配层（共享客户端 + 生效配置）
+    pub(crate) fn new(client: reqwest::Client, config: EngineProviderConfig) -> Self {
+        Self {
+            client,
+            config,
+            first_byte_timeout: Some(DEFAULT_FIRST_BYTE_TIMEOUT),
+            idle_timeout: Some(DEFAULT_IDLE_TIMEOUT),
+        }
+    }
+
+    /// chat-completions 请求选项（对话无关字段；模型 / max_tokens 透传）
+    fn request_options(&self, request: &ProviderRequest<'_>) -> ChatCompletionsRequestOptions {
+        ChatCompletionsRequestOptions {
+            model: Some(self.config.model.clone()),
+            stream: Some(self.config.stream),
+            max_tokens: request.max_tokens.map(u64::from),
+            max_tokens_field: Some(MaxTokensField::MaxTokens),
+            ..ChatCompletionsRequestOptions::default()
+        }
+    }
+
+    /// 请求构建上下文（消息 0 深拷贝借用，PE-09 T09.3 阶段 1）
+    fn build_context<'a>(&self, request: &ProviderRequest<'a>) -> RequestBuildContext<'a> {
+        RequestBuildContext {
+            system_prompt: None,
+            messages: request.messages,
+            tools: request
+                .tools
+                .iter()
+                .map(|schema| WireToolDefinition {
+                    name: schema.name.clone(),
+                    description: schema.description.clone(),
+                    input_schema: schema.input_schema.clone(),
+                })
+                .collect(),
+            wire_mode: SystemPromptWireMode::NativeSystemRole,
+        }
+    }
+}
+
+#[async_trait]
+impl ProviderCall for HttpProviderCall {
+    async fn stream<'a>(
+        &self,
+        request: &ProviderRequest<'a>,
+    ) -> Result<ProviderEventStream, ClassifiedStreamError> {
+        // 1. 同步构建请求体（返回流 'static：请求体必须在此处序列化完毕，
+        //    PE-02 §3.1.1；连接池 / endpoint 构建不变，T09.1.2 步骤 2）
+        let options = self.request_options(request);
+        let context = self.build_context(request);
+        let body = build_chat_completions_request_body(&options, &context);
+        let url = provider_url(&self.config);
+
+        // 2. HTTP 请求（共享连接池；传输层错误分类后上抛）
+        let response = match self
+            .client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .json(&body)
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => {
+                // 流前传输错误（reqwest 层）：分类后上抛（02 §四.1）
+                let source = source_from_reqwest_error(&error);
+                return Err(to_classified(classify_provider_error(
+                    None,
+                    None,
+                    Some(source),
+                    None,
+                )));
+            }
+        };
+
+        // 非 2xx：读 body → 分类（含 Retry-After 头；流前错误，未产出事件）
+        let status = response.status();
+        if !status.is_success() {
+            let status_code = status.as_u16();
+            // 头信息先于 body 消费读取（reqwest Response 非 Copy，
+            // text() 消费 body 后再读 headers 属 use-after-move）
+            let retry_after = response
+                .headers()
+                .get("retry-after")
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_string);
+            let body_text = response.text().await.ok();
+            let classified = classify_provider_error(
+                Some(status_code),
+                body_text.as_deref(),
+                None,
+                retry_after.as_deref(),
+            );
+            return Err(to_classified(classified));
+        }
+
+        // 3. 增量帧流 → 逐帧解析 → 逐事件产出（T09.1.2 步骤 2：unfold 状态机）
+        let (_abort_flag, abort_handle) = AbortFlag::new();
+        let read_options = StreamReadOptions {
+            first_byte_timeout: self.first_byte_timeout,
+            idle_timeout: self.idle_timeout,
+            diagnostics: Some(StreamDiagnosticContext {
+                provider_id: Some("openai-compatible".to_string()),
+                endpoint: Some(self.config.endpoint.as_str().to_string()),
+                url: Some(url.clone()),
+                ..StreamDiagnosticContext::default()
+            }),
+        };
+        let frames = stream_frames(response, read_options, abort_handle);
+        let state = HttpStreamState {
+            frames,
+            parser: ChatCompletionsParser::new(),
+            pending: VecDeque::new(),
+            finished: false,
+        };
+        Ok(Box::pin(futures_util::stream::unfold(
+            state,
+            |mut state| async move { http_stream_next(&mut state).await.map(|item| (item, state)) },
+        )))
+    }
+}
+
+/// 增量解析状态机（T09.1：帧流 → 解析器 → 待发事件队列）
+struct HttpStreamState {
+    /// 底层帧流（帧 / 诊断 / 读取错误；错误后流立即结束）
+    frames: Pin<Box<dyn Stream<Item = Result<StreamFrameEvent, agent_provider::sse::SseReadError<reqwest::Error>>> + Send>>,
+    /// chat-completions 逐帧解析器
+    parser: ChatCompletionsParser,
+    /// 待发事件（一次读取可产出多帧事件，逐条流出）
+    pending: VecDeque<ProviderStreamEvent>,
+    /// 帧流已收尾（EOF 后 finish 事件已入队 / 错误终止）
+    finished: bool,
+}
+
+/// 产出下一条流条目（Ok 事件 / Err 已分类错误；None = 流结束）
+///
+/// 顺序（T09.1.2 步骤 2）：
+/// - 帧到达 → `parser.push_frame` → 该帧触发的事件逐条产出；
+/// - 诊断条目 → provider-diagnostic 事件；
+/// - EOF → `parser.finish()` → 剩余事件（flush pending + 唯一 stop）；
+/// - 读取错误 → 分类后以 Err 条目终止流（02 §六.2 绝不静默结束）；
+/// - 解析错误 → Unknown / 不可重试分类（:339-346 保持）。
+async fn http_stream_next(state: &mut HttpStreamState) -> Option<Result<ProviderStreamEvent, ClassifiedStreamError>> {
+    loop {
+        // 待发事件优先逐条流出
+        if let Some(event) = state.pending.pop_front() {
+            return Some(Ok(event));
+        }
+        if state.finished {
+            return None;
+        }
+        match state.frames.next().await {
+            // EOF：flush pending → 唯一 stop（解析器 finish）
+            None => match state.parser.finish() {
+                Ok(events) => {
+                    state.pending.extend(events.into_iter().map(to_loop_event));
+                    state.finished = true;
+                }
+                Err(error) => {
+                    state.finished = true;
+                    return Some(Err(classify_stream_parse(&error)));
+                }
+            },
+            Some(Ok(StreamFrameEvent::Frame(frame))) => match state.parser.push_frame(&frame) {
+                Ok(events) => {
+                    state.pending.extend(events.into_iter().map(to_loop_event));
+                }
+                Err(error) => {
+                    // 解析错误：Unknown / 不可重试（T09.1.2 步骤 2）
+                    state.finished = true;
+                    return Some(Err(classify_stream_parse(&error)));
+                }
+            },
+            Some(Ok(StreamFrameEvent::Diagnostic(diagnostic))) => {
+                state
+                    .pending
+                    .push_back(ProviderStreamEvent::ProviderDiagnostic { diagnostic });
+            }
+            Some(Err(read_error)) => {
+                // 读取错误（超时 / abort / 传输 / 分帧）：分类后 Err 条目终止
+                state.finished = true;
+                let source = source_from_sse_read_error(&read_error);
+                let classified = classify_provider_error(None, None, Some(source), None);
+                return Some(Err(to_classified(classified)));
+            }
+        }
+    }
+}
+
+/// 分类错误 → 已分类流错误（02 §4.2 分类表产物）
+fn to_classified(provider_error: agent_provider::error::ProviderError) -> ClassifiedStreamError {
+    ClassifiedStreamError {
+        kind: provider_error.kind(),
+        message: provider_error.to_string(),
+        retryable: provider_error.is_retryable(),
+        retry_after_ms: provider_error.retry_after().map(|d| d.as_millis() as u64),
+    }
+}
+
+/// 解析错误分类：Unknown / 不可重试（T09.1.2 步骤 2，:339-346 语义保持）
+fn classify_stream_parse(_error: &StreamParseError) -> ClassifiedStreamError {
+    ClassifiedStreamError {
+        kind: ProviderErrorKind::Unknown,
+        message: _error.to_string(),
+        retryable: false,
+        retry_after_ms: None,
+    }
+}
+
+/// agent-provider 低级事件 → session-loop 消费事件（形状一致，逐字段转换；
+/// session-loop 不直接依赖 agent-provider，B3.4 第 5 点）
+fn to_loop_event(event: WireEvent) -> ProviderStreamEvent {
+    match event {
+        WireEvent::TextDelta { text } => ProviderStreamEvent::TextDelta { text },
+        WireEvent::ThoughtDelta { text, redacted } => {
+            ProviderStreamEvent::ThoughtDelta { text, redacted }
+        }
+        WireEvent::ToolCall { id, tool_name, input } => {
+            ProviderStreamEvent::ToolCall { id, tool_name, input }
+        }
+        WireEvent::ProviderDiagnostic { diagnostic } => {
+            ProviderStreamEvent::ProviderDiagnostic { diagnostic }
+        }
+        WireEvent::Stop { reason, error, usage } => ProviderStreamEvent::Stop {
+            reason: match reason {
+                agent_provider::events::StopReason::Stop => LoopStopReason::Stop,
+                agent_provider::events::StopReason::ToolCall => LoopStopReason::ToolCall,
+                agent_provider::events::StopReason::Length => LoopStopReason::Length,
+                agent_provider::events::StopReason::Error => LoopStopReason::Error,
+            },
+            error,
+            usage: usage.map(|usage| ProviderUsage {
+                prompt_tokens: usage.prompt_tokens,
+                completion_tokens: usage.completion_tokens,
+                total_tokens: usage.total_tokens,
+                cache_read_tokens: usage.cache_read_tokens,
+                cache_write_tokens: usage.cache_write_tokens,
+                reasoning_tokens: usage.reasoning_tokens,
+            }),
+        },
+    }
+}
+
+// ── EngineHandle ──────────────────────────────────────────────────
+
+/// 引擎句柄（B6.4：provider 生效配置 + 工具注册表 + engineReady）
+///
+/// - `ready()`：provider 配置三件套（baseUrl/model/apiKey）齐备即可发起
+///   调用；加载失败仅降级未就绪（engine.rs:112-125），不 panic；
+/// - 工具注册表：内置工具（fs/shell/search/diff，B5.2）注册失败仅告警
+///   （工具执行器按 tool.not_found 兜底）；
+/// - 跨会话并发安全：provider 只读共享（Mutex<Option<Arc<dyn ProviderCall>>>），
+///   std Mutex 不跨 await 持有（AA-02 并发模型注记）。
+pub(crate) struct EngineHandle {
+    /// 共享 reqwest 客户端（连接池跨 run 复用，AA-02 S-7）
+    client: Arc<reqwest::Client>,
+    /// 生效的 provider 适配层（None = 配置缺失降级未就绪）
+    provider: Mutex<Option<Arc<dyn ProviderCall>>>,
+    /// 工具注册表（只读共享）
+    tool_registry: Arc<ToolRegistry>,
+    /// engineReady（配置齐备即 true）
+    ready: AtomicBool,
+    /// 未就绪原因（ready=false 时的诊断文案，PE-04 T04.5 联动）
+    ready_reason: Mutex<Option<String>>,
+}
+
+impl EngineHandle {
+    /// 初始化引擎（加载生效配置 + 内置工具注册；失败仅降级未就绪）
+    pub(crate) fn new() -> Self {
+        let client = Arc::new(reqwest::Client::new());
+
+        // 内置工具注册（B5.2：fs / shell / search / diff）
+        let mut registry = ToolRegistry::new();
+        if let Err(error) = agent_tools::tools::register_builtin_tools(&mut registry) {
+            tracing::warn!(
+                target: "engine",
+                error = %error,
+                "内置工具注册失败（工具按 tool.not_found 兜底）"
+            );
+        }
+        let tool_registry = Arc::new(registry);
+
+        // provider 生效配置加载（三件套齐备才就绪）
+        let (provider, ready, ready_reason) = match load_provider_endpoint() {
+            Some(config) => {
+                let provider: Arc<dyn ProviderCall> =
+                    Arc::new(HttpProviderCall::new((*client).clone(), config));
+                (Some(provider), true, None)
+            }
+            None => {
+                tracing::warn!(
+                    target: "engine",
+                    "engine not ready: provider 配置缺失（baseUrl/model/apiKey 三件套）"
+                );
+                (
+                    None,
+                    false,
+                    Some("provider 配置缺失（baseUrl/model/apiKey）".to_string()),
+                )
+            }
+        };
+
+        Self {
+            client,
+            provider: Mutex::new(provider),
+            tool_registry,
+            ready: AtomicBool::new(ready),
+            ready_reason: Mutex::new(ready_reason),
+        }
+    }
+
+    /// 重载生效配置（config_update 后调用；失败降级未就绪）
+    pub(crate) fn reload(&self) {
+        let (provider, ready, ready_reason) = match load_provider_endpoint() {
+            Some(config) => {
+                let provider: Arc<dyn ProviderCall> =
+                    Arc::new(HttpProviderCall::new((*self.client).clone(), config));
+                (Some(provider), true, None)
+            }
+            None => (
+                None,
+                false,
+                Some("provider 配置缺失（baseUrl/model/apiKey）".to_string()),
+            ),
+        };
+        *self.provider.lock().unwrap_or_else(|e| e.into_inner()) = provider;
+        self.ready.store(ready, Ordering::SeqCst);
+        *self.ready_reason.lock().unwrap_or_else(|e| e.into_inner()) = ready_reason;
+    }
+
+    /// engineReady（provider 配置齐备即可发起调用）
+    pub(crate) fn ready(&self) -> bool {
+        self.ready.load(Ordering::SeqCst)
+    }
+
+    /// 未就绪原因（ready=false 时的诊断文案）
+    pub(crate) fn ready_reason(&self) -> Option<String> {
+        self.ready_reason
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// 生效的 provider 适配层（None = 未就绪）
+    pub(crate) fn provider(&self) -> Option<Arc<dyn ProviderCall>> {
+        self.provider
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// 工具注册表（只读共享）
+    pub(crate) fn tool_registry(&self) -> Arc<ToolRegistry> {
+        Arc::clone(&self.tool_registry)
+    }
+}
+
+impl Default for EngineHandle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ── BufferedRunEventBridge：缓冲 + 序列化 + 发射组装 ───────────────
+
+/// 缓冲事件桥（每 run 一个实例；B6.3 组装层）
+///
+/// - [Self::emit]：信封 → 序列化 → 按 runId 入缓冲（P9：入队时序列化，
+///   丢帧判定只需事件类别；丢帧报告汇入 tracing，S-8）；
+/// - [Self::flush]：冲刷本 run 缓冲并发射（顺序保持，载荷直接 emit）。
+pub(crate) struct BufferedRunEventBridge {
+    /// 底层事件桥（Tauri 通道）
+    bridge: EventBridge,
+    /// 按 runId 的背压缓冲（丢帧类目：Delta 可丢、message-end 必达）
+    buffer: Mutex<EventBuffer>,
+    /// 本桥绑定的 run
+    run_id: String,
+}
+
+impl BufferedRunEventBridge {
+    /// 新建缓冲事件桥（run 级实例）
+    pub(crate) fn new(bridge: EventBridge, run_id: impl Into<String>) -> Self {
+        Self {
+            bridge,
+            buffer: Mutex::new(EventBuffer::default()),
+            run_id: run_id.into(),
+        }
+    }
+
+    /// 入队一条信封（序列化 + 缓冲；不立即发射）
+    ///
+    /// 丢帧（Soft 水位优先丢 Delta 旧帧，Critical 永不丢——buffer.rs:41-58
+    /// 语义）经 EmitReport 汇入 tracing 计数（S-8 / PE-04 T04.2-3）。
+    pub(crate) fn emit(&self, envelope: &AgentEventEnvelope) -> EmitReport {
+        let Some(payload) = self.bridge.serialize(envelope) else {
+            return EmitReport::default();
+        };
+        let class = drop_class_of(&envelope.event);
+        let mut report = EmitReport::default();
+        let outcome = match self.buffer.lock() {
+            Ok(mut buffer) => buffer.enqueue(&self.run_id, class, payload),
+            Err(poisoned) => poisoned
+                .into_inner()
+                .enqueue(&self.run_id, class, payload),
+        };
+        report.buffered = usize::from(outcome.buffered);
+        report.dropped = outcome.dropped;
+        if outcome.dropped > 0 {
+            tracing::warn!(
+                target: "event_bridge",
+                run_id = %self.run_id,
+                dropped = outcome.dropped,
+                "事件缓冲丢帧（Delta 类目可丢，message-end 必达）"
+            );
+        }
+        report
+    }
+
+    /// 冲刷本 run 的缓冲并发射（按入队序；返回发射报告）
+    pub(crate) fn flush(&self) -> EmitReport {
+        let payloads = self
+            .buffer
+            .lock()
+            .map(|mut buffer| buffer.drain(&self.run_id))
+            .unwrap_or_default();
+        let mut report = EmitReport::default();
+        for payload in payloads {
+            report.add(self.bridge.emit_payload(&payload));
+        }
+        report
+    }
+
+    /// 缓冲中待发条数（观测）
+    pub(crate) fn buffered_len(&self) -> usize {
+        self.buffer
+            .lock()
+            .map(|buffer| buffer.len(&self.run_id))
+            .unwrap_or(0)
+    }
+
+    /// 丢弃本 run 的缓冲（终态清理；返回被丢弃条数）
+    pub(crate) fn drop_buffered(&self) -> usize {
+        self.buffer
+            .lock()
+            .map(|mut buffer| buffer.remove_run(&self.run_id))
+            .unwrap_or(0)
+    }
+}
+
+// ── BridgeDeltaSink：T09.1 实时轨桥 ────────────────────────────────
+
+/// 实时 delta 转发桥（T09.1 双轨的实时轨：sequence=None 实时发射）
+///
+/// - 只承载 message-delta（text/thought 增量）；信封由本桥构造，
+///   **sequence=None**（不落库、无序列号，前端按 messageId 累加，
+///   PE-09 §0.3 契约点 3）；
+/// - 背压/丢帧复用缓冲桥的 Delta 类目（delta 可丢、message-end 必达，
+///   03 §5.3-6）；
+/// - 无状态（[Send] + [Sync]），run 结束无清理需求。
+pub(crate) struct BridgeDeltaSink {
+    /// 缓冲事件桥（emit + flush）
+    bridge: Arc<BufferedRunEventBridge>,
+    /// 本 run 标识（信封 runId 注入）
+    run_id: String,
+}
+
+impl BridgeDeltaSink {
+    /// 新建实时 delta 桥（共享 run 级缓冲事件桥）
+    pub(crate) fn new(bridge: Arc<BufferedRunEventBridge>, run_id: impl Into<String>) -> Self {
+        Self {
+            bridge,
+            run_id: run_id.into(),
+        }
+    }
+}
+
+impl DeltaSink for BridgeDeltaSink {
+    fn push(&self, delta: AgentEvent) {
+        // 信封：{event, runId: Some, sequence: None}（T09.1 实时轨）
+        let envelope = AgentEventEnvelope::new(delta, Some(self.run_id.clone()), None);
+        self.bridge.emit(&envelope);
+        // 实时通道立即发射（丢帧由 buffer 的 Delta 类目兜底，不丢 message-end）
+        self.bridge.flush();
+    }
+}
+
+// ── SessionLoopProducer ───────────────────────────────────────────
+
+/// Arc 包装的 ProviderCall（[AgentSessionLoop] 按 `Box<dyn ProviderCall>`
+/// 接收；生产者跨 run 共享 provider，需经本包装再装箱）
+struct SharedProvider(Arc<dyn ProviderCall>);
+
+#[async_trait]
+impl ProviderCall for SharedProvider {
+    async fn stream<'a>(
+        &self,
+        request: &ProviderRequest<'a>,
+    ) -> Result<ProviderEventStream, ClassifiedStreamError> {
+        self.0.stream(request).await
+    }
+}
+
+/// run 生产者（engine.rs:436-462；每 run 重建 [AgentSessionLoop]——真实接线
+/// 跨 run 重建语义，PE-09 §4）
+pub(crate) struct SessionLoopProducer {
+    /// 会话标识
+    session_id: String,
+    /// run 标识
+    run_id: String,
+    /// max-turns 预算
+    max_turns: u32,
+    /// provider 适配层（Arc 共享，跨 run 复用）
+    provider: Arc<dyn ProviderCall>,
+    /// 工具注册表
+    tool_registry: Arc<ToolRegistry>,
+    /// 循环配置（恢复阶梯 / 幂等 / assistant clientMessageId 等）
+    options: SessionLoopOptions,
+    /// 工具批量执行选项（超时 / 失败策略 / 审批开关）
+    tool_options: ToolBatchOptions,
+    /// 审批门（permissionMode 非 full-access 时注入）
+    approval: Option<Arc<dyn ApprovalGate>>,
+    /// 实时 delta 转发（T09.1；None = 不启用，收口流 message-delta 兜底）
+    delta_sink: Option<Arc<dyn DeltaSink>>,
+    /// 本次 run 的用户消息
+    user_message: AgentMessage,
+}
+
+impl SessionLoopProducer {
+    /// 新建 run 生产者（permissionMode 与 clientMessageId 已由 core_run_task
+    /// 归一为循环选项与用户消息）
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        session_id: String,
+        run_id: String,
+        max_turns: u32,
+        provider: Arc<dyn ProviderCall>,
+        tool_registry: Arc<ToolRegistry>,
+        options: SessionLoopOptions,
+        tool_options: ToolBatchOptions,
+        approval: Option<Arc<dyn ApprovalGate>>,
+        delta_sink: Option<Arc<dyn DeltaSink>>,
+        user_message: AgentMessage,
+    ) -> Self {
+        Self {
+            session_id,
+            run_id,
+            max_turns,
+            provider,
+            tool_registry,
+            options,
+            tool_options,
+            approval,
+            delta_sink,
+            user_message,
+        }
+    }
+
+    /// 生产一次 run 结果（构造 [AgentSessionLoop] 并运行；每 run 重建，
+    /// 对话由 store 水合承担，PE-09 T09.3.3）
+    pub(crate) async fn produce(&mut self) -> RunOutcome {
+        let mut session_loop = AgentSessionLoop::new(
+            self.session_id.as_str(),
+            self.run_id.as_str(),
+            self.max_turns,
+            Box::new(SharedProvider(Arc::clone(&self.provider))),
+            Arc::clone(&self.tool_registry),
+        );
+        session_loop = session_loop
+            .with_options(self.options.clone())
+            .with_tool_options(self.tool_options.clone());
+        if let Some(approval) = &self.approval {
+            session_loop = session_loop.with_approval(Arc::clone(approval));
+        }
+        if let Some(delta_sink) = &self.delta_sink {
+            session_loop = session_loop.with_delta_sink(Arc::clone(delta_sink));
+        }
+        session_loop.run(self.user_message.clone()).await
+    }
+}
+
+// ── 测试 ──────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ISO8601 时间戳形状（毫秒精度 + Z 后缀）
+    #[test]
+    fn now_iso_utc_formats_iso8601() {
+        let value = now_iso_utc();
+        assert!(value.ends_with('Z'), "应带 Z 后缀：{value}");
+        assert!(value.len() >= 24, "应含毫秒精度：{value}");
+        let (date, rest) = value.split_once('T').expect("T 分隔");
+        let parts: Vec<&str> = date.split('-').collect();
+        assert_eq!(parts.len(), 3);
+        assert_eq!(parts[0].len(), 4);
+        assert!(rest.ends_with(".000Z") || rest.contains('.'), "毫秒精度：{value}");
+    }
+
+    /// 消息 id 前缀 + 唯一
+    #[test]
+    fn message_ids_are_unique_per_prefix() {
+        let a = new_message_id("user");
+        let b = new_message_id("user");
+        assert!(a.starts_with("user-"));
+        assert_ne!(a, b);
+    }
+
+    /// 用户消息构造：clientMessageId 透传（21-log §5.2 缺口 2 修复）
+    #[test]
+    fn user_message_carries_client_message_id() {
+        let message = user_message("你好", Some("user-msg-1"));
+        assert_eq!(message.client_message_id.as_deref(), Some("user-msg-1"));
+        assert_eq!(message.role, AgentMessageRole::User);
+        let text = message.blocks.iter().find_map(|block| match block {
+            AgentMessageBlock::Text { text } => Some(text.as_str()),
+            _ => None,
+        });
+        assert_eq!(text, Some("你好"));
+        // None 不标注（向后兼容）
+        assert!(user_message("hi", None).client_message_id.is_none());
+    }
+
+    /// 端点路径：chat-completions（00 D3）/ responses
+    #[test]
+    fn provider_url_respects_endpoint() {
+        let base = EngineProviderConfig {
+            base_url: "https://api.example.com/v1/".to_string(),
+            api_key: "k".to_string(),
+            model: "m".to_string(),
+            endpoint: Endpoint::ChatCompletions,
+            stream: true,
+        };
+        assert_eq!(provider_url(&base), "https://api.example.com/v1/chat/completions");
+        let responses = EngineProviderConfig {
+            endpoint: Endpoint::Responses,
+            ..base
+        };
+        assert_eq!(provider_url(&responses), "https://api.example.com/v1/responses");
+    }
+
+    /// 低级事件 → session-loop 事件转换（形状逐字段一致）
+    #[test]
+    fn wire_event_converts_to_loop_event() {
+        let wire = WireEvent::Stop {
+            reason: agent_provider::events::StopReason::Length,
+            error: None,
+            usage: Some(agent_provider::events::ProviderUsage {
+                prompt_tokens: Some(1),
+                completion_tokens: Some(2),
+                total_tokens: Some(3),
+                cache_read_tokens: None,
+                cache_write_tokens: None,
+                reasoning_tokens: None,
+            }),
+        };
+        match to_loop_event(wire) {
+            ProviderStreamEvent::Stop {
+                reason,
+                usage,
+                error,
+            } => {
+                assert_eq!(reason, LoopStopReason::Length);
+                assert!(error.is_none());
+                let usage = usage.expect("usage 透传");
+                assert_eq!(usage.total_tokens, Some(3));
+            }
+            other => panic!("期望 Stop，得到 {other:?}"),
+        }
+    }
+
+    /// 分类错误：ProviderError → ClassifiedStreamError（kind/retryable 透传）
+    #[test]
+    fn classified_error_preserves_kind_and_retryable() {
+        let error = agent_provider::error::ProviderError::Server {
+            status: Some(503),
+        };
+        let classified = to_classified(error);
+        assert_eq!(classified.kind, ProviderErrorKind::ServerError);
+        assert!(classified.retryable);
+        assert!(classified.retry_after_ms.is_none());
+    }
+
+    /// 解析错误分类：Unknown / 不可重试（T09.1.2 步骤 2）
+    #[test]
+    fn parse_error_classifies_unknown_not_retryable() {
+        let error = StreamParseError::EventAfterStop;
+        let classified = classify_stream_parse(&error);
+        assert_eq!(classified.kind, ProviderErrorKind::Unknown);
+        assert!(!classified.retryable);
+    }
+}

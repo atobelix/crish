@@ -1,3 +1,4 @@
+use conex_types::CoreError;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -405,26 +406,28 @@ pub(crate) struct WorkbenchRunShellResult {
 
 /// 终端面板直接执行：Windows 用系统 powershell.exe，其它平台用 bash。
 /// 与 agent shell_command 同源语义，但不经 daemon 审批（用户主动输入）。
+/// 错误统一为 CoreError（IPC 面唯一协议）；红线拦截 → InvalidInput。
 #[tauri::command]
 pub(crate) async fn workbench_run_shell(
     request: WorkbenchRunShellRequest,
-) -> Result<WorkbenchRunShellResult, String> {
+) -> Result<WorkbenchRunShellResult, CoreError> {
     let command = request.command.trim().to_string();
     if command.is_empty() {
-        return Err("command must be a non-empty string".to_string());
+        return Err(CoreError::InvalidInput(
+            "command must be a non-empty string".to_string(),
+        ));
     }
     if command.len() > 32_000 {
-        return Err("command too long".to_string());
+        return Err(CoreError::InvalidInput("command too long".to_string()));
     }
 
     let gatekeeper = conex_sandbox::gatekeeper::CommandGatekeeper::new();
     if gatekeeper.check_command(&command, &[]) == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
         || gatekeeper.patterns().is_match(&command)
     {
-        return Err(
-            "PermissionDenied: Command blocked by safety red-line gatekeeper (InvalidCommand)"
-                .to_string(),
-        );
+        return Err(CoreError::InvalidInput(
+            "Command blocked by safety red-line gatekeeper (InvalidCommand)".to_string(),
+        ));
     }
 
     let cwd = resolve_shell_cwd(request.cwd.as_deref())?;
@@ -458,7 +461,7 @@ pub(crate) async fn workbench_run_shell(
 
     let child = child_cmd
         .spawn()
-        .map_err(|e| format!("failed to spawn {shell_label}: {e}"))?;
+        .map_err(|e| CoreError::Internal(format!("failed to spawn {shell_label}: {e}")))?;
     let child_pid = child.id();
 
     // wait_with_output 会拿走 child；超时后靠 kill_on_drop + taskkill 树杀
@@ -486,7 +489,7 @@ pub(crate) async fn workbench_run_shell(
                 truncated: trunc_out || trunc_err,
             })
         }
-        Ok(Err(e)) => Err(format!("shell wait failed: {e}")),
+        Ok(Err(e)) => Err(CoreError::Internal(format!("shell wait failed: {e}"))),
         Err(_elapsed) => {
             if let Some(pid) = child_pid {
                 let _ = terminate_process_tree(pid);
@@ -507,13 +510,13 @@ pub(crate) async fn workbench_run_shell(
     }
 }
 
-fn resolve_shell_cwd(cwd: Option<&str>) -> Result<PathBuf, String> {
+fn resolve_shell_cwd(cwd: Option<&str>) -> Result<PathBuf, CoreError> {
     if let Some(raw) = cwd.map(str::trim).filter(|s| !s.is_empty()) {
         let p = PathBuf::from(raw);
         if p.is_dir() {
             return Ok(p);
         }
-        return Err(format!("cwd is not a directory: {raw}"));
+        return Err(CoreError::InvalidInput(format!("cwd is not a directory: {raw}")));
     }
     // 回落到 monorepo 根或当前进程目录
     if let Ok(app) = crate::host_paths::app_dir() {
@@ -522,10 +525,10 @@ fn resolve_shell_cwd(cwd: Option<&str>) -> Result<PathBuf, String> {
             return Ok(root);
         }
     }
-    std::env::current_dir().map_err(|e| format!("no valid cwd: {e}"))
+    std::env::current_dir().map_err(|e| CoreError::Internal(format!("no valid cwd: {e}")))
 }
 
-fn build_shell_invocation(command: &str) -> Result<(String, Vec<String>, String), String> {
+fn build_shell_invocation(command: &str) -> Result<(String, Vec<String>, String), CoreError> {
     if cfg!(windows) {
         let ps = resolve_system_powershell()?;
         let script = build_windows_powershell_script(command);
@@ -552,7 +555,7 @@ fn build_shell_invocation(command: &str) -> Result<(String, Vec<String>, String)
 }
 
 /// 优先系统目录下的 Windows PowerShell 5.x，再回落 PATH 上的 powershell.exe。
-fn resolve_system_powershell() -> Result<String, String> {
+fn resolve_system_powershell() -> Result<String, CoreError> {
     if let Ok(root) = std::env::var("SystemRoot") {
         let candidate = Path::new(&root)
             .join("System32")
@@ -567,7 +570,7 @@ fn resolve_system_powershell() -> Result<String, String> {
     if which_on_path("powershell.exe") {
         return Ok("powershell.exe".into());
     }
-    Err("system powershell.exe not found".into())
+    Err(CoreError::Internal("system powershell.exe not found".into()))
 }
 
 fn which_on_path(name: &str) -> bool {
@@ -907,8 +910,15 @@ mod tests {
             let res = workbench_run_shell(req).await;
             assert!(res.is_err(), "Expected workbench_run_shell to block `{}`", cmd);
             let err = res.unwrap_err();
-            assert!(err.contains("PermissionDenied"), "Err should contain PermissionDenied for `{}`", cmd);
-            assert!(err.contains("InvalidCommand"), "Err should contain InvalidCommand for `{}`", cmd);
+            match err {
+                CoreError::InvalidInput(msg) => {
+                    assert!(
+                        msg.contains("InvalidCommand"),
+                        "detail should contain InvalidCommand for `{cmd}`: {msg}"
+                    );
+                }
+                other => panic!("expected InvalidInput for `{cmd}`, got {other:?}"),
+            }
         }
     }
 

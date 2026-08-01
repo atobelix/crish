@@ -1,4 +1,8 @@
 //! API key 环境变量名称列表与过滤逻辑。
+//!
+//! 环境变量作为凭据 / 非敏感配置的最后兜底来源（daemon 启动时经
+//! `sidecar/connection/lifecycle.rs` 透传）。CRISH_* 为推荐前缀，
+//! FLOWBIT_* / OPENAI_* 为历史兼容前缀。
 
 const API_KEY_ENV_VARS: &[&str] = &["CRISH_API_KEY", "FLOWBIT_API_KEY", "OPENAI_API_KEY"];
 const API_BASE_URL_ENV_VARS: &[&str] = &[
