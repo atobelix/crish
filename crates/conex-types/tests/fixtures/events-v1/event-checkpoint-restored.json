@@ -1,0 +1,17 @@
+{
+  "restore": {
+    "checkpointId": "ck-1",
+    "deleted": [],
+    "restored": [
+      "a.txt"
+    ],
+    "skipped": [
+      "b.txt"
+    ],
+    "toolCallId": "tc-1",
+    "toolName": "checkpoint"
+  },
+  "sessionId": "s1",
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "type": "checkpoint-restored"
+}

@@ -1,5 +1,40 @@
 use serde::{Deserialize, Serialize};
 
+// ===== 域模块（Round 5/6 拆分层；与 TS shared-types 对齐）=====
+// 消费方同时使用模块路径（conex_types::events::AgentEvent）与根级重导出
+// （conex_types::AgentEvent），两形并存；本处为唯一接线点。
+
+pub mod error;
+pub mod events;
+pub mod message;
+pub mod response;
+pub mod session;
+pub mod tool;
+pub mod transition;
+
+// codes 常量集在 error.rs 内（`pub mod codes`），根级重导出供
+// orchestrator / 壳命令面以 `conex_types::codes` 引用（R6 接线点）。
+pub use error::codes;
+
+pub use error::{
+    CrishError, CrishErrorCategory, CrishErrorPayload, MigrateErrorContext, ProviderErrorKind,
+    RunTerminal, RunTerminalError, migrate_error_code,
+};
+pub use events::{
+    AgentEvent, AgentEventEnvelope, ApprovalDecision, EVENT_ENVELOPE_SCHEMA_VERSION,
+    PermissionBehavior, PermissionDecision, PermissionRequest, RunTerminalStatus, ToolMetadata,
+};
+pub use message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
+pub use response::{ClassifiedStreamError, ProviderOutput};
+pub use session::{AgentEndReason, AgentSessionContext, AgentSessionEvent, AgentSessionState};
+pub use tool::{
+    ContextCompressionRecord, ContextCompressionReason, ContextCompressionTrigger,
+    ProviderDiagnostic, ProviderDiagnosticPhase, RuntimeCheckpointKind, RuntimeCheckpointRecord,
+    RuntimeCheckpointRestoreRecord, SystemPromptWireMode, ToolArtifact, ToolArtifactKind,
+    ToolBatchCall, ToolBatchResult, ToolCategory, ToolConcurrency, ToolOutput, ToolProgressUpdate,
+};
+pub use transition::{AgentTransition, AgentTransitionEffect, TransitionError};
+
 // ===== Diff Types (对齐 rustCore.ts DiffResult/DiffHunk/DiffLine) =====
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

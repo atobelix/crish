@@ -1,0 +1,22 @@
+{
+  "message": {
+    "blocks": [
+      {
+        "text": "hello",
+        "type": "text"
+      },
+      {
+        "redacted": false,
+        "text": "thinking...",
+        "type": "thought"
+      }
+    ],
+    "clientMessageId": "cm-1",
+    "content": "hello",
+    "createdAt": "2026-07-31T00:00:00.000Z",
+    "id": "m1",
+    "role": "assistant"
+  },
+  "sessionId": "s1",
+  "type": "message-start"
+}

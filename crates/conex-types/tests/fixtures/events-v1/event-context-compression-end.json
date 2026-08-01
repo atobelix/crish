@@ -1,0 +1,24 @@
+{
+  "aborted": false,
+  "result": {
+    "compressedMessageIds": [
+      "m1",
+      "m2"
+    ],
+    "createdAt": "2026-07-31T00:00:00.000Z",
+    "firstKeptMessageId": "m3",
+    "id": "cc-1",
+    "keptMessageIds": [
+      "m3"
+    ],
+    "reason": "threshold",
+    "summary": "压缩摘要",
+    "thresholdTokens": 80,
+    "tokensAfter": 40,
+    "tokensBefore": 100,
+    "trigger": "threshold"
+  },
+  "sessionId": "s1",
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "type": "context-compression-end"
+}

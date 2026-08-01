@@ -1,0 +1,15 @@
+{
+  "batchId": "b1",
+  "result": {
+    "durationMs": 12,
+    "id": "tc-1",
+    "isError": false,
+    "output": {
+      "text": "文件内容"
+    },
+    "toolName": "read_file"
+  },
+  "sessionId": "s1",
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "type": "tool-end"
+}

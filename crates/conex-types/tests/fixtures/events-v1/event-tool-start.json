@@ -1,0 +1,16 @@
+{
+  "batchId": "b1",
+  "call": {
+    "category": "filesystem",
+    "concurrency": "parallel",
+    "id": "tc-1",
+    "input": {
+      "path": "a.txt"
+    },
+    "summary": "读取文件",
+    "toolName": "read_file"
+  },
+  "sessionId": "s1",
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "type": "tool-start"
+}

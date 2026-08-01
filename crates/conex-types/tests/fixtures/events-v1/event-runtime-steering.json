@@ -1,0 +1,22 @@
+{
+  "message": {
+    "blocks": [
+      {
+        "text": "请调用工具完成目标",
+        "type": "text"
+      }
+    ],
+    "createdAt": "2026-07-31T00:00:00.000Z",
+    "id": "sm-1",
+    "metadata": {
+      "kind": "runtime-steering",
+      "reason": "empty-response",
+      "steeringCount": 1
+    },
+    "role": "system"
+  },
+  "reason": "empty-response",
+  "sessionId": "s1",
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "type": "runtime-steering"
+}

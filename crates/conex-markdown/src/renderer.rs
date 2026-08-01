@@ -692,23 +692,6 @@ pub fn render_markdown_stream(text: &str, stream_mode: bool) -> String {
     renderer.render(text)
 }
 
-/// 流式渲染 markdown 为 HTML。
-///
-/// - `stream_mode = true`: 流式增量渲染，跳过 syntect 高亮（耗时），
-///   仅做 pulldown-cmark 解析 + escape + sanitize，输出带占位 class 的 HTML，
-///   供前端流式期快速展示。完成态再走 [`render_markdown`] 补高亮。
-/// - `stream_mode = false`: 等价于 [`render_markdown`]（完整渲染 + 缓存）。
-///
-/// TODO(Agent 1.1): 实现 `stream_mode = true` 的快速路径（跳过 syntect）。
-/// 当前 stub fallback 到 [`render_markdown`]，保证功能链可用，stream_mode 暂被忽略。
-/// Agent 1.1 完成后应替换为真正的流式渲染实现，并移除此注释。
-pub fn render_markdown_stream(text: &str, stream_mode: bool) -> String {
-    // stub: Agent 1.1 未实现，fallback 到完整渲染。
-    // stream_mode 参数暂被忽略，待 Agent 1.1 实现快速路径。
-    let _ = stream_mode;
-    render_markdown(text)
-}
-
 /// 渲染(不走缓存) — 内部实现。
 fn render_markdown_uncached(raw: &str) -> String {
     if raw.is_empty() {

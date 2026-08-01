@@ -1,0 +1,14 @@
+{
+  "batchId": "b1",
+  "sessionId": "s1",
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "toolCallId": "tc-1",
+  "type": "tool-update",
+  "update": {
+    "metadata": {
+      "argumentsText": "{\"path\":",
+      "kind": "tool-args-delta"
+    },
+    "text": "正在读取"
+  }
+}

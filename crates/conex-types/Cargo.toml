@@ -11,6 +11,9 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-serde = { workspace = true }
+# rc：events.rs 的 AgentMessage 以 Arc 字段承载（Arc<T>: Serialize/Deserialize
+# 需要 serde rc feature；R6 接线点——独立构建 conex-types 时不可缺失）
+serde = { workspace = true, features = ["rc"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+once_cell = { workspace = true }

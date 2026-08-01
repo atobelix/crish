@@ -1,0 +1,21 @@
+{
+  "diagnostic": {
+    "attempt": 2,
+    "elapsedMs": 1200,
+    "endpoint": "chat-completions",
+    "errorKind": "rate-limit",
+    "maxAttempts": 3,
+    "phase": "sse-first-byte",
+    "providerId": "openai",
+    "reason": "rate-limit",
+    "retryAfterMs": 5000,
+    "retryable": true,
+    "status": 429,
+    "statusText": "Too Many Requests",
+    "streamRequested": true,
+    "url": "https://api.example.com/v1/chat/completions"
+  },
+  "sessionId": "s1",
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "type": "provider-diagnostic"
+}

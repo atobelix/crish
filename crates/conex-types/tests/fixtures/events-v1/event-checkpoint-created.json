@@ -1,0 +1,13 @@
+{
+  "checkpoint": {
+    "id": "ck-1",
+    "kind": "workspace-checkpoint",
+    "label": "初始检查点",
+    "manifestPath": "manifest.json",
+    "toolCallId": "tc-1",
+    "toolName": "checkpoint"
+  },
+  "sessionId": "s1",
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "type": "checkpoint-created"
+}

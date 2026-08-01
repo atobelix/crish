@@ -1,0 +1,10 @@
+{
+  "notes": [
+    "补全必填入参 path"
+  ],
+  "sessionId": "s1",
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "toolCallId": "tc-1",
+  "toolName": "read_file",
+  "type": "tool-input-repaired"
+}
