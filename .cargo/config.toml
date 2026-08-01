@@ -1,0 +1,7 @@
+# target/ 体积管控与 release 产物优化（PE-10 T10.10g / AA-08 #29）
+# strip=true 去除调试符号；lto=thin + codegen-units=1 减小产物体积。
+# 若增量构建时间不可接受，可回退为仅保留 strip=true（lto/codegen-units 二选一即可）。
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1

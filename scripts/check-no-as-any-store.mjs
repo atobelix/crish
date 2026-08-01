@@ -26,6 +26,40 @@ function listStoreTsFiles() {
     .map((f) => join(storeDir, f));
 }
 
+/** 递归收集目录下全部 .ts/.tsx（门禁扩展目录用） */
+function listTsFilesRecursive(dir) {
+  const out = [];
+  if (!existsSync(dir)) return out;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const abs = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...listTsFilesRecursive(abs));
+    else if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) {
+      out.push(abs);
+    }
+  }
+  return out;
+}
+
+/**
+ * 门禁扩展目录（PE-06 T06.7：Q09/Q18 as-any 消除后覆盖）：
+ * layout-helpers / workspace-shell / hooks 生产文件禁止 as-any / :any / @ts-*。
+ * 测试文件豁免（替身 mock 属正常测试设施）。
+ */
+const EXTRA_SCAN_DIRS = [
+  {
+    dir: resolve(root, 'apps/crish-desktop/src/store/layout-helpers'),
+    rel: 'apps/crish-desktop/src/store/layout-helpers',
+  },
+  {
+    dir: resolve(root, 'apps/crish-desktop/src/store/workspace-shell'),
+    rel: 'apps/crish-desktop/src/store/workspace-shell',
+  },
+  {
+    dir: resolve(root, 'apps/crish-desktop/src/hooks'),
+    rel: 'apps/crish-desktop/src/hooks',
+  },
+];
+
 /**
  * Forbidden patterns（action 接线 / 类型逃逸回归）。
  * 保持足够具体，避免误伤注释里的说明文字以外的合理代码。
@@ -103,7 +137,8 @@ const LAYOUT_REQUIRED = [
     label: 'syncTelemetryData typed as TelemetrySyncPayload',
   },
   {
-    re: /export\s+type\s+TelemetrySyncPayload\b/,
+    // 兼容直接定义与 re-export 两种形态（layoutStore 经 store-types 再导出）
+    re: /export\s+type\s+(?:TelemetrySyncPayload\b|\{[^}]*\bTelemetrySyncPayload\b)/,
     label: 'export type TelemetrySyncPayload',
   },
 ];
@@ -307,6 +342,15 @@ for (const abs of files) {
   }
 }
 
+// 门禁扩展：layout-helpers / workspace-shell / hooks 生产文件禁止 as-any（Q09/Q18）
+for (const { dir, rel } of EXTRA_SCAN_DIRS) {
+  for (const abs of listTsFilesRecursive(dir)) {
+    if (/\.(test|spec)\.(ts|tsx)$/.test(basename(abs))) continue;
+    const sub = relative(dir, abs).replace(/\\/g, '/');
+    scanForbidden(abs, `${rel}/${sub}`);
+  }
+}
+
 // sessionIndex 必须导出一致性检查
 {
   const abs = resolve(storeDir, 'sessionIndex.ts');
@@ -498,11 +542,11 @@ for (const facade of FACADE_REQUIRED) {
 
 if (failed) {
   console.error(
-    '[check-no-as-any-store] FAIL: use generic SessionStoreSlice / WorkspaceStoreSlice wiring; no `as any` / `: any` / @ts-ignore in store/ + storeAccess; keep sessionsById helpers + typed telemetry + facade alignment + anti-cycle + barrel.',
+    '[check-no-as-any-store] FAIL: use generic SessionStoreSlice / WorkspaceStoreSlice wiring; no `as any` / `: any` / @ts-ignore in store/ + storeAccess + layout-helpers/ + workspace-shell/ + hooks/ (production); keep sessionsById helpers + typed telemetry + facade alignment + anti-cycle + barrel.',
   );
   process.exit(1);
 }
 
 console.log(
-  `[check-no-as-any-store] OK — scanned ${files.length} store files + storeAccess; no as-any / :any / @ts-ignore; sessionIndex + layout + actions + facade + barrel + storeAccess + anti-cycle checks passed`,
+  `[check-no-as-any-store] OK — scanned ${files.length} store files + storeAccess + layout-helpers/workspace-shell/hooks (production); no as-any / :any / @ts-ignore; sessionIndex + layout + actions + facade + barrel + storeAccess + anti-cycle checks passed`,
 );

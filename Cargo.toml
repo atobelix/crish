@@ -1,19 +1,21 @@
 [workspace]
 members = [
     "apps/agent-workbench/src-tauri",
-    "packages/agent-provider-http",
+    "crates/agent-provider",
+    "crates/agent-tools",
     "crates/conex-compaction",
     "crates/conex-db",
     "crates/conex-diff",
     "crates/conex-fs",
     "crates/conex-ipc",
     "crates/conex-markdown",
-    "crates/conex-net",
     "crates/conex-sandbox",
     "crates/conex-search",
-    "crates/conex-stream",
+    "crates/conex-telemetry",
     "crates/conex-test-utils",
     "crates/conex-types",
+    "crates/orchestrator",
+    "crates/session-loop",
 ]
 resolver = "2"
 
@@ -35,28 +37,33 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-build = { version = "2", features = [] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# reqwest 0.13：与 tauri 2.11 依赖链（0.13.4）收敛单版本，消除双 HTTP/hyper 栈。
+# rustls 组（= rustls-ring）为 0.13 新增命名，旧名 rustls-tls 已弃用。
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "stream"] }
 tracing = { version = "0.1", features = ["attributes"] }
 tracing-subscriber = "0.3"
 anyhow = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["full"] }
+# tokio 最小 feature 集（PE-10 T10.3）：按各 crate 实际使用面收敛（详见 AA-08 #3）。
+# 各 crate 按需在依赖处补 feature：agent-provider 补 test-util/rt-multi-thread（dev），
+# orchestrator dev 补 rt-multi-thread（persist.rs 测试用 Runtime::new）。
+tokio = { version = "1", default-features = false, features = ["rt", "macros", "time", "sync", "net", "io-util", "process"] }
 async-trait = "0.1"
 rusqlite = { version = "0.31", features = ["bundled"] }
-r2d2 = "0.8"
-r2d2_sqlite = "0.24"
 notify = { version = "8", features = [] }
 ignore = "0.4"
 sha2 = "0.10"
 hex = "0.4"
 bytes = "1"
 futures-util = "0.3"
-tokio-tungstenite = "0.21"
-derive_builder = "0.20"
+regex = "1"
 similar = "2"
 pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
 syntect = { version = "5", default-features = false, features = ["default-fancy"] }
 ammonia = "4"
 moka = { version = "0.12", features = ["sync"] }
 once_cell = "1"
+# windows-sys：与 tauri 生态（windows 0.61）对齐的版本；各 crate 按需补 feature
+windows-sys = { version = "0.61", features = [] }
 url = "2"
+uuid = "1"
