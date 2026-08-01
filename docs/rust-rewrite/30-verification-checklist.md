@@ -1,0 +1,176 @@
+# 30 — 分歧点核对矩阵（B7.3 产出，D 轮前登记）
+
+> 状态：✅ 已建立（Round 12 / B7.3）
+> 输入：01-session-loop-semantics.md §四（01 D1-D10）+ 00-master-plan.md §3（00 D1-D6）分歧表
+> 测试产出：`crates/session-loop/tests/divergence.rs`（10 条，D1-D10 逐条正/反向断言）、
+> `crates/agent-provider/tests/divergence.rs`（3 条，00 D3/D4）
+> 说明：01 D5（thinkingIntensity 透传）已由 B2.6 落地并在 agent-provider
+> request::vendor 单测覆盖（vendor.rs resolve_thinking_params_by_vendor 等），
+> 不属本任务核对范围（任务书 B7.3 清单未含）。
+
+## 一、核对矩阵
+
+| 分歧 | 裁决 | 正向断言测试名 | 反向断言测试名 | 状态 |
+|---|---|---|---|---|
+| 01 D1 / 00 D1 cooperative_stop 的 endReason | 独立 reason `stopped`（非 stop 非 aborted 非 error）；orchestrator 层不自动续轮 | `divergence::d1_cooperative_stop_ends_stopped_no_auto_continuation`（reason=Stopped、已产出内容保留、agent-end 事件同步） | 同测试（非 Aborted/Error；TurnStart=1，终态不触发自动续轮） | ✅ |
+| 01 D2 / 00 D2 tool-promise steering 删除 | 模型承诺性语言无 tool_call → 正常 stop 收场；不注入 nudge、不发自终止 runtime-error 诊断 | `divergence::d2_tool_promise_language_ends_stop_no_nudge_no_diagnostic`（Stop、承诺文本保留、TurnStart=1） | 同测试（无 tool-promise-nudge/runtime-steering 注入、无 runtime-error、无二次 provider 调用） | ✅ |
+| 01 D3 预注入短路保留 | input_queue 有 runnable pending 时 steering 评估跳过（不重复注入） | `divergence::d3_pre_injected_steer_consumed_without_double_steering`（预注入消息以 User 角色消费为下一条用户消息；注入 ≤1） | 同测试（无叠加第二条 runtime-steering 注入；不以 error 收场） | ✅ |
+| 01 D4 自终止诊断保留 | 保留为非 error 语义诊断事件（字段 toolCallCount/turnIndex/maxTurns/promisedToolsWithoutCall） | `divergence::d4_self_termination_diagnostic_does_not_fail_run`（provider-diagnostic 事件照发、载荷 camelCase 字段齐全） | 同测试（无 runtime-error 事件、run 以 Stop 收场 error=None） | ✅ |
+| 01 D6 / 00 D5 模型输出与传输错误分离 | 有文字/tool-call 即非 error；stopReason=error 不作一票否决，错误降级为标注 | `divergence::d5_text_with_error_stop_ends_as_message_not_error`（文字 commit、Message 收场、metadata.providerError 标注） | 同测试（stopReason 保持 "stop"、无 runtime-error、error=None） | ✅ |
+| 01 D7 / 00 D6 empty-response 预算内重试 | 空响应预算内重试注入；耗尽正常 stop 收场（intervention 不以 error 终结） | `divergence::d6_empty_response_retry_within_budget_then_recover`（注入后恢复、Stop、最终回复落盘） | 同测试（第 1 次空响应不以 error/aborted 收场） | ✅ |
+| 01 D7 intervention 事件照发 | runtime-intervention-required 照发但 run 以 stop + 诊断收场 | `divergence::d7_intervention_event_emitted_but_run_ends_stop`（事件照发、choices=rollback/pause/user-instruction、diagnostic Some） | 同测试（error=None、reason≠Error，旧行为 endReason=error 不复现） | ✅ |
+| 01 D8 run 内不注入 nudge | nudge 一律排入下一条用户消息（run 内无任何 nudge 注入） | `divergence::d8_run_never_injects_nudge_nudge_goes_to_next_user_message`（nudge 以 User 角色消费、位于第一/二轮之间的用户消息边界） | 同测试（无 system 角色 nudge、run 内消息无 nudge 元数据） | ✅ |
+| 01 D9 预算耗尽禁止 inject-message | 耗尽后禁止注入；run 以 stop 收场（保留干预事件） | `divergence::d9_budget_exhausted_forbids_inject_and_ends_stop`（注入恰 1 条、stop + 诊断） | 同测试（无第 2 条注入；非 error/aborted 收场） | ✅ |
+| 01 D10 无 ctx.steeringCount 死检查 | 单一计数源（coordinator/apply）、单一配置源；机器上下文 steeringCount 死检查删除 | `divergence::d10_steering_count_single_source_in_apply_no_dead_check`（第 2 次空响应真实触发耗尽、收场计数=实际注入数） | 同测试（恒 0 死检查不复现——耗尽真实发生；耗尽后不注入、stop 收场） | ✅ |
+| 00 D3 endpoint 默认 chat-completions | 未显式指定（含 auto）恒解析为 chat-completions | `agent_provider divergence::endpoint_defaults_to_chat_completions`（None/auto→ChatCompletions、显式指定仍生效） | 同测试（不默认解析为 Responses——模型侧「有工具→Responses」不复现） | ✅ |
+| 00 D4 vendor 机制保留 | 保留 vendor 推断（取 model 行为）+ 未识别 auto 退化 | `agent_provider divergence::vendor_mechanism_preserved_infers_by_base_url_and_model`（baseUrl/model 关键字识别 anthropic/deepseek/openai） | `agent_provider divergence::vendor_unrecognized_degrades_to_auto_not_defaulted`（未识别→Auto、默认值=Auto，不硬编码 vendor） | ✅ |
+
+> 备注（D3 实现观察）：`steering_evaluation.rs:29` 的短路分支在当前循环公开路径
+> 下不可直接触达——steer 消息经控制总线仅在安全点落环，且安全点后必经
+> awaiting-input/preparing-turn 的全量消费才进入 streaming，故评估时队列恒空。
+> 测试锁定其可观察契约（预注入内容不重复注入、按用户消息边界消费），
+> 短路分支本身由 orchestrator（B4.4 跨 run steering 队列）场景兜底。
+
+## 二、测试实际运行结果（2026-07-31，B7.3 验证）
+
+| 测试名 | 结果 | 断言要点（正/反向） | 备注 |
+|---|---|---|---|
+| d1_cooperative_stop_ends_stopped_no_auto_continuation | ✅ PASS | Stopped 收场 + 内容保留 + agent-end 同步 / 非 Aborted/Error + TurnStart=1 | 复用 run_loop 锚点语义，独立断言终态不续轮 |
+| d2_tool_promise_language_ends_stop_no_nudge_no_diagnostic | ✅ PASS | Stop + 承诺文本保留 + TurnStart=1 / 无 nudge 无 runtime-error 无二次调用 | 覆盖「我将」「首先」「let me」承诺语言 |
+| d3_pre_injected_steer_consumed_without_double_steering | ✅ PASS | 预注入消息 User 消费 + 注入 ≤1 / 无叠加注入 + 非 error | 预置 steer 模拟 B4.4 跨 run 注入 |
+| d4_self_termination_diagnostic_does_not_fail_run | ✅ PASS | provider-diagnostic 照发 + 载荷字段齐全 / 无 runtime-error + Stop 收场 | 载荷含 agent-self-terminated 标记 |
+| d5_text_with_error_stop_ends_as_message_not_error | ✅ PASS | 文字 commit + providerError 标注 / stopReason="stop" + 无 runtime-error | 本次 bug 核心回归（D5/D6 联合） |
+| d6_empty_response_retry_within_budget_then_recover | ✅ PASS | 注入 1 条 + 恢复 + Stop / 空响应不 error/aborted | 计数在无 tool-call 正常结束时重置（01 §3.3 ③） |
+| d7_intervention_event_emitted_but_run_ends_stop | ✅ PASS | 干预事件照发 + choices 齐全 + diagnostic / error=None | 与 d9/d10 同场景不同断言焦点 |
+| d8_run_never_injects_nudge_nudge_goes_to_next_user_message | ✅ PASS | nudge 以 User 角色落在消息边界 / 无 system nudge 注入 | Part A 常规 run 无 nudge；Part B followUp 环 |
+| d9_budget_exhausted_forbids_inject_and_ends_stop | ✅ PASS | 注入恰 1 条后禁止 + Stop / 无第 2 条注入 + 非 error/aborted | 断言「耗尽后禁注入」 |
+| d10_steering_count_single_source_in_apply_no_dead_check | ✅ PASS | 第 2 次空响应真实耗尽 + 计数=注入数 / 死检查不复现 | 若为恒 0 死检查则永不耗尽 |
+| agent_provider: endpoint_defaults_to_chat_completions | ✅ PASS | None/auto→ChatCompletions / ≠Responses | 纯函数 resolve_endpoint（00 D3） |
+| agent_provider: vendor_mechanism_preserved_infers_by_base_url_and_model | ✅ PASS | baseUrl/model 关键字识别 / — | 00 D4 正向 |
+| agent_provider: vendor_unrecognized_degrades_to_auto_not_defaulted | ✅ PASS | — / 未识别→Auto + 默认=Auto | 00 D4 反向（auto 退化） |
+
+## 三、验证命令与结果
+
+| 命令 | 结果 |
+|---|---|
+| `cargo test -p session-loop` | ✅ 126 全绿（99 unit + 10 divergence + 17 run_loop） |
+| `cargo test -p agent-provider` | ✅ 353 全绿（327 unit + 3 divergence + 23 集成） |
+| `cargo clippy -p session-loop --all-targets` | ✅ 0 告警（依赖树 conex-sandbox/search/diff 的历史告警与本任务无关） |
+| `cargo clippy -p agent-provider --all-targets` | ✅ 0 告警 |
+
+---
+
+## 四、C2.1 事件结构差异核对（Rust 输出 vs 03 §5.1 硬依赖，2026-07-31 实测）
+
+> 输入：20-phase-c-tasks.md C2.1（89-96 行）；03-frontend-contract.md §5.1（16 项硬依赖）/ §5.3。
+> Rust 侧证据：crates/conex-types/src/events.rs（AgentEvent 24 变体 + AgentEventEnvelope）、
+> crates/conex-types/tests/events_roundtrip.rs（B1.5 golden）、
+> apps/agent-workbench/src-tauri/src/core_event_bridge.rs（B6.3 emit 桥）、
+> apps/agent-workbench/src-tauri/tests/event_bridge.rs（16 项逐项锚定）、
+> apps/agent-workbench/src-tauri/src/core_run_commands.rs / core_query_commands.rs / engine.rs（产出与接线路径）。
+> 前端消费证据：EventRouter.ts、daemonEventZod.ts、daemon-chat-bridge/handlers/toolUtils.ts、api/sessionEventHydrate.ts。
+
+### 4.1 16 项硬依赖逐项核对表
+
+| # | 字段/结构（03 §5.1） | 前端需求（消费点） | Rust 实际产出（文件:行号 / 测试断言） | 判定 |
+|---|---|---|---|---|
+| 1 | 顶层 type 字符串 | eventType.ts:8-28；EventRouter.ts:206-216 | events.rs:111 `#[serde(tag="type")]`；events_roundtrip.rs:371-404（24 tag 穷举）；event_bridge.rs:326/506 | 一致 |
+| 2 | 顶层 runId（每事件） | eventUtils.ts:17-26 messageBelongsToRun | 信封注入 events.rs:353-355；live 双路径恒 Some(run_id)：core_run_commands.rs:360-365、406-411；重放重建 core_query_commands.rs:159；锚定 event_bridge.rs:327/507（每载荷 runId） | 一致（live 通道 runId 缺失为零；重放末段归属 None 时前端放行不过滤，与 03 §5.1-2 注释一致，非阻塞） |
+| 3 | sequence（数字） | StreamRecovery.ts:108-115；EventRouter.ts:49/544-557；sessionEventHydrate.ts:221 | events.rs:356-358；全局单调 AtomicU64 core_event_bridge.rs:132/171；会话持久化序列 core_run_commands.rs:360-364；锚定 event_bridge.rs:328/508 + sequence_monotonic_across_runs:349-363 | 一致 |
+| 4 | message-delta.block.text + block.type/kind=thought | EventRouter.ts:218-258；eventUtils.ts:1-7 | events.rs:156-162；message.rs:99-125（tag=type：text/thought）；锚定 events_roundtrip.rs:409-435、event_bridge.rs:513-517 | 一致（Rust 发 type 字段，前端 type/kind 双读兼容） |
+| 5 | message-delta.messageId | shared-types events.ts:15；chat-stream/helpers.ts:55-90 | events.rs:160（message_id→messageId）；锚定 events_roundtrip.rs:418、event_bridge.rs:515 | 一致 |
+| 6 | message-end.message：role/content/blocks[] + clientMessageId | EventRouter.ts:261-306；sessionEventHydrate.ts:93-101 pickStableMessageId 三字段 | events.rs:165-169；message.rs:31-49（id/role/createdAt/blocks/metadata/clientMessageId/content）；锚定 events_roundtrip.rs:438-453、event_bridge.rs:519-527 | 一致（content 可选兜底字段，message.rs:46-48 注明 emit 建议填 text 拼接；稳定 id 命中 id/clientMessageId） |
+| 7 | tool-start.call.id/toolName + 参数别名 + explanation | toolUtils.ts:12-46；daemonEventSchema.ts:48-89；sessionEventHydrate.ts:313-338 | events.rs:173-179；tool.rs:109-122（ToolBatchCall：id/toolName/summary/input/category/concurrency）；锚定 events_roundtrip.rs:456-470、event_bridge.rs:529-532 | 一致（Rust 用 input，属前端别名集；explanation 取 call.summary，daemonEventZod.ts:124-126） |
+| 8 | tool-end.result：id/toolCallId、output/text、isError/error、path/filePath、diffs | toolUtils.ts:48-106；daemonEventZod.ts:137-156；EventRouter.ts:321-331 | events.rs:190-196；tool.rs:128-137（ToolBatchResult：id/toolName/output{text,json,artifacts}/isError/durationMs）；锚定 events_roundtrip.rs:473-487、event_bridge.rs:535-538 | 差异（容差）：id/output/isError 全齐；path/filePath 与 diffs 未显式输出，前端兜底（toolUtils.ts:66-103 text 内 parseUnifiedDiffs / output.path），不构成协议失败（唯一硬失败=无 id，Rust 恒有） |
+| 9 | approval-requested.request：toolCallId/toolName/parameters/summary|reason | daemonEventZod.ts:164-199；EventRouter.ts:337-438；daemonEventSchema.ts:115-153 | events.rs:281-286；events.rs:73-86（PermissionRequest 七字段全齐）；锚定 events_roundtrip.rs:490-504、event_bridge.rs:541-544 | 一致 |
+| 10 | approval-resolved：toolCallId（兼容 requestId/id）+ decision 规范值 | daemonEventZod.ts:207-241；EventRouter.ts:162-191 | events.rs:289-297（toolCallId + requestId? + decision）；events.rs:91-100（approved/denied/expired lowercase）；锚定 events_roundtrip.rs:507-525、event_bridge.rs:547-549 | 一致（toolCallId 主键符合 03 §5.2-3；shared-types events.ts:36 声明未同步属 C2.3 范围，前端 zod 已兼容） |
+| 11 | run-terminal.terminal（completed/cancelled/failed）+ error | daemonEventZod.ts:246-264；EventRouter.ts:445-486 | events.rs:313-321；events.rs:21-30（lowercase）；锚定 events_roundtrip.rs:528-555、event_bridge.rs:551-554 | 一致（error 省略时字段不输出，events_roundtrip.rs:539 断言） |
+| 12 | agent-end.reason（stop/max-turns/aborted/error）+ error | EventRouter.ts:497-532 | events.rs:122-129；session.rs:95-108（kebab-case）；锚定 events_roundtrip.rs:558-577、event_bridge.rs:557-558 | 差异（已知扩展）：四规范值全对 + 额外 stopped（01 D1 已裁决，events_roundtrip.rs:576 锚定；前端未知 reason 走 sawRunTerminal/endTimer 兜底不报错） |
+| 13 | error 信封：message/error | EventRouter.ts:601-611 | AgentEvent 24 变体无 Error 变体；桥只处理 AgentEvent；finalize_failed 以 run-terminal(failed) 收口 core_run_commands.rs:380-413；event_bridge.rs:560-562 明示不在桥测试范围 | 差异（缺口）：IPC 模式下 error 信封不产出，四源失败源 4 需决策（见 4.3-1） |
+| 14 | event 信封：{type:event, event:{内层}} | EventRouter.ts:613-624（C2.2 删） | 信封扁平化 events.rs:342-361；锚定 event_bridge.rs:331-332（无 event/payload 键）、509-511 | 一致（Rust 已按 03 §5.2-1 直发内层，C2.2 删前端分支零阻塞） |
+| 15 | subagent-*：subagentId/subagentRunId/runId/parentToolCallId/description/mode/status/summary | EventRouter.ts:559-599 | conex-types + 桥 + core_run_commands + orchestrator 无 subagent-started/event/ended 类型与产出（grep 无匹配）；旧 sidecar workbench_send_to_subagent 为 WS 转发，IPC 模式删除 | 差异（缺口）：前端消费存在、Rust 无产出，需决策（见 4.3-3） |
+| 16 | run-terminal 的 runId 必须存在 | StreamRecovery.ts:150-155 | 事件体自带 run_id events.rs:315-317 + 信封注入 events.rs:353-355（同值单键）；锚定 events_roundtrip.rs:799-820、event_bridge.rs:336-347/554 | 一致 |
+
+### 4.2 事件名对照表（Rust kebab-case tag ↔ 前端消费事件名）
+
+| Rust tag（events.rs:112-322） | 前端消费事件名 | 前端消费位置 | 判定 |
+|---|---|---|---|
+| agent-start | agent-start | EventRouter 无分支（静默忽略） | 一致 |
+| agent-end | agent-end | EventRouter.ts:497-532 | 一致（含 stopped 扩展，见 4.1-12） |
+| turn-start / turn-end | 同 | 未消费 | 一致（03 §1.2） |
+| message-start | 同 | 未单独消费（hydrate 以 message-end 为准） | 一致 |
+| message-delta | message-delta（前端另有 text-delta 遗留别名） | EventRouter.ts:218-259 | 一致（Rust 只发 message-delta） |
+| message-end | message-end | EventRouter.ts:261-306 | 一致 |
+| tool-start | tool-start | EventRouter.ts:308-316 | 一致 |
+| tool-update | tool-update | 预留 partialToolArgs.ts:122-135 | 一致（未接线） |
+| tool-end | tool-end | EventRouter.ts:321-331 | 一致 |
+| tool-batch-start / tool-batch-end | 同 | 显式 ignore（317-319 / 333-335） | 一致 |
+| tool-input-repaired | 同 | 未消费 | 一致 |
+| context-compression-start / end | 同 | 未消费 | 一致 |
+| provider-diagnostic | provider-diagnostic | EventRouter.ts:492-495 | 差异：前端读 event.data，Rust 顶层 diagnostic（见 4.3-2） |
+| runtime-error | runtime-error | EventRouter.ts:488-491 | 差异：前端读 event.data，Rust 顶层 error（见 4.3-2） |
+| runtime-steering / runtime-intervention-required | 同 | 未消费 | 一致 |
+| approval-requested | approval-requested | handleAgentEvent 337-438；onMsg 信封分支 647-654（WS 遗留，C2.2 删） | 一致 |
+| approval-resolved | approval-resolved | handleAgentEvent 440-443；onMsg 信封分支 652-655（WS 遗留，C2.2 删） | 一致 |
+| checkpoint-created / checkpoint-restored | 同 | 未消费 | 一致 |
+| run-terminal | run-terminal（前端另有 run-completed/run-failed/run-cancelled 别名分支 445-451 与 run-ended 组信封 626-645，均 WS 遗留，C2.2 删） | EventRouter.ts:445-486 | 一致（Rust 只发 run-terminal 唯一终态） |
+| （非 AgentEvent）event 信封 | event | EventRouter.ts:613-624（C2.2 删） | Rust 不产出（锚定无 event 键） |
+| （非 AgentEvent）error 信封 | error | EventRouter.ts:601-611 | Rust 不产出（见 4.3-1） |
+| （非 AgentEvent）run-ended 组信封 | run-ended/run-failed/run-cancelled/run-completed | EventRouter.ts:626-645（C2.2 删） | Rust 不产出 |
+| （非 AgentEvent）subagent-started/event/ended | 同 | EventRouter.ts:559-599 | Rust 不产出（见 4.3-3） |
+
+### 4.3 差异项清单
+
+Rust 侧修复单（回 B6.3 / B1.x）：
+
+1. 【缺口】error 信封（03 §5.1-13 / 四源失败源 4）：Rust 核心无产出。回修建议（二选一）：
+   a) 维持现状：run-terminal(failed) 全覆盖失败收口（core_run_commands.rs:380-413 已保证），前端 C2.4 删 error 信封分支（EventRouter.ts:601-611），03 §2.4 源 4 标注为 WS 遗留收口——前端零阻塞；
+   b) 补产出：桥层新增非 AgentEvent 的 error 信封载荷（字段 message/error）旁路 emit，保持四源语义——需补类型与 emit 测试。
+2. 【前端侧读取不一致，非 Rust 缺陷】runtime-error / provider-diagnostic：Rust 按 03 §1.6 与 shared-types events.ts:31-32 输出顶层 error / diagnostic（events.rs:247-262），前端 EventRouter.ts:489/493 读取 event.data 恒为 undefined，错误详情丢失。回修建议：C2.4 一并修正前端读取（读 event.error ?? event / event.diagnostic），并补 error-translation 测试锚定（05 §2.10）。
+3. 【缺口】subagent-*（03 §5.1-15）：Rust 无类型无产出。回修建议：若 IPC 模式保留 subagent 功能，conex-types 补 subagent-started/event/ended 三事件（字段按 EventRouter.ts:559-599 消费面）并在引擎产出路径 emit + 锚定测试；若功能裁剪，C2.2 删前端 559-599 分支并登记 04 遗留。
+4. 【可选字段缺失（容差）】tool-end.result 的 path/filePath/diffs（03 §5.1-8）：ToolBatchResult（tool.rs:128-137）未含，前端兜底（toolUtils.ts:66-103）不失败。回修建议：B6.x 产出 diff/路径型结果时补 path + diffs 字段（前端直读、省 text 解析），非阻塞。
+5. 【扩展值】agent-end reason 含 stopped（01 D1 已裁决，session.rs:106-107）：前端 reason 白名单不含，消费不报错（sawRunTerminal → finish(false)；否则 8s endTimer）。C2.4 按 00 D1/01 D1 定稿前端分支（若采纳独立 reason，加 stopped → clear_all + finish(false)）。
+
+非差异观察：
+- 重放路径末段（活动 run 无终态）事件 runId 归属 None（core_query_commands.rs:127-146 assign_run_ids），前端 messageBelongsToRun 放行不过滤（eventUtils.ts:21）——与 03 §5.1-2 注释一致，非阻塞。
+- approval-resolved 的 shared-types 声明（events.ts:36 requestId 必填、decision: PermissionDecision）与 Rust 输出（toolCallId 主键 + 规范字符串）不同步——C2.3 任务范围，前端 zod 已兼容，非 Rust 修复项。
+
+### 4.4 结论（C2.2 / C2.4 阻塞判定）
+
+- C2.2（删 event 信封分支 + run-ended 别名分支，onMsg 直进 handleAgentEvent）：Rust 侧无阻塞。已锚定：桥载荷扁平顶层（type/runId/sequence，无 event/payload 二次包装，event_bridge.rs:318-333）；run-terminal 为 AgentEvent 唯一终态变体（无 run-completed/failed/cancelled）；runId 每事件注入。可执行。
+- C2.4（四源失败收敛 + agent-end 扩展 + aborted 静默）：
+  - 源 1 run-terminal(failed)：产出路径完整（drive_outcome + finalize_failed，core_run_commands.rs:380-413）✅；
+  - 源 2 runtime-error：事件照发且为缓冲关键帧（buffer.rs:36/46），produce/drive 失败后 finalize_failed 必发 run-terminal 收口 ✅；但前端 event.data 读取需一并修正（4.3-2）⚠️；
+  - 源 3 agent-end reason=error：类型与字段就绪 ✅；stopped 扩展值按 4.3-5 联调 ⚠️；
+  - 源 4 error 信封：Rust 不产出——唯一阻塞决策点（4.3-1：删前端分支 or Rust 补产出）。
+  - subagent-*：C2.2/C2.4 删信封分支与终态别名后，前端 subagent 回调无事件源 → 需按 4.3-3 决策（补 Rust emit or 前端一并删）。
+- 总体：16 项硬依赖中 12 项一致、4 项差异（#8 容差、#12 扩展、#13/#15 缺口）；C2.2 无阻塞可执行；C2.4 有一个决策点（error 信封）与两个前端侧修正（event.data 读取、stopped reason）。验收口径「runId 缺失事件为零」：live 通道满足（每载荷锚定）。
+
+---
+
+## 五、AA-05 范围外项登记表（PE-07 T07.8，AU-04 认领表 #5，2026-08-01）
+
+> 承接 PE-07 方案 §0.3「范围外」十项（I-02/I-03/I-05/M-01/M-02/M-03/K-03/K-04/X-02/X-03），
+> 逐项给出决议、建议轮次与复评日期；**本登记防止「归后续批次」落空**，每项均有落点。
+> 决议依据 PE-07 v2 逐项决议表；与 AA-05 审阅人的决议复核登记于 31-security-baseline.md §5 豁免表。
+> 现状核实行：2026-08-01 对工作区代码逐项核实（文件:行号）。
+
+| # | 项（AA-05） | 严重度 | 现状核实（2026-08-01） | 决议 | 建议轮次 | 复评日期 |
+|---|---|---|---|---|---|---|
+| 1 | I-02 审批 tool_call_id 校验（core_run_commands.rs:1126-1170 resolve_tool_decision） | 中 | 仅校验 run 存在（NotFound），**未**校验 tool_call_id 存在性/awaiting-approval 状态；任意 id 伪造 approval-resolved 事件落库 | **随 PE-09 T09.6 审批改造后复评**：resolve_tool_decision 前校验 run 状态 + tool_call_id ∈ 待审批集合，不匹配返回 NotFound；S-11 deny 状态机恢复部分同点复评（AU-04 认领表 #15） | 批 5 之后（T09.6 落地后） | T09.6 落地后 30 日内 |
+| 2 | I-03 HTTP SSRF（commands.rs:26-101 workbench_http_request 任意 http(s) URL） | 中 | 仅禁 host/content-length 头 + body 1MB/响应 10MB 上限；**无**内网/loopback 段限制 | **暂缓**：URL 限制（禁 loopback/链路本地/内网段）+ headers 白名单 + body 上限；需产品确认 http_request 工具是否保留 | 后续批次 | 2026-09-01 |
+| 3 | I-05 PTY 归属校验（pty/mod.rs:43-58 workbench_pty_create 任意 cwd、无门禁） | 中 | cwd 任意存在目录即可；无创建者归属绑定 | **暂缓**：pty_id 与创建者绑定 + cwd 白名单（P-03 同源，复用 T07.2 WorkspaceRegistry） | 后续批次 | 2026-09-01 |
+| 4 | M-01 MCP server 配置白名单（mcp/servers.rs:33-47,76-104 任意 command/args/env） | 中 | validate 仅查 command 非空 + env 键不含 `=`；**无**命令白名单 | **暂缓**：命令白名单（npx/node/python/已知 CLI）+ env 键白名单 + 配置完整性校验；壳未暴露 mcp 管理命令前无即时风险 | 后续批次（MCP 管理面暴露前必须完成） | MCP 管理面暴露时 |
+| 5 | M-02 远端工具名净化（mcp/bridge.rs:645-684 mcp_tool_name 仅净化 server_id；inputSchema 原样透传） | 中 | 远端 tool_name 原样拼接；inputSchema 无大小/结构上限 | **暂缓**：sanitize_id_part 扩展至远端名 + 长度/字符白名单 + inputSchema 大小上限 + prompt 注入提示 | 后续批次 | 2026-09-01 |
+| 6 | M-03 call_tool 透传/结果进库（mcp/bridge.rs:358-449 call_tool 无 schema 校验；结果原样进事件） | 低 | 入参原样透传远端；结果 text 无上限无来源标记 | **暂缓**：本地 schema 校验 + 结果 text 截断 + `mcp:` 来源标记 | 后续批次 | 2026-09-01 |
+| 7 | K-03 DPAPI 文件 ACL 收紧（config/credentials.rs:183 fs::write 默认 ACL；config/persistence.rs:35-47 config_dir 回退 temp） | 低 | DPAPI 密文文件无显式 DACL；`%TEMP%\crish-agent-workbench` 回退存在 | **暂缓**（T07.4-D 可选低优先子项）：显式 DACL + 回退路径改 `%LOCALAPPDATA%` 专用目录 | 后续批次 | 2026-09-01 |
+| 8 | K-04 SecretString zeroize（config/credentials.rs:15-21,91 memory_key/os_cache 普通 String；engine.rs:94 api_key String 驻留） | 低 | 明文 String 多处驻留，无 drop 清零 | **暂缓**：引入 drop 清零类型承载 key；崩溃上报前过滤敏感字段 | 后续批次 | 2026-09-01 |
+| 9 | X-02 ammonia class/style 收紧（conex-markdown/src/ammonia_config.rs:26-27,36-37 任意 class 与 th/td style） | 低 | class 全局放行；th/td style 任意值 | **暂缓**：class 前缀白名单（`md-`/`hljs-`/`language-`）+ th/td style 仅 text-align | 后续批次 | 2026-09-01 |
+| 10 | X-03 window store 生产暴露（crish-desktop/src/main.tsx:31-37 `__CRISH_STORE__` 等全局） | 低 | 生产构建也挂 4 个 zustand store 到 window | **已修复（批 6 内落地）**：`import.meta.env.DEV` 守卫 + `dev/storeExposure.ts`（DEV=false 不写 window 全局）；vitest 用例 `storeExposure.test.ts` 锁定 | 批 6（已完成） | —（已闭环） |
+
+> 另注（§0.3 补充登记，非十项内）：I-04（session 命令存在性，低危，无新建任务）登记本表备忘——
+> `session_commands.rs:97-124` save/delete 仅校验非空，无会话存在性/所有权校验；决议：低危不新建任务，
+> 随前端只对当前 store 持有会话操作约束 + 后续 session 面重构复评。D-01（WAL/busy_timeout）与
+> D-02（事件 payload 上限）分别随 PE-08 T08.7（P15）与 T08.3 新增子项合并处理（AU-04 认领表 #7）。
+> **验收**：本表 10 项全部有决议列与落点（1 项随 PE-09 T09.6 复评、1 项随 MCP 管理面演进、
+> 7 项暂缓 + X-03 已闭环）；无任何一项停留在「无落点」状态。
