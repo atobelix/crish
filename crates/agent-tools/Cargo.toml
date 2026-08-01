@@ -1,0 +1,35 @@
+[package]
+name = "agent-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+conex-diff = { path = "../conex-diff" }
+conex-fs = { path = "../conex-fs" }
+conex-sandbox = { path = "../conex-sandbox" }
+conex-search = { path = "../conex-search" }
+conex-types = { path = "../conex-types" }
+ignore = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+conex-test-utils = { path = "../conex-test-utils" }
+# 测试所需 feature（macros/rt/process/time）已由 workspace 最小集覆盖（PE-10 T10.3）
+tokio = { workspace = true }
+
+# 测试夹具：MCP 假 server（stdio JSON-RPC 回显），仅供 tests/mcp_bridge.rs 经
+# CARGO_BIN_EXE_mcp_fake_server 启动；只用 std，不引入任何依赖。
+[[bin]]
+name = "mcp-fake-server"
+path = "tests/fixtures/mcp_fake_server.rs"

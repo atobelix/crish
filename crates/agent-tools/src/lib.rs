@@ -1,0 +1,90 @@
+//! agent-tools —— 工具注册表与内置工具（任务书 B5.1 / B5.2 / B5.3）
+//!
+//! 本 crate 是工具执行域（B5）的骨架与内置工具实现：
+//! - `definition`：ToolDefinition（声明）与 Tool trait（执行面）、ToolError
+//! - `registry`：ToolRegistry 注册表（注册/查找/列出，保序）
+//! - `middleware`：ToolMiddleware 前置/后置钩子抽象与示例后置实现
+//! - `output`：工具输出结构化——序列化（text 优先）与预算截断（B5.3）
+//! - `idempotency`：工具幂等守卫——已执行结果去重（B5.3）
+//! - `executor`：最小工具执行器——单工具执行 + 输出策略 + 幂等检查（B5.3，供 B3.5 消费）
+//! - `tools`：内置工具（fs / shell / search / diff，B5.2），
+//!   复用 conex-fs 路径安全、conex-sandbox 命令门禁、conex-search 模糊搜索、conex-diff
+//! - `mcp`：MCP 桥（B5.4）——server 配置管理（servers）与 stdio 客户端桥（bridge），
+//!   远端 MCP 工具经名称前缀适配为 Tool 进入统一执行器
+
+pub mod definition;
+pub mod executor;
+pub mod idempotency;
+pub mod mcp;
+pub mod middleware;
+pub mod output;
+pub mod registry;
+pub mod tools;
+
+pub use definition::{default_input_schema, Tool, ToolDefinition, ToolError};
+pub use executor::{execute_with_output_policy, ExecutorContext, ToolExecutionPolicy, ToolResult};
+pub use idempotency::{
+    domain_for, execution_key, IdempotencyContext, IdempotencyDecision, IdempotencyStore,
+    ToolIdempotencyGuard,
+};
+pub use mcp::{
+    McpClientBridge, McpServerConfig, McpServerRuntimeState, McpServerSession, McpServerStore,
+    McpToolAdapter, McpToolInfo, McpTransport,
+};
+pub use middleware::{
+    AfterExecuteResult, BeforeExecuteResult, ToolExecutionContext, ToolMiddleware,
+};
+// T06.3 Q18：RecordingMiddleware / RecordingRecord 仅测试使用（生产零
+// 引用），导出面标注 #[cfg(test)]
+#[cfg(test)]
+pub use middleware::{RecordingMiddleware, RecordingRecord};
+pub use output::{
+    budget_text_for_context, output_size, stringify_tool_output, summarize, BudgetedText,
+    OutputSize, SummarizedOutput, ToolOutputBudgetOptions,
+};
+pub use registry::ToolRegistry;
+pub use tools::{
+    register_builtin_tools, register_builtin_tools_with_config, BuiltinToolConfig,
+};
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    //! 测试共用的示例工具（echo），验证 execute 闭环
+
+    use crate::definition::{Tool, ToolDefinition, ToolError};
+    use async_trait::async_trait;
+
+    /// 测试用 echo 工具：把入参原样包进 {"echo": ...} 返回
+    pub(crate) struct EchoTool {
+        pub(crate) def: ToolDefinition,
+    }
+
+    impl EchoTool {
+        pub(crate) fn new(name: &str) -> Self {
+            Self {
+                def: ToolDefinition {
+                    name: name.to_string(),
+                    description: "回显入参".to_string(),
+                    input_schema: serde_json::json!({ "type": "object", "properties": {} }),
+                    dangerous: false,
+                    fatal_on_error: false,
+                },
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Tool for EchoTool {
+        fn name(&self) -> &str {
+            &self.def.name
+        }
+
+        fn definition(&self) -> &ToolDefinition {
+            &self.def
+        }
+
+        async fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+            Ok(serde_json::json!({ "echo": args }))
+        }
+    }
+}
