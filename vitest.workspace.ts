@@ -1,95 +1,11 @@
-import { defineWorkspace } from 'vitest/config';
-
-export default defineWorkspace([
-  {
-    test: {
-      name: 'unit',
-      environment: 'node',
-      // globals 必须开启：test-setup.ts 通过 vi.mock + beforeEach 注入 Tauri invoke
-      // mock 基础设施，@testing-library/jest-dom 也依赖全局 expect。
-      globals: true,
-      // 顺序：先加载根 vitest.setup.ts（localStorage/RAF 等环境补齐），
-      // 再加载 crish-desktop test-setup.ts（Tauri invoke mock + jest-dom + ResizeObserver）。
-      setupFiles: [
-        './vitest.setup.ts',
-        './apps/crish-desktop/src/test-setup.ts',
-      ],
-      retry: 2,
-      testTimeout: 10000,
-      include: [
-        'packages/*/src/**/*.test.{ts,tsx}',
-        'apps/crish-desktop/src/**/*.test.{ts,tsx}',
-        'apps/crish-desktop/src/__tests__/**/*.{ts,tsx}',
-        'apps/agent-workbench/src/**/*.test.{ts,tsx}',
-      ],
-      exclude: [
-        '**/__tests__/e2e/**',
-        '**/__tests__/integrations/**',
-        '**/node_modules/**',
-        '**/dist/**',
-      ],
-      coverage: {
-        provider: 'v8',
-        reporter: ['text', 'json', 'html'],
-        thresholds: {
-          statements: 70,
-          branches: 60,
-          functions: 65,
-          lines: 70,
-        },
-      },
-    },
-  },
-  {
-    test: {
-      name: 'integration',
-      environment: 'node',
-      setupFiles: ['./vitest.setup.ts'],
-      retry: 2,
-      testTimeout: 10000,
-      include: [
-        'tests/integration/**/*.test.ts',
-        'tests/fuzz/**/*.test.ts',
-        'tests/race/**/*.test.ts',
-        'tests/recovery/**/*.test.ts',
-        'apps/crish-desktop/tests/**/*.test.ts',
-      ],
-      exclude: ['**/node_modules/**', '**/dist/**'],
-      coverage: {
-        provider: 'v8',
-        reporter: ['text', 'json', 'html'],
-        thresholds: {
-          statements: 70,
-          branches: 60,
-          functions: 65,
-          lines: 70,
-        },
-      },
-    },
-  },
-  {
-    test: {
-      name: 'e2e',
-      environment: 'node',
-      setupFiles: ['./vitest.setup.ts'],
-      retry: 2,
-      testTimeout: 30000,
-      include: [
-        '**/__tests__/e2e/**/*.test.ts',
-        'tests/e2e/**/*.spec.ts',
-        'tests/e2e/**/*.test.ts',
-      ],
-      exclude: ['**/node_modules/**', '**/dist/**'],
-      coverage: {
-        provider: 'v8',
-        reporter: ['text', 'json', 'html'],
-        thresholds: {
-          statements: 70,
-          branches: 60,
-          functions: 65,
-          lines: 70,
-        },
-      },
-    },
-  },
-]);
+// 已废弃（2026-08-03 迁移至 vitest.config.ts 的 test.projects）。
+//
+// 原因：
+// 1. vitest 3.2.7 提示本工作区文件已 deprecated，应改用 test.projects；
+// 2. 项目级 coverage 配置（阈值/目录）在本版本会被根配置整体覆盖，
+//    实测项目级 coverage.thresholds 解析为 undefined，阈值形同虚设；
+//    阈值现统一放在 vitest.config.ts 根 coverage 块（45/70/65/45）。
+//
+// vitest 在 test.projects 存在时不再加载本文件；保留仅作迁移记录，
+// 待确认无工具链引用后经回收站删除。
+export {};

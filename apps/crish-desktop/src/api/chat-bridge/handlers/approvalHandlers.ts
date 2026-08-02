@@ -2,11 +2,13 @@
  * 审批域 handler（T7 分派表）：approval-requested / approval-resolved。
  *
  * approval-requested 保留宽容形态（嵌套 request 或平铺 daemon WS 形状），
- * 参数抽取与白名单自动放行逻辑与原 16 分支实现完全等价。
+ * 参数抽取与白名单自动放行逻辑与原 16 分支实现完全等价
+ * （自动放行额外加硬拒绝门禁：极危/破坏性命令即使白名单命中也不静默放行，
+ * 对齐 commandPermissions.shouldAutoApproveCommand 契约）。
  */
 import {
-  commandMatchesWhitelist,
   extractCommandForMatch,
+  shouldAutoApproveCommand,
 } from '../../commandPermissions';
 import { getCommandPermissions, getPermissionMode } from '../../storeAccess';
 import { logInternalError } from '../../userFacingErrors';
@@ -55,7 +57,9 @@ export function onApprovalRequested(
 
   {
     const line = extractCommandForMatch(toolName, args);
-    if (commandMatchesWhitelist(line, getCommandPermissions())) {
+    // 自动放行须过完整门禁：白名单命中且非极危/硬拒绝（shouldAutoApproveCommand），
+    // 防止「rm / format / git push 被加入白名单后静默放行」
+    if (shouldAutoApproveCommand(line, getCommandPermissions())) {
       callbacks.onToolStart(
         toolCallId,
         toolName,

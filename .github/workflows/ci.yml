@@ -66,8 +66,12 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      # 前端快集：仅 unit 项目（F1 纯逻辑 + F2 组件，3679 用例基线主体）
-      - run: npx vitest run --project=unit --reporter=verbose
+      # 前端快集：仅 unit 项目（F1 纯逻辑 + F2 组件，用例基线主体）
+      # --coverage：强制执行 vitest.config.ts 根 coverage 块的阈值门禁。
+      #（2026-08-03 审计：此前未带 --coverage，且项目级阈值被根配置整体覆盖，
+      #  70/60/65/70 从未生效；实测基线 47.02/77.37/69.69/47.02，阈值已按基线
+      #  校准为 45/70/65/45，低于阈值即失败）
+      - run: npx vitest run --project=unit --coverage --reporter=verbose
 
   audit:
     runs-on: ubuntu-latest
@@ -80,6 +84,23 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm audit --audit-level=moderate
+
+  # 生成物漂移门禁（2026-08-03 审计：gen:engine-bindings 是手动脚本，CI 未跑；
+  # registry_drift 只锁 JSON↔Rust，不锁 JSON↔TS）。
+  # 生成物提交在仓库内（packages/shared-types/src/generated/engine），
+  # 此处重新生成后 diff：events.rs / engine-events.json 更新但未跑生成器即失败。
+  engine-bindings-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: node scripts/generate-engine-bindings.mjs
+      - run: git diff --exit-code -- packages/shared-types/src/generated
 
   cargo-deny:
     runs-on: ubuntu-latest

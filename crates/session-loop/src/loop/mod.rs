@@ -24,6 +24,7 @@
 use std::sync::Arc;
 
 use agent_tools::idempotency::ToolIdempotencyGuard;
+use agent_tools::middleware::ToolMiddleware;
 use agent_tools::registry::ToolRegistry;
 use async_trait::async_trait;
 use conex_types::error::{codes, CrishError};
@@ -153,6 +154,15 @@ pub struct SessionLoopOptions {
     /// 并注入工具执行器——同域（run_id+session_id）同参工具去重，失败不
     /// 记录、成功才落键；跨 run 生效（域与 run/session 绑定）。
     pub idempotency_enabled: bool,
+    /// 工具中间件链（[agent_tools::middleware::ToolMiddleware]；审批通过后、
+    /// 执行前生效，优先级语义见 tool_exec.rs 模块头注与
+    /// docs/multi-agent-repair/06-tool-middleware-hook-接线决策.md）。
+    /// with_options 派生同步到工具执行器。
+    pub tool_middleware: Vec<Arc<dyn ToolMiddleware>>,
+    /// 插件钩子注册表（[crate::hooks::HookRegistry]；turn.end /
+    /// tool.pre / tool.post 广播）。with_options 派生同步到工具执行器
+    /// （tool.pre / tool.post）与 turn-complete handler（turn.end）。
+    pub hooks: Option<Arc<crate::hooks::HookRegistry>>,
 }
 
 impl Default for SessionLoopOptions {
@@ -168,6 +178,8 @@ impl Default for SessionLoopOptions {
             cwd: None,
             assistant_client_message_id: None,
             idempotency_enabled: false,
+            tool_middleware: Vec::new(),
+            hooks: None,
         }
     }
 }
@@ -244,7 +256,7 @@ impl AgentSessionLoop {
     ///
     /// 派生状态同步（T06.4.4）：`cwd` → 工具执行上下文 `tool_ctx.cwd`；
     /// `idempotency_enabled` → 重建工具执行器（开启时创建幂等守卫并注入，
-    /// 关闭时移除守卫）。
+    /// 关闭时移除守卫）；`tool_middleware` / `hooks` → 同步到工具执行器。
     ///
     /// 顺序约束（Rust builder 语义，Option 字段构造期定）：`with_options` /
     /// `with_tool_options` / `with_approval` 必须在 `run()` 之前调用。
@@ -258,6 +270,12 @@ impl AgentSessionLoop {
             None
         };
         self.tool_executor = self.tool_executor.with_idempotency_opt(idempotency);
+        // 中间件链 / 插件钩子派生同步（中间件与审批的优先级语义见
+        // tool_exec.rs 模块头注）
+        self.tool_executor = self
+            .tool_executor
+            .with_middleware(options.tool_middleware.clone());
+        self.tool_executor = self.tool_executor.with_hooks(options.hooks.clone());
         self
     }
 

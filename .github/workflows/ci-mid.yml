@@ -64,6 +64,13 @@ jobs:
           cache: npm
       - run: npm ci
       # 前端 vitest 全量（vitest.workspace：unit + integration + e2e 项目）
+      # 覆盖率门禁在快层 ci.yml 强制执行（unit 项目 --coverage，阈值 45/70/65/45）。
+      # 中层不加 --coverage 的理由（2026-08-03 实测基线）：
+      #   - integration 项目实测 3.75% / 61.16% / 33.5% / 3.75%，远低于原 70/60/65/70；
+      #   - e2e 项目 vitest include 命中 Playwright spec（test.describe 与 vitest
+      #     运行器冲突，预存问题），无法在 vitest 下运行；
+      #   强行加 --coverage 只会制造必红门禁，待专项补齐（integration 用例扩增、
+      #   e2e 迁移 playwright runner）后再启用。
       - run: npx vitest run --reporter=verbose
 
   test:integration:

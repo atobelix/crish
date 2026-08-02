@@ -59,10 +59,12 @@ export function useAgentToolApproval(
 
   const onApprovalAllow = useCallback(
     (toolId: string, msgId: string, remember = false) => {
-      if (!parentSessionId || !agentId || !toolId) return;
+      // 与 ChatCard 同路径：trim + busy 防双点（approvalBusy 由父级卡片展示）
+      const tid = String(toolId || '').trim();
+      if (!parentSessionId || !agentId || !tid || approvalBusy) return;
       setApprovalBusy(true);
       if (remember) {
-        const { t } = findAgentTool(parentSessionId, agentId, msgId, toolId);
+        const { t } = findAgentTool(parentSessionId, agentId, msgId, tid);
         const prefix = rememberPrefixFromToolArgs(
           t?.name || '',
           t?.arguments || '',
@@ -72,13 +74,13 @@ export function useAgentToolApproval(
       }
       // 乐观标 running；send 失败回滚 error
       // 治理防线 #33：走 patchAgentTool action，复用 sanitizeToolCallUpdates 终态守卫
-      patchAgentTool(parentSessionId, agentId, toolId, {
+      patchAgentTool(parentSessionId, agentId, tid, {
         status: 'running' as MessageToolCallStatus,
         output: '执行中…',
       });
-      void engineApproveTool(toolId)
+      void engineApproveTool(tid)
         .catch(() => {
-          patchAgentTool(parentSessionId, agentId, toolId, {
+          patchAgentTool(parentSessionId, agentId, tid, {
             status: 'error' as MessageToolCallStatus,
             output: '批准失败',
           });
@@ -88,21 +90,22 @@ export function useAgentToolApproval(
           window.setTimeout(() => setApprovalBusy(false), 200);
         });
     },
-    [parentSessionId, agentId, onShowToast]
+    [parentSessionId, agentId, approvalBusy, onShowToast]
   );
 
   const onApprovalDeny = useCallback(
     (toolId: string, _msgId: string) => {
-      if (!parentSessionId || !agentId || !toolId) return;
+      const tid = String(toolId || '').trim();
+      if (!parentSessionId || !agentId || !tid || approvalBusy) return;
       setApprovalBusy(true);
       // 乐观标已拒绝；send 失败回滚 pending_approval（与 ChatCard 对称）
-      patchAgentTool(parentSessionId, agentId, toolId, {
+      patchAgentTool(parentSessionId, agentId, tid, {
         status: 'error' as MessageToolCallStatus,
         output: '已拒绝',
       });
-      void engineDenyTool(toolId)
+      void engineDenyTool(tid)
         .catch(() => {
-          patchAgentTool(parentSessionId, agentId, toolId, {
+          patchAgentTool(parentSessionId, agentId, tid, {
             status: 'pending_approval' as MessageToolCallStatus,
             output: '拒绝未送达',
           });
@@ -112,7 +115,7 @@ export function useAgentToolApproval(
           window.setTimeout(() => setApprovalBusy(false), 200);
         });
     },
-    [parentSessionId, agentId, onShowToast]
+    [parentSessionId, agentId, approvalBusy, onShowToast]
   );
 
   return { approvalBusy, onApprovalAllow, onApprovalDeny };

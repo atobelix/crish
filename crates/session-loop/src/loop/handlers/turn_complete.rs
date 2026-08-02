@@ -8,8 +8,11 @@
 //!      （streaming PROVIDER_ERROR / executing-tools ERROR 经此收敛）；
 //!   4. lifecycle turn.end 钩子的 stop 建议 → SHOULD_STOP
 //!      （**与 shouldStopAfterTurn 合并时以 turn.end 为准**，01 遗留问题 3）；
+//! - 插件钩子 turn.end（步骤 4.5；HookRegistry 广播；handler Block = stop 建议。
+//!   propagate 失败记录日志后继续收场，不中断会话——与 tool.pre 的
+//!   propagate（降级为工具错误结果）语义一致：钩子失败不打断执行流）；
 //!   5. maxTurns（turnIndex >= maxTurns）→ runtime-error 观测事件 +
-//!      MAX_TURNS_REACHED（独立预算 reason，非错误非中止，01 §1.5）；
+//!   MAX_TURNS_REACHED（独立预算 reason，非错误非中止，01 §1.5）；
 //!   6. shouldStopAfterTurn 兼容层 → SHOULD_STOP；
 //!   7. toolCallCount > 0 → NEXT_TURN；
 //!   8. idle 输入（followUp 仅在此 promote）→ INPUT_AVAILABLE；
@@ -82,6 +85,30 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     if stop_suggested {
         dispatch(state, E::ShouldStop)?;
         return Ok(HandlerOutcome::end(EndDecision::stop(state)));
+    }
+
+    // 4.5 插件钩子 turn.end（HookRegistry 广播；handler Block = stop 建议，
+    //    优先级低于编排层 turn_end_hook、高于 maxTurns）。
+    //    propagate 失败：记录日志后继续收场（钩子失败不中断收场流程，
+    //    与 tool.pre 的 propagate 降级语义一致，见 hooks.rs 模块头注）。
+    if let Some(hooks) = &state.options.hooks {
+        let event = crate::hooks::HookEvent::TurnEnd {
+            session_id: ctx.session_id.clone(),
+            turn_index: ctx.turn_index,
+            tool_call_count: ctx.tool_call_count,
+        };
+        match hooks.dispatch(&event) {
+            Ok(outcome) => {
+                if let Some(reason) = outcome.blocked {
+                    tracing::info!(reason = %reason, "turn.end 钩子建议 stop");
+                    dispatch(state, E::ShouldStop)?;
+                    return Ok(HandlerOutcome::end(EndDecision::stop(state)));
+                }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "turn.end 钩子分派失败（propagate），按忽略继续收场");
+            }
+        }
     }
 
     // 5. maxTurns（shouldStopForMaxTurns = turnIndex >= maxTurns，01 §2.9 步骤 4）

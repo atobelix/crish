@@ -1,4 +1,4 @@
-﻿//! 工具批处理执行器（任务书 B3.5：executeToolBatch 等价）
+//! 工具批处理执行器（任务书 B3.5：executeToolBatch 等价）
 //!
 //! 行为要点（01 §2.8 / §五.8，05 §2.3）：
 //! - 并行/顺序：concurrency=Parallel 的工具并行执行，Sequential/Exclusive 顺序执行；
@@ -15,11 +15,33 @@
 //!   判定（ask 问询 / plan 拒绝写类 / full-access 放行）；requires_approval
 //!   错误分类为 ApprovalRequired（不再折叠 SoftDeny），走真实审批——用户
 //!   同意后重试执行，拒绝返回明确拒绝结果；ctx.ask 接线 ApprovalChannel；
-//! - 单工具执行复用 agent-tools 的 execute_with_output_policy（幂等+输出预算）。
+//! - 单工具执行复用 agent-tools 的 execute_with_output_policy（幂等+输出预算）；
+//! - 中间件链 + 插件钩子（ToolMiddleware / HookRegistry，见模块中部「中间件与
+//!   审批的优先级语义」）：
+//!   - 审批通过（或无需审批）后、工具执行前运行 middleware before_execute 链
+//!     （可改输入 / Block 阻止）→ 广播 tool.pre 事件；
+//!   - 执行成功后广播 tool.post（成功）→ middleware on_result 链（可改写输出）；
+//!     执行失败广播 tool.post（失败）→ middleware on_error 链（仅观察）。
+//!
+//! ## 中间件与审批的优先级语义（决策记录，详见
+//! docs/multi-agent-repair/06-tool-middleware-hook-接线决策.md）
+//!
+//! **审批优先于中间件**：PermissionVerdict::Deny 直接拒绝、NeedsApproval 走
+//! 审批（拒绝/过期不进入中间件链）；中间件 before_execute 的 Block 只拦截
+//! 「审批已通过」的调用——中间件无法绕过审批，审批拒绝也不会被中间件吞掉。
+//! 顺序：权限判定 → 审批 → middleware before 链 → tool.pre → 执行 →
+//! tool.post → middleware on_result/on_error 链。
+//!
+//! 中间件自身错误语义：
+//! - before_execute 返回 Err → 视为阻止执行（与 Block 同语义，文案带中间件名）；
+//! - on_result 返回 Err → 记录日志并降级透传原输出（后置钩子错误不改变
+//!   已完成的工具执行结果）；
+//! - on_error 返回 Err → 记录日志（仅观察，不吞原错误）。
 //!
 //! 语义来源：01-session-loop-semantics.md §2.8 / §五.8；05-test-mapping.md §2.3
 
 use crate::approval::ApprovalChannel;
+use crate::hooks::{HookEvent, HookRegistry};
 use crate::tool_events::{
     ApprovalDecision, ApprovalGate, ClassifiedToolResult, FailStrategy, ToolBatchOptions,
     ToolErrorKind, ToolEvent,
@@ -28,6 +50,9 @@ use agent_tools::context::{AbortToken, AskCallback, NoopAskChannel, ToolContext}
 use agent_tools::definition::ToolError;
 use agent_tools::executor::{execute_with_output_policy, ExecutorContext, ToolExecutionPolicy};
 use agent_tools::idempotency::ToolIdempotencyGuard;
+use agent_tools::middleware::{
+    AfterExecuteResult, BeforeExecuteResult, ToolExecutionContext, ToolMiddleware,
+};
 use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
 use agent_tools::registry::ToolRegistry;
 use conex_types::tool::{ToolBatchCall, ToolConcurrency};
@@ -64,6 +89,10 @@ pub struct ToolExecutor {
     registry: Arc<ToolRegistry>,
     /// 可选幂等守卫（None 表示禁用幂等）
     idempotency: Option<Arc<ToolIdempotencyGuard>>,
+    /// 中间件链（审批通过后、执行前生效；空链 = 不启用）
+    middleware: Vec<Arc<dyn ToolMiddleware>>,
+    /// 插件钩子注册表（tool.pre / tool.post 广播；None = 不启用）
+    hooks: Option<Arc<HookRegistry>>,
 }
 
 impl ToolExecutor {
@@ -72,6 +101,8 @@ impl ToolExecutor {
         Self {
             registry,
             idempotency: None,
+            middleware: Vec::new(),
+            hooks: None,
         }
     }
 
@@ -81,6 +112,8 @@ impl ToolExecutor {
         Self {
             registry: self.registry,
             idempotency: self.idempotency,
+            middleware: self.middleware,
+            hooks: self.hooks,
         }
     }
 
@@ -93,12 +126,40 @@ impl ToolExecutor {
         Self {
             registry: self.registry,
             idempotency: self.idempotency,
+            middleware: self.middleware,
+            hooks: self.hooks,
         }
     }
 
     /// 是否启用幂等守卫（测试 / 观测用）
     pub fn idempotency_enabled(&self) -> bool {
         self.idempotency.is_some()
+    }
+
+    /// 注入中间件链（替换现有链；空链 = 不启用）。
+    ///
+    /// 链在审批通过（或无需审批）后、工具执行前运行 before_execute，
+    /// 执行后运行 on_result / on_error（优先级语义见模块头注）。
+    pub fn with_middleware(mut self, middleware: Vec<Arc<dyn ToolMiddleware>>) -> Self {
+        self.middleware = middleware;
+        Self {
+            registry: self.registry,
+            idempotency: self.idempotency,
+            middleware: self.middleware,
+            hooks: self.hooks,
+        }
+    }
+
+    /// 注入插件钩子注册表（Some = 启用 tool.pre/tool.post 广播；
+    /// None = 移除）。跨批共享同一注册表实例即可多批广播。
+    pub fn with_hooks(mut self, hooks: Option<Arc<HookRegistry>>) -> Self {
+        self.hooks = hooks;
+        Self {
+            registry: self.registry,
+            idempotency: self.idempotency,
+            middleware: self.middleware,
+            hooks: self.hooks,
+        }
     }
 
     /// 执行一批工具调用
@@ -566,14 +627,80 @@ impl ToolExecutor {
                     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
                 }),
         };
+        // ── 中间件链 + 插件钩子（审批已通过，进入执行面；优先级语义
+        //    见模块头注：审批优先于中间件，中间件 Block 不绕过审批）──
+        let mw_ctx = ToolExecutionContext {
+            session_id: Some(ctx.session_id.clone()),
+            run_id: Some(ctx.run_id.clone()),
+            tool_call_id: Some(call.id.clone()),
+            cwd: ctx.cwd.clone(),
+        };
+        // 1) middleware before_execute 链：可修改入参 / Block 阻止（仅对
+        //    「审批已通过」的调用生效；链中任一 Err 视为阻止执行）
+        let mut current_input = call.input.clone();
+        let mut blocked: Option<String> = None;
+        for m in &self.middleware {
+            match m
+                .before_execute(tool.as_ref(), current_input.clone(), &mw_ctx)
+                .await
+            {
+                Ok(BeforeExecuteResult::Proceed { modified_input }) => {
+                    if let Some(v) = modified_input {
+                        current_input = v;
+                    }
+                }
+                Ok(BeforeExecuteResult::Block { reason }) => {
+                    blocked = Some(format!("被中间件 {} 阻止：{reason}", m.name()));
+                    break;
+                }
+                Err(e) => {
+                    blocked = Some(format!("中间件 {} 前置钩子错误：{e}", m.name()));
+                    break;
+                }
+            }
+        }
+        // 2) tool.pre 事件广播（HookRegistry；handler Block = 阻止执行；
+        //    propagate 失败降级为阻止，不中断批执行）
+        if blocked.is_none() {
+            if let Some(hooks) = &self.hooks {
+                let event = HookEvent::ToolPre {
+                    session_id: ctx.session_id.clone(),
+                    tool_name: call.tool_name.clone(),
+                    input: current_input.clone(),
+                };
+                match hooks.dispatch(&event) {
+                    Ok(outcome) => {
+                        if let Some(reason) = outcome.blocked {
+                            blocked = Some(format!("tool.pre 钩子阻止：{reason}"));
+                        }
+                    }
+                    Err(e) => {
+                        blocked = Some(format!("tool.pre 钩子失败（propagate）：{e}"));
+                    }
+                }
+            }
+        }
+        if let Some(reason) = blocked {
+            return (
+                ClassifiedToolResult::error(
+                    &call.id,
+                    &call.tool_name,
+                    ToolErrorKind::ExecutionFailed,
+                    reason,
+                ),
+                Vec::new(),
+            );
+        }
+
         let policy = ToolExecutionPolicy {
             // T06.4.2：输出预算从 ToolBatchOptions 透传（None = 不截断，
             // 与 executor.rs 的 summarize 截断语义接通）
             output_budget_bytes: options.output_budget_bytes,
             idempotency: self.idempotency.is_some(),
         };
-        let call_own = call.clone();
         let guard = self.idempotency.clone();
+        // 执行入参 = 中间件链修改后的最终入参（未经 before 链时与原始入参一致）
+        let exec_input = current_input.clone();
         let start = std::time::Instant::now();
         // 执行体 future：幂等守卫开启时透传守卫（execute_with_output_policy
         // 的幂等去重 + 输出预算语义，T06.4.2/T06.4.4）
@@ -581,7 +708,7 @@ impl ToolExecutor {
             if let Some(g) = guard.as_ref() {
                 execute_with_output_policy(
                     tool.as_ref(),
-                    call_own.input.clone(),
+                    exec_input.clone(),
                     &tool_ctx,
                     &exec_ctx,
                     Some(g.as_ref()),
@@ -591,7 +718,7 @@ impl ToolExecutor {
             } else {
                 execute_with_output_policy(
                     tool.as_ref(),
-                    call_own.input.clone(),
+                    exec_input.clone(),
                     &tool_ctx,
                     &exec_ctx,
                     None,
@@ -661,16 +788,56 @@ impl ToolExecutor {
             ),
             Some(Ok(Ok(tool_result))) => {
                 if tool_result.deduplicated {
+                    // 幂等去重：未真正执行，跳过 on_result 改写链，仅广播
+                    // tool.post（成功，duration=0）保持事件对称
+                    if let Some(hooks) = &self.hooks {
+                        let _ = hooks.dispatch(&HookEvent::ToolPost {
+                            session_id: ctx.session_id.clone(),
+                            tool_name: call.tool_name.clone(),
+                            output: tool_result.output.clone(),
+                            duration_ms: 0,
+                            is_error: false,
+                        });
+                    }
                     (
                         ClassifiedToolResult::ok(&call.id, &call.tool_name, tool_result.output, 0),
                         recorded,
                     )
                 } else {
+                    // 3) middleware on_result 链：可改写输出；Err 记录日志并
+                    //    降级透传原输出（后置钩子错误不改变已完成的执行结果）
+                    let mut final_output = tool_result.output;
+                    for m in &self.middleware {
+                        match m
+                            .on_result(tool.as_ref(), &current_input, final_output.clone(), &mw_ctx)
+                            .await
+                        {
+                            Ok(AfterExecuteResult::Passthrough) => {}
+                            Ok(AfterExecuteResult::Replace(v)) => final_output = v,
+                            Err(e) => {
+                                tracing::error!(
+                                    middleware = %m.name(),
+                                    error = %e,
+                                    "中间件 on_result 失败，降级透传原输出"
+                                );
+                            }
+                        }
+                    }
+                    // 4) tool.post 事件广播（成功；广播中间件改写后的最终输出）
+                    if let Some(hooks) = &self.hooks {
+                        let _ = hooks.dispatch(&HookEvent::ToolPost {
+                            session_id: ctx.session_id.clone(),
+                            tool_name: call.tool_name.clone(),
+                            output: final_output.clone(),
+                            duration_ms,
+                            is_error: false,
+                        });
+                    }
                     (
                         ClassifiedToolResult::ok(
                             &call.id,
                             &call.tool_name,
-                            tool_result.output,
+                            final_output,
                             duration_ms,
                         ),
                         recorded,
@@ -678,6 +845,29 @@ impl ToolExecutor {
                 }
             }
             Some(Ok(Err(err))) => {
+                // 5) middleware on_error 链（仅观察；Err 记录日志，不吞原错误）
+                for m in &self.middleware {
+                    if let Err(e) = m
+                        .on_error(tool.as_ref(), &current_input, &err, &mw_ctx)
+                        .await
+                    {
+                        tracing::error!(
+                            middleware = %m.name(),
+                            error = %e,
+                            "中间件 on_error 失败（仅观察，不吞原错误）"
+                        );
+                    }
+                }
+                // 6) tool.post 事件广播（失败；output 承载错误文案）
+                if let Some(hooks) = &self.hooks {
+                    let _ = hooks.dispatch(&HookEvent::ToolPost {
+                        session_id: ctx.session_id.clone(),
+                        tool_name: call.tool_name.clone(),
+                        output: serde_json::json!(err.to_string()),
+                        duration_ms,
+                        is_error: true,
+                    });
+                }
                 let (kind, msg) = classify_tool_error(&err);
                 (
                     ClassifiedToolResult::error(&call.id, &call.tool_name, kind, msg),
@@ -789,6 +979,8 @@ impl ToolExecutor {
         Self {
             registry: self.registry.clone(),
             idempotency: self.idempotency.clone(),
+            middleware: self.middleware.clone(),
+            hooks: self.hooks.clone(),
         }
     }
 }
@@ -871,15 +1063,18 @@ fn mark_rest_cancelled(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hooks::{HookAction, HookError, HookEventKind, HookFailStrategy, HookHandler, HookRegistry};
     use crate::safe_point::AbortSignal;
     use agent_tools::context::ToolContext;
     use agent_tools::definition::{Tool, ToolDefinition};
+    use agent_tools::middleware::ToolExecutionContext;
     use agent_tools::permission::PermissionMode;
     use agent_tools::registry::ToolRegistry;
+    use async_trait::async_trait;
     use serde_json::Value;
     use std::collections::VecDeque;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
     /// 测试工具：echo
@@ -2277,5 +2472,486 @@ mod tests {
             .position(|e| matches!(e, ToolEvent::ToolEnd { call_id, .. } if call_id == "c1"))
             .unwrap();
         assert!(start < approval && approval < end, "审批事件顺序契约被破坏");
+    }
+
+    // ── 中间件链 + 插件钩子接线（ToolMiddleware 真实扩展点 + HookRegistry）──
+    // 优先级语义：审批优先于中间件（拒绝/过期不进入中间件链）；中间件
+    // Block 只拦截「审批已通过」的调用（详见模块头注与决策文档）。
+
+    /// 计数工具：每次执行自增并原样返回入参（验证中间件/钩子修改与阻止）
+    struct CountingEchoTool {
+        calls: Arc<AtomicUsize>,
+    }
+    #[async_trait]
+    impl Tool for CountingEchoTool {
+        fn name(&self) -> &str {
+            "countecho"
+        }
+        fn definition(&self) -> &ToolDefinition {
+            static DEF: std::sync::OnceLock<ToolDefinition> = std::sync::OnceLock::new();
+            DEF.get_or_init(|| ToolDefinition {
+                name: "countecho".into(),
+                description: "count then echo".into(),
+                input_schema: serde_json::json!({"type": "object"}),
+                dangerous: false,
+                fatal_on_error: false,
+            })
+        }
+        async fn execute(&self, _ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(args)
+        }
+    }
+
+    /// 修改入参的中间件：为 {"v": "x"} 追加后缀（验证 before 链可改输入）
+    struct PrefixMiddleware {
+        name: String,
+        suffix: String,
+    }
+    #[async_trait]
+    impl ToolMiddleware for PrefixMiddleware {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        async fn before_execute(
+            &self,
+            _tool: &dyn Tool,
+            mut input: Value,
+            _ctx: &ToolExecutionContext,
+        ) -> Result<BeforeExecuteResult, ToolError> {
+            if let Some(v) = input.get_mut("v") {
+                if let Some(s) = v.as_str() {
+                    *v = Value::String(format!("{s}{}", self.suffix));
+                }
+            }
+            Ok(BeforeExecuteResult::Proceed {
+                modified_input: Some(input),
+            })
+        }
+    }
+
+    /// 按入参 block 标记阻止执行的中间件
+    struct BlockingMiddleware {
+        name: String,
+    }
+    #[async_trait]
+    impl ToolMiddleware for BlockingMiddleware {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        async fn before_execute(
+            &self,
+            _tool: &dyn Tool,
+            input: Value,
+            _ctx: &ToolExecutionContext,
+        ) -> Result<BeforeExecuteResult, ToolError> {
+            if input.get("block").and_then(Value::as_bool) == Some(true) {
+                Ok(BeforeExecuteResult::Block {
+                    reason: "策略拦截".into(),
+                })
+            } else {
+                Ok(BeforeExecuteResult::Proceed {
+                    modified_input: None,
+                })
+            }
+        }
+    }
+
+    /// 替换输出的中间件（验证 on_result 改写）
+    struct ReplaceMiddleware {
+        name: String,
+        replacement: Value,
+    }
+    #[async_trait]
+    impl ToolMiddleware for ReplaceMiddleware {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        async fn on_result(
+            &self,
+            _tool: &dyn Tool,
+            _input: &Value,
+            _output: Value,
+            _ctx: &ToolExecutionContext,
+        ) -> Result<AfterExecuteResult, ToolError> {
+            Ok(AfterExecuteResult::Replace(self.replacement.clone()))
+        }
+    }
+
+    /// 恒失败的 on_result 中间件（验证降级透传）
+    struct FailingAfterMiddleware {
+        name: String,
+    }
+    #[async_trait]
+    impl ToolMiddleware for FailingAfterMiddleware {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        async fn on_result(
+            &self,
+            _tool: &dyn Tool,
+            _input: &Value,
+            _output: Value,
+            _ctx: &ToolExecutionContext,
+        ) -> Result<AfterExecuteResult, ToolError> {
+            Err(ToolError::execution_failed("failing-after", "after boom"))
+        }
+    }
+
+    /// 记录 on_error 调用的中间件（验证失败观察）
+    struct ErrorSpyMiddleware {
+        name: String,
+        seen: Arc<Mutex<Vec<String>>>,
+    }
+    #[async_trait]
+    impl ToolMiddleware for ErrorSpyMiddleware {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        async fn on_error(
+            &self,
+            _tool: &dyn Tool,
+            _input: &Value,
+            error: &ToolError,
+            _ctx: &ToolExecutionContext,
+        ) -> Result<(), ToolError> {
+            self.seen
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(error.to_string());
+            Ok(())
+        }
+    }
+
+    /// 计数 before_execute 调用的中间件（审批优先级验证用）
+    struct CallCounterMiddleware {
+        name: String,
+        calls: Arc<AtomicUsize>,
+    }
+    #[async_trait]
+    impl ToolMiddleware for CallCounterMiddleware {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        async fn before_execute(
+            &self,
+            _tool: &dyn Tool,
+            _input: Value,
+            _ctx: &ToolExecutionContext,
+        ) -> Result<BeforeExecuteResult, ToolError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(BeforeExecuteResult::Proceed {
+                modified_input: None,
+            })
+        }
+    }
+
+    /// 插件钩子测试替身：记录 tool.post 事件（tool_name, is_error）
+    struct SpyHook {
+        name: String,
+        posts: Arc<Mutex<Vec<(String, bool)>>>,
+        action: Option<HookAction>,
+        err: Option<HookError>,
+    }
+
+    impl SpyHook {
+        fn observing(name: &str) -> Self {
+            Self {
+                name: name.to_string(),
+                posts: Arc::new(Mutex::new(Vec::new())),
+                action: None,
+                err: None,
+            }
+        }
+
+        fn blocking(name: &str) -> Self {
+            Self {
+                name: name.to_string(),
+                posts: Arc::new(Mutex::new(Vec::new())),
+                action: Some(HookAction::Block {
+                    reason: "钩子拦截".into(),
+                }),
+                err: None,
+            }
+        }
+
+        fn failing(name: &str) -> Self {
+            Self {
+                name: name.to_string(),
+                posts: Arc::new(Mutex::new(Vec::new())),
+                action: None,
+                err: Some(HookError::new("hook boom")),
+            }
+        }
+
+        fn posts(&self) -> Vec<(String, bool)> {
+            self.posts.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        }
+    }
+
+    impl HookHandler for SpyHook {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        fn handle(&self, event: &HookEvent) -> Result<HookAction, HookError> {
+            if let HookEvent::ToolPost {
+                tool_name,
+                is_error,
+                ..
+            } = event
+            {
+                self.posts
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push((tool_name.clone(), *is_error));
+            }
+            if let Some(err) = &self.err {
+                return Err(err.clone());
+            }
+            Ok(self.action.clone().unwrap_or(HookAction::Continue))
+        }
+    }
+
+    fn block_call(id: &str, name: &str) -> ToolBatchCall {
+        let mut c = call(id, name, ToolConcurrency::Sequential);
+        c.input = serde_json::json!({ "v": id, "block": true });
+        c
+    }
+
+    #[tokio::test]
+    async fn middleware_before_chain_modifies_input() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg).with_middleware(vec![Arc::new(PrefixMiddleware {
+            name: "prefix".into(),
+            suffix: "-mw".into(),
+        })]);
+        let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        assert!(out.results[0].is_ok());
+        // EchoTool 原样返回入参 → 中间件修改后的入参可见
+        assert_eq!(
+            out.results[0].output.get("v"),
+            Some(&Value::String("c1-mw".into())),
+            "before 链应修改入参"
+        );
+    }
+
+    #[tokio::test]
+    async fn middleware_before_block_prevents_execution() {
+        let tool = Arc::new(CountingEchoTool {
+            calls: Arc::new(AtomicUsize::new(0)),
+        });
+        let reg = registry_with(vec![Arc::clone(&tool) as Arc<dyn Tool>]);
+        let exec = ToolExecutor::new(reg).with_middleware(vec![Arc::new(BlockingMiddleware {
+            name: "blocker".into(),
+        })]);
+        let calls = vec![block_call("c1", "countecho")];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        let r = &out.results[0];
+        assert_eq!(r.error_kind, Some(ToolErrorKind::ExecutionFailed));
+        assert!(
+            r.error_message.as_deref().unwrap_or_default().contains("被中间件 blocker 阻止"),
+            "阻止文案应携带中间件名：{:?}",
+            r.error_message
+        );
+        assert_eq!(tool.calls.load(Ordering::SeqCst), 0, "被阻止的工具不应执行");
+    }
+
+    #[tokio::test]
+    async fn middleware_on_result_replace_output() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg).with_middleware(vec![Arc::new(ReplaceMiddleware {
+            name: "replacer".into(),
+            replacement: serde_json::json!({ "wrapped": true }),
+        })]);
+        let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        assert_eq!(out.results[0].output, serde_json::json!({ "wrapped": true }));
+    }
+
+    #[tokio::test]
+    async fn middleware_on_error_observes_failure() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let reg = registry_with(vec![Arc::new(FailTool)]);
+        let exec = ToolExecutor::new(reg).with_middleware(vec![Arc::new(ErrorSpyMiddleware {
+            name: "spy".into(),
+            seen: Arc::clone(&seen),
+        })]);
+        let calls = vec![call("c1", "fail", ToolConcurrency::Sequential)];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::ExecutionFailed));
+        let msgs = seen.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(msgs.len(), 1);
+        assert!(msgs[0].contains("boom"));
+    }
+
+    #[tokio::test]
+    async fn middleware_on_result_error_degrades_to_passthrough() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg).with_middleware(vec![Arc::new(
+            FailingAfterMiddleware {
+                name: "failing".into(),
+            },
+        )]);
+        let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        // 后置钩子错误：记录日志并降级透传原输出（不改变已完成的执行结果）
+        assert!(out.results[0].is_ok(), "on_result 失败应降级透传原输出");
+        assert_eq!(out.results[0].output, serde_json::json!({ "v": "c1" }));
+    }
+
+    #[tokio::test]
+    async fn middleware_empty_chain_is_noop() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg).with_middleware(Vec::new());
+        let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        assert!(out.results[0].is_ok());
+        assert_eq!(out.results[0].output, serde_json::json!({ "v": "c1" }));
+    }
+
+    /// 审批优先于中间件：拒绝时不进入中间件链，通过后中间件参与执行
+    #[tokio::test]
+    async fn middleware_runs_after_approval_gate() {
+        let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Ask),
+            ..Default::default()
+        };
+
+        // 审批拒绝：中间件 before_execute 不被调用（审批优先语义）
+        let counter = Arc::new(AtomicUsize::new(0));
+        let reg = registry_with(vec![Arc::new(DangerousTool)]);
+        let exec = ToolExecutor::new(reg).with_middleware(vec![Arc::new(
+            CallCounterMiddleware {
+                name: "counter".into(),
+                calls: Arc::clone(&counter),
+            },
+        )]);
+        let gate = MockApproval {
+            decision: ApprovalDecision::Denied {
+                reason: "no".into(),
+            },
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
+            .await;
+        assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::UserDenied));
+        assert_eq!(counter.load(Ordering::SeqCst), 0, "审批拒绝时中间件不参与");
+
+        // 审批通过：中间件进入执行面
+        let counter2 = Arc::new(AtomicUsize::new(0));
+        let reg2 = registry_with(vec![Arc::new(DangerousTool)]);
+        let exec2 = ToolExecutor::new(reg2).with_middleware(vec![Arc::new(
+            CallCounterMiddleware {
+                name: "counter".into(),
+                calls: Arc::clone(&counter2),
+            },
+        )]);
+        let gate2 = MockApproval {
+            decision: ApprovalDecision::Approved,
+        };
+        let out2 = exec2
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate2)), &opts, None)
+            .await;
+        assert!(out2.results[0].is_ok());
+        assert_eq!(counter2.load(Ordering::SeqCst), 1, "审批通过后中间件参与执行");
+    }
+
+    #[tokio::test]
+    async fn hook_tool_pre_block_prevents_execution() {
+        let tool = Arc::new(CountingEchoTool {
+            calls: Arc::new(AtomicUsize::new(0)),
+        });
+        let reg = registry_with(vec![Arc::clone(&tool) as Arc<dyn Tool>]);
+        let registry = HookRegistry::new();
+        registry.register(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Swallow,
+            Arc::new(SpyHook::blocking("blocker")) as Arc<dyn HookHandler>,
+        );
+        let exec = ToolExecutor::new(reg).with_hooks(Some(Arc::new(registry)));
+        let calls = vec![call("c1", "countecho", ToolConcurrency::Sequential)];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        let r = &out.results[0];
+        assert_eq!(r.error_kind, Some(ToolErrorKind::ExecutionFailed));
+        assert!(
+            r.error_message.as_deref().unwrap_or_default().contains("tool.pre 钩子阻止"),
+            "tool.pre 阻止文案：{:?}",
+            r.error_message
+        );
+        assert_eq!(tool.calls.load(Ordering::SeqCst), 0, "tool.pre 阻止时工具不执行");
+    }
+
+    #[tokio::test]
+    async fn hook_tool_post_receives_success_and_failure() {
+        let reg = registry_with(vec![Arc::new(EchoTool), Arc::new(FailTool)]);
+        let registry = HookRegistry::new();
+        let spy = Arc::new(SpyHook::observing("spy"));
+        registry.register(
+            HookEventKind::ToolPost,
+            HookFailStrategy::Swallow,
+            Arc::clone(&spy) as Arc<dyn HookHandler>,
+        );
+        let exec = ToolExecutor::new(reg).with_hooks(Some(Arc::new(registry)));
+        let calls = vec![
+            call("c1", "echo", ToolConcurrency::Sequential),
+            call("c2", "fail", ToolConcurrency::Sequential),
+        ];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        assert!(out.results[0].is_ok());
+        assert_eq!(out.results[1].error_kind, Some(ToolErrorKind::ExecutionFailed));
+        assert_eq!(
+            spy.posts(),
+            vec![
+                ("echo".to_string(), false),
+                ("fail".to_string(), true),
+            ],
+            "tool.post 应广播成功与失败事件（含 is_error 标记）"
+        );
+    }
+
+    #[tokio::test]
+    async fn hook_tool_pre_propagate_failure_blocks_tool() {
+        let tool = Arc::new(CountingEchoTool {
+            calls: Arc::new(AtomicUsize::new(0)),
+        });
+        let reg = registry_with(vec![Arc::clone(&tool) as Arc<dyn Tool>]);
+        let registry = HookRegistry::new();
+        registry.register(
+            HookEventKind::ToolPre,
+            HookFailStrategy::Propagate,
+            Arc::new(SpyHook::failing("fail")) as Arc<dyn HookHandler>,
+        );
+        let exec = ToolExecutor::new(reg).with_hooks(Some(Arc::new(registry)));
+        let calls = vec![call("c1", "countecho", ToolConcurrency::Sequential)];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        let r = &out.results[0];
+        assert_eq!(r.error_kind, Some(ToolErrorKind::ExecutionFailed));
+        assert!(
+            r.error_message.as_deref().unwrap_or_default().contains("propagate"),
+            "propagate 失败应降级为阻止（批继续）：{:?}",
+            r.error_message
+        );
+        assert_eq!(tool.calls.load(Ordering::SeqCst), 0, "propagate 失败时工具不执行");
     }
 }

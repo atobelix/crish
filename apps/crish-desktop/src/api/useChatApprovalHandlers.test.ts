@@ -1,0 +1,394 @@
+// @vitest-environment jsdom
+/**
+ * useChatApprovalHandlers 审批 UI 链路测试（审计补齐）。
+ *
+ * 覆盖点：
+ * - approval-requested 落地 → 挂起（计数 / dock 文案 / 单条主列内联优先）
+ * - handleApprovalAllow / Deny → 乐观状态 + engine 命令直发
+ * - approval-resolved 落地 → 挂起清零恢复
+ * - remember 白名单、busy 防双点、失败回滚 + toast
+ * - 批量批准 / 批量拒绝（含部分失败回滚）
+ * - 子 agent 待审批 → dock 协作任务文案
+ *
+ * 依赖：真实 layout store（createSession 语义一致），仅 mock chatBridge 命令直发层。
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { useChatApprovalHandlers } from '../components/chat-card/useChatApprovalHandlers';
+import { useLayoutStore } from './store-access/componentAccess';
+import { getCommandPermissions } from './storeAccess';
+import type {
+  MessageToolCall,
+  SessionAgent,
+  SessionMessage,
+} from '../store/types';
+
+const { chatBridgeMock } = vi.hoisted(() => ({
+  chatBridgeMock: {
+    engineApproveTool: vi.fn(async () => undefined),
+    engineDenyTool: vi.fn(async () => undefined),
+  },
+}));
+
+vi.mock('./chatBridge', () => chatBridgeMock);
+
+function makeToolCall(
+  id: string,
+  overrides: Partial<MessageToolCall> = {},
+): MessageToolCall {
+  return { id, name: 'shell_command', status: 'pending_approval', ...overrides };
+}
+
+function pendingMsg(id: string, toolCalls: MessageToolCall[]): SessionMessage {
+  return { id, sender: 'assistant', timestamp: Date.now(), toolCalls };
+}
+
+function seedSession(messages: SessionMessage[], agents: SessionAgent[] = []) {
+  const sid = `sess-${Math.random().toString(36).slice(2, 10)}`;
+  useLayoutStore.setState((st) => {
+    st.sessions.push({
+      id: sid,
+      title: '审批测试',
+      folder: '',
+      isPinned: false,
+      isArchived: false,
+      timestamp: String(Date.now()),
+      messages,
+      agents,
+    });
+    st.activeSessionId = sid;
+  });
+  return sid;
+}
+
+function readTool(sid: string, msgId: string, toolId: string) {
+  return useLayoutStore
+    .getState()
+    .sessions.find((s) => s.id === sid)
+    ?.messages.find((m) => m.id === msgId)
+    ?.toolCalls?.find((t) => t.id === toolId);
+}
+
+function renderApproval(sid: string) {
+  const toast = vi.fn();
+  const utils = renderHook(() => {
+    const sess = useLayoutStore
+      .getState()
+      .sessions.find((s) => s.id === sid);
+    return useChatApprovalHandlers({
+      activeSessionId: sid,
+      messages: sess?.messages ?? [],
+      agents: sess?.agents ?? [],
+      onShowToast: toast,
+    });
+  });
+  return { ...utils, toast };
+}
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  chatBridgeMock.engineApproveTool.mockReset();
+  chatBridgeMock.engineDenyTool.mockReset();
+  useLayoutStore.setState((st) => {
+    st.sessions = [];
+    st.activeSessionId = '';
+  });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('useChatApprovalHandlers 挂起扫描（approval-requested 落地后）', () => {
+  it('多条 pending：计数 + dock 队列文案', () => {
+    const sid = seedSession([
+      pendingMsg('m1', [makeToolCall('tc-1'), makeToolCall('tc-2')]),
+    ]);
+    const { result } = renderApproval(sid);
+
+    expect(result.current.pendingApprovalCount).toBe(2);
+    expect(result.current.pendingApprovalMsgId).toBe('m1');
+    expect(result.current.pendingApprovalToolId).toBe('tc-1');
+    expect(result.current.approvalUiPlan).toMatchObject({
+      mode: 'dock',
+      showDock: true,
+      inlineOnly: false,
+      total: 2,
+    });
+    expect(result.current.approvalDockVisible).toBe(true);
+    expect(result.current.pendingApprovalDockLabel).toContain('2 待审批');
+    expect(result.current.pendingApprovalDockLabel).toContain('队列');
+  });
+
+  it('单条主时间线 pending：inline-only、dock 强制隐藏（防双渲染）', () => {
+    const sid = seedSession([
+      pendingMsg('m1', [makeToolCall('tc-1', { explanation: '运行构建脚本' })]),
+    ]);
+    const { result } = renderApproval(sid);
+
+    expect(result.current.pendingApprovalCount).toBe(1);
+    expect(result.current.approvalUiPlan.inlineOnly).toBe(true);
+    expect(result.current.approvalDockVisible).toBe(false);
+    expect(result.current.pendingApprovalSummary).toBeTruthy();
+  });
+
+  it('子 agent 待审批：dock 可见，文案含协作任务', () => {
+    const agent: SessionAgent = {
+      id: 'ag-1',
+      subagentRunId: 'sr-1',
+      parentSessionId: 'parent',
+      parentRunId: 'pr-1',
+      description: 'helper',
+      mode: 'explore',
+      status: 'running',
+      messages: [pendingMsg('am1', [makeToolCall('tc-a')])],
+      startedAt: 1,
+    };
+    const sid = seedSession([], [agent]);
+    const { result } = renderApproval(sid);
+
+    expect(result.current.pendingApprovalCount).toBe(1);
+    expect(result.current.approvalDockVisible).toBe(true);
+    expect(result.current.approvalUiPlan.agentCount).toBe(1);
+    expect(result.current.pendingApprovalDockLabel).toContain('协作任务');
+  });
+
+  it('无 pending：count 0、dock 隐藏、模式 none', () => {
+    const sid = seedSession([
+      {
+        id: 'm1',
+        sender: 'assistant',
+        timestamp: Date.now(),
+        toolCalls: [makeToolCall('tc-1', { status: 'success' })],
+      },
+    ]);
+    const { result } = renderApproval(sid);
+
+    expect(result.current.pendingApprovalCount).toBe(0);
+    expect(result.current.approvalDockVisible).toBe(false);
+    expect(result.current.approvalUiPlan.mode).toBe('none');
+    expect(result.current.pendingApprovalToolId).toBe('');
+  });
+});
+
+describe('useChatApprovalHandlers 单个允许 / 拒绝动作', () => {
+  it('handleApprovalAllow：乐观标 running + engineApproveTool 直发', async () => {
+    const sid = seedSession([pendingMsg('m1', [makeToolCall('tc-1')])]);
+    const { result } = renderApproval(sid);
+
+    await act(async () => {
+      result.current.handleApprovalAllow('tc-1', 'm1');
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledTimes(1);
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith('tc-1');
+    expect(readTool(sid, 'm1', 'tc-1')?.status).toBe('running');
+    expect(readTool(sid, 'm1', 'tc-1')?.output).toBe('执行中…');
+    expect(result.current.approvalBusy).toBe(false);
+  });
+
+  it('handleApprovalDeny：乐观标已拒绝 + engineDenyTool 直发', async () => {
+    const sid = seedSession([pendingMsg('m1', [makeToolCall('tc-1')])]);
+    const { result } = renderApproval(sid);
+
+    await act(async () => {
+      result.current.handleApprovalDeny('tc-1', 'm1');
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(chatBridgeMock.engineDenyTool).toHaveBeenCalledTimes(1);
+    expect(chatBridgeMock.engineDenyTool).toHaveBeenCalledWith('tc-1');
+    expect(readTool(sid, 'm1', 'tc-1')?.status).toBe('error');
+    expect(readTool(sid, 'm1', 'tc-1')?.output).toBe('已拒绝');
+    expect(result.current.approvalBusy).toBe(false);
+  });
+
+  it('remember=true：把命令前缀写入白名单（自动放行路径的前置）', async () => {
+    const sid = seedSession([
+      pendingMsg('m1', [
+        makeToolCall('tc-1', { arguments: '{"command":"npm install lodash"}' }),
+      ]),
+    ]);
+    const { result } = renderApproval(sid);
+
+    await act(async () => {
+      result.current.handleApprovalAllow('tc-1', 'm1', true);
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(getCommandPermissions()).toContain('npm install lodash');
+  });
+
+  it('approve 发送失败：回滚 error + toast', async () => {
+    chatBridgeMock.engineApproveTool.mockRejectedValueOnce(new Error('send-fail'));
+    const sid = seedSession([pendingMsg('m1', [makeToolCall('tc-1')])]);
+    const { result, toast } = renderApproval(sid);
+
+    await act(async () => {
+      result.current.handleApprovalAllow('tc-1', 'm1');
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(readTool(sid, 'm1', 'tc-1')?.status).toBe('error');
+    expect(readTool(sid, 'm1', 'tc-1')?.output).toBe('批准失败');
+    expect(toast).toHaveBeenCalledWith('批准失败，请重试');
+    expect(result.current.approvalBusy).toBe(false);
+  });
+
+  it('deny 发送失败：回滚 pending_approval + toast', async () => {
+    chatBridgeMock.engineDenyTool.mockRejectedValueOnce(new Error('send-fail'));
+    const sid = seedSession([pendingMsg('m1', [makeToolCall('tc-1')])]);
+    const { result, toast } = renderApproval(sid);
+
+    await act(async () => {
+      result.current.handleApprovalDeny('tc-1', 'm1');
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(readTool(sid, 'm1', 'tc-1')?.status).toBe('pending_approval');
+    expect(readTool(sid, 'm1', 'tc-1')?.output).toBe('拒绝未送达');
+    expect(toast).toHaveBeenCalledWith('拒绝未送达，请重试');
+  });
+
+  it('approvalBusy 期间重复点击被忽略（防双发）', async () => {
+    let release: (() => void) | undefined;
+    chatBridgeMock.engineApproveTool.mockImplementationOnce(
+      () =>
+        new Promise<void>((res) => {
+          release = res;
+        }),
+    );
+    const sid = seedSession([pendingMsg('m1', [makeToolCall('tc-1')])]);
+    const { result } = renderApproval(sid);
+
+    act(() => {
+      result.current.handleApprovalAllow('tc-1', 'm1');
+    });
+    expect(result.current.approvalBusy).toBe(true);
+    await act(async () => {});
+
+    act(() => {
+      result.current.handleApprovalAllow('tc-1', 'm1');
+    });
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      release?.();
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    expect(result.current.approvalBusy).toBe(false);
+  });
+
+  it('空 toolId / msgId 防护：不发送、不乐观修改', () => {
+    const sid = seedSession([pendingMsg('m1', [makeToolCall('tc-1')])]);
+    const { result } = renderApproval(sid);
+
+    act(() => {
+      result.current.handleApprovalAllow('', '');
+      result.current.handleApprovalDeny('   ', 'm1');
+    });
+
+    expect(chatBridgeMock.engineApproveTool).not.toHaveBeenCalled();
+    expect(chatBridgeMock.engineDenyTool).not.toHaveBeenCalled();
+    expect(result.current.approvalBusy).toBe(false);
+    expect(readTool(sid, 'm1', 'tc-1')?.status).toBe('pending_approval');
+  });
+});
+
+describe('useChatApprovalHandlers 批量批准 / 拒绝', () => {
+  it('handleBatchApprove：批量乐观 running + 逐个直发', async () => {
+    const sid = seedSession([
+      pendingMsg('m1', [makeToolCall('tc-1')]),
+      pendingMsg('m2', [makeToolCall('tc-2')]),
+    ]);
+    const { result } = renderApproval(sid);
+
+    await act(async () => {
+      result.current.handleBatchApprove(['m1', 'm2']);
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledTimes(2);
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith('tc-1');
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith('tc-2');
+    expect(readTool(sid, 'm1', 'tc-1')?.status).toBe('running');
+    expect(readTool(sid, 'm2', 'tc-2')?.status).toBe('running');
+  });
+
+  it('handleBatchDeny：批量乐观已拒绝 + 逐个直发', async () => {
+    const sid = seedSession([
+      pendingMsg('m1', [makeToolCall('tc-1')]),
+      pendingMsg('m2', [makeToolCall('tc-2')]),
+    ]);
+    const { result } = renderApproval(sid);
+
+    await act(async () => {
+      result.current.handleBatchDeny(['m1', 'm2']);
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(chatBridgeMock.engineDenyTool).toHaveBeenCalledTimes(2);
+    expect(readTool(sid, 'm1', 'tc-1')?.status).toBe('error');
+    expect(readTool(sid, 'm2', 'tc-2')?.status).toBe('error');
+  });
+
+  it('handleBatchDeny 部分失败：失败项回滚 pending + toast', async () => {
+    chatBridgeMock.engineDenyTool.mockRejectedValueOnce(new Error('x'));
+    const sid = seedSession([
+      pendingMsg('m1', [makeToolCall('tc-1')]),
+      pendingMsg('m2', [makeToolCall('tc-2')]),
+    ]);
+    const { result, toast } = renderApproval(sid);
+
+    await act(async () => {
+      result.current.handleBatchDeny(['m1', 'm2']);
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(readTool(sid, 'm1', 'tc-1')?.status).toBe('pending_approval');
+    expect(readTool(sid, 'm1', 'tc-1')?.output).toBe('拒绝未送达');
+    expect(readTool(sid, 'm2', 'tc-2')?.status).toBe('error');
+    expect(toast).toHaveBeenCalledWith('1 个工具拒绝未送达，请重试');
+  });
+
+  it('handleBatchApprove 显式 toolIds 配对：跳过重复与空 id', async () => {
+    const sid = seedSession([
+      pendingMsg('m1', [makeToolCall('tc-1')]),
+      pendingMsg('m2', [makeToolCall('tc-2')]),
+    ]);
+    const { result } = renderApproval(sid);
+
+    await act(async () => {
+      result.current.handleBatchApprove(['m1', 'm2'], ['tc-1', 'tc-1']);
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledTimes(1);
+    expect(chatBridgeMock.engineApproveTool).toHaveBeenCalledWith('tc-1');
+  });
+});
+
+describe('useChatApprovalHandlers approval-resolved 恢复', () => {
+  it('approval-resolved 落地（引擎放行 + 工具完成）→ 挂起清零恢复', () => {
+    const sid = seedSession([pendingMsg('m1', [makeToolCall('tc-1')])]);
+    const { result, rerender } = renderApproval(sid);
+    expect(result.current.pendingApprovalCount).toBe(1);
+
+    // 模拟 approval-resolved（allow）事件落地后 store 更新为终态
+    useLayoutStore.setState((st) => {
+      const m = st.sessions.find((s) => s.id === sid)?.messages[0];
+      const tc = m?.toolCalls?.find((t) => t.id === 'tc-1');
+      if (tc) {
+        tc.status = 'success';
+        tc.output = 'done';
+      }
+    });
+    rerender();
+
+    expect(result.current.pendingApprovalCount).toBe(0);
+    expect(result.current.approvalDockVisible).toBe(false);
+    expect(result.current.approvalUiPlan.mode).toBe('none');
+    expect(result.current.pendingApprovalMsgId).toBe('');
+  });
+});

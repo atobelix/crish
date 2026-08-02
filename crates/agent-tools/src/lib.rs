@@ -7,7 +7,9 @@
 //! - `context`：ToolContext 会话级执行上下文（session_id / abort_token / ask /
 //!   workspace_root，R3 T9 引入，T10 权限引擎消费）
 //! - `registry`：ToolRegistry 注册表（注册/查找/列出，保序）
-//! - `middleware`：ToolMiddleware 前置/后置钩子抽象与示例后置实现
+//! - `middleware`：ToolMiddleware 前置/后置钩子抽象与示例后置实现。
+//!   生产消费方：session-loop ToolExecutor（审批通过后、执行前接链，
+//!   优先级语义见 docs/multi-agent-repair/06-tool-middleware-hook-接线决策.md）
 //! - `output`：工具输出结构化——序列化（text 优先）与预算截断（B5.3）
 //! - `idempotency`：工具幂等守卫——已执行结果去重（B5.3）
 //! - `executor`：最小工具执行器——单工具执行 + 输出策略 + 幂等检查（B5.3，供 B3.5 消费）

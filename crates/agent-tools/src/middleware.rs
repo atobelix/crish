@@ -1,9 +1,14 @@
 //! 工具中间件（对齐 TS 端 tools/tool-middleware.ts 精简 Hook 体系）
 //!
 //! TS 红线禁令 7 后仅保留三个钩子：beforeExecute / onResult / onError。
-//! 本模块先定接口（ToolMiddleware trait，三个钩子均有默认空实现）；
-//! 后置钩子示例实现 [RecordingMiddleware] 仅测试使用（T06.3 Q18：
-//! 生产零引用，整体标注 #[cfg(test)]）。
+//! 本模块定义接口（ToolMiddleware trait，三个钩子均有默认空实现）；
+//! 后置钩子示例实现 [RecordingMiddleware] 仅测试使用（T06.3 Q18 曾标注
+//! 生产零引用；后接线为真实扩展点——session-loop ToolExecutor 消费本
+//! trait，RecordingMiddleware 仍保持 #[cfg(test)]）。
+//!
+//! 生产消费方：crates/session-loop/src/tool_exec.rs（审批通过后、执行前
+//! 运行 before_execute 链，执行后运行 on_result / on_error 链；优先级
+//! 语义与决策记录见 docs/multi-agent-repair/06-tool-middleware-hook-接线决策.md）。
 
 use crate::definition::{Tool, ToolError};
 use async_trait::async_trait;

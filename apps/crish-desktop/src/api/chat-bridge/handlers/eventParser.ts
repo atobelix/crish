@@ -41,6 +41,7 @@ import type {
   ToolConcurrency,
 } from '../../../../../../packages/shared-types/src/generated/engine';
 import { blockText } from './eventUtils';
+import { logInternalError } from '../../userFacingErrors';
 
 export type LegacyEventType =
   | 'subagent-started'
@@ -198,6 +199,51 @@ function normalizeRunTerminal(raw: Record<string, unknown>, sourceType: string):
  */
 type Normalizer = (raw: Record<string, unknown>, type: string) => EngineEvent | null;
 
+/**
+ * tool-batch-start 的宽容 calls 抽取：从原始 payload 保留批内调用，不硬编码空数组。
+ * 逐项宽容（id/toolCallId 别名、category/concurrency 默认值，语义对齐 tool-start 归一器）；
+ * 原始 payload 无 calls 数组时返回 null（调用方记可观测日志后回退空数组）。
+ */
+function normalizeBatchCalls(rawCalls: unknown): ToolBatchCall[] | null {
+  if (!Array.isArray(rawCalls)) return null;
+  return rawCalls.map((c) => {
+    const r = isRecord(c) ? c : {};
+    return {
+      id: str(r.id ?? r.toolCallId),
+      toolName: str(r.toolName ?? r.name),
+      summary: str(r.summary),
+      input: (r.input ?? r.parameters ?? {}) as ToolBatchCall['input'],
+      category: isToolCategory(r.category) ? r.category : 'terminal',
+      concurrency: isToolConcurrency(r.concurrency) ? r.concurrency : 'sequential',
+    };
+  });
+}
+
+/**
+ * tool-batch-end 的宽容 calls 抽取：从原始 payload 保留批内结果，不硬编码空数组。
+ * 逐项宽容（toolCallId/id 别名、output 字符串归一、isError 真值判定，语义对齐 tool-end 归一器）；
+ * 原始 payload 无 calls 数组时返回 null（调用方记可观测日志后回退空数组）。
+ */
+function normalizeBatchResults(rawCalls: unknown): ToolBatchResult[] | null {
+  if (!Array.isArray(rawCalls)) return null;
+  return rawCalls.map((c) => {
+    const r = isRecord(c) ? c : {};
+    const output =
+      typeof r.output === 'string'
+        ? { text: r.output }
+        : isRecord(r.output)
+          ? (r.output as unknown as ToolBatchResult['output'])
+          : {};
+    return {
+      id: str(r.toolCallId ?? r.id ?? r.tool_call_id),
+      toolName: str(r.toolName ?? r.name),
+      output,
+      isError: r.isError === true || (r.error != null && r.error !== false),
+      durationMs: num(r.durationMs) ?? 0,
+    };
+  });
+}
+
 const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
   'agent-start': (raw) => ({
     type: 'agent-start',
@@ -302,21 +348,39 @@ const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
       },
     };
   },
-  'tool-batch-start': (raw) => ({
-    type: 'tool-batch-start',
-    sessionId: str(raw.sessionId),
-    batchId: str(raw.batchId),
-    timestamp: str(raw.timestamp),
-    summary: str(raw.summary),
-    calls: [],
-  }),
-  'tool-batch-end': (raw) => ({
-    type: 'tool-batch-end',
-    sessionId: str(raw.sessionId),
-    batchId: str(raw.batchId),
-    timestamp: str(raw.timestamp),
-    calls: [],
-  }),
+  'tool-batch-start': (raw) => {
+    const calls = normalizeBatchCalls(raw.calls);
+    if (!calls) {
+      logInternalError(
+        'engine-protocol',
+        'tool-batch-start 宽容路径缺 calls 数组，批内调用为空'
+      );
+    }
+    return {
+      type: 'tool-batch-start',
+      sessionId: str(raw.sessionId),
+      batchId: str(raw.batchId),
+      timestamp: str(raw.timestamp),
+      summary: str(raw.summary),
+      calls: calls ?? [],
+    };
+  },
+  'tool-batch-end': (raw) => {
+    const calls = normalizeBatchResults(raw.calls);
+    if (!calls) {
+      logInternalError(
+        'engine-protocol',
+        'tool-batch-end 宽容路径缺 calls 数组，批内结果为空'
+      );
+    }
+    return {
+      type: 'tool-batch-end',
+      sessionId: str(raw.sessionId),
+      batchId: str(raw.batchId),
+      timestamp: str(raw.timestamp),
+      calls: calls ?? [],
+    };
+  },
   'tool-input-repaired': (raw) => ({
     type: 'tool-input-repaired',
     sessionId: str(raw.sessionId),

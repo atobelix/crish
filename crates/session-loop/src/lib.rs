@@ -33,6 +33,7 @@
 
 pub mod approval;
 pub mod control;
+pub mod hooks;
 pub mod input;
 pub mod provider;
 pub mod r#loop;
@@ -50,6 +51,10 @@ pub use approval::ApprovalChannel;
 pub use control::{
     level_for_kind, ControlBus, ControlDrainAction, ControlIntent, ControlIntentInput,
     ControlKind, ControlLevel,
+};
+pub use hooks::{
+    HookAction, HookDispatchOutcome, HookError, HookEvent, HookEventKind, HookFailStrategy,
+    HookHandler, HookRegistry,
 };
 pub use input::{next_batch_seq, AgentInputQueue, InputEnqueueMode, RingBuffer, INPUT_QUEUE_CAPACITY};
 pub use provider::{
