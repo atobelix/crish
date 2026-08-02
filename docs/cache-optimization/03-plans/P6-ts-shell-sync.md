@@ -22,14 +22,14 @@
 
 ### 1.2 范围边界
 
-| 维度 | 本方案覆盖 | 明确排除（交给对应计划） |
-|---|---|---|
-| 规范化规则 | **定义规则清单 + TS 侧实现契约 + 交叉验证测试** | Rust 主路径落实现场（P1）；`registry.rs` 排序、`streaming.rs` 快照锁定（P1） |
-| 缓存键 | 键推导规则文档化、TS 侧 `derivePromptCacheKey`、降级路径键源切换 | Rust 请求体注入 prompt_cache_key（P3）；vendor 能力表（P3） |
-| usage | 前端解析契约（`parseUsageFromMetadata` 等纯函数）与展示默认态 | Rust `parse_usage` 字段补齐（P2）；会话级缓存统计事件（P5，`CacheDomainEvent`）【A1 审计修正：原稿"（P2）"归属错误】 |
-| 展示 | 数据契约、组件骨架占位、testid 契约、默认态 | 真实展示逻辑与视觉设计（P5） |
-| 测试 | cache fixture、命中率断言、usage/cache-key 单测、基准 | 其余既有测试改造 |
-| 迁移 | 默认值语义、shared-types 版本化步骤 | 持久化模型加列（P5 关联的 sessionRustDb 改造） |
+| 维度       | 本方案覆盖                                                       | 明确排除（交给对应计划）                                                                                             |
+| ---------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| 规范化规则 | **定义规则清单 + TS 侧实现契约 + 交叉验证测试**                  | Rust 主路径落实现场（P1）；`registry.rs` 排序、`streaming.rs` 快照锁定（P1）                                         |
+| 缓存键     | 键推导规则文档化、TS 侧 `derivePromptCacheKey`、降级路径键源切换 | Rust 请求体注入 prompt_cache_key（P3）；vendor 能力表（P3）                                                          |
+| usage      | 前端解析契约（`parseUsageFromMetadata` 等纯函数）与展示默认态    | Rust `parse_usage` 字段补齐（P2）；会话级缓存统计事件（P5，`CacheDomainEvent`）【A1 审计修正：原稿"（P2）"归属错误】 |
+| 展示       | 数据契约、组件骨架占位、testid 契约、默认态                      | 真实展示逻辑与视觉设计（P5）                                                                                         |
+| 测试       | cache fixture、命中率断言、usage/cache-key 单测、基准            | 其余既有测试改造                                                                                                     |
+| 迁移       | 默认值语义、shared-types 版本化步骤                              | 持久化模型加列（P5 关联的 sessionRustDb 改造）                                                                       |
 
 ### 1.3 设计原则（对齐 comparison.md 3.1 的选型结论）
 
@@ -43,13 +43,13 @@
 
 ### 2.1 降级路径现状（directFetchBridge.ts）
 
-| 能力 | 位置 | 现状行为 | 与主路径（P1 目标）的偏差 |
-|---|---|---|---|
-| `canonicalizeJsonSchema` | directFetchBridge.ts:37-61 | 只做**一层**：properties 键升序 + required 升序；其余字段（type 数组、布尔 schema、const、$defs 等）原样保留；**不递归**嵌套 properties 的子 schema | 递归缺失 → 深层 schema 键序不稳定；未处理 opencode sanitize 类形态（布尔 schema/类型数组/const→enum，opencode-cache-analysis.md:185） |
-| `formatStableTools` | directFetchBridge.ts:64-76 | 按 `name.localeCompare(b.name)` 升序排序，输出固定 `{type:'function', function:{name,description,parameters}}` 形状 | `localeCompare` 依赖宿主 ICU，与 Rust `String::cmp`（UTF-8 码点序）**不保证一致**——跨侧字节一致性有风险 |
-| `buildStableCacheKey` | directFetchBridge.ts:79-87 | FNV-1a 对 `{systemPrompt, tools}` JSON 序列化结果哈希 → `crish-prefix-<hex>` | **前缀内容哈希**而非会话 ID；P2/P3 规则是 **sessionId 钳制 64 字符**（对齐 pi-cache-analysis.md:141-143 的码点钳制；opencode 全家 `promptCacheKey = sessionID`，opencode-cache-analysis.md:110-121；kimi sessionId→cacheKey，kimi-code-cache-analysis.md:95-107）。内容哈希的缺陷：tools 表一旦增删工具，键即变化，无法享受"同一会话前缀演进仍可命中"的服务端缓存域 |
-| 键注入 | directFetchBridge.ts:175-176、207 | `prompt_cache_key: cacheAffinityKey` 恒注入（对 DeepSeek 是静默忽略字段） | 主路径由 vendor 能力表控制是否注入（P3）；降级路径可保持"恒注入"（语义无害），但键源必须改为会话 ID |
-| usage 捕获 | directFetchBridge.ts:269-282 | `hit = prompt_cache_hit_tokens ?? prompt_tokens_details.cached_tokens ?? 0`；`miss = prompt_cache_miss_tokens ?? max(0, prompt - hit)`；命中时 `onThought("[KV Cache: N hit / N miss]")` | 缺 Kimi 顶层 `cached_tokens` 一级；命中率计算（hit/inputTotal）没有显式函数；提示走 onThought 属于临时通道，非结构化数据（对齐 kimi-code-cache-analysis.md:262-264 的 debug 行语义，但 P6 不迁移这条提示） |
+| 能力                     | 位置                              | 现状行为                                                                                                                                                                                 | 与主路径（P1 目标）的偏差                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------ | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `canonicalizeJsonSchema` | directFetchBridge.ts:37-61        | 只做**一层**：properties 键升序 + required 升序；其余字段（type 数组、布尔 schema、const、$defs 等）原样保留；**不递归**嵌套 properties 的子 schema                                      | 递归缺失 → 深层 schema 键序不稳定；未处理 opencode sanitize 类形态（布尔 schema/类型数组/const→enum，opencode-cache-analysis.md:185）                                                                                                                                                                                                                               |
+| `formatStableTools`      | directFetchBridge.ts:64-76        | 按 `name.localeCompare(b.name)` 升序排序，输出固定 `{type:'function', function:{name,description,parameters}}` 形状                                                                      | `localeCompare` 依赖宿主 ICU，与 Rust `String::cmp`（UTF-8 码点序）**不保证一致**——跨侧字节一致性有风险                                                                                                                                                                                                                                                             |
+| `buildStableCacheKey`    | directFetchBridge.ts:79-87        | FNV-1a 对 `{systemPrompt, tools}` JSON 序列化结果哈希 → `crish-prefix-<hex>`                                                                                                             | **前缀内容哈希**而非会话 ID；P2/P3 规则是 **sessionId 钳制 64 字符**（对齐 pi-cache-analysis.md:141-143 的码点钳制；opencode 全家 `promptCacheKey = sessionID`，opencode-cache-analysis.md:110-121；kimi sessionId→cacheKey，kimi-code-cache-analysis.md:95-107）。内容哈希的缺陷：tools 表一旦增删工具，键即变化，无法享受"同一会话前缀演进仍可命中"的服务端缓存域 |
+| 键注入                   | directFetchBridge.ts:175-176、207 | `prompt_cache_key: cacheAffinityKey` 恒注入（对 DeepSeek 是静默忽略字段）                                                                                                                | 主路径由 vendor 能力表控制是否注入（P3）；降级路径可保持"恒注入"（语义无害），但键源必须改为会话 ID                                                                                                                                                                                                                                                                 |
+| usage 捕获               | directFetchBridge.ts:269-282      | `hit = prompt_cache_hit_tokens ?? prompt_tokens_details.cached_tokens ?? 0`；`miss = prompt_cache_miss_tokens ?? max(0, prompt - hit)`；命中时 `onThought("[KV Cache: N hit / N miss]")` | 缺 Kimi 顶层 `cached_tokens` 一级；命中率计算（hit/inputTotal）没有显式函数；提示走 onThought 属于临时通道，非结构化数据（对齐 kimi-code-cache-analysis.md:262-264 的 debug 行语义，但 P6 不迁移这条提示）                                                                                                                                                          |
 
 ### 2.2 降级路径的使用状态
 
@@ -100,17 +100,17 @@
 
 对工具 inputSchema 执行**递归**规范化，规则如下（按优先级）：
 
-| # | 规则 | 处理 |
-|---|---|---|
-| R2.1 | 非对象/空 | 归一为 `{type:'object', properties:{}}` |
-| R2.2 | 布尔 schema | `true/false` → `{type:'string'}`（对齐 opencode sanitizeOpenAISchema，opencode-cache-analysis.md:185） |
-| R2.3 | `type` 字段 | 数组形态 → 过滤无效项；过滤后单元素 → 取单值；过滤后空 → 丢弃该键；非数组 → 保留 |
-| R2.4 | `properties` | 键按码点升序；**递归应用本表到每个子 schema** |
-| R2.5 | `required` | 数组去重 + 码点升序；非数组 → 丢弃该键 |
-| R2.6 | `const` | 转为 `{enum: [const值]}` 并删除 const 键（对齐 opencode 语义） |
-| R2.7 | `$defs` / `definitions` | 存在则按码点排序其键，并对每个定义递归应用本表 |
-| R2.8 | 其余键（description / additionalProperties / items / enum / oneOf / anyOf / allOf / default 等） | **原值保留**；`items` / `oneOf` / `anyOf` / `allOf` 为数组/对象时递归应用本表 |
-| R2.9 | 输出键序 | 固定序列化顺序：`type` → `properties` → `required` → `items` → `enum` → `$defs` → 其余键按码点升序 | 
+| #    | 规则                                                                                             | 处理                                                                                                   |
+| ---- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| R2.1 | 非对象/空                                                                                        | 归一为 `{type:'object', properties:{}}`                                                                |
+| R2.2 | 布尔 schema                                                                                      | `true/false` → `{type:'string'}`（对齐 opencode sanitizeOpenAISchema，opencode-cache-analysis.md:185） |
+| R2.3 | `type` 字段                                                                                      | 数组形态 → 过滤无效项；过滤后单元素 → 取单值；过滤后空 → 丢弃该键；非数组 → 保留                       |
+| R2.4 | `properties`                                                                                     | 键按码点升序；**递归应用本表到每个子 schema**                                                          |
+| R2.5 | `required`                                                                                       | 数组去重 + 码点升序；非数组 → 丢弃该键                                                                 |
+| R2.6 | `const`                                                                                          | 转为 `{enum: [const值]}` 并删除 const 键（对齐 opencode 语义）                                         |
+| R2.7 | `$defs` / `definitions`                                                                          | 存在则按码点排序其键，并对每个定义递归应用本表                                                         |
+| R2.8 | 其余键（description / additionalProperties / items / enum / oneOf / anyOf / allOf / default 等） | **原值保留**；`items` / `oneOf` / `anyOf` / `allOf` 为数组/对象时递归应用本表                          |
+| R2.9 | 输出键序                                                                                         | 固定序列化顺序：`type` → `properties` → `required` → `items` → `enum` → `$defs` → 其余键按码点升序     |
 
 - 目的：两个语义等价的 schema（键序不同、required 顺序不同、深层结构不同）经规范化后 JSON 字节完全一致——这是工具循环内跨 turn 前缀命中的前提（对齐百炼"工具定义序列化完全一致"要求，comparison.md:68）。
 - 与现行 `canonicalizeJsonSchema`（directFetchBridge.ts:37-61）的差异：补齐 R2.2/R2.3/R2.6/R2.7/R2.8 递归与 R2.9 固定键序。
@@ -131,9 +131,9 @@
 - 规则（TS 侧解析链，与 Rust P2 补齐后的字段面一致）：
   - `cacheRead = prompt_cache_hit_tokens ?? prompt_tokens_details.cached_tokens ?? usage.cached_tokens(顶层/Kimi) ?? 0`（三级回退，对齐 directFetchBridge.ts:272-275 现有链 + 补 Kimi 顶层，kimi-code-cache-analysis.md:186）
   - `cacheWrite = cache_write_tokens ?? prompt_tokens_details.cache_write_tokens ?? usage.cache_creation_tokens ?? 0`（别名回退，对齐 comparison.md:190 第②项）
-  - `cacheMiss = prompt_cache_miss_tokens ?? max(0, promptTokens - cacheRead - cacheWrite)`
-  - `hitRate = promptTokens > 0 ? cacheRead / promptTokens : 0`（对齐 kimi-code-cache-analysis.md:262-264 的 `cacheRead / inputTotal`）
-- 恒等式：`cacheMiss + cacheRead + cacheWrite = promptTokens`（对齐 opencode 恒等式 opencode-cache-analysis.md:193-205）；解析后若可校验且偏差 > 0，以 promptTokens 为准钳制（`cacheRead = min(cacheRead, promptTokens)`），**不抛错**。
+  - `cacheMiss = prompt_cache_miss_tokens ?? (accounting === 'excluded' ? promptTokens : max(0, promptTokens - cacheRead - cacheWrite))`（【A2 审计修正】原公式只对 Included 系成立；Excluded 系（Anthropic/Gemini）的 prompt 不含缓存，miss 即 prompt 本身。`accounting` 为解析函数的可选入参（默认 `'included'`，主路径 chat-completions；Anthropic/Gemini 路径由 Rust 侧 P2 `CacheAccounting`/P5 派生值下发或由调用方显式传入——见下方对齐注））
+  - `hitRate = inputTotal > 0 ? cacheRead / inputTotal : 0`，其中 `inputTotal = cacheMiss + cacheRead + cacheWrite`（对齐 kimi-code-cache-analysis.md:262-264 的 `cacheRead / inputTotal` 与 P5 §1.3 口径）【A2 审计修正：原公式分母用 `promptTokens`，只对 Included 系等于 inputTotal；Excluded 系下分母应为 `prompt + read + write`，按恒等式 `miss + read + write` 计算对两侧同时成立】
+- 恒等式：Included 系 `cacheMiss + cacheRead + cacheWrite = promptTokens`；Excluded 系 `cacheMiss + cacheRead + cacheWrite = promptTokens + cacheRead + cacheWrite`（即 input_total = prompt + read + write，对齐 P2 §3.3 D 统一不变量）。解析后若可校验且偏差 > 0，以 promptTokens 为准钳制（`cacheRead = min(cacheRead, promptTokens)`），**不抛错**。【A2 审计修正：原恒等式仅对 Included 成立；渲染口径统一以 `inputTotal = miss + read + write` 为分母，与 P5 `CacheBreakdownMath::derive` / `hitRatio = cacheRead / inputTotal` 同源，禁止前端另算一套（P5 §6.2 风险"命中率口径被前端各算各的"即此条）】
 
 #### R5 消息结构稳定性（前端侧哨兵规则）
 
@@ -144,22 +144,24 @@
 
 **实施形态**：新增 `packages/shared-utils/src/cache/`（纯函数，无 DOM 依赖），作为 TS 侧规范实现真源；`directFetchBridge.ts` 改为委托/重导出，导出名保持兼容（`stressFuzzing.test.ts` Probe E 直接 import 这三个函数，见 :5）。
 
-| 新模块导出 | 职责 | 替代的旧函数 |
-|---|---|---|
-| `canonicalizeJsonSchema(schema)` | 完整实现 R2（递归） | directFetchBridge.ts:37-61（保留导出名，实现委托） |
-| `formatStableTools(tools)` | 实现 R1 + 固定输出形状 | directFetchBridge.ts:64-76 |
-| `derivePromptCacheKey(sessionId)` | 实现 R3（clamp64） | `buildStableCacheKey`（directFetchBridge.ts:79-87）改造：签名改为 `(sessionId)`，旧内容哈希行为废弃；旧名保留为 `@deprecated` 包装（返回 `derivePromptCacheKey(sessionId)`） |
-| `parseUsageFromProviderChunk(usage: unknown): ProviderUsage | null` | 实现 R4 三级回退链（供降级路径 usage 捕获与未来任何 HTTP 直连场景复用） | directFetchBridge.ts:269-282 内联逻辑 |
-| `computeCacheMetrics(usage: ProviderUsage | null): CacheMetrics | null` | 派生 cacheMiss/hitRate/displayTokens（3.3 节类型），命中率口径统一 | — |
-| `resolveCacheAffinity(params): { promptCacheKey?: string; sessionId: string }` | 组装 run-task 缓存域参数（3.4 节契约） | — |
+| 新模块导出                                                                     | 职责                                   | 替代的旧函数                                                                                                                                                                 |
+| ------------------------------------------------------------------------------ | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `canonicalizeJsonSchema(schema)`                                               | 完整实现 R2（递归）                    | directFetchBridge.ts:37-61（保留导出名，实现委托）                                                                                                                           |
+| `formatStableTools(tools)`                                                     | 实现 R1 + 固定输出形状                 | directFetchBridge.ts:64-76                                                                                                                                                   |
+| `derivePromptCacheKey(sessionId)`                                              | 实现 R3（clamp64）                     | `buildStableCacheKey`（directFetchBridge.ts:79-87）改造：签名改为 `(sessionId)`，旧内容哈希行为废弃；旧名保留为 `@deprecated` 包装（返回 `derivePromptCacheKey(sessionId)`） |
+| `parseUsageFromProviderChunk(usage: unknown): ProviderUsage                    | null`                                  | 实现 R4 三级回退链（供降级路径 usage 捕获与未来任何 HTTP 直连场景复用）                                                                                                      | directFetchBridge.ts:269-282 内联逻辑                              |
+| `computeCacheMetrics(usage: ProviderUsage                                      | null): CacheMetrics                    | null`                                                                                                                                                                        | 派生 cacheMiss/hitRate/displayTokens（3.3 节类型），命中率口径统一 | —   |
+| `resolveCacheAffinity(params): { promptCacheKey?: string; sessionId: string }` | 组装 run-task 缓存域参数（3.4 节契约） | —                                                                                                                                                                            |
 
 **directFetchBridge.ts 的改动边界**：
+
 1. `buildStableCacheKey(systemPrompt, tools)` → `derivePromptCacheKey(sessionId)`：`streamViaDirectFetch` 内 `cacheAffinityKey`（:176）改为由 sessionId 派生；`sessionId` 参数（:144、:148 现为 `void sessionId`）恢复使用。
 2. 三个规范化函数改为委托 shared-utils 实现（保持导出名，Probe E 不破）。
 3. usage 捕获（:269-282）改用 `parseUsageFromProviderChunk`；`onThought("[KV Cache: ...]")` 提示**保留原样**（降级路径终端体验，不属产品展示面）。
 4. 文件头注释补充：规范规则引用 `docs/cache-optimization/03-plans/P6-ts-shell-sync.md` §3.1。
 
 **对齐的边界声明**（防止过度解读）：
+
 - 对齐的是**规则与键源**，不是"两侧行为完全一致"：主路径是否注入 `prompt_cache_key` 由 P3 的 vendor 能力表控制（DeepSeek 不注入）；降级路径恒注入但键值同源。两侧差异有文档依据，不算不一致。
 - 本方案不要求 Rust 侧同步改代码；P1 落地时以 §3.1 为准，两侧行为由交叉验证测试（3.5.2）钉死。
 
@@ -186,7 +188,7 @@ export interface CacheMetrics {
   cacheWriteTokens: number;
   /** max(0, promptTokens - cacheReadTokens - cacheWriteTokens) */
   cacheMissTokens: number;
-  /** promptTokens > 0 ? cacheRead / promptTokens : 0；渲染层在 hitRate 无意义时隐藏 */
+  /** inputTotal > 0 ? cacheRead / inputTotal : 0（inputTotal = miss + read + write，R4 口径；【A2 审计修正】原分母 promptTokens 仅对 Included 系成立）；渲染层在 hitRate 无意义时隐藏 */
   hitRate: number;
   /** 会话累计（多轮累加后的展示用快照，P5 的 `cache-stats-updated` 事件就绪后填充；P6 阶段恒为 null）【A1 审计修正：原稿"P2 会话级统计事件"归属错误，事件归 P5 §3.1.3】 */
   session?: {
@@ -228,11 +230,11 @@ metricsToCostInputs(metrics: CacheMetrics | null):
 
 #### 3.3.3 组件骨架位置（占位，P5 填充逻辑）
 
-| 骨架 | 建议位置 | 职责（P6 占位） | P5 最终职责 |
-|---|---|---|---|
-| `CacheMetricsBadge` | `apps/crish-desktop/src/components/chat-message-row/CacheMetricsBadge.tsx`（新文件，与 MessageThinkingSection / MessageActionsBar 同级） | 空壳组件 + testid；从 store 消息读 `MessageCacheState.metrics`，`null` 时渲染 null | 消息级徽标：`缓存命中 62% · 读 1.2k · 写 0.3k · 省 $0.012`；无数据时隐藏 |
-| `SessionCacheStatsPanel` | `apps/crish-desktop/src/components/workspace/RuntimePanel.tsx` 内新增小节（RuntimeSection 同级），或独立 `components/workspace/SessionCacheStats.tsx` | 空壳 + testid；读会话级统计（P6 阶段无数据源 → 渲染空态文案） | 会话统计面板：hitRate 指标、cache read/write 累计、冷缓存/压缩后命中率跳水提示（对齐 kimi vis 面板，kimi-code-cache-analysis.md:19） |
-| 接入点 | `ChatAssistantMessageRow.tsx`（消息元数据区）与 `RuntimePanel.tsx`（统计区） | 只挂占位，不接数据 | P5 接线 |
+| 骨架                     | 建议位置                                                                                                                                              | 职责（P6 占位）                                                                    | P5 最终职责                                                                                                                          |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `CacheMetricsBadge`      | `apps/crish-desktop/src/components/chat-message-row/CacheMetricsBadge.tsx`（新文件，与 MessageThinkingSection / MessageActionsBar 同级）              | 空壳组件 + testid；从 store 消息读 `MessageCacheState.metrics`，`null` 时渲染 null | 消息级徽标：`缓存命中 62% · 读 1.2k · 写 0.3k · 省 $0.012`；无数据时隐藏                                                             |
+| `SessionCacheStatsPanel` | `apps/crish-desktop/src/components/workspace/RuntimePanel.tsx` 内新增小节（RuntimeSection 同级），或独立 `components/workspace/SessionCacheStats.tsx` | 空壳 + testid；读会话级统计（P6 阶段无数据源 → 渲染空态文案）                      | 会话统计面板：hitRate 指标、cache read/write 累计、冷缓存/压缩后命中率跳水提示（对齐 kimi vis 面板，kimi-code-cache-analysis.md:19） |
+| 接入点                   | `ChatAssistantMessageRow.tsx`（消息元数据区）与 `RuntimePanel.tsx`（统计区）                                                                          | 只挂占位，不接数据                                                                 | P5 接线                                                                                                                              |
 
 - testid 契约（登记，沿用 tests/e2e/README.md §5 模式）：`cache-metrics-badge` / `session-cache-stats`；CSS 稳定类 `.cache-metrics`。
 
@@ -276,36 +278,36 @@ export interface RunTaskCacheAffinityParams {
 
 ```ts
 /** 带缓存 usage 的完整旅程：message-end 携带 metadata.usage.cacheReadTokens 等 */
-export function cacheUsageRunEvents(): MockEvent[]
+export function cacheUsageRunEvents(): MockEvent[];
 
 /** 无 cache 字段的老形态消息（兼容性场景：断言不渲染、不显示 0%） */
-export function legacyNoUsageRunEvents(): MockEvent[]
+export function legacyNoUsageRunEvents(): MockEvent[];
 
 /** run-task 断言用配置：记录 cacheAffinity 参数（engineState().lastRun.args 可查） */
 ```
 
 - fixture 中 `message-end.message.metadata.usage` 形状：
   `{ promptTokens: 12000, completionTokens: 400, cacheReadTokens: 9000, cacheWriteTokens: 500, reasoningTokens: 60 }`
-- 断言口径（对齐 Kimi `cache read N (xx%)`，kimi-code-cache-analysis.md:263）：`hitRate = cacheReadTokens / promptTokens`。
+- 断言口径（对齐 Kimi `cache read N (xx%)`，kimi-code-cache-analysis.md:263）：`hitRate = cacheReadTokens / inputTotal`（inputTotal = miss + read + write；本 fixture 为 Included 形态，inputTotal = promptTokens，断言值不变）【A2 审计修正：原"cacheReadTokens / promptTokens"仅在 Included 系成立，已按 R4 统一口径表述】
 
 **新 spec：`tests/e2e/cache-metrics.spec.ts`**（登记进 tests/e2e/README.md 必覆盖表）：
 
-| 用例 | 断言 |
-|---|---|
-| ① 带 cache fixture 全流程 | 消息终态后 `cache-metrics-badge` 可见；文本含命中率（`75%`：9000/12000）；含 read/write 数值 |
-| ② 无 cache 字段（legacy fixture） | badge **不出现**；页面无 `0%` 字样 |
-| ③ run-task 缓存域参数 | `engineState().lastRun.args`：sessionId 存在；`promptCacheKey`/`cacheAffinity` 未传时缺省（或按 3.4 裁决后的形状） |
-| ④ 命中率边界（hitRate=0 或 read=0） | 渲染层显示"未命中"态而非 0% 误导（P6 只钉 badge 行为；文案细节归 P5） |
+| 用例                                | 断言                                                                                                               |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| ① 带 cache fixture 全流程           | 消息终态后 `cache-metrics-badge` 可见；文本含命中率（`75%`：9000/12000）；含 read/write 数值                       |
+| ② 无 cache 字段（legacy fixture）   | badge **不出现**；页面无 `0%` 字样                                                                                 |
+| ③ run-task 缓存域参数               | `engineState().lastRun.args`：sessionId 存在；`promptCacheKey`/`cacheAffinity` 未传时缺省（或按 3.4 裁决后的形状） |
+| ④ 命中率边界（hitRate=0 或 read=0） | 渲染层显示"未命中"态而非 0% 误导（P6 只钉 badge 行为；文案细节归 P5）                                              |
 
 #### 3.5.2 vitest 单测（apps/crish-desktop 与 packages/shared-utils）
 
-| 文件 | 覆盖 |
-|---|---|
-| `packages/shared-utils/src/cache/cache-rules.test.ts`（新） | R1：码点排序确定性（含非 ASCII name）；R2：递归规范化（嵌套 properties / 布尔 schema / type 数组 / const→enum / $defs）、乱序输入 → 字节等价；R3：`derivePromptCacheKey` 64 码点钳制、代理对不拆、空输入 undefined、<64 原样 |
-| `packages/shared-utils/src/cache/usage-parse.test.ts`（新） | R4 三级回退链：DeepSeek 顶层 hit/miss、`prompt_tokens_details.cached_tokens`、Kimi 顶层 `cached_tokens`、cache_write 别名、异常输入（null/字符串/负数）→ null 或钳制；恒等式校验 |
-| `apps/crish-desktop/src/__tests__/stressFuzzing.test.ts`（Probe E 升级，:121-165） | 断言目标从 `buildStableCacheKey` 内容哈希改为 `derivePromptCacheKey` 会话 ID 语义；补"同一 sessionId 不同 tools → 键相同"（缓存域不随工具集漂移） |
-| **跨侧交叉验证测试**（新，`packages/shared-utils/src/cache/rust-parity.test.ts`） | 以 §3.1 规则清单为枚举源，构造"规则级样例表"（输入 schema/工具集/键 → 期望输出），双侧实现都跑同一张表：TS 侧直接断言；Rust 侧（P1 落地后）由 cargo 侧同名样例表测试消费。**本测试先把 TS 侧与规则表钉死，Rust 侧表格在 P1 实现时复制** |
-| `apps/crish-desktop/src/api/chat-bridge/handlers/eventParser.test.ts`（扩展） | `message-end` 带 metadata.usage 时解析成功、usage 落在 message.metadata 结构化读取路径 |
+| 文件                                                                               | 覆盖                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/shared-utils/src/cache/cache-rules.test.ts`（新）                        | R1：码点排序确定性（含非 ASCII name）；R2：递归规范化（嵌套 properties / 布尔 schema / type 数组 / const→enum / $defs）、乱序输入 → 字节等价；R3：`derivePromptCacheKey` 64 码点钳制、代理对不拆、空输入 undefined、<64 原样            |
+| `packages/shared-utils/src/cache/usage-parse.test.ts`（新）                        | R4 三级回退链：DeepSeek 顶层 hit/miss、`prompt_tokens_details.cached_tokens`、Kimi 顶层 `cached_tokens`、cache_write 别名、异常输入（null/字符串/负数）→ null 或钳制；恒等式校验                                                        |
+| `apps/crish-desktop/src/__tests__/stressFuzzing.test.ts`（Probe E 升级，:121-165） | 断言目标从 `buildStableCacheKey` 内容哈希改为 `derivePromptCacheKey` 会话 ID 语义；补"同一 sessionId 不同 tools → 键相同"（缓存域不随工具集漂移）                                                                                       |
+| **跨侧交叉验证测试**（新，`packages/shared-utils/src/cache/rust-parity.test.ts`）  | 以 §3.1 规则清单为枚举源，构造"规则级样例表"（输入 schema/工具集/键 → 期望输出），双侧实现都跑同一张表：TS 侧直接断言；Rust 侧（P1 落地后）由 cargo 侧同名样例表测试消费。**本测试先把 TS 侧与规则表钉死，Rust 侧表格在 P1 实现时复制** |
+| `apps/crish-desktop/src/api/chat-bridge/handlers/eventParser.test.ts`（扩展）      | `message-end` 带 metadata.usage 时解析成功、usage 落在 message.metadata 结构化读取路径                                                                                                                                                  |
 
 - 注：`parseUsageFromMetadata` 放 shared-utils 而非 crish-desktop，是因为 mock-engine/纯函数断言与前端 store 都要用，且避免测试间路径纠缠。
 
@@ -313,10 +315,10 @@ export function legacyNoUsageRunEvents(): MockEvent[]
 
 - 新增 2 项（对齐现有 `{name, setup, run, iterations, warmupIterations, target}` 模式，:36-52）：
 
-| name | 内容 | target |
-|---|---|---|
+| name                                 | 内容                                                                                   | target                                         |
+| ------------------------------------ | -------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | `cache.schema.canonicalize.100tools` | 构造 100 个含嵌套 schema 的工具定义，跑 `canonicalizeJsonSchema` + `formatStableTools` | `{ maxMs: 5, minOps: 200 }`（预热 5、迭代 50） |
-| `cache.key.derive.1000` | 1000 次 `derivePromptCacheKey`（含 100+ 码点长 sessionId 的钳制路径） | `{ maxMs: 2, minOps: 500 }` |
+| `cache.key.derive.1000`              | 1000 次 `derivePromptCacheKey`（含 100+ 码点长 sessionId 的钳制路径）                  | `{ maxMs: 2, minOps: 500 }`                    |
 
 - 依据：规范化/键计算在每次 run-task 组装时执行一次，规模与上述量级相当；基准用于防止未来实现（P1 的 TS 侧镜像或重构）引入回归。若 P6 阶段评估 jsdom 环境对基准无影响，可直接入 BENCHMARKS（bench-definitions.ts 均为纯 Node 侧，符合）。
 
@@ -347,16 +349,16 @@ export function legacyNoUsageRunEvents(): MockEvent[]
 
 按依赖序排布，每步标注文件域。**实施时禁止改本方案已声明"P1/P2/P3/P5 负责"的范围。**
 
-| 步 | 内容 | 文件域 | 产出/验证 |
-|---|---|---|---|
-| S1 | 新建 `packages/shared-utils/src/cache/`：`cache-rules.ts`（R1/R2/R3 实现）、`usage-parse.ts`（R4）、`index.ts` 导出；同步 `packages/shared-utils/src/index.ts` 导出 | packages/shared-utils | 纯函数实现 §3.1 全部规则 |
-| S2 | 新增 `packages/shared-types/src/cache-metrics.ts`（3.3.1 类型）+ index.ts 导出 | packages/shared-types | typecheck 通过 |
-| S3 | directFetchBridge 改造：三函数委托 shared-utils、`buildStableCacheKey`→`derivePromptCacheKey`（sessionId）、usage 捕获改用 `parseUsageFromProviderChunk`、文件头补规则引用 | apps/crish-desktop/src/api/directFetchBridge.ts | Probe E 更新后通过；无其他调用方破坏（先 grep 调用方） |
-| S4 | 单测：`cache-rules.test.ts`、`usage-parse.test.ts`、`rust-parity.test.ts`（规则样例表）；Probe E 升级；eventParser.test.ts 扩展 | packages/shared-utils/src/cache、apps/crish-desktop/src/__tests__、apps/crish-desktop/src/api/chat-bridge/handlers | vitest 绿 |
-| S5 | mock-engine.ts 扩展：`cacheUsageRunEvents` / `legacyNoUsageRunEvents`；新 spec `tests/e2e/cache-metrics.spec.ts`；README 必覆盖表登记 | tests/e2e | playwright 绿 |
-| S6 | 基准 2 项入 BENCHMARKS | packages/shared-utils/src/bench/bench-definitions.ts | `npm run bench` 绿 |
-| S7 | 组件骨架占位：`CacheMetricsBadge.tsx`、`SessionCacheStatsPanel.tsx`（空壳 + testid + 挂载点引用） | apps/crish-desktop/src/components/chat-message-row、apps/crish-desktop/src/components/workspace | typecheck + e2e 用例①② 绿（badge 渲染由 fixture 驱动，P6 即验证骨架数据读取路径） |
-| S8 | 文档收口：tests/e2e/README.md §5 testid 登记、`docs/cache-optimization/03-plans/P6-ts-shell-sync.md` 规则表同步为最终版 | tests/e2e/README.md | 文档一致 |
+| 步  | 内容                                                                                                                                                                       | 文件域                                                                                                             | 产出/验证                                                                         |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| S1  | 新建 `packages/shared-utils/src/cache/`：`cache-rules.ts`（R1/R2/R3 实现）、`usage-parse.ts`（R4）、`index.ts` 导出；同步 `packages/shared-utils/src/index.ts` 导出        | packages/shared-utils                                                                                              | 纯函数实现 §3.1 全部规则                                                          |
+| S2  | 新增 `packages/shared-types/src/cache-metrics.ts`（3.3.1 类型）+ index.ts 导出                                                                                             | packages/shared-types                                                                                              | typecheck 通过                                                                    |
+| S3  | directFetchBridge 改造：三函数委托 shared-utils、`buildStableCacheKey`→`derivePromptCacheKey`（sessionId）、usage 捕获改用 `parseUsageFromProviderChunk`、文件头补规则引用 | apps/crish-desktop/src/api/directFetchBridge.ts                                                                    | Probe E 更新后通过；无其他调用方破坏（先 grep 调用方）                            |
+| S4  | 单测：`cache-rules.test.ts`、`usage-parse.test.ts`、`rust-parity.test.ts`（规则样例表）；Probe E 升级；eventParser.test.ts 扩展                                            | packages/shared-utils/src/cache、apps/crish-desktop/src/**tests**、apps/crish-desktop/src/api/chat-bridge/handlers | vitest 绿                                                                         |
+| S5  | mock-engine.ts 扩展：`cacheUsageRunEvents` / `legacyNoUsageRunEvents`；新 spec `tests/e2e/cache-metrics.spec.ts`；README 必覆盖表登记                                      | tests/e2e                                                                                                          | playwright 绿                                                                     |
+| S6  | 基准 2 项入 BENCHMARKS                                                                                                                                                     | packages/shared-utils/src/bench/bench-definitions.ts                                                               | `npm run bench` 绿                                                                |
+| S7  | 组件骨架占位：`CacheMetricsBadge.tsx`、`SessionCacheStatsPanel.tsx`（空壳 + testid + 挂载点引用）                                                                          | apps/crish-desktop/src/components/chat-message-row、apps/crish-desktop/src/components/workspace                    | typecheck + e2e 用例①② 绿（badge 渲染由 fixture 驱动，P6 即验证骨架数据读取路径） |
+| S8  | 文档收口：tests/e2e/README.md §5 testid 登记、`docs/cache-optimization/03-plans/P6-ts-shell-sync.md` 规则表同步为最终版                                                    | tests/e2e/README.md                                                                                                | 文档一致                                                                          |
 
 > 说明：S7 的"骨架数据读取路径"指 badge 从 store 消息读取 `MessageCacheState.metrics` 并渲染的**最小实现**（null 隐藏 + 非 null 显示数值文本）；视觉设计与交互细节留给 P5，P6 只保证契约可被 e2e 断言。
 
@@ -385,6 +387,7 @@ npx vitest run --coverage apps/crish-desktop/src/api/chat-bridge  # 抽查
 ```
 
 **验收清单（对应目标 A–E）**：
+
 - [ ] A：§3.1 规则清单已文档化；TS 侧实现（shared-utils/cache）逐条对应；rust-parity 样例表已建立（TS 侧先钉死，P1 落地后 Rust 侧同表通过）
 - [ ] A：`derivePromptCacheKey` 与 P2/P3 规则一致（sessionId 钳制 64 码点）；降级路径键源已切换，`crish-prefix-` 内容哈希废弃
 - [ ] B：类型契约（3.3.1）进入 shared-types；两个骨架组件存在且 testid 生效；e2e 用例①②③④ 通过
@@ -398,25 +401,25 @@ npx vitest run --coverage apps/crish-desktop/src/api/chat-bridge  # 抽查
 
 ### 6.1 依赖（上游契约）
 
-| 计划 | 依赖内容 | 本方案的对接点 |
-|---|---|---|
-| P1 | Rust 侧 tools 排序 + schema 规范化实现（registry.rs / streaming.rs） | 本方案 §3.1 规则清单是 P1 的实现输入；`rust-parity.test.ts` 样例表是双向验收机制 |
-| P2 | usage 字段补齐（DeepSeek/Kimi 顶层） | R4 三级回退链与之同口径（会话级缓存统计事件归 P5，见下行）【A1 审计修正：原稿"+ 会话级缓存统计事件"归属错误】 |
-| P3 | Rust 侧 `prompt_cache_key` 注入（vendor 能力表） | R3 键推导规则与 P3 一致；3.4 的 `promptCacheKey` 透传字段由 P3 裁决是否采纳 |
-| P5 | 前端展示逻辑（徽标/面板真实实现）+ 会话级缓存统计事件（`CacheDomainEvent` 三变体，P5 §3.1.3） | 3.3 的类型 + 骨架 + 默认态是其输入；`CacheMetrics.session` 字段等待 P5 事件；P5 不得改 `CacheMetrics` 的 null 语义【A1 审计修正：事件归属自 P2 行移入本行】 |
+| 计划 | 依赖内容                                                                                      | 本方案的对接点                                                                                                                                              |
+| ---- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1   | Rust 侧 tools 排序 + schema 规范化实现（registry.rs / streaming.rs）                          | 本方案 §3.1 规则清单是 P1 的实现输入；`rust-parity.test.ts` 样例表是双向验收机制                                                                            |
+| P2   | usage 字段补齐（DeepSeek/Kimi 顶层）                                                          | R4 三级回退链与之同口径（会话级缓存统计事件归 P5，见下行）【A1 审计修正：原稿"+ 会话级缓存统计事件"归属错误】                                               |
+| P3   | Rust 侧 `prompt_cache_key` 注入（vendor 能力表）                                              | R3 键推导规则与 P3 一致；3.4 的 `promptCacheKey` 透传字段由 P3 裁决是否采纳                                                                                 |
+| P5   | 前端展示逻辑（徽标/面板真实实现）+ 会话级缓存统计事件（`CacheDomainEvent` 三变体，P5 §3.1.3） | 3.3 的类型 + 骨架 + 默认态是其输入；`CacheMetrics.session` 字段等待 P5 事件；P5 不得改 `CacheMetrics` 的 null 语义【A1 审计修正：事件归属自 P2 行移入本行】 |
 
 **反向依赖（下游对本方案的阻塞面）**：P2/P5 若在 P6 落地前改动 `metadata.usage` 形状，须与本方案 3.3.1 的 `UsageMetadataShape` 对齐；否则 `parseUsageFromMetadata` 兜底 null 不炸但展示会长期隐藏（可观测，不静默错误）。
 
 ### 6.2 风险
 
-| 风险 | 等级 | 缓解 |
-|---|---|---|
-| `localeCompare` 与 Rust 码点序不一致导致跨侧字节漂移（2.1 表） | 高 | R1 强制码点比较；rust-parity 样例表含非 ASCII 工具名样例 |
-| 规则文档与两侧实现漂移（文档沦为摆设） | 中 | §3.1 声明"规则即真源"；样例表测试把规则转成可执行断言；P1 评审时逐条对照（可引用本方案行号） |
-| shared-utils 新增包内模块影响既有 coverage 门槛（crish-desktop 的 vitest.config.ts 门槛是包级配置，shared-utils 无门槛） | 低 | 新代码集中在 shared-utils；crish-desktop 侧只加骨架组件，均会被单测/e2e 覆盖 |
-| mock-engine 快照 manifest 与命令面漂移（若 3.4 参数扩展影响 commandManifest） | 低 | 本方案无命令面变更；若 P3 采纳 `promptCacheKey` 参数，需同步 `BUILTIN_COMMAND_MANIFEST`（mock-engine.ts:30 引 commandManifest.ts） |
-| e2e 新增 spec 增加 CI 中层时长 | 低 | 4 用例共享 1 个 `openApp` 启动（对齐 full-journey 模式），delayMs 用最小值 30 |
-| 降级路径被误用于产品特性（directFetchBridge 复活风险） | 低 | 文件头 + 本方案 3.2"对齐边界声明"双保险；不新增其产品职责 |
+| 风险                                                                                                                     | 等级 | 缓解                                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------ | ---- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `localeCompare` 与 Rust 码点序不一致导致跨侧字节漂移（2.1 表）                                                           | 高   | R1 强制码点比较；rust-parity 样例表含非 ASCII 工具名样例                                                                           |
+| 规则文档与两侧实现漂移（文档沦为摆设）                                                                                   | 中   | §3.1 声明"规则即真源"；样例表测试把规则转成可执行断言；P1 评审时逐条对照（可引用本方案行号）                                       |
+| shared-utils 新增包内模块影响既有 coverage 门槛（crish-desktop 的 vitest.config.ts 门槛是包级配置，shared-utils 无门槛） | 低   | 新代码集中在 shared-utils；crish-desktop 侧只加骨架组件，均会被单测/e2e 覆盖                                                       |
+| mock-engine 快照 manifest 与命令面漂移（若 3.4 参数扩展影响 commandManifest）                                            | 低   | 本方案无命令面变更；若 P3 采纳 `promptCacheKey` 参数，需同步 `BUILTIN_COMMAND_MANIFEST`（mock-engine.ts:30 引 commandManifest.ts） |
+| e2e 新增 spec 增加 CI 中层时长                                                                                           | 低   | 4 用例共享 1 个 `openApp` 启动（对齐 full-journey 模式），delayMs 用最小值 30                                                      |
+| 降级路径被误用于产品特性（directFetchBridge 复活风险）                                                                   | 低   | 文件头 + 本方案 3.2"对齐边界声明"双保险；不新增其产品职责                                                                          |
 
 ### 6.3 文件域总表
 

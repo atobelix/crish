@@ -4,6 +4,7 @@
 > 文档性质：方案设计（只读分析 + 文档产出，未修改任何源代码）
 > 所属计划：`docs/cache-optimization/` 计划族第 2 项（P1 前缀稳定 → **P2 通用格式层** → P3 厂商/模型开关与数据 → P4 历史回流/上下文管理 → P5 测量层/遥测 → P6 TS 侧协同）【A1 审计修正】原稿"→ P4 测量层"归属错误：测量层是 P5（P5-cache-telemetry），P4 是历史回流/上下文管理；本文中所有"归 P4"的测量/命中率/归因/展示表述均已改为 P5。
 > 输入材料：
+>
 > - `docs/cache-optimization/02-comparison/comparison.md`（第 2.4/2.5/2.6/2.7 节与第 5 节第二层 4/5/6 项）
 > - `docs/cache-optimization/01-reference-research/` 的 opencode / pi / litellm / kimi-code 四份缓存分析
 > - `docs/cache-optimization/00-vendor-model-pricing-catalog.md`（厂商缓存机制与计量字段数据基准）
@@ -32,7 +33,7 @@
 3. `request/build.rs`：`ChatCompletionsRequestOptions` 增加缓存参数选项；请求体注入 `prompt_cache_key` / `prompt_cache_retention` / `prompt_cache_options` / 消息与工具级 `cache_control`。
 4. `parse/chat.rs` usage 解析补全（顶层 hit/miss、Kimi 顶层 cached_tokens、write 别名）+ `parse/gemini.rs` 补 `total_cached_tokens` 别名 + `events.rs` `ProviderUsage` 增补 `cache_miss_tokens` 字段与归一化派生函数。
 5. `session-loop` 契约面：`ProviderRequest` 增 `session_id` 透传；`ConsumeBuilder` 增 usage 口径提示（为归一化派生提供协议族信息）。
-6. `apps/agent-workbench/src-tauri/src/engine.rs` 适配层接线：能力推断 + 参数组装（唯一真实调用面）。
+6. `apps/agent-workbench/src-tauri/src/engine.rs` 适配层接线：仅调用 `build_cache_policy` 完成能力判定 + 参数组装（唯一真实调用面；能力判定收敛于 `build_cache_policy` 内部，见 §3.1.2【调度者裁决】）。
 
 **不做**（明确排除，分属其他计划）：
 
@@ -54,20 +55,20 @@
 
 ### 2.1 请求构造层（`crates/agent-provider/src/request/`）
 
-| 位置 | 现状 | 与本计划的关系 |
-|---|---|---|
-| `vendor.rs:14-41` | `ReasoningVendor` 枚举（Openai/Anthropic/Deepseek/Gemini/Qwen/Glm/Kimi/Auto） | 厂商识别基准，但**无 MiniMax/Moonshot 变体**；缓存能力表不扩它，另建 |
-| `vendor.rs:277-310` | `infer_reasoning_vendor(base_url, model)`：baseUrl 关键字（anthropic/deepseek/gemini/openai）→ model 前缀（claude/gpt/o1/o3/o4/qwen/glm/kimi） | 缓存能力推断 `infer_cache_capability` 的模板（同构） |
-| `vendor.rs:219-257` | `MODEL_SERIES_CAPABILITIES` 最长前缀命中表 | 缓存能力表 `CACHE_CAPABILITY_TABLE` 的模板 |
-| `vendor.rs:437-452` | `reasoning_effort_headers`：vendor=anthropic 才发 `anthropic-beta` 头 | 会话亲和头/断点头的注入模式可复用（P2 默认不做头） |
-| `messages.rs:62-72` | `ChatMessage { role, content: Option<ChatContent>, tool_call_id, reasoning_content, tool_calls }` | **无 cache_control 字段**（比较文档第 2.4 节判定的缺口） |
-| `messages.rs:38-42` | `ChatContentPart` 仅 Text{text} / ImageUrl{url,detail} | 需扩展 Text 变体承载 `cache_control` |
-| `messages.rs:318-395` | `to_chat_messages` 纯映射（0 深拷贝借用，PE-09 T09.3） | 保持纯函数，断点注入做独立后处理 pass（见 3.2） |
-| `tools.rs:12-19` | `ToolDefinition { name, description, input_schema }`；`to_openai_tool` 序列化 | 工具级 cache_control 在序列化处附加，不污染定义 |
-| `build.rs:44-63` | `ChatCompletionsRequestOptions`（model/stream/temperature/max_tokens/reasoning_effort/vendor/thinking_intensity…） | 缓存参数选项挂在此结构（对齐既有的 reasoning 注入模式） |
-| `build.rs:102-177` | `build_chat_completions_request_body`：compactObject 等价（None 省略）、messages 内联映射、tools+tool_choice、`stream_options.include_usage` | 缓存字段注入点：body 顶层（prompt_cache_key/retention/options）+ messages/tools 级（cache_control） |
-| `config.rs:44-53` | `Endpoint` 仅 Auto/Responses/ChatCompletions | 无 Anthropic Messages 端点（原生端点接线非本计划） |
-| `config.rs:108-110` | `ProviderConfig.extra: BTreeMap<String, Value>` | 厂商私有参数透传通道（P3 开关数据的落点） |
+| 位置                  | 现状                                                                                                                                           | 与本计划的关系                                                                                      |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `vendor.rs:14-41`     | `ReasoningVendor` 枚举（Openai/Anthropic/Deepseek/Gemini/Qwen/Glm/Kimi/Auto）                                                                  | 厂商识别基准，但**无 MiniMax/Moonshot 变体**；缓存能力表不扩它，另建                                |
+| `vendor.rs:277-310`   | `infer_reasoning_vendor(base_url, model)`：baseUrl 关键字（anthropic/deepseek/gemini/openai）→ model 前缀（claude/gpt/o1/o3/o4/qwen/glm/kimi） | 缓存能力推断 `infer_cache_capability` 的模板（同构）                                                |
+| `vendor.rs:219-257`   | `MODEL_SERIES_CAPABILITIES` 最长前缀命中表                                                                                                     | 缓存能力表 `CACHE_CAPABILITY_TABLE` 的模板                                                          |
+| `vendor.rs:437-452`   | `reasoning_effort_headers`：vendor=anthropic 才发 `anthropic-beta` 头                                                                          | 会话亲和头/断点头的注入模式可复用（P2 默认不做头）                                                  |
+| `messages.rs:62-72`   | `ChatMessage { role, content: Option<ChatContent>, tool_call_id, reasoning_content, tool_calls }`                                              | **无 cache_control 字段**（比较文档第 2.4 节判定的缺口）                                            |
+| `messages.rs:38-42`   | `ChatContentPart` 仅 Text{text} / ImageUrl{url,detail}                                                                                         | 需扩展 Text 变体承载 `cache_control`                                                                |
+| `messages.rs:318-395` | `to_chat_messages` 纯映射（0 深拷贝借用，PE-09 T09.3）                                                                                         | 保持纯函数，断点注入做独立后处理 pass（见 3.2）                                                     |
+| `tools.rs:12-19`      | `ToolDefinition { name, description, input_schema }`；`to_openai_tool` 序列化                                                                  | 工具级 cache_control 在序列化处附加，不污染定义                                                     |
+| `build.rs:44-63`      | `ChatCompletionsRequestOptions`（model/stream/temperature/max_tokens/reasoning_effort/vendor/thinking_intensity…）                             | 缓存参数选项挂在此结构（对齐既有的 reasoning 注入模式）                                             |
+| `build.rs:102-177`    | `build_chat_completions_request_body`：compactObject 等价（None 省略）、messages 内联映射、tools+tool_choice、`stream_options.include_usage`   | 缓存字段注入点：body 顶层（prompt_cache_key/retention/options）+ messages/tools 级（cache_control） |
+| `config.rs:44-53`     | `Endpoint` 仅 Auto/Responses/ChatCompletions                                                                                                   | 无 Anthropic Messages 端点（原生端点接线非本计划）                                                  |
+| `config.rs:108-110`   | `ProviderConfig.extra: BTreeMap<String, Value>`                                                                                                | 厂商私有参数透传通道（P3 开关数据的落点）                                                           |
 
 ### 2.2 调用面（`apps/agent-workbench/src-tauri/src/engine.rs`）
 
@@ -79,15 +80,15 @@
 
 ### 2.3 解析层（`crates/agent-provider/src/parse/`）
 
-| 位置 | 现状 | 缺口 |
-|---|---|---|
-| `chat.rs:251-267` `parse_usage` | `prompt_tokens??input_tokens`；`prompt_tokens_details.cached_tokens ?? input_tokens_details.cached_tokens` → cacheRead；`reasoning_tokens` 有；**`cache_write_tokens: None` 写死** | ①DeepSeek 顶层 `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` 未解析（比较文档表注，directFetchBridge.ts:271-278 有实现但主路径无）；②Kimi 顶层 `usage.cached_tokens` 未解析（00-catalog 第 5.2 节）；③write 别名 `cache_write_tokens` / `cache_creation_tokens` / `prompt_tokens_details.cache_creation_input_tokens` 未覆盖（litellm-cache-analysis.md:377-382） |
-| `chat.rs` 同款 | 被 `responses.rs:33` 复用 | 同上三缺口对 Responses 一并生效 |
-| `anthropic.rs:308-339` `parse_anthropic_usage` | `cache_read_input_tokens` → cacheRead、`cache_creation_input_tokens` → cacheWrite，**完整** | 无缺口（1h 细分 `usage.cache_creation.ephemeral_1h_input_tokens` 未拆，属 P4 成本核算，本计划记录不拆） |
-| `anthropic.rs:345-372` `merge_anthropic_usage` | message_start + message_delta 分片补全：next 显式字段优先、total 重算 | 分片合并语义待统一（见 3.4 的 max 语义裁决） |
-| `gemini.rs:309-345` `parse_gemini_usage` | `cachedContentTokenCount` → cacheRead、`thoughtsTokenCount` → reasoning | 缺 `total_cached_tokens` 别名（00-catalog 第 8.2 节：隐式缓存计量字段为 `total_cached_tokens`） |
-| `gemini.rs:351-380` `merge_gemini_usage` | 逐帧合并：next 优先、total 三级回退 | 与 anthropic 同需对齐 max 语义 |
-| `events.rs:31-52` `ProviderUsage` | 六字段 camelCase：prompt/completion/total/cache_read/cache_write/reasoning | **无 cache_miss_tokens**；无归一化派生函数；无协议族口径标记 |
+| 位置                                           | 现状                                                                                                                                                                               | 缺口                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chat.rs:251-267` `parse_usage`                | `prompt_tokens??input_tokens`；`prompt_tokens_details.cached_tokens ?? input_tokens_details.cached_tokens` → cacheRead；`reasoning_tokens` 有；**`cache_write_tokens: None` 写死** | ①DeepSeek 顶层 `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` 未解析（比较文档表注，directFetchBridge.ts:271-278 有实现但主路径无）；②Kimi 顶层 `usage.cached_tokens` 未解析（00-catalog 第 5.2 节）；③write 别名 `cache_write_tokens` / `cache_creation_tokens` / `prompt_tokens_details.cache_creation_input_tokens` 未覆盖（litellm-cache-analysis.md:377-382） |
+| `chat.rs` 同款                                 | 被 `responses.rs:33` 复用                                                                                                                                                          | 同上三缺口对 Responses 一并生效                                                                                                                                                                                                                                                                                                                                            |
+| `anthropic.rs:308-339` `parse_anthropic_usage` | `cache_read_input_tokens` → cacheRead、`cache_creation_input_tokens` → cacheWrite，**完整**                                                                                        | 无缺口（1h 细分 `usage.cache_creation.ephemeral_1h_input_tokens` 未拆，属 P5 成本核算，本计划记录不拆）【A2 审计修正：原"P4 成本核算"为陈旧编号，成本核算=P5】                                                                                                                                                                                                             |
+| `anthropic.rs:345-372` `merge_anthropic_usage` | message_start + message_delta 分片补全：next 显式字段优先、total 重算                                                                                                              | 分片合并语义待统一（见 3.4 的 max 语义裁决）                                                                                                                                                                                                                                                                                                                               |
+| `gemini.rs:309-345` `parse_gemini_usage`       | `cachedContentTokenCount` → cacheRead、`thoughtsTokenCount` → reasoning                                                                                                            | 缺 `total_cached_tokens` 别名（00-catalog 第 8.2 节：隐式缓存计量字段为 `total_cached_tokens`）                                                                                                                                                                                                                                                                            |
+| `gemini.rs:351-380` `merge_gemini_usage`       | 逐帧合并：next 优先、total 三级回退                                                                                                                                                | 与 anthropic 同需对齐 max 语义                                                                                                                                                                                                                                                                                                                                             |
+| `events.rs:31-52` `ProviderUsage`              | 六字段 camelCase：prompt/completion/total/cache_read/cache_write/reasoning                                                                                                         | **无 cache_miss_tokens**；无归一化派生函数；无协议族口径标记                                                                                                                                                                                                                                                                                                               |
 
 ### 2.4 证据链结论
 
@@ -124,7 +125,11 @@ pub enum CacheTtl {
     /// `{"type":"ephemeral","ttl":"1h"}`（写价 2x，受模型开关 supportsLongCacheRetention 约束）
     OneHour,
 }
+```
 
+> 【A2 审计修正】**命名冲突裁决（P2 × P3）**：P3 在 `crates/agent-provider/src/models/ttl.rs` 定义同名 `CacheTtl`（`Short/Hour/Day` 三档路由语义）。两者同处 `agent-provider` crate，同名导入必然冲突。**裁决（承接 A1 在 P3 §3.2.1 的"取一"标注）：本类型（wire 桶，5m/1h 双档）更名 `TtlBucket`，`CacheTtl` 名称留给 P3 的模型级 TTL 路由档**（P3 §3.5，serde 值域 `"5m"/"1h"/"24h"` 已在 P3 侧按 A2 落地）。实施时以 `TtlBucket` 落地，`apply_cache_controls`/`CachePolicy` 中的 `CacheTtl` 引用一并改名。**`CacheKey::from_session_id`（本文件）与 P3 `derive_prompt_cache_key`（models/cache_key.rs）同一规则：按 A1 裁决（P3 §3.3.1 标注），实现保留在本文件的 `CacheKey::from_session_id`（请求构造面真源），P3 的 `derive_prompt_cache_key` 作为 models/ 层等价委托（或删除重复实现），禁止两套独立实现漂移。**
+
+```rust
 /// 块级/消息级缓存控制标记（Anthropic 系 wire 值）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CacheControl {
@@ -221,6 +226,9 @@ pub struct BreakpointPlan {
 ```rust
 /// 内置能力表：model 名前缀（不区分大小写）→ CacheCapability，最长前缀命中
 /// 覆盖顺序参考 CACHE_CAPABILITY_TABLE 注释；未命中按 base_url 关键字二次推断
+/// 【调度者裁决】本函数与 CACHE_CAPABILITY_TABLE 降级为"无 catalog 可用时的
+/// 内置保守兜底默认"，仅由 build_cache_policy 内部兜底调用（engine.rs 不再直接调用），
+/// 数据值以 P3 §3.2.2 矩阵为准转录
 pub fn infer_cache_capability(base_url: Option<&str>, model: Option<&str>) -> CacheCapability;
 
 /// 会话亲和头判定（x-grok-conv-id / x-session-id / session_id 等，pi-cache-analysis.md:141-143、
@@ -229,6 +237,9 @@ pub fn affinity_header(capability: &CacheCapability, session_id: &str) -> Option
 ```
 
 > 【A3 审计修正】（2026-08-03，A3-executability.md P0-2）：**本模块与 P3 的运行时合并链裁决**——P3（models/behavior.rs）交付 `cache_behavior_for(catalog, vendor, model)`（静态矩阵 + catalog 模型级覆盖），并声明"矩阵表是 P2 的唯一接口面"。为避免双真源，裁决如下：**运行时唯一判定入口 = P3 的 `cache_behavior_for`**（engine.rs `request_options` 调它）；本模块的 `infer_cache_capability` + `CACHE_CAPABILITY_TABLE` 降级为"无 catalog 注入时的内置保守默认"（`cache_behavior_for` 内部兜底调用），**不再在 engine.rs 直接暴露**；`build_cache_policy` 的输入改为消费 P3 的 `CacheBehavior`（或 P3 将 `CacheBehavior` 序列化为本函数 `overrides` 接受的 JSON——二选一，实施任务书定稿前冻结）。本表数据值以 P3 §3.2.2 矩阵为准转录。P3 文档已同步修正。
+
+> 【调度者裁决】（2026-08-03，A2 审计遗留项 P1-6 收敛；取代上方 A3 注记中"cache_behavior_for 为 engine.rs 唯一运行时判定入口"的表述，以及下方 §3.2 / 步骤 4 中 engine.rs 直接调用 `infer_cache_capability` 的写法）：
+> 缓存能力判定的运行时入口收敛为：engine.rs 只调用 P2 的 build_cache_policy（唯一运行时判定/消费入口）；P3 models/ 层的 cache_behavior_for + CacheBehavior 矩阵（含 catalog 模型级覆盖）是唯一数据真源；P2 的 infer_cache_capability 与 CACHE_CAPABILITY_TABLE 降级为'无 catalog 可用时的内置保守兜底默认'，其数据值以 P3 矩阵为准转录；extra.cache 覆盖 JSON 的键名与 P3 的 CacheBehavior 结构字段对齐（或由 CacheBehavior 序列化得到）。
 
 #### 3.1.3 断点预算分配与放置（A 子主题核心）
 
@@ -406,20 +417,25 @@ pub struct ProviderRequest<'a> {
 ```rust
 // request_options（engine.rs:207-215）扩展：
 fn request_options(&self, request: &ProviderRequest<'_>) -> ChatCompletionsRequestOptions {
-    let capability = infer_cache_capability(self.config.base_url.as_deref(),
-                                            Some(&self.config.model));
-    let cache = build_cache_policy(&capability,
+    // 【调度者裁决】engine.rs 只调用 build_cache_policy（唯一运行时判定/消费入口）；
+    // 能力判定收敛在其内部：数据真源 = P3 cache_behavior_for（矩阵 + catalog 模型级覆盖），
+    // 无 catalog 可用时回退内置保守兜底默认（infer_cache_capability，数据值以 P3 矩阵为准转录）
+    let cache = build_cache_policy(Some(&self.catalog),           // P3 ModelCatalog（无 → None）
+                                   self.config.base_url.as_deref(),
+                                   Some(&self.config.model),
                                    request.session_id.as_deref(),
                                    self.config.extra.get("cache"));  // P3 开关数据入口
     ChatCompletionsRequestOptions { cache, /* ……既有字段…… */ }
 }
 ```
 
-`build_cache_policy`（cache.rs 内的纯函数，也是"门控矩阵 → 参数"的唯一翻译点）：
+`build_cache_policy`（cache.rs 内的纯函数，也是"能力判定 + 门控矩阵 → 参数"的唯一运行时判定/消费入口；engine.rs 只调用本函数）：
 
 ```rust
-pub fn build_cache_policy(capability: &CacheCapability, session_id: Option<&str>,
-                          overrides: Option<&Value>) -> Option<CachePolicy> {
+pub fn build_cache_policy(catalog: Option<&ModelCatalog>, base_url: Option<&str>, model: Option<&str>,
+                          session_id: Option<&str>, overrides: Option<&Value>) -> Option<CachePolicy> {
+    // 0. 能力判定：catalog 可用 → 数据真源 cache_behavior_for(catalog, vendor, model) 得 CacheBehavior；
+    //    无 catalog 可用 → infer_cache_capability(base_url, model) 内置保守兜底（数据值以 P3 矩阵为准转录）
     // 1. extra.cache.enabled == false / retention == "none" → None（摘要请求同款）
     // 2. mechanism == Auto（DeepSeek/Kimi/GLM 隐式）→ 除 retention=Short 外零参数
     //    （DeepSeek 不发送 prompt_cache_key：00-catalog 第 3.2 节"静默忽略"，P2 仍省略）
@@ -436,35 +452,35 @@ pub fn build_cache_policy(capability: &CacheCapability, session_id: Option<&str>
 
 #### A. Anthropic 系 `cache_control` 断点
 
-| 项 | 设计 |
-|---|---|
-| 载体 | part 级（`ChatContentPart::Text.cache_control`，chat-completions 兼容端点与原生端点均用）+ 消息级（`ChatMessage.cache_control`，原生端点）/ 工具级（序列化时附加）/ system（文本改写为 parts） |
-| 放置条件 | `supports_cache_control` 为真、`retention != None`、对应锚点存在（有 system / 有 tools / 有 messages） |
-| 预算 | 4 断点上限（常量 `ANTHROPIC_BREAKPOINT_CAP`），分配层级 tools→system→messages，超限丢 messages 尾部、`dropped` 计数不报错（opencode-cache-analysis.md:92-99 同款"记账 + 降级日志"） |
-| TTL 桶 | 默认 5m（`{"type":"ephemeral"}`）；长档 1h（`ttl:"1h"`，写价 2x）仅 `retention=Long` 且 `supports_long_retention` 时启用；**同请求不混用 5m/1h 桶**（00-catalog 第 1.3 节"1h 条目必须位于 5m 条目之前"，统一桶规避排序问题） |
-| 模型开关 | `supports_cache_control_on_tools`：工具数组末尾工具的 cache_control 仅在此开关为真时附加（Fireworks 反例；pi-cache-analysis.md:314） |
-| DeepSeek 分支 | vendor=deepseek / base_url 含 deepseek → `mechanism=Auto` → **整个 cache 参数组不出现**（DeepSeek 自动缓存 + 忽略 cache_control，比较文档 2.4 与 00-catalog 3.2；用测试钉死省略行为） |
-| MiniMax 分支 | model 前缀 `minimax-m2` → 主动缓存可开（`mechanism=Explicit`）；`minimax-m3` → 仅被动（`mechanism=Auto`，00-catalog 第 7.2 节"M3 不支持主动缓存"）；MiniMax 断点语义"超出只取从后往前最近 4 个"与 Anthropic 相同，预算逻辑复用 |
-| 未知/未实测厂商 | GLM z.ai Anthropic 端点（00-catalog 第 4.2 节"是否处理 cache_control 未确认"）→ 默认 `mechanism=Auto`，由 P3 数据/实测后翻转 |
+| 项              | 设计                                                                                                                                                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 载体            | part 级（`ChatContentPart::Text.cache_control`，chat-completions 兼容端点与原生端点均用）+ 消息级（`ChatMessage.cache_control`，原生端点）/ 工具级（序列化时附加）/ system（文本改写为 parts）                                 |
+| 放置条件        | `supports_cache_control` 为真、`retention != None`、对应锚点存在（有 system / 有 tools / 有 messages）                                                                                                                         |
+| 预算            | 4 断点上限（常量 `ANTHROPIC_BREAKPOINT_CAP`），分配层级 tools→system→messages，超限丢 messages 尾部、`dropped` 计数不报错（opencode-cache-analysis.md:92-99 同款"记账 + 降级日志"）                                            |
+| TTL 桶          | 默认 5m（`{"type":"ephemeral"}`）；长档 1h（`ttl:"1h"`，写价 2x）仅 `retention=Long` 且 `supports_long_retention` 时启用；**同请求不混用 5m/1h 桶**（00-catalog 第 1.3 节"1h 条目必须位于 5m 条目之前"，统一桶规避排序问题）   |
+| 模型开关        | `supports_cache_control_on_tools`：工具数组末尾工具的 cache_control 仅在此开关为真时附加（Fireworks 反例；pi-cache-analysis.md:314）                                                                                           |
+| DeepSeek 分支   | vendor=deepseek / base_url 含 deepseek → `mechanism=Auto` → **整个 cache 参数组不出现**（DeepSeek 自动缓存 + 忽略 cache_control，比较文档 2.4 与 00-catalog 3.2；用测试钉死省略行为）                                          |
+| MiniMax 分支    | model 前缀 `minimax-m2` → 主动缓存可开（`mechanism=Explicit`）；`minimax-m3` → 仅被动（`mechanism=Auto`，00-catalog 第 7.2 节"M3 不支持主动缓存"）；MiniMax 断点语义"超出只取从后往前最近 4 个"与 Anthropic 相同，预算逻辑复用 |
+| 未知/未实测厂商 | GLM z.ai Anthropic 端点（00-catalog 第 4.2 节"是否处理 cache_control 未确认"）→ 默认 `mechanism=Auto`，由 P3 数据/实测后翻转                                                                                                   |
 
 #### B. OpenAI 系 `prompt_cache_key` / retention / GPT-5.6+ options
 
-| 项 | 设计 |
-|---|---|
-| 键来源 | `CacheKey::from_session_id`（码点钳 64）；`session_id` 经 `ProviderRequest.session_id` 透传；会话内所有请求共享同键（同轮工具循环 + 跨轮） |
-| 键门控 | `prompt_cache_key` 为真的厂商发送；DeepSeek 明确不发（00-catalog 3.2）；官方 OpenAI（api.openai.com）非 none 即发（pi-cache-analysis.md:160-171） |
-| retention | Short → `"in_memory"`；Long → `"24h"`（仅 `supports_long_retention`）；None → 不发。GPT-5.6+ 的 TTL 只支持 30m（00-catalog 2.1）——本计划按厂商能力表收敛为"官方 OpenAI 5.6+ 不发 retention"（用 `prompt_cache_key` 即可获得可靠匹配） |
-| GPT-5.6+ mode | 一期：`prompt_cache_options` 只在"明确不缓存"时发 `{"mode":"explicit"}`（pi 语义：none 档必须被协议级尊重）；其余不发（默认 implicit）。**显式断点（`prompt_cache_breakpoint`）一期不做**：见下方裁决 |
-| 显式断点裁决 | **统一策略源**：若二期做 OpenAI 显式断点，直接复用 `allocate_breakpoints` 产出的同一 `BreakpointPlan`，翻译为 `prompt_cache_breakpoint`（Chat Completions：text/image_url 块；Responses：input_text/input_image/input_file 块，00-catalog 2.1）并配套 `mode:"explicit"`。**一期关闭**的理由：①GPT-5.6+ 断点行为（implicit 不回退找最长前缀）与旧模型差异大，前缀漂移风险高；②写价 1.25x + TTL 仅 30m，工具循环场景收益不确定；③P1 前缀稳定未落地前，显式断点无命中对象。留 `PromptCacheMode::Explicit` 与翻译函数签名的挂点（P2 交付代码框架 + 单元测试，不发请求） |
-| Responses | `store: false` 与 `prompt_cache_key` 一并注入（pi openai-responses.ts:287 对齐）；Responses 的 usage 解析复用 chat 的 `parse_usage`（现状即如此，D 节补齐后自动生效） |
+| 项            | 设计                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 键来源        | `CacheKey::from_session_id`（码点钳 64）；`session_id` 经 `ProviderRequest.session_id` 透传；会话内所有请求共享同键（同轮工具循环 + 跨轮）                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| 键门控        | `prompt_cache_key` 为真的厂商发送；DeepSeek 明确不发（00-catalog 3.2）；官方 OpenAI（api.openai.com）非 none 即发（pi-cache-analysis.md:160-171）                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| retention     | Short → `"in_memory"`；Long → `"24h"`（仅 `supports_long_retention`）；None → 不发。GPT-5.6+ 的 TTL 只支持 30m（00-catalog 2.1）——本计划按厂商能力表收敛为"官方 OpenAI 5.6+ 不发 retention"（用 `prompt_cache_key` 即可获得可靠匹配）                                                                                                                                                                                                                                                                                                                               |
+| GPT-5.6+ mode | 一期：`prompt_cache_options` 只在"明确不缓存"时发 `{"mode":"explicit"}`（pi 语义：none 档必须被协议级尊重）；其余不发（默认 implicit）。**显式断点（`prompt_cache_breakpoint`）一期不做**：见下方裁决                                                                                                                                                                                                                                                                                                                                                               |
+| 显式断点裁决  | **统一策略源**：若二期做 OpenAI 显式断点，直接复用 `allocate_breakpoints` 产出的同一 `BreakpointPlan`，翻译为 `prompt_cache_breakpoint`（Chat Completions：text/image_url 块；Responses：input_text/input_image/input_file 块，00-catalog 2.1）并配套 `mode:"explicit"`。**一期关闭**的理由：①GPT-5.6+ 断点行为（implicit 不回退找最长前缀）与旧模型差异大，前缀漂移风险高；②写价 1.25x + TTL 仅 30m，工具循环场景收益不确定；③P1 前缀稳定未落地前，显式断点无命中对象。留 `PromptCacheMode::Explicit` 与翻译函数签名的挂点（P2 交付代码框架 + 单元测试，不发请求） |
+| Responses     | `store: false` 与 `prompt_cache_key` 一并注入（pi openai-responses.ts:287 对齐）；Responses 的 usage 解析复用 chat 的 `parse_usage`（现状即如此，D 节补齐后自动生效）                                                                                                                                                                                                                                                                                                                                                                                               |
 
 #### C. Gemini：隐式缓存适配 + explicit cachedContents 评估
 
-| 项 | 设计 |
-|---|---|
-| 隐式路径 | 无请求侧参数（Gemini 隐式缓存默认启用，00-catalog 8.2）；**前缀稳定由 P1 负责**——P2 只保证 usage 侧 `total_cached_tokens` 别名解析（见 3.4），命中率观测归 P5（【A1 审计修正】原稿"归 P4"归属错误，测量层=P5） |
+| 项                      | 设计                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 隐式路径                | 无请求侧参数（Gemini 隐式缓存默认启用，00-catalog 8.2）；**前缀稳定由 P1 负责**——P2 只保证 usage 侧 `total_cached_tokens` 别名解析（见 3.4），命中率观测归 P5（【A1 审计修正】原稿"归 P4"归属错误，测量层=P5）                                                                                                                                                                                                                                                                                                                                                          |
 | explicit cachedContents | **一期不做**。评估结论：①需管理 cachedContent 生命周期（create/list/update/delete + TTL + 存储费按 token×小时计费，00-catalog 8.2/13-3），桌面单机会话形态下收益不确定；②`cachedContent: <name>` 注入使请求依赖外部状态，任何会话历史变化即失效；③Gemini 隐式最低 4096 tokens 已覆盖长会话场景；④Kimi Code 也明确不实现客户端 cachedContent（kimi-code-cache-analysis.md:299）。**二期可选**：`GeminiCachedContentManager`（crates/agent-provider 内独立模块），请求体 `generateContent` 构建处预留 `cached_content: Option<String>` 注入位（本计划仅记录挂点，不实现） |
-| 挂点记录 | `request/build.rs` 若未来新增 `build_gemini_request_body`，缓存参数面仅 `cached_content` 一个字段；`parse/gemini.rs` 的 `cachedContentTokenCount` 解析已就绪（gemini.rs:316-317），补别名即可闭环 |
+| 挂点记录                | `request/build.rs` 若未来新增 `build_gemini_request_body`，缓存参数面仅 `cached_content` 一个字段；`parse/gemini.rs` 的 `cachedContentTokenCount` 解析已就绪（gemini.rs:316-317），补别名即可闭环                                                                                                                                                                                                                                                                                                                                                                       |
 
 #### D. usage 归一化补全
 
@@ -544,7 +560,7 @@ pub enum CacheAccounting {
     Excluded,
 }
 
-/// 归一化派生（唯一口径入口，P4 测量/成本直接消费）
+/// 归一化派生（唯一口径入口，P5 测量/成本直接消费）【A2 审计修正：原"P4 测量/成本"为陈旧编号，测量层=P5】
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CacheBreakdown {
     pub read: u64,
@@ -595,25 +611,25 @@ pub fn merge_usage_shards(prev: &ProviderUsage, next: &ProviderUsage) -> Provide
 
 ### 3.4 厂商门控矩阵（E 子主题）
 
-**数据表**（`infer_cache_capability` 内置默认值的权威视图；P3 负责以模型目录/配置覆盖）：
+**数据表**（【调度者裁决】P2 内置保守兜底默认表：供 `infer_cache_capability` 在无 catalog 可用时兜底，数据值以 P3 §3.2.2 矩阵为准转录；P3 `cache_behavior_for` + `CacheBehavior` 矩阵是唯一数据真源，P3 负责以模型目录/配置覆盖）：
 
-| 厂商/协议族 | 判定依据（base_url 关键字 / model 前缀） | 机制 | 块级 cache_control | 工具级 cache_control | 断点预算 | TTL 桶 | prompt_cache_key | retention | GPT-5.6+ options | 会话亲和头 |
-|---|---|---|---|---|---|---|---|---|---|---|
-| Anthropic 官方（Messages） | url 含 anthropic / model 以 claude 开头 | Explicit | ✅ | ✅（claude 系全支持） | 4 | 5m/1h | ❌（可用 metadata.user_id，二期） | — | — | ❌ |
-| DeepSeek | url 含 deepseek / model 以 deepseek 开头 | Auto | ❌ **强制省略** | ❌ | 0 | — | ❌（官方不支持，静默忽略也发不得） | ❌ | ❌ | ❌ |
-| MiniMax M2.x（Anthropic 兼容） | model 以 minimax-m2 开头 | Explicit | ✅ | ✅ | 4（超出只取后 4，同 Anthropic） | 5m | ❌ | — | — | ❌ |
-| MiniMax M3 | model 以 minimax-m3 开头 | Auto | ❌（不支持主动缓存） | ❌ | 0 | — | ❌ | — | — | ❌ |
-| OpenAI 官方（Chat/Responses） | url 含 openai / model 以 gpt/o1/o3/o4 开头 | Key | 二期（5.6+ 显式断点） | 二期 | （4 上限，implicit 占 1） | 5.6+ 仅 30m | ✅ sessionId→64 | in_memory / 24h（5.6+ 不发） | 二期；none 档发 explicit | ❌ |
-| Kimi | model 以 kimi 开头 | Auto（缓存键辅助） | ❌（纯自动） | ❌ | 0 | — | ✅ sessionId→64 | — | — | ❌ |
-| GLM z.ai / 百炼 | model 以 glm 开头 | Auto（默认，Anthropic 端点行为未实测） | 待实测（默认关） | 待实测 | （4） | 5m | 待实测（00-catalog §4/§11 未确认百炼 OpenAI 兼容端点的 key 语义，保守按 ❌，与 P3 矩阵一致【A1 审计修正】原稿"✅（百炼 OpenAI 兼容）"无 catalog 依据且与 P3 矩阵冲突） | — | ❌ | ❌ |
-| Gemini | url 含 generativelanguage/gemini / model 以 gemini 开头 | Auto | ❌ | ❌ | 0 | — | ❌（不适用） | — | — | ❌ |
-| xAI Grok | model 以 grok 开头 | Key | ❌ | ❌ | 0 | — | ✅（Responses） | — | — | ✅ x-grok-conv-id（默认关） |
-| 未知/本地（Ollama 等） | 未命中 | None | ❌ | ❌ | 0 | — | ❌ | ❌ | ❌ | ❌ |
+| 厂商/协议族                    | 判定依据（base_url 关键字 / model 前缀）                | 机制                                   | 块级 cache_control    | 工具级 cache_control  | 断点预算                        | TTL 桶      | prompt_cache_key                                                                                                                                                       | retention                    | GPT-5.6+ options         | 会话亲和头                  |
+| ------------------------------ | ------------------------------------------------------- | -------------------------------------- | --------------------- | --------------------- | ------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------ | --------------------------- |
+| Anthropic 官方（Messages）     | url 含 anthropic / model 以 claude 开头                 | Explicit                               | ✅                    | ✅（claude 系全支持） | 4                               | 5m/1h       | ❌（可用 metadata.user_id，二期）                                                                                                                                      | —                            | —                        | ❌                          |
+| DeepSeek                       | url 含 deepseek / model 以 deepseek 开头                | Auto                                   | ❌ **强制省略**       | ❌                    | 0                               | —           | ❌（官方不支持，静默忽略也发不得）                                                                                                                                     | ❌                           | ❌                       | ❌                          |
+| MiniMax M2.x（Anthropic 兼容） | model 以 minimax-m2 开头                                | Explicit                               | ✅                    | ✅                    | 4（超出只取后 4，同 Anthropic） | 5m          | ❌                                                                                                                                                                     | —                            | —                        | ❌                          |
+| MiniMax M3                     | model 以 minimax-m3 开头                                | Auto                                   | ❌（不支持主动缓存）  | ❌                    | 0                               | —           | ❌                                                                                                                                                                     | —                            | —                        | ❌                          |
+| OpenAI 官方（Chat/Responses）  | url 含 openai / model 以 gpt/o1/o3/o4 开头              | Key                                    | 二期（5.6+ 显式断点） | 二期                  | （4 上限，implicit 占 1）       | 5.6+ 仅 30m | ✅ sessionId→64                                                                                                                                                        | in_memory / 24h（5.6+ 不发） | 二期；none 档发 explicit | ❌                          |
+| Kimi                           | model 以 kimi 开头                                      | Auto（缓存键辅助）                     | ❌（纯自动）          | ❌                    | 0                               | —           | ✅ sessionId→64                                                                                                                                                        | —                            | —                        | ❌                          |
+| GLM z.ai / 百炼                | model 以 glm 开头                                       | Auto（默认，Anthropic 端点行为未实测） | 待实测（默认关）      | 待实测                | （4）                           | 5m          | 待实测（00-catalog §4/§11 未确认百炼 OpenAI 兼容端点的 key 语义，保守按 ❌，与 P3 矩阵一致【A1 审计修正】原稿"✅（百炼 OpenAI 兼容）"无 catalog 依据且与 P3 矩阵冲突） | —                            | ❌                       | ❌                          |
+| Gemini                         | url 含 generativelanguage/gemini / model 以 gemini 开头 | Auto                                   | ❌                    | ❌                    | 0                               | —           | ❌（不适用）                                                                                                                                                           | —                            | —                        | ❌                          |
+| xAI Grok                       | model 以 grok 开头                                      | Key                                    | ❌                    | ❌                    | 0                               | —           | ✅（Responses）                                                                                                                                                        | —                            | —                        | ✅ x-grok-conv-id（默认关） |
+| 未知/本地（Ollama 等）         | 未命中                                                  | None                                   | ❌                    | ❌                    | 0                               | —           | ❌                                                                                                                                                                     | ❌                           | ❌                       | ❌                          |
 
 **存放位置建议**：
 
 1. **内置默认表**：`crates/agent-provider/src/request/cache.rs` 的 `CACHE_CAPABILITY_TABLE: &[(&str, CacheCapability)]`（model 前缀）+ `infer_cache_capability`（base_url 关键字优先，与 `infer_reasoning_vendor` 的判定顺序完全同构，vendor.rs:277-310）。
-2. **每请求覆盖**：`build_cache_policy` 的 `overrides: Option<&Value>` 读 `ProviderConfig.extra.cache`（config.rs:108-110 的透传通道，`{ "enabled": bool, "retention": "short"|"long"|"none", "breakpoints": bool, "cacheKey": bool }`）——**P3 的开关数据最终落在这一层**，P2 只定义键名与语义。
+2. **每请求覆盖**：`build_cache_policy` 的 `overrides: Option<&Value>` 读 `ProviderConfig.extra.cache`（config.rs:108-110 的透传通道，`{ "enabled": bool, "retention": "short"|"long"|"none", "breakpoints": bool, "cacheKey": bool }`）——**P3 的开关数据最终落在这一层**，P2 只定义键名与语义。【调度者裁决】覆盖 JSON 的键名与 P3 `CacheBehavior` 结构字段对齐（或由 `CacheBehavior` 序列化得到）。
 3. **不落入**：`endpoint` 枚举（不加 MiniMax 等新端点）、`ReasoningVendor`（不扩变体）——缓存能力独立于推理能力推断，避免两套枚举互相污染。
 
 ---
@@ -644,12 +660,12 @@ pub fn merge_usage_shards(prev: &ProviderUsage, next: &ProviderUsage) -> Provide
 ### 步骤 4（契约面 + 接线）
 
 - `session-loop/src/provider.rs`：`ProviderRequest` 增 `session_id: Option<String>`（走接口变更登记，见 6.2）。【A1 审计修正】与 P1 步骤 2.2 的 `ProviderRequest.system_prompt`（provider.rs:74-81 同 struct）重叠——两字段建议与 P1 合并一次提交（P1 先行），避免同一 struct 两次契约变更登记。`session-loop/src/stream.rs`：`ConsumeBuilder` 增 `usage_accounting` 提示与 metadata `cacheBreakdown` 派生。
-- `apps/agent-workbench/src-tauri/src/engine.rs`：`request_options` 组装 `cache`（`infer_cache_capability` + `build_cache_policy`）；`stream()` 中把 `AgentSessionContext.session_id` 注入 `ProviderRequest.session_id`。
+- `apps/agent-workbench/src-tauri/src/engine.rs`：`request_options` 组装 `cache`（【调度者裁决】仅调用 `build_cache_policy`，能力判定收敛在其内部：P3 `cache_behavior_for` 数据真源，无 catalog 时回退 `infer_cache_capability` 内置保守兜底）；`stream()` 中把 `AgentSessionContext.session_id` 注入 `ProviderRequest.session_id`。
 - 文件域：`session-loop/src/provider.rs` / `session-loop/src/stream.rs` / `engine.rs`（`engine.rs` 与 P1 的 system_prompt 透传同文件，**与 P1 串行，P1 先行**；`session-loop/src/provider.rs` 与 P1 步骤 2.2 同文件——P1 加 `system_prompt`、P2 加 `session_id`，**同样串行，P1 先行**）。
 
 ### 步骤 5（收尾）
 
-- 全量回归（见第 5 节）；`docs/cache-optimization/02-comparison/comparison.md` 的相关维度标记"已落地"（第 2.4/2.5/2.6/2.7 节）；P4 计划引用 `CacheBreakdown` 为消费契约。
+- 全量回归（见第 5 节）；`docs/cache-optimization/02-comparison/comparison.md` 的相关维度标记"已落地"（第 2.4/2.5/2.6/2.7 节）；P5 计划引用 `CacheBreakdown` 为消费契约（【A2 审计修正：原"P4 计划引用"为陈旧编号，消费 `CacheBreakdown` 的是 P5 测量层）。
 
 ---
 
@@ -657,15 +673,15 @@ pub fn merge_usage_shards(prev: &ProviderUsage, next: &ProviderUsage) -> Provide
 
 ### 5.1 新增单元测试（必须全绿）
 
-| 测试组 | 关键断言 |
-|---|---|
-| `allocate_breakpoints` | 有 tools+system+messages → (true,true,true)；tools_ok=false → tools 不占预算；cap=1 只保 tools；超限不 panic、dropped 计数正确 |
-| `apply_cache_controls` | 三锚点落位：首条 system、最后 user/tool 消息末块；string content 被改写为 parts 形态且只发生在被打断点处；plan 全 false → 请求字节与未施加时完全一致 |
-| DeepSeek 省略 | vendor=deepseek → `build_cache_policy` 返回 None（或全字段 None），请求体不含任何 cache 键（对齐 deepseek-reasonix-cache-analysis.md:111-112 的"测试钉死省略"） |
-| `CacheKey::from_session_id` | 中文/emoji 会话 ID 按码点钳 64 不截半字符；空串 → None |
-| `parse_usage` 补全 | DeepSeek 顶层 `{prompt_cache_hit_tokens, prompt_cache_miss_tokens}`；Kimi 顶层 `{cached_tokens}`；OpenAI `{prompt_tokens_details: {cached_tokens, cache_write_tokens}}` 各形状归一正确 |
-| `merge_usage_shards` | 输入侧 max 语义：next 传 0 不覆盖 prev 的 100；completion 后到优先；total 重算 |
-| `cache_breakdown` | Included：miss = prompt - read - write；Excluded：miss = prompt、input_total = prompt + read + write；DeepSeek miss 字段优先 |
+| 测试组                      | 关键断言                                                                                                                                                                               |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `allocate_breakpoints`      | 有 tools+system+messages → (true,true,true)；tools_ok=false → tools 不占预算；cap=1 只保 tools；超限不 panic、dropped 计数正确                                                         |
+| `apply_cache_controls`      | 三锚点落位：首条 system、最后 user/tool 消息末块；string content 被改写为 parts 形态且只发生在被打断点处；plan 全 false → 请求字节与未施加时完全一致                                   |
+| DeepSeek 省略               | vendor=deepseek → `build_cache_policy` 返回 None（或全字段 None），请求体不含任何 cache 键（对齐 deepseek-reasonix-cache-analysis.md:111-112 的"测试钉死省略"）                        |
+| `CacheKey::from_session_id` | 中文/emoji 会话 ID 按码点钳 64 不截半字符；空串 → None                                                                                                                                 |
+| `parse_usage` 补全          | DeepSeek 顶层 `{prompt_cache_hit_tokens, prompt_cache_miss_tokens}`；Kimi 顶层 `{cached_tokens}`；OpenAI `{prompt_tokens_details: {cached_tokens, cache_write_tokens}}` 各形状归一正确 |
+| `merge_usage_shards`        | 输入侧 max 语义：next 传 0 不覆盖 prev 的 100；completion 后到优先；total 重算                                                                                                         |
+| `cache_breakdown`           | Included：miss = prompt - read - write；Excluded：miss = prompt、input_total = prompt + read + write；DeepSeek miss 字段优先                                                           |
 
 ### 5.2 回归命令
 
@@ -693,41 +709,41 @@ npx vitest run src
 
 ### 6.1 依赖
 
-| 依赖 | 说明 |
-|---|---|
+| 依赖                      | 说明                                                                                                                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **P1 前缀稳定（硬依赖）** | 断点/键注入是"命中手段"而非"命中保证"：tools 排序、system prompt 透传、历史回流未落地前，注入的断点无命中对象，`cache_read_tokens` 恒为 0。P2 交付框架后可先行验证"请求字节正确性"，收益验证在 P1 之后 |
-| PE-02/PE-09 接口冻结 | `ProviderRequest` 增字段属契约扩展（默认 None 兼容），需按 AU-04 F1 流程登记 |
-| 前端 `shared:tool.ts` | `cacheMissTokens` 字段镜像同步（缺失不阻塞，P2 序列化默认省略） |
+| PE-02/PE-09 接口冻结      | `ProviderRequest` 增字段属契约扩展（默认 None 兼容），需按 AU-04 F1 流程登记                                                                                                                           |
+| 前端 `shared:tool.ts`     | `cacheMissTokens` 字段镜像同步（缺失不阻塞，P2 序列化默认省略）                                                                                                                                        |
 
 ### 6.2 风险
 
-| 风险 | 等级 | 缓解 |
-|---|---|---|
-| MiniMax/GLM/百炼的 Anthropic 兼容端点对 `cache_control` 位置/字段的接受度未实测（00-catalog 4.2/11.1"tools 数组中的 cache_control 标记被忽略"等平台差异） | 中 | 默认保守：GLM 默认 Auto；MiniMax 按型号前缀精准开；注入位置（part 级 vs 消息级 vs 工具级）按能力表逐厂商收敛；P3 实测数据翻转 |
-| Anthropic 断点上限冲突（超出 4 返回 400） | 低 | `allocate_breakpoints` 内置 cap，超限丢尾不报错（opencode 同款）；单元测试钉死 |
-| 1h 与 5m TTL 桶混用违反"1h 条目必须位于 5m 条目之前"（00-catalog 1.3） | 低 | 同请求统一 TTL 桶；`CachePolicy` 只持单一 `CacheTtl` |
-| usage 口径误判（Included/Excluded 反了）导致 miss 虚高/成本失真 | 中 | `CacheAccounting` 默认 Included（主路径 chat-completions）；anthropic/gemini 路径由适配层显式传 Excluded；`parse_usage` 顶层 miss 字段优先直接取服务端报告值，不依赖推导 |
-| 写入费用高于折扣（Anthropic 1.25x/2x、GPT-5.6+ 1.25x） | 中 | 默认 retention=Short（5m 桶、无额外 1h 写价）；长档显式开启；显式断点默认关闭 |
-| 与 P1/P3 同文件冲突 | 中 | `engine.rs` 与 P1 串行（P1 先行）；`messages.rs` 与 P1 阶段 3 串行（P1 先行，改动面 C2/C3 与 P2 载体同文件，见步骤 2 文件域注）；`provider.rs` 的 `ProviderRequest` 与 P1 步骤 2.2 同 struct（两字段一次合并）；P3 只消费 `extra.cache` 数据层，不改 cache.rs 的 API【A1 审计修正：原稿仅登记 engine.rs 一处串行，已补 messages.rs / provider.rs】 |
+| 风险                                                                                                                                                      | 等级 | 缓解                                                                                                                                                                                                                                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MiniMax/GLM/百炼的 Anthropic 兼容端点对 `cache_control` 位置/字段的接受度未实测（00-catalog 4.2/11.1"tools 数组中的 cache_control 标记被忽略"等平台差异） | 中   | 默认保守：GLM 默认 Auto；MiniMax 按型号前缀精准开；注入位置（part 级 vs 消息级 vs 工具级）按能力表逐厂商收敛；P3 实测数据翻转                                                                                                                                                                                                                      |
+| Anthropic 断点上限冲突（超出 4 返回 400）                                                                                                                 | 低   | `allocate_breakpoints` 内置 cap，超限丢尾不报错（opencode 同款）；单元测试钉死                                                                                                                                                                                                                                                                     |
+| 1h 与 5m TTL 桶混用违反"1h 条目必须位于 5m 条目之前"（00-catalog 1.3）                                                                                    | 低   | 同请求统一 TTL 桶；`CachePolicy` 只持单一 `CacheTtl`                                                                                                                                                                                                                                                                                               |
+| usage 口径误判（Included/Excluded 反了）导致 miss 虚高/成本失真                                                                                           | 中   | `CacheAccounting` 默认 Included（主路径 chat-completions）；anthropic/gemini 路径由适配层显式传 Excluded；`parse_usage` 顶层 miss 字段优先直接取服务端报告值，不依赖推导                                                                                                                                                                           |
+| 写入费用高于折扣（Anthropic 1.25x/2x、GPT-5.6+ 1.25x）                                                                                                    | 中   | 默认 retention=Short（5m 桶、无额外 1h 写价）；长档显式开启；显式断点默认关闭                                                                                                                                                                                                                                                                      |
+| 与 P1/P3 同文件冲突                                                                                                                                       | 中   | `engine.rs` 与 P1 串行（P1 先行）；`messages.rs` 与 P1 阶段 3 串行（P1 先行，改动面 C2/C3 与 P2 载体同文件，见步骤 2 文件域注）；`provider.rs` 的 `ProviderRequest` 与 P1 步骤 2.2 同 struct（两字段一次合并）；P3 只消费 `extra.cache` 数据层，不改 cache.rs 的 API【A1 审计修正：原稿仅登记 engine.rs 一处串行，已补 messages.rs / provider.rs】 |
 
 ### 6.3 与 P3 的边界（明确切分）
 
 - **P2 负责**：注入与解析的**框架本身**——载体结构、预算分配、锚点放置、键派生、usage 归一化函数、内置默认能力表（保守值）。
 - **P3 负责**：按厂商/模型的**开关与数据**——模型目录（`supports_cache_control` / `prompt_cache_min_tokens` / 断点上限等，00-vendor-model-pricing-catalog.md 第 12.1 节草案）、配置 UI、实测校准、`extra.cache` 覆盖值的真源。
-- **契约面**：P2 交付的 `CacheCapability` 与 `build_cache_policy(.., overrides)` 是 P3 的唯二替换点；P3 不得改写 `parse/*` 的归一化逻辑（口径唯一）。
+- **契约面**：【调度者裁决】数据真源 = P3 `cache_behavior_for` + `CacheBehavior` 矩阵（含 catalog 模型级覆盖），由 P2 `build_cache_policy` 内部消费（engine.rs 只调 `build_cache_policy`，唯一运行时判定/消费入口）；`extra.cache` 覆盖经 `build_cache_policy` 的 `overrides` 通道生效（键名与 `CacheBehavior` 字段对齐）。P3 不得改写 `parse/*` 的归一化逻辑（口径唯一）。
 
 ---
 
 ## 附：证据文件索引
 
-| 主题 | 位置 |
-|---|---|
-| 现状缺口汇总 | `docs/cache-optimization/02-comparison/comparison.md` 第 1 节总览表（维度 4/5/6/7）、第 2.4/2.5/2.6/2.7 节 |
-| 断点预算与层级分配 | `docs/cache-optimization/01-reference-research/opencode-cache-analysis.md` 第 3.3 节（cap=4、tools→system→messages、dropped 不报错）与第 9 节第 2/3 条 |
-| 三锚点与省略分支 | `pi-cache-analysis.md` 第 4.2 节（system/最后工具/最后 user 消息末块、string→parts 改写）、第 8.2 节（supportsCacheControlOnTools、Fireworks 关闭）；`kimi-code-cache-analysis.md` 第 3.2 节（三锚点 + 可缓存白名单 + 合并后注入） |
-| prompt_cache_key 与 retention | `pi-cache-analysis.md` 第 5.1/5.3 节（64 码点钳制、in_memory/24h、api.openai.com 门控）；`opencode-cache-analysis.md` 第 4.1 节（sessionID→键）；`kimi-code-cache-analysis.md` 第 3.1 节（三 dialect 键） |
-| GPT-5.6+ options | `pi-cache-analysis.md` 第 5.3 节（explicit = 禁止隐式缓存）；`00-vendor-model-pricing-catalog.md` 第 2.1 节 |
-| usage 归一化 | `litellm-cache-analysis.md` 第 5 节（双命名空间 + 不变量 + 别名兜底）；`pi-cache-analysis.md` 第 5.4 节（input = prompt - read - write）；`opencode-cache-analysis.md` 第 7.1 节 |
-| 分片合并防御 | `pi-cache-analysis.md` 第 4.4 节（message_start 不被 message_delta 的 0 覆盖）；`comparison.md` 第 2.7 节（anthropic.rs:308-372 现状） |
-| 厂商缓存机制数据 | `00-vendor-model-pricing-catalog.md`：Anthropic 第 1 节、OpenAI 第 2 节、DeepSeek 第 3 节、MiniMax 第 7 节、Gemini 第 8 节、Kimi 第 5 节、GLM 第 4 节 |
-| crish 代码证据 | `crates/agent-provider/src/request/vendor.rs:277-310`、`request/messages.rs:62-72`、`request/build.rs:44-63`、`request/tools.rs:12-19`、`config.rs:44-53`、`parse/chat.rs:251-267`、`parse/gemini.rs:309-345`、`events.rs:31-52`、`session-loop/src/provider.rs:74-81`、`apps/agent-workbench/src-tauri/src/engine.rs:207-233` |
+| 主题                          | 位置                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 现状缺口汇总                  | `docs/cache-optimization/02-comparison/comparison.md` 第 1 节总览表（维度 4/5/6/7）、第 2.4/2.5/2.6/2.7 节                                                                                                                                                                                                                     |
+| 断点预算与层级分配            | `docs/cache-optimization/01-reference-research/opencode-cache-analysis.md` 第 3.3 节（cap=4、tools→system→messages、dropped 不报错）与第 9 节第 2/3 条                                                                                                                                                                         |
+| 三锚点与省略分支              | `pi-cache-analysis.md` 第 4.2 节（system/最后工具/最后 user 消息末块、string→parts 改写）、第 8.2 节（supportsCacheControlOnTools、Fireworks 关闭）；`kimi-code-cache-analysis.md` 第 3.2 节（三锚点 + 可缓存白名单 + 合并后注入）                                                                                             |
+| prompt_cache_key 与 retention | `pi-cache-analysis.md` 第 5.1/5.3 节（64 码点钳制、in_memory/24h、api.openai.com 门控）；`opencode-cache-analysis.md` 第 4.1 节（sessionID→键）；`kimi-code-cache-analysis.md` 第 3.1 节（三 dialect 键）                                                                                                                      |
+| GPT-5.6+ options              | `pi-cache-analysis.md` 第 5.3 节（explicit = 禁止隐式缓存）；`00-vendor-model-pricing-catalog.md` 第 2.1 节                                                                                                                                                                                                                    |
+| usage 归一化                  | `litellm-cache-analysis.md` 第 5 节（双命名空间 + 不变量 + 别名兜底）；`pi-cache-analysis.md` 第 5.4 节（input = prompt - read - write）；`opencode-cache-analysis.md` 第 7.1 节                                                                                                                                               |
+| 分片合并防御                  | `pi-cache-analysis.md` 第 4.4 节（message_start 不被 message_delta 的 0 覆盖）；`comparison.md` 第 2.7 节（anthropic.rs:308-372 现状）                                                                                                                                                                                         |
+| 厂商缓存机制数据              | `00-vendor-model-pricing-catalog.md`：Anthropic 第 1 节、OpenAI 第 2 节、DeepSeek 第 3 节、MiniMax 第 7 节、Gemini 第 8 节、Kimi 第 5 节、GLM 第 4 节                                                                                                                                                                          |
+| crish 代码证据                | `crates/agent-provider/src/request/vendor.rs:277-310`、`request/messages.rs:62-72`、`request/build.rs:44-63`、`request/tools.rs:12-19`、`config.rs:44-53`、`parse/chat.rs:251-267`、`parse/gemini.rs:309-345`、`events.rs:31-52`、`session-loop/src/provider.rs:74-81`、`apps/agent-workbench/src-tauri/src/engine.rs:207-233` |

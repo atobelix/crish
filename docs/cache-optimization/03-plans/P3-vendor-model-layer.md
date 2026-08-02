@@ -32,27 +32,27 @@
 
 - **不做请求注入实现本身**：cache_control 断点注入、header 注入、请求体字段注入的**框架**属于 P2（"P2 提供注入框架，P3 提供数据与开关"）。本方案只交付：注入**决策所需的数据结构、枚举、矩阵表、查询接口签名**，以及 P2 消费这些接口的契约说明。P2 计划文档已落盘（2026-08-03）。【A1 审计修正】经 A1 交叉审计：本方案的 `CacheBehavior`/`cache_behavior_for`、`derive_prompt_cache_key`、`session_affinity_headers`、`CacheTtl`（models/ 侧）与 P2 §3.1 的 `CacheCapability`/`build_cache_policy`、`CacheKey::from_session_id`、`affinity_header`、`CacheTtl`（request/cache.rs 侧）存在同名/同职责重复与字段不一致；按本句契约以 P2 为准并回写，具体合并规则见 §3.2.1 / §3.3.1 / §3.3.2 标注。
 - **不做成本计算**：价格字段由本方案建模与提供，但**成本计算、节省金额估算、命中率统计属于 P5**（P5 消费价格字段做成本计算；P3 只负责数据与开关）。`pricingStore.ts` 是 UI 展示层，本方案不动其编辑能力，只为其提供 Rust 侧数据源（见 3.1.4）。
-- **不做 usage 解析字段补齐**：DeepSeek 顶层 `prompt_cache_hit_tokens` / Kimi 顶层 `cached_tokens` 的解析补齐属 comparison.md 2.5/2.7 的通用格式层（可能是 P1 或其他计划），本方案仅在依赖处标注。
-- **不做测量/审计**：命中率展示、miss 归因、冷缓存预警 UI 属测量层（comparison.md 2.10/2.11），本方案只交付它们依赖的 TTL 查询接口（E）。
+- **不做 usage 解析字段补齐**：DeepSeek 顶层 `prompt_cache_hit_tokens` / Kimi 顶层 `cached_tokens` 的解析补齐属 **P2**（通用格式层 D 子主题，P2 §3.3 D / §2.3 缺口①），本方案仅在依赖处标注。【A2 审计修正：原稿"（可能是 P1 或其他计划）"为落盘前猜测，P2 已明确拥有该缺口，删去模糊表述】
+- **不做测量/审计**：命中率展示、miss 归因、冷缓存预警 UI 属测量层 **P5**（comparison.md 2.10/2.11；P5-cache-telemetry.md），本方案只交付它们依赖的 TTL 查询接口（E）。【A2 审计修正：原稿"测量层"未落计划号，已按最终编号标注 P5】
 - **不做历史回流/前缀稳定**：comparison.md 2.1-2.3、2.13 的通用基础层不在本方案范围（本方案假设前缀稳定由其他计划解决；但目录的 `supports_prompt_caching` / `prompt_cache_min_tokens` 字段为其提供判定依据）。
 
 ### 1.3 文件域
 
 本方案的实施将触及（仅列文件，实施时由相应实现任务书执行）：
 
-| 类别 | 文件 | 本方案动作 |
-|---|---|---|
-| 新增 | `crates/agent-provider/src/models/mod.rs` | 新模块声明（catalog / behavior / cache_key / ttl） |
-| 新增 | `crates/agent-provider/src/models/catalog.rs` | 模型目录结构 + 内置表 + 查询接口 |
-| 新增 | `crates/agent-provider/src/models/catalog.json` | 内置静态目录（include_str! 打包） |
-| 新增 | `crates/agent-provider/src/models/behavior.rs` | 厂商缓存行为矩阵 + 查询接口 |
-| 新增 | `crates/agent-provider/src/models/cache_key.rs` | prompt_cache_key 推导 + 会话亲和 header 表 |
-| 新增 | `crates/agent-provider/src/models/ttl.rs` | 模型级 TTL 路由表 |
-| 扩展 | `crates/agent-provider/src/request/vendor.rs` | ReasoningVendor 扩展为 VendorId 或新增映射；DeepSeek 省略 cache_control 的断言辅助 |
-| 扩展 | `crates/agent-provider/src/request/messages.rs` | reasoning_content 回放模式接线（D） |
-| 扩展 | `apps/agent-workbench/src-tauri/src/engine.rs` | provider_url 按 catalog `supports_responses` 判定（D） |
-| 扩展 | `apps/agent-workbench/src-tauri/src/config/provider.rs` | vendor 显式声明字段透传（可选） |
-| 扩展 | `apps/crish-desktop/src/api/modelCatalog.ts` | scanProviderModels 结果可选合并到 Rust 目录（只读消费） |
+| 类别 | 文件                                                    | 本方案动作                                                                         |
+| ---- | ------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 新增 | `crates/agent-provider/src/models/mod.rs`               | 新模块声明（catalog / behavior / cache_key / ttl）                                 |
+| 新增 | `crates/agent-provider/src/models/catalog.rs`           | 模型目录结构 + 内置表 + 查询接口                                                   |
+| 新增 | `crates/agent-provider/src/models/catalog.json`         | 内置静态目录（include_str! 打包）                                                  |
+| 新增 | `crates/agent-provider/src/models/behavior.rs`          | 厂商缓存行为矩阵 + 查询接口                                                        |
+| 新增 | `crates/agent-provider/src/models/cache_key.rs`         | prompt_cache_key 推导 + 会话亲和 header 表                                         |
+| 新增 | `crates/agent-provider/src/models/ttl.rs`               | 模型级 TTL 路由表                                                                  |
+| 扩展 | `crates/agent-provider/src/request/vendor.rs`           | ReasoningVendor 扩展为 VendorId 或新增映射；DeepSeek 省略 cache_control 的断言辅助 |
+| 扩展 | `crates/agent-provider/src/request/messages.rs`         | reasoning_content 回放模式接线（D）                                                |
+| 扩展 | `apps/agent-workbench/src-tauri/src/engine.rs`          | provider_url 按 catalog `supports_responses` 判定（D）                             |
+| 扩展 | `apps/agent-workbench/src-tauri/src/config/provider.rs` | vendor 显式声明字段透传（可选）                                                    |
+| 扩展 | `apps/crish-desktop/src/api/modelCatalog.ts`            | scanProviderModels 结果可选合并到 Rust 目录（只读消费）                            |
 
 ---
 
@@ -283,24 +283,25 @@ pub struct CacheBehavior {
 ```
 
 【A1 审计修正】与 P2 §3.1.2 `CacheCapability`（request/cache.rs，注入框架的决策类型真源）的合并规则：
+
 - P3 的 `CacheBehavior` 保留为矩阵查询的返回类型，但需映射进 P2 `CacheCapability`——`omit_cache_control`、`auto_cache`、`supports_conv_header`、`conv_header_name`、`default_ttl` 是 P2 `CacheCapability` 未覆盖字段（并入）；`breakpoint_max` ↔ P2 `breakpoint_cap`；`supports_prompt_cache_key` ↔ P2 `prompt_cache_key`；`supports_cache_control` 两方案同名字段一致。
 - `models/behavior.rs` 静态矩阵作为 P2 `CACHE_CAPABILITY_TABLE` 的数据源（P2 §3.4 存放位置建议 1），模型级覆盖经 P2 `build_cache_policy(.., overrides)` 的 `extra.cache` 通道生效（P2 §3.4 存放位置建议 2）。
 - 两处 `CacheTtl` 同名枚举需合一：P2 的 `FiveMinutes/OneHour`（request/cache.rs）与 P3 的 `Short/Hour/Day`（models/ttl.rs）取一，serde 值域与 00-catalog §12.1 的 `"5m"/"1h"` 对齐（P3 的 kebab-case short/hour/day 需改为 5m/1h/24h 或增加映射）。
 
 #### 3.2.2 矩阵数据表（数据事实，转录自 vendor-cache-mechanisms.md §10 汇总 + 00 catalog）
 
-| 厂商（VendorId） | 缓存类型 | auto_cache | supports_cache_control | omit_cache_control | supports_prompt_cache_key | supports_conv_header | breakpoint_max | default_ttl | 备注 |
-|---|---|---|---|---|---|---|---|---|---|
-| Deepseek | 自动磁盘前缀缓存（前缀单元制） | ✅ | ❌ | **✅ 强制** | ❌（官方明确不支持，静默忽略，vendor-cache-gaps.md:104） | ❌ | — | 300s | 客户端只做前缀稳定 + 解析 hit/miss（vendor-cache-mechanisms.md:38-40） |
-| Anthropic | automatic + explicit 双模式 | ✅ | ✅ | ❌ | ❌ | ❌ | 4 | 300s / 3600s | 顶层 ephemeral 自动缓存；块级断点；20 块回溯（vendor-cache-mechanisms.md:219-265） |
-| MiniMax | 被动（自动）+ 主动（Anthropic 轨）双轨 | ✅ | ✅（仅 M2.x） | ❌ | ❌ | ❌ | 4 | 300s | **M3 不支持主动缓存**（vendor-cache-gaps.md:186）；断点语义与 Anthropic 一致可复用同一实现 |
-| Openai | 自动 + 显式断点（GPT-5.6+ prompt_cache_options） | ✅ | ❌（自有断点参数体系，非 cache_control） | ❌ | ✅（GPT-5.6+ 建议设置） | ❌ | 4（5.6+，隐式占 1） | 300s / 86400s | retention 24h 仅 gpt-5.x 扩展保留模型（00 catalog §2.1） |
-| Kimi | 全自动 Context Caching | ✅ | ❌ | ❌ | ✅（session/task id 语义，Coding Plan 必填） | ❌ | — | 300s | 顶层 `usage.cached_tokens`；前置请求 >256 token 才缓存（vendor-cache-mechanisms.md:78-97） |
-| Grok | 自动前缀缓存 + 粘性路由 | ✅ | ❌ | ❌ | ✅（Responses 原生） | ✅（`x-grok-conv-id`，Chat 轨） | — | 300s | 不设头/键则命中率不可靠（vendor-cache-mechanisms.md:113-127） |
-| Gemini | 隐式（默认）+ 显式 cachedContents | ✅ | ❌（无 cache_control，cachedContent 独立资源） | ❌ | ❌ | ❌ | — | 300s | 隐式最低 4096（3.x）；显式走 API 资源非请求字段 |
-| Glm | 自动隐式缓存（相似度识别） | ✅ | ❓（Anthropic 端点存在但**未实测确认**，保守按 ❌） | ❌ | ❌ | ❌ | — | 300s | 矩阵该格标 unverified（vendor-cache-gaps.md:150-153） |
-| Dashscope（百炼） | 显式 cache_control 与隐式互斥 + Responses Session 缓存 | ✅ | ✅（仅 ephemeral，≤4，20 块回溯） | ❌ | ❌ | ✅（`x-dashscope-session-cache: enable`，仅 Responses） | 4 | 300s | 显式命中 10% 优于隐式 20%；tools 中 cache_control 被忽略（vendor-cache-gaps.md:16-42） |
-| Auto（未识别网关） | 未知 | ❌ | ❌ | ❌ | ❌ | ❌ | — | None | **保守默认：不注入任何缓存字段**（对齐 jcode `model_supports_cache` 的"否则视为不支持"，jcode-cache-analysis.md:2744） |
+| 厂商（VendorId）   | 缓存类型                                               | auto_cache | supports_cache_control                              | omit_cache_control | supports_prompt_cache_key                                | supports_conv_header                                    | breakpoint_max      | default_ttl   | 备注                                                                                                                   |
+| ------------------ | ------------------------------------------------------ | ---------- | --------------------------------------------------- | ------------------ | -------------------------------------------------------- | ------------------------------------------------------- | ------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Deepseek           | 自动磁盘前缀缓存（前缀单元制）                         | ✅         | ❌                                                  | **✅ 强制**        | ❌（官方明确不支持，静默忽略，vendor-cache-gaps.md:104） | ❌                                                      | —                   | 300s          | 客户端只做前缀稳定 + 解析 hit/miss（vendor-cache-mechanisms.md:38-40）                                                 |
+| Anthropic          | automatic + explicit 双模式                            | ✅         | ✅                                                  | ❌                 | ❌                                                       | ❌                                                      | 4                   | 300s / 3600s  | 顶层 ephemeral 自动缓存；块级断点；20 块回溯（vendor-cache-mechanisms.md:219-265）                                     |
+| MiniMax            | 被动（自动）+ 主动（Anthropic 轨）双轨                 | ✅         | ✅（仅 M2.x）                                       | ❌                 | ❌                                                       | ❌                                                      | 4                   | 300s          | **M3 不支持主动缓存**（vendor-cache-gaps.md:186）；断点语义与 Anthropic 一致可复用同一实现                             |
+| Openai             | 自动 + 显式断点（GPT-5.6+ prompt_cache_options）       | ✅         | ❌（自有断点参数体系，非 cache_control）            | ❌                 | ✅（GPT-5.6+ 建议设置）                                  | ❌                                                      | 4（5.6+，隐式占 1） | 300s / 86400s | retention 24h 仅 gpt-5.x 扩展保留模型（00 catalog §2.1）                                                               |
+| Kimi               | 全自动 Context Caching                                 | ✅         | ❌                                                  | ❌                 | ✅（session/task id 语义，Coding Plan 必填）             | ❌                                                      | —                   | 300s          | 顶层 `usage.cached_tokens`；前置请求 >256 token 才缓存（vendor-cache-mechanisms.md:78-97）                             |
+| Grok               | 自动前缀缓存 + 粘性路由                                | ✅         | ❌                                                  | ❌                 | ✅（Responses 原生）                                     | ✅（`x-grok-conv-id`，Chat 轨）                         | —                   | 300s          | 不设头/键则命中率不可靠（vendor-cache-mechanisms.md:113-127）                                                          |
+| Gemini             | 隐式（默认）+ 显式 cachedContents                      | ✅         | ❌（无 cache_control，cachedContent 独立资源）      | ❌                 | ❌                                                       | ❌                                                      | —                   | 300s          | 隐式最低 4096（3.x）；显式走 API 资源非请求字段                                                                        |
+| Glm                | 自动隐式缓存（相似度识别）                             | ✅         | ❓（Anthropic 端点存在但**未实测确认**，保守按 ❌） | ❌                 | ❌                                                       | ❌                                                      | —                   | 300s          | 矩阵该格标 unverified（vendor-cache-gaps.md:150-153）                                                                  |
+| Dashscope（百炼）  | 显式 cache_control 与隐式互斥 + Responses Session 缓存 | ✅         | ✅（仅 ephemeral，≤4，20 块回溯）                   | ❌                 | ❌                                                       | ✅（`x-dashscope-session-cache: enable`，仅 Responses） | 4                   | 300s          | 显式命中 10% 优于隐式 20%；tools 中 cache_control 被忽略（vendor-cache-gaps.md:16-42）                                 |
+| Auto（未识别网关） | 未知                                                   | ❌         | ❌                                                  | ❌                 | ❌                                                       | ❌                                                      | —                   | None          | **保守默认：不注入任何缓存字段**（对齐 jcode `model_supports_cache` 的"否则视为不支持"，jcode-cache-analysis.md:2744） |
 
 #### 3.2.3 查询接口
 
@@ -314,9 +315,14 @@ pub fn cache_behavior_for(catalog: &ModelCatalog, vendor: VendorId, model: Optio
 
 - vendor 级默认来自静态矩阵表（3.2.2）；模型级覆盖来自 catalog 条目（`supports_cache_control` / `supports_prompt_caching` / `breakpoint_max` / `cache_ttl` 非默认时覆盖）。
 - **模型系列覆盖**沿用 `MODEL_SERIES_CAPABILITIES` 的最长前缀模式（如 MiniMax 家族 `minimax-m3` → 主动缓存关；`minimax-m2` → 开），以静态表（`behavior.rs` 内）形式存在，catalog 条目优先级更高。
-- 消费方契约（给 P2）：P2 注入框架在请求构造时调用 `cache_behavior_for`，据 `supports_cache_control` / `omit_cache_control` 决定是否注入断点；据 `supports_prompt_cache_key` 决定是否注入键；据 `supports_conv_header` + `conv_header_name` 决定是否注入 header。**矩阵表是本方案对 P2 的唯一接口面**。
+- 消费方契约（给 P2）：【调度者裁决】P2 注入框架的入口 `build_cache_policy`（engine.rs 唯一运行时判定/消费入口）在请求构造时内部调用 `cache_behavior_for` 取数据真源，据 `supports_cache_control` / `omit_cache_control` 决定是否注入断点；据 `supports_prompt_cache_key` 决定是否注入键；据 `supports_conv_header` + `conv_header_name` 决定是否注入 header。本接口是 models/ 层的数据层查询接口（不直接进 engine），**矩阵表是本方案对 P2 的唯一接口面（唯一数据真源）**。
 
 > 【A3 审计修正】（2026-08-03，A3-executability.md P0-2）：**与 P2 的运行时合并链（唯一判定入口）**——P2（03-plans/P2-wire-cache-params.md §3.1.2）曾交付 `infer_cache_capability` + `CACHE_CAPABILITY_TABLE` 内置默认表 + `build_cache_policy(capability, session_id, overrides)`，与本方案 `cache_behavior_for` 存在双真源。裁决：**`cache_behavior_for` 是 engine.rs `request_options` 的唯一运行时判定入口**；P2 的 `infer_cache_capability` 降级为"无 catalog 注入时的内置保守默认"，作为本函数内部兜底（P2 表数据值以本方案 §3.2.2 矩阵为准转录）；`build_cache_policy` 输入改为消费本方案的 `CacheBehavior`（或等价序列化覆盖，二选一由实施任务书冻结）。P2 文档已同步修正。【A1 审计修正】P2 落盘后的实际调用链为 `infer_cache_capability` → `build_cache_policy`（P2 §3.2 接线）；本方案的矩阵数据经"内置默认表（CACHE_CAPABILITY_TABLE）+ `extra.cache` 覆盖"两条通道汇入 P2，`cache_behavior_for` 保留为 models/ 层查询接口（供 P2 数据映射与 P5 消费），不再作为注入框架的直接调用点。
+
+> 【调度者裁决】（2026-08-03，A2 审计遗留项 P1-6 收敛；取代上方 A3/A1 两则注记中互相矛盾的入口表述）：
+> 缓存能力判定的运行时入口收敛为：engine.rs 只调用 P2 的 build_cache_policy（唯一运行时判定/消费入口）；P3 models/ 层的 cache_behavior_for + CacheBehavior 矩阵（含 catalog 模型级覆盖）是唯一数据真源；P2 的 infer_cache_capability 与 CACHE_CAPABILITY_TABLE 降级为'无 catalog 可用时的内置保守兜底默认'，其数据值以 P3 矩阵为准转录；extra.cache 覆盖 JSON 的键名与 P3 的 CacheBehavior 结构字段对齐（或由 CacheBehavior 序列化得到）。
+>
+> 即：**`cache_behavior_for` 是 models/ 层的数据层查询接口（不直接进 engine）**，数据经 P2 `build_cache_policy` 消费（`build_cache_policy` 内部取数据真源；无 catalog 可用时回退 `infer_cache_capability` 内置保守兜底默认）。
 
 ### 3.3 C. 会话亲和与缓存键推导
 
@@ -337,11 +343,11 @@ pub fn derive_prompt_cache_key(session_id: &str) -> Option<String>;
 
 #### 3.3.2 会话亲和 header 注入表（数据与开关；注入位置由 P2 提供）
 
-| header | 值 | 注入条件 | 协议/厂商 |
-|---|---|---|---|
-| `x-grok-conv-id` | `derive_prompt_cache_key(session_id)` | vendor=Grok 且 endpoint=ChatCompletions | xAI Chat 轨粘性路由（vendor-cache-mechanisms.md:121） |
-| `x-dashscope-session-cache: enable` | 固定值 enable | vendor=Dashscope 且 endpoint=Responses | 百炼 Responses Session 缓存（vendor-cache-gaps.md:71-76） |
-| `x-session-affinity` / `x-session-id` | session_id | 默认关闭（可配置开关，pi 默认 false） | 通用兼容（pi-cache-analysis.md:141-143） |
+| header                                | 值                                    | 注入条件                                | 协议/厂商                                                 |
+| ------------------------------------- | ------------------------------------- | --------------------------------------- | --------------------------------------------------------- |
+| `x-grok-conv-id`                      | `derive_prompt_cache_key(session_id)` | vendor=Grok 且 endpoint=ChatCompletions | xAI Chat 轨粘性路由（vendor-cache-mechanisms.md:121）     |
+| `x-dashscope-session-cache: enable`   | 固定值 enable                         | vendor=Dashscope 且 endpoint=Responses  | 百炼 Responses Session 缓存（vendor-cache-gaps.md:71-76） |
+| `x-session-affinity` / `x-session-id` | session_id                            | 默认关闭（可配置开关，pi 默认 false）   | 通用兼容（pi-cache-analysis.md:141-143）                  |
 
 - 数据结构：`pub fn session_affinity_headers(behavior: &CacheBehavior, session_id: &str) -> Vec<(String, String)>`（纯函数，返回注入对；空 Vec = 不注入）。
 - 注入点契约：P2 在 `engine.rs:250-256`（仅 Authorization 处）扩展为"基础头 + 亲和头"合并；P3 只交付该函数的输出。
@@ -353,11 +359,13 @@ pub fn derive_prompt_cache_key(session_id: &str) -> Option<String>;
 #### 3.4.1 reasoning_content 回放（对齐 Reasonix openai.go:658-680）
 
 **规则**（矩阵的 Deepseek 行派生）：
+
 1. vendor=Deepseek 且 assistant 消息含 `tool_calls` → **无条件发送 `reasoning_content` key**，历史无该内容时也发**空串**（pointer 序列化保证 key 存在，API 接受空串；缺 key 直接 400——deepseek-reasonix-cache-analysis.md:118-122）。
 2. thinking disabled（effort=off / ThinkingIntensity::Off）时：**只在该轮历史确实留有 reasoning 时发 key**，绝不为了"整洁"改变历史字节形状（deepseek-reasonix-cache-analysis.md:123、"字节稳定优先于整洁"）。
 3. 载体复用：`ReasoningContentMode::Require`（messages.rs:25-27）已存在；由 P3 提供判定函数 `pub fn deepseek_reasoning_content_mode(vendor: VendorId, effort_off: bool) -> ReasoningContentMode`（vendor=Deepseek → Require / 按历史字节 → Include / 其余 → Omit），P2 或 D 实施步骤在 `build.rs` 的 `reasoning_content` 选项接线。
 
 > 【A3 审计修正】（2026-08-03，A3-executability.md P0-1）：**规则 2 与 P1 C3 冲突，裁决以 P1 为准并删除本规则的第二套判定**。P1（03-plans/P1-prefix-stability.md §3.4 C3）已实现 engine.rs 侧 `reasoning_content_mode()`：DeepSeek 恒 Require（工具轮次必带 `reasoning_content` 键、空串兜底），并论证"恒在"恰好消除 thinking 开→关会话的前缀形态漂移（本规则 2 的"effort=off 按历史字节"会让开关漂移，与 P1 目标直接冲突）。修正后：
+>
 > - **不实现** `deepseek_reasoning_content_mode` 第二套判定函数；P1 C3 的 `reasoning_content_mode()` 是唯一接线点（engine.rs `request_options`）。
 > - 本方案的 effort 维度降级为**数据输入**：catalog 条目的 `supports_reasoning` 位与 effort 档位（§3.4.3）供 P1 判定函数消费。
 > - 步骤 4 与 P1 步骤 3.1（messages.rs Require 语义）同代码点，实施时**只由 P1 实现一次**，本方案不做第二遍接线。
@@ -380,14 +388,24 @@ pub fn derive_prompt_cache_key(session_id: &str) -> Option<String>;
 
 ```rust
 /// 缓存 TTL 档（对齐 jcode cache_ttl_for_provider_model 的返回值语义）
+///
+/// 【A2 审计修正】名称与值域收敛裁决（P2 × P3 合并，承接 A1 标注的"取一"）：
+/// - 名称：`CacheTtl` **保留在本模块（models/ttl.rs）**，承担模型级 TTL 路由语义；
+///   P2（request/cache.rs）同名的 wire 桶类型（FiveMinutes/OneHour）已按 A2 裁决
+///   更名 `TtlBucket`，避免同 crate 同名冲突（见 P2 §3.1.1 A2 注记）；
+/// - 值域：serde 值对齐 00-catalog §12.1 的 `"5m" / "1h" / "24h"`（替代原 kebab-case
+///   short/hour/day——A1 标注"需改为 5m/1h/24h 或增加映射"此处落地），
+///   catalog.json 条目 `cache_ttl` 按此值域填写。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
 pub enum CacheTtl {
     /// 5 分钟（自动缓存通例；命中刷新免费）
+    #[serde(rename = "5m")]
     Short,          // 300s
     /// 1 小时（Anthropic ttl:"1h" 显式；写入价 2x）
+    #[serde(rename = "1h")]
     Hour,           // 3600s
     /// 24 小时（OpenAI 扩展保留模型）
+    #[serde(rename = "24h")]
     Day,            // 86400s
 }
 
@@ -399,18 +417,18 @@ impl CacheTtl {
 pub fn cache_ttl_for_provider_model(catalog: &ModelCatalog, vendor: VendorId, model: Option<&str>) -> Option<CacheTtl>;
 ```
 
-| vendor | 默认档 | 模型级覆盖（catalog `cache_ttl`） | 依据 |
-|---|---|---|---|
-| Deepseek | Short | — | 自动磁盘缓存，不再使用数小时到数天清除（vendor-cache-gaps.md:118）；客户端按 300s 预警 |
-| Anthropic | Short（`ttl_1h` 开关开时 Hour） | 1h 档模型（如需要） | jcode 2776-2780：300s 或 3600s |
-| Openai | Short（gpt-5.5 及更早扩展保留模型 → Day） | 模型前缀 `gpt-5.5/5.4/5.2/5.1/5` 支持 24h（**gpt-5.6 除外**：TTL 仅 30m，00-catalog §2.1【A1 审计修正：原稿含 gpt-5.6，与 00-catalog §2.1"GPT-5.6+ TTL 仅 30m"矛盾】） | jcode 2781-2790；00 catalog §2.1 |
-| Kimi | Short | — | 全自动无 TTL 管理，按 300s 预警 |
-| Grok | Short | — | 服务端管理未公布值，按 300s |
-| MiniMax | Short | — | 主动缓存 TTL 5 分钟（vendor-cache-mechanisms.md:150） |
-| Gemini | Short | — | 隐式缓存无公开 TTL；显式 cachedContents 默认 1h（有存储费，另行核算） |
-| Glm | Short | — | 自动缓存"有合理时限"（vendor-cache-mechanisms.md:58） |
-| Dashscope | Short | — | 显式 5 分钟（命中重置）（vendor-cache-gaps.md:23） |
-| Auto/无缓存厂商 | **None** | — | 不支持前缀缓存 → 永不预警（jcode 2794-2796：copilot/cursor 类返回 None） |
+| vendor          | 默认档                                    | 模型级覆盖（catalog `cache_ttl`）                                                                                                                                      | 依据                                                                                   |
+| --------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Deepseek        | Short                                     | —                                                                                                                                                                      | 自动磁盘缓存，不再使用数小时到数天清除（vendor-cache-gaps.md:118）；客户端按 300s 预警 |
+| Anthropic       | Short（`ttl_1h` 开关开时 Hour）           | 1h 档模型（如需要）                                                                                                                                                    | jcode 2776-2780：300s 或 3600s                                                         |
+| Openai          | Short（gpt-5.5 及更早扩展保留模型 → Day） | 模型前缀 `gpt-5.5/5.4/5.2/5.1/5` 支持 24h（**gpt-5.6 除外**：TTL 仅 30m，00-catalog §2.1【A1 审计修正：原稿含 gpt-5.6，与 00-catalog §2.1"GPT-5.6+ TTL 仅 30m"矛盾】） | jcode 2781-2790；00 catalog §2.1                                                       |
+| Kimi            | Short                                     | —                                                                                                                                                                      | 全自动无 TTL 管理，按 300s 预警                                                        |
+| Grok            | Short                                     | —                                                                                                                                                                      | 服务端管理未公布值，按 300s                                                            |
+| MiniMax         | Short                                     | —                                                                                                                                                                      | 主动缓存 TTL 5 分钟（vendor-cache-mechanisms.md:150）                                  |
+| Gemini          | Short                                     | —                                                                                                                                                                      | 隐式缓存无公开 TTL；显式 cachedContents 默认 1h（有存储费，另行核算）                  |
+| Glm             | Short                                     | —                                                                                                                                                                      | 自动缓存"有合理时限"（vendor-cache-mechanisms.md:58）                                  |
+| Dashscope       | Short                                     | —                                                                                                                                                                      | 显式 5 分钟（命中重置）（vendor-cache-gaps.md:23）                                     |
+| Auto/无缓存厂商 | **None**                                  | —                                                                                                                                                                      | 不支持前缀缓存 → 永不预警（jcode 2794-2796：copilot/cursor 类返回 None）               |
 
 - 消费方：冷缓存预警（jcode app.rs:1810-1814 模式，属测量层）、摘要请求缓存隔离（pi cacheRetention:"none"，属 P4 压缩层）。P3 只交付表 + 查询函数。
 - 覆盖优先级：catalog 条目 `cache_ttl` > vendor 默认 > None。
@@ -420,21 +438,25 @@ pub fn cache_ttl_for_provider_model(catalog: &ModelCatalog, vendor: VendorId, mo
 ## ④ 实施步骤（建议顺序，每步独立可验证）
 
 ### 步骤 1：catalog 骨架 + 内置 JSON
+
 - 建 `crates/agent-provider/src/models/{mod,catalog}.rs` + `catalog.json`。
 - 条目转录自 `00-vendor-model-pricing-catalog.md`（DeepSeek 2、Anthropic 6+、OpenAI 2、Kimi 1、Grok 2、MiniMax 3、Gemini 4、GLM 4、Qwen 3 ≈ 27 条起步；条目数不设上限）。
 - 实现 `bundled()` / `lookup`（多级兜底：精确 → 去版本后缀 → vendor 默认 → None）/ `version()`。
 - 测试：精确命中、`deepseek-v4-flash-0731` 兜底命中 `deepseek-v4-flash`、未知模型 None、catalog.json 可被 serde 全量解析（防转录错误）。
 
 ### 步骤 2：VendorId 与行为矩阵
+
 - `models/behavior.rs`：`VendorId` / `infer_vendor`（在 `infer_reasoning_vendor` 基础上补 minimax/grok/dashscope 关键字，vendor.rs:277-310 不动，新增独立函数）`/ CacheBehavior` / 静态矩阵表 / 模型系列覆盖表（最长前缀）/ `cache_behavior_for`。
 - 测试：每家至少 2 条（baseUrl 命中 + model 前缀命中 + Auto 保守回退）；DeepSeek `omit_cache_control` 恒 true；MiniMax M3 与 M2.x 断点差异；Grok `conv_header_name == Some("x-grok-conv-id")`。
 
 ### 步骤 3：缓存键推导与 TTL 表
+
 - `models/cache_key.rs`：`derive_prompt_cache_key`（64 码点钳制）+ `session_affinity_headers`。
 - `models/ttl.rs`：`CacheTtl` + `cache_ttl_for_provider_model` + 表。
 - 测试：中文 sessionId 按码点截断不 panic；空串 → None；DeepSeek 键不注入（矩阵联动）；TTL 表每 vendor 断言；catalog 条目覆盖 vendor 默认。
 
 ### 步骤 4：DeepSeek 专用适配
+
 - `messages.rs` 接线 `ReasoningContentMode::Require` 语义（工具回合必带 reasoning_content key、空串兜底）；`build.rs` 按 `deepseek_reasoning_content_mode` 驱动。
 - `engine.rs` `provider_url`（engine.rs:168-174）接入 `supports_responses_for` 判定。
 - 测试钉死（对齐 Reasonix anthropic_test.go:452-461）：DeepSeek 请求体任意消息块不得出现 `cache_control`；DeepSeek 带 tool_calls 的 assistant 消息必含 `reasoning_content`（空串也含）；v4-pro 在 endpoint=responses 下被判定拒绝/降级。
@@ -444,16 +466,19 @@ pub fn cache_ttl_for_provider_model(catalog: &ModelCatalog, vendor: VendorId, mo
 【A1 审计修正】本步与 P1 重叠：`messages.rs` 的 Require 落地与 `engine.rs` 的 vendor 推断驱动由 **P1 阶段 2 步骤 2.3 / 阶段 3 步骤 3.1 先行实现**（P1 的 `reasoning_content_mode()`：vendor=Deepseek → Require，其余 Omit）；P3 的增量只保留 `deepseek_reasoning_content_mode(vendor, effort_off)` 的 effort_off 细分规则（thinking disabled 时按历史字节 Include，P3 §3.4.1 规则 2），实现时并入 P1 的 `reasoning_content_mode`，不在 P1 之后另写第二套驱动。`build.rs` 与 P1 步骤 2.1（build_system_prompt）、P2 步骤 3（cache 注入）同文件，按 P1 → P2 → P3 串行。
 
 ### 步骤 5：用户覆盖与运行时合并（可选，配合 P5/前端）
+
 - `merge_overrides`（白名单字段校验 + 版本号 bump）；`upsert_from_scan`（前端 scanProviderModels 结果上送）。
 - 壳侧 `catalog_get` / `catalog_refresh` 命令（挂在 Tauri state，`Arc<RwLock<ModelCatalog>>`）。
 - 前端 `modelCatalog.ts` 只读消费：扫描完成后上送合并；`fetchLatestModels`（clientApi.ts:822-824，DEAD）不改（保持 DEAD 声明，不复活）。
 
 > 【A3 审计修正】（2026-08-03，A3-executability.md P1-3）：新增 `catalog_get` / `catalog_refresh` 两个 Tauri 命令，必须同步三处登记（缺一即命令面审计/mock 层失败）：
+>
 > 1. `apps/agent-workbench/src-tauri/src/command_manifest.rs`：按既有模式登记 `entry("catalog_get", "core", "engine", true)`（参照 :104 `core_compact_messages` 行）；
 > 2. `apps/agent-workbench/src-tauri/src/main.rs`：invoke_handler 注册（参照 :108/:117 模式）；
 > 3. `tests/e2e/mock-engine.ts`：`BUILTIN_COMMAND_MANIFEST` 快照（:30、:98）随命令面同步（P6 §6.2 已提醒同类约束；mock 对未登记命令抛 missing）。
 
 ### 步骤 6：文档回写
+
 - `00-vendor-model-pricing-catalog.md` §12.3 刷新清单核销（Sonnet 5 九月涨价 / DeepSeek v4-pro Responses 支持时间 / 峰谷定价生效日期）。
 - 本文件按实施结果更新"矩阵未确认项"（GLM Anthropic 端点 cache_control 实测结果）。
 
@@ -480,59 +505,59 @@ pub fn cache_ttl_for_provider_model(catalog: &ModelCatalog, vendor: VendorId, mo
 
 ### 6.1 依赖
 
-| 依赖 | 说明 | 缓解 |
-|---|---|---|
-| **P2（注入框架）** | P2 提供 cache_control / prompt_cache_key / header 的**注入位置**；P3 只提供数据与开关（`CacheBehavior` / `derive_prompt_cache_key` / `session_affinity_headers`）。P1/P2 均已落盘（2026-08-03） | 接口签名在本文件冻结；按 A1 审计合并规则回写（见 §3.2.1 / §3.3.1 / §3.3.2 标注，接口以 P2 的 request/cache.rs 为真源）【A1 审计修正：原稿"写本文档时 03-plans/ 为空"已过时】 |
-| **通用基础层（历史回流 / 前缀稳定）** | 无跨轮前缀时缓存命中恒为 0（comparison.md 4.1），矩阵与目录的收益无法兑现 | 本方案只交付"开关与数据"，收益验证依赖基础层计划；矩阵的 `auto_cache` 语义在无回流时仍成立（工具循环内同 run 多轮也可命中） |
-| **usage 解析补齐（格式层）** | DeepSeek 顶层 hit/miss / Kimi 顶层 cached_tokens 未解析时，命中数据不可见 | 属其他计划；catalog 的计量字段表（§11.2 两套标准）为其提供字段清单 |
-| **数据时效** | 目录数据截至 2026-08-02；Sonnet 5 九月涨价、DeepSeek 峰谷定价、v4-pro Responses 时间待公告 | catalog 版本号 + 刷新清单（00 catalog §12.3）+ `source_url/data_verified_at` 溯源字段 |
+| 依赖                                  | 说明                                                                                                                                                                                            | 缓解                                                                                                                                                                         |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P2（注入框架）**                    | P2 提供 cache_control / prompt_cache_key / header 的**注入位置**；P3 只提供数据与开关（`CacheBehavior` / `derive_prompt_cache_key` / `session_affinity_headers`）。P1/P2 均已落盘（2026-08-03） | 接口签名在本文件冻结；按 A1 审计合并规则回写（见 §3.2.1 / §3.3.1 / §3.3.2 标注，接口以 P2 的 request/cache.rs 为真源）【A1 审计修正：原稿"写本文档时 03-plans/ 为空"已过时】 |
+| **通用基础层（历史回流 / 前缀稳定）** | 无跨轮前缀时缓存命中恒为 0（comparison.md 4.1），矩阵与目录的收益无法兑现                                                                                                                       | 本方案只交付"开关与数据"，收益验证依赖基础层计划；矩阵的 `auto_cache` 语义在无回流时仍成立（工具循环内同 run 多轮也可命中）                                                  |
+| **usage 解析补齐（格式层）**          | DeepSeek 顶层 hit/miss / Kimi 顶层 cached_tokens 未解析时，命中数据不可见                                                                                                                       | 属其他计划；catalog 的计量字段表（§11.2 两套标准）为其提供字段清单                                                                                                           |
+| **数据时效**                          | 目录数据截至 2026-08-02；Sonnet 5 九月涨价、DeepSeek 峰谷定价、v4-pro Responses 时间待公告                                                                                                      | catalog 版本号 + 刷新清单（00 catalog §12.3）+ `source_url/data_verified_at` 溯源字段                                                                                        |
 
 ### 6.2 风险
 
-| 风险 | 等级 | 应对 |
-|---|---|---|
-| 自建网关 vendor 推断失败（baseUrl 无关键字）→ 全保守默认，缓存字段全部不注入 | 中 | Auto 保守是刻意设计（jcode 教训：不确定就视为不支持）；提供 `provider-config.json extra.vendor` 显式声明字段作为精确路径（步骤 5 可选） |
-| GLM Anthropic 端点 cache_control 行为未实测 | 中 | 矩阵标记 unverified，行为按"不发断点"；实测后改一行表数据（步骤 6 回写） |
-| 转售通道价与官方直连价差异（方舟/千帆 DeepSeek 量级不同，00 catalog §13.4） | 中 | 目录按 `provider` 区分条目（键 = `{vendor}::{model}`），价格按通道取；P5 计算时必须区分 channel |
-| 模型名版本后缀/微调后缀漂移导致 miss | 低 | 多级兜底（去版本后缀）在 `lookup` 内实现，测试钉死 |
-| reasoning_content 回放放大 miss 输入 | 低（已量化认知） | Reasonix 实测为命中率天花板（deepseek-reasonix-cache-analysis.md:222）；接受并在 UI 如实显示（测量层） |
-| 内置 JSON 转录错误（价格/能力位） | 低 | serde 全量解析测试 + `source_url` 溯源 + 刷新清单核销 |
-| catalog.json 体积增长 | 低 | 起步 ~27 条（几十 KB）；即使扩到 LiteLLM 量级（1.7MB）也仅为 include_str! 内存常驻，可接受；后续可拆 lazy 加载 |
+| 风险                                                                         | 等级             | 应对                                                                                                                                    |
+| ---------------------------------------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 自建网关 vendor 推断失败（baseUrl 无关键字）→ 全保守默认，缓存字段全部不注入 | 中               | Auto 保守是刻意设计（jcode 教训：不确定就视为不支持）；提供 `provider-config.json extra.vendor` 显式声明字段作为精确路径（步骤 5 可选） |
+| GLM Anthropic 端点 cache_control 行为未实测                                  | 中               | 矩阵标记 unverified，行为按"不发断点"；实测后改一行表数据（步骤 6 回写）                                                                |
+| 转售通道价与官方直连价差异（方舟/千帆 DeepSeek 量级不同，00 catalog §13.4）  | 中               | 目录按 `provider` 区分条目（键 = `{vendor}::{model}`），价格按通道取；P5 计算时必须区分 channel                                         |
+| 模型名版本后缀/微调后缀漂移导致 miss                                         | 低               | 多级兜底（去版本后缀）在 `lookup` 内实现，测试钉死                                                                                      |
+| reasoning_content 回放放大 miss 输入                                         | 低（已量化认知） | Reasonix 实测为命中率天花板（deepseek-reasonix-cache-analysis.md:222）；接受并在 UI 如实显示（测量层）                                  |
+| 内置 JSON 转录错误（价格/能力位）                                            | 低               | serde 全量解析测试 + `source_url` 溯源 + 刷新清单核销                                                                                   |
+| catalog.json 体积增长                                                        | 低               | 起步 ~27 条（几十 KB）；即使扩到 LiteLLM 量级（1.7MB）也仅为 include_str! 内存常驻，可接受；后续可拆 lazy 加载                          |
 
 ### 6.3 与其他计划边界（责任矩阵）
 
-| 计划 | 负责 | 不负责 |
-|---|---|---|
-| **P2** | 注入框架（断点/键/header 的写入位置、engine.rs:250-256 扩展、Anthropic Messages 端点接线） | 不决定"哪个厂商注入什么"（决策数据在 P3） |
-| **P3（本方案）** | 目录数据结构与数据源、行为矩阵、键推导规则、DeepSeek 适配开关、TTL 表 | 不写请求注入逻辑、不算成本、不做命中率 UI |
-| **P4（压缩/恢复层）** | CompactionEngine 接线、窗口钳制 | 窗口值从 P3 `context_window_for` 读取 |
-| **P5（成本/测量）** | 价格计算（消费 catalog 价格字段）、命中率统计、冷缓存预警（消费 P3 TTL 表） | 不定义价格数据结构（在 P3） |
-| **通用基础层** | 历史回流、tools 排序、system prompt 透传 | — |
+| 计划                  | 负责                                                                                       | 不负责                                    |
+| --------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| **P2**                | 注入框架（断点/键/header 的写入位置、engine.rs:250-256 扩展、Anthropic Messages 端点接线） | 不决定"哪个厂商注入什么"（决策数据在 P3） |
+| **P3（本方案）**      | 目录数据结构与数据源、行为矩阵、键推导规则、DeepSeek 适配开关、TTL 表                      | 不写请求注入逻辑、不算成本、不做命中率 UI |
+| **P4（压缩/恢复层）** | CompactionEngine 接线、窗口钳制                                                            | 窗口值从 P3 `context_window_for` 读取     |
+| **P5（成本/测量）**   | 价格计算（消费 catalog 价格字段）、命中率统计、冷缓存预警（消费 P3 TTL 表）                | 不定义价格数据结构（在 P3）               |
+| **通用基础层**        | 历史回流、tools 排序、system prompt 透传                                                   | —                                         |
 
 ---
 
 ## 附：本方案引用的关键文件行号索引
 
-| 主题 | 位置 |
-|---|---|
-| ReasoningVendor / infer_reasoning_vendor | crates/agent-provider/src/request/vendor.rs:14-41、277-310 |
-| MODEL_SERIES_CAPABILITIES 最长前缀表 | crates/agent-provider/src/request/vendor.rs:219-271 |
-| ProviderConfig（provider_id/extra 透传） | crates/agent-provider/src/config.rs:93-125 |
-| config_update 五参数 | apps/agent-workbench/src-tauri/src/config/provider.rs:501-553 |
-| build_chat_completions_request_body | crates/agent-provider/src/request/build.rs:102-177 |
-| ChatMessage 无 cache_control | crates/agent-provider/src/request/messages.rs:62-104 |
-| ReasoningContentMode | crates/agent-provider/src/request/messages.rs:19-28 |
-| 请求仅 Authorization 头 / provider_url | apps/agent-workbench/src-tauri/src/engine.rs:250-256、168-174 |
-| system_prompt 恒 None | apps/agent-workbench/src-tauri/src/engine.rs:220 |
-| core_run_task 签名（有 session_id） | apps/agent-workbench/src-tauri/src/core_run_commands.rs:919-929 |
-| scanProviderModels 无缓存 | apps/crish-desktop/src/api/modelCatalog.ts:688-771 |
-| ModelMeta / crish_model_meta_v1 | apps/crish-desktop/src/api/modelCatalog.ts:16、32-49 |
-| fetchLatestModels DEAD | apps/crish-desktop/src/api/clientApi.ts:822-824 |
-| pricingStore 全局乘数 | apps/crish-desktop/src/api/pricingStore.ts:22-51、99-121 |
-| parse_usage 缺 DeepSeek/Kimi 字段 | crates/agent-provider/src/parse/chat.rs:251-267 |
-| jcode TTL 路由表 | jcode-cache-analysis.md:2774-2799（provider/mod.rs） |
-| Reasonix reasoning_content 回放 | deepseek-reasonix-cache-analysis.md:116-127（openai.go:658-680） |
-| Reasonix DeepSeek 省略 cache_control | deepseek-reasonix-cache-analysis.md:100-114（anthropic.go:384） |
-| LiteLLM 目录三件套 | litellm-cache-analysis.md:464-467 |
-| 字段结构草案 | 00-vendor-model-pricing-catalog.md §12.1 |
-| 厂商矩阵事实 | vendor-cache-mechanisms.md §10；vendor-cache-gaps.md §六 |
+| 主题                                     | 位置                                                             |
+| ---------------------------------------- | ---------------------------------------------------------------- |
+| ReasoningVendor / infer_reasoning_vendor | crates/agent-provider/src/request/vendor.rs:14-41、277-310       |
+| MODEL_SERIES_CAPABILITIES 最长前缀表     | crates/agent-provider/src/request/vendor.rs:219-271              |
+| ProviderConfig（provider_id/extra 透传） | crates/agent-provider/src/config.rs:93-125                       |
+| config_update 五参数                     | apps/agent-workbench/src-tauri/src/config/provider.rs:501-553    |
+| build_chat_completions_request_body      | crates/agent-provider/src/request/build.rs:102-177               |
+| ChatMessage 无 cache_control             | crates/agent-provider/src/request/messages.rs:62-104             |
+| ReasoningContentMode                     | crates/agent-provider/src/request/messages.rs:19-28              |
+| 请求仅 Authorization 头 / provider_url   | apps/agent-workbench/src-tauri/src/engine.rs:250-256、168-174    |
+| system_prompt 恒 None                    | apps/agent-workbench/src-tauri/src/engine.rs:220                 |
+| core_run_task 签名（有 session_id）      | apps/agent-workbench/src-tauri/src/core_run_commands.rs:919-929  |
+| scanProviderModels 无缓存                | apps/crish-desktop/src/api/modelCatalog.ts:688-771               |
+| ModelMeta / crish_model_meta_v1          | apps/crish-desktop/src/api/modelCatalog.ts:16、32-49             |
+| fetchLatestModels DEAD                   | apps/crish-desktop/src/api/clientApi.ts:822-824                  |
+| pricingStore 全局乘数                    | apps/crish-desktop/src/api/pricingStore.ts:22-51、99-121         |
+| parse_usage 缺 DeepSeek/Kimi 字段        | crates/agent-provider/src/parse/chat.rs:251-267                  |
+| jcode TTL 路由表                         | jcode-cache-analysis.md:2774-2799（provider/mod.rs）             |
+| Reasonix reasoning_content 回放          | deepseek-reasonix-cache-analysis.md:116-127（openai.go:658-680） |
+| Reasonix DeepSeek 省略 cache_control     | deepseek-reasonix-cache-analysis.md:100-114（anthropic.go:384）  |
+| LiteLLM 目录三件套                       | litellm-cache-analysis.md:464-467                                |
+| 字段结构草案                             | 00-vendor-model-pricing-catalog.md §12.1                         |
+| 厂商矩阵事实                             | vendor-cache-mechanisms.md §10；vendor-cache-gaps.md §六         |

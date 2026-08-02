@@ -32,20 +32,20 @@
 
 ### 1.2 范围（做）
 
-| 维度 | 内容 | 落点 |
-|---|---|---|
-| A. tools 确定性 | `list_definitions` 按名排序；run 内快照锁定；schema 规范化（新建 `canonicalize_schema`）；canonical JSON 序列化函数 | agent-tools registry.rs / session-loop streaming.rs、LoopState / agent-provider request（新增 schema.rs、改 tools.rs） |
-| B. system prompt 通路 | `core_run_task` 增加 `system_prompt` 参数；SessionLoopOptions / ProviderRequest 透传；前端 guidance 拼接函数化；`build_system_prompt` 单点构造 | core_run_commands.rs / engine.rs / session-loop / ConnectionLifecycle.ts |
-| C. 消息构造确定性 | 字段顺序钉死；tool_call id 消毒；arguments 规范化序列化；DeepSeek `reasoning_content` 键存在性（Require 模式空串兜底） | messages.rs / engine.rs |
-| D. append-only 不变量 | 追加点清单化；动态内容后置纪律；水合只发生在 run 创建时 | session-loop（文档化 + 测试） |
-| E. 测试与回归 | 单元 + 集成 + 前端测试；字节级断言 | 各 crate 测试模块 / ConnectionLifecycle.tauri.test.ts |
+| 维度                  | 内容                                                                                                                                           | 落点                                                                                                                   |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| A. tools 确定性       | `list_definitions` 按名排序；run 内快照锁定；schema 规范化（新建 `canonicalize_schema`）；canonical JSON 序列化函数                            | agent-tools registry.rs / session-loop streaming.rs、LoopState / agent-provider request（新增 schema.rs、改 tools.rs） |
+| B. system prompt 通路 | `core_run_task` 增加 `system_prompt` 参数；SessionLoopOptions / ProviderRequest 透传；前端 guidance 拼接函数化；`build_system_prompt` 单点构造 | core_run_commands.rs / engine.rs / session-loop / ConnectionLifecycle.ts                                               |
+| C. 消息构造确定性     | 字段顺序钉死；tool_call id 消毒；arguments 规范化序列化；DeepSeek `reasoning_content` 键存在性（Require 模式空串兜底）                         | messages.rs / engine.rs                                                                                                |
+| D. append-only 不变量 | 追加点清单化；动态内容后置纪律；水合只发生在 run 创建时                                                                                        | session-loop（文档化 + 测试）                                                                                          |
+| E. 测试与回归         | 单元 + 集成 + 前端测试；字节级断言                                                                                                             | 各 crate 测试模块 / ConnectionLifecycle.tauri.test.ts                                                                  |
 
 ### 1.3 非范围（明确不做，记入边界）
 
 - **历史消息回流 / 会话水合**（comparison.md 2.13）：**P4 负责**（P4 §3.2 混合路线：SessionHistoryCache + with_initial_conversation_arc）。P1 只提供"回流之后前缀稳定"的物理前提与 `canonical_json_string`（稳定序列化基础，供 P1 测试与 P4 前缀哈希投影等复用；P2/P6 的缓存键已定为会话 ID 派生，**不再做内容哈希**）。【A1 审计修正】原稿"P2 负责 / P2 前缀哈希的基础函数"归属错误：历史回流属 P4；内容哈希已被 P2 §3.1.1 / P6 R3 废弃。
 - **cache_control 断点 / prompt_cache_key / 会话亲和头**（comparison.md 2.4/2.6）：**P2 负责注入框架（载体/预算/放置/键派生），P3 负责开关与数据（行为矩阵/模型目录）**。【A1 审计修正】原稿"P3 负责"表述不完整：P2 的 A/B 子主题才是注入实现方。
 - **压缩接线 / PayloadTooLarge 恢复阶梯 / 窗口钳制**（comparison.md 2.8/2.9）：P4 负责。P1 只在其纪律层面与其对齐（append-only、compaction 是唯一 cache-reset 点）。
-- **usage 字段补齐（DeepSeek 顶层 hit/miss、Kimi cached_tokens）与命中率展示**（comparison.md 2.5/2.10/2.11）：测量层 plan agent 负责。
+- **usage 字段补齐（DeepSeek 顶层 hit/miss、Kimi cached_tokens）与命中率展示**（comparison.md 2.5/2.10/2.11）：usage 字段补齐属 P2（D 子主题），命中率展示与浪费审计属 P5。【A2 审计修正：原稿"测量层 plan agent 负责"未落计划号，已按最终编号 P2/P5 标注】
 - **core_run_task 其余被静默丢弃的参数**（`mcpDisabledTools` / `budgetDifficulty` / `content` / `hasImages` / `attachments` / `visibleGoal` / `maxRounds` / `maxStalledRounds`）：不属本方案，相关 agent 按各自任务接线，本方案只修 `systemPrompt` 一条通路。
 - **`stream_error.rs` 的恢复阶梯**：只读引用（其注释"真实压缩落地后恢复阶梯"是 P4 的登记），本方案不改。
 - **会话持久化模型（conex-db / sessionRustDb）**：不属本方案。
@@ -89,7 +89,7 @@
 - `engine.rs:207-215`：`request_options` 未设置 `reasoning_content`，`build.rs:152` 兜底 `ReasoningContentMode::Omit`——**DeepSeek 工具循环轮次的 assistant 消息永远不带 `reasoning_content` 键**。参考 Reasonix 的实测结论：DeepSeek thinking 模式下 tool_calls 回合缺该键直接 400（deepseek-reasonix-cache-analysis.md:116-127，"总是发送该 key，空串也发"）；opencode 同样对每条 assistant 消息补 `{type:"reasoning", text:""}`（opencode-cache-analysis.md:186）。
 - `messages.rs:365-367`：assistant 消息"无正文、无工具调用、无思考回传"时整条跳过——Require 模式下若思考为空串，`reasoning_content: Some("")` 使跳过条件不成立（键存在），行为正确。
 
-### 2.4 请求体构建管线：字段插入序固定（含 preserve_order 隐患）
+### 2.4 请求体构建管线：字段插入序固定（preserve_order 传闻已核实排除）
 
 - `build.rs:102-177`：`build_chat_completions_request_body` 的字段插入序固定（model → stream → temperature → top_p → max_tokens → reasoning → messages → tools → tool_choice → stream_options）——管线序确定。
 - 【A2 审计修正】**preserve_order 双态结论不成立（原稿此处断言有误，实测纠正）**：`cargo tree -i serde_json -e features`（workspace 全成员）与 `cargo tree -p crish-agent-workbench -i serde_json -e features` 均显示 serde_json 启用的特性只有 `default / raw_value / std / alloc / unbounded_depth`——**全 workspace（含 app build）没有启用 `serde_json/preserve_order`**。schemars 0.8.22 的 `preserve_order` 特性定义为 `preserve_order = ["indexmap"]`，只启用 schemars 自身的 indexmap 依赖，**不联动 serde_json 的 preserve_order**（已核对 registry 源码 Cargo.toml）。因此：
@@ -230,14 +230,15 @@ pub fn canonicalize_schema(value: &Value) -> Value;
 /// 确定性 JSON 序列化：递归把对象键按字典序排序后输出字符串。
 ///
 /// 用途：
-/// 1. 测试断言（preserve_order 双态下字节一致，见 P1 §2.4 发现）；
+/// 1. 测试断言（【A2 审计修正】原"preserve_order 双态下字节一致"前提不成立，
+///    见 §2.4；本函数仍作为跨形态/跨侧字节断言的确定性基础）；
 /// 2. P2 前缀哈希（comparison.md 2.6 的 buildStableCacheKey 的 Rust 侧
 ///    哈希输入）；
 /// 3. tool_call arguments 的 wire 序列化（见 C2）。
 pub fn canonical_json_string(value: &Value) -> String;
 ```
 
-`canonicalize_schema` 实现要点（preserve_order 感知）：重建对象时**按排序后的键集合逐键插入**——preserve_order 开启时 IndexMap 保此插入序，未开启时 BTreeMap 自动排序，两种构建形态输出一致。`canonical_json_string` 同构：深度优先收集 `(key, value)` 排序后递归序列化。
+`canonicalize_schema` 实现要点（【A2 审计修正】原"preserve_order 感知"表述已更正：本 workspace 全构建 `serde_json::Map` 均为 BTreeMap，不存在双态——重建对象时**按固定序逐键插入**即可在任何构建形态下输出同一字节；若未来任一 crate 引入 serde_json preserve_order，本实现同样不受影响）。`canonical_json_string` 同构：深度优先收集 `(key, value)` 排序后递归序列化。
 
 #### A4. 接线点：`to_openai_tool` / `to_responses_tool` 内单点规范化
 
@@ -302,7 +303,9 @@ pub fn build_system_prompt(system_prompt: Option<String>) -> Option<String> {
 function composeSystemPrompt(
   base: string | undefined,
   guidance: string | undefined
-): string | undefined { /* 纯函数实现 + 单测 */ }
+): string | undefined {
+  /* 纯函数实现 + 单测 */
+}
 ```
 
 `responseStyleSystemPrompt` 变量（ConnectionLifecycle.ts:200、237-250）改为 `guidance`（仅 styleMap 映射文案，不含 base），`systemPrompt = composeSystemPrompt(options?.systemPrompt, guidance)`（ConnectionLifecycle.ts:271-275 处）。**行为不变**（同配置下输出文案与现状相同），只把"拼接形态"收敛为单一函数并加测试。
@@ -336,8 +339,9 @@ pub fn sanitize_tool_call_id(id: &str) -> String {
 ```
 
 接线（messages.rs:352-360 assistant 分支 + :335-343 tool 分支）：
+
 - `"id": call.id` → `"id": sanitize_tool_call_id(&call.id)`；
-- `"arguments": serde_json::to_string(&call.input)` → `canonical_json_string(&call.input)`（preserve_order 双态下字节一致）。
+- `"arguments": serde_json::to_string(&call.input)` → `canonical_json_string(&call.input)`（【A2 审计修正】原"preserve_order 双态下字节一致"前提不成立（见 §2.4）；保留本改动的真实理由：①防御性确定性——arguments 来自 provider 回传的 wire JSON，解析后的键序依赖对端，规范化保证未来任何键序依赖路径下历史字节不回改；②与 P6 R4/TS 侧解析链的跨侧口径一致；③为 P2 前缀哈希提供稳定输入）。
 
 **幂等性论证**：`canonical_json_string` 对相同语义 JSON 输出恒定；`sanitize_tool_call_id` 对已合法 id 无操作。两条都满足"历史字节不回改"——第二轮请求对同一历史消息映射出的 wire 与第一轮一致。
 
@@ -392,31 +396,31 @@ fn reasoning_content_mode(&self) -> ReasoningContentMode {
 
 #### E1. 单元测试（两次构建字节一致）
 
-| 测试 | 位置 | 断言 |
-|---|---|---|
-| `list_definitions_sorted_by_name_regardless_of_registration_order` | agent-tools registry 测试 | 乱序注册（z,a,m）→ 输出 [a,m,z]；`list()` 仍保注册序 |
-| `canonicalize_schema_sorts_properties_and_required` | agent-provider schema 测试 | properties 键序与 required 数组排序 |
-| `canonicalize_schema_const_to_enum` | 同上 | `{"const": 5}` → `{"enum":[5]}` |
-| `canonicalize_schema_type_array_normalized` | 同上 | `["string","number","string"]` → 去重固定序 |
-| `canonicalize_schema_ref_is_leaf` | 同上 | `$ref` 原样、不深入 |
-| `canonicalize_schema_is_idempotent` | 同上 | `canonicalize(canonicalize(x)) == canonicalize(x)` |
-| `canonical_json_string_is_order_independent` | 同上 | 同语义不同插入序的两个 Value → 相同字符串 |
-| `to_openai_tool_bytes_stable_across_calls` | agent-provider tools 测试 | 同一 ToolDefinition 两次 `to_openai_tool` → `canonical_json_string` 相等（含规范化接线） |
-| `request_body_bytes_identical_across_two_builds` | agent-provider build 测试 | 同 opts+context 两次 `build_chat_completions_request_body` → `to_string` 字节相等（同进程内对比，规避 preserve_order 双态） |
-| `tool_call_arguments_canonical_serialization` | agent-provider messages 测试 | arguments 用规范序列化（键序无关） |
-| `sanitize_tool_call_id_replaces_invalid_chars_and_is_idempotent` | 同上 | `"a b/c"` → `"a_b_c"`；`"call_1-2"` 不变；两次幂等 |
-| `reasoning_content_require_emits_empty_string` | 同上 | Require 模式无思考 → `Some("")` 且 to_value 含键 |
-| `tools_schema_snapshot_identical_across_build_requests` | session-loop 测试 | 两次 `build_request` → tools 快照同一引用/字节一致 |
+| 测试                                                               | 位置                         | 断言                                                                                                                                                                                                             |
+| ------------------------------------------------------------------ | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_definitions_sorted_by_name_regardless_of_registration_order` | agent-tools registry 测试    | 乱序注册（z,a,m）→ 输出 [a,m,z]；`list()` 仍保注册序                                                                                                                                                             |
+| `canonicalize_schema_sorts_properties_and_required`                | agent-provider schema 测试   | properties 键序与 required 数组排序                                                                                                                                                                              |
+| `canonicalize_schema_const_to_enum`                                | 同上                         | `{"const": 5}` → `{"enum":[5]}`                                                                                                                                                                                  |
+| `canonicalize_schema_type_array_normalized`                        | 同上                         | `["string","number","string"]` → 去重固定序                                                                                                                                                                      |
+| `canonicalize_schema_ref_is_leaf`                                  | 同上                         | `$ref` 原样、不深入                                                                                                                                                                                              |
+| `canonicalize_schema_is_idempotent`                                | 同上                         | `canonicalize(canonicalize(x)) == canonicalize(x)`                                                                                                                                                               |
+| `canonical_json_string_is_order_independent`                       | 同上                         | 同语义不同插入序的两个 Value → 相同字符串                                                                                                                                                                        |
+| `to_openai_tool_bytes_stable_across_calls`                         | agent-provider tools 测试    | 同一 ToolDefinition 两次 `to_openai_tool` → `canonical_json_string` 相等（含规范化接线）                                                                                                                         |
+| `request_body_bytes_identical_across_two_builds`                   | agent-provider build 测试    | 同 opts+context 两次 `build_chat_completions_request_body` → `to_string` 字节相等（同进程内对比；【A2 审计修正】原文"规避 preserve_order 双态"理由已删——全构建均为 BTreeMap 字节天然确定，该断言是常规回归守门） |
+| `tool_call_arguments_canonical_serialization`                      | agent-provider messages 测试 | arguments 用规范序列化（键序无关）                                                                                                                                                                               |
+| `sanitize_tool_call_id_replaces_invalid_chars_and_is_idempotent`   | 同上                         | `"a b/c"` → `"a_b_c"`；`"call_1-2"` 不变；两次幂等                                                                                                                                                               |
+| `reasoning_content_require_emits_empty_string`                     | 同上                         | Require 模式无思考 → `Some("")` 且 to_value 含键                                                                                                                                                                 |
+| `tools_schema_snapshot_identical_across_build_requests`            | session-loop 测试            | 两次 `build_request` → tools 快照同一引用/字节一致                                                                                                                                                               |
 
 #### E2. 集成测试（参考 codex prompt_caching.rs）
 
-| 测试 | 位置 | 断言 |
-|---|---|---|
+| 测试                                                  | 位置                                                                      | 断言                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `two_turn_tool_loop_keeps_request_prefix_byte_stable` | session-loop 集成测试（复用 TestProvider.requests()，testing/mod.rs:111） | 脚本：call1 = ToolCall + Stop(ToolCall)，call2 = TextDelta + Stop；注册 echo 工具；run 后 `requests()[0].tools` 与 `requests()[1].tools` 的 canonical 序列化相等（对齐 codex `prompt_tools_are_consistent_across_requests`）；`requests()[1].messages[0]` 与 `requests()[0].messages[0]` 内容相等（前缀复用），messages[1..] 为追加段（对齐 codex `prefixes_context_and_instructions_once_and_consistently`） |
-| `system_prompt_stable_across_runs_same_settings` | session-loop 集成测试 | 同 settings（system_prompt 相同）两次 run → 首次请求的 system 段字节一致（用 `with_initial_conversation_arc` 续接模拟跨 run） |
-| `conversation_is_append_only_within_run` | session-loop 集成测试 | 工具循环 run 后：`RunOutcome.messages` 中每条消息的 Arc 内容与请求快照顺序一致，无重排/改写（append-only 不变量） |
-| `build_context_passes_system_prompt_and_is_stable` | agent-workbench（app crate）engine 测试 | `build_context` 透传 `system_prompt`；两次构建上下文相同请求 → body 字节一致 |
-| `compose_system_prompt_forms_are_canonical` | 前端 vitest（ConnectionLifecycle.tauri.test.ts） | 三形态（base / guidance / 两者）输出唯一确定；`systemPrompt` 参数出现在 startRunTask 调用中 |
+| `system_prompt_stable_across_runs_same_settings`      | session-loop 集成测试                                                     | 同 settings（system_prompt 相同）两次 run → 首次请求的 system 段字节一致（用 `with_initial_conversation_arc` 续接模拟跨 run）                                                                                                                                                                                                                                                                                 |
+| `conversation_is_append_only_within_run`              | session-loop 集成测试                                                     | 工具循环 run 后：`RunOutcome.messages` 中每条消息的 Arc 内容与请求快照顺序一致，无重排/改写（append-only 不变量）                                                                                                                                                                                                                                                                                             |
+| `build_context_passes_system_prompt_and_is_stable`    | agent-workbench（app crate）engine 测试                                   | `build_context` 透传 `system_prompt`；两次构建上下文相同请求 → body 字节一致                                                                                                                                                                                                                                                                                                                                  |
+| `compose_system_prompt_forms_are_canonical`           | 前端 vitest（ConnectionLifecycle.tauri.test.ts）                          | 三形态（base / guidance / 两者）输出唯一确定；`systemPrompt` 参数出现在 startRunTask 调用中                                                                                                                                                                                                                                                                                                                   |
 
 #### E3. 测试命令（验收用）
 
@@ -438,21 +442,25 @@ npx vitest run src                          # 基线失败集中在既有 4 处�
 ### 阶段 1：tools 确定性（A）
 
 **步骤 1.1** —— `crates/agent-tools/src/registry.rs`
+
 - 改：`list_definitions`（registry.rs:63-68）内排序（§3.2 A1）。
 - 加测试：`list_definitions_sorted_by_name_regardless_of_registration_order`（现有 `list_definitions_in_order_with_schema`（registry.rs:157-171）是顺序注册，不受影响；`list_preserves_registration_order`（registry.rs:126-133）断言 `list()`，不受影响）。
 - 为什么：一行改动对齐 jcode/TS formatStableTools，消除注册序漂移；排序在输出面做，不碰执行面。
 
 **步骤 1.2** —— 新增 `crates/agent-provider/src/request/schema.rs`
+
 - 改：实现 `canonicalize_schema` + `canonical_json_string`（§3.2 A3）+ 全部单测。
 - 在 `request/mod.rs`（mod.rs:11-14）挂 `pub mod schema;` 并 re-export 两函数。
-- 为什么：schema 规范化是 tools 字节稳定与 P2 前缀哈希的公共基础，独立模块避免塞进 tools.rs 或 build.rs；`canonical_json_string` 同时服务测试（preserve_order 双态）与未来 P2。
+- 为什么：schema 规范化是 tools 字节稳定与 P2 前缀哈希的公共基础，独立模块避免塞进 tools.rs 或 build.rs；`canonical_json_string` 同时服务测试（【A2 审计修正】原文"（preserve_order 双态）"理由不成立，已改为"跨形态/跨侧字节断言的确定性基础"）与未来 P2。
 
 **步骤 1.3** —— `crates/agent-provider/src/request/tools.rs`
+
 - 改：`to_openai_tool`（tools.rs:38-47）与 `to_responses_tool`（tools.rs:50-58）的 `parameters` 改为 `canonicalize_schema(&tool.effective_input_schema())`；import `super::schema::canonicalize_schema`。
 - 加测试：`to_openai_tool_bytes_stable_across_calls` + 现有 shape 测试（tools.rs:107-131）更新为期望规范化输出（如 properties 排序）。
 - 为什么：wire 出口单点接线，所有工具统一规范化；`to_responses_tool` 同步处理防止 Responses 端点将来接入时漂移。
 
 **步骤 1.4** —— `crates/session-loop/src/loop/handlers/mod.rs` + `streaming.rs`
+
 - 改：`LoopState` 增加 `tools_snapshot: Option<Vec<ToolSchema>>`（handlers/mod.rs:55-85 结构体 + :89-112 构造器初始化 None）；`streaming.rs` 新增 `ensure_tools_snapshot`、`tools_schema` 改为返回 `&[ToolSchema]`（§3.2 A2）；`streaming::handle`（streaming.rs:47-48）在 `build_request` 前调 `ensure_tools_snapshot`。
 - 加测试：`tools_schema_snapshot_identical_across_build_requests`（session-loop 单测：构造 LoopState，两次 ensure+build，快照字节一致且为同一缓存）。
 - 为什么：工具循环轮次间复用同一快照（对齐"首轮锁定"），即使未来注册表引入运行时注册路径，run 内也稳定；借用形态 `&[ToolSchema]` 与 ProviderRequest 的 `Vec<ToolSchema>` 需要一次克隆——权衡后保留 `ProviderRequest.tools: Vec<ToolSchema>` 不变（provider.rs:78），`build_request` 里 `ensure_tools_snapshot` 后 `tools_snapshot.clone()`（8 个内置工具，克隆成本可忽略；避免动 ProviderCall 冻结契约，AU-04 F1）。
@@ -460,24 +468,30 @@ npx vitest run src                          # 基线失败集中在既有 4 处�
 ### 阶段 2：system prompt 通路（B）
 
 **步骤 2.1** —— `crates/agent-provider/src/request/build.rs`
+
 - 改：新增 `build_system_prompt`（§3.3 B1）+ 单测（trim/空值/None）。
 - re-export：`request/mod.rs:16-19` 的 `pub use build::{...}` 增加 `build_system_prompt`。
 - 为什么：规范化单点；agent-provider 是请求构造真源，前端/上层不感知拼接规则。
 
 **步骤 2.2** —— `crates/session-loop/src/loop/mod.rs`（SessionLoopOptions）+ `crates/session-loop/src/provider.rs`（ProviderRequest）
+
 - 改：`SessionLoopOptions`（mod.rs:126-156）增加 `pub system_prompt: Option<String>`；`Default`（mod.rs:158-173）补 `None`；`default_options_match_documented_defaults` 测试（mod.rs:546-558）补断言。
 - 改：`ProviderRequest`（provider.rs:74-81）增加 `pub system_prompt: Option<&'a str>`；`build_request`（streaming.rs:253-259）填充 `system_prompt: state.options.system_prompt.as_deref()`。
+- 【A2 审计修正】`ProviderRequest` 冻结于 PE-02 §3.1 v1 契约（AU-04 F1，"后续变更须走 AU-04 冻结变更流程"，PE-02 §3.1 尾注）：本步骤新增字段属**契约扩展**（全字段 `Option`，既有调用方构造不破坏），实施时必须与 P2 步骤 4（`ProviderRequest.session_id` 扩展）合并走一次接口变更登记（与 P2 §6.1 相同的登记路径），避免两次变更互相覆盖。
 - 为什么：system prompt 进入 run 的调用上下文（ProviderRequest 是"本次调用的全部上下文"，provider.rs:64-81 注释语义），engine 侧从 request 读取而非再开一路状态。
 
 **步骤 2.3** —— `apps/agent-workbench/src-tauri/src/engine.rs`
+
 - 改：`build_context`（engine.rs:218-233）的 `system_prompt: None` → `system_prompt: request.system_prompt.map(str::to_string)`；`request_options`（engine.rs:207-215）增加 `reasoning_content: Some(self.reasoning_content_mode())`（§3.4 C3，vender 推断函数一并加）。
 - 为什么：两处修复合一（system prompt 透传 + DeepSeek reasoning 键存在性）；engine.rs:246 的 body 构建路径不变。
 
 **步骤 2.4** —— `apps/agent-workbench/src-tauri/src/core_run_commands.rs`
+
 - 改：`core_run_task` 签名（core_run_commands.rs:919-929）增加 `system_prompt: Option<String>`；装配 options（core_run_commands.rs:1019-1023）增加 `system_prompt: build_system_prompt(system_prompt),`。
 - 为什么：修复"前端参数被 serde 静默丢弃"；入站规范化一次（步骤 2.1 的函数），全链透传原始。
 
 **步骤 2.5** —— `apps/crish-desktop/src/api/chat-bridge/ConnectionLifecycle.ts`
+
 - 改：新增 `composeSystemPrompt` 纯函数（§3.3 B2），删除 `base.includes('Response style:')` 特殊分支；`responseStyleSystemPrompt` 改名为 `responseStyleGuidance`（只含 styleMap 文案）；`systemPrompt = composeSystemPrompt(base, guidance)`。
 - 改测试：`ConnectionLifecycle.tauri.test.ts:128-142` 增加 `systemPrompt` 断言；新增 composeSystemPrompt 三形态单测。
 - 为什么：消除拼接形态漂移；透传行为不变（参数名仍为 systemPrompt）。
@@ -485,24 +499,28 @@ npx vitest run src                          # 基线失败集中在既有 4 处�
 ### 阶段 3：消息构造确定性（C）
 
 **步骤 3.1** —— `crates/agent-provider/src/request/messages.rs`
+
 - 改：`sanitize_tool_call_id`（§3.4 C2）；assistant 分支（messages.rs:352-360）id 消毒 + arguments 用 `canonical_json_string`；tool 分支（messages.rs:335-343）tool_call_id 消毒；`reasoning_content_object` 的 Require 语义落地（§3.4 C3）。
 - 加测试：`sanitize_tool_call_id_*`、`tool_call_arguments_canonical_serialization`、`reasoning_content_require_emits_empty_string`。
-- 注意：`role_map`/`wire_value_shape`（messages.rs:803-816）等既有测试断言 `arguments` 为 `{"path":"/a"}`（messages.rs:630）——规范化序列化在无 preserve_order 的测试 build 下输出相同（BTreeMap 本来就排序），断言不破。
-- 为什么：wire 层单点；id 消毒幂等保证历史不回改；arguments 规范化消除跨构建字节差。
+- 注意：`role_map`/`wire_value_shape`（messages.rs:803-816）等既有测试断言 `arguments` 为 `{"path":"/a"}`（messages.rs:630）——【A2 审计修正】原文"无 preserve_order 的测试 build"表述已删（全构建均 BTreeMap，见 §2.4）：`serde_json::to_string` 与 `canonical_json_string` 对该单键对象输出相同，断言不破。
+- 为什么：wire 层单点；id 消毒幂等保证历史不回改；arguments 规范化保证任意键序输入下输出恒定（防御性确定性，见 §2.4 修正）。
 
 ### 阶段 4：append-only 纪律 + 集成测试（D/E）
 
 **步骤 4.1** —— `crates/session-loop/src/loop/handlers/mod.rs`（注释）、`streaming.rs`（注释）、`mod.rs`（注释）
+
 - 改：在 4 个追加点（§2.5）与 `with_initial_conversation_arc` 处补充 P1 不变量注释（"本函数是 append-only 追加点之一；改写既有消息会破坏请求前缀，任何新写入必须追加尾部"）。
 - 为什么：把纪律写进代码，评审/未来 agent 可审计。
 
 **步骤 4.2** —— `crates/session-loop/src/loop/handlers/streaming.rs`（测试模块）或新测试文件
+
 - 加：E2 三个集成测试（`two_turn_tool_loop_keeps_request_prefix_byte_stable`、`system_prompt_stable_across_runs_same_settings`、`conversation_is_append_only_within_run`），复用 `TestProvider.requests()`（testing/mod.rs:111）与 `RequestSnapshot`（testing/mod.rs:244-262）；tools 字节断言经 `canonical_json_string`（步骤 1.2 的函数，session-loop 需依赖 agent-provider？——不，session-loop 不依赖 agent-provider（provider.rs:1-22 契约注释）。**处理**：tools 断言在 session-loop 侧用 `serde_json::to_string(&schema)` 直接序列化（ToolSchema 三字段结构确定，工具内无嵌套对象顺序问题——input_schema 是 Value，其中 properties 键序在 session-loop 测试 build 下是 BTreeMap 排序，两次构建同 build 对比仍成立）。若需要与 app build 一致的断言，把 input_schema 规范化断言放 agent-provider 单测（步骤 1.2/1.3 已覆盖）。
 - 为什么：session-loop 不依赖 agent-provider 的架构约束（provider.rs:1-22）决定集成断言在 loop 层用自身形态（ProviderRequest/ToolSchema），wire 字节断言下沉到 agent-provider。
 
 **步骤 4.3** —— `apps/agent-workbench/src-tauri/src/engine.rs`（测试模块）
+
 - 加：`build_context_passes_system_prompt_and_is_stable`（透传 + 两次构建字节一致，同进程对比）。
-- 为什么：app crate 是唯一同时看到 request 构造与 preserve_order 的构建，端到端字节断言放这里最真实。
+- 为什么：app crate 是唯一端到端串起 request 构造 → HTTP 发送的构建，端到端字节断言放这里最真实（【A2 审计修正】原文"唯一同时看到 request 构造与 preserve_order 的构建"表述已删——无 preserve_order，见 §2.4）。
 
 ---
 
@@ -510,18 +528,18 @@ npx vitest run src                          # 基线失败集中在既有 4 处�
 
 ### 5.1 功能验收（对照方案主题逐条）
 
-| # | 验收项 | 验证方式 |
-|---|---|---|
-| 1 | `list_definitions` 输出按 name 升序，与注册序无关 | `cargo test -p agent-tools` 新单测 |
-| 2 | schema 规范化幂等且覆盖 properties/required/const/type 数组/$ref | `cargo test -p agent-provider` schema 单测 |
-| 3 | 同一 run 内工具循环两次请求的 tools 字节一致 | `cargo test -p session-loop` 集成测试 |
-| 4 | `core_run_task` 接收 systemPrompt 并到达请求体 system 消息 | `cargo test --workspace` + app 集成测试；前端 `ConnectionLifecycle.tauri.test.ts` 参数断言 |
-| 5 | 同配置跨 run system 段字节一致 | `cargo test -p session-loop` 集成测试 |
-| 6 | 前端 guidance 拼接单一形态（composeSystemPrompt 纯函数） | `npx vitest run src` 新单测 |
-| 7 | DeepSeek 工具轮次 assistant 消息必带 `reasoning_content` 键（空串兜底） | `cargo test -p agent-provider` Require 单测 |
-| 8 | tool_call id 消毒幂等、arguments 规范化序列化 | `cargo test -p agent-provider` messages 单测 |
-| 9 | 对话 append-only（追加点清单 + 无改写路径） | `cargo test -p session-loop` 不变量集成测试 |
-| 10 | 请求体两次构建字节一致 | `cargo test -p agent-provider` build 单测 + app 集成测试 |
+| #   | 验收项                                                                  | 验证方式                                                                                   |
+| --- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 1   | `list_definitions` 输出按 name 升序，与注册序无关                       | `cargo test -p agent-tools` 新单测                                                         |
+| 2   | schema 规范化幂等且覆盖 properties/required/const/type 数组/$ref        | `cargo test -p agent-provider` schema 单测                                                 |
+| 3   | 同一 run 内工具循环两次请求的 tools 字节一致                            | `cargo test -p session-loop` 集成测试                                                      |
+| 4   | `core_run_task` 接收 systemPrompt 并到达请求体 system 消息              | `cargo test --workspace` + app 集成测试；前端 `ConnectionLifecycle.tauri.test.ts` 参数断言 |
+| 5   | 同配置跨 run system 段字节一致                                          | `cargo test -p session-loop` 集成测试                                                      |
+| 6   | 前端 guidance 拼接单一形态（composeSystemPrompt 纯函数）                | `npx vitest run src` 新单测                                                                |
+| 7   | DeepSeek 工具轮次 assistant 消息必带 `reasoning_content` 键（空串兜底） | `cargo test -p agent-provider` Require 单测                                                |
+| 8   | tool_call id 消毒幂等、arguments 规范化序列化                           | `cargo test -p agent-provider` messages 单测                                               |
+| 9   | 对话 append-only（追加点清单 + 无改写路径）                             | `cargo test -p session-loop` 不变量集成测试                                                |
+| 10  | 请求体两次构建字节一致                                                  | `cargo test -p agent-provider` build 单测 + app 集成测试                                   |
 
 ### 5.2 测试命令（全部通过为验收）
 
@@ -540,6 +558,7 @@ npx vitest run src
 ### 5.3 字节级验收样例（手工复核路径）
 
 带 `systemPrompt` 发起 run → 工具循环两轮 → 抓取两次请求体（tracing 或断点）：
+
 - 两次请求的 `tools` 数组 `to_string` 完全一致；
 - 第二次请求的 `messages[0..n]` 与第一次请求 `messages` 完全一致（仅尾部追加）；
 - system 消息始终是 `messages[0]`。
@@ -562,42 +581,42 @@ npx vitest run src
 
 ### 6.2 与其他计划的边界
 
-| 计划 | 边界 |
-|---|---|
-| P2（wire 缓存参数/键稳定） | 不做 history 参数（历史回流归 P4）；P2 的断点/键注入依赖 P1 的前缀稳定才有命中对象 |
-| P3（厂商/模型开关与数据） | 不注入断点、不建 CacheControl 载体（messages.rs:62-104 的 ChatMessage 不新增字段，载体由 P2 步骤 2 增加）；P3 只提供开关数据与模型目录 |
-| P4（历史回流/上下文管理） | P1 不做 history 参数、不做压缩接线；`with_initial_conversation_arc` 语义固定由 P1 提供，P4 §3.2 消费 |
-| 串行注意（同文件） | `engine.rs`（P1 步骤 2.3 × P2 步骤 4 × P3 步骤 4 × P4 阶段 1 × P5 S5）、`request/messages.rs`（P1 阶段 3 × P2 步骤 2 × P3 步骤 4）、`request/build.rs`（P1 步骤 2.1 × P2 步骤 3 × P3 步骤 4）、`session-loop provider.rs`（P1 步骤 2.2 × P2 步骤 4 的 ProviderRequest 同 struct）、`core_run_commands.rs`（P1 步骤 2.4 × P4 阶段 1 的 core_run_task 同签名）——按 P1 → P2 → P3 → P4 → P5 串行，同文件改动合并提交【A1 审计修正：原稿 P2 行把"历史回流"归 P2、P3 行把"断点注入"归 P3，均归属错误，已改为 P4/P2 职责】 |
-| P4（压缩/恢复） | 不改 stream_error.rs 恢复阶梯（只读引用其 length_ladder）；不接 CompactionEngine；P4 的"压缩 = 唯一 cache-reset 点"与 P1 的 append-only 不变量在注释层对齐（§3.5） |
-| 测量层 agent（usage/命中率） | 不做命中率统计与展示；`reasoning_content` Require 只改请求侧，不动 parse/usage |
+| 计划                                 | 边界                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P2（wire 缓存参数/键稳定）           | 不做 history 参数（历史回流归 P4）；P2 的断点/键注入依赖 P1 的前缀稳定才有命中对象                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| P3（厂商/模型开关与数据）            | 不注入断点、不建 CacheControl 载体（messages.rs:62-104 的 ChatMessage 不新增字段，载体由 P2 步骤 2 增加）；P3 只提供开关数据与模型目录                                                                                                                                                                                                                                                                                                                                                                              |
+| P4（历史回流/上下文管理）            | P1 不做 history 参数、不做压缩接线；`with_initial_conversation_arc` 语义固定由 P1 提供，P4 §3.2 消费                                                                                                                                                                                                                                                                                                                                                                                                                |
+| 串行注意（同文件）                   | `engine.rs`（P1 步骤 2.3 × P2 步骤 4 × P3 步骤 4 × P4 阶段 1 × P5 S5）、`request/messages.rs`（P1 阶段 3 × P2 步骤 2 × P3 步骤 4）、`request/build.rs`（P1 步骤 2.1 × P2 步骤 3 × P3 步骤 4）、`session-loop provider.rs`（P1 步骤 2.2 × P2 步骤 4 的 ProviderRequest 同 struct）、`core_run_commands.rs`（P1 步骤 2.4 × P4 阶段 1 的 core_run_task 同签名）——按 P1 → P2 → P3 → P4 → P5 串行，同文件改动合并提交【A1 审计修正：原稿 P2 行把"历史回流"归 P2、P3 行把"断点注入"归 P3，均归属错误，已改为 P4/P2 职责】 |
+| P4（压缩/恢复）                      | 不改 stream_error.rs 恢复阶梯（只读引用其 length_ladder）；不接 CompactionEngine；P4 的"压缩 = 唯一 cache-reset 点"与 P1 的 append-only 不变量在注释层对齐（§3.5）                                                                                                                                                                                                                                                                                                                                                  |
+| P5（测量层 agent，usage/命中率展示） | 不做命中率统计与展示；`reasoning_content` Require 只改请求侧，不动 parse/usage【A2 审计修正：原稿"测量层 agent"未标注计划号，现编号体系下为 P5（缓存命中率测量/成本记账/浪费审计）】                                                                                                                                                                                                                                                                                                                                |
 
 ### 6.3 风险清单
 
-| 风险 | 等级 | 缓解 |
-|---|---|---|
-| **preserve_order 双态**：app build（schemars→tauri）开启 serde_json preserve_order（IndexMap 保插入序），crate 级测试 build 未开启（BTreeMap 排序）——同一代码两种字节行为 | 高 | ① 所有跨形态字节断言走 `canonical_json_string` 或同进程两次构建对比；② `canonicalize_schema` 重建时按键排序插入，两种形态输出一致；③ 验收标准 5.3 的手工复核走真实 app 路径 |
-| tools 排序改变模型可见顺序 | 低 | DeepSeek/OpenAI 兼容端点无工具位置语义；jcode/opencode 均排序或固定序，无负面反馈；排序只在 `list_definitions` 输出面 |
-| systemPrompt 首次真正到达模型（行为变化） | 中 | 这是修复"参数被丢弃"，模型行为从"无 system"变为"有 system"——需在 UI 侧确认文案（前端 guidance 文案保持不变，仅通路打通）；P1 合入说明中标注 |
-| 前端 guidance 改动引入回归 | 低 | composeSystemPrompt 纯函数 + 既有 ConnectionLifecycle 测试更新；文案常量（styleMap）不动 |
-| `reasoning_content` Require 模式对非 DeepSeek 厂商副作用 | 低 | 只在 vendor=DeepSeek 时启用（engine.rs 推断）；其余厂商保持 Omit（现状） |
-| 工具循环集成测试的字节断言在 session-loop 层不可达 wire | 低 | session-loop 不依赖 agent-provider（provider.rs:1-22）；loop 层断言 ProviderRequest 形态稳定，wire 字节断言下沉 agent-provider 单测与 app 集成测试（步骤 4.2 说明） |
-| 与既有测试的冲突 | 低 | `list_preserves_registration_order`（registry.rs:126-133）断言 `list()` 不受排序影响；`list_definitions_in_order_with_schema`（registry.rs:157-171）顺序注册，排序后断言仍成立；messages 既有 arguments 断言（messages.rs:630）在无 preserve_order 测试 build 下不破 |
+| 风险                                                                                                                                                                               | 等级        | 缓解                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **preserve_order 双态（【A2 审计修正】原风险条目事实不成立，见 §2.4——本 workspace 从未启用 serde_json preserve_order，全构建形态 `Map` 均为 BTreeMap，无"同一代码两种字节行为"）** | ~~高~~ 已撤 | 原缓解①③保留为常规纪律：字节断言走 `canonical_json_string` 或同进程两次构建对比（理由：防御性确定性 + P6 R2 跨侧对齐）；`canonicalize_schema` 固定键序重建保证任意未来特性组合下输出一致；验收 5.3 手工复核走真实 app 路径。**新增真实风险替代条目**：若未来任一 crate 引入 serde_json preserve_order（IndexMap），既有"依赖 Map 排序"的断言可能翻转——以本方案 canonical 序列化函数作为唯一跨形态断言入口即可免疫 |
+| tools 排序改变模型可见顺序                                                                                                                                                         | 低          | DeepSeek/OpenAI 兼容端点无工具位置语义；jcode/opencode 均排序或固定序，无负面反馈；排序只在 `list_definitions` 输出面                                                                                                                                                                                                                                                                                             |
+| systemPrompt 首次真正到达模型（行为变化）                                                                                                                                          | 中          | 这是修复"参数被丢弃"，模型行为从"无 system"变为"有 system"——需在 UI 侧确认文案（前端 guidance 文案保持不变，仅通路打通）；P1 合入说明中标注                                                                                                                                                                                                                                                                       |
+| 前端 guidance 改动引入回归                                                                                                                                                         | 低          | composeSystemPrompt 纯函数 + 既有 ConnectionLifecycle 测试更新；文案常量（styleMap）不动                                                                                                                                                                                                                                                                                                                          |
+| `reasoning_content` Require 模式对非 DeepSeek 厂商副作用                                                                                                                           | 低          | 只在 vendor=DeepSeek 时启用（engine.rs 推断）；其余厂商保持 Omit（现状）                                                                                                                                                                                                                                                                                                                                          |
+| 工具循环集成测试的字节断言在 session-loop 层不可达 wire                                                                                                                            | 低          | session-loop 不依赖 agent-provider（provider.rs:1-22）；loop 层断言 ProviderRequest 形态稳定，wire 字节断言下沉 agent-provider 单测与 app 集成测试（步骤 4.2 说明）                                                                                                                                                                                                                                               |
+| 与既有测试的冲突                                                                                                                                                                   | 低          | `list_preserves_registration_order`（registry.rs:126-133）断言 `list()` 不受排序影响；`list_definitions_in_order_with_schema`（registry.rs:157-171）顺序注册，排序后断言仍成立；messages 既有 arguments 断言（messages.rs:630）输出键序不受本方案影响（【A2 审计修正】原文"无 preserve_order 测试 build"表述已删——全构建均为 BTreeMap，见 §2.4）                                                                  |
 
 ### 6.4 未决问题（合入前需裁决）
 
 1. `systemPrompt` 透传后，前端 styleMap 的 guidance 是否未来下沉为"前端只传 styleKey、Rust 维护文案表"（彻底静态化）？P1 选择最小改动（前端拼好传值，Rust 只做规范化），文案表下沉留待 P2 静态/动态拆分时评估。
-2. `canonical_json_string` 是否同时用于**请求体发送序列化**（reqwest `.json()` 之外自定义序列化器）？P1 只用于工具 schema/arguments 与测试/哈希；全请求体规范化发送涉及 wire 行为变化（键序改变），暂不做，记入 P2 候选。
+2. `canonical_json_string` 是否同时用于**请求体发送序列化**（reqwest `.json()` 之外自定义序列化器）？P1 只用于工具 schema/arguments 与测试/哈希。【A2 审计修正】原"全请求体规范化发送涉及 wire 行为变化（键序改变）"前提不成立（BTreeMap 下 `to_string` 键序已固定，自定义序列化器是字节等价 no-op）；该问题实际降级为"未来若引入 preserve_order，是否统一走 canonical 序列化"——届时再裁决，现记入 P2 候选。
 
 ---
 
 ## 附：参考调研锚点索引（本方案引用）
 
-| 引用点 | 调研文档 |
-|---|---|
-| jcode `sort_by(name)` / 快照锁定 / static-dynamic 拆分 / 前缀不变量测试 | jcode-cache-analysis.md:36-49、70-79、299-318 |
-| opencode tools 排序 / schema 规范化 / strict:false / reasoning 补齐 / toolCallId 消毒 | opencode-cache-analysis.md:180-187、258-259 |
-| codex 固定流水线序 / prompt_caching.rs 集成断言 / instructions 确定性 | codex-cli-cache-analysis.md:153-154、160-170 |
-| Reasonix append-only / 记忆折叠 / reasoning_content 空串兜底 / 字节稳定优先 | deepseek-reasonix-cache-analysis.md:11-25、116-127、255-281 |
-| pi system prompt 整轮复用 | pi-cache-analysis.md:322-326 |
-| 百炼工具定义字节一致要求 | vendor-cache-mechanisms.md:359、420-424 |
-| crish 对比缺口与优先级
+| 引用点                                                                                | 调研文档                                                    |
+| ------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| jcode `sort_by(name)` / 快照锁定 / static-dynamic 拆分 / 前缀不变量测试               | jcode-cache-analysis.md:36-49、70-79、299-318               |
+| opencode tools 排序 / schema 规范化 / strict:false / reasoning 补齐 / toolCallId 消毒 | opencode-cache-analysis.md:180-187、258-259                 |
+| codex 固定流水线序 / prompt_caching.rs 集成断言 / instructions 确定性                 | codex-cli-cache-analysis.md:153-154、160-170                |
+| Reasonix append-only / 记忆折叠 / reasoning_content 空串兜底 / 字节稳定优先           | deepseek-reasonix-cache-analysis.md:11-25、116-127、255-281 |
+| pi system prompt 整轮复用                                                             | pi-cache-analysis.md:322-326                                |
+| 百炼工具定义字节一致要求                                                              | vendor-cache-mechanisms.md:359、420-424                     |
+| crish 对比缺口与优先级                                                                | comparison.md:2.1-2.3、3.1-3.3、4.2、5（第一/二层）         |
