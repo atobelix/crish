@@ -1,17 +1,25 @@
 /**
- * layoutStore — **god-object** (single zustand + immer instance).
+ * layoutStore — 布局/壳层 UI 域（zustand + immer 实例）。
  *
- * ## Ownership (write authority)
+ * ## Ownership (write authority) — T11 拆分后
  *
  * This store is the **authority** for:
- * - **Session domain**: sessions[], sessionsById, activeSessionId, draftFolder,
- *   agents, messages, composer drafts (also via `sessionStore` facade — same instance)
+ * - **Layout chrome**: uiSize, shellChromeMode, chatMainSurface, sidebarCollapsed,
+ *   tabModeEnabled, settings overlay (showSettingsOverlay / settingsActiveTab)
+ * - **Session domain**（OPT-C1 保留）: sessions[], sessionsById, activeSessionId,
+ *   draftFolder, agents, messages, composer drafts
+ *   (also via `sessionStore` facade — same instance)
  * - **Legacy workspace columns**: workspaces / groups / cards / DnD preview
- *   (also via `workspaceStore` facade — same instance; pre-tree fallback UI)
- * - **Layout chrome**: sidebarCollapsed, tabModeEnabled, shellChromeMode,
- *   chatMainSurface, uiSize, settings overlay, permission/plan mode
- * - **App settings & telemetry**: appSettings, cron, mcp, tokenUsage, workers
- * - **Cross-cutting UI buffers**: diffFiles, terminalLines / terminalBySession
+ *   (also via `workspaceStore` facade — same instance)
+ *
+ * ## Split out to domain stores (T11) — do NOT dual-write from here
+ *
+ * | Concern | Owner store | Entry |
+ * |---------|-------------|-------|
+ * | terminal buffers + diff buffers | `terminalStore` | `storeAccess` / `useTerminalStore` |
+ * | workers / killed / manual workers | `workerStore` | `storeAccess` / `useWorkerStore` |
+ * | permission mode / plan / command whitelist | `permissionStore` | `storeAccess` / `usePermissionStore` |
+ * | app settings / providers / cron / mcp / tokenUsage | `settingsStore` | `storeAccess` / `useSettingsStore` |
  *
  * ## Does NOT own (sibling stores — do not dual-write from here)
  *
@@ -20,27 +28,14 @@
  * | Open tabs / TabSurface / rightDock / shellReady | `workspaceShellStore` | `compositionRoot.shell` / shell actions |
  * | Binary tree geometry (split/merge/drop/activeLeaf) | `layoutTreeStore` | layout-tree ops / `useLayoutTreeStore` |
  *
- * ## Forbidden writes (components / features)
- *
- * - **Do not** open/focus/new-draft by only calling `setActiveSessionId` — go through
- *   shell (`openOrFocusSession` / `openNewDraftTab`); shell may call session activate internally.
- * - **Do not** mutate layout-tree geometry from layoutStore actions.
- * - **Do not** invent a third layout store; facades (`sessionStore` / `workspaceStore` /
- *   `settingsUiStore`) are **aliases**, not separate create() instances.
- *
  * ## compositionRoot naming trap
  *
- * `getCompositionRoot().layout` = **this** store (chrome + sessions + settings).
+ * `getCompositionRoot().layout` = **this** store (chrome + sessions).
  * It is **not** `layoutTreeStore`. Shell tabs = `.shell`; tree = no facade yet.
  *
- * ## Current truth (OPT-C1)
- *
- * Sessions **still live here** (not mass-split to a separate session store this wave).
- * Phase 2 may extract message stream; until then treat session facade as the API.
- *
- * @see store/README.md § Layout identity ownership
+ * @see store/README.md § 状态归属
  * @see store/storeOwnership.ts
- * @see docs/architecture/desktop-composition-and-stores.md
+ * @see docs/multi-agent-repair/reports/R3-T11-归类表.md
  */
 
 import { create } from 'zustand';
@@ -50,16 +45,7 @@ import { withLogger } from './middleware/withLogger';
 import { withPersist } from './middleware/withPersist';
 import { withAutoIndex } from './autoIndexMiddleware';
 import type {
-  Settings,
-  CronJob,
-  McpServer,
-  ProviderInfo,
-} from '../api/clientApi';
-import { loadCommandPermissions } from '../api/commandPermissions';
-import { planModeEnabledFor, type PermissionMode } from '../api/permissionModes';
-import type {
   DropPreviewState,
-  FileDiff,
   SessionState,
   SettingsTabType,
   WorkspaceState,
@@ -151,9 +137,8 @@ export type {
 
 // ── LayoutStore interface ───────────────────────────────────────────────────
 
-/** 工作区 + UI + 遥测 + 会话域 + 工作区域（actions 见 SessionActions / WorkspaceActions） */
+/** 布局/壳层 UI + 会话域 + 工作区域（actions 见 SessionActions / WorkspaceActions） */
 export interface LayoutStore extends SessionActions, WorkspaceActions {
-  setPermissionMode: (mode: PermissionMode) => void;
   workspaces: WorkspaceState[];
   activeWorkspaceIndex: number;
   tabModeEnabled: boolean;
@@ -182,9 +167,10 @@ export interface LayoutStore extends SessionActions, WorkspaceActions {
   dropPreview: DropPreviewState | null;
   showSettingsOverlay: boolean;
   settingsActiveTab: SettingsTabType;
-  permissionMode: PermissionMode;
+  /** true 当会话磁盘镜像恢复完成（无论是否找到数据） */
+  hydrationComplete: boolean;
 
-  // UI Settings
+  // Layout chrome / settings overlay UI
   setUiSize: (size: UiSize) => void;
   setShellChromeMode: (mode: ShellChromeMode) => void;
   setChatMainSurface: (surface: 'chat' | 'scheduled') => void;
@@ -193,55 +179,6 @@ export interface LayoutStore extends SessionActions, WorkspaceActions {
   setShowSettingsOverlay: (show: boolean) => void;
   setSettingsActiveTab: (tab: SettingsTabType) => void;
   openSettings: (tab?: SettingsTabType) => void;
-
-  // Diff
-  activeDiffSource: FileDiff | null;
-  /** 本轮工具产生的多文件 diff（H2）；H3 可接 git-diff */
-  diffFiles: FileDiff[];
-  setActiveDiffSource: (diff: FileDiff | null) => void;
-  setDiffFiles: (
-    files: FileDiff[] | ((prev: FileDiff[]) => FileDiff[])
-  ) => void;
-  pushDiffFile: (diff: FileDiff) => void;
-  /** 从变更列表移除（拒绝 / 已应用后清理） */
-  removeDiffFile: (filePath: string) => void;
-
-  // Plan Mode & Permissions
-  planModeEnabled: boolean;
-  setPlanModeEnabled: (enabled: boolean) => void;
-  planApproved: boolean;
-  setPlanApproved: (approved: boolean) => void;
-  commandPermissions: string[];
-  addCommandPermission: (cmd: string) => void;
-  removeCommandPermission: (cmd: string) => void;
-  setCommandPermissions: (list: string[]) => void;
-
-  // App Settings & Telemetry
-  appSettings: Settings | null;
-  scheduledTasks: CronJob[];
-  mcpServers: McpServer[];
-  activeWorkers: ActiveWorkerState[];
-  tokenUsage: TokenUsageState;
-  killedWorkerIds: string[];
-  providers: ProviderInfo[];
-  /** true 当会话磁盘镜像恢复完成（无论是否找到数据） */
-  hydrationComplete: boolean;
-  setProviders: (providers: ProviderInfo[]) => void;
-  setAppSettings: (settings: Settings | null) => void;
-  setScheduledTasks: (tasks: CronJob[]) => void;
-  setMcpServers: (servers: McpServer[]) => void;
-  syncTelemetryData: (data: TelemetrySyncPayload) => void;
-
-  /** 兼容：当前活动会话的终端行 */
-  terminalLines: string[];
-  /** 按会话隔离的终端缓冲（H2） */
-  terminalBySession: Record<string, string[]>;
-  addTerminalLine: (line: string, sessionId?: string) => void;
-  addTerminalLines: (lines: string[], sessionId?: string) => void;
-  clearTerminalLines: (sessionId?: string) => void;
-  manuallyTriggeredWorkers: ActiveWorkerState[];
-  triggerCronJobNow: (prompt: string) => void;
-  killWorker: (id: string, taskName: string) => void;
 }
 
 // ── Initial state (safe defaults + seed) ────────────────────────────────────
@@ -278,28 +215,10 @@ export const useLayoutStore = create<LayoutStore>()(
 
             showSettingsOverlay: false,
             settingsActiveTab: DEFAULT_SETTINGS_TAB,
-            // 与设置页 / Composer 共用；hydrate 时 planModeEnabled 必须与之一致
-            permissionMode: _defaults.initialPermissionMode,
 
-            activeDiffSource: null,
-            diffFiles: [],
-            planModeEnabled: planModeEnabledFor(_defaults.initialPermissionMode),
-            planApproved: false,
-            commandPermissions: loadCommandPermissions(),
-            appSettings: null,
-            providers: [],
-            scheduledTasks: [],
-            mcpServers: [],
-            activeWorkers: [],
-            tokenUsage: _defaults.initialTokenUsage,
-            killedWorkerIds: [],
-
-            terminalLines: _defaults.initialTerminalLines,
-            terminalBySession: {},
             composerDrafts: {},
-            manuallyTriggeredWorkers: [],
 
-            // Core Layout / Telemetry / Diff / Permission Actions
+            // Layout / Settings-overlay Actions
             ...createLayoutCoreActions(set, get),
 
             // 会话 / 消息 / agent 域（实现见 sessionActions.ts）—— 泛型切片，无 as any
@@ -358,22 +277,6 @@ export type LayoutStoreState = Pick<
   | 'dropPreview'
   | 'showSettingsOverlay'
   | 'settingsActiveTab'
-  | 'permissionMode'
-  | 'activeDiffSource'
-  | 'diffFiles'
-  | 'planModeEnabled'
-  | 'planApproved'
-  | 'commandPermissions'
-  | 'appSettings'
-  | 'providers'
-  | 'scheduledTasks'
-  | 'mcpServers'
-  | 'activeWorkers'
-  | 'tokenUsage'
-  | 'killedWorkerIds'
-  | 'terminalLines'
-  | 'terminalBySession'
-  | 'manuallyTriggeredWorkers'
   | 'hydrationComplete'
 >;
 

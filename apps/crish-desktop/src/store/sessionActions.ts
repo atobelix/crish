@@ -40,8 +40,6 @@ export interface SessionStoreSlice extends SessionsIndexed {
   draftFolder: string;
   activeAgentId: string | null;
   panelAgentId: string | null;
-  terminalLines: string[];
-  terminalBySession: Record<string, string[]>;
   composerDrafts: Record<string, string>;
 }
 

@@ -4,11 +4,22 @@ import {
   useRef,
   useCallback,
 } from 'react';
-import { useLayoutStore, type FileDiff } from '../../store/layoutStore';
 import {
-  selectActiveSessionId,
+  useLayoutStore,
   useSessionField,
-} from '../../store/sessionStore';
+  selectActiveSessionId,
+} from '../../api/store-access/componentAccess';
+import type { FileDiff } from '../../store/types';
+import {
+  useTerminalField,
+  usePermissionField,
+  useSettingsField,
+  selectDiffFiles,
+  selectAppSettings,
+  selectPermissionMode,
+  selectPlanModeEnabled,
+  selectPlanApproved,
+} from '../../store/storeAccess';
 import {
   openSettings,
   patchSession,
@@ -119,8 +130,8 @@ export function useChatCardState({
     )
   );
 
-  const appSettings = useLayoutStore((s) => s.appSettings);
-  const diffFiles = useLayoutStore((s) => s.diffFiles);
+  const appSettings = useSettingsField(selectAppSettings);
+  const diffFiles = useTerminalField(selectDiffFiles);
 
   const [pickerInlineError, setPickerInlineError] = useState('');
   const [showProjectPicker, setShowProjectPicker] = useState(false);
@@ -216,11 +227,11 @@ export function useChatCardState({
     engineLastRunId,
   });
 
-  const permissionMode = useLayoutStore((s) => s.permissionMode);
-  const setPermissionMode = useLayoutStore((s) => s.setPermissionMode);
-  const planModeEnabled = useLayoutStore((s) => s.planModeEnabled);
-  const planApproved = useLayoutStore((s) => s.planApproved);
-  const setPlanApproved = useLayoutStore((s) => s.setPlanApproved);
+  const permissionMode = usePermissionField(selectPermissionMode);
+  const setPermissionMode = usePermissionField((s) => s.setPermissionMode);
+  const planModeEnabled = usePermissionField(selectPlanModeEnabled);
+  const planApproved = usePermissionField(selectPlanApproved);
+  const setPlanApproved = usePermissionField((s) => s.setPlanApproved);
   const inPlanMode = permissionMode === 'plan' || planModeEnabled;
 
   const openSidePanel = useCallback(

@@ -7,7 +7,7 @@
  * 若会话已有 importMeta 匹配同一 source+sourceSessionId，则跳过，不覆盖。
  */
 
-import { getSessionStoreState } from '../../store/sessionStore';
+import { getSessionStoreState } from '../../store';
 import type { SessionImportMeta, SessionMessage, SessionState } from '../../store/types';
 import { mapExternalSessions, type MapExternalOptions } from './map';
 import {

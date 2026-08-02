@@ -35,8 +35,6 @@ function makeStoreState(sessions: SessionState[], activeSessionId: string): Sess
     draftFolder: '',
     activeAgentId: null,
     panelAgentId: null,
-    terminalLines: [],
-    terminalBySession: {},
     composerDrafts: {},
   };
 }

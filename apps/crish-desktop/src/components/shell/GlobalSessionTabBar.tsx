@@ -29,15 +29,15 @@ import {
   EMPTY_SESSION_TITLE,
   sessionListDisplayTitle,
 } from '../../api/sessionTitle';
-import { getSessionById } from '../../store/sessionStore';
+import { getSessionById } from '../../api/store-access/componentAccess';
 import {
   useWorkspaceShellStore,
   selectActiveTabSessionId,
   resolveStripWorkspaceKey,
   createDefaultDock,
   type TabSurface,
-} from '../../store/workspace-shell';
-import { isPendingDraft } from '../../store/draftSession';
+} from '../../api/store-access/componentAccess';
+import { isPendingDraft } from '../../api/store-access/componentAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { emitUiEvent } from '../../api/uiEvents';
 import { Tooltip } from '../Tooltip';

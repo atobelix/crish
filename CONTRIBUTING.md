@@ -14,12 +14,13 @@ Crish 是 Rust + TypeScript 的 npm/Cargo 混合 monorepo：
 - `apps/agent-workbench/src-tauri`：Tauri 2 壳（窗口、IPC 命令注册、CSP、updater）
 - `crates/`：Rust 引擎（orchestrator / session-loop / agent-provider / agent-tools / conex-* 基础设施），
   全部经 Cargo workspace 统一管理（`Cargo.lock` 已提交，构建可复现）
-- `packages/`：TS 侧共享包（decision-engine / logger / plugin-sdk / shared-types / shared-utils /
+- `packages/`：TS 侧共享包（logger / plugin-sdk / shared-types / shared-utils /
   telemetry / test-utils）
 
-> **重写过渡期提醒**：旧 TS 后端包（`agent-daemon` / `agent-orchestrator` / `agent-runtime` 等）已删除，
-> 引擎为 Rust 进程内实现。`apps/agent-workbench/src` 内少量遗留 CLI/注册表文件仍引用旧包，属于
-> 待清理路径，**不要在旧路径上开发新功能**；新功能一律落在 Rust 引擎契约面（`core_*`/`workbench_*` 命令）。
+> **过渡期已结束**：旧 TS 后端包（`agent-daemon` / `agent-orchestrator` / `agent-runtime` 等）已删除，
+> 引擎为 Rust 进程内实现（Tauri 壳内嵌）。`apps/agent-workbench/src/cli` 已随迁移删除，
+> `src/core`、`src/shared` 保留为壳的 TS 支持层；新功能一律落在 Rust 引擎契约面
+> （`core_*`/`workbench_*` 命令，契约见 `crates/conex-types/contracts/engine-events.json`）。
 
 ## 前置条件
 
@@ -61,7 +62,7 @@ npm run test:desktop-helpers   # 桌面端 api / store 单测
 npx vitest run --project=unit   # CI 快层 vitest 快集
 ```
 
-> 过渡期说明：部分 TS 存量测试仍引用已删除的旧包路径，`npm run test` 全量执行时可能报错；
+> 迁移收尾已完成：代码与脚本已无对已删除包的引用（仅个别测试注释保留历史路径说明）；
 > 本地以 `cargo test --workspace` 与 `npm run check:desktop` 为绿线，CI 快层为合并门禁。
 
 ## 代码规范

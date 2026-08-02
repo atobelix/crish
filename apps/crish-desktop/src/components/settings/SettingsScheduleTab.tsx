@@ -14,7 +14,7 @@ import {
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
 import { setComposerSeed } from '../../api/composerSeed';
-import { closeSettings } from '../../store/settingsUiStore';
+import { closeSettings } from '../../api/store-access/componentAccess';
 import styles from './SettingsScheduleTab.module.css';
 import {
   SettingsPage,

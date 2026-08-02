@@ -17,7 +17,11 @@
  * | `session` | layoutStore via session facade | sessions[], messages, agents, draftFolder |
  * | `shell` | workspaceShellStore | openTabs, activeTabId, rightDock, shellReady |
  * | `layout-tree` | layoutTreeStore | tree root, activeLeafId, split/merge/drop |
- * | `layout-chrome` | layoutStore | sidebar, tabMode, planMode, uiSize, appSettings |
+ * | `layout-chrome` | layoutStore | sidebar, tabMode, uiSize, shellChrome, settingsOverlay |
+ * | `terminal` | terminalStore | terminal buffers + diff buffers |
+ * | `worker` | workerStore | activeWorkers / killedWorkerIds / manual workers |
+ * | `permission` | permissionStore | permissionMode / plan* / command whitelist |
+ * | `settings` | settingsStore | appSettings / providers / cron / mcp / tokenUsage |
  * | `workspace-legacy` | layoutStore via workspace facade | workspaces columns/groups (pre-tree fallback) |
  */
 export type StoreOwnershipDomain =
@@ -25,6 +29,10 @@ export type StoreOwnershipDomain =
   | 'shell'
   | 'layout-tree'
   | 'layout-chrome'
+  | 'terminal'
+  | 'worker'
+  | 'permission'
+  | 'settings'
   | 'workspace-legacy';
 
 /**
@@ -37,6 +45,11 @@ export type StoreWriteOwner =
   | 'layoutStore'
   | 'sessionStore' // alias of layoutStore
   | 'workspaceStore' // alias of layoutStore
+  | 'settingsUiStore' // alias of layoutStore (overlay) + permissionStore delegation
+  | 'terminalStore'
+  | 'workerStore'
+  | 'permissionStore'
+  | 'settingsStore'
   | 'workspaceShellStore'
   | 'layoutTreeStore'
   | 'compositionRoot.session'

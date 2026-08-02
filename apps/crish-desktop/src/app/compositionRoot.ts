@@ -66,6 +66,7 @@ import { useWorkspaceShellStore } from '../store/workspace-shell/workspaceShellS
 import { useLayoutTreeStore } from '../store/layout-tree';
 import type { SessionState } from '../store/types';
 import type { Settings } from '../api/clientApi';
+import { getPermissionState, getSettingsState } from '../store/storeAccess';
 
 export type PtyFacade = {
   getHandlers: () => { spawn: PtySpawnFn | null; kill: PtyKillFn | null };
@@ -190,14 +191,15 @@ function buildDefaultLayoutFacade(): LayoutFacade {
       const st = getLayoutState();
       st.setSidebarCollapsed(!st.sidebarCollapsed);
     },
-    getPlanModeEnabled: () => getLayoutState().planModeEnabled,
-    setPlanModeEnabled: (enabled) => getLayoutState().setPlanModeEnabled(enabled),
+    getPlanModeEnabled: () => getPermissionState().planModeEnabled,
+    setPlanModeEnabled: (enabled) =>
+      getPermissionState().setPlanModeEnabled(enabled),
     togglePlanMode: () => {
-      const st = getLayoutState();
+      const st = getPermissionState();
       st.setPlanModeEnabled(!st.planModeEnabled);
     },
-    getAppSettings: () => getLayoutState().appSettings,
-    setAppSettings: (settings) => getLayoutState().setAppSettings(settings),
+    getAppSettings: () => getSettingsState().appSettings,
+    setAppSettings: (settings) => getSettingsState().setAppSettings(settings),
   };
 }
 

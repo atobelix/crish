@@ -1,7 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import type { FileDiff, SessionAgent, SessionMessage } from '../../store/layoutStore';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
+import {
+  usePermissionField,
+  useSettingsField,
+  selectPermissionMode,
+  selectPlanModeEnabled,
+  selectPlanApproved,
+} from '../../store/storeAccess';
 import {
   DEFAULT_RECENT_MESSAGE_COUNT,
   collectMustIncludeIndices,
@@ -210,14 +217,14 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     messageWindow.startIndex,
   ]);
 
-  const permissionMode = useLayoutStore((s) => s.permissionMode);
-  const hideThinkingBlock = useLayoutStore((s) =>
-    Boolean(s.appSettings?.hideThinkingBlock)
+  const permissionMode = usePermissionField(selectPermissionMode);
+  const hideThinkingBlock = useSettingsField(
+    (s) => Boolean(s.appSettings?.hideThinkingBlock)
   );
-  const planModeEnabled = useLayoutStore((s) => s.planModeEnabled);
-  const planApproved = useLayoutStore((s) => s.planApproved);
-  const setPlanApproved = useLayoutStore((s) => s.setPlanApproved);
-  const setPermissionMode = useLayoutStore((s) => s.setPermissionMode);
+  const planModeEnabled = usePermissionField(selectPlanModeEnabled);
+  const planApproved = usePermissionField(selectPlanApproved);
+  const setPlanApproved = usePermissionField((s) => s.setPlanApproved);
+  const setPermissionMode = usePermissionField((s) => s.setPermissionMode);
   const inPlanMode = permissionMode === 'plan' || planModeEnabled;
 
   const expandOlderStep = useCallback(() => {

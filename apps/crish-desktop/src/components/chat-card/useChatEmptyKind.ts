@@ -6,7 +6,7 @@ import {
   chatEmptyKindAriaLabel,
   resolveChatEmptyKind,
 } from '../../api/chatEmptyState';
-import { isPendingDraft } from '../../store/draftSession';
+import { isPendingDraft } from '../../api/store-access/componentAccess';
 
 export interface UseChatEmptyKindOptions {
   activeSessionId: string | null;

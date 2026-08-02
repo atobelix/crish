@@ -30,7 +30,7 @@ import type {
   MessageToolCall,
   SessionMessageToolCallResult,
 } from '../../store/types';
-import { isPendingDraft } from '../../store/draftSession';
+import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
 import { coerceSessionTimestamp } from '../sessionTime';
 import { prepareSessionsForUi } from '../sessionTitle';
 import { normalizeAssistantTimeline } from '../toolPresentation';

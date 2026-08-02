@@ -12,7 +12,7 @@ import {
 } from '../../api/projectStore';
 import { openDirectoryDialogSafe } from '../../api/openDirectoryDialog';
 import { getSessionStoreState, setDraftFolder } from '../../api/storeAccess';
-import { isPendingDraft } from '../../store/draftSession';
+import { isPendingDraft } from '../../api/store-access/componentAccess';
 import { Check, ChevronRight, Folder, Plus, Search, Trash2 } from 'lucide-react';
 import { Menu } from '../ui/Menu';
 import { Tooltip } from '../Tooltip';

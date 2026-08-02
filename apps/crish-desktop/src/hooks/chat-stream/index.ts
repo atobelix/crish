@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useLayoutStore } from '../../store/layoutStore';
+import { useTerminalStore } from '../../store/terminalStore';
 import type { UseChatStreamOptions, UseChatStreamResult, RunNotice } from './types';
 import { useStreamBatchers } from './useStreamBatchers';
 import { useStreamCallbacks } from './useStreamCallbacks';
@@ -13,7 +14,7 @@ export function useChatStream(
   const { renderBufferRef } = refs;
 
   const wsId = options.wsId;
-  const setActiveDiffSource = useLayoutStore((s) => s.setActiveDiffSource);
+  const setActiveDiffSource = useTerminalStore((s) => s.setActiveDiffSource);
   const upsertSessionAgent = useLayoutStore((s) => s.upsertSessionAgent);
 
   const [runNotice, setRunNotice] = useState<RunNotice | null>(null);

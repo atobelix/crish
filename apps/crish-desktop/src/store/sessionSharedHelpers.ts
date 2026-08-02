@@ -21,6 +21,7 @@ import {
   type SessionsIndexed,
 } from './sessionIndex';
 import type { SessionStoreSlice } from './sessionActions';
+import { useTerminalStore } from './terminalStore';
 
 /** 手动 rename / 分叉标题码点上限（略宽于侧栏自动标题 28） */
 export const MANUAL_SESSION_TITLE_MAX_LEN = 48;
@@ -470,13 +471,8 @@ export function dropTerminalForSession(
   state: SessionStoreSlice,
   sessionId: string
 ): void {
-  if (!sessionId) return;
-  if (state.terminalBySession && sessionId in state.terminalBySession) {
-    delete state.terminalBySession[sessionId];
-  }
-  if (state.activeSessionId === sessionId) {
-    state.terminalLines = [];
-  }
+  void state;
+  useTerminalStore.getState().removeTerminalSession(sessionId);
 }
 
 export function pruneEmptyShellsInPlace(
@@ -488,13 +484,9 @@ export function pruneEmptyShellsInPlace(
     state.sessions = pruned;
     reindexSessionsById(state);
   }
-  if (state.terminalBySession) {
-    for (const tid of Object.keys(state.terminalBySession)) {
-      if (!state.sessionsById[tid]) {
-        delete state.terminalBySession[tid];
-      }
-    }
-  }
+  useTerminalStore
+    .getState()
+    .pruneTerminalSessions(Object.keys(state.sessionsById));
 }
 
 export function maybeAutoTitleSession(

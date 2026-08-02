@@ -2,7 +2,7 @@
  * Daemon 事件桥层轻量 schema（不引入 zod 依赖时的 safeParse 等价物）。
  * 协议不匹配时返回 { ok:false, error }，便于日志可见。
  *
- * ParseResult 判别联合 + 收窄守卫与 engineEventZod 共用，避免两处分叉。
+ * ParseResult 判别联合 + 收窄守卫为共享最小工具，避免多处分叉。
  */
 
 /** 成功支路：调用方经 isParseOk 收窄后可读 data */

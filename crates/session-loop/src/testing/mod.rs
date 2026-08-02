@@ -341,7 +341,11 @@ impl Tool for TestTool {
         &self.definition
     }
 
-    async fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+    async fn execute(
+        &self,
+        _ctx: &agent_tools::context::ToolContext,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, ToolError> {
         self.calls.lock().unwrap().push(args);
         if let Some(error) = &self.error {
             Err(ToolError::execution_failed(&self.name, error))

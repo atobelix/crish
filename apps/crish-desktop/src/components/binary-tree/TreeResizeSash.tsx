@@ -26,7 +26,7 @@ import {
   useLayoutTreeStore,
   MIN_SPLIT_RATIO,
   MAX_SPLIT_RATIO,
-} from '../../store/layout-tree';
+} from '../../api/store-access/componentAccess';
 import type { BranchRect } from '../../hooks/useTreeResize';
 import {
   clampSplitRatioForParent,

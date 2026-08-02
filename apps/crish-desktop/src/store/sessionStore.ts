@@ -49,8 +49,6 @@ export type SessionFacadeState = {
   activeAgentId: string | null;
   panelAgentId: string | null;
   composerDrafts: Record<string, string>;
-  terminalBySession: Record<string, string[]>;
-  terminalLines: string[];
 };
 
 export type SessionFacade = SessionFacadeState & SessionActions;

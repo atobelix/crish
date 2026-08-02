@@ -4,21 +4,20 @@
 //! 支持两种输入模式：两文件路径（pathA/pathB）或两段内容（contentA/contentB），
 //! 输出 unified diff 文本与结构化 hunk 数据。
 
+use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::tools::{display_path, optional_string, require_string, resolve_workspace_path};
 use async_trait::async_trait;
 use conex_diff::diff_engine::DiffEngine;
 use conex_types::{DiffLineKind, DiffResult};
-use std::path::PathBuf;
 
 /// 文本 diff 工具
 pub(crate) struct DiffTextTool {
     def: ToolDefinition,
-    workspace_root: PathBuf,
 }
 
 impl DiffTextTool {
-    pub(crate) fn new(workspace_root: PathBuf) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             def: ToolDefinition {
                 name: "diff_text".to_string(),
@@ -36,7 +35,6 @@ impl DiffTextTool {
                 dangerous: false,
                 fatal_on_error: false,
             },
-            workspace_root,
         }
     }
 }
@@ -51,7 +49,11 @@ impl Tool for DiffTextTool {
         &self.def
     }
 
-    async fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+    async fn execute(
+        &self,
+        ctx: &ToolContext,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, ToolError> {
         let path_a = optional_string(&args, "pathA");
         let path_b = optional_string(&args, "pathB");
         let has_path_mode = path_a.is_some() || path_b.is_some();
@@ -69,12 +71,12 @@ impl Tool for DiffTextTool {
             let b = path_b.ok_or_else(|| {
                 ToolError::invalid_input("pathA and pathB must be provided together")
             })?;
-            let pa = resolve_workspace_path(&self.workspace_root, &a)?;
-            let pb = resolve_workspace_path(&self.workspace_root, &b)?;
+            let pa = resolve_workspace_path(&ctx.workspace_root, &a)?;
+            let pb = resolve_workspace_path(&ctx.workspace_root, &b)?;
             let old_text = read_file_text(&pa)?;
             let new_text = read_file_text(&pb)?;
-            let label_a = display_path(&self.workspace_root, &pa);
-            let label_b = display_path(&self.workspace_root, &pb);
+            let label_a = display_path(&ctx.workspace_root, &pa);
+            let label_b = display_path(&ctx.workspace_root, &pb);
             (old_text, new_text, label_a, label_b, "files")
         } else {
             let a = require_string(&args, "contentA")?;
@@ -142,14 +144,25 @@ fn render_unified(label_a: &str, label_b: &str, result: &DiffResult) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::{create_mock_tool_context, ToolContext};
     use conex_test_utils::TempWorkspace;
     use serde_json::json;
 
+    /// 测试用会话上下文：workspace_root 指向临时工作区
+    fn mock_ctx(ws: &TempWorkspace) -> ToolContext {
+        ToolContext {
+            workspace_root: ws.path().clone(),
+            ..create_mock_tool_context()
+        }
+    }
+
     #[tokio::test]
     async fn diff_contents_produces_unified_text() {
-        let tool = DiffTextTool::new(std::env::temp_dir());
+        // contents 模式不触碰 workspace_root，直接使用 mock 上下文
+        let ctx = create_mock_tool_context();
+        let tool = DiffTextTool::new();
         let out = tool
-            .execute(json!({ "contentA": "aaa\nbbb\nccc\n", "contentB": "aaa\nxxx\nccc\n" }))
+            .execute(&ctx, json!({ "contentA": "aaa\nbbb\nccc\n", "contentB": "aaa\nxxx\nccc\n" }))
             .await
             .unwrap();
         assert_eq!(out["mode"], "contents");
@@ -165,9 +178,10 @@ mod tests {
 
     #[tokio::test]
     async fn diff_identical_contents_empty() {
-        let tool = DiffTextTool::new(std::env::temp_dir());
+        let ctx = create_mock_tool_context();
+        let tool = DiffTextTool::new();
         let out = tool
-            .execute(json!({ "contentA": "same\n", "contentB": "same\n" }))
+            .execute(&ctx, json!({ "contentA": "same\n", "contentB": "same\n" }))
             .await
             .unwrap();
         assert_eq!(out["addedLines"], 0);
@@ -180,9 +194,9 @@ mod tests {
         let ws = TempWorkspace::new("diff_files");
         ws.write_file("old.txt", "line1\nline2\n");
         ws.write_file("new.txt", "line1\nchanged\n");
-        let tool = DiffTextTool::new(ws.path().clone());
+        let tool = DiffTextTool::new();
         let out = tool
-            .execute(json!({ "pathA": "old.txt", "pathB": "new.txt" }))
+            .execute(&mock_ctx(&ws), json!({ "pathA": "old.txt", "pathB": "new.txt" }))
             .await
             .unwrap();
         assert_eq!(out["mode"], "files");
@@ -194,9 +208,10 @@ mod tests {
 
     #[tokio::test]
     async fn diff_mixed_mode_rejected() {
-        let tool = DiffTextTool::new(std::env::temp_dir());
+        let ctx = create_mock_tool_context();
+        let tool = DiffTextTool::new();
         let err = tool
-            .execute(json!({ "pathA": "a.txt", "contentB": "x" }))
+            .execute(&ctx, json!({ "pathA": "a.txt", "contentB": "x" }))
             .await
             .unwrap_err();
         assert!(err.to_string().contains("只能选一种模式"));
@@ -206,9 +221,9 @@ mod tests {
     async fn diff_missing_path_errors() {
         let ws = TempWorkspace::new("diff_missing");
         ws.write_file("a.txt", "x");
-        let tool = DiffTextTool::new(ws.path().clone());
+        let tool = DiffTextTool::new();
         let err = tool
-            .execute(json!({ "pathA": "a.txt" }))
+            .execute(&mock_ctx(&ws), json!({ "pathA": "a.txt" }))
             .await
             .unwrap_err();
         assert!(err.to_string().contains("together"));

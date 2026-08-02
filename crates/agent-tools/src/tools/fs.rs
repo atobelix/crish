@@ -1,15 +1,17 @@
 //! 文件系统工具（任务书 B5.2：read_file / write_file / list_dir / file_stat）
 //!
 //! 全部路径入参经 `resolve_workspace_path` 校验（复用 conex-fs 的 safe_canonicalize），
+//! 工作区根目录从会话上下文 `ToolContext.workspace_root` 读取（R3 T9）；
 //! 返回结构对齐 TS 版 read/list 工具语义：text 为对话正文，json 为结构化元数据。
 
+use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::tools::{
     clamp_text, decode_text, display_path, epoch_millis, optional_string, require_string,
     resolve_workspace_path, snapshot_tag,
 };
 use async_trait::async_trait;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// 读文件默认字符上限（对齐 TS read 工具默认 maxBytes）
 pub(crate) const DEFAULT_READ_MAX_BYTES: usize = 256_000;
@@ -17,12 +19,11 @@ pub(crate) const DEFAULT_READ_MAX_BYTES: usize = 256_000;
 /// 读文件工具：返回文本内容与元数据，超限截断并附标记
 pub(crate) struct ReadFileTool {
     def: ToolDefinition,
-    workspace_root: PathBuf,
     max_bytes: usize,
 }
 
 impl ReadFileTool {
-    pub(crate) fn new(workspace_root: PathBuf, max_bytes: Option<usize>) -> Self {
+    pub(crate) fn new(max_bytes: Option<usize>) -> Self {
         Self {
             def: ToolDefinition {
                 name: "read_file".to_string(),
@@ -39,7 +40,6 @@ impl ReadFileTool {
                 dangerous: false,
                 fatal_on_error: false,
             },
-            workspace_root,
             max_bytes: max_bytes.unwrap_or(DEFAULT_READ_MAX_BYTES),
         }
     }
@@ -55,10 +55,14 @@ impl Tool for ReadFileTool {
         &self.def
     }
 
-    async fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+    async fn execute(
+        &self,
+        ctx: &ToolContext,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, ToolError> {
         let path_str = require_string(&args, "path")?;
-        let file_path = resolve_workspace_path(&self.workspace_root, &path_str)?;
-        let display = display_path(&self.workspace_root, &file_path);
+        let file_path = resolve_workspace_path(&ctx.workspace_root, &path_str)?;
+        let display = display_path(&ctx.workspace_root, &file_path);
 
         let metadata = std::fs::metadata(&file_path)
             .map_err(|e| ToolError::execution_failed("read_file", format!("{display}: {e}")))?;
@@ -126,14 +130,13 @@ impl Tool for ReadFileTool {
 /// 写文件工具：自动建父目录，BOM 续写既有编码；幂等守卫标记留 B5.3
 pub(crate) struct WriteFileTool {
     def: ToolDefinition,
-    workspace_root: PathBuf,
 }
 
 /// 写文件支持编码枚举（对齐 TS write_file 的 encoding 参数）
 const WRITE_ENCODINGS: &[&str] = &["utf-8", "utf-8-bom", "utf-16le", "utf-16be"];
 
 impl WriteFileTool {
-    pub(crate) fn new(workspace_root: PathBuf) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             def: ToolDefinition {
                 name: "write_file".to_string(),
@@ -155,7 +158,6 @@ impl WriteFileTool {
                 dangerous: true,
                 fatal_on_error: false,
             },
-            workspace_root,
         }
     }
 }
@@ -170,11 +172,15 @@ impl Tool for WriteFileTool {
         &self.def
     }
 
-    async fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+    async fn execute(
+        &self,
+        ctx: &ToolContext,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, ToolError> {
         let path_str = require_string(&args, "path")?;
         let content = require_string(&args, "content")?;
-        let file_path = resolve_workspace_path(&self.workspace_root, &path_str)?;
-        let display = display_path(&self.workspace_root, &file_path);
+        let file_path = resolve_workspace_path(&ctx.workspace_root, &path_str)?;
+        let display = display_path(&ctx.workspace_root, &file_path);
 
         // 幂等守卫标记：B5.3 提供 ToolIdempotencyGuard（按 tool_call_id 去重已执行写盘），
         // 此处仅执行文件写入，不做去重。
@@ -284,11 +290,10 @@ struct DirEntry {
 /// 列目录工具：返回条目清单（name/type/isFile/isDirectory/size/mtime）
 pub(crate) struct ListDirTool {
     def: ToolDefinition,
-    workspace_root: PathBuf,
 }
 
 impl ListDirTool {
-    pub(crate) fn new(workspace_root: PathBuf) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             def: ToolDefinition {
                 name: "list_dir".to_string(),
@@ -303,7 +308,6 @@ impl ListDirTool {
                 dangerous: false,
                 fatal_on_error: false,
             },
-            workspace_root,
         }
     }
 }
@@ -318,10 +322,14 @@ impl Tool for ListDirTool {
         &self.def
     }
 
-    async fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+    async fn execute(
+        &self,
+        ctx: &ToolContext,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, ToolError> {
         let path_str = optional_string(&args, "path").unwrap_or_else(|| ".".to_string());
-        let dir = resolve_workspace_path(&self.workspace_root, &path_str)?;
-        let display = display_path(&self.workspace_root, &dir);
+        let dir = resolve_workspace_path(&ctx.workspace_root, &path_str)?;
+        let display = display_path(&ctx.workspace_root, &dir);
 
         let metadata = std::fs::metadata(&dir)
             .map_err(|e| ToolError::execution_failed("list_dir", format!("{display}: {e}")))?;
@@ -388,11 +396,10 @@ impl Tool for ListDirTool {
 /// 文件信息工具：返回单个路径的 stat 元数据
 pub(crate) struct FileStatTool {
     def: ToolDefinition,
-    workspace_root: PathBuf,
 }
 
 impl FileStatTool {
-    pub(crate) fn new(workspace_root: PathBuf) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             def: ToolDefinition {
                 name: "file_stat".to_string(),
@@ -408,7 +415,6 @@ impl FileStatTool {
                 dangerous: false,
                 fatal_on_error: false,
             },
-            workspace_root,
         }
     }
 }
@@ -423,10 +429,14 @@ impl Tool for FileStatTool {
         &self.def
     }
 
-    async fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+    async fn execute(
+        &self,
+        ctx: &ToolContext,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, ToolError> {
         let path_str = require_string(&args, "path")?;
-        let target = resolve_workspace_path(&self.workspace_root, &path_str)?;
-        let display = display_path(&self.workspace_root, &target);
+        let target = resolve_workspace_path(&ctx.workspace_root, &path_str)?;
+        let display = display_path(&ctx.workspace_root, &target);
 
         let metadata = std::fs::metadata(&target)
             .map_err(|e| ToolError::execution_failed("file_stat", format!("{display}: {e}")))?;
@@ -462,15 +472,24 @@ impl Tool for FileStatTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::{create_mock_tool_context, ToolContext};
     use conex_test_utils::TempWorkspace;
     use serde_json::json;
+
+    /// 测试用会话上下文：workspace_root 指向临时工作区
+    fn mock_ctx(ws: &TempWorkspace) -> ToolContext {
+        ToolContext {
+            workspace_root: ws.path().clone(),
+            ..create_mock_tool_context()
+        }
+    }
 
     #[tokio::test]
     async fn read_file_roundtrip() {
         let ws = TempWorkspace::new("fs_read");
         ws.write_file("a.txt", "hello\nworld\n");
-        let tool = ReadFileTool::new(ws.path().clone(), None);
-        let out = tool.execute(json!({ "path": "a.txt" })).await.unwrap();
+        let tool = ReadFileTool::new(None);
+        let out = tool.execute(&mock_ctx(&ws), json!({ "path": "a.txt" })).await.unwrap();
         assert_eq!(out["kind"], "file");
         assert_eq!(out["bytes"], 12);
         assert_eq!(out["truncated"], false);
@@ -486,8 +505,8 @@ mod tests {
     async fn read_file_truncates_oversize_content() {
         let ws = TempWorkspace::new("fs_trunc");
         ws.write_file("big.txt", "abcdefghijklmnopqrstuvwxyz");
-        let tool = ReadFileTool::new(ws.path().clone(), Some(10));
-        let out = tool.execute(json!({ "path": "big.txt" })).await.unwrap();
+        let tool = ReadFileTool::new(Some(10));
+        let out = tool.execute(&mock_ctx(&ws), json!({ "path": "big.txt" })).await.unwrap();
         assert_eq!(out["truncated"], true);
         assert_eq!(out["shownChars"], 10);
         assert_eq!(out["totalChars"], 26);
@@ -501,9 +520,9 @@ mod tests {
     async fn read_file_rejects_path_traversal() {
         let ws = TempWorkspace::new("fs_traversal");
         ws.write_file("a.txt", "hello");
-        let tool = ReadFileTool::new(ws.path().clone(), None);
+        let tool = ReadFileTool::new(None);
         let err = tool
-            .execute(json!({ "path": "../outside.txt" }))
+            .execute(&mock_ctx(&ws), json!({ "path": "../outside.txt" }))
             .await
             .unwrap_err();
         assert_eq!(err.code(), "tool.path_escape");
@@ -513,9 +532,9 @@ mod tests {
     async fn read_file_missing_and_directory_errors() {
         let ws = TempWorkspace::new("fs_err");
         ws.write_file("a.txt", "hello");
-        let tool = ReadFileTool::new(ws.path().clone(), None);
-        assert!(tool.execute(json!({ "path": "nope.txt" })).await.is_err());
-        let err = tool.execute(json!({ "path": "." })).await.unwrap_err();
+        let tool = ReadFileTool::new(None);
+        assert!(tool.execute(&mock_ctx(&ws), json!({ "path": "nope.txt" })).await.is_err());
+        let err = tool.execute(&mock_ctx(&ws), json!({ "path": "." })).await.unwrap_err();
         assert!(err.to_string().contains("directory"));
     }
 
@@ -525,17 +544,17 @@ mod tests {
         ws.write_file("bin.bin", "");
         let p = ws.path().join("bin.bin");
         std::fs::write(&p, [0u8, 1u8, 2u8]).unwrap();
-        let tool = ReadFileTool::new(ws.path().clone(), None);
-        let err = tool.execute(json!({ "path": "bin.bin" })).await.unwrap_err();
+        let tool = ReadFileTool::new(None);
+        let err = tool.execute(&mock_ctx(&ws), json!({ "path": "bin.bin" })).await.unwrap_err();
         assert!(err.to_string().contains("binary"));
     }
 
     #[tokio::test]
     async fn write_then_read_roundtrip() {
         let ws = TempWorkspace::new("fs_write");
-        let tool = WriteFileTool::new(ws.path().clone());
+        let tool = WriteFileTool::new();
         let out = tool
-            .execute(json!({ "path": "sub/dir/b.txt", "content": "你好 rust" }))
+            .execute(&mock_ctx(&ws), json!({ "path": "sub/dir/b.txt", "content": "你好 rust" }))
             .await
             .unwrap();
         assert_eq!(out["path"], "sub/dir/b.txt");
@@ -545,9 +564,9 @@ mod tests {
         // 父目录被自动创建
         assert!(ws.path().join("sub/dir").is_dir());
 
-        let read_tool = ReadFileTool::new(ws.path().clone(), None);
+        let read_tool = ReadFileTool::new(None);
         let out = read_tool
-            .execute(json!({ "path": "sub/dir/b.txt" }))
+            .execute(&mock_ctx(&ws), json!({ "path": "sub/dir/b.txt" }))
             .await
             .unwrap();
         assert_eq!(out["totalChars"], 7);
@@ -556,14 +575,14 @@ mod tests {
     #[tokio::test]
     async fn write_file_supports_encodings() {
         let ws = TempWorkspace::new("fs_enc");
-        let tool = WriteFileTool::new(ws.path().clone());
-        tool.execute(json!({ "path": "u16.txt", "content": "hi", "encoding": "utf-16le" }))
+        let tool = WriteFileTool::new();
+        tool.execute(&mock_ctx(&ws), json!({ "path": "u16.txt", "content": "hi", "encoding": "utf-16le" }))
             .await
             .unwrap();
         let bytes = std::fs::read(ws.path().join("u16.txt")).unwrap();
         assert!(bytes.starts_with(&[0xFF, 0xFE]));
         // 不传编码时按 BOM 续写原编码
-        tool.execute(json!({ "path": "u16.txt", "content": "yo" }))
+        tool.execute(&mock_ctx(&ws), json!({ "path": "u16.txt", "content": "yo" }))
             .await
             .unwrap();
         let bytes = std::fs::read(ws.path().join("u16.txt")).unwrap();
@@ -573,14 +592,14 @@ mod tests {
     #[tokio::test]
     async fn write_file_rejects_escape_and_bad_encoding() {
         let ws = TempWorkspace::new("fs_werr");
-        let tool = WriteFileTool::new(ws.path().clone());
+        let tool = WriteFileTool::new();
         let err = tool
-            .execute(json!({ "path": "../evil.txt", "content": "x" }))
+            .execute(&mock_ctx(&ws), json!({ "path": "../evil.txt", "content": "x" }))
             .await
             .unwrap_err();
         assert_eq!(err.code(), "tool.path_escape");
         let err = tool
-            .execute(json!({ "path": "a.txt", "content": "x", "encoding": "latin1" }))
+            .execute(&mock_ctx(&ws), json!({ "path": "a.txt", "content": "x", "encoding": "latin1" }))
             .await
             .unwrap_err();
         assert!(err.to_string().contains("encoding"));
@@ -592,8 +611,8 @@ mod tests {
         ws.write_file("b.txt", "bb");
         ws.write_file("a.txt", "aa");
         ws.write_file("sub/c.txt", "cc");
-        let tool = ListDirTool::new(ws.path().clone());
-        let out = tool.execute(json!({})).await.unwrap();
+        let tool = ListDirTool::new();
+        let out = tool.execute(&mock_ctx(&ws), json!({})).await.unwrap();
         assert_eq!(out["kind"], "directory");
         let items = out["items"].as_array().unwrap();
         assert_eq!(items.len(), 3);
@@ -614,9 +633,9 @@ mod tests {
     async fn list_dir_non_directory_errors() {
         let ws = TempWorkspace::new("fs_listerr");
         ws.write_file("a.txt", "x");
-        let tool = ListDirTool::new(ws.path().clone());
+        let tool = ListDirTool::new();
         let err = tool
-            .execute(json!({ "path": "a.txt" }))
+            .execute(&mock_ctx(&ws), json!({ "path": "a.txt" }))
             .await
             .unwrap_err();
         assert!(err.to_string().contains("not a directory"));
@@ -626,21 +645,21 @@ mod tests {
     async fn file_stat_reports_metadata() {
         let ws = TempWorkspace::new("fs_stat");
         ws.write_file("a.txt", "hello");
-        let tool = FileStatTool::new(ws.path().clone());
-        let out = tool.execute(json!({ "path": "a.txt" })).await.unwrap();
+        let tool = FileStatTool::new();
+        let out = tool.execute(&mock_ctx(&ws), json!({ "path": "a.txt" })).await.unwrap();
         assert_eq!(out["isFile"], true);
         assert_eq!(out["type"], "file");
         assert_eq!(out["size"], 5);
         assert!(out["mtime"].as_i64().unwrap() > 0);
 
-        let out = tool.execute(json!({ "path": "." })).await.unwrap();
+        let out = tool.execute(&mock_ctx(&ws), json!({ "path": "." })).await.unwrap();
         assert_eq!(out["isDirectory"], true);
     }
 
     #[tokio::test]
     async fn file_stat_missing_errors() {
         let ws = TempWorkspace::new("fs_staterr");
-        let tool = FileStatTool::new(ws.path().clone());
-        assert!(tool.execute(json!({ "path": "ghost.txt" })).await.is_err());
+        let tool = FileStatTool::new();
+        assert!(tool.execute(&mock_ctx(&ws), json!({ "path": "ghost.txt" })).await.is_err());
     }
 }

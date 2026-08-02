@@ -1,5 +1,5 @@
 import type { SessionState as Session, SessionGoalTask } from '../store/layoutStore';
-import { getStreamTools } from '../store/streamingStore';
+import { getStreamTools } from './store-access/helperAccess';
 import { toolHumanLabel } from './toolPresentation';
 
 export interface ProgressSummary {

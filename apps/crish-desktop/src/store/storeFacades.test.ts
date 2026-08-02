@@ -31,6 +31,7 @@ import {
   toggleSettingsOverlay,
   useSettingsUiStore,
 } from './settingsUiStore';
+import { usePermissionStore } from './permissionStore';
 
 describe('domain facades alignment', () => {
   it('useSessionStore / useWorkspaceStore / useSettingsUiStore are the same instance as useLayoutStore', () => {
@@ -54,8 +55,11 @@ describe('domain facades alignment', () => {
     expect(workspace.draggedTab).toBe(layout.draggedTab);
 
     expect(settings.showSettingsOverlay).toBe(layout.showSettingsOverlay);
-    expect(settings.permissionMode).toBe(layout.permissionMode);
     expect(typeof settings.openSettings).toBe('function');
+    // T11：权限状态已迁 permissionStore（独立实例），facade 不再承载
+    expect(['ask', 'plan', 'auto']).toContain(
+      usePermissionStore.getState().permissionMode
+    );
   });
 
   it('selectActiveSession matches getSessionById(activeSessionId) and getActiveSession()', () => {
@@ -94,16 +98,15 @@ describe('domain facades alignment', () => {
     expect(useLayoutStore.getState().showSettingsOverlay).toBe(false);
   });
 
-  it('settingsUi permission / plan imperative helpers share layout', () => {
+  it('settingsUi permission / plan imperative helpers delegate to permissionStore', () => {
     setPermissionMode('ask');
-    expect(getSettingsUiState().permissionMode).toBe('ask');
+    expect(usePermissionStore.getState().permissionMode).toBe('ask');
     expect(getPermissionMode()).toBe('ask');
-    expect(useLayoutStore.getState().permissionMode).toBe('ask');
 
     setPlanModeEnabled(true);
-    expect(getSettingsUiState().planModeEnabled).toBe(true);
+    expect(usePermissionStore.getState().planModeEnabled).toBe(true);
     setPlanApproved(true);
-    expect(getSettingsUiState().planApproved).toBe(true);
+    expect(usePermissionStore.getState().planApproved).toBe(true);
 
     setPlanApproved(false);
     setPlanModeEnabled(false);

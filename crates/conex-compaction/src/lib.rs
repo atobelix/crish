@@ -142,9 +142,9 @@ pub fn count_tokens(text: &str) -> usize {
     for ch in text.chars() {
         if ch.is_ascii() {
             if ch.is_whitespace() || ch.is_ascii_punctuation() {
-                // Flush accumulated word characters (not including this separator)
+                // 约 4 字符折 1 token（向上取整）
                 if word_chars > 0 {
-                    tokens += (word_chars + 3) / 4; // ceil division by ~4
+                    tokens += word_chars.div_ceil(4);
                     word_chars = 0;
                 }
                 // Separator is its own token
@@ -153,19 +153,19 @@ pub fn count_tokens(text: &str) -> usize {
                 word_chars += 1;
             }
         } else {
-            // CJK and other multi-byte characters: ~1-2 tokens per character
-            // Flush any pending ASCII word chars
+            // CJK 等非 ASCII 字符：约 1-2 token/字符
+            // 先刷出待结算的 ASCII 单词字符
             if word_chars > 0 {
-                tokens += (word_chars + 3) / 4;
+                tokens += word_chars.div_ceil(4);
                 word_chars = 0;
             }
             tokens += 1; // each non-ASCII char ≈ 1 token
         }
     }
 
-    // Flush remaining word characters
+    // 刷新剩余单词字符（向上取整）
     if word_chars > 0 {
-        tokens += (word_chars + 3) / 4;
+        tokens += word_chars.div_ceil(4);
     }
 
     // Minimum 1 token for non-empty text
@@ -196,7 +196,7 @@ mod tests {
     fn count_tokens_simple_word() {
         // "hello" = 5 chars → ~1-2 tokens
         let tokens = count_tokens("hello");
-        assert!(tokens >= 1 && tokens <= 3);
+        assert!((1..=3).contains(&tokens));
     }
 
     #[test]

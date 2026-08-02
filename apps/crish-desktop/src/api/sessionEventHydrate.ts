@@ -7,7 +7,7 @@
 
 import { pickStableMessageId } from '@crish/shared-types';
 import type { SessionMessage } from '../store/layoutStore';
-import { mergeSessionMessageFields } from '../store/sessionSharedHelpers';
+import { mergeSessionMessageFields } from './store-access/helperAccess';
 import { getTransport } from './transport';
 import { normalizeAssistantTimeline } from './toolPresentation';
 import { logInternalError } from './userFacingErrors';

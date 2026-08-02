@@ -1,4 +1,5 @@
-//! 消息域类型（对齐 TS 端 shared-types/src/message.ts）
+//! 消息域类型（契约注册表 contracts/engine-events.json 的
+//! AgentMessage / AgentMessageBlock / ToolCallBlock 载荷）
 //!
 //! 前端硬依赖（03 §5.1-4/5/6）：`message-delta.block.text` 与
 //! `block.type === 'thought'` 是增量正文/思考的唯一文本来源；

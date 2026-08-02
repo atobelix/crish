@@ -23,6 +23,7 @@ import {
   recordDraftEnter,
 } from '../api/controlMetrics';
 import { runEmptyShellAssert } from '../dev/emptyShellAssert';
+import { useTerminalStore } from './terminalStore';
 import type { SessionActions, SessionStoreSlice, SessionImmerSet, SessionStoreGet } from './sessionActions';
 import {
   applyTitleIfDefault,
@@ -93,7 +94,9 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
       '';
     state.activeAgentId = null;
     state.panelAgentId = null;
-    state.terminalLines = [];
+    useTerminalStore.getState().setActiveTerminalSession(
+      PENDING_DRAFT_SESSION_ID
+    );
   };
 
   const actions = {
@@ -155,7 +158,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         if (!same) {
           state.activeAgentId = null;
           state.panelAgentId = null;
-          state.terminalLines = state.terminalBySession[nextId] || [];
+          useTerminalStore.getState().setActiveTerminalSession(nextId);
         }
       });
       // 未知 ID 且当前 active 也无效 → 进入草稿态收口
@@ -336,7 +339,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
             state.activeSessionId = id;
             state.activeAgentId = null;
             state.panelAgentId = null;
-            state.terminalLines = state.terminalBySession[id] || [];
+            useTerminalStore.getState().setActiveTerminalSession(id);
             state.draftFolder = '';
           }
           applyTitleIfDefault(existing, requestedTitle);
@@ -383,7 +386,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
           state.activeSessionId = id;
           state.activeAgentId = null;
           state.panelAgentId = null;
-          state.terminalLines = [];
+          useTerminalStore.getState().setActiveTerminalSession(id);
           state.draftFolder = '';
         }
       });
@@ -411,9 +414,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
             state.activeSessionId = fallback;
             state.activeAgentId = null;
             state.panelAgentId = null;
-            state.terminalLines = fallback
-              ? state.terminalBySession[fallback] || []
-              : [];
+            useTerminalStore.getState().setActiveTerminalSession(fallback);
           }
         }
         pruneEmptyShellsInPlace(
@@ -467,17 +468,13 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
           state.activeSessionId = state.sessions[0]?.id || PENDING_DRAFT_SESSION_ID;
           state.activeAgentId = null;
           state.panelAgentId = null;
-          state.terminalLines = state.activeSessionId
-            ? state.terminalBySession[state.activeSessionId] || []
-            : [];
+          useTerminalStore.getState().setActiveTerminalSession(
+            state.activeSessionId || null
+          );
         }
-        if (state.terminalBySession) {
-          for (const tid of Object.keys(state.terminalBySession)) {
-            if (!state.sessionsById[tid]) {
-              delete state.terminalBySession[tid];
-            }
-          }
-        }
+        useTerminalStore
+          .getState()
+          .pruneTerminalSessions(Object.keys(state.sessionsById));
       }),
 
     patchSession: (

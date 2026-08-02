@@ -9,14 +9,11 @@
     "dev": "npm --prefix ../crish-desktop run dev",
     "build": "npm --prefix ../crish-desktop run build",
     "tauri": "tauri",
-    "cli": "node ../../node_modules/vite-node/vite-node.mjs --config vite.config.ts src/cli/main.ts",
     "cli:check": "tsc --noEmit && npm run command-registry:check",
     "command-registry:check": "vitest run src/core/tauri-command-registry.test.ts src/shared/chinese-text-regression.test.ts"
   },
   "dependencies": {
-    "@crish/shared-types": "file:../../packages/shared-types",
-    "@crish/shared-utils": "file:../../packages/shared-utils",
-    "@crish/crish-desktop": "file:../crish-desktop"
+    "@crish/shared-types": "file:../../packages/shared-types"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.8.4",

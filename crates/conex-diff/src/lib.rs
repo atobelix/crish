@@ -111,8 +111,7 @@ pub mod diff_engine {
             let mut old_count: usize = 0;
             let mut new_count: usize = 0;
 
-            for idx in hunk_start..hunk_end {
-                let (tag, old_idx, new_idx, content) = &changes[idx];
+            for (tag, old_idx, new_idx, content) in changes.iter().take(hunk_end).skip(hunk_start) {
 
                 if old_start.is_none() {
                     old_start = Some(*old_idx + 1); // 1-based
@@ -224,7 +223,7 @@ mod tests {
     #[test]
     fn distant_changes_produce_multiple_hunks() {
         // Create content with changes far apart (> 2*3 = 6 lines of context between them)
-        let mut old_lines: Vec<String> = (1..=20).map(|i| format!("line{i}")).collect();
+        let old_lines: Vec<String> = (1..=20).map(|i| format!("line{i}")).collect();
         let mut new_lines = old_lines.clone();
         new_lines[1] = "changed2".into(); // line 2 changed
         new_lines[18] = "changed19".into(); // line 19 changed

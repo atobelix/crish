@@ -6,7 +6,8 @@ import React, {
   useState,
 } from 'react';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useSettingsField, selectAppSettings } from '../../store/storeAccess';
 import { sessionRuntimeRegistry } from '../../api/SessionRuntimeRegistry';
 import type { Attachment } from '../../api/SessionRuntimeRegistry';
 import {
@@ -52,7 +53,7 @@ export function useChatComposerProps({
   const setComposerDraft = useLayoutStore((s) => s.setComposerDraft);
   // Do not subscribe to the full composerDrafts map — it re-renders on every keystroke persist.
   // Session restore reads drafts via getState() only.
-  const appSettings = useLayoutStore((s) => s.appSettings);
+  const appSettings = useSettingsField(selectAppSettings);
 
   // Keyboard and Input states
   const [chatInput, setChatInputState] = useState('');

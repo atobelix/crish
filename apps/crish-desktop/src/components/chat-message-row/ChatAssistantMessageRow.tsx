@@ -25,7 +25,7 @@ import {
   getStreamText,
   streamStoreKey,
   useStreamingStore,
-} from '../../store/streamingStore';
+} from '../../api/store-access/componentAccess';
 
 export type ChatAssistantMessageRowProps = {
   msg: SessionMessage;

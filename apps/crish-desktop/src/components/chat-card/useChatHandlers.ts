@@ -12,6 +12,7 @@ import {
   reverseFileDiffsToDisk,
   formatReverseFailureToast,
 } from '../../api/reverseFileDiff';
+import { getTerminalState } from '../../store/storeAccess';
 
 export interface UseChatHandlersOptions {
   wsId: string;
@@ -139,9 +140,9 @@ export function useChatHandlers({
         );
         if (failToast) onShowToast(failToast);
         // 从 diff 面板移除已还原文件
-        const layoutStore = getCompositionRoot().layout;
+        const terminal = getTerminalState();
         for (const fp of scope.filePaths) {
-          layoutStore.getState().removeDiffFile(fp);
+          terminal.removeDiffFile(fp);
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

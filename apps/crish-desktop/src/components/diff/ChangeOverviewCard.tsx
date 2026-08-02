@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 
 import styles from './ChangeOverviewCard.module.css';
 import * as Lucide from 'lucide-react';
 import type { FileDiff, SessionMessage } from '../../store/layoutStore';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useTerminalField } from '../../store/storeAccess';
 import {
   applyFileDiffToDisk,
   applyFileDiffsToDisk,
@@ -97,7 +97,7 @@ export const ChangeOverviewCard: React.FC<ChangeOverviewCardProps> = ({
   /** 硬失败行内条；成功不写 */
   const [inlineErr, setInlineErr] = useState('');
   const errTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const removeDiffFile = useLayoutStore((s) => s.removeDiffFile);
+  const removeDiffFile = useTerminalField((s) => s.removeDiffFile);
 
   const allFiles = useMemo(() => collectMessageDiffs(message), [message]);
   const files = useMemo(

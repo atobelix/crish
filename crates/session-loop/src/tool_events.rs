@@ -6,6 +6,7 @@
 //!
 //! 语义来源：01-session-loop-semantics.md §2.8 / §五.8
 
+use agent_tools::permission::PermissionMode;
 use conex_types::tool::{ToolCategory, ToolConcurrency};
 use serde_json::Value;
 use std::time::Duration;
@@ -90,21 +91,27 @@ pub enum ToolErrorKind {
     UserDenied,
     /// 审批过期
     ApprovalExpired,
-    /// 软拒绝（审批策略层）
+    /// 需审批（工具返回 tool.requires_approval，R4 T10：产生真实审批请求，
+    /// 用户同意后重试执行；不再折叠为 SoftDeny）
+    ApprovalRequired,
+    /// 软拒绝（审批策略层；R4 T10 后不再作为 requires_approval 的归宿，
+    /// 枚举保留兼容既有消费方）
     SoftDeny,
     /// 因 abort / 兄弟失败被取消
     Cancelled,
 }
 
 impl ToolErrorKind {
-    /// 非 fatal 的审批/控制类错误（softDeny/timedOut/cancelled/approval_expired/
-    /// user_denied，01 §五.8 排除清单）——永不致命。
+    /// 非 fatal 的审批/控制类错误（softDeny/timedOut/cancelled/
+    /// approval_expired/user_denied/approval_required，01 §五.8 排除清单）
+    /// ——永不致命。
     pub fn is_never_fatal(self) -> bool {
         matches!(
             self,
             ToolErrorKind::Timeout
                 | ToolErrorKind::UserDenied
                 | ToolErrorKind::ApprovalExpired
+                | ToolErrorKind::ApprovalRequired
                 | ToolErrorKind::SoftDeny
                 | ToolErrorKind::Cancelled
         )
@@ -132,6 +139,7 @@ impl ToolErrorKind {
             ToolErrorKind::Timeout => "tool.timeout",
             ToolErrorKind::UserDenied => "tool.user_denied",
             ToolErrorKind::ApprovalExpired => "tool.approval_expired",
+            ToolErrorKind::ApprovalRequired => "tool.requires_approval",
             ToolErrorKind::SoftDeny => "tool.soft_deny",
             ToolErrorKind::Cancelled => "tool.cancelled",
         }
@@ -199,6 +207,10 @@ pub struct ToolBatchOptions {
     /// 透传 agent-tools executor 的 summarize 截断语义（T06.4.2 补缺省，
     /// 修复 tool_exec.rs 中硬编码 None 的死配置）
     pub output_budget_bytes: Option<usize>,
+    /// 权限模式（R4 T10）：显式设置时按工具 dangerous 标记 + 模式做三态
+    /// 判定（ask 问询 / plan 拒绝写类 / full-access 放行）；None = 既有
+    /// 语义（approval_enabled 开启 → 全部工具调用走审批）。
+    pub permission_mode: Option<PermissionMode>,
 }
 
 impl Default for ToolBatchOptions {
@@ -208,6 +220,7 @@ impl Default for ToolBatchOptions {
             fail_strategy: FailStrategy::ContinueDrain,
             approval_enabled: false,
             output_budget_bytes: None,
+            permission_mode: None,
         }
     }
 }

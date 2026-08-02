@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
 import { focusOrOpenPanel, setGroupActiveCard } from '../../api/storeAccess';
 import { onUiEvent } from '../../api/uiEvents';
 import { closeAgentSidePanel } from '../../api/openAgentPanel';

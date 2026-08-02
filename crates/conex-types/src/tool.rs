@@ -1,4 +1,5 @@
-//! 工具域与诊断/压缩/检查点类型（对齐 TS 端 shared-types/src/tool.ts）
+//! 工具域与诊断/压缩/检查点类型（契约注册表 contracts/engine-events.json 的
+//! tool 载荷；TS 端由 scripts/generate-engine-bindings.mjs 生成）
 //!
 //! 本模块是 conex-types 的工具类型唯一源，供 agent-provider / agent-tools /
 //! agent-core 复用。字段名 serde camelCase，与前端契约 03 §5.1 表逐项对齐。

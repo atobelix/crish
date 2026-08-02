@@ -99,10 +99,10 @@ pub mod gatekeeper {
             // If cwd is outside workspace, escalate to approval
             let cwd_normalized = cwd.replace('\\', "/");
             let root_normalized = workspace_root.replace('\\', "/");
-            if !cwd_normalized.starts_with(&root_normalized) {
-                if base_result == GatekeeperResult::Allowed {
-                    return GatekeeperResult::RequiresApproval;
-                }
+            if !cwd_normalized.starts_with(&root_normalized)
+                && base_result == GatekeeperResult::Allowed
+            {
+                return GatekeeperResult::RequiresApproval;
             }
 
             base_result

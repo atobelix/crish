@@ -45,6 +45,13 @@ use conex_types::error::{CrishErrorCategory, CrishErrorPayload};
 /// produced by `panic!`), wrapped in a `CrishErrorPayload` with
 /// `code = "common.panic"`, `category = Permanent`, `retryable = false`, and
 /// the originating thread name recorded in `metadata`.
+//
+// 豁免说明（clippy::result_large_err）：
+// `CrishErrorPayload` 是命令层全域错误契约类型（conex-types::error），
+// 在本函数与命令层返回处保持同一非 box 形态，避免公共 API 分裂；
+// 且 panic 路径非常热路径，152 字节栈上返回无实际开销。
+// 若后续全域改用 Box<CrishErrorPayload>，本豁免应随之取消。
+#[allow(clippy::result_large_err)]
 pub fn catch_unwind<F, R>(f: F) -> Result<R, CrishErrorPayload>
 where
     F: FnOnce() -> R + UnwindSafe,

@@ -10,7 +10,7 @@
  * 注意：beforeunload 事件中只能使用同步 API（localStorage 同步，IndexedDB 不行）。
  */
 
-import { getSessionStoreState } from '../store/sessionStore';
+import { getSessionStoreState } from '../store';
 import { persistAllSessionsSync } from './sessionPersistence';
 import { type StreamTextBatcher, type StreamValueBatcher } from './streamTextBatcher';
 import { errorStore } from '../services/ErrorStore';

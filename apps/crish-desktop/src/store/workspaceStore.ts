@@ -22,7 +22,6 @@ import { useShallow } from './useShallowSelector';
 import { DEFAULT_WORKSPACE_ID, seedInitialWorkspaces, clampActiveWorkspaceIndex, useLayoutStore } from './layoutStore';
 import type {
   DropPreviewState,
-  FileDiff,
   WorkspaceState,
 } from './types';
 import type {
@@ -34,17 +33,9 @@ import { expandToolColumnIfCollapsed } from './layoutHelpers';
 
 const _initialWorkspaces = seedInitialWorkspaces(DEFAULT_WORKSPACE_ID);
 
-type WorkspaceStoreData = WorkspaceStoreSlice & {
-  diffFiles: FileDiff[];
-  activeDiffSource: FileDiff | null;
-};
+type WorkspaceStoreData = WorkspaceStoreSlice;
 
-export type WorkspaceStore = WorkspaceStoreData & WorkspaceActions & {
-  setActiveDiffSource: (diff: FileDiff | null) => void;
-  setDiffFiles: (files: FileDiff[] | ((prev: FileDiff[]) => FileDiff[])) => void;
-  pushDiffFile: (diff: FileDiff) => void;
-  removeDiffFile: (filePath: string) => void;
-};
+export type WorkspaceStore = WorkspaceStoreData & WorkspaceActions;
 
 export const useWorkspaceStore = useLayoutStore;
 

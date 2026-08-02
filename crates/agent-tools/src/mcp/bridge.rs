@@ -468,7 +468,11 @@ impl Tool for McpToolAdapter {
         &self.def
     }
 
-    async fn execute(&self, args: Value) -> Result<Value, ToolError> {
+    async fn execute(
+        &self,
+        _ctx: &crate::context::ToolContext,
+        args: Value,
+    ) -> Result<Value, ToolError> {
         self.session
             .call_tool(&self.server_tool_name, &self.def.name, args)
             .await

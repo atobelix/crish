@@ -1,10 +1,15 @@
 # Lifecycle Hooks（进程内 Hook 平面）
 
+> **【已废弃】** 本文描述旧 TS 引擎（`packages/agent-runtime`，已删除）的进程内 Hook 平面。
+> 当前引擎已全部 Rust 化并进程内运行（见 [`ARCHITECTURE.md`](../../ARCHITECTURE.md)）；
+> Hook 侧仅保留 plugin-sdk 的插件生命周期钩子（`packages/plugin-sdk/src/hooks/`，
+> 契约见 `packages/shared-types/src/plugin.ts`）。本文仅作历史参考，不再作为实现依据。
+
 | Field | Value |
 |-------|-------|
 | Status | B2 骨架已落地；**tool.pre / tool.post 已接入真路径**；W6-8 **context.compact.start/end observe-only**；D2-2 health-hook-pack lite 已落地 |
 | 实现 | `packages/agent-runtime/src/hooks/lifecycle-hooks.ts` · `compact-lifecycle.ts` · `health-hook-pack.ts` |
-| 中控 | [`docs/plans/2026-07-system-architecture-control-master-plan.md`](./plans/2026-07-system-architecture-control-master-plan.md) §6 |
+| 中控 | [`docs/archive/plans/2026-07-system-architecture-control-master-plan.md`](../archive/plans/2026-07-system-architecture-control-master-plan.md) §6 |
 
 ---
 

@@ -226,7 +226,7 @@ export function initWorkspaceLayoutSync(opts?: {
 
   void Promise.all([
     import('../app/compositionRoot'),
-    import('../store/layoutStore'),
+    import('../store'),
     import('./projectStore'),
   ]).then(([{ getCompositionRoot }, { useLayoutStore }, { getWorkspacePath }]) => {
     if (disposed) return;

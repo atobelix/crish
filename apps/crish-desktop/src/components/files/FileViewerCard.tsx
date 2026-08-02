@@ -1,11 +1,11 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import * as Lucide from 'lucide-react';
-import { useLayoutStore, type FileDiff } from '../../store/layoutStore';
-import { useLayoutTreeStore } from '../../store/layout-tree';
+import type { FileDiff } from '../../store/types';
+import { useLayoutTreeStore, fileViewerInitialModeMap } from '../../api/store-access/componentAccess';
+import { useTerminalField, selectDiffFiles } from '../../store/storeAccess';
 import { openPathDefault, openWithHostOpener, listOpenOptionsForFile, type HostOpener } from '../../api/hostOpenersApi';
 import { pathDirname, readTextFile, getWorkspacePath } from '../../api/workspaceFsApi';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
-import { fileViewerInitialModeMap } from '../../store/workspace-shell/openTool';
 import { Tooltip } from '../Tooltip';
 import styles from './FileViewerCard.module.css';
 
@@ -16,7 +16,7 @@ export interface FileViewerCardProps {
 
 export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
   ({ filePath, onShowToast }) => {
-    const diffFiles = useLayoutStore((s) => s.diffFiles) as FileDiff[];
+    const diffFiles = useTerminalField(selectDiffFiles) as FileDiff[];
 
     // 匹配当前文件的 git 变更（如果有）
     const f = useMemo(() => {

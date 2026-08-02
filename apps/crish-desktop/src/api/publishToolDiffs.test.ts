@@ -21,7 +21,7 @@ vi.hoisted(() => {
   Object.defineProperty(globalThis, 'localStorage', { value: ls, configurable: true });
 });
 
-import { useLayoutStore } from '../store/layoutStore';
+import { useTerminalStore } from '../store/terminalStore';
 import type { FileDiff } from '../store/types';
 import {
   coalescePublishableDiffs,
@@ -228,7 +228,7 @@ describe('multi-file coalesce / filter', () => {
 
 describe('publishToolDiffs (collaborator success path)', () => {
   beforeEach(() => {
-    useLayoutStore.setState({
+    useTerminalStore.setState({
       diffFiles: [],
       activeDiffSource: null,
     });
@@ -250,23 +250,23 @@ describe('publishToolDiffs (collaborator success path)', () => {
     const n = publishToolDiffs(files);
     expect(n).toBe(1);
 
-    const st = useLayoutStore.getState();
+    const st = useTerminalStore.getState();
     expect(st.diffFiles.some((f) => f.filePath === 'src/collab.ts')).toBe(true);
     expect(st.activeDiffSource?.filePath).toBe('src/collab.ts');
   });
 
   it('nested pushDiffFile inside immer set is discarded (regression guard)', () => {
-    useLayoutStore.setState(() => {
+    useTerminalStore.setState(() => {
       const resolved = [sampleDiff('src/nested-bug.ts')];
-      const push = useLayoutStore.getState().pushDiffFile;
+      const push = useTerminalStore.getState().pushDiffFile;
       resolved.forEach((d) => push(d));
     });
-    expect(useLayoutStore.getState().diffFiles.some((f) => f.filePath === 'src/nested-bug.ts')).toBe(
+    expect(useTerminalStore.getState().diffFiles.some((f) => f.filePath === 'src/nested-bug.ts')).toBe(
       false,
     );
 
     publishToolDiffs([sampleDiff('src/nested-bug.ts')]);
-    expect(useLayoutStore.getState().diffFiles.some((f) => f.filePath === 'src/nested-bug.ts')).toBe(
+    expect(useTerminalStore.getState().diffFiles.some((f) => f.filePath === 'src/nested-bug.ts')).toBe(
       true,
     );
   });
@@ -282,7 +282,7 @@ describe('publishToolDiffs (collaborator success path)', () => {
         sampleDiff('../nope.ts'),
       ]),
     ).toBe(0);
-    expect(useLayoutStore.getState().diffFiles).toEqual([]);
+    expect(useTerminalStore.getState().diffFiles).toEqual([]);
   });
 
   it('skips unpublishable junk (empty path / traversal / placeholder)', () => {
@@ -293,7 +293,7 @@ describe('publishToolDiffs (collaborator success path)', () => {
       emptyDiff('good.ts'),
       sampleDiff('src/keep.ts'),
     ]);
-    const paths = useLayoutStore.getState().diffFiles.map((f) => f.filePath);
+    const paths = useTerminalStore.getState().diffFiles.map((f) => f.filePath);
     expect(paths).toEqual(['src/keep.ts']);
   });
 
@@ -312,9 +312,9 @@ describe('publishToolDiffs (collaborator success path)', () => {
       }),
     ]);
     expect(n).toBe(3);
-    const paths = useLayoutStore.getState().diffFiles.map((f) => f.filePath).sort();
+    const paths = useTerminalStore.getState().diffFiles.map((f) => f.filePath).sort();
     expect(paths).toEqual(['src/one.ts', 'src/three.ts', 'src/two.ts']);
-    const one = useLayoutStore.getState().diffFiles.find((f) => f.filePath === 'src/one.ts');
+    const one = useTerminalStore.getState().diffFiles.find((f) => f.filePath === 'src/one.ts');
     expect(one?.changes).toHaveLength(2);
   });
 
@@ -330,20 +330,20 @@ describe('publishToolDiffs (collaborator success path)', () => {
         ],
       }),
     ]);
-    const before = useLayoutStore.getState().diffFiles.find((f) => f.filePath === 'src/conflict.ts');
+    const before = useTerminalStore.getState().diffFiles.find((f) => f.filePath === 'src/conflict.ts');
     expect(before?.changes).toHaveLength(2);
 
     // 再推 missing-base 占位（同 path 反斜杠）——不得覆盖
     const n = publishToolDiffs([placeholderDiff('src\\conflict.ts')]);
     expect(n).toBe(0);
-    const after = useLayoutStore.getState().diffFiles.find((f) => f.filePath === 'src/conflict.ts');
+    const after = useTerminalStore.getState().diffFiles.find((f) => f.filePath === 'src/conflict.ts');
     expect(after?.changes).toEqual(before?.changes);
     expect(after?.changes.some((c) => c.type === 'deletion')).toBe(true);
   });
 
   it('allows richer incoming to replace missing-base already in store', () => {
     publishToolDiffs([placeholderDiff('src/upgrade.ts')]);
-    expect(isMissingBaseDiff(useLayoutStore.getState().diffFiles[0])).toBe(true);
+    expect(isMissingBaseDiff(useTerminalStore.getState().diffFiles[0])).toBe(true);
 
     const n = publishToolDiffs([
       sampleDiff('src\\upgrade.ts', {
@@ -352,19 +352,19 @@ describe('publishToolDiffs (collaborator success path)', () => {
       }),
     ]);
     expect(n).toBe(1);
-    const f = useLayoutStore.getState().diffFiles.find((x) => x.filePath === 'src/upgrade.ts');
+    const f = useTerminalStore.getState().diffFiles.find((x) => x.filePath === 'src/upgrade.ts');
     expect(f?.changes[0]).toEqual({ type: 'addition', content: 'real' });
   });
 
   it('removes raw path aliases so store does not accumulate duplicates', () => {
     // 模拟 Git / 其它路径写入反斜杠形式（未走 publish 规范化）
-    useLayoutStore.getState().pushDiffFile({
+    useTerminalStore.getState().pushDiffFile({
       filePath: 'src\\alias.ts',
       additions: 0,
       deletions: 0,
       changes: [{ type: 'normal', content: '文件已更新' }],
     });
-    expect(useLayoutStore.getState().diffFiles.map((f) => f.filePath)).toEqual([
+    expect(useTerminalStore.getState().diffFiles.map((f) => f.filePath)).toEqual([
       'src\\alias.ts',
     ]);
 
@@ -375,11 +375,11 @@ describe('publishToolDiffs (collaborator success path)', () => {
       }),
     ]);
     expect(n).toBe(1);
-    const paths = useLayoutStore.getState().diffFiles.map((f) => f.filePath);
+    const paths = useTerminalStore.getState().diffFiles.map((f) => f.filePath);
     expect(paths).toEqual(['src/alias.ts']);
     expect(paths).not.toContain('src\\alias.ts');
     expect(
-      useLayoutStore.getState().diffFiles.find((f) => f.filePath === 'src/alias.ts')
+      useTerminalStore.getState().diffFiles.find((f) => f.filePath === 'src/alias.ts')
         ?.changes[0],
     ).toEqual({ type: 'addition', content: 'canonical' });
   });
@@ -394,7 +394,7 @@ describe('publishToolDiffs (collaborator success path)', () => {
         ],
       }),
     ]);
-    const beforeActive = useLayoutStore.getState().activeDiffSource;
+    const beforeActive = useTerminalStore.getState().activeDiffSource;
     // 较弱但仍有真实 +/- 的后写：score 更低 → 不覆盖、不重复 push
     const n = publishToolDiffs([
       sampleDiff('src/stable.ts', {
@@ -403,10 +403,10 @@ describe('publishToolDiffs (collaborator success path)', () => {
       }),
     ]);
     expect(n).toBe(0);
-    const after = useLayoutStore.getState().diffFiles.find((f) => f.filePath === 'src/stable.ts');
+    const after = useTerminalStore.getState().diffFiles.find((f) => f.filePath === 'src/stable.ts');
     expect(after?.changes).toHaveLength(2);
     expect(after?.changes.map((c) => c.content)).toEqual(['a', 'b']);
     // activeDiffSource 不应因无效覆盖被改写内容
-    expect(useLayoutStore.getState().activeDiffSource?.changes).toEqual(beforeActive?.changes);
+    expect(useTerminalStore.getState().activeDiffSource?.changes).toEqual(beforeActive?.changes);
   });
 });

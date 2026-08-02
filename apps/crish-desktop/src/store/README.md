@@ -2,11 +2,15 @@
 
 ## Layout identity ownership（OPT-C1 · write owners）
 
-Three **real** store instances matter for “what is open / where is it painted / what is the session body”. Facades on layout are **aliases**, not extra create().
+Three **real** store instances matter for “what is open / where is it painted / what is the session body”. Facades on layout are **aliases**, not extra create(). T11 起新增四个**域 store**（独立实例）。
 
 | Instance | Path | Write owner for | Forbidden for new code |
 |----------|------|-----------------|------------------------|
-| **layoutStore** (god) | `layoutStore.ts` | sessions[], messages, agents, chrome (sidebar/tabMode/plan), appSettings, legacy columns | Opening tabs by `setActiveSessionId` alone; mutating layout-tree |
+| **layoutStore** (god, T11 瘦身) | `layoutStore.ts` | sessions[], messages, agents, chrome (sidebar/tabMode/uiSize/shellChrome/chatSurface/settingsOverlay), legacy columns | Opening tabs by `setActiveSessionId` alone; mutating layout-tree |
+| **terminalStore** | `terminalStore.ts` | terminal buffers（terminalLines / terminalBySession）+ diff buffers（diffFiles / activeDiffSource） | 会话 CRUD；权限写入 |
+| **workerStore** | `workerStore.ts` | activeWorkers / killedWorkerIds / manuallyTriggeredWorkers（killWorker / triggerCronJobNow） | 权限写入；settings 数据 |
+| **permissionStore** | `permissionStore.ts` | permissionMode / planModeEnabled / planApproved / commandPermissions | 会话 CRUD |
+| **settingsStore** | `settingsStore.ts` | appSettings / providers / scheduledTasks / mcpServers / tokenUsage（syncTelemetryData 单向委托 workerStore） | 布局 chrome |
 | **workspaceShellStore** | `workspace-shell/*` | openTabs / TabSurface, activeTabId, rightDock, shellReady; open/focus/close/new-draft | Session message body; raw tree split as “open chat” |
 | **layoutTreeStore** | `layout-tree/*` | binary tree geometry, activeLeafId, history, leaf↔session bind | Tab strip order; sessions[] CRUD |
 
@@ -14,7 +18,7 @@ Three **real** store instances matter for “what is open / where is it painted 
 |-------------------------------------|------|
 | `useSessionStore` | `sessionStore.ts` |
 | `useWorkspaceStore` | `workspaceStore.ts` — **≠** workspace-shell |
-| `useSettingsUiStore` | `settingsUiStore.ts` |
+| `useSettingsUiStore` | `settingsUiStore.ts`（浮层直读 layout；权限便捷入口委托 permissionStore） |
 
 ### Command entry (compositionRoot naming trap)
 
@@ -29,25 +33,30 @@ Three **real** store instances matter for “what is open / where is it painted 
 
 Type tags: `storeOwnership.ts` (`StoreOwnership`, `SHELL_TAB_OWNERSHIP`, …).
 
-**Current truth:** sessions **still live on layoutStore** (not mass-split this wave). Phase 2 may extract message stream; until then session facade is the API.
+**Current truth:** sessions **still live on layoutStore**（OPT-C1，本波不拆）。T11 已把 terminal / worker / permission / settings 四域拆为独立 store；session/workspace 拆分为后续波次。
 
 ---
 
-## 现状（Phase 0/1 · facade 收尾）
+## 现状（T11 后 · facade 收尾）
 
-桌面 UI **会话/chrome/legacy workspace** 仍是 **单一** zustand + immer 实例：`useLayoutStore`（`layoutStore.ts`）。Tab 条与二叉树是 sibling stores（上表）。
+桌面 UI **会话/chrome/legacy workspace** 仍是 **单一** zustand + immer 实例：`useLayoutStore`（`layoutStore.ts`，布局域 ≤8 action）。**terminal / worker / permission / settings 为四个独立实例**（`terminalStore.ts` / `workerStore.ts` / `permissionStore.ts` / `settingsStore.ts`）。Tab 条与二叉树是 sibling stores（上表）。
 
 | 层 | 文件 | 职责 |
 |----|------|------|
-| 权威 store | `layoutStore.ts` | 创建 store、拼装各域 actions、持久化订阅 |
-| 会话 actions | `sessionActions.ts` | 会话/消息/agent/permissionMode 写入 |
+| 权威 store | `layoutStore.ts` | 布局/壳层 UI + 会话域 + 工作区域（拼装切片 actions、持久化订阅） |
+| 会话 actions | `sessionActions.ts` | 会话/消息/agent 写入（terminal 镜像经 terminalStore 委托） |
 | 工作区 actions | `workspaceActions.ts` | columns、标签 DnD、布局预设 |
+| 域 store（T11 新） | `terminalStore.ts` | 终端行缓冲 + diff 缓冲 |
+| 域 store（T11 新） | `workerStore.ts` | 活动/manual/killed worker |
+| 域 store（T11 新） | `permissionStore.ts` | 权限/plan/命令白名单 |
+| 域 store（T11 新） | `settingsStore.ts` | 设置/遥测（scheduledTasks 持久化） |
+| 公共读面（T11 新） | `storeAccess.ts` | **components 只经它读新域 store**（T14 规则引用） |
 | 纯函数 | `layoutHelpers.ts` | 默认工作区、列宽、group 查找、diff/终端缓冲 |
 | 索引 | `sessionIndex.ts` | `sessionsById` O(1) + 一致性校验 + 侧栏投影（空壳过滤） |
 | 类型 | `types.ts` | 公共类型 |
 | ownership tags | `storeOwnership.ts` | domain / write-owner aliases（文档用） |
 | barrel | `index.ts` | 统一 re-export |
-| 命令式 api | `api/storeAccess.ts` | 非 React 热路径集中 getState / action |
+| 命令式 api | `api/storeAccess.ts` | 非 React 热路径集中 getState / action（既有编排层；T11 后其 getLayoutState 形状依赖归 T14/汇合修复） |
 | TabSurface | `workspace-shell/*` | open tabs / dock（独立 store） |
 | Geometry | `layout-tree/*` | binary tree（独立 store） |
 
@@ -65,22 +74,25 @@ Type tags: `storeOwnership.ts` (`StoreOwnership`, `SHELL_TAB_OWNERSHIP`, …).
 |--------|------|------|--------|
 | 会话 | `useSessionStore` / `useSessionField` / `useActiveSession*` | sessions、sessionsById、activeSession*、SessionActions | `getSessionStoreState` / `getSessionById` / `getSessionAgent` |
 | 工作区 | `useWorkspaceStore` / `useWorkspaceField` / `useActiveWorkspace*` | workspaces、draggedTab、dropPreview、WorkspaceActions | `getWorkspaceStoreState` / `getActiveWorkspace` / `setGroupActiveCard` / `setDropPreview` / `focusExistingPanelCard` |
-| 设置 UI | `useSettingsUiStore` / `useSettingsUiField` / `usePermissionMode`… | showSettingsOverlay、settings tab、permission/plan | `getSettingsUiState` / `openSettings` / `closeSettings` / `toggleSettingsOverlay` / `setPermissionMode` / `setPlanMode*` |
+| 设置 UI | `useSettingsUiStore` / `useSettingsUiField` / `usePermissionMode`… | showSettingsOverlay、settings tab（layout 直读）；permission/plan 经 permissionStore 委托 | `getSettingsUiState` / `openSettings` / `closeSettings` / `toggleSettingsOverlay` / `setPermissionMode`（→permissionStore） |
 
 - **非 React 热路径**请走 `api/storeAccess.ts`（或 facade 的 get*），组件渲染用 selector。
 - `storeAccess` 已覆盖：会话 CRUD/消息 toolCall/archive·unarchive/pin/agent、`getActiveSessionId` / `getSessionAgent`、设置 UI 开关与 plan/`getPermissionMode`、工作区 `setGroupActiveCard` / `focusOrOpenPanel` / DnD `getDropPreview`、diff、遥测、`setAppSettings` / `getCommandPermissions` / `setScheduledTasks`。跨域写统一经 `getLayoutState()`。
 
-### 状态归属（该放哪）
+### 状态归属（该放哪 — T11 后）
 
 | 状态 | 归属 | 说明 |
 |------|------|------|
-| sessions / sessionsById / folderOrder / activeSession* / agents | 会话域 | 高频；Phase 2 优先拆独立 store |
-| workspaces / draggedTab / dropPreview / tabMode | 工作区域 | DnD 与布局 |
-| showSettingsOverlay / settingsActiveTab / permissionMode / plan* | 设置 UI 域 | 浮层与权限开关 |
-| activeDiffSource / diffFiles | 仍在 layout（横切） | 工具结果与 Git 共用；经 `storeAccess.pushDiffFile` |
-| terminalLines / terminalBySession | 仍在 layout | 与会话 id 关联，但非消息时间线 |
-| appSettings / providers / mcp / cron / tokenUsage / workers | 遥测 & 设置数据 | 非布局；syncTelemetryData 已类型化为 `TelemetrySyncPayload` |
-| uiSize / sidebarCollapsed | 壳层 UI | 可随 settings UI 或独立 chrome store |
+| sessions / sessionsById / folderOrder / activeSession* / agents | 会话域（layoutStore 切片） | 高频；后续波次拆独立 store |
+| workspaces / draggedTab / dropPreview / tabMode | 工作区域（layoutStore 切片） | DnD 与布局 |
+| uiSize / shellChromeMode / chatMainSurface / sidebarCollapsed | 布局 chrome（layoutStore） | 壳层 UI |
+| showSettingsOverlay / settingsActiveTab / openSettings | 布局 chrome（layoutStore） | 设置浮层 = 布局 UI |
+| terminalLines / terminalBySession / activeDiffSource / diffFiles | **terminalStore** | 会话输出/工作缓冲 |
+| activeWorkers / killedWorkerIds / manuallyTriggeredWorkers | **workerStore** | killWorker / triggerCronJobNow / applyTelemetryWorkers |
+| permissionMode / planModeEnabled / planApproved / commandPermissions | **permissionStore** | 权限三态联动 + 白名单 |
+| appSettings / providers / scheduledTasks / mcpServers / tokenUsage | **settingsStore** | 设置/遥测；syncTelemetryData 单向委托 workerStore |
+
+新代码读取新域 store：`storeAccess.ts`（`useTerminalField` / `getWorkerState` / `usePermissionField` / `useSettingsField` …）。
 
 ### 循环依赖
 
@@ -108,7 +120,7 @@ api/* 可 → store；store 避免 → 组件
 | 路径 | messages | 说明 |
 |------|----------|------|
 | 本地 disk / SQLite `hydrateSessionsFrom*` | **eager** 全量 body | `loadSessionBody` 与 index 一并回灌 |
-| daemon `list-sessions` merge | **lazy** `messages: []` + title | 见 `sessionDaemonSync` |
+| 引擎 `list-sessions` merge | **lazy** `messages: []` + title | 见 `api/sessionEngineSync` |
 | `setActiveSessionId` | 空且 `!hydratedFromEngine` → 拉 `session-events` | `needsEngineMessageHydrate` |
 | `prepareSessionsForUi` | **不** strip messages | 只补默认标题 + prune 幽灵空壳（I-DRAFT） |
 
@@ -135,7 +147,7 @@ const s = useLayoutStore(s => s.sessions).find(x => x.id === id);
 |------|------|
 | 渲染订阅 | `useSessionField(selector)` / `useWorkspaceField` / `useSettingsUiField` |
 | 事件回调需最新快照 | facade `getSessionById` / `get*StoreState` / `api/storeAccess` |
-| 流式 bridge / daemon / 快捷键 | `api/storeAccess`；避免组件散落 getState |
+| 流式 bridge / 引擎同步 / 快捷键 | `api/storeAccess`；避免组件散落 getState |
 | 禁止 | 新代码在组件 render 路径调用 `useLayoutStore.getState()` |
 
 ### 消费侧收紧进度（真实状态 · 2026-07）
@@ -155,7 +167,7 @@ const s = useLayoutStore(s => s.sessions).find(x => x.id === id);
 | `hooks/useTabDrag.ts` | dropPreview / draggedTab → workspace facade get*/set* |
 | `hooks/useAgentToolApproval.ts` | getSessionById / getSessionAgent / addCommandPermission |
 | `hooks/useChatStream.ts` | updateMessageThinking / getActiveSessionId / setPermissionMode |
-| `api/daemonChatBridge.ts` | getPermissionMode / getCommandPermissions |
+| `api/chat-bridge/ConnectionLifecycle.ts`、`handlers/approvalHandlers.ts` | getPermissionMode / getCommandPermissions（经 `api/storeAccess`） |
 | `SettingsPanel.tsx` | setAppSettings → storeAccess |
 
 **仍可接受 / 后续 Phase 再收：**
@@ -183,7 +195,7 @@ npm run check:desktop         # crish-desktop tsc
 - 非 facade 生产文件禁止 `as unknown as`；三门面各允许 1 处 get*StoreState 窄化
 - 要求 `createSessionActions(set, get)` / `createWorkspaceActions(set, get)` 无 cast
 - 要求 `SessionStoreSlice` / `WorkspaceStoreSlice` + `create*<T extends *Slice>`；actions **不得** import layoutStore/facade（反环）
-- 要求 `syncTelemetryData(data: TelemetrySyncPayload)` 且 layout 导出该类型
+- 要求 `syncTelemetryData(data: TelemetrySyncPayload)` 且 layout 导出该类型（T11 起签名检查落在 settingsStore）
 - 要求 `sessionIndex` 导出 build/reindex/get/check/isConsistent/**assert**
 - 要求三门面 `use*Store = useLayoutStore`、get*State / 域 helper 符号齐全；门面互不 import
 - 要求 `index.ts` barrel re-export 三门面 + `useLayoutStore`；`store/README.md` 存在

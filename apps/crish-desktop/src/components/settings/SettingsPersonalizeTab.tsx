@@ -5,7 +5,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Settings } from '../../api/clientApi';
 import { clientApi } from '../../api/clientApi';
 import { getWorkspacePath } from '../../api/projectStore';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useSettingsField } from '../../store/storeAccess';
 import { SettingsPage } from './SettingsUI';
 import { SettingsSchemaRenderer } from './SettingsSchemaRenderer';
 import type { SchemaSection } from './SettingsSchemaRenderer';
@@ -17,7 +18,7 @@ type Props = {
 export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
   const cwd = getWorkspacePath() || '__global__';
   const setTabModeEnabled = useLayoutStore((s) => s.setTabModeEnabled);
-  const setAppSettings = useLayoutStore((s) => s.setAppSettings);
+  const setAppSettings = useSettingsField((s) => s.setAppSettings);
 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);

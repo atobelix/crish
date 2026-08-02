@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { GENERAL_FOLDER } from '../api/projectStore';
 import { shouldListSessionInSidebar } from '../api/sessionTitle';
 import { createSessionActions, type SessionStoreSlice } from './sessionActions';
+import { useTerminalStore } from './terminalStore';
 import { buildSessionsById, filterSidebarSessions } from './sessionIndex';
 import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from './draftSession';
 import type { SessionMessage, SessionState } from './types';
@@ -85,8 +86,6 @@ function makeStateFromSessions(
     draftFolder,
     activeAgentId: null,
     panelAgentId: null,
-    terminalLines: [],
-    terminalBySession: {},
     composerDrafts: {},
   };
 }
@@ -736,22 +735,26 @@ describe('sessionActions create/prune paths', () => {
         'a'
       )
     );
-    const st0 = h.getState();
-    st0.terminalBySession = {
-      a: ['keep-a'],
-      b: ['keep-b'],
-      ghost: ['keep-ghost'],
-    };
+    useTerminalStore.setState({
+      terminalBySession: {
+        a: ['keep-a'],
+        b: ['keep-b'],
+        ghost: ['keep-ghost'],
+      },
+      activeTerminalSessionId: 'a',
+      terminalLines: ['keep-a'],
+    });
     h.actions.setActiveSessionId('b');
     const st = h.getState();
     // 会话与各会话 terminal 缓冲均保留；仅当前 terminalLines 切到 b
     expect(st.sessions.map((s) => s.id).sort()).toEqual(
       ['a', 'b', 'ghost'].sort()
     );
-    expect(st.terminalBySession.ghost).toEqual(['keep-ghost']);
-    expect(st.terminalBySession.a).toEqual(['keep-a']);
-    expect(st.terminalBySession.b).toEqual(['keep-b']);
-    expect(st.terminalLines).toEqual(['keep-b']);
+    const t = useTerminalStore.getState();
+    expect(t.terminalBySession.ghost).toEqual(['keep-ghost']);
+    expect(t.terminalBySession.a).toEqual(['keep-a']);
+    expect(t.terminalBySession.b).toEqual(['keep-b']);
+    expect(t.terminalLines).toEqual(['keep-b']);
   });
 
   it('branchSession prunes non-active empty shells', () => {
@@ -794,13 +797,11 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
         'victim'
       )
     );
-    h.getState().terminalBySession = {
-      victim: ['line'],
-      'keep-content': ['ok'],
-    };
-    // harness 上直接改 initial 后需再走 actions 读最新；此处 mutate 返回对象
-    const st0 = h.getState();
-    st0.terminalBySession = { victim: ['line'], 'keep-content': ['ok'] };
+    useTerminalStore.setState({
+      terminalBySession: { victim: ['line'], 'keep-content': ['ok'] },
+      activeTerminalSessionId: 'victim',
+      terminalLines: ['line'],
+    });
 
     const ok = h.actions.deleteSession('victim');
     expect(ok).toBe(true);
@@ -809,8 +810,9 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
     expect(st.sessionsById.ghost).toBeUndefined(); // 空壳 prune
     expect(st.sessionsById['keep-content']).toBeDefined();
     expect(st.activeSessionId).toBe('keep-content');
-    expect(st.terminalBySession.victim).toBeUndefined();
-    expect(st.terminalLines).toEqual(['ok']);
+    const t = useTerminalStore.getState();
+    expect(t.terminalBySession.victim).toBeUndefined();
+    expect(t.terminalLines).toEqual(['ok']);
   });
 
   it('deleteSession empty / missing is a guarded no-op', () => {

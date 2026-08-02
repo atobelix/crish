@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useId, lazy, Suspense } from 'react';
 import styles from './SettingsPanel.module.css';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
 import {
   getCachedCapabilities,
   refreshProductCapabilities,

@@ -30,6 +30,7 @@ import {
   syncTelemetryData,
 } from '../../api/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
+import { getSettingsState } from '../../store/storeAccess';
 import {
   clearStream,
   getStreamText,
@@ -607,7 +608,7 @@ export function useStreamCallbacks(
                 const usage = await fetchRunSnapshotUsage(runId);
                 if (usage && (usage.sampleCount ?? 0) > 0 && (usage.promptTokens || usage.completionTokens)) {
                   const model = getActiveModelId() || 'unknown';
-                  const cur = getCompositionRoot().layout.getState().tokenUsage;
+                  const cur = getSettingsState().tokenUsage;
                   const next = applyUsageDelta(cur, usage, (i: number, o: number) => estimateCostUsd(model, i, o));
                   const dIn = Math.max(0, (next.input || 0) - (cur.input || 0));
                   const dOut = Math.max(0, (next.output || 0) - (cur.output || 0));
@@ -627,7 +628,7 @@ export function useStreamCallbacks(
                 const approxIn = Math.max(1, Math.ceil(userText.length / 4));
                 const approxOut = Math.max(0, Math.ceil(asstText.length / 4));
                 const model = getActiveModelId() || 'unknown';
-                const cur = getCompositionRoot().layout.getState().tokenUsage;
+                const cur = getSettingsState().tokenUsage;
                 const dCost = estimateCostUsd(model, approxIn, approxOut);
                 syncTelemetryData({
                   tokenUsage: {
@@ -749,7 +750,7 @@ export function useStreamCallbacks(
         const approxIn = Math.max(1, Math.ceil(userTxt.length / 4));
         const approxOut = Math.max(0, Math.ceil(asstTxt.length / 4));
         const model = getActiveModelId() || 'unknown';
-        const curUsage = getCompositionRoot().layout.getState().tokenUsage;
+        const curUsage = getSettingsState().tokenUsage;
         const dCost = estimateCostUsd(model, approxIn, approxOut);
         syncTelemetryData({
           tokenUsage: {

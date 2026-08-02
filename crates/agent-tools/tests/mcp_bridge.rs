@@ -5,6 +5,7 @@
 //! 定位可执行文件路径。Windows 上 tokio 子进程管道与 kill（TerminateProcess）
 //! 均可靠，无需 cfg 条件裁剪；若个别用例在 CI 偶发超时，可单独重跑。
 
+use agent_tools::context::{create_mock_tool_context, ToolContext};
 use agent_tools::mcp::{McpClientBridge, McpServerConfig, McpServerRuntimeState, McpTransport};
 use serde_json::json;
 use std::collections::HashMap;
@@ -12,6 +13,11 @@ use std::time::Duration;
 
 /// 假 server 可执行文件路径（cargo 为集成测试注入，连字符原样保留）
 const FAKE_SERVER: &str = env!("CARGO_BIN_EXE_mcp-fake-server");
+
+/// 测试用会话上下文（MCP 适配器不读 workspace_root，用默认 mock 即可）
+fn tool_ctx() -> ToolContext {
+    create_mock_tool_context()
+}
 
 fn fake_server_config(extra_env: &[(&str, &str)]) -> McpServerConfig {
     let mut env = HashMap::new();
@@ -69,7 +75,7 @@ async fn start_is_idempotent_when_ready() {
     assert_eq!(first, second);
     // 仍可正常调用（同一会话）
     let adapter = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
-    let out = adapter.execute(json!({ "msg": "重复" })).await.unwrap();
+    let out = adapter.execute(&tool_ctx(), json!({ "msg": "重复" })).await.unwrap();
     assert!(out["text"].as_str().unwrap().contains("重复"));
     bridge.stop("fake").await.unwrap();
 }
@@ -81,12 +87,12 @@ async fn execute_echo_and_add_roundtrip() {
 
     // echo：text 段拼接
     let echo = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
-    let out = echo.execute(json!({ "msg": "你好，MCP" })).await.unwrap();
+    let out = echo.execute(&tool_ctx(), json!({ "msg": "你好，MCP" })).await.unwrap();
     assert!(out["text"].as_str().unwrap().contains("你好，MCP"));
 
     // add：structuredContent 进 json 字段，text 兜底
     let add = bridge.get_adapter("fake", "mcp_fake__add").unwrap();
-    let out = add.execute(json!({ "a": 1, "b": 2 })).await.unwrap();
+    let out = add.execute(&tool_ctx(), json!({ "a": 1, "b": 2 })).await.unwrap();
     assert_eq!(out["json"]["sum"].as_f64(), Some(3.0));
     assert_eq!(out["text"], "3");
 
@@ -101,7 +107,7 @@ async fn execute_boom_returns_execution_failed() {
     let bridge = McpClientBridge::new();
     bridge.start(&fake_server_config(&[])).await.unwrap();
     let boom = bridge.get_adapter("fake", "mcp_fake__boom").unwrap();
-    let err = boom.execute(json!({})).await.unwrap_err();
+    let err = boom.execute(&tool_ctx(), json!({})).await.unwrap_err();
     assert_eq!(err.code(), "tool.execution_failed");
     assert!(err.to_string().contains("boom 失败"));
     bridge.stop("fake").await.unwrap();
@@ -115,7 +121,7 @@ async fn env_vars_are_passed_to_child() {
         .await
         .unwrap();
     let env_tool = bridge.get_adapter("fake", "mcp_fake__env").unwrap();
-    let out = env_tool.execute(json!({})).await.unwrap();
+    let out = env_tool.execute(&tool_ctx(), json!({})).await.unwrap();
     assert_eq!(out["text"], "hello-env");
     bridge.stop("fake").await.unwrap();
 }
@@ -146,7 +152,7 @@ async fn stop_then_restart_works() {
     let defs = bridge.start(&config).await.unwrap();
     assert!(!defs.is_empty());
     let echo = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
-    let out = echo.execute(json!({ "msg": "重启后" })).await.unwrap();
+    let out = echo.execute(&tool_ctx(), json!({ "msg": "重启后" })).await.unwrap();
     assert!(out["text"].as_str().unwrap().contains("重启后"));
     bridge.stop("fake").await.unwrap();
 }
@@ -176,7 +182,7 @@ async fn crash_detection_marks_exited_and_fails_calls() {
 
     // 崩溃后的调用报 connection_failed 且带退出原因
     let echo = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
-    let err = echo.execute(json!({ "msg": "x" })).await.unwrap_err();
+    let err = echo.execute(&tool_ctx(), json!({ "msg": "x" })).await.unwrap_err();
     assert_eq!(err.code(), "mcp.connection_failed");
     assert!(err.to_string().contains("不可用"));
 
@@ -191,7 +197,7 @@ async fn call_timeout_applies() {
     let config = fake_server_config(&[("FAKE_MCP_SLOW_MS", "1500")]);
     bridge.start(&config).await.unwrap();
     let echo = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
-    let err = echo.execute(json!({ "msg": "慢" })).await.unwrap_err();
+    let err = echo.execute(&tool_ctx(), json!({ "msg": "慢" })).await.unwrap_err();
     assert_eq!(err.code(), "runtime.timeout");
     assert!(err.to_string().contains("tools/call"));
     bridge.stop("fake").await.unwrap();

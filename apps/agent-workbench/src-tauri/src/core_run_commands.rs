@@ -41,7 +41,7 @@ use orchestrator::run::{CancelMode, RunEngine, RunHandle, RunManager};
 use orchestrator::session::SessionRecord;
 use session_loop::tool_events::ApprovalDecision;
 use session_loop::{
-    AbortSignal, ApprovalGate, ControlBus, DeltaSink, RunOutcome, SessionLoopOptions,
+    AbortSignal, ApprovalGate, ControlBus, DeltaSink, PermissionMode, RunOutcome, SessionLoopOptions,
     ToolBatchOptions,
 };
 
@@ -1023,6 +1023,11 @@ pub(crate) async fn core_run_task(
     };
     let tool_options = ToolBatchOptions {
         approval_enabled,
+        // R4 T10：permission_mode 显式下传时按 dangerous 标记三态判定
+        // （ask 问询 / plan 拒绝写类 / full-access 放行）；None = 既有语义
+        permission_mode: permission_mode
+            .as_deref()
+            .map(|mode| PermissionMode::from_engine_str(Some(mode))),
         ..ToolBatchOptions::default()
     };
     // 用户消息（clientMessageId 透传，03 §5.3-4）

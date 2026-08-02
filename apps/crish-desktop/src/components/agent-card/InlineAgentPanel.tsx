@@ -17,7 +17,7 @@ import {
   selectActiveAgentId,
   selectPanelAgentId,
   useSessionField,
-} from '../../store/sessionStore';
+} from '../../api/store-access/componentAccess';
 import { buildAssistantTimeline } from '../../api/toolPresentation';
 import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
 import {

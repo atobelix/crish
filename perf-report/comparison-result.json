@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-07-19T09:45:18.231Z",
+  "timestamp": "2026-08-02T06:50:56.675Z",
   "threshold": 0.2,
   "baselines": [
     {
@@ -48,55 +48,126 @@
   "currents": [
     {
       "name": "lru.cache.10k.hits",
-      "avgMs": 2.7,
-      "ops": 370,
-      "p95Ms": 3.16,
+      "avgMs": 3.51,
+      "ops": 285,
+      "p95Ms": 4.39,
       "passed": true
     },
     {
       "name": "bounded-map.set.10k",
-      "avgMs": 1.37,
-      "ops": 728,
-      "p95Ms": 1.93,
+      "avgMs": 1.68,
+      "ops": 596,
+      "p95Ms": 2.19,
       "passed": true
     },
     {
       "name": "jsonl.append.1000",
-      "avgMs": 3.6,
-      "ops": 278,
-      "p95Ms": 4.74,
+      "avgMs": 4.54,
+      "ops": 220,
+      "p95Ms": 6.41,
       "passed": true
     },
     {
       "name": "deep-equal.1k.props",
-      "avgMs": 0.58,
-      "ops": 1735,
-      "p95Ms": 0.9,
+      "avgMs": 0.74,
+      "ops": 1346,
+      "p95Ms": 1.11,
       "passed": true
     },
     {
       "name": "async-mutex.contention.100",
-      "avgMs": 0.33,
-      "ops": 3037,
-      "p95Ms": 0.58,
+      "avgMs": 0.45,
+      "ops": 2241,
+      "p95Ms": 0.77,
       "passed": true
     },
     {
       "name": "ring-buffer.10k.rw",
-      "avgMs": 0.31,
-      "ops": 3232,
-      "p95Ms": 0.55,
+      "avgMs": 0.44,
+      "ops": 2294,
+      "p95Ms": 1.07,
       "passed": true
     },
     {
       "name": "object.clone.1k",
-      "avgMs": 0.59,
-      "ops": 1687,
-      "p95Ms": 0.92,
+      "avgMs": 1.3,
+      "ops": 772,
+      "p95Ms": 2.62,
+      "passed": true
+    },
+    {
+      "name": "diff.parse.10k",
+      "avgMs": 2.42,
+      "ops": 413,
+      "p95Ms": 3.32,
+      "passed": true
+    },
+    {
+      "name": "session.serialize.500msg",
+      "avgMs": 0.85,
+      "ops": 1175,
+      "p95Ms": 1.16,
+      "passed": true
+    },
+    {
+      "name": "cache.lru.10k",
+      "avgMs": 8.93,
+      "ops": 112,
+      "p95Ms": 15.09,
+      "passed": false
+    },
+    {
+      "name": "mutex.contention.10",
+      "avgMs": 0.54,
+      "ops": 1867,
+      "p95Ms": 1.06,
       "passed": true
     }
   ],
-  "regressions": [],
+  "regressions": [
+    {
+      "name": "lru.cache.10k.hits",
+      "previousAvgMs": 2.7,
+      "currentAvgMs": 3.51,
+      "changePercent": 30
+    },
+    {
+      "name": "bounded-map.set.10k",
+      "previousAvgMs": 1.4,
+      "currentAvgMs": 1.68,
+      "changePercent": 20
+    },
+    {
+      "name": "jsonl.append.1000",
+      "previousAvgMs": 3.6,
+      "currentAvgMs": 4.54,
+      "changePercent": 26.11
+    },
+    {
+      "name": "deep-equal.1k.props",
+      "previousAvgMs": 0.6,
+      "currentAvgMs": 0.74,
+      "changePercent": 23.33
+    },
+    {
+      "name": "async-mutex.contention.100",
+      "previousAvgMs": 0.3,
+      "currentAvgMs": 0.45,
+      "changePercent": 50
+    },
+    {
+      "name": "ring-buffer.10k.rw",
+      "previousAvgMs": 0.3,
+      "currentAvgMs": 0.44,
+      "changePercent": 46.67
+    },
+    {
+      "name": "object.clone.1k",
+      "previousAvgMs": 0.6,
+      "currentAvgMs": 1.3,
+      "changePercent": 116.67
+    }
+  ],
   "improvements": [],
-  "passed": true
+  "passed": false
 }

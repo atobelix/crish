@@ -11,12 +11,12 @@ import {
   findChatLeafBySessionId,
   isChatDomain,
   useLayoutTreeStore,
-} from '../../store/layout-tree';
+} from '../../api/store-access/componentAccess';
 import {
   insertLeafBesideNode,
   moveNode,
-} from '../../store/layout-tree/operations';
-import type { DropZone } from '../../store/layout-tree';
+} from '../../api/store-access/componentAccess';
+import type { DropZone } from '../../api/store-access/componentAccess';
 import {
   planSessionCanvasDrop,
   reprojectAllSessionDocksSafe,

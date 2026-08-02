@@ -7,7 +7,7 @@ import styles from './RuntimePanel.module.css';
 import { Tooltip } from '../Tooltip';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
 import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
 
 export type ApprovalSectionProps = {
   approvals: PendingApprovalInfo[];

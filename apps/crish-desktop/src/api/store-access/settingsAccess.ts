@@ -11,7 +11,8 @@ import {
   setPlanModeEnabled as setPlanModeEnabledUi,
   setPlanApproved as setPlanApprovedUi,
 } from '../../store/settingsUiStore';
-import { getLayoutState } from './storeAccessCore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { usePermissionStore } from '../../store/permissionStore';
 
 export function setShowSettingsOverlay(show: boolean): void {
   setShowSettingsOverlayUi(show);
@@ -34,17 +35,17 @@ export function setPlanApproved(approved: boolean): void {
 }
 
 export function setAppSettings(settings: Settings | null): void {
-  getLayoutState().setAppSettings(settings);
+  useSettingsStore.getState().setAppSettings(settings);
 }
 
 export function getAppSettings(): Settings | null {
-  return getLayoutState().appSettings;
+  return useSettingsStore.getState().appSettings;
 }
 
 export function addCommandPermission(cmd: string): void {
-  getLayoutState().addCommandPermission(cmd);
+  usePermissionStore.getState().addCommandPermission(cmd);
 }
 
 export function getCommandPermissions(): string[] {
-  return getLayoutState().commandPermissions ?? [];
+  return usePermissionStore.getState().commandPermissions ?? [];
 }

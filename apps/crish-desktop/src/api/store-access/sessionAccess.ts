@@ -17,6 +17,7 @@ import {
   getSessionStoreState,
 } from '../../store/sessionStore';
 import { sessionRuntimeRegistry } from '../SessionRuntimeRegistry';
+import { useTerminalStore } from '../../store/terminalStore';
 import {
   resolveSessionState,
   resolveWorkspaceState,
@@ -425,9 +426,9 @@ export function appendSessionAgentMessage(
 }
 
 export function addTerminalLine(line: string, sessionId?: string): void {
-  resolveSessionState().addTerminalLine(line, sessionId);
+  useTerminalStore.getState().addTerminalLine(line, sessionId);
 }
 
 export function addTerminalLines(lines: string[], sessionId?: string): void {
-  resolveSessionState().addTerminalLines(lines, sessionId);
+  useTerminalStore.getState().addTerminalLines(lines, sessionId);
 }

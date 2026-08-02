@@ -118,8 +118,6 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       draftFolder: '',
       activeAgentId: null,
       panelAgentId: null,
-      terminalLines: [],
-      terminalBySession: {},
       composerDrafts: {},
     });
 
@@ -207,8 +205,6 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       draftFolder: '',
       activeAgentId: null,
       panelAgentId: null,
-      terminalLines: [],
-      terminalBySession: {},
       composerDrafts: {},
     });
     // active 指向不存在 → setActive 会 skip unknown；用合法 peer
@@ -239,8 +235,6 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
       draftFolder: '',
       activeAgentId: null,
       panelAgentId: null,
-      terminalLines: [],
-      terminalBySession: {},
       composerDrafts: {},
     });
     h.actions.setActiveSessionId('local-full');

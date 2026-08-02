@@ -14,7 +14,7 @@ import {
   type HiddenBucketKind,
 } from '../../api/messageUserProjection';
 import { downloadTextFile } from '../../api/sessionExport';
-import { useActiveSession } from '../../store/sessionStore';
+import { useActiveSession } from '../../api/store-access/componentAccess';
 import { SettingsCard, SettingsRow, SettingsSection } from './SettingsUI';
 import { Tooltip } from '../Tooltip';
 import styles from './UserViewDebugPanel.module.css';

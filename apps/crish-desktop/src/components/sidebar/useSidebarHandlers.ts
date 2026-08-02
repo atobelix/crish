@@ -1,8 +1,8 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
 import { getActiveProjectId } from '../../api/projectStore';
 import { setDraftFolder } from '../../api/storeAccess';
-import { isPendingDraft } from '../../store/draftSession';
+import { isPendingDraft } from '../../api/store-access/componentAccess';
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
 import { emitUiEvent } from '../../api/uiEvents';
 import type { FilterType } from './sidebarHelpers';

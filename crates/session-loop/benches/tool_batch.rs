@@ -42,7 +42,11 @@ impl Tool for SlowTool {
         })
     }
 
-    async fn execute(&self, _args: serde_json::Value) -> Result<serde_json::Value, agent_tools::definition::ToolError> {
+    async fn execute(
+        &self,
+        _ctx: &agent_tools::context::ToolContext,
+        _args: serde_json::Value,
+    ) -> Result<serde_json::Value, agent_tools::definition::ToolError> {
         tokio::time::sleep(Duration::from_millis(self.delay_ms)).await;
         Ok(serde_json::json!({ "ok": true }))
     }
@@ -107,6 +111,7 @@ fn bench_tool_batch(c: &mut Criterion) {
                     run_id: "r1".into(),
                     session_id: "s1".into(),
                     cwd: None,
+                    workspace_root: None,
                 };
                 let options = ToolBatchOptions {
                     timeout: Duration::from_secs(10),
@@ -130,6 +135,7 @@ fn bench_tool_batch(c: &mut Criterion) {
                     run_id: "r1".into(),
                     session_id: "s1".into(),
                     cwd: None,
+                    workspace_root: None,
                 };
                 let options = ToolBatchOptions {
                     timeout: Duration::from_secs(10),

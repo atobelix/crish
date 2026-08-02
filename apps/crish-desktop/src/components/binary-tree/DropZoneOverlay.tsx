@@ -18,8 +18,8 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { useLayoutTreeStore } from '../../store/layout-tree';
-import type { DropZone } from '../../store/layout-tree';
+import { useLayoutTreeStore } from '../../api/store-access/componentAccess';
+import type { DropZone } from '../../api/store-access/componentAccess';
 import styles from './BinaryTreeWorkspace.module.css';
 
 /** 覆盖层位置（屏幕坐标） */

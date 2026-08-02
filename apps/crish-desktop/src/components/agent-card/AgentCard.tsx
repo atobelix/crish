@@ -9,7 +9,7 @@ import styles from './AgentCard.module.css';
 import { Tooltip } from '../Tooltip';
 import * as Lucide from 'lucide-react';
 import { browseAgentSidePanel, openAgentInSidePanel } from '../../api/openAgentPanel';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
 import type { FileDiff } from '../../store/layoutStore';
 import { focusOrOpenPanel, setActiveDiffSource as setActiveDiffSourceAccess } from '../../api/storeAccess';
 import { openFileInPanel } from '../../api/workspaceFsApi';
@@ -19,7 +19,7 @@ import {
   selectPanelAgentId,
   selectSessionsById,
   useSessionField,
-} from '../../store/sessionStore';
+} from '../../api/store-access/componentAccess';
 import {
   getSubagentStatus,
 } from '../../api/subagentApi';

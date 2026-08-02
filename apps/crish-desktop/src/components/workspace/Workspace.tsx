@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
 import type {
   LayoutStore,
   WorkspaceState,

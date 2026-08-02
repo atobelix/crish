@@ -22,6 +22,8 @@
 //! - `r#loop`：run 主循环（B3.4）——AgentSessionLoop + 8 个 handler +
 //!   收口决策（end.rs）+ 安全点集成。
 //! - `tool_events` / `tool_exec`：工具批处理执行器（B3.5）。
+//! - `approval`：审批通道（R4 T10）——ToolContext.ask 的真实接线，把工具内
+//!   审批提问接到 ApprovalGate（approval-requested + 等待裁决 + abort 取消）。
 //! - `testing`：TestProvider / TestTool 测试替身（B3.6 先行落地）。
 //!
 //! 语义来源：01-session-loop-semantics.md §1-§五；TS 对照：
@@ -29,6 +31,7 @@
 //! agent-input-queue.ts、control/control-bus.ts、session-loop/control-check.ts、
 //! steering/、runtime-components/。
 
+pub mod approval;
 pub mod control;
 pub mod input;
 pub mod provider;
@@ -40,6 +43,9 @@ pub mod stream;
 pub mod testing;
 pub mod tool_events;
 pub mod tool_exec;
+
+pub use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
+pub use approval::ApprovalChannel;
 
 pub use control::{
     level_for_kind, ControlBus, ControlDrainAction, ControlIntent, ControlIntentInput,

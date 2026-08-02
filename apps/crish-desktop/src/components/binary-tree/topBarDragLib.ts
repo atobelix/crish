@@ -10,15 +10,15 @@ import {
   isChatDomain,
   rectFromDOM,
   type DropZone,
-} from '../../store/layout-tree';
-import { findParent } from '../../store/layout-tree/operations';
+} from '../../api/store-access/componentAccess';
+import { findParent } from '../../api/store-access/componentAccess';
 import type { DropDirection, LayoutNode } from '../../store/layout-tree/types';
 import { TOP_BAR_GHOST_CLASS } from './topBarDragConst';
 import type { LeafRectItem } from './topBarDragTypes';
 
 /** 延迟加载，避免与 adapterShape 在 HMR 时形成循环依赖导致缺导出崩溃 */
 export function reprojectAllSessionDocksSafe(): void {
-  void import('../../store/workspace-shell/adapterShape')
+  void import('../../api/store-access/componentAccess')
     .then((m) => {
       if (typeof m.reprojectAllSessionDocks === 'function') {
         m.reprojectAllSessionDocks();

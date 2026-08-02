@@ -11,7 +11,11 @@ import {
   SettingsRow,
 } from './SettingsUI';
 import { Tooltip } from '../Tooltip';
-import { useLayoutStore } from '../../store/layoutStore';
+import {
+  usePermissionField,
+  selectPermissionMode,
+  selectCommandPermissions,
+} from '../../store/storeAccess';
 import { getWorkspacePath, listProjects } from '../../api/projectStore';
 import {
   PERMISSION_MODES,
@@ -64,12 +68,12 @@ function isBlockedWhitelistRisk(level: ShellRiskLevel, hardDeny: boolean): boole
 }
 
 export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
-  const permissionModeRaw = useLayoutStore((s) => s.permissionMode);
-  const setPermissionMode = useLayoutStore((s) => s.setPermissionMode);
-  const commandPermissions = useLayoutStore((s) => s.commandPermissions);
-  const addCommandPermissionStore = useLayoutStore((s) => s.addCommandPermission);
-  const removeCommandPermissionStore = useLayoutStore((s) => s.removeCommandPermission);
-  const setCommandPermissions = useLayoutStore((s) => s.setCommandPermissions);
+  const permissionModeRaw = usePermissionField(selectPermissionMode);
+  const setPermissionMode = usePermissionField((s) => s.setPermissionMode);
+  const commandPermissions = usePermissionField(selectCommandPermissions);
+  const addCommandPermissionStore = usePermissionField((s) => s.addCommandPermission);
+  const removeCommandPermissionStore = usePermissionField((s) => s.removeCommandPermission);
+  const setCommandPermissions = usePermissionField((s) => s.setCommandPermissions);
   const [newWhitelistCmd, setNewWhitelistCmd] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showAllPaths, setShowAllPaths] = useState(false);
@@ -105,7 +109,7 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
   const extraCount = workspacePaths.length - 5;
 
   const whitelist = useMemo(() => {
-    const raw = commandPermissions || [];
+    const raw: string[] = commandPermissions || [];
     const cleaned = raw
       .map((x) => sanitizeWhitelistEntry(x))
       .filter(Boolean);

@@ -9,7 +9,7 @@ import type { SessionState } from '../../../store/layoutStore';
 import {
   groupUnpinnedByProject,
   partitionSidebarSessions,
-} from '../../../store/sessionIndex';
+} from '../../../api/store-access/componentAccess';
 import { getCompositionRoot } from '../../../app/compositionRoot';
 import {
   SESSION_LIST_TICK_HIDDEN_MS,

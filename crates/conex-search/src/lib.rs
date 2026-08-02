@@ -65,10 +65,8 @@ pub mod fuzzy {
                     }
 
                     // Case-exact bonus (O(1) index into pre-collected Vec)
-                    if !self.case_sensitive {
-                        if orig_t[ti] == orig_q[qi - 1] {
-                            score += 1;
-                        }
+                    if !self.case_sensitive && orig_t[ti] == orig_q[qi - 1] {
+                        score += 1;
                     }
                 } else {
                     consecutive = 0;
@@ -154,7 +152,7 @@ pub mod search {
             .unwrap_or(4)
             .min(8);
 
-        let chunk_size = (paths.len() + thread_count - 1) / thread_count;
+        let chunk_size = paths.len().div_ceil(thread_count);
 
         // Use thread::scope to avoid cloning paths into each thread
         let all_hits: Vec<FileHit> = std::thread::scope(|s| {

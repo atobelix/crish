@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 默认最大轮次（对齐 TS 端 DEFAULT_MAX_TURNS = 16）
+/// 默认最大轮次（TS 端常量 DEFAULT_MAX_TURNS = 16 同值）
 pub const DEFAULT_MAX_TURNS: u32 = 16;
 
 /// 会话状态机 8 态（01 §1.1）

@@ -95,9 +95,23 @@ function loadCurrentResults(): CurrentResult[] {
   }
 }
 
+function writeBaselineBack(baselineFile: string, currents: CurrentResult[], hadBaseline: boolean): void {
+  const entries: BaselineEntry[] = currents.map((c) => ({
+    name: c.name,
+    avgMs: c.avgMs,
+    ops: c.ops,
+    p95Ms: c.p95Ms,
+  }));
+  const resolvedPath = resolve(baselineFile);
+  mkdirSync(dirname(resolvedPath), { recursive: true });
+  writeFileSync(resolvedPath, JSON.stringify(entries, null, 2), "utf8");
+  console.log(`\n基线${hadBaseline ? "已更新" : "已初始化"}: ${baselineFile}（${entries.length} 个条目）`);
+}
+
 function main() {
   const { threshold, baselinePath } = parseArgs();
-  const baselines = loadBaselines(baselinePath);
+  const baselineFile = baselinePath ?? "perf-report/baseline.json";
+  const baselines = loadBaselines(baselineFile);
   const currents = loadCurrentResults();
 
   const baselineMap = new Map(baselines.map((b) => [b.name, b]));
@@ -167,6 +181,10 @@ function main() {
   mkdirSync(reportDir, { recursive: true });
   writeFileSync(`${reportDir}/comparison-result.json`, JSON.stringify(result, null, 2), "utf8");
   console.log(`\n对比报告已保存到 ${reportDir}/comparison-result.json`);
+
+  if (result.passed) {
+    writeBaselineBack(baselineFile, currents, baselines.length > 0);
+  }
 
   if (!result.passed) {
     process.exitCode = 1;

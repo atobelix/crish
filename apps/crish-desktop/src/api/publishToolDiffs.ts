@@ -11,7 +11,8 @@
  */
 import type { DiffChange, DiffChangeType, FileDiff } from '../store/types';
 import { isSafeApplyPath } from './applyFileDiff';
-import { getDiffFiles, getLayoutState, pushDiffFile } from './storeAccess';
+import { getDiffFiles, pushDiffFile } from './storeAccess';
+import { useTerminalStore } from '../store';
 
 /** 解析器 / 引擎常见占位名（与 isSafeApplyPath 对齐，发布侧再拦一道） */
 const UNSAFE_PLACEHOLDER_PATHS = new Set(['变更', '文件', 'unknown', 'untitled']);
@@ -230,7 +231,7 @@ export function extractPublishablePaths(
 
 /** 清掉同规范化 key 下、与 keepPath 字面不同的 store 条目（反斜杠 alias 等） */
 function removePathAliases(rawPaths: Iterable<string>, keepPath: string): void {
-  const remove = getLayoutState().removeDiffFile;
+  const remove = useTerminalStore.getState().removeDiffFile;
   for (const raw of rawPaths) {
     if (raw !== keepPath) remove(raw);
   }

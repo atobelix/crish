@@ -73,7 +73,7 @@ mod tests {
 
     #[test]
     fn format_chain_single_error() {
-        let err = std::io::Error::new(std::io::ErrorKind::Other, "solo");
+        let err = std::io::Error::other("solo");
         assert_eq!(format_error_chain(&err), "solo");
     }
 

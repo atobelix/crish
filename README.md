@@ -10,7 +10,7 @@ GUI / TUI / Web 三种界面。
 
 > **过渡状态说明**：引擎已完成 Rust 化（阶段进度见 [`docs/rust-rewrite/`](docs/rust-rewrite/00-master-plan.md)），
 > 旧 TS 后端包（`agent-daemon` / `agent-orchestrator` / `agent-runtime` 等）已删除。
-> 存量文档与测试中指向旧包的引用正在清理中。
+> 存量文档与测试中的旧包引用已清理（历史条目仅以迁移说明保留）。
 
 ## ✨ 功能特性
 
@@ -73,7 +73,7 @@ npm run dev:workbench   # Tauri 壳 + 桌面联调（加载 crish-desktop）
 - `cargo test` — 引擎侧 Rust 测试
 - 端到端：`npx playwright test`（`tests/e2e`，含 mock 引擎套件）
 
-> 重写过渡期，部分 TS 存量测试仍引用已删除的旧包路径，尚未全部收敛；以 CI 快层门禁
+> 迁移收尾已完成：代码/脚本已无对已删除包的引用（仅个别测试注释保留历史路径说明）；以 CI 快层门禁
 > （`cargo check --workspace --locked` + vitest 快集）为准。
 
 ## 🏗️ 架构（简）
@@ -95,7 +95,7 @@ npm run dev:workbench   # Tauri 壳 + 桌面联调（加载 crish-desktop）
 
 - **引擎契约面** = `core_*` + `config_*` + `session_*` + `workbench-run-event` + `CoreError`，三端共用；
 - **GUI 专属** = `workbench_*`（fs / pty / process / power / host 等桌面能力）；
-- **Web 形态** = 同一契约面的 HTTP/WS 适配（后续由网关暴露）；
+- **Web 形态** = 同一契约面的 HTTP 适配（后续由网关暴露）；
 - **TUI 形态** = 直接消费契约面（命令 + 事件通道），渲染层独立。
 
 详见 [`ARCHITECTURE.md`](ARCHITECTURE.md) 与 [`docs/rust-rewrite/23-architecture-hardening-plan.md`](docs/rust-rewrite/23-architecture-hardening-plan.md)。

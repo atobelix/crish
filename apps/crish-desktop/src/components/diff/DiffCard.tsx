@@ -5,8 +5,13 @@
 import React, { useCallback, useDeferredValue, useState } from 'react';
 import styles from './DiffCard.module.css';
 import { Tooltip } from '../Tooltip';
-import { useLayoutStore, type FileDiff } from '../../store/layoutStore';
-import { selectActiveSession, useSessionField } from '../../store/sessionStore';
+import { selectActiveSession, useSessionField } from '../../api/store-access/componentAccess';
+import type { FileDiff } from '../../store/types';
+import {
+  useTerminalField,
+  selectActiveDiffSource,
+  selectDiffFiles,
+} from '../../store/storeAccess';
 import * as Lucide from 'lucide-react';
 import { applyFileDiffToDisk, classifyFileDiff, formatApplyFailureToast } from '../../api/applyFileDiff';
 import { filterPublishableDiffs } from '../../api/publishToolDiffs';
@@ -30,11 +35,11 @@ function basename(p: string): string {
 }
 
 const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
-  const activeDiffSource = useLayoutStore((s) => s.activeDiffSource);
-  const diffFiles = useLayoutStore((s) => s.diffFiles) as FileDiff[];
-  const setActiveDiffSource = useLayoutStore((s) => s.setActiveDiffSource);
-  const setDiffFiles = useLayoutStore((s) => s.setDiffFiles);
-  const removeDiffFile = useLayoutStore((s) => s.removeDiffFile);
+  const activeDiffSource = useTerminalField(selectActiveDiffSource);
+  const diffFiles = useTerminalField(selectDiffFiles) as FileDiff[];
+  const setActiveDiffSource = useTerminalField((s) => s.setActiveDiffSource);
+  const setDiffFiles = useTerminalField((s) => s.setDiffFiles);
+  const removeDiffFile = useTerminalField((s) => s.removeDiffFile);
   const session = useSessionField(selectActiveSession);
 
   const [diffViewMode, setDiffViewMode] = useState<'unified' | 'split'>('unified');

@@ -1,65 +1,29 @@
-import {
-  MAX_DIFF_FILES,
-  MAX_TERMINAL_SESSIONS,
-} from '@crish/shared-utils/browser';
-import type { Settings, CronJob, McpServer, ProviderInfo } from '../../api/clientApi';
-import {
-  addCommandPermission as persistAddCommandPermission,
-  removeCommandPermission as persistRemoveCommandPermission,
-  saveCommandPermissions,
-} from '../../api/commandPermissions';
-import {
-  permissionModeAfterPlanToggle,
-  persistPermissionMode,
-  planModeEnabledFor,
-  type PermissionMode,
-} from '../../api/permissionModes';
+import type { SettingsTabType, WorkspaceState } from '../types';
 import {
   SHELL_CHROME_STORAGE_KEY,
   parseShellChromeMode,
   type ShellChromeMode,
 } from '../../api/shellChrome';
-import type { FileDiff, SettingsTabType, WorkspaceState } from '../types';
-import { appendTerminalLine, upsertDiffFile } from './diff-selectors';
 import { collapseToolColumnToTabs } from './ui-selectors';
 import {
   isSettingsTabType,
   parseSettingsTab,
   parseUiSize,
-  sanitizeActiveWorkers,
-  sanitizeTokenUsage,
 } from './store-initializers';
 import {
   TAB_MODE_STORAGE_KEY,
   UI_SIZE_STORAGE_KEY,
-  type ActiveWorkerState,
-  type TelemetrySyncPayload,
-  type TokenUsageState,
   type UiSize,
 } from './store-types';
 
 /**
  * layout-core-actions 依赖的 state 面（AA-03 Q09 门禁：禁止 `: any`）。
  * 只声明本模块 recipe 读写的字段；layoutStore 结构上包含全部字段（结构子类型）。
+ *
+ * T11 瘦身：仅保留布局/壳层 UI + 设置浮层 action（共 8 个）；
+ * 权限 / 设置 / worker / 输出缓冲（terminal + diff）action 已迁往对应域 store。
  */
 export interface LayoutCoreState {
-  activeDiffSource: FileDiff | null;
-  diffFiles: FileDiff[];
-  permissionMode: PermissionMode;
-  planModeEnabled: boolean;
-  planApproved: boolean;
-  commandPermissions: string[];
-  providers: ProviderInfo[];
-  appSettings: Settings | null;
-  scheduledTasks: CronJob[];
-  mcpServers: McpServer[];
-  tokenUsage: TokenUsageState;
-  manuallyTriggeredWorkers: ActiveWorkerState[];
-  activeWorkers: ActiveWorkerState[];
-  killedWorkerIds: string[];
-  terminalBySession: Record<string, string[]>;
-  terminalLines: string[];
-  activeSessionId: string;
   uiSize: UiSize;
   shellChromeMode: ShellChromeMode;
   chatMainSurface: 'chat' | 'scheduled';
@@ -75,222 +39,6 @@ export function createLayoutCoreActions(
   get: () => LayoutCoreState
 ) {
   return {
-    setActiveDiffSource: (diff: FileDiff | null) =>
-      set((state) => {
-        state.activeDiffSource = diff;
-        if (diff) {
-          upsertDiffFile(state.diffFiles, diff);
-        }
-      }),
-    setDiffFiles: (files: FileDiff[] | ((prev: FileDiff[]) => FileDiff[])) =>
-      set((state) => {
-        const next =
-          typeof files === 'function'
-            ? (files as (prev: FileDiff[]) => FileDiff[])(state.diffFiles)
-            : files;
-        state.diffFiles = Array.isArray(next) ? next : [];
-        state.activeDiffSource = state.diffFiles[0] || null;
-      }),
-    pushDiffFile: (diff: FileDiff) =>
-      set((state) => {
-        upsertDiffFile(state.diffFiles, diff);
-        state.activeDiffSource = diff;
-      }),
-    removeDiffFile: (filePath: string) =>
-      set((state) => {
-        const path = filePath || '';
-        state.diffFiles = state.diffFiles.filter((f: FileDiff) => f.filePath !== path);
-        if (state.activeDiffSource?.filePath === path) {
-          state.activeDiffSource = state.diffFiles[0] || null;
-        }
-      }),
-    setPermissionMode: (mode: PermissionMode) => {
-      set((state) => {
-        state.permissionMode = mode;
-        state.planModeEnabled = planModeEnabledFor(mode);
-        state.planApproved = false;
-      });
-      persistPermissionMode(mode);
-    },
-    setPlanModeEnabled: (enabled: boolean) => {
-      let nextMode: PermissionMode = 'ask';
-      set((state) => {
-        nextMode = permissionModeAfterPlanToggle(state.permissionMode, enabled);
-        state.permissionMode = nextMode;
-        state.planModeEnabled = planModeEnabledFor(nextMode);
-        state.planApproved = false;
-      });
-      persistPermissionMode(nextMode);
-    },
-    setPlanApproved: (approved: boolean) =>
-      set((state) => {
-        state.planApproved = approved;
-      }),
-    addCommandPermission: (cmd: string) =>
-      set((state) => {
-        state.commandPermissions = persistAddCommandPermission(
-          state.commandPermissions,
-          cmd
-        );
-      }),
-    removeCommandPermission: (cmd: string) =>
-      set((state) => {
-        state.commandPermissions = persistRemoveCommandPermission(
-          state.commandPermissions,
-          cmd
-        );
-      }),
-    setCommandPermissions: (list: string[]) =>
-      set((state) => {
-        const next = Array.isArray(list)
-          ? list.filter((c) => typeof c === 'string')
-          : [];
-        state.commandPermissions = next;
-        saveCommandPermissions(next);
-      }),
-    setProviders: (providers: ProviderInfo[]) =>
-      set((state) => {
-        state.providers = Array.isArray(providers) ? providers : [];
-      }),
-    setAppSettings: (settings: Settings | null) =>
-      set((state) => {
-        state.appSettings = settings;
-      }),
-    setScheduledTasks: (tasks: CronJob[]) =>
-      set((state) => {
-        state.scheduledTasks = Array.isArray(tasks) ? tasks : [];
-      }),
-    setMcpServers: (servers: McpServer[]) =>
-      set((state) => {
-        state.mcpServers = Array.isArray(servers) ? servers : [];
-      }),
-    syncTelemetryData: (data: TelemetrySyncPayload) =>
-      set((state) => {
-        if (data.tokenUsage) {
-          state.tokenUsage = sanitizeTokenUsage(
-            data.tokenUsage,
-            state.tokenUsage
-          );
-        }
-
-        state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.map(
-          (w: ActiveWorkerState) => ({
-            id: w.id,
-            taskName: w.taskName,
-            elapsedSeconds: Math.max(
-              0,
-              (typeof w.elapsedSeconds === 'number' && Number.isFinite(w.elapsedSeconds) ? w.elapsedSeconds : 0) + 2
-            ),
-          })
-        );
-
-        if (data.activeWorkers) {
-          const live = sanitizeActiveWorkers(data.activeWorkers).filter(
-            (w: ActiveWorkerState) => !state.killedWorkerIds.includes(w.id)
-          );
-          state.activeWorkers = [
-            ...live,
-            ...state.manuallyTriggeredWorkers,
-          ];
-        }
-        if (data.mcpServers) {
-          state.mcpServers = Array.isArray(data.mcpServers)
-            ? data.mcpServers
-            : state.mcpServers;
-        }
-        if (data.cronJobs) {
-          state.scheduledTasks = Array.isArray(data.cronJobs)
-            ? data.cronJobs
-            : state.scheduledTasks;
-        }
-      }),
-    addTerminalLine: (line: string, sessionId?: string) =>
-      set((state) => {
-        const text = typeof line === 'string' ? line : String(line ?? '');
-        const sid = sessionId || state.activeSessionId || '_global';
-        if (!state.terminalBySession[sid]) state.terminalBySession[sid] = [];
-        appendTerminalLine(state.terminalBySession[sid], text);
-        if (
-          !sessionId ||
-          sessionId === state.activeSessionId ||
-          !state.activeSessionId
-        ) {
-          state.terminalLines = state.terminalBySession[sid];
-        }
-      }),
-    addTerminalLines: (lines: string[], sessionId?: string) =>
-      set((state) => {
-        if (!Array.isArray(lines) || lines.length === 0) return;
-        const sid = sessionId || state.activeSessionId || '_global';
-        if (!state.terminalBySession[sid]) state.terminalBySession[sid] = [];
-        const buf = state.terminalBySession[sid];
-        for (const line of lines) {
-          const text = typeof line === 'string' ? line : String(line ?? '');
-          appendTerminalLine(buf, text);
-        }
-        if (
-          !sessionId ||
-          sessionId === state.activeSessionId ||
-          !state.activeSessionId
-        ) {
-          state.terminalLines = state.terminalBySession[sid];
-        }
-      }),
-    clearTerminalLines: (sessionId?: string) =>
-      set((state) => {
-        const sid = sessionId || state.activeSessionId || '_global';
-        state.terminalBySession[sid] = [];
-        if (
-          !sessionId ||
-          sessionId === state.activeSessionId ||
-          !state.activeSessionId
-        ) {
-          state.terminalLines = [];
-        }
-      }),
-    triggerCronJobNow: (prompt: string) =>
-      set((state) => {
-        const label =
-          typeof prompt === 'string' && prompt.trim()
-            ? prompt.trim()
-            : 'task';
-        const newWorker: ActiveWorkerState = {
-          id: `worker-manual-${Date.now()}`,
-          taskName: `Cron: ${label}`,
-          elapsedSeconds: 0,
-        };
-        if (state.manuallyTriggeredWorkers.length < MAX_TERMINAL_SESSIONS)
-          state.manuallyTriggeredWorkers.push(newWorker);
-        if (state.activeWorkers.length < MAX_DIFF_FILES * 2)
-          state.activeWorkers.push(newWorker);
-      }),
-    killWorker: (id: string, _taskName?: string) =>
-      set((state) => {
-        void _taskName;
-        if (!id) return;
-        state.manuallyTriggeredWorkers =
-          state.manuallyTriggeredWorkers.filter((w: ActiveWorkerState) => w.id !== id);
-        state.activeWorkers = state.activeWorkers.filter((w: ActiveWorkerState) => w.id !== id);
-        if (
-          !state.killedWorkerIds.includes(id) &&
-          state.killedWorkerIds.length < MAX_TERMINAL_SESSIONS * 4
-        ) {
-          state.killedWorkerIds.push(id);
-        }
-        const curInput =
-          typeof state.tokenUsage.input === 'number' &&
-          Number.isFinite(state.tokenUsage.input)
-            ? state.tokenUsage.input
-            : 0;
-        state.tokenUsage.input = Math.max(0, curInput - 1500);
-        const curCost =
-          typeof state.tokenUsage.cost === 'number' &&
-          Number.isFinite(state.tokenUsage.cost)
-            ? state.tokenUsage.cost
-            : 0;
-        const nextCost = curCost - 0.0045;
-        state.tokenUsage.cost = Math.max(0, parseFloat(nextCost.toFixed(4)));
-      }),
     setUiSize: (size: UiSize) => {
       const next = parseUiSize(size);
       set((state) => {

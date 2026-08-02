@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import styles from './OverviewCard.module.css';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore, selectActiveSession, selectActiveSessionId, useSessionField } from '../../api/store-access/componentAccess';
 import {
-  selectActiveSession,
-  selectActiveSessionId,
-  useSessionField,
-} from '../../store/sessionStore';
+  useTerminalField,
+  useSettingsField,
+  selectActiveDiffSource,
+  selectDiffFiles,
+  selectScheduledTasks,
+  selectTokenUsage,
+} from '../../store/storeAccess';
 import { getWorkspacePath } from '../../api/projectStore';
 import { setActiveDiffSource } from '../../api/storeAccess';
 import { estimateCostUsd } from '../../api/pricingStore';
@@ -37,10 +40,10 @@ type SecKey = 'agents' | 'files' | 'usage' | 'activeTasks' | 'bgTasks' | 'cronJo
 const OverviewCardInner: React.FC<OverviewCardProps> = ({ wsId, onOpenPanel }) => {
   const activeSessionId = useSessionField(selectActiveSessionId);
   const session = useSessionField(selectActiveSession);
-  const diffFiles = useLayoutStore((s) => s.diffFiles);
-  const activeDiffSource = useLayoutStore((s) => s.activeDiffSource);
-  const cronJobs = useLayoutStore((state) => state.scheduledTasks);
-  const tokenUsage = useLayoutStore((state) => state.tokenUsage);
+  const diffFiles = useTerminalField(selectDiffFiles);
+  const activeDiffSource = useTerminalField(selectActiveDiffSource);
+  const cronJobs = useSettingsField(selectScheduledTasks);
+  const tokenUsage = useSettingsField(selectTokenUsage);
   const sessions = useLayoutStore((state) => state.sessions);
   const ds = useEngineState();
 

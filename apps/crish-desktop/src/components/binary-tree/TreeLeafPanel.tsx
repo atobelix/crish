@@ -10,9 +10,9 @@
  */
 
 import React, { lazy, Suspense, useCallback, useLayoutEffect, useRef } from 'react';
-import { useLayoutTreeStore, isChatDomain } from '../../store/layout-tree';
+import { useLayoutTreeStore, isChatDomain } from '../../api/store-access/componentAccess';
 import type { LayoutLeaf } from '../../store/layout-tree';
-import { getPanelTitle } from '../../store/layoutHelpers';
+import { getPanelTitle } from '../../api/store-access/componentAccess';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { UnitSessionTabStrip } from './UnitSessionTabStrip';
@@ -22,12 +22,12 @@ import styles from './BinaryTreeWorkspace.module.css';
 import {
   useWorkspaceShellStore,
   openToolInSession,
-} from '../../store/workspace-shell';
+} from '../../api/store-access/componentAccess';
 import {
   selectActiveSessionId,
   useSessionField,
-} from '../../store/sessionStore';
-import { isPendingDraft } from '../../store/draftSession';
+} from '../../api/store-access/componentAccess';
+import { isPendingDraft } from '../../api/store-access/componentAccess';
 
 // ── 面板内容懒加载 ──────────────────────────────────────────────────
 

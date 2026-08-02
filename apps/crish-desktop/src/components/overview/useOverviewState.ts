@@ -20,7 +20,7 @@ import {
   type BackgroundTaskInfo,
 } from '../../api/backgroundTasksApi';
 import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
 import type { SessionState } from '../../store/types';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
 

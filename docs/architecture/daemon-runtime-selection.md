@@ -1,5 +1,10 @@
 # Daemon 运行时与打包技术选型
 
+> **【已废弃】** 本文档描述的是已被删除的旧 Node.js daemon 运行时选型（sidecar / WS 传输），
+> 仅供历史参考，不再代表当前架构。当前架构：Rust 引擎同进程内嵌于 Tauri 壳，无独立后端进程；
+> 详见根 [`ARCHITECTURE.md`](../../ARCHITECTURE.md) 与引擎事件契约
+> `crates/conex-types/contracts/engine-events.json`。
+
 日期：2026-06-09  
 范围：Workbench/Tauri -> agent-daemon -> AgentOrchestrator -> AgentRuntime 的 daemon sidecar 启动、流式传输、打包与 smoke/benchmark 策略。
 

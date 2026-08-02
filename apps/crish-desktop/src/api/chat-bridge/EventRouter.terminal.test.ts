@@ -1,6 +1,9 @@
 /**
  * W6-4: L2/L3 terminal finalization — isProcessing must clear promptly.
  * agent-end reason=stop|aborted and run-cancelled must finish without 8s delay.
+ *
+ * T7 迁移：handleAgentEvent 入参改为具体信封类型（BridgeEventEnvelope），
+ * 测试统一走 onMsg 全链路（解析 → 分派），与生产调用路径一致。
  */
 import { describe, expect, it, vi } from 'vitest';
 import { EventRouter } from './EventRouter';
@@ -46,7 +49,7 @@ describe('EventRouter L2/L3 terminal finalization (W6-4)', () => {
   it('agent-end reason=stop finishes immediately (L2, not 8s timer)', () => {
     const finish = vi.fn();
     const { router, state } = makeRouter(finish);
-    router.handleAgentEvent({
+    router.onMsg({
       type: 'agent-end',
       sessionId: 's',
       reason: 'stop',
@@ -59,7 +62,7 @@ describe('EventRouter L2/L3 terminal finalization (W6-4)', () => {
   it('agent-end reason=aborted finishes immediately (L3)', () => {
     const finish = vi.fn();
     const { router } = makeRouter(finish);
-    router.handleAgentEvent({
+    router.onMsg({
       type: 'agent-end',
       sessionId: 's',
       reason: 'aborted',
@@ -72,7 +75,7 @@ describe('EventRouter L2/L3 terminal finalization (W6-4)', () => {
     const onRunError = vi.fn();
     const { router, callbacks } = makeRouter(finish);
     callbacks.onRunError = onRunError;
-    router.handleAgentEvent({
+    router.onMsg({
       type: 'run-cancelled',
       sessionId: 's',
       runId: 'run-test',
@@ -85,7 +88,7 @@ describe('EventRouter L2/L3 terminal finalization (W6-4)', () => {
   it('run-completed finishes success path', () => {
     const finish = vi.fn();
     const { router } = makeRouter(finish);
-    router.handleAgentEvent({
+    router.onMsg({
       type: 'run-completed',
       sessionId: 's',
       runId: 'run-test',

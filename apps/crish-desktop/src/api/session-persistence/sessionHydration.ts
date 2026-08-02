@@ -16,7 +16,7 @@ import type {
   MessageToolApprovalMeta,
   MessageToolCall,
 } from '../../store/types';
-import { isPendingDraft } from '../../store/draftSession';
+import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
 import { EMPTY_SESSION_TITLE } from '../sessionTitle';
 import { normalizeAssistantTimeline } from '../toolPresentation';
 import {

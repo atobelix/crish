@@ -4,7 +4,7 @@ import type {
   SessionAgent,
   SessionMessage,
 } from '../../store/layoutStore';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
 import { assistantCopyText } from '../../api/toolPresentation';
 import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import type { PinnedItem } from './MessageVirtualizer';

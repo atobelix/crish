@@ -11,7 +11,7 @@
 2. **注释与空行免惩罚**：仅计算有效代码行，过滤空行与文档注释，鼓励开发者写完善的文档。
 3. **渐进预警与分级阻断**：接近上限时产生 CI 警告提醒重构，只有严重超标（如 >650 行）才硬性阻断 PR。
 4. **状态爆炸识别单一职责**：限制单文件多组件 (`no-multi-comp`) 与单组件 `useState` 数量（>12个），自动拦截“包罗万象”的上帝组件。
-5. **分层硬性解耦与禁逆向依赖**：底层工具包绝不能反向引入上层业务包，前端禁止深路径直接调用 Daemon 内部私有模块。
+5. **分层硬性解耦与禁逆向依赖**：底层工具包绝不能反向引入上层业务包，前端禁止深路径直接调用引擎内部私有模块（一律经 IPC transport / commandMap / storeAccess 分层）。
 6. **零循环依赖与极速 CI 扫描**：全局硬阻断循环依赖 (`no-circular`)，排除 `dist/` 和 `node_modules`，将扫描耗时控制在 2 秒以内。
 
 ## 2. Tooltips / Hover Tips
@@ -34,8 +34,7 @@
 
 Run `npm run dev:workbench` from root. This launches the full Tauri desktop app including:
 
-- Rust backend (Tauri shell with Windows API)
-- Node.js daemon (WebSocket server on port 8765)
+- Rust engine (crates/*, in-process with the Tauri shell)
 - React frontend in WebView2 (Vite HMR enabled)
 
 ### CDP Debug Port
@@ -46,23 +45,23 @@ The WebView2 process (`msedgewebview2.exe`) is automatically started with `--rem
 
 ```
 http://127.0.0.1:9222/json/list       → list available targets
-ws://127.0.0.1:9222/devtools/page/... → full CDP session (WebSocket)
+ws://127.0.0.1:9222/devtools/page/... → full CDP session
 ```
 
 **Available via CDP:**
 
 - Inspect DOM, read console logs, execute JS
 - Take screenshots of the app window
-- Monitor network requests (daemon WebSocket calls)
+- Monitor network requests (Tauri IPC / engine event traffic)
 - Read app state (React stores, Zustand state)
 
 ### ⚠️ CRITICAL: Disable Browser-Side DevTools Inspection (禁用 DevTools 浏览器端检查)
 
 - **Disable Browser-Side Inspection**: Strictly forbid using browser-side DevTools plugins, standalone Chrome instances, or browser-side inspection tools for UI testing.
-- **Direct CDP 9222 Only**: All UI debugging, state inspection, DOM checks, and screenshots MUST be performed directly against the Tauri WebView2 process via port 9222 (`http://127.0.0.1:9222` / CDP WebSocket).
+- **Direct CDP 9222 Only**: All UI debugging, state inspection, DOM checks, and screenshots MUST be performed directly against the Tauri WebView2 process via port 9222 (`http://127.0.0.1:9222`).
 - **Do NOT** open `http://localhost:5174` in a standalone browser to debug.
-- Browser mode has no Tauri APIs (no file dialogs, no shell, no sidecar daemon).
-- Browser mode cannot connect to the daemon — WebSocket connection will fail silently.
+- Browser mode has no Tauri host capabilities (no file dialogs, no shell, no engine IPC).
+- Browser mode cannot reach the engine — IPC calls will fail silently.
 - Browser mode gives false negatives: UI renders but features don't work, leading to wasted debugging.
 - **Only use CDP** via the `ws://127.0.0.1:9222` endpoint for accurate debugging and screenshots.
 
@@ -78,8 +77,7 @@ ws://127.0.0.1:9222/devtools/page/... → full CDP session (WebSocket)
 | Service          | Port | Type                                                  |
 | ---------------- | ---- | ----------------------------------------------------- |
 | Vite dev server  | 5174 | HTTP (frontend source)                                |
-| Daemon WebSocket | 8765 | WebSocket (agent engine)                              |
-| CDP (WebView2)   | 9222 | CDP/WebSocket (debugging)                             |
+| CDP (WebView2)   | 9222 | CDP (debugging)                                       |
 | Tauri MCP Socket | 4000 | TCP (opt-in: `CRISH_MCP_SOCKET=1` + token, see below) |
 
 ### Debugging via Model Context Protocol (MCP)

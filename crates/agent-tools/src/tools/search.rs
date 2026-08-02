@@ -4,6 +4,7 @@
 //!   默认排除 .git / node_modules 等非源码目录，返回 path/line/column/text
 //! - fuzzy_find：模糊文件名查找，复用 conex-search 的模糊匹配与目录索引
 
+use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::tools::{
     display_path, optional_bool, optional_string, optional_u64, require_string,
@@ -45,11 +46,10 @@ struct GrepMatch {
 /// grep 文本搜索工具
 pub(crate) struct GrepSearchTool {
     def: ToolDefinition,
-    workspace_root: PathBuf,
 }
 
 impl GrepSearchTool {
-    pub(crate) fn new(workspace_root: PathBuf) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             def: ToolDefinition {
                 name: "grep_search".to_string(),
@@ -72,7 +72,6 @@ impl GrepSearchTool {
                 dangerous: false,
                 fatal_on_error: false,
             },
-            workspace_root,
         }
     }
 }
@@ -87,10 +86,14 @@ impl Tool for GrepSearchTool {
         &self.def
     }
 
-    async fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+    async fn execute(
+        &self,
+        ctx: &ToolContext,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, ToolError> {
         let query = require_string(&args, "query")?;
         let path_str = optional_string(&args, "path").unwrap_or_else(|| ".".to_string());
-        let root = resolve_workspace_path(&self.workspace_root, &path_str)?;
+        let root = resolve_workspace_path(&ctx.workspace_root, &path_str)?;
         let use_regex = optional_bool(&args, "regex").unwrap_or(false);
         let glob = optional_string(&args, "glob");
         let case_sensitive = optional_bool(&args, "caseSensitive").unwrap_or(true);
@@ -267,11 +270,10 @@ pub(crate) fn glob_match(pattern: &str, path: &str) -> bool {
 /// 模糊文件查找工具：复用 conex-search 目录索引 + 模糊打分
 pub(crate) struct FuzzyFindTool {
     def: ToolDefinition,
-    workspace_root: PathBuf,
 }
 
 impl FuzzyFindTool {
-    pub(crate) fn new(workspace_root: PathBuf) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             def: ToolDefinition {
                 name: "fuzzy_find".to_string(),
@@ -290,7 +292,6 @@ impl FuzzyFindTool {
                 dangerous: false,
                 fatal_on_error: false,
             },
-            workspace_root,
         }
     }
 }
@@ -305,10 +306,14 @@ impl Tool for FuzzyFindTool {
         &self.def
     }
 
-    async fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+    async fn execute(
+        &self,
+        ctx: &ToolContext,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, ToolError> {
         let query = require_string(&args, "query")?;
         let path_str = optional_string(&args, "path").unwrap_or_else(|| ".".to_string());
-        let root = resolve_workspace_path(&self.workspace_root, &path_str)?;
+        let root = resolve_workspace_path(&ctx.workspace_root, &path_str)?;
         let limit = optional_u64(&args, "limit")
             .unwrap_or(20)
             .min(100) as usize;
@@ -353,8 +358,17 @@ impl Tool for FuzzyFindTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::{create_mock_tool_context, ToolContext};
     use conex_test_utils::TempWorkspace;
     use serde_json::json;
+
+    /// 测试用会话上下文：workspace_root 指向临时工作区
+    fn mock_ctx(ws: &TempWorkspace) -> ToolContext {
+        ToolContext {
+            workspace_root: ws.path().clone(),
+            ..create_mock_tool_context()
+        }
+    }
 
     fn sample_workspace() -> TempWorkspace {
         let ws = TempWorkspace::new("search");
@@ -370,8 +384,8 @@ mod tests {
     #[tokio::test]
     async fn grep_finds_matches_with_line_column() {
         let ws = sample_workspace();
-        let tool = GrepSearchTool::new(ws.path().clone());
-        let out = tool.execute(json!({ "query": "needle" })).await.unwrap();
+        let tool = GrepSearchTool::new();
+        let out = tool.execute(&mock_ctx(&ws), json!({ "query": "needle" })).await.unwrap();
         // main.rs 命中 2 行 + lib.rs 1 行 + data.json 1 行 = 4
         assert_eq!(out["matchCount"], 4);
         assert_eq!(out["visitedFiles"], 4);
@@ -408,9 +422,9 @@ mod tests {
     #[tokio::test]
     async fn grep_regex_mode_and_case_sensitive() {
         let ws = sample_workspace();
-        let tool = GrepSearchTool::new(ws.path().clone());
+        let tool = GrepSearchTool::new();
         let out = tool
-            .execute(json!({ "query": r"needle\s+found", "regex": true }))
+            .execute(&mock_ctx(&ws), json!({ "query": r"needle\s+found", "regex": true }))
             .await
             .unwrap();
         assert_eq!(out["matchCount"], 1);
@@ -418,13 +432,13 @@ mod tests {
         assert_eq!(out["matches"][0]["line"], 3);
         // 大小写敏感：大写 NEEDLE 无命中
         let out = tool
-            .execute(json!({ "query": "NEEDLE" }))
+            .execute(&mock_ctx(&ws), json!({ "query": "NEEDLE" }))
             .await
             .unwrap();
         assert_eq!(out["matchCount"], 0);
         // 大小写不敏感模式有命中
         let out = tool
-            .execute(json!({ "query": "needle", "caseSensitive": false }))
+            .execute(&mock_ctx(&ws), json!({ "query": "needle", "caseSensitive": false }))
             .await
             .unwrap();
         assert_eq!(out["matchCount"], 4);
@@ -433,9 +447,9 @@ mod tests {
     #[tokio::test]
     async fn grep_glob_filter_limits_to_rust_files() {
         let ws = sample_workspace();
-        let tool = GrepSearchTool::new(ws.path().clone());
+        let tool = GrepSearchTool::new();
         let out = tool
-            .execute(json!({ "query": "needle", "glob": "*.rs" }))
+            .execute(&mock_ctx(&ws), json!({ "query": "needle", "glob": "*.rs" }))
             .await
             .unwrap();
         // main.rs 2 行 + lib.rs 1 行 = 3
@@ -448,9 +462,9 @@ mod tests {
     #[tokio::test]
     async fn grep_glob_with_directory_pattern() {
         let ws = sample_workspace();
-        let tool = GrepSearchTool::new(ws.path().clone());
+        let tool = GrepSearchTool::new();
         let out = tool
-            .execute(json!({ "query": "needle", "glob": "src/**" }))
+            .execute(&mock_ctx(&ws), json!({ "query": "needle", "glob": "src/**" }))
             .await
             .unwrap();
         // src 下全部命中：main.rs 2 + lib.rs 1 + data.json 1 = 4
@@ -463,9 +477,9 @@ mod tests {
         for i in 0..10 {
             ws.write_file(&format!("f{i}.txt"), "needle\n");
         }
-        let tool = GrepSearchTool::new(ws.path().clone());
+        let tool = GrepSearchTool::new();
         let out = tool
-            .execute(json!({ "query": "needle", "maxMatches": 3 }))
+            .execute(&mock_ctx(&ws), json!({ "query": "needle", "maxMatches": 3 }))
             .await
             .unwrap();
         assert_eq!(out["matchCount"], 3);
@@ -475,9 +489,9 @@ mod tests {
     #[tokio::test]
     async fn grep_invalid_regex_errors() {
         let ws = TempWorkspace::new("search_re");
-        let tool = GrepSearchTool::new(ws.path().clone());
+        let tool = GrepSearchTool::new();
         let err = tool
-            .execute(json!({ "query": "([", "regex": true }))
+            .execute(&mock_ctx(&ws), json!({ "query": "([", "regex": true }))
             .await
             .unwrap_err();
         assert!(err.to_string().contains("invalid regex"));
@@ -486,9 +500,9 @@ mod tests {
     #[tokio::test]
     async fn fuzzy_find_returns_ranked_candidates() {
         let ws = sample_workspace();
-        let tool = FuzzyFindTool::new(ws.path().clone());
+        let tool = FuzzyFindTool::new();
         let out = tool
-            .execute(json!({ "query": "main", "limit": 5 }))
+            .execute(&mock_ctx(&ws), json!({ "query": "main", "limit": 5 }))
             .await
             .unwrap();
         let hits = out["hits"].as_array().unwrap();
@@ -504,9 +518,9 @@ mod tests {
     async fn fuzzy_find_no_match_returns_empty() {
         let ws = TempWorkspace::new("search_none");
         ws.write_file("a.txt", "x");
-        let tool = FuzzyFindTool::new(ws.path().clone());
+        let tool = FuzzyFindTool::new();
         let out = tool
-            .execute(json!({ "query": "zzz" }))
+            .execute(&mock_ctx(&ws), json!({ "query": "zzz" }))
             .await
             .unwrap();
         assert_eq!(out["hits"].as_array().unwrap().len(), 0);

@@ -175,7 +175,10 @@ mod tests {
         let mut reg = ToolRegistry::new();
         reg.register(echo("echo")).unwrap();
         let tool = reg.get("echo").unwrap();
-        let out = tool.execute(json!({ "msg": "闭环" })).await.unwrap();
+        let out = tool
+            .execute(&crate::context::create_mock_tool_context(), json!({ "msg": "闭环" }))
+            .await
+            .unwrap();
         assert_eq!(out, json!({ "echo": { "msg": "闭环" } }));
     }
 }

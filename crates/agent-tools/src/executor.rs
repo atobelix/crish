@@ -7,6 +7,7 @@
 //!
 //! 语义来源：05 §2.3 输出预算、05 §5.5 工具幂等（stream-recovery.test.ts:188-229）。
 
+use crate::context::ToolContext;
 use crate::definition::{Tool, ToolError};
 use crate::idempotency::{IdempotencyContext, IdempotencyDecision, ToolIdempotencyGuard};
 use crate::output::{stringify_tool_output, summarize};
@@ -64,12 +65,14 @@ pub struct ToolResult {
 /// 流程：
 /// 1. 幂等检查（policy.idempotency 且传入 guard）：已执行 → 直接返回
 ///    deduplicated 结果（不执行工具）
-/// 2. 执行工具（失败返回 ToolError，且不记录幂等键，允许重试）
+/// 2. 执行工具（R3 T9：携带会话级 ToolContext，失败返回 ToolError，
+///    且不记录幂等键，允许重试）
 /// 3. 输出预算：超出 budget_bytes 时截断并附加 contextBudget 标记字段
 /// 4. 记录幂等键（成功执行后）
 pub async fn execute_with_output_policy(
     tool: &dyn Tool,
     args: Value,
+    tool_ctx: &ToolContext,
     ctx: &ExecutorContext,
     guard: Option<&ToolIdempotencyGuard>,
     policy: &ToolExecutionPolicy,
@@ -97,7 +100,7 @@ pub async fn execute_with_output_policy(
         }
     }
 
-    let output = tool.execute(args.clone()).await?;
+    let output = tool.execute(tool_ctx, args.clone()).await?;
 
     let (output, truncated) = match policy.output_budget_bytes {
         Some(budget) => {
@@ -186,7 +189,11 @@ mod tests {
             &self.def
         }
 
-        async fn execute(&self, args: Value) -> Result<Value, ToolError> {
+        async fn execute(
+            &self,
+            _ctx: &crate::context::ToolContext,
+            args: Value,
+        ) -> Result<Value, ToolError> {
             let n = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
             Ok(json!({ "text": format!("called {n}: {args}") }))
         }
@@ -223,7 +230,11 @@ mod tests {
             &self.def
         }
 
-        async fn execute(&self, _args: Value) -> Result<Value, ToolError> {
+        async fn execute(
+            &self,
+            _ctx: &crate::context::ToolContext,
+            _args: Value,
+        ) -> Result<Value, ToolError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
             Err(ToolError::execution_failed("failing", "模拟失败"))
         }
@@ -238,12 +249,17 @@ mod tests {
         }
     }
 
+    fn tool_ctx() -> crate::context::ToolContext {
+        crate::context::create_mock_tool_context()
+    }
+
     #[tokio::test]
     async fn execute_single_tool_basic() {
         let tool = CountingTool::new();
         let result = execute_with_output_policy(
             &tool,
             json!({ "msg": "hi" }),
+            &tool_ctx(),
             &ctx(),
             None,
             &ToolExecutionPolicy::default(),
@@ -264,13 +280,13 @@ mod tests {
         let policy = ToolExecutionPolicy::default();
         let args = json!({ "path": "a.txt" });
 
-        let first = execute_with_output_policy(&tool, args.clone(), &ctx(), Some(&guard), &policy)
+        let first = execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &policy)
             .await
             .unwrap();
         assert!(!first.deduplicated);
         assert_eq!(tool.call_count(), 1);
 
-        let second = execute_with_output_policy(&tool, args, &ctx(), Some(&guard), &policy)
+        let second = execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard), &policy)
             .await
             .unwrap();
         assert!(second.deduplicated);
@@ -288,11 +304,11 @@ mod tests {
         let guard = ToolIdempotencyGuard::new();
         let policy = ToolExecutionPolicy::default();
 
-        execute_with_output_policy(&tool, json!({ "path": "a.txt" }), &ctx(), Some(&guard), &policy)
+        execute_with_output_policy(&tool, json!({ "path": "a.txt" }), &tool_ctx(), &ctx(), Some(&guard), &policy)
             .await
             .unwrap();
         let second =
-            execute_with_output_policy(&tool, json!({ "path": "b.txt" }), &ctx(), Some(&guard), &policy)
+            execute_with_output_policy(&tool, json!({ "path": "b.txt" }), &tool_ctx(), &ctx(), Some(&guard), &policy)
                 .await
                 .unwrap();
         assert!(!second.deduplicated);
@@ -306,16 +322,16 @@ mod tests {
         let policy = ToolExecutionPolicy::default();
         let args = json!({ "path": "a.txt" });
 
-        execute_with_output_policy(&tool, args.clone(), &ctx(), Some(&guard), &policy)
+        execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &policy)
             .await
             .unwrap();
-        let second = execute_with_output_policy(&tool, args.clone(), &ctx(), Some(&guard), &policy)
+        let second = execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &policy)
             .await
             .unwrap();
         assert!(second.deduplicated);
 
         guard.clear("run-1:sess-1");
-        let third = execute_with_output_policy(&tool, args, &ctx(), Some(&guard), &policy)
+        let third = execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard), &policy)
             .await
             .unwrap();
         assert!(!third.deduplicated);
@@ -328,6 +344,7 @@ mod tests {
         let result = execute_with_output_policy(
             big.as_ref(),
             json!({}),
+            &tool_ctx(),
             &ctx(),
             None,
             &ToolExecutionPolicy {
@@ -352,6 +369,7 @@ mod tests {
         let result = execute_with_output_policy(
             big.as_ref(),
             json!({}),
+            &tool_ctx(),
             &ctx(),
             None,
             &ToolExecutionPolicy {
@@ -375,11 +393,11 @@ mod tests {
         };
         let args = json!({ "path": "a.txt" });
 
-        let first = execute_with_output_policy(&tool, args.clone(), &ctx(), Some(&guard), &policy)
+        let first = execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &policy)
             .await
             .unwrap();
         assert!(first.truncated);
-        let second = execute_with_output_policy(&tool, args, &ctx(), Some(&guard), &policy)
+        let second = execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard), &policy)
             .await
             .unwrap();
         assert!(second.deduplicated);
@@ -394,13 +412,13 @@ mod tests {
         let policy = ToolExecutionPolicy::default();
         let args = json!({ "path": "a.txt" });
 
-        let err = execute_with_output_policy(&tool, args.clone(), &ctx(), Some(&guard), &policy)
+        let err = execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &policy)
             .await
             .unwrap_err();
         assert!(err.to_string().contains("模拟失败"));
 
         // 失败不记录：再次执行仍走执行路径（重新抛错，而非返回 deduplicated）
-        let err2 = execute_with_output_policy(&tool, args, &ctx(), Some(&guard), &policy)
+        let err2 = execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard), &policy)
             .await
             .unwrap_err();
         assert!(err2.to_string().contains("模拟失败"));
@@ -416,10 +434,10 @@ mod tests {
         };
         let args = json!({ "path": "a.txt" });
 
-        execute_with_output_policy(&tool, args.clone(), &ctx(), Some(&guard), &policy)
+        execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &policy)
             .await
             .unwrap();
-        let second = execute_with_output_policy(&tool, args, &ctx(), Some(&guard), &policy)
+        let second = execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard), &policy)
             .await
             .unwrap();
         assert!(!second.deduplicated);
@@ -455,7 +473,11 @@ mod tests {
             &self.def
         }
 
-        async fn execute(&self, _args: Value) -> Result<Value, ToolError> {
+        async fn execute(
+            &self,
+            _ctx: &crate::context::ToolContext,
+            _args: Value,
+        ) -> Result<Value, ToolError> {
             Ok(json!({
                 "text": "a".repeat(200),
                 "artifacts": [{ "kind": "file", "title": "big" }]
@@ -503,7 +525,7 @@ mod tests {
         let args = json!({ "path": "a.txt" });
 
         let result =
-            execute_with_output_policy(&tool, args.clone(), &ctx(), Some(&guard), &ToolExecutionPolicy::default())
+            execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &ToolExecutionPolicy::default())
                 .await
                 .unwrap();
         assert!(!result.deduplicated);
@@ -516,7 +538,7 @@ mod tests {
         // 新守卫（模拟重启）共享同一 store：同参执行被去重
         let guard2 = ToolIdempotencyGuard::with_store(store.clone());
         let second =
-            execute_with_output_policy(&tool, args, &ctx(), Some(&guard2), &ToolExecutionPolicy::default())
+            execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard2), &ToolExecutionPolicy::default())
                 .await
                 .unwrap();
         assert!(second.deduplicated);

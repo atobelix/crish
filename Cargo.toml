@@ -7,7 +7,6 @@ members = [
     "crates/conex-db",
     "crates/conex-diff",
     "crates/conex-fs",
-    "crates/conex-ipc",
     "crates/conex-markdown",
     "crates/conex-sandbox",
     "crates/conex-search",
@@ -28,9 +27,24 @@ description = "Crish — Tauri desktop AI agent workbench (Rust engine, React UI
 repository = "https://github.com/conex-community/crish"
 
 # workspace 级 lint 基线：子 crate 通过 [lints] workspace = true 继承。
-# 不在此声明任何 clippy restriction lint（如 unwrap_used/expect_used），
-# 因为它们默认即为 allow；如需在测试中禁用，由各 crate 的测试模块自行 #[cfg_attr(test, allow(...))]。
-[workspace.lints]
+# 选择依据与豁免记录见 docs/multi-agent-repair/基线记录/clippy-workspace-T13.md：
+# - 不开 pedantic/nursery/restriction：存量告警约 200 条（多为 T1 清理遗留 dead_code），
+#   一次性全开会爆量，后续轮次按 crate 增量打开；
+# - 不开 unwrap_used/expect_used：存量 unwrap 1900+ 处，开启将全量炸开，先记录后治理；
+# - unsafe_code = warn：让存量 unsafe 全部可见，逐处评审后降量；
+# - dbg_macro / unimplemented 存量命中为 0，直接 deny 做正向守门。
+[workspace.lints.rust]
+unsafe_code = "warn"
+missing_docs = "allow"
+
+[workspace.lints.clippy]
+# 组声明统一 priority = -1，保证具体 lint（dbg_macro/unimplemented）可覆盖组默认值
+all = { level = "warn", priority = -1 }
+pedantic = { level = "allow", priority = -1 }
+nursery = { level = "allow", priority = -1 }
+restriction = { level = "allow", priority = -1 }
+dbg_macro = "deny"
+unimplemented = "deny"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

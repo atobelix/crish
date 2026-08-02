@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import styles from './Sidebar.module.css';
-import { useLayoutStore } from '../../store/layoutStore';
-import { useSidebarSessions } from '../../store/sessionStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useSidebarSessions } from '../../api/store-access/componentAccess';
 import { getActiveProjectId, listProjects, type ProjectEntry } from '../../api/projectStore';
 import { isUpdateAvailable } from '../../api/updateStore';
 import { onUiEvent } from '../../api/uiEvents';

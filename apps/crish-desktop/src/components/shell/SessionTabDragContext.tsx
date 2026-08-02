@@ -19,7 +19,7 @@ import stripStyles from '../binary-tree/UnitSessionTabStrip.module.css';
 import {
   useLayoutTreeStore,
   listChatLeaves,
-} from '../../store/layout-tree';
+} from '../../api/store-access/componentAccess';
 
 const SessionTabDragContext = createContext<UseTopBarDragResult | null>(null);
 

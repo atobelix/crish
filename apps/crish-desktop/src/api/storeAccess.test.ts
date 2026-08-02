@@ -6,6 +6,9 @@ import {
   PENDING_DRAFT_SESSION_ID,
   isPendingDraft,
 } from '../store/draftSession';
+import { usePermissionStore } from '../store/permissionStore';
+import { useSettingsStore } from '../store/settingsStore';
+import { useTerminalStore } from '../store/terminalStore';
 import {
   addCommandPermission,
   addMessage,
@@ -519,11 +522,11 @@ describe('storeAccess + domain facades', () => {
     expect(getSettingsUiState().showSettingsOverlay).toBe(true);
   });
 
-  it('getPermissionMode mirrors settings facade + layout', () => {
+  it('getPermissionMode mirrors settings facade + permission store', () => {
     setPermissionMode('full');
     expect(getPermissionMode()).toBe('full');
-    expect(getSettingsUiState().permissionMode).toBe('full');
-    expect(getLayoutState().permissionMode).toBe('full');
+    expect(getPermissionMode()).toBe('full');
+    expect(usePermissionStore.getState().permissionMode).toBe('full');
     setPermissionMode('ask');
     expect(getPermissionMode()).toBe('ask');
   });
@@ -632,10 +635,10 @@ describe('storeAccess + domain facades', () => {
     };
     pushDiffFile(diff);
     expect(getDiffFiles().some((d) => d.filePath === diff.filePath)).toBe(true);
-    expect(getLayoutState().diffFiles.some((d) => d.filePath === diff.filePath)).toBe(true);
+    expect(useTerminalStore.getState().diffFiles.some((d) => d.filePath === diff.filePath)).toBe(true);
     setActiveDiffSource(diff);
     expect(getActiveDiffSource()?.filePath).toBe(diff.filePath);
-    expect(getLayoutState().activeDiffSource?.filePath).toBe(diff.filePath);
+    expect(useTerminalStore.getState().activeDiffSource?.filePath).toBe(diff.filePath);
 
     // 非法 FileDiff 不写入、不清空已有 active
     const beforeActive = getActiveDiffSource()?.filePath;
@@ -652,7 +655,7 @@ describe('storeAccess + domain facades', () => {
     const settings = { packages: ['@crish/demo'] } as Parameters<typeof setAppSettings>[0];
     setAppSettings(settings);
     expect(getAppSettings()).toEqual(settings);
-    expect(getLayoutState().appSettings).toEqual(settings);
+    expect(useSettingsStore.getState().appSettings).toEqual(settings);
 
     const tasks: CronJob[] = [
       {

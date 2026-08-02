@@ -4,7 +4,8 @@
 import type { TelemetrySyncPayload } from '../../store/layoutStore';
 import type { DiffChange, FileDiff } from '../../store/types';
 import type { CronJob } from '../clientApi';
-import { getLayoutState } from './storeAccessCore';
+import { useTerminalStore } from '../../store/terminalStore';
+import { useSettingsStore } from '../../store/settingsStore';
 
 export type DiffFileInfo = FileDiff;
 
@@ -65,29 +66,29 @@ export function normalizeFileDiff(value: unknown): FileDiff | null {
 export function pushDiffFile(diff: FileDiff): void {
   const normalized = normalizeFileDiff(diff);
   if (!normalized) return;
-  getLayoutState().pushDiffFile(normalized);
+  useTerminalStore.getState().pushDiffFile(normalized);
 }
 
 export function setActiveDiffSource(diff: FileDiff | null): void {
   if (diff === null) {
-    getLayoutState().setActiveDiffSource(null);
+    useTerminalStore.getState().setActiveDiffSource(null);
     return;
   }
   const normalized = normalizeFileDiff(diff);
   if (!normalized) return;
-  getLayoutState().setActiveDiffSource(normalized);
+  useTerminalStore.getState().setActiveDiffSource(normalized);
 }
 
 export function getDiffFiles(): FileDiff[] {
-  return getLayoutState().diffFiles;
+  return useTerminalStore.getState().diffFiles;
 }
 
 export function getActiveDiffSource(): FileDiff | null {
-  return getLayoutState().activeDiffSource;
+  return useTerminalStore.getState().activeDiffSource;
 }
 
 export function syncTelemetryData(data: TelemetrySyncPayload): void {
-  getLayoutState().syncTelemetryData(data);
+  useSettingsStore.getState().syncTelemetryData(data);
 }
 
 const CRON_TARGET = new Set(['current-session', 'new-session']);
@@ -129,9 +130,9 @@ export function filterCronJobs(tasks: unknown): CronJob[] {
 
 export function setScheduledTasks(tasks: CronJob[]): void {
   const list = filterCronJobs(tasks);
-  getLayoutState().setScheduledTasks(list);
+  useSettingsStore.getState().setScheduledTasks(list);
 }
 
 export function getScheduledTasks(): CronJob[] {
-  return getLayoutState().scheduledTasks;
+  return useSettingsStore.getState().scheduledTasks;
 }

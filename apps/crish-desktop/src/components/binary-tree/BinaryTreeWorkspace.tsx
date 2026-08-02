@@ -18,8 +18,8 @@ import {
   listChatLeaves,
   type LayoutLeaf,
   type FlatBranch,
-} from '../../store/layout-tree';
-import { getPanelTitle } from '../../store/layoutHelpers';
+} from '../../api/store-access/componentAccess';
+import { getPanelTitle } from '../../api/store-access/componentAccess';
 import { useTreeDrag } from '../../hooks/useTreeDrag';
 import { useTreeResize } from '../../hooks/useTreeResize';
 import { useTreePanelEvents } from '../../hooks/useTreePanelEvents';

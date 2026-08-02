@@ -10,6 +10,7 @@ import {
   getSessionIndex,
 } from './sessionIndex';
 import type { SessionActions, SessionStoreSlice, SessionImmerSet } from './sessionActions';
+import { useTerminalStore } from './terminalStore';
 import {
   cloneMessages,
   normalizeWritableSessionTitle,
@@ -74,9 +75,7 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
           state.activeSessionId = fallback;
           state.activeAgentId = null;
           state.panelAgentId = null;
-          state.terminalLines = fallback
-            ? state.terminalBySession[fallback] || []
-            : [];
+          useTerminalStore.getState().setActiveTerminalSession(fallback);
           pruneEmptyShellsInPlace(
             state,
             shellPruneKeepIds(fallback || null, null, { activating: true })
@@ -128,7 +127,7 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
         state.activeSessionId = newSess.id;
         state.activeAgentId = null;
         state.panelAgentId = null;
-        state.terminalLines = [];
+        useTerminalStore.getState().setActiveTerminalSession(newSess.id);
         pruneEmptyShellsInPlace(
           state,
           shellPruneKeepIds(newSess.id, null, { activating: true })

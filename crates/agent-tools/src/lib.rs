@@ -2,6 +2,10 @@
 //!
 //! 本 crate 是工具执行域（B5）的骨架与内置工具实现：
 //! - `definition`：ToolDefinition（声明）与 Tool trait（执行面）、ToolError
+//! - `permission`：权限规则引擎（R4 T10）——dangerous / requires_approval +
+//!   permissionMode 三态判定（Allow / Deny / NeedsApproval）
+//! - `context`：ToolContext 会话级执行上下文（session_id / abort_token / ask /
+//!   workspace_root，R3 T9 引入，T10 权限引擎消费）
 //! - `registry`：ToolRegistry 注册表（注册/查找/列出，保序）
 //! - `middleware`：ToolMiddleware 前置/后置钩子抽象与示例后置实现
 //! - `output`：工具输出结构化——序列化（text 优先）与预算截断（B5.3）
@@ -12,17 +16,24 @@
 //! - `mcp`：MCP 桥（B5.4）——server 配置管理（servers）与 stdio 客户端桥（bridge），
 //!   远端 MCP 工具经名称前缀适配为 Tool 进入统一执行器
 
+pub mod context;
 pub mod definition;
 pub mod executor;
 pub mod idempotency;
 pub mod mcp;
 pub mod middleware;
 pub mod output;
+pub mod permission;
 pub mod registry;
 pub mod tools;
 
+pub use context::{
+    create_mock_tool_context, AbortToken, AskCallback, AskChannel, AskDecision, NoopAskChannel,
+    ToolContext,
+};
 pub use definition::{default_input_schema, Tool, ToolDefinition, ToolError};
 pub use executor::{execute_with_output_policy, ExecutorContext, ToolExecutionPolicy, ToolResult};
+pub use permission::{decide, PermissionMode, PermissionVerdict};
 pub use idempotency::{
     domain_for, execution_key, IdempotencyContext, IdempotencyDecision, IdempotencyStore,
     ToolIdempotencyGuard,
@@ -111,7 +122,11 @@ pub(crate) mod test_support {
             &self.def
         }
 
-        async fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+        async fn execute(
+            &self,
+            _ctx: &crate::context::ToolContext,
+            args: serde_json::Value,
+        ) -> Result<serde_json::Value, ToolError> {
             Ok(serde_json::json!({ "echo": args }))
         }
     }

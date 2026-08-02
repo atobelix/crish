@@ -30,6 +30,8 @@ impl SecretString {
     }
 
     /// 覆写清零整个缓冲区（供 `Drop` 与测试直接调用）。
+    // 豁免 unsafe_code：wipe 是受控内存擦除（见下方 SAFETY），经评审后允许。
+    #[allow(unsafe_code)]
     pub fn wipe(buf: &mut String) {
         // SAFETY: 写入全零字节会破坏 UTF-8 不变量，但此处仅在丢弃前或测试中调用，
         // 覆写后字符串不再被读取，不违反借用期内的不变量约束。
@@ -308,7 +310,9 @@ fn set_plaintext_permissions(path: &Path) -> Result<(), CredentialError> {
 // ── Windows DPAPI（从 Tauri 壳 credentials.rs:220-324 复制，SAFETY 注释保留）──
 
 /// 调用 `CryptProtectData` 加密明文，返回 DPAPI 密文。
+// 豁免 unsafe_code：Windows DPAPI FFI 调用（每处 unsafe 均有 SAFETY 说明），经评审后允许。
 #[cfg(windows)]
+#[allow(unsafe_code)]
 fn dpapi_protect(input: &[u8]) -> Result<Vec<u8>, String> {
     use std::{ffi::c_void, ptr};
     use windows_sys::Win32::{
@@ -355,7 +359,9 @@ fn dpapi_protect(input: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 /// 调用 `CryptUnprotectData` 解密 DPAPI 密文。
+// 豁免 unsafe_code：Windows DPAPI FFI 调用（每处 unsafe 均有 SAFETY 说明），经评审后允许。
 #[cfg(windows)]
+#[allow(unsafe_code)]
 fn dpapi_unprotect(input: &[u8]) -> Result<Vec<u8>, String> {
     use std::{ffi::c_void, ptr};
     use windows_sys::Win32::{

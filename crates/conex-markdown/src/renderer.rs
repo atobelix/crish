@@ -392,6 +392,7 @@ impl Renderer {
     /// 根据 stream_mode 选择高亮路径:
     ///   - false → build_code_fence_html (syntect 高亮)
     ///   - true  → build_code_fence_html_streaming (plain text, 跳过 syntect)
+    ///
     /// 单一派发点,被 end_code_block (正常闭合) 和 render() 末尾 (软闭合未闭合 fence) 共用。
     fn flush_fence(&mut self) {
         if let Some(fence) = self.fence.take() {

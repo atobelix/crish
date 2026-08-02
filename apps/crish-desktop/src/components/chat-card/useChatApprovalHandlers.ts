@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { SessionMessage } from '../../store/layoutStore';
-import { getSessionById, type SessionAgent } from '../../store/sessionStore';
+import { getSessionById } from '../../api/store-access/componentAccess';
+import type { SessionAgent } from '../../store/types';
 import {
   addCommandPermission,
   updateMessageToolCall,

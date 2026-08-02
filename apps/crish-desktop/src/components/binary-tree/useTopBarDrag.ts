@@ -30,8 +30,8 @@ import {
   findLeafAtPointer,
   isChatDomain,
   type DropZone,
-} from '../../store/layout-tree';
-import type { TreeDragSource } from '../../store/layout-tree';
+} from '../../api/store-access/componentAccess';
+import type { TreeDragSource } from '../../api/store-access/componentAccess';
 import {
   usePointerDragBase,
   DROP_DETECT_INTERVAL_MS,

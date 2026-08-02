@@ -69,7 +69,7 @@ fn init_with_file_config_creates_daily_log_with_content() {
     );
 
     let mut content = String::new();
-    std::fs::File::open(&file_path)
+    std::fs::File::open(file_path)
         .expect("打开日志文件")
         .read_to_string(&mut content)
         .expect("读取日志文件");

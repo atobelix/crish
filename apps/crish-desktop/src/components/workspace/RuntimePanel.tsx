@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './RuntimePanel.module.css';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useSettingsField, selectScheduledTasks, selectTokenUsage } from '../../store/storeAccess';
 import { useEngineState } from '../../hooks/useEngineState';
 import { RuntimeSection } from './RuntimeSection';
 import { LiveTasksSection } from './LiveTasksSection';
@@ -31,8 +31,8 @@ interface RuntimePanelProps {
  * - 成功操作静默（列表/面板切换即反馈）；仅失败 toast
  */
 export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowToast }) => {
-  const tokenUsage = useLayoutStore((state) => state.tokenUsage);
-  const cronJobs = useLayoutStore((state) => state.scheduledTasks);
+  const tokenUsage = useSettingsField(selectTokenUsage);
+  const cronJobs = useSettingsField(selectScheduledTasks);
   const ds = useEngineState();
   const data = useRuntimePanelData();
 

@@ -113,7 +113,8 @@ describe('parseToolArgsDeltaEvent', () => {
   });
 
   it('parses session-loop production tool-update + metadata.kind tool-args-delta', () => {
-    // Exact shape from packages/agent-runtime/src/agent-session-loop.ts
+    // Exact shape from crates/conex-types/src/tool.rs (ToolProgressUpdate:
+    // update.metadata.kind === 'tool-args-delta')
     const r = parseToolArgsDeltaEvent({
       type: 'tool-update',
       sessionId: 'sess-1',

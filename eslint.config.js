@@ -51,6 +51,11 @@ export default tseslint.config(
       '**/.codex-tool-scratch/**',
       '**/.firecrawl/**',
       '**/.trae/**',
+      'reference/**',
+      'assets/**',
+      'docs/**',
+      'analysis/**',
+      'implementer/**',
     ],
   },
   // Base configuration for Javascript files

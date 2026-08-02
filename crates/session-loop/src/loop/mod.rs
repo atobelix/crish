@@ -230,6 +230,7 @@ impl AgentSessionLoop {
                 run_id,
                 session_id: session_id.clone(),
                 cwd: None,
+                workspace_root: None,
             },
             tool_options: ToolBatchOptions::default(),
             approval: None,

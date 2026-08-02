@@ -8,7 +8,7 @@ import React from 'react';
 import * as Lucide from 'lucide-react';
 import { clientApi } from '../../api/clientApi';
 import { getWorkspacePath } from '../../api/projectStore';
-import { useLayoutStore } from '../../store/layoutStore';
+import { getSettingsState } from '../../store/storeAccess';
 import { Tooltip } from '../Tooltip';
 import styles from './SkillsSettingsTab.module.css';
 import { Menu } from '../ui/Menu';
@@ -97,7 +97,7 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
             enableSkillCommands: next,
           })
           .then((merged) => {
-            useLayoutStore.getState().setAppSettings(merged);
+            getSettingsState().setAppSettings(merged);
           })
           .catch((err) => {
             setEnableCommands(prev);

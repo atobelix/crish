@@ -1,201 +1,42 @@
-import {
-  loadStoredPermissionMode,
-  planModeEnabledFor,
-  type PermissionMode,
-} from '../api/permissionModes';
-import {
-  addCommandPermission as persistAddCommandPermission,
-  loadCommandPermissions,
-  removeCommandPermission as persistRemoveCommandPermission,
-  saveCommandPermissions,
-} from '../api/commandPermissions';
-import {
-  DEFAULT_SHELL_CHROME,
-  parseShellChromeMode,
-  SHELL_CHROME_STORAGE_KEY,
-  type ShellChromeMode,
-} from '../api/shellChrome';
-import { isDemoMode } from '../api/appMode';
-import { MAX_TERMINAL_SESSIONS, MAX_DIFF_FILES } from '@crish/shared-utils/browser';
-import type { CronJob, McpServer, ProviderInfo, Settings } from '../api/clientApi';
+/**
+ * settingsUiStore — 设置 UI 域 facade。
+ *
+ * 三域 facade 之一：`useSettingsUiStore` 与 `useLayoutStore` **同一实例**。
+ *
+ * T11 拆分后：
+ * - 设置浮层（`showSettingsOverlay` / `settingsActiveTab`）仍属布局域（layoutStore），
+ *   本 facade 直读/直写。
+ * - 权限 / plan / 命令白名单已迁往 `permissionStore`（独立实例）；本 facade 的权限便捷
+ *   入口（`setPermissionMode` / `setPlanMode*` / `addCommandPermission` …）经
+ *   `permissionStore` 委托，保持 API 面稳定。
+ *
+ * @see store/README.md
+ * @see docs/multi-agent-repair/reports/R3-T11-归类表.md
+ */
+
+import { useLayoutStore, DEFAULT_SETTINGS_TAB } from './layoutStore';
+import { usePermissionStore, type PermissionStore } from './permissionStore';
 import type { SettingsTabType } from './types';
-import {
-  DEFAULT_TOKEN_USAGE,
-  DEMO_TOKEN_USAGE,
-  DEFAULT_UI_SIZE,
-  DEFAULT_SETTINGS_TAB,
-  finiteNumber,
-  parseUiSize,
-  sanitizeActiveWorkers,
-  sanitizeTokenUsage,
-  UI_SIZE_STORAGE_KEY,
-  useLayoutStore,
-  type ActiveWorkerState,
-  type TokenUsageState,
-  type TelemetrySyncPayload,
-  type UiSize,
-} from './layoutStore';
+import type { PermissionMode } from '../api/permissionModes';
 
 export type { SettingsTabType } from './types';
 
 export type SettingsUiSlice = {
   showSettingsOverlay: boolean;
   settingsActiveTab: SettingsTabType;
-  permissionMode: PermissionMode;
-  planModeEnabled: boolean;
-  planApproved: boolean;
 };
 
 export type SettingsUiActions = {
   setShowSettingsOverlay: (show: boolean) => void;
   setSettingsActiveTab: (tab: SettingsTabType) => void;
   openSettings: (tab?: SettingsTabType) => void;
-  setPermissionMode: (mode: PermissionMode) => void;
-  setPlanModeEnabled: (enabled: boolean) => void;
-  setPlanApproved: (approved: boolean) => void;
-  addCommandPermission: (cmd: string) => void;
-  removeCommandPermission: (cmd: string) => void;
-  setCommandPermissions: (list: string[]) => void;
 };
 
+/**
+ * 布局 store 实际承载的设置 UI 面（浮层字段 + 浮层 action）。
+ * 权限/plan 便捷入口经 permissionStore 委托，以模块级函数导出，不进本 facade 类型。
+ */
 export type SettingsUiFacade = SettingsUiSlice & SettingsUiActions;
-
-type SettingsUiStoreData = SettingsUiSlice & {
-  commandPermissions: string[];
-  uiSize: UiSize;
-  shellChromeMode: ShellChromeMode;
-  chatMainSurface: 'chat' | 'scheduled';
-  sidebarCollapsed: boolean;
-  appSettings: Settings | null;
-  scheduledTasks: CronJob[];
-  mcpServers: McpServer[];
-  providers: ProviderInfo[];
-  activeWorkers: ActiveWorkerState[];
-  tokenUsage: TokenUsageState;
-  killedWorkerIds: string[];
-  manuallyTriggeredWorkers: ActiveWorkerState[];
-};
-
-export type SettingsUiState = SettingsUiStoreData;
-
-export type SettingsUiStore = SettingsUiStoreData & SettingsUiActions & {
-  setUiSize: (size: UiSize) => void;
-  setShellChromeMode: (mode: ShellChromeMode) => void;
-  setChatMainSurface: (surface: 'chat' | 'scheduled') => void;
-  setSidebarCollapsed: (collapsed: boolean) => void;
-  setAppSettings: (settings: Settings | null) => void;
-  setScheduledTasks: (tasks: CronJob[]) => void;
-  setMcpServers: (servers: McpServer[]) => void;
-  setProviders: (providers: ProviderInfo[]) => void;
-  syncTelemetryData: (data: TelemetrySyncPayload) => void;
-  addCommandPermission: (cmd: string) => void;
-  removeCommandPermission: (cmd: string) => void;
-  setCommandPermissions: (list: string[]) => void;
-  killWorker: (id: string, taskName: string) => void;
-  triggerCronJobNow: (prompt: string) => void;
-};
-
-const _initialPermissionMode = loadStoredPermissionMode();
-
-function _readStoredUiSize(): UiSize {
-  try {
-    return parseUiSize(localStorage.getItem(UI_SIZE_STORAGE_KEY));
-  } catch {
-    return DEFAULT_UI_SIZE;
-  }
-}
-
-function _readStoredShellChrome(): ShellChromeMode {
-  try {
-    return parseShellChromeMode(localStorage.getItem(SHELL_CHROME_STORAGE_KEY));
-  } catch {
-    return DEFAULT_SHELL_CHROME;
-  }
-}
-
-
-const _settingsData: SettingsUiStoreData = {
-  showSettingsOverlay: false,
-  settingsActiveTab: DEFAULT_SETTINGS_TAB,
-  permissionMode: _initialPermissionMode,
-  planModeEnabled: planModeEnabledFor(_initialPermissionMode),
-  planApproved: false,
-  commandPermissions: loadCommandPermissions(),
-  uiSize: _readStoredUiSize(),
-  shellChromeMode: _readStoredShellChrome(),
-  chatMainSurface: 'chat',
-  sidebarCollapsed: false,
-  appSettings: null,
-  scheduledTasks: [],
-  mcpServers: [],
-  providers: [],
-  activeWorkers: [],
-  tokenUsage: isDemoMode() ? { ...DEMO_TOKEN_USAGE } : { ...DEFAULT_TOKEN_USAGE },
-  killedWorkerIds: [],
-  manuallyTriggeredWorkers: [],
-};
-
-export const createSettingsUiSlice = (set: (fn: (state: SettingsUiState) => void) => void) => ({
-  ..._settingsData,
-
-  syncTelemetryData: (data: TelemetrySyncPayload) => set((state: SettingsUiState) => {
-          if (data.tokenUsage) {
-            state.tokenUsage = sanitizeTokenUsage(data.tokenUsage, state.tokenUsage);
-          }
-          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.map((w: ActiveWorkerState) => ({
-            id: w.id,
-            taskName: w.taskName,
-            elapsedSeconds: Math.max(0, finiteNumber(w.elapsedSeconds, 0) + 2),
-          }));
-          if (data.activeWorkers) {
-            const live = sanitizeActiveWorkers(data.activeWorkers).filter(
-              (w: ActiveWorkerState) => !state.killedWorkerIds.includes(w.id),
-            );
-            state.activeWorkers = [...live, ...state.manuallyTriggeredWorkers];
-          }
-          if (data.mcpServers) {
-            state.mcpServers = Array.isArray(data.mcpServers) ? data.mcpServers : state.mcpServers;
-          }
-          if (data.cronJobs) {
-            state.scheduledTasks = Array.isArray(data.cronJobs) ? data.cronJobs : state.scheduledTasks;
-          }
-        }),
-
-        addCommandPermission: (cmd: string) => set((state: SettingsUiState) => {
-          state.commandPermissions = persistAddCommandPermission(state.commandPermissions, cmd);
-        }),
-        removeCommandPermission: (cmd: string) => set((state: SettingsUiState) => {
-          state.commandPermissions = persistRemoveCommandPermission(state.commandPermissions, cmd);
-        }),
-        setCommandPermissions: (list: string[]) => set((state: SettingsUiState) => {
-          const next = Array.isArray(list) ? list.filter((c: unknown): c is string => typeof c === 'string') : [];
-          state.commandPermissions = next;
-          saveCommandPermissions(next);
-        }),
-
-        killWorker: (id: string, _taskName: string) => set((state: SettingsUiState) => {
-          if (!id) return;
-          state.manuallyTriggeredWorkers = state.manuallyTriggeredWorkers.filter((w: ActiveWorkerState) => w.id !== id);
-          state.activeWorkers = state.activeWorkers.filter((w: ActiveWorkerState) => w.id !== id);
-          if (!state.killedWorkerIds.includes(id) && state.killedWorkerIds.length < MAX_TERMINAL_SESSIONS * 4) {
-            state.killedWorkerIds.push(id);
-          }
-          state.tokenUsage.input = Math.max(0, finiteNumber(state.tokenUsage.input, 0) - 1500);
-          const nextCost = finiteNumber(state.tokenUsage.cost, 0) - 0.0045;
-          state.tokenUsage.cost = Math.max(0, parseFloat(nextCost.toFixed(4)));
-        }),
-
-        triggerCronJobNow: (prompt: string) => set((state: SettingsUiState) => {
-          const label = typeof prompt === 'string' && prompt.trim() ? prompt.trim() : 'task';
-          const newWorker: ActiveWorkerState = {
-            id: `worker-manual-${Date.now()}`,
-            taskName: `Cron: ${label}`,
-            elapsedSeconds: 0,
-          };
-          if (state.manuallyTriggeredWorkers.length < MAX_TERMINAL_SESSIONS) state.manuallyTriggeredWorkers.push(newWorker);
-          if (state.activeWorkers.length < MAX_DIFF_FILES * 2) state.activeWorkers.push(newWorker);
-        }),
-});
 
 export { DEFAULT_SETTINGS_TAB } from './layoutStore';
 
@@ -207,13 +48,13 @@ export const selectSettingsActiveTab = (
   s: Pick<SettingsUiSlice, 'settingsActiveTab'>,
 ) => s.settingsActiveTab;
 
-export const selectPermissionMode = (s: Pick<SettingsUiSlice, 'permissionMode'>) =>
+export const selectPermissionMode = (s: Pick<PermissionStore, 'permissionMode'>) =>
   s.permissionMode;
 
-export const selectPlanModeEnabled = (s: Pick<SettingsUiSlice, 'planModeEnabled'>) =>
+export const selectPlanModeEnabled = (s: Pick<PermissionStore, 'planModeEnabled'>) =>
   s.planModeEnabled;
 
-export const selectPlanApproved = (s: Pick<SettingsUiSlice, 'planApproved'>) =>
+export const selectPlanApproved = (s: Pick<PermissionStore, 'planApproved'>) =>
   s.planApproved;
 
 export const selectOpenSettings = (s: Pick<SettingsUiActions, 'openSettings'>) =>
@@ -230,15 +71,15 @@ export const selectSetSettingsActiveTab = (
 export const useSettingsUiStore = useLayoutStore;
 
 export const selectSetPermissionMode = (
-  s: Pick<SettingsUiActions, 'setPermissionMode'>,
+  s: Pick<PermissionStore, 'setPermissionMode'>,
 ) => s.setPermissionMode;
 
 export const selectSetPlanModeEnabled = (
-  s: Pick<SettingsUiActions, 'setPlanModeEnabled'>,
+  s: Pick<PermissionStore, 'setPlanModeEnabled'>,
 ) => s.setPlanModeEnabled;
 
 export const selectSetPlanApproved = (
-  s: Pick<SettingsUiActions, 'setPlanApproved'>,
+  s: Pick<PermissionStore, 'setPlanApproved'>,
 ) => s.setPlanApproved;
 
 export function useSettingsUiField<T>(selector: (state: SettingsUiFacade) => T): T {
@@ -256,15 +97,15 @@ export function useSettingsActiveTab(): string {
 }
 
 export function usePermissionMode(): PermissionMode {
-  return useSettingsUiStore((s) => s.permissionMode);
+  return usePermissionStore((s) => s.permissionMode);
 }
 
 export function usePlanModeEnabled(): boolean {
-  return useSettingsUiStore((s) => s.planModeEnabled);
+  return usePermissionStore((s) => s.planModeEnabled);
 }
 
 export function usePlanApproved(): boolean {
-  return useSettingsUiStore((s) => s.planApproved);
+  return usePermissionStore((s) => s.planApproved);
 }
 
 export function useOpenSettings(): (tab?: SettingsTabType) => void {
@@ -276,7 +117,7 @@ export function getSettingsUiState(): SettingsUiFacade {
 }
 
 export function getPermissionMode(): PermissionMode {
-  return getSettingsUiState().permissionMode;
+  return usePermissionStore.getState().permissionMode;
 }
 
 export function openSettings(tab?: SettingsTabType): void {
@@ -301,25 +142,25 @@ export function setSettingsActiveTab(tab: SettingsTabType): void {
 }
 
 export function setPermissionMode(mode: PermissionMode): void {
-  getSettingsUiState().setPermissionMode(mode);
+  usePermissionStore.getState().setPermissionMode(mode);
 }
 
 export function setPlanModeEnabled(enabled: boolean): void {
-  getSettingsUiState().setPlanModeEnabled(enabled);
+  usePermissionStore.getState().setPlanModeEnabled(enabled);
 }
 
 export function setPlanApproved(approved: boolean): void {
-  getSettingsUiState().setPlanApproved(approved);
+  usePermissionStore.getState().setPlanApproved(approved);
 }
 
 export function addCommandPermission(cmd: string): void {
-  getSettingsUiState().addCommandPermission(cmd);
+  usePermissionStore.getState().addCommandPermission(cmd);
 }
 
 export function removeCommandPermission(cmd: string): void {
-  getSettingsUiState().removeCommandPermission(cmd);
+  usePermissionStore.getState().removeCommandPermission(cmd);
 }
 
 export function setCommandPermissions(list: string[]): void {
-  getSettingsUiState().setCommandPermissions(list);
+  usePermissionStore.getState().setCommandPermissions(list);
 }

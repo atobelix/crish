@@ -2,16 +2,18 @@
 //!
 //! 执行链路（对齐 05 §5.5 tools::shell 与 Tauri 壳 workbench_run_shell 语义）：
 //! 1. 命令门禁：conex-sandbox CommandGatekeeper 检查，Blocked → tool.command_blocked，
-//!    RequiresApproval → tool.requires_approval（上层据此走审批流）
+//!    RequiresApproval → 经 ctx.ask 审批通道发起真实审批（R4 T10；未接线时
+//!    返回 tool.requires_approval，执行器分类为 ApprovalRequired 透传审批状态）
 //! 2. Windows 包装：系统 PowerShell + -EncodedCommand（UTF-16LE → base64），
 //!    命令体再经 UTF-8 → base64 包进 scriptblock，避免引号/管道被外壳二次解析
 //! 3. 执行：tokio 子进程，stdout/stderr 管道收集，超时树杀，输出按上限截断
 
+use crate::context::{AskDecision, ToolContext};
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::tools::{display_path, optional_string, optional_u64, require_string, resolve_workspace_path};
 use async_trait::async_trait;
 use conex_sandbox::gatekeeper::{CommandGatekeeper, GatekeeperResult};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Stdio;
 use tokio::process::Command as TokioCommand;
 use tokio::time::{timeout, Duration};
@@ -20,6 +22,8 @@ use tokio::time::{timeout, Duration};
 pub(crate) const TOOL_REQUIRES_APPROVAL: &str = "tool.requires_approval";
 /// 红线命令：直接拒绝
 pub(crate) const TOOL_COMMAND_BLOCKED: &str = "tool.command_blocked";
+/// 用户明确拒绝（ask 通道 Denied → Denied 语义）
+pub(crate) const TOOL_USER_DENIED: &str = "tool.user_denied";
 
 /// 命令长度上限（对齐 workbench_run_shell）
 const MAX_COMMAND_LEN: usize = 32_000;
@@ -29,17 +33,12 @@ const MAX_TIMEOUT_MS: u64 = 600_000;
 /// 命令执行工具
 pub(crate) struct ShellCommandTool {
     def: ToolDefinition,
-    workspace_root: PathBuf,
     default_timeout_ms: u64,
     max_output_bytes: usize,
 }
 
 impl ShellCommandTool {
-    pub(crate) fn new(
-        workspace_root: PathBuf,
-        default_timeout_ms: u64,
-        max_output_bytes: usize,
-    ) -> Self {
+    pub(crate) fn new(default_timeout_ms: u64, max_output_bytes: usize) -> Self {
         Self {
             def: ToolDefinition {
                 name: "shell_command".to_string(),
@@ -58,7 +57,6 @@ impl ShellCommandTool {
                 dangerous: true,
                 fatal_on_error: false,
             },
-            workspace_root,
             default_timeout_ms,
             max_output_bytes,
         }
@@ -75,7 +73,11 @@ impl Tool for ShellCommandTool {
         &self.def
     }
 
-    async fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+    async fn execute(
+        &self,
+        ctx: &ToolContext,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, ToolError> {
         let command = require_string(&args, "command")?.trim().to_string();
         if command.is_empty() {
             return Err(ToolError::invalid_input(
@@ -85,14 +87,15 @@ impl Tool for ShellCommandTool {
         if command.len() > MAX_COMMAND_LEN {
             return Err(ToolError::invalid_input("command too long"));
         }
+        let workspace_root = &ctx.workspace_root;
         let cwd = resolve_workspace_path(
-            &self.workspace_root,
+            workspace_root,
             &optional_string(&args, "cwd").unwrap_or_else(|| ".".to_string()),
         )?;
         if !cwd.is_dir() {
             return Err(ToolError::invalid_input(format!(
                 "cwd is not a directory: {}",
-                display_path(&self.workspace_root, &cwd)
+                display_path(workspace_root, &cwd)
             )));
         }
         let timeout_ms = optional_u64(&args, "timeoutMs")
@@ -105,7 +108,7 @@ impl Tool for ShellCommandTool {
         // 上下文字符串统一为门禁比较格式：剥离 \\?\ 前缀、反斜杠转斜杠、Windows 小写
         let gatekeeper = CommandGatekeeper::new();
         let cwd_str = gate_path(&cwd);
-        let root_str = gate_path(&self.workspace_root);
+        let root_str = gate_path(workspace_root);
         let verdict = gatekeeper.check_command_with_context(&command, &[], &cwd_str, &root_str);
         if verdict == GatekeeperResult::Blocked || gatekeeper.patterns().is_match(&command) {
             return Err(ToolError::new(
@@ -116,10 +119,29 @@ impl Tool for ShellCommandTool {
             ));
         }
         if verdict == GatekeeperResult::RequiresApproval {
-            return Err(ToolError::new(
-                TOOL_REQUIRES_APPROVAL,
-                format!("Command requires approval: {command}"),
-            ));
+            // R4 T10：经 ctx.ask 审批通道发起真实审批——approval-requested
+            // 事件由通道侧记录并广播，等待用户裁决（abort 可取消）；
+            // 用户同意后继续执行（等价重试该命令），拒绝返回明确拒绝结果。
+            // 未接线（ask: None）时返回 tool.requires_approval，执行器
+            // 分类为 ApprovalRequired 透传审批状态（不再折叠 SoftDeny）。
+            match &ctx.ask {
+                Some(ask) => match ask.ask(&self.def.name, &args).await {
+                    Ok(AskDecision::Allowed) => {}
+                    Ok(AskDecision::Denied { reason }) => {
+                        return Err(ToolError::new(
+                            TOOL_USER_DENIED,
+                            format!("user denied: {reason}"),
+                        ));
+                    }
+                    Err(err) => return Err(err),
+                },
+                None => {
+                    return Err(ToolError::new(
+                        TOOL_REQUIRES_APPROVAL,
+                        format!("Command requires approval: {command}"),
+                    ));
+                }
+            }
         }
 
         run_command(&command, &cwd, timeout_ms, max_output_bytes).await
@@ -435,23 +457,121 @@ fn terminate_process_tree(pid: u32) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::{create_mock_tool_context, AskChannel, ToolContext};
     use conex_test_utils::TempWorkspace;
     use serde_json::json;
+    use std::sync::Arc;
 
-    fn tool(ws: &TempWorkspace) -> ShellCommandTool {
-        ShellCommandTool::new(ws.path().clone(), 30_000, 200_000)
+    fn tool() -> ShellCommandTool {
+        ShellCommandTool::new(30_000, 200_000)
+    }
+
+    /// 测试用会话上下文：workspace_root 指向临时工作区
+    fn ctx(ws: &TempWorkspace) -> ToolContext {
+        ToolContext {
+            workspace_root: ws.path().clone(),
+            ..create_mock_tool_context()
+        }
+    }
+
+    /// 测试用审批通道：记录审批请求（工具名）并返回预设裁决
+    #[derive(Clone, Debug)]
+    struct MockAskChannel {
+        decision: AskDecision,
+        requested: Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    #[async_trait]
+    impl AskChannel for MockAskChannel {
+        async fn ask(
+            &self,
+            tool_name: &str,
+            _args: &serde_json::Value,
+        ) -> Result<AskDecision, ToolError> {
+            self.requested
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(tool_name.to_string());
+            Ok(self.decision.clone())
+        }
+    }
+
+    /// T10：带 dangerous 标记的 shell 命令触发审批（拒绝路径）——approval
+    /// 事件产生（通道被问询）且命令未直接执行（返回 Denied 拒绝结果）
+    #[tokio::test]
+    async fn dangerous_command_asks_then_denied_never_executes() {
+        let ws = TempWorkspace::new("shell_ask_deny");
+        let t = tool();
+        let requested = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let ask = Arc::new(MockAskChannel {
+            decision: AskDecision::Denied {
+                reason: "user says no".into(),
+            },
+            requested: Arc::clone(&requested),
+        });
+        let ctx = ToolContext {
+            ask: Some(ask),
+            ..ctx(&ws)
+        };
+        let err = t
+            .execute(
+                &ctx,
+                json!({ "command": "echo sudo-hi", "timeoutMs": 5000 }),
+            )
+            .await
+            .unwrap_err();
+        // 审批事件产生：通道被问询一次
+        assert_eq!(
+            *requested.lock().unwrap_or_else(|e| e.into_inner()),
+            vec!["shell_command".to_string()]
+        );
+        // 命令未直接执行：返回明确拒绝结果（Denied 语义）
+        assert_eq!(err.code(), TOOL_USER_DENIED);
+        assert!(err.to_string().contains("user says no"));
+    }
+
+    /// T10：带 dangerous 标记的 shell 命令触发审批（同意路径）——approval
+    /// 事件产生，用户同意后命令真正执行（越过门禁）
+    #[tokio::test]
+    async fn dangerous_command_asks_then_allowed_executes() {
+        let ws = TempWorkspace::new("shell_ask_allow");
+        let t = tool();
+        let requested = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let ask = Arc::new(MockAskChannel {
+            decision: AskDecision::Allowed,
+            requested: Arc::clone(&requested),
+        });
+        let ctx = ToolContext {
+            ask: Some(ask),
+            ..ctx(&ws)
+        };
+        // 越界命令（gatekeeper RequiresApproval）：经审批放行后真正执行
+        let out = t
+            .execute(
+                &ctx,
+                json!({ "command": "echo sudo-hi", "timeoutMs": 5000 }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            *requested.lock().unwrap_or_else(|e| e.into_inner()),
+            vec!["shell_command".to_string()]
+        );
+        // 命令已执行（不再被审批拦截）：正常输出且退出码 0
+        assert_eq!(out["exitCode"], 0);
+        assert!(out["text"].as_str().unwrap().contains("sudo-hi"));
     }
 
     #[tokio::test]
     async fn shell_echo_succeeds() {
         let ws = TempWorkspace::new("shell_echo");
-        let t = tool(&ws);
+        let t = tool();
         let command = if cfg!(windows) {
             "Write-Output hello-shell"
         } else {
             "echo hello-shell"
         };
-        let out = t.execute(json!({ "command": command })).await.unwrap();
+        let out = t.execute(&ctx(&ws), json!({ "command": command })).await.unwrap();
         assert_eq!(out["timedOut"], false);
         assert_eq!(out["exitCode"], 0);
         let stdout = out["stdout"].as_str().unwrap();
@@ -462,9 +582,9 @@ mod tests {
     #[tokio::test]
     async fn shell_blocked_command_rejected() {
         let ws = TempWorkspace::new("shell_blocked");
-        let t = tool(&ws);
+        let t = tool();
         let err = t
-            .execute(json!({ "command": "rm -rf /" }))
+            .execute(&ctx(&ws), json!({ "command": "rm -rf /" }))
             .await
             .unwrap_err();
         assert_eq!(err.code(), TOOL_COMMAND_BLOCKED);
@@ -473,9 +593,9 @@ mod tests {
     #[tokio::test]
     async fn shell_approval_command_requires_approval() {
         let ws = TempWorkspace::new("shell_approval");
-        let t = tool(&ws);
+        let t = tool();
         let err = t
-            .execute(json!({ "command": "git push --force origin main" }))
+            .execute(&ctx(&ws), json!({ "command": "git push --force origin main" }))
             .await
             .unwrap_err();
         assert_eq!(err.code(), TOOL_REQUIRES_APPROVAL);
@@ -484,14 +604,14 @@ mod tests {
     #[tokio::test]
     async fn shell_timeout_kills_and_marks() {
         let ws = TempWorkspace::new("shell_timeout");
-        let t = ShellCommandTool::new(ws.path().clone(), 30_000, 200_000);
+        let t = ShellCommandTool::new(30_000, 200_000);
         let command = if cfg!(windows) {
             "Start-Sleep -Seconds 10"
         } else {
             "sleep 10"
         };
         let out = t
-            .execute(json!({ "command": command, "timeoutMs": 2000 }))
+            .execute(&ctx(&ws), json!({ "command": command, "timeoutMs": 2000 }))
             .await
             .unwrap();
         assert_eq!(out["timedOut"], true);
@@ -501,15 +621,15 @@ mod tests {
     #[tokio::test]
     async fn shell_cwd_must_be_valid() {
         let ws = TempWorkspace::new("shell_cwd");
-        let t = tool(&ws);
+        let t = tool();
         let err = t
-            .execute(json!({ "command": "echo hi", "cwd": "no/such/dir" }))
+            .execute(&ctx(&ws), json!({ "command": "echo hi", "cwd": "no/such/dir" }))
             .await
             .unwrap_err();
         assert!(err.to_string().contains("not a directory"));
         // 越界 cwd 拒绝
         let err = t
-            .execute(json!({ "command": "echo hi", "cwd": "../outside" }))
+            .execute(&ctx(&ws), json!({ "command": "echo hi", "cwd": "../outside" }))
             .await
             .unwrap_err();
         assert_eq!(err.code(), "tool.path_escape");
@@ -518,8 +638,8 @@ mod tests {
     #[tokio::test]
     async fn shell_exit_code_captured() {
         let ws = TempWorkspace::new("shell_exit");
-        let t = tool(&ws);
-        let out = t.execute(json!({ "command": "exit 42" })).await.unwrap();
+        let t = tool();
+        let out = t.execute(&ctx(&ws), json!({ "command": "exit 42" })).await.unwrap();
         assert_eq!(out["exitCode"], 42);
         assert!(out["text"].as_str().unwrap().contains("(exit 42)"));
     }

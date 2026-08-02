@@ -1,11 +1,14 @@
-//! 域事件类型（对齐 TS 端 shared-types/src/events.ts 的 AgentEvent）
+//! 域事件契约（Rust enum 为双端唯一事实源）
 //!
-//! AgentEvent 是 24 种域事件的 serde tagged enum（顶层 `type`），
-//! 全部字段 serde camelCase。字段结构以 03-frontend-contract.md §1.1-1.6
-//! 清单与 §5.1 硬依赖表为准（唯一真源：packages/shared-types/src/events.ts）。
+//! [AgentEvent] 是 24 种域事件的 serde tagged enum（顶层 `type`），全部字段
+//! serde camelCase，字段结构以 03-frontend-contract.md §1.1-1.6 清单与 §5.1
+//! 硬依赖表为准。机器可读导出见 contracts/engine-events.json（事件注册表），
+//! 前端 TS 类型与解析器由 scripts/generate-engine-bindings.mjs 生成，落点
+//! packages/shared-types/src/generated/engine/**；注册表与 enum 的一致性由
+//! tests/registry_drift.rs 锁定——新增/变更事件必须同步注册表与生成产物。
 //!
-//! 顶层 `runId` / `sequence` / `schemaVersion` 不在 TS 事件类型内，由 emit 层
-//! 统一注入（03 §5.1-2/3、§5.3-2；schemaVersion 见 PE-03 T03.10 / PE-12 T12.5，
+//! 顶层 `runId` / `sequence` / `schemaVersion` 不在事件体内，由 emit 层统一
+//! 注入（03 §5.1-2/3、§5.3-2；schemaVersion 见 PE-03 T03.10 / PE-12 T12.5，
 //! 演进登记在 docs/rust-rewrite/33-event-schema-changelog.md）：见 [AgentEventEnvelope]。
 
 use serde::{Deserialize, Serialize};
@@ -31,7 +34,7 @@ pub enum RunTerminalStatus {
     Failed,
 }
 
-/// 审批放行行为（对齐 PermissionBehavior）
+/// 审批放行行为（wire 值为 allow/deny/ask，lowercase）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PermissionBehavior {
@@ -43,7 +46,7 @@ pub enum PermissionBehavior {
     Ask,
 }
 
-/// 审批决策（对齐 PermissionDecision）
+/// 审批决策（behavior 携带放行行为；reason/metadata 可选）
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PermissionDecision {
@@ -54,7 +57,7 @@ pub struct PermissionDecision {
     pub metadata: Option<serde_json::Value>,
 }
 
-/// 工具元数据（对齐 ToolMetadata，审批请求附带）
+/// 工具元数据（审批请求附带）
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolMetadata {
@@ -68,7 +71,7 @@ pub struct ToolMetadata {
     pub concurrency: Option<String>,
 }
 
-/// 权限请求（对齐 PermissionRequest）
+/// 权限请求（approval-requested.request 载荷）
 ///
 /// 前端硬依赖（03 §5.1-9）：`request.toolCallId` 与 `request.toolName`
 /// 必填，`parameters` 为参数包（前端兼容 parameters/input 别名）。
@@ -101,11 +104,12 @@ pub enum ApprovalDecision {
     Expired,
 }
 
-/// 24 种域事件（对齐 AgentEvent，tagged enum）
+/// 24 种域事件（tagged enum，双端契约唯一事实源）
 ///
-/// 顶层 `type` 为事件名（kebab-case），事件字段全部 camelCase。
+/// 顶层 `type` 为事件名（kebab-case），事件字段全部 camelCase；
+/// 字段清单与类型映射见 contracts/engine-events.json（事件注册表），
+/// 前端 TS 由生成脚本产出（见模块文档）。
 ///
-/// 注意：事件体字段与 TS 端结构一一对应（schema 唯一真源，03 §5.3-1），
 /// 跨进程序列化是主用途，事件按值短暂传递，变体间内存差异非热点，
 /// 故不装箱（装箱会破坏调用方 API 形态），显式允许 large_enum_variant。
 /// 例外：message-start / message-end 的正文载荷经 [Arc] 承载（PE-09 T09.3.2，
@@ -326,39 +330,57 @@ pub enum AgentEvent {
     },
 }
 
-impl AgentEvent {
-    /// 事件类型名（顶层 `type` 值，kebab-case）
-    ///
-    /// 与 serde tag（[`AgentEventEnvelope`] 序列化的顶层 `type` 字段）同源，
-    /// 供落库等只取类型名的路径复用，避免为取类型名构造信封克隆整个事件。
-    pub fn type_name(&self) -> &'static str {
-        match self {
-            AgentEvent::AgentStart { .. } => "agent-start",
-            AgentEvent::AgentEnd { .. } => "agent-end",
-            AgentEvent::TurnStart { .. } => "turn-start",
-            AgentEvent::TurnEnd { .. } => "turn-end",
-            AgentEvent::MessageStart { .. } => "message-start",
-            AgentEvent::MessageDelta { .. } => "message-delta",
-            AgentEvent::MessageEnd { .. } => "message-end",
-            AgentEvent::ToolStart { .. } => "tool-start",
-            AgentEvent::ToolUpdate { .. } => "tool-update",
-            AgentEvent::ToolEnd { .. } => "tool-end",
-            AgentEvent::ToolBatchStart { .. } => "tool-batch-start",
-            AgentEvent::ToolBatchEnd { .. } => "tool-batch-end",
-            AgentEvent::ToolInputRepaired { .. } => "tool-input-repaired",
-            AgentEvent::ContextCompressionStart { .. } => "context-compression-start",
-            AgentEvent::ContextCompressionEnd { .. } => "context-compression-end",
-            AgentEvent::ProviderDiagnostic { .. } => "provider-diagnostic",
-            AgentEvent::RuntimeError { .. } => "runtime-error",
-            AgentEvent::RuntimeSteering { .. } => "runtime-steering",
-            AgentEvent::RuntimeInterventionRequired { .. } => "runtime-intervention-required",
-            AgentEvent::ApprovalRequested { .. } => "approval-requested",
-            AgentEvent::ApprovalResolved { .. } => "approval-resolved",
-            AgentEvent::CheckpointCreated { .. } => "checkpoint-created",
-            AgentEvent::CheckpointRestored { .. } => "checkpoint-restored",
-            AgentEvent::RunTerminal { .. } => "run-terminal",
+/// 事件类型名宏：由同一份变体名 → wire 名清单展开出
+/// [AgentEvent::type_name] 与 [AgentEvent::ALL_TYPE_NAMES] 两处，
+/// 保证「取类型名」与「全量清单」永不漂移（新增事件变体在此登记即可，
+/// 编译期要求补 arm；并同步 contracts/engine-events.json 注册表，
+/// 由 tests/registry_drift.rs 锁定）。
+macro_rules! engine_event_type_names {
+    ($($variant:ident => $name:literal),+ $(,)?) => {
+        impl AgentEvent {
+            /// 事件类型名（顶层 `type` 值，kebab-case）
+            ///
+            /// 与 serde tag（[`AgentEventEnvelope`] 序列化的顶层 `type` 字段）同源，
+            /// 供落库等只取类型名的路径复用，避免为取类型名构造信封克隆整个事件。
+            pub fn type_name(&self) -> &'static str {
+                match self {
+                    $(AgentEvent::$variant { .. } => $name,)+
+                }
+            }
         }
-    }
+
+        impl AgentEvent {
+            /// 全部事件类型名（enum 声明顺序，与事件注册表编号 1-24 一一对应）
+            pub const ALL_TYPE_NAMES: &'static [&'static str] = &[$($name),+];
+        }
+    };
+}
+
+engine_event_type_names! {
+    AgentStart => "agent-start",
+    AgentEnd => "agent-end",
+    TurnStart => "turn-start",
+    TurnEnd => "turn-end",
+    MessageStart => "message-start",
+    MessageDelta => "message-delta",
+    MessageEnd => "message-end",
+    ToolStart => "tool-start",
+    ToolUpdate => "tool-update",
+    ToolEnd => "tool-end",
+    ToolBatchStart => "tool-batch-start",
+    ToolBatchEnd => "tool-batch-end",
+    ToolInputRepaired => "tool-input-repaired",
+    ContextCompressionStart => "context-compression-start",
+    ContextCompressionEnd => "context-compression-end",
+    ProviderDiagnostic => "provider-diagnostic",
+    RuntimeError => "runtime-error",
+    RuntimeSteering => "runtime-steering",
+    RuntimeInterventionRequired => "runtime-intervention-required",
+    ApprovalRequested => "approval-requested",
+    ApprovalResolved => "approval-resolved",
+    CheckpointCreated => "checkpoint-created",
+    CheckpointRestored => "checkpoint-restored",
+    RunTerminal => "run-terminal",
 }
 
 /// 事件信封（emit 层统一注入 runId/sequence/schemaVersion，03 §5.3-2/6）

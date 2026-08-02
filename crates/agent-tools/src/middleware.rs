@@ -206,6 +206,20 @@ mod tests {
         chain: &[Arc<dyn ToolMiddleware>],
         ctx: &ToolExecutionContext,
     ) -> Result<Value, ToolError> {
+        // R3 T9：中间件上下文 → 会话级 ToolContext（session_id / cwd 为
+        // 可选字段，缺失时回退空串与当前目录）
+        let tool_ctx = crate::context::ToolContext {
+            session_id: ctx.session_id.clone().unwrap_or_default(),
+            abort_token: crate::context::AbortToken::new(),
+            ask: None,
+            workspace_root: ctx
+                .cwd
+                .clone()
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| {
+                    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+                }),
+        };
         let mut current = input;
         for m in chain {
             match m.before_execute(tool, current.clone(), ctx).await? {
@@ -222,7 +236,7 @@ mod tests {
                 }
             }
         }
-        let output = match tool.execute(current.clone()).await {
+        let output = match tool.execute(&tool_ctx, current.clone()).await {
             Ok(v) => v,
             Err(e) => {
                 for m in chain {

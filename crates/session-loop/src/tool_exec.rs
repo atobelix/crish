@@ -6,23 +6,32 @@
 //! - 超时（ToolBatchOptions.timeout）→ tool.timeout；
 //! - abort 置位：已就绪结果返回，未执行项标记 cancelled；
 //! - 失败策略：cancel-siblings（致命失败后同批未执行项 cancelled）/ continue-drain；
-//! - fatalOnError 判定排除 softDeny/timedOut/cancelled/approval_expired/user_denied；
+//! - fatalOnError 判定排除 softDeny/timedOut/cancelled/approval_expired/
+//!   user_denied/approval_required；
 //! - 审批：approval-requested 事件先于挂起等待发出（防死锁）；
 //! - 审批并行（T09.6/P8）：审批模式并行组不再退化串行——审批逐个 await
 //!   （执行模型 A，UX 与事件顺序不变），通过后执行阶段 join_all 并行；
+//! - 权限判定（R4 T10）：permission_mode 显式设置时按 dangerous 标记三态
+//!   判定（ask 问询 / plan 拒绝写类 / full-access 放行）；requires_approval
+//!   错误分类为 ApprovalRequired（不再折叠 SoftDeny），走真实审批——用户
+//!   同意后重试执行，拒绝返回明确拒绝结果；ctx.ask 接线 ApprovalChannel；
 //! - 单工具执行复用 agent-tools 的 execute_with_output_policy（幂等+输出预算）。
 //!
 //! 语义来源：01-session-loop-semantics.md §2.8 / §五.8；05-test-mapping.md §2.3
 
+use crate::approval::ApprovalChannel;
 use crate::tool_events::{
     ApprovalDecision, ApprovalGate, ClassifiedToolResult, FailStrategy, ToolBatchOptions,
     ToolErrorKind, ToolEvent,
 };
+use agent_tools::context::{AbortToken, AskCallback, NoopAskChannel, ToolContext};
 use agent_tools::definition::ToolError;
 use agent_tools::executor::{execute_with_output_policy, ExecutorContext, ToolExecutionPolicy};
 use agent_tools::idempotency::ToolIdempotencyGuard;
+use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
 use agent_tools::registry::ToolRegistry;
 use conex_types::tool::{ToolBatchCall, ToolConcurrency};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 /// 批处理执行上下文
@@ -34,6 +43,9 @@ pub struct ToolExecCtx {
     pub session_id: String,
     /// 工作目录
     pub cwd: Option<String>,
+    /// 工作区根目录（R3 T9：会话级 ToolContext.workspace_root 来源；
+    /// None 时回退 cwd / 当前目录）
+    pub workspace_root: Option<PathBuf>,
 }
 
 /// 批处理产出：结果 + 事件序列 + 致命错误
@@ -132,7 +144,7 @@ impl ToolExecutor {
             if group.len() == 1 {
                 let idx = group[0];
                 let r = self
-                    .execute_one(calls, idx, ctx, approval.as_deref(), options, abort, &mut events, &mut fatal)
+                    .execute_one(calls, idx, ctx, approval.clone(), options, abort, &mut events, &mut fatal)
                     .await;
                 results[idx] = Some(r);
                 if fatal.is_some() && options.fail_strategy == FailStrategy::CancelSiblings {
@@ -160,73 +172,108 @@ impl ToolExecutor {
                 // 审批逐个发起：approval-requested 事件全组先发（防死锁
                 // 硬契约，01 §五.8），再逐个等待决策；abort 中断后不再
                 // 发起剩余审批（与顺序路径逐项 abort 前置检查一致）。
-                let mut approvals: Vec<Option<ApprovalDecision>> = Vec::new();
+                // R4 T10：permission_mode 显式设置时仅「需审批」项发起
+                //（dangerous → ask 问询 / plan 拒绝 / full-access 放行）；
+                // 未设置时沿用既有语义（approval_enabled → 全批审批）。
+                let mut approvals: Vec<Option<ApprovalDecision>> = vec![None; group.len()];
                 let approval_active = options.approval_enabled && approval.is_some();
-                if options.approval_enabled {
+                if approval_active {
                     if let Some(gate) = approval.as_deref() {
-                        for &idx in &group {
+                        let mut needs: Vec<usize> = Vec::new();
+                        for (pos, &idx) in group.iter().enumerate() {
                             let call = &calls[idx];
-                            events.push(ToolEvent::ApprovalRequested {
-                                call_id: call.id.clone(),
-                                tool_name: call.tool_name.clone(),
-                                args: call.input.clone(),
-                            });
+                            if self.call_verdict(call, options) == PermissionVerdict::NeedsApproval
+                            {
+                                needs.push(pos);
+                                events.push(ToolEvent::ApprovalRequested {
+                                    call_id: call.id.clone(),
+                                    tool_name: call.tool_name.clone(),
+                                    args: call.input.clone(),
+                                });
+                            }
                         }
-                        for &idx in &group {
+                        for &pos in &needs {
                             if let Some(sig) = abort {
                                 if sig.is_aborted() {
                                     break;
                                 }
                             }
+                            let idx = group[pos];
                             let call = &calls[idx];
                             let decision = gate
                                 .request_approval(&call.id, &call.tool_name, &call.input)
                                 .await;
-                            approvals.push(Some(decision));
+                            approvals[pos] = Some(decision);
                         }
                     }
                 }
 
                 // 执行阶段：已批准项 join_all 并行执行（拒绝/过期/abort
-                // 中断项不执行，直接构造结果）
+                // 中断/权限拒绝项不执行，直接构造结果）
                 let exec = self.clone_executor();
                 let ctx_own = ctx.clone();
                 let options_own = options.clone();
+                let approval_own = approval.clone();
                 let mut futures = Vec::new();
-                let mut executed: Vec<Option<ClassifiedToolResult>> = vec![None; group.len()];
+                let mut executed: Vec<Option<(ClassifiedToolResult, Vec<ToolEvent>)>> =
+                    vec![None; group.len()];
                 for (pos, &idx) in group.iter().enumerate() {
+                    let call = &calls[idx];
+                    let verdict = self.call_verdict(call, options);
                     let decided = approvals.get(pos).and_then(Option::as_ref);
                     // 审批未启用/未注入门 → 全部执行；有决策 → 仅通过执行；
-                    // 无决策（abort 中断，未发起审批）→ 按取消收场
-                    let should_execute = if approval_active {
-                        matches!(decided, Some(ApprovalDecision::Approved))
-                    } else {
-                        true
+                    // 无决策（abort 中断，未发起审批）→ 按取消收场；
+                    // 权限拒绝（plan 模式写类）→ 直接拒绝结果；
+                    // 显式模式无门（ask 模式缺审批基础设施）→ 透传需审批状态
+                    let should_execute = match (verdict, approval_active) {
+                        (PermissionVerdict::Deny, _) => false,
+                        (PermissionVerdict::NeedsApproval, true) => {
+                            matches!(decided, Some(ApprovalDecision::Approved))
+                        }
+                        (PermissionVerdict::NeedsApproval, false) => {
+                            options.permission_mode.is_none()
+                        }
+                        _ => true,
                     };
                     if !should_execute {
                         let call = &calls[idx];
-                        let r = match decided {
-                            Some(ApprovalDecision::Denied { reason }) => ClassifiedToolResult::error(
-                                &call.id,
-                                &call.tool_name,
-                                ToolErrorKind::UserDenied,
-                                format!("user denied: {reason}"),
-                            ),
-                            Some(ApprovalDecision::Expired) => ClassifiedToolResult::error(
-                                &call.id,
-                                &call.tool_name,
-                                ToolErrorKind::ApprovalExpired,
-                                "approval expired",
-                            ),
-                            // 无决策 = abort 中断，与顺序路径 abort 收场一致
-                            _ => ClassifiedToolResult::error(
-                                &call.id,
-                                &call.tool_name,
-                                ToolErrorKind::Cancelled,
-                                "aborted",
-                            ),
+                        let r = match verdict {
+                            PermissionVerdict::Deny => denied_result(call, options),
+                            PermissionVerdict::NeedsApproval
+                                if !approval_active && options.permission_mode.is_some() =>
+                            {
+                                ClassifiedToolResult::error(
+                                    &call.id,
+                                    &call.tool_name,
+                                    ToolErrorKind::ApprovalRequired,
+                                    format!("{} requires approval", call.tool_name),
+                                )
+                            }
+                            _ => match decided {
+                                Some(ApprovalDecision::Denied { reason }) => {
+                                    ClassifiedToolResult::error(
+                                        &call.id,
+                                        &call.tool_name,
+                                        ToolErrorKind::UserDenied,
+                                        format!("user denied: {reason}"),
+                                    )
+                                }
+                                Some(ApprovalDecision::Expired) => ClassifiedToolResult::error(
+                                    &call.id,
+                                    &call.tool_name,
+                                    ToolErrorKind::ApprovalExpired,
+                                    "approval expired",
+                                ),
+                                // 无决策 = abort 中断，与顺序路径 abort 收场一致
+                                _ => ClassifiedToolResult::error(
+                                    &call.id,
+                                    &call.tool_name,
+                                    ToolErrorKind::Cancelled,
+                                    "aborted",
+                                ),
+                            },
                         };
-                        executed[pos] = Some(r);
+                        executed[pos] = Some((r, Vec::new()));
                         continue;
                     }
                     let call = calls[idx].clone();
@@ -234,28 +281,36 @@ impl ToolExecutor {
                     let c = ctx_own.clone();
                     let o = options_own.clone();
                     let ab = abort.cloned();
+                    let g = approval_own.clone();
                     futures.push(async move {
-                        let r = e.execute_single(&call, &c, &o, ab.as_ref()).await;
-                        (pos, r)
+                        let (r, extra) = e
+                            .execute_single_with_retry(&call, &c, &o, ab.as_ref(), g)
+                            .await;
+                        (pos, r, extra)
                     });
                 }
                 let finished = futures::future::join_all(futures).await;
-                for (pos, r) in finished {
-                    executed[pos] = Some(r);
+                for (pos, r, extra) in finished {
+                    executed[pos] = Some((r, extra));
                 }
 
-                // 按组序收 tool-end（每项 tool-start → approval-requested → tool-end 顺序保持）
+                // 按组序收 tool-end（每项 tool-start → approval-requested →
+                // tool-end 顺序保持；审批附加事件先于本项 tool-end 落位）
                 for (pos, &idx) in group.iter().enumerate() {
                     let call = &calls[idx];
-                    let r = executed[pos].take().unwrap_or_else(|| {
+                    let (r, extra) = executed[pos].take().unwrap_or_else(|| {
                         // 防御性兜底：正常路径不应缺失（与批尾兜底语义一致）
-                        ClassifiedToolResult::error(
-                            &call.id,
-                            &call.tool_name,
-                            ToolErrorKind::Cancelled,
-                            "cancelled",
+                        (
+                            ClassifiedToolResult::error(
+                                &call.id,
+                                &call.tool_name,
+                                ToolErrorKind::Cancelled,
+                                "cancelled",
+                            ),
+                            Vec::new(),
                         )
                     });
+                    events.extend(extra);
                     events.push(ToolEvent::ToolEnd {
                         call_id: call.id.clone(),
                         tool_name: call.tool_name.clone(),
@@ -322,7 +377,7 @@ impl ToolExecutor {
         calls: &[ToolBatchCall],
         idx: usize,
         ctx: &ToolExecCtx,
-        approval: Option<&dyn ApprovalGate>,
+        approval: Option<Arc<dyn ApprovalGate>>,
         options: &ToolBatchOptions,
         abort: Option<&crate::safe_point::AbortSignal>,
         events: &mut Vec<ToolEvent>,
@@ -359,55 +414,74 @@ impl ToolExecutor {
             }
         }
 
-        // 审批：approval-requested 事件先发出，再挂起等待（防死锁）
-        if options.approval_enabled {
-            if let Some(gate) = approval {
-                events.push(ToolEvent::ApprovalRequested {
-                    call_id: call.id.clone(),
-                    tool_name: call.tool_name.clone(),
-                    args: call.input.clone(),
-                });
-                let decision = gate
-                    .request_approval(&call.id, &call.tool_name, &call.input)
-                    .await;
-                let r = match decision {
-                    ApprovalDecision::Approved => {
-                        self.execute_single(call, ctx, options, abort).await
-                    }
-                    ApprovalDecision::Denied { reason } => ClassifiedToolResult::error(
-                        &call.id,
-                        &call.tool_name,
-                        ToolErrorKind::UserDenied,
-                        format!("user denied: {reason}"),
-                    ),
-                    ApprovalDecision::Expired => ClassifiedToolResult::error(
-                        &call.id,
-                        &call.tool_name,
-                        ToolErrorKind::ApprovalExpired,
-                        "approval expired",
-                    ),
-                };
-                if self.result_is_fatal(call, &r) {
-                    *fatal = Some(
-                        r.error_message
-                            .clone()
-                            .unwrap_or_else(|| "tool failed".into()),
-                    );
+        // R4 T10：权限判定 → 放行 / 拒绝 / 需审批。permission_mode 显式
+        // 设置时 dangerous 标记进入判定（ask 问询 / plan 拒绝 / full-access
+        // 放行）；未设置时沿用既有语义（approval 开启 → 全批审批）。
+        let verdict = self.call_verdict(call, options);
+        let r = match (&approval, options.approval_enabled) {
+            (Some(gate), true) => match verdict {
+                PermissionVerdict::Allow => {
+                    let (r, extra) = self
+                        .execute_single_with_retry(call, ctx, options, abort, Some(Arc::clone(gate)))
+                        .await;
+                    events.extend(extra);
+                    r
                 }
-                events.push(ToolEvent::ToolEnd {
-                    call_id: call.id.clone(),
-                    tool_name: call.tool_name.clone(),
-                    is_error: r.error_kind.is_some(),
-                    duration_ms: r.duration_ms,
-                    output: r.output.clone(),
-                    error_code: r.error_kind.map(|k| k.error_code().to_string()),
-                    error_message: r.error_message.clone(),
-                });
-                return r;
-            }
-        }
-
-        let r = self.execute_single(call, ctx, options, abort).await;
+                PermissionVerdict::Deny => denied_result(call, options),
+                PermissionVerdict::NeedsApproval => {
+                    // 审批：approval-requested 事件先发出，再挂起等待（防死锁）
+                    events.push(ToolEvent::ApprovalRequested {
+                        call_id: call.id.clone(),
+                        tool_name: call.tool_name.clone(),
+                        args: call.input.clone(),
+                    });
+                    let decision = gate
+                        .request_approval(&call.id, &call.tool_name, &call.input)
+                        .await;
+                    match decision {
+                        ApprovalDecision::Approved => {
+                            let (r, extra) = self
+                                .execute_single_with_retry(call, ctx, options, abort, Some(Arc::clone(gate)))
+                                .await;
+                            events.extend(extra);
+                            r
+                        }
+                        ApprovalDecision::Denied { reason } => ClassifiedToolResult::error(
+                            &call.id,
+                            &call.tool_name,
+                            ToolErrorKind::UserDenied,
+                            format!("user denied: {reason}"),
+                        ),
+                        ApprovalDecision::Expired => ClassifiedToolResult::error(
+                            &call.id,
+                            &call.tool_name,
+                            ToolErrorKind::ApprovalExpired,
+                            "approval expired",
+                        ),
+                    }
+                }
+            },
+            // 审批未启用 / 无门：plan 模式写类仍拒绝；显式 ask 模式缺审批
+            // 基础设施时危险项透传需审批状态（不再 SoftDeny 折叠）
+            _ => match verdict {
+                PermissionVerdict::Deny => denied_result(call, options),
+                PermissionVerdict::NeedsApproval if options.permission_mode.is_some() => {
+                    ClassifiedToolResult::error(
+                        &call.id,
+                        &call.tool_name,
+                        ToolErrorKind::ApprovalRequired,
+                        format!("{} requires approval", call.tool_name),
+                    )
+                }
+                _ => {
+                    let (r, extra) = self
+                        .execute_single_with_retry(call, ctx, options, abort, approval.clone())
+                        .await;
+                    events.extend(extra);
+                    r
+                }
+            },
+        };
         if self.result_is_fatal(call, &r) {
             *fatal = Some(r.error_message.clone().unwrap_or_else(|| "tool failed".into()));
         }
@@ -424,22 +498,32 @@ impl ToolExecutor {
     }
 
     /// 单工具执行（不含事件产出；审批已通过或未启用）
+    ///
+    /// R4 T10：组装 ToolContext 时接线审批通道（ctx.ask）——有审批门时
+    /// [ApprovalChannel]（真实审批请求 + abort 取消），full-access 模式
+    /// [NoopAskChannel]（自动放行，T0–T3 语义），其余未接线 None（工具
+    /// 自报 tool.requires_approval → 执行器分类 ApprovalRequired 透传）。
+    /// 返回（结果, 审批附加事件）。
     async fn execute_single(
         &self,
         call: &ToolBatchCall,
         ctx: &ToolExecCtx,
         options: &ToolBatchOptions,
         abort: Option<&crate::safe_point::AbortSignal>,
-    ) -> ClassifiedToolResult {
+        approval: Option<Arc<dyn ApprovalGate>>,
+    ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
         // 未知工具
         let tool = match self.registry.get(&call.tool_name) {
             Some(t) => t,
             None => {
-                return ClassifiedToolResult::error(
-                    &call.id,
-                    &call.tool_name,
-                    ToolErrorKind::NotFound,
-                    format!("unknown tool: {}", call.tool_name),
+                return (
+                    ClassifiedToolResult::error(
+                        &call.id,
+                        &call.tool_name,
+                        ToolErrorKind::NotFound,
+                        format!("unknown tool: {}", call.tool_name),
+                    ),
+                    Vec::new(),
                 )
             }
         };
@@ -450,6 +534,37 @@ impl ToolExecutor {
             session_id: ctx.session_id.clone(),
             tool_call_id: Some(call.id.clone()),
             cwd: ctx.cwd.clone(),
+        };
+        // R3 T9：会话级 ToolContext——workspace_root 优先取显式注入，
+        // 其次 cwd，最后当前目录（与既有 BuiltinToolConfig 默认语义对齐）。
+        // R4 T10：ask 通道接线（approval 事件记录由通道侧收集，执行后取回
+        // 并入批事件流，保持 tool-start → approval-requested → tool-end 顺序）。
+        let abort_token = AbortToken::new();
+        let mut approval_channel: Option<Arc<ApprovalChannel>> = None;
+        let ask: Option<AskCallback> = match options.permission_mode {
+            Some(PermissionMode::FullAccess) => Some(Arc::new(NoopAskChannel)),
+            _ => approval.as_ref().map(|gate| {
+                let channel = Arc::new(ApprovalChannel::new(
+                    Arc::clone(gate),
+                    &call.id,
+                    abort.cloned(),
+                    abort_token.clone(),
+                ));
+                approval_channel = Some(Arc::clone(&channel));
+                channel as AskCallback
+            }),
+        };
+        let tool_ctx = ToolContext {
+            session_id: ctx.session_id.clone(),
+            abort_token,
+            ask,
+            workspace_root: ctx
+                .workspace_root
+                .clone()
+                .or_else(|| ctx.cwd.clone().map(PathBuf::from))
+                .unwrap_or_else(|| {
+                    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+                }),
         };
         let policy = ToolExecutionPolicy {
             // T06.4.2：输出预算从 ToolBatchOptions 透传（None = 不截断，
@@ -467,6 +582,7 @@ impl ToolExecutor {
                 execute_with_output_policy(
                     tool.as_ref(),
                     call_own.input.clone(),
+                    &tool_ctx,
                     &exec_ctx,
                     Some(g.as_ref()),
                     &policy,
@@ -476,6 +592,7 @@ impl ToolExecutor {
                 execute_with_output_policy(
                     tool.as_ref(),
                     call_own.input.clone(),
+                    &tool_ctx,
                     &exec_ctx,
                     None,
                     &policy,
@@ -499,42 +616,171 @@ impl ToolExecutor {
 
         let duration_ms = start.elapsed().as_millis() as u64;
 
+        // 审批附加事件（approval-requested 等，执行后取回）
+        let recorded = approval_channel
+            .as_ref()
+            .map(|c| c.take_recorded())
+            .unwrap_or_default();
+
         if let Some(sig) = abort {
             if sig.is_aborted() {
-                return ClassifiedToolResult::error(
-                    &call.id,
-                    &call.tool_name,
-                    ToolErrorKind::Cancelled,
-                    "aborted",
+                return (
+                    ClassifiedToolResult::error(
+                        &call.id,
+                        &call.tool_name,
+                        ToolErrorKind::Cancelled,
+                        "aborted",
+                    ),
+                    recorded,
                 );
             }
         }
 
         match outcome {
             // 竞速获胜：abort 已触发（上方检查兜底），防御性按取消处理
-            None => ClassifiedToolResult::error(
-                &call.id,
-                &call.tool_name,
-                ToolErrorKind::Cancelled,
-                "aborted",
+            None => (
+                ClassifiedToolResult::error(
+                    &call.id,
+                    &call.tool_name,
+                    ToolErrorKind::Cancelled,
+                    "aborted",
+                ),
+                recorded,
             ),
-            Some(Err(_elapsed)) => ClassifiedToolResult::error(
-                &call.id,
-                &call.tool_name,
-                ToolErrorKind::Timeout,
-                format!("tool {} timed out after {:?}", call.tool_name, options.timeout),
+            Some(Err(_elapsed)) => (
+                ClassifiedToolResult::error(
+                    &call.id,
+                    &call.tool_name,
+                    ToolErrorKind::Timeout,
+                    format!(
+                        "tool {} timed out after {:?}",
+                        call.tool_name, options.timeout
+                    ),
+                ),
+                recorded,
             ),
             Some(Ok(Ok(tool_result))) => {
                 if tool_result.deduplicated {
-                    ClassifiedToolResult::ok(&call.id, &call.tool_name, tool_result.output, 0)
+                    (
+                        ClassifiedToolResult::ok(&call.id, &call.tool_name, tool_result.output, 0),
+                        recorded,
+                    )
                 } else {
-                    ClassifiedToolResult::ok(&call.id, &call.tool_name, tool_result.output, duration_ms)
+                    (
+                        ClassifiedToolResult::ok(
+                            &call.id,
+                            &call.tool_name,
+                            tool_result.output,
+                            duration_ms,
+                        ),
+                        recorded,
+                    )
                 }
             }
             Some(Ok(Err(err))) => {
                 let (kind, msg) = classify_tool_error(&err);
-                ClassifiedToolResult::error(&call.id, &call.tool_name, kind, msg)
+                (
+                    ClassifiedToolResult::error(&call.id, &call.tool_name, kind, msg),
+                    recorded,
+                )
             }
+        }
+    }
+
+    /// 单工具执行 + requires_approval 真实审批（R4 T10）
+    ///
+    /// 工具返回 tool.requires_approval 时分类为 ApprovalRequired：有审批门
+    /// 则发起真实审批请求（approval-requested 先发后等，防死锁），用户
+    /// 同意后重试执行该工具调用一次（二次 ApprovalRequired 直接透传，
+    /// 防循环）；拒绝返回明确拒绝结果（Denied 语义）；无门时透传需审批
+    /// 状态给模型（不再伪装成 SoftDeny 可自行降级）。
+    /// 返回（结果, 审批附加事件）。
+    async fn execute_single_with_retry(
+        &self,
+        call: &ToolBatchCall,
+        ctx: &ToolExecCtx,
+        options: &ToolBatchOptions,
+        abort: Option<&crate::safe_point::AbortSignal>,
+        approval: Option<Arc<dyn ApprovalGate>>,
+    ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
+        let (r, extra) = self
+            .execute_single(call, ctx, options, abort, approval.clone())
+            .await;
+        if r.error_kind != Some(ToolErrorKind::ApprovalRequired) {
+            return (r, extra);
+        }
+        // requires_approval：按权限模式裁决（ask → 真实审批；plan → 拒绝；
+        // full-access → 自动放行；未设置 → 审批）
+        let verdict = match options.permission_mode {
+            Some(mode) => decide(false, true, mode),
+            None => PermissionVerdict::NeedsApproval,
+        };
+        match verdict {
+            PermissionVerdict::Deny => (denied_result(call, options), extra),
+            PermissionVerdict::Allow => {
+                // full-access：自动放行，直接重试执行一次
+                let (r2, extra2) =
+                    self.execute_single(call, ctx, options, abort, approval).await;
+                (r2, [extra, extra2].concat())
+            }
+            PermissionVerdict::NeedsApproval => match approval {
+                Some(gate) => {
+                    let mut extra = extra;
+                    extra.push(ToolEvent::ApprovalRequested {
+                        call_id: call.id.clone(),
+                        tool_name: call.tool_name.clone(),
+                        args: call.input.clone(),
+                    });
+                    let decision = gate
+                        .request_approval(&call.id, &call.tool_name, &call.input)
+                        .await;
+                    match decision {
+                        ApprovalDecision::Approved => {
+                            let (r2, extra2) = self
+                                .execute_single(call, ctx, options, abort, Some(gate))
+                                .await;
+                            (r2, [extra, extra2].concat())
+                        }
+                        ApprovalDecision::Denied { reason } => (
+                            ClassifiedToolResult::error(
+                                &call.id,
+                                &call.tool_name,
+                                ToolErrorKind::UserDenied,
+                                format!("user denied: {reason}"),
+                            ),
+                            extra,
+                        ),
+                        ApprovalDecision::Expired => (
+                            ClassifiedToolResult::error(
+                                &call.id,
+                                &call.tool_name,
+                                ToolErrorKind::ApprovalExpired,
+                                "approval expired",
+                            ),
+                            extra,
+                        ),
+                    }
+                }
+                // 无审批门：透传需审批状态（不再 SoftDeny 折叠）
+                None => (r, extra),
+            },
+        }
+    }
+
+    /// 权限判定（R4 T10）：permission_mode 显式设置时按工具 dangerous
+    /// 标记 + 模式三态判定；未设置（None）时沿用既有语义——approval
+    /// 开启即视为需审批。
+    fn call_verdict(&self, call: &ToolBatchCall, options: &ToolBatchOptions) -> PermissionVerdict {
+        match options.permission_mode {
+            Some(mode) => {
+                let dangerous = self
+                    .registry
+                    .get(&call.tool_name)
+                    .map(|t| t.definition().dangerous)
+                    .unwrap_or(false);
+                decide(dangerous, false, mode)
+            }
+            None => PermissionVerdict::NeedsApproval,
         }
     }
 
@@ -547,20 +793,39 @@ impl ToolExecutor {
     }
 }
 
-/// 工具错误 → 分类（排除清单语义：SoftDeny 对应 agent-tools 的拒绝类错误码）
+/// 工具错误 → 分类
+///
+/// R4 T10：`tool.requires_approval` 不再落入软拒绝分类，归类为
+/// [ToolErrorKind::ApprovalRequired]——真实审批状态透传（有审批门时
+/// [ToolExecutor::execute_single_with_retry] 发起真实审批并重试）；
+/// tool.soft_deny 已无工具产生，落到 execution_failed（枚举保留兼容）。
 fn classify_tool_error(err: &ToolError) -> (ToolErrorKind, String) {
     let code = err.code();
     let message = err.to_string();
     let kind = match code {
         "tool.not_found" => ToolErrorKind::NotFound,
         "tool.invalid_input" => ToolErrorKind::InvalidInput,
-        "tool.soft_deny" | "tool.requires_approval" => ToolErrorKind::SoftDeny,
+        "tool.requires_approval" => ToolErrorKind::ApprovalRequired,
         "tool.user_denied" => ToolErrorKind::UserDenied,
         "tool.approval_expired" => ToolErrorKind::ApprovalExpired,
         "tool.cancelled" => ToolErrorKind::Cancelled,
         _ => ToolErrorKind::ExecutionFailed,
     };
     (kind, message)
+}
+
+/// permission 拒绝结果（plan 模式写类工具 / 越界命令拒绝，Denied 语义）
+fn denied_result(call: &ToolBatchCall, options: &ToolBatchOptions) -> ClassifiedToolResult {
+    let mode = options
+        .permission_mode
+        .unwrap_or(PermissionMode::Ask)
+        .as_engine_str();
+    ClassifiedToolResult::error(
+        &call.id,
+        &call.tool_name,
+        ToolErrorKind::UserDenied,
+        format!("permission denied by {mode} mode: {}", call.tool_name),
+    )
 }
 
 /// 取消全部未执行项（cancel-siblings）
@@ -607,9 +872,13 @@ fn mark_rest_cancelled(
 mod tests {
     use super::*;
     use crate::safe_point::AbortSignal;
+    use agent_tools::context::ToolContext;
     use agent_tools::definition::{Tool, ToolDefinition};
+    use agent_tools::permission::PermissionMode;
     use agent_tools::registry::ToolRegistry;
     use serde_json::Value;
+    use std::collections::VecDeque;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -630,7 +899,11 @@ mod tests {
                 fatal_on_error: false,
             })
         }
-        async fn execute(&self, args: Value) -> Result<Value, ToolError> {
+        async fn execute(
+            &self,
+            _ctx: &ToolContext,
+            args: Value,
+        ) -> Result<Value, ToolError> {
             Ok(args)
         }
     }
@@ -654,7 +927,11 @@ mod tests {
                 fatal_on_error: false,
             })
         }
-        async fn execute(&self, _args: Value) -> Result<Value, ToolError> {
+        async fn execute(
+            &self,
+            _ctx: &ToolContext,
+            _args: Value,
+        ) -> Result<Value, ToolError> {
             tokio::time::sleep(Duration::from_millis(self.ms)).await;
             Ok(serde_json::json!({"ok": true}))
         }
@@ -677,7 +954,11 @@ mod tests {
                 fatal_on_error: false,
             })
         }
-        async fn execute(&self, _args: Value) -> Result<Value, ToolError> {
+        async fn execute(
+            &self,
+            _ctx: &ToolContext,
+            _args: Value,
+        ) -> Result<Value, ToolError> {
             Err(ToolError::execution_failed("fail", "boom"))
         }
     }
@@ -699,7 +980,11 @@ mod tests {
                 fatal_on_error: true,
             })
         }
-        async fn execute(&self, _args: Value) -> Result<Value, ToolError> {
+        async fn execute(
+            &self,
+            _ctx: &ToolContext,
+            _args: Value,
+        ) -> Result<Value, ToolError> {
             Err(ToolError::execution_failed("failfatal", "boom"))
         }
     }
@@ -728,6 +1013,7 @@ mod tests {
             run_id: "run-1".into(),
             session_id: "sess-1".into(),
             cwd: None,
+            workspace_root: None,
         }
     }
 
@@ -1164,7 +1450,11 @@ mod tests {
                 fatal_on_error: false,
             })
         }
-        async fn execute(&self, _args: Value) -> Result<Value, ToolError> {
+        async fn execute(
+            &self,
+            _ctx: &ToolContext,
+            _args: Value,
+        ) -> Result<Value, ToolError> {
             Ok(serde_json::json!({ "text": "a".repeat(200) }))
         }
     }
@@ -1298,6 +1588,141 @@ mod tests {
             } else {
                 ApprovalDecision::Approved
             }
+        }
+    }
+
+    /// 按序返回决策的测试门（T10：批级审批通过 → 重试审批拒绝场景）
+    struct SequenceApproval {
+        decisions: std::sync::Mutex<VecDeque<ApprovalDecision>>,
+    }
+
+    impl SequenceApproval {
+        fn new(decisions: Vec<ApprovalDecision>) -> Self {
+            Self {
+                decisions: std::sync::Mutex::new(VecDeque::from(decisions)),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ApprovalGate for SequenceApproval {
+        async fn request_approval(
+            &self,
+            _call_id: &str,
+            _tool_name: &str,
+            _args: &Value,
+        ) -> ApprovalDecision {
+            self.decisions
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .pop_front()
+                .unwrap_or(ApprovalDecision::Approved)
+        }
+    }
+
+    /// 测试工具：恒返回 tool.requires_approval（T10 ApprovalRequired 分类）
+    struct AlwaysRequiresApprovalTool;
+
+    #[async_trait::async_trait]
+    impl Tool for AlwaysRequiresApprovalTool {
+        fn name(&self) -> &str {
+            "always_approval"
+        }
+        fn definition(&self) -> &ToolDefinition {
+            static DEF: std::sync::OnceLock<ToolDefinition> = std::sync::OnceLock::new();
+            DEF.get_or_init(|| ToolDefinition {
+                name: "always_approval".into(),
+                description: "always requires approval".into(),
+                input_schema: serde_json::json!({"type": "object"}),
+                dangerous: true,
+                fatal_on_error: false,
+            })
+        }
+        async fn execute(
+            &self,
+            _ctx: &ToolContext,
+            _args: Value,
+        ) -> Result<Value, ToolError> {
+            Err(ToolError::new(
+                "tool.requires_approval",
+                "command requires approval",
+            ))
+        }
+    }
+
+    /// 测试工具：首调返回 tool.requires_approval，次调成功
+    /// （T10：用户同意后重试执行该工具调用）
+    #[derive(Clone)]
+    struct ApprovalOnceTool {
+        calls: Arc<AtomicUsize>,
+    }
+
+    impl ApprovalOnceTool {
+        fn new() -> Self {
+            Self {
+                calls: Arc::new(AtomicUsize::new(0)),
+            }
+        }
+        fn call_count(&self) -> usize {
+            self.calls.load(Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl Tool for ApprovalOnceTool {
+        fn name(&self) -> &str {
+            "approval_once"
+        }
+        fn definition(&self) -> &ToolDefinition {
+            static DEF: std::sync::OnceLock<ToolDefinition> = std::sync::OnceLock::new();
+            DEF.get_or_init(|| ToolDefinition {
+                name: "approval_once".into(),
+                description: "first call requires approval".into(),
+                input_schema: serde_json::json!({"type": "object"}),
+                dangerous: true,
+                fatal_on_error: false,
+            })
+        }
+        async fn execute(
+            &self,
+            _ctx: &ToolContext,
+            args: Value,
+        ) -> Result<Value, ToolError> {
+            if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                Err(ToolError::new(
+                    "tool.requires_approval",
+                    "command requires approval",
+                ))
+            } else {
+                Ok(args)
+            }
+        }
+    }
+
+    /// 测试工具：dangerous 标记且执行成功（T10 权限判定消费 dangerous）
+    struct DangerousTool;
+
+    #[async_trait::async_trait]
+    impl Tool for DangerousTool {
+        fn name(&self) -> &str {
+            "dangerous_tool"
+        }
+        fn definition(&self) -> &ToolDefinition {
+            static DEF: std::sync::OnceLock<ToolDefinition> = std::sync::OnceLock::new();
+            DEF.get_or_init(|| ToolDefinition {
+                name: "dangerous_tool".into(),
+                description: "dangerous but succeeds".into(),
+                input_schema: serde_json::json!({"type": "object"}),
+                dangerous: true,
+                fatal_on_error: false,
+            })
+        }
+        async fn execute(
+            &self,
+            _ctx: &ToolContext,
+            args: Value,
+        ) -> Result<Value, ToolError> {
+            Ok(args)
         }
     }
 
@@ -1527,5 +1952,330 @@ mod tests {
             .results
             .iter()
             .all(|r| r.error_message.as_deref() == Some("aborted")));
+    }
+
+    // ── R4 T10：真实审批事件（requires_approval / dangerous / permissionMode）──
+
+    /// T10 回归：tool.requires_approval 不再落入软拒绝分类，归类为
+    /// ApprovalRequired 透传审批状态（无审批门时）
+    #[tokio::test]
+    async fn requires_approval_is_not_soft_deny_without_gate() {
+        let reg = registry_with(vec![Arc::new(AlwaysRequiresApprovalTool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![call("c1", "always_approval", ToolConcurrency::Sequential)];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        assert_eq!(
+            out.results[0].error_kind,
+            Some(ToolErrorKind::ApprovalRequired),
+            "requires_approval 应分类为 ApprovalRequired"
+        );
+        assert_ne!(
+            out.results[0].error_kind,
+            Some(ToolErrorKind::SoftDeny),
+            "不再折叠为 SoftDeny"
+        );
+        assert_eq!(
+            out.results[0].error_kind.map(|k| k.error_code()),
+            Some("tool.requires_approval")
+        );
+        // 审批/控制类错误永不致命
+        assert!(out.fatal.is_none());
+    }
+
+    /// T10：requires_approval 产生真实审批请求（走 gate），用户同意后
+    /// 重试执行该工具调用
+    #[tokio::test]
+    async fn requires_approval_approved_then_retries_execution() {
+        let tool = ApprovalOnceTool::new();
+        let reg = registry_with(vec![Arc::new(tool.clone())]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![call("c1", "approval_once", ToolConcurrency::Sequential)];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            ..Default::default()
+        };
+        let gate = MockApproval {
+            decision: ApprovalDecision::Approved,
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
+            .await;
+        // 批级审批通过 → 工具首调 requires_approval → ApprovalRequired →
+        // 真实审批（gate 再次问询）→ 用户同意 → 重试执行成功
+        assert!(out.results[0].is_ok(), "重试后应成功：{:?}", out.results[0]);
+        assert_eq!(tool.call_count(), 2, "工具应被重试执行（共 2 次）");
+        // 两次审批请求均产生 approval-requested 事件（批级 + 重试）
+        let approvals = out
+            .events
+            .iter()
+            .filter(|e| matches!(e, ToolEvent::ApprovalRequested { .. }))
+            .count();
+        assert_eq!(approvals, 2);
+        assert!(out.fatal.is_none());
+    }
+
+    /// T10：requires_approval 重试审批被拒绝 → 明确拒绝结果（Denied 语义）
+    #[tokio::test]
+    async fn requires_approval_denied_returns_user_denied() {
+        let tool = AlwaysRequiresApprovalTool;
+        let reg = registry_with(vec![Arc::new(tool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![call("c1", "always_approval", ToolConcurrency::Sequential)];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            ..Default::default()
+        };
+        // 批级审批通过（首问），重试审批拒绝（次问）
+        let gate = SequenceApproval::new(vec![
+            ApprovalDecision::Approved,
+            ApprovalDecision::Denied {
+                reason: "no".into(),
+            },
+        ]);
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
+            .await;
+        assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::UserDenied));
+        assert!(out.results[0]
+            .error_message
+            .as_deref()
+            .unwrap_or_default()
+            .contains("user denied: no"));
+        // 拒绝非致命（喂回模型，Denied 语义）
+        assert!(out.fatal.is_none());
+    }
+
+    /// T10：requires_approval 重试审批过期 → ApprovalExpired
+    #[tokio::test]
+    async fn requires_approval_expired_returns_approval_expired() {
+        let tool = AlwaysRequiresApprovalTool;
+        let reg = registry_with(vec![Arc::new(tool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![call("c1", "always_approval", ToolConcurrency::Sequential)];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            ..Default::default()
+        };
+        let gate = SequenceApproval::new(vec![
+            ApprovalDecision::Approved,
+            ApprovalDecision::Expired,
+        ]);
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
+            .await;
+        assert_eq!(
+            out.results[0].error_kind,
+            Some(ToolErrorKind::ApprovalExpired)
+        );
+    }
+
+    /// T10 消费 dangerous：ask 模式仅危险工具进审批，安全工具直接执行
+    #[tokio::test]
+    async fn permission_ask_mode_routes_only_dangerous_to_approval() {
+        let reg = registry_with(vec![Arc::new(DangerousTool), Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![
+            call("c1", "dangerous_tool", ToolConcurrency::Parallel),
+            call("c2", "echo", ToolConcurrency::Parallel),
+        ];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Ask),
+            ..Default::default()
+        };
+        let order = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let gate = Arc::new(RecordingApproval {
+            order: Arc::clone(&order),
+        });
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(gate), &opts, None)
+            .await;
+        // 仅 dangerous 项发起审批；echo 直接执行
+        assert_eq!(*order.lock().unwrap(), vec!["c1".to_string()]);
+        assert!(out.results.iter().all(|r| r.is_ok()));
+        // approval-requested 事件仅对应危险项
+        let approvals: Vec<&str> = out
+            .events
+            .iter()
+            .filter_map(|e| match e {
+                ToolEvent::ApprovalRequested { call_id, .. } => Some(call_id.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(approvals, vec!["c1"]);
+    }
+
+    /// T10 消费 dangerous：ask 模式危险项被用户拒绝 → UserDenied 不执行
+    #[tokio::test]
+    async fn permission_ask_mode_denied_dangerous_skips_execution() {
+        let reg = registry_with(vec![Arc::new(DangerousTool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Ask),
+            ..Default::default()
+        };
+        let gate = MockApproval {
+            decision: ApprovalDecision::Denied {
+                reason: "no".into(),
+            },
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
+            .await;
+        assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::UserDenied));
+    }
+
+    /// T10 消费 dangerous：plan 模式写类（dangerous）工具拒绝且不弹窗
+    #[tokio::test]
+    async fn permission_plan_mode_denies_dangerous_tools() {
+        let reg = registry_with(vec![Arc::new(DangerousTool), Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![
+            call("c1", "dangerous_tool", ToolConcurrency::Sequential),
+            call("c2", "echo", ToolConcurrency::Sequential),
+        ];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Plan),
+            ..Default::default()
+        };
+        let order = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let gate = Arc::new(RecordingApproval {
+            order: Arc::clone(&order),
+        });
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(gate), &opts, None)
+            .await;
+        // plan 模式：写类工具直接拒绝（Denied 语义），安全工具放行
+        assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::UserDenied));
+        assert!(out.results[0]
+            .error_message
+            .as_deref()
+            .unwrap_or_default()
+            .contains("permission denied"));
+        assert!(out.results[1].is_ok());
+        // 不发起任何审批（不弹窗）
+        assert!(
+            order.lock().unwrap().is_empty(),
+            "plan 模式不应发起审批"
+        );
+        assert!(!out
+            .events
+            .iter()
+            .any(|e| matches!(e, ToolEvent::ApprovalRequested { .. })));
+        assert!(out.fatal.is_none());
+    }
+
+    /// T10 消费 dangerous：plan 模式并行组——写类拒绝、安全项并行执行
+    #[tokio::test]
+    async fn permission_plan_parallel_denies_dangerous_runs_safe() {
+        let reg = registry_with(vec![Arc::new(DangerousTool), Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![
+            call("c1", "dangerous_tool", ToolConcurrency::Parallel),
+            call("c2", "echo", ToolConcurrency::Parallel),
+            call("c3", "echo", ToolConcurrency::Sequential),
+        ];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Plan),
+            ..Default::default()
+        };
+        let order = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let gate = Arc::new(RecordingApproval {
+            order: Arc::clone(&order),
+        });
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(gate), &opts, None)
+            .await;
+        assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::UserDenied));
+        assert!(out.results[1].is_ok());
+        assert!(out.results[2].is_ok());
+        assert!(order.lock().unwrap().is_empty());
+        assert!(out.fatal.is_none());
+    }
+
+    /// T10 消费 dangerous：full-access 模式危险工具直接放行（无审批）
+    #[tokio::test]
+    async fn permission_full_access_allows_dangerous_tools() {
+        let reg = registry_with(vec![Arc::new(DangerousTool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];
+        let opts = ToolBatchOptions {
+            approval_enabled: false,
+            permission_mode: Some(PermissionMode::FullAccess),
+            ..Default::default()
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &opts, None)
+            .await;
+        assert!(out.results[0].is_ok(), "full-access 放行危险工具");
+        assert!(!out
+            .events
+            .iter()
+            .any(|e| matches!(e, ToolEvent::ApprovalRequested { .. })));
+    }
+
+    /// T10：显式 ask 模式但无审批门 → 危险项透传需审批状态（不静默执行）
+    #[tokio::test]
+    async fn permission_ask_without_gate_passes_through_approval_required() {
+        let reg = registry_with(vec![Arc::new(DangerousTool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];
+        let opts = ToolBatchOptions {
+            approval_enabled: false,
+            permission_mode: Some(PermissionMode::Ask),
+            ..Default::default()
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &opts, None)
+            .await;
+        assert_eq!(
+            out.results[0].error_kind,
+            Some(ToolErrorKind::ApprovalRequired),
+            "无审批基础设施时不应静默执行危险工具"
+        );
+    }
+
+    /// T10 集成：dangerous shell 工具经权限判定进入审批（Approved 后执行），
+    /// ApprovalChannel 的审批事件进入批事件流
+    #[tokio::test]
+    async fn permission_ask_mode_approval_channel_events_in_batch_stream() {
+        let reg = registry_with(vec![Arc::new(DangerousTool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Ask),
+            ..Default::default()
+        };
+        let gate = MockApproval {
+            decision: ApprovalDecision::Approved,
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
+            .await;
+        assert!(out.results[0].is_ok());
+        // 事件顺序契约：tool-start → approval-requested → tool-end
+        let start = out
+            .events
+            .iter()
+            .position(|e| matches!(e, ToolEvent::ToolStart { call_id, .. } if call_id == "c1"))
+            .unwrap();
+        let approval = out
+            .events
+            .iter()
+            .position(|e| matches!(e, ToolEvent::ApprovalRequested { call_id, .. } if call_id == "c1"))
+            .unwrap();
+        let end = out
+            .events
+            .iter()
+            .position(|e| matches!(e, ToolEvent::ToolEnd { call_id, .. } if call_id == "c1"))
+            .unwrap();
+        assert!(start < approval && approval < end, "审批事件顺序契约被破坏");
     }
 }

@@ -1,5 +1,12 @@
 # Streaming Transport Contract
 
+> **【已废弃】** 本文描述旧 daemon / WebSocket 流式传输契约（Node `agent-daemon` 链路已删除）。
+> 当前传输为 Tauri IPC 单路径：UI 经 invoke 调 `core_*` / `workbench_*` 命令，引擎经
+> `workbench-run-event` 事件通道推送运行事件（流式文本、工具 intermediate/terminal、审批请求等）；
+> 契约真源 `crates/conex-types/contracts/engine-events.json`，前端类型
+> `packages/shared-types/src/generated/engine/`（详见 [`ARCHITECTURE.md`](../../ARCHITECTURE.md) §传输与壳）。
+> 本文仅作历史参考，不再作为实现依据。
+
 Date: 2026-06-09
 
 Scope: provider streams, daemon WebSocket events, sidecar reconnects, and Workbench replay.

@@ -23,10 +23,11 @@ import {
   RESTORE_LAST_WORKSPACE_LS_KEY,
   RESTORE_LAST_WORKSPACE_SETTING_KEY,
 } from '../store/workspace-shell/layoutRestorePolicy';
-import { useLayoutStore } from '../store/layoutStore';
 import { getSessionById } from '../store/sessionStore';
 import { listChatLeaves } from '../store/layout-tree';
 import { getCompositionRoot } from './compositionRoot';
+import { getSettingsState } from '../store/storeAccess';
+import type { Settings } from '../api/clientApi';
 
 /** @deprecated use RESTORE_LAST_WORKSPACE_SETTING_KEY — kept for call-site clarity */
 const RESTORE_KEY = RESTORE_LAST_WORKSPACE_SETTING_KEY;
@@ -162,16 +163,14 @@ export function setRestoreLastWorkspace(value: boolean): void {
   } catch {
     /* ignore */
   }
-  useLayoutStore.setState((s) => {
-    const prev = (s.appSettings || {}) as Record<string, unknown>;
-    const ui = {
-      ...((prev.ui as object) || {}),
-      restoreLastWorkspace: value,
-    };
-    s.appSettings = {
-      ...prev,
-      [RESTORE_KEY]: value,
-      ui,
-    } as typeof s.appSettings;
-  });
+  const prev = (getSettingsState().appSettings || {}) as Record<string, unknown>;
+  const ui = {
+    ...((prev.ui as object) || {}),
+    restoreLastWorkspace: value,
+  };
+  getSettingsState().setAppSettings({
+    ...prev,
+    [RESTORE_KEY]: value,
+    ui,
+  } as Settings);
 }

@@ -42,253 +42,121 @@ export interface RegisteredTauriCommand {
   owner?: string;
 }
 
+// B6.4 注册面（73 = 注册面 69 + 登记先行 4；与 command_manifest.rs
+// `COMMAND_MANIFEST` 及前端 `BUILTIN_COMMAND_MANIFEST` 三方对齐）：
+// - 注册面：`command_registry!` 宏已注册的命令，status=implemented；
+// - 登记先行（registered=false）：已登记未接线，tauriRegistration=not-registered。
 export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
-  { command: "get_api_config", status: "implemented", feature: "provider config read" },
-  { command: "list_directory", status: "implemented", feature: "workspace file browser" },
-  {
-    command: "open_file_in_folder",
-    status: "unsupported",
-    tauriRegistration: "not-registered",
-    capabilityStatus: UNSUPPORTED_CODE,
-    feature: "workspace file reveal",
-    reason: "The frontend bridge references this desktop shell command, but the current Tauri backend does not register it.",
-  },
-  {
-    command: "open_file_with_default_app",
-    status: "unsupported",
-    tauriRegistration: "not-registered",
-    capabilityStatus: UNSUPPORTED_CODE,
-    feature: "workspace file open",
-    reason: "The frontend bridge references this desktop shell command, but the current Tauri backend does not register it.",
-  },
-  { command: "read_file_content", status: "implemented", feature: "workspace file preview" },
-  { command: "write_file_content", status: "implemented", feature: "workspace file editor save" },
-  { command: "save_api_config", status: "implemented", feature: "provider config save" },
-  { command: "select_folder", status: "implemented", feature: "workspace folder picker" },
-  { command: "update_daemon_config", status: "implemented", feature: "daemon provider config update" },
-  { command: "workbench_approve_tool", status: "implemented", feature: "tool approval" },
-  {
-    command: "workbench_cancel_background_task",
-    status: "experimental",
-    capabilityStatus: "experimental",
-    feature: "background task cancellation",
-    reason: "Tauri forwards cancellation to the daemon background task manager; output and history remain preview-oriented.",
-  },
-  { command: "workbench_cancel_run", status: "implemented", feature: "run cancellation" },
-  { command: "workbench_connection_status", status: "implemented", feature: "sidecar connection status" },
-  {
-    command: "workbench_cancel_pending_input",
-    status: "experimental",
-    capabilityStatus: "experimental",
-    feature: "pending input cancellation",
-    reason: "Tauri forwards cancellation to the daemon-owned pending input queue; automatic dispatch and live steering are still being productized.",
-  },
-  {
-    command: "workbench_continuation",
-    status: "unsupported",
-    tauriRegistration: "not-registered",
-    capabilityStatus: UNSUPPORTED_CODE,
-    feature: "run continuation",
-    reason: "Legacy CLI continuation has a different runId/decision contract. Product continuation must be daemon-backed before this bridge command is re-enabled.",
-  },
-  {
-    command: "workbench_delete_memory",
-    status: "experimental",
-    capabilityStatus: UNSUPPORTED_CODE,
-    feature: "memory deletion",
-    reason: "The daemon exposes this command only when a memory adapter reports experimental or implemented support.",
-  },
-  { command: "workbench_deny_tool", status: "implemented", feature: "tool denial" },
-  {
-    command: "workbench_dispatch_pending_input",
-    status: "experimental",
-    capabilityStatus: "experimental",
-    feature: "pending input dispatch",
-    reason: "Workbench marks queued input as daemon-dispatched when it starts the follow-up run; safe-boundary steering remains follow-up work.",
-  },
-  {
-    command: "workbench_enqueue_pending_input",
-    status: "experimental",
-    capabilityStatus: "experimental",
-    feature: "pending input queue",
-    reason: "Running-session input is persisted through the daemon queue, while dispatch and safe-boundary steering remain follow-up work.",
-  },
-  {
-    command: "workbench_get_artifact_content",
-    status: "experimental",
-    capabilityStatus: UNSUPPORTED_CODE,
-    feature: "artifact content",
-    reason: "The daemon default capability snapshot marks artifacts unsupported until an artifact adapter is wired.",
-  },
-  {
-    command: "workbench_get_background_task_output",
-    status: "experimental",
-    capabilityStatus: "experimental",
-    feature: "background task output",
-    reason: "Tauri returns the daemon task output preview; full persisted output is not available yet.",
-  },
-  {
-    command: "workbench_get_checkpoint_diff",
-    status: "experimental",
-    capabilityStatus: "experimental",
-    feature: "checkpoint diff",
-    reason: "Checkpoint diff is available when the daemon checkpoint manifest adapter is configured.",
-  },
-  { command: "workbench_git_diff", status: "implemented", feature: "git workspace diff" },
-  { command: "workbench_git_status", status: "implemented", feature: "git workspace status" },
-  { command: "workbench_create_plan_document", status: "implemented", feature: "plan document creation" },
-  {
-    command: "workbench_create_requirements_alignment_plan",
-    status: "implemented",
-    feature: "requirements alignment plan creation",
-  },
-  { command: "workbench_delete_plan_document", status: "implemented", feature: "plan document deletion" },
-  { command: "workbench_get_plan_document", status: "implemented", feature: "plan document read" },
-  { command: "workbench_get_run_snapshot", status: "implemented", feature: "run snapshot" },
-  { command: "workbench_get_metrics", status: "implemented", feature: "run and provider stream metrics" },
-  { command: "workbench_open_host_target", status: "implemented", feature: "host external opener launch" },
-  {
-    command: "workbench_get_subagent_status",
-    status: "implemented",
-    capabilityStatus: "implemented",
-    surface: "subagent-control",
-    feature: "subagent status",
-    reason: "Daemon get-subagent-status returns collaborative subagent runtime status.",
-  },
-  {
-    command: "workbench_list_artifacts",
-    status: "experimental",
-    capabilityStatus: UNSUPPORTED_CODE,
-    feature: "artifact listing",
-    reason: "The daemon default capability snapshot marks artifacts unsupported until an artifact adapter is wired.",
-  },
-  {
-    command: "workbench_list_background_tasks",
-    status: "experimental",
-    capabilityStatus: "experimental",
-    feature: "background task listing",
-    reason: "Tauri lists daemon-owned background task snapshots, including history and output previews.",
-  },
-  {
-    command: "workbench_list_checkpoints",
-    status: "experimental",
-    capabilityStatus: "experimental",
-    feature: "checkpoint listing",
-    reason: "Checkpoint listing is backed by the daemon checkpoint manifest adapter in the default server.",
-  },
+  // ── GUI 专属面（workbench_*，§2.3）──
+  { command: "workbench_run_shell", status: "implemented", feature: "interactive terminal shell" },
+  { command: "workbench_git_run", status: "implemented", feature: "git workspace command execution" },
+  { command: "workbench_fs_delete_file", status: "implemented", feature: "workspace file deletion" },
+  { command: "workbench_pty_create", status: "implemented", feature: "interactive PTY session creation" },
+  { command: "workbench_pty_write", status: "implemented", feature: "interactive PTY input write" },
+  { command: "workbench_pty_resize", status: "implemented", feature: "interactive PTY resize" },
+  { command: "workbench_pty_kill", status: "implemented", feature: "interactive PTY termination" },
   { command: "workbench_list_host_openers", status: "implemented", feature: "host external opener discovery" },
-  { command: "workbench_list_mcp_servers", status: "implemented", feature: "MCP server listing" },
+  { command: "workbench_open_host_target", status: "implemented", feature: "host external opener launch" },
+  { command: "workbench_open_path_default", status: "implemented", feature: "host default app open" },
+  { command: "workbench_list_file_openers", status: "implemented", feature: "file association discovery" },
+  { command: "workbench_select_folder", status: "implemented", feature: "workspace folder picker" },
+  { command: "workbench_list_directory", status: "implemented", feature: "workspace directory listing" },
+  { command: "workbench_read_file_content", status: "implemented", feature: "workspace file preview" },
+  { command: "workbench_write_file_content", status: "implemented", feature: "workspace file editor save" },
+  { command: "workbench_discover_skills", status: "implemented", feature: "skill discovery" },
+  { command: "workbench_http_request", status: "implemented", feature: "HTTP request tool" },
+  { command: "workbench_apply_update", status: "implemented", feature: "app update application" },
+  // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
+  { command: "config_get", status: "implemented", feature: "provider config read" },
+  { command: "config_update", status: "implemented", feature: "provider config update" },
+  { command: "config_secret_set", status: "implemented", feature: "secret store write" },
+  { command: "config_secret_get", status: "implemented", feature: "secret store read" },
+  { command: "config_secret_has", status: "implemented", feature: "secret presence check" },
+  { command: "config_secret_clear", status: "implemented", feature: "secret removal" },
+  { command: "config_profile_apply", status: "implemented", feature: "provider profile apply" },
+  { command: "config_secret_reveal", status: "implemented", feature: "secret reveal" },
+  // ── 工具旧组（E1，§2.2-E）──
+  { command: "core_check_command", status: "implemented", feature: "command availability check" },
+  { command: "core_search_files", status: "implemented", feature: "workspace file search" },
+  { command: "core_rebuild_search_index", status: "implemented", feature: "search index rebuild" },
+  { command: "core_compact_messages", status: "implemented", feature: "conversation compaction" },
+  { command: "core_count_tokens", status: "implemented", feature: "token counting" },
+  { command: "core_compute_diff", status: "implemented", feature: "content diff computation" },
+  // ── 查询与运行（A/B，§2.2）──
+  { command: "core_get_status", status: "implemented", feature: "engine status snapshot" },
+  { command: "core_get_run_snapshot", status: "implemented", feature: "run snapshot read" },
+  { command: "core_read_run_events", status: "implemented", feature: "run event read" },
+  { command: "core_read_session_events", status: "implemented", feature: "session event read" },
+  { command: "core_run_task", status: "implemented", feature: "task run start" },
+  { command: "core_run_control", status: "implemented", feature: "run control signal" },
+  { command: "core_cancel_run", status: "implemented", feature: "run cancellation" },
+  { command: "core_approve_tool", status: "implemented", feature: "tool approval" },
+  { command: "core_deny_tool", status: "implemented", feature: "tool denial" },
+  // ── 会话持久化（B，§2.2；含 F3 冻结的 upsert_session_entry）──
+  { command: "list_sessions", status: "implemented", feature: "session history" },
+  { command: "load_session_body", status: "implemented", feature: "session body read" },
+  { command: "save_session_body", status: "implemented", feature: "session body save" },
+  { command: "delete_session", status: "implemented", feature: "session deletion" },
+  { command: "load_session_agents", status: "implemented", feature: "session agent list read" },
+  { command: "save_session_agents", status: "implemented", feature: "session agent list save" },
+  { command: "get_session_meta", status: "implemented", feature: "session metadata read" },
+  { command: "set_session_meta", status: "implemented", feature: "session metadata write" },
+  { command: "cleanup_orphan_sessions", status: "implemented", feature: "orphan session cleanup" },
+  { command: "import_from_localstorage", status: "implemented", feature: "localstorage session import" },
+  { command: "touch_session", status: "implemented", feature: "session touch" },
+  { command: "upsert_session_entry", status: "implemented", feature: "session entry upsert" },
+  // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
+  { command: "core_md_render", status: "implemented", feature: "markdown render" },
+  { command: "core_md_render_batch", status: "implemented", feature: "markdown batch render" },
+  { command: "core_md_render_stream", status: "implemented", feature: "markdown stream render" },
+  { command: "core_highlight_code", status: "implemented", feature: "code highlight" },
+  { command: "core_md_clear_cache", status: "implemented", feature: "markdown cache clear" },
+  // ── 工具 Worker 组（E，§2.2；core_jsonl_append 自 perf 迁移）──
+  { command: "core_hash_compute", status: "implemented", feature: "hash computation" },
+  { command: "core_base64_encode", status: "implemented", feature: "base64 encode" },
+  { command: "core_base64_decode", status: "implemented", feature: "base64 decode" },
+  { command: "core_detect_encoding", status: "implemented", feature: "encoding detection" },
+  { command: "core_decode_text", status: "implemented", feature: "text decode" },
+  { command: "core_parse_diff", status: "implemented", feature: "diff parsing" },
+  { command: "core_messages_to_jsonl", status: "implemented", feature: "messages JSONL export" },
+  { command: "core_jsonl_to_messages", status: "implemented", feature: "JSONL messages import" },
+  { command: "core_text_encode", status: "implemented", feature: "text encoding" },
+  { command: "core_jsonl_append", status: "implemented", feature: "JSONL append" },
+  // ── 注册表单一化自身（T03.1；经 command_manifest 注册）──
+  { command: "core_list_commands", status: "implemented", feature: "command manifest list" },
+  // ── 登记先行（§7.2 登记表；registered=false，实现方接线后翻 true）──
   {
-    command: "workbench_list_memories",
+    command: "append_session_messages",
     status: "experimental",
-    capabilityStatus: "experimental",
-    feature: "memory listing",
-    reason: "Memory listing is backed by the daemon JSONL memory adapter in the default server.",
-  },
-  { command: "workbench_list_mutation_leases", status: "implemented", feature: "workspace mutation leases" },
-  { command: "workbench_list_plan_documents", status: "implemented", feature: "plan document listing" },
-  {
-    command: "workbench_list_pending_inputs",
-    status: "experimental",
-    capabilityStatus: "experimental",
-    feature: "pending input listing",
-    reason: "Workbench can hydrate pending input state from the daemon queue; richer queue ordering controls are still follow-up work.",
-  },
-  { command: "workbench_list_runs", status: "implemented", feature: "run history" },
-  { command: "workbench_list_sessions", status: "implemented", feature: "session history" },
-  { command: "workbench_apply_session_action", status: "implemented", feature: "session metadata action" },
-  { command: "workbench_patch_plan_document", status: "implemented", feature: "plan document patch" },
-  { command: "workbench_performance_snapshot", status: "implemented", feature: "performance diagnostics" },
-  {
-    command: "workbench_run_shell",
-    status: "implemented",
-    surface: "product",
-    feature: "interactive terminal shell",
-    reason: "Runs user-typed terminal commands via system PowerShell (Windows) or bash (Unix).",
-  },
-  { command: "workbench_provider_diagnostics", status: "implemented", feature: "provider diagnostics" },
-  {
-    command: "workbench_dev_cli_probe",
-    status: "implemented",
-    tauriRegistration: "debug-only",
-    surface: "developer-diagnostics",
-    feature: "legacy CLI probe diagnostics",
-    reason: "Developer-only diagnostics for probing the legacy npm CLI. Not part of the product run path.",
-  },
-  {
-    command: "workbench_dev_cli_task_snapshot",
-    status: "implemented",
-    tauriRegistration: "debug-only",
-    surface: "developer-diagnostics",
-    feature: "legacy CLI snapshot diagnostics",
-    reason: "Developer-only diagnostics for comparing legacy CLI snapshots. Product snapshots use workbench_get_run_snapshot.",
-  },
-  {
-    command: "workbench_dev_cli_bootstrap",
-    status: "implemented",
-    tauriRegistration: "debug-only",
-    surface: "developer-diagnostics",
-    feature: "legacy CLI bootstrap diagnostics",
-    reason: "Developer-only diagnostics for the legacy CLI bootstrap path.",
-  },
-  {
-    command: "workbench_dev_cli_continuation",
-    status: "implemented",
-    tauriRegistration: "debug-only",
-    surface: "developer-diagnostics",
-    feature: "legacy CLI continuation diagnostics",
-    reason: "Developer-only diagnostics; product continuation is not wired to the legacy CLI contract.",
-  },
-  {
-    command: "workbench_dev_cli_run_task",
-    status: "implemented",
-    tauriRegistration: "debug-only",
-    surface: "developer-diagnostics",
-    feature: "legacy CLI task run diagnostics",
-    reason: "Developer-only diagnostics. Product task runs use workbench_run_task_stream.",
-  },
-  {
-    command: "workbench_dev_cli_run_goal",
-    status: "implemented",
-    tauriRegistration: "debug-only",
-    surface: "developer-diagnostics",
-    feature: "legacy CLI goal run diagnostics",
-    reason: "Developer-only diagnostics. Product goal runs use workbench_run_goal_stream.",
-  },
-  { command: "workbench_read_run_events", status: "implemented", feature: "run event read" },
-  { command: "workbench_read_session_events", status: "implemented", feature: "session event read" },
-  { command: "workbench_restart_daemon", status: "implemented", feature: "daemon restart" },
-  {
-    command: "workbench_restore_checkpoint",
-    status: "experimental",
-    capabilityStatus: UNSUPPORTED_CODE,
-    feature: "checkpoint restore",
-    reason: "The default daemon checkpoint adapter supports list and diff; restore remains unsupported until a restore adapter is wired.",
-  },
-  { command: "workbench_preview_conversation_rewind", status: "implemented", feature: "conversation rewind preview" },
-  { command: "workbench_apply_conversation_rewind", status: "implemented", feature: "conversation rewind apply" },
-  {
-    command: "workbench_answer_question",
-    status: "unsupported",
     tauriRegistration: "not-registered",
     capabilityStatus: UNSUPPORTED_CODE,
-    feature: "interactive ask answer",
-    reason: "Interactive ask mechanism (BE-16) is not yet implemented in the backend.",
+    feature: "session message append",
+    reason: "Registered in the command manifest but not yet wired to a Tauri handler.",
   },
-  { command: "workbench_run_goal_stream", status: "implemented", feature: "goal run stream" },
-  { command: "workbench_run_task_stream", status: "implemented", feature: "task run stream" },
   {
-    command: "workbench_send_to_subagent",
-    status: "implemented",
-    capabilityStatus: "implemented",
-    surface: "subagent-control",
-    feature: "subagent messaging",
-    reason: "Daemon steerRun accepts send-to-subagent for collaborative subagent control.",
+    command: "workbench_open_workspace",
+    status: "experimental",
+    tauriRegistration: "not-registered",
+    capabilityStatus: UNSUPPORTED_CODE,
+    feature: "workspace open",
+    reason: "Registered in the command manifest but not yet wired to a Tauri handler.",
   },
-  { command: "workbench_start_mcp_server", status: "experimental", feature: "MCP server start" },
-  { command: "workbench_status", status: "implemented", feature: "workbench status" },
-  { command: "workbench_stop_daemon", status: "implemented", feature: "daemon stop" },
-  { command: "workbench_stop_mcp_server", status: "experimental", feature: "MCP server stop" },
+  {
+    command: "workbench_list_workspaces",
+    status: "experimental",
+    tauriRegistration: "not-registered",
+    capabilityStatus: UNSUPPORTED_CODE,
+    feature: "workspace listing",
+    reason: "Registered in the command manifest but not yet wired to a Tauri handler.",
+  },
+  {
+    command: "workbench_dev_mcp_enabled",
+    status: "experimental",
+    tauriRegistration: "not-registered",
+    capabilityStatus: UNSUPPORTED_CODE,
+    feature: "dev MCP socket status",
+    reason: "Registered in the command manifest but not yet wired to a Tauri handler.",
+  },
 ];
 
 export interface BackendNotWiredDiagnostic extends BackendNotWiredAllowlistEntry {
@@ -438,6 +306,27 @@ export function extractInvokedTauriCommands(source: string): string[] {
 }
 
 export function extractRegisteredTauriCommands(source: string): string[] {
+  // B6.4 真源：command_registry![ ("name", path), ... ] 宏调用（注册面同源
+  // COMMAND_REGISTRY_NAMES）。wire 名取二元组第一个字符串字面量；实现路径
+  // 只做形态校验不提取（防 path 与 wire 名混淆）。
+  const registryBlocks = readAllCommandRegistryBlocks(source);
+  if (registryBlocks.length > 0) {
+    const commands = new Set<string>();
+    for (const rawBlock of registryBlocks) {
+      const withoutComments = rawBlock
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\/.*$/gm, "");
+      // ("name", path) 二元组：wire 名取字符串字面量，实现路径只做形态校验
+      const tuplePattern = /\(\s*"([^"]+)",\s*[^()]+\)/g;
+      let match: RegExpExecArray | null;
+      while ((match = tuplePattern.exec(withoutComments)) !== null) {
+        commands.add(match[1] as string);
+      }
+    }
+    return [...commands].sort();
+  }
+
+  // 回退：旧式 generate_handler! 解析（历史代码库 / 合成样例）。
   const blocks = readAllGenerateHandlerBlocks(source);
   if (blocks.length === 0 && !source.includes("make_handlers!")) return [];
 
@@ -773,6 +662,59 @@ function readAllGenerateHandlerBlocks(source: string): string[] {
         depth -= 1;
         if (depth === 0) {
           blocks.push(source.slice(start + 1, index));
+          searchFrom = index + 1;
+          found = true;
+          break;
+        }
+      }
+    }
+    if (!found) break;
+  }
+
+  return blocks;
+}
+
+/**
+ * Reads the call bodies of the `command_registry![...]` macro (B6.4 注册面真源).
+ *
+ * The macro *definition* (`macro_rules! command_registry { ... }`) is skipped —
+ * only call sites (`command_registry![...]`) are processed. Call bodies are
+ * delimited by balanced `[`/`]` (and `(`/`)` when invoked with paren syntax),
+ * so multi-line tuples and nested tokens survive intact.
+ */
+function readAllCommandRegistryBlocks(source: string): string[] {
+  const marker = "command_registry!";
+  const blocks: string[] = [];
+  let searchFrom = 0;
+
+  while (searchFrom < source.length) {
+    const markerIndex = source.indexOf(marker, searchFrom);
+    if (markerIndex === -1) break;
+
+    // Skip the macro definition itself: `macro_rules! command_registry {`
+    const prefix = source.slice(Math.max(0, markerIndex - "macro_rules! ".length), markerIndex);
+    if (prefix.endsWith("macro_rules! ")) {
+      searchFrom = markerIndex + marker.length;
+      continue;
+    }
+
+    let cursor = skipWhitespace(source, markerIndex + marker.length);
+    const open = source[cursor];
+    if (open !== "[" && open !== "(") {
+      searchFrom = markerIndex + marker.length;
+      continue;
+    }
+    const close = open === "[" ? "]" : ")";
+
+    let depth = 0;
+    let found = false;
+    for (let index = cursor; index < source.length; index += 1) {
+      const char = source[index];
+      if (char === open) depth += 1;
+      if (char === close) {
+        depth -= 1;
+        if (depth === 0) {
+          blocks.push(source.slice(cursor + 1, index));
           searchFrom = index + 1;
           found = true;
           break;

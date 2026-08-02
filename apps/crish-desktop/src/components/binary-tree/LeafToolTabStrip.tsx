@@ -14,12 +14,12 @@ import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import {
   useLayoutTreeStore,
   type LayoutLeaf,
-} from '../../store/layout-tree';
+} from '../../api/store-access/componentAccess';
 import {
   collapseActiveTabRightDock,
   openToolInSession,
   openToolInActiveTab,
-} from '../../store/workspace-shell';
+} from '../../api/store-access/componentAccess';
 import { Tooltip } from '../Tooltip';
 import styles from './LeafToolTabStrip.module.css';
 

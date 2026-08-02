@@ -7,33 +7,36 @@
 ## 1. Process topology / 进程拓扑
 
 ```text
-┌─────────────────────────┐     WS (会话/运行/配置)      ┌──────────────────┐
-│ crish-desktop           │◄──────────────────────────►│ agent-daemon     │
-│ React 19 + zustand      │                             │ (Node 产品后端)  │
-└───────────┬─────────────┘                             └────────┬─────────┘
-            │ Tauri invoke (FS / PTY / md / 窗口)                 │
-            ▼                                                    ▼
-┌─────────────────────────┐                         ┌──────────────────┐
-│ agent-workbench         │                         │ agent-orchestrator│
-│ src-tauri (壳 + sidecar)│                         │ 会话树 / run SM   │
-│ frontendDist → desktop  │                         └────────┬─────────┘
-└─────────────────────────┘                                  ▼
-                                                    ┌──────────────────┐
-                                                    │ agent-runtime    │
-                                                    │ 流 / 工具 / 权限 │
-                                                    └──────────────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│ Tauri 进程（apps/agent-workbench/src-tauri）—— Rust 引擎同进程内嵌       │
+│                                                                       │
+│  crates/orchestrator    会话树 / run 状态机 / 事件存储 / 恢复           │
+│  crates/session-loop    单会话状态机 + steering / control              │
+│  crates/agent-provider  OpenAI 兼容 / Anthropic / Gemini / Ollama      │
+│  crates/agent-tools     fs / shell / search 工具 + MCP 桥              │
+│  crates/conex-*         db / types / net / stream / sandbox / …        │
+│                                                                       │
+│        │  Tauri IPC：invoke（core_* / workbench_* 命令）               │
+│        │  事件：workbench-run-event（流式文本 / 工具 / 审批 / 终态）     │
+└────────┼──────────────────────────────────────────────────────────────┘
+         ▼
+┌─────────────────────────────────────────┐
+│ crish-desktop（React 19 + zustand）      │
+│ WebView2（Vite dev 5174 / dist）         │
+│ 本地消息正文 SoT                         │
+└─────────────────────────────────────────┘
 ```
 
 | 层 | 路径 | 职责 |
 |----|------|------|
 | **Desktop UI** | `apps/crish-desktop` | 聊天、侧栏、设置、布局；本地消息正文 SoT |
-| **Tauri 壳** | `apps/agent-workbench/src-tauri` | 窗口、sidecar、宿主 invoke；**不**加载旧 Preact |
-| **Daemon** | `packages/agent-daemon` | WS 协议、session meta、run、审批、MCP、workflow |
-| **Orchestrator** | `packages/agent-orchestrator` | 会话树、事件存储、目标策略、run 状态机 |
-| **Runtime** | `packages/agent-runtime` | provider 流、工具、权限、压缩、ControlBus、hooks |
-| **CLI** | `apps/agent-workbench/src/cli` + `shared` | 无 UI 跑批；**非**产品 UI 路径 |
+| **Tauri 壳** | `apps/agent-workbench/src-tauri` | 窗口、IPC 命令注册、事件桥、引擎初始化与恢复；**不**加载旧 Preact |
+| **Orchestrator** | `crates/orchestrator` | 会话树、事件存储、目标策略、run 状态机、崩溃恢复 |
+| **Session-loop** | `crates/session-loop` | provider 调用流、工具执行与审批门、steering / control |
+| **Provider** | `crates/agent-provider` | provider 流、重试与错误分类 |
+| **Tools** | `crates/agent-tools` | 工具执行、权限、MCP 桥 |
 
-传输：业务/流 → **daemon WS**；宿主能力 → **Tauri invoke**。开发 `dev:workbench`；产物 `crish-desktop/dist`。
+传输：业务/流/宿主能力 → **Tauri IPC**（invoke + `workbench-run-event` 事件通道）。开发 `dev:workbench`；产物 `crish-desktop/dist`。
 
 ---
 
@@ -42,9 +45,9 @@
 | ID | 名 | 拥有者 | 职责 | 禁止 |
 |----|----|--------|------|------|
 | **CP-UI** | 表现 | `crish-desktop` | 布局、焦点、空态、加载、composer UI | 自 mint 会话 id；猜 run 状态 |
-| **CP-SESS** | 会话身份 | session store + daemon meta | id、draft、侧栏列表、folder 绑定 | 草稿进 `sessions[]`；空壳当「新对话」 |
-| **CP-RUN** | 运行 | orch run SM + runtime session SM | start / turn / tool / stop L0–L3 | UI Stop 一律 Abort；L3 表达 AI 自主停 |
-| **CP-HOST** | 宿主 | Tauri + `crates/*` | PTY、FS、md 渲染、IPC | UI 双 spawn PTY；与 daemon 工具双通道混写 |
+| **CP-SESS** | 会话身份 | session store + 引擎 session meta | id、draft、侧栏列表、folder 绑定 | 草稿进 `sessions[]`；空壳当「新对话」 |
+| **CP-RUN** | 运行 | orchestrator run SM + session-loop SM | start / turn / tool / stop L0–L3 | UI Stop 一律 Abort；L3 表达 AI 自主停 |
+| **CP-HOST** | 宿主 | Tauri + `crates/*` | PTY、FS、md 渲染、IPC | UI 双 spawn PTY；与引擎工具双通道混写 |
 
 命令入口：`apps/crish-desktop/src/app/compositionRoot.ts` facades：
 
@@ -87,13 +90,14 @@ UI「新对话」→ getCompositionRoot().shell.openNewDraftTab
 ```text
 commitDraftIfNeeded（若草稿）
 → 乐观 append user msg（clientMessageId）
-→ chatApi → streamViaDaemon（主）
-→ runtime 流事件 → streamingStore（热路径）→ 终态写 session
+→ chatApi → streamViaEngine（主，Tauri IPC → core_run_task）
+→ 引擎事件（workbench-run-event）→ streamingStore（热路径）→ 终态写 session
 ```
 
 - busy 再发 → **L1 follow_up / soft**（不 abort 当前 run）
-- 降级：`streamViaDirectFetch` 仅 disconnect 后备（`ALLOW_AUTO_DIRECT_FETCH_FALLBACK`，soft-deprecated auto；非产品主能力）。见 inventory #10 / OPT-C3
-- **OPT-F7：** 降级时 `recordTransportDegradedDirectFetch`（metric `transport_degraded_direct_fetch`）+ 一次 dev console notice；flag 仍 `true`（offline UX 产品化后再翻）
+- 无降级第二通道：核心未就绪（waitUntilConnected 超时）→ **拒绝启动**（C3.4：directFetch HTTP SSE
+  降级分支已删，见 `chat-bridge/ConnectionLifecycle.ts` 头部声明）
+- 历史度量：`recordTransportDegradedDirectFetch`（controlMetrics，OPT-F7 产物）仅保留度量通道，不参与主路径决策
 
 ### 3.3 Stop L2 / L3（CP-RUN）— dual-wire **still transitional**（OPT-B7 + OPT-C6）
 
@@ -103,11 +107,11 @@ commitDraftIfNeeded（若草稿）
 | Force（长按/确认） | **L3** | `force_cancel` | abort provider + tools |
 
 ```text
-handleStop* → api/streamStop.dispatchStreamStopCancel
+handleStop* → api/streamStop.dispatchStreamCancelStop
            → live StreamCancelFn（createStreamCancel）XOR runId → compositionRoot.runControl
            → runControlClient.dispatchRunControl
            → sendTerminateDualWire（唯一双线配对点）
-           → daemon → runtime ControlBus（安全点 drain）
+           → core_run_control（L2/L3；过渡双线成对附 core_cancel_run，安全点 drain 由引擎保证）
 ```
 
 - 契约：[`run-control.md`](./run-control.md)、`packages/shared-types/src/run-control.ts`
@@ -117,17 +121,17 @@ handleStop* → api/streamStop.dispatchStreamStopCancel
 - metrics 按 **一次** L2/L3 计数；L1 follow_up **永不**附 cancel-run
 - **禁止** UI 直发 `{ type: 'cancel-run' }` 绕过 `runControlClient`
 
-### 3.4 Tool pre / post（CP-RUN hooks）
+### 3.4 Tool pre / post（CP-RUN）
 
 ```text
-session-loop 工具执行
-  → LifecycleHookRegistry.emit('tool.pre')  → block / modifiedInput
-  → ToolExecutor
-  → emit('tool.post')                        → modifiedOutput / terminate
+Rust 引擎内工具执行（crates/session-loop::tool_exec）
+  → 审批门（crates/session-loop / crates/orchestrator 审批状态机）
+  → ToolExecutor（crates/agent-tools）
+  → 工具 intermediate / terminal 事件经 workbench-run-event 回发前端
 ```
 
-- 实现：`packages/agent-runtime/src/hooks/` + `session-loop/tool-execution.ts`
-- 目录：[`docs/guides/hooks.md`](../guides/hooks.md)（`observe` 只读 / `on` 可语义）
+- 实现：`crates/session-loop/src/tool_exec.rs`、`crates/session-loop/src/approval.rs`、`crates/agent-tools/src/executor.rs`
+- 目录：[`docs/guides/hooks.md`](../guides/hooks.md)（历史：旧 TS hooks 层的语义参考）
 
 ### 3.5 Import external / 外部导入（CP-SESS + CP-HOST）— **real Tauri FS（OPT-B1）**
 
@@ -157,7 +161,7 @@ Settings / FirstRunWizard 点击
 | 7 | useChatStream / useAgentStream 双 cancel 原语 | 共享 `streamStop` + createStreamCancel 契约 | **partial C6**（full hook merge residual） |
 | 8 | 文档指向已删 `store/session-actions/` | flat `session*Actions.ts` + barrel | **done E8**（docs purge） |
 | 9 | ~~新建复用 empty shell~~ **DONE OPT-C2** | draft 哨兵；empty shell 仅 hydrate GC（非 create） | keep prune |
-| 10 | 产品功能只挂 direct-fetch | 主路径 daemon WS；flag 降级 | **partial C3**；degraded metric **OPT-F7 done**（flag flip residual） |
+| 10 | 产品功能只挂 direct-fetch | 主路径 Tauri IPC（workbench-run-event）；核心未就绪拒绝启动 | **done C3.4**；`recordTransportDegradedDirectFetch` 仅存度量通道 |
 
 ---
 
@@ -181,15 +185,15 @@ Settings / FirstRunWizard 点击
 |---------|--------|--------------|
 | UI 组件 / 空态 / 布局 | `apps/crish-desktop/src/components/**` | CP-UI |
 | 会话 CRUD / draft / 列表规则 / pin·archive·branch | `store/session*Actions.ts` + compositionRoot.session/shell（**OPT-G7** 写经 `session` facade） | CP-SESS |
-| 发送 / 流 / Stop | `hooks/chat-stream/*`、`api/runControlClient.ts`、daemon handlers | CP-RUN |
-| 工具策略 / hook / 压缩 | `packages/agent-runtime`（hooks / tools / session-loop） | CP-RUN |
-| 编排 / 目标 / 事件持久 | `packages/agent-orchestrator` | CP-RUN |
-| WS 协议 / 审批 / MCP / workflow | `packages/agent-daemon` | 契约层 |
+| 发送 / 流 / Stop | `hooks/chat-stream/*`、`api/runControlClient.ts`、`api/chat-bridge/handlers` | CP-RUN |
+| 工具策略 / 审批 / 工具执行 | `crates/session-loop`（tool_exec / approval）、`crates/agent-tools`（executor） | CP-RUN |
+| 编排 / 目标 / 事件持久 | `crates/orchestrator` | CP-RUN |
+| 审批处理 / MCP / workflow | `api/chat-bridge/handlers`（前端审批卡片）、`crates/agent-tools`（MCP 桥）、`api/workflowApi.ts` | 契约层 |
 | PTY / FS / 原生 md | `apps/agent-workbench/src-tauri` + `crates/*` | CP-HOST |
-| 跨包类型 / run-control wire | `packages/shared-types` | 契约 |
+| 跨包类型 / run-control wire | `packages/shared-types` + `packages/shared-types/src/generated/engine/` | 契约 |
 | 外部导入 | `apps/crish-desktop/src/api/import/**` | CP-SESS + HOST |
 | Provider 配置 | `apps/crish-desktop/src/api/providerProfiles.ts` → `update-config` | 配置同步 |
-| CLI / 无 UI 批跑 | `apps/agent-workbench/src/cli` + `shared` | 非 desktop 产品路径 |
+| 壳 TS 支持层 | `apps/agent-workbench/src/core`、`src/shared` | 非 desktop 产品路径 |
 | 样式 token | `styles/tokens.css` 先扩，再写组件 CSS | CP-UI |
 
 **组装纪律：** 第三处命令调用 → 先扩 `compositionRoot` facade，再散落 `getState`。  
@@ -203,5 +207,6 @@ Settings / FirstRunWizard 点击
 |------|------|
 | [`desktop-composition-and-stores.md`](./desktop-composition-and-stores.md) | compositionRoot + store 图 |
 | [`streaming-transport-contract.md`](./streaming-transport-contract.md) | 流传输契约 |
-| [`daemon-protocol-single-source.md`](./daemon-protocol-single-source.md) | daemon 协议真源 |
+| [`engine-events.json`](../../crates/conex-types/contracts/engine-events.json) + [`generated/engine/`](../../packages/shared-types/src/generated/engine/) | 引擎事件契约真源（R3；前端类型生成产物） |
+| [`daemon-protocol-single-source.md`](./daemon-protocol-single-source.md) | **历史**：旧 daemon 协议文档（引擎 Rust 化后仅存档） |
 | [`multi-unit-layout-restore-adr.md`](./multi-unit-layout-restore-adr.md) | 多 unit 布局恢复 |

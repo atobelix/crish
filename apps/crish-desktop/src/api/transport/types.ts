@@ -18,8 +18,8 @@
  *
  * 设计约束：
  * - 上层（EventRouter / ConnectionLifecycle 等）只依赖本接口。
- * - `request` 的 type 即命令名：Tauri 路径直接对应 core_* 命令
- *   （WS 消息 type 经 commandMap 翻译，03 §3.2）。
+ * - `request` / `send` / `call` 的 type 即命令名：Tauri 路径直接对应
+ *   core_* / config_* 等命令（T18 起无 WS 消息 type 映射层，命令名直传）。
  * - 事件载荷不做二次归一：IPC 为顶层平铺
  *   `{ type, runId, sessionId, ...事件字段 }`（03 §3.1、§5.1），
  *   EventRouter.onMsg 逐字透传。

@@ -584,8 +584,8 @@ async function persistSelectionToAppSettings(
       defaultModel: model,
     });
     try {
-      const { useLayoutStore } = await import('../../store/layoutStore');
-      useLayoutStore.getState().setAppSettings(merged);
+      const { useSettingsStore } = await import('../../store');
+      useSettingsStore.getState().setAppSettings(merged);
     } catch {
       /* store 未就绪时忽略 */
     }

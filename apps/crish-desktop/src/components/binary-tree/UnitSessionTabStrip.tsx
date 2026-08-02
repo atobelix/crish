@@ -41,8 +41,8 @@ import {
   EMPTY_SESSION_TITLE,
   sessionListDisplayTitle,
 } from '../../api/sessionTitle';
-import { getSessionById } from '../../store/sessionStore';
-import { useLayoutTreeStore } from '../../store/layout-tree';
+import { getSessionById } from '../../api/store-access/componentAccess';
+import { useLayoutTreeStore } from '../../api/store-access/componentAccess';
 import {
   useWorkspaceShellStore,
   selectActiveTabSessionId,
@@ -50,8 +50,8 @@ import {
   tabsForUnit,
   type ChatUnitRef,
   type TabSurface,
-} from '../../store/workspace-shell';
-import { isPendingDraft } from '../../store/draftSession';
+} from '../../api/store-access/componentAccess';
+import { isPendingDraft } from '../../api/store-access/componentAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { emitUiEvent } from '../../api/uiEvents';
 import { Tooltip } from '../Tooltip';

@@ -3,6 +3,7 @@
 //! 定义与执行分离：ToolDefinition 只承载声明（名称/描述/入参 schema/危险标记），
 //! 第三方工具实现 Tool trait 的执行面 execute，注册后由 ToolRegistry 统一管理。
 
+use crate::context::ToolContext;
 use async_trait::async_trait;
 use conex_types::error::{codes, CrishError, CrishErrorPayload};
 use serde::{Deserialize, Serialize};
@@ -143,11 +144,17 @@ pub trait Tool: Send + Sync {
     /// 工具定义（声明信息，随工具列表发送给模型）
     fn definition(&self) -> &ToolDefinition;
 
-    /// 执行工具
+    /// 执行工具（R3 T9：携带会话级上下文）
     ///
+    /// ctx 为会话级上下文（session_id / abort_token / ask / workspace_root），
+    /// 工具需要会话数据（工作区根、中止检查、审批提问）时从 ctx 读取；
     /// args 为结构化入参（JSON 对象），须与 definition().input_schema 匹配；
     /// 返回结构化输出（JSON 值）。失败返回类型化 ToolError（tool.* 错误码）。
-    async fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, ToolError>;
+    async fn execute(
+        &self,
+        ctx: &ToolContext,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, ToolError>;
 }
 
 #[cfg(test)]
@@ -226,12 +233,13 @@ mod tests {
 
     #[tokio::test]
     async fn echo_tool_execute_roundtrip() {
+        use crate::context::create_mock_tool_context;
         use crate::test_support::EchoTool;
 
         let tool = EchoTool::new("echo");
         assert_eq!(tool.name(), "echo");
         let out = tool
-            .execute(json!({ "msg": "你好" }))
+            .execute(&create_mock_tool_context(), json!({ "msg": "你好" }))
             .await
             .unwrap();
         assert_eq!(out, json!({ "echo": { "msg": "你好" } }));

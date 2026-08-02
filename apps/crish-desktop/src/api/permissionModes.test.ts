@@ -305,7 +305,7 @@ describe('permissionModes sync', () => {
   });
 
   it('aligns product aliases with daemon-permission-policy matrix', () => {
-    // 与 packages/agent-daemon/src/daemon-permission-policy.ts 保持契约镜像
+    // 与 crates/agent-tools/src/permission.rs（PermissionMode::from_engine_str）保持契约镜像
     const daemonAliasExpectations: Array<[string, string]> = [
       ['deep', 'ask'],
       ['project', 'ask'],

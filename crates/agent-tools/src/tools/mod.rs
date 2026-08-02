@@ -6,7 +6,8 @@
 //! - `diff`：文本 diff（复用 conex-diff，输出 unified diff 文本）
 //!
 //! 全部工具实现 `Tool` trait，经 `register_builtin_tools` 统一注册进 ToolRegistry。
-//! 各工具的 workspace 根目录来自 `BuiltinToolConfig`（可信配置，不由模型入参指定）。
+//! 各工具的会话级数据（工作区根目录等）执行时从 `ToolContext` 读取
+//! （R3 T9：BuiltinToolConfig 仅承载构造期默认配置，不再注入 workspace_root）。
 
 pub mod diff;
 pub mod fs;
@@ -20,10 +21,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// 内置工具统一定制配置（由工具执行器注入，模型入参不可覆盖）
+///
+/// R3 T9：`workspace_root` 移至执行期 `ToolContext`（会话级），
+/// 本配置仅保留构造期默认值（shell 超时 / 输出上限）。
 #[derive(Debug, Clone)]
 pub struct BuiltinToolConfig {
-    /// 工作区根目录：全部路径入参必须落在其内（对齐 TS resolveWorkspacePath）
-    pub workspace_root: PathBuf,
     /// shell 工具默认超时（毫秒），任务书要求默认 30 秒
     pub default_shell_timeout_ms: u64,
     /// shell 工具默认输出保留上限（字节）
@@ -33,40 +35,33 @@ pub struct BuiltinToolConfig {
 impl Default for BuiltinToolConfig {
     fn default() -> Self {
         Self {
-            workspace_root: std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from(".")),
             default_shell_timeout_ms: 30_000,
             default_shell_max_output_bytes: 200_000,
         }
     }
 }
 
-/// 以默认配置注册全部内置工具（工作区根为当前目录，供无配置环境的直连使用）
+/// 以默认配置注册全部内置工具（供无配置环境的直连使用）
 pub fn register_builtin_tools(registry: &mut ToolRegistry) -> Result<(), ToolError> {
     register_builtin_tools_with_config(registry, BuiltinToolConfig::default())
 }
 
-/// 以显式配置注册全部内置工具（工作区根由执行器注入）
+/// 以显式配置注册全部内置工具（构造期默认值由配置注入，会话数据走 ctx）
 pub fn register_builtin_tools_with_config(
     registry: &mut ToolRegistry,
     config: BuiltinToolConfig,
 ) -> Result<(), ToolError> {
-    let root = config.workspace_root.clone();
-    registry.register(Arc::new(fs::ReadFileTool::new(
-        root.clone(),
-        None,
-    )))?;
-    registry.register(Arc::new(fs::WriteFileTool::new(root.clone())))?;
-    registry.register(Arc::new(fs::ListDirTool::new(root.clone())))?;
-    registry.register(Arc::new(fs::FileStatTool::new(root.clone())))?;
-    registry.register(Arc::new(search::GrepSearchTool::new(root.clone())))?;
-    registry.register(Arc::new(search::FuzzyFindTool::new(root.clone())))?;
+    registry.register(Arc::new(fs::ReadFileTool::new(None)))?;
+    registry.register(Arc::new(fs::WriteFileTool::new()))?;
+    registry.register(Arc::new(fs::ListDirTool::new()))?;
+    registry.register(Arc::new(fs::FileStatTool::new()))?;
+    registry.register(Arc::new(search::GrepSearchTool::new()))?;
+    registry.register(Arc::new(search::FuzzyFindTool::new()))?;
     registry.register(Arc::new(shell::ShellCommandTool::new(
-        root.clone(),
         config.default_shell_timeout_ms,
         config.default_shell_max_output_bytes,
     )))?;
-    registry.register(Arc::new(diff::DiffTextTool::new(root)))?;
+    registry.register(Arc::new(diff::DiffTextTool::new()))?;
     Ok(())
 }
 
@@ -440,22 +435,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn register_with_config_executes_read_file() {
+    async fn register_with_config_executes_read_file_via_ctx() {
+        use crate::context::{create_mock_tool_context, ToolContext};
+
         let ws = conex_test_utils::TempWorkspace::new("reg_integ");
         ws.write_file("note.txt", "hello from registry");
         let mut registry = ToolRegistry::new();
-        register_builtin_tools_with_config(
-            &mut registry,
-            BuiltinToolConfig {
-                workspace_root: ws.path().clone(),
-                ..BuiltinToolConfig::default()
-            },
-        )
-        .unwrap();
+        register_builtin_tools(&mut registry).unwrap();
         assert!(registry.has("read_file"));
         let tool = registry.get("read_file").unwrap();
+        // R3 T9：workspace_root 从会话上下文读取（不再由注册配置注入）
+        let ctx = ToolContext {
+            workspace_root: ws.path().clone(),
+            ..create_mock_tool_context()
+        };
         let out = tool
-            .execute(serde_json::json!({ "path": "note.txt" }))
+            .execute(&ctx, serde_json::json!({ "path": "note.txt" }))
             .await
             .unwrap();
         assert!(out["text"].as_str().unwrap().contains("hello from registry"));

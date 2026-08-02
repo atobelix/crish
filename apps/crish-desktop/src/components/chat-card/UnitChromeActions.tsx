@@ -17,8 +17,8 @@ import {
   openToolInSession,
   applyDockToTree,
   useWorkspaceShellStore,
-} from '../../store/workspace-shell';
-import { useLayoutTreeStore } from '../../store/layout-tree';
+} from '../../api/store-access/componentAccess';
+import { useLayoutTreeStore } from '../../api/store-access/componentAccess';
 import { pinSession, unpinSession } from '../../api/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import styles from './ChatHeader.module.css';

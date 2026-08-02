@@ -11,14 +11,14 @@ import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
 import { Priority } from '../../workers';
 import { AsyncMarkdownBlock } from '../chat-message-row/AsyncMarkdownBlock';
 import { MessageToolCallsSection } from '../chat-message-row/MessageToolCallsSection';
-import { useShallow } from '../../store/useShallowSelector';
+import { useShallow } from '../../api/store-access/componentAccess';
 import {
   applyStreamTextToMessage,
   applyStreamToolsToMessage,
   streamStoreKey,
   useStreamingStore,
   type StreamToolLive,
-} from '../../store/streamingStore';
+} from '../../api/store-access/componentAccess';
 
 export interface MessageContentProps {
   msg: SessionMessage;

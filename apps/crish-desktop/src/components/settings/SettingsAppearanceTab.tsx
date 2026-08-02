@@ -5,7 +5,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Settings } from '../../api/clientApi';
 import { clientApi } from '../../api/clientApi';
 import { getWorkspacePath } from '../../api/projectStore';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useSettingsField } from '../../store/storeAccess';
 import {
   parseShellChromeMode,
   type ShellChromeMode,
@@ -61,7 +62,7 @@ function normalizeCodeIndent(raw: unknown): string {
 
 export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
   const cwd = getWorkspacePath() || '__global__';
-  const setAppSettings = useLayoutStore((s) => s.setAppSettings);
+  const setAppSettings = useSettingsField((s) => s.setAppSettings);
   const [activeTheme, setActiveTheme] = useState<'default' | 'dark'>(() => readStoredTheme());
   const [personalization, setPersonalization] = useState<PersonalizationSettings>(() => readStoredPersonalization());
 

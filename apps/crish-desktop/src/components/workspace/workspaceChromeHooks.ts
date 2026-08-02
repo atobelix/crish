@@ -32,32 +32,32 @@ import {
   focusOrOpenPanel,
   setActiveSessionId,
 } from '../../api/storeAccess';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
 import {
   collapseToolColumnPreserve,
   isChatColumn,
-} from '../../store/layoutHelpers';
+} from '../../api/store-access/componentAccess';
 import {
   getSessionById,
   selectActiveSessionId,
   useSessionField,
-} from '../../store/sessionStore';
+} from '../../api/store-access/componentAccess';
 import {
   PENDING_DRAFT_SESSION_ID,
   isPendingDraft,
-} from '../../store/draftSession';
+} from '../../api/store-access/componentAccess';
 import { emitUiEvent } from '../../api/uiEvents';
 import {
   useLayoutTreeStore,
   collectLeaves,
   isChatDomain,
-} from '../../store/layout-tree';
-import { focusOrOpenTreePanel } from '../../store/layout-tree/treePanelAccess';
+} from '../../api/store-access/componentAccess';
+import { focusOrOpenTreePanel } from '../../api/store-access/componentAccess';
 import { isTreeWorkspaceFast } from '../../createSsrGlobals';
 import {
   selectActiveTabSessionId,
   useWorkspaceShellStore,
-} from '../../store/workspace-shell';
+} from '../../api/store-access/componentAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 
 export type WorkspaceChromeProps = {

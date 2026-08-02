@@ -2,7 +2,7 @@
  * Tauri IPC Transport —— 03 §3.3 职责表的 IPC 模式实现。
  *
  * 职责映射（对照 types.ts 的职责表）：
- * - request（职责 5）→ invokeTyped(cmd, payload)，cmd 即 core_* 命令名
+ * - request（职责 5）→ invokeTyped(cmd, payload)，cmd 即命令名（T18 后无 WS type 映射）
  * - send（职责 6）→ invokeTyped(cmd, payload)（fire-and-forget 语义，错误仍上抛）
  * - onMessage（职责 7）→ 懒订阅 `listen('workbench-run-event', e => listener(e.payload))`
  *   （03 §3.1 前端替换点；订阅模式对齐 ptySessionApi.ts:201-234 的懒加载 fanout）
@@ -168,8 +168,9 @@ export class TauriTransport {
 
   /**
    * 请求-响应配对：invoke 天然配对（03 §3.3 职责 5）。
-   * type 经 commandMap 解析（C1.5：WS 消息 type → 命令名；命令名直放行），
-   * 解析结果必须落在 core_list_commands 清单 registered 内（PE-03 T03.1）；
+   * type 即命令名，经 resolveTauriCommand 直接校验清单（T18：已无
+   * WS 消息 type → 命令名映射层），校验结果必须落在 core_list_commands
+   * 清单 registered 内（PE-03 T03.1）；
    * 未注册 / 清单外 → null → 抛「Tauri command not available」（显式 missing，
    * 无静默降级；幽灵调用点裁决归 T03.7）。
    *

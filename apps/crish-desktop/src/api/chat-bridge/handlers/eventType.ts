@@ -1,29 +1,8 @@
-import {
-  parseEngineEnvelope,
-} from '../../engineEventSchema';
-import {
-  safeParseDaemonEvent,
-} from '../../engineEventZod';
-
-export function resolveEventType(
-  event: unknown
-): { type: string; raw: Record<string, unknown> } | null {
-  const zodEnv = safeParseDaemonEvent(event);
-  if (zodEnv.ok === true) {
-    const type = String(zodEnv.data.type ?? '').trim();
-    if (!type) return null;
-    return { type, raw: zodEnv.data.raw };
-  }
-  const light = parseEngineEnvelope(event);
-  if (light.ok === true) {
-    const type = String(light.data.type ?? '').trim();
-    if (!type) return null;
-    return { type, raw: light.data.raw };
-  }
-  if (event && typeof event === 'object' && !Array.isArray(event)) {
-    const raw = event as Record<string, unknown>;
-    const type = String(raw.type ?? raw.event ?? raw.kind ?? '').trim();
-    if (type) return { type, raw };
-  }
-  return null;
-}
+/**
+ * 信封类型抽取（T7 兼容面）。
+ *
+ * 原双 zod 解析模块的交叉 fallback 已删，
+ * resolveEventType 收敛到单一解析入口 eventParser 的纯实现，
+ * 本文件保留为 chatBridge facade 的 re-export 兼容位。
+ */
+export { resolveEventType } from './eventParser';

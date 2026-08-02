@@ -18,7 +18,7 @@
  */
 
 import type { SessionAgent, SessionMessage, SessionState } from '../../store/layoutStore';
-import { isPendingDraft } from '../../store/draftSession';
+import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
 import { coerceSessionTimestamp } from '../sessionTime';
 import { prepareSessionsForUi } from '../sessionTitle';
 import { normalizeAssistantTimeline } from '../toolPresentation';

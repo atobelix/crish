@@ -15,6 +15,8 @@ import type {
 import type { PermissionMode } from '../permissionModes';
 import type { ShellChromeMode } from '../shellChrome';
 import type { DraggedTabState } from '../../store/workspaceStore';
+import { usePermissionStore } from '../../store/permissionStore';
+import { useTerminalStore } from '../../store/terminalStore';
 
 export type LayoutStoreHook = typeof useLayoutStore;
 
@@ -147,7 +149,7 @@ export class StoreTransaction {
       activeAgentId: state.activeAgentId,
       panelAgentId: state.panelAgentId,
       composerDrafts: { ...(state.composerDrafts ?? {}) },
-      terminalBySession: { ...(state.terminalBySession ?? {}) },
+      terminalBySession: { ...(useTerminalStore.getState().terminalBySession ?? {}) },
     };
   }
 
@@ -168,21 +170,26 @@ export class StoreTransaction {
 
   private cloneSettingsUi(): SettingsUiSnapshot {
     const state = resolveSettingsUiState();
+    const perm = usePermissionStore.getState();
     return {
       showSettingsOverlay: state.showSettingsOverlay,
       settingsActiveTab: state.settingsActiveTab,
-      permissionMode: state.permissionMode,
-      planModeEnabled: state.planModeEnabled,
-      planApproved: state.planApproved,
+      permissionMode: perm.permissionMode,
+      planModeEnabled: perm.planModeEnabled,
+      planApproved: perm.planApproved,
     };
   }
 
   private restoreSessions(snapshot: SessionsSnapshot): void {
     const store = _sessionStore;
+    const { terminalBySession, ...rest } = snapshot;
     if (store) {
-      store.setState(snapshot as Partial<unknown>);
+      store.setState(rest as Partial<unknown>);
     } else {
-      useLayoutStore.setState(snapshot);
+      useLayoutStore.setState(rest);
+    }
+    if (terminalBySession) {
+      useTerminalStore.setState({ terminalBySession });
     }
   }
 
@@ -197,11 +204,13 @@ export class StoreTransaction {
 
   private restoreSettingsUi(snapshot: SettingsUiSnapshot): void {
     const store = _settingsUiStore;
+    const { permissionMode, planModeEnabled, planApproved, ...rest } = snapshot;
     if (store) {
-      store.setState(snapshot as Partial<unknown>);
+      store.setState(rest as Partial<unknown>);
     } else {
-      useLayoutStore.setState(snapshot);
+      useLayoutStore.setState(rest);
     }
+    usePermissionStore.setState({ permissionMode, planModeEnabled, planApproved });
   }
 }
 

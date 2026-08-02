@@ -24,8 +24,6 @@ import {
   type UiSize,
 } from './layoutStore';
 import type { SettingsTabType } from './types';
-import type { McpServer } from '../api/clientApi';
-import type { CronJob, ProviderInfo } from '../api/clientApi';
 import type { WorkspaceState } from './types';
 
 function snapshotChrome() {
@@ -36,16 +34,6 @@ function snapshotChrome() {
     settingsActiveTab: s.settingsActiveTab,
     showSettingsOverlay: s.showSettingsOverlay,
     sidebarCollapsed: s.sidebarCollapsed,
-    planApproved: s.planApproved,
-    permissionMode: s.permissionMode,
-    planModeEnabled: s.planModeEnabled,
-    tokenUsage: { ...s.tokenUsage },
-    activeWorkers: [...s.activeWorkers],
-    manuallyTriggeredWorkers: [...s.manuallyTriggeredWorkers],
-    killedWorkerIds: [...s.killedWorkerIds],
-    diffFiles: [...s.diffFiles],
-    activeDiffSource: s.activeDiffSource,
-    commandPermissions: [...s.commandPermissions],
     workspacesLen: s.workspaces.length,
     activeWorkspaceIndex: s.activeWorkspaceIndex,
     activeAgentId: s.activeAgentId,
@@ -62,15 +50,7 @@ afterEach(() => {
   s.setSettingsActiveTab(chrome0.settingsActiveTab);
   s.setShowSettingsOverlay(chrome0.showSettingsOverlay);
   s.setSidebarCollapsed(chrome0.sidebarCollapsed);
-  s.setPlanApproved(false);
-  s.setDiffFiles([]);
-  s.setCommandPermissions(chrome0.commandPermissions);
-  // 遥测 / worker 复位
   useLayoutStore.setState((st) => {
-    st.tokenUsage = { ...chrome0.tokenUsage };
-    st.activeWorkers = [];
-    st.manuallyTriggeredWorkers = [];
-    st.killedWorkerIds = [];
     st.activeAgentId = null;
     st.panelAgentId = null;
     // 确保工作区非空
@@ -320,8 +300,6 @@ describe('useLayoutStore initial invariants', () => {
     expect(s.panelAgentId).toBeNull();
     expect(s.draggedTab).toBeNull();
     expect(s.dropPreview).toBeNull();
-    expect(s.activeDiffSource).toBeNull();
-    expect(s.diffFiles).toEqual([]);
 
     const ids = s.workspaces.flatMap((ws) =>
       ws.columns.flatMap((c) =>
@@ -378,76 +356,6 @@ describe('useLayoutStore actions — guards', () => {
     s.setShowSettingsOverlay(false);
   });
 
-  it('syncTelemetryData sanitizes tokenUsage and workers; respects killed ids', () => {
-    const s = useLayoutStore.getState();
-    s.syncTelemetryData({
-      tokenUsage: { input: -1, cost: NaN, output: 5 },
-      activeWorkers: [
-        { id: 'live', taskName: 't', elapsedSeconds: 1 },
-        { id: 'dead', taskName: 'd', elapsedSeconds: 2 },
-      ],
-    });
-    let st = useLayoutStore.getState();
-    expect(st.tokenUsage.input).toBe(0);
-    expect(st.tokenUsage.output).toBe(5);
-    expect(Number.isFinite(st.tokenUsage.cost)).toBe(true);
-    expect(st.activeWorkers.some((w) => w.id === 'live')).toBe(true);
-
-    s.killWorker('dead', 'd');
-    s.syncTelemetryData({
-      activeWorkers: [
-        { id: 'live', taskName: 't', elapsedSeconds: 3 },
-        { id: 'dead', taskName: 'd', elapsedSeconds: 9 },
-      ],
-    });
-    st = useLayoutStore.getState();
-    expect(st.activeWorkers.some((w) => w.id === 'dead')).toBe(false);
-    expect(st.killedWorkerIds).toContain('dead');
-  });
-
-  it('setDiffFiles / removeDiffFile keep activeDiffSource coherent', () => {
-    const s = useLayoutStore.getState();
-    const a = {
-      filePath: 'a.ts',
-      additions: 1,
-      deletions: 0,
-      changes: [{ type: 'addition' as const, content: '+x' }],
-    };
-    const b = {
-      filePath: 'b.ts',
-      additions: 0,
-      deletions: 1,
-      changes: [{ type: 'deletion' as const, content: '-y' }],
-    };
-    s.setDiffFiles([a, b]);
-    expect(useLayoutStore.getState().activeDiffSource?.filePath).toBe('a.ts');
-    s.removeDiffFile('a.ts');
-    expect(useLayoutStore.getState().activeDiffSource?.filePath).toBe('b.ts');
-    s.removeDiffFile('b.ts');
-    expect(useLayoutStore.getState().activeDiffSource).toBeNull();
-    expect(useLayoutStore.getState().diffFiles).toEqual([]);
-  });
-
-  it('setProviders / setScheduledTasks / setMcpServers reject non-arrays safely', () => {
-    const s = useLayoutStore.getState();
-    s.setProviders([]);
-    // null/undefined may be accepted at type-level under loose null checks; runtime still clamps
-    s.setProviders(null as unknown as ProviderInfo[]);
-    expect(useLayoutStore.getState().providers).toEqual([]);
-    s.setScheduledTasks(undefined as unknown as CronJob[]);
-    expect(Array.isArray(useLayoutStore.getState().scheduledTasks)).toBe(true);
-    s.setMcpServers('nope' as unknown as McpServer[]);
-    expect(useLayoutStore.getState().mcpServers).toEqual([]);
-  });
-
-  it('triggerCronJobNow seeds a manual worker with safe label', () => {
-    const before = useLayoutStore.getState().activeWorkers.length;
-    useLayoutStore.getState().triggerCronJobNow('  deploy  ');
-    const workers = useLayoutStore.getState().activeWorkers;
-    expect(workers.length).toBe(before + 1);
-    expect(workers[workers.length - 1]!.taskName).toContain('deploy');
-    useLayoutStore.getState().triggerCronJobNow('   ');
-    const last = useLayoutStore.getState().activeWorkers.slice(-1)[0]!;
-    expect(last.taskName).toContain('task');
-  });
+  // T11：遥测/worker/diff/权限 action 已迁往 terminalStore / workerStore /
+  // permissionStore / settingsStore，各自独立测试见对应 .test.ts。
 });

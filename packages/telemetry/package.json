@@ -29,7 +29,6 @@
     "build": "npm run clean && npm run build:types && npm run build:js"
   },
   "dependencies": {
-    "@crish/shared-types": "*",
     "@crish/shared-utils": "*"
   },
   "devDependencies": {

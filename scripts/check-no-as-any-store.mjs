@@ -122,7 +122,7 @@ const SESSION_INDEX_REQUIRED = [
   { re: /export\s+function\s+assertSessionsIndexConsistent\b/, label: 'assertSessionsIndexConsistent' },
 ];
 
-/** layoutStore 须用泛型切片接线，禁止 any 遥测入参 */
+/** layoutStore 须用泛型切片接线，禁止 any 遥测入参（遥测签名检查随 T11 迁至 settingsStore） */
 const LAYOUT_REQUIRED = [
   {
     re: /createSessionActions\s*\(\s*set\s*,\s*get\s*\)/,
@@ -133,13 +133,17 @@ const LAYOUT_REQUIRED = [
     label: 'createWorkspaceActions(set, get) without cast',
   },
   {
-    re: /syncTelemetryData:\s*\(data:\s*TelemetrySyncPayload\)/,
-    label: 'syncTelemetryData typed as TelemetrySyncPayload',
-  },
-  {
     // 兼容直接定义与 re-export 两种形态（layoutStore 经 store-types 再导出）
     re: /export\s+type\s+(?:TelemetrySyncPayload\b|\{[^}]*\bTelemetrySyncPayload\b)/,
     label: 'export type TelemetrySyncPayload',
+  },
+];
+
+/** T11：settingsStore 承载遥测 action，须保持入参类型化（迁移自 layoutStore 的检查） */
+const SETTINGS_REQUIRED = [
+  {
+    re: /syncTelemetryData:\s*\(data:\s*TelemetrySyncPayload\)/,
+    label: 'settingsStore.syncTelemetryData typed as TelemetrySyncPayload',
   },
 ];
 
@@ -383,6 +387,22 @@ for (const { dir, rel } of EXTRA_SCAN_DIRS) {
   }
 }
 
+// T11：settingsStore 遥测 action 入参类型化
+{
+  const abs = resolve(storeDir, 'settingsStore.ts');
+  const rel = 'apps/crish-desktop/src/store/settingsStore.ts';
+  if (!existsSync(abs)) {
+    fail(`missing file: ${rel}`);
+  } else {
+    const src = readFileSync(abs, 'utf8');
+    for (const { re, label } of SETTINGS_REQUIRED) {
+      if (!re.test(src)) {
+        fail(`${rel} missing required pattern: ${label}`);
+      }
+    }
+  }
+}
+
 // 域 actions：泛型切片 + 反环
 for (const mod of ACTION_MODULE_REQUIRED) {
   const abs = resolve(storeDir, mod.file);
@@ -459,7 +479,7 @@ for (const facade of FACADE_REQUIRED) {
   }
 }
 
-// storeAccess 须编排三域 + 禁止 as any / : any；跨域写走 getLayoutState
+// storeAccess 须编排三域 + 禁止 as any / : any；跨域写按域分发（域 store 自身 getState）
 {
   const accessRel = 'apps/crish-desktop/src/api/storeAccess.ts';
   if (!existsSync(storeAccessPath)) {
@@ -499,10 +519,19 @@ for (const facade of FACADE_REQUIRED) {
       { re: /export\s+function\s+archiveSession\b/, label: 'archiveSession' },
       { re: /export\s+function\s+setScheduledTasks\b/, label: 'setScheduledTasks' },
       { re: /export\s+function\s+syncTelemetryData\b/, label: 'syncTelemetryData' },
-      // 跨域写须经 getLayoutState，避免散落 useLayoutStore.getState()
+      // T11 拆分后域写按域分发：各域 action 经所属域 store 自身 getState() 接线
+      // （api/store-access/** 范围内；与旧 getLayoutState() 跨域写约定等价）
       {
-        re: /getLayoutState\(\)\.(?:pushDiffFile|setActiveDiffSource|syncTelemetryData|setAppSettings|setScheduledTasks|addCommandPermission)\b/,
-        label: 'cross-domain writes via getLayoutState()',
+        re: /useTerminalStore\.getState\(\)\.(?:pushDiffFile|setActiveDiffSource)\b/,
+        label: 'terminal 域写走 useTerminalStore.getState()',
+      },
+      {
+        re: /useSettingsStore\.getState\(\)\.(?:syncTelemetryData|setAppSettings|setScheduledTasks)\b/,
+        label: 'settings 域写走 useSettingsStore.getState()',
+      },
+      {
+        re: /usePermissionStore\.getState\(\)\.addCommandPermission\b/,
+        label: 'permission 域写走 usePermissionStore.getState()',
       },
       { re: /from\s+['\"]\.\.\/store\/sessionStore['\"]/, label: 'import sessionStore facade' },
       { re: /from\s+['\"]\.\.\/store\/workspaceStore['\"]/, label: 'import workspaceStore facade' },
@@ -511,6 +540,25 @@ for (const facade of FACADE_REQUIRED) {
     for (const { re, label } of accessRequired) {
       if (!re.test(src)) {
         fail(`${accessRel} missing required pattern: ${label}`);
+      }
+    }
+    // 域写回归门禁：不得回退到旧 god-object 形状（useLayoutStore.getState().<域 action>）；
+    // store/storeAccess.ts（T11 新域读面）同样纳入该门禁。
+    const accessForbidden = [
+      {
+        re: /useLayoutStore\.getState\(\)\.(?:pushDiffFile|setActiveDiffSource|syncTelemetryData|setAppSettings|setScheduledTasks|addCommandPermission)\b/,
+        label: 'god-object domain write via useLayoutStore.getState() (use domain store)',
+      },
+    ];
+    for (const { re, label } of accessForbidden) {
+      if (re.test(src)) fail(`${accessRel} forbidden: ${label}`);
+    }
+    const storeAccessDomainRel = 'apps/crish-desktop/src/store/storeAccess.ts';
+    const storeAccessDomainPath = resolve(storeDir, 'storeAccess.ts');
+    if (existsSync(storeAccessDomainPath)) {
+      const domainSrc = readFileSync(storeAccessDomainPath, 'utf8');
+      for (const { re, label } of accessForbidden) {
+        if (re.test(domainSrc)) fail(`${storeAccessDomainRel} forbidden: ${label}`);
       }
     }
     // 禁止 storeAccess 内再散落 useLayoutStore.getState()（跨域以外）
@@ -542,11 +590,11 @@ for (const facade of FACADE_REQUIRED) {
 
 if (failed) {
   console.error(
-    '[check-no-as-any-store] FAIL: use generic SessionStoreSlice / WorkspaceStoreSlice wiring; no `as any` / `: any` / @ts-ignore in store/ + storeAccess + layout-helpers/ + workspace-shell/ + hooks/ (production); keep sessionsById helpers + typed telemetry + facade alignment + anti-cycle + barrel.',
+    '[check-no-as-any-store] FAIL: use generic SessionStoreSlice / WorkspaceStoreSlice wiring; no `as any` / `: any` / @ts-ignore in store/ + storeAccess + layout-helpers/ + workspace-shell/ + hooks/ (production); keep sessionsById helpers + typed telemetry + facade alignment + anti-cycle + barrel + domain-scoped writes.',
   );
   process.exit(1);
 }
 
 console.log(
-  `[check-no-as-any-store] OK — scanned ${files.length} store files + storeAccess + layout-helpers/workspace-shell/hooks (production); no as-any / :any / @ts-ignore; sessionIndex + layout + actions + facade + barrel + storeAccess + anti-cycle checks passed`,
+  `[check-no-as-any-store] OK — scanned ${files.length} store files + storeAccess + layout-helpers/workspace-shell/hooks (production); no as-any / :any / @ts-ignore; sessionIndex + layout + actions + facade + barrel + storeAccess + anti-cycle + domain-scoped write checks passed`,
 );

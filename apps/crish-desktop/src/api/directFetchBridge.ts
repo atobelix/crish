@@ -31,7 +31,7 @@
 
 import type { StreamCallbacks, StreamRequestOptions } from './chatApi';
 import { getActiveModelId, getActiveProfile } from './providerProfiles';
-import { useLayoutStore } from '../store/layoutStore';
+import { useSettingsStore } from '../store';
 
 /** 递归规范化与确定性排序 JSON Schema 键名与 required 数组 */
 export function canonicalizeJsonSchema(schema: Record<string, unknown> | undefined): Record<string, unknown> {
@@ -166,7 +166,7 @@ export function streamViaDirectFetch(
   }
 
   const apiKey = activeProfile.apiKey || activeProfile.oauthToken?.accessToken || '';
-  const thinkingLevel = useLayoutStore.getState().appSettings?.defaultThinkingLevel;
+  const thinkingLevel = useSettingsStore.getState().appSettings?.defaultThinkingLevel;
   const thinkingParams = buildThinkingParams(thinkingLevel);
 
   // 1. Stable System Prompt & Tools

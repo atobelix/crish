@@ -1,4 +1,4 @@
-//! CrishError 错误系统（对齐 TS 端 shared-types/src/errors）
+//! CrishError 错误系统（TS 端 shared-types/src/errors 同构）
 //!
 //! 权威定义：
 //! - analysis/iterative-repair/v2/ROUND-10-rust.md §3
@@ -18,10 +18,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// cause 链递归深度上限（对齐 TS 端 CRISH_ERROR_CAUSE_MAX_DEPTH = 8）
+/// cause 链递归深度上限（TS 端 CRISH_ERROR_CAUSE_MAX_DEPTH = 8 同值）
 pub const CRISH_ERROR_CAUSE_MAX_DEPTH: u8 = 8;
 
-/// 故障类别（对齐 TS 端 CrishErrorCategory，serde lowercase）
+/// 故障类别（TS 端 CrishErrorCategory 同构，serde lowercase）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CrishErrorCategory {
@@ -35,7 +35,7 @@ pub enum CrishErrorCategory {
     Protocol,
 }
 
-/// 错误码元信息（对齐 TS 端 CrishErrorInfo）
+/// 错误码元信息（TS 端 CrishErrorInfo 同构）
 #[derive(Debug, Clone, PartialEq)]
 pub struct CrishErrorInfo {
     pub code: &'static str,
@@ -46,7 +46,7 @@ pub struct CrishErrorInfo {
     pub action: &'static str,
 }
 
-/// 错误码常量集（对齐 TS 端 CrishErrorCode，77 码 / 20 域）
+/// 错误码常量集（TS 端 CrishErrorCode 同构，77 码 / 20 域）
 ///
 /// 来源：packages/shared-types/src/errors/codes.ts
 /// 权威：03-ERROR-MIGRATION.md §2.2
@@ -155,7 +155,7 @@ pub mod codes {
     pub const GOAL_MAX_ROUNDS: &str = "goal.max_rounds";
 }
 
-/// 错误码元信息注册表（对齐 TS 端 CRISH_ERROR_REGISTRY，77 条）
+/// 错误码元信息注册表（TS 端 CRISH_ERROR_REGISTRY 同构，77 条）
 static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy::new(|| {
     let mut m = HashMap::with_capacity(80);
     // ── config 域 ──
@@ -581,7 +581,7 @@ static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy:
     m
 });
 
-/// 查询错误码元信息，未知码回退到 common.unknown（对齐 TS 端 getErrorInfo）
+/// 查询错误码元信息，未知码回退到 common.unknown（TS 端 getErrorInfo 同构）
 pub fn info(code: &str) -> CrishErrorInfo {
     CRISH_ERROR_REGISTRY.get(code).cloned().unwrap_or(CrishErrorInfo {
         code: codes::COMMON_UNKNOWN,
@@ -602,7 +602,8 @@ fn now_millis() -> i64 {
 
 /// Crish 错误类型（struct，非 enum）
 ///
-/// 对齐 TS 端 CrishError class。77 码通过 code: String 表达，
+/// Crish 错误类型（struct，非 enum），与 TS 端 CrishError class 同构。
+/// 77 码通过 code: String 表达，
 /// category/retryable 由 info(code) 在构造时决定，可通过 with_* 覆盖。
 /// cause 链在 to_error_payload 时按 depth 截断。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -664,7 +665,7 @@ impl CrishError {
     }
 
     /// 序列化为 IPC 负载，cause 链在 depth >= 8 时截断
-    /// （对齐 TS 端 toErrorPayload，截断 payload 携带 metadata.truncated = true）
+    /// （TS 端 toErrorPayload 同构，截断 payload 携带 metadata.truncated = true）
     pub fn to_error_payload(&self, depth: u8) -> CrishErrorPayload {
         if depth >= CRISH_ERROR_CAUSE_MAX_DEPTH {
             return CrishErrorPayload {
@@ -699,7 +700,7 @@ impl CrishError {
     }
 }
 
-/// 跨进程序列化错误负载（对齐 TS 端 CrishErrorPayload）
+/// 跨进程序列化错误负载（TS 端 CrishErrorPayload 同构）
 ///
 /// 字段一一对应 packages/shared-types/src/errors/serialize.ts 的 CrishErrorPayload：
 /// code / message / category / retryable / public / action / metadata / cause / stack / timestamp
@@ -710,7 +711,7 @@ pub struct CrishErrorPayload {
     pub message: String,
     pub category: CrishErrorCategory,
     pub retryable: bool,
-    /// 序列化为 "public"（对齐 TS 端字段名）
+    /// 序列化为 "public"（TS 端字段名同值）
     #[serde(rename = "public")]
     pub is_public: bool,
     pub action: String,
@@ -724,7 +725,7 @@ pub struct CrishErrorPayload {
 }
 
 impl CrishErrorPayload {
-    /// 从任意 std::error::Error 构造兜底 payload（对齐 TS 端 fromUnknownError）
+    /// 从任意 std::error::Error 构造兜底 payload（TS 端 fromUnknownError 同构）
     ///
     /// 若 e 已是 CrishError，直接 to_error_payload(0)；否则用 common.unknown 兜底。
     /// 要求 `'static` 是为了支持 downcast_ref（标准模式，与 anyhow/std 一致）。

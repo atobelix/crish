@@ -19,7 +19,7 @@ import {
   textToRuleLines,
 } from '../../api/rulesApi';
 import { formatEngineDegradeToast } from '../../hooks/useToastQueue';
-import { useLayoutStore } from '../../store/layoutStore';
+import { getSettingsState } from '../../store/storeAccess';
 import {
   EMPTY_GLOBAL_TEMPLATE,
   EMPTY_PROJECT_TEMPLATE,
@@ -173,7 +173,7 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
           normalizeCustomRules(merged.customRules ?? safe),
         );
         setCustomRules(next);
-        useLayoutStore.getState().setAppSettings(merged);
+        getSettingsState().setAppSettings(merged);
         setEditorText(
           next.length > 0
             ? rulesLinesToText(next, '# 全局规则')

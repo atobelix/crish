@@ -4,7 +4,8 @@
  * 渲染层（RuntimeSection 基座 + 4 个业务 Section）不持有这些派生逻辑。
  */
 import { useEffect, useMemo, useState } from 'react';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useSettingsField, selectScheduledTasks, selectTokenUsage } from '../../store/storeAccess';
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
 import { setActiveSessionId } from '../../api/storeAccess';
 import { estimateCostUsd } from '../../api/pricingStore';
@@ -39,8 +40,8 @@ export type UseRuntimePanelDataResult = {
 };
 
 export function useRuntimePanelData(): UseRuntimePanelDataResult {
-  const cronJobs = useLayoutStore((state) => state.scheduledTasks);
-  const tokenUsage = useLayoutStore((state) => state.tokenUsage);
+  const cronJobs = useSettingsField(selectScheduledTasks);
+  const tokenUsage = useSettingsField(selectTokenUsage);
   const sessions = useLayoutStore((state) => state.sessions);
   const ds = useEngineState();
 

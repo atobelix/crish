@@ -7,6 +7,7 @@ import {
   useMemo,
 } from 'react';
 import { useLayoutStore } from './store/layoutStore';
+import { useSettingsStore } from './store/settingsStore';
 import { isDemoModeFast, isProductShellFast, isTreeWorkspaceFast } from './createSsrGlobals';
 import {
   PlatformAdaptationCtx,
@@ -104,7 +105,7 @@ function App() {
     (s) => s.setShowSettingsOverlay
   );
   const settingsActiveTab = useLayoutStore((s) => s.settingsActiveTab);
-  const setAppSettings = useLayoutStore((s) => s.setAppSettings);
+  const setAppSettings = useSettingsStore((s) => s.setAppSettings);
 
 
 

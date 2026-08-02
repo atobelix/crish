@@ -57,17 +57,17 @@ describe('ApprovalHandler', () => {
   });
 
   describe('engineApproveTool and engineDenyTool', () => {
-    it('approve-tool 经 transport.send（commandMap 翻译 core_approve_tool）', async () => {
+    it('core_approve_tool 经 transport.send 命令名直发', async () => {
       await engineApproveTool('tc-999', 'project');
-      expect(fakeTransport.send).toHaveBeenCalledWith('approve-tool', {
+      expect(fakeTransport.send).toHaveBeenCalledWith('core_approve_tool', {
         toolCallId: 'tc-999',
         scope: 'project',
       });
     });
 
-    it('deny-tool 经 transport.send（commandMap 翻译 core_deny_tool）', async () => {
+    it('core_deny_tool 经 transport.send 命令名直发', async () => {
       await engineDenyTool('tc-888');
-      expect(fakeTransport.send).toHaveBeenCalledWith('deny-tool', {
+      expect(fakeTransport.send).toHaveBeenCalledWith('core_deny_tool', {
         toolCallId: 'tc-888',
       });
     });
