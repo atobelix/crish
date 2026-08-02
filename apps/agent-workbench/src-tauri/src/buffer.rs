@@ -338,3 +338,95 @@ mod tests {
         assert!(buffer.is_empty());
     }
 }
+
+/// 桥吞吐压力测试（PE-11 T11.6.3，验证 buffer.rs:41-58 丢帧语义不丢终态）
+///
+/// 运行方式（release，显式跑；默认不进常规 CI）：
+///   cargo test -p crish-agent-workbench --release -- --ignored stress_ --nocapture
+#[cfg(test)]
+mod stress_tests {
+    use super::*;
+    use std::time::Instant;
+
+    /// 高水位丢帧压力：20 万条 delta 灌入（远超软水位），期间 message-end
+    /// 与 run-terminal 以 Critical 入队——断言二者必达、agent-start 保留、
+    /// 缓冲内 delta 不超过软水位（丢帧只丢 delta 旧帧）
+    #[test]
+    #[ignore]
+    fn stress_high_watermark_flood_drops_only_delta_and_keeps_terminal() {
+        let mut buffer = EventBuffer::new(64, 256);
+        let started = Instant::now();
+
+        let mut enqueued = 0usize;
+        buffer.enqueue("r1", DropClass::Critical, "agent-start".into());
+        enqueued += 1;
+        for i in 0..200_000u64 {
+            buffer.enqueue("r1", DropClass::Soft, format!("delta-{i}"));
+            enqueued += 1;
+        }
+        // message-end（全文兜底）与 run-terminal 永不丢
+        let message_end = buffer.enqueue("r1", DropClass::Critical, "message-end".into());
+        let terminal = buffer.enqueue("r1", DropClass::Critical, "run-terminal".into());
+        assert!(message_end.buffered, "message-end 永不丢");
+        assert!(terminal.buffered, "run-terminal 永不丢");
+        let elapsed = started.elapsed();
+
+        let drained = buffer.drain("r1");
+        assert!(drained.contains(&"run-terminal".to_string()), "run-terminal 必达");
+        assert!(drained.contains(&"message-end".to_string()), "message-end 必达（全文兜底）");
+        assert!(drained.contains(&"agent-start".to_string()), "agent-start 不可丢");
+        let soft_alive = drained.iter().filter(|p| p.starts_with("delta-")).count();
+        assert!(soft_alive <= 64, "缓冲内 delta 不得超过软水位（丢帧只丢 delta 旧帧）");
+
+        let dropped = enqueued - drained.len();
+        println!(
+            "[stress] 桥高水位洪峰：入队 {enqueued} 条（20 万 delta + 3 条 Critical），丢帧 {dropped} 条，存活 {} 条，耗时 {elapsed:?}（{:.0} 事件/秒）",
+            drained.len(),
+            enqueued as f64 / elapsed.as_secs_f64()
+        );
+    }
+
+    /// 周期性冲刷压力：模拟桥的每轮 flush 循环——50 轮 ×（agent-start +
+    /// 3000 delta + message-end）逐轮冲刷，终态再灌入——断言每轮 message-end
+    /// 必达、终态批次 message-end-final 与 run-terminal 必达
+    #[test]
+    #[ignore]
+    fn stress_delta_flood_across_flush_cycles_keeps_terminal() {
+        let mut buffer = EventBuffer::new(64, 256);
+        let started = Instant::now();
+
+        let mut cycles = 0u32;
+        for cycle in 0..50u32 {
+            buffer.enqueue("r1", DropClass::Critical, format!("agent-start-{cycle}"));
+            for i in 0..3000u64 {
+                buffer.enqueue("r1", DropClass::Soft, format!("delta-{cycle}-{i}"));
+            }
+            // 每轮 message-end（Critical）入队后冲刷
+            buffer.enqueue("r1", DropClass::Critical, format!("message-end-{cycle}"));
+            let flushed = buffer.drain("r1");
+            assert!(
+                flushed.contains(&format!("message-end-{cycle}")),
+                "第 {cycle} 轮 message-end 必达（Critical 永不丢）"
+            );
+            assert!(
+                flushed.contains(&format!("agent-start-{cycle}")),
+                "第 {cycle} 轮 agent-start 必达"
+            );
+            cycles += 1;
+        }
+        // 终态：最后一条消息 message-end + run-terminal 必达
+        buffer.enqueue("r1", DropClass::Critical, "message-end-final".into());
+        let terminal = buffer.enqueue("r1", DropClass::Critical, "run-terminal".into());
+        assert!(terminal.buffered, "run-terminal 永不丢");
+        let final_batch = buffer.drain("r1");
+        assert!(final_batch.contains(&"run-terminal".to_string()), "run-terminal 必达");
+        assert!(final_batch.contains(&"message-end-final".to_string()), "message-end 必达");
+        let elapsed = started.elapsed();
+
+        let total = cycles as usize * 3002 + 2;
+        println!(
+            "[stress] 桥周期冲刷压力：{cycles} 轮 × 3002 事件 + 终态 2 条 = {total} 条，耗时 {elapsed:?}（{:.0} 事件/秒），Critical 全部必达",
+            total as f64 / elapsed.as_secs_f64()
+        );
+    }
+}
