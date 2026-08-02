@@ -1,5 +1,4 @@
 import fs from 'fs';
-import path from 'path';
 
 const manifestData = {
   "$schema": "http://json-schema.org/draft-07/schema#",

@@ -9,10 +9,11 @@ interface CacheEntry {
 /**
  * 防御边界异常: 遍历校验是否存在 NaN 或无限大的数值，避免后续引擎计算溢出
  */
-export function validatePreparedText(prepared: any): boolean {
-  if (!prepared) return false;
-  for (const key of Object.keys(prepared)) {
-    const val = prepared[key];
+export function validatePreparedText(prepared: unknown): boolean {
+  if (!prepared || typeof prepared !== 'object') return false;
+  const record = prepared as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    const val = record[key];
     if (typeof val === 'number') {
       if (Number.isNaN(val) || !Number.isFinite(val)) {
         return false;
@@ -34,7 +35,7 @@ export function safePrepareText(text: string, font: string): PreparedText | null
       return null;
     }
     return prepared;
-  } catch (error) {
+  } catch {
     return null;
   }
 }

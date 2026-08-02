@@ -36,7 +36,7 @@ function utf8Bytes(text: string): Uint8Array {
   // Fallback for rare non-browser hosts without TextEncoder
   const out: number[] = [];
   for (let i = 0; i < text.length; i++) {
-    let c = text.charCodeAt(i);
+    const c = text.charCodeAt(i);
     if (c < 0x80) {
       out.push(c);
     } else if (c < 0x800) {

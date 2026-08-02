@@ -256,7 +256,7 @@ export const useLayoutAnimationStore = create<LayoutAnimationStore>((set, get) =
           }
         });
       });
-    } catch (e) {
+    } catch {
       // 在非 React 调度回调中 fallback 至普通调用
       catchupQueue.forEach((task) => {
         try {

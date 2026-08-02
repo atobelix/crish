@@ -324,7 +324,7 @@ describe('bandwidth comparison: binary vs JSON transports', () => {
     const ratioGiant = sizeB / sizeGiantJson;
     const savingsGiant = 1 - ratioGiant;
 
-    // eslint-disable-next-line no-console
+     
     console.log(
       `[bandwidth] 100KB raw → JSON+b64=${sizeBase64}B giantJSON≈${sizeGiantJson}B binary=${sizeB}B` +
         ` | vs b64: ratio=${(ratioB64 * 100).toFixed(2)}% savings=${(savingsB64 * 100).toFixed(2)}%` +

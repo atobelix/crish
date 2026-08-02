@@ -161,8 +161,8 @@ const ACTION_MODULE_REQUIRED = [
       },
     ],
     forbidImport: [
-      { re: /from\s+['\"]\.\/layoutStore['\"]/, label: 'must not import ./layoutStore (cycle)' },
-      { re: /from\s+['\"]\.\/sessionStore['\"]/, label: 'must not import ./sessionStore (cycle)' },
+      { re: /from\s+['"]\.\/layoutStore['"]/, label: 'must not import ./layoutStore (cycle)' },
+      { re: /from\s+['"]\.\/sessionStore['"]/, label: 'must not import ./sessionStore (cycle)' },
     ],
   },
   {
@@ -175,8 +175,8 @@ const ACTION_MODULE_REQUIRED = [
       },
     ],
     forbidImport: [
-      { re: /from\s+['\"]\.\/layoutStore['\"]/, label: 'must not import ./layoutStore (cycle)' },
-      { re: /from\s+['\"]\.\/workspaceStore['\"]/, label: 'must not import ./workspaceStore (cycle)' },
+      { re: /from\s+['"]\.\/layoutStore['"]/, label: 'must not import ./layoutStore (cycle)' },
+      { re: /from\s+['"]\.\/workspaceStore['"]/, label: 'must not import ./workspaceStore (cycle)' },
     ],
   },
 ];
@@ -199,8 +199,8 @@ const FACADE_REQUIRED = [
     ],
     // 门面互不 import，避免 multi-store 前形成假依赖
     forbidImport: [
-      { re: /from\s+['\"]\.\/workspaceStore['\"]/, label: 'sessionStore must not import workspaceStore' },
-      { re: /from\s+['\"]\.\/settingsUiStore['\"]/, label: 'sessionStore must not import settingsUiStore' },
+      { re: /from\s+['"]\.\/workspaceStore['"]/, label: 'sessionStore must not import workspaceStore' },
+      { re: /from\s+['"]\.\/settingsUiStore['"]/, label: 'sessionStore must not import settingsUiStore' },
     ],
     getStateCast: {
       re: /as\s+unknown\s+as\s+SessionFacade\b/,
@@ -221,8 +221,8 @@ const FACADE_REQUIRED = [
       { re: /export\s+function\s+useWorkspaceField\b/, label: 'useWorkspaceField' },
     ],
     forbidImport: [
-      { re: /from\s+['\"]\.\/sessionStore['\"]/, label: 'workspaceStore must not import sessionStore' },
-      { re: /from\s+['\"]\.\/settingsUiStore['\"]/, label: 'workspaceStore must not import settingsUiStore' },
+      { re: /from\s+['"]\.\/sessionStore['"]/, label: 'workspaceStore must not import sessionStore' },
+      { re: /from\s+['"]\.\/settingsUiStore['"]/, label: 'workspaceStore must not import settingsUiStore' },
     ],
     getStateCast: {
       re: /as\s+unknown\s+as\s+WorkspaceFacade\b/,
@@ -244,8 +244,8 @@ const FACADE_REQUIRED = [
       { re: /export\s+function\s+useSettingsUiField\b/, label: 'useSettingsUiField' },
     ],
     forbidImport: [
-      { re: /from\s+['\"]\.\/sessionStore['\"]/, label: 'settingsUiStore must not import sessionStore' },
-      { re: /from\s+['\"]\.\/workspaceStore['\"]/, label: 'settingsUiStore must not import workspaceStore' },
+      { re: /from\s+['"]\.\/sessionStore['"]/, label: 'settingsUiStore must not import sessionStore' },
+      { re: /from\s+['"]\.\/workspaceStore['"]/, label: 'settingsUiStore must not import workspaceStore' },
     ],
     getStateCast: {
       re: /as\s+unknown\s+as\s+SettingsUiFacade\b/,
@@ -257,10 +257,10 @@ const FACADE_REQUIRED = [
 
 /** barrel 须 re-export 三门面入口 */
 const BARREL_REQUIRED = [
-  { re: /export\s+\{[^}]*\buseSessionStore\b[^}]*\}\s+from\s+['\"]\.\/sessionStore['\"]/, label: 're-export useSessionStore' },
-  { re: /export\s+\{[^}]*\buseWorkspaceStore\b[^}]*\}\s+from\s+['\"]\.\/workspaceStore['\"]/, label: 're-export useWorkspaceStore' },
-  { re: /export\s+\{[^}]*\buseSettingsUiStore\b[^}]*\}\s+from\s+['\"]\.\/settingsUiStore['\"]/, label: 're-export useSettingsUiStore' },
-  { re: /export\s+\{[^}]*\buseLayoutStore\b[^}]*\}\s+from\s+['\"]\.\/layoutStore['\"]/, label: 're-export useLayoutStore' },
+  { re: /export\s+\{[^}]*\buseSessionStore\b[^}]*\}\s+from\s+['"]\.\/sessionStore['"]/, label: 're-export useSessionStore' },
+  { re: /export\s+\{[^}]*\buseWorkspaceStore\b[^}]*\}\s+from\s+['"]\.\/workspaceStore['"]/, label: 're-export useWorkspaceStore' },
+  { re: /export\s+\{[^}]*\buseSettingsUiStore\b[^}]*\}\s+from\s+['"]\.\/settingsUiStore['"]/, label: 're-export useSettingsUiStore' },
+  { re: /export\s+\{[^}]*\buseLayoutStore\b[^}]*\}\s+from\s+['"]\.\/layoutStore['"]/, label: 're-export useLayoutStore' },
 ];
 
 function isCommentOnlyLine(line) {
@@ -533,9 +533,9 @@ for (const facade of FACADE_REQUIRED) {
         re: /usePermissionStore\.getState\(\)\.addCommandPermission\b/,
         label: 'permission 域写走 usePermissionStore.getState()',
       },
-      { re: /from\s+['\"]\.\.\/store\/sessionStore['\"]/, label: 'import sessionStore facade' },
-      { re: /from\s+['\"]\.\.\/store\/workspaceStore['\"]/, label: 'import workspaceStore facade' },
-      { re: /from\s+['\"]\.\.\/store\/settingsUiStore['\"]/, label: 'import settingsUiStore facade' },
+      { re: /from\s+['"]\.\.\/store\/sessionStore['"]/, label: 'import sessionStore facade' },
+      { re: /from\s+['"]\.\.\/store\/workspaceStore['"]/, label: 'import workspaceStore facade' },
+      { re: /from\s+['"]\.\.\/store\/settingsUiStore['"]/, label: 'import settingsUiStore facade' },
     ];
     for (const { re, label } of accessRequired) {
       if (!re.test(src)) {
@@ -577,7 +577,7 @@ for (const facade of FACADE_REQUIRED) {
       fail(`${accessRel}: expected 1 useLayoutStore.getState() inside getLayoutState; found 0`);
     }
     // 禁止 import 组件层（编排层只依赖 store）
-    if (/from\s+['\"]\.\.\/components\//.test(src) || /from\s+['\"]\.\/components\//.test(src)) {
+    if (/from\s+['"]\.\.\/components\//.test(src) || /from\s+['"]\.\/components\//.test(src)) {
       fail(`${accessRel}: must not import from components/`);
     }
     // storeAccess 自身禁止 as unknown as（跨域编排应已类型化）

@@ -33,14 +33,14 @@ for (const file of files) {
     const line = lines[i];
     
     // Only detect component top-level early returns (e.g. if (cond) return null; at 2 spaces)
-    const condMatch = line.match(/^  if\s*\(.*?\)\s*(?:return|\{\s*return)/);
+    const condMatch = line.match(/^ {2}if\s*\(.*?\)\s*(?:return|\{\s*return)/);
     if (condMatch) {
       conditionalReturnLine = i + 1;
       continue;
     }
     
     if (conditionalReturnLine !== -1) {
-      const hookMatch = line.match(/^  (?:const|let|var)\s+.*?=\s*(useRef|useCallback|useState|useEffect|useMemo)\b/);
+      const hookMatch = line.match(/^ {2}(?:const|let|var)\s+.*?=\s*(useRef|useCallback|useState|useEffect|useMemo)\b/);
       if (hookMatch) {
         console.error(`Error: Found React Hook '${hookMatch[1]}' at line ${i + 1} after top-level early return at line ${conditionalReturnLine} in ${file}`);
         hasError = true;

@@ -36,7 +36,7 @@ export interface LayoutCoreState {
 
 export function createLayoutCoreActions(
   set: (updater: (state: LayoutCoreState) => void) => void,
-  get: () => LayoutCoreState
+  _get: () => LayoutCoreState
 ) {
   return {
     setUiSize: (size: UiSize) => {

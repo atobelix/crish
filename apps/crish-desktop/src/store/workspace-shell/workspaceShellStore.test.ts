@@ -552,10 +552,6 @@ describe('openNewDraftTab — 不清空已打开会话 tab', () => {
     expect(next.activeTabId).toBeNull();
     expect(resetSpy).not.toHaveBeenCalled();
     // 活动 chat leaf 应解绑，便于 ChatCard 跟 draft 空态
-    const leaf = findChatLeafBySessionId(
-      useLayoutTreeStore.getState().tree.root,
-      's1'
-    );
     // s1 已从 leaf 解绑（或 leaf 无 sessionId）
     const chats = listChatLeaves(useLayoutTreeStore.getState().tree.root);
     expect(chats.every((c) => c.sessionId !== 's1' || !c.sessionId)).toBe(true);

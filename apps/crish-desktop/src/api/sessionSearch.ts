@@ -60,7 +60,7 @@ const UNICODE_SPACE_RE = /[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u30
  * 保留 ZWJ（U+200D）以不破坏 emoji 序列（搜索侧不需剥 ZWJ，因 NFKC + lower 不影响 ZWJ 语义）。
  */
 const SEARCH_INVISIBLE_RE =
-  // eslint-disable-next-line no-control-regex -- intentional sanitization of C0 controls
+  // eslint-disable-next-line no-control-regex, no-misleading-character-class -- 有意剥离不可见/控制字符（含组合类）
   /(?![\u200D])[\p{Cf}\u034F\u3164\u115F\uFE00-\uFE0F\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu;
 
 /**

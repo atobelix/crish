@@ -90,7 +90,7 @@ class FakeHookBus implements HookBusLike {
       observers.map(async (h) => {
         try {
           await h.handler(payload);
-        } catch (err) {
+        } catch {
           // observe 失败吞掉
         }
       }),
@@ -158,7 +158,7 @@ class FakeHookBus implements HookBusLike {
             if (result.reason !== undefined) merged.reason = result.reason;
           }
         }
-      } catch (err) {
+      } catch {
         // on 失败记录但不阻塞
       }
     }

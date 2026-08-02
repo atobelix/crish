@@ -22,14 +22,15 @@ export type UseSessionTabReorderResult = {
 export function useSessionTabReorder(
   opts: UseSessionTabReorderOptions
 ): UseSessionTabReorderResult {
+  const { refreshTabs } = opts;
   const commitSessionReorder = useCallback(
     (sourceSessionId: string, targetSessionId?: string) => {
       getCompositionRoot()
         .shell.getState()
         .reorderSessionTab(sourceSessionId, targetSessionId ?? null);
-      opts.refreshTabs();
+      refreshTabs();
     },
-    [opts.refreshTabs]
+    [refreshTabs]
   );
 
   return { commitSessionReorder };

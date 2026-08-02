@@ -21,7 +21,6 @@ import type { SessionAgent, SessionMessage, SessionState } from '../../store/lay
 import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
 import { coerceSessionTimestamp } from '../sessionTime';
 import { prepareSessionsForUi } from '../sessionTitle';
-import { normalizeAssistantTimeline } from '../toolPresentation';
 
 import {
   SESSION_ACTIVE_KEY,

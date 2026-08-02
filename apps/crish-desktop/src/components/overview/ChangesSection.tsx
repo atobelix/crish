@@ -7,7 +7,7 @@ import { detectFileKind } from '../../api/workspaceFsApi';
 import { fileExtColor } from '../../api/codeHighlight';
 import { gitStatusLabel } from '../../api/gitApi';
 import { basename, getGitStatusColor } from './helpers';
-import type { GitStatusResult } from '../../api/gitApi';
+import type { GitStatusResult, GitStatusFile } from '../../api/gitApi';
 import type { DiffFileInfo } from '../../api/storeAccess';
 
 function FileIcon({ name }: { name: string }) {
@@ -34,14 +34,14 @@ interface ChangesSectionProps {
   gitHelp: { title: string; hint?: string; action?: string } | null;
   onToggle: () => void;
   onRefreshGit: (opts?: { force?: boolean }) => void;
-  onOpenGitFile: (f: any) => void;
+  onOpenGitFile: (f: GitStatusFile) => void;
   onSetShowAllFiles: (v: boolean) => void;
   onOpenPanel: (id: string) => void;
   onOpenDiffSource: (f: DiffFileInfo) => void;
 }
 
 export const ChangesSection = React.memo(function ChangesSection({
-  open, git, gitLoading, gitErr, convoFiles, openingPath, actionErr,
+  open, git, gitLoading, convoFiles, openingPath, actionErr,
   showAllFiles, branch, gitHelp,
   onToggle, onRefreshGit, onOpenGitFile, onSetShowAllFiles, onOpenPanel, onOpenDiffSource,
 }: ChangesSectionProps) {
@@ -86,7 +86,7 @@ export const ChangesSection = React.memo(function ChangesSection({
           {gitFiles.length > 0 ? (
             <>
               <ul className={styles.list} aria-label="Git 改动文件">
-                {(showAllFiles ? gitFiles : gitFiles.slice(0, 8)).map((f: any) => {
+                {(showAllFiles ? gitFiles : gitFiles.slice(0, 8)).map((f) => {
                   const opening = openingPath === f.path;
                   const stLabel = gitStatusLabel(f.status);
                   const statusColor = getGitStatusColor(f.status);

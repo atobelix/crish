@@ -21,9 +21,9 @@ import { useTerminalStore } from '../../store/terminalStore';
 export type LayoutStoreHook = typeof useLayoutStore;
 
 export interface StoreLike<S = unknown> {
-  getState: () => S;
-  setState: Function;
-  subscribe: Function;
+  getState(): S;
+  setState(partial: S | Partial<S> | ((state: S) => S | Partial<S>), replace?: boolean): void;
+  subscribe(listener: (state: S, prevState: S) => void): () => void;
 }
 
 let _sessionStore: StoreLike<unknown> | null = null;

@@ -3,7 +3,7 @@ export interface RetryOptions {
   baseMs?: number;
   maxMs?: number;
   jitterFactor?: number;
-  shouldRetry?: (error: any) => boolean;
+  shouldRetry?: (error: unknown) => boolean;
 }
 
 export function calculateBackoff(

@@ -39,11 +39,9 @@ async function testRealApi() {
     });
 
     console.log(`✅ 成功建立 HTTP Stream 连接，收到响应 chunk:`);
-    let fullText = '';
     for await (const chunk of stream) {
       if (chunk.type === 'content_delta') {
         process.stdout.write(chunk.delta);
-        fullText += chunk.delta;
       }
     }
 

@@ -58,7 +58,7 @@ describe('Destructive Stress & Mutation Probing Pipeline', () => {
       let exceptionThrown = false;
       try {
         buffer.push(hugeText);
-      } catch (e) {
+      } catch {
         exceptionThrown = true;
       }
       expect(exceptionThrown).toBe(false);
@@ -66,7 +66,7 @@ describe('Destructive Stress & Mutation Probing Pipeline', () => {
       let titleException = false;
       try {
         sessionHasListableContent({ messages: [malformedMessage] });
-      } catch (e) {
+      } catch {
         titleException = true;
       }
       expect(titleException).toBe(false);
@@ -94,7 +94,7 @@ describe('Destructive Stress & Mutation Probing Pipeline', () => {
         if (Number.isNaN(total)) {
           nanDetected = true;
         }
-      } catch (e) {
+      } catch {
         exceptionThrown = true;
       }
 
@@ -229,7 +229,7 @@ describe('Destructive Stress & Mutation Probing Pipeline', () => {
       let heapException = false;
       try {
         stringified = JSON.stringify(payload);
-      } catch (e) {
+      } catch {
         heapException = true;
       }
       expect(heapException).toBe(false);

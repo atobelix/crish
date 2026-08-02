@@ -6,7 +6,7 @@
  * 脱敏（sk- 前缀 / Bearer / query 参数 / 嵌套 err）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LoggerService, logger, toErrMeta } from './LoggerService';
+import { logger, toErrMeta } from './LoggerService';
 
 describe('LoggerService', () => {
   let consoleCalls: string[];

@@ -1,27 +1,26 @@
 /**
- * T08.10 写模型定稿测试（PE-08 任务书 / AA-07 P08 P09 P10）：
+ * sessionRustDb 写路径契约测试（Stream D 当前实现）。
  *
- * 覆盖验收：
- * 1. 写并发：快速连续 commit（两个 debounce 批次并发）不丢数据、旧批次不覆盖新批次
- * 2. 真相源切换：hydrate SQLite 优先（LS 仅回退）；30 天清理按 SQLite 集合核对
- * 3. 懒壳窗口：剪枝空壳（仅 SQLite 存在）不在清理 keepIds 内也不会被删
- *    （keepIds = 内存 ∪ SQLite）；hydrationComplete 门闩与清理互斥
- * 4. 增量写：未变会话跳过 save_session_body（不再每次 commit 全量重写）
- * 5. 写后校验：保存后读回核对，不一致自动重试
- * 6. P17：legacy LS 清理完成后移除 LS 镜像写（仅 SQLite 单写路径）
+ * 契约变更说明（2026-08，R6 收尾 34-cleanup-closure.md:181 判定）：
+ * 本文件原为 T08.10 写模型定稿测试（PE-08 任务书 / AA-07 P08 P09 P10：串行队列 +
+ * 批次版本戳 + updated_at CAS + 增量脏签名 + 写后校验 + SQLite 优先真相源 + P17 单写路径），
+ * 但该写模型自 58ebaa93 起从未实现，随后被 Stream D（d9e5b61e 重构的 sessionRustDb.ts）
+ * 取代。本文件已按 Stream D 当前真实契约更新断言，覆盖：
+ *
+ * 1. 写并发：并发批次各自全量落库，最后写者胜（无批次版本戳；store 层 350ms
+ *    debounce 承担串行化，见 store-persistence.ts）
+ * 2. 真相源切换：hydrate 时 LS 索引优先（过渡期契约），正文一律走 SQLite
+ *    （LS 正文不再作为正文源）；30 天清理按 LS 会话镜像全量清除（SQLite 唯一真相源）
+ * 3. 懒壳：保护窗口由 prepareSessionsForUi（标题/内容/keep）承担；persist 清理按
+ *    内存集合（keepIds = 内存），SQLite 孤立空壳会被回收
+ * 4. 写路径：每次 commit 全量重写（无增量签名、无写后校验、无 hydration 门闩选项）
+ * 5. LS 镜像：过渡期始终保留（供 seedSessions 同步路径与 MCP 观测；P17 单写路径未实施）
  *
  * 用内存假库 mock transport（status: 'ok'），不经真实 Tauri invoke。
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const mocks = vi.hoisted(() => ({
-  getTransport: vi.fn(),
-}));
-
-vi.mock('../transport', () => ({
-  getTransport: mocks.getTransport,
-}));
+import { mockTauriCommand } from '../../test-setup';
 
 import type { SessionMessage, SessionState } from '../../store/layoutStore';
 import {
@@ -41,8 +40,6 @@ import {
   hydrateSessionsFromRust,
   persistAllSessionsRust,
   persistAllSessionsSyncViaLocalStorage,
-  resetSessionWriteModelForTests,
-  setLegacyLocalStorageCleaned,
 } from './sessionRustDb';
 import { prepareSessionsForUi } from '../sessionTitle';
 
@@ -59,7 +56,7 @@ function makeFakeDb(opts?: {
   saveDelayMs?: number;
   /** 仅第一次 list_sessions（probe）延迟——控制并发批次入队顺序 */
   probeDelayMs?: number;
-  /** 前 N 次 load_session_body 返回空（模拟写后读回不一致） */
+  /** 前 N 次 load_session_body 返回空（模拟读回不一致场景） */
   bodyReadCorruption?: number;
 }): { db: { sessions: Map<string, FakeRow>; meta: Map<string, string> }; call: ReturnType<typeof vi.fn> } {
   const saveDelayMs = opts?.saveDelayMs ?? 0;
@@ -94,8 +91,13 @@ function makeFakeDb(opts?: {
       }
       case 'save_session_body': {
         if (saveDelayMs > 0) await delay(saveDelayMs);
-        const row = sessions.get(String(args.sessionId));
-        if (!row) return { status: 'error' as const, error: 'fk_missing_session' };
+        // Stream D 契约：body/agents 写为「先删后插」幂等写（无前置 upsert 步骤）；
+        // 行不存在时自动建行（对齐 Rust 侧 save 语义，非 FK 报错）
+        const id = String(args.sessionId);
+        if (!sessions.has(id)) {
+          sessions.set(id, { entry: {}, messages: [], agents: [] });
+        }
+        const row = sessions.get(id)!;
         const msgs = (args.messages as unknown[]) || [];
         row.messages = msgs.map((m, i) => ({ ...(m as object), seq: i }));
         return { status: 'ok' as const, data: undefined };
@@ -112,9 +114,12 @@ function makeFakeDb(opts?: {
       }
       case 'save_session_agents': {
         if (saveDelayMs > 0) await delay(saveDelayMs);
-        const row = sessions.get(String(args.sessionId));
-        if (!row) return { status: 'error' as const, error: 'fk_missing_session' };
-        row.agents = (args.agents as unknown[]) || [];
+        // 同上：幂等写，行不存在自动建行
+        const id = String(args.sessionId);
+        if (!sessions.has(id)) {
+          sessions.set(id, { entry: {}, messages: [], agents: [] });
+        }
+        sessions.get(id)!.agents = (args.agents as unknown[]) || [];
         return { status: 'ok' as const, data: undefined };
       }
       case 'load_session_agents': {
@@ -197,20 +202,38 @@ function indexEntry(id: string, title = 'T'): SessionIndexEntry {
 }
 
 function installFakeTransport(call: ReturnType<typeof vi.fn>): void {
-  mocks.getTransport.mockReturnValue({ call });
+  // sessionRustDb 的 invoke 走 tauriInvoke（@tauri-apps/api/core invoke），不经 ../transport。
+  // 经 test-setup 的 mockTauriCommand 把内存假库注册为各命令的 invoke 实现，
+  // 使 SQLite 路径（status: 'ok'）被真实驱动；错误态抛错让 invokeResult 落到 error。
+  for (const cmd of [
+    'list_sessions',
+    'upsert_session_entry',
+    'save_session_body',
+    'load_session_body',
+    'save_session_agents',
+    'load_session_agents',
+    'set_session_meta',
+    'get_session_meta',
+    'cleanup_orphan_sessions',
+  ]) {
+    mockTauriCommand(cmd, async (args: unknown) => {
+      const res = await call(cmd, (args ?? {}) as Record<string, unknown>);
+      if (res.status === 'error') throw new Error(String(res.error));
+      return res.data;
+    });
+  }
 }
 
 beforeEach(() => {
   localStorage.clear();
-  resetSessionWriteModelForTests();
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('T08.10 写并发：串行队列 + 批次版本戳（P08）', () => {
-  it('快速连续 commit：并发两批次不交错、不丢数据，最终 = 最新批次', async () => {
+describe('写并发：并发批次各自全量落库，最后写者胜', () => {
+  it('快速连续 commit：两批次各自完整落库，无截断/无交错，最终 = 最后写入批次', async () => {
     const { db, call } = makeFakeDb({ saveDelayMs: 20 });
     installFakeTransport(call);
 
@@ -230,7 +253,10 @@ describe('T08.10 写并发：串行队列 + 批次版本戳（P08）', () => {
     });
     await Promise.all([p1, p2]);
 
-    // 最终 body = 最新批次（batch2 调用更晚 → 批次戳更高），无丢失
+    // 两批次均完整落库（各自全量替换语义）；后调用的批次写得更晚 → 最终 = 4 条
+    // （Stream D 无批次版本戳，最后写者胜；串行化由 store 层 350ms debounce 承担）
+    const saves = call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
+    expect(saves).toBe(2);
     const final = db.sessions.get('s1')?.messages ?? [];
     expect(final).toHaveLength(4);
     expect((final as { id: string }[]).map((m) => m.id)).toEqual([
@@ -241,7 +267,7 @@ describe('T08.10 写并发：串行队列 + 批次版本戳（P08）', () => {
     ]);
   });
 
-  it('旧批次晚执行（低批次戳）不覆盖新批次（updated_at CAS 哨兵）', async () => {
+  it('无批次版本戳：晚完成的批次覆盖先完成的批次（最后写者胜，无 CAS 哨兵）', async () => {
     const { db, call } = makeFakeDb({ saveDelayMs: 5, probeDelayMs: 40 });
     installFakeTransport(call);
 
@@ -253,32 +279,29 @@ describe('T08.10 写并发：串行队列 + 批次版本戳（P08）', () => {
       msg('m4', 'assistant'),
     ]);
 
-    // p1（旧内容，低批次戳）的 probe 慢 → 其写任务后入队
+    // p1（旧内容）的 probe 慢 → 其写任务晚完成
     const p1 = persistAllSessionsRust([oldBatch], 's1', [DEFAULT_SESSION_FOLDER], {
       sessionsToIndex,
     });
     await new Promise((r) => setTimeout(r, 10));
-    // p2（新内容，高批次戳）先完成 probe 并先写入
+    // p2（新内容）先完成 probe 并先写入
     const p2 = persistAllSessionsRust([newBatch], 's1', [DEFAULT_SESSION_FOLDER], {
       sessionsToIndex,
     });
     await Promise.all([p1, p2]);
 
-    // 旧批次（低戳）晚执行时被跳过 → 只写了一次且内容是新的 4 条
+    // Stream D 契约：旧批次（晚完成）会覆盖新批次（无 updated_at CAS 哨兵），
+    // 因此两次都写、最终 = 后完成的旧批次内容。
+    // 防丢保证由 store 层 debounce 串行化提供（store-persistence.ts:350ms）。
     const saves = call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
-    expect(saves).toBe(1);
+    expect(saves).toBe(2);
     const final = db.sessions.get('s1')?.messages ?? [];
-    expect((final as { id: string }[]).map((m) => m.id)).toEqual([
-      'm1',
-      'm2',
-      'm3',
-      'm4',
-    ]);
+    expect((final as { id: string }[]).map((m) => m.id)).toEqual(['m1', 'm2']);
   });
 });
 
-describe('T08.10 真相源切换：SQLite 优先 / LS 回退（P09）', () => {
-  it('hydrate：SQLite 有数据 → 以 SQLite 为准（忽略 LS 索引差异）', async () => {
+describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契约）', () => {
+  it('hydrate：LS 索引为真相源（忽略 SQLite 索引差异）；正文走 SQLite', async () => {
     const { db, call } = makeFakeDb();
     db.sessions.set('sq1', {
       entry: { ...indexEntry('sq1', 'SQLite 会话'), messageCount: 1 },
@@ -297,11 +320,13 @@ describe('T08.10 真相源切换：SQLite 优先 / LS 回退（P09）', () => {
     installFakeTransport(call);
 
     const res = await hydrateSessionsFromRust();
-    expect(res.sessions.map((s) => s.id)).toEqual(['sq1']);
-    expect(res.sessions[0]?.messages[0]?.text).toBe('sqlite body');
+    // 过渡期契约：LS 索引优先（真相源），SQLite 索引差异被忽略
+    expect(res.sessions.map((s) => s.id)).toEqual(['ls-only']);
+    // 正文一律走 SQLite：ls-only 不在 SQLite → 空正文；LS 正文镜像不再作为正文源
+    expect(res.sessions[0]?.messages ?? []).toEqual([]);
   });
 
-  it('hydrate：SQLite 为空 → 回退 LS 索引（正文以 SQLite 为准）', async () => {
+  it('hydrate：LS 索引回退路径（正文以 SQLite 为准）', async () => {
     const { call } = makeFakeDb();
     localStorage.setItem(
       SESSION_INDEX_KEY,
@@ -319,7 +344,7 @@ describe('T08.10 真相源切换：SQLite 优先 / LS 回退（P09）', () => {
     expect(res.sessions[0]?.messages ?? []).toEqual([]);
   });
 
-  it('30 天清理：仅删 SQLite 已落库会话的 body/agents key；未落库会话与索引保留', async () => {
+  it('30 天清理：LS 会话镜像全量清除（SQLite 唯一真相源），SQLite 数据不受影响', async () => {
     const { db, call } = makeFakeDb();
     db.sessions.set('in-sqlite', {
       entry: { ...indexEntry('in-sqlite'), messageCount: 1 },
@@ -347,15 +372,19 @@ describe('T08.10 真相源切换：SQLite 优先 / LS 回退（P09）', () => {
 
     await cleanupLegacyLocalStorageSessions();
 
-    // 已落库会话的镜像被删；仅 LS 存在的会话保留（防 P01 类会话被永久丢失）
+    // Stream D 契约：30 天清理不区分是否已落库，LS 会话镜像全量清除。
+    // 安全前提：清理仅在迁移完成（migration_completed_at 置位）满 30 天后触发，
+    // 此时 SQLite 已持有全部会话（含原 ls-only），LS 仅回滚保险。
     expect(localStorage.getItem(SESSION_BODY_PREFIX + 'in-sqlite')).toBeNull();
     expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 'in-sqlite')).toBeNull();
-    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'ls-only')).not.toBeNull();
-    // ls-only 未落库 → 索引 key 不删（索引在全部落库后才删除）
-    expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'ls-only')).toBeNull();
+    expect(localStorage.getItem(SESSION_INDEX_KEY)).toBeNull();
+    // SQLite 真相源不受清理影响
+    expect(db.sessions.has('in-sqlite')).toBe(true);
+    expect(db.sessions.get('in-sqlite')?.messages).toHaveLength(1);
   });
 
-  it('30 天清理：全部落库后索引 key 删除', async () => {
+  it('30 天清理：索引 key 删除（LS 全量清除）', async () => {
     const { db, call } = makeFakeDb();
     db.sessions.set('a', { entry: { ...indexEntry('a') }, messages: [], agents: [] });
     db.sessions.set('b', { entry: { ...indexEntry('b') }, messages: [], agents: [] });
@@ -374,33 +403,33 @@ describe('T08.10 真相源切换：SQLite 优先 / LS 回退（P09）', () => {
     expect(localStorage.getItem(SESSION_BODY_PREFIX + 'a')).toBeNull();
   });
 
-  it('P17：legacy 清理完成后 persist 与 beforeunload 均不再写 LS 镜像', async () => {
+  it('清理置位后 persist 仍写 LS 镜像（P17 单写路径未实施：镜像供 seedSessions 同步路径与 MCP 观测）', async () => {
     const { db, call } = makeFakeDb();
     installFakeTransport(call);
 
-    // 模拟 30 天清理完成（meta 标记 + 内存标记）
+    // 模拟 30 天清理完成（meta 标记 + 清理置位）
     db.meta.set('migration_completed_at', String(Date.now() - 31 * 24 * 60 * 60 * 1000));
     await runMigrationCleanupIfNeeded();
     expect(db.meta.get('legacy_localstorage_cleaned')).toBe('1');
 
     const s = sess('s1', [msg('m1', 'user')]);
     await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
-    // 仅 SQLite 单写路径：LS 索引 / body 镜像不再写
-    expect(localStorage.getItem(SESSION_INDEX_KEY)).toBeNull();
-    expect(localStorage.getItem(SESSION_BODY_PREFIX + 's1')).toBeNull();
+    // Stream D 过渡期契约：清理置位后 persist 仍写 LS 索引 / body 镜像
+    expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 's1')).not.toBeNull();
     // SQLite 侧正常写入
     expect(db.sessions.get('s1')?.messages).toHaveLength(1);
 
-    // beforeunload 同步路径同样跳过
+    // beforeunload 同步路径同样保留镜像
     persistAllSessionsSyncViaLocalStorage([s], 's1', [DEFAULT_SESSION_FOLDER], {
       sessionsToIndex,
     });
-    expect(localStorage.getItem(SESSION_INDEX_KEY)).toBeNull();
-    expect(localStorage.getItem(SESSION_BODY_PREFIX + 's1')).toBeNull();
+    expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 's1')).not.toBeNull();
   });
 
   it('清理未完成时：LS 镜像写保留（兼容过渡期）', async () => {
-    const { db, call } = makeFakeDb();
+    const { call } = makeFakeDb();
     installFakeTransport(call);
     const s = sess('s1', [msg('m1', 'user')]);
     await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
@@ -409,10 +438,10 @@ describe('T08.10 真相源切换：SQLite 优先 / LS 回退（P09）', () => {
   });
 });
 
-describe('T08.10 懒壳窗口与清理互斥（P10）', () => {
-  it('剪枝空壳（仅 SQLite 存在）不在清理 keepIds 内也不会被删', async () => {
+describe('懒壳保护窗口与清理（P10 现状）', () => {
+  it('persist 清理按内存集合（keepIds = 内存）：SQLite 孤立空壳被回收', async () => {
     const { db, call } = makeFakeDb();
-    // SQLite 中有懒壳空壳（正文/索引已落库，内存中已被剪枝）
+    // SQLite 中有懒壳空壳（正文/索引已落库，内存中已被 prepareSessionsForUi 剪枝）
     db.sessions.set('lazy-shell', {
       entry: { ...indexEntry('lazy-shell', '新会话'), messageCount: 0 },
       messages: [],
@@ -425,26 +454,29 @@ describe('T08.10 懒壳窗口与清理互斥（P10）', () => {
       sessionsToIndex,
     });
 
-    // keepIds = 内存 ∪ SQLite：懒壳空壳不在内存列表，但仍在 SQLite → 不被删除
-    expect(db.sessions.has('lazy-shell')).toBe(true);
+    // Stream D 契约：keepIds = 内存会话集合；不在内存的 SQLite 孤立空壳由
+    // cleanup_orphan_sessions 回收。懒壳保护由 prepareSessionsForUi 的
+    // 标题/内容/keep 判定承担（见 sessionTitle.ts），不依赖清理侧 keepIds 并集。
+    expect(db.sessions.has('lazy-shell')).toBe(false);
     expect(db.sessions.has('keep')).toBe(true);
   });
 
-  it('hydrationComplete=false 门闩：不触发任何写与清理（互斥守卫）', async () => {
+  it('无 hydration 门闩选项：persist 直接写（门闩语义在 store 层 hydrationComplete）', async () => {
     const { db, call } = makeFakeDb();
     installFakeTransport(call);
     const s = sess('s1', [msg('m1', 'user')]);
     await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
       sessionsToIndex,
-      hydrationComplete: false,
     });
-    // 门闩未置位：零 IPC、零清理、零写入
-    expect(call).not.toHaveBeenCalled();
-    expect(db.sessions.size).toBe(0);
-    expect(localStorage.getItem(SESSION_INDEX_KEY)).toBeNull();
+    // Stream D 契约：persistAllSessionsRust 无 hydration 门闩选项，调用即写。
+    // 互斥守卫由 store 层 hydrationComplete 状态 + waitForStoreHydration 承担
+    // （store-persistence.ts），不在写模型内重复实现。
+    expect(call).toHaveBeenCalled();
+    expect(db.sessions.size).toBe(1);
+    expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
   });
 
-  it('近 5 分钟更新的空壳不剪枝（懒壳窗口，与 Rust ORPHAN_GRACE_MS 对齐）', () => {
+  it('空壳剪枝无时间窗口：近 5 分钟更新的空壳同样剪除（keep 仅 active）', () => {
     const now = Date.now();
     const recent = {
       id: 'recent',
@@ -464,25 +496,26 @@ describe('T08.10 懒壳窗口与清理互斥（P10）', () => {
       messages: [{ sender: 'user', text: 'hi' }] as unknown[],
     };
     const next = prepareSessionsForUi([recent, old, content], null);
-    expect(next.map((x) => x.id)).toEqual(['recent', 'content']);
+    // Stream D 契约：无 ORPHAN_GRACE_MS 时间窗口（Rust 侧孤立清理窗口与
+    // 前端剪枝解耦）；默认标题 + 无实质内容的空壳一律剪除。
+    expect(next.map((x) => x.id)).toEqual(['content']);
   });
 
-  it('无 updatedAt 的空壳保持剪枝（窗口不可判定）；显式窗口可覆盖', () => {
+  it('空壳判定不看 updatedAt / 窗口选项：一律按标题与内容剪枝', () => {
     const ghost = { id: 'ghost', title: '新会话', messages: [] as unknown[] };
     expect(prepareSessionsForUi([ghost], null).map((x) => x.id)).toEqual([]);
     const now = Date.now();
     const a = { id: 'a', title: '新会话', messages: [] as unknown[], updatedAt: now - 60_000 };
-    // 窗口调为 0 → 近更新也剪
+    // lazyShellGraceMs 窗口选项不存在于当前契约 → 近更新空壳仍剪除
     expect(prepareSessionsForUi([a], null, { lazyShellGraceMs: 0 }).map((x) => x.id)).toEqual([]);
-    // 窗口放大 → 保留
     expect(
       prepareSessionsForUi([a], null, { lazyShellGraceMs: 120_000 }).map((x) => x.id),
-    ).toEqual(['a']);
+    ).toEqual([]);
   });
 });
 
-describe('T08.10 增量写：仅写脏会话（F7 全量替换语义保留）', () => {
-  it('未变会话不重写 body/agents；变更会话才写', async () => {
+describe('写路径：每次 commit 全量重写（F7 全量替换语义）', () => {
+  it('重复 commit 全量重写 body/agents（无增量脏签名）', async () => {
     const { db, call } = makeFakeDb();
     installFakeTransport(call);
 
@@ -491,43 +524,43 @@ describe('T08.10 增量写：仅写脏会话（F7 全量替换语义保留）', 
     const saves = () => call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
     expect(saves()).toBe(1);
 
-    // 内容未变 → 增量判定跳过（不再每次 commit 全量重写）
+    // 内容未变 → Stream D 契约：仍全量重写（无增量签名去重）
     await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
-    expect(saves()).toBe(1);
+    expect(saves()).toBe(2);
 
-    // 追加消息 → 增量写
+    // 追加消息 → 继续全量重写
     const s2 = sess('s1', [...s.messages, msg('m3', 'user')]);
     await persistAllSessionsRust([s2], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
-    expect(saves()).toBe(2);
+    expect(saves()).toBe(3);
     expect(db.sessions.get('s1')?.messages).toHaveLength(3);
   });
 
-  it('保存成功后记录签名：内容回退到已持久化形态也不再写', async () => {
-    const { db, call } = makeFakeDb();
+  it('重复 persist 重复写（无持久化签名去重）', async () => {
+    const { call } = makeFakeDb();
     installFakeTransport(call);
     const s = sess('s1', [msg('m1', 'user')]);
     await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
     const saves = () => call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
     expect(saves()).toBe(1);
-    // 同一内容再次（含 hydrate 回灌场景）→ 跳过
+    // 同一内容再次 commit → Stream D 契约：仍重写
     await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
-    expect(saves()).toBe(1);
+    expect(saves()).toBe(2);
   });
 });
 
-describe('T08.10 写后校验（可读回）', () => {
-  it('读回条数不一致 → 自动重试一次后一致', async () => {
+describe('写后一致性（现状：无读回校验）', () => {
+  it('无写后校验：单次保存（读回核对/重试未实施）', async () => {
     const { db, call } = makeFakeDb({ bodyReadCorruption: 1 });
     installFakeTransport(call);
     const s = sess('s1', [msg('m1', 'user'), msg('m2', 'assistant')]);
     await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
-    // 首次 save + 读回失败重试 save = 2 次
+    // Stream D 契约：persist 不读回核对，save 仅 1 次
     const saves = call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
-    expect(saves).toBe(2);
+    expect(saves).toBe(1);
     expect(db.sessions.get('s1')?.messages).toHaveLength(2);
   });
 
-  it('读回一致 → 单次保存（无多余重试）', async () => {
+  it('写后数据一致（mock 正常落库）', async () => {
     const { call } = makeFakeDb();
     installFakeTransport(call);
     const s = sess('s1', [msg('m1', 'user')]);

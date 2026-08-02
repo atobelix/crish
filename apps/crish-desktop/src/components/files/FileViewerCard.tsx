@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import * as Lucide from 'lucide-react';
 import type { FileDiff } from '../../store/types';
 import { useLayoutTreeStore, fileViewerInitialModeMap } from '../../api/store-access/componentAccess';
@@ -80,7 +80,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
             setOpenDefaultLabel(defaultLabel || '在系统默认应用打开');
             setFileOpeners(openers || []);
           }
-        } catch {}
+        } catch { /* 打开方式列表失败时静默降级 */ }
       }
       void loadOpeners();
       return () => {
@@ -132,17 +132,24 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       const treeStore = useLayoutTreeStore.getState();
       const root = treeStore.tree.root;
 
-      function findAndActivateFiles(node: any): boolean {
+      type TreeLike = {
+        type?: string;
+        tabs?: string[];
+        id?: string;
+        children?: TreeLike[];
+      };
+      function findAndActivateFiles(node: TreeLike): boolean {
         if (node.type === 'leaf') {
           if (node.tabs && node.tabs.includes('files')) {
-            treeStore.setActiveTab(node.id, 'files');
+            treeStore.setActiveTab(node.id ?? '', 'files');
             return true;
           }
           return false;
         }
+        const [first, second] = node.children ?? [];
         return (
-          findAndActivateFiles(node.children[0]) ||
-          findAndActivateFiles(node.children[1])
+          (first ? findAndActivateFiles(first) : false) ||
+          (second ? findAndActivateFiles(second) : false)
         );
       }
 

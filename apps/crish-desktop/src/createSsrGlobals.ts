@@ -25,7 +25,7 @@ export function initSsrGlobals(): void {
     SSR_GLOBALS.monoFont = document.documentElement.getAttribute('data-mono-font') || 'auto';
     const wsKind = localStorage.getItem('crish_workspace');
     SSR_GLOBALS.workspaceKind = wsKind === 'columns' ? 'columns' : 'tree';
-  } catch {}
+  } catch { /* localStorage 不可用时保持默认全局值 */ }
 }
 
 export function isTauriShellFast(): boolean { return SSR_GLOBALS.isTauri; }

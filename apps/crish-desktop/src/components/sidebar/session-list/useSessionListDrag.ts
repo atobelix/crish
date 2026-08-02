@@ -188,7 +188,7 @@ function resolveDropTarget(
   );
 
   const sessionWrap = hovered.closest('[data-session-id]') as HTMLElement | null;
-  let targetSessionId: string | null =
+  const targetSessionId: string | null =
     sessionWrap?.getAttribute('data-session-id') || null;
   let place: DropPlace = 'before';
 

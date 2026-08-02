@@ -51,6 +51,7 @@ function get256Color(code: string): string {
  */
 export function parseAnsi(text: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
+  // eslint-disable-next-line no-control-regex -- 有意匹配 ANSI ESC 序列
   const re = /\x1b\[([\d;]*)m/g;
 
   let last = 0;

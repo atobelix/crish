@@ -117,11 +117,11 @@ const DEFAULT_TITLE_ZH =
  *   — 用户输入的 emoji 序列应原样保留；首尾 ZWJ 由 sanitize 额外清理。
  */
 const ALL_INVISIBLE_CHARS =
-  // eslint-disable-next-line no-control-regex -- intentional sanitization of C0 controls
+  // eslint-disable-next-line no-control-regex, no-misleading-character-class -- 有意剥离不可见/控制字符（含组合类）
   /[\p{Cf}\u034F\u3164\u115F\uFE00-\uFE0F\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu;
 
 const TITLE_INVISIBLE_CHARS =
-  // eslint-disable-next-line no-control-regex -- intentional sanitization of C0 controls
+  // eslint-disable-next-line no-control-regex, no-misleading-character-class -- 有意剥离不可见/控制字符（保留 ZWJ）
   /(?![\u200D])[\p{Cf}\u034F\u3164\u115F\uFE00-\uFE0F\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu;
 
 /**

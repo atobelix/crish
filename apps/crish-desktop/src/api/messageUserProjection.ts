@@ -155,10 +155,6 @@ export function clipPreview(text: string, max: number): string {
   return t.slice(0, Math.max(0, max - 1)) + '…';
 }
 
-function emptyStats(): UserViewStats {
-  return { modelBlockCount: 0, userVisibleBlockCount: 0, hiddenCount: 0 };
-}
-
 function makeBucket(
   kind: HiddenBucketKind,
   text: string,
@@ -693,7 +689,7 @@ export function debugExportUserView(
 ): UserViewDto {
   if (!isUserViewDebugEnabled()) return dto;
   try {
-    // eslint-disable-next-line no-console
+     
     console.debug(`[${label}]`, {
       stats: dto.stats,
       hiddenKinds: dto.hiddenBuckets.map((b) => b.kind),

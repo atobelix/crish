@@ -230,6 +230,7 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
     const [overflowStart, setOverflowStart] = useState(false);
     const [overflowEnd, setOverflowEnd] = useState(false);
 
+    const sessionIdsKey = sessionTabs.map((t) => t.sessionId).join('|');
     useEffect(() => {
       if (sessionTabs.length === 0) {
         setRovingIndex(0);
@@ -240,11 +241,11 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
           ? Math.min(activeIndex, sessionTabs.length - 1)
           : Math.min(rovingIndex, sessionTabs.length - 1);
       setRovingIndex(next);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- rovingIndex 由本效应自洽写入（仅 activeIndex<0 时读取），纳入依赖会引入无意义的二次收敛
     }, [
       sessionTabs.length,
       activeIndex,
-      sessionTabs.map((t) => t.sessionId).join('|'),
+      sessionIdsKey,
     ]);
 
     const focusTabAt = useCallback(

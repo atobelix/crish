@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { countPendingFileAnnotations, detectFileKind, FILE_PREVIEW_CHUNK_LINES, FILE_PREVIEW_MAX_LINES, isMarkdownFilename, nextFilePreviewLineBudget, pathBasename, pathDirname, readTextFile, resolveWorkspacePath, toAssetUrl, writeTextFile } from '../../../api/workspaceFsApi';
+import { countPendingFileAnnotations, detectFileKind, FILE_PREVIEW_CHUNK_LINES, FILE_PREVIEW_MAX_LINES, isMarkdownFilename, nextFilePreviewLineBudget, pathBasename, readTextFile, resolveWorkspacePath, toAssetUrl, writeTextFile } from '../../../api/workspaceFsApi';
 import { listOpenOptionsForFile, type HostOpener } from '../../../api/hostOpenersApi';
 import { pathRelativeToRoot } from '../../../api/workspaceFsApi';
 

@@ -85,19 +85,29 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
 
     useEffect(() => () => clearHideTimer(), [clearHideTimer]);
 
+    // 系统化修复：Tooltip 必须把自己收到的 props/ref 透传给子元素，
+    // 否则外部（如 UnifiedSelectPopover 通过 cloneElement 注入的 onClick/
+    // onPointerDown 事件）会被 Tooltip 截断，导致 Plus 下拉菜单等按钮点击无响应。
+    // 同时必须合并子元素自身的 ref 与本组件 forwardRef，避免 SettingsQuickMenu
+    // 等需要 btnRef 定位菜单的场景中 ref 被覆盖而失效。
+    // 注意：useMergeRefs 必须在早返回之前调用，保证 hooks 顺序恒定。
+    const child = children as React.ReactElement<React.HTMLAttributes<HTMLElement>>;
+    const childRef: React.Ref<HTMLElement> | undefined =
+      (child.props as React.HTMLAttributes<HTMLElement> & { ref?: React.Ref<HTMLElement> }).ref ??
+      (child as React.RefAttributes<HTMLElement>).ref;
+    const mergedRef = useMergeRefs(forwardedRef, childRef);
+
     if (disabled || !content) return children;
 
-    const child = children as React.ReactElement<any>;
-
-    const handleMouseEnter = (e: React.MouseEvent) => {
+    const handleMouseEnter = (e: React.MouseEvent<HTMLElement>) => {
       clearHideTimer();
       setRect(e.currentTarget.getBoundingClientRect());
       setVisible(true);
       child.props.onMouseEnter?.(e);
-      (restProps as any).onMouseEnter?.(e);
+      (restProps as Partial<React.HTMLAttributes<HTMLElement>>).onMouseEnter?.(e);
     };
 
-    const handleMouseLeave = (e: React.MouseEvent) => {
+    const handleMouseLeave = (e: React.MouseEvent<HTMLElement>) => {
       if (delayHide > 0) {
         hideTimerRef.current = setTimeout(() => {
           setVisible(false);
@@ -106,25 +116,22 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
         setVisible(false);
       }
       child.props.onMouseLeave?.(e);
-      (restProps as any).onMouseLeave?.(e);
+      (restProps as Partial<React.HTMLAttributes<HTMLElement>>).onMouseLeave?.(e);
     };
 
-    // 系统化修复：Tooltip 必须把自己收到的 props/ref 透传给子元素，
-    // 否则外部（如 UnifiedSelectPopover 通过 cloneElement 注入的 onClick/
-    // onPointerDown 事件）会被 Tooltip 截断，导致 Plus 下拉菜单等按钮点击无响应。
-    // 同时必须合并子元素自身的 ref 与本组件 forwardRef，避免 SettingsQuickMenu
-    // 等需要 btnRef 定位菜单的场景中 ref 被覆盖而失效。
-    const childRef = (child.props as any).ref ?? (child as any).ref;
-    const mergedRef = useMergeRefs(forwardedRef, childRef);
+    // cloneElement 的 props 抽成显式类型变量：React 19 类型中 ref 位于
+    // RefAttributes 而非 HTMLAttributes，对象字面量直接传会触发多余属性检查
+    const cloneProps: Partial<React.HTMLAttributes<HTMLElement>> &
+      React.RefAttributes<HTMLElement> = {
+      ref: mergedRef,
+      ...restProps,
+      onMouseEnter: handleMouseEnter,
+      onMouseLeave: handleMouseLeave,
+    };
 
     return (
       <>
-        {React.cloneElement(child, {
-          ref: mergedRef,
-          ...restProps,
-          onMouseEnter: handleMouseEnter,
-          onMouseLeave: handleMouseLeave,
-        })}
+        {React.cloneElement(child, cloneProps)}
         {isMounted && rect && createPortal(
           <div
             role="tooltip"

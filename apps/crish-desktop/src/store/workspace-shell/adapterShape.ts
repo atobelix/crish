@@ -263,7 +263,7 @@ export function expandSessionUnitDock(
   const resolved = resolveChatLeafForSession(tree.root, sid, activeLeafId);
   if (!resolved) return tree;
 
-  let root = resolved.root;
+  const root = resolved.root;
   const chatLeaf = resolved.chatLeaf;
   const toolLeaf = makeToolLeaf(openPanelIds, activePanelId, sid);
   const toolRatio = clampDockWidthRatio(widthRatio);
@@ -578,14 +578,13 @@ export function applyDockToSession(
 
     const store = useLayoutTreeStore.getState();
     const originalTree = store.tree;
-    let base = stripLegacyGlobalToolColumn(originalTree);
+    const base = stripLegacyGlobalToolColumn(originalTree);
     const next = projectDockOntoTree(base, dock, sid, store.activeLeafId);
 
   // ── 统一计算所有状态变更（避免独立 setState 之间的中间态 re-render） ──
   const chatCount = countChatLeaves(next.root);
   const toolCount = countToolLeaves(next.root);
 
-  let targetTree = next;
   let targetCollapsed: boolean;
   let targetActiveLeafId: string | null | undefined = undefined;
 

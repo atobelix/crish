@@ -28,7 +28,6 @@ import { useWorkspaceShellStore } from './store/workspace-shell';
 // ── 关键路径组件：同步导入，与 App 同 chunk ──
 import { Sidebar } from './components/sidebar/Sidebar';
 import { Workspace } from './components/workspace/Workspace';
-import { Tooltip } from './components/Tooltip';
 import { AppTopBar } from './components/AppTopBar';
 import { SessionTabDragProvider } from './components/shell/SessionTabDragContext';
 
@@ -61,12 +60,6 @@ function DevHealthOverlayMount() {
   );
 }
 
-const IconSidebarLeft = lazy(() =>
-  import('./components/sidebar/SidebarToggleIcons').then((m) => ({
-    default: m.IconSidebarLeft,
-  }))
-);
-
 // 二叉树工作区（重构后默认入口；代码分割避免影响旧路径首屏）
 const BinaryTreeWorkspace = lazy(() =>
   import('./components/binary-tree/BinaryTreeWorkspace').then((m) => ({
@@ -75,11 +68,6 @@ const BinaryTreeWorkspace = lazy(() =>
 );
 
 // ── 非关键路径组件：代码分割，按需加载 ──
-const WorkspaceChromeBars = lazy(() =>
-  import('./components/workspace/WorkspaceChromeBars').then((m) => ({
-    default: m.WorkspaceChromeBars,
-  }))
-);
 
 function App() {
   const platformAdaptation = usePlatformAdaptation({
@@ -118,8 +106,9 @@ function App() {
     createDebounced<string>((q) => setSessionSearch(q), 220)
   );
   useEffect(() => {
-    searchDebounceRef.current.schedule(sessionSearchInput);
-    return () => searchDebounceRef.current.cancel();
+    const debounced = searchDebounceRef.current;
+    debounced.schedule(sessionSearchInput);
+    return () => debounced.cancel();
   }, [sessionSearchInput]);
 
   const productShell = isProductShellFast();

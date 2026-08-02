@@ -45,8 +45,8 @@ export function splitRatioBounds(
   const pixelMin = effectiveMinPx / dim;
   const pixelMax = 1 - pixelMin;
 
-  let min = Math.max(absMin, pixelMin);
-  let max = Math.min(absMax, pixelMax);
+  const min = Math.max(absMin, pixelMin);
+  const max = Math.min(absMax, pixelMax);
 
   if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) {
     return { min: 0.5, max: 0.5 };

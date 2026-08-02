@@ -123,7 +123,6 @@ export const WorkspaceCanvas: React.FC<WorkspaceCanvasProps> = React.memo(
       [
         containerRef,
         focusThisWorkspace,
-        nudgeColumnByKey,
         resizeColumns,
         ws.columns,
         ws.id,

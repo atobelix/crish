@@ -145,7 +145,6 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
     isDraggingThis,
     isRenaming,
     isDraggable,
-    rowHeight,
     renameDraft,
     renameInputRef,
     onRenameDraftChange,

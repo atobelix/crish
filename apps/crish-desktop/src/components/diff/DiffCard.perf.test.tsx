@@ -8,7 +8,7 @@
  */
 import React from 'react';
 import { render, act } from '@testing-library/react';
-import { describe, expect, it, vi, beforeAll, afterAll } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { useDiffData } from './useDiffData';
 import { renderHook } from '@testing-library/react';
 import { VirtualPlainCodeViewer } from './VirtualPlainCodeViewer';

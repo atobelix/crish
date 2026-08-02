@@ -63,6 +63,7 @@ export type EngineConfigUpdate = {
    * @deprecated PE-07 T07.4（K-01）：明文 key 下线后仅接受 undefined——
    * normalizeEngineConfigUpdate 会剥离任何 apiKey 值（兼容层剥离），
    * 密钥一律经 config_secret_set / config_profile_apply 走 DPAPI。
+   * @see config_secret_set / config_profile_apply（DPAPI 凭据槽）
    */
   apiKey?: string | undefined;
   baseUrl?: string | undefined;
@@ -83,7 +84,7 @@ export type EngineCredentialMode = 'direct' | 'auto' | 'account-center';
  * Optional fields stay undefined when unset — **no** default remote model id.
  */
 export type NormalizedEngineConfig = {
-  /** @deprecated 明文 key 已下线（K-01）：规范化输出恒不含本字段 */
+  /** @deprecated 明文 key 已下线（K-01）：规范化输出恒不含本字段。@see config_secret_set / config_profile_apply */
   apiKey?: string;
   baseUrl?: string;
   model?: string;

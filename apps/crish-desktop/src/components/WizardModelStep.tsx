@@ -60,7 +60,7 @@ export const WizardModelStep: React.FC<WizardModelStepProps> = ({
             {...(styles.firstRunSelect !== undefined && { className: styles.firstRunSelect })}
             value={modelInList ? modelId : ''}
             disabled={busy}
-            {...('从本机列表选择…' !== undefined && { placeholder: '从本机列表选择…' })}
+            placeholder="从本机列表选择…"
             options={[
               { value: '', label: '从本机列表选择…' },
               ...listedModels.map((m) => ({ value: m, label: m })),

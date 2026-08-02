@@ -31,7 +31,6 @@ import {
 import type { SessionMessage, MessageToolCall } from '../store/types';
 
 const SUFFIX = '...[截断]';
-const SUFFIX_BYTES = new TextEncoder().encode(SUFFIX).length; // 11 字节（3 '.' + '[' + 3 字节'截' + 3 字节'断' + ']'）
 
 describe('SizeValidator — 对抗性测试', () => {
   describe('SV1: maxBytes=NaN 截断逻辑失效', () => {

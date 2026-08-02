@@ -1,20 +1,12 @@
 import fs from 'fs';
-import path from 'path';
 
 const files = JSON.parse(fs.readFileSync('scripts/component-files-list.json', 'utf8'));
-
-const eventRegex = /on(Click|MouseDown|PointerDown|KeyDown|ContextMenu|MouseOver|MouseEnter|MouseLeave|DoubleClick|Change|Submit|Focus|Blur)\s*=\s*/g;
-const classNameRegex = /className\s*=\s*(?:{([^}]+)}|"([^"]+)"|'([^']+)')/g;
-const dataAttrRegex = /data-[\w-]+(?:\s*=\s*(?:{([^}]+)}|"([^"]+)"|'([^']+)'))?/g;
-const ariaRegex = /aria-[\w-]+(?:\s*=\s*(?:{([^}]+)}|"([^"]+)"|'([^']+)'))?/g;
-const titleRegex = /title\s*=\s*(?:{([^}]+)}|"([^"]+)"|'([^']+)')/g;
 
 const results = [];
 
 for (const filePath of files) {
   const code = fs.readFileSync(filePath, 'utf8');
   const fileEvents = [];
-  let match;
 
   // Find line numbers for event handlers
   const lines = code.split('\n');

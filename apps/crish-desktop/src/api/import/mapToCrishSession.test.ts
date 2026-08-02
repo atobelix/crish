@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { folderFromCwd, mapToCrishSession, pickTitle } from './mapToCrishSession';
 import { parseClaudeCodeJsonl } from './parseClaudeCodeJsonl';
-import { parseCodexRolloutJsonl } from './parseCodexRolloutJsonl';
 import { importClaudeCodeSession, importCodexSession } from './index';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

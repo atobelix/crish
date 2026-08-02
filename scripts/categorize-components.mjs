@@ -1,5 +1,4 @@
 import fs from 'fs';
-import path from 'path';
 
 const componentFiles = JSON.parse(fs.readFileSync('scripts/component-files-list.json', 'utf8'));
 

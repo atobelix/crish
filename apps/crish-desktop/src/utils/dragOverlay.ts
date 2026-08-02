@@ -52,5 +52,5 @@ export function disableIframePointerEvents(): () => void {
     el.style.pointerEvents = 'none';
     restoreFns.push(() => { el.style.pointerEvents = original || ''; });
   });
-  return () => { restoreFns.forEach(fn => { try { fn(); } catch {} }); };
+  return () => { restoreFns.forEach(fn => { try { fn(); } catch { /* 单个恢复失败不阻断其余 */ } }); };
 }

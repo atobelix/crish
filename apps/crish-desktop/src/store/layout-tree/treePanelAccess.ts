@@ -19,9 +19,7 @@
  */
 
 import { useLayoutTreeStore } from './layoutTreeStore';
-import { findNodeById, collectLeaves } from './operations';
-import { isLeaf, isChatDomain } from './types';
-import type { LayoutLeaf, LayoutTree } from './types';
+import { isChatDomain } from './types';
 import {
   openToolInActiveTab,
   openToolInSession,
@@ -42,69 +40,6 @@ export type OpenablePanelId =
   | 'runtime'
   | 'agent'
   | 'chat';
-
-function findFirstLeaf(tree: LayoutTree): LayoutLeaf | null {
-  const stack = [tree.root];
-  while (stack.length > 0) {
-    const node = stack.shift()!;
-    if (isLeaf(node)) return node;
-    if (node.children) stack.push(...node.children);
-  }
-  return null;
-}
-
-/** 判断 leaf 是否属于目标 panel 的域 */
-function leafMatchesDomain(leaf: LayoutLeaf, panelId: string): boolean {
-  return isChatDomain(leaf.panelId) === isChatDomain(panelId);
-}
-
-/**
- * 在 tree 中找到合适的 leaf 来承载目标 panel，并严格保持域隔离：
- * 1. 若 activeLeaf 与目标同域且已含目标 tab，返回该 leaf（仅切 tab）。
- * 2. 否则若任意同域 leaf 已含目标 tab，返回首个匹配（切 tab + 激活 leaf）。
- * 3. 否则若 activeLeaf 与目标同域，返回 activeLeaf（由调用方 addTab）。
- * 4. 否则返回首个同域 leaf（由调用方 addTab）。
- * 5. 若找不到同域 leaf，返回 null，表示需要在树中新建一个 leaf。
- */
-function resolveTargetLeaf(
-  tree: LayoutTree,
-  activeLeafId: string | null,
-  panelId: string
-): { leafId: string; alreadyHasTab: boolean; needsSplit: false } | { needsSplit: true; anchorLeafId: string } | null {
-  const leaves = collectLeaves(tree.root);
-
-  // 已打开目标 tab 的 leaf（优先 activeLeaf）
-  if (activeLeafId) {
-    const active = findNodeById(tree.root, activeLeafId);
-    if (active && isLeaf(active) && leafMatchesDomain(active, panelId) && active.tabs.includes(panelId)) {
-      return { leafId: active.id, alreadyHasTab: true, needsSplit: false };
-    }
-  }
-  for (const leaf of leaves) {
-    if (leafMatchesDomain(leaf, panelId) && leaf.tabs.includes(panelId)) {
-      return { leafId: leaf.id, alreadyHasTab: true, needsSplit: false };
-    }
-  }
-
-  // 同域 leaf 中找一个可新增 tab 的
-  if (activeLeafId) {
-    const active = findNodeById(tree.root, activeLeafId);
-    if (active && isLeaf(active) && leafMatchesDomain(active, panelId)) {
-      return { leafId: active.id, alreadyHasTab: false, needsSplit: false };
-    }
-  }
-  const sameDomainLeaf = leaves.find((leaf) => leafMatchesDomain(leaf, panelId));
-  if (sameDomainLeaf) {
-    return { leafId: sameDomainLeaf.id, alreadyHasTab: false, needsSplit: false };
-  }
-
-  // 没有同域 leaf：需要 split，锚点用 activeLeaf 或首个 leaf
-  const anchor = (activeLeafId ? findNodeById(tree.root, activeLeafId) : null) ?? findFirstLeaf(tree);
-  if (anchor && isLeaf(anchor)) {
-    return { needsSplit: true, anchorLeafId: anchor.id };
-  }
-  return null;
-}
 
 /**
  * 在二叉树布局下聚焦或打开指定面板。

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
+import { usePermissionStore } from '../store/permissionStore';
 import { bootstrapStores } from '../store/bootstrapStores';
 import { bootstrapServices } from '../bootstrap-services';
 import { onUiEvent } from '../api/uiEvents';
@@ -15,11 +16,13 @@ import { getCompositionRoot } from './compositionRoot';
 /** Devtools / internal globals attached to window */
 export type CrishWindow = Window & {
   useLayoutStore?: typeof useLayoutStore;
+  usePermissionStore?: typeof usePermissionStore;
   AUTO_FOLD_DELAY?: number;
 };
 
 if (typeof window !== 'undefined') {
   (window as CrishWindow).useLayoutStore = useLayoutStore;
+  (window as CrishWindow).usePermissionStore = usePermissionStore;
 }
 
 /** 浏览器标签 / 任务栏标题 */

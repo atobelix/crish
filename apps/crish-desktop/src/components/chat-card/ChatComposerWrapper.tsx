@@ -4,27 +4,30 @@ import { ChatStatusRibbons } from './ChatStatusRibbons';
 import { anyProfileHasKey } from '../../api/providerProfiles';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import type { FileDiff } from '../../store/layoutStore';
+import type { SessionGoalMode } from '../../store/types';
+import type { EngineStatus } from '../../api/engineConfig';
+import type { RunNotice } from '../../hooks/useChatStream';
 
 export interface ChatComposerWrapperProps {
   mainSurface: string;
   emptyKind: string | null;
   composerElement: React.ReactNode;
   diffFiles: FileDiff[];
-  engineHint: any;
+  engineHint: EngineStatus | null;
   needsKeySetup: boolean;
   needsModelSetup: boolean;
-  onEmptySurface: any;
+  onEmptySurface: boolean;
   onOpenModelSettings: () => void;
   onOpenModelDropdown: () => void;
   inPlanMode: boolean;
   planApproved: boolean;
   onApprovePlan: () => void;
   goalModeActive: boolean;
-  goalMode: any;
+  goalMode: SessionGoalMode | null | undefined;
   onStopGoal: () => void;
   showScrollToBottom: boolean;
   onScrollToBottom: () => void;
-  runNotice: any;
+  runNotice: RunNotice | null;
   onDismissRunNotice: () => void;
   pendingApprovalCount: number;
   showApprovalDock: boolean;
@@ -39,7 +42,6 @@ export interface ChatComposerWrapperProps {
 
 export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.memo(({
   mainSurface,
-  emptyKind,
   composerElement,
   diffFiles,
   engineHint,
@@ -66,7 +68,6 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
   activeSessionId,
   onShowToast,
   openSidePanel,
-  handleGlobalTabClick,
 }) => {
   return (
     <div
@@ -95,7 +96,7 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
           goalModeActive={goalModeActive}
           goalText={goalMode?.goal || ''}
           goalIteration={goalMode?.iteration ?? 0}
-          goalTasksDone={(goalMode?.tasks || []).filter((t: any) => t.done).length}
+          goalTasksDone={(goalMode?.tasks || []).filter((t) => t.done).length}
           goalTasksTotal={(goalMode?.tasks || []).length}
           onStopGoal={onStopGoal}
           showScrollToBottom={showScrollToBottom}

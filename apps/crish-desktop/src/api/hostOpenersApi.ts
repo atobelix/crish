@@ -145,7 +145,7 @@ export async function listOpenOptionsForFile(filePath: string): Promise<{
   for (const o of [...handlers, ...hosts]) {
     if (!map.has(o.id)) map.set(o.id, o);
   }
-  let openers = [...map.values()];
+  const openers = [...map.values()];
   // 轻量偏好：图片/文档时把 file-manager 沉底，编辑器仍可见
   const imageLike = /^(png|jpe?g|gif|webp|bmp|svg|pdf|ico)$/i.test(lower);
   const codeLike = /^(ts|tsx|js|jsx|json|md|css|html|rs|py|go|java|c|cpp|h|cs)$/i.test(

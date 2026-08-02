@@ -87,7 +87,7 @@ export function usePreviewNavigation(
     isPreviewBookmarked(getPreviewUrl()),
   );
   const [showHist, setShowHist] = useState(false);
-  const [histTick, setHistTick] = useState(0);
+  const [, setHistTick] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const histRef = useRef<HTMLDivElement>(null);
@@ -96,11 +96,11 @@ export function usePreviewNavigation(
 
   const history = useMemo(
     () => getPreviewHistory(),
-    [activeUrl, showHist, histTick],
+    [],
   );
   const bookmarks = useMemo(
     () => getPreviewBookmarks(),
-    [bookmarked, activeUrl, histTick],
+    [],
   );
 
   const blank = isAboutBlank(activeUrl);

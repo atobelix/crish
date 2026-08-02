@@ -10,7 +10,7 @@
  * - Tauri 路径 payload 整形（键为命令名 config_update；rewind 幽灵整形已删除）。
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   checkCommandMapConsistency,
   COMMAND_NAME_ALLOWLIST,

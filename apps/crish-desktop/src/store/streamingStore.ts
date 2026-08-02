@@ -571,7 +571,7 @@ export function applyStreamToolsToMessage<T extends MsgWithTools>(
 
   if (!changed) return msg;
 
-  let blocks = msg.blocks ? msg.blocks.map((b) => ({ ...b })) : [];
+  const blocks = msg.blocks ? msg.blocks.map((b) => ({ ...b })) : [];
   const inBlocks = new Set(
     blocks
       .filter((b) => b.type === 'tool_call' && b.id)

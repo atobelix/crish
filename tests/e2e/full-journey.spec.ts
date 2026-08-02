@@ -62,6 +62,27 @@ test.describe('E2E-L2 完整旅程（full-journey）', () => {
     await expect(userRow).toBeVisible();
     await expect(userRow).toContainText(prompt);
 
+    // 发送链路回归（R6 主路径）：消息已入 session store + core_run_task 已下发
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const h = (window as any).__CRISH_E2E__;
+            const store = (window as any).__CRISH_STORE__;
+            const byId = store?.getState?.().sessionsById || {};
+            const key = Object.keys(byId)[0];
+            return {
+              runCount: h?.getState?.().runCount ?? 0,
+              sessionCreated: typeof key === 'string' && key.startsWith('sess-'),
+              hasUserMsg: (byId[key]?.messages ?? []).some(
+                (m: { sender: string }) => m.sender === 'user'
+              ),
+            };
+          }),
+        { timeout: 8000 }
+      )
+      .toEqual({ runCount: 1, sessionCreated: true, hasUserMsg: true });
+
     // ── ④ 流式渲染：assistant 消息随 delta 逐条追加 ──
     const assistantRow = page.locator('.msg-row-assistant').first();
     await expect(assistantRow).toBeVisible();
@@ -82,7 +103,9 @@ test.describe('E2E-L2 完整旅程（full-journey）', () => {
       '.tool-stack .tool-row[data-tool-id="tool-1"]'
     );
     await expect(toolRow).toBeVisible({ timeout: 8000 });
-    await expect(toolRow).toContainText('bash');
+    // human label 优先 explanation（toolHumanLabel 产品语义：意图说明）
+    await expect(toolRow).toHaveAttribute('data-tool-label', '查看当前目录');
+    await expect(toolRow).toContainText('查看当前目录');
     // tool-end 成功态：输出可见
     await expect(toolRow).toContainText('/workspace/crish');
 

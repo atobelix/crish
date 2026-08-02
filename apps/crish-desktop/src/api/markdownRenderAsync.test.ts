@@ -10,7 +10,7 @@
  * 同时验证 useAsyncMarkdownHtml hook 的 loading / skeleton 行为。
  */
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import {
   clearMarkdownHtmlCache,
   resetMarkdownHtmlCacheStats,

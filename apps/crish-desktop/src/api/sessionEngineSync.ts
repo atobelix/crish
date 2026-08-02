@@ -318,7 +318,7 @@ export function mergeEngineSessions(
     const remoteTitle = remoteSessionTitle(r);
 
     if (existing) {
-      let title = resolveMergedSessionTitle(
+      const title = resolveMergedSessionTitle(
         existing.title,
         existing.messages,
         remoteTitle,

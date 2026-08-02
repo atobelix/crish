@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import styles from './FilesCard.module.css';
 import { Tooltip } from '../Tooltip';
 import { CornerLeftUp, RotateCw, Search, X } from 'lucide-react';
@@ -101,6 +101,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(({ initialPath }) 
       const pending = takePendingOpenPath() || (initialPath ?? null);
       if (pending) void handleOpenFile(pending);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 挂载一次性：仅消费挂载时待打开路径，不随依赖变更重放
   }, []);
 
   useEffect(() => {

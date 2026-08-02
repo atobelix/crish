@@ -102,7 +102,6 @@ export async function runStressTest(scenario: StressScenario): Promise<StressRes
 
   try {
     const generator = scenario.scenario();
-    const activeTasks: Promise<void>[] = [];
 
     const runBatch = async () => {
       while (performance.now() < endTime) {

@@ -13,7 +13,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockTauriCommand } from '../../test-setup';
 import {
-  LEGACY_MIGRATION_FLAG_KEY,
   LEGACY_PROFILES_KEY,
   isLegacyMigrationDone,
   migrateLegacyProfiles,

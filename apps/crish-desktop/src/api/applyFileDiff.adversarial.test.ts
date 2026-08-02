@@ -21,9 +21,6 @@ import {
   applySearchReplaceToContent,
   countOccurrences,
   classifyFileDiff,
-  hasEffectiveDiffChanges,
-  reconstructFullContent,
-  reconstructSearchReplace,
   normalizeEol,
   preferEolStyle,
   formatApplyFailureToast,
@@ -60,7 +57,7 @@ describe('normalizeApplyPath — 路径规范化', () => {
     expect(normalizeApplyPath(undefined)).toBe('');
   });
 
-  it('暴露 bug: UNC 路径 \\server\share 被折叠为 /server/share', () => {
+  it('暴露 bug: UNC 路径 \\\\server\\share 被折叠为 /server/share', () => {
     // UNC 路径以双反斜杠开头，规范化后变成单斜杠
     expect(normalizeApplyPath('\\\\server\\share\\file.ts')).toBe('/server/share/file.ts');
     // 这变成了 POSIX 绝对路径，语义改变
@@ -260,7 +257,6 @@ describe('analyzeSearchReplace — 状态分析', () => {
 
   it('exposed bug: 冲突检测要求 newStr 长度 >= 24 或含换行，短 newStr 漏报冲突', () => {
     // body 同时包含 old 和 new（短），但函数认为不是冲突
-    const r = analyzeSearchReplace('foo abc xyz def abc', 'abc', 'xyz');
     // old=abc 出现 2 次 → ambiguous，不会进入冲突分支
     // 改为 old 出现 1 次
     const r2 = analyzeSearchReplace('foo abc def xyz', 'abc', 'xyz');

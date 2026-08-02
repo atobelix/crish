@@ -11,6 +11,7 @@ import { mergeSessionMessageFields } from './store-access/helperAccess';
 import { getTransport } from './transport';
 import { normalizeAssistantTimeline } from './toolPresentation';
 import { logInternalError } from './userFacingErrors';
+import { toolCallFieldsFromEvent } from './chat-bridge/handlers/toolUtils';
 
 export type SessionHydrateResult = {
   ok: boolean;
@@ -35,9 +36,11 @@ function agentEventFromOrchestrator(ev: AnyRec): AnyRec | null {
     const nested = asRec(payload?.event) || asRec(ev.event);
     return nested;
   }
-  // 部分路径直接摊平
-  if (typeof ev.type === 'string' && String(ev.type).includes('message')) {
-    return ev;
+  // 顶层摊平：放行 message* 与 tool* 事件（live 桥与 daemon 回放同协议形态；
+  // 只放行 message* 会导致会话恢复丢工具卡 —— tool-start/tool-end 被当 run 级事件跳过）
+  if (typeof ev.type === 'string' && ev.type) {
+    const t = String(ev.type);
+    if (t.startsWith('message') || t.startsWith('tool')) return ev;
   }
   return null;
 }
@@ -48,27 +51,6 @@ function blockText(block: unknown): string {
   if (typeof b.text === 'string') return b.text;
   if (typeof b.content === 'string') return b.content;
   return '';
-}
-
-function toolFields(call: unknown): { id: string; name: string; args: string; explanation: string } {
-  const c = asRec(call) || {};
-  const id = String(c.id ?? c.toolCallId ?? `tc-${Date.now()}`);
-  const name = String(c.name ?? c.toolName ?? 'tool');
-  let args = '';
-  if (typeof c.arguments === 'string') args = c.arguments;
-  else if (c.input !== undefined) {
-    try {
-      args = typeof c.input === 'string' ? c.input : JSON.stringify(c.input);
-    } catch {
-      args = String(c.input);
-    }
-  }
-  return {
-    id,
-    name,
-    args,
-    explanation: String(c.summary ?? c.description ?? name),
-  };
 }
 
 function toolResult(result: unknown): { id: string; text: string; isError: boolean } {
@@ -311,7 +293,9 @@ export function projectEventsToMessages(events: unknown[]): {
     }
 
     if (type === 'tool-start') {
-      const { id, name, args, explanation } = toolFields(agent.call);
+      // 与 live EventRouter 同一协议解析：兼容 call 包装与顶层字段两种形态
+      //（真实 daemon 回放与 live 桥事件同源，禁止只认 call 包装导致恢复丢工具卡）
+      const { id, name, args, explanation } = toolCallFieldsFromEvent(agent);
       const a = ensureAssistant(ts);
       if (!a.toolCalls) a.toolCalls = [];
       if (!a.blocks) a.blocks = [];

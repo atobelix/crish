@@ -4,17 +4,18 @@ import { Tooltip } from '../Tooltip';
 import { Target } from 'lucide-react';
 import { computeChecklistProgress, findCurrentLiveTool, resolveSessionProgressItems } from '../../api/sessionProgressApi';
 import { agentOneLineLabel } from './helpers';
+import type { SessionState } from '../../store/layoutStore';
 
 interface ProgressSectionProps {
-  session?: any;
+  session?: SessionState | null;
   onGoalClick?: (() => void) | undefined;
 }
 
 export const ProgressSection = React.memo(function ProgressSection({ session, onGoalClick }: ProgressSectionProps) {
-  const progressItems = React.useMemo(() => resolveSessionProgressItems(session), [session?.messages, session?.goalMode?.tasks]);
+  const progressItems = React.useMemo(() => resolveSessionProgressItems(session), [session]);
   const progress = React.useMemo(() => computeChecklistProgress(progressItems), [progressItems]);
   const goalMode = session?.goalMode?.active ? session.goalMode : null;
-  const liveTool = React.useMemo(() => findCurrentLiveTool(session), [session?.messages, session?.agents]);
+  const liveTool = React.useMemo(() => findCurrentLiveTool(session), [session]);
   const liveToolLabel = liveTool ? liveTool.label : '';
   const liveToolStatus = liveTool ? liveTool.statusLabel : '';
 

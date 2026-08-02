@@ -3,7 +3,7 @@ import { resolveChatEmptyKind } from '../api/chatEmptyState';
 import { messageHasSubstance } from '../api/sessionTitle';
 import { windowMessages } from '../api/messageWindow';
 import { StreamTextBatcher } from '../api/streamTextBatcher';
-import { globalPretextCache, validatePreparedText, safePrepareText } from '../api/pretextCache';
+import { globalPretextCache, validatePreparedText } from '../api/pretextCache';
 
 describe('chat invariants', () => {
   it('1. resolveChatEmptyKind - when message count > 0, empty state route must return null', () => {

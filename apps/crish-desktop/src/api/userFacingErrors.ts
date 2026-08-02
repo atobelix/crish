@@ -9,7 +9,7 @@ const NETWORK_RE =
   /network|timeout|offline|econn|enotfound|econnrefused|not connected|failed to connect|connect(?:ion)? (?:failed|refused|reset|closed)|disconnected|unable to connect|proxy|dns|net::|fetch failed|socket/i;
 
 const NO_KEY_RE =
-  /no provider|missing.*(?:api.?key|credential)|api.?key.*(?:missing|unset|required)|NO_PROVIDER|credential.*not|hasApiKey.?false/i;
+  /no provider|missing.*(?:api.?key|credential)|api.?key.*(?:missing|unset|required)|NO_PROVIDER|credential.*not|hasApiKey.?false|引擎未就绪/i;
 
 const AUTH_RE =
   /invalid.?api.?key|unauthorized|401|authentication|auth.?failed|api.?key.*invalid|key.*expired|credential.*invalid/i;
@@ -46,9 +46,36 @@ export function isNetworkishError(input: unknown): boolean {
   return NETWORK_RE.test(text);
 }
 
+/**
+ * Rust session-loop 的 provider 收场文案包装：
+ *   `provider 错误（{kind}）：{message}`（crates/session-loop/src/loop/handlers/stream_error.rs kind_str）。
+ * AA-07 统一规范：kebab 错误码优先识别，前端不再按英文文本重复猜测。
+ */
+const RUST_PROVIDER_WRAPPER_RE = /provider\s*错误\s*（([^）]+)）\s*：/;
+
+/** kebab 错误码 → 前端软失败分类（未登记码回落到文本正则兜底） */
+const KEBAB_KIND_TO_SOFT: Record<string, SoftFailureKind> = {
+  auth: 'auth',
+  'endpoint-unavailable': 'network',
+  network: 'network',
+  timeout: 'network',
+  quota: 'blocked',
+  'rate-limit': 'blocked',
+  'gateway-challenge': 'blocked',
+};
+
+function classifyByKebabCode(text: string): SoftFailureKind | null {
+  const m = RUST_PROVIDER_WRAPPER_RE.exec(text);
+  if (!m) return null;
+  return KEBAB_KIND_TO_SOFT[m[1]!] ?? null;
+}
+
 export function classifySoftFailure(input: unknown): SoftFailureKind {
   const text = normalizeErrorText(input);
   if (!text) return null;
+  // kebab 错误码优先（统一规范）；未登记码 → 落到文本正则兜底
+  const kebab = classifyByKebabCode(text);
+  if (kebab) return kebab;
   if (NO_KEY_RE.test(text)) return 'no_key';
   if (AUTH_RE.test(text)) return 'auth';
   if (NO_PROJECT_RE.test(text)) return 'no_project';
@@ -89,6 +116,7 @@ export function softFailureMessage(kind: SoftFailureKind): string | null {
 /**
  * @deprecated 禁止再写入 assistant 气泡。错误/中断只走 onRunError → 横幅/toast。
  * 仍返回文案供 surfaceStreamFailure 组 notice，勿 updateMessageText 进气泡。
+ * @see onRunError（横幅/toast 错误链路）
  */
 export function assistantBubbleForFailure(input: unknown): string | null {
   const kind = classifySoftFailure(input);

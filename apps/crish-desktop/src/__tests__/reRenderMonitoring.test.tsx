@@ -5,14 +5,13 @@
  * 2. 无关 Store 状态更新 (如 Shell Chrome / 无关 workspace / 后台 session) 时零额外重渲染 (0 extra re-render)
  * 3. React.memo Props 稳定性断言 (同址/不可变属性不击穿 memo)
  */
-import React, { useRef } from 'react';
+import React from 'react';
 import { render, act, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import { useLayoutStore } from '../store/layoutStore';
 import { useSessionStore } from '../store/sessionStore';
 import { DiffCard } from '../components/diff/DiffCard';
 import { CardPanel } from '../components/CardPanel';
-import { MessageVirtualizer } from '../components/chat-message-list/MessageVirtualizer';
 import type { SessionMessage } from '../store/types';
 
 // Mock ResizeObserver
@@ -98,12 +97,12 @@ describe('重渲染监控 (Component Re-render Monitoring)', () => {
   it('DiffCard / Zustand State 关联：无关 Layout Store 变更 (如 shellChromeMode) 不击穿无关组件', async () => {
     let parentRenderCount = 0;
 
-    function ParentWrapper({ dummy }: { dummy: number }) {
+    function ParentWrapper(_props: { dummy: number }) {
       parentRenderCount++;
       return <DiffCard onShowToast={vi.fn()} />;
     }
 
-    const { rerender } = render(<ParentWrapper dummy={1} />);
+    render(<ParentWrapper dummy={1} />);
     expect(parentRenderCount).toBe(1);
 
     // 修改无关 Layout Store 状态：shellChromeMode (不影响未变动 props 的 React.memo 组件)

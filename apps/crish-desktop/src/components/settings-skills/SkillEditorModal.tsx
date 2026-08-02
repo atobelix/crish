@@ -8,7 +8,6 @@
  * 新建（paths/manual）两个 create 框为页内内联区块，保持原样。
  */
 import React, { useId } from 'react';
-import * as Lucide from 'lucide-react';
 import type { DesktopSkill } from '../../api/skillsApi';
 import { Tooltip } from '../Tooltip';
 import { Dialog } from '../ui';

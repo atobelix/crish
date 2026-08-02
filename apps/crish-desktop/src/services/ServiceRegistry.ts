@@ -36,7 +36,7 @@ export class ServiceRegistry {
   }
 
   async healthCheck(): Promise<Record<string, { status: string; latency: number }>> {
-    const result: Record<string, any> = {};
+    const result: Record<string, { status: string; latency: number }> = {};
     for (const [id, svc] of this.services) {
       const start = performance.now();
       try {

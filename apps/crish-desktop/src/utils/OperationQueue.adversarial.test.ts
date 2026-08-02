@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { OperationQueue, type OperationType } from './OperationQueue';
+import { OperationQueue } from './OperationQueue';
 
 // 辅助：创建一个可控的延迟 execute 函数
 function createControllableExecute() {
@@ -55,7 +55,7 @@ describe('OperationQueue — 对抗性测试', () => {
 
       // 后续操作永远无法执行
       const op2Execute = vi.fn().mockResolvedValue(undefined);
-      const op2Promise = queue.enqueue('session-1', 'send-message', op2Execute);
+      queue.enqueue('session-1', 'send-message', op2Execute);
 
       // 等待一段时间
       await new Promise((r) => setTimeout(r, 100));

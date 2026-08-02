@@ -92,7 +92,7 @@ export function useAgentToolApproval(
   );
 
   const onApprovalDeny = useCallback(
-    (toolId: string, msgId: string) => {
+    (toolId: string, _msgId: string) => {
       if (!parentSessionId || !agentId || !toolId) return;
       setApprovalBusy(true);
       // 乐观标已拒绝；send 失败回滚 pending_approval（与 ChatCard 对称）

@@ -360,11 +360,14 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
     }
   }, [installed, pendingExpand]);
 
-  const matchQ = (name: string, desc: string) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return name.toLowerCase().includes(q) || desc.toLowerCase().includes(q);
-  };
+  const matchQ = useCallback(
+    (name: string, desc: string) => {
+      const q = query.trim().toLowerCase();
+      if (!q) return true;
+      return name.toLowerCase().includes(q) || desc.toLowerCase().includes(q);
+    },
+    [query],
+  );
 
   const installedFiltered = useMemo(
     () =>
@@ -372,7 +375,7 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
         if (kindFilter !== 'all' && item.kind !== kindFilter) return false;
         return matchQ(item.name, item.description);
       }),
-    [installed, kindFilter, query]
+    [installed, kindFilter, matchQ]
   );
 
   const catalogFiltered = useMemo(
@@ -381,7 +384,7 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
         if (kindFilter !== 'all' && entry.kind !== kindFilter) return false;
         return matchQ(entry.name, entry.description);
       }),
-    [kindFilter, query]
+    [kindFilter, matchQ]
   );
 
   const toggleExpand = (

@@ -7,13 +7,13 @@ export interface TelemetryLog {
   durationMs?: number | undefined;
   sessionId?: string | undefined;
   errorStack?: string | undefined;
-  context?: any;
+  context?: unknown;
 }
 
 export class TelemetryMonitor {
   private static instance: TelemetryMonitor;
   private buffer: string[] = [];
-  private flushInterval: any = null;
+  private flushInterval: number | null = null;
   private _disposed = false;
   private errorHandler: ((e: ErrorEvent) => void) | null = null;
   private rejectionHandler: ((e: PromiseRejectionEvent) => void) | null = null;
@@ -59,7 +59,7 @@ export class TelemetryMonitor {
   /**
    * Log a timing metric for an action
    */
-  logAction(actionName: string, durationMs: number, sessionId?: string, context?: any) {
+  logAction(actionName: string, durationMs: number, sessionId?: string, context?: unknown) {
     const entry: TelemetryLog = {
       timestamp: Date.now(),
       type: 'action',
@@ -80,11 +80,11 @@ export class TelemetryMonitor {
   /**
    * Log a lossless error with stack and context
    */
-  logError(error: any, sessionId?: string, context?: any) {
+  logError(error: unknown, sessionId?: string, context?: unknown) {
     const entry: TelemetryLog = {
       timestamp: Date.now(),
       type: 'error',
-      errorStack: error?.stack || String(error),
+      errorStack: error instanceof Error ? error.stack || String(error) : String(error),
       sessionId,
       context
     };

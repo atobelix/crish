@@ -28,18 +28,19 @@ async function startup() {
     const { useSessionStore } = await import('./store/sessionStore');
     const { useLayoutTreeStore } = await import('./store/layout-tree');
     // __CRISH_STORE__ 保持为会话 store（与既有测试脚本、手动调试习惯一致）
-    (window as any).__CRISH_STORE__ = useSessionStore;
-    (window as any).__CRISH_SESSION_STORE__ = useSessionStore;
-    (window as any).__CRISH_LAYOUT_STORE__ = useLayoutStore;
-    (window as any).__CRISH_TREE_STORE__ = useLayoutTreeStore;
+    const win = window as unknown as Record<string, unknown>;
+    win.__CRISH_STORE__ = useSessionStore;
+    win.__CRISH_SESSION_STORE__ = useSessionStore;
+    win.__CRISH_LAYOUT_STORE__ = useLayoutStore;
+    win.__CRISH_TREE_STORE__ = useLayoutTreeStore;
   } catch (e) {
     console.warn('[crish] exposing stores failed:', e);
   }
 
   // Phase 1.5: 动态加载 React + App（失败则展示错误边界 fallback）
-  let StrictMode: any;
-  let createRoot: any;
-  let App: any;
+  let StrictMode: React.ComponentType<{ children?: React.ReactNode }> | null = null;
+  let createRoot: typeof import('react-dom/client').createRoot | null = null;
+  let App: React.ComponentType<Record<string, never>> | null = null;
   try {
     const [{ StrictMode: SM }, { createRoot: CR }] = await Promise.all([
       import('react'),

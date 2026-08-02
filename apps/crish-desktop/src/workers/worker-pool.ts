@@ -63,7 +63,7 @@ export class WorkerPool {
 
   constructor(options?: Partial<WorkerPoolOptions> & { minimal?: boolean }) {
     const base = options?.minimal ? MINIMAL_OPTIONS : DEFAULT_OPTIONS;
-    const { minimal, ...rest } = options || {};
+    const { minimal: _minimal, ...rest } = options || {};
     this.options = { ...base, ...rest };
     this.initWorkers();
     this.startIdleMonitor();

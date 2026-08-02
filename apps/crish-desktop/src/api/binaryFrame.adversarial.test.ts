@@ -32,7 +32,6 @@ import {
   decodeMetaBodyPayload,
   decodeUtf8,
   encodeBinaryFrame,
-  encodeBinaryFrameByKind,
   encodeMetaBodyPayload,
   encodeUtf8,
   looksLikeBinaryFrame,
@@ -173,7 +172,7 @@ describe('binaryFrame — 对抗性测试', () => {
       // 但实际行为依赖引擎；本测试暴露这个风险
       if (after === 'yes') {
         // 已确认污染发生，清理
-        // eslint-disable-next-line no-proto
+         
         delete (Object.prototype as Record<string, unknown>).polluted;
         expect(after).toBe('yes'); // 标记 bug 存在
       } else {
@@ -202,7 +201,7 @@ describe('binaryFrame — 对抗性测试', () => {
       const after = ({} as Record<string, unknown>).polluted2;
       expect(after).toBeUndefined();
       // 清理以防万一
-      // eslint-disable-next-line no-proto
+       
       delete (Object.prototype as Record<string, unknown>).polluted2;
     });
   });

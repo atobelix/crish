@@ -112,6 +112,7 @@ function escapeRegExp(s: string): string {
 }
 
 function isAsciiToken(token: string): boolean {
+  // eslint-disable-next-line no-control-regex -- 有意按 ASCII 范围校验 token
   return /^[\x00-\x7F]+$/.test(token);
 }
 

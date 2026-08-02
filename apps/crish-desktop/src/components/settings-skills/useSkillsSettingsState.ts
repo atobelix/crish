@@ -24,7 +24,6 @@ import { clientApi } from '../../api/clientApi';
 import { setComposerSeed } from '../../api/composerSeed';
 import { emitUiEvent } from '../../api/uiEvents';
 import { formatEngineDegradeToast } from '../../hooks/useToastQueue';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
 import { closeSettings } from '../../api/store-access/componentAccess';
 
 export const ACTIVATION_OPTIONS: { id: SkillActivation; label: string }[] = [

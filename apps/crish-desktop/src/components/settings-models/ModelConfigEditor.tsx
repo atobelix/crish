@@ -1,7 +1,6 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import {
-  addModelToProfile,
   getActiveModelId,
   getActiveProfileId,
   removeModelFromProfile,

@@ -322,7 +322,7 @@ export function useRightSidebarState() {
         collapseToolColumnPreserve(w);
       });
     }
-  }, [activeWs, toggleToolColumnCollapsed]);
+  }, [activeWs, toggleToolColumnCollapsed, toolColumnCollapsed]);
 
   return { isRightSidebarCollapsed, toggleRightSidebar };
 }

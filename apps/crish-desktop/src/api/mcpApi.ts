@@ -73,9 +73,8 @@ export type McpControlProbe = {
 
 /**
  * 一次失败后记住：库存引擎不支持界面启停（T03.7 后恒为不支持态）。
+ * 该记忆状态已无读取方（T03.7 后恒为不支持态），仅保留重置函数签名兼容。
  */
-let rememberedStartStopUnsupported = true;
-let rememberedStartStopMessage: string | undefined;
 
 const START_STOP_UNSUPPORTED_HINT =
   '当前引擎不支持从界面启停；MCP 通常随任务运行时连接';
@@ -251,10 +250,9 @@ export function mcpStateKind(
   return 'idle';
 }
 
-/** 测试/重置用：清除「启停不支持」记忆 */
+/** 测试/重置用：清除「启停不支持」记忆（状态已移除，保留签名兼容） */
 export function resetMcpControlProbeMemory(): void {
-  rememberedStartStopUnsupported = false;
-  rememberedStartStopMessage = undefined;
+  /* 记忆状态已随 T03.7 移除，无操作 */
 }
 
 // ── R4-A2: MCP SDK 直连集成 ──────────────────────────────────────────

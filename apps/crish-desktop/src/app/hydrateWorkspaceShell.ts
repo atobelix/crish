@@ -29,7 +29,7 @@ import { getCompositionRoot } from './compositionRoot';
 import { getSettingsState } from '../store/storeAccess';
 import type { Settings } from '../api/clientApi';
 
-/** @deprecated use RESTORE_LAST_WORKSPACE_SETTING_KEY — kept for call-site clarity */
+/** @deprecated use RESTORE_LAST_WORKSPACE_SETTING_KEY — kept for call-site clarity. @see RESTORE_LAST_WORKSPACE_SETTING_KEY */
 const RESTORE_KEY = RESTORE_LAST_WORKSPACE_SETTING_KEY;
 
 export function readRestoreLastWorkspace(): boolean {

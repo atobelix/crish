@@ -17,7 +17,6 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   invokeResult,
   invokeCmd,
-  type InvokeResult,
 } from './api/tauriInvoke';
 import {
   mockTauriCommand,

@@ -22,7 +22,7 @@ describe("clone", () => {
       name: "bash",
       label: "bash",
       isReadOnly: () => true,
-      summarize: (input: unknown) => "run",
+      summarize: (_input: unknown) => "run",
       execute: async () => ({ text: "ok" }),
       input: { command: "ls" },
     };

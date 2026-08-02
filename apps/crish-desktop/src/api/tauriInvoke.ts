@@ -15,6 +15,7 @@
  *
  * 旧 `invokeCmd<T>` 返回 `T | null`（missing 与 error 都返回 null），
  * 已 `@deprecated`，新代码用 `invokeTyped` 或 `invokeCmdStrict` 替代。
+ * @see invokeTyped / invokeCmdStrict
  */
 
 export type InvokeOk<T> = { status: 'ok'; data: T };
@@ -103,7 +104,7 @@ function extractErrorKind(err: unknown): { kind: string; message: string } {
   return { kind: 'Unknown', message: String(err) };
 }
 
-let cachedInvoke: any = null;
+let cachedInvoke: typeof import('@tauri-apps/api/core').invoke | null = null;
 let tauriChecked = false;
 
 async function getTauriInvoke() {
@@ -179,6 +180,7 @@ export async function invokeTyped<T = unknown>(
  *
  * @deprecated 新代码应使用 `invokeTyped`（区分错误类型）或 `invokeCmdStrict`（失败抛错）。
  * 此 API 把 missing 与 error 都吞为 null，丢失错误信息，不利于排错。
+ * @see invokeTyped / invokeCmdStrict
  */
 export async function invokeCmd<T = unknown>(
   cmd: string,

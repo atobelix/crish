@@ -65,6 +65,7 @@ export type UseRulesStateResult = {
 };
 
 export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
+  const { onShowToast, onBlockingOverlayChange } = opts;
   /** 已打开过的项目 + 当前 cwd（文件夹名） */
   const [scopeProjects, setScopeProjects] = useState(() => listSettingsScopeProjects());
 
@@ -144,19 +145,19 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
           const msg = '读取规则失败：' + String(err);
           setLoadError(msg);
           setLoaded(false);
-          opts.onShowToast(msg);
+          onShowToast(msg);
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [scopeKey, isGlobal, scopeLabel, opts.onShowToast, loadTick]);
+  }, [scopeKey, isGlobal, scopeLabel, onShowToast, loadTick]);
 
   useEffect(() => {
-    opts.onBlockingOverlayChange?.(editingOpen);
-    return () => opts.onBlockingOverlayChange?.(false);
-  }, [editingOpen, opts.onBlockingOverlayChange]);
+    onBlockingOverlayChange?.(editingOpen);
+    return () => onBlockingOverlayChange?.(false);
+  }, [editingOpen, onBlockingOverlayChange]);
 
   /**
    * 本机写入当前作用域 customRules；成功静默。
@@ -192,7 +193,7 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
       );
       return safe;
     } catch (err) {
-      opts.onShowToast('更新设置失败：' + String(err));
+      onShowToast('更新设置失败：' + String(err));
       return null;
     }
   };
@@ -206,9 +207,9 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
   }) => {
     const sync = await syncRulesToDaemon(opts2);
     if (!sync.engineSynced) {
-      opts.onShowToast(formatEngineDegradeToast(sync.error));
+      onShowToast(formatEngineDegradeToast(sync.error));
     } else if (sync.truncated) {
-      opts.onShowToast('规则较长，引擎侧已截断');
+      onShowToast('规则较长，引擎侧已截断');
     }
   };
 
@@ -244,9 +245,9 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
             });
           })();
       if (!syncResult.engineSynced) {
-        opts.onShowToast('规则已保存到本机，同步到引擎失败');
+        onShowToast('规则已保存到本机，同步到引擎失败');
       } else if (syncResult.truncated) {
-        opts.onShowToast('规则较长，引擎侧已截断');
+        onShowToast('规则较长，引擎侧已截断');
       }
     } finally {
       setSaving(false);
@@ -257,11 +258,11 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
     if (saving) return false;
     const trimmed = normalizeRuleLine(text);
     if (!trimmed) {
-      opts.onShowToast('请输入规则内容');
+      onShowToast('请输入规则内容');
       return false;
     }
     if (customRules.some((r) => normalizeRuleLine(r) === trimmed)) {
-      opts.onShowToast('该规则已存在');
+      onShowToast('该规则已存在');
       return false;
     }
     setSaving(true);

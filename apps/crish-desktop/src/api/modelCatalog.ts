@@ -530,7 +530,7 @@ export function formatContextLabelZh(n?: number | null): string {
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
-  let u = (baseUrl || '').trim().replace(/\/+$/, '');
+  const u = (baseUrl || '').trim().replace(/\/+$/, '');
   if (!u) return '';
   // 已带 /v1 则保持
   return u;
@@ -846,7 +846,7 @@ export async function testProviderModel(
 
   try {
     return await Promise.race([doTest(), timeoutPromise]);
-  } catch (e: any) {
+  } catch (e: unknown) {
     const error = e instanceof Error ? e.message : String(e);
     upsertModelMeta(fresh.id, model, {
       lastTest: { ok: false, at: Date.now(), error },

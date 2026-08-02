@@ -245,16 +245,12 @@ describe('getContrastGuardedText — 对比度阈值', () => {
 
   it('阈值附近的颜色对比度选择敏感', () => {
     // 找到阈值附近的颜色
-    // L = 0.52 对应大约 #888（相对亮度 0.246）— 不对
-    // 实际 L = 0.2126*R + 0.7152*G + 0.0722*B (linear)
-    // 需要找到 L ≈ 0.52 的灰度
-    // #9c9c9c: sRGB ≈ 0.612, linear ≈ 0.331, L ≈ 0.331
-    // #b0b0b0: sRGB ≈ 0.69, linear ≈ 0.435, L ≈ 0.435
-    // #b8b8b8: sRGB ≈ 0.722, linear ≈ 0.485, L ≈ 0.485
-    // #bdbdbd: sRGB ≈ 0.741, linear ≈ 0.514, L ≈ 0.514
-    // #bebebe: L ≈ 0.52
+    // L = 0.2126*R + 0.7152*G + 0.0722*B (linear)
+    // #bdbdbd: sRGB ≈ 0.741, linear ≈ 0.509, L ≈ 0.509 < 0.52 → 浅色文字
+    // #bfbfbf: sRGB ≈ 0.749, linear ≈ 0.521, L ≈ 0.521 > 0.52 → 深色文字
+    // 原 fixture #bebebe 线性化后 L ≈ 0.515 位于阈值之下（fixture 计算误差，已修正）
     const below = getContrastGuardedText('#bdbdbd'); // L < 0.52
-    const above = getContrastGuardedText('#bebebe'); // L > 0.52
+    const above = getContrastGuardedText('#bfbfbf'); // L > 0.52
     expect(below).toBe('hsl(0, 0%, 94%)'); // 浅色文字
     expect(above).toBe('hsl(35, 12%, 11%)'); // 深色文字
   });

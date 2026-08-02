@@ -1,4 +1,4 @@
-export type EventHandler = (payload: any, source?: string) => void | Promise<void>;
+export type EventHandler = (payload: unknown, source?: string) => void | Promise<void>;
 export type Unsubscribe = () => void;
 
 interface HandlerEntry {
@@ -27,7 +27,7 @@ export class EventBus {
     return () => this.anyHandlers.delete(entry);
   }
 
-  emit(type: string, payload?: any, source?: string): void {
+  emit(type: string, payload?: unknown, source?: string): void {
     const entries = this.handlers.get(type);
     if (entries) {
       for (const entry of entries) {
@@ -44,7 +44,7 @@ export class EventBus {
     }
   }
 
-  async emitAsync(type: string, payload?: any, source?: string): Promise<void> {
+  async emitAsync(type: string, payload?: unknown, source?: string): Promise<void> {
     const promises: Promise<void>[] = [];
     const entries = this.handlers.get(type);
     if (entries) {

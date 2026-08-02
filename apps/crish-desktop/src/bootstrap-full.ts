@@ -17,7 +17,7 @@ export async function bootstrapFull(): Promise<void> {
           const { applyTheme, normalizeTheme } = await import('./api/themeStore');
           applyTheme(normalizeTheme(settings.theme));
         }
-      } catch {}
+      } catch { /* 主题读取失败时保持默认主题 */ }
     })(),
   ]);
 

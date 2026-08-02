@@ -359,8 +359,8 @@ export interface ToolRegistryQuery extends ToolRegistrar {
  */
 function cloneToolMetadata(
   tool: AgentTool,
-  pluginId: string,
-  sourceId: string,
+  _pluginId: string,
+  _sourceId: string,
 ): AgentTool {
   // AgentTool 是接口，返回同一引用（工具实例由 ToolRegistry 管理，Registry 不复制）
   // 此函数预留为扩展点：未来可附加 pluginId/sourceId 元数据到 tool.metadata

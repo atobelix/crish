@@ -58,7 +58,7 @@
     "test:e2e:audit": "node scripts/audit-ui-runtime-errors.mjs",
     "test:e2e:native": "vitest run tests/e2e/tauri-native-smoke.spec.ts",
     "test:real-api": "node scripts/test-real-provider-api.mjs",
-    "lint:all": "eslint . --ext .ts,.tsx --max-warnings 0 && stylelint 'apps/crish-desktop/src/**/*.css'",
+    "lint:all": "eslint . --ext .ts,.tsx --max-warnings 0 && npx --yes stylelint@16 \"apps/crish-desktop/src/**/*.css\"",
     "lint:css": "npx --yes stylelint@16 \"apps/crish-desktop/src/styles/**/*.css\"",
     "lint": "eslint .",
     "lint:depcruise": "depcruise --config .dependency-cruiser.cjs packages apps",

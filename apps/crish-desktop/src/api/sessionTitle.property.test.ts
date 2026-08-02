@@ -54,10 +54,6 @@ const fcAnyMaxLen = fc.oneof(
 
 const LONE_SURROGATE_REGEX = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u;
 
-// Cf 类（Format 字符）— 包括 Bidi 控制、变体选择符等
-// 注意：sanitize 后可能仍保留 ZWJ（U+200D）以保护 emoji 序列
-const CF_CHARS_REGEX = /[\u00AD\u0600-\u0605\u061C\u06DD\u070F\u0890-\u0891\u08E2\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF\uFFF9-\uFFFB\uE0000-\uE007F]/u;
-
 function codepointCount(s: string): number {
   return Array.from(s).length;
 }

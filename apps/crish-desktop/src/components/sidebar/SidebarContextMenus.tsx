@@ -10,7 +10,7 @@ import styles from './SidebarContextMenus.module.css';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { Tooltip } from '../Tooltip';
 import { Menu } from '../ui/Menu';
-import { clampPosition, measureMenu } from '../ui/Menu/position';
+import { measureMenu } from '../ui/Menu/position';
 import {
   Archive,
   Check,
@@ -156,12 +156,6 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
     }, 80);
   }, []);
 
-  const handleFlyLeave = useCallback(() => {
-    clearTimeout(flyTimerRef.current.enter);
-    flyTimerRef.current.leave = window.setTimeout(() => {
-      setFly(null);
-    }, 150);
-  }, []);
   const target = contextMenu
     ? (() => {
         const s =

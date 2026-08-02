@@ -14,7 +14,7 @@
  * @see ./storeOwnership.ts (`SESSION_OWNERSHIP`)
  * @see ./layoutStore.ts package header
  */
-import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useShallow } from '../store/useShallowSelector';
 import { useLayoutStore } from './layoutStore';
 import { sidebarSessionsEqual } from './sessionListEqual';

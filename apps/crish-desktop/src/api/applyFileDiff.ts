@@ -51,6 +51,7 @@ const WINDOWS_RESERVED_BASENAME =
   /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 
 /** 控制字符 / 禁止字符（路径段内；盘符冒号单独处理） */
+// eslint-disable-next-line no-control-regex -- 有意匹配 C0 控制字符（路径净化）
 const PATH_CONTROL_OR_BAD = /[\x00-\x1f\x7f<>"|?*]/;
 
 /**

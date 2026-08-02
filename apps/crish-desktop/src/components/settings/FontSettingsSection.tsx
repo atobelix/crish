@@ -29,6 +29,7 @@ interface Props {
 const FONT_NAME_MAX = 64;
 
 function sanitizeFontFamilyName(raw: string): { ok: true; name: string } | { ok: false; reason: string } {
+  // eslint-disable-next-line no-control-regex -- 有意剥离 C0 控制字符
   const stripped = raw.replace(/[\u0000-\u001f\u007f]/g, '').trim();
   if (!stripped) {
     return { ok: false, reason: '请输入字体名称' };

@@ -120,17 +120,6 @@ function emptyAgentMessage(): AgentMessage {
   return { id: '', role: 'assistant', createdAt: '', blocks: [] };
 }
 
-function emptyToolBatchCall(): ToolBatchCall {
-  return {
-    id: '',
-    toolName: '',
-    summary: '',
-    input: {},
-    category: 'terminal',
-    concurrency: 'sequential',
-  };
-}
-
 function emptyCheckpointRecord(): RuntimeCheckpointRecord {
   return {
     id: '',

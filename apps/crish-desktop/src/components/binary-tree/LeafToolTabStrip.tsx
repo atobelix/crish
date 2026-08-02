@@ -62,7 +62,6 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
       [leaf.id, removeTabFromLeaf]
     );
 
-    const addTabToLeaf = useLayoutTreeStore((s) => s.addTabToLeaf);
     const [showAddMenu, setShowAddMenu] = useState(false);
 
     // 单 tab 或无 tab 时不渲染标签栏（已调整为无 tabs 时才不渲染，以保证加号可用）

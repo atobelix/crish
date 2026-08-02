@@ -26,7 +26,7 @@ describe('useFileNavigation', () => {
 
     it('reflects updated getIsDirty value via ref', () => {
       const getIsDirty = vi.fn(() => false);
-      const { result, rerender } = renderHook(
+      const { result } = renderHook(
         ({ dirty }) => useFileNavigation(dirty),
         { initialProps: { dirty: getIsDirty } },
       );

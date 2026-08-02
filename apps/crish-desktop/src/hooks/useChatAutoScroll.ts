@@ -76,7 +76,7 @@ export function useChatAutoScroll(
     const root = chatFlowRef.current;
     if (!root) return;
 
-    let el = resolveScrollEl(root);
+    const el = resolveScrollEl(root);
     let attached: HTMLElement | null = null;
 
     const handleScroll = () => {

@@ -127,7 +127,6 @@ export function parseClaudeCodeJsonl(
   const turns: NormalizedImportTurn[] = [];
   // Pending tool outputs keyed by tool_use id — attached to nearest assistant or synthetic.
   const pendingResults = new Map<string, { output: string; isError: boolean }>();
-  let title: string | undefined;
   let customTitle: string | undefined;
   let aiTitle: string | undefined;
   let summary: string | undefined;
@@ -312,7 +311,7 @@ export function parseClaudeCodeJsonl(
     }
   }
 
-  title = customTitle || aiTitle || summary || lastPrompt;
+  const title = customTitle || aiTitle || summary || lastPrompt;
 
   return {
     source: 'claude-code' as const,

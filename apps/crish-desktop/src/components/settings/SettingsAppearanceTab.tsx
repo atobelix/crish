@@ -80,23 +80,28 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
     };
   }, []);
 
+  const [visibilityRef] = useIsVisible();
+
+  const updatePersonalization = useCallback(
+    (updates: Partial<PersonalizationSettings>) => {
+      const next = { ...personalization, ...updates };
+      setPersonalization(next);
+      writeStoredPersonalization(next);
+      applyPersonalization(next, activeTheme);
+    },
+    [personalization, activeTheme],
+  );
+
   // 切换主题时，如果当前选中的皮肤不在新主题预设中，自动回退到该主题的第一个预设皮肤（#237）
+  // 注意：必须位于 updatePersonalization（const useCallback）之后——
+  // 依赖数组在渲染期求值，提前引用会触发 TDZ ReferenceError 导致整个 tab 崩溃。
   useEffect(() => {
     const validSkins = activeTheme === 'dark' ? DARK_SKIN_IDS : LIGHT_SKIN_IDS;
     if (personalization.skin !== 'custom' && !validSkins.includes(personalization.skin)) {
       const fallback = activeTheme === 'dark' ? 'dark-cozy' : 'warm-gray';
       updatePersonalization({ skin: fallback });
     }
-  }, [activeTheme, personalization.skin]);
-
-  const [visibilityRef] = useIsVisible();
-
-  const updatePersonalization = (updates: Partial<PersonalizationSettings>) => {
-    const next = { ...personalization, ...updates };
-    setPersonalization(next);
-    writeStoredPersonalization(next);
-    applyPersonalization(next, activeTheme);
-  };
+  }, [activeTheme, personalization.skin, updatePersonalization]);
 
   const skinOptions = useMemo(() => {
     const list = activeTheme === 'dark'
@@ -242,7 +247,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
     [onShowToast, setShellChromeMode, shellChromeMode],
   );
 
-  const allValues = React.useMemo<Record<string, any>>(() => {
+  const allValues = React.useMemo<Record<string, unknown>>(() => {
     if (!settings) return {};
     return {
       theme: normalizeTheme(settings.theme),
@@ -341,7 +346,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
     );
   }
 
-  const handleSave = (updates: Record<string, any>) => {
+  const handleSave = (updates: Record<string, unknown>) => {
     if ('theme' in updates) void save({ theme: String(updates.theme) });
     if ('uiSize' in updates) applyDensity(updates.uiSize as UiSize);
     if ('shellChrome' in updates) applyChrome(updates.shellChrome as ShellChromeMode);
@@ -351,9 +356,9 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
         void save({ markdown: { ...(settings.markdown || {}), codeBlockIndent: next } });
       }
     }
-    if ('skinPreset' in updates) updatePersonalization({ skin: updates.skinPreset });
-    if ('accentColor' in updates) updatePersonalization({ customBg: updates.accentColor });
-    if ('customFgColor' in updates) updatePersonalization({ customFg: updates.customFgColor });
+    if ('skinPreset' in updates) updatePersonalization({ skin: updates.skinPreset as string });
+    if ('accentColor' in updates) updatePersonalization({ customBg: updates.accentColor as string });
+    if ('customFgColor' in updates) updatePersonalization({ customFg: updates.customFgColor as string });
     if ('brightness' in updates) updatePersonalization({ themeBrightnessAdjust: updates.brightness as number });
     if ('fontSize' in updates) updatePersonalization({ fontSizeAdjust: (updates.fontSize as number) - 14 });
     if ('transitionEnabled' in updates) updatePersonalization({ themeAutoTimeTransition: updates.transitionEnabled as boolean });

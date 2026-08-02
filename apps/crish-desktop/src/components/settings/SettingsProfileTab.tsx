@@ -47,7 +47,6 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
 
   const hasWorkspace = cwd !== '__global__' && Boolean(cwd);
   // Stream D 改造后：存储统一为 SQLite（本机数据库），不再有磁盘镜像 / localStorage 分支
-  const diskPath = '';
   const dataLocation = '本机 SQLite 数据库';
 
   const handleExportSettings = async () => {

@@ -167,7 +167,7 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
   }, [settings]);
 
   const handleSave = useCallback(
-    async (updates: Record<string, any>) => {
+    async (updates: Record<string, unknown>) => {
       if ('tabModeEnabled' in updates) {
         const on = Boolean(updates.tabModeEnabled);
         setTabModeEnabled(on);

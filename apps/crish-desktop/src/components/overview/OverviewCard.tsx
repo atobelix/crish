@@ -31,13 +31,13 @@ import { useOverviewState } from './useOverviewState';
 export type OverviewCardProps = {
   wsId: string;
   onOpenPanel: (id: string) => void;
-  /** @deprecated 保留 prop 兼容 */
+  /** @deprecated 保留 prop 兼容。@removeWhen 调用方全部迁移后移除 */
   onShowToast?: (msg: string) => void;
 };
 
 type SecKey = 'agents' | 'files' | 'usage' | 'activeTasks' | 'bgTasks' | 'cronJobs';
 
-const OverviewCardInner: React.FC<OverviewCardProps> = ({ wsId, onOpenPanel }) => {
+const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
   const activeSessionId = useSessionField(selectActiveSessionId);
   const session = useSessionField(selectActiveSession);
   const diffFiles = useTerminalField(selectDiffFiles);

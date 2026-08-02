@@ -14,13 +14,6 @@ interface BenchResult {
   passed: boolean;
 }
 
-interface MemResult {
-  name: string;
-  maxHeapDelta: number;
-  maxListenerDelta: number;
-  passed: boolean;
-}
-
 const ACCEPTANCE_CRITERIA: AcceptanceEntry[] = [
   {
     module: "BoundedMap / LruMap",
@@ -82,18 +75,6 @@ function loadBenchResults(): BenchResult[] {
   }));
 }
 
-function loadMemResults(): MemResult[] {
-  const path = "perf-report/mem-benchmark-result.json";
-  if (!existsSync(path)) return [];
-  const raw = JSON.parse(readFileSync(path, "utf8"));
-  return raw.tests.map((t: Record<string, unknown>) => ({
-    name: t.name as string,
-    maxHeapDelta: t.maxHeapDelta as number,
-    maxListenerDelta: t.maxListenerDelta as number,
-    passed: t.passed as boolean,
-  }));
-}
-
 function matchName(pattern: string, name: string): boolean {
   if (pattern.includes("*")) {
     const regex = new RegExp("^" + pattern.replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
@@ -104,10 +85,6 @@ function matchName(pattern: string, name: string): boolean {
 
 function main() {
   const benchResults = loadBenchResults();
-  const memResults = loadMemResults();
-
-  const benchMap = new Map(benchResults.map((b) => [b.name, b]));
-  const memMap = new Map(memResults.map((m) => [m.name, m]));
 
   const results: AcceptanceResult["modules"] = [];
   let passedModules = 0;

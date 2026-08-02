@@ -11,9 +11,9 @@ interface ConfigSchemaEntry<T> {
 }
 
 export class ConfigService {
-  private schemas = new Map<string, ConfigSchemaEntry<any>>();
-  private listeners = new Map<string, Set<(value: any) => void>>();
-  private memoryStore = new Map<string, any>();
+  private schemas = new Map<string, ConfigSchemaEntry<unknown>>();
+  private listeners = new Map<string, Set<(value: unknown) => void>>();
+  private memoryStore = new Map<string, unknown>();
 
   async init(): Promise<void> {
     // no-op for now
@@ -28,12 +28,12 @@ export class ConfigService {
     if (!entry) throw new InvariantViolation(`Config key "${key}" not defined`);
 
     const raw = this.readFromStorage(key, entry.storage);
-    if (raw === null || raw === undefined) return entry.default;
+    if (raw === null || raw === undefined) return entry.default as T;
 
     try {
-      return entry.schema.parse(raw);
+      return entry.schema.parse(raw) as T;
     } catch {
-      return entry.default;
+      return entry.default as T;
     }
   }
 
@@ -48,8 +48,8 @@ export class ConfigService {
 
   watch<T>(key: string, cb: (value: T) => void): () => void {
     if (!this.listeners.has(key)) this.listeners.set(key, new Set());
-    this.listeners.get(key)!.add(cb);
-    return () => this.listeners.get(key)?.delete(cb);
+    this.listeners.get(key)!.add(cb as (value: unknown) => void);
+    return () => this.listeners.get(key)?.delete(cb as (value: unknown) => void);
   }
 
   reset(key?: string): void {
@@ -77,7 +77,7 @@ export class ConfigService {
     } catch { /* quota exceeded */ }
   }
 
-  private notify(key: string, value: any): void {
+  private notify(key: string, value: unknown): void {
     this.listeners.get(key)?.forEach(cb => { try { cb(value); } catch { /* */ } });
   }
 }

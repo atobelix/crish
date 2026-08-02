@@ -9,7 +9,7 @@ describe('EventBus Race Conditions', () => {
   it('handles concurrent emit and subscribe/unsubscribe', async () => {
     const received = new Set<number>();
     
-    const sub1 = eventBus.on('test', () => { received.add(1); });
+    eventBus.on('test', () => { received.add(1); });
     const sub2 = eventBus.on('test', () => { 
       received.add(2);
       sub2();

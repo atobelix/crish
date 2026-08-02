@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import type { FileDiff, SessionAgent, SessionMessage } from '../../store/layoutStore';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
 import {
   usePermissionField,
   useSettingsField,

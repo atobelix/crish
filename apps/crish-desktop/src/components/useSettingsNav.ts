@@ -42,6 +42,7 @@ export type UseSettingsNavResult = {
 };
 
 export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResult {
+  const { mcpAvailable, safeActiveTab, onClose, rulesModalOpen, selectTab, navFocusId } = opts;
   const [navQuery, setNavQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -49,7 +50,7 @@ export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResul
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (opts.rulesModalOpen) return;
+      if (rulesModalOpen) return;
       if (navQuery.trim()) {
         e.preventDefault();
         e.stopPropagation();
@@ -57,19 +58,19 @@ export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResul
         searchInputRef.current?.focus();
         return;
       }
-      if (!opts.onClose) return;
+      if (!onClose) return;
       e.preventDefault();
       e.stopPropagation();
-      opts.onClose();
+      onClose();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [opts.onClose, opts.rulesModalOpen, navQuery]);
+  }, [onClose, rulesModalOpen, navQuery]);
 
   // / or Ctrl+F focuses sidebar search
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (opts.rulesModalOpen) return;
+      if (rulesModalOpen) return;
       const el = e.target as HTMLElement | null;
       if (
         el &&
@@ -89,24 +90,24 @@ export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResul
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [opts.rulesModalOpen]);
+  }, [rulesModalOpen]);
 
   const visibleTabs = useMemo(() => {
     const q = navQuery.trim().toLowerCase();
     return TAB_META.filter((t) => {
       if (t.demoOnly && !isDemoMode()) return false;
-      if (!(allowedTabIds(opts.mcpAvailable) as string[]).includes(t.id)) return false;
+      if (!(allowedTabIds(mcpAvailable) as string[]).includes(t.id)) return false;
       return tabMatchesQuery(t, q);
     });
-  }, [navQuery, opts.mcpAvailable]);
+  }, [navQuery, mcpAvailable]);
 
   // 过滤后若当前页不可见：仍保留内容，但 roving 焦点落到首项
   const rovingId: TabType =
-    (opts.navFocusId && visibleTabs.some((t) => t.id === opts.navFocusId) && opts.navFocusId) ||
-    (visibleTabs.some((t) => t.id === opts.safeActiveTab)
-      ? opts.safeActiveTab
+    (navFocusId && visibleTabs.some((t) => t.id === navFocusId) && navFocusId) ||
+    (visibleTabs.some((t) => t.id === safeActiveTab)
+      ? safeActiveTab
       : visibleTabs[0]?.id) ||
-    opts.safeActiveTab;
+    safeActiveTab;
 
   /** 侧栏 tablist：方向键漫游 + Home/End；Enter/Space 由 button 原生激活 */
   const onTablistKeyDown = useCallback(
@@ -137,9 +138,9 @@ export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResul
       e.preventDefault();
       const nextId = ids[next]!;
       // 方向键：移动焦点并选中（设置页切换应即时可见）
-      opts.selectTab(nextId, { focusTab: true });
+      selectTab(nextId, { focusTab: true });
     },
-    [visibleTabs, rovingId, opts.selectTab],
+    [visibleTabs, rovingId, selectTab],
   );
 
   const onSearchKeyDown = useCallback(
@@ -147,21 +148,21 @@ export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResul
       if (e.key === 'ArrowDown' && visibleTabs.length > 0) {
         e.preventDefault();
         const first = visibleTabs[0]!.id;
-        opts.selectTab(first, { focusTab: true });
+        selectTab(first, { focusTab: true });
         return;
       }
       if (e.key === 'Enter' && visibleTabs.length > 0) {
         e.preventDefault();
         const hit =
-          visibleTabs.find((t) => t.id === opts.safeActiveTab)?.id ?? visibleTabs[0]!.id;
-        opts.selectTab(hit, { focusPanel: true });
+          visibleTabs.find((t) => t.id === safeActiveTab)?.id ?? visibleTabs[0]!.id;
+        selectTab(hit, { focusPanel: true });
       }
     },
-    [visibleTabs, opts.safeActiveTab, opts.selectTab],
+    [visibleTabs, safeActiveTab, selectTab],
   );
 
   const activeLabel =
-    TAB_META.find((t) => t.id === opts.safeActiveTab)?.label || '设置';
+    TAB_META.find((t) => t.id === safeActiveTab)?.label || '设置';
   const filterStatusText =
     navQuery.trim().length > 0
       ? visibleTabs.length === 0

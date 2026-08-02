@@ -115,7 +115,7 @@ describe('T11.5.2 密钥迁移失败回退 e2e（启动 A 失败 → 启动 B �
   it('重启 B（DPAPI 恢复）：重试成功 → 标记置位 + 明文清除 + hasKey 保留', async () => {
     seedLegacyProfiles('sk-boot-a-plain');
     let calls = 0;
-    const apply = installApplyMock((args) => {
+    installApplyMock((args) => {
       calls += 1;
       // 启动 A：两次尝试均失败（主迁移 + 重试）；启动 B 起 DPAPI 恢复
       return calls <= 2 ? failApply() : okApply(args);

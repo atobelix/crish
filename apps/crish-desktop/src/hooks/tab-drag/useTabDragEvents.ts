@@ -212,7 +212,7 @@ export function useTabDragEvents({
       }
       draggingRef.current = false;
     },
-    [commitTabDrop]
+    [commitTabDrop, setDraggedTab]
   );
 
   const handleLostCapture = React.useCallback(() => {
@@ -404,7 +404,7 @@ export function useTabDragEvents({
         e
       );
     },
-    [base, wsId, groupId, cardsLength, setDraggedTab, closeTabInGroup, evaluateMoveDrop, commitTabDrop, handleLostCapture]
+    [base, wsId, groupId, cardsLength, closeTabInGroup, handleLostCapture]
   );
 
   return { handleTabPointerDown };

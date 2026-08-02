@@ -176,7 +176,7 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
           clientApi.saveSettingsEx('__global__', 'global', {
             shortcuts: updated,
           }).catch(() => {});
-        } catch {}
+        } catch { /* 远端保存失败时本地已生效，不阻断 */ }
         return true;
       } catch {
         onShowToast('保存失败：无法写入快捷键');

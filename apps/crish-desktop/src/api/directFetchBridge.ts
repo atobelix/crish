@@ -132,6 +132,7 @@ function buildThinkingParams(thinkingLevel?: string): Record<string, unknown> {
  * @deprecated **Not product primary transport** (inventory #10). Call only from
  * `ConnectionLifecycle.createStreamSession` degraded branch, or explicit tests/dev.
  * Prefer `chatApi.streamAssistantResponseApi` → `streamViaEngine`.
+ * @see chatApi.streamAssistantResponseApi
  *
  * Cancel: returned `() => void` aborts the fetch and calls `onComplete` once
  * (force-equivalent only; no L2 cooperative). Callers must retain the handle

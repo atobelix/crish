@@ -28,7 +28,7 @@ type Props = {
   onClose?: () => void;
   /** 错误捕获回调，每次捕获到错误时触发 */
   onError?: (error: Error) => void;
-  /** @deprecated 使用 variant="compact" */
+  /** @deprecated 使用 variant="compact"。@see variant="compact" */
   compact?: boolean;
   /** 显示变体，默认 fullscreen */
   variant?: Variant;

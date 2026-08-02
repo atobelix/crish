@@ -172,10 +172,6 @@ describe('escapeShellArg — 属性测试：剥离字符集的不一致性', () 
     const strippedChars = '<>|&;()$`%!^';
     fc.assert(
       fc.property(fc.string({ minLength: 1, maxLength: 128 }), (s) => {
-        const escaped = escapeShellArg(s);
-        const inner = escaped.slice(1, -1); // 去掉外层双引号
-        // 还原换行→空格的替换
-        const restored = inner.replace(/ /g, '?'); // 占位
         // 被剥离的字符不应出现在结果中（除了换行被替换为空格）
         for (const ch of strippedChars) {
           if (s.includes(ch)) {

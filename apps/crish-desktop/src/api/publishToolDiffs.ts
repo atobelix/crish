@@ -46,7 +46,7 @@ export function normalizeDiffFilePath(
   }
 
   // Windows 盘符路径：C:\a\b → C:/a/b
-  let p = raw.replace(/\\/g, '/');
+  const p = raw.replace(/\\/g, '/');
   if (UNSAFE_PLACEHOLDER_PATHS.has(p)) return null;
 
   const driveMatch = /^([A-Za-z]:)(\/.*)?$/.exec(p);

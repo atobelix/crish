@@ -220,7 +220,7 @@ class ToastBus {
 
 export const toastBus = new ToastBus();
 
-eventBus.on('toast:show', (payload: any) => {
+eventBus.on('toast:show', (payload: unknown) => {
   if (payload && typeof payload === 'object' && 'severity' in payload && 'code' in payload) {
     toastBus.show(payload as UiError);
   }

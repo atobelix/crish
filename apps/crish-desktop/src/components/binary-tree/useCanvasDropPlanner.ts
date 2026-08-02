@@ -37,6 +37,7 @@ export function useCanvasDropPlanner(
 ): UseCanvasDropPlannerResult {
   const setActiveLeaf = useLayoutTreeStore((s) => s.setActiveLeaf);
   const setLeafSessionId = useLayoutTreeStore((s) => s.setLeafSessionId);
+  const { refreshTabs } = opts;
 
   /** 激活 chat leaf + shell 切到对应 session（drop 后统一收尾） */
   const activateSessionOnLeaf = useCallback(
@@ -49,9 +50,9 @@ export function useCanvasDropPlanner(
       } else {
         shell.openOrFocusSession(sourceSessionId);
       }
-      opts.refreshTabs();
+      refreshTabs();
     },
-    [setActiveLeaf, opts.refreshTabs]
+    [setActiveLeaf, refreshTabs]
   );
 
   /**

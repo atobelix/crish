@@ -27,7 +27,7 @@ function syncDraftFolderOnProjectChange(folder: string): void {
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** @deprecated 优先使用 onOpenChange(false) */
+  /** @deprecated 优先使用 onOpenChange(false)。@see onOpenChange */
   onClose?: () => void;
   onChanged?: () => void;
   /** 真实触发器（项目名按钮），用于锚定 Popover */

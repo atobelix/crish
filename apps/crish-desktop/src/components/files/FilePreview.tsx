@@ -2,10 +2,10 @@ import React, { useCallback, useRef, useState } from 'react';
 import styles from './FilesCard.module.css';
 import { Tooltip } from '../Tooltip';
 import { ExternalLink, X } from 'lucide-react';
-import { openPathDefault, pathBasename } from '../../api/workspaceFsApi';
+import { pathBasename } from '../../api/workspaceFsApi';
 import { highlightCode, langFromFilename } from '../../api/codeHighlight';
 import { useAsyncMarkdownHtml } from '../../api/markdownRenderAsync';
-import { addPendingFileAnnotation, countPendingFileAnnotations, parseCsvPreview } from '../../api/workspaceFsApi';
+import { addPendingFileAnnotation, parseCsvPreview } from '../../api/workspaceFsApi';
 import { FileEditor } from './FileEditor';
 import type { ViewMode } from './hooks/useFilePreview';
 

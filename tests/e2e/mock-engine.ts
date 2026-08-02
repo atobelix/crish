@@ -593,6 +593,10 @@ export function restoreSessions(): MockSessionSource[] {
       title: '规划 Rust 迁移',
       updatedAt: Date.now() - 3_600_000,
       events: [
+        {
+          type: 'message-end',
+          message: { role: 'user', content: '规划 Rust 迁移' },
+        },
         { type: 'message-start' },
         {
           type: 'message-delta',
@@ -614,6 +618,10 @@ export function restoreSessions(): MockSessionSource[] {
       title: '修复 CI 报错',
       updatedAt: Date.now() - 7_200_000,
       events: [
+        {
+          type: 'message-end',
+          message: { role: 'user', content: '修复 CI 报错' },
+        },
         { type: 'message-start' },
         {
           type: 'message-delta',
@@ -651,6 +659,10 @@ export function restoreSessions(): MockSessionSource[] {
       title: '长会话（中断未收口）',
       updatedAt: Date.now() - 86_400_000,
       events: [
+        {
+          type: 'message-end',
+          message: { role: 'user', content: '长会话（中断未收口）' },
+        },
         { type: 'message-start' },
         {
           type: 'message-delta',

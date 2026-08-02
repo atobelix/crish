@@ -303,11 +303,13 @@ export function useChatCardState({
     }
   }, [pickerInlineError, onShowToast]);
 
+  const { handleStopGeneration, handleSendChat } = composerProps;
+
   useEffect(() => {
     return onUiEvent('stop-generation', () => {
-      composerProps.handleStopGeneration();
+      handleStopGeneration();
     });
-  }, [composerProps.handleStopGeneration]);
+  }, [handleStopGeneration]);
 
   const openDiffInRightPanel = useCallback(
     (diff: FileDiff) => {
@@ -335,9 +337,9 @@ export function useChatCardState({
 
   const handleSendFollowUp = useCallback(
     (prompt: string) => {
-      void composerProps.handleSendChat(false, prompt);
+      void handleSendChat(false, prompt);
     },
-    [composerProps.handleSendChat]
+    [handleSendChat]
   );
 
   const handleOpenTerminal = useCallback(() => {

@@ -58,7 +58,6 @@ async function runComprehensiveAudit() {
 
   const capturedErrors = [];
   const consoleLogs = [];
-  const wsMessagesSent = [];
 
   // Listen to Uncaught Page Exceptions
   page.on('pageerror', (exception) => {
@@ -222,7 +221,7 @@ async function runComprehensiveAudit() {
           await allButtons[k].click({ timeout: 1000 }).catch(() => {});
           await page.waitForTimeout(300);
         }
-      } catch {}
+      } catch { /* 点击失败继续下一个按钮 */ }
     }
 
     // ── Phase 5: Settings Modal & 12 Sub-Tabs Audit ──

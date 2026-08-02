@@ -73,7 +73,7 @@ export function insertNode(
   root: GridNode,
   path: number[],
   newNode: GridNode,
-  insertBefore = true,
+  _insertBefore = true,
 ): GridNode {
   // TODO: 实现路径查找和插入
   // 路径示例：[] → 替换根，[0] → 第一个子节点，[0, 1] → 第一个子节点的第二个子节点
@@ -83,15 +83,17 @@ export function insertNode(
 /**
  * 移除指定路径的节点。
  */
-export function removeNode(root: GridNode, path: number[]): { root: GridNode; removed: GridNode | null } {
+export function removeNode(root: GridNode, _path: number[]): { root: GridNode; removed: GridNode | null } {
   // TODO: 实现路径查找和移除
   return { root, removed: null };
 }
 
+type GridCardLike = { id?: string; type?: string };
+
 /**
  * 从现有 WorkspaceState 构建 Grid 树。
  */
-export function fromWorkspaceState(ws: { columns: Array<{ widthRatio: number; groups: Array<{ heightRatio: number; activeCard: any; cards: any[] }> }> }): GridNode {
+export function fromWorkspaceState(ws: { columns: Array<{ widthRatio: number; groups: Array<{ heightRatio: number; activeCard?: GridCardLike; cards: GridCardLike[] }> }> }): GridNode {
   if (ws.columns.length === 1) {
     return fromGroups(ws.columns[0]!.groups);
   }
@@ -105,7 +107,7 @@ export function fromWorkspaceState(ws: { columns: Array<{ widthRatio: number; gr
   };
 }
 
-function fromGroups(groups: Array<{ heightRatio: number; activeCard: any; cards: any[] }>): GridNode {
+function fromGroups(groups: Array<{ heightRatio: number; activeCard?: GridCardLike; cards: GridCardLike[] }>): GridNode {
   if (groups.length === 1) {
     return fromGroup(groups[0]!);
   }
@@ -119,12 +121,12 @@ function fromGroups(groups: Array<{ heightRatio: number; activeCard: any; cards:
   };
 }
 
-function fromGroup(group: { activeCard: any; cards: any[] }): GridLeaf {
+function fromGroup(group: { activeCard?: GridCardLike; cards: GridCardLike[] }): GridLeaf {
   return {
     type: 'leaf',
     minSize: 50,
     panelType: group.activeCard?.type || 'unknown',
-    tabs: group.cards.map((c) => c.id),
+    tabs: group.cards.map((c) => c.id ?? ''),
     activeTab: group.activeCard?.id || group.cards[0]?.id || '',
   };
 }

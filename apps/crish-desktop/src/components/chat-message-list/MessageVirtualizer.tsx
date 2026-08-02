@@ -168,10 +168,12 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
   }, [visibleMsgIds, containerRef, setActual]);
 
   useEffect(() => {
+    const ro = roRef.current;
+    const observed = observedRowsRef.current;
     return () => {
-      roRef.current?.disconnect();
+      ro?.disconnect();
       roRef.current = null;
-      observedRowsRef.current.clear();
+      observed.clear();
     };
   }, []);
 

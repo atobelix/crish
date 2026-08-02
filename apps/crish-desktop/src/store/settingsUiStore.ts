@@ -14,7 +14,7 @@
  * @see docs/multi-agent-repair/reports/R3-T11-归类表.md
  */
 
-import { useLayoutStore, DEFAULT_SETTINGS_TAB } from './layoutStore';
+import { useLayoutStore } from './layoutStore';
 import { usePermissionStore, type PermissionStore } from './permissionStore';
 import type { SettingsTabType } from './types';
 import type { PermissionMode } from '../api/permissionModes';

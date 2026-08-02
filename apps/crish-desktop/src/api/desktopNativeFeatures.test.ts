@@ -13,14 +13,11 @@ import {
 } from './workspaceFsApi';
 import {
   listHostOpeners,
-  listFileOpenHandlers,
   openWithHostOpener,
   openPathDefault,
   listOpenOptionsForFile,
 } from './hostOpenersApi';
-import { invokeCmd, invokeResult, tryInvokeTauri } from './tauriInvoke';
-import { winCtl } from '../app/AppBootstrap';
-import { renderHook, act } from '@testing-library/react';
+import { invokeCmd, invokeResult } from './tauriInvoke';
 import capabilitiesManifest from '../../../agent-workbench/src-tauri/capabilities/default.json';
 
 // Mock tauriInvoke dependencies for unit tests

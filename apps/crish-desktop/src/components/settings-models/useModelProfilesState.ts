@@ -9,10 +9,7 @@ import {
   normalizeModelIds,
   profileDisplayLabel,
   profileHasKey,
-  removeProfile,
-  saveProfileBaseUrl,
   saveProfileKey,
-  setProfileEnabled,
   type ProviderProfile,
   upsertProfile,
 } from '../../api/providerProfiles';
@@ -215,7 +212,7 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
       setNameDraft('');
       setConfirmDeleteId(null);
     }
-  }, [selectedId]);
+  }, [selectedId, selected]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -457,7 +454,7 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
       const name = (meta.displayName || '').toLowerCase();
       return m.toLowerCase().includes(q) || name.includes(q);
     });
-  }, [selected, modelFilter, profiles]);
+  }, [selected, modelFilter]);
 
   const modelsCount = selected?.models ? (normalizeModelIds(selected.models) || []).length : 0;
   const selectedLabel = selected ? profileDisplayLabel(selected) : '';

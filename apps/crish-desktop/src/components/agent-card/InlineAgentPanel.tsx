@@ -117,11 +117,11 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
   /** 标题 / 短标签 / 状态：与 openAgentPanel 纯函数同轨（中文） */
   const displayTitle = useMemo(
     () => resolveAgentPanelTitle(live),
-    [live.description, live.mode, live.id],
+    [live],
   );
   const displayLabel = useMemo(
     () => resolveAgentPanelLabel(live),
-    [live.description, live.mode, live.id],
+    [live],
   );
   const statusLabel = resolveAgentPanelStatusLabel(live.status);
 

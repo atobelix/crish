@@ -530,10 +530,10 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     let bgElevated = skinConfig.bgElevated;
     let shellChromeBg = skinConfig.shellChromeBg;
     let textPrimary = skinConfig.textPrimary;
-    let textSecondary = skinConfig.textSecondary;
+    const textSecondary = skinConfig.textSecondary;
     let borderColor = skinConfig.borderColor;
     let borderSubtle = skinConfig.borderSubtle;
-    let mixColor = skinConfig.mixColor || (isDarkPreset 
+    const mixColor = skinConfig.mixColor || (isDarkPreset 
       ? 'var(--text-primary)' 
       : 'hsl(35, 50%, 20%)');
 

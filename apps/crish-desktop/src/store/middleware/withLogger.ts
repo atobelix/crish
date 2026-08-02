@@ -12,6 +12,13 @@
  * 在调用前后插入性能测量和日志。Reflect.apply 保证原始 set 的所有
  * 重载行为不变。无任何 as 类型断言，完全类型安全。
  *
+ * 健壮性（store/withLogger 嵌套 set 回归）：
+ * - persist / withAutoIndex 等中间件对函数 partial 先求值再**再次调用**内层 set，
+ *   导致同一次 action 的 instrumented set 嵌套触发（mark 名固定时内层 clearMarks
+ *   会清掉外层 start mark → 外层 measure 抛 SyntaxError → 中断业务 action）。
+ * - 修复 1：mark 名带每次调用的唯一序号，嵌套调用互不覆盖。
+ * - 修复 2：measure / budget 整体 try-catch，观测失败绝不向业务层抛异常。
+ *
  * 性能注意：
  * - measure 后立即 clearMarks / clearMeasures，避免 getEntriesByName 随调用次数 O(N) 增长
  * - 不 dump 完整 prev/next state（streaming 时极贵），仅打印 action 名 + top-level keys
@@ -20,6 +27,9 @@
  */
 import type { StateCreator, StoreMutatorIdentifier } from 'zustand/vanilla';
 import { checkBudget } from '../../api/performance-budget';
+
+/** mark 名唯一化序号：每次 instrumented set 调用 +1，防嵌套 set 共享同名 mark */
+let perfMarkSeq = 0;
 
 function topLevelKeys(state: unknown): string[] {
   if (state !== null && typeof state === 'object') {
@@ -52,24 +62,31 @@ export const withLogger = <
       apply(target, thisArg, argArray) {
         const actionName = api.setState.name || 'anonymous';
         const markName = `store:${actionName}`;
-        const startMark = `${markName}:start`;
-        const endMark = `${markName}:end`;
+        // 唯一化：persist / autoIndex 等中间件会为同一 action 嵌套调用 set，
+        // 固定 mark 名会被内层覆盖并 clear，导致外层 measure 抛 SyntaxError。
+        const seq = ++perfMarkSeq;
+        const startMark = `${markName}:start:${seq}`;
+        const endMark = `${markName}:end:${seq}`;
 
         performance.mark(startMark);
         const prev = get();
         const result = Reflect.apply(target, thisArg, argArray);
         const next = get();
         performance.mark(endMark);
-        performance.measure(markName, startMark, endMark);
-
-        const measures = performance.getEntriesByName(markName);
-        const last = measures[measures.length - 1];
-        if (last) checkBudget('store:transaction', last.duration);
-
-        // Prevent unbounded PerformanceEntry accumulation (O(N) getEntriesByName growth)
-        performance.clearMarks(startMark);
-        performance.clearMarks(endMark);
-        performance.clearMeasures(markName);
+        let last: PerformanceEntry | undefined;
+        try {
+          performance.measure(markName, startMark, endMark);
+          const measures = performance.getEntriesByName(markName);
+          last = measures[measures.length - 1];
+          if (last) checkBudget('store:transaction', last.duration);
+        } catch {
+          // 观测失败（mark 被外部清除 / 环境差异）绝不中断业务 action
+        } finally {
+          // Prevent unbounded PerformanceEntry accumulation (O(N) getEntriesByName growth)
+          performance.clearMarks(startMark);
+          performance.clearMarks(endMark);
+          performance.clearMeasures(markName);
+        }
 
         // Streaming: keep budget timing, skip verbose console work
         if (isStreamingActive()) {

@@ -31,18 +31,18 @@ export function looksLikeDirectoryListing(text: string): boolean {
   const t = text.replace(/\r\n/g, '\n');
   // PowerShell Get-ChildItem / Format-Table
   if (/\bMode\s+LastWriteTime\s+Length\s+Name\b/i.test(t)) return true;
-  if (/^\s*Directory:\s+\S+/m.test(t) && /\b[d\-][a\-hsr]{4,5}\b/.test(t)) return true;
+  if (/^\s*Directory:\s+\S+/m.test(t) && /\b[d-][a\-hsr]{4,5}\b/.test(t)) return true;
   // cmd.exe `dir`
   if (/\bDirectory of\s+/i.test(t) && /<DIR>/i.test(t)) return true;
   // Unix `ls -l` / `ls -la`
-  if (/^total\s+\d+\s*$/m.test(t) && /^[d\-l][rwxsStT\-]{9}\s/m.test(t)) return true;
+  if (/^total\s+\d+\s*$/m.test(t) && /^[d\-l][rwxsStT-]{9}\s/m.test(t)) return true;
   // 表头被截掉：≥2 行 PowerShell Mode + 日期（避免单行误伤）
   const psModes = t.match(
-    /^[d\-][a\-hsr]{4,5}\s+\d{1,4}[\/\-.]\d{1,2}[\/\-.]\d{1,4}/gm,
+    /^[d-][a\-hsr]{4,5}\s+\d{1,4}[/\-.]\d{1,2}[/\-.]\d{1,4}/gm,
   );
   if (psModes && psModes.length >= 2) return true;
   // 多行 Unix 权限（无 total 行时）
-  const unixModes = t.match(/^[d\-l][rwxsStT\-]{9}\s+\d+\s+\S+/gm);
+  const unixModes = t.match(/^[d\-l][rwxsStT-]{9}\s+\d+\s+\S+/gm);
   if (unixModes && unixModes.length >= 3) return true;
   // cmd 多条 <DIR>
   if ((t.match(/<DIR>/gi) || []).length >= 2) return true;

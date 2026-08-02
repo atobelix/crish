@@ -1,5 +1,4 @@
 import { MAX_MESSAGES_PER_AGENT } from '@crish/shared-utils/browser';
-import type { MessageToolCall, SessionAgent, SessionAgentPatch, SessionMessage } from './types';
 import { getSessionForWrite, rebindSessionById } from './sessionIndex';
 import type { SessionActions, SessionStoreSlice, SessionImmerSet } from './sessionActions';
 import {

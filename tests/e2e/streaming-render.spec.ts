@@ -47,7 +47,11 @@ test.describe('E2E-L2 流式渲染（streaming-render）', () => {
 
     // ── ① 流式期：纯文本软渲染，delta 逐条累积 ──
     // 前两条 delta（含未闭合 fence）先落地：流式容器出现且含 fence 原文
-    const streamingText = assistantRow.locator('.md-rendered.is-streaming');
+    // （AsyncMarkdownBlock 以 data-streaming="true" 标记流式块；is-streaming
+    //   为 CSS Modules hashed 类名，不可按字面断言）
+    const streamingText = assistantRow.locator(
+      '.md-rendered[data-streaming="true"]'
+    );
     await expect(streamingText.first()).toBeVisible({ timeout: 5000 });
     await expect(streamingText.first()).toContainText('示例代码：', {
       timeout: 5000,
@@ -58,7 +62,9 @@ test.describe('E2E-L2 流式渲染（streaming-render）', () => {
     });
 
     // ── ② 完成态收敛：md_render 权威渲染 → pre/code 结构 ──
-    const finalBlock = assistantRow.locator('.md-rendered:not(.is-streaming)');
+    const finalBlock = assistantRow.locator(
+      '.md-rendered[data-streaming="false"]'
+    );
     await expect(finalBlock.first()).toBeVisible({ timeout: 8000 });
     await expect(finalBlock.first().locator('pre code')).toBeVisible({
       timeout: 8000,
@@ -72,10 +78,10 @@ test.describe('E2E-L2 流式渲染（streaming-render）', () => {
     await expect(page.locator('[data-testid="composer-stop"]')).toBeHidden({
       timeout: 8000,
     });
-    // 流式标记消失（isStreaming 移除）
-    await expect(assistantRow.locator('.md-rendered.is-streaming')).toHaveCount(
-      0
-    );
+    // 流式标记消失（流式块卸载 / data-streaming 移除）
+    await expect(
+      assistantRow.locator('.md-rendered[data-streaming="true"]')
+    ).toHaveCount(0);
   });
 
   test('delta 收敛性：流式累积文本 == 完成态全文（PE-02 T2）', async ({
@@ -87,7 +93,9 @@ test.describe('E2E-L2 流式渲染（streaming-render）', () => {
     const assistantRow = await sendAndGetAssistantRow(page, '再试一次');
 
     // 完成态：md_render HTML 的纯文本（去标签）应包含全部 delta 内容
-    const finalBlock = assistantRow.locator('.md-rendered:not(.is-streaming)');
+    const finalBlock = assistantRow.locator(
+      '.md-rendered[data-streaming="false"]'
+    );
     await expect(finalBlock.first()).toBeVisible({ timeout: 8000 });
     const htmlText = await finalBlock.first().innerText();
     expect(htmlText).toContain('示例代码：');
@@ -101,7 +109,9 @@ test.describe('E2E-L2 流式渲染（streaming-render）', () => {
     });
     const assistantRow = await sendAndGetAssistantRow(page, '做个表格');
 
-    const finalBlock = assistantRow.locator('.md-rendered:not(.is-streaming)');
+    const finalBlock = assistantRow.locator(
+      '.md-rendered[data-streaming="false"]'
+    );
     await expect(finalBlock.first()).toBeVisible({ timeout: 8000 });
     await expect(finalBlock.first().locator('table')).toBeVisible();
     await expect(finalBlock.first().locator('th')).toHaveCount(2);

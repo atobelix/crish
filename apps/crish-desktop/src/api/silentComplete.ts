@@ -235,7 +235,7 @@ export function alertSilentComplete(
   const sid = meta?.sessionId ? ` session=${meta.sessionId}` : '';
   const rid = meta?.runId ? ` run=${meta.runId}` : '';
   const midPart = mid ? ` message=${mid}` : '';
-  // eslint-disable-next-line no-console
+   
   console.warn(
     `[silent-complete] ${result.reason}: run completed with no user-visible content` +
       `${sid}${rid}${midPart}` +

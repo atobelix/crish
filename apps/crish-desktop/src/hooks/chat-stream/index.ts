@@ -47,11 +47,13 @@ export function useChatStream(
   );
 
   useEffect(() => {
+    const timer = runNoticeTimerRef.current;
+    const renderBuffer = renderBufferRef.current;
     return () => {
-      if (runNoticeTimerRef.current != null) {
-        clearTimeout(runNoticeTimerRef.current);
+      if (timer != null) {
+        clearTimeout(timer);
       }
-      renderBufferRef.current?.stop();
+      renderBuffer?.stop();
     };
   }, [clearRunNoticeTimer, renderBufferRef]);
 

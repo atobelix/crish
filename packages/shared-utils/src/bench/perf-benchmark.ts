@@ -58,7 +58,7 @@ export async function runBenchmark(benchmark: PerfBenchmark): Promise<BenchmarkR
   const warmupSamples: BenchmarkSample[] = [];
   const samples: BenchmarkSample[] = [];
 
-  const runWithLifecycle = async (index: number, isWarmup: boolean): Promise<number> => {
+  const runWithLifecycle = async (_index: number, _isWarmup: boolean): Promise<number> => {
     if (benchmark.setup) {
       await benchmark.setup();
     }

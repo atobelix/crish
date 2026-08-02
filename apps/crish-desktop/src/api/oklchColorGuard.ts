@@ -16,17 +16,22 @@ export function parseColorToOklch(colorStr: string, isDark?: boolean): OKLCH {
 
   if (str.startsWith('#')) {
     const rawHex = str.slice(1);
-    if (rawHex.length !== 3 && rawHex.length !== 6) {
+    // 8 位 #RRGGBBAA：alpha 不参与明度判定（对比度守卫无背景合成信息），
+    // 取前 6 位 RGB 解析（与文档化行为一致：alpha 静默忽略）。
+    // 非法长度（1/2/4/5/7+ 位）维持既有 NaN 契约。
+    if (rawHex.length !== 3 && rawHex.length !== 6 && rawHex.length !== 8) {
       return { l: NaN, c: NaN, h: NaN };
     }
-    const parsedHex = rawHex.length === 3 
-      ? rawHex.split('').map(char => char + char).join('') 
-      : rawHex;
+    const parsedHex = rawHex.length === 3
+      ? rawHex.split('').map(char => char + char).join('')
+      : rawHex.slice(0, 6);
     r = parseInt(parsedHex.slice(0, 2), 16) / 255;
     g = parseInt(parsedHex.slice(2, 4), 16) / 255;
     b = parseInt(parsedHex.slice(4, 6), 16) / 255;
   } else if (str.startsWith('hsl')) {
-    const match = str.match(/hsla?\((\d+),\s*(\d+)%,\s*(\d+)%/);
+    // 锚定右括号：仅匹配完整函数调用。小数 / deg / 空格分隔 / 现代 slash alpha
+    // （hsl(35, 10%, 50% / 50%)）等未覆盖格式按文档契约回退默认灰。
+    const match = str.match(/hsla?\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
     if (match) {
       const h = parseInt(match[1]!) / 360;
       const s = parseInt(match[2]!) / 100;
@@ -82,7 +87,7 @@ export function getContrastGuardedText(bgPrimaryColor: string, isDark?: boolean)
       // Dark background: Return bright soft-white contrast
       return 'hsl(0, 0%, 94%)';
     }
-  } catch (e) {
+  } catch {
     if (typeof isDark === 'boolean') {
       return isDark ? 'hsl(0, 0%, 94%)' : 'hsl(35, 12%, 11%)';
     }

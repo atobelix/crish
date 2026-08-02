@@ -140,7 +140,7 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
           if (m) fn(m);
         });
       },
-    [parentSessionId, agentId],
+    [parentSessionId, agentId, guard],
   );
 
   const buildStreamCallbacks = useCallback(
@@ -272,7 +272,7 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
         },
       } as const;
     },
-    [parentSessionId, agentId, patchSessionAgent, buildPatchAsst],
+    [parentSessionId, agentId, patchSessionAgent, buildPatchAsst, guard],
   );
 
   const finalizeInFlight = useCallback(() => {

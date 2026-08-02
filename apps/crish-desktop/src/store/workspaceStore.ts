@@ -19,7 +19,7 @@
 
 import { useShallow } from './useShallowSelector';
 
-import { DEFAULT_WORKSPACE_ID, seedInitialWorkspaces, clampActiveWorkspaceIndex, useLayoutStore } from './layoutStore';
+import { DEFAULT_WORKSPACE_ID, seedInitialWorkspaces, useLayoutStore } from './layoutStore';
 import type {
   DropPreviewState,
   WorkspaceState,

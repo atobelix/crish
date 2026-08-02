@@ -1,6 +1,5 @@
 import type { SessionState, WorkspaceState } from '../types';
 import { isDemoMode } from '../../api/appMode';
-import { logger, toErrMeta } from '../../services/LoggerService';
 import {
   ensureMigrated,
   hydrateSessionsFromRust,

@@ -495,11 +495,12 @@ export function useToastQueue() {
   );
 
   useEffect(() => {
+    const timers = timersRef.current;
     return () => {
-      for (const t of timersRef.current.values()) {
+      for (const t of timers.values()) {
         clearTimeout(t);
       }
-      timersRef.current.clear();
+      timers.clear();
     };
   }, []);
 

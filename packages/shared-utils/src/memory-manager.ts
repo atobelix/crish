@@ -19,7 +19,7 @@ const DEFAULTS: Required<MemoryManagerOptions> = {
 };
 
 export class MemoryManager {
-  private readonly caches: CacheProvider<any, any>[] = [];
+  private readonly caches: CacheProvider<unknown, unknown>[] = [];
   private shrinkLevel: MemoryPressureLevel = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly opts: Required<MemoryManagerOptions>;
@@ -31,11 +31,11 @@ export class MemoryManager {
     this.opts = { ...DEFAULTS, ...opts };
   }
 
-  register(cache: CacheProvider<any, any>): void {
+  register(cache: CacheProvider<unknown, unknown>): void {
     this.caches.push(cache);
   }
 
-  unregister(cache: CacheProvider<any, any>): void {
+  unregister(cache: CacheProvider<unknown, unknown>): void {
     const idx = this.caches.indexOf(cache);
     if (idx !== -1) this.caches.splice(idx, 1);
   }
@@ -134,7 +134,7 @@ export class MemoryManager {
     this.shrinkLevel = 0;
   }
 
-  getCaches(): readonly CacheProvider<any, any>[] {
+  getCaches(): readonly CacheProvider<unknown, unknown>[] {
     return this.caches;
   }
 }

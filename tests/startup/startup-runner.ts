@@ -1,6 +1,5 @@
 import { performance } from "node:perf_hooks";
 import { spawn } from "node:child_process";
-import { join } from "node:path";
 import { writeFileSync, mkdirSync } from "node:fs";
 
 export interface StartupTarget {

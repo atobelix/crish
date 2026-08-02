@@ -15,7 +15,7 @@
  * ## Cancel parity
  * - 取消经 `compositionRoot.runControl.dispatch`（L2/L3 → core_run_control）。
  */
-import { getTransport, startRunTask, type Transport } from '../transport';
+import { getTransport, startRunTask } from '../transport';
 import type { StreamCallbacks, StreamRequestOptions } from '../chatApi';
 import { toEnginePermissionMode } from '../permissionModes';
 import { getPermissionMode } from '../storeAccess';

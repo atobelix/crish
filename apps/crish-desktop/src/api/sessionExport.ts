@@ -137,10 +137,12 @@ export function sanitizeExportFilename(
   date = new Date(),
   extension = 'md',
 ): string {
+  // eslint-disable-next-line no-control-regex -- 有意剥离文件名非法控制字符
   const ext = (extension || 'md').replace(/^\./, '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '') || 'md';
   let base =
     (title || '会话')
       // Windows 非法 + C0 控制符 + DEL
+      // eslint-disable-next-line no-control-regex -- 有意剥离 C0 控制符与 DEL
       .replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g, '')
       // 零宽 / BOM 等不可见字符
       .replace(/[\u200b-\u200f\u2028\u2029\ufeff]/g, '')

@@ -17,7 +17,6 @@ import { applyFileDiffToDisk, classifyFileDiff, formatApplyFailureToast } from '
 import { filterPublishableDiffs } from '../../api/publishToolDiffs';
 import type { DiffSourceMode } from '../../api/diffPanelHelpers';
 import { readTextFile } from '../../api/workspaceFsApi';
-import { openPathDefault } from '../../api/hostOpenersApi';
 import { DiffCardFileList } from './DiffCardFileList';
 import { DiffCardGitActions } from './DiffCardGitActions';
 import { DiffHeaderControls } from './DiffHeaderControls';

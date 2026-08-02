@@ -4,7 +4,6 @@ import {
   beginLayoutInteraction,
   endLayoutInteraction,
 } from '../store/layoutAnimationStore';
-import { logger, toErrMeta } from '../services/LoggerService';
 import {
   createDragOverlay,
   removeDragOverlay,

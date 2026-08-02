@@ -125,7 +125,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
     setSendError('');
     setIsComposing(false);
     setComposerEpoch((n) => n + 1);
-  }, [incrementEpoch]);
+  }, [incrementEpoch, setSendError]);
 
   // 侧栏切换子 agent 或回浏览列表：清草稿/错误/流，不串会话输入
   const prevIdRef = useRef<string | null | undefined>(undefined);
@@ -179,6 +179,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(({
     return () => {
       if (statusPollRef.current) clearInterval(statusPollRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 轮询只依赖已列出的字段，纳入整个对象会因无关变更重启轮询
   }, [agent?.id, agent?.status, agent?.subagentRunId, sess?.id, patchSessionAgent]);
 
   if (!agent || !sess) {

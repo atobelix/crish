@@ -6,7 +6,7 @@
  * - messageBelongsToRun 过滤不误杀（B6.3 注入 runId 后按 runId 精确路由）
  * - 核心未就绪时拒绝启动（C3.4 后无 directFetch 降级）
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createStreamSession,
   streamViaEngine,

@@ -33,9 +33,11 @@ test.describe('E2E-L2 错误路径（error-path）', () => {
     // ── ① 运行提示条可见（RunNoticeBar：data-testid="run-notice"）──
     const notice = page.locator('[data-testid="run-notice"]');
     await expect(notice).toBeVisible({ timeout: 8000 });
-    // 文案 = 引擎错误信息（非空跑）
+    // C3.4 产品语义：stream-start 拒绝统一走 networkUserMessage 通用文案
+    // （createStreamSession catch → onRunError(networkUserMessage(), 'network')），
+    // 不透出引擎错误原文，但必须显式提示而非静默失败。
     await expect(page.locator('[data-testid="run-notice-text"]')).toContainText(
-      '模型服务不可用',
+      '服务暂时不可用',
       { timeout: 8000 }
     );
 

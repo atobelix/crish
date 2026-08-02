@@ -34,11 +34,6 @@ import {
 } from '../../../api/sessionSearch';
 import styles from '../SidebarSessionList.module.css';
 import { SessionRow } from './SessionRow';
-import {
-  buildSidebarPretextFont,
-  measureSessionRowHeight,
-  readSidebarContentWidth,
-} from './sidebarMeasure';
 import { FULL_RANGE, useSessionListWindow } from './useSessionListWindow';
 import { dedupeSessionsById } from './sessionListUtils';
 import type { SidebarSessionListProps } from './sessionListTypes';
@@ -337,9 +332,6 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
     generalCollapsed,
     generalSessions,
   ]);
-
-  const pretextFont = useMemo(() => buildSidebarPretextFont(), []);
-  const contentWidth = useMemo(() => readSidebarContentWidth(), []);
 
   // 固定单行高度，禁止按标题测量成两行
   const rowHeightById = useMemo(() => {

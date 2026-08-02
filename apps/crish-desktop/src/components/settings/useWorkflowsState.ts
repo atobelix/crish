@@ -26,7 +26,6 @@ import {
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
 import {
-  FILTER_OPTIONS,
   WORKFLOWS_LOAD_TIMEOUT_MS,
   ensureScheduledSession,
   loadWorkflowRunsCache,

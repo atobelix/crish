@@ -31,8 +31,8 @@ export interface SchemaSection {
 
 export interface SettingsSchemaRendererProps {
   schema: SchemaSection[];
-  values: Record<string, any> | null;
-  onSave: (updates: Record<string, any>) => void | Promise<any>;
+  values: object | null;
+  onSave: (updates: Record<string, unknown>) => void | Promise<unknown>;
   ready: boolean;
 }
 
@@ -68,7 +68,7 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
           <SettingsCard>
             {section.properties.map((prop) => {
               const domId = getElementId(prop.key);
-              const val = values[prop.key];
+              const val = (values as Record<string, unknown>)[prop.key];
 
               let control: React.ReactNode = null;
 

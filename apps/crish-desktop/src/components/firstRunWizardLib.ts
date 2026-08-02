@@ -88,6 +88,7 @@ export function validateWizardModelId(raw: string): WizardModelIdResult {
     return { ok: false, error: '模型 id 不能包含空格' };
   }
   // 控制字符 / 不可见字符（粘贴污染）
+  // eslint-disable-next-line no-control-regex -- 有意校验 C0 控制字符
   if (/[\u0000-\u001F\u007F]/.test(modelId)) {
     return { ok: false, error: '模型 id 含有非法字符' };
   }

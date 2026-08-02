@@ -61,18 +61,19 @@ test.describe('E2E-L2 会话恢复（session-restore）', () => {
       '.tool-stack .tool-row[data-tool-id="tool-r2-1"]'
     );
     await expect(toolRow).toBeVisible({ timeout: 8000 });
-    await expect(toolRow).toContainText('bash');
+    // human label 优先 explanation（toolHumanLabel 产品语义：意图说明）
+    await expect(toolRow).toHaveAttribute('data-tool-label', '复现 CI 失败');
     // 完成会话的工具为成功态
     await expect(toolRow).toContainText('2 failed; 1 passed');
 
     // ── ④ in-flight 会话恢复为 interrupted（PE-08 T08.6 语义）──
     await items.nth(2).click();
+    // 中断工具卡按产品语义隐藏（isInterruptedTool：output 含「上次会话中断」
+    // 的 error 工具不渲染工具行，避免展示未完成工具；store 仍保留 toolCalls 终态）
     const interruptedTool = page.locator(
       '.tool-stack .tool-row[data-tool-id="tool-r3-1"]'
     );
-    await expect(interruptedTool).toBeVisible({ timeout: 8000 });
-    // running 工具 → 中断标注（error 终态 + 文案）
-    await expect(interruptedTool).toContainText('中断', { timeout: 8000 });
+    await expect(interruptedTool).toHaveCount(0);
     // 无 pending 态：composer-stop 不可见、消息终态 completed
     await expect(page.locator('[data-testid="composer-stop"]')).toBeHidden();
     await expect

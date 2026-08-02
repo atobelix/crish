@@ -56,6 +56,10 @@ export default tseslint.config(
       'docs/**',
       'analysis/**',
       'implementer/**',
+      // 开发临时脚本（如根目录 debug-send.tmp.ts）不入库也不参与门禁
+      '**/*.tmp.ts',
+      '**/*.tmp.tsx',
+      '**/*.tmp.mjs',
     ],
   },
   // Base configuration for Javascript files
@@ -122,6 +126,22 @@ export default tseslint.config(
       ],
     },
   },
+  // 测试/模拟代码豁免 no-explicit-any：测试夹具、mock、对抗性输入与 e2e 断言
+  // 天然需要 any（覆盖 *.test.ts(x) / *.spec.ts / __tests__ / tests/ 目录与
+  // test-utils 包）；生产代码仍全量执行该规则。
+  {
+    files: [
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.spec.ts',
+      '**/__tests__/**',
+      '**/tests/**',
+      '**/packages/test-utils/**',
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
   // Frontend/Browser specific configuration (React)
   {
     files: [
@@ -144,5 +164,31 @@ export default tseslint.config(
         ...globals.browser,
       },
     },
-  }
+  },
+  // react-refresh 文件级豁免（置于 React 块之后以确保优先级）：以下组件文件
+  // 按既有约定同文件导出常量/hook/子组件（拆分迁移成本高于 fast-refresh 收益，
+  // 不影响运行正确性）；新文件仍要求遵守 only-export-components。
+  {
+    files: [
+      'apps/crish-desktop/src/components/agent-card/AgentCard.tsx',
+      'apps/crish-desktop/src/components/binary-tree/TreeResizeSash.tsx',
+      'apps/crish-desktop/src/components/binary-tree/UnitSessionTabStrip.tsx',
+      'apps/crish-desktop/src/components/card-panel/CardPanelHeader.tsx',
+      'apps/crish-desktop/src/components/card-panel/CardPanelLayout.tsx',
+      'apps/crish-desktop/src/components/chat-card/ChatHeader.tsx',
+      'apps/crish-desktop/src/components/chat-card/ChatHeaderControls.tsx',
+      'apps/crish-desktop/src/components/chat-composer/ComposerSlashMenu.tsx',
+      'apps/crish-desktop/src/components/chat-message-row/ChatMessageRow.tsx',
+      'apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx',
+      'apps/crish-desktop/src/components/shell/GlobalSessionTabBar.tsx',
+      'apps/crish-desktop/src/components/shell/SessionTabDragContext.tsx',
+      'apps/crish-desktop/src/components/shell/VirtualList.tsx',
+      'apps/crish-desktop/src/components/sidebar/SidebarContextMenus.tsx',
+      'apps/crish-desktop/src/components/sidebar/session-list/SessionRow.tsx',
+      'apps/crish-desktop/src/dev/DevHealthOverlay.tsx',
+    ],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 );

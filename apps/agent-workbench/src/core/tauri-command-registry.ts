@@ -698,7 +698,7 @@ function readAllCommandRegistryBlocks(source: string): string[] {
       continue;
     }
 
-    let cursor = skipWhitespace(source, markerIndex + marker.length);
+    const cursor = skipWhitespace(source, markerIndex + marker.length);
     const open = source[cursor];
     if (open !== "[" && open !== "(") {
       searchFrom = markerIndex + marker.length;

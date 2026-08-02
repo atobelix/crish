@@ -274,7 +274,7 @@ export const InteractiveXtermTerminal = forwardRef<
       const priorId = reg.ptyRegistry.get(key) ?? null;
       let ptyId: string | null = priorId;
       // 仅 registry 已有绑定时算复用（折坞再开续缓冲）；ensure 新建不算
-      let reused = !!priorId;
+      const reused = !!priorId;
 
       if (!ptyId) {
         // ensure：走 spawn handler（bootstrap 注入）；失败再直连 ptyCreate

@@ -34,7 +34,7 @@ describe('sidebarMeasure', () => {
     };
     vi.stubGlobal('document', mockDocument);
 
-    const mockGetComputedStyle = (el: unknown) => ({
+    const mockGetComputedStyle = (_el: unknown) => ({
       getPropertyValue: (prop: string) => {
         if (prop === '--sidebar-width') return '260px';
         if (prop === '--font-sans') return 'Inter';

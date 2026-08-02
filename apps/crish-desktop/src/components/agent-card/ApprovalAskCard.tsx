@@ -159,6 +159,7 @@ export const ApprovalAskCard: React.FC<Props> = ({
   const chips = useMemo(() => {
     const raw = buildApprovalRiskChips(riskMeta);
     return dedupeChipLabels(localizeRiskChips(raw, riskMeta));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- riskMeta 每次渲染新引用，字段级依赖有意为之
   }, [
     riskMeta?.trustZone,
     riskMeta?.risk,

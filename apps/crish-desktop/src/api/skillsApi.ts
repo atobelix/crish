@@ -203,18 +203,18 @@ export function removeExtraSkillDir(dir: string) {
 /* ---------- FS helpers（plugin-fs 优先，突破工作区沙箱） ---------- */
 
 async function tryPluginFs(): Promise<{
-  readDir?: (p: string) => Promise<Array<{ name: string; isDirectory?: boolean; isDir?: boolean }>>;
+  readDir?: (p: string) => Promise<Array<{ name?: unknown; isDirectory?: boolean; isDir?: boolean; children?: unknown }>>;
   readTextFile?: (p: string) => Promise<string>;
   writeTextFile?: (p: string, content: string) => Promise<void>;
   mkdir?: (p: string, opts?: { recursive?: boolean }) => Promise<void>;
   exists?: (p: string) => Promise<boolean>;
 } | null> {
   try {
-    const fs: any = await (Function('return import("@tauri-apps/plugin-fs")')() as Promise<any>).catch(
+    const fs: unknown = await (Function('return import("@tauri-apps/plugin-fs")')() as Promise<unknown>).catch(
       () => null,
     );
     if (!fs) return null;
-    return fs;
+    return fs as NonNullable<Awaited<ReturnType<typeof tryPluginFs>>>;
   } catch {
     return null;
   }
@@ -222,9 +222,9 @@ async function tryPluginFs(): Promise<{
 
 async function tryHomeDir(): Promise<string | null> {
   try {
-    const pathApi: any = await (Function(
+    const pathApi = (await (Function(
       'return import("@tauri-apps/api/path")',
-    )() as Promise<any>).catch(() => null);
+    )() as Promise<unknown>).catch(() => null)) as { homeDir?: () => Promise<string> } | null;
     if (pathApi?.homeDir) {
       const h = await pathApi.homeDir();
       if (h) return String(h);
@@ -242,7 +242,7 @@ async function listDirAny(dirPath: string): Promise<FsDirEntry[]> {
   if (fs?.readDir) {
     try {
       const entries = await fs.readDir(path);
-      return (entries || []).map((e: any) => {
+      return (entries || []).map((e) => {
         const name = String(e.name ?? e);
         const isDir = Boolean(e.isDirectory ?? e.isDir ?? e.children);
         return { name, isDir, path: joinPath(path, name) };
@@ -399,7 +399,22 @@ export async function discoverSkills(opts?: {
   const workspace = (opts?.workspacePath ?? getWorkspacePath() ?? '').trim();
   const extraDirs = getExtraSkillDirs();
 
-  const rustSkills = await tryInvokeTauri<any[]>('workbench_discover_skills', {
+  type RustSkillRow = {
+  name?: unknown;
+  filePath?: unknown;
+  description?: unknown;
+  baseDir?: unknown;
+  content?: unknown;
+  raw?: unknown;
+  scope?: unknown;
+  tags?: unknown;
+  appliesTo?: unknown;
+  fileActivation?: unknown;
+  system?: unknown;
+  disableModelInvocation?: unknown;
+};
+
+const rustSkills = await tryInvokeTauri<RustSkillRow[]>('workbench_discover_skills', {
     workspacePath: workspace || null,
     extraDirs,
   });
@@ -574,9 +589,12 @@ export async function pickSkillDirectory(): Promise<string | null> {
 /** 在系统资源管理器中显示路径 */
 export async function revealSkillPath(filePath: string): Promise<boolean> {
   try {
-    const opener: any = await (Function(
+    const opener = (await (Function(
       'return import("@tauri-apps/plugin-opener")',
-    )() as Promise<any>).catch(() => null);
+    )() as Promise<unknown>).catch(() => null)) as {
+      openPath?: (p: string) => Promise<unknown>;
+      revealItemInDir?: (p: string) => Promise<unknown>;
+    } | null;
     if (opener?.openPath) {
       await opener.openPath(filePath);
       return true;
@@ -589,9 +607,9 @@ export async function revealSkillPath(filePath: string): Promise<boolean> {
     /* ignore */
   }
   try {
-    const shell: any = await (Function(
+    const shell = (await (Function(
       'return import("@tauri-apps/plugin-shell")',
-    )() as Promise<any>).catch(() => null);
+    )() as Promise<unknown>).catch(() => null)) as { open?: (url: string) => Promise<unknown> } | null;
     if (shell?.open) {
       await shell.open(dirname(filePath));
       return true;

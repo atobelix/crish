@@ -177,7 +177,6 @@ describe('sessionTime — 对抗性测试', () => {
           null as unknown as { timestamp?: number },
         ],
       );
-      const after = Date.now();
       // 跳过 null 后取 1700000000000 → ISO
       expect(result).toBe(new Date(1_700_000_000_000).toISOString());
       // 验证未取当前时间（说明跳过 null 后取到了真实消息时间）

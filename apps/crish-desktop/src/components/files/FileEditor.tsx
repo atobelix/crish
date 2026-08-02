@@ -8,7 +8,7 @@ interface FileEditorProps {
 }
 
 export const FileEditor = React.memo(function FileEditor({
-  editBuf, content, dirty, onChange,
+  editBuf, content, onChange,
 }: FileEditorProps) {
   return (
     <textarea

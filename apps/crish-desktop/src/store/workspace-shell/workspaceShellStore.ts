@@ -46,7 +46,7 @@ import {
   canonicalSessionFolder,
   getActiveProjectId,
 } from '../../api/projectStore';
-import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from '../draftSession';
+import { isPendingDraft } from '../draftSession';
 import { enterDraftMode, setActiveSessionId } from '../../api/storeAccess';
 import {
   closeSessionTab,
@@ -242,17 +242,6 @@ export interface WorkspaceShellStore
 
 function workspaceKeyNow(): string {
   return currentWorkspaceFolderKey(getActiveProjectId());
-}
-
-function makeDraftTab(workspaceKey: string): TabSurface {
-  return {
-    tabId: mintTabId(),
-    kind: 'conversation',
-    sessionId: PENDING_DRAFT_SESSION_ID,
-    workspaceKey: canonicalSessionFolder(workspaceKey) || GENERAL_FOLDER,
-    title: '新对话',
-    rightDock: createDefaultDock(),
-  };
 }
 
 function makeSessionTab(

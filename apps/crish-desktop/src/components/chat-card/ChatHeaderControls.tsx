@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import styles from './ChatCard.module.css';
 import { Tooltip } from '../Tooltip';
