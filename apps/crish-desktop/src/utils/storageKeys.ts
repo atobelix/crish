@@ -12,8 +12,6 @@ export const COMPOSER_DRAFTS_KEY = 'crish_composer_drafts_v1';
 export const COMMAND_PERMISSIONS_KEY = 'crish_command_permissions_v1';
 /** Demo 定时任务列表 */
 export const CRON_KEY = 'crish_cron';
-/** Daemon WebSocket 地址（用户覆盖） */
-export const DAEMON_WS_KEY = 'crish_daemon_ws';
 /** 未发送错误队列 */
 export const ERROR_QUEUE_KEY = 'crish_error_queue_v1';
 /** 已安装扩展目录 id 集合 */

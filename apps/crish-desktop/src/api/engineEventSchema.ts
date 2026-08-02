@@ -2,7 +2,7 @@
  * Daemon 事件桥层轻量 schema（不引入 zod 依赖时的 safeParse 等价物）。
  * 协议不匹配时返回 { ok:false, error }，便于日志可见。
  *
- * ParseResult 判别联合 + 收窄守卫与 daemonEventZod 共用，避免两处分叉。
+ * ParseResult 判别联合 + 收窄守卫与 engineEventZod 共用，避免两处分叉。
  */
 
 /** 成功支路：调用方经 isParseOk 收窄后可读 data */
@@ -37,7 +37,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-export type DaemonToolCallFields = {
+export type EngineToolCallFields = {
   id: string;
   name: string;
   args: string;
@@ -45,7 +45,7 @@ export type DaemonToolCallFields = {
 };
 
 /** 解析 tool-call 载荷；缺 id/name 视为协议失败 */
-export function parseToolCallFields(call: unknown): ParseResult<DaemonToolCallFields> {
+export function parseToolCallFields(call: unknown): ParseResult<EngineToolCallFields> {
   if (!isRecord(call)) {
     return parseErr('tool-call payload is not an object');
   }
@@ -88,19 +88,19 @@ export function parseToolCallFields(call: unknown): ParseResult<DaemonToolCallFi
   return parseOk({ id, name, args, explanation });
 }
 
-export type DaemonEnvelope = {
+export type EngineEnvelope = {
   type: string;
   raw: Record<string, unknown>;
 };
 
 /** 事件信封：至少要有 type 字符串 */
-export function parseDaemonEnvelope(event: unknown): ParseResult<DaemonEnvelope> {
+export function parseEngineEnvelope(event: unknown): ParseResult<EngineEnvelope> {
   if (!isRecord(event)) {
-    return parseErr('daemon event is not an object');
+    return parseErr('engine event is not an object');
   }
   const type = String(event.type ?? event.event ?? event.kind ?? '').trim();
   if (!type) {
-    return parseErr('daemon event missing type');
+    return parseErr('engine event missing type');
   }
   return parseOk({ type, raw: event });
 }

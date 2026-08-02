@@ -1,7 +1,7 @@
 import React from 'react';
 import styles from './RuntimePanel.module.css';
 import { useLayoutStore } from '../../store/layoutStore';
-import { useDaemonState } from '../../hooks/useDaemonState';
+import { useEngineState } from '../../hooks/useEngineState';
 import { RuntimeSection } from './RuntimeSection';
 import { LiveTasksSection } from './LiveTasksSection';
 import { BgTasksSection } from './BgTasksSection';
@@ -33,7 +33,7 @@ interface RuntimePanelProps {
 export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowToast }) => {
   const tokenUsage = useLayoutStore((state) => state.tokenUsage);
   const cronJobs = useLayoutStore((state) => state.scheduledTasks);
-  const ds = useDaemonState();
+  const ds = useEngineState();
   const data = useRuntimePanelData();
 
   if (ds.loading) {

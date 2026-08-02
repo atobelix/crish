@@ -205,7 +205,7 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
     projectText?: string;
   }) => {
     const sync = await syncRulesToDaemon(opts2);
-    if (!sync.daemonSynced) {
+    if (!sync.engineSynced) {
       opts.onShowToast(formatEngineDegradeToast(sync.error));
     } else if (sync.truncated) {
       opts.onShowToast('规则较长，引擎侧已截断');
@@ -243,7 +243,7 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
               projectText: editorText,
             });
           })();
-      if (!syncResult.daemonSynced) {
+      if (!syncResult.engineSynced) {
         opts.onShowToast('规则已保存到本机，同步到引擎失败');
       } else if (syncResult.truncated) {
         opts.onShowToast('规则较长，引擎侧已截断');

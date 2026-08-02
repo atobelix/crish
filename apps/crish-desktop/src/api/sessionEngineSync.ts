@@ -9,7 +9,7 @@
  *
  * ## 懒水合（intentional lazy，非丢消息）
  * 新插入的远程会话固定 `messages: []`，仅带真实 title 等元数据。
- * 正文在 `setActiveSessionId` → `hydrateSessionMessagesFromDaemon` 时补齐。
+ * 正文在 `setActiveSessionId` → `hydrateSessionMessagesFromEngine` 时补齐。
  * prepareSessionsForUi / 侧栏 list **不会** strip 消息；MCP 若见
  * sessions[].messages 全为 length 0 而 titles 存在，通常是尚未 activate 的远程壳。
  */
@@ -24,7 +24,7 @@ import {
   pruneEmptyShellSessions,
 } from './sessionTitle';
 
-export type DaemonSession = {
+export type EngineSession = {
   id?: string;
   sessionId?: string;
   title?: string;
@@ -35,7 +35,7 @@ export type DaemonSession = {
 };
 
 /** merge 可选行为：空壳剪枝（须配合 keepIds 保留 active） */
-export type MergeDaemonSessionsOpts = {
+export type MergeEngineSessionsOpts = {
   /**
    * 合并后剪除非保留空壳。
    * 默认 false：纯 merge 不删本地空白「新会话」（用户可能正要输入）。
@@ -50,7 +50,7 @@ export type MergeDaemonSessionsOpts = {
  * 规范化远程会话 id：trim；优先 id，其次 sessionId；空白 / 非字符串 → null。
  * 匹配本地时统一用此键，避免空格 id 幽灵与 sessionId 字段不一致。
  */
-export function remoteSessionId(s: DaemonSession): string | null {
+export function remoteSessionId(s: EngineSession): string | null {
   for (const raw of [s.id, s.sessionId]) {
     if (typeof raw !== 'string') continue;
     const id = raw.trim();
@@ -63,7 +63,7 @@ export function remoteSessionId(s: DaemonSession): string | null {
  * 远程标题清洗：空 / 默认占位一律视为无标题（返回空串，绝不伪造「新会话」）。
  * 插入决策：仅非空且非默认才追加入口。
  */
-export function remoteSessionTitle(s: DaemonSession): string {
+export function remoteSessionTitle(s: EngineSession): string {
   const raw =
     (typeof s.title === 'string' && s.title.trim()) ||
     (typeof s.name === 'string' && s.name.trim()) ||
@@ -111,7 +111,7 @@ export function resolveMergedSessionTitle(
  * 离线时禁止用「空列表」推断删除本地会话。
  */
 export function isOfflineOrEmptyRemote(
-  remote: DaemonSession[] | null | undefined,
+  remote: EngineSession[] | null | undefined,
 ): boolean {
   return remote == null || remote.length === 0;
 }
@@ -120,7 +120,7 @@ export function isOfflineOrEmptyRemote(
  * 解析 daemon 时间戳为 ms；无效返回 null（调用方勿当 0 epoch 写入）。
  * 支持秒级 / 毫秒级 number 与可 parse 的 ISO 字符串。
  */
-export function parseDaemonTimeMs(r: DaemonSession): number | null {
+export function parseDaemonTimeMs(r: EngineSession): number | null {
   const raw = r.updatedAt ?? r.createdAt;
   if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
     return raw < 1e12 ? raw * 1000 : raw;
@@ -152,7 +152,7 @@ export function parseLocalSessionTimeMs(s: SessionState): number | null {
  */
 export function isRemoteMetadataFresh(
   local: SessionState,
-  remote: DaemonSession,
+  remote: EngineSession,
   skewMs = 60_000,
 ): boolean {
   const remoteMs = parseDaemonTimeMs(remote);
@@ -163,7 +163,7 @@ export function isRemoteMetadataFresh(
 }
 
 /** 远程 cwd 映射到用户项目 id；匹配不上则归入对话区 */
-function folderForRemote(r: DaemonSession): string {
+function folderForRemote(r: EngineSession): string {
   const cwd =
     typeof r.cwd === 'string'
       ? r.cwd.replace(/\\/g, '/').replace(/\/+$/, '')
@@ -181,7 +181,7 @@ function folderForRemote(r: DaemonSession): string {
 }
 
 /** 存 ISO，侧栏用 formatSessionListTime 算相对时间；勿写 locale 死字符串 */
-export function formatRemoteTime(r: DaemonSession): string {
+export function formatRemoteTime(r: EngineSession): string {
   const ms = parseDaemonTimeMs(r);
   if (ms != null) return new Date(ms).toISOString();
   const raw = r.updatedAt ?? r.createdAt;
@@ -201,13 +201,13 @@ export function formatRemoteTime(r: DaemonSession): string {
  * 远程列表去重（同规范化 id 后者覆盖前者元数据），
  * 避免引擎偶发重复条目 / 空格 id / 缺 id 导致双插或抖动。
  */
-export function dedupeRemoteSessions(remote: DaemonSession[]): DaemonSession[] {
+export function dedupeRemoteSessions(remote: EngineSession[]): EngineSession[] {
   if (!remote.length) return remote;
   if (remote.length === 1) {
     // 单条也规范化：无 id 时返回空数组，避免下游误用
     return remoteSessionId(remote[0]!) ? remote : [];
   }
-  const byId = new Map<string, DaemonSession>();
+  const byId = new Map<string, EngineSession>();
   const order: string[] = [];
   let dropped = 0;
   for (const r of remote) {
@@ -248,7 +248,7 @@ export function localSessionKey(id: string): string {
   return t || id;
 }
 
-export async function fetchDaemonSessions(): Promise<DaemonSession[]> {
+export async function fetchEngineSessions(): Promise<EngineSession[]> {
   const transport = getTransport();
   try {
     if (!transport.isReady()) {
@@ -261,16 +261,16 @@ export async function fetchDaemonSessions(): Promise<DaemonSession[]> {
       { timeoutMs: 10_000 },
     )) as Record<string, unknown>;
     const list = res.sessions;
-    return Array.isArray(list) ? (list as DaemonSession[]) : [];
+    return Array.isArray(list) ? (list as EngineSession[]) : [];
   } catch (e) {
-    logInternalError('fetchDaemonSessions', e);
+    logInternalError('fetchEngineSessions', e);
     return [];
   }
 }
 
 function maybePrune(
   sessions: SessionState[],
-  opts?: MergeDaemonSessionsOpts,
+  opts?: MergeEngineSessionsOpts,
 ): SessionState[] {
   if (!opts?.pruneEmptyShells) return sessions;
   return pruneEmptyShellSessions(sessions, {
@@ -289,10 +289,10 @@ function maybePrune(
  * - 定时真实标题远程可插入；本地已有真实/定时标题不被默认远程覆盖
  * - opts.pruneEmptyShells：合并后剪非 keepIds 空壳（默认关）
  */
-export function mergeDaemonSessions(
+export function mergeEngineSessions(
   local: SessionState[],
-  remote: DaemonSession[] | null | undefined,
-  opts?: MergeDaemonSessionsOpts,
+  remote: EngineSession[] | null | undefined,
+  opts?: MergeEngineSessionsOpts,
 ): SessionState[] {
   // 离线 / 空列表：绝不发明远程壳；不把「引擎不可用」当成清空信号
   if (isOfflineOrEmptyRemote(remote)) {
@@ -404,7 +404,7 @@ export function mergeDaemonSessions(
  * sync 侧「壳字段」是否一致（顺序 + id/title/folder）。
  * 仅用于决定是否 setLocal；消息正文不参与比较。
  */
-export function daemonMergeShellEqual(
+export function engineMergeShellEqual(
   a: SessionState[],
   b: SessionState[],
 ): boolean {
@@ -420,18 +420,18 @@ export function daemonMergeShellEqual(
   return true;
 }
 
-export async function syncSessionsFromDaemon(
+export async function syncSessionsFromEngine(
   getLocal: () => SessionState[],
   setLocal: (sessions: SessionState[]) => void,
-  opts?: MergeDaemonSessionsOpts,
+  opts?: MergeEngineSessionsOpts,
 ): Promise<number> {
-  const remote = await fetchDaemonSessions();
+  const remote = await fetchEngineSessions();
   // 离线 / 空列表：不写 store（避免把失败当清空）
   if (isOfflineOrEmptyRemote(remote)) return 0;
   const local = getLocal();
-  const next = mergeDaemonSessions(local, remote, opts);
+  const next = mergeEngineSessions(local, remote, opts);
   // 无实质变化则不写 store，避免无意义持久化抖动
-  if (next === local || daemonMergeShellEqual(local, next)) {
+  if (next === local || engineMergeShellEqual(local, next)) {
     return remote.length;
   }
   setLocal(next);

@@ -29,13 +29,16 @@ export const RunNoticeBar: React.FC<RunNoticeBarProps> = ({
     <div
       className={styles.runNotice}
       role="status"
+      data-testid="run-notice"
       aria-live={resolveRunNoticeAriaLive(runNotice?.kind)}
       aria-atomic="true"
       aria-label={resolveRunNoticeAriaLabel(text)}
     >
       <div className={styles.runNoticeMain}>
         <span className={styles.runNoticeKicker}>运行提示</span>
-        <span className={styles.runNoticeText}>{text}</span>
+        <span className={styles.runNoticeText} data-testid="run-notice-text">
+          {text}
+        </span>
         {runNotice?.detail ? (
           <Tooltip content={runNotice.detail}>
             <span className={styles.runNoticeDetail}>

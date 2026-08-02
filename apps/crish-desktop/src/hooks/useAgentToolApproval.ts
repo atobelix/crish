@@ -10,10 +10,10 @@
  *   - 类型安全：sanitizeToolCallUpdates + applyMessageToolCallPatch 消除类型逃逸
  *   - 单一职责：终态后忽略 status 回退逻辑集中在 sanitizeToolCallUpdates
  *   - 不再扫描「同 toolId 残留 pending」：daemon 协议保证 toolId 唯一，
- *     若出现重复是 daemon bug，应在 daemonChatBridge 修复而非在视图层兜底
+ *     若出现重复是 daemon bug，应在 chatBridge 修复而非在视图层兜底
  */
 import { useCallback, useState } from 'react';
-import { daemonApproveTool, daemonDenyTool } from '../api/daemonChatBridge';
+import { engineApproveTool, engineDenyTool } from '../api/chatBridge';
 import { rememberPrefixFromToolArgs } from '../api/approvalMeta';
 import { extractCommandForMatch } from '../api/commandPermissions';
 import {
@@ -76,7 +76,7 @@ export function useAgentToolApproval(
         status: 'running' as MessageToolCallStatus,
         output: '执行中…',
       });
-      void daemonApproveTool(toolId)
+      void engineApproveTool(toolId)
         .catch(() => {
           patchAgentTool(parentSessionId, agentId, toolId, {
             status: 'error' as MessageToolCallStatus,
@@ -100,7 +100,7 @@ export function useAgentToolApproval(
         status: 'error' as MessageToolCallStatus,
         output: '已拒绝',
       });
-      void daemonDenyTool(toolId)
+      void engineDenyTool(toolId)
         .catch(() => {
           patchAgentTool(parentSessionId, agentId, toolId, {
             status: 'pending_approval' as MessageToolCallStatus,

@@ -19,7 +19,7 @@ import {
   BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
   type BackgroundTaskInfo,
 } from '../../api/backgroundTasksApi';
-import { daemonApproveTool, daemonDenyTool } from '../../api/daemonChatBridge';
+import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
 import { useLayoutStore } from '../../store/layoutStore';
 import type { SessionState } from '../../store/types';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
@@ -183,7 +183,7 @@ export function useOverviewState(
     if (approvalBusyId) return;
     setApprovalBusyId(id);
     markLocalTool(id, 'running', '执行中…');
-    void daemonApproveTool(id)
+    void engineApproveTool(id)
       .catch(() => {
         markLocalTool(id, 'error', '批准失败');
         showActionErr('批准失败，请重试');
@@ -201,7 +201,7 @@ export function useOverviewState(
     if (approvalBusyId) return;
     setApprovalBusyId(id);
     markLocalTool(id, 'error', '已拒绝');
-    void daemonDenyTool(id)
+    void engineDenyTool(id)
       .catch(() => showActionErr('拒绝失败，请重试'))
       .finally(() => setApprovalBusyId(null));
   };

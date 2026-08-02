@@ -73,7 +73,7 @@ export function isEditToolName(name: string): boolean {
  */
 export function parseUnifiedDiffs(text: string): FileDiff[] {
   if (!text || !text.includes('\n')) return [];
-  // daemonChatBridge / gitApi 也会直调本函数，目录列表必须在此拦死
+  // chatBridge / gitApi 也会直调本函数，目录列表必须在此拦死
   if (looksLikeDirectoryListing(text)) return [];
   const lines = text.replace(/\r\n/g, '\n').split('\n');
 

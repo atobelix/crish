@@ -1,5 +1,5 @@
 /**
- * 合并 OverviewCard / RuntimePanel 共享的 daemon 状态逻辑。
+ * 合并 OverviewCard / RuntimePanel 共享的引擎状态逻辑。
  *
  * 使用 React 18 官方 `useSyncExternalStore` 范式：
  * - 模块级单例 + refcount 生命周期管理
@@ -27,7 +27,7 @@ export interface WorkflowRunInfo {
   startedAt: number;
 }
 
-export interface DaemonState {
+export interface EngineState {
   engineOnline: boolean;
   activeRuns: ActiveRunInfo[];
   pendingApprovals: PendingApprovalInfo[];
@@ -51,7 +51,7 @@ let _workflowsLoaded = false;
 type Listener = () => void;
 const _listeners = new Set<Listener>();
 
-let _state: DaemonState = {
+let _state: EngineState = {
   engineOnline: false,
   activeRuns: [],
   pendingApprovals: [],
@@ -65,7 +65,7 @@ function _notify(): void {
   for (const l of _listeners) l();
 }
 
-function _setState(patch: Partial<DaemonState>): void {
+function _setState(patch: Partial<EngineState>): void {
   const next = { ..._state, ...patch };
 
   // 浅等防护：如果核心字段完全一致，直接拦截，避免触发无意义的 React 组件重渲
@@ -160,12 +160,12 @@ function _subscribe(listener: Listener): () => void {
   };
 }
 
-function _getSnapshot(): DaemonState {
+function _getSnapshot(): EngineState {
   return _state;
 }
 
 // ─── React 18 标准 useSyncExternalStore 接口 ─────────────────
 
-export function useDaemonState(): DaemonState {
+export function useEngineState(): EngineState {
   return useSyncExternalStore(_subscribe, _getSnapshot, _getSnapshot);
 }

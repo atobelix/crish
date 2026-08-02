@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  daemonApproveTool,
-  daemonDenyTool,
+  engineApproveTool,
+  engineDenyTool,
   parseApprovalResolvedFields,
 } from './ApprovalHandler';
 
@@ -56,9 +56,9 @@ describe('ApprovalHandler', () => {
     });
   });
 
-  describe('daemonApproveTool and daemonDenyTool', () => {
+  describe('engineApproveTool and engineDenyTool', () => {
     it('approve-tool 经 transport.send（commandMap 翻译 core_approve_tool）', async () => {
-      await daemonApproveTool('tc-999', 'project');
+      await engineApproveTool('tc-999', 'project');
       expect(fakeTransport.send).toHaveBeenCalledWith('approve-tool', {
         toolCallId: 'tc-999',
         scope: 'project',
@@ -66,7 +66,7 @@ describe('ApprovalHandler', () => {
     });
 
     it('deny-tool 经 transport.send（commandMap 翻译 core_deny_tool）', async () => {
-      await daemonDenyTool('tc-888');
+      await engineDenyTool('tc-888');
       expect(fakeTransport.send).toHaveBeenCalledWith('deny-tool', {
         toolCallId: 'tc-888',
       });

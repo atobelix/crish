@@ -3,14 +3,14 @@ import {
   extractApprovalCommandArgs,
   isParseErr,
   isParseOk,
-  parseDaemonEnvelope,
+  parseEngineEnvelope,
   parseErr,
   parseOk,
   parseToolCallFields,
   type ParseResult,
-} from './daemonEventSchema';
+} from './engineEventSchema';
 
-describe('daemonEventSchema', () => {
+describe('engineEventSchema', () => {
   describe('ParseResult helpers', () => {
     it('isParseOk narrows data; isParseErr narrows error', () => {
       const ok: ParseResult<string> = parseOk('hi');
@@ -65,24 +65,24 @@ describe('daemonEventSchema', () => {
     if (isParseOk(perm)) expect(perm.data.args).toContain('echo ok');
   });
 
-  it('parseDaemonEnvelope requires type', () => {
-    expect(isParseOk(parseDaemonEnvelope({}))).toBe(false);
-    const e = parseDaemonEnvelope({ type: 'tool-start', call: {} });
+  it('parseEngineEnvelope requires type', () => {
+    expect(isParseOk(parseEngineEnvelope({}))).toBe(false);
+    const e = parseEngineEnvelope({ type: 'tool-start', call: {} });
     expect(isParseOk(e)).toBe(true);
     if (isParseOk(e)) expect(e.data.type).toBe('tool-start');
   });
 
-  it('parseDaemonEnvelope accepts event/kind aliases', () => {
-    const e = parseDaemonEnvelope({ event: 'message-delta', text: 'x' });
+  it('parseEngineEnvelope accepts event/kind aliases', () => {
+    const e = parseEngineEnvelope({ event: 'message-delta', text: 'x' });
     expect(isParseOk(e)).toBe(true);
     if (isParseOk(e)) expect(e.data.type).toBe('message-delta');
-    const k = parseDaemonEnvelope({ kind: 'run-terminal', terminal: 'completed' });
+    const k = parseEngineEnvelope({ kind: 'run-terminal', terminal: 'completed' });
     expect(isParseOk(k)).toBe(true);
     if (isParseOk(k)) expect(k.data.type).toBe('run-terminal');
   });
 
-  it('parseDaemonEnvelope rejects arrays and surfaces non-empty error', () => {
-    const r = parseDaemonEnvelope([]);
+  it('parseEngineEnvelope rejects arrays and surfaces non-empty error', () => {
+    const r = parseEngineEnvelope([]);
     expect(isParseErr(r)).toBe(true);
     if (isParseErr(r)) {
       expect(r.error.length).toBeGreaterThan(0);

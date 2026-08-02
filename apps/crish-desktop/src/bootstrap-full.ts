@@ -4,8 +4,8 @@ export async function bootstrapFull(): Promise<void> {
   await Promise.all([
     // 1. 核心就绪探测（C3.5：transport「核心已初始化」语义；WS 回退路径内部含 keep-alive）
     (async () => {
-      const { ensureDaemonConnected } = await import('./api/daemonChatBridge');
-      await ensureDaemonConnected().catch(() => {});
+      const { ensureEngineConnected } = await import('./api/chatBridge');
+      await ensureEngineConnected().catch(() => {});
     })(),
 
     // 2. 同步引擎配置

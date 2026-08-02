@@ -1,5 +1,5 @@
 /**
- * 轻量解析结果判别联合（原 daemonEventSchema 的 ParseResult 部分）。
+ * 轻量解析结果判别联合（原 engineEventSchema 的 ParseResult 部分）。
  *
  * C3.2：zod 协议校验层已删，协议契约以 shared-types 类型为准（Rust 侧事件桥测试锚定）。
  * 此处仅保留消费点做最小防御解析时共用的结果类型与收窄守卫，不承载任何协议校验。

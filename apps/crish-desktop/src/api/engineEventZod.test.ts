@@ -11,9 +11,9 @@ import {
   safeParseToolCall,
   safeParseToolResult,
   type ParseResult,
-} from './daemonEventZod';
+} from './engineEventZod';
 
-describe('daemonEventZod', () => {
+describe('engineEventZod', () => {
   describe('ParseResult narrowing', () => {
     it('isParseOk / isParseErr are exclusive type guards', () => {
       const ok = parseOk({ n: 1 });
@@ -94,7 +94,7 @@ describe('daemonEventZod', () => {
 
       const miss = safeParseDaemonEvent({ foo: 1 });
       expect(isParseErr(miss)).toBe(true);
-      if (isParseErr(miss)) expect(miss.error).toBe('daemon event missing type');
+      if (isParseErr(miss)) expect(miss.error).toBe('engine event missing type');
     });
   });
 

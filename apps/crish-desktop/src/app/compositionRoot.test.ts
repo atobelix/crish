@@ -290,7 +290,7 @@ describe('compositionRoot (B3)', () => {
         setAppSettings,
       },
     });
-    // 与 AppBootstrap / useEngineBootstrap syncSessionsFromDaemon 同形
+    // 与 AppBootstrap / useEngineBootstrap syncSessionsFromEngine 同形
     const layout = getCompositionRoot().layout;
     const sessions = layout.getSessions();
     layout.setSessions(sessions);

@@ -19,7 +19,7 @@ function blockText(block: unknown): string {
   return '';
 }
 
-/** 与 daemonChatBridge / sessionEventHydrate 对齐：兼容 id|toolCallId、name|toolName、input|arguments|parameters */
+/** 与 chatBridge / sessionEventHydrate 对齐：兼容 id|toolCallId、name|toolName、input|arguments|parameters */
 function toolCallFields(call: unknown): {
   id: string;
   name: string;

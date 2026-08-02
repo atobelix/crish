@@ -229,9 +229,8 @@ export default defineConfig({
             if (n.includes('highlight.js')) return 'vendor-highlight';
             if (n.includes('@fontsource')) return 'vendor-fonts';
           }
-          // Business-stable splits (async-heavy daemon/stream cores)
-          if (n.includes('/src/api/daemonChatBridge')) return 'daemon-bridge';
-          if (n.includes('/src/api/daemonClient')) return 'daemon-client';
+          // Business-stable splits (async-heavy chat-bridge/stream cores)
+          if (n.includes('/src/api/chatBridge')) return 'chat-bridge';
           if (
             n.includes('/src/api/StreamRenderBuffer') ||
             n.includes('/src/services/StreamRecovery')

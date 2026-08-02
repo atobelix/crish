@@ -20,11 +20,11 @@ import { getCommandPermissions, getPermissionMode } from '../storeAccess';
 import { logInternalError } from '../userFacingErrors';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
 import { parseApprovalRiskMeta } from '../approvalMeta';
-import { extractApprovalCommandArgs } from '../daemonEventSchema';
+import { extractApprovalCommandArgs } from '../engineEventSchema';
 import {
   safeParseApprovalRequest,
   safeParseRunTerminal,
-} from '../daemonEventZod';
+} from '../engineEventZod';
 import {
   blockText,
   extractEventSequence,
@@ -84,7 +84,7 @@ export class EventRouter {
     if (this.state.cancelled || this.state.finished) return;
     const resolved = parseApprovalResolvedFields(payload);
     if (resolved.ok === false) {
-      logInternalError('daemon-protocol', resolved.error);
+      logInternalError('engine-protocol', resolved.error);
       return;
     }
     const {
@@ -274,10 +274,10 @@ export class EventRouter {
       ).trim();
       if (!toolCallId) {
         if (parsed.ok === false) {
-          logInternalError('daemon-protocol', parsed.error);
+          logInternalError('engine-protocol', parsed.error);
         } else {
           logInternalError(
-            'daemon-protocol',
+            'engine-protocol',
             'approval-requested missing toolCallId'
           );
         }
@@ -517,7 +517,7 @@ export class EventRouter {
     if (type === 'error') {
       surfaceStreamFailure(
         msg.message ?? msg.error ?? msg,
-        'daemon-error',
+        'engine-error',
         this.callbacks,
         this.runId
       );

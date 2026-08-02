@@ -191,8 +191,8 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
           // 非丢消息 — 见 needsEngineMessageHydrate / store README「会话消息水合」。
           if (needsEngineMessageHydrate(sess)) {
             void import('../api/sessionEventHydrate').then(
-              ({ hydrateSessionMessagesFromDaemon, mergeMessagesById }) => {
-                void hydrateSessionMessagesFromDaemon(nextId).then((res) => {
+              ({ hydrateSessionMessagesFromEngine, mergeMessagesById }) => {
+                void hydrateSessionMessagesFromEngine(nextId).then((res) => {
                   if (!res.ok) return;
                   set((state) => {
                     // getSessionForWrite：经 sessions[] 写，避免 immer 只 fork sessionsById

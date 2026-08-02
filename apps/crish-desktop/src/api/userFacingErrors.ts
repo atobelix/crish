@@ -6,7 +6,7 @@
  */
 
 const NETWORK_RE =
-  /network|websocket|timeout|offline|econn|enotfound|econnrefused|not connected|failed to connect|connect(?:ion)? (?:failed|refused|reset|closed)|disconnected|daemon (?:offline|not|unavailable)|unable to connect|proxy|dns|net::|fetch failed|socket/i;
+  /network|timeout|offline|econn|enotfound|econnrefused|not connected|failed to connect|connect(?:ion)? (?:failed|refused|reset|closed)|disconnected|unable to connect|proxy|dns|net::|fetch failed|socket/i;
 
 const NO_KEY_RE =
   /no provider|missing.*(?:api.?key|credential)|api.?key.*(?:missing|unset|required)|NO_PROVIDER|credential.*not|hasApiKey.?false/i;

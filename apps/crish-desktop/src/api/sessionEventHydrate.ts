@@ -406,7 +406,7 @@ export async function fetchSessionEvents(
   }
 }
 
-export async function hydrateSessionMessagesFromDaemon(
+export async function hydrateSessionMessagesFromEngine(
   sessionId: string,
 ): Promise<SessionHydrateResult> {
   const page = await fetchSessionEvents(sessionId, 0, 800);

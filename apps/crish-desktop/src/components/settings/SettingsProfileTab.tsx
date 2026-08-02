@@ -7,7 +7,7 @@
 import React, { useId, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import { clientApi } from '../../api/clientApi';
-import { ensureDaemonConnected } from '../../api/daemonChatBridge';
+import { ensureEngineConnected } from '../../api/chatBridge';
 import { getTransport } from '../../api/transport';
 import { isUserViewDebugEnabled } from '../../api/messageUserProjection';
 import { isDeveloperEngineUiEnabled } from '../../api/productMode';
@@ -38,9 +38,9 @@ function pathLeaf(path: string): string {
 export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
   const cwd = getWorkspacePath() || '__global__';
   const headMetaId = useId();
-  const daemonStatusId = useId();
+  const engineStatusId = useId();
 
-  const [daemonConnHint, setDaemonConnHint] = useState('');
+  const [engineConnHint, setDaemonConnHint] = useState('');
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -127,7 +127,7 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
     if (busy) return;
     setBusy(true);
     setDaemonConnHint('连接中…');
-    void ensureDaemonConnected()
+    void ensureEngineConnected()
       .then((r) => {
         setDaemonConnHint(
           r.ok ? '已连接' : networkUserMessage(r.error) || '未连接',
@@ -150,16 +150,16 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
   const storageDisplay = 'SQLite';
   const storageIsPath = false;
 
-  const daemonOnline = getTransport().isReady();
-  const daemonStatus = daemonConnHint || (daemonOnline ? '在线' : '离线');
+  const engineOnline = getTransport().isReady();
+  const engineStatus = engineConnHint || (engineOnline ? '在线' : '离线');
   const showDeveloper = isDeveloperEngineUiEnabled();
   /** 投影调试：开发者引擎 UI 或既有 crish:userViewDebug / VITE_USER_VIEW_DEBUG */
   const showUserViewDebug = showDeveloper || isUserViewDebugEnabled();
   const engineMeta =
-    showDeveloper && !daemonOnline
+    showDeveloper && !engineOnline
       ? '服务未连接'
-      : showDeveloper && daemonConnHint
-        ? daemonConnHint
+      : showDeveloper && engineConnHint
+        ? engineConnHint
         : null;
 
   return (
@@ -276,7 +276,7 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
         <SettingsSection title="高级">
           <SettingsCard>
             <SettingsRow
-              title={<label htmlFor={daemonStatusId}>核心连接</label>}
+              title={<label htmlFor={engineStatusId}>核心连接</label>}
               desc="Tauri IPC 进程内核心（无 WS 地址）；可测试「核心已初始化」"
               control={
                 <>
@@ -289,12 +289,12 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
                     {busy ? '测试中…' : '测试'}
                   </button>
                   <span
-                    id={daemonStatusId}
+                    id={engineStatusId}
                     className={styles.settingsListMeta}
                     role="status"
                     aria-live="polite"
                   >
-                    {daemonStatus}
+                    {engineStatus}
                   </span>
                 </>
               }

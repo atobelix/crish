@@ -8,7 +8,7 @@
  * - full  完全访问：T0–T3 自动；T4（极危）仍确认
  * - plan  计划：仅 T0；写与风险 soft-deny，不弹窗
  *
- * 与 packages/agent-daemon daemon-permission-policy.normalizeDaemonPermissionMode
+ * 与 packages/agent-daemon daemon-permission-policy.normalizeEnginePermissionMode
  * 别名表对齐（桌面侧映射到 UI 四模式，不暴露 unattended/auto）：
  * - deep / project / confirm / default / interactive → ask（deep 桌面可保留 deep，引擎仍 ask）
  * - full / full_access / full-access / yolo / danger → full
@@ -27,7 +27,7 @@
 export type PermissionMode = 'ask' | 'deep' | 'full' | 'plan';
 
 /** 引擎协议 permissionMode（含 unattended 批处理；桌面 UI 暂不暴露） */
-export type DaemonPermissionMode = 'ask' | 'auto' | 'full-access' | 'plan' | 'unattended';
+export type EnginePermissionMode = 'ask' | 'auto' | 'full-access' | 'plan' | 'unattended';
 
 export type PermissionModeMeta = {
   id: PermissionMode;
@@ -36,7 +36,7 @@ export type PermissionModeMeta = {
   description: string;
   accent: string;
   /** 引擎侧实际生效的 permissionMode */
-  engineMode: DaemonPermissionMode;
+  engineMode: EnginePermissionMode;
   /** 一句话矩阵摘要（设置页 / 菜单副文案） */
   matrixHint: string;
 };
@@ -60,7 +60,7 @@ export const DESKTOP_PERMISSION_MODE_IDS: readonly PermissionMode[] = [
 const DESKTOP_MODE_SET: ReadonlySet<string> = new Set(DESKTOP_PERMISSION_MODE_IDS);
 
 /** 桌面正式模式 → run-task 必须下发的引擎 mode（单一真相表） */
-export const DESKTOP_TO_DAEMON: Readonly<Record<PermissionMode, DaemonPermissionMode>> = {
+export const DESKTOP_TO_ENGINE: Readonly<Record<PermissionMode, EnginePermissionMode>> = {
   ask: 'ask',
   deep: 'ask',
   full: 'full-access',
@@ -78,7 +78,7 @@ export const PERMISSION_MODES: PermissionModeMeta[] = [
     shortLabel: '需确认',
     description: '改文件、推送前先问你',
     accent: 'var(--text-tertiary)',
-    engineMode: DESKTOP_TO_DAEMON.ask,
+    engineMode: DESKTOP_TO_ENGINE.ask,
     matrixHint: '常用默认',
   },
   {
@@ -87,7 +87,7 @@ export const PERMISSION_MODES: PermissionModeMeta[] = [
     shortLabel: '深入分析',
     description: '多读多聊，改文件仍会问你',
     accent: 'var(--text-secondary)',
-    engineMode: DESKTOP_TO_DAEMON.deep,
+    engineMode: DESKTOP_TO_ENGINE.deep,
     matrixHint: '同需确认',
   },
   {
@@ -96,7 +96,7 @@ export const PERMISSION_MODES: PermissionModeMeta[] = [
     shortLabel: '计划',
     description: '只出方案，不改项目',
     accent: 'var(--text-secondary)',
-    engineMode: DESKTOP_TO_DAEMON.plan,
+    engineMode: DESKTOP_TO_ENGINE.plan,
     matrixHint: '只读',
   },
   {
@@ -105,7 +105,7 @@ export const PERMISSION_MODES: PermissionModeMeta[] = [
     shortLabel: '完全访问',
     description: '读写推送自动做，极危才问',
     accent: 'var(--text-primary)',
-    engineMode: DESKTOP_TO_DAEMON.full,
+    engineMode: DESKTOP_TO_ENGINE.full,
     matrixHint: '少打扰',
   },
 ];
@@ -224,10 +224,10 @@ export function permissionModeShortLabel(mode: PermissionMode | unknown): string
   return permissionModeMeta(mode).shortLabel;
 }
 
-/** 桌面 → 引擎：deep 映射为 ask；full → full-access（唯一真相：DESKTOP_TO_DAEMON） */
-export function toDaemonPermissionMode(mode: PermissionMode | unknown): DaemonPermissionMode {
+/** 桌面 → 引擎：deep 映射为 ask；full → full-access（唯一真相：DESKTOP_TO_ENGINE） */
+export function toEnginePermissionMode(mode: PermissionMode | unknown): EnginePermissionMode {
   const m = coercePermissionMode(mode);
-  return DESKTOP_TO_DAEMON[m] ?? DESKTOP_TO_DAEMON[DEFAULT_PERMISSION_MODE];
+  return DESKTOP_TO_ENGINE[m] ?? DESKTOP_TO_ENGINE[DEFAULT_PERMISSION_MODE];
 }
 
 /**
@@ -235,7 +235,7 @@ export function toDaemonPermissionMode(mode: PermissionMode | unknown): DaemonPe
  * full-access → full；auto/unattended → ask；plan → plan。
  * deep 仅当引擎原样回传 deep 时保留（run-task 下发的是 ask，引擎不会回 deep）。
  */
-export function fromDaemonPermissionMode(mode: unknown): PermissionMode {
+export function fromEnginePermissionMode(mode: unknown): PermissionMode {
   const key = foldPermissionKey(mode);
   if (!key) return normalizePermissionMode(mode);
   // deep 原样回传时保留 UI 态（normalize 同样处理；显式分支便于契约阅读）
@@ -246,32 +246,32 @@ export function fromDaemonPermissionMode(mode: unknown): PermissionMode {
 
 /**
  * 设置页 / Composer 选择后的「应下发引擎」mode。
- * 保证 meta.engineMode 与 toDaemon 永远一致；不一致时以 DESKTOP_TO_DAEMON 为准。
+ * 保证 meta.engineMode 与 toDaemon 永远一致；不一致时以 DESKTOP_TO_ENGINE 为准。
  */
-export function resolveEnginePermissionMode(mode: PermissionMode | unknown): DaemonPermissionMode {
+export function resolveEnginePermissionMode(mode: PermissionMode | unknown): EnginePermissionMode {
   const desktop = coercePermissionMode(mode);
-  const engine = toDaemonPermissionMode(desktop);
+  const engine = toEnginePermissionMode(desktop);
   const metaEngine = permissionModeMeta(desktop).engineMode;
   // 防御：若 meta 表被误改，仍下发真相表
-  return metaEngine === engine ? engine : DESKTOP_TO_DAEMON[desktop] ?? DESKTOP_TO_DAEMON[DEFAULT_PERMISSION_MODE];
+  return metaEngine === engine ? engine : DESKTOP_TO_ENGINE[desktop] ?? DESKTOP_TO_ENGINE[DEFAULT_PERMISSION_MODE];
 }
 
 /**
  * 桌面 mode 经 daemon 再回写是否稳定（deep 会塌缩为 ask，属预期）。
  * 用于测试与调试，不改变 store。
  */
-export function desktopDaemonRoundTrip(mode: PermissionMode | unknown): {
-  daemon: DaemonPermissionMode;
+export function desktopEngineRoundTrip(mode: PermissionMode | unknown): {
+  engine: EnginePermissionMode;
   back: PermissionMode;
   stable: boolean;
   deepCollapses: boolean;
 } {
   const desktop = coercePermissionMode(mode);
-  const daemon = toDaemonPermissionMode(desktop);
-  const back = fromDaemonPermissionMode(daemon);
+  const engine = toEnginePermissionMode(desktop);
+  const back = fromEnginePermissionMode(engine);
   const deepCollapses = desktop === 'deep' && back === 'ask';
   const stable = back === desktop || deepCollapses;
-  return { daemon, back, stable, deepCollapses };
+  return { engine, back, stable, deepCollapses };
 }
 
 // ── 路径语义（default / auto / ask / allow / plan）──────────────────────────

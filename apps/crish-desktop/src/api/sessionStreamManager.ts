@@ -3,9 +3,9 @@
  * 将 cancel/drain/goal-cancel/续写从 useChatStream 四 ref 隐式状态机收口到一处。
  */
 
-import type { StreamCancelFn } from './daemon-chat-bridge/ConnectionLifecycle';
+import type { StreamCancelFn } from './chat-bridge/ConnectionLifecycle';
 
-export type { StreamCancelFn, StreamCancelMode } from './daemon-chat-bridge/ConnectionLifecycle';
+export type { StreamCancelFn, StreamCancelMode } from './chat-bridge/ConnectionLifecycle';
 
 export type SessionStreamHandle = {
   /** 支持 L2 cooperative / L3 force；无参时按 force（旧调用兼容） */

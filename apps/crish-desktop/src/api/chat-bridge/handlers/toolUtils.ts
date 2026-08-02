@@ -1,11 +1,11 @@
 import type { FileDiff } from '../../../store/types';
 import {
   parseToolCallFields,
-} from '../../daemonEventSchema';
+} from '../../engineEventSchema';
 import {
   safeParseToolCall,
   safeParseToolResult,
-} from '../../daemonEventZod';
+} from '../../engineEventZod';
 import { parseUnifiedDiffs } from '../../toolFeedback';
 import { logInternalError } from '../../userFacingErrors';
 
@@ -24,7 +24,7 @@ export function toolCallFields(call: unknown): {
   const err =
     (zodParsed.ok === false ? zodParsed.error : '') ||
     (light.ok === false ? light.error : 'tool-call parse failed');
-  logInternalError('daemon-protocol', err);
+  logInternalError('engine-protocol', err);
   return { id: `tc-${Date.now()}`, name: 'tool', args: '', explanation: '' };
 }
 

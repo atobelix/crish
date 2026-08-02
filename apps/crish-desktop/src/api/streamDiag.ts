@@ -91,7 +91,7 @@ export function formatRunFailureForUi(
     message = '执行超时中断了，可缩短单步命令或稍后重试。';
   } else if (/cancel|stopp?ed|abort|user/i.test(tech)) {
     message = '本轮已停止。';
-  } else if (/websocket|network|disconnect|econn|offline/i.test(tech)) {
+  } else if (/network|disconnect|econn|offline/i.test(tech)) {
     message = '与引擎的连接中断了，正在恢复后可重试。';
   } else if (/context|token|too long|max.?turn|length/i.test(tech)) {
     message = '上下文或轮次过长导致中断，可新开会话或缩短任务。';

@@ -13,7 +13,7 @@ import {
   getActiveModelId,
   resolveDisplayModelId,
 } from '../../api/providerProfiles';
-import { useDaemonState } from '../../hooks/useDaemonState';
+import { useEngineState } from '../../hooks/useEngineState';
 
 import { OverviewHeader } from './OverviewHeader';
 import { OverviewStats } from './OverviewStats';
@@ -42,7 +42,7 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({ wsId, onOpenPanel }) =
   const cronJobs = useLayoutStore((state) => state.scheduledTasks);
   const tokenUsage = useLayoutStore((state) => state.tokenUsage);
   const sessions = useLayoutStore((state) => state.sessions);
-  const ds = useDaemonState();
+  const ds = useEngineState();
 
   const [openSec, setOpenSec] = useState<Record<SecKey, boolean>>({
     agents: true,

@@ -2,15 +2,15 @@
  * Chat streaming API surface — **single product entry** for assistant streams.
  *
  * ## Transport SoT (inventory #10)
- * - **Primary:** `streamViaDaemon` (daemon WebSocket → `run-task` + event stream).
+ * - **Primary:** `streamViaEngine` (daemon WebSocket → `run-task` + event stream).
  * - **Degraded only:** `streamViaDirectFetch` (HTTP SSE to provider). Not a second product path.
- * - Auto fallback lives in `daemon-chat-bridge/ConnectionLifecycle.createStreamSession`
+ * - Auto fallback lives in `chat-bridge/ConnectionLifecycle.createStreamSession`
  *   behind `ALLOW_AUTO_DIRECT_FETCH_FALLBACK` (soft-deprecated; see flag).
  *
  * ## Decision tree (call graph)
  * ```
  * streamAssistantResponseApi(prompt, callbacks, sessionId?, asstId?, options?)
- *   └─ streamViaDaemon  (always; this module never imports directFetch)
+ *   └─ streamViaEngine  (always; this module never imports directFetch)
  *        └─ createStreamSession
  *             ├─ daemon WS ready within 1.5s → run-task  [PRIMARY]
  *             └─ !ready || !connected
@@ -24,7 +24,7 @@
  * @see docs/plans/progress/architecture-dedup-inventory.md #10
  * @see docs/architecture/system-map-clear.md §3.2
  */
-import { streamViaDaemon } from './daemonChatBridge';
+import { streamViaEngine } from './chatBridge';
 import type { FileDiff, MessageToolApprovalMeta } from '../store/types';
 
 import type { SessionMessage, SessionState } from '../store/layoutStore';
@@ -187,7 +187,7 @@ export interface StreamCallbacks {
 
 /**
  * Stream assistant response — product entry (inventory #10 → C3.1)。
- * 唯一通道：`streamViaDaemon`（Tauri IPC transport，无 directFetch 降级）。
+ * 唯一通道：`streamViaEngine`（Tauri IPC transport，无 directFetch 降级）。
  */
 export const streamAssistantResponseApi = (
   prompt: string,
@@ -198,5 +198,5 @@ export const streamAssistantResponseApi = (
 ) => {
   const sid = sessionId || `sess-${Date.now()}`;
   const aid = assistantMsgId || `asst-${Date.now()}`;
-  return streamViaDaemon(prompt, callbacks, sid, aid, options);
+  return streamViaEngine(prompt, callbacks, sid, aid, options);
 };

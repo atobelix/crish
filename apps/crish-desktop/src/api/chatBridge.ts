@@ -1,12 +1,12 @@
 /**
- * daemon 流式事件桥 —— Tauri IPC transport 版（C3.1 后唯一通道）。
+ * 引擎流式事件桥 —— Tauri IPC transport 版（C3.1 后唯一通道）。
  *
  * Facade layer: Re-exports all public API functions and types from split modules
- * under ./daemon-chat-bridge/ to preserve backward compatibility for ChatCard,
+ * under ./chat-bridge/ to preserve backward compatibility for ChatCard,
  * storeAccess, and subagentApi callers.
  *
  * ## Transport SoT (inventory #10 → C3.1)
- * - **唯一通道:** `streamViaDaemon`（本 facade → `ConnectionLifecycle`）经
+ * - **唯一通道:** `streamViaEngine`（本 facade → `ConnectionLifecycle`）经
  *   `getTransport()`（TauriTransport）分派 `core_run_task`，事件经
  *   `listen('workbench-run-event')` → `router.onMsg`。
  * - directFetch HTTP SSE 降级已删（C3.4），核心未就绪直接拒绝启动。
@@ -24,39 +24,39 @@ export {
   mergeAssistantTextPiece,
   messageBelongsToRun,
   normalizeStreamSessionId,
-} from './daemon-chat-bridge/handlers/eventUtils';
+} from './chat-bridge/handlers/eventUtils';
 
-export { resolveEventType } from './daemon-chat-bridge/handlers/eventType';
+export { resolveEventType } from './chat-bridge/handlers/eventType';
 
 export {
   toolCallFields,
   toolCallFieldsFromEvent,
   toolResultFields,
-} from './daemon-chat-bridge/handlers/toolUtils';
+} from './chat-bridge/handlers/toolUtils';
 
-export type { StreamState } from './daemon-chat-bridge/handlers/streamState';
+export type { StreamState } from './chat-bridge/handlers/streamState';
 
 // Error policy
-export { surfaceStreamFailure } from './daemon-chat-bridge/BridgeErrorPolicy';
+export { surfaceStreamFailure } from './chat-bridge/BridgeErrorPolicy';
 
 // Approval handling
-export type { ApprovalResolvedFields } from './daemon-chat-bridge/ApprovalHandler';
+export type { ApprovalResolvedFields } from './chat-bridge/ApprovalHandler';
 export {
-  daemonApproveTool,
-  daemonDenyTool,
+  engineApproveTool,
+  engineDenyTool,
   parseApprovalResolvedFields,
-} from './daemon-chat-bridge/ApprovalHandler';
+} from './chat-bridge/ApprovalHandler';
 
 // Event routing
-export { EventRouter } from './daemon-chat-bridge/EventRouter';
+export { EventRouter } from './chat-bridge/EventRouter';
 
 // Connection lifecycle & stream session management
 export {
   createFinishController,
   createStreamCancel,
   createStreamSession,
-  ensureDaemonConnected,
-  streamViaDaemon,
+  ensureEngineConnected,
+  streamViaEngine,
   type StreamCancelFn,
   type StreamCancelMode,
-} from './daemon-chat-bridge/ConnectionLifecycle';
+} from './chat-bridge/ConnectionLifecycle';

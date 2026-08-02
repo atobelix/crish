@@ -17,7 +17,7 @@
  */
 import { getTransport, startRunTask, type Transport } from '../transport';
 import type { StreamCallbacks, StreamRequestOptions } from '../chatApi';
-import { toDaemonPermissionMode } from '../permissionModes';
+import { toEnginePermissionMode } from '../permissionModes';
 import { getPermissionMode } from '../storeAccess';
 import { logInternalError, networkUserMessage } from '../userFacingErrors';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
@@ -35,7 +35,7 @@ export type { StreamCancelMode };
  * 等待核心就绪并探测 get-status（AppBootstrap 启动门闩用）。
  * IPC 模式：waitUntilConnected 内部即 core_get_status 轮询，无需二次 request。
  */
-export async function ensureDaemonConnected(): Promise<{
+export async function ensureEngineConnected(): Promise<{
   ok: boolean;
   error?: string;
 }> {
@@ -47,7 +47,7 @@ export async function ensureDaemonConnected(): Promise<{
     }
     return { ok: true };
   } catch (e) {
-    logInternalError('ensureDaemonConnected', e);
+    logInternalError('ensureEngineConnected', e);
     return { ok: false, error: networkUserMessage(e) };
   }
 }
@@ -187,7 +187,7 @@ export async function createStreamSession(
     const cwd = getWorkspacePath() || undefined;
 
     const mode = getPermissionMode();
-    const permissionMode = toDaemonPermissionMode(mode);
+    const permissionMode = toEnginePermissionMode(mode);
 
     const hasImages = Boolean(
       options?.hasImages ||
@@ -324,7 +324,7 @@ export async function createStreamSession(
  * 产品流入口（chatApi.streamAssistantResponseApi 唯一调用）：
  * transport 事件订阅 → EventRouter 路由 → 审批/收口；返回 cancel 句柄。
  */
-export function streamViaDaemon(
+export function streamViaEngine(
   prompt: string,
   callbacks: StreamCallbacks,
   sessionId: string,

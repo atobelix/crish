@@ -440,7 +440,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
         list.map((s) => (s.id === skill.id ? { ...s, activation } : s)),
       );
       invalidateSkillSlashCache();
-      if (!r.daemonSynced) {
+      if (!r.engineSynced) {
         onShowToast?.(formatEngineDegradeToast(r.error));
       }
     } catch (e) {

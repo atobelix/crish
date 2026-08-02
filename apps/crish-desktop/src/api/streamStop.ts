@@ -7,7 +7,7 @@
  *
  * @see hooks/chat-stream/useStreamCallbacks.ts finalizeStopGeneration
  * @see hooks/useAgentStream.ts finalizeAgentStop
- * @see api/daemon-chat-bridge/ConnectionLifecycle.ts createStreamCancel
+ * @see api/chat-bridge/ConnectionLifecycle.ts createStreamCancel
  * @see api/runControlClient.ts sendTerminateDualWire
  */
 

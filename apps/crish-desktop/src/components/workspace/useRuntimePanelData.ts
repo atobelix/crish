@@ -12,7 +12,7 @@ import {
   getActiveModelId,
   resolveDisplayModelId,
 } from '../../api/providerProfiles';
-import { useDaemonState } from '../../hooks/useDaemonState';
+import { useEngineState } from '../../hooks/useEngineState';
 import { formatSectionCount } from './runtimePanelLib';
 
 export type LiveTask = {
@@ -42,7 +42,7 @@ export function useRuntimePanelData(): UseRuntimePanelDataResult {
   const cronJobs = useLayoutStore((state) => state.scheduledTasks);
   const tokenUsage = useLayoutStore((state) => state.tokenUsage);
   const sessions = useLayoutStore((state) => state.sessions);
-  const ds = useDaemonState();
+  const ds = useEngineState();
 
   const [now, setNow] = useState(() => Date.now());
 

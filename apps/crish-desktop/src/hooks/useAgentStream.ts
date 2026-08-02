@@ -31,7 +31,7 @@ import type { MessageToolApprovalMeta } from '../store/types';
 import { sendToSubagent, streamCollaboratorRun, getSubagentStatus } from '../api/subagentApi';
 import { resolveToolDiffs, sanitizeToolDisplayOutput } from '../api/toolFeedback';
 import { publishToolDiffs } from '../api/publishToolDiffs';
-import type { StreamCancelFn } from '../api/daemonChatBridge';
+import type { StreamCancelFn } from '../api/chatBridge';
 import { dispatchStreamStopCancel, markStreamingActive } from '../api/streamStop';
 import { getCompositionRoot } from '../app/compositionRoot';
 
@@ -77,7 +77,7 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
   }, []);
 
   const epochRef = useRef(0);
-  /** follow-up stream cancel；支持 L2/L3 mode（streamViaDaemon → StreamCancelFn） */
+  /** follow-up stream cancel；支持 L2/L3 mode（streamViaEngine → StreamCancelFn） */
   const cancelRef = useRef<null | StreamCancelFn>(null);
   const localRunIdRef = useRef<string | null>(null);
   const cooldownRef = useRef<number | null>(null);
@@ -314,7 +314,7 @@ export function useAgentPanel(options: UseAgentPanelOptions): UseAgentPanelRetur
         toolCalls: [],
         blocks: [],
       });
-      // streamViaDaemon 返回 StreamCancelFn；subagentApi 签名仍为 () => void
+      // streamViaEngine 返回 StreamCancelFn；subagentApi 签名仍为 () => void
       cancelRef.current = streamCollaboratorRun(
         text,
         agentId,

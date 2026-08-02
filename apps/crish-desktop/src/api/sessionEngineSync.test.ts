@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
-  daemonMergeShellEqual,
+  engineMergeShellEqual,
   dedupeRemoteSessions,
   formatRemoteTime,
   isOfflineOrEmptyRemote,
   isRemoteMetadataFresh,
   localSessionKey,
-  mergeDaemonSessions,
+  mergeEngineSessions,
   parseDaemonTimeMs,
   parseLocalSessionTimeMs,
   remoteSessionId,
   remoteSessionTitle,
   resolveMergedSessionTitle,
   shouldInsertRemoteSession,
-} from './sessionDaemonSync';
+} from './sessionEngineSync';
 import type { SessionState } from '../store/layoutStore';
 
 function localShell(partial: Partial<SessionState> & { id: string }): SessionState {
@@ -191,7 +191,7 @@ describe('dedupeRemoteSessions', () => {
   });
 });
 
-describe('mergeDaemonSessions', () => {
+describe('mergeEngineSessions', () => {
   it('does not insert remote-only default-title shells', () => {
     const local: SessionState[] = [
       localShell({
@@ -209,7 +209,7 @@ describe('mergeDaemonSessions', () => {
       { id: 'remote-ghost-6', title: 'Untitled', updatedAt: Date.now() },
       { id: 'remote-ghost-7', name: 'new chat', updatedAt: Date.now() },
     ];
-    const next = mergeDaemonSessions(local, remote);
+    const next = mergeEngineSessions(local, remote);
     expect(next.map((s) => s.id)).toEqual(['local-1']);
     expect(next).toHaveLength(1);
     // 无实质变化：返回同一引用，避免 store/persist 抖动
@@ -218,7 +218,7 @@ describe('mergeDaemonSessions', () => {
 
   it('inserts remote scheduled titles without treating as shells', () => {
     const local: SessionState[] = [];
-    const next = mergeDaemonSessions(local, [
+    const next = mergeEngineSessions(local, [
       { id: 'sched-1', title: '定时 · 巡检', updatedAt: Date.now() },
       { id: 'ghost', title: '新会话', updatedAt: Date.now() },
     ]);
@@ -231,7 +231,7 @@ describe('mergeDaemonSessions', () => {
     const remote = [
       { id: 'eng-1', title: '从引擎恢复的任务', updatedAt: 1_700_000_000_000 },
     ];
-    const next = mergeDaemonSessions(local, remote);
+    const next = mergeEngineSessions(local, remote);
     expect(next).toHaveLength(1);
     expect(next![0]!.id).toBe('eng-1');
     expect(next![0]!.title).toBe('从引擎恢复的任务');
@@ -252,7 +252,7 @@ describe('mergeDaemonSessions', () => {
       }),
     ];
     const remote = [{ id: 'same', title: '引擎标题', updatedAt: Date.now() }];
-    const next = mergeDaemonSessions(local, remote);
+    const next = mergeEngineSessions(local, remote);
     expect(next).toHaveLength(1);
     expect(next![0]!.messages[0]!.text).toBe('本地正文是真相');
     // 有用户消息时应从消息推导标题，而不是盲目用远程默认
@@ -264,7 +264,7 @@ describe('mergeDaemonSessions', () => {
       localShell({ id: 'sched', title: '定时 · 本地名' }),
       localShell({ id: 'real', title: '用户改名' }),
     ];
-    const next = mergeDaemonSessions(local, [
+    const next = mergeEngineSessions(local, [
       { id: 'sched', title: 'New Session', updatedAt: Date.now() },
       { id: 'real', title: 'Untitled', updatedAt: Date.now() },
     ]);
@@ -277,7 +277,7 @@ describe('mergeDaemonSessions', () => {
   it('fills real remote title onto local default-title empty shell', () => {
     const local: SessionState[] = [localShell({ id: 'same', title: '新会话' })];
     const remote = [{ id: 'same', title: '引擎真实名', updatedAt: Date.now() }];
-    const next = mergeDaemonSessions(local, remote);
+    const next = mergeEngineSessions(local, remote);
     expect(next![0]!.title).toBe('引擎真实名');
     expect(next).not.toBe(local);
   });
@@ -285,7 +285,7 @@ describe('mergeDaemonSessions', () => {
   it('does not invent 新会话 title from empty remote onto local shell', () => {
     const local: SessionState[] = [localShell({ id: 'same', title: '新会话' })];
     const remote = [{ id: 'same', title: '', updatedAt: Date.now() }];
-    const next = mergeDaemonSessions(local, remote);
+    const next = mergeEngineSessions(local, remote);
     // 保持本地默认标题；关键是不额外插入远程幽灵
     expect(next).toHaveLength(1);
     expect(next![0]!.id).toBe('same');
@@ -295,7 +295,7 @@ describe('mergeDaemonSessions', () => {
   it('does not apply remote default title over local default', () => {
     const local: SessionState[] = [localShell({ id: 'same', title: '新会话' })];
     const remote = [{ id: 'same', title: 'New Session', updatedAt: Date.now() }];
-    const next = mergeDaemonSessions(local, remote);
+    const next = mergeEngineSessions(local, remote);
     // 远程默认标题不得覆盖本地
     expect(next![0]!.title).toBe('新会话');
     expect(next).toBe(local);
@@ -303,14 +303,14 @@ describe('mergeDaemonSessions', () => {
 
   it('returns local unchanged when remote empty or null (offline)', () => {
     const local: SessionState[] = [localShell({ id: 'a' })];
-    expect(mergeDaemonSessions(local, [])).toBe(local);
-    expect(mergeDaemonSessions(local, null)).toBe(local);
-    expect(mergeDaemonSessions(local, undefined)).toBe(local);
+    expect(mergeEngineSessions(local, [])).toBe(local);
+    expect(mergeEngineSessions(local, null)).toBe(local);
+    expect(mergeEngineSessions(local, undefined)).toBe(local);
   });
 
   it('dedupes remote before merge so duplicate ids do not double-append', () => {
     const local: SessionState[] = [];
-    const next = mergeDaemonSessions(local, [
+    const next = mergeEngineSessions(local, [
       { id: 'x', title: '第一次', updatedAt: 1 },
       { id: 'x', title: '第二次', updatedAt: 2 },
     ]);
@@ -322,7 +322,7 @@ describe('mergeDaemonSessions', () => {
     const a = localShell({ id: 'a', title: '固定标题 A' });
     const b = localShell({ id: 'b', title: '新会话' });
     const local = [a, b];
-    const next = mergeDaemonSessions(local, [
+    const next = mergeEngineSessions(local, [
       { id: 'b', title: '引擎补全 B', updatedAt: Date.now() },
     ]);
     expect(next[0]).toBe(a);
@@ -332,7 +332,7 @@ describe('mergeDaemonSessions', () => {
 
   it('appends real-title remote after local order', () => {
     const local = [localShell({ id: 'local', title: '本地', messages: [{ id: 'm', sender: 'user', text: 'x', timestamp: 1 }] })];
-    const next = mergeDaemonSessions(local, [
+    const next = mergeEngineSessions(local, [
       { id: 'r1', title: '远程任务', updatedAt: Date.now() },
       { id: 'ghost', title: '新会话', updatedAt: Date.now() },
     ]);
@@ -347,7 +347,7 @@ describe('mergeDaemonSessions', () => {
         messages: [{ id: 'm', sender: 'user', text: '从消息补标题', timestamp: 1 }],
       }),
     ];
-    const next = mergeDaemonSessions(local, [
+    const next = mergeEngineSessions(local, [
       { id: 'ghost', title: '新会话', updatedAt: Date.now() },
     ]);
     expect(next).toHaveLength(1);
@@ -357,7 +357,7 @@ describe('mergeDaemonSessions', () => {
 
   it('accepts remote sessionId field and second-scale unix timestamps', () => {
     const local: SessionState[] = [];
-    const next = mergeDaemonSessions(local, [
+    const next = mergeEngineSessions(local, [
       {
         sessionId: 'via-session-id',
         name: '引擎仅有 name',
@@ -374,7 +374,7 @@ describe('mergeDaemonSessions', () => {
 
   it('does not insert Untitled-1 / New Session N remote ghosts', () => {
     const local: SessionState[] = [localShell({ id: 'keep', title: '本地' })];
-    const next = mergeDaemonSessions(local, [
+    const next = mergeEngineSessions(local, [
       { id: 'g1', title: 'Untitled-1', updatedAt: Date.now() },
       { id: 'g2', title: 'New Session 2', updatedAt: Date.now() },
       { id: 'g3', name: '会话', updatedAt: Date.now() },
@@ -391,7 +391,7 @@ describe('mergeDaemonSessions', () => {
         messages: [{ id: 'm', sender: 'user', text: 'x', timestamp: 1 }],
       }),
     ];
-    const next = mergeDaemonSessions(local, [
+    const next = mergeEngineSessions(local, [
       { id: 'same', name: 'New Chat', title: '', updatedAt: Date.now() },
     ]);
     expect(next![0]!.title).toBe('用户手改');
@@ -400,7 +400,7 @@ describe('mergeDaemonSessions', () => {
 
   it('matches local id to remote sessionId with whitespace', () => {
     const local = [localShell({ id: 'abc', title: '新会话' })];
-    const next = mergeDaemonSessions(local, [
+    const next = mergeEngineSessions(local, [
       { sessionId: '  abc  ', title: '引擎补全', updatedAt: Date.now() },
     ]);
     expect(next).toHaveLength(1);
@@ -413,7 +413,7 @@ describe('mergeDaemonSessions', () => {
       localShell({ id: 'local-only', title: '本地独有', messages: [{ id: 'm', sender: 'user', text: 'x', timestamp: 1 }] }),
       localShell({ id: 'empty-local', title: '新会话' }),
     ];
-    const next = mergeDaemonSessions(local, [
+    const next = mergeEngineSessions(local, [
       { id: 'remote-real', title: '远程任务', updatedAt: Date.now() },
     ]);
     expect(next.map((s) => s.id)).toEqual(['local-only', 'empty-local', 'remote-real']);
@@ -442,7 +442,7 @@ describe('mergeDaemonSessions', () => {
       { id: 'remote-ok', title: '从引擎来的任务', updatedAt: Date.now() },
       { id: 'active-empty', title: '', updatedAt: Date.now() },
     ];
-    const next = mergeDaemonSessions(local, remote);
+    const next = mergeEngineSessions(local, remote);
     expect(next.map((s) => s.id)).toEqual([
       'active-empty',
       'with-msgs',
@@ -472,7 +472,7 @@ describe('mergeDaemonSessions', () => {
       localShell({ id: 'sched', title: '定时 · keep' }),
       localShell({ id: 'pinned', title: '新会话', isPinned: true }),
     ];
-    const next = mergeDaemonSessions(
+    const next = mergeEngineSessions(
       local,
       [{ id: 'remote-ok', title: '远程实名', updatedAt: Date.now() }],
       { pruneEmptyShells: true, keepIds: ['active'] },
@@ -487,7 +487,7 @@ describe('mergeDaemonSessions', () => {
       localShell({ id: 'active', title: '新会话' }),
       localShell({ id: 'ghost', title: '新会话' }),
     ];
-    const next = mergeDaemonSessions(local, null, {
+    const next = mergeEngineSessions(local, null, {
       pruneEmptyShells: true,
       keepIds: ['active'],
     });
@@ -496,7 +496,7 @@ describe('mergeDaemonSessions', () => {
 
   it('does not invent remote shells when remote is only invalid ids', () => {
     const local = [localShell({ id: 'local', title: '本地' })];
-    const next = mergeDaemonSessions(local, [
+    const next = mergeEngineSessions(local, [
       { title: '有标题无 id' },
       { id: '   ', title: '空白 id' },
       { sessionId: '', name: '空 sessionId' },
@@ -508,7 +508,7 @@ describe('mergeDaemonSessions', () => {
     const messages = [{ id: 'm', sender: 'user' as const, text: 'body', timestamp: 1 }];
     const local = [localShell({ id: 's', title: '新会话', messages })];
     // remote real title but messages win for title; still clone session but messages same ref
-    const next = mergeDaemonSessions(local, [
+    const next = mergeEngineSessions(local, [
       { id: 's', title: '引擎', updatedAt: Date.now() },
     ]);
     expect(next![0]!.messages).toBe(messages);
@@ -516,7 +516,7 @@ describe('mergeDaemonSessions', () => {
   });
 });
 
-describe('daemonMergeShellEqual', () => {
+describe('engineMergeShellEqual', () => {
   it('compares order + id/title/folder only', () => {
     const a = [localShell({ id: '1', title: 't', folder: 'f' })];
     const b = [
@@ -527,11 +527,11 @@ describe('daemonMergeShellEqual', () => {
         messages: [{ id: 'm', sender: 'user', text: 'x', timestamp: 1 }],
       }),
     ];
-    expect(daemonMergeShellEqual(a, b)).toBe(true);
-    expect(daemonMergeShellEqual(a, [localShell({ id: '1', title: 'other', folder: 'f' })])).toBe(
+    expect(engineMergeShellEqual(a, b)).toBe(true);
+    expect(engineMergeShellEqual(a, [localShell({ id: '1', title: 'other', folder: 'f' })])).toBe(
       false,
     );
-    expect(daemonMergeShellEqual(a, a)).toBe(true);
+    expect(engineMergeShellEqual(a, a)).toBe(true);
   });
 
   it('detects order and folder diffs', () => {
@@ -540,13 +540,13 @@ describe('daemonMergeShellEqual', () => {
       localShell({ id: '2', title: 't', folder: 'f2' }),
     ];
     expect(
-      daemonMergeShellEqual(a, [
+      engineMergeShellEqual(a, [
         localShell({ id: '2', title: 't', folder: 'f2' }),
         localShell({ id: '1', title: 't', folder: 'f1' }),
       ]),
     ).toBe(false);
     expect(
-      daemonMergeShellEqual(a, [
+      engineMergeShellEqual(a, [
         localShell({ id: '1', title: 't', folder: 'other' }),
         localShell({ id: '2', title: 't', folder: 'f2' }),
       ]),

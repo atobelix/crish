@@ -2,11 +2,11 @@
  * 协作 agent 客户端 API：steer 续聊、状态查询、独立 follow-up run。
  *
  * T03.7：send-to-subagent / get-subagent-status 为幽灵命令（Rust 侧无），
- * 显式不可用；协作运行本身经 streamViaDaemon（core_run_task + 事件通道）。
+ * 显式不可用；协作运行本身经 streamViaEngine（core_run_task + 事件通道）。
  */
 
 import type { StreamCallbacks } from './chatApi';
-import { streamViaDaemon } from './daemonChatBridge';
+import { streamViaEngine } from './chatBridge';
 
 export type CollaboratorMode = 'research' | 'implement' | 'verify';
 
@@ -52,7 +52,7 @@ export function streamCollaboratorRun(
   agentSessionId: string,
   callbacks: StreamCallbacks,
 ): () => void {
-  return streamViaDaemon(prompt, callbacks, agentSessionId, `agent-asst-${Date.now()}`);
+  return streamViaEngine(prompt, callbacks, agentSessionId, `agent-asst-${Date.now()}`);
 }
 
 /** 组装手动拉起协作者的任务卡 */

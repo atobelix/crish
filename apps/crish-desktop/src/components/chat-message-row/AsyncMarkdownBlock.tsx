@@ -53,6 +53,7 @@ export function AsyncMarkdownBlock({
       <div
         ref={containerRef}
         className={`${styles.assistantText} md-rendered ${styles.isStreaming}`}
+        data-streaming="true"
       >
         {text}
       </div>
@@ -64,6 +65,7 @@ export function AsyncMarkdownBlock({
     <div
       ref={containerRef}
       className={`${styles.assistantText} md-rendered`}
+      data-streaming="false"
     >
       {loading && !html ? (
         <div className={styles.skeletonLine} aria-hidden />

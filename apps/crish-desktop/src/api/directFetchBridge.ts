@@ -2,7 +2,7 @@
  * Direct HTTP SSE fetch bridge for OpenAI/DeepSeek-compatible LLM endpoints.
  *
  * ## Transport role (inventory #10) — DEGRADED ONLY, not product SoT
- * - **Primary SoT:** `streamViaDaemon` via `chatApi.streamAssistantResponseApi`.
+ * - **Primary SoT:** `streamViaEngine` via `chatApi.streamAssistantResponseApi`.
  * - **This module:** last-resort HTTP SSE when agent-daemon WS is unreachable
  *   (auto-gated by `ALLOW_AUTO_DIRECT_FETCH_FALLBACK` in ConnectionLifecycle).
  * - **Do not** wire product features that only work on this path (tools/approvals/
@@ -16,7 +16,7 @@
  * | Stop wire | L2/L3 via `runControlClient` | N/A — no daemon run |
  * | Local stop | cleanup + onComplete | `AbortController.abort()` + onComplete |
  * | Cooperative L2 | runtime safe-point drain | **Not supported** (abort ≈ force) |
- * | Outer handle | `StreamCancelFn` from `streamViaDaemon` | must be stored on `state.transportAbort` |
+ * | Outer handle | `StreamCancelFn` from `streamViaEngine` | must be stored on `state.transportAbort` |
  *
  * Caller cancel **must** invoke the returned abort; fire-and-forget starts leak streams.
  *
@@ -26,7 +26,7 @@
  * - 捕获增量流中的 Prompt Cache Hit/Miss 用量统计并实时透传
  *
  * @see docs/plans/progress/architecture-dedup-inventory.md #10
- * @see ./daemon-chat-bridge/ConnectionLifecycle.ts (`ALLOW_AUTO_DIRECT_FETCH_FALLBACK`)
+ * @see ./chat-bridge/ConnectionLifecycle.ts (`ALLOW_AUTO_DIRECT_FETCH_FALLBACK`)
  */
 
 import type { StreamCallbacks, StreamRequestOptions } from './chatApi';
@@ -131,7 +131,7 @@ function buildThinkingParams(thinkingLevel?: string): Record<string, unknown> {
  *
  * @deprecated **Not product primary transport** (inventory #10). Call only from
  * `ConnectionLifecycle.createStreamSession` degraded branch, or explicit tests/dev.
- * Prefer `chatApi.streamAssistantResponseApi` → `streamViaDaemon`.
+ * Prefer `chatApi.streamAssistantResponseApi` → `streamViaEngine`.
  *
  * Cancel: returned `() => void` aborts the fetch and calls `onComplete` once
  * (force-equivalent only; no L2 cooperative). Callers must retain the handle

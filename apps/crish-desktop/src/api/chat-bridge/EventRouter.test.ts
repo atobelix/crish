@@ -246,7 +246,7 @@ describe('EventRouter.onMsg 四源失败收敛（C2.4，03 §2.4 表）', () => 
     const [msg, kind] = onRunError.mock.calls[0];
     expect(typeof msg).toBe('string');
     expect(msg.length).toBeGreaterThan(0);
-    expect(kind).toBe('daemon-error');
+    expect(kind).toBe('engine-error');
     expect(approvalFlow.snapshot().flowStatus).toBe('idle');
     expect(finish).toHaveBeenCalledWith(true);
   });

@@ -4,8 +4,8 @@
  * C3.1 transport 语义：
  * - 启动门闩 =「核心已初始化」（transport.isReady / onStatus(connected)）。
  * - 不再 bootstrapDesktopBackend（WS keep-alive / sidecar 重启已删）。
- * - ensureDaemonConnected（daemonChatBridge）内部即 transport.waitUntilConnected。
- * - 就绪后做一次会话列表合并（syncSessionsFromDaemon，list_sessions 走 transport）。
+ * - ensureEngineConnected（chatBridge）内部即 transport.waitUntilConnected。
+ * - 就绪后做一次会话列表合并（syncSessionsFromEngine，list_sessions 走 transport）。
  */
 import { useState, useEffect } from 'react';
 import { isProductShellFast } from '../createSsrGlobals';
@@ -37,16 +37,16 @@ export function useEngineBootstrap(): boolean {
           setEngineReady(true);
         }
       });
-      const { ensureDaemonConnected } = await import('../api/daemonChatBridge');
-      void ensureDaemonConnected().then((res) => {
+      const { ensureEngineConnected } = await import('../api/chatBridge');
+      void ensureEngineConnected().then((res) => {
         if (res.ok) setEngineReady(true);
         else if (!productShell) {
           console.warn('[crish-desktop] engine offline after boot wait');
         }
         if (res.ok) {
-          void import('../api/sessionDaemonSync').then(({ syncSessionsFromDaemon }) => {
+          void import('../api/sessionEngineSync').then(({ syncSessionsFromEngine }) => {
             const layout = getCompositionRoot().layout;
-            void syncSessionsFromDaemon(
+            void syncSessionsFromEngine(
               () => layout.getSessions(),
               (sessions) => layout.setSessions(sessions)
             );

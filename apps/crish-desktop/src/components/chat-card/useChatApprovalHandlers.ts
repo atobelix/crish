@@ -103,8 +103,8 @@ export function useChatApprovalHandlers({
           });
         }
       }
-      void import('../../api/daemonChatBridge')
-        .then(({ daemonApproveTool }) => daemonApproveTool(tid))
+      void import('../../api/chatBridge')
+        .then(({ engineApproveTool }) => engineApproveTool(tid))
         .catch(() => {
           updateMessageToolCall(activeSessionId, mid, tid, {
             status: 'error',
@@ -130,8 +130,8 @@ export function useChatApprovalHandlers({
         status: 'error',
         output: '已拒绝',
       });
-      void import('../../api/daemonChatBridge')
-        .then(({ daemonDenyTool }) => daemonDenyTool(tid))
+      void import('../../api/chatBridge')
+        .then(({ engineDenyTool }) => engineDenyTool(tid))
         .catch(() => {
           updateMessageToolCall(activeSessionId, mid, tid, {
             status: 'pending_approval',
@@ -197,10 +197,10 @@ export function useChatApprovalHandlers({
           output: '执行中…',
         });
       }
-      void import('../../api/daemonChatBridge')
-        .then(async ({ daemonApproveTool }) => {
+      void import('../../api/chatBridge')
+        .then(async ({ engineApproveTool }) => {
           const results = await Promise.allSettled(
-            pairs.map(({ toolId }) => daemonApproveTool(toolId))
+            pairs.map(({ toolId }) => engineApproveTool(toolId))
           );
           let failCount = 0;
           results.forEach((r, i) => {
@@ -249,10 +249,10 @@ export function useChatApprovalHandlers({
           output: '已拒绝',
         });
       }
-      void import('../../api/daemonChatBridge')
-        .then(async ({ daemonDenyTool }) => {
+      void import('../../api/chatBridge')
+        .then(async ({ engineDenyTool }) => {
           const results = await Promise.allSettled(
-            pairs.map(({ toolId }) => daemonDenyTool(toolId))
+            pairs.map(({ toolId }) => engineDenyTool(toolId))
           );
           let failCount = 0;
           results.forEach((r, i) => {

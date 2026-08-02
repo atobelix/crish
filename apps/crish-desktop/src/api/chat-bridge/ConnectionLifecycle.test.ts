@@ -1,13 +1,13 @@
 /**
  * ConnectionLifecycle 单测（Tauri IPC transport 版，C3.1）。
  * - 完整 run-task / 事件流契约见 ConnectionLifecycle.tauri.test.ts；
- * - 本文件覆盖 createFinishController / createStreamCancel / ensureDaemonConnected 纯逻辑面。
+ * - 本文件覆盖 createFinishController / createStreamCancel / ensureEngineConnected 纯逻辑面。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createFinishController,
   createStreamCancel,
-  ensureDaemonConnected,
+  ensureEngineConnected,
 } from './ConnectionLifecycle';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
 import type { StreamCallbacks } from '../chatApi';
@@ -89,16 +89,16 @@ describe('ConnectionLifecycle（Tauri IPC 版）', () => {
     resetControlMetrics();
   });
 
-  describe('ensureDaemonConnected', () => {
+  describe('ensureEngineConnected', () => {
     it('核心就绪 → ok:true（waitUntilConnected 即 core_get_status 轮询）', async () => {
-      const res = await ensureDaemonConnected();
+      const res = await ensureEngineConnected();
       expect(res.ok).toBe(true);
       expect(fakeTransport.waitUntilConnected).toHaveBeenCalledWith(20_000);
     });
 
     it('核心未就绪 → ok:false + network 文案', async () => {
       vi.mocked(fakeTransport.waitUntilConnected).mockResolvedValue(false);
-      const res = await ensureDaemonConnected();
+      const res = await ensureEngineConnected();
       expect(res.ok).toBe(false);
       expect(res.error).toBeTruthy();
     });

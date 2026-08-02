@@ -75,8 +75,8 @@ describe('skillsApi', () => {
 
       const result = await setSkillActivation(mockSkill, 'disabled');
       expect(result.ok).toBe(true);
-      // T03.7：scoped-context 本地-only，daemonSynced 恒 false
-      expect(result.daemonSynced).toBe(false);
+      // T03.7：scoped-context 本地-only，engineSynced 恒 false
+      expect(result.engineSynced).toBe(false);
     });
   });
 

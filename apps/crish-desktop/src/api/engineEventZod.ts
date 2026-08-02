@@ -1,6 +1,6 @@
 /**
- * Zod-based daemon event validation for the desktop bridge.
- * Prefer these parsers; fall back to daemonEventSchema.ts light parsers if needed.
+ * Zod-based engine event validation for the desktop bridge.
+ * Prefer these parsers; fall back to engineEventSchema.ts light parsers if needed.
  *
  * Aligns with agent-runtime + daemon WS shapes:
  * - tool-start.call (ToolBatchCall): { id, toolName, summary, input }
@@ -10,7 +10,7 @@
  * - approval-resolved: decision string | PermissionDecision { behavior }
  * - run-terminal: { terminal, error? }
  *
- * ParseResult 收窄：与 daemonEventSchema 共用 isParseOk / isParseErr / parseOk / parseErr。
+ * ParseResult 收窄：与 engineEventSchema 共用 isParseOk / isParseErr / parseOk / parseErr。
  */
 
 import { z } from 'zod';
@@ -22,7 +22,7 @@ import {
   type ParseErr,
   type ParseOk,
   type ParseResult,
-} from './daemonEventSchema';
+} from './engineEventSchema';
 
 export type { ParseErr, ParseOk, ParseResult };
 export { isParseErr, isParseOk, parseErr, parseOk };
@@ -89,18 +89,18 @@ function extractResultPath(r: Record<string, unknown>): string | undefined {
 }
 
 /** Envelope: at least a non-empty type string (aliases: event, kind). */
-export const daemonEventEnvelopeSchema = z.custom<Record<string, unknown>>(isRecord, {
-  message: 'daemon event is not an object',
+export const engineEventEnvelopeSchema = z.custom<Record<string, unknown>>(isRecord, {
+  message: 'engine event is not an object',
 }).transform((event, ctx) => {
   const type = String(event.type ?? event.event ?? event.kind ?? '').trim();
   if (!type) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'daemon event missing type' });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'engine event missing type' });
     return z.NEVER;
   }
   return { type, raw: event };
 });
 
-export type DaemonEventEnvelope = z.infer<typeof daemonEventEnvelopeSchema>;
+export type EngineEventEnvelope = z.infer<typeof engineEventEnvelopeSchema>;
 
 /**
  * Tool-call fields: require id + name (aliases for both).
@@ -267,8 +267,8 @@ export type DaemonRunTerminalZod = z.infer<typeof runTerminalSchema>;
 
 export function safeParseDaemonEvent(
   event: unknown,
-): ParseResult<DaemonEventEnvelope> {
-  return fromZodSafeParse(daemonEventEnvelopeSchema.safeParse(event));
+): ParseResult<EngineEventEnvelope> {
+  return fromZodSafeParse(engineEventEnvelopeSchema.safeParse(event));
 }
 
 export function safeParseToolCall(call: unknown): ParseResult<DaemonToolCallZod> {

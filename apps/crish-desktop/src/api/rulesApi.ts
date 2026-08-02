@@ -14,7 +14,7 @@ export type SyncRulesResult = {
   ok: boolean;
   localSaved: boolean;
   /** T03.7：scoped-context 仅本机保存，恒 false（显式本地-only） */
-  daemonSynced: boolean;
+  engineSynced: boolean;
   error?: string;
   truncated?: boolean;
 };
@@ -31,7 +31,7 @@ function normalizeRuleBody(text: string): { body: string; truncated: boolean } {
 
 /**
  * 将规则保存到本机设置（localSaved 由调用方在 saveSettings 后设为 true）。
- * T03.7：引擎 scoped-context 通道已删，daemonSynced 恒 false（无引擎同步）。
+ * T03.7：引擎 scoped-context 通道已删，engineSynced 恒 false（无引擎同步）。
  * projectText 省略时仅处理全局规则。
  */
 export async function syncRulesToDaemon(opts: {
@@ -48,7 +48,7 @@ export async function syncRulesToDaemon(opts: {
   return {
     ok: true,
     localSaved: true,
-    daemonSynced: false,
+    engineSynced: false,
     truncated,
   };
 }

@@ -7,7 +7,7 @@ import {
   type ParseResult,
 } from './parseResult';
 
-describe('parseResult（C3.2：原 daemonEventSchema 共用的结果判别联合，独立成最小工具）', () => {
+describe('parseResult（C3.2：原 engineEventSchema 共用的结果判别联合，独立成最小工具）', () => {
   it('isParseOk / isParseErr are exclusive type guards', () => {
     const ok = parseOk({ n: 1 });
     const err = parseErr('boom');

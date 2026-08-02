@@ -26,7 +26,7 @@ vi.mock('../../api/skillsApi', () => ({
   invalidateSkillSlashCache: vi.fn(),
   pickSkillDirectory: vi.fn(async () => '/extra/dir'),
   removeExtraSkillDir: vi.fn(),
-  setSkillActivation: vi.fn(async () => ({ daemonSynced: true })),
+  setSkillActivation: vi.fn(async () => ({ engineSynced: true })),
   skillsFsAvailable: vi.fn(async () => true),
   syncSkillsToDaemon: vi.fn(async () => ({ ok: 1, fail: 0 })),
 }));

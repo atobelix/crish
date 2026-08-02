@@ -7,7 +7,7 @@
  * - 仅投影 TransportStatus → ConnectionPhase，不独立跑任何 probe / timer。
  * - connect() 委托 transport.waitUntilConnected（core_get_status 轮询）。
  * - disconnect() 仅复位投影状态（进程内核心无「断开 keep-alive」语义）。
- * - 通过 eventBus 广播连接状态变更（daemon:connection:change）。
+ * - 通过 eventBus 广播连接状态变更（engine:connection:change）。
  *
  * 状态映射：
  *   TransportStatus            → ConnectionPhase
@@ -243,7 +243,7 @@ export class ConnectionManager {
   }
 
   private emitEventBus(): void {
-    eventBus.emit('daemon:connection:change', { ...this.state }, 'daemon');
+    eventBus.emit('engine:connection:change', { ...this.state }, 'engine');
   }
 
   // ─── 内部：辅助 ─────────────────────────────────────────────

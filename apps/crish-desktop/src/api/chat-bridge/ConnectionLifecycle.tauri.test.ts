@@ -9,7 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createStreamSession,
-  streamViaDaemon,
+  streamViaEngine,
 } from './ConnectionLifecycle';
 import type { StreamCallbacks } from '../chatApi';
 import type { StreamState } from './handlers/streamState';
@@ -185,7 +185,7 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
     });
   });
 
-  describe('streamViaDaemon：listen 事件流全流程（消息→流→工具→收口）', () => {
+  describe('streamViaEngine：listen 事件流全流程（消息→流→工具→收口）', () => {
     it('平铺 IPC 事件经 transport.onMessage → router.onMsg 路由；runId 过滤不误杀', async () => {
       let capturedRunId = '';
       const onChunk = vi.fn();
@@ -203,7 +203,7 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
         },
       };
 
-      const cancel = streamViaDaemon(
+      const cancel = streamViaEngine(
         'hello ipc',
         callbacks,
         'sess-ipc-1',

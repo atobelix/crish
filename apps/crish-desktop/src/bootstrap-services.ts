@@ -91,7 +91,7 @@ export function bootstrapServices(): () => void {
   crossTabCoordinator.init();
 
   // 7. Wire ErrorStore to EventBus — map daemon connection state
-  const unsubErrorStore = eventBus.on('daemon:connection:change', (payload) => {
+  const unsubErrorStore = eventBus.on('engine:connection:change', (payload) => {
     const p = payload as { phase?: string };
     if (!p?.phase) return;
     switch (p.phase) {

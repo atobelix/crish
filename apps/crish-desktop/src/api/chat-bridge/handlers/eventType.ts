@@ -1,9 +1,9 @@
 import {
-  parseDaemonEnvelope,
-} from '../../daemonEventSchema';
+  parseEngineEnvelope,
+} from '../../engineEventSchema';
 import {
   safeParseDaemonEvent,
-} from '../../daemonEventZod';
+} from '../../engineEventZod';
 
 export function resolveEventType(
   event: unknown
@@ -14,7 +14,7 @@ export function resolveEventType(
     if (!type) return null;
     return { type, raw: zodEnv.data.raw };
   }
-  const light = parseDaemonEnvelope(event);
+  const light = parseEngineEnvelope(event);
   if (light.ok === true) {
     const type = String(light.data.type ?? '').trim();
     if (!type) return null;

@@ -6,8 +6,8 @@ export {
   createFinishController,
   createStreamCancel,
   createStreamSession,
-  ensureDaemonConnected,
-  streamViaDaemon,
+  ensureEngineConnected,
+  streamViaEngine,
   type StreamCancelFn,
   type StreamCancelMode,
 } from './ConnectionLifecycle';

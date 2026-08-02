@@ -6,7 +6,7 @@ import React, { useState } from 'react';
 import styles from './RuntimePanel.module.css';
 import { Tooltip } from '../Tooltip';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
-import { daemonApproveTool, daemonDenyTool } from '../../api/daemonChatBridge';
+import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
 import { useLayoutStore } from '../../store/layoutStore';
 
 export type ApprovalSectionProps = {
@@ -97,7 +97,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
     if (approvalBusyId) return;
     setApprovalBusyId(id);
     markLocalTool(id, 'running', '执行中…');
-    void daemonApproveTool(id)
+    void engineApproveTool(id)
       .catch(() => {
         markLocalTool(id, 'error', '批准失败');
         onShowToast('批准失败，请重试');
@@ -117,7 +117,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
     if (approvalBusyId) return;
     setApprovalBusyId(id);
     markLocalTool(id, 'error', '已拒绝');
-    void daemonDenyTool(id)
+    void engineDenyTool(id)
       .catch(() => {
         onShowToast('拒绝失败，请重试');
       })

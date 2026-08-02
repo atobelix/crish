@@ -9,8 +9,8 @@ import {
   toolCallFields,
   toolCallFieldsFromEvent,
   toolResultFields,
-} from './daemonChatBridge';
-import { isParseErr, isParseOk } from './daemonEventSchema';
+} from './chatBridge';
+import { isParseErr, isParseOk } from './engineEventSchema';
 
 describe('normalizeStreamSessionId (empty session safety)', () => {
   it('keeps non-empty trimmed session ids', () => {

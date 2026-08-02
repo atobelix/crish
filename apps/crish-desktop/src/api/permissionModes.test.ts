@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_PERMISSION_MODE,
   DESKTOP_PERMISSION_MODE_IDS,
-  DESKTOP_TO_DAEMON,
+  DESKTOP_TO_ENGINE,
   coercePermissionMode,
-  desktopDaemonRoundTrip,
-  fromDaemonPermissionMode,
+  desktopEngineRoundTrip,
+  fromEnginePermissionMode,
   isAllowPathMode,
   isAskFamilyMode,
   isAutoAliasToAsk,
@@ -25,7 +25,7 @@ import {
   planModeEnabledFor,
   previousPermissionMode,
   resolveEnginePermissionMode,
-  toDaemonPermissionMode,
+  toEnginePermissionMode,
   transitionPermissionMode,
   modeShowsApprovalUi,
 } from './permissionModes';
@@ -95,36 +95,36 @@ describe('permissionModes sync', () => {
   });
 
   it('maps desktop → daemon for run-task', () => {
-    expect(toDaemonPermissionMode('ask')).toBe('ask');
-    expect(toDaemonPermissionMode('deep')).toBe('ask');
-    expect(toDaemonPermissionMode('full')).toBe('full-access');
-    expect(toDaemonPermissionMode('plan')).toBe('plan');
+    expect(toEnginePermissionMode('ask')).toBe('ask');
+    expect(toEnginePermissionMode('deep')).toBe('ask');
+    expect(toEnginePermissionMode('full')).toBe('full-access');
+    expect(toEnginePermissionMode('plan')).toBe('plan');
     // unknown-mode guard
-    expect(toDaemonPermissionMode('nope')).toBe('ask');
-    expect(toDaemonPermissionMode(null)).toBe('ask');
-    expect(toDaemonPermissionMode('yolo')).toBe('full-access');
+    expect(toEnginePermissionMode('nope')).toBe('ask');
+    expect(toEnginePermissionMode(null)).toBe('ask');
+    expect(toEnginePermissionMode('yolo')).toBe('full-access');
   });
 
   it('maps daemon → desktop for settings hydrate', () => {
-    expect(fromDaemonPermissionMode('full-access')).toBe('full');
-    expect(fromDaemonPermissionMode('full_access')).toBe('full');
-    expect(fromDaemonPermissionMode('yolo')).toBe('full');
-    expect(fromDaemonPermissionMode('plan')).toBe('plan');
-    expect(fromDaemonPermissionMode('safe')).toBe('plan');
-    expect(fromDaemonPermissionMode('auto')).toBe('ask');
-    expect(fromDaemonPermissionMode('unattended')).toBe('ask');
-    expect(fromDaemonPermissionMode('ci')).toBe('ask');
-    expect(fromDaemonPermissionMode('deep')).toBe('deep');
-    expect(fromDaemonPermissionMode('HEADLESS')).toBe('ask');
-    expect(fromDaemonPermissionMode('深入分析')).toBe('deep');
-    expect(fromDaemonPermissionMode('')).toBe(DEFAULT_PERMISSION_MODE);
+    expect(fromEnginePermissionMode('full-access')).toBe('full');
+    expect(fromEnginePermissionMode('full_access')).toBe('full');
+    expect(fromEnginePermissionMode('yolo')).toBe('full');
+    expect(fromEnginePermissionMode('plan')).toBe('plan');
+    expect(fromEnginePermissionMode('safe')).toBe('plan');
+    expect(fromEnginePermissionMode('auto')).toBe('ask');
+    expect(fromEnginePermissionMode('unattended')).toBe('ask');
+    expect(fromEnginePermissionMode('ci')).toBe('ask');
+    expect(fromEnginePermissionMode('deep')).toBe('deep');
+    expect(fromEnginePermissionMode('HEADLESS')).toBe('ask');
+    expect(fromEnginePermissionMode('深入分析')).toBe('deep');
+    expect(fromEnginePermissionMode('')).toBe(DEFAULT_PERMISSION_MODE);
   });
 
-  it('keeps engineMode on meta consistent with toDaemonPermissionMode', () => {
+  it('keeps engineMode on meta consistent with toEnginePermissionMode', () => {
     for (const id of DESKTOP_PERMISSION_MODE_IDS) {
-      expect(permissionModeMeta(id).engineMode).toBe(toDaemonPermissionMode(id));
-      expect(DESKTOP_TO_DAEMON[id]).toBe(toDaemonPermissionMode(id));
-      expect(resolveEnginePermissionMode(id)).toBe(toDaemonPermissionMode(id));
+      expect(permissionModeMeta(id).engineMode).toBe(toEnginePermissionMode(id));
+      expect(DESKTOP_TO_ENGINE[id]).toBe(toEnginePermissionMode(id));
+      expect(resolveEnginePermissionMode(id)).toBe(toEnginePermissionMode(id));
     }
     // PERMISSION_MODES 顺序与 id 表覆盖一致
     expect(PERMISSION_MODES.map((m) => m.id).sort()).toEqual(
@@ -287,20 +287,20 @@ describe('permissionModes sync', () => {
 
   it('desktop ↔ daemon round-trip is stable (deep collapses to ask)', () => {
     for (const id of DESKTOP_PERMISSION_MODE_IDS) {
-      const r = desktopDaemonRoundTrip(id);
+      const r = desktopEngineRoundTrip(id);
       expect(r.stable).toBe(true);
       if (id === 'deep') {
         expect(r.deepCollapses).toBe(true);
-        expect(r.daemon).toBe('ask');
+        expect(r.engine).toBe('ask');
         expect(r.back).toBe('ask');
       } else {
         expect(r.back).toBe(id);
         expect(r.deepCollapses).toBe(false);
       }
     }
-    const bad = desktopDaemonRoundTrip('not-a-mode');
+    const bad = desktopEngineRoundTrip('not-a-mode');
     expect(bad.stable).toBe(true);
-    expect(bad.daemon).toBe('ask');
+    expect(bad.engine).toBe('ask');
     expect(bad.back).toBe('ask');
   });
 
@@ -332,11 +332,11 @@ describe('permissionModes sync', () => {
       ['autopilot', 'auto'],
     ];
     for (const [alias, daemonMode] of daemonAliasExpectations) {
-      const desktop = fromDaemonPermissionMode(alias);
+      const desktop = fromEnginePermissionMode(alias);
       // unattended 族在桌面收成 ask（不暴露批处理）
       if (daemonMode === 'unattended') {
         expect(desktop).toBe('ask');
-        expect(toDaemonPermissionMode(desktop)).toBe('ask');
+        expect(toEnginePermissionMode(desktop)).toBe('ask');
         continue;
       }
       if (daemonMode === 'auto') {
@@ -347,10 +347,10 @@ describe('permissionModes sync', () => {
       // deep 桌面可保留 deep，但引擎仍是 ask
       if (alias === 'deep') {
         expect(desktop).toBe('deep');
-        expect(toDaemonPermissionMode('deep')).toBe('ask');
+        expect(toEnginePermissionMode('deep')).toBe('ask');
         continue;
       }
-      const engine = toDaemonPermissionMode(desktop);
+      const engine = toEnginePermissionMode(desktop);
       if (daemonMode === 'full-access') {
         expect(desktop).toBe('full');
         expect(engine).toBe('full-access');

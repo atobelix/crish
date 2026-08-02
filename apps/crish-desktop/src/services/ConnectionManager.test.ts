@@ -5,6 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Transport, TransportStatus } from '../api/transport';
 import { ConnectionManager } from './ConnectionManager';
+import { eventBus } from './EventBus';
 
 /** 可编程假 transport（模拟 onStatus / waitUntilConnected / isReady） */
 class FakeTransport implements Transport {
@@ -127,12 +128,28 @@ describe('ConnectionManager (transport 投影)', () => {
     expect(cm.getState().phase).toBe('ready');
   });
 
-  it('事件总线广播 daemon:connection:change（phase 随 ready 切换）', async () => {
+  it('事件总线广播 engine:connection:change（phase 随 ready 切换）', async () => {
     const received: string[] = [];
     const unsub = cm.onStateChange((s) => received.push(s.phase));
     transport.emitStatus('connected');
     transport.emitStatus('failed');
     unsub();
     expect(received).toEqual(['ready', 'recovering']);
+  });
+
+  it('发布/订阅一致性：eventBus 收得到 ConnectionManager 的 engine:connection:change（T05.7.3 ③）', async () => {
+    // 订阅方（bootstrap-services.ts）与发布方（ConnectionManager.emitEventBus）
+    // 必须使用同一个事件名字符串；本用例钉死该名，任何一侧改名即失败。
+    const phases: string[] = [];
+    const unsub = eventBus.on('engine:connection:change', (payload) => {
+      phases.push((payload as { phase?: string }).phase ?? '');
+    });
+
+    transport.emitStatus('connected');
+    transport.emitStatus('failed');
+    transport.emitStatus('disconnected');
+    unsub();
+
+    expect(phases).toEqual(['ready', 'recovering', 'disconnected']);
   });
 });

@@ -3,7 +3,7 @@
  * - 发现：项目 / 工作区 / 全局 skills 目录
  * - 解析 frontmatter + markdown 正文
  * - 激活态：localStorage 覆盖（T03.7：upsert/delete-scoped-context 幽灵命令已删，
- *   daemon 同步显式本地-only，daemonSynced 恒 false）
+ *   daemon 同步显式本地-only，engineSynced 恒 false）
  * - 斜杠命令：/skill:name 与 enableSkillCommands
  *
  * @see docs/plans/2026-07-product-trust-topdown.md §1.2 / §2
@@ -528,13 +528,13 @@ export async function discoverSkills(opts?: {
 export type SkillActivationResult = {
   ok: boolean;
   /** T03.7：scoped-context 仅本机保存，恒 false（显式本地-only） */
-  daemonSynced: boolean;
+  engineSynced: boolean;
   error?: string;
 };
 
 /**
  * 更新技能激活态：始终写入 localStorage（本机唯一真相）。
- * T03.7：引擎 scoped-context 通道已删，daemonSynced 恒 false（无引擎同步）。
+ * T03.7：引擎 scoped-context 通道已删，engineSynced 恒 false（无引擎同步）。
  */
 export async function setSkillActivation(
   skill: DesktopSkill,
@@ -547,7 +547,7 @@ export async function setSkillActivation(
     delete map[legacyId];
   }
   saveActivationMap(map);
-  return { ok: true, daemonSynced: false };
+  return { ok: true, engineSynced: false };
 }
 
 /** 批量同步到引擎：T03.7 后无引擎通道，恒 0/0（保留签名兼容调用方） */

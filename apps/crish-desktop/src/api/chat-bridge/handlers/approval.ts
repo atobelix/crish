@@ -2,10 +2,10 @@ import {
   parseErr,
   parseOk,
   type ParseResult,
-} from '../../daemonEventSchema';
+} from '../../engineEventSchema';
 import {
   safeParseApprovalResolved,
-} from '../../daemonEventZod';
+} from '../../engineEventZod';
 
 export type ApprovalResolvedFields = {
   toolCallId: string;

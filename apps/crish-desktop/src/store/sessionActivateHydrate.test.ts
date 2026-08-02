@@ -36,7 +36,7 @@ vi.mock('../api/projectStore', async (importOriginal) => {
 });
 
 vi.mock('../api/sessionEventHydrate', () => ({
-  hydrateSessionMessagesFromDaemon: (...args: unknown[]) =>
+  hydrateSessionMessagesFromEngine: (...args: unknown[]) =>
     hydrateMock(...args),
   mergeMessagesById: (
     existing: SessionMessage[],

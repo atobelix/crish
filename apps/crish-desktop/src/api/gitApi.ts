@@ -24,13 +24,13 @@ export type GitStatusFile = {
  * 稳定 reason 码（UI 分支用）：
  * - not-installed：本机无 git / 找不到可执行文件
  * - not-a-repo：有 git 但目录不是仓库
- * - timeout / daemon-offline / error / unavailable
+ * - timeout / engine-offline / error / unavailable
  */
 export type GitStatusReason =
   | 'not-installed'
   | 'not-a-repo'
   | 'timeout'
-  | 'daemon-offline'
+  | 'engine-offline'
   | 'error'
   | 'unavailable'
   | string;
@@ -56,7 +56,7 @@ export function classifyGitReason(raw?: string | null): GitStatusReason {
   if (!s) return 'unavailable';
   const lower = s.toLowerCase();
   if (s === 'timeout' || lower.includes('timeout')) return 'timeout';
-  if (s === 'daemon-offline' || lower.includes('daemon')) return 'daemon-offline';
+  if (s === 'engine-offline') return 'engine-offline';
   if (
     lower.includes('not a git repository') ||
     lower.includes('not inside a git work tree') ||
@@ -112,7 +112,7 @@ export function gitStatusUserMessage(result: Pick<GitStatusResult, 'found' | 're
         hint: '仓库过大或引擎忙碌，可稍后重试',
         action: 'retry',
       };
-    case 'daemon-offline':
+    case 'engine-offline':
       return {
         title: '引擎未连接',
         hint: '等待引擎就绪后自动可查；也可点刷新',
