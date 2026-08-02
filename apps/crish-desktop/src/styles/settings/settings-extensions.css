@@ -18,11 +18,6 @@
 .settings-pane--extensions .settings-head-tools {
   gap: var(--space-1_5);
 }
-.settings-pane--extensions .ui-btn-secondary,
-.settings-pane--extensions .ui-btn-ghost {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
-}
-
 .ext-toolbar,
 .ext-toolbar--one {
   display: flex;

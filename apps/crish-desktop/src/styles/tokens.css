@@ -88,6 +88,19 @@ html[data-theme="light"] {
   --accent-danger: var(--color-error);
   --warning-color: var(--color-warning);
 
+  /* 文本语义色：--text-danger/--text-success 供模块文本/图标使用（映射 --color-* 语义值） */
+  --text-danger: var(--color-error);
+  --text-success: var(--color-success);
+  /* 危险按钮前景色（红底白字；--text-on-accent 在深色主题解析为深色，不适用） */
+  --text-on-danger: #ffffff;
+  /* 状态诊断面板文本色（值保持与历史 fallback 一致，避免渲染漂移） */
+  --ui-text-success: #2f9e44;
+  --ui-text-danger: #e03131;
+  --ui-text-muted: #868e96;
+  --ui-text-info: #1971c2;
+  --ui-text-warning: #e8590c;
+  --ui-text-primary: inherit;
+
   /* Windows caption close (shared by app top bar + inset chrome) */
   --window-close-bg: #e81123;
   --window-close-fg: #c50f1f;
@@ -120,6 +133,25 @@ html[data-theme="light"] {
   --terminal-cmd: var(--text-primary);
   --terminal-prompt: #4ade80; /* classic terminal prompt green */
   --terminal-bar-fill: color-mix(in srgb, var(--shadow-color) 3%, transparent);
+
+  /* xterm 终端 16 色调色板：TerminalCard.xterm.tsx 读取；值保持与历史硬编码一致 */
+  --xterm-black: #1e1e1e;
+  --xterm-red: #f87171;
+  --xterm-green: #4ade80;
+  --xterm-yellow: #fbbf24;
+  --xterm-blue: #60a5fa;
+  --xterm-magenta: #c084fc;
+  --xterm-cyan: #22d3ee;
+  --xterm-white: #e5e5e5;
+  --xterm-bright-black: #6b7280;
+  --xterm-bright-red: #fca5a5;
+  --xterm-bright-green: #86efac;
+  --xterm-bright-yellow: #fde68a;
+  --xterm-bright-blue: #93c5fd;
+  --xterm-bright-magenta: #d8b4fe;
+  --xterm-bright-cyan: #67e8f9;
+  --xterm-bright-white: #f9fafb;
+  --xterm-selection: rgba(255, 255, 255, 0.18);
 
   /* macOS traffic-light chrome (decorative terminal mockups) */
   --mac-dot-red: #ff5f56;
@@ -240,10 +272,7 @@ html[data-theme="light"] {
   --letter-spacing-tighter: -0.02em;
   --letter-spacing-tightest: -0.025em;
 
-  /* 层级与断Token 体系 */
-  /* --z-dropdown: 2000; — see z-index.css for canonical value */
-  --z-modal: 5000;
-  --z-tooltip: 9999;
+  /* 层级变量统一以 styles/z-index.css 为唯一真源（TS 侧 tokens/zindex.ts 由 check:zindex 校验） */
 
   --breakpoint-sm: 640px;
   --breakpoint-md: 768px;
@@ -286,8 +315,6 @@ html[data-theme="light"] {
   --space-12: 48px;
   --space-16: 64px;
   --space-0: 0px;
-  --space-0.5: 2px;
-  --space-1.5: 6px;
 
   /*
    * 行高：中?UI 略抬 body，避免汉字行贴；控件/标签?tight|ui

@@ -152,6 +152,16 @@ export {
   fromPromise,
   promiseResult,
 } from './errors/result';
+// 错误序列化（与 dist 导出对齐：error-translation.ts / tauriInvoke 消费）
+export {
+  CRISH_ERROR_CAUSE_MAX_DEPTH,
+  toErrorPayload,
+  fromErrorPayload,
+  fromUnknownError,
+  makeErrorPayload,
+  codeFromHttpStatus,
+} from './errors/serialize';
+export type { CrishErrorPayload } from './errors/serialize';
 
 // Provider 默认配置
 export type {

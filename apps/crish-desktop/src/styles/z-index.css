@@ -27,6 +27,7 @@
 
   /* ── 模态与通知 ── */
   --z-modal-backdrop: 9000;
+  --z-tooltip: 9999;
   --z-context-menu: 9500;
   --z-toast: 10000;
   --z-drag-overlay: 10010;

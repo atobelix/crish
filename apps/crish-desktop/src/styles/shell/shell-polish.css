@@ -963,8 +963,6 @@ body {
 }
 
 /* --- 1. COMPACT SIZE FLOATING MENUS --- */
-.settings-select-menu,
-.settings-select-menu--portal,
 .files-open-menu,
 .files-more-menu,
 .chat-more-menu,
@@ -983,7 +981,6 @@ body {
 }
 
 /* Compact Menu Items */
-.settings-select-item,
 .files-open-item,
 .files-more-item,
 .chat-more-item,
@@ -1058,7 +1055,6 @@ body {
 }
 
 /* --- 3. COMMON HOVER & ACTIVE/SELECTED INTERACTION STATES --- */
-.settings-select-item:hover,
 .files-open-item:hover,
 .files-more-item:hover,
 .chat-more-item:hover,
@@ -1076,7 +1072,6 @@ body {
 }
 
 /* Active / Selected items */
-.settings-select-item.is-active,
 .sort-filter-option.is-on,
 .perm-menu-item.is-selected,
 .pp-row.is-selected {
@@ -1112,7 +1107,6 @@ body {
 }
 
 /* Special styling for icon coloring inside menu items */
-.settings-select-item svg,
 .files-open-item svg,
 .files-more-item svg,
 .chat-more-item svg,

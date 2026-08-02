@@ -21,6 +21,7 @@ export const Z_DRAG_HIGHLIGHT = 1020;
 export const Z_DRAG_CARD = 1030;
 
 export const Z_MODAL_BACKDROP = 9000;
+export const Z_TOOLTIP = 9999;
 export const Z_CONTEXT_MENU = 9500;
 export const Z_TOAST = 10000;
 export const Z_DRAG_OVERLAY = 10010;

@@ -1596,11 +1596,6 @@ html[data-theme="dark"] .models-tab .models-btn--use {
 
 
 /* 濞喡ゎ洣閹稿鎸抽幓蹇氱1% */
-.settings-pane--modern .ui-btn-secondary,
-.settings-pane--modern .ui-btn-ghost {
-  border-color: var(--settings-border);
-}
-
 /* models-tab閿涙艾宸遍崚鑸靛伎鏉堥€涚瑝鐡掑懓锟11%閿涘牐顩惄鏍у坊閸欐彃褰旂仦鍌︾ */
 .models-tab {
   --models-border: color-mix(in srgb, var(--text-primary) 7%, transparent);

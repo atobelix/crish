@@ -129,11 +129,6 @@
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
 }
-.settings-pane--usage .ui-btn-ghost,
-.settings-pane--usage .ui-btn-secondary {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
-}
-
 /* 閻庤鐭悳顖炲箮濡搫缍?*/
 .settings-pane--usage .settings-usage-prices {
   border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);

@@ -298,11 +298,6 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   gap: var(--space-1_5);
   max-width: min(440px, 60%);
 }
-.settings-pane--security .ui-btn-secondary,
-.settings-pane--security .ui-btn-ghost {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
-}
-
 @media (max-width: 640px) {
   .settings-pane--security .settings-list-row--security {
     flex-wrap: wrap;
@@ -474,10 +469,6 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
   box-shadow: none;
 }
-.settings-pane--rules .ui-btn-secondary,
-.settings-pane--rules .ui-btn-ghost {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
-}
 .settings-pane--rules .ui-btn.danger:hover {
   color: var(--accent-red);
 }
@@ -567,11 +558,6 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
 }
-.sched-settings .ui-btn-secondary,
-.sched-settings .ui-btn-ghost {
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
-}
-
 /* 閺傛澘缂撻崣宀冪熅 */
 .sched-settings .settings-create-paths {
   display: grid;
