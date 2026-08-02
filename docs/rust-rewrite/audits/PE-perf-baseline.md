@@ -130,11 +130,66 @@
 
 ## 3. 复测对照表（T09.2/T09.3/T09.4/T09.6 落地后回填）
 
-| 任务                   | 预期变化                                          | 改前基线                | 复测                                                                                                                           |
-| ---------------------- | ------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| T09.2（P2 克隆消除）   | push_per_event 每事件耗时下降（深克隆 2→0）       | 7.2 µs（10KB 单条）     | —                                                                                                                              |
-| T09.3（P3 借用/Arc）   | provider_request 保持 O(1)；record_message 弱相关 | 129-141 ps / 324-405 ns | —                                                                                                                              |
-| T09.4（P6 增量接线）   | 前端 commit 写放大 O(n)→O(k)                      | 112×（1.3 节）          | —                                                                                                                              |
-| T09.6（P8 审批并行）   | approval_model_a 309.9ms → ≈62ms                  | 309.9 ms                | **62.1 ms**（-79.95%，已达标；2026-08-02 复测：no_approval 62.0ms / approval_model_a 62.1ms，批延迟 = max(工具耗时) + 审批链） |
-| T09.5（P7 分页下推）   | 页首查询 O(n)→O(limit)（另行量化，暂未设基准）    | —                       | —                                                                                                                              |
-| P5（帧解析，另立任务） | chat_delta 每帧 <2.9 µs                           | 2.9 µs/帧               | —                                                                                                                              |
+| 任务                   | 预期变化                                          | 改前基线                | 复测（2026-08-02 T09.10 收口复测）                                                                                                                                                                                        |
+| ---------------------- | ------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| T09.2（P2 克隆消除）   | push_per_event 每事件耗时下降（深克隆 2→0）       | 7.2 µs（10KB 单条）     | **8.1-8.5 µs**（低噪声采样；drive_outcome 1KB 71.7µs 持平基线 70.4µs；+14% 在机器噪声内，见 §4 噪声说明）                                                                                                                |
+| T09.3（P3 借用/Arc）   | provider_request 保持 O(1)；record_message 弱相关 | 129-141 ps / 324-405 ns | **139-149 ps**（100/1000/5000 消息持平，O(1) 保持）；record_message **322/376 ns**（1KB/10KB）；consume 1000 **61.2 µs**（61 ns/token，基线 57.1µs）；Arc 身份零拷贝断言全绿 |
+| T09.4（P6 增量接线）   | 前端 commit 写放大 O(n)→O(k)                      | 112×（1.3 节）          | **⚠ 未接线（遗留）**：append_session_messages 命令未注册（manifest `registered=false`，session_commands.rs 无实现，main.rs 未挂）；G4 端到端未达成，登记见 §5 |
+| T09.6（P8 审批并行）   | approval_model_a 309.9ms → ≈62ms                  | 309.9 ms                | **61.9 ms**（-80.0%，已达标；2026-08-02 复测：no_approval 62.0ms / approval_model_a 61.9ms，批延迟 = max(工具耗时) + 审批链）                                                                                            |
+| T09.5（P7 分页下推）   | 页首查询 O(n)→O(limit)（另行量化，暂未设基准）    | —                       | **⚠ 未实现（遗留）**：Store::query_events 无 limit 参数（persist.rs:169 两参签名），调用处全量读 + 内存 paginate；conex-db SQL LIMIT 已支持但传 None（persist.rs:672），登记见 §5 |
+| P5（帧解析，另立任务） | chat_delta 每帧 <2.9 µs                           | 2.9 µs/帧               | **1.0 µs/帧**（顺带复测 1.00ms/1000 帧，优于基线；text_framing 1.40/4.60ms，均优于基线）                                                                                                                                 |
+
+## 4. T09.10 回归收口复测记录（2026-08-02）
+
+### 4.1 首 token（F1 三测量点之 600ms / 300ms 复测）
+
+| 测量点                                  | 基线（T09.7） | T09.10 复测 | 状态 |
+| --------------------------------------- | ------------- | ----------- | ---- |
+| session-loop 慢速流：首条 delta 到达事件桥 | 502.6 ms      | **503.7 ms** | ✓ <600ms（5.04s 全流时长保持，增量路径不缩短流） |
+| agent-provider mock SSE：请求 → 首事件  | 510.8 ms      | **510.5 ms** | ✓ <600ms（首字节 510.5ms / 首帧 510.5ms，总 6.17s） |
+| 300ms 内部基准：流产出 → 事件桥处理耗时 | 43.2 µs       | **31.3 µs**  | ✓ 远低于 300ms（仅记录，不作验收门） |
+
+### 4.2 基准复测（Criterion，快速模式参数）
+
+| 基准        | 场景                   | 基线中位数 | T09.10 复测中位数 | 状态 |
+| ----------- | ---------------------- | ---------- | ----------------- | ---- |
+| tool_batch  | no_approval 并行 5×50ms | 62.2 ms    | 62.0 ms           | ✓ 持平 |
+| tool_batch  | approval_model_a 5×50ms | 309.9 ms   | **61.9 ms**       | ✓ 已达标（-80.0%） |
+| event_chain | drive_outcome 1KB      | 70.4 µs    | 71.7 µs           | ✓ 持平 |
+| event_chain | drive_outcome 10KB     | 71.9 µs    | 78-97 µs（多次运行区间） | ⚠ 噪声内（±50% 波动，见 4.3） |
+| event_chain | push_per_event 10KB    | 7.2 µs     | 8.1-8.5 µs（低噪声采样） | ✓ 噪声内 |
+| request_build | provider_request 100/1000/5000 | 141/129/134 ps | 145.6/149.2/139.1 ps | ✓ O(1) 保持 |
+| request_build | record_message 1KB/10KB | 324/405 ns | 322.5/376.2 ns | ✓ 持平 |
+| request_build | consume 1000 TextDelta | 57.1 µs    | 61.2 µs            | ✓ 持平（61 ns/token） |
+| db_write    | save_full 100/1000/5000 | 1.49/14.25/80.17 ms | 1.37/17.04/80.64 ms | ✓ 持平（1000 档 +20% 噪声） |
+| db_write    | append +1/+10/+100    | 127/252 µs / 2.52 ms | 84.0/202.8 µs / 1.93 ms | ✓ 更优 |
+| sse_parse   | text_framing 1KB/16KB  | 3.39/8.39 ms | 1.40/4.60 ms       | ✓ 更优（非本域，顺带复测） |
+| sse_parse   | chat_delta 1000 帧     | 2.93 ms    | 1.00 ms            | ✓ 更优（1.0 µs/帧） |
+
+### 4.3 测量环境噪声说明（重要）
+
+- 复测期间机器背景进程活跃（Chrome 多进程 / QQPC / msedgewebview2 等），
+  Criterion 同参数多次运行 event_chain 波动达 ±50%（1KB 档 69-190µs、
+  10KB 档 78-202µs、push 档 8-17µs 均出现过）；单独低并发运行时低值端
+  与基线一致。**结论：全部基准无超量级回归信号；event_chain 10KB 档
+  （+24~35%）与 save_full 1000 档（+20%）判为噪声，待低负载时段复测确认**，
+  登记见 §5 L3。
+- 记录口径：本表取「独立运行、低并发」的中位数；与基线同机同参数
+  （快速模式 `--measurement-time 1~3 --warm-up-time 0.2~0.5 --sample-size 20~30`）。
+- 注意：criterion 默认参数（长测量时间）在本机持续负载下会触发 CPU
+  降频，数值系统性偏高（event_chain 1KB 达 190µs），对照基线须用快速模式。
+
+## 5. 遗留登记（T09.10 收口，未完成项）
+
+| # | 项 | 状态证据 | 影响 | 后续归属 |
+| - | -- | -------- | ---- | -------- |
+| L1 | **T09.4 前端 commit 增量未接线**：append_session_messages 命令仅 manifest 登记（`registered=false`，command_manifest.rs:150），session_commands.rs 无实现、main.rs 未注册；sessionRustDb.ts 无 appendSessionMessages，commit 仍全量 saveSessionBody | G4 端到端写放大未达成（DB 侧 append API 已就绪，lib.rs:965） | 写放大比维持全量路径（实测 1000 条会话 save_full ≈ 17ms vs append +1 ≈ 84µs，仍 ~200×） | PE-09 后续轮次接线（T09.4.1/T09.4.2），与 PE-08 串行约束保持 |
+| L2 | **T09.5 SQL 分页下推未实现**：Store::query_events 无 limit 参数（persist.rs:169）；core_read_session_events/read_run_events 全量读 + 内存 paginate（core_query_commands.rs:429/477）；conex-db SQL LIMIT 已支持但 LocalDbStore 传 None（persist.rs:672） | G5 首页查询仍 O(n) | 长会话首页查询全量读 + 逐条 JSON 重建；翻页语义正确但开销未消除 | 按 T09.5.1 步骤 1-7 落地（含 restore 传 None、run 边界切点测试） |
+| L3 | 基准噪声：机器背景负载导致 event_chain/save_full 部分档位波动 ±50%，10KB 档无法定论 | 见 §4.3 | 复测对照精度受限 | 低负载时段或专用机器复测，更新 §3 对照表 |
+| L4 | clippy 既有告警（非本任务新增）：conex-db/search/sandbox 等 lib 告警；workbench 未接线命令死代码（workbench_profile_secret_* / provider_status 等，与 L1 同类：命令登记先行未接线） | `cargo clippy --workspace --all-targets` | 无功能影响 | 随 PE-07/PE-09 接线消除；本任务零代码改动，无新增告警 |
+
+> 已验证未回归项（收口结论）：T09.1 增量流（ttfb 600ms 硬断言）、T09.2 事件克隆
+> （by value 零克隆代码审查 + roundtrip）、T09.3 对话克隆（Arc 身份零拷贝测试）、
+> T09.6 审批并行（61.9ms）、T09.9 abort 三修复（14+ 测试）、压力测试
+> （stress_long_session / stress_concurrent_runs / stress_write）、
+> `cargo test --workspace` 全绿。

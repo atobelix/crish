@@ -152,10 +152,19 @@
 |---|---|
 | 23-architecture-hardening-plan.md（本文件，总纲） | ✅ 已建立 |
 | 24/25/26-markdown-streaming/ipc-contract/frontend-observability-audit.md | ✅ 审计完成 |
-| audits/AA-01 至 AA-08（八份代码审查，217 问题） | ✅ 审查完成 |
+| audits/AA-01 至 AA-08（八份代码审查，217 问题） | ✅ 审查完成（问题已全部落任务或登记） |
 | audits/AU-01 至 AU-03（交叉/覆盖/可执行性审计） | ✅ 审计完成 |
-| audits/AU-04-interface-freeze-decisions.md（接口冻结与去重裁决） | ✅ 裁决完成 |
-| plans/PE-01 至 PE-12（十二份执行任务书，v2，共约 580KB） | ✅ 全部可执行（PE-12 经 30 号归一） |
-| 30-phase-e-master-execution.md（主执行方案：轮次规划 E0-E8、调度规则、验收清单） | ✅ 已建立 |
-| 31-security-baseline.md（安全基线） | ⬜ E5 轮产出 |
-| 32-upgrading-migration.md（升级迁移文档） | ⬜ E7 轮产出 |
+| audits/AU-04-interface-freeze-decisions.md（接口冻结与去重裁决） | ✅ 裁决完成；契约测试覆盖矩阵已落盘 contracts/ |
+| plans/PE-01 至 PE-12（十二份执行任务书，v2） | ✅ 全部执行完毕（PE-12 归一后仅 T12.8 生效） |
+| 30-phase-e-master-execution.md（主执行方案 E0-E8） | ✅ E0-E8 全部完成（2026-08-01） |
+| 31-security-baseline.md（安全基线） | ✅ 已发布（T07.7） |
+| 32-upgrading-migration.md（升级迁移文档） | ✅ 已产出（UPGRADING.md） |
+| 33-event-schema-changelog.md（事件 schema 版本化） | ✅ 已产出（T03.10） |
+| 34-cleanup-closure.md（清理收尾清单） | ✅ 已产出（T06.13/T05.8） |
+
+## 6. Phase E 执行总结（2026-08-01）
+
+- **审查**：8 份代码审查（217 问题）+ 3 份方案审计 + 1 份接口冻结裁决
+- **执行**：12 份任务书、约 60+ 子任务、E0-E8 八轮（每轮 4-8 个并行 Agent）
+- **成果**：阻塞 5（门禁绕过/沙箱根/会话落库/级联删除/cancel-siblings）全修复；锁中毒 37 处、命令门禁三层管线、沙箱真源化、密钥 DPAPI 迁移、MCP socket 加固；流式 markdown 增量渲染（首 token 2.44s→817ms）、审批并行 -80%、克隆 O(n²)→O(1)；命令契约面 69 条与 manifest 零漂移、全命令 CoreError、事件 schemaVersion；Rust 日志落地 + span 注入；ui 原子层 7 组件 + 弹窗/菜单收敛 + 10 大组件拆分 + 136 文件目录化 + 命名归零；测试体系（契约测试 33+、压力 11、基准 5、e2e 7 spec、三层 CI）
+- **遗留**：T09.4/T09.5 性能项、前端 4 个基线失败、2 个快照待更新（均已文档化登记）

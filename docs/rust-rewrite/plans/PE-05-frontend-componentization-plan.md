@@ -18,6 +18,7 @@
 | T05.7 重命名时序（C17） | 声明与 PE-01 T04.3 / PE-06 T06.8 组 2 的时序：两书用旧名开发，本任务末轮统一改名；发布/订阅一致性单测由本任务负责 |
 | 新增 T05.9 | 视觉回归门禁（认领表 #3）——**引用 PE-11 T11.2**（PE-11 已产出完整测试策略任务书 T11.1/T11.2），本任务只确认配合义务与 owner，不另建基线体系 |
 | T05.8 删行 | LoggerService 行删除（PE-04 T04.4-1 接线，本域不回收） |
+| T05.7 落地 v3（2026-08-02） | 执行 T05.7 文件清单冻结（清单落盘 `plans/T05.7-filelist.md`）：目录 `api/daemon-chat-bridge/` → `api/chat-bridge/`；8 个 daemon 命名文件改 engine/chat 名；事件名 `'daemon:connection:change'` → `'engine:connection:change'`（内部 eventBus，非 wire，发布/订阅两侧同改 + 一致性单测）；agent-workbench 侧核查为 wire 契约层（引擎 daemon 存活：`update_daemon_config`、`workbench_restart_daemon`、`DAEMON_DISCONNECTED_CODE`、`network.daemon_dead`），**豁免不改**（wire 层不动）；`daemonSynced`/`daemon-offline`/`daemon-error` 等非 wire 标识符随批替换；`DAEMON_WS_KEY` 死码删除 |
 
 ---
 

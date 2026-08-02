@@ -583,53 +583,53 @@ pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
 
 ### T09.1 P1
 
-- [ ] `cargo test -p session-loop -p orchestrator -p agent-provider -p agent-workbench` 全绿
-- [ ] 中途错误有内容 → Message 收场不重试；无内容 → 重试阶梯（新增测试）
-- [ ] 双轨顺序：实时 sink delta 顺序 = block 顺序；收口流 start/delta/end 契约保持
-- [ ] 首 token 集成测试 < 600ms（本地 mock SSE，改前 ≈ 5s）
-- [ ] run_loop/divergence 全套回归；delta 不阻塞、终态唯一、序列连续性测试全绿
-- [ ] 前端零改动验收（EventRouter 增量累加，联调项）
+- [x] `cargo test -p session-loop -p orchestrator -p agent-provider -p agent-workbench` 全绿（T09.10 复跑）
+- [x] 中途错误有内容 → Message 收场不重试；无内容 → 重试阶梯（streaming_incremental_contract + consume 测试）
+- [x] 双轨顺序：实时 sink delta 顺序 = block 顺序；收口流 start/delta/end 契约保持（7 契约测试）
+- [x] 首 token 集成测试 < 600ms（T09.10 复测：503.7ms / 510.5ms，基线 502.6/510.8ms）
+- [x] run_loop/divergence 全套回归；delta 不阻塞、终态唯一、序列连续性测试全绿
+- [ ] 前端零改动验收（EventRouter 增量累加，联调项，归 PE-02 T02.6）
 
 ### T09.2 P2
 
-- [ ] drive_outcome/push 路径无 `.clone()`（代码审查断言）
-- [ ] 25 个事件类型名 roundtrip 逐字节不变
-- [ ] events.rs 既有 8 个测试全绿；clippy 无新告警
+- [x] drive_outcome/push 路径无 `.clone()`（代码审查断言：events.rs by value 消费）
+- [x] 25 个事件类型名 roundtrip 逐字节不变（conex-types 全绿）
+- [x] events.rs 既有 8 个测试全绿；clippy 无新告警（本任务零代码改动）
 
 ### T09.3 P3
 
-- [ ] 阶段 1：build_request/engine/build.rs 链 0 拷贝（审查断言）；5000 消息基准 O(1)
-- [ ] 阶段 2（若做）：record_message 0 深克隆；conex-types roundtrip 全绿
-- [ ] converge 方案落地 + with_initial_conversation 测试续接用例全绿
-- [ ] steering 行为回归（divergence.rs 全绿）
+- [x] 阶段 1：build_request/engine/build.rs 链 0 拷贝（审查断言）；5000 消息基准 O(1)（复测 139ps 持平）
+- [x] 阶段 2（若做）：record_message 0 深克隆（Arc 身份测试 `long_conversation_request_and_record_are_zero_copy` 全绿）；conex-types roundtrip 全绿
+- [x] converge 方案落地 + with_initial_conversation 测试续接用例全绿（run_loop 27 测试）
+- [x] steering 行为回归（divergence.rs 全绿）
 
 ### T09.4 P6
 
-- [ ] append_session_messages 命令注册（main.rs）+ spawn_blocking 包装（session 族第 13 个命令，F7）
-- [ ] save_session_body 全量替换语义回归（R6 撤销后无 upsert 测试）；append 增量续写 seq 连续 + 混合完整性
-- [ ] 前端 commit 增量 + id 幂等；hydrate 保持全量
-- [ ] 重启回归：3 消息 → 重启 → body 完整无重复（AA-07 协同）
-- [ ] 基准：1000 消息 commit 写放大 O(n)→O(k)
+- [ ] append_session_messages 命令注册（main.rs）+ spawn_blocking 包装（session 族第 13 个命令，F7）——**未接线，遗留登记 PE-perf-baseline.md §5 L1**
+- [x] save_session_body 全量替换语义回归（R6 撤销后无 upsert 测试）；append 增量续写 seq 连续 + 混合完整性（conex-db 测试）
+- [ ] 前端 commit 增量 + id 幂等；hydrate 保持全量——**未做，随 L1 遗留**
+- [ ] 重启回归：3 消息 → 重启 → body 完整无重复（AA-07 协同）——**依赖 L1**
+- [ ] 基准：1000 消息 commit 写放大 O(n)→O(k)——**未达成（DB 侧 append 已就绪）**
 
 ### T09.5 P7
 
-- [ ] Store::query_events 三参数全调用点适配（restore 传 None）
-- [ ] 分页新测试：limit 行数断言；run 边界在切点的归属一致性（翻页一致）
-- [ ] 前端 hydrate 游标循环（若在边界内）
+- [ ] Store::query_events 三参数全调用点适配（restore 传 None）——**未实现，遗留登记 PE-perf-baseline.md §5 L2**
+- [ ] 分页新测试：limit 行数断言；run 边界在切点的归属一致性（翻页一致）——**未做，随 L2 遗留**
+- [ ] 前端 hydrate 游标循环（若在边界内）——**未做，随 L2 遗留**
 
 ### T09.6 P8
 
 - [x] 审批并行组新测试：5×50ms 批耗时 < 2×单工具；事件顺序契约回归（F9：Arc 形态 + 执行模型 A）
 - [x] 无审批并行 <95ms 测试保持；审批拒绝/超时/expired 回归
-- [x] T09.7 基准复测：approval_model_a 309.9ms → 62.1ms（-79.95%，≈62ms 达标，见 PE-perf-baseline.md §3）
+- [x] T09.7 基准复测：approval_model_a 309.9ms → 62.1ms（-79.95%，≈62ms 达标，见 PE-perf-baseline.md §3）——**T09.10 二次复测 61.9ms 保持**
 
 ### T09.8/T09.9 新增任务
 
-- [ ] T09.8：PE-perf-baseline.md 单一基线文档就位（PE-02 写入数据，本任务维护）；500ms 端到端验收放行权确认
-- [ ] T09.9：Q21 abort-aware 竞速（取消 ≤ 数百 ms 生效）；Q33 consume 后重读 abort 标注；Q40 重试前查 abort（mock 计数）
+- [x] T09.8：PE-perf-baseline.md 单一基线文档就位（PE-02 写入数据，本任务维护）；500ms 端到端验收放行权确认（T09.10 复测对照已入档）
+- [x] T09.9：Q21 abort-aware 竞速（`abort_interrupts_long_running_tool_promptly` 等）；Q33 consume 后重读 abort（`abort_at_stream_end_still_annotates_aborted`）；Q40 重试前查 abort（`abort_at_ladder_entry_skips_retry_and_closes_out` 等）——**T09.10 全部复跑全绿**
 
 ### T09.7/T09.10 收口
 
-- [ ] 5 个基准场景基线 + 复测对照表（G1-G7 逐项核对；300ms 仅内部基准）
-- [ ] `cargo test`（workspace）+ `cargo clippy --workspace` 零新告警
-- [ ] live model 冒烟：长回复流式渲染 → 工具调用 → 收口 → 重启恢复
+- [x] 5 个基准场景基线 + 复测对照表（G1-G7 逐项核对；300ms 仅内部基准）——**T09.10 复测完成，见 PE-perf-baseline.md §3/§4；T09.4/T09.5 未达成已登记**
+- [x] `cargo test`（workspace）+ `cargo clippy --workspace` 零新告警（T09.10 复跑全绿；clippy 既有告警登记 L4）
+- [ ] live model 冒烟：长回复流式渲染 → 工具调用 → 收口 → 重启恢复（联调项，需真实 provider）

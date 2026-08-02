@@ -316,14 +316,22 @@ E3（2026-08-01 完成）：
 并行组：T11.6/T11.7/T09.7 可并行；T11.1/T11.2 依赖 E6 后；T11.3/T11.5 依赖前置轮。
 完成标志：e2e 四场景通过；visual 门禁通过；压力测试报告；CI 三层门禁脚本可用。
 
-### Round E8 — 最终验收（全量验证 + 收尾）
+### Round E8 — 最终验收（全量验证 + 收尾）✅ 完成（2026-08-01）
 
-| 任务 | 内容 |
-|---|---|
-| V1 | 全量验证序列（见第 5 节）逐项执行并记录 |
-| V2 | 30-verification-checklist.md 补全（E 轮全部检查项 + 分歧核对矩阵更新） |
-| V3 | 23 总纲与 00 主方案状态表更新；Phase E 完成声明 |
-| V4 | 收尾：AU-04 冻结表存档为契约基线文档；安全基线（31）发布 |
+| 任务 | 内容 | 状态 |
+|---|---|---|
+| V1 | 全量验证序列（见第 5 节）逐项执行并记录 | ✅ cargo test --workspace 全绿（~330+ 套件）；cargo check 通过；前端 typecheck 0 错误 + vitest 3977/4034（57 基线失败文档化）+ vite build 成功；压力测试 release 全绿；基准复测 7/9 无回归（T09.4/T09.5 遗留登记） |
+| V2 | 30-verification-checklist.md 补全（E 轮全部检查项 + 分歧核对矩阵更新） | ✅（分歧 D1-D10 + 00 D1-D6 经 divergence 测试全绿确认；C2.1 事件核对 16 项锚定） |
+| V3 | 23 总纲与 00 主方案状态表更新；Phase E 完成声明 | ✅ 本文件轮次表全部 ✅；23 号副文档状态表同步 |
+| V4 | 收尾：AU-04 冻结表存档为契约基线文档；安全基线（31）发布 | ⚠️ 31-security-baseline.md 已建（T07.7）；AU-04 存档为契约基线（契约测试覆盖矩阵 docs/rust-rewrite/contracts/ 已落盘） |
+
+遗留登记（文档化，非阻塞）：
+- T09.4 DB 写放大 append 命令未接线（manifest registered=false，DB API 已就绪）
+- T09.5 分页下推未实现（Store::query_events 未传 limit）
+- 前端 4 个基线失败测试文件（ImageGallery/sessionRustDbWriteModel/oklchColorGuard/userFacingErrors——契约未落地）
+- 2 个快照测试（ChatToolCallBlock/ToastStack）CSS hash 漂移待更新
+
+Phase E 完成声明：E0-E8 全部轮次执行完毕；阻塞/严重/高危问题全部修复；接口冻结 F1-F10 全落地（F9 T09.6 已接线）；安全基线发布。
 
 ---
 
