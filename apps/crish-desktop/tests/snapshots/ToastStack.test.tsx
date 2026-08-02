@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
-import { ToastStack } from '../../src/components/ToastStack';
+import { ToastStack } from '../../src/components/overlay/ToastStack';
 import type { AppToast } from '../../src/services/ToastBus';
 
 const baseToast: AppToast = {
