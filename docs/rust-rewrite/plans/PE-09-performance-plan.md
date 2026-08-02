@@ -10,10 +10,10 @@
 
 ## 修订记录
 
-| 版本 | 日期 | 修订依据 | 要点 |
-|---|---|---|---|
-| v1 | 2026-08-01 | — | 初版 |
-| v2 | 2026-08-01 | **AU-04 接口冻结裁决** | ① T09.1.1：契约引用 PE-02 §3.1 SoT（F1 冻结 v1），别名统一 `ProviderStreamItem`（弃 `StreamItem`）+ `ProviderEventStream`；`ProviderRequest<'a>` 生命周期照旧；T09.1.3 验收显式引用锚点 `crates/session-loop/tests/streaming_incremental_contract.rs`；首 token 阈值按 F1 三测量点（600ms 集成硬断言 / 500ms 端到端归 PE-02 T02.6 / 300ms 降为 T09.7 内部基准，G1 目标改写）；② T09.4.1：**删除 save_session_body 改 upsert**（F7，R6 撤销），保留 append_session_messages 命令（session 族第 13 个，唯一负责本任务；PE-08 提供底层增量 API + manifest 登记），hydrate 保留全量；③ T09.5 与 PE-08 T08.x 串行声明；④ T09.6 按 F9 冻结（Arc<dyn> 跨 async 边界 + 执行模型取定 A）；⑤ 新增 **T09.8「首 token 总验收 owner」**（原 T09.8 复测顺延为 **T09.10**）；新增 **T09.9「abort 时序三修复」（Q21/Q33/Q40，认领表 #1，T09.1 之后执行）**；⑥ 基线文档合并为单一 `docs/rust-rewrite/audits/PE-perf-baseline.md`（T09.7 维护，PE-02 写入）；⑦ P11 压缩「后续域」改「登记不做」（认领表 #16）；⑧ 同文件串行声明：streaming.rs/handlers/mod.rs 与 PE-06、transport/mod.rs 与 PE-10（依赖升级先行）、tool_exec.rs 与 PE-06 T06.1（PE-06 先行）；criterion 0.5 依赖增量统一由 PE-10 管理（只提需求） |
+| 版本 | 日期       | 修订依据               | 要点                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ---- | ---------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v1   | 2026-08-01 | —                      | 初版                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| v2   | 2026-08-01 | **AU-04 接口冻结裁决** | ① T09.1.1：契约引用 PE-02 §3.1 SoT（F1 冻结 v1），别名统一 `ProviderStreamItem`（弃 `StreamItem`）+ `ProviderEventStream`；`ProviderRequest<'a>` 生命周期照旧；T09.1.3 验收显式引用锚点 `crates/session-loop/tests/streaming_incremental_contract.rs`；首 token 阈值按 F1 三测量点（600ms 集成硬断言 / 500ms 端到端归 PE-02 T02.6 / 300ms 降为 T09.7 内部基准，G1 目标改写）；② T09.4.1：**删除 save_session_body 改 upsert**（F7，R6 撤销），保留 append_session_messages 命令（session 族第 13 个，唯一负责本任务；PE-08 提供底层增量 API + manifest 登记），hydrate 保留全量；③ T09.5 与 PE-08 T08.x 串行声明；④ T09.6 按 F9 冻结（Arc<dyn> 跨 async 边界 + 执行模型取定 A）；⑤ 新增 **T09.8「首 token 总验收 owner」**（原 T09.8 复测顺延为 **T09.10**）；新增 **T09.9「abort 时序三修复」（Q21/Q33/Q40，认领表 #1，T09.1 之后执行）**；⑥ 基线文档合并为单一 `docs/rust-rewrite/audits/PE-perf-baseline.md`（T09.7 维护，PE-02 写入）；⑦ P11 压缩「后续域」改「登记不做」（认领表 #16）；⑧ 同文件串行声明：streaming.rs/handlers/mod.rs 与 PE-06、transport/mod.rs 与 PE-10（依赖升级先行）、tool_exec.rs 与 PE-06 T06.1（PE-06 先行）；criterion 0.5 依赖增量统一由 PE-10 管理（只提需求） |
 
 ---
 
@@ -21,13 +21,13 @@
 
 ### 0.1 术语
 
-| 术语 | 含义 |
-|---|---|
-| 首 token 延迟 | 从 provider 返回流首字节到前端收到第一条 `message-delta` 的端到端时间 |
+| 术语              | 含义                                                                  |
+| ----------------- | --------------------------------------------------------------------- |
+| 首 token 延迟     | 从 provider 返回流首字节到前端收到第一条 `message-delta` 的端到端时间 |
 | 每 token 处理耗时 | Rust 侧对单个流事件（TextDelta）完成解析→聚合→产出事件的平均 CPU 耗时 |
-| 克隆风暴 | 同一份事件/消息数据在一次驱动循环中被深克隆多次（P2） |
-| O(n²) 对话克隆 | 每轮把全部历史消息深拷贝进请求，多轮累计二次方（P3） |
-| 写放大 | 每次 commit 实际写入 DB 的行数 / 新增消息行数之比（P6） |
+| 克隆风暴          | 同一份事件/消息数据在一次驱动循环中被深克隆多次（P2）                 |
+| O(n²) 对话克隆    | 每轮把全部历史消息深拷贝进请求，多轮累计二次方（P3）                  |
+| 写放大            | 每次 commit 实际写入 DB 的行数 / 新增消息行数之比（P6）               |
 
 ### 0.2 目标（量化验收标准）
 
@@ -185,12 +185,14 @@ pub struct ProviderRequest<'a> {
 #### T09.1.2 实施步骤
 
 **步骤 1——agent-provider 传输层帧级流**（`crates/agent-provider/src/transport/mod.rs`）：
+
 - 新增 `stream_frames(response, options, abort) -> Pin<Box<dyn Stream<Item = Result<SseFrame, SseReadError<reqwest::Error>>> + Send>>`：内部把 `ReqwestChunkReader`（:18-45 已有）+ `SseParser`（:57）按帧产出，双段超时/诊断逻辑（`sse::reader::read_sse` 的语义）逐帧透出；
 - `read_stream`（:51-59）改为 `stream_frames` 的收集包装（`collect().await`），保持签名与全部既有测试兼容——其它调用方零改动；
 - 需要 `async-stream` 或 `futures_util::stream::unfold` 实现（检查 workspace 是否已有 async-stream；没有则用 unfold，避免新增依赖）。
 - **串行声明（AU-04 PE-09 修订指令 6）**：transport/mod.rs 与 **PE-10 串行（PE-10 先行**：reqwest 0.12→0.13 升级（T10.2）后 `stream_frames` 无 API 差异；若需 async-stream 依赖，声明增量统一由 PE-10 管理）。
 
 **步骤 2——HttpProviderCall 增量实现**（`engine.rs:221-325`）：
+
 - `stream` 返回 Ok(流)：流内每帧 → `parser.push_frame(frame)` → `produced.into_iter().map(to_loop_event)` yield；
 - EOF → `parser.finish()` → yield 剩余事件 + `output.diagnostics` 诊断事件（对应现 :313-323 行为）；
 - 解析错误（push_frame/finish Err）→ yield `Err(classify_stream_parse(...))`（保持 :339-346 的 Unknown/不可重试分类）；
@@ -198,6 +200,7 @@ pub struct ProviderRequest<'a> {
 - `reqwest::Client` 连接池、endpoint、`build_chat_completions_request_body` 同步构建均不变（请求体在返回流之前序列化完毕，满足契约 1 的 'static 要求）。
 
 **步骤 3——session-loop 增量消费**（`streaming.rs:35-117` + `stream.rs`）：
+
 - `stream.rs` 新增 `ConsumeBuilder`（复用现有 `Aggregate`，:192-233）：`push(event)` 增量聚合 + `finish(aborted) -> ConsumeResult`（复用 :252-348 的 `finish` 家族）；`consume()`（:240-249）保留为 `ConsumeBuilder` 的薄包装（测试兼容）；
 - `streaming.rs::handle` 重写为逐 item 循环：
   1. 调用 provider 前预生成 `message_id = new_message_id("assistant")`（与最终 record_message 的消息 id 一致，保证 message-start/delta/end 的 message_id 对齐）；
@@ -211,6 +214,7 @@ pub struct ProviderRequest<'a> {
 - 注意：`ToolCall` 可能出现在文本之后（consume 语义：tool_calls 与 text 共存，stream.rs:429-444 测试锚定），增量通道只发 delta 类，ToolCall 仍走收口批量 emit——顺序无冲突。
 
 **步骤 4——实时 delta 双轨（核心设计，防顺序/持久化契约破坏）**：
+
 - 新增增量通道抽象（`provider.rs` 或 `loop/mod.rs`）：
 
 ```rust
@@ -251,6 +255,7 @@ pub trait DeltaSink: Send + Sync {
 #### T09.2.1 实施步骤
 
 **步骤 1——`AgentEvent::type_name()`**（`crates/conex-types/src/events.rs`）：
+
 - 新增 `impl AgentEvent { pub fn type_name(&self) -> &'static str }`，match 内容照搬 `AgentEventEnvelope::type_name`（:399-426 全部 25 个分支）；
 - `AgentEventEnvelope::type_name`（:398-426）改为 `self.event.type_name()` 委托；
 - 回归锚点：conex-types 既有测试 + 序列化 roundtrip（`crates/conex-types/tests/events_roundtrip.rs`）逐字节比对 wire 形状。
@@ -266,18 +271,21 @@ pub fn event_type_name(event: &AgentEvent) -> &'static str {
 （删除 `AgentEventEnvelope::new(event.clone(), None, None)` 构造——克隆 2 消除。）
 
 **步骤 3——push 系列改所有权移动 + 序列化借用**（`events.rs:120-204`）：
+
 - `push(&mut self, session_id: &str, event: AgentEvent)`（by value）；序列化改 `serde_json::to_string(&event)`（:136 已有借用，配合 by value 后 0 克隆）；
 - `push_terminal_best_effort` / `push_at_best_effort` 同样 by value；
 - `SequencedEvent`（:61-69）保持 owned event 不变（envelope/emit 需要）；
 - 既有调用点核对：`core_run_commands.rs:644`（`queue.push(&session_id, event)` owned，兼容）。
 
 **步骤 4——`drive_outcome` 零克隆**（`events.rs:263-377`）：
+
 - 签名改 `drive_outcome(run, queue, outcome: RunOutcome)`（by value 消费事件流）；
 - `for event in &outcome.events` 改 `for event in outcome.events`（move，0 克隆）；
 - 收尾字段（reason/error/diagnostic/messages）改 by value 使用（`outcome.reason` Copy、`error` 移动）；
 - `drive_outcome` 的调用点：`core_run_commands.rs:350`（`&outcome` → `outcome`；outcome 在步骤 3 后不再使用，可安全 move——核对 :338-357 控制流）；orchestrator tests（`events.rs` 测试多处 `drive_outcome(&mut run, &mut queue, &outcome(...))` → 传值，构造处已是临时值，改动机械）。
 
 **步骤 5——分发循环去第三次克隆**（`core_run_commands.rs:358-370`）：
+
 - `for sequenced in &drive.events` 改 `for sequenced in drive.events`（by value）；
 - `AgentEventEnvelope::new(sequenced.event, ...)` 直接 move（:360-364 去 `.clone()`）；
 - 步骤 5 取 last 提前：`let last_sequence = drive.events.last().map(|e| e.sequence);`（在 move 前取，适配 :368-370）。
@@ -294,6 +302,7 @@ pub fn event_type_name(event: &AgentEvent) -> &'static str {
 #### T09.3.1 阶段 1——请求构建链全链借用（必做，P3 主体 O(n²) 来源）
 
 **实施步骤**：
+
 1. `crates/session-loop/src/provider.rs:24-31`：`ProviderRequest<'a> { messages: &'a [AgentMessage], ... }`；
 2. `streaming.rs:154-160`：`build_request` → `messages: &state.conversation`（0 拷贝）；
 3. `crates/agent-provider/src/request/build.rs:66-70`：`RequestBuildContext<'a> { messages: &'a [AgentMessage], ... }`；:146 处（wire 消息转换）适配 `&**msg` 或 `msg.as_ref()`；
@@ -304,6 +313,7 @@ pub fn event_type_name(event: &AgentEvent) -> &'static str {
 #### T09.3.2 阶段 2——`record_message` 零深克隆（建议做，含完整波及清单）
 
 **方案（Arc 化，wire 形状不变）**：
+
 1. `crates/conex-types/src/events.rs:151-166`：`MessageStart.message` / `MessageEnd.message` 字段类型 `AgentMessage` → `Arc<AgentMessage>`（serde 对 `Arc<T>` 按 `T` 序列化，持久化 JSON **逐字节不变**）；
 2. `crates/session-loop/src/loop/handlers/mod.rs:147-154`：
 
@@ -429,13 +439,13 @@ pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
 
 工作区根 Cargo.toml 增加 `criterion = "0.5"` dev-dependency（**依赖增量统一由 PE-10 管理，本任务只提需求**，AU-04 PE-10 修订指令 2），`crates/**/benches/`：
 
-| 基准 | 位置 | 场景 | 指标 |
-|---|---|---|---|
-| event_chain | `crates/orchestrator/benches/event_chain.rs` | P2：drive_outcome 100 事件（agent-start + 20 工具批 + 大 MessageEnd 1KB/10KB 文本） | 每事件耗时、总耗时、内存峰值 |
-| request_build | `crates/session-loop/benches/request_build.rs` | P3：build_request + ProviderRequest 构造 + consume 聚合，100/1000/5000 消息 | 每轮耗时（验证 O(1)） |
-| db_write | `crates/conex-db/benches/db_write.rs` | P6：save_session_body 全量（100/1000/5000）vs append_session_messages 增量（每批 +1/+10） | 写放大比、每批耗时 |
-| tool_batch | `crates/session-loop/benches/tool_batch.rs` | P8：并行组 5×50ms，无审批 vs 审批（A/B 两模型） | 批总耗时 |
-| consume_delta | `crates/session-loop/benches/consume_delta.rs` | 每 token 处理耗时：1000 条 TextDelta 的 consume + emit 路径 | ns/token |
+| 基准          | 位置                                           | 场景                                                                                      | 指标                         |
+| ------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------- |
+| event_chain   | `crates/orchestrator/benches/event_chain.rs`   | P2：drive_outcome 100 事件（agent-start + 20 工具批 + 大 MessageEnd 1KB/10KB 文本）       | 每事件耗时、总耗时、内存峰值 |
+| request_build | `crates/session-loop/benches/request_build.rs` | P3：build_request + ProviderRequest 构造 + consume 聚合，100/1000/5000 消息               | 每轮耗时（验证 O(1)）        |
+| db_write      | `crates/conex-db/benches/db_write.rs`          | P6：save_session_body 全量（100/1000/5000）vs append_session_messages 增量（每批 +1/+10） | 写放大比、每批耗时           |
+| tool_batch    | `crates/session-loop/benches/tool_batch.rs`    | P8：并行组 5×50ms，无审批 vs 审批（A/B 两模型）                                           | 批总耗时                     |
+| consume_delta | `crates/session-loop/benches/consume_delta.rs` | 每 token 处理耗时：1000 条 TextDelta 的 consume + emit 路径                               | ns/token                     |
 
 #### T09.7.2 首 token 延迟测量方法（集成测试 + 观测）
 
@@ -468,6 +478,7 @@ pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
 > 短路点稳定后落点）。PE-06 §7「移交 PE-05 运行行为域」表述**作废**（AU-04 认领表 #1）。
 
 **现状（AA-01 原文证据）**
+
 - Q21（tool_exec.rs:386-395，重要）：abort 信号只在工具执行完成后检查——L3 取消对运行中的长工具最长
   需等 `options.timeout`（默认 60s）才生效；超时 drop future 时 MCP 远端仍在执行（费用/副作用）。
 - Q33（streaming.rs:50,84，建议）：`aborted` 标志在 consume 前一次性捕获：流中途触发 abort 时已
@@ -477,6 +488,7 @@ pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
   继续重试直至阶梯用尽（延迟 3 次请求）。
 
 **方案（三修复一体合入）**
+
 1. **Q21——abort-aware 竞速**：`execute_one`/工具执行体包「`options.timeout` future 与 abort 监听
    future 竞速」：abort 触发即取消等待并走现有收场路径（execute_impl 的取消语义），不再等 timeout 全长；
    超时 drop 时对 MCP 远端尽力发取消（transport 层 abort 语义，T09.1 步骤 1 的 abort 参数联动）。
@@ -489,6 +501,7 @@ pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
 **产出**：tool_exec.rs / streaming.rs / stream_error.rs 三处改造 + 单测。
 
 **验收**
+
 - Q21：模拟 60s 长工具 + 中途 abort → 取消在 ≤ 数百 ms 内生效（不等 timeout）；远端取消尽力触发；
 - Q33：流中途 abort → 已 commit 消息带 stopReason=aborted（partial salvage 标注一致）；
 - Q40：重试阶梯第一级后 abort → 剩余阶梯不再发起请求（mock 计数断言）；
@@ -507,28 +520,28 @@ pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
 
 ### 3.1 行为变化面（需显式登记/产品确认）
 
-| # | 变化 | 来源 | 影响与缓解 |
-|---|---|---|---|
-| R1 | 事件到达时序：delta 由「批 emit」变「实时 emit」；信封 `sequence=None` | T09.1 | 前端 EventRouter 按 messageId 累加不依赖 sequence（AA-06 F1 已验证）；buffer 丢帧类目 Delta 不变；需在联调确认「实时通道先行 + 收口流再 emit」不产生 UI 双写（前端按 messageId 幂等） |
-| R2 | 重试语义：有已产出内容的中途错误不再重试（内容保留收场） | T09.1 | 现状：全量缓冲下中途错误可整体重试无残留；改后：已显示内容保留。语义与 01 D6「有文字即 Message、错误降级标注」一致，需回归 retry 阶梯测试（无内容错误路径不变） |
-| R3 | 事件队列 API：push/drive_outcome 改 by value | T09.2 | 仅 Rust 内部 API；测试与调用点已列清单；无协议变化 |
-| R4 | 跨 run 对话语义：converge 后 conversation 清空（mem::take） | T09.3.3 | 真实接线每 run 重建 loop（engine.rs:445-452）无影响；测试路径需 with_initial_conversation 续接；已列三方案择一 |
-| R5 | 事件类型内部形态：MessageStart/End 消息体改 Arc（wire 不变） | T09.3.2 | 持久化载荷逐字节不变（serde Arc 透传）；波及清单已列；roundtrip 测试锚定 |
-| R6 | ~~save_session_body 改 upsert 后不再清除旧行~~ | T09.4 | **已撤销（AU-04 F7）**：写模型 = 全量替换保留（PE-08 T08.10 定稿），删除/编辑历史消息的全量保存继续生效；本任务只新增 append_session_messages 增量命令 |
-| R7 | 审批并行组事件时序：ToolStart+ApprovalRequested 全组先发 | T09.6 | 前端审批 UI 若逐个处理需兼容批量（默认模型 A 保持逐个审批，仅执行并行，时序仍为逐工具 start/approval/end——R7 实际仅在选项 B 下成立，登记备查） |
-| R8 | LS 镜像节流：非活跃会话离线回退数据滞后 | T09.4 | 已知接受项；SQLite 主存路径不受影响 |
+| #   | 变化                                                                   | 来源    | 影响与缓解                                                                                                                                                                            |
+| --- | ---------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | 事件到达时序：delta 由「批 emit」变「实时 emit」；信封 `sequence=None` | T09.1   | 前端 EventRouter 按 messageId 累加不依赖 sequence（AA-06 F1 已验证）；buffer 丢帧类目 Delta 不变；需在联调确认「实时通道先行 + 收口流再 emit」不产生 UI 双写（前端按 messageId 幂等） |
+| R2  | 重试语义：有已产出内容的中途错误不再重试（内容保留收场）               | T09.1   | 现状：全量缓冲下中途错误可整体重试无残留；改后：已显示内容保留。语义与 01 D6「有文字即 Message、错误降级标注」一致，需回归 retry 阶梯测试（无内容错误路径不变）                       |
+| R3  | 事件队列 API：push/drive_outcome 改 by value                           | T09.2   | 仅 Rust 内部 API；测试与调用点已列清单；无协议变化                                                                                                                                    |
+| R4  | 跨 run 对话语义：converge 后 conversation 清空（mem::take）            | T09.3.3 | 真实接线每 run 重建 loop（engine.rs:445-452）无影响；测试路径需 with_initial_conversation 续接；已列三方案择一                                                                        |
+| R5  | 事件类型内部形态：MessageStart/End 消息体改 Arc（wire 不变）           | T09.3.2 | 持久化载荷逐字节不变（serde Arc 透传）；波及清单已列；roundtrip 测试锚定                                                                                                              |
+| R6  | ~~save_session_body 改 upsert 后不再清除旧行~~                         | T09.4   | **已撤销（AU-04 F7）**：写模型 = 全量替换保留（PE-08 T08.10 定稿），删除/编辑历史消息的全量保存继续生效；本任务只新增 append_session_messages 增量命令                                |
+| R7  | 审批并行组事件时序：ToolStart+ApprovalRequested 全组先发               | T09.6   | 前端审批 UI 若逐个处理需兼容批量（默认模型 A 保持逐个审批，仅执行并行，时序仍为逐工具 start/approval/end——R7 实际仅在选项 B 下成立，登记备查）                                        |
+| R8  | LS 镜像节流：非活跃会话离线回退数据滞后                                | T09.4   | 已知接受项；SQLite 主存路径不受影响                                                                                                                                                   |
 
 ### 3.2 跨域接口契约
 
-| 契约面 | 变更 | 冲突方 | 处置 |
-|---|---|---|---|
-| `ProviderCall::stream` 签名 | Vec → Stream；**冻结 v1（AU-04 F1）** | TestProvider、HttpProviderCall、session-loop 测试、agent-workbench 集成测试 | 契约正文 SoT = PE-02 §3.1（修订后）；别名 `ProviderStreamItem`/`ProviderEventStream`；T09.1.2 步骤 2/5 全量适配；tauri 侧 `SessionLoopProducer`（engine.rs:436-462）同步 |
-| `Store::query_events` 签名 | 加 limit 参数 | InMemoryStore/LocalDbStore/restore.rs/全部 test double | 一处 trait + 两实现 + 两调用点，机械变更；restore 显式传 None 保语义 |
-| `AgentSessionEvent`/`AgentEvent` wire 形状 | 不变 | 前端 EventRouter、AA-07 持久化、03-frontend-contract | 本任务所有方案以「wire 逐字节不变」为硬约束，roundtrip 测试为守门 |
-| 事件桥/背压 | delta 信封无 sequence | buffer.rs DropClass 判定（按事件类型，:41-58）、core_event_bridge | 类型判定不依赖 sequence，兼容；P9 若前置序列化需同步覆盖 delta 路径 |
-| `EventQueue` 逐条同步等待语义 | 不变（批接口仅限重放路径） | approval 中间态可观测（events.rs 测试） | 硬约束登记：append_events 批接口不得接入 push 路径 |
-| 前端 session-persistence | commit 增量 + LS 节流 | 离线回退、多端同步（seedSessions） | 与 AA-07 数据持久化审查协同回归；fallback 路径保持全量 |
-| RunOutcome.messages | mem::take/Arc 方案 | run_loop.rs/divergence.rs/testing/mod.rs:114 | 适配清单已列；`SessionLoopProducer` 不使用该字段（drive_outcome 忽略），无生产影响 |
+| 契约面                                     | 变更                                  | 冲突方                                                                      | 处置                                                                                                                                                                     |
+| ------------------------------------------ | ------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ProviderCall::stream` 签名                | Vec → Stream；**冻结 v1（AU-04 F1）** | TestProvider、HttpProviderCall、session-loop 测试、agent-workbench 集成测试 | 契约正文 SoT = PE-02 §3.1（修订后）；别名 `ProviderStreamItem`/`ProviderEventStream`；T09.1.2 步骤 2/5 全量适配；tauri 侧 `SessionLoopProducer`（engine.rs:436-462）同步 |
+| `Store::query_events` 签名                 | 加 limit 参数                         | InMemoryStore/LocalDbStore/restore.rs/全部 test double                      | 一处 trait + 两实现 + 两调用点，机械变更；restore 显式传 None 保语义                                                                                                     |
+| `AgentSessionEvent`/`AgentEvent` wire 形状 | 不变                                  | 前端 EventRouter、AA-07 持久化、03-frontend-contract                        | 本任务所有方案以「wire 逐字节不变」为硬约束，roundtrip 测试为守门                                                                                                        |
+| 事件桥/背压                                | delta 信封无 sequence                 | buffer.rs DropClass 判定（按事件类型，:41-58）、core_event_bridge           | 类型判定不依赖 sequence，兼容；P9 若前置序列化需同步覆盖 delta 路径                                                                                                      |
+| `EventQueue` 逐条同步等待语义              | 不变（批接口仅限重放路径）            | approval 中间态可观测（events.rs 测试）                                     | 硬约束登记：append_events 批接口不得接入 push 路径                                                                                                                       |
+| 前端 session-persistence                   | commit 增量 + LS 节流                 | 离线回退、多端同步（seedSessions）                                          | 与 AA-07 数据持久化审查协同回归；fallback 路径保持全量                                                                                                                   |
+| RunOutcome.messages                        | mem::take/Arc 方案                    | run_loop.rs/divergence.rs/testing/mod.rs:114                                | 适配清单已列；`SessionLoopProducer` 不使用该字段（drive_outcome 忽略），无生产影响                                                                                       |
 
 ### 3.3 依赖与前置
 
@@ -569,6 +582,7 @@ pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
 ## 5. 验证清单（可勾选执行）
 
 ### T09.1 P1
+
 - [ ] `cargo test -p session-loop -p orchestrator -p agent-provider -p agent-workbench` 全绿
 - [ ] 中途错误有内容 → Message 收场不重试；无内容 → 重试阶梯（新增测试）
 - [ ] 双轨顺序：实时 sink delta 顺序 = block 顺序；收口流 start/delta/end 契约保持
@@ -577,17 +591,20 @@ pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
 - [ ] 前端零改动验收（EventRouter 增量累加，联调项）
 
 ### T09.2 P2
+
 - [ ] drive_outcome/push 路径无 `.clone()`（代码审查断言）
 - [ ] 25 个事件类型名 roundtrip 逐字节不变
 - [ ] events.rs 既有 8 个测试全绿；clippy 无新告警
 
 ### T09.3 P3
+
 - [ ] 阶段 1：build_request/engine/build.rs 链 0 拷贝（审查断言）；5000 消息基准 O(1)
 - [ ] 阶段 2（若做）：record_message 0 深克隆；conex-types roundtrip 全绿
 - [ ] converge 方案落地 + with_initial_conversation 测试续接用例全绿
 - [ ] steering 行为回归（divergence.rs 全绿）
 
 ### T09.4 P6
+
 - [ ] append_session_messages 命令注册（main.rs）+ spawn_blocking 包装（session 族第 13 个命令，F7）
 - [ ] save_session_body 全量替换语义回归（R6 撤销后无 upsert 测试）；append 增量续写 seq 连续 + 混合完整性
 - [ ] 前端 commit 增量 + id 幂等；hydrate 保持全量
@@ -595,19 +612,24 @@ pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
 - [ ] 基准：1000 消息 commit 写放大 O(n)→O(k)
 
 ### T09.5 P7
+
 - [ ] Store::query_events 三参数全调用点适配（restore 传 None）
 - [ ] 分页新测试：limit 行数断言；run 边界在切点的归属一致性（翻页一致）
 - [ ] 前端 hydrate 游标循环（若在边界内）
 
 ### T09.6 P8
-- [ ] 审批并行组新测试：5×50ms 批耗时 < 2×单工具；事件顺序契约回归（F9：Arc 形态 + 执行模型 A）
-- [ ] 无审批并行 <95ms 测试保持；审批拒绝/超时/expired 回归
+
+- [x] 审批并行组新测试：5×50ms 批耗时 < 2×单工具；事件顺序契约回归（F9：Arc 形态 + 执行模型 A）
+- [x] 无审批并行 <95ms 测试保持；审批拒绝/超时/expired 回归
+- [x] T09.7 基准复测：approval_model_a 309.9ms → 62.1ms（-79.95%，≈62ms 达标，见 PE-perf-baseline.md §3）
 
 ### T09.8/T09.9 新增任务
+
 - [ ] T09.8：PE-perf-baseline.md 单一基线文档就位（PE-02 写入数据，本任务维护）；500ms 端到端验收放行权确认
 - [ ] T09.9：Q21 abort-aware 竞速（取消 ≤ 数百 ms 生效）；Q33 consume 后重读 abort 标注；Q40 重试前查 abort（mock 计数）
 
 ### T09.7/T09.10 收口
+
 - [ ] 5 个基准场景基线 + 复测对照表（G1-G7 逐项核对；300ms 仅内部基准）
 - [ ] `cargo test`（workspace）+ `cargo clippy --workspace` 零新告警
 - [ ] live model 冒烟：长回复流式渲染 → 工具调用 → 收口 → 重启恢复
