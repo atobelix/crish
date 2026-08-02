@@ -195,3 +195,6 @@ tmp_*
 reference/ui-replica/package-lock.json
 
 
+
+# turbo cache (opencode/agent 会话产物)
+.turbo/
