@@ -130,12 +130,6 @@ apps/agent-workbench/FRONTEND-DESIGN-PLAN.md
 apps/agent-workbench/IMPROVEMENT-PLAN.md
 apps/agent-workbench/REFACTOR_PLAN.md
 
-# Rust lock file (managed by Cargo)
-Cargo.lock
-
-# Documentation — track active docs (plans/architecture); ignore archive only
-docs/archive/
-
 # Local implementer / agent scratch workspace (never commit)
 implementer/
 

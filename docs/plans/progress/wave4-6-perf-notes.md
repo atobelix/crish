@@ -2,7 +2,7 @@
 
 > 对应门禁：`docs/plans/2026-07-system-architecture-control-master-plan.md` **D0-8** `perf-report`  
 > 进度真源：`docs/plans/progress/system-control-ledger.md`  
-> 早期 R1–R3 方案：`docs/perf/MULTI_AGENT_PERF_PLAN.md`  
+> 早期 R1–R3 方案：`docs/archive/provider-m4/perf/MULTI_AGENT_PERF_PLAN.md`  
 > 日期：2026-07-29
 
 本文只记已落地事实，不写规划愿望。

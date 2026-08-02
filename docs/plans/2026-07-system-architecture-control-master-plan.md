@@ -408,7 +408,7 @@ END
 - 无扩展时行为 = 今日 baseline（兼容）。
 - 注册 observe hook 可拿到 turn 时序而不改结果。
 - gate hook 可 block 工具且模型收到错误文本。
-- 文档：`docs/hooks.md` 事件表 + 示例。
+- 文档：`docs/guides/hooks.md` 事件表 + 示例。
 
 ---
 
@@ -876,7 +876,7 @@ Hook observe 通道 = 业务时序；Metrics/Tracing = 聚合。
 | B2-5 | `tool-hook-unify` | 与 ToolHook/审批对齐 | tool-executor / approval |
 | B2-6 | `builtin-perf-health` | 内置 observe 包 | runtime |
 | B2-7 | `tests-hooks` | baseline 兼容 + gate | tests |
-| B2-8 | `docs-hooks` | docs/hooks.md | docs |
+| B2-8 | `docs-hooks` | docs/guides/hooks.md | docs |
 
 **门禁**：无 hook = 旧行为；有 gate 可挡 tool。
 

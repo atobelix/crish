@@ -127,7 +127,7 @@ session-loop 工具执行
 ```
 
 - 实现：`packages/agent-runtime/src/hooks/` + `session-loop/tool-execution.ts`
-- 目录：[`docs/hooks.md`](../hooks.md)（`observe` 只读 / `on` 可语义）
+- 目录：[`docs/guides/hooks.md`](../guides/hooks.md)（`observe` 只读 / `on` 可语义）
 
 ### 3.5 Import external / 外部导入（CP-SESS + CP-HOST）— **real Tauri FS（OPT-B1）**
 

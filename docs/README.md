@@ -1,44 +1,41 @@
-# Crish Documentation Index
+# Conex Documentation Index
 
-Welcome to the Crish project documentation. This index introduces the overall architecture, codebase directory structure, and details the primary entrypoints to the project's documentation.
-
----
-
-## Core Architecture Overview
-
-**Crish** is a desktop AI Agent Workbench designed with a decoupled architecture:
-1. **Frontend UI** ([crish-desktop](file:///c:/Software/conex/apps/crish-desktop)): A modern React 19 + Zustand application.
-2. **Desktop Shell** ([agent-workbench](file:///c:/Software/conex/apps/agent-workbench)): A Tauri 2 shell that hosts the React frontend and handles native windowing and sidecar supervisor logic.
-3. **Daemon Core** ([agent-daemon](file:///c:/Software/conex/packages/agent-daemon)): A Node-based daemon serving session management, WebSocket APIs, and workflow orchestrations.
-4. **Execution Layer**:
-   - [agent-orchestrator](file:///c:/Software/conex/packages/agent-orchestrator): Governs state machines, session trees, and target continuation.
-   - [agent-runtime](file:///c:/Software/conex/packages/agent-runtime): Manages LLM connections, tools, context compression, and execution checkpoints.
-
-For a detailed view of the architectural truth, please check the root documentation:
-- [ARCHITECTURE.md](file:///c:/Software/conex/ARCHITECTURE.md)
-- [DEVELOPMENT_LOG.md](file:///c:/Software/conex/DEVELOPMENT_LOG.md)
+Index of the `docs/` tree. Live sources are `architecture/`, `rust-rewrite/`, `plans/`, and `organization/`; developer guides live in `guides/`; the open-source collaboration surface lives in `opensource/`; everything else is archived under `archive/` (read-only historical records).
 
 ---
 
-## Documentation Entrypoints
+## Active sources
 
-### 1. Architecture Design Documents (`docs/architecture/`)
+- [architecture/](architecture/) — active architecture specs: system map, run control, daemon protocol, ADRs, desktop composition, observability.
+- [rust-rewrite/](rust-rewrite/) — active Rust rewrite campaign: master plan, semantic contracts (01/02/03), task sheets (PE-01~12), audits, verification.
+- [plans/](plans/) — active plans and progress ledger (`progress/system-control-ledger.md`, waves, OPT-E8).
+- [organization/](organization/) — documentation governance: inventories, tree analysis, open-source docs plan (A1/A2/A3).
 
-These documents detail specific sub-systems, protocol contracts, and technical choices:
-- [Daemon Protocol Single Source](file:///c:/Software/conex/docs/architecture/daemon-protocol-single-source.md): The unified source of truth for the daemon-to-UI protocol.
-- [Daemon Runtime Selection](file:///c:/Software/conex/docs/architecture/daemon-runtime-selection.md): Architecture details on runtime environments and integration points.
-- [Observability & Session Loading](file:///c:/Software/conex/docs/architecture/observability-and-session-loading.md): Details on observability, logging, and session state rehydration.
-- [Streaming Transport Contract](file:///c:/Software/conex/docs/architecture/streaming-transport-contract.md): Specifications of streaming formats and event payloads over WebSockets.
-- [Workbench Session Actions and Split View](file:///c:/Software/conex/docs/architecture/workbench-session-actions-and-split-view.md): Product SessionAction / Split View contracts (not the deleted `store/session-actions/` directory; see OPT-E8).
+## Guides
 
-### 2. Implementation Plans (`docs/plans/`)
+- [guides/error-handling.md](guides/error-handling.md) — `@crish/shared-types` error system.
+- [guides/hooks.md](guides/hooks.md) — lifecycle hooks (observe/on/emit).
+- [guides/plugin-development.md](guides/plugin-development.md) — `@crish/plugin-sdk`.
+- [guides/subagent-development.md](guides/subagent-development.md) — `@crish/agent-subagent`.
+- [guides/testing/](guides/testing/) — integration test roadmap and Tauri smoke guide.
 
-Active design proposals and roadmap execution plans:
-- [Product Trust Topdown Plan](file:///c:/Software/conex/docs/plans/2026-07-product-trust-topdown.md): High-level strategy for product stability, trust, and execution validation.
-- [UI System Coherence Plan](file:///c:/Software/conex/docs/plans/2026-07-ui-system-coherence.md): Guidelines and milestones for frontend component normalization and styling consistency.
+## Open source surface
+
+- [opensource/CONTRIBUTING-PROVIDERS.md](opensource/CONTRIBUTING-PROVIDERS.md) — provider contribution guide (Chinese).
+- [opensource/provider-dx/](opensource/provider-dx/) — provider system docs for external contributors (English): architecture, contributing, dev environment, catalog, troubleshooting.
+
+## Archive (read-only history)
+
+- [archive/legacy/](archive/legacy/) — superseded root-level plans/audits/execution records from the TS era (kept for reference; most reference deleted `packages/*`).
+- [archive/provider-m4/](archive/provider-m4/) — M4 Provider delivery batch: POST-M4 reports, config contract, audit/, security/, performance/, perf/.
+- [archive/campaigns/](archive/campaigns/) — closed multi-agent repair campaigns (benchmark-evolution-plans, v2_plan_review, refac, refactor-guides, round_12_audit, ui-jank-message-dnd-rootfix, system-completion-plans, crish_desktop_architectural_remediation_plan, systematic_solution_plan).
+- [archive/redesign/](archive/redesign/) — parallel redesign drafts overlapping `rust-rewrite/` (rust-architecture-redesign, system-enhancement-plans, architecture-improvement, architecture-review, analysis, design, conversation_flow_plan).
+- [archive/prototypes/](archive/prototypes/) — abandoned prototypes (`loading page/` Vite project, `new/` HTML copies).
 
 ---
 
-## How to Contribute
+## Repository entrypoints
 
-To get started with development, please read the [CONTRIBUTING.md](file:///c:/Software/conex/CONTRIBUTING.md) guide in the repository root.
+- [README.md](../README.md) — product overview and build commands.
+- [ARCHITECTURE.md](../ARCHITECTURE.md) — architecture truth document.
+- [CONTRIBUTING.md](../CONTRIBUTING.md) — contribution guide.

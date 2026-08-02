@@ -128,7 +128,7 @@ run-control (level)  →  cancel-run { runId, mode: cooperative|force }
 
 ## 6. 相关文档
 
-- Hook 与 L2 stop 建议：[`docs/hooks.md`](../hooks.md)
+- Hook 与 L2 stop 建议：[`docs/guides/hooks.md`](../guides/hooks.md)
 - 会话 / 消息身份：`packages/shared-types/src/session-identity.ts`、`message-identity.ts`
 - 中控 Round：A1（类型）· B0（骨架）· B1（UI/daemon Stop）
 

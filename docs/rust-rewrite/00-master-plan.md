@@ -10,7 +10,7 @@
 
 - 本方案及所有关联副文档**统一存放于 `docs/rust-rewrite/`**，命名：`NN-<topic>.md`（NN 为执行顺序号）。
 - 每轮 Agent 产出的分析文档、计划文档、审查文档一律落盘到本目录，不散落其他位置。
-- 历史参考：`docs/rust-architecture-redesign/`（2026-07-21 愿景级规划，性能/C4 层面）仅作引用输入，不修改、不并入。
+- 历史参考：`docs/archive/redesign/rust-architecture-redesign/`（2026-07-21 愿景级规划，性能/C4 层面）仅作引用输入，不修改、不并入。
 - 副文档状态在本文件第 4 节登记；每轮结束更新状态。
 
 ---

@@ -24,7 +24,7 @@
 | A3 | **done** | setActive hydrate；空壳 prune；侧栏 shouldList |
 | B0 | **done** | ControlBus + session-loop 安全点 L1/L2/L3；max-turns 语义 |
 | B1 | **done** | UI Stop=L2 / Force=L3；runControlClient；daemon run-control 接线 |
-| B2 | **done** | LifecycleHookRegistry observe/on/emit；turn.start/end wire；docs/hooks.md |
+| B2 | **done** | LifecycleHookRegistry observe/on/emit；turn.start/end wire；docs/guides/hooks.md |
 | B3 | **partial → 更近 done** | W5-2 compositionRoot 扩展 runControl / metrics / session；**W9-B3** sidebar「新对话」走 compositionRoot **done**；**OPT-5** layout facade **done**；**OPT-9** cancel via compositionRoot + useAgentPanel **done**；**OPT-B4** navigation-keys → compositionRoot.layout **done**；**OPT-D3** `compositionRoot.tree` facade **done**；**OPT-E5** setAppSettings + AppBootstrap **done**；**OPT-E6** sidebar command paths **done**；**OPT-E7** openAgentPanel + workspaceChromeHooks **done**；**OPT-F4–F6 done**（useStreamCallbacks / drag / tree+chatHandlers → root）；**OPT-G3–G7 done**（useAgentStream/useSlashSend/openTool/layoutRestore/ChatHeader/session sync/pin-archive-branch → root）；**OPT-H5** mcpBridge → compositionRoot **done**；**OPT-H4** stream layout.setState residual **documented intentional**（no patchState）。**仍非**全量去 getState（leftover strip may remain） |
 | C0 | **done** | addMessage upsert by id；clientMessageId；hydrate mergeMessagesById；**W7-6** clientMessageId 端到端 stream 接线 |
 | C1 | **done** | messageUserProjection + hidden buckets + debug flag |
