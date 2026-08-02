@@ -166,6 +166,17 @@ apps/agent-workbench/src-tauri/gen/
 !package-lock.json
 !tsconfig.json
 
+# Legacy root planning docs moved into docs/archive (keep untracked)
+docs/archive/legacy/0613-0055-plan.md
+docs/archive/legacy/ARCHITECTURE-IMPROVEMENT.md
+docs/archive/legacy/CORE-ARCHITECTURE-IMPROVEMENT.md
+docs/archive/legacy/DEVELOPMENT_LOG.md
+docs/archive/legacy/FRONTEND-DESIGN-PLAN.md
+docs/archive/legacy/IMPROVEMENT-PLAN.md
+docs/archive/legacy/new.md
+docs/archive/legacy/suggestions-v2.md
+docs/archive/legacy/suggestions.md
+
 # Local directories
 scratch/
 test-results/
