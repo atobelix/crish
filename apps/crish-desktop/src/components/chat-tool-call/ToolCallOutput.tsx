@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
-import styles from '../ChatToolCallBlock.module.css';
+import styles from './ChatToolCallBlock.module.css';
 import type { FileDiff, MessageToolCall } from '../../store/layoutStore';
 import {
   extractImageRefs,

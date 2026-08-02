@@ -1,8 +1,18 @@
+/**
+ * 技能编辑弹窗（PE-05 T05.2 #4）
+ *
+ * 发现面板已收敛到 ui/Dialog 基座：原为页内 role=dialog 内联区块（声明
+ * aria-modal 却无焦点圈定），现由基座提供模态行为（Esc/遮罩 = 跳过导入，
+ * 与「跳过」按钮同一动作）；样式归属纠正为本组件 module，skills-discover-*
+ * 全局类不再使用。
+ * 新建（paths/manual）两个 create 框为页内内联区块，保持原样。
+ */
 import React, { useId } from 'react';
 import * as Lucide from 'lucide-react';
 import type { DesktopSkill } from '../../api/skillsApi';
 import { Tooltip } from '../Tooltip';
-import styles from '../SkillsSettingsTab.module.css';
+import { Dialog } from '../ui';
+import styles from './SkillEditorModal.module.css';
 
 interface SkillEditorModalProps {
   discoverCandidates: DesktopSkill[] | null;
@@ -42,45 +52,19 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
   const createBoxId = useId();
   const createNameId = useId();
   const createDescId = useId();
-  const discoverTitleId = useId();
+
+  const showDiscover = discoverCandidates != null && discoverCandidates.length > 0;
 
   return (
     <>
-      {discoverCandidates && discoverCandidates.length > 0 ? (
-        <section
-          className={`${styles.skillsDiscoverPanel} skills-discover-panel`}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={discoverTitleId}
-          aria-busy={discoverBusy || undefined}
-        >
-          <div className={`${styles.skillsDiscoverTitle} skills-discover-title`} id={discoverTitleId}>
-            发现新技能 {discoverCandidates.length}
-          </div>
-          <div className={`${styles.skillsDiscoverList} skills-discover-list`} role="group" aria-label="待导入技能">
-            {discoverCandidates.map((s) => {
-              const checked = discoverPick[s.id] !== false;
-              return (
-                <label
-                  key={s.id}
-                  className={`${styles.skillsDiscoverItem} skills-discover-item`}
-                  title={s.description || s.name}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={discoverBusy}
-                    onChange={(e) =>
-                      setDiscoverPick((p) => ({ ...p, [s.id]: e.target.checked }))
-                    }
-                    aria-label={`${checked ? '取消选择' : '选择'} ${s.name}`}
-                  />
-                  <span className={`${styles.skillsDiscoverName} skills-discover-name`}>{s.name}</span>
-                </label>
-              );
-            })}
-          </div>
-          <div className={`${styles.skillsDiscoverActions} skills-discover-actions`}>
+      <Dialog
+        open={showDiscover}
+        onClose={() => void applyDiscoverImport('skip')}
+        title={`发现新技能 ${discoverCandidates?.length ?? 0}`}
+        size="lg"
+        overlayClassName={styles.skillsDiscoverOverlay}
+        footer={
+          <div className={styles.skillsDiscoverActions}>
             <button
               type="button"
               className="ui-btn ui-btn-ghost ui-btn-sm"
@@ -95,7 +79,7 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
               className="ui-btn ui-btn-ghost ui-btn-sm"
               disabled={discoverBusy}
               onClick={() => void applyDiscoverImport('all')}
-              aria-label={`全部启用 ${discoverCandidates.length} 个新技能`}
+              aria-label={`全部启用 ${discoverCandidates?.length ?? 0} 个新技能`}
             >
               全启
             </button>
@@ -110,8 +94,32 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
               {discoverBusy ? '…' : '启用所选'}
             </button>
           </div>
-        </section>
-      ) : null}
+        }
+      >
+        <div className={styles.skillsDiscoverList} role="group" aria-label="待导入技能">
+          {(discoverCandidates ?? []).map((s) => {
+            const checked = discoverPick[s.id] !== false;
+            return (
+              <label
+                key={s.id}
+                className={styles.skillsDiscoverItem}
+                title={s.description || s.name}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={discoverBusy}
+                  onChange={(e) =>
+                    setDiscoverPick((p) => ({ ...p, [s.id]: e.target.checked }))
+                  }
+                  aria-label={`${checked ? '取消选择' : '选择'} ${s.name}`}
+                />
+                <span className={styles.skillsDiscoverName}>{s.name}</span>
+              </label>
+            );
+          })}
+        </div>
+      </Dialog>
 
       {createMode === 'paths' ? (
         <section
@@ -157,7 +165,7 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
           id={createBoxId}
           aria-label="手填项目技能"
         >
-          <div className={`${styles.skillsCreateRow} skills-create-row`}>
+          <div className={styles.skillsCreateRow}>
             <Tooltip content="写入 .conex/skills/<name>/SKILL.md">
               <input
                 id={createNameId}

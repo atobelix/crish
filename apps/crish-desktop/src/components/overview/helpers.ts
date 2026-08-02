@@ -39,8 +39,8 @@ export function formatBgTaskMeta(opts: {
 }
 
 export function getGitStatusColor(status: string): string {
-  if (status === 'A' || status === '?') return 'var(--accent-green, #22c55e)';
-  if (status === 'D') return 'var(--accent-red, #ef4444)';
-  if (status === 'U') return 'var(--accent-red, #ef4444)';
-  return 'var(--accent-orange, #f97316)';
+  if (status === 'A' || status === '?') return 'var(--accent-green)';
+  if (status === 'D') return 'var(--accent-red)';
+  if (status === 'U') return 'var(--accent-red)';
+  return 'var(--accent-orange)';
 }

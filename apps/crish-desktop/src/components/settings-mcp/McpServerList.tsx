@@ -3,7 +3,7 @@ import * as Lucide from 'lucide-react';
 import type { McpServerInfo, McpStatusSnapshot } from '../../api/mcpApi';
 import { mcpStateKind, mcpStateLabel } from '../../api/mcpApi';
 import type { McpServer } from '../../api/clientApi';
-import styles from '../McpSettingsTab.module.css';
+import styles from './McpSettingsTab.module.css';
 import { Tooltip } from '../Tooltip';
 import {
   EMPTY_DEMO_HINT,

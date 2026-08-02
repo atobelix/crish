@@ -1,6 +1,6 @@
 import React from 'react';
 import { Check, Copy, PinOff, RefreshCw, Send, Undo2, X } from 'lucide-react';
-import styles from '../ChatMessageRow.module.css';
+import styles from './ChatMessageRow.module.css';
 import { Tooltip } from '../Tooltip';
 import type { SessionMessage } from '../../store/layoutStore';
 import type { PermissionMode } from '../../api/permissionModes';

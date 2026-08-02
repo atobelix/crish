@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { Plus } from 'lucide-react';
-import styles from '../Workspace.module.css';
+import styles from './Workspace.module.css';
 import type { WorkspaceState } from '../../store/layoutStore';
 import { CardPanel } from '../CardPanel';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
@@ -10,7 +10,7 @@ import {
   nudgeColumnByKey,
   nudgeGroupByKey,
 } from '../../hooks/useColumnResize';
-import type { RenderedColumn } from '../Workspace';
+import type { RenderedColumn } from './Workspace';
 
 interface WorkspaceCanvasProps {
   ws: WorkspaceState;

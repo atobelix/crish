@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import styles from '../FilesCard.module.css';
+import styles from './FilesCard.module.css';
 import { Tooltip } from '../Tooltip';
 import { CornerLeftUp, RotateCw, Search, X } from 'lucide-react';
 import { countPendingFileAnnotations, getWorkspacePath, openPathDefault, pathDirname, resolveWorkspacePath, takePendingOpenPath } from '../../api/workspaceFsApi';

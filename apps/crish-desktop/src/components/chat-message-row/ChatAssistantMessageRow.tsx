@@ -4,9 +4,9 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import styles from '../ChatMessageRow.module.css';
+import styles from './ChatMessageRow.module.css';
 import type { FileDiff, SessionMessage } from '../../store/layoutStore';
-import type { ChatToolStackSharedProps } from '../ChatToolCallBlock';
+import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import { assistantCopyText } from '../../api/toolPresentation';
 import type { PermissionMode } from '../../api/permissionModes';
 import { THINKING_DOM_CHAR_CAP, budgetDomText } from '../../api/messageWindow';

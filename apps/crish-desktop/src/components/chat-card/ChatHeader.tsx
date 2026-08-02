@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import { Search } from 'lucide-react';
-import { ChatMsgFilterBar } from '../ChatMsgFilterBar';
+import { ChatMsgFilterBar } from './ChatMsgFilterBar';
 import { Tooltip } from '../Tooltip';
 import {
   EMPTY_SESSION_TITLE,

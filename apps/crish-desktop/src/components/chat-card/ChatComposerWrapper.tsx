@@ -1,6 +1,6 @@
 import React from 'react';
-import styles from '../ChatCard.module.css';
-import { ChatStatusRibbons } from '../ChatStatusRibbons';
+import styles from './ChatCard.module.css';
+import { ChatStatusRibbons } from './ChatStatusRibbons';
 import { anyProfileHasKey } from '../../api/providerProfiles';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import type { FileDiff } from '../../store/layoutStore';

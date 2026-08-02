@@ -17,7 +17,6 @@ import {
   storeSessionSearchQuery,
   type SessionSearchMatch,
 } from '../../../api/sessionSearch';
-import type { ProjectEntry } from '../../../api/projectStore';
 import { Tooltip } from '../../Tooltip';
 import styles from '../SidebarSessionList.module.css';
 import { MoreHorizontal } from 'lucide-react';
@@ -130,10 +129,6 @@ export type SessionRowProps = {
   onCancelRename?: (() => void) | undefined;
   /** 列表内 ↑↓ 导航（跨置顶/项目/对话，由父级按可见顺序解析） */
   onNavigateSession?: ((fromId: string, delta: number) => void) | undefined;
-  /** @deprecated 项目副行已移除；保留 prop 以免破坏调用方 */
-  projects?: readonly ProjectEntry[] | undefined;
-  /** @deprecated 项目副行已移除；保留 prop 以免破坏调用方 */
-  projectLabel?: string | undefined;
   /** 键盘重排（Alt+↑/↓） */
   onReorderKeyboard?: ((sessionId: string, direction: -1 | 1) => void) | undefined;
   /** Live drop line: insert before/after this row */

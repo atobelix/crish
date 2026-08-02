@@ -9,7 +9,7 @@ import {
 import { assistantCopyText } from '../../api/toolPresentation';
 
 const ChangeOverviewCard = React.lazy(() =>
-  import('../ChangeOverviewCard').then((m) => ({
+  import('../diff/ChangeOverviewCard').then((m) => ({
     default: m.ChangeOverviewCard,
   }))
 );

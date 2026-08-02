@@ -32,7 +32,6 @@ import {
   storeSessionSearchQuery,
   type SessionSearchMatch,
 } from '../../../api/sessionSearch';
-import { GENERAL_FOLDER } from '../../../api/projectStore';
 import styles from '../SidebarSessionList.module.css';
 import { SessionRow } from './SessionRow';
 import {
@@ -592,8 +591,6 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
     renderSessionItem,
     toggleExpandedProjectFolder,
     toggleShowAllGeneralSessions,
-    /** @deprecated kept for API compatibility; GENERAL_FOLDER is canonical */
-    generalFolder: GENERAL_FOLDER,
     listClassName: isDragging ? styles.sidebarDragging : undefined,
   };
 }

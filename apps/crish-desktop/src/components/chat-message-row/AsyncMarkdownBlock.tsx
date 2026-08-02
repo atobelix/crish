@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import styles from '../ChatMessageRow.module.css';
+import styles from './ChatMessageRow.module.css';
 import { useAsyncMarkdownHtml } from '../../api/markdownRenderAsync';
 import type { Priority } from '../../workers';
 

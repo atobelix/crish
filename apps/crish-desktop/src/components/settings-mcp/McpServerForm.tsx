@@ -1,6 +1,6 @@
 import React from 'react';
-import styles from '../McpSettingsTab.module.css';
-import { SettingsSelect } from '../SettingsSelect';
+import styles from './McpSettingsTab.module.css';
+import { SettingsSelect } from '../settings/SettingsSelect';
 import { Tooltip } from '../Tooltip';
 import { isDemoTransport, transportTitle, type DemoTransport } from './types';
 

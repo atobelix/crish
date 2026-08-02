@@ -18,8 +18,8 @@ import {
   X,
 } from 'lucide-react';
 import { getPanelTitle } from '../../store/layoutHelpers';
-import { ChatHeaderMore } from '../ChatHeaderMore';
-import { WorkspaceChromeBars } from '../WorkspaceChromeBars';
+import { ChatHeaderMore } from '../chat-card/ChatHeaderMore';
+import { WorkspaceChromeBars } from '../workspace/WorkspaceChromeBars';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { Tooltip } from '../Tooltip';
 import type { CardState, GroupState } from '../../store/layoutStore';

@@ -1,0 +1,138 @@
+/* ui/Button 私有形态样式（PE-05 T05.1.2）
+ * 全部引用 tokens.css 变量，无裸 hex/rgba；类名 camelCase 与组件私有 */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1_5);
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-weight: var(--font-weight-normal);
+  border-radius: var(--radius-md);
+  transition:
+    background-color var(--transition-micro),
+    color var(--transition-micro),
+    opacity var(--transition-micro);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+/* 尺寸档：sm 对齐 .ui-btn-sm（药丸形），md 对齐 .ui-btn-md */
+.buttonSm {
+  height: var(--control-height-sm);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-full);
+}
+
+.buttonMd {
+  height: var(--control-height);
+  padding: 0 var(--space-3_5);
+  font-size: var(--font-size-base);
+}
+
+/* 变体档：对齐 .ui-btn-primary / secondary / ghost 语义 */
+.buttonPrimary {
+  background: var(--accent-color);
+  color: var(--text-on-accent);
+}
+
+.buttonPrimary:hover {
+  background: var(--accent-hover);
+}
+
+.buttonSecondary {
+  background: var(--control-soft-bg);
+  color: var(--text-secondary);
+  border: none;
+  border-radius: var(--radius-full);
+}
+
+.buttonSecondary:hover {
+  background: var(--control-soft-bg-hover);
+  color: var(--text-primary);
+}
+
+.buttonGhost {
+  background: transparent;
+  color: var(--text-tertiary);
+  border: none;
+  padding: 0 var(--space-2);
+  height: var(--control-height-sm);
+  min-width: var(--control-height-sm);
+  width: auto;
+  border-radius: var(--radius-full);
+}
+
+.buttonGhost:hover {
+  background: var(--control-soft-bg);
+  color: var(--text-primary);
+}
+
+/* danger 新增变体（AA-04 3.3 缺口）：轻量危险操作，
+ * 复用 .ui-btn-ghost.danger 悬停色板：error 红文本 + error 浅底 */
+.buttonDanger {
+  background: transparent;
+  color: var(--color-error);
+  border: none;
+  padding: 0 var(--space-2);
+  height: var(--control-height-sm);
+  min-width: var(--control-height-sm);
+  width: auto;
+  border-radius: var(--radius-full);
+}
+
+.buttonDanger:hover {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+.buttonBlock {
+  width: 100%;
+}
+
+.buttonLoading {
+  cursor: progress;
+}
+
+.buttonIcon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.buttonLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 加载旋转指示：纯 tokens 色彩 */
+.spinner {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  border-radius: var(--radius-full);
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: button-spin var(--transition-spin) infinite linear;
+  flex-shrink: 0;
+}
+
+@keyframes button-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

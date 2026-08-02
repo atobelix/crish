@@ -1,0 +1,82 @@
+/* Approval Dock（自 ChatStatusRibbons.module.css 随组件搬出） */
+.approvalDock {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: min(var(--chat-col-max, 760px), 100%);
+  margin: 0 auto 6px;
+  padding: 8px 12px;
+  border-radius: var(--radius-xl);
+  border: 1px solid color-mix(in srgb, var(--accent-orange) 30%, var(--hairline, var(--border-subtle)));
+  background: color-mix(in srgb, var(--accent-orange) 5%, transparent);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.approvalDock.slim {
+  padding: 5px 10px;
+  gap: var(--space-1_5);
+  min-height: 30px;
+}
+
+.approvalDock:hover {
+  background: color-mix(in srgb, var(--accent-orange) 9%, transparent);
+}
+
+.approvalDock:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-orange) 10%, transparent);
+  outline-offset: 2px;
+}
+
+.approvalDockDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-orange);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-orange) 45%, transparent);
+  animation: approval-dock-dot-pulse 1.8s ease-out infinite;
+}
+
+@keyframes approval-dock-dot-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-orange) 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-orange) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-orange) 0%, transparent);
+  }
+}
+
+.approvalDockLabel {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approvalDockGoIcon {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  opacity: 0.8;
+}
+
+.approvalDock:hover .approvalDockGoIcon {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .approvalDockDot {
+    animation: none;
+  }
+}

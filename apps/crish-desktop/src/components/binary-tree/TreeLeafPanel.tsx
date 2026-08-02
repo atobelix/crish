@@ -32,31 +32,31 @@ import { isPendingDraft } from '../../store/draftSession';
 // ── 面板内容懒加载 ──────────────────────────────────────────────────
 
 const ChatCard = lazy(() =>
-  import('../ChatCard').then((m) => ({ default: m.ChatCard }))
+  import('../chat-card/ChatCard').then((m) => ({ default: m.ChatCard }))
 );
 const TerminalCard = lazy(() =>
-  import('../TerminalCard').then((m) => ({ default: m.TerminalCard }))
+  import('../workspace/TerminalCard').then((m) => ({ default: m.TerminalCard }))
 );
 const PreviewCard = lazy(() =>
-  import('../PreviewCard').then((m) => ({ default: m.PreviewCard }))
+  import('../workspace/PreviewCard').then((m) => ({ default: m.PreviewCard }))
 );
 const OverviewCard = lazy(() =>
-  import('../OverviewCard').then((m) => ({ default: m.OverviewCard }))
+  import('../overview/OverviewCard').then((m) => ({ default: m.OverviewCard }))
 );
 const FilesCard = lazy(() =>
-  import('../FilesCard').then((m) => ({ default: m.FilesCard }))
+  import('../files/FilesCard').then((m) => ({ default: m.FilesCard }))
 );
 const DiffCard = lazy(() =>
-  import('../DiffCard').then((m) => ({ default: m.DiffCard }))
+  import('../diff/DiffCard').then((m) => ({ default: m.DiffCard }))
 );
 const FileViewerCard = lazy(() =>
-  import('../FileViewerCard').then((m) => ({ default: m.FileViewerCard }))
+  import('../files/FileViewerCard').then((m) => ({ default: m.FileViewerCard }))
 );
 const RuntimePanel = lazy(() =>
-  import('../RuntimePanel').then((m) => ({ default: m.RuntimePanel }))
+  import('../workspace/RuntimePanel').then((m) => ({ default: m.RuntimePanel }))
 );
 const AgentCard = lazy(() =>
-  import('../AgentCard').then((m) => ({ default: m.AgentCard }))
+  import('../agent-card/AgentCard').then((m) => ({ default: m.AgentCard }))
 );
 
 // ── Props ───────────────────────────────────────────────────────────

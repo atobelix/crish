@@ -28,9 +28,9 @@ export function getDockOverlayStyle(
       height: '32px',
       borderRadius: '6px',
       backgroundColor:
-        'color-mix(in srgb, var(--accent-color, #1a73e8) 6%, transparent)',
+        'color-mix(in srgb, var(--accent-color) 6%, transparent)',
       border:
-        '1px dashed color-mix(in srgb, var(--accent-color, #1a73e8) 45%, transparent)',
+        '1px dashed color-mix(in srgb, var(--accent-color) 45%, transparent)',
       animation: 'pulse-merge-highlight 1.5s infinite ease-in-out',
       pointerEvents: 'none',
       zIndex: 'var(--z-drag-highlight)',
@@ -44,9 +44,9 @@ export function getDockOverlayStyle(
       height: 'calc((100% - 58px) / 2)',
       borderRadius: '6px',
       backgroundColor:
-        'color-mix(in srgb, var(--accent-color, #1a73e8) 6%, transparent)',
+        'color-mix(in srgb, var(--accent-color) 6%, transparent)',
       border:
-        '1px dashed color-mix(in srgb, var(--accent-color, #1a73e8) 45%, transparent)',
+        '1px dashed color-mix(in srgb, var(--accent-color) 45%, transparent)',
       animation: 'pulse-merge-highlight 1.5s infinite ease-in-out',
       pointerEvents: 'none',
       zIndex: 'var(--z-drag-highlight)',
@@ -60,9 +60,9 @@ export function getDockOverlayStyle(
       right: '10px',
       borderRadius: '6px',
       backgroundColor:
-        'color-mix(in srgb, var(--accent-color, #1a73e8) 6%, transparent)',
+        'color-mix(in srgb, var(--accent-color) 6%, transparent)',
       border:
-        '1px dashed color-mix(in srgb, var(--accent-color, #1a73e8) 45%, transparent)',
+        '1px dashed color-mix(in srgb, var(--accent-color) 45%, transparent)',
       animation: 'pulse-merge-highlight 1.5s infinite ease-in-out',
       pointerEvents: 'none',
       zIndex: 'var(--z-drag-highlight)',

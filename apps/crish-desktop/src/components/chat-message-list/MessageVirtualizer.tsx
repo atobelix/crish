@@ -3,7 +3,7 @@ import React, {
   useMemo,
   useRef,
 } from 'react';
-import styles from '../ChatMessageList.module.css';
+import styles from './ChatMessageList.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { Tooltip } from '../Tooltip';
 import type {
@@ -11,11 +11,11 @@ import type {
   SessionMessage,
 } from '../../store/layoutStore';
 import { messageMatchesSearch } from '../../api/sessionSearch';
-import { ChatAssistantMessageRow, ChatUserMessageRow } from '../ChatMessageRow';
+import { ChatAssistantMessageRow, ChatUserMessageRow } from '../chat-message-row/ChatMessageRow';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../../api/messageWindow';
 import { ChevronDown, Pin, PinOff } from 'lucide-react';
-import type { ChatToolStackSharedProps } from '../ChatToolCallBlock';
+import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 
 import type { PermissionMode } from '../../api/permissionModes';
 

@@ -1,0 +1,93 @@
+/* ui/Menu 私有形态样式（PE-05 T05.1.4）
+ * 收敛自全局 .tabs-add-menu/.tabs-add-item（shell-polish.css）；
+ * 全部引用 tokens.css / z-index.css 变量，无裸 hex/rgba */
+
+.menuContent {
+  position: fixed;
+  z-index: var(--z-dropdown-menu);
+  outline: none;
+  pointer-events: auto;
+  min-width: 180px;
+  max-height: min(70vh, 360px);
+  overflow-y: auto;
+  padding: var(--dropdown-padding);
+  border-radius: var(--dropdown-radius);
+  border: 1px solid var(--hairline-strong);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dropdown-gap);
+}
+
+.menuTitle {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: var(--space-1);
+}
+
+.menuList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dropdown-gap);
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: var(--item-padding);
+  border-radius: var(--item-radius);
+  font-family: inherit;
+  font-size: var(--item-font-size);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--transition-micro);
+  width: 100%;
+}
+
+.menuItem:hover {
+  background: var(--bg-hover);
+}
+
+.menuItem:focus-visible {
+  outline: none;
+  background: var(--bg-active);
+}
+
+.menuItemDisabled {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+.menuItemDisabled:hover {
+  background: transparent;
+}
+
+.menuItemDanger {
+  color: var(--color-error);
+}
+
+.menuItemIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.menuItemLabel {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menuItemHint {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}

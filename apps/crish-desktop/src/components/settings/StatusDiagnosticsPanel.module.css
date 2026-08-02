@@ -8,11 +8,11 @@
 }
 
 .connOk {
-  color: var(--ui-text-success, #2f9e44);
+  color: var(--ui-text-success);
 }
 
 .connBad {
-  color: var(--ui-text-danger, #e03131);
+  color: var(--ui-text-danger);
 }
 
 .spin {
@@ -35,7 +35,7 @@
   border: 1px solid var(--ui-border-danger, rgba(224, 49, 49, 0.4));
   border-radius: 8px;
   background: var(--ui-bg-danger-soft, rgba(224, 49, 49, 0.08));
-  color: var(--ui-text-danger, #e03131);
+  color: var(--ui-text-danger);
 }
 
 .errorBanner svg {
@@ -63,7 +63,7 @@
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--ui-text-success, #2f9e44);
+  color: var(--ui-text-success);
   background: rgba(47, 158, 68, 0.12);
 }
 
@@ -74,7 +74,7 @@
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--ui-text-danger, #e03131);
+  color: var(--ui-text-danger);
   background: rgba(224, 49, 49, 0.12);
 }
 
@@ -121,14 +121,14 @@
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 6px;
-  color: var(--ui-text-danger, #e03131);
+  color: var(--ui-text-danger);
   background: rgba(224, 49, 49, 0.14);
 }
 
 .lastErrorTs {
   flex: 1;
   font-size: 12px;
-  color: var(--ui-text-muted, #868e96);
+  color: var(--ui-text-muted);
 }
 
 .lastErrorDetail {
@@ -138,7 +138,7 @@
   font-family: var(--ui-font-mono, ui-monospace, Consolas, monospace);
   font-size: 12px;
   line-height: 1.5;
-  color: var(--ui-text-danger, #e03131);
+  color: var(--ui-text-danger);
 }
 
 /* 无错误 / 无诊断空态 */
@@ -148,7 +148,7 @@
   gap: 8px;
   padding: 10px 4px;
   font-size: 13px;
-  color: var(--ui-text-muted, #868e96);
+  color: var(--ui-text-muted);
 }
 
 /* 最近诊断列表 */
@@ -185,23 +185,23 @@
 }
 
 .diagLevel_debug {
-  color: var(--ui-text-muted, #868e96);
+  color: var(--ui-text-muted);
   background: rgba(127, 127, 127, 0.14);
 }
 
 .diagLevel_info {
-  color: var(--ui-text-info, #1971c2);
+  color: var(--ui-text-info);
   background: rgba(25, 113, 194, 0.12);
 }
 
 .diagLevel_warn,
 .diagLevel_warning {
-  color: var(--ui-text-warning, #e8590c);
+  color: var(--ui-text-warning);
   background: rgba(232, 89, 12, 0.12);
 }
 
 .diagLevel_error {
-  color: var(--ui-text-danger, #e03131);
+  color: var(--ui-text-danger);
   background: rgba(224, 49, 49, 0.12);
 }
 
@@ -209,7 +209,7 @@
   flex-shrink: 0;
   font-family: var(--ui-font-mono, ui-monospace, Consolas, monospace);
   font-size: 11px;
-  color: var(--ui-text-muted, #868e96);
+  color: var(--ui-text-muted);
   white-space: nowrap;
 }
 
@@ -217,5 +217,5 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--ui-text-primary, inherit);
+  color: var(--ui-text-primary);
 }

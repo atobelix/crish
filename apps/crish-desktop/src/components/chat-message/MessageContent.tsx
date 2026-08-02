@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { AlertCircle } from 'lucide-react';
-import styles from '../ChatMessageRow.module.css';
+import styles from '../chat-message-row/ChatMessageRow.module.css';
 import type { SessionMessage } from '../../store/layoutStore';
-import type { ChatToolStackSharedProps } from '../ChatToolCallBlock';
+import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import {
   buildAssistantTimeline,
   extractImageRefs,
@@ -85,7 +85,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(({
                 gap: 8,
               }}
             >
-              <AlertCircle size={13} style={{ color: 'var(--color-error, #ef4444)' }} />
+              <AlertCircle size={13} style={{ color: 'var(--color-error)' }} />
               <span>{errorDetail?.message || '服务暂时不可用，请检查网络或后端配置'}</span>
             </div>
           </div>

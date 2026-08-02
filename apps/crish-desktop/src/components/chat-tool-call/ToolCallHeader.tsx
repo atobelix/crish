@@ -8,7 +8,7 @@ import {
   RotateCcw,
   XCircle,
 } from 'lucide-react';
-import styles from '../ChatToolCallBlock.module.css';
+import styles from './ChatToolCallBlock.module.css';
 import type { MessageToolCall } from '../../store/layoutStore';
 import { Tooltip } from '../Tooltip';
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import styles from '../OverviewCard.module.css';
+import styles from './OverviewCard.module.css';
 import { useLayoutStore } from '../../store/layoutStore';
 import {
   selectActiveSession,

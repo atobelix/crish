@@ -1,11 +1,11 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
-import styles from '../DiffCard.module.css';
-import { DiffCardUnifiedView } from '../DiffCardUnifiedView';
-import { DiffCardSplitView } from '../DiffCardSplitView';
+import styles from './DiffCard.module.css';
+import { DiffCardUnifiedView } from './DiffCardUnifiedView';
+import { DiffCardSplitView } from './DiffCardSplitView';
 import { VirtualPlainCodeViewer } from './VirtualPlainCodeViewer';
 import type { FileDiff } from '../../store/types';
-import type { CompareMode, ComputedChange, SplitRenderItem, UnifiedRenderItem } from '../diffCardTypes';
+import type { CompareMode, ComputedChange, SplitRenderItem, UnifiedRenderItem } from './diffCardTypes';
 
 export interface DiffCodeViewerProps {
   f: FileDiff;

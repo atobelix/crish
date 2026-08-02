@@ -1,0 +1,137 @@
+/* ui/Input 私有形态样式（PE-05 T05.1.6）
+ * 对齐 .settings-field-input 语义；全部引用 tokens.css 变量，无裸 hex/rgba */
+.inputWrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.inputLabel {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--text-secondary);
+}
+
+.inputShell {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input {
+  width: 100%;
+  height: var(--control-height);
+  min-height: var(--control-height);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-sans);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  outline: none;
+  box-sizing: border-box;
+  box-shadow: none;
+  transition:
+    border-color var(--transition-micro),
+    background var(--transition-micro),
+    box-shadow var(--transition-micro);
+}
+
+.input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.input:focus,
+.input:focus-visible {
+  border-color: var(--border-color);
+  background: var(--bg-card);
+  box-shadow: var(--focus-ring);
+}
+
+.inputSm {
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+  padding: 0 var(--control-pad-x);
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-sm);
+}
+
+/* search 型：给放大镜前缀留位 */
+.inputSearch {
+  padding-left: var(--space-6);
+}
+
+.inputPrefix {
+  position: absolute;
+  left: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.inputSuffix {
+  position: absolute;
+  right: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.inputAction {
+  position: absolute;
+  right: var(--space-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background var(--transition-micro), color var(--transition-micro);
+}
+
+.inputAction:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.inputAction:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* 错误态：边框与文案走 --color-error 语义 token */
+.inputWrapError .input {
+  border-color: var(--color-error-border);
+}
+
+.inputWrapError .input:focus,
+.inputWrapError .input:focus-visible {
+  border-color: var(--color-error);
+}
+
+.inputError {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-error);
+}
+
+.inputHint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.inputWrapDisabled {
+  opacity: var(--opacity-disabled);
+}
+
+.inputWrapDisabled .input {
+  cursor: not-allowed;
+}

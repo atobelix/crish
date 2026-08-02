@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import styles from '../FilesCard.module.css';
+import styles from './FilesCard.module.css';
 import { Tooltip } from '../Tooltip';
 import { ExternalLink, X } from 'lucide-react';
 import { openPathDefault, pathBasename } from '../../api/workspaceFsApi';

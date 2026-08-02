@@ -1,5 +1,5 @@
 import React from 'react';
-import { SettingsSelect } from '../SettingsSelect';
+import { SettingsSelect } from './SettingsSelect';
 import {
   SettingsSection,
   SettingsCard,
@@ -150,6 +150,7 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
                   <input
                     id={domId}
                     type="color"
+                    // 待确认：颜色选择器默认值（纯黑）是功能数据而非样式 token，暂不迁移
                     value={String(val || '#000000')}
                     disabled={!ready}
                     onChange={(e) => void onSave({ [prop.key]: e.target.value })}
@@ -170,7 +171,7 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
                           style={{
                             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                             padding: 8, borderRadius: 8, cursor: 'pointer',
-                            border: isSelected ? '2px solid var(--accent-color, #888)' : '1px solid var(--border-color)',
+                            border: isSelected ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
                             background: 'var(--bg-card)', color: 'var(--text-primary)',
                             position: 'relative', transition: 'border-color 0.15s',
                           }}
@@ -180,7 +181,7 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
                           )}
                           <span style={{ fontSize: 'var(--font-size-xs)', textAlign: 'center', lineHeight: 1.3 }}>{preset.name}</span>
                           {isSelected && (
-                            <span style={{ position: 'absolute', top: 2, right: 2, fontSize: 12, color: 'var(--accent-color, #888)' }}>✓</span>
+                            <span style={{ position: 'absolute', top: 2, right: 2, fontSize: 12, color: 'var(--accent-color)' }}>✓</span>
                           )}
                         </button>
                       );

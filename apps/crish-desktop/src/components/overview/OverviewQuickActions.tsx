@@ -1,6 +1,6 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
-import styles from '../OverviewCard.module.css';
+import styles from './OverviewCard.module.css';
 import { emitUiEvent } from '../../api/uiEvents';
 import { Tooltip } from '../Tooltip';
 

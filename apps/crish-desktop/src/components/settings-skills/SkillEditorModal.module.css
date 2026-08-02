@@ -1,0 +1,84 @@
+/* 技能编辑弹窗（PE-05 T05.2 #4）
+ * 样式归属纠正：原跨文件复用 SkillsSettingsTab.module.css + 全局 skills-discover-*
+ * 类混用，现下沉为本组件 module（发现面板已收敛到 ui/Dialog 基座，:global 清零）；
+ * 新建/手填两个 create 框仍为页内内联区块（非弹窗），保留原位私有形态。 */
+
+/* 发现弹窗遮罩壳：设置页内弹层层级（--z-settings-dialog） */
+.skillsDiscoverOverlay {
+  --dialog-z: var(--z-settings-dialog);
+}
+
+/* 发现面板 → 弹窗内容区：候选技能勾选列表 */
+.skillsDiscoverList {
+  max-height: 120px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.skillsDiscoverItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  padding: 3px 2px;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  min-height: 26px;
+}
+
+.skillsDiscoverItem:last-child {
+  border-bottom: none;
+}
+
+.skillsDiscoverItem:hover {
+  background: var(--bg-hover);
+}
+
+.skillsDiscoverName {
+  display: block;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 弹窗 footer 操作区 */
+.skillsDiscoverActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* 页内 create 框（paths 选择 / manual 手填，非弹窗） */
+.skillsCreateBox {
+  padding: 2px 0 6px;
+  border-radius: 0;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5);
+}
+
+.skillsCreateRow {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-1_5);
+  min-width: 0;
+}
+
+.skillsCreateRow :global(.settings-field-input) {
+  flex: 1 1 120px;
+  min-width: 100px;
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+  font-size: var(--font-size-xs);
+  padding: 0 var(--control-pad-x);
+}

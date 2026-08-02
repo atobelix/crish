@@ -6,7 +6,7 @@ import type {
 } from '../../store/layoutStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { assistantCopyText } from '../../api/toolPresentation';
-import type { ChatToolStackSharedProps } from '../ChatToolCallBlock';
+import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import type { PinnedItem } from './MessageVirtualizer';
 import { pinSnippet } from './useScrollAnchor';
 

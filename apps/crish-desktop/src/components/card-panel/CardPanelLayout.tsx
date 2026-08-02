@@ -1,8 +1,8 @@
 import React, { lazy, Suspense } from 'react';
 import styles from '../CardPanel.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { ChatCard } from '../ChatCard';
-import { TerminalCard } from '../TerminalCard';
+import { ChatCard } from '../chat-card/ChatCard';
+import { TerminalCard } from '../workspace/TerminalCard';
 import { getPanelTitle } from '../../store/layoutHelpers';
 import type { CardState, GroupState } from '../../store/layoutStore';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
@@ -23,22 +23,22 @@ export {
 };
 
 const PreviewCard = lazy(() =>
-  import('../PreviewCard').then((m) => ({ default: m.PreviewCard }))
+  import('../workspace/PreviewCard').then((m) => ({ default: m.PreviewCard }))
 );
 const OverviewCard = lazy(() =>
-  import('../OverviewCard').then((m) => ({ default: m.OverviewCard }))
+  import('../overview/OverviewCard').then((m) => ({ default: m.OverviewCard }))
 );
 const FilesCard = lazy(() =>
-  import('../FilesCard').then((m) => ({ default: m.FilesCard }))
+  import('../files/FilesCard').then((m) => ({ default: m.FilesCard }))
 );
 const DiffCard = lazy(() =>
-  import('../DiffCard').then((m) => ({ default: m.DiffCard }))
+  import('../diff/DiffCard').then((m) => ({ default: m.DiffCard }))
 );
 const RuntimePanel = lazy(() =>
-  import('../RuntimePanel').then((m) => ({ default: m.RuntimePanel }))
+  import('../workspace/RuntimePanel').then((m) => ({ default: m.RuntimePanel }))
 );
 const AgentCard = lazy(() =>
-  import('../AgentCard').then((m) => ({ default: m.AgentCard }))
+  import('../agent-card/AgentCard').then((m) => ({ default: m.AgentCard }))
 );
 
 export interface CardPanelLayoutProps {

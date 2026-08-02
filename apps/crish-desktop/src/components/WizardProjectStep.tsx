@@ -1,0 +1,91 @@
+/**
+ * 向导第 3 步：选择项目（可选）。
+ * 已有项目展示状态；否则「选择文件夹」+ 手填路径。
+ * 目录选择副作用（openDirectoryDialogSafe + addProjectFromPath）由 useFirstRunWizard 提供。
+ */
+import React from 'react';
+import * as Lucide from 'lucide-react';
+import styles from './overlay/FirstRunWizard.module.css';
+
+/** 本步用到的可访问 id（useId 生成，壳层透传） */
+export type WizardProjectStepIds = {
+  pathId: string;
+};
+
+export type WizardProjectStepProps = {
+  ids: WizardProjectStepIds;
+  hasProject: boolean;
+  /** 已激活项目名或工作区路径（展示用） */
+  currentProjectLabel: string;
+  pathDraft: string;
+  busy: boolean;
+  /** 壳层 role=alert 文案（仅用于 aria-invalid / aria-describedby） */
+  error: string;
+  describedBy?: string;
+  onPathChange: (v: string) => void;
+  onPickFolder: () => void;
+  onEnter: () => void;
+};
+
+export const WizardProjectStep: React.FC<WizardProjectStepProps> = ({
+  ids,
+  hasProject,
+  currentProjectLabel,
+  pathDraft,
+  busy,
+  error,
+  describedBy,
+  onPathChange,
+  onPickFolder,
+  onEnter,
+}) => {
+  return (
+    <>
+      <p className={styles.firstRunHint} style={{ marginTop: 0 }}>
+        选择工作目录后，助手会在该项目下读写文件。也可跳过，无项目直接对话。
+      </p>
+      {hasProject ? (
+        <div className={styles.firstRunProjectOk} role="status">
+          <Lucide.FolderCheck size={16} aria-hidden="true" />
+          <span>当前：{currentProjectLabel}</span>
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            className={`${styles.firstRunBtn} ${styles.secondary}`}
+            disabled={busy}
+            aria-busy={busy || undefined}
+            onClick={() => {
+              void onPickFolder();
+            }}
+          >
+            <Lucide.FolderInput size={16} aria-hidden="true" />
+            选择文件夹
+          </button>
+          <label className={styles.firstRunLabel} htmlFor={ids.pathId}>
+            或输入路径
+          </label>
+          <input
+            id={ids.pathId}
+            className={styles.firstRunInput}
+            placeholder="例如 C:/workspace/crish"
+            value={pathDraft}
+            disabled={busy}
+            spellCheck={false}
+            autoComplete="off"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={describedBy}
+            onChange={(e) => onPathChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !busy) {
+                e.preventDefault();
+                onEnter();
+              }
+            }}
+          />
+        </>
+      )}
+    </>
+  );
+};

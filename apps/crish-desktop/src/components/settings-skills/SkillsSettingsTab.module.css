@@ -1,0 +1,759 @@
+.skillsTab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  flex: 1;
+  width: 100%;
+  max-width: var(--settings-content-max, 720px);
+}
+
+.skillsHeadRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-2_5);
+  min-height: var(--control-height);
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.skillsHeadStats {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.skillsFsWarn {
+  font-size: var(--font-size-xs);
+  color: var(--accent-orange);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.skillsTabHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+/* 空态内联操作行（SkillCardList 消费；发现弹窗的 skillsDiscoverActions 已下沉到
+   SkillEditorModal.module.css） */
+.skillsDiscoverActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.skillsTabTitle {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-content);
+  letter-spacing: var(--letter-spacing-tighter);
+  line-height: var(--line-height-dense);
+  color: var(--text-primary);
+}
+
+.skillsTabSub {
+  margin: 8px 0 0;
+  font-size: var(--font-size-sm-plus);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  max-width: 40em;
+}
+
+.skillsTabActions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-1_5);
+  align-items: center;
+  min-width: 0;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* 闂佺懓鐏堥崑鎾绘煠瀹曞洦娅曢柣鈽嗗亰閺屽懏寰勫☉姘辩崶婵炶揪绲剧划搴ㄥ极閵堝鏄ラ柣鏂垮閻熸捇鏌?+ 闂佺懓鍚嬬划搴ㄥ磼閵娾晜鏅悘鐐跺亹閻熸繈鏌涢銏☆棤妞ゆ垵娲︾粋宥呯暆閸愮偓鏂€ segment */
+.skillsToolbarFocus {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-2_5);
+  min-height: 36px;
+}
+
+.skillsToolbarFocus .skillsScopeSelect,
+.skillsToolbarFocus :global(.settings-select) {
+  flex: 0 0 auto;
+  min-width: 140px;
+  max-width: 220px;
+}
+
+.skillsToolbarFocus .skillsSearch {
+  flex: 1 1 auto;
+  min-width: 120px;
+  max-width: 320px;
+}
+
+.skillsMoreWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* T05.3.2：基座面板形态（原 .skillsMoreMenu 的绝对定位交给 ui/Menu 基座接管） */
+.skillsMoreMenuBase {
+  min-width: 168px;
+}
+
+.skillsMoreMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 168px;
+  padding: var(--space-1);
+  border-radius: var(--radius-xl);
+  background: var(--bg-elevated, var(--bg-primary));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--text-primary) 6%, transparent),
+    0 8px 24px color-mix(in srgb, var(--shadow-color) 8%, transparent);
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+}
+
+.skillsMoreItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  padding: 8px 10px;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+}
+
+.skillsMoreItem:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+}
+
+.skillsMoreItem:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.skillsMoreItem.isActive {
+  background: color-mix(in srgb, var(--accent-green) 12%, transparent);
+}
+
+.skillsEmptyInlineCta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2_5);
+  padding: 16px 8px;
+  font-size: var(--font-size-base);
+}
+
+.skillsExtraDetails {
+  margin-top: auto;
+  padding: 8px 6px 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.skillsExtraSummary {
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  padding: 4px 2px 8px;
+  list-style: none;
+  user-select: none;
+}
+
+.skillsExtraSummary::-webkit-details-marker {
+  display: none;
+}
+
+.skillsStats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1_5);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.skillsStats strong {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.skillsStatSep {
+  opacity: 0.5;
+}
+
+.skillsStats :global(.act-enabled) {
+  color: var(--accent-green);
+}
+
+.skillsStats :global(.act-recommended) {
+  color: var(--accent-orange);
+}
+
+.skillsToolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.skillsFilters {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-1_5);
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.skillsEnableCmd {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.skillsEnableTitle {
+  font-size: var(--font-size-xs-plus);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.skillsEnableDesc {
+  display: none;
+}
+
+.skillsSearch {
+  max-width: 140px;
+  min-width: 88px;
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+  font-size: var(--font-size-xs);
+  padding: 0 var(--control-pad-x);
+}
+
+.skillsSlashPreview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.skillsSlashLabel {
+  margin-right: var(--space-1);
+}
+
+.skillsSlashChip {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xxs);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.skillsSlashMore {
+  opacity: 0.7;
+}
+
+.skillsBanner {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm-plus);
+  line-height: 1.5;
+}
+
+.skillsSplit {
+  display: flex;
+  flex: 1;
+  min-height: min(360px, calc(100vh - 220px));
+  border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: transparent;
+}
+
+.skillsRail {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+
+.skillsRailList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.skillsRailGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: var(--space-1_5);
+}
+
+.skillsRailGroupLabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px 3px;
+  font-size: 10.5px;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-tertiary);
+  text-transform: none;
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+.skillsRailItem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: var(--space-2_5);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  font-family: inherit;
+  position: relative;
+}
+
+.skillsRailItemDense {
+  align-items: center;
+  min-height: 24px;
+  padding: 1px 6px;
+  gap: 5px;
+  border-radius: var(--radius-xs);
+}
+
+.skillsRailItemDense .skillsRailIcon {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  border: none;
+}
+
+.skillsRailItemDense .skillsRailName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs-plus);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.skillsRailItemDense .skillsActDot {
+  position: static;
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  margin-left: var(--space-0_5);
+}
+
+.skillsRailItem:hover {
+  background: var(--bg-hover);
+}
+
+.skillsRailItem.isActive {
+  background: var(--bg-active);
+}
+
+.skillsRailIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.skillsRailText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+  padding-right: 14px;
+}
+
+.skillsRailName {
+  font-size: var(--font-size-sm-plus);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+}
+
+.skillsSysBadge {
+  font-style: normal;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 0 6px;
+  background: transparent;
+}
+
+.skillsRailDesc {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.skillsActDot {
+  position: absolute;
+  right: 10px;
+  top: 14px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.skillsActDot.actEnabled {
+  background: var(--accent-green);
+}
+
+.skillsActDot.actRecommended {
+  background: var(--accent-orange);
+}
+
+.skillsActDot.actDisabled {
+  background: var(--border-color);
+}
+
+.skillsEmptyInline {
+  padding: 6px 6px;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.skillsEmptyHint {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+}
+
+.skillsEmptyHint code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
+.skillsExtra {
+  border-top: 1px solid var(--border-subtle);
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5);
+  background: transparent;
+}
+
+.skillsExtraLabel {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.skillsExtraRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.skillsExtraRow span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skillsExtraAdd {
+  display: flex;
+  gap: var(--space-1_5);
+}
+
+.skillsExtraAdd :global(.settings-field-input) {
+  flex: 1;
+  min-width: 0;
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+}
+
+.skillsDetail {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5);
+  background: transparent;
+}
+
+.skillsDetailEmpty {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  padding: 8px 4px;
+  text-align: left;
+}
+
+.skillsDetailTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.skillsDetailMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.skillsDetailNameRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.skillsDetailCmdRow {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-1_5);
+  min-width: 0;
+}
+
+.skillsPathInline {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-micro);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.skillsDetailControls {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1_5);
+}
+
+.skillsDetailName {
+  font-size: var(--font-size-sm-plus);
+  font-weight: var(--font-weight-content);
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.skillsDetailMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: 0;
+}
+
+.skillsScope,
+.skillsTag {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: transparent;
+}
+
+.skillsDetailPath,
+.skillsPathBtn {
+  margin-top: var(--space-1_5);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  word-break: break-all;
+}
+
+.skillsPathBtn {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-1_5);
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-mono);
+}
+
+.skillsPathBtn:hover {
+  color: var(--text-secondary);
+}
+
+.skillsPreview {
+  flex: 1;
+  min-height: 140px;
+  padding: 8px 0;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
+  overflow-y: auto;
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+.skillsRaw {
+  flex: 1;
+  min-height: 140px;
+  margin: 0;
+  padding: 8px 0;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-base);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 闂佺懓鐏堥崑鎾绘煠閾忣偄鐏婇柡鍛埣瀵€熺疀濞戣鲸婢撴繝銏ｅ煐閻楁粌煤閹峰被浜归柡鍥朵簽缁愭鏌涘Δ浣圭妞ゃ垺鍨归幃浼村Ω閵夈儳顦伴梺鎸庣☉閺堫剙螞?inline style */
+.skillsExtraSection {
+  padding: 6px 6px 8px;
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.skillsExtraSection :global(.settings-group-label) {
+  padding: 2px 2px 2px;
+}
+
+.skillsExtraAddRow {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  min-width: 0;
+}
+
+.skillsExtraAddRow :global(.settings-field-input) {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+  font-size: var(--font-size-xs);
+  padding: 0 var(--control-pad-x);
+}
+
+.skillsRoots {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.skillsRoots summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.skillsRoots ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.skillsRoots li {
+  margin: 4px 0;
+  word-break: break-all;
+}
+
+.skillsRoots li.fail {
+  color: var(--accent-red);
+}
+
+.skillsRoots li.empty {
+  opacity: 0.75;
+}
+
+.skillsRoots code {
+  font-family: var(--font-mono);
+}

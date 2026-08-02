@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from '../SettingsExtensionsTab.module.css';
+import styles from './SettingsExtensionsTab.module.css';
 import {
   kindLabel,
   isMcpToolDisabled,

@@ -10,7 +10,7 @@
 
 import React, { useCallback, useState } from 'react';
 import { Plus, X } from 'lucide-react';
-import { IconSidebarRight } from '../SidebarToggleIcons';
+import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import {
   useLayoutTreeStore,
   type LayoutLeaf,

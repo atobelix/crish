@@ -1,5 +1,13 @@
+/**
+ * 斜杠命令菜单（PE-05 T05.3 约定例外，不接 ui/Menu 基座）：
+ * - 纯渲染：键盘漫游保持在父级 ChatComposer（handleSlashKeyDown），
+ *   aria-activedescendant 由父级管理，本组件只渲染 listbox 与选项；
+ * - 定位：随输入框内联布局（CSS 绝对定位），如未来需要视口钳位/避让，
+ *   必须统一走 ui/Menu/position.ts 的 clampPosition（坐标计算单源），
+ *   不得在本文件引入新的坐标实现。
+ */
 import React from 'react';
-import styles from '../ChatComposer.module.css';
+import styles from './ChatComposer.module.css';
 
 export type SlashCommandItem = { cmd: string; desc: string };
 

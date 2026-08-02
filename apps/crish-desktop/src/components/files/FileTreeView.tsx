@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import styles from '../FilesCard.module.css';
+import styles from './FilesCard.module.css';
 import { Tooltip } from '../Tooltip';
 import { ChevronDown, ChevronRight, File, FileCode2, FileText, Folder, Image, Table, X } from 'lucide-react';
 import { detectFileKind } from '../../api/workspaceFsApi';

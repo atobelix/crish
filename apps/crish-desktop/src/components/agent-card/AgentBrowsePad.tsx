@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import styles from '../AgentCard.module.css';
+import styles from './AgentCard.module.css';
 import { Tooltip } from '../Tooltip';
 import * as Lucide from 'lucide-react';
 import { browseAgentSidePanel, openAgentInSidePanel } from '../../api/openAgentPanel';

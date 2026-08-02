@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from '../OverviewCard.module.css';
+import styles from './OverviewCard.module.css';
 import { CalendarClock, ChevronDown } from 'lucide-react';
 import { scheduleLabel } from '../../api/workflowApi';
 import type { CronJob } from '../../api/clientApi';

@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
-import { collectMessageDiffs } from '../ChangeOverviewCard';
+import { collectMessageDiffs } from './ChangeOverviewCard';
 import { assistantTurnLabel, mergeSessionDiffFiles, type DiffSourceMode } from '../../api/diffPanelHelpers';
 import { readTextFile } from '../../api/workspaceFsApi';
 import type { FileDiff, SessionMessage, MessageSender, SessionMessageStatus } from '../../store/types';
-import type { CompareMode, ComputedChange, SplitPair, UnifiedRenderItem, SplitRenderItem } from '../diffCardTypes';
+import type { CompareMode, ComputedChange, SplitPair, UnifiedRenderItem, SplitRenderItem } from './diffCardTypes';
 
 type SourceMode = DiffSourceMode;
 

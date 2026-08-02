@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import styles from '../ChatMessageRow.module.css';
+import styles from './ChatMessageRow.module.css';
 import { Tooltip } from '../Tooltip';
 import type { SessionMessage } from '../../store/layoutStore';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';

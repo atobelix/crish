@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
-import styles from '../ChatMessageRow.module.css';
+import styles from './ChatMessageRow.module.css';
 import { thinkingFoldAria } from './chatMessageRowUtils';
 import { ThinkingTimer } from './ThinkingTimer';
 

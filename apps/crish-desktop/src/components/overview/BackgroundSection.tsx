@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from '../OverviewCard.module.css';
+import styles from './OverviewCard.module.css';
 import { ChevronDown, Terminal } from 'lucide-react';
 import { formatBgTaskMeta } from './helpers';
 import type { BackgroundTaskInfo } from '../../api/backgroundTasksApi';

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
-import styles from '../DiffCard.module.css';
+import styles from './DiffCard.module.css';
 
 function basename(p: string): string {
   return p.replace(/^.*[\\/]/, '') || p;

@@ -10,9 +10,9 @@ import {
   Terminal,
   LayoutDashboard,
 } from 'lucide-react';
-import { ChatHeaderMore } from '../ChatHeaderMore';
+import { ChatHeaderMore } from './ChatHeaderMore';
 import { Tooltip } from '../Tooltip';
-import { IconSidebarRight } from '../SidebarToggleIcons';
+import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import {
   openToolInSession,
   applyDockToTree,

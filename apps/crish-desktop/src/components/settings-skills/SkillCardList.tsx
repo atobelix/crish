@@ -2,7 +2,7 @@ import React, { useId } from 'react';
 import * as Lucide from 'lucide-react';
 import type { DesktopSkill } from '../../api/skillsApi';
 import { Tooltip } from '../Tooltip';
-import styles from '../SkillsSettingsTab.module.css';
+import styles from './SkillsSettingsTab.module.css';
 import {
   ACTIVATION_LABEL,
   EMPTY_FILTER_HINT,

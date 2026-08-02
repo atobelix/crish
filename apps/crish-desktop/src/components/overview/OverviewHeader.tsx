@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from '../OverviewCard.module.css';
+import styles from './OverviewCard.module.css';
 import { Tooltip } from '../Tooltip';
 import { basename } from './helpers';
 import { ProgressSection } from './ProgressSection';

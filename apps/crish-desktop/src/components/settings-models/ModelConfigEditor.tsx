@@ -19,7 +19,7 @@ import {
   setModelEnabled,
 } from '../../api/modelCatalog';
 import { Tooltip } from '../Tooltip';
-import styles from '../ModelsSettingsTab.module.css';
+import styles from './ModelsSettingsTab.module.css';
 import type { AddDraft, CfgDraft } from './useModelProfilesState';
 
 interface ModelConfigEditorProps {

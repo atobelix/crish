@@ -1,5 +1,11 @@
 import type { SessionAgent } from '../../store/layoutStore';
 
+/**
+ * 例外声明（T05.5.1 tokens 唯一源）：
+ * buildAgentPreviewHtml 输出的内联 <style> 是独立 HTML 文档（Blob 独立上下文），
+ * 不继承应用 CSS 变量，其中的 hex 属预览模板数据，不做 token 化。
+ */
+
 /** 状态芯片文案（中文唯一来源） */
 export const STATUS_LABEL: Record<SessionAgent['status'], string> = {
   running: '运行中',

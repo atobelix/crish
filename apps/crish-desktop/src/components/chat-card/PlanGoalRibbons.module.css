@@ -1,0 +1,117 @@
+/* Plan / goal mode ribbons（自 ChatStatusRibbons.module.css 随组件搬出） */
+.planModeRibbon {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2_5);
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--hairline, var(--border-subtle));
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.planModeRibbon.slim {
+  gap: var(--space-1_5);
+  margin: 0 0 6px;
+  padding: 4px 8px;
+  min-height: 28px;
+  border-radius: var(--radius-lg);
+}
+
+.planModeRibbon.slim > svg {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  opacity: 0.9;
+}
+
+.planModeRibbonText {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: 1.35;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planModeRibbon.slim .planModeRibbonText {
+  white-space: nowrap;
+}
+
+.planModeRibbonText strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.planModeRibbonActions {
+  display: flex;
+  gap: var(--space-1_5);
+  flex-shrink: 0;
+}
+
+.planModeRibbonIconBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.planModeRibbonIconBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.planModeRibbonIconBtn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-color) 10%, transparent);
+  outline-offset: 1px;
+}
+
+.planModeRibbonIconBtn.isDanger {
+  color: var(--danger-color);
+}
+
+.planModeRibbonIconBtn.isDanger:hover {
+  background: color-mix(in srgb, var(--danger-color) 12%, transparent);
+  color: var(--danger-color);
+}
+
+/* goal mode ribbon */
+.goalModeRibbon {
+  border-color: color-mix(in srgb, var(--accent-color) 35%, var(--hairline, var(--border-subtle)));
+}
+
+.goalModeRibbonMeter {
+  flex-shrink: 0;
+  width: 36px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--text-tertiary) 22%, transparent);
+  overflow: hidden;
+  align-self: center;
+}
+
+.goalModeRibbonMeterFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent-color) 75%, var(--text-primary));
+  min-width: 0;
+  transition: width var(--transition-fast);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goalModeRibbonMeterFill {
+    transition: none;
+  }
+}

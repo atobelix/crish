@@ -16,7 +16,7 @@ import { GlobalSessionTabBar } from './shell/GlobalSessionTabBar';
 import { useSessionTabDrag } from './shell/SessionTabDragContext';
 
 const IconSidebarLeft = lazy(() =>
-  import('./SidebarToggleIcons').then((m) => ({ default: m.IconSidebarLeft }))
+  import('./sidebar/SidebarToggleIcons').then((m) => ({ default: m.IconSidebarLeft }))
 );
 
 export interface AppTopBarProps {

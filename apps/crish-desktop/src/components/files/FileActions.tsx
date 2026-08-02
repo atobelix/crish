@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import styles from '../FilesCard.module.css';
+import styles from './FilesCard.module.css';
 import { Tooltip } from '../Tooltip';
 import { AppWindow, ChevronDown, ChevronsUpDown, Copy, FolderOpen, MoreHorizontal, Pencil, Save } from 'lucide-react';
 import { revealInOs } from '../../api/workspaceFsApi';

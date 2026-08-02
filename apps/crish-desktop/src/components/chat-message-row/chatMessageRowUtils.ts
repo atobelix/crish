@@ -2,7 +2,7 @@
  * ChatMessageRow 纯工具函数与类型定义
  */
 import type { SessionMessage } from '../../store/layoutStore';
-import type { ChatToolStackSharedProps } from '../ChatToolCallBlock';
+import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import type { ToolRenderItem } from '../../api/toolPresentation';
 
 export const USER_BUBBLE_LONG_CHARS = 260;

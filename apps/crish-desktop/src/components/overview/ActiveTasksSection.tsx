@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from '../OverviewCard.module.css';
+import styles from './OverviewCard.module.css';
 import { Activity, ChevronDown } from 'lucide-react';
 import { formatElapsed } from './helpers';
 import type { PendingApprovalInfo } from '../../api/engineStatus';

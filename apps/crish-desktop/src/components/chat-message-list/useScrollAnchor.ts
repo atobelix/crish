@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import styles from '../ChatMessageList.module.css';
+import styles from './ChatMessageList.module.css';
 import {
   DEFAULT_RECENT_MESSAGE_COUNT,
   expandedOlderForPinJump,

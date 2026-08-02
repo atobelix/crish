@@ -1,6 +1,6 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
-import styles from '../ChatComposer.module.css';
+import styles from './ChatComposer.module.css';
 import { Tooltip } from '../Tooltip';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 

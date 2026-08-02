@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from '../OverviewCard.module.css';
+import styles from './OverviewCard.module.css';
 import { ChevronDown, Cpu } from 'lucide-react';
 
 interface UsageSectionProps {

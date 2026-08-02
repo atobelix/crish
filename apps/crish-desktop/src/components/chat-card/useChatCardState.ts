@@ -22,7 +22,7 @@ import { isDemoMode } from '../../api/appMode';
 import { getProviderSetupStatus } from '../../api/providerProfiles';
 import { openFileInPanel } from '../../api/workspaceFsApi';
 import { onUiEvent } from '../../api/uiEvents';
-import { isFirstRunOverlayOpen } from '../FirstRunWizard';
+import { isFirstRunOverlayOpen } from '../firstRunOverlayFlag';
 
 import { useModelSelection } from './ChatHeaderControls';
 import { useChatScrollAnchor } from './ChatScrollAnchor';

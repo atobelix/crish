@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from '../OverviewCard.module.css';
+import styles from './OverviewCard.module.css';
 import { Tooltip } from '../Tooltip';
 import { ChevronDown, File, FileCode2, FileText, GitBranch, Image, RefreshCw, Table } from 'lucide-react';
 import { openGitDownloadPage } from '../../api/gitApi';

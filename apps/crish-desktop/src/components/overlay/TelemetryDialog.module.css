@@ -1,0 +1,64 @@
+/* 诊断日志弹窗（PE-05 T05.2 #1）
+ * 原 TelemetryDialog 内联 style 对象下沉为本组件 module；全引用 tokens，无裸 hex/rgba */
+.row {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-1_5) 0;
+  font-size: var(--font-size-sm);
+}
+
+.label {
+  color: var(--text-tertiary);
+}
+
+.value {
+  font-weight: var(--font-weight-medium);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.btn {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.btnPrimary {
+  background: var(--accent-blue);
+  color: var(--text-on-accent);
+}
+
+.btnDanger {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+.btnSecondary {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
+}
+
+.badge {
+  display: inline-block;
+  padding: var(--space-0_5) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semi, 600);
+}
+
+.badgeError {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+.badgeWarn {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}

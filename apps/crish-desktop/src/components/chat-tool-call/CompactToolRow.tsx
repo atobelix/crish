@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useState, useMemo, useEffect } from 'react';
-import styles from '../ChatToolCallBlock.module.css';
+import styles from './ChatToolCallBlock.module.css';
 import type { MessageToolCall } from '../../store/layoutStore';
-import { ApprovalAskCard } from '../ApprovalAskCard';
+import { ApprovalAskCard } from '../agent-card/ApprovalAskCard';
 import { isEditToolName } from '../../api/toolFeedback';
 import {
   extractToolCommand,
@@ -17,13 +17,13 @@ import {
   toolRowTone,
 } from '../../api/toolPresentation';
 import { extractFilePathFromToolArgs } from '../../api/workspaceFsApi';
-import type { ChatToolStackProps } from '../ChatToolCallBlock';
+import type { ChatToolStackProps } from './ChatToolCallBlock';
 import { ToolCallHeader } from './ToolCallHeader';
 import { ToolCallOutput } from './ToolCallOutput';
 import { toolStatusZh, toolResultBodyId, findAgentForTool } from './chatToolCallUtils';
 
 const InlineAgentPanel = lazy(() =>
-  import('../InlineAgentPanel').then((m) => ({ default: m.InlineAgentPanel }))
+  import('../agent-card/InlineAgentPanel').then((m) => ({ default: m.InlineAgentPanel }))
 );
 
 export interface CompactToolRowProps {

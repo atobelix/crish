@@ -7,7 +7,7 @@ import {
   type ProviderProfile,
 } from '../../api/providerProfiles';
 import { formatModelDisplayName } from '../../api/modelCatalog';
-import styles from '../ModelsSettingsTab.module.css';
+import styles from './ModelsSettingsTab.module.css';
 import { Tooltip } from '../Tooltip';
 
 interface ModelsCascadeSelectProps {

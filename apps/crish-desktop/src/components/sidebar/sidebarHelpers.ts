@@ -1,5 +1,11 @@
 import { sessionListDisplayTitle } from '../../api/sessionTitle';
 
+/**
+ * 例外声明（T05.5.1 tokens 唯一源）：
+ * buildSessionPreviewHtml 输出的内联 <style> 是独立 HTML 文档（Blob 独立上下文），
+ * 不继承应用 CSS 变量，其中的 hex 属预览模板数据，不做 token 化。
+ */
+
 export const SIDEBAR_WIDTH_MIN = 220;
 export const SIDEBAR_WIDTH_MAX = 360;
 export const SIDEBAR_WIDTH_DEFAULT = 260;

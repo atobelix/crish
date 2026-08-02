@@ -2,7 +2,7 @@ import React from 'react';
 import * as Lucide from 'lucide-react';
 import { revealSkillPath, type DesktopSkill, type SkillActivation } from '../../api/skillsApi';
 import { Tooltip } from '../Tooltip';
-import styles from '../SkillsSettingsTab.module.css';
+import styles from './SkillsSettingsTab.module.css';
 import { ACTIVATION_OPTIONS, scopeGroupLabel } from './useSkillsSettingsState';
 
 interface SkillDetailPreviewProps {

@@ -1,7 +1,6 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import * as Popover from '@radix-ui/react-popover';
 import { ChevronDown } from 'lucide-react';
-import styles from '../ChatCard.module.css';
+import styles from './ChatCard.module.css';
 import { Tooltip } from '../Tooltip';
 import {
   getActiveModelId,
@@ -14,7 +13,7 @@ import { fetchEngineStatus, type EngineStatus } from '../../api/engineConfig';
 import { onUiEvent } from '../../api/uiEvents';
 import type { AppSettings } from '../../store/layoutStore';
 
-import { ModelBadgePickerMenu } from '../ModelBadgePickerMenu';
+import { ModelBadgePickerMenu } from '../provider/ModelBadgePickerMenu';
 
 export interface ChatHeaderControlsProps {
   appSettings: AppSettings | undefined;
@@ -124,15 +123,19 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
   };
 
   return (
-    <Popover.Root open={showModelDropdown} onOpenChange={setShowModelDropdown}>
-      <Tooltip
-        content={
-          getActiveProfile()
-            ? `${getActiveProfile()!.name} · ${resolveDisplayModelId(engineModel) || engineModel || '未选模型'}`
-            : '服务商与模型（可在设置中更改）'
-        }
+    <Suspense fallback={null}>
+      <ModelBadgePickerMenu
+        activeModel={engineModel}
+        onClose={() => setShowModelDropdown(false)}
+        open={showModelDropdown}
       >
-        <Popover.Trigger asChild>
+        <Tooltip
+          content={
+            getActiveProfile()
+              ? `${getActiveProfile()!.name} · ${resolveDisplayModelId(engineModel) || engineModel || '未选模型'}`
+              : '服务商与模型（可在设置中更改）'
+          }
+        >
           <div
             className={`${styles.modelBadge} ${showModelDropdown ? styles.active : ''}`}
             data-testid="model-selector-button"
@@ -159,16 +162,8 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
               style={{ opacity: 0.6, marginLeft: 6, flexShrink: 0 }}
             />
           </div>
-        </Popover.Trigger>
-      </Tooltip>
-      {showModelDropdown && (
-        <Suspense fallback={null}>
-          <ModelBadgePickerMenu
-            activeModel={engineModel}
-            onClose={() => setShowModelDropdown(false)}
-          />
-        </Suspense>
-      )}
-    </Popover.Root>
+        </Tooltip>
+      </ModelBadgePickerMenu>
+    </Suspense>
   );
 };

@@ -6,7 +6,7 @@ import { createLeaf, createBranch } from '../../store/layout-tree/types';
 import type { LayoutNode } from '../../store/layout-tree/types';
 import { moveLeaf, collectLeaves } from '../../store/layout-tree/operations';
 import { findChatLeafBySessionId, listChatLeaves } from '../../store/layout-tree';
-import { planSessionCanvasDrop } from './useTopBarDrag';
+import { planSessionCanvasDrop } from './topBarDragLib';
 import type { DropZone } from '../../store/layout-tree';
 
 function splitZone(

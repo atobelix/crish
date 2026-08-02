@@ -1,0 +1,186 @@
+/* ui/Dialog 私有形态样式（PE-05 T05.1.3）
+ * 全部引用 tokens.css / z-index.css 变量，无裸 hex/rgba；
+ * 进出场动画由 --transition-modal-enter / --duration-exit 驱动 */
+
+/* 遮罩 + 面板的绝对定位壳（铺满视口）
+ * 消费方可经 overlayClassName 设 --dialog-z 覆盖层级（SettingsPanel/Cheatsheet 等） */
+.overlayEnter,
+.overlayExit {
+  position: fixed;
+  inset: 0;
+  z-index: var(--dialog-z, var(--z-modal-backdrop));
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg-overlay) 45%, transparent);
+}
+
+.dialog {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - var(--space-8));
+  max-height: calc(100vh - var(--space-8));
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-2xl);
+  outline: none;
+}
+
+/* 尺寸档（消费方可经 className 设 --dialog-width 精确覆盖宽度） */
+.dialogSm {
+  width: var(--dialog-width, 320px);
+}
+
+.dialogMd {
+  width: var(--dialog-width, 480px);
+}
+
+.dialogLg {
+  width: var(--dialog-width, 640px);
+}
+
+/* 全屏盖层形态（SettingsPanel 消费）：面板铺满视口，
+ * 取消居中位移/尺寸档/圆角/阴影/描边；背景与设置页一致 */
+.dialogFullscreen {
+  top: 0;
+  left: 0;
+  transform: none;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--bg-primary);
+}
+
+/* 进出场动画（与 --transition-modal-enter/exit 对齐） */
+.dialogEnter {
+  animation: dialog-enter var(--transition-modal-enter) forwards;
+  transform-origin: center center;
+}
+
+.dialogExit {
+  animation: dialog-exit var(--duration-exit) ease-in forwards;
+  transform-origin: center center;
+}
+
+.overlayEnter {
+  animation: overlay-enter var(--duration-enter) ease-out forwards;
+}
+
+.overlayExit {
+  animation: overlay-exit var(--duration-exit) ease-in forwards;
+}
+
+@keyframes dialog-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes dialog-exit {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+}
+
+@keyframes overlay-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes overlay-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-2);
+}
+
+.dialogTitle {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-content);
+  color: var(--text-primary);
+}
+
+.dialogClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background var(--transition-micro), color var(--transition-micro);
+  flex-shrink: 0;
+}
+
+.dialogClose:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.dialogClose:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.dialogDescription {
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-2);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-body);
+  color: var(--text-secondary);
+}
+
+.dialogBody {
+  padding: var(--space-1) var(--space-4);
+  overflow-y: auto;
+  color: var(--text-primary);
+  flex: 1 1 auto;
+}
+
+.dialogFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--hairline);
+}

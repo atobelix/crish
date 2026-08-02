@@ -1,6 +1,6 @@
 import React from 'react';
-import styles from '../ChatMessageRow.module.css';
-import { ChatToolStack, type ChatToolStackSharedProps } from '../ChatToolCallBlock';
+import styles from './ChatMessageRow.module.css';
+import { ChatToolStack, type ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import type { ToolRenderItem } from '../../api/toolPresentation';
 import { buildToolStackHostProps, shouldHostToolStack } from './chatMessageRowUtils';
 

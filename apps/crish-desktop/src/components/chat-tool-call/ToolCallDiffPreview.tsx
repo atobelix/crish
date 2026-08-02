@@ -1,7 +1,7 @@
 import React from 'react';
 import { FileCode } from 'lucide-react';
 import type { FileDiff } from '../../store/layoutStore';
-import styles from '../ChatToolCallBlock.module.css';
+import styles from './ChatToolCallBlock.module.css';
 
 export interface ToolCallDiffPreviewProps {
   diff: FileDiff;

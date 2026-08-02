@@ -9,7 +9,8 @@ import { createPortal } from 'react-dom';
 import styles from './SidebarContextMenus.module.css';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { Tooltip } from '../Tooltip';
-import { UnifiedSelectPopover } from '../common/UnifiedSelectPopover';
+import { Menu } from '../ui/Menu';
+import { clampPosition, measureMenu } from '../ui/Menu/position';
 import {
   Archive,
   Check,
@@ -30,14 +31,6 @@ export type SessionContextMenuState = {
   x: number;
   y: number;
   sessionId: string;
-};
-
-/** @deprecated 子 agent 不再出现在侧栏树；保留类型以免外部 import 断裂 */
-export type AgentContextMenuState = {
-  x: number;
-  y: number;
-  sessionId: string;
-  agentId: string;
 };
 
 /** 侧栏会话右键菜单动作（与 Sidebar.handleAction 对齐） */
@@ -70,17 +63,7 @@ export interface SidebarContextMenusProps {
   menuRef: React.RefObject<HTMLDivElement | null>;
   sortMenuRef: React.RefObject<HTMLDivElement | null>;
   contextMenu: SessionContextMenuState | null;
-  /** 已废弃：不再渲染 agent 菜单 */
-  agentMenu?: AgentContextMenuState | null;
   onSessionAction: (action: SessionMenuAction) => void;
-  /** @deprecated */
-  onOpenAgentPanel?: (sessionId: string, agentId: string) => void;
-  /** @deprecated */
-  onOpenAgentWindow?: (sessionId: string, agentId: string) => void;
-  /** @deprecated */
-  onCopyAgentSummary?: (sessionId: string, agentId: string) => void;
-  /** @deprecated */
-  onCloseAgentMenu?: () => void;
   sortDropdownOpen: boolean;
   sortDropdownCoords: { x: number; y: number } | null;
   sortType: 'active' | 'name';
@@ -97,54 +80,8 @@ export interface SidebarContextMenusProps {
 
 type FlyKey = 'sort' | 'group' | 'filter' | null;
 
-const MENU_EDGE_PAD = 8;
-/** 紧凑菜单预估尺寸（clamp 用；真实尺寸由 layout 后再微调） */
-const MENU_EST_W = 160;
-const MENU_EST_H = 280;
-
-/** 右键/更多按钮坐标钳入视口并智能判断避让点 */
-export function clampContextMenuPosition(
-  x: number,
-  y: number,
-  menuW = MENU_EST_W,
-  menuH = MENU_EST_H
-): { x: number; y: number; transformOrigin: string } {
-  const rawW = typeof window !== 'undefined' ? window.innerWidth : 0;
-  const rawH = typeof window !== 'undefined' ? window.innerHeight : 0;
-  const vw = rawW > 0 ? rawW : 1280;
-  const vh = rawH > 0 ? rawH : 800;
-
-  let finalX = x;
-  let finalY = y;
-  let originY = 'top';
-  let originX = 'left';
-
-  // 水平避让：右侧贴边则左翻，再钳入视口
-  if (finalX + menuW > vw - MENU_EDGE_PAD) {
-    finalX = finalX - menuW;
-    originX = 'right';
-  }
-  finalX = Math.min(
-    Math.max(MENU_EDGE_PAD, finalX),
-    Math.max(MENU_EDGE_PAD, vw - menuW - MENU_EDGE_PAD)
-  );
-
-  // 垂直避让：底部贴边则上翻，再钳入视口
-  if (finalY + menuH > vh - MENU_EDGE_PAD) {
-    finalY = finalY - menuH;
-    originY = 'bottom';
-  }
-  finalY = Math.min(
-    Math.max(MENU_EDGE_PAD, finalY),
-    Math.max(MENU_EDGE_PAD, vh - menuH - MENU_EDGE_PAD)
-  );
-
-  return {
-    x: finalX,
-    y: finalY,
-    transformOrigin: `${originY} ${originX}`,
-  };
-}
+// 坐标钳位单源：ui/Menu/position.ts 的 clampPosition / measureMenu
+// （T05.3.1 收敛后本文件不再保留独立坐标实现）
 
 /** 菜单项键盘漫游：↑↓ / Home / End；忽略 divider */
 function focusMenuItem(
@@ -244,30 +181,18 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
   useLayoutEffect(() => {
     if (!showSessionMenu || !contextMenu || !menuRef.current) return;
     const el = menuRef.current;
-    const rect = el.getBoundingClientRect();
-    const next = clampContextMenuPosition(
-      contextMenu.x,
-      contextMenu.y,
-      rect.width,
-      rect.height
-    );
+    const next = measureMenu(el, contextMenu.x, contextMenu.y);
     el.style.left = `${next.x}px`;
     el.style.top = `${next.y}px`;
     el.style.transformOrigin = next.transformOrigin;
   }, [showSessionMenu, contextMenu, menuRef]);
 
-  // 排序菜单同样钳位
+  // 排序菜单同样钳位（真实尺寸由基座浮层实测后统一走 position.ts）
   useLayoutEffect(() => {
     if (!sortDropdownOpen || !sortDropdownCoords || !sortMenuRef.current)
       return;
     const el = sortMenuRef.current;
-    const rect = el.getBoundingClientRect();
-    const next = clampContextMenuPosition(
-      sortDropdownCoords.x,
-      sortDropdownCoords.y,
-      rect.width,
-      rect.height
-    );
+    const next = measureMenu(el, sortDropdownCoords.x, sortDropdownCoords.y);
     el.style.left = `${next.x}px`;
     el.style.top = `${next.y}px`;
     el.style.transformOrigin = next.transformOrigin;
@@ -455,7 +380,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
               role="menuitem"
               data-action="delete"
               onClick={() => onSessionAction('delete')}
-              style={{ color: 'var(--text-danger, #f85149)' }}
+              style={{ color: 'var(--text-danger)' }}
             >
               <Trash2 size={14} strokeWidth={1.75} aria-hidden />
               <span>删除当前对话</span>
@@ -480,7 +405,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
         )}
 
       {sortDropdownOpen && (
-        <UnifiedSelectPopover
+        <Menu
           open={sortDropdownOpen}
           onOpenChange={(open) => {
             if (!open) onCloseSortDropdown();
@@ -686,7 +611,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
               </div>
             ) : null}
           </div>
-        </UnifiedSelectPopover>
+        </Menu>
       )}
     </>
   );

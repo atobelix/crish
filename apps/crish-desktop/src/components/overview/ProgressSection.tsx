@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from '../OverviewCard.module.css';
+import styles from './OverviewCard.module.css';
 import { Tooltip } from '../Tooltip';
 import { Target } from 'lucide-react';
 import { computeChecklistProgress, findCurrentLiveTool, resolveSessionProgressItems } from '../../api/sessionProgressApi';

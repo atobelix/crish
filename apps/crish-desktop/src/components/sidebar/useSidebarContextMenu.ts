@@ -12,10 +12,10 @@ import {
   archiveUndoToastMessage,
   branchUndoToastMessage,
   BRANCH_TITLE_SUFFIX,
-  clampContextMenuPosition,
   type SessionContextMenuState,
   type SessionMenuAction,
 } from './SidebarContextMenus';
+import { clampPosition } from '../ui/Menu/position';
 import { openSessionInNewWindow } from './sidebarHelpers';
 
 /**
@@ -124,7 +124,8 @@ export function useSidebarContextMenu({
   const handleContextMenu = (e: React.MouseEvent, sessionId: string) => {
     e.preventDefault();
     setRenamingSessionId(null);
-    const { x, y } = clampContextMenuPosition(e.clientX, e.clientY);
+    // 坐标钳位单源：ui/Menu/position.ts（T05.3.1）
+    const { x, y } = clampPosition(e.clientX, e.clientY);
     setContextMenu({ x, y, sessionId });
   };
 
@@ -212,7 +213,8 @@ export function useSidebarContextMenu({
       case 'delete': {
         const title = targetSession.title || '未命名会话';
         if (window.confirm(`确定要彻底删除对话“${title}”吗？删除后数据将永久丢失。`)) {
-          root.session.deleteSession(sessionId);
+          // 删除走 sessionStore 命令式入口（SessionFacade 无 deleteSession）
+          root.session.getState().deleteSession(sessionId);
           onShowToast(`已删除对话: ${title}`);
         }
         break;
