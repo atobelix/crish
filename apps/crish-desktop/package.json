@@ -15,7 +15,7 @@
     "test:snapshots:update": "vitest run tests/snapshots/ --update --coverage.enabled=false",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots",
-    "test:e2e": "playwright test tests/e2e/ui-store-invariants.spec.ts"
+    "test:e2e": "npx playwright test --config ../../playwright.config.ts"
   },
   "dependencies": {
     "@crish/shared-types": "file:../../packages/shared-types",

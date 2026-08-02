@@ -74,7 +74,7 @@
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:fuzz": "vitest run tests/fuzz --reporter=verbose || echo 'No fuzz tests found'",
-    "test:e2e": "npx playwright test tests/e2e/ui-store-invariants.spec.ts",
+    "test:e2e": "npx playwright test tests/e2e",
     "test:e2e:all": "node scripts/run-full-e2e-suite.mjs",
     "test:e2e:audit": "node scripts/audit-ui-runtime-errors.mjs",
     "test:e2e:native": "vitest run tests/e2e/tauri-native-smoke.spec.ts",

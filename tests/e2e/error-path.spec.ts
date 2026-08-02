@@ -1,0 +1,90 @@
+/**
+ * E2E-L2 场景 ④'：错误路径（mock 引擎错误 → 用户提示）
+ * （任务书补充场景：core_run_task 拒绝时前端必须显式提示，非静默失败）
+ *
+ * 链路：core_run_task 抛 CoreError（{ kind, message }）→
+ *   createStreamSession catch → onRunError → RunNoticeBar（运行提示）+ toast
+ *   （useStreamCallbacks.ts:436-479：错误只走横幅/toast，禁止写入 assistant 气泡）
+ *
+ * 断言（行为级）：
+ *   1. run-notice 可见且文案为引擎错误信息（非静默失败）
+ *   2. 无 assistant 空气泡残留（错误不伪装成 AI 输出）
+ *   3. 错误后输入框可继续输入（可重试）
+ */
+
+import { test, expect, type Page } from '@playwright/test';
+import { installMockEngine, errorRunConfig } from './mock-engine';
+
+async function openApp(page: Page) {
+  await installMockEngine(page, { runStream: errorRunConfig() });
+  await page.goto('/');
+  await expect(page.locator('#root')).toBeVisible();
+  await expect(page.locator('[data-testid="chat-input"]')).toBeVisible();
+}
+
+test.describe('E2E-L2 错误路径（error-path）', () => {
+  test('引擎拒绝 run-task → 显式提示，无静默失败', async ({ page }) => {
+    await openApp(page);
+
+    const input = page.locator('[data-testid="chat-input"]');
+    await input.fill('请帮我执行一个任务');
+    await input.press('Enter');
+
+    // ── ① 运行提示条可见（RunNoticeBar：data-testid="run-notice"）──
+    const notice = page.locator('[data-testid="run-notice"]');
+    await expect(notice).toBeVisible({ timeout: 8000 });
+    // 文案 = 引擎错误信息（非空跑）
+    await expect(page.locator('[data-testid="run-notice-text"]')).toContainText(
+      '模型服务不可用',
+      { timeout: 8000 }
+    );
+
+    // ── ② 错误不伪装成 AI 输出：assistant 空气泡被收回 ──
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const store = (window as any).__CRISH_STORE__;
+            const byId = store?.getState?.().sessionsById || {};
+            const sess = byId[Object.keys(byId)[0]];
+            if (!sess?.messages?.length) return [];
+            return sess.messages
+              .filter((m: { sender: string }) => m.sender === 'assistant')
+              .map((m: { text: string; status: string }) => ({
+                text: m.text || '',
+                status: m.status,
+              }));
+          }),
+        { timeout: 8000 }
+      )
+      .toEqual([]);
+
+    // ── ③ 可重试：错误后输入框可用 ──
+    await expect(input).toBeEditable();
+    await input.fill('重试一次');
+    await expect(input).toHaveValue('重试一次');
+  });
+
+  test('引擎错误时 runCount 已记录且 runId 下发（非空跑证据）', async ({
+    page,
+  }) => {
+    await openApp(page);
+
+    const input = page.locator('[data-testid="chat-input"]');
+    await input.fill('触发错误');
+    await input.press('Enter');
+
+    await expect(page.locator('[data-testid="run-notice"]')).toBeVisible({
+      timeout: 8000,
+    });
+    const state = await page.evaluate(() => {
+      const h = (window as any).__CRISH_E2E__;
+      return {
+        runCount: h?.getState?.().runCount,
+        lastRun: h?.getState?.().lastRun,
+      };
+    });
+    expect(state.runCount).toBeGreaterThan(0);
+    expect(String(state.lastRun?.runId || '')).toMatch(/^run-/);
+  });
+});
