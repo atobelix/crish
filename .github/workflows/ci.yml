@@ -1,4 +1,15 @@
-name: CI
+# CI · 快层（T11.7.4：每次提交/PR 的即时反馈，预算 ≤15 min）
+#
+# 门禁内容（PE-11 T11.7，快层）：
+# - cargo check --workspace --locked（--locked：T10.1 锁定依赖）
+# - 关键单元测试快速套件：conex-types + session-loop
+# - 前端 typecheck / vitest 快集（unit 项目）
+# - 静态与安全：eslint / depcruise / audit / cargo-deny / secret-scan
+#
+# 中层全量验证见 ci-mid.yml（cargo test 全量 + clippy + vitest 全量）；
+# 慢层（压力 / e2e / 基准）见 ci-slow.yml。
+
+name: CI · 快层（提交/PR）
 
 on:
   push:
@@ -22,6 +33,7 @@ permissions:
 jobs:
   typecheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,6 +45,7 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,8 +56,9 @@ jobs:
       - run: npx eslint .
       - run: npx depcruise --config .dependency-cruiser.cjs packages apps --ignore "dist/"
 
-  test:
+  vitest-fast:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,21 +66,12 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npx vitest run --reporter=verbose
-
-  test:integration:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npx vitest run --config vitest.integration.config.ts --reporter=verbose
+      # 前端快集：仅 unit 项目（F1 纯逻辑 + F2 组件，3679 用例基线主体）
+      - run: npx vitest run --project=unit --reporter=verbose
 
   audit:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -78,6 +83,7 @@ jobs:
 
   cargo-deny:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -85,16 +91,27 @@ jobs:
 
   secret-scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: gitleaks/gitleaks-action@v2
 
   rust-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          components: clippy
-      - run: cargo check --workspace
-      - run: cargo clippy --workspace -- -D warnings
+      # 快层只做编译门禁（--locked 锁定 Cargo.lock，T10.1）；
+      # clippy 已归中层（ci-mid.yml，全量验证门禁）
+      - run: cargo check --workspace --locked
+
+  rust-unit-fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      # 关键单元测试快速套件（T11.7 快层）：conex-types（类型/契约域）+
+      # session-loop（主循环核心，含流式契约锚点）
+      - run: cargo test -p conex-types -p session-loop

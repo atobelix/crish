@@ -1,0 +1,80 @@
+# CI · 中层（T11.7.4：合并前全量验证，预算 ≤20 min）
+#
+# 门禁内容（PE-11 T11.7，中层）：
+# - cargo test --workspace 全量（L1 单测 + L2 集成 + L3 契约 + L4 e2e faux；
+#   --ignored 压力场景除外，归慢层）
+# - cargo clippy --workspace -- -D warnings
+# - 前端 vitest 全量（vitest.workspace：unit + integration + e2e 项目）
+# - F3 专项：integration / fuzz / race / recovery（vitest.integration.config.ts）
+#
+# 触发：PR（合并前必跑）+ main 分支 push（主干兜底）。
+# 快层即时反馈见 ci.yml；慢层见 ci-slow.yml。
+
+name: CI · 中层（合并前全量）
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'assets/**'
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'assets/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      # 全量测试：L1 单测 + L2 集成 + L3 契约（含流式契约锚点）+ L4 e2e faux
+      - run: cargo test --workspace
+
+  clippy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy
+      - run: cargo clippy --workspace -- -D warnings
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # 前端 vitest 全量（vitest.workspace：unit + integration + e2e 项目）
+      - run: npx vitest run --reporter=verbose
+
+  test:integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # F3 层：integration / fuzz / race / recovery（vitest.integration.config.ts）
+      - run: npx vitest run --config vitest.integration.config.ts --reporter=verbose

@@ -1,0 +1,81 @@
+# CI · 慢层（T11.7.4：nightly + 发布前，预算 ≤40 min）
+#
+# 门禁内容（PE-11 T11.7 / §1.3，慢层）：
+# - Rust 压力测试：cargo test --workspace --release -- --ignored（T11.6 场景）
+# - TS 压力轨：npm run stress（stress-runner，~60s+）
+# - e2e（Playwright，L2 mock 引擎，根 config tests/e2e）
+# - 基准：cargo bench（PE-09 T09.7 落地 crates/*/benches 后自动生效）
+#
+# 触发：每日定时 + 手动 dispatch + 版本 tag（发布前必跑）。
+# 快层/中层见 ci.yml / ci-mid.yml。
+
+name: CI · 慢层（nightly/发布前）
+
+on:
+  schedule:
+    # 每日 UTC 02:00（夜间档，避开白天 PR 高峰）
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust-stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      # 压力场景全部 #[ignore]（T11.6）：release 下运行，不进常规 CI
+      - run: cargo test --workspace --release -- --ignored
+
+  stress-ts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # TS 压力轨（stress-runner：AI 流 / diff 加载 / 会话切换）
+      - run: npm run stress
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # L2 mock-IPC e2e（根 config：tests/e2e，webServer 自动拉起 dev server）
+      - run: npx playwright test tests/e2e
+
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      # 基准场景（Criterion，PE-09 T09.7 新建 crates/*/benches）：
+      # 落地前跳过并提示，落地后自动生效
+      - name: 基准（存在基准场景时运行）
+        run: |
+          if ls crates/*/benches >/dev/null 2>&1; then
+            cargo bench --workspace
+          else
+            echo "暂无基准场景（crates/*/benches 不存在，PE-09 T09.7 落地后生效）"
+          fi
