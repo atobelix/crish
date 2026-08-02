@@ -18,6 +18,7 @@ use agent_provider::error::{
 use agent_provider::retry::{provider_stream, RetryPolicy, RetryState, StreamAttempt, TokioSleeper};
 use agent_provider::sse::{AbortFlag, ChunkReader};
 use common::{MockFrame, MockResponse, MockServer};
+use conex_test_utils::clock::TimePauseGuard;
 use serde_json::json;
 
 /// 单次真实 HTTP 流尝试（请求 → 分类错误 → StreamAttempt），模拟 provider_stream 调用方
@@ -231,19 +232,20 @@ async fn server_errors_stop_after_max_retries() {
 }
 
 /// 5xx 连续 → 总预算耗尽提前终止（远小于 max_retries=10 次）
-#[tokio::test(flavor = "multi_thread")]
+///
+/// Q41（T11.7.2）：预算判定基于 [tokio::time::Instant]（retry.rs 的
+/// `RetryState::started_at`）。旧版走真实 HTTP + 15ms 预算：并行负载下
+/// 单次真实请求耗时即可超预算或超出断言区间（2..=4），属时间脆弱性。
+/// 本测试改为**纯异步尝试**（分类 Server 500 错误，不经真实 HTTP）+
+/// 虚拟时间护栏：确定性收场——初始 1 次 + 退避重试 2 次（10ms 退避、
+/// 第二次按剩余预算 5ms 钳制），第三次决策时预算耗尽终止。
+/// 断言收紧为精确值（count=3、retries=2）；HTTP 层路径由本文件其余
+/// retry 用例覆盖，语义不受影响。
+#[tokio::test]
 async fn retry_budget_exhaustion_stops_retrying() {
+    let _time = TimePauseGuard::new();
     let counter = Arc::new(AtomicU32::new(0));
     let attempts = Arc::clone(&counter);
-    let server = MockServer::start(move |_request| {
-        attempts.fetch_add(1, Ordering::SeqCst);
-        MockResponse::Plain {
-            status: 500,
-            headers: Vec::new(),
-            body: "boom".to_string(),
-        }
-    })
-    .await;
 
     // 总预算 15ms、基数 10ms：两次退避即超出预算
     let policy = RetryPolicy {
@@ -255,20 +257,46 @@ async fn retry_budget_exhaustion_stops_retrying() {
     let (_flag, abort) = AbortFlag::new();
     let mut sleeper = TokioSleeper::new(abort);
     let mut state = RetryState::new();
-    let error = provider_stream(&policy, &mut sleeper, &mut state, move || {
-        let addr = server.addr;
-        async move { attempt_chat_stream(addr).await }
-    })
-    .await
-    .expect_err("预算耗尽应报错");
+    // 纯异步尝试：分类 Server 500（不经真实 HTTP，虚拟时间下完全确定）
+    let attempt = {
+        let attempts = Arc::clone(&attempts);
+        move || {
+            let attempts = Arc::clone(&attempts);
+            async move {
+                attempts.fetch_add(1, Ordering::SeqCst);
+                StreamAttempt {
+                    frames: Vec::new(),
+                    error: Some(classify_provider_error(Some(500), Some("boom"), None, None)),
+                    produced_content: false,
+                }
+            }
+        }
+    };
+    // 独立作用域：run 持有 &mut sleeper/state，收场后随作用域释放借用
+    let error = {
+        let run = async { provider_stream(&policy, &mut sleeper, &mut state, attempt).await };
+        tokio::pin!(run);
+        // 虚拟时间驱动：1ms 小步推进直至 run 收场。推进量子必须小于
+        // 预算（15ms）——大步推进会让时钟一次性越过预算，重试决策
+        // 轮询时 elapsed 已超限（count=1，语义失真）
+        loop {
+            tokio::select! {
+                result = &mut run => break result.expect_err("预算耗尽应报错"),
+                _ = tokio::time::advance(Duration::from_millis(1)) => {}
+            }
+        }
+    };
 
-    assert!(matches!(error, ProviderError::Server { .. }));
+    assert!(matches!(
+        error,
+        ProviderError::Server { status: Some(500) }
+    ));
     let count = counter.load(Ordering::SeqCst);
-    assert!(
-        (2..=4).contains(&count),
-        "预算应在两三次尝试内终止，实际 {count}"
+    assert_eq!(
+        count, 3,
+        "预算 15ms：初始 1 次 + 2 次重试（10ms 退避、第二次按剩余预算 5ms 钳制），第三次决策预算耗尽"
     );
-    assert_eq!(state.retries, count - 1);
+    assert_eq!(state.retries, 2, "预算内恰好两次重试");
 }
 
 /// 不可重试错误（401）不进入重试循环，仅请求一次

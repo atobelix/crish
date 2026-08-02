@@ -21,7 +21,21 @@ async-trait = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-# 测试所需 feature（macros/rt/time）已由 workspace 最小集覆盖（PE-10 T10.3）
-tokio = { workspace = true }
+# 测试基础设施域（T11.7）：断言助手 + TestClock 虚拟时间护栏
+conex-test-utils = { path = "../conex-test-utils" }
+# 测试所需 feature（macros/rt/time）已由 workspace 最小集覆盖（PE-10 T10.3）；
+# test-util 供 TimePauseGuard（tokio::time::pause/advance，Q41 时间确定性）；
+# rt-multi-thread 供基准/集成测试的 Runtime::new（tool_batch 基准）
+tokio = { workspace = true, features = ["test-util", "rt-multi-thread"] }
 # 日志捕获测试（PE-04 T04.2）
 tracing-subscriber = { workspace = true }
+# Criterion 基准（PE-09 T09.7：request_build / tool_batch，仅 dev-dependency）
+criterion = { workspace = true }
+
+[[bench]]
+name = "request_build"
+harness = false
+
+[[bench]]
+name = "tool_batch"
+harness = false

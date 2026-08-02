@@ -19,6 +19,8 @@ use std::time::Duration;
 
 use agent_tools::registry::ToolRegistry;
 use async_trait::async_trait;
+use conex_test_utils::assertions::{assert_event_sequence, assert_request_text_contains};
+use conex_test_utils::clock::TimePauseGuard;
 use conex_types::error::ProviderErrorKind;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::response::ClassifiedStreamError;
@@ -455,6 +457,9 @@ async fn payload_too_large_ends_with_error_without_retry() {
 /// （abort 原因不再丢失：aborted_with_diagnostic 接线）
 #[tokio::test]
 async fn force_cancel_reason_surfaces_in_diagnostic() {
+    // Q41（T11.7.2）：虚拟时间护栏——真实 sleep 改为 advance 显式推进，
+    // 时间确定性（provider 栅栏停顿 300ms 虚拟）
+    let _time = TimePauseGuard::new();
     let provider = TestProvider::new(vec![
         ProviderStreamEvent::text("部分内容"),
         ProviderStreamEvent::stop(StopReason::Stop),
@@ -464,10 +469,12 @@ async fn force_cancel_reason_surfaces_in_diagnostic() {
     let bus = loop_.control_bus();
 
     let handle = tokio::spawn(async move { loop_.run(user("跑起来")).await });
-    tokio::time::sleep(Duration::from_millis(80)).await;
+    tokio::time::advance(Duration::from_millis(80)).await;
     bus.lock()
         .unwrap()
         .request_force_cancel(Some("用户强停".into()), Some("ui".into()));
+    // 越过 provider 栅栏（300ms 虚拟停顿），loop 才读到取消并收场
+    tokio::time::advance(Duration::from_millis(300)).await;
     let outcome = handle.await.expect("run 不应 panic");
 
     assert_eq!(outcome.reason, AgentEndReason::Aborted);
@@ -578,6 +585,8 @@ async fn idempotency_disabled_by_default_executes_twice() {
 /// abort：streaming 中 abort → aborted 收场（部分内容保留，01 §2.4 / §五.9）
 #[tokio::test]
 async fn abort_mid_stream_ends_aborted_with_partial_content() {
+    // Q41（T11.7.2）：虚拟时间护栏（真实 sleep → advance 显式推进）
+    let _time = TimePauseGuard::new();
     let provider = TestProvider::new(vec![
         ProviderStreamEvent::text("已流出的部分内容"),
         ProviderStreamEvent::stop(StopReason::Stop),
@@ -588,8 +597,10 @@ async fn abort_mid_stream_ends_aborted_with_partial_content() {
 
     let handle = tokio::spawn(async move { loop_.run(user("生成内容")).await });
     // provider 正在栅栏停顿中 → L3 强停
-    tokio::time::sleep(Duration::from_millis(80)).await;
+    tokio::time::advance(Duration::from_millis(80)).await;
     abort.abort();
+    // 越过 provider 栅栏（300ms 虚拟停顿），loop 读到 abort 并收场
+    tokio::time::advance(Duration::from_millis(300)).await;
     let outcome = handle.await.expect("run 不应 panic");
 
     assert_eq!(outcome.reason, AgentEndReason::Aborted);
@@ -614,6 +625,8 @@ async fn abort_mid_stream_ends_aborted_with_partial_content() {
 /// cooperative_stop（L2）→ stopped 收场（不 abort，D1）
 #[tokio::test]
 async fn cooperative_stop_ends_with_stopped() {
+    // Q41（T11.7.2）：虚拟时间护栏（真实 sleep → advance 显式推进）
+    let _time = TimePauseGuard::new();
     let provider = TestProvider::new(vec![
         ProviderStreamEvent::text("这条消息保留"),
         ProviderStreamEvent::stop(StopReason::Stop),
@@ -623,10 +636,12 @@ async fn cooperative_stop_ends_with_stopped() {
     let bus = loop_.control_bus();
 
     let handle = tokio::spawn(async move { loop_.run(user("开始")).await });
-    tokio::time::sleep(Duration::from_millis(80)).await;
+    tokio::time::advance(Duration::from_millis(80)).await;
     bus.lock()
         .unwrap()
         .request_cooperative_stop(Some("用户协作停止".into()), Some("test".into()));
+    // 越过 provider 栅栏（300ms 虚拟停顿），loop 读到协作停止并收场
+    tokio::time::advance(Duration::from_millis(300)).await;
     let outcome = handle.await.expect("run 不应 panic");
 
     // D1：独立 reason stopped，既不是 aborted 也不是 error
@@ -746,6 +761,8 @@ impl ProviderCall for RetryFailProvider {
 /// 第一级重试在途时用户取消，直接 aborted 收场（不白耗 3 次请求）
 #[tokio::test]
 async fn abort_during_retry_ladder_skips_remaining_requests() {
+    // Q41（T11.7.2）：虚拟时间护栏——替身内 sleep(300) 与测试等待全部虚拟化
+    let _time = TimePauseGuard::new();
     let calls = Arc::new(Mutex::new(0usize));
     let provider = RetryFailProvider { calls: calls.clone() };
     let mut loop_ = AgentSessionLoop::new(
@@ -759,8 +776,10 @@ async fn abort_during_retry_ladder_skips_remaining_requests() {
 
     let handle = tokio::spawn(async move { loop_.run(user("重试")).await });
     // 首次调用快速失败 → 第一级重试在途（第二次调用慢速失败中）
-    tokio::time::sleep(Duration::from_millis(80)).await;
+    tokio::time::advance(Duration::from_millis(80)).await;
     abort.abort();
+    // 越过重试替身的 300ms 慢速失败窗口，loop 在梯级入口读到 abort 收场
+    tokio::time::advance(Duration::from_millis(300)).await;
     let outcome = handle.await.expect("run 不应 panic");
 
     assert_eq!(outcome.reason, AgentEndReason::Aborted);
@@ -924,6 +943,8 @@ async fn fatal_tool_error_ends_with_error() {
 /// L3 force_cancel（经控制总线）→ aborted 收场
 #[tokio::test]
 async fn force_cancel_via_bus_ends_aborted() {
+    // Q41（T11.7.2）：虚拟时间护栏（真实 sleep → advance 显式推进）
+    let _time = TimePauseGuard::new();
     let provider = TestProvider::new(vec![
         ProviderStreamEvent::text("部分内容"),
         ProviderStreamEvent::stop(StopReason::Stop),
@@ -933,8 +954,10 @@ async fn force_cancel_via_bus_ends_aborted() {
     let bus = loop_.control_bus();
 
     let handle = tokio::spawn(async move { loop_.run(user("跑起来")).await });
-    tokio::time::sleep(Duration::from_millis(80)).await;
+    tokio::time::advance(Duration::from_millis(80)).await;
     bus.lock().unwrap().request_force_cancel(Some("用户强停".into()), Some("ui".into()));
+    // 越过 provider 栅栏（300ms 虚拟停顿），loop 才读到取消并收场
+    tokio::time::advance(Duration::from_millis(300)).await;
     let outcome = handle.await.expect("run 不应 panic");
 
     assert_eq!(outcome.reason, AgentEndReason::Aborted);
@@ -962,7 +985,10 @@ async fn test_provider_records_requests() {
     assert_eq!(provider.call_count(), 1);
     let requests = provider.requests();
     assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].messages[0].text(), "请求");
+    // T11.7.1 断言助手：第 0 次请求含用户输入正文
+    assert_request_text_contains(&requests, 0, "请求", |r| {
+        r.messages.iter().map(|m| m.text()).collect()
+    });
     assert_eq!(requests[0].max_tokens, Some(8192));
 }
 
@@ -978,28 +1004,23 @@ async fn event_sequence_contract() {
 
     let outcome = loop_.run(user("验证")).await;
 
-    // 首事件 agent-start，末事件 agent-end
-    assert!(matches!(
-        outcome.events.first(),
-        Some(conex_types::events::AgentEvent::AgentStart { .. })
-    ));
-    assert!(matches!(
-        outcome.events.last(),
-        Some(conex_types::events::AgentEvent::AgentEnd { .. })
-    ));
-    // message-start 与 message-end 等量成对
-    let starts = outcome
-        .events
-        .iter()
-        .filter(|e| matches!(e, conex_types::events::AgentEvent::MessageStart { .. }))
-        .count();
-    let ends = outcome
-        .events
-        .iter()
-        .filter(|e| matches!(e, conex_types::events::AgentEvent::MessageEnd { .. }))
-        .count();
-    assert_eq!(starts, ends, "message-start/end 必成对");
-    assert_eq!(starts, 2, "user + assistant 各一对");
+    // T11.7.1 断言助手：全序列类型名断言（首事件 agent-start、末事件
+    // agent-end、turn/message 成对均由序列整体保证——比分散 matches!
+    // 更强，01 §五.6 序列契约）
+    assert_event_sequence(
+        &outcome.events,
+        &[
+            "agent-start",
+            "message-start",
+            "message-end",
+            "turn-start",
+            "message-start",
+            "message-delta",
+            "message-end",
+            "turn-end",
+            "agent-end",
+        ],
+    );
 }
 
 /// T09.3（PE-09）：长会话克隆消除——100 条消息会话下请求链与消息记录路径

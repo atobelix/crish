@@ -108,7 +108,7 @@ pub enum RecordingRecord {
 /// before_execute 保持默认放行。记录可经 `records()` 读取（测试/审计）。
 ///
 /// T06.3 Q18：生产零引用（grep 证实），整体标注 #[cfg(test)]；
-/// 锁 expect（139/157）移交 PE-07 T07.6 治理。
+/// 锁 expect（139/157）已由 PE-07 T07.6 改为恢复模式（A 模式，不 panic）。
 #[cfg(test)]
 pub struct RecordingMiddleware {
     name: String,
@@ -127,7 +127,14 @@ impl RecordingMiddleware {
 
     /// 已收集的记录
     pub fn records(&self) -> Vec<RecordingRecord> {
-        self.records.lock().map(|g| g.clone()).unwrap_or_default()
+        self.records
+            .lock()
+            .unwrap_or_else(|e| {
+                // PE-07 T07.6 A 模式（Q18 处置）：锁中毒恢复，不 panic 且可继续读
+                tracing::error!("记录中间件锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
+            .clone()
     }
 }
 
@@ -148,7 +155,11 @@ impl ToolMiddleware for RecordingMiddleware {
         let mut records = self
             .records
             .lock()
-            .expect("记录锁中毒后不可恢复");
+            .unwrap_or_else(|e| {
+                // PE-07 T07.6 A 模式（Q18 处置）：锁中毒恢复，不 panic
+                tracing::error!("记录中间件锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            });
         records.push(RecordingRecord::Result {
             tool_name: tool.name().to_string(),
             output,
@@ -166,7 +177,11 @@ impl ToolMiddleware for RecordingMiddleware {
         let mut records = self
             .records
             .lock()
-            .expect("记录锁中毒后不可恢复");
+            .unwrap_or_else(|e| {
+                // PE-07 T07.6 A 模式（Q18 处置）：锁中毒恢复，不 panic
+                tracing::error!("记录中间件锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            });
         records.push(RecordingRecord::Error {
             tool_name: tool.name().to_string(),
             message: error.to_string(),
@@ -377,5 +392,27 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out, json!({ "echo": { "msg": "hi" } }));
+    }
+
+    // ── PE-07 T07.6 用例 3：锁中毒恢复（Q18 处置验证） ──
+
+    #[tokio::test]
+    async fn poisoned_recording_middleware_recovers_without_panic() {
+        let recorder = Arc::new(RecordingMiddleware::new("recorder"));
+        crate::test_support::poison_std_lock(&recorder.records);
+        // 毒化后 on_result / on_error 不 panic 且继续记录（恢复模式）
+        let tool = EchoTool::new("echo");
+        let chain: Vec<Arc<dyn ToolMiddleware>> = vec![recorder.clone()];
+        let out = run_chain(&tool, json!({ "msg": "hi" }), &chain, &ctx())
+            .await
+            .unwrap();
+        assert_eq!(out, json!({ "echo": { "msg": "hi" } }));
+        let err = ToolError::execution_failed("echo", "模拟失败");
+        recorder
+            .on_error(&tool, &json!({}), &err, &ctx())
+            .await
+            .unwrap();
+        let records = recorder.records();
+        assert_eq!(records.len(), 2);
     }
 }

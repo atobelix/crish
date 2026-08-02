@@ -8,6 +8,8 @@
 //! - 失败策略：cancel-siblings（致命失败后同批未执行项 cancelled）/ continue-drain；
 //! - fatalOnError 判定排除 softDeny/timedOut/cancelled/approval_expired/user_denied；
 //! - 审批：approval-requested 事件先于挂起等待发出（防死锁）；
+//! - 审批并行（T09.6/P8）：审批模式并行组不再退化串行——审批逐个 await
+//!   （执行模型 A，UX 与事件顺序不变），通过后执行阶段 join_all 并行；
 //! - 单工具执行复用 agent-tools 的 execute_with_output_policy（幂等+输出预算）。
 //!
 //! 语义来源：01-session-loop-semantics.md §2.8 / §五.8；05-test-mapping.md §2.3
@@ -94,7 +96,7 @@ impl ToolExecutor {
         &self,
         calls: &[ToolBatchCall],
         ctx: &ToolExecCtx,
-        approval: Option<&dyn ApprovalGate>,
+        approval: Option<Arc<dyn ApprovalGate>>,
         options: &ToolBatchOptions,
         abort: Option<&crate::safe_point::AbortSignal>,
     ) -> ToolBatchOutcome {
@@ -130,27 +132,19 @@ impl ToolExecutor {
             if group.len() == 1 {
                 let idx = group[0];
                 let r = self
-                    .execute_one(calls, idx, ctx, approval, options, abort, &mut events, &mut fatal)
+                    .execute_one(calls, idx, ctx, approval.as_deref(), options, abort, &mut events, &mut fatal)
                     .await;
                 results[idx] = Some(r);
                 if fatal.is_some() && options.fail_strategy == FailStrategy::CancelSiblings {
                     mark_rest_cancelled(calls, &mut results, &mut events);
                     break 'outer;
                 }
-            } else if options.approval_enabled {
-                // 审批模式下并行组退化为顺序（ApprovalGate 是 &dyn，无法跨 async move 共享）
-                for idx in group {
-                    let r = self
-                        .execute_one(calls, idx, ctx, approval, options, abort, &mut events, &mut fatal)
-                        .await;
-                    results[idx] = Some(r);
-                    if fatal.is_some() && options.fail_strategy == FailStrategy::CancelSiblings {
-                        mark_rest_cancelled(calls, &mut results, &mut events);
-                        break 'outer;
-                    }
-                }
             } else {
-                // 并行组：先发 tool-start，join_all 并发执行，再收 tool-end
+                // 并行组（T09.6/P8：审批模式恢复并行，不再退化串行）：
+                // 事件顺序契约（tool_events.rs 头注）每项保持
+                // tool-start → approval-requested → tool-end；执行模型 A
+                //（AU-04 F9）：审批逐个 await（UX 与事件顺序不变），
+                // 通过后执行阶段 join_all 并行（批延迟 = max(工具耗时) + 审批链）。
                 for &idx in &group {
                     let call = &calls[idx];
                     events.push(ToolEvent::ToolStart {
@@ -162,11 +156,79 @@ impl ToolExecutor {
                         summary: call.summary.clone(),
                     });
                 }
+
+                // 审批逐个发起：approval-requested 事件全组先发（防死锁
+                // 硬契约，01 §五.8），再逐个等待决策；abort 中断后不再
+                // 发起剩余审批（与顺序路径逐项 abort 前置检查一致）。
+                let mut approvals: Vec<Option<ApprovalDecision>> = Vec::new();
+                let approval_active = options.approval_enabled && approval.is_some();
+                if options.approval_enabled {
+                    if let Some(gate) = approval.as_deref() {
+                        for &idx in &group {
+                            let call = &calls[idx];
+                            events.push(ToolEvent::ApprovalRequested {
+                                call_id: call.id.clone(),
+                                tool_name: call.tool_name.clone(),
+                                args: call.input.clone(),
+                            });
+                        }
+                        for &idx in &group {
+                            if let Some(sig) = abort {
+                                if sig.is_aborted() {
+                                    break;
+                                }
+                            }
+                            let call = &calls[idx];
+                            let decision = gate
+                                .request_approval(&call.id, &call.tool_name, &call.input)
+                                .await;
+                            approvals.push(Some(decision));
+                        }
+                    }
+                }
+
+                // 执行阶段：已批准项 join_all 并行执行（拒绝/过期/abort
+                // 中断项不执行，直接构造结果）
                 let exec = self.clone_executor();
                 let ctx_own = ctx.clone();
                 let options_own = options.clone();
                 let mut futures = Vec::new();
-                for &idx in &group {
+                let mut executed: Vec<Option<ClassifiedToolResult>> = vec![None; group.len()];
+                for (pos, &idx) in group.iter().enumerate() {
+                    let decided = approvals.get(pos).and_then(Option::as_ref);
+                    // 审批未启用/未注入门 → 全部执行；有决策 → 仅通过执行；
+                    // 无决策（abort 中断，未发起审批）→ 按取消收场
+                    let should_execute = if approval_active {
+                        matches!(decided, Some(ApprovalDecision::Approved))
+                    } else {
+                        true
+                    };
+                    if !should_execute {
+                        let call = &calls[idx];
+                        let r = match decided {
+                            Some(ApprovalDecision::Denied { reason }) => ClassifiedToolResult::error(
+                                &call.id,
+                                &call.tool_name,
+                                ToolErrorKind::UserDenied,
+                                format!("user denied: {reason}"),
+                            ),
+                            Some(ApprovalDecision::Expired) => ClassifiedToolResult::error(
+                                &call.id,
+                                &call.tool_name,
+                                ToolErrorKind::ApprovalExpired,
+                                "approval expired",
+                            ),
+                            // 无决策 = abort 中断，与顺序路径 abort 收场一致
+                            _ => ClassifiedToolResult::error(
+                                &call.id,
+                                &call.tool_name,
+                                ToolErrorKind::Cancelled,
+                                "aborted",
+                            ),
+                        };
+                        executed[pos] = Some(r);
+                        continue;
+                    }
                     let call = calls[idx].clone();
                     let e = exec.clone_executor();
                     let c = ctx_own.clone();
@@ -174,12 +236,26 @@ impl ToolExecutor {
                     let ab = abort.cloned();
                     futures.push(async move {
                         let r = e.execute_single(&call, &c, &o, ab.as_ref()).await;
-                        (idx, r)
+                        (pos, r)
                     });
                 }
                 let finished = futures::future::join_all(futures).await;
-                for (idx, r) in finished {
+                for (pos, r) in finished {
+                    executed[pos] = Some(r);
+                }
+
+                // 按组序收 tool-end（每项 tool-start → approval-requested → tool-end 顺序保持）
+                for (pos, &idx) in group.iter().enumerate() {
                     let call = &calls[idx];
+                    let r = executed[pos].take().unwrap_or_else(|| {
+                        // 防御性兜底：正常路径不应缺失（与批尾兜底语义一致）
+                        ClassifiedToolResult::error(
+                            &call.id,
+                            &call.tool_name,
+                            ToolErrorKind::Cancelled,
+                            "cancelled",
+                        )
+                    });
                     events.push(ToolEvent::ToolEnd {
                         call_id: call.id.clone(),
                         tool_name: call.tool_name.clone(),
@@ -190,7 +266,11 @@ impl ToolExecutor {
                         error_message: r.error_message.clone(),
                     });
                     if self.result_is_fatal(call, &r) {
-                        fatal = Some(r.error_message.clone().unwrap_or_else(|| "tool failed".into()));
+                        fatal = Some(
+                            r.error_message
+                                .clone()
+                                .unwrap_or_else(|| "tool failed".into()),
+                        );
                     }
                     results[idx] = Some(r);
                 }
@@ -911,10 +991,12 @@ mod tests {
         assert_event_contract(&calls, &out.results, &out.events);
     }
 
-    /// 混排用例 4：审批退化路径（顺序路径调用点）——组内致命后，
-    /// 并行组未执行项 + 后置顺序项一并取消且事件对齐全
+    /// 混排用例 4：审批并行（T09.6/P8）——并行组 join_all 全完成才判
+    /// fatal：组内兄弟正常完成，后置顺序项取消且事件对齐全（与无审批
+    /// 并行组 `cancel_siblings_parallel_group_completes_before_fatal_judged`
+    /// 行为一致——审批不再把并行组退化串行）
     #[tokio::test]
-    async fn cancel_siblings_approval_degrades_cancels_unexecuted_parallel() {
+    async fn cancel_siblings_approval_parallel_completes_before_fatal_judged() {
         let reg = registry_with(vec![
             Arc::new(FailToolFatal),
             Arc::new(SlowTool { ms: 0 }),
@@ -935,11 +1017,11 @@ mod tests {
             decision: ApprovalDecision::Approved,
         };
         let out = exec
-            .execute_batch(&calls, &exec_ctx(), Some(&gate), &opts, None)
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
             .await;
-        // 审批退化：并行组按顺序执行；组内致命 → 组内未执行项取消
+        // 审批并行：并行组 join_all 全完成才判 fatal——slow 兄弟正常完成
         assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::ExecutionFailed));
-        assert_eq!(out.results[1].error_kind, Some(ToolErrorKind::Cancelled));
+        assert!(out.results[1].is_ok());
         assert_eq!(out.results[1].id, "c2");
         assert_eq!(out.results[1].tool_name, "slow");
         // 后置顺序项同样取消
@@ -1155,6 +1237,70 @@ mod tests {
         }
     }
 
+    /// 记录审批请求顺序的测试门（T09.6：决策逐个按组序发起断言）
+    struct RecordingApproval {
+        order: Arc<std::sync::Mutex<Vec<String>>>,
+    }
+    #[async_trait::async_trait]
+    impl ApprovalGate for RecordingApproval {
+        async fn request_approval(
+            &self,
+            call_id: &str,
+            _tool_name: &str,
+            _args: &Value,
+        ) -> ApprovalDecision {
+            self.order
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(call_id.to_string());
+            ApprovalDecision::Approved
+        }
+    }
+
+    /// 阻塞审批门：等待 release 通知后才返回决策（abort 中断审批测试用）
+    struct BlockingApproval {
+        release: Arc<tokio::sync::Notify>,
+        order: Arc<std::sync::Mutex<Vec<String>>>,
+    }
+    #[async_trait::async_trait]
+    impl ApprovalGate for BlockingApproval {
+        async fn request_approval(
+            &self,
+            call_id: &str,
+            _tool_name: &str,
+            _args: &Value,
+        ) -> ApprovalDecision {
+            self.order
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(call_id.to_string());
+            self.release.notified().await;
+            ApprovalDecision::Approved
+        }
+    }
+
+    /// 按 call_id 选择性拒绝的测试门（并行组内单项被拒场景）
+    struct DenySomeApproval {
+        deny: String,
+    }
+    #[async_trait::async_trait]
+    impl ApprovalGate for DenySomeApproval {
+        async fn request_approval(
+            &self,
+            call_id: &str,
+            _tool_name: &str,
+            _args: &Value,
+        ) -> ApprovalDecision {
+            if call_id == self.deny {
+                ApprovalDecision::Denied {
+                    reason: "no".into(),
+                }
+            } else {
+                ApprovalDecision::Approved
+            }
+        }
+    }
+
     #[tokio::test]
     async fn approval_denied_is_not_fatal() {
         let reg = registry_with(vec![Arc::new(EchoTool)]);
@@ -1170,7 +1316,7 @@ mod tests {
             },
         };
         let out = exec
-            .execute_batch(&calls, &exec_ctx(), Some(&gate), &opts, None)
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
             .await;
         assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::UserDenied));
         assert!(out.fatal.is_none());
@@ -1194,7 +1340,7 @@ mod tests {
             decision: ApprovalDecision::Approved,
         };
         let out = exec
-            .execute_batch(&calls, &exec_ctx(), Some(&gate), &opts, None)
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
             .await;
         assert!(out.results[0].is_ok());
         assert!(out.fatal.is_none());
@@ -1213,9 +1359,173 @@ mod tests {
             decision: ApprovalDecision::Expired,
         };
         let out = exec
-            .execute_batch(&calls, &exec_ctx(), Some(&gate), &opts, None)
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
             .await;
         assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::ApprovalExpired));
         assert!(out.fatal.is_none());
+    }
+
+    /// T09.6/P8：审批开启时并行组恢复并行——5×50ms 慢工具批耗时接近单
+    /// 工具（旧串行退化 ≈ 5×50ms = 250ms，改后 ≈ max(50ms) + 审批链）
+    #[tokio::test]
+    async fn approval_parallel_executes_concurrently() {
+        let reg = registry_with(vec![Arc::new(SlowTool { ms: 50 })]);
+        let exec = ToolExecutor::new(reg);
+        let calls = (0..5)
+            .map(|i| call(&format!("p{i}"), "slow", ToolConcurrency::Parallel))
+            .collect::<Vec<_>>();
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            ..Default::default()
+        };
+        let gate = MockApproval {
+            decision: ApprovalDecision::Approved,
+        };
+        let start = std::time::Instant::now();
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
+            .await;
+        let elapsed = start.elapsed();
+        assert!(out.results.iter().all(|r| r.is_ok()));
+        assert!(
+            elapsed.as_millis() < 120,
+            "审批并行批耗时应接近单工具（50ms），实际 {elapsed:?}"
+        );
+    }
+
+    /// T09.6/P8：审批并行组事件顺序与决策顺序——每项保持
+    /// tool-start → approval-requested → tool-end；审批逐个按组序发起
+    #[tokio::test]
+    async fn approval_parallel_event_order_preserved() {
+        let reg = registry_with(vec![Arc::new(EchoTool), Arc::new(SlowTool { ms: 0 })]);
+        let exec = ToolExecutor::new(reg);
+        let ids = ["p0", "p1", "p2"];
+        let calls = ids
+            .iter()
+            .map(|id| call(id, "echo", ToolConcurrency::Parallel))
+            .collect::<Vec<_>>();
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            ..Default::default()
+        };
+        let order = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let gate = Arc::new(RecordingApproval {
+            order: Arc::clone(&order),
+        });
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(gate), &opts, None)
+            .await;
+        // 审批逐个按组序发起
+        assert_eq!(
+            *order.lock().unwrap(),
+            ids.iter().map(|s| s.to_string()).collect::<Vec<_>>()
+        );
+        // 每项事件顺序：tool-start 先于 approval-requested 先于 tool-end
+        let start_pos = |id: &str| {
+            out.events
+                .iter()
+                .position(|e| {
+                    matches!(e, ToolEvent::ToolStart { call_id, .. } if call_id == id)
+                })
+                .unwrap()
+        };
+        let approval_pos = |id: &str| {
+            out.events
+                .iter()
+                .position(|e| {
+                    matches!(e, ToolEvent::ApprovalRequested { call_id, .. } if call_id == id)
+                })
+                .unwrap()
+        };
+        let end_pos = |id: &str| {
+            out.events
+                .iter()
+                .position(|e| {
+                    matches!(e, ToolEvent::ToolEnd { call_id, .. } if call_id == id)
+                })
+                .unwrap()
+        };
+        for id in ids {
+            assert!(
+                start_pos(id) < approval_pos(id),
+                "{id}: tool-start 应先于 approval-requested"
+            );
+            assert!(
+                approval_pos(id) < end_pos(id),
+                "{id}: approval-requested 应先于 tool-end"
+            );
+        }
+    }
+
+    /// T09.6/P8：并行组中单项被拒 → 该项 user_denied 不执行，其余项并行执行
+    #[tokio::test]
+    async fn approval_parallel_denied_skips_execution() {
+        let reg = registry_with(vec![Arc::new(EchoTool), Arc::new(SlowTool { ms: 0 })]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![
+            call("p0", "echo", ToolConcurrency::Parallel),
+            call("p1", "echo", ToolConcurrency::Parallel),
+            call("p2", "echo", ToolConcurrency::Parallel),
+        ];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            ..Default::default()
+        };
+        let gate = Arc::new(DenySomeApproval {
+            deny: "p1".to_string(),
+        });
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(gate), &opts, None)
+            .await;
+        assert_eq!(out.results[1].error_kind, Some(ToolErrorKind::UserDenied));
+        assert!(out.results[0].is_ok());
+        assert!(out.results[2].is_ok());
+        assert!(out.fatal.is_none());
+    }
+
+    /// T09.6/P8：审批等待期间 abort → 已发起审批保留决策，剩余项不再
+    /// 发起审批并全部以取消收场（与顺序路径逐项 abort 前置检查一致）
+    #[tokio::test]
+    async fn approval_parallel_abort_skips_remaining_approvals() {
+        let reg = registry_with(vec![Arc::new(SlowTool { ms: 0 })]);
+        let exec = ToolExecutor::new(reg);
+        let calls = (0..3)
+            .map(|i| call(&format!("a{i}"), "slow", ToolConcurrency::Parallel))
+            .collect::<Vec<_>>();
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            ..Default::default()
+        };
+        let release = Arc::new(tokio::sync::Notify::new());
+        let order = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let gate = Arc::new(BlockingApproval {
+            release: Arc::clone(&release),
+            order: Arc::clone(&order),
+        });
+        let abort = AbortSignal::new();
+        let aborter = {
+            let abort = abort.clone();
+            let release = Arc::clone(&release);
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                abort.abort();
+                release.notify_waiters();
+            })
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(gate), &opts, Some(&abort))
+            .await;
+        aborter.await.expect("aborter 不应 panic");
+        // 仅首个审批被发起（abort 后不再发起剩余审批）
+        assert_eq!(order.lock().unwrap().as_slice(), &["a0".to_string()]);
+        // 全部以取消收场
+        assert!(out
+            .results
+            .iter()
+            .all(|r| r.error_kind == Some(ToolErrorKind::Cancelled)));
+        assert!(out
+            .results
+            .iter()
+            .all(|r| r.error_message.as_deref() == Some("aborted")));
     }
 }

@@ -265,6 +265,8 @@ mod tests {
             }
         }
 
+        // PE-07 T07.6：下列 2 处 expect 属测试专属持久化（cfg(test)），非运行时路径，
+        // 按任务书「测试 expect 保留但标注」处置，保持不动。
         fn snapshots(&self) -> Vec<Vec<McpServerConfig>> {
             self.saved
                 .lock()

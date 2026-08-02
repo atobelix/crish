@@ -105,6 +105,15 @@ pub struct ToolIdempotencyGuard {
     store: Option<Arc<dyn IdempotencyStore>>,
 }
 
+/// 锁中毒恢复（PE-07 T07.6 A 模式，Q16 处置）：PoisonError → 记录错误并取回守卫继续使用。
+///
+/// 对齐 AA-01 正面发现 3（handlers/mod.rs:199 先例）：临界区无 await、持锁时间短，
+/// 恢复后状态可能不完整但进程不 panic（外部 store 回调持锁 panic 不再级联 DoS）。
+fn recover_lock<T>(poison: std::sync::PoisonError<T>) -> T {
+    tracing::error!("幂等守卫锁中毒，按恢复模式继续（锁内状态可能不完整）：{poison}");
+    poison.into_inner()
+}
+
 impl Default for ToolIdempotencyGuard {
     fn default() -> Self {
         Self::new()
@@ -135,7 +144,7 @@ impl ToolIdempotencyGuard {
         let mut domains = self
             .domains
             .lock()
-            .expect("幂等守卫锁中毒后不可恢复");
+            .unwrap_or_else(recover_lock);
         let state = domains
             .entry(DEFAULT_IDEMPOTENCY_DOMAIN.to_string())
             .or_default();
@@ -151,7 +160,7 @@ impl ToolIdempotencyGuard {
         let mut domains = self
             .domains
             .lock()
-            .expect("幂等守卫锁中毒后不可恢复");
+            .unwrap_or_else(recover_lock);
         let state = domains
             .entry(DEFAULT_IDEMPOTENCY_DOMAIN.to_string())
             .or_default();
@@ -163,7 +172,7 @@ impl ToolIdempotencyGuard {
         let domains = self
             .domains
             .lock()
-            .expect("幂等守卫锁中毒后不可恢复");
+            .unwrap_or_else(recover_lock);
         domains
             .get(DEFAULT_IDEMPOTENCY_DOMAIN)
             .map(|s| s.keys.iter().cloned().collect())
@@ -186,7 +195,7 @@ impl ToolIdempotencyGuard {
         let domains = self
             .domains
             .lock()
-            .expect("幂等守卫锁中毒后不可恢复");
+            .unwrap_or_else(recover_lock);
         let executed = domains
             .get(&domain)
             .map(|s| s.keys.contains(&key))
@@ -212,7 +221,7 @@ impl ToolIdempotencyGuard {
         let key = execution_key(ctx, args);
         self.domains
             .lock()
-            .expect("幂等守卫锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .entry(domain.clone())
             .or_default()
             .keys
@@ -230,7 +239,7 @@ impl ToolIdempotencyGuard {
     pub fn clear(&self, domain: &str) {
         self.domains
             .lock()
-            .expect("幂等守卫锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .remove(domain);
     }
 
@@ -238,7 +247,7 @@ impl ToolIdempotencyGuard {
     pub fn clear_all(&self) {
         self.domains
             .lock()
-            .expect("幂等守卫锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .clear();
     }
 
@@ -248,7 +257,7 @@ impl ToolIdempotencyGuard {
             let domains = self
                 .domains
                 .lock()
-                .expect("幂等守卫锁中毒后不可恢复");
+                .unwrap_or_else(recover_lock);
             !domains
                 .get(domain)
                 .map(|s| s.loaded)
@@ -262,7 +271,7 @@ impl ToolIdempotencyGuard {
             let mut domains = self
                 .domains
                 .lock()
-                .expect("幂等守卫锁中毒后不可恢复");
+                .unwrap_or_else(recover_lock);
             let state = domains.entry(domain.to_string()).or_default();
             state.keys.extend(keys);
             state.loaded = true;
@@ -270,7 +279,7 @@ impl ToolIdempotencyGuard {
             let mut domains = self
                 .domains
                 .lock()
-                .expect("幂等守卫锁中毒后不可恢复");
+                .unwrap_or_else(recover_lock);
             domains.entry(domain.to_string()).or_default().loaded = true;
         }
         Ok(())
@@ -549,6 +558,8 @@ mod tests {
 
     #[async_trait]
     impl IdempotencyStore for FakeStore {
+        // PE-07 T07.6：下列 2 处 expect 属测试专属 store（cfg(test)），非运行时路径，
+        // 按任务书「测试 expect 保留但标注」处置，保持不动。
         async fn load_keys(&self, domain: &str) -> Result<Vec<String>, ToolError> {
             Ok(self
                 .keys
@@ -586,5 +597,41 @@ mod tests {
         let guard2 = ToolIdempotencyGuard::with_store(store.clone());
         let next = guard2.check(&c, &args).await.unwrap();
         assert!(matches!(next, IdempotencyDecision::Deduplicated { .. }));
+    }
+
+    // ── PE-07 T07.6 用例 1：锁中毒恢复（Q16 处置验证） ──
+
+    #[test]
+    fn poisoned_guard_sync_api_recovers_without_panic() {
+        let guard = ToolIdempotencyGuard::new();
+        crate::test_support::poison_std_lock(&guard.domains);
+        // 毒化后公开同步 API 不 panic，且继续可用（恢复模式）
+        assert!(guard.should_execute("call_1"));
+        assert!(!guard.should_execute("call_1"));
+        assert!(guard.snapshot().contains(&"call_1".to_string()));
+        guard.restore(&["call_2".to_string()]);
+        assert!(!guard.should_execute("call_2"));
+        guard.clear(DEFAULT_IDEMPOTENCY_DOMAIN);
+        assert!(guard.should_execute("call_3"));
+        guard.clear_all();
+        assert!(guard.snapshot().is_empty());
+    }
+
+    #[tokio::test]
+    async fn poisoned_guard_async_api_recovers_without_panic() {
+        let guard = ToolIdempotencyGuard::new();
+        crate::test_support::poison_std_lock(&guard.domains);
+        // 毒化后 check/record（含 ensure_loaded 懒加载路径）不 panic
+        let c = ctx("run-1", "sess-1", "read_file");
+        let args = json!({ "path": "a.txt" });
+        assert!(matches!(
+            guard.check(&c, &args).await.unwrap(),
+            IdempotencyDecision::Execute { .. }
+        ));
+        guard.record(&c, &args).await.unwrap();
+        assert!(matches!(
+            guard.check(&c, &args).await.unwrap(),
+            IdempotencyDecision::Deduplicated { .. }
+        ));
     }
 }

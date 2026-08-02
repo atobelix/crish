@@ -40,6 +40,16 @@ const CRASH_POLL_INTERVAL: Duration = Duration::from_millis(50);
 /// stderr 保留最近行数（诊断用）
 const STDERR_TAIL_LIMIT: usize = 20;
 
+/// 锁中毒恢复（PE-07 T07.6 A 模式，Q17 处置）：PoisonError → 记录错误并取回守卫继续使用。
+///
+/// 对齐 AA-01 正面发现 3（handlers/mod.rs:199 先例）：临界区无 await、持锁时间短，
+/// 恢复后状态可能不完整但进程不 panic（恶意/异常 MCP server 回调不再级联 DoS）。
+/// 仅用于 std `Mutex`/`RwLock`；tokio `Mutex` 无中毒语义，不适用。
+fn recover_lock<T>(poison: std::sync::PoisonError<T>) -> T {
+    tracing::error!("MCP 桥锁中毒，按恢复模式继续（锁内状态可能不完整）：{poison}");
+    poison.into_inner()
+}
+
 /// 运行状态原子编码（state: AtomicU8）
 const STATE_STOPPED: u8 = 0;
 const STATE_STARTING: u8 = 1;
@@ -136,7 +146,7 @@ impl McpServerSession {
     pub fn tools(&self) -> Vec<ToolDefinition> {
         self.tools
             .read()
-            .expect("工具表读锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .clone()
             .unwrap_or_default()
     }
@@ -145,7 +155,7 @@ impl McpServerSession {
     pub fn exit_reason(&self) -> Option<String> {
         self.exit_reason
             .lock()
-            .expect("退出原因锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .clone()
     }
 
@@ -153,7 +163,7 @@ impl McpServerSession {
     pub fn stderr_tail(&self) -> Vec<String> {
         self.stderr_tail
             .lock()
-            .expect("stderr 缓冲锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .clone()
     }
 
@@ -168,21 +178,21 @@ impl McpServerSession {
     /// 收到 RecvError，由 request 映射为 connection_failed）。
     pub(crate) fn mark_exited(&self, reason: impl Into<String>) {
         {
-            let mut exit_reason = self.exit_reason.lock().expect("退出原因锁中毒后不可恢复");
+            let mut exit_reason = self.exit_reason.lock().unwrap_or_else(recover_lock);
             if exit_reason.is_none() {
                 *exit_reason = Some(reason.into());
             }
         }
         self.state.store(STATE_EXITED, Ordering::SeqCst);
         let pending = std::mem::take(
-            &mut *self.pending.lock().expect("请求表锁中毒后不可恢复"),
+            &mut *self.pending.lock().unwrap_or_else(recover_lock),
         );
         drop(pending);
     }
 
     /// 记录一行 stderr（环形尾部）
     pub(crate) fn push_stderr_line(&self, line: String) {
-        let mut tail = self.stderr_tail.lock().expect("stderr 缓冲锁中毒后不可恢复");
+        let mut tail = self.stderr_tail.lock().unwrap_or_else(recover_lock);
         tail.push(line);
         while tail.len() > STDERR_TAIL_LIMIT {
             tail.remove(0);
@@ -268,7 +278,7 @@ impl McpServerSession {
         let (tx, rx) = oneshot::channel();
         self.pending
             .lock()
-            .expect("请求表锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .insert(id, tx);
         let payload = serde_json::to_string(&json!({
             "jsonrpc": "2.0",
@@ -276,7 +286,14 @@ impl McpServerSession {
             "method": method,
             "params": params,
         }))
-        .expect("JSON-RPC 请求序列化不可能失败");
+        // PE-07 T07.6 B 模式（Q17 结果 expect 处置）：序列化本不应失败，
+        // 失败时返回错误而非 panic（调用方传播）
+        .map_err(|e| {
+            ToolError::new(
+                codes::RUNTIME_UNEXPECTED_STATE,
+                format!("JSON-RPC 请求序列化失败（不应发生）：{e}"),
+            )
+        })?;
         // MCP stdio 规范：消息按行分隔，必须带换行结束
         let mut payload = payload.into_bytes();
         payload.push(b'\n');
@@ -301,7 +318,7 @@ impl McpServerSession {
         if let Err(e) = written {
             self.pending
                 .lock()
-                .expect("请求表锁中毒后不可恢复")
+                .unwrap_or_else(recover_lock)
                 .remove(&id);
             return Err(e);
         }
@@ -311,7 +328,7 @@ impl McpServerSession {
             Err(_) => {
                 self.pending
                     .lock()
-                    .expect("请求表锁中毒后不可恢复")
+                    .unwrap_or_else(recover_lock)
                     .remove(&id);
                 Err(ToolError::new(
                     codes::RUNTIME_TIMEOUT,
@@ -331,7 +348,14 @@ impl McpServerSession {
             "method": method,
             "params": params,
         }))
-        .expect("JSON-RPC 通知序列化不可能失败");
+        // PE-07 T07.6 B 模式（Q17 结果 expect 处置）：序列化本不应失败，
+        // 失败时返回错误而非 panic（调用方传播）
+        .map_err(|e| {
+            ToolError::new(
+                codes::RUNTIME_UNEXPECTED_STATE,
+                format!("JSON-RPC 通知序列化失败（不应发生）：{e}"),
+            )
+        })?;
         let mut payload = payload.into_bytes();
         payload.push(b'\n');
         let mut stdin = self.stdin.lock().await;
@@ -398,8 +422,8 @@ impl McpServerSession {
                 )
             })
             .collect();
-        *self.tools.write().expect("工具表写锁中毒后不可恢复") = Some(defs.to_vec());
-        *self.tool_index.write().expect("工具索引写锁中毒后不可恢复") = index;
+        *self.tools.write().unwrap_or_else(recover_lock) = Some(defs.to_vec());
+        *self.tool_index.write().unwrap_or_else(recover_lock) = index;
     }
 
     /// 会话不可用时的错误（含退出原因，便于诊断崩溃）
@@ -484,7 +508,7 @@ impl McpClientBridge {
     pub async fn start(&self, config: &McpServerConfig) -> Result<Vec<ToolDefinition>, ToolError> {
         config.validate()?;
         {
-            let sessions = self.sessions.lock().expect("会话表锁中毒后不可恢复");
+            let sessions = self.sessions.lock().unwrap_or_else(recover_lock);
             if let Some(session) = sessions.get(&config.server_id) {
                 match session.state() {
                     McpServerRuntimeState::Ready => return Ok(session.tools()),
@@ -504,7 +528,7 @@ impl McpClientBridge {
         let session = McpServerSession::spawn(config, self.call_timeout).await?;
         self.sessions
             .lock()
-            .expect("会话表锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .insert(config.server_id.clone(), session.clone());
 
         let result: Result<Vec<ToolDefinition>, ToolError> = async {
@@ -534,13 +558,13 @@ impl McpClientBridge {
         }
         .await;
 
-        match &result {
-            Ok(_) => Ok(result.expect("Ok 分支必有值")),
-            Err(_) => {
-                session.set_state(McpServerRuntimeState::Degraded);
-                Err(result.expect_err("Err 分支必有值"))
-            }
+        // PE-07 T07.6 C 模式（Q17 样板简化）：538/541 的 match + expect/expect_err
+        // 样板对整体简化为直接返回 result（result 本身即 Result<Vec<ToolDefinition>, ToolError>）
+        if result.is_err() {
+            // 握手 / 工具枚举失败：进程保留（Degraded），供 restart 重建重试
+            session.set_state(McpServerRuntimeState::Degraded);
         }
+        result
     }
 
     /// 停止 server：杀子进程 + 清理（未运行 → mcp.server_not_found）
@@ -548,7 +572,7 @@ impl McpClientBridge {
         let session = self
             .sessions
             .lock()
-            .expect("会话表锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .remove(server_id);
         match session {
             Some(session) => {
@@ -565,7 +589,7 @@ impl McpClientBridge {
     /// 停止全部 server，返回停止数量
     pub async fn stop_all(&self) -> usize {
         let sessions = std::mem::take(
-            &mut *self.sessions.lock().expect("会话表锁中毒后不可恢复"),
+            &mut *self.sessions.lock().unwrap_or_else(recover_lock),
         );
         let count = sessions.len();
         for session in sessions.values() {
@@ -578,7 +602,7 @@ impl McpClientBridge {
     pub fn state(&self, server_id: &str) -> McpServerRuntimeState {
         self.sessions
             .lock()
-            .expect("会话表锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .get(server_id)
             .map(|s| s.state())
             .unwrap_or(McpServerRuntimeState::Stopped)
@@ -588,7 +612,7 @@ impl McpClientBridge {
     pub fn is_running(&self, server_id: &str) -> bool {
         self.sessions
             .lock()
-            .expect("会话表锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .get(server_id)
             .map(|s| s.is_running())
             .unwrap_or(false)
@@ -598,7 +622,7 @@ impl McpClientBridge {
     pub fn tools(&self, server_id: &str) -> Option<Vec<ToolDefinition>> {
         self.sessions
             .lock()
-            .expect("会话表锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .get(server_id)
             .map(|s| s.tools())
             .filter(|tools| !tools.is_empty())
@@ -609,13 +633,13 @@ impl McpClientBridge {
         let session = self
             .sessions
             .lock()
-            .expect("会话表锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .get(server_id)?
             .clone();
         let handle = session
             .tool_index
             .read()
-            .expect("工具索引读锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .get(tool_name)?
             .clone();
         Some(Arc::new(McpToolAdapter {
@@ -630,7 +654,7 @@ impl McpClientBridge {
         let mut ids: Vec<String> = self
             .sessions
             .lock()
-            .expect("会话表锁中毒后不可恢复")
+            .unwrap_or_else(recover_lock)
             .keys()
             .cloned()
             .collect();
@@ -854,7 +878,7 @@ fn handle_response_line(session: &McpServerSession, line: &str) {
     if let Some(tx) = session
         .pending
         .lock()
-        .expect("请求表锁中毒后不可恢复")
+        .unwrap_or_else(recover_lock)
         .remove(&id)
     {
         let _ = tx.send(message);
@@ -1065,5 +1089,89 @@ mod tests {
         let err = session.unavailable_error();
         assert_eq!(err.code(), "mcp.connection_failed");
         assert!(err.to_string().contains("进程退出"));
+    }
+
+    // ── PE-07 T07.6 用例 2：锁中毒恢复（Q17 处置验证） ──
+
+    /// 构造一个就绪态会话（全部锁初始未毒化）
+    fn ready_session() -> Arc<McpServerSession> {
+        Arc::new(McpServerSession {
+            server_id: "s1".to_string(),
+            state: AtomicU8::new(STATE_READY),
+            child: Mutex::new(None),
+            stdin: Mutex::new(None),
+            next_id: AtomicU64::new(0),
+            pending: std::sync::Mutex::new(HashMap::new()),
+            tools: RwLock::new(None),
+            tool_index: RwLock::new(HashMap::new()),
+            exit_reason: std::sync::Mutex::new(None),
+            stderr_tail: std::sync::Mutex::new(Vec::new()),
+            call_timeout: DEFAULT_MCP_CALL_TIMEOUT,
+        })
+    }
+
+    #[test]
+    fn poisoned_session_locks_recover_without_panic() {
+        let session = ready_session();
+        // 毒化会话全部 std 锁（模拟恶意 server 回调持锁 panic）
+        crate::test_support::poison_std_lock(&session.pending);
+        crate::test_support::poison_std_lock(&session.exit_reason);
+        crate::test_support::poison_std_lock(&session.stderr_tail);
+        crate::test_support::poison_rw_lock(&session.tools);
+        crate::test_support::poison_rw_lock(&session.tool_index);
+        // 毒化后公开 API / 内部清理路径不 panic 且可继续工作
+        assert!(session.tools().is_empty());
+        assert_eq!(session.exit_reason(), None);
+        assert!(session.stderr_tail().is_empty());
+        session.push_stderr_line("line".to_string());
+        session.mark_exited("模拟退出");
+        assert_eq!(session.state(), McpServerRuntimeState::Exited);
+        assert_eq!(session.exit_reason(), Some("模拟退出".to_string()));
+    }
+
+    #[test]
+    fn poisoned_bridge_sessions_lock_recovers_without_panic() {
+        let bridge = McpClientBridge::new();
+        crate::test_support::poison_std_lock(&bridge.sessions);
+        // 毒化后查询 / 清理路径返回安全值或错误，不 panic
+        assert_eq!(bridge.state("s1"), McpServerRuntimeState::Stopped);
+        assert!(!bridge.is_running("s1"));
+        assert_eq!(bridge.tools("s1"), None);
+        assert_eq!(bridge.managed_servers(), Vec::<String>::new());
+    }
+
+    #[tokio::test]
+    async fn poisoned_bridge_stop_paths_return_error_not_panic() {
+        let bridge = McpClientBridge::new();
+        crate::test_support::poison_std_lock(&bridge.sessions);
+        // 错误路径：毒化后 stop 返回 mcp.server_not_found 而非 panic
+        let err = bridge.stop("s1").await.unwrap_err();
+        assert_eq!(err.code(), "mcp.server_not_found");
+        // stop_all 毒化后正常返回 0
+        assert_eq!(bridge.stop_all().await, 0);
+    }
+
+    #[tokio::test]
+    async fn poisoned_session_request_returns_error_not_panic() {
+        let session = Arc::new(McpServerSession {
+            server_id: "s1".to_string(),
+            state: AtomicU8::new(STATE_STARTING),
+            child: Mutex::new(None),
+            stdin: Mutex::new(None),
+            next_id: AtomicU64::new(0),
+            pending: std::sync::Mutex::new(HashMap::new()),
+            tools: RwLock::new(None),
+            tool_index: RwLock::new(HashMap::new()),
+            exit_reason: std::sync::Mutex::new(None),
+            stderr_tail: std::sync::Mutex::new(Vec::new()),
+            call_timeout: DEFAULT_MCP_CALL_TIMEOUT,
+        });
+        crate::test_support::poison_std_lock(&session.pending);
+        // 毒化 pending 后 request 挂起表可写、stdin 缺失走错误返回，不 panic
+        let err = session
+            .request("tools/list", json!({}), Duration::from_millis(10))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "mcp.connection_failed");
     }
 }

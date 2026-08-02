@@ -25,6 +25,7 @@ use crate::tool_events::{
     ApprovalGate, ClassifiedToolResult, ToolBatchOptions, ToolEvent,
 };
 use crate::tool_exec::{ToolExecCtx, ToolExecutor};
+use std::sync::Arc;
 
 use super::super::end::EndDecision;
 use super::super::handlers::{
@@ -40,7 +41,9 @@ pub(crate) async fn handle(
     executor: &ToolExecutor,
     ctx: &ToolExecCtx,
     options: &ToolBatchOptions,
-    approval: Option<&dyn ApprovalGate>,
+    // T09.6/P8（AU-04 F9）：跨 async 边界一律 Arc 传递（审批模式并行组
+    // 恢复并行；execute_batch 内部以 as_deref 单点消费）
+    approval: Option<Arc<dyn ApprovalGate>>,
 ) -> Result<HandlerOutcome, LoopError> {
     // 1. abort / 控制意图检查（L3 强停可立即中断）
     if let Some(end) = check_control(state)? {

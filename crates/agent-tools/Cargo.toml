@@ -22,6 +22,8 @@ regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+# PE-07 T07.6：锁中毒恢复路径错误日志（复用 workspace 既有依赖，非新外部依赖）
+tracing = { workspace = true }
 
 [dev-dependencies]
 conex-test-utils = { path = "../conex-test-utils" }

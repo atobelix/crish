@@ -24,8 +24,16 @@ async-trait = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-# rt-multi-thread：集成测试（abort/classify/retry 等）用 #[tokio::test(flavor = "multi_thread")]
+# 测试基础设施域（T11.7）：TimePauseGuard 虚拟时间护栏（Q41 时间确定性）
+conex-test-utils = { path = "../conex-test-utils" }
+# rt-multi-thread：集成测试（abort/classify/retry 等）使用 #[tokio::test(flavor = "multi_thread")]
 tokio = { workspace = true, features = ["rt-multi-thread"] }
+# Criterion 基准（PE-09 T09.7：sse_parse 吞吐，仅 dev-dependency）
+criterion = { workspace = true }
+
+[[bench]]
+name = "sse_parse"
+harness = false
 
 # DPAPI 凭据加密（B2.2）：windows-sys 0.61 已随 Tauri 壳进入 Cargo.lock（0.61.2），
 # 此处仅补 feature 声明，不新增任何新 crate 到依赖树。

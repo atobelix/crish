@@ -49,10 +49,38 @@ pub use tools::{
 
 #[cfg(test)]
 pub(crate) mod test_support {
-    //! 测试共用的示例工具（echo），验证 execute 闭环
+    //! 测试共用的示例工具（echo）与锁毒化注入工具，验证 execute 闭环
 
     use crate::definition::{Tool, ToolDefinition, ToolError};
     use async_trait::async_trait;
+
+    /// 毒化 std `Mutex`（PE-07 T07.6 测试注入）：在持锁线程内 panic，
+    /// 使锁进入中毒状态（PoisonError 注入），验证恢复式处理不 panic。
+    pub(crate) fn poison_std_lock<T: std::marker::Send>(lock: &std::sync::Mutex<T>) {
+        let _ = std::panic::catch_unwind(|| {
+            std::thread::scope(|scope| {
+                scope.spawn(|| {
+                    let _guard = lock.lock().unwrap();
+                    panic!("模拟持锁 panic（毒化锁）");
+                });
+            });
+        });
+    }
+
+    /// 毒化 std `RwLock`（PE-07 T07.6 测试注入）：持写锁线程内 panic，
+    /// 使读/写路径均进入中毒状态，验证恢复式处理不 panic。
+    pub(crate) fn poison_rw_lock<T: std::marker::Send + std::marker::Sync>(
+        lock: &std::sync::RwLock<T>,
+    ) {
+        let _ = std::panic::catch_unwind(|| {
+            std::thread::scope(|scope| {
+                scope.spawn(|| {
+                    let _guard = lock.write().unwrap();
+                    panic!("模拟持锁 panic（毒化锁）");
+                });
+            });
+        });
+    }
 
     /// 测试用 echo 工具：把入参原样包进 {"echo": ...} 返回
     pub(crate) struct EchoTool {

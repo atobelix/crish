@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 
 use agent_tools::registry::ToolRegistry;
 use async_trait::async_trait;
+use conex_test_utils::assertions::assert_message_delta_concatenation;
 use conex_types::error::ProviderErrorKind;
 use conex_types::events::AgentEvent;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
@@ -483,20 +484,13 @@ async fn realtime_sink_receives_deltas_and_collected_sequence_stays_intact() {
     );
 
     // 收敛性（PE-02 §3.1.4 T2）：实时正文 delta 拼接 == 收口消息全文
-    let sink_text: String = sink_blocks
-        .iter()
-        .filter_map(|block| match block {
-            AgentMessageBlock::Text { text } => Some(text.as_str()),
-            _ => None,
-        })
-        .collect();
     let message = outcome
         .messages
         .iter()
         .find(|m| m.role == AgentMessageRole::Assistant)
         .expect("应 commit assistant 消息");
-    assert_eq!(sink_text, message.text(), "实时正文拼接 == 收口全文");
-    assert_eq!(sink_text, "你好");
+    assert_message_delta_concatenation(&sink_events, &message.text());
+    assert_eq!(message.text(), "你好");
 }
 
 /// T09.1 双轨：未注入 DeltaSink 时收口序列仍完整（message-end 必达——

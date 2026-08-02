@@ -26,6 +26,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_tools::registry::ToolRegistry;
+use conex_test_utils::clock::TimePauseGuard;
 use conex_types::events::AgentEvent;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::session::AgentEndReason;
@@ -95,6 +96,8 @@ fn has_runtime_error(events: &[AgentEvent]) -> bool {
 /// 独立 reason（Stopped）；orchestrator 层明确「cooperative stop 不自动续轮」。
 #[tokio::test]
 async fn d1_cooperative_stop_ends_stopped_no_auto_continuation() {
+    // Q41（T11.7.2）：虚拟时间护栏——真实 sleep 改为 advance 显式推进
+    let _time = TimePauseGuard::new();
     let provider = TestProvider::new(vec![
         ProviderStreamEvent::text("这条消息保留"),
         ProviderStreamEvent::stop(StopReason::Stop),
@@ -104,10 +107,12 @@ async fn d1_cooperative_stop_ends_stopped_no_auto_continuation() {
     let bus = loop_.control_bus();
 
     let handle = tokio::spawn(async move { loop_.run(user("开始")).await });
-    tokio::time::sleep(Duration::from_millis(80)).await;
+    tokio::time::advance(Duration::from_millis(80)).await;
     bus.lock()
         .unwrap()
         .request_cooperative_stop(Some("用户协作停止".into()), Some("test".into()));
+    // 越过 provider 栅栏（300ms 虚拟停顿），loop 读到协作停止并收场
+    tokio::time::advance(Duration::from_millis(300)).await;
     let outcome = handle.await.expect("run 不应 panic");
 
     // 正向：独立 reason stopped，内容保留

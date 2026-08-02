@@ -1,4 +1,4 @@
-//! 事件 schema 版本化兼容测试（PE-03 T03.10 / PE-12 T12.5/T12.6）
+﻿//! 事件 schema 版本化兼容测试（PE-03 T03.10 / PE-12 T12.5/T12.6）
 //!
 //! 覆盖：
 //! - v1 golden fixture（tests/fixtures/events-v1/，24 事件每类 ≥1 条，无
@@ -11,8 +11,9 @@
 
 use conex_types::{AgentEventEnvelope, EVENT_ENVELOPE_SCHEMA_VERSION};
 use serde_json::{json, Value};
-use std::fs;
-use std::path::PathBuf;
+
+/// 统一 fixture 访问辅助（T11.3 golden 规范：tests/common/mod.rs 单一实现）
+mod common;
 
 /// v1 基线 24 事件类型清单（与 changelog v1 表逐条对应，PE-12 T12.6 门禁）
 const V1_EVENT_TYPES: &[&str] = &[
@@ -42,18 +43,6 @@ const V1_EVENT_TYPES: &[&str] = &[
     "run-terminal",
 ];
 
-fn fixture_dir() -> PathBuf {
-    PathBuf::from(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/events-v1"
-    ))
-}
-
-fn fixture(name: &str) -> String {
-    fs::read_to_string(fixture_dir().join(name))
-        .unwrap_or_else(|e| panic!("读取 fixture {name} 失败：{e}"))
-}
-
 // ── 1. 变体数一致性：24 清单 ↔ fixtures ↔ changelog ──
 
 #[test]
@@ -72,7 +61,7 @@ fn v1_baseline_has_exactly_24_event_types() {
 fn v1_fixture_files_cover_all_24_event_types() {
     // 每个事件类型必须有对应的 v1 golden fixture（PE-12 T12.6 步骤 1）
     for name in V1_EVENT_TYPES {
-        let path = fixture_dir().join(format!("event-{name}.json"));
+        let path = common::v1_fixture_dir().join(format!("event-{name}.json"));
         assert!(path.exists(), "缺 v1 fixture：{}", path.display());
     }
 }
@@ -84,7 +73,7 @@ fn v1_fixtures_parse_and_default_schema_version_one() {
     // 全部 24 条 v1 样本（无 schemaVersion 字段）反序列化无错；
     // schemaVersion 缺省视为 1（旧帧向后兼容），type_name 与文件一一对应
     for name in V1_EVENT_TYPES {
-        let raw = fixture(&format!("event-{name}.json"));
+        let raw = common::v1_fixture(name);
         let envelope: AgentEventEnvelope =
             serde_json::from_str(&raw).unwrap_or_else(|e| panic!("解析 v1 样本 {name} 失败：{e}"));
         assert_eq!(
@@ -108,7 +97,7 @@ fn old_runtime_error_string_form_parses() {
     // 首个 major 变更候选（PE-04 R4/T04.3-3）的 v1 形态：
     // RuntimeError.error 为字符串（String），演进为 CrishError 前必须可解析
     let envelope: AgentEventEnvelope =
-        serde_json::from_str(&fixture("event-runtime-error.json")).unwrap();
+        serde_json::from_str(&common::v1_fixture("runtime-error")).unwrap();
     assert_eq!(envelope.type_name(), "runtime-error");
     let event = serde_json::to_value(&envelope.event).unwrap();
     assert_eq!(event["error"], "provider failed", "v1 的 error 是字符串");
@@ -121,7 +110,7 @@ fn old_runtime_error_string_form_parses() {
 fn v1_fixture_key_fields_anchored() {
     // 抽查：message-delta 的硬依赖字段（03 §5.1-4/5）
     let delta: AgentEventEnvelope =
-        serde_json::from_str(&fixture("event-message-delta.json")).unwrap();
+        serde_json::from_str(&common::v1_fixture("message-delta")).unwrap();
     let d = serde_json::to_value(&delta.event).unwrap();
     assert_eq!(d["messageId"], "m1");
     assert_eq!(d["block"]["type"], "text");
@@ -129,7 +118,7 @@ fn v1_fixture_key_fields_anchored() {
 
     // 抽查：run-terminal 的事件体 runId（03 §5.1-16）
     let terminal: AgentEventEnvelope =
-        serde_json::from_str(&fixture("event-run-terminal.json")).unwrap();
+        serde_json::from_str(&common::v1_fixture("run-terminal")).unwrap();
     let t = serde_json::to_value(&terminal.event).unwrap();
     assert_eq!(t["terminal"], "completed");
     assert_eq!(t["runId"], "run-1");
@@ -141,7 +130,7 @@ fn v1_fixture_key_fields_anchored() {
 fn complete_frame_with_runid_sequence_parses() {
     // v1 完整信封帧：带 runId/sequence、无 schemaVersion（PE-12 T12.6 步骤 1）
     let envelope: AgentEventEnvelope =
-        serde_json::from_str(&fixture("frame-with-runid-sequence.json")).unwrap();
+        serde_json::from_str(&common::fixture("events-v1/frame-with-runid-sequence.json")).unwrap();
     assert_eq!(envelope.run_id.as_deref(), Some("run-1"));
     assert_eq!(envelope.sequence, Some(42));
     assert_eq!(envelope.schema_version, 1);
@@ -209,7 +198,7 @@ fn upgrade_on_read_reserializes_with_schema_version() {
     // 升级读语义：旧帧解析后（schema_version=1）再序列化会带上
     // schemaVersion: 1 —— wire 形状自然升级，双端 golden 无需迁移
     let envelope: AgentEventEnvelope =
-        serde_json::from_str(&fixture("frame-with-runid-sequence.json")).unwrap();
+        serde_json::from_str(&common::fixture("events-v1/frame-with-runid-sequence.json")).unwrap();
     let reserialized: Value = serde_json::to_value(&envelope).unwrap();
     assert_eq!(reserialized["schemaVersion"], 1, "旧帧重序列化自动补 schemaVersion");
     assert_eq!(reserialized["runId"], "run-1");

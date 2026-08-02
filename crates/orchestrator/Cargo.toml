@@ -24,3 +24,9 @@ tracing = { workspace = true }
 [dev-dependencies]
 # rt-multi-thread：persist.rs 测试用 tokio::runtime::Runtime::new（PE-10 T10.3）
 tokio = { workspace = true, features = ["rt-multi-thread"] }
+# Criterion 基准（PE-09 T09.7：event_chain，仅 dev-dependency）
+criterion = { workspace = true }
+
+[[bench]]
+name = "event_chain"
+harness = false

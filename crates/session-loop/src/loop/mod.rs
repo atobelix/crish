@@ -404,7 +404,9 @@ impl AgentSessionLoop {
             }
             S::SteeringEvaluation => handlers::steering_evaluation::handle(&mut self.state).await,
             S::ExecutingTools => {
-                let approval = self.approval.as_deref();
+                // T09.6/P8（AU-04 F9）：Arc 克隆传递（Arc 克隆便宜），
+                // 供并行组内各 future 共享审批门
+                let approval = self.approval.clone();
                 handlers::executing_tools::handle(
                     &mut self.state,
                     &self.tool_executor,

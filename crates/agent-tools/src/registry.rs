@@ -102,6 +102,7 @@ mod tests {
         let mut reg = ToolRegistry::new();
         reg.register(echo("echo")).unwrap();
         assert!(reg.has("echo"));
+        // PE-07 T07.6：测试断言 expect（cfg(test) 模块，legit 断言，保留）
         let tool = reg.get("echo").expect("注册后应可查得");
         assert_eq!(tool.name(), "echo");
         assert_eq!(tool.definition().name, "echo");

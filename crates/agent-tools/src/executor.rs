@@ -470,6 +470,8 @@ mod tests {
 
     #[async_trait]
     impl IdempotencyStore for FakeStore {
+        // PE-07 T07.6：下列 2 处 expect 属测试专属 store（cfg(test)），非运行时路径，
+        // 按任务书「测试 expect 保留但标注」处置，保持不动。
         async fn load_keys(&self, domain: &str) -> Result<Vec<String>, ToolError> {
             Ok(self
                 .keys

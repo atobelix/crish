@@ -15,3 +15,11 @@ rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 conex-types = { path = "../conex-types" }
+
+[dev-dependencies]
+# Criterion 基准（PE-09 T09.7：db_write 写放大，仅 dev-dependency）
+criterion = { workspace = true }
+
+[[bench]]
+name = "db_write"
+harness = false
