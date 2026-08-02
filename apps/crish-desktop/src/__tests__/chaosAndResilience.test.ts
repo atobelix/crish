@@ -1,22 +1,18 @@
 /**
  * 混沌容错与抗抖动测试 (Chaos Resilience & Anti-Jitter Test Suite)
- * 
- * 重点覆盖度：
- * 1. 端口冲突：8765 端口被占用时，Sidecar 与前端自动漂移至 8766 端口 Handshake 握手。
- * 2. 网络抖动：HTTP 504 超时、429 Rate Limit 限流、WebSocket 突然掉线重连。
- * 3. 进程崩溃：Daemon 进程被强制杀掉 (SIGKILL)，前端断开重连且 Session 状态不丢失、不上屏白屏。
+ *
+ * C3.1 迁移后保留的覆盖：
+ * 2. 网络抖动：HTTP 504 超时、429 Rate Limit 限流（纯函数退避）。
  * 4. 用户疯狂连击：按钮 Double-click、连续快速敲击 Enter 发送消息的防抖与防重复派发。
  * 5. 乱序帧与拆包：大 Binary 帧分片传输与乱序接收防护。
+ *
+ * 已删除（WS daemon 语义，C3.1）：
+ * - 1. 端口冲突 / WS 端口漂移 Handshake（Tauri IPC 无 WS URL）
+ * - 2 内 WebSocket 掉线重连用例
+ * - 3. Daemon SIGKILL 崩溃重连（进程内核心，无独立 daemon 进程）
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  DesktopDaemonClient,
-  HEARTBEAT_MISS_TOLERANCE,
-  resetDesktopDaemonClientForTests,
-} from '../api/daemonClient';
-import { ConnectionManager } from '../services/ConnectionManager';
-import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
 import {
   BinaryFrameType,
   encodeBinaryFrame,
@@ -31,171 +27,15 @@ import {
   parseRetryAfterMs,
   normalizeRetryOptions,
   retryDelayMs,
-} from '../../../../packages/agent-runtime/src/openai-retry';
+} from '../../../../packages/shared-utils/src/retry-openai';
 import { retryWithBackoff } from '../../../../packages/shared-utils/src/retry';
-
-type Listener = (ev?: unknown) => void;
-
-class FakeWebSocket {
-  static CONNECTING = 0;
-  static OPEN = 1;
-  static CLOSING = 2;
-  static CLOSED = 3;
-  static instances: FakeWebSocket[] = [];
-
-  readyState = FakeWebSocket.CONNECTING;
-  url: string;
-  sent: string[] = [];
-  private listeners = new Map<string, Set<Listener>>();
-
-  constructor(url: string) {
-    this.url = url;
-    FakeWebSocket.instances.push(this);
-    queueMicrotask(() => this.simulateOpen());
-  }
-
-  addEventListener(type: string, cb: Listener) {
-    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
-    this.listeners.get(type)!.add(cb);
-  }
-
-  removeEventListener(type: string, cb: Listener) {
-    this.listeners.get(type)?.delete(cb);
-  }
-
-  send(data: string) {
-    if (this.readyState !== FakeWebSocket.OPEN) {
-      throw new Error('WebSocket is not OPEN');
-    }
-    this.sent.push(String(data));
-  }
-
-  close() {
-    if (this.readyState === FakeWebSocket.CLOSED) return;
-    this.readyState = FakeWebSocket.CLOSED;
-    this.emit('close');
-  }
-
-  simulateOpen() {
-    if (this.readyState !== FakeWebSocket.CONNECTING) return;
-    this.readyState = FakeWebSocket.OPEN;
-    this.emit('open');
-  }
-
-  simulateMessage(msg: Record<string, unknown>) {
-    this.emit('message', { data: JSON.stringify(msg) });
-  }
-
-  private emit(type: string, ev?: unknown) {
-    for (const cb of this.listeners.get(type) ?? []) {
-      cb(ev);
-    }
-  }
-}
-
-function lastSocket(): FakeWebSocket {
-  const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
-  if (!ws) throw new Error('no FakeWebSocket');
-  return ws;
-}
 
 describe('【极速边界、混沌容错与抗抖动】测试', () => {
 
   // =========================================================================
-  // 1. 端口冲突与 Handshake 自动漂移 (Port Conflict & Port Drift Handshake)
-  // =========================================================================
-  describe('1. 端口冲突与 Handshake 自动漂移', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-      FakeWebSocket.instances = [];
-      resetDesktopDaemonClientForTests();
-      ConnectionManager.resetInstanceForTests();
-    });
-
-    afterEach(() => {
-      ConnectionManager.resetInstanceForTests();
-      resetDesktopDaemonClientForTests();
-      vi.useRealTimers();
-      vi.restoreAllMocks();
-    });
-
-    it('当 8765 端口被占用时，Sidecar 与前端能动态识别并自动漂移至 8766 端口完成 Handshake 握手', async () => {
-      localStorage.setItem('crish_daemon_ws', 'ws://127.0.0.1:8766');
-      const client = new DesktopDaemonClient({
-        heartbeatMs: 5000,
-        webSocketFactory: (url) => new FakeWebSocket(url) as unknown as WebSocket,
-      });
-
-      const cm = ConnectionManager.createForTest(client);
-
-      const connectP = client.connect();
-      await vi.advanceTimersByTimeAsync(0);
-      await connectP;
-
-      expect(client.isConnected()).toBe(true);
-      expect(client.getUrl()).toBe('ws://127.0.0.1:8766');
-
-      // 模拟完成 Handshake (认证)
-      const ws = lastSocket();
-      expect(ws.url).toBe('ws://127.0.0.1:8766');
-      ws.simulateMessage({ type: 'authenticated' });
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(cm.getState().phase).toBe('ready');
-      expect(cm.isReady()).toBe(true);
-
-      cm.dispose();
-      client.disconnect();
-      localStorage.removeItem('crish_daemon_ws');
-    });
-
-    it('8765 握手失败/拒绝连接时，重连循环能自动切换到新端口 8766 并重新发起 Handshake', async () => {
-      localStorage.setItem('crish_daemon_ws', 'ws://127.0.0.1:8765');
-      const client = new DesktopDaemonClient({
-        heartbeatMs: 5000,
-        webSocketFactory: (url) => new FakeWebSocket(url) as unknown as WebSocket,
-      });
-
-      const p1 = client.connect();
-      await vi.advanceTimersByTimeAsync(0);
-      await p1;
-
-      // 模拟 8765 被占用 / 连接被拒绝中断
-      const ws1 = lastSocket();
-      ws1.close();
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(client.getState()).toBe('reconnecting');
-
-      // 断开原端口并由 Sidecar 漂移后更新配置重连 8766
-      localStorage.setItem('crish_daemon_ws', 'ws://127.0.0.1:8766');
-      client.disconnect();
-      const p2 = client.connect();
-      await vi.advanceTimersByTimeAsync(0);
-      await p2;
-
-      expect(client.getUrl()).toBe('ws://127.0.0.1:8766');
-      expect(client.isConnected()).toBe(true);
-
-      client.disconnect();
-      localStorage.removeItem('crish_daemon_ws');
-    });
-  });
-
-  // =========================================================================
-  // 2. 网络抖动：HTTP 504 超时、429 Rate Limit 限流、WebSocket 掉线重连
+  // 2. 网络抖动：HTTP 504 超时、429 Rate Limit 限流
   // =========================================================================
   describe('2. 网络抖动与超流限流容错', () => {
-    beforeEach(() => {
-      FakeWebSocket.instances = [];
-      resetDesktopDaemonClientForTests();
-    });
-
-    afterEach(() => {
-      resetDesktopDaemonClientForTests();
-      vi.restoreAllMocks();
-    });
-
     it('HTTP 504 Gateway Timeout: 发生 504 网关超时时自动计算指数退避并重试', async () => {
       let attempts = 0;
       const mockApi = vi.fn(async () => {
@@ -242,138 +82,6 @@ describe('【极速边界、混沌容错与抗抖动】测试', () => {
       const delayAttempt1 = retryDelayMs(opts, 1);
       const delayAttempt2 = retryDelayMs(opts, 2);
       expect(delayAttempt2).toBeGreaterThanOrEqual(delayAttempt1);
-    });
-
-    it('WebSocket 突然掉线重连: 掉线 (1006) 后自动触发退避重连且保留事件监听器', async () => {
-      vi.useFakeTimers();
-      const client = new DesktopDaemonClient({
-        heartbeatMs: 200,
-        heartbeatMissTolerance: HEARTBEAT_MISS_TOLERANCE,
-        webSocketFactory: (url) => new FakeWebSocket(url) as unknown as WebSocket,
-      });
-
-      const eventCallback = vi.fn();
-      client.onMessage(eventCallback);
-
-      const p = client.connect('ws://127.0.0.1:8765');
-      await vi.advanceTimersByTimeAsync(0);
-      await p;
-
-      expect(client.isConnected()).toBe(true);
-
-      // 模拟 WebSocket 突然掉线 (异常断开 1006)
-      const ws = lastSocket();
-      ws.close();
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(client.getState()).toBe('reconnecting');
-
-      // 前进定时器直到自动重连逻辑触发并建立新 WebSocket
-      await vi.advanceTimersByTimeAsync(5000);
-      await Promise.resolve();
-
-      expect(client.isConnected()).toBe(true);
-
-      // 验证重连后新连接上推送的消息仍能触发原来的监听器
-      const newWs = lastSocket();
-      newWs.simulateMessage({ type: 'stream-chunk', delta: 'hello' });
-      expect(eventCallback).toHaveBeenCalledWith({ type: 'stream-chunk', delta: 'hello' });
-
-      client.disconnect();
-      vi.useRealTimers();
-    });
-  });
-
-  // =========================================================================
-  // 3. 进程崩溃：Daemon 进程被强制杀掉 (SIGKILL)，Session 状态不丢失、不上屏白屏
-  // =========================================================================
-  describe('3. Daemon 进程崩溃 (SIGKILL) 与 Session 状态保持', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-      FakeWebSocket.instances = [];
-      resetDesktopDaemonClientForTests();
-      ConnectionManager.resetInstanceForTests();
-      sessionRuntimeRegistry.remove('sess_1');
-      sessionRuntimeRegistry.remove('sess_active');
-    });
-
-    afterEach(() => {
-      sessionRuntimeRegistry.remove('sess_1');
-      sessionRuntimeRegistry.remove('sess_active');
-      ConnectionManager.resetInstanceForTests();
-      resetDesktopDaemonClientForTests();
-      vi.useRealTimers();
-      vi.restoreAllMocks();
-    });
-
-    it('Daemon 被 SIGKILL 强制杀死时，前端 ConnectionManager 优雅降级为 recovering，不上屏白屏', async () => {
-      const client = new DesktopDaemonClient({
-        heartbeatMs: 1000,
-        webSocketFactory: (url) => new FakeWebSocket(url) as unknown as WebSocket,
-      });
-
-      const cm = ConnectionManager.createForTest(client);
-      const connectP = cm.connect();
-      await vi.advanceTimersByTimeAsync(0);
-      lastSocket().simulateMessage({ type: 'authenticated' });
-      await connectP;
-
-      expect(cm.getState().phase).toBe('ready');
-
-      // 模拟存有当前 Session 状态草稿与对比视图
-      sessionRuntimeRegistry.save('sess_1', {
-        composerDraft: 'User draft text during crash',
-        chatMainSurface: 'chat',
-      });
-
-      // SIGKILL: Socket 突然关闭且没有任何 Close Frame
-      lastSocket().close();
-      await vi.advanceTimersByTimeAsync(0);
-
-      // ConnectionManager 转换至 recovering 状态
-      expect(cm.getState().phase).toBe('recovering');
-
-      // 关键防线：Session 状态与草稿存量完好无损，没有被擦除/未发生白屏崩溃
-      const runtimeState = sessionRuntimeRegistry.get('sess_1');
-      expect(runtimeState.composerDraft).toBe('User draft text during crash');
-      expect(runtimeState.chatMainSurface).toBe('chat');
-
-      cm.dispose();
-      client.disconnect();
-    });
-
-    it('Daemon 崩溃重启后，前端自动恢复连接并保持 Session 状态同步', async () => {
-      const client = new DesktopDaemonClient({
-        heartbeatMs: 1000,
-        webSocketFactory: (url) => new FakeWebSocket(url) as unknown as WebSocket,
-      });
-
-      const cm = ConnectionManager.createForTest(client);
-      const connectP = cm.connect();
-      await vi.advanceTimersByTimeAsync(0);
-      lastSocket().simulateMessage({ type: 'authenticated' });
-      await connectP;
-
-      sessionRuntimeRegistry.save('sess_active', {
-        composerDraft: 'Keep this active draft',
-      });
-
-      // SIGKILL 崩溃
-      lastSocket().close();
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(cm.getState().phase).toBe('recovering');
-
-      // 推动定时器，Daemon 进程复活后自动建立新连接
-      await vi.advanceTimersByTimeAsync(5000);
-      await Promise.resolve();
-      lastSocket().simulateMessage({ type: 'authenticated' });
-
-      expect(cm.getState().phase).toBe('ready');
-      expect(sessionRuntimeRegistry.get('sess_active').composerDraft).toBe('Keep this active draft');
-
-      cm.dispose();
-      client.disconnect();
     });
   });
 

@@ -12,7 +12,7 @@ import { describe, expect, it, vi, beforeAll, afterAll, beforeEach } from 'vites
 import { eventBus } from '../services/EventBus';
 import { useLayoutStore } from '../store/layoutStore';
 import { useSessionStore } from '../store/sessionStore';
-import { DiffCard } from '../components/DiffCard';
+import { DiffCard } from '../components/diff/DiffCard';
 import { CardPanel } from '../components/CardPanel';
 import { MessageVirtualizer } from '../components/chat-message-list/MessageVirtualizer';
 import type { SessionMessage } from '../store/types';
