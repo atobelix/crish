@@ -12,7 +12,7 @@
  */
 
 import type { FileDiff, SessionMessage, SessionState } from '../store/types';
-import { collectMessageDiffs } from '../components/ChangeOverviewCard';
+import { collectMessageDiffs } from '../components/diff/ChangeOverviewCard';
 import { filterPublishableDiffs } from './publishToolDiffs';
 
 export type RewindScopeSummary = {

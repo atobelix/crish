@@ -106,8 +106,7 @@ function fromInvokeTyped<T>(res: InvokeTypedResult<T>, cmd: string): T {
   // PE-04 T04.4-1：invoke 失败统一落 LoggerService（关键路径接线）
   logger.error('invoke failed', {
     module: 'transport',
-    cmd,
-    err: { message: `${res.kind}: ${res.message}`, code: res.kind },
+    err: { message: `${res.kind}: ${res.message}`, code: res.kind, name: cmd },
   });
   throw new Error(`${res.kind}: ${res.message}`);
 }

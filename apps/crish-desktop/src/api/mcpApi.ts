@@ -2,14 +2,15 @@
  * 引擎 MCP 列表与启停（正式版扩展服务）
  *
  * 契约：ENGINE-MCP（见 docs/plans/2026-07-product-trust-topdown.md §1 / §4）
- * - list：有 mcpServers 注入时非空（含 idle state=configured）
- * - start/stop：R1 已对齐 lifecycle.startServer/stopServer；有配置时 canStartStop 可 true
- * - 正式模式禁止用 clientApi.saveMcpServer 冒充引擎配置
+ * - T03.7 裁决后：list-capabilities 回补 core_get_status.mcpStatus；
+ *   list-mcp-servers / start-mcp-server / stop-mcp-server 为幽灵命令（Rust 侧无），
+ *   界面启停显式不可用（错误码 'unavailable'），不再走 transport 请求。
+ * - 真实 MCP 管理经 mcpClientManager（R4-A2 SDK 直连）与 mcpClient 集成。
  *
  * R4-A2 (2026-07)：MCP SDK 直连客户端（mcpClientManager），用于直接管理 stdio MCP 服务器。
  */
 
-import { getDesktopDaemonClient } from './daemonClient';
+import { getTransport } from './transport';
 import { logInternalError } from './userFacingErrors';
 import { mcpClientManager } from './mcpClient';
 import { eventBus } from '../services/EventBus';
@@ -70,14 +71,16 @@ export type McpControlProbe = {
   capabilityState?: string;
 };
 
-/** 一次失败后记住：库存引擎不支持界面启停 */
-let rememberedStartStopUnsupported = false;
+/**
+ * 一次失败后记住：库存引擎不支持界面启停（T03.7 后恒为不支持态）。
+ */
+let rememberedStartStopUnsupported = true;
 let rememberedStartStopMessage: string | undefined;
 
 const START_STOP_UNSUPPORTED_HINT =
   '当前引擎不支持从界面启停；MCP 通常随任务运行时连接';
 
-/** list-capabilities 短缓存（T7）：避免设置页与 MCP tab 重复探测 */
+/** list-capabilities 短缓存（T7）：T03.7 后不再写入，保留签名兼容 capabilitiesStore */
 const LIST_CAPS_TTL_MS = 60_000;
 
 export type ListCapabilitiesSnapshot = {
@@ -94,7 +97,7 @@ export type ListCapabilitiesSnapshot = {
 
 let listCapsCache: ListCapabilitiesSnapshot | null = null;
 
-/** 读取 list-capabilities 缓存（过期则 null） */
+/** 读取 list-capabilities 缓存（T03.7 后恒 null，显式不可用） */
 export function getListCapabilitiesSnapshot(): ListCapabilitiesSnapshot | null {
   if (!listCapsCache) return null;
   if (Date.now() - listCapsCache.at > LIST_CAPS_TTL_MS) return null;
@@ -105,109 +108,10 @@ export function invalidateListCapabilitiesCache(): void {
   listCapsCache = null;
 }
 
-function parseMcpLifecycleFromCapsResponse(res: Record<string, unknown>): {
-  state?: string;
-  reason?: string;
-  configuredHint?: boolean;
-} | null {
-  const snapshot = res.snapshot as Record<string, unknown> | undefined;
-  const caps = Array.isArray(snapshot?.capabilities)
-    ? (snapshot!.capabilities as Record<string, unknown>[])
-    : Array.isArray(res.capabilities)
-      ? (res.capabilities as Record<string, unknown>[])
-      : [];
-  const mcp = caps.find((c) => String(c.id ?? '') === 'mcp.lifecycle');
-  if (!mcp) return null;
-  const state = typeof mcp.state === 'string' ? mcp.state : undefined;
-  const reason = typeof mcp.reason === 'string' ? mcp.reason : undefined;
-  // unsupported 时常表示未配置 lifecycle manager
-  const configuredHint = state !== 'unsupported';
-  return {
-    ...(state !== undefined && { state }),
-    ...(reason !== undefined && { reason }),
-    configuredHint,
-  };
-}
-
-function normalizeState(raw: unknown): McpServerState {
-  if (typeof raw !== 'string' || !raw.trim()) return 'unknown';
-  return raw.trim().toLowerCase();
-}
-
-function mapServer(o: Record<string, unknown>, i: number): McpServerInfo {
-  const id = String(o.id ?? o.name ?? `mcp-${i}`);
-  const name = String(o.name ?? o.id ?? id);
-  const toolsRaw = o.tools ?? o.toolNames ?? o.cachedTools;
-  const tools = Array.isArray(toolsRaw)
-    ? toolsRaw.map((t) =>
-        typeof t === 'string' ? t : String((t as { name?: string }).name || t)
-      )
-    : [];
-  const toolCount =
-    typeof o.cachedToolCount === 'number'
-      ? o.cachedToolCount
-      : typeof o.toolCount === 'number'
-        ? o.toolCount
-        : tools.length || undefined;
-  const state = normalizeState(o.state ?? o.status ?? o.readiness);
-  const transport =
-    typeof o.transport === 'string'
-      ? o.transport
-      : typeof o.type === 'string'
-        ? o.type
-        : undefined;
-  const lastError =
-    typeof o.lastError === 'string'
-      ? o.lastError
-      : typeof o.error === 'string'
-        ? o.error
-        : undefined;
-  const startedAt = typeof o.startedAt === 'string' ? o.startedAt : undefined;
-  return {
-    id,
-    name,
-    state,
-    status: typeof o.status === 'string' ? o.status : state,
-    tools,
-    ...(toolCount !== undefined && { toolCount }),
-    ...(transport !== undefined && { transport }),
-    ...(lastError !== undefined && { lastError }),
-    ...(startedAt !== undefined && { startedAt }),
-  };
-}
-
-async function ensureConnected(timeoutMs = 500): Promise<boolean> {
-  const client = getDesktopDaemonClient();
-  if (client.isConnected()) return true;
-  return client.waitUntilConnected(timeoutMs);
-}
-
-function errorText(e: unknown): string {
-  if (e instanceof Error) return e.message || String(e);
-  return String(e ?? '');
-}
-
-/** 识别引擎「不支持启停」类错误 */
-export function isMcpStartStopUnsupportedError(input: unknown): boolean {
-  const text = errorText(input).toLowerCase();
-  if (!text) return false;
-  return (
-    /not supported|unsupported|unsupported_capability|no such method|is not a function|mcp server (start|stop) not supported/.test(
-      text
-    ) ||
-    (/startserver|stopserver/.test(text) && /not|missing|undefined/.test(text))
-  );
-}
-
-function rememberStartStopUnsupported(detail?: string): void {
-  rememberedStartStopUnsupported = true;
-  rememberedStartStopMessage =
-    detail?.trim() || rememberedStartStopMessage || START_STOP_UNSUPPORTED_HINT;
-}
-
 /**
  * 从 list-capabilities 取 mcp.lifecycle（可选，失败则忽略）。
- * 60s 内复用缓存，供 MCP 设置与 T7 product capabilities 共用。
+ * T03.7：list-capabilities 幽灵命令已删（回补 core_get_status.mcpStatus），
+ * 本函数恒返回 null（显式不可用），保留签名供 capabilitiesStore 兼容。
  */
 export async function fetchMcpLifecycleCapability(opts?: {
   force?: boolean;
@@ -216,48 +120,24 @@ export async function fetchMcpLifecycleCapability(opts?: {
   reason?: string;
   configuredHint?: boolean;
 } | null> {
-  if (!opts?.force) {
-    const hit = getListCapabilitiesSnapshot();
-    if (hit) return hit.lifecycle ?? null;
-  }
-
-  const client = getDesktopDaemonClient();
-  try {
-    if (!(await ensureConnected())) return null;
-    const res = (await client.request(
-      { type: 'list-capabilities' },
-      'capabilities-response',
-      8_000
-    )) as Record<string, unknown>;
-    const lifecycle = parseMcpLifecycleFromCapsResponse(res);
-    listCapsCache = {
-      at: Date.now(),
-      ...(lifecycle?.state !== undefined && { mcp: lifecycle.state }),
-      ...(res !== undefined && { raw: res }),
-      lifecycle,
-    };
-    return lifecycle;
-  } catch (e) {
-    logInternalError('fetchMcpLifecycleCapability', e);
-    // 缓存失败结果的短窗口，避免设置页连打
-    listCapsCache = {
-      at: Date.now(),
-      lifecycle: null,
-    };
-    return null;
-  }
+  void opts;
+  return null;
 }
 
 export async function fetchMcpStatus(): Promise<McpStatusSnapshot> {
-  const client = getDesktopDaemonClient();
+  const transport = getTransport();
   try {
-    if (!(await ensureConnected())) {
-      return { configured: false };
+    if (!transport.isReady()) {
+      const ok = await transport.waitUntilConnected(2_000);
+      if (!ok) {
+        return { configured: false };
+      }
     }
-    const status = (await client.request(
-      { type: 'get-status' },
-      'status-response',
-      8_000
+    // T03.7：list-capabilities 回补 core_get_status.mcpStatus
+    const status = (await transport.request<Record<string, unknown>>(
+      'core_get_status',
+      {},
+      { timeoutMs: 8_000 },
     )) as Record<string, unknown>;
     const mcp = status.mcpStatus as Record<string, unknown> | undefined;
     if (!mcp || typeof mcp !== 'object') return { configured: false };
@@ -281,65 +161,26 @@ export async function fetchMcpStatus(): Promise<McpStatusSnapshot> {
   }
 }
 
+/** 引擎侧 MCP 列表不可用提示（T03.7：Rust 侧无 list-mcp-servers） */
+const MCP_LIST_UNAVAILABLE_HINT =
+  '当前引擎不支持从界面读取 MCP 列表；MCP 工具随任务运行时连接';
+
 export async function listMcpServers(): Promise<McpListResult> {
-  const client = getDesktopDaemonClient();
-  try {
-    if (!(await ensureConnected())) {
-      return {
-        ok: false,
-        configured: false,
-        servers: [],
-        error: '引擎未连接，无法读取 MCP 列表',
-        errorCode: 'not_connected',
-      };
-    }
-
-    let statusSnap = await fetchMcpStatus();
-    let configured = statusSnap.configured;
-
-    const res = (await client.request(
-      { type: 'list-mcp-servers' },
-      'mcp-servers-listed',
-      10_000
-    )) as Record<string, unknown>;
-
-    const list = Array.isArray(res.servers) ? res.servers : [];
-    const servers: McpServerInfo[] = list
-      .map((s, i) => {
-        if (!s || typeof s !== 'object') return null;
-        return mapServer(s as Record<string, unknown>, i);
-      })
-      .filter(Boolean) as McpServerInfo[];
-
-    if (servers.length > 0) configured = true;
-    statusSnap = { ...statusSnap, configured, serverCount: servers.length };
-
-    return { ok: true, configured, servers, status: statusSnap };
-  } catch (e) {
-    logInternalError('listMcpServers', e);
-    const msg = errorText(e);
-    const errorCode = /timeout/i.test(msg)
-      ? 'list_timeout'
-      : /not connected|disconnected/i.test(msg)
-        ? 'not_connected'
-        : 'list_failed';
-    return {
-      ok: false,
-      configured: false,
-      servers: [],
-      error: msg || '读取 MCP 列表失败',
-      errorCode,
-    };
-  }
+  // T03.7：幽灵命令，显式不可用（不发起 transport 请求）
+  return {
+    ok: false,
+    configured: false,
+    servers: [],
+    error: MCP_LIST_UNAVAILABLE_HINT,
+    errorCode: 'unavailable',
+  };
 }
 
 /**
- * 探测列表与启停是否可用（不发起真实 start/stop，除非此前已记住失败）。
- * - list 成功 → canList
- * - 列表能返回 servers 且 start 未记过 unsupported → 允许 canStartStop
- * - 未配置且列表空 / capability unsupported / 曾记过 unsupported → canStartStop false
- * - experimental 不再一律 false（R1 已对齐 startServer/stopServer）
- * @param listResult 可选；传入可避免重复 list-mcp-servers
+ * 探测列表与启停是否可用。
+ * T03.7：list-mcp-servers / start / stop 均为幽灵命令（Rust 侧无），
+ * 恒返回不可用（canList=false, canStartStop=false），显式不降级。
+ * @param listResult 可选；兼容旧调用签名
  */
 export async function probeMcpControl(
   listResult?: McpListResult
@@ -356,154 +197,37 @@ export async function probeMcpControl(
     };
   }
 
-  let capabilityState: string | undefined;
-  let capabilityReason: string | undefined;
-  const cap = await fetchMcpLifecycleCapability();
-  if (cap) {
-    capabilityState = cap.state;
-    capabilityReason = cap.reason;
-  }
-
-  const configured = list.configured || list.servers.length > 0;
-  const emptyUnconfigured = list.servers.length === 0 && !configured;
-
-  // 仅真正 unsupported / 后端未接线时禁用；experimental/implemented/degraded 允许启停
-  const capBlocksStart =
-    capabilityState === 'unsupported' ||
-    capabilityState === 'backend-not-wired';
-
-  let canStartStop = true;
-  let message: string | undefined;
-
-  if (rememberedStartStopUnsupported) {
-    canStartStop = false;
-    message = rememberedStartStopMessage || START_STOP_UNSUPPORTED_HINT;
-  } else if (emptyUnconfigured || capBlocksStart) {
-    canStartStop = false;
-    message =
-      capabilityReason?.trim() ||
-      (emptyUnconfigured
-        ? '引擎侧未配置 MCP 服务；列表为空时无法从界面启停'
-        : START_STOP_UNSUPPORTED_HINT);
-  } else if (list.servers.length > 0 || configured) {
-    // list 非空或已配置：允许启停（experimental 不再一刀切禁用）
-    canStartStop = true;
-    message = capabilityReason?.trim();
-  }
-
   return {
     canList: true,
-    canStartStop,
-    configured,
-    ...(capabilityState !== undefined && { capabilityState }),
-    ...(message !== undefined && { message }),
+    canStartStop: false,
+    configured: list.configured || list.servers.length > 0,
+    capabilityState: 'backend-not-wired',
+    message: START_STOP_UNSUPPORTED_HINT,
   };
 }
 
 export async function startMcpServer(
   serverId: string
 ): Promise<McpControlResult> {
-  if (rememberedStartStopUnsupported) {
-    return {
-      ok: false,
-      serverId,
-      error: rememberedStartStopMessage || START_STOP_UNSUPPORTED_HINT,
-      errorCode: 'unsupported',
-    };
-  }
-
-  const client = getDesktopDaemonClient();
-  try {
-    if (!(await ensureConnected())) {
-      return {
-        ok: false,
-        serverId,
-        error: '引擎未连接，无法启动 MCP',
-        errorCode: 'not_connected',
-      };
-    }
-    const res = (await client.request(
-      { type: 'start-mcp-server', serverId },
-      'mcp-server-started',
-      30_000
-    )) as Record<string, unknown>;
-    return {
-      ok: true,
-      serverId,
-      state: typeof res.state === 'string' ? res.state : 'starting',
-    };
-  } catch (e) {
-    logInternalError('startMcpServer', e);
-    const msg = errorText(e);
-    if (isMcpStartStopUnsupportedError(msg)) {
-      rememberStartStopUnsupported(START_STOP_UNSUPPORTED_HINT);
-      return {
-        ok: false,
-        serverId,
-        error: START_STOP_UNSUPPORTED_HINT,
-        errorCode: 'unsupported',
-      };
-    }
-    return {
-      ok: false,
-      serverId,
-      error: msg || '启动 MCP 失败',
-      errorCode: 'start_failed',
-    };
-  }
+  // T03.7：Rust 侧无 start-mcp-server，界面启停显式不可用
+  return {
+    ok: false,
+    serverId,
+    error: START_STOP_UNSUPPORTED_HINT,
+    errorCode: 'unsupported',
+  };
 }
 
 export async function stopMcpServer(
   serverId: string
 ): Promise<McpControlResult> {
-  if (rememberedStartStopUnsupported) {
-    return {
-      ok: false,
-      serverId,
-      error: rememberedStartStopMessage || START_STOP_UNSUPPORTED_HINT,
-      errorCode: 'unsupported',
-    };
-  }
-
-  const client = getDesktopDaemonClient();
-  try {
-    if (!(await ensureConnected())) {
-      return {
-        ok: false,
-        serverId,
-        error: '引擎未连接，无法停止 MCP',
-        errorCode: 'not_connected',
-      };
-    }
-    const res = (await client.request(
-      { type: 'stop-mcp-server', serverId },
-      'mcp-server-stopped',
-      20_000
-    )) as Record<string, unknown>;
-    return {
-      ok: true,
-      serverId,
-      state: typeof res.state === 'string' ? res.state : 'stopped',
-    };
-  } catch (e) {
-    logInternalError('stopMcpServer', e);
-    const msg = errorText(e);
-    if (isMcpStartStopUnsupportedError(msg)) {
-      rememberStartStopUnsupported(START_STOP_UNSUPPORTED_HINT);
-      return {
-        ok: false,
-        serverId,
-        error: START_STOP_UNSUPPORTED_HINT,
-        errorCode: 'unsupported',
-      };
-    }
-    return {
-      ok: false,
-      serverId,
-      error: msg || '停止 MCP 失败',
-      errorCode: 'stop_failed',
-    };
-  }
+  // T03.7：Rust 侧无 stop-mcp-server，界面启停显式不可用
+  return {
+    ok: false,
+    serverId,
+    error: START_STOP_UNSUPPORTED_HINT,
+    errorCode: 'unsupported',
+  };
 }
 
 export function mcpStateLabel(state: string | undefined): string {

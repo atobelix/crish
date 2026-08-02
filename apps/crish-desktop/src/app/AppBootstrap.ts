@@ -51,7 +51,6 @@ export interface UseAppBootstrapOptions {
    * App.tsx may still pass store setter for backward compatibility.
    */
   setAppSettings?: (settings: AppSettings) => void;
-  setEngineReady: (ready: boolean | ((prev: boolean) => boolean)) => void;
   productShell: boolean;
   uiSize: string;
   shellChromeMode: string | undefined;
@@ -59,8 +58,6 @@ export interface UseAppBootstrapOptions {
 
 export function useAppBootstrap({
   setAppSettings,
-  setEngineReady,
-  productShell,
   uiSize,
   shellChromeMode,
 }: UseAppBootstrapOptions) {
@@ -143,17 +140,7 @@ export function useAppBootstrap({
     return () => cleanup();
   }, []);
 
-  // 3. Early lazy initialization for daemon client connection status
-  useEffect(() => {
-    import('../api/daemonClient').then(({ getDesktopDaemonClient }) => {
-      const client = getDesktopDaemonClient();
-      if (client.hasEverConnected() || client.isConnected()) {
-        setEngineReady(true);
-      }
-    });
-  }, [setEngineReady]);
-
-  // 4. Session folder rebinds
+  // 3. Session folder rebinds（引擎初始化已归一至 useEngineBootstrap，T06.8）
   useLayoutEffect(() => {
     const rebind = () => {
       try {
@@ -275,56 +262,8 @@ export function useAppBootstrap({
     initApp();
   }, [setAppSettings]);
 
-  // 7. Backend daemon engine initialization
-  useEffect(() => {
-    const initEngine = async () => {
-      const { bootstrapDesktopBackend } = await import('../api/daemonClient');
-      const client = bootstrapDesktopBackend();
-      if (client.isConnected() || client.hasEverConnected()) {
-        setEngineReady(true);
-      }
-      const unsub = client.onState((s) => {
-        if (s === 'connected' || client.hasEverConnected()) {
-          setEngineReady(true);
-        }
-      });
-      const { ensureDaemonConnected } = await import('../api/daemonChatBridge');
-      void ensureDaemonConnected().then((res) => {
-        if (res.ok || client.hasEverConnected()) setEngineReady(true);
-        else if (!productShell) {
-          console.warn(
-            '[crish-desktop] engine offline after boot wait (keep-alive continues)'
-          );
-        }
-        if (res.ok) {
-          void import('../api/sessionDaemonSync').then(
-            ({ syncSessionsFromDaemon }) => {
-              const layout = getCompositionRoot().layout;
-              void syncSessionsFromDaemon(
-                () => layout.getSessions(),
-                (sessions) => layout.setSessions(sessions)
-              );
-            }
-          );
-        }
-      });
-      const gateTimer = window.setTimeout(
-        () => {
-          setEngineReady(true);
-        },
-        productShell ? 12_000 : 0
-      );
-      return () => {
-        unsub();
-        window.clearTimeout(gateTimer);
-      };
-    };
-    const cleanupPromise = initEngine();
-    return () => {
-      cleanupPromise.then((cleanup) => cleanup?.());
-    };
-  }, [productShell, setEngineReady]);
-
+  // 7. Backend daemon engine initialization 已归一至 useEngineBootstrap（T06.8）：
+  //    引擎启动门闩 = transport「核心已初始化」（isReady / onStatus / waitUntilConnected）。
   // 7b. 旧明文密钥一次性迁移（PE-07 T07.4-B；幂等标记门控，失败不阻断启动）
   // syncActiveProfileToEngine 已按 F5/C6 整体删除（密钥生效仅限用户主动路径）。
   useEffect(() => {

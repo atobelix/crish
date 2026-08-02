@@ -20,7 +20,7 @@ import {
   sanitizeToolDisplayOutput,
   truncateToolFeedbackOutput,
 } from './toolFeedback';
-import { collectMessageDiffs } from '../components/ChangeOverviewCard';
+import { collectMessageDiffs } from '../components/diff/ChangeOverviewCard';
 import type { SessionMessage } from '../store/types';
 
 describe('looksLikeDirectoryListing', () => {

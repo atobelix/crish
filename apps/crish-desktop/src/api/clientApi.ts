@@ -5,8 +5,10 @@
  * - Settings：getSettings / updateSettings / getSettingsEx / saveSettingsEx
  *   → SettingsPanel / SettingsRulesTab / SkillsSettingsTab / App / ChatCard
  * - subscribeTelemetry：正式安静 no-op
+ *
+ * T03.7：cron / MCP demo 方法（getScheduledTasks / getMcpServers 等）显式不可用——
+ * Rust 侧无 list-workflows / cron.* / list|start|stop-mcp-server 命令，直接返回空表。
  */
-import { getDesktopDaemonClient } from './daemonClient';
 
 export interface CompactionSettings {
   enabled?: boolean;
@@ -645,26 +647,6 @@ function projectSettingsKey(cwd: string): string {
   return `crish_project_settings_${normalizedCwd}`;
 }
 
-function isMcpServer(obj: unknown): obj is McpServer {
-  if (!obj || typeof obj !== 'object') return false;
-  const o = obj as Record<string, unknown>;
-  return (
-    typeof o.id === 'string' &&
-    typeof o.name === 'string' &&
-    (o.type === 'stdio' || o.type === 'sse')
-  );
-}
-
-function isCronJob(obj: unknown): obj is CronJob {
-  if (!obj || typeof obj !== 'object') return false;
-  const o = obj as Record<string, unknown>;
-  return (
-    typeof o.id === 'string' &&
-    typeof o.cronExpression === 'string' &&
-    typeof o.prompt === 'string'
-  );
-}
-
 export const clientApi = {
   // ── Settings（正式路径）────────────────────────────────────────────────
 
@@ -841,123 +823,35 @@ export const clientApi = {
     return [];
   },
 
+  // ── Cron / MCP — 显式不可用（T03.7：Rust 侧无 cron.* / mcp daemon 命令）──
+
+  /** @deprecated T03.7 显式不可用：Tauri 下无 cron 引擎，恒返回空表 */
   getScheduledTasks: async (): Promise<CronJob[]> => {
-    try {
-      const client = getDesktopDaemonClient();
-      const res = (await client.request(
-        { type: 'list-workflows' },
-        [
-          'list-workflows',
-          'workflows-listed',
-          'cron.list_tasks_response',
-          'cron.list_tasks',
-          'cron.tasks_listed',
-          'cron.tasks',
-        ],
-        10_000
-      )) as { tasks?: unknown[]; jobs?: unknown[]; workflows?: unknown[] };
-      const rawList = res.workflows || res.tasks || res.jobs || [];
-      return Array.isArray(rawList) ? rawList.filter(isCronJob) : [];
-    } catch (e) {
-      console.error('getScheduledTasks daemon RPC error:', e);
-      return [];
-    }
+    return [];
   },
 
-  saveScheduledTask: async (task: CronJob): Promise<CronJob[]> => {
-    try {
-      const client = getDesktopDaemonClient();
-      await client.request(
-        { type: 'create-workflow', task },
-        ['create-workflow', 'workflow-created', 'cron.upsert_task_response', 'cron.upsert_task', 'cron.task_upserted'],
-        10_000
-      );
-      return clientApi.getScheduledTasks();
-    } catch (e) {
-      console.error('saveScheduledTask daemon RPC error:', e);
-      return [];
-    }
+  /** @deprecated T03.7 显式不可用：Tauri 下无 cron 引擎，恒返回空表 */
+  saveScheduledTask: async (_task: CronJob): Promise<CronJob[]> => {
+    return [];
   },
 
-  deleteScheduledTask: async (id: string): Promise<CronJob[]> => {
-    try {
-      const client = getDesktopDaemonClient();
-      await client.request(
-        { type: 'delete-workflow', id },
-        ['delete-workflow', 'workflow-deleted', 'cron.delete_task_response', 'cron.delete_task', 'cron.task_deleted'],
-        10_000
-      );
-      return clientApi.getScheduledTasks();
-    } catch (e) {
-      console.error('deleteScheduledTask daemon RPC error:', e);
-      return [];
-    }
+  /** @deprecated T03.7 显式不可用：Tauri 下无 cron 引擎，恒返回空表 */
+  deleteScheduledTask: async (_id: string): Promise<CronJob[]> => {
+    return [];
   },
 
-  // ── MCP — Daemon RPC 通信链路 ────
-
+  /** @deprecated T03.7 显式不可用：Rust 侧无 list-mcp-servers，恒返回空表 */
   getMcpServers: async (): Promise<McpServer[]> => {
-    try {
-      const client = getDesktopDaemonClient();
-      const res = (await client.request(
-        { type: 'list-mcp-servers' },
-        [
-          'list-mcp-servers',
-          'mcp-servers-listed',
-          'mcp.list_servers_response',
-          'mcp.list_servers',
-          'mcp.servers_listed',
-          'mcp.servers',
-        ],
-        10_000
-      )) as { servers?: unknown[] };
-      const rawList = res.servers || [];
-      return Array.isArray(rawList) ? rawList.filter(isMcpServer) : [];
-    } catch (e) {
-      console.error('getMcpServers daemon RPC error:', e);
-      return [];
-    }
+    return [];
   },
 
-  saveMcpServer: async (server: McpServer): Promise<McpServer[]> => {
-    try {
-      const client = getDesktopDaemonClient();
-      await client.request(
-        { type: 'start-mcp-server', server },
-        [
-          'start-mcp-server',
-          'mcp-server-started',
-          'mcp.upsert_server_response',
-          'mcp.upsert_server',
-          'mcp.server_upserted',
-        ],
-        10_000
-      );
-      return clientApi.getMcpServers();
-    } catch (e) {
-      console.error('saveMcpServer daemon RPC error:', e);
-      return [];
-    }
+  /** @deprecated T03.7 显式不可用：Rust 侧无 start-mcp-server，恒返回空表 */
+  saveMcpServer: async (_server: McpServer): Promise<McpServer[]> => {
+    return [];
   },
 
-  deleteMcpServer: async (id: string): Promise<McpServer[]> => {
-    try {
-      const client = getDesktopDaemonClient();
-      await client.request(
-        { type: 'stop-mcp-server', id },
-        [
-          'stop-mcp-server',
-          'mcp-server-stopped',
-          'mcp.delete_server_response',
-          'mcp.delete_server',
-          'mcp.server_deleted',
-        ],
-        10_000
-      );
-      return clientApi.getMcpServers();
-    } catch (e) {
-      console.error('deleteMcpServer daemon RPC error:', e);
-      return [];
-    }
+  /** @deprecated T03.7 显式不可用：Rust 侧无 stop-mcp-server，恒返回空表 */
+  deleteMcpServer: async (_id: string): Promise<McpServer[]> => {
+    return [];
   },
 };

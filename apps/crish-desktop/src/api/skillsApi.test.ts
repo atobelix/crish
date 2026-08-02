@@ -22,13 +22,6 @@ vi.mock('./projectStore', () => ({
   getWorkspacePath: vi.fn(() => '/workspace/test-project'),
 }));
 
-vi.mock('./daemonClient', () => ({
-  getDesktopDaemonClient: vi.fn(() => ({
-    isConnected: vi.fn(() => true),
-    request: vi.fn(async () => ({ ok: true })),
-  })),
-}));
-
 import {
   getExtraSkillDirs,
   addExtraSkillDir,
@@ -82,7 +75,8 @@ describe('skillsApi', () => {
 
       const result = await setSkillActivation(mockSkill, 'disabled');
       expect(result.ok).toBe(true);
-      expect(result.daemonSynced).toBe(true);
+      // T03.7：scoped-context 本地-only，daemonSynced 恒 false
+      expect(result.daemonSynced).toBe(false);
     });
   });
 

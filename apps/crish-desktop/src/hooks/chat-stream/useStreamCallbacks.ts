@@ -37,7 +37,6 @@ import {
   setStreamText,
 } from '../../store/streamingStore';
 import { generateMessageId } from '../../utils/generateMessageId';
-import { streamRecovery } from '../../services/StreamRecovery';
 import type { MessageToolApprovalMeta, MessageToolCall, SessionAgent } from '../../store/types';
 import type { FileDiff } from '../../store/types';
 import type { SessionMessage } from '../../store/layoutStore';
@@ -179,7 +178,6 @@ export function useStreamCallbacks(
       // Lightweight store only — avoid immer/session messages ref churn per token.
       setStreamText(sid, assistantMsgId, frame.full);
       if (myGen !== generationMapRef.current.get(sid)) return;
-      streamRecovery.noteRenderBuffer(sid, buffer.bufferedLength());
     };
     buffer.start();
     preloadPublishToolDiffs();
@@ -272,7 +270,6 @@ export function useStreamCallbacks(
           if (entry && entry.assistantMsgId === assistantMsgId) {
             entry.runId = runId;
           }
-          streamRecovery.registerStream(sid, runId);
           // OPT-H4: immer recipe residual — intentional; LayoutFacade has no setState/patchState.
           // Command reads use getCompositionRoot().layout.getState() (see above).
           useLayoutStore.setState((state) => {
@@ -423,10 +420,8 @@ export function useStreamCallbacks(
           gotRealText = true;
           dismissRunNotice();
           streamedFullText += chunk;
-          streamRecovery.updateHeartbeat(sid, { bytes: chunk.length });
           if (renderBufferRef.current) {
             renderBufferRef.current.push(chunk);
-            streamRecovery.noteRenderBuffer(sid, renderBufferRef.current.bufferedLength());
           } else {
             textBatcherRef.current?.push(streamBatchKey(sid, assistantMsgId), streamedFullText);
           }
@@ -440,7 +435,6 @@ export function useStreamCallbacks(
         },
         onRunError: (message, kind, detail) => {
           if (!assertLive()) return;
-          streamRecovery.markFailed(sid, message || kind || 'error');
           const asstErr = getSessionById(sid)?.messages.find(
             (m: SessionMessage) => m.id === assistantMsgId
           );
@@ -492,7 +486,6 @@ export function useStreamCallbacks(
           }
           runClosed = true;
           markStreamingActive(false);
-          streamRecovery.markCompleted(sid);
 
           buffer.push('', true);
           buffer.flush(true);
@@ -685,7 +678,6 @@ export function useStreamCallbacks(
     if (!sid) return;
     const cur = streamManagerRef.current!.get(sid);
     if (!cur) return;
-    streamRecovery.markFailed(sid, force ? 'force_cancelled' : 'cancelled');
     streamManagerRef.current!.delete(sid);
     generationMapRef.current.delete(sid);
     markStreamingActive(false);

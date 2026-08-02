@@ -1,4 +1,4 @@
-import { getDesktopDaemonClient } from '../daemonClient';
+import { getTransport } from '../transport';
 import { parseErr, parseOk, type ParseResult } from '../daemonEventSchema';
 import { safeParseApprovalResolved } from '../daemonEventZod';
 
@@ -36,22 +36,20 @@ export function parseApprovalResolvedFields(
 
 /**
  * 批准工具：乐观 fire-and-forget，不阻塞 UI 8s。
+ * IPC 通道：transport.send('approve-tool') → commandMap 翻译 core_approve_tool。
  * 引擎若队列无此项会静默忽略；状态以 approval-resolved / tool-end 为准。
  */
 export async function daemonApproveTool(
   toolCallId: string,
   scope?: string
 ): Promise<void> {
-  const client = getDesktopDaemonClient();
-  await client.send({
-    type: 'approve-tool',
+  await getTransport().send('approve-tool', {
     toolCallId,
     ...(scope ? { scope } : { scope: 'project' }),
   });
 }
 
-/** 拒绝工具：同样不阻塞 UI */
+/** 拒绝工具：同样不阻塞 UI（transport.send → core_deny_tool） */
 export async function daemonDenyTool(toolCallId: string): Promise<void> {
-  const client = getDesktopDaemonClient();
-  await client.send({ type: 'deny-tool', toolCallId });
+  await getTransport().send('deny-tool', { toolCallId });
 }

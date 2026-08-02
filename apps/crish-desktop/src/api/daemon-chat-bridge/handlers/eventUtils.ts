@@ -1,3 +1,16 @@
+/**
+ * 从事件对象中提取 sequence 号（StreamRecovery 删除后迁入的游标助手）。
+ * 支持字段名：sequence / eventSequence / seq。找不到返回 null。
+ */
+export function extractEventSequence(obj: unknown): number | null {
+  if (!obj || typeof obj !== 'object') return null;
+  const r = obj as Record<string, unknown>;
+  if (typeof r.sequence === 'number') return r.sequence;
+  if (typeof r.eventSequence === 'number') return r.eventSequence;
+  if (typeof r.seq === 'number') return r.seq;
+  return null;
+}
+
 export function blockText(block: unknown): string {
   if (!block || typeof block !== 'object' || Array.isArray(block)) return '';
   const b = block as Record<string, unknown>;

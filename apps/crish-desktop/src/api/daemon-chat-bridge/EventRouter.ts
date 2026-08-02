@@ -1,4 +1,16 @@
-import { getDesktopDaemonClient } from '../daemonClient';
+/**
+ * 事件路由器 —— IPC 平铺事件直进 handleAgentEvent（C2.2 / C2.4）。
+ *
+ * - onMsg 仅处理信封级分支（subagent-* / error / approval-resolved），
+ *   其余一律直进 handleAgentEvent 主路径（03 §5.2-1）；
+ * - `event` 信封解包分支与 `run-ended` 别名收口分支已删（03 §5.2-2，
+ *   终态唯一入口 = run-terminal 主路径，Rust 只发规范事件）；
+ * - 四源失败统一收敛到 surfaceStreamFailure + finish（03 §2.4 表）。
+ *
+ * 事件载荷为 IPC 顶层平铺 `{ type, runId, sessionId, sequence, ... }`
+ * （03 §3.1），不做二次归一；runId 过滤沿用 messageBelongsToRun。
+ */
+import type { Transport } from '../transport';
 import type { StreamCallbacks } from '../chatApi';
 import {
   commandMatchesWhitelist,
@@ -14,16 +26,8 @@ import {
   safeParseRunTerminal,
 } from '../daemonEventZod';
 import {
-  extractEventSequence,
-  orchestratorEventToAgentEvent,
-  projectAssistantTextFromEvents,
-  streamRecovery,
-  suffixDelta,
-  type ReplayEvent,
-  type ReplayPayload,
-} from '../../services/StreamRecovery';
-import {
   blockText,
+  extractEventSequence,
   mergeAssistantTextPiece,
   messageBelongsToRun,
 } from './handlers/eventUtils';
@@ -36,6 +40,10 @@ import {
 import { surfaceStreamFailure } from './BridgeErrorPolicy';
 import type { StreamState } from './handlers/streamState';
 
+/** 白名单自动放行所需的最小发送面（生产传 TauriTransport） */
+type SendLike = {
+  send: (type: string, payload?: Record<string, unknown>) => Promise<unknown>;
+};
 
 export class EventRouter {
   private state: StreamState;
@@ -45,7 +53,7 @@ export class EventRouter {
   private sessionId: string;
   private finish: (force?: boolean) => void;
   private tryResumeFinish: () => void;
-  private client: ReturnType<typeof getDesktopDaemonClient>;
+  private client?: SendLike;
   private lastAppliedSequence = 0;
 
   constructor(
@@ -55,7 +63,7 @@ export class EventRouter {
     runId: string,
     finish: (force?: boolean) => void,
     tryResumeFinish: () => void,
-    client: ReturnType<typeof getDesktopDaemonClient>,
+    client?: SendLike,
     sessionId = ''
   ) {
     this.state = state;
@@ -70,93 +78,6 @@ export class EventRouter {
 
   getLastAppliedSequence(): number {
     return this.lastAppliedSequence;
-  }
-
-  applyReplayEvents(payload: ReplayPayload | ReplayEvent[]): void {
-    if (this.state.cancelled || this.state.finished) return;
-    const events = Array.isArray(payload) ? payload : payload.events;
-    if (!events.length) return;
-
-    const sorted = [...events].sort((a, b) => {
-      const sa = extractEventSequence(a) ?? 0;
-      const sb = extractEventSequence(b) ?? 0;
-      return sa - sb;
-    });
-
-    const fresh = sorted.filter((e) => {
-      const seq = extractEventSequence(e);
-      return seq == null || seq > this.lastAppliedSequence;
-    });
-    if (!fresh.length) return;
-
-    const projected = projectAssistantTextFromEvents(fresh);
-    const afterSeq =
-      !Array.isArray(payload) && typeof payload.afterSequence === 'number'
-        ? payload.afterSequence
-        : this.lastAppliedSequence;
-    let textEmit = '';
-    if (afterSeq <= 0 && this.state.assistantText) {
-      const fullProjected = projectAssistantTextFromEvents(sorted);
-      textEmit = suffixDelta(this.state.assistantText, fullProjected);
-      if (
-        fullProjected.startsWith(this.state.assistantText) ||
-        !this.state.assistantText
-      ) {
-        this.state.assistantText =
-          fullProjected.length >= this.state.assistantText.length
-            ? fullProjected
-            : this.state.assistantText;
-      } else if (textEmit) {
-        this.state.assistantText += textEmit;
-      }
-    } else {
-      textEmit = projected;
-      if (textEmit) this.state.assistantText += textEmit;
-    }
-    if (textEmit) {
-      this.callbacks.onChunk(textEmit);
-    }
-
-    for (const raw of fresh) {
-      const seq = extractEventSequence(raw);
-      const agent = orchestratorEventToAgentEvent(raw) ?? raw;
-      if (agent && typeof agent === 'object') {
-        const agentRec = agent as Record<string, unknown>;
-        const type = String(agentRec.type ?? '');
-        if (
-          type === 'message-delta' ||
-          type === 'text-delta' ||
-          type === 'message-end'
-        ) {
-          if (type === 'message-end') {
-            this.handleAgentEvent(agentRec);
-          }
-        } else {
-          this.handleAgentEvent(agentRec);
-        }
-      }
-      if (seq != null && seq > this.lastAppliedSequence) {
-        this.lastAppliedSequence = seq;
-        if (this.sessionId) {
-          streamRecovery.updateHeartbeat(this.sessionId, { sequence: seq });
-        }
-      }
-    }
-
-    if (
-      !Array.isArray(payload) &&
-      typeof payload.nextAfterSequence === 'number'
-    ) {
-      if (payload.nextAfterSequence > this.lastAppliedSequence) {
-        this.lastAppliedSequence = payload.nextAfterSequence;
-      }
-      if (this.sessionId) {
-        streamRecovery.setLastSequence(
-          this.sessionId,
-          payload.nextAfterSequence
-        );
-      }
-    }
   }
 
   private applyApprovalResolved(payload: unknown): void {
@@ -398,8 +319,9 @@ export class EventRouter {
             args,
             explanation ? `${explanation}（白名单自动允许）` : '白名单自动允许'
           );
+          // 白名单自动放行：经 transport 直发 core_approve_tool（commandMap 翻译）
           void this.client
-            .send({ type: 'approve-tool', toolCallId, scope: 'project' })
+            ?.send('approve-tool', { toolCallId, scope: 'project' })
             .catch(() => {
               this.approvalFlow.dispatch({
                 type: 'approval_pending',
@@ -446,7 +368,6 @@ export class EventRouter {
       type === 'run-terminal' ||
       type === 'run-completed' ||
       type === 'run-failed' ||
-      // Orchestrator L3 terminal (was missing → stuck isProcessing until agent-end 8s timer)
       type === 'run-cancelled'
     ) {
       const termParsed = safeParseRunTerminal(event);
@@ -510,12 +431,12 @@ export class EventRouter {
         this.finish(true);
         return;
       }
-      // L2 stop / L3 aborted / max-turns: settle immediately so isProcessing clears.
-      // (Previously only deferred 8s when run-terminal lagged — stuck Stop / cannot send.)
+      // L2 stop / L3 aborted / max-turns / stopped：立即收口，isProcessing 及时清除
       if (
         reason === 'stop' ||
         reason === 'aborted' ||
-        reason === 'max-turns'
+        reason === 'max-turns' ||
+        reason === 'stopped'
       ) {
         this.approvalFlow.dispatch({ type: 'clear_all' });
         this.finish(false);
@@ -549,11 +470,6 @@ export class EventRouter {
         : null);
     if (seq != null && seq > this.lastAppliedSequence) {
       this.lastAppliedSequence = seq;
-    }
-    if (this.sessionId) {
-      streamRecovery.updateHeartbeat(this.sessionId, {
-        ...(seq != null ? { sequence: seq } : {}),
-      });
     }
 
     if (type === 'subagent-started') {
@@ -610,47 +526,12 @@ export class EventRouter {
       return;
     }
 
-    if (type === 'event') {
-      if (
-        !msg.event ||
-        typeof msg.event !== 'object' ||
-        Array.isArray(msg.event)
-      )
-        return;
-      const inner = msg.event as Record<string, unknown>;
-      const innerType = String(inner.type ?? inner.event ?? inner.kind ?? '').trim();
-      this.handleAgentEvent(inner, innerType || undefined);
-      return;
-    }
-
-    if (
-      type === 'run-ended' ||
-      type === 'run-failed' ||
-      type === 'run-cancelled' ||
-      type === 'run-completed'
-    ) {
-      if (type === 'run-failed') {
-        surfaceStreamFailure(
-          msg.error ?? msg.message ?? msg,
-          'run-ended-failed',
-          this.callbacks,
-          this.runId
-        );
-      }
-      this.approvalFlow.dispatch({ type: 'run_terminal_seen' });
-      this.approvalFlow.dispatch({ type: 'clear_all' });
-      // L3 run-cancelled: finish without error surface (partial content kept in UI)
-      this.finish(type === 'run-failed');
-      return;
-    }
-
-    if (type === 'approval-requested') {
-      this.handleAgentEvent(msg);
-      return;
-    }
-
     if (type === 'approval-resolved') {
       this.applyApprovalResolved(msg);
+      return;
     }
+
+    // C2.2：平铺事件直进主路径（event 信封 / run-ended 别名分支已删）
+    this.handleAgentEvent(msg, type);
   };
 }

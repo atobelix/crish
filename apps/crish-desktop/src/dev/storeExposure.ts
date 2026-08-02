@@ -11,7 +11,7 @@ export function exposeStoresForDev(
   isDev: boolean,
 ): void {
   if (!isDev) return;
-  const w = window as Record<string, unknown>;
+  const w = window as unknown as Record<string, unknown>;
   for (const [key, store] of Object.entries(stores)) {
     w[key] = store;
   }

@@ -4,6 +4,11 @@ import { applyTextContrastGuard } from './oklchColorGuard';
  * 外观主题：应用 DOM + 本地记忆。
  * - 独立 key `crish_theme`，启动时立刻读，不依赖 settings 异步
  * - 同步写入 settings.theme，设置页与其它入口一致
+ *
+ * 例外声明（T05.5.1 tokens 唯一源）：
+ * 本文件是「调色板数据文件」（SKIN_PRESETS 各皮肤色板常量，约 225 处 hex/hsl），
+ * 运行时通过 root.style.setProperty 注入 CSS 变量，天然构成 tokens 的运行时数据源。
+ * 按 PE-05 T05.5.1 约定不做逐处 token 化，仅保留本例外标注。
  */
 
 export type UiTheme = 'default' | 'dark';

@@ -2,15 +2,14 @@
  * 技能发现与激活（正规 SKILL.md 范式）
  * - 发现：项目 / 工作区 / 全局 skills 目录
  * - 解析 frontmatter + markdown 正文
- * - 激活态：localStorage 覆盖 + 尽量同步 daemon scoped-context
+ * - 激活态：localStorage 覆盖（T03.7：upsert/delete-scoped-context 幽灵命令已删，
+ *   daemon 同步显式本地-only，daemonSynced 恒 false）
  * - 斜杠命令：/skill:name 与 enableSkillCommands
  *
- * 契约：技能 activation → ENGINE-SCOPED + LS（id 必须与 agent-runtime stableId 一致）
  * @see docs/plans/2026-07-product-trust-topdown.md §1.2 / §2
  */
 
 import { getWorkspacePath } from './projectStore';
-import { getDesktopDaemonClient } from './daemonClient';
 import { tryInvokeTauri } from './tauriInvoke';
 import { skillStableId } from './skillId';
 import { openDirectoryDialogSafe } from './openDirectoryDialog';
@@ -528,64 +527,14 @@ export async function discoverSkills(opts?: {
 
 export type SkillActivationResult = {
   ok: boolean;
+  /** T03.7：scoped-context 仅本机保存，恒 false（显式本地-only） */
   daemonSynced: boolean;
   error?: string;
 };
 
-async function upsertSkillToDaemon(
-  skill: DesktopSkill,
-  activation: SkillActivation,
-): Promise<{ synced: boolean; error?: string }> {
-  try {
-    const client = getDesktopDaemonClient();
-    if (!client.isConnected()) {
-      return { synced: false, error: '引擎未连接' };
-    }
-    if (activation === 'disabled') {
-      await client.request(
-        { type: 'delete-scoped-context', id: skill.id },
-        'scoped-context-deleted',
-        8_000,
-      );
-      return { synced: true };
-    }
-    await client.request(
-      {
-        type: 'upsert-scoped-context',
-        record: {
-          id: skill.id,
-          kind: 'skill',
-          title: skill.name,
-          content: skill.content,
-          description: skill.description,
-          scope: skill.scope,
-          activation,
-          appliesTo: skill.appliesTo,
-          tags: skill.tags,
-          source: {
-            type: 'skill-file',
-            path: skill.filePath,
-            label: skill.name,
-          },
-          order: activation === 'enabled' ? 0 : 10,
-          updatedAt: new Date().toISOString(),
-        },
-      },
-      'scoped-context-upserted',
-      12_000,
-    );
-    return { synced: true };
-  } catch (e) {
-    return {
-      synced: false,
-      error: e instanceof Error ? e.message : String(e),
-    };
-  }
-}
-
 /**
- * 更新技能激活态：始终写入 localStorage；尽力同步 daemon scoped-context（同 id）。
- * daemon 失败时仍 ok=true（本机已存），daemonSynced=false 供 UI 提示「仅本机」。
+ * 更新技能激活态：始终写入 localStorage（本机唯一真相）。
+ * T03.7：引擎 scoped-context 通道已删，daemonSynced 恒 false（无引擎同步）。
  */
 export async function setSkillActivation(
   skill: DesktopSkill,
@@ -598,25 +547,12 @@ export async function setSkillActivation(
     delete map[legacyId];
   }
   saveActivationMap(map);
-  const daemon = await upsertSkillToDaemon(skill, activation);
-  return {
-    ok: true,
-    daemonSynced: daemon.synced,
-    ...(!daemon.synced && daemon.error !== undefined && { error: daemon.error }),
-  };
+  return { ok: true, daemonSynced: false };
 }
 
-/** 将当前启用 / 推荐技能批量同步到 daemon */
-export async function syncSkillsToDaemon(skills: DesktopSkill[]): Promise<{ ok: number; fail: number }> {
-  let ok = 0;
-  let fail = 0;
-  for (const s of skills) {
-    if (s.activation === 'disabled') continue;
-    const r = await upsertSkillToDaemon(s, s.activation);
-    if (r.synced) ok += 1;
-    else fail += 1;
-  }
-  return { ok, fail };
+/** 批量同步到引擎：T03.7 后无引擎通道，恒 0/0（保留签名兼容调用方） */
+export async function syncSkillsToDaemon(_skills: DesktopSkill[]): Promise<{ ok: number; fail: number }> {
+  return { ok: 0, fail: 0 };
 }
 
 export async function readSkillRaw(filePath: string): Promise<string | null> {

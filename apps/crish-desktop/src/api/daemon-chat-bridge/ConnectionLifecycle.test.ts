@@ -1,47 +1,41 @@
+/**
+ * ConnectionLifecycle 单测（Tauri IPC transport 版，C3.1）。
+ * - 完整 run-task / 事件流契约见 ConnectionLifecycle.tauri.test.ts；
+ * - 本文件覆盖 createFinishController / createStreamCancel / ensureDaemonConnected 纯逻辑面。
+ */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createFinishController,
   createStreamCancel,
-  createStreamSession,
   ensureDaemonConnected,
 } from './ConnectionLifecycle';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
 import type { StreamCallbacks } from '../chatApi';
 import type { StreamState } from './handlers/streamState';
-import { getDesktopDaemonClient } from '../daemonClient';
 import {
   getControlMetrics,
   resetControlMetrics,
 } from '../controlMetrics';
 
-const { send, streamViaDirectFetch } = vi.hoisted(() => ({
-  send: vi.fn().mockResolvedValue(undefined),
-  streamViaDirectFetch: vi.fn().mockReturnValue(() => undefined),
-}));
-
-vi.mock('../daemonClient', () => {
-  const startKeepAlive = vi.fn();
-  const waitUntilConnected = vi.fn().mockResolvedValue(true);
-  const request = vi.fn().mockResolvedValue({ status: 'ok' });
-  const isConnected = vi.fn().mockReturnValue(true);
-  const onMessage = vi.fn().mockReturnValue(() => undefined);
-  const getUrl = vi.fn().mockReturnValue('ws://localhost:18800');
-
-  return {
-    getDesktopDaemonClient: () => ({
-      startKeepAlive,
-      waitUntilConnected,
-      request,
-      isConnected,
-      send,
-      onMessage,
-      getUrl,
-    }),
+const { fakeTransport } = vi.hoisted(() => {
+  const fakeTransport = {
+    waitUntilConnected: vi.fn(async () => true),
+    isReady: vi.fn(() => true),
+    onMessage: vi.fn(() => () => undefined),
+    getStatus: vi.fn(() => 'connected' as const),
+    onStatus: vi.fn(() => () => undefined),
+    request: vi.fn(async () => ({ ok: true })),
+    send: vi.fn(async () => undefined),
+    stop: vi.fn(),
   };
+  return { fakeTransport };
 });
 
-vi.mock('../directFetchBridge', () => ({
-  streamViaDirectFetch,
+vi.mock('../transport', () => ({
+  getTransport: () => fakeTransport,
+  startRunTask: vi.fn(async () => undefined),
+  resetTransportForTests: () => undefined,
+  TauriTransport: class TauriTransport {},
 }));
 
 vi.mock('../projectStore', async (importOriginal) => {
@@ -74,21 +68,39 @@ vi.mock('../clientApi', async (importOriginal) => {
   };
 });
 
-describe('ConnectionLifecycle', () => {
+function makeState(partial: Partial<StreamState> = {}): StreamState {
+  return {
+    cancelled: false,
+    finished: false,
+    assistantText: '',
+    assistantThought: '',
+    unsub: null,
+    endTimer: null,
+    ...partial,
+  };
+}
+
+describe('ConnectionLifecycle（Tauri IPC 版）', () => {
   beforeEach(() => {
-    send.mockClear();
-    streamViaDirectFetch.mockClear();
+    vi.mocked(fakeTransport.waitUntilConnected).mockResolvedValue(true);
+    vi.mocked(fakeTransport.isReady).mockReturnValue(true);
+    fakeTransport.request.mockClear();
+    fakeTransport.send.mockClear();
     resetControlMetrics();
-    const client = getDesktopDaemonClient();
-    vi.mocked(client.waitUntilConnected).mockResolvedValue(true);
-    vi.mocked(client.isConnected).mockReturnValue(true);
   });
 
   describe('ensureDaemonConnected', () => {
-    it('returns ok: true when daemon responds', async () => {
+    it('核心就绪 → ok:true（waitUntilConnected 即 core_get_status 轮询）', async () => {
       const res = await ensureDaemonConnected();
       expect(res.ok).toBe(true);
-      expect(res.url).toBe('ws://localhost:18800');
+      expect(fakeTransport.waitUntilConnected).toHaveBeenCalledWith(20_000);
+    });
+
+    it('核心未就绪 → ok:false + network 文案', async () => {
+      vi.mocked(fakeTransport.waitUntilConnected).mockResolvedValue(false);
+      const res = await ensureDaemonConnected();
+      expect(res.ok).toBe(false);
+      expect(res.error).toBeTruthy();
     });
   });
 
@@ -105,14 +117,7 @@ describe('ConnectionLifecycle', () => {
         onComplete,
       };
       const cleanup = vi.fn();
-      const state: StreamState = {
-        cancelled: false,
-        finished: false,
-        assistantText: '',
-        assistantThought: '',
-        unsub: null,
-        endTimer: null,
-      };
+      const state = makeState();
 
       const controller = createFinishController(
         approvalFlow,
@@ -129,131 +134,8 @@ describe('ConnectionLifecycle', () => {
     });
   });
 
-  describe('createStreamSession clientMessageId wire', () => {
-    it('run-task 携带 user/assistant clientMessageId', async () => {
-      const onRunError = vi.fn();
-      const callbacks: StreamCallbacks = {
-        onChunk: vi.fn(),
-        onThought: vi.fn(),
-        onToolStart: vi.fn(),
-        onToolError: vi.fn(),
-        onToolSuccess: vi.fn(),
-        onComplete: vi.fn(),
-        onRunError,
-      };
-      const state: StreamState = {
-        cancelled: false,
-        finished: false,
-        assistantText: '',
-        assistantThought: '',
-        unsub: null,
-        endTimer: null,
-      };
-      const client = getDesktopDaemonClient();
-      // 强制走 daemon 分支（非 directFetch），避免其它用例污染连接 mock
-      vi.mocked(client.waitUntilConnected).mockResolvedValue(true);
-      vi.mocked(client.isConnected).mockReturnValue(true);
-      const finish = vi.fn();
-
-      await createStreamSession(
-        client,
-        'hello',
-        'sess-id-1',
-        'run-id-1',
-        callbacks,
-        {
-          clientMessageId: 'user-msg-fixed-1',
-          assistantClientMessageId: 'assistant-msg-fixed-1',
-        },
-        state,
-        () => undefined,
-        finish,
-        'assistant-msg-fixed-1',
-      );
-
-      expect(onRunError).not.toHaveBeenCalled();
-      expect(send).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'run-task',
-          runId: 'run-id-1',
-          sessionId: 'sess-id-1',
-          prompt: 'hello',
-          clientMessageId: 'user-msg-fixed-1',
-          assistantClientMessageId: 'assistant-msg-fixed-1',
-        }),
-      );
-      expect(getControlMetrics().transport_degraded_direct_fetch).toBe(0);
-      expect(streamViaDirectFetch).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('createStreamSession degraded directFetch (OPT-F7 / kill #10)', () => {
-    it('records transport_degraded_direct_fetch when daemon WS not ready', async () => {
-      const callbacks: StreamCallbacks = {
-        onChunk: vi.fn(),
-        onThought: vi.fn(),
-        onToolStart: vi.fn(),
-        onToolError: vi.fn(),
-        onToolSuccess: vi.fn(),
-        onComplete: vi.fn(),
-      };
-      const state: StreamState = {
-        cancelled: false,
-        finished: false,
-        assistantText: '',
-        assistantThought: '',
-        unsub: null,
-        endTimer: null,
-        transportAbort: null,
-      };
-      const client = getDesktopDaemonClient();
-      vi.mocked(client.waitUntilConnected).mockResolvedValue(false);
-      vi.mocked(client.isConnected).mockReturnValue(false);
-      const finish = vi.fn();
-
-      await createStreamSession(
-        client,
-        'offline prompt',
-        'sess-degraded-1',
-        'run-degraded-1',
-        callbacks,
-        undefined,
-        state,
-        () => undefined,
-        finish,
-      );
-
-      expect(send).not.toHaveBeenCalled();
-      expect(finish).not.toHaveBeenCalled();
-      expect(streamViaDirectFetch).toHaveBeenCalledTimes(1);
-      expect(streamViaDirectFetch).toHaveBeenCalledWith(
-        'offline prompt',
-        callbacks,
-        'sess-degraded-1',
-        'run-degraded-1',
-        undefined,
-      );
-      expect(getControlMetrics().transport_degraded_direct_fetch).toBe(1);
-      expect(typeof state.transportAbort).toBe('function');
-
-      // second fallback accumulates (counter, not latch)
-      await createStreamSession(
-        client,
-        'offline prompt 2',
-        'sess-degraded-2',
-        'run-degraded-2',
-        callbacks,
-        undefined,
-        state,
-        () => undefined,
-        finish,
-      );
-      expect(getControlMetrics().transport_degraded_direct_fetch).toBe(2);
-    });
-  });
-
   describe('createStreamCancel', () => {
-    it('cancels stream and notifies daemon client', async () => {
+    it('force 默认：state 收口 + onComplete（run-control L3 经 compositionRoot 分派）', async () => {
       const approvalFlow = new ApprovalFlowMachine();
       const onComplete = vi.fn();
       const callbacks: StreamCallbacks = {
@@ -265,18 +147,9 @@ describe('ConnectionLifecycle', () => {
         onComplete,
       };
       const cleanup = vi.fn();
-      const state: StreamState = {
-        cancelled: false,
-        finished: false,
-        assistantText: '',
-        assistantThought: '',
-        unsub: null,
-        endTimer: null,
-      };
-      const client = getDesktopDaemonClient();
+      const state = makeState();
 
       const cancel = createStreamCancel(
-        client,
         'run-test-1',
         callbacks,
         approvalFlow,
@@ -290,68 +163,35 @@ describe('ConnectionLifecycle', () => {
       expect(state.finished).toBe(true);
       expect(cleanup).toHaveBeenCalled();
       expect(onComplete).toHaveBeenCalled();
-      // 无参默认 force（L3）：async dispatch 经 runControl 门面
-      await vi.waitFor(() => {
-        expect(client.send).toHaveBeenCalledWith({
-          type: 'run-control',
-          level: 'force_cancel',
-          runId: 'run-test-1',
-          reason: 'ui-force-cancel',
-        });
-        expect(client.send).toHaveBeenCalledWith({
-          type: 'cancel-run',
-          runId: 'run-test-1',
-          mode: 'force',
-        });
-      });
+      // metrics：L3 force_cancel 只记一次 level
+      expect(getControlMetrics().run_control_L3).toBe(1);
     });
 
-    it('cooperative mode sends run-control L2 + cancel-run mode=cooperative', async () => {
+    it('cooperative 模式 → L2（metrics 记 L2）', () => {
       const approvalFlow = new ApprovalFlowMachine();
-      const onComplete = vi.fn();
       const callbacks: StreamCallbacks = {
         onChunk: vi.fn(),
         onThought: vi.fn(),
         onToolStart: vi.fn(),
         onToolError: vi.fn(),
         onToolSuccess: vi.fn(),
-        onComplete,
+        onComplete: vi.fn(),
       };
-      const cleanup = vi.fn();
-      const state: StreamState = {
-        cancelled: false,
-        finished: false,
-        assistantText: '',
-        assistantThought: '',
-        unsub: null,
-        endTimer: null,
-      };
-      const client = getDesktopDaemonClient();
+      const state = makeState();
 
       const cancel = createStreamCancel(
-        client,
         'run-coop-1',
         callbacks,
         approvalFlow,
-        cleanup,
+        () => undefined,
         state
       );
 
       cancel({ mode: 'cooperative' });
 
-      await vi.waitFor(() => {
-        expect(client.send).toHaveBeenCalledWith({
-          type: 'run-control',
-          level: 'cooperative_stop',
-          runId: 'run-coop-1',
-          reason: 'ui-stop',
-        });
-        expect(client.send).toHaveBeenCalledWith({
-          type: 'cancel-run',
-          runId: 'run-coop-1',
-          mode: 'cooperative',
-        });
-      });
+      expect(state.cancelled).toBe(true);
+      expect(getControlMetrics().run_control_L2).toBe(1);
+      expect(getControlMetrics().run_control_L3).toBe(0);
     });
   });
 });

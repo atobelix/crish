@@ -1,9 +1,8 @@
 /**
- * Re-export barrel for stream lifecycle (primary transport + #10 flag).
+ * Re-export barrel for stream lifecycle (Tauri IPC transport, C3.1)。
  * Implementation + SoT docs: `./ConnectionLifecycle.ts`.
  */
 export {
-  ALLOW_AUTO_DIRECT_FETCH_FALLBACK,
   createFinishController,
   createStreamCancel,
   createStreamSession,

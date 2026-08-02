@@ -1,8 +1,10 @@
 /**
  * 协作 agent 客户端 API：steer 续聊、状态查询、独立 follow-up run。
+ *
+ * T03.7：send-to-subagent / get-subagent-status 为幽灵命令（Rust 侧无），
+ * 显式不可用；协作运行本身经 streamViaDaemon（core_run_task + 事件通道）。
  */
 
-import { getDesktopDaemonClient } from './daemonClient';
 import type { StreamCallbacks } from './chatApi';
 import { streamViaDaemon } from './daemonChatBridge';
 
@@ -18,58 +20,27 @@ export const COLLABORATOR_MODES: {
   { id: 'verify', label: '验证', hint: '检查结果、复现与对照' },
 ];
 
-/** 向正在运行的子 agent run 注入消息（daemon steer） */
+/**
+ * 向正在运行的子 agent run 注入消息。
+ * T03.7：Rust 侧无 send-to-subagent，显式不可用（不静默降级）。
+ */
 export async function sendToSubagent(
-  subagentRunId: string,
-  message: string,
+  _subagentRunId: string,
+  _message: string,
 ): Promise<{ ok: boolean; accepted?: boolean; error?: string }> {
-  const client = getDesktopDaemonClient();
-  try {
-    if (!client.isConnected()) {
-      const ok = await client.waitUntilConnected(8_000);
-      if (!ok) return { ok: false, error: '引擎未连接' };
-    }
-    const res = (await client.request(
-      { type: 'send-to-subagent', subagentRunId, message },
-      ['subagent-message-sent', 'error'],
-      12_000,
-    )) as { type?: string; accepted?: boolean; message?: string };
-    if (res?.type === 'error') {
-      return { ok: false, error: String(res.message || '发送失败') };
-    }
-    return { ok: true, accepted: Boolean(res?.accepted) };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
+  return { ok: false, error: '引擎不支持向子 agent 注入消息（send-to-subagent 不可用）' };
 }
 
-export async function getSubagentStatus(subagentRunId: string): Promise<{
+/**
+ * 查询子 agent 运行状态。
+ * T03.7：Rust 侧无 get-subagent-status，显式不可用（返回 null）。
+ */
+export async function getSubagentStatus(_subagentRunId: string): Promise<{
   status: string;
   progress?: string;
   latestError?: string;
 } | null> {
-  const client = getDesktopDaemonClient();
-  try {
-    if (!client.isConnected()) return null;
-    const res = (await client.request(
-      { type: 'get-subagent-status', subagentRunId },
-      ['subagent-status', 'error'],
-      8_000,
-    )) as {
-      type?: string;
-      status?: string;
-      progress?: string;
-      latestError?: string;
-    };
-    if (res?.type === 'error' || !res?.status) return null;
-    return {
-      status: res.status,
-      ...(res.progress !== undefined && { progress: res.progress }),
-      ...(res.latestError !== undefined && { latestError: res.latestError }),
-    };
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 /**

@@ -271,7 +271,8 @@ describe('ST-P6: withTitleCollisionSuffix 结果不在 existing 集合', () => {
     fc.assert(
       fc.property(fc.string({ minLength: 1, maxLength: 32 }), (base) => {
         const result = withTitleCollisionSuffix(base, []);
-        expect(result).toBe(base.trim());
+        // 空 base（trim 后）回落 EMPTY_SESSION_TITLE，与上方「base 为空时回落」属性一致
+        expect(result).toBe(base.trim() || EMPTY_SESSION_TITLE);
       }),
       { numRuns: 100 },
     );

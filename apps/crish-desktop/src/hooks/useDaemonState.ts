@@ -8,7 +8,7 @@
  * - document.visibilityState === 'hidden' 时跳过轮询
  */
 import { useSyncExternalStore } from 'react';
-import { getDesktopDaemonClient } from '../api/daemonClient';
+import { getTransport } from '../api/transport';
 import {
   fetchEngineLiveStatus,
   type ActiveRunInfo,
@@ -121,9 +121,9 @@ async function _loadWorkflows(): Promise<void> {
 }
 
 function _startSingleton(): void {
-  const client = getDesktopDaemonClient();
-  _setState({ engineOnline: client.isConnected() });
-  _unsubState = client.onState((s) =>
+  const transport = getTransport();
+  _setState({ engineOnline: transport.isReady() });
+  _unsubState = transport.onStatus((s) =>
     _setState({ engineOnline: s === 'connected' })
   );
   void _tick();

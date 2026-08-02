@@ -1,12 +1,12 @@
 /**
- * Git 工作区状态与 diff：优先 Tauri workbench 命令，失败时走 daemon WebSocket。
+ * Git 工作区状态与 diff：本机 git 命令（workbench_git_run 参数数组执行）。
+ * T03.7：git-status / git-diff 为幽灵命令（Rust 侧不存在）——daemon 回退分支已删，
+ * 本机 git 快路径为唯一路径；失败显式返回原因（不静默降级）。
  */
 
 import { getWorkspacePath } from './projectStore';
-import { getDesktopDaemonClient } from './daemonClient';
 import { parseUnifiedDiffs } from './toolFeedback';
 import type { FileDiff } from '../store/layoutStore';
-import { invokeCmd } from './tauriInvoke';
 
 export type GitFileStatusCode = 'A' | 'M' | 'D' | 'U' | 'R' | 'C' | '?' | '!' | 'mixed' | string;
 
@@ -137,71 +137,12 @@ export async function openGitDownloadPage(): Promise<void> {
   window.open(GIT_DOWNLOAD_URL, '_blank', 'noopener,noreferrer');
 }
 
-function asStatusFile(raw: unknown): GitStatusFile | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const o = raw as Record<string, unknown>;
-  const path = String(o.path ?? o.filePath ?? o.file ?? '').trim();
-  if (!path) return null;
-  const originalPath = typeof o.originalPath === 'string' && o.originalPath ? o.originalPath : undefined;
-  return {
-    path,
-    status: String(o.status ?? '?') as GitFileStatusCode,
-    staged: Boolean(o.staged),
-    unstaged: Boolean(o.unstaged),
-    untracked: Boolean(o.untracked),
-    conflicted: Boolean(o.conflicted),
-    ...(originalPath !== undefined && { originalPath }),
-  };
-}
-
-function normalizeStatus(raw: Record<string, unknown> | null | undefined): GitStatusResult {
-  if (!raw) {
-    return { found: false, files: [], reason: 'unavailable' };
-  }
-  const found = raw.found !== false;
-  const filesRaw = Array.isArray(raw.files) ? raw.files : [];
-  const files = filesRaw
-    .map(asStatusFile)
-    .filter((f): f is GitStatusFile => Boolean(f));
-  const rawReason = typeof raw.reason === 'string' ? raw.reason : undefined;
-  const reason = found ? rawReason : classifyGitReason(rawReason);
-  const cwd = typeof raw.cwd === 'string' ? raw.cwd : undefined;
-  const branch = typeof raw.branch === 'string' ? raw.branch : undefined;
-  const stagedCount = typeof raw.stagedCount === 'number'
-    ? raw.stagedCount
-    : typeof raw.staged === 'number' ? raw.staged : undefined;
-  const unstagedCount = typeof raw.unstagedCount === 'number'
-    ? raw.unstagedCount
-    : typeof raw.unstaged === 'number' ? raw.unstaged : undefined;
-  const untrackedCount = typeof raw.untrackedCount === 'number'
-    ? raw.untrackedCount
-    : typeof raw.untracked === 'number' ? raw.untracked : undefined;
-  const conflictedCount = typeof raw.conflictedCount === 'number'
-    ? raw.conflictedCount
-    : typeof raw.conflicted === 'number' ? raw.conflicted : undefined;
-  const detail = rawReason && reason !== rawReason ? rawReason : undefined;
-  return {
-    found,
-    ...(cwd !== undefined && { cwd }),
-    ...(branch !== undefined && { branch }),
-    clean: typeof raw.clean === 'boolean' ? raw.clean : files.length === 0,
-    files,
-    ...(stagedCount !== undefined && { stagedCount }),
-    ...(unstagedCount !== undefined && { unstagedCount }),
-    ...(untrackedCount !== undefined && { untrackedCount }),
-    ...(conflictedCount !== undefined && { conflictedCount }),
-    ...(reason !== undefined && { reason }),
-    ...(detail !== undefined && { detail }),
-  };
-}
-
-/** 防止 workbench/daemon 挂死导致 UI 永久「加载中」 */
+/** 防止本机 git 挂死导致 UI 永久「加载中」 */
 export const GIT_STATUS_TIMEOUT_MS = 12_000;
-export const GIT_DIFF_TIMEOUT_MS = 14_000;
 /** 本机 shell git 超时（优先快路径；大仓可稍长，仍短于总超时） */
 export const GIT_LOCAL_TIMEOUT_MS = 8_000;
 
-/** 导出供单测；生产路径 fetchGitStatus/Diff 均经此包裹 */
+/** 导出供单测；生产路径 fetchGitStatus 经此包裹 */
 export function withTimeout<T>(
   promise: Promise<T>,
   ms: number,
@@ -431,15 +372,15 @@ export async function fetchGitStatus(cwd?: string): Promise<GitStatusResult> {
     return cached.result;
   }
 
-  // 1) 本机 git 快路径（避免 daemon 队列导致「一直超时」）
+  // 1) 本机 git 快路径（唯一路径；T03.7 已删 daemon 回退）
   try {
     const local = await fetchGitStatusLocal(resolved);
     if (local) {
       if (local.found || local.reason === 'not-a-repo' || local.reason === 'not-installed') {
         return rememberGitStatus(resolved, local);
       }
-      // timeout / 其它：继续尝试引擎；若本机已给出明确失败则直接返回
-      if (local.reason !== 'timeout') return rememberGitStatus(resolved, local);
+      // timeout / 其它失败：显式返回（不再尝试幽灵 daemon 命令）
+      return rememberGitStatus(resolved, local);
     }
   } catch {
     /* fall through */
@@ -455,42 +396,13 @@ export async function fetchGitStatus(cwd?: string): Promise<GitStatusResult> {
   // 总超时略大于本机超时，避免本机刚结束就被外层判超时
   return withTimeout(
     (async () => {
-      const viaTauri = await invokeCmd<Record<string, unknown>>('workbench_git_status', {
-        cwd: resolved,
-      });
-      if (viaTauri) {
-        return rememberGitStatus(resolved, normalizeStatus(viaTauri));
-      }
-
       try {
-        const client = getDesktopDaemonClient();
-        if (!client.isConnected()) {
-          await client.waitUntilConnected(1_500);
-        }
-        if (!client.isConnected()) {
-          // 引擎离线时再试一次本机（短超时，避免二次长等）
-          const local2 = await fetchGitStatusLocal(resolved);
-          if (local2) return rememberGitStatus(resolved, local2);
-          return { found: false, files: [], reason: 'daemon-offline' };
-        }
-        const res = (await client.request(
-          { type: 'git-status', cwd: resolved },
-          'git-status-response',
-          5_000,
-        )) as Record<string, unknown>;
-        return rememberGitStatus(resolved, normalizeStatus(res));
-      } catch (err) {
-        const local3 = await fetchGitStatusLocal(resolved);
-        if (local3) return rememberGitStatus(resolved, local3);
-        const msg = err instanceof Error ? err.message : String(err || '');
-        const detail = msg || undefined;
-        return {
-          found: false,
-          files: [],
-          reason: classifyGitReason(msg || 'error'),
-          ...(detail !== undefined && { detail }),
-        };
+        const local2 = await fetchGitStatusLocal(resolved);
+        if (local2) return rememberGitStatus(resolved, local2);
+      } catch {
+        /* ignore */
       }
+      return { found: false, files: [], reason: 'unavailable' };
     })(),
     GIT_STATUS_TIMEOUT_MS,
     timeoutResult,
@@ -499,7 +411,7 @@ export async function fetchGitStatus(cwd?: string): Promise<GitStatusResult> {
 
 /**
  * 拉取单文件或工作区 unified diff，并解析为 FileDiff 列表。
- * 优先本机 git；超时返回 found:false，避免变更面板永久加载。
+ * T03.7：本机 git 为唯一路径（幽灵命令已删）；无 cwd 或失败返回 found:false。
  */
 export async function fetchGitDiff(params?: {
   cwd?: string;
@@ -514,7 +426,11 @@ export async function fetchGitDiff(params?: {
 
   if (cwd) {
     try {
-      const local = await fetchGitDiffLocal({ cwd, ...(path !== undefined && { path }), ...(staged !== undefined && { staged }) });
+      const local = await fetchGitDiffLocal({
+        cwd,
+        ...(path !== undefined && { path }),
+        ...(staged !== undefined && { staged }),
+      });
       if (local && (local.files.length > 0 || local.unified != null)) {
         return local;
       }
@@ -522,80 +438,7 @@ export async function fetchGitDiff(params?: {
       /* fall through */
     }
   }
-
-  const raw = await withTimeout(
-    (async (): Promise<Record<string, unknown> | null> => {
-      let r: Record<string, unknown> | null = await invokeCmd('workbench_git_diff', {
-        cwd,
-        path,
-        staged,
-      });
-
-      if (!r) {
-        try {
-          const client = getDesktopDaemonClient();
-          if (!client.isConnected()) {
-            await client.waitUntilConnected(2_500);
-          }
-          if (client.isConnected()) {
-            r = (await client.request(
-              {
-                type: 'git-diff',
-                ...(cwd ? { cwd } : {}),
-                ...(path ? { path } : {}),
-                ...(staged !== undefined ? { staged } : {}),
-              },
-              'git-diff-response',
-              8_000,
-            )) as Record<string, unknown>;
-          }
-        } catch {
-          r = null;
-        }
-      }
-      return r;
-    })(),
-    GIT_DIFF_TIMEOUT_MS,
-    () => null,
-  );
-
-  if (!raw) {
-    // 引擎失败时再试本机
-    if (cwd) {
-      const local = await fetchGitDiffLocal({
-        cwd,
-        ...(path !== undefined && { path }),
-        ...(staged !== undefined && { staged }),
-      });
-      if (local) return local;
-    }
-    return empty;
-  }
-
-  const unified = typeof raw.unified === 'string' ? raw.unified : undefined;
-  let files = unified ? parseUnifiedDiffs(unified) : [];
-
-  if (files.length === 0 && path) {
-    files = [
-      {
-        filePath: path,
-        additions: 0,
-        deletions: 0,
-        changes: unified
-          ? unified.split('\n').slice(0, 200).map((line) => ({
-              type: 'normal' as const,
-              content: line,
-            }))
-          : [{ type: 'normal', content: '（暂无行级 diff，文件已变更）' }],
-      },
-    ];
-  }
-
-  return {
-    found: raw.found !== false,
-    files,
-    ...(unified !== undefined && { unified }),
-  };
+  return empty;
 }
 
 /** 状态码短标签（界面展示） */

@@ -267,6 +267,7 @@ describe('Desktop Native Features - Tauri Native Commands Suite', () => {
   });
 
   describe('Window Control & Minimization (winCtl)', () => {
+    // 并行测试负载下动态 import + doMock 可能超过默认 5s 超时（非逻辑问题）
     it('executes window minimization, maximization, and close safely', async () => {
       const mockMinimize = vi.fn().mockResolvedValue(undefined);
       const mockIsMaximized = vi.fn().mockResolvedValue(false);
@@ -305,7 +306,7 @@ describe('Desktop Native Features - Tauri Native Commands Suite', () => {
       expect(mockClose).toHaveBeenCalledTimes(1);
 
       vi.doUnmock('@tauri-apps/api/window');
-    });
+    }, 15_000);
 
     it('falls back silently when Tauri window API is unavailable', async () => {
       vi.doMock('@tauri-apps/api/window', () => {
@@ -314,7 +315,7 @@ describe('Desktop Native Features - Tauri Native Commands Suite', () => {
       const mod = await import('../app/AppBootstrap');
       await expect(mod.winCtl('minimize')).resolves.toBeUndefined();
       vi.doUnmock('@tauri-apps/api/window');
-    });
+    }, 15_000);
 
     it('verifies window permissions are explicitly allowed in Tauri capabilities default.json', () => {
       const permissions = capabilitiesManifest.permissions;

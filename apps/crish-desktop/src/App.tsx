@@ -15,17 +15,18 @@ import {
 import { createDebounced } from './api/debouncedValue';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { useToastQueue } from './hooks/useToastQueue';
-import { shouldShowFirstRunWizard } from './components/FirstRunWizard';
+import { shouldShowFirstRunWizard } from './components/firstRunWizardLib';
 import styles from './App.module.css';
 
 import { useAppBootstrap } from './app/AppBootstrap';
+import { useEngineBootstrap } from './app/useEngineBootstrap';
 import { useAppShortcuts } from './app/AppShortcuts';
 import { AppGlobalDialogs, SkeletonFallback } from './app/AppGlobalDialogs';
 import { useWorkspaceShellStore } from './store/workspace-shell';
 
 // ── 关键路径组件：同步导入，与 App 同 chunk ──
-import { Sidebar } from './components/Sidebar';
-import { Workspace } from './components/Workspace';
+import { Sidebar } from './components/sidebar/Sidebar';
+import { Workspace } from './components/workspace/Workspace';
 import { Tooltip } from './components/Tooltip';
 import { AppTopBar } from './components/AppTopBar';
 import { SessionTabDragProvider } from './components/shell/SessionTabDragContext';
@@ -60,7 +61,7 @@ function DevHealthOverlayMount() {
 }
 
 const IconSidebarLeft = lazy(() =>
-  import('./components/SidebarToggleIcons').then((m) => ({
+  import('./components/sidebar/SidebarToggleIcons').then((m) => ({
     default: m.IconSidebarLeft,
   }))
 );
@@ -74,7 +75,7 @@ const BinaryTreeWorkspace = lazy(() =>
 
 // ── 非关键路径组件：代码分割，按需加载 ──
 const WorkspaceChromeBars = lazy(() =>
-  import('./components/WorkspaceChromeBars').then((m) => ({
+  import('./components/workspace/WorkspaceChromeBars').then((m) => ({
     default: m.WorkspaceChromeBars,
   }))
 );
@@ -126,7 +127,8 @@ function App() {
   const [showFirstRun, setShowFirstRun] = useState(
     () => !isDemoModeFast() && shouldShowFirstRunWizard()
   );
-  const [engineReady, setEngineReady] = useState(false);
+  // 引擎就绪门闩（T06.8 归一：useEngineBootstrap 取代 useAppBootstrap setEngineReady）
+  const engineReady = useEngineBootstrap();
 
   const [isHoveredExpanded, setIsHoveredExpanded] = useState(false);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -134,7 +136,6 @@ function App() {
   // App startup & service hydration
   useAppBootstrap({
     setAppSettings,
-    setEngineReady,
     productShell,
     uiSize,
     shellChromeMode,

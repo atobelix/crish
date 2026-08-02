@@ -3,7 +3,7 @@
  * H3 可扩展：把 activeRuns[].runId 接到 get-run-snapshot 用量。
  */
 
-import { getDesktopDaemonClient } from './daemonClient';
+import { getTransport } from './transport';
 import { logInternalError } from './userFacingErrors';
 
 export type ActiveRunInfo = {
@@ -40,19 +40,19 @@ function asRec(v: unknown): Record<string, unknown> | null {
 }
 
 export async function fetchEngineLiveStatus(): Promise<EngineLiveStatus> {
-  const client = getDesktopDaemonClient();
-  if (!client.isConnected()) {
-    const ready = await client.waitUntilConnected(6_000);
+  const transport = getTransport();
+  if (!transport.isReady()) {
+    const ready = await transport.waitUntilConnected(6_000);
     if (!ready) {
       return { ok: false, connected: false, activeRuns: [], pendingApprovals: [], error: 'not_connected' };
     }
   }
 
   try {
-    const res = (await client.request(
-      { type: 'get-status' },
-      'status-response',
-      8_000,
+    const res = (await transport.request<Record<string, unknown>>(
+      'core_get_status',
+      {},
+      { timeoutMs: 8_000 },
     )) as Record<string, unknown>;
 
     const activeRuns: ActiveRunInfo[] = asArr(res.activeRuns)
@@ -96,7 +96,7 @@ export async function fetchEngineLiveStatus(): Promise<EngineLiveStatus> {
     logInternalError('fetchEngineLiveStatus', e);
     return {
       ok: false,
-      connected: client.isConnected(),
+      connected: transport.isReady(),
       activeRuns: [],
       pendingApprovals: [],
       error: e instanceof Error ? e.message : String(e),

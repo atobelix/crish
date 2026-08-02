@@ -4,16 +4,17 @@ import {
   daemonDenyTool,
   parseApprovalResolvedFields,
 } from './ApprovalHandler';
-import { getDesktopDaemonClient } from '../daemonClient';
 
-vi.mock('../daemonClient', () => {
-  const sendMock = vi.fn().mockResolvedValue(undefined);
-  return {
-    getDesktopDaemonClient: () => ({
-      send: sendMock,
-    }),
+const { fakeTransport } = vi.hoisted(() => {
+  const fakeTransport = {
+    send: vi.fn(async () => undefined),
   };
+  return { fakeTransport };
 });
+
+vi.mock('../transport', () => ({
+  getTransport: () => fakeTransport,
+}));
 
 describe('ApprovalHandler', () => {
   describe('parseApprovalResolvedFields', () => {
@@ -56,21 +57,17 @@ describe('ApprovalHandler', () => {
   });
 
   describe('daemonApproveTool and daemonDenyTool', () => {
-    it('sends approve-tool message via daemon client', async () => {
+    it('approve-tool 经 transport.send（commandMap 翻译 core_approve_tool）', async () => {
       await daemonApproveTool('tc-999', 'project');
-      const client = getDesktopDaemonClient();
-      expect(client.send).toHaveBeenCalledWith({
-        type: 'approve-tool',
+      expect(fakeTransport.send).toHaveBeenCalledWith('approve-tool', {
         toolCallId: 'tc-999',
         scope: 'project',
       });
     });
 
-    it('sends deny-tool message via daemon client', async () => {
+    it('deny-tool 经 transport.send（commandMap 翻译 core_deny_tool）', async () => {
       await daemonDenyTool('tc-888');
-      const client = getDesktopDaemonClient();
-      expect(client.send).toHaveBeenCalledWith({
-        type: 'deny-tool',
+      expect(fakeTransport.send).toHaveBeenCalledWith('deny-tool', {
         toolCallId: 'tc-888',
       });
     });

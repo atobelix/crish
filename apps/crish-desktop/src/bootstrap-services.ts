@@ -6,19 +6,18 @@
  * - beforeunloadFlush：页面关闭时同步持久化保护
  * - PTY exit kill：pagehide + cleanup 唯一走 compositionRoot.pty.killAll（关窗 best-effort；
  *   权威杀进程在 Rust `RunEvent::Exit` → kill_all_sessions）
- * - ConnectionManager：Daemon 连接管理器
- * - StreamRecovery：流恢复协议
- * - SessionSyncService：会话双向同步
+ * - ConnectionManager：核心连接状态投影器（transport 驱动）
  * - CrossTabCoordinator：跨标签页协调
  * - ErrorStore 挂接到 EventBus
+ *
+ * C3.1：StreamRecovery（流恢复协议）与 SessionSyncService（会话双向同步）已删除
+ * ——reload/HMR 恢复由 Rust 事件通道有序保证；会话即本地 SQLite。
  *
  * 返回清理函数供 useEffect 卸载时调用。
  */
 
 import { installBeforeunloadFlush } from './api/beforeunloadFlush';
 import { connectionManager } from './services/ConnectionManager';
-import { streamRecovery } from './services/StreamRecovery';
-import { sessionSyncService } from './services/SessionSyncService';
 import { crossTabCoordinator } from './services/CrossTabCoordinator';
 import { errorStore } from './services/ErrorStore';
 import { eventBus } from './services/EventBus';
@@ -84,19 +83,9 @@ export function bootstrapServices(): () => void {
   // 3. Start ConnectionManager (fire-and-forget, retries internally)
   connectionManager.connect().catch(() => {});
 
-  // 4. Register daemon connection listener for StreamRecovery
-  const unsubStreamRecovery = eventBus.on('daemon:connection:change', (payload) => {
-    const p = payload as { phase?: string };
-    if (p?.phase === 'ready') {
-      streamRecovery.recoverAllStreams().catch(() => {});
-    }
-  });
-  cleanups.push(unsubStreamRecovery);
+  // 4. (C3.1) StreamRecovery 已删：连接就绪恢复由 Rust 事件通道有序保证，前端不再重放
 
-  // 5. Start SessionSyncService (loads queue, starts push/pull timers)
-  sessionSyncService.init().catch((err) => {
-    console.error('[bootstrap] sessionSyncService.init failed:', err);
-  });
+  // 5. (C3.1) SessionSyncService 已删：会话即本地 SQLite，无 push/pull 双向同步
 
   // 6. Start CrossTabCoordinator (leader election, cross-tab sync)
   crossTabCoordinator.init();

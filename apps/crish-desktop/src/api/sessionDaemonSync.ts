@@ -14,7 +14,7 @@
  * sessions[].messages 全为 length 0 而 titles 存在，通常是尚未 activate 的远程壳。
  */
 
-import { getDesktopDaemonClient } from './daemonClient';
+import { getTransport } from './transport';
 import { logInternalError } from './userFacingErrors';
 import type { SessionState } from '../store/layoutStore';
 import { GENERAL_FOLDER, listProjects } from './projectStore';
@@ -249,16 +249,16 @@ export function localSessionKey(id: string): string {
 }
 
 export async function fetchDaemonSessions(): Promise<DaemonSession[]> {
-  const client = getDesktopDaemonClient();
+  const transport = getTransport();
   try {
-    if (!client.isConnected()) {
-      const ok = await client.waitUntilConnected(8_000);
+    if (!transport.isReady()) {
+      const ok = await transport.waitUntilConnected(8_000);
       if (!ok) return [];
     }
-    const res = (await client.request(
-      { type: 'list-sessions', includeArchived: false },
-      'sessions-listed',
-      10_000,
+    const res = (await transport.request<Record<string, unknown>>(
+      'list_sessions',
+      { includeArchived: false },
+      { timeoutMs: 10_000 },
     )) as Record<string, unknown>;
     const list = res.sessions;
     return Array.isArray(list) ? (list as DaemonSession[]) : [];

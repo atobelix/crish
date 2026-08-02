@@ -75,9 +75,10 @@ export function normalizeApplyPath(filePath: string | null | undefined): string 
   while (p.startsWith('./')) {
     p = p.slice(2);
   }
-  // 去尾 `/`（保留单个 `/` 作为绝对根——仍会在安全校验中处理）
+  // 去尾 `/`（保留单个 `/` 作为绝对根——仍会在安全校验中处理）；
+  // 剥斜杠后再剥尾随空白，保证规范化幂等（再规范化不变）
   if (p.length > 1 && p.endsWith('/')) {
-    p = p.replace(/\/+$/, '');
+    p = p.replace(/\/+$/, '').trimEnd();
   }
   return p;
 }

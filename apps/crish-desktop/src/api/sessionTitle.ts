@@ -349,14 +349,18 @@ export function sanitizeSessionTitleText(
   s = s.replace(/^#{1,6}\s+/, '');
   // 有序/无序列表前缀（中文「1、」后常无空格）
   s = s.replace(/^(?:[-*•·]|\d+[.)、])\s*/, '');
-  // 后处理循环：剥引号 / 句末标点 / 首尾 ZWJ 可能互相暴露新的首尾噪声，
-  // 必须循环到稳定才能保证幂等性（如 `#".` → 剥 `.` → `#"` → 剥 `"` → `#`）。
+  // 后处理循环：剥引号 / 句末标点 / 首尾 ZWJ 可能互相暴露新的首尾噪声；
+  // 引号剥除也可能暴露前导 slash 命令 / 标题符 / 列表符（如 `"/help"`），
+  // 因此循环内重复执行前缀剥离，保证规范化幂等（sanitize(sanitize(s)) === sanitize(s)）。
   // 上限 4 次迭代防止极端输入卡死（每次迭代至少剥 1 字符或退出）。
   for (let i = 0; i < 4; i++) {
     const before = s;
     s = s.replace(/^["'“”‘’「」『』]+|["'“”‘’「」『』]+$/g, '').trim();
     s = s.replace(/[。！？.!?…‥]+$/u, '').trim();
     s = s.replace(BOUNDARY_ZWJ, '').trim();
+    s = s.replace(/^(?:\/\S+[ \t]*)+/, '').trim();
+    s = s.replace(/^#{1,6}\s+/, '').trim();
+    s = s.replace(/^(?:[-*•·]|\d+[.)、])\s*/, '').trim();
     if (s === before) break;
   }
   return s;

@@ -37,7 +37,7 @@ function mintWindowId(): string {
 }
 
 function sanitizeWindowId(raw: string): string {
-  // localStorage key-safe; match openNewWindow label sanitization spirit
+  // localStorage key-safe; 与窗口 label 清洗规则同款
   const s = raw.trim().replace(/[^a-zA-Z0-9_-]+/g, '_');
   return s || 'main';
 }
@@ -114,7 +114,7 @@ export function scopedStorageKey(base: string): string {
  * - Tauri: label === 'main'
  * - Non-Tauri (browser / vitest fallback): single webview → treat as main
  *
- * Secondary Tauri windows (custom labels from openNewWindow) start empty.
+ * Secondary Tauri windows（自定义 label 的独立窗口）启动时为空。
  */
 export function isMainShellWindow(windowId: string = getShellWindowId()): boolean {
   if (windowId === 'main') return true;

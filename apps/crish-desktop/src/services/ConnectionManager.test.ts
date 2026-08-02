@@ -1,253 +1,138 @@
 /**
- * ConnectionManager — UI projection only; no dual reconnect / probe stack.
+ * ConnectionManager — transport 驱动的核心连接状态投影器测试。
+ * C3.1：无 WS 心跳 / 重连 / 认证；phase 由 isReady / onStatus / waitUntilConnected 驱动。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-// Keep attemptConnect off the real Tauri dynamic-import / sidecar poll path under fake timers.
-vi.mock('../api/tauriInvoke', () => ({
-  tryInvokeTauri: vi.fn(async () => null),
-  invokeResult: vi.fn(async () => ({ status: 'error' as const, message: 'unavailable in test' })),
-}));
-
-import {
-  DesktopDaemonClient,
-  HEARTBEAT_MISS_TOLERANCE,
-  resetDesktopDaemonClientForTests,
-} from '../api/daemonClient';
+import type { Transport, TransportStatus } from '../api/transport';
 import { ConnectionManager } from './ConnectionManager';
 
-type Listener = (ev?: unknown) => void;
+/** 可编程假 transport（模拟 onStatus / waitUntilConnected / isReady） */
+class FakeTransport implements Transport {
+  status: TransportStatus = 'disconnected';
+  ready = false;
+  private statusListeners = new Set<
+    (s: TransportStatus, err?: Error) => void
+  >();
+  public waitResult = true;
+  public waitResolve: ((v: boolean) => void) | null = null;
 
-class FakeWebSocket {
-  static CONNECTING = 0;
-  static OPEN = 1;
-  static CLOSING = 2;
-  static CLOSED = 3;
-  static instances: FakeWebSocket[] = [];
+  call = vi.fn(async () => ({ status: 'ok' as const, data: null }));
+  request = vi.fn(async () => null);
+  send = vi.fn(async () => undefined);
+  onMessage = vi.fn(() => () => undefined);
+  stop = vi.fn(() => undefined);
 
-  readyState = FakeWebSocket.CONNECTING;
-  url: string;
-  sent: string[] = [];
-  private listeners = new Map<string, Set<Listener>>();
-
-  constructor(url: string) {
-    this.url = url;
-    FakeWebSocket.instances.push(this);
-    queueMicrotask(() => this.simulateOpen());
+  onStatus(listener: (s: TransportStatus, err?: Error) => void): () => void {
+    this.statusListeners.add(listener);
+    return () => this.statusListeners.delete(listener);
   }
 
-  addEventListener(type: string, cb: Listener) {
-    let set = this.listeners.get(type);
-    if (!set) {
-      set = new Set();
-      this.listeners.set(type, set);
+  waitUntilConnected(_timeoutMs?: number): Promise<boolean> {
+    // 镜像真实 TauriTransport：成功即置 ready + connected
+    if (this.waitResult) {
+      this.ready = true;
+      this.status = 'connected';
     }
-    set.add(cb);
+    return Promise.resolve(this.waitResult);
   }
 
-  removeEventListener(type: string, cb: Listener) {
-    this.listeners.get(type)?.delete(cb);
+  getStatus(): TransportStatus {
+    return this.status;
   }
 
-  send(data: string) {
-    this.sent.push(String(data));
+  isReady(): boolean {
+    return this.ready;
   }
 
-  close() {
-    if (this.readyState === FakeWebSocket.CLOSED) return;
-    this.readyState = FakeWebSocket.CLOSED;
-    this.emit('close');
-  }
-
-  simulateOpen() {
-    if (this.readyState !== FakeWebSocket.CONNECTING) return;
-    this.readyState = FakeWebSocket.OPEN;
-    this.emit('open');
-  }
-
-  simulateMessage(msg: Record<string, unknown>) {
-    this.emit('message', { data: JSON.stringify(msg) });
-  }
-
-  private emit(type: string, ev?: unknown) {
-    for (const cb of this.listeners.get(type) ?? []) {
-      cb(ev);
+  /** 测试驱动：置状态并通知订阅者 */
+  emitStatus(s: TransportStatus, err?: Error): void {
+    this.status = s;
+    if (s === 'connected') this.ready = true;
+    if (s === 'disconnected' || s === 'failed') this.ready = false;
+    for (const cb of this.statusListeners) {
+      cb(s, err);
     }
   }
 }
 
-function lastSocket(): FakeWebSocket {
-  const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
-  if (!ws) throw new Error('no FakeWebSocket');
-  return ws;
-}
-
-describe('ConnectionManager (UI projection)', () => {
-  // Slow heartbeat so it does not interfere with auth / projection tests.
-  const HEARTBEAT_MS = 60_000;
-  let client: DesktopDaemonClient;
+describe('ConnectionManager (transport 投影)', () => {
+  let transport: FakeTransport;
   let cm: ConnectionManager;
 
   beforeEach(() => {
-    vi.useFakeTimers();
-    FakeWebSocket.instances = [];
-    resetDesktopDaemonClientForTests();
     ConnectionManager.resetInstanceForTests();
-
-    client = new DesktopDaemonClient({
-      heartbeatMs: HEARTBEAT_MS,
-      heartbeatMissTolerance: HEARTBEAT_MISS_TOLERANCE,
-      webSocketFactory: (url) => new FakeWebSocket(url) as unknown as WebSocket,
-    });
-    cm = ConnectionManager.createForTest(client);
+    transport = new FakeTransport();
+    cm = ConnectionManager.createForTest(transport);
   });
 
   afterEach(() => {
     cm.dispose();
-    client.disconnect();
     ConnectionManager.resetInstanceForTests();
-    resetDesktopDaemonClientForTests();
-    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
-  /**
-   * Drive connect to ready under fake timers.
-   *
-   * Client attemptConnect may spend up to ~3s in sidecar poll timers before openSocket;
-   * soft-auth then needs either `{type:authenticated}` or AUTH_TIMEOUT_MS (3s).
-   * Flush both layers so we never hang on a pending connect Promise.
-   */
-  async function connectUntilReady() {
-    const connectP = cm.connect();
+  it('connect → waitUntilConnected 成功后 phase=ready 且 isReady=true', async () => {
+    transport.waitResult = true;
+    const phases: string[] = [];
+    cm.onStateChange((s) => phases.push(s.phase));
 
-    for (let i = 0; i < 120; i++) {
-      await vi.advanceTimersByTimeAsync(100);
-      // Allow real microtasks (dynamic import / queueMicrotask open) to settle.
-      await Promise.resolve();
-      await Promise.resolve();
-
-      if (FakeWebSocket.instances.length > 0) {
-        const ws = lastSocket();
-        if (ws.readyState === FakeWebSocket.OPEN) {
-          // Complete soft-auth if still waiting
-          ws.simulateMessage({ type: 'authenticated' });
-        }
-      }
-
-      if (cm.getState().phase === 'ready') {
-        // Do not advance further — short-heartbeat tests would miss-out and reconnect.
-        await connectP;
-        return;
-      }
-    }
-
-    // Drain sidecar poll leftovers + soft-auth timeout if still pending
-    await vi.advanceTimersByTimeAsync(5_000);
-    await Promise.resolve();
-    await Promise.resolve();
-    if (FakeWebSocket.instances.length > 0) {
-      const ws = lastSocket();
-      if (ws.readyState === FakeWebSocket.OPEN) {
-        ws.simulateMessage({ type: 'authenticated' });
-      }
-    }
-    await vi.advanceTimersByTimeAsync(3_000);
-    await connectP;
-  }
-
-  it(
-    'maps client connected → authenticating → ready without independent probe timers',
-    async () => {
-      const phases: string[] = [];
-      cm.onStateChange((s) => phases.push(s.phase));
-
-      await connectUntilReady();
-
-      expect(cm.getState().phase).toBe('ready');
-      expect(cm.isReady()).toBe(true);
-      expect(phases).toContain('connecting');
-      expect(phases).toContain('authenticating');
-      expect(phases).toContain('ready');
-
-      // No echo probe frames from ConnectionManager
-      const sent = lastSocket().sent.map((s) => JSON.parse(s) as { type?: string });
-      expect(sent.some((m) => m.type === 'echo')).toBe(false);
-      expect(sent.some((m) => m.type === 'authenticate')).toBe(true);
-    },
-    15_000,
-  );
-
-  it('does not call client.disconnect on transport drop — projects recovering', async () => {
-    await connectUntilReady();
-    expect(cm.getState().phase).toBe('ready');
-
-    const disconnectSpy = vi.spyOn(client, 'disconnect');
-
-    lastSocket().close();
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(disconnectSpy).not.toHaveBeenCalled();
-    expect(client.isKeepAliveStarted()).toBe(true);
-    expect(cm.getState().phase).toBe('recovering');
-  });
-
-  it('mirrors client heartbeat misses into probeMissCount (no second probe)', async () => {
-    cm.dispose();
-    client.disconnect();
-
-    // Heartbeat slower than metrics mirror (500ms) so we can observe miss=1
-    // without accumulating to HEARTBEAT_MISS_TOLERANCE and force-reconnecting.
-    const shortHb = 1_000;
-    client = new DesktopDaemonClient({
-      heartbeatMs: shortHb,
-      heartbeatMissTolerance: HEARTBEAT_MISS_TOLERANCE,
-      webSocketFactory: (url) => new FakeWebSocket(url) as unknown as WebSocket,
-    });
-    cm = ConnectionManager.createForTest(client);
-
-    await connectUntilReady();
-    expect(cm.getState().phase).toBe('ready');
-
-    // One interval: send ping (miss still 0)
-    await vi.advanceTimersByTimeAsync(shortHb);
-    expect(client.getPendingPingId()).not.toBeNull();
-    expect(client.getHeartbeatMisses()).toBe(0);
-
-    // Second interval without pong → miss = 1 (still under tolerance)
-    await vi.advanceTimersByTimeAsync(shortHb);
-    expect(client.getHeartbeatMisses()).toBe(1);
-
-    // Metrics mirror interval is 500ms (no extra heartbeat tick within 500ms)
-    await vi.advanceTimersByTimeAsync(500);
-    expect(cm.getState().probeMissCount).toBe(1);
-
-    const pending = client.getPendingPingId();
-    if (pending) {
-      lastSocket().simulateMessage({ type: 'pong', requestId: pending });
-    } else {
-      lastSocket().simulateMessage({ type: 'pong' });
-    }
-    // pong handler on CM syncs immediately via handleDaemonMessage
-    expect(client.getHeartbeatMisses()).toBe(0);
-    expect(cm.getState().probeMissCount).toBe(0);
-  });
-
-  it('connect is a no-op tear-down when client already connected', async () => {
-    await connectUntilReady();
-
-    const socketsBefore = FakeWebSocket.instances.length;
     await cm.connect();
-    expect(FakeWebSocket.instances.length).toBe(socketsBefore);
+
+    expect(cm.getState().phase).toBe('ready');
+    expect(cm.isReady()).toBe(true);
+    expect(phases).toContain('ready');
+  });
+
+  it('connect → waitUntilConnected 失败时投影 recovering（不崩，等 onStatus 纠正）', async () => {
+    transport.waitResult = false;
+    await cm.connect();
+    expect(cm.getState().phase).toBe('recovering');
+    expect(cm.isReady()).toBe(false);
+  });
+
+  it('onStatus(connected) 直接驱动 ready；failed → recovering；disconnected → disconnected', async () => {
+    transport.emitStatus('connecting');
+    expect(cm.getState().phase).toBe('connecting');
+
+    transport.emitStatus('connected');
+    expect(cm.getState().phase).toBe('ready');
+    expect(cm.isReady()).toBe(true);
+
+    transport.emitStatus('failed');
+    expect(cm.getState().phase).toBe('recovering');
+
+    transport.emitStatus('disconnected');
+    expect(cm.getState().phase).toBe('disconnected');
+  });
+
+  it('ready 后 connect 为 no-op（不重复 waitUntilConnected）', async () => {
+    transport.emitStatus('connected');
+    const spy = vi.spyOn(transport, 'waitUntilConnected');
+    await cm.connect();
+    await cm.connect();
+    expect(spy).not.toHaveBeenCalled();
     expect(cm.getState().phase).toBe('ready');
   });
 
-  it('explicit disconnect is the only path that stops client keepAlive', async () => {
-    await connectUntilReady();
-
-    expect(client.isKeepAliveStarted()).toBe(true);
+  it('disconnect 复位投影为 disconnected', async () => {
+    transport.emitStatus('connected');
+    expect(cm.getState().phase).toBe('ready');
     cm.disconnect();
-    expect(client.isKeepAliveStarted()).toBe(false);
     expect(cm.getState().phase).toBe('disconnected');
+  });
+
+  it('reconnect = disconnect + connect', async () => {
+    transport.emitStatus('connected');
+    await cm.reconnect();
+    expect(cm.getState().phase).toBe('ready');
+  });
+
+  it('事件总线广播 daemon:connection:change（phase 随 ready 切换）', async () => {
+    const received: string[] = [];
+    const unsub = cm.onStateChange((s) => received.push(s.phase));
+    transport.emitStatus('connected');
+    transport.emitStatus('failed');
+    unsub();
+    expect(received).toEqual(['ready', 'recovering']);
   });
 });

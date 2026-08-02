@@ -6,14 +6,13 @@
  * - L2 cooperative_stop：默认 Stop，协作收尾
  * - L3 force_cancel：强制取消（二次确认 / Shift+点击 / 长按）
  *
- * ## Wire 策略（inventory #4 — dual 过渡）
- * Canonical 协议：`run-control` L2/L3。
- * **TRANSITIONAL**：L2/L3 终止经 {@link sendTerminateDualWire} **成对**发送
- * `run-control` + `cancel-run.mode`（旧 daemon 忽略 mode 时仍能停）。
- * 产品路径只走本模块 / `compositionRoot.runControl`；禁止 UI 直发 `cancel-run`。
- * 当 daemon cooperative L2 验收完成后关闭 {@link TRANSITIONAL_DUAL_CANCEL_RUN_WIRE}。
+ * ## Wire 策略（C3.1 transport 路径）
+ * - Canonical 协议：`run-control`（命令名 core_run_control）。
+ * - 过渡双线保留：L2/L3 终止经 {@link sendTerminateDualWire} **成对**发送
+ *   core_run_control + core_cancel_run（Rust 侧两条命令均已在 manifest 注册面内）。
+ * - 产品路径只走本模块 / `compositionRoot.runControl`；禁止 UI 直发取消命令。
  *
- * 3. 本地 EventBus 镜像 `run:control` 便于观测（不替代 daemon 真相）
+ * 3. 本地 EventBus 镜像 `run:control` 便于观测（不替代核心真相）
  *
  * @see packages/shared-types/src/run-control.ts
  * @see docs/architecture/run-control.md
@@ -27,7 +26,7 @@ import {
   type RunControlIntent,
   type RunControlLevel,
 } from '@crish/shared-types';
-import { getDesktopDaemonClient } from './daemonClient';
+import { getTransport, type Transport } from './transport';
 import { eventBus } from '../services/EventBus';
 import { recordRunControlLevel } from './controlMetrics';
 
@@ -96,6 +95,30 @@ type DaemonSendClient = {
 };
 
 /**
+ * WS 消息 type → transport 命令名（03 §3.2；命令名以 commandManifest 为准）：
+ * - 'run-control' → core_run_control
+ * - 'cancel-run'  → core_cancel_run
+ * 未知 type → 空操作（不 invoke）。
+ */
+function wireTypeToCommand(type: string): string | null {
+  if (type === 'run-control') return 'core_run_control';
+  if (type === 'cancel-run') return 'core_cancel_run';
+  return null;
+}
+
+/** 把 WS 形状 wire 消息经 transport.send 发出（剥离 type 后按命令名调用） */
+function sendWireViaTransport(
+  transport: Transport,
+  msg: Record<string, unknown>,
+): Promise<void> {
+  const type = String(msg.type ?? '');
+  const cmd = wireTypeToCommand(type);
+  if (!cmd) return Promise.resolve();
+  const { type: _type, ...rest } = msg;
+  return transport.send(cmd, rest);
+}
+
+/**
  * **唯一** L2/L3 双线发送点：始终成对（或 flag 关闭后仅 run-control）。
  * 勿在其它模块再手写 `cancel-run` / 第二套 pairing。
  *
@@ -134,8 +157,8 @@ export async function sendTerminateDualWire(
 }
 
 /**
- * 向 daemon 发送控制意图；失败不抛（UI 仍可本地收口）。
- * 返回是否至少成功发出一条 WS 消息。
+ * 向核心发送控制意图；失败不抛（UI 仍可本地收口）。
+ * 返回是否至少成功发出一条命令。
  *
  * L2/L3 经 {@link sendTerminateDualWire}（过渡双线唯一配对点）。
  * L1 仅 `run-control`（永不附 cancel-run）。
@@ -148,32 +171,37 @@ export async function dispatchRunControl(req: RunControlRequest): Promise<boolea
     ...(req.payload ? { payload: req.payload } : {}),
   });
 
-  // D2：内存计数 L1/L2/L3（不依赖 EventBus / daemon）
+  // D2：内存计数 L1/L2/L3（不依赖 EventBus / 核心）
   recordRunControlLevel(intent.level);
 
-  // 本地可观测镜像（非 daemon 真源）
+  // 本地可观测镜像（非核心真源）
   try {
     eventBus.emit('run:control', intent, 'runControlClient');
   } catch {
     /* EventBus 类型表未登记时忽略 */
   }
 
-  let client: ReturnType<typeof getDesktopDaemonClient>;
+  let transport: Transport;
   try {
-    client = getDesktopDaemonClient();
+    transport = getTransport();
   } catch {
+    // 单元测试 / 非 Tauri 环境无 transport：metrics 仍已记录，发送静默失败
     return false;
   }
 
   // 终止类：单一 helper 成对双线（metrics 仍只记一次 level）
   const mode = cancelModeForLevel(req.level);
   if (mode) {
-    return sendTerminateDualWire(client, req, mode);
+    return sendTerminateDualWire(
+      { send: (msg) => sendWireViaTransport(transport, msg) },
+      req,
+      mode
+    );
   }
 
   // L0/L1：仅 run-control
   try {
-    await Promise.resolve(client.send(buildRunControlWireMessage(req)));
+    await sendWireViaTransport(transport, buildRunControlWireMessage(req));
     return true;
   } catch {
     return false;

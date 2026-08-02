@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { AppErrorBoundary } from '../components/AppErrorBoundary';
-import { TelemetryDialog } from '../components/TelemetryDialog';
+import { TelemetryDialog } from '../components/overlay/TelemetryDialog';
 import { openSettings } from '../api/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
 import { getActiveModelId, getActiveProfileId } from '../api/providerProfiles';
@@ -9,20 +9,20 @@ import type { SettingsTabType } from '../store/types';
 
 // Lazy loaded components
 const ToastStack = lazy(() =>
-  import('../components/ToastStack').then((m) => ({ default: m.ToastStack }))
+  import('../components/overlay/ToastStack').then((m) => ({ default: m.ToastStack }))
 );
 const CheatsheetModal = lazy(() =>
-  import('../components/CheatsheetModal').then((m) => ({
+  import('../components/overlay/CheatsheetModal').then((m) => ({
     default: m.CheatsheetModal,
   }))
 );
 const FirstRunWizard = lazy(() =>
-  import('../components/FirstRunWizard').then((m) => ({
+  import('../components/overlay/FirstRunWizard').then((m) => ({
     default: m.FirstRunWizard,
   }))
 );
 const SettingsPanel = lazy(() =>
-  import('../components/SettingsPanel')
+  import('../components/settings/SettingsPanel')
     .then((m) => ({ default: m.SettingsPanel }))
     .catch((err) => {
       console.error('[crish] SettingsPanel lazy load failed', err);
@@ -124,53 +124,47 @@ export function AppGlobalDialogs({
         </AppErrorBoundary>
       )}
 
+      {/* 设置全屏盖层（PE-05 T05.2 #5）：role/aria-modal/层级已由
+          SettingsPanel 内的 ui/Dialog 基座提供，此处不再包 settings-cover */}
       {showSettingsOverlay && (
-        <div
-          className="settings-cover"
-          role="dialog"
-          aria-modal="true"
-          aria-label="设置"
-          style={{ zIndex: 'var(--z-settings-panel)' }}
-        >
-          <AppErrorBoundary
-            title="设置加载失败"
-            onReset={() => {
-              setShowSettingsOverlay(false);
+        <AppErrorBoundary
+          title="设置加载失败"
+          onReset={() => {
+            setShowSettingsOverlay(false);
+            window.requestAnimationFrame(() => {
               window.requestAnimationFrame(() => {
-                window.requestAnimationFrame(() => {
-                  setShowSettingsOverlay(true);
-                });
+                setShowSettingsOverlay(true);
               });
-            }}
-          >
-            <Suspense
-              fallback={
+            });
+          }}
+        >
+          <Suspense
+            fallback={
+              <div
+                className="settings-suspense-fallback"
+                aria-busy="true"
+                aria-label="正在加载设置"
+                role="status"
+              >
                 <div
-                  className="settings-suspense-fallback"
-                  aria-busy="true"
-                  aria-label="正在加载设置"
-                  role="status"
-                >
-                  <div
-                    className="settings-suspense-skel settings-suspense-skel--nav"
-                    aria-hidden="true"
-                  />
-                  <div
-                    className="settings-suspense-skel settings-suspense-skel--main"
-                    aria-hidden="true"
-                  />
-                </div>
-              }
-            >
-              <SettingsPanel
-                wsId={activeWorkspaceId}
-                onShowToast={handleShowToast}
-                onClose={() => setShowSettingsOverlay(false)}
-                initialTab={settingsActiveTab || 'profile'}
-              />
-            </Suspense>
-          </AppErrorBoundary>
-        </div>
+                  className="settings-suspense-skel settings-suspense-skel--nav"
+                  aria-hidden="true"
+                />
+                <div
+                  className="settings-suspense-skel settings-suspense-skel--main"
+                  aria-hidden="true"
+                />
+              </div>
+            }
+          >
+            <SettingsPanel
+              wsId={activeWorkspaceId}
+              onShowToast={handleShowToast}
+              onClose={() => setShowSettingsOverlay(false)}
+              initialTab={settingsActiveTab || 'profile'}
+            />
+          </Suspense>
+        </AppErrorBoundary>
       )}
     </>
   );

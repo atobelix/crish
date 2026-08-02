@@ -312,6 +312,7 @@ export function useToolDockTabDrag(
         tabId: payload.panelId,
         panelId: payload.panelId,
       });
+      return true;
     },
     onDragMove: (payload, clientX, clientY) => {
       const now = performance.now();

@@ -12,9 +12,9 @@ import {
 import { RUN_CONTROL_LEVEL } from '@crish/shared-types';
 import { getControlMetrics, resetControlMetrics } from './controlMetrics';
 
-vi.mock('./daemonClient', () => ({
-  getDesktopDaemonClient: () => {
-    throw new Error('no-daemon-in-unit');
+vi.mock('./transport', () => ({
+  getTransport: () => {
+    throw new Error('no-transport-in-unit');
   },
 }));
 

@@ -298,8 +298,13 @@ describe('analyzeSearchReplace — 状态分析', () => {
     fc.assert(
       fc.property(
         fc.string({ minLength: 1, maxLength: 32 }).filter(s => !s.includes('\n') && !s.includes('\r')),
-        fc.string({ minLength: 1, maxLength: 32 }).filter(s => !s.includes('\n') && !s.includes('\r')),
+        // newStr 不得包含 oldStr：旧片段作为新内容子串时，应用后 old 仍存在
+        // （replace 语义天然不幂等，analyzeSearchReplace 不承诺该域；排除防种子抖动）
+        fc
+          .string({ minLength: 1, maxLength: 32 })
+          .filter(s => !s.includes('\n') && !s.includes('\r')),
         (oldStr, newStr) => {
+          if (newStr.includes(oldStr)) return; // 不幂等域：跳过
           const body = `prefix${oldStr}suffix`;
           const r1 = analyzeSearchReplace(body, oldStr, newStr);
           if (r1.status === 'apply') {

@@ -8,7 +8,7 @@
 import { pickStableMessageId } from '@crish/shared-types';
 import type { SessionMessage } from '../store/layoutStore';
 import { mergeSessionMessageFields } from '../store/sessionSharedHelpers';
-import { getDesktopDaemonClient } from './daemonClient';
+import { getTransport } from './transport';
 import { normalizeAssistantTimeline } from './toolPresentation';
 import { logInternalError } from './userFacingErrors';
 
@@ -384,22 +384,17 @@ export async function fetchSessionEvents(
   afterSequence = 0,
   maxEvents = 500,
 ): Promise<{ events: unknown[]; nextAfterSequence: number; hasMore: boolean } | null> {
-  const client = getDesktopDaemonClient();
+  const transport = getTransport();
   try {
-    if (!client.isConnected()) {
-      const ok = await client.waitUntilConnected(10_000);
+    if (!transport.isReady()) {
+      const ok = await transport.waitUntilConnected(10_000);
       if (!ok) return null;
     }
-    const res = (await client.request(
-      {
-        type: 'read-session-events',
-        sessionId,
-        afterSequence,
-        maxEvents,
-      },
-      'session-events',
-      15_000,
-    )) as AnyRec;
+    const res = (await transport.request<Record<string, unknown>>(
+      'core_read_session_events',
+      { sessionId, afterSequence, maxEvents },
+      { timeoutMs: 15_000 },
+    )) as Record<string, unknown>;
     const events = Array.isArray(res.events) ? res.events : [];
     const nextAfterSequence =
       typeof res.nextAfterSequence === 'number' ? res.nextAfterSequence : afterSequence;
@@ -453,14 +448,14 @@ export async function fetchRunSnapshotUsage(runId: string): Promise<{
   totalTokens?: number;
   sampleCount?: number;
 } | null> {
-  const client = getDesktopDaemonClient();
+  const transport = getTransport();
   try {
-    if (!client.isConnected()) return null;
-    const res = (await client.request(
-      { type: 'get-run-snapshot', runId },
-      'run-snapshot',
-      10_000,
-    )) as AnyRec;
+    if (!transport.isReady()) return null;
+    const res = (await transport.request<Record<string, unknown>>(
+      'core_get_run_snapshot',
+      { runId },
+      { timeoutMs: 10_000 },
+    )) as Record<string, unknown>;
     const snap = asRec(res.snapshot) || res;
     const usage = asRec(snap?.usage);
     if (!usage) return null;

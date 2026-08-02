@@ -1,12 +1,9 @@
 /**
  * Conversation Rewind desktop bridge.
  *
- * Daemon already implements preview/apply; this module is the product surface
- * so ChatHeaderMore / message menus can call real protocol messages.
- * Never invents preview facts client-side.
+ * T03.7：preview/apply-conversation-rewind 为幽灵命令（Rust 侧无，已从 commandMap 删除），
+ * 本模块显式不可用（返回 ok:false + error 文案），不发起任何 transport 请求。
  */
-import { getDesktopDaemonClient } from './daemonClient';
-
 export interface ConversationRewindPreview {
   ok: boolean;
   raw: Record<string, unknown>;
@@ -19,75 +16,36 @@ export interface ConversationRewindApplyResult {
   error?: string;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return null;
-}
-
 /**
  * Preview rewind to a target leaf / message boundary.
- * Pass whatever facts the UI has; daemon validates and returns diagnostics.
+ * T03.7：显式不可用。
  */
-export async function previewConversationRewind(input: {
+export async function previewConversationRewind(_input: {
   sessionId: string;
   targetLeafId?: string;
   targetEventId?: string;
   targetMessageId?: string;
 }): Promise<ConversationRewindPreview> {
-  const client = getDesktopDaemonClient();
-  try {
-    const response = await client.request(
-      {
-        type: 'preview-conversation-rewind',
-        sessionId: input.sessionId,
-        ...(input.targetLeafId ? { targetLeafId: input.targetLeafId } : {}),
-        ...(input.targetEventId ? { targetEventId: input.targetEventId } : {}),
-        ...(input.targetMessageId
-          ? { targetMessageId: input.targetMessageId }
-          : {}),
-      },
-      'conversation-rewind-preview',
-      15_000
-    );
-    const raw = asRecord(response) ?? {};
-    return { ok: true, raw };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, raw: {}, error: message };
-  }
+  return {
+    ok: false,
+    raw: {},
+    error: '引擎不支持对话回退预览（preview-conversation-rewind 不可用）',
+  };
 }
 
 /**
- * Apply a previously previewed rewind. Prefer passing the same target facts
- * the preview used; daemon may require a preview token if protocol adds one later.
+ * Apply a previously previewed rewind.
+ * T03.7：显式不可用。
  */
-export async function applyConversationRewind(input: {
+export async function applyConversationRewind(_input: {
   sessionId: string;
   targetLeafId?: string;
   targetEventId?: string;
   targetMessageId?: string;
 }): Promise<ConversationRewindApplyResult> {
-  const client = getDesktopDaemonClient();
-  try {
-    const response = await client.request(
-      {
-        type: 'apply-conversation-rewind',
-        sessionId: input.sessionId,
-        ...(input.targetLeafId ? { targetLeafId: input.targetLeafId } : {}),
-        ...(input.targetEventId ? { targetEventId: input.targetEventId } : {}),
-        ...(input.targetMessageId
-          ? { targetMessageId: input.targetMessageId }
-          : {}),
-      },
-      'conversation-rewind-applied',
-      30_000
-    );
-    const raw = asRecord(response) ?? {};
-    return { ok: true, raw };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, raw: {}, error: message };
-  }
+  return {
+    ok: false,
+    raw: {},
+    error: '引擎不支持对话回退（apply-conversation-rewind 不可用）',
+  };
 }

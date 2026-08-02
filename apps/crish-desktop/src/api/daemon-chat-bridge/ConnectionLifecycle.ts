@@ -1,43 +1,30 @@
 /**
- * Daemon stream connection lifecycle — primary transport + degraded fallback switch.
+ * Daemon stream connection lifecycle —— Tauri IPC transport 直连（C1.2 / C3.1）。
  *
- * ## Transport SoT (inventory #10)
- * - **Primary:** `streamViaDaemon` → WS `run-task` + EventRouter (full tools/approvals/L2/L3).
- * - **Degraded:** `streamViaDirectFetch` only when daemon WS not ready within 1.5s.
- * - **Single switch:** {@link ALLOW_AUTO_DIRECT_FETCH_FALLBACK} (soft-deprecated auto path).
- * - Product entry: `chatApi.streamAssistantResponseApi` always calls `streamViaDaemon` first.
+ * ## Transport SoT
+ * - **唯一通道**：`getTransport()`（TauriTransport，进程内核心直连，03 §3.1）。
+ * - run-task 经 `startRunTask(transport, params)` 分派 `core_run_task`。
+ * - 事件经 `transport.onMessage` → `router.onMsg`（listen('workbench-run-event')）。
+ * - 核心未就绪（waitUntilConnected 超时）→ **拒绝启动**（C3.4：无 directFetch 降级）。
  *
- * ## When directFetch is chosen
- * ```
- * createStreamSession:
- *   waitUntilConnected(1500ms)
- *   if ready && isConnected → daemon run-task          [PRIMARY]
- *   else if ALLOW_AUTO_DIRECT_FETCH_FALLBACK
- *        → streamViaDirectFetch + state.transportAbort [DEGRADED, soft-deprecated]
- *   else → onRunError(network) + finish                [refuse]
- * ```
+ * ## 删除项（Phase C3.1 / C3.4）
+ * - WS daemonClient / directFetch HTTP SSE 降级分支（ALLOW_AUTO_DIRECT_FETCH_FALLBACK 已删）；
+ * - `state.transportAbort`（streamState）与 `recordTransportDegradedDirectFetch`（controlMetrics）；
+ * - StreamRecovery 流恢复协议（reload/HMR 恢复由 Rust 事件通道有序保证，前端不再重放）。
  *
  * ## Cancel parity
- * - Daemon: {@link createStreamCancel} → compositionRoot.runControl L2/L3 + cleanup + onComplete.
- * - Degraded: same outer `StreamCancelFn` also calls `state.transportAbort` (HTTP AbortController).
- * - Direct path has **no** cooperative L2 (abort ≈ force); do not ship features that need L2-only.
- *
- * @see docs/plans/progress/architecture-dedup-inventory.md #10
- * @see ../directFetchBridge.ts
- * @see ../chatApi.ts
+ * - 取消经 `compositionRoot.runControl.dispatch`（L2/L3 → core_run_control）。
  */
-import { getDesktopDaemonClient } from '../daemonClient';
+import { getTransport, startRunTask, type Transport } from '../transport';
 import type { StreamCallbacks, StreamRequestOptions } from '../chatApi';
 import { toDaemonPermissionMode } from '../permissionModes';
 import { getPermissionMode } from '../storeAccess';
 import { logInternalError, networkUserMessage } from '../userFacingErrors';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
-import { streamRecovery } from '../../services/StreamRecovery';
 import { normalizeStreamSessionId } from './handlers/eventUtils';
 import { type StreamState, cleanupStreamState } from './handlers/streamState';
 import { EventRouter } from './EventRouter';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import { recordTransportDegradedDirectFetch } from '../controlMetrics';
 import { RUN_CONTROL_LEVEL } from '@crish/shared-types';
 /** Single SoT for cancel mode literals — do not redeclare in this package. */
 import type { StreamCancelMode } from '../runControlClient';
@@ -45,66 +32,23 @@ import type { StreamCancelMode } from '../runControlClient';
 export type { StreamCancelMode };
 
 /**
- * Inventory #10 — **single switch** for auto HTTP SSE when daemon WS is down.
- *
- * - `true` (default, transitional): degrade to `streamViaDirectFetch` so chat still works
- *   offline/dev without agent-daemon. Soft-deprecated: silent dual transport confuses
- *   cancel/metrics/tool support expectations.
- * - `false` (preferred end state): refuse start with `onRunError` until daemon is reachable.
- *
- * Flip to `false` after product UX for “engine offline” is acceptable and E0 no longer
- * relies on silent direct for smoke. Do **not** add a second product entry that calls
- * directFetch outside this flag.
- *
- * @see architecture-dedup-inventory.md #10
+ * 等待核心就绪并探测 get-status（AppBootstrap 启动门闩用）。
+ * IPC 模式：waitUntilConnected 内部即 core_get_status 轮询，无需二次 request。
  */
-export const ALLOW_AUTO_DIRECT_FETCH_FALLBACK = true as const;
-
-/** Soft console notice once per process when first degraded fallback fires (dev only). */
-let degradedTransportNoticeShown = false;
-
-function noticeDegradedTransportOnce(): void {
-  if (degradedTransportNoticeShown) return;
-  degradedTransportNoticeShown = true;
-  const isDev =
-    (typeof import.meta !== 'undefined' &&
-      (import.meta as { env?: { DEV?: boolean } }).env?.DEV) ||
-    (typeof process !== 'undefined' && process.env.NODE_ENV === 'development');
-  if (!isDev) return;
-  // eslint-disable-next-line no-console
-  console.info(
-    '[transport] degraded to directFetch (daemon WS not ready); metric=transport_degraded_direct_fetch · inventory #10',
-  );
-}
-
 export async function ensureDaemonConnected(): Promise<{
   ok: boolean;
-  url?: string;
   error?: string;
 }> {
-  const client = getDesktopDaemonClient();
-  client.startKeepAlive();
+  const transport = getTransport();
   try {
-    const ready = await client.waitUntilConnected(20_000);
+    const ready = await transport.waitUntilConnected(20_000);
     if (!ready) {
-      return {
-        ok: false,
-        ...(client.getUrl() !== undefined && { url: client.getUrl()! }),
-        error: networkUserMessage(),
-      };
+      return { ok: false, error: networkUserMessage() };
     }
-    await client.request({ type: 'get-status' }, 'status-response', 8_000);
-    return {
-      ok: true,
-      ...(client.getUrl() !== undefined && { url: client.getUrl()! }),
-    };
+    return { ok: true };
   } catch (e) {
     logInternalError('ensureDaemonConnected', e);
-    return {
-      ok: false,
-      ...(client.getUrl() !== undefined && { url: client.getUrl()! }),
-      error: networkUserMessage(e),
-    };
+    return { ok: false, error: networkUserMessage(e) };
   }
 }
 
@@ -164,7 +108,6 @@ export function createFinishController(
 export type StreamCancelFn = (opts?: { mode?: StreamCancelMode }) => void;
 
 export function createStreamCancel(
-  client: ReturnType<typeof getDesktopDaemonClient>,
   runId: string,
   callbacks: StreamCallbacks,
   approvalFlow: ApprovalFlowMachine,
@@ -178,25 +121,9 @@ export function createStreamCancel(
     approvalFlow.dispatch({ type: 'clear_all' });
     approvalFlow.dispatch({ type: 'force_finish' });
 
-    // Inventory #10 cancel parity: if we degraded to direct HTTP SSE, abort that
-    // fetch first. L2/L3 run-control below is a no-op for pure-direct runs (no daemon task).
-    // Cooperative mode is force-equivalent on direct path (no ControlBus).
-    const localAbort = state.transportAbort;
-    state.transportAbort = null;
-    if (localAbort) {
-      try {
-        localAbort();
-      } catch {
-        /* ignore */
-      }
-    }
-
     cleanup();
 
-    // L2/L3 经 compositionRoot.runControl（metrics + EventBus + wire）
-    // `client` 保留签名兼容；WS 由 runControlClient → getDesktopDaemonClient 发出
-    // （与本参数通常为同一单例；测试 mock daemonClient 仍命中）
-    void client;
+    // L2/L3 经 compositionRoot.runControl（metrics + EventBus + transport wire）
     void getCompositionRoot().runControl.dispatch({
       level:
         mode === 'cooperative'
@@ -207,20 +134,23 @@ export function createStreamCancel(
     });
 
     state.finished = true;
-    // If localAbort already called onComplete (directFetch cancel parity), skip double-fire.
-    // Daemon path: transportAbort is null → onComplete once here.
-    if (!localAbort) {
-      try {
-        callbacks.onComplete();
-      } catch {
-        /* ignore */
-      }
+    try {
+      callbacks.onComplete();
+    } catch {
+      /* ignore */
     }
   };
 }
 
+/**
+ * 创建流式 run（C1.2 主路径）：
+ * 1. transport.waitUntilConnected(1.5s) —— 核心未就绪直接拒绝（无降级）；
+ * 2. 挂 transport.onMessage（listen 事件通道）→ onMessage 回调；
+ * 3. 组装 run-task 参数 → startRunTask 分派 core_run_task。
+ *
+ * 参数中 runId 为前端自管（03 §3.1），Rust 以请求携带 runId 回发事件。
+ */
 export async function createStreamSession(
-  client: ReturnType<typeof getDesktopDaemonClient>,
   prompt: string,
   sessionId: string,
   runId: string,
@@ -232,40 +162,25 @@ export async function createStreamSession(
   /** 本地助手 placeholder id（= clientMessageId），经 run-task 下发 */
   assistantClientMessageId?: string,
 ): Promise<void> {
+  const transport = getTransport();
   try {
-    const ready = await client.waitUntilConnected(1_500);
-    // --- inventory #10: transport branch (primary vs degraded) ---
-    if (!ready || !client.isConnected()) {
-      if (!ALLOW_AUTO_DIRECT_FETCH_FALLBACK) {
-        // Preferred end state: refuse rather than a second silent transport.
-        logInternalError(
-          'stream-start-refuse-direct',
-          new Error('daemon unreachable; ALLOW_AUTO_DIRECT_FETCH_FALLBACK=false')
-        );
-        if (callbacks.onRunError) {
-          callbacks.onRunError(networkUserMessage(), 'network');
-        } else {
-          callbacks.onChunk(networkUserMessage());
-        }
-        finish();
-        return;
-      }
-      // DEGRADED (soft-deprecated auto): HTTP SSE. Retain abort on state for Stop parity.
-      // OPT-F7: one controlMetrics counter per fallback (kill #10 residual observability).
-      recordTransportDegradedDirectFetch();
-      noticeDegradedTransportOnce();
-      const { streamViaDirectFetch } = await import('../directFetchBridge');
-      state.transportAbort = streamViaDirectFetch(
-        prompt,
-        callbacks,
-        sessionId,
-        runId,
-        options
+    const ready = await transport.waitUntilConnected(1_500);
+    if (!ready || !transport.isReady()) {
+      // C3.4：核心未就绪 → 拒绝启动（无 directFetch 降级）
+      logInternalError(
+        'stream-start-refuse-direct',
+        new Error('engine not ready; no degraded fallback (C3.4)')
       );
+      if (callbacks.onRunError) {
+        callbacks.onRunError(networkUserMessage(), 'network');
+      } else {
+        callbacks.onChunk(networkUserMessage());
+      }
+      finish();
       return;
     }
 
-    state.unsub = client.onMessage(onMessage);
+    state.unsub = transport.onMessage(onMessage);
     callbacks.onThought('正在处理…');
 
     const { getWorkspacePath } = await import('../projectStore');
@@ -372,8 +287,7 @@ export async function createStreamSession(
         ? options.assistantClientMessageId.trim()
         : undefined);
 
-    await client.send({
-      type: 'run-task',
+    await startRunTask(transport, {
       runId,
       prompt,
       sessionId: safeSessionId,
@@ -406,6 +320,10 @@ export async function createStreamSession(
   }
 }
 
+/**
+ * 产品流入口（chatApi.streamAssistantResponseApi 唯一调用）：
+ * transport 事件订阅 → EventRouter 路由 → 审批/收口；返回 cancel 句柄。
+ */
 export function streamViaDaemon(
   prompt: string,
   callbacks: StreamCallbacks,
@@ -413,8 +331,7 @@ export function streamViaDaemon(
   assistantMsgId: string,
   options?: StreamRequestOptions
 ): () => void {
-  const client = getDesktopDaemonClient();
-  client.startKeepAlive();
+  const transport = getTransport();
 
   const safeSessionId = normalizeStreamSessionId(sessionId);
 
@@ -425,7 +342,6 @@ export function streamViaDaemon(
     assistantThought: '',
     unsub: null,
     endTimer: null,
-    transportAbort: null,
   };
   const approvalFlow = new ApprovalFlowMachine();
   const runId = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -441,43 +357,13 @@ export function streamViaDaemon(
     /* ignore */
   }
 
-  streamRecovery.registerStream(safeSessionId, runId);
-
-  let terminalMarked = false;
-  const markTerminal = (kind: 'completed' | 'failed', error?: string) => {
-    if (terminalMarked) return;
-    terminalMarked = true;
-    if (kind === 'completed') streamRecovery.markCompleted(safeSessionId);
-    else streamRecovery.markFailed(safeSessionId, error || 'failed');
-  };
-
-  const trackedCallbacks: StreamCallbacks = {
-    ...callbacks,
-    onChunk: (chunk: string) => {
-      if (chunk) {
-        streamRecovery.updateHeartbeat(safeSessionId, { bytes: chunk.length });
-      }
-      callbacks.onChunk(chunk);
-    },
-    onComplete: () => {
-      if (state.cancelled) markTerminal('failed', 'cancelled');
-      else markTerminal('completed');
-      callbacks.onComplete();
-    },
-    onRunError: (message, kind, detail) => {
-      markTerminal('failed', message || kind || 'error');
-      if (callbacks.onRunError) callbacks.onRunError(message, kind, detail);
-    },
-  };
-
   const cleanup = () => {
     cleanupStreamState(state);
-    streamRecovery.setReplayHandler(safeSessionId, null);
   };
 
   const { finish, tryResumeFinish } = createFinishController(
     approvalFlow,
-    trackedCallbacks,
+    callbacks,
     cleanup,
     state,
     options?.finishTimeoutMs ?? 120000
@@ -486,44 +372,29 @@ export function streamViaDaemon(
   const router = new EventRouter(
     state,
     approvalFlow,
-    trackedCallbacks,
+    callbacks,
     runId,
     finish,
     tryResumeFinish,
-    client,
+    transport,
     safeSessionId
   );
 
-  streamRecovery.setReplayHandler(safeSessionId, (payload) => {
-    router.applyReplayEvents(payload);
-  });
-
-  const ensureLiveSubscription = () => {
-    if (state.finished || state.cancelled) return;
-    if (!state.unsub) {
-      state.unsub = client.onMessage((msg) => router.onMsg(msg));
-    }
-  };
-
   void createStreamSession(
-    client,
     prompt,
     safeSessionId,
     runId,
-    trackedCallbacks,
+    callbacks,
     options,
     state,
     (msg) => router.onMsg(msg),
     finish,
     assistantClientMessageId || undefined,
-  ).then(() => {
-    ensureLiveSubscription();
-  });
+  );
 
   const cancel = createStreamCancel(
-    client,
     runId,
-    trackedCallbacks,
+    callbacks,
     approvalFlow,
     cleanup,
     state
@@ -531,7 +402,6 @@ export function streamViaDaemon(
 
   // 透传 L2/L3 mode；无参默认 force 保持 replace/旧路径兼容
   const cancelWithMode: StreamCancelFn = (opts) => {
-    markTerminal('failed', opts?.mode === 'cooperative' ? 'cancelled' : 'force_cancelled');
     cancel(opts);
   };
   return cancelWithMode;

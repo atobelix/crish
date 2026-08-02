@@ -71,7 +71,7 @@ describe('Chat list React key audit (static source)', () => {
   });
 
   it('ChatToolCallBlock tool rows key by tool id', () => {
-    const src = readSrc('../components/ChatToolCallBlock.tsx');
+    const src = readSrc('../components/chat-tool-call/ChatToolCallBlock.tsx');
     // 工具行 / 批处理均以 id 为键（禁止 index）
     expect(src).toMatch(/key=\{tc\.id\}/);
     expect(src).toMatch(/key=\{ti\.id\}/);

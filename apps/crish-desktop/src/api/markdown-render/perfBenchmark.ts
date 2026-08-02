@@ -22,7 +22,6 @@ import {
 } from './IncrementalMarkdownParser';
 import { IncrementalDomRenderer } from './IncrementalDomRenderer';
 import { LINE_CACHE } from './IncrementalInlineRenderer';
-import { assetUrlCache } from '../workspaceFsApi';
 
 // ===== 类型定义 =====
 
@@ -138,7 +137,8 @@ function measureMemory(
   return {
     finalizedBlocks: parseResult.finalizedBlocks.length,
     lineCache: LINE_CACHE.size,
-    assetUrlCache: assetUrlCache.size,
+    // assetUrlCache LRU（计划第 5 轮增强）尚未实现，计量恒为 0
+    assetUrlCache: 0,
     estimatedBytes,
   };
 }

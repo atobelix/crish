@@ -17,10 +17,10 @@ import {
 } from '../api/controlMetrics';
 import { RUN_CONTROL_LEVEL } from '@crish/shared-types';
 
-// 避免 dispatch 真连 daemon WS（同 runControlClient.test）
-vi.mock('../api/daemonClient', () => ({
-  getDesktopDaemonClient: () => {
-    throw new Error('no-daemon-in-unit');
+// 避免 dispatch 真连核心 transport（同 runControlClient.test）
+vi.mock('../api/transport', () => ({
+  getTransport: () => {
+    throw new Error('no-transport-in-unit');
   },
 }));
 

@@ -6,11 +6,24 @@
  * never invent remote vendor demo model ids (e.g. mimo). Empty stays empty.
  */
 
-import { getDesktopDaemonClient } from './daemonClient';
+import { getTransport } from './transport';
 import { logInternalError } from './userFacingErrors';
 
 const RECENT_MODELS_KEY = 'crish_recent_models';
 const MAX_RECENT = 12;
+
+export type EngineLastErrorEntry = {
+  kind: string;
+  detail: string;
+  ts: number;
+};
+
+/** 最近诊断条目（wire 形状 F2：ts/level/message） */
+export type EngineDiagnosticEntry = {
+  ts: number;
+  level: string;
+  message: string;
+};
 
 export type EngineStatus = {
   /**
@@ -28,6 +41,21 @@ export type EngineStatus = {
   credentialMode?: string;
   raw?: Record<string, unknown>;
   error?: string;
+  // ── T04.5-2 诊断段（core_get_status wire 形状，缺省 undefined）──
+  /** 引擎（session-loop）就绪 */
+  engineReady?: boolean;
+  /** 会话数据库就绪 */
+  dbReady?: boolean;
+  /** 搜索索引就绪（文件数 > 0 推断） */
+  searchIndexReady?: boolean;
+  /** 当前生效日志级别 */
+  logLevel?: string;
+  /** 日志文件层目录 */
+  logDir?: string;
+  /** 最近错误（AtomicSlot；None = 无错误记录） */
+  lastError?: EngineLastErrorEntry;
+  /** 最近诊断（环形 20，最旧在前；展示层自行 reverse） */
+  diagnostics?: EngineDiagnosticEntry[];
 };
 
 export type EngineConfigUpdate = {
@@ -455,12 +483,58 @@ export function parseEngineStatusFromRaw(res: unknown): Omit<EngineStatus, 'raw'
     normalizeEngineCredentialMode(provider.credentialMode) ||
     undefined;
 
+  // ── T04.5-2 诊断段（core_get_status wire 形状，camelCase 直读）──
+  const asBool = (v: unknown): boolean | undefined =>
+    typeof v === 'boolean' ? v : undefined;
+  const asStr = (v: unknown): string | undefined =>
+    typeof v === 'string' && v ? v : undefined;
+  const lastErrorRaw = pickNested(root, ['lastError']) as
+    | Record<string, unknown>
+    | undefined;
+  const lastError: EngineLastErrorEntry | undefined =
+    lastErrorRaw && typeof lastErrorRaw.kind === 'string'
+      ? {
+          kind: lastErrorRaw.kind,
+          detail:
+            typeof lastErrorRaw.detail === 'string'
+              ? lastErrorRaw.detail
+              : '',
+          ts: typeof lastErrorRaw.ts === 'number' ? lastErrorRaw.ts : 0,
+        }
+      : undefined;
+  const diagnosticsRaw = root.diagnostics;
+  const diagnostics: EngineDiagnosticEntry[] | undefined = Array.isArray(
+    diagnosticsRaw,
+  )
+    ? diagnosticsRaw
+        .filter(
+          (d): d is Record<string, unknown> =>
+            Boolean(d) && typeof d === 'object',
+        )
+        .map((d) => ({
+          ts: typeof d.ts === 'number' ? d.ts : 0,
+          level: asStr(d.level) ?? '',
+          message: asStr(d.message) ?? '',
+        }))
+    : undefined;
+
   return {
     ok: true,
     ...(model !== undefined && { model }),
     ...(baseUrl !== undefined && { baseUrl }),
     hasApiKey,
     ...(credentialMode !== undefined && { credentialMode }),
+    ...(asBool(root.engineReady) !== undefined && {
+      engineReady: asBool(root.engineReady) as boolean,
+    }),
+    ...(asBool(root.dbReady) !== undefined && { dbReady: asBool(root.dbReady) as boolean }),
+    ...(asBool(root.searchIndexReady) !== undefined && {
+      searchIndexReady: asBool(root.searchIndexReady) as boolean,
+    }),
+    ...(asStr(root.logLevel) !== undefined && { logLevel: asStr(root.logLevel) as string }),
+    ...(asStr(root.logDir) !== undefined && { logDir: asStr(root.logDir) as string }),
+    ...(lastError !== undefined && { lastError }),
+    ...(diagnostics !== undefined && { diagnostics }),
   };
 }
 
@@ -499,33 +573,24 @@ export function pushRecentModel(model: string): string[] {
 }
 
 /**
- * 产品策略「默认引擎永不离线」：
- * - 已 startKeepAlive：短暂未连上 → ok:true + reconnecting（不弹 engine-down）
- * - 仅在用户显式 disconnect、且未 keep-alive 时才 ok:false
+ * 引擎状态读取（C3.1 transport 路径）：
+ * - transport.waitUntilConnected（core_get_status 轮询）判「核心已初始化」；
+ * - 就绪后 request('core_get_status') 取引擎状态原始 JSON。
+ * 不再有 WS keep-alive / hasEverConnected 语义：未就绪 → ok:false（显式离线）。
  */
 export async function fetchEngineStatus(): Promise<EngineStatus> {
-  const client = getDesktopDaemonClient();
-  client.startKeepAlive();
+  const transport = getTransport();
   try {
-    const ready = await client.waitUntilConnected(12_000);
+    const ready = await transport.waitUntilConnected(12_000);
     if (!ready) {
-      // keep-alive 仍在跑 / 曾连通过 → 对用户视为引擎在场（后台重连）
-      if (client.isKeepAliveStarted() || client.hasEverConnected()) {
-        return {
-          ok: true,
-          connected: false,
-          reconnecting: true,
-          error: 'reconnecting',
-          raw: { reconnecting: true, state: client.getState() },
-        };
-      }
       return { ok: false, connected: false, error: 'not_connected' };
     }
 
-    const res = (await client.request({ type: 'get-status' }, 'status-response', 8_000)) as Record<
-      string,
-      unknown
-    >;
+    const res = (await transport.request<Record<string, unknown>>(
+      'core_get_status',
+      {},
+      { timeoutMs: 8_000 }
+    )) as Record<string, unknown>;
 
     // 不在 get-status 时写入 recent：避免引擎演示默认（如 mimo）污染本机最近列表
     // recent 仅由用户主动 activate / update-config 写入
@@ -539,16 +604,6 @@ export async function fetchEngineStatus(): Promise<EngineStatus> {
     };
   } catch (e) {
     logInternalError('fetchEngineStatus', e);
-    // 请求失败但 keep-alive 仍在：不恐吓离线
-    if (client.isKeepAliveStarted() || client.hasEverConnected()) {
-      return {
-        ok: true,
-        connected: client.isConnected(),
-        reconnecting: !client.isConnected(),
-        error: e instanceof Error ? e.message : String(e),
-        raw: { reconnecting: true },
-      };
-    }
     return {
       ok: false,
       connected: false,
@@ -560,20 +615,20 @@ export async function fetchEngineStatus(): Promise<EngineStatus> {
 export async function updateEngineConfig(
   update: EngineConfigUpdate,
 ): Promise<{ ok: boolean; error?: string }> {
-  const client = getDesktopDaemonClient();
+  const transport = getTransport();
   try {
-    const ready = await client.waitUntilConnected(12_000);
+    const ready = await transport.waitUntilConnected(12_000);
     if (!ready) return { ok: false, error: 'not_connected' };
 
     const normalized = normalizeEngineConfigUpdate(update);
     if (isEmptyEngineConfigUpdate(normalized)) {
-      // 无可下发字段：视为成功 no-op（避免空 update-config 打 daemon）
+      // 无可下发字段：视为成功 no-op（避免空 config_update 打核心）
       return { ok: true };
     }
 
     const payload = buildUpdateConfigPayload(normalized);
-
-    await client.request(payload, ['config-updated', 'status-response', 'error'], 12_000);
+    const { type: _type, ...rest } = payload;
+    await transport.request('config_update', rest, { timeoutMs: 12_000 });
     if (typeof normalized.model === 'string' && normalized.model) {
       pushRecentModel(normalized.model);
     }

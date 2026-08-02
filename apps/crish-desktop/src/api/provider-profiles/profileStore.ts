@@ -419,7 +419,12 @@ export async function saveProfileBaseUrl(
     ...(model ? { model } : {}),
   });
   if (res.status !== 'ok' || res.data?.ok !== true) {
-    const error = res.status === 'missing' ? 'engine_unavailable' : res.message;
+    const error =
+      res.status === 'missing'
+        ? 'engine_unavailable'
+        : res.status === 'error'
+          ? res.message
+          : 'apply_failed';
     return { ok: false, ...(error ? { error } : {}), synced: false };
   }
   return { ok: true, synced: true };
@@ -466,7 +471,12 @@ export async function saveProfileKey(
       setActiveProfileId(profileId);
       return { ok: true, synced: true };
     }
-    const error = res.status === 'missing' ? 'engine_unavailable' : res.message;
+    const error =
+      res.status === 'missing'
+        ? 'engine_unavailable'
+        : res.status === 'error'
+          ? res.message
+          : 'apply_failed';
     return { ok: false, ...(error ? { error } : {}), synced: false };
   }
 
@@ -624,7 +634,12 @@ export async function activateProfileModel(
     model: m,
   });
   if (res.status !== 'ok' || res.data?.ok !== true) {
-    const error = res.status === 'missing' ? 'engine_unavailable' : res.message;
+    const error =
+      res.status === 'missing'
+        ? 'engine_unavailable'
+        : res.status === 'error'
+          ? res.message
+          : 'apply_failed';
     return { ok: false, ...(error ? { error } : {}) };
   }
   const applied = res.data;

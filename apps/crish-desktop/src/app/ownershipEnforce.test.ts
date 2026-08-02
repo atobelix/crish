@@ -29,10 +29,10 @@ import { useWorkspaceShellStore } from '../store/workspace-shell/workspaceShellS
 import { findEmptyShellViolations } from '../dev/emptyShellAssert';
 import { EMPTY_SESSION_TITLE } from '../api/sessionTitle';
 
-// Avoid any accidental daemon touch if a future import pulls run control
-vi.mock('../api/daemonClient', () => ({
-  getDesktopDaemonClient: () => {
-    throw new Error('no-daemon-in-unit');
+// Avoid any accidental transport touch if a future import pulls run control
+vi.mock('../api/transport', () => ({
+  getTransport: () => {
+    throw new Error('no-transport-in-unit');
   },
 }));
 

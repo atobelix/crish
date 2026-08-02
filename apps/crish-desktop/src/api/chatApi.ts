@@ -25,7 +25,6 @@
  * @see docs/architecture/system-map-clear.md §3.2
  */
 import { streamViaDaemon } from './daemonChatBridge';
-import { getDesktopDaemonClient } from './daemonClient';
 import type { FileDiff, MessageToolApprovalMeta } from '../store/types';
 
 import type { SessionMessage, SessionState } from '../store/layoutStore';
@@ -187,9 +186,8 @@ export interface StreamCallbacks {
 }
 
 /**
- * Stream assistant response — product entry (inventory #10).
- * Always starts via `streamViaDaemon` (primary). Direct HTTP SSE is never chosen here;
- * ConnectionLifecycle may degrade only when daemon WS is unreachable and the flag allows it.
+ * Stream assistant response — product entry (inventory #10 → C3.1)。
+ * 唯一通道：`streamViaDaemon`（Tauri IPC transport，无 directFetch 降级）。
  */
 export const streamAssistantResponseApi = (
   prompt: string,
@@ -200,7 +198,5 @@ export const streamAssistantResponseApi = (
 ) => {
   const sid = sessionId || `sess-${Date.now()}`;
   const aid = assistantMsgId || `asst-${Date.now()}`;
-  // Touch client so keep-alive / URL resolution start; transport choice is inside streamViaDaemon.
-  void getDesktopDaemonClient();
   return streamViaDaemon(prompt, callbacks, sid, aid, options);
 };

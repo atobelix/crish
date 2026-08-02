@@ -1,10 +1,11 @@
 /**
- * 引擎 workflow 执行与运行状态管理
+ * 引擎 workflow 执行与运行状态管理。
+ *
+ * T03.7：Tauri 下无 workflow 引擎（list/create/update/delete/trigger-workflow、
+ * list-workflow-runs 均为幽灵命令，Rust 侧无）——运行类函数显式不可用
+ * （返回空表 / ok:false），纯助手（标题、文案、状态标签）保留。
  */
 
-import { getDesktopDaemonClient } from '../daemonClient';
-import { logInternalError } from '../userFacingErrors';
-import { getWorkspacePath } from '../projectStore';
 import type { WorkflowSchedule } from './workflowScheduler';
 
 export type WorkflowDefinition = {
@@ -22,78 +23,24 @@ export type WorkflowDefinition = {
   [key: string]: unknown;
 };
 
-async function ensureClient() {
-  const client = getDesktopDaemonClient();
-  if (!client.isConnected()) {
-    const ok = await client.waitUntilConnected(500);
-    if (!ok) return null;
-  }
-  return client;
-}
-
+/** T03.7：无 workflow 引擎，恒返回空表（显式不可用） */
 export async function listWorkflows(): Promise<WorkflowDefinition[]> {
-  const client = await ensureClient();
-  if (!client) return [];
-  try {
-    const res = (await client.request(
-      { type: 'list-workflows' },
-      'workflows-listed',
-      10_000
-    )) as Record<string, unknown>;
-    const list = res.workflows;
-    if (!Array.isArray(list)) return [];
-    return list
-      .map((w) => {
-        const o = w as WorkflowDefinition;
-        if (!o || typeof o !== 'object' || typeof o.id !== 'string')
-          return null;
-        return {
-          ...o,
-          id: o.id,
-          name: typeof o.name === 'string' ? o.name : o.id,
-          prompt: typeof o.prompt === 'string' ? o.prompt : '',
-        };
-      })
-      .filter(Boolean) as WorkflowDefinition[];
-  } catch (e) {
-    logInternalError('listWorkflows', e);
-    return [];
-  }
+  return [];
 }
 
-export async function createWorkflow(input: {
+export async function createWorkflow(_input: {
   name: string;
   prompt: string;
   schedule?: WorkflowSchedule;
   cwd?: string;
   enabled?: boolean;
 }): Promise<{ ok: boolean; workflow?: WorkflowDefinition; error?: string }> {
-  const client = await ensureClient();
-  if (!client) return { ok: false, error: 'not_connected' };
-  try {
-    const schedule: WorkflowSchedule = input.schedule || { type: 'manual' };
-    const res = (await client.request(
-      {
-        type: 'create-workflow',
-        name: input.name.trim(),
-        prompt: input.prompt.trim(),
-        schedule,
-        cwd: input.cwd || getWorkspacePath() || undefined,
-        ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
-      },
-      'workflow-created',
-      12_000
-    )) as Record<string, unknown>;
-    return { ok: true, workflow: res.workflow as WorkflowDefinition };
-  } catch (e) {
-    logInternalError('createWorkflow', e);
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
+  return { ok: false, error: '引擎不支持 workflow（create-workflow 不可用）' };
 }
 
 export async function updateWorkflow(
-  workflowId: string,
-  patch: {
+  _workflowId: string,
+  _patch: {
     name?: string;
     prompt?: string;
     schedule?: WorkflowSchedule;
@@ -101,88 +48,24 @@ export async function updateWorkflow(
     cwd?: string;
   }
 ): Promise<{ ok: boolean; workflow?: WorkflowDefinition; error?: string }> {
-  const client = await ensureClient();
-  if (!client) return { ok: false, error: 'not_connected' };
-  try {
-    const res = (await client.request(
-      {
-        type: 'update-workflow',
-        workflowId,
-        ...patch,
-      },
-      'workflow-updated',
-      12_000
-    )) as Record<string, unknown>;
-    return { ok: true, workflow: res.workflow as WorkflowDefinition };
-  } catch (e) {
-    logInternalError('updateWorkflow', e);
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
+  return { ok: false, error: '引擎不支持 workflow（update-workflow 不可用）' };
 }
 
 export async function deleteWorkflow(
-  workflowId: string
+  _workflowId: string
 ): Promise<{ ok: boolean; error?: string }> {
-  const client = await ensureClient();
-  if (!client) return { ok: false, error: 'not_connected' };
-  try {
-    await client.request(
-      { type: 'delete-workflow', workflowId },
-      'workflow-deleted',
-      10_000
-    );
-    return { ok: true };
-  } catch (e) {
-    logInternalError('deleteWorkflow', e);
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
+  return { ok: false, error: '引擎不支持 workflow（delete-workflow 不可用）' };
 }
 
 export async function triggerWorkflow(
-  workflowId: string
+  _workflowId: string
 ): Promise<{
   ok: boolean;
   error?: string;
   runId?: string;
   sessionId?: string;
 }> {
-  const client = await ensureClient();
-  if (!client) return { ok: false, error: 'not_connected' };
-  try {
-    const res = (await client.request(
-      { type: 'trigger-workflow', workflowId },
-      'workflow-triggered',
-      15_000
-    )) as Record<string, unknown>;
-    const accepted = (res as { accepted?: Record<string, unknown> }).accepted;
-    const run =
-      (res as { run?: Record<string, unknown> }).run ||
-      (accepted && typeof accepted === 'object'
-        ? (accepted as { run?: Record<string, unknown> }).run
-        : undefined);
-    const runId =
-      typeof res.runId === 'string'
-        ? res.runId
-        : typeof accepted?.runId === 'string'
-          ? (accepted.runId as string)
-          : typeof run?.runId === 'string'
-            ? (run.runId as string)
-            : undefined;
-    const sessionId =
-      typeof run?.sessionId === 'string'
-        ? (run.sessionId as string)
-        : typeof accepted?.sessionId === 'string'
-          ? (accepted.sessionId as string)
-          : undefined;
-    return {
-      ok: true,
-      ...(runId !== undefined && { runId }),
-      ...(sessionId !== undefined && { sessionId }),
-    };
-  } catch (e) {
-    logInternalError('triggerWorkflow', e);
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
+  return { ok: false, error: '引擎不支持 workflow（trigger-workflow 不可用）' };
 }
 
 /** 引擎 workflow 运行历史 */
@@ -196,51 +79,11 @@ export type WorkflowRunEntry = {
   error?: string | undefined;
 };
 
+/** T03.7：无 workflow 引擎，恒返回空表（显式不可用） */
 export async function listWorkflowRuns(
-  workflowId?: string
+  _workflowId?: string
 ): Promise<WorkflowRunEntry[]> {
-  const client = await ensureClient();
-  if (!client) return [];
-  try {
-    const res = (await client.request(
-      {
-        type: 'list-workflow-runs',
-        ...(workflowId ? { workflowId } : {}),
-      },
-      'workflow-runs-listed',
-      10_000
-    )) as Record<string, unknown>;
-    const list = res.runs;
-    if (!Array.isArray(list)) return [];
-    return list
-      .map((r) => {
-        if (!r || typeof r !== 'object') return null;
-        const o = r as Record<string, unknown>;
-        const id =
-          typeof o.runId === 'string'
-            ? o.runId
-            : typeof o.id === 'string'
-              ? o.id
-              : '';
-        const wf =
-          typeof o.workflowId === 'string' ? o.workflowId : workflowId || '';
-        if (!id) return null;
-        return {
-          workflowId: wf,
-          runId: id,
-          sessionId: typeof o.sessionId === 'string' ? o.sessionId : undefined,
-          scheduledFor:
-            typeof o.scheduledFor === 'string' ? o.scheduledFor : undefined,
-          startedAt: typeof o.startedAt === 'string' ? o.startedAt : undefined,
-          status: typeof o.status === 'string' ? o.status : undefined,
-          error: typeof o.error === 'string' ? o.error : undefined,
-        } satisfies WorkflowRunEntry;
-      })
-      .filter(Boolean) as WorkflowRunEntry[];
-  } catch (e) {
-    logInternalError('listWorkflowRuns', e);
-    return [];
-  }
+  return [];
 }
 
 export function workflowRunStatusLabel(status?: string): string {

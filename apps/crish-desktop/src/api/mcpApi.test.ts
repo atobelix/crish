@@ -1,16 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('./daemonClient', () => {
-  const mockClient = {
-    isConnected: vi.fn(() => true),
-    waitUntilConnected: vi.fn(async () => true),
-    request: vi.fn(),
-  };
-  return {
-    getDesktopDaemonClient: () => mockClient,
-    __mockClient: mockClient,
-  };
-});
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./mcpClient', () => {
   return {
@@ -27,21 +15,22 @@ import {
   startMcpServer,
   stopMcpServer,
   probeMcpControl,
+  fetchMcpStatus,
   mcpStateKind,
   mcpStateLabel,
   invalidateListCapabilitiesCache,
   resetMcpControlProbeMemory,
 } from './mcpApi';
-import { getDesktopDaemonClient } from './daemonClient';
 
 describe('mcpApi', () => {
-  const daemonClient = getDesktopDaemonClient() as any;
-
   beforeEach(() => {
     vi.clearAllMocks();
     invalidateListCapabilitiesCache();
     resetMcpControlProbeMemory();
-    daemonClient.isConnected.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('mcpStateKind & mcpStateLabel', () => {
@@ -58,84 +47,50 @@ describe('mcpApi', () => {
     });
   });
 
-  describe('listMcpServers', () => {
-    it('returns error when daemon is not connected', async () => {
-      daemonClient.isConnected.mockReturnValue(false);
-      daemonClient.waitUntilConnected.mockResolvedValue(false);
-
+  describe('T03.7 幽灵命令显式不可用', () => {
+    it('listMcpServers 恒返回 unavailable（不发起 transport 请求）', async () => {
       const res = await listMcpServers();
       expect(res.ok).toBe(false);
       expect(res.servers).toEqual([]);
-      expect(res.errorCode).toBe('not_connected');
+      expect(res.errorCode).toBe('unavailable');
     });
 
-    it('parses server list from daemon response', async () => {
-      daemonClient.request
-        .mockResolvedValueOnce({
-          mcpStatus: { configured: true, serverCount: 2 },
-        })
-        .mockResolvedValueOnce({
-          servers: [
-            { id: 'filesystem', name: 'File System', state: 'running', tools: ['read', 'write'] },
-            { id: 'fetch', name: 'Web Fetch', state: 'stopped', tools: ['fetch_url'] },
-          ],
-        });
+    it('startMcpServer / stopMcpServer 恒返回 unsupported', async () => {
+      const started = await startMcpServer('mcp-1');
+      expect(started.ok).toBe(false);
+      expect(started.errorCode).toBe('unsupported');
 
-      const res = await listMcpServers();
-      expect(res.ok).toBe(true);
+      const stopped = await stopMcpServer('mcp-1');
+      expect(stopped.ok).toBe(false);
+      expect(stopped.errorCode).toBe('unsupported');
+    });
+
+    it('probeMcpControl 恒 canList=false / canStartStop=false', async () => {
+      const probe = await probeMcpControl();
+      expect(probe.canList).toBe(false);
+      expect(probe.canStartStop).toBe(false);
+      expect(probe.configured).toBe(false);
+    });
+  });
+
+  describe('fetchMcpStatus（回补 core_get_status.mcpStatus）', () => {
+    it('未就绪时返回 configured:false', async () => {
+      const { getTransport } = await import('./transport');
+      vi.spyOn(getTransport(), 'isReady').mockReturnValue(false);
+      const res = await fetchMcpStatus();
+      expect(res.configured).toBe(false);
+    });
+
+    it('读取 mcpStatus 字段投影 snapshot', async () => {
+      const { getTransport } = await import('./transport');
+      const transport = getTransport();
+      vi.spyOn(transport, 'isReady').mockReturnValue(true);
+      vi.spyOn(transport, 'request').mockResolvedValue({
+        mcpStatus: { configured: true, serverCount: 2 },
+      });
+      const res = await fetchMcpStatus();
       expect(res.configured).toBe(true);
-      expect(res.servers).toHaveLength(2);
-      expect(res.servers[0].id).toBe('filesystem');
-      expect(res.servers[0].tools).toEqual(['read', 'write']);
-    });
-  });
-
-  describe('startMcpServer & stopMcpServer', () => {
-    it('routes start to daemon RPC', async () => {
-      daemonClient.request.mockResolvedValueOnce({
-        state: 'starting',
-      });
-
-      const res = await startMcpServer('remote-mcp-1');
-      expect(res.ok).toBe(true);
-      expect(res.serverId).toBe('remote-mcp-1');
-      expect(daemonClient.request).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'start-mcp-server', serverId: 'remote-mcp-1' }),
-        'mcp-server-started',
-        30_000
-      );
-    });
-
-    it('routes stop to daemon RPC', async () => {
-      daemonClient.request.mockResolvedValueOnce({
-        state: 'stopped',
-      });
-
-      const res = await stopMcpServer('remote-mcp-1');
-      expect(res.ok).toBe(true);
-      expect(res.serverId).toBe('remote-mcp-1');
-      expect(daemonClient.request).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'stop-mcp-server', serverId: 'remote-mcp-1' }),
-        'mcp-server-stopped',
-        20_000
-      );
-    });
-  });
-
-  describe('probeMcpControl', () => {
-    it('evaluates control capability probes correctly', async () => {
-      daemonClient.request.mockResolvedValue({
-        capabilities: [{ id: 'mcp.lifecycle', state: 'implemented' }],
-      });
-
-      const probe = await probeMcpControl({
-        ok: true,
-        configured: true,
-        servers: [{ id: 's1', name: 'S1', state: 'running', tools: [] }],
-      });
-
-      expect(probe.canList).toBe(true);
-      expect(probe.canStartStop).toBe(true);
+      expect(res.serverCount).toBe(2);
     });
   });
 });

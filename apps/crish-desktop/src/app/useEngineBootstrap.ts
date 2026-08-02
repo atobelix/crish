@@ -1,3 +1,12 @@
+/**
+ * useEngineBootstrap —— 引擎初始化唯一 hook（T06.8 归一后）。
+ *
+ * C3.1 transport 语义：
+ * - 启动门闩 =「核心已初始化」（transport.isReady / onStatus(connected)）。
+ * - 不再 bootstrapDesktopBackend（WS keep-alive / sidecar 重启已删）。
+ * - ensureDaemonConnected（daemonChatBridge）内部即 transport.waitUntilConnected。
+ * - 就绪后做一次会话列表合并（syncSessionsFromDaemon，list_sessions 走 transport）。
+ */
 import { useState, useEffect } from 'react';
 import { isProductShellFast } from '../createSsrGlobals';
 import { getCompositionRoot } from './compositionRoot';
@@ -7,9 +16,10 @@ export function useEngineBootstrap(): boolean {
   const productShell = isProductShellFast();
 
   useEffect(() => {
-    import('../api/daemonClient').then(({ getDesktopDaemonClient }) => {
-      const client = getDesktopDaemonClient();
-      if (client.hasEverConnected() || client.isConnected()) {
+    // 早探：transport 已就绪则立即放行（启动门闩不阻塞渲染）
+    import('../api/transport').then(({ getTransport }) => {
+      const transport = getTransport();
+      if (transport.isReady()) {
         setEngineReady(true);
       }
     });
@@ -17,21 +27,21 @@ export function useEngineBootstrap(): boolean {
 
   useEffect(() => {
     const initEngine = async () => {
-      const { bootstrapDesktopBackend } = await import('../api/daemonClient');
-      const client = bootstrapDesktopBackend();
-      if (client.isConnected() || client.hasEverConnected()) {
+      const { getTransport } = await import('../api/transport');
+      const transport = getTransport();
+      if (transport.isReady()) {
         setEngineReady(true);
       }
-      const unsub = client.onState((s) => {
-        if (s === 'connected' || client.hasEverConnected()) {
+      const unsub = transport.onStatus((s) => {
+        if (s === 'connected') {
           setEngineReady(true);
         }
       });
       const { ensureDaemonConnected } = await import('../api/daemonChatBridge');
       void ensureDaemonConnected().then((res) => {
-        if (res.ok || client.hasEverConnected()) setEngineReady(true);
+        if (res.ok) setEngineReady(true);
         else if (!productShell) {
-          console.warn('[crish-desktop] engine offline after boot wait (keep-alive continues)');
+          console.warn('[crish-desktop] engine offline after boot wait');
         }
         if (res.ok) {
           void import('../api/sessionDaemonSync').then(({ syncSessionsFromDaemon }) => {
@@ -43,14 +53,21 @@ export function useEngineBootstrap(): boolean {
           });
         }
       });
-      const gateTimer = window.setTimeout(() => { setEngineReady(true); }, productShell ? 12_000 : 0);
+      const gateTimer = window.setTimeout(
+        () => {
+          setEngineReady(true);
+        },
+        productShell ? 12_000 : 0
+      );
       return () => {
         unsub();
         window.clearTimeout(gateTimer);
       };
     };
     const cleanupPromise = initEngine();
-    return () => { cleanupPromise.then((cleanup) => cleanup?.()); };
+    return () => {
+      cleanupPromise.then((cleanup) => cleanup?.());
+    };
   }, [productShell]);
 
   return engineReady;
