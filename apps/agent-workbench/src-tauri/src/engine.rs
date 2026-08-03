@@ -967,6 +967,159 @@ fn model_switched(last: Option<&str>, current: Option<&str>) -> bool {
     }
 }
 
+// ── M1：Tool Context 注入通道（C10 地基；build_context 立通道）──────
+
+/// 注入段类型（注入顺序契约：M11 重注入断言以此为准；顺序变化视为协议变更）
+///
+/// 冻结顺序（调度者 I4-M1 指令，文档化于
+/// `docs/multi-agent-repair/improvement/02-多Agent调度实现方案.md` M1）：
+///
+/// `system → skills → mcp → agent 定义`：
+/// - [ContextInjectionKind::System]：系统提示词基础段（run-task 下发的
+///   systemPrompt），先于一切注入段；
+/// - [ContextInjectionKind::Skills]：skill 定义；
+/// - [ContextInjectionKind::Mcp]：MCP 工具声明；
+/// - [ContextInjectionKind::AgentDefinition]：agent 定义。
+///
+/// 注：04 文档 C10 第 4 条原稿顺序为「agent 定义 → skill → MCP」，
+/// 本次按 I4-M1 调度指令落盘为「skills → mcp → agent 定义」（偏差见
+/// M1 轮报告；enum 声明序 = 排序序 = 协议序，三者一致由快照断言锁定）。
+///
+/// 非测试构建静音：M1 只立通道，生产消费面仅 [ContextInjector::render]
+/// （produce 装配）；变体/构造面由 M4（started_at）/M5（检查点摘要）/
+/// M11（系统上下文重注入）与测试消费，轮末接线后移除 allow。
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum ContextInjectionKind {
+    /// 系统提示词基础段（systemPrompt；先于一切）
+    System,
+    /// skill 定义段
+    Skills,
+    /// MCP 工具声明段
+    Mcp,
+    /// agent 定义段
+    AgentDefinition,
+}
+
+/// 注入顺序常量（冻结契约；[ContextInjector::render] 按此顺序拼接，
+/// 与 [ContextInjectionKind] 声明序/排序序一致——排序即协议，
+/// M11 重注入断言以此为契约）。
+#[allow(dead_code)] // M11 重注入断言消费（本域测试先行断言，见轮末接线）
+pub(crate) const CONTEXT_INJECTION_ORDER: [ContextInjectionKind; 4] = [
+    ContextInjectionKind::System,
+    ContextInjectionKind::Skills,
+    ContextInjectionKind::Mcp,
+    ContextInjectionKind::AgentDefinition,
+];
+
+/// 一段注入内容（M1：只承载「类型 + 标题 + 正文」，不持有任何业务逻辑；
+/// M4（started_at）/ M5（检查点摘要）/ M11（配额凭证 + 系统上下文重注入）
+/// 只读经 [ContextInjector::push] 挂载）。
+///
+/// 动态字段（时间戳类）必须显式标记 `@dynamic`（M1 约定 2：C2 的
+/// started_at、恢复注入的检查点摘要）——带 `@dynamic` 的内容不在
+/// C10 字节级一致断言范围内。
+#[derive(Debug, Clone)]
+pub(crate) struct ContextInjection {
+    /// 注入段类型（决定拼接顺序）
+    pub kind: ContextInjectionKind,
+    /// 节标题（渲染为 `## {title}`）
+    pub title: String,
+    /// 正文
+    pub content: String,
+}
+
+impl ContextInjection {
+    /// 新建注入段
+    #[allow(dead_code)] // M4/M5/M11 挂载消费（本域测试先行断言，见轮末接线）
+    pub(crate) fn new(
+        kind: ContextInjectionKind,
+        title: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Self {
+        Self {
+            kind,
+            title: title.into(),
+            content: content.into(),
+        }
+    }
+}
+
+/// ContextInjector 装配点（M1：build_context 立通道；C10/C2/C1/C5 全部
+/// 提示词层能力的统一入口）
+///
+/// - **注入顺序冻结**：注入段按 [CONTEXT_INJECTION_ORDER] 顺序拼接——
+///   构造方乱序 [Self::push] 也会在 [Self::render] 时按契约顺序重排
+///   （同类型保持 push 序，sort 稳定）；
+/// - **独立于压缩预算**：注入段经 [Self::render] 汇入 `system_prompt`
+///   面（wire 上归类 system 角色），压缩只作用于会话对话
+///   （conex-compaction system 保留语义：system 消息恒保留、system_prompt
+///   字段不在压缩输入内）——注入段结构上不进压缩预算；
+/// - **默认行为不变**：无注入段时 [Self::render] 原样返回基础段
+///   （None → None），与现状逐字节一致；
+/// - 不持有业务逻辑：挂载点 = 只读注入项注册表（M1 内容 3）。
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ContextInjector {
+    injections: Vec<ContextInjection>,
+}
+
+impl ContextInjector {
+    /// 新建空注入器（无注入段 = 默认行为）
+    #[allow(dead_code)] // M4/M5/M11 挂载消费（本域测试先行断言，见轮末接线）
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// 追加注入段（render 时按冻结顺序重排；同类型保持追加序）
+    #[allow(dead_code)] // M4/M5/M11 挂载消费（本域测试先行断言，见轮末接线）
+    pub(crate) fn push(&mut self, injection: ContextInjection) -> &mut Self {
+        self.injections.push(injection);
+        self
+    }
+
+    /// 是否无任何注入段
+    #[allow(dead_code)] // M11 消费（本域测试先行断言，见轮末接线）
+    pub(crate) fn is_empty(&self) -> bool {
+        self.injections.is_empty()
+    }
+
+    /// 注入段类型序列（按冻结顺序；顺序契约断言入口，M11 复用）
+    #[allow(dead_code)] // M11 重注入断言消费（本域测试先行断言，见轮末接线）
+    pub(crate) fn kinds(&self) -> Vec<ContextInjectionKind> {
+        let mut kinds: Vec<ContextInjectionKind> =
+            self.injections.iter().map(|injection| injection.kind).collect();
+        kinds.sort();
+        kinds
+    }
+
+    /// 拼接基础系统段与注入段（M1 内容 1：先系统段、再 skill 段、再
+    /// MCP 段、再 agent 定义段）：
+    ///
+    /// - 无注入段 → 基础段原样返回（None → None，默认行为与现状一致）；
+    /// - 有注入段 → 基础段（System 段）置首，其后按冻结顺序逐段拼接，
+    ///   每段渲染为 `## {title}\n{content}`，段间 `\n\n` 分隔；
+    /// - 输出确定（同一配置两次构建字节一致，可快照断言；
+    ///   `@dynamic` 字段不在一致性范围）。
+    pub(crate) fn render(&self, base: Option<String>) -> Option<String> {
+        if self.injections.is_empty() {
+            return base;
+        }
+        let mut ordered = self.injections.clone();
+        ordered.sort_by_key(|injection| injection.kind);
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(base) = base.filter(|text| !text.is_empty()) {
+            parts.push(base);
+        }
+        for injection in ordered {
+            if !parts.is_empty() {
+                parts.push("\n\n".to_string());
+            }
+            parts.push(format!("## {}\n{}", injection.title, injection.content));
+        }
+        Some(parts.concat())
+    }
+}
+
 // ── SessionLoopProducer ───────────────────────────────────────────
 
 /// Arc 包装的 ProviderCall（[AgentSessionLoop] 按 `Box<dyn ProviderCall>`
@@ -1031,6 +1184,10 @@ pub(crate) struct SessionLoopProducer {
     /// 由 EngineHandle 按会话维护，core_run_task 装配时经
     /// [Self::with_cache_session] 注入）
     cache_session: SessionCacheState,
+    /// 上下文注入通道（M1：C10 地基；None = 无注入，options.system_prompt
+    /// 原样透传——默认行为与现状一致。注入段经 [ContextInjector::render]
+    /// 汇入 system_prompt 面，独立于压缩预算）
+    context_injector: Option<ContextInjector>,
 }
 
 impl SessionLoopProducer {
@@ -1065,6 +1222,8 @@ impl SessionLoopProducer {
             // P5 S5 / T-40：缓存测量缺省关闭（未配置 = 现状行为）
             cache_tracking: None,
             cache_session: SessionCacheState::default(),
+            // M1：注入通道缺省关闭（未装配 = 现状行为，system_prompt 原样透传）
+            context_injector: None,
         }
     }
 
@@ -1081,6 +1240,15 @@ impl SessionLoopProducer {
     #[allow(dead_code)] // T-40 轮末合并：core_run_task 装配 producer 时调用
     pub(crate) fn with_cache_session(mut self, session: SessionCacheState) -> Self {
         self.cache_session = session;
+        self
+    }
+
+    /// M1：装配上下文注入通道（[ContextInjector]；None = 无注入，保持
+    /// 现状行为）。produce 时把注入段渲染进 system_prompt 面——注入段
+    /// 归类 system 角色，独立于压缩预算（压缩只作用于会话对话）。
+    #[allow(dead_code)] // M4/M5/M11 经此挂载（本文件测试先行断言）
+    pub(crate) fn with_context_injector(mut self, injector: Option<ContextInjector>) -> Self {
+        self.context_injector = injector;
         self
     }
 
@@ -1124,6 +1292,15 @@ impl SessionLoopProducer {
         // 装配 CacheTrackingConfig（T-36 消费：LoopState 构造 /
         // run 起始 build_tracker 重建 tracker——fresh run 语义）
         self.options.cache_tracking = self.cache_tracking.clone();
+
+        // ── M1：上下文注入通道（C10 地基；build_context 立通道）────
+        // 注入段渲染进 system_prompt 面（wire 归类 system 角色）——独立于
+        // 压缩预算：压缩只作用于会话对话（conex-compaction system 保留
+        // 语义），注入段结构上不进压缩输入。无注入段（None / 空注入器）
+        // 时 render 原样返回 → 与现状字节一致。
+        if let Some(injector) = &self.context_injector {
+            self.options.system_prompt = injector.render(self.options.system_prompt.take());
+        }
 
         let mut session_loop = AgentSessionLoop::new(
             self.session_id.as_str(),
@@ -2139,6 +2316,203 @@ mod tests {
         assert!(
             value.get("cache_read_tokens").is_none(),
             "不得出现 snake_case 键"
+        );
+    }
+
+    // ── M1：Tool Context 注入通道（C10 地基；build_context 立通道）────
+
+    /// M1 注入顺序契约（冻结快照）：`system → skills → mcp → agent 定义`
+    ///
+    /// 断言（02 M1 内容 4 + 任务书内容 2）：顺序常量与枚举声明序/排序序
+    /// 三方一致——排序即协议，M11 重注入断言以此为契约；顺序变化必须
+    /// 同时改三处并被本快照捕获。
+    #[test]
+    fn injection_order_contract_is_frozen() {
+        assert_eq!(
+            CONTEXT_INJECTION_ORDER,
+            [
+                ContextInjectionKind::System,
+                ContextInjectionKind::Skills,
+                ContextInjectionKind::Mcp,
+                ContextInjectionKind::AgentDefinition,
+            ],
+            "注入顺序契约：system → skills → mcp → agent 定义（变化视为协议变更）"
+        );
+        // 常量已按 enum Ord 升序（声明序 = 排序序 = 协议序）
+        let mut sorted = CONTEXT_INJECTION_ORDER.to_vec();
+        sorted.sort();
+        assert_eq!(sorted, CONTEXT_INJECTION_ORDER);
+    }
+
+    /// M1 注入点存在且可注入（mock）：push 累积、空判定、kinds 按契约序
+    #[test]
+    fn injector_push_accumulates_and_kinds_follow_contract() {
+        let mut injector = ContextInjector::new();
+        assert!(injector.is_empty());
+        assert_eq!(injector.kinds(), Vec::<ContextInjectionKind>::new());
+
+        // 乱序 push：agent 定义 → skills → mcp
+        injector
+            .push(ContextInjection::new(
+                ContextInjectionKind::AgentDefinition,
+                "Agent 定义",
+                "agent-body",
+            ))
+            .push(ContextInjection::new(
+                ContextInjectionKind::Skills,
+                "Skill 定义",
+                "skill-body",
+            ))
+            .push(ContextInjection::new(
+                ContextInjectionKind::Mcp,
+                "MCP 工具声明",
+                "mcp-body",
+            ));
+        assert!(!injector.is_empty());
+        assert_eq!(
+            injector.kinds(),
+            vec![
+                ContextInjectionKind::Skills,
+                ContextInjectionKind::Mcp,
+                ContextInjectionKind::AgentDefinition,
+            ],
+            "kinds() 必须按冻结顺序返回（skills → mcp → agent 定义）"
+        );
+    }
+
+    /// M1 顺序契约 + 快照：乱序 push 后 render 仍按冻结顺序拼接
+    /// （system 段 → skill 段 → MCP 段 → agent 定义段），且同一配置
+    /// 两次构建字节一致（动态字段以 `@dynamic` 标记豁免，不在断言范围）
+    #[test]
+    fn injector_render_respects_frozen_order_and_is_byte_stable() {
+        let mut injector = ContextInjector::new();
+        injector
+            .push(ContextInjection::new(
+                ContextInjectionKind::AgentDefinition,
+                "Agent 定义",
+                "agent-body",
+            ))
+            .push(ContextInjection::new(
+                ContextInjectionKind::Mcp,
+                "MCP 工具声明",
+                "mcp-body",
+            ))
+            .push(ContextInjection::new(
+                ContextInjectionKind::Skills,
+                "Skill 定义",
+                "skill-body",
+            ));
+
+        let rendered = injector
+            .render(Some("基础系统提示".to_string()))
+            .expect("有注入段时必然产出");
+        // 顺序：基础段 → Skills → MCP → Agent 定义（契约断言）
+        let skill = rendered.find("## Skill 定义").expect("skill 段存在");
+        let mcp = rendered.find("## MCP 工具声明").expect("MCP 段存在");
+        let agent = rendered.find("## Agent 定义").expect("agent 段存在");
+        assert!(rendered.starts_with("基础系统提示"), "system 段必须置首");
+        assert!(skill < mcp, "skill 段先于 MCP 段（契约）");
+        assert!(mcp < agent, "MCP 段先于 agent 定义段（契约）");
+        // 每段渲染为 `## {title}\n{content}`，段间 \n\n 分隔
+        assert!(rendered.contains("## Skill 定义\nskill-body"));
+        assert!(rendered.contains("## MCP 工具声明\nmcp-body"));
+        assert!(rendered.contains("## Agent 定义\nagent-body"));
+
+        // 快照：两次构建 system 段字节一致（M1 内容 4）
+        let second = injector
+            .render(Some("基础系统提示".to_string()))
+            .expect("有注入段时必然产出");
+        assert_eq!(rendered, second, "同一配置两次构建 system 段字节必须一致");
+    }
+
+    /// M1 默认行为回归：无注入段时 render 原样返回基础段
+    /// （None → None；Some → 原样透传，含空串——空值归一属装配点
+    /// build_system_prompt 职责，注入通道不做二次规范化），与现状
+    /// 逐字节一致
+    #[test]
+    fn injector_render_without_injections_preserves_base() {
+        let injector = ContextInjector::new();
+        assert_eq!(injector.render(None), None, "无注入且无基础段 → None（现状）");
+        assert_eq!(
+            injector.render(Some("基础系统提示".to_string())),
+            Some("基础系统提示".to_string()),
+            "无注入时基础段原样透传（现状）"
+        );
+        // 原样透传：空串基础段不归一（归一化在装配点 build_system_prompt）
+        assert_eq!(injector.render(Some(String::new())), Some(String::new()));
+    }
+
+    /// M1 集成：produce 装配注入通道后，渲染结果经 system_prompt 面送达
+    /// provider（注入点存在且可注入），且对话消息不含 system 角色——
+    /// 注入段归类 system 角色、结构上不进压缩输入（独立于压缩预算）
+    #[tokio::test]
+    async fn produce_with_injector_sends_rendered_system_prompt_as_system_role() {
+        let mut injector = ContextInjector::new();
+        injector
+            .push(ContextInjection::new(
+                ContextInjectionKind::AgentDefinition,
+                "Agent 定义",
+                "agent-body",
+            ))
+            .push(ContextInjection::new(
+                ContextInjectionKind::Skills,
+                "Skill 定义",
+                "skill-body",
+            ))
+            .push(ContextInjection::new(
+                ContextInjectionKind::Mcp,
+                "MCP 工具声明",
+                "mcp-body",
+            ));
+        let (producer, provider) = test_producer(None, SessionLoopOptions::default());
+        let mut producer = producer.with_context_injector(Some(injector));
+        producer.produce().await;
+
+        // 注入段经 system_prompt 面送达（非对话消息）
+        let sent_system = provider
+            .request_system_prompt(0)
+            .expect("注入后请求必须携带 system prompt");
+        let skill = sent_system.find("## Skill 定义").expect("skill 段存在");
+        let mcp = sent_system.find("## MCP 工具声明").expect("MCP 段存在");
+        let agent = sent_system.find("## Agent 定义").expect("agent 段存在");
+        assert!(skill < mcp, "skill 段先于 MCP 段（契约）");
+        assert!(mcp < agent, "MCP 段先于 agent 定义段（契约）");
+        assert!(sent_system.contains("## Agent 定义\nagent-body"));
+
+        // 对话消息不含 system 角色：注入段归类 system 角色（system_prompt
+        // 面），压缩只作用于会话对话 → 注入段不进压缩预算
+        let sent_messages = provider.request_message_arcs(0);
+        assert!(
+            sent_messages
+                .iter()
+                .all(|m| m.role != AgentMessageRole::System),
+            "注入段不得混入会话消息（system 角色面 = system_prompt）"
+        );
+    }
+
+    /// M1 默认行为回归（produce 级）：未装配注入通道时 system_prompt
+    /// 原样透传（None → None；已有基础段 → 不变），与现状一致
+    #[tokio::test]
+    async fn produce_without_injector_keeps_default_system_prompt_behavior() {
+        // 无注入且无基础段：请求不携带 system prompt（P1 阶段 2 现状）
+        let (mut producer, provider) = test_producer(None, SessionLoopOptions::default());
+        producer.produce().await;
+        assert!(
+            provider.request_system_prompt(0).is_none(),
+            "无注入无基础段 → system_prompt 保持 None（现状）"
+        );
+
+        // 无注入但 options 已带基础段：原样透传（不被注入通道改写）
+        let options = SessionLoopOptions {
+            system_prompt: Some("基础系统提示".to_string()),
+            ..SessionLoopOptions::default()
+        };
+        let (mut producer_base, provider_base) = test_producer(None, options);
+        producer_base.produce().await;
+        assert_eq!(
+            provider_base.request_system_prompt(0).as_deref(),
+            Some("基础系统提示"),
+            "无注入 → 基础段原样透传（现状）"
         );
     }
 }

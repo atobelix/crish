@@ -224,6 +224,8 @@ mod tests {
                 .unwrap_or_else(|| {
                     std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
                 }),
+            write_claims: None,
+            write_claim_holder: None,
         };
         let mut current = input;
         for m in chain {

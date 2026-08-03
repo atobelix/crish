@@ -20,6 +20,9 @@ use std::collections::HashSet;
 use std::fmt;
 
 use conex_db::RunStatus;
+use conex_types::checkpoint::{
+    CHECKPOINT_PAYLOAD_KEY, CheckpointPayload, LeafCheckpointState,
+};
 use conex_types::context::SessionContextMeta;
 use serde::{Deserialize, Serialize};
 
@@ -482,6 +485,86 @@ impl SessionTree {
         }
         path.reverse();
         Ok(path)
+    }
+
+    // ===== C1 checkpoint 叶子 payload（M5A 最小落库面） =====
+    //
+    // 会话树主写权归 C6（M6）；本面只读写叶子节点 payload 的
+    // `checkpoint` 保留键（[CHECKPOINT_PAYLOAD_KEY]），不触碰 payload
+    // 其它字段与树结构。采集端（session-loop safe_point.rs）产出
+    // [CheckpointPayload]，经 [Self::set_leaf_checkpoint] 落库，
+    // 恢复端（M5B）经 [Self::read_leaf_checkpoint] 判定优先恢复。
+
+    /// 读取叶子 payload 中的检查点（C1 / M5A 最小读面）。
+    ///
+    /// 三态语义（fail-open，不 panic）：
+    /// - leaf_id 为 None 时取当前叶子；条目不存在 / 非节点 / 无
+    ///   `checkpoint` 键 / 值为 null → [LeafCheckpointState::Absent]
+    ///   （无检查点，保持现状）；
+    /// - 值存在且解析成功 → [LeafCheckpointState::Present]（恢复时
+    ///   优先消费）；
+    /// - 值存在但解析失败 → [LeafCheckpointState::Corrupt]（损坏降级
+    ///   普通会话，message 供「检查点失效」通知）。
+    pub fn read_leaf_checkpoint(&self, leaf_id: Option<&str>) -> LeafCheckpointState {
+        let entry = match leaf_id {
+            Some(id) => self.entry(id),
+            None => self
+                .current_leaf_id
+                .as_deref()
+                .and_then(|id| self.entry(id)),
+        };
+        let Some(entry) = entry else {
+            return LeafCheckpointState::Absent;
+        };
+        let SessionTreeEntryKind::Node { payload } = &entry.kind else {
+            return LeafCheckpointState::Absent;
+        };
+        let Some(value) = payload.get(CHECKPOINT_PAYLOAD_KEY) else {
+            return LeafCheckpointState::Absent;
+        };
+        if value.is_null() {
+            return LeafCheckpointState::Absent;
+        }
+        match serde_json::from_value::<CheckpointPayload>(value.clone()) {
+            Ok(checkpoint) => LeafCheckpointState::Present(checkpoint),
+            Err(err) => LeafCheckpointState::Corrupt(format!("检查点载荷解析失败: {err}")),
+        }
+    }
+
+    /// 写入叶子 payload 的检查点字段（C1 / M5A 最小写面）。
+    ///
+    /// 只新增/更新 `checkpoint` 键，payload 其它字段原样保留（最小
+    /// 落库面：checkpoint payload 字段）。条目不存在 → NotFound；
+    /// 条目非节点或 payload 非 JSON 对象 → InvalidState。
+    pub fn set_leaf_checkpoint(
+        &mut self,
+        leaf_id: &str,
+        checkpoint: &CheckpointPayload,
+    ) -> Result<(), SessionTreeError> {
+        let entry = self
+            .entries
+            .iter_mut()
+            .find(|entry| entry.id == leaf_id)
+            .ok_or_else(|| SessionTreeError::NotFound {
+                id: leaf_id.to_string(),
+            })?;
+        let SessionTreeEntryKind::Node { payload } = &mut entry.kind else {
+            return Err(SessionTreeError::InvalidState {
+                message: format!("条目 {leaf_id} 不是会话节点，不能写入检查点"),
+            });
+        };
+        let object = payload.as_object_mut().ok_or_else(|| {
+            SessionTreeError::InvalidState {
+                message: format!("条目 {leaf_id} 的 payload 不是 JSON 对象，不能写入检查点"),
+            }
+        })?;
+        let value = serde_json::to_value(checkpoint).map_err(|err| {
+            SessionTreeError::InvalidState {
+                message: format!("检查点序列化失败: {err}"),
+            }
+        })?;
+        object.insert(CHECKPOINT_PAYLOAD_KEY.to_string(), value);
+        Ok(())
     }
 
     /// 序列化为会话记录（快照 / 重启恢复用）
@@ -1282,7 +1365,7 @@ mod tests {
         // serde roundtrip：camelCase + skip_none（快照/会话记录持久化形态）
         let json = serde_json::to_string(&record).unwrap();
         let back: SessionRecord = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.context_meta().as_deref(), Some(&meta));
+        assert_eq!(back.context_meta(), Some(&meta));
         assert!(json.contains("contextMeta"), "camelCase 序列化：{json}");
         // 旧快照（无 contextMeta 字段）→ None（schema 兼容）
         let legacy = r#"{"sessionId":"s1","currentLeafId":null,"branches":[]}"#;
@@ -1627,5 +1710,141 @@ mod tests {
         tree.move_leaf(plan.target_leaf_id.as_deref(), plan.from_leaf_id.as_deref())
             .unwrap();
         assert_eq!(tree.current_leaf_id(), Some("leaf_target"));
+    }
+
+    // ── C1 checkpoint 叶子 payload（M5A 最小落库面） ──
+
+    fn sample_checkpoint(target: &str) -> CheckpointPayload {
+        CheckpointPayload {
+            target: target.into(),
+            summary: "基座完成".into(),
+            timestamp: Some("2026-08-03T10:00:00.000Z".into()),
+            completed: vec!["安装依赖".into()],
+            files: vec!["crates/session-loop/src/safe_point.rs".into()],
+            next: vec!["接线恢复注入".into()],
+        }
+    }
+
+    /// 叶子 payload 读写往返：写入 checkpoint → 读回相等，payload
+    /// 其它字段不被触碰（最小落库面）
+    #[test]
+    fn leaf_checkpoint_write_read_roundtrip_preserves_other_fields() {
+        let mut t = tree();
+        t.append("leaf1", json!({ "text": "运行记录" })).unwrap();
+        let checkpoint = sample_checkpoint("实现采集");
+        t.set_leaf_checkpoint("leaf1", &checkpoint).unwrap();
+
+        match t.read_leaf_checkpoint(Some("leaf1")) {
+            LeafCheckpointState::Present(back) => assert_eq!(back, checkpoint),
+            other => panic!("应读回有效检查点：{other:?}"),
+        }
+        // payload 其它字段原样保留
+        let entry = t.entry("leaf1").expect("叶子存在");
+        let SessionTreeEntryKind::Node { payload } = &entry.kind else {
+            panic!("应为节点条目");
+        };
+        assert_eq!(payload["text"], "运行记录");
+    }
+
+    /// 无检查点回归：普通叶子 / 分支摘要 / 缺失叶子 → Absent（现状）
+    #[test]
+    fn leaf_checkpoint_absent_cases() {
+        let mut t = tree();
+        let (root, _mid, _leaf) = chain(&mut t);
+        assert_eq!(
+            t.read_leaf_checkpoint(Some(&root.id)),
+            LeafCheckpointState::Absent,
+            "无 checkpoint 键 → Absent"
+        );
+        let summary = t
+            .abandon_branch_with_summary(None, "summary_1", "abandoned", None)
+            .unwrap();
+        assert_eq!(
+            t.read_leaf_checkpoint(Some(summary.id())),
+            LeafCheckpointState::Absent,
+            "分支摘要条目 → Absent"
+        );
+        assert_eq!(
+            t.read_leaf_checkpoint(Some("missing")),
+            LeafCheckpointState::Absent,
+            "缺失叶子 → Absent"
+        );
+        assert_eq!(
+            t.read_leaf_checkpoint(None),
+            LeafCheckpointState::Absent,
+            "当前叶子（摘要条目）→ Absent"
+        );
+        // 值为 null → Absent（不是损坏）
+        t.append("null_leaf", json!({ "checkpoint": null })).unwrap();
+        assert_eq!(
+            t.read_leaf_checkpoint(Some("null_leaf")),
+            LeafCheckpointState::Absent
+        );
+    }
+
+    /// 损坏降级：checkpoint 值存在但解析失败 → Corrupt（不 panic）
+    #[test]
+    fn leaf_checkpoint_corrupt_degrades() {
+        let mut t = tree();
+        // 值类型错误（target 非字符串）
+        t.append("bad1", json!({ "checkpoint": { "target": 123 } })).unwrap();
+        // 值非对象（字符串）
+        t.append("bad2", json!({ "checkpoint": "oops" })).unwrap();
+        for leaf in ["bad1", "bad2"] {
+            match t.read_leaf_checkpoint(Some(leaf)) {
+                LeafCheckpointState::Corrupt(reason) => {
+                    assert!(reason.contains("解析失败"), "损坏原因应可读：{reason}")
+                }
+                other => panic!("应降级为 Corrupt：{other:?}"),
+            }
+            assert_eq!(
+                t.read_leaf_checkpoint(Some(leaf)).signal(),
+                Some(conex_types::checkpoint::CHECKPOINT_CORRUPT_SIGNAL)
+            );
+        }
+    }
+
+    /// 写面校验：缺失叶子 → NotFound；分支摘要 / 非对象 payload →
+    /// InvalidState（写不坏树）
+    #[test]
+    fn leaf_checkpoint_write_rejects_invalid_targets() {
+        let mut t = tree();
+        chain(&mut t);
+        let checkpoint = sample_checkpoint("目标");
+        let err = t.set_leaf_checkpoint("missing", &checkpoint).unwrap_err();
+        assert!(matches!(err, SessionTreeError::NotFound { .. }));
+
+        let summary = t
+            .abandon_branch_with_summary(None, "summary_1", "abandoned", None)
+            .unwrap();
+        let err = t.set_leaf_checkpoint(summary.id(), &checkpoint).unwrap_err();
+        assert!(matches!(err, SessionTreeError::InvalidState { .. }));
+
+        t.append("text_payload", json!("just-a-string")).unwrap();
+        let err = t.set_leaf_checkpoint("text_payload", &checkpoint).unwrap_err();
+        assert!(matches!(err, SessionTreeError::InvalidState { .. }));
+    }
+
+    /// 会话记录往返：带 checkpoint 的叶子经快照 serde 持久化后可读回
+    /// （叶子移动经 session-leaf-moved 事件重放的既有恢复面同构）
+    #[test]
+    fn leaf_checkpoint_survives_session_record_roundtrip() {
+        let mut t = tree();
+        t.append("leaf1", json!({ "text": "运行记录" })).unwrap();
+        let checkpoint = sample_checkpoint("快照目标");
+        t.set_leaf_checkpoint("leaf1", &checkpoint).unwrap();
+
+        let json = serde_json::to_string(&t.to_session_record()).unwrap();
+        let record: SessionRecord = serde_json::from_str(&json).unwrap();
+        let restored = SessionTree::from_session_record(record).unwrap();
+        match restored.read_leaf_checkpoint(Some("leaf1")) {
+            LeafCheckpointState::Present(back) => assert_eq!(back, checkpoint),
+            other => panic!("快照恢复后应读到检查点：{other:?}"),
+        }
+        assert_eq!(
+            restored.read_leaf_checkpoint(None).signal(),
+            Some(conex_types::checkpoint::CHECKPOINT_PRESENT_SIGNAL),
+            "当前叶子即 checkpoint 叶子 → 优先恢复信号"
+        );
     }
 }

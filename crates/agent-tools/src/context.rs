@@ -5,11 +5,18 @@
 //! [crate 外 ApprovalChannel] / full-access 自动放行 NoopAskChannel）、
 //! 工作区根目录（`workspace_root`）。
 //!
+//! I4-M3 起另承载写路径互斥注册表（`write_claims`，None = 未接线不强制）
+//! 与声明持有者（`write_claim_holder`，子代理 run id；None = 会话主身份）——
+//! 写类工具经 [crate::write_paths::claim_write_guard] 声明写路径，引擎级
+//! 互斥；接线由执行器按会话装配（session-loop ToolExecutor / M2 子代理
+//! 执行上下文）。
+//!
 //! 工具不再持有 workspace_root 等会话数据（原 BuiltinToolConfig 注入），
 //! 统一从 ctx 读取——R4 T10 权限规则引擎（requires_approval/dangerous
 //! 判定挂 ctx.ask 通道、审批等待期支持 abort_token 取消）已接线。
 
 use crate::definition::ToolError;
+use crate::write_paths::WritePathRegistry;
 use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -99,16 +106,24 @@ pub struct ToolContext {
     pub ask: Option<AskCallback>,
     /// 工作区根目录：路径类工具相对路径解析与越界校验基准
     pub workspace_root: PathBuf,
+    /// 写路径互斥注册表（I4-M3：None = 未接线，写工具不强制互斥；
+    /// 接线由执行器按会话装配，M2 子代理执行上下文注入）
+    pub write_claims: Option<Arc<WritePathRegistry>>,
+    /// 写声明持有者（I4-M3：子代理 run id；None = 会话主身份 session_id，
+    /// 用于工具执行期声明归属——同持有者声明不互斥）
+    pub write_claim_holder: Option<String>,
 }
 
 impl ToolContext {
-    /// 新建会话上下文（未触发中止令牌、未接线审批通道）
+    /// 新建会话上下文（未触发中止令牌、未接线审批通道、未接线写路径互斥）
     pub fn new(session_id: impl Into<String>, workspace_root: PathBuf) -> Self {
         Self {
             session_id: session_id.into(),
             abort_token: AbortToken::new(),
             ask: None,
             workspace_root,
+            write_claims: None,
+            write_claim_holder: None,
         }
     }
 }
@@ -126,6 +141,8 @@ pub fn create_mock_tool_context() -> ToolContext {
         abort_token: AbortToken::new(),
         ask: None,
         workspace_root: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+        write_claims: None,
+        write_claim_holder: None,
     }
 }
 

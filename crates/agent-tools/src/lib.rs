@@ -30,10 +30,13 @@ pub mod mcp;
 pub mod middleware;
 pub mod output;
 pub mod permission;
+pub mod readonly;
 pub mod registry;
 pub mod revert;
 pub mod revert_guard;
+pub mod subagent_inject;
 pub mod tools;
+pub mod write_paths;
 
 pub use context::{
     create_mock_tool_context, AbortToken, AskCallback, AskChannel, AskDecision, NoopAskChannel,
@@ -83,8 +86,26 @@ pub use revert_guard::{
     RevertCounterGuard, RevertGuardOutcome, RevertGuardReason, StreakVerdict,
     DEFAULT_REVERT_WINDOW_SECONDS, REVERT_WINDOW_SECONDS_KEY,
 };
+// I4-M4（C2 创建时间注入 + git 回退谨慎指引）：注入内容模块——started_at
+// 注入段 / 续跑不刷新解析 / git 回退指引固定文案 / ref 年代判定，经 M1
+// 注入点只读挂载（engine.rs build_context 主体归 C10，M4 不并写）
+pub use subagent_inject::{
+    git_revert_caution_section, iso8601_from_epoch_ms, ref_older_than_threshold,
+    resolve_started_at, started_at_section, subagent_session_injections,
+    DEFAULT_REF_AGE_THRESHOLD_HOURS, DYNAMIC_MARKER, REVERT_CAUTION_TITLE,
+    STARTED_AT_SECTION_TITLE,
+};
 pub use tools::{
     register_builtin_tools, register_builtin_tools_with_config, BuiltinToolConfig,
+};
+// I4-M3（写路径互斥与只读裁剪）：write_paths 引擎级互斥 + readonly 只读
+// 子代理工具集裁剪；claim_write_guard 为 crate 内部工具接线助手，不导出
+pub use readonly::{
+    filter_readonly_registry, READONLY_TOOL_NAMES, WRITE_TOOL_NAMES,
+};
+pub use write_paths::{
+    validate_write_path, ClaimMode, WriteClaimGuard, WritePathClaim, WritePathConflict,
+    WritePathRegistry, DEFAULT_CLAIM_TTL_MS,
 };
 
 #[cfg(test)]

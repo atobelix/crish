@@ -55,6 +55,7 @@ use agent_tools::middleware::{
 };
 use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
 use agent_tools::registry::ToolRegistry;
+use agent_tools::revert::RevertPolicy;
 use conex_types::tool::{ToolBatchCall, ToolConcurrency};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -93,6 +94,11 @@ pub struct ToolExecutor {
     middleware: Vec<Arc<dyn ToolMiddleware>>,
     /// 插件钩子注册表（tool.pre / tool.post 广播；None = 不启用）
     hooks: Option<Arc<HookRegistry>>,
+    /// C3 回退护栏策略（I3-S6）：git 回退形态 + 面积超阈值 → 需审批
+    /// （无论权限模式，full-access 不豁免；审批人 = 用户）。默认启用
+    /// （语义估算评估器 + 默认阈值），引擎可经 [Self::with_revert_policy]
+    /// 注入 session_meta 覆盖阈值 / 真实 git 面积评估器。
+    revert_policy: RevertPolicy,
 }
 
 impl ToolExecutor {
@@ -103,6 +109,7 @@ impl ToolExecutor {
             idempotency: None,
             middleware: Vec::new(),
             hooks: None,
+            revert_policy: RevertPolicy::default(),
         }
     }
 
@@ -114,6 +121,7 @@ impl ToolExecutor {
             idempotency: self.idempotency,
             middleware: self.middleware,
             hooks: self.hooks,
+            revert_policy: self.revert_policy,
         }
     }
 
@@ -128,6 +136,7 @@ impl ToolExecutor {
             idempotency: self.idempotency,
             middleware: self.middleware,
             hooks: self.hooks,
+            revert_policy: self.revert_policy,
         }
     }
 
@@ -147,6 +156,7 @@ impl ToolExecutor {
             idempotency: self.idempotency,
             middleware: self.middleware,
             hooks: self.hooks,
+            revert_policy: self.revert_policy,
         }
     }
 
@@ -159,6 +169,21 @@ impl ToolExecutor {
             idempotency: self.idempotency,
             middleware: self.middleware,
             hooks: self.hooks,
+            revert_policy: self.revert_policy,
+        }
+    }
+
+    /// 注入 C3 回退护栏策略（I3-S6）：替换阈值（session_meta 运行时覆盖，
+    /// 04 Q1：同键覆盖默认值）/ 面积评估器（真实 git 接线 / 测试注入）。
+    /// 默认策略始终生效（语义估算 + 默认阈值 10 文件 / 300 行 / 24 小时）。
+    pub fn with_revert_policy(mut self, policy: RevertPolicy) -> Self {
+        self.revert_policy = policy;
+        Self {
+            registry: self.registry,
+            idempotency: self.idempotency,
+            middleware: self.middleware,
+            hooks: self.hooks,
+            revert_policy: self.revert_policy,
         }
     }
 
@@ -307,7 +332,7 @@ impl ToolExecutor {
                                     &call.id,
                                     &call.tool_name,
                                     ToolErrorKind::ApprovalRequired,
-                                    format!("{} requires approval", call.tool_name),
+                                    self.revert_refusal_message(call),
                                 )
                             }
                             _ => match decided {
@@ -531,7 +556,7 @@ impl ToolExecutor {
                         &call.id,
                         &call.tool_name,
                         ToolErrorKind::ApprovalRequired,
-                        format!("{} requires approval", call.tool_name),
+                        self.revert_refusal_message(call),
                     )
                 }
                 _ => {
@@ -626,6 +651,10 @@ impl ToolExecutor {
                 .unwrap_or_else(|| {
                     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
                 }),
+            // I4-M3：写路径互斥注册表未接线（None = 写工具不强制互斥）；
+            // 接线由执行器按会话装配（M2 子代理执行上下文注入注册表与持有者）
+            write_claims: None,
+            write_claim_holder: None,
         };
         // ── 中间件链 + 插件钩子（审批已通过，进入执行面；优先级语义
         //    见模块头注：审批优先于中间件，中间件 Block 不绕过审批）──
@@ -960,7 +989,20 @@ impl ToolExecutor {
     /// 权限判定（R4 T10）：permission_mode 显式设置时按工具 dangerous
     /// 标记 + 模式三态判定；未设置（None）时沿用既有语义——approval
     /// 开启即视为需审批。
+    ///
+    /// C3（I3-S6）判定点（C4/S10b 经此挂载，不并写本文件主体）：入参含
+    /// 命令文本时先过回退护栏——GitRevertShape 段 + 面积超阈值 →
+    /// NeedsApproval（无论权限模式，full-access 不豁免；plan 保持更严
+    /// Deny），面积小 → 按既有矩阵。红线语义仍由工具内门禁 100% 拦截
+    /// （S2），本层不重复。审批人 = 用户：NeedsApproval 走既有
+    /// ApprovalGate 链路等待用户裁决，主 Agent 仅转呈。
     fn call_verdict(&self, call: &ToolBatchCall, options: &ToolBatchOptions) -> PermissionVerdict {
+        if let Some(command) = call.input.get("command").and_then(serde_json::Value::as_str) {
+            let mode = options.permission_mode.unwrap_or_default();
+            if let Some(verdict) = self.revert_policy.gate_verdict_command(command, mode) {
+                return verdict;
+            }
+        }
         match options.permission_mode {
             Some(mode) => {
                 let dangerous = self
@@ -974,6 +1016,19 @@ impl ToolExecutor {
         }
     }
 
+    /// C3 兜底拒绝文案：大面积回退 + 审批通道缺失（approval=None）时阈值
+    /// 检查仍生效（04 C3 第 2/5 条 + 01 方案 §4 关键关系：安全优先，不做
+    /// 无限等待），拒绝结果带面积摘要与替代路径指引；非回退门禁项保持
+    /// 既有通用文案。
+    fn revert_refusal_message(&self, call: &ToolBatchCall) -> String {
+        if let Some(command) = call.input.get("command").and_then(serde_json::Value::as_str) {
+            if let Some(msg) = self.revert_policy.refusal_message(command) {
+                return msg;
+            }
+        }
+        format!("{} requires approval", call.tool_name)
+    }
+
     /// 克隆执行器（共享 Arc 状态）
     fn clone_executor(&self) -> Self {
         Self {
@@ -981,6 +1036,7 @@ impl ToolExecutor {
             idempotency: self.idempotency.clone(),
             middleware: self.middleware.clone(),
             hooks: self.hooks.clone(),
+            revert_policy: self.revert_policy.clone(),
         }
     }
 }
@@ -2472,6 +2528,189 @@ mod tests {
             .position(|e| matches!(e, ToolEvent::ToolEnd { call_id, .. } if call_id == "c1"))
             .unwrap();
         assert!(start < approval && approval < end, "审批事件顺序契约被破坏");
+    }
+
+    // ── I3-S6：C3 大面积回退审批（判定点集成，04 C3 验收 1/3/5 对齐）──
+
+    /// 固定面积评估器（测试注入）
+    #[derive(Debug)]
+    struct FixedAreaAssessor(agent_tools::revert::RevertArea);
+
+    impl agent_tools::revert::RevertAssessor for FixedAreaAssessor {
+        fn assess(
+            &self,
+            _target: &agent_tools::revert::RevertTarget,
+        ) -> agent_tools::revert::RevertArea {
+            self.0.clone()
+        }
+    }
+
+    fn revert_policy(area: agent_tools::revert::RevertArea) -> agent_tools::revert::RevertPolicy {
+        agent_tools::revert::RevertPolicy::default().with_assessor(Arc::new(FixedAreaAssessor(area)))
+    }
+
+    fn large_area() -> agent_tools::revert::RevertArea {
+        agent_tools::revert::RevertArea {
+            file_count: Some(25),
+            line_count: Some(1200),
+            cross_directory: true,
+            ref_age_seconds: Some(36 * 3600),
+        }
+    }
+
+    fn small_area() -> agent_tools::revert::RevertArea {
+        agent_tools::revert::RevertArea {
+            file_count: Some(2),
+            line_count: Some(40),
+            cross_directory: false,
+            ref_age_seconds: Some(3600),
+        }
+    }
+
+    /// 携带命令文本入参的工具调用（C3 判定点从 input.command 取命令）
+    fn command_call(id: &str, name: &str, command: &str) -> ToolBatchCall {
+        ToolBatchCall {
+            id: id.into(),
+            tool_name: name.into(),
+            summary: format!("call {name}"),
+            input: serde_json::json!({ "command": command }),
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: ToolConcurrency::Sequential,
+        }
+    }
+
+    /// C3 验收 5 + full-access 不豁免：full-access 下大面积回退且无审批门 →
+    /// 阈值检查仍生效（CommandPolicy 兜底：结构化拒绝，不做无限等待），
+    /// 工具不执行、run 非致命
+    #[tokio::test]
+    async fn full_access_large_revert_refused_without_gate() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg).with_revert_policy(revert_policy(large_area()));
+        let calls = vec![command_call("c1", "echo", "git checkout abc1234")];
+        let opts = ToolBatchOptions {
+            approval_enabled: false,
+            permission_mode: Some(PermissionMode::FullAccess),
+            ..Default::default()
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &opts, None)
+            .await;
+        assert_eq!(
+            out.results[0].error_kind,
+            Some(ToolErrorKind::ApprovalRequired),
+            "full-access 下大面积回退不得静默执行"
+        );
+        let msg = out.results[0].error_message.as_deref().unwrap_or_default();
+        assert!(msg.contains("大面积 git 回退需用户审批"), "拒绝文案：{msg}");
+        assert!(msg.contains("缩小回退范围或改用单文件修复"), "指引：{msg}");
+        assert!(msg.contains("full-access 不豁免"), "不豁免声明：{msg}");
+        // 工具未执行：EchoTool 若执行必成功（is_ok），拒绝态即证明未执行
+        assert!(out.fatal.is_none(), "拒绝不是引擎故障");
+    }
+
+    /// C3 验收 1：ask 模式大面积回退产生审批请求（approval-requested 事件），
+    /// 审批人 = 用户（门裁决）；Denied → 结构化拒绝、工具不执行
+    #[tokio::test]
+    async fn ask_large_revert_denied_after_approval_request() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg).with_revert_policy(revert_policy(large_area()));
+        let calls = vec![command_call("c1", "echo", "git reset --hard HEAD~30")];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Ask),
+            ..Default::default()
+        };
+        let gate = MockApproval {
+            decision: ApprovalDecision::Denied {
+                reason: "no".into(),
+            },
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
+            .await;
+        assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::UserDenied));
+        assert!(out
+            .events
+            .iter()
+            .any(|e| matches!(e, ToolEvent::ApprovalRequested { .. })),
+            "审批请求必须真实发出（用户裁决入口）"
+        );
+        assert!(out.fatal.is_none(), "拒绝不崩溃、run 状态正常");
+    }
+
+    /// C3 验收 1 通过路径：用户批准后大面积回退才执行
+    #[tokio::test]
+    async fn ask_large_revert_approved_then_executes() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg).with_revert_policy(revert_policy(large_area()));
+        let calls = vec![command_call("c1", "echo", "git checkout abc1234")];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Ask),
+            ..Default::default()
+        };
+        let gate = MockApproval {
+            decision: ApprovalDecision::Approved,
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
+            .await;
+        assert!(out.results[0].is_ok(), "用户批准后才执行");
+    }
+
+    /// C3 验收 3：面积低于全部阈值 → full-access 放行（零打扰，无审批事件）
+    #[tokio::test]
+    async fn full_access_small_revert_executes_without_approval() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg).with_revert_policy(revert_policy(small_area()));
+        let calls = vec![command_call("c1", "echo", "git restore --source=HEAD~1 src/main.rs")];
+        let opts = ToolBatchOptions {
+            approval_enabled: false,
+            permission_mode: Some(PermissionMode::FullAccess),
+            ..Default::default()
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &opts, None)
+            .await;
+        assert!(out.results[0].is_ok(), "小面积回退零打扰");
+        assert!(!out
+            .events
+            .iter()
+            .any(|e| matches!(e, ToolEvent::ApprovalRequested { .. })));
+    }
+
+    /// 分支切换（非回退形态）不被 C3 门禁拦截：full-access 直接执行
+    #[tokio::test]
+    async fn checkout_branch_switch_not_gated() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg).with_revert_policy(revert_policy(large_area()));
+        let calls = vec![command_call("c1", "echo", "git checkout main")];
+        let opts = ToolBatchOptions {
+            approval_enabled: false,
+            permission_mode: Some(PermissionMode::FullAccess),
+            ..Default::default()
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &opts, None)
+            .await;
+        assert!(out.results[0].is_ok(), "分支切换不是回退，C3 不拦截");
+    }
+
+    /// 无命令文本入参（非命令类工具）不受 C3 门禁影响（既有语义不变）
+    #[tokio::test]
+    async fn non_command_input_not_gated() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg).with_revert_policy(revert_policy(large_area()));
+        let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
+        let opts = ToolBatchOptions {
+            approval_enabled: false,
+            permission_mode: Some(PermissionMode::FullAccess),
+            ..Default::default()
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &opts, None)
+            .await;
+        assert!(out.results[0].is_ok(), "非命令入参按既有矩阵放行");
     }
 
     // ── 中间件链 + 插件钩子接线（ToolMiddleware 真实扩展点 + HookRegistry）──

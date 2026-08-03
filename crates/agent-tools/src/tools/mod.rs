@@ -6,6 +6,8 @@
 //! - `diff`：文本 diff（复用 conex-diff，输出 unified diff 文本）
 //! - `delete`：删除接管（delete_file / delete_dir，I2-S3）——唯一删除接口，
 //!   移入 conex-fs 回收站服务并登记，dangerous=true 走审批
+//! - `subagent`：run_subagent（I4-M2）——spawn 独立子代理会话 + run，
+//!   递归守卫 + 三方状态映射 + 伪造审批防护（注册面 10→11）
 //!
 //! 全部工具实现 `Tool` trait，经 `register_builtin_tools` 统一注册进 ToolRegistry。
 //! 各工具的会话级数据（工作区根目录等）执行时从 `ToolContext` 读取
@@ -16,6 +18,7 @@ pub mod diff;
 pub mod fs;
 pub mod search;
 pub mod shell;
+pub mod subagent;
 
 use crate::audit::{NoopAuditSink, SecurityAuditSink};
 use crate::definition::ToolError;
@@ -40,6 +43,10 @@ pub struct BuiltinToolConfig {
     /// 安全审计 sink（I2-S8：删除/重定向/拦截发射 security-audit 事件；
     /// None = 不接线，工具回退 no-op，审计仅走结构化 tracing 日志）
     pub audit_sink: Option<Arc<dyn SecurityAuditSink>>,
+    /// run_subagent spawn 通道（I4-M2：None = 未接线，run_subagent 返回
+    /// 结构化不可用错误；引擎侧接线后经此通道发起独立 run——落库与
+    /// run 启动在引擎侧实现，agent-tools 只定义契约）
+    pub subagent_spawner: Option<Arc<dyn subagent::SubagentSpawner>>,
 }
 
 impl Default for BuiltinToolConfig {
@@ -49,6 +56,7 @@ impl Default for BuiltinToolConfig {
             default_shell_max_output_bytes: 200_000,
             trash_root: None,
             audit_sink: None,
+            subagent_spawner: None,
         }
     }
 }
@@ -86,6 +94,9 @@ pub fn register_builtin_tools_with_config(
     registry.register(Arc::new(delete::DeleteDirTool::with_audit_sink(
         config.trash_root.clone(),
         audit_sink,
+    )))?;
+    registry.register(Arc::new(subagent::RunSubagentTool::with_spawner(
+        config.subagent_spawner.clone(),
     )))?;
     Ok(())
 }
@@ -368,6 +379,9 @@ pub(crate) fn clamp_text(text: &str, limit: usize) -> (String, bool) {
 
 #[cfg(test)]
 mod tests {
+    // G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
+    #![allow(clippy::disallowed_methods)]
+
     use super::*;
 
     #[test]
@@ -435,7 +449,7 @@ mod tests {
     fn register_builtin_tools_registers_all() {
         let mut registry = ToolRegistry::new();
         register_builtin_tools(&mut registry).unwrap();
-        assert_eq!(registry.len(), 10);
+        assert_eq!(registry.len(), 11);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -452,6 +466,7 @@ mod tests {
                 "grep_search",
                 "list_dir",
                 "read_file",
+                "run_subagent",
                 "shell_command",
                 "write_file",
             ]

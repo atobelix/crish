@@ -19,6 +19,7 @@ use crate::tools::{
     display_path, optional_string, optional_u64, require_string, resolve_workspace_path,
     delete::DEFAULT_TRASH_DIR_NAME,
 };
+use crate::write_paths::{claim_write_guard, ClaimMode};
 use async_trait::async_trait;
 use conex_fs::impact::ImpactAssessment;
 use conex_fs::trash::TrashService;
@@ -321,6 +322,17 @@ fn redirect_or_intercept_delete(
             }
         }
     }
+    // I4-M3：删除重定向目标的写路径互斥——全部目标先声明（Delete 模式）再执行，
+    // 任一目标被占用 → 整链拒绝（不产生部分删除）；未接线（None）不强制；
+    // 守卫集合随函数结束自动释放
+    let mut claims = Vec::new();
+    for target in &targets {
+        claims.push(claim_write_guard(
+            ctx,
+            &target.display().to_string(),
+            ClaimMode::Delete,
+        )?);
+    }
     // 5. trash 服务执行（模式 B：应用内回收站；未注入根时回退工作区 .crish-trash）
     let service_root = trash_root.unwrap_or_else(|| workspace_root.join(DEFAULT_TRASH_DIR_NAME));
     let service = TrashService::new(&service_root);
@@ -605,6 +617,10 @@ fn base64_encode(data: &[u8]) -> String {
 }
 
 /// 执行命令并收集输出（超时则树杀）
+// G2 禁令豁免（clippy.toml 文件头「豁免面」）：命令门禁执行面——本函数只被
+// shell 工具调用，且调用前必经 CommandGatekeeper 检查（blocked/approval，
+// 见本文件 :152-171），是「子进程经命令门禁」的门禁落地处本身。
+#[allow(clippy::disallowed_methods)]
 async fn run_command(
     command: &str,
     cwd: &std::path::Path,

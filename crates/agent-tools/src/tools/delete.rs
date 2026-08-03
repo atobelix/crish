@@ -16,6 +16,7 @@ use crate::audit::{NoopAuditSink, SecurityAuditSink, security_audit_event};
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::tools::{display_path, optional_bool, require_string, resolve_workspace_path};
+use crate::write_paths::{claim_write_guard, ClaimMode};
 use async_trait::async_trait;
 use conex_fs::trash::{TrashKind, TrashService};
 use conex_types::events::{SecurityAuditDecision, SecurityAuditOperation};
@@ -188,6 +189,9 @@ async fn execute_delete(
     let path_str = require_string(&args, "path")?;
     let target = resolve_workspace_path(&ctx.workspace_root, &path_str)?;
     let display = display_path(&ctx.workspace_root, &target);
+    // I4-M3：写路径互斥——删除目标声明 Delete 模式；冲突拒绝（谁占用/何时），
+    // 守卫随函数结束自动释放（任何错误路径均释放，不残留记账）
+    let _claim = claim_write_guard(ctx, &path_str, ClaimMode::Delete)?;
 
     let metadata = std::fs::metadata(&target)
         .map_err(|e| ToolError::execution_failed(tool_name, format!("{display}: {e}")))?;

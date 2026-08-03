@@ -10,6 +10,7 @@ use crate::tools::{
     clamp_text, decode_text, display_path, epoch_millis, optional_string, require_string,
     resolve_workspace_path, snapshot_tag,
 };
+use crate::write_paths::{claim_write_guard, ClaimMode};
 use async_trait::async_trait;
 use std::path::Path;
 
@@ -181,6 +182,9 @@ impl Tool for WriteFileTool {
         let content = require_string(&args, "content")?;
         let file_path = resolve_workspace_path(&ctx.workspace_root, &path_str)?;
         let display = display_path(&ctx.workspace_root, &file_path);
+        // I4-M3：写路径互斥——执行期声明写路径，冲突拒绝（谁占用/何时）；
+        // 未接线（write_claims = None）不强制；守卫随函数结束自动释放
+        let _claim = claim_write_guard(ctx, &path_str, ClaimMode::Write)?;
 
         // 幂等守卫标记：B5.3 提供 ToolIdempotencyGuard（按 tool_call_id 去重已执行写盘），
         // 此处仅执行文件写入，不做去重。
