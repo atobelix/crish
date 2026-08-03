@@ -61,7 +61,10 @@ impl<T> AtomicSlot<T> {
         }
     }
 
+    // G11a 备注：clear/is_some 非 test 构建无 bin 消费者（lastError 写入读
+    // 只走 set/get），测试逐条覆盖（atomic_slot_is_generic 等）——dead_code 静音。
     /// 清除（置 None）
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn clear(&self) {
         if let Ok(mut guard) = self.inner.lock() {
             *guard = None;
@@ -77,6 +80,7 @@ impl<T> AtomicSlot<T> {
     }
 
     /// 是否已有值
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn is_some(&self) -> bool {
         self.inner.lock().map(|guard| guard.is_some()).unwrap_or(false)
     }
@@ -132,7 +136,10 @@ impl StatusDiagnostics {
         self.last_error.set(error);
     }
 
+    // G11a 备注：clear_last_error 非 test 构建无 bin 消费者（lastError 清除
+    // 未接线），测试覆盖（last_error_slot_roundtrip）——dead_code 静音。
     /// 清除 lastError
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn clear_last_error(&self) {
         self.last_error.clear();
     }

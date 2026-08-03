@@ -122,7 +122,10 @@ pub(crate) fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
     })
 }
 
+    // G11a 备注：root() 非 test 构建无 bin 消费者（守卫内部用 self.root
+    // 字段，命令面不读根路径），workspace.rs 测试逐条断言——dead_code 静音。
     /// 已授权根（canonical 绝对路径）。
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn root(&self) -> &Path {
         &self.root
     }

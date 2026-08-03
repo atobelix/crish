@@ -82,7 +82,9 @@ impl CredentialStore {
         }
     }
 
-    #[allow(dead_code)]
+    // G11a 备注：unavailable_for_test 仅测试构造用（provider.rs 测试断言
+    // 降级路径），非 test 构建 dead_code 静音。
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn unavailable_for_test() -> Self {
         Self {
             mode: CredentialStoreMode::MemoryOnly,

@@ -355,13 +355,14 @@ mod tests {
         }
     }
 
-    /// 命令面便捷入口：非红线危险命令在 full-access 下 Allow（既有语义不破坏）
+    /// 命令面便捷入口：非红线危险命令在 full-access 下 Allow（既有语义不破坏）；
+    /// mkfs/设备写入属红线清单（S2），full-access 下也必须 Deny
     #[test]
     fn decide_command_non_redline_dangerous_allowed_in_full_access() {
         assert_eq!(
             decide_command("mkfs.ext4 /dev/sdb", true, false, PermissionMode::FullAccess),
-            PermissionVerdict::Allow,
-            "非红线危险命令在 full-access 下应放行"
+            PermissionVerdict::Deny,
+            "mkfs 写设备属红线（确定性毁灭目标），full-access 下也必须 Deny"
         );
         assert_eq!(
             decide_command("rm -rf ./local-dir", true, false, PermissionMode::FullAccess),

@@ -80,7 +80,7 @@ T3 定稿 members（15 项）内，未纳入工作区，不处理。
 | agent-provider | src/credentials.rs:312 `dpapi_protect` | unsafe_code | `#[allow]` + 注释：Windows DPAPI FFI（每处 unsafe 均有 SAFETY 说明） |
 | agent-provider | src/credentials.rs:359 `dpapi_unprotect` | unsafe_code | `#[allow]` + 注释：同上 |
 
-## 4. 存量告警基线（验收时点全量唯一告警：190 条 → I1 G1 刷新为 165 条）
+## 4. 存量告警基线（验收时点全量唯一告警：190 条 → I1 G1 刷新为 165 条 → I2 G11a 刷新为 34 条）
 
 > I1 G1 维护注记（2026-08-03，`scripts/check-clippy-baseline.mjs` 建立机器守门）：
 > - 清理 daemon_discovery.rs 僵尸条目 30 条（模块已随 d82f7468 删除，告警不再存在）；
@@ -89,14 +89,23 @@ T3 定稿 members（15 项）内，未纳入工作区，不处理。
 >   `too_many_arguments`（9/7 → 10/7，system_prompt plumbing 加参数）、
 >   `crates/session-loop/tests/prefix_stability.rs` needless_range_loop 1 条；
 > - 下述分类统计为验收时点口径，精确清单以标记区为准。
+>
+> I2 G11a 维护注记（2026-08-03，dead_code 清零第一波）：
+> - 165 → 63 条（raw 实例）/ 34 个归一键（消息+文件去重）；agent-workbench
+>   dead_code/unused 类清零（删除 77 / allow+理由 14 / cfg_attr 22 / 跳过
+>   core_run_commands 4），明细见 `reports/I2-G11a-清理报告.md`；
+> - `--update` 显式刷新基线（清零后的有意基线提升）；
+> - 基线内新增 4 条均为**并行域在途产物**（非本任务引入，登记遗留跟踪）：
+>   `core_run_commands.rs` doc list item 1 条 + too_many_arguments（10/7 → 12/7）1 条
+>   （01 方案 S5 trash 接线在途）、`agent-provider/models/catalog.rs` unused_mut 1 条、
+>   `orchestrator/src/session.rs` derefed_type 1 条；
+> - 下述分类统计为验收时点口径（归一键），精确清单以标记区为准。
 
-- **apps/agent-workbench/src-tauri：163 条**（非 T13 写域，R1 T1 清理后遗留 dead_code 为主）
-  - dead_code/unused 类（never used/constructed/read、unused import）：103 条
-  - unsafe 类（unsafe 块 / unsafe impl）：19 条
-  - clippy 风格类（doc、manual_*、unnecessary_*、bool_assert 等）：41 条
-- **crates/session-loop：1 条**（needless_range_loop，tests/prefix_stability.rs:241，0cb335b9 引入）
-- **crates/conex-db：1 条**（`needless_borrows_for_generic_args`，src/migrate.rs:34，T15 域）
-- **crates/** 其余：0 条（本任务已清零）
+- **apps/agent-workbench/src-tauri：30 条**（G11a 后按归一键：unsafe 7 + 风格 19 + core_run_commands 跳过域 4；raw 实例 59）
+  - dead_code/unused 类：**0 条（G11a 清零）**；core_run_commands.rs 4 条跳过域遗留 I3 承接
+  - unsafe 类（unsafe 块 / unsafe impl）：7 条（死代码连带删除 5 处 unsafe 块后由 19 降为 14 raw）
+  - clippy 风格类（doc、manual_*、unnecessary_*、bool_assert 等）：19 条
+- **crates/**：4 条（conex-db migrate.rs:34 / session-loop prefix_stability.rs:241 / 并行域在途 2 条见上注记）
 
 处置约定：agent-workbench 存量清零由后续轮次分配专门任务（建议 R4-M 后单独接线）；
 conex-db 的 1 条由 T15 完成后在 R4-M 补 `[lints]` 复核时一并修复。
@@ -108,102 +117,23 @@ conex-db 的 1 条由 T15 完成后在 R4-M 补 `[lints]` 复核时一并修复�
 - casting to the same type is unnecessary (`u64` -> `u64`)  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:196:55
 - casting to the same type is unnecessary (`u64` -> `u64`)  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:213:55
 - casting to the same type is unnecessary (`u64` -> `u64`)  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:214:55
-- constant `MAX_PATH` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:196:7
-- constant `MCP_EXEC_ENV` is never used  --> apps/agent-workbench/src-tauri/src/dev_mcp.rs:24:7
-- constant `PROCESS_QUERY_INFORMATION` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:190:7
-- constant `PROCESS_VM_READ` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:192:7
-- constant `TH32CS_SNAPPROCESS` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:194:7
+- derefed type is same as origin  --> crates/orchestrator/src/session.rs:1285:20
 - doc list item overindented  --> apps/agent-workbench/src-tauri/src/main.rs:12:5
 - doc list item overindented  --> apps/agent-workbench/src-tauri/src/main.rs:19:5
 - doc list item overindented  --> apps/agent-workbench/src-tauri/src/main.rs:22:5
-- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/workspace.rs:177:9
+- doc list item overindented  --> apps/agent-workbench/src-tauri/src/main.rs:24:5
+- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:386:9
+- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/workspace.rs:182:9
 - doc list item without indentation  --> apps/agent-workbench/src-tauri/tests/event_bridge_contract.rs:23:5
-- enum `ProviderStatusSource` is never used  --> apps/agent-workbench/src-tauri/src/config/provider.rs:61:17
-- field `client` is never read  --> apps/agent-workbench/src-tauri/src/engine.rs:504:5
-- function `CloseHandle` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:183:8
-- function `CreateToolhelp32Snapshot` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:184:8
-- function `GetCurrentProcess` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:181:8
-- function `GetProcessMemoryInfo` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:171:8
-- function `OpenProcess` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:182:8
-- function `Process32FirstW` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:185:8
-- function `Process32NextW` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:186:8
-- function `active_run_pid` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:110:15
-- function `active_run_pids` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:129:4
-- function `active_runs` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:105:4
-- function `assign_child_to_daemon_job_object` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:814:15
-- function `bytes_to_mb` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:347:4
-- function `check_command_verdict` is never used  --> apps/agent-workbench/src-tauri/src/core_commands.rs:265:8
-- function `create_daemon_job_object` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:794:15
-- function `current_process_memory_snapshot` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:199:4
-- function `current_uptime_ms` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:371:4
-- function `daemon_api_key_source` is never used  --> apps/agent-workbench/src-tauri/src/config/provider.rs:477:15
-- function `file_info` is never used  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:116:15
-- function `format_event_kind` is never used  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:242:4
-- function `get_api_config` is never used  --> apps/agent-workbench/src-tauri/src/config/provider.rs:639:15
-- function `init_daemon_job_object` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:799:15
-- function `mcp_exec_enabled` is never used  --> apps/agent-workbench/src-tauri/src/dev_mcp.rs:40:15
-- function `non_zero_mb` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:357:4
-- function `optional_mb` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:350:4
-- function `perf_fs_file_info` is never used  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:276:15
-- function `perf_fs_read_chunk` is never used  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:265:15
-- function `perf_fs_watch_start` is never used  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:282:15
-- function `perf_fs_watch_stop` is never used  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:296:15
-- function `perf_jsonl_append` is never used  --> apps/agent-workbench/src-tauri/src/perf/jsonl.rs:208:15
-- function `perf_jsonl_read` is never used  --> apps/agent-workbench/src-tauri/src/perf/jsonl.rs:198:15
-- function `perf_jsonl_write` is never used  --> apps/agent-workbench/src-tauri/src/perf/jsonl.rs:219:15
-- function `process_memory_snapshot_from_handle` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:221:4
-- function `process_memory_snapshot` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:207:4
-- function `process_parent_map` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:292:4
-- function `process_started_at_millis` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:374:4
-- function `process_tree_memory_snapshot` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:245:4
-- function `process_tree_pids` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:268:4
-- function `provider_status` is never used  --> apps/agent-workbench/src-tauri/src/config/provider.rs:459:15
-- function `read_chunk` is never used  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:68:15
-- function `read_jsonl_lines` is never used  --> apps/agent-workbench/src-tauri/src/perf/jsonl.rs:53:15
-- function `register_active_run` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:117:15
-- function `resolve_existing` is never used  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:62:4
-- function `resolve_path` is never used  --> apps/agent-workbench/src-tauri/src/perf/jsonl.rs:43:4
-- function `save_api_config` is never used  --> apps/agent-workbench/src-tauri/src/config/provider.rs:645:15
-- function `set_keep_awake` is never used  --> apps/agent-workbench/src-tauri/src/power.rs:8:12
-- function `start_watcher_internal` is never used  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:145:4
-- function `ts_id` is never used  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:252:4
-- function `unregister_active_run` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:123:15
-- function `update_daemon_config` is never used  --> apps/agent-workbench/src-tauri/src/config/provider.rs:665:21
-- function `watchers` is never used  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:57:4
-- function `workbench_dev_mcp_enabled` is never used  --> apps/agent-workbench/src-tauri/src/dev_mcp.rs:81:15
-- function `workbench_list_workspaces` is never used  --> apps/agent-workbench/src-tauri/src/workspace.rs:380:15
-- function `workbench_open_workspace` is never used  --> apps/agent-workbench/src-tauri/src/workspace.rs:367:15
-- function `workbench_performance_snapshot` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:51:15
-- function `workbench_profile_secret_clear` is never used  --> apps/agent-workbench/src-tauri/src/config/mod.rs:100:15
-- function `workbench_profile_secret_get` is never used  --> apps/agent-workbench/src-tauri/src/config/mod.rs:88:15
-- function `workbench_profile_secret_has` is never used  --> apps/agent-workbench/src-tauri/src/config/mod.rs:94:15
-- function `workbench_profile_secret_set` is never used  --> apps/agent-workbench/src-tauri/src/config/mod.rs:79:15
-- function `workbench_set_keep_awake` is never used  --> apps/agent-workbench/src-tauri/src/power.rs:46:8
-- function `write_jsonl` is never used  --> apps/agent-workbench/src-tauri/src/perf/jsonl.rs:142:15
-- implementation of an `unsafe` trait  --> apps/agent-workbench/src-tauri/src/process.rs:727:1
-- implementation of an `unsafe` trait  --> apps/agent-workbench/src-tauri/src/process.rs:731:1
-- manual `Range::contains` implementation  --> apps/agent-workbench/src-tauri/src/commands.rs:81:15
+- implementation of an `unsafe` trait  --> apps/agent-workbench/src-tauri/src/process.rs:367:1
+- implementation of an `unsafe` trait  --> apps/agent-workbench/src-tauri/src/process.rs:371:1
+- manual `Range::contains` implementation  --> apps/agent-workbench/src-tauri/src/commands.rs:62:15
 - manual implementation of `.is_multiple_of()`  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:499:8
-- manual implementation of `Option::map`  --> apps/agent-workbench/src-tauri/src/fs_commands/types.rs:232:16
-- manually reimplementing `div_ceil`  --> apps/agent-workbench/src-tauri/src/process.rs:623:41
-- method `as_str` is never used  --> apps/agent-workbench/src-tauri/src/config/provider.rs:73:19
-- method `channel` is never used  --> apps/agent-workbench/src-tauri/src/core_event_bridge.rs:105:12
-- method `clear_last_error` is never used  --> apps/agent-workbench/src-tauri/src/status_diagnostics.rs:136:12
-- method `clear` is never used  --> apps/agent-workbench/src-tauri/src/buffer.rs:183:12
-- method `daemon_value` is never used  --> apps/agent-workbench/src-tauri/src/config/resolution.rs:58:19
-- method `pending_count` is never used  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:160:19
-- method `provider_status_source` is never used  --> apps/agent-workbench/src-tauri/src/config/provider.rs:386:8
-- method `provider_status` is never used  --> apps/agent-workbench/src-tauri/src/config/provider.rs:365:19
-- method `reload` is never used  --> apps/agent-workbench/src-tauri/src/engine.rs:561:19
-- method `root` is never used  --> apps/agent-workbench/src-tauri/src/fs_commands/types.rs:126:19
-- methods `buffered_len` and `drop_buffered` are never used  --> apps/agent-workbench/src-tauri/src/engine.rs:682:19
-- methods `channel` and `emit_envelope` are never used  --> apps/agent-workbench/src-tauri/src/core_event_bridge.rs:105:12
-- methods `clear` and `is_some` are never used  --> apps/agent-workbench/src-tauri/src/status_diagnostics.rs:65:12
-- methods `engine`, `diagnostics`, `active_run_count`, and `pending_approval_count` are never used  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:491:12
-- methods `len`, `is_empty`, `total_len`, `run_ids`, `remove_run`, and `clear` are never used  --> apps/agent-workbench/src-tauri/src/buffer.rs:155:12
+- manual implementation of `Option::map`  --> apps/agent-workbench/src-tauri/src/fs_commands/types.rs:235:16
+- manually reimplementing `div_ceil`  --> apps/agent-workbench/src-tauri/src/process.rs:264:41
+- method `pending_count` is never used  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:168:19
+- methods `engine`, `diagnostics`, `active_run_count`, and `pending_approval_count` are never used  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:866:12
 - redundant closure  --> apps/agent-workbench/src-tauri/src/markdown_commands.rs:83:33
-- static `DAEMON_JOB_OBJECT` is never used  --> apps/agent-workbench/src-tauri/src/process.rs:791:8
-- static `WATCHERS` is never used  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:55:8
 - stripping a prefix manually  --> apps/agent-workbench/src-tauri/src/fs_commands/skills.rs:34:5
 - stripping a prefix manually  --> apps/agent-workbench/src-tauri/src/fs_commands/skills.rs:35:32
 - stripping a prefix manually  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:133:9
@@ -212,21 +142,6 @@ conex-db 的 1 条由 T15 完成后在 R4-M 补 `[lints]` 复核时一并修复�
 - stripping a prefix manually  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:139:42
 - stripping a prefix manually  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:212:57
 - stripping a prefix manually  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:212:30
-- struct `ActiveRunPerformanceSnapshot` is never constructed  --> apps/agent-workbench/src-tauri/src/process.rs:30:8
-- struct `ActiveWatcher` is never constructed  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:50:8
-- struct `CommandVerdict` is never constructed  --> apps/agent-workbench/src-tauri/src/core_commands.rs:256:12
-- struct `FileChunk` is never constructed  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:23:19
-- struct `FileInfo` is never constructed  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:33:19
-- struct `FsWatchEvent` is never constructed  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:44:19
-- struct `JsonlWriteResult` is never constructed  --> apps/agent-workbench/src-tauri/src/perf/jsonl.rs:36:19
-- struct `McpEnabledState` is never constructed  --> apps/agent-workbench/src-tauri/src/dev_mcp.rs:71:19
-- struct `OpenWorkspaceResult` is never constructed  --> apps/agent-workbench/src-tauri/src/workspace.rs:394:19
-- struct `ProcessEntry32W` is never constructed  --> apps/agent-workbench/src-tauri/src/process.rs:155:8
-- struct `ProcessMemoryCounters` is never constructed  --> apps/agent-workbench/src-tauri/src/process.rs:140:8
-- struct `ProcessTreeMemorySnapshot` is never constructed  --> apps/agent-workbench/src-tauri/src/process.rs:43:8
-- struct `ProviderStatus` is never constructed  --> apps/agent-workbench/src-tauri/src/config/provider.rs:42:19
-- struct `WorkbenchPerformanceSnapshot` is never constructed  --> apps/agent-workbench/src-tauri/src/process.rs:16:19
-- struct `WorkbenchRunTaskRequest` is never constructed  --> apps/agent-workbench/src-tauri/src/commands.rs:7:19
 - the `Err`-variant returned from this function is very large  --> apps/agent-workbench/src-tauri/src/host_openers/discovery.rs:14:42
 - the `Err`-variant returned from this function is very large  --> apps/agent-workbench/src-tauri/src/host_openers/discovery.rs:26:6
 - the `Err`-variant returned from this function is very large  --> apps/agent-workbench/src-tauri/src/host_openers/discovery.rs:83:59
@@ -236,39 +151,31 @@ conex-db 的 1 条由 T15 完成后在 R4-M 补 `[lints]` 复核时一并修复�
 - the function `CryptProtectData` doesn't need a mutable reference  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:418:13
 - the function `CryptUnprotectData` doesn't need a mutable reference  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:465:13
 - the loop variable `i` is used to index `first_run_msgs`  --> crates/session-loop/tests/prefix_stability.rs:241:14
-- this expression creates a reference which is immediately dereferenced by the compiler  --> apps/agent-workbench/src-tauri/src/main.rs:245:45
-- this expression creates a reference which is immediately dereferenced by the compiler  --> apps/agent-workbench/src-tauri/src/main.rs:277:35
-- this expression creates a reference which is immediately dereferenced by the compiler  --> apps/agent-workbench/src-tauri/src/main.rs:295:28
-- this function has too many arguments (10/7)  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:921:1
+- this expression creates a reference which is immediately dereferenced by the compiler  --> apps/agent-workbench/src-tauri/src/main.rs:251:45
+- this expression creates a reference which is immediately dereferenced by the compiler  --> apps/agent-workbench/src-tauri/src/main.rs:283:35
+- this expression creates a reference which is immediately dereferenced by the compiler  --> apps/agent-workbench/src-tauri/src/main.rs:301:28
+- this function has too many arguments (12/7)  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:1308:1
 - unneeded `return` statement  --> apps/agent-workbench/src-tauri/src/host_openers/resolve.rs:166:9
-- unused import: `conex_types::error::core_error_code`  --> apps/agent-workbench/src-tauri/src/core_error.rs:32:9
-- unused import: `env_filter::api_key_env_var_names`  --> apps/agent-workbench/src-tauri/src/config/mod.rs:37:16
-- unused imports: `CommandManifestEntry`, `CommandManifest`, and `core_list_commands`  --> apps/agent-workbench/src-tauri/src/core_query_commands.rs:545:35
 - usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:416:14
 - usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:433:9
 - usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:435:5
 - usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:463:14
 - usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:480:9
 - usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:482:5
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:94:20
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/power.rs:16:19
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:202:9
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:209:5
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:223:5
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:294:5
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:745:5
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:777:5
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:805:13
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:838:13
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:934:9
+- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:74:20
+- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/power.rs:22:19
+- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:385:5
+- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:417:5
+- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:443:13
+- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:539:9
 - use of `unwrap_or_else` to construct default value  --> apps/agent-workbench/src-tauri/src/fs_commands/skills.rs:77:10
-- used `assert_eq!` with a literal bool  --> apps/agent-workbench/src-tauri/src/config/provider.rs:738:9
-- used `assert_eq!` with a literal bool  --> apps/agent-workbench/src-tauri/src/config/provider.rs:756:9
-- used `assert_eq!` with a literal bool  --> apps/agent-workbench/src-tauri/src/config/provider.rs:799:9
-- used `assert_eq!` with a literal bool  --> apps/agent-workbench/src-tauri/src/config/provider.rs:812:9
+- used `assert_eq!` with a literal bool  --> apps/agent-workbench/src-tauri/src/config/provider.rs:596:9
+- used `assert_eq!` with a literal bool  --> apps/agent-workbench/src-tauri/src/config/provider.rs:614:9
+- used `assert_eq!` with a literal bool  --> apps/agent-workbench/src-tauri/src/config/provider.rs:657:9
+- used `assert_eq!` with a literal bool  --> apps/agent-workbench/src-tauri/src/config/provider.rs:670:9
 - useless conversion to the same type: `std::path::PathBuf`  --> apps/agent-workbench/src-tauri/src/host_openers/execute.rs:39:73
 - using `contains()` instead of `iter().any()` is more efficient  --> apps/agent-workbench/src-tauri/src/fs_commands/read.rs:190:8
-- variant `RecentList` is never constructed  --> apps/agent-workbench/src-tauri/src/workspace.rs:32:5
+- variable does not need to be mutable  --> crates/agent-provider/src/models/catalog.rs:919:13
 <!-- BASELINE_LIST_END -->
 
 ## 5. 增量守门规则（机器执行）
@@ -281,11 +188,11 @@ conex-db 的 1 条由 T15 完成后在 R4-M 补 `[lints]` 复核时一并修复�
    脚本语义只许降不许升，文档保留决策记录）。
 3. 复跑命令：`node scripts/check-clippy-baseline.mjs [--update]`
    （脚本内部执行 `cargo clippy --workspace --all-targets`，warn 级口径）。
-4. 计数基线（190 → I1 G1 刷新 165）：清零轮每批完成后计数下降即通过（新增 0 是硬门禁）。
+4. 计数基线（190 → I1 G1 刷新 165 → I2 G11a 刷新 34 归一键 / 63 raw）：清零轮每批完成后计数下降即通过（新增 0 是硬门禁）。
 
 ## 6. 验收输出摘要
 
-- `cargo clippy --workspace --all-targets` → 退出码 **0**（warn 级通过；190 条存量告警入基线）
+- `cargo clippy --workspace --all-targets` → 退出码 **0**（warn 级通过；I2 G11a 后存量 34 归一键 / 63 raw 实例入基线）
 - `cargo test --workspace` → **72 个测试二进制、1348 个测试全部通过、0 失败**
 - 修复/豁免均未破坏既有行为（registry_drift 断言为只读校验，测试全绿已证明）
 

@@ -1,3 +1,10 @@
+//! conex-fs —— 文件系统安全工具域
+//!
+//! - `path_utils`：路径安全（safe_canonicalize / compute_file_hash / ensure_parent_dir）
+//! - `trash`：回收站服务（删除接管统一接口，I2-S3）
+
+pub mod trash;
+
 pub mod path_utils {
     use anyhow::{bail, Result};
     use std::path::{Component, Path, PathBuf};

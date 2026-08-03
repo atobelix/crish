@@ -1,24 +1,5 @@
-use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct WorkbenchRunTaskRequest {
-    pub(crate) prompt: String,
-    pub(crate) visible_goal: Option<String>,
-    pub(crate) session_id: Option<String>,
-    pub(crate) run_id: Option<String>,
-    pub(crate) mode: Option<String>,
-    pub(crate) workspace_mode: Option<String>,
-    pub(crate) budget_difficulty: Option<String>,
-    pub(crate) run_token_budget: Option<u64>,
-    pub(crate) max_rounds: Option<u64>,
-    pub(crate) max_stalled_rounds: Option<u64>,
-    pub(crate) background_drain_timeout_ms: Option<u64>,
-    pub(crate) cwd: Option<String>,
-    pub(crate) permission_mode: Option<String>,
-}
 
 /// 安装更新 stub：当前仅返回成功，供前端闭环演示。
 /// TODO: 接入真实更新下载/安装流程。

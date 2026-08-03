@@ -1,9 +1,12 @@
 //! 性能工具 - JSONL：行读取 / 追加 / 全量写入。
 //!
-//! 路径解析（PE-07 T07.2 变更）：不再接收 `workspace_root` 参数（该参数入口已删除），
-//! 统一经 `crate::workspace` 的 WorkspaceRegistry 解析（信任锚，B1）。
-//! `core_jsonl_append` 迁移到 `core_commands.rs`（复用本模块 `append_jsonl_lines`）。
-//! `perf_jsonl_*` 别名保留兼容（前端 TelemetryMonitor 等仍在调用）。
+//! 变更记录：
+//! - `core_jsonl_append` 已迁移到 `core_commands.rs`（复用本模块 `append_jsonl_lines`）；
+//! - G11a：`perf_jsonl_read` / `perf_jsonl_append` / `perf_jsonl_write` 命令
+//!   与 `resolve_path` / `read_jsonl_lines` 整段删除（PE-03 定删除注册；前端
+//!   TelemetryMonitor 旧名调用迁移至 core_jsonl_append 由前端域承接）；
+//! - `read_jsonl` / `write_jsonl` 保留为测试直接覆盖的核心实现（本文件测试
+//!   逐条断言），等待 core_* 命令面迁移时复用。
 
 use serde::Serialize;
 use std::{
@@ -11,9 +14,10 @@ use std::{
     io::{BufRead, BufReader, Write},
     path::Path,
 };
-use tauri::AppHandle;
 
-#[allow(dead_code)]
+// 测试专用：非 test 构建下无 bin 消费者（perf_jsonl_* 命令已删，PE-03 迁移
+// core_* 前仅测试覆盖），dead_code 静音。
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct JsonlReadResult {
@@ -23,7 +27,8 @@ pub(crate) struct JsonlReadResult {
     pub(crate) parse_errors: Vec<JsonlParseError>,
 }
 
-#[allow(dead_code)]
+// 测试专用：同 JsonlReadResult。
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct JsonlParseError {
@@ -31,44 +36,14 @@ pub(crate) struct JsonlParseError {
     pub(crate) message: String,
 }
 
+// 测试专用：非 test 构建下由 write_jsonl（同 cfg_attr 保留面）构造。
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct JsonlWriteResult {
     pub(crate) path: String,
     pub(crate) records_written: usize,
     pub(crate) bytes_written: u64,
-}
-
-/// 注册表解析：已存在路径走 `resolve_existing`，写路径（新文件）走 `resolve_for_write`。
-fn resolve_path(app: &AppHandle, path: &str) -> Result<std::path::PathBuf, String> {
-    let guard = crate::workspace::resolve_guard(app, "")
-        .map_err(|e| format!("Workspace guard error: {}", e.message))?;
-    if Path::new(path).exists() {
-        guard.resolve_existing(path).map_err(|e| e.message)
-    } else {
-        guard.resolve_for_write(path).map_err(|e| e.message)
-    }
-}
-
-pub(crate) fn read_jsonl_lines(path: &Path, max_lines: Option<u32>) -> Result<Vec<String>, String> {
-    let file = File::open(path).map_err(|e| format!("Failed to open JSONL file: {e}"))?;
-    let reader = BufReader::new(file);
-    let max = max_lines.unwrap_or(u32::MAX) as usize;
-    let mut lines: Vec<String> = Vec::new();
-
-    for line_result in reader.lines() {
-        let line = line_result.map_err(|e| format!("Failed to read JSONL line: {e}"))?;
-        let trimmed = line.trim().to_string();
-        if trimmed.is_empty() {
-            continue;
-        }
-        if lines.len() >= max {
-            break;
-        }
-        lines.push(trimmed);
-    }
-
-    Ok(lines)
 }
 
 pub(crate) fn append_jsonl_lines(path: &Path, lines: &[String], flush: bool) -> Result<(), String> {
@@ -96,7 +71,8 @@ pub(crate) fn append_jsonl_lines(path: &Path, lines: &[String], flush: bool) -> 
     Ok(())
 }
 
-#[allow(dead_code)]
+// 测试专用：同 JsonlReadResult。
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn read_jsonl(path: &Path, max_records: Option<usize>) -> Result<JsonlReadResult, String> {
     let file = File::open(path).map_err(|e| format!("Failed to open JSONL file: {e}"))?;
     let reader = BufReader::new(file);
@@ -139,6 +115,8 @@ pub(crate) fn read_jsonl(path: &Path, max_records: Option<usize>) -> Result<Json
     })
 }
 
+// 测试专用：同 JsonlReadResult。
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn write_jsonl(
     path: &Path,
     records: &[serde_json::Value],
@@ -192,38 +170,6 @@ pub(crate) fn write_jsonl(
         records_written,
         bytes_written,
     })
-}
-
-#[tauri::command]
-pub(crate) fn perf_jsonl_read(
-    app: AppHandle,
-    path: String,
-    max_lines: Option<u32>,
-) -> Result<Vec<String>, String> {
-    let resolved = resolve_path(&app, &path)?;
-    read_jsonl_lines(&resolved, max_lines)
-}
-
-#[tauri::command]
-pub(crate) fn perf_jsonl_append(
-    app: AppHandle,
-    path: String,
-    lines: Vec<String>,
-    flush: Option<bool>,
-) -> Result<(), String> {
-    let resolved = resolve_path(&app, &path)?;
-    append_jsonl_lines(&resolved, &lines, flush.unwrap_or(false))
-}
-
-#[tauri::command]
-pub(crate) fn perf_jsonl_write(
-    app: AppHandle,
-    path: String,
-    records: Vec<serde_json::Value>,
-    append: Option<bool>,
-) -> Result<JsonlWriteResult, String> {
-    let resolved = resolve_path(&app, &path)?;
-    write_jsonl(&resolved, &records, append.unwrap_or(false))
 }
 
 #[cfg(test)]

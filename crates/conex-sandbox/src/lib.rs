@@ -24,6 +24,9 @@ pub mod gatekeeper {
                 r"(?i)\brm\s+(-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*)\s+(/|/\*|\*)",
                 r"(?i)\brm\s+--no-preserve-root",
                 r"(?i)\bdd\s+if=.*of=/dev/sd[a-z]",
+                // 文件系统创建/格式化（确定性毁灭目标；S2 窄化时误删，host opener 逐参场景依赖正则兜底）
+                r"(?i)\bmkfs(\.[a-z0-9]+)?\s+/dev/sd[a-z]",
+                r"(?i)\bmkfs(\.[a-z0-9]+)?\s+/dev/(nvme|vd|mmcblk)[a-z0-9]+",
                 // 远程执行红线：curl/wget 管道直接进 shell（语义层视 Dangerous，此处升级为红线）
                 r"(?i)\b(curl|wget)\b[^\r\n]*\|\s*(ba|z|d)?sh\b",
                 // Windows 毁灭性命令
@@ -314,10 +317,10 @@ mod tests {
     #[test]
     fn dangerous_semantics_requires_approval() {
         let gk = CommandGatekeeper::new();
-        // 语义层 Dangerous（mkfs 写设备）合并既有 approval_patterns 语义 → 审批
+        // mkfs 写设备属红线清单（确定性毁灭目标，S2）→ 直接 Blocked
         assert_eq!(
             gk.check_command("mkfs.ext4 /dev/sdb", &[]),
-            GatekeeperResult::RequiresApproval
+            GatekeeperResult::Blocked
         );
         // 既有审批形态语义保持
         assert_eq!(

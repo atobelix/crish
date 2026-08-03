@@ -1,14 +1,17 @@
-//! 内置工具模块（任务书 B5.2：fs / shell / search / diff）
+//! 内置工具模块（任务书 B5.2：fs / shell / search / diff + I2-S3 删除接管）
 //!
 //! - `fs`：读/写/列目录/文件信息，路径安全复用 conex-fs 的 safe_canonicalize
 //! - `search`：grep 文本搜索（目录递归 + glob 过滤）与模糊文件查找（复用 conex-search）
 //! - `shell`：命令执行，先过 conex-sandbox 门禁，Windows 用 PowerShell EncodedCommand 包装
 //! - `diff`：文本 diff（复用 conex-diff，输出 unified diff 文本）
+//! - `delete`：删除接管（delete_file / delete_dir，I2-S3）——唯一删除接口，
+//!   移入 conex-fs 回收站服务并登记，dangerous=true 走审批
 //!
 //! 全部工具实现 `Tool` trait，经 `register_builtin_tools` 统一注册进 ToolRegistry。
 //! 各工具的会话级数据（工作区根目录等）执行时从 `ToolContext` 读取
 //! （R3 T9：BuiltinToolConfig 仅承载构造期默认配置，不再注入 workspace_root）。
 
+pub mod delete;
 pub mod diff;
 pub mod fs;
 pub mod search;
@@ -23,13 +26,15 @@ use std::sync::Arc;
 /// 内置工具统一定制配置（由工具执行器注入，模型入参不可覆盖）
 ///
 /// R3 T9：`workspace_root` 移至执行期 `ToolContext`（会话级），
-/// 本配置仅保留构造期默认值（shell 超时 / 输出上限）。
+/// 本配置仅保留构造期默认值（shell 超时 / 输出上限 / 回收站根）。
 #[derive(Debug, Clone)]
 pub struct BuiltinToolConfig {
     /// shell 工具默认超时（毫秒），任务书要求默认 30 秒
     pub default_shell_timeout_ms: u64,
     /// shell 工具默认输出保留上限（字节）
     pub default_shell_max_output_bytes: usize,
+    /// 删除工具回收站根目录（I2-S3：None 时执行期回退工作区 `.crish-trash`）
+    pub trash_root: Option<PathBuf>,
 }
 
 impl Default for BuiltinToolConfig {
@@ -37,6 +42,7 @@ impl Default for BuiltinToolConfig {
         Self {
             default_shell_timeout_ms: 30_000,
             default_shell_max_output_bytes: 200_000,
+            trash_root: None,
         }
     }
 }
@@ -62,6 +68,8 @@ pub fn register_builtin_tools_with_config(
         config.default_shell_max_output_bytes,
     )))?;
     registry.register(Arc::new(diff::DiffTextTool::new()))?;
+    registry.register(Arc::new(delete::DeleteFileTool::new(config.trash_root.clone())))?;
+    registry.register(Arc::new(delete::DeleteDirTool::new(config.trash_root.clone())))?;
     Ok(())
 }
 
@@ -410,7 +418,7 @@ mod tests {
     fn register_builtin_tools_registers_all() {
         let mut registry = ToolRegistry::new();
         register_builtin_tools(&mut registry).unwrap();
-        assert_eq!(registry.len(), 8);
+        assert_eq!(registry.len(), 10);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -419,6 +427,8 @@ mod tests {
         assert_eq!(
             names,
             [
+                "delete_dir",
+                "delete_file",
                 "diff_text",
                 "file_stat",
                 "fuzzy_find",

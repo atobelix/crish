@@ -101,11 +101,6 @@ impl EventBridge {
         }
     }
 
-    /// 事件通道名
-    pub fn channel(&self) -> &str {
-        &self.channel
-    }
-
     /// 序列化信封（缓冲层在入队时即序列化，flush 直接发射字符串，AA-06 P9）
     ///
     /// 失败返回 None（信封内容不可序列化属防御性异常，记录后跳过）。
@@ -124,7 +119,12 @@ impl EventBridge {
         }
     }
 
-    /// 序列化信封并发射（完整事件 JSON 载荷，03 §3.1）
+    /// 序列化信封并发射（完整事件 JSON 载荷，03 §3.1）。
+    ///
+    /// G11a 备注：非 test 构建无 bin 消费者（生产路径经
+    /// BufferedRunEventBridge::flush → emit_payload），本方法为测试直接覆盖的
+    /// 信封直发 API（payload_is_flat_top_level_envelope_json 等断言）——dead_code 静音。
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn emit_envelope(&self, envelope: &AgentEventEnvelope) -> EmitReport {
         match self.serialize(envelope) {
             Some(payload) => self.emit_payload(&payload),

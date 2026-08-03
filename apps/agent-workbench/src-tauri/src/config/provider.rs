@@ -2,13 +2,18 @@
 //!
 //! - `ApiConfigStore`：持久化配置 + 运行期覆盖 + DPAPI 凭据的组合门面，
 //!   生效值统一走 `effective_*` 函数族（runtime → persisted → env → 默认）。
-//! - `ProviderStatusSource` / `ApiConfigStore::provider_status()`：引擎 provider
-//!   状态快照（AU-04 F2 字段集 + K-02 last4 展示字段）。
 //! - 命令面（PE-07 F5 终态名）：
 //!   - `config_get`：脱敏快照（apiKey 恒为空串 + apiKeyLast4，K-02）；
 //!   - `config_update`：非敏感配置更新（K-01/K-05：载荷永不携带明文 apiKey）；
 //!   - `config_profile_apply`：把 profile 配置应用到引擎——apiKey 落密钥槽
 //!     （config_secret_set）后进程内直写引擎，baseUrl/model 生效，返回脱敏状态。
+//!
+//! G11a 变更：`ProviderStatus` / `ProviderStatusSource` 状态快照族删除——
+//! F2 providerStatus 输出由 `core_query_commands::ProviderStatus`（活面）
+//! 承载（`provider_status_from_config` 经 `effective_*` 组装），本模块同型
+//! 结构为重复死面；`get_api_config` / `save_api_config` / `update_daemon_config`
+//! 旧登记名别名删除（F5 单终态，config_command_names_contract.rs 严禁旧名登记）；
+//! `daemon_api_key_source` 删除（daemon sidecar 已随 d82f7468 移除）。
 
 use std::{
     path::PathBuf,
@@ -16,7 +21,6 @@ use std::{
 };
 
 use conex_types::CoreError;
-use serde::Serialize;
 use serde_json::Value;
 
 use super::credentials::{config_secret_set, CredentialPersistence, CredentialStore};
@@ -35,50 +39,6 @@ use super::resolution::{
     DEFAULT_PROVIDER_STREAM,
 };
 use super::API_CONFIG_STORE;
-
-/// 引擎 provider 配置状态快照（AU-04 F2：输出侧只存在 `providerStatus`）。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ProviderStatus {
-    /// 三态：null = store 未初始化 / 无法判定；false = 明确无 key。
-    pub(crate) has_api_key: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) model: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) base_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) credential_mode: Option<String>,
-    /// K-02 展示：生效密钥末 4 位（无密钥为 None）。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) api_key_last4: Option<String>,
-    /// 生效密钥来源（ProviderStatusSource::as_str）。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) api_key_source: Option<String>,
-}
-
-/// API key 生效来源（providerStatus 展示 / 诊断用）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ProviderStatusSource {
-    /// 持久化凭据槽（DPAPI / 用户配置）。
-    Stored,
-    /// 环境变量提供。
-    Env,
-    /// 运行期更新（config_profile_apply / config_secret_set 落引擎）。
-    Runtime,
-    /// 未设置。
-    Unset,
-}
-
-impl ProviderStatusSource {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::Stored => "stored",
-            Self::Env => "env",
-            Self::Runtime => "runtime",
-            Self::Unset => "unset",
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub(crate) struct ApiConfigStore {
@@ -130,7 +90,9 @@ impl ApiConfigStore {
         }
     }
 
-    #[allow(dead_code)]
+    // G11a 备注：load_for_test 仅测试构造用（本模块测试逐条断言），
+    // 非 test 构建 dead_code 静音。
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn load_for_test(
         config_path: PathBuf,
         secret_path: PathBuf,
@@ -360,37 +322,6 @@ impl ApiConfigStore {
             }),
         })
     }
-
-    /// providerStatus 快照（F2 字段集 + K-02 last4 / 来源）。
-    pub(crate) fn provider_status(&self) -> ProviderStatus {
-        let secret = self.effective_api_key();
-        ProviderStatus {
-            has_api_key: Some(secret.is_some()),
-            model: self.effective_model(),
-            base_url: self.effective_base_url(),
-            credential_mode: Some(self.effective_credential_mode()),
-            api_key_last4: secret.as_ref().and_then(|secret| last4(&secret.value)),
-            api_key_source: Some(
-                secret
-                    .as_ref()
-                    .map(|secret| secret.source.provider_status_source().as_str())
-                    .unwrap_or(ProviderStatusSource::Unset.as_str())
-                    .to_string(),
-            ),
-        }
-    }
-}
-
-impl ApiKeySource {
-    /// 来源标记 → providerStatus 展示名。
-    fn provider_status_source(self) -> ProviderStatusSource {
-        match self {
-            Self::RuntimeUpdate => ProviderStatusSource::Runtime,
-            Self::UserConfig => ProviderStatusSource::Stored,
-            Self::Env => ProviderStatusSource::Env,
-            Self::Unset => ProviderStatusSource::Unset,
-        }
-    }
 }
 
 // ── 全局 store 访问 ──
@@ -454,37 +385,6 @@ pub(crate) fn effective_provider_endpoint() -> String {
 
 pub(crate) fn effective_provider_stream() -> bool {
     with_store(|store| store.effective_stream()).unwrap_or(DEFAULT_PROVIDER_STREAM)
-}
-
-pub(crate) fn provider_status() -> Option<ProviderStatus> {
-    with_store(|store| store.provider_status()).ok()
-}
-
-#[allow(dead_code)]
-fn api_key_source() -> &'static str {
-    with_store(|store| {
-        if store.effective_credential_mode() == "account-center" {
-            return "unset";
-        }
-        store
-            .effective_api_key()
-            .map(|secret| secret.source.renderer_value())
-            .unwrap_or("unset")
-    })
-    .unwrap_or("unset")
-}
-
-pub(crate) fn daemon_api_key_source() -> &'static str {
-    with_store(|store| {
-        if store.effective_credential_mode() == "account-center" {
-            return "unset";
-        }
-        store
-            .effective_api_key()
-            .map(|secret| secret.source.daemon_value())
-            .unwrap_or("unset")
-    })
-    .unwrap_or("unset")
 }
 
 // ── 命令面（PE-07 F5 终态名）───────────────────────────────────────────
@@ -633,46 +533,6 @@ pub(crate) fn config_profile_apply(
 }
 
 // ── 旧登记名兼容别名（F5 改名前的命令；PE-03 重命名后随 main.rs 一并删除）──
-
-/// 旧登记名：引擎配置快照（前端已迁移到 `config_get`）。
-#[tauri::command]
-pub(crate) fn get_api_config() -> Result<Value, CoreError> {
-    config_get()
-}
-
-/// 旧登记名：一次性保存引擎配置（apiKey 落 DPAPI，baseUrl/model 生效）。
-#[tauri::command]
-pub(crate) fn save_api_config(
-    api_key: String,
-    base_url: String,
-    model: String,
-) -> Result<Value, CoreError> {
-    with_store_mut(|store| {
-        store.set_base_url(base_url)?;
-        store.set_model(model)?;
-        store.set_credential_mode("direct".to_string())?;
-        store.set_api_key(api_key)?;
-        store.apply_direct_streaming_defaults(true, true)?;
-        let mut snapshot = store.snapshot();
-        snapshot["ok"] = serde_json::Value::Bool(true);
-        Ok(snapshot)
-    })
-}
-
-/// 旧登记名（K-05 修复：`api_key` 参数废弃忽略——明文密钥只经
-/// `config_secret_set` / `config_profile_apply` 落 DPAPI，payload 永不携带明文）。
-#[tauri::command]
-pub(crate) async fn update_daemon_config(
-    api_key: Option<String>,
-    base_url: Option<String>,
-    model: Option<String>,
-    credential_mode: Option<String>,
-    endpoint: Option<String>,
-    stream: Option<bool>,
-) -> Result<Value, CoreError> {
-    let _ = api_key;
-    config_update(base_url, model, credential_mode, endpoint, stream).await
-}
 
 #[cfg(test)]
 mod tests {
@@ -846,32 +706,6 @@ mod tests {
             config["credentialDiagnostic"]["code"].as_str(),
             Some("PROVIDER_CREDENTIAL_STORE_DEGRADED")
         );
-    }
-
-    #[test]
-    fn provider_status_reports_redacted_key_info() {
-        let mut store = test_store();
-        store
-            .set_api_key("sk-test-secret-value".to_string())
-            .expect("save key");
-        store
-            .set_base_url("https://example.test/v1".to_string())
-            .expect("save url");
-        store
-            .set_model("test-model".to_string())
-            .expect("save model");
-        store
-            .set_credential_mode("direct".to_string())
-            .expect("save mode");
-
-        let status = store.provider_status();
-
-        assert_eq!(status.has_api_key, Some(true));
-        assert_eq!(status.api_key_last4.as_deref(), Some("alue"));
-        assert_eq!(status.api_key_source.as_deref(), Some("runtime"));
-        assert_eq!(status.model.as_deref(), Some("test-model"));
-        assert_eq!(status.base_url.as_deref(), Some("https://example.test/v1"));
-        assert_eq!(status.credential_mode.as_deref(), Some("direct"));
     }
 
     fn test_store() -> ApiConfigStore {

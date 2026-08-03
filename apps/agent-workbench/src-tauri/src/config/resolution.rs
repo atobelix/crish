@@ -1,7 +1,8 @@
 //! 配置解析：字段规范化与有效值来源标记。
 //!
 //! - `normalize_*` 系列：对前端 / 环境变量传入的字符串做别名归一（Endpoint 解析）；
-//! - `ApiKeySource`：API key 生效来源标记（渲染层 / daemon 层展示名）；
+//! - `ApiKeySource`：API key 生效来源标记（渲染层展示名；daemon 层展示名
+//!   随 daemon sidecar 移除而删除，G11a）；
 //! - `last4`：脱敏展示工具（K-02：保留末 4 位，不回明文）。
 
 use std::env;
@@ -37,6 +38,8 @@ pub(crate) struct ResolvedSecret {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// Unset 变体在运行期不构造（effective_api_key 只产 RuntimeUpdate/UserConfig/Env，
+// 未设置时 snapshot() 直接输出字符串 "unset"）——保留为 API 面语义兜底（G11a 备注）。
 #[allow(dead_code)]
 pub(crate) enum ApiKeySource {
     RuntimeUpdate,
@@ -50,15 +53,6 @@ impl ApiKeySource {
         match self {
             Self::RuntimeUpdate => "frontend",
             Self::UserConfig => "frontend",
-            Self::Env => "env",
-            Self::Unset => "unset",
-        }
-    }
-
-    pub(crate) fn daemon_value(self) -> &'static str {
-        match self {
-            Self::RuntimeUpdate => "runtime-update",
-            Self::UserConfig => "user-config",
             Self::Env => "env",
             Self::Unset => "unset",
         }

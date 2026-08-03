@@ -1,6 +1,12 @@
 // 跨平台系统唤醒锁模块（Keep-Awake）。
 // 命令错误统一为 CoreError（IPC 面唯一协议）。
 
+// G11a 备注：keep-awake 为 PE-03 已定「删除注册、实现与测试保留」的预留面——
+// workbench_set_keep_awake 当前无 UI/TUI 消费方（登记被 PE-03 移除），
+// platform::set_keep_awake 为跨平台实现层（macOS IOKit / Linux DBus 实现
+// 在途），整模块 dead_code 静音待接线。
+#![allow(dead_code)]
+
 use conex_types::CoreError;
 
 #[cfg(target_os = "windows")]

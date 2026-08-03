@@ -41,6 +41,8 @@ pub(crate) struct DiffFile {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+// G11a 备注：Copied 变体当前解析器不产出（git 摘要语义完整面），
+// 枚举整体 dead_code 静音保留序列化契约。
 #[allow(dead_code)]
 pub(crate) enum DiffFileStatus {
     Added,

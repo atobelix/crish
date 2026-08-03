@@ -6,9 +6,7 @@ pub(crate) mod skills;
 pub(crate) mod types;
 pub(crate) mod write;
 
-pub(crate) use types::{
-    FileCommandError, WorkspaceFsGuard, ERR_NOT_FILE, ERR_NOT_FOUND, ERR_OUTSIDE_WORKSPACE,
-};
+pub(crate) use types::{FileCommandError, WorkspaceFsGuard};
 
 /// 原生目录选择器：唯一「新授权」入口（PE-07 T07.2）。
 /// 选中路径 → WorkspaceRegistry::register(Dialog) → 返回 canonical 路径。

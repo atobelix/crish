@@ -24,6 +24,11 @@ use std::sync::Mutex;
 use tauri::Manager;
 
 /// 注册来源：决定该路径属于「新授权」还是「复授权」。
+///
+/// G11a 备注：RecentList 变体仅由登记先行命令 workbench_open_workspace
+/// （command_manifest registered=false，PE-07 T07.2 接线在途）构造——
+/// dead_code 静音待接线。
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RegisterSource {
     /// 原生目录对话框选中（唯一新授权入口）
@@ -363,6 +368,10 @@ pub(crate) fn resolve_guard(
 
 /// T07.2 复授权命令：仅当 path ∈ recent 列表或 = 默认应用根时授权；
 /// 否则返回 `workspace_not_granted`（提示走文件夹选择器）。授权成功后写回 recent。
+///
+/// G11a 备注（登记先行面）：command_manifest registered=false（契约测试锚定），
+/// PE-07 T07.2 接线在途——dead_code 静音待接线。
+#[allow(dead_code)]
 #[tauri::command]
 pub(crate) fn workbench_open_workspace(
     app: tauri::AppHandle,
@@ -376,6 +385,8 @@ pub(crate) fn workbench_open_workspace(
 }
 
 /// T07.2 状态同步命令：列出已授权根（供 UI 状态同步）。
+// G11a 备注：登记先行面（command_manifest registered=false），PE-07 T07.2 接线在途。
+#[allow(dead_code)]
 #[tauri::command]
 pub(crate) fn workbench_list_workspaces(
     app: tauri::AppHandle,
@@ -389,6 +400,8 @@ pub(crate) fn workbench_list_workspaces(
 }
 
 /// 复授权成功返回体（camelCase 序列化）。
+// G11a 备注：随登记先行命令 workbench_open_workspace 保留（同理由）。
+#[allow(dead_code)]
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct OpenWorkspaceResult {

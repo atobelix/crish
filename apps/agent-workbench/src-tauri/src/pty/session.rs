@@ -46,6 +46,8 @@ struct PtyExitEvent {
 
 struct PtySession {
     /// Frontend association key (not used for routing; for diagnostics).
+    // G11a 备注：session_key 仅前端关联诊断用（不参与路由/控制），
+    // 非 test 构建从未读取——dead_code 静音。
     #[allow(dead_code)]
     session_key: String,
     writer: Mutex<Box<dyn Write + Send>>,

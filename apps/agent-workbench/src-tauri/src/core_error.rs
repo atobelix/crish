@@ -6,8 +6,8 @@
 //! 1. 重导出 `CoreError`（禁止各命令文件散落 `use conex_types::CoreError`）；
 //! 2. `map_store_err` / `map_run_err`：把存储层 / run 生命周期错误无损映射为 CoreError
 //!    （detail 保留操作名 + 人读消息，77 码侧按 PE-03 §2.4.2 映射表成文）；
-//! 3. 与 77 码体系的显式映射（重导出 `core_error_code`，单一真源在
-//!    `crates/conex-types/src/error.rs`，本层不重复实现映射表）。
+//! 3. 77 码显式映射经 `conex_types::error::core_error_code` 展开（G11a：本层
+//!    重导出已删，需求方直引 `conex-types` 单一真源，避免双重门面）。
 //!
 //! 约定（PE-03 §2.4.2 映射表）：
 //! | CoreError kind | 77 码主码 | 说明 |
@@ -24,12 +24,6 @@
 
 /// 命令面唯一错误类型（serde `{kind, detail}` 协议，`conex-types` 权威定义）。
 pub use conex_types::CoreError;
-
-/// CoreError → 77 码体系主码（PE-03 §2.4.2 映射表，见 `conex-types::error::core_error_code`）。
-///
-/// 命令面需要 77 码（HTTP 网关 / 日志 / lastError 落盘）时一律经本函数显式映射，
-/// 禁止散落自建映射。
-pub use conex_types::error::core_error_code;
 
 /// 把 `orchestrator::persist::StoreError` 映射为 CoreError。
 ///
@@ -62,7 +56,7 @@ pub fn map_run_err(err: orchestrator::run::RunError) -> CoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use conex_types::error::codes;
+    use conex_types::error::{codes, core_error_code};
     use orchestrator::persist::StoreError;
 
     #[test]

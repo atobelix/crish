@@ -151,27 +151,36 @@ impl EventBuffer {
             .unwrap_or_default()
     }
 
+    // 以下观测方法（len/is_empty/total_len/run_ids/remove_run/clear）G11a 备注：
+    // 非 test 构建无 bin 消费者（事件桥 flush 仅用 drain），测试逐条覆盖
+    // （buffer_is_isolated_per_run_id / stress_*）——dead_code 静音，供观测面复用。
+
     /// 指定 run 的缓冲长度（观测）
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn len(&self, run_id: &str) -> usize {
         self.runs.get(run_id).map(|q| q.entries.len()).unwrap_or(0)
     }
 
     /// 是否为空（观测）
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn is_empty(&self) -> bool {
         self.runs.values().all(|q| q.entries.is_empty())
     }
 
     /// 缓冲中待发的总条数（观测）
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn total_len(&self) -> usize {
         self.runs.values().map(|q| q.entries.len()).sum()
     }
 
     /// 已缓冲的 run id 列表（观测）
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn run_ids(&self) -> Vec<String> {
         self.runs.keys().cloned().collect()
     }
 
     /// 丢弃整个 run 的缓冲（run 终态清理；返回被丢弃条数）
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn remove_run(&mut self, run_id: &str) -> usize {
         self.runs
             .remove(run_id)
@@ -180,6 +189,9 @@ impl EventBuffer {
     }
 
     /// 清空全部缓冲
+    // G11a 备注：clear() 无测试消费（其余观测方法均被 buffer 测试断言），
+    // 保留为 API 面观测入口——dead_code 静音。
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.runs.clear();
     }

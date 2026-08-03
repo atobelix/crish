@@ -28,7 +28,7 @@ use std::sync::{Arc, RwLock};
 use tauri::State;
 
 use crate::core_error::CoreError;
-use crate::fs_commands::{FileCommandError, WorkspaceFsGuard};
+use crate::fs_commands::WorkspaceFsGuard;
 
 /// 并行搜索阈值（文件数 ≥ 该值走并行实现）。
 const SEARCH_PARALLEL_THRESHOLD: usize = 1000;
@@ -251,6 +251,10 @@ pub async fn core_compute_diff(
 /// 与 `core_check_command`（返回 GatekeeperResult 字符串字面量，对齐前端
 /// `rustCore.ts` 的 GatekeeperResult 类型）并存：本结构为内部决策面
 /// （允许/需审批/拦截 + 人读原因），不直接走 IPC。
+///
+/// G11a 备注：run 循环 / sidecar 接线未落地，当前仅测试覆盖
+/// （check_command_verdict_maps_all_results）——非 test 构建 dead_code 静音。
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandVerdict {
@@ -262,6 +266,7 @@ pub struct CommandVerdict {
 }
 
 /// 检查一条命令并产出结构化裁决。
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn check_command_verdict(
     gatekeeper: &CommandGatekeeper,
     cmd: &str,
@@ -533,19 +538,6 @@ fn map_jsonl_err(e: String) -> CoreError {
         CoreError::NotFound(e)
     } else {
         CoreError::Io(e)
-    }
-}
-
-/// FileCommandError → CoreError（供路径守卫复用；outside_workspace / not_file →
-/// InvalidInput，path_not_found → NotFound，其余 → Io）。
-#[allow(dead_code)]
-fn map_file_command_err(e: FileCommandError) -> CoreError {
-    match e.code.as_str() {
-        crate::fs_commands::ERR_OUTSIDE_WORKSPACE | crate::fs_commands::ERR_NOT_FILE => {
-            CoreError::InvalidInput(e.message)
-        }
-        crate::fs_commands::ERR_NOT_FOUND => CoreError::NotFound(e.message),
-        _ => CoreError::Io(format!("{}: {}", e.code, e.message)),
     }
 }
 

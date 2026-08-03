@@ -65,6 +65,13 @@ const DANGEROUS_COMMANDS: &[&str] = &[
     "clear-disk", "format", "dd", "stop-computer", "restart-computer",
 ];
 
+/// 红线命令名（小写，确定性毁灭目标——S2 红线清单：mkfs/设备写入/盘符格式化/系统关机，
+/// 与 01 方案 S2 红线清单及 workbench `*_blocks_eleven_red_line_targets` 测试对齐）
+const REDLINE_COMMANDS: &[&str] = &[
+    "mkfs", "mkfs.ext2", "mkfs.ext3", "mkfs.ext4", "mkfs.xfs", "mkfs.btrfs", "format-volume",
+    "clear-disk", "format", "dd", "stop-computer", "restart-computer",
+];
+
 /// 解析命令行：拆分复合命令，逐段分析。
 pub fn analyze(command_line: &str) -> SemanticAnalysis {
     let raw_segments = split_segments(command_line);
@@ -476,7 +483,12 @@ fn classify(command: &str, args: &[String], segment_raw: &str) -> CommandClass {
         return CommandClass::Normal;
     }
 
-    // 4. 危险形态
+    // 4. 红线形态（确定性毁灭目标，100% 拦截层）
+    if REDLINE_COMMANDS.contains(&command) {
+        return CommandClass::Redline;
+    }
+
+    // 5. 危险形态
     if DANGEROUS_COMMANDS.contains(&command) {
         return CommandClass::Dangerous;
     }
@@ -704,9 +716,9 @@ mod tests {
     }
 
     #[test]
-    fn mkfs_is_dangerous() {
+    fn mkfs_is_redline() {
         let a = analyze("mkfs.ext4 /dev/sdb");
-        assert_eq!(a.overall_class, CommandClass::Dangerous);
+        assert_eq!(a.overall_class, CommandClass::Redline);
     }
 
     #[test]

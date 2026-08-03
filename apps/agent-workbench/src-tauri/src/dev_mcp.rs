@@ -20,7 +20,12 @@
 
 /// `CRISH_MCP_SOCKET` 环境变量名：精确等于 "1" 才开启
 const MCP_SOCKET_ENV: &str = "CRISH_MCP_SOCKET";
+
+// G11a 备注（登记先行面）：MCP_EXEC_ENV / mcp_exec_enabled / McpEnabledState /
+// workbench_dev_mcp_enabled 为 command_manifest 登记先行（registered=false，
+// 契约测试锚定 surface=gui），PE-07 T07.5 接线在途——dead_code 静音待接线。
 /// `CRISH_DEV_MCP_EXEC` 环境变量名：二次显式开启 execute_js 等高危命令
+#[allow(dead_code)]
 const MCP_EXEC_ENV: &str = "CRISH_DEV_MCP_EXEC";
 /// MCP socket 固定端口（loopback）
 const MCP_SOCKET_PORT: u16 = 4000;
@@ -37,6 +42,7 @@ pub(crate) fn mcp_socket_enabled() -> bool {
 }
 
 /// execute_js 等高危命令是否显式开启（二次 env）。
+#[allow(dead_code)]
 pub(crate) fn mcp_exec_enabled() -> bool {
     env_flag(MCP_EXEC_ENV)
 }
@@ -66,6 +72,7 @@ pub(crate) fn register_if_enabled(builder: tauri::Builder<tauri::Wry>) -> tauri:
 
 /// MCP 状态查询结果（camelCase 序列化，对齐 commandManifest 契约
 /// `{ enabled, execEnabled }`）。
+#[allow(dead_code)]
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct McpEnabledState {
@@ -77,6 +84,7 @@ pub(crate) struct McpEnabledState {
 
 /// 前端查询 MCP 状态（main.tsx setupPluginListeners 前置检查）：
 /// 仅 enabled 时注册插件监听器；execEnabled 决定是否挂 execute_js。
+#[allow(dead_code)]
 #[tauri::command]
 pub(crate) fn workbench_dev_mcp_enabled() -> McpEnabledState {
     McpEnabledState {

@@ -1,23 +1,25 @@
-//! 性能工具 - 文件系统：分块读取 / 文件信息 / 目录监听。
+//! 性能工具 - 文件系统：分块读取 / 文件信息。
 //!
-//! 路径解析（PE-07 T07.2 变更）：不再接收 `workspace_root` 参数（该参数入口已删除），
-//! 统一经 `crate::workspace` 的 WorkspaceRegistry 解析（信任锚，B1）——
-//! 前端多余参数被 Tauri 忽略，Rust 侧只认注册表授权的活动根。
+//! 变更记录：
+//! - PE-03 已定 `perf_fs_*` 命令删除注册（实现降为内部 fn 或整体删除）；
+//! - G11a：perf_fs_read_chunk / perf_fs_file_info / perf_fs_watch_start /
+//!   perf_fs_watch_stop 命令与目录监听机制（WATCHERS / start_watcher_internal /
+//!   FsWatchEvent 系列）整段删除（main.rs 注册面零命中，前端无消费方）；
+//! - `read_chunk` / `file_info` 保留为测试直接覆盖的核心实现（本文件测试
+//!   逐条断言），等待 core_* 命令面迁移时复用。
 
 use memmap2::Mmap;
-use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
 use std::{
-    collections::HashMap,
     fs::File,
     io::{Read, Seek, SeekFrom},
     path::Path,
-    sync::{Mutex, OnceLock},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::UNIX_EPOCH,
 };
-use tauri::{AppHandle, Emitter};
-use tokio::sync::oneshot;
 
+// 测试专用：非 test 构建下无 bin 消费者（perf_fs_* 命令已删，PE-03 迁移
+// core_* 前仅测试覆盖），dead_code 静音。
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct FileChunk {
@@ -28,6 +30,8 @@ pub(crate) struct FileChunk {
     pub(crate) is_eof: bool,
 }
 
+// 测试专用：同 FileChunk（仅测试覆盖，等待 core_* 迁移复用）。
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct FileInfo {
@@ -39,32 +43,8 @@ pub(crate) struct FileInfo {
     pub(crate) is_symlink: bool,
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct FsWatchEvent {
-    pub(crate) kind: String,
-    pub(crate) paths: Vec<String>,
-    pub(crate) timestamp: u64,
-}
-
-struct ActiveWatcher {
-    _watcher: RecommendedWatcher,
-    _stop_tx: Option<oneshot::Sender<()>>,
-}
-
-static WATCHERS: OnceLock<Mutex<HashMap<String, ActiveWatcher>>> = OnceLock::new();
-
-fn watchers() -> &'static Mutex<HashMap<String, ActiveWatcher>> {
-    WATCHERS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-/// 注册表解析：经 WorkspaceRegistry 活动根解析已存在的文件路径。
-fn resolve_existing(app: &AppHandle, path: &str) -> Result<std::path::PathBuf, String> {
-    let guard = crate::workspace::resolve_guard(app, "")
-        .map_err(|e| format!("Workspace guard error: {}", e.message))?;
-    guard.resolve_existing(path).map_err(|e| e.message)
-}
-
+// 测试专用：同 FileChunk。
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn read_chunk(path: &Path, offset: u64, size: usize) -> Result<FileChunk, String> {
     let file = File::open(path).map_err(|e| format!("Failed to open file: {e}"))?;
     let file_size = file
@@ -113,6 +93,8 @@ pub(crate) fn read_chunk(path: &Path, offset: u64, size: usize) -> Result<FileCh
     })
 }
 
+// 测试专用：同 FileChunk。
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn file_info(path: &Path) -> Result<FileInfo, String> {
     let sym_meta = std::fs::symlink_metadata(path).map_err(|e| format!("Failed to stat file: {e}"))?;
     let is_symlink = sym_meta.is_symlink();
@@ -140,167 +122,6 @@ pub(crate) fn file_info(path: &Path) -> Result<FileInfo, String> {
         is_dir: meta.is_dir(),
         is_symlink,
     })
-}
-
-fn start_watcher_internal(
-    path: String,
-    app_handle: AppHandle,
-    recursive: bool,
-) -> Result<String, String> {
-    let watch_path = std::fs::canonicalize(Path::new(&path))
-        .map_err(|e| format!("Failed to canonicalize watch path: {e}"))?;
-    let watcher_id = format!("perf-fs-watcher-{}", ts_id());
-
-    let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel::<FsWatchEvent>();
-
-    let mut watcher = RecommendedWatcher::new(
-        move |res: Result<Event, notify::Error>| {
-            if let Ok(event) = res {
-                let kind = format_event_kind(&event.kind);
-                if kind == "Other" {
-                    return;
-                }
-                let paths: Vec<String> = event
-                    .paths
-                    .iter()
-                    .filter_map(|p| p.to_str().map(String::from))
-                    .collect();
-                let timestamp = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_millis() as u64)
-                    .unwrap_or(0);
-                let _ = event_tx.send(FsWatchEvent {
-                    kind,
-                    paths,
-                    timestamp,
-                });
-            }
-        },
-        Config::default(),
-    )
-    .map_err(|e| format!("Failed to create file watcher: {e}"))?;
-
-    let mode = if recursive {
-        RecursiveMode::Recursive
-    } else {
-        RecursiveMode::NonRecursive
-    };
-
-    watcher
-        .watch(&watch_path, mode)
-        .map_err(|e| format!("Failed to start watching path: {e}"))?;
-
-    let (stop_tx, mut stop_rx) = oneshot::channel::<()>();
-
-    let emit_handle = app_handle.clone();
-    tokio::spawn(async move {
-        let mut last_emit = tokio::time::Instant::now();
-        let debounce = Duration::from_millis(100);
-        let mut pending: Option<FsWatchEvent> = None;
-
-        loop {
-            tokio::select! {
-                Some(event) = event_rx.recv() => {
-                    pending = Some(event);
-                    let elapsed = last_emit.elapsed();
-                    if elapsed >= debounce {
-                        if let Some(ev) = pending.take() {
-                            let _ = emit_handle.emit("perf:fs:changed", &ev);
-                            last_emit = tokio::time::Instant::now();
-                        }
-                    }
-                }
-                _ = tokio::time::sleep(Duration::from_millis(50)) => {
-                    if let Some(ev) = pending.take() {
-                        if last_emit.elapsed() >= debounce {
-                            let _ = emit_handle.emit("perf:fs:changed", &ev);
-                            last_emit = tokio::time::Instant::now();
-                        }
-                    }
-                }
-                _ = &mut stop_rx => {
-                    break;
-                }
-            }
-        }
-    });
-
-    let mut registry = watchers()
-        .lock()
-        .map_err(|e| format!("Watcher registry lock: {e}"))?;
-    registry.insert(
-        watcher_id.clone(),
-        ActiveWatcher {
-            _watcher: watcher,
-            _stop_tx: Some(stop_tx),
-        },
-    );
-
-    Ok(watcher_id)
-}
-
-fn format_event_kind(kind: &EventKind) -> String {
-    match kind {
-        EventKind::Create(_) => "Create".to_string(),
-        EventKind::Modify(_) => "Modify".to_string(),
-        EventKind::Remove(_) => "Remove".to_string(),
-        EventKind::Any => "Any".to_string(),
-        _ => "Other".to_string(),
-    }
-}
-
-fn ts_id() -> String {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos().to_string())
-        .unwrap_or_else(|_| {
-            use std::hash::{Hash, Hasher};
-            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-            SystemTime::now().hash(&mut hasher);
-            format!("{:x}", hasher.finish())
-        })
-}
-
-#[tauri::command]
-pub(crate) fn perf_fs_read_chunk(
-    app: AppHandle,
-    path: String,
-    offset: u64,
-    size: u32,
-) -> Result<FileChunk, String> {
-    let resolved = resolve_existing(&app, &path)?;
-    read_chunk(&resolved, offset, size as usize)
-}
-
-#[tauri::command]
-pub(crate) fn perf_fs_file_info(app: AppHandle, path: String) -> Result<FileInfo, String> {
-    let resolved = resolve_existing(&app, &path)?;
-    file_info(&resolved)
-}
-
-#[tauri::command]
-pub(crate) fn perf_fs_watch_start(
-    app: AppHandle,
-    path: String,
-    recursive: Option<bool>,
-) -> Result<String, String> {
-    let resolved = resolve_existing(&app, &path)?;
-    start_watcher_internal(
-        resolved.to_string_lossy().to_string(),
-        app,
-        recursive.unwrap_or(false),
-    )
-}
-
-#[tauri::command]
-pub(crate) fn perf_fs_watch_stop(watcher_id: String) -> Result<(), String> {
-    let mut registry = watchers()
-        .lock()
-        .map_err(|e| format!("Watcher registry lock: {e}"))?;
-    registry
-        .remove(&watcher_id)
-        .ok_or_else(|| format!("Watcher not found: {watcher_id}"))?;
-    Ok(())
 }
 
 #[cfg(test)]

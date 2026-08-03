@@ -539,10 +539,7 @@ pub async fn core_get_run_snapshot(
 // ===== core_list_commands（注册表单一化，PE-03 T03.1）=====
 //
 // 实现唯一真源在 `command_manifest.rs`（COMMAND_MANIFEST 常量 + `core_list_commands`
-// 命令本体），本文件只重导出，保证 main.rs 无论从哪个模块注册都指向同一函数。
-
-/// 命令清单查询（实现见 `crate::command_manifest`）。
-pub use crate::command_manifest::{core_list_commands, CommandManifest, CommandManifestEntry};
+// 命令本体），main.rs 直接引用该真源注册（G11a：本文件原重导出无消费方，已删）。
 
 #[cfg(test)]
 mod tests {

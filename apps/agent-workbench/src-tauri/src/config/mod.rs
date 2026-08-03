@@ -18,7 +18,6 @@ mod resolution;
 use std::sync::{Mutex, OnceLock};
 
 use conex_types::CoreError;
-use serde_json::Value;
 
 use credentials::CredentialStore;
 use persistence::{
@@ -34,8 +33,11 @@ pub(crate) static PROFILE_SECRET_STORE: OnceLock<Mutex<CredentialStore>> = OnceL
 // 使用 glob 确保 Tauri 的 #[tauri::command] 宏生成的辅助项（__cmd__*, __tauri_command_name_*）
 // 在 config 命名空间下可见；逐个 use 只引入命名项，不会引入宏生成项。
 pub(crate) use credentials::*;
-pub(crate) use env_filter::api_key_env_var_names;
 pub(crate) use provider::*;
+
+// 注：workbench_profile_secret_* 旧登记名别名（G11a 删除）——F5 单终态体系
+// （config_command_names_contract.rs 严禁旧名登记 manifest），终态名
+// config_secret_* 已在 credentials.rs 接线。
 
 pub(crate) fn init_api_config_store() {
     let config_path = default_config_path();
@@ -69,34 +71,4 @@ fn with_profile_secrets<T>(
         CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
     })?;
     operation(&guard)
-}
-
-// ── 旧登记名兼容别名（F5 改名前的 workbench_profile_secret_*；
-//   语义与终态名一致：K-02 默认只回 last4，不回明文）──────────────
-
-/// 旧登记名：写指定 profile 的 API key（DPAPI 或 memory-only 降级）。
-#[tauri::command]
-pub(crate) fn workbench_profile_secret_set(
-    profile_id: String,
-    api_key: String,
-) -> Result<Value, CoreError> {
-    config_secret_set(profile_id, api_key)
-}
-
-/// 旧登记名：读取指定 profile 的密钥状态（K-02：与终态名一致，不回明文）。
-#[tauri::command]
-pub(crate) fn workbench_profile_secret_get(profile_id: String) -> Result<Value, CoreError> {
-    config_secret_get(profile_id)
-}
-
-/// 旧登记名：仅探测是否已有密钥（不回传明文）。
-#[tauri::command]
-pub(crate) fn workbench_profile_secret_has(profile_id: String) -> Result<Value, CoreError> {
-    config_secret_has(profile_id)
-}
-
-/// 旧登记名：清除指定 profile 密钥。
-#[tauri::command]
-pub(crate) fn workbench_profile_secret_clear(profile_id: String) -> Result<Value, CoreError> {
-    config_secret_clear(profile_id)
 }
