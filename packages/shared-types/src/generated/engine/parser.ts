@@ -35,6 +35,7 @@ import type {
   EngineCacheStatsUpdatedEvent,
   EngineCacheWasteAlertEvent,
   EngineColdCacheWarningEvent,
+  EngineSecurityAuditEvent,
 } from './events';
 import type {
   AgentMessage,
@@ -58,6 +59,7 @@ import type {
   ContextCompressionCacheBoundaryMetadata,
   ContextCompressionRecord,
   RunCacheStats,
+  ImpactAssessment,
   AgentMessageRole,
   AgentEndReason,
   RunTerminalStatus,
@@ -75,6 +77,8 @@ import type {
   ContextCompressionPolicyAction,
   CompressionCacheInvalidation,
   MissAttribution,
+  SecurityAuditOperation,
+  SecurityAuditDecision,
 } from './types';
 import {
   AGENT_MESSAGE_ROLE_VALUES,
@@ -94,6 +98,8 @@ import {
   CONTEXT_COMPRESSION_POLICY_ACTION_VALUES,
   COMPRESSION_CACHE_INVALIDATION_VALUES,
   MISS_ATTRIBUTION_VALUES,
+  SECURITY_AUDIT_OPERATION_VALUES,
+  SECURITY_AUDIT_DECISION_VALUES,
 } from './types';
 import type { JsonValue } from '../../primitive-types';
 
@@ -435,6 +441,36 @@ export function parseMissAttribution(v: unknown): ParseResult<MissAttribution> {
   }
   return parseErr(
     'MissAttribution: expected one of ' + MISS_ATTRIBUTION_VALUES.join(', ')
+  );
+}
+
+export function parseSecurityAuditOperation(
+  v: unknown
+): ParseResult<SecurityAuditOperation> {
+  if (
+    typeof v === 'string' &&
+    (SECURITY_AUDIT_OPERATION_VALUES as readonly string[]).includes(v)
+  ) {
+    return parseOk(v as SecurityAuditOperation);
+  }
+  return parseErr(
+    'SecurityAuditOperation: expected one of ' +
+      SECURITY_AUDIT_OPERATION_VALUES.join(', ')
+  );
+}
+
+export function parseSecurityAuditDecision(
+  v: unknown
+): ParseResult<SecurityAuditDecision> {
+  if (
+    typeof v === 'string' &&
+    (SECURITY_AUDIT_DECISION_VALUES as readonly string[]).includes(v)
+  ) {
+    return parseOk(v as SecurityAuditDecision);
+  }
+  return parseErr(
+    'SecurityAuditDecision: expected one of ' +
+      SECURITY_AUDIT_DECISION_VALUES.join(', ')
   );
 }
 
@@ -1232,6 +1268,30 @@ export function parseRunCacheStats(v: unknown): ParseResult<RunCacheStats> {
   });
 }
 
+export function parseImpactAssessment(
+  v: unknown
+): ParseResult<ImpactAssessment> {
+  if (!isRecord(v))
+    return parseErr('ImpactAssessment: payload must be an object');
+  const fileCount = reqField(v, 'fileCount', checkNumber);
+  if (!fileCount.ok) return fileCount;
+  const totalSizeBytes = reqField(v, 'totalSizeBytes', checkNumber);
+  if (!totalSizeBytes.ok) return totalSizeBytes;
+  const directoryCount = reqField(v, 'directoryCount', checkNumber);
+  if (!directoryCount.ok) return directoryCount;
+  const crossDirectory = reqField(v, 'crossDirectory', checkBoolean);
+  if (!crossDirectory.ok) return crossDirectory;
+  const flagged = reqField(v, 'flagged', checkBoolean);
+  if (!flagged.ok) return flagged;
+  return parseOk({
+    fileCount: fileCount.data,
+    totalSizeBytes: totalSizeBytes.data,
+    directoryCount: directoryCount.data,
+    crossDirectory: crossDirectory.data,
+    flagged: flagged.data,
+  });
+}
+
 export function parseEngineAgentStartEvent(
   v: unknown
 ): ParseResult<EngineAgentStartEvent> {
@@ -1889,6 +1949,44 @@ export function parseEngineColdCacheWarningEvent(
   });
 }
 
+export function parseEngineSecurityAuditEvent(
+  v: unknown
+): ParseResult<EngineSecurityAuditEvent> {
+  if (!isRecord(v))
+    return parseErr('EngineSecurityAuditEvent: payload must be an object');
+  if (v['type'] !== 'security-audit')
+    return parseErr('EngineSecurityAuditEvent: type mismatch');
+  const sessionId = reqField(v, 'sessionId', checkString);
+  if (!sessionId.ok) return sessionId;
+  const timestamp = reqField(v, 'timestamp', checkString);
+  if (!timestamp.ok) return timestamp;
+  const operation = reqField(v, 'operation', parseSecurityAuditOperation);
+  if (!operation.ok) return operation;
+  const targets = reqField(v, 'targets', (x) => parseArrayOf(x, checkString));
+  if (!targets.ok) return targets;
+  const impact = reqField(v, 'impact', parseImpactAssessment);
+  if (!impact.ok) return impact;
+  const decision = reqField(v, 'decision', parseSecurityAuditDecision);
+  if (!decision.ok) return decision;
+  const permissionMode = optField(v, 'permissionMode', checkString);
+  if (!permissionMode.ok) return permissionMode;
+  const toolCallId = optField(v, 'toolCallId', checkString);
+  if (!toolCallId.ok) return toolCallId;
+  return parseOk({
+    type: 'security-audit',
+    sessionId: sessionId.data,
+    timestamp: timestamp.data,
+    operation: operation.data,
+    targets: targets.data,
+    impact: impact.data,
+    decision: decision.data,
+    ...(permissionMode.data !== undefined
+      ? { permissionMode: permissionMode.data }
+      : {}),
+    ...(toolCallId.data !== undefined ? { toolCallId: toolCallId.data } : {}),
+  });
+}
+
 export function parseEngineEvent(v: unknown): ParseResult<EngineEvent> {
   if (!isRecord(v)) return parseErr('engine event must be an object');
   const t = v['type'];
@@ -1948,6 +2046,8 @@ export function parseEngineEvent(v: unknown): ParseResult<EngineEvent> {
       return parseEngineCacheWasteAlertEvent(v);
     case 'cold-cache-warning':
       return parseEngineColdCacheWarningEvent(v);
+    case 'security-audit':
+      return parseEngineSecurityAuditEvent(v);
     default:
       return parseErr("unknown engine event type '" + t + "'");
   }

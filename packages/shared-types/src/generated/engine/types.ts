@@ -176,6 +176,27 @@ export const MISS_ATTRIBUTION_VALUES = [
 ] as const;
 export type MissAttribution = (typeof MISS_ATTRIBUTION_VALUES)[number];
 
+export const SECURITY_AUDIT_OPERATION_VALUES = [
+  'delete',
+  'trash-restore',
+  'trash-purge',
+  'git-revert',
+  'command-exec',
+] as const;
+export type SecurityAuditOperation =
+  (typeof SECURITY_AUDIT_OPERATION_VALUES)[number];
+
+export const SECURITY_AUDIT_DECISION_VALUES = [
+  'blocked',
+  'approved',
+  'denied',
+  'redirected',
+  'restored',
+  'purged',
+] as const;
+export type SecurityAuditDecision =
+  (typeof SECURITY_AUDIT_DECISION_VALUES)[number];
+
 export interface AgentMessage {
   id: string;
   role: AgentMessageRole;
@@ -404,4 +425,12 @@ export interface RunCacheStats {
   writeRatio?: number;
   missedTokens: number;
   warmUntilMs?: number;
+}
+
+export interface ImpactAssessment {
+  fileCount: number;
+  totalSizeBytes: number;
+  directoryCount: number;
+  crossDirectory: boolean;
+  flagged: boolean;
 }

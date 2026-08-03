@@ -161,3 +161,31 @@ export type {
   PlatformAdaptationOptions,
   UsePlatformAdaptationResult,
 } from './use-platform-adaptation';
+
+// ── 缓存优化（P6：TS 侧规范实现真源，规则 R1-R5 见 P6 §3.1） ──
+// 注：目录与既有 `./cache.ts`（LruCache）同名，模块解析文件优先于目录，
+// 故显式走 `./cache/index`。
+export {
+  compareToolNames,
+  sortToolsByName,
+  formatStableTools,
+  canonicalizeJsonSchema,
+  derivePromptCacheKey,
+  PROMPT_CACHE_KEY_MAX_LENGTH,
+  parseUsageFromProviderChunk,
+  parseUsageFromMetadata,
+  computeCacheMetrics,
+  metricsToCostInputs,
+  resolveCacheAffinity,
+} from './cache/index';
+export type {
+  ToolDefinition,
+  StableTool,
+  CacheAccountingMode,
+  ParseUsageOptions,
+  ParsedUsage,
+  CacheMetrics,
+  CostInputs,
+  CacheAffinityParams,
+  CacheAffinityResult,
+} from './cache/index';

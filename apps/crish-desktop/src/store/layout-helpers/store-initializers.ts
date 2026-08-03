@@ -14,13 +14,13 @@ import {
   type ShellChromeMode,
 } from '../../api/shellChrome';
 import { loadStoredPermissionMode } from '../../api/permissionModes';
-import { createDefaultWorkspace, resolveWorkspacePanelKey } from './ui-selectors';
+import {
+  createDefaultWorkspace,
+  resolveWorkspacePanelKey,
+} from './ui-selectors';
 import { seedSessions } from './session-selectors';
 import { buildSessionsById } from '../sessionIndex';
-import {
-  PENDING_DRAFT_SESSION_ID,
-  isPendingDraft,
-} from '../draftSession';
+import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from '../draftSession';
 import {
   DEFAULT_SETTINGS_TAB,
   DEFAULT_TOKEN_USAGE,
@@ -38,6 +38,20 @@ import {
 /** 有限数字；NaN/Infinity/非数字 → fallback */
 export function finiteNumber(n: unknown, fallback: number): number {
   return typeof n === 'number' && Number.isFinite(n) ? n : fallback;
+}
+
+/**
+ * T-47：4D 可选字段宽容清洗——非负有限才透出，非法值回落 fallback；
+ * fallback 为 undefined 时非法值 → undefined（键省略，UI 隐藏而非显示 0）。
+ */
+function optionalNonNegative(
+  raw: unknown,
+  fallback: number | undefined
+): number | undefined {
+  if (raw === undefined || raw === null) return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, n);
 }
 
 /** 未知值 → 合法 UiSize；损坏存储 / 越界一律 medium */
@@ -66,7 +80,11 @@ export function parseSettingsTab(
   return isSettingsTabType(raw) ? raw : fallback;
 }
 
-/** 清洗 token 用量：非负、有限；缺失字段回落 base */
+/**
+ * 清洗 token 用量：非负、有限；缺失字段回落 base。
+ * T-47：4D 可选字段（cacheRead/cacheWrite/savedCost）宽容处理——
+ * 双端均缺失则键省略（undefined），任意一端提供则取合法非负值。
+ */
 export function sanitizeTokenUsage(
   raw: Partial<TokenUsageState> | TokenUsageState | null | undefined,
   base: TokenUsageState = DEFAULT_TOKEN_USAGE
@@ -80,12 +98,18 @@ export function sanitizeTokenUsage(
       cost: base.cost,
     };
   }
+  const cacheRead = optionalNonNegative(raw.cacheRead, base.cacheRead);
+  const cacheWrite = optionalNonNegative(raw.cacheWrite, base.cacheWrite);
+  const savedCost = optionalNonNegative(raw.savedCost, base.savedCost);
   return {
     input: Math.max(0, finiteNumber(raw.input, base.input)),
     inputMax: Math.max(1, finiteNumber(raw.inputMax, base.inputMax)),
     output: Math.max(0, finiteNumber(raw.output, base.output)),
     outputMax: Math.max(1, finiteNumber(raw.outputMax, base.outputMax)),
     cost: Math.max(0, finiteNumber(raw.cost, base.cost)),
+    ...(cacheRead !== undefined && { cacheRead }),
+    ...(cacheWrite !== undefined && { cacheWrite }),
+    ...(savedCost !== undefined && { savedCost }),
   };
 }
 
@@ -265,7 +289,9 @@ export function sanitizeSessionSeed(seed: {
   // active 指向不存在的会话：优先取首个 session 作后备，否则进入草稿态
   if (!activeSessionId || !sessionsById[activeSessionId]) {
     activeSessionId =
-      sessions.length > 0 ? (sessions[0]?.id ?? PENDING_DRAFT_SESSION_ID) : PENDING_DRAFT_SESSION_ID;
+      sessions.length > 0
+        ? (sessions[0]?.id ?? PENDING_DRAFT_SESSION_ID)
+        : PENDING_DRAFT_SESSION_ID;
   }
   // sessions 为空时强制草稿态（覆盖 active 指向首个 session 但 sessions 已清空的边界）
   if (sessions.length === 0) {

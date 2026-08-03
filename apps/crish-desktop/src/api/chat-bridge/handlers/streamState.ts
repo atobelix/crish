@@ -6,6 +6,7 @@ import {
   logInternalError,
   softFailureMessage,
 } from '../../userFacingErrors';
+import type { MessageCacheMetrics } from './messageHandlers';
 
 export interface StreamState {
   cancelled: boolean;
@@ -14,6 +15,12 @@ export interface StreamState {
   assistantThought: string;
   unsub: (() => void) | null;
   endTimer: ReturnType<typeof setTimeout> | null;
+  /**
+   * 最后一条 assistant 消息的缓存指标（T-47；message-end 派生自
+   * metadata.usage / cacheBreakdown）。null / undefined = 未上报隐藏；
+   * message-end 只在派生非空时写入（无数据不覆盖上一拍）。
+   */
+  lastMessageCacheMetrics?: MessageCacheMetrics | null;
 }
 
 export function cleanupStreamState(state: StreamState): void {

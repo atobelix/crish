@@ -1,7 +1,4 @@
-import type {
-  SettingsTabType,
-  ColumnState,
-} from '../types';
+import type { SettingsTabType, ColumnState } from '../types';
 import type { McpServer, CronJob } from '../../api/clientApi';
 import {
   DEFAULT_SHELL_CHROME,
@@ -50,13 +47,23 @@ export const DEFAULT_SETTINGS_TAB: SettingsTabType = 'profile';
 
 export const SETTINGS_TAB_SET: ReadonlySet<string> = new Set(SETTINGS_TAB_IDS);
 
-/** 遥测 / 用量条 token 计数 */
+/**
+ * 遥测 / 用量条 token 计数。
+ * T-47：扩展 4D 可选字段（cacheRead / cacheWrite / savedCost）——
+ * 全可选向后兼容；undefined = 未上报（UI 隐藏而非显示 0）。
+ */
 export type TokenUsageState = {
   input: number;
   inputMax: number;
   output: number;
   outputMax: number;
   cost: number;
+  /** 缓存命中读取 token（4D；undefined = 未上报） */
+  cacheRead?: number;
+  /** 缓存写入 token（4D；undefined = 未上报） */
+  cacheWrite?: number;
+  /** 缓存节省金额 USD（4D：2D 全价 - 4D 实际价；undefined = 未上报） */
+  savedCost?: number;
 };
 
 /** 产品态安全默认（全 0；上限与历史 demo 一致） */

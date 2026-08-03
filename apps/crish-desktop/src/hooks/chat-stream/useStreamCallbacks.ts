@@ -12,7 +12,10 @@ import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
 import { normalizeAssistantTimeline } from '../../api/toolPresentation';
 import { checkAndAlertSilentComplete } from '../../api/silentComplete';
 import { recordStreamDiag } from '../../api/streamDiag';
-import { applyUsageDelta, fetchRunSnapshotUsage } from '../../api/sessionEventHydrate';
+import {
+  applyUsageDelta,
+  fetchRunSnapshotUsage,
+} from '../../api/sessionEventHydrate';
 import { applySubagentEventToMessages } from '../../api/subagentTimeline';
 import { getActiveModelId } from '../../api/providerProfiles';
 import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
@@ -38,7 +41,11 @@ import {
   setStreamText,
 } from '../../store/streamingStore';
 import { generateMessageId } from '../../utils/generateMessageId';
-import type { MessageToolApprovalMeta, MessageToolCall, SessionAgent } from '../../store/types';
+import type {
+  MessageToolApprovalMeta,
+  MessageToolCall,
+  SessionAgent,
+} from '../../store/types';
 import type { FileDiff } from '../../store/types';
 import type { SessionMessage } from '../../store/layoutStore';
 import type { UseChatStreamOptions, RunNotice } from './types';
@@ -61,6 +68,65 @@ import {
 } from '../../api/streamStop';
 import { useGoalMode } from './useGoalMode';
 
+/**
+ * T-47：run usage 成本估算器选择（纯函数，供单测；4D 回退规则）。
+ *
+ * - 缓存字段已上报（cacheRead / cacheWrite 任一 > 0）→ 4D：
+ *   `estimateCostUsd4d` + `estimateSavingsUsd`（savedCost = 2D 全价 - 4D 实际价）；
+ * - 否则回退 2D：`estimateCostUsd`（缓存缺失不虚报节省，不假装有命中）。
+ *
+ * 估算器实现由调用方注入（pricingStore 动态 import），本函数不依赖
+ * localStorage / 定价数据，保持可单测。
+ */
+export function pickUsageCostEstimators(
+  usage: { cacheReadTokens?: number; cacheWriteTokens?: number },
+  estimators: {
+    estimateCostUsd: (model: string, input: number, output: number) => number;
+    estimateCostUsd4d: (
+      model: string,
+      prompt: number,
+      completion: number,
+      cacheRead: number,
+      cacheWrite: number
+    ) => number;
+    estimateSavingsUsd: (
+      model: string,
+      prompt: number,
+      completion: number,
+      cacheRead: number,
+      cacheWrite: number
+    ) => number;
+  },
+  model: string
+): {
+  estimateCost: (
+    input: number,
+    output: number,
+    cacheRead?: number,
+    cacheWrite?: number
+  ) => number;
+  estimateSavings?: (
+    input: number,
+    output: number,
+    cacheRead?: number,
+    cacheWrite?: number
+  ) => number;
+} {
+  const hasCache =
+    (usage.cacheReadTokens ?? 0) > 0 || (usage.cacheWriteTokens ?? 0) > 0;
+  if (hasCache) {
+    return {
+      estimateCost: (i, o, cr, cw) =>
+        estimators.estimateCostUsd4d(model, i, o, cr ?? 0, cw ?? 0),
+      estimateSavings: (i, o, cr, cw) =>
+        estimators.estimateSavingsUsd(model, i, o, cr ?? 0, cw ?? 0),
+    };
+  }
+  return {
+    estimateCost: (i, o) => estimators.estimateCostUsd(model, i, o),
+  };
+}
+
 export function useStreamCallbacks(
   options: UseChatStreamOptions,
   refs: StreamBatcherRefs,
@@ -72,7 +138,7 @@ export function useStreamCallbacks(
     wsId: string;
     setActiveDiffSource: (source: FileDiff | null) => void;
     upsertSessionAgent: (sessionId: string, agent: SessionAgent) => void;
-  },
+  }
 ): {
   runStreamingAssistant: (
     input: string,
@@ -100,7 +166,7 @@ export function useStreamCallbacks(
 
   const { maybeContinueGoalMode, drainQueuedAfterComplete } = useGoalMode(
     streamManagerRef,
-    onShowToast,
+    onShowToast
   );
 
   const generationMapRef = useRef<Map<string, number>>(new Map());
@@ -169,7 +235,10 @@ export function useStreamCallbacks(
 
     const assertLive = (): boolean => {
       if (runClosed) return false;
-      return isLiveStreamRun(streamManagerRef.current!.get(sid), assistantMsgId);
+      return isLiveStreamRun(
+        streamManagerRef.current!.get(sid),
+        assistantMsgId
+      );
     };
 
     buffer.onFrame = (frame) => {
@@ -188,7 +257,9 @@ export function useStreamCallbacks(
     }
 
     // cancel 支持 L2/L3 mode；协议对接见 runControlClient / createStreamCancel
-    let cancelStreamFn: (opts?: { mode?: 'cooperative' | 'force' }) => void = () => {};
+    let cancelStreamFn: (opts?: {
+      mode?: 'cooperative' | 'force';
+    }) => void = () => {};
     streamManagerRef.current!.set(sid, {
       cancel: (opts) => cancelStreamFn(opts),
       userMsgId,
@@ -217,7 +288,11 @@ export function useStreamCallbacks(
       const key = streamToolBatchKey(sid, assistantMsgId, toolId);
       toolBatcherRef.current?.push(key, patch);
       if (immediate || isImmediateToolStatus(patch.status)) {
-        try { toolBatcherRef.current?.flushNow(); } catch { /* ignore */ }
+        try {
+          toolBatcherRef.current?.flushNow();
+        } catch {
+          /* ignore */
+        }
       }
     };
 
@@ -235,7 +310,11 @@ export function useStreamCallbacks(
       queueToolCallPatch(
         toolId,
         {
-          id: toolId, name, arguments: args, explanation, status,
+          id: toolId,
+          name,
+          arguments: args,
+          explanation,
+          status,
           ...(approvalMeta ? { approvalMeta } : {}),
         },
         status === 'pending_approval'
@@ -281,30 +360,53 @@ export function useStreamCallbacks(
         onThought: (thought) => {
           if (!assertLive()) return;
           thinkingBatcherRef.current?.push(
-            streamBatchKey(sid, assistantMsgId), thought
+            streamBatchKey(sid, assistantMsgId),
+            thought
           );
         },
         onToolStart: (toolId, name, args, explanation) => {
           if (!assertLive()) return;
           upsertToolCall(toolId, name, args, explanation, 'running');
         },
-        onToolPendingApproval: (toolId, name, args, explanation, approvalMeta) => {
+        onToolPendingApproval: (
+          toolId,
+          name,
+          args,
+          explanation,
+          approvalMeta
+        ) => {
           if (!assertLive()) return;
-          upsertToolCall(toolId, name, args, explanation, 'pending_approval', approvalMeta);
+          upsertToolCall(
+            toolId,
+            name,
+            args,
+            explanation,
+            'pending_approval',
+            approvalMeta
+          );
         },
         onApprovalResolved: (toolId, decision) => {
           if (!assertLive()) return;
           toolNames[toolId] = toolNames[toolId] || 'tool';
           if (decision === 'allow') {
-            queueToolCallPatch(toolId, { id: toolId, status: 'running', output: '执行中…' }, true);
+            queueToolCallPatch(
+              toolId,
+              { id: toolId, status: 'running', output: '执行中…' },
+              true
+            );
           } else {
-            queueToolCallPatch(toolId, { id: toolId, status: 'error', output: '未获批准' }, true);
+            queueToolCallPatch(
+              toolId,
+              { id: toolId, status: 'error', output: '未获批准' },
+              true
+            );
           }
         },
         onSubagentStarted: (info) => {
           if (!assertLive()) return;
           if (!info.subagentId) return;
-          const taskLabel = (info.description || '协作任务').trim() || '协作任务';
+          const taskLabel =
+            (info.description || '协作任务').trim() || '协作任务';
           upsertSessionAgent(sid, {
             id: info.subagentId,
             subagentRunId: info.subagentRunId,
@@ -318,11 +420,15 @@ export function useStreamCallbacks(
             startedAt: Date.now(),
           });
           if (info.parentToolCallId) {
-            queueToolCallPatch(info.parentToolCallId, {
-              id: info.parentToolCallId,
-              status: 'running',
-              output: '协作进行中…',
-            }, true);
+            queueToolCallPatch(
+              info.parentToolCallId,
+              {
+                id: info.parentToolCallId,
+                status: 'running',
+                output: '协作进行中…',
+              },
+              true
+            );
           }
         },
         onSubagentEvent: (info) => {
@@ -331,9 +437,14 @@ export function useStreamCallbacks(
           // OPT-H4: nested agent message immer patch (no facade method for this recipe).
           useLayoutStore.setState((state) => {
             const sess = state.sessionsById[sid];
-            const ag = sess?.agents?.find((a: SessionAgent) => a.id === info.subagentId);
+            const ag = sess?.agents?.find(
+              (a: SessionAgent) => a.id === info.subagentId
+            );
             if (!ag) return;
-            ag.messages = applySubagentEventToMessages(ag.messages || [], info.event);
+            ag.messages = applySubagentEventToMessages(
+              ag.messages || [],
+              info.event
+            );
           });
         },
         onSubagentEnded: (info) => {
@@ -344,7 +455,9 @@ export function useStreamCallbacks(
           // OPT-H4: multi-field agent terminal patch via immer (intentional residual).
           useLayoutStore.setState((state) => {
             const sess = state.sessionsById[sid];
-            const ag = sess?.agents?.find((a: SessionAgent) => a.id === info.subagentId);
+            const ag = sess?.agents?.find(
+              (a: SessionAgent) => a.id === info.subagentId
+            );
             if (!ag) return;
             ag.status = info.status;
             if (info.summary) ag.summary = info.summary;
@@ -357,14 +470,24 @@ export function useStreamCallbacks(
             const toolId = ag.parentToolCallId;
             if (toolId && sess?.messages) {
               for (const m of sess.messages) {
-                const tc = m.toolCalls?.find((t: MessageToolCall) => t.id === toolId);
+                const tc = m.toolCalls?.find(
+                  (t: MessageToolCall) => t.id === toolId
+                );
                 if (!tc) continue;
                 const st = String(info.status || '');
                 const failed = /fail|error/i.test(st);
-                const stopped = st === 'stopped' || /cancel|stopp?ed|abort/i.test(st);
+                const stopped =
+                  st === 'stopped' || /cancel|stopp?ed|abort/i.test(st);
                 tc.status = failed || stopped ? 'error' : 'success';
-                const body = summary.trim() || (failed ? '协作未完成' : stopped ? '协作已停止' : '协作已完成');
-                tc.output = body.length > 1200 ? body.slice(0, 1199) + '…' : body;
+                const body =
+                  summary.trim() ||
+                  (failed
+                    ? '协作未完成'
+                    : stopped
+                      ? '协作已停止'
+                      : '协作已完成');
+                tc.output =
+                  body.length > 1200 ? body.slice(0, 1199) + '…' : body;
               }
             }
           });
@@ -392,14 +515,23 @@ export function useStreamCallbacks(
               ?.arguments ||
             '';
           const displayOut = sanitizeToolDisplayOutput(output || '');
-          const resolvedDiffs = resolveToolDiffs({ name, args, output: displayOut, structuredDiffs: diffs });
-          queueToolCallPatch(toolId, {
-            id: toolId,
-            ...(name ? { name } : {}),
-            status: 'success',
-            output: displayOut || output || '完成',
-            diffs: resolvedDiffs.length ? resolvedDiffs : undefined,
-          }, true);
+          const resolvedDiffs = resolveToolDiffs({
+            name,
+            args,
+            output: displayOut,
+            structuredDiffs: diffs,
+          });
+          queueToolCallPatch(
+            toolId,
+            {
+              id: toolId,
+              ...(name ? { name } : {}),
+              status: 'success',
+              output: displayOut || output || '完成',
+              diffs: resolvedDiffs.length ? resolvedDiffs : undefined,
+            },
+            true
+          );
           if (isShellToolName(name) && displayOut) {
             addTerminalLines(displayOut.split('\n').slice(0, 80), sid);
           }
@@ -410,7 +542,11 @@ export function useStreamCallbacks(
         onToolError: (toolId, error) => {
           if (!assertLive()) return;
           const clean = sanitizeToolDisplayOutput(error || '');
-          queueToolCallPatch(toolId, { id: toolId, status: 'error', output: clean || error || '失败' }, true);
+          queueToolCallPatch(
+            toolId,
+            { id: toolId, status: 'error', output: clean || error || '失败' },
+            true
+          );
           const name = toolNames[toolId];
           if (name && isShellToolName(name) && clean) {
             addTerminalLine(clean, sid);
@@ -424,13 +560,18 @@ export function useStreamCallbacks(
           if (renderBufferRef.current) {
             renderBufferRef.current.push(chunk);
           } else {
-            textBatcherRef.current?.push(streamBatchKey(sid, assistantMsgId), streamedFullText);
+            textBatcherRef.current?.push(
+              streamBatchKey(sid, assistantMsgId),
+              streamedFullText
+            );
           }
           const cur = getSessionById(sid)?.messages.find(
             (m: SessionMessage) => m.id === assistantMsgId
           );
           if (cur?.thinking === '正在处理…') {
-            thinkingBatcherRef.current?.drop(streamBatchKey(sid, assistantMsgId));
+            thinkingBatcherRef.current?.drop(
+              streamBatchKey(sid, assistantMsgId)
+            );
             store.updateMessageThinking(sid, assistantMsgId, '');
           }
         },
@@ -455,7 +596,11 @@ export function useStreamCallbacks(
           });
           // 错误只走横幅/toast，禁止写入 assistant 气泡（用户要求：勿把错误当 AI 输出）
           pushRunNotice(
-            { text: message, kind: kind || 'error', detail: detail || undefined },
+            {
+              text: message,
+              kind: kind || 'error',
+              detail: detail || undefined,
+            },
             14000
           );
           onShowToast(message);
@@ -467,20 +612,33 @@ export function useStreamCallbacks(
               store.withdrawMessage(wsId, sid, assistantMsgId);
               clearStream(sid, assistantMsgId);
             } else {
-              store.setSessionMessageStatus(sid, assistantMsgId, 'error', undefined, {
-                errorDetail: {
-                  message: message || '服务暂时不可用，请检查网络或后端配置',
-                  kind: kind || 'stream-error',
-                  technical: typeof detail === 'string' ? detail : detail ? JSON.stringify(detail) : undefined
+              store.setSessionMessageStatus(
+                sid,
+                assistantMsgId,
+                'error',
+                undefined,
+                {
+                  errorDetail: {
+                    message: message || '服务暂时不可用，请检查网络或后端配置',
+                    kind: kind || 'stream-error',
+                    technical:
+                      typeof detail === 'string'
+                        ? detail
+                        : detail
+                          ? JSON.stringify(detail)
+                          : undefined,
+                  },
                 }
-              });
+              );
             }
           }
           flushStreamBatchers();
         },
         onComplete: () => {
           if (runClosed) return;
-          if (!isLiveStreamRun(streamManagerRef.current!.get(sid), assistantMsgId)) {
+          if (
+            !isLiveStreamRun(streamManagerRef.current!.get(sid), assistantMsgId)
+          ) {
             runClosed = true;
             // Replaced by a newer run — that run owns streamingActive; do not clear.
             return;
@@ -513,7 +671,9 @@ export function useStreamCallbacks(
             runId: localRunId || undefined,
             scope: 'run-complete',
             kind: 'complete',
-            message: runningLeft ? `流已收口，但仍有 ${runningLeft} 个工具显示运行中` : '流正常收口',
+            message: runningLeft
+              ? `流已收口，但仍有 ${runningLeft} 个工具显示运行中`
+              : '流正常收口',
             context: {
               lastTool: lastTool?.name ?? null,
               lastToolStatus: lastTool?.status ?? null,
@@ -522,23 +682,42 @@ export function useStreamCallbacks(
               elapsedSec: elapsed,
             },
           });
-          if (asst && !gotRealText && !(asst.text || committedText || '').trim()) {
+          if (
+            asst &&
+            !gotRealText &&
+            !(asst.text || committedText || '').trim()
+          ) {
             const hasTools = (asst.toolCalls || []).some(
               (t: MessageToolCall) =>
-                t.status === 'success' || t.status === 'error' || t.status === 'running'
+                t.status === 'success' ||
+                t.status === 'error' ||
+                t.status === 'running'
             );
             if (!hasTools) {
-              pushRunNotice({ text: '这一轮没有文字回复。若刚改过配置，请检查模型与网络。', kind: 'empty' }, 6000);
+              pushRunNotice(
+                {
+                  text: '这一轮没有文字回复。若刚改过配置，请检查模型与网络。',
+                  kind: 'empty',
+                },
+                6000
+              );
             } else {
               dismissRunNotice();
             }
-          } else if (gotRealText || (asst?.text || committedText || '').trim()) {
+          } else if (
+            gotRealText ||
+            (asst?.text || committedText || '').trim()
+          ) {
             dismissRunNotice();
           }
-          const toolPatches = buildTerminalToolPatches(asst?.toolCalls, 'complete');
+          const toolPatches = buildTerminalToolPatches(
+            asst?.toolCalls,
+            'complete'
+          );
           for (const p of toolPatches) {
             st.updateMessageToolCall(sid, assistantMsgId, p.id, {
-              status: p.status, output: p.output,
+              status: p.status,
+              output: p.output,
             });
           }
           let finalTextForHtml = '';
@@ -548,23 +727,30 @@ export function useStreamCallbacks(
             );
             const raw = latest?.text || committedText || streamedFullText || '';
             const cleaned = stripThoughtPlaceholders(raw);
-            if (cleaned !== raw) st.updateMessageText(sid, assistantMsgId, cleaned);
+            if (cleaned !== raw)
+              st.updateMessageText(sid, assistantMsgId, cleaned);
             finalTextForHtml = cleaned || raw;
             const th = latest?.thinking || '';
             if (th === '正在处理…' || th === '正在思考中...') {
-              thinkingBatcherRef.current?.drop(streamBatchKey(sid, assistantMsgId));
+              thinkingBatcherRef.current?.drop(
+                streamBatchKey(sid, assistantMsgId)
+              );
               st.updateMessageThinking(sid, assistantMsgId, '');
             }
             // OPT-H4: timeline normalize mutates msg in place — keep store.setState recipe.
             useLayoutStore.setState((state) => {
               const sess = state.sessionsById[sid];
-              const msg = sess?.messages.find((m: SessionMessage) => m.id === assistantMsgId);
+              const msg = sess?.messages.find(
+                (m: SessionMessage) => m.id === assistantMsgId
+              );
               if (!msg || msg.sender !== 'assistant') return;
               const n = normalizeAssistantTimeline({ ...msg });
               msg.blocks = n.blocks;
               msg.toolCalls = n.toolCalls;
             });
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
           scheduleRunFinalHtml(finalTextForHtml);
           const latestUserMsg = getSessionById(sid)?.messages.find(
             (m: SessionMessage) => m.id === userMsgId
@@ -578,7 +764,12 @@ export function useStreamCallbacks(
             st.setSessionMessageStatus(sid, userMsgId, 'completed');
           }
           if (latestAssistantMsg?.status === 'processing') {
-            st.setSessionMessageStatus(sid, assistantMsgId, 'completed', elapsed);
+            st.setSessionMessageStatus(
+              sid,
+              assistantMsgId,
+              'completed',
+              elapsed
+            );
           }
           // D2-5：终态后检测 silent complete（无 UserView 可见正文/工具）；仅 metric + dev warn，不改成功语义
           try {
@@ -602,29 +793,82 @@ export function useStreamCallbacks(
             try {
               const runId = localRunId;
               let applied = false;
-              const { estimateCostUsd } = await import('../../api/pricingStore');
+              const { estimateCostUsd, estimateCostUsd4d, estimateSavingsUsd } =
+                await import('../../api/pricingStore');
               if (runId) {
                 await new Promise((r) => setTimeout(r, 400));
                 const usage = await fetchRunSnapshotUsage(runId);
-                if (usage && (usage.sampleCount ?? 0) > 0 && (usage.promptTokens || usage.completionTokens)) {
+                if (
+                  usage &&
+                  (usage.sampleCount ?? 0) > 0 &&
+                  (usage.promptTokens || usage.completionTokens)
+                ) {
                   const model = getActiveModelId() || 'unknown';
                   const cur = getSettingsState().tokenUsage;
-                  const next = applyUsageDelta(cur, usage, (i: number, o: number) => estimateCostUsd(model, i, o));
+                  // T-47：4D 消费——缓存字段上报时用 estimateCostUsd4d + estimateSavingsUsd
+                  //（savedCost = 2D 全价 - 4D 实际价）；缓存缺失回退 2D，不虚报节省
+                  const { estimateCost, estimateSavings } =
+                    pickUsageCostEstimators(
+                      usage,
+                      {
+                        estimateCostUsd,
+                        estimateCostUsd4d,
+                        estimateSavingsUsd,
+                      },
+                      model
+                    );
+                  const next = applyUsageDelta(
+                    cur,
+                    usage,
+                    estimateCost,
+                    estimateSavings
+                  );
                   const dIn = Math.max(0, (next.input || 0) - (cur.input || 0));
-                  const dOut = Math.max(0, (next.output || 0) - (cur.output || 0));
+                  const dOut = Math.max(
+                    0,
+                    (next.output || 0) - (cur.output || 0)
+                  );
                   const dCost = Math.max(0, (next.cost || 0) - (cur.cost || 0));
+                  const dCacheRead = Math.max(
+                    0,
+                    (next.cacheRead || 0) - (cur.cacheRead || 0)
+                  );
+                  const dCacheWrite = Math.max(
+                    0,
+                    (next.cacheWrite || 0) - (cur.cacheWrite || 0)
+                  );
+                  const dSavedCost = Math.max(
+                    0,
+                    (next.savedCost || 0) - (cur.savedCost || 0)
+                  );
                   syncTelemetryData({ tokenUsage: next });
                   try {
-                    const { recordUsageDelta } = await import('../../api/usageStore');
-                    recordUsageDelta({ input: dIn, output: dOut, cost: dCost, model });
-                  } catch { /* ignore */ }
+                    const { recordUsageDelta } =
+                      await import('../../api/usageStore');
+                    recordUsageDelta({
+                      input: dIn,
+                      output: dOut,
+                      cost: dCost,
+                      model,
+                      ...(dCacheRead > 0 ? { cacheRead: dCacheRead } : {}),
+                      ...(dCacheWrite > 0 ? { cacheWrite: dCacheWrite } : {}),
+                      ...(dSavedCost > 0 ? { savedCost: dSavedCost } : {}),
+                    });
+                  } catch {
+                    /* ignore */
+                  }
                   applied = true;
                 }
               }
               if (!applied) {
                 const sess = getSessionById(sid);
-                const userText = sess?.messages.find((m: SessionMessage) => m.id === userMsgId)?.text || '';
-                const asstText = sess?.messages.find((m: SessionMessage) => m.id === assistantMsgId)?.text || '';
+                const userText =
+                  sess?.messages.find((m: SessionMessage) => m.id === userMsgId)
+                    ?.text || '';
+                const asstText =
+                  sess?.messages.find(
+                    (m: SessionMessage) => m.id === assistantMsgId
+                  )?.text || '';
                 const approxIn = Math.max(1, Math.ceil(userText.length / 4));
                 const approxOut = Math.max(0, Math.ceil(asstText.length / 4));
                 const model = getActiveModelId() || 'unknown';
@@ -639,11 +883,21 @@ export function useStreamCallbacks(
                   },
                 });
                 try {
-                  const { recordUsageDelta } = await import('../../api/usageStore');
-                  recordUsageDelta({ input: approxIn, output: approxOut, cost: dCost, model });
-                } catch { /* ignore */ }
+                  const { recordUsageDelta } =
+                    await import('../../api/usageStore');
+                  recordUsageDelta({
+                    input: approxIn,
+                    output: approxOut,
+                    cost: dCost,
+                    model,
+                  });
+                } catch {
+                  /* ignore */
+                }
               }
-            } catch { /* ignore */ }
+            } catch {
+              /* ignore */
+            }
           })();
           if (!maybeContinueGoalMode(sid, assistantMsgId)) {
             drainQueuedAfterComplete(sid);
@@ -743,7 +997,9 @@ export function useStreamCallbacks(
     void (async () => {
       try {
         const sess = getSessionById(sid);
-        const userTxt = sess?.messages.find((m: SessionMessage) => m.id === cur.userMsgId)?.text || '';
+        const userTxt =
+          sess?.messages.find((m: SessionMessage) => m.id === cur.userMsgId)
+            ?.text || '';
         const asstTxt = asst?.text || stopText || '';
         if (!userTxt && !asstTxt) return;
         const { estimateCostUsd } = await import('../../api/pricingStore');
@@ -762,9 +1018,18 @@ export function useStreamCallbacks(
         });
         try {
           const { recordUsageDelta } = await import('../../api/usageStore');
-          recordUsageDelta({ input: approxIn, output: approxOut, cost: dCost, model });
-        } catch { /* ignore */ }
-      } catch { /* ignore */ }
+          recordUsageDelta({
+            input: approxIn,
+            output: approxOut,
+            cost: dCost,
+            model,
+          });
+        } catch {
+          /* ignore */
+        }
+      } catch {
+        /* ignore */
+      }
     })();
     // L2/L3 wire：shared helper（chat has live cancel; no runId double-dispatch）
     dispatchStreamStopCancel({ force, cancel: cur.cancel });
@@ -780,5 +1045,9 @@ export function useStreamCallbacks(
     finalizeStopGeneration(true);
   };
 
-  return { runStreamingAssistant, handleStopGeneration, handleForceCancelGeneration };
+  return {
+    runStreamingAssistant,
+    handleStopGeneration,
+    handleForceCancelGeneration,
+  };
 }

@@ -53,7 +53,11 @@ function blockText(block: unknown): string {
   return '';
 }
 
-function toolResult(result: unknown): { id: string; text: string; isError: boolean } {
+function toolResult(result: unknown): {
+  id: string;
+  text: string;
+  isError: boolean;
+} {
   const r = asRec(result) || {};
   const id = String(r.toolCallId ?? r.id ?? '');
   const isError = Boolean(r.isError ?? r.error);
@@ -75,7 +79,7 @@ function toolResult(result: unknown): { id: string; text: string; isError: boole
 function resolveProjectedMessageId(
   msg: AnyRec | null,
   role: 'user' | 'assistant',
-  msgSeq: number,
+  msgSeq: number
 ): string {
   const stable = pickStableMessageId(msg);
   if (stable) return stable;
@@ -89,7 +93,7 @@ function resolveProjectedMessageId(
 function rekeyAssistantIfStable(
   messages: SessionMessage[],
   assistant: SessionMessage,
-  stableId: string,
+  stableId: string
 ): void {
   if (!stableId || stableId.startsWith('hyd-') || assistant.id === stableId) {
     return;
@@ -107,7 +111,7 @@ function rekeyAssistantIfStable(
  */
 export function mergeMessagesById(
   existing: SessionMessage[],
-  incoming: SessionMessage[],
+  incoming: SessionMessage[]
 ): SessionMessage[] {
   if (!incoming.length) return existing.slice();
 
@@ -177,7 +181,7 @@ export function projectEventsToMessages(events: unknown[]): {
     if (!currentAssistant) {
       const id = stableId || `hyd-asst-${++msgSeq}`;
       const existing = messages.find(
-        (m) => m.id === id && m.sender === 'assistant',
+        (m) => m.id === id && m.sender === 'assistant'
       );
       if (existing) {
         currentAssistant = existing;
@@ -200,10 +204,12 @@ export function projectEventsToMessages(events: unknown[]): {
   for (const raw of events) {
     const ev = asRec(raw);
     if (!ev) continue;
-    if (typeof ev.sequence === 'number') maxSequence = Math.max(maxSequence, ev.sequence);
+    if (typeof ev.sequence === 'number')
+      maxSequence = Math.max(maxSequence, ev.sequence);
     if (typeof ev.runId === 'string') lastRunId = ev.runId;
     const payload = asRec(ev.payload);
-    if (payload && typeof payload.runId === 'string') lastRunId = payload.runId as string;
+    if (payload && typeof payload.runId === 'string')
+      lastRunId = payload.runId as string;
 
     const agent = agentEventFromOrchestrator(ev);
     if (!agent) {
@@ -230,7 +236,8 @@ export function projectEventsToMessages(events: unknown[]): {
         for (const bl of msg.blocks) {
           const b = asRec(bl);
           if (!b) continue;
-          if (b.type === 'thought' || b.kind === 'thought') thought += blockText(b);
+          if (b.type === 'thought' || b.kind === 'thought')
+            thought += blockText(b);
           else if (b.type === 'text') text += blockText(b);
         }
       }
@@ -283,8 +290,12 @@ export function projectEventsToMessages(events: unknown[]): {
         a.text = (a.text || '') + t;
         if (!a.blocks) a.blocks = [];
         // 与 live store 类似：当前 text 段
-        const offset = typeof a.streamTextOffset === 'number' ? a.streamTextOffset : 0;
-        const segment = (a.text || '').length >= offset ? (a.text || '').slice(offset) : a.text || '';
+        const offset =
+          typeof a.streamTextOffset === 'number' ? a.streamTextOffset : 0;
+        const segment =
+          (a.text || '').length >= offset
+            ? (a.text || '').slice(offset)
+            : a.text || '';
         const last = a.blocks[a.blocks.length - 1];
         if (last?.type === 'text') last.content = segment;
         else if (segment) a.blocks.push({ type: 'text', content: segment });
@@ -328,7 +339,9 @@ export function projectEventsToMessages(events: unknown[]): {
       const { id, text, isError } = toolResult(agent.result);
       const a = currentAssistant as SessionMessage | null;
       if (!a || !a.toolCalls) continue;
-      const tc = a.toolCalls.find((t) => t.id === id) || a.toolCalls[a.toolCalls.length - 1];
+      const tc =
+        a.toolCalls.find((t) => t.id === id) ||
+        a.toolCalls[a.toolCalls.length - 1];
       if (tc) {
         tc.status = isError ? 'error' : 'success';
         tc.output = text || (isError ? 'failed' : 'OK');
@@ -352,7 +365,7 @@ export function projectEventsToMessages(events: unknown[]): {
 
   // 与 live / 本地持久化共用同一套 blocks 对齐规则
   const normalized = messages.map((m) =>
-    m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m,
+    m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
   );
 
   return {
@@ -362,12 +375,15 @@ export function projectEventsToMessages(events: unknown[]): {
   };
 }
 
-
 export async function fetchSessionEvents(
   sessionId: string,
   afterSequence = 0,
-  maxEvents = 500,
-): Promise<{ events: unknown[]; nextAfterSequence: number; hasMore: boolean } | null> {
+  maxEvents = 500
+): Promise<{
+  events: unknown[];
+  nextAfterSequence: number;
+  hasMore: boolean;
+} | null> {
   const transport = getTransport();
   try {
     if (!transport.isReady()) {
@@ -377,11 +393,13 @@ export async function fetchSessionEvents(
     const res = (await transport.request<Record<string, unknown>>(
       'core_read_session_events',
       { sessionId, afterSequence, maxEvents },
-      { timeoutMs: 15_000 },
+      { timeoutMs: 15_000 }
     )) as Record<string, unknown>;
     const events = Array.isArray(res.events) ? res.events : [];
     const nextAfterSequence =
-      typeof res.nextAfterSequence === 'number' ? res.nextAfterSequence : afterSequence;
+      typeof res.nextAfterSequence === 'number'
+        ? res.nextAfterSequence
+        : afterSequence;
     const hasMore = Boolean(res.hasMore);
     return { events, nextAfterSequence, hasMore };
   } catch (e) {
@@ -391,7 +409,7 @@ export async function fetchSessionEvents(
 }
 
 export async function hydrateSessionMessagesFromEngine(
-  sessionId: string,
+  sessionId: string
 ): Promise<SessionHydrateResult> {
   const page = await fetchSessionEvents(sessionId, 0, 800);
   if (!page) {
@@ -411,7 +429,9 @@ export async function hydrateSessionMessagesFromEngine(
       hasMore: page.hasMore,
     };
   }
-  const { messages, lastRunId, maxSequence } = projectEventsToMessages(page.events);
+  const { messages, lastRunId, maxSequence } = projectEventsToMessages(
+    page.events
+  );
   return {
     ok: true,
     messages,
@@ -421,40 +441,27 @@ export async function hydrateSessionMessagesFromEngine(
   };
 }
 
-
 /**
  * H3 钩子：拉取 run snapshot 中的 usage（若协议可用）。
  * H2 仅提供 API，UI 可选用。
+ *
+ * T-47：透出 cache 字段（cacheReadTokens / cacheWriteTokens / cacheMissTokens /
+ * hitRatio / writeRatio / missedTokens / warmUntilMs），解析统一走
+ * `parseRunSnapshotUsage`（与 H2 投影同口径，禁止两套解析漂移）。
  */
-export async function fetchRunSnapshotUsage(runId: string): Promise<{
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-  sampleCount?: number;
-} | null> {
+export async function fetchRunSnapshotUsage(
+  runId: string
+): Promise<RunSnapshotUsage | null> {
   const transport = getTransport();
   try {
     if (!transport.isReady()) return null;
     const res = (await transport.request<Record<string, unknown>>(
       'core_get_run_snapshot',
       { runId },
-      { timeoutMs: 10_000 },
+      { timeoutMs: 10_000 }
     )) as Record<string, unknown>;
-    const snap = asRec(res.snapshot) || res;
-    const usage = asRec(snap?.usage);
-    if (!usage) return null;
-    const promptTokens = typeof usage.promptTokens === 'number' ? usage.promptTokens : undefined;
-    const completionTokens = typeof usage.completionTokens === 'number' ? usage.completionTokens : undefined;
-    const totalTokens = typeof usage.totalTokens === 'number' ? usage.totalTokens : undefined;
-    const sampleCount = typeof usage.sampleCount === 'number' ? usage.sampleCount : undefined;
-    return {
-      ...(promptTokens !== undefined && { promptTokens }),
-      ...(completionTokens !== undefined && { completionTokens }),
-      ...(totalTokens !== undefined && { totalTokens }),
-      ...(sampleCount !== undefined && { sampleCount }),
-    };
+    return parseRunSnapshotUsage(res);
   } catch (e) {
-
     logInternalError('fetchRunSnapshotUsage', e);
     return null;
   }
@@ -484,12 +491,23 @@ export type RunSnapshotUsage = {
   sampleCount: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  cacheMissTokens?: number;
+  /** 命中率 = cacheRead / inputTotal；undefined = 未上报（隐藏而非 0%） */
+  hitRatio?: number;
+  /** 写入占比 = cacheWrite / inputTotal；undefined = 未上报 */
+  writeRatio?: number;
+  /** 本 run 审计出的浪费量（detectMiss 累计） */
+  missedTokens?: number;
+  /** 缓存温暖截止（now + TTL）；undefined = 无 TTL 数据 */
+  warmUntilMs?: number;
 };
 
 /**
  * 同步解析 run-snapshot 原始数据为规范化 usage 结构。
- * 支持 snapshot.cache.readTokens/writeTokens（优先）和
- * usage.cacheReadTokens/cacheWriteTokens（兜底）两种字段路径。
+ * 支持 snapshot.cache.readTokens/writeTokens（legacy daemon 形态）和
+ * usage.cacheReadTokens/cacheWriteTokens（T-40 wire 形态）两种字段路径；
+ * cacheMissTokens / hitRatio / writeRatio / missedTokens / warmUntilMs 同源透出。
+ * null 语义：缺失/非法值 → undefined（UI 隐藏而非显示 0）。
  */
 export function parseRunSnapshotUsage(raw: unknown): RunSnapshotUsage | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -499,32 +517,46 @@ export function parseRunSnapshotUsage(raw: unknown): RunSnapshotUsage | null {
   const usage = asRec(snap?.usage) ?? asRec(r.usage);
   if (!usage) return null;
 
-  const promptTokens = typeof usage.promptTokens === 'number' ? usage.promptTokens : null;
-  const completionTokens = typeof usage.completionTokens === 'number' ? usage.completionTokens : null;
-  const totalTokens = typeof usage.totalTokens === 'number'
-    ? usage.totalTokens
-    : (promptTokens ?? 0) + (completionTokens ?? 0);
-  const sampleCount = typeof usage.sampleCount === 'number' ? usage.sampleCount : 0;
+  const promptTokens =
+    typeof usage.promptTokens === 'number' ? usage.promptTokens : null;
+  const completionTokens =
+    typeof usage.completionTokens === 'number' ? usage.completionTokens : null;
+  const totalTokens =
+    typeof usage.totalTokens === 'number'
+      ? usage.totalTokens
+      : (promptTokens ?? 0) + (completionTokens ?? 0);
+  const sampleCount =
+    typeof usage.sampleCount === 'number' ? usage.sampleCount : 0;
 
   if (promptTokens === null && completionTokens === null) return null;
 
-  // cache 字段：优先 snapshot.cache.readTokens/writeTokens
+  // cache 字段（T-47）：优先 snapshot.cache（legacy daemon 形态），
+  // 否则 usage.*（T-40 wire 形态 RunUsage camelCase）。
   const cache = snap ? asRec(snap.cache) : null;
-  let cacheReadTokens: number | undefined;
-  let cacheWriteTokens: number | undefined;
+  const readRaw = cache ? cache.readTokens : usage.cacheReadTokens;
+  const writeRaw = cache ? cache.writeTokens : usage.cacheWriteTokens;
+  const missRaw = cache ? cache.missTokens : usage.cacheMissTokens;
+  const hitRatioRaw = cache ? cache.hitRatio : usage.hitRatio;
+  const writeRatioRaw = cache ? cache.writeRatio : usage.writeRatio;
 
-  if (cache) {
-    const r = Number(cache.readTokens);
-    const w = Number(cache.writeTokens);
-    if (Number.isFinite(r) && r > 0) cacheReadTokens = r;
-    if (Number.isFinite(w) && w > 0) cacheWriteTokens = w;
-  } else {
-    // 兜底：直接在 usage 里找
-    const r = Number(usage.cacheReadTokens);
-    const w = Number(usage.cacheWriteTokens);
-    if (Number.isFinite(r) && r > 0) cacheReadTokens = r;
-    if (Number.isFinite(w) && w > 0) cacheWriteTokens = w;
-  }
+  // 计数类仅正数透出（0 = 无缓存活动；undefined = 未上报，UI 隐藏）
+  const positive = (v: unknown): number | undefined => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  };
+  // 比例类非负即透出（0 是合法报告值，区别于未上报 undefined）
+  const nonNegative = (v: unknown): number | undefined => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : undefined;
+  };
+
+  const cacheReadTokens = positive(readRaw);
+  const cacheWriteTokens = positive(writeRaw);
+  const cacheMissTokens = positive(missRaw);
+  const hitRatio = nonNegative(hitRatioRaw);
+  const writeRatio = nonNegative(writeRatioRaw);
+  const missedTokens = positive(usage.missedTokens);
+  const warmUntilMs = positive(usage.warmUntilMs);
 
   return {
     promptTokens: promptTokens ?? 0,
@@ -533,6 +565,11 @@ export function parseRunSnapshotUsage(raw: unknown): RunSnapshotUsage | null {
     sampleCount,
     ...(cacheReadTokens !== undefined && { cacheReadTokens }),
     ...(cacheWriteTokens !== undefined && { cacheWriteTokens }),
+    ...(cacheMissTokens !== undefined && { cacheMissTokens }),
+    ...(hitRatio !== undefined && { hitRatio }),
+    ...(writeRatio !== undefined && { writeRatio }),
+    ...(missedTokens !== undefined && { missedTokens }),
+    ...(warmUntilMs !== undefined && { warmUntilMs }),
   };
 }
 
@@ -553,8 +590,18 @@ export function applyUsageDelta(
     cacheReadTokens?: number;
     cacheWriteTokens?: number;
   },
-  estimateCost: (input: number, output: number, cacheRead?: number, cacheWrite?: number) => number,
-  estimateSavings?: (input: number, output: number, cacheRead?: number, cacheWrite?: number) => number,
+  estimateCost: (
+    input: number,
+    output: number,
+    cacheRead?: number,
+    cacheWrite?: number
+  ) => number,
+  estimateSavings?: (
+    input: number,
+    output: number,
+    cacheRead?: number,
+    cacheWrite?: number
+  ) => number
 ): UsageDeltaState {
   const din = Math.max(0, usage.promptTokens ?? 0);
   const dout = Math.max(0, usage.completionTokens ?? 0);
@@ -564,12 +611,17 @@ export function applyUsageDelta(
 
   const nextIn = current.input + din;
   const nextOut = current.output + dout;
-  const nextCost = current.cost + estimateCost(din, dout, dcr || undefined, dcw || undefined);
+  const nextCost =
+    current.cost + estimateCost(din, dout, dcr || undefined, dcw || undefined);
 
   const hasCacheRead = dcr > 0;
   const hasCacheWrite = dcw > 0;
-  const nextCacheRead = hasCacheRead ? (current.cacheRead ?? 0) + dcr : current.cacheRead;
-  const nextCacheWrite = hasCacheWrite ? (current.cacheWrite ?? 0) + dcw : current.cacheWrite;
+  const nextCacheRead = hasCacheRead
+    ? (current.cacheRead ?? 0) + dcr
+    : current.cacheRead;
+  const nextCacheWrite = hasCacheWrite
+    ? (current.cacheWrite ?? 0) + dcw
+    : current.cacheWrite;
 
   let nextSavedCost = current.savedCost;
   if (estimateSavings && (dcr > 0 || dcw > 0)) {

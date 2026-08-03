@@ -22,6 +22,9 @@ import type {
   RunTerminalStatus,
   RunCacheStats,
   MissAttribution,
+  SecurityAuditOperation,
+  ImpactAssessment,
+  SecurityAuditDecision,
 } from './types';
 
 export interface EngineAgentStartEvent {
@@ -239,6 +242,18 @@ export interface EngineColdCacheWarningEvent {
   resendEstimateTokens: number;
 }
 
+export interface EngineSecurityAuditEvent {
+  type: 'security-audit';
+  sessionId: string;
+  timestamp: string;
+  operation: SecurityAuditOperation;
+  targets: string[];
+  impact: ImpactAssessment;
+  decision: SecurityAuditDecision;
+  permissionMode?: string;
+  toolCallId?: string;
+}
+
 export type EngineEvent =
   | EngineAgentStartEvent
   | EngineAgentEndEvent
@@ -266,7 +281,8 @@ export type EngineEvent =
   | EngineRunTerminalEvent
   | EngineCacheStatsUpdatedEvent
   | EngineCacheWasteAlertEvent
-  | EngineColdCacheWarningEvent;
+  | EngineColdCacheWarningEvent
+  | EngineSecurityAuditEvent;
 
 export const ENGINE_EVENT_TYPES = [
   'agent-start',
@@ -296,5 +312,6 @@ export const ENGINE_EVENT_TYPES = [
   'cache-stats-updated',
   'cache-waste-alert',
   'cold-cache-warning',
+  'security-audit',
 ] as const;
 export type EngineEventType = (typeof ENGINE_EVENT_TYPES)[number];
