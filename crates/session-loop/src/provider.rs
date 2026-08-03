@@ -84,6 +84,14 @@ pub struct ProviderRequest<'a> {
     /// 向后兼容（既有调用方构造不破坏）。实现方负责在返回流前完成
     /// 序列化（与 messages 同生命周期，`'a` 借用期）。
     pub system_prompt: Option<&'a str>,
+    /// 会话 ID（P2 步骤 4a：prompt_cache_key 的键来源，C4 键推导真源
+    /// `CacheKey::from_session_id` 的输入）。
+    /// 属于请求静态前缀，run 内不可变；会话内所有请求共享同键
+    /// （同轮工具循环 + 跨轮，P2 §3.3 B）。None = 适配层不派生缓存键；
+    /// 全 Option 扩展（C5 合并一次契约登记，PE-02 §3.1 v1 契约冻结面）。
+    /// 接线（engine.rs 适配层注入，P2 步骤 4b）归 T-17，本任务只完成
+    /// 契约字段与登记；构造点一律先填 None 保持既有调用兼容。
+    pub session_id: Option<String>,
 }
 
 /// 工具定义的最小消费面（真实适配层据此构建 provider 请求体）

@@ -48,6 +48,7 @@ fn build_request(conversation: &[Arc<AgentMessage>]) -> ProviderRequest<'_> {
         tools: Vec::new(),
         max_tokens: Some(8192),
         system_prompt: None,
+        session_id: None,
     }
 }
 

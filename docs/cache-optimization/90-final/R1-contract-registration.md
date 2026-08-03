@@ -29,6 +29,7 @@ messages: ..., tools: ..., max_tokens: ... }`）需在合并登记时同步更�
 | 变更项                                  | 文件:行号                                                      | 类型/签名                                                                                                                    | 涉及任务单元                                          | 轮次 | 状态       |
 | --------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ---- | ---------- |
 | `ProviderRequest.system_prompt`         | `crates/session-loop/src/provider.rs:86`                       | `Option<&'a str>`（新增 pub 字段，全 Option 扩展）                                                                           | T-05（发起）、T-16（session_id 补记合并）             | R1   | **已登记** |
+| `ProviderRequest.session_id`            | `crates/session-loop/src/provider.rs:94`                       | `Option<String>`（新增 pub 字段，全 Option 扩展；P2 步骤 4a，prompt_cache_key 键来源，C4 键推导真源输入）                    | T-16（补记，C5 合并一次登记）                         | R2   | **已登记** |
 | `SessionLoopOptions.system_prompt`      | `crates/session-loop/src/loop/mod.rs:170`                      | `Option<String>`（新增 pub 字段，`Default` 补 `None`，mod.rs:188）                                                           | T-05（发起）、T-33（R4 扩展同 struct）                | R1   | **已登记** |
 | `core_run_task.system_prompt`           | `apps/agent-workbench/src-tauri/src/core_run_commands.rs:931`  | `Option<String>`（Tauri 命令签名加参，前端 `startRunTask.systemPrompt` 按名反序列化；入站 `build_system_prompt` 规范化一次） | T-07（追加登记，A3 P2-8 合并）、T-29（R4 同签名串行） | R1   | **已登记** |
 | `SessionLoopOptions 装配 system_prompt` | `apps/agent-workbench/src-tauri/src/core_run_commands.rs:1026` | `system_prompt: build_system_prompt(system_prompt)`（trim + 空值 → None，全链透传原始）                                      | T-07（追加登记）                                      | R1   | **已登记** |
@@ -38,6 +39,16 @@ messages: ..., tools: ..., max_tokens: ... }`）需在合并登记时同步更�
 >
 > 配套测试：`default_options_match_documented_defaults`（loop/mod.rs 测试模块）
 > 已补 `system_prompt` 默认 None 断言（mod.rs:582-585）。
+>
+> **T-16 补记（R2，2026-08-03，A7）**：`ProviderRequest.session_id` 已落地
+> （provider.rs:94，全 Option 扩展，与 `system_prompt` 同 struct 合并一次登记，C5）。
+> 配套实现：stream.rs 的 `ConsumeBuilder.usage_accounting`（默认 Included，
+> anthropic/gemini 由适配层显式传 Excluded，T-17 接线）与
+> metadata `cacheBreakdown` 派生块（C9 口径，camelCase）；会话内既有构造点已补
+> `session_id: None`（streaming.rs build_request / tests / benches，默认兼容，
+> 不破坏既有调用）。PE-02 §3.1.1 契约正文的载荷注释建议同步更新为含
+> `system_prompt`/`session_id` 的最终形态（PE-02 文档本登记不修改，归主 Agent
+> 合并时执行）。
 
 ## 三、预留后续行占位说明（本轮不登记，届时补记）
 
@@ -48,3 +59,6 @@ messages: ..., tools: ..., max_tokens: ... }`）需在合并登记时同步更�
 > 注：`core_run_task.system_prompt` 占位行已于 2026-08-03 由主 Agent 合并转正（见第二节）。
 > 占位行仅声明归属与补记时机，不构成已登记状态；T-16 补记时需连同
 > PE-02 §3.1.1 契约正文的载荷注释一并更新。
+>
+> 注（T-16 转正，2026-08-03）：`ProviderRequest.session_id` 占位行已由 T-16 补记
+> 转正（见第二节）；占位行保留作历史占位说明，PE-02 载荷注释同步建议见第二节注。

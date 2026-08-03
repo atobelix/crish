@@ -976,6 +976,7 @@ async fn test_provider_records_requests() {
         tools: vec![],
         max_tokens: Some(8192),
         system_prompt: None,
+        session_id: None,
     };
     let mut stream = provider.stream(&request).await.expect("脚本调用成功");
     let mut events = Vec::new();

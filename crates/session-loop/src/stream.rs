@@ -6,6 +6,10 @@
 //! - [ProviderStreamEvent] / [StopReason] / [ProviderUsage]：wire 形状与
 //!   agent-provider::events 逐字段一致（02 §1.1、§六.9-10），供 ProviderCall
 //!   实现方（真实 provider 适配层 / TestProvider）产出一致的事件序列；
+//! - [CacheAccounting] / [CacheBreakdown]：usage 归一化口径与派生结果的本地
+//!   等价类型（对齐 agent-provider::events，P2 §3.3 D / C9 口径唯一真源）——
+//!   [ConsumeBuilder] 携带口径提示，流收口处把派生出的 `cacheBreakdown`
+//!   （camelCase）写入消息 metadata；
 //! - [consume] / [ConsumeResult] / [ConsumeStopReason]：与
 //!   agent-provider::consume 等价的响应分类聚合（01 D5/D6：模型输出与传输
 //!   错误分离——有文字或有 tool-call 即 Message，纯文字永不失败）。
@@ -52,8 +56,65 @@ pub struct ProviderUsage {
     pub cache_read_tokens: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_write_tokens: Option<u64>,
+    /// cacheMissTokens：缓存未命中输入（DeepSeek 顶层 prompt_cache_miss_tokens；
+    /// 其余协议族由 [ProviderUsage::cache_breakdown] 按口径推导，此处可为 None）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_miss_tokens: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_tokens: Option<u64>,
+}
+
+/// 协议族口径标记（对齐 agent-provider::events::CacheAccounting，T-10 交付，
+/// P2 §3.3 D；LiteLLM 双命名空间：prompt 是否已含缓存）
+///
+/// 恒等式（C9 口径唯一真源）：`input_total = miss + read + write`；
+/// Included 系下 `input_total = prompt`，Excluded 系下 `input_total = prompt + read + write`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CacheAccounting {
+    /// OpenAI 系（chat/responses）：prompt 已含缓存
+    #[default]
+    Included,
+    /// Anthropic/Gemini 系：prompt 不含缓存
+    Excluded,
+}
+
+/// 归一化派生结果（camelCase，对齐 agent-provider CacheBreakdown；C9 口径真源）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CacheBreakdown {
+    /// 缓存命中读取（cacheReadTokens）
+    pub read: u64,
+    /// 缓存写入（cacheWriteTokens）
+    pub write: u64,
+    /// 未缓存输入（= 计费输入；DeepSeek 顶层 miss 存在时优先）
+    pub miss: u64,
+    /// 归一化后的输入总量 = miss + read + write
+    pub input_total: u64,
+}
+
+impl ProviderUsage {
+    /// 按协议族口径归一化派生缓存拆分（P2 §3.3 D；C9 口径真源，与
+    /// agent-provider::events 的 [ProviderUsage::cache_breakdown] 公式一致）
+    ///
+    /// - Included（OpenAI 系）：miss = prompt - read - write、input_total = prompt；
+    /// - Excluded（Anthropic/Gemini 系）：miss = prompt、input_total = prompt + read + write；
+    /// - read/write 为 None 时按 0 处理；推导结果为负时钳 0；
+    /// - DeepSeek 顶层 `cache_miss_tokens` 存在时直接取服务端报告值，不依赖推导；
+    /// - prompt 缺失时返回 None（无输入侧数据可派）。
+    pub fn cache_breakdown(&self, accounting: CacheAccounting) -> Option<CacheBreakdown> {
+        let read = self.cache_read_tokens.unwrap_or(0);
+        let write = self.cache_write_tokens.unwrap_or(0);
+        let prompt = self.prompt_tokens?;
+        let miss = self.cache_miss_tokens.unwrap_or_else(|| match accounting {
+            CacheAccounting::Included => prompt.saturating_sub(read.saturating_add(write)),
+            CacheAccounting::Excluded => prompt,
+        });
+        let input_total = match accounting {
+            CacheAccounting::Included => prompt,
+            CacheAccounting::Excluded => prompt.saturating_add(read).saturating_add(write),
+        };
+        Some(CacheBreakdown { read, write, miss, input_total })
+    }
 }
 
 /// 低级流事件（对齐 agent-provider::events::ProviderStreamEvent，02 §1.1 表）
@@ -262,12 +323,25 @@ pub struct ConsumeBuilder {
     aggregate: Aggregate,
     /// 已聚合事件数（流中错误归属判定：是否已产出任何事件）
     pushed: usize,
+    /// 协议族口径提示（P2 §3.3 D）：收口时派生 metadata.cacheBreakdown 的
+    /// miss/input_total 口径依据。默认 Included（chat-completions 主路径）；
+    /// anthropic/gemini 解析路径由适配层显式传 Excluded（T-17/后续接线，
+    /// 本任务只提供字段与 setter）。
+    usage_accounting: CacheAccounting,
 }
 
 impl ConsumeBuilder {
     /// 新建构建器
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// 设置协议族口径（默认 [CacheAccounting::Included]；Anthropic/Gemini 系
+    /// 需显式传 [CacheAccounting::Excluded]，使 metadata.cacheBreakdown 的
+    /// miss/input_total 按「prompt 不含缓存」口径派生）
+    pub fn usage_accounting(mut self, accounting: CacheAccounting) -> Self {
+        self.usage_accounting = accounting;
+        self
     }
 
     /// 聚合一条事件（增量喂入）
@@ -284,14 +358,14 @@ impl ConsumeBuilder {
     /// 流结束收口：产出与 [consume] 等价的 [ConsumeResult]
     /// （`aborted` 语义同 [consume]，partial salvage）
     pub fn finish(self, aborted: bool) -> ConsumeResult {
-        finish(self.aggregate, aborted)
+        finish(self.aggregate, aborted, self.usage_accounting)
     }
 }
 
 /// 终止聚合：按 01 D6 裁决生成 stopReason 并分类响应
-fn finish(aggregate: Aggregate, aborted: bool) -> ConsumeResult {
+fn finish(aggregate: Aggregate, aborted: bool, accounting: CacheAccounting) -> ConsumeResult {
     if aborted {
-        return finish_after_abort(aggregate);
+        return finish_after_abort(aggregate, accounting);
     }
     let has_content = !aggregate.text.is_empty() || !aggregate.tool_calls.is_empty();
     // 空响应：无 block 且无 error → Empty（02 §一.3；01 §五.3）
@@ -323,7 +397,7 @@ fn finish(aggregate: Aggregate, aborted: bool) -> ConsumeResult {
             _ => ConsumeStopReason::Stop,
         }
     };
-    let metadata = build_message_metadata(&aggregate, stop_reason, false);
+    let metadata = build_message_metadata(&aggregate, stop_reason, false, accounting);
     ConsumeResult {
         response: ProviderOutput::message(aggregate.text.clone(), aggregate.tool_calls.clone()),
         diagnostics: aggregate.diagnostics,
@@ -332,7 +406,7 @@ fn finish(aggregate: Aggregate, aborted: bool) -> ConsumeResult {
 }
 
 /// abort 时完成聚合（partial salvage，02 §一.3：144-174）
-fn finish_after_abort(aggregate: Aggregate) -> ConsumeResult {
+fn finish_after_abort(aggregate: Aggregate, accounting: CacheAccounting) -> ConsumeResult {
     let has_content = !aggregate.text.is_empty() || !aggregate.tool_calls.is_empty();
     if !has_content {
         let message = aggregate.error.unwrap_or_else(|| "aborted".to_string());
@@ -347,7 +421,7 @@ fn finish_after_abort(aggregate: Aggregate) -> ConsumeResult {
             metadata: Value::Null,
         };
     }
-    let metadata = build_message_metadata(&aggregate, ConsumeStopReason::Aborted, true);
+    let metadata = build_message_metadata(&aggregate, ConsumeStopReason::Aborted, true, accounting);
     ConsumeResult {
         response: ProviderOutput::message(aggregate.text.clone(), aggregate.tool_calls.clone()),
         diagnostics: aggregate.diagnostics,
@@ -356,7 +430,15 @@ fn finish_after_abort(aggregate: Aggregate) -> ConsumeResult {
 }
 
 /// 构建消息元数据（对齐 agent-provider buildMessageMetadata）
-fn build_message_metadata(aggregate: &Aggregate, stop_reason: ConsumeStopReason, aborted: bool) -> Value {
+///
+/// `accounting`：协议族口径（P2 §3.3 D）——usage 存在且可派生时，
+/// 额外写入 `cacheBreakdown`（camelCase，C9 恒等式派生块）。
+fn build_message_metadata(
+    aggregate: &Aggregate,
+    stop_reason: ConsumeStopReason,
+    aborted: bool,
+    accounting: CacheAccounting,
+) -> Value {
     let mut metadata = serde_json::Map::new();
     metadata.insert("stopReason".to_string(), Value::String(stop_reason.as_str().to_string()));
     metadata.insert("text".to_string(), Value::String(aggregate.text.clone()));
@@ -371,6 +453,14 @@ fn build_message_metadata(aggregate: &Aggregate, stop_reason: ConsumeStopReason,
     }
     if let Some(usage) = &aggregate.usage {
         metadata.insert("usage".to_string(), serde_json::to_value(usage).unwrap_or_default());
+        // cacheBreakdown：流收口处按口径派生的缓存拆分（P2 §3.3 D 事件/遥测
+        // 输出字段；prompt 缺失时无输入侧数据可派，省略不写）
+        if let Some(breakdown) = usage.cache_breakdown(accounting) {
+            metadata.insert(
+                "cacheBreakdown".to_string(),
+                serde_json::to_value(breakdown).unwrap_or_default(),
+            );
+        }
     }
     if let Some(reason) = aggregate.finish_reason {
         metadata.insert(
@@ -584,5 +674,114 @@ mod tests {
         assert!(!builder.is_empty());
         let empty = ConsumeBuilder::new().finish(false);
         assert_eq!(empty.response, ProviderOutput::Empty);
+    }
+
+    // ── T-16（P2 步骤 4a）：metadata.cacheBreakdown 派生（C9 口径，camelCase）────
+
+    /// 构造带 usage 的停止事件（read/write/miss 齐备）
+    fn stop_with_usage(miss: Option<u64>) -> ProviderStreamEvent {
+        ProviderStreamEvent::Stop {
+            reason: StopReason::Stop,
+            error: None,
+            usage: Some(ProviderUsage {
+                prompt_tokens: Some(100),
+                completion_tokens: Some(20),
+                total_tokens: Some(120),
+                cache_read_tokens: Some(70),
+                cache_write_tokens: Some(10),
+                cache_miss_tokens: miss,
+                reasoning_tokens: None,
+            }),
+        }
+    }
+
+    /// T-16：默认口径（Included，consume/ConsumeBuilder::new 缺省）下
+    /// metadata 派生 cacheBreakdown，键为 camelCase（inputTotal）
+    #[test]
+    fn metadata_cache_breakdown_included_default() {
+        let result = consume(vec![ProviderStreamEvent::text("你好"), stop_with_usage(None)], false);
+        let breakdown = result
+            .metadata
+            .get("cacheBreakdown")
+            .expect("默认口径（Included）应派生 cacheBreakdown")
+            .clone();
+        assert_eq!(breakdown["read"], 70);
+        assert_eq!(breakdown["write"], 10);
+        assert_eq!(breakdown["miss"], 20, "Included：miss = prompt - read - write");
+        assert_eq!(breakdown["inputTotal"], 100, "Included：inputTotal = prompt");
+        // 恒等式（C9）：input_total = miss + read + write
+        assert_eq!(
+            breakdown["miss"].as_u64().unwrap() + breakdown["read"].as_u64().unwrap()
+                + breakdown["write"].as_u64().unwrap(),
+            breakdown["inputTotal"].as_u64().unwrap()
+        );
+    }
+
+    /// T-16：Excluded 口径（适配层显式传入，Anthropic/Gemini 系）下
+    /// miss = prompt、inputTotal = prompt + read + write
+    #[test]
+    fn metadata_cache_breakdown_excluded_via_builder() {
+        let mut builder = ConsumeBuilder::new().usage_accounting(CacheAccounting::Excluded);
+        builder.push(ProviderStreamEvent::text("你好"));
+        builder.push(stop_with_usage(None));
+        let result = builder.finish(false);
+        let breakdown = result.metadata["cacheBreakdown"].clone();
+        assert_eq!(breakdown["miss"], 100, "Excluded：miss = prompt");
+        assert_eq!(breakdown["inputTotal"], 180, "Excluded：inputTotal = prompt + read + write");
+        assert_eq!(breakdown["read"], 70);
+        assert_eq!(breakdown["write"], 10);
+    }
+
+    /// T-16：DeepSeek 顶层 miss 优先（服务端报告值直接采用，不依赖口径推导）
+    #[test]
+    fn metadata_cache_breakdown_deepseek_miss_priority() {
+        // 显式 Excluded 也应尊重服务端报告的 miss 值（C9：miss 报告值优先）
+        let mut builder = ConsumeBuilder::new().usage_accounting(CacheAccounting::Excluded);
+        builder.push(ProviderStreamEvent::text("你好"));
+        builder.push(stop_with_usage(Some(15)));
+        let result = builder.finish(false);
+        let breakdown = result.metadata["cacheBreakdown"].clone();
+        assert_eq!(breakdown["miss"], 15, "DeepSeek 顶层 miss 字段优先");
+        assert_eq!(breakdown["inputTotal"], 180);
+    }
+
+    /// T-16：prompt 缺失 → 不写 cacheBreakdown（无输入侧数据可派）
+    #[test]
+    fn metadata_omits_cache_breakdown_without_prompt() {
+        let result = consume(
+            vec![
+                ProviderStreamEvent::text("你好"),
+                ProviderStreamEvent::Stop {
+                    reason: StopReason::Stop,
+                    error: None,
+                    usage: Some(ProviderUsage {
+                        completion_tokens: Some(20),
+                        ..ProviderUsage::default()
+                    }),
+                },
+            ],
+            false,
+        );
+        assert!(result.metadata.get("cacheBreakdown").is_none(), "prompt 缺失不派生");
+        assert!(result.metadata.get("usage").is_some(), "usage 原样保留");
+    }
+
+    /// T-16：无 usage 的 Stop → 不写 cacheBreakdown
+    #[test]
+    fn metadata_omits_cache_breakdown_without_usage() {
+        let result = consume(vec![ProviderStreamEvent::text("你好"), ProviderStreamEvent::stop(StopReason::Stop)], false);
+        assert!(result.metadata.get("cacheBreakdown").is_none());
+    }
+
+    /// T-16：CacheBreakdown 序列化形状（camelCase，与 agent-provider 同形）
+    #[test]
+    fn cache_breakdown_serializes_camel_case() {
+        let breakdown = CacheBreakdown { read: 1, write: 2, miss: 3, input_total: 6 };
+        let value = serde_json::to_value(breakdown).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({ "read": 1, "write": 2, "miss": 3, "inputTotal": 6 })
+        );
+        assert!(value.get("input_total").is_none(), "禁止 snake_case 键");
     }
 }

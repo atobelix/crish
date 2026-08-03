@@ -245,7 +245,13 @@ pub fn finish_reason_to_stop(reason: Option<&str>) -> StopReason {
 /// usage 解析（02 §2.5；chat 与 responses 同构）
 ///
 /// - `prompt_tokens` ?? `input_tokens`；`completion_tokens` ?? `output_tokens`；`total_tokens`
-/// - `prompt_tokens_details.cached_tokens` ?? `input_tokens_details.cached_tokens` → cacheRead
+/// - hit 链（P2 §3.3 D；A1-04：与 P6 R4、TS 降级路径 directFetchBridge.ts 顺序一致）：
+///   顶层 `prompt_cache_hit_tokens`（DeepSeek）→ details `cached_tokens`
+///   （OpenAI/Responses）→ 顶层 `cached_tokens`（Kimi）——顶层 hit 优先
+/// - write 链：details `cache_write_tokens`/`cache_creation_tokens`/
+///   `cache_creation_input_tokens`（百炼，00-catalog 11.2）→ 顶层
+///   `cache_write_tokens`/`cache_creation_tokens`
+/// - `cache_miss_tokens` 取顶层 `prompt_cache_miss_tokens`（DeepSeek 唯一直接报告 miss 的字段）
 /// - `completion_tokens_details.reasoning_tokens` ?? `output_tokens_details.reasoning_tokens` → reasoningTokens
 /// - 仅接受有限数值（02 §2.5:319-323）；非对象入参返回 None（不覆盖已有 usage）
 pub fn parse_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
@@ -253,14 +259,28 @@ pub fn parse_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
     let prompt_details = nested_details(usage, &["prompt_tokens_details", "input_tokens_details"]);
     let completion_details =
         nested_details(usage, &["completion_tokens_details", "output_tokens_details"]);
+    // hit 链：顶层 prompt_cache_hit_tokens（DeepSeek）→ details.cached_tokens →
+    // 顶层 cached_tokens（Kimi），顺序与 P6 R4 一致（A1-04：顶层 hit 优先）
+    let cache_read_tokens = finite_u64(usage.get("prompt_cache_hit_tokens"))
+        .or_else(|| prompt_details.and_then(|details| finite_u64(details.get("cached_tokens"))))
+        .or_else(|| finite_u64(usage.get("cached_tokens")));
+    // write 链：details 三别名 → 顶层 cache_write_tokens → 顶层 cache_creation_tokens
+    let cache_write_tokens = details_alias(
+        prompt_details,
+        &["cache_write_tokens", "cache_creation_tokens", "cache_creation_input_tokens"],
+    )
+    .or_else(|| finite_u64(usage.get("cache_write_tokens")))
+    .or_else(|| finite_u64(usage.get("cache_creation_tokens")));
     Some(ProviderUsage {
         prompt_tokens: finite_u64(usage.get("prompt_tokens"))
             .or_else(|| finite_u64(usage.get("input_tokens"))),
         completion_tokens: finite_u64(usage.get("completion_tokens"))
             .or_else(|| finite_u64(usage.get("output_tokens"))),
         total_tokens: finite_u64(usage.get("total_tokens")),
-        cache_read_tokens: prompt_details.and_then(|details| finite_u64(details.get("cached_tokens"))),
-        cache_write_tokens: None,
+        cache_read_tokens,
+        cache_write_tokens,
+        // DeepSeek 顶层 miss：唯一直接报告 miss 的字段，落入统一契约（P2 §3.3 D）
+        cache_miss_tokens: finite_u64(usage.get("prompt_cache_miss_tokens")),
         reasoning_tokens: completion_details
             .and_then(|details| finite_u64(details.get("reasoning_tokens"))),
     })
@@ -288,6 +308,11 @@ fn nested_details<'a>(usage: &'a Map<String, Value>, names: &[&str]) -> Option<&
     names
         .iter()
         .find_map(|name| usage.get(*name).filter(|value| value.is_object()))
+}
+
+/// 从 details 对象按名称顺序取第一个有限数值字段（write 别名链用，P2 §3.3 D）
+fn details_alias(details: Option<&Value>, names: &[&str]) -> Option<u64> {
+    details.and_then(|details| names.iter().find_map(|name| finite_u64(details.get(*name))))
 }
 
 /// 仅接受有限数值（02 §2.5:319-323）：整数直接取；浮点须有限且非负
@@ -618,6 +643,80 @@ mod tests {
                 assert_eq!(usage.reasoning_tokens, Some(4));
             }
             other => panic!("期望携带 usage 的 stop，得到：{other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_usage_deepseek_top_level_hit_miss_shape() {
+        // DeepSeek 顶层形状（P2 §5.1）：prompt_cache_hit_tokens / prompt_cache_miss_tokens；
+        // 顶层 hit 优先于 details.cached_tokens（A1-04 hit 链顺序）
+        let usage = parse_usage(Some(&json!({
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "prompt_tokens_details": { "cached_tokens": 30 },
+            "prompt_cache_hit_tokens": 60,
+            "prompt_cache_miss_tokens": 40,
+        })))
+        .expect("解析成功");
+        assert_eq!(usage.cache_read_tokens, Some(60), "顶层 hit 优先（A1-04）");
+        assert_eq!(usage.cache_miss_tokens, Some(40), "顶层 miss 直接取服务端报告值");
+    }
+
+    #[test]
+    fn parse_usage_kimi_top_level_cached_tokens_shape() {
+        // Kimi 顶层形状（P2 §5.1）：usage.cached_tokens（00-catalog 第 5.2 节）
+        let usage = parse_usage(Some(&json!({
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "cached_tokens": 55,
+            "cache_write_tokens": 7,
+        })))
+        .expect("解析成功");
+        assert_eq!(usage.cache_read_tokens, Some(55), "顶层 cached_tokens（Kimi）");
+        assert_eq!(usage.cache_write_tokens, Some(7), "顶层 cache_write_tokens 别名");
+    }
+
+    #[test]
+    fn parse_usage_openai_details_shape_with_write_aliases() {
+        // OpenAI details 形状（P2 §5.1）：details.cached_tokens + details 三 write 别名；
+        // details 优先于顶层 cached_tokens 与顶层 write 别名（hit/write 链顺序）
+        let usage = parse_usage(Some(&json!({
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "cached_tokens": 99,
+            "cache_write_tokens": 12,
+            "cache_creation_tokens": 98,
+            "prompt_tokens_details": {
+                "cached_tokens": 45,
+                "cache_write_tokens": 9,
+                "cache_creation_input_tokens": 3,
+            },
+        })))
+        .expect("解析成功");
+        assert_eq!(usage.cache_read_tokens, Some(45), "details.cached_tokens 先于顶层 cached_tokens");
+        assert_eq!(
+            usage.cache_write_tokens,
+            Some(9),
+            "details.cache_write_tokens 先于顶层 write 别名（write 链序）"
+        );
+    }
+
+    #[test]
+    fn parse_usage_write_alias_fallback_chain() {
+        // write 链回退顺序（P2 §3.3 D）：details.cache_creation_tokens →
+        // details.cache_creation_input_tokens（百炼）→ 顶层 cache_creation_tokens
+        let cases = [
+            (json!({ "prompt_tokens_details": { "cache_creation_tokens": 6 } }), Some(6)),
+            (json!({ "prompt_tokens_details": { "cache_creation_input_tokens": 8 } }), Some(8)),
+            (json!({ "cache_creation_tokens": 10 }), Some(10)),
+            (json!({ "prompt_tokens": 5 }), None),
+        ];
+        for (usage, expected) in cases {
+            let parsed = parse_usage(Some(&usage)).expect("解析成功");
+            assert_eq!(parsed.cache_write_tokens, expected, "usage={usage}");
         }
     }
 

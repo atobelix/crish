@@ -18,7 +18,10 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::events::{ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError, StreamParser};
+use crate::events::{
+    merge_usage_shards, ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError,
+    StreamParser,
+};
 use crate::sse::frame::SseFrame;
 
 use super::tool_call::parse_arguments;
@@ -302,7 +305,9 @@ pub fn gemini_finish_reason_to_stop(
 ///
 /// - `promptTokenCount` ?? `prompt_token_count` → prompt
 /// - `candidatesTokenCount` ?? `responseTokenCount` ?? `candidates_token_count` → completion
-/// - `cachedContentTokenCount` ?? `cached_content_token_count` → cacheRead
+/// - `cachedContentTokenCount` ?? `cached_content_token_count` → cacheRead；
+///   `totalCachedTokens` ?? `total_cached_tokens` 别名（camel/snake 双形）回退于其后
+///   （00-catalog 第 8.2 节：隐式缓存计量字段为 total_cached_tokens，P2 步骤 1b）
 /// - `thoughtsTokenCount` ?? `thoughts_token_count` → reasoningTokens
 /// - `totalTokenCount` ?? `total_token_count` ??（prompt/completion 任一存在时的和）
 /// - 全空返回 None（361-369）；非对象入参返回 None
@@ -313,8 +318,11 @@ pub fn parse_gemini_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
     let completion_tokens = finite_u64(usage.get("candidatesTokenCount"))
         .or_else(|| finite_u64(usage.get("responseTokenCount")))
         .or_else(|| finite_u64(usage.get("candidates_token_count")));
+    // hit 链（P2 §3.3 D）：cachedContentTokenCount 优先，total_cached_tokens 别名回退于其后
     let cache_read_tokens = finite_u64(usage.get("cachedContentTokenCount"))
-        .or_else(|| finite_u64(usage.get("cached_content_token_count")));
+        .or_else(|| finite_u64(usage.get("cached_content_token_count")))
+        .or_else(|| finite_u64(usage.get("totalCachedTokens")))
+        .or_else(|| finite_u64(usage.get("total_cached_tokens")));
     let reasoning_tokens = finite_u64(usage.get("thoughtsTokenCount"))
         .or_else(|| finite_u64(usage.get("thoughts_token_count")));
     let total_tokens = finite_u64(usage.get("totalTokenCount"))
@@ -339,43 +347,23 @@ pub fn parse_gemini_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
         completion_tokens,
         total_tokens,
         cache_read_tokens,
+        // Gemini 无直接报告 miss 的字段：miss 由 cache_breakdown 按 Excluded 口径推导
         cache_write_tokens: None,
+        cache_miss_tokens: None,
         reasoning_tokens,
     })
 }
 
 /// mergeGeminiUsage 逐帧合并（02 §六.6：Gemini 逐帧合并；对齐 456-479）
 ///
-/// usageMetadata 为累计值：next 显式字段优先，缺失回退 base；total 优先取 next
-/// 显式值，其次按合并后的 prompt+completion 重算，最后回退 base（465-469）。
+/// usageMetadata 为累计值：已收敛为共享 [crate::events::merge_usage_shards]
+/// （P2 §3.3 D 分片 max 语义，与 anthropic 收敛同向）——输入侧字段
+/// （prompt/cacheRead/cacheWrite/cacheMiss）在分片间取 max 防 0/部分值覆盖，
+/// completion/reasoning 后到优先，total 恒由合并结果重算（防代理覆盖完整 input）。
 pub fn merge_gemini_usage(base: Option<&ProviderUsage>, next: &ProviderUsage) -> ProviderUsage {
-    let prompt_tokens = next.prompt_tokens.or_else(|| base.and_then(|base| base.prompt_tokens));
-    let completion_tokens = next
-        .completion_tokens
-        .or_else(|| base.and_then(|base| base.completion_tokens));
-    let cache_read_tokens = next
-        .cache_read_tokens
-        .or_else(|| base.and_then(|base| base.cache_read_tokens));
-    let cache_write_tokens = next
-        .cache_write_tokens
-        .or_else(|| base.and_then(|base| base.cache_write_tokens));
-    let reasoning_tokens = next
-        .reasoning_tokens
-        .or_else(|| base.and_then(|base| base.reasoning_tokens));
-    let total_tokens = next.total_tokens.or_else(|| {
-        if prompt_tokens.is_some() || completion_tokens.is_some() {
-            Some(prompt_tokens.unwrap_or(0) + completion_tokens.unwrap_or(0))
-        } else {
-            base.and_then(|base| base.total_tokens)
-        }
-    });
-    ProviderUsage {
-        prompt_tokens,
-        completion_tokens,
-        total_tokens,
-        cache_read_tokens,
-        cache_write_tokens,
-        reasoning_tokens,
+    match base {
+        Some(base) => merge_usage_shards(base, next),
+        None => merge_usage_shards(&ProviderUsage::default(), next),
     }
 }
 
@@ -851,7 +839,8 @@ mod tests {
 
     #[test]
     fn usage_total_prefers_next_explicit_value() {
-        // 累计值语义：next 显式 total 优先于重算（465-467）
+        // 收敛后（P2 §3.3 D max 语义）：total 恒由合并结果重算（10+20=30，
+        // 与 next 显式 total 同值——保持既有断言成立）
         let base = ProviderUsage {
             prompt_tokens: Some(10),
             completion_tokens: Some(5),
@@ -865,7 +854,7 @@ mod tests {
             ..ProviderUsage::default()
         };
         let merged = merge_gemini_usage(Some(&base), &next);
-        assert_eq!(merged.total_tokens, Some(30), "next 显式 total 优先");
+        assert_eq!(merged.total_tokens, Some(30), "total 重算为 10+20");
         assert_eq!(merged.prompt_tokens, Some(10));
         assert_eq!(merged.completion_tokens, Some(20));
     }
@@ -889,6 +878,26 @@ mod tests {
     }
 
     #[test]
+    fn usage_merge_max_semantics_next_zero_keeps_prev() {
+        // 收敛后（P2 §3.3 D 分片 max 语义）：next 传 0 不覆盖 prev 的完整 input
+        let base = ProviderUsage {
+            prompt_tokens: Some(100),
+            cache_read_tokens: Some(40),
+            ..ProviderUsage::default()
+        };
+        let next = ProviderUsage {
+            prompt_tokens: Some(0),
+            completion_tokens: Some(5),
+            ..ProviderUsage::default()
+        };
+        let merged = merge_gemini_usage(Some(&base), &next);
+        assert_eq!(merged.prompt_tokens, Some(100), "next 0 不覆盖 prev 100");
+        assert_eq!(merged.cache_read_tokens, Some(40), "prev 字段保留");
+        assert_eq!(merged.completion_tokens, Some(5), "completion 后到优先");
+        assert_eq!(merged.total_tokens, Some(105), "total 重算为 100+5");
+    }
+
+    #[test]
     fn parse_gemini_usage_accepts_snake_alternates() {
         let usage = parse_gemini_usage(Some(&json!({
             "prompt_token_count": 3,
@@ -903,6 +912,34 @@ mod tests {
         assert_eq!(usage.total_tokens, Some(9), "显式 total 优先于重算");
         assert_eq!(usage.cache_read_tokens, Some(1));
         assert_eq!(usage.reasoning_tokens, Some(2));
+    }
+
+    #[test]
+    fn parse_gemini_usage_accepts_total_cached_tokens_alias() {
+        // total_cached_tokens 别名（camel/snake 双形，P2 步骤 1b）：回退于
+        // cachedContentTokenCount 之后（00-catalog 第 8.2 节隐式缓存计量字段）
+        let usage = parse_gemini_usage(Some(&json!({
+            "promptTokenCount": 10,
+            "candidatesTokenCount": 20,
+            "totalCachedTokens": 4,
+        })))
+        .expect("解析成功");
+        assert_eq!(usage.cache_read_tokens, Some(4), "camel 形 totalCachedTokens");
+
+        let usage = parse_gemini_usage(Some(&json!({
+            "promptTokenCount": 10,
+            "total_cached_tokens": 3,
+        })))
+        .expect("解析成功");
+        assert_eq!(usage.cache_read_tokens, Some(3), "snake 形 total_cached_tokens");
+
+        let usage = parse_gemini_usage(Some(&json!({
+            "promptTokenCount": 10,
+            "cachedContentTokenCount": 6,
+            "total_cached_tokens": 3,
+        })))
+        .expect("解析成功");
+        assert_eq!(usage.cache_read_tokens, Some(6), "cachedContentTokenCount 优先于别名");
     }
 
     #[test]

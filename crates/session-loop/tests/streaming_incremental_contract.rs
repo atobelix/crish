@@ -59,6 +59,7 @@ async fn deltas_flow_incrementally_then_exactly_one_stop() {
         tools: vec![],
         max_tokens: None,
         system_prompt: None,
+        session_id: None,
     };
     let mut stream = provider.stream(&request).await.expect("流前不应有错误");
     let mut items = Vec::new();
@@ -133,6 +134,7 @@ async fn mid_stream_error_ends_stream_after_content() {
         tools: vec![],
         max_tokens: None,
         system_prompt: None,
+        session_id: None,
     };
     let mut stream = provider.stream(&request).await.expect("流前不应有错误");
     let mut items = Vec::new();

@@ -26,7 +26,10 @@ use std::collections::BTreeMap;
 
 use serde_json::{Map, Value};
 
-use crate::events::{ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError, StreamParser};
+use crate::events::{
+    merge_usage_shards, ProviderStreamEvent, ProviderUsage, StopReason, StreamParseError,
+    StreamParser,
+};
 use crate::sse::frame::SseFrame;
 
 use super::tool_call::parse_arguments;
@@ -304,6 +307,7 @@ pub fn anthropic_stop_reason_to_stop(reason: Option<&str>) -> StopReason {
 /// - `input_tokens` ?? `prompt_tokens` → prompt；`output_tokens` ?? `completion_tokens` → completion
 /// - `cache_read_input_tokens` → cacheRead；`cache_creation_input_tokens` → cacheWrite
 /// - `total_tokens` ??（prompt/completion 任一存在时的和）
+/// - Anthropic wire 不直接报告 miss（P2 §3.3 D：miss 由 Excluded 口径推导），`cache_miss_tokens` 恒 None
 /// - 全空返回 None（304-306）；非对象入参返回 None
 pub fn parse_anthropic_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
     let usage = raw?.as_object()?;
@@ -334,40 +338,21 @@ pub fn parse_anthropic_usage(raw: Option<&Value>) -> Option<ProviderUsage> {
         total_tokens,
         cache_read_tokens,
         cache_write_tokens,
+        cache_miss_tokens: None,
         reasoning_tokens: None,
     })
 }
 
 /// mergeAnthropicUsage 分片补全（02 §六.6：Anthropic 分片补全；对齐 363-388）
 ///
-/// message_start 与 message_delta 各自只带部分字段：next 显式字段优先，缺失回退 base；
-/// total 由合并后的 prompt+completion 重算（377-378）。
+/// 合并逻辑已收敛到共享 [merge_usage_shards]（P2 §3.3 D 裁决：分片合并的 max 语义）——
+/// 输入侧字段（prompt/cacheRead/cacheWrite/cacheMiss）分片间取 max，
+/// 防代理用 0/部分值覆盖 message_start 的完整 input；completion/reasoning 侧
+/// 维持"后到优先"；total 恒由合并结果重算（377-378 的既有语义不变）。
 pub fn merge_anthropic_usage(base: Option<&ProviderUsage>, next: &ProviderUsage) -> ProviderUsage {
-    let prompt_tokens = next.prompt_tokens.or_else(|| base.and_then(|base| base.prompt_tokens));
-    let completion_tokens = next
-        .completion_tokens
-        .or_else(|| base.and_then(|base| base.completion_tokens));
-    let cache_read_tokens = next
-        .cache_read_tokens
-        .or_else(|| base.and_then(|base| base.cache_read_tokens));
-    let cache_write_tokens = next
-        .cache_write_tokens
-        .or_else(|| base.and_then(|base| base.cache_write_tokens));
-    let reasoning_tokens = next
-        .reasoning_tokens
-        .or_else(|| base.and_then(|base| base.reasoning_tokens));
-    let total_tokens = if prompt_tokens.is_some() || completion_tokens.is_some() {
-        Some(prompt_tokens.unwrap_or(0) + completion_tokens.unwrap_or(0))
-    } else {
-        next.total_tokens.or_else(|| base.and_then(|base| base.total_tokens))
-    };
-    ProviderUsage {
-        prompt_tokens,
-        completion_tokens,
-        total_tokens,
-        cache_read_tokens,
-        cache_write_tokens,
-        reasoning_tokens,
+    match base {
+        Some(base) => merge_usage_shards(base, next),
+        None => merge_usage_shards(&ProviderUsage::default(), next),
     }
 }
 
@@ -523,6 +508,7 @@ mod tests {
                     total_tokens: Some(18),
                     cache_read_tokens: None,
                     cache_write_tokens: None,
+                    cache_miss_tokens: None,
                     reasoning_tokens: None,
                 }),
             }
@@ -853,6 +839,30 @@ mod tests {
                 assert_eq!(usage.total_tokens, Some(160), "total 由合并后重算");
                 assert_eq!(usage.cache_read_tokens, Some(40));
                 assert_eq!(usage.cache_write_tokens, Some(10));
+            }
+            other => panic!("期望携带 usage 的 stop，得到：{other:?}"),
+        }
+    }
+
+    #[test]
+    fn usage_next_zero_does_not_override_prev_input() {
+        // 分片合并 max 语义：message_delta 传 0 不覆盖 message_start 的完整 input
+        // （P2 §3.3 D；共享函数 merge_usage_shards 已钉死纯函数级用例，此处走真实帧路径再钉一层）
+        let events = parse_all(vec![
+            &event_frame("message_start", json!({
+                "message": { "usage": { "input_tokens": 100, "cache_read_input_tokens": 40 } },
+            })),
+            &event_frame("message_delta", json!({
+                "usage": { "input_tokens": 0, "output_tokens": 60 },
+            })),
+            &event_frame("message_stop", json!({})),
+        ]);
+        match stop_of(&events) {
+            ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
+                assert_eq!(usage.prompt_tokens, Some(100), "next 传 0 不覆盖 prev 的 100");
+                assert_eq!(usage.cache_read_tokens, Some(40), "read 同理防 0 覆盖");
+                assert_eq!(usage.completion_tokens, Some(60));
+                assert_eq!(usage.total_tokens, Some(160), "total 由合并后重算");
             }
             other => panic!("期望携带 usage 的 stop，得到：{other:?}"),
         }

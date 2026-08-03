@@ -982,6 +982,29 @@ mod tests {
     }
 
     #[test]
+    fn usage_receives_cache_hit_write_miss_aliases() {
+        // responses 复用 chat 的 parse_usage（P2 步骤 1b）：hit/write/miss 链自动受益；
+        // 顶层 hit 优先于 details（A1-04 hit 链顺序）
+        let data = r#"{"type":"response.completed","response":{"status":"completed","usage":{
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "total_tokens": 120,
+            "input_tokens_details": { "cached_tokens": 50, "cache_write_tokens": 10 },
+            "prompt_cache_hit_tokens": 70,
+            "prompt_cache_miss_tokens": 30
+        }}}"#;
+        let events = parse_all(vec![data]);
+        match stop_of(&events) {
+            ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
+                assert_eq!(usage.cache_read_tokens, Some(70), "顶层 hit 优先于 details（A1-04）");
+                assert_eq!(usage.cache_miss_tokens, Some(30), "顶层 miss 透传");
+                assert_eq!(usage.cache_write_tokens, Some(10), "details.cache_write_tokens 别名");
+            }
+            other => panic!("期望携带 usage 的 stop，得到：{other:?}"),
+        }
+    }
+
+    #[test]
     fn usage_rejects_non_finite_values() {
         let data = r#"{"type":"response.completed","response":{"status":"completed","usage":{
             "prompt_tokens": "1e3",

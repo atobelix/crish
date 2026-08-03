@@ -260,12 +260,15 @@ pub(crate) fn streaming_aborted(state: &mut LoopState) -> Result<HandlerOutcome,
 /// [ProviderRequest.tools] 冻结为 owned 形态，AU-04 F1 契约不变）。
 /// system_prompt 经 `as_deref()` 透传（P1 阶段 2 通路第三层），与 messages
 /// 同生命周期（`'a` 借用期，实现方在返回流前完成序列化）。
+/// session_id 暂填 None（P2 步骤 4a 契约字段，C5 合并登记）；会话 ID 的注入
+/// 接线（engine.rs 适配层 / SessionLoopOptions 透传）归 T-17（P2 步骤 4b）。
 fn build_request(state: &LoopState) -> ProviderRequest<'_> {
     ProviderRequest {
         messages: &state.conversation,
         tools: tools_schema(state).to_vec(),
         max_tokens: Some(state.max_tokens),
         system_prompt: state.options.system_prompt.as_deref(),
+        session_id: None,
     }
 }
 
