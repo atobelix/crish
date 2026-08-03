@@ -2,6 +2,7 @@
 //! PendingInput 记录类型（orchestrator persist/restore 层消费的最小 API 面）。
 
 use super::{DbFailure, DbFailureKind, LocalDb};
+use conex_types::RunCacheStats;
 use rusqlite::OptionalExtension;
 use std::str::FromStr;
 
@@ -174,6 +175,100 @@ impl LocalDb {
         )
         .optional()
         .map_err(|e| self.latch_error("get_run", e))
+    }
+
+    /// 保存 run 级 usage/cache 统计（P5 §3.1.4，v5 列）。
+    ///
+    /// `UPDATE runs SET ...`，缺行静默跳过（不报错）；
+    /// hit_ratio / write_ratio 可派生（不落库），warm_until_ms NULL 兼容。
+    pub fn save_run_usage(&self, run_id: &str, stats: RunCacheStats) -> Result<(), DbFailure> {
+        let conn = self.conn.lock().map_err(|e| DbFailure {
+            message: format!("lock poisoned: {e}"),
+            kind: DbFailureKind::Lock,
+        })?;
+        conn.execute(
+            "UPDATE runs SET
+                prompt_tokens = ?2,
+                completion_tokens = ?3,
+                total_tokens = ?4,
+                cache_read_tokens = ?5,
+                cache_write_tokens = ?6,
+                cache_miss_tokens = ?7,
+                sample_count = ?8,
+                missed_tokens = ?9,
+                warm_until_ms = ?10
+             WHERE run_id = ?1",
+            rusqlite::params![
+                run_id,
+                stats.prompt_tokens as i64,
+                stats.completion_tokens as i64,
+                stats.total_tokens as i64,
+                stats.cache_read_tokens as i64,
+                stats.cache_write_tokens as i64,
+                stats.cache_miss_tokens as i64,
+                stats.sample_count as i64,
+                stats.missed_tokens as i64,
+                stats.warm_until_ms.map(|v| v as i64),
+            ],
+        )
+        .map_err(|e| self.latch_error("save_run_usage", e))?;
+        Ok(())
+    }
+
+    /// 读取 run 级 usage/cache 统计（v5 列）。
+    ///
+    /// 缺行或 `sample_count == 0`（含 v4 迁移后旧行全零）返回 None——
+    /// 「无样本 → 前端隐藏而非 0% 误导」语义（P5 §3.1.2）；
+    /// hit_ratio / write_ratio 不落库，读回一律 None（由前端按原始计数重算）。
+    pub fn get_run_usage(&self, run_id: &str) -> Result<Option<RunCacheStats>, DbFailure> {
+        let conn = self.conn.lock().map_err(|e| DbFailure {
+            message: format!("lock poisoned: {e}"),
+            kind: DbFailureKind::Lock,
+        })?;
+        let row: Option<(i64, i64, i64, i64, i64, i64, i64, i64, Option<i64>)> = conn
+            .query_row(
+                "SELECT prompt_tokens, completion_tokens, total_tokens,
+                        cache_read_tokens, cache_write_tokens, cache_miss_tokens,
+                        sample_count, missed_tokens, warm_until_ms
+                 FROM runs WHERE run_id = ?1",
+                rusqlite::params![run_id],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                        r.get(6)?,
+                        r.get(7)?,
+                        r.get(8)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|e| self.latch_error("get_run_usage", e))?;
+        let Some((prompt, completion, total, cache_read, cache_write, cache_miss, sample_count, missed, warm_until_ms)) = row else {
+            return Ok(None);
+        };
+        if sample_count <= 0 {
+            // 无真实 usage 样本（含迁移后旧行全零）→ None
+            return Ok(None);
+        }
+        Ok(Some(RunCacheStats {
+            prompt_tokens: prompt.max(0) as u64,
+            completion_tokens: completion.max(0) as u64,
+            total_tokens: total.max(0) as u64,
+            cache_read_tokens: cache_read.max(0) as u64,
+            cache_write_tokens: cache_write.max(0) as u64,
+            cache_miss_tokens: cache_miss.max(0) as u64,
+            sample_count: sample_count.max(0) as u64,
+            // hit_ratio / write_ratio 可派生，不落库
+            hit_ratio: None,
+            write_ratio: None,
+            missed_tokens: missed.max(0) as u64,
+            warm_until_ms: warm_until_ms.map(|v| v.max(0) as u64),
+        }))
     }
 
     /// 读取全部 run 记录（按创建时间升序）。

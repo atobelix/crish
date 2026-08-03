@@ -2,13 +2,13 @@
 //!
 //! 模块按域拆分（R4-T15）：
 //! - [`error`]：失败类型（`DbFailure` / `DbFailureKind`）
-//! - [`schema`]：v1 起点 / v4 目标建表 DDL
-//! - [`migrate`]：v1→v4 版本化迁移链（PE-08 T08.7，实现保持不变）
+//! - [`schema`]：v1 起点 / v5 目标建表 DDL
+//! - [`migrate`]：v1→v5 版本化迁移链（PE-08 T08.7，实现保持不变）
 //! - [`sessions`]：sessions 表 CRUD / 会话索引 / 孤儿清理 / session_meta
 //! - [`messages`]：session_messages 正文读写与增量追加
 //! - [`agents`]：session_agents 协作子代理读写
 //! - [`events`]：events 表读写与会话级 sequence 取号
-//! - [`runs`]：run 生命周期 / pending_inputs / RunStatus
+//! - [`runs`]：run 生命周期 / pending_inputs / RunStatus / run 级 usage 落库
 //! - [`import`]：localStorage 历史数据一次性导入
 //!
 //! 对外公共面由本文件原样 re-export，签名与既有调用方（orchestrator /
@@ -41,9 +41,9 @@ pub struct LocalDb {
 }
 
 /// 当前 schema 版本（PE-08 T08.7：PRAGMA user_version 驱动的版本化迁移）。
-pub const LATEST_VERSION: u32 = 4;
+pub const LATEST_VERSION: u32 = 5;
 /// session_meta 中登记的 schema 版本字符串（与 PRAGMA user_version 保持一致）。
-pub const SCHEMA_VERSION_STRING: &str = "4";
+pub const SCHEMA_VERSION_STRING: &str = "5";
 /// 孤儿会话宽限期（毫秒）：updated_at 距今小于该值的会话不被清理（PE-08 T08.2）。
 pub const ORPHAN_GRACE_MS: i64 = 300_000;
 /// session_meta 中可配宽限期的键。

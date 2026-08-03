@@ -11,6 +11,7 @@
 //! D1（cooperative_stop）：协作停止收敛为独立 reason `Stopped`，既不是
 //! 错误也不是取消（safe_point 的 [crate::safe_point::ControlAction] 语义）。
 
+use conex_types::events::RunCacheStats;
 use conex_types::message::AgentMessage;
 use conex_types::session::AgentEndReason;
 use std::sync::Arc;
@@ -116,4 +117,9 @@ pub struct RunOutcome {
     pub tool_call_count: u32,
     /// 收场时的 steering 计数
     pub steering_count: usize,
+    /// 缓存统计（P5 S2 / T-36）：tracker.finish() 产物——run 内多 turn usage
+    /// 聚合 + 浪费审计累计（missed_tokens）+ 缓存温暖截止（warm_until_ms）；
+    /// 未配置缓存测量或无可测 usage 时为 None（缺省 None，向后兼容；
+    /// T-40 消费本字段发 cache-stats-updated 事件与落库 runs 表）
+    pub cache_stats: Option<RunCacheStats>,
 }

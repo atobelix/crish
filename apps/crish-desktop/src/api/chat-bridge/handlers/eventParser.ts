@@ -17,10 +17,14 @@ import {
   parseErr,
   type ParseResult,
 } from '../../../../../../packages/shared-types/src/generated/engine';
-import { AGENT_END_REASON_VALUES } from '../../../../../../packages/shared-types/src/generated/engine';
+import {
+  AGENT_END_REASON_VALUES,
+  MISS_ATTRIBUTION_VALUES,
+} from '../../../../../../packages/shared-types/src/generated/engine';
 import type {
   EngineEvent,
   EngineEventType,
+  EngineCacheWasteAlertEvent,
   AgentMessage,
   AgentMessageBlock,
   AgentMessageBlockToolCall,
@@ -39,15 +43,14 @@ import type {
   RuntimeCheckpointRestoreRecord,
   ToolCategory,
   ToolConcurrency,
+  RunCacheStats,
+  MissAttribution,
 } from '../../../../../../packages/shared-types/src/generated/engine';
 import { blockText } from './eventUtils';
 import { logInternalError } from '../../userFacingErrors';
 
 export type LegacyEventType =
-  | 'subagent-started'
-  | 'subagent-event'
-  | 'subagent-ended'
-  | 'error';
+  'subagent-started' | 'subagent-event' | 'subagent-ended' | 'error';
 
 export const LEGACY_EVENT_TYPES: readonly LegacyEventType[] = [
   'subagent-started',
@@ -71,7 +74,8 @@ export interface LegacyEnvelope {
   raw: Record<string, unknown>;
 }
 
-export type BridgeEventEnvelope = EngineEnvelope<EngineEventType> | LegacyEnvelope;
+export type BridgeEventEnvelope =
+  EngineEnvelope<EngineEventType> | LegacyEnvelope;
 
 /** 纯信封类型抽取：type/event/kind 别名，trim 后返回；非对象/空 type 返回 null */
 export function resolveEventType(
@@ -104,16 +108,26 @@ function strArray(v: unknown): string[] {
 function isToolCategory(v: unknown): v is ToolCategory {
   return (
     typeof v === 'string' &&
-    (['terminal', 'filesystem', 'network', 'mcp', 'skill', 'agent', 'internal'] as const).includes(
-      v as ToolCategory
-    )
+    (
+      [
+        'terminal',
+        'filesystem',
+        'network',
+        'mcp',
+        'skill',
+        'agent',
+        'internal',
+      ] as const
+    ).includes(v as ToolCategory)
   );
 }
 
 function isToolConcurrency(v: unknown): v is ToolConcurrency {
   return (
     typeof v === 'string' &&
-    (['parallel', 'sequential', 'exclusive'] as const).includes(v as ToolConcurrency)
+    (['parallel', 'sequential', 'exclusive'] as const).includes(
+      v as ToolConcurrency
+    )
   );
 }
 
@@ -132,7 +146,14 @@ function emptyCheckpointRecord(): RuntimeCheckpointRecord {
 }
 
 function emptyCheckpointRestoreRecord(): RuntimeCheckpointRestoreRecord {
-  return { checkpointId: '', toolCallId: '', toolName: '', restored: [], deleted: [], skipped: [] };
+  return {
+    checkpointId: '',
+    toolCallId: '',
+    toolName: '',
+    restored: [],
+    deleted: [],
+    skipped: [],
+  };
 }
 
 /** message-delta 的宽容 block 归一：text/thought 直读，tool-call/tool-result 原样透传，未知按 text 取 text/content */
@@ -168,11 +189,17 @@ function normalizeDeltaBlock(b: unknown): AgentMessageBlock {
 }
 
 /** run-terminal 家族（含别名）宽容归一：terminal 拼写变体与来源 type 推断 */
-function normalizeRunTerminal(raw: Record<string, unknown>, sourceType: string): EngineEvent {
-  const rawTerm = String(raw.terminal ?? '').trim().toLowerCase();
+function normalizeRunTerminal(
+  raw: Record<string, unknown>,
+  sourceType: string
+): EngineEvent {
+  const rawTerm = String(raw.terminal ?? '')
+    .trim()
+    .toLowerCase();
   let terminal: RunTerminalStatus;
   if (rawTerm === 'failed' || rawTerm === 'error') terminal = 'failed';
-  else if (rawTerm === 'cancelled' || rawTerm === 'canceled') terminal = 'cancelled';
+  else if (rawTerm === 'cancelled' || rawTerm === 'canceled')
+    terminal = 'cancelled';
   else if (rawTerm === 'completed') terminal = 'completed';
   else if (sourceType === 'run-failed') terminal = 'failed';
   else if (sourceType === 'run-cancelled') terminal = 'cancelled';
@@ -197,7 +224,10 @@ function normalizeRunTerminal(raw: Record<string, unknown>, sourceType: string):
  * 宽容归一器：生成解析器 parseEngineEvent 失败后的兜底。
  * 返回 null 表示该形态无法归一，交由 unknown-case 登记。
  */
-type Normalizer = (raw: Record<string, unknown>, type: string) => EngineEvent | null;
+type Normalizer = (
+  raw: Record<string, unknown>,
+  type: string
+) => EngineEvent | null;
 
 /**
  * tool-batch-start 的宽容 calls 抽取：从原始 payload 保留批内调用，不硬编码空数组。
@@ -214,7 +244,9 @@ function normalizeBatchCalls(rawCalls: unknown): ToolBatchCall[] | null {
       summary: str(r.summary),
       input: (r.input ?? r.parameters ?? {}) as ToolBatchCall['input'],
       category: isToolCategory(r.category) ? r.category : 'terminal',
-      concurrency: isToolConcurrency(r.concurrency) ? r.concurrency : 'sequential',
+      concurrency: isToolConcurrency(r.concurrency)
+        ? r.concurrency
+        : 'sequential',
     };
   });
 }
@@ -244,6 +276,53 @@ function normalizeBatchResults(rawCalls: unknown): ToolBatchResult[] | null {
   });
 }
 
+/**
+ * 事件体附加信封注入的 runId（可选）：Rust 三缓存事件的变体体不占 runId
+ * 字段，由信封扁平化注入（raw 顶层同名键）；宽容归一时一并读入，
+ * wire 层值与信封注入值天然一致（同一来源），老帧缺失时省略。
+ */
+function withEnvelopeRunId<E extends EngineEvent>(
+  event: E,
+  raw: Record<string, unknown>
+): E {
+  const runId = str(raw.runId);
+  return runId ? Object.assign(event, { runId }) : event;
+}
+
+/** cache-waste-alert 归因宽容判定：未知/缺失字符串兜底 unknown（8 类 kebab-case） */
+function isMissAttribution(v: unknown): v is MissAttribution {
+  return (
+    typeof v === 'string' &&
+    (MISS_ATTRIBUTION_VALUES as readonly string[]).includes(v)
+  );
+}
+
+/**
+ * cache-stats-updated.stats 的宽容归一（RunCacheStats，C6 ④兜底）：
+ * 计数类字段缺失/非数值 → 0（聚合无贡献）；比例/时间类字段
+ * null/缺失 → 不写字段（null = 未上报，区别于 0，前端隐藏而非显示 0%）。
+ */
+function normalizeRunCacheStats(rawStats: unknown): RunCacheStats {
+  const r = isRecord(rawStats) ? rawStats : {};
+  const stats: RunCacheStats = {
+    promptTokens: num(r.promptTokens) ?? 0,
+    completionTokens: num(r.completionTokens) ?? 0,
+    totalTokens: num(r.totalTokens) ?? 0,
+    cacheReadTokens: num(r.cacheReadTokens) ?? 0,
+    cacheWriteTokens: num(r.cacheWriteTokens) ?? 0,
+    cacheMissTokens: num(r.cacheMissTokens) ?? 0,
+    sampleCount: num(r.sampleCount) ?? 0,
+    missedTokens: num(r.missedTokens) ?? 0,
+  };
+  const hitRatio = num(r.hitRatio);
+  if (hitRatio !== undefined) stats.hitRatio = hitRatio;
+  const writeRatio = num(r.writeRatio);
+  if (writeRatio !== undefined) stats.writeRatio = writeRatio;
+  const warmUntilMs = num(r.warmUntilMs);
+  if (warmUntilMs !== undefined) stats.warmUntilMs = warmUntilMs;
+  return stats;
+}
+
 const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
   'agent-start': (raw) => ({
     type: 'agent-start',
@@ -252,7 +331,8 @@ const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
   }),
   'agent-end': (raw) => {
     const reason = str(raw.reason).trim() as AgentEndReason;
-    if (!(AGENT_END_REASON_VALUES as readonly string[]).includes(reason)) return null;
+    if (!(AGENT_END_REASON_VALUES as readonly string[]).includes(reason))
+      return null;
     const event: EngineEvent = {
       type: 'agent-end',
       sessionId: str(raw.sessionId),
@@ -278,7 +358,9 @@ const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
   'message-start': (raw) => ({
     type: 'message-start',
     sessionId: str(raw.sessionId),
-    message: isRecord(raw.message) ? (raw.message as unknown as AgentMessage) : emptyAgentMessage(),
+    message: isRecord(raw.message)
+      ? (raw.message as unknown as AgentMessage)
+      : emptyAgentMessage(),
   }),
   'message-delta': (raw) => ({
     type: 'message-delta',
@@ -292,7 +374,10 @@ const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
     sessionId: str(raw.sessionId),
     timestamp: str(raw.timestamp),
     messageId: str(raw.messageId),
-    block: { type: 'text', text: typeof raw.text === 'string' ? raw.text : blockText(raw) },
+    block: {
+      type: 'text',
+      text: typeof raw.text === 'string' ? raw.text : blockText(raw),
+    },
   }),
   'message-end': (raw) => {
     if (!isRecord(raw.message)) return null;
@@ -313,9 +398,15 @@ const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
         id: str(call.id ?? call.toolCallId ?? raw.toolCallId ?? raw.id),
         toolName: str(call.toolName ?? call.name ?? raw.toolName ?? raw.name),
         summary: str(call.summary ?? raw.summary),
-        input: (call.input ?? raw.input ?? call.parameters ?? raw.parameters ?? {}) as ToolBatchCall['input'],
+        input: (call.input ??
+          raw.input ??
+          call.parameters ??
+          raw.parameters ??
+          {}) as ToolBatchCall['input'],
         category: isToolCategory(call.category) ? call.category : 'terminal',
-        concurrency: isToolConcurrency(call.concurrency) ? call.concurrency : 'sequential',
+        concurrency: isToolConcurrency(call.concurrency)
+          ? call.concurrency
+          : 'sequential',
       },
     };
   },
@@ -325,7 +416,9 @@ const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
     batchId: str(raw.batchId),
     toolCallId: str(raw.toolCallId),
     timestamp: str(raw.timestamp),
-    update: isRecord(raw.update) ? (raw.update as unknown as ToolProgressUpdate) : {},
+    update: isRecord(raw.update)
+      ? (raw.update as unknown as ToolProgressUpdate)
+      : {},
   }),
   'tool-end': (raw) => {
     const r = isRecord(raw.result) ? raw.result : raw;
@@ -421,7 +514,9 @@ const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
     sessionId: str(raw.sessionId),
     timestamp: str(raw.timestamp),
     error: typeof raw.error === 'string' ? raw.error : str(raw.data),
-    ...(raw.retryable === true || raw.retryable === false ? { retryable: raw.retryable } : {}),
+    ...(raw.retryable === true || raw.retryable === false
+      ? { retryable: raw.retryable }
+      : {}),
   }),
   'runtime-steering': (raw) => ({
     type: 'runtime-steering',
@@ -459,7 +554,9 @@ const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
         toolName: str(req.toolName ?? req.name),
         parameters: (parameters ?? {}) as PermissionRequest['parameters'],
         summary: str(req.summary),
-        toolMetadata: (isRecord(req.toolMetadata) ? req.toolMetadata : {}) as ToolMetadata,
+        toolMetadata: (isRecord(req.toolMetadata)
+          ? req.toolMetadata
+          : {}) as ToolMetadata,
       },
     };
   },
@@ -472,7 +569,9 @@ const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
       if (s === 'approved' || s === 'allow') decision = 'approved';
       else if (s === 'expired') decision = 'expired';
     } else if (d && typeof d === 'object' && !Array.isArray(d)) {
-      const behavior = str((d as Record<string, unknown>).behavior).trim().toLowerCase();
+      const behavior = str((d as Record<string, unknown>).behavior)
+        .trim()
+        .toLowerCase();
       if (behavior === 'allow') decision = 'approved';
     }
     return {
@@ -504,6 +603,44 @@ const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
   'run-completed': (raw) => normalizeRunTerminal(raw, 'run-completed'),
   'run-failed': (raw) => normalizeRunTerminal(raw, 'run-failed'),
   'run-cancelled': (raw) => normalizeRunTerminal(raw, 'run-cancelled'),
+  'cache-stats-updated': (raw) =>
+    withEnvelopeRunId(
+      {
+        type: 'cache-stats-updated' as const,
+        sessionId: str(raw.sessionId),
+        timestamp: str(raw.timestamp),
+        stats: normalizeRunCacheStats(raw.stats),
+      },
+      raw
+    ),
+  'cache-waste-alert': (raw) => {
+    const event: EngineCacheWasteAlertEvent = {
+      type: 'cache-waste-alert',
+      sessionId: str(raw.sessionId),
+      timestamp: str(raw.timestamp),
+      attribution: isMissAttribution(raw.attribution)
+        ? raw.attribution
+        : 'unknown',
+      missedTokens: num(raw.missedTokens) ?? 0,
+      idleMs: num(raw.idleMs) ?? 0,
+      modelChanged: raw.modelChanged === true,
+    };
+    const missedCostUsd = num(raw.missedCostUsd);
+    if (missedCostUsd !== undefined) event.missedCostUsd = missedCostUsd;
+    return withEnvelopeRunId(event, raw);
+  },
+  'cold-cache-warning': (raw) =>
+    withEnvelopeRunId(
+      {
+        type: 'cold-cache-warning' as const,
+        sessionId: str(raw.sessionId),
+        timestamp: str(raw.timestamp),
+        ttlSeconds: num(raw.ttlSeconds) ?? 0,
+        idleMs: num(raw.idleMs) ?? 0,
+        resendEstimateTokens: num(raw.resendEstimateTokens) ?? 0,
+      },
+      raw
+    ),
 };
 
 function isLegacyEventType(type: string): type is LegacyEventType {
@@ -511,7 +648,9 @@ function isLegacyEventType(type: string): type is LegacyEventType {
 }
 
 /** 单一解析入口：返回已收窄的分派信封；未知形态 parseErr（由调用方登记） */
-export function parseBridgeEvent(input: unknown): ParseResult<BridgeEventEnvelope> {
+export function parseBridgeEvent(
+  input: unknown
+): ParseResult<BridgeEventEnvelope> {
   const envelope = resolveEventType(input);
   if (!envelope) {
     return parseErr('engine event is not an object or missing type');
@@ -534,7 +673,13 @@ export function parseBridgeEvent(input: unknown): ParseResult<BridgeEventEnvelop
   if (normalizer) {
     const event = normalizer(raw, type);
     if (event) {
-      return parseOk({ kind: 'engine', type: event.type, originalType: type, event, raw });
+      return parseOk({
+        kind: 'engine',
+        type: event.type,
+        originalType: type,
+        event,
+        raw,
+      });
     }
   }
 

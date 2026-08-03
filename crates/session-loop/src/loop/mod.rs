@@ -34,6 +34,7 @@ use conex_types::events::AgentEvent;
 use conex_types::message::AgentMessage;
 use conex_types::session::{AgentSessionEvent as E, AgentSessionState as S, AgentSessionState};
 
+use crate::cache_tracker::{build_tracker, CacheStatsTracker, CacheTrackingConfig};
 use crate::provider::{DeltaSink, ProviderCall};
 use crate::steering::{
     RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions,
@@ -193,6 +194,13 @@ pub struct SessionLoopOptions {
     /// 重写前缀，P4 §3.4.6）：预检触发与溢出触发共用计数
     /// （LoopState.compactions_this_run），0 = 禁用自动压缩。
     pub max_auto_compactions_per_run: u32,
+    /// 缓存跟踪配置（P5 S2 / T-36）：None = 不构造 CacheStatsTracker
+    /// （无缓存测量，行为与现状一致）；Some = run 起始在 LoopState 构造 /
+    /// 复位跟踪器（fresh run），run 内跨 turn 维护签名基线并聚合
+    /// RunCacheStats（收口移交 RunOutcome.cache_stats）。provider / model /
+    /// TTL 由壳层装配（engine 侧 SessionLoopProducer 构造，T-40 接线点；
+    /// TTL 走 P3 cache_ttl_for_provider_model 查询，0 = 未知）。
+    pub cache_tracking: Option<CacheTrackingConfig>,
 }
 
 impl Default for SessionLoopOptions {
@@ -217,6 +225,8 @@ impl Default for SessionLoopOptions {
             compaction_policy: None,
             summarizer: None,
             max_auto_compactions_per_run: 1,
+            // P5 S2 / T-36：缓存测量缺省关闭（未配置即现状行为）
+            cache_tracking: None,
         }
     }
 }
@@ -305,6 +315,9 @@ impl AgentSessionLoop {
         self.state.budget = options.context_budget;
         self.state.compaction_policy = options.compaction_policy.clone();
         self.state.summarizer = options.summarizer.clone();
+        // 缓存测量派生状态同步（P5 S2 / T-36）：cache_tracker 与 options
+        // 同源（构造期定，run 起始再复位）
+        self.state.cache_tracker = build_tracker(self.state.options.cache_tracking.as_ref());
         self.tool_ctx.cwd = self.state.options.cwd.clone();
         // 幂等开关派生状态同步（T06.4.4）：true → 注入新守卫；false → 移除
         let idempotency = if options.idempotency_enabled {
@@ -427,6 +440,11 @@ impl AgentSessionLoop {
         // 有效；跨重启由 orchestrator SessionContextMeta 持久化恢复，T-34）
         self.state.compactions_this_run = 0;
         self.state.compression_retries = 0;
+        // 缓存跟踪器复位（fresh run，P5 S2 / T-36 / §3.4.5「每 run 重建」语义）：
+        // run 内跨 turn 基线在 tracker 内部维护；跨 run 基线持久化由 engine
+        // 层负责（T-40，经 CacheStatsTracker::baseline 移交）——本层只保证
+        // 每 run 从干净状态开始（压缩代数归 0、签名基线作废、聚合清零）。
+        self.state.cache_tracker = build_tracker(self.state.options.cache_tracking.as_ref());
 
         // 用户消息入队（force 环）→ INITIALIZED → agent-start（01 §2.1）
         self.state.input_queue.enqueue_force(input);
@@ -602,6 +620,13 @@ impl AgentSessionLoop {
             turn_index: decision.turn_index,
             tool_call_count: decision.tool_call_count,
             steering_count: decision.steering_count,
+            // 缓存统计收口（P5 S2 / T-36）：tracker.finish() 产出 run 级聚合；
+            // 未配置 / 无样本 → None（缺省向后兼容，T-40 落库与事件消费）
+            cache_stats: self
+                .state
+                .cache_tracker
+                .take()
+                .map(CacheStatsTracker::finish),
         }
     }
 }
@@ -609,6 +634,7 @@ impl AgentSessionLoop {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use conex_types::{AgentMessageBlock, AgentMessageRole};
     use crate::testing::TestProvider;
 
     fn registry() -> Arc<ToolRegistry> {
@@ -648,6 +674,10 @@ mod tests {
         assert_eq!(
             options.max_auto_compactions_per_run, 1,
             "单 run 自动压缩上限默认 1（P4 §3.4.6）"
+        );
+        assert!(
+            options.cache_tracking.is_none(),
+            "cache_tracking 缺省 None = 不启用缓存测量（T-36 向后兼容）"
         );
     }
 
@@ -725,5 +755,84 @@ mod tests {
             .clone()
             .expect("decide 必须收到结构化错误");
         assert_eq!(received_code, codes::TOOL_EXECUTION_FAILED);
+    }
+
+    /// 构造用户消息（run 输入）
+    fn user_input(text: &str) -> AgentMessage {
+        AgentMessage {
+            id: format!("user-{text}"),
+            role: AgentMessageRole::User,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            blocks: vec![AgentMessageBlock::Text { text: text.into() }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        }
+    }
+
+    /// 携带 usage 的停止事件（ProviderUsage camelCase 标量面，T-36 消费面）
+    fn stop_with_usage(
+        prompt: u64,
+        completion: u64,
+        read: u64,
+        write: u64,
+        miss: Option<u64>,
+    ) -> crate::stream::ProviderStreamEvent {
+        crate::stream::ProviderStreamEvent::Stop {
+            reason: crate::stream::StopReason::Stop,
+            error: None,
+            usage: Some(crate::stream::ProviderUsage {
+                prompt_tokens: Some(prompt),
+                completion_tokens: Some(completion),
+                total_tokens: Some(prompt.saturating_add(completion)),
+                cache_read_tokens: Some(read),
+                cache_write_tokens: Some(write),
+                cache_miss_tokens: miss,
+                reasoning_tokens: None,
+            }),
+        }
+    }
+
+    /// T-36：run 收口携带缓存统计（usage → RunCacheStats 聚合）；
+    /// 未配置 cache_tracking 时缺省 None（向后兼容）
+    #[tokio::test]
+    async fn run_outcome_carries_cache_stats_and_defaults_to_none() {
+        use crate::cache_tracker::CacheTrackingConfig;
+        // 配置跟踪器：单轮 usage（Included 口径）→ RunCacheStats 聚合
+        let provider = TestProvider::new(vec![
+            crate::stream::ProviderStreamEvent::text("你好"),
+            stop_with_usage(1_000, 50, 800, 100, None),
+        ]);
+        let mut loop_ = AgentSessionLoop::new("s1", "r1", 16, Box::new(provider), registry());
+        loop_ = loop_.with_options(SessionLoopOptions {
+            cache_tracking: Some(CacheTrackingConfig {
+                provider: "deepseek".to_string(),
+                model: "deepseek-v4-flash".to_string(),
+                ttl_seconds: 60,
+            }),
+            ..Default::default()
+        });
+        let outcome = loop_.run(user_input("你好")).await;
+        let stats = outcome.cache_stats.expect("配置后收口必须携带缓存统计");
+        assert_eq!(stats.sample_count, 1);
+        assert_eq!(stats.prompt_tokens, 1_000);
+        assert_eq!(stats.completion_tokens, 50);
+        assert_eq!(stats.total_tokens, 1_050);
+        assert_eq!(stats.cache_read_tokens, 800);
+        assert_eq!(stats.cache_write_tokens, 100);
+        // Included：miss = prompt - read - write
+        assert_eq!(stats.cache_miss_tokens, 100);
+        assert_eq!(stats.hit_ratio, Some(0.8));
+        assert_eq!(stats.missed_tokens, 0, "首轮无基线 → 不计 miss");
+        assert!(stats.warm_until_ms.is_some(), "TTL 已知 → 温暖截止可计算");
+
+        // 未配置 → None（向后兼容，行为与现状一致）
+        let provider2 = TestProvider::new(vec![
+            crate::stream::ProviderStreamEvent::text("hi"),
+            stop_with_usage(100, 10, 0, 0, None),
+        ]);
+        let mut loop2 = AgentSessionLoop::new("s1", "r2", 16, Box::new(provider2), registry());
+        let outcome2 = loop2.run(user_input("hi")).await;
+        assert!(outcome2.cache_stats.is_none(), "未配置缓存测量 → cache_stats 为 None");
     }
 }

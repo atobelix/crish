@@ -5,8 +5,14 @@
  * 历史别名（text-delta / run-completed / run-failed / run-cancelled）、
  * legacy 信封（subagent-* / error）、未知事件 parseErr（供 unknown-case 登记）。
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { parseBridgeEvent } from './eventParser';
+import type {
+  AgentEvent,
+  CacheDomainEvent,
+  MissAttribution,
+  RunCacheStats,
+} from '../../../../../../packages/shared-types/src/events';
 
 describe('parseBridgeEvent（T7 单一解析入口）', () => {
   it('规范 message-delta 载荷经生成解析器直出具体信封类型', () => {
@@ -68,7 +74,10 @@ describe('parseBridgeEvent（T7 单一解析入口）', () => {
   });
 
   it('run-terminal 拼写变体 canceled / error / FAILED 归一为规范枚举', () => {
-    const canceled = parseBridgeEvent({ type: 'run-terminal', terminal: 'canceled' });
+    const canceled = parseBridgeEvent({
+      type: 'run-terminal',
+      terminal: 'canceled',
+    });
     expect(canceled.ok).toBe(true);
     if (canceled.ok && canceled.data.kind === 'engine') {
       expect(canceled.data.event.terminal).toBe('cancelled');
@@ -77,14 +86,22 @@ describe('parseBridgeEvent（T7 单一解析入口）', () => {
     if (error.ok && error.data.kind === 'engine') {
       expect(error.data.event.terminal).toBe('failed');
     }
-    const upper = parseBridgeEvent({ type: 'run-terminal', terminal: 'FAILED' });
+    const upper = parseBridgeEvent({
+      type: 'run-terminal',
+      terminal: 'FAILED',
+    });
     if (upper.ok && upper.data.kind === 'engine') {
       expect(upper.data.event.terminal).toBe('failed');
     }
   });
 
   it('subagent-* 与 error 走 legacy 信封', () => {
-    for (const type of ['subagent-started', 'subagent-event', 'subagent-ended', 'error']) {
+    for (const type of [
+      'subagent-started',
+      'subagent-event',
+      'subagent-ended',
+      'error',
+    ]) {
       const r = parseBridgeEvent({ type, subagentId: 'sa-1' });
       expect(r.ok).toBe(true);
       if (r.ok) {
@@ -95,7 +112,14 @@ describe('parseBridgeEvent（T7 单一解析入口）', () => {
   });
 
   it('未知事件 parseErr（供 EventRouter unknown-case 登记，不静默吞）', () => {
-    for (const input of [null, [], 'x', {}, { type: '' }, { type: 'nope-event' }]) {
+    for (const input of [
+      null,
+      [],
+      'x',
+      {},
+      { type: '' },
+      { type: 'nope-event' },
+    ]) {
       const r = parseBridgeEvent(input);
       expect(r.ok).toBe(false);
       if (r.ok === false) expect(r.error.length).toBeGreaterThan(0);
@@ -105,7 +129,11 @@ describe('parseBridgeEvent（T7 单一解析入口）', () => {
   it('approval-requested 嵌套 request 与平铺形状均归一出 toolCallId / parameters', () => {
     const nested = parseBridgeEvent({
       type: 'approval-requested',
-      request: { toolCallId: 'tc-a', toolName: 'shell_command', parameters: { command: 'ls' } },
+      request: {
+        toolCallId: 'tc-a',
+        toolName: 'shell_command',
+        parameters: { command: 'ls' },
+      },
     });
     expect(nested.ok).toBe(true);
     if (nested.ok && nested.data.kind === 'engine') {
@@ -120,25 +148,43 @@ describe('parseBridgeEvent（T7 单一解析入口）', () => {
     });
     expect(flat.ok).toBe(true);
     if (flat.ok && flat.data.kind === 'engine') {
-      expect(flat.data.event.request.parameters).toMatchObject({ command: 'git status' });
+      expect(flat.data.event.request.parameters).toMatchObject({
+        command: 'git status',
+      });
     }
   });
 
   it('approval-resolved 决策映射：approved 放行、denied/expired/未知拒绝', () => {
-    const approved = parseBridgeEvent({ type: 'approval-resolved', toolCallId: 't1', decision: 'approved' });
+    const approved = parseBridgeEvent({
+      type: 'approval-resolved',
+      toolCallId: 't1',
+      decision: 'approved',
+    });
     expect(approved.ok).toBe(true);
     if (approved.ok && approved.data.kind === 'engine') {
       expect(approved.data.event.decision).toBe('approved');
     }
-    const expired = parseBridgeEvent({ type: 'approval-resolved', toolCallId: 't2', decision: 'expired' });
+    const expired = parseBridgeEvent({
+      type: 'approval-resolved',
+      toolCallId: 't2',
+      decision: 'expired',
+    });
     if (expired.ok && expired.data.kind === 'engine') {
       expect(expired.data.event.decision).toBe('expired');
     }
-    const weird = parseBridgeEvent({ type: 'approval-resolved', toolCallId: 't3', decision: 'maybe' });
+    const weird = parseBridgeEvent({
+      type: 'approval-resolved',
+      toolCallId: 't3',
+      decision: 'maybe',
+    });
     if (weird.ok && weird.data.kind === 'engine') {
       expect(weird.data.event.decision).toBe('denied');
     }
-    const behavior = parseBridgeEvent({ type: 'approval-resolved', toolCallId: 't4', decision: { behavior: 'allow' } });
+    const behavior = parseBridgeEvent({
+      type: 'approval-resolved',
+      toolCallId: 't4',
+      decision: { behavior: 'allow' },
+    });
     if (behavior.ok && behavior.data.kind === 'engine') {
       expect(behavior.data.event.decision).toBe('approved');
     }
@@ -175,7 +221,14 @@ describe('parseBridgeEvent（T7 单一解析入口）', () => {
     const r = parseBridgeEvent({
       type: 'tool-batch-start',
       batchId: 'b-2',
-      calls: [{ toolCallId: 'c-2', name: 'read_file', summary: '读文件', input: { path: 'a.txt' } }],
+      calls: [
+        {
+          toolCallId: 'c-2',
+          name: 'read_file',
+          summary: '读文件',
+          input: { path: 'a.txt' },
+        },
+      ],
     });
     expect(r.ok).toBe(true);
     if (r.ok && r.data.kind === 'engine') {
@@ -193,7 +246,13 @@ describe('parseBridgeEvent（T7 单一解析入口）', () => {
       sessionId: 's',
       batchId: 'b-3',
       calls: [
-        { id: 'r-1', toolName: 'shell_command', output: 'done', isError: false, durationMs: 10 },
+        {
+          id: 'r-1',
+          toolName: 'shell_command',
+          output: 'done',
+          isError: false,
+          durationMs: 10,
+        },
       ],
     });
     expect(r.ok).toBe(true);
@@ -227,7 +286,10 @@ describe('parseBridgeEvent（T7 单一解析入口）', () => {
   it('宽容路径 tool-batch-start/end 缺 calls 时回退空数组并记录可观测日志', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      const start = parseBridgeEvent({ type: 'tool-batch-start', batchId: 'b-5' });
+      const start = parseBridgeEvent({
+        type: 'tool-batch-start',
+        batchId: 'b-5',
+      });
       expect(start.ok).toBe(true);
       if (start.ok && start.data.kind === 'engine') {
         expect(start.data.event.calls).toEqual([]);
@@ -239,10 +301,215 @@ describe('parseBridgeEvent（T7 单一解析入口）', () => {
       }
       expect(warn).toHaveBeenCalledTimes(2);
       const messages = warn.mock.calls.map((c) => String(c[1] ?? ''));
-      expect(messages.some((m) => m.includes('tool-batch-start') && m.includes('calls'))).toBe(true);
-      expect(messages.some((m) => m.includes('tool-batch-end') && m.includes('calls'))).toBe(true);
+      expect(
+        messages.some(
+          (m) => m.includes('tool-batch-start') && m.includes('calls')
+        )
+      ).toBe(true);
+      expect(
+        messages.some(
+          (m) => m.includes('tool-batch-end') && m.includes('calls')
+        )
+      ).toBe(true);
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe('parseBridgeEvent（P5 S3 缓存测量域三事件）', () => {
+  const fullStats = {
+    promptTokens: 12000,
+    completionTokens: 400,
+    totalTokens: 12400,
+    cacheReadTokens: 9000,
+    cacheWriteTokens: 500,
+    cacheMissTokens: 2500,
+    sampleCount: 1,
+    hitRatio: 0.75,
+    writeRatio: 0.04,
+    missedTokens: 0,
+    warmUntilMs: 1754200000000,
+  };
+
+  it('规范 cache-stats-updated 载荷（stats 完整）经生成解析器直出', () => {
+    const r = parseBridgeEvent({
+      type: 'cache-stats-updated',
+      sessionId: 's',
+      timestamp: 't',
+      stats: fullStats,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect(r.data.type).toBe('cache-stats-updated');
+      expect(r.data.event.stats).toMatchObject({
+        cacheReadTokens: 9000,
+        hitRatio: 0.75,
+      });
+    }
+  });
+
+  it('宽容 cache-stats-updated（缺 stats/部分字段）经归一器兜底，计数缺省 0 不抛', () => {
+    const noStats = parseBridgeEvent({
+      type: 'cache-stats-updated',
+      sessionId: 's',
+    });
+    expect(noStats.ok).toBe(true);
+    if (noStats.ok && noStats.data.kind === 'engine') {
+      expect(noStats.data.event.stats.promptTokens).toBe(0);
+      expect(noStats.data.event.stats.hitRatio).toBeUndefined();
+    }
+    const partial = parseBridgeEvent({
+      type: 'cache-stats-updated',
+      sessionId: 's',
+      timestamp: 't',
+      stats: { promptTokens: 100 },
+    });
+    expect(partial.ok).toBe(true);
+    if (partial.ok && partial.data.kind === 'engine') {
+      expect(partial.data.event.stats.promptTokens).toBe(100);
+      expect(partial.data.event.stats.completionTokens).toBe(0);
+    }
+  });
+
+  it('cache-stats-updated stats null 语义：null = 未上报（隐藏）区别于 0', () => {
+    const r = parseBridgeEvent({
+      type: 'cache-stats-updated',
+      sessionId: 's',
+      stats: {
+        cacheReadTokens: 0,
+        hitRatio: null,
+        writeRatio: null,
+        warmUntilMs: null,
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect('hitRatio' in r.data.event.stats).toBe(false);
+      expect('writeRatio' in r.data.event.stats).toBe(false);
+      expect('warmUntilMs' in r.data.event.stats).toBe(false);
+      expect(r.data.event.stats.cacheReadTokens).toBe(0);
+    }
+    const zero = parseBridgeEvent({
+      type: 'cache-stats-updated',
+      sessionId: 's',
+      stats: { hitRatio: 0, cacheReadTokens: 0 },
+    });
+    if (zero.ok && zero.data.kind === 'engine') {
+      expect(zero.data.event.stats.hitRatio).toBe(0);
+    }
+  });
+
+  it('规范 cache-waste-alert 载荷经生成解析器直出（含 missedCostUsd）', () => {
+    const r = parseBridgeEvent({
+      type: 'cache-waste-alert',
+      sessionId: 's',
+      timestamp: 't',
+      attribution: 'model-switch',
+      missedTokens: 21000,
+      idleMs: 3000,
+      modelChanged: true,
+      missedCostUsd: 0.03,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect(r.data.event.attribution).toBe('model-switch');
+      expect(r.data.event.missedTokens).toBe(21000);
+      expect(r.data.event.missedCostUsd).toBe(0.03);
+    }
+  });
+
+  it('宽容 cache-waste-alert（未知 attribution / 缺字段）兜底 unknown 与 0，不抛', () => {
+    const r = parseBridgeEvent({
+      type: 'cache-waste-alert',
+      sessionId: 's',
+      attribution: 'bogus-attribution',
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect(r.data.event.attribution).toBe('unknown');
+      expect(r.data.event.missedTokens).toBe(0);
+      expect(r.data.event.idleMs).toBe(0);
+      expect(r.data.event.modelChanged).toBe(false);
+      expect(r.data.event.missedCostUsd).toBeUndefined();
+    }
+  });
+
+  it('cache-waste-alert runId 信封注入值读入且 missedCostUsd null = 未上报', () => {
+    const r = parseBridgeEvent({
+      type: 'cache-waste-alert',
+      sessionId: 's',
+      runId: 'r-9',
+      attribution: 'prefix-changed',
+      missedCostUsd: null,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect(r.data.event.runId).toBe('r-9');
+      expect('missedCostUsd' in r.data.event).toBe(false);
+    }
+  });
+
+  it('规范 cold-cache-warning 载荷经生成解析器直出', () => {
+    const r = parseBridgeEvent({
+      type: 'cold-cache-warning',
+      sessionId: 's',
+      timestamp: 't',
+      ttlSeconds: 300,
+      idleMs: 360000,
+      resendEstimateTokens: 12400,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect(r.data.event.ttlSeconds).toBe(300);
+      expect(r.data.event.resendEstimateTokens).toBe(12400);
+    }
+  });
+
+  it('宽容 cold-cache-warning（全缺字段）兜底 0，不抛', () => {
+    const r = parseBridgeEvent({ type: 'cold-cache-warning' });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect(r.data.event.ttlSeconds).toBe(0);
+      expect(r.data.event.idleMs).toBe(0);
+      expect(r.data.event.resendEstimateTokens).toBe(0);
+      expect(r.data.event.runId).toBeUndefined();
+    }
+  });
+
+  it('类型导出：CacheDomainEvent 三变体并入 AgentEvent 联合（编译期契约）', () => {
+    expectTypeOf<MissAttribution>().toEqualTypeOf<
+      | 'model-switch'
+      | 'compaction'
+      | 'prefix-changed'
+      | 'idle-ttl-expired'
+      | 'cold'
+      | 'zero-read'
+      | 'low-read'
+      | 'unknown'
+    >();
+    expectTypeOf<RunCacheStats>().toHaveProperty(
+      'cacheReadTokens',
+      'number | undefined'
+    );
+    expectTypeOf<RunCacheStats>().toHaveProperty(
+      'hitRatio',
+      'number | undefined'
+    );
+    const ev = {
+      type: 'cache-stats-updated',
+      sessionId: 's',
+      timestamp: 't',
+      stats: {},
+    } satisfies AgentEvent;
+    expect(ev.type).toBe('cache-stats-updated');
+    const alert = {
+      type: 'cache-waste-alert',
+      sessionId: 's',
+      timestamp: 't',
+      attribution: 'zero-read',
+      missedTokens: 20000,
+    } satisfies CacheDomainEvent;
+    expect(alert.attribution).toBe('zero-read');
   });
 });

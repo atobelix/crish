@@ -1223,6 +1223,8 @@ mod tests {
             turn_index: 0,
             tool_call_count: 0,
             steering_count: 0,
+            // T-36：缓存统计字段（本构造点无样本 → None，缺省向后兼容）
+            cache_stats: None,
         }
     }
 

@@ -9,7 +9,9 @@
 //!      输入队列有可运行输入即跳过评估；`steering_enabled=false` 时跳过
 //!      评估，T06.2.1 Q03）；intervention-required 事件照发，但 run
 //!      **不以 error 收场**（00 D6 / 01 §五.4 裁决：stop + 诊断）；
-//!   5. 上下文压缩（已删除，T06.2.3 Q04：CompressionHook 死配置无消费者）；
+//!   5. 上下文压缩预检（P4 阶段 3-2 / §3.4.1 触发点 1：阈值触发——T-33
+//!      恢复 T06.2.3 Q04 删除的触发点，真实压缩引擎接线；条件与动作见
+//!      [maybe_compact_preflight]）；
 //!   6. TURN_PREPARED → streaming。
 
 use conex_types::events::AgentEvent;
@@ -19,7 +21,8 @@ use crate::steering::SteeringPhase;
 
 use super::super::end::EndDecision;
 use super::super::handlers::{
-    check_control, dispatch, record_message, steering_context, HandlerOutcome, LoopState,
+    check_control, dispatch, maybe_compact_preflight, record_message, steering_context,
+    HandlerOutcome, LoopState,
 };
 use super::super::LoopError;
 
@@ -68,9 +71,14 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
         }
     }
 
-    // 5. 上下文压缩（已删除，T06.2.3 / AA-01 Q04）：CompressionHook 死配置
-    //    无消费者（payload 阶梯亦已删除，T06.2.2）。上下文压缩 = 未来任务，
-    //    需真实压缩实现 + payload 阶梯一并恢复（AA-06 P11 登记不做，PE-09）。
+    // 5. 上下文压缩预检（P4 阶段 3-2 / §3.4.1 触发点 1：阈值触发）——
+    //    estimate ≥ window - reserve 且本 run 压缩次数未达上限时同步压缩
+    //    （对话替换 + 事件广播在预检函数内完成；压缩是唯一前缀重写点，
+    //    I1 不变量，P1 追加点纪律的 P4 闸门例外）。
+    //    T06.2.3 Q04 删除的触发点在 T-33 恢复：真实压缩引擎
+    //    （conex-compaction AgentMessage 面）已接线，CompressionHook
+    //    死配置由阈值预检替代。
+    maybe_compact_preflight(state);
 
     // 6. TURN_PREPARED → streaming（turnIndex+1，toolCallCount 归零）
     dispatch(state, E::TurnPrepared)?;

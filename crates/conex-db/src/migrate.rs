@@ -1,8 +1,8 @@
-//! 迁移链域：`PRAGMA user_version` 驱动的版本化迁移（v1→v4，PE-08 T08.7）。
+//! 迁移链域：`PRAGMA user_version` 驱动的版本化迁移（v1→v5，PE-08 T08.7 + P5 §3.1.4）。
 //! 逐版本独立事务、幂等可重试；DROP 前备份（[backup_before_drop]）；
-//! 新库直接建 v4 结构。迁移实现保持原样，由 `LocalDb::open` 触发。
+//! 新库直接建 v5 结构。迁移实现保持原样，由 `LocalDb::open` 触发。
 
-use super::schema::{create_v1_schema, create_v4_schema};
+use super::schema::{create_v1_schema, create_v5_schema};
 use super::{DbFailure, DbFailureKind, LocalDb, BACKUP_KEEP, LATEST_VERSION, SCHEMA_VERSION_STRING};
 use std::path::Path;
 
@@ -56,7 +56,7 @@ impl LocalDb {
     ///
     /// 版本化迁移（PE-08 T08.7）：以 `PRAGMA user_version` 为权威源，
     /// 从当前版本逐级迁移到 [LATEST_VERSION]；每版本独立事务、幂等可重试；
-    /// DROP 前备份（[backup_before_drop]）；新库直接建 v4 结构。
+    /// DROP 前备份（[backup_before_drop]）；新库直接建 v5 结构。
     pub(crate) fn migrate(&self) -> Result<(), DbFailure> {
         let mut conn = self.conn.lock().map_err(|e| DbFailure {
             message: format!("lock poisoned: {e}"),
@@ -74,14 +74,14 @@ impl LocalDb {
 
         if current == LATEST_VERSION {
             // 已是目标版本：确保关键结构存在（幂等兜底，含备份恢复场景）
-            conn.execute_batch(create_v4_schema())
+            conn.execute_batch(create_v5_schema())
                 .map_err(|e| self.latch_error("schema_ensure", e))?;
             self.record_schema_version(&conn)?;
             return Ok(());
         }
 
         // 全新库（无 sessions 表）：建 v1 形态后走完整迁移链
-        // （fresh_db_full_chain 测试锚定：全新建库也执行 v1..v4 全部迁移，
+        // （fresh_db_full_chain 测试锚定：全新建库也执行 v1..v5 全部迁移，
         // 验证迁移链自身正确性，且 DROP 前备份产生）。
         let has_sessions: i64 = conn
             .query_row(
@@ -112,6 +112,7 @@ impl LocalDb {
                 2 => migrate_v1_to_v2(&tx),
                 3 => migrate_v2_to_v3(&tx),
                 4 => migrate_v3_to_v4(&tx),
+                5 => migrate_v4_to_v5(&tx),
                 _ => unreachable!(),
             };
             if let Err(e) = step_result {
@@ -127,13 +128,18 @@ impl LocalDb {
                 .map_err(|e| self.latch_error(&format!("migrate_commit_v{version}"), e))?;
             conn.execute_batch(&format!("PRAGMA user_version = {version};"))
                 .map_err(|e| self.latch_error(&format!("user_version_set_v{version}"), e))?;
+            // v5 纯 ADD COLUMN 无 DROP：跳过备份，保持「DROP 前备份」语义。
+            // （backup_file_contains_pre_migration_data / upgrade_e2e_backup_*
+            // 锚定 v3→v4 只产 .bak-v4，v5 不额外产生备份）
             if let Some(p) = &path {
-                self.backup_before_drop(p, version);
+                if version != 5 {
+                    self.backup_before_drop(p, version);
+                }
             }
         }
 
-        // 迁移完成后 ensure v4 结构（补触发器/索引；幂等）
-        conn.execute_batch(create_v4_schema())
+        // 迁移完成后 ensure v5 结构（补触发器/索引；幂等）
+        conn.execute_batch(create_v5_schema())
             .map_err(|e| self.latch_error("schema_ensure_post_migrate", e))?;
         self.record_schema_version(&conn)?;
 
@@ -316,6 +322,47 @@ fn migrate_v3_to_v4(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Erro
                 next_sequence INTEGER NOT NULL DEFAULT 1
              ) WITHOUT ROWID;",
         )?;
+    }
+    Ok(())
+}
+
+/// 查询表的列名清单（`PRAGMA table_info`；v5 col-check 幂等复用）。
+fn table_columns(
+    tx: &rusqlite::Transaction<'_>,
+    table: &str,
+) -> Result<Vec<String>, rusqlite::Error> {
+    let mut stmt = tx.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mapped = stmt.query_map([], |r| r.get::<_, String>(1))?;
+    Ok(mapped.filter_map(|c| c.ok()).collect::<Vec<String>>())
+}
+
+/// v4 → v5：runs 补 run 级 usage/cache 列 + session_messages 补 usage_json（P5 §3.1.4 / C8）。
+///
+/// 纯 ADD COLUMN（无 DROP、无重建），col-check 幂等（对齐 v1→v2 模式，migrate.rs:161-183）：
+/// - runs：prompt/completion/total/cache_read/cache_write/cache_miss/sample_count/missed_tokens
+///   （NOT NULL DEFAULT 0，旧行自动补 0）+ warm_until_ms（NULL 兼容）；
+/// - session_messages：usage_json TEXT（消息级 usage 快照，前端 saveSessionBody 写入面）。
+/// hit_ratio / write_ratio 不落库（可派生，口径一致）。
+fn migrate_v4_to_v5(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
+    let runs_cols = table_columns(tx, "runs")?;
+    let add_run_col = |col: &str, ddl: &str| -> Result<(), rusqlite::Error> {
+        if !runs_cols.iter().any(|c| c == col) {
+            tx.execute_batch(&format!("ALTER TABLE runs ADD COLUMN {ddl};"))?;
+        }
+        Ok(())
+    };
+    add_run_col("prompt_tokens", "prompt_tokens INTEGER NOT NULL DEFAULT 0")?;
+    add_run_col("completion_tokens", "completion_tokens INTEGER NOT NULL DEFAULT 0")?;
+    add_run_col("total_tokens", "total_tokens INTEGER NOT NULL DEFAULT 0")?;
+    add_run_col("cache_read_tokens", "cache_read_tokens INTEGER NOT NULL DEFAULT 0")?;
+    add_run_col("cache_write_tokens", "cache_write_tokens INTEGER NOT NULL DEFAULT 0")?;
+    add_run_col("cache_miss_tokens", "cache_miss_tokens INTEGER NOT NULL DEFAULT 0")?;
+    add_run_col("sample_count", "sample_count INTEGER NOT NULL DEFAULT 0")?;
+    add_run_col("missed_tokens", "missed_tokens INTEGER NOT NULL DEFAULT 0")?;
+    add_run_col("warm_until_ms", "warm_until_ms INTEGER")?;
+    let msg_cols = table_columns(tx, "session_messages")?;
+    if !msg_cols.iter().any(|c| c == "usage_json") {
+        tx.execute_batch("ALTER TABLE session_messages ADD COLUMN usage_json TEXT;")?;
     }
     Ok(())
 }

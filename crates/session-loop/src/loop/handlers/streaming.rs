@@ -28,7 +28,8 @@ use crate::stream::{ConsumeBuilder, ConsumeResult, ConsumeStopReason, ProviderSt
 
 use super::super::end::EndDecision;
 use super::super::handlers::{
-    check_control, dispatch, new_message_id, HandlerOutcome, LoopState,
+    check_control, clamp_max_tokens, dispatch, estimate_context, new_message_id, HandlerOutcome,
+    LoopState,
 };
 use super::super::LoopError;
 use super::{no_tool_calls, stream_error};
@@ -49,6 +50,15 @@ pub(crate) async fn handle(
     // ensure_tools_snapshot，再不可变借用 build_request——工具循环轮次间
     // 复用同一快照，保证 tools 前缀字节稳定）
     ensure_tools_snapshot(state);
+    // P5 S2 / T-36：请求发送前捕获缓存审计签名（P5 §3.4.1「BEFORE sending」；
+    // tools 取 P1 排序后快照的克隆（与 build_request 的 tools 同源）、system
+    // 取透传后非 None 值、messages 取对话投影；剔除 created_at / metadata——
+    // 只读哈希，不改请求字节）
+    let tools = tools_schema(state).to_vec();
+    let system = state.options.system_prompt.clone();
+    if let Some(tracker) = &mut state.cache_tracker {
+        tracker.capture_signature(system.as_deref(), &tools, &state.conversation);
+    }
     let request = build_request(state);
     // T09.1 双轨：预生成 assistant 消息 id——实时 delta 与最终收口消息共用
     // 同一 id，保证 message-delta / message-start / message-end 的
@@ -145,6 +155,12 @@ pub(crate) async fn handle(
 
     // 4b. diagnostics → provider-diagnostic 事件（01 §2.4 步骤 4）
     emit_diagnostics(state, &consumed);
+
+    // 4c. 缓存审计（P5 S2 / T-36）：turn 后消费 usage——metadata.usage →
+    // 标量面 → tracker.record_usage（run 聚合 + detectMiss 归因）；产出的
+    // CacheMiss 由 T-40 按告警阈值转 cache-waste-alert 事件（本层只记录日志，
+    // 不越界发事件；aborted / error 回合的实测 usage 照记，pi 语义）
+    consume_cache_usage(state, &consumed);
 
     // 5. 响应分类（01 §2.4 步骤 5）
     match &consumed.response {
@@ -262,14 +278,29 @@ pub(crate) fn streaming_aborted(state: &mut LoopState) -> Result<HandlerOutcome,
 /// 同生命周期（`'a` 借用期，实现方在返回流前完成序列化）。
 /// session_id 暂填 None（P2 步骤 4a 契约字段，C5 合并登记）；会话 ID 的注入
 /// 接线（engine.rs 适配层 / SessionLoopOptions 透传）归 T-17（P2 步骤 4b）。
+///
+/// P4（预算钳制）：max_tokens 发请求前经 [clamp_max_tokens] 钳制
+/// （window - estimate - safety，估算 = [estimate_context] 双源，
+/// C9 口径 input_total）；预算未配置（None）时透传现状值，向后兼容。
 fn build_request(state: &LoopState) -> ProviderRequest<'_> {
     ProviderRequest {
         messages: &state.conversation,
         tools: tools_schema(state).to_vec(),
-        max_tokens: Some(state.max_tokens),
+        max_tokens: Some(clamp_request_max_tokens(state)),
         system_prompt: state.options.system_prompt.as_deref(),
         session_id: None,
     }
+}
+
+/// 预算钳制挂载点（P4 阶段 2-2/2-3，§3.3.2）：`state.max_tokens`
+/// （length 阶梯值）经 [clamp_max_tokens] 钳到 `window - estimate - safety`；
+/// 预算缺省 None = 不钳制（向后兼容现状）
+fn clamp_request_max_tokens(state: &LoopState) -> u32 {
+    let Some(budget) = state.budget else {
+        return state.max_tokens;
+    };
+    let estimate = estimate_context(state);
+    clamp_max_tokens(state.max_tokens, estimate.tokens, &budget)
 }
 
 /// 工具定义导出（P1：快照锁定——首次构建后缓存，不再每轮从注册表重建）
@@ -284,13 +315,15 @@ fn tools_schema(state: &LoopState) -> &[ToolSchema] {
         .expect("build_request 前必须已构建工具快照（ensure_tools_snapshot）")
 }
 
-/// 构建工具快照（run 内一次；入口：streaming handler 首次 build_request 前）
+/// 构建工具快照（run 内一次；入口：streaming handler 首次 build_request 前；
+/// P4 预检压缩 [crate::r#loop::handlers::maybe_compact_preflight] 复用——
+/// 快照必须已构建才能折算 tools 前缀）
 ///
 /// 幂等：快照已存在时直接返回（不重建、不覆盖——锁定语义）；清理时机：
 /// run 收口不需要清理——每 run 重建 LoopState（engine 每 run new），测试
 /// 路径跨 run 复用同一 loop 时快照仍有效（注册表未变），语义正确。
 /// length 阶梯升级不影响 tools，快照无需重建。
-fn ensure_tools_snapshot(state: &mut LoopState) {
+pub(crate) fn ensure_tools_snapshot(state: &mut LoopState) {
     if state.tools_snapshot.is_none() {
         state.tools_snapshot = Some(
             state
@@ -312,6 +345,60 @@ fn emit_diagnostics(state: &mut LoopState, consumed: &ConsumeResult) {
             timestamp: crate::steering::now_iso_utc(),
             diagnostic: diagnostic.clone(),
         });
+    }
+}
+
+/// 缓存 usage 消费（P5 S2 / T-36）：`metadata.usage`（ProviderUsage camelCase
+/// 形状）→ `CacheUsageScalars`（含 completion / total 标量）→
+/// `tracker.record_usage`；产出的 [CacheMiss] 只做日志观测——cache-waste-alert
+/// 事件发射（阈值 + DeltaSink 实时轨）归 T-40 engine 接线。
+fn consume_cache_usage(state: &mut LoopState, consumed: &ConsumeResult) {
+    let Some(tracker) = &mut state.cache_tracker else { return };
+    let Some(usage) = consumed.metadata.get("usage").and_then(|v| v.as_object()) else {
+        return;
+    };
+    let get = |key: &str| usage.get(key).and_then(|v| v.as_u64());
+    let scalars = conex_telemetry::cache::CacheUsageScalars {
+        prompt: get("promptTokens").unwrap_or(0),
+        read: get("cacheReadTokens").unwrap_or(0),
+        write: get("cacheWriteTokens").unwrap_or(0),
+        miss: get("cacheMissTokens"),
+        accounting: cache_accounting_kind(consumed),
+    };
+    let completion = get("completionTokens").unwrap_or(0);
+    let total = get("totalTokens").unwrap_or(0);
+    let completed_at_ms = crate::steering::unix_millis() as u64;
+    if let Some(miss) = tracker.record_usage(scalars, completion, total, completed_at_ms) {
+        tracing::debug!(
+            missed_tokens = miss.missed_tokens,
+            idle_ms = miss.idle_ms,
+            attribution = ?miss.attribution,
+            model_changed = miss.model_changed,
+            "缓存 miss 审计命中（cache-waste-alert 发射归 T-40）"
+        );
+    }
+}
+
+/// 口径判定（C9）：与 `metadata.cacheBreakdown`（consume 收口处按有效口径
+/// 派生）比对——`inputTotal == prompt` 即 Included（Excluded 系
+/// `input_total = prompt + read + write`）；cacheBreakdown 缺失（无 prompt
+/// 数据）时按默认 Included——两口径在无 read/write 时推导结果等价，无歧义。
+fn cache_accounting_kind(consumed: &ConsumeResult) -> conex_telemetry::cache::CacheAccountingKind {
+    let prompt = consumed
+        .metadata
+        .get("usage")
+        .and_then(|u| u.get("promptTokens"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let breakdown_total = consumed
+        .metadata
+        .get("cacheBreakdown")
+        .and_then(|b| b.get("inputTotal"))
+        .and_then(|v| v.as_u64());
+    match breakdown_total {
+        Some(total) if total == prompt => conex_telemetry::cache::CacheAccountingKind::Included,
+        Some(_) => conex_telemetry::cache::CacheAccountingKind::Excluded,
+        None => conex_telemetry::cache::CacheAccountingKind::Included,
     }
 }
 

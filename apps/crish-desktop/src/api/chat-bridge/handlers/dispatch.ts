@@ -6,9 +6,17 @@
  * legacyDispatchTable 承接生成联合之外的信封级事件（subagent-* / error）。
  */
 import type { EngineEventType } from '../../../../../../packages/shared-types/src/generated/engine';
-import type { EngineEnvelope, LegacyEnvelope, LegacyEventType } from './eventParser';
+import type {
+  EngineEnvelope,
+  LegacyEnvelope,
+  LegacyEventType,
+} from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
-import { onMessageStart, onMessageDelta, onMessageEnd } from './messageHandlers';
+import {
+  onMessageStart,
+  onMessageDelta,
+  onMessageEnd,
+} from './messageHandlers';
 import {
   onToolStart,
   onToolUpdate,
@@ -76,6 +84,11 @@ export const engineDispatchTable: {
   'checkpoint-created': onCheckpointCreated,
   'checkpoint-restored': onCheckpointRestored,
   'run-terminal': onRunTerminal,
+  // 缓存测量域三事件（P5 S3；T-38 先注册显式空实现，宽容静默忽略——
+  // 对齐老前端不识别新事件类型的 tolerance，T-48 负责真实展示消费接线）
+  'cache-stats-updated': (_env, _envelope) => {},
+  'cache-waste-alert': (_env, _envelope) => {},
+  'cold-cache-warning': (_env, _envelope) => {},
 };
 
 type LegacyHandler = (env: HandlerEnv, envelope: LegacyEnvelope) => void;
@@ -96,6 +109,8 @@ export function dispatchEvent(
     legacyDispatchTable[envelope.type](env, envelope);
     return;
   }
-  const handler = engineDispatchTable[envelope.type] as EngineHandler<EngineEventType>;
+  const handler = engineDispatchTable[
+    envelope.type
+  ] as EngineHandler<EngineEventType>;
   handler(env, envelope);
 }

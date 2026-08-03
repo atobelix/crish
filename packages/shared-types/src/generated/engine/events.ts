@@ -6,16 +6,32 @@
 // Regenerate: node scripts/generate-engine-bindings.mjs
 // =======================================================================
 
-import type { AgentEndReason, AgentMessage, AgentMessageBlock, ToolBatchCall, ToolProgressUpdate, ToolBatchResult, ContextCompressionRecord, ProviderDiagnostic, PermissionRequest, ApprovalDecision, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, RunTerminalStatus } from "./types";
+import type {
+  AgentEndReason,
+  AgentMessage,
+  AgentMessageBlock,
+  ToolBatchCall,
+  ToolProgressUpdate,
+  ToolBatchResult,
+  ContextCompressionRecord,
+  ProviderDiagnostic,
+  PermissionRequest,
+  ApprovalDecision,
+  RuntimeCheckpointRecord,
+  RuntimeCheckpointRestoreRecord,
+  RunTerminalStatus,
+  RunCacheStats,
+  MissAttribution,
+} from './types';
 
 export interface EngineAgentStartEvent {
-  type: "agent-start";
+  type: 'agent-start';
   sessionId: string;
   timestamp: string;
 }
 
 export interface EngineAgentEndEvent {
-  type: "agent-end";
+  type: 'agent-end';
   sessionId: string;
   timestamp: string;
   reason: AgentEndReason;
@@ -23,14 +39,14 @@ export interface EngineAgentEndEvent {
 }
 
 export interface EngineTurnStartEvent {
-  type: "turn-start";
+  type: 'turn-start';
   sessionId: string;
   turnIndex: number;
   timestamp: string;
 }
 
 export interface EngineTurnEndEvent {
-  type: "turn-end";
+  type: 'turn-end';
   sessionId: string;
   turnIndex: number;
   timestamp: string;
@@ -38,13 +54,13 @@ export interface EngineTurnEndEvent {
 }
 
 export interface EngineMessageStartEvent {
-  type: "message-start";
+  type: 'message-start';
   sessionId: string;
   message: AgentMessage;
 }
 
 export interface EngineMessageDeltaEvent {
-  type: "message-delta";
+  type: 'message-delta';
   sessionId: string;
   timestamp: string;
   messageId: string;
@@ -52,13 +68,13 @@ export interface EngineMessageDeltaEvent {
 }
 
 export interface EngineMessageEndEvent {
-  type: "message-end";
+  type: 'message-end';
   sessionId: string;
   message: AgentMessage;
 }
 
 export interface EngineToolStartEvent {
-  type: "tool-start";
+  type: 'tool-start';
   sessionId: string;
   batchId: string;
   call: ToolBatchCall;
@@ -66,7 +82,7 @@ export interface EngineToolStartEvent {
 }
 
 export interface EngineToolUpdateEvent {
-  type: "tool-update";
+  type: 'tool-update';
   sessionId: string;
   batchId: string;
   toolCallId: string;
@@ -75,7 +91,7 @@ export interface EngineToolUpdateEvent {
 }
 
 export interface EngineToolEndEvent {
-  type: "tool-end";
+  type: 'tool-end';
   sessionId: string;
   batchId: string;
   result: ToolBatchResult;
@@ -83,7 +99,7 @@ export interface EngineToolEndEvent {
 }
 
 export interface EngineToolBatchStartEvent {
-  type: "tool-batch-start";
+  type: 'tool-batch-start';
   sessionId: string;
   batchId: string;
   timestamp: string;
@@ -92,7 +108,7 @@ export interface EngineToolBatchStartEvent {
 }
 
 export interface EngineToolBatchEndEvent {
-  type: "tool-batch-end";
+  type: 'tool-batch-end';
   sessionId: string;
   batchId: string;
   timestamp: string;
@@ -100,7 +116,7 @@ export interface EngineToolBatchEndEvent {
 }
 
 export interface EngineToolInputRepairedEvent {
-  type: "tool-input-repaired";
+  type: 'tool-input-repaired';
   sessionId: string;
   timestamp: string;
   toolCallId: string;
@@ -109,7 +125,7 @@ export interface EngineToolInputRepairedEvent {
 }
 
 export interface EngineContextCompressionStartEvent {
-  type: "context-compression-start";
+  type: 'context-compression-start';
   sessionId: string;
   timestamp: string;
   reason: string;
@@ -117,7 +133,7 @@ export interface EngineContextCompressionStartEvent {
 }
 
 export interface EngineContextCompressionEndEvent {
-  type: "context-compression-end";
+  type: 'context-compression-end';
   sessionId: string;
   timestamp: string;
   result?: ContextCompressionRecord;
@@ -126,14 +142,14 @@ export interface EngineContextCompressionEndEvent {
 }
 
 export interface EngineProviderDiagnosticEvent {
-  type: "provider-diagnostic";
+  type: 'provider-diagnostic';
   sessionId: string;
   timestamp: string;
   diagnostic: ProviderDiagnostic;
 }
 
 export interface EngineRuntimeErrorEvent {
-  type: "runtime-error";
+  type: 'runtime-error';
   sessionId: string;
   timestamp: string;
   error: string;
@@ -141,7 +157,7 @@ export interface EngineRuntimeErrorEvent {
 }
 
 export interface EngineRuntimeSteeringEvent {
-  type: "runtime-steering";
+  type: 'runtime-steering';
   sessionId: string;
   timestamp: string;
   reason: string;
@@ -149,7 +165,7 @@ export interface EngineRuntimeSteeringEvent {
 }
 
 export interface EngineRuntimeInterventionRequiredEvent {
-  type: "runtime-intervention-required";
+  type: 'runtime-intervention-required';
   sessionId: string;
   timestamp: string;
   reason: string;
@@ -158,14 +174,14 @@ export interface EngineRuntimeInterventionRequiredEvent {
 }
 
 export interface EngineApprovalRequestedEvent {
-  type: "approval-requested";
+  type: 'approval-requested';
   sessionId: string;
   request: PermissionRequest;
   timestamp: string;
 }
 
 export interface EngineApprovalResolvedEvent {
-  type: "approval-resolved";
+  type: 'approval-resolved';
   sessionId: string;
   toolCallId: string;
   requestId?: string;
@@ -174,21 +190,21 @@ export interface EngineApprovalResolvedEvent {
 }
 
 export interface EngineCheckpointCreatedEvent {
-  type: "checkpoint-created";
+  type: 'checkpoint-created';
   sessionId: string;
   timestamp: string;
   checkpoint: RuntimeCheckpointRecord;
 }
 
 export interface EngineCheckpointRestoredEvent {
-  type: "checkpoint-restored";
+  type: 'checkpoint-restored';
   sessionId: string;
   timestamp: string;
   restore: RuntimeCheckpointRestoreRecord;
 }
 
 export interface EngineRunTerminalEvent {
-  type: "run-terminal";
+  type: 'run-terminal';
   sessionId: string;
   runId: string;
   timestamp: string;
@@ -196,8 +212,89 @@ export interface EngineRunTerminalEvent {
   error?: string;
 }
 
-export type EngineEvent = EngineAgentStartEvent | EngineAgentEndEvent | EngineTurnStartEvent | EngineTurnEndEvent | EngineMessageStartEvent | EngineMessageDeltaEvent | EngineMessageEndEvent | EngineToolStartEvent | EngineToolUpdateEvent | EngineToolEndEvent | EngineToolBatchStartEvent | EngineToolBatchEndEvent | EngineToolInputRepairedEvent | EngineContextCompressionStartEvent | EngineContextCompressionEndEvent | EngineProviderDiagnosticEvent | EngineRuntimeErrorEvent | EngineRuntimeSteeringEvent | EngineRuntimeInterventionRequiredEvent | EngineApprovalRequestedEvent | EngineApprovalResolvedEvent | EngineCheckpointCreatedEvent | EngineCheckpointRestoredEvent | EngineRunTerminalEvent;
+export interface EngineCacheStatsUpdatedEvent {
+  type: 'cache-stats-updated';
+  sessionId: string;
+  timestamp: string;
+  stats: RunCacheStats;
+}
 
-export const ENGINE_EVENT_TYPES = ["agent-start","agent-end","turn-start","turn-end","message-start","message-delta","message-end","tool-start","tool-update","tool-end","tool-batch-start","tool-batch-end","tool-input-repaired","context-compression-start","context-compression-end","provider-diagnostic","runtime-error","runtime-steering","runtime-intervention-required","approval-requested","approval-resolved","checkpoint-created","checkpoint-restored","run-terminal"] as const;
+export interface EngineCacheWasteAlertEvent {
+  type: 'cache-waste-alert';
+  sessionId: string;
+  timestamp: string;
+  attribution: MissAttribution;
+  missedTokens: number;
+  idleMs: number;
+  modelChanged: boolean;
+  missedCostUsd?: number;
+}
+
+export interface EngineColdCacheWarningEvent {
+  type: 'cold-cache-warning';
+  sessionId: string;
+  timestamp: string;
+  ttlSeconds: number;
+  idleMs: number;
+  resendEstimateTokens: number;
+}
+
+export type EngineEvent =
+  | EngineAgentStartEvent
+  | EngineAgentEndEvent
+  | EngineTurnStartEvent
+  | EngineTurnEndEvent
+  | EngineMessageStartEvent
+  | EngineMessageDeltaEvent
+  | EngineMessageEndEvent
+  | EngineToolStartEvent
+  | EngineToolUpdateEvent
+  | EngineToolEndEvent
+  | EngineToolBatchStartEvent
+  | EngineToolBatchEndEvent
+  | EngineToolInputRepairedEvent
+  | EngineContextCompressionStartEvent
+  | EngineContextCompressionEndEvent
+  | EngineProviderDiagnosticEvent
+  | EngineRuntimeErrorEvent
+  | EngineRuntimeSteeringEvent
+  | EngineRuntimeInterventionRequiredEvent
+  | EngineApprovalRequestedEvent
+  | EngineApprovalResolvedEvent
+  | EngineCheckpointCreatedEvent
+  | EngineCheckpointRestoredEvent
+  | EngineRunTerminalEvent
+  | EngineCacheStatsUpdatedEvent
+  | EngineCacheWasteAlertEvent
+  | EngineColdCacheWarningEvent;
+
+export const ENGINE_EVENT_TYPES = [
+  'agent-start',
+  'agent-end',
+  'turn-start',
+  'turn-end',
+  'message-start',
+  'message-delta',
+  'message-end',
+  'tool-start',
+  'tool-update',
+  'tool-end',
+  'tool-batch-start',
+  'tool-batch-end',
+  'tool-input-repaired',
+  'context-compression-start',
+  'context-compression-end',
+  'provider-diagnostic',
+  'runtime-error',
+  'runtime-steering',
+  'runtime-intervention-required',
+  'approval-requested',
+  'approval-resolved',
+  'checkpoint-created',
+  'checkpoint-restored',
+  'run-terminal',
+  'cache-stats-updated',
+  'cache-waste-alert',
+  'cold-cache-warning',
+] as const;
 export type EngineEventType = (typeof ENGINE_EVENT_TYPES)[number];
-

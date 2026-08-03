@@ -35,6 +35,7 @@
 //! steering/、runtime-components/。
 
 pub mod approval;
+pub mod cache_tracker;
 pub mod control;
 pub mod hooks;
 pub mod hydrate;
@@ -51,6 +52,7 @@ pub mod tool_exec;
 
 pub use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
 pub use approval::ApprovalChannel;
+pub use cache_tracker::{CacheMiss, CacheStatsTracker, CacheTrackingConfig};
 
 pub use control::{
     level_for_kind, ControlBus, ControlDrainAction, ControlIntent, ControlIntentInput,

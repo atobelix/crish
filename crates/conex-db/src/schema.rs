@@ -1,8 +1,8 @@
-//! schema DDL 域：v1 起点形态与 v4 目标形态的建表 SQL。
+//! schema DDL 域：v1 起点形态与 v5 目标形态的建表 SQL。
 //! 仅提供纯 DDL 字符串；迁移编排在 `migrate` 模块。
 
 /// v1 形态 schema（全新建库的迁移链起点，与 tests/migrations.rs 的
-/// build_v1_fixture 结构一致；随后经 v2/v3/v4 迁移到目标形态）。
+/// build_v1_fixture 结构一致；随后经 v2/v3/v4/v5 迁移到目标形态）。
 pub(crate) fn create_v1_schema() -> &'static str {
     r#"
     CREATE TABLE IF NOT EXISTS sessions (
@@ -106,15 +106,17 @@ pub(crate) fn create_v1_schema() -> &'static str {
     "#
 }
 
-/// v4 目标 schema 全量 DDL（PE-08 T08.7）。
+/// v5 目标 schema 全量 DDL（PE-08 T08.7 + P5 §3.1.4 T-39）。
 ///
 /// 结构要点：
 /// - events：组合主键 `(session_id, sequence)` + FK，无 AUTOINCREMENT id 列（P14）；
 /// - runs / pending_inputs：FK 到 sessions（孤儿行迁移时过滤）；
-/// - session_messages：新增 `updated_at`；
+/// - runs：v5 新增 run 级 usage/cache 列（P5 §3.1.4，`save_run_usage` 写入面；
+///   hit_ratio/write_ratio 可派生不落库，warm_until_ms NULL 兼容）；
+/// - session_messages：新增 `updated_at`（v4）+ `usage_json`（v5，消息级 usage 快照，C8）；
 /// - session_sequence：会话级 sequence 原子分配表（T08.12）；
 /// - metadata 旧表不创建（v4 删除）。
-pub(crate) fn create_v4_schema() -> &'static str {
+pub(crate) fn create_v5_schema() -> &'static str {
     r#"
     CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
@@ -152,6 +154,15 @@ pub(crate) fn create_v4_schema() -> &'static str {
         cursor INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
+        prompt_tokens INTEGER NOT NULL DEFAULT 0,
+        completion_tokens INTEGER NOT NULL DEFAULT 0,
+        total_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_miss_tokens INTEGER NOT NULL DEFAULT 0,
+        sample_count INTEGER NOT NULL DEFAULT 0,
+        missed_tokens INTEGER NOT NULL DEFAULT 0,
+        warm_until_ms INTEGER,
         FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
     ) WITHOUT ROWID;
 
@@ -188,6 +199,7 @@ pub(crate) fn create_v4_schema() -> &'static str {
         blocks_json TEXT,
         tool_call_results_json TEXT,
         updated_at INTEGER,
+        usage_json TEXT,
         PRIMARY KEY (session_id, seq)
     ) WITHOUT ROWID;
 
