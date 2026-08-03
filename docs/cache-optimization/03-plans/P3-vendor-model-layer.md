@@ -561,3 +561,83 @@ pub fn cache_ttl_for_provider_model(catalog: &ModelCatalog, vendor: VendorId, mo
 | LiteLLM 目录三件套                       | litellm-cache-analysis.md:464-467                                |
 | 字段结构草案                             | 00-vendor-model-pricing-catalog.md §12.1                         |
 | 厂商矩阵事实                             | vendor-cache-mechanisms.md §10；vendor-cache-gaps.md §六         |
+
+---
+
+## ⑦ 实施核销（R3 完成，2026-08-03）
+
+> 核销范围：R3 轮 T-18~T-25（代码面）+ T-26（本文档回写）。逐节核对本方案 ④ 实施步骤与
+> ⑤ 验收标准在 `crates/agent-provider/src/models/`、`request/`、`engine.rs`、壳层命令面的实际
+> 落地情况，以及实施中与方案正文的差异裁决。全部结论基于 2026-08-03 实读代码。
+> 转录数据面核销（28 条落地条目与转录差异）见 `00-vendor-model-pricing-catalog.md §12.4`。
+
+### 7.1 步骤 1-6 完成状态
+
+| 步骤 | 内容                                | 状态                                         | 落地证据（文件:行号）                                                                                                                                                                                                                                                  |
+| ---- | ----------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | catalog 骨架 + 内置 JSON            | **完成**                                     | `models/catalog.rs`（ModelCatalogEntry 全字段 Option/Default 满足 A3 P2-10；`bundled()` 以 include_str! 打包；`lookup` 多级兜底 精确→去版本后缀→vendor 默认→None）、`models/catalog.json`（28 条）、`models/mod.rs`                                                    |
+| 2    | VendorId 与行为矩阵                 | **完成**                                     | `models/behavior.rs`（VendorId 11 变体 / `infer_vendor` / `CacheBehavior` / 静态矩阵 / `MODEL_SERIES_CACHE_BEHAVIOR` 系列表 / `cache_behavior_for`）                                                                                                                   |
+| 3    | 缓存键推导与 TTL 表                 | **完成（含一处定义位裁决，见 7.2.1）**       | `models/cache_key.rs`（`derive_prompt_cache_key` 等价委托 C4 / `session_affinity_headers`）、`models/ttl.rs`（`cache_ttl_for_provider_model`）                                                                                                                         |
+| 4    | DeepSeek 专用适配                   | **完成（只补测试 + engine 判定）**           | `request/deepseek_invariants.rs`（6 个测试钉死，不实现第二遍接线，C1）；`engine.rs:193-242`（`provider_url` 降级 + `responses_supported` + `BUNDLED_CATALOG`）                                                                                                         |
+| 5    | 用户覆盖与运行时合并 + 命令三处登记 | **命令侧完成；前端上送面未接线（见 7.2.3）** | `catalog.rs:232-466`（`with_overrides` / `upsert_from_scan`）、`catalog_commands.rs`（catalog_get / catalog_refresh）、`command_manifest.rs:150-151`、`main.rs:155-156`、`main.rs:319-323`（`Arc<RwLock<ModelCatalog>>` 挂 Tauri state）、`commandManifest.ts:135-137` |
+| 6    | 文档回写                            | **完成**                                     | 本文件 ⑦ 节 + 00-catalog §12.4（T-26）                                                                                                                                                                                                                                 |
+
+### 7.2 与实现在代码中的差异（裁决记录）
+
+#### 7.2.1 CacheTtl 定义位：behavior.rs 而非 ttl.rs
+
+- 方案 §3.5 计划 `CacheTtl` 定义在 `models/ttl.rs`（T-21）；实际 **T-19 在 `behavior.rs` 定义了 `CacheTtl` 本体**（含 serde 值域 `"5m"/"1h"/"24h"`、`seconds()`、`parse()`，behavior.rs:66-101），`ttl.rs` 经 `pub use super::behavior::CacheTtl` re-export（ttl.rs:19）并按任务书契约在固有 impl 补 `as_str()`（ttl.rs:23-34）。
+- 裁决记录：C3 的实质目标（同 crate 单一类型 + serde 值域对齐 + 与 P2 wire 桶 `TtlBucket` 无同名冲突）已满足；分工为 behavior.rs 持有类型本体、ttl.rs 提供 TTL 路由查询；behavior.rs:66-68 注释明示「TTL 路由表（T-21 models/ttl.rs）如需本类型应 re-export 而非重定义，避免同 crate 两套同名枚举漂移」。
+
+#### 7.2.2 build_cache_policy 仍用 PlaceholderCatalog（待接线记录）
+
+- P2 `request/cache.rs:254-306`：`build_cache_policy` 签名仍为 `catalog: Option<&PlaceholderCatalog>`；占位实现恒 None，等价「无 catalog」→ 回退内置保守兜底表 `infer_cache_capability`；`engine.rs:294-300` 实传 None（C2 唯一运行时入口不变）。
+- **待接线**：R3 数据真源（`cache_behavior_for` + catalog 模型级覆盖）尚未接入 `build_cache_policy`。engine.rs:290-293 注释明示「catalog 传 None：R3 T-18/T-19 交付后替换为真实 ModelCatalog」。接线 = 以 `models::ModelCatalog` 替换占位（或按 C2 把 `CacheBehavior` 映射归并进 `CacheCapability`），归 R3 收尾/R2 数据真源完整化（T-17 验收用例复验）。
+- 行为等价性说明：占位期间 DeepSeek 直判省略（cache.rs:319-327）与内置表转录值（以本方案 §3.2.2 矩阵为准）已由 T-22 `deepseek_invariants.rs` 测试钉死，无行为漂移风险。
+- engine.rs:145-149 `extra` 通道恒空表（overrides=None），配置面透传待后续接入。
+
+#### 7.2.3 T-25 前端扫描上送未接线
+
+- `catalog_refresh` 命令（catalog_commands.rs:52-58）与三处登记（command_manifest.rs / main.rs / commandManifest.ts）均完成，但 `modelCatalog.ts` 的 `scanProviderModels`（modelCatalog.ts:725-819）**未调用 `catalog_refresh`**——前端上送消费侧缺失，列为待接线项（命令面已就绪，消费面补齐即可闭合步骤 5b）。
+
+#### 7.2.4 engine.rs Responses 判定的目录形态
+
+- T-23 用 `BUNDLED_CATALOG` OnceLock 静态实例（engine.rs:204-213），未使用 main.rs:319-323 挂的运行时 `Arc<RwLock<ModelCatalog>>` 实例；engine.rs:207-208 注释注明「T-24 壳侧挂 Arc<RwLock> 后此处可换为运行时实例，内置表即当前数据真源」。
+- `responses_vendor`（engine.rs:231-242）经 `infer_reasoning_vendor` 映射目录 vendor 字符串；Grok/MiniMax/Dashscope 不在 `ReasoningVendor` 内 → 一律 None（保留现状不降级，避免对未识别网关臆断）。
+
+#### 7.2.5 C7 三处登记实现方式
+
+- ③ 的 mock-engine.ts 快照未直接编辑，而是经 mock-engine.ts:30 从共享清单 `apps/crish-desktop/src/api/transport/commandManifest.ts` 导入 `BUILTIN_COMMAND_MANIFEST`（该清单 :135-137 新增 `catalog_get` / `catalog_refresh` 两条，commandManifest.test.ts:35 断言接线）——与任务书「编辑 mock-engine.ts 快照行」的表述有实现方式差异，效果等价（mock 对未登记命令抛 missing 的约束同样成立）。
+
+#### 7.2.6 A1-13 计数表述核销
+
+- 实读计数：`ChatMessage` 生产构造点 = **4 组**（messages.rs:400 Tool / :434 Assistant / :451 User 三处 + `system_prompt_message` 辅助函数 :466 一处，其中 NativeSystemRole 与 UserPrefix 两个 wire 变体 :468/:476 属同一组函数）；各构造点均已补 `cache_control: None`。
+- P2 §3.2 原表述「现有 ChatMessage 构造点共 5 处（4 处区间）」计数不符 → 按 A1-13 裁决以实读为准，核销为 **「4 组构造点」**（测试辅助构造 cache.rs:1231/1436/1491、messages.rs:1045 不计入生产构造点）。
+
+#### 7.2.7 R0.5 表 3 #1 部分消化
+
+- kimi-k3 / glm-4.7 的**缓存行为维度**已由 `MODEL_SERIES_CACHE_BEHAVIOR` 系列表显式收录（behavior.rs:371-394，测试 `kimi_k3_resolves_to_kimi_family_behavior` / `glm_4_7_resolves_to_conservative_glm_behavior` 钉死）；
+- **vendor.rs `MODEL_SERIES_CAPABILITIES` 思考能力表未改行**（kimi → NO_THINKING、glm → NO_THINKING 维持）——behavior.rs:15-17 注释明示「vendor.rs 思考能力表缺行属其文件域，补全需求经轮末汇总物移交主 Agent 协调」→ 标注移交后续。
+
+### 7.3 ⑤ 验收标准核销
+
+| 验收项                             | 结果           | 证据（测试/代码）                                                                                                                                                                                                                                                                  |
+| ---------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 编译与回归                       | 由轮末门禁记录 | `cargo test --workspace`（73 套件基线不退步，以轮次报告为准）                                                                                                                                                                                                                      |
+| 2 矩阵行为                         | 通过           | behavior.rs 测试：`deepseek_always_omits_cache_control` / `minimax_m3_disables_active_caching_while_m2_keeps_breakpoints` / `grok_exposes_conv_header_and_prompt_cache_key` / `dashscope_exposes_session_cache_header_and_breakpoints` / `auto_falls_back_to_conservative_all_off` |
+| 3 目录解析                         | 通过           | catalog.rs 测试：`lookup_exact_match_hits_bundled_entry` / `lookup_strips_version_suffix` / `lookup_unknown_model_and_vendor_yield_none`；`supports_responses_for` v4-flash=true / v4-pro=false                                                                                    |
+| 4 键推导                           | 通过           | cache_key.rs 测试：`derive_prompt_cache_key_clamps_codepoints_without_panic`（中文/emoji 不截半字符）/ `grok_chat_track_injects_conv_header_with_codepoint_64_value` / 空输入 None                                                                                                 |
+| 5 DeepSeek 请求体不变量            | 通过           | deepseek_invariants.rs 6 个测试（cache_control 键全省略 / tool_calls 回合必带 reasoning_content / 矩阵 omit 联动）                                                                                                                                                                 |
+| 6 TTL 表                           | 通过           | ttl.rs 测试：`vendor_defaults_without_catalog` / `openai_ttl_tiers_gpt55_day_gpt56_short`（A1-11）/ `catalog_entry_overrides_vendor_default`                                                                                                                                       |
+| 7 无越界（cache_control 落点审计） | 通过           | `git grep "cache_control"` 落点 = behavior.rs/catalog.rs（矩阵数据与注释）、cache.rs/build.rs/tools.rs/messages.rs（P2 注入框架）、deepseek_invariants.rs（测试断言）——无绕过矩阵的新散落判定                                                                                      |
+
+### 7.4 遗留与移交清单
+
+| #   | 项                                                                      | 归属                                                              |
+| --- | ----------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 1   | `build_cache_policy` 接入真实 `ModelCatalog`（PlaceholderCatalog 替换） | R3 收尾/R2 数据真源完整化（T-17 验收用例复验）                    |
+| 2   | T-25 前端 `modelCatalog.ts` 扫描上送接线（调用 `catalog_refresh`）      | 前端侧待接线                                                      |
+| 3   | vendor.rs 思考能力表 kimi-k3/glm-4.7 行（R0.5 表 3 #1 思考能力维度）    | 移交主 Agent 协调                                                 |
+| 4   | GLM Anthropic 端点 cache_control 实测                                   | 实测后改 behavior.rs 矩阵 + 本文件 §3.2.2 表格（步骤 6 回写约定） |
+| 5   | 目录条目 `cache_ttl` 与行为矩阵 `default_ttl` 双轨一致性维护            | 后续数据刷新时同步                                                |
+| 6   | 峰谷定价生效日期 / v4-pro Responses 加入时间 / Sonnet 5 九月涨价        | 00-catalog §12.3 刷新清单跟踪（catalog.json 条目随官方公告更新）  |

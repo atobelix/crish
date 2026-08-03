@@ -18,41 +18,42 @@
 ## 1. Anthropic（Claude）
 
 **来源 URL**：
+
 - https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching（缓存机制）
 - 定价表由用户提供（官方定价页，2026-08-02，权威）
 
 ### 1.1 官方定价表（2026-08-02 用户提供，完整收录）
 
-| 模型 | 基础输入 | 5m 缓存写入 | 1h 缓存写入 | 缓存命中与刷新 | 输出 |
-|---|---|---|---|---|---|
-| Claude Fable 5 | $10 / MTok | $12.50 / MTok | $20 / MTok | $1 / MTok | $50 / MTok |
-| Claude Mythos 5 (limited availability) | $10 / MTok | $12.50 / MTok | $20 / MTok | $1 / MTok | $50 / MTok |
-| Claude Opus 5 | $5 / MTok | $6.25 / MTok | $10 / MTok | $0.50 / MTok | $25 / MTok |
-| Claude Opus 4.8 | $5 / MTok | $6.25 / MTok | $10 / MTok | $0.50 / MTok | $25 / MTok |
-| Claude Opus 4.7 | $5 / MTok | $6.25 / MTok | $10 / MTok | $0.50 / MTok | $25 / MTok |
-| Claude Opus 4.6 | $5 / MTok | $6.25 / MTok | $10 / MTok | $0.50 / MTok | $25 / MTok |
-| Claude Opus 4.5 | $5 / MTok | $6.25 / MTok | $10 / MTok | $0.50 / MTok | $25 / MTok |
-| Claude Opus 4.1 (deprecated) | $15 / MTok | $18.75 / MTok | $30 / MTok | $1.50 / MTok | $75 / MTok |
-| Claude Opus 4 (retired, except Google Cloud) | $15 / MTok | $18.75 / MTok | $30 / MTok | $1.50 / MTok | $75 / MTok |
-| Claude Sonnet 5 (through August 31, 2026) | $2 / MTok | $2.50 / MTok | $4 / MTok | $0.20 / MTok | $10 / MTok |
-| Claude Sonnet 5 (starting September 1, 2026) | $3 / MTok | $3.75 / MTok | $6 / MTok | $0.30 / MTok | $15 / MTok |
-| Claude Sonnet 4.6 | $3 / MTok | $3.75 / MTok | $6 / MTok | $0.30 / MTok | $15 / MTok |
-| Claude Sonnet 4.5 | $3 / MTok | $3.75 / MTok | $6 / MTok | $0.30 / MTok | $15 / MTok |
-| Claude Sonnet 4 (retired, except Bedrock/Google Cloud) | $3 / MTok | $3.75 / MTok | $6 / MTok | $0.30 / MTok | $15 / MTok |
-| Claude Haiku 4.5 | $1 / MTok | $1.25 / MTok | $2 / MTok | $0.10 / MTok | $5 / MTok |
-| Claude Haiku 3.5 (retired, except Bedrock/Google Cloud) | $0.80 / MTok | $1 / MTok | $1.60 / MTok | $0.08 / MTok | $4 / MTok |
+| 模型                                                    | 基础输入     | 5m 缓存写入   | 1h 缓存写入  | 缓存命中与刷新 | 输出       |
+| ------------------------------------------------------- | ------------ | ------------- | ------------ | -------------- | ---------- |
+| Claude Fable 5                                          | $10 / MTok   | $12.50 / MTok | $20 / MTok   | $1 / MTok      | $50 / MTok |
+| Claude Mythos 5 (limited availability)                  | $10 / MTok   | $12.50 / MTok | $20 / MTok   | $1 / MTok      | $50 / MTok |
+| Claude Opus 5                                           | $5 / MTok    | $6.25 / MTok  | $10 / MTok   | $0.50 / MTok   | $25 / MTok |
+| Claude Opus 4.8                                         | $5 / MTok    | $6.25 / MTok  | $10 / MTok   | $0.50 / MTok   | $25 / MTok |
+| Claude Opus 4.7                                         | $5 / MTok    | $6.25 / MTok  | $10 / MTok   | $0.50 / MTok   | $25 / MTok |
+| Claude Opus 4.6                                         | $5 / MTok    | $6.25 / MTok  | $10 / MTok   | $0.50 / MTok   | $25 / MTok |
+| Claude Opus 4.5                                         | $5 / MTok    | $6.25 / MTok  | $10 / MTok   | $0.50 / MTok   | $25 / MTok |
+| Claude Opus 4.1 (deprecated)                            | $15 / MTok   | $18.75 / MTok | $30 / MTok   | $1.50 / MTok   | $75 / MTok |
+| Claude Opus 4 (retired, except Google Cloud)            | $15 / MTok   | $18.75 / MTok | $30 / MTok   | $1.50 / MTok   | $75 / MTok |
+| Claude Sonnet 5 (through August 31, 2026)               | $2 / MTok    | $2.50 / MTok  | $4 / MTok    | $0.20 / MTok   | $10 / MTok |
+| Claude Sonnet 5 (starting September 1, 2026)            | $3 / MTok    | $3.75 / MTok  | $6 / MTok    | $0.30 / MTok   | $15 / MTok |
+| Claude Sonnet 4.6                                       | $3 / MTok    | $3.75 / MTok  | $6 / MTok    | $0.30 / MTok   | $15 / MTok |
+| Claude Sonnet 4.5                                       | $3 / MTok    | $3.75 / MTok  | $6 / MTok    | $0.30 / MTok   | $15 / MTok |
+| Claude Sonnet 4 (retired, except Bedrock/Google Cloud)  | $3 / MTok    | $3.75 / MTok  | $6 / MTok    | $0.30 / MTok   | $15 / MTok |
+| Claude Haiku 4.5                                        | $1 / MTok    | $1.25 / MTok  | $2 / MTok    | $0.10 / MTok   | $5 / MTok  |
+| Claude Haiku 3.5 (retired, except Bedrock/Google Cloud) | $0.80 / MTok | $1 / MTok     | $1.60 / MTok | $0.08 / MTok   | $4 / MTok  |
 
 价格规律：5m 写 = 基础输入 × 1.25；1h 写 = × 2；命中与刷新 = × 0.1。
 
 ### 1.2 最低可缓存 token 明细（官方文档）
 
-| 模型 | 最低可缓存 token |
-|---|---|
-| Opus 5 / Fable 5 / Mythos 5 | 512 |
-| Mythos Preview / Opus 4.7 | 2048 |
-| Opus 4.6 / 4.5 | 4096 |
-| Opus 4.8 / Sonnet 5 / Sonnet 4.6 / 4.5 | 1024 |
-| Haiku 4.5 | 4096 |
+| 模型                                   | 最低可缓存 token |
+| -------------------------------------- | ---------------- |
+| Opus 5 / Fable 5 / Mythos 5            | 512              |
+| Mythos Preview / Opus 4.7              | 2048             |
+| Opus 4.6 / 4.5                         | 4096             |
+| Opus 4.8 / Sonnet 5 / Sonnet 4.6 / 4.5 | 1024             |
+| Haiku 4.5                              | 4096             |
 
 ### 1.3 TTL 与断点规则
 
@@ -68,16 +69,17 @@
 
 ### 1.4 上下文窗口（补充：本地 LiteLLM catalog 副本）
 
-| 模型 | 输入窗口 | 输出上限 |
-|---|---|---|
-| claude-sonnet-5 | 1,000,000 | 128,000 |
-| claude-haiku-4-5 | 200,000 | 64,000 |
+| 模型             | 输入窗口  | 输出上限 |
+| ---------------- | --------- | -------- |
+| claude-sonnet-5  | 1,000,000 | 128,000  |
+| claude-haiku-4-5 | 200,000   | 64,000   |
 
 ---
 
 ## 2. OpenAI（GPT-5.x）
 
 **来源 URL**：
+
 - https://platform.openai.com/docs/guides/prompt-caching（缓存机制）
 - 定价页官方按量计费表本次调研未抓取；下表价格来自本地 LiteLLM catalog 副本 `reference/litellm/model_prices_and_context_window.json`（2026-08-02）
 
@@ -96,11 +98,11 @@
 
 ### 2.2 模型清单与价格（litellm 本地副本口径，$/1M）
 
-| 模型 | 输入窗口 | 输出上限 | 输入价 | 命中价 | 写入价 | 备注 |
-|---|---|---|---|---|---|---|
-| gpt-5.6 | 1,050,000 | 128,000 | $5.00 | $0.50 | $6.25（1.25x） | 写价 1.25x；TTL 仅 30m；最低 1024 |
-| gpt-5.5 | 1,050,000 | 128,000 | $5.00 | $0.50 | 写免费（旧轨） | 支持 24h extended 保留 |
-| gpt-5.4 / 5.2 / 5.1 / 5 / 4.1 | 未获取 | 未获取 | 未获取 | 未获取 | 写免费（旧轨） | 支持 24h extended 保留；最低 1024-2048 |
+| 模型                          | 输入窗口  | 输出上限 | 输入价 | 命中价 | 写入价         | 备注                                   |
+| ----------------------------- | --------- | -------- | ------ | ------ | -------------- | -------------------------------------- |
+| gpt-5.6                       | 1,050,000 | 128,000  | $5.00  | $0.50  | $6.25（1.25x） | 写价 1.25x；TTL 仅 30m；最低 1024      |
+| gpt-5.5                       | 1,050,000 | 128,000  | $5.00  | $0.50  | 写免费（旧轨） | 支持 24h extended 保留                 |
+| gpt-5.4 / 5.2 / 5.1 / 5 / 4.1 | 未获取    | 未获取   | 未获取 | 未获取 | 写免费（旧轨） | 支持 24h extended 保留；最低 1024-2048 |
 
 > 注：gpt-5.6/gpt-5.5 价格取自 litellm 副本（`input_cost_per_token=5e-06`、`cache_read_input_token_cost=5e-07`、`cache_creation_input_token_cost=6.25e-06`）；其余型号价格未获取，刷新时以 platform.openai.com 按量计费页为准。
 
@@ -109,16 +111,17 @@
 ## 3. DeepSeek
 
 **来源 URL**：
+
 - https://api-docs.deepseek.com/guides/kv_cache（KV 缓存）
 - https://api-docs.deepseek.com/guides/responses_api（Responses API）
 - https://api-docs.deepseek.com/quick_start/pricing（定价）
 
 ### 3.1 模型清单与价格（$/1M，2026-08-02 已确认）
 
-| 模型 | 上下文窗口 | 输入（未命中） | 输入（命中） | 输出 | 命中/未命中比 |
-|---|---|---|---|---|---|
-| deepseek-v4-flash (0731) | 1,000,000 | $0.14 | $0.0028 | $0.28 | 2% |
-| deepseek-v4-pro | 1,000,000 | $0.435 | $0.003625 | $0.87 | ≈0.83% |
+| 模型                     | 上下文窗口 | 输入（未命中） | 输入（命中） | 输出  | 命中/未命中比 |
+| ------------------------ | ---------- | -------------- | ------------ | ----- | ------------- |
+| deepseek-v4-flash (0731) | 1,000,000  | $0.14          | $0.0028      | $0.28 | 2%            |
+| deepseek-v4-pro          | 1,000,000  | $0.435         | $0.003625    | $0.87 | ≈0.83%        |
 
 - 输出最大 384K（Responses API 文档口径）
 - 命中价仅为未命中的 2%（flash）/0.83%（pro），是全行业价差最大的厂商
@@ -140,6 +143,7 @@
 ## 4. 智谱 GLM（z.ai / open.bigmodel.cn）
 
 **来源 URL**：
+
 - https://docs.z.ai/guides/capabilities/cache（缓存）
 - https://docs.z.ai/guides/llm/glm-4.7（GLM-4.7 保留式推理）
 - https://docs.z.ai/guides/overview/pricing（定价）
@@ -147,12 +151,12 @@
 
 ### 4.1 模型清单与价格（$/1M，缓存存储限时免费）
 
-| 模型 | 上下文窗口 | 输入 | 命中 | 输出 | 备注 |
-|---|---|---|---|---|---|
-| GLM-5.2（最新旗舰） | 1,000,000 | $1.40 | $0.26 | $4.40 | 命中 = 18.6% |
-| GLM-5 | 未获取 | $1.00 | $0.20 | $3.20 | 命中 = 20% |
+| 模型                | 上下文窗口                    | 输入  | 命中  | 输出  | 备注                          |
+| ------------------- | ----------------------------- | ----- | ----- | ----- | ----------------------------- |
+| GLM-5.2（最新旗舰） | 1,000,000                     | $1.40 | $0.26 | $4.40 | 命中 = 18.6%                  |
+| GLM-5               | 未获取                        | $1.00 | $0.20 | $3.20 | 命中 = 20%                    |
 | GLM-4.7 / 4.6 / 4.5 | 200K（4.7，Flash 免费版除外） | $0.60 | $0.11 | $2.20 | 命中 ≈ 18%；4.7 最大输出 128K |
-| GLM-4.5-Air | 未获取 | $0.20 | $0.03 | $1.10 | 命中 = 15% |
+| GLM-4.5-Air         | 未获取                        | $0.20 | $0.03 | $1.10 | 命中 = 15%                    |
 
 - 命中价约为标准输入价的 15%~20%（按定价页表格计算）；注意官方缓存文档另有示例口径「usually 50% of standard price」（0.005/0.01 示例）——两处口径并存，计算时以定价页数字为准
 - GLM-4.7 支持 Thinking Mode 与「保留式推理」（自动保留多轮推理块以提高缓存命中率，适合长期复杂任务）
@@ -170,16 +174,17 @@
 ## 5. 月之暗面 Kimi
 
 **来源 URL**：
+
 - https://platform.kimi.com/docs/guide/use-context-caching-feature-of-kimi-api.md（缓存）
 - https://platform.kimi.com/docs/pricing/chat-k3.md（K3 定价）
 - https://platform.kimi.com/docs/api/chat.md（API）
 
 ### 5.1 模型清单与价格（¥/1M）
 
-| 模型 | 上下文窗口 | 输入（未命中） | 命中 | 输出 | 命中占比 |
-|---|---|---|---|---|---|
-| kimi-k3 | 1,048,576 | ¥20.00 | ¥2.00 | ¥100.00 | 10%（90% 折扣） |
-| kimi-k2.7 / k2.6 / k2.5 | 未获取 | 未获取 | 未获取 | 未获取 | — |
+| 模型                    | 上下文窗口 | 输入（未命中） | 命中   | 输出    | 命中占比        |
+| ----------------------- | ---------- | -------------- | ------ | ------- | --------------- |
+| kimi-k3                 | 1,048,576  | ¥20.00         | ¥2.00  | ¥100.00 | 10%（90% 折扣） |
+| kimi-k2.7 / k2.6 / k2.5 | 未获取     | 未获取         | 未获取 | 未获取  | —               |
 
 ### 5.2 缓存机制要点
 
@@ -195,6 +200,7 @@
 ## 6. xAI Grok
 
 **来源 URL**：
+
 - https://docs.x.ai/developers/advanced-api-usage/prompt-caching/how-it-works
 - https://docs.x.ai/developers/advanced-api-usage/prompt-caching/usage-and-pricing
 - https://docs.x.ai/developers/models
@@ -202,11 +208,11 @@
 
 ### 6.1 模型清单与价格（$/1M）
 
-| 模型 | 标准输入 | 标准命中 | 标准输出 | ≥200K prompt 输入 | ≥200K 命中 | ≥200K 输出 |
-|---|---|---|---|---|---|---|
-| grok-4.5 | $2.00 | $0.30 | $6.00 | $4.00 | $0.60 | $12.00 |
-| grok-4.3 | $1.25 | $0.20 | $2.50 | 未获取 | 未获取 | 未获取 |
-| grok-4.20-0309 | 同 grok-4.3 | 同 grok-4.3 | 同 grok-4.3 | — | — | — |
+| 模型           | 标准输入    | 标准命中    | 标准输出    | ≥200K prompt 输入 | ≥200K 命中 | ≥200K 输出 |
+| -------------- | ----------- | ----------- | ----------- | ----------------- | ---------- | ---------- |
+| grok-4.5       | $2.00       | $0.30       | $6.00       | $4.00             | $0.60      | $12.00     |
+| grok-4.3       | $1.25       | $0.20       | $2.50       | 未获取            | 未获取     | 未获取     |
+| grok-4.20-0309 | 同 grok-4.3 | 同 grok-4.3 | 同 grok-4.3 | —                 | —          | —          |
 
 - 命中价为标准输入价的 15%
 - 长上下文定价：≥200K prompt tokens（含缓存）按长上下文价计费（约 2x）
@@ -224,26 +230,29 @@
 ## 7. MiniMax
 
 **来源 URL**：
+
 - https://platform.minimaxi.com/docs/api-reference/text-prompt-caching（被动/自动缓存）
 - https://platform.minimaxi.com/docs/api-reference/anthropic-api-compatible-cache（主动缓存）
 
 ### 7.1 模型清单与价格（¥/1M，双轨制）
 
-| 模型 | 输入 | 缓存读取 | 缓存写入 | 输出 | 缓存轨 |
-|---|---|---|---|---|---|
-| MiniMax-M2.7 | ¥2.10 | ¥0.42（20%） | ¥2.625（125%） | ¥8.40 | 主动（Anthropic 式）+ 被动 |
-| MiniMax-M2.5 / M2.1 / M2 | ¥2.10 | ¥0.21（10%） | ¥2.625（125%） | ¥8.40 | 主动（Anthropic 式） |
-| MiniMax-M3 | ¥4.20 | ¥0.84（20%） | 无写入费 | ¥16.80 | 仅被动（**不支持主动缓存**） |
+| 模型                     | 输入  | 缓存读取     | 缓存写入       | 输出   | 缓存轨                       |
+| ------------------------ | ----- | ------------ | -------------- | ------ | ---------------------------- |
+| MiniMax-M2.7             | ¥2.10 | ¥0.42（20%） | ¥2.625（125%） | ¥8.40  | 主动（Anthropic 式）+ 被动   |
+| MiniMax-M2.5 / M2.1 / M2 | ¥2.10 | ¥0.21（10%） | ¥2.625（125%） | ¥8.40  | 主动（Anthropic 式）         |
+| MiniMax-M3               | ¥4.20 | ¥0.84（20%） | 无写入费       | ¥16.80 | 仅被动（**不支持主动缓存**） |
 
 ### 7.2 缓存机制要点（双轨制最完整的厂商）
 
 **A. Prompt 缓存（被动/自动，OpenAI 与 Anthropic 兼容端点均生效）**
+
 - 自动识别重复上下文（工具定义 → 系统提示 → 历史消息顺序前缀匹配）
 - 最低缓存量：512 个输入 token；写入无额外计费；过期时间随系统负载自动调整
 - 支持模型：M3、M2.7、M2.5、M2.1 系列
 - 计量字段：OpenAI 格式 `usage.prompt_tokens_details.cached_tokens`；Anthropic 格式 `usage.cache_read_input_tokens`
 
 **B. Anthropic 主动缓存（显式 cache_control）**
+
 - 完整复刻 Anthropic 语义：`cache_control {"type":"ephemeral"}`；最多 4 个断点（超出只取从后往前最近 4 个）；20 块回溯窗口；可缓存 tools/system/messages（含 tool_use/tool_result）；thinking 块不可直接标记
 - TTL 5 分钟，命中自动续期，续期免费；首次写入额外计费（1.25x 输入价）
 - 支持模型：M2.7/M2.5/M2.1/M2 系列（**M3 不支持主动缓存**）
@@ -255,30 +264,33 @@
 ## 8. Google Gemini
 
 **来源 URL**：
+
 - https://ai.google.dev/gemini-api/docs/caching（缓存）
 - https://ai.google.dev/gemini-api/docs/generate-content/caching
 - https://ai.google.dev/gemini-api/docs/pricing（定价）
 
 ### 8.1 模型清单与价格（$/1M）
 
-| 模型 | 输入 | 命中 | 存储费 | 备注 |
-|---|---|---|---|---|
-| Gemini 3.6 Flash | $1.50 | $0.15 | $1.00 / 1M·h | 命中 = 10% |
-| Gemini 3.5 Flash | $0.75 | $0.075 | 未获取 | 隐式最低 4096 tokens |
-| Gemini 3.5 Flash-Lite | $0.30 | $0.03 | 未获取 | 命中 = 10% |
-| Gemini 3.1 Pro | $1.25（≤200k） | $0.125 | $4.50 / 1M·h | 超过 200k 另有长上下文价 |
+| 模型                  | 输入           | 命中   | 存储费       | 备注                     |
+| --------------------- | -------------- | ------ | ------------ | ------------------------ |
+| Gemini 3.6 Flash      | $1.50          | $0.15  | $1.00 / 1M·h | 命中 = 10%               |
+| Gemini 3.5 Flash      | $0.75          | $0.075 | 未获取       | 隐式最低 4096 tokens     |
+| Gemini 3.5 Flash-Lite | $0.30          | $0.03  | 未获取       | 命中 = 10%               |
+| Gemini 3.1 Pro        | $1.25（≤200k） | $0.125 | $4.50 / 1M·h | 超过 200k 另有长上下文价 |
 
 - 命中价 ≈ 标准输入价的 10%
 
 ### 8.2 缓存机制要点（双轨制）
 
 **A. Implicit caching（隐式缓存）**
+
 - Gemini 2.5 及更新模型默认启用（含 Gemini 3.5 Flash、3.1 Pro Preview）；stateful（previous_interaction_id）与 stateless 均支持
 - 不保证命中（no cost saving guarantee）
 - 最低 token 数：Gemini 3.5 Flash / 3.1 Pro Preview = 4096；Gemini 2.5 Flash / Pro = 2048
 - 计量：`usage_metadata` 中的 `total_cached_tokens`
 
 **B. Explicit caching（显式 cachedContents API）**
+
 - `POST /v1beta/cachedContents` 创建缓存（contents + system_instruction + ttl），请求时以 `cachedContent: <name>` 引用；支持 list/get/update/delete
 - TTL 默认 1 小时，无最小/最大限制；**存储按「缓存 token 数 × 时长」计费**
 - 有成本节省保证；OpenAI 库可通过 `extra_body: {cached_content: ...}` 启用
@@ -292,13 +304,13 @@
 
 ### 9.1 模型清单与价格（¥/1M，含缓存存储费 0.017 元/百万 token/小时）
 
-| 模型 | 输入 | 命中 | 输出 | 备注 |
-|---|---|---|---|---|
-| doubao-seed-2.1-pro | ¥6.00 | ¥1.20（20%） | ¥30.00 | |
-| doubao-seed-2.1-turbo | ¥3.00 | ¥0.60 | ¥15.00 | |
-| doubao-seed-2.0-mini | ¥0.20 | ¥0.04 | ¥2.00 | |
-| deepseek-v4-pro（方舟转售） | ¥12.00 | ¥1.00 | ¥24.00 | 与 DeepSeek 官方直连价（$0.435/1M）差异巨大，见注意事项 |
-| glm-4.7（方舟转售） | ¥2.0-4.0（分段） | ¥0.4-0.8 | ¥8.0-16.0 | |
+| 模型                        | 输入             | 命中         | 输出      | 备注                                                    |
+| --------------------------- | ---------------- | ------------ | --------- | ------------------------------------------------------- |
+| doubao-seed-2.1-pro         | ¥6.00            | ¥1.20（20%） | ¥30.00    |                                                         |
+| doubao-seed-2.1-turbo       | ¥3.00            | ¥0.60        | ¥15.00    |                                                         |
+| doubao-seed-2.0-mini        | ¥0.20            | ¥0.04        | ¥2.00     |                                                         |
+| deepseek-v4-pro（方舟转售） | ¥12.00           | ¥1.00        | ¥24.00    | 与 DeepSeek 官方直连价（$0.435/1M）差异巨大，见注意事项 |
+| glm-4.7（方舟转售）         | ¥2.0-4.0（分段） | ¥0.4-0.8     | ¥8.0-16.0 |                                                         |
 
 ### 9.2 缓存机制要点
 
@@ -314,12 +326,12 @@
 
 ### 10.1 模型清单与价格（¥/1M，原文为元/千 tokens，已换算）
 
-| 模型 | 输入 | 命中 | 输出 | 备注 |
-|---|---|---|---|---|
-| ERNIE-4.5-Turbo | ¥0.80 | ¥0.20（25%） | ¥3.20 | |
-| ERNIE-4.5-Turbo-VL | ¥3.00 | ¥0.75 | ¥9.00 | |
-| DeepSeek-V4-Pro（千帆转售） | ¥12.00 | ¥1.00 | ¥24.00 | 转售价，与官方直连价差异见注意事项 |
-| DeepSeek-V4-Flash（千帆转售） | ¥1.00 | ¥0.20 | ¥2.00 | 转售价，与官方直连价差异见注意事项 |
+| 模型                          | 输入   | 命中         | 输出   | 备注                               |
+| ----------------------------- | ------ | ------------ | ------ | ---------------------------------- |
+| ERNIE-4.5-Turbo               | ¥0.80  | ¥0.20（25%） | ¥3.20  |                                    |
+| ERNIE-4.5-Turbo-VL            | ¥3.00  | ¥0.75        | ¥9.00  |                                    |
+| DeepSeek-V4-Pro（千帆转售）   | ¥12.00 | ¥1.00        | ¥24.00 | 转售价，与官方直连价差异见注意事项 |
+| DeepSeek-V4-Flash（千帆转售） | ¥1.00  | ¥0.20        | ¥2.00  | 转售价，与官方直连价差异见注意事项 |
 
 ### 10.2 缓存机制要点
 
@@ -332,12 +344,14 @@
 ## 11. 阿里云百炼 Qwen
 
 **来源 URL**：
+
 - https://help.aliyun.com/zh/model-studio/context-cache（上下文缓存）
 - https://help.aliyun.com/zh/model-studio/compatibility-with-openai-responses-api（Responses API Session 缓存）
 
 ### 11.1 缓存机制要点（三套并存）
 
 **A. 显式缓存（cache_control，与隐式互斥）**
+
 - 需在 messages 的 content 块加 `"cache_control": {"type": "ephemeral"}`（仅 ephemeral）
 - 缓存创建计费：输入标准单价的 **125%**；命中计费：**10%**
 - 最低可缓存 token：**1024**；有效期 5 分钟（命中后重置）；确定性命中
@@ -348,6 +362,7 @@
 - 建议：并行工具调用时合并 tool 结果为一条消息 + 多个 content 块，避免超出 20 块回溯窗口
 
 **B. 隐式缓存（自动，无法关闭）**
+
 - 前缀匹配（messages 数组公共前缀）；创建无额外费用（100%）；命中为输入单价的 **20%**（多数百炼部署模型）；无手动控制；命中率不确定
 - 最低可缓存 token：百炼部署模型 **256**；Qwen3.7 系列约 **2000**；智谱部署 GLM、稀宇 MiniMax 为 **512**
 - 计费折扣因模型来源而异（第三方程式部署）：
@@ -359,6 +374,7 @@
 - OpenAI 兼容 Batch（文件输入）无法享受缓存折扣
 
 **C. Responses API Session 缓存**
+
 - Header `x-dashscope-session-cache: enable` 开启（默认 disable）；服务端自动缓存对话上下文（结合 previous_response_id 多轮关联）
 - 最小可缓存提示词 1024 Token，有效期 5 分钟
 - 支持模型：qwen3-max / qwen3.7-max / qwen3.7-plus / qwen3.6-plus / qwen3.5-plus / qwen3.7-flash / qwen3.6-flash / qwen3.5-flash / qwen-plus / qwen-flash / qwen3-coder-plus / qwen3-coder-flash
@@ -367,12 +383,12 @@
 
 ### 11.2 计量字段（已确认）
 
-| 协议 | 命中缓存计量字段 | 创建缓存计量字段 |
-|---|---|---|
-| OpenAI Chat Completions | `usage.prompt_tokens_details.cached_tokens` | `usage.prompt_tokens_details.cache_creation_input_tokens` |
-| DashScope | 同 OpenAI | 同 OpenAI |
-| Anthropic 兼容 | `usage.cache_read_input_tokens`（不计入 input_tokens，单独报告） | `usage.cache_creation_input_tokens` |
-| Responses | `usage.input_tokens_details.cached_tokens` | — |
+| 协议                    | 命中缓存计量字段                                                 | 创建缓存计量字段                                          |
+| ----------------------- | ---------------------------------------------------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `usage.prompt_tokens_details.cached_tokens`                      | `usage.prompt_tokens_details.cache_creation_input_tokens` |
+| DashScope               | 同 OpenAI                                                        | 同 OpenAI                                                 |
+| Anthropic 兼容          | `usage.cache_read_input_tokens`（不计入 input_tokens，单独报告） | `usage.cache_creation_input_tokens`                       |
+| Responses               | `usage.input_tokens_details.cached_tokens`                       | —                                                         |
 
 ### 11.3 价格说明（诚实边界）
 
@@ -389,35 +405,35 @@ crish 未来模型目录建议参考 `reference/litellm/model_prices_and_context
 
 ```jsonc
 {
-  "model": "claude-sonnet-5",            // API 模型标识（唯一键）
-  "provider": "anthropic",               // 通道/网关标识（如 dashscope、volcengine、qianfan）
-  "vendor": "anthropic",                 // 官方厂商（转售场景用于区分通道价与官方直连价）
+  "model": "claude-sonnet-5", // API 模型标识（唯一键）
+  "provider": "anthropic", // 通道/网关标识（如 dashscope、volcengine、qianfan）
+  "vendor": "anthropic", // 官方厂商（转售场景用于区分通道价与官方直连价）
   "mode": "chat",
-  "currency": "USD",                     // USD / CNY（务必随币种切换，转售价多为 CNY）
-  "unit": "per_1M",                      // 计价单位：per_1M tokens
-  "context_window": 1000000,             // 输入上下文窗口（token）
-  "max_input_tokens": 1000000,           // 与 litellm 对齐
+  "currency": "USD", // USD / CNY（务必随币种切换，转售价多为 CNY）
+  "unit": "per_1M", // 计价单位：per_1M tokens
+  "context_window": 1000000, // 输入上下文窗口（token）
+  "max_input_tokens": 1000000, // 与 litellm 对齐
   "max_output_tokens": 128000,
-  "input_price": 3.0,                    // 未缓存输入价
+  "input_price": 3.0, // 未缓存输入价
   "output_price": 15.0,
-  "cache_read_price": 0.3,               // 缓存命中价（read/refresh）
-  "cache_write_price": 3.75,             // 通用缓存写入价（OpenAI GPT-5.6+ 1.25x / 智谱等）
-  "cache_write_price_5m": 3.75,          // Anthropic 系 5m TTL 写入价
-  "cache_write_price_1h": 6.0,           // Anthropic 系 1h TTL 写入价（无则省略）
-  "storage_price_per_1m_hour": null,     // 缓存存储费（$/1M·h 或 ¥/1M·h，Gemini/方舟有值）
-  "prompt_cache_min_tokens": 1024,       // 最低可缓存 token（Anthropic 官方字段同名）
-  "cache_type": "explicit",              // automatic | explicit | both | none
-  "cache_mechanism": "prefix",           // prefix | similarity | disk_unit | session
-  "supports_cache_control": true,        // 是否支持 Anthropic 式 cache_control 断点（litellm 无此字段，需扩展）
-  "supports_responses": false,           // Responses API 支持（litellm 无此字段，需扩展）
+  "cache_read_price": 0.3, // 缓存命中价（read/refresh）
+  "cache_write_price": 3.75, // 通用缓存写入价（OpenAI GPT-5.6+ 1.25x / 智谱等）
+  "cache_write_price_5m": 3.75, // Anthropic 系 5m TTL 写入价
+  "cache_write_price_1h": 6.0, // Anthropic 系 1h TTL 写入价（无则省略）
+  "storage_price_per_1m_hour": null, // 缓存存储费（$/1M·h 或 ¥/1M·h，Gemini/方舟有值）
+  "prompt_cache_min_tokens": 1024, // 最低可缓存 token（Anthropic 官方字段同名）
+  "cache_type": "explicit", // automatic | explicit | both | none
+  "cache_mechanism": "prefix", // prefix | similarity | disk_unit | session
+  "supports_cache_control": true, // 是否支持 Anthropic 式 cache_control 断点（litellm 无此字段，需扩展）
+  "supports_responses": false, // Responses API 支持（litellm 无此字段，需扩展）
   "supports_prompt_caching": true,
-  "breakpoint_max": 4,                   // 断点上限（Anthropic/MiniMax/百炼显式）
-  "lookback_blocks": 20,                 // 回溯窗口（Anthropic/百炼）
-  "cache_ttl": {"default": "5m", "options": ["5m", "1h"]},
-  "cache_write_free": false,             // 旧轨模型写免费（OpenAI 旧模型/Kimi/DeepSeek）
-  "long_context_threshold": 200000,      // 长上下文价格阈值（Grok 200K、Gemini 3.1 Pro 200K）
-  "long_context_input_price": 4.0,       // 长上下文输入价（有则填）
-  "peak_pricing_2x": true,               // DeepSeek 峰谷定价标记（9:00-12:00/14:00-18:00 北京）
+  "breakpoint_max": 4, // 断点上限（Anthropic/MiniMax/百炼显式）
+  "lookback_blocks": 20, // 回溯窗口（Anthropic/百炼）
+  "cache_ttl": { "default": "5m", "options": ["5m", "1h"] },
+  "cache_write_free": false, // 旧轨模型写免费（OpenAI 旧模型/Kimi/DeepSeek）
+  "long_context_threshold": 200000, // 长上下文价格阈值（Grok 200K、Gemini 3.1 Pro 200K）
+  "long_context_input_price": 4.0, // 长上下文输入价（有则填）
+  "peak_pricing_2x": true, // DeepSeek 峰谷定价标记（9:00-12:00/14:00-18:00 北京）
   "supports_reasoning": true,
   "supports_vision": true,
   "supports_function_calling": true,
@@ -428,37 +444,98 @@ crish 未来模型目录建议参考 `reference/litellm/model_prices_and_context
   "supports_audio_input": false,
   "supports_audio_output": false,
   "deprecation_date": null,
-  "source_url": "https://docs.anthropic.com/...",   // 条目数据来源
-  "data_verified_at": "2026-08-02"                  // 条目核实日期
+  "source_url": "https://docs.anthropic.com/...", // 条目数据来源
+  "data_verified_at": "2026-08-02", // 条目核实日期
 }
 ```
 
 ### 12.2 与 LiteLLM 字段映射
 
-| crish 建议字段 | LiteLLM 对应字段 | 差异说明 |
-|---|---|---|
-| input_price / output_price | `input_cost_per_token` / `output_cost_per_token` | LiteLLM 按 per-token 存（2e-06 = $2/1M），建议统一存 per-1M 避免换算错误 |
-| cache_read_price | `cache_read_input_token_cost` | 同名语义 |
-| cache_write_price_5m | `cache_creation_input_token_cost` | LiteLLM 只存单一创建价（Anthropic 5m 口径），1h 价需扩展 |
-| cache_write_price_1h | 无 | 需扩展（Anthropic 1h = 2x；OpenAI 无 1h 概念） |
-| prompt_cache_min_tokens | `prompt_cache_min_tokens` | 同名；注意 litellm 仅部分厂商有 |
-| context_window / max_* | `max_input_tokens` / `max_output_tokens` | 建议加总 context_window 便于展示 |
-| supports_cache_control / supports_responses | 无 | 需扩展 |
-| currency / unit | 无（隐含 USD per-token） | 需扩展，转售价格是 CNY |
+| crish 建议字段                              | LiteLLM 对应字段                                 | 差异说明                                                                 |
+| ------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------ |
+| input_price / output_price                  | `input_cost_per_token` / `output_cost_per_token` | LiteLLM 按 per-token 存（2e-06 = $2/1M），建议统一存 per-1M 避免换算错误 |
+| cache_read_price                            | `cache_read_input_token_cost`                    | 同名语义                                                                 |
+| cache_write_price_5m                        | `cache_creation_input_token_cost`                | LiteLLM 只存单一创建价（Anthropic 5m 口径），1h 价需扩展                 |
+| cache_write_price_1h                        | 无                                               | 需扩展（Anthropic 1h = 2x；OpenAI 无 1h 概念）                           |
+| prompt_cache_min_tokens                     | `prompt_cache_min_tokens`                        | 同名；注意 litellm 仅部分厂商有                                          |
+| context_window / max_*                      | `max_input_tokens` / `max_output_tokens`         | 建议加总 context_window 便于展示                                         |
+| supports_cache_control / supports_responses | 无                                               | 需扩展                                                                   |
+| currency / unit                             | 无（隐含 USD per-token）                         | 需扩展，转售价格是 CNY                                                   |
 
 ### 12.3 需要定期刷新的模型清单
 
-| 优先级 | 模型 | 刷新原因 |
-|---|---|---|
-| 高 | Claude Sonnet 5 | **2026-09-01 起涨价**（$2→$3 输入、$0.20→$0.30 命中、$10→$15 输出） |
-| 高 | DeepSeek v4-flash / v4-pro | 峰谷定价生效日期待公告；v4-pro 的 Responses API 支持「2026 年 8 月初」 |
-| 高 | OpenAI GPT-5.x | 断点机制与写价随版本变化（写 1.25x 仅 5.6+）；官方按量计费页本次未抓取 |
-| 高 | Anthropic 全系 | 模型迭代快（Fable/Mythos 为新系列），价格表以用户提供为准，刷新时对照官方定价页 |
-| 中 | GLM 全系 | 旗舰迭代快（5.2 为最新）；Anthropic 端点 cache_control 行为需实测 |
-| 中 | Kimi K2.x 系列 | 本次仅 K3 有价格，K2.5/2.6/2.7 待补 |
-| 中 | Grok | 长上下文价格细节、命中价数值（本次部分未抓取） |
-| 中 | Gemini / MiniMax / 火山方舟 / 百度千帆 | 价格表相对稳定，随发布刷新 |
-| 低 | 百炼 Qwen 系列 | **缓存命中绝对单价未获取**（官方仅给折扣比例），刷新时查百炼控制台按量计费页 |
+| 优先级 | 模型                                   | 刷新原因                                                                        |
+| ------ | -------------------------------------- | ------------------------------------------------------------------------------- |
+| 高     | Claude Sonnet 5                        | **2026-09-01 起涨价**（$2→$3 输入、$0.20→$0.30 命中、$10→$15 输出）             |
+| 高     | DeepSeek v4-flash / v4-pro             | 峰谷定价生效日期待公告；v4-pro 的 Responses API 支持「2026 年 8 月初」          |
+| 高     | OpenAI GPT-5.x                         | 断点机制与写价随版本变化（写 1.25x 仅 5.6+）；官方按量计费页本次未抓取          |
+| 高     | Anthropic 全系                         | 模型迭代快（Fable/Mythos 为新系列），价格表以用户提供为准，刷新时对照官方定价页 |
+| 中     | GLM 全系                               | 旗舰迭代快（5.2 为最新）；Anthropic 端点 cache_control 行为需实测               |
+| 中     | Kimi K2.x 系列                         | 本次仅 K3 有价格，K2.5/2.6/2.7 待补                                             |
+| 中     | Grok                                   | 长上下文价格细节、命中价数值（本次部分未抓取）                                  |
+| 中     | Gemini / MiniMax / 火山方舟 / 百度千帆 | 价格表相对稳定，随发布刷新                                                      |
+| 低     | 百炼 Qwen 系列                         | **缓存命中绝对单价未获取**（官方仅给折扣比例），刷新时查百炼控制台按量计费页    |
+
+### 12.4 R3 落地核销（2026-08-03）
+
+> 核销范围：R3 轮 P3 厂商模型层（T-18~T-25 代码面 + T-26 本文档回写）把本文档数据转录进
+> `crates/agent-provider/src/models/catalog.json`（内置目录，`include_str!` 编译期打包）后的
+> 落地对照与转录差异记录。核对对象为 2026-08-03 实读的 catalog.json（28 条）与本文档各节。
+
+#### 12.4.1 落地条目清单（28 条，与文档各节对应）
+
+| 厂商      | 条数   | 落地条目（catalog.json 键）                                                                                                               | 数据来源（00-catalog）     |
+| --------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| DeepSeek  | 2      | deepseek-v4-flash、deepseek-v4-pro                                                                                                        | §3.1                       |
+| Anthropic | 7      | claude-fable-5、claude-mythos-5、claude-opus-5、claude-opus-4-5、claude-sonnet-5、claude-sonnet-4-5、claude-haiku-4-5                     | §1.1/§1.2/§1.4             |
+| OpenAI    | 2      | gpt-5.6、gpt-5.5                                                                                                                          | §2.2                       |
+| Kimi      | 1      | kimi-k3                                                                                                                                   | §5.1                       |
+| Grok      | 2      | grok-4.5、grok-4.3                                                                                                                        | §6.1                       |
+| MiniMax   | 3      | minimax-m2-7、minimax-m2-5、minimax-m3                                                                                                    | §7.1                       |
+| Gemini    | 4      | gemini-3-6-flash、gemini-3-5-flash、gemini-3-5-flash-lite、gemini-3-1-pro                                                                 | §8.1                       |
+| GLM       | 4      | glm-5-2、glm-5、glm-4-7、glm-4-5-air                                                                                                      | §4.1                       |
+| Qwen      | 3      | qwen3-max、qwen3-7-max、qwen3-coder-plus                                                                                                  | §11.1（价格按 §11.3 留空） |
+| **合计**  | **28** | 全部条目携带 `source_url` / `data_verified_at: 2026-08-02`；`vendor::model` 键与条目身份字段一致性、各厂商条目数由 serde 全量解析测试钉死 | —                          |
+
+#### 12.4.2 转录差异（catalog.json 与本文档逐项核对）
+
+| #   | 差异项                    | 本文档原状                                                                                        | catalog.json 落地形态                                                                                                                                       | 处理结论                                                                                                                               |
+| --- | ------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | qwen 键 vendor 形态       | §11 以「阿里云百炼 Qwen」章节记录，数据全部来自百炼（dashscope）通道                              | 3 条 qwen 条目键为 `qwen::qwen3-max` 等（`vendor: "qwen"`、`provider: "dashscope"`）；行为矩阵 Qwen 行保守全关，由这些条目覆盖为百炼行为（断点 4 / TTL 5m） | 键以 vendor 语义承载、provider 保留通道标识；`infer_vendor` 对 dashscope 域名返回 Dashscope、对 qwen 模型名返回 Qwen，两键并存各自生效 |
+| 2   | sonnet-5 促销价钉死       | §1.1 双行：8/31 前 $2/$0.20/$10、9/1 起 $3/$0.30/$15                                              | 条目按 2026-08-02 现行促销价转录（input 2.0 / read 0.2 / output 10.0 / 5m 写 2.5 / 1h 写 4.0），涨价项留在 §12.3 刷新清单                                   | 钉死促销价是刻意决策：9/1 日期区间切换归 P5 定价模块；测试 `sonnet5_transcribes_promo_price` 钉死当前值                                |
+| 3   | gemini 窗口未收录项       | §8.1 未收录 Gemini 3.x 上下文窗口                                                                 | 4 条 gemini 条目均无 `contextWindow`                                                                                                                        | 不沿用前端旧值 1M，`context_window_for("gemini", …)` 返回 None（测试钉死）；R0.5 表 3 #3 风险维持、待官方核实                          |
+| 4   | qwen 命中绝对价未获取留空 | §11.3：Qwen 缓存命中绝对单价未获取（仅折扣比例）                                                  | 3 条 qwen 条目无 `inputPrice` / `outputPrice` / `cacheReadPrice`（留空 None）                                                                               | 遵守「不编造数字」规则留空并登记刷新清单；按折扣比例折算属 P5 成本层                                                                   |
+| 5   | 条目范围缩窄              | §1.1 Anthropic 16 行（含退役/弃用）、§2.2 gpt-5.4/5.2/5.1/5/4.1、§4.1 GLM-4.6/4.5、§5.1 Kimi K2.x | 只转录现行有价条目：Anthropic 7、OpenAI 仅 5.6/5.5、GLM 4、Kimi 仅 k3                                                                                       | 退役/价格未获取条目不收录；未收录模型由 `lookup` 回退 vendor 默认条目或 None，行为矩阵兜底保守默认                                     |
+| 6   | 模型名键形态              | §7.1「MiniMax-M2.7 / M2.5」、§8.1「Gemini 3.6 Flash」、§4.1「GLM-5.2」等点号/空格形态             | 键统一横线形态：minimax-m2-7 / gemini-3-6-flash / glm-5-2                                                                                                   | 行为矩阵系列表同时收录点号与横线两形态（glm-4.7 与 glm-4-7 均命中），目录键以横线为准                                                  |
+| 7   | deepseek 写价与峰谷标记   | §3.1：命中 2%（flash）/0.83%（pro）；峰谷定价即将实施、生效日期待公告                             | 条目 `cacheWritePrice: 0.0` + `cacheWriteFree: true`（官方无写价概念）；`peakPricing2x: true`                                                               | 峰谷 2x 仅做数据标记，生效日期待公告后由刷新清单更新；成本计算预留该因子                                                               |
+| 8   | gpt-5.6 输出价            | §2.2 注：litellm 副本 output 3e-05（$30），正文未转录输出价列                                     | 条目未含 `outputPrice`（R0.5 表 3 #8 风险项维持）                                                                                                           | 下次刷新 catalog 时补录输出价列                                                                                                        |
+
+#### 12.4.3 R0.5 表 3 风险项消化状态
+
+| #   | 风险项                                                  | 消化状态                                                                                                                                                                                                                                                         |
+| --- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | vendor.rs 能力判定缺口（kimi-k3/glm-4.7 → NO_THINKING） | **部分消化**：T-19 行为矩阵系列表显式收录 kimi-k3/k2.7/k2.6/k2.5、glm-4.7 等（缓存行为维度已覆盖，测试钉死）；vendor.rs 思考能力表行未改 → **标注移交后续**（behavior.rs 注释明示「vendor.rs 思考能力表缺行属其文件域，补全需求经轮末汇总物移交主 Agent 协调」） |
+| 2   | 旧前缀行膨胀                                            | 不处理（功能行，保持旧模型正确判定）                                                                                                                                                                                                                             |
+| 3   | gemini-3.5/3.6-flash 窗口未收录（前端沿用 1M 旧值）     | **已标注**：目录不编造窗口 → None；窗口核实列入刷新清单                                                                                                                                                                                                          |
+| 4   | Sonnet 5 促销价/日期区间                                | **已消化**：catalog 钉死促销价 + §12.3 刷新清单登记 9/1 涨价；日期区间切换归 P5 定价模块                                                                                                                                                                         |
+| 5   | Kimi/MiniMax/豆包 CNY 价、Qwen 命中价未获取             | **部分消化**：Kimi/MiniMax 条目 `currency: "CNY"` 转录正确；Qwen 价格留空（§12.4.2 #4）；豆包/方舟通道价未入内置表                                                                                                                                               |
+| 6   | 全局费率乘数 0.1/1.25                                   | **已消化（数据面）**：目录提供 per-model 缓存价供 P5 成本层消费；pricingStore 全局乘数改造属 P5/T-48 域                                                                                                                                                          |
+| 7   | LEGACY_SEED_MODELS 迁移键                               | 不相关（迁移键，不得改）                                                                                                                                                                                                                                         |
+| 8   | gpt-5.6 输出价 $30 未转录                               | **未消化**：00-catalog §2.2 正文与目录条目均未含输出价，列入刷新清单补录                                                                                                                                                                                         |
+
+#### 12.4.4 §12.3 刷新清单核销状态
+
+| 优先级 | 模型                           | 刷新原因                                                   | 本次核销状态                                                                                                     |
+| ------ | ------------------------------ | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| 高     | Claude Sonnet 5                | 2026-09-01 起涨价                                          | 促销价已钉死入目录；9/1 涨价为 P5 定价模块日期切换 + 刷新清单跟踪项，**待刷新**                                  |
+| 高     | DeepSeek v4-flash / v4-pro     | 峰谷定价生效日期待公告；v4-pro Responses「2026 年 8 月初」 | v4-pro 条目 `supportsResponses: false`（官方口径未到）；峰谷日期**待公告后更新**                                 |
+| 高     | OpenAI GPT-5.x                 | 断点机制与写价随版本变化；官方按量计费页未抓取             | gpt-5.6/5.5 已入目录（litellm 副本口径）；gpt-5.4/5.2/5.1/5/4.1 与输出价**待刷新补录**                           |
+| 高     | Anthropic 全系                 | 模型迭代快                                                 | 7 条现行有价条目已入目录；新系列随发布刷新                                                                       |
+| 中     | GLM 全系                       | Anthropic 端点 cache_control 行为需实测                    | 目录/矩阵保守关（unverified 标记），**实测后改 behavior.rs 矩阵一行数据**（P3 步骤 6 回写约定）                  |
+| 中     | Kimi K2.x 系列                 | 仅 K3 有价格                                               | kimi-k2.x 未收录（无价），**待补**                                                                               |
+| 中     | Grok                           | 长上下文价格细节                                           | grok-4.5 已收录 long_context 档；grok-4.3 长上下文价未获取，**待补**                                             |
+| 中     | Gemini / MiniMax / 方舟 / 千帆 | 价格相对稳定                                               | Gemini 4 / MiniMax 3 已收录；方舟/千帆转售通道未入内置表（转售通道价按 §13.4 区分，`provider` 维度条目策略保留） |
+| 低     | 百炼 Qwen 系列                 | 缓存命中绝对单价未获取                                     | 3 条已收录、价格留空；控制台按量计费页**待补绝对价**                                                             |
 
 ---
 

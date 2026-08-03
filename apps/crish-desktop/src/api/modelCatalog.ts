@@ -780,6 +780,8 @@ export async function scanProviderModels(
         ? data.models
         : [];
     const models: string[] = [];
+    // 响应体显式声明的窗口（context_length / max_model_len），上送时优先于猜测
+    const scannedCtx = new Map<string, number>();
     for (const item of rawList) {
       if (typeof item === 'string' && item.trim()) {
         models.push(item.trim());
@@ -799,6 +801,7 @@ export async function scanProviderModels(
               : undefined;
         if (ctx && ctx > 0) {
           upsertModelMeta(fresh.id, id, { contextLength: ctx });
+          scannedCtx.set(id, ctx);
         }
       }
     }
@@ -813,9 +816,82 @@ export async function scanProviderModels(
         capabilities: caps,
       });
     }
+    // P3 步骤 5b / §3.1.3（数据来源策略 2）：扫描结果上送合并——
+    // 仅窗口 / 能力位，不覆盖价格（Rust upsert_from_scan 保证）；
+    // 命令缺失 / invoke 失败降级记录，不阻塞扫描流程（uploadScannedModels 内吞错）。
+    const scanned: ScannedModel[] = unique.map((m) =>
+      buildScannedModelWire(
+        m,
+        scannedCtx.get(m) ?? guessContextLength(m),
+        guessModelCapabilities(m)
+      )
+    );
+    await uploadScannedModels(fresh.id, scanned);
     return { ok: true, models: unique };
   } catch (e) {
     return { ok: false, models: [], error: friendlyFetchError(e) };
+  }
+}
+
+// ─── P3 扫描结果上送（catalog_refresh；T-25）────────────────────────────
+
+/** 扫描上送单模型（catalog_refresh wire，camelCase；缺省字段 Rust 侧不合并） */
+export type ScannedModel = {
+  /** API 模型标识（扫描列表原样；空串 Rust 侧忽略） */
+  model: string;
+  /** 厂商；缺省时 Rust 回退 catalog_refresh 的 provider 参数作 vendor 键 */
+  vendor?: string | undefined;
+  /** 上下文窗口（≤0 视为缺失，不发送） */
+  contextWindow?: number | undefined;
+  /** 输出上限（扫描结果不提供，恒缺省） */
+  maxOutputTokens?: number | undefined;
+  /** 能力位猜测（对齐 ModelCapabilityKey 三键） */
+  capabilities?: ModelCapabilities | undefined;
+};
+
+/**
+ * 扫描结果 → catalog_refresh 上送形状（纯）。
+ * 仅映射窗口 / 能力位；vendor / maxOutputTokens 扫描不提供 → 缺省。
+ */
+export function buildScannedModelWire(
+  model: string,
+  contextWindow?: number | undefined,
+  capabilities?: ModelCapabilities | undefined
+): ScannedModel {
+  const m = normalizeModelIdText(model);
+  const out: ScannedModel = { model: m };
+  if (!m) return out;
+  if (contextWindow && contextWindow > 0) out.contextWindow = contextWindow;
+  if (capabilities && Object.keys(capabilities).length > 0) {
+    out.capabilities = { ...capabilities };
+  }
+  return out;
+}
+
+/**
+ * 扫描结果上送合并（P3 步骤 5b / §3.1.3 数据来源策略 2）。
+ *
+ * 经 Tauri `catalog_refresh` 命令合并（仅窗口 / 能力位，不覆盖价格）；
+ * 命令缺失 / invoke 失败 / 非 Tauri 环境一律降级：console.warn 记录，
+ * 绝不抛出——扫描流程不因上送失败而中断（invokeResult 本身不抛，外层
+ * try/catch 兜底保证恒不抛）。
+ */
+export async function uploadScannedModels(
+  provider: string,
+  scan: readonly ScannedModel[]
+): Promise<void> {
+  try {
+    const res = await invokeResult<unknown>('catalog_refresh', {
+      provider,
+      scan,
+    });
+    if (res.status !== 'ok') {
+      console.warn(
+        `模型目录上送合并跳过（${res.status}）${res.status === 'error' ? `：${res.message}` : ''}，不阻塞扫描`
+      );
+    }
+  } catch (e) {
+    console.warn('模型目录上送合并失败，不阻塞扫描：', e);
   }
 }
 

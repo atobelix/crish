@@ -287,12 +287,12 @@ impl HttpProviderCall {
         // 入口，C2）：能力判定收敛在其内部——数据真源 = P3 cache_behavior_for
         // （矩阵 + catalog 模型级覆盖）；无 catalog 可用时回退内置保守兜底默认
         // （infer_cache_capability，数据值以 P3 §3.2.2 矩阵为准转录）。
-        // catalog 传 None：R3 T-18/T-19 交付后替换为真实 ModelCatalog（占位
-        // PlaceholderCatalog 恒 None，等价"无 catalog"）；session_id 由
-        // SharedProvider 注入（P2 步骤 4b）；overrides 走 config.extra.cache
-        // 通道（R2 恒空表 → None，见 EngineProviderConfig.extra 注释）。
+        // catalog = bundled_catalog()（T-23 OnceLock 单例）；T-24 壳侧挂运行时
+        // ModelCatalog 后此处可换为实例。session_id 由 SharedProvider 注入
+        // （P2 步骤 4b）；overrides 走 config.extra.cache 通道（R2 恒空表 →
+        // None，见 EngineProviderConfig.extra 注释）。
         let cache = build_cache_policy(
-            None,
+            Some(bundled_catalog()),
             Some(&self.config.base_url),
             Some(&self.config.model),
             request.session_id.as_deref(),
@@ -1146,7 +1146,8 @@ mod tests {
     }
 
     /// request_options 组装 cache：engine.rs 只调用 build_cache_policy（C2 唯一
-    /// 运行时判定/消费入口），能力判定收敛在其内部
+    /// 运行时判定/消费入口），能力判定收敛在其内部（catalog = bundled_catalog()
+    /// 真源路径，T-23 单例；无 catalog 时兜底内置保守表）
     ///
     /// 断言（P2 §5.1/§5.3）：
     /// - DeepSeek：build_cache_policy 归 None → 请求体不含任何 cache 键

@@ -13,6 +13,7 @@
 
 use serde_json::{json, Value};
 
+use crate::models::{cache_behavior_for, infer_vendor, CacheBehavior, CacheTtl, ModelCatalog, VendorId};
 use crate::request::messages::{ChatContent, ChatContentPart, ChatMessage};
 
 /// 缓存保留档位（对齐 pi 的 CacheRetention 三档，pi-cache-analysis.md:126-131）
@@ -247,42 +248,12 @@ pub struct CachePolicy {
     pub affinity_header: Option<(&'static str, String)>,
 }
 
-/// 模型目录占位（R3 T-18 替换为 models/ 层 ModelCatalog 真身，P3 §3.1）
-///
-/// 方法默认保守：不提供任何模型级覆盖，行为等价于"无 catalog 可用"——
-/// [build_cache_policy] 回退内置保守兜底表（infer_cache_capability）。
-pub struct PlaceholderCatalog {
-    _private: (),
-}
-
-impl PlaceholderCatalog {
-    /// 占位构造（T-18 替换后移除，改用 ModelCatalog::bundled()）
-    pub fn new() -> Self {
-        Self { _private: () }
-    }
-
-    /// 保守占位查询：恒 None（不覆盖；T-18 后接入 P3 cache_behavior_for 数据真源，
-    /// 返回 CacheBehavior 经映射归并进 CacheCapability）
-    pub fn cache_behavior(
-        &self,
-        _base_url: Option<&str>,
-        _model: Option<&str>,
-    ) -> Option<CacheCapability> {
-        None
-    }
-}
-
-impl Default for PlaceholderCatalog {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// 统一缓存策略组装：能力判定 + 门控矩阵 → 参数的唯一运行时判定/消费入口
 /// （P2 §3.2【调度者裁决】：engine.rs 只调用本函数，不直接暴露能力表）
 ///
 /// 输入：
-/// - `catalog`：P3 模型目录（R3 T-18 替换占位真身；无目录 → 内置保守兜底表）
+/// - `catalog`：P3 模型目录（models/ 层，cache_behavior_for 数据真源；None →
+///   内置保守兜底表）
 /// - `base_url` / `model`：能力判定依据（base_url 关键字优先，model 前缀兜底）
 /// - `session_id`：Key 机制 prompt_cache_key 的键来源（None/空白 → 不注入）
 /// - `overrides`：ProviderConfig.extra.cache 覆盖 JSON（键名与 P3 CacheBehavior
@@ -293,17 +264,32 @@ impl Default for PlaceholderCatalog {
 /// - 未识别厂商（机制 None）→ 保守不注入
 /// - enabled=false / 非 5.6+ 的 retention="none" / Key 机制无有效会话 ID → 不注入
 pub fn build_cache_policy(
-    catalog: Option<&PlaceholderCatalog>,
+    catalog: Option<&ModelCatalog>,
     base_url: Option<&str>,
     model: Option<&str>,
     session_id: Option<&str>,
     overrides: Option<&Value>,
 ) -> Option<CachePolicy> {
-    // 0. 能力判定：catalog 可用 → 数据真源（P3 models/ 层，T-18 接线）；
-    //    无/占位 catalog → 内置保守兜底（数据值以 P3 §3.2.2 矩阵为准转录）
-    let capability = catalog
-        .and_then(|c| c.cache_behavior(base_url, model))
-        .unwrap_or_else(|| infer_cache_capability(base_url, model));
+    // 0. 能力判定（C2）：catalog 可用 → 数据真源（models/ 层 cache_behavior_for，
+    //    CacheBehavior 经 capability_from_behavior 归并到 wire 决策面，omit 位
+    //    单独带回供步骤 3 消费）；无 catalog → 内置保守兜底表
+    //    （infer_cache_capability，数据值以 P3 §3.2.2 矩阵为准转录）
+    let url = base_url.unwrap_or("").to_ascii_lowercase();
+    let model_lower = model.unwrap_or("").to_ascii_lowercase();
+    let (capability, omit_cache_control) = match catalog {
+        Some(catalog) => {
+            let vendor = infer_vendor(&url, &model_lower);
+            let behavior = cache_behavior_for(Some(catalog), vendor, &model_lower);
+            (capability_from_behavior(&behavior), behavior.omit_cache_control)
+        }
+        None => {
+            let capability = infer_cache_capability(base_url, model);
+            // 兜底表无 omit 位（T-13a 冻结）：DeepSeek 强制省略按 vendor 推断
+            // 直判（与 infer_cache_capability 同链：url 关键字 → model 前缀）
+            let omit = infer_vendor(&url, &model_lower) == VendorId::Deepseek;
+            (capability, omit)
+        }
+    };
     // 1. 硬关：extra.cache.enabled == false → 完全不参与缓存（P2 §3.2 步骤 1）
     if overrides_disabled(overrides) {
         return None;
@@ -317,12 +303,9 @@ pub fn build_cache_policy(
         return None;
     }
     // 3. DeepSeek 强制省略：P3 矩阵 omit_cache_control 恒 true（官方不支持
-    //    prompt_cache_key，发出静默忽略，vendor-cache-gaps.md:104）；CacheCapability
-    //    无 omit 位（T-13a 冻结），此处按 vendor 直判，T-18 数据层落地后由
-    //    CacheBehavior.omit_cache_control 统一驱动
-    let url = base_url.unwrap_or("").to_ascii_lowercase();
-    let model_lower = model.unwrap_or("").to_ascii_lowercase();
-    if url.contains("deepseek") || model_lower.starts_with("deepseek") {
+    //    prompt_cache_key，发出静默忽略，vendor-cache-gaps.md:104）；catalog
+    //    路径直接消费 CacheBehavior 的 omit 位（唯一数据真源，C2）
+    if omit_cache_control {
         return None;
     }
     // 4. 机制分流
@@ -390,6 +373,51 @@ pub fn build_cache_policy(
                 affinity_header: affinity_header(&capability, session_id.unwrap_or("")),
             })
         }
+    }
+}
+
+/// CacheBehavior（models/ 层数据真源）→ CacheCapability（wire 决策面）归并映射
+/// （C2：行为矩阵是唯一数据真源，本映射只归并不新增事实）
+///
+/// 机制分类（与兜底表转录口径一致，P3 §3.2.2）：
+/// - 不参与任何缓存（supports_prompt_caching=false，如 Qwen 直连保守行）→ None
+/// - Anthropic 式断点（supports_cache_control=true，Anthropic/MiniMax M2.x/百炼）→ Explicit
+/// - 键路由（supports_prompt_cache_key=true，OpenAI/Grok/Kimi）→ Key
+/// - 其余自动缓存（DeepSeek/MiniMax M3/Gemini/GLM 隐式）→ Auto
+///
+/// TTL 桶：default_ttl 为 1h 档（Hour）→ 5m+1h 双桶；5m/Day 档只挂 5m 桶
+/// （Day=24h 属 OpenAI retention 长档值域，wire 桶无 24h 档，写价 2x 宁缺毋滥）。
+/// GPT-5.6+ 显式模式位：CacheBehavior 无该字段（T-19 冻结），catalog 路径保守
+/// 按非 5.6+ 处理（retention="none" 整体不参与），5.6+ 显式模式仍由无 catalog
+/// 兜底表承担（OPENAI_CACHE_56 前缀行）。
+fn capability_from_behavior(behavior: &CacheBehavior) -> CacheCapability {
+    let mechanism = if !behavior.supports_prompt_caching {
+        CacheMechanism::None
+    } else if behavior.supports_cache_control {
+        CacheMechanism::Explicit
+    } else if behavior.supports_prompt_cache_key {
+        CacheMechanism::Key
+    } else {
+        CacheMechanism::Auto
+    };
+    let ttl_buckets = if behavior.default_ttl == Some(CacheTtl::Hour) {
+        BUCKETS_5M_1H
+    } else {
+        BUCKETS_5M
+    };
+    let retention = match behavior.default_ttl {
+        Some(CacheTtl::Hour | CacheTtl::Day) => CacheRetention::Long,
+        _ => CacheRetention::Short,
+    };
+    CacheCapability {
+        mechanism,
+        supports_cache_control: behavior.supports_cache_control,
+        supports_cache_control_on_tools: behavior.supports_cache_control,
+        breakpoint_cap: behavior.breakpoint_max.map_or(0, usize::from),
+        ttl_buckets,
+        prompt_cache_key: behavior.supports_prompt_cache_key,
+        retention,
+        supports_explicit_prompt_cache_mode: false,
     }
 }
 
@@ -1207,14 +1235,82 @@ mod tests {
     }
 
     #[test]
-    fn build_cache_policy_placeholder_catalog_is_conservative() {
-        // PlaceholderCatalog 占位（R3 T-18 替换）：方法默认保守——不覆盖任何
-        // 能力，行为与无 catalog 完全一致
-        let catalog = PlaceholderCatalog::new();
-        let with_catalog =
-            build_cache_policy(Some(&catalog), None, Some("gpt-4o"), Some("ses-1"), None);
-        let without = build_cache_policy(None, None, Some("gpt-4o"), Some("ses-1"), None);
-        assert_eq!(with_catalog, without);
+    fn build_cache_policy_catalog_drives_deepseek_omit() {
+        // catalog 真源路径（C2）：DeepSeek 经 cache_behavior_for 的 omit 位 →
+        // 整个 cache 参数组不出现；无 catalog 兜底（vendor 推断直判）同语义
+        let catalog = ModelCatalog::bundled();
+        assert_eq!(
+            build_cache_policy(Some(&catalog), None, Some("deepseek-v4-flash"), Some("ses-1"), None),
+            None
+        );
+        assert_eq!(
+            build_cache_policy(
+                Some(&catalog),
+                Some("https://api.deepseek.com"),
+                Some("deepseek-v4"),
+                Some("ses-1"),
+                Some(&json!({ "enabled": true }))
+            ),
+            None
+        );
+        assert_eq!(
+            build_cache_policy(None, None, Some("deepseek-v4-flash"), Some("ses-1"), None),
+            None
+        );
+    }
+
+    #[test]
+    fn build_cache_policy_catalog_drives_minimax_m2_breakpoints() {
+        // MiniMax M2.x 经 catalog：系列表 minimax-m2 开主动缓存 → Explicit 断点注入
+        let catalog = ModelCatalog::bundled();
+        let policy =
+            build_cache_policy(Some(&catalog), None, Some("minimax-m2-7"), Some("ses-1"), None)
+                .expect("M2-7 经 catalog 应启用显式断点注入");
+        assert_eq!(policy.mechanism, CacheMechanism::Explicit);
+        assert_eq!(policy.breakpoints, Some(BreakpointPlan::default()));
+        assert_eq!(policy.ttl, TtlBucket::FiveMinutes);
+        assert_eq!(policy.cache_key, None);
+        // M3 经 catalog：系列表关主动缓存 → Auto 零参数（隐式缓存不发任何字段）
+        let m3 = build_cache_policy(Some(&catalog), None, Some("minimax-m3"), Some("ses-1"), None)
+            .expect("M3 经 catalog 应为 Auto 零参数");
+        assert_eq!(m3.mechanism, CacheMechanism::Auto);
+        assert_eq!(m3.breakpoints, None);
+        assert_eq!(m3.cache_key, None);
+        assert_eq!(m3.prompt_cache_options, None);
+    }
+
+    #[test]
+    fn build_cache_policy_catalog_drives_grok_key() {
+        // Grok 经 catalog：supports_prompt_cache_key → Key 键路由（会话 ID 派生键）
+        let catalog = ModelCatalog::bundled();
+        let policy =
+            build_cache_policy(Some(&catalog), None, Some("grok-4.5"), Some("ses-grok"), None)
+                .expect("Grok 经 catalog 应走键路由");
+        assert_eq!(policy.mechanism, CacheMechanism::Key);
+        assert_eq!(policy.cache_key, Some(CacheKey("ses-grok".to_string())));
+        assert_eq!(policy.retention, CacheRetention::Short);
+    }
+
+    #[test]
+    fn build_cache_policy_catalog_unknown_model_conservative() {
+        // 未知模型经 catalog：vendor 推断 Auto → 保守全关（不猜不注入）
+        let catalog = ModelCatalog::bundled();
+        assert_eq!(
+            build_cache_policy(
+                Some(&catalog),
+                Some("http://localhost:11434"),
+                Some("llama-3.1"),
+                Some("ses-1"),
+                None
+            ),
+            None
+        );
+        // 已知厂商但目录未收录的模型：保持 vendor 默认行为（目录缺失 ≠ 全关；
+        // 如 OpenAI 未知系列按 vendor 默认行走键路由）
+        let policy =
+            build_cache_policy(Some(&catalog), None, Some("gpt-8-future"), Some("ses-1"), None)
+                .expect("已知厂商未知模型应保持 vendor 默认行为");
+        assert_eq!(policy.mechanism, CacheMechanism::Key);
     }
 
     #[test]
