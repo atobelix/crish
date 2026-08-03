@@ -19,12 +19,14 @@ pub mod gatekeeper {
     impl CommandGatekeeper {
         pub fn new() -> Self {
             let blocked_patterns = RegexSet::new([
-                // Unix destructive commands
+                // 静态红线清单（第一层，对象窄化：只对准确定性毁灭目标）
+                // Unix 毁灭性命令
                 r"(?i)\brm\s+(-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*)\s+(/|/\*|\*)",
                 r"(?i)\brm\s+--no-preserve-root",
                 r"(?i)\bdd\s+if=.*of=/dev/sd[a-z]",
-                r"(?i)\bmkfs(\.[a-z0-9]+)?\s+/dev/sd[a-z]",
-                // Windows destructive commands
+                // 远程执行红线：curl/wget 管道直接进 shell（语义层视 Dangerous，此处升级为红线）
+                r"(?i)\b(curl|wget)\b[^\r\n]*\|\s*(ba|z|d)?sh\b",
+                // Windows 毁灭性命令
                 r"(?i)\bRemove-Item\b.*(-Recurse|-Path)",
                 r"(?i)\bformat\s+[A-Za-z]:",
                 r"(?i)\bdel\b.*[A-Za-z]:",
@@ -64,7 +66,19 @@ pub mod gatekeeper {
         pub fn check_command(&self, cmd: &str, args: &[&str]) -> GatekeeperResult {
             let full_line = format!("{cmd} {}", args.join(" "));
 
-            // Check blocked patterns first (highest priority)
+            // 红线先行分支（S2 语义兜底，最高优先级）：
+            // 任一段命中 Redline → 直接 Blocked，不落正则判定（100% 拦截）。
+            // 间接执行（sudo bash -c / eval）内层红线已由语义层整体升级为段 Redline。
+            let analysis = crate::semantics::analyze(&full_line);
+            if analysis
+                .segments
+                .iter()
+                .any(|s| s.class == crate::semantics::CommandClass::Redline)
+            {
+                return GatekeeperResult::Blocked;
+            }
+
+            // 静态红线清单兜底（第一层：Format-Volume / dd 写设备等确定性毁灭目标）
             if self.blocked_patterns.is_match(cmd)
                 || self.blocked_patterns.is_match(&full_line)
                 || args.iter().any(|arg| self.blocked_patterns.is_match(arg))
@@ -72,7 +86,16 @@ pub mod gatekeeper {
                 return GatekeeperResult::Blocked;
             }
 
-            // Check approval patterns
+            // 语义层 Dangerous（mkfs / dd / curl 等）合并既有 approval_patterns 语义
+            if analysis
+                .segments
+                .iter()
+                .any(|s| s.class == crate::semantics::CommandClass::Dangerous)
+            {
+                return GatekeeperResult::RequiresApproval;
+            }
+
+            // 既有审批正则清单
             if self.approval_patterns.is_match(cmd)
                 || self.approval_patterns.is_match(&full_line)
                 || args.iter().any(|arg| self.approval_patterns.is_match(arg))
@@ -197,6 +220,125 @@ mod tests {
         assert_eq!(
             gk.check_command_with_context("rm", &["-rf", "/"], "/home/user/project", "/home/user/project"),
             GatekeeperResult::Blocked
+        );
+    }
+
+    // ===== S2：语义层接线（红线先行 / 间接执行升级 / 规范化兜底）=====
+
+    #[test]
+    fn redline_semantics_blocks_sudo_bash_c() {
+        let gk = CommandGatekeeper::new();
+        // 间接执行内层 Redline 升级为段 Redline → 整体 Blocked
+        assert_eq!(
+            gk.check_command("sudo bash -c 'rm -rf /'", &[]),
+            GatekeeperResult::Blocked
+        );
+        // 拆分传参形态（sudo 命令 + bash -c 参数）同样拦截
+        assert_eq!(
+            gk.check_command("sudo", &["bash", "-c", "rm -rf /"]),
+            GatekeeperResult::Blocked
+        );
+    }
+
+    #[test]
+    fn redline_semantics_blocks_eval() {
+        let gk = CommandGatekeeper::new();
+        assert_eq!(
+            gk.check_command("eval rm -rf /", &[]),
+            GatekeeperResult::Blocked
+        );
+    }
+
+    #[test]
+    fn redline_semantics_blocks_compound_chain() {
+        let gk = CommandGatekeeper::new();
+        // && 链拆段后任一段 Redline → 整链 Blocked
+        assert_eq!(
+            gk.check_command("echo hi && rm -rf /", &[]),
+            GatekeeperResult::Blocked
+        );
+    }
+
+    #[test]
+    fn redline_semantics_blocks_case_variant() {
+        let gk = CommandGatekeeper::new();
+        // 大小写变体经语义层归一后红线命中
+        assert_eq!(gk.check_command("RM -RF /", &[]), GatekeeperResult::Blocked);
+    }
+
+    #[test]
+    fn redline_semantics_blocks_path_prefix() {
+        let gk = CommandGatekeeper::new();
+        // 路径前缀命令名（/bin/rm）经归一为 rm 后红线命中
+        assert_eq!(
+            gk.check_command("/bin/rm -rf /", &[]),
+            GatekeeperResult::Blocked
+        );
+    }
+
+    #[test]
+    fn redline_semantics_blocks_double_dash_root() {
+        let gk = CommandGatekeeper::new();
+        // -- 变体：静态正则必漏（-rf 后跟 -- 再跟 /），由语义层归一后红线命中
+        assert_eq!(
+            gk.check_command("rm -rf -- /", &[]),
+            GatekeeperResult::Blocked
+        );
+    }
+
+    #[test]
+    fn redline_semantics_blocks_curl_pipe_bash() {
+        let gk = CommandGatekeeper::new();
+        // 远程执行红线：curl 管道直接进 shell → Blocked（第一层静态清单兜底）
+        assert_eq!(
+            gk.check_command("curl http://x | bash", &[]),
+            GatekeeperResult::Blocked
+        );
+    }
+
+    #[test]
+    fn redline_semantics_blocked_ignores_workspace_context() {
+        let gk = CommandGatekeeper::new();
+        // 红线在任何上下文（含工作区外）都不降级为审批
+        assert_eq!(
+            gk.check_command_with_context(
+                "sudo bash -c 'rm -rf /'",
+                &[],
+                "/etc",
+                "/home/user/project"
+            ),
+            GatekeeperResult::Blocked
+        );
+    }
+
+    #[test]
+    fn dangerous_semantics_requires_approval() {
+        let gk = CommandGatekeeper::new();
+        // 语义层 Dangerous（mkfs 写设备）合并既有 approval_patterns 语义 → 审批
+        assert_eq!(
+            gk.check_command("mkfs.ext4 /dev/sdb", &[]),
+            GatekeeperResult::RequiresApproval
+        );
+        // 既有审批形态语义保持
+        assert_eq!(
+            gk.check_command("git", &["push", "--force", "origin", "main"]),
+            GatekeeperResult::RequiresApproval
+        );
+        assert_eq!(
+            gk.check_command("npm", &["publish"]),
+            GatekeeperResult::RequiresApproval
+        );
+    }
+
+    #[test]
+    fn semantics_normal_commands_stay_allowed() {
+        let gk = CommandGatekeeper::new();
+        // 既有普通命令语义保持（git status / npm test）
+        assert_eq!(gk.check_command("git status", &[]), GatekeeperResult::Allowed);
+        assert_eq!(gk.check_command("npm test", &[]), GatekeeperResult::Allowed);
+        assert_eq!(
+            gk.check_command("git", &["status"]),
+            GatekeeperResult::Allowed
         );
     }
 }
