@@ -45,6 +45,10 @@ pub(crate) async fn handle(
     }
 
     // 2-3. 构建请求并调用 provider（传输层错误已分类，走 retry 阶梯）
+    // P1：build_request 前先确保工具快照已构建（借用顺序：先可变借用
+    // ensure_tools_snapshot，再不可变借用 build_request——工具循环轮次间
+    // 复用同一快照，保证 tools 前缀字节稳定）
+    ensure_tools_snapshot(state);
     let request = build_request(state);
     // T09.1 双轨：预生成 assistant 消息 id——实时 delta 与最终收口消息共用
     // 同一 id，保证 message-delta / message-start / message-end 的
@@ -250,22 +254,50 @@ pub(crate) fn streaming_aborted(state: &mut LoopState) -> Result<HandlerOutcome,
 /// 冻结签名下消息字段为借用形态（`&'a [AgentMessage]`），直接借用
 /// `state.conversation`（provider 调用期间对话不被修改，01 §2.4 步骤 5
 /// 才 commit 新消息）。
+///
+/// P1：调用前必须已执行 [ensure_tools_snapshot]（快照锁定）；tools 经
+/// 快照克隆填充 [ProviderRequest]（8 个内置工具，克隆成本可忽略；
+/// [ProviderRequest.tools] 冻结为 owned 形态，AU-04 F1 契约不变）。
+/// system_prompt 经 `as_deref()` 透传（P1 阶段 2 通路第三层），与 messages
+/// 同生命周期（`'a` 借用期，实现方在返回流前完成序列化）。
 fn build_request(state: &LoopState) -> ProviderRequest<'_> {
     ProviderRequest {
         messages: &state.conversation,
-        tools: tools_schema(state),
+        tools: tools_schema(state).to_vec(),
         max_tokens: Some(state.max_tokens),
+        system_prompt: state.options.system_prompt.as_deref(),
     }
 }
 
-/// 工具定义导出（注册表按注册序，供真实 provider 适配层构建请求体）
-fn tools_schema(state: &LoopState) -> Vec<ToolSchema> {
+/// 工具定义导出（P1：快照锁定——首次构建后缓存，不再每轮从注册表重建）
+///
+/// 注册表 run 内不可变（engine 级只读 `Arc<ToolRegistry>`，无运行时注册
+/// 路径），快照生命周期天然 = run 生命周期；工具循环轮次间复用同一快照
+/// 保证请求前缀字节稳定（对齐 jcode `locked_tools` / codex 固定流水线）。
+fn tools_schema(state: &LoopState) -> &[ToolSchema] {
     state
-        .tool_registry
-        .list_definitions()
-        .iter()
-        .map(ToolSchema::from_definition)
-        .collect()
+        .tools_snapshot
+        .as_deref()
+        .expect("build_request 前必须已构建工具快照（ensure_tools_snapshot）")
+}
+
+/// 构建工具快照（run 内一次；入口：streaming handler 首次 build_request 前）
+///
+/// 幂等：快照已存在时直接返回（不重建、不覆盖——锁定语义）；清理时机：
+/// run 收口不需要清理——每 run 重建 LoopState（engine 每 run new），测试
+/// 路径跨 run 复用同一 loop 时快照仍有效（注册表未变），语义正确。
+/// length 阶梯升级不影响 tools，快照无需重建。
+fn ensure_tools_snapshot(state: &mut LoopState) {
+    if state.tools_snapshot.is_none() {
+        state.tools_snapshot = Some(
+            state
+                .tool_registry
+                .list_definitions()
+                .iter()
+                .map(ToolSchema::from_definition)
+                .collect(),
+        );
+    }
 }
 
 /// 诊断事件透出（01 §2.4 步骤 4：provider-diagnostic）
@@ -341,6 +373,10 @@ fn build_assistant_message(
 ///
 /// PE-09 T09.3.2：`Arc::new` 一次后对话与 start/end 事件共享同一份消息
 /// 内存（0 深克隆；wire 逐字节不变）。
+///
+/// P1 不变量（append-only）：本函数是会话内 4 个追加点之一（assistant
+/// 收口路径）——只允许把新消息**追加到对话尾部**；改写既有消息破坏请求
+/// 前缀字节稳定性；压缩是唯一例外（P4 闸门）。
 fn commit_message_with_deltas(state: &mut LoopState, message: AgentMessage) {
     let session_id = state.machine.context().session_id.clone();
     let message = Arc::new(message);

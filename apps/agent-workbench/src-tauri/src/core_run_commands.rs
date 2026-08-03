@@ -1,4 +1,4 @@
-﻿//! run 生命周期命令桥（B6.1：core_run_task / core_run_control /
+//! run 生命周期命令桥（B6.1：core_run_task / core_run_control /
 //! core_cancel_run / core_approve_tool / core_deny_tool）
 //!
 //! 本模块同时承载：
@@ -29,6 +29,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use agent_provider::request::build_system_prompt;
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision as WireApprovalDecision, PermissionRequest,
     RunTerminalStatus,
@@ -914,7 +915,8 @@ fn active_run(state: &CoreRunState, run_id: &str) -> Result<Arc<ActiveRun>, Core
 /// 流程：门禁（restore 完成 + engine 就绪 + 会话内串行）→ start_run →
 /// EventQueue（base = 预热/懒计算 max+1，T08.8）→ 装配
 /// （approval 门 / BridgeDeltaSink / SessionLoopProducer）→ spawn
-/// [drive_run_loop]。
+/// [drive_run_loop]。system_prompt 入站经 build_system_prompt 规范化一次
+/// （P1 B1：trim + 空值 → None），全链透传原始。
 #[tauri::command]
 pub(crate) async fn core_run_task(
     state: tauri::State<'_, Arc<CoreRunState>>,
@@ -926,6 +928,7 @@ pub(crate) async fn core_run_task(
     permission_mode: Option<String>,
     client_message_id: Option<String>,
     assistant_client_message_id: Option<String>,
+    system_prompt: Option<String>,
 ) -> Result<RunTaskResponse, CoreError> {
     let state = Arc::clone(state.inner());
     // 参数校验（S-15：trim + 显式 InvalidInput）
@@ -1016,9 +1019,11 @@ pub(crate) async fn core_run_task(
     ));
 
     // 循环选项（cwd / assistant clientMessageId / 幂等；21-log §5.2 回补）
+    // P1 B1：systemPrompt 入站规范化一次（trim + 空值 → None），全链透传原始
     let options = SessionLoopOptions {
         cwd: cwd.clone(),
         assistant_client_message_id: assistant_client_message_id.clone(),
+        system_prompt: build_system_prompt(system_prompt),
         ..SessionLoopOptions::default()
     };
     let tool_options = ToolBatchOptions {

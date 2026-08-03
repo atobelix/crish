@@ -72,6 +72,10 @@ pub(crate) struct LoopState {
     pub(crate) options: SessionLoopOptions,
     /// 工具注册表（请求构建导出工具定义 + 供 ToolExecutor 使用）
     pub(crate) tool_registry: Arc<ToolRegistry>,
+    /// 工具 schema 快照（P1：run 内首次构建后锁定；注册表 run 内不可变，
+    /// 工具循环轮次间复用保证请求前缀字节稳定——tools 是请求前缀的一部分，
+    /// 每轮重建会随注册序漂移打爆缓存前缀）
+    pub(crate) tools_snapshot: Option<Vec<crate::provider::ToolSchema>>,
     /// length 阶梯当前 max_tokens（8192 → 16384 → 32768，01 §2.6 步骤 1）
     pub(crate) max_tokens: u32,
     /// length 阶梯已升级次数（上限 2）
@@ -103,6 +107,7 @@ impl LoopState {
             events: Vec::new(),
             options,
             tool_registry,
+            tools_snapshot: None,
             max_tokens: crate::r#loop::DEFAULT_MAX_TOKENS,
             length_upgrades: 0,
             transient_retries: 0,
@@ -147,6 +152,11 @@ pub(crate) fn dispatch(state: &mut LoopState, event: E) -> Result<(), LoopError>
 ///
 /// PE-09 T09.3.2：`Arc::new` 一次后对话与事件共享同一份消息内存
 /// （0 深克隆；serde 对 `Arc<T>` 按 `T` 序列化，wire 逐字节不变）。
+///
+/// P1 不变量（append-only）：本函数是会话内 4 个追加点之一（user / steering
+/// 消息入队消费路径）——只允许把新消息**追加到对话尾部**；改写 / 重排 /
+/// 删除既有消息会破坏请求前缀字节稳定性；压缩是唯一例外（P4 闸门，
+/// compaction 是唯一前缀重写点）。
 pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
     let session_id = state.machine.context().session_id.clone();
     let message = Arc::new(message);

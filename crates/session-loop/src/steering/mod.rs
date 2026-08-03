@@ -267,6 +267,10 @@ impl SteeringCoordinator {
     ///
     /// PE-09 T09.3.2：对话为 Arc 共享形态（steering 注入低频——预算上限 3，
     /// 不属 P3/P4 热路径，注入消息本身仍 2 次深克隆用于对话 + 事件两处）。
+    ///
+    /// P1 不变量（append-only）：`inject-message` 是会话内 4 个追加点之一
+    /// （steering 注入路径）——只允许把注入消息**追加到对话尾部**；改写
+    /// 既有消息破坏请求前缀字节稳定性；压缩是唯一例外（P4 闸门）。
     pub fn apply(
         &mut self,
         actions: &[SteeringAction],

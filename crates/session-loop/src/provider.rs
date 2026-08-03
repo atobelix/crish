@@ -78,6 +78,12 @@ pub struct ProviderRequest<'a> {
     pub tools: Vec<ToolSchema>,
     /// 本次调用 max_tokens（length 阶梯升级后透传）
     pub max_tokens: Option<u32>,
+    /// 系统提示词（P1 阶段 2：B1 四层通路的第三层，SessionLoopOptions.
+    /// system_prompt 经 build_request 以 `as_deref()` 透传）。
+    /// 属于请求静态前缀，run 内不可变；None = 不发送 system 消息，
+    /// 向后兼容（既有调用方构造不破坏）。实现方负责在返回流前完成
+    /// 序列化（与 messages 同生命周期，`'a` 借用期）。
+    pub system_prompt: Option<&'a str>,
 }
 
 /// 工具定义的最小消费面（真实适配层据此构建 provider 请求体）

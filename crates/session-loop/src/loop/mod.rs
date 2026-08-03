@@ -163,6 +163,11 @@ pub struct SessionLoopOptions {
     /// tool.pre / tool.post 广播）。with_options 派生同步到工具执行器
     /// （tool.pre / tool.post）与 turn-complete handler（turn.end）。
     pub hooks: Option<Arc<crate::hooks::HookRegistry>>,
+    /// 系统提示词（P1 阶段 2：system prompt 主路径透传，B1 四层通路第二层）。
+    /// 属于请求静态前缀的一部分，run 内不可变（B3 纪律：构造后整轮复用，
+    /// 任何 handler 不得在 run 中途改写）；None = 不发送 system 消息，
+    /// 向后兼容。壳层在装配 options 时经 build_system_prompt 规范化后存入。
+    pub system_prompt: Option<String>,
 }
 
 impl Default for SessionLoopOptions {
@@ -180,6 +185,7 @@ impl Default for SessionLoopOptions {
             idempotency_enabled: false,
             tool_middleware: Vec::new(),
             hooks: None,
+            system_prompt: None,
         }
     }
 }
@@ -315,6 +321,11 @@ impl AgentSessionLoop {
 
     /// 预置初始对话的**零拷贝**形态：直接接收 [RunOutcome::messages]
     /// （`Vec<Arc<AgentMessage>>`），续接不产生任何深拷贝。
+    ///
+    /// P1 不变量（append-only）：本函数是会话内 4 个追加点之一（水合入口，
+    /// P4 历史回流消费）——只在 `run()` 之前调用一次、一次生效，之后对话
+    /// 只增不改；改写既有消息破坏请求前缀字节稳定性；压缩是唯一例外
+    /// （P4 闸门）。
     pub fn with_initial_conversation_arc(mut self, messages: Vec<Arc<AgentMessage>>) -> Self {
         self.state.conversation = messages;
         self
@@ -573,6 +584,10 @@ mod tests {
         assert!(options.recovery_hook.is_none());
         assert!(options.cwd.is_none());
         assert!(options.assistant_client_message_id.is_none());
+        assert!(
+            options.system_prompt.is_none(),
+            "system_prompt 默认不发送（P1 阶段 2 透传字段）"
+        );
     }
 
     /// T06.4.4：with_options 派生状态同步——cwd 联动到工具执行上下文
