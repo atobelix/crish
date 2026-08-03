@@ -19,5 +19,8 @@ mod ttl;
 
 pub use behavior::{cache_behavior_for, infer_vendor, CacheBehavior, CacheTtl, VendorId};
 pub use cache_key::{derive_prompt_cache_key, session_affinity_headers};
-pub use catalog::{CatalogError, ModelCatalog, ModelCatalogEntry, ScannedCapabilities, ScannedModel};
+pub use catalog::{
+    CatalogError, ModelCatalog, ModelCatalogEntry, ModelCatalogFile, PeakPricingSchedule,
+    PriceDerivation, ScannedCapabilities, ScannedModel, TieredPriceTier,
+};
 pub use ttl::cache_ttl_for_provider_model;

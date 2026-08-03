@@ -1,6 +1,7 @@
 //! 模型级 TTL 路由表（P3 §3.5 E / T-21）
 //!
-//! - [CacheTtl]：缓存 TTL 三档。**定义在 behavior.rs（T-19 交付）**，本模块按
+//! - [CacheTtl]：缓存 TTL 四档（5m / 30m / 1h / 24h；v2 Schema 扩 "30m" 档承载
+//!   gpt-5.6 系）。**定义在 behavior.rs（T-19 交付）**，本模块按
 //!   T-19 的模块内约定 re-export（"TTL 路由表（T-21 models/ttl.rs）如需本类型
 //!   应 re-export 而非重定义，避免同 crate 两套同名枚举漂移"）；C3 裁决的
 //!   实质目标（单一类型、serde 值域 "5m"/"1h"/"24h"、与 P2 wire 桶
@@ -21,12 +22,13 @@ use super::behavior::VendorId;
 use super::catalog::ModelCatalog;
 
 impl CacheTtl {
-    /// 档位的目录/wire 值域字符串（"5m" / "1h" / "24h"，与 serde 值一致）。
+    /// 档位的目录/wire 值域字符串（"5m" / "30m" / "1h" / "24h"，与 serde 值一致）。
     /// T-19 在 behavior.rs 定义了枚举本体与 [CacheTtl::seconds]/[CacheTtl::parse]，
     /// `as_str` 按任务书契约在本模块补全（轮末合并时可并入 behavior.rs 本体）。
     pub fn as_str(self) -> &'static str {
         match self {
             CacheTtl::Short => "5m",
+            CacheTtl::HalfHour => "30m",
             CacheTtl::Hour => "1h",
             CacheTtl::Day => "24h",
         }
@@ -37,7 +39,7 @@ impl CacheTtl {
 ///
 /// 覆盖优先级：catalog 条目 `cache_ttl` > vendor 默认 > None。
 /// - catalog 为 None、条目未命中、或条目 `cache_ttl` 为 None 时回退 vendor 默认档；
-/// - catalog 条目 `cache_ttl` 值域为 "5m"/"1h"/"24h"（T-18 交付 `Option<String>`），
+/// - catalog 条目 `cache_ttl` 值域为 "5m"/"30m"/"1h"/"24h"（v2 四档），
 ///   无法识别的值防御性忽略并回退 vendor 默认档（[CacheTtl::parse] → None）；
 /// - Auto 与无缓存厂商 → None（永不预警，对齐 jcode copilot/cursor 返回 None
 ///   的"否则视为不支持"语义）。
@@ -89,11 +91,12 @@ fn vendor_default_ttl(vendor: VendorId, model: &str) -> Option<CacheTtl> {
 }
 
 /// OpenAI 默认档：Short；gpt-5.5 及更早扩展保留模型 → Day(24h)；
-/// **gpt-5.6 除外**（TTL 仅 30m，不入 24h 档，A1-11 / 00-catalog §2.1）。
+/// **gpt-5.6 除外**（TTL 仅 30m，不入 24h 档，A1-11 / 00-catalog §2.1）——
+/// v2 Schema 扩档后 30m 有明确档位（CacheTtl::HalfHour），不再按 5m 保守预警
+/// （03-catalog-v2-schema.md §5.2 要点，销账 ttl.rs:93-97 旧注释）。
 fn openai_default_ttl(model: &str) -> Option<CacheTtl> {
     if model.starts_with("gpt-5.6") {
-        // 30m 不在三档值域内（5m/1h/24h），保守按 5 分钟档预警
-        return Some(CacheTtl::Short);
+        return Some(CacheTtl::HalfHour);
     }
     if is_openai_extended_retention(model) {
         Some(CacheTtl::Day)
@@ -117,18 +120,25 @@ fn is_openai_extended_retention(model: &str) -> bool {
 mod tests {
     use super::*;
 
-    /// CacheTtl 契约：秒数（300/3600/86400）+ 值域字符串 + serde 往返
+    /// CacheTtl 契约：秒数（300/1800/3600/86400）+ 值域字符串 + serde 往返
     /// （枚举本体与 parse 由 T-19 behavior.rs 的 cache_ttl_serde_values_and_seconds
-    /// 测试钉死；本测试补 as_str 与反序列化往返）
+    /// 测试钉死；本测试补 as_str 与反序列化往返，含 v2 新增 30m 档）
     #[test]
     fn cache_ttl_buckets_seconds_and_serde_values() {
         assert_eq!(CacheTtl::Short.seconds(), 300);
+        assert_eq!(CacheTtl::HalfHour.seconds(), 1800);
         assert_eq!(CacheTtl::Hour.seconds(), 3600);
         assert_eq!(CacheTtl::Day.seconds(), 86400);
         assert_eq!(CacheTtl::Short.as_str(), "5m");
+        assert_eq!(CacheTtl::HalfHour.as_str(), "30m");
         assert_eq!(CacheTtl::Hour.as_str(), "1h");
         assert_eq!(CacheTtl::Day.as_str(), "24h");
-        for ttl in [CacheTtl::Short, CacheTtl::Hour, CacheTtl::Day] {
+        for ttl in [
+            CacheTtl::Short,
+            CacheTtl::HalfHour,
+            CacheTtl::Hour,
+            CacheTtl::Day,
+        ] {
             let json = serde_json::to_string(&ttl).expect("CacheTtl 必须可序列化");
             assert_eq!(json, format!("\"{}\"", ttl.as_str()));
             let roundtrip: CacheTtl = serde_json::from_str(&json).expect("必须可反序列化");
@@ -162,14 +172,15 @@ mod tests {
         assert_eq!(ttl(VendorId::Auto, "anything"), None);
     }
 
-    /// OpenAI 分档（A1-11）：gpt-5.5 及更早扩展保留 → Day；**gpt-5.6 除外**仅
-    /// 30m 不入 24h 档 → Short；其余 OpenAI 模型 → Short
+    /// OpenAI 分档（A1-11 / v2 Schema §5.2）：gpt-5.5 及更早扩展保留 → Day；
+    /// **gpt-5.6 仅 30m TTL** → HalfHour（v2 扩档后不再按 5m 保守预警）；其余
+    /// OpenAI 模型 → Short
     #[test]
-    fn openai_ttl_tiers_gpt55_day_gpt56_short() {
+    fn openai_ttl_tiers_gpt55_day_gpt56_half_hour() {
         let ttl = |model: &str| cache_ttl_for_provider_model(None, VendorId::Openai, model);
-        // gpt-5.6 及同族 → Short（不入 Day 档）
-        assert_eq!(ttl("gpt-5.6"), Some(CacheTtl::Short));
-        assert_eq!(ttl("gpt-5.6-mini"), Some(CacheTtl::Short));
+        // gpt-5.6 及同族 → HalfHour（30m 档）
+        assert_eq!(ttl("gpt-5.6"), Some(CacheTtl::HalfHour));
+        assert_eq!(ttl("gpt-5.6-mini"), Some(CacheTtl::HalfHour));
         // gpt-5.5 及更早扩展保留模型 → Day(24h)
         assert_eq!(ttl("gpt-5.5"), Some(CacheTtl::Day));
         assert_eq!(ttl("gpt-5.5-preview"), Some(CacheTtl::Day));
@@ -204,10 +215,11 @@ mod tests {
             cache_ttl_for_provider_model(Some(&catalog), VendorId::Openai, "gpt-5.5"),
             Some(CacheTtl::Day)
         );
-        // 目录条目无 cache_ttl（gpt-5.6）→ 回退 vendor 默认 Short（不入 Day 档）
+        // 目录条目无 cache_ttl（gpt-5.6）→ 回退 vendor 默认 HalfHour（30m 档，
+        // v2 扩档后不再按 5m 保守预警）
         assert_eq!(
             cache_ttl_for_provider_model(Some(&catalog), VendorId::Openai, "gpt-5.6"),
-            Some(CacheTtl::Short)
+            Some(CacheTtl::HalfHour)
         );
         // deepseek 条目 cacheTtl="5m" → Short（路径仍经目录解析）
         assert_eq!(

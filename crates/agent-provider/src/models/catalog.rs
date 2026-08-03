@@ -1,10 +1,14 @@
 //! 模型目录（Model Catalog）：内置静态表 + 多级兜底查询（P3 §3.1）
 //!
-//! - [ModelCatalogEntry]：一个 provider 通道下一个模型的完整元数据。字段集按
-//!   00-catalog §12.1 草案缩窄到实现层必须字段；全字段可缺省（struct 级
-//!   `#[serde(default)]`），缺字段条目可正常反序列化（对齐 A3 P2-10 裁决）。
+//! - [ModelCatalogEntry]：一个 provider 通道下一个模型的完整元数据，字段集 = v2
+//!   Schema 59 字段（docs/cache-optimization/10-model-catalog-v2/03-catalog-v2-schema.md）；
+//!   全字段可缺省（struct 级 `#[serde(default)]`），缺字段条目可正常反序列化
+//!   （对齐 A3 P2-10 裁决）；v1 旧 JSON（含 `maxInputTokens`/`longContext*` 遗留键）
+//!   由 serde 忽略未知键兼容解析。
 //! - [ModelCatalog]：内置表 + 版本号。[ModelCatalog::lookup] 按 litellm
-//!   `_get_model_info_helper` 顺序多级兜底：精确 → 去版本后缀 → vendor 默认 → None。
+//!   `_get_model_info_helper` 顺序多级兜底：精确 → 去版本后缀 → vendor 默认 → None；
+//!   v2 四价查询（`input_price_for` / `cache_write_price_for` 等）按 schema 语义
+//!   提供 None/0 显式语义。
 //!
 //! 本模块不依赖 request/parse 层；行为矩阵（T-19）、TTL 表（T-21）等上层只通过
 //! [ModelCatalog] 查询接口消费，禁止散落硬编码判定。
@@ -16,91 +20,140 @@ use thiserror::Error;
 
 /// 模型目录条目（一个 provider 通道下一个模型的完整元数据）
 ///
-/// 字段集按 00-catalog §12.1 草案缩窄；全部字段提供 Default（`#[serde(default)]`），
-/// 缺字段条目可解析（A3 P2-10 由测试钉死）。
+/// 字段集 = v2 Schema 59 字段（docs/cache-optimization/10-model-catalog-v2/
+/// 03-catalog-v2-schema.md §2 权威定义：标识 8 / 窗口 2 / 四指标价格 7 /
+/// 扩展价格 9 / 缓存语义 12 / 能力位 16 / 溯源与生命周期 7）。
+/// v1 遗留字段 `maxInputTokens` / `longContextThreshold` / `longContextInputPrice`
+/// 已从结构移除（03 §7.1 迁移表 #17/#18：长上下文档迁入 `tieredPricing`）；
+/// v1 旧 JSON 中的这些键由 serde 忽略，仍可正常解析（兼容不炸）。
+/// 全部字段提供 Default（`#[serde(default)]`），缺字段条目可解析（A3 P2-10 由测试钉死）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ModelCatalogEntry {
-    // ── 标识 ──
-    /// API 模型标识（唯一键，如 deepseek-v4-flash）
+    // ── 标识（A 组）──
+    /// 条目稳定唯一 ID（缺省派生 vendor::model；跨源合并锚点 / 前端费率表键）
+    pub id: Option<String>,
+    /// 目录内模型标识（顶层键 vendor::model 组成部分，如 deepseek-v4-flash）
     pub model: String,
-    /// 通道/网关标识（dashscope / volcengine / qianfan；直连 = 官方厂商名）
+    /// API 真实请求标识（点号异形，如 qwen3.7-max；缺省 = model）
+    pub api_model: Option<String>,
+    /// 通道/网关标识（dashscope / volcengine / qianfan / bigmodel / zai；直连 = 官方厂商名）
     pub provider: String,
     /// 官方厂商（转售场景区分通道价与官方直连价；决定缓存行为矩阵取哪个 vendor）
     pub vendor: String,
     /// 协议模式："chat" | "responses" | "both"
     pub mode: Option<String>,
-    /// 计价币种：USD / CNY（转售价多为 CNY，00-catalog §12.1）
+    /// 计价币种：USD / CNY（必填语义由校验层钉死，禁止隐式）
     pub currency: Option<String>,
-    /// 计价单位（per_1M）
+    /// 计价单位（v2 唯一值 "per_1M"）
     pub unit: Option<String>,
 
-    // ── 窗口 ──
+    // ── 窗口（B 组）──
     /// 输入上下文窗口（token）
     pub context_window: Option<u64>,
-    pub max_input_tokens: Option<u64>,
+    /// 输出上限（token）
     pub max_output_tokens: Option<u64>,
 
-    // ── 价格（P3 只建模不计算；P5 成本计算消费）──
-    /// 未缓存输入价（per_1M）
+    // ── 四指标价格（C 组；全部 per_1M）──
+    /// 未缓存输入价
     pub input_price: Option<f64>,
+    /// 输出价
     pub output_price: Option<f64>,
-    /// 缓存命中价（read/refresh，per_1M）
+    /// 缓存命中价（read/refresh）
     pub cache_read_price: Option<f64>,
-    /// 通用缓存写入价（OpenAI GPT-5.6+ 1.25x 口径）
+    /// 通用缓存写入价（写免费 = 0 + cache_write_free = true；null = 未收录）
     pub cache_write_price: Option<f64>,
     /// Anthropic 系 5m TTL 写入价
     pub cache_write_price_5m: Option<f64>,
-    /// Anthropic 系 1h TTL 写入价（无则省略）
+    /// Anthropic 系 1h TTL 写入价（above_1hr；MiniMax 1h 窗口语义不落此字段）
     pub cache_write_price_1h: Option<f64>,
-    /// 缓存存储费（$/1M·h 或 ¥/1M·h，Gemini / 方舟有值）
+    /// 写免费显式位（true 时 cache_write_price 必须为 0 或 null；false = 有写价或未收录）
+    pub cache_write_free: bool,
+
+    // ── 扩展价格（D 组）──
+    /// 缓存存储费（/1M·h，小时计时；免费档 = 0）
     pub storage_price_per_1m_hour: Option<f64>,
-    /// 长上下文价格阈值（Grok 200K / Gemini 3.1 Pro 200K）
-    pub long_context_threshold: Option<u64>,
-    pub long_context_input_price: Option<f64>,
+    /// 存储费限时免费到期日（YYYY-MM-DD）
+    pub storage_price_free_until: Option<String>,
+    /// 推理 token 计价（models.dev cost.reasoning；P5 成本域消费）
+    pub reasoning_price: Option<f64>,
+    /// 价格形态："official" | "derived" | "unavailable"（缺省 official）
+    pub price_status: Option<String>,
+    /// 推导标注（price_status = "derived" 时必填）
+    pub derivation: Option<PriceDerivation>,
     /// DeepSeek 峰谷定价标记（北京 9:00-12:00 / 14:00-18:00 2 倍，生效日期待官方公告）
     pub peak_pricing_2x: bool,
+    /// 峰谷时段与生效日期
+    pub peak_pricing_schedule: Option<PeakPricingSchedule>,
+    /// 长度分档（基础四价 + 增量档；长上下文 2x 档 = minTokens 单边档；
+    /// v1 longContextThreshold/longContextInputPrice 迁移目标）
+    pub tiered_pricing: Option<Vec<TieredPriceTier>>,
 
-    // ── 缓存语义 ──
+    // ── 缓存语义（E 组）──
     /// 最低可缓存前缀（Anthropic 512~4096 / Kimi 256 / MiniMax 512 …；缺省由
     /// [ModelCatalog::prompt_cache_min_tokens_for] 回退 1024，对齐 litellm 默认值）
     pub prompt_cache_min_tokens: Option<u64>,
-    /// 缓存类型："automatic" | "explicit" | "both" | "none"
+    /// 缓存类型："auto" | "explicit" | "key" | "both" | "none"
+    /// （v2 值域：v1 "automatic" 更名 "auto"；旧 JSON 的 "automatic" 仍可解析）
     pub cache_type: Option<String>,
-    /// 缓存机制："prefix" | "similarity" | "disk_unit" | "session"
+    /// 缓存机制："prefix" | "similarity" | "disk_unit" | "session" | "key"
     pub cache_mechanism: Option<String>,
+    /// 是否参与任何形式缓存（behavior.rs 与 TTL 路由的开关位）
+    pub supports_prompt_caching: bool,
+    /// 自动隐式缓存能力（OpenRouter endpoints 语义；缺省 = 与 cacheType ∈ {auto, both} 推断一致）
+    pub supports_implicit_caching: bool,
+    /// prompt_cache_key 请求字段支持（behavior.rs supports_prompt_cache_key 的模型级覆盖来源）
+    pub supports_prompt_cache_key: bool,
     /// 是否支持 Anthropic 式 cache_control 断点
     pub supports_cache_control: bool,
-    /// 是否参与任何形式缓存
-    pub supports_prompt_caching: bool,
     /// 断点上限（Anthropic/MiniMax 4、百炼 4）
     pub breakpoint_max: Option<u8>,
     /// 回溯窗口（Anthropic/百炼 20）
     pub lookback_blocks: Option<u16>,
-    /// 模型级 TTL（值域 "5m" / "1h" / "24h"，对齐 00-catalog §12.1；
+    /// 模型级 TTL（值域 "5m" / "30m" / "1h" / "24h"；v2 扩 "30m" 档承载 gpt-5.6 系；
     /// T-21 ttl.rs 消费时映射为其 CacheTtl 枚举）
     pub cache_ttl: Option<String>,
-    /// 旧轨模型写免费（OpenAI 旧模型/Kimi/DeepSeek）
-    pub cache_write_free: bool,
+    /// 可选 TTL 档位（Anthropic ["5m","1h"]；缺省 = [cacheTtl]）
+    pub cache_ttl_options: Option<Vec<String>>,
 
-    // ── 协议/能力位 ──
+    // ── 能力位（F 组，缺省 false = 保守关闭）──
     /// Responses API 支持（DeepSeek 仅 v4-flash；engine.rs provider_url 判定用）
     pub supports_responses: bool,
     pub supports_reasoning: bool,
     /// 是否接受 reasoning_effort 参数（OpenAI/DeepSeek/Qwen/GLM/Kimi 原生格式）
     pub supports_reasoning_effort: bool,
+    /// effort 档位白名单（qwen3.8-max ["low","medium","xhigh"]）
+    pub reasoning_effort_tiers: Option<Vec<String>>,
     pub supports_vision: bool,
     pub supports_function_calling: bool,
     pub supports_parallel_function_calling: bool,
     pub supports_system_messages: bool,
     pub supports_response_schema: bool,
+    pub supports_tool_choice: bool,
+    pub supports_web_search: bool,
+    pub supports_audio_input: bool,
+    pub supports_audio_output: bool,
+    pub supports_pdf_input: bool,
+    pub supports_assistant_prefill: bool,
+    pub supports_computer_use: bool,
 
-    // ── 溯源 ──
-    pub deprecation_date: Option<String>,
-    /// 条目数据来源（00-catalog 各节 URL）
+    // ── 溯源与生命周期（G 组）──
+    /// 条目数据来源 URL（远程源条目 = 远程源 URL）
     pub source_url: Option<String>,
-    /// 条目核实日期（00-catalog 数据获取日期 2026-08-02）
+    /// 条目核实日期（YYYY-MM-DD）
     pub data_verified_at: Option<String>,
+    /// 数据口径标注："static" | "official" | "channel" | "remote:models.dev" |
+    /// "remote:openrouter" | "derived" | "litellm-copy"
+    pub data_source: Option<String>,
+    /// 自由备注（口径差异、参考值来源、未实测项、待复核项）
+    pub notes: Option<String>,
+    /// 促销价到期日（YYYY-MM-DD）
+    pub promo_expires_at: Option<String>,
+    /// 促销到期后的替代价行日期
+    pub promo_replaces_at: Option<String>,
+    /// 退役标记
+    pub retired: bool,
+    pub deprecation_date: Option<String>,
 }
 
 impl ModelCatalogEntry {
@@ -108,6 +161,71 @@ impl ModelCatalogEntry {
     fn key(vendor: &str, model: &str) -> String {
         format!("{vendor}::{model}")
     }
+}
+
+/// 长度分档（v2 Schema §3.1；对齐 litellm `tiered_pricing` 的 `range: [min, max)`
+/// 半开区间；只写 `minTokens` 的档 = 长上下文档 2x 档）
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TieredPriceTier {
+    /// 输入长度下界（半开区间下界，含）
+    pub min_tokens: u64,
+    /// 输入长度上界（半开区间上界，不含）；null = 无上界（长上下文档档）
+    pub max_tokens: Option<u64>,
+    /// 输出长度组合约束下界（null = 无约束）
+    pub min_output_tokens: Option<u64>,
+    /// 输出长度组合约束上界（null = 无约束）
+    pub max_output_tokens: Option<u64>,
+    /// 档内输入价（null = 沿用基础四价）
+    pub input_price: Option<f64>,
+    /// 档内输出价（null = 沿用基础四价）
+    pub output_price: Option<f64>,
+    /// 档内缓存命中价（null = 沿用基础四价）
+    pub cache_read_price: Option<f64>,
+    /// 档内通用写价（null = 沿用基础四价）
+    pub cache_write_price: Option<f64>,
+}
+
+/// 推导标注（v2 Schema §3.2；`priceStatus = "derived"` 时必填）
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PriceDerivation {
+    /// 推导依据文字说明（必填）
+    pub note: String,
+    /// 显式命中比例（qwen 0.1）
+    pub cache_read_factor: Option<f64>,
+    /// 显式创建比例（qwen 1.25）
+    pub cache_write_factor: Option<f64>,
+    /// 隐式命中比例（qwen 0.2；目录不存隐式绝对价，供 P5 按比例折算）
+    pub implicit_cache_read_factor: Option<f64>,
+}
+
+/// 峰谷时段（v2 Schema §3.3；`peakPricing2x = true` 时条件必填）
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PeakPricingSchedule {
+    /// 峰谷时段窗口（如 ["09:00-12:00", "14:00-18:00"]）
+    pub windows: Vec<String>,
+    /// 时区（Asia/Shanghai）
+    pub tz: String,
+    /// 峰谷生效日期（YYYY-MM-DD | null = 待官方公告）
+    pub effective_from: Option<String>,
+    pub note: Option<String>,
+}
+
+/// v2 文件级包装（v2 Schema §3.4；`version` 与 [ModelCatalog::version] 同语义，
+/// 远程合并 / 覆盖回写后 +1）
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelCatalogFile {
+    /// 文件版本号（内置静态表起始 0）
+    pub version: u64,
+    /// 字段集版本（"2.0"，防止旧消费方误解析新字段集）
+    pub schema: String,
+    /// 文件级更新时间（YYYY-MM-DD）
+    pub updated_at: Option<String>,
+    /// 条目映射（键 = vendor::model）
+    pub entries: BTreeMap<String, ModelCatalogEntry>,
 }
 
 /// 扫描模型能力位猜测（前端 `ModelCapabilityKey` 三键 → supports_* 映射面；T-24/T-25）
@@ -159,9 +277,10 @@ pub enum CatalogError {
 #[derive(Debug, Clone)]
 pub struct ModelCatalog {
     /// 键 = "{vendor}::{model}"（同模型多通道按 provider 区分）
-    entries: BTreeMap<String, ModelCatalogEntry>,
+    /// （pub(crate)：request/cache.rs 等消费方单测需构造独立目录验证档位语义）
+    pub(crate) entries: BTreeMap<String, ModelCatalogEntry>,
     /// 单调递增版本号（对齐 litellm `_model_cost_mutation_generation`；下游 memoize 失效键）
-    version: u64,
+    pub(crate) version: u64,
 }
 
 impl ModelCatalog {
@@ -227,6 +346,68 @@ impl ModelCatalog {
     pub fn supports_responses_for(&self, vendor: &str, model: &str) -> bool {
         self.lookup(vendor, model)
             .is_some_and(|entry| entry.supports_responses)
+    }
+
+    // ===== v2 四价查询（v2 Schema §2 C/D 组语义；全部 Option，缺失 = 未收录）=====
+
+    /// 便捷：未缓存输入价（per_1M）
+    pub fn input_price_for(&self, vendor: &str, model: &str) -> Option<f64> {
+        self.lookup(vendor, model).and_then(|entry| entry.input_price)
+    }
+
+    /// 便捷：输出价（per_1M）
+    pub fn output_price_for(&self, vendor: &str, model: &str) -> Option<f64> {
+        self.lookup(vendor, model).and_then(|entry| entry.output_price)
+    }
+
+    /// 便捷：缓存命中价（per_1M）
+    pub fn cache_read_price_for(&self, vendor: &str, model: &str) -> Option<f64> {
+        self.lookup(vendor, model).and_then(|entry| entry.cache_read_price)
+    }
+
+    /// 便捷：通用写价（per_1M）。语义 = 条目 `cacheWritePrice`；Anthropic 系无
+    /// 通用写价只有 5m/1h 双档时兜底 `cacheWritePrice5m`（对齐前端费率表
+    /// `writePerMTok` 规则：cacheWritePrice ?? cacheWritePrice5m ?? 0，03 §8.2）。
+    pub fn cache_write_price_for(&self, vendor: &str, model: &str) -> Option<f64> {
+        self.lookup(vendor, model).and_then(|entry| {
+            entry
+                .cache_write_price
+                .or(entry.cache_write_price_5m)
+        })
+    }
+
+    /// 便捷：Anthropic 5m 档写价（per_1M）
+    pub fn cache_write_price_5m_for(&self, vendor: &str, model: &str) -> Option<f64> {
+        self.lookup(vendor, model).and_then(|entry| entry.cache_write_price_5m)
+    }
+
+    /// 便捷：Anthropic 1h 档写价（per_1M）
+    pub fn cache_write_price_1h_for(&self, vendor: &str, model: &str) -> Option<f64> {
+        self.lookup(vendor, model).and_then(|entry| entry.cache_write_price_1h)
+    }
+
+    /// 便捷：写免费显式位（v2 三态语义：true = 写免费；false = 有写价或未收录；
+    /// 未知模型保守 false）
+    pub fn cache_write_free_for(&self, vendor: &str, model: &str) -> bool {
+        self.lookup(vendor, model).is_some_and(|entry| entry.cache_write_free)
+    }
+
+    /// 便捷：计价币种（USD / CNY；未知模型 = None，禁止隐式 USD）
+    pub fn currency_for(&self, vendor: &str, model: &str) -> Option<&str> {
+        self.lookup(vendor, model)
+            .and_then(|entry| entry.currency.as_deref())
+    }
+
+    /// 便捷：缓存存储费（/1M·h；免费档 = 0，未收录 = None）
+    pub fn storage_price_per_1m_hour_for(&self, vendor: &str, model: &str) -> Option<f64> {
+        self.lookup(vendor, model)
+            .and_then(|entry| entry.storage_price_per_1m_hour)
+    }
+
+    /// 便捷：价格形态（"official" | "derived" | "unavailable"；缺省 = official）
+    pub fn price_status_for(&self, vendor: &str, model: &str) -> Option<&str> {
+        self.lookup(vendor, model)
+            .and_then(|entry| entry.price_status.as_deref())
     }
 
     // ===== T-24：运行时合并与覆盖（P3 §3.1.3 优先级 2/3，任何变更 version +1）=====
@@ -409,9 +590,6 @@ impl ModelCatalog {
         if let Some(value) = patch.storage_price_per_1m_hour {
             entry.storage_price_per_1m_hour = Some(value);
         }
-        if let Some(value) = patch.long_context_input_price {
-            entry.long_context_input_price = Some(value);
-        }
         if let Some(value) = patch.prompt_cache_min_tokens {
             entry.prompt_cache_min_tokens = Some(value);
         }
@@ -428,6 +606,7 @@ impl ModelCatalog {
 /// 覆盖白名单（camelCase 键，与 [ModelCatalogEntry] serde 键一致）：
 /// 窗口 / 输出上限 / 价格族 / 最低可缓存前缀。
 /// 禁覆盖键 model / provider / vendor 不在此列——身份键只用于定位，值必须与目标条目一致。
+/// v1 遗留 `longContextInputPrice` 随结构移除（v2 迁入 tieredPricing，03 §7.1）。
 const OVERRIDE_WHITELIST: &[&str] = &[
     "contextWindow",
     "maxOutputTokens",
@@ -438,7 +617,6 @@ const OVERRIDE_WHITELIST: &[&str] = &[
     "cacheWritePrice5m",
     "cacheWritePrice1h",
     "storagePricePer1mHour",
-    "longContextInputPrice",
     "promptCacheMinTokens",
 ];
 
@@ -916,7 +1094,7 @@ mod tests {
         let catalog = ModelCatalog::bundled();
         let snapshot = catalog.entries_snapshot();
         assert_eq!(snapshot.len(), catalog.entries.len());
-        let mut keys: Vec<String> = snapshot
+        let keys: Vec<String> = snapshot
             .iter()
             .map(|e| ModelCatalogEntry::key(&e.vendor, &e.model))
             .collect();
@@ -928,5 +1106,285 @@ mod tests {
             .find(|e| e.model == "deepseek-v4-flash")
             .unwrap();
         assert_eq!(flash.input_price, Some(0.14));
+    }
+
+    // ===== v2 Schema（R3）：serde 往返 / v1 兼容 / 四价查询 =====
+
+    /// v2 结构 serde 往返：四价 + currency + 写免费三态 + 1h 档 + 存储费 +
+    /// tieredPricing + derivation + 能力位齐全
+    #[test]
+    fn v2_entry_serde_roundtrip_full_fields() {
+        // 用原始字符串而非 json! 宏（59 字段嵌套超过宏递归上限）
+        let raw = r#"{
+            "id": "glm-5v-turbo",
+            "model": "glm-5v-turbo",
+            "apiModel": "glm-5v-turbo",
+            "provider": "bigmodel",
+            "vendor": "glm",
+            "mode": "chat",
+            "currency": "CNY",
+            "unit": "per_1M",
+            "contextWindow": 200000,
+            "maxOutputTokens": 131072,
+            "inputPrice": 5.0,
+            "outputPrice": 22.0,
+            "cacheReadPrice": 1.2,
+            "cacheWritePrice": 0.0,
+            "cacheWriteFree": true,
+            "storagePricePer1mHour": 0.0,
+            "storagePriceFreeUntil": "2026-08-31",
+            "reasoningPrice": 22.0,
+            "priceStatus": "derived",
+            "derivation": {
+                "note": "官方仅公布比例",
+                "cacheReadFactor": 0.1,
+                "cacheWriteFactor": 1.25,
+                "implicitCacheReadFactor": 0.2
+            },
+            "peakPricing2x": false,
+            "peakPricingSchedule": {
+                "windows": ["09:00-12:00"],
+                "tz": "Asia/Shanghai",
+                "effectiveFrom": null,
+                "note": "待公告"
+            },
+            "tieredPricing": [
+                {
+                    "minTokens": 32000,
+                    "maxTokens": null,
+                    "inputPrice": 7.0,
+                    "outputPrice": 26.0,
+                    "cacheReadPrice": 1.8,
+                    "cacheWritePrice": null
+                }
+            ],
+            "promptCacheMinTokens": 512,
+            "cacheType": "auto",
+            "cacheMechanism": "similarity",
+            "supportsPromptCaching": true,
+            "supportsImplicitCaching": true,
+            "supportsPromptCacheKey": false,
+            "supportsCacheControl": false,
+            "breakpointMax": 4,
+            "lookbackBlocks": 20,
+            "cacheTtl": "5m",
+            "cacheTtlOptions": ["5m", "1h"],
+            "supportsResponses": true,
+            "supportsReasoning": true,
+            "supportsReasoningEffort": true,
+            "reasoningEffortTiers": ["low", "medium", "xhigh"],
+            "supportsVision": true,
+            "supportsToolChoice": true,
+            "supportsWebSearch": false,
+            "supportsAudioInput": false,
+            "supportsAudioOutput": false,
+            "supportsPdfInput": true,
+            "supportsAssistantPrefill": false,
+            "supportsComputerUse": false,
+            "sourceUrl": "https://open.bigmodel.cn/pricing",
+            "dataVerifiedAt": "2026-08-03",
+            "dataSource": "official",
+            "notes": "测试条目",
+            "promoExpiresAt": "2026-08-31",
+            "promoReplacesAt": "2026-09-01",
+            "retired": false,
+            "deprecationDate": null
+        }"#;
+        let entry: ModelCatalogEntry =
+            serde_json::from_str(raw).expect("v2 全字段条目必须可解析");
+        // 标识 / 窗口
+        assert_eq!(entry.id.as_deref(), Some("glm-5v-turbo"));
+        assert_eq!(entry.api_model.as_deref(), Some("glm-5v-turbo"));
+        assert_eq!(entry.currency.as_deref(), Some("CNY"));
+        assert_eq!(entry.context_window, Some(200_000));
+        assert_eq!(entry.max_output_tokens, Some(131_072));
+        // 四价 + 三态（写免费 = 0 + true）
+        assert_eq!(entry.input_price, Some(5.0));
+        assert_eq!(entry.output_price, Some(22.0));
+        assert_eq!(entry.cache_read_price, Some(1.2));
+        assert_eq!(entry.cache_write_price, Some(0.0));
+        assert!(entry.cache_write_free);
+        // 扩展价格：存储费 / 推导 / 峰谷 / 长度分档
+        assert_eq!(entry.storage_price_per_1m_hour, Some(0.0));
+        assert_eq!(entry.storage_price_free_until.as_deref(), Some("2026-08-31"));
+        assert_eq!(entry.price_status.as_deref(), Some("derived"));
+        let derivation = entry.derivation.as_ref().expect("derivation 必须存在");
+        assert_eq!(derivation.cache_read_factor, Some(0.1));
+        assert_eq!(derivation.cache_write_factor, Some(1.25));
+        assert_eq!(derivation.implicit_cache_read_factor, Some(0.2));
+        let schedule = entry.peak_pricing_schedule.as_ref().expect("峰谷时段必须存在");
+        assert_eq!(schedule.windows, vec!["09:00-12:00".to_string()]);
+        let tiers = entry.tiered_pricing.as_ref().expect("tieredPricing 必须存在");
+        assert_eq!(tiers.len(), 1);
+        assert_eq!(tiers[0].min_tokens, 32_000);
+        assert_eq!(tiers[0].max_tokens, None);
+        assert_eq!(tiers[0].input_price, Some(7.0));
+        assert_eq!(tiers[0].cache_write_price, None);
+        // 缓存语义 / 能力位
+        assert_eq!(entry.cache_type.as_deref(), Some("auto"));
+        assert!(entry.supports_implicit_caching);
+        assert!(entry.supports_prompt_caching);
+        assert_eq!(
+            entry.cache_ttl_options.as_deref(),
+            Some(&["5m".to_string(), "1h".to_string()][..])
+        );
+        assert_eq!(
+            entry.reasoning_effort_tiers.as_deref(),
+            Some(&["low".to_string(), "medium".to_string(), "xhigh".to_string()][..])
+        );
+        assert!(entry.supports_pdf_input);
+        assert_eq!(entry.data_source.as_deref(), Some("official"));
+        assert_eq!(entry.promo_expires_at.as_deref(), Some("2026-08-31"));
+        // 往返：序列化后重新解析必须一致（含嵌套结构）
+        let serialized = serde_json::to_string(&entry).expect("必须可序列化");
+        let reparsed: ModelCatalogEntry =
+            serde_json::from_str(&serialized).expect("往返必须可解析");
+        assert_eq!(reparsed, entry);
+    }
+
+    /// 写价三态之二：有写价（n>0 + free=false）与未收录（null + free=false）
+    /// 在 serde 层可区分
+    #[test]
+    fn v2_entry_write_price_three_states_serde() {
+        let with_price: ModelCatalogEntry = serde_json::from_value(serde_json::json!({
+            "model": "x", "provider": "p", "vendor": "v",
+            "cacheWritePrice": 6.25, "cacheWriteFree": false,
+        }))
+        .expect("有写价条目可解析");
+        assert_eq!(with_price.cache_write_price, Some(6.25));
+        assert!(!with_price.cache_write_free);
+
+        let not_collected: ModelCatalogEntry = serde_json::from_value(serde_json::json!({
+            "model": "x", "provider": "p", "vendor": "v",
+            "cacheWritePrice": null, "cacheWriteFree": false,
+            "priceStatus": "unavailable",
+        }))
+        .expect("未收录条目可解析");
+        assert_eq!(not_collected.cache_write_price, None);
+        assert!(!not_collected.cache_write_free);
+        assert_eq!(not_collected.price_status.as_deref(), Some("unavailable"));
+    }
+
+    /// v1 旧 JSON 兼容解析：v1 特有键（maxInputTokens / longContextThreshold /
+    /// longContextInputPrice）与 v1 值域（cacheType "automatic"）不炸，且
+    /// 序列化往返不产生 v1 遗留键
+    #[test]
+    fn v1_legacy_json_parses_without_error_and_drops_legacy_fields() {
+        let v1 = serde_json::json!({
+            "model": "grok-4.5",
+            "provider": "grok",
+            "vendor": "grok",
+            "mode": "both",
+            "currency": "USD",
+            "unit": "per_1M",
+            "contextWindow": 1000000,
+            "maxInputTokens": 256000,
+            "maxOutputTokens": 32768,
+            "inputPrice": 2.0,
+            "outputPrice": 8.0,
+            "cacheReadPrice": 0.2,
+            "cacheWritePrice": 0.0,
+            "cacheWriteFree": true,
+            "longContextThreshold": 200000,
+            "longContextInputPrice": 4.0,
+            "promptCacheMinTokens": 1024,
+            "cacheType": "automatic",
+            "cacheMechanism": "prefix",
+            "supportsCacheControl": false,
+            "supportsPromptCaching": true,
+            "cacheTtl": "5m",
+            "supportsResponses": true,
+            "supportsReasoning": true,
+            "sourceUrl": "https://docs.x.ai/docs/models",
+            "dataVerifiedAt": "2026-08-02"
+        });
+        let entry: ModelCatalogEntry =
+            serde_json::from_value(v1).expect("v1 旧 JSON 必须兼容解析（serde default 兜底）");
+        assert_eq!(entry.model, "grok-4.5");
+        assert_eq!(entry.context_window, Some(1_000_000));
+        assert_eq!(entry.max_output_tokens, Some(32_768));
+        assert_eq!(entry.cache_write_price, Some(0.0));
+        assert!(entry.cache_write_free);
+        // v1 值域 cacheType 原样保留（消费侧 behavior.rs 同时匹配 automatic/auto）
+        assert_eq!(entry.cache_type.as_deref(), Some("automatic"));
+        assert_eq!(entry.cache_ttl.as_deref(), Some("5m"));
+        // 序列化往返：v1 遗留键已从结构移除 → 不再出现
+        let serialized = serde_json::to_string(&entry).expect("必须可序列化");
+        assert!(!serialized.contains("maxInputTokens"));
+        assert!(!serialized.contains("longContextThreshold"));
+        assert!(!serialized.contains("longContextInputPrice"));
+    }
+
+    /// v2 文件级包装 ModelCatalogFile serde 往返（version / schema / updatedAt / entries）
+    #[test]
+    fn v2_file_wrapper_serde_roundtrip() {
+        let file = ModelCatalogFile {
+            version: 0,
+            schema: "2.0".to_string(),
+            updated_at: Some("2026-08-03".to_string()),
+            entries: BTreeMap::from([(
+                "acme::x".to_string(),
+                ModelCatalogEntry {
+                    model: "x".to_string(),
+                    provider: "acme".to_string(),
+                    vendor: "acme".to_string(),
+                    currency: Some("USD".to_string()),
+                    ..Default::default()
+                },
+            )]),
+        };
+        let serialized = serde_json::to_string(&file).expect("文件包装必须可序列化");
+        let reparsed: ModelCatalogFile =
+            serde_json::from_str(&serialized).expect("文件包装必须可反序列化");
+        assert_eq!(reparsed, file);
+        assert_eq!(reparsed.schema, "2.0");
+        assert_eq!(reparsed.entries.len(), 1);
+    }
+
+    /// v2 四价查询：内置 v1 数据命中（Anthropic 双档写价兜底）与未知模型
+    /// None/保守 false 语义
+    #[test]
+    fn v2_price_queries_hit_bundled_and_default_to_none_or_false() {
+        let catalog = ModelCatalog::bundled();
+        // 基础四价命中
+        assert_eq!(catalog.input_price_for("deepseek", "deepseek-v4-flash"), Some(0.14));
+        assert_eq!(catalog.output_price_for("deepseek", "deepseek-v4-flash"), Some(0.28));
+        assert_eq!(
+            catalog.cache_read_price_for("deepseek", "deepseek-v4-flash"),
+            Some(0.0028)
+        );
+        // 写价：DeepSeek 显式 0 + free；Anthropic 无通用写价 → 兜底 5m 档
+        assert_eq!(
+            catalog.cache_write_price_for("deepseek", "deepseek-v4-flash"),
+            Some(0.0)
+        );
+        assert!(catalog.cache_write_free_for("deepseek", "deepseek-v4-flash"));
+        assert_eq!(
+            catalog.cache_write_price_for("anthropic", "claude-fable-5"),
+            Some(12.5)
+        );
+        assert_eq!(
+            catalog.cache_write_price_5m_for("anthropic", "claude-fable-5"),
+            Some(12.5)
+        );
+        assert_eq!(
+            catalog.cache_write_price_1h_for("anthropic", "claude-fable-5"),
+            Some(20.0)
+        );
+        // 币种 / 存储费 / 价格形态（v1 数据未标 priceStatus → 缺省 official 不返回）
+        assert_eq!(catalog.currency_for("kimi", "kimi-k3"), Some("CNY"));
+        assert_eq!(catalog.currency_for("anthropic", "claude-sonnet-5"), Some("USD"));
+        assert_eq!(
+            catalog.storage_price_per_1m_hour_for("gemini", "gemini-3-1-pro"),
+            Some(4.5)
+        );
+        assert_eq!(catalog.price_status_for("deepseek", "deepseek-v4-flash"), None);
+        // 未知模型：价格 None、币种 None、写免费保守 false
+        assert_eq!(catalog.input_price_for("nobody", "whatever"), None);
+        assert_eq!(catalog.cache_write_price_for("nobody", "whatever"), None);
+        assert_eq!(catalog.currency_for("nobody", "whatever"), None);
+        assert!(!catalog.cache_write_free_for("nobody", "whatever"));
+        // 非写免费模型（有写价 n>0）显式 false
+        assert!(!catalog.cache_write_free_for("qwen", "qwen3-max"));
     }
 }

@@ -5,6 +5,10 @@
 //! - [reasoning_effort_headers]：anthropic-beta 头（仅 vendor=anthropic 且 effort 非 off/auto，§五 #3）
 //! - thinkingIntensity 透传（01 D5）：能力推断 → 归一化 → vendor 原生参数
 //!   （resolveThinkingParams，对齐 `shared:thinking-intensity.ts` 单一真源）
+//! - G7 自适应思考（模型目录 v2）：Opus 4.7+ / Sonnet 5+（含 Fable/Mythos 5 与
+//!   SAP 倒置形态）按模型系列前缀切 `thinking{type:"adaptive",display:"summarized"}`
+//!   + 顶层 `effort`；display 强制 summarized 保证思考摘要存活——新版默认 omitted
+//!   会吐空 thinking 块，块内容漂移破坏缓存前缀（对齐 opencode transform.ts:791-794）
 
 use serde_json::{json, Value};
 
@@ -52,6 +56,8 @@ pub enum ReasoningEffort {
     Medium,
     High,
     Xhigh,
+    /// 最高档位（Opus 4.7+/Sonnet 5+ 自适应思考、DeepSeek/Kimi 官方语义均含）
+    Max,
 }
 
 impl ReasoningEffort {
@@ -64,6 +70,7 @@ impl ReasoningEffort {
             Self::Medium => "medium",
             Self::High => "high",
             Self::Xhigh => "xhigh",
+            Self::Max => "max",
         }
     }
 }
@@ -92,6 +99,8 @@ pub enum ThinkingIntensity {
     High,
     /// 仅 Anthropic 系支持（OpenAI/Gemini 降级为 high）
     Xhigh,
+    /// 最高档位（Anthropic 自适应思考；OpenAI/Gemini 降级为 high）
+    Max,
 }
 
 impl ThinkingIntensity {
@@ -103,6 +112,7 @@ impl ThinkingIntensity {
             Self::Medium => "medium",
             Self::High => "high",
             Self::Xhigh => "xhigh",
+            Self::Max => "max",
         }
     }
 }
@@ -114,6 +124,9 @@ pub enum ReasoningFormat {
     ReasoningEffort,
     /// Anthropic：thinking.budget_tokens
     ThinkingBudget,
+    /// Anthropic 自适应思考（Opus 4.7+ 等新代际）：
+    /// thinking{type:"adaptive",display:"summarized"} + 顶层 effort
+    ThinkingAdaptive,
     /// Gemini：generation_config.thinking_level
     ThinkingLevel,
     /// 不支持思考
@@ -159,6 +172,16 @@ const LEVELS_NO_MINIMAL: &[ThinkingIntensity] = &[
     ThinkingIntensity::High,
 ];
 
+/// Anthropic 自适应思考档位（对齐 opencode anthropicAdaptiveEfforts：
+/// [low,medium,high,xhigh,max]；无 minimal）
+const LEVELS_ADAPTIVE: &[ThinkingIntensity] = &[
+    ThinkingIntensity::Low,
+    ThinkingIntensity::Medium,
+    ThinkingIntensity::High,
+    ThinkingIntensity::Xhigh,
+    ThinkingIntensity::Max,
+];
+
 const OPENAI_REASONING: ThinkingCapability = ThinkingCapability {
     supported: true,
     levels: LEVELS_NO_XHIGH,
@@ -181,6 +204,14 @@ const ANTHROPIC_NO_XHIGH: ThinkingCapability = ThinkingCapability {
     supported: true,
     levels: LEVELS_NO_XHIGH,
     format: ReasoningFormat::ThinkingBudget,
+    vendor: ReasoningVendor::Anthropic,
+};
+/// Anthropic 自适应思考（Opus 4.7+ / Sonnet 5+ 等新代际）：
+/// thinking{type:"adaptive",display:"summarized"} + effort（G7）
+const ANTHROPIC_ADAPTIVE: ThinkingCapability = ThinkingCapability {
+    supported: true,
+    levels: LEVELS_ADAPTIVE,
+    format: ReasoningFormat::ThinkingAdaptive,
     vendor: ReasoningVendor::Anthropic,
 };
 const GEMINI_REASONING: ThinkingCapability = ThinkingCapability {
@@ -229,6 +260,18 @@ static MODEL_SERIES_CAPABILITIES: &[(&str, ThinkingCapability)] = &[
     ("gpt-4.1", NO_THINKING),
     ("gpt-4", NO_THINKING),
     // ── Anthropic Claude ──
+    // 新代际自适应思考（G7：Opus 4.7+ / Sonnet 5+ / Fable 5 / Mythos 5；
+    // "claude-4-7"/"claude-4-8" 兼容 SAP 倒置形态 claude-4-7-opus 等，最长前缀
+    // 命中优先于 "claude-4"）
+    ("claude-opus-4-7", ANTHROPIC_ADAPTIVE),
+    ("claude-opus-4-8", ANTHROPIC_ADAPTIVE),
+    ("claude-opus-5", ANTHROPIC_ADAPTIVE),
+    ("claude-sonnet-5", ANTHROPIC_ADAPTIVE),
+    ("claude-fable-5", ANTHROPIC_ADAPTIVE),
+    ("claude-mythos-5", ANTHROPIC_ADAPTIVE),
+    ("claude-4-7", ANTHROPIC_ADAPTIVE),
+    ("claude-4-8", ANTHROPIC_ADAPTIVE),
+    // 旧代际保持既有映射（enabled+budget_tokens）
     ("claude-opus-4", ANTHROPIC_REASONING),
     ("claude-sonnet-4", ANTHROPIC_REASONING),
     ("claude-4", ANTHROPIC_REASONING),
@@ -310,7 +353,7 @@ pub fn infer_reasoning_vendor(base_url: Option<&str>, model: Option<&str>) -> Re
 }
 
 /// 归一化 reasoning effort（对齐 `model:openai-request-build.ts:107-113`）：
-/// off/auto → None（不发送 reasoning 参数）；xhigh → high；其余原样
+/// off/auto → None（不发送 reasoning 参数）；xhigh → high；max 直发；其余原样
 pub fn normalize_reasoning_effort(effort: ReasoningEffort) -> Option<&'static str> {
     match effort {
         ReasoningEffort::Off | ReasoningEffort::Auto => None,
@@ -327,6 +370,9 @@ pub fn effort_to_budget_tokens(effort: ReasoningEffort) -> u64 {
         ReasoningEffort::Medium => 2048,
         ReasoningEffort::High => 4096,
         ReasoningEffort::Xhigh => 8192,
+        // 防御性兜底（自适应模型不走 budget_tokens；旧模型档位集无 Max，
+        // 归一化已降级）——沿用既有倍增档位刻度
+        ReasoningEffort::Max => 16384,
         ReasoningEffort::Off | ReasoningEffort::Auto => 2048,
     }
 }
@@ -339,6 +385,8 @@ pub fn thinking_to_budget_tokens(intensity: ThinkingIntensity) -> u64 {
         ThinkingIntensity::Medium => 2048,
         ThinkingIntensity::High => 4096,
         ThinkingIntensity::Xhigh => 8192,
+        // 防御性兜底（同上：adaptive 形态不走本函数）
+        ThinkingIntensity::Max => 16384,
         ThinkingIntensity::Off => 2048,
     }
 }
@@ -349,7 +397,7 @@ pub fn effort_to_gemini_thinking_level(effort: ReasoningEffort) -> &'static str 
         ReasoningEffort::Minimal => "minimal",
         ReasoningEffort::Low => "low",
         ReasoningEffort::Medium => "medium",
-        ReasoningEffort::High | ReasoningEffort::Xhigh => "high",
+        ReasoningEffort::High | ReasoningEffort::Xhigh | ReasoningEffort::Max => "high",
         ReasoningEffort::Off | ReasoningEffort::Auto => "high",
     }
 }
@@ -360,8 +408,26 @@ pub fn thinking_to_gemini_thinking_level(intensity: ThinkingIntensity) -> &'stat
         ThinkingIntensity::Minimal => "minimal",
         ThinkingIntensity::Low => "low",
         ThinkingIntensity::Medium => "medium",
-        ThinkingIntensity::High | ThinkingIntensity::Xhigh => "high",
+        ThinkingIntensity::High | ThinkingIntensity::Xhigh | ThinkingIntensity::Max => "high",
         ThinkingIntensity::Off => "medium",
+    }
+}
+
+/// 判定 Anthropic 自适应思考代际（Opus 4.7+ / Sonnet 5+ / Fable 5 / Mythos 5，
+/// 含 SAP 倒置形态 claude-4-7-opus 等）：按模型系列前缀命中能力表的
+/// ThinkingAdaptive 形态（对齐 opencode anthropicOpus47OrLater /
+/// anthropicSonnet5OrLater 的系列门控；旧代际保持 ThinkingBudget 既有映射）
+fn is_adaptive_thinking_model(model: &str) -> bool {
+    infer_thinking_capability(model).format == ReasoningFormat::ThinkingAdaptive
+}
+
+/// Anthropic 自适应思考的 wire effort：xhigh/max 直发（新代际有效档位）；
+/// minimal 不在 adaptive 档位集 → 降级 low（对齐 normalize_thinking_intensity）。
+/// off/auto 已在上游提前返回，不会到达此处。
+fn adaptive_effort_wire(effort: ReasoningEffort) -> &'static str {
+    match effort {
+        ReasoningEffort::Minimal => "low",
+        other => other.as_str(),
     }
 }
 
@@ -369,7 +435,9 @@ pub fn thinking_to_gemini_thinking_level(intensity: ThinkingIntensity) -> &'stat
 ///
 /// 显式 vendor（非 auto）优先，按 vendor 原生格式生成（忽略 endpoint/format）：
 /// - openai：responses 用 `reasoning.effort`，chat-completions 用 `reasoning_effort`
-/// - anthropic：`thinking{type:'enabled',budget_tokens}`（需配合 [reasoning_effort_headers]）
+/// - anthropic：旧代际 `thinking{type:'enabled',budget_tokens}`（需配合
+///   [reasoning_effort_headers]）；Opus 4.7+/Sonnet 5+ 等新代际（[is_adaptive_thinking_model]）
+///   切 adaptive 形态：`thinking{type:'adaptive',display:'summarized'}` + 顶层 `effort`
 /// - deepseek/qwen/glm/kimi：仅 `reasoning_effort`（原生 API 不支持 extra_body.thinking）
 /// - gemini：`generation_config.thinking_level`
 ///
@@ -377,7 +445,7 @@ pub fn thinking_to_gemini_thinking_level(intensity: ThinkingIntensity) -> &'stat
 /// effort 为 off/auto 或 format=none → None（不注入任何字段）。
 pub fn reasoning_effort_object(
     endpoint: Endpoint,
-    _model: &str,
+    model: &str,
     effort: Option<ReasoningEffort>,
     format: Option<ReasoningEffortFormat>,
     vendor: Option<ReasoningVendor>,
@@ -396,12 +464,24 @@ pub fn reasoning_effort_object(
                     Some(json!({ "reasoning_effort": wire_effort }))
                 }
             }
-            ReasoningVendor::Anthropic => Some(json!({
-                "thinking": {
-                    "type": "enabled",
-                    "budget_tokens": effort_to_budget_tokens(effort.unwrap_or(ReasoningEffort::Medium)),
+            ReasoningVendor::Anthropic => {
+                if is_adaptive_thinking_model(model) {
+                    // G7 自适应形态：effort 档位直发（xhigh/max 有效），display 强制
+                    // "summarized"——新版默认 omitted 会吐空 thinking 块，块内容漂移
+                    // 破坏缓存前缀（对齐 opencode transform.ts:791-794）
+                    Some(json!({
+                        "thinking": { "type": "adaptive", "display": "summarized" },
+                        "effort": adaptive_effort_wire(effort.unwrap_or(ReasoningEffort::Medium)),
+                    }))
+                } else {
+                    Some(json!({
+                        "thinking": {
+                            "type": "enabled",
+                            "budget_tokens": effort_to_budget_tokens(effort.unwrap_or(ReasoningEffort::Medium)),
+                        }
+                    }))
                 }
-            })),
+            }
             ReasoningVendor::Deepseek
             | ReasoningVendor::Qwen
             | ReasoningVendor::Glm
@@ -445,7 +525,8 @@ pub fn reasoning_effort_headers(
             | Some(ReasoningEffort::Low)
             | Some(ReasoningEffort::Medium)
             | Some(ReasoningEffort::High)
-            | Some(ReasoningEffort::Xhigh),
+            | Some(ReasoningEffort::Xhigh)
+            | Some(ReasoningEffort::Max),
         ) => Some(("anthropic-beta", "interleaved-thinking-2025-05-14")),
         _ => None,
     }
@@ -509,6 +590,15 @@ pub fn resolve_thinking_params(
                 "budget_tokens": thinking_to_budget_tokens(active),
             }
         }),
+        ReasoningFormat::ThinkingAdaptive => {
+            // G7：新代际自适应思考——display:"summarized" 强制（新版默认 omitted
+            // 会吐空 thinking 块，思考摘要不存活；块内容漂移破坏缓存前缀，
+            // 对齐 opencode transform.ts:791-794）
+            json!({
+                "thinking": { "type": "adaptive", "display": "summarized" },
+                "effort": active.as_str(),
+            })
+        }
         ReasoningFormat::ThinkingLevel => json!({
             "generation_config": {
                 "thinking_level": thinking_to_gemini_thinking_level(active),
@@ -811,5 +901,115 @@ mod tests {
         assert_eq!(thinking_to_gemini_thinking_level(ThinkingIntensity::Xhigh), "high");
         assert_eq!(effort_to_gemini_thinking_level(ReasoningEffort::Xhigh), "high");
         assert_eq!(effort_to_budget_tokens(ReasoningEffort::High), 4096);
+    }
+
+    // ── G7：Anthropic 自适应思考（Opus 4.7+ / Sonnet 5+）──
+
+    #[test]
+    fn adaptive_model_detection_by_series_prefix() {
+        // 新代际：Opus 4.7+ / Sonnet 5+ / Fable 5 / Mythos 5 启用 adaptive 档位集
+        for model in [
+            "claude-opus-4-7",
+            "claude-opus-4-8",
+            "claude-opus-5",
+            "claude-sonnet-5",
+            "claude-fable-5",
+            "claude-mythos-5",
+            "claude-4-7-opus", // SAP 倒置形态
+            "claude-4-8-opus", // SAP 倒置形态
+        ] {
+            let cap = infer_thinking_capability(model);
+            assert!(cap.supported, "{model} 应支持思考");
+            assert_eq!(
+                cap.format,
+                ReasoningFormat::ThinkingAdaptive,
+                "{model} 应为 adaptive 形态"
+            );
+            assert!(cap.levels.contains(&ThinkingIntensity::Xhigh), "{model} 应含 xhigh");
+            assert!(cap.levels.contains(&ThinkingIntensity::Max), "{model} 应含 max");
+            assert!(
+                !cap.levels.contains(&ThinkingIntensity::Minimal),
+                "{model} 不应含 minimal"
+            );
+        }
+        // 旧代际保持既有映射（ThinkingBudget + 含 xhigh、无 max）
+        for model in ["claude-opus-4-6", "claude-opus-4-5", "claude-sonnet-4-6", "claude-sonnet-4"] {
+            let cap = infer_thinking_capability(model);
+            assert_eq!(cap.format, ReasoningFormat::ThinkingBudget, "{model} 保持 budget 形态");
+            assert!(!cap.levels.contains(&ThinkingIntensity::Max), "{model} 不应含 max");
+        }
+    }
+
+    #[test]
+    fn adaptive_effort_object_injects_display_summarized() {
+        // 新代际：thinking{type:adaptive,display:summarized} + effort（xhigh/max 直发）
+        assert_eq!(
+            reasoning_effort_object(Endpoint::ChatCompletions, "claude-opus-4-7", Some(ReasoningEffort::Max), None, Some(ReasoningVendor::Anthropic)),
+            Some(json!({ "thinking": { "type": "adaptive", "display": "summarized" }, "effort": "max" }))
+        );
+        assert_eq!(
+            reasoning_effort_object(Endpoint::ChatCompletions, "claude-opus-4-8", Some(ReasoningEffort::Xhigh), None, Some(ReasoningVendor::Anthropic)),
+            Some(json!({ "thinking": { "type": "adaptive", "display": "summarized" }, "effort": "xhigh" }))
+        );
+        assert_eq!(
+            reasoning_effort_object(Endpoint::ChatCompletions, "claude-sonnet-5", Some(ReasoningEffort::High), None, Some(ReasoningVendor::Anthropic)),
+            Some(json!({ "thinking": { "type": "adaptive", "display": "summarized" }, "effort": "high" }))
+        );
+        // minimal 不在 adaptive 档位集 → 降级 low
+        assert_eq!(
+            reasoning_effort_object(Endpoint::ChatCompletions, "claude-opus-4-7", Some(ReasoningEffort::Minimal), None, Some(ReasoningVendor::Anthropic)),
+            Some(json!({ "thinking": { "type": "adaptive", "display": "summarized" }, "effort": "low" }))
+        );
+        // 旧代际保持 enabled+budget_tokens 既有映射（Max 走预算兜底）
+        assert_eq!(
+            reasoning_effort_object(Endpoint::ChatCompletions, "claude-opus-4-6", Some(ReasoningEffort::Max), None, Some(ReasoningVendor::Anthropic)),
+            Some(json!({ "thinking": { "type": "enabled", "budget_tokens": 16384 } }))
+        );
+    }
+
+    #[test]
+    fn adaptive_thinking_params_inject_display_summarized() {
+        let cap = infer_thinking_capability("claude-opus-4-7");
+        assert_eq!(
+            resolve_thinking_params(&cap, ThinkingIntensity::High, Endpoint::ChatCompletions),
+            json!({ "thinking": { "type": "adaptive", "display": "summarized" }, "effort": "high" })
+        );
+        assert_eq!(
+            resolve_thinking_params(&cap, ThinkingIntensity::Xhigh, Endpoint::ChatCompletions),
+            json!({ "thinking": { "type": "adaptive", "display": "summarized" }, "effort": "xhigh" })
+        );
+        assert_eq!(
+            resolve_thinking_params(&cap, ThinkingIntensity::Max, Endpoint::ChatCompletions),
+            json!({ "thinking": { "type": "adaptive", "display": "summarized" }, "effort": "max" })
+        );
+        // minimal 在 adaptive 档位集外 → 归一化降级 low
+        assert_eq!(
+            resolve_thinking_params(&cap, ThinkingIntensity::Minimal, Endpoint::ChatCompletions),
+            json!({ "thinking": { "type": "adaptive", "display": "summarized" }, "effort": "low" })
+        );
+        // off → 空对象（不注入）
+        assert_eq!(resolve_thinking_params(&cap, ThinkingIntensity::Off, Endpoint::ChatCompletions), json!({}));
+        // 旧代际：max 降级到最大支持档位 xhigh → 保持 enabled+budget_tokens
+        let old = infer_thinking_capability("claude-sonnet-4");
+        assert_eq!(
+            resolve_thinking_params(&old, ThinkingIntensity::Max, Endpoint::ChatCompletions),
+            json!({ "thinking": { "type": "enabled", "budget_tokens": 8192 } })
+        );
+    }
+
+    #[test]
+    fn adaptive_effort_enum_and_header_extensions() {
+        assert_eq!(ReasoningEffort::Max.as_str(), "max");
+        assert_eq!(ThinkingIntensity::Max.as_str(), "max");
+        assert_eq!(normalize_reasoning_effort(ReasoningEffort::Max), Some("max"));
+        assert_eq!(effort_to_budget_tokens(ReasoningEffort::Max), 16384);
+        assert_eq!(thinking_to_budget_tokens(ThinkingIntensity::Max), 16384);
+        assert_eq!(effort_to_gemini_thinking_level(ReasoningEffort::Max), "high");
+        assert_eq!(thinking_to_gemini_thinking_level(ThinkingIntensity::Max), "high");
+        // anthropic-beta 头把 max 视为活跃档位
+        assert_eq!(
+            reasoning_effort_headers(Some(ReasoningVendor::Anthropic), Some(ReasoningEffort::Max)),
+            Some(("anthropic-beta", "interleaved-thinking-2025-05-14"))
+        );
     }
 }

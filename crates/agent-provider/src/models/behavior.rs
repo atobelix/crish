@@ -64,13 +64,17 @@ impl VendorId {
 }
 
 /// 缓存 TTL 档（P3 §3.5 值域收敛裁决：serde 值对齐 00-catalog §12.1 的
-/// "5m" / "1h" / "24h"）。TTL 路由表（T-21 models/ttl.rs）如需本类型应
+/// "5m" / "1h" / "24h"；v2 Schema 扩第四档 "30m" 承载 gpt-5.6 系，
+/// 03-catalog-v2-schema.md §0-4）。TTL 路由表（T-21 models/ttl.rs）如需本类型应
 /// re-export 而非重定义，避免同 crate 两套同名枚举漂移。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CacheTtl {
     /// 5 分钟（自动缓存通例；命中刷新免费）
     #[serde(rename = "5m")]
     Short,
+    /// 30 分钟（v2 新增档；gpt-5.6 系 TTL 仅 30m 语义）
+    #[serde(rename = "30m")]
+    HalfHour,
     /// 1 小时（Anthropic ttl:"1h" 显式；写入价 2x）
     #[serde(rename = "1h")]
     Hour,
@@ -80,10 +84,11 @@ pub enum CacheTtl {
 }
 
 impl CacheTtl {
-    /// 秒数（300 / 3600 / 86400）
+    /// 秒数（300 / 1800 / 3600 / 86400）
     pub fn seconds(self) -> u64 {
         match self {
             Self::Short => 300,
+            Self::HalfHour => 1800,
             Self::Hour => 3600,
             Self::Day => 86400,
         }
@@ -93,6 +98,7 @@ impl CacheTtl {
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "5m" => Some(Self::Short),
+            "30m" => Some(Self::HalfHour),
             "1h" => Some(Self::Hour),
             "24h" => Some(Self::Day),
             _ => None,
@@ -421,13 +427,24 @@ fn apply_series_overrides(behavior: &mut CacheBehavior, model: &str) {
 /// supports_prompt_caching / breakpoint_max / cache_ttl 非默认时覆盖；
 /// `false` / `None` 视为缺省不覆盖——目录中"显式关闭"的模型（如 minimax-m3、
 /// glm 全系）已由系列表先行表达，不会与条目覆盖冲突）
+///
+/// v2 Schema §6.1 新增消费点：`supportsPromptCacheKey` → `supports_prompt_cache_key`
+/// 模型级覆盖（真源为 vendor 矩阵时的目录覆盖来源）；`supportsImplicitCaching`
+/// → `auto_cache` 模型级覆盖（OpenRouter 端点实测值）。
 fn apply_catalog_overrides(behavior: &mut CacheBehavior, entry: &ModelCatalogEntry) {
     if entry.supports_prompt_caching {
         behavior.supports_prompt_caching = true;
     }
-    // cache_type "automatic"/"both" 表示存在自动缓存轨（数据：catalog.json）
-    if matches!(entry.cache_type.as_deref(), Some("automatic" | "both")) {
+    // cache_type "automatic"（v1 值域）/ "auto"（v2 值域）/ "both" 表示存在自动
+    // 缓存轨（数据：catalog.json；v2 值域更名 automatic → auto，双形态都匹配）
+    if matches!(entry.cache_type.as_deref(), Some("automatic" | "auto" | "both")) {
         behavior.auto_cache = true;
+    }
+    if entry.supports_implicit_caching {
+        behavior.auto_cache = true;
+    }
+    if entry.supports_prompt_cache_key {
+        behavior.supports_prompt_cache_key = true;
     }
     if entry.supports_cache_control {
         behavior.supports_cache_control = true;
@@ -731,14 +748,102 @@ mod tests {
     #[test]
     fn cache_ttl_serde_values_and_seconds() {
         assert_eq!(CacheTtl::Short.seconds(), 300);
+        assert_eq!(CacheTtl::HalfHour.seconds(), 1800);
         assert_eq!(CacheTtl::Hour.seconds(), 3600);
         assert_eq!(CacheTtl::Day.seconds(), 86400);
         assert_eq!(serde_json::to_string(&CacheTtl::Short).unwrap(), "\"5m\"");
+        assert_eq!(serde_json::to_string(&CacheTtl::HalfHour).unwrap(), "\"30m\"");
         assert_eq!(serde_json::to_string(&CacheTtl::Hour).unwrap(), "\"1h\"");
         assert_eq!(serde_json::to_string(&CacheTtl::Day).unwrap(), "\"24h\"");
         assert_eq!(CacheTtl::parse("5m"), Some(CacheTtl::Short));
+        assert_eq!(CacheTtl::parse("30m"), Some(CacheTtl::HalfHour));
         assert_eq!(CacheTtl::parse("1h"), Some(CacheTtl::Hour));
         assert_eq!(CacheTtl::parse("24h"), Some(CacheTtl::Day));
-        assert_eq!(CacheTtl::parse("30m"), None);
+        assert_eq!(CacheTtl::parse("10m"), None);
+        // 30m 档 serde 往返
+        let json = serde_json::to_string(&CacheTtl::HalfHour).unwrap();
+        let roundtrip: CacheTtl = serde_json::from_str(&json).expect("必须可反序列化");
+        assert_eq!(roundtrip, CacheTtl::HalfHour);
+    }
+
+    // ── v2 Schema（R3）：cacheType "auto" 值域与模型级新覆盖 ──
+
+    /// v2 值域更名：cacheType "auto"（v1 "automatic"）同样命中自动缓存轨；
+    /// v1 旧 JSON 的 "automatic" 兼容保留（catalog.json 现为 v1 数据）
+    #[test]
+    fn catalog_override_cache_type_auto_and_automatic_both_enable_auto_cache() {
+        let make = |cache_type: &str| {
+            ModelCatalogEntry {
+                model: "m".to_string(),
+                provider: "p".to_string(),
+                vendor: "v".to_string(),
+                supports_prompt_caching: true,
+                cache_type: Some(cache_type.to_string()),
+                ..Default::default()
+            }
+        };
+        for value in ["auto", "automatic", "both"] {
+            // Qwen 直连 vendor 默认 auto_cache=false（保守），由目录覆盖开启
+            let mut behavior = cache_behavior_for(None, VendorId::Qwen, "qwen3-max");
+            assert!(!behavior.auto_cache, "基座必须保守关闭");
+            apply_catalog_overrides(&mut behavior, &make(value));
+            assert!(behavior.auto_cache, "cacheType {value} 必须开启自动缓存轨");
+        }
+        // "explicit" / "none" / 缺失不开启
+        for value in ["explicit", "none"] {
+            let mut behavior = cache_behavior_for(None, VendorId::Qwen, "qwen3-max");
+            apply_catalog_overrides(&mut behavior, &make(value));
+            assert!(!behavior.auto_cache, "cacheType {value} 不得开启自动缓存轨");
+        }
+    }
+
+    /// v2 新消费点：supportsPromptCacheKey / supportsImplicitCaching 模型级覆盖
+    /// 生效（vendor 矩阵真源之上的目录覆盖）
+    #[test]
+    fn catalog_override_prompt_cache_key_and_implicit_caching_enable() {
+        let entry = ModelCatalogEntry {
+            model: "m".to_string(),
+            provider: "p".to_string(),
+            vendor: "v".to_string(),
+            supports_prompt_caching: true,
+            supports_prompt_cache_key: true,
+            supports_implicit_caching: true,
+            ..Default::default()
+        };
+        // 基座：DeepSeek 行 key 默认 false → 目录覆盖开启
+        let mut behavior = cache_behavior_for(None, VendorId::Deepseek, "deepseek-v4-flash");
+        assert!(!behavior.supports_prompt_cache_key);
+        apply_catalog_overrides(&mut behavior, &entry);
+        assert!(behavior.supports_prompt_cache_key);
+        assert!(behavior.auto_cache, "supportsImplicitCaching=true 必须开启自动轨");
+        // 显式 false（缺省）不改变 vendor 真源（OpenAI 行 key 默认 true）
+        let entry_off = ModelCatalogEntry {
+            model: "m".to_string(),
+            provider: "p".to_string(),
+            vendor: "v".to_string(),
+            supports_prompt_caching: true,
+            ..Default::default()
+        };
+        let mut behavior = cache_behavior_for(None, VendorId::Openai, "gpt-5.6");
+        assert!(behavior.supports_prompt_cache_key);
+        apply_catalog_overrides(&mut behavior, &entry_off);
+        assert!(behavior.supports_prompt_cache_key, "键缺失 = 不覆盖");
+    }
+
+    /// v2 目录条目 cacheTtl="30m" → default_ttl 第四档 HalfHour（gpt-5.6 系）
+    #[test]
+    fn catalog_override_ttl_30m_maps_to_half_hour() {
+        let entry = ModelCatalogEntry {
+            model: "gpt-5.6-x".to_string(),
+            provider: "openai".to_string(),
+            vendor: "openai".to_string(),
+            cache_ttl: Some("30m".to_string()),
+            ..Default::default()
+        };
+        let mut behavior = cache_behavior_for(None, VendorId::Openai, "gpt-5.6-x");
+        assert_eq!(behavior.default_ttl, Some(CacheTtl::Short), "目录覆盖前 = vendor 默认");
+        apply_catalog_overrides(&mut behavior, &entry);
+        assert_eq!(behavior.default_ttl, Some(CacheTtl::HalfHour));
+        assert_eq!(behavior.default_ttl.unwrap().seconds(), 1800);
     }
 }

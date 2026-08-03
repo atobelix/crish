@@ -13,7 +13,10 @@
 
 use serde_json::{json, Value};
 
-use crate::models::{cache_behavior_for, infer_vendor, CacheBehavior, CacheTtl, ModelCatalog, VendorId};
+use crate::models::{
+    cache_behavior_for, infer_vendor, session_affinity_headers, CacheBehavior, CacheTtl,
+    ModelCatalog, VendorId,
+};
 use crate::request::messages::{ChatContent, ChatContentPart, ChatMessage};
 
 /// 缓存保留档位（对齐 pi 的 CacheRetention 三档，pi-cache-analysis.md:126-131）
@@ -276,18 +279,23 @@ pub fn build_cache_policy(
     //    （infer_cache_capability，数据值以 P3 §3.2.2 矩阵为准转录）
     let url = base_url.unwrap_or("").to_ascii_lowercase();
     let model_lower = model.unwrap_or("").to_ascii_lowercase();
-    let (capability, omit_cache_control) = match catalog {
+    let (capability, behavior, omit_cache_control) = match catalog {
         Some(catalog) => {
             let vendor = infer_vendor(&url, &model_lower);
             let behavior = cache_behavior_for(Some(catalog), vendor, &model_lower);
-            (capability_from_behavior(&behavior), behavior.omit_cache_control)
+            (capability_from_behavior(&behavior), behavior, behavior.omit_cache_control)
         }
         None => {
             let capability = infer_cache_capability(base_url, model);
             // 兜底表无 omit 位（T-13a 冻结）：DeepSeek 强制省略按 vendor 推断
             // 直判（与 infer_cache_capability 同链：url 关键字 → model 前缀）
             let omit = infer_vendor(&url, &model_lower) == VendorId::Deepseek;
-            (capability, omit)
+            // G2：会话亲和头数据源 = 行为矩阵（models/cache_key.rs 数据表），
+            // 兜底路径取矩阵默认行（与兜底表转录自同一 P3 §3.2.2 矩阵；Grok
+            // 无 catalog 时同样注入 x-grok-conv-id，两路径行为一致）
+            let behavior =
+                cache_behavior_for(None, infer_vendor(&url, &model_lower), &model_lower);
+            (capability, behavior, omit)
         }
     };
     // 1. 硬关：extra.cache.enabled == false → 完全不参与缓存（P2 §3.2 步骤 1）
@@ -321,7 +329,7 @@ pub fn build_cache_policy(
             breakpoints: None,
             cache_key: None,
             prompt_cache_options: None,
-            affinity_header: affinity_header(&capability, session_id.unwrap_or("")),
+            affinity_header: affinity_header(Some(&behavior), session_id.unwrap_or("")),
         }),
         // Explicit（Anthropic/MiniMax M2.x/百炼）：断点注入启用 + TTL 桶按档选
         CacheMechanism::Explicit => {
@@ -339,7 +347,7 @@ pub fn build_cache_policy(
                 breakpoints: Some(BreakpointPlan::default()),
                 cache_key: None,
                 prompt_cache_options: None,
-                affinity_header: affinity_header(&capability, session_id.unwrap_or("")),
+                affinity_header: affinity_header(Some(&behavior), session_id.unwrap_or("")),
             })
         }
         // Key（OpenAI/Kimi/xAI）：会话 ID 派生键 + retention 按档
@@ -357,7 +365,7 @@ pub fn build_cache_policy(
                     prompt_cache_options: Some(PromptCacheOptions {
                         mode: PromptCacheMode::Explicit,
                     }),
-                    affinity_header: affinity_header(&capability, session_id.unwrap_or("")),
+                    affinity_header: affinity_header(Some(&behavior), session_id.unwrap_or("")),
                 });
             }
             // 键路由：会话 ID → prompt_cache_key（码点钳 64）；无有效会话 ID →
@@ -370,7 +378,7 @@ pub fn build_cache_policy(
                 breakpoints: None,
                 cache_key: Some(key),
                 prompt_cache_options: None,
-                affinity_header: affinity_header(&capability, session_id.unwrap_or("")),
+                affinity_header: affinity_header(Some(&behavior), session_id.unwrap_or("")),
             })
         }
     }
@@ -385,8 +393,20 @@ pub fn build_cache_policy(
 /// - 键路由（supports_prompt_cache_key=true，OpenAI/Grok/Kimi）→ Key
 /// - 其余自动缓存（DeepSeek/MiniMax M3/Gemini/GLM 隐式）→ Auto
 ///
-/// TTL 桶：default_ttl 为 1h 档（Hour）→ 5m+1h 双桶；5m/Day 档只挂 5m 桶
-/// （Day=24h 属 OpenAI retention 长档值域，wire 桶无 24h 档，写价 2x 宁缺毋滥）。
+/// TTL 桶：default_ttl 为 1h 档（Hour）→ 5m+1h 双桶；5m/30m/Day 档只挂 5m 桶
+/// （v2 新增 30m 档 = gpt-5.6 系 TTL，wire 层 TtlBucket 无 30m 桶 → 保守按 5m 桶；
+/// Day=24h 属 OpenAI retention 长档值域，wire 桶无 24h 档，写价 2x 宁缺毋滥）。
+/// G1 修复（02-model-specific-optimizations.md 缺口 G1 / 条目 #10）：Anthropic
+/// 官方能力上支持 5m+1h 双桶（supportsLongCacheRetention 模型开关默认 true，
+/// pi anthropic-messages.ts:59-73）——矩阵 default_ttl=Short 只表达默认档位，
+/// 不表达能力上限。此前判定只看 default_ttl，而 catalog 路径 Anthropic 条目
+/// cacheTtl="5m"（矩阵行为行亦为 Short）→ 1h 桶永久关闭，cacheWritePrice1h
+/// 定价与请求侧脱节；本判定同时消费矩阵 default_ttl 与模型级 ttl 档
+/// （catalog 条目 cache_ttl 经 cache_behavior_for 归并进 default_ttl）：
+/// 矩阵 1h 或 Anthropic 显式断点厂商即挂双桶。厂商限定防止放宽误伤——
+/// MiniMax M2.x / 百炼同为 supports_cache_control=true 但矩阵仅 5m 单桶
+/// （vendor-cache-mechanisms.md：M2.x 5m、百炼仅 ephemeral），不得随 Anthropic
+/// 并入 1h。
 /// GPT-5.6+ 显式模式位：CacheBehavior 无该字段（T-19 冻结），catalog 路径保守
 /// 按非 5.6+ 处理（retention="none" 整体不参与），5.6+ 显式模式仍由无 catalog
 /// 兜底表承担（OPENAI_CACHE_56 前缀行）。
@@ -400,7 +420,9 @@ fn capability_from_behavior(behavior: &CacheBehavior) -> CacheCapability {
     } else {
         CacheMechanism::Auto
     };
-    let ttl_buckets = if behavior.default_ttl == Some(CacheTtl::Hour) {
+    let ttl_buckets = if behavior.default_ttl == Some(CacheTtl::Hour)
+        || (behavior.vendor == VendorId::Anthropic && behavior.supports_cache_control)
+    {
         BUCKETS_5M_1H
     } else {
         BUCKETS_5M
@@ -462,15 +484,31 @@ pub fn retention_wire_value(retention: CacheRetention) -> Option<&'static str> {
     }
 }
 
-/// 会话亲和头判定（P2 只提供判定入口，默认全关，pi-cache-analysis.md:141-143；
-/// 数据表 x-grok-conv-id / x-dashscope-session-cache / x-session-affinity 由 P3
-/// §3.3.2 交付并经 overrides 通道注入后由本函数判定——本函数不直接持数据。
-/// A1 注记：与 P3 session_affinity_headers 取一实现，本函数为 P2 侧判定入口）
+/// 会话亲和头判定（G2 接线：消费 models/cache_key.rs 的
+/// [session_affinity_headers] 数据表——行为矩阵 supports_conv_header +
+/// conv_header_name 门控，Grok 行返回 x-grok-conv-id = derivePromptCacheKey
+/// 值，session_id 前 64 码点，粘性路由，vendor-cache-mechanisms.md:121）。
+///
+/// 本文件域是 chat-completions 请求构造面，只放行 **Chat 轨**头名
+/// （x-grok-conv-id）；百炼 x-dashscope-session-cache 属 Responses 轨
+/// （vendor-cache-mechanisms.md 与 cache_key.rs 数据表注释），由未来
+/// Responses 请求构造面消费，此处保守不注入（G2 验收：其他厂商 None）。
+///
+/// `behavior`：catalog 路径传 cache_behavior_for 结果；无 catalog 兜底时
+/// 传行为矩阵默认行（与兜底表转录自同一 P3 §3.2.2 矩阵）；None → 不注入。
 pub fn affinity_header(
-    _capability: &CacheCapability,
-    _session_id: &str,
+    behavior: Option<&CacheBehavior>,
+    session_id: &str,
 ) -> Option<(&'static str, String)> {
-    None
+    let (name, value) = session_affinity_headers(behavior?, session_id)
+        .into_iter()
+        .next()?;
+    if name == "x-grok-conv-id" {
+        Some(("x-grok-conv-id", value))
+    } else {
+        // 未收录 / Responses 轨头名（如 x-dashscope-session-cache）→ 不注入
+        None
+    }
 }
 
 /// TTL 桶组合常量（能力表数据）
@@ -863,6 +901,7 @@ pub fn text_to_parts_with_cc(text: &str, cc: CacheControl) -> ChatContent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::ModelCatalogEntry;
 
     // ── CacheRetention ──
 
@@ -985,10 +1024,32 @@ mod tests {
     }
 
     #[test]
-    fn affinity_header_defaults_off() {
-        // P2 默认全关：任何能力与会话 ID 都不产生亲和头（P3 数据注入后翻转）
-        assert_eq!(affinity_header(&ANTHROPIC_CACHE, "ses-123"), None);
-        assert_eq!(affinity_header(&GROK_CACHE, "ses-123"), None);
+    fn affinity_header_grok_chat_track_and_others_none() {
+        // G2 接线：Grok Chat 轨 → x-grok-conv-id（值 = 键推导结果，session_id
+        // 前 64 码点）；其余厂商 / 空会话 / None behavior → None
+        let grok = cache_behavior_for(None, VendorId::Grok, "grok-4.5");
+        assert_eq!(
+            affinity_header(Some(&grok), "ses-123"),
+            Some(("x-grok-conv-id", "ses-123".to_string()))
+        );
+        // 值 = 键推导（64 码点钳制，多字节尾字符完整保留）
+        let long = format!("{}尾", "g".repeat(63));
+        let header = affinity_header(Some(&grok), &long).expect("Grok 应注入亲和头");
+        assert_eq!(header.0, "x-grok-conv-id");
+        assert_eq!(header.1.chars().count(), 64);
+        assert!(header.1.ends_with('尾'));
+        // 其他厂商：Anthropic / OpenAI 系矩阵 conv_header 关 → None
+        let anthropic = cache_behavior_for(None, VendorId::Anthropic, "claude-sonnet-5");
+        assert_eq!(affinity_header(Some(&anthropic), "ses-123"), None);
+        let openai = cache_behavior_for(None, VendorId::Openai, "gpt-5.6");
+        assert_eq!(affinity_header(Some(&openai), "ses-123"), None);
+        // 百炼 x-dashscope-session-cache 属 Responses 轨 → Chat 轨不注入
+        let dashscope = cache_behavior_for(None, VendorId::Dashscope, "qwen3-max");
+        assert_eq!(affinity_header(Some(&dashscope), "ses-1"), None);
+        // 空/全空白会话 ID → None；None behavior → None
+        assert_eq!(affinity_header(Some(&grok), ""), None);
+        assert_eq!(affinity_header(Some(&grok), "   "), None);
+        assert_eq!(affinity_header(None, "ses-123"), None);
     }
 
     // ── infer_cache_capability / CACHE_CAPABILITY_TABLE ──
@@ -1289,6 +1350,134 @@ mod tests {
         assert_eq!(policy.mechanism, CacheMechanism::Key);
         assert_eq!(policy.cache_key, Some(CacheKey("ses-grok".to_string())));
         assert_eq!(policy.retention, CacheRetention::Short);
+    }
+
+    // ── G1（02-model-specific-optimizations.md 缺口 G1）：Anthropic 1h 长档
+    //    在 catalog 路径不再永久关闭（矩阵 Short 只表达默认档，不表达能力上限）──
+
+    #[test]
+    fn build_cache_policy_anthropic_catalog_path_enables_one_hour_bucket() {
+        // G1 核心：catalog 路径 Anthropic（条目 cacheTtl="5m"、矩阵 default_ttl
+        // =Short）——retention=long 覆盖时发出 OneHour 桶（cacheWritePrice1h
+        // 定价能力与请求侧恢复接线）；默认档（无覆盖）仍 5m（1h 写价 2x，
+        // 由档位显式开启）
+        let catalog = ModelCatalog::bundled();
+        let policy = build_cache_policy(
+            Some(&catalog),
+            None,
+            Some("claude-opus-4-5"),
+            Some("ses-1"),
+            Some(&json!({ "retention": "long" })),
+        )
+        .expect("Anthropic catalog 路径应启用显式断点注入");
+        assert_eq!(policy.mechanism, CacheMechanism::Explicit);
+        assert_eq!(policy.retention, CacheRetention::Long);
+        assert_eq!(policy.ttl, TtlBucket::OneHour);
+        let policy =
+            build_cache_policy(Some(&catalog), None, Some("claude-opus-4-5"), Some("ses-1"), None)
+                .expect("Anthropic catalog 路径应启用显式断点注入");
+        assert_eq!(policy.ttl, TtlBucket::FiveMinutes);
+    }
+
+    #[test]
+    fn build_cache_policy_anthropic_catalog_1h_entry_sets_long_retention() {
+        // 模型级 ttl 档（catalog 条目 cache_ttl="1h" → default_ttl=Hour）：
+        // 双桶 + 默认 Long 档（任务书：Anthropic 1h 配置 → 双桶含 1h）
+        let mut entries = std::collections::BTreeMap::new();
+        entries.insert(
+            "anthropic::claude-long-1h".to_string(),
+            ModelCatalogEntry {
+                model: "claude-long-1h".to_string(),
+                provider: "anthropic".to_string(),
+                vendor: "anthropic".to_string(),
+                supports_prompt_caching: true,
+                supports_cache_control: true,
+                breakpoint_max: Some(4),
+                cache_ttl: Some("1h".to_string()),
+                ..Default::default()
+            },
+        );
+        let catalog = ModelCatalog { entries, version: 0 };
+        let policy =
+            build_cache_policy(Some(&catalog), None, Some("claude-long-1h"), Some("ses-1"), None)
+                .expect("1h 条目应启用显式断点注入");
+        assert_eq!(policy.mechanism, CacheMechanism::Explicit);
+        assert_eq!(policy.retention, CacheRetention::Long);
+        assert_eq!(policy.ttl, TtlBucket::OneHour);
+    }
+
+    #[test]
+    fn build_cache_policy_short_config_keeps_five_minutes_only() {
+        // G1 反例（任务书：Short 配置 → 仅 5m 桶）：MiniMax M2.x 同为
+        // supports_cache_control=true，但矩阵仅 5m 单桶——G1 厂商限定防止
+        // 随 Anthropic 一并放宽到 1h
+        let catalog = ModelCatalog::bundled();
+        let policy = build_cache_policy(
+            Some(&catalog),
+            None,
+            Some("minimax-m2-7"),
+            Some("ses-1"),
+            Some(&json!({ "retention": "long" })),
+        )
+        .expect("M2.x 应启用显式断点注入");
+        assert_eq!(policy.mechanism, CacheMechanism::Explicit);
+        assert_eq!(policy.retention, CacheRetention::Long);
+        assert_eq!(policy.ttl, TtlBucket::FiveMinutes);
+    }
+
+    // ── G2（02-model-specific-optimizations.md 缺口 G2）：x-grok-conv-id 会话
+    //    亲和头接线（消费 models/cache_key.rs session_affinity_headers 数据表）──
+
+    #[test]
+    fn build_cache_policy_grok_injects_affinity_header() {
+        // Grok 模型 → policy.affinity_header = x-grok-conv-id，值 = session_id
+        // 前 64 码点（键推导结果）；catalog / 兜底 model 前缀 / 兜底 base_url
+        // 三路径行为一致
+        let catalog = ModelCatalog::bundled();
+        for (catalog, base_url, model) in [
+            (Some(&catalog), None, Some("grok-4.5")),
+            (None, None, Some("grok-4.5")),
+            (None, Some("https://api.x.ai"), Some("grok-4.5")),
+        ] {
+            let policy = build_cache_policy(catalog, base_url, model, Some("ses-grok"), None)
+                .expect("Grok 应走键路由");
+            assert_eq!(
+                policy.affinity_header,
+                Some(("x-grok-conv-id", "ses-grok".to_string())),
+                "路径 {model:?} / {base_url:?}"
+            );
+        }
+        // 超长会话 ID：header 值恰好 64 码点（含多字节尾字符）
+        let long = format!("{}尾", "g".repeat(63));
+        let policy =
+            build_cache_policy(Some(&catalog), None, Some("grok-4.5"), Some(long.as_str()), None)
+                .expect("Grok 应走键路由");
+        let header = policy.affinity_header.expect("Grok 必须注入亲和头");
+        assert_eq!(header.0, "x-grok-conv-id");
+        assert_eq!(header.1.chars().count(), 64);
+        assert!(header.1.ends_with('尾'));
+    }
+
+    #[test]
+    fn build_cache_policy_other_vendors_no_affinity_header() {
+        // G2 反例：Anthropic（Explicit）/ OpenAI（Key）/ Gemini（Auto）→
+        // affinity_header 恒 None（矩阵 conv_header 关）；DeepSeek omit 整体 None
+        for (catalog, base_url, model) in [
+            (None, None, Some("claude-sonnet-5")),
+            (None, None, Some("gpt-4o")),
+            (None, None, Some("gemini-2.5-pro")),
+            (None, None, Some("deepseek-v4-flash")),
+        ] {
+            let policy = build_cache_policy(catalog, base_url, model, Some("ses-1"), None);
+            if let Some(policy) = policy {
+                assert_eq!(policy.affinity_header, None, "{model:?} 不得注入亲和头");
+            }
+        }
+        // Grok 无有效会话 ID → 键路由整体不注入（无键则无路由对象，亲和头同源）
+        assert_eq!(
+            build_cache_policy(None, None, Some("grok-4.5"), Some("   "), None),
+            None
+        );
     }
 
     #[test]

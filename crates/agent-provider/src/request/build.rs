@@ -154,11 +154,12 @@ pub fn build_chat_completions_request_body(
 
     // 01 D5：per-request thinkingIntensity 优先注入，清除 legacy reasoning 字段
     // （对齐 `model:provider-openai-class.ts:551-585`：统一模块注入/覆盖/清空，
-    // 消除 budgetDifficulty 语义混淆）
+    // 消除 budgetDifficulty 语义混淆；"effort" 为 G7 自适应思考的顶层档位字段，
+    // 一并清除防止 legacy 注入残留）
     if let Some(intensity) = opts.thinking_intensity {
         let capability = infer_thinking_capability(opts.model.as_deref().unwrap_or(""));
         let params = resolve_thinking_params(&capability, intensity, Endpoint::ChatCompletions);
-        for key in ["reasoning_effort", "reasoning", "thinking", "generation_config"] {
+        for key in ["reasoning_effort", "reasoning", "thinking", "generation_config", "effort"] {
             body.remove(key);
         }
         merge_object(&mut body, &params);
@@ -169,7 +170,10 @@ pub fn build_chat_completions_request_body(
     // （OpenAI 官方值域 in_memory/24h，仅 Key 机制发 wire——Auto 机制 retention
     // 恒 Short 为内部档位，P2 §3.4 矩阵 Auto 行不发）/ prompt_cache_options
     // （GPT-5.6+ none 档显式化 {"mode":"explicit"}）；DeepSeek 等由
-    // build_cache_policy 归 None，整个 cache 参数组不出现
+    // build_cache_policy 归 None，整个 cache 参数组不出现。
+    // G2 注记：policy.affinity_header（x-grok-conv-id 会话亲和头）属 HTTP 头，
+    // 不进请求体——由发送层经 [affinity_http_headers] 合并进基础请求头
+    // （基础头 + 亲和头合并，P2 §3.3 注记；Grok 粘性路由，vendor-cache-mechanisms.md:121）
     if let Some(policy) = &opts.cache {
         if let Some(key) = &policy.cache_key {
             body.insert("prompt_cache_key".to_string(), json!(&key.0));
@@ -254,6 +258,18 @@ pub fn build_chat_completions_request_body(
     }
 
     Value::Object(body)
+}
+
+/// G2 消费点：从缓存策略提取会话亲和 HTTP 头（x-grok-conv-id 粘性路由）。
+///
+/// [build_chat_completions_request_body] 只产出请求体（HTTP 头由发送层附加），
+/// 故本函数供 http 发送层在发请求前调用——把亲和头合并进基础请求头后再发送。
+/// None / 无亲和头 → 空 Vec（零参数，请求行为与现状一致，不新增头）。
+pub fn affinity_http_headers(policy: Option<&CachePolicy>) -> Vec<(&'static str, String)> {
+    match policy.and_then(|p| p.affinity_header.as_ref()) {
+        Some((name, value)) => vec![(*name, value.clone())],
+        None => Vec::new(),
+    }
 }
 
 /// 把对象字段并入请求体（空对象不产生任何字段）
@@ -526,6 +542,90 @@ mod tests {
         );
     }
 
+    // ── G7：Anthropic 自适应思考（Opus 4.7+ / Sonnet 5+）──
+
+    #[test]
+    fn adaptive_anthropic_thinking_intensity_injects_adaptive_shape() {
+        // G7：新代际 thinkingIntensity → thinking{type:adaptive,display:summarized} + effort
+        let opts = ChatCompletionsRequestOptions {
+            thinking_intensity: Some(ThinkingIntensity::High),
+            model: Some("claude-opus-4-7".to_string()),
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+        assert_eq!(
+            body["thinking"],
+            json!({ "type": "adaptive", "display": "summarized" })
+        );
+        assert_eq!(body["effort"], "high");
+        assert!(
+            body["thinking"].get("budget_tokens").is_none(),
+            "adaptive 形态不带 budget_tokens"
+        );
+
+        let opts = ChatCompletionsRequestOptions {
+            thinking_intensity: Some(ThinkingIntensity::Max),
+            model: Some("claude-sonnet-5".to_string()),
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+        assert_eq!(
+            body["thinking"],
+            json!({ "type": "adaptive", "display": "summarized" })
+        );
+        assert_eq!(body["effort"], "max");
+    }
+
+    #[test]
+    fn adaptive_anthropic_legacy_effort_injects_adaptive_shape() {
+        // 新代际 + 显式 anthropic vendor：adaptive + display summarized + effort
+        let opts = ChatCompletionsRequestOptions {
+            reasoning_effort: Some(ReasoningEffort::Xhigh),
+            vendor: Some(ReasoningVendor::Anthropic),
+            model: Some("claude-opus-4-7".to_string()),
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+        assert_eq!(
+            body["thinking"],
+            json!({ "type": "adaptive", "display": "summarized" })
+        );
+        assert_eq!(body["effort"], "xhigh");
+        assert!(
+            body["thinking"].get("budget_tokens").is_none(),
+            "adaptive 形态不带 budget_tokens"
+        );
+
+        // 旧代际行为不变：enabled+budget_tokens、无顶层 effort
+        let opts = ChatCompletionsRequestOptions {
+            reasoning_effort: Some(ReasoningEffort::High),
+            vendor: Some(ReasoningVendor::Anthropic),
+            model: Some("claude-opus-4-6".to_string()),
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+        assert_eq!(body["thinking"], json!({ "type": "enabled", "budget_tokens": 4096 }));
+        assert!(body.get("effort").is_none(), "旧代际不注入顶层 effort");
+    }
+
+    #[test]
+    fn adaptive_legacy_effort_cleared_by_thinking_intensity() {
+        // thinkingIntensity 覆盖时，legacy 注入的顶层 effort 必须被清除
+        let opts = ChatCompletionsRequestOptions {
+            reasoning_effort: Some(ReasoningEffort::Max),
+            vendor: Some(ReasoningVendor::Anthropic),
+            thinking_intensity: Some(ThinkingIntensity::Medium),
+            model: Some("claude-opus-4-7".to_string()),
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+        assert_eq!(
+            body["thinking"],
+            json!({ "type": "adaptive", "display": "summarized" })
+        );
+        assert_eq!(body["effort"], "medium", "thinkingIntensity 覆盖后 effort 应为新档位");
+    }
+
     #[test]
     fn wire_mode_user_prefix_is_honored() {
         let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_message("你好"))];
@@ -795,5 +895,38 @@ mod tests {
         assert!(tools[0].get("cache_control").is_none(), "非最后工具不附加");
         assert_eq!(tools[1]["cache_control"], json!({ "type": "ephemeral" }));
         assert_eq!(tools[1]["function"]["name"], "search");
+    }
+
+    #[test]
+    fn affinity_http_headers_consumes_policy_header() {
+        // G2 消费点：policy.affinity_header → HTTP 头列表（发送层基础头 + 亲和头
+        // 合并用）；无亲和头 / None policy → 空 Vec（不新增任何头）
+        let mut policy = cache_policy(
+            CacheMechanism::Key,
+            Some("ses-grok"),
+            CacheRetention::Short,
+            TtlBucket::FiveMinutes,
+            None,
+        );
+        policy.affinity_header = Some(("x-grok-conv-id", "ses-grok".to_string()));
+        assert_eq!(
+            affinity_http_headers(Some(&policy)),
+            vec![("x-grok-conv-id", "ses-grok".to_string())]
+        );
+        let plain = cache_policy(
+            CacheMechanism::Key,
+            Some("ses-1"),
+            CacheRetention::Short,
+            TtlBucket::FiveMinutes,
+            None,
+        );
+        assert_eq!(affinity_http_headers(Some(&plain)), Vec::new());
+        assert_eq!(affinity_http_headers(None), Vec::new());
+        // 亲和头不影响请求体字节（HTTP 头不在 body 内，回归护栏）
+        let body = build_chat_completions_request_body(
+            &ChatCompletionsRequestOptions { cache: Some(policy), ..base_opts() },
+            &RequestBuildContext::default(),
+        );
+        assert!(body.get("x-grok-conv-id").is_none(), "请求体不得携带 HTTP 头");
     }
 }
