@@ -15,6 +15,7 @@ use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::tool::{SystemPromptWireMode, ToolOutput};
 use serde_json::{json, Map, Value};
 
+use crate::request::cache::CacheControl;
 use crate::request::schema::canonical_json_string;
 
 /// reasoningContentMode（对齐 OpenAICompatibleReasoningContentMode；默认 omit）
@@ -38,18 +39,34 @@ pub enum ChatContent {
     Parts(Vec<ChatContentPart>),
 }
 
-/// 多模态 content part（对齐 ChatContentPart：text / image_url）
+/// 多模态 content part（对齐 ChatContentPart：text / image_url；Text 可携带
+/// Anthropic 系块级 cache_control 断点，P2 §3.2）
+///
+/// 序列化采用手写 to_value（compactObject 等价），不派生 serde——"仅 Some 时
+/// 序列化"语义在 to_value 分支落地（None 时请求字节与 P2 前逐字节一致）。
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChatContentPart {
-    Text { text: String },
+    Text {
+        text: String,
+        /// Anthropic 系块级断点标记（仅 Some 时序列化，见 to_value）
+        cache_control: Option<CacheControl>,
+    },
     ImageUrl { url: String, detail: Option<String> },
 }
 
 impl ChatContentPart {
-    /// 序列化为 wire part
+    /// 序列化为 wire part（cache_control 仅 Some 时输出 `"cache_control"` 键）
     pub fn to_value(&self) -> Value {
         match self {
-            ChatContentPart::Text { text } => json!({ "type": "text", "text": text }),
+            ChatContentPart::Text { text, cache_control } => {
+                let mut part = Map::new();
+                part.insert("type".to_string(), json!("text"));
+                part.insert("text".to_string(), json!(text));
+                if let Some(cc) = cache_control {
+                    part.insert("cache_control".to_string(), cc.to_value());
+                }
+                Value::Object(part)
+            }
             ChatContentPart::ImageUrl { url, detail } => {
                 let mut image_url = Map::new();
                 image_url.insert("url".to_string(), json!(url));
@@ -58,6 +75,18 @@ impl ChatContentPart {
                 }
                 json!({ "type": "image_url", "image_url": image_url })
             }
+        }
+    }
+
+    /// 文本 part 挂断点（供 apply_cache_controls 改写；返回带断点的新 part，
+    /// 非文本 part 原样返回自身）
+    pub fn with_cache_control(self, cc: CacheControl) -> Self {
+        match self {
+            ChatContentPart::Text { text, .. } => ChatContentPart::Text {
+                text,
+                cache_control: Some(cc),
+            },
+            other => other,
         }
     }
 }
@@ -73,6 +102,9 @@ pub struct ChatMessage {
     pub reasoning_content: Option<String>,
     /// `{id, type:'function', function:{name, arguments}}`
     pub tool_calls: Vec<Value>,
+    /// 消息级 cache_control（Anthropic 原生端点"顶层自动模式"载体，P2 §3.1.3；
+    /// chat-completions 兼容端点走 part 级，本字段恒 None；仅 Some 时序列化）
+    pub cache_control: Option<CacheControl>,
 }
 
 impl ChatMessage {
@@ -103,7 +135,16 @@ impl ChatMessage {
         if !self.tool_calls.is_empty() {
             message.insert("tool_calls".to_string(), json!(self.tool_calls));
         }
+        if let Some(cc) = &self.cache_control {
+            message.insert("cache_control".to_string(), cc.to_value());
+        }
         Value::Object(message)
+    }
+
+    /// 消息级断点设置（Anthropic 原生端点顶层自动模式用；返回自身）
+    pub fn with_cache_control(mut self, cc: CacheControl) -> Self {
+        self.cache_control = Some(cc);
+        self
     }
 }
 
@@ -217,6 +258,7 @@ pub fn normalize_content_parts(value: &Value) -> Vec<ChatContentPart> {
                 if let Some(text) = part.get("text").and_then(Value::as_str) {
                     out.push(ChatContentPart::Text {
                         text: text.to_string(),
+                        cache_control: None,
                     });
                 }
             }
@@ -274,10 +316,10 @@ pub fn user_message_content(message: &AgentMessage) -> ChatContent {
     let mut saw_text = false;
     for part in parts {
         match part {
-            ChatContentPart::Text { text } => {
+            ChatContentPart::Text { text, .. } => {
                 let cleaned = strip_inline_data_urls(&text).trim().to_string();
                 if !cleaned.is_empty() {
-                    out.push(ChatContentPart::Text { text: cleaned });
+                    out.push(ChatContentPart::Text { text: cleaned, cache_control: None });
                     saw_text = true;
                 }
             }
@@ -287,7 +329,7 @@ pub fn user_message_content(message: &AgentMessage) -> ChatContent {
     if !saw_text {
         let fallback = strip_inline_data_urls(&message.text()).trim().to_string();
         if !fallback.is_empty() {
-            out.insert(0, ChatContentPart::Text { text: fallback });
+            out.insert(0, ChatContentPart::Text { text: fallback, cache_control: None });
         }
     }
     if out.is_empty() {
@@ -361,6 +403,7 @@ pub fn to_chat_messages<M: Borrow<AgentMessage>>(
                             tool_call_id: Some(sanitize_tool_call_id(tool_call_id)),
                             reasoning_content: None,
                             tool_calls: Vec::new(),
+                            cache_control: None,
                         });
                     }
                 }
@@ -398,6 +441,7 @@ pub fn to_chat_messages<M: Borrow<AgentMessage>>(
                     tool_call_id: None,
                     reasoning_content: reasoning,
                     tool_calls,
+                    cache_control: None,
                 });
             }
             AgentMessageRole::System => {
@@ -410,6 +454,7 @@ pub fn to_chat_messages<M: Borrow<AgentMessage>>(
                     tool_call_id: None,
                     reasoning_content: None,
                     tool_calls: Vec::new(),
+                    cache_control: None,
                 });
             }
         }
@@ -426,6 +471,7 @@ fn system_prompt_message(prompt: &str, wire_mode: SystemPromptWireMode) -> ChatM
             tool_call_id: None,
             reasoning_content: None,
             tool_calls: Vec::new(),
+            cache_control: None,
         },
         SystemPromptWireMode::UserPrefix => ChatMessage {
             role: "user".to_string(),
@@ -433,6 +479,7 @@ fn system_prompt_message(prompt: &str, wire_mode: SystemPromptWireMode) -> ChatM
             tool_call_id: None,
             reasoning_content: None,
             tool_calls: Vec::new(),
+            cache_control: None,
         },
     }
 }
@@ -904,7 +951,7 @@ mod tests {
         assert_eq!(
             messages[0].content,
             Some(ChatContent::Parts(vec![
-                ChatContentPart::Text { text: "看图说话".to_string() },
+                ChatContentPart::Text { text: "看图说话".to_string(), cache_control: None },
                 ChatContentPart::ImageUrl {
                     url: "https://example.com/a.png".to_string(),
                     detail: Some("high".to_string()),
@@ -990,5 +1037,90 @@ mod tests {
         assert!(value.get("tool_call_id").is_none());
         assert!(value.get("reasoning_content").is_none());
         assert!(value.get("tool_calls").is_none());
+    }
+
+    // ── P2：cache_control 载体字段与序列化（T-14）──
+
+    /// 便捷构造 user wire 消息（cache_control 恒 None，构造点补齐语义）
+    fn wire_user(content: &str) -> ChatMessage {
+        ChatMessage {
+            role: "user".to_string(),
+            content: Some(ChatContent::Text(content.to_string())),
+            tool_call_id: None,
+            reasoning_content: None,
+            tool_calls: Vec::new(),
+            cache_control: None,
+        }
+    }
+
+    #[test]
+    fn text_part_cache_control_omitted_when_none() {
+        // None → 序列化省略 cache_control 键（与 P2 前 wire 字节一致）
+        let part = ChatContentPart::Text { text: "hi".to_string(), cache_control: None };
+        assert_eq!(part.to_value(), json!({ "type": "text", "text": "hi" }));
+    }
+
+    #[test]
+    fn text_part_cache_control_serialized_when_some() {
+        // Some → 输出块级断点键（Anthropic 系 wire 值）
+        let part = ChatContentPart::Text {
+            text: "hi".to_string(),
+            cache_control: Some(CacheControl::Ephemeral),
+        };
+        assert_eq!(
+            part.to_value(),
+            json!({ "type": "text", "text": "hi", "cache_control": { "type": "ephemeral" } })
+        );
+        // Ephemeral1h → 带 ttl 键
+        let part = ChatContentPart::Text {
+            text: "hi".to_string(),
+            cache_control: Some(CacheControl::Ephemeral1h),
+        };
+        assert_eq!(
+            part.to_value()["cache_control"],
+            json!({ "type": "ephemeral", "ttl": "1h" })
+        );
+    }
+
+    #[test]
+    fn message_cache_control_omitted_when_none() {
+        // 消息级 None → 不输出 cache_control 键
+        let value = wire_user("hi").to_value();
+        assert!(value.get("cache_control").is_none(), "None 不得输出 cache_control 键");
+    }
+
+    #[test]
+    fn message_cache_control_serialized_when_some() {
+        // 消息级 Some → 输出 `"cache_control":{"type":"ephemeral"}`（原生端点顶层载体）
+        let message = wire_user("hi").with_cache_control(CacheControl::Ephemeral);
+        let value = message.to_value();
+        assert_eq!(value["cache_control"], json!({ "type": "ephemeral" }));
+        assert_eq!(value["content"], "hi", "消息级断点不改写内容");
+    }
+
+    #[test]
+    fn with_cache_control_helpers() {
+        // part 级：文本 part 挂断点；非文本 part 原样返回自身
+        let part = ChatContentPart::Text { text: "hi".to_string(), cache_control: None }
+            .with_cache_control(CacheControl::Ephemeral);
+        assert_eq!(
+            part,
+            ChatContentPart::Text {
+                text: "hi".to_string(),
+                cache_control: Some(CacheControl::Ephemeral),
+            }
+        );
+        let image = ChatContentPart::ImageUrl {
+            url: "https://example.com/a.png".to_string(),
+            detail: None,
+        };
+        assert_eq!(
+            image.clone().with_cache_control(CacheControl::Ephemeral),
+            image,
+            "非文本 part 原样返回"
+        );
+        // 消息级：设置 cache_control 字段
+        let message = wire_user("hi").with_cache_control(CacheControl::Ephemeral1h);
+        assert_eq!(message.cache_control, Some(CacheControl::Ephemeral1h));
     }
 }

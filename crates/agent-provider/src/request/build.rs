@@ -13,8 +13,12 @@ use std::sync::Arc;
 
 use crate::config::Endpoint;
 
+use super::cache::{
+    apply_cache_controls, allocate_breakpoints, retention_wire_value, BreakpointPlan,
+    CacheMechanism, CachePolicy,
+};
 use super::messages::{to_chat_messages, ChatMessage, ReasoningContentMode};
-use super::tools::{to_chat_tool_choice, to_openai_tool, ToolChoice, ToolDefinition};
+use super::tools::{to_cache_aware_tool, to_chat_tool_choice, ToolChoice, ToolDefinition};
 use super::vendor::{
     infer_thinking_capability, reasoning_effort_object, resolve_thinking_params,
     ReasoningEffort, ReasoningEffortFormat, ReasoningVendor, ThinkingIntensity,
@@ -60,6 +64,10 @@ pub struct ChatCompletionsRequestOptions {
     pub vendor: Option<ReasoningVendor>,
     /// 01 D5：thinkingIntensity 透传（提供时覆盖 reasoning 字段并注入 vendor 原生参数）
     pub thinking_intensity: Option<ThinkingIntensity>,
+    /// 统一缓存策略（P2 步骤 3 / T-15：None = 完全不参与缓存，请求体不含任何
+    /// cache 键——compactObject 等价，无缓存配置时请求字节与现状逐字节一致；
+    /// DeepSeek 等自动缓存厂商由 build_cache_policy 归 None，整个参数组不出现）
+    pub cache: Option<CachePolicy>,
 }
 
 /// 请求构建上下文（对齐 RequestBuildContext 的 request 字段子集）
@@ -156,23 +164,83 @@ pub fn build_chat_completions_request_body(
         merge_object(&mut body, &params);
     }
 
+    // ── P2 步骤 3（T-15）：缓存顶层字段注入（compactObject：None 一律省略）──
+    // 三字段：prompt_cache_key（会话亲和键，OpenAI 系）/ prompt_cache_retention
+    // （OpenAI 官方值域 in_memory/24h，仅 Key 机制发 wire——Auto 机制 retention
+    // 恒 Short 为内部档位，P2 §3.4 矩阵 Auto 行不发）/ prompt_cache_options
+    // （GPT-5.6+ none 档显式化 {"mode":"explicit"}）；DeepSeek 等由
+    // build_cache_policy 归 None，整个 cache 参数组不出现
+    if let Some(policy) = &opts.cache {
+        if let Some(key) = &policy.cache_key {
+            body.insert("prompt_cache_key".to_string(), json!(&key.0));
+        }
+        if policy.mechanism == CacheMechanism::Key {
+            if let Some(retention) = retention_wire_value(policy.retention) {
+                body.insert("prompt_cache_retention".to_string(), json!(retention));
+            }
+        }
+        if let Some(options) = &policy.prompt_cache_options {
+            body.insert(
+                "prompt_cache_options".to_string(),
+                json!({ "mode": options.mode.as_str() }),
+            );
+        }
+    }
+
+    // messages：先映射既有 wire 消息（to_chat_messages 保持纯函数），
+    // 再 post-pass 施加断点（P2 §3.1.3：纯后处理，与映射解耦；plan 全 false
+    // → 请求字节与未施加时完全一致）
+    let mut wire = to_chat_messages(
+        context.system_prompt.as_deref(),
+        context.messages,
+        opts.reasoning_content.unwrap_or(ReasoningContentMode::Omit),
+        context.wire_mode,
+    );
+    // Explicit 机制断点：policy.breakpoints 为 Some（机制启用位，cache.rs
+    // T-13b 产出）时，按请求形态（tools 数 / system / messages 锚点存在性）
+    // 经 allocate_breakpoints 落地具体锚点（P2 §3.1.2：层级 tools→system→
+    // messages，超限丢尾不报错）；锚点存在性判定与 apply_cache_controls 内部
+    // 查找逻辑保持一致（system 回退首条 user / messages 回退最后 user/tool）
+    let mut breakpoint_plan = BreakpointPlan::default();
+    if let Some(policy) = &opts.cache {
+        if policy.breakpoints.is_some() {
+            breakpoint_plan = allocate_breakpoints(
+                context.tools.len(),
+                wire.iter().any(|m| m.role == "system" || m.role == "user"),
+                wire.iter().any(|m| m.role == "user" || m.role == "tool"),
+            );
+            // chat-completions 兼容端点走 part 级断点（supports_message_cache_control
+            // = false；消息级断点是 Anthropic 原生端点"顶层自动模式"载体，本线路不用）
+            apply_cache_controls(&mut wire, &breakpoint_plan, policy.ttl, false);
+        }
+    }
     body.insert(
         "messages".to_string(),
-        json!(to_chat_messages(
-            context.system_prompt.as_deref(),
-            context.messages,
-            opts.reasoning_content.unwrap_or(ReasoningContentMode::Omit),
-            context.wire_mode,
-        )
-        .iter()
-        .map(ChatMessage::to_value)
-        .collect::<Vec<_>>()),
+        json!(wire.iter().map(ChatMessage::to_value).collect::<Vec<_>>()),
     );
 
     if !context.tools.is_empty() {
+        // tools 级断点：plan.tools 为真时在**最后一个工具**附加 cache_control
+        // （tools 层级锚点；to_cache_aware_tool 经 cache_control_for_ttl 映射，
+        // 与消息级共用 TTL 桶 → 断点值转换，避免双实现漂移）
+        let last_ttl = if breakpoint_plan.tools {
+            opts.cache.as_ref().map(|policy| policy.ttl)
+        } else {
+            None
+        };
         body.insert(
             "tools".to_string(),
-            json!(context.tools.iter().map(to_openai_tool).collect::<Vec<_>>()),
+            json!(context
+                .tools
+                .iter()
+                .enumerate()
+                .map(|(index, tool)| {
+                    to_cache_aware_tool(
+                        tool,
+                        if index + 1 == context.tools.len() { last_ttl } else { None },
+                    )
+                })
+                .collect::<Vec<_>>()),
         );
         body.insert(
             "tool_choice".to_string(),
@@ -202,6 +270,10 @@ mod tests {
     use super::*;
     use conex_types::message::{AgentMessageBlock, AgentMessageRole};
     use conex_types::tool::ToolOutput;
+    use crate::request::cache::{
+        CacheKey, CacheRetention, PromptCacheMode, PromptCacheOptions, TtlBucket,
+    };
+    use crate::request::schema::canonical_json_string;
 
     fn text_block(text: &str) -> AgentMessageBlock {
         AgentMessageBlock::Text {
@@ -509,5 +581,219 @@ mod tests {
         assert_eq!(messages[1]["role"], "tool");
         assert_eq!(messages[1]["tool_call_id"], "call_1");
         assert_eq!(messages[1]["content"], "文件内容");
+    }
+
+    // ── P2 步骤 3（T-15）：缓存参数注入 ──
+
+    /// 便捷构造缓存策略（prompt_cache_options 恒 None，需要时单独构造）
+    fn cache_policy(
+        mechanism: CacheMechanism,
+        cache_key: Option<&str>,
+        retention: CacheRetention,
+        ttl: TtlBucket,
+        breakpoints: Option<BreakpointPlan>,
+    ) -> CachePolicy {
+        CachePolicy {
+            mechanism,
+            retention,
+            ttl,
+            breakpoints,
+            cache_key: cache_key.map(|k| CacheKey(k.to_string())),
+            prompt_cache_options: None,
+            affinity_header: None,
+        }
+    }
+
+    /// 固定输入（system + user + 单工具），供无缓存回归断言复用
+    fn baseline_context<'a>(messages: &'a [Arc<AgentMessage>]) -> RequestBuildContext<'a> {
+        RequestBuildContext {
+            system_prompt: Some("系统提示".to_string()),
+            messages,
+            tools: vec![tool("read_file")],
+            wire_mode: SystemPromptWireMode::NativeSystemRole,
+        }
+    }
+
+    #[test]
+    fn cache_none_keeps_baseline_bytes() {
+        // 无缓存配置（cache: None）：请求字节与 P2 前逐字节一致（关键回归护栏，
+        // P2 §5.3：无缓存配置请求字节与 P2 前一致；compactObject 兜底）
+        let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_message("你好"))];
+        let context = baseline_context(&messages);
+        let body = build_chat_completions_request_body(&base_opts(), &context);
+        assert_eq!(
+            body,
+            json!({
+                "model": "gpt-4o",
+                "messages": [
+                    { "content": "系统提示", "role": "system" },
+                    { "content": "你好", "role": "user" },
+                ],
+                "tools": [{
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "description": "工具 read_file",
+                        "parameters": { "type": "object" },
+                    },
+                }],
+                "tool_choice": "auto",
+                "stream_options": { "include_usage": true },
+            })
+        );
+        // 字节级钉死（canonical 序列化 = 键码点序；BTreeMap 字典序同构）
+        assert_eq!(
+            canonical_json_string(&body),
+            r#"{"messages":[{"content":"系统提示","role":"system"},{"content":"你好","role":"user"}],"model":"gpt-4o","stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"工具 read_file","name":"read_file","parameters":{"type":"object"}},"type":"function"}]}"#
+        );
+    }
+
+    #[test]
+    fn cache_injects_prompt_cache_key_and_retention() {
+        // Key 机制（OpenAI/Grok）：prompt_cache_key + prompt_cache_retention 顶层注入
+        let opts = ChatCompletionsRequestOptions {
+            cache: Some(cache_policy(
+                CacheMechanism::Key,
+                Some("ses-abc"),
+                CacheRetention::Short,
+                TtlBucket::FiveMinutes,
+                None,
+            )),
+            ..base_opts()
+        };
+        let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+        assert_eq!(body["prompt_cache_key"], "ses-abc");
+        assert_eq!(body["prompt_cache_retention"], "in_memory");
+        assert!(body.get("prompt_cache_options").is_none(), "默认不发 options");
+
+        // retention=Long → wire 值 "24h"
+        let opts = ChatCompletionsRequestOptions {
+            cache: Some(cache_policy(
+                CacheMechanism::Key,
+                Some("ses-abc"),
+                CacheRetention::Long,
+                TtlBucket::OneHour,
+                None,
+            )),
+            ..base_opts()
+        };
+        let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+        assert_eq!(body["prompt_cache_retention"], "24h");
+        assert_eq!(body["prompt_cache_key"], "ses-abc");
+    }
+
+    #[test]
+    fn cache_injects_prompt_cache_options() {
+        // GPT-5.6+ none 档：prompt_cache_options={"mode":"explicit"}（"none 也须被
+        // 尊重"，pi openai-responses.ts:278-285）；无键、无 retention
+        let mut policy = cache_policy(
+            CacheMechanism::Key,
+            None,
+            CacheRetention::None,
+            TtlBucket::FiveMinutes,
+            None,
+        );
+        policy.prompt_cache_options =
+            Some(PromptCacheOptions { mode: PromptCacheMode::Explicit });
+        let opts = ChatCompletionsRequestOptions { cache: Some(policy), ..base_opts() };
+        let body = build_chat_completions_request_body(&opts, &RequestBuildContext::default());
+        assert_eq!(body["prompt_cache_options"], json!({ "mode": "explicit" }));
+        assert!(body.get("prompt_cache_key").is_none());
+        assert!(body.get("prompt_cache_retention").is_none(), "none 档不发 retention");
+    }
+
+    #[test]
+    fn cache_none_omits_all_cache_keys() {
+        // DeepSeek 语义（build_cache_policy → None）与显式 None 同：请求体不含
+        // 任何 cache 键——顶层三字段、消息断点、工具断点全部省略
+        // （P2 §5.1 DeepSeek 省略；对齐 deepseek-reasonix-cache-analysis.md:111-112）
+        let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_message("你好"))];
+        let context = baseline_context(&messages);
+        let opts = ChatCompletionsRequestOptions { cache: None, ..base_opts() };
+        let body = build_chat_completions_request_body(&opts, &context);
+        for key in ["prompt_cache_key", "prompt_cache_retention", "prompt_cache_options"] {
+            assert!(body.get(key).is_none(), "cache=None 不得注入 {key}");
+        }
+        let wire_messages = body["messages"].as_array().expect("messages 数组");
+        for message in wire_messages {
+            assert!(message.get("cache_control").is_none(), "消息不得携带断点");
+        }
+        assert_eq!(wire_messages[1]["content"], "你好", "无断点 → content 保持 string 形态");
+        let tools = body["tools"].as_array().expect("tools 数组");
+        for tool in tools {
+            assert!(tool.get("cache_control").is_none(), "工具不得附加断点");
+        }
+    }
+
+    #[test]
+    fn cache_auto_zero_params_keeps_bytes_identical() {
+        // Auto 机制（Kimi/Gemini 隐式）产出零参数 policy：无键/断点/options，
+        // retention 恒 Short 为内部档位不发 wire——请求字节与 cache=None 完全
+        // 一致（P2 §5.1：plan 全 false → 请求字节与未施加时完全一致）
+        let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_message("你好"))];
+        let context = baseline_context(&messages);
+        let opts_without = base_opts();
+        let opts_with = ChatCompletionsRequestOptions {
+            cache: Some(cache_policy(
+                CacheMechanism::Auto,
+                None,
+                CacheRetention::Short,
+                TtlBucket::FiveMinutes,
+                None,
+            )),
+            ..base_opts()
+        };
+        let body_without = build_chat_completions_request_body(&opts_without, &context);
+        let body_with = build_chat_completions_request_body(&opts_with, &context);
+        assert_eq!(
+            serde_json::to_string(&body_with).expect("序列化"),
+            serde_json::to_string(&body_without).expect("序列化"),
+            "Auto 零参数 policy 不得改变请求字节"
+        );
+    }
+
+    #[test]
+    fn explicit_breakpoints_placed_on_wire_messages_and_last_tool() {
+        // Explicit 机制（MiniMax M2.x / Anthropic 语义）：policy.breakpoints=Some
+        // （启用位）→ post-pass 在首条 system 消息与最后 user 消息末块落 part 级
+        // 断点（锚点落在 wire 消息上）；plan.tools → 最后一个工具附加
+        // cache_control，其余工具不附加
+        let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_message("你好"))];
+        let mut context = baseline_context(&messages);
+        context.tools = vec![tool("read_file"), tool("search")];
+        let opts = ChatCompletionsRequestOptions {
+            cache: Some(cache_policy(
+                CacheMechanism::Explicit,
+                None,
+                CacheRetention::Short,
+                TtlBucket::FiveMinutes,
+                Some(BreakpointPlan::default()),
+            )),
+            ..base_opts()
+        };
+        let body = build_chat_completions_request_body(&opts, &context);
+        // system 锚点：首条 system 消息改写为 parts 形态挂断点
+        let wire_messages = body["messages"].as_array().expect("messages 数组");
+        assert_eq!(wire_messages[0]["role"], "system");
+        assert_eq!(
+            wire_messages[0]["content"][0]["cache_control"],
+            json!({ "type": "ephemeral" })
+        );
+        // messages 锚点：最后 user 消息改写为 parts 形态挂断点
+        assert_eq!(wire_messages[1]["role"], "user");
+        assert_eq!(
+            wire_messages[1]["content"][0]["cache_control"],
+            json!({ "type": "ephemeral" })
+        );
+        // Explicit 机制不发顶层键
+        for key in ["prompt_cache_key", "prompt_cache_retention", "prompt_cache_options"] {
+            assert!(body.get(key).is_none(), "Explicit 机制不得注入 {key}");
+        }
+        // tools 级：仅最后一个工具附加（tools 层级锚点）
+        let tools = body["tools"].as_array().expect("tools 数组");
+        assert_eq!(tools.len(), 2);
+        assert!(tools[0].get("cache_control").is_none(), "非最后工具不附加");
+        assert_eq!(tools[1]["cache_control"], json!({ "type": "ephemeral" }));
+        assert_eq!(tools[1]["function"]["name"], "search");
     }
 }

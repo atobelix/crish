@@ -4,6 +4,8 @@
 //! toResponsesToolChoice / toResponsesTool。缺 schema 时兜底
 //! `{type:'object',properties:{},additionalProperties:true}`（§二.6:292-296）。
 
+use super::cache::cache_control_for_ttl;
+use super::cache::TtlBucket;
 use super::schema::canonicalize_schema;
 use serde_json::{json, Value};
 
@@ -61,6 +63,27 @@ pub fn to_responses_tool(tool: &ToolDefinition) -> Value {
         "parameters": canonicalize_schema(&tool.effective_input_schema()),
         "strict": false,
     })
+}
+
+/// 缓存感知的工具序列化（P2 步骤 3 / T-15）：to_openai_tool 基础上，
+/// `ttl` 为 Some 时在工具对象顶层附加 `cache_control`（Anthropic 系断点）。
+///
+/// 断点值经 [cache_control_for_ttl] 映射（与消息级 apply_cache_controls 共用
+/// 同一 TTL 桶 → 断点值转换，避免双实现漂移）；`None` 时输出与
+/// to_openai_tool 逐字节一致（无缓存配置回归护栏）。
+///
+/// 附加位置约定：调用方（build.rs）只在**最后一个工具**传 Some（tools 层级
+/// 锚点，对齐 jcode format_tools 只放最后工具，jcode-cache-analysis.md:53-59）；
+/// 是否附加由能力表 supports_cache_control_on_tools 门控（plan.tools，
+/// Fireworks 类拒绝未知字段的厂商不附加，pi-cache-analysis.md:314）。
+pub fn to_cache_aware_tool(tool: &ToolDefinition, ttl: Option<TtlBucket>) -> Value {
+    let mut value = to_openai_tool(tool);
+    if let Some(ttl) = ttl {
+        if let Some(obj) = value.as_object_mut() {
+            obj.insert("cache_control".to_string(), cache_control_for_ttl(ttl).to_value());
+        }
+    }
+    value
 }
 
 /// tool_choice（对齐 OpenAICompatibleToolChoice：auto/none/required/指定函数）
@@ -227,5 +250,53 @@ mod tests {
             default_input_schema(),
             json!({ "type": "object", "properties": {}, "additionalProperties": true })
         );
+    }
+
+    // ── P2 步骤 3（T-15）：to_cache_aware_tool 工具级断点附加 ──
+
+    #[test]
+    fn cache_aware_tool_none_matches_openai_tool_bytes() {
+        // ttl=None → 输出与 to_openai_tool 逐字节一致（无缓存回归护栏）
+        let tool = tool("echo");
+        assert_eq!(to_cache_aware_tool(&tool, None), to_openai_tool(&tool));
+        assert!(to_cache_aware_tool(&tool, None).get("cache_control").is_none());
+    }
+
+    #[test]
+    fn cache_aware_tool_some_attaches_cache_control() {
+        // ttl=Some → 附加 cache_control（断点值经 cache_control_for_ttl 映射，
+        // 与消息级断点同一 TTL 桶 → 断点值转换，避免双实现漂移）
+        let tool = tool("echo");
+        let value = to_cache_aware_tool(&tool, Some(TtlBucket::FiveMinutes));
+        assert_eq!(
+            value["cache_control"],
+            json!({ "type": "ephemeral" }),
+            "5m 桶 → ephemeral"
+        );
+        assert_eq!(value["function"]["name"], "echo");
+        assert_eq!(value["type"], "function");
+        assert_eq!(
+            canonical_json_string(&value["function"]["parameters"]),
+            CANONICAL_PARAMETERS_BYTES,
+            "既有规范化字段不受附加影响"
+        );
+
+        let value = to_cache_aware_tool(&tool, Some(TtlBucket::OneHour));
+        assert_eq!(
+            value["cache_control"],
+            json!({ "type": "ephemeral", "ttl": "1h" }),
+            "1h 桶 → ephemeral + ttl"
+        );
+    }
+
+    #[test]
+    fn cache_aware_tool_attaches_at_top_level_object() {
+        // cache_control 挂在工具对象顶层（非 function 内），对齐 Anthropic 系
+        // tools[].cache_control wire 形态
+        let value = to_cache_aware_tool(&tool("echo"), Some(TtlBucket::FiveMinutes));
+        let obj = value.as_object().expect("工具对象");
+        let keys: Vec<&String> = obj.keys().collect();
+        assert!(keys.contains(&&"cache_control".to_string()), "顶层键：{keys:?}");
+        assert_eq!(obj.get("function").and_then(|v| v.get("cache_control")), None);
     }
 }
