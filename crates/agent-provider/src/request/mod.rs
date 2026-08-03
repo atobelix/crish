@@ -9,8 +9,11 @@
 //! - [schema]：JSON Schema 规范化（canonicalize_schema / canonical_json_string，
 //!   前缀稳定性基础，规则真源 P6 §3.1 R2）
 //! - [tools]：ToolDefinition → OpenAI tools 格式与 tool_choice
+//! - [cache]：缓存参数载体与键派生（CacheRetention/TtlBucket/CacheControl/CacheKey/
+//!   CacheMechanism/CacheCapability，P2 §3.1；断点分配与 wire 注入 T-13b）
 
 pub mod build;
+pub mod cache;
 pub mod messages;
 pub mod schema;
 pub mod tools;
@@ -19,6 +22,10 @@ pub mod vendor;
 pub use build::{
     build_chat_completions_request_body, build_system_prompt, resolve_endpoint,
     ChatCompletionsRequestOptions, MaxTokensField, RequestBuildContext,
+};
+pub use cache::{
+    CacheCapability, CacheControl, CacheKey, CacheMechanism, CacheRetention, TtlBucket,
+    OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH,
 };
 pub use messages::{
     stringify_tool_output, system_prompt_as_user_prefix, to_chat_messages, ChatContent,
