@@ -20,10 +20,12 @@
  *
  * Caller cancel **must** invoke the returned abort; fire-and-forget starts leak streams.
  *
- * 性能与缓存增强：
- * - 规范化与确定性排序 Tool Schema (JSON Schema Canonicalization) 确保前缀字节级一致
- * - 注入 FNV-1a Hash 派生的 prompt_cache_key (适用于 DeepSeek / OpenAI / OpenCode)
- * - 捕获增量流中的 Prompt Cache Hit/Miss 用量统计并实时透传
+ * 缓存增强（规则真源：docs/cache-optimization/03-plans/P6-ts-shell-sync.md §3.1 R1-R5，
+ * 与 Rust 主路径 P1/P2 共享同一规范标准，约束 C10；本模块仍为"非产品 SoT"，C15）：
+ * - R1/R2：Tool Schema 规范化与确定性排序委托 shared-utils（码点序，禁用 localeCompare）
+ * - R3：prompt_cache_key 由 sessionId 派生（clamp64）；无有效 sessionId 不注入
+ *   （内容哈希键 buildStableCacheKey 已废弃，旧名仅保留兼容包装）
+ * - R4：增量流 usage 解析委托 shared-utils；[KV Cache: N hit / N miss] 提示保留透传
  *
  * @see docs/plans/progress/architecture-dedup-inventory.md #10
  * @see ./chat-bridge/ConnectionLifecycle.ts (`ALLOW_AUTO_DIRECT_FETCH_FALLBACK`)
@@ -32,74 +34,33 @@
 import type { StreamCallbacks, StreamRequestOptions } from './chatApi';
 import { getActiveModelId, getActiveProfile } from './providerProfiles';
 import { useSettingsStore } from '../store';
+import {
+  formatStableTools,
+  derivePromptCacheKey,
+  parseUsageFromProviderChunk,
+} from '@crish/shared-utils';
 
-/** 递归规范化与确定性排序 JSON Schema 键名与 required 数组 */
-export function canonicalizeJsonSchema(
-  schema: Record<string, unknown> | undefined
-): Record<string, unknown> {
-  if (!schema || typeof schema !== 'object') {
-    return { type: 'object', properties: {} };
-  }
+/**
+ * 工具排序与 schema 规范化：委托 shared-utils（P6 §3.1 R1/R2）。
+ *
+ * 导出名保持兼容（stressFuzzing Probe E 直接 import 本文件），实现一律走
+ * shared-utils 规范真源，本文件不再维护独立实现（避免双实现漂移，C10）。
+ */
+export { canonicalizeJsonSchema, formatStableTools } from '@crish/shared-utils';
 
-  const result: Record<string, unknown> = {
-    type: schema.type || 'object',
-    properties: {},
-  };
-
-  if (schema.properties && typeof schema.properties === 'object') {
-    const sortedProps: Record<string, unknown> = {};
-    const keys = Object.keys(
-      schema.properties as Record<string, unknown>
-    ).sort();
-    for (const key of keys) {
-      sortedProps[key] = (schema.properties as Record<string, unknown>)[key];
-    }
-    result.properties = sortedProps;
-  }
-
-  if (Array.isArray(schema.required)) {
-    result.required = [...schema.required].sort();
-  }
-
-  return result;
-}
-
-/** 格式化确定性排序的 Tool 定义 */
-export function formatStableTools(
-  tools?: Array<{
-    name: string;
-    description: string;
-    inputSchema?: Record<string, unknown>;
-  }>
-) {
-  if (!tools || tools.length === 0) return undefined;
-
-  const sorted = [...tools].sort((a, b) => a.name.localeCompare(b.name));
-  return sorted.map((t) => ({
-    type: 'function',
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: canonicalizeJsonSchema(t.inputSchema),
-    },
-  }));
-}
-
-/** 构建前缀 Hash 键，用于 OpenAI / DeepSeek Prompt Cache Affinity */
-export function buildStableCacheKey(
-  systemPrompt?: string,
-  tools?: ReturnType<typeof formatStableTools>
-): string {
-  const payload = JSON.stringify({
-    systemPrompt: systemPrompt || '',
-    tools: tools || [],
-  });
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < payload.length; i++) {
-    hash ^= payload.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return `crish-prefix-${(hash >>> 0).toString(16)}`;
+/**
+ * @deprecated 内容哈希键已废弃（P6 §3.1 R3）。
+ *
+ * 旧行为：对 {systemPrompt, tools} 序列化做 FNV-1a 哈希 → `crish-prefix-<hex>`；
+ * 内容哈希无法承载"会话前缀演进"（tools 增删即换缓存域），且与 P2/P3 的
+ * 会话 ID 键源语义冲突。现语义改为 R3：`prompt_cache_key = clamp64(sessionId)`；
+ * 无有效 sessionId 返回 undefined（调用方不注入 prompt_cache_key）。
+ * 新代码请直接使用 `derivePromptCacheKey`。
+ * @removeWhen 缓存优化多 Agent 方案 R7 终验（docs/cache-optimization/90-final/）
+ * 确认无外部调用方后删除本兼容包装（保留 `derivePromptCacheKey` 真源）。
+ */
+export function buildStableCacheKey(sessionId?: string): string | undefined {
+  return derivePromptCacheKey(sessionId);
 }
 
 /**
@@ -161,7 +122,6 @@ export function streamViaDirectFetch(
   assistantMsgId: string,
   options?: StreamRequestOptions
 ): () => void {
-  void sessionId;
   void assistantMsgId;
   const controller = new AbortController();
   let finished = false;
@@ -195,7 +155,8 @@ export function streamViaDirectFetch(
   // 1. Stable System Prompt & Tools
   const systemPrompt = options?.systemPrompt || undefined;
   const formattedTools = formatStableTools(options?.tools);
-  const cacheAffinityKey = buildStableCacheKey(systemPrompt, formattedTools);
+  // R3：缓存键由 sessionId 派生（clamp64，内容哈希键已废弃）；无有效 sessionId 不注入
+  const cacheAffinityKey = derivePromptCacheKey(sessionId);
 
   // 2. Format Messages History + User Turn
   const messagesPayload: Array<Record<string, unknown>> = [];
@@ -226,7 +187,7 @@ export function streamViaDirectFetch(
     messages: messagesPayload,
     stream: true,
     stream_options: { include_usage: true },
-    prompt_cache_key: cacheAffinityKey,
+    ...(cacheAffinityKey ? { prompt_cache_key: cacheAffinityKey } : {}),
     ...thinkingParams,
     ...(formattedTools ? { tools: formattedTools, tool_choice: 'auto' } : {}),
     ...(options?.content ? { content: options.content } : {}),
@@ -289,21 +250,16 @@ export function streamViaDirectFetch(
             try {
               const data = JSON.parse(rawJson);
 
-              // Capture Cache Usage Metrics from Stream Usage Chunk
+              // R4：usage 解析委托 shared-utils（hit 三级回退 / write 别名链，
+              // 与 Rust 主路径 P2 归一化口径同源）
               if (data.usage) {
-                const hitTokens =
-                  data.usage.prompt_cache_hit_tokens ??
-                  data.usage.prompt_tokens_details?.cached_tokens ??
-                  0;
-                const missTokens =
-                  data.usage.prompt_cache_miss_tokens ??
-                  (data.usage.prompt_tokens
-                    ? Math.max(0, data.usage.prompt_tokens - hitTokens)
-                    : 0);
-
-                if (hitTokens > 0 || missTokens > 0) {
+                const parsedUsage = parseUsageFromProviderChunk(data.usage);
+                if (
+                  parsedUsage &&
+                  (parsedUsage.read > 0 || parsedUsage.miss > 0)
+                ) {
                   callbacks.onThought?.(
-                    `[KV Cache: ${hitTokens} hit / ${missTokens} miss]`
+                    `[KV Cache: ${parsedUsage.read} hit / ${parsedUsage.miss} miss]`
                   );
                 }
               }

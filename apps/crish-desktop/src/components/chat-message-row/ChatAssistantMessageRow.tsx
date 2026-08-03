@@ -1,9 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './ChatMessageRow.module.css';
 import type { FileDiff, SessionMessage } from '../../store/layoutStore';
 import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
@@ -21,6 +16,7 @@ import {
 import { MessageThinkingBlock } from '../chat-message/MessageThinkingBlock';
 import { MessageContent } from '../chat-message/MessageContent';
 import { MessageActions } from '../chat-message/MessageActions';
+import { CacheMetricsBadge } from './CacheMetricsBadge';
 import {
   getStreamText,
   streamStoreKey,
@@ -221,15 +217,15 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
         thinkingBudget={thinkingBudget}
       />
 
-      <div
-        className={styles.assistantBody}
-        data-message-body="assistant"
-      >
+      <div className={styles.assistantBody} data-message-body="assistant">
         <MessageContent
           msg={msg}
           isThinkingMsg={isThinkingMsg}
           toolStackProps={toolStackProps}
         />
+
+        {/* P6 骨架挂载（T-46）：无数据源 → 恒传 null 隐藏；T-48 接线真实 metrics */}
+        <CacheMetricsBadge metrics={null} />
       </div>
 
       {!isThinkingMsg && msg.status !== 'processing' && (

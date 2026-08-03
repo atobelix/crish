@@ -19,6 +19,11 @@ export type {
   ToolDomainEvent,
   CompressionDomainEvent,
   DiagnosticDomainEvent,
+  CacheDomainEvent,
+  CacheStatsUpdated,
+  CacheWasteAlert,
+  ColdCacheWarning,
+  MissAttribution,
 } from './events';
 
 // 消息
@@ -270,3 +275,15 @@ export type { MediaSource, MediaType, ImageContent } from './media';
 
 // 校验器
 export * as validators from './validators';
+
+// 缓存计量契约（P6 S2 §3.3.1；T-42；RunCacheStats re-export 自 ./events，
+// 避免双定义——events.ts 为 run 级聚合唯一定义）
+export type {
+  CacheUsage,
+  CacheBreakdown,
+  SessionCacheSnapshot,
+  CacheMetrics,
+  UsageMetadataShape,
+  MessageCacheState,
+  RunCacheStats,
+} from './cache-metrics';

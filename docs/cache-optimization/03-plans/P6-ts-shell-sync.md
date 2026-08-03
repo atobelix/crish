@@ -425,3 +425,52 @@ npx vitest run --coverage apps/crish-desktop/src/api/chat-bridge  # 抽查
 
 - **本方案实施涉及**：`packages/shared-utils/src/cache/`（新）、`packages/shared-types/src/cache-metrics.ts`（新）、`apps/crish-desktop/src/api/directFetchBridge.ts`、`apps/crish-desktop/src/__tests__/stressFuzzing.test.ts`、`apps/crish-desktop/src/api/chat-bridge/handlers/eventParser.test.ts`、`apps/crish-desktop/src/components/chat-message-row/CacheMetricsBadge.tsx`（新）、`apps/crish-desktop/src/components/workspace/`（骨架挂载）、`tests/e2e/mock-engine.ts`、`tests/e2e/cache-metrics.spec.ts`（新）、`tests/e2e/README.md`、`packages/shared-utils/src/bench/bench-definitions.ts`
 - **明确不动**（留给对应计划）：Rust crates（P1/P2/P3）、`pricingStore.ts` 费率逻辑（P5 消费侧）、`ConnectionLifecycle.ts` 的 systemPrompt 透传缺陷（P1/P4）、`generated/engine/*`（P2 事件面变更时经生成器）。
+
+---
+
+## ⑦ 实施核销（R6 完成，2026-08-03）
+
+> 核销范围：R6 轮 T-46（骨架组件 + 挂载 + 本文档收口）。逐节核对 ④ 实施步骤 S7 与本方案
+> §3.3.3 组件骨架契约、§3.6.1 默认值语义在 `apps/crish-desktop/src/components/` 的实际落地情况，
+> 以及实施中与任务书/方案正文的差异裁决。全部结论基于 2026-08-03 实读代码。
+> 本方案 §3.1 规则表为双侧真源，本次无规则内容改动，无需回写（维持最终版）。
+
+### 7.1 步骤 7（S7）骨架占位完成状态
+
+| 交付物                                                    | 状态 | 说明                                                                                                                                                                                                                                                   |
+| --------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `components/chat-message-row/CacheMetricsBadge.tsx`（新） | 完成 | 空壳 + testid `cache-metrics-badge` + CSS 稳定类 `.cache-metrics`；props `metrics: CacheMetrics \| null`，null → 渲染 null；非 null 最小数值文本（命中率/读/写，hitRatio 优先、hitRate 兼容别名回退），命中率 0 或未上报 → "未命中"态（e2e 用例④口径） |
+| `components/workspace/SessionCacheStatsPanel.tsx`（新）   | 完成 | 空壳 + testid `session-cache-stats`；props `stats: CacheMetrics \| null`，null → 空态占位文案；非 null 渲染命中率/读写 token/未命中提示占位                                                                                                            |
+| 挂载点（ChatAssistantMessageRow.tsx / RuntimePanel.tsx）  | 完成 | 最小引用：传 null 占位，不接数据（数据接线归 T-48）                                                                                                                                                                                                    |
+| 组件测试（两文件）                                        | 完成 | `CacheMetricsBadge.test.tsx` / `SessionCacheStatsPanel.test.tsx`：null 隐藏、testid 存在、未命中态                                                                                                                                                     |
+
+### 7.2 与任务书/方案正文的差异裁决
+
+1. **面板 testid 差异**：任务派单对面板写 `cache-stats-panel`，但本方案 §3.3.3 与 90-final T-45
+   登记的 testid 契约为 `session-cache-stats` → 按**登记契约**实现（e2e 断言与 README §5 登记以
+   登记契约为准），差异已在轮末汇总物声明，请主 Agent 裁决是否全局统一。
+2. **类型占位 → 已切换共享类型**：T-42（shared-types cache-metrics 契约）同波并行在本任务
+   实施中途落盘（`cache-metrics.ts` / `index.ts` 导出实读确认）→ 两个组件直接消费
+   `@crish/shared-types` 的 `CacheMetrics`（字段全可选；`hitRatio` 正式名 + `hitRate` 兼容别名），
+   未保留本地占位接口（无占位债留给 T-48）。
+3. **骨架数据读取路径**：任务派单将"从 store 消息读 `MessageCacheState.metrics`"归 T-48 接线；
+   T-46 交付 props 驱动的纯骨架（挂载恒传 null），e2e 用例①②的数据读取路径断言由 T-48
+   接线后的全流程覆盖。
+4. **跨 Agent 阻塞上报（T-42 域）**：`packages/shared-types/src/cache-metrics.test.ts`（T-42 域）
+   存在 GBK 乱码写入（实读字节确认，`it(...)` 字符串被错误字节截断，tsc 报
+   `Unterminated string literal` / `Invalid character`），导致全仓 `npm run typecheck` 门禁失败。
+   该文件不在 T-46 文件域内，未代改；请主 Agent 协调 T-42 修复（按 chinese-encoding-guard
+   安全写入方式重写该文件）。
+
+### 7.3 交接对声明（A6 → A8，轮内串行）
+
+- components 域（`CacheMetricsBadge.tsx` / `SessionCacheStatsPanel.tsx` / `ChatAssistantMessageRow.tsx` /
+  `RuntimePanel.tsx`）骨架与挂载已完成并通过 P6 门禁（typecheck + 组件单测），所有权移交主 Agent，
+  由主 Agent 在轮末报告后转移给 T-48（A8）接线真实数据。
+- 接线接口（T-48 消费面）：
+  - `CacheMetricsBadge.props.metrics: CacheMetrics | null`（null 隐藏；类型已消费
+    `@crish/shared-types` 共享契约，T-48 无需替换类型来源）
+  - `SessionCacheStatsPanel.props.stats: CacheMetrics | null`（null 空态占位）
+  - testid：`cache-metrics-badge` / `session-cache-stats`
+- 验收"无 generated 产物手改"：本次未触碰 `packages/shared-types/src/generated/`（无事件面变更，
+  对齐 §3.6.2 第 2 条纪律）。

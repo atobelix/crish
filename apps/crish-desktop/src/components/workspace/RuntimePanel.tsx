@@ -1,6 +1,10 @@
 import React from 'react';
 import styles from './RuntimePanel.module.css';
-import { useSettingsField, selectScheduledTasks, selectTokenUsage } from '../../store/storeAccess';
+import {
+  useSettingsField,
+  selectScheduledTasks,
+  selectTokenUsage,
+} from '../../store/storeAccess';
 import { useEngineState } from '../../hooks/useEngineState';
 import { RuntimeSection } from './RuntimeSection';
 import { LiveTasksSection } from './LiveTasksSection';
@@ -8,6 +12,7 @@ import { BgTasksSection } from './BgTasksSection';
 import { ApprovalSection } from './ApprovalSection';
 import { PlansSection } from './PlansSection';
 import { useRuntimePanelData } from './useRuntimePanelData';
+import { SessionCacheStatsPanel } from './SessionCacheStatsPanel';
 import {
   formatEngineStatusFull,
   formatEngineStatusShort,
@@ -30,7 +35,10 @@ interface RuntimePanelProps {
  * - 计划：workflow 列表（H3 再补 CRUD）
  * - 成功操作静默（列表/面板切换即反馈）；仅失败 toast
  */
-export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowToast }) => {
+export const RuntimePanel: React.FC<RuntimePanelProps> = ({
+  wsId: _wsId,
+  onShowToast,
+}) => {
   const tokenUsage = useSettingsField(selectTokenUsage);
   const cronJobs = useSettingsField(selectScheduledTasks);
   const ds = useEngineState();
@@ -89,19 +97,29 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({ wsId: _wsId, onShowT
           <div className={styles.usageStats}>
             <div className={styles.statRow}>
               <span className={styles.statLabel}>输入</span>
-              <span className={styles.statValue}>{tokenUsage.input.toLocaleString()}</span>
+              <span className={styles.statValue}>
+                {tokenUsage.input.toLocaleString()}
+              </span>
             </div>
             <div className={styles.statRow}>
               <span className={styles.statLabel}>输出</span>
-              <span className={styles.statValue}>{tokenUsage.output.toLocaleString()}</span>
+              <span className={styles.statValue}>
+                {tokenUsage.output.toLocaleString()}
+              </span>
             </div>
             <div className={`${styles.statRow} ${styles.isTotal}`}>
               <span className={styles.statLabel}>费用</span>
-              <span className={styles.statValue}>{"$"}{data.estimated.toFixed(4)}</span>
+              <span className={styles.statValue}>
+                {'$'}
+                {data.estimated.toFixed(4)}
+              </span>
             </div>
           </div>
         </div>
       </RuntimeSection>
+
+      {/* P6 骨架挂载（T-46）：会话级统计无数据源 → 恒传 null 空态；T-48 接线真实 stats */}
+      <SessionCacheStatsPanel stats={null} />
 
       <LiveTasksSection
         liveTasks={data.liveTasks}
