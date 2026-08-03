@@ -1,3 +1,4 @@
+pub mod semantics;
 pub mod gatekeeper {
     use regex::RegexSet;
     use serde::{Deserialize, Serialize};

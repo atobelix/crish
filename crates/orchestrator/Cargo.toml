@@ -11,7 +11,8 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-agent-tools = { path = "../agent-tools" }
+# G5 清理（2026-08-03）：agent-tools 无任何引用（run/events/persist/session/restore
+# 均为编排逻辑，工具执行未接线，cargo machete 实证）；后续工具执行接线时按需加回。
 async-trait = { workspace = true }
 conex-db = { path = "../conex-db" }
 conex-types = { path = "../conex-types" }

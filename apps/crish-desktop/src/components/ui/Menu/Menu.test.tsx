@@ -1,9 +1,10 @@
 /**
  * ui/Menu 基座测试：双模 open、键盘漫游、Esc 关闭、a11y
  */
+// @vitest-environment jsdom
+import React, { useState } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
-import { useState } from 'react';
 import { Menu } from './Menu';
 import styles from './Menu.module.css';
 

@@ -41,7 +41,9 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npx turbo run typecheck
+      # G7 统一：typecheck 走根脚本（npm run typecheck = 7 段 tsc 直跑；
+      # 与 npx turbo run typecheck 覆盖等价，口径对齐 G7 盘点）
+      - run: npm run typecheck
 
   lint:
     runs-on: ubuntu-latest
@@ -71,7 +73,9 @@ jobs:
       #（2026-08-03 审计：此前未带 --coverage，且项目级阈值被根配置整体覆盖，
       #  70/60/65/70 从未生效；实测基线 47.02/77.37/69.69/47.02，阈值已按基线
       #  校准为 45/70/65/45，低于阈值即失败）
-      - run: npx vitest run --project=unit --coverage --reporter=verbose
+      # G7 统一：vitest 调用走根脚本（npm run test:coverage = vitest run --coverage，
+      # 追加 --project=unit 透传快层专项口径）
+      - run: npm run test:coverage -- --project=unit --reporter=verbose
 
   audit:
     runs-on: ubuntu-latest

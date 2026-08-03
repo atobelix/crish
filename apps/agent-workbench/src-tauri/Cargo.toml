@@ -34,10 +34,7 @@ chardetng = "0.1"
 encoding_rs = "0.8"
 notify = { version = "8", features = [] }
 memmap2 = "0.9"
-itertools = "0.14"
 tracing.workspace = true
-anyhow.workspace = true
-regex = "1"
 async-trait.workspace = true
 conex-sandbox = { path = "../../../crates/conex-sandbox" }
 conex-types = { path = "../../../crates/conex-types" }
@@ -63,3 +60,8 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# G5 豁免登记（2026-08-03）：conex-fs 为 01 方案 S3 同轮新建的删除接管 crate，
+# 删除工具接线中（trash_list/trash_restore），本壳将立即使用，暂不算未用。
+[package.metadata.cargo-machete]
+ignored = ["conex-fs"]

@@ -11,7 +11,6 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-serde = { workspace = true }
-serde_json = { workspace = true }
+# G5 清理（2026-08-03）：serde/serde_json 无任何引用（fuzzy 纯逻辑，cargo machete 实证）
 ignore = { workspace = true }
 conex-types = { path = "../conex-types" }

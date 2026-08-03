@@ -68,7 +68,6 @@ notify = { version = "8", features = [] }
 ignore = "0.4"
 sha2 = "0.10"
 hex = "0.4"
-bytes = "1"
 futures-util = "0.3"
 regex = "1"
 similar = "2"
@@ -79,7 +78,8 @@ moka = { version = "0.12", features = ["sync"] }
 once_cell = "1"
 # windows-sys：与 tauri 生态（windows 0.61）对齐的版本；各 crate 按需补 feature
 windows-sys = { version = "0.61", features = [] }
-url = "2"
+# G5 清理（2026-08-03）：uuid 当前唯一消费者 agent-provider 处于并行域开发中
+# （models/ 目录接线中），保留 workspace 声明供其按需加回；后续无消费者则删。
 uuid = "1"
 # Criterion 基准（PE-09 T09.7：仅 dev-dependency，不进常规测试路径；
 # 依赖增量按 PE-10 修订指令 2 由本任务落声明）

@@ -12,7 +12,7 @@ workspace = true
 
 [dependencies]
 rusqlite = { workspace = true }
-serde = { workspace = true }
+# G5 清理（2026-08-03）：serde 本体无引用（仅 serde_json 使用，cargo machete 实证）
 serde_json = { workspace = true }
 conex-types = { path = "../conex-types" }
 

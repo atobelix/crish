@@ -51,7 +51,15 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           components: clippy
-      - run: cargo clippy --workspace -- -D warnings
+      # 口径统一（G7）：--all-targets warn 级 + 基线 ratchet 脚本（G1）。
+      # -D warnings 为存量清零后终态（G12 切换）
+      # 头部注释旧口径已由 G7 更新。
+      - run: cargo clippy --workspace --all-targets
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # 新增告警 > 0 即失败（基线真源：基线记录/clippy-workspace-T13.md 标记区）
+      - run: node scripts/check-clippy-baseline.mjs
 
   test:
     runs-on: ubuntu-latest
@@ -71,7 +79,7 @@ jobs:
       #     运行器冲突，预存问题），无法在 vitest 下运行；
       #   强行加 --coverage 只会制造必红门禁，待专项补齐（integration 用例扩增、
       #   e2e 迁移 playwright runner）后再启用。
-      - run: npx vitest run --reporter=verbose
+      - run: npm run test -- --reporter=verbose
 
   test:integration:
     runs-on: ubuntu-latest
@@ -85,3 +93,11 @@ jobs:
       - run: npm ci
       # F3 层：integration / fuzz / race / recovery（vitest.integration.config.ts）
       - run: npx vitest run --config vitest.integration.config.ts --reporter=verbose
+
+  machete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo machete

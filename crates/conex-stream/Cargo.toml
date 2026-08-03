@@ -11,6 +11,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-tokio = { workspace = true }
-bytes = { workspace = true }
+# G5 清理（2026-08-03）：tokio/bytes 为 R 轮重写前的预留声明，
+# StreamSession 当前为纯同步 VecDeque 实现，源码 0 引用（cargo machete 实证）；
+# 后续异步化接线时按需加回。
 conex-types = { path = "../conex-types" }

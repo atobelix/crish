@@ -62,7 +62,8 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       # L2 mock-IPC e2e（根 config：tests/e2e，webServer 自动拉起 dev server）
-      - run: npx playwright test tests/e2e
+      # G7 统一：走根脚本 npm run test:e2e（等价 npx playwright test tests/e2e）
+      - run: npm run test:e2e
 
   bench:
     runs-on: ubuntu-latest

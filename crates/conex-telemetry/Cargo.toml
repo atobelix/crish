@@ -17,7 +17,7 @@ tracing = { workspace = true }
 # fmt feature: subscriber.rs 用 tracing_subscriber::fmt()（with_writer stderr + MakeWriterExt），
 # 缺 fmt feature 时 io::Stderr 不实现 MakeWriter（编译报 E0599）。
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
-serde = { workspace = true }
+# G5 清理（2026-08-03）：serde 本体无引用（仅 serde_json::json! 使用，cargo machete 实证）
 serde_json = { workspace = true }
 # CrishErrorPayload / CrishErrorCategory are produced by Agent 10-A in
 # crates/conex-types/src/error.rs (ROUND-10-rust.md §3.2). This dependency is

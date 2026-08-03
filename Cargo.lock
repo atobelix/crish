@@ -907,8 +907,6 @@ name = "conex-compaction"
 version = "0.1.0"
 dependencies = [
  "conex-types",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -918,7 +916,6 @@ dependencies = [
  "conex-types",
  "criterion",
  "rusqlite",
- "serde",
  "serde_json",
 ]
 
@@ -927,7 +924,6 @@ name = "conex-diff"
 version = "0.1.0"
 dependencies = [
  "conex-types",
- "serde",
  "serde_json",
  "similar",
 ]
@@ -950,11 +946,8 @@ dependencies = [
  "once_cell",
  "pulldown-cmark",
  "regex",
- "serde",
- "serde_json",
  "syntect",
  "thiserror 2.0.19",
- "url",
 ]
 
 [[package]]
@@ -971,8 +964,6 @@ version = "0.1.0"
 dependencies = [
  "conex-types",
  "ignore",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -980,7 +971,6 @@ name = "conex-telemetry"
 version = "0.1.0"
 dependencies = [
  "conex-types",
- "serde",
  "serde_json",
  "tracing",
  "tracing-subscriber",
@@ -1131,7 +1121,6 @@ version = "0.1.0"
 dependencies = [
  "agent-provider",
  "agent-tools",
- "anyhow",
  "async-trait",
  "base64 0.22.1",
  "chardetng",
@@ -1146,13 +1135,11 @@ dependencies = [
  "conex-types",
  "encoding_rs",
  "futures-util",
- "itertools 0.14.0",
  "libc",
  "memmap2",
  "notify",
  "orchestrator",
  "portable-pty",
- "regex",
  "reqwest",
  "serde",
  "serde_json",
@@ -3994,7 +3981,6 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 name = "orchestrator"
 version = "0.1.0"
 dependencies = [
- "agent-tools",
  "async-trait",
  "conex-db",
  "conex-types",
