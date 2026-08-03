@@ -32,8 +32,9 @@ use agent_provider::error::{
 use agent_provider::events::{ProviderStreamEvent as WireEvent, StreamParseError};
 use agent_provider::parse::chat::ChatCompletionsParser;
 use agent_provider::request::{
-    build_chat_completions_request_body, ChatCompletionsRequestOptions, MaxTokensField,
-    RequestBuildContext, ToolDefinition as WireToolDefinition,
+    build_chat_completions_request_body, infer_reasoning_vendor, ChatCompletionsRequestOptions,
+    MaxTokensField, ReasoningContentMode, ReasoningVendor, RequestBuildContext,
+    ToolDefinition as WireToolDefinition,
 };
 use agent_provider::sse::{AbortFlag, StreamDiagnosticContext, StreamReadOptions};
 use agent_provider::transport::{stream_frames, StreamFrameEvent};
@@ -204,12 +205,17 @@ impl HttpProviderCall {
     }
 
     /// chat-completions 请求选项（对话无关字段；模型 / max_tokens 透传）
+    ///
+    /// `reasoning_content` 为请求级配置（非历史字节）：按 vendor 推断的
+    /// 键存在性模式，DeepSeek 恒 Require（P1 C3 唯一实现），其余厂商
+    /// Omit 保持现状（P1 §3.4 C3 / P1 §3.3 B1 步骤 2.3）。
     fn request_options(&self, request: &ProviderRequest<'_>) -> ChatCompletionsRequestOptions {
         ChatCompletionsRequestOptions {
             model: Some(self.config.model.clone()),
             stream: Some(self.config.stream),
             max_tokens: request.max_tokens.map(u64::from),
             max_tokens_field: Some(MaxTokensField::MaxTokens),
+            reasoning_content: Some(self.reasoning_content_mode()),
             ..ChatCompletionsRequestOptions::default()
         }
     }
@@ -217,7 +223,7 @@ impl HttpProviderCall {
     /// 请求构建上下文（消息 0 深拷贝借用，PE-09 T09.3 阶段 1）
     fn build_context<'a>(&self, request: &ProviderRequest<'a>) -> RequestBuildContext<'a> {
         RequestBuildContext {
-            system_prompt: None,
+            system_prompt: request.system_prompt.map(str::to_string),
             messages: request.messages,
             tools: request
                 .tools
@@ -229,6 +235,17 @@ impl HttpProviderCall {
                 })
                 .collect(),
             wire_mode: SystemPromptWireMode::NativeSystemRole,
+        }
+    }
+
+    /// reasoning 键存在性按 vendor 推断（P1 C3 唯一实现，P3 不实现第二套）：
+    /// DeepSeek 工具循环轮次必须回传 `reasoning_content`（空串兜底，缺键 400），
+    /// 其余厂商 omit 保持现状。判定只依赖生效配置（base_url / model），
+    /// 与请求历史无关，属稳定键。
+    fn reasoning_content_mode(&self) -> ReasoningContentMode {
+        match infer_reasoning_vendor(Some(&self.config.base_url), Some(&self.config.model)) {
+            ReasoningVendor::Deepseek => ReasoningContentMode::Require,
+            _ => ReasoningContentMode::Omit,
         }
     }
 }
@@ -883,5 +900,113 @@ mod tests {
         let classified = classify_stream_parse(&error);
         assert_eq!(classified.kind, ProviderErrorKind::Unknown);
         assert!(!classified.retryable);
+    }
+
+    // ── P1：system prompt 透传 + 请求体稳定性（T-06，P1 阶段 2 步骤 2.3 /
+    //     阶段 4 步骤 4.3）──────────────────────────────────────────────
+
+    /// 构造测试用适配层（chat-completions 端点）
+    fn test_provider_call(model: &str) -> HttpProviderCall {
+        let client = reqwest::Client::new();
+        let config = EngineProviderConfig {
+            base_url: "https://api.example.com/v1/".to_string(),
+            api_key: "k".to_string(),
+            model: model.to_string(),
+            endpoint: Endpoint::ChatCompletions,
+            stream: true,
+        };
+        HttpProviderCall::new(client, config)
+    }
+
+    /// 构造单条 user 消息的会话（验证 system 前置与请求体字节稳定）
+    fn single_user_request<'a>(
+        messages: &'a Vec<Arc<AgentMessage>>,
+        system_prompt: Option<&'a str>,
+    ) -> ProviderRequest<'a> {
+        ProviderRequest {
+            messages,
+            tools: Vec::new(),
+            max_tokens: Some(4096),
+            system_prompt,
+        }
+    }
+
+    /// build_context 透传 system_prompt；相同设置下两次构建请求体字节一致
+    ///
+    /// 断言（P1 §5.1 验收 4/10 + §5.3 路径 3）：
+    /// - system_prompt 到达请求构建上下文（不再硬编码 None）；
+    /// - system 消息始终是 messages[0]（静态前缀前置纪律）；
+    /// - 同进程两次构建请求体 to_string 字节相等（前缀稳定性）。
+    #[test]
+    fn build_context_passes_system_prompt_and_is_stable() {
+        let call = test_provider_call("deepseek-chat");
+
+        let user = AgentMessage {
+            id: "user-1".to_string(),
+            role: AgentMessageRole::User,
+            created_at: "2026-08-03T00:00:00.000Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "你好".to_string(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        };
+        let messages = vec![Arc::new(user)];
+        let request = single_user_request(&messages, Some("你是助手，使用中文回答。"));
+
+        // 透传正确：system_prompt 到达构建上下文（P-04 修复点）
+        let context_a = call.build_context(&request);
+        let context_b = call.build_context(&request);
+        assert_eq!(
+            context_a.system_prompt.as_deref(),
+            Some("你是助手，使用中文回答。")
+        );
+
+        // 稳定性：相同设置下两次构建请求体字节一致（同进程对比）
+        let options = call.request_options(&request);
+        let body_a = build_chat_completions_request_body(&options, &context_a);
+        let body_b = build_chat_completions_request_body(&options, &context_b);
+        assert_eq!(body_a.to_string(), body_b.to_string());
+
+        // system 消息始终是 messages[0]（静态前缀前置，P1 §5.3 路径 3）
+        let wire_messages = body_a
+            .get("messages")
+            .and_then(serde_json::Value::as_array)
+            .expect("请求体应含 messages 数组");
+        let first = wire_messages.first().expect("至少一条消息");
+        assert_eq!(first["role"], "system");
+        assert_eq!(first["content"], "你是助手，使用中文回答。");
+    }
+
+    /// reasoning_content 模式按 vendor 判定（P1 C3 唯一实现）：
+    /// DeepSeek → Require（键存在性，空串兜底）；其余厂商 → Omit
+    #[test]
+    fn reasoning_content_mode_follows_vendor() {
+        let deepseek = test_provider_call("deepseek-chat");
+        assert_eq!(
+            deepseek.reasoning_content_mode(),
+            ReasoningContentMode::Require
+        );
+
+        let openai = test_provider_call("gpt-4o");
+        assert_eq!(openai.reasoning_content_mode(), ReasoningContentMode::Omit);
+
+        // base_url 含 deepseek 关键字同样判定（infer_reasoning_vendor 双通道）
+        let mut config = EngineProviderConfig {
+            base_url: "https://deepseek.example.com/v1/".to_string(),
+            api_key: "k".to_string(),
+            model: "random-model".to_string(),
+            endpoint: Endpoint::ChatCompletions,
+            stream: true,
+        };
+        let call = HttpProviderCall::new(reqwest::Client::new(), config.clone());
+        assert_eq!(call.reasoning_content_mode(), ReasoningContentMode::Require);
+
+        // 未知厂商 → Auto → Omit（现状保持）
+        config.base_url = "https://unknown.example.com/v1/".to_string();
+        config.model = "custom-model".to_string();
+        let call = HttpProviderCall::new(reqwest::Client::new(), config);
+        assert_eq!(call.reasoning_content_mode(), ReasoningContentMode::Omit);
     }
 }
