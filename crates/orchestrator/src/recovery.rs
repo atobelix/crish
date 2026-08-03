@@ -962,6 +962,10 @@ impl RecoveryCoordinator {
                     message: format!("预算拒绝事件序列化失败：{e}"),
                 })?,
             )?;
+            // G10 月度统计收集点：恢复预算 denied 计数（进程级累计，
+            // 月度报告经 conex_types::denied_stats 拉取；持久化由事件留痕承载）
+            conex_types::denied_stats::global_denied_stats()
+                .record_recovery_budget_denied();
             return self.report_to_user(ctx);
         }
         // 阶梯 2：steering 条目 + 通知落库
@@ -2041,6 +2045,46 @@ mod tests {
             .filter(|a| a.ladder == RecoveryLadder::Ladder3Fork)
             .count();
         assert_eq!(fork_attempts, 3, "试过什么：3 次 fork 记录");
+    }
+
+    /// G10 月度统计收集点：预算耗尽拒绝同时累计全局 denied 统计
+    /// （delta 断言，防全局实例跨测试累计污染）
+    #[tokio::test]
+    async fn g10_budget_denied_increments_global_stats() {
+        use conex_types::denied_stats::global_denied_stats;
+        let before = global_denied_stats().summary().recovery_budget_denied;
+        let (env, mut coordinator) = env();
+        // 前 3 次 fork 耗尽预算（limit=3）
+        for i in 0..3 {
+            let failure_ctx = ctx(
+                &format!("run-{i}"),
+                ProviderErrorKind::Network,
+                4,
+                61_000,
+            );
+            coordinator.fork_and_reassign(&failure_ctx).await.unwrap();
+        }
+        // 新 run 再失败：预算耗尽 → recovery-budget-denied 事件 + 全局计数 +1
+        let outcome = coordinator
+            .on_subagent_run_failure(&ctx(
+                "run-g10",
+                ProviderErrorKind::Network,
+                4,
+                61_000,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(outcome.ladder, RecoveryLadder::Ladder4User);
+        assert!(
+            env.store.events().iter().any(|(_, t, _)| t == RECOVER_BUDGET_DENIED_EVENT),
+            "预算拒绝事件留痕"
+        );
+        let after = global_denied_stats().summary().recovery_budget_denied;
+        assert_eq!(
+            after,
+            before + 1,
+            "全局恢复预算 denied 计数应 +1（月度报告数据源）"
+        );
     }
 
     /// 重启恢复预算：跨重启计数一致，不重放授权

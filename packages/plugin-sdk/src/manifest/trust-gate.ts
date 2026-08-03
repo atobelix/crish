@@ -69,3 +69,99 @@ export interface TrustGateLike {
  * 而是通过 PluginAPIDeps.trustGate 接收已构造的实例。
  */
 export type TrustGateFactory = () => TrustGateLike;
+
+// ─── 路径逃逸校验（kimi manifest.ts:162-225 移植，ref-analysis 03 Top 4）───
+
+/** 路径逃逸校验结果（纯函数，不抛错）。 */
+export interface PathEscapeValidationResult {
+  readonly ok: boolean;
+  readonly error?: string;
+}
+
+/**
+ * 校验插件相对路径不逃逸插件目录（kimi 路径逃逸校验移植）。
+ *
+ * 规则（对齐 kimi manifest.ts:162-225）：
+ * 1. 禁止绝对路径（POSIX '/' 前缀 / Windows 盘符 'C:\' 前缀）；
+ * 2. 规范化（解析 '.' / '..' 段）后目标必须仍位于插件目录内；
+ * 3. 推荐 './' 前缀（相对路径显式化）；无前缀的相对路径也接受。
+ *
+ * 纯函数实现（不做真实 realpath——webview 无 node:fs；宿主侧若需
+ * 软链接穿透校验，在 fs 适配层以 realpath 后复用本函数）。
+ *
+ * @param pluginDir 插件目录（绝对路径，如 /work/.crish/plugins/my-plugin）
+ * @param relativePath 插件声明的相对路径（entrypoints.main / skills 目录 /
+ *   mcp cwd 等）
+ * @param field 字段名（诊断文案用，如 'entrypoints.main'）
+ */
+export function assertPathWithinPluginDir(
+  pluginDir: string,
+  relativePath: string,
+  field: string,
+): PathEscapeValidationResult {
+  if (isAbsolutePath(relativePath)) {
+    return {
+      ok: false,
+      error: `${field} 必须为相对路径（禁止绝对路径）：${relativePath}`,
+    };
+  }
+  const root = normalizePath(pluginDir);
+  const target = normalizePath(joinWithin(pluginDir, relativePath));
+  if (!isWithin(root, target)) {
+    return {
+      ok: false,
+      error: `${field} 逃逸插件目录（../ 或绝对跳转被拒绝）：${relativePath}`,
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * 校验 MCP 服务器声明的 cwd 不逃逸插件目录（kimi mcp cwd 校验移植）。
+ * cwd 为相对路径时必须位于插件目录内；cwd 缺省（继承宿主）时放行。
+ */
+export function assertMcpCwdWithinPluginDir(
+  pluginDir: string,
+  cwd: string | undefined,
+  serverName: string,
+): PathEscapeValidationResult {
+  if (cwd === undefined || cwd === '') {
+    return { ok: true };
+  }
+  return assertPathWithinPluginDir(pluginDir, cwd, `mcpServer(${serverName}).cwd`);
+}
+
+/** 判定绝对路径（POSIX '/' 前缀 / Windows 盘符 'C:\' / UNC） */
+function isAbsolutePath(path: string): boolean {
+  if (path.startsWith('/') || path.startsWith('\\')) return true;
+  return /^[a-zA-Z]:[\\/]/.test(path);
+}
+
+/** 把相对路径拼接到基目录（不解析，纯拼接——解析在 normalize 内） */
+function joinWithin(base: string, relative: string): string {
+  if (base.endsWith('/') || base.endsWith('\\')) {
+    return base + relative;
+  }
+  return `${base}/${relative}`;
+}
+
+/** 规范化路径：统一 '/' 分隔、解析 '.' / '..' 段（纯字符串，无 fs 依赖） */
+function normalizePath(path: string): string {
+  const segments = path.split(/[\\/]+/).filter((s) => s.length > 0);
+  const stack: string[] = [];
+  for (const seg of segments) {
+    if (seg === '.') continue;
+    if (seg === '..') {
+      stack.pop();
+      continue;
+    }
+    stack.push(seg);
+  }
+  const normalized = stack.join('/');
+  return normalized.startsWith('/') ? `/${normalized}` : normalized;
+}
+
+/** 判定 target 位于 root 内（root 自身或其后代） */
+function isWithin(root: string, target: string): boolean {
+  return target === root || target.startsWith(`${root}/`);
+}

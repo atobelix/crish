@@ -42,6 +42,8 @@ use agent_provider::request::{
 };
 use agent_provider::sse::{AbortFlag, StreamDiagnosticContext, StreamReadOptions};
 use agent_provider::transport::{stream_frames, StreamFrameEvent};
+use agent_tools::definition::{ToolDefinition, ToolError};
+use agent_tools::mcp::{register_plugin_server, McpClientBridge, McpServerConfig};
 use agent_tools::registry::ToolRegistry;
 use async_trait::async_trait;
 use conex_types::error::ProviderErrorKind;
@@ -64,6 +66,7 @@ use session_loop::{
 
 use crate::buffer::{drop_class_of, EventBuffer};
 use crate::core_event_bridge::{EmitReport, EventBridge};
+use crate::fs_commands::skills::RustSkill;
 
 /// 首字节超时（等待流首个字节到达；None = 不设限，对齐 normalizeStreamTimeoutMs）
 const DEFAULT_FIRST_BYTE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -526,6 +529,13 @@ fn to_loop_event(event: WireEvent) -> ProviderStreamEvent {
         WireEvent::ProviderDiagnostic { diagnostic } => {
             ProviderStreamEvent::ProviderDiagnostic { diagnostic }
         }
+        // M14：model 请求生命周期观测事件（before-request / after-response）——
+        // 消费面在 agent-provider 请求层观测器（I8 钩子桥 model.*），
+        // 不进入会话循环事件流（会话层无对应变体，观测语义在请求层闭环）
+        WireEvent::BeforeRequest { .. } | WireEvent::AfterResponse { .. } => {
+            tracing::debug!(target: "provider", "model 请求生命周期观测事件不进入会话循环");
+            unreachable!("HttpProviderCall 不产出 before/after-response 流内事件");
+        }
         WireEvent::Stop { reason, error, usage } => ProviderStreamEvent::Stop {
             reason: match reason {
                 agent_provider::events::StopReason::Stop => LoopStopReason::Stop,
@@ -570,6 +580,10 @@ pub(crate) struct EngineHandle {
     provider: Mutex<Option<Arc<dyn ProviderCall>>>,
     /// 工具注册表（只读共享）
     tool_registry: Arc<ToolRegistry>,
+    /// MCP 客户端桥（E5：插件 mcpServers 受管服务器 + 工具并入运行集；
+    /// 生命周期随 run 启停由上层驱动——session.start 启动 / session.end
+    /// 关闭，见 [Self::register_plugin_mcp_server]）
+    mcp_bridge: Arc<McpClientBridge>,
     /// engineReady（配置齐备即 true）
     ready: AtomicBool,
     /// 未就绪原因（ready=false 时的诊断文案，PE-04 T04.5 联动）
@@ -597,6 +611,9 @@ impl EngineHandle {
             );
         }
         let tool_registry = Arc::new(registry);
+        // E5：MCP 客户端桥初始化（stdio 服务器管理 + 工具适配；插件
+        // mcpServers 经 register_plugin_mcp_server 注册为受管服务器）
+        let mcp_bridge = Arc::new(McpClientBridge::new());
 
         // provider 生效配置加载（三件套齐备才就绪）
         let (provider, ready, ready_reason, provider_config) = match load_provider_endpoint() {
@@ -623,6 +640,7 @@ impl EngineHandle {
             client,
             provider: Mutex::new(provider),
             tool_registry,
+            mcp_bridge,
             ready: AtomicBool::new(ready),
             ready_reason: Mutex::new(ready_reason),
             provider_config: Mutex::new(provider_config),
@@ -679,6 +697,70 @@ impl EngineHandle {
     /// 工具注册表（只读共享）
     pub(crate) fn tool_registry(&self) -> Arc<ToolRegistry> {
         Arc::clone(&self.tool_registry)
+    }
+
+    /// MCP 客户端桥（E5；上层 run 启停驱动用——session.start 启动 /
+    /// session.end `stop_all` 关闭）
+    #[allow(dead_code)] // E5 接线：core_run_commands 装配 run 启停时消费
+    pub(crate) fn mcp_bridge(&self) -> Arc<McpClientBridge> {
+        Arc::clone(&self.mcp_bridge)
+    }
+
+    /// 注册插件 MCP server（E5 内容 1）：PluginMcpDeclaration（stdio
+    /// command/args/env）→ 受管服务器（spawn + 握手 + 枚举）→ 工具并入
+    /// ToolRegistry 运行集（`mcp_<server>__<tool>` 命名，供
+    /// `list_definitions` 消费——与 E4 on_definition 共享构建点）。
+    ///
+    /// 启动失败 → mcp.* 错误上抛（调用方承接为插件级错误进
+    /// runtime-error，不阻塞 run）；服务器生命周期随 run 启停由上层
+    /// 驱动（本方法只注册并入，启停经 [Self::mcp_bridge]）。
+    #[allow(dead_code)] // E5 接线：core_run_commands 装配插件 mcpServers 时消费
+    pub(crate) async fn register_plugin_mcp_server(
+        &self,
+        config: McpServerConfig,
+    ) -> Result<Vec<ToolDefinition>, ToolError> {
+        register_plugin_server(&self.mcp_bridge, &self.tool_registry, &config).await
+    }
+
+    // ── E5 内容 3：C10 注入读取面（skills.rs RustSkill → 注入段）──────
+
+    /// C10 Skills 注入段：RustSkill 扫描结果 → `## Skill 定义` 注入段。
+    ///
+    /// 每次上下文构建重新读取（不与会话历史共享压缩预算——注入段经
+    /// [ContextInjector::render] 汇入 system_prompt 面，压缩只作用于
+    /// 会话对话）；渲染确定：同一技能集合两次构建字节一致（C10 字节级
+    /// 一致断言）。技能条目格式：
+    /// `- <name>（系统）（<scope>）：<description>\n<content>`
+    #[allow(dead_code)] // E5 接线：core_run_commands 装配 ContextInjector 时消费
+    pub(crate) fn skill_context_injection(skills: &[RustSkill]) -> ContextInjection {
+        let content = skills
+            .iter()
+            .map(|skill| {
+                format!(
+                    "- {}{}（{}）：{}\n{}",
+                    skill.name(),
+                    if skill.is_system() { "（系统）" } else { "" },
+                    skill.scope(),
+                    skill.description(),
+                    skill.content()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        ContextInjection::new(ContextInjectionKind::Skills, "Skill 定义", content)
+    }
+
+    /// C10 MCP 工具声明注入段：已并入注册表的 MCP 工具定义 →
+    /// `## MCP 工具声明` 注入段（与 E4 on_definition 共享
+    /// `list_definitions` 构建点；渲染确定，可字节级断言）。
+    #[allow(dead_code)] // E5 接线：core_run_commands 装配 ContextInjector 时消费
+    pub(crate) fn mcp_context_injection(defs: &[ToolDefinition]) -> ContextInjection {
+        let content = defs
+            .iter()
+            .map(|def| format!("- {}：{}", def.name, def.description))
+            .collect::<Vec<_>>()
+            .join("\n");
+        ContextInjection::new(ContextInjectionKind::Mcp, "MCP 工具声明", content)
     }
 
     // ── P5 S5 / T-40：缓存测量装配（轮末合并接线点）──────────────
@@ -2587,5 +2669,207 @@ mod tests {
             Some("基础系统提示"),
             "无注入 → 基础段原样透传（现状）"
         );
+    }
+
+    // ── E5：MCP 接入 + C10 注入读取面（03 方案 E5 内容 1/3）────────────
+
+    /// 构造测试用 RustSkill（C10 注入断言用）
+    fn sample_skill(name: &str, description: &str, content: &str) -> RustSkill {
+        RustSkill {
+            file_path: format!("C:\\skills\\{name}\\SKILL.md"),
+            base_dir: format!("C:\\skills\\{name}"),
+            content: content.to_string(),
+            raw: format!("---\nname: {name}\n---\n{content}"),
+            scope: "project".to_string(),
+            system: false,
+            name: name.to_string(),
+            description: description.to_string(),
+            tags: Vec::new(),
+            applies_to: Vec::new(),
+            disable_model_invocation: false,
+            file_activation: None,
+        }
+    }
+
+    /// C10 Skills 注入段：RustSkill 读取面 → 注入段渲染确定（同一配置
+    /// 两次构建 system 段字节一致），条目含技能名/描述/正文
+    #[test]
+    fn skill_injection_is_byte_stable_and_contains_skills() {
+        let skills = vec![
+            sample_skill("code-review", "代码评审", "按正确性优先评审。"),
+            sample_skill("conex-committer", "提交规范", "按仓库风格提交。"),
+        ];
+        let injection = EngineHandle::skill_context_injection(&skills);
+        assert_eq!(injection.kind, ContextInjectionKind::Skills);
+        let mut injector = ContextInjector::new();
+        injector.push(injection);
+        let rendered = injector
+            .render(Some("基础系统提示".to_string()))
+            .expect("有注入段时必然产出");
+        // 渲染确定：两次构建字节一致（C10 断言）
+        let second = injector
+            .render(Some("基础系统提示".to_string()))
+            .expect("有注入段时必然产出");
+        assert_eq!(rendered, second, "同一技能集合两次构建 system 段必须字节一致");
+        // 读取面内容可见
+        assert!(rendered.contains("## Skill 定义"));
+        assert!(rendered.contains("- code-review（project）：代码评审"));
+        assert!(rendered.contains("按正确性优先评审。"));
+        assert!(rendered.contains("- conex-committer（project）：提交规范"));
+        // system 标记技能带（系统）标注
+        let mut sys = sample_skill("sys-skill", "系统技能", "系统正文");
+        sys.system = true;
+        let inj = EngineHandle::skill_context_injection(&[sys]);
+        let mut injector_sys = ContextInjector::new();
+        injector_sys.push(inj);
+        let render = injector_sys.render(None).expect("必产出");
+        assert!(render.contains("- sys-skill（系统）（project）：系统技能"));
+    }
+
+    /// C10 MCP 工具声明注入段：定义列表 → 注入段渲染确定，条目含
+    /// `mcp_<server>__<tool>` 命名工具
+    #[test]
+    fn mcp_injection_is_byte_stable_and_lists_tools() {
+        let defs = vec![
+            ToolDefinition {
+                name: "mcp_files__read".to_string(),
+                description: "读文件".to_string(),
+                input_schema: serde_json::json!({ "type": "object" }),
+                dangerous: false,
+                fatal_on_error: false,
+            },
+            ToolDefinition {
+                name: "mcp_files__write".to_string(),
+                description: "写文件".to_string(),
+                input_schema: serde_json::json!({ "type": "object" }),
+                dangerous: true,
+                fatal_on_error: false,
+            },
+        ];
+        let injection = EngineHandle::mcp_context_injection(&defs);
+        assert_eq!(injection.kind, ContextInjectionKind::Mcp);
+        let mut injector = ContextInjector::new();
+        injector.push(injection);
+        let rendered = injector.render(None).expect("有注入段时必然产出");
+        let second = injector.render(None).expect("有注入段时必然产出");
+        assert_eq!(rendered, second, "同一 MCP 工具集两次构建必须字节一致");
+        assert!(rendered.contains("## MCP 工具声明"));
+        assert!(rendered.contains("- mcp_files__read：读文件"));
+        assert!(rendered.contains("- mcp_files__write：写文件"));
+    }
+
+    /// C10 注入集成（produce 级）：skill 注入段经 system_prompt 面送达
+    /// provider（M1 注入点 + M11 输出消费），对话消息不含 system 角色
+    #[tokio::test]
+    async fn produce_with_skill_injection_sends_skill_segment() {
+        let skills = vec![sample_skill("code-review", "代码评审", "按正确性优先评审。")];
+        let mut injector = ContextInjector::new();
+        injector
+            .push(EngineHandle::skill_context_injection(&skills))
+            .push(EngineHandle::mcp_context_injection(&[ToolDefinition {
+                name: "mcp_files__read".to_string(),
+                description: "读文件".to_string(),
+                input_schema: serde_json::json!({ "type": "object" }),
+                dangerous: false,
+                fatal_on_error: false,
+            }]));
+        let (producer, provider) = test_producer(None, SessionLoopOptions::default());
+        let mut producer = producer.with_context_injector(Some(injector));
+        producer.produce().await;
+
+        let sent_system = provider
+            .request_system_prompt(0)
+            .expect("注入后请求必须携带 system prompt");
+        assert!(sent_system.contains("## Skill 定义"));
+        assert!(sent_system.contains("code-review"));
+        // 注入顺序契约：skills 段先于 MCP 段
+        let skill = sent_system.find("## Skill 定义").expect("skill 段存在");
+        let mcp = sent_system.find("## MCP 工具声明").expect("MCP 段存在");
+        assert!(skill < mcp, "skill 段先于 MCP 段（M1 冻结顺序）");
+        // 注入段归类 system 角色，不进会话对话（独立于压缩预算）
+        let sent_messages = provider.request_message_arcs(0);
+        assert!(
+            sent_messages
+                .iter()
+                .all(|m| m.role != AgentMessageRole::System),
+            "注入段不得混入会话消息（system 角色面 = system_prompt）"
+        );
+    }
+
+    /// 定位 agent-tools 测试夹具二进制（mcp-fake-server）：workspace 测试
+    /// 构建时与测试可执行同目录产出；独立构建本 crate 测试时可能缺失
+    fn locate_mcp_fake_server() -> Option<std::path::PathBuf> {
+        let exe = std::env::current_exe().ok()?;
+        let dir = exe.parent()?;
+        let name = if cfg!(windows) {
+            "mcp-fake-server.exe"
+        } else {
+            "mcp-fake-server"
+        };
+        let candidate = dir.join(name);
+        candidate.exists().then_some(candidate)
+    }
+
+    /// 引擎集成：插件 mcpServers 声明 → 服务器启动 → 工具并入注册表
+    /// （mcp_<server>__<tool> 命名），注册后可执行往返；启动失败 =
+    /// mcp.* 错误上抛且注册表不污染
+    #[tokio::test]
+    async fn register_plugin_mcp_server_integration() {
+        let engine = EngineHandle::new();
+
+        // 错误路径：非法命令 → mcp.connection_failed，注册表无残留
+        let bad = McpServerConfig::new("missing", "definitely-not-a-real-command-xyz");
+        let err = engine.register_plugin_mcp_server(bad).await.unwrap_err();
+        assert_eq!(err.code(), "mcp.connection_failed");
+        let listed: Vec<String> = engine
+            .tool_registry()
+            .list_definitions()
+            .iter()
+            .map(|d| d.name.clone())
+            .collect();
+        assert!(
+            !listed.iter().any(|n| n.starts_with("mcp_missing")),
+            "启动失败不得污染注册表"
+        );
+
+        // 成功路径：依赖 agent-tools 测试夹具（workspace 全量测试时存在；
+        // 单独构建本 crate 时跳过并记录）
+        let Some(fake) = locate_mcp_fake_server() else {
+            tracing::warn!(
+                "mcp-fake-server 夹具未构建（需 workspace 全量构建），跳过引擎级 MCP 成功路径断言"
+            );
+            return;
+        };
+        let config = McpServerConfig::new("fake", fake.to_string_lossy().to_string());
+        let defs = engine.register_plugin_mcp_server(config).await.unwrap();
+        let names: Vec<String> = defs.iter().map(|d| d.name.clone()).collect();
+        assert!(
+            names.contains(&"mcp_fake__echo".to_string()),
+            "MCP 工具应并入：{names:?}"
+        );
+        let listed: Vec<String> = engine
+            .tool_registry()
+            .list_definitions()
+            .iter()
+            .map(|d| d.name.clone())
+            .collect();
+        assert!(
+            listed.contains(&"mcp_fake__echo".to_string()),
+            "list_definitions 应可见并入的 MCP 工具"
+        );
+        // 幂等：重复注册不报错、不重复并入
+        engine
+            .register_plugin_mcp_server(McpServerConfig::new("fake", fake.to_string_lossy().to_string()))
+            .await
+            .unwrap();
+        let count = engine
+            .tool_registry()
+            .list_definitions()
+            .iter()
+            .filter(|d| d.name.starts_with("mcp_fake__"))
+            .count();
+        assert_eq!(count, 4, "重复注册不得重复并入");
+        // 生命周期收口
+        engine.mcp_bridge().stop_all().await;
     }
 }

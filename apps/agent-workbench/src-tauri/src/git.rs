@@ -168,6 +168,10 @@ pub(crate) struct GitRunResult {
 
 /// 本机 git 命令：参数数组执行，禁 shell（T07.3 C-02 修复）。
 #[tauri::command]
+// G2 禁令豁免（clippy.toml 文件头「豁免面」）：git 白名单执行面——固定二进制
+// `git` + 参数 schema 白名单（validate_git_args）+ 工作区注册表 cwd 校验，
+// 无任意命令面，是本壳 git 命令的唯一执行点。
+#[allow(clippy::disallowed_methods)]
 pub(crate) async fn workbench_git_run(
     app: tauri::AppHandle,
     cwd: String,

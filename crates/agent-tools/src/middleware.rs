@@ -10,9 +10,10 @@
 //! 运行 before_execute 链，执行后运行 on_result / on_error 链；优先级
 //! 语义与决策记录见 docs/multi-agent-repair/06-tool-middleware-hook-接线决策.md）。
 
-use crate::definition::{Tool, ToolError};
+use crate::definition::{Tool, ToolDefinition, ToolError};
 use async_trait::async_trait;
 use serde_json::Value;
+use std::time::Duration;
 // Arc/Mutex 仅 RecordingMiddleware（#[cfg(test)]）使用（T06.3 Q18）
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
@@ -46,16 +47,65 @@ pub enum AfterExecuteResult {
     Replace(Value),
 }
 
+/// 中间件钩子超时配置（E4：06 遗留 :148-152 收口）
+///
+/// 三个执行钩子（before_execute / on_result / on_error）统一包
+/// `tokio::time::timeout` 竞速窗口，超时语义对齐 06 文档「中间件自身
+/// 错误语义」表：
+/// - `before_execute` 超时 → 视为 Err → **Block**（守门者报错 = 不放行，06:57）；
+/// - `on_result` 超时 → 日志 + 降级透传原输出（06:58）；
+/// - `on_error` 超时 → 日志（06:59）。
+///
+/// 默认值 = 「宽松放行」语义（2000/2000/1000ms）：快中间件不受影响，
+/// 只有挂死 handler 才会被竞速收口。执行器经
+/// `ToolExecutor::with_middleware_timeouts` 注入（session-loop）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MiddlewareTimeoutConfig {
+    /// before_execute 超时（默认 2000ms）
+    pub before_execute: Duration,
+    /// on_result 超时（默认 2000ms）
+    pub on_result: Duration,
+    /// on_error 超时（默认 1000ms）
+    pub on_error: Duration,
+}
+
+impl Default for MiddlewareTimeoutConfig {
+    fn default() -> Self {
+        Self {
+            before_execute: Duration::from_millis(2000),
+            on_result: Duration::from_millis(2000),
+            on_error: Duration::from_millis(1000),
+        }
+    }
+}
+
 /// 工具中间件接口
 ///
-/// 三个钩子按需覆盖（默认空实现）：
+/// 四个钩子按需覆盖（默认空实现）：
+/// - on_definition：工具定义构建时改写（同步链，挂 ToolRegistry::list_definitions 构建点）
 /// - before_execute：执行前拦截/改写入参（审批类中间件落点，B5.4/B3.5 联动）
 /// - on_result：执行成功后观察/改写输出
 /// - on_error：执行失败后观察（仅记录，不吞错）
+///
+/// 串行化语义（E4 内容 4，06 遗留 :153 文档化）：中间件链本就**顺序执行**
+/// （determinism，ref-analysis 03 Top 6）——并行工具组内每项独立走链、
+/// 中间件实例跨项共享，trait 已要求 Send + Sync（实例须自持线程安全
+/// 状态）；on_definition 同链顺序改写，改写结果确定。
 #[async_trait]
 pub trait ToolMiddleware: Send + Sync {
     /// 中间件名称（日志与调试用）
     fn name(&self) -> &str;
+
+    /// 定义改写钩子（同步；默认空实现 no-op）。
+    ///
+    /// 挂载点 = `ToolRegistry::list_definitions()` 构建工具清单时（引擎给
+    /// provider 发 schema 前，ref-analysis 03 Top 1「生成时改写」语义——
+    /// 按 (provider, model) 动态裁剪的未来点位与此共享）。可改写
+    /// `description` 与 `input_schema`；实现必须幂等（同一工具定义可被
+    /// 多次构建改写，重入结果一致）。
+    fn on_definition(&self, def: &mut ToolDefinition) {
+        let _ = def;
+    }
 
     /// 执行前钩子
     async fn before_execute(
@@ -436,5 +486,94 @@ mod tests {
             .unwrap();
         let records = recorder.records();
         assert_eq!(records.len(), 2);
+    }
+
+    // ── E4：on_definition 第 4 钩子 + 超时默认（03 方案 E4 内容 1/3）──
+
+    /// 测试用定义改写中间件：给 description 追加后缀（链序断言用）
+    struct DescriptionSuffixMiddleware {
+        name: String,
+        suffix: String,
+    }
+
+    impl ToolMiddleware for DescriptionSuffixMiddleware {
+        fn name(&self) -> &str {
+            &self.name
+        }
+
+        fn on_definition(&self, def: &mut crate::definition::ToolDefinition) {
+            def.description = format!("{}{}", def.description, self.suffix);
+        }
+    }
+
+    /// on_definition 可改写工具定义（description 与 input_schema）
+    #[test]
+    fn on_definition_rewrites_tool_definition() {
+        let mw = DescriptionSuffixMiddleware {
+            name: "suffixer".to_string(),
+            suffix: "（改写）".to_string(),
+        };
+        let mut def = crate::definition::ToolDefinition {
+            name: "shell_run".to_string(),
+            description: "运行命令".to_string(),
+            input_schema: json!({ "type": "object" }),
+            dangerous: false,
+            fatal_on_error: false,
+        };
+        mw.on_definition(&mut def);
+        assert_eq!(def.description, "运行命令（改写）");
+        // name 与 schema 不被误伤（只改 description）
+        assert_eq!(def.name, "shell_run");
+        assert_eq!(def.input_schema, json!({ "type": "object" }));
+    }
+
+    /// 默认空实现 no-op：定义原样保留（空链语义）
+    #[test]
+    fn on_definition_default_is_noop() {
+        let recorder = RecordingMiddleware::new("noop");
+        let mut def = crate::definition::ToolDefinition {
+            name: "x".to_string(),
+            description: "原始描述".to_string(),
+            input_schema: json!({ "type": "object" }),
+            dangerous: false,
+            fatal_on_error: false,
+        };
+        let original = def.clone();
+        recorder.on_definition(&mut def);
+        assert_eq!(def, original, "未覆盖 on_definition 的中间件不改写定义");
+    }
+
+    /// 链序确定性：多个中间件按注册顺序依次改写（determinism）
+    #[test]
+    fn on_definition_chain_applies_in_registration_order() {
+        let first = DescriptionSuffixMiddleware {
+            name: "first".to_string(),
+            suffix: "|1".to_string(),
+        };
+        let second = DescriptionSuffixMiddleware {
+            name: "second".to_string(),
+            suffix: "|2".to_string(),
+        };
+        let mut def = crate::definition::ToolDefinition {
+            name: "x".to_string(),
+            description: "base".to_string(),
+            input_schema: json!({ "type": "object" }),
+            dangerous: false,
+            fatal_on_error: false,
+        };
+        let chain: Vec<&dyn ToolMiddleware> = vec![&first, &second];
+        for mw in chain {
+            mw.on_definition(&mut def);
+        }
+        assert_eq!(def.description, "base|1|2", "改写必须按链序顺序生效");
+    }
+
+    /// 超时默认值 = 宽松放行（before/on_result 2000ms、on_error 1000ms）
+    #[test]
+    fn middleware_timeout_defaults_are_permissive() {
+        let defaults = MiddlewareTimeoutConfig::default();
+        assert_eq!(defaults.before_execute, Duration::from_millis(2000));
+        assert_eq!(defaults.on_result, Duration::from_millis(2000));
+        assert_eq!(defaults.on_error, Duration::from_millis(1000));
     }
 }

@@ -14,9 +14,10 @@
 //! `runId`/`permissionMode` 由 emit 层注入（任务卡约定）：runId 经信封
 //! 注入（03 §5.3-2），permissionMode 属会话级属性，工具侧恒为 None。
 
+use conex_types::denied_stats::DeniedStats;
 use conex_types::events::{AgentEvent, SecurityAuditDecision, SecurityAuditOperation};
 use conex_types::impact::ImpactAssessment;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 /// 安全审计 sink（工具/引擎命令发射 `security-audit` 事件的出口）
 pub trait SecurityAuditSink: Send + Sync + std::fmt::Debug {
@@ -69,6 +70,39 @@ impl SecurityAuditSink for RecordingAuditSink {
 
 /// 审计 sink 类型别名（`Arc` 共享；与 `AskCallback` 形态对齐）
 pub type AuditSink = std::sync::Arc<dyn SecurityAuditSink>;
+
+/// 统计型审计 sink（G10：转发事件并累计 denied 决策计数）
+///
+/// 收集点接线：引擎侧把真实 sink 与共享的 [`DeniedStats`] 包进本 sink 注入
+/// `BuiltinToolConfig.audit_sink`；denied 决策在转发时计数，供月度报告经
+/// [`DeniedStats::summary`] 拉取（conex-types::denied_stats）。
+#[derive(Debug)]
+pub struct CountingAuditSink {
+    /// 转发目标（真实收集/广播/落库 sink）
+    inner: AuditSink,
+    /// 拒绝统计收集点（共享实例）
+    stats: Arc<DeniedStats>,
+}
+
+impl CountingAuditSink {
+    /// 包装既有 sink：转发全部事件，denied 决策同步计数
+    pub fn new(inner: AuditSink, stats: Arc<DeniedStats>) -> Self {
+        Self { inner, stats }
+    }
+}
+
+impl SecurityAuditSink for CountingAuditSink {
+    fn emit(&self, event: &AgentEvent) {
+        if let AgentEvent::SecurityAudit {
+            decision: SecurityAuditDecision::Denied,
+            ..
+        } = event
+        {
+            self.stats.record_security_audit_denied();
+        }
+        self.inner.emit(event);
+    }
+}
 
 /// 构造安全审计事件（时间戳统一取 UTC ISO8601；permissionMode 由 emit
 /// 层注入恒为 None，toolCallId 由调用方按上下文填充）
@@ -180,6 +214,47 @@ mod tests {
             vec!["security-audit", "security-audit"]
         );
         assert_eq!(sink.emitted().len(), 2);
+    }
+
+    #[test]
+    fn counting_sink_counts_denied_and_forwards_all() {
+        // G10：统计型 sink 只对 denied 决策计数，其余决策转发不计数
+        let inner = Arc::new(RecordingAuditSink::new());
+        let stats = Arc::new(DeniedStats::new());
+        let sink = CountingAuditSink::new(
+            Arc::clone(&inner) as AuditSink,
+            Arc::clone(&stats),
+        );
+        sink.emit(&security_audit_event(
+            "s1",
+            SecurityAuditOperation::Delete,
+            vec![],
+            impact(),
+            SecurityAuditDecision::Redirected,
+            None,
+        ));
+        sink.emit(&security_audit_event(
+            "s1",
+            SecurityAuditOperation::Delete,
+            vec![],
+            impact(),
+            SecurityAuditDecision::Denied,
+            Some("tc-deny".into()),
+        ));
+        sink.emit(&security_audit_event(
+            "s1",
+            SecurityAuditOperation::CommandExec,
+            vec![],
+            impact(),
+            SecurityAuditDecision::Blocked,
+            None,
+        ));
+        // 仅 denied 计数
+        assert_eq!(stats.summary().security_audit_denied, 1);
+        assert_eq!(stats.summary().recovery_budget_denied, 0);
+        // 全部事件原样转发（含非 denied 决策）
+        assert_eq!(inner.emitted().len(), 3);
+        assert_eq!(inner.type_names(), vec!["security-audit"; 3]);
     }
 
     #[test]

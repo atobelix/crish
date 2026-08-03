@@ -80,7 +80,7 @@ T3 定稿 members（15 项）内，未纳入工作区，不处理。
 | agent-provider | src/credentials.rs:312 `dpapi_protect` | unsafe_code | `#[allow]` + 注释：Windows DPAPI FFI（每处 unsafe 均有 SAFETY 说明） |
 | agent-provider | src/credentials.rs:359 `dpapi_unprotect` | unsafe_code | `#[allow]` + 注释：同上 |
 
-## 4. 存量告警基线（验收时点全量唯一告警：190 条 → I1 G1 刷新为 165 条 → I2 G11a 刷新为 34 条）
+## 4. 存量告警基线（验收时点全量唯一告警：190 条 → I1 G1 刷新为 165 条 → I2 G11a 刷新为 34 条 → I3 G11b/G11c 刷新为 9 条）
 
 > I1 G1 维护注记（2026-08-03，`scripts/check-clippy-baseline.mjs` 建立机器守门）：
 > - 清理 daemon_discovery.rs 僵尸条目 30 条（模块已随 d82f7468 删除，告警不再存在）；
@@ -100,6 +100,27 @@ T3 定稿 members（15 项）内，未纳入工作区，不处理。
 >   （01 方案 S5 trash 接线在途）、`agent-provider/models/catalog.rs` unused_mut 1 条、
 >   `orchestrator/src/session.rs` derefed_type 1 条；
 > - 下述分类统计为验收时点口径（归一键），精确清单以标记区为准。
+>
+> I3 G11b/G11c 维护注记（2026-08-03，unsafe/风格清零第二波）：
+> - 34 → 9 条（归一键）/ 63 → 19 raw（基线内保留 8 raw + 并行域新增 11 raw）；
+>   本域（agent-workbench src-tauri/** + crates 非并行域）清零 27 键：
+>   unsafe 5 键/14 raw **全部豁免保留**（Windows FFI / memmap / POSIX libc，
+>   每处带 SAFETY 说明 + 豁免理由注释，`rg SAFETY` 可抽查；memmap2 0.9 无
+>   safe 等价 API，perf/fs.rs 保留 unsafe）、风格 22 键/42 raw 逐条改写
+>   （manual_*/unnecessary_*/doc_*/result_large_err 模块级豁免带理由等）；
+> - core_run_commands.rs dead_code 2 键由并行 Agent 清除（非本任务写入）；
+>   该文件剩余 doc list 1 键 + too_many_arguments 1 键因**并行在途**
+>   （另一 Agent 正清理该文件死代码）登记遗留，本任务未触碰（同文件串行纪律）；
+> - 基线内新增 4 键/11 raw 均为并行缓存域在途产物（非本任务引入，登记
+>   遗留跟踪）：session-loop/cache_tracker.rs map_or + slice::from_ref
+>   2 键/9 raw、conex-db migrate.rs doc 1 键/1 raw、conex-db runs.rs
+>   very_complex 1 键/1 raw；
+> - 既有基线条目保留（并行域文件一律不碰）：conex-db migrate.rs
+>   needless_borrows（行号 :34 → :38 随并行域改动漂移）、
+>   session-loop/tests/prefix_stability.rs needless_range_loop 1 键、
+>   agent-provider/models/catalog.rs unused_mut 1 键；
+> - orchestrator/src/session.rs derefed_type 1 键本域修复（crates 非并行域）；
+> - 下述分类统计为验收时点口径（归一键），精确清单以标记区为准。
 
 - **apps/agent-workbench/src-tauri：30 条**（G11a 后按归一键：unsafe 7 + 风格 19 + core_run_commands 跳过域 4；raw 实例 59）
   - dead_code/unused 类：**0 条（G11a 清零）**；core_run_commands.rs 4 条跳过域遗留 I3 承接
@@ -107,75 +128,31 @@ T3 定稿 members（15 项）内，未纳入工作区，不处理。
   - clippy 风格类（doc、manual_*、unnecessary_*、bool_assert 等）：19 条
 - **crates/**：4 条（conex-db migrate.rs:34 / session-loop prefix_stability.rs:241 / 并行域在途 2 条见上注记）
 
-处置约定：agent-workbench 存量清零由后续轮次分配专门任务（建议 R4-M 后单独接线）；
-conex-db 的 1 条由 T15 完成后在 R4-M 补 `[lints]` 复核时一并修复。
+处置约定（I2 口径）：agent-workbench 存量清零由 I3 G11b/G11c 承接（已清零 27 键，
+见 I3 维护注记）；conex-db 的 1 条待并行缓存域完成后随域内修复。
 
 ### 全量清单（按 lint 消息排序，含位置）
 
 <!-- BASELINE_LIST_START -->
-- casting to the same type is unnecessary (`u64` -> `u64`)  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:188:55
-- casting to the same type is unnecessary (`u64` -> `u64`)  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:196:55
-- casting to the same type is unnecessary (`u64` -> `u64`)  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:213:55
-- casting to the same type is unnecessary (`u64` -> `u64`)  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:214:55
-- derefed type is same as origin  --> crates/orchestrator/src/session.rs:1285:20
-- doc list item overindented  --> apps/agent-workbench/src-tauri/src/main.rs:12:5
-- doc list item overindented  --> apps/agent-workbench/src-tauri/src/main.rs:19:5
-- doc list item overindented  --> apps/agent-workbench/src-tauri/src/main.rs:22:5
-- doc list item overindented  --> apps/agent-workbench/src-tauri/src/main.rs:24:5
-- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:386:9
-- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/workspace.rs:182:9
-- doc list item without indentation  --> apps/agent-workbench/src-tauri/tests/event_bridge_contract.rs:23:5
-- implementation of an `unsafe` trait  --> apps/agent-workbench/src-tauri/src/process.rs:367:1
-- implementation of an `unsafe` trait  --> apps/agent-workbench/src-tauri/src/process.rs:371:1
-- manual `Range::contains` implementation  --> apps/agent-workbench/src-tauri/src/commands.rs:62:15
-- manual implementation of `.is_multiple_of()`  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:499:8
-- manual implementation of `Option::map`  --> apps/agent-workbench/src-tauri/src/fs_commands/types.rs:235:16
-- manually reimplementing `div_ceil`  --> apps/agent-workbench/src-tauri/src/process.rs:264:41
-- method `pending_count` is never used  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:168:19
-- methods `engine`, `diagnostics`, `active_run_count`, and `pending_approval_count` are never used  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:866:12
-- redundant closure  --> apps/agent-workbench/src-tauri/src/markdown_commands.rs:83:33
-- stripping a prefix manually  --> apps/agent-workbench/src-tauri/src/fs_commands/skills.rs:34:5
-- stripping a prefix manually  --> apps/agent-workbench/src-tauri/src/fs_commands/skills.rs:35:32
-- stripping a prefix manually  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:133:9
-- stripping a prefix manually  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:134:42
-- stripping a prefix manually  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:138:9
-- stripping a prefix manually  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:139:42
-- stripping a prefix manually  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:212:57
-- stripping a prefix manually  --> apps/agent-workbench/src-tauri/src/perf/diff.rs:212:30
-- the `Err`-variant returned from this function is very large  --> apps/agent-workbench/src-tauri/src/host_openers/discovery.rs:14:42
-- the `Err`-variant returned from this function is very large  --> apps/agent-workbench/src-tauri/src/host_openers/discovery.rs:26:6
-- the `Err`-variant returned from this function is very large  --> apps/agent-workbench/src-tauri/src/host_openers/discovery.rs:83:59
-- the `Err`-variant returned from this function is very large  --> apps/agent-workbench/src-tauri/src/host_openers/resolve.rs:72:6
-- the `Err`-variant returned from this function is very large  --> apps/agent-workbench/src-tauri/src/host_openers/resolve.rs:142:6
-- the borrowed expression implements the required traits  --> crates/conex-db/src/migrate.rs:34:70
-- the function `CryptProtectData` doesn't need a mutable reference  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:418:13
-- the function `CryptUnprotectData` doesn't need a mutable reference  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:465:13
+- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:383:9
+- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:1730:5
+- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:1731:5
+- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:1732:5
+- doc list item without indentation  --> crates/conex-db/src/migrate.rs:349:5
+- the borrowed expression implements the required traits  --> crates/conex-db/src/migrate.rs:38:70
 - the loop variable `i` is used to index `first_run_msgs`  --> crates/session-loop/tests/prefix_stability.rs:241:14
-- this expression creates a reference which is immediately dereferenced by the compiler  --> apps/agent-workbench/src-tauri/src/main.rs:251:45
-- this expression creates a reference which is immediately dereferenced by the compiler  --> apps/agent-workbench/src-tauri/src/main.rs:283:35
-- this expression creates a reference which is immediately dereferenced by the compiler  --> apps/agent-workbench/src-tauri/src/main.rs:301:28
-- this function has too many arguments (12/7)  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:1308:1
-- unneeded `return` statement  --> apps/agent-workbench/src-tauri/src/host_openers/resolve.rs:166:9
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:416:14
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:433:9
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:435:5
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:463:14
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:480:9
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/config/credentials.rs:482:5
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/perf/fs.rs:74:20
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/power.rs:22:19
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:385:5
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:417:5
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:443:13
-- usage of an `unsafe` block  --> apps/agent-workbench/src-tauri/src/process.rs:539:9
-- use of `unwrap_or_else` to construct default value  --> apps/agent-workbench/src-tauri/src/fs_commands/skills.rs:77:10
-- used `assert_eq!` with a literal bool  --> apps/agent-workbench/src-tauri/src/config/provider.rs:596:9
-- used `assert_eq!` with a literal bool  --> apps/agent-workbench/src-tauri/src/config/provider.rs:614:9
-- used `assert_eq!` with a literal bool  --> apps/agent-workbench/src-tauri/src/config/provider.rs:657:9
-- used `assert_eq!` with a literal bool  --> apps/agent-workbench/src-tauri/src/config/provider.rs:670:9
-- useless conversion to the same type: `std::path::PathBuf`  --> apps/agent-workbench/src-tauri/src/host_openers/execute.rs:39:73
-- using `contains()` instead of `iter().any()` is more efficient  --> apps/agent-workbench/src-tauri/src/fs_commands/read.rs:190:8
+- this `map_or` can be simplified  --> crates/session-loop/src/cache_tracker.rs:208:28
+- this `map_or` can be simplified  --> crates/session-loop/src/cache_tracker.rs:273:9
+- this `map_or` can be simplified  --> crates/session-loop/src/cache_tracker.rs:323:42
+- this `map_or` can be simplified  --> crates/session-loop/src/cache_tracker.rs:324:32
+- this `map_or` can be simplified  --> crates/session-loop/src/cache_tracker.rs:352:27
+- this call to `clone` can be replaced with `std::slice::from_ref`  --> crates/session-loop/src/cache_tracker.rs:544:67
+- this call to `clone` can be replaced with `std::slice::from_ref`  --> crates/session-loop/src/cache_tracker.rs:545:76
+- this call to `clone` can be replaced with `std::slice::from_ref`  --> crates/session-loop/src/cache_tracker.rs:569:64
+- this call to `clone` can be replaced with `std::slice::from_ref`  --> crates/session-loop/src/cache_tracker.rs:579:67
+- this function has too many arguments (12/7)  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:1282:1
 - variable does not need to be mutable  --> crates/agent-provider/src/models/catalog.rs:919:13
+- very complex type used. Consider factoring parts into `type` definitions  --> crates/conex-db/src/runs.rs:228:18
 <!-- BASELINE_LIST_END -->
 
 ## 5. 增量守门规则（机器执行）
@@ -192,15 +169,22 @@ conex-db 的 1 条由 T15 完成后在 R4-M 补 `[lints]` 复核时一并修复�
 
 ## 6. 验收输出摘要
 
-- `cargo clippy --workspace --all-targets` → 退出码 **0**（warn 级通过；I2 G11a 后存量 34 归一键 / 63 raw 实例入基线）
+- `cargo clippy --workspace --all-targets` → 退出码 **0**（warn 级通过；I3 G11b/G11c 后存量 9 归一键 / 19 raw 实例入基线，其中并行域在途 4 键登记遗留跟踪）
 - `cargo test --workspace` → **72 个测试二进制、1348 个测试全部通过、0 失败**
 - 修复/豁免均未破坏既有行为（registry_drift 断言为只读校验，测试全绿已证明）
 
 ## 7. 遗留事项
 
-1. agent-workbench 189 条存量告警待后续轮次专门任务清零（dead_code 130 条多为 T1
-   清理后孤儿代码，可考虑整模块删除或恢复接线）。
-2. conex-db migrate.rs:34 告警待 T15 拆分后修复（R4-M 复核）。
-3. pedantic/nursery/restriction、unwrap_used/expect_used、missing_docs 暂缓开启的
+1. agent-workbench 剩 2 键（core_run_commands.rs doc list 1 键 + too_many_arguments
+   1 键）：该文件并行在途（另一 Agent 清理死代码中），待其完成后承接（doc
+   续行缩进 / 参数分组或带理由豁免）。
+2. conex-db migrate.rs:34 needless_borrows（现 :38）待并行缓存域完成其
+   migrate/runs 改造后一并修复；session-loop cache_tracker.rs 9 raw /
+   conex-db migrate doc 1 / runs.rs very_complex 1 由缓存域清理（4 键登记
+   遗留跟踪，非本任务域）。
+3. agent-provider/models/catalog.rs unused_mut 1 键（models 域，并行）待其域内清理。
+4. session-loop/tests/prefix_stability.rs needless_range_loop 1 键（session-loop
+   域，并行）待其域内清理。
+5. pedantic/nursery/restriction、unwrap_used/expect_used、missing_docs 暂缓开启的
    决策已记录于 §1，后续按 crate 逐个评估。
-4. 若 clippy 工具链升级，`clippy::all` 显式 warn 可保持基线稳定；升级后需复跑比对。
+6. 若 clippy 工具链升级，`clippy::all` 显式 warn 可保持基线稳定；升级后需复跑比对。

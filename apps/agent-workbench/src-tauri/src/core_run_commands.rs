@@ -169,14 +169,6 @@ impl ApprovalGateImpl {
         }
     }
 
-    /// 当前待审批数（core_get_status.pendingApprovals 数据源）
-    pub(crate) fn pending_count(&self) -> usize {
-        self.pending
-            .lock()
-            .map(|guard| guard.len())
-            .unwrap_or_default()
-    }
-
     /// 解析审批（core_approve_tool / core_deny_tool 入口）
     ///
     /// I-02（T12.3）：tool_call_id 必须在待审批集合，不匹配返回
@@ -865,29 +857,6 @@ impl CoreRunState {
     /// 共享 store（查询命令 / 集成接线用）
     pub fn store(&self) -> Arc<dyn Store> {
         Arc::clone(&self.store)
-    }
-
-    /// 引擎句柄（查询命令 / 集成接线用）
-    pub fn engine(&self) -> &EngineHandle {
-        &self.engine
-    }
-
-    /// 状态诊断（查询命令 / 集成接线用）
-    pub fn diagnostics(&self) -> Arc<StatusDiagnostics> {
-        Arc::clone(&self.diagnostics)
-    }
-
-    /// 活动 run 数（core_get_status.activeRuns 数据源）
-    pub fn active_run_count(&self) -> usize {
-        self.active_runs.lock().map(|r| r.len()).unwrap_or_default()
-    }
-
-    /// 待审批数（core_get_status.pendingApprovals 数据源）
-    pub fn pending_approval_count(&self) -> usize {
-        self.active_runs
-            .lock()
-            .map(|runs| runs.values().map(|r| r.approval.pending_count()).sum())
-            .unwrap_or_default()
     }
 
     /// restore 是否完成（run_task 门禁；查询命令 restore.state 数据源）

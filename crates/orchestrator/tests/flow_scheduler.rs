@@ -772,3 +772,144 @@ async fn load_without_declaration_reports_not_found() {
     };
     assert!(matches!(err, FlowError::NotFound { .. }), "{err:?}");
 }
+
+// ── M14（I7 事件源补齐）：子代理域事件发射点（唯一发射方接线）────
+
+/// spawn 成功 → subagent-started 恰一次；收口 → subagent-ended 恰一次；
+/// 终态通知幂等（重复通知不重复发射）；信封字段对齐前端契约。
+#[tokio::test]
+async fn subagent_events_emitted_once_on_spawn_and_terminal() {
+    use conex_types::events::AgentEvent;
+    use orchestrator::persist::{InMemoryStore, Store};
+    use orchestrator::subagent_events::SubagentEventEmitter;
+
+    let mem = Arc::new(InMemoryStore::new());
+    let store: Arc<dyn Store> = mem.clone();
+    let emitter = SubagentEventEmitter::new(store);
+    let spawner = Arc::new(RecordingSpawner::new());
+    let meta = Arc::new(InMemoryMeta::new());
+    let mut sched = FlowScheduler::new("sess-a", spawner.clone(), meta.clone())
+        .expect("调度器创建失败")
+        .with_subagent_event_emitter(emitter);
+
+    let adv = sched
+        .declare_flow(&decl(vec![node("a", &[]), node("b", &["a"])]))
+        .await
+        .expect("DAG 声明应接受");
+    assert_eq!(adv.started.len(), 1);
+
+    // spawn 后：subagent-started 恰一次落库（Critical 必达）
+    let stored = mem.events();
+    assert_eq!(stored.len(), 1, "spawn 只产生一条事件");
+    assert_eq!(stored[0].event_type, "subagent-started");
+    let parsed: AgentEvent = serde_json::from_str(&stored[0].payload).expect("信封 JSON 可解析");
+    match parsed {
+        AgentEvent::SubagentStarted {
+            subagent_run_id,
+            description,
+            mode,
+            ..
+        } => {
+            assert_eq!(
+                subagent_run_id,
+                adv.started[0].subagent_run_id,
+                "信封 subagentRunId = spawn 结果 run id"
+            );
+            // flow 节点 spawn 不携带 description/mode（M2 契约可选字段）
+            assert_eq!(description.as_deref(), None);
+            assert_eq!(mode.as_deref(), None);
+        }
+        other => panic!("期望 subagent-started：{other:?}"),
+    }
+
+    // 收口 → subagent-ended 恰一次；推进同时 spawn B → started(B) 恰一次
+    let run_a = adv.started[0].subagent_run_id.clone();
+    let adv2 = sched
+        .on_subagent_terminal(&run_a, SubagentState::Completed)
+        .await
+        .unwrap();
+    assert_eq!(adv2.started.len(), 1, "A completed 后 B 启动");
+    let stored = mem.events();
+    let types: Vec<&str> = stored.iter().map(|e| e.event_type.as_str()).collect();
+    assert_eq!(
+        types,
+        vec![
+            "subagent-started",
+            "subagent-ended",
+            "subagent-started",
+        ],
+        "事件流：started(A) → ended(A) → started(B)，各恰一次"
+    );
+    let parsed: AgentEvent = serde_json::from_str(&stored[1].payload).expect("信封 JSON 可解析");
+    match parsed {
+        AgentEvent::SubagentEnded {
+            subagent_run_id,
+            status,
+            ..
+        } => {
+            assert_eq!(subagent_run_id, run_a);
+            assert_eq!(status, conex_types::events::SubagentEndStatus::Completed);
+        }
+        other => panic!("期望 subagent-ended：{other:?}"),
+    }
+
+    // 终态通知幂等：重复通知不重复发射 ended（事件源唯一性）
+    let _ = sched
+        .on_subagent_terminal(&run_a, SubagentState::Completed)
+        .await
+        .unwrap();
+    assert_eq!(
+        mem.events()
+            .iter()
+            .filter(|e| e.event_type == "subagent-ended")
+            .count(),
+        1,
+        "重复终态通知不得重复发射 ended"
+    );
+
+    // B 收口：ended(B) 恰一次，编排终态
+    let run_b = adv2.started[0].subagent_run_id.clone();
+    let adv3 = sched
+        .on_subagent_terminal(&run_b, SubagentState::Completed)
+        .await
+        .unwrap();
+    assert!(adv3.flow_terminal);
+    let stored = mem.events();
+    assert_eq!(
+        stored
+            .iter()
+            .filter(|e| e.event_type == "subagent-started")
+            .count(),
+        2,
+        "两个节点各 started 一次"
+    );
+    assert_eq!(
+        stored
+            .iter()
+            .filter(|e| e.event_type == "subagent-ended")
+            .count(),
+        2,
+        "两个节点各 ended 一次"
+    );
+    assert_eq!(stored.len(), 4, "全链路事件总数 = 2 started + 2 ended");
+}
+
+/// 未挂载发射器时编排不产生子代理事件（纯逻辑域零事件，可选接线语义）
+#[tokio::test]
+async fn without_emitter_no_subagent_events() {
+    use orchestrator::persist::InMemoryStore;
+
+    let mem = Arc::new(InMemoryStore::new());
+    let spawner = Arc::new(RecordingSpawner::new());
+    let meta = Arc::new(InMemoryMeta::new());
+    let mut sched =
+        FlowScheduler::new("sess-a", spawner.clone(), meta.clone()).expect("调度器创建失败");
+
+    let adv = sched.declare_flow(&decl(vec![node("a", &[])])).await.unwrap();
+    let run_a = adv.started[0].subagent_run_id.clone();
+    let _ = sched
+        .on_subagent_terminal(&run_a, SubagentState::Completed)
+        .await
+        .unwrap();
+    assert!(mem.events().is_empty(), "未挂载发射器不得产生任何事件");
+}

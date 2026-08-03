@@ -1,12 +1,13 @@
 /**
- * Parse OpenAI Codex CLI rollout JSONL into normalized turns.
- * Pure function — no FS, no logging of message bodies.
+ * 解析 OpenAI Codex CLI rollout JSONL 为规范化 turns（纯函数，无 FS、不记录消息正文）。
  *
- * Format refs: reference/codex-cli/codex-rs/app-server/tests/common/rollout.rs
- *              protocol/src/models.rs (ResponseItem, ContentItem)
+ * 格式参考：reference/codex-cli/codex-rs/app-server/tests/common/rollout.rs、
+ *          protocol/src/models.rs（ResponseItem、ContentItem）
+ * 本文件由宿主 apps/crish-desktop/src/api/import/parseCodexRolloutJsonl.ts 迁入，
+ * 输出与迁移前实现保持字节级一致（fixture 复用既有测试数据）。
  */
 
-import type { NormalizedImportTurn, ParsedExternalConversation } from './types';
+import type { NormalizedImportTurn, ParsedExternalConversation } from '../types';
 
 export type ParseCodexRolloutOptions = {
   sourceSessionId?: string;
@@ -63,7 +64,7 @@ function reasoningToText(payload: Record<string, unknown>): string | undefined {
 function outputToString(output: unknown): string {
   if (output == null) return '';
   if (typeof output === 'string') return output;
-  // FunctionCallOutputPayload may be { content: string } or content_items
+  // FunctionCallOutputPayload 可能为 { content: string } 或 content_items
   const r = asRecord(output);
   if (r) {
     if (typeof r.content === 'string') return r.content;
@@ -80,7 +81,7 @@ function outputToString(output: unknown): string {
 }
 
 /**
- * Parse Codex rollout file content.
+ * 解析 Codex rollout 文件内容。
  */
 export function parseCodexRolloutJsonl(
   content: string,
@@ -96,12 +97,12 @@ export function parseCodexRolloutJsonl(
   let skippedLineCount = 0;
   const maxLines = options.maxLines ?? Number.POSITIVE_INFINITY;
 
-  // Current assistant turn being built (merge consecutive assistant pieces)
+  // 正在构建的 assistant 轮（合并连续的 assistant 片段）
   let currentAssistant: NormalizedImportTurn | null = null;
 
   const flushAssistant = () => {
     if (!currentAssistant) return;
-    // drop empty
+    // 丢弃空轮
     if (
       !currentAssistant.text?.trim() &&
       !currentAssistant.thinking &&
@@ -149,17 +150,17 @@ export function parseCodexRolloutJsonl(
     const payload = asRecord(row.payload) ?? {};
 
     if (envType === 'session_meta') {
-      // payload may be SessionMetaLine { meta, git } or flat meta
+      // payload 可能为 SessionMetaLine { meta, git } 或扁平 meta
       const meta = asRecord(payload.meta) ?? payload;
       if (typeof meta.id === 'string' && !sourceSessionId) sourceSessionId = meta.id;
       const cwdVal = meta.cwd;
       if (typeof cwdVal === 'string') cwd = cwdVal;
-      skippedLineCount++; // meta is not a turn
+      skippedLineCount++; // meta 不是轮
       continue;
     }
 
     if (envType === 'event_msg') {
-      // optional first-user preview only; skip as turns (response_item is source of truth)
+      // 仅可选的首次用户消息预览；真实数据以 response_item 为准
       const et = typeof payload.type === 'string' ? payload.type : '';
       if (et === 'user_message' && typeof payload.message === 'string' && !title) {
         title = payload.message.slice(0, 200);
@@ -194,7 +195,7 @@ export function parseCodexRolloutJsonl(
         continue;
       }
       if (role === 'assistant' || role === 'system') {
-        // system → treat as assistant commentary for import readability
+        // system 按 assistant 评述处理，便于导入后阅读
         const text = contentItemsToText(payload.content, ['output_text', 'text']);
         if (!text.trim()) {
           skippedLineCount++;
@@ -255,7 +256,7 @@ export function parseCodexRolloutJsonl(
         payload.success === false ||
         (typeof payload.status === 'string' && payload.status === 'error');
 
-      // Prefer current assistant buffer (local alias avoids odd CF narrowing to never)
+      // 优先挂当前 assistant 缓冲（本地别名避免 CF 收窄为 never）
       const openTools =
         currentAssistant == null
           ? undefined
@@ -269,7 +270,7 @@ export function parseCodexRolloutJsonl(
           continue;
         }
       }
-      // Search flushed turns
+      // 搜索已 flush 的轮
       for (let i = turns.length - 1; i >= 0; i--) {
         const tc = turns[i]?.toolCalls?.find((t) => t.id === callId);
         if (tc) {
@@ -282,7 +283,7 @@ export function parseCodexRolloutJsonl(
       continue;
     }
 
-    // local_shell_call, web_search_call, etc. — best-effort as tool
+    // local_shell_call / web_search_call 等 —— 尽力作为工具
     if (
       itemType === 'local_shell_call' ||
       itemType === 'web_search_call' ||
@@ -319,12 +320,12 @@ export function parseCodexRolloutJsonl(
 
   flushAssistant();
 
-  // Mark any still-running tools as success if no output (incomplete rollout)
+  // 仍未收口的工具保持 running；映射层会把无输出的 running 强制为 success（空输出）
   for (const t of turns) {
     if (!t.toolCalls) continue;
     for (const tc of t.toolCalls) {
       if (tc.status === 'running' && tc.output == null) {
-        // leave as running → map layer will coerce to success with empty output
+        // 保持 running → map 层处理
       }
     }
   }

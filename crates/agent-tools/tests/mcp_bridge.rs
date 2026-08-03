@@ -218,3 +218,75 @@ async fn stop_all_cleans_up_everything() {
     assert_eq!(bridge.state("fake2"), McpServerRuntimeState::Stopped);
     assert!(bridge.managed_servers().is_empty());
 }
+
+// ── E5：register_plugin_server（插件 mcpServers 接入运行集）──────────
+
+use agent_tools::registry::ToolRegistry;
+
+/// 插件 MCP 注册：声明 → 服务器启动 → 工具并入 ToolRegistry 运行集，
+/// 命名 `mcp_<server>__<tool>`（对齐 kimi 命名规范）；注册后可经注册表
+/// 执行往返
+#[tokio::test]
+async fn register_plugin_server_merges_tools_into_registry() {
+    let bridge = McpClientBridge::new();
+    let registry = ToolRegistry::new();
+    let config = fake_server_config(&[]);
+    let defs = agent_tools::mcp::register_plugin_server(&bridge, &registry, &config)
+        .await
+        .unwrap();
+    let names: Vec<String> = defs.iter().map(|d| d.name.clone()).collect();
+    assert_eq!(
+        names,
+        ["mcp_fake__echo", "mcp_fake__add", "mcp_fake__boom", "mcp_fake__env"]
+    );
+    // 工具可见（list_definitions 消费面；输出按 name 升序）
+    let mut listed: Vec<String> = registry
+        .list_definitions()
+        .iter()
+        .map(|d| d.name.clone())
+        .collect();
+    let mut expected = names.clone();
+    listed.sort();
+    expected.sort();
+    assert_eq!(listed, expected, "并入后 list_definitions 应可见全部 MCP 工具");
+    // 注册表执行往返（适配器生效）
+    let echo = registry.get("mcp_fake__echo").unwrap();
+    let out = echo.execute(&tool_ctx(), json!({ "msg": "插件注册" })).await.unwrap();
+    assert!(out["text"].as_str().unwrap().contains("插件注册"));
+    // 生命周期：stop 后注册表工具仍在（适配器调用报不可用）
+    bridge.stop("fake").await.unwrap();
+    let err = echo.execute(&tool_ctx(), json!({ "msg": "x" })).await.unwrap_err();
+    assert_eq!(err.code(), "mcp.connection_failed");
+}
+
+/// 幂等：重复注册（server 已 Ready）不报错、不重复并入
+#[tokio::test]
+async fn register_plugin_server_is_idempotent() {
+    let bridge = McpClientBridge::new();
+    let registry = ToolRegistry::new();
+    let config = fake_server_config(&[]);
+    let first = agent_tools::mcp::register_plugin_server(&bridge, &registry, &config)
+        .await
+        .unwrap();
+    let second = agent_tools::mcp::register_plugin_server(&bridge, &registry, &config)
+        .await
+        .unwrap();
+    assert_eq!(first, second, "幂等注册返回同一组定义");
+    assert_eq!(registry.len(), first.len(), "重复注册不得重复并入");
+    assert_eq!(registry.len(), 4);
+    bridge.stop("fake").await.unwrap();
+}
+
+/// 启动失败 = 插件级错误上抛（mcp.connection_failed），注册表保持干净
+#[tokio::test]
+async fn register_plugin_server_failure_leaves_registry_clean() {
+    let bridge = McpClientBridge::new();
+    let registry = ToolRegistry::new();
+    let config = McpServerConfig::new("missing", "definitely-not-a-real-command-xyz");
+    let err = agent_tools::mcp::register_plugin_server(&bridge, &registry, &config)
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "mcp.connection_failed");
+    assert!(registry.is_empty(), "启动失败不得污染注册表");
+    assert_eq!(bridge.state("missing"), McpServerRuntimeState::Stopped);
+}

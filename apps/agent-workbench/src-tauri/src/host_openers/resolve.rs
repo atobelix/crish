@@ -1,3 +1,9 @@
+// 豁免 clippy::result_large_err：本模块 Result 函数返回 HostOpenerError——
+// host_openers 域错误契约类型（code + message + 诊断载荷，IPC 序列化面），
+// 保持非 box 形态避免公共 API 分裂（对齐 conex-telemetry crash.rs 先例）；
+// 错误路径非热路径。
+#![allow(clippy::result_large_err)]
+
 use std::path::{Path, PathBuf};
 
 use crate::host_openers::types::{
@@ -163,7 +169,7 @@ fn file_manager_args(path: &Path) -> Vec<String> {
         if path.is_file() {
             return vec![format!("/select,{}", path.display())];
         }
-        return vec![path.display().to_string()];
+        vec![path.display().to_string()]
     }
 
     #[cfg(not(windows))]

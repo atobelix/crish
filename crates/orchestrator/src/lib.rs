@@ -5,6 +5,9 @@
 //!   cooperative-fallback-force）；
 //! - [`events`]：事件序列与持久化分流（B4.2）——sequence 连续分配、
 //!   message-delta/thought-delta 非持久化不阻塞、run-terminal 唯一终态事件；
+//! - [`flow_graph`]：C6 依赖图调度器（I5-M6）——[flow_graph::FlowNode]
+//!   声明 / staged-clone 环检测 / gate 强制 / on_failed 三策略 /
+//!   并发预算 reserve-release / 重启恢复 / 合成唤醒（事件驱动不轮询）；
 //! - [`persist`]：事件存储连接抽象（B4.2）——[persist::Store] trait
 //!   （insert_run/update_run_status/append_event/query_events/query_runs/
 //!   pending 输入 API），内存实现（测试用）+ conex-db 实现（SQLite
@@ -15,7 +18,11 @@
 //!   与执行骨架（取消 run → 清审批 → 恢复检查点 → 移动叶子）；
 //! - [`restore`]：重启恢复与状态快照（B4.3）——in-flight → interrupted
 //!   （previousStatus 审计）、blocked/终态保真、pending FIFO 恢复、
-//!   全量/增量快照 + 损坏回退。
+//!   全量/增量快照 + 损坏回退；
+//! - [`recovery`]：C7 四级恢复阶梯 + 恢复预算制（I6-M9）——
+//!   [recovery::RecoveryCoordinator]（阶梯 1 自动重试 → 阶梯 2 主 agent
+//!   激活 steering → 阶梯 3 fork 三态上下文继承 → 阶梯 4 上报用户），
+//!   操作指纹 + Episode 预算（`recover_*` 键命名空间）。
 //!
 //! 语义来源：05-test-mapping.md §2.8 / §5.4（run::drive / run::cancel /
 //! run::approval / run::fail / run::restore / session::tree / store::pending /
@@ -28,12 +35,15 @@
 //! 与 [conex_types::events::AgentEvent] 作为事件唯一真源。
 
 pub mod events;
+pub mod flow_graph;
 pub mod normalize;
 pub mod persist;
+pub mod recovery;
 pub mod restore;
 pub mod run;
 pub mod session;
 pub mod steering_queue;
+pub mod subagent_events;
 
 pub use normalize::{allows_auto_continue, is_terminal_event, normalize_envelope, terminal_status_for_end_reason};
 pub use steering_queue::PendingMessageQueue;

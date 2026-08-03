@@ -59,7 +59,7 @@ pub(crate) async fn workbench_http_request(
     let status = res.status().as_u16();
     let text = res.text().await.unwrap_or_default();
     Ok(json!({
-        "ok": status >= 200 && status < 300,
+        "ok": (200..300).contains(&status),
         "status": status,
         "body": text,
     }))

@@ -1,8 +1,10 @@
 /**
- * Detect local Claude Code + Codex CLI sessions (metadata only).
- * Full JSONL parse is deferred until the user selects sessions.
+ * 探测本机 Claude Code + Codex CLI 会话（仅元数据）。
+ * 完整 JSONL 解析推迟到用户选择会话之后。
  *
- * Privacy: only path + short title previews; never log bodies.
+ * 隐私：只保留路径与短标题预览，绝不记录正文。
+ * 由宿主 apps/crish-desktop/src/api/import/detectExternalSessions.ts 迁入；
+ * FS 经 ImportFs 注入面接入（宿主提供 Tauri 适配实现，遵守依赖全注入原则）。
  */
 
 import type {
@@ -22,7 +24,7 @@ const UUID_JSONL_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/i;
 const ROLLOUT_RE = /^rollout-.*\.jsonl$/i;
 
-/** Join path segments with host separator. */
+/** 用宿主分隔符拼接路径段。 */
 export function joinImportPath(sep: string, ...parts: string[]): string {
   const s = sep === '\\' ? '\\' : '/';
   return parts
@@ -45,8 +47,8 @@ function inferSep(env: ImportPathEnv): '\\' | '/' {
 }
 
 /**
- * Resolve default config roots without touching the filesystem.
- * Does not recursively scan home — only constructs well-known paths.
+ * 解析默认配置根目录（不触碰文件系统）。
+ * 只构造已知路径，不递归扫描 home。
  */
 export function resolveDefaultImportRoots(env: ImportPathEnv = {}): ExternalImportRoots {
   const sep = inferSep(env);
@@ -76,12 +78,12 @@ export function resolveDefaultImportRoots(env: ImportPathEnv = {}): ExternalImpo
   };
 }
 
-/** Claude-style path munging for docs/tests (non-alnum → `-`). */
+/** Claude 风格的项目路径 munging（文档/测试用；非字母数字 → `-`）。 */
 export function mungeProjectPath(projectPath: string): string {
   return projectPath.replace(/[^a-zA-Z0-9]/g, '-');
 }
 
-/** Unescape a JSON string fragment extracted without full parse. */
+/** 不经完整解析，从 JSON 字符串片段解出某个字符串字段值。 */
 function unescapeJsonString(raw: string): string {
   if (!raw.includes('\\')) return raw;
   try {
@@ -92,8 +94,8 @@ function unescapeJsonString(raw: string): string {
 }
 
 /**
- * Extract first JSON string field value from raw text (lite head/tail).
- * Mirrors Claude Code portable extractors — no full parse required.
+ * 从原始文本提取首个 JSON 字符串字段值（轻量 head/tail 读取）。
+ * 对齐 Claude Code 便携式提取器——不需要完整解析。
  */
 export function extractJsonStringField(text: string, key: string): string | undefined {
   const patterns = [`"${key}":"`, `"${key}": "`];
@@ -116,7 +118,7 @@ export function extractJsonStringField(text: string, key: string): string | unde
   return undefined;
 }
 
-export function extractLastJsonStringField(text: string, key: string): string | undefined {
+function extractLastJsonStringField(text: string, key: string): string | undefined {
   const patterns = [`"${key}":"`, `"${key}": "`];
   let last: string | undefined;
   for (const pattern of patterns) {
@@ -147,7 +149,7 @@ const SKIP_FIRST_PROMPT =
   /^(?:\s*<[a-z][\w-]*[\s>]|\[Request interrupted by user[^\]]*\])/;
 
 /**
- * Best-effort first user prompt from Claude JSONL head (no full parse).
+ * 从 Claude JSONL head/tail 尽力取首个用户提示（不完整解析）。
  */
 export function extractClaudeTitlePreview(head: string, tail: string): string {
   const custom =
@@ -169,7 +171,7 @@ export function extractClaudeTitlePreview(head: string, tail: string): string {
     if (line.includes('"isMeta":true') || line.includes('"isMeta": true')) continue;
     const text =
       extractJsonStringField(line, 'text') ||
-      // plain content string on message
+      // message 上的纯字符串 content
       (() => {
         const m = line.match(/"content"\s*:\s*"((?:\\.|[^"\\])*)"/);
         return m?.[1] != null ? unescapeJsonString(m[1]) : undefined;
@@ -180,7 +182,7 @@ export function extractClaudeTitlePreview(head: string, tail: string): string {
   return 'Claude Code session';
 }
 
-/** Codex rollout: first user input_text or event_msg user_message. */
+/** Codex rollout：首个用户 input_text 或 event_msg user_message。 */
 export function extractCodexTitlePreview(head: string): string {
   const fromInput = extractJsonStringField(head, 'text');
   if (fromInput && fromInput.trim()) return truncatePreview(fromInput.trim());
@@ -200,7 +202,7 @@ export function truncatePreview(s: string, max = 200): string {
   return t.slice(0, max - 1) + '…';
 }
 
-/** Count non-empty lines in a chunk as message estimate base. */
+/** 以非空行数估算消息量（chunk 内）。 */
 export function estimateLineCount(content: string, truncated: boolean, fileSize?: number): number {
   let n = 0;
   for (let i = 0; i < content.length; i++) {
@@ -208,7 +210,7 @@ export function estimateLineCount(content: string, truncated: boolean, fileSize?
   }
   if (content.length > 0 && !content.endsWith('\n')) n++;
   if (truncated && fileSize && content.length > 0) {
-    // Scale estimate by file size ratio (rough).
+    // 按文件大小比例粗估
     const ratio = fileSize / content.length;
     if (ratio > 1 && Number.isFinite(ratio)) n = Math.round(n * ratio);
   }
@@ -218,7 +220,7 @@ export function estimateLineCount(content: string, truncated: boolean, fileSize?
 function parseModifiedMs(mod: string | number | undefined): number | undefined {
   if (mod == null) return undefined;
   if (typeof mod === 'number' && Number.isFinite(mod)) {
-    // host may send ms as number or as stringified ms
+    // 宿主可能以 ms 数字或数字字符串返回
     return mod < 1e12 ? mod * 1000 : mod;
   }
   const s = String(mod);
@@ -242,7 +244,7 @@ async function liteRead(
   if (content.length <= liteBytes) {
     return { head: content, tail: content, truncated, content };
   }
-  // Prefer true head+tail when host returned a large slice.
+  // 宿主返回大块切片时优先取真实 head+tail
   const head = content.slice(0, liteBytes);
   const tail = content.slice(-liteBytes);
   return { head, tail, truncated: true, content: head };
@@ -316,7 +318,7 @@ async function detectClaude(
 }
 
 /**
- * Walk sessions/YYYY/MM/DD/ shallow for rollout-*.jsonl
+ * 浅遍历 sessions/YYYY/MM/DD/ 找 rollout-*.jsonl
  */
 async function detectCodex(
   fs: ImportFs,
@@ -383,11 +385,11 @@ async function detectCodex(
               const p = Date.parse(ts);
               if (!Number.isNaN(p)) createdAtMs = p;
             }
-            // session_meta payload may nest cwd as path string
+            // session_meta payload 可能把 cwd 嵌套为 path 字符串
             cwd = extractJsonStringField(lite.head, 'cwd');
             const metaId = extractJsonStringField(lite.head, 'id');
             if (metaId) {
-              // prefer meta id when present
+              // 存在 meta id 时优先使用（占位保留）
             }
           } catch {
             warnings.push(`Lite-read failed: ${f.name}`);
@@ -412,7 +414,7 @@ async function detectCodex(
 }
 
 /**
- * Discover external sessions (metadata only). Opt-in: call only from Import UI.
+ * 发现外部会话（仅元数据）。仅从导入 UI 调用（opt-in）。
  */
 export async function detectExternalSessions(
   options: DetectExternalSessionsOptions,

@@ -581,6 +581,8 @@ describe('HookAPI - 接口结构', () => {
         version: '1.0.0',
         origin: 'user-dir',
         trustLevel: 'restricted',
+        entrypoints: { main: './index.js' },
+        engineVersion: '>=0.2.0 <0.3.0',
         entry: './index.js',
         declaredHooks: [],
         declaredTools: [],
@@ -611,7 +613,20 @@ describe('HookAPI - 接口结构', () => {
 
   it('observe 返回 HookUnsubscribe（取消订阅函数）', () => {
     const mockApi: HookAPI = {
-      manifest: {} as HookAPI['manifest'],
+      manifest: {
+        id: 'test',
+        name: 'test',
+        version: '1.0.0',
+        origin: 'user-dir',
+        trustLevel: 'restricted',
+        entrypoints: { main: './index.js' },
+        engineVersion: '>=0.2.0 <0.3.0',
+        declaredHooks: [],
+        declaredTools: [],
+        declaredMcpServers: [],
+        declaredAgents: [],
+        permissions: [],
+      } as HookAPI['manifest'],
       observe: () => () => {},
       on: () => () => {},
       registerTool: () => ({ name: 't', registeredAt: 0, unregister: () => {} }),

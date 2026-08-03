@@ -20,6 +20,7 @@
 //! - 12 agent-end reason + error 可选；
 //! - 13/14 无 error 信封 / 无 event 二次包装（扁平载荷）；
 //! - schemaVersion：新事件必带且 = 1（T11.3.2 衔接）。
+//!
 //! 第 15 项（subagent-*）Rust 侧无产出，属协议已知缺口（30 号清单 §4.1-15 记录）。
 //!
 //! 运行：`cargo test -p agent-workbench --test event_bridge_contract`

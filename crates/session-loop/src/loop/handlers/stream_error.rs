@@ -61,10 +61,10 @@ pub(crate) async fn handle(
         // 长度/上下文超限：length 恢复阶梯（8192→16384→32768，上限 2 次）；
         // 用尽后接压缩阶梯（P4 §3.5，输入超限维度——只放大输出预算对
         // 输入超限无效，comparison.md:24）
-        ProviderErrorKind::ContextLengthExceeded => length_ladder(state, &classified),
+        ProviderErrorKind::ContextLengthExceeded => length_ladder(state, &classified).await,
         // payload 过大：压缩阶梯（P4 §3.5）——真实压缩 + 重试一次，
         // 代替 T06.2.2 的假恢复（请求体不变时重试必败）与直接 fatal
-        ProviderErrorKind::PayloadTooLarge => compression_ladder(state, &classified),
+        ProviderErrorKind::PayloadTooLarge => compression_ladder(state, &classified).await,
         // 其余（Auth / Quota / InvalidRequest / Unknown / Aborted 等）：不可重试
         _ => fatal_provider_error(state, &classified),
     }
@@ -90,7 +90,7 @@ fn transient_retry(state: &mut LoopState, classified: &ClassifiedStreamError) ->
 /// length 恢复阶梯：max_tokens 翻倍升级（8192→16384→32768，上限 2 次）；
 /// 用尽后接压缩阶梯（P4 §3.5）——输入超限维度，对齐 pi「溢出 → 压缩 →
 /// 重试一次」
-fn length_ladder(state: &mut LoopState, classified: &ClassifiedStreamError) -> Result<HandlerOutcome, LoopError> {
+async fn length_ladder(state: &mut LoopState, classified: &ClassifiedStreamError) -> Result<HandlerOutcome, LoopError> {
     // Q40（T09.9）：每级决策前查 abort——已取消不再发起 length 升级重试
     if state.abort_signal.is_aborted() {
         return streaming_aborted(state);
@@ -107,7 +107,7 @@ fn length_ladder(state: &mut LoopState, classified: &ClassifiedStreamError) -> R
     }
     // length 阶梯用尽 → 压缩阶梯（P4 §3.5：压缩对话后重试一次，
     // compression_retries 上限 1；仍超限才 fatal）
-    compression_ladder(state, classified)
+    compression_ladder(state, classified).await
 }
 
 /// 溢出压缩阶梯（P4 §3.5，对齐 pi `_overflowRecoveryAttempted` 防死循环）：
@@ -130,7 +130,7 @@ fn length_ladder(state: &mut LoopState, classified: &ClassifiedStreamError) -> R
 /// 时间戳护栏 + 单 run 计数）；目标预算 = window - reserve（与预检同一
 /// 口径）。无合法切割点 / 无可丢内容（plan.dropped_ids 为空）时**不重试**
 /// ——请求体未变，重试必再超（对齐 T06.2.2 删除假恢复的裁决）→ 直接 fatal。
-fn compression_ladder(
+async fn compression_ladder(
     state: &mut LoopState,
     classified: &ClassifiedStreamError,
 ) -> Result<HandlerOutcome, LoopError> {
@@ -172,7 +172,7 @@ fn compression_ladder(
         trigger: ContextCompressionTrigger::Overflow,
         reason: ContextCompressionReason::Overflow,
     };
-    apply_compaction(state, &plan, &info, Some(u64::from(budget_tokens)));
+    apply_compaction(state, &plan, &info, Some(u64::from(budget_tokens))).await;
     state.compression_retries += 1;
     // 重试一次：NO_PROGRESS_CONTINUE 重进 provider 循环（对话已替换，
     // 下一次 build_request 携带压缩后序列 = 真实恢复）
@@ -455,6 +455,7 @@ mod tests {
             &mut state,
             &transient_error(ProviderErrorKind::ContextLengthExceeded),
         )
+        .await
         .expect("length 阶梯为同步决策");
         assert_eq!(state.length_upgrades, 0, "abort 后不升级 max_tokens");
         assert_eq!(state.max_tokens, crate::r#loop::DEFAULT_MAX_TOKENS);

@@ -97,7 +97,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
             turn_index: ctx.turn_index,
             tool_call_count: ctx.tool_call_count,
         };
-        match hooks.dispatch(&event) {
+        match hooks.dispatch(&event).await {
             Ok(outcome) => {
                 if let Some(reason) = outcome.blocked {
                     tracing::info!(reason = %reason, "turn.end 钩子建议 stop");
@@ -124,6 +124,20 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
             ),
             retryable: Some(true),
         });
+        // I8-E1 第二批：error.occurred 钩子广播（runtime-error 事件同点位；
+        // observe 默认，失败吞掉 + 计数，收场流程继续）
+        if let Some(hooks) = &state.options.hooks {
+            let _ = hooks
+                .dispatch(&crate::hooks::HookEvent::ErrorOccurred {
+                    session_id: ctx.session_id.clone(),
+                    error: format!(
+                        "maxTurns 预算用尽（turnIndex={}，maxTurns={}）",
+                        ctx.turn_index, ctx.max_turns
+                    ),
+                    retryable: true,
+                })
+                .await;
+        }
         // 错误日志（T04.3-3，点位同 T04.2-2）：max-turns 边界按类型化错误码
         // 记录（纯观测事件：retryable=true 只表可重试，与收场 reason=max-turns 正交）
         tracing::error!(

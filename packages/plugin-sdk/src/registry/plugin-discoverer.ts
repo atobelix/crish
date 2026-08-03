@@ -8,9 +8,10 @@
 // - full 级别 + project-dir 自动降级为 restricted（防仓库投毒，禁令 18）
 // - DiscoveredPlugin 携带 origin + pluginDir + entryPath，供 Loader 直接使用
 
-import { readdir, readFile, access } from 'node:fs/promises';
 import { join, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
+import type { PluginFs } from '../fs/plugin-fs';
+import { NodeFsAdapter } from '../fs/plugin-fs';
 import type { PluginManifest, PluginOrigin } from '../manifest';
 import { validateManifest } from '../manifest';
 import type { ManifestValidationResult } from '../manifest';
@@ -29,11 +30,17 @@ import type { ManifestValidationResult } from '../manifest';
  * 禁止源（禁令 15/16/17）：mcp / github / inline / npm / global-dir
  *
  * 优先级：project-dir > user-dir（同名覆盖，便于项目级覆盖用户级配置）。
+ *
+ * I8-E2（fs 注入面）：文件系统经 [PluginFs] 注入（webview 宿主注入
+ * Tauri fs 适配；Node 环境默认 [NodeFsAdapter]）。
  */
 export class PluginDiscoverer {
+  private readonly fs: PluginFs;
+
   /**
    * @param userDir 自定义 user-dir 路径（默认 ~/.crish/plugins）
    * @param projectDir 自定义 project-dir 路径（默认 <cwd>/.crish/plugins）
+   * @param fs 文件系统适配（默认 NodeFsAdapter；webview 宿主须注入）
    */
   constructor(
     private readonly userDir: string = join(homedir(), '.crish', 'plugins'),
@@ -42,7 +49,10 @@ export class PluginDiscoverer {
       '.crish',
       'plugins',
     ),
-  ) {}
+    fs?: PluginFs,
+  ) {
+    this.fs = fs ?? new NodeFsAdapter();
+  }
 
   /** 发现全部插件（user-dir 先扫描，project-dir 覆盖同名） */
   async discover(): Promise<DiscoveredPlugin[]> {
@@ -78,7 +88,9 @@ export class PluginDiscoverer {
     const results: DiscoveredPlugin[] = [];
     let entries: string[];
     try {
-      entries = await readdir(dir);
+      entries = await this.fs.readdir(dir, false).then((list) =>
+        list.map((e) => e.name),
+      );
     } catch {
       return results; // 目录不存在，静默跳过
     }
@@ -103,14 +115,14 @@ export class PluginDiscoverer {
   ): Promise<DiscoveredPlugin | undefined> {
     const manifestPath = join(pluginDir, 'plugin.json');
     try {
-      await access(manifestPath);
+      await this.fs.access(manifestPath);
     } catch {
       return undefined; // 无 plugin.json，跳过
     }
 
     let raw: unknown;
     try {
-      const content = await readFile(manifestPath, 'utf-8');
+      const content = await this.fs.readFile(manifestPath, 'utf-8');
       raw = JSON.parse(content);
     } catch {
       console.warn(

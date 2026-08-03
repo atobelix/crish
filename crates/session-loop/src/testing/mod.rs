@@ -139,6 +139,12 @@ impl TestProvider {
     pub fn request_max_tokens(&self, n: usize) -> Option<u32> {
         self.requests().get(n).and_then(|r| r.max_tokens)
     }
+
+    /// 第 n 次请求的 system prompt（M1 注入通道断言用：注入段经
+    /// system_prompt 面送达，不混入会话消息）
+    pub fn request_system_prompt(&self, n: usize) -> Option<String> {
+        self.requests().get(n).and_then(|r| r.system_prompt.clone())
+    }
 }
 
 #[async_trait]
@@ -248,6 +254,9 @@ pub struct RequestSnapshot {
     pub tools: Vec<ToolSchema>,
     /// 本次调用 max_tokens（length 阶梯升级后透传）
     pub max_tokens: Option<u32>,
+    /// 本次调用 system prompt（M1：注入通道断言用；system 角色面，
+    /// 独立于会话对话）
+    pub system_prompt: Option<String>,
 }
 
 impl RequestSnapshot {
@@ -257,6 +266,7 @@ impl RequestSnapshot {
             messages: request.messages.to_vec(),
             tools: request.tools.clone(),
             max_tokens: request.max_tokens,
+            system_prompt: request.system_prompt.map(str::to_string),
         }
     }
 }

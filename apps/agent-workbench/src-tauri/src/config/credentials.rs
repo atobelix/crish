@@ -399,6 +399,9 @@ fn remove_os_secret(path: &Path) -> Result<(), String> {
 }
 
 #[cfg(windows)]
+// 豁免 unsafe_code：Windows DPAPI FFI 调用（每处 unsafe 均有 SAFETY 说明），
+// 经评审后允许（对齐 agent-provider credentials.rs 同款先例）。
+#[allow(unsafe_code)]
 fn dpapi_protect(input: &[u8]) -> Result<Vec<u8>, String> {
     use std::{ffi::c_void, ptr};
     use windows_sys::Win32::{
@@ -406,7 +409,7 @@ fn dpapi_protect(input: &[u8]) -> Result<Vec<u8>, String> {
         Security::Cryptography::{CryptProtectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB},
     };
 
-    let mut in_blob = CRYPT_INTEGER_BLOB {
+    let in_blob = CRYPT_INTEGER_BLOB {
         cbData: input.len() as u32,
         pbData: input.as_ptr() as *mut u8,
     };
@@ -421,7 +424,7 @@ fn dpapi_protect(input: &[u8]) -> Result<Vec<u8>, String> {
     // 成功后 out_blob 持有 DPAPI 分配的加密数据。
     let ok = unsafe {
         CryptProtectData(
-            &mut in_blob,
+            &in_blob,
             ptr::null(),
             ptr::null(),
             ptr::null_mut::<c_void>(),
@@ -445,6 +448,9 @@ fn dpapi_protect(input: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(windows)]
+// 豁免 unsafe_code：Windows DPAPI FFI 调用（每处 unsafe 均有 SAFETY 说明），
+// 经评审后允许（对齐 agent-provider credentials.rs 同款先例）。
+#[allow(unsafe_code)]
 fn dpapi_unprotect(input: &[u8]) -> Result<Vec<u8>, String> {
     use std::{ffi::c_void, ptr};
     use windows_sys::Win32::{
@@ -454,7 +460,7 @@ fn dpapi_unprotect(input: &[u8]) -> Result<Vec<u8>, String> {
         },
     };
 
-    let mut in_blob = CRYPT_INTEGER_BLOB {
+    let in_blob = CRYPT_INTEGER_BLOB {
         cbData: input.len() as u32,
         pbData: input.as_ptr() as *mut u8,
     };
@@ -468,7 +474,7 @@ fn dpapi_unprotect(input: &[u8]) -> Result<Vec<u8>, String> {
     // - CRYPTPROTECT_UI_FORBIDDEN 禁止任何 UI 弹窗。
     let ok = unsafe {
         CryptUnprotectData(
-            &mut in_blob,
+            &in_blob,
             ptr::null_mut(),
             ptr::null(),
             ptr::null_mut::<c_void>(),
@@ -502,7 +508,7 @@ fn encode_hex(bytes: &[u8]) -> String {
 }
 
 fn decode_hex(input: &str) -> Result<Vec<u8>, String> {
-    if input.len() % 2 != 0 {
+    if !input.len().is_multiple_of(2) {
         return Err("Invalid encrypted credential encoding".to_string());
     }
     input

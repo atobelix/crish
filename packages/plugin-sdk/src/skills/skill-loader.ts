@@ -20,9 +20,6 @@
  * - 二进制检测保留（null byte 探测，避免误将二进制当 Markdown 解析）
  */
 
-import { readdir, readFile, stat } from 'node:fs/promises';
-import type { Dirent } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
 import type {
   JsonObject,
   JsonValue,
@@ -30,6 +27,9 @@ import type {
   ToolExecutionContext,
   ToolOutput,
 } from '@crish/shared-types';
+import type { PluginFs, PluginFsEntry } from '../fs/plugin-fs';
+import { NodeFsAdapter } from '../fs/plugin-fs';
+import { basename, dirname, join } from 'node:path';
 import type {
   LoadSkillsOptions,
   LoadSkillsResult,
@@ -49,8 +49,15 @@ const MAX_SKILL_DESCRIPTION_LENGTH = 1024;
  * 2. toTool：将技能转换为 ToolDefinition，供 api.registerTool() 注册
  *
  * 线程安全：无状态，可在多个加载流程复用。
+ *
+ * I8-E2（fs 注入面）：文件系统经 [PluginFs] 注入（依赖全注入原则）——
+ * Node 环境默认 [NodeFsAdapter]；webview 宿主注入 Tauri fs 适配。
  */
 export class SkillLoader {
+  /**
+   * @param fs 文件系统适配（默认 NodeFsAdapter；webview 宿主须注入）
+   */
+  constructor(private readonly fs: PluginFs = new NodeFsAdapter()) {}
   /**
    * 从目录加载全部技能。
    *
@@ -118,12 +125,9 @@ export class SkillLoader {
     includeRootMarkdown: boolean,
     maxBytes: number,
   ): Promise<void> {
-    let entries: Dirent<string>[];
+    let entries: PluginFsEntry[];
     try {
-      entries = await readdir(dir, {
-        withFileTypes: true,
-        encoding: 'utf8',
-      });
+      entries = await this.fs.readdir(dir, true);
     } catch {
       result.diagnostics.push(
         diagnostic('error', 'skill-directory-unreadable', dir, [
@@ -171,7 +175,7 @@ export class SkillLoader {
   ): Promise<PluginSkill | null> {
     let content: string;
     try {
-      const fileStat = await stat(filePath);
+      const fileStat = await this.fs.stat(filePath);
       if (!fileStat.isFile()) {
         result.diagnostics.push(
           diagnostic('warning', 'skill-file-not-file', filePath, [
@@ -188,7 +192,7 @@ export class SkillLoader {
         );
         return null;
       }
-      const buffer = await readFile(filePath);
+      const buffer = await this.fs.readFile(filePath);
       if (isBinaryBuffer(buffer)) {
         result.diagnostics.push(
           diagnostic('warning', 'skill-file-binary', filePath, [
@@ -197,7 +201,7 @@ export class SkillLoader {
         );
         return null;
       }
-      content = buffer.toString('utf8');
+      content = new TextDecoder().decode(buffer);
     } catch {
       result.diagnostics.push(
         diagnostic('warning', 'skill-file-unreadable', filePath, [
@@ -274,6 +278,44 @@ export class SkillLoader {
     };
     return skill;
   }
+}
+
+/**
+ * 技能接线辅助（E5：03 方案 E5 内容 2）——loadFromDirectory → toTool →
+ * registerTool 注入运行集。
+ *
+ * - 技能工具命名 `skill__<name>` 前缀防冲突（工具名与普通工具隔离）；
+ * - `disableModelInvocation` 技能跳过注册（仅手动触发，不暴露为模型
+ *   可调用工具）；
+ * - 同名冲突优先级文档化：**project > user > plugin**（ref-analysis 03
+ *   Top 10）——宿主注册表按优先级判定冲突，本辅助按目录加载序调用
+ *   registerTool，宿主应把各技能目录按上述优先级排序后依次调用；
+ * - 单技能加载失败不影响其他技能（diagnostics 照常收集返回）。
+ *
+ * @param loader SkillLoader 实例（无状态，可复用）
+ * @param skillsDir 技能根目录
+ * @param registerTool 宿主工具注册回调（PluginAPI.registerTool 委托面）
+ * @param options 加载选项
+ * @returns 加载结果（技能列表 + 诊断；注册数 = skills - disableModelInvocation）
+ */
+export async function loadSkillsIntoRegistry(
+  loader: SkillLoader,
+  skillsDir: string,
+  registerTool: (definition: ToolDefinition) => void,
+  options: LoadSkillsOptions = {},
+): Promise<LoadSkillsResult> {
+  const result = await loader.loadFromDirectory(skillsDir, options);
+  for (const skill of result.skills) {
+    if (skill.disableModelInvocation) {
+      continue;
+    }
+    const definition = loader.toTool(skill);
+    registerTool({
+      ...definition,
+      name: `skill__${definition.name}`,
+    });
+  }
+  return result;
 }
 
 // ─── 内部辅助类型与函数 ──────────────────────────────────────
@@ -456,7 +498,7 @@ function readStringField(input: JsonObject, key: string): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-function isBinaryBuffer(buffer: Buffer): boolean {
+function isBinaryBuffer(buffer: Uint8Array): boolean {
   // 探测前 8KB 是否含 null byte（对齐 git 的 binary 检测启发式）
   const checkLength = Math.min(buffer.length, 8192);
   for (let i = 0; i < checkLength; i++) {

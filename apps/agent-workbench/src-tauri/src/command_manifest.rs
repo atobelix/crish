@@ -59,7 +59,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（75 条 = 注册面 71 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（78 条 = 注册面 74 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：append_session_messages /
@@ -149,6 +149,10 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // ── 模型目录（P3 步骤 5：catalog_get / catalog_refresh；C7 三处登记 ①）──
         entry("catalog_get", "core", "engine", true),
         entry("catalog_refresh", "core", "engine", true),
+        // ── 误删恢复（I2-S5：trash_list / trash_restore / trash_purge）──
+        entry("trash_list", "core", "engine", true),
+        entry("trash_restore", "core", "engine", true),
+        entry("trash_purge", "core", "engine", true),
         // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
         entry("append_session_messages", "session", "engine", false),
         entry("workbench_open_workspace", "workbench", "gui", false),
@@ -170,7 +174,7 @@ mod tests {
     use super::*;
 
     /// 条数公式化：总数 = 注册面 + 登记先行（镜像前端 commandManifest.test.ts：
-    /// 75 = 注册面 71 + 登记先行 4；变更时双端同步）。
+    /// 78 = 注册面 74 + 登记先行 4；变更时双端同步）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -181,8 +185,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 75, "总数 75（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 71, "注册面 71");
+        assert_eq!(total, 78, "总数 78（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 74, "注册面 74");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -303,7 +307,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 75);
+        assert_eq!(manifest.commands.len(), 78);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 }

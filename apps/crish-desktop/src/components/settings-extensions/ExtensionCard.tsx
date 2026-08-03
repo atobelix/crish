@@ -8,8 +8,15 @@ import {
   type InstalledExtension,
 } from '../../api/extensionCatalog';
 import { mcpStateLabel } from '../../api/mcpApi';
-import type { ExpandMode, ManageKind } from './types';
+import type { ExpandMode, ManageKind, PluginInstalledExtension } from './types';
 import { Tooltip } from '../Tooltip';
+
+/** 插件卡片收窄：manifest 元数据条目（useExtensionMarket 构造，id 恒有 pluginId）。 */
+function isPluginCardItem(
+  item: InstalledExtension | CatalogEntry,
+): item is PluginInstalledExtension {
+  return 'pluginId' in item && item.kind === 'plugin';
+}
 
 export type ExtensionCardProps = {
   scope: 'installed' | 'catalog';
@@ -32,6 +39,8 @@ export type ExtensionCardProps = {
   onToggleExpandMcpTools?: (id: string) => void;
   onSetManage?: (kind: ManageKind) => void;
   onGoToConfig?: (id: string) => void;
+  /** 插件启停开关（E3 UI 泛化：kind: 'plugin' 分支）。 */
+  onTogglePlugin?: (pluginId: string, enabled: boolean) => void;
 };
 
 export const ExtensionCard: React.FC<ExtensionCardProps> = ({
@@ -55,6 +64,7 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
   onToggleExpandMcpTools,
   onSetManage,
   onGoToConfig,
+  onTogglePlugin,
 }) => {
   const renderSkillBody = (
     targetItem: InstalledExtension | CatalogEntry,
@@ -270,6 +280,7 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
     const desc = targetItem.description;
     const ref =
       'installRef' in targetItem && targetItem.installRef ? targetItem.installRef : undefined;
+    const pluginCard = isPluginCardItem(targetItem) ? targetItem : null;
     return (
       <div className="ext-inline-panel">
         <div className={`ext-detail-md ${styles.detailMdSans}`}>
@@ -280,6 +291,16 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
             : '安装后会写入本机扩展包列表，供工作台加载。'}
           {ref ? `\n\n引用：${ref}` : ''}
           {`\n名称：${name}`}
+          {pluginCard?.pluginVersion ? `\n版本：${pluginCard.pluginVersion}` : ''}
+          {pluginCard?.pluginTrustLevel
+            ? `\n信任级别：${pluginCard.pluginTrustLevel}`
+            : ''}
+          {pluginCard?.pluginHooks && pluginCard.pluginHooks.length > 0
+            ? `\n钩子：${pluginCard.pluginHooks.join('、')}`
+            : ''}
+          {pluginCard?.pluginTools && pluginCard.pluginTools.length > 0
+            ? `\n工具：${pluginCard.pluginTools.join('、')}`
+            : ''}
         </div>
       </div>
     );
@@ -297,6 +318,7 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
 
   if (scope === 'installed') {
     const installedItem = item as InstalledExtension;
+    const pluginCard = isPluginCardItem(installedItem) ? installedItem : null;
     return (
       <div
         className={`ext-row-block${
@@ -334,14 +356,30 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
             >
               {detailOpen ? '收起' : '详情'}
             </button>
-            <button
-              type="button"
-              className="ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect"
-              aria-expanded={configOpen}
-              onClick={() => toggleExpand('installed', installedItem.id, 'config')}
-            >
-              {configOpen ? '收起' : '配置'}
-            </button>
+            {pluginCard ? (
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect"
+                aria-pressed={pluginCard.pluginEnabled}
+                onClick={() =>
+                  onTogglePlugin?.(
+                    pluginCard.pluginId!,
+                    !pluginCard.pluginEnabled
+                  )
+                }
+              >
+                {pluginCard.pluginEnabled ? '停用' : '启用'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary ui-btn-sm settings-btn-rect"
+                aria-expanded={configOpen}
+                onClick={() => toggleExpand('installed', installedItem.id, 'config')}
+              >
+                {configOpen ? '收起' : '配置'}
+              </button>
+            )}
             {canUninstall ? (
               <button
                 type="button"

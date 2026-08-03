@@ -66,6 +66,11 @@ pub(crate) fn read_chunk(path: &Path, offset: u64, size: usize) -> Result<FileCh
     let mut data = vec![0u8; read_size];
 
     if read_size >= 65536 {
+        // 豁免 unsafe_code：memmap2 0.9 的 map/map_copy* 全部为 unsafe
+        // （文件截断期间访问映射区间属 UB 面），无 safe 等价 API；
+        // 本函数只读映射整文件后取分块，性能关键路径保留 mmap
+        // （SAFETY 见下方注释），经评审后允许。
+        #[allow(unsafe_code)]
         // SAFETY: Mmap::map 创建文件只读内存映射。调用方保证：
         // - 文件未被另一线程/进程同时截断或改写
         // - 文件句柄在 mmap 生命周期内保持有效

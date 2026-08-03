@@ -28,6 +28,8 @@ export type ExtensionListProps = {
   onSetManage: (kind: ManageKind) => void;
   onSetView: (view: MainView) => void;
   onSetExpand: (expand: ExpandTarget | null) => void;
+  /** 插件启停（E3 UI 泛化）。 */
+  onTogglePlugin: (pluginId: string, enabled: boolean) => void;
 };
 
 export const ExtensionList: React.FC<ExtensionListProps> = ({
@@ -55,6 +57,7 @@ export const ExtensionList: React.FC<ExtensionListProps> = ({
   onSetManage,
   onSetView,
   onSetExpand,
+  onTogglePlugin,
 }) => {
   if (view === 'installed') {
     return (
@@ -108,6 +111,7 @@ export const ExtensionList: React.FC<ExtensionListProps> = ({
                 onToggleMcpTool={onToggleMcpTool}
                 onToggleExpandMcpTools={onToggleExpandMcpTools}
                 onSetManage={onSetManage}
+                onTogglePlugin={onTogglePlugin}
               />
             );
           })

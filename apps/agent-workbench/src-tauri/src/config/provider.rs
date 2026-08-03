@@ -595,7 +595,7 @@ mod tests {
             .expect("apply defaults");
 
         assert_eq!(store.effective_endpoint(), "auto");
-        assert_eq!(store.effective_stream(), true);
+        assert!(store.effective_stream());
     }
 
     #[test]
@@ -613,7 +613,7 @@ mod tests {
             .expect("preserve explicit overrides");
 
         assert_eq!(store.effective_endpoint(), "chat-completions");
-        assert_eq!(store.effective_stream(), false);
+        assert!(!store.effective_stream());
     }
 
     #[test]
@@ -656,7 +656,7 @@ mod tests {
         );
         assert_eq!(reloaded.effective_credential_mode(), "auto");
         assert_eq!(reloaded.effective_endpoint(), "responses");
-        assert_eq!(reloaded.effective_stream(), false);
+        assert!(!reloaded.effective_stream());
     }
 
     #[test]
@@ -669,7 +669,7 @@ mod tests {
 
         let config = store.snapshot();
 
-        assert_eq!(store.effective_api_key().is_none(), true);
+        assert!(store.effective_api_key().is_none());
         assert_eq!(config["hasApiKey"].as_bool(), Some(false));
         assert_eq!(config["apiKeySource"].as_str(), Some("unset"));
         assert_eq!(config["credentialPersistence"].as_str(), Some("unset"));

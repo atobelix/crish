@@ -60,7 +60,8 @@ pub use mcp::{
     McpToolAdapter, McpToolInfo, McpTransport,
 };
 pub use middleware::{
-    AfterExecuteResult, BeforeExecuteResult, ToolExecutionContext, ToolMiddleware,
+    AfterExecuteResult, BeforeExecuteResult, MiddlewareTimeoutConfig, ToolExecutionContext,
+    ToolMiddleware,
 };
 pub use backup::{default_backup_tools, BackupMiddleware, BUILTIN_BACKUP_TOOLS};
 // T06.3 Q18：RecordingMiddleware / RecordingRecord 仅测试使用（生产零

@@ -40,11 +40,22 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
 
     // 3. turn-start 事件（turn_index 以 TURN_PREPARED 递增后的值展示）
     let session_id = state.machine.context().session_id.clone();
+    let turn_index = state.machine.context().turn_index + 1;
     state.events.push(AgentEvent::TurnStart {
-        session_id,
-        turn_index: state.machine.context().turn_index + 1,
+        session_id: session_id.clone(),
+        turn_index,
         timestamp: crate::steering::now_iso_utc(),
     });
+    // I8-E1 第一批：turn.start 钩子广播（turn 编排起点；observe 默认，
+    // 失败吞掉 + 计数，编排继续——03 §2.4 表）
+    if let Some(hooks) = &state.options.hooks {
+        let _ = hooks
+            .dispatch(&crate::hooks::HookEvent::TurnStart {
+                session_id,
+                turn_index,
+            })
+            .await;
+    }
 
     // 4. steering 评估（D3 预注入短路：有可运行输入即跳过策略评估，
     //    避免对已注入 nudge 重复 steering；T06.2.1 Q03：steering_enabled
@@ -78,7 +89,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     //    T06.2.3 Q04 删除的触发点在 T-33 恢复：真实压缩引擎
     //    （conex-compaction AgentMessage 面）已接线，CompressionHook
     //    死配置由阈值预检替代。
-    maybe_compact_preflight(state);
+    maybe_compact_preflight(state).await;
 
     // 6. TURN_PREPARED → streaming（turnIndex+1，toolCallCount 归零）
     dispatch(state, E::TurnPrepared)?;

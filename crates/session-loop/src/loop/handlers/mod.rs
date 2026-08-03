@@ -264,7 +264,7 @@ pub(crate) struct CompactionTriggerInfo {
 /// 字段，P3 模型目录接线后由壳层在会话级比对），本层预留不实现。
 ///
 /// 返回是否实际发生了压缩（对话被替换 + 事件已广播）。
-pub(crate) fn maybe_compact_preflight(state: &mut LoopState) -> bool {
+pub(crate) async fn maybe_compact_preflight(state: &mut LoopState) -> bool {
     let Some(budget) = state.budget else {
         return false;
     };
@@ -297,7 +297,7 @@ pub(crate) fn maybe_compact_preflight(state: &mut LoopState) -> bool {
         trigger: ContextCompressionTrigger::Threshold,
         reason: ContextCompressionReason::Threshold,
     };
-    apply_compaction(state, &plan, &info, Some(u64::from(budget_tokens)));
+    apply_compaction(state, &plan, &info, Some(u64::from(budget_tokens))).await;
     true
 }
 
@@ -309,14 +309,27 @@ pub(crate) fn maybe_compact_preflight(state: &mut LoopState) -> bool {
 ///   完成后重置 `last_compaction_at = now`（usage 源早于边界作废）；
 /// - **事件**：`ContextCompressionStart`（tokens_before + 触发原因）→
 ///   替换对话 → `ContextCompressionEnd`（record 载荷 = CompactionPlan
-///   字段，trigger/reason/policy/tokens/ids/summary/threshold）。
-pub(crate) fn apply_compaction(
+///   字段，trigger/reason/policy/tokens/ids/summary/threshold）；
+/// - **插件钩子**（I8-E1 第二批）：context.compact.start 在压缩动作前、
+///   context.compact.end 在压缩收场后广播（同事件点位、同载荷语义）。
+pub(crate) async fn apply_compaction(
     state: &mut LoopState,
     plan: &CompactionPlan,
     info: &CompactionTriggerInfo,
     threshold_tokens: Option<u64>,
 ) {
     let session_id = state.machine.context().session_id.clone();
+    // I8-E1：context.compact.start 钩子广播（压缩域处理起点；trigger ←
+    // reason、tokens_before ← tokensBefore；observe 默认，失败吞掉 + 计数）
+    if let Some(hooks) = &state.options.hooks {
+        let _ = hooks
+            .dispatch(&crate::hooks::HookEvent::ContextCompactStart {
+                session_id: session_id.clone(),
+                trigger: compression_reason_str(info.reason).to_string(),
+                tokens_before: plan.tokens_before,
+            })
+            .await;
+    }
     // 时间戳护栏边界（epoch ms；与 usage 源消息时间戳同精度）
     let boundary_ms = crate::steering::unix_millis() as i64;
     tracing::info!(
@@ -368,13 +381,26 @@ pub(crate) fn apply_compaction(
         cache_boundary: None,
         details: None,
     };
+    let compaction_id = record.id.clone();
     state.events.push(AgentEvent::ContextCompressionEnd {
-        session_id,
+        session_id: session_id.clone(),
         timestamp: crate::steering::now_iso_utc(),
         result: Some(record),
         aborted: false,
         error: None,
     });
+    // I8-E1：context.compact.end 钩子广播（压缩域收场；诊断字段全保留——
+    // aborted / keptMessageCount / compactionId；observe 默认，失败吞掉）
+    if let Some(hooks) = &state.options.hooks {
+        let _ = hooks
+            .dispatch(&crate::hooks::HookEvent::ContextCompactEnd {
+                session_id,
+                aborted: false,
+                kept_message_count: plan.kept_ids.len() as u32,
+                compaction_id,
+            })
+            .await;
+    }
 }
 
 /// 触发点 → 事件原因文案（ContextCompressionStart.reason 字符串）
@@ -656,11 +682,11 @@ mod tests {
 
     /// 预检触发：超阈值 → 压缩一次 + 事件成对 + 护栏置位；
     /// 单 run 上限：对话再次膨胀后第二次预检被挡下（§3.4.6 防重触发）
-    #[test]
-    fn preflight_compacts_once_and_guard_blocks_second() {
+    #[tokio::test]
+    async fn preflight_compacts_once_and_guard_blocks_second() {
         let mut state = test_state(budgeted_options());
         state.conversation = big_conversation();
-        assert!(maybe_compact_preflight(&mut state), "超阈值必须触发预检压缩");
+        assert!(maybe_compact_preflight(&mut state).await, "超阈值必须触发预检压缩");
         // 护栏：压缩计数 + 时间戳护栏重置
         assert_eq!(state.compactions_this_run, 1);
         assert!(state.last_compaction_at.is_some(), "压缩后时间戳护栏必须重置");
@@ -686,7 +712,7 @@ mod tests {
         // 第二次预检：对话重新膨胀到超阈值，但单 run 上限挡下（不重触发）
         state.conversation = big_conversation();
         assert!(
-            !maybe_compact_preflight(&mut state),
+            !maybe_compact_preflight(&mut state).await,
             "同 run 内第二次超阈值不得再压缩（单 run 上限护栏）"
         );
         assert_eq!(state.compactions_this_run, 1);
@@ -702,28 +728,28 @@ mod tests {
     }
 
     /// 可配置上限：max_auto_compactions_per_run = 2 → 同 run 最多压缩 2 次
-    #[test]
-    fn preflight_respects_configured_run_limit() {
+    #[tokio::test]
+    async fn preflight_respects_configured_run_limit() {
         let mut state = test_state(SessionLoopOptions {
             max_auto_compactions_per_run: 2,
             ..budgeted_options()
         });
         state.conversation = big_conversation();
-        assert!(maybe_compact_preflight(&mut state));
+        assert!(maybe_compact_preflight(&mut state).await);
         state.conversation = big_conversation();
-        assert!(maybe_compact_preflight(&mut state));
+        assert!(maybe_compact_preflight(&mut state).await);
         assert_eq!(state.compactions_this_run, 2);
         state.conversation = big_conversation();
-        assert!(!maybe_compact_preflight(&mut state), "上限 2 已用尽");
+        assert!(!maybe_compact_preflight(&mut state).await, "上限 2 已用尽");
     }
 
     /// 不触发：无预算配置（None，向后兼容现状）/ 估算低于阈值
-    #[test]
-    fn preflight_skipped_under_threshold_and_without_config() {
+    #[tokio::test]
+    async fn preflight_skipped_under_threshold_and_without_config() {
         // 无预算配置 → 不预检（默认 options 全 None）
         let mut state = test_state(SessionLoopOptions::default());
         state.conversation = big_conversation();
-        assert!(!maybe_compact_preflight(&mut state));
+        assert!(!maybe_compact_preflight(&mut state).await);
         // 预算配置但估算低于阈值 → 不压缩、无事件
         let mut state = test_state(budgeted_options());
         state.conversation = vec![Arc::new(AgentMessage {
@@ -735,15 +761,15 @@ mod tests {
             client_message_id: None,
             content: None,
         })];
-        assert!(!maybe_compact_preflight(&mut state));
+        assert!(!maybe_compact_preflight(&mut state).await);
         assert_eq!(state.compactions_this_run, 0);
         assert!(state.events.is_empty(), "未触发不得广播任何事件");
     }
 
     /// 事件载荷：ContextCompressionEnd.record 字段 = CompactionPlan 字段
     /// （trigger/reason/policy/tokens/ids/summary/threshold，§3.4.6）
-    #[test]
-    fn compaction_end_event_carries_plan_fields() {
+    #[tokio::test]
+    async fn compaction_end_event_carries_plan_fields() {
         let mut state = test_state(budgeted_options());
         let msgs = big_conversation();
         let plan = CompactionPlan {
@@ -760,7 +786,7 @@ mod tests {
             trigger: ContextCompressionTrigger::Threshold,
             reason: ContextCompressionReason::Threshold,
         };
-        apply_compaction(&mut state, &plan, &info, Some(8_000));
+        apply_compaction(&mut state, &plan, &info, Some(8_000)).await;
 
         // 对话替换 + 护栏
         assert_eq!(state.conversation, plan.messages, "压缩结果必须替换对话");
@@ -809,8 +835,8 @@ mod tests {
 
     /// T-36：压缩事件（apply_compaction 单一广播点）触发 tracker 代数 +1 /
     /// 基线作废（C13）；压缩后首轮 usage 无基线 → 不计 miss（新内容非重放）
-    #[test]
-    fn compaction_resets_cache_tracker_baseline_via_real_path() {
+    #[tokio::test]
+    async fn compaction_resets_cache_tracker_baseline_via_real_path() {
         use conex_telemetry::cache::{CacheAccountingKind, CacheUsageScalars};
         let mut state = test_state(SessionLoopOptions {
             cache_tracking: Some(crate::cache_tracker::CacheTrackingConfig {
@@ -858,7 +884,7 @@ mod tests {
             trigger: ContextCompressionTrigger::Threshold,
             reason: ContextCompressionReason::Threshold,
         };
-        apply_compaction(&mut state, &plan, &info, Some(8_000));
+        apply_compaction(&mut state, &plan, &info, Some(8_000)).await;
         // C13：基线作废
         assert!(
             state.cache_tracker.as_ref().unwrap().baseline().is_none(),
@@ -879,9 +905,9 @@ mod tests {
 
     /// 摘要隔离（C14）：摘要器只收到丢弃消息（trait 边界不携带会话/
     /// 缓存亲和参数——无缓存键断言）；Err → 降级 L1 占位符，压缩仍完成
-    #[test]
+    #[tokio::test]
     #[allow(clippy::type_complexity)]
-    fn summarizer_receives_dropped_only_and_err_falls_back_to_l1() {
+    async fn summarizer_receives_dropped_only_and_err_falls_back_to_l1() {
         struct RecordingSummarizer {
             calls: Arc<Mutex<Vec<(Vec<String>, Option<String>)>>>,
             fail: bool,
@@ -913,7 +939,7 @@ mod tests {
             ..budgeted_options()
         });
         state.conversation = big_conversation();
-        assert!(maybe_compact_preflight(&mut state), "L2 摘要路径压缩必须完成");
+        assert!(maybe_compact_preflight(&mut state).await, "L2 摘要路径压缩必须完成");
         let recorded = calls.lock().unwrap().clone();
         assert_eq!(recorded.len(), 1, "摘要器只调用一次");
         let (dropped_ids, existing) = &recorded[0];
@@ -937,7 +963,7 @@ mod tests {
                 ..budgeted_options()
             });
             state.conversation = big_conversation();
-            assert!(maybe_compact_preflight(&mut state), "摘要失败也必须完成压缩");
+            assert!(maybe_compact_preflight(&mut state).await, "摘要失败也必须完成压缩");
             state
         };
         let summary = compression_record(&fail_state).map(|r| r.summary).expect("必须有记录");

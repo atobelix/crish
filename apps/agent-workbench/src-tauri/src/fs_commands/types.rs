@@ -230,13 +230,7 @@ pub(crate) fn strip_verbatim_prefix(path: &Path) -> PathBuf {
     #[cfg(windows)]
     {
         let s = path.to_string_lossy();
-        let stripped = if let Some(rest) = s.strip_prefix(r"\\?\") {
-            Some(rest)
-        } else if let Some(rest) = s.strip_prefix(r"\\.\") {
-            Some(rest)
-        } else {
-            None
-        };
+        let stripped = s.strip_prefix(r"\\?\").or_else(|| s.strip_prefix(r"\\.\"));
         match stripped {
             Some(rest) => PathBuf::from(rest),
             None => path.to_path_buf(),

@@ -68,7 +68,68 @@ export type {
   ProviderUsage,
   ProviderStreamEvent,
   HealthCheckResult,
+  ToolRegistrationOptions,
+  RegisteredTool,
 } from './tool';
+
+// 钩子（I8-E1：14 事件名 + 全 14 载荷 + HookPayloadMap + 双模式 handler；
+// 冻结：HOOK_EVENT_NAMES ↔ crates/session-loop hooks.rs HookEventKind 双向锁定）
+export {
+  HOOK_EVENT_NAMES,
+} from './hooks';
+export type {
+  HookEventName,
+  ExistingHookEventName,
+  NewHookEventName,
+  HookEventNameLiteral,
+  HookMode,
+  HookFailStrategy,
+  HookPayloadMap,
+  TurnStartPayload,
+  TurnEndPayload,
+  ToolPrePayload,
+  ToolPostPayload,
+  ToolErrorPayload,
+  ContextCompactStartPayload,
+  ContextCompactEndPayload,
+  SessionStartPayload,
+  SessionEndPayload,
+  ModelBeforeRequestPayload,
+  ModelAfterResponsePayload,
+  SubagentStartPayload,
+  SubagentEndPayload,
+  ErrorOccurredPayload,
+  HookUnsubscribe,
+  HookObserveHandler,
+  HookOnHandler,
+  LifecycleHandlerResult,
+  ToolErrorHandlerResult,
+  HookBusLike,
+  HookRegistration,
+} from './hooks';
+
+// 插件契约（I8-E2 manifest 双轨收敛：shared-types 为跨端真源，plugin-sdk re-export）
+export type {
+  PluginOrigin,
+  PluginTrustLevel,
+  HookHandlerType,
+  PluginPermission,
+  PluginEntrypoints,
+  PluginAuthor,
+  PluginManifest,
+  PluginActivationApi,
+  PluginHookHandler,
+  HookControlSignal,
+  PluginToolDeclaration,
+  PluginMcpDeclaration,
+  PluginMcpServerDeclaration,
+  ActivatedPlugin,
+  SessionContextSnapshot,
+  PluginState,
+  PluginStateEntryLike,
+  PluginListEntryLike,
+  PluginRegistryLike,
+} from './plugin';
 
 // 权限
 export type {
@@ -211,7 +272,6 @@ export type {
 export {
   SESSION_IDENTITY_KINDS,
   PENDING_DRAFT_SESSION_ID,
-  PENDING_DRAFT,
   isPendingDraftSessionId,
   isSessionIdentityKind,
   resolveSessionIdentityKind,

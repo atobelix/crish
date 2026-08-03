@@ -11,6 +11,11 @@ use conex_types::CoreError;
 
 #[cfg(target_os = "windows")]
 mod platform {
+    // 豁免 unsafe_code：SetThreadExecutionState 是 Windows FFI 调用，
+    // 仅传入布尔型 flags 常量组合，无指针参数、无内存所有权转移
+    // （SAFETY：返回值 0 表示失败，已显式检查；ESTABLISH 与 CLEAR
+    // 语义由调用方 enabled 决定，本函数内不保留任何跨调用状态）。
+    #[allow(unsafe_code)]
     pub fn set_keep_awake(enabled: bool) -> Result<(), String> {
         let flags = if enabled {
             windows_sys::Win32::System::Power::ES_CONTINUOUS

@@ -40,11 +40,19 @@ pub enum EventClass {
 
 /// 事件持久化分类（05 §2.8：message-delta/thought-delta 非持久化；
 /// agent-start/agent-end、message-end、approval-requested 等持久化）
+///
+/// M14（I7 事件源补齐）：subagent-event 的 progress 类为 Delta 可丢增量
+/// （M7 背压注册表锁定），同 message-delta 不落库不阻塞 drive loop；
+/// message/tool 类（Soft）与 started/ended（Critical）照常落库。
 pub fn event_class(event: &AgentEvent) -> EventClass {
-    if matches!(event, AgentEvent::MessageDelta { .. }) {
-        EventClass::NonPersistent
-    } else {
-        EventClass::Persistent
+    match event {
+        AgentEvent::MessageDelta { .. } => EventClass::NonPersistent,
+        AgentEvent::SubagentEvent { event, .. }
+            if event.kind == conex_types::events::SubagentEventKind::Progress =>
+        {
+            EventClass::NonPersistent
+        }
+        _ => EventClass::Persistent,
     }
 }
 
@@ -590,6 +598,8 @@ mod tests {
             turn_index: 0,
             tool_call_count: 0,
             steering_count: 0,
+            // T-36：缓存统计字段（本构造点无样本 → None，缺省向后兼容）
+            cache_stats: None,
         }
     }
 
@@ -1086,5 +1096,100 @@ mod tests {
         assert_eq!(stored[0].sequence, 1, "终态复用失败序列，不留空洞（Q25）");
         // T08.4：失败路径 cursor = 最后已分配序列（含失败占位）
         assert_eq!(mem.runs()[0].cursor, 1, "失败路径 cursor 落库（T08.4）");
+    }
+
+    // ── M14（I7 事件源补齐）：session.start/end 映射 + subagent-event 分流 ──
+
+    /// session.start/end 事件源 = run 生命周期既有点位（映射而非重复发射）：
+    /// - session.start ← agent-start（session-loop loop/mod.rs run 启动发射，
+    ///   本域经 drive_outcome 入队）；
+    /// - session.end ← run-terminal（唯一终态事件，只发一次）。
+    ///
+    /// 断言：一次 run 生命周期恰好发射一个 agent-start 与一个 run-terminal，
+    /// 无重复发射（避免双发）。
+    #[tokio::test]
+    async fn session_start_end_map_to_run_lifecycle_without_duplication() {
+        let (mem, store) = setup();
+        let manager = RunManager::new(store.clone());
+        let mut run = manager.start_run("s1", "r_session_map").await.unwrap();
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+
+        let result = drive_outcome(
+            &mut run,
+            &mut queue,
+            outcome(
+                AgentEndReason::Stop,
+                vec![agent_start(), agent_end(AgentEndReason::Stop)],
+            ),
+        )
+        .await
+        .unwrap();
+
+        let starts = result
+            .events
+            .iter()
+            .filter(|e| matches!(e.event, AgentEvent::AgentStart { .. }))
+            .count();
+        let terminals = result
+            .events
+            .iter()
+            .filter(|e| matches!(e.event, AgentEvent::RunTerminal { .. }))
+            .count();
+        assert_eq!(starts, 1, "agent-start（session.start 源）只发一次");
+        assert_eq!(terminals, 1, "run-terminal（session.end 源）只发一次");
+        // 事件流首尾语义：agent-start 在首、终态在尾（映射表锚点）
+        assert!(
+            matches!(result.events.first().map(|e| &e.event), Some(AgentEvent::AgentStart { .. })),
+            "session.start 源必须是流首"
+        );
+        assert!(
+            matches!(result.events.last().map(|e| &e.event), Some(AgentEvent::RunTerminal { .. })),
+            "session.end 源必须是流尾"
+        );
+        // 落库同样恰好一次（Critical 必达）
+        assert_eq!(
+            mem.events()
+                .iter()
+                .filter(|e| e.event_type == "agent-start")
+                .count(),
+            1
+        );
+        assert_eq!(
+            mem.events()
+                .iter()
+                .filter(|e| e.event_type == "run-terminal")
+                .count(),
+            1
+        );
+    }
+
+    /// subagent-event 持久化分流（M14）：progress（Delta）不落库不阻塞；
+    /// message/tool（Soft）与 started/ended（Critical）落库
+    #[tokio::test]
+    async fn subagent_event_progress_is_non_persistent() {
+        use conex_types::events::{SubagentEventKind, SubagentEventPayload};
+
+        let progress = AgentEvent::SubagentEvent {
+            session_id: "s1".to_string(),
+            subagent_id: "sub-1".to_string(),
+            subagent_run_id: "sr-1".to_string(),
+            event: SubagentEventPayload {
+                kind: SubagentEventKind::Progress,
+                payload: None,
+            },
+        };
+        let soft = AgentEvent::SubagentEvent {
+            session_id: "s1".to_string(),
+            subagent_id: "sub-1".to_string(),
+            subagent_run_id: "sr-1".to_string(),
+            event: SubagentEventPayload {
+                kind: SubagentEventKind::Message,
+                payload: None,
+            },
+        };
+        assert!(is_non_persistent(&progress), "progress 类为 Delta：不落库不阻塞 drive loop");
+        assert!(!is_non_persistent(&soft), "message/tool 类为 Soft：尽力落库");
+        assert!(!is_non_persistent(&agent_start()), "agent-start 必达落库");
+        assert!(is_non_persistent(&message_delta(0)), "message-delta 保持既有语义");
     }
 }

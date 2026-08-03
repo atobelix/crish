@@ -605,6 +605,7 @@ mod tests {
             workspace_root: ws.path().clone(),
             write_claims: Some(Arc::clone(&registry)),
             write_claim_holder: Some("runB".to_string()),
+            explore_docs_quota: None,
             ..create_mock_tool_context()
         };
         let tool = WriteFileTool::new();
@@ -636,6 +637,7 @@ mod tests {
             workspace_root: ws.path().clone(),
             write_claims: Some(Arc::clone(&registry)),
             write_claim_holder: Some("runA".to_string()),
+            explore_docs_quota: None,
             ..create_mock_tool_context()
         };
         let tool = WriteFileTool::new();

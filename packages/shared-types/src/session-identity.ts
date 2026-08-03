@@ -23,9 +23,6 @@ export const SESSION_IDENTITY_KINDS = ['draft', 'local', 'engine'] as const;
  */
 export const PENDING_DRAFT_SESSION_ID = '__pending_draft__' as const;
 
-/** 别名：文档/任务中的 PENDING_DRAFT 写法 */
-export const PENDING_DRAFT = PENDING_DRAFT_SESSION_ID;
-
 /** 带阶段的会话身份引用（契约层最小结构） */
 export interface SessionIdentityRef {
   kind: SessionIdentityKind;

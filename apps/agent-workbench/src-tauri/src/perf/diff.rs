@@ -132,13 +132,13 @@ pub(crate) fn parse_unified_diff(input: &str) -> Result<DiffParseResult, String>
             continue;
         }
 
-        if line.starts_with("--- ") {
-            old_path = Some(strip_prefix(&line[4..]));
+        if let Some(rest) = line.strip_prefix("--- ") {
+            old_path = Some(strip_prefix(rest));
             continue;
         }
 
-        if line.starts_with("+++ ") {
-            new_path = Some(strip_prefix(&line[4..]));
+        if let Some(rest) = line.strip_prefix("+++ ") {
+            new_path = Some(strip_prefix(rest));
             continue;
         }
 
@@ -187,7 +187,7 @@ pub(crate) fn parse_unified_diff(input: &str) -> Result<DiffParseResult, String>
                     kind: DiffLineKind::Addition,
                     content: rest.to_string(),
                     old_lineno: None,
-                    new_lineno: Some(hunk.new_start + count_additions(&hunk.lines) as u64),
+                    new_lineno: Some(hunk.new_start + count_additions(&hunk.lines)),
                 });
                 file_additions += 1;
                 total_additions += 1;
@@ -195,7 +195,7 @@ pub(crate) fn parse_unified_diff(input: &str) -> Result<DiffParseResult, String>
                 hunk.lines.push(DiffLine {
                     kind: DiffLineKind::Deletion,
                     content: rest.to_string(),
-                    old_lineno: Some(hunk.old_start + count_deletions(&hunk.lines) as u64),
+                    old_lineno: Some(hunk.old_start + count_deletions(&hunk.lines)),
                     new_lineno: None,
                 });
                 file_deletions += 1;
@@ -211,9 +211,9 @@ pub(crate) fn parse_unified_diff(input: &str) -> Result<DiffParseResult, String>
                 let ctx_offset = count_context(&hunk.lines);
                 hunk.lines.push(DiffLine {
                     kind: DiffLineKind::Context,
-                    content: if line.starts_with(' ') { line[1..].to_string() } else { content.clone() },
-                    old_lineno: Some(hunk.old_start + ctx_offset as u64),
-                    new_lineno: Some(hunk.new_start + ctx_offset as u64),
+                    content: line.strip_prefix(' ').unwrap_or(&content).to_string(),
+                    old_lineno: Some(hunk.old_start + ctx_offset),
+                    new_lineno: Some(hunk.new_start + ctx_offset),
                 });
             }
         }

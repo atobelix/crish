@@ -11,6 +11,7 @@ import {
 } from './importSessions';
 import {
   allowRootFor,
+  draftToSessionMessage,
   mapExternalRoleToSender,
   mapExternalSession,
 } from './map';
@@ -125,6 +126,50 @@ describe('mapExternalRoleToSender', () => {
     expect(mapExternalRoleToSender('assistant')).toBe('assistant');
     expect(mapExternalRoleToSender('system')).toBe('assistant');
     expect(mapExternalRoleToSender(undefined)).toBe('assistant');
+  });
+});
+
+describe('draftToSessionMessage（E3 宿主适配回归：插件中立载荷 → store 消息）', () => {
+  it('文本草稿 → SessionMessage（role→sender、status、timestamp）', () => {
+    const msg = draftToSessionMessage({
+      id: 'm1',
+      role: 'user',
+      text: 'hi',
+      timestampMs: 1000,
+    });
+    expect(msg.sender).toBe('user');
+    expect(msg.text).toBe('hi');
+    expect(msg.timestamp).toBe(1000);
+    expect(msg.status).toBe('completed');
+  });
+
+  it('工具调用草稿 → MessageToolCall（running 无输出强制 success + blocks 透传）', () => {
+    const msg = draftToSessionMessage({
+      id: 'm2',
+      role: 'assistant',
+      timestampMs: 2,
+      toolCalls: [
+        { id: 't1', name: 'Bash', status: 'running', output: 'out' },
+      ],
+      blocks: [
+        { type: 'text', content: 'x' },
+        { type: 'tool_call', id: 't1' },
+      ],
+    });
+    expect(msg.sender).toBe('assistant');
+    expect(msg.toolCalls?.[0]).toMatchObject({ id: 't1', name: 'Bash', status: 'success' });
+    expect(msg.toolCalls?.[0]?.output).toBe('out');
+    expect(msg.blocks).toHaveLength(2);
+  });
+
+  it('isError 工具调用 → status error', () => {
+    const msg = draftToSessionMessage({
+      id: 'm3',
+      role: 'assistant',
+      timestampMs: 3,
+      toolCalls: [{ id: 't2', name: 'Bash', isError: true }],
+    });
+    expect(msg.toolCalls?.[0]?.status).toBe('error');
   });
 });
 

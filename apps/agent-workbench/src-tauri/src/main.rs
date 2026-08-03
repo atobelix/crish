@@ -9,19 +9,19 @@
 //!   `command_manifest.rs` 的 `registered=true` 集合逐项一致（壳测试锁定）；
 //! - **setup 序列**（依 PE-01/PE-04/PE-08 接线契约）：
 //!   ① conex-telemetry 初始化（级别：`CRISH_LOG_LEVEL` 优先，dev debug /
-//!     release info；文件层 `app_dir()/logs` 双通道）+ 崩溃文件 panic hook；
+//!   release info；文件层 `app_dir()/logs` 双通道）+ 崩溃文件 panic hook；
 //!   ② LocalDb 打开（`app_dir()/sessions.db`，失败降级内存 + `db_ready=false`）；
 //!   ③ config 初始化（`init_api_config_store`，静态存储）；
 //!   ④ [WorkspaceRegistry::init] manage（工作区沙箱真源）；
 //!   ⑤ [SharedGatekeeper] / [SharedSearchState] / [SharedCompactionState] manage；
 //!   ⑥ [StatusDiagnostics] manage（与 CoreRunState 共享同一实例）；
 //!   ⑦ restore：`run_restore` 经 run_in_runtime 在 `manage(CoreRunState)` 之前
-//!     执行（成功 seed_sequences + 立即快照；失败降级不阻断启动）；
+//!   执行（成功 seed_sequences + 立即快照；失败降级不阻断启动）；
 //!   ⑧ [CoreRunState] manage + [EventBridge] manage + [SharedDb] manage；
 //!   ⑨ 模型目录 manage（`Arc<RwLock<ModelCatalog>>`，内置表；P3 步骤 5，
-//!     catalog_get / catalog_refresh 消费）；
+//!   catalog_get / catalog_refresh 消费）；
 //!   ⑩ MCP 插件：debug 下 `dev_mcp::register_if_enabled(builder)`（默认关闭，
-//!     `CRISH_MCP_SOCKET=1` 开启）；
+//!   `CRISH_MCP_SOCKET=1` 开启）；
 //! - **退出钩子**：`RunEvent::Exit` 时 PTY 清理 +
 //!   [CoreRunState::save_snapshot_blocking]（独立线程）。
 
@@ -157,6 +157,10 @@ command_registry![
     // ── 注册表单一化自身（T03.1；经 command_manifest 注册——Tauri 宏生成项
     //    （__cmd__*）不随 core_query_commands 的 pub use 重导出，必须直引真源）──
     ("core_list_commands", command_manifest::core_list_commands),
+    // ── 误删恢复（I2-S5：trash_list / trash_restore / trash_purge）──
+    ("trash_list", core_run_commands::trash_list),
+    ("trash_restore", core_run_commands::trash_restore),
+    ("trash_purge", core_run_commands::trash_purge),
 ];
 
 /// 当前生效日志级别：`CRISH_LOG_LEVEL` 优先，dev debug / release info
@@ -248,7 +252,7 @@ fn main() {
             diagnostics.record("telemetry", true, Some(log_dir.display().to_string()));
 
             // ② 会话数据库（SharedDb manage；Store 与命令共用同一 LocalDb 连接）
-            let shared_db = open_session_db(&diagnostics);
+            let shared_db = open_session_db(diagnostics);
             let store: Arc<dyn orchestrator::persist::Store> =
                 Arc::new(orchestrator::persist::LocalDbStore::new(shared_db.local_db()));
 
@@ -271,6 +275,11 @@ fn main() {
                 }
             }
 
+            // ④b 回收站根注入（I2-S5：None = 未注入 → 命令侧回退活动
+            // 工作区 `.crish-trash`，与删除工具兜底一致；对齐
+            // BuiltinToolConfig.trash_root 语义）
+            app.manage(core_run_commands::TrashRootConfig::default());
+
             // ⑤ 共享状态：命令闸门 / 搜索索引 / 压缩能力标记
             app.manage(core_commands::SharedGatekeeper::new());
             app.manage(core_commands::SharedSearchState::new());
@@ -280,7 +289,7 @@ fn main() {
             app.manage(compaction);
 
             // ⑥ 状态诊断 manage（与 CoreRunState 共享同一实例）
-            app.manage(Arc::clone(&diagnostics));
+            app.manage(Arc::clone(diagnostics));
 
             // 事件桥（B6.3：workbench-run-event 通道；Tauri 发射器）
             let bridge = EventBridge::new(
@@ -298,7 +307,7 @@ fn main() {
                 Arc::clone(&store),
                 Arc::clone(&snapshots),
                 bridge.clone(),
-                Arc::clone(&diagnostics),
+                Arc::clone(diagnostics),
             ));
 
             // ⑦ restore：run_in_runtime 在 manage(CoreRunState) 之前执行

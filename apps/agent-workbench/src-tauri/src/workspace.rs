@@ -179,6 +179,7 @@ impl WorkspaceRegistry {
     /// 解析请求路径对应的沙箱守卫。
     /// - 请求路径为空或相对：以活动根为基准（`..`/绝对越界由守卫二次校验）；
     /// - 绝对路径：先 canonicalize 再与全部已授权根前缀匹配（T07.2 用例 11/12）。
+    ///
     /// 越界 → `ERR_OUTSIDE_WORKSPACE`；不可达 → 明确错误（不退化裸用）。
     pub(crate) fn resolve_guard(&self, requested: &str) -> Result<WorkspaceFsGuard, FileCommandError> {
         let inner = self.inner.lock().map_err(|e| {
@@ -408,8 +409,11 @@ pub(crate) struct OpenWorkspaceResult {
     pub(crate) path: String,
 }
 
-#[cfg(test)]
-mod tests {
+    #[cfg(test)]
+    mod tests {
+        // G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
+        #![allow(clippy::disallowed_methods)]
+
     use super::*;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};

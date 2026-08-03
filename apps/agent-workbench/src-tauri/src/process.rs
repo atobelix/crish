@@ -266,7 +266,7 @@ fn encode_powershell_encoded_command(script: &str) -> String {
 
 fn base64_encode_std(data: &[u8]) -> String {
     const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     let mut i = 0;
     while i + 3 <= data.len() {
         let n = ((data[i] as u32) << 16) | ((data[i + 1] as u32) << 8) | (data[i + 2] as u32);
@@ -368,10 +368,16 @@ pub(crate) fn terminate_process_tree(pid: u32) -> Result<(), String> {
 struct JobHandle(windows_sys::Win32::Foundation::HANDLE);
 
 #[cfg(windows)]
+// 豁免 unsafe_code：Send 标记（SAFETY 见下）——JobHandle 仅含整数句柄，
+// 经评审后允许。
+#[allow(unsafe_code)]
 // SAFETY: JobHandle 仅含整数句柄；Create/Assign/Close 由调用方串行化到 OnceLock
 unsafe impl Send for JobHandle {}
 
 #[cfg(windows)]
+// 豁免 unsafe_code：Sync 标记（SAFETY 见下）——JobHandle 仅含整数句柄，
+// 经评审后允许。
+#[allow(unsafe_code)]
 // SAFETY: JobHandle 仅含整数句柄
 unsafe impl Sync for JobHandle {}
 
@@ -379,6 +385,9 @@ unsafe impl Sync for JobHandle {}
 /// Caller owns the returned handle (CloseHandle when done, or store for process lifetime).
 /// Used by daemon and PTY orphan protection — see module comment above.
 #[cfg(windows)]
+// 豁免 unsafe_code：Windows Job Objects FFI（CreateJobObjectW /
+// SetInformationJobObject），每处 unsafe 均有 SAFETY 说明，经评审后允许。
+#[allow(unsafe_code)]
 pub(crate) fn create_kill_on_close_job_object(
 ) -> Result<windows_sys::Win32::Foundation::HANDLE, String> {
     use core::mem;
@@ -412,6 +421,9 @@ pub(crate) fn create_kill_on_close_job_object(
 }
 
 #[cfg(windows)]
+// 豁免 unsafe_code：Windows Job Objects FFI（AssignProcessToJobObject），
+// SAFETY 见函数内注释，经评审后允许。
+#[allow(unsafe_code)]
 fn assign_process_to_job(
     job: windows_sys::Win32::Foundation::HANDLE,
     child_handle: std::os::windows::io::RawHandle,
@@ -439,6 +451,9 @@ fn assign_process_to_job(
 static PTY_JOB_OBJECT: OnceLock<JobHandle> = OnceLock::new();
 
 #[cfg(windows)]
+// 豁免 unsafe_code：CloseHandle FFI（重复 init 时的句柄清理），
+// SAFETY 见函数内注释，经评审后允许。
+#[allow(unsafe_code)]
 pub(crate) fn init_pty_job_object() -> Result<(), String> {
     let handle = create_kill_on_close_job_object()?;
     match PTY_JOB_OBJECT.set(JobHandle(handle)) {
@@ -464,6 +479,9 @@ pub(crate) fn assign_child_to_pty_job_object(
 }
 
 #[cfg(not(windows))]
+// 豁免 unsafe_code：POSIX libc FFI（setpgid），参数为整数 PID 无指针
+// 所有权转移（SAFETY 见函数内注释），经评审后允许。
+#[allow(unsafe_code)]
 pub(crate) fn set_child_process_group(pid: u32) -> Result<(), String> {
     // SAFETY: POSIX 标准 API
     unsafe {
@@ -478,6 +496,9 @@ pub(crate) fn set_child_process_group(pid: u32) -> Result<(), String> {
 }
 
 #[cfg(not(windows))]
+// 豁免 unsafe_code：POSIX libc FFI（killpg），参数为整数 PID 无指针
+// 所有权转移（SAFETY 见函数内注释），经评审后允许。
+#[allow(unsafe_code)]
 pub(crate) fn kill_process_group(pid: u32) -> Result<(), String> {
     // SAFETY: POSIX 标准 API
     unsafe {
@@ -537,6 +558,9 @@ mod tests {
     /// shell PID, force-kill the workbench process — shell tree should exit without orphans.
     #[cfg(windows)]
     #[test]
+    // 豁免 unsafe_code：测试内 CloseHandle FFI（SAFETY：句柄来自同函数
+    // create_kill_on_close_job_object 的返回值，测试拥有所有权），经评审后允许。
+    #[allow(unsafe_code)]
     fn create_kill_on_close_job_object_empty_ok() {
         let job = create_kill_on_close_job_object().expect("create empty kill-on-close job");
         assert!(!job.is_null(), "job handle must be non-null");

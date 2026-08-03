@@ -80,7 +80,7 @@ pub async fn highlight_code(code: String, lang: Option<String>) -> Result<String
 /// wire 名 = `core_md_clear_cache`（T03.4 更名 core_md_*）。
 #[tauri::command(rename = "core_md_clear_cache")]
 pub async fn md_clear_cache() -> Result<(), CoreError> {
-    tokio::task::spawn_blocking(|| conex_markdown::clear_cache())
+    tokio::task::spawn_blocking(conex_markdown::clear_cache)
         .await
         .map_err(|e| CoreError::Internal(format!("md_clear_cache join: {e}")))
 }

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { parseClaudeCodeJsonl } from './parseClaudeCodeJsonl';
+import { parseClaudeCodeJsonl } from '../parse/claude-code';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixture = readFileSync(
@@ -11,7 +11,7 @@ const fixture = readFileSync(
 );
 
 describe('parseClaudeCodeJsonl', () => {
-  it('parses user/assistant turns, tools, and custom title', () => {
+  it('解析 user/assistant 轮、工具调用与自定义标题', () => {
     const parsed = parseClaudeCodeJsonl(fixture, {
       sourceSessionId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
     });
@@ -22,7 +22,7 @@ describe('parseClaudeCodeJsonl', () => {
     expect(parsed.cwd).toBe('C:\\Software\\demo-project');
     expect(parsed.createdAtMs).toBe(Date.parse('2026-07-01T10:00:00.000Z'));
 
-    // user + assistant(with tool) + assistant final — tool_result is not a turn
+    // user + assistant(带工具) + assistant 收尾 —— tool_result 不构成轮
     expect(parsed.turns).toHaveLength(3);
     expect(parsed.turns[0]).toMatchObject({
       role: 'user',
@@ -41,7 +41,7 @@ describe('parseClaudeCodeJsonl', () => {
     expect(parsed.turns[2]?.text).toContain('Top level has');
   });
 
-  it('skips sidechain and malformed lines', () => {
+  it('跳过 sidechain 与畸形行', () => {
     const content = [
       '{"type":"user","uuid":"a","isSidechain":true,"timestamp":"2026-01-01T00:00:00.000Z","message":{"role":"user","content":"hidden"}}',
       'not-json',
@@ -53,7 +53,7 @@ describe('parseClaudeCodeJsonl', () => {
     expect(parsed.skippedLineCount).toBeGreaterThanOrEqual(2);
   });
 
-  it('honors maxLines', () => {
+  it('遵守 maxLines', () => {
     const parsed = parseClaudeCodeJsonl(fixture, { maxLines: 1 });
     expect(parsed.turns.length).toBeLessThanOrEqual(1);
     expect(parsed.warnings.some((w) => w.includes('maxLines'))).toBe(true);

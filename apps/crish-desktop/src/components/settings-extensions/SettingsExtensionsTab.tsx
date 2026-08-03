@@ -50,6 +50,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
     handleRemovePackage,
     toggleMcpTool,
     toggleMcpServer,
+    togglePlugin,
     setExpand,
   } = useExtensionMarket(onShowToast);
 
@@ -203,6 +204,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
         onSetManage={setManage}
         onSetView={setView}
         onSetExpand={setExpand}
+        onTogglePlugin={togglePlugin}
       />
     </SettingsPage>
   );

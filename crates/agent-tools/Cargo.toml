@@ -27,6 +27,10 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 conex-test-utils = { path = "../conex-test-utils" }
+# I3-S7（C4 连续回退计数）：持久化链路集成测试（revert_guard 的
+# SessionMetaRevertStore 经 session_meta 落库 + 重启恢复断言）；
+# 生产代码保持叶子依赖（不引用 conex-db），接线在引擎侧完成。
+conex-db = { path = "../conex-db" }
 # 测试所需 feature（macros/rt/process/time）已由 workspace 最小集覆盖（PE-10 T10.3）
 tokio = { workspace = true }
 

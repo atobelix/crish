@@ -17,6 +17,25 @@ export interface ToolDefinition {
   execute(input: JsonObject, ctx: ToolExecutionContext): Promise<ToolOutput>;
 }
 
+/** 工具注册选项（plugin-sdk ToolRegistrar.register 第二参；三层体系第 2 层） */
+export interface ToolRegistrationOptions {
+  readonly label?: string;
+  readonly category?: ToolCategory;
+  readonly concurrency?: ToolConcurrency;
+  readonly allowParallel?: boolean;
+  readonly fatalOnError?: boolean;
+  readonly isReadOnly?: (input: JsonObject) => boolean;
+  readonly summarize?: (input: JsonObject) => string;
+  readonly metadata?: JsonObject;
+}
+
+/** 已注册工具（三层体系第 3 层；系统自动填充注册时间，可注销） */
+export interface RegisteredTool {
+  readonly name: string;
+  readonly registeredAt: number;
+  unregister(): void;
+}
+
 export interface ToolExecutionContext {
   toolCallId: string;
   sessionId: string;

@@ -51,7 +51,8 @@ use agent_tools::definition::ToolError;
 use agent_tools::executor::{execute_with_output_policy, ExecutorContext, ToolExecutionPolicy};
 use agent_tools::idempotency::ToolIdempotencyGuard;
 use agent_tools::middleware::{
-    AfterExecuteResult, BeforeExecuteResult, ToolExecutionContext, ToolMiddleware,
+    AfterExecuteResult, BeforeExecuteResult, MiddlewareTimeoutConfig, ToolExecutionContext,
+    ToolMiddleware,
 };
 use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
 use agent_tools::registry::ToolRegistry;
@@ -59,6 +60,7 @@ use agent_tools::revert::RevertPolicy;
 use conex_types::tool::{ToolBatchCall, ToolConcurrency};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// 批处理执行上下文
 #[derive(Debug, Clone, Default)]
@@ -92,6 +94,9 @@ pub struct ToolExecutor {
     idempotency: Option<Arc<ToolIdempotencyGuard>>,
     /// 中间件链（审批通过后、执行前生效；空链 = 不启用）
     middleware: Vec<Arc<dyn ToolMiddleware>>,
+    /// 中间件钩子超时竞速配置（E4：06 遗留 :148-152 收口；默认宽松放行
+    /// 2000/2000/1000ms，经 [Self::with_middleware_timeouts] 覆盖）
+    middleware_timeouts: MiddlewareTimeoutConfig,
     /// 插件钩子注册表（tool.pre / tool.post 广播；None = 不启用）
     hooks: Option<Arc<HookRegistry>>,
     /// C3 回退护栏策略（I3-S6）：git 回退形态 + 面积超阈值 → 需审批
@@ -108,6 +113,7 @@ impl ToolExecutor {
             registry,
             idempotency: None,
             middleware: Vec::new(),
+            middleware_timeouts: MiddlewareTimeoutConfig::default(),
             hooks: None,
             revert_policy: RevertPolicy::default(),
         }
@@ -120,6 +126,7 @@ impl ToolExecutor {
             registry: self.registry,
             idempotency: self.idempotency,
             middleware: self.middleware,
+            middleware_timeouts: self.middleware_timeouts,
             hooks: self.hooks,
             revert_policy: self.revert_policy,
         }
@@ -135,6 +142,7 @@ impl ToolExecutor {
             registry: self.registry,
             idempotency: self.idempotency,
             middleware: self.middleware,
+            middleware_timeouts: self.middleware_timeouts,
             hooks: self.hooks,
             revert_policy: self.revert_policy,
         }
@@ -155,12 +163,29 @@ impl ToolExecutor {
             registry: self.registry,
             idempotency: self.idempotency,
             middleware: self.middleware,
+            middleware_timeouts: self.middleware_timeouts,
             hooks: self.hooks,
             revert_policy: self.revert_policy,
         }
     }
 
-    /// 注入插件钩子注册表（Some = 启用 tool.pre/tool.post 广播；
+    /// 覆盖中间件钩子超时配置（E4：06 遗留 :148-152 收口；默认宽松放行
+    /// 2000/2000/1000ms）。语义对齐 06「中间件自身错误语义」表：
+    /// before_execute 超时 → Block；on_result 超时 → 降级透传原输出；
+    /// on_error 超时 → 仅日志。
+    pub fn with_middleware_timeouts(mut self, timeouts: MiddlewareTimeoutConfig) -> Self {
+        self.middleware_timeouts = timeouts;
+        Self {
+            registry: self.registry,
+            idempotency: self.idempotency,
+            middleware: self.middleware,
+            middleware_timeouts: self.middleware_timeouts,
+            hooks: self.hooks,
+            revert_policy: self.revert_policy,
+        }
+    }
+
+    /// 注入插件钩子注册表（Some = 启用 tool.pre/tool.post/tool.error 广播；
     /// None = 移除）。跨批共享同一注册表实例即可多批广播。
     pub fn with_hooks(mut self, hooks: Option<Arc<HookRegistry>>) -> Self {
         self.hooks = hooks;
@@ -168,6 +193,7 @@ impl ToolExecutor {
             registry: self.registry,
             idempotency: self.idempotency,
             middleware: self.middleware,
+            middleware_timeouts: self.middleware_timeouts,
             hooks: self.hooks,
             revert_policy: self.revert_policy,
         }
@@ -182,6 +208,7 @@ impl ToolExecutor {
             registry: self.registry,
             idempotency: self.idempotency,
             middleware: self.middleware,
+            middleware_timeouts: self.middleware_timeouts,
             hooks: self.hooks,
             revert_policy: self.revert_policy,
         }
@@ -655,6 +682,8 @@ impl ToolExecutor {
             // 接线由执行器按会话装配（M2 子代理执行上下文注入注册表与持有者）
             write_claims: None,
             write_claim_holder: None,
+            // I6-M11 C5：探索类文档配额未接线（None = 不检查）
+            explore_docs_quota: None,
         };
         // ── 中间件链 + 插件钩子（审批已通过，进入执行面；优先级语义
         //    见模块头注：审批优先于中间件，中间件 Block 不绕过审批）──
@@ -665,25 +694,51 @@ impl ToolExecutor {
             cwd: ctx.cwd.clone(),
         };
         // 1) middleware before_execute 链：可修改入参 / Block 阻止（仅对
-        //    「审批已通过」的调用生效；链中任一 Err 视为阻止执行）
+        //    「审批已通过」的调用生效；链中任一 Err 视为阻止执行）。
+        //    E4：每项包超时竞速窗口（默认 2000ms，中间件可配）——超时视为
+        //    Err → Block（守门者报错 = 不放行，06:57）；abort 竞速偏置——
+        //    abort 在链执行期间触发 → 本调用取消（超时窗口内可取消）。
         let mut current_input = call.input.clone();
         let mut blocked: Option<String> = None;
         for m in &self.middleware {
-            match m
-                .before_execute(tool.as_ref(), current_input.clone(), &mw_ctx)
-                .await
-            {
-                Ok(BeforeExecuteResult::Proceed { modified_input }) => {
+            let result = run_hook_with_timeout(
+                self.middleware_timeouts.before_execute,
+                abort,
+                m.before_execute(tool.as_ref(), current_input.clone(), &mw_ctx),
+            )
+            .await;
+            let Some(result) = result else {
+                // abort 在中间件 before 链竞速窗口内触发 → 取消收场
+                return (
+                    ClassifiedToolResult::error(
+                        &call.id,
+                        &call.tool_name,
+                        ToolErrorKind::Cancelled,
+                        "aborted",
+                    ),
+                    Vec::new(),
+                );
+            };
+            match result {
+                Ok(Ok(BeforeExecuteResult::Proceed { modified_input })) => {
                     if let Some(v) = modified_input {
                         current_input = v;
                     }
                 }
-                Ok(BeforeExecuteResult::Block { reason }) => {
+                Ok(Ok(BeforeExecuteResult::Block { reason })) => {
                     blocked = Some(format!("被中间件 {} 阻止：{reason}", m.name()));
                     break;
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     blocked = Some(format!("中间件 {} 前置钩子错误：{e}", m.name()));
+                    break;
+                }
+                Err(_elapsed) => {
+                    blocked = Some(format!(
+                        "中间件 {} 前置钩子超时（{}ms），按阻止处理",
+                        m.name(),
+                        self.middleware_timeouts.before_execute.as_millis()
+                    ));
                     break;
                 }
             }
@@ -697,7 +752,9 @@ impl ToolExecutor {
                     tool_name: call.tool_name.clone(),
                     input: current_input.clone(),
                 };
-                match hooks.dispatch(&event) {
+                // I8-E1：HookRegistry::dispatch 已转 async（async_trait +
+                // timeout 竞速窗口，03 §2.4/§3.5）；tool.pre 广播 await
+                match hooks.dispatch(&event).await {
                     Ok(outcome) => {
                         if let Some(reason) = outcome.blocked {
                             blocked = Some(format!("tool.pre 钩子阻止：{reason}"));
@@ -820,47 +877,75 @@ impl ToolExecutor {
                     // 幂等去重：未真正执行，跳过 on_result 改写链，仅广播
                     // tool.post（成功，duration=0）保持事件对称
                     if let Some(hooks) = &self.hooks {
-                        let _ = hooks.dispatch(&HookEvent::ToolPost {
-                            session_id: ctx.session_id.clone(),
-                            tool_name: call.tool_name.clone(),
-                            output: tool_result.output.clone(),
-                            duration_ms: 0,
-                            is_error: false,
-                        });
+                        let _ = hooks
+                            .dispatch(&HookEvent::ToolPost {
+                                session_id: ctx.session_id.clone(),
+                                tool_name: call.tool_name.clone(),
+                                output: tool_result.output.clone(),
+                                duration_ms: 0,
+                                is_error: false,
+                            })
+                            .await;
                     }
                     (
                         ClassifiedToolResult::ok(&call.id, &call.tool_name, tool_result.output, 0),
                         recorded,
                     )
                 } else {
-                    // 3) middleware on_result 链：可改写输出；Err 记录日志并
-                    //    降级透传原输出（后置钩子错误不改变已完成的执行结果）
+                    // 3) middleware on_result 链：可改写输出；Err/超时记录
+                    //    日志并降级透传原输出（后置钩子错误不改变已完成的
+                    //    执行结果；E4 超时语义 = 06:58）
                     let mut final_output = tool_result.output;
                     for m in &self.middleware {
-                        match m
-                            .on_result(tool.as_ref(), &current_input, final_output.clone(), &mw_ctx)
-                            .await
-                        {
-                            Ok(AfterExecuteResult::Passthrough) => {}
-                            Ok(AfterExecuteResult::Replace(v)) => final_output = v,
-                            Err(e) => {
+                        let result = run_hook_with_timeout(
+                            self.middleware_timeouts.on_result,
+                            None,
+                            m.on_result(
+                                tool.as_ref(),
+                                &current_input,
+                                final_output.clone(),
+                                &mw_ctx,
+                            ),
+                        )
+                        .await;
+                        match result {
+                            Some(Ok(Ok(AfterExecuteResult::Passthrough))) => {}
+                            Some(Ok(Ok(AfterExecuteResult::Replace(v)))) => final_output = v,
+                            Some(Ok(Err(e))) => {
                                 tracing::error!(
                                     middleware = %m.name(),
                                     error = %e,
                                     "中间件 on_result 失败，降级透传原输出"
                                 );
                             }
+                            Some(Err(_elapsed)) => {
+                                tracing::error!(
+                                    middleware = %m.name(),
+                                    timeout_ms = self.middleware_timeouts.on_result.as_millis(),
+                                    "中间件 on_result 超时，降级透传原输出"
+                                );
+                            }
+                            None => {
+                                // abort=None 竞速路径不可能返回 None（防御性
+                                // 兜底，与降级语义一致：透传原输出）
+                                tracing::error!(
+                                    middleware = %m.name(),
+                                    "中间件 on_result 竞速异常，降级透传原输出"
+                                );
+                            }
                         }
                     }
                     // 4) tool.post 事件广播（成功；广播中间件改写后的最终输出）
                     if let Some(hooks) = &self.hooks {
-                        let _ = hooks.dispatch(&HookEvent::ToolPost {
-                            session_id: ctx.session_id.clone(),
-                            tool_name: call.tool_name.clone(),
-                            output: final_output.clone(),
-                            duration_ms,
-                            is_error: false,
-                        });
+                        let _ = hooks
+                            .dispatch(&HookEvent::ToolPost {
+                                session_id: ctx.session_id.clone(),
+                                tool_name: call.tool_name.clone(),
+                                output: final_output.clone(),
+                                duration_ms,
+                                is_error: false,
+                            })
+                            .await;
                     }
                     (
                         ClassifiedToolResult::ok(
@@ -874,28 +959,62 @@ impl ToolExecutor {
                 }
             }
             Some(Ok(Err(err))) => {
-                // 5) middleware on_error 链（仅观察；Err 记录日志，不吞原错误）
+                // 5) middleware on_error 链（仅观察；Err/超时记录日志，
+                //    不吞原错误；E4 超时语义 = 06:59）
                 for m in &self.middleware {
-                    if let Err(e) = m
-                        .on_error(tool.as_ref(), &current_input, &err, &mw_ctx)
-                        .await
-                    {
-                        tracing::error!(
-                            middleware = %m.name(),
-                            error = %e,
-                            "中间件 on_error 失败（仅观察，不吞原错误）"
-                        );
+                    let result = run_hook_with_timeout(
+                        self.middleware_timeouts.on_error,
+                        None,
+                        m.on_error(tool.as_ref(), &current_input, &err, &mw_ctx),
+                    )
+                    .await;
+                    match result {
+                        Some(Ok(Ok(()))) => {}
+                        Some(Ok(Err(e))) => {
+                            tracing::error!(
+                                middleware = %m.name(),
+                                error = %e,
+                                "中间件 on_error 失败（仅观察，不吞原错误）"
+                            );
+                        }
+                        Some(Err(_elapsed)) => {
+                            tracing::error!(
+                                middleware = %m.name(),
+                                timeout_ms = self.middleware_timeouts.on_error.as_millis(),
+                                "中间件 on_error 超时（仅观察，不吞原错误）"
+                            );
+                        }
+                        None => {
+                            // abort=None 竞速路径不可能返回 None（防御性兜底）
+                            tracing::error!(
+                                middleware = %m.name(),
+                                "中间件 on_error 竞速异常（仅观察，不吞原错误）"
+                            );
+                        }
                     }
                 }
-                // 6) tool.post 事件广播（失败；output 承载错误文案）
+                // 6) tool.post 事件广播（失败；output 承载错误文案）。
+                //    I8-E1：dispatch 已转 async（async_trait + 竞速窗口）
                 if let Some(hooks) = &self.hooks {
-                    let _ = hooks.dispatch(&HookEvent::ToolPost {
-                        session_id: ctx.session_id.clone(),
-                        tool_name: call.tool_name.clone(),
-                        output: serde_json::json!(err.to_string()),
-                        duration_ms,
-                        is_error: true,
-                    });
+                    let _ = hooks
+                        .dispatch(&HookEvent::ToolPost {
+                            session_id: ctx.session_id.clone(),
+                            tool_name: call.tool_name.clone(),
+                            output: serde_json::json!(err.to_string()),
+                            duration_ms,
+                            is_error: true,
+                        })
+                        .await;
+                    // I8-E1：tool.error 追加广播（tool-end isError 分支，M13
+                    // 映射第 7 行；on 模式可转 retry 信号——保留 ToolHook.onError
+                    // 控制能力；失败吞掉 + 计数，结果保持）
+                    let _ = hooks
+                        .dispatch(&HookEvent::ToolError {
+                            session_id: ctx.session_id.clone(),
+                            tool_name: call.tool_name.clone(),
+                            error: err.to_string(),
+                        })
+                        .await;
                 }
                 let (kind, msg) = classify_tool_error(&err);
                 (
@@ -1035,9 +1154,32 @@ impl ToolExecutor {
             registry: self.registry.clone(),
             idempotency: self.idempotency.clone(),
             middleware: self.middleware.clone(),
+            middleware_timeouts: self.middleware_timeouts,
             hooks: self.hooks.clone(),
             revert_policy: self.revert_policy.clone(),
         }
+    }
+}
+
+/// 中间件钩子超时竞速助手（E4：06 遗留 :148-152 收口）
+///
+/// - 无 abort 信号：`tokio::time::timeout(timeout, fut)`；
+/// - 有 abort 信号：竞速**偏置 abort**（`biased`，先触发先生效）——
+///   abort 触发返回 None，调用方按取消收场（超时窗口内可取消）；
+/// - 超时返回 `Err(Elapsed)`，由调用方按 06「中间件自身错误语义」表
+///   处置（before_execute → Block；on_result → 降级透传；on_error → 日志）。
+async fn run_hook_with_timeout<T>(
+    timeout: Duration,
+    abort: Option<&crate::safe_point::AbortSignal>,
+    fut: impl std::future::Future<Output = T>,
+) -> Option<Result<T, tokio::time::error::Elapsed>> {
+    match abort {
+        Some(sig) => tokio::select! {
+            biased;
+            _ = sig.wait_aborted() => None,
+            result = tokio::time::timeout(timeout, fut) => Some(result),
+        },
+        None => Some(tokio::time::timeout(timeout, fut).await),
     }
 }
 
@@ -2928,11 +3070,12 @@ mod tests {
         }
     }
 
+    #[async_trait::async_trait]
     impl HookHandler for SpyHook {
         fn name(&self) -> &str {
             &self.name
         }
-        fn handle(&self, event: &HookEvent) -> Result<HookAction, HookError> {
+        async fn handle(&self, event: &HookEvent) -> Result<HookAction, HookError> {
             if let HookEvent::ToolPost {
                 tool_name,
                 is_error,
@@ -3192,5 +3335,237 @@ mod tests {
             r.error_message
         );
         assert_eq!(tool.calls.load(Ordering::SeqCst), 0, "propagate 失败时工具不执行");
+    }
+
+    // ── E4：middleware 超时竞速窗口（06 遗留 :148-152 收口）──────────
+
+    /// 慢 before_execute 中间件：sleep 后放行（超时竞速断言用）
+    struct SlowBeforeMiddleware {
+        name: String,
+        sleep_ms: u64,
+    }
+    #[async_trait]
+    impl ToolMiddleware for SlowBeforeMiddleware {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        async fn before_execute(
+            &self,
+            _tool: &dyn Tool,
+            input: Value,
+            _ctx: &ToolExecutionContext,
+        ) -> Result<BeforeExecuteResult, ToolError> {
+            tokio::time::sleep(Duration::from_millis(self.sleep_ms)).await;
+            Ok(BeforeExecuteResult::Proceed {
+                modified_input: Some(input),
+            })
+        }
+    }
+
+    /// 慢 on_result / on_error 中间件：sleep 后透传（超时降级断言用）
+    struct SlowAfterMiddleware {
+        name: String,
+        sleep_ms: u64,
+    }
+    #[async_trait]
+    impl ToolMiddleware for SlowAfterMiddleware {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        async fn on_result(
+            &self,
+            _tool: &dyn Tool,
+            _input: &Value,
+            _output: Value,
+            _ctx: &ToolExecutionContext,
+        ) -> Result<AfterExecuteResult, ToolError> {
+            tokio::time::sleep(Duration::from_millis(self.sleep_ms)).await;
+            Ok(AfterExecuteResult::Passthrough)
+        }
+    }
+
+    /// before_execute 超时 → 视为 Err → Block（守门者报错 = 不放行，
+    /// 06:57）：工具未执行、结果 ExecutionFailed、文案含中间件名与超时
+    #[tokio::test]
+    async fn middleware_before_timeout_blocks_tool() {
+        let tool = Arc::new(CountingEchoTool {
+            calls: Arc::new(AtomicUsize::new(0)),
+        });
+        let reg = registry_with(vec![Arc::clone(&tool) as Arc<dyn Tool>]);
+        let timeouts = MiddlewareTimeoutConfig {
+            before_execute: Duration::from_millis(1),
+            ..MiddlewareTimeoutConfig::default()
+        };
+        let exec = ToolExecutor::new(reg)
+            .with_middleware(vec![Arc::new(SlowBeforeMiddleware {
+                name: "slow".into(),
+                sleep_ms: 300,
+            })])
+            .with_middleware_timeouts(timeouts);
+        let calls = vec![call("c1", "countecho", ToolConcurrency::Sequential)];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        let r = &out.results[0];
+        assert_eq!(r.error_kind, Some(ToolErrorKind::ExecutionFailed));
+        assert!(
+            r.error_message.as_deref().unwrap_or_default().contains("slow"),
+            "超时阻止文案应携带中间件名：{:?}",
+            r.error_message
+        );
+        assert!(
+            r.error_message.as_deref().unwrap_or_default().contains("超时"),
+            "超时阻止文案应标注超时：{:?}",
+            r.error_message
+        );
+        assert_eq!(tool.calls.load(Ordering::SeqCst), 0, "超时阻止时工具不应执行");
+    }
+
+    /// on_result 超时 → 日志 + 降级透传原输出（06:58）
+    #[tokio::test]
+    async fn middleware_on_result_timeout_degrades_to_passthrough() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let timeouts = MiddlewareTimeoutConfig {
+            on_result: Duration::from_millis(1),
+            ..MiddlewareTimeoutConfig::default()
+        };
+        let exec = ToolExecutor::new(reg)
+            .with_middleware(vec![Arc::new(SlowAfterMiddleware {
+                name: "slow-after".into(),
+                sleep_ms: 300,
+            })])
+            .with_middleware_timeouts(timeouts);
+        let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        assert!(out.results[0].is_ok(), "on_result 超时应降级透传原输出");
+        assert_eq!(out.results[0].output, serde_json::json!({ "v": "c1" }));
+    }
+
+    /// on_error 超时 → 仅日志（06:59）：原错误结果保持（不吞错）
+    #[tokio::test]
+    async fn middleware_on_error_timeout_keeps_error_result() {
+        let reg = registry_with(vec![Arc::new(FailTool)]);
+        let timeouts = MiddlewareTimeoutConfig {
+            on_error: Duration::from_millis(1),
+            ..MiddlewareTimeoutConfig::default()
+        };
+        let exec = ToolExecutor::new(reg)
+            .with_middleware(vec![Arc::new(SlowAfterMiddleware {
+                name: "slow-error".into(),
+                sleep_ms: 300,
+            })])
+            .with_middleware_timeouts(timeouts);
+        let calls = vec![call("c1", "fail", ToolConcurrency::Sequential)];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        // 工具失败结果原样保持（on_error 超时只影响观察链，不改变结果）
+        assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::ExecutionFailed));
+        assert!(out.results[0].error_message.as_deref().unwrap_or_default().contains("boom"));
+    }
+
+    /// 默认超时 = 宽松放行：快中间件在默认竞速窗口内正常通过（现有
+    /// 中间件语义不受引入超时窗口影响）
+    #[tokio::test]
+    async fn middleware_default_timeouts_allow_fast_hooks() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg).with_middleware(vec![Arc::new(PrefixMiddleware {
+            name: "prefix".into(),
+            suffix: "-ok".into(),
+        })]);
+        let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        assert!(out.results[0].is_ok(), "默认超时下快中间件正常放行");
+        assert_eq!(out.results[0].output.get("v"), Some(&Value::String("c1-ok".into())));
+    }
+
+    /// 超时窗口内 abort 可取消：before 链执行期间 abort 触发 →
+    /// 调用取消（Cancelled），工具不执行
+    #[tokio::test]
+    async fn middleware_before_abort_cancels_call() {
+        let tool = Arc::new(CountingEchoTool {
+            calls: Arc::new(AtomicUsize::new(0)),
+        });
+        let reg = registry_with(vec![Arc::clone(&tool) as Arc<dyn Tool>]);
+        let exec = ToolExecutor::new(reg).with_middleware(vec![Arc::new(SlowBeforeMiddleware {
+            name: "slow".into(),
+            sleep_ms: 300,
+        })]);
+        let sig = AbortSignal::new();
+        let abort = sig.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            abort.abort();
+        });
+        let calls = vec![call("c1", "countecho", ToolConcurrency::Sequential)];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), Some(&sig))
+            .await;
+        assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::Cancelled));
+        assert_eq!(tool.calls.load(Ordering::SeqCst), 0, "abort 取消后工具不应执行");
+    }
+
+    // ── tool.error 广播（E1 第二批承接；tool-end isError 分支）────────
+
+    /// 插件钩子测试替身（tool.error 版）：记录 (tool_name, error 文案)
+    struct ToolErrorSpyHook {
+        name: String,
+        errors: Arc<Mutex<Vec<(String, String)>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl HookHandler for ToolErrorSpyHook {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        async fn handle(&self, event: &HookEvent) -> Result<HookAction, HookError> {
+            if let HookEvent::ToolError { tool_name, error, .. } = event {
+                self.errors
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push((tool_name.clone(), error.clone()));
+            }
+            Ok(HookAction::Continue)
+        }
+    }
+
+    /// tool.error 广播：工具执行失败（isError 分支）追加广播，
+    /// 成功不广播；载荷携带错误文案
+    #[tokio::test]
+    async fn hook_tool_error_broadcasts_on_failure_only() {
+        let reg = registry_with(vec![Arc::new(EchoTool), Arc::new(FailTool)]);
+        let registry = HookRegistry::new();
+        let spy = Arc::new(ToolErrorSpyHook {
+            name: "error-spy".into(),
+            errors: Arc::new(Mutex::new(Vec::new())),
+        });
+        registry.register_observe(
+            HookEventKind::ToolError,
+            HookFailStrategy::Swallow,
+            Arc::clone(&spy) as Arc<dyn HookHandler>,
+        );
+        let exec = ToolExecutor::new(reg).with_hooks(Some(Arc::new(registry)));
+        let calls = vec![
+            call("c1", "echo", ToolConcurrency::Sequential),
+            call("c2", "fail", ToolConcurrency::Sequential),
+        ];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        assert!(out.results[0].is_ok());
+        assert_eq!(out.results[1].error_kind, Some(ToolErrorKind::ExecutionFailed));
+        let errors = spy.errors.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(
+            errors.as_slice(),
+            &[(
+                "fail".to_string(),
+                "[tool.execution_failed] 工具 fail 执行失败：boom".to_string()
+            )],
+            "tool.error 只广播失败调用（携带错误文案）"
+        );
     }
 }

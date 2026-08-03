@@ -449,12 +449,22 @@ impl AgentSessionLoop {
         // 用户消息入队（force 环）→ INITIALIZED → agent-start（01 §2.1）
         self.state.input_queue.enqueue_force(input);
         if let Err(err) = handlers::dispatch(&mut self.state, E::Initialized) {
-            return self.converge(EndDecision::error(&self.state, err.message()));
+            return self.converge(EndDecision::error(&self.state, err.message())).await;
         }
         self.state.events.push(AgentEvent::AgentStart {
             session_id: self.session_id.clone(),
             timestamp: crate::steering::now_iso_utc(),
         });
+        // I8-E1 第一批：session.start 钩子广播（run 启动处；载荷最小子集
+        // sessionId；observe 观察者失败不阻塞 run 启动——dispatch 内部
+        // 已按 failStrategy 处置 + 错误事件化）
+        if let Some(hooks) = &self.state.options.hooks {
+            let _ = hooks
+                .dispatch(&crate::hooks::HookEvent::SessionStart {
+                    session_id: self.session_id.clone(),
+                })
+                .await;
+        }
 
         // while(!done) 按当前状态分派 handler（01 §2.1）
         while !self.state.machine.is_done() {
@@ -462,14 +472,14 @@ impl AgentSessionLoop {
             match outcome {
                 Ok(handler_outcome) => {
                     if let Some(end) = handler_outcome.end {
-                        return self.converge(end);
+                        return self.converge(end).await;
                     }
                 }
                 Err(err) => {
                     // catch 兜底（01 §2.1 步骤 4）：恢复钩子裁决 retry/skip/abort
                     let decision = self.recovery_decision(&err);
-                    if let Some(end) = self.apply_recovery(decision, &err) {
-                        return self.converge(end);
+                    if let Some(end) = self.apply_recovery(decision, &err).await {
+                        return self.converge(end).await;
                     }
                 }
             }
@@ -482,6 +492,7 @@ impl AgentSessionLoop {
             None,
             &self.state,
         ))
+        .await
     }
 
     /// 单次分派（按当前状态路由到对应 handler）
@@ -535,7 +546,7 @@ impl AgentSessionLoop {
     }
 
     /// 应用恢复决策；返回 Some 表示 run 已收敛
-    fn apply_recovery(
+    async fn apply_recovery(
         &mut self,
         decision: RecoveryDecision,
         err: &LoopError,
@@ -557,6 +568,17 @@ impl AgentSessionLoop {
             error: err.message().to_string(),
             retryable: Some(decision == RecoveryDecision::Retry),
         });
+        // I8-E1 第二批：error.occurred 钩子广播（引擎错误分类处——runtime-error
+        // 事件同点位；observe 默认，失败吞掉 + 计数，收场流程继续）
+        if let Some(hooks) = &self.state.options.hooks {
+            let _ = hooks
+                .dispatch(&crate::hooks::HookEvent::ErrorOccurred {
+                    session_id: self.session_id.clone(),
+                    error: err.message().to_string(),
+                    retryable: decision == RecoveryDecision::Retry,
+                })
+                .await;
+        }
         match decision {
             RecoveryDecision::Retry => {
                 // 仅 streaming 下可 NO_PROGRESS_CONTINUE 重进 provider 循环；
@@ -600,7 +622,7 @@ impl AgentSessionLoop {
     /// 每 run 收口全量克隆，O(n) → O(1)）；行为变化面 R4 已登记——converge
     /// 后 `state.conversation` 清空，真实接线每 run 重建 loop 无影响，
     /// 测试路径经 [Self::with_initial_conversation] 续接。
-    fn converge(&mut self, decision: EndDecision) -> RunOutcome {
+    async fn converge(&mut self, decision: EndDecision) -> RunOutcome {
         let reason = decision.reason;
         let error = decision.error.clone();
         let diagnostic = decision.diagnostic.clone();
@@ -610,6 +632,15 @@ impl AgentSessionLoop {
             reason,
             error: error.clone(),
         });
+        // I8-E1 第一批：session.end 钩子广播（run 收场终态；observe 默认，
+        // 失败吞掉 + 计数，收场流程继续——03 §2.4 表）
+        if let Some(hooks) = &self.state.options.hooks {
+            let _ = hooks
+                .dispatch(&crate::hooks::HookEvent::SessionEnd {
+                    session_id: self.session_id.clone(),
+                })
+                .await;
+        }
         tracing::info!(end_reason = ?reason, has_error = error.is_some(), "run 收场");
         RunOutcome {
             reason,

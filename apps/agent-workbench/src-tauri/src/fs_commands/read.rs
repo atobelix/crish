@@ -187,7 +187,7 @@ fn is_probably_binary(bytes: &[u8]) -> bool {
     {
         return true;
     }
-    if bytes.iter().any(|byte| *byte == 0) {
+    if bytes.contains(&0) {
         return true;
     }
 

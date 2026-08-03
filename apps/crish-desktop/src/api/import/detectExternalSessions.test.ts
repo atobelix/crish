@@ -9,7 +9,7 @@ import {
   mungeProjectPath,
   resolveDefaultImportRoots,
   truncatePreview,
-} from './detectExternalSessions';
+} from '@crish/plugin-import-claude-codex';
 import { createMemoryImportFs } from './importFsHost';
 import {
   getPersistedImportRoots,

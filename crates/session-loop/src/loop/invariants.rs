@@ -97,8 +97,8 @@ fn user(id: &str) -> AgentMessage {
 ///
 /// 非压缩路径的 append-only 全链路身份断言引用
 /// `tests/prefix_stability.rs::conversation_is_append_only_within_run`。
-#[test]
-fn i1_compaction_is_the_only_prefix_rewrite_point() {
+#[tokio::test]
+async fn i1_compaction_is_the_only_prefix_rewrite_point() {
     let mut state = test_state(budgeted_options());
     // 对话：system 首条 + 10 条大消息（估算 ≈ 5 万 ≥ 阈值 8000）
     let mut conv = big_conversation();
@@ -118,7 +118,7 @@ fn i1_compaction_is_the_only_prefix_rewrite_point() {
     let original_ids: Vec<String> = state.conversation.iter().map(|m| m.id.clone()).collect();
     let original_arcs = state.conversation.clone();
 
-    assert!(maybe_compact_preflight(&mut state), "超阈值必须压缩");
+    assert!(maybe_compact_preflight(&mut state).await, "超阈值必须压缩");
 
     // 压缩后形态：system 恒在头部（前缀不被改写）、摘要占位紧随其后
     let sys_pos = state
@@ -250,8 +250,8 @@ fn i4_summarizer_trait_carries_no_session_affinity() {
 /// I5：压缩后基线重建（缓存读回从压缩后状态开始）——真实压缩路径
 /// （预检触发 → apply_compaction 写时间戳护栏）后，存活于保留段的旧 usage
 /// 消息因早于压缩边界而作废，估算回退启发式（usage 基线清空，§3.4.6）
-#[test]
-fn i5_compaction_resets_usage_baseline_via_real_path() {
+#[tokio::test]
+async fn i5_compaction_resets_usage_baseline_via_real_path() {
     let mut state = test_state(budgeted_options());
     // 对话：带 usage 的 assistant 消息（inputTotal=9000 ≥ 阈值 8000，
     // 时间戳远早于任何运行时刻——2020 年）+ 大尾巴；usage 消息位于保留段
@@ -277,7 +277,7 @@ fn i5_compaction_resets_usage_baseline_via_real_path() {
     assert_eq!(before.tokens, 9000);
     assert_eq!(before.usage_message_id.as_deref(), Some("a-usage"));
     // 真实压缩（预检路径）：对话替换 + 时间戳护栏重置
-    assert!(maybe_compact_preflight(&mut state), "usage 估算超阈值必须压缩");
+    assert!(maybe_compact_preflight(&mut state).await, "usage 估算超阈值必须压缩");
     assert!(state.last_compaction_at.is_some(), "压缩后必须写时间戳护栏");
     assert!(
         state.conversation.iter().any(|m| m.id == "a-usage"),

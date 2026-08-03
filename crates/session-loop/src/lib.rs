@@ -36,6 +36,7 @@
 
 pub mod approval;
 pub mod cache_tracker;
+pub mod checkpoint;
 pub mod control;
 pub mod hooks;
 pub mod hydrate;
@@ -60,7 +61,7 @@ pub use control::{
 };
 pub use hooks::{
     HookAction, HookDispatchOutcome, HookError, HookEvent, HookEventKind, HookFailStrategy,
-    HookHandler, HookRegistry,
+    HookHandler, HookMode, HookRegisterOptions, HookRegistry,
 };
 pub use input::{next_batch_seq, AgentInputQueue, InputEnqueueMode, RingBuffer, INPUT_QUEUE_CAPACITY};
 pub use provider::{

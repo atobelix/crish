@@ -14,7 +14,7 @@ export const SESSION_ACTION_KINDS = [
 
 export const SESSION_OPEN_TARGETS = ["split-view"] as const;
 
-export const SESSION_PANE_ROLES = ["primary", "secondary", "reference", "diff"] as const;
+const SESSION_PANE_ROLES = ["primary", "secondary", "reference", "diff"] as const;
 
 export const SPLIT_LAYOUT_MAX_PANES = 6;
 

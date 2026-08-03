@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod checkpoint;
 pub mod context;
+pub mod denied_stats;
 pub mod error;
 pub mod events;
 pub mod history;
@@ -24,6 +25,7 @@ pub use checkpoint::{
     LeafCheckpointState,
 };
 pub use context::{CONTEXT_SAFETY_TOKENS, ContextBudget, SessionContextMeta};
+pub use denied_stats::{DeniedStats, DeniedStatsSummary, global_denied_stats};
 pub use error::codes;
 
 pub use error::{

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PENDING_DRAFT,
   PENDING_DRAFT_SESSION_ID,
   SESSION_IDENTITY_KINDS,
   isPendingDraftSessionId,
@@ -22,9 +21,8 @@ import {
 } from './index';
 
 describe('session-identity (A1)', () => {
-  it('PENDING_DRAFT 与 desktop 哨兵字面量对齐', () => {
+  it('PENDING_DRAFT_SESSION_ID 与 desktop 哨兵字面量对齐', () => {
     expect(PENDING_DRAFT_SESSION_ID).toBe('__pending_draft__');
-    expect(PENDING_DRAFT).toBe(PENDING_DRAFT_SESSION_ID);
   });
 
   it('isPendingDraftSessionId 仅识别哨兵', () => {

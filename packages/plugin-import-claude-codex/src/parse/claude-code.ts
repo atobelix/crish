@@ -1,16 +1,17 @@
 /**
- * Parse Claude Code session JSONL into normalized turns.
- * Pure function — no FS, no logging of message bodies.
+ * 解析 Claude Code 会话 JSONL 为规范化 turns（纯函数，无 FS、不记录消息正文）。
  *
- * Format refs: reference/claudeCode/utils/sessionStorage*.ts, types/logs.ts
+ * 格式参考：reference/claudeCode/utils/sessionStorage*.ts、types/logs.ts
+ * 本文件由宿主 apps/crish-desktop/src/api/import/parseClaudeCodeJsonl.ts 迁入，
+ * 输出与迁移前实现保持字节级一致（fixture 复用既有测试数据）。
  */
 
-import type { NormalizedImportTurn, ParsedExternalConversation } from './types';
+import type { NormalizedImportTurn, ParsedExternalConversation } from '../types';
 
 export type ParseClaudeCodeOptions = {
-  /** Source session id fallback (filename stem). */
+  /** 来源会话 id 兜底（文件名主干）。 */
   sourceSessionId?: string;
-  /** Max lines to process (default unlimited). */
+  /** 最大处理行数（默认不限）。 */
   maxLines?: number;
 };
 
@@ -117,7 +118,7 @@ function isToolResultOnlyUser(content: unknown): boolean {
 }
 
 /**
- * Parse entire Claude Code session file content.
+ * 解析整份 Claude Code 会话文件内容。
  */
 export function parseClaudeCodeJsonl(
   content: string,
@@ -125,7 +126,7 @@ export function parseClaudeCodeJsonl(
 ): ParsedExternalConversation {
   const warnings: string[] = [];
   const turns: NormalizedImportTurn[] = [];
-  // Pending tool outputs keyed by tool_use id — attached to nearest assistant or synthetic.
+  // 待挂载的工具输出（按 tool_use id 索引），就近挂到最近 assistant 或合成轮。
   const pendingResults = new Map<string, { output: string; isError: boolean }>();
   let customTitle: string | undefined;
   let aiTitle: string | undefined;
@@ -138,7 +139,7 @@ export function parseClaudeCodeJsonl(
   let skippedLineCount = 0;
   const maxLines = options.maxLines ?? Number.POSITIVE_INFINITY;
 
-  // Index of assistant turns that still have open tool calls
+  // 仍有打开工具调用的 assistant 轮索引
   const openToolAssistants: number[] = [];
 
   const lines = content.split(/\r?\n/);
@@ -178,7 +179,7 @@ export function parseClaudeCodeJsonl(
       continue;
     }
 
-    // Metadata-only / non-transcript
+    // 仅元数据 / 非会话行
     if (
       type === 'file-history-snapshot' ||
       type === 'attachment' ||
@@ -222,12 +223,12 @@ export function parseClaudeCodeJsonl(
     const uuid = typeof row.uuid === 'string' ? row.uuid : `cc-${lineCount}`;
 
     if (type === 'user') {
-      // Tool results → attach to prior assistant toolCalls
+      // 工具结果 → 挂到先前 assistant 的 toolCalls
       if (isToolResultOnlyUser(contentField)) {
         const results = extractToolResults(contentField);
         for (const r of results) {
           pendingResults.set(r.id, { output: r.output, isError: r.isError });
-          // try attach to open assistants from newest
+          // 从最新开始尝试挂载
           for (let i = openToolAssistants.length - 1; i >= 0; i--) {
             const turn = turns[openToolAssistants[i]!];
             if (!turn?.toolCalls) continue;
@@ -244,9 +245,9 @@ export function parseClaudeCodeJsonl(
       }
 
       const text = contentToText(contentField);
-      // also handle plain string content already covered
+      // 纯字符串 content 已覆盖
       if (!text.trim()) {
-        // may include mixed tool_result + text — attach results then keep text
+        // 可能混合 tool_result + text —— 先挂结果再保留文本
         const results = extractToolResults(contentField);
         for (const r of results) {
           pendingResults.set(r.id, { output: r.output, isError: r.isError });
@@ -298,7 +299,7 @@ export function parseClaudeCodeJsonl(
     }
   }
 
-  // Apply any remaining pending results
+  // 应用剩余待挂载结果
   for (const [id, r] of pendingResults) {
     for (let i = turns.length - 1; i >= 0; i--) {
       const tc = turns[i]?.toolCalls?.find((t) => t.id === id);

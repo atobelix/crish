@@ -22,6 +22,7 @@ conex-types = { path = "../conex-types" }
 # 该 crate 仅依赖 conex-types；A3 §7.1 登记本依赖为计划内唯一新增授权）
 conex-telemetry = { path = "../conex-telemetry" }
 futures = "0.3"
+regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

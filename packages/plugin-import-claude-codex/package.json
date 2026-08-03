@@ -1,0 +1,12 @@
+{
+  "name": "@crish/plugin-import-claude-codex",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "description": "官方插件：Claude Code / Codex CLI 对话导入（纯函数 + manifest 声明，内置分发）",
+  "license": "MIT",
+  "dependencies": {
+    "@crish/plugin-sdk": "file:../plugin-sdk"
+  }
+}

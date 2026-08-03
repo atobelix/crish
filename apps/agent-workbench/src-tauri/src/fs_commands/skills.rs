@@ -11,18 +11,45 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RustSkill {
-    file_path: String,
-    base_dir: String,
-    content: String,
-    raw: String,
-    scope: String,
-    system: bool,
-    name: String,
-    description: String,
-    tags: Vec<String>,
-    applies_to: Vec<String>,
-    disable_model_invocation: bool,
-    file_activation: Option<String>,
+    pub(crate) file_path: String,
+    pub(crate) base_dir: String,
+    pub(crate) content: String,
+    pub(crate) raw: String,
+    pub(crate) scope: String,
+    pub(crate) system: bool,
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) tags: Vec<String>,
+    pub(crate) applies_to: Vec<String>,
+    pub(crate) disable_model_invocation: bool,
+    pub(crate) file_activation: Option<String>,
+}
+
+impl RustSkill {
+    /// 技能名（C10 注入段条目用）
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// 技能描述（C10 注入段条目用）
+    pub(crate) fn description(&self) -> &str {
+        &self.description
+    }
+
+    /// 技能正文（SKILL.md body，C10 注入段正文用）
+    pub(crate) fn content(&self) -> &str {
+        &self.content
+    }
+
+    /// 作用域（project / global；同名冲突优先级判定用）
+    pub(crate) fn scope(&self) -> &str {
+        &self.scope
+    }
+
+    /// 是否系统技能（.system 目录 / frontmatter system 标记）
+    pub(crate) fn is_system(&self) -> bool {
+        self.system
+    }
 }
 
 /// 错误码：路径未在已授权根内
@@ -31,11 +58,10 @@ const ERR_WORKSPACE_NOT_GRANTED: &str = "workspace_not_granted";
 fn parse_frontmatter(content: &str) -> (std::collections::HashMap<String, String>, String) {
     let mut data = std::collections::HashMap::new();
     let mut body = content.to_string();
-    if content.starts_with("---") {
-        if let Some(end_idx) = content[3..].find("\n---") {
-            let actual_end = end_idx + 3;
-            let raw_fm = &content[3..actual_end];
-            body = content[actual_end + 4..].to_string();
+    if let Some(after_open) = content.strip_prefix("---") {
+        if let Some(end_idx) = after_open.find("\n---") {
+            let raw_fm = &after_open[..end_idx];
+            body = after_open[end_idx + 4..].to_string();
             for line in raw_fm.lines() {
                 if let Some((key, val)) = line.split_once(':') {
                     let k = key.trim().to_string();
@@ -74,7 +100,7 @@ fn load_skill_file_rust(file_path: &Path, scope: &str, system: bool) -> Option<R
     let base_dir = file_path
         .parent()
         .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| "".to_string());
+        .unwrap_or_default();
 
     let file_path_str = file_path.to_string_lossy().to_string();
 

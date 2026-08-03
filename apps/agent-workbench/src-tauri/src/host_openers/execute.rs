@@ -44,7 +44,6 @@ pub(crate) fn open_host_target(
     let env_lookup = |key: &str| std::env::var_os(key);
     let path_exists = |path: &Path| path.exists();
     let path_dirs = std::env::split_paths(&path_env.unwrap_or_default())
-        .map(std::path::PathBuf::from)
         .collect::<Vec<_>>();
     let candidates = opener_candidates(&env_lookup);
     let candidate = candidates

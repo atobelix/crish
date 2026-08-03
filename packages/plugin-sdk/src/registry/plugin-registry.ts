@@ -50,12 +50,14 @@ export class PluginRegistry implements ToolSource {
 
   private readonly store: PluginStore | undefined;
   private readonly toolRegistryQuery: ToolRegistryQuery | undefined;
+  private readonly options: PluginRegistryOptions;
 
   constructor(
     private readonly discoverer: PluginDiscoverer,
     private readonly loader: PluginLoader,
     options: PluginRegistryOptions = {},
   ) {
+    this.options = options;
     this.id = options.id ?? 'plugin-registry';
     this.label = options.label ?? 'Plugin registry';
     this.store = options.store;
@@ -123,6 +125,16 @@ export class PluginRegistry implements ToolSource {
       const message = (err as Error).message;
       // 任意状态 → error
       entry.state = transferState(entry.state, 'error', message);
+      // I8-E2 加载阶段错误报告：单插件失败不阻断其他插件（opencode
+      // plugin/index.ts:220-238 语义），经 onError 上报宿主
+      // （宿主转发 runtime-error 事件流——错误事件化）
+      if (this.options.onError) {
+        try {
+          this.options.onError(manifest.id, message);
+        } catch {
+          // 上报器自身失败不阻断状态机
+        }
+      }
     }
   }
 
@@ -317,6 +329,12 @@ export interface PluginRegistryOptions {
   store?: PluginStore;
   /** 工具注册表查询接口（可选，注入后 listTools() 可查询插件注册的工具） */
   toolRegistryQuery?: ToolRegistryQuery;
+  /**
+   * 加载失败上报器（I8-E2 错误事件化）：单插件加载失败（discover/load/
+   * activate/validate）时回调——宿主据此转发 runtime-error 事件流；
+   * 单插件失败不阻断其他插件。
+   */
+  onError?: (pluginId: string, message: string) => void;
 }
 
 export interface PluginListEntry {

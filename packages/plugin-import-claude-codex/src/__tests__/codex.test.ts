@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { parseCodexRolloutJsonl } from './parseCodexRolloutJsonl';
+import { parseCodexRolloutJsonl } from '../parse/codex';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixture = readFileSync(
@@ -11,7 +11,7 @@ const fixture = readFileSync(
 );
 
 describe('parseCodexRolloutJsonl', () => {
-  it('parses session_meta, user/assistant, reasoning, and function_call pair', () => {
+  it('解析 session_meta、user/assistant、reasoning 与 function_call 配对', () => {
     const parsed = parseCodexRolloutJsonl(fixture);
 
     expect(parsed.source).toBe('codex');
@@ -20,7 +20,7 @@ describe('parseCodexRolloutJsonl', () => {
     expect(parsed.title).toContain('unit test');
     expect(parsed.createdAtMs).toBe(Date.parse('2026-07-02T12:00:00.000Z'));
 
-    // user + one merged assistant (reasoning + tool + final text)
+    // user + 一条合并的 assistant（reasoning + 工具 + 收尾文本）
     expect(parsed.turns.length).toBeGreaterThanOrEqual(2);
     expect(parsed.turns[0]).toMatchObject({
       role: 'user',
@@ -39,7 +39,7 @@ describe('parseCodexRolloutJsonl', () => {
     expect(assistant?.text).toContain('unit test');
   });
 
-  it('skips malformed lines without throwing', () => {
+  it('跳过畸形行且不抛错', () => {
     const content = [
       '{bad',
       JSON.stringify({

@@ -2,30 +2,22 @@
  * External conversation import — shared types.
  * Privacy: never log full message bodies; fixtures only use synthetic text.
  *
- * UI wiring (`ExternalSessionImport`) uses DetectedExternalSession + scan/import APIs.
- * Parsers use NormalizedImportTurn → mapToCrishSession / MappedImportSession.
+ * 载荷中立化（E3）：解析/映射载荷（NormalizedImportTurn / ParsedExternalConversation /
+ * SessionImportPayload 等）与探测层类型（ImportFs / ImportPathEnv 等）全部来自
+ * 官方插件包 @crish/plugin-import-claude-codex（不依赖 store/types）；
+ * 本文件只保留宿主侧类型（UI 行 / store 写路径）与适配函数。
  */
 
 import type { SessionMessage } from '../../store/types';
+import type { ExternalSessionMeta, SessionImportPayload } from '@crish/plugin-import-claude-codex';
 
-/**
- * Supported external transcript sources (v1).
- * `'codex'` is the UI/store id; `'codex-cli'` accepted as alias in parsers.
- */
-export type ExternalSessionSource = 'claude-code' | 'codex' | 'codex-cli';
-
-/** Normalize aliases → canonical UI source. */
-export function canonicalExternalSource(
-  source: ExternalSessionSource,
-): 'claude-code' | 'codex' {
-  return source === 'claude-code' ? 'claude-code' : 'codex';
-}
-
-export function externalSourceLabel(source: ExternalSessionSource): string {
-  return canonicalExternalSource(source) === 'claude-code'
-    ? 'Claude Code'
-    : 'Codex CLI';
-}
+export type {
+  ExternalSessionSource,
+  ExternalImportRoots,
+  ImportPathEnv,
+  ImportDirEntry,
+  ImportFs,
+} from '@crish/plugin-import-claude-codex';
 
 // ---------------------------------------------------------------------------
 // UI / store write path (scan → select → importDetectedSessions)
@@ -81,129 +73,6 @@ export function makeExternalImportKey(
   return `${source}::${sourceSessionId}`;
 }
 
-// ---------------------------------------------------------------------------
-// Path / FS / detect (parser pipeline)
-// ---------------------------------------------------------------------------
-
-/** Platform hints for default path resolution (injectable for tests). */
-export type ImportPathEnv = {
-  home?: string;
-  claudeConfigDir?: string;
-  codexHome?: string;
-  platform?: string;
-  sep?: '\\' | '/';
-};
-
-export type ExternalImportRoots = {
-  home: string;
-  claudeConfig: string;
-  claudeProjects: string;
-  codexHome: string;
-  codexSessions: string;
-};
-
-export type ImportDirEntry = {
-  name: string;
-  isDir: boolean;
-  size?: number;
-  modified?: string | number;
-  path: string;
-};
-
-export type ImportFs = {
-  listDir: (dirPath: string, allowRoot: string) => Promise<ImportDirEntry[]>;
-  readText: (
-    filePath: string,
-    allowRoot: string,
-    opts?: { maxBytes?: number; maxLines?: number },
-  ) => Promise<{ content: string; truncated: boolean; path: string }>;
-  exists?: (path: string, allowRoot: string) => Promise<boolean>;
-};
-
-/** Metadata from detect (richer than DetectedExternalSession). */
-export type ExternalSessionMeta = {
-  source: 'claude-code' | 'codex';
-  path: string;
-  sourceSessionId: string;
-  titlePreview: string;
-  projectLabel?: string;
-  cwd?: string;
-  mtimeMs?: number;
-  createdAtMs?: number;
-  fileSize?: number;
-  messageCountEstimate: number;
-};
-
-export type DetectExternalSessionsOptions = {
-  fs: ImportFs;
-  env?: ImportPathEnv;
-  limit?: number;
-  liteReadBytes?: number;
-  sources?: Array<'claude-code' | 'codex'>;
-  maxFileSizeBytes?: number;
-};
-
-export type DetectExternalSessionsResult = {
-  roots: ExternalImportRoots;
-  sessions: ExternalSessionMeta[];
-  warnings: string[];
-};
-
-// ---------------------------------------------------------------------------
-// Parse → map
-// ---------------------------------------------------------------------------
-
-export type NormalizedImportTurn = {
-  id: string;
-  role: 'user' | 'assistant';
-  text?: string;
-  thinking?: string;
-  timestampMs: number;
-  toolCalls?: Array<{
-    id: string;
-    name: string;
-    arguments?: string;
-    output?: string;
-    isError?: boolean;
-    status?: 'success' | 'error' | 'running';
-  }>;
-};
-
-export type ParsedExternalConversation = {
-  source: 'claude-code' | 'codex';
-  sourceSessionId: string;
-  title?: string;
-  cwd?: string;
-  createdAtMs?: number;
-  turns: NormalizedImportTurn[];
-  warnings: string[];
-  lineCount: number;
-  skippedLineCount: number;
-};
-
-export type MapToCrishSessionOptions = {
-  sourcePath: string;
-  sessionId?: string;
-  title?: string;
-  folder?: string;
-  nowMs?: number;
-  idFactory?: () => string;
-};
-
-/** Full import payload (also convertible to MappedImportSession). */
-export type ImportedCrishSession = {
-  source: 'claude-code' | 'codex';
-  sourcePath: string;
-  sourceSessionId: string;
-  sessionId: string;
-  title: string;
-  folder: string;
-  timestamp: string;
-  messages: SessionMessage[];
-  createdAtMs?: number;
-  warnings: string[];
-};
-
 /** Convert detect meta → UI DetectedExternalSession. */
 export function metaToDetected(meta: ExternalSessionMeta): DetectedExternalSession {
   return {
@@ -223,16 +92,17 @@ export function metaToDetected(meta: ExternalSessionMeta): DetectedExternalSessi
   };
 }
 
-/** Convert ImportedCrishSession → MappedImportSession for store write. */
+/** Convert SessionImportPayload + 适配后的消息 → MappedImportSession for store write. */
 export function toMappedImportSession(
-  imported: ImportedCrishSession,
+  imported: SessionImportPayload,
+  messages: SessionMessage[],
 ): MappedImportSession {
   return {
     source: imported.source,
     sourceId: imported.sourceSessionId,
     title: imported.title,
     folder: imported.folder,
-    messages: imported.messages,
+    messages,
     ...(imported.sourcePath ? { path: imported.sourcePath } : {}),
   };
 }

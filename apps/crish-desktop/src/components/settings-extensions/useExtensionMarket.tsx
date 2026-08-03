@@ -19,6 +19,11 @@ import {
 import { discoverSkills, type DesktopSkill } from '../../api/skillsApi';
 import { getWorkspacePath } from '../../api/projectStore';
 import { setAppSettings } from '../../api/storeAccess';
+import {
+  listPluginCardStates,
+  setPluginEnabled,
+  type PluginCardState,
+} from './pluginRegistryAdapter';
 import type {
   ExpandMode,
   ExpandTarget,
@@ -26,6 +31,7 @@ import type {
   MainView,
   ManageKind,
   PendingExpand,
+  PluginInstalledExtension,
 } from './types';
 
 const SKILLS_CACHE_KEY = 'crish_skills_cache_v1';
@@ -160,16 +166,19 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
     mcpServers: McpServerInfo[];
     packages: (string | PackageSource)[];
     catalogInstalled: Set<string>;
+    plugins: PluginCardState[];
   }>(() => ({
     skills: loadSkillsCache(),
     mcpServers: loadMcpServersCache(),
     packages: [],
     catalogInstalled: loadCatalogInstalledIds(),
+    plugins: listPluginCardStates(),
   }));
   const skills = dataState.skills;
   const mcpServers = dataState.mcpServers;
   const packages = dataState.packages;
   const catalogInstalled = dataState.catalogInstalled;
+  const plugins = dataState.plugins;
   const setSkills = (val: React.SetStateAction<DesktopSkill[]>) =>
     setDataState((prev) => ({ ...prev, skills: typeof val === 'function' ? val(prev.skills) : val }));
   const setMcpServers = (val: React.SetStateAction<McpServerInfo[]>) =>
@@ -178,6 +187,8 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
     setDataState((prev) => ({ ...prev, packages: typeof val === 'function' ? val(prev.packages) : val }));
   const setCatalogInstalled = (val: React.SetStateAction<Set<string>>) =>
     setDataState((prev) => ({ ...prev, catalogInstalled: typeof val === 'function' ? val(prev.catalogInstalled) : val }));
+  const setPlugins = (val: React.SetStateAction<PluginCardState[]>) =>
+    setDataState((prev) => ({ ...prev, plugins: typeof val === 'function' ? val(prev.plugins) : val }));
 
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -247,6 +258,7 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
       saveMcpServersCache(mcpRes.servers || []);
       setPackages(settings?.packages || []);
       setCatalogInstalled(loadCatalogInstalledIds());
+      setPlugins(listPluginCardStates());
       if (settings?.mcpDisabledTools) {
         cacheMcpToolDisabled(settings.mcpDisabledTools);
       }
@@ -268,8 +280,7 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
   const installed: InstalledExtension[] = useMemo(() => {
     const out: InstalledExtension[] = [];
 
-    for (const s of skills) {
-      out.push({
+    for (const s of skills) {      out.push({
         id: `local-skill:${s.id}`,
         kind: 'skill',
         source: s.system ? 'official' : 'local',
@@ -316,6 +327,32 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
       });
     });
 
+    for (const p of plugins) {
+      const already = out.some(
+        (x) =>
+          x.kind === 'plugin' &&
+          (x.name.toLowerCase() === p.name.toLowerCase() ||
+            x.id === `plugin:${p.id}`)
+      );
+      if (already) continue;
+      const item: PluginInstalledExtension = {
+        id: `plugin:${p.id}`,
+        kind: 'plugin',
+        source: p.source,
+        name: p.name,
+        description: p.description,
+        fromSystem: p.fromSystem,
+        installRef: p.installRef,
+        pluginId: p.id,
+        pluginVersion: p.version,
+        pluginTools: p.declaredTools,
+        pluginHooks: p.declaredHooks,
+        pluginTrustLevel: p.trustLevel,
+        pluginEnabled: p.enabled,
+      };
+      out.push(item);
+    }
+
     for (const entry of EXTENSION_CATALOG) {
       if (!catalogInstalled.has(entry.id)) continue;
       const already = out.some(
@@ -336,7 +373,7 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
     }
 
     return out;
-  }, [skills, mcpServers, packages, catalogInstalled]);
+  }, [skills, mcpServers, packages, catalogInstalled, plugins]);
 
   useEffect(() => {
     if (!pendingExpand) return;
@@ -536,6 +573,18 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
     }
   };
 
+  /** 插件启停：持久化 + 本地状态刷新（E3 UI 泛化；E2 运行时接入后同步注册表）。 */
+  const togglePlugin = useCallback(
+    (pluginId: string, enabled: boolean) => {
+      setPluginEnabled(pluginId, enabled);
+      setPlugins((prev) =>
+        prev.map((p) => (p.id === pluginId ? { ...p, enabled } : p))
+      );
+      onShowToast(enabled ? '插件已启用' : '插件已停用');
+    },
+    [onShowToast]
+  );
+
   return {
     view,
     setView,
@@ -568,6 +617,7 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
     handleRemovePackage,
     toggleMcpTool,
     toggleMcpServer,
+    togglePlugin,
     setExpand,
   };
 }
