@@ -15,10 +15,13 @@
 //! follow_up → followUp 环（仅 run idle）。
 
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use conex_types::message::AgentMessage;
 use serde::{Deserialize, Serialize};
+
+use crate::steering::now_iso_utc;
 
 /// 控制意图种类（对齐 TS RunControlKind）
 ///
@@ -76,6 +79,31 @@ pub fn inject_ring_for_kind(kind: ControlKind) -> Option<RingChoice> {
         ControlKind::FollowUp => Some(RingChoice::FollowUp),
         ControlKind::SoftInject | ControlKind::Steer => Some(RingChoice::Steer),
         _ => None,
+    }
+}
+
+// ── C8/M8：运行中注入（wait 期间主 agent 向子代理注入提示词）──────
+
+/// 子代理注入消息自增序号（id 唯一性，与 create_at 共用防同毫秒碰撞）
+static SUBAGENT_INJECT_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// 子代理注入消息构造（C8 §2.2：执行期可注入不打断流）
+///
+/// user 角色文本消息，经目标 run 的 L1 steer 环在下一安全点注入——
+/// transfer 到 steer 环语义（pi steer）；id 带子代理标识与自增序号，
+/// 保证可观测可测。created_at 与 steering 侧同源（now_iso_utc）。
+pub fn subagent_inject_message(subagent_id: &str, prompt: &str) -> AgentMessage {
+    let seq = SUBAGENT_INJECT_SEQ.fetch_add(1, Ordering::Relaxed);
+    AgentMessage {
+        id: format!("subagent-inject:{subagent_id}:{seq}"),
+        role: conex_types::message::AgentMessageRole::User,
+        created_at: now_iso_utc(),
+        blocks: vec![conex_types::message::AgentMessageBlock::Text {
+            text: prompt.to_string(),
+        }],
+        metadata: None,
+        client_message_id: None,
+        content: None,
     }
 }
 
@@ -235,6 +263,26 @@ impl ControlBus {
             source,
             ..ControlIntentInput::new(ControlKind::Steer)
         })
+    }
+
+    /// C8/M8：wait 期间主 agent 向子代理注入提示词——经 L1 steer 环
+    /// transfer 到目标 run 的下一安全点（不打断流，无 L2/L3）；
+    /// reason 携带 `subagent_inject:<id>` 可观测标识。
+    ///
+    /// 注：本总线为注入目标 run（子代理 run）的实例；主 agent 侧按
+    /// 子代理 run 定位其总线后调用。L3 强停仍优先（drain_as_action
+    /// 聚合优先级不变，control.rs:315 语义）。
+    pub fn request_subagent_inject(
+        &mut self,
+        subagent_id: &str,
+        prompt: &str,
+        source: Option<&str>,
+    ) -> ControlIntent {
+        self.request_steer(
+            subagent_inject_message(subagent_id, prompt),
+            Some(format!("subagent_inject:{subagent_id}")),
+            source.map(str::to_string),
+        )
     }
 
     /// pi followUp：仅 run idle 时注入
@@ -564,5 +612,86 @@ mod tests {
         assert_eq!(json["level"], "L3");
         assert_eq!(json["reason"], "r");
         assert_eq!(json["source"], "ui");
+    }
+
+    // ── C8/M8：运行中注入（wait 期间向子代理注入提示词）──────────
+
+    /// 注入走 L1 steer 环：drain 聚合为 SoftInject，消息进入 steer 环，
+    /// 不产生任何 L2/L3 动作
+    #[test]
+    fn subagent_inject_lands_in_steer_ring() {
+        let mut bus = ControlBus::new();
+        let intent =
+            bus.request_subagent_inject("sub-1", "调整方向：优先低风险改动", Some("subagent_wait"));
+        assert_eq!(intent.kind, ControlKind::Steer);
+        assert_eq!(intent.level, ControlLevel::L1);
+        assert_eq!(intent.reason.as_deref(), Some("subagent_inject:sub-1"));
+        assert_eq!(intent.source.as_deref(), Some("subagent_wait"));
+
+        match bus.drain_as_action() {
+            ControlDrainAction::SoftInject {
+                messages,
+                steer_messages,
+                follow_up_messages,
+                ..
+            } => {
+                assert!(
+                    follow_up_messages.is_empty(),
+                    "注入只走 steer 环，不进 followUp 环"
+                );
+                assert_eq!(steer_messages.len(), 1);
+                assert_eq!(messages.len(), 1);
+                assert_eq!(messages[0].text(), "调整方向：优先低风险改动");
+            }
+            other => panic!("注入应聚合为 SoftInject（L1），实际 {other:?}"),
+        }
+    }
+
+    /// 等待期间注入不打断流：多次注入 + 无 L2/L3 意图时，drain 结果恒为
+    /// SoftInject（C8 §2.2：不触发 L2/L3）
+    #[test]
+    fn subagent_inject_during_wait_is_soft_only() {
+        let mut bus = ControlBus::new();
+        bus.request_subagent_inject("sub-1", "提示 A", None);
+        bus.request_subagent_inject("sub-2", "提示 B", None);
+        match bus.drain_as_action() {
+            ControlDrainAction::SoftInject { steer_messages, .. } => {
+                assert_eq!(steer_messages.len(), 2);
+                assert_eq!(steer_messages[0].text(), "提示 A");
+                assert_eq!(steer_messages[1].text(), "提示 B", "注入顺序保持");
+            }
+            other => panic!("应为 SoftInject，实际 {other:?}"),
+        }
+    }
+
+    /// L3 强停优先（control.rs:315 drain 聚合优先级）：注入与强停并存时
+    /// 强停胜出，注入消息随强停一并带出
+    #[test]
+    fn force_cancel_still_beats_subagent_inject() {
+        let mut bus = ControlBus::new();
+        bus.request_subagent_inject("sub-1", "提示 A", None);
+        bus.request_force_cancel(Some("user cancel".to_string()), Some("ui".to_string()));
+        match bus.drain_as_action() {
+            ControlDrainAction::ForceCancel { reason, intents } => {
+                assert_eq!(reason.as_deref(), Some("user cancel"));
+                assert_eq!(intents.len(), 2, "注入意图随强停一并带出");
+            }
+            other => panic!("L3 强停应优先于 L1 注入，实际 {other:?}"),
+        }
+    }
+
+    /// 注入消息信封：user 角色 + 文本块 + 幂等 id（含子代理标识）
+    #[test]
+    fn subagent_inject_message_shape() {
+        let m1 = subagent_inject_message("sub-1", "调整方向");
+        assert_eq!(m1.role, conex_types::message::AgentMessageRole::User);
+        assert!(
+            m1.id.starts_with("subagent-inject:sub-1:"),
+            "id 带子代理标识"
+        );
+        assert_eq!(m1.text(), "调整方向");
+        // 同毫秒两次注入 id 不碰撞（自增序号）
+        let m2 = subagent_inject_message("sub-1", "继续");
+        assert_ne!(m1.id, m2.id);
     }
 }

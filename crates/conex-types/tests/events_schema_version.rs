@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 /// 统一 fixture 访问辅助（T11.3 golden 规范：tests/common/mod.rs 单一实现）
 mod common;
 
-/// v1 基线 27 事件类型清单（与 changelog v1 表逐条对应，PE-12 T12.6 门禁）
+/// v1 基线 31 事件类型清单（与 changelog v1 表逐条对应，PE-12 T12.6 门禁）
 const V1_EVENT_TYPES: &[&str] = &[
     "agent-start",
     "agent-end",
@@ -51,20 +51,24 @@ const V1_EVENT_TYPES: &[&str] = &[
     "cold-cache-warning",
     // 安全审计域（I2-S8 兼容新增，2026-08-03；登记于 changelog §四 1.2 行）
     "security-audit",
+    // 子代理域（I5-M7 C8 事件契约兼容新增，2026-08-03；登记于 changelog §四 1.3 行）
+    "subagent-started",
+    "subagent-event",
+    "subagent-ended",
 ];
 
-// ── 1. 变体数一致性：28 清单 ↔ fixtures ↔ changelog ──
+// ── 1. 变体数一致性：31 清单 ↔ fixtures ↔ changelog ──
 
 #[test]
-fn v1_baseline_has_exactly_28_event_types() {
-    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（28）
+fn v1_baseline_has_exactly_31_event_types() {
+    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（31）
     assert_eq!(
         V1_EVENT_TYPES.len(),
-        28,
-        "v1 基线必须是 28 事件（27 基线 + I2-S8 security-audit 变体）"
+        31,
+        "v1 基线必须是 31 事件（28 基线 + I5-M7 subagent 域三变体）"
     );
     let unique: std::collections::HashSet<&&str> = V1_EVENT_TYPES.iter().collect();
-    assert_eq!(unique.len(), 28, "清单内事件名不得重复");
+    assert_eq!(unique.len(), 31, "清单内事件名不得重复");
 }
 
 #[test]
@@ -449,6 +453,172 @@ fn security_audit_missing_optional_fields_default_to_none() {
         } => {
             assert_eq!(permission_mode, None, "缺省 permissionMode 必须补 None");
             assert_eq!(tool_call_id, None, "缺省 toolCallId 必须补 None");
+        }
+        other => panic!("type 判别错误：{}", other.type_name()),
+    }
+}
+
+// ── 6. 子代理域（I5-M7：C8 事件契约）serde 契约 ──
+
+use conex_types::{SubagentEndStatus, SubagentEventKind, SubagentEventPayload};
+
+fn subagent_started_event() -> AgentEvent {
+    AgentEvent::SubagentStarted {
+        session_id: "s1".into(),
+        subagent_id: "sa-1".into(),
+        subagent_run_id: "sr-1".into(),
+        role: "researcher".into(),
+        capability_mode: "readonly".into(),
+        started_at: TS.into(),
+        description: Some("调研子代理".into()),
+        mode: Some("research".into()),
+        parent_tool_call_id: Some("tc-1".into()),
+    }
+}
+
+#[test]
+fn subagent_started_roundtrip_and_camel_case() {
+    // subagent-started：subagentId/subagentRunId/role/capabilityMode/startedAt
+    // camelCase；description/mode/parentToolCallId 可选 None 省略；
+    // runId 不占事件体（信封注入 = 父 run，ParentID 语义 01 B1-2）
+    let event = subagent_started_event();
+    assert_eq!(event.type_name(), "subagent-started");
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "subagent-started");
+    assert_eq!(json["subagentId"], "sa-1");
+    assert_eq!(json["subagentRunId"], "sr-1");
+    assert_eq!(json["role"], "researcher");
+    assert_eq!(json["capabilityMode"], "readonly");
+    assert_eq!(json["startedAt"], TS);
+    assert_eq!(json["description"], "调研子代理");
+    assert_eq!(json["mode"], "research");
+    assert_eq!(json["parentToolCallId"], "tc-1");
+    // runId 属信封注入（03 §5.3-2），事件体不得携带
+    assert!(json.get("runId").is_none(), "runId 不得出现在事件体");
+    let back: AgentEvent = serde_json::from_value(json).unwrap();
+    assert_eq!(back, event, "subagent-started roundtrip 保真");
+
+    // 可选字段 None 时必须省略（skip_serializing_if 纪律）
+    let slim = serde_json::to_value(AgentEvent::SubagentStarted {
+        session_id: "s1".into(),
+        subagent_id: "sa-1".into(),
+        subagent_run_id: "sr-1".into(),
+        role: "researcher".into(),
+        capability_mode: "readonly".into(),
+        started_at: TS.into(),
+        description: None,
+        mode: None,
+        parent_tool_call_id: None,
+    })
+    .unwrap();
+    assert!(slim.get("description").is_none(), "None 可选字段必须省略");
+    assert!(slim.get("mode").is_none(), "None 可选字段必须省略");
+    assert!(slim.get("parentToolCallId").is_none(), "None 可选字段必须省略");
+}
+
+#[test]
+fn subagent_event_roundtrip_and_kind_wire_values() {
+    // subagent-event：event 为结构化负载（kind kebab-case + payload JsonValue）；
+    // 前端 subagentHandlers.ts:38-42 把 event 对象整体透传
+    for (wire, kind) in [
+        ("progress", SubagentEventKind::Progress),
+        ("message", SubagentEventKind::Message),
+        ("tool", SubagentEventKind::Tool),
+    ] {
+        let parsed: SubagentEventKind =
+            serde_json::from_value(serde_json::json!(wire)).unwrap();
+        assert_eq!(parsed, kind, "kind 值 {wire}");
+        assert_eq!(
+            serde_json::to_value(parsed).unwrap(),
+            serde_json::json!(wire),
+            "kind 值 {wire} 回写"
+        );
+    }
+    let event = AgentEvent::SubagentEvent {
+        session_id: "s1".into(),
+        subagent_id: "sa-1".into(),
+        subagent_run_id: "sr-1".into(),
+        event: SubagentEventPayload {
+            kind: SubagentEventKind::Progress,
+            payload: Some(json!({ "step": "reading", "percent": 40 })),
+        },
+    };
+    assert_eq!(event.type_name(), "subagent-event");
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["subagentId"], "sa-1");
+    assert_eq!(json["event"]["kind"], "progress");
+    assert_eq!(json["event"]["payload"]["step"], "reading");
+    let back: AgentEvent = serde_json::from_value(json).unwrap();
+    assert_eq!(back, event, "subagent-event roundtrip 保真");
+
+    // payload 缺省兼容：瘦帧无 payload 也能解析（补 None）
+    let slim = json!({
+        "type": "subagent-event",
+        "sessionId": "s1",
+        "subagentId": "sa-1",
+        "subagentRunId": "sr-1",
+        "event": { "kind": "tool" },
+    });
+    let slim_event: AgentEvent = serde_json::from_value(slim).unwrap();
+    match slim_event {
+        AgentEvent::SubagentEvent { event, .. } => {
+            assert_eq!(event.kind, SubagentEventKind::Tool, "kind 判别");
+            assert_eq!(event.payload, None, "缺省 payload 必须补 None");
+        }
+        other => panic!("type 判别错误：{}", other.type_name()),
+    }
+}
+
+#[test]
+fn subagent_ended_roundtrip_and_status_wire_values() {
+    // subagent-ended.status wire 全量锚定（completed/failed/cancelled——
+    // 前端正则 /cancel|stopp?ed|abort/ 把 cancelled 映射为 stopped 展示）
+    for (value, status) in [
+        ("completed", SubagentEndStatus::Completed),
+        ("failed", SubagentEndStatus::Failed),
+        ("cancelled", SubagentEndStatus::Cancelled),
+    ] {
+        let parsed: SubagentEndStatus =
+            serde_json::from_value(serde_json::json!(value)).unwrap();
+        assert_eq!(parsed, status, "status 值 {value}");
+        assert_eq!(
+            serde_json::to_value(parsed).unwrap(),
+            serde_json::json!(value),
+            "status 值 {value} 回写"
+        );
+    }
+    let event = AgentEvent::SubagentEnded {
+        session_id: "s1".into(),
+        subagent_id: "sa-1".into(),
+        subagent_run_id: "sr-1".into(),
+        status: SubagentEndStatus::Cancelled,
+        summary: Some("被用户终止".into()),
+        ended_at: TS.into(),
+    };
+    assert_eq!(event.type_name(), "subagent-ended");
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["status"], "cancelled");
+    assert_eq!(json["summary"], "被用户终止");
+    assert_eq!(json["endedAt"], TS);
+    let back: AgentEvent = serde_json::from_value(json).unwrap();
+    assert_eq!(back, event, "subagent-ended roundtrip 保真");
+
+    // summary 缺省兼容：瘦帧无 summary 也能解析（补 None）
+    let slim = json!({
+        "type": "subagent-ended",
+        "sessionId": "s1",
+        "subagentId": "sa-1",
+        "subagentRunId": "sr-1",
+        "status": "completed",
+        "endedAt": TS,
+    });
+    let slim_event: AgentEvent = serde_json::from_value(slim).unwrap();
+    match slim_event {
+        AgentEvent::SubagentEnded {
+            status, summary, ..
+        } => {
+            assert_eq!(status, SubagentEndStatus::Completed, "status 判别");
+            assert_eq!(summary, None, "缺省 summary 必须补 None");
         }
         other => panic!("type 判别错误：{}", other.type_name()),
     }

@@ -9,9 +9,9 @@ use conex_types::{
     PermissionBehavior, PermissionDecision, PermissionRequest, ProviderDiagnostic,
     ProviderDiagnosticPhase, ProviderErrorKind, RunTerminalStatus, RuntimeCheckpointKind,
     RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, SecurityAuditDecision,
-    SecurityAuditOperation, ToolArtifactKind, ToolBatchCall, ToolBatchResult,
-    ToolCallBlock, ToolCategory, ToolConcurrency, ToolMetadata, ToolOutput,
-    ToolProgressUpdate,
+    SecurityAuditOperation, SubagentEndStatus, SubagentEventKind, SubagentEventPayload,
+    ToolArtifactKind, ToolBatchCall, ToolBatchResult, ToolCallBlock, ToolCategory,
+    ToolConcurrency, ToolMetadata, ToolOutput, ToolProgressUpdate,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -205,7 +205,8 @@ fn restore() -> RuntimeCheckpointRestoreRecord {
     }
 }
 
-/// 25 种域事件各构造一个实例（03 §1.1-1.6 全清单 + I2-S8 安全审计域）
+/// 28 种域事件各构造一个实例（03 §1.1-1.6 全清单 + I2-S8 安全审计域 +
+/// I5-M7 子代理域三事件）
 fn all_events() -> Vec<AgentEvent> {
     let s = "s1".to_string();
     vec![
@@ -366,6 +367,35 @@ fn all_events() -> Vec<AgentEvent> {
             permission_mode: Some("full-access".into()),
             tool_call_id: Some("tc-1".into()),
         },
+        // I5-M7：子代理域三事件（C8 事件契约；runId 由信封注入 = 父 run）
+        AgentEvent::SubagentStarted {
+            session_id: "s1".to_string(),
+            subagent_id: "sa-1".to_string(),
+            subagent_run_id: "sr-1".to_string(),
+            role: "researcher".to_string(),
+            capability_mode: "readonly".to_string(),
+            started_at: TS.into(),
+            description: Some("调研子代理".into()),
+            mode: Some("research".into()),
+            parent_tool_call_id: Some("tc-1".into()),
+        },
+        AgentEvent::SubagentEvent {
+            session_id: "s1".to_string(),
+            subagent_id: "sa-1".to_string(),
+            subagent_run_id: "sr-1".to_string(),
+            event: SubagentEventPayload {
+                kind: SubagentEventKind::Progress,
+                payload: Some(json!({ "step": "reading" })),
+            },
+        },
+        AgentEvent::SubagentEnded {
+            session_id: "s1".to_string(),
+            subagent_id: "sa-1".to_string(),
+            subagent_run_id: "sr-1".to_string(),
+            status: SubagentEndStatus::Completed,
+            summary: Some("完成调研".into()),
+            ended_at: TS.into(),
+        },
     ]
 }
 
@@ -373,12 +403,12 @@ fn event_type_name(event: &AgentEvent) -> &'static str {
     event.type_name()
 }
 
-// ── 1. 25 事件穷举 roundtrip ──
+// ── 1. 28 事件穷举 roundtrip ──
 
 #[test]
-fn all_25_events_roundtrip() {
+fn all_28_events_roundtrip() {
     let events = all_events();
-    assert_eq!(events.len(), 25, "AgentEvent 必须是 25 种域事件");
+    assert_eq!(events.len(), 28, "AgentEvent 必须是 28 种域事件");
     for event in events {
         let json = serde_json::to_string(&event).expect("序列化失败");
         let back: AgentEvent = serde_json::from_str(&json).expect("反序列化失败");
@@ -387,7 +417,7 @@ fn all_25_events_roundtrip() {
 }
 
 #[test]
-fn all_25_event_types_have_expected_wire_type_name() {
+fn all_28_event_types_have_expected_wire_type_name() {
     let expected = [
         "agent-start",
         "agent-end",
@@ -414,6 +444,9 @@ fn all_25_event_types_have_expected_wire_type_name() {
         "checkpoint-restored",
         "run-terminal",
         "security-audit",
+        "subagent-started",
+        "subagent-event",
+        "subagent-ended",
     ];
     for (event, name) in all_events().iter().zip(expected) {
         let json = serde_json::to_value(event).unwrap();

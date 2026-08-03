@@ -14,6 +14,13 @@
 //! 启动在引擎侧（apps/agent-workbench）实现 [SubagentSpawner]，本模块只
 //! 定义契约、纯逻辑与工具本身。测试域以 conex-db（dev-dependency）验证
 //! 落库链路与守卫拒绝零 run 语义。
+//!
+//! C6 调度器扩展（I5-M6）：依赖图调度器（crates/orchestrator/src/
+//! flow_graph.rs）经 [SubagentSpawner] 启动流程节点，本模块在 M2 冻结
+//! 契约上追加**流程关联字段**（[SubagentSpawnRequest::flow_node_id] /
+//! [SubagentSpawnRequest::is_composite]）——调度器 spawn 时携带流程节点
+//! id 与综合节点标记，引擎侧落库与终态事件据此把 run 关联回依赖图
+//! 节点（合成唤醒：主 agent 自行启动的综合 run 也经 [attach_run] 挂接）。
 
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
@@ -316,6 +323,12 @@ pub struct SubagentSpawnRequest {
     pub parent_run_id: Option<String>,
     /// 父工具调用 id（run_subagent 所在的 tool call，引擎侧补齐）
     pub parent_tool_call_id: Option<String>,
+    /// 依赖图流程节点 id（C6 调度器扩展：调度器 spawn 流程节点时携带，
+    /// 引擎侧落库与终态事件据此把 run 关联回依赖图；工具直调路径为 None）
+    pub flow_node_id: Option<String>,
+    /// 综合节点标记（C6 合成唤醒扩展：综合 run 记录 is_composite 与
+    /// planner_run_id 亲和，jcode NodeMeta.planner 对齐；非综合为 false）
+    pub is_composite: bool,
 }
 
 /// 子代理 spawn 结果（工具出站信封载荷）
@@ -332,6 +345,9 @@ pub struct SubagentSpawnResult {
     pub status: SubagentState,
     /// 状态摘要文案（可选；出站前经伪造审批防护处理）
     pub summary: Option<String>,
+    /// 请求携带的流程节点 id 回显（C6 调度器扩展：引擎侧可据此关联
+    /// 依赖图节点；非流程 spawn 为 None）
+    pub flow_node_id: Option<String>,
 }
 
 /// spawn 失败（结构化错误，映射为 ToolError 出站）
@@ -371,13 +387,16 @@ impl SubagentSpawnError {
 
 /// 子代理 spawn 通道（引擎侧实现；agent-tools 只定义契约）
 ///
-/// 实现方职责（对齐 M2 内容 2/3/4）：
+/// 实现方职责（对齐 M2 内容 2/3/4 + C6 调度器扩展）：
 /// 1. 采集守卫快照（深度沿 parent_id 链数，兄弟/并发按未终态记账）并
 ///    经 [check_recursion_guard] / [check_ancestor_chain] 校验——超限
 ///    返回 [SubagentSpawnError::GuardRejected]，不产生任何 run；
 /// 2. session_agents 行落库（pending 首写即 running，写面不产生 stopped）；
 /// 3. 独立会话 + run 启动（走 core_run_task 同通道，带 parent 关系），
-///    写操作经 I3 审批基础设施原样挂靠（run 级 ApprovalGate → ctx.ask）。
+///    写操作经 I3 审批基础设施原样挂靠（run 级 ApprovalGate → ctx.ask）；
+/// 4. 流程关联（C6 调度器扩展）：请求携带 flow_node_id / is_composite 时，
+///    引擎侧把流程节点关联信息随落库记录保存，终态事件（subagent-ended）
+///    回传调度器 [FlowScheduler::on_subagent_terminal] 据此映射回节点。
 #[async_trait]
 pub trait SubagentSpawner: Send + Sync + std::fmt::Debug {
     /// 发起子代理 spawn
@@ -556,6 +575,9 @@ impl Tool for RunSubagentTool {
             parent_session_id: ctx.session_id.clone(),
             parent_run_id: None,
             parent_tool_call_id: None,
+            // 工具直调路径不携带流程关联（C6 调度器经 spawner 直接 spawn）
+            flow_node_id: None,
+            is_composite: false,
         };
         let result = spawner
             .spawn(&request)
@@ -605,6 +627,7 @@ mod tests {
                     session_id: "sub-sess-1".to_string(),
                     status: SubagentState::Running,
                     summary: Some("子代理已启动".to_string()),
+                    flow_node_id: None,
                 }),
             }
         }
@@ -628,7 +651,10 @@ mod tests {
             req: &SubagentSpawnRequest,
         ) -> Result<SubagentSpawnResult, SubagentSpawnError> {
             self.requests.lock().unwrap().push(req.clone());
-            self.outcome.clone()
+            let mut result = self.outcome.clone()?;
+            // C6 调度器扩展：flow_node_id 回显（引擎侧据此关联依赖图节点）
+            result.flow_node_id = req.flow_node_id.clone();
+            Ok(result)
         }
     }
 
@@ -758,6 +784,46 @@ mod tests {
             .unwrap_err();
         assert_eq!(err.code(), "common.unsupported");
         assert!(err.to_string().contains("未接线"));
+    }
+
+    // ── C6 调度器扩展：流程关联字段（flow_node_id / is_composite）────────
+
+    #[tokio::test]
+    async fn tool_direct_path_carries_no_flow_correlation() {
+        // 工具直调路径：flow 字段恒为 None/false（流程关联只由调度器
+        // 经 spawner 直接 spawn 时携带，C6 文件域约定）
+        let spawner = Arc::new(RecordingSpawner::ok());
+        let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+        let ctx = create_mock_tool_context();
+        tool.execute(&ctx, serde_json::json!({ "prompt": "任务" }))
+            .await
+            .unwrap();
+        let requests = spawner.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].flow_node_id, None, "工具路径不携带流程节点");
+        assert!(!requests[0].is_composite, "工具路径不标记综合节点");
+    }
+
+    #[tokio::test]
+    async fn flow_correlation_fields_echo_through_spawner() {
+        // 调度器路径：spawn 请求携带 flow_node_id + is_composite，
+        // spawner 结果回显 flow_node_id（引擎侧据此把 run 关联回依赖图）
+        let spawner = RecordingSpawner::ok();
+        let mut req = request("综合任务", "sess-main", Some("run-main"));
+        req.flow_node_id = Some("node-gate".to_string());
+        req.is_composite = true;
+        let result = spawner.spawn(&req).await.expect("spawn 应成功");
+        assert_eq!(
+            result.flow_node_id.as_deref(),
+            Some("node-gate"),
+            "结果必须回显流程节点 id"
+        );
+        assert_eq!(
+            spawner.requests()[0].flow_node_id.as_deref(),
+            Some("node-gate"),
+            "请求必须携带流程节点 id"
+        );
+        assert!(spawner.requests()[0].is_composite, "请求必须携带综合节点标记");
     }
 
     // ── 递归守卫纯函数 ────────────────────────────────────────────
@@ -1141,6 +1207,7 @@ mod tests {
                 session_id: format!("sub-sess-{depth}-{n}"),
                 status: SubagentState::Running,
                 summary: None,
+                flow_node_id: req.flow_node_id.clone(),
             })
         }
     }
@@ -1162,6 +1229,8 @@ mod tests {
             parent_session_id: parent_session.to_string(),
             parent_run_id: parent_run.map(str::to_string),
             parent_tool_call_id: None,
+            flow_node_id: None,
+            is_composite: false,
         }
     }
 

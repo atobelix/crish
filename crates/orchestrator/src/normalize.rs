@@ -49,6 +49,11 @@ fn event_session_id_mut(event: &mut AgentEvent) -> &mut String {
         AgentEvent::CacheWasteAlert { session_id, .. } => session_id,
         AgentEvent::ColdCacheWarning { session_id, .. } => session_id,
         AgentEvent::SecurityAudit { session_id, .. } => session_id,
+        // I5-M7 事件契约新增三事件（subagent-started/event/ended，均携带
+        // sessionId；M6 域补齐归一化位，emit 出口统一注入语义不变）
+        AgentEvent::SubagentStarted { session_id, .. } => session_id,
+        AgentEvent::SubagentEvent { session_id, .. } => session_id,
+        AgentEvent::SubagentEnded { session_id, .. } => session_id,
     }
 }
 

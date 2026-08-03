@@ -1,6 +1,6 @@
 //! 域事件契约（Rust enum 为双端唯一事实源）
 //!
-//! [AgentEvent] 是 27 种域事件的 serde tagged enum（顶层 `type`），全部字段
+//! [AgentEvent] 是 31 种域事件的 serde tagged enum（顶层 `type`），全部字段
 //! serde camelCase，字段结构以 03-frontend-contract.md §1.1-1.6 清单与 §5.1
 //! 硬依赖表为准。机器可读导出见 contracts/engine-events.json（事件注册表），
 //! 前端 TS 类型与解析器由 scripts/generate-engine-bindings.mjs 生成，落点
@@ -111,6 +111,76 @@ pub struct ToolMetadata {
     pub concurrency: Option<String>,
 }
 
+// ── 子代理域（I5-M7：C8 事件契约；Rust 侧三事件产出）──
+
+/// 子代理事件类别（`subagent-event.event.kind`，wire kebab-case）
+///
+/// 背压分级随类别走（04 报告 1e）：progress 为 Delta 级可丢增量，
+/// message/tool 为 Soft 级尽力投递（分类入事件注册表 kindBackpressure，
+/// registry_drift 护栏锁定）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SubagentEventKind {
+    /// 进度增量（背压 Delta 级：可丢不落库）
+    Progress,
+    /// 消息（背压 Soft 级：尽力投递，可丢弃重发）
+    Message,
+    /// 工具活动（背压 Soft 级：尽力投递）
+    Tool,
+}
+
+/// 子代理事件结构化负载（`subagent-event.event`，前端 subagentHandlers.ts:38-42
+/// 把整个 event 对象透传给 onSubagentEvent 回调）
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SubagentEventPayload {
+    /// 事件类别（progress/message/tool）
+    pub kind: SubagentEventKind,
+    /// 类别负载（progress 携带进度片段、message 携带消息、tool 携带工具摘要）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload: Option<serde_json::Value>,
+}
+
+/// 子代理终态（`subagent-ended.status`，wire lowercase）
+///
+/// 与前端 status 判定正则对齐（subagentHandlers.ts:50-56）：cancel/stop/abort
+/// → stopped、fail/error → failed、其余 → completed。Rust 只发规范值
+/// completed/failed/cancelled（cancelled 命中前端 /cancel/ 分支映射为 stopped
+/// 展示），不产生 stopped 值（M2 状态映射：stopped 仅保留为 legacy 展示字段）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SubagentEndStatus {
+    /// 正常完成
+    Completed,
+    /// 失败
+    Failed,
+    /// 被取消/终止（前端映射为 stopped 展示）
+    Cancelled,
+}
+
+/// 事件背压级别（M7 三级分类，04 报告 1e「Delta→Soft→Critical，delta 可丢、
+/// terminal 必达」落地；先例：buffer.rs DropClass 两级——非 delta 全 Critical）
+///
+/// - [BackpressureLevel::Delta]：增量可丢（message-delta、subagent-event 的
+///   progress 类），非持久化不阻塞 drive loop；
+/// - [BackpressureLevel::Soft]：尽力投递（subagent-event 的 message/tool 类），
+///   可丢弃重发；
+/// - [BackpressureLevel::Critical]：必达（subagent-started/subagent-ended、
+///   终态、审批、审计等），落库不丢。
+///
+/// 分类静态可判定（不许运行时拍脑袋）：写入事件注册表每事件 backpressure
+/// 字段，registry_drift 护栏把本函数与注册表双向锁定。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BackpressureLevel {
+    /// 增量可丢
+    Delta,
+    /// 尽力投递
+    Soft,
+    /// 必达（落库不丢）
+    Critical,
+}
+
 /// 权限请求（approval-requested.request 载荷）
 ///
 /// 前端硬依赖（03 §5.1-9）：`request.toolCallId` 与 `request.toolName`
@@ -200,7 +270,7 @@ pub enum MissAttribution {
     Unknown,
 }
 
-/// 28 种域事件（tagged enum，双端契约唯一事实源）
+/// 31 种域事件（tagged enum，双端契约唯一事实源）
 ///
 /// 顶层 `type` 为事件名（kebab-case），事件字段全部 camelCase；
 /// 字段清单与类型映射见 contracts/engine-events.json（事件注册表），
@@ -482,6 +552,55 @@ pub enum AgentEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tool_call_id: Option<String>,
     },
+
+    // ── 子代理域（I5-M7：C8 事件契约；runId 由信封注入 = 父 run）──
+    /// 子代理启动（run_subagent spawn；前端消费 subagentId/subagentRunId/
+    /// parentRunId（信封 runId）/parentToolCallId/description/mode，
+    /// subagentHandlers.ts:17-26；role/capabilityMode/startedAt 供状态展示）
+    #[serde(rename = "subagent-started", rename_all = "camelCase")]
+    SubagentStarted {
+        session_id: String,
+        subagent_id: String,
+        subagent_run_id: String,
+        /// 子代理角色（对齐 shared-types subagent.ts SubagentRole）
+        role: String,
+        /// 能力模式（readonly/read-write 等，工具集裁剪依据 M3）
+        capability_mode: String,
+        /// ISO8601 时间戳（首次创建时间，M4 started_at 同源；@dynamic 动态字段）
+        started_at: String,
+        /// 人读描述（前端缺省 '协作 agent'）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+        /// 调度模式（research/research_single/solve/write，前端缺省 research）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mode: Option<String>,
+        /// 父 run 发起 spawn 的工具调用 id
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_tool_call_id: Option<String>,
+    },
+    /// 子代理过程事件（event 为结构化负载，前端整体透传给 onSubagentEvent；
+    /// 背压分级随 kind：progress=Delta、message/tool=Soft）
+    #[serde(rename = "subagent-event", rename_all = "camelCase")]
+    SubagentEvent {
+        session_id: String,
+        subagent_id: String,
+        subagent_run_id: String,
+        event: SubagentEventPayload,
+    },
+    /// 子代理结束（status 规范值 completed/failed/cancelled，前端正则映射
+    /// stopped/failed/completed；Critical 级必达落库）
+    #[serde(rename = "subagent-ended", rename_all = "camelCase")]
+    SubagentEnded {
+        session_id: String,
+        subagent_id: String,
+        subagent_run_id: String,
+        status: SubagentEndStatus,
+        /// 收尾摘要（可选）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        summary: Option<String>,
+        /// ISO8601 时间戳
+        ended_at: String,
+    },
 }
 
 /// 事件类型名宏：由同一份变体名 → wire 名清单展开出
@@ -539,6 +658,40 @@ engine_event_type_names! {
     CacheWasteAlert => "cache-waste-alert",
     ColdCacheWarning => "cold-cache-warning",
     SecurityAudit => "security-audit",
+    SubagentStarted => "subagent-started",
+    SubagentEvent => "subagent-event",
+    SubagentEnded => "subagent-ended",
+}
+
+/// 事件 → 背压级别（静态可判定，04 报告 1e；与事件注册表 backpressure 字段
+/// 一一对应，registry_drift 护栏双向锁定；先例 buffer.rs drop_class_of——
+/// 非 delta 全 Critical）
+///
+/// 分级规则：
+/// - Delta（可丢）：message-delta（既有非持久化语义）、subagent-event 的
+///   progress 类；
+/// - Soft（尽力）：subagent-event 的 message/tool 类；
+/// - Critical（必达）：其余全部（含 subagent-started/subagent-ended、终态、
+///   审批、审计等）。
+pub fn event_backpressure(event: &AgentEvent) -> BackpressureLevel {
+    match event {
+        AgentEvent::MessageDelta { .. } => BackpressureLevel::Delta,
+        AgentEvent::SubagentEvent { event, .. } => match event.kind {
+            SubagentEventKind::Progress => BackpressureLevel::Delta,
+            SubagentEventKind::Message | SubagentEventKind::Tool => BackpressureLevel::Soft,
+        },
+        _ => BackpressureLevel::Critical,
+    }
+}
+
+/// 子代理事件类别 → 背压级别（`subagent-event` 的 kind 级分类；
+/// progress=Delta 可丢、message/tool=Soft 尽力；与注册表 kindBackpressure
+/// 字段对应，registry_drift 护栏锁定）
+pub fn subagent_event_kind_backpressure(kind: SubagentEventKind) -> BackpressureLevel {
+    match kind {
+        SubagentEventKind::Progress => BackpressureLevel::Delta,
+        SubagentEventKind::Message | SubagentEventKind::Tool => BackpressureLevel::Soft,
+    }
 }
 
 /// 事件信封（emit 层统一注入 runId/sequence/schemaVersion，03 §5.3-2/6）

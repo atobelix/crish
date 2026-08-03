@@ -5,12 +5,16 @@
 //! contracts/engine-events.json 是给生成脚本（scripts/generate-engine-bindings.mjs）
 //! 的机器可读导出，本测试把注册表与 Rust 侧真实 serde 行为双向锁定：
 //!
-//! - 事件清单：注册表 28 个 type 名与顺序 == [AgentEvent::ALL_TYPE_NAMES]
-//!   （enum 声明顺序，编号 1-28 连续）；
+//! - 事件清单：注册表 31 个 type 名与顺序 == [AgentEvent::ALL_TYPE_NAMES]
+//!   （enum 声明顺序，编号 1-31 连续）；
 //! - 事件字段：按注册表必填字段构造样本 → 反序列化为 [AgentEvent] →
 //!   回序列化，断言必填字段全部在场、且无注册表外字段（字段名漂移即失败）；
 //! - 载荷结构：同一模式逐类型回环（struct + tagged enum 全变体）；
 //! - 枚举：注册表值逐项反序列化并回写一致 + 变体数锁定；
+//! - 背压分级（I5-M7）：每事件 backpressure 字段与
+//!   [conex_types::events::event_backpressure] 双向锁定，subagent-event 的
+//!   kindBackpressure 与 [conex_types::events::subagent_event_kind_backpressure]
+//!   双向锁定（分类静态可判定，04 报告 1e）；
 //! - 可达性：注册表内所有 types/enums 必须被事件（或其载荷）传递引用，
 //!   禁止注册表塞入与事件链路无关的死条目。
 //!
@@ -19,11 +23,12 @@
 
 use conex_types::{
     AgentEndReason, AgentEvent, AgentMessage, AgentMessageBlock, AgentMessageRole,
-    ApprovalDecision, ImpactAssessment, MissAttribution, PermissionRequest, ProviderDiagnostic,
-    ProviderDiagnosticPhase, ProviderErrorKind, RunCacheStats, RunTerminalStatus,
-    RuntimeCheckpointKind, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord,
-    SecurityAuditDecision, SecurityAuditOperation, SystemPromptWireMode, ToolArtifact,
-    ToolArtifactKind, ToolBatchCall, ToolBatchResult, ToolCallBlock, ToolCategory,
+    ApprovalDecision, BackpressureLevel, ImpactAssessment, MissAttribution, PermissionRequest,
+    ProviderDiagnostic, ProviderDiagnosticPhase, ProviderErrorKind, RunCacheStats,
+    RunTerminalStatus, RuntimeCheckpointKind, RuntimeCheckpointRecord,
+    RuntimeCheckpointRestoreRecord, SecurityAuditDecision, SecurityAuditOperation,
+    SubagentEndStatus, SubagentEventKind, SubagentEventPayload, SystemPromptWireMode,
+    ToolArtifact, ToolArtifactKind, ToolBatchCall, ToolBatchResult, ToolCallBlock, ToolCategory,
     ToolConcurrency, ToolMetadata, ToolOutput, ToolProgressUpdate,
 };
 use conex_types::tool::{
@@ -57,6 +62,10 @@ struct EventSpec {
     rust_variant: String,
     domain: String,
     fields: Vec<FieldSpec>,
+    /// 背压级别（I5-M7：delta/soft/critical，静态可判定）
+    backpressure: String,
+    /// kind 级背压映射（仅 subagent-event 登记：progress=delta、message/tool=soft）
+    kind_backpressure: Option<std::collections::BTreeMap<String, String>>,
 }
 
 #[derive(serde::Deserialize)]
@@ -190,12 +199,12 @@ fn registry_event_types_match_enum_declaration_order() {
     let reg = registry();
     assert_eq!(reg.contract, "engine-events", "注册表契约名必须为 engine-events");
     assert_eq!(reg.schema_version, 1);
-    assert_eq!(reg.event_count, 28);
-    assert_eq!(reg.events.len(), 28, "事件注册表必须是 28 条");
+    assert_eq!(reg.event_count, 31);
+    assert_eq!(reg.events.len(), 31, "事件注册表必须是 31 条");
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        28,
-        "AgentEvent enum 必须是 28 种域事件"
+        31,
+        "AgentEvent enum 必须是 31 种域事件"
     );
     for (i, ev) in reg.events.iter().enumerate() {
         assert_eq!(ev.id as usize, i + 1, "事件编号必须从 1 连续递增");
@@ -216,6 +225,44 @@ fn registry_event_types_match_enum_declaration_order() {
             .find(|f| f.name == "sessionId")
             .unwrap_or_else(|| panic!("事件 {} 缺 sessionId 字段", ev.wire));
         assert!(session.required, "事件 {} 的 sessionId 必须必填", ev.wire);
+        // 每个事件都必须标注背压级别（I5-M7：静态可判定，04 报告 1e）
+        assert!(
+            matches!(ev.backpressure.as_str(), "delta" | "soft" | "critical"),
+            "事件 {} 的 backpressure 非法：{}",
+            ev.wire,
+            ev.backpressure
+        );
+        // kindBackpressure 只允许 subagent-event 登记
+        if ev.wire != "subagent-event" {
+            assert!(
+                ev.kind_backpressure.is_none(),
+                "事件 {} 不应登记 kindBackpressure（仅 subagent-event 允许）",
+                ev.wire
+            );
+        }
+    }
+    // subagent-event 必须带 kind 级背压映射（覆盖 SubagentEventKind 全值）
+    let subagent_event = reg
+        .events
+        .iter()
+        .find(|e| e.wire == "subagent-event")
+        .expect("注册表必须有 subagent-event");
+    let kb = subagent_event
+        .kind_backpressure
+        .as_ref()
+        .expect("subagent-event 必须登记 kindBackpressure");
+    let kind_enum = &reg.enums["SubagentEventKind"];
+    assert_eq!(
+        kb.len(),
+        kind_enum.values.len(),
+        "kindBackpressure 必须覆盖 SubagentEventKind 全值"
+    );
+    for value in &kind_enum.values {
+        assert!(
+            matches!(kb.get(value).map(String::as_str), Some("delta" | "soft" | "critical")),
+            "kindBackpressure[{}] 非法或缺失",
+            value
+        );
     }
 }
 
@@ -310,6 +357,9 @@ fn check_payload_struct(reg: &Registry, rust_name: &str) {
         }
         "RunCacheStats" => check_roundtrip::<RunCacheStats>(rust_name, fields, sample),
         "ImpactAssessment" => check_roundtrip::<ImpactAssessment>(rust_name, fields, sample),
+        "SubagentEventPayload" => {
+            check_roundtrip::<SubagentEventPayload>(rust_name, fields, sample)
+        }
         other => panic!("注册表含未接入漂移检查的载荷类型 {other}"),
     }
 }
@@ -428,6 +478,8 @@ fn enum_values_match_serde_wire() {
     check_enum!(reg, "MissAttribution", MissAttribution, 8);
     check_enum!(reg, "SecurityAuditOperation", SecurityAuditOperation, 5);
     check_enum!(reg, "SecurityAuditDecision", SecurityAuditDecision, 6);
+    check_enum!(reg, "SubagentEventKind", SubagentEventKind, 3);
+    check_enum!(reg, "SubagentEndStatus", SubagentEndStatus, 3);
 }
 
 // ── 5. 可达性：注册表不允许死条目 ──
@@ -435,7 +487,7 @@ fn enum_values_match_serde_wire() {
 #[test]
 fn registry_entries_are_reachable_from_events() {
     let reg = registry();
-    // 从 28 事件出发做传递闭包；JsonValue/string/number/boolean 为基元。
+    // 从 31 事件出发做传递闭包；JsonValue/string/number/boolean 为基元。
     let mut reachable: std::collections::BTreeSet<String> =
         reg.events.iter().flat_map(|e| e.fields.iter()).map(|f| f.ts_type.clone()).collect();
     let mut queue: Vec<String> = reachable.iter().cloned().collect();
@@ -533,4 +585,102 @@ fn envelope_wire_fields_are_separate_from_event_body() {
         .unwrap_or_else(|e| panic!("run-terminal 注册表样本反序列化失败：{e}"));
     let out = serde_json::to_value(&parsed).unwrap();
     assert_eq!(out["runId"], json!("x"));
+}
+
+// ── 7. 背压三级分类（I5-M7：注册表 backpressure 字段 ↔ Rust 判定函数双向锁定）──
+
+use conex_types::events::{event_backpressure, subagent_event_kind_backpressure};
+
+/// 每事件背压分级：注册表 backpressure 字段与 Rust 静态判定函数一致
+/// （分类静态可判定，不许运行时拍脑袋——04 报告 1e / 02 方案 M7 内容 3）
+#[test]
+fn backpressure_level_matches_rust_judgement_for_all_events() {
+    let reg = registry();
+    for ev in &reg.events {
+        let sample = build_event_sample(&reg, ev);
+        let parsed: AgentEvent = serde_json::from_value(sample)
+            .unwrap_or_else(|e| panic!("事件 {} 按注册表样本反序列化失败：{e}", ev.wire));
+        let expected = match ev.backpressure.as_str() {
+            "delta" => BackpressureLevel::Delta,
+            "soft" => BackpressureLevel::Soft,
+            "critical" => BackpressureLevel::Critical,
+            other => panic!("事件 {} 注册表 backpressure 非法：{other}", ev.wire),
+        };
+        assert_eq!(
+            event_backpressure(&parsed),
+            expected,
+            "事件 {} 的背压分级与注册表不一致",
+            ev.wire
+        );
+    }
+}
+
+/// subagent-event kind 级背压：kindBackpressure 映射与 Rust kind 判定函数
+/// 一致（progress=Delta 可丢、message/tool=Soft 尽力）
+#[test]
+fn subagent_event_kind_backpressure_matches_registry() {
+    let reg = registry();
+    let ev = reg
+        .events
+        .iter()
+        .find(|e| e.wire == "subagent-event")
+        .expect("注册表必须有 subagent-event");
+    let kb = ev.kind_backpressure.as_ref().expect("kindBackpressure 必须存在");
+    for (kind, expected) in [
+        (SubagentEventKind::Progress, BackpressureLevel::Delta),
+        (SubagentEventKind::Message, BackpressureLevel::Soft),
+        (SubagentEventKind::Tool, BackpressureLevel::Soft),
+    ] {
+        let wire = serde_json::to_value(kind).unwrap();
+        let level = serde_json::to_value(expected).unwrap();
+        let wire_str = wire.as_str().unwrap();
+        assert_eq!(
+            kb.get(wire_str).map(String::as_str),
+            Some(level.as_str().unwrap()),
+            "kindBackpressure[{}] 与 Rust kind 判定不一致",
+            wire_str
+        );
+        assert_eq!(
+            subagent_event_kind_backpressure(kind),
+            expected,
+            "kind {wire_str} 的 Rust 背压判定不符"
+        );
+    }
+}
+
+/// 分级语义锚定（防分级漂移破坏既有语义）：
+/// - message-delta 保持 Delta（既有非持久化语义，buffer.rs 先例）；
+/// - subagent-started / subagent-ended 为 Critical（必达落库）；
+/// - subagent-event 基级为 Delta（progress 类可丢），kind 级再分 message/tool=Soft；
+/// - 终态/审批/审计等既有关键事件保持 Critical（不改变既有丢帧语义）。
+#[test]
+fn backpressure_classification_semantics_anchored() {
+    let reg = registry();
+    let level_of = |wire: &str| {
+        reg.events
+            .iter()
+            .find(|e| e.wire == wire)
+            .unwrap_or_else(|| panic!("注册表缺事件 {wire}"))
+            .backpressure
+            .clone()
+    };
+    assert_eq!(level_of("message-delta"), "delta", "message-delta 必须保持 Delta（可丢）");
+    assert_eq!(level_of("subagent-started"), "critical", "subagent-started 必达");
+    assert_eq!(level_of("subagent-ended"), "critical", "subagent-ended 必达");
+    assert_eq!(level_of("subagent-event"), "delta", "subagent-event 基级为 Delta");
+    // 既有关键事件全部保持 Critical（对齐 buffer.rs drop_class_of：非 delta 全 Critical）
+    for wire in [
+        "agent-start",
+        "agent-end",
+        "message-end",
+        "tool-end",
+        "run-terminal",
+        "approval-requested",
+        "approval-resolved",
+        "checkpoint-created",
+        "checkpoint-restored",
+        "security-audit",
+    ] {
+        assert_eq!(level_of(wire), "critical", "事件 {wire} 必须保持 Critical（既有语义）");
+    }
 }

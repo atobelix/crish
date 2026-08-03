@@ -98,6 +98,13 @@ export const engineDispatchTable: {
   // 安全审计域（I2-S8 事件面 → I3-S9 接线）：security-audit → securityAuditStore
   // （审计日志视图 / 恢复面板数据源）
   'security-audit': onSecurityAudit,
+  // 子代理域（I5-M7：注册表新增后 EngineEventType 含此三键；解析路径
+  // 优先生成解析器——完整信封带 sessionId 时走 engine 分支，宽容形态
+  // （缺 sessionId 等）走 legacy 分支；两分支都转发 legacy handler
+  // （消费 raw 原始信封，subagentHandlers.ts），保证行为一致）
+  'subagent-started': onSubagentStarted as unknown as EngineHandler<'subagent-started'>,
+  'subagent-event': onSubagentEvent as unknown as EngineHandler<'subagent-event'>,
+  'subagent-ended': onSubagentEnded as unknown as EngineHandler<'subagent-ended'>,
 };
 
 type LegacyHandler = (env: HandlerEnv, envelope: LegacyEnvelope) => void;

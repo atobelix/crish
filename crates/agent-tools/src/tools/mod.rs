@@ -8,6 +8,9 @@
 //!   移入 conex-fs 回收站服务并登记，dangerous=true 走审批
 //! - `subagent`：run_subagent（I4-M2）——spawn 独立子代理会话 + run，
 //!   递归守卫 + 三方状态映射 + 伪造审批防护（注册面 10→11）
+//! - `wait_subagents`：wait_subagents（I5-M8）——三模式调度等待
+//!   （await-all/timer/parallel-work）+ 事件驱动等待原语 + dispatch_*
+//!   持久化 + 运行中注入（注册面 11→12）
 //!
 //! 全部工具实现 `Tool` trait，经 `register_builtin_tools` 统一注册进 ToolRegistry。
 //! 各工具的会话级数据（工作区根目录等）执行时从 `ToolContext` 读取
@@ -19,6 +22,7 @@ pub mod fs;
 pub mod search;
 pub mod shell;
 pub mod subagent;
+pub mod wait_subagents;
 
 use crate::audit::{NoopAuditSink, SecurityAuditSink};
 use crate::definition::ToolError;
@@ -47,6 +51,10 @@ pub struct BuiltinToolConfig {
     /// 结构化不可用错误；引擎侧接线后经此通道发起独立 run——落库与
     /// run 启动在引擎侧实现，agent-tools 只定义契约）
     pub subagent_spawner: Option<Arc<dyn subagent::SubagentSpawner>>,
+    /// wait_subagents 等待通道（I5-M8：None = 未接线，wait_subagents 返回
+    /// 结构化不可用错误；引擎侧接线后经此通道做事件驱动等待、dispatch_*
+    /// 落库与 L1 注入——agent-tools 只定义契约）
+    pub subagent_wait_channel: Option<Arc<dyn wait_subagents::SubagentWaitChannel>>,
 }
 
 impl Default for BuiltinToolConfig {
@@ -57,6 +65,7 @@ impl Default for BuiltinToolConfig {
             trash_root: None,
             audit_sink: None,
             subagent_spawner: None,
+            subagent_wait_channel: None,
         }
     }
 }
@@ -97,6 +106,9 @@ pub fn register_builtin_tools_with_config(
     )))?;
     registry.register(Arc::new(subagent::RunSubagentTool::with_spawner(
         config.subagent_spawner.clone(),
+    )))?;
+    registry.register(Arc::new(wait_subagents::WaitSubagentsTool::with_channel(
+        config.subagent_wait_channel.clone(),
     )))?;
     Ok(())
 }
@@ -449,7 +461,7 @@ mod tests {
     fn register_builtin_tools_registers_all() {
         let mut registry = ToolRegistry::new();
         register_builtin_tools(&mut registry).unwrap();
-        assert_eq!(registry.len(), 11);
+        assert_eq!(registry.len(), 12);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -468,6 +480,7 @@ mod tests {
                 "read_file",
                 "run_subagent",
                 "shell_command",
+                "wait_subagents",
                 "write_file",
             ]
         );
