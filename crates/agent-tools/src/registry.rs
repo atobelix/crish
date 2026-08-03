@@ -59,12 +59,24 @@ impl ToolRegistry {
             .collect()
     }
 
-    /// 按注册顺序列出工具定义（对齐 TS resolveForLLM 的消费面）
+    /// 按 name 升序列出工具定义（对齐 TS resolveForLLM 的消费面）
+    ///
+    /// P1：按 name 升序排序输出——tools 数组是请求前缀的一部分，
+    /// 注册序（代码书写序/插件加载序）可能漂移，名称序在进程重启间稳定
+    /// （对齐 jcode `sort_by(name)`：deterministic ordering is critical
+    /// for prompt cache hits）。
+    /// 排序规则真源：P6 §3.1 R1——工具定义按 name 升序，排序比较按
+    /// UTF-8 码点（`String::cmp` 语义），禁止 localeCompare。
+    /// 只排序本函数，不动 `list()`：`list()` 的注册序是执行面语义，
+    /// 与请求前缀无关。
     pub fn list_definitions(&self) -> Vec<ToolDefinition> {
-        self.list()
+        let mut defs: Vec<ToolDefinition> = self
+            .list()
             .iter()
             .map(|t| t.definition().clone())
-            .collect()
+            .collect();
+        defs.sort_by(|a, b| a.name.cmp(&b.name));
+        defs
     }
 
     /// 注销工具，返回是否注销成功
@@ -168,6 +180,24 @@ mod tests {
         assert_eq!(v["description"], "回显入参");
         assert_eq!(v["inputSchema"], json!({ "type": "object", "properties": {} }));
         assert_eq!(v["dangerous"], false);
+    }
+
+    #[test]
+    fn list_definitions_sorted_by_name_regardless_of_registration_order() {
+        let mut reg = ToolRegistry::new();
+        // 乱序注册（z,a,m）→ 输出按 name 升序 [a,m,z]（P1 E1；规则真源 P6 R1）
+        for name in ["z", "a", "m"] {
+            reg.register(echo(name)).unwrap();
+        }
+        let names: Vec<String> = reg
+            .list_definitions()
+            .iter()
+            .map(|d| d.name.clone())
+            .collect();
+        assert_eq!(names, ["a", "m", "z"]);
+        // list() 仍保注册序（执行面语义不受排序影响）
+        let listed: Vec<String> = reg.list().iter().map(|t| t.name().to_string()).collect();
+        assert_eq!(listed, ["z", "a", "m"]);
     }
 
     #[tokio::test]

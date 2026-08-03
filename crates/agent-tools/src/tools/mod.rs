@@ -419,14 +419,14 @@ mod tests {
         assert_eq!(
             names,
             [
-                "read_file",
-                "write_file",
-                "list_dir",
-                "file_stat",
-                "grep_search",
-                "fuzzy_find",
-                "shell_command",
                 "diff_text",
+                "file_stat",
+                "fuzzy_find",
+                "grep_search",
+                "list_dir",
+                "read_file",
+                "shell_command",
+                "write_file",
             ]
         );
         // 重复注册报版本冲突

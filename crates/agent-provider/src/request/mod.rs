@@ -6,21 +6,25 @@
 //!   system user-prefix 重写；不做 LruMap 缓存，§五.13）
 //! - [vendor]：vendor 推断（inferReasoningVendor）、reasoningEffortObject、anthropic-beta 头、
 //!   thinkingIntensity 透传适配（01 D5）
+//! - [schema]：JSON Schema 规范化（canonicalize_schema / canonical_json_string，
+//!   前缀稳定性基础，规则真源 P6 §3.1 R2）
 //! - [tools]：ToolDefinition → OpenAI tools 格式与 tool_choice
 
 pub mod build;
 pub mod messages;
+pub mod schema;
 pub mod tools;
 pub mod vendor;
 
 pub use build::{
-    build_chat_completions_request_body, resolve_endpoint, ChatCompletionsRequestOptions,
-    MaxTokensField, RequestBuildContext,
+    build_chat_completions_request_body, build_system_prompt, resolve_endpoint,
+    ChatCompletionsRequestOptions, MaxTokensField, RequestBuildContext,
 };
 pub use messages::{
     stringify_tool_output, system_prompt_as_user_prefix, to_chat_messages, ChatContent,
     ChatContentPart, ChatMessage, ReasoningContentMode,
 };
+pub use schema::{canonical_json_string, canonicalize_schema};
 pub use tools::{
     default_input_schema, to_chat_tool_choice, to_openai_tool, to_responses_tool,
     to_responses_tool_choice, ToolChoice, ToolDefinition,

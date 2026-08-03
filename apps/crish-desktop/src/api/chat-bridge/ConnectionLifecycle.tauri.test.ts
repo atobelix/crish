@@ -7,40 +7,34 @@
  * - 核心未就绪时拒绝启动（C3.4 后无 directFetch 降级）
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  createStreamSession,
-  streamViaEngine,
-} from './ConnectionLifecycle';
+import { createStreamSession, streamViaEngine } from './ConnectionLifecycle';
 import type { StreamCallbacks } from '../chatApi';
 import type { StreamState } from './handlers/streamState';
-import {
-  resetControlMetrics,
-} from '../controlMetrics';
+import { resetControlMetrics } from '../controlMetrics';
 
-const { fakeTransport, startRunTask, messageListener } =
-  vi.hoisted(() => {
-    const messageListener = {
-      current: null as ((msg: Record<string, unknown>) => void) | null,
-    };
-    const fakeTransport = {
-      waitUntilConnected: vi.fn(async () => true),
-      isReady: vi.fn(() => true),
-      onMessage: vi.fn((cb: (msg: Record<string, unknown>) => void) => {
-        messageListener.current = cb;
-        return () => undefined;
-      }),
-      getStatus: vi.fn(() => 'connected' as const),
-      onStatus: vi.fn(() => () => undefined),
-      request: vi.fn(async () => ({ runId: 'r', sessionId: 's' })),
-      send: vi.fn(async () => undefined),
-      stop: vi.fn(),
-    };
-    return {
-      fakeTransport,
-      startRunTask: vi.fn(async () => undefined),
-      messageListener,
-    };
-  });
+const { fakeTransport, startRunTask, messageListener } = vi.hoisted(() => {
+  const messageListener = {
+    current: null as ((msg: Record<string, unknown>) => void) | null,
+  };
+  const fakeTransport = {
+    waitUntilConnected: vi.fn(async () => true),
+    isReady: vi.fn(() => true),
+    onMessage: vi.fn((cb: (msg: Record<string, unknown>) => void) => {
+      messageListener.current = cb;
+      return () => undefined;
+    }),
+    getStatus: vi.fn(() => 'connected' as const),
+    onStatus: vi.fn(() => () => undefined),
+    request: vi.fn(async () => ({ runId: 'r', sessionId: 's' })),
+    send: vi.fn(async () => undefined),
+    stop: vi.fn(),
+  };
+  return {
+    fakeTransport,
+    startRunTask: vi.fn(async () => undefined),
+    messageListener,
+  };
+});
 
 vi.mock('../transport', () => ({
   getTransport: () => fakeTransport,
@@ -120,13 +114,15 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
         state,
         () => undefined,
         finish,
-        'assistant-msg-1',
+        'assistant-msg-1'
       );
 
       expect(finish).not.toHaveBeenCalled();
       expect(startRunTask).toHaveBeenCalledTimes(1);
-      const [transport, params] = startRunTask.mock
-        .calls[0] as [unknown, Record<string, unknown>];
+      const [transport, params] = startRunTask.mock.calls[0] as [
+        unknown,
+        Record<string, unknown>,
+      ];
       expect(transport).toBe(fakeTransport);
       expect(params).toEqual(
         expect.objectContaining({
@@ -136,7 +132,10 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
           permissionMode: 'ask',
           clientMessageId: 'user-msg-1',
           assistantClientMessageId: 'assistant-msg-1',
-        }),
+          // P1：systemPrompt 经 composeSystemPrompt 组装后下发（settings 为 medium → 仅 guidance）
+          systemPrompt:
+            'Response style: balanced. Be clear and complete without padding. Explain non-obvious steps briefly.',
+        })
       );
       // 通道名（core_run_task / run-task）由 startRunTask 分派，不再内嵌进 payload
       expect(params.type).toBeUndefined();
@@ -176,12 +175,52 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
         undefined,
         state,
         () => undefined,
-        finish,
+        finish
       );
 
       expect(startRunTask).not.toHaveBeenCalled();
       expect(finish).toHaveBeenCalled();
       expect(onRunError).toHaveBeenCalled();
+    });
+
+    it('options.systemPrompt 与 guidance 经 composeSystemPrompt 拼接后经 startRunTask 下发', async () => {
+      const callbacks: StreamCallbacks = {
+        onChunk: vi.fn(),
+        onThought: vi.fn(),
+        onToolStart: vi.fn(),
+        onToolError: vi.fn(),
+        onToolSuccess: vi.fn(),
+        onComplete: vi.fn(),
+      };
+      const state: StreamState = {
+        cancelled: false,
+        finished: false,
+        assistantText: '',
+        assistantThought: '',
+        unsub: null,
+        endTimer: null,
+      };
+      const finish = vi.fn();
+
+      await createStreamSession(
+        'hello base',
+        'sess-id-2',
+        'run-id-2',
+        callbacks,
+        {
+          systemPrompt: '  Base instructions.  ',
+        },
+        state,
+        () => undefined,
+        finish
+      );
+
+      expect(startRunTask).toHaveBeenCalledTimes(1);
+      const params = startRunTask.mock.calls[0][1] as Record<string, unknown>;
+      expect(params.systemPrompt).toBe(
+        'Base instructions.\n\n' +
+          'Response style: balanced. Be clear and complete without padding. Explain non-obvious steps briefly.'
+      );
     });
   });
 

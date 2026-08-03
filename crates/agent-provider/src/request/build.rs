@@ -98,6 +98,18 @@ pub fn resolve_endpoint(endpoint: Option<Endpoint>) -> Endpoint {
     }
 }
 
+/// system prompt 稳定构造（P1 B1：单点规范化——trim + 空值归一；空 → None）
+///
+/// 前端 guidance 拼接（ConnectionLifecycle 的 base+"\n\n"+guidance）改为
+/// 入站前完成（P1 B2），Rust 侧只负责 trim 与空值归一，保证同一配置下
+/// 字节确定。
+pub fn build_system_prompt(system_prompt: Option<String>) -> Option<String> {
+    let trimmed = system_prompt
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())?;
+    Some(trimmed)
+}
+
 /// 构建 chat-completions 请求体（compactObject 等价：None 字段一律省略，02 §二.6:132）
 pub fn build_chat_completions_request_body(
     opts: &ChatCompletionsRequestOptions,
@@ -222,6 +234,37 @@ mod tests {
             model: Some("gpt-4o".to_string()),
             ..ChatCompletionsRequestOptions::default()
         }
+    }
+
+    // ── system prompt 单点规范化（P1 B1）──
+
+    #[test]
+    fn build_system_prompt_trims_whitespace() {
+        assert_eq!(
+            build_system_prompt(Some("  你好，世界  \n\t".to_string())),
+            Some("你好，世界".to_string())
+        );
+        assert_eq!(
+            build_system_prompt(Some("  全局提示 \n ".to_string())),
+            Some("全局提示".to_string())
+        );
+        // 内部空白保留（只做首尾 trim）
+        assert_eq!(
+            build_system_prompt(Some(" a  b ".to_string())),
+            Some("a  b".to_string())
+        );
+    }
+
+    #[test]
+    fn build_system_prompt_empty_or_whitespace_normalizes_to_none() {
+        assert_eq!(build_system_prompt(Some(String::new())), None);
+        assert_eq!(build_system_prompt(Some("   ".to_string())), None);
+        assert_eq!(build_system_prompt(Some("\n\t  \n".to_string())), None);
+    }
+
+    #[test]
+    fn build_system_prompt_none_passes_through() {
+        assert_eq!(build_system_prompt(None), None);
     }
 
     // ── 请求体构建与 compactObject ──

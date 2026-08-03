@@ -126,9 +126,7 @@ export function createStreamCancel(
     // L2/L3 经 compositionRoot.runControl（metrics + EventBus + transport wire）
     void getCompositionRoot().runControl.dispatch({
       level:
-        mode === 'cooperative'
-          ? RUN_CONTROL_LEVEL.L2
-          : RUN_CONTROL_LEVEL.L3,
+        mode === 'cooperative' ? RUN_CONTROL_LEVEL.L2 : RUN_CONTROL_LEVEL.L3,
       runId,
       reason: mode === 'cooperative' ? 'ui-stop' : 'ui-force-cancel',
     });
@@ -140,6 +138,26 @@ export function createStreamCancel(
       /* ignore */
     }
   };
+}
+
+/**
+ * P1：systemPrompt 组装纯函数化——消除三形态漂移。
+ * 规则：base 与 guidance 各自 trim 后按固定分隔符 "\n\n" 拼接；
+ * guidance 为空 → 仅 base；base 为空 → 仅 guidance；两者皆空 → undefined。
+ * 删除 base.includes('Response style:') 特殊分支（同一配置下形态唯一）。
+ */
+export function composeSystemPrompt(
+  base: string | undefined,
+  guidance: string | undefined
+): string | undefined {
+  const baseTrimmed = typeof base === 'string' ? base.trim() : '';
+  const guidanceTrimmed = typeof guidance === 'string' ? guidance.trim() : '';
+  if (baseTrimmed && guidanceTrimmed) {
+    return `${baseTrimmed}\n\n${guidanceTrimmed}`;
+  }
+  if (baseTrimmed) return baseTrimmed;
+  if (guidanceTrimmed) return guidanceTrimmed;
+  return undefined;
 }
 
 /**
@@ -160,7 +178,7 @@ export async function createStreamSession(
   onMessage: (msg: Record<string, unknown>) => void,
   finish: (force?: boolean) => void,
   /** 本地助手 placeholder id（= clientMessageId），经 run-task 下发 */
-  assistantClientMessageId?: string,
+  assistantClientMessageId?: string
 ): Promise<void> {
   const transport = getTransport();
   try {
@@ -197,7 +215,7 @@ export async function createStreamSession(
 
     let mcpDisabledTools: Record<string, string[]> | undefined;
     let budgetDifficulty: string | undefined;
-    let responseStyleSystemPrompt: string | undefined;
+    let responseStyleGuidance: string | undefined;
     try {
       const { clientApi } = await import('../clientApi');
       const sets = await clientApi.getSettingsEx(cwd || '__global__');
@@ -230,21 +248,11 @@ export async function createStreamSession(
         适中: 'Response style: balanced. Be clear and complete without padding. Explain non-obvious steps briefly.',
         深入: 'Response style: thorough. Provide structured reasoning, edge cases, and verification steps when useful. Still stay on-topic.',
       };
-      const guidance =
+      // 只含 styleMap 映射文案（不含 base），与 base 的拼接统一走 composeSystemPrompt
+      responseStyleGuidance =
         styleMap[styleKey] ??
         styleMap[styleKey.toLowerCase()] ??
         styleMap.medium;
-      const base =
-        typeof options?.systemPrompt === 'string'
-          ? options.systemPrompt.trim()
-          : '';
-      if (base.includes('Response style:')) {
-        responseStyleSystemPrompt = base;
-      } else if (base) {
-        responseStyleSystemPrompt = `${base}\n\n${guidance}`;
-      } else {
-        responseStyleSystemPrompt = guidance;
-      }
     } catch {
       /* ignore */
     }
@@ -268,18 +276,19 @@ export async function createStreamSession(
         ? Math.floor(options.maxStalledRounds)
         : undefined;
 
-    const systemPrompt =
-      responseStyleSystemPrompt ||
-      (typeof options?.systemPrompt === 'string' && options.systemPrompt.trim()
-        ? options.systemPrompt.trim()
-        : undefined);
+    const systemPrompt = composeSystemPrompt(
+      options?.systemPrompt,
+      responseStyleGuidance
+    );
 
     const userClientMessageId =
-      typeof options?.clientMessageId === 'string' && options.clientMessageId.trim()
+      typeof options?.clientMessageId === 'string' &&
+      options.clientMessageId.trim()
         ? options.clientMessageId.trim()
         : undefined;
     const asstClientMessageId =
-      (typeof assistantClientMessageId === 'string' && assistantClientMessageId.trim()
+      (typeof assistantClientMessageId === 'string' &&
+      assistantClientMessageId.trim()
         ? assistantClientMessageId.trim()
         : undefined) ||
       (typeof options?.assistantClientMessageId === 'string' &&
@@ -389,7 +398,7 @@ export function streamViaEngine(
     state,
     (msg) => router.onMsg(msg),
     finish,
-    assistantClientMessageId || undefined,
+    assistantClientMessageId || undefined
   );
 
   const cancel = createStreamCancel(

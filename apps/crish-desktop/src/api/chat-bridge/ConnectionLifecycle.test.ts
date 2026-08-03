@@ -8,14 +8,12 @@ import {
   createFinishController,
   createStreamCancel,
   ensureEngineConnected,
+  composeSystemPrompt,
 } from './ConnectionLifecycle';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
 import type { StreamCallbacks } from '../chatApi';
 import type { StreamState } from './handlers/streamState';
-import {
-  getControlMetrics,
-  resetControlMetrics,
-} from '../controlMetrics';
+import { getControlMetrics, resetControlMetrics } from '../controlMetrics';
 
 const { fakeTransport } = vi.hoisted(() => {
   const fakeTransport = {
@@ -79,6 +77,40 @@ function makeState(partial: Partial<StreamState> = {}): StreamState {
     ...partial,
   };
 }
+
+describe('composeSystemPrompt（P1：三形态唯一确定）', () => {
+  const guidance = 'Response style: balanced. Be clear and complete.';
+
+  it('base 与 guidance 都存在 → 各自 trim 后按 "\\n\\n" 拼接', () => {
+    expect(
+      composeSystemPrompt('  Base instructions.  ', `  ${guidance}  `)
+    ).toBe(`Base instructions.\n\n${guidance}`);
+  });
+
+  it('guidance 为空 → 仅 base（trim 后）', () => {
+    expect(composeSystemPrompt('  Base only.  ', undefined)).toBe('Base only.');
+    expect(composeSystemPrompt('Base only.', '   ')).toBe('Base only.');
+  });
+
+  it('base 为空 → 仅 guidance（trim 后）', () => {
+    expect(composeSystemPrompt(undefined, `  ${guidance}  `)).toBe(guidance);
+    expect(composeSystemPrompt('', guidance)).toBe(guidance);
+  });
+
+  it('两者皆空（undefined / 空串 / 纯空白）→ undefined', () => {
+    expect(composeSystemPrompt(undefined, undefined)).toBeUndefined();
+    expect(composeSystemPrompt('', undefined)).toBeUndefined();
+    expect(composeSystemPrompt(undefined, '')).toBeUndefined();
+    expect(composeSystemPrompt('   ', '  ')).toBeUndefined();
+  });
+
+  it('base 含 "Response style:" 字样不特殊处理（同配置形态唯一）', () => {
+    const baseWithStyle = 'Response style: thorough. User says hi.';
+    expect(composeSystemPrompt(baseWithStyle, guidance)).toBe(
+      `${baseWithStyle}\n\n${guidance}`
+    );
+  });
+});
 
 describe('ConnectionLifecycle（Tauri IPC 版）', () => {
   beforeEach(() => {
