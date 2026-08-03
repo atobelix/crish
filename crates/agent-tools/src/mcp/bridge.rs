@@ -200,6 +200,10 @@ impl McpServerSession {
     }
 
     /// 启动子进程并建立会话（仅进程拉起与后台任务；握手由桥驱动）
+    // G2 禁令豁免（clippy.toml 文件头「豁免面」）：MCP server 进程注册面——
+    // 启动命令来自用户配置的 server command（config.server_id 对应注册表），
+    // 是 MCP 子进程的唯一拉起点，非任意命令执行面。
+    #[allow(clippy::disallowed_methods)]
     pub(crate) async fn spawn(
         config: &McpServerConfig,
         call_timeout: Duration,

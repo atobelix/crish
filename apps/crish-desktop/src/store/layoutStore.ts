@@ -74,6 +74,7 @@ import {
 import {
   initStorePersistence,
   waitForStoreHydration,
+  type SessionActivatableStore,
   type StoreApiLike,
 } from './layout-helpers/store-persistence';
 import { createLayoutCoreActions } from './layout-helpers/layout-core-actions';
@@ -292,7 +293,11 @@ export function waitForHydration(): Promise<void> {
  * （window.useLayoutStore 由 App.tsx 以 CrishWindow 类型挂载，此处不再重复 attach）
  */
 export function initLayoutStorePersistence(): () => void {
-  return initStorePersistence(useLayoutStore as StoreApiLike<LayoutStore>);
+  // SessionActivatableStore：useLayoutStore 含 SessionActions.setActiveSessionId，
+  // 会话激活由 store 自身 action 提供（G13 断环，不再经 api/storeAccess）
+  return initStorePersistence(
+    useLayoutStore as SessionActivatableStore<LayoutStore>
+  );
 }
 
 export type { GroupState, AppSettings } from './types';

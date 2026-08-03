@@ -15,10 +15,24 @@
 //! - 模式 B（应用内 trash 目录，本模块实现）：跨平台一致、可列出可恢复，
 //!   为默认实现；降级状态由调用方显式上报（工具输出与 UI 明示）。
 //!
+//! 写前自动备份（I3-S10b 中间件钩子的存储面）：[TrashService::snapshot] 把
+//! 目标文件**复制**进回收站域并登记（原路径保留，写工具随后覆盖写入），
+//! 与 [TrashService::trash_file] 的「移入」语义互补——删除走移入、写类走
+//! 复制快照。目标原不存在时登记 nil-content 条目（[EntryMode::Snapshot] +
+//! `original_existed=false`），恢复语义 = 删除原路径（对齐 FileSnap
+//! `Content == nil` 反向语义）。快照条目经 [TrashService::restore_force]
+//! 覆盖写回恢复（原路径必然存在，`restore` 的「拒绝覆盖」守卫不适用）。
+//!
 //! 原子性：同一文件系统内 `rename` 优先（原子移动），跨卷（EXDEV 等）
 //! 回退 copy + delete。本模块是产品唯一被允许的物理删除点（S11 G2
 //! 禁令的豁免面：删除必须走删除接管接口），其余代码不得直调
 //! `fs::remove_*`。
+
+// G2 禁令豁免面（01 方案 S11 / 04 方案 G2，与 clippy.toml 文件头「豁免面」对应）：
+// 本模块是产品唯一物理删除点（S3 删除接管实现本体）——purge / 原子移动回退 /
+// 登记失败回滚 / 恢复后清理均为回收站实现内部语义，物理删除的「可恢复前提」
+// 由本模块的移动 + 登记机制承担，不再经过其它删除接管接口。
+#![allow(clippy::disallowed_methods)]
 
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -33,6 +47,17 @@ pub enum TrashKind {
     File,
     /// 目录（含子树）
     Dir,
+}
+
+/// 条目模式（决定恢复语义）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EntryMode {
+    /// 移入回收站（trash_file 产生）：恢复 = 移回原路径（拒绝覆盖）
+    #[default]
+    Trash,
+    /// 复制快照（snapshot 产生，S10b 写前备份）：恢复 = 覆盖写回原路径
+    Snapshot,
 }
 
 /// 回收站条目（登记形状，camelCase 对齐工具输出与 meta.json）
@@ -52,6 +77,9 @@ pub struct TrashEntry {
     /// 文件 SHA-256 校验和（backup=true 时写入，供恢复防篡改校验；
     /// 目录恒为 None）
     pub checksum: Option<String>,
+    /// 条目模式（旧登记无此字段时按 Trash 兼容）
+    #[serde(default)]
+    pub mode: EntryMode,
 }
 
 /// 条目登记文件（meta.json）形状：TrashEntry + 快照元数据
@@ -64,6 +92,15 @@ struct EntryMeta {
     backup: bool,
     /// 原始元数据快照（backup=true 时写入）
     snapshot: Option<SnapshotMeta>,
+    /// 快照时原路径是否已存在（nil-content 条目为 false，S10b 写前备份；
+    /// 旧登记无此字段按 true 兼容）
+    #[serde(default = "default_true")]
+    original_existed: bool,
+}
+
+/// serde 缺省值：原路径已存在（旧条目兼容）
+fn default_true() -> bool {
+    true
 }
 
 /// 原始元数据快照（backup=true 时随 checksum 一并登记）
@@ -154,8 +191,9 @@ impl TrashService {
             kind: if is_dir { TrashKind::Dir } else { TrashKind::File },
             size,
             checksum,
+            mode: EntryMode::Trash,
         };
-        if let Err(e) = write_meta(&entry_dir, &entry, backup, snapshot) {
+        if let Err(e) = write_meta(&entry_dir, &entry, backup, snapshot, true) {
             // 登记失败：尽力把已移动内容移回原路径，避免孤儿条目（不吞原始错误）
             let moved_back = atomic_move(&payload_dst, path, is_dir).is_ok();
             if moved_back {
@@ -166,11 +204,74 @@ impl TrashService {
         Ok(entry)
     }
 
+    /// 写前自动备份快照（S10b 中间件钩子存储面）
+    ///
+    /// 目标文件**复制**进回收站域并登记（原路径保留，写工具随后覆盖写入），
+    /// 与 [Self::trash_file] 的「移入」语义互补。仅支持普通文件（写工具
+    /// 不写目录）；目标原不存在时登记 nil-content 条目（`original_existed`
+    /// = false，无 payload，恢复语义 = 删除原路径）。
+    pub fn snapshot(&self, path: &Path) -> Result<TrashEntry> {
+        if path_is_within(&self.root, path) {
+            bail!("目标位于回收站根目录内，拒绝快照：{}", path.display());
+        }
+        let original = abs_clean(path);
+        let id = gen_entry_id();
+        let entry_dir = self.root.join(&id);
+        let payload_dst = entry_dir
+            .join(PAYLOAD_DIR)
+            .join(relative_path_of(&original));
+
+        match fs::metadata(path) {
+            Ok(metadata) if metadata.is_file() => {
+                crate::path_utils::ensure_parent_dir(&payload_dst)
+                    .with_context(|| format!("创建快照目录失败：{}", payload_dst.display()))?;
+                let checksum = crate::path_utils::compute_file_hash(path)?;
+                fs::copy(path, &payload_dst)
+                    .with_context(|| format!("复制快照失败：{}", path.display()))?;
+                let snapshot = SnapshotMeta {
+                    mtime: epoch_millis(metadata.modified().ok()),
+                    readonly: metadata.permissions().readonly(),
+                };
+                let entry = TrashEntry {
+                    id: id.clone(),
+                    original_path: original,
+                    trashed_at: now_millis(),
+                    kind: TrashKind::File,
+                    size: metadata.len(),
+                    checksum: Some(checksum),
+                    mode: EntryMode::Snapshot,
+                };
+                write_meta(&entry_dir, &entry, true, Some(snapshot), true)?;
+                Ok(entry)
+            }
+            Ok(_) => bail!("快照仅支持普通文件：{}", path.display()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                // nil-content 条目（原不存在）：登记「原不存在」语义，
+                // 不复制 payload；恢复 = 删除原路径（FileSnap 反向语义）
+                fs::create_dir_all(&entry_dir)
+                    .with_context(|| format!("创建快照目录失败：{}", entry_dir.display()))?;
+                let entry = TrashEntry {
+                    id: id.clone(),
+                    original_path: original,
+                    trashed_at: now_millis(),
+                    kind: TrashKind::File,
+                    size: 0,
+                    checksum: None,
+                    mode: EntryMode::Snapshot,
+                };
+                write_meta(&entry_dir, &entry, true, None, false)?;
+                Ok(entry)
+            }
+            Err(e) => bail!("目标不可访问（快照失败）：{}：{e}", path.display()),
+        }
+    }
+
     /// 从回收站恢复到原路径（校验 checksum 防篡改）
     ///
     /// - 条目不存在 / 内容缺失 → 结构化错误；
     /// - backup=true 的条目先重算校验和比对，不匹配拒绝恢复（防篡改）；
     /// - 原路径已存在 → 拒绝覆盖（不静默覆盖用户文件）；
+    /// - 快照条目（写前备份，原路径仍存在）→ 拒绝并引导 [Self::restore_force]；
     /// - 恢复成功后移除条目目录（登记一并清除）。
     pub fn restore(&self, entry_id: &str) -> Result<PathBuf> {
         let entry_dir = self.entry_dir(entry_id)?;
@@ -179,6 +280,11 @@ impl TrashService {
         }
         let meta = read_meta(&entry_dir)?;
         let entry = &meta.entry;
+        if entry.mode == EntryMode::Snapshot {
+            bail!(
+                "条目为快照条目（写前备份，原路径仍存在），请用覆盖恢复接口：{entry_id}"
+            );
+        }
         let is_dir = entry.kind == TrashKind::Dir;
         let payload = entry_dir
             .join(PAYLOAD_DIR)
@@ -199,6 +305,47 @@ impl TrashService {
         crate::path_utils::ensure_parent_dir(original)?;
         atomic_move(&payload, original, is_dir)?;
         // 恢复成功后清理条目目录（移除登记与空壳）；清理失败不阻塞恢复结果
+        let _ = fs::remove_dir_all(&entry_dir);
+        Ok(original.clone())
+    }
+
+    /// 覆盖式恢复（快照条目专用，S10b 写前备份）
+    ///
+    /// 与 [Self::restore] 的「拒绝覆盖」守卫互补：快照条目的原路径必然
+    /// 存在（写工具已覆盖写入），恢复 = 把快照内容校验后**覆盖写回**；
+    /// nil-content 条目（原不存在）恢复 = 删除原路径（FileSnap
+    /// `Content == nil` 反向语义）。恢复成功后移除条目目录（登记清除）。
+    pub fn restore_force(&self, entry_id: &str) -> Result<PathBuf> {
+        let entry_dir = self.entry_dir(entry_id)?;
+        if !entry_dir.is_dir() {
+            bail!("回收站条目不存在：{entry_id}");
+        }
+        let meta = read_meta(&entry_dir)?;
+        let entry = &meta.entry;
+        let original = &entry.original_path;
+        if !meta.original_existed {
+            // nil-content 条目：恢复 = 删除原路径（快照条目恒为文件）
+            if original.exists() {
+                remove_all(original, false)?;
+            }
+            let _ = fs::remove_dir_all(&entry_dir);
+            return Ok(original.clone());
+        }
+        let payload = entry_dir
+            .join(PAYLOAD_DIR)
+            .join(relative_path_of(original));
+        if !payload.exists() {
+            bail!("条目内容缺失，无法恢复：{}", payload.display());
+        }
+        if let Some(expected) = &entry.checksum {
+            let actual = crate::path_utils::compute_file_hash(&payload)?;
+            if &actual != expected {
+                bail!("条目内容校验失败（checksum 不匹配），可能已被篡改：{entry_id}");
+            }
+        }
+        crate::path_utils::ensure_parent_dir(original)?;
+        fs::copy(&payload, original)
+            .with_context(|| format!("恢复写回失败：{}", original.display()))?;
         let _ = fs::remove_dir_all(&entry_dir);
         Ok(original.clone())
     }
@@ -257,11 +404,13 @@ fn write_meta(
     entry: &TrashEntry,
     backup: bool,
     snapshot: Option<SnapshotMeta>,
+    original_existed: bool,
 ) -> Result<()> {
     let meta = EntryMeta {
         entry: entry.clone(),
         backup,
         snapshot,
+        original_existed,
     };
     let json = serde_json::to_string_pretty(&meta)?;
     fs::write(entry_dir.join(META_FILE), json)?;
@@ -674,5 +823,143 @@ mod tests {
             .trash_file(&src.0.join("ghost.txt"), false)
             .unwrap_err();
         assert!(err.to_string().contains("不存在"));
+    }
+
+    // ── S10b 写前自动备份：snapshot / restore_force ──
+
+    #[test]
+    fn snapshot_copies_and_registers() {
+        let src = TempDir::new("snap");
+        let file = src.write("a.txt", "original");
+        let svc = service();
+
+        let entry = svc.snapshot(&file).unwrap();
+        assert_eq!(entry.mode, EntryMode::Snapshot);
+        assert_eq!(entry.kind, TrashKind::File);
+        assert!(entry.checksum.is_some(), "快照必写校验和");
+        // 原路径保留且内容未变（复制语义，非移入）
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "original");
+
+        let entries = svc.list();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].id, entry.id);
+        assert_eq!(entries[0].mode, EntryMode::Snapshot);
+    }
+
+    #[test]
+    fn snapshot_restore_force_overwrites() {
+        let src = TempDir::new("snap_rf");
+        let file = src.write("doc.txt", "good version");
+        let svc = service();
+
+        let entry = svc.snapshot(&file).unwrap();
+        // 模拟写工具覆盖写入「坏版本」
+        std::fs::write(&file, "bad version").unwrap();
+
+        let restored = svc.restore_force(&entry.id).unwrap();
+        assert_eq!(restored, file);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "good version");
+        assert!(svc.list().is_empty(), "覆盖恢复后登记应清除");
+    }
+
+    #[test]
+    fn snapshot_nil_content_restore_force_deletes() {
+        let src = TempDir::new("snap_nil");
+        let file = src.0.join("fresh.txt");
+        let svc = service();
+
+        // 目标原不存在 → nil-content 条目
+        let entry = svc.snapshot(&file).unwrap();
+        assert_eq!(entry.mode, EntryMode::Snapshot);
+        assert_eq!(entry.size, 0);
+        assert!(entry.checksum.is_none());
+        assert!(!file.exists());
+
+        // 之后文件被创建（写工具写入），恢复 = 删除原路径
+        std::fs::write(&file, "created later").unwrap();
+        let restored = svc.restore_force(&entry.id).unwrap();
+        assert_eq!(restored, file);
+        assert!(!file.exists(), "nil-content 恢复 = 删除原路径");
+        assert!(svc.list().is_empty());
+    }
+
+    #[test]
+    fn snapshot_rejects_dir_and_inside_trash_root() {
+        let src = TempDir::new("snap_guard");
+        src.write("sub/x.txt", "x");
+        let svc = service();
+
+        // 目录拒绝（写工具不写目录）
+        let err = svc.snapshot(&src.0.join("sub")).unwrap_err();
+        assert!(err.to_string().contains("仅支持普通文件"));
+
+        // 回收站根内目标拒绝（防递归/双份）
+        let trash = TempDir::new("root");
+        let svc2 = TrashService::new(trash.path());
+        let inner = trash.write("already.txt", "x");
+        let err = svc2.snapshot(&inner).unwrap_err();
+        assert!(err.to_string().contains("回收站根目录"));
+        assert!(inner.exists(), "守卫拒绝时不得移动文件");
+    }
+
+    #[test]
+    fn snapshot_tampered_payload_rejected_on_force_restore() {
+        let src = TempDir::new("snap_tamper");
+        let file = src.write("a.txt", "original");
+        let trash = TempDir::new("root");
+        let svc = TrashService::new(trash.path());
+
+        let entry = svc.snapshot(&file).unwrap();
+        let payload = trash
+            .0
+            .join(&entry.id)
+            .join(PAYLOAD_DIR)
+            .join(relative_path_of(&entry.original_path));
+        let mut f = fs::File::create(&payload).unwrap();
+        f.write_all(b"tampered").unwrap();
+        drop(f);
+
+        let err = svc.restore_force(&entry.id).unwrap_err();
+        assert!(err.to_string().contains("校验失败"));
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "original");
+        assert_eq!(svc.list().len(), 1, "恢复失败条目保留");
+    }
+
+    #[test]
+    fn restore_rejects_snapshot_entry() {
+        let src = TempDir::new("snap_mix");
+        let file = src.write("a.txt", "x");
+        let svc = service();
+
+        let entry = svc.snapshot(&file).unwrap();
+        let err = svc.restore(&entry.id).unwrap_err();
+        assert!(err.to_string().contains("覆盖恢复"));
+
+        // 移入条目（Trash 模式）不受影响
+        let file2 = src.write("b.txt", "y");
+        let moved = svc.trash_file(&file2, true).unwrap();
+        assert_eq!(moved.mode, EntryMode::Trash);
+        svc.restore(&moved.id).unwrap();
+    }
+
+    #[test]
+    fn meta_registers_mode_and_original_existed() {
+        let src = TempDir::new("snap_meta");
+        let file = src.write("a.txt", "registered");
+        let svc = service();
+
+        let entry = svc.snapshot(&file).unwrap();
+        let meta_path = svc.root().join(&entry.id).join(META_FILE);
+        let meta = std::fs::read_to_string(meta_path).unwrap();
+        assert!(meta.contains("\"mode\": \"snapshot\""));
+        assert!(meta.contains("\"originalExisted\": true"));
+
+        // 移入条目登记 mode=trash
+        let file2 = src.write("b.txt", "moved");
+        let moved = svc.trash_file(&file2, true).unwrap();
+        let meta_path = svc.root().join(&moved.id).join(META_FILE);
+        let meta = std::fs::read_to_string(meta_path).unwrap();
+        assert!(meta.contains("\"mode\": \"trash\""));
+        assert!(meta.contains("\"originalExisted\": true"));
     }
 }

@@ -10,6 +10,8 @@
 //! - `middleware`：ToolMiddleware 前置/后置钩子抽象与示例后置实现。
 //!   生产消费方：session-loop ToolExecutor（审批通过后、执行前接链，
 //!   优先级语义见 docs/multi-agent-repair/06-tool-middleware-hook-接线决策.md）
+//! - `backup`：删除前自动备份中间件（I3-S10b）——写类工具执行前复制快照
+//!   进回收站域（TrashService::snapshot），失败即 Block（安全优先）
 //! - `output`：工具输出结构化——序列化（text 优先）与预算截断（B5.3）
 //! - `idempotency`：工具幂等守卫——已执行结果去重（B5.3）
 //! - `executor`：最小工具执行器——单工具执行 + 输出策略 + 幂等检查（B5.3，供 B3.5 消费）
@@ -20,6 +22,7 @@
 
 pub mod context;
 pub mod audit;
+pub mod backup;
 pub mod definition;
 pub mod executor;
 pub mod idempotency;
@@ -28,6 +31,8 @@ pub mod middleware;
 pub mod output;
 pub mod permission;
 pub mod registry;
+pub mod revert;
+pub mod revert_guard;
 pub mod tools;
 
 pub use context::{
@@ -39,7 +44,9 @@ pub use audit::{
 };
 pub use definition::{default_input_schema, Tool, ToolDefinition, ToolError};
 pub use executor::{execute_with_output_policy, ExecutorContext, ToolExecutionPolicy, ToolResult};
-pub use permission::{decide, PermissionMode, PermissionVerdict};
+pub use permission::{
+    decide, decide_command_with_revert, PermissionMode, PermissionVerdict,
+};
 pub use idempotency::{
     domain_for, execution_key, IdempotencyContext, IdempotencyDecision, IdempotencyStore,
     ToolIdempotencyGuard,
@@ -51,6 +58,7 @@ pub use mcp::{
 pub use middleware::{
     AfterExecuteResult, BeforeExecuteResult, ToolExecutionContext, ToolMiddleware,
 };
+pub use backup::{default_backup_tools, BackupMiddleware, BUILTIN_BACKUP_TOOLS};
 // T06.3 Q18：RecordingMiddleware / RecordingRecord 仅测试使用（生产零
 // 引用），导出面标注 #[cfg(test)]
 #[cfg(test)]
@@ -60,6 +68,21 @@ pub use output::{
     OutputSize, SummarizedOutput, ToolOutputBudgetOptions,
 };
 pub use registry::ToolRegistry;
+pub use revert::{
+    InMemoryRevertCounterStore, RevertArea, RevertAssessor, RevertCounterSnapshot,
+    RevertCounterStore, RevertPolicy, RevertTarget, RevertThresholds, SemanticRevertAssessor,
+    DEFAULT_REVERT_MAX_FILES, DEFAULT_REVERT_MAX_LINES, DEFAULT_REVERT_MAX_REF_AGE_HOURS,
+    REVERT_APPROVER, REVERT_GATE_GUIDANCE, SESSION_META_KEY_REVERT_MAX_FILES,
+    SESSION_META_KEY_REVERT_MAX_LINES, SESSION_META_KEY_REVERT_MAX_REF_AGE_HOURS,
+    SESSION_META_KEY_REVERT_STREAK_COUNT, SESSION_META_KEY_REVERT_STREAK_LAST_AT,
+};
+// I3-S7（C4 连续回退计数）：时窗归零 / 第 2 次必审批判定 / 统一回退护栏
+// （面积 + 连续合并），接线契约见 revert_guard 模块文档（S6 判定点挂载）
+pub use revert_guard::{
+    combine_revert_gate, evaluate_streak, guard_reasons, now_unix, parse_window_seconds,
+    RevertCounterGuard, RevertGuardOutcome, RevertGuardReason, StreakVerdict,
+    DEFAULT_REVERT_WINDOW_SECONDS, REVERT_WINDOW_SECONDS_KEY,
+};
 pub use tools::{
     register_builtin_tools, register_builtin_tools_with_config, BuiltinToolConfig,
 };

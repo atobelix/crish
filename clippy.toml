@@ -1,0 +1,36 @@
+# G2 安全禁令（01 方案 S11 / 04 方案 G2 交接产物，2026-08-03 落地）
+#
+# 职责边界：
+# - 本文件由 01 方案 S11 写入（00 总览 §3：clippy.toml 每轮唯一所有者）；
+# - 04 方案 G2 产出禁令清单与豁免评审，本文件是其机器化形态；
+# - 豁免必须写理由（04 方案原则 3：任何 allow 必须带原因注释），
+#   豁免评审表见 docs/multi-agent-repair/reports/ 轮次报告与各豁免处注释。
+#
+# 生效说明：disallowed-methods 在 clippy.toml 中列出即被激活为 warn
+# （实测确认，不受 workspace.lints 中 `restriction = allow` 影响），
+# CI 侧由 ci-mid.yml clippy job（--all-targets + check-clippy-baseline.mjs）守门。
+
+# 禁裸删除 API：删除必须走删除接管接口（conex-fs::trash::TrashService），
+# 可恢复删除的前提是删除前有快照/回收站登记（01 方案 S3）；
+# 裸 fs::remove_* 绕过快照与审计（ref-analysis 04 1a「删除可恢复」前提）。
+# 豁免面：
+#   - crates/conex-fs/src/trash.rs：产品唯一物理删除点（purge/原子移动回退），
+#     文件级 allow + 理由（见该文件头模块文档）；
+#   - 凭据清除（agent-workbench/config/credentials.rs、agent-provider/credentials.rs）：
+#     清除语义必须物理删除，不留可恢复的敏感数据副本，函数级 allow + 理由；
+#   - 自管文件轮转（conex-telemetry/file.rs 日志保留策略、conex-db/migrate.rs
+#     迁移备份轮转、orchestrator/restore.rs 快照轮转）：轮转对象是自家生成物，
+#     新态取代旧态，进回收站反而不正确，函数级 allow + 理由；
+#   - 测试代码临时目录清理：非产品删除路径，测试 mod 内 allow + 理由；
+#   - conex-test-utils：纯测试基础设施 crate，crate 级 allow + 理由。
+disallowed-methods = [
+    { path = "std::fs::remove_file", reason = "删除必须走删除接管接口（conex-fs::trash），裸删除绕过快照与审计；豁免面见文件头注释" },
+    { path = "std::fs::remove_dir", reason = "删除必须走删除接管接口（conex-fs::trash），裸删除绕过快照与审计；豁免面见文件头注释" },
+    { path = "std::fs::remove_dir_all", reason = "删除必须走删除接管接口（conex-fs::trash），裸删除绕过快照与审计；豁免面见文件头注释" },
+    # 禁裸子进程拉起：子进程必须经命令门禁/进程注册面（CommandGatekeeper、
+    # MCP server 注册面、host opener 双防线），未 enroll 子进程脱离会话存活
+    # （grok 同款禁令理由）。tokio::process::Command::spawn 一并禁——
+    # 否则等价变形（tokio Command）可绕过 std::process 禁令（04 1a 坑 1）。
+    { path = "std::process::Command::spawn", reason = "子进程必须经命令门禁/进程注册面，禁止裸拉起；豁免面：agent-tools shell/mcp bridge、agent-workbench process/git/host_openers（均为门禁通过后的执行面，函数级 allow + 理由）" },
+    { path = "tokio::process::Command::spawn", reason = "与 std::process::Command::spawn 同禁令（防等价变形绕过）；豁免面：agent-tools shell 执行面、agent-workbench process/git（均先过 CommandGatekeeper/白名单校验，函数级 allow + 理由）" },
+]

@@ -2,16 +2,15 @@
  * Shell-side helpers for multi-unit layout restore.
  * Pure tree → dock inference; validation re-exported from layout-tree.
  *
- * ## compositionRoot (OPT-G4)
- * - Cross-store tree commands: `getCompositionRoot().tree.getState()` (not raw
- *   `useLayoutTreeStore.getState`) — shell package must not scatter tree getState.
- * - Same-store shell reads/writes: keep `useWorkspaceShellStore` (store-internal;
- *   avoids shell ↔ compositionRoot import coupling on the write path).
+ * ## 依赖方向（G13 断环）
+ * - Cross-store tree reads: `useLayoutTreeStore`（不 import compositionRoot，
+ *   避免 layoutRestorePolicy → compositionRoot → workspaceShellStore 回环）。
+ * - Same-store shell reads/writes: `shellReadBridge` 注册式接口
+ *   （workspaceShellStore 注册自身闭包，本文件不直接 import workspaceShellStore）。
  *
  * @see docs/architecture/multi-unit-layout-restore-adr.md
  */
 
-import { getCompositionRoot } from '../../app/compositionRoot';
 import {
   findNodeById,
   findUnitRootId,
@@ -21,6 +20,7 @@ import {
   isBranch,
   isLeaf,
   collectLeaves,
+  useLayoutTreeStore,
 } from '../layout-tree';
 import type { LayoutNode, LayoutTree } from '../layout-tree/types';
 import {
@@ -35,7 +35,7 @@ import {
   createDefaultDock,
 } from './types';
 import { clampDockWidthRatio } from './adapterShape';
-import { useWorkspaceShellStore } from './workspaceShellStore';
+import { getShellReadApi } from './shellReadBridge';
 
 export {
   validateRestorableLayoutTree,
@@ -135,8 +135,9 @@ export function inferDockFromSessionUnit(
  * (tree topology is the source of truth after a successful multi-unit restore).
  */
 export function syncShellDocksFromTree(tree: LayoutTree): void {
-  const shell = useWorkspaceShellStore.getState();
-  const { openTabs } = shell;
+  const shellApi = getShellReadApi();
+  if (!shellApi) return;
+  const openTabs = shellApi.getOpenTabs();
   if (!openTabs.length) return;
 
   const nextTabs: TabSurface[] = openTabs.map((tab) => {
@@ -149,7 +150,8 @@ export function syncShellDocksFromTree(tree: LayoutTree): void {
     return { ...tab, rightDock: dock };
   });
 
-  useWorkspaceShellStore.setState({ openTabs: nextTabs });
+  // 写入走注册的 setter：workspaceShellStore 注册的闭包
+  shellApi.setOpenTabs?.(nextTabs);
 }
 
 /**
@@ -175,12 +177,13 @@ export function countRestoredToolLeaves(tree: LayoutTree): number {
  * Used when restore is off, or restore is on but tree fails validation.
  */
 export function applySafeCleanColdStart(): void {
-  // Cross-store: layout-tree via compositionRoot.tree (not useLayoutTreeStore)
-  const treeStore = getCompositionRoot().tree.getState();
+  // Cross-store: layout-tree via useLayoutTreeStore（G13 断环：
+  // 不再 import compositionRoot → workspaceShellStore 回环）
+  const treeStore = useLayoutTreeStore.getState();
   treeStore.resetTree('chat');
-  // Same-store: shell stays on workspaceShellStore.getState
-  const shell = useWorkspaceShellStore.getState();
-  shell.resetToCleanDraft();
+  // Same-store: shell stays on workspaceShellStore（经 shellReadBridge 注册闭包）
+  const shellApi = getShellReadApi();
+  shellApi?.resetToCleanDraft?.();
   // resetToCleanDraft already ensureChatOnlyTree; force collapsed global dock
   treeStore.setToolColumnCollapsed(true);
 }

@@ -121,6 +121,35 @@ pub fn decide_command(
     decide_with_redline(redline, dangerous, requires_approval, mode)
 }
 
+/// 命令面判定 + C3 回退护栏（I3-S6）
+///
+/// 判定顺序（C3 判定点唯一写者挂载于此，C4/S10b 经此挂载）：
+/// 1. 红线先行（S10a 既有语义）：`Redline` → [PermissionVerdict::Deny]，不经矩阵；
+/// 2. C3 回退护栏（[RevertPolicy]）：GitRevertShape 段 + 面积超阈值 → 需审批
+///    （ask/full-access [PermissionVerdict::NeedsApproval]，full-access 不豁免；
+///    plan 保持更严 [PermissionVerdict::Deny]）；面积小 → 跳过，按既有矩阵；
+/// 3. 既有三态矩阵（[decide]），语义不变。
+///
+/// 审批人 = 用户：NeedsApproval 走既有 ApprovalGate 链路等待用户裁决，主
+/// Agent 仅转呈，无任何单方面批准路径（ref-analysis 01 B3 防线配套）。
+pub fn decide_command_with_revert(
+    command_line: &str,
+    dangerous: bool,
+    requires_approval: bool,
+    mode: PermissionMode,
+    policy: &crate::revert::RevertPolicy,
+) -> PermissionVerdict {
+    use conex_sandbox::semantics::{analyze, CommandClass};
+    let analysis = analyze(command_line);
+    if analysis.overall_class == CommandClass::Redline {
+        return PermissionVerdict::Deny;
+    }
+    if let Some(verdict) = policy.gate_verdict(&analysis, mode) {
+        return verdict;
+    }
+    decide(dangerous, requires_approval, mode)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -387,6 +416,192 @@ mod tests {
             decide_command("git status", true, false, PermissionMode::Ask),
             PermissionVerdict::NeedsApproval,
             "ask 模式危险工具需审批"
+        );
+    }
+
+    // ===== I3-S6：C3 大面积回退审批（decide_command_with_revert 链）=====
+
+    use crate::revert::{RevertArea, RevertAssessor, RevertPolicy, RevertTarget};
+    use std::sync::Arc;
+
+    /// 固定面积评估器（测试注入）
+    #[derive(Debug)]
+    struct FixedAreaAssessor(RevertArea);
+
+    impl RevertAssessor for FixedAreaAssessor {
+        fn assess(&self, _target: &RevertTarget) -> RevertArea {
+            self.0.clone()
+        }
+    }
+
+    fn policy(area: RevertArea) -> RevertPolicy {
+        RevertPolicy::default().with_assessor(Arc::new(FixedAreaAssessor(area)))
+    }
+
+    fn large_area() -> RevertArea {
+        RevertArea {
+            file_count: Some(25),
+            line_count: Some(1200),
+            cross_directory: true,
+            ref_age_seconds: Some(36 * 3600),
+        }
+    }
+
+    fn small_area() -> RevertArea {
+        RevertArea {
+            file_count: Some(3),
+            line_count: Some(50),
+            cross_directory: false,
+            ref_age_seconds: Some(3600),
+        }
+    }
+
+    /// 核心断言：full-access 下大面积回退仍 NeedsApproval（full-access 不
+    /// 豁免回退护栏——红线类豁免不可覆盖大面积回退）
+    #[test]
+    fn full_access_large_revert_needs_approval() {
+        assert_eq!(
+            decide_command_with_revert(
+                "git checkout abc1234",
+                true,
+                false,
+                PermissionMode::FullAccess,
+                &policy(large_area()),
+            ),
+            PermissionVerdict::NeedsApproval,
+            "full-access 下大面积回退必须 NeedsApproval"
+        );
+        // 面积已知超阈值但工具标记非危险：同样触发（C3 与 dangerous 独立）
+        assert_eq!(
+            decide_command_with_revert(
+                "git checkout abc1234",
+                false,
+                false,
+                PermissionMode::FullAccess,
+                &policy(large_area()),
+            ),
+            PermissionVerdict::NeedsApproval
+        );
+    }
+
+    /// ask 模式下大面积回退 NeedsApproval（审批人 = 用户，走既有审批链路）
+    #[test]
+    fn ask_large_revert_needs_approval() {
+        assert_eq!(
+            decide_command_with_revert(
+                "git reset --hard HEAD~30",
+                true,
+                false,
+                PermissionMode::Ask,
+                &policy(large_area()),
+            ),
+            PermissionVerdict::NeedsApproval
+        );
+    }
+
+    /// plan 模式下大面积回退保持更严拒绝（plan 只读：拒绝强度高于审批、
+    /// 不弹窗——回退门禁不放宽权限矩阵）
+    #[test]
+    fn plan_large_revert_denied() {
+        assert_eq!(
+            decide_command_with_revert(
+                "git checkout abc1234",
+                true,
+                false,
+                PermissionMode::Plan,
+                &policy(large_area()),
+            ),
+            PermissionVerdict::Deny,
+            "plan 模式大面积回退保持拒绝（既有更严语义优先）"
+        );
+    }
+
+    /// 面积小（低于全部阈值）→ 按既有矩阵（零打扰，04 C3 验收 3）
+    #[test]
+    fn small_revert_follows_mode_matrix() {
+        // full-access：非危险小回退放行
+        assert_eq!(
+            decide_command_with_revert(
+                "git checkout abc1234",
+                false,
+                false,
+                PermissionMode::FullAccess,
+                &policy(small_area()),
+            ),
+            PermissionVerdict::Allow
+        );
+        // full-access + dangerous：按既有矩阵放行
+        assert_eq!(
+            decide_command_with_revert(
+                "git reset --hard HEAD~1",
+                true,
+                false,
+                PermissionMode::FullAccess,
+                &policy(small_area()),
+            ),
+            PermissionVerdict::Allow
+        );
+        // ask + dangerous：按既有矩阵 NeedsApproval
+        assert_eq!(
+            decide_command_with_revert(
+                "git reset --hard HEAD~1",
+                true,
+                false,
+                PermissionMode::Ask,
+                &policy(small_area()),
+            ),
+            PermissionVerdict::NeedsApproval
+        );
+    }
+
+    /// checkout 分支名（非回退形态）不被 C3 门禁误拦——语义层区分分支名与
+    /// 旧 ref，git checkout <旧ref> 的覆盖点在语义分类
+    #[test]
+    fn checkout_branch_name_not_gated() {
+        assert_eq!(
+            decide_command_with_revert(
+                "git checkout main",
+                false,
+                false,
+                PermissionMode::FullAccess,
+                &policy(large_area()),
+            ),
+            PermissionVerdict::Allow,
+            "分支切换不是回退，C3 不拦截"
+        );
+    }
+
+    /// 非回退命令行为与既有 decide_command 完全一致（兼容委托）
+    #[test]
+    fn non_revert_commands_unchanged() {
+        for cmd in ["git status", "npm test", "ls -la"] {
+            for mode in [
+                PermissionMode::Ask,
+                PermissionMode::FullAccess,
+                PermissionMode::Plan,
+            ] {
+                assert_eq!(
+                    decide_command_with_revert(cmd, true, false, mode, &policy(large_area())),
+                    decide_command(cmd, true, false, mode),
+                    "非回退命令 {cmd:?} 在 {mode:?} 下与既有判定一致"
+                );
+            }
+        }
+    }
+
+    /// 红线优先于回退护栏：复合链中红线段（rm -rf /）在任意面积评估下仍 Deny
+    #[test]
+    fn redline_precedes_revert_gate() {
+        assert_eq!(
+            decide_command_with_revert(
+                "echo hi && rm -rf /",
+                true,
+                false,
+                PermissionMode::FullAccess,
+                &policy(large_area()),
+            ),
+            PermissionVerdict::Deny,
+            "红线在任何模式下不可被回退护栏/审批豁免"
         );
     }
 }

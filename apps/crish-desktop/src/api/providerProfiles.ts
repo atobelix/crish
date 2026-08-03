@@ -88,11 +88,6 @@ export {
   type LegacyMigrationResult,
 } from './provider-profiles/migrateLegacyProfiles';
 
-// Model meta helpers re-exported from modelCatalog for backward compatibility
-export {
-  formatModelDisplayName,
-  setModelCapability,
-  setModelContextLength,
-  setModelDisplayName,
-  setModelEnabled,
-} from './modelCatalog';
+// G13 断环：不再 re-export modelCatalog 符号（providerProfiles → modelCatalog
+// 反向边已移除）。消费方（settings-models / provider 组件 / modelCatalog.test）
+// 均直接从 './modelCatalog' 导入这些符号。

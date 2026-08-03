@@ -386,6 +386,10 @@ fn read_os_secret(_path: &Path) -> Result<Option<String>, String> {
     Ok(None)
 }
 
+// G2 禁令豁免（clippy.toml 文件头「豁免面」）：凭据清除——删除对象是
+// DPAPI 加密的凭据文件，清除语义必须物理删除，进回收站/快照会留下
+// 可恢复的敏感数据副本，与「不留痕迹」的清除意图相悖。
+#[allow(clippy::disallowed_methods)]
 fn remove_os_secret(path: &Path) -> Result<(), String> {
     match fs::remove_file(path) {
         Ok(()) => Ok(()),

@@ -188,6 +188,10 @@ impl CredentialStore {
     }
 
     /// 清除凭据：删除文件（缺失视为成功）并清空内存副本。
+    // G2 禁令豁免（clippy.toml 文件头「豁免面」）：凭据清除——删除对象是
+    // 加密凭据文件（DPAPI/明文秘密），清除语义必须物理删除，进回收站/
+    // 快照会留下可恢复的敏感数据副本，与「不留痕迹」的清除意图相悖。
+    #[allow(clippy::disallowed_methods)]
     pub fn clear(&mut self, path: &Path) -> Result<CredentialPersistence, CredentialError> {
         // 清空内存密钥（Option 赋值触发 Drop，`SecretString` 自动覆写清零）。
         self.memory_key = None;
@@ -446,6 +450,9 @@ fn hex_value(byte: u8) -> Result<u8, String> {
 
 #[cfg(test)]
 mod tests {
+    // G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
+    #![allow(clippy::disallowed_methods)]
+
     use super::*;
     use std::env;
 

@@ -425,6 +425,10 @@ impl SnapshotStore for SnapshotFileStore {
         }
     }
 
+    // G2 禁令豁免（clippy.toml 文件头「豁免面」）：快照轮转——删除对象是
+    // 本库自管的上一份备份快照（马上被当前主快照取代），非用户文件；
+    // 保留旧版反而让恢复可能回退到旧状态，物理删除更正确。
+    #[allow(clippy::disallowed_methods)]
     fn save_snapshot(&self, snapshot: &StateSnapshot) -> Result<(), SnapshotError> {
         if !snapshot.valid() {
             return Err(SnapshotError::new("save_snapshot", "快照内容校验失败，拒绝写入"));
@@ -697,6 +701,9 @@ pub fn is_blocked_reason(reason: Option<&str>) -> bool {
 
 #[cfg(test)]
 mod tests {
+    // G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
+    #![allow(clippy::disallowed_methods)]
+
     use std::sync::Arc;
 
     use conex_db::RunStatus;

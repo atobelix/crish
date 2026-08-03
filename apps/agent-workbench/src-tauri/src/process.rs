@@ -49,6 +49,11 @@ pub(crate) struct WorkbenchRunShellResult {
 /// 与 agent shell_command 同源语义，但不经 daemon 审批（用户主动输入）。
 /// 错误统一为 CoreError（IPC 面唯一协议）；红线拦截 → InvalidInput。
 #[tauri::command]
+// G2 禁令豁免（clippy.toml 文件头「豁免面」）：命令门禁执行面——本函数执行前
+// 必过 CommandGatekeeper 双防线（见函数体内 :65-72 的 check_command + patterns
+// 校验），是「子进程经命令门禁」的门禁落地处本身；不经 daemon 审批的
+// 用户主动输入同样先过红线检查。
+#[allow(clippy::disallowed_methods)]
 pub(crate) async fn workbench_run_shell(
     request: WorkbenchRunShellRequest,
 ) -> Result<WorkbenchRunShellResult, CoreError> {

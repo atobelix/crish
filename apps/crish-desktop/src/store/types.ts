@@ -15,6 +15,7 @@
  * 避免 App 侧 `as SettingsTabType` 与 string 漂移。
  */
 import type { Settings } from '../api/clientApi';
+import type { MessageCacheState } from '@crish/shared-types';
 export type AppSettings = Settings;
 export type GroupState = { id: string; cards: CardState[]; activeCardId: string | null };
 
@@ -408,6 +409,7 @@ export interface SessionMessageInput {
   streamTextOffset?: number | undefined;
   thinkingTime?: number | undefined;
   toolCallResults?: SessionMessageToolCallResult[] | undefined;
+  cacheMetrics?: MessageCacheState | null;
 }
 
 /** 会话内一条用户或助手消息 */
@@ -445,6 +447,12 @@ export interface SessionMessage {
     kind: string;
     technical?: string;
   } | undefined;
+  /**
+   * 消息级缓存指标（T-48；P6 `MessageCacheState` 契约）。
+   * null / undefined = 老数据或引擎未上报 → 渲染层隐藏（不显示 0% 误导，C15）；
+   * 写入侧：message-end → computeCacheMetricsFromUsage → 本字段（messageHandlers）。
+   */
+  cacheMetrics?: MessageCacheState | null;
 }
 
 /**

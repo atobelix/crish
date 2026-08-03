@@ -8,6 +8,13 @@
 //!
 //! 错误统一 `CoreError`（IPC 面唯一协议），`HostOpenerError` 经 `to_core_error` 映射。
 
+// G2 禁令豁免（clippy.toml 文件头「豁免面」）：host opener 进程执行面——
+// 本文件每个 spawn 点（open_host_target / open_with_shortcut /
+// open_path_with_default_app）执行前必过 CommandGatekeeper 双防线
+// （check_command + patterns 逐参匹配，见文件头安全模型与各函数体内校验），
+// 是「子进程经命令门禁」的门禁落地处本身。
+#![allow(clippy::disallowed_methods)]
+
 use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},

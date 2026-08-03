@@ -8,6 +8,68 @@
 import { blockText, mergeAssistantTextPiece } from './eventUtils';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
+import { useLayoutStore } from '../../../store';
+import type { MessageCacheState } from '@crish/shared-types';
+
+/**
+ * 把消息级缓存指标挂到 store 的 SessionMessage.cacheMetrics（T-48）。
+ *
+ * - 优先用 message-end 载荷携带的稳定消息 id（真实 daemon 回显
+ *   assistantClientMessageId = 本地 assistant message.id）；
+ * - 载荷缺 id（老形态/mock fixture）时兜底：会话内最后一条 status
+ *   === 'processing' 的 assistant 消息（即当前流式消息）。
+ * - null 语义（P6 C15）：metrics 为 null 时不写入（store 保持无字段，
+ *   渲染层隐藏而非显示 0%）。
+ */
+function attachCacheMetricsToStoreMessage(
+  sessionId: string,
+  messageId: string,
+  metrics: MessageCacheMetrics
+): void {
+  const cacheState: MessageCacheState = {
+    metrics,
+    source: 'engine-message-end',
+  };
+  useLayoutStore.setState((state) => {
+    const sess = state.sessionsById[sessionId];
+    // T-48 debug trace（e2e 排查用，收口前移除）
+    // eslint-disable-next-line no-console
+    console.log('[cache-metrics-attach]', { sessionId, messageId, hasSess: !!sess, msgCount: sess?.messages?.length ?? -1 });
+    if (!sess?.messages) return;
+    let target = messageId
+      ? sess.messages.find((m) => m.id === messageId)
+      : undefined;
+    if (!target) {
+      for (let i = sess.messages.length - 1; i >= 0; i--) {
+        const m = sess.messages[i];
+        if (!m) continue;
+        if (m.sender === 'assistant' && m.status === 'processing') {
+          target = m;
+          break;
+        }
+      }
+    }
+    // eslint-disable-next-line no-console
+    console.log('[cache-metrics-attach] target:', target ? target.id : 'NONE');
+    if (!target) return;
+    target.cacheMetrics = cacheState;
+  });
+  const after = useLayoutStore.getState();
+  const sess = after.sessionsById[sessionId];
+  const t = sess?.messages?.find(
+    (m) => m.id === (messageId || undefined)
+  );
+  // eslint-disable-next-line no-console
+  console.log(
+    '[cache-metrics-attach] after-setState:',
+    JSON.stringify({
+      found: !!t,
+      last: sess?.messages?.slice(-1)[0]?.id,
+      lastCache: sess?.messages?.slice(-1)[0]?.cacheMetrics ?? null,
+      sessionRefInSessions: after.sessions.some((s) => s.id === sessionId),
+    })
+  );
+}
 
 /**
  * 消息级缓存指标（T-47；T-41 的 shared-utils `computeCacheMetrics` 未就位时的
@@ -174,5 +236,9 @@ export function onMessageEnd(
   // 存入流状态（null = 未上报隐藏；store 层 SessionMessage.cacheMetrics
   // 接线由 T-48 消费）。仅非 null 写入，无数据时不覆盖上一拍。
   const metrics = computeCacheMetricsFromUsage(msg.metadata);
-  if (metrics) state.lastMessageCacheMetrics = metrics;
+  if (metrics) {
+    state.lastMessageCacheMetrics = metrics;
+    // T-48：同步挂到 store 消息（badge 数据链：事件 → SessionMessage.cacheMetrics）
+    attachCacheMetricsToStoreMessage(env.sessionId, msg.id, metrics);
+  }
 }

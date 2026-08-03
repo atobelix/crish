@@ -67,6 +67,7 @@ import {
 } from './types';
 import { applyDockToTree, ensureAdapterShape, ensureChatOnlyTree } from './adapterShape';
 import { syncShellDocksFromTree } from './layoutRestorePolicy';
+import { registerShellReadApi } from './shellReadBridge';
 import {
   useLayoutTreeStore,
   findChatLeafBySessionId,
@@ -79,7 +80,6 @@ import {
 } from '../layout-tree';
 import type { LayoutTree } from '../layout-tree/types';
 import { isTreeDockProjectionSuppressed } from './treeDockProjection';
-import { getCompositionRoot } from '../../app/compositionRoot';
 
 /**
  * 归一化：去掉同 session 重复 chat leaf，写回 store（有变更才 setTree）。
@@ -87,7 +87,7 @@ import { getCompositionRoot } from '../../app/compositionRoot';
  * T06.9.1：跨 store 读经 compositionRoot.tree 门面（阻断对 layoutTreeStore 的直接 import 环）。
  */
 function dedupeSessionLeavesInStore(): void {
-  const store = getCompositionRoot().tree.getState();
+  const store = useLayoutTreeStore.getState();
   const next = dedupeDuplicateSessionChatLeaves(store.tree);
   if (next !== store.tree) {
     store.setTree(next);
@@ -101,7 +101,7 @@ function dedupeSessionLeavesInStore(): void {
 function removeSessionUnitFromTree(sessionId: string): void {
   const sid = (sessionId || '').trim();
   if (!sid) return;
-  const store = getCompositionRoot().tree.getState();
+  const store = useLayoutTreeStore.getState();
   const next = removeUnitBySessionId(store.tree, sid);
   if (next !== store.tree) {
     store.setTree(next);
@@ -123,7 +123,7 @@ function neighborDockNeedsProject(
   // 折叠 / 无 active 面板：不因 focus 去剥树
   if (dock.collapsed || !dock.activePanelId) return false;
 
-  const layout = getCompositionRoot().tree.getState();
+  const layout = useLayoutTreeStore.getState();
   const unitId = findUnitRootId(layout.tree.root, sid);
   if (!unitId) return true;
   const unit = findNodeById(layout.tree.root, unitId);
@@ -152,12 +152,12 @@ function bindActiveChatLeafSession(sessionId: string): void {
 
   dedupeSessionLeavesInStore();
 
-  let store = getCompositionRoot().tree.getState();
+  let store = useLayoutTreeStore.getState();
   let chats = listChatLeaves(store.tree.root);
 
   if (chats.length === 0) {
     ensureAdapterShape();
-    store = getCompositionRoot().tree.getState();
+    store = useLayoutTreeStore.getState();
     chats = listChatLeaves(store.tree.root);
   }
 
@@ -505,7 +505,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     // 关键：ChatCard 若钉死 leaf.sessionId，会忽略 PENDING_DRAFT → 看起来「点了没反应」
     // 解绑当前活动 chat leaf，让面板跟全局 draft 空态
     try {
-      const treeStore = getCompositionRoot().tree.getState();
+      const treeStore = useLayoutTreeStore.getState();
       const chats = listChatLeaves(treeStore.tree.root);
       const target =
         chats.find((c) => c.id === treeStore.activeLeafId) ??
@@ -610,6 +610,17 @@ export function selectActiveTabSessionId(
 //   消除 shell↔tree 双向投影互触发回环。
 // 语义：用户拖拽 / 分屏等纯 tree 变更（非 shell 投影路径）仍照常反推
 // shell rightDock 元数据，保证后续 applyDockToTree 重投影不拿旧 dock 覆盖树。
+
+// G13 断环：向 shellReadBridge 注册本 store 的读取/写入闭包，
+// adapterShape / layoutRestorePolicy 经桥访问 shell，不再 import 本文件。
+registerShellReadApi({
+  getActiveTab: () => useWorkspaceShellStore.getState().getActiveTab(),
+  getOpenTabs: () => useWorkspaceShellStore.getState().openTabs,
+  setOpenTabs: (tabs) => useWorkspaceShellStore.setState({ openTabs: tabs }),
+  resetToCleanDraft: (workspaceKey) =>
+    useWorkspaceShellStore.getState().resetToCleanDraft(workspaceKey),
+});
+
 let treeDockSyncRegistered = false;
 let lastSyncedTree: LayoutTree | null = null;
 

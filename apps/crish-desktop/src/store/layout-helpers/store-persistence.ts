@@ -40,6 +40,16 @@ export interface StoreApiLike<S extends PersistableStoreState> {
   subscribe: (listener: (state: S) => void) => () => void;
 }
 
+/**
+ * 依赖倒置（G13 断环）：会话激活由调用方 store 自身 action 提供，
+ * 避免 store-persistence 反向 import api/storeAccess（api → store 大环）。
+ * layoutStore（含 SessionActions）天然满足该接口。
+ */
+export type SessionActivatableStore<S extends PersistableStoreState> = StoreApiLike<S> & {
+  /** 会话激活（触发引擎懒水合）；不存在时降级为空操作 */
+  setActiveSessionId?: (id: string) => void;
+};
+
 export function serializeWorkspaceLayout<S extends PersistableStoreState>(
   state: S
 ): WorkspaceLayoutSnapshot {
@@ -101,7 +111,7 @@ export function waitForStoreHydration<S extends PersistableStoreState>(
  * 由 App 在 mount 时调用一次，unmount 时执行返回的 cleanup。
  */
 export function initStorePersistence<S extends PersistableStoreState>(
-  store: StoreApiLike<S>
+  store: SessionActivatableStore<S>
 ): () => void {
   if (isDemoMode()) {
     return () => undefined;
@@ -149,9 +159,10 @@ export function initStorePersistence<S extends PersistableStoreState>(
         const cur = store.getState();
         let applied = false;
         let filledBodies = false;
-        // 经 storeAccess 命名 action 激活（动态 import 防 store↔api 循环依赖：
-        // storeAccess → sessionStore → layoutStore → store-persistence 回环）
-        const { setActiveSessionId } = await import('../../api/storeAccess');
+        // 经 store 自身 action 激活（依赖倒置：store-persistence 不再反向
+        // import api/storeAccess，G13 断环——api → store 大环的收口边）
+        const setActiveSessionId = (id: string) =>
+          store.setActiveSessionId?.(id);
 
         if (cur.sessions.length === 0) {
           // 冷启动无 seed：全量回灌 SQLite

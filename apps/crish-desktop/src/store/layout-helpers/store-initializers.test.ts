@@ -51,6 +51,44 @@ describe('store-initializers', () => {
     });
   });
 
+  it('sanitizeTokenUsage 4D 宽容：cache 可选字段非负有限（T-47）', () => {
+    // 负值钳 0；非数字 / NaN → 键省略（undefined = 未上报隐藏）
+    const dirty = sanitizeTokenUsage({ cacheRead: -5, cacheWrite: 'x', savedCost: NaN });
+    expect(dirty.cacheRead).toBe(0);
+    expect(dirty.cacheWrite).toBeUndefined();
+    expect(dirty.savedCost).toBeUndefined();
+
+    // 双端均无 cache 字段 → 结果不含 4D 键（与既有形状一致）
+    expect(sanitizeTokenUsage({ input: 1 })).not.toHaveProperty('cacheRead');
+
+    // 任意一端提供 → 取合法非负值
+    const base = {
+      input: 1,
+      inputMax: 2,
+      output: 3,
+      outputMax: 4,
+      cost: 0.5,
+      cacheRead: 10,
+      cacheWrite: 2,
+      savedCost: 0.01,
+    };
+    const keep = sanitizeTokenUsage({ input: 9 }, base);
+    expect(keep).toEqual({
+      input: 9,
+      inputMax: 2,
+      output: 3,
+      outputMax: 4,
+      cost: 0.5,
+      cacheRead: 10,
+      cacheWrite: 2,
+      savedCost: 0.01,
+    });
+    const next = sanitizeTokenUsage({ input: 9, cacheRead: 20, savedCost: 0.05 }, base);
+    expect(next.cacheRead).toBe(20);
+    expect(next.cacheWrite).toBe(2);
+    expect(next.savedCost).toBe(0.05);
+  });
+
   it('sanitizeActiveWorkers filters invalid items', () => {
     expect(sanitizeActiveWorkers([null, { id: 'w1', elapsedSeconds: 10 }])).toEqual([
       { id: 'w1', taskName: '', elapsedSeconds: 10 },

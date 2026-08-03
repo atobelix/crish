@@ -32,7 +32,7 @@ import {
 } from '../layout-tree/types';
 import { findParent } from '../layout-tree/operations';
 import type { RightToolDockState } from './types';
-import { useWorkspaceShellStore } from './workspaceShellStore';
+import { getShellReadApi } from './shellReadBridge';
 import { withTreeDockProjectionSuppressed } from './treeDockProjection';
 import { getActiveSessionId } from '../../api/storeAccess';
 
@@ -430,9 +430,9 @@ function resolveTargetSessionId(explicit?: string): string | null {
   const sid = (explicit || '').trim();
   if (sid) return sid;
 
-  // 活动 shell tab（运行期调用；模块循环依赖在 getState 时通常已初始化完毕）
+  // 活动 shell tab（运行期调用；经 shellReadBridge 注册式读取，避免 store 环）
   try {
-    const tab = useWorkspaceShellStore.getState().getActiveTab();
+    const tab = getShellReadApi()?.getActiveTab();
     if (tab?.sessionId) return tab.sessionId;
   } catch {
     /* 循环初始化窗口内忽略，走 tree 回退 */
@@ -535,8 +535,8 @@ export function reprojectAllSessionDocks(): void {
 
     let current = treeStore.tree;
     try {
-      const tabs = useWorkspaceShellStore.getState().openTabs;
-      for (const tab of tabs) {
+      const tabs = getShellReadApi()?.getOpenTabs();
+      for (const tab of tabs ?? []) {
         const sid = (tab.sessionId || '').trim();
         if (!sid) continue;
         const dock = tab.rightDock;

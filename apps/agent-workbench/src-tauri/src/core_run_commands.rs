@@ -1759,7 +1759,9 @@ const DEFAULT_TRASH_DIR_NAME: &str = ".crish-trash";
 /// 1. 托管状态注入优先（main.rs 配置注入点，数据目录或显式根）；
 /// 2. 未注入 → 活动工作区 `.crish-trash`（S3 执行期兜底语义）；
 /// 工作区注册表不可用 → 结构化错误（不静默退化）。
-fn trash_root_for(app: &tauri::AppHandle) -> Result<PathBuf, CoreError> {
+/// pub(crate)：供 fs_commands/delete.rs（UI 删除命令）复用，保证
+/// UI 删除与 AI 删除落入同一回收站根（S11 G2 删除接管收敛）。
+pub(crate) fn trash_root_for(app: &tauri::AppHandle) -> Result<PathBuf, CoreError> {
     if let Some(config) = app.try_state::<TrashRootConfig>() {
         if let Some(root) = &config.root {
             return Ok(root.clone());
@@ -1991,6 +1993,9 @@ fn now_iso_utc() -> String {
 
 #[cfg(test)]
 mod tests {
+    // G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
+    #![allow(clippy::disallowed_methods)]
+
     use super::*;
     use conex_types::message::{AgentMessageBlock, AgentMessageRole, ToolCallBlock};
     use conex_types::session::AgentEndReason;

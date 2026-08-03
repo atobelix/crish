@@ -235,6 +235,10 @@ impl Default for LogRetention {
 ///    旧 → 新删除普通日志，直到总量不超限。
 ///
 /// 返回被删除的文件名（测试断言用）；目录不存在 / 读取失败返回空列表。
+#[allow(clippy::disallowed_methods)]
+// G2 禁令豁免（clippy.toml 文件头「豁免面」）：日志保留策略轮转——清理对象是
+// 本进程自管的日志文件（crash 保留 N 份 / 按日龄清理 / 总量上限），按策略
+// 物理删除是日志子系统自身语义，进回收站/快照反而留下无意义的旧日志。
 pub fn cleanup_logs(dir: &Path, retention: &LogRetention) -> Vec<String> {
     let mut deleted = Vec::new();
     let Ok(entries) = fs::read_dir(dir) else {
@@ -396,6 +400,9 @@ fn civil_from_days(days_since_epoch: i64) -> (i64, u32, u32) {
 
 #[cfg(test)]
 mod tests {
+    // G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
+    #![allow(clippy::disallowed_methods)]
+
     use super::*;
 
     /// 独立临时目录（测试并发安全：进程 id + 纳秒时间戳唯一）

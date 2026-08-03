@@ -18,6 +18,10 @@ impl LocalDb {
     }
 
     /// 迁移备份：整库拷贝到 `sessions.db.bak-v{n}`，保留最近 [BACKUP_KEEP] 份。
+    #[allow(clippy::disallowed_methods)]
+    // G2 禁令豁免（clippy.toml 文件头「豁免面」）：迁移备份轮转——删除对象是
+    // 迁移时本库自产的最旧备份（新备份已生成，旧备份被取代），非用户文件，
+    // 进回收站/快照会留下陈旧 DB 副本（含敏感数据），轮转物理删除更正确。
     fn backup_before_drop(&self, path: &Path, version: u32) {
         let Some(dir) = path.parent() else {
             return;
