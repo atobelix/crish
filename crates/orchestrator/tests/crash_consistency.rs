@@ -88,6 +88,7 @@ fn snapshot_with_leaf(generation: u64, last_sequence: u64, leaf: &str) -> StateS
             session_id: "s1".to_string(),
             current_leaf_id: Some(leaf.to_string()),
             branches: Vec::new(),
+            context_meta: None,
         }],
         Vec::new(),
         Vec::new(),

@@ -556,7 +556,11 @@ fn to_loop_event(event: WireEvent) -> ProviderStreamEvent {
 /// - 跨会话并发安全：provider 只读共享（Mutex<Option<Arc<dyn ProviderCall>>>），
 ///   std Mutex 不跨 await 持有（AA-02 并发模型注记）。
 pub(crate) struct EngineHandle {
-    /// 共享 reqwest 客户端（连接池跨 run 复用，AA-02 S-7）
+    /// 共享 reqwest 客户端（连接池跨 run 复用，AA-02 S-7）。
+    ///
+    /// G11a 备注：本字段仅被 `reload()` 读取（config_update 后的重载接线
+    /// 在引擎集成域推进中），new() 仅写入——dead_code 静音待接线。
+    #[allow(dead_code)]
     client: Arc<reqwest::Client>,
     /// 生效的 provider 适配层（None = 配置缺失降级未就绪）
     provider: Mutex<Option<Arc<dyn ProviderCall>>>,
@@ -613,7 +617,11 @@ impl EngineHandle {
         }
     }
 
-    /// 重载生效配置（config_update 后调用；失败降级未就绪）
+    /// 重载生效配置（config_update 后调用；失败降级未就绪）。
+    ///
+    /// G11a 备注：config_update → EngineHandle::reload 的接线尚未落地
+    /// （引擎集成域），当前仅 client 字段在此读取——dead_code 静音待接线。
+    #[allow(dead_code)]
     pub(crate) fn reload(&self) {
         let (provider, ready, ready_reason) = match load_provider_endpoint() {
             Some(config) => {
@@ -733,22 +741,6 @@ impl BufferedRunEventBridge {
         }
         report
     }
-
-    /// 缓冲中待发条数（观测）
-    pub(crate) fn buffered_len(&self) -> usize {
-        self.buffer
-            .lock()
-            .map(|buffer| buffer.len(&self.run_id))
-            .unwrap_or(0)
-    }
-
-    /// 丢弃本 run 的缓冲（终态清理；返回被丢弃条数）
-    pub(crate) fn drop_buffered(&self) -> usize {
-        self.buffer
-            .lock()
-            .map(|mut buffer| buffer.remove_run(&self.run_id))
-            .unwrap_or(0)
-    }
 }
 
 // ── BridgeDeltaSink：T09.1 实时轨桥 ────────────────────────────────
@@ -840,6 +832,9 @@ pub(crate) struct SessionLoopProducer {
     approval: Option<Arc<dyn ApprovalGate>>,
     /// 实时 delta 转发（T09.1；None = 不启用，收口流 message-delta 兜底）
     delta_sink: Option<Arc<dyn DeltaSink>>,
+    /// 预置初始对话（P4 T-30 水合：SessionHistoryCache 缓存 / 前端 history
+    /// 水合产物；None = 现状单消息 run，向后兼容）
+    initial_conversation: Option<Vec<Arc<AgentMessage>>>,
     /// 本次 run 的用户消息
     user_message: AgentMessage,
 }
@@ -858,6 +853,7 @@ impl SessionLoopProducer {
         tool_options: ToolBatchOptions,
         approval: Option<Arc<dyn ApprovalGate>>,
         delta_sink: Option<Arc<dyn DeltaSink>>,
+        initial_conversation: Option<Vec<Arc<AgentMessage>>>,
         user_message: AgentMessage,
     ) -> Self {
         Self {
@@ -870,12 +866,18 @@ impl SessionLoopProducer {
             tool_options,
             approval,
             delta_sink,
+            initial_conversation,
             user_message,
         }
     }
 
-    /// 生产一次 run 结果（构造 [AgentSessionLoop] 并运行；每 run 重建，
-    /// 对话由 store 水合承担，PE-09 T09.3.3）
+    /// 生产一次 run 结果（构造 [AgentSessionLoop] 并运行；每 run 重建）
+    ///
+    /// T-30 水合分支（P4 §3.2.3 混合路线）：`initial_conversation` 非空时
+    /// 以 [AgentSessionLoop::with_initial_conversation_arc] 零拷贝预置对话
+    /// （引擎缓存 = 权威增量 / 前端 history = 冷启动兜底，P4 阶段 1-3），
+    /// `run()` 追加新用户消息——历史回流 LLM 是跨轮前缀缓存命中的基础；
+    /// 为空时走现状单消息路径（向后兼容）。
     pub(crate) async fn produce(&mut self) -> RunOutcome {
         let mut session_loop = AgentSessionLoop::new(
             self.session_id.as_str(),
@@ -896,6 +898,14 @@ impl SessionLoopProducer {
         if let Some(delta_sink) = &self.delta_sink {
             session_loop = session_loop.with_delta_sink(Arc::clone(delta_sink));
         }
+        // 水合分支：预置对话经 with_initial_conversation_arc 一次性填充
+        // （Arc 克隆便宜，0 深拷贝；P1 append-only 不变量：之后 loop 只追加）
+        if let Some(initial_conversation) = &self.initial_conversation {
+            if !initial_conversation.is_empty() {
+                session_loop =
+                    session_loop.with_initial_conversation_arc(initial_conversation.clone());
+            }
+        }
         session_loop.run(self.user_message.clone()).await
     }
 }
@@ -906,7 +916,9 @@ impl SessionLoopProducer {
 mod tests {
     use super::*;
     use agent_provider::request::cache::{CacheKey, CacheMechanism};
+    use conex_types::ContextBudget;
     use session_loop::provider::ProviderStreamItem;
+    use session_loop::TestProvider;
 
     /// ISO8601 时间戳形状（毫秒精度 + Z 后缀）
     #[test]
@@ -1358,5 +1370,131 @@ mod tests {
             extra: BTreeMap::new(),
         };
         assert!(responses_supported(&gateway));
+    }
+
+    // ── T-30：produce 水合分支 + 预算透传（P4 阶段 1-3/1-4，§3.2.1/§3.2.3）──
+
+    /// 构造测试用 producer（initial_conversation / options 可注入；
+    /// provider 为脚本化替身，供请求快照断言）
+    fn test_producer(
+        initial_conversation: Option<Vec<Arc<AgentMessage>>>,
+        options: SessionLoopOptions,
+    ) -> (SessionLoopProducer, Arc<TestProvider>) {
+        let provider = Arc::new(TestProvider::text_reply("收到"));
+        let provider_call: Arc<dyn ProviderCall> = Arc::clone(&provider) as Arc<dyn ProviderCall>;
+        let producer = SessionLoopProducer::new(
+            "ses-t30".to_string(),
+            "run-t30".to_string(),
+            8,
+            provider_call,
+            Arc::new(ToolRegistry::new()),
+            options,
+            ToolBatchOptions::default(),
+            None,
+            None,
+            initial_conversation,
+            user_message("第二轮提问", Some("user-t30")),
+        );
+        (producer, provider)
+    }
+
+    /// T-30：produce 水合分支——预置对话经 with_initial_conversation_arc
+    /// 零拷贝续接（Arc 身份不变），run 追加新用户消息与助手回复；
+    /// 收口 outcome.messages 携带完整续接序列（SessionHistoryCache 的
+    /// 原子替换数据源，P4 阶段 1-4）
+    #[tokio::test]
+    async fn produce_hydrates_initial_conversation() {
+        let initial_text = AgentMessage {
+            id: "assistant-1".to_string(),
+            role: AgentMessageRole::Assistant,
+            created_at: "2026-08-03T00:00:00.000Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "首轮回复".to_string(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        };
+        let initial: Vec<Arc<AgentMessage>> = vec![Arc::new(initial_text)];
+        let (mut producer, provider) =
+            test_producer(Some(initial.clone()), SessionLoopOptions::default());
+
+        let outcome = producer.produce().await;
+
+        // 请求链：预置对话 + 新用户消息（水合分支生效，历史回流 LLM）
+        let sent = provider.request_message_arcs(0);
+        assert_eq!(
+            sent.len(),
+            initial.len() + 1,
+            "请求应含预置对话 + 新用户消息"
+        );
+        assert!(
+            Arc::ptr_eq(&initial[0], &sent[0]),
+            "预置消息零拷贝续接（Arc 身份不变）"
+        );
+        assert_eq!(sent[0].role, AgentMessageRole::Assistant);
+        let last = sent.last().expect("至少一条消息");
+        assert_eq!(last.role, AgentMessageRole::User, "尾部应为新用户消息");
+        let text = last
+            .blocks
+            .iter()
+            .find_map(|block| match block {
+                AgentMessageBlock::Text { text } => Some(text.as_str()),
+                _ => None,
+            });
+        assert_eq!(text, Some("第二轮提问"));
+
+        // 收口：outcome = 预置 + 用户 + 助手回复（缓存原子替换的数据源）
+        assert_eq!(outcome.messages.len(), initial.len() + 2);
+        assert!(
+            Arc::ptr_eq(&initial[0], &outcome.messages[0]),
+            "收口续接保留预置消息 Arc 身份"
+        );
+        assert_eq!(
+            outcome.messages.last().map(|m| m.role),
+            Some(AgentMessageRole::Assistant)
+        );
+    }
+
+    /// T-30：initial_conversation 为空（None / 空 Vec）→ 现状单消息路径
+    /// （向后兼容：请求只含本次用户消息，不产生空预置）
+    #[tokio::test]
+    async fn produce_without_initial_conversation_stays_single_message() {
+        let (mut producer, provider) = test_producer(None, SessionLoopOptions::default());
+        let outcome = producer.produce().await;
+        let sent = provider.request_message_arcs(0);
+        assert_eq!(sent.len(), 1, "无预置时请求只含本次用户消息");
+        assert_eq!(sent[0].role, AgentMessageRole::User);
+        assert_eq!(outcome.messages.len(), 2, "用户 + 助手回复");
+
+        // Some(空 Vec) 同样走单消息路径（空预置不产生水合调用）
+        let (mut producer_empty, provider_empty) =
+            test_producer(Some(Vec::new()), SessionLoopOptions::default());
+        producer_empty.produce().await;
+        assert_eq!(provider_empty.request_message_arcs(0).len(), 1);
+    }
+
+    /// T-30：context_budget 透传（core_run_commands 构造点 → options →
+    /// 预算层）——窗口收紧到 12288 时 max_tokens 被钳到默认 8192 之下
+    /// （clamp = min(requested, window - estimate - safety)，估算 > 0）
+    #[tokio::test]
+    async fn produce_applies_context_budget_clamp() {
+        let options = SessionLoopOptions {
+            context_budget: Some(ContextBudget {
+                context_window: 12_288,
+                ..ContextBudget::default()
+            }),
+            ..SessionLoopOptions::default()
+        };
+        let (mut producer, provider) = test_producer(None, options);
+        producer.produce().await;
+        let max_tokens = provider
+            .request_max_tokens(0)
+            .expect("请求应携带 max_tokens");
+        assert!(
+            max_tokens < session_loop::r#loop::DEFAULT_MAX_TOKENS,
+            "预算钳制应把 max_tokens 收到默认 8192 之下（实际 {max_tokens}）"
+        );
+        assert!(max_tokens >= 1, "钳制下限 MIN_MAX_TOKENS = 1");
     }
 }

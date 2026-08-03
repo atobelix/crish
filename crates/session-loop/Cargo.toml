@@ -12,6 +12,10 @@ workspace = true
 
 [dependencies]
 agent-tools = { path = "../agent-tools" }
+# T-33（R4）：预算钳制 + 预检触发内联调用 CompactionEngine（P4 §3.4.1
+# 核心决策——run 循环内直接依赖 conex-compaction，不走 core_compact_messages
+# IPC 绕行）；conex-compaction 仅依赖 conex-types + serde_json，无环。
+conex-compaction = { path = "../conex-compaction" }
 conex-types = { path = "../conex-types" }
 futures = "0.3"
 serde = { workspace = true }

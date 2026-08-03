@@ -6,35 +6,39 @@
  * - messageBelongsToRun 过滤不误杀（B6.3 注入 runId 后按 runId 精确路由）
  * - 核心未就绪时拒绝启动（C3.4 后无 directFetch 降级）
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { createStreamSession, streamViaEngine } from './ConnectionLifecycle';
 import type { StreamCallbacks } from '../chatApi';
 import type { StreamState } from './handlers/streamState';
+import type { SessionMessage } from '../../store/types';
 import { resetControlMetrics } from '../controlMetrics';
 
-const { fakeTransport, startRunTask, messageListener } = vi.hoisted(() => {
-  const messageListener = {
-    current: null as ((msg: Record<string, unknown>) => void) | null,
-  };
-  const fakeTransport = {
-    waitUntilConnected: vi.fn(async () => true),
-    isReady: vi.fn(() => true),
-    onMessage: vi.fn((cb: (msg: Record<string, unknown>) => void) => {
-      messageListener.current = cb;
-      return () => undefined;
-    }),
-    getStatus: vi.fn(() => 'connected' as const),
-    onStatus: vi.fn(() => () => undefined),
-    request: vi.fn(async () => ({ runId: 'r', sessionId: 's' })),
-    send: vi.fn(async () => undefined),
-    stop: vi.fn(),
-  };
-  return {
-    fakeTransport,
-    startRunTask: vi.fn(async () => undefined),
-    messageListener,
-  };
-});
+const { fakeTransport, startRunTask, messageListener, loadSessionBodyMock } =
+  vi.hoisted(() => {
+    const messageListener = {
+      current: null as ((msg: Record<string, unknown>) => void) | null,
+    };
+    const fakeTransport = {
+      waitUntilConnected: vi.fn(async () => true),
+      isReady: vi.fn(() => true),
+      onMessage: vi.fn((cb: (msg: Record<string, unknown>) => void) => {
+        messageListener.current = cb;
+        return () => undefined;
+      }),
+      getStatus: vi.fn(() => 'connected' as const),
+      onStatus: vi.fn(() => () => undefined),
+      request: vi.fn(async () => ({ runId: 'r', sessionId: 's' })),
+      send: vi.fn(async () => undefined),
+      stop: vi.fn(),
+    };
+    return {
+      fakeTransport,
+      startRunTask: vi.fn(async () => undefined),
+      messageListener,
+      // P4 T-31：loadSessionBody mock（createStreamSession 动态 import 的历史真源）
+      loadSessionBodyMock: vi.fn(async () => []),
+    };
+  });
 
 vi.mock('../transport', () => ({
   getTransport: () => fakeTransport,
@@ -73,13 +77,27 @@ vi.mock('../clientApi', async (importOriginal) => {
   };
 });
 
+// P4 T-31：createStreamSession 内 `await import('../session-persistence/sessionRustDb')`
+// 的水合数据源 mock（测试可注入会话正文；缺省空会话）
+vi.mock('../session-persistence/sessionRustDb', () => ({
+  loadSessionBody: loadSessionBodyMock,
+}));
+
 describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
   beforeEach(() => {
     vi.mocked(fakeTransport.waitUntilConnected).mockResolvedValue(true);
     vi.mocked(fakeTransport.isReady).mockReturnValue(true);
     messageListener.current = null;
     startRunTask.mockClear();
+    loadSessionBodyMock.mockClear();
+    loadSessionBodyMock.mockResolvedValue([]);
     resetControlMetrics();
+  });
+
+  afterEach(() => {
+    localStorage.removeItem('crish_active_profile_id');
+    localStorage.removeItem('crish_active_model_id');
+    localStorage.removeItem('crish_model_meta_v1');
   });
 
   describe('createStreamSession：core_run_task 参数组装', () => {
@@ -221,6 +239,145 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
         'Base instructions.\n\n' +
           'Response style: balanced. Be clear and complete without padding. Explain non-obvious steps briefly.'
       );
+    });
+
+    it('P4 T-31：history 经 startRunTask 透传（loadSessionBody 数据源；完成态过滤 + 排除当前消息 + camelCase 字段）', async () => {
+      localStorage.setItem('crish_active_profile_id', 'p1');
+      localStorage.setItem('crish_active_model_id', 'deepseek-chat');
+      localStorage.setItem(
+        'crish_model_meta_v1',
+        JSON.stringify({
+          'p1::deepseek-chat': {
+            profileId: 'p1',
+            model: 'deepseek-chat',
+            enabled: true,
+            contextLength: 131_072,
+          },
+        })
+      );
+      loadSessionBodyMock.mockResolvedValue([
+        {
+          id: 'h1',
+          sender: 'user',
+          text: '第一轮问题',
+          timestamp: 1000,
+          status: 'completed',
+        },
+        {
+          id: 'h2',
+          sender: 'assistant',
+          text: '第一轮回复',
+          thinking: '思考中',
+          timestamp: 2000,
+          status: 'completed',
+          toolCalls: [
+            { id: 'c1', name: 'bash', arguments: '{}', status: 'success' },
+          ],
+          toolCallResults: [{ id: 'c1', output: 'ok', isError: false }],
+        },
+        // 当前 run 的 user 消息：完成态也要排除（避免历史与 prompt 重复）
+        {
+          id: 'cur',
+          sender: 'user',
+          text: '当前问题',
+          timestamp: 3000,
+          status: 'completed',
+        },
+      ] as SessionMessage[]);
+
+      const callbacks: StreamCallbacks = {
+        onChunk: vi.fn(),
+        onThought: vi.fn(),
+        onToolStart: vi.fn(),
+        onToolError: vi.fn(),
+        onToolSuccess: vi.fn(),
+        onComplete: vi.fn(),
+      };
+      const state: StreamState = {
+        cancelled: false,
+        finished: false,
+        assistantText: '',
+        assistantThought: '',
+        unsub: null,
+        endTimer: null,
+      };
+
+      await createStreamSession(
+        '当前问题',
+        'sess-h-1',
+        'run-h-1',
+        callbacks,
+        { clientMessageId: 'cur' },
+        state,
+        () => undefined,
+        vi.fn()
+      );
+
+      expect(loadSessionBodyMock).toHaveBeenCalledWith('sess-h-1');
+      expect(startRunTask).toHaveBeenCalledTimes(1);
+      const params = startRunTask.mock.calls[0][1] as Record<string, unknown>;
+      expect(params.history).toEqual([
+        {
+          id: 'h1',
+          sender: 'user',
+          text: '第一轮问题',
+          timestamp: 1000,
+          status: 'completed',
+        },
+        {
+          id: 'h2',
+          sender: 'assistant',
+          text: '第一轮回复',
+          thinking: '思考中',
+          timestamp: 2000,
+          status: 'completed',
+          tool_calls_json:
+            '[{"id":"c1","name":"bash","arguments":"{}","status":"success"}]',
+          tool_call_results_json: '[{"id":"c1","output":"ok","isError":false}]',
+        },
+      ]);
+      // contextWindow 经生效模型 catalog 解析后透传（T-33 预算钳制消费）
+      expect(params.contextWindow).toBe(131_072);
+    });
+
+    it('P4 T-31：空会话 → history / contextWindow 均不发送（params 无对应字段）', async () => {
+      loadSessionBodyMock.mockResolvedValue([]);
+
+      const callbacks: StreamCallbacks = {
+        onChunk: vi.fn(),
+        onThought: vi.fn(),
+        onToolStart: vi.fn(),
+        onToolError: vi.fn(),
+        onToolSuccess: vi.fn(),
+        onComplete: vi.fn(),
+      };
+      const state: StreamState = {
+        cancelled: false,
+        finished: false,
+        assistantText: '',
+        assistantThought: '',
+        unsub: null,
+        endTimer: null,
+      };
+
+      await createStreamSession(
+        'hi empty',
+        'sess-empty-1',
+        'run-empty-1',
+        callbacks,
+        undefined,
+        state,
+        () => undefined,
+        vi.fn()
+      );
+
+      expect(startRunTask).toHaveBeenCalledTimes(1);
+      const params = startRunTask.mock.calls[0][1] as Record<string, unknown>;
+      expect(params.history).toBeUndefined();
+      expect(params.contextWindow).toBeUndefined();
+      // 其余参数不受影响（现状单消息 run 向后兼容）
+      expect(params.prompt).toBe('hi empty');
+      expect(params.sessionId).toBe('sess-empty-1');
     });
   });
 

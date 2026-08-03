@@ -20,6 +20,7 @@ use std::collections::HashSet;
 use std::fmt;
 
 use conex_db::RunStatus;
+use conex_types::context::SessionContextMeta;
 use serde::{Deserialize, Serialize};
 
 use crate::run::RunStateMachine;
@@ -145,7 +146,20 @@ pub struct SessionRecord {
     pub current_leaf_id: Option<String>,
     /// 分支列表（全部分支历史条目，父先于子的插入序）
     pub branches: Vec<SessionTreeEntry>,
+    /// 会话上下文元数据（P4 阶段 5-1 / §3.7）：压缩护栏状态
+    /// （last_compaction_at / last_compaction_sequence /
+    /// last_compaction_generation / compression_retries）随会话记录持久化；
+    /// restore 时随 [crate::restore::RestoreOutcome::sessions] 返回，
+    /// 供壳层重建 SessionHistoryCache 的护栏状态（跨重启不丢）。
+    /// 旧快照无该字段（serde default → None = 无压缩边界，护栏从零开始）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_meta: Option<SessionContextMeta>,
 }
+
+/// 会话上下文压缩护栏更新事件类型（context-compression-end，落库事件流
+/// 的 type；restore 重放重建护栏用，与 session-leaf-moved 的既有恢复机制
+/// 同构，P4 阶段 5-1）
+pub const CONTEXT_COMPRESSION_END_EVENT: &str = "context-compression-end";
 
 impl SessionRecord {
     /// 应用 session-leaf-moved 事件的载荷（持久化叶子移动的重放；
@@ -167,11 +181,122 @@ impl SessionRecord {
         self.current_leaf_id = Some(to_leaf_id.to_string());
         Ok(())
     }
+
+    /// 会话上下文元数据（None = 尚无压缩护栏状态，护栏从零开始）
+    pub fn context_meta(&self) -> Option<&SessionContextMeta> {
+        self.context_meta.as_ref()
+    }
+
+    /// 写入会话上下文元数据（压缩事件写点 / 恢复重建护栏状态用）
+    pub fn set_context_meta(&mut self, meta: SessionContextMeta) {
+        self.context_meta = Some(meta);
+    }
+
+    /// 压缩结束事件折叠（P4 阶段 5-1 写点）：压缩事件落库时更新护栏——
+    /// `last_compaction_at` = 事件时间戳（epoch ms，时间戳护栏边界）、
+    /// `last_compaction_sequence` = 事件序列（审计锚点）、
+    /// `last_compaction_generation` +1（C13：压缩重置 P5 审计基线）、
+    /// `compression_retries` 归零（溢出压缩已消费，fresh 起点）。
+    ///
+    /// 返回是否成功更新（事件时间戳不可解析时返回 false，不破坏既有状态；
+    /// 不变量：非法输入绝不把护栏写坏）。
+    pub fn apply_compression_end(&mut self, sequence: u64, timestamp_iso: &str) -> bool {
+        let Some(boundary_ms) = parse_iso8601_epoch_ms(timestamp_iso) else {
+            return false;
+        };
+        let meta = self.context_meta.get_or_insert_with(SessionContextMeta::default);
+        meta.last_compaction_at = Some(boundary_ms);
+        meta.last_compaction_sequence = Some(sequence);
+        meta.last_compaction_generation = Some(meta.last_compaction_generation.unwrap_or(0) + 1);
+        meta.compression_retries = 0;
+        true
+    }
 }
 
 /// session-leaf-moved 事件载荷（叶子移动持久化，05 §2.8:813）
 pub fn session_leaf_moved_payload(to_leaf_id: &str) -> String {
     serde_json::json!({ "toLeafId": to_leaf_id }).to_string()
+}
+
+/// ISO8601 时间戳 → epoch 毫秒（无 chrono 依赖的手工解析；与 session-loop
+/// `now_iso_utc` 产出形态对齐：`YYYY-MM-DDTHH:MM:SS[.mmm]Z`，仅接受 UTC）。
+///
+/// 供压缩事件时间戳（epoch ms 语义，与 session-loop 时间戳护栏 `unix_millis`
+/// 同精度）与 [SessionRecord::apply_compression_end] 使用；解析失败返回
+/// None（调用方保持既有护栏状态，绝不写坏）。
+pub(crate) fn parse_iso8601_epoch_ms(value: &str) -> Option<i64> {
+    let bytes = value.as_bytes();
+    if bytes.len() < 20 {
+        return None;
+    }
+    if bytes[4] != b'-' || bytes[7] != b'-' || bytes[10] != b'T' {
+        return None;
+    }
+    if bytes[13] != b':' || bytes[16] != b':' {
+        return None;
+    }
+    let num = |start: usize, len: usize| -> Option<i64> {
+        value.get(start..start + len)?.parse().ok()
+    };
+    let year = num(0, 4)?;
+    let month = num(5, 2)?;
+    let day = num(8, 2)?;
+    let hour = num(11, 2)?;
+    let minute = num(14, 2)?;
+    let second = num(17, 2)?;
+    // 小数秒（可选；now_iso_utc 恒 3 位）
+    let mut millis = 0i64;
+    let mut idx = 19;
+    if idx < bytes.len() && bytes[idx] == b'.' {
+        idx += 1;
+        let start = idx;
+        while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+            idx += 1;
+        }
+        if idx == start {
+            return None;
+        }
+        let fraction = &value[start..idx];
+        // 不足 3 位补零、超 3 位截断（毫秒精度）
+        let mut padded = String::with_capacity(3);
+        padded.push_str(fraction);
+        while padded.len() < 3 {
+            padded.push('0');
+        }
+        padded.truncate(3);
+        millis = padded.parse().ok()?;
+    }
+    if idx >= bytes.len() || bytes[idx] != b'Z' {
+        return None;
+    }
+    // 基本范围校验（护栏判定用；不做逐月天数精确校验）
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    if hour > 23 || minute > 59 || second > 60 {
+        return None;
+    }
+    let days = days_from_civil(year, month as u32, day as u32)?;
+    Some(
+        (days * 86_400 + hour * 3_600 + minute * 60 + second) * 1_000 + millis,
+    )
+}
+
+/// 公历日期 → 1970-01-01 起天数（Howard Hinnant civil-from-days 逆运算，
+/// 与 session-loop 同源算法）
+fn days_from_civil(year: i64, month: u32, day: u32) -> Option<i64> {
+    if month == 0 || day == 0 {
+        return None;
+    }
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = (if year >= 0 { year } else { year - 399 }) / 400;
+    let year_of_era = year - era * 400;
+    let day_of_year: i64 =
+        (153 * i64::from(if month > 2 { month - 3 } else { month + 9 }) + 2) / 5
+            + i64::from(day)
+            - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    Some(era * 146_097 + day_of_era - 719_468)
 }
 
 /// 会话树（追加 / 分叉 / 叶子移动 / 分支放弃摘要）
@@ -365,6 +490,9 @@ impl SessionTree {
             session_id: self.session_id.clone(),
             current_leaf_id: self.current_leaf_id.clone(),
             branches: self.entries.clone(),
+            // 会话树本身不持有上下文元数据（压缩护栏由事件流/快照携带，
+            // 恢复后经 SessionRecord.context_meta 重建）
+            context_meta: None,
         }
     }
 
@@ -1133,6 +1261,102 @@ mod tests {
 
         let err = record.apply_leaf_move_event("{}").unwrap_err();
         assert!(matches!(err, SessionTreeError::InvalidState { .. }));
+    }
+
+    // ── T-34：会话上下文元数据（P4 阶段 5-1 护栏持久化） ──
+
+    /// 会话记录上下文元数据：set / get + serde roundtrip（快照持久化形态）
+    #[test]
+    fn session_record_context_meta_roundtrip() {
+        let meta = conex_types::context::SessionContextMeta {
+            last_compaction_at: Some(1_700_000_000_000),
+            last_compaction_sequence: Some(42),
+            last_compaction_generation: Some(3),
+            compression_retries: 1,
+        };
+        let mut record = tree().to_session_record();
+        assert!(record.context_meta().is_none(), "新建会话记录无护栏");
+        record.set_context_meta(meta.clone());
+        assert_eq!(record.context_meta(), Some(&meta));
+
+        // serde roundtrip：camelCase + skip_none（快照/会话记录持久化形态）
+        let json = serde_json::to_string(&record).unwrap();
+        let back: SessionRecord = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.context_meta().as_deref(), Some(&meta));
+        assert!(json.contains("contextMeta"), "camelCase 序列化：{json}");
+        // 旧快照（无 contextMeta 字段）→ None（schema 兼容）
+        let legacy = r#"{"sessionId":"s1","currentLeafId":null,"branches":[]}"#;
+        let legacy_record: SessionRecord = serde_json::from_str(legacy).unwrap();
+        assert!(legacy_record.context_meta().is_none(), "旧快照缺省 None");
+    }
+
+    /// 压缩结束事件折叠：last_compaction_at = 事件时间戳（epoch ms）、
+    /// sequence = 事件序列、generation 逐条 +1、compression_retries 归零
+    #[test]
+    fn apply_compression_end_updates_guards() {
+        let mut record = tree().to_session_record();
+        let boundary = parse_iso8601_epoch_ms("2026-08-03T10:00:00.000Z").unwrap();
+        // 首次压缩：从无护栏建立
+        assert!(record.apply_compression_end(7, "2026-08-03T10:00:00.000Z"));
+        let meta = record.context_meta().expect("首次压缩必须建立护栏");
+        assert_eq!(meta.last_compaction_at, Some(boundary));
+        assert_eq!(meta.last_compaction_sequence, Some(7));
+        assert_eq!(meta.last_compaction_generation, Some(1), "首次压缩代数 = 1");
+        assert_eq!(meta.compression_retries, 0);
+        // 第二次压缩：边界推进、序列更新、代数 +1
+        let boundary2 = parse_iso8601_epoch_ms("2026-08-03T12:30:00.000Z").unwrap();
+        assert!(record.apply_compression_end(15, "2026-08-03T12:30:00.000Z"));
+        let meta = record.context_meta().expect("护栏持续存在");
+        assert_eq!(meta.last_compaction_at, Some(boundary2), "边界推进到最近压缩");
+        assert_eq!(meta.last_compaction_sequence, Some(15));
+        assert_eq!(meta.last_compaction_generation, Some(2), "代数按事件累计");
+    }
+
+    /// 时间戳不可解析：保持既有护栏状态（不写坏），返回 false
+    #[test]
+    fn apply_compression_end_ignores_unparseable_timestamp() {
+        let mut record = tree().to_session_record();
+        assert!(!record.apply_compression_end(1, "not-a-timestamp"));
+        assert!(record.context_meta().is_none(), "非法输入不得建立护栏");
+        // 既有护栏 + 非法输入：护栏不被破坏
+        assert!(record.apply_compression_end(2, "2026-08-03T10:00:00.000Z"));
+        assert!(!record.apply_compression_end(3, "2026-13-99T99:99:99.000Z"));
+        let meta = record.context_meta().expect("既有护栏保留");
+        assert_eq!(meta.last_compaction_sequence, Some(2), "非法输入不得推进序列");
+        assert_eq!(meta.last_compaction_generation, Some(1));
+    }
+
+    /// ISO 时间戳解析精度：毫秒、缺毫秒、非法形态
+    #[test]
+    fn parse_iso8601_epoch_ms_precision() {
+        assert_eq!(
+            parse_iso8601_epoch_ms("1970-01-01T00:00:00.000Z"),
+            Some(0)
+        );
+        assert_eq!(
+            parse_iso8601_epoch_ms("1970-01-01T00:00:00.500Z"),
+            Some(500)
+        );
+        assert_eq!(
+            parse_iso8601_epoch_ms("1970-01-01T00:00:01Z"),
+            Some(1_000),
+            "缺毫秒按 0 处理"
+        );
+        assert_eq!(
+            parse_iso8601_epoch_ms("2026-08-03T11:30:00.500Z"),
+            parse_iso8601_epoch_ms("2026-08-03T11:30:00.5Z"),
+            "毫秒补零一致"
+        );
+        for bad in [
+            "2026-08-03T11:30:00",
+            "2026-08-03 11:30:00.000Z",
+            "2026-13-01T00:00:00.000Z",
+            "2026-08-03T24:00:00.000Z",
+            "garbage",
+            "",
+        ] {
+            assert_eq!(parse_iso8601_epoch_ms(bad), None, "非法形态：{bad}");
+        }
     }
 
     // ── conversation-rewind 计划 ──

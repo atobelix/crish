@@ -23,10 +23,13 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use conex_db::{PendingInput, RunStatus, StoredRun};
+use conex_types::events::AgentEvent;
 use serde::{Deserialize, Serialize};
 
 use crate::persist::{Store, StoreError};
-use crate::session::{SESSION_LEAF_MOVED_EVENT, SessionRecord, SessionTreeError};
+use crate::session::{
+    CONTEXT_COMPRESSION_END_EVENT, SESSION_LEAF_MOVED_EVENT, SessionRecord, SessionTreeError,
+};
 use crate::now_ms;
 
 /// in-flight → interrupted 的终态 reason（05 §2.8 orchestrator.test.ts:404）
@@ -587,11 +590,15 @@ impl RestoreManager {
                     session_id: run.session_id.clone(),
                     current_leaf_id: None,
                     branches: Vec::new(),
+                    // 新派生会话无压缩护栏（None）；其护栏经第 5 步事件重放
+                    // 从 0 全量重建（快照会话则从快照 meta 续接增量）
+                    context_meta: None,
                 });
             }
         }
 
-        // 5. 增量流：lastSequence 后事件重放（会话树叶子移动）+ 锚点推进
+        // 5. 增量流：lastSequence 后事件重放（会话树叶子移动 + 压缩护栏
+        //    重建）+ 锚点推进
         let snapshot_session_ids: Vec<String> = sessions
             .iter()
             .map(|s| s.session_id.clone())
@@ -612,6 +619,15 @@ impl RestoreManager {
                 if event.event_type == SESSION_LEAF_MOVED_EVENT {
                     // 叶子移动重放（载荷损坏时跳过，不中断恢复）
                     let _ = session.apply_leaf_move_event(&event.payload);
+                } else if event.event_type == CONTEXT_COMPRESSION_END_EVENT {
+                    // 压缩护栏重放（P4 阶段 5-1）：context-compression-end
+                    // 事件折叠进会话上下文元数据——快照会话增量续接、
+                    // 派生会话全量重建（事件时间戳不可解析时保持既有状态）
+                    let _ = serde_json::from_str::<AgentEvent>(&event.payload).map(|e| {
+                        if let AgentEvent::ContextCompressionEnd { timestamp, .. } = e {
+                            session.apply_compression_end(event.sequence, &timestamp);
+                        }
+                    });
                 }
             }
         }
@@ -687,7 +703,9 @@ mod tests {
 
     use super::*;
     use crate::persist::{InMemoryStore, LocalDbStore};
-    use crate::session::{SessionTree, session_leaf_moved_payload};
+    use crate::session::{
+        parse_iso8601_epoch_ms, SessionTree, session_leaf_moved_payload,
+    };
     use conex_db::LocalDb;
 
     /// 内存 store 测试环境（具体句柄 + 共享 trait 对象）
@@ -1011,6 +1029,7 @@ mod tests {
                 session_id: "s1".to_string(),
                 current_leaf_id: Some("leaf_v1".to_string()),
                 branches: vec![],
+                context_meta: None,
             }],
             Vec::new(),
             Vec::new(),
@@ -1023,6 +1042,7 @@ mod tests {
                 session_id: "s1".to_string(),
                 current_leaf_id: Some("leaf_v2".to_string()),
                 branches: vec![],
+                context_meta: None,
             }],
             Vec::new(),
             Vec::new(),
@@ -1076,6 +1096,7 @@ mod tests {
                 session_id: "s1".to_string(),
                 current_leaf_id: None,
                 branches: vec![],
+                context_meta: None,
             }],
             Vec::new(),
             Vec::new(),
@@ -1269,5 +1290,196 @@ mod tests {
         let mut all: Vec<u64> = stored.iter().map(|e| e.sequence).collect();
         all.sort_unstable();
         assert_eq!(all, (1..=9).collect::<Vec<_>>(), "恢复后全事件连续无冲突（Q24）");
+    }
+
+    // ── T-34：会话上下文元数据护栏持久化（P4 阶段 5-1） ──
+
+    /// 压缩结束事件构造（context-compression-end 落库载荷；与
+    /// session-loop 的 apply_compaction 事件形态同构）
+    fn compression_end_event(session_id: &str, timestamp: &str) -> AgentEvent {
+        AgentEvent::ContextCompressionEnd {
+            session_id: session_id.to_string(),
+            timestamp: timestamp.to_string(),
+            result: Some(conex_types::tool::ContextCompressionRecord {
+                id: "compaction-1".to_string(),
+                trigger: conex_types::tool::ContextCompressionTrigger::Overflow,
+                reason: None,
+                policy: None,
+                summary: "[Compacted 8 earlier message(s) to fit context window]".to_string(),
+                first_kept_message_id: None,
+                compressed_message_ids: Vec::new(),
+                kept_message_ids: Vec::new(),
+                tokens_before: 50_000,
+                tokens_after: 9_000,
+                threshold_tokens: None,
+                created_at: timestamp.to_string(),
+                handoff: None,
+                cache_boundary: None,
+                details: None,
+            }),
+            aborted: false,
+            error: None,
+        }
+    }
+
+    /// 全量重放路径：无快照时从事件流重放 context-compression-end 事件，
+    /// 重建会话压缩护栏（last_compaction_at / sequence / generation /
+    /// compression_retries）——restore 时护栏状态跨重启不丢（P4 阶段 5-1）
+    #[tokio::test]
+    async fn restore_replays_compression_events_to_rebuild_session_guards() {
+        let (_mem, store) = setup();
+        // 两条压缩事件（模拟压缩发生两次：generation 应累计到 2）
+        store
+            .append_event(
+                "s1",
+                1,
+                CONTEXT_COMPRESSION_END_EVENT,
+                &serde_json::to_string(&compression_end_event(
+                    "s1",
+                    "2026-08-03T10:00:00.000Z",
+                ))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        store
+            .append_event(
+                "s1",
+                2,
+                CONTEXT_COMPRESSION_END_EVENT,
+                &serde_json::to_string(&compression_end_event(
+                    "s1",
+                    "2026-08-03T11:30:00.500Z",
+                ))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        store
+            .insert_run("r1", "s1", RunStatus::Completed, Some("stop"), 2)
+            .await
+            .unwrap();
+
+        let outcome = RestoreManager::new()
+            .restore(store.as_ref(), &NoSnapshots)
+            .await
+            .unwrap();
+
+        let session = outcome
+            .sessions
+            .iter()
+            .find(|s| s.session_id == "s1")
+            .expect("会话必须恢复");
+        let meta = session
+            .context_meta()
+            .expect("压缩事件重放后必须有上下文元数据");
+        // 时间戳护栏 = 最近一次压缩边界（epoch ms）
+        let expected_boundary = parse_iso8601_epoch_ms("2026-08-03T11:30:00.500Z").unwrap();
+        assert_eq!(meta.last_compaction_at, Some(expected_boundary));
+        assert_eq!(meta.last_compaction_sequence, Some(2), "审计锚点 = 最近压缩事件序列");
+        assert_eq!(
+            meta.last_compaction_generation,
+            Some(2),
+            "压缩代数按事件逐条累计（C13 基线重置锚点）"
+        );
+        assert_eq!(meta.compression_retries, 0, "压缩后重试计数归零");
+    }
+
+    /// 快照增量路径：快照携带 context_meta + 快照后新增压缩事件 →
+    /// 恢复从快照 meta 续接增量（不重复累计快照已含的代数）
+    #[tokio::test]
+    async fn snapshot_context_meta_survives_and_continues_incrementally() {
+        let (_mem, store) = setup();
+        let mut record = SessionRecord {
+            session_id: "s1".to_string(),
+            current_leaf_id: None,
+            branches: Vec::new(),
+            context_meta: Some(conex_types::context::SessionContextMeta {
+                last_compaction_at: Some(parse_iso8601_epoch_ms("2026-08-03T09:00:00.000Z").unwrap()),
+                last_compaction_sequence: Some(3),
+                last_compaction_generation: Some(1),
+                compression_retries: 0,
+            }),
+        };
+        record.current_leaf_id = Some("root".to_string());
+        let snapshot = StateSnapshot::build(1, 3, vec![record], Vec::new(), Vec::new());
+        assert!(snapshot.valid(), "带 context_meta 的快照应通过 checksum 校验");
+        // 快照后（sequence 4）新增一条压缩事件
+        store
+            .append_event(
+                "s1",
+                4,
+                CONTEXT_COMPRESSION_END_EVENT,
+                &serde_json::to_string(&compression_end_event(
+                    "s1",
+                    "2026-08-03T12:00:00.000Z",
+                ))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        store
+            .insert_run("r1", "s1", RunStatus::Completed, Some("stop"), 4)
+            .await
+            .unwrap();
+
+        let outcome = RestoreManager::new()
+            .restore(store.as_ref(), &snapshot_store_holder(&snapshot))
+            .await
+            .unwrap();
+
+        assert_eq!(outcome.mode, RestoreMode::SnapshotIncremental);
+        let session = outcome
+            .sessions
+            .iter()
+            .find(|s| s.session_id == "s1")
+            .expect("会话必须恢复");
+        let meta = session.context_meta().expect("快照 meta 必须保留");
+        // 快照 meta 续接增量：边界推进到快照后事件，代数 1 → 2（不重复累计）
+        assert_eq!(
+            meta.last_compaction_at,
+            Some(parse_iso8601_epoch_ms("2026-08-03T12:00:00.000Z").unwrap())
+        );
+        assert_eq!(meta.last_compaction_sequence, Some(4));
+        assert_eq!(meta.last_compaction_generation, Some(2));
+    }
+
+    /// 损坏载荷容错：压缩事件时间戳不可解析 / 载荷非压缩事件 → 保持既有
+    /// 护栏状态，不写坏、不中断恢复（与叶子移动重放的容错语义一致）
+    #[tokio::test]
+    async fn restore_ignores_corrupt_compression_event_payloads() {
+        let (_mem, store) = setup();
+        // 载荷损坏（非法 JSON）与时间戳损坏（非法时间串）各一条
+        store
+            .append_event("s1", 1, CONTEXT_COMPRESSION_END_EVENT, "{not-json")
+            .await
+            .unwrap();
+        store
+            .append_event(
+                "s1",
+                2,
+                CONTEXT_COMPRESSION_END_EVENT,
+                &serde_json::to_string(&compression_end_event("s1", "not-a-timestamp")).unwrap(),
+            )
+            .await
+            .unwrap();
+        store
+            .insert_run("r1", "s1", RunStatus::Completed, Some("stop"), 2)
+            .await
+            .unwrap();
+
+        let outcome = RestoreManager::new()
+            .restore(store.as_ref(), &NoSnapshots)
+            .await
+            .unwrap();
+        let session = outcome
+            .sessions
+            .iter()
+            .find(|s| s.session_id == "s1")
+            .expect("会话必须恢复");
+        assert!(
+            session.context_meta().is_none(),
+            "损坏载荷不得写入护栏状态（保持 None）"
+        );
     }
 }

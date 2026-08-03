@@ -27,6 +27,8 @@ use agent_tools::idempotency::ToolIdempotencyGuard;
 use agent_tools::middleware::ToolMiddleware;
 use agent_tools::registry::ToolRegistry;
 use async_trait::async_trait;
+use conex_compaction::{CompactionPolicy, Summarizer};
+use conex_types::context::ContextBudget;
 use conex_types::error::{codes, CrishError};
 use conex_types::events::AgentEvent;
 use conex_types::message::AgentMessage;
@@ -41,6 +43,9 @@ use crate::tool_exec::{ToolExecCtx, ToolExecutor};
 
 mod end;
 mod handlers;
+
+#[cfg(test)]
+mod invariants;
 
 pub use end::{EndDecision, RunOutcome};
 
@@ -168,6 +173,26 @@ pub struct SessionLoopOptions {
     /// 任何 handler 不得在 run 中途改写）；None = 不发送 system 消息，
     /// 向后兼容。壳层在装配 options 时经 build_system_prompt 规范化后存入。
     pub system_prompt: Option<String>,
+    /// 预算配置（P4 阶段 2-2 / §3.3.2）：None = 不启用 max_tokens 钳制与
+    /// 预检压缩（向后兼容现状）；Some = 发请求前估算上下文占用
+    /// （C9 口径 input_total，usage 优先 + 启发式兜底），max_tokens 钳到
+    /// window - estimate - safety。窗口元数据真源为 P3 模型目录
+    /// （context_window_for），P3 未接线前由壳层经前端参数注入。
+    pub context_budget: Option<ContextBudget>,
+    /// 压缩策略（P4 阶段 3-2 / §3.4.2）：None = 无自动压缩（向后兼容现状）；
+    /// Some = prepare_turn 阈值预检触发（estimate ≥ window - reserve）时
+    /// 同步压缩。字段默认对齐 P4 §3.4.2（keep_recent_tokens 20000 /
+    /// min_recent_turns 2 / max_summary_tokens 1024 / tool_pair_protection）。
+    pub compaction_policy: Option<CompactionPolicy>,
+    /// L2 LLM 摘要器（P4 §3.4.4，可选注入）：None = L1 静态占位符。
+    /// C14 摘要请求缓存隔离（独立前缀域、无断点、无会话亲和键）由
+    /// 摘要器实现方（壳层）保证——本 trait 边界只接收丢弃消息与既有摘要，
+    /// 不携带任何会话/缓存亲和参数；失败降级 L1 占位符不阻塞主对话。
+    pub summarizer: Option<Arc<dyn Summarizer>>,
+    /// 单 run 自动压缩上限（默认 1，对齐 Reasonix compactStuck 防每轮
+    /// 重写前缀，P4 §3.4.6）：预检触发与溢出触发共用计数
+    /// （LoopState.compactions_this_run），0 = 禁用自动压缩。
+    pub max_auto_compactions_per_run: u32,
 }
 
 impl Default for SessionLoopOptions {
@@ -186,6 +211,12 @@ impl Default for SessionLoopOptions {
             tool_middleware: Vec::new(),
             hooks: None,
             system_prompt: None,
+            // P4 阶段 2-2/3-2：预算与压缩配置全部缺省 None/1——未配置即现状
+            // 行为（不钳制、不预检、无自动压缩，向后兼容）
+            context_budget: None,
+            compaction_policy: None,
+            summarizer: None,
+            max_auto_compactions_per_run: 1,
         }
     }
 }
@@ -268,6 +299,12 @@ impl AgentSessionLoop {
     /// `with_tool_options` / `with_approval` 必须在 `run()` 之前调用。
     pub fn with_options(mut self, options: SessionLoopOptions) -> Self {
         self.state.options = options.clone();
+        // 预算/压缩派生状态同步（P4 阶段 2-2/3-2）：LoopState 的
+        // budget / compaction_policy / summarizer 与 options 同源，
+        // 避免 handler 侧双读不一致（with_options 构造期定，run 内不可变）
+        self.state.budget = options.context_budget;
+        self.state.compaction_policy = options.compaction_policy.clone();
+        self.state.summarizer = options.summarizer.clone();
         self.tool_ctx.cwd = self.state.options.cwd.clone();
         // 幂等开关派生状态同步（T06.4.4）：true → 注入新守卫；false → 移除
         let idempotency = if options.idempotency_enabled {
@@ -380,6 +417,16 @@ impl AgentSessionLoop {
         self.state.continue_nudges = 0;
         self.state.terminal_error = None;
         self.state.events.clear();
+        // 压缩护栏归零（fresh run，P4 §3.4.6 / §3.5）：
+        // - compactions_this_run：单 run 压缩上限计数（预检与溢出触发共用）；
+        // - compression_retries：溢出压缩重试计数（上限 1）——stream_error.rs
+        //   压缩阶梯（ContextLengthExceeded 用尽后 / PayloadTooLarge）消费。
+        //   归零语义 T-34（第四波）确认闭合：每 run 起始清零，压缩 + 重试
+        //   一次后不可再超（防「压缩→仍超→再压缩」死循环）。
+        // last_compaction_at 不在此归零（跨 run 时间戳护栏，压缩边界持续
+        // 有效；跨重启由 orchestrator SessionContextMeta 持久化恢复，T-34）
+        self.state.compactions_this_run = 0;
+        self.state.compression_retries = 0;
 
         // 用户消息入队（force 环）→ INITIALIZED → agent-start（01 §2.1）
         self.state.input_queue.enqueue_force(input);
@@ -587,6 +634,20 @@ mod tests {
         assert!(
             options.system_prompt.is_none(),
             "system_prompt 默认不发送（P1 阶段 2 透传字段）"
+        );
+        // P4 阶段 2-2/3-2：预算与压缩配置缺省全部关闭（未配置即现状）
+        assert!(
+            options.context_budget.is_none(),
+            "context_budget 缺省 None = 不钳制不预检（向后兼容）"
+        );
+        assert!(
+            options.compaction_policy.is_none(),
+            "compaction_policy 缺省 None = 无自动压缩（向后兼容）"
+        );
+        assert!(options.summarizer.is_none(), "summarizer 缺省 None = L1 静态占位符");
+        assert_eq!(
+            options.max_auto_compactions_per_run, 1,
+            "单 run 自动压缩上限默认 1（P4 §3.4.6）"
         );
     }
 

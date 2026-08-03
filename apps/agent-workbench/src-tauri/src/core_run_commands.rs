@@ -24,7 +24,7 @@
 //! TODO(集成 agent)：main.rs 声明 `mod core_run_commands` 并
 //! `app.manage(Arc::new(CoreRunState::new(...)))`（restore 在 manage 之前）。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -34,12 +34,14 @@ use conex_types::events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision as WireApprovalDecision, PermissionRequest,
     RunTerminalStatus,
 };
-use conex_types::{codes, CrishError, CrishErrorPayload};
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+use conex_types::{codes, ContextBudget, CrishError, CrishErrorPayload, HistoryMessage};
 use orchestrator::events::{build_run_terminal, drive_outcome, EventQueue};
 use orchestrator::persist::{SessionSequencer, Store};
 use orchestrator::restore::{RestoreManager, RestoreMode, RestoreOutcome, SnapshotStore, StateSnapshot};
 use orchestrator::run::{CancelMode, RunEngine, RunHandle, RunManager};
 use orchestrator::session::SessionRecord;
+use session_loop::hydrate::hydrate_history;
 use session_loop::tool_events::ApprovalDecision;
 use session_loop::{
     AbortSignal, ApprovalGate, ControlBus, DeltaSink, PermissionMode, RunOutcome, SessionLoopOptions,
@@ -59,6 +61,12 @@ const APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
 /// 快照周期默认值（T08.6 触发点 B：默认 60s，session_meta
 /// `snapshot_interval_ms` 可配）
 const DEFAULT_SNAPSHOT_INTERVAL_MS: u64 = 60_000;
+/// T-29：SessionHistoryCache 每会话消息条数上限（防膨胀；超出时保留
+/// 最近 N 条并对齐安全前缀，P4 阶段 1-3）
+const SESSION_HISTORY_MAX_MESSAGES: usize = 200;
+/// T-29：SessionHistoryCache 会话数上限（防膨胀；超出时 FIFO 淘汰
+/// 最久未更新的会话）
+const SESSION_HISTORY_MAX_SESSIONS: usize = 32;
 
 // ── 命令返回形状（03 §3.2 A 组契约）───────────────────────────────
 
@@ -313,6 +321,369 @@ impl RunEngine for ActiveRunEngine {
     }
 }
 
+// ── SessionHistoryCache（T-29：per-session 历史缓存）────────────
+
+/// 引擎壳侧 per-session 历史缓存（P4 阶段 1-3/1-4，任务单元 T-29）
+///
+/// - 结构：`session_id → Vec<HistoryMessage>`——与前端 `history` 参数
+///   同构（混合路线统一载荷形态，P4 §3.2.3）；
+/// - 内存态、不落库：避免与前端全量写 session_messages 双写冲突
+///   （P4 §1.3 验收红线 2）；不改写会话语义；
+/// - 写入时机：run 收口（[drive_run_loop] 收口处，[RunOutcome]::messages
+///   收口映射后原子替换 = 压缩后缓存基线重建，P4 §3.6 I5 / C13）；
+/// - 读取：下次 run 组装 history 参数（[core_run_task]：前端 history
+///   为空/未传时回退本缓存——混合路线"引擎侧缓存主"）；
+/// - 容量护栏：每会话消息条数上限 + 会话数上限（防膨胀）。
+pub(crate) struct SessionHistoryCache {
+    inner: Mutex<CacheInner>,
+    /// 每会话消息条数上限
+    max_messages: usize,
+    /// 会话数上限
+    max_sessions: usize,
+}
+
+struct CacheInner {
+    sessions: HashMap<String, Vec<HistoryMessage>>,
+    /// 写入顺序（FIFO 淘汰最久未更新的会话；重复写入移到末尾 ≈ LRU）
+    order: VecDeque<String>,
+}
+
+impl SessionHistoryCache {
+    /// 新建缓存（默认容量：每会话 `SESSION_HISTORY_MAX_MESSAGES` 条、
+    /// 最多 `SESSION_HISTORY_MAX_SESSIONS` 个会话）
+    pub(crate) fn new() -> Self {
+        Self::with_limits(SESSION_HISTORY_MAX_MESSAGES, SESSION_HISTORY_MAX_SESSIONS)
+    }
+
+    /// 新建缓存（显式容量；测试用小容量验证上限语义）
+    pub(crate) fn with_limits(max_messages: usize, max_sessions: usize) -> Self {
+        Self {
+            inner: Mutex::new(CacheInner {
+                sessions: HashMap::new(),
+                order: VecDeque::new(),
+            }),
+            max_messages,
+            max_sessions,
+        }
+    }
+
+    /// 读取会话历史（下次 run 组装 history 参数的缓存源；None = 无缓存）
+    pub(crate) fn get(&self, session_id: &str) -> Option<Vec<HistoryMessage>> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .sessions
+            .get(session_id)
+            .cloned()
+    }
+
+    /// 写入会话历史（run 收口原子替换）
+    ///
+    /// 写入前执行两级护栏：
+    /// 1. 条数上限：保留最近 `max_messages` 条（截掉最旧）；
+    /// 2. 安全前缀：逐条前移直到首条为 user（不保留孤儿 tool/system
+    ///    首条与带未配对 ToolCall 的 assistant 首条——wire 400 风险）。
+    /// 会话数超限：FIFO 淘汰最久未更新的会话。
+    pub(crate) fn store(&self, session_id: &str, mut messages: Vec<HistoryMessage>) {
+        if messages.len() > self.max_messages {
+            let keep = self.max_messages;
+            messages.drain(..messages.len() - keep);
+        }
+        ensure_safe_prefix(&mut messages);
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(pos) = inner.order.iter().position(|id| id == session_id) {
+            inner.order.remove(pos);
+        }
+        inner.order.push_back(session_id.to_string());
+        while inner.order.len() > self.max_sessions {
+            if let Some(oldest) = inner.order.pop_front() {
+                inner.sessions.remove(&oldest);
+            }
+        }
+        inner.sessions.insert(session_id.to_string(), messages);
+    }
+
+    /// 缓存中的会话数（测试/诊断专用，生产路径暂不消费）
+    #[cfg(test)]
+    pub(crate) fn session_count(&self) -> usize {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .sessions
+            .len()
+    }
+
+    /// 指定会话缓存的消息条数（测试/诊断专用，生产路径暂不消费）
+    #[cfg(test)]
+    pub(crate) fn message_count(&self, session_id: &str) -> usize {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .sessions
+            .get(session_id)
+            .map(|messages| messages.len())
+            .unwrap_or(0)
+    }
+}
+
+/// 缓存安全前缀化：首条不得为 tool/system（孤儿——需要前置上下文），
+/// 也不得为携带未配对 ToolCall 的 assistant（孤儿调用——wire 400）。
+/// 逐条前移直到首条为 user（或序列为空）。
+fn ensure_safe_prefix(messages: &mut Vec<HistoryMessage>) {
+    while let Some(first) = messages.first() {
+        let must_drop = match first.sender.as_str() {
+            "tool" | "system" => true,
+            "assistant" => first_has_orphan_tool_call(messages),
+            _ => false,
+        };
+        if must_drop {
+            messages.remove(0);
+        } else {
+            break;
+        }
+    }
+}
+
+/// 首条 assistant 是否携带孤儿 ToolCall（其调用 id 在后续消息中无
+/// 对应 ToolResult——截断落在 assistant(tool_calls) 与其结果之间）。
+/// 全部调用都有结果才算配对完整（wire 要求每个 call 都有 result）。
+fn first_has_orphan_tool_call(messages: &[HistoryMessage]) -> bool {
+    let Some(first) = messages.first() else {
+        return false;
+    };
+    let Some(blocks) = parse_blocks(first) else {
+        return false;
+    };
+    let call_ids: Vec<&str> = blocks
+        .iter()
+        .filter_map(|block| match block {
+            AgentMessageBlock::ToolCall(call) => Some(call.id.as_str()),
+            _ => None,
+        })
+        .collect();
+    if call_ids.is_empty() {
+        return false;
+    }
+    let has_all_results = call_ids.iter().all(|call_id| {
+        messages.iter().skip(1).any(|entry| {
+            parse_blocks(entry).is_some_and(|entry_blocks| {
+                entry_blocks.iter().any(|block| match block {
+                    AgentMessageBlock::ToolResult { tool_call_id, .. } => tool_call_id == call_id,
+                    _ => false,
+                })
+            })
+        })
+    });
+    !has_all_results
+}
+
+/// 解析 HistoryMessage 的 blocks_json（缓存收口/读回均保真携带完整块序列）
+fn parse_blocks(entry: &HistoryMessage) -> Option<Vec<AgentMessageBlock>> {
+    entry
+        .blocks_json
+        .as_deref()
+        .and_then(|json| serde_json::from_str::<Vec<AgentMessageBlock>>(json).ok())
+}
+
+// ── T-29 收口映射：RunOutcome::messages → HistoryMessage ─────────
+
+/// run 收口：对话消息 → HistoryMessage（任务书第 4 点）
+///
+/// - **全角色保真**（user/assistant/tool/system 都收口）：引擎缓存是
+///   权威增量，工具结果（Tool 角色独立消息，executing_tools.rs:143-158）
+///   必须原样续接，否则 wire 前缀 tool_call 无对应 result（400）；
+///   hydrate.rs 的前端过滤规则（P4 §3.2.3 规则 2）只适用于 UI 载荷，
+///   不适用于本收口路径（读回走 [cached_history_to_conversation] 保真水合）；
+/// - `blocks_json` 保真（完整 AgentMessageBlock 序列）；`tool_calls_json`
+///   /`tool_call_results_json` 置 None（有 blocks_json 时不再需要合成源）；
+/// - `status = completed`（收口消息均为完成态）；
+/// - `timestamp` = created_at 的 epoch ms 折算。
+fn to_history_messages(outcome: &RunOutcome) -> Vec<HistoryMessage> {
+    outcome
+        .messages
+        .iter()
+        .map(|message| to_history_message(message.as_ref()))
+        .collect()
+}
+
+/// 单条 AgentMessage → HistoryMessage（全角色保真）
+fn to_history_message(message: &AgentMessage) -> HistoryMessage {
+    HistoryMessage {
+        id: message.id.clone(),
+        sender: role_sender(message.role),
+        text: non_empty(message.text()),
+        thinking: non_empty(message.thought()),
+        blocks_json: if message.blocks.is_empty() {
+            None
+        } else {
+            serde_json::to_string(&message.blocks).ok()
+        },
+        tool_calls_json: None,
+        tool_call_results_json: None,
+        status: Some("completed".to_string()),
+        timestamp: iso8601_to_epoch_millis(&message.created_at),
+    }
+}
+
+/// 角色 → sender 字符串（与 hydrate.rs 规则 2 的 user/assistant 子集
+/// 兼容，额外保留 tool/system——缓存路径读回不过滤）
+fn role_sender(role: AgentMessageRole) -> String {
+    match role {
+        AgentMessageRole::System => "system",
+        AgentMessageRole::User => "user",
+        AgentMessageRole::Assistant => "assistant",
+        AgentMessageRole::Tool => "tool",
+    }
+    .to_string()
+}
+
+/// 空串 → None（HistoryMessage 载荷字段可选语义）
+fn non_empty(text: String) -> Option<String> {
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
+    }
+}
+
+// ── T-29 时间戳互逆（与 session-loop hydrate.rs 同源算法）────────
+
+/// ISO8601 → epoch ms（引擎统一格式 `YYYY-MM-DDTHH:MM:SS.mmmZ`；
+/// 宽容解析：毫秒段可缺省（`SSZ`），时区仅接受 Z；失败兜底 0）
+fn iso8601_to_epoch_millis(iso: &str) -> i64 {
+    let Some((date, rest)) = iso.split_once('T') else {
+        return 0;
+    };
+    let mut parts = date.split('-');
+    let (Some(year), Some(month), Some(day)) = (
+        parts.next().and_then(|v| v.parse::<i64>().ok()),
+        parts.next().and_then(|v| v.parse::<u32>().ok()),
+        parts.next().and_then(|v| v.parse::<u32>().ok()),
+    ) else {
+        return 0;
+    };
+    let mut time = rest.split(':');
+    let (Some(hour), Some(minute)) = (
+        time.next().and_then(|v| v.parse::<i64>().ok()),
+        time.next().and_then(|v| v.parse::<i64>().ok()),
+    ) else {
+        return 0;
+    };
+    let sec_rest = time.next().unwrap_or("0");
+    let stripped = sec_rest.strip_suffix('Z').unwrap_or(sec_rest);
+    let (sec, millis) = match stripped.split_once('.') {
+        Some((s, ms)) => (
+            s.parse::<i64>().unwrap_or(0),
+            ms.parse::<i64>().unwrap_or(0),
+        ),
+        None => (stripped.parse::<i64>().unwrap_or(0), 0),
+    };
+    let days = days_from_civil(year, month, day);
+    ((days * 86_400 + hour * 3600 + minute * 60 + sec) * 1000) + millis
+}
+
+/// 公历年月日 → Unix 天数（Howard Hinnant civil_from_days 的逆函数；
+/// 与 session-loop hydrate.rs / steering mod.rs 同源算法）
+fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = (m as i64 + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d as i64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+/// epoch ms → ISO8601（毫秒精度 UTC；算法与 session-loop hydrate.rs
+/// iso8601_from_epoch_millis 同源——读回缓存还原 created_at 用）
+fn epoch_millis_to_iso8601(epoch_ms: i64) -> String {
+    let secs = epoch_ms.div_euclid(1000);
+    let millis = epoch_ms.rem_euclid(1000);
+    let (hours, minutes, sec) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
+    let (year, month, day) = civil_from_days(secs.div_euclid(86_400));
+    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{sec:02}.{millis:03}Z")
+}
+
+/// Unix 天数 → 公历年月日（Howard Hinnant 算法，与 session-loop
+/// hydrate.rs:251-271 同源，不引入 chrono 依赖）
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (y + if m <= 2 { 1 } else { 0 }, m, d)
+}
+
+// ── T-29 读回水合与混合路线装配 ──────────────────────────────────
+
+/// 缓存读回 → 对话（**保真水合**：T-29 缓存路径，与 T-28 前端载荷
+/// 过滤规则互补——缓存是引擎权威增量，tool/system 角色与完整 blocks
+/// 原样续接，工具结果配对不拆散；单条不可用（角色未知 / blocks 不可
+/// 解析）宽容跳过，不中断整体）
+fn cached_history_to_conversation(entries: Vec<HistoryMessage>) -> Vec<Arc<AgentMessage>> {
+    entries
+        .iter()
+        .filter_map(|entry| {
+            let role = match entry.sender.as_str() {
+                "user" => AgentMessageRole::User,
+                "assistant" => AgentMessageRole::Assistant,
+                "tool" => AgentMessageRole::Tool,
+                "system" => AgentMessageRole::System,
+                _ => return None,
+            };
+            let blocks = parse_blocks(entry).unwrap_or_default();
+            if blocks.is_empty() {
+                return None;
+            }
+            Some(Arc::new(AgentMessage {
+                id: entry.id.clone(),
+                role,
+                created_at: epoch_millis_to_iso8601(entry.timestamp),
+                blocks,
+                // metadata 裁剪（usage 等运行期数据不进 LLM 上下文，双保险）
+                metadata: None,
+                client_message_id: Some(entry.id.clone()),
+                content: None,
+            }))
+        })
+        .collect()
+}
+
+/// 历史装配源（P4 §3.2.3 混合路线：前端水合兜底 + 引擎侧缓存主）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HistorySource {
+    /// 前端 store 已完成消息（冷启动/重启后的第一个 run）
+    Frontend,
+    /// 引擎侧 SessionHistoryCache（运行期连续 run 的权威增量）
+    Cache,
+}
+
+/// 历史源判定：前端 history 非空 → Frontend；为空/未传但缓存有值 →
+/// Cache；两者皆无 → None（现状单消息 run，向后兼容）。
+fn resolve_history_source(
+    history: &Option<Vec<HistoryMessage>>,
+    cached: Option<Vec<HistoryMessage>>,
+) -> Option<(HistorySource, Vec<HistoryMessage>)> {
+    match history {
+        Some(h) if !h.is_empty() => Some((HistorySource::Frontend, h.clone())),
+        _ => cached.map(|messages| (HistorySource::Cache, messages)),
+    }
+}
+
+/// context_window 入站 → ContextBudget（P4 §3.3.2：reserve/safety 取
+/// 默认 16384/4096；T-33 在 SessionLoopOptions.context_budget 消费钳制）
+fn assemble_context_budget(context_window: u32) -> ContextBudget {
+    ContextBudget {
+        context_window,
+        ..ContextBudget::default()
+    }
+}
+
 // ── CoreRunState ──────────────────────────────────────────────────
 
 /// 核心运行状态（B6.4：进程内核心的共享状态）
@@ -365,6 +736,9 @@ pub struct CoreRunState {
     restore_last_sequence: Mutex<Option<u64>>,
     /// 最近一次快照写入时间（epoch ms；snapshot.writtenAt 数据源）
     snapshot_written_at: Mutex<Option<i64>>,
+    /// T-29：per-session 历史缓存（P4 阶段 1-3/1-4；运行期内存态，
+    /// 不落库——前端 history 为空时回退，混合路线"引擎侧缓存主"）
+    session_history: SessionHistoryCache,
 }
 
 impl CoreRunState {
@@ -400,6 +774,7 @@ impl CoreRunState {
             interrupted_count: Mutex::new(0),
             restore_last_sequence: Mutex::new(None),
             snapshot_written_at: Mutex::new(None),
+            session_history: SessionHistoryCache::new(),
         }
     }
 
@@ -767,6 +1142,12 @@ async fn drive_run_loop(
     //    未来 goal 多轮模式在本循环续轮）
     let outcome = producer.produce().await;
 
+    // T-29 收口写入（P4 阶段 1-4）：run 引擎侧收口后，把对话消息收口为
+    // HistoryMessage 原子替换 SessionHistoryCache——不落库、不改写会话语义
+    // （混合路线核心）；缓存 = 下次 run 的 history 参数回退源；压缩后序列
+    // 随收口自然携带（缓存基线重建，P4 §3.6 I5 / C13）
+    state.session_history.store(&session_id, to_history_messages(&outcome));
+
     // 2. drive_outcome（锁在作用域内持有，错误路径先释放再收口）
     let driven = {
         let mut run = active.handle.lock().await;
@@ -917,6 +1298,12 @@ fn active_run(state: &CoreRunState, run_id: &str) -> Result<Arc<ActiveRun>, Core
 /// （approval 门 / BridgeDeltaSink / SessionLoopProducer）→ spawn
 /// [drive_run_loop]。system_prompt 入站经 build_system_prompt 规范化一次
 /// （P1 B1：trim + 空值 → None），全链透传原始。
+///
+/// T-29（P4 阶段 1-3/1-4）：新增 `history`（前端 store 已完成消息，
+/// 冷启动水合兜底）与 `context_window`（生效模型窗口元数据，P3 目录
+/// 接线前由前端下发；T-33 预算钳制消费）。混合路线（P4 §3.2.3）：
+/// 前端 history 为空/未传时回退引擎侧 SessionHistoryCache（缓存主，
+/// run 收口写入的权威增量）；两者皆空 = 现状单消息 run（向后兼容）。
 #[tauri::command]
 pub(crate) async fn core_run_task(
     state: tauri::State<'_, Arc<CoreRunState>>,
@@ -929,6 +1316,8 @@ pub(crate) async fn core_run_task(
     client_message_id: Option<String>,
     assistant_client_message_id: Option<String>,
     system_prompt: Option<String>,
+    history: Option<Vec<HistoryMessage>>,
+    context_window: Option<u32>,
 ) -> Result<RunTaskResponse, CoreError> {
     let state = Arc::clone(state.inner());
     // 参数校验（S-15：trim + 显式 InvalidInput）
@@ -1018,12 +1407,29 @@ pub(crate) async fn core_run_task(
         run_id.clone(),
     ));
 
+    // ── T-29 context_window 入站（P4 §3.3.2）──────────────────────
+    // 生效模型窗口 → ContextBudget（reserve/safety 取默认）；经
+    // SessionLoopOptions.context_budget 透传（T-30 装配，T-33 预算层
+    // 消费钳制与预检）。
+    let context_budget = context_window.map(assemble_context_budget);
+    if let Some(budget) = context_budget {
+        tracing::debug!(
+            target: "run",
+            session_id = %session_id,
+            context_window = budget.context_window,
+            reserve_tokens = budget.reserve_tokens,
+            "context_window 入站（T-33 预算钳制消费）"
+        );
+    }
+
     // 循环选项（cwd / assistant clientMessageId / 幂等；21-log §5.2 回补）
     // P1 B1：systemPrompt 入站规范化一次（trim + 空值 → None），全链透传原始
+    // P4 T-30：context_budget 装配进 options（预算钳制 + 预检压缩消费入口）
     let options = SessionLoopOptions {
         cwd: cwd.clone(),
         assistant_client_message_id: assistant_client_message_id.clone(),
         system_prompt: build_system_prompt(system_prompt),
+        context_budget,
         ..SessionLoopOptions::default()
     };
     let tool_options = ToolBatchOptions {
@@ -1039,6 +1445,30 @@ pub(crate) async fn core_run_task(
     let message =
         crate::engine::user_message(&prompt.unwrap_or_default(), client_message_id.as_deref());
 
+    // ── T-29/T-30 历史参数装配（P4 §3.2.3 混合路线）───────────────
+    // 前端 history（store 已完成消息）为冷启动水合兜底；为空/未传时回退
+    // SessionHistoryCache（引擎侧缓存主，run 收口写入的权威增量）。
+    // 产出 initial_conversation（Vec<Arc<AgentMessage>>）：前端载荷走
+    // T-28 hydrate_history（过滤 + 尾部 user 截断），缓存走保真水合
+    // （工具结果配对不拆散）。已由 T-30 物理接线：经
+    // SessionLoopProducer::initial_conversation 字段传入 produce，
+    // 由 with_initial_conversation_arc 零拷贝水合。
+    let assembled_history =
+        resolve_history_source(&history, state.session_history.get(&session_id));
+    let initial_conversation: Option<Vec<Arc<AgentMessage>>> = assembled_history
+        .as_ref()
+        .map(|(source, payload)| match source {
+            HistorySource::Frontend => hydrate_history(payload.clone()),
+            HistorySource::Cache => cached_history_to_conversation(payload.clone()),
+        });
+    tracing::debug!(
+        target: "run",
+        session_id = %session_id,
+        source = ?assembled_history.as_ref().map(|(source, _)| source),
+        hydrated = initial_conversation.as_ref().map(Vec::len).unwrap_or(0),
+        "历史装配完成（前端水合兜底 / 引擎缓存主）"
+    );
+
     let producer = SessionLoopProducer::new(
         session_id.clone(),
         run_id.clone(),
@@ -1049,6 +1479,7 @@ pub(crate) async fn core_run_task(
         tool_options,
         approval,
         Some(delta_sink),
+        initial_conversation,
         message,
     );
 
@@ -1309,7 +1740,58 @@ async fn emit_approval_resolved(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use conex_types::message::{AgentMessageBlock, AgentMessageRole};
+    use conex_types::message::{AgentMessageBlock, AgentMessageRole, ToolCallBlock};
+    use conex_types::session::AgentEndReason;
+    use conex_types::tool::ToolOutput;
+
+    /// 便捷构造 HistoryMessage（缺省无 thinking/无 JSON 载荷字段）
+    fn hmsg(id: &str, sender: &str, text: Option<&str>) -> HistoryMessage {
+        HistoryMessage {
+            id: id.into(),
+            sender: sender.into(),
+            text: text.map(String::from),
+            thinking: None,
+            blocks_json: None,
+            tool_calls_json: None,
+            tool_call_results_json: None,
+            status: Some("completed".into()),
+            timestamp: 1_785_456_000_000,
+        }
+    }
+
+    /// 便捷构造 AgentMessage（固定 created_at 锚点 2026-07-31T00:00:00.123Z）
+    fn amsg(id: &str, role: AgentMessageRole, blocks: Vec<AgentMessageBlock>) -> AgentMessage {
+        AgentMessage {
+            id: id.into(),
+            role,
+            created_at: "2026-07-31T00:00:00.123Z".into(),
+            blocks,
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        }
+    }
+
+    fn text_block(text: &str) -> AgentMessageBlock {
+        AgentMessageBlock::Text { text: text.into() }
+    }
+
+    fn tool_call_block(id: &str, name: &str) -> AgentMessageBlock {
+        AgentMessageBlock::ToolCall(ToolCallBlock {
+            id: id.into(),
+            tool_name: name.into(),
+            input: serde_json::json!({"path": "/a"}),
+        })
+    }
+
+    fn tool_result_block(id: &str, output: &str) -> AgentMessageBlock {
+        AgentMessageBlock::ToolResult {
+            tool_call_id: id.into(),
+            tool_name: "read_file".into(),
+            output: ToolOutput::text(output.to_string()),
+            is_error: false,
+        }
+    }
 
     /// 错误文案 → payload：77 码兜底 + 人读文案
     #[test]
@@ -1338,5 +1820,240 @@ mod tests {
             message.blocks.as_slice(),
             [AgentMessageBlock::Text { text }] if text == "继续"
         ));
+    }
+
+    // ── T-29：SessionHistoryCache ──────────────────────────────────
+
+    /// 缓存容量上限（每会话消息条数）：超出保留最近 N 条，最旧截掉
+    #[test]
+    fn session_history_cache_caps_messages_per_session() {
+        let cache = SessionHistoryCache::with_limits(3, 8);
+        let many: Vec<HistoryMessage> =
+            (0..7).map(|i| hmsg(&format!("m{i}"), "user", Some("x"))).collect();
+        cache.store("s1", many);
+        let stored = cache.get("s1").unwrap();
+        assert_eq!(cache.message_count("s1"), 3);
+        // 保留最近 3 条（m4/m5/m6），最旧 4 条截掉
+        let ids: Vec<&str> = stored.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["m4", "m5", "m6"]);
+    }
+
+    /// 缓存容量上限（会话数）：超出 FIFO 淘汰最久未更新的会话
+    #[test]
+    fn session_history_cache_evicts_oldest_session() {
+        let cache = SessionHistoryCache::with_limits(8, 2);
+        cache.store("s1", vec![hmsg("a", "user", Some("1"))]);
+        cache.store("s2", vec![hmsg("b", "user", Some("2"))]);
+        cache.store("s3", vec![hmsg("c", "user", Some("3"))]);
+        assert_eq!(cache.session_count(), 2);
+        // 最久未更新的 s1 被淘汰；s2/s3 存活
+        assert!(cache.get("s1").is_none());
+        assert_eq!(cache.message_count("s2"), 1);
+        assert_eq!(cache.message_count("s3"), 1);
+        // 重复写入同一会话 = 刷新其 FIFO 位置（近似 LRU），不再被误淘汰
+        cache.store("s2", vec![hmsg("d", "user", Some("4"))]);
+        cache.store("s4", vec![hmsg("e", "user", Some("5"))]);
+        assert!(cache.get("s3").is_none());
+        assert_eq!(cache.message_count("s2"), 1);
+        assert_eq!(cache.message_count("s4"), 1);
+    }
+
+    /// 空 history 回退缓存（混合路线：前端水合兜底 + 引擎侧缓存主）
+    #[test]
+    fn resolve_history_falls_back_to_cache_when_empty() {
+        let cached = vec![hmsg("c1", "user", Some("缓存"))];
+        let frontend = vec![hmsg("f1", "user", Some("前端"))];
+        // 前端非空 → Frontend 优先（即使缓存有值）
+        let (source, payload) =
+            resolve_history_source(&Some(frontend.clone()), Some(cached.clone())).unwrap();
+        assert_eq!(source, HistorySource::Frontend);
+        assert_eq!(payload[0].id, "f1");
+        // 前端空数组 → 回退缓存
+        let (source, payload) =
+            resolve_history_source(&Some(Vec::new()), Some(cached.clone())).unwrap();
+        assert_eq!(source, HistorySource::Cache);
+        assert_eq!(payload[0].id, "c1");
+        // 前端未传 → 回退缓存
+        let (source, payload) = resolve_history_source(&None, Some(cached.clone())).unwrap();
+        assert_eq!(source, HistorySource::Cache);
+        assert_eq!(payload[0].id, "c1");
+        // 两者皆空 → None（现状单消息 run，向后兼容）
+        assert!(resolve_history_source(&None, None).is_none());
+        assert!(resolve_history_source(&Some(Vec::new()), None).is_none());
+    }
+
+    /// 收口写入形状：RunOutcome.messages → HistoryMessage（全角色保真）
+    #[test]
+    fn run_outcome_collected_into_history_messages() {
+        let outcome = RunOutcome {
+            reason: AgentEndReason::Stop,
+            error: None,
+            diagnostic: None,
+            messages: vec![
+                Arc::new(amsg("u1", AgentMessageRole::User, vec![text_block("你好")])),
+                Arc::new(amsg(
+                    "a1",
+                    AgentMessageRole::Assistant,
+                    vec![text_block("回复"), AgentMessageBlock::Thought {
+                        text: "思考".into(),
+                        redacted: None,
+                    }],
+                )),
+                Arc::new(amsg(
+                    "a2",
+                    AgentMessageRole::Assistant,
+                    vec![tool_call_block("c1", "read_file")],
+                )),
+                Arc::new(amsg(
+                    "t1",
+                    AgentMessageRole::Tool,
+                    vec![tool_result_block("c1", "file content")],
+                )),
+            ],
+            events: Vec::new(),
+            turn_index: 2,
+            tool_call_count: 1,
+            steering_count: 0,
+        };
+        let history = to_history_messages(&outcome);
+        assert_eq!(history.len(), 4);
+        // 角色保真（tool 角色独立消息保留——缓存路径不过滤）
+        let senders: Vec<&str> = history.iter().map(|m| m.sender.as_str()).collect();
+        assert_eq!(senders, ["user", "assistant", "assistant", "tool"]);
+        // 收口消息均为完成态
+        assert!(history.iter().all(|m| m.status.as_deref() == Some("completed")));
+        // blocks_json 保真：可解析回 AgentMessageBlock 完整序列
+        let first_blocks = parse_blocks(&history[0]).unwrap();
+        assert_eq!(first_blocks, vec![text_block("你好")]);
+        let tool_blocks = parse_blocks(&history[2]).unwrap();
+        assert!(matches!(&tool_blocks[0], AgentMessageBlock::ToolCall(call) if call.id == "c1"));
+        let result_blocks = parse_blocks(&history[3]).unwrap();
+        assert!(matches!(
+            &result_blocks[0],
+            AgentMessageBlock::ToolResult { tool_call_id, output, is_error: false, .. }
+                if tool_call_id == "c1" && output.text.as_deref() == Some("file content")
+        ));
+        // timestamp = created_at 折算（锚点 2026-07-31T00:00:00.123Z）
+        assert_eq!(history[0].timestamp, 1_785_456_000_123);
+        // thinking / text 字段裁剪（空 → None）
+        assert_eq!(history[1].thinking.as_deref(), Some("思考"));
+        assert!(history[3].text.is_none());
+        // 合成源字段置 None（有 blocks_json 保真，无需冗余）
+        assert!(history.iter().all(|m| m.tool_calls_json.is_none()));
+        assert!(history.iter().all(|m| m.tool_call_results_json.is_none()));
+    }
+
+    /// 缓存往返保真：收口 → store → get → 读回水合，tool 配对不拆散
+    #[test]
+    fn cached_history_roundtrip_preserves_tool_pairs() {
+        let cache = SessionHistoryCache::with_limits(16, 4);
+        let outcome = RunOutcome {
+            reason: AgentEndReason::Stop,
+            error: None,
+            diagnostic: None,
+            messages: vec![
+                Arc::new(amsg("u1", AgentMessageRole::User, vec![text_block("q")])),
+                Arc::new(amsg(
+                    "a1",
+                    AgentMessageRole::Assistant,
+                    vec![tool_call_block("c1", "read_file")],
+                )),
+                Arc::new(amsg(
+                    "t1",
+                    AgentMessageRole::Tool,
+                    vec![tool_result_block("c1", "content")],
+                )),
+                Arc::new(amsg("u2", AgentMessageRole::User, vec![text_block("q2")])),
+            ],
+            events: Vec::new(),
+            turn_index: 1,
+            tool_call_count: 1,
+            steering_count: 0,
+        };
+        cache.store("s1", to_history_messages(&outcome));
+        let restored = cached_history_to_conversation(cache.get("s1").unwrap());
+        // 角色与数量保真（Tool 消息不被过滤——与前端 hydrate 路径互补）
+        let roles: Vec<AgentMessageRole> = restored.iter().map(|m| m.role).collect();
+        assert_eq!(
+            roles,
+            [
+                AgentMessageRole::User,
+                AgentMessageRole::Assistant,
+                AgentMessageRole::Tool,
+                AgentMessageRole::User,
+            ]
+        );
+        // 工具配对完整：assistant 的 ToolCall id 与 tool 消息的 result id 一致
+        assert!(matches!(
+            restored[1].blocks[0],
+            AgentMessageBlock::ToolCall(ref call) if call.id == "c1"
+        ));
+        assert!(matches!(
+            restored[2].blocks[0],
+            AgentMessageBlock::ToolResult { ref tool_call_id, .. } if tool_call_id == "c1"
+        ));
+        // created_at 还原（时间戳往返一致）
+        assert_eq!(restored[0].created_at, "2026-07-31T00:00:00.123Z");
+        // metadata 裁剪 + 幂等键对齐
+        assert!(restored.iter().all(|m| m.metadata.is_none()));
+        assert_eq!(restored[0].client_message_id.as_deref(), Some("u1"));
+    }
+
+    /// 收口写入安全前缀：孤儿 tool/system 首条与带未配对 ToolCall 的
+    /// assistant 首条被前移掉，缓存序列以 user 开头（wire 合法）
+    #[test]
+    fn store_truncates_orphan_prefix() {
+        let cache = SessionHistoryCache::with_limits(16, 4);
+        // 场景 A：assistant(带 ToolCall，结果已不在保留段) 首条 → 前移掉
+        let mut orphan_calls = hmsg("a1", "assistant", Some("调用了工具"));
+        orphan_calls.blocks_json = Some(
+            serde_json::to_string(&vec![tool_call_block("c1", "read_file")]).unwrap(),
+        );
+        cache.store("s1", vec![orphan_calls, hmsg("u1", "user", Some("后续"))]);
+        let stored = cache.get("s1").unwrap();
+        let senders: Vec<&str> = stored.iter().map(|m| m.sender.as_str()).collect();
+        assert_eq!(senders, ["user"]);
+        // 场景 B：tool 消息首条（孤儿结果）→ 前移掉
+        cache.store("s2", vec![
+            hmsg("t1", "tool", Some("孤儿结果")),
+            hmsg("u1", "user", Some("后续")),
+        ]);
+        let stored = cache.get("s2").unwrap();
+        assert_eq!(stored[0].sender, "user");
+        assert_eq!(stored.len(), 1);
+        // 场景 C：完整配对（assistant + tool 结果）以 assistant 首条 → 保留
+        let mut paired = hmsg("a1", "assistant", None);
+        paired.blocks_json = Some(
+            serde_json::to_string(&vec![tool_call_block("c1", "read_file")]).unwrap(),
+        );
+        let mut result = hmsg("t1", "tool", None);
+        result.blocks_json = Some(
+            serde_json::to_string(&vec![tool_result_block("c1", "content")]).unwrap(),
+        );
+        cache.store("s3", vec![paired, result, hmsg("u1", "user", Some("尾"))]);
+        let stored = cache.get("s3").unwrap();
+        let senders: Vec<&str> = stored.iter().map(|m| m.sender.as_str()).collect();
+        assert_eq!(senders, ["assistant", "tool", "user"]);
+    }
+
+    /// context_window 入站 → ContextBudget（reserve/safety 取默认，T-33 消费）
+    #[test]
+    fn context_window_assembles_into_budget_with_defaults() {
+        let budget = assemble_context_budget(128_000);
+        assert_eq!(budget.context_window, 128_000);
+        assert_eq!(budget.reserve_tokens, 16_384);
+        assert_eq!(budget.safety_tokens, 4_096);
+    }
+
+    /// 时间戳互逆：ISO8601 ↔ epoch ms 往返一致（锚点 2026-07-31）
+    #[test]
+    fn iso8601_epoch_millis_roundtrip() {
+        let epoch = 1_785_456_000_123;
+        assert_eq!(iso8601_to_epoch_millis("2026-07-31T00:00:00.123Z"), epoch);
+        assert_eq!(epoch_millis_to_iso8601(epoch), "2026-07-31T00:00:00.123Z");
+        // 宽容解析：无毫秒段
+        assert_eq!(iso8601_to_epoch_millis("2026-07-31T00:00:01Z"), 1_785_456_001_000);
+        // 失败兜底 0
+        assert_eq!(iso8601_to_epoch_millis("not-a-date"), 0);
     }
 }
