@@ -28,9 +28,9 @@
 use std::sync::Arc;
 
 use conex_telemetry::cache::{
-    classify, cold_cache_check, is_cold, warm_until, CacheAccountingKind, CacheBaseline,
-    CacheBreakdownMath, CacheUsageScalars, ColdCacheWarning, MissDetector, MissReason,
-    RequestSignature, LOW_HIT_RATIO_PCT,
+    classify, cold_cache_check, is_cold, warm_until, CacheBaseline, CacheBreakdownMath,
+    CacheUsageScalars, ColdCacheWarning, MissDetector, MissReason, RequestSignature,
+    LOW_HIT_RATIO_PCT,
 };
 use conex_types::events::{MissAttribution, RunCacheStats};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
