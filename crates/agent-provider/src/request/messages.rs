@@ -4,7 +4,7 @@
 //! - system → `{role:'system'}`；wireMode=user-prefix 时改 `role:'user'` +
 //!   `System instructions for this run:\n\n` 前缀（02 §六.11）
 //! - tool → 每个 tool-result block 一个 `{role:'tool', tool_call_id, content}`
-//! - assistant → 文本 join + `tool_calls[]`（arguments 为 JSON 序列化）+ 可选 `reasoning_content`
+//! - assistant → 文本 join + `tool_calls[]`（arguments 为 canonical JSON 序列化，P1 C2）+ 可选 `reasoning_content`
 //! - user → 纯文本或 metadata.contentParts 多模态 parts（02 §二.6:138）
 //!
 //! 不做 LruMap 消息转换缓存（02 §五.13：Rust 无 GC 压力，非热路径）。
@@ -15,6 +15,8 @@ use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::tool::{SystemPromptWireMode, ToolOutput};
 use serde_json::{json, Map, Value};
 
+use crate::request::schema::canonical_json_string;
+
 /// reasoningContentMode（对齐 OpenAICompatibleReasoningContentMode；默认 omit）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ReasoningContentMode {
@@ -23,7 +25,9 @@ pub enum ReasoningContentMode {
     Omit,
     /// 有思考内容时回传 reasoning_content
     Include,
-    /// 无思考内容也回传（与 Include 在 wire 层等价，仅下游语义差异）
+    /// 无思考内容也回传空串（P1 C3：键存在性——DeepSeek thinking
+    /// 工具轮次缺 reasoning_content 键 400，空串兜底；Reasonix
+    /// openai.go:669-680）
     Require,
 }
 
@@ -293,17 +297,35 @@ pub fn user_message_content(message: &AgentMessage) -> ChatContent {
     }
 }
 
+/// P1：tool_call id 规整为 [a-zA-Z0-9_-]（对齐 opencode scrub，
+/// transform.ts:201-228）——部分 provider 回传非法 id 字符时，回放
+/// 请求 400 且前缀漂移；幂等（已合法字符不变，历史字节不回改）。
+pub fn sanitize_tool_call_id(id: &str) -> String {
+    id.chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .collect()
+}
+
 /// reasoningContentObject（对齐 `model:openai-request-build.ts:326-334`）：
 /// omit → 不回传；有思考内容时回传 reasoning_content
 fn reasoning_content_object(message: &AgentMessage, mode: ReasoningContentMode) -> Option<String> {
-    if matches!(mode, ReasoningContentMode::Omit) {
-        return None;
-    }
-    let thought = thought_content(message);
-    if thought.is_empty() {
-        None
-    } else {
-        Some(thought)
+    match mode {
+        ReasoningContentMode::Omit => None,
+        // P1：Require 模式无思考内容也回传空串——键存在性（DeepSeek
+        // thinking 工具轮次缺键 400；空串兜底，Reasonix openai.go:669-680）
+        ReasoningContentMode::Include => {
+            let thought = thought_content(message);
+            if thought.is_empty() {
+                None
+            } else {
+                Some(thought)
+            }
+        }
+        ReasoningContentMode::Require => {
+            let thought = thought_content(message);
+            // 空串也回传（to_value 对 Some("") 插入键，本文件 to_value 分支）
+            Some(thought)
+        }
     }
 }
 
@@ -336,7 +358,7 @@ pub fn to_chat_messages<M: Borrow<AgentMessage>>(
                         result.push(ChatMessage {
                             role: "tool".to_string(),
                             content: Some(ChatContent::Text(stringify_tool_output(output))),
-                            tool_call_id: Some(tool_call_id.clone()),
+                            tool_call_id: Some(sanitize_tool_call_id(tool_call_id)),
                             reasoning_content: None,
                             tool_calls: Vec::new(),
                         });
@@ -350,12 +372,13 @@ pub fn to_chat_messages<M: Borrow<AgentMessage>>(
                     .iter()
                     .filter_map(|block| match block {
                         AgentMessageBlock::ToolCall(call) => Some(json!({
-                            "id": call.id,
+                            // P1 C2：id 消毒 + arguments canonical 序列化（键序确定，
+                            // 防御 provider 回传 wire JSON 的键序依赖；幂等保证历史不回改）
+                            "id": sanitize_tool_call_id(&call.id),
                             "type": "function",
                             "function": {
                                 "name": call.tool_name,
-                                "arguments": serde_json::to_string(&call.input)
-                                    .unwrap_or_else(|_| "{}".to_string()),
+                                "arguments": canonical_json_string(&call.input),
                             },
                         })),
                         _ => None,
@@ -705,6 +728,160 @@ mod tests {
             SystemPromptWireMode::NativeSystemRole,
         );
         assert_eq!(messages[0].reasoning_content.as_deref(), Some("元数据思考"));
+    }
+
+    // ── P1：tool_call id 消毒与 arguments 规范化 ──
+
+    #[test]
+    fn sanitize_tool_call_id_replaces_invalid_chars_and_is_idempotent() {
+        // 非法字符（空格/斜杠/点号）替换为下划线；合法字符保留
+        assert_eq!(sanitize_tool_call_id("a b/c"), "a_b_c");
+        assert_eq!(sanitize_tool_call_id("call.1"), "call_1");
+        assert_eq!(sanitize_tool_call_id("call_1-2"), "call_1-2");
+        // 幂等：二次消毒结果不变（历史字节不回改）
+        let once = sanitize_tool_call_id("a b/c");
+        assert_eq!(sanitize_tool_call_id(&once), once);
+        // 空串 → 空串
+        assert_eq!(sanitize_tool_call_id(""), "");
+    }
+
+    #[test]
+    fn sanitize_tool_call_id_preserves_whitelist_chars() {
+        // 白名单 [a-zA-Z0-9_-] 全部保留，含大小写字母与数字
+        assert_eq!(sanitize_tool_call_id("ABCdef_012-9"), "ABCdef_012-9");
+        // 非 ASCII 字符（中文/全角）视为非法 → 下划线
+        assert_eq!(sanitize_tool_call_id("call_中文"), "call___");
+    }
+
+    #[test]
+    fn tool_call_ids_are_sanitized_on_wire() {
+        // assistant 分支：tool_calls[].id 消毒
+        let messages = to_chat_messages(
+            None,
+            &[assistant_msg(vec![tool_call_block("call 1/2", "noop", json!({}))])],
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(messages[0].tool_calls[0]["id"], "call_1_2");
+
+        // tool 分支：tool_call_id 消毒
+        let messages = to_chat_messages(
+            None,
+            &[message(
+                AgentMessageRole::Tool,
+                vec![tool_result_block("call 1/2", ToolOutput::text("结果"))],
+            )],
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(messages[0].tool_call_id.as_deref(), Some("call_1_2"));
+    }
+
+    #[test]
+    fn tool_call_arguments_canonical_serialization() {
+        // arguments 使用 canonical_json_string：递归键序确定，
+        // 同语义不同插入序的对象输出相同字节
+        let input = json!({ "path": "/a", "options": { "z": 1, "a": 2 } });
+        let messages = to_chat_messages(
+            None,
+            &[assistant_msg(vec![tool_call_block("call_1", "read_file", input.clone())])],
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        let arguments = messages[0].tool_calls[0]["function"]["arguments"]
+            .as_str()
+            .expect("arguments 必须为字符串");
+        assert_eq!(arguments, canonical_json_string(&input));
+        assert_eq!(arguments, r#"{"options":{"a":2,"z":1},"path":"/a"}"#);
+
+        // 键序无关：不同插入序构建的等价对象序列化结果相同
+        let mut b_first = Map::new();
+        b_first.insert("b".to_string(), json!(1));
+        b_first.insert("a".to_string(), json!(2));
+        let mut a_first = Map::new();
+        a_first.insert("a".to_string(), json!(2));
+        a_first.insert("b".to_string(), json!(1));
+        let messages = to_chat_messages(
+            None,
+            &[assistant_msg(vec![
+                tool_call_block("call_1", "noop", Value::Object(b_first)),
+                tool_call_block("call_2", "noop", Value::Object(a_first)),
+            ])],
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(
+            messages[0].tool_calls[0]["function"]["arguments"],
+            messages[0].tool_calls[1]["function"]["arguments"],
+            "不同插入序的等价对象必须序列化为相同字节"
+        );
+        assert_eq!(messages[0].tool_calls[0]["function"]["arguments"], r#"{"a":2,"b":1}"#);
+    }
+
+    // ── P1：reasoning_content Require 键存在性 ──
+
+    #[test]
+    fn reasoning_content_require_emits_empty_string() {
+        // Require 模式 + 无思考 → Some("")，序列化含 "reasoning_content":"" 键
+        // （DeepSeek 工具轮次缺键 400 兜底；Reasonix openai.go:669-680）
+        let messages = to_chat_messages(
+            None,
+            &[assistant_msg(vec![text_block("正文")])],
+            ReasoningContentMode::Require,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].reasoning_content.as_deref(), Some(""));
+        let value = messages[0].to_value();
+        assert!(
+            value.get("reasoning_content").is_some(),
+            "Require 模式必须含 reasoning_content 键"
+        );
+        assert_eq!(value["reasoning_content"], "");
+
+        // Require 模式有思考 → 原样回传
+        let messages = to_chat_messages(
+            None,
+            &[message(
+                AgentMessageRole::Assistant,
+                vec![AgentMessageBlock::Thought {
+                    text: "推理过程".to_string(),
+                    redacted: None,
+                }],
+            )],
+            ReasoningContentMode::Require,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(messages[0].reasoning_content.as_deref(), Some("推理过程"));
+
+        // Omit 模式：不含该键（行为不变）
+        let messages = to_chat_messages(
+            None,
+            &[assistant_msg(vec![text_block("正文")])],
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(messages[0].reasoning_content, None);
+        let value = messages[0].to_value();
+        assert!(
+            value.get("reasoning_content").is_none(),
+            "Omit 模式不得含 reasoning_content 键"
+        );
+    }
+
+    #[test]
+    fn reasoning_content_require_keeps_empty_assistant_message() {
+        // Require 模式空思考 → reasoning_content: Some("") 使跳过条件不成立，
+        // 空 assistant 消息保留且带键（Omit/Include 下该消息整条跳过）
+        let messages = to_chat_messages(
+            None,
+            &[assistant_msg(vec![])],
+            ReasoningContentMode::Require,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].reasoning_content.as_deref(), Some(""));
+        assert_eq!(messages[0].content, None);
     }
 
     // ── 多模态 contentParts ──
