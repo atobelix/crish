@@ -165,6 +165,7 @@ apps/agent-workbench/src-tauri/gen/
 !package.json
 !package-lock.json
 !tsconfig.json
+!crates/agent-provider/src/models/catalog.json
 
 # Legacy root planning docs moved into docs/archive (keep untracked)
 docs/archive/legacy/0613-0055-plan.md
@@ -196,5 +197,5 @@ reference/ui-replica/package-lock.json
 
 
 
-# turbo cache (opencode/agent 会话产物)
+# turbo cache (opencode/agent 锟结话锟斤拷锟斤拷)
 .turbo/
