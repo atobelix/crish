@@ -13,7 +13,7 @@
 - **消费关系**：本方案不重写需求。C1–C10 的「目标 / 触发条件 / 行为 / 边界 / 分层归属 / 对接点 / 独占写集 / 验收标准」全部原样引用 04 文档 §2；本文档只补「对接现有模块的落地方式、验收命令、轮内交接序」。
 - **任务集**：M1–M14，与 00 总览 §4 轮次总览表的 M1–M14 一一对应（M1=Tool Context 地基、M2=run_subagent、M3=写路径互斥、M4=C2、M5=C1、M6=C6、M7/M8=C8、M9=C7、M10=C9、M11=C10+C5、M12=联测、M13/M14=事件面完备）。
 - **轮次**：I4（调度地基）→ I5（调度核心）→ I6（恢复与压缩）→ I7（集成终验与事件面完备），镜像 04 §4 实现顺序的步骤 1–7；I3（本阶段安全线）已提前交付步骤 2（C3/C4 审批基础设施），I4 起 run_subagent 的写操作直接挂靠该通道。
-- **自然内化**：全部任务挂接现有模块——SessionTree（`crates/orchestrator/src/session.rs:186`）、PendingMessageQueue（`steering_queue.rs:111`）、ControlBus L0-L3（`crates/session-loop/src/control.rs:177`）、三环输入队列（`crates/session-loop/src/input.rs:37`）、session_agents 表（`crates/conex-db/src/schema.rs:50`）、CompactionEngine（`crates/conex-compaction/src/lib.rs:16`）、RetryPolicy（`crates/agent-provider/src/retry.rs:30`）、HookRegistry（`crates/session-loop/src/hooks.rs:30`）。只新增有明确演进出处的模块（依赖图、写路径声明、模式状态机），不造平行通道。
+- **自然内化**：全部任务挂接现有模块——SessionTree（`crates/orchestrator/src/session.rs:187`）、PendingMessageQueue（`steering_queue.rs:111`）、ControlBus L0-L3（`crates/session-loop/src/control.rs:182`）、三环输入队列（`crates/session-loop/src/input.rs:37`）、session_agents 表（`crates/conex-db/src/schema.rs:50`）、CompactionEngine（`crates/conex-compaction/src/lib.rs:4`）、RetryPolicy（`crates/agent-provider/src/retry.rs:30`）、HookRegistry（`crates/session-loop/src/hooks.rs:30`）。只新增有明确演进出处的模块（依赖图、写路径声明、模式状态机），不造平行通道。
 - **验收锚点**：I7 以 04 §4.1 验收命令清单 + 各能力验收断言逐条核销为完成态判定（00 总览 §4.2 主线二完成态）。
 
 ---
@@ -24,9 +24,9 @@
 
 | 现有资产 | 现状位置 | 本方案谁消费 | 挂接方式 |
 | --- | --- | --- | --- |
-| 会话树 | `SessionTree` append/fork/move_leaf/restore_leaf/read_branch_path（`crates/orchestrator/src/session.rs:186/231/239/255/315/331`） | M2（fork 子分支）、M5（叶子 payload 检查点）、M6（编排推进）、M9（阶梯 3 fork） | 04 §4 互斥约定：session.rs 主写权归 M6；M1/M2/M5/M9 只读引用冻结接口 |
+| 会话树 | `SessionTree` append/fork/move_leaf/restore_leaf/read_branch_path（`crates/orchestrator/src/session.rs:187/231/239/255/315/331`） | M2（fork 子分支）、M5（叶子 payload 检查点）、M6（编排推进）、M9（阶梯 3 fork） | 04 §4 互斥约定：session.rs 主写权归 M6；M1/M2/M5/M9 只读引用冻结接口 |
 | rewind 计划 | `RewindPlan` / `plan_conversation_rewind`（`session.rs:537/670`）、`RewindExecutor`（`session.rs:827`） | M5（恢复接线，仅会话树形态不一致时触发回退） | C1 独占 restore.rs/safe_point.rs；plan_conversation_rewind 只读复用 |
-| 控制总线 | `ControlBus` L0-L3 + L1 分环（`crates/session-loop/src/control.rs:177-373`、`inject_ring_for_kind:74`） | M8（三模式注入通道）、M9（阶梯 2 激活指令） | control.rs 主写权归 M8（C8 独占）；M9 经其通道注入 |
+| 控制总线 | `ControlBus` L0-L3 + L1 分环（`crates/session-loop/src/control.rs:182-373`、`inject_ring_for_kind:74`） | M8（三模式注入通道）、M9（阶梯 2 激活指令） | control.rs 主写权归 M8（C8 独占）；M9 经其通道注入 |
 | 三环输入队列 | `AgentInputQueue` / `InputEnqueueMode`（steer/followUp/force，`crates/session-loop/src/input.rs:37-44`、`promote_follow_up:181`） | M7/M8（事件摘要注入走 steer/followUp 环） | 只读复用，不加新模式 |
 | 跨 run steering 队列 | `PendingMessageQueue`（`crates/orchestrator/src/steering_queue.rs:111-278`，replaceOrEnqueue/transfer_follow_up/drain_nudges） | M9（阶梯 2 通知落库与投递） | steering_queue.rs 写入侧归 C7 独占；M8 只读消费 |
 | 安全点 | `safe_point.rs:118-151`（apply_safe_point_control） | M5（检查点采集钩子挂载点） | C1 独占追加 |
@@ -35,8 +35,8 @@
 | 事件基座 | `append_event`（`crates/conex-db/src/events.rs:8`）、会话级原子取号（reserve_sequence）、事件注册表漂移护栏（`crates/conex-types/tests/registry_drift.rs`） | M7（三事件产出与背压分级）、M9/M10（留痕落库） | 走既有接口，不新增平行写入面 |
 | 上下文构建 | `build_context`（`apps/agent-workbench/src-tauri/src/engine.rs:224-239`，现 system_prompt 恒空注入） | M1（立通道）、M4/M5/M11（经注入点挂载） | build_context 主体归 C10（M1 立口、M11 实装）；M4/M5 只读经注入点挂载 |
 | 工具注册表 | `register_builtin_tools` 8 工具（`crates/agent-tools/src/tools/mod.rs:45-66`）、`BuiltinToolConfig`（`mod.rs:28-42`）；I2（S3）已注册 delete_file/delete_dir，注册面基数 10 | M2（run_subagent 注册，10→11）、M8（wait_subagents 注册，11→12） | 注册面跨轮唯一写者（S3（I2）→ M2（I4）→ M8（I5），逐轮唯一、跨轮不冲突） |
-| 压缩骨架 | `CompactionEngine::compact` 占位符压缩（`crates/conex-compaction/src/lib.rs:16-127`）、`count_tokens`（`:134`） | M10（AI 摘要升级，C9 独占） | 独占文件，沿用既有 count_tokens 与压缩事件结构 |
-| 审批基础设施 | `ApprovalGate` trait（`crates/session-loop/src/tool_events.rs:68`）、审批先发后等防死锁（`tool_exec.rs:493-500`）、CommandPolicy 兜底 | M2（run_subagent 写操作挂靠）、M4（整体回退走 C3 门禁） | I3 交付的通道原样挂靠，不重建 |
+| 压缩骨架 | `CompactionEngine::compact` 占位符压缩（`crates/conex-compaction/src/lib.rs:4-127`（约），struct 本体在 :4）、`count_tokens`（`:134`） | M10（AI 摘要升级，C9 独占） | 独占文件，沿用既有 count_tokens 与压缩事件结构 |
+| 审批基础设施 | `ApprovalGate` trait（`crates/session-loop/src/tool_events.rs:69`）、审批先发后等防死锁（`tool_exec.rs:493-500`）、CommandPolicy 兜底 | M2（run_subagent 写操作挂靠）、M4（整体回退走 C3 门禁） | I3 交付的通道原样挂靠，不重建 |
 | 钩子运行时 | `HookRegistry` 3 事件（`crates/session-loop/src/hooks.rs:30-37`，turn.end/tool.pre/tool.post） | M14（事件源补齐后挂接面）、M12（联测观察点） | 只读；新增事件源接 HookEventKind 扩展位（I8 生态轮消费） |
 | 前端事件消费 | `handlers/subagentHandlers.ts:12-63`（onSubagentStarted/Event/Ended 已接）、`dispatch.ts:84-86`（legacy 表三键） | M7（Rust 侧信封对齐的唯一基准） | 前端只读对齐，不改前端解析器 |
 
@@ -78,7 +78,7 @@
 
 ### 1.4 前提条件：I3 交付的审批基础设施（本方案启动门禁）
 
-按 00 总览 §8 依赖链：**I4 的启动门禁 = I3 轮次报告通过 + C3/C4 审批基础设施验收断言核销**。M2 的 run_subagent 写操作、M4 的整体回退引导，一律挂 I3 交付的 ApprovalGate 通道（`tool_events.rs:68` 判定点 + `tool_exec.rs:493-500` 先发后等）；未达标的项由 I4 首轮承接（run_subagent 写操作暂挂既有审批通道）。
+按 00 总览 §8 依赖链：**I4 的启动门禁 = I3 轮次报告通过 + C3/C4 审批基础设施验收断言核销**。M2 的 run_subagent 写操作、M4 的整体回退引导，一律挂 I3 交付的 ApprovalGate 通道（`tool_events.rs:69` 判定点 + `tool_exec.rs:493-500` 先发后等）；未达标的项由 I4 首轮承接（run_subagent 写操作暂挂既有审批通道）。
 
 ---
 
@@ -101,7 +101,7 @@
 ### M2 run_subagent 工具与子代理会话模型（04 §4 步骤 3；C6 前置、C7 阶梯 3 的载体）
 
 - **目标**：打通 spawn 入口——agent-tools 注册 run_subagent 工具；子代理 = 独立 session + run（parent_id 链）；状态机落库；递归守卫执行；写操作挂 I3 审批通道。
-- **文件域（对接现有模块）**：独占 `crates/agent-tools/src/tools/mod.rs` 注册面与新增 `crates/agent-tools/src/tools/subagent.rs`（10→11 工具，I2 后注册面基数 10 含 S3 删除工具）；独占 `crates/conex-db/src/agents.rs` 写面（save_session_agents，本轮 conex-db 唯一写面的第一波）；只读：`packages/shared-types/src/subagent.ts`（RecursionGuardConfig/DEFAULT_RECURSION_GUARD/DeadlockCheckInput/SubagentState:17，状态映射只读对齐）、`crates/conex-db/src/schema.rs:50/59`（session_agents 表结构与 status CHECK 集，只读不并写）、`crates/session-loop/src/tool_events.rs:68`（I3 审批通道，只挂靠不并写）、`crates/orchestrator/src/session.rs:239`（fork，冻结接口）。
+- **文件域（对接现有模块）**：独占 `crates/agent-tools/src/tools/mod.rs` 注册面与新增 `crates/agent-tools/src/tools/subagent.rs`（10→11 工具，I2 后注册面基数 10 含 S3 删除工具）；独占 `crates/conex-db/src/agents.rs` 写面（save_session_agents，本轮 conex-db 唯一写面的第一波）；只读：`packages/shared-types/src/subagent.ts`（RecursionGuardConfig/DEFAULT_RECURSION_GUARD/DeadlockCheckInput/SubagentState:17，状态映射只读对齐）、`crates/conex-db/src/schema.rs:50/59`（session_agents 表结构与 status CHECK 集，只读不并写）、`crates/session-loop/src/tool_events.rs:69`（I3 审批通道，只挂靠不并写）、`crates/orchestrator/src/session.rs:239`（fork，冻结接口）。
 - **内容**：
   1. **工具契约**：`run_subagent`（输入：agentId/definitionId、role、capabilityMode、description、target/任务目标、mode（research/research_single/solve/write，对齐前端 AgentBrowsePad 语义）、write_paths 声明（M3 校验）、is_dispatch 标记（M8 用）；输出：subagentRunId + 状态）；
   2. **子代理 = 独立 session + run**：spawn 时经 `SessionTree.fork` 挂子分支，新建子 session 的 run（`subagent_run_id`），session_agents 行写入 `parent_session_id / parent_run_id / parent_tool_call_id / depth / subagent_path_json`（schema.rs:53-64 字段已备）；同一 run 续跑保持 `subagent_run_id` 不变（C1 硬约束，M5 复用）；
@@ -118,7 +118,7 @@
 ### M3 写路径声明与引擎级互斥（01 Top 2 落地）
 
 - **目标**：把 05 §3 文件域互斥表从提示词纪律升级为引擎强制：run_subagent 输入带 write_paths 声明，调度时校验互斥。
-- **文件域（对接现有模块）**：独占新增 `crates/agent-tools/src/claims.rs`（校验纯函数）+ `crates/orchestrator/src/write_claims.rs`（会话级记账与 Overlaps 检测，供 M6 调度器消费）；只读：`crates/agent-tools/src/tools/mod.rs`（不并写注册面）、`crates/agent-tools/src/context.rs:93-102`（workspace_root）。
+- **文件域（对接现有模块）**：独占新增 `crates/agent-tools/src/claims.rs`（校验纯函数）+ `crates/orchestrator/src/write_claims.rs`（会话级记账与 Overlaps 检测，供 M6 调度器消费）；只读：`crates/agent-tools/src/tools/mod.rs`（不并写注册面）、`crates/agent-tools/src/context.rs:101`（workspace_root）。
 - **内容**：
   1. **校验**：绝对路径、symlink 解析（canonicalize 后比较）、拒绝 glob、拒绝工作区外（workspace_root 越界拒绝，01 A4 第 1 条）、大小写折叠（Windows 语义）；
   2. **声明语义**：未声明 write_paths 的子代理视为「全工作区声明」——与任何写代理互斥（写代理之间串行，01 B2）；
@@ -161,9 +161,10 @@
   4. **失败策略**：`on_failed ∈ { abort, skip, retry_once }`，默认 abort；存 session_meta 键 `flow_on_failed`；
   5. **并发预算 reserve/release**：全局并发 ≤ maxConcurrent=6、兄弟并发 ≤ maxSiblings=5（预算只算子 agent run，主 agent 不占）；记账「已分配」而非「已消耗」（02 Top 2）：session_meta 记 `flow_reserved` / `flow_released` 两计数，**重启后按已完成任务重算 reserved、未完成任务预留释放**（防 double-charge）；父代理写预留与嵌套快速失败语义由 M3 记账消费；
   6. **gate 强制（第一版观测态）**：可选 `gate` 节点（verify/critique 类），全部子任务 completed 后才启动；第一版以观测 phase 事件起步（hooks.rs turn.end 广播位），不引入 jcode 式完整门禁流程；
-  7. **重启恢复**：编排声明存 session_meta 单键 JSON（Q3 暂定，任务数 >20 再建表）；每任务状态在 session_agents 行；重启后按图重新推进（结合 C1 恢复）。
+  7. **合成唤醒（第二版扩展，P1，ref-analysis 02 Top 8 补入）**：后置节点（gate / 综合 run）全部前置就绪时由调度器**合成唤醒**——经 L1 注入事件通知主 agent 或自动排队综合 run（消耗并发预算），**不依赖轮询**（grok 合成态重唤醒语义，jcode dag/ops.rs:337-359）；综合节点记录 `is_composite` 标记与 `planner_run_id` 亲和（对齐 jcode NodeMeta.planner：fork 出的综合 run 偏好原 planner 执行）；第一版可只发事件不自动排队（观测态起步），但 M7 事件面需预留给合成唤醒位，防止把 gate 做成死观测；
+  8. **重启恢复**：编排声明存 session_meta 单键 JSON（Q3 暂定，任务数 >20 再建表）；每任务状态在 session_agents 行；重启后按图重新推进（结合 C1 恢复）。
 - **三问**：隔离边界——依赖图只推进不回溯，并发预算全局计数且不算子 agent 之外；干预入口——L3 强停可停整个编排，L1 注入可打断等待；持久化——编排声明 `flow_*` 键 + session_agents 行 + events 表（启动/终态事件）。
-- **验收命令**：`cargo test -p orchestrator -p conex-db`；断言（04 C6 验收 1–6）：A→B 依赖下 B 在 A completed 前不启动；并发启动 10 个 parallel 任务峰值 ≤ maxConcurrent；abort 策略后置不启动、skip 策略后置照常；含环声明被拒且零 run；中断重启后未完成后置按图恢复、已完成不重复启动；reserve/release 跨重启重算（崩溃一致性扩展项）。
+- **验收命令**：`cargo test -p orchestrator -p conex-db`；断言（04 C6 验收 1–6）：A→B 依赖下 B 在 A completed 前不启动；并发启动 10 个 parallel 任务峰值 ≤ maxConcurrent；abort 策略后置不启动、skip 策略后置照常；含环声明被拒且零 run；中断重启后未完成后置按图恢复、已完成不重复启动；reserve/release 跨重启重算（崩溃一致性扩展项）；合成唤醒（第二版）：gate 前置全部 completed 后触发唤醒事件（不轮询）、综合 run 记录 planner_run_id 亲和。
 
 ### M7 C8 事件契约（04 §1.1 事件对接点；Rust 侧三事件产出）
 
@@ -186,6 +187,8 @@
 - **文件域（对接现有模块）**：独占 `crates/session-loop/src/control.rs`（L1 steer 注入通道，C8 主写权）与新增模式状态机模块（`crates/session-loop/src/dispatch_mode.rs` 或 orchestrator 侧，随调度核心归属定）；独占 `crates/agent-tools/src/tools/mod.rs` 注册面（wait_subagents，11→12 工具，I4 后无并写）；独占 session_meta 键 `dispatch_*`；只读：`crates/orchestrator/src/steering_queue.rs`（PendingMessageQueue 消费，写入侧归 C7/M9）、`crates/session-loop/src/input.rs:37-44`（三环队列）、`crates/session-loop/src/stream.rs`（事件流）。
 - **内容**：
   1. **等待原语工具化**：`wait_subagents(task_ids: string[], timeout_ms?: number)`（02 Top 7，对齐 grok get_task_output/wait_tasks）——省略 timeout 或 0 = 非阻塞快照（返回各任务状态 + completed_snapshot 式摘要，不重放全量）；正数 = 阻塞等待至超时；**timeout 硬上限 10 分钟**（02 §5.4，对齐 grok cap；超限参数报错）；
+
+> **yield 语义（pi 借鉴）由本任务覆盖**：wait_subagents 单次返回、主 agent 串起后续行动（yield = 子代理完成时单次返回、主代理串任务，ref-analysis 01 B2）；本任务即该协议的执行载体（快照返回 + C6 主 agent 唯一编排，M2 内容 6 提示词协议层已声明「子代理单次返回、不得自主续跑」）。
   2. **三模式**（模式 = 主 agent 视角等待策略，不改变 C6 子 agent 调度与并发预算）：
      - `await-all`：主 agent 等待全部已发子 agent 到达终态（completed/failed）后再规划下一步；期间子 agent 事件只记录、不打断（无 L2/L3）；
      - `timer`：等待 `dispatch_wait_ms`（默认 30s，可配）后唤醒主 agent 规划，未完成任务保持运行；timer 语义 = wait_subagents 单次带超时；
@@ -340,7 +343,7 @@
 ## 4. 与现有体系的整合关系（执行链总图）
 
 ```
-I3 交付（安全线）: ApprovalGate 通道（tool_events.rs:68 / tool_exec.rs:493-500）+ CommandPolicy 兜底 + 自动备份钩子
+I3 交付（安全线）: ApprovalGate 通道（tool_events.rs:69 / tool_exec.rs:493-500）+ CommandPolicy 兜底 + 自动备份钩子
         │ run_subagent 写操作挂靠（M2）/ 整体回退走门禁（M4）
         ▼
 I4 调度地基: M1 注入通道（engine.rs build_context）───▶ M4 started_at / M5 检查点摘要 / M11 配额凭证 / M11 系统上下文（全部经注入点挂载）
@@ -422,6 +425,7 @@ npx knip
 | Q6 | C10 注入上限 32KB 与截断优先级 | 32KB + agent 定义 > skill > MCP；实测校准 | M1 落地后校准（I4 后） |
 | Q7 | 压缩双触发点水位线是否拆分 | 暂同一水位线；二次触发频繁则拆双水位线 | M10 实现后评估（I6 后） |
 | Q8 | C4 连续回退计数跨会话/继承 | 仅本会话、fork 不继承；「换会话绕过」验证项进 I8 产品监控清单 | I3 验收后评估（Q8 不属本方案主线，跟踪） |
+| Q9 | **worktree 隔离（P0.1 后增强，ref-analysis 01 Top 8 补记）** | 有意推迟已登记（00 总览 §1.3 有意推迟项）；参考 pi worktree.ts 多后端 + grok snapshot_ref 重水化；`session_agents` 预留 `worktree_path/snapshot_ref` 字段 | 触发条件：多项目并行或高风险子代理场景；字段预留 I4 起（M2 落库时） |
 
 ---
 
