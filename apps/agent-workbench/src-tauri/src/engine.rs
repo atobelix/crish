@@ -22,13 +22,14 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use agent_provider::config::Endpoint;
 use agent_provider::error::{
     classify_provider_error, source_from_reqwest_error, source_from_sse_read_error,
 };
+use agent_provider::models::ModelCatalog;
 use agent_provider::events::{ProviderStreamEvent as WireEvent, StreamParseError};
 use agent_provider::parse::chat::ChatCompletionsParser;
 use agent_provider::request::cache::build_cache_policy;
@@ -177,11 +178,66 @@ pub(crate) fn load_provider_endpoint() -> Option<EngineProviderConfig> {
 // ── HttpProviderCall：真实 provider 适配层 ─────────────────────────
 
 /// chat-completions 请求的端点路径（endpoint 缺省恒 chat-completions，00 D3）
+///
+/// P3 步骤 4b（T-23）：endpoint=Responses 时经模型目录判定该模型是否支持
+/// Responses API（P3 §3.4.2）。DeepSeek 现状仅 v4-flash 支持 Responses、
+/// v4-pro 官方计划 2026 年 8 月初加入（vendor-cache-gaps.md:95；加入后刷新
+/// catalog.json 条目即可，无代码改动）。判定 = `supports_responses_for`：
+/// - 支持 → 保持 /responses；
+/// - 不支持 → 拒绝 responses 并降级回 chat-completions（P3 §3.4.2 降级策略由
+///   引擎裁决：本引擎无 per-request 端点重试/诊断面，静默回退 chat-completions
+///   最符合"模型不支持时必须可用"的现状语义）；
+/// - 厂商未识别（baseUrl/model 均无关键字 → Auto）→ 目录无该厂商数据，
+///   保留现状不降级（避免对自定义网关臆断降级）；DeepSeek 经 model 前缀
+///   仍可命中判定（自建网关转发 deepseek-* 模型名同样受判）。
 fn provider_url(config: &EngineProviderConfig) -> String {
     let base = config.base_url.trim_end_matches('/');
     match config.endpoint {
+        Endpoint::Responses if !responses_supported(config) => {
+            format!("{base}/chat/completions")
+        }
         Endpoint::Responses => format!("{base}/responses"),
         _ => format!("{base}/chat/completions"),
+    }
+}
+
+/// 内置模型目录单例（T-23：Responses 支持判定用）
+///
+/// catalog.json 编译期打包（include_str!，无运行时 IO）；OnceLock 保证
+/// 进程内只解析一次（bundled() 每次解析成本避免）。T-24 壳侧挂
+/// `Arc<RwLock<ModelCatalog>>` 后此处可换为运行时实例，内置表即当前数据真源。
+static BUNDLED_CATALOG: OnceLock<ModelCatalog> = OnceLock::new();
+
+fn bundled_catalog() -> &'static ModelCatalog {
+    BUNDLED_CATALOG.get_or_init(ModelCatalog::bundled)
+}
+
+/// Responses API 支持判定（P3 §3.1.5 / §3.4.2，T-18 查询接口）
+///
+/// vendor 未识别（Auto）→ 目录无该厂商数据，返回 true（保留现状不干预）；
+/// 其余厂商按目录条目 `supports_responses` 判定，未知模型保守视为不支持
+/// （对齐 catalog.rs 注释"未知模型保守为不支持"，jcode"否则视为不支持"）。
+fn responses_supported(config: &EngineProviderConfig) -> bool {
+    let Some(vendor) = responses_vendor(config) else {
+        return true;
+    };
+    bundled_catalog().supports_responses_for(vendor, &config.model)
+}
+
+/// 生效配置 → 目录 vendor 字符串（对齐 catalog.json 条目 vendor 字段；
+/// 未识别 → None）。复用 infer_reasoning_vendor 双通道（baseUrl 关键字 →
+/// model 前缀，vendor.rs:277-310）；Grok/MiniMax/百炼等目录厂商不在
+/// ReasoningVendor 内，一律走 None（保留现状）。
+fn responses_vendor(config: &EngineProviderConfig) -> Option<&'static str> {
+    match infer_reasoning_vendor(Some(&config.base_url), Some(&config.model)) {
+        ReasoningVendor::Deepseek => Some("deepseek"),
+        ReasoningVendor::Openai => Some("openai"),
+        ReasoningVendor::Anthropic => Some("anthropic"),
+        ReasoningVendor::Gemini => Some("gemini"),
+        ReasoningVendor::Qwen => Some("qwen"),
+        ReasoningVendor::Glm => Some("glm"),
+        ReasoningVendor::Kimi => Some("kimi"),
+        ReasoningVendor::Auto => None,
     }
 }
 
@@ -1188,5 +1244,118 @@ mod tests {
             Some("ses-42"),
             "会话 ID 应注入 ProviderRequest.session_id"
         );
+    }
+
+    // ── P3：provider_url 接入 supports_responses_for（T-23，P3 步骤 4b / §3.4.2）──
+
+    /// 构造测试用配置（Responses 支持判定用；base_url 含 deepseek 关键字，
+    /// 经 infer_reasoning_vendor 双通道判定厂商）
+    fn responses_config(model: &str, endpoint: Endpoint) -> EngineProviderConfig {
+        EngineProviderConfig {
+            base_url: "https://api.deepseek.com/v1/".to_string(),
+            api_key: "k".to_string(),
+            model: model.to_string(),
+            endpoint,
+            stream: true,
+            extra: BTreeMap::new(),
+        }
+    }
+
+    /// provider_url 按目录 supports_responses 判定端点（P3 ⑤ 验收 3）：
+    /// - deepseek-v4-flash → 允许 responses（/responses）；
+    /// - 版本后缀 deepseek-v4-flash-0731（官方版本号）经 lookup 多级兜底同样允许；
+    /// - deepseek-v4-pro → 不支持 → 拒绝 responses 并降级 chat-completions；
+    /// - deepseek 前缀内未收录模型 → 保守视为不支持 → 同样降级；
+    /// - 未知厂商（baseUrl/model 无关键字）→ 保留现状走 /responses（不臆断）；
+    /// - chat-completions 端点不受判定影响（原路径保持）。
+    #[test]
+    fn provider_url_gates_responses_by_catalog_support() {
+        // v4-flash：目录 supportsResponses=true → 保持 /responses
+        let flash = responses_config("deepseek-v4-flash", Endpoint::Responses);
+        assert_eq!(
+            provider_url(&flash),
+            "https://api.deepseek.com/v1/responses",
+            "v4-flash 应允许 responses 端点"
+        );
+
+        // 版本后缀兜底：DeepSeek-V4-Flash-0731 命中内置 v4-flash 条目
+        let flash_0731 = responses_config("deepseek-v4-flash-0731", Endpoint::Responses);
+        assert_eq!(
+            provider_url(&flash_0731),
+            "https://api.deepseek.com/v1/responses",
+            "版本后缀模型应经 lookup 兜底命中 v4-flash"
+        );
+
+        // v4-pro：官方尚未支持 Responses（2026 年 8 月初加入）→ 降级 chat-completions
+        let pro = responses_config("deepseek-v4-pro", Endpoint::Responses);
+        assert_eq!(
+            provider_url(&pro),
+            "https://api.deepseek.com/v1/chat/completions",
+            "v4-pro 应拒绝 responses 并降级 chat-completions"
+        );
+
+        // deepseek 前缀内未收录模型 → 保守视为不支持 → 降级
+        let unknown = responses_config("deepseek-custom", Endpoint::Responses);
+        assert_eq!(
+            provider_url(&unknown),
+            "https://api.deepseek.com/v1/chat/completions",
+            "未收录模型应保守降级"
+        );
+
+        // 未知厂商（无关键字网关）→ 目录无数据 → 保留现状走 /responses
+        let gateway = EngineProviderConfig {
+            base_url: "https://gw.example.com/v1/".to_string(),
+            api_key: "k".to_string(),
+            model: "m".to_string(),
+            endpoint: Endpoint::Responses,
+            stream: true,
+            extra: BTreeMap::new(),
+        };
+        assert_eq!(
+            provider_url(&gateway),
+            "https://gw.example.com/v1/responses",
+            "未知厂商不应臆断降级"
+        );
+
+        // chat-completions 端点恒不受判定影响
+        let chat = responses_config("deepseek-v4-pro", Endpoint::ChatCompletions);
+        assert_eq!(
+            provider_url(&chat),
+            "https://api.deepseek.com/v1/chat/completions"
+        );
+    }
+
+    /// responses_supported 辅助函数语义（目录查询面）：
+    /// v4-flash → true；v4-pro → false；版本后缀兜底 → true；
+    /// 未收录模型 → false（保守）；未知厂商（Auto）→ true（保留现状）。
+    #[test]
+    fn responses_supported_follows_catalog_entry() {
+        assert!(responses_supported(&responses_config(
+            "deepseek-v4-flash",
+            Endpoint::Responses
+        )));
+        assert!(responses_supported(&responses_config(
+            "deepseek-v4-flash-0731",
+            Endpoint::Responses
+        )));
+        assert!(!responses_supported(&responses_config(
+            "deepseek-v4-pro",
+            Endpoint::Responses
+        )));
+        assert!(!responses_supported(&responses_config(
+            "deepseek-custom",
+            Endpoint::Responses
+        )));
+
+        // 未知厂商：base_url/model 均无关键字 → Auto → 保留现状（不降级）
+        let gateway = EngineProviderConfig {
+            base_url: "https://gw.example.com/v1/".to_string(),
+            api_key: "k".to_string(),
+            model: "m".to_string(),
+            endpoint: Endpoint::Responses,
+            stream: true,
+            extra: BTreeMap::new(),
+        };
+        assert!(responses_supported(&gateway));
     }
 }
