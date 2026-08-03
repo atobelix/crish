@@ -21,7 +21,7 @@
 
 use std::sync::Arc;
 
-use conex_types::events::AgentEventEnvelope;
+use conex_types::events::{AgentEventEnvelope, RunCacheStats};
 use serde::Serialize;
 use tauri::State;
 
@@ -299,7 +299,10 @@ pub struct EventPage {
 }
 
 /// run 执行统计（usage 域；前端 `parseRunSnapshotUsage` 消费面）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+///
+/// P5 S5 / T-40：缓存字段扩展（cacheMissTokens / hitRatio / writeRatio /
+/// missedTokens / warmUntilMs，T-47 前端 `fetchRunSnapshotUsage` 透出面）。
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunUsage {
     #[serde(default)]
@@ -315,6 +318,57 @@ pub struct RunUsage {
     pub cache_read_tokens: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_write_tokens: Option<u64>,
+    /// 缓存未命中输入（服务端直报优先，否则按 C9 口径推导）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_miss_tokens: Option<u64>,
+    /// 命中率 = cache_read / input_total（input_total == 0 → None，前端隐藏）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hit_ratio: Option<f64>,
+    /// 写入占比 = cache_write / input_total
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub write_ratio: Option<f64>,
+    /// 本 run 审计出的浪费量（detectMiss 累计；0 = 无浪费）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub missed_tokens: Option<u64>,
+    /// 缓存温暖截止（epoch ms；前端据此驱动冷缓存提示；None = 无 TTL 数据）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warm_until_ms: Option<u64>,
+}
+
+impl RunUsage {
+    /// 从 run 级缓存统计映射为快照 usage（P5 S5 / T-40；数据源 =
+    /// `RunOutcome.cache_stats`（tracker.finish 产物）或 conex-db
+    /// `get_run_usage`（runs 表 v5 列，T-39）——两者同型）。
+    ///
+    /// - `sample_count == 0` → None（「无样本 → 前端隐藏而非 0% 误导」，
+    ///   P5 §3.1.2 / T-39 `get_run_usage` 同口径）；
+    /// - hit_ratio / write_ratio 不直接透传（DB 落库不存派生值，T-39），
+    ///   统一按 C9 恒等式重算：`input_total = miss + read + write`；
+    ///   `input_total == 0` → None。
+    #[allow(dead_code)] // T-40 轮末合并：CoreRunState::run_usage 消费（core_run_commands.rs）
+    pub fn from_run_cache_stats(stats: RunCacheStats) -> Option<RunUsage> {
+        if stats.sample_count == 0 {
+            return None;
+        }
+        let input_total = stats
+            .cache_miss_tokens
+            .saturating_add(stats.cache_read_tokens)
+            .saturating_add(stats.cache_write_tokens);
+        let ratio = |part: u64| (input_total != 0).then(|| part as f64 / input_total as f64);
+        Some(RunUsage {
+            prompt_tokens: stats.prompt_tokens,
+            completion_tokens: stats.completion_tokens,
+            total_tokens: stats.total_tokens,
+            sample_count: stats.sample_count,
+            cache_read_tokens: Some(stats.cache_read_tokens),
+            cache_write_tokens: Some(stats.cache_write_tokens),
+            cache_miss_tokens: Some(stats.cache_miss_tokens),
+            hit_ratio: ratio(stats.cache_read_tokens),
+            write_ratio: ratio(stats.cache_write_tokens),
+            missed_tokens: Some(stats.missed_tokens),
+            warm_until_ms: stats.warm_until_ms,
+        })
+    }
 }
 
 /// run 快照（`{snapshot: {...}}` 包装；对齐 daemon get-run-snapshot 协议——
@@ -746,5 +800,92 @@ mod tests {
         assert_eq!(value["sequence"], 7);
         assert_eq!(value["schemaVersion"], 1);
         assert_eq!(value["sessionId"], "s1");
+    }
+
+    // ── P5 S5 / T-40：run_usage 真实返回（RunUsage 缓存字段映射）──────
+
+    /// 构造测试用 run 级缓存统计（tracker.finish / DB get_run_usage 同型）
+    fn usage_stats() -> RunCacheStats {
+        RunCacheStats {
+            prompt_tokens: 1_000,
+            completion_tokens: 50,
+            total_tokens: 1_050,
+            cache_read_tokens: 800,
+            cache_write_tokens: 100,
+            cache_miss_tokens: 100,
+            sample_count: 1,
+            // 落库读回不存派生值（T-39：hit_ratio 一律 None）——映射层
+            // 必须按 C9 恒等式重算，不能透传
+            hit_ratio: None,
+            write_ratio: None,
+            missed_tokens: 2_000,
+            warm_until_ms: Some(61_000),
+        }
+    }
+
+    /// T-40：from_run_cache_stats 全字段映射——原始计数透传 + hitRatio /
+    /// writeRatio 按 C9 恒等式重算（input_total = miss + read + write）
+    #[test]
+    fn run_usage_from_cache_stats_maps_all_fields() {
+        let usage = RunUsage::from_run_cache_stats(usage_stats()).expect("有样本必须映射");
+        assert_eq!(usage.prompt_tokens, 1_000);
+        assert_eq!(usage.completion_tokens, 50);
+        assert_eq!(usage.total_tokens, 1_050);
+        assert_eq!(usage.sample_count, 1);
+        assert_eq!(usage.cache_read_tokens, Some(800));
+        assert_eq!(usage.cache_write_tokens, Some(100));
+        assert_eq!(usage.cache_miss_tokens, Some(100));
+        // 800 / (100 + 800 + 100) = 0.8
+        assert_eq!(usage.hit_ratio, Some(0.8));
+        // 100 / 1000 = 0.1
+        assert_eq!(usage.write_ratio, Some(0.1));
+        assert_eq!(usage.missed_tokens, Some(2_000));
+        assert_eq!(usage.warm_until_ms, Some(61_000));
+
+        // wire 形状：camelCase（T-47 前端 fetchRunSnapshotUsage 消费面）
+        let value = serde_json::to_value(&usage).unwrap();
+        assert_eq!(value["cacheReadTokens"], 800);
+        assert_eq!(value["cacheWriteTokens"], 100);
+        assert_eq!(value["cacheMissTokens"], 100);
+        assert_eq!(value["hitRatio"], 0.8);
+        assert_eq!(value["writeRatio"], 0.1);
+        assert_eq!(value["missedTokens"], 2_000);
+        assert_eq!(value["warmUntilMs"], 61_000);
+        assert!(
+            value.get("cache_read_tokens").is_none(),
+            "不得出现 snake_case 键"
+        );
+    }
+
+    /// T-40：无样本（sample_count == 0）→ None（前端隐藏而非 0% 误导，
+    /// P5 §3.1.2；与 T-39 get_run_usage 同口径）
+    #[test]
+    fn run_usage_from_cache_stats_none_without_samples() {
+        let stats = RunCacheStats {
+            sample_count: 0,
+            ..Default::default()
+        };
+        assert!(RunUsage::from_run_cache_stats(stats).is_none());
+    }
+
+    /// T-40：input_total == 0（无任何输入侧数据）→ hitRatio / writeRatio
+    /// None（前端隐藏而非显示 0%）
+    #[test]
+    fn run_usage_from_cache_stats_ratio_none_when_zero_input() {
+        let stats = RunCacheStats {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            total_tokens: 15,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            cache_miss_tokens: 0,
+            sample_count: 1,
+            ..Default::default()
+        };
+        let usage = RunUsage::from_run_cache_stats(stats).expect("有样本必须映射");
+        assert_eq!(usage.cache_read_tokens, Some(0));
+        assert_eq!(usage.hit_ratio, None, "input_total == 0 → 占比隐藏");
+        assert_eq!(usage.write_ratio, None);
+        assert_eq!(usage.warm_until_ms, None);
     }
 }

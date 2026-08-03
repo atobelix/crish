@@ -19,7 +19,7 @@
 //! TODO(集成 agent)：main.rs 声明 `mod engine` 等本批模块并完成接线
 //! （本文件不声明 mod）。
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -29,7 +29,9 @@ use agent_provider::config::Endpoint;
 use agent_provider::error::{
     classify_provider_error, source_from_reqwest_error, source_from_sse_read_error,
 };
-use agent_provider::models::ModelCatalog;
+use agent_provider::models::{
+    cache_ttl_for_provider_model, infer_vendor, CacheTtl, ModelCatalog,
+};
 use agent_provider::events::{ProviderStreamEvent as WireEvent, StreamParseError};
 use agent_provider::parse::chat::ChatCompletionsParser;
 use agent_provider::request::cache::build_cache_policy;
@@ -43,10 +45,11 @@ use agent_provider::transport::{stream_frames, StreamFrameEvent};
 use agent_tools::registry::ToolRegistry;
 use async_trait::async_trait;
 use conex_types::error::ProviderErrorKind;
-use conex_types::events::{AgentEvent, AgentEventEnvelope};
+use conex_types::events::{AgentEvent, AgentEventEnvelope, MissAttribution, RunCacheStats};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::response::ClassifiedStreamError;
 use conex_types::tool::SystemPromptWireMode;
+use conex_telemetry::cache::WARN_MISSED_TOKENS;
 use futures_util::{Stream, StreamExt};
 use session_loop::provider::{
     DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest,
@@ -55,7 +58,8 @@ use session_loop::stream::{
     ProviderStreamEvent, ProviderUsage, StopReason as LoopStopReason,
 };
 use session_loop::{
-    AgentSessionLoop, ApprovalGate, RunOutcome, SessionLoopOptions, ToolBatchOptions,
+    AgentSessionLoop, ApprovalGate, CacheTrackingConfig, RunOutcome, SessionLoopOptions,
+    ToolBatchOptions,
 };
 
 use crate::buffer::{drop_class_of, EventBuffer};
@@ -570,6 +574,12 @@ pub(crate) struct EngineHandle {
     ready: AtomicBool,
     /// 未就绪原因（ready=false 时的诊断文案，PE-04 T04.5 联动）
     ready_reason: Mutex<Option<String>>,
+    /// 生效 provider 配置快照（P5 S5 / T-40：缓存测量装配数据源；
+    /// None = 未就绪）
+    provider_config: Mutex<Option<EngineProviderConfig>>,
+    /// 会话级缓存测量状态（T-40：跨 run 冷缓存预警 + 模型切换检测数据源；
+    /// 内存态，跨重启由 runs 表 v5 列兜底——warm_until_ms 落库，T-39）
+    cache_sessions: Mutex<HashMap<String, SessionCacheState>>,
 }
 
 impl EngineHandle {
@@ -589,11 +599,11 @@ impl EngineHandle {
         let tool_registry = Arc::new(registry);
 
         // provider 生效配置加载（三件套齐备才就绪）
-        let (provider, ready, ready_reason) = match load_provider_endpoint() {
+        let (provider, ready, ready_reason, provider_config) = match load_provider_endpoint() {
             Some(config) => {
                 let provider: Arc<dyn ProviderCall> =
-                    Arc::new(HttpProviderCall::new((*client).clone(), config));
-                (Some(provider), true, None)
+                    Arc::new(HttpProviderCall::new((*client).clone(), config.clone()));
+                (Some(provider), true, None, Some(config))
             }
             None => {
                 tracing::warn!(
@@ -604,6 +614,7 @@ impl EngineHandle {
                     None,
                     false,
                     Some("provider 配置缺失（baseUrl/model/apiKey）".to_string()),
+                    None,
                 )
             }
         };
@@ -614,6 +625,8 @@ impl EngineHandle {
             tool_registry,
             ready: AtomicBool::new(ready),
             ready_reason: Mutex::new(ready_reason),
+            provider_config: Mutex::new(provider_config),
+            cache_sessions: Mutex::new(HashMap::new()),
         }
     }
 
@@ -623,19 +636,21 @@ impl EngineHandle {
     /// （引擎集成域），当前仅 client 字段在此读取——dead_code 静音待接线。
     #[allow(dead_code)]
     pub(crate) fn reload(&self) {
-        let (provider, ready, ready_reason) = match load_provider_endpoint() {
+        let (provider, ready, ready_reason, provider_config) = match load_provider_endpoint() {
             Some(config) => {
                 let provider: Arc<dyn ProviderCall> =
-                    Arc::new(HttpProviderCall::new((*self.client).clone(), config));
-                (Some(provider), true, None)
+                    Arc::new(HttpProviderCall::new((*self.client).clone(), config.clone()));
+                (Some(provider), true, None, Some(config))
             }
             None => (
                 None,
                 false,
                 Some("provider 配置缺失（baseUrl/model/apiKey）".to_string()),
+                None,
             ),
         };
         *self.provider.lock().unwrap_or_else(|e| e.into_inner()) = provider;
+        *self.provider_config.lock().unwrap_or_else(|e| e.into_inner()) = provider_config;
         self.ready.store(ready, Ordering::SeqCst);
         *self.ready_reason.lock().unwrap_or_else(|e| e.into_inner()) = ready_reason;
     }
@@ -664,6 +679,59 @@ impl EngineHandle {
     /// 工具注册表（只读共享）
     pub(crate) fn tool_registry(&self) -> Arc<ToolRegistry> {
         Arc::clone(&self.tool_registry)
+    }
+
+    // ── P5 S5 / T-40：缓存测量装配（轮末合并接线点）──────────────
+
+    /// 生效 provider 配置（缓存测量装配数据源；None = 未就绪）。
+    /// 注：core_run_commands 装配 SessionLoopProducer 时经
+    /// [Self::cache_tracking_config] 消费本值——T-40 轮末合并接线。
+    #[allow(dead_code)]
+    pub(crate) fn provider_config(&self) -> Option<EngineProviderConfig> {
+        self.provider_config
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// 解析缓存跟踪配置（P5 S5 / T-40）：provider / model 取生效配置、
+    /// TTL 走 P3 `cache_ttl_for_provider_model` 路由表（T-21）——未知厂商 /
+    /// 无 TTL 数据 → ttl_seconds = 0（P5 §3.4.4「TTL 查询失败不提示」，
+    /// 不阻塞其他功能）。
+    #[allow(dead_code)] // T-40 轮末合并：core_run_task 装配 producer 时消费
+    pub(crate) fn cache_tracking_config(&self) -> Option<CacheTrackingConfig> {
+        let config = self.provider_config()?;
+        Some(build_cache_tracking_config(&config))
+    }
+
+    /// 会话缓存测量状态（上一 run 快照；core_run_task 装配 producer 时
+    /// 经 [SessionLoopProducer::with_cache_session] 注入，T-40）
+    #[allow(dead_code)] // T-40 轮末合并接线
+    pub(crate) fn cache_session(&self, session_id: &str) -> SessionCacheState {
+        self.cache_sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(session_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// 收口写回会话缓存状态（drive_run_loop 在 produce 后调用，
+    /// T-40 轮末合并接线；供下一 run 冷缓存预警 / 模型切换检测）
+    #[allow(dead_code)]
+    pub(crate) fn update_cache_session(
+        &self,
+        session_id: &str,
+        stats: &RunCacheStats,
+        model: &str,
+    ) {
+        let mut sessions = self
+            .cache_sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let state = sessions.entry(session_id.to_string()).or_default();
+        state.last_stats = Some(*stats);
+        state.last_model = Some(model.to_string());
     }
 }
 
@@ -780,6 +848,125 @@ impl DeltaSink for BridgeDeltaSink {
     }
 }
 
+// ── P5 S5 / T-40：缓存测量引擎侧装配 ──────────────────────────────
+
+/// 会话级缓存测量状态（engine 层跨 run 维护；T-40）
+///
+/// 跨 run 持久化边界（对齐 cache_tracker.rs 模块注释「基线经
+/// [CacheStatsTracker::baseline] 交还调用方（engine 层跨 run 持久化归
+/// T-40）」）：
+/// - 本状态只保留**可观测标量**（warm_until_ms / input_total / model），
+///   不保留请求签名哈希——签名基线在 loop 内每 run 重建（T-36 现状），
+///   跨 run 签名续接（detect 的 min(prev,cur) 基线）属 session-loop 侧
+///   待接线项，见轮末汇总物声明；本层不做假签名；
+/// - 冷缓存预警 = 上一 run warm_until_ms 过期判定（与前端 tick 路径同
+///   口径，P5 §3.4.4）；模型切换 = 上一 run model ≠ 当前 model
+///   （P5 §3.4.5 归因数据源）。
+#[derive(Debug, Clone, Default)]
+pub(crate) struct SessionCacheState {
+    /// 最近一次 run 的缓存统计（warm_until_ms 过期判定 + 重发量估算）
+    pub last_stats: Option<RunCacheStats>,
+    /// 最近一次 run 的模型标识（模型切换检测）
+    pub last_model: Option<String>,
+}
+
+/// 装配缓存跟踪配置（T-40：provider / model 取生效配置、TTL 走 P3
+/// `cache_ttl_for_provider_model` 路由表，T-21）；未知厂商 / 无 TTL 数据
+/// → ttl_seconds = 0（P5 §3.4.4「TTL 查询失败不提示」，不阻塞其他功能）。
+fn build_cache_tracking_config(config: &EngineProviderConfig) -> CacheTrackingConfig {
+    let vendor = infer_vendor(&config.base_url, &config.model);
+    let ttl_seconds = cache_ttl_for_provider_model(Some(bundled_catalog()), vendor, &config.model)
+        .map(CacheTtl::seconds)
+        .unwrap_or(0);
+    CacheTrackingConfig {
+        provider: vendor.as_str().to_string(),
+        model: config.model.clone(),
+        ttl_seconds,
+    }
+}
+
+/// 当前 UTC 毫秒时间戳（epoch ms；冷缓存预警判定用）
+fn unix_millis_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or_default()
+}
+
+/// 冷缓存预警事件（P5 §3.4.4 请求启动路径，辅助路径）：上一 run 温暖截止
+/// 已过期 → Some（等价 tracker.cold_cache_check 的可观测面）。
+///
+/// 实现说明：跨 run 签名基线续接在 session-loop 侧尚未接线（T-36 只做
+/// run 内跨 turn 基线），本层以 `RunCacheStats.warm_until_ms`（= 完成时刻 +
+/// TTL × 1000，tracker.finish 口径）过期判定——与前端 warmUntilMs tick
+/// 路径同口径，TTL 未知（0）或无温暖截止 → None（P5 §3.4.4 不提示）。
+fn cold_cache_warning_event(
+    session_id: &str,
+    config: &CacheTrackingConfig,
+    last: &RunCacheStats,
+    now_ms: u64,
+) -> Option<AgentEvent> {
+    if config.ttl_seconds == 0 {
+        return None;
+    }
+    let warm_until_ms = last.warm_until_ms?;
+    if now_ms <= warm_until_ms {
+        // 尚未过期（恰好等于截止仍温暖，与 tracker.is_cold 同语义）
+        return None;
+    }
+    // 完成时刻 = 温暖截止 - TTL（warm = completed_at + ttl × 1000 反解）
+    let completed_at_ms = warm_until_ms.saturating_sub(config.ttl_seconds.saturating_mul(1000));
+    let idle_ms = now_ms.saturating_sub(completed_at_ms);
+    // 预估重发量 = 上次请求 input_total（C9 恒等式：miss + read + write）
+    let resend_estimate_tokens = last
+        .cache_miss_tokens
+        .saturating_add(last.cache_read_tokens)
+        .saturating_add(last.cache_write_tokens);
+    Some(AgentEvent::ColdCacheWarning {
+        session_id: session_id.to_string(),
+        timestamp: now_iso_utc(),
+        ttl_seconds: config.ttl_seconds,
+        idle_ms,
+        resend_estimate_tokens,
+    })
+}
+
+/// 缓存浪费预警事件（P5 §3.4.2 阈值：`missed_tokens ≥ 20_000` 才打扰；
+/// cost 阈值需 P3 价格数据 → None，不估算）。
+///
+/// 实现说明：run 级聚合无法还原逐 miss 归因与空闲时长 → attribution
+/// Unknown / idle_ms 0 / missed_cost_usd None（诚实兜底，宁缺勿误报——
+/// 浪费量本身是实测值非估算）；逐 miss 归因的 in-loop 发射（streaming.rs
+/// `consume_cache_usage` 处，T-36 注释「发射归 T-40」但该文件不在本任务
+/// 文件域）见轮末汇总物声明，合并后本函数降级为兜底路径。
+fn waste_alert_event(
+    session_id: &str,
+    stats: &RunCacheStats,
+    model_changed: bool,
+) -> Option<AgentEvent> {
+    if stats.missed_tokens < WARN_MISSED_TOKENS {
+        return None;
+    }
+    Some(AgentEvent::CacheWasteAlert {
+        session_id: session_id.to_string(),
+        timestamp: now_iso_utc(),
+        attribution: MissAttribution::Unknown,
+        missed_tokens: stats.missed_tokens,
+        idle_ms: 0,
+        model_changed,
+        missed_cost_usd: None,
+    })
+}
+
+/// 模型切换检测（P5 §3.4.5）：上一 run model ≠ 当前 model → true；
+/// 无上一 run 基线（首次 run）→ false（首轮归因 Cold，不算切换）。
+fn model_switched(last: Option<&str>, current: Option<&str>) -> bool {
+    match (last, current) {
+        (Some(last), Some(current)) => last != current,
+        _ => false,
+    }
+}
+
 // ── SessionLoopProducer ───────────────────────────────────────────
 
 /// Arc 包装的 ProviderCall（[AgentSessionLoop] 按 `Box<dyn ProviderCall>`
@@ -837,6 +1024,13 @@ pub(crate) struct SessionLoopProducer {
     initial_conversation: Option<Vec<Arc<AgentMessage>>>,
     /// 本次 run 的用户消息
     user_message: AgentMessage,
+    /// 缓存跟踪配置（P5 S5 / T-40：None = 不启用测量，行为与现状一致；
+    /// Some = produce 装配进 SessionLoopOptions，LoopState 构造 tracker）
+    cache_tracking: Option<CacheTrackingConfig>,
+    /// 上一 run 的会话缓存状态（T-40：冷缓存预警 + 模型切换检测数据源；
+    /// 由 EngineHandle 按会话维护，core_run_task 装配时经
+    /// [Self::with_cache_session] 注入）
+    cache_session: SessionCacheState,
 }
 
 impl SessionLoopProducer {
@@ -868,7 +1062,26 @@ impl SessionLoopProducer {
             delta_sink,
             initial_conversation,
             user_message,
+            // P5 S5 / T-40：缓存测量缺省关闭（未配置 = 现状行为）
+            cache_tracking: None,
+            cache_session: SessionCacheState::default(),
         }
+    }
+
+    /// 启用缓存测量（P5 S5 / T-40）：装配 [CacheTrackingConfig]
+    /// （provider / model / TTL；None = 保持现状不测量）。
+    #[allow(dead_code)] // T-40 轮末合并：core_run_task 装配 producer 时调用
+    pub(crate) fn with_cache_tracking(mut self, config: Option<CacheTrackingConfig>) -> Self {
+        self.cache_tracking = config;
+        self
+    }
+
+    /// 注入上一 run 的会话缓存状态（T-40：冷缓存预警 + 模型切换检测
+    /// 数据源；EngineHandle::cache_session 产出）
+    #[allow(dead_code)] // T-40 轮末合并：core_run_task 装配 producer 时调用
+    pub(crate) fn with_cache_session(mut self, session: SessionCacheState) -> Self {
+        self.cache_session = session;
+        self
     }
 
     /// 生产一次 run 结果（构造 [AgentSessionLoop] 并运行；每 run 重建）
@@ -878,7 +1091,40 @@ impl SessionLoopProducer {
     /// （引擎缓存 = 权威增量 / 前端 history = 冷启动兜底，P4 阶段 1-3），
     /// `run()` 追加新用户消息——历史回流 LLM 是跨轮前缀缓存命中的基础；
     /// 为空时走现状单消息路径（向后兼容）。
+    ///
+    /// T-40 缓存测量接线（P5 S5，只测不改）：
+    /// - run 启动前：冷缓存预警（上一 run warm_until_ms 过期 → 实时轨发
+    ///   cold-cache-warning 一次）+ 模型切换检测（记录，in-loop 归因接线
+    ///   见轮末汇总物声明）+ 装配 CacheTrackingConfig（LoopState 构造
+    ///   tracker，T-36 capture_signature / record_usage / finish 已在
+    ///   loop 内接线）；
+    /// - run 收口：`cache-stats-updated` 入收口轨（outcome.events →
+    ///   drive_outcome → 既有缓冲桥，与 ContextCompressionStart/End 同轨）；
+    ///   `cache-waste-alert` 按阈值经实时轨 DeltaSink 发出。
     pub(crate) async fn produce(&mut self) -> RunOutcome {
+        // ── T-40：run 启动前缓存测量装配 ────────────────────────
+        // 冷缓存预警（P5 §3.4.4 请求启动路径）：实时轨 DeltaSink 发一次
+        // （此时前端 tick 未必在看该会话；空闲期提示由前端 warmUntilMs
+        // tick 驱动，T-48）
+        self.emit_cold_cache_warning_if_cold();
+        // 模型切换检测（P5 §3.4.5）：上一 run model ≠ 当前 model → 记录
+        // （tracker.on_model_switch 的 in-loop 接线见轮末汇总物声明——
+        // engine 无法触达 LoopState.cache_tracker，会话级跨 run 信号经
+        // CacheTrackingConfig 透传由合并轮实现）
+        let model_switched = self.detect_model_switch();
+        if model_switched {
+            tracing::info!(
+                target: "engine",
+                session_id = %self.session_id,
+                previous_model = ?self.cache_session.last_model,
+                current_model = ?self.current_model(),
+                "缓存测量：检测到模型切换（miss 仍计数，归因 model-switch）"
+            );
+        }
+        // 装配 CacheTrackingConfig（T-36 消费：LoopState 构造 /
+        // run 起始 build_tracker 重建 tracker——fresh run 语义）
+        self.options.cache_tracking = self.cache_tracking.clone();
+
         let mut session_loop = AgentSessionLoop::new(
             self.session_id.as_str(),
             self.run_id.as_str(),
@@ -906,7 +1152,51 @@ impl SessionLoopProducer {
                     session_loop.with_initial_conversation_arc(initial_conversation.clone());
             }
         }
-        session_loop.run(self.user_message.clone()).await
+        let mut outcome = session_loop.run(self.user_message.clone()).await;
+
+        // ── T-40：run 收口（P5 S5 §3.2 数据流）─────────────────
+        // cache-stats-updated 入收口轨（复用既有事件桥——outcome.events
+        // 由 drive_run_loop 统一入队 + 信封注入 runId/sequence 发射，
+        // 与 ContextCompressionStart/End 同一发射方式；P5 §3.1.3
+        // 「run 收口经收口轨发一次」）
+        if let Some(stats) = &outcome.cache_stats {
+            outcome.events.push(AgentEvent::CacheStatsUpdated {
+                session_id: self.session_id.clone(),
+                timestamp: now_iso_utc(),
+                stats: *stats,
+            });
+        }
+        // cache-waste-alert（实时轨，P5 §3.4.2 阈值）：run 级累计浪费
+        // 超阈值才打扰（低于阈值只计入 run 聚合）；归因在 run 级聚合不可
+        // 还原 → Unknown（诚实兜底，逐 miss 归因发射见轮末汇总物声明）
+        if let Some(stats) = &outcome.cache_stats {
+            if let Some(alert) = waste_alert_event(&self.session_id, stats, model_switched) {
+                if let Some(sink) = &self.delta_sink {
+                    sink.push(alert);
+                }
+            }
+        }
+        outcome
+    }
+
+    /// 当前模型标识（缓存测量装配 / 模型切换检测用；未启用测量 → None）
+    fn current_model(&self) -> Option<&str> {
+        self.cache_tracking.as_ref().map(|config| config.model.as_str())
+    }
+
+    /// 模型切换检测（上一 run model ≠ 当前 model）
+    fn detect_model_switch(&self) -> bool {
+        model_switched(self.cache_session.last_model.as_deref(), self.current_model())
+    }
+
+    /// 冷缓存预警（run 启动前；实时轨 DeltaSink 发一次）
+    fn emit_cold_cache_warning_if_cold(&self) {
+        let Some(sink) = &self.delta_sink else { return };
+        let Some(config) = &self.cache_tracking else { return };
+        let Some(last) = &self.cache_session.last_stats else { return };
+        if let Some(event) = cold_cache_warning_event(&self.session_id, config, last, unix_millis_now()) {
+            sink.push(event);
+        }
     }
 }
 
@@ -1496,5 +1786,359 @@ mod tests {
             "预算钳制应把 max_tokens 收到默认 8192 之下（实际 {max_tokens}）"
         );
         assert!(max_tokens >= 1, "钳制下限 MIN_MAX_TOKENS = 1");
+    }
+
+    // ── P5 S5 / T-40：缓存测量装配与事件（engine 接线段）────────────
+
+    /// 携带 usage 的停止事件（ProviderUsage camelCase 标量面；与
+    /// session-loop T-36 测试同形状）
+    fn stop_with_usage(
+        prompt: u64,
+        completion: u64,
+        read: u64,
+        write: u64,
+        miss: Option<u64>,
+    ) -> ProviderStreamEvent {
+        ProviderStreamEvent::Stop {
+            reason: LoopStopReason::Stop,
+            error: None,
+            usage: Some(ProviderUsage {
+                prompt_tokens: Some(prompt),
+                completion_tokens: Some(completion),
+                total_tokens: Some(prompt.saturating_add(completion)),
+                cache_read_tokens: Some(read),
+                cache_write_tokens: Some(write),
+                cache_miss_tokens: miss,
+                reasoning_tokens: None,
+            }),
+        }
+    }
+
+    /// 捕获实时轨事件的测试 sink（ColdCacheWarning / CacheWasteAlert 断言）
+    struct CaptureDeltaSink {
+        events: Arc<Mutex<Vec<AgentEvent>>>,
+    }
+
+    impl DeltaSink for CaptureDeltaSink {
+        fn push(&self, delta: AgentEvent) {
+            self.events
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(delta);
+        }
+    }
+
+    /// 测试用 run 级缓存统计（字段齐全，避免逐字段构造样板）
+    fn sample_stats(warm_until_ms: Option<u64>, missed_tokens: u64) -> RunCacheStats {
+        RunCacheStats {
+            prompt_tokens: 10_000,
+            completion_tokens: 100,
+            total_tokens: 10_100,
+            cache_read_tokens: 9_000,
+            cache_write_tokens: 500,
+            cache_miss_tokens: 500,
+            sample_count: 1,
+            hit_ratio: Some(0.9),
+            write_ratio: Some(0.05),
+            missed_tokens,
+            warm_until_ms,
+        }
+    }
+
+    /// T-40：装配缓存跟踪配置——provider / model 取生效配置、TTL 走
+    /// P3 路由表（DeepSeek 300s）；未知厂商 → ttl 0（不提示不阻塞）
+    #[test]
+    fn cache_tracking_config_resolves_provider_model_ttl() {
+        let deepseek = responses_config("deepseek-v4-flash", Endpoint::ChatCompletions);
+        let config = build_cache_tracking_config(&deepseek);
+        assert_eq!(config.provider, "deepseek");
+        assert_eq!(config.model, "deepseek-v4-flash");
+        assert_eq!(config.ttl_seconds, 300, "DeepSeek 自动前缀缓存 TTL 300s");
+
+        // 未知厂商（无关键字网关）→ 保守全关（TTL 0 = 不提示不阻塞）
+        let gateway = EngineProviderConfig {
+            base_url: "https://gw.example.com/v1/".to_string(),
+            api_key: "k".to_string(),
+            model: "custom-model".to_string(),
+            endpoint: Endpoint::ChatCompletions,
+            stream: true,
+            extra: BTreeMap::new(),
+        };
+        let config = build_cache_tracking_config(&gateway);
+        assert_eq!(config.provider, "auto");
+        assert_eq!(config.ttl_seconds, 0);
+    }
+
+    /// T-40：冷缓存预警——温暖截止过期判定（完成时刻反解 idle、
+    /// 重发量 = 上次 input_total，C9 恒等式）；TTL 未知 / 未过期 /
+    /// 无截止 → 不预警
+    #[test]
+    fn cold_cache_warning_fires_after_warm_until() {
+        let config = CacheTrackingConfig {
+            provider: "deepseek".to_string(),
+            model: "deepseek-v4-flash".to_string(),
+            ttl_seconds: 60,
+        };
+        // 上一 run：完成 1000ms、warm = 1000 + 60_000 = 61_000
+        let last = sample_stats(Some(61_000), 0);
+        assert!(
+            cold_cache_warning_event("s1", &config, &last, 60_000).is_none(),
+            "未过期不预警"
+        );
+        assert!(
+            cold_cache_warning_event("s1", &config, &last, 61_000).is_none(),
+            "恰好等于截止仍温暖"
+        );
+        let event = cold_cache_warning_event("s1", &config, &last, 121_001)
+            .expect("超 TTL 必须预警");
+        match event {
+            AgentEvent::ColdCacheWarning {
+                session_id,
+                ttl_seconds,
+                idle_ms,
+                resend_estimate_tokens,
+                ..
+            } => {
+                assert_eq!(session_id, "s1");
+                assert_eq!(ttl_seconds, 60);
+                // idle = now - completed = 121_001 - 1_000
+                assert_eq!(idle_ms, 120_001);
+                // 重发量 = 上次 input_total = 500 + 9000 + 500
+                assert_eq!(resend_estimate_tokens, 10_000);
+            }
+            other => panic!("期望 ColdCacheWarning，得到 {other:?}"),
+        }
+        // TTL 未知（0）→ 不预警（P5 §3.4.4：TTL 查询失败不提示）
+        let no_ttl = CacheTrackingConfig {
+            ttl_seconds: 0,
+            ..config.clone()
+        };
+        assert!(cold_cache_warning_event("s1", &no_ttl, &last, 121_001).is_none());
+        // 无温暖截止 → 不预警
+        let mut no_warm = last;
+        no_warm.warm_until_ms = None;
+        assert!(cold_cache_warning_event("s1", &config, &no_warm, 121_001).is_none());
+    }
+
+    /// T-40：浪费预警阈值（≥ 20_000 才打扰，pi 口径）——低于阈值只计入
+    /// run 聚合；触发时 attribution 诚实兜底 Unknown + wire 形状
+    #[test]
+    fn waste_alert_emitted_above_threshold_with_honest_attribution() {
+        let below = sample_stats(Some(61_000), WARN_MISSED_TOKENS - 1);
+        assert!(
+            waste_alert_event("s1", &below, false).is_none(),
+            "低于阈值不打扰"
+        );
+        let over = sample_stats(Some(61_000), WARN_MISSED_TOKENS);
+        let event = waste_alert_event("s1", &over, true).expect("达到阈值必须预警");
+        match event {
+            AgentEvent::CacheWasteAlert {
+                ref session_id,
+                attribution,
+                missed_tokens,
+                model_changed,
+                missed_cost_usd,
+                ..
+            } => {
+                assert_eq!(session_id, "s1");
+                assert_eq!(attribution, MissAttribution::Unknown);
+                assert_eq!(missed_tokens, WARN_MISSED_TOKENS);
+                assert!(model_changed);
+                assert!(missed_cost_usd.is_none(), "无 P3 价格数据 → None");
+            }
+            other => panic!("期望 CacheWasteAlert，得到 {other:?}"),
+        }
+        // wire 形状：kebab-case attribution + camelCase 字段
+        let value = serde_json::to_value(&event).unwrap();
+        assert_eq!(value["type"], "cache-waste-alert");
+        assert_eq!(value["attribution"], "unknown");
+        assert_eq!(value["missedTokens"], WARN_MISSED_TOKENS);
+        assert!(value.get("missed_tokens").is_none(), "不得出现 snake_case");
+    }
+
+    /// T-40：模型切换检测——上一 run model ≠ 当前 model；无上一 run
+    /// 基线（首次 run）不算切换（首轮归因 Cold）
+    #[test]
+    fn model_switch_detection_compares_last_and_current() {
+        assert!(model_switched(Some("gpt-4o"), Some("deepseek-v4-flash")));
+        assert!(!model_switched(Some("deepseek-v4-flash"), Some("deepseek-v4-flash")));
+        assert!(
+            !model_switched(None, Some("deepseek-v4-flash")),
+            "无上一 run 基线 → 不算切换"
+        );
+        assert!(!model_switched(Some("deepseek-v4-flash"), None));
+        assert!(!model_switched(None, None));
+    }
+
+    /// T-40 集成：启用缓存测量后 produce 收口——RunOutcome.cache_stats
+    /// 携带 run 级聚合 + cache-stats-updated 事件入收口轨
+    #[tokio::test]
+    async fn produce_emits_cache_stats_updated_when_tracking_enabled() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("你好"),
+            stop_with_usage(1_000, 50, 800, 100, None),
+        ]));
+        let provider_call: Arc<dyn ProviderCall> = Arc::clone(&provider) as Arc<dyn ProviderCall>;
+        let mut producer = SessionLoopProducer::new(
+            "ses-t40".to_string(),
+            "run-t40".to_string(),
+            8,
+            provider_call,
+            Arc::new(ToolRegistry::new()),
+            SessionLoopOptions::default(),
+            ToolBatchOptions::default(),
+            None,
+            None,
+            None,
+            user_message("第一轮", Some("user-t40")),
+        )
+        .with_cache_tracking(Some(CacheTrackingConfig {
+            provider: "deepseek".to_string(),
+            model: "deepseek-v4-flash".to_string(),
+            ttl_seconds: 300,
+        }));
+
+        let outcome = producer.produce().await;
+
+        let stats = outcome.cache_stats.expect("启用测量后收口必须携带缓存统计");
+        assert_eq!(stats.sample_count, 1);
+        assert_eq!(stats.cache_read_tokens, 800);
+        // Included：miss = prompt - read - write
+        assert_eq!(stats.cache_miss_tokens, 100);
+        // cache-stats-updated 入收口轨（与 agent-end 同轨）
+        let updated = outcome
+            .events
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                AgentEvent::CacheStatsUpdated { session_id, stats, .. } => {
+                    Some((session_id.as_str(), *stats))
+                }
+                _ => None,
+            })
+            .expect("收口事件应含 cache-stats-updated");
+        assert_eq!(updated.0, "ses-t40");
+        assert_eq!(updated.1.cache_read_tokens, 800);
+    }
+
+    /// T-40 向后兼容：未配置缓存测量 → cache_stats None、无
+    /// cache-stats-updated 事件（行为与现状一致）
+    #[tokio::test]
+    async fn produce_without_cache_tracking_keeps_legacy_behavior() {
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("hi"),
+            stop_with_usage(100, 10, 0, 0, None),
+        ]));
+        let provider_call: Arc<dyn ProviderCall> = Arc::clone(&provider) as Arc<dyn ProviderCall>;
+        let mut producer = SessionLoopProducer::new(
+            "ses-legacy".to_string(),
+            "run-legacy".to_string(),
+            8,
+            provider_call,
+            Arc::new(ToolRegistry::new()),
+            SessionLoopOptions::default(),
+            ToolBatchOptions::default(),
+            None,
+            None,
+            None,
+            user_message("hi", None),
+        );
+        let outcome = producer.produce().await;
+        assert!(outcome.cache_stats.is_none(), "未配置 → cache_stats 为 None");
+        assert!(
+            outcome
+                .events
+                .iter()
+                .all(|e| !matches!(e, AgentEvent::CacheStatsUpdated { .. })),
+            "未配置 → 不发射 cache-stats-updated"
+        );
+    }
+
+    /// T-40 集成：上一 run warm_until_ms 已过期 → produce 启动前经
+    /// 实时轨 DeltaSink 发射 cold-cache-warning 一次（重发量 = 上次
+    /// input_total）
+    #[tokio::test]
+    async fn produce_emits_cold_cache_warning_when_previous_run_cold() {
+        let now = unix_millis_now();
+        // 上一 run：温暖截止 = now - 1（刚过期）；TTL 60s
+        let last = sample_stats(Some(now.saturating_sub(1)), 0);
+        let sink_events: Arc<Mutex<Vec<AgentEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink: Arc<dyn DeltaSink> = Arc::new(CaptureDeltaSink {
+            events: Arc::clone(&sink_events),
+        });
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("hi"),
+            stop_with_usage(100, 10, 0, 0, None),
+        ]));
+        let provider_call: Arc<dyn ProviderCall> = Arc::clone(&provider) as Arc<dyn ProviderCall>;
+        let mut producer = SessionLoopProducer::new(
+            "ses-cold".to_string(),
+            "run-cold".to_string(),
+            8,
+            provider_call,
+            Arc::new(ToolRegistry::new()),
+            SessionLoopOptions::default(),
+            ToolBatchOptions::default(),
+            None,
+            Some(sink),
+            None,
+            user_message("hi", None),
+        )
+        .with_cache_tracking(Some(CacheTrackingConfig {
+            provider: "deepseek".to_string(),
+            model: "deepseek-v4-flash".to_string(),
+            ttl_seconds: 60,
+        }))
+        .with_cache_session(SessionCacheState {
+            last_stats: Some(last),
+            last_model: Some("deepseek-v4-flash".to_string()),
+        });
+
+        producer.produce().await;
+
+        let captured = sink_events.lock().unwrap_or_else(|e| e.into_inner());
+        let warning = captured
+            .iter()
+            .find_map(|event| match event {
+                AgentEvent::ColdCacheWarning {
+                    ttl_seconds,
+                    resend_estimate_tokens,
+                    ..
+                } => Some((*ttl_seconds, *resend_estimate_tokens)),
+                _ => None,
+            })
+            .expect("实时轨应收到 cold-cache-warning");
+        assert_eq!(warning.0, 60);
+        // 重发量 = 上次 input_total = 9000 + 500 + 500（C9 恒等式）
+        assert_eq!(warning.1, 10_000);
+    }
+
+    /// T-40：cache-stats-updated 事件 wire 形状（camelCase 全字段）
+    #[test]
+    fn cache_stats_updated_event_serializes_camel_case() {
+        let event = AgentEvent::CacheStatsUpdated {
+            session_id: "s1".to_string(),
+            timestamp: now_iso_utc(),
+            stats: sample_stats(Some(61_000), 0),
+        };
+        let value = serde_json::to_value(&event).unwrap();
+        assert_eq!(value["type"], "cache-stats-updated");
+        assert_eq!(value["sessionId"], "s1");
+        let stats = &value["stats"];
+        assert_eq!(stats["promptTokens"], 10_000);
+        assert_eq!(stats["completionTokens"], 100);
+        assert_eq!(stats["totalTokens"], 10_100);
+        assert_eq!(stats["cacheReadTokens"], 9_000);
+        assert_eq!(stats["cacheWriteTokens"], 500);
+        assert_eq!(stats["cacheMissTokens"], 500);
+        assert_eq!(stats["sampleCount"], 1);
+        assert_eq!(stats["hitRatio"], 0.9);
+        assert_eq!(stats["writeRatio"], 0.05);
+        assert_eq!(stats["missedTokens"], 0);
+        assert_eq!(stats["warmUntilMs"], 61_000);
+        assert!(
+            value.get("cache_read_tokens").is_none(),
+            "不得出现 snake_case 键"
+        );
     }
 }
