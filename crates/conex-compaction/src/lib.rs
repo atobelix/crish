@@ -21,6 +21,12 @@
 
 use conex_types::{AgentMessage, AgentMessageBlock, ToolOutput};
 
+/// AI 摘要通道（M10/C9：五字段模板 + 退化重试护栏 + covers_up_to_turn 载荷）
+pub mod ai_summary;
+
+/// 工具输出截断（G8 核销：head + 标记 + tail 计数截断 + 预算水位联动）
+pub mod tool_output;
+
 pub mod compaction {
     use std::collections::HashSet;
     use std::sync::Arc;
@@ -47,6 +53,69 @@ pub mod compaction {
                 min_recent_turns: super::MIN_RECENT_TURNS_DEFAULT,
                 max_summary_tokens: super::MAX_SUMMARY_TOKENS_DEFAULT,
                 tool_pair_protection: true,
+            }
+        }
+    }
+
+    /// 双阈值判定结果（M10/C9：85% 常规线 + 95% 临界线，02 Top 4）
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum ThresholdDecision {
+        /// 预算内（无需压缩）
+        UnderBudget,
+        /// 常规线（默认 85% 预算水位线）：触发 AI 摘要（后台预压缩，
+        /// grok 两遍借鉴——常规线优先走 [super::ai_summary] 通道生成
+        /// 结构化摘要，失败降级占位符）
+        Regular,
+        /// 临界线（默认 95%）：同步硬压缩（走确定性占位符路径，
+        /// 不依赖 AI，保 API 调用不失败，对齐 jcode CRITICAL_THRESHOLD）
+        Critical,
+    }
+
+    /// 双阈值配置（可配；session_meta 键
+    /// `compact_threshold_ratio` / `compact_critical_ratio`，
+    /// 04 §3.5 键命名空间 compact_*）
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub struct CompactionThresholds {
+        /// 常规线水位（默认 0.85）
+        pub regular_ratio: f64,
+        /// 临界线水位（默认 0.95；≥ 常规线）
+        pub critical_ratio: f64,
+    }
+
+    impl Default for CompactionThresholds {
+        fn default() -> Self {
+            Self {
+                regular_ratio: super::COMPACT_THRESHOLD_RATIO_DEFAULT,
+                critical_ratio: super::COMPACT_CRITICAL_RATIO_DEFAULT,
+            }
+        }
+    }
+
+    impl CompactionThresholds {
+        /// 边界钳制：常规线 ∈ (0, 1]、临界线 ∈ [常规线, 1]
+        pub fn normalized(&self) -> Self {
+            let regular = self.regular_ratio.clamp(0.0, 1.0);
+            let regular = if regular == 0.0 { 1.0 } else { regular };
+            Self {
+                regular_ratio: regular,
+                critical_ratio: self.critical_ratio.clamp(regular, 1.0),
+            }
+        }
+
+        /// 水位判定单点：`estimate / window` 与双阈值比较（window = 0 时
+        /// 保守判临界——无法估算即按最紧防线处理）
+        pub fn classify(&self, estimate: u64, window: u64) -> ThresholdDecision {
+            if window == 0 {
+                return ThresholdDecision::Critical;
+            }
+            let thresholds = self.normalized();
+            let ratio = estimate as f64 / window as f64;
+            if ratio >= thresholds.critical_ratio {
+                ThresholdDecision::Critical
+            } else if ratio >= thresholds.regular_ratio {
+                ThresholdDecision::Regular
+            } else {
+                ThresholdDecision::UnderBudget
             }
         }
     }
@@ -791,6 +860,17 @@ pub const KEEP_RECENT_TOKENS_DEFAULT: usize = 20_000;
 pub const MIN_RECENT_TURNS_DEFAULT: u32 = 2;
 /// 摘要占位符 token 上限默认（P4 §3.4.2）
 pub const MAX_SUMMARY_TOKENS_DEFAULT: usize = 1_024;
+/// 常规线水位默认（85%，02 Top 4 / 04 C9 触发条件）
+pub const COMPACT_THRESHOLD_RATIO_DEFAULT: f64 = 0.85;
+/// 临界线水位默认（95%，02 Top 4：同步硬压缩防线）
+pub const COMPACT_CRITICAL_RATIO_DEFAULT: f64 = 0.95;
+/// session_meta 键：常规线水位（Q1 裁决：默认值配置面、覆盖走 session_meta）
+pub const SESSION_META_KEY_COMPACT_THRESHOLD_RATIO: &str = "compact_threshold_ratio";
+/// session_meta 键：临界线水位
+pub const SESSION_META_KEY_COMPACT_CRITICAL_RATIO: &str = "compact_critical_ratio";
+/// session_meta 键：摘要产出 token 上限（04 C9 第 2 条，默认 1500 由
+/// 调用方换算进 CompactionPolicy.max_summary_tokens）
+pub const SESSION_META_KEY_COMPACT_SUMMARY_MAX_TOKENS: &str = "compact_summary_max_tokens";
 /// 图片固定 token 计价（对齐 jcode IMAGE_TOKEN_COST=1600，P4 §3.3.1：
 /// base64 按 len/4 计数会高估真实上下文约 100 倍，必须固定计价；
 /// AgentMessage 当前无图片块，此常量供未来图片块 / 旧面迁移使用）
@@ -924,8 +1004,8 @@ pub fn structured_summary_template(dropped: &[AgentMessage], existing: Option<&s
 }
 
 pub use compaction::{
-    CompactionEngine, CompactionPlan, CompactionPolicy, EstimateContext, EstimateSource,
-    Summarizer,
+    CompactionEngine, CompactionPlan, CompactionPolicy, CompactionThresholds, EstimateContext,
+    EstimateSource, Summarizer, ThresholdDecision,
 };
 
 #[cfg(test)]
@@ -1777,5 +1857,202 @@ mod tests {
         assert_eq!(policy.min_recent_turns, MIN_RECENT_TURNS_DEFAULT);
         assert_eq!(policy.max_summary_tokens, 1_024);
         assert!(policy.tool_pair_protection);
+    }
+
+    // ── M10/C9：双阈值（85% 常规线 + 95% 临界线）──
+
+    #[test]
+    fn threshold_classification_regular_and_critical() {
+        use super::compaction::{CompactionThresholds, ThresholdDecision};
+        let thresholds = CompactionThresholds::default();
+        let window = 100_000u64;
+        // 预算内
+        assert_eq!(thresholds.classify(0, window), ThresholdDecision::UnderBudget);
+        assert_eq!(thresholds.classify(84_999, window), ThresholdDecision::UnderBudget);
+        // 常规线：85% ≤ 占比 < 95%
+        assert_eq!(thresholds.classify(85_000, window), ThresholdDecision::Regular);
+        assert_eq!(thresholds.classify(94_999, window), ThresholdDecision::Regular);
+        // 临界线：≥ 95%
+        assert_eq!(thresholds.classify(95_000, window), ThresholdDecision::Critical);
+        assert_eq!(thresholds.classify(100_000, window), ThresholdDecision::Critical);
+        assert_eq!(thresholds.classify(200_000, window), ThresholdDecision::Critical);
+        // window = 0 保守判临界
+        assert_eq!(thresholds.classify(1, 0), ThresholdDecision::Critical);
+    }
+
+    #[test]
+    fn threshold_configurable_ratios_change_decision() {
+        use super::compaction::{CompactionThresholds, ThresholdDecision};
+        let window = 100_000u64;
+        // 70% / 90% 自定义双阈值
+        let custom = CompactionThresholds {
+            regular_ratio: 0.70,
+            critical_ratio: 0.90,
+        };
+        assert_eq!(custom.classify(60_000, window), ThresholdDecision::UnderBudget);
+        assert_eq!(custom.classify(80_000, window), ThresholdDecision::Regular);
+        assert_eq!(custom.classify(95_000, window), ThresholdDecision::Critical);
+        // 默认阈值下 80% 是常规线触发；改阈值键（配置化）后行为变化
+        assert_eq!(
+            CompactionThresholds::default().classify(80_000, window),
+            ThresholdDecision::UnderBudget
+        );
+        // 钳制：临界线低于常规线 → 钳到常规线
+        let clamped = CompactionThresholds {
+            regular_ratio: 0.85,
+            critical_ratio: 0.5,
+        };
+        assert_eq!(clamped.normalized().critical_ratio, 0.85);
+    }
+
+    /// 临界线 = 同步硬压缩：走确定性占位符路径（无 AI 摘要器），
+    /// 保 API 调用不失败（02 Top 4 / 04 C9）
+    #[test]
+    fn critical_line_hard_compression_deterministic_placeholder() {
+        use super::compaction::{CompactionThresholds, ThresholdDecision};
+        let engine = CompactionEngine::new(0);
+        let messages = vec![
+            amsg("s1", AgentMessageRole::System, "2026-08-04T10:00:00.000Z", vec![text_block("system")], None),
+            amsg("u1", AgentMessageRole::User, "2026-08-04T10:00:01.000Z", vec![text_block(&"长".repeat(200))], None),
+            amsg("a1", AgentMessageRole::Assistant, "2026-08-04T10:00:02.000Z", vec![text_block(&"长".repeat(200))], None),
+            amsg("u2", AgentMessageRole::User, "2026-08-04T10:00:03.000Z", vec![text_block("keep")], None),
+            amsg("a2", AgentMessageRole::Assistant, "2026-08-04T10:00:04.000Z", vec![text_block("keep")], None),
+        ];
+        let keep = count_agent_message_tokens(&messages[3]) + count_agent_message_tokens(&messages[4]);
+        let policy = CompactionPolicy {
+            keep_recent_tokens: keep,
+            min_recent_turns: 1,
+            ..CompactionPolicy::default()
+        };
+        // 95% 临界线触发
+        let window = 1_000u64;
+        let estimate = 960u64;
+        assert_eq!(
+            CompactionThresholds::default().classify(estimate, window),
+            ThresholdDecision::Critical
+        );
+        // 临界线路径 = 确定性压缩（summarizer=None → L1 占位符，不依赖 AI）
+        let plan = engine.compact_agent_messages(&messages, 5, &policy, None);
+        assert!(!plan.summary_is_llm);
+        assert_eq!(plan.summary, "[Compacted 2 earlier message(s) to fit context window]");
+        assert!(plan.tokens_after < plan.tokens_before);
+    }
+
+    /// 常规线 = AI 摘要路径：mock 摘要器（provider 通道）产出五字段
+    /// 压缩文档入对话；被压缩段落不删除（原消息仍在 dropped_ids 可查）
+    #[test]
+    fn regular_line_ai_summary_five_fields_into_conversation() {
+        use super::ai_summary::{
+            format_structured_summary, validate_structured_summary, StructuredSummaryFields,
+        };
+        use super::compaction::{CompactionThresholds, ThresholdDecision};
+        let engine = CompactionEngine::new(0);
+        let messages = vec![
+            amsg("u1", AgentMessageRole::User, "2026-08-04T10:00:00.000Z", vec![text_block(&"长".repeat(200))], None),
+            amsg("a1", AgentMessageRole::Assistant, "2026-08-04T10:00:01.000Z", vec![text_block(&"长".repeat(200))], None),
+            amsg("u2", AgentMessageRole::User, "2026-08-04T10:00:02.000Z", vec![text_block("keep")], None),
+            amsg("a2", AgentMessageRole::Assistant, "2026-08-04T10:00:03.000Z", vec![text_block("keep")], None),
+        ];
+        let keep = count_agent_message_tokens(&messages[2]) + count_agent_message_tokens(&messages[3]);
+        let policy = CompactionPolicy {
+            keep_recent_tokens: keep,
+            min_recent_turns: 1,
+            ..CompactionPolicy::default()
+        };
+        // 常规线触发
+        assert_eq!(
+            CompactionThresholds::default().classify(900, 1_000),
+            ThresholdDecision::Regular
+        );
+        struct AiSummarizer;
+        impl Summarizer for AiSummarizer {
+            fn summarize(
+                &self,
+                _dropped: &[AgentMessage],
+                _existing: Option<&str>,
+            ) -> Result<String, String> {
+                Ok(format_structured_summary(&StructuredSummaryFields {
+                    task_goal: "压缩升级".to_string(),
+                    completed: "双阈值已实现".to_string(),
+                    pending: "联测".to_string(),
+                    key_decisions: "常规线 AI、临界线占位".to_string(),
+                    file_list: "crates/conex-compaction/src/lib.rs".to_string(),
+                }))
+            }
+        }
+        let plan = engine.compact_agent_messages(&messages, 5, &policy, Some(&AiSummarizer));
+        // AI 摘要标志 + 五字段结构校验
+        assert!(plan.summary_is_llm);
+        assert!(validate_structured_summary(&plan.summary).is_ok());
+        for field in [
+            "任务目标", "已完成", "待办", "关键决策", "文件清单",
+        ] {
+            assert!(plan.summary.contains(field), "摘要须含字段 {field}");
+        }
+        // 压缩文档入对话（摘要消息在保留段前）
+        let summary_msg = plan
+            .messages
+            .iter()
+            .find(|m| m.id.starts_with("compacted-summary"))
+            .expect("摘要消息须入对话");
+        assert_eq!(summary_msg.text(), plan.summary);
+        // 被压缩段落可查（不删除数据：dropped_ids 保留原消息 id）
+        assert_eq!(plan.dropped_ids, vec!["u1", "a1"]);
+        assert!(plan.tokens_after < plan.tokens_before);
+    }
+
+    /// system 永不压缩（AI 摘要路径复验）：system 消息不进入丢弃列表、
+    /// 不进摘要文本、恒在输出最前（04 C9 第 5 条 + M1 注入段保留语义）
+    #[test]
+    fn system_never_compressed_on_ai_path() {
+        use super::ai_summary::{
+            format_structured_summary, StructuredSummaryFields,
+        };
+        let engine = CompactionEngine::new(0);
+        let injected = "## Agent 定义\nagent-body";
+        let messages = vec![
+            amsg("s1", AgentMessageRole::System, "2026-08-04T10:00:00.000Z", vec![text_block(injected)], None),
+            amsg("u1", AgentMessageRole::User, "2026-08-04T10:00:01.000Z", vec![text_block(&"长".repeat(200))], None),
+            amsg("a1", AgentMessageRole::Assistant, "2026-08-04T10:00:02.000Z", vec![text_block(&"长".repeat(200))], None),
+            amsg("u2", AgentMessageRole::User, "2026-08-04T10:00:03.000Z", vec![text_block("keep")], None),
+            amsg("a2", AgentMessageRole::Assistant, "2026-08-04T10:00:04.000Z", vec![text_block("keep")], None),
+        ];
+        let keep = count_agent_message_tokens(&messages[3]) + count_agent_message_tokens(&messages[4]);
+        let policy = CompactionPolicy {
+            keep_recent_tokens: keep,
+            min_recent_turns: 1,
+            ..CompactionPolicy::default()
+        };
+        struct AiSummarizer;
+        impl Summarizer for AiSummarizer {
+            fn summarize(
+                &self,
+                _dropped: &[AgentMessage],
+                _existing: Option<&str>,
+            ) -> Result<String, String> {
+                Ok(format_structured_summary(&StructuredSummaryFields {
+                    task_goal: "x".to_string(),
+                    completed: "x".to_string(),
+                    pending: "x".to_string(),
+                    key_decisions: "x".to_string(),
+                    file_list: "x".to_string(),
+                }))
+            }
+        }
+        let plan = engine.compact_agent_messages(&messages, 5, &policy, Some(&AiSummarizer));
+        assert_eq!(plan.messages[0].id, "s1", "system 恒在输出最前");
+        assert_eq!(plan.messages[0].text(), injected, "注入段字节原样保留");
+        assert!(!plan.dropped_ids.iter().any(|id| id == "s1"));
+        assert!(!plan.summary.contains("## Agent 定义"));
+    }
+
+    #[test]
+    fn threshold_defaults_matched() {
+        use super::compaction::CompactionThresholds;
+        let thresholds = CompactionThresholds::default();
+        assert_eq!(thresholds.regular_ratio, super::COMPACT_THRESHOLD_RATIO_DEFAULT);
+        assert_eq!(thresholds.critical_ratio, super::COMPACT_CRITICAL_RATIO_DEFAULT);
+        assert_eq!(super::COMPACT_THRESHOLD_RATIO_DEFAULT, 0.85);
+        assert_eq!(super::COMPACT_CRITICAL_RATIO_DEFAULT, 0.95);
     }
 }

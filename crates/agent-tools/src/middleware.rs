@@ -226,6 +226,7 @@ mod tests {
                 }),
             write_claims: None,
             write_claim_holder: None,
+            explore_docs_quota: None,
         };
         let mut current = input;
         for m in chain {

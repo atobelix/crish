@@ -185,6 +185,8 @@ impl Tool for WriteFileTool {
         // I4-M3：写路径互斥——执行期声明写路径，冲突拒绝（谁占用/何时）；
         // 未接线（write_claims = None）不强制；守卫随函数结束自动释放
         let _claim = claim_write_guard(ctx, &path_str, ClaimMode::Write)?;
+        // I6-M11 C5：探索类子代理写文档配额检查（未装配 = 非探索类，放行）
+        crate::explore_quota::guard_explore_docs_write(ctx)?;
 
         // 幂等守卫标记：B5.3 提供 ToolIdempotencyGuard（按 tool_call_id 去重已执行写盘），
         // 此处仅执行文件写入，不做去重。
@@ -197,6 +199,8 @@ impl Tool for WriteFileTool {
         std::fs::write(&file_path, &bytes).map_err(|e| {
             ToolError::execution_failed("write_file", format!("{display}: {e}"))
         })?;
+        // I6-M11 C5：写盘成功后消耗配额（探索类子代理文档计数）
+        crate::explore_quota::consume_explore_docs_quota(ctx);
 
         let tag = snapshot_tag(&file_path).unwrap_or_default();
         let text = format!(

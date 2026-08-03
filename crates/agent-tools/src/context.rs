@@ -112,6 +112,29 @@ pub struct ToolContext {
     /// 写声明持有者（I4-M3：子代理 run id；None = 会话主身份 session_id，
     /// 用于工具执行期声明归属——同持有者声明不互斥）
     pub write_claim_holder: Option<String>,
+    /// 探索类文档配额上下文（I6-M11 C5：read-only 子代理写文档配额检查；
+    /// None = 非探索类或未接线，不检查）
+    pub explore_docs_quota: Option<ExploreDocsQuotaContext>,
+}
+
+/// 探索类文档配额检查上下文（C5，I6-M11）
+///
+/// 语义：探索类（capabilityMode=read-only 或 researcher 角色）子代理每会话
+/// 至多写 1 份文档，且必须由主 agent 显式分配（spawn 时给配额凭证）。
+/// 超配额返回结构化错误，run 不中断。持久化经 [crate::explore_quota::ExploreDocsQuotaStore]
+/// 后端（引擎侧以 session_meta 实现）注入。
+#[derive(Debug, Clone)]
+pub struct ExploreDocsQuotaContext {
+    /// 会话标识（配额按会话计数，多 run 共享）
+    pub session_id: String,
+    /// 当前 run 标识（消耗计数时登记 last consumer run）
+    pub run_id: String,
+    /// 配额凭证（spawn 时主 agent 注入；false = 未分配，拒绝写文档）
+    pub granted: bool,
+    /// 配额上限（默认 1，可配）
+    pub quota: u32,
+    /// 配额计数后端（None = 无持久化，按零消耗检查）
+    pub store: Option<Arc<dyn crate::explore_quota::ExploreDocsQuotaStore>>,
 }
 
 impl ToolContext {
@@ -124,6 +147,7 @@ impl ToolContext {
             workspace_root,
             write_claims: None,
             write_claim_holder: None,
+            explore_docs_quota: None,
         }
     }
 }
@@ -143,6 +167,7 @@ pub fn create_mock_tool_context() -> ToolContext {
         workspace_root: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
         write_claims: None,
         write_claim_holder: None,
+        explore_docs_quota: None,
     }
 }
 

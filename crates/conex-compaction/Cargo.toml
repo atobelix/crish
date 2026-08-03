@@ -15,4 +15,7 @@ workspace = true
 # （serde_json::Value 字段访问），测试构造 usage JSON 亦依赖 json! 宏；
 # G5 清理（2026-08-03）时曾移除 serde_json（旧 Message 面无引用），本任务恢复。
 serde_json = { workspace = true }
+# M10（I6）：tool_output.rs 的 ToolOutputTruncationRecord 事件留痕载荷
+# 需要序列化（camelCase，进 events 表）
+serde = { workspace = true }
 conex-types = { path = "../conex-types" }

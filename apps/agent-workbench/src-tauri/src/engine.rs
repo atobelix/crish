@@ -1058,9 +1058,21 @@ impl ContextInjection {
 /// - **默认行为不变**：无注入段时 [Self::render] 原样返回基础段
 ///   （None → None），与现状逐字节一致；
 /// - 不持有业务逻辑：挂载点 = 只读注入项注册表（M1 内容 3）。
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub(crate) struct ContextInjector {
     injections: Vec<ContextInjection>,
+    /// C10 禁用开关（M11）：false = 渲染时忽略全部注入段
+    enabled: bool,
+}
+
+impl Default for ContextInjector {
+    /// 默认：无注入段 + 注入启用（C10 默认开）
+    fn default() -> Self {
+        Self {
+            injections: Vec::new(),
+            enabled: true,
+        }
+    }
 }
 
 impl ContextInjector {
@@ -1068,6 +1080,12 @@ impl ContextInjector {
     #[allow(dead_code)] // M4/M5/M11 挂载消费（本域测试先行断言，见轮末接线）
     pub(crate) fn new() -> Self {
         Self::default()
+    }
+
+    /// 是否启用注入（默认开；C10 禁用开关）
+    #[allow(dead_code)]
+    pub(crate) fn is_enabled(&self) -> bool {
+        self.enabled
     }
 
     /// 追加注入段（render 时按冻结顺序重排；同类型保持追加序）
@@ -1101,7 +1119,7 @@ impl ContextInjector {
     /// - 输出确定（同一配置两次构建字节一致，可快照断言；
     ///   `@dynamic` 字段不在一致性范围）。
     pub(crate) fn render(&self, base: Option<String>) -> Option<String> {
-        if self.injections.is_empty() {
+        if self.injections.is_empty() || !self.enabled {
             return base;
         }
         let mut ordered = self.injections.clone();
@@ -1117,6 +1135,61 @@ impl ContextInjector {
             parts.push(format!("## {}\n{}", injection.title, injection.content));
         }
         Some(parts.concat())
+    }
+
+    /// C10 字节级一致断言（M11）：两次渲染（如压缩前后重建）非动态段
+    /// 必须逐字节一致；`@dynamic` 标记段（时间戳类）豁免。
+    /// 返回：非动态段的字节级指纹（FNV-1a 64），可用于跨构建比对。
+    #[allow(dead_code)] // M11 重注入断言消费（轮末接线后移除）
+    pub(crate) fn static_fingerprint(&self) -> u64 {
+        let mut ordered = self.injections.clone();
+        ordered.sort_by_key(|injection| injection.kind);
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        for injection in ordered {
+            if injection.content.contains("@dynamic") {
+                continue;
+            }
+            for byte in injection.title.bytes().chain(injection.content.bytes()) {
+                hash ^= u64::from(byte);
+                hash = hash.wrapping_mul(0x1000_0000_01b3);
+            }
+        }
+        hash
+    }
+
+    /// C10 禁用开关（M11）：关 = 渲染时忽略全部注入段（仅基础段透传）。
+    #[allow(dead_code)] // M12 联测接线消费（重注入开关接线后移除）
+    pub(crate) fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    /// C10 注入上限（M11）：注入段总体积上限（字节），超限按优先级截断
+    /// （核心段保留、扩展段截断），绝不整体丢弃。
+    /// 返回截断后的注入段数（日志/审计用）。
+    #[allow(dead_code)] // M12 联测接线消费（注入上限配置接线后移除）
+    pub(crate) fn truncate_to_budget(&mut self, budget_bytes: usize) -> usize {
+        if self.enabled {
+            self.injections.retain(|injection| {
+                // 动态段（@dynamic）不参与体积预算（时间戳类极小，保留）
+                !injection.content.contains("@dynamic")
+            });
+        }
+        let mut retained = Vec::new();
+        let mut used = 0usize;
+        let mut dropped = 0usize;
+        let mut ordered = std::mem::take(&mut self.injections);
+        ordered.sort_by_key(|injection| injection.kind);
+        for injection in ordered {
+            let size = injection.title.len() + injection.content.len() + 8;
+            if used + size > budget_bytes {
+                dropped += 1;
+                continue;
+            }
+            used += size;
+            retained.push(injection);
+        }
+        self.injections = retained;
+        dropped
     }
 }
 

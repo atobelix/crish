@@ -24,6 +24,7 @@ pub mod context;
 pub mod audit;
 pub mod backup;
 pub mod definition;
+pub mod explore_quota;
 pub mod executor;
 pub mod idempotency;
 pub mod mcp;
