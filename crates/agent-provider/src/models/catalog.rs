@@ -286,11 +286,12 @@ pub struct ModelCatalog {
 impl ModelCatalog {
     /// 内置表：catalog.json 编译期打包（include_str!，无运行时 IO、离线可用）。
     ///
+    /// v2 文件级包装（schema §3.4：version / schema / updatedAt / entries），
     /// 解析失败即 panic——转录错误由"catalog.json serde 全量解析"单测钉死。
     pub fn bundled() -> Self {
-        let entries = serde_json::from_str(include_str!("catalog.json"))
+        let file: ModelCatalogFile = serde_json::from_str(include_str!("catalog.json"))
             .expect("内置 catalog.json 必须可解析（serde 全量解析测试钉死转录错误）");
-        Self { entries, version: 0 }
+        Self { entries: file.entries, version: 0 }
     }
 
     /// 当前版本号（下游 memoize 失效键；内置表为 0，T-24 覆盖/合并时 bump）
@@ -658,12 +659,14 @@ mod tests {
     use super::*;
 
     /// 内置表 serde 全量解析 + 键与条目身份字段一致（防转录漂移）+ 各厂商条目数钉死
+    ///
+    /// v2 全量转录（2026-08-03 核实）：御十家 151 条（OpenAI 34 / Anthropic 11 /
+    /// Kimi 4 / GLM 31 / Qwen 23 / Grok 6 / MiniMax 16 / Gemini 22 / DeepSeek 2 /
+    /// Cursor 2；GLM 双币种 13 条 CNY 与 MiniMax 8 条 USD 以 -cny/-usd 键后缀区分）
     #[test]
     fn catalog_json_parses_fully_and_keys_match_entries() {
         let catalog = ModelCatalog::bundled();
-        // ≈27 条起步（DeepSeek 2 / Anthropic 7 / OpenAI 2 / Kimi 1 / Grok 2 /
-        // MiniMax 3 / Gemini 4 / GLM 4 / Qwen 3）
-        assert!(catalog.entries.len() >= 27, "内置条目数 = {}", catalog.entries.len());
+        assert!(catalog.entries.len() >= 100, "内置条目数 = {}", catalog.entries.len());
         for (key, entry) in &catalog.entries {
             assert_eq!(
                 *key,
@@ -676,11 +679,11 @@ mod tests {
             assert!(entry.source_url.is_some(), "{key} 缺 source_url");
             assert_eq!(
                 entry.data_verified_at.as_deref(),
-                Some("2026-08-02"),
-                "{key} 核实日期须为 2026-08-02",
+                Some("2026-08-03"),
+                "{key} 核实日期须为 2026-08-03",
             );
         }
-        // 各厂商条目数（转录范围钉死）
+        // 各厂商条目数（转录范围钉死；御十家全量 v2）
         let count = |vendor: &str| {
             catalog
                 .entries
@@ -689,14 +692,15 @@ mod tests {
                 .count()
         };
         assert_eq!(count("deepseek"), 2);
-        assert_eq!(count("anthropic"), 7);
-        assert_eq!(count("openai"), 2);
-        assert_eq!(count("kimi"), 1);
-        assert_eq!(count("grok"), 2);
-        assert_eq!(count("minimax"), 3);
-        assert_eq!(count("gemini"), 4);
-        assert_eq!(count("glm"), 4);
-        assert_eq!(count("qwen"), 3);
+        assert_eq!(count("anthropic"), 11);
+        assert_eq!(count("openai"), 34);
+        assert_eq!(count("kimi"), 4);
+        assert_eq!(count("grok"), 6);
+        assert_eq!(count("minimax"), 16);
+        assert_eq!(count("gemini"), 22);
+        assert_eq!(count("glm"), 31);
+        assert_eq!(count("qwen"), 23);
+        assert_eq!(count("cursor"), 2);
     }
 
     /// 精确命中：deepseek-v4-flash 及其关键字段
@@ -825,8 +829,11 @@ mod tests {
             catalog.max_output_for("anthropic", "claude-haiku-4-5"),
             Some(64_000)
         );
-        // Gemini 3.x 窗口 00-catalog 未收录 → None（不沿用前端旧值 1M）
-        assert_eq!(catalog.context_window_for("gemini", "gemini-3-6-flash"), None);
+        // Gemini 3.x 窗口 v2 已补录（master list §8.1 口径 1,048,576）
+        assert_eq!(
+            catalog.context_window_for("gemini", "gemini-3-6-flash"),
+            Some(1_048_576)
+        );
         // 最低可缓存前缀：收录值命中；未收录/未知模型回退 1024
         assert_eq!(catalog.prompt_cache_min_tokens_for("kimi", "kimi-k3"), 256);
         assert_eq!(
@@ -1371,14 +1378,17 @@ mod tests {
             catalog.cache_write_price_1h_for("anthropic", "claude-fable-5"),
             Some(20.0)
         );
-        // 币种 / 存储费 / 价格形态（v1 数据未标 priceStatus → 缺省 official 不返回）
+        // 币种 / 存储费 / 价格形态（v2 全量转录后 priceStatus 显式 official）
         assert_eq!(catalog.currency_for("kimi", "kimi-k3"), Some("CNY"));
         assert_eq!(catalog.currency_for("anthropic", "claude-sonnet-5"), Some("USD"));
         assert_eq!(
-            catalog.storage_price_per_1m_hour_for("gemini", "gemini-3-1-pro"),
+            catalog.storage_price_per_1m_hour_for("gemini", "gemini-3-1-pro-preview"),
             Some(4.5)
         );
-        assert_eq!(catalog.price_status_for("deepseek", "deepseek-v4-flash"), None);
+        assert_eq!(
+            catalog.price_status_for("deepseek", "deepseek-v4-flash"),
+            Some("official")
+        );
         // 未知模型：价格 None、币种 None、写免费保守 false
         assert_eq!(catalog.input_price_for("nobody", "whatever"), None);
         assert_eq!(catalog.cache_write_price_for("nobody", "whatever"), None);
