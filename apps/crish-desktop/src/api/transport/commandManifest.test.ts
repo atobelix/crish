@@ -24,14 +24,17 @@ describe('commandManifest', () => {
 
   describe('内置快照（镜像 Rust command_manifest.rs）', () => {
     it('条数公式化：总数 = 注册面 + 登记先行（镜像 Rust 测试断言）', () => {
-      const registered = BUILTIN_COMMAND_MANIFEST.commands.filter((c) => c.registered).length;
+      const registered = BUILTIN_COMMAND_MANIFEST.commands.filter(
+        (c) => c.registered
+      ).length;
       const pending = BUILTIN_COMMAND_MANIFEST.commands.length - registered;
       expect(pending).toBeGreaterThan(0);
-      // 与 Rust COMMAND_MANIFEST（73 = 69 注册面 + 4 登记先行）保持同步；
+      // 与 Rust COMMAND_MANIFEST（75 = 71 注册面 + 4 登记先行）保持同步；
       // 变更 Rust 侧时同步本快照，双向条数由两端测试锁定
       // PE-07：T07.3（git_run/fs_delete_file）+ T07.4（profile_apply/secret_reveal）已接线
-      expect(registered).toBe(69);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(73);
+      // P3 步骤 5（C7 ③）：catalog_get / catalog_refresh 已接线
+      expect(registered).toBe(71);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(75);
     });
 
     it('命令名唯一', () => {
@@ -40,7 +43,9 @@ describe('commandManifest', () => {
     });
 
     it('9 条新增命令登记齐备（§7.2 登记表；PE-07 T07.3/T07.4 已接线）', () => {
-      const byName = new Map(BUILTIN_COMMAND_MANIFEST.commands.map((c) => [c.name, c]));
+      const byName = new Map(
+        BUILTIN_COMMAND_MANIFEST.commands.map((c) => [c.name, c])
+      );
       for (const name of [
         'upsert_session_entry',
         'append_session_messages',
@@ -82,7 +87,9 @@ describe('commandManifest', () => {
       // - 传递性：本测试「映射值全部 registered」+ commandMap 对照测试保证
       //   幽灵命令无任何可调用路径。
       const registered = new Set(
-        BUILTIN_COMMAND_MANIFEST.commands.filter((c) => c.registered).map((c) => c.name),
+        BUILTIN_COMMAND_MANIFEST.commands
+          .filter((c) => c.registered)
+          .map((c) => c.name)
       );
       // 幽灵 WS type 对应的命令名不得出现在 registered 面
       for (const ws of ['git-status', 'git-diff']) {
@@ -112,7 +119,14 @@ describe('commandManifest', () => {
     it('拉取成功 → 真源清单生效（替换内置快照）', async () => {
       mockTauriCommand('core_list_commands', async () => ({
         contractVersion: '9.9.9',
-        commands: [{ name: 'core_mock_only', family: 'core', surface: 'engine', registered: true }],
+        commands: [
+          {
+            name: 'core_mock_only',
+            family: 'core',
+            surface: 'engine',
+            registered: true,
+          },
+        ],
       }));
       const manifest = await initCommandManifest();
       expect(manifest.contractVersion).toBe('9.9.9');
@@ -131,10 +145,21 @@ describe('commandManifest', () => {
     it('幂等：并发/重复调用只拉取一次', async () => {
       const impl = vi.fn(async () => ({
         contractVersion: '1.0.0',
-        commands: [{ name: 'core_mock_only', family: 'core', surface: 'engine', registered: true }],
+        commands: [
+          {
+            name: 'core_mock_only',
+            family: 'core',
+            surface: 'engine',
+            registered: true,
+          },
+        ],
       }));
       mockTauriCommand('core_list_commands', impl);
-      await Promise.all([initCommandManifest(), initCommandManifest(), initCommandManifest()]);
+      await Promise.all([
+        initCommandManifest(),
+        initCommandManifest(),
+        initCommandManifest(),
+      ]);
       expect(impl).toHaveBeenCalledTimes(1);
     });
   });

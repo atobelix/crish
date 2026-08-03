@@ -59,7 +59,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（73 条 = 注册面 69 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（75 条 = 注册面 71 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：append_session_messages /
@@ -146,6 +146,9 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("core_jsonl_append", "core", "engine", true),
         // ── 注册表单一化自身（T03.1）──
         entry("core_list_commands", "core", "engine", true),
+        // ── 模型目录（P3 步骤 5：catalog_get / catalog_refresh；C7 三处登记 ①）──
+        entry("catalog_get", "core", "engine", true),
+        entry("catalog_refresh", "core", "engine", true),
         // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
         entry("append_session_messages", "session", "engine", false),
         entry("workbench_open_workspace", "workbench", "gui", false),
@@ -167,7 +170,7 @@ mod tests {
     use super::*;
 
     /// 条数公式化：总数 = 注册面 + 登记先行（镜像前端 commandManifest.test.ts：
-    /// 73 = 注册面 69 + 登记先行 4；变更时双端同步）。
+    /// 75 = 注册面 71 + 登记先行 4；变更时双端同步）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -178,8 +181,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 73, "总数 73（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 69, "注册面 69");
+        assert_eq!(total, 75, "总数 75（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 71, "注册面 71");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -277,11 +280,30 @@ mod tests {
         assert!(json.get("contract_version").is_none());
     }
 
+    /// 模型目录命令登记（P3 步骤 5 / C7 三处登记 ①）：catalog_get / catalog_refresh
+    /// 必须登记且 registered=true（与 main.rs 注册面、mock 引擎快照同步）。
+    #[test]
+    fn manifest_registers_catalog_commands() {
+        let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
+            .commands
+            .iter()
+            .map(|c| (c.name, c))
+            .collect();
+        for name in ["catalog_get", "catalog_refresh"] {
+            let entry = by_name
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} 必须登记 manifest（C7 ①）"));
+            assert_eq!(entry.family, "core", "{name} 属 core 族");
+            assert_eq!(entry.surface, "engine", "{name} 属引擎契约面");
+            assert!(entry.registered, "{name} 已接线应 registered=true");
+        }
+    }
+
     /// core_list_commands：无状态返回完整清单（启动即可用）。
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 73);
+        assert_eq!(manifest.commands.len(), 75);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 }

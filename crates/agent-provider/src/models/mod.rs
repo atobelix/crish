@@ -13,9 +13,11 @@
 //! 导出需求，由主 Agent 统一合并到本文件（避免三写冲突）。
 
 mod behavior;
+mod cache_key;
 mod catalog;
 mod ttl;
 
 pub use behavior::{cache_behavior_for, infer_vendor, CacheBehavior, CacheTtl, VendorId};
-pub use catalog::{ModelCatalog, ModelCatalogEntry};
+pub use cache_key::{derive_prompt_cache_key, session_affinity_headers};
+pub use catalog::{CatalogError, ModelCatalog, ModelCatalogEntry, ScannedCapabilities, ScannedModel};
 pub use ttl::cache_ttl_for_provider_model;

@@ -39,13 +39,13 @@ function entry(
   name: string,
   family: string,
   surface: 'engine' | 'gui',
-  registered = true,
+  registered = true
 ): CommandManifestEntry {
   return { name, family, surface, registered };
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（73 = 注册面 67 + 登记先行 6；§7.2 推算 ≈73）。
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（75 = 注册面 71 + 登记先行 4；§7.2 推算 ≈75）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
  * commandManifest.test.ts 的条数/登记断言拦截。
@@ -132,6 +132,9 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('core_jsonl_append', 'core', 'engine'),
     // ── 注册表单一化自身（T03.1）──
     entry('core_list_commands', 'core', 'engine'),
+    // ── 模型目录（P3 步骤 5：catalog_get / catalog_refresh；C7 三处登记 ③）──
+    entry('catalog_get', 'core', 'engine'),
+    entry('catalog_refresh', 'core', 'engine'),
     // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
     // PE-07 T07.4：config_profile_apply / config_secret_reveal 已接线（registered=true）
     entry('append_session_messages', 'session', 'engine', false),
@@ -157,7 +160,9 @@ const registeredNameCache = new WeakMap<CommandManifest, ReadonlySet<string>>();
 function registeredNamesOf(manifest: CommandManifest): ReadonlySet<string> {
   let set = registeredNameCache.get(manifest);
   if (!set) {
-    set = new Set(manifest.commands.filter((c) => c.registered).map((c) => c.name));
+    set = new Set(
+      manifest.commands.filter((c) => c.registered).map((c) => c.name)
+    );
     registeredNameCache.set(manifest, set);
   }
   return set;
@@ -180,7 +185,11 @@ export async function initCommandManifest(): Promise<CommandManifest> {
   manifestInitStarted = (async () => {
     try {
       const res = await invokeTyped<CommandManifest>('core_list_commands', {});
-      if (res.status === 'ok' && Array.isArray(res.data?.commands) && res.data.commands.length > 0) {
+      if (
+        res.status === 'ok' &&
+        Array.isArray(res.data?.commands) &&
+        res.data.commands.length > 0
+      ) {
         cachedManifest = res.data;
       }
     } catch {
@@ -196,7 +205,9 @@ export async function initCommandManifest(): Promise<CommandManifest> {
  * - 无参或传 null：回退内置快照（默认行为）；
  * - 传自定义清单：模拟 Rust 真源（mock 清单对照测试用）。
  */
-export function resetCommandManifestForTests(manifest?: CommandManifest | null): void {
+export function resetCommandManifestForTests(
+  manifest?: CommandManifest | null
+): void {
   manifestInitStarted = null;
   cachedManifest = manifest ?? null;
 }

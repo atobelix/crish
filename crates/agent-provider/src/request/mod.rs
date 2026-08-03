@@ -19,6 +19,10 @@ pub mod schema;
 pub mod tools;
 pub mod vendor;
 
+// DeepSeek 请求体不变量测试钉死（T-22，P3 步骤 4；只读既有源码，只挂测试）
+#[cfg(test)]
+mod deepseek_invariants;
+
 pub use build::{
     build_chat_completions_request_body, build_system_prompt, resolve_endpoint,
     ChatCompletionsRequestOptions, MaxTokensField, RequestBuildContext,

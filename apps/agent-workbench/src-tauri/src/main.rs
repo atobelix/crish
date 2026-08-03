@@ -18,12 +18,15 @@
 //!   ⑦ restore：`run_restore` 经 run_in_runtime 在 `manage(CoreRunState)` 之前
 //!     执行（成功 seed_sequences + 立即快照；失败降级不阻断启动）；
 //!   ⑧ [CoreRunState] manage + [EventBridge] manage + [SharedDb] manage；
-//!   ⑨ MCP 插件：debug 下 `dev_mcp::register_if_enabled(builder)`（默认关闭，
+//!   ⑨ 模型目录 manage（`Arc<RwLock<ModelCatalog>>`，内置表；P3 步骤 5，
+//!     catalog_get / catalog_refresh 消费）；
+//!   ⑩ MCP 插件：debug 下 `dev_mcp::register_if_enabled(builder)`（默认关闭，
 //!     `CRISH_MCP_SOCKET=1` 开启）；
 //! - **退出钩子**：`RunEvent::Exit` 时 PTY 清理 +
 //!   [CoreRunState::save_snapshot_blocking]（独立线程）。
 
 mod buffer;
+mod catalog_commands;
 mod command_manifest;
 mod commands;
 mod config;
@@ -47,7 +50,7 @@ mod session_commands;
 mod status_diagnostics;
 mod workspace;
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use core_event_bridge::{EventBridge, TauriEmitter};
 use tauri::Manager;
@@ -148,6 +151,9 @@ command_registry![
     ("core_jsonl_to_messages", core_commands::core_jsonl_to_messages),
     ("core_text_encode", core_commands::core_text_encode),
     ("core_jsonl_append", core_commands::core_jsonl_append),
+    // ── 模型目录（P3 步骤 5：catalog_get / catalog_refresh）──
+    ("catalog_get", catalog_commands::catalog_get),
+    ("catalog_refresh", catalog_commands::catalog_refresh),
     // ── 注册表单一化自身（T03.1；经 command_manifest 注册——Tauri 宏生成项
     //    （__cmd__*）不随 core_query_commands 的 pub use 重导出，必须直引真源）──
     ("core_list_commands", command_manifest::core_list_commands),
@@ -225,7 +231,7 @@ fn main() {
 
     let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
 
-    // setup 序列 ⑨：MCP 调试插件（默认关闭，CRISH_MCP_SOCKET=1 开启；
+    // setup 序列 ⑩：MCP 调试插件（默认关闭，CRISH_MCP_SOCKET=1 开启；
     // release 由插件自身拒绝兜底，注册点本身亦被 cfg 隔离）。
     #[cfg(debug_assertions)]
     let builder = dev_mcp::register_if_enabled(builder);
@@ -309,6 +315,12 @@ fn main() {
             app.manage(Arc::clone(&core_state));
             app.manage(bridge);
             app.manage(shared_db);
+
+            // ⑨ 模型目录（P3 步骤 5）：内置表挂 Tauri state（catalog_get /
+            //    catalog_refresh 消费；覆盖/扫描合并仅经命令入口进行）
+            app.manage(Arc::new(RwLock::new(
+                agent_provider::models::ModelCatalog::bundled(),
+            )));
 
             // 周期快照（T08.6 触发点 B：默认 60s，仅活动 run 存在时保存；
             // 幂等，restore 完成与否均可启动）
