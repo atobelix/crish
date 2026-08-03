@@ -57,7 +57,9 @@ export const WizardModelStep: React.FC<WizardModelStepProps> = ({
       {hasListedModels ? (
         <>
           <SettingsSelect
-            {...(styles.firstRunSelect !== undefined && { className: styles.firstRunSelect })}
+            {...(styles.firstRunSelect !== undefined && {
+              className: styles.firstRunSelect,
+            })}
             value={modelInList ? modelId : ''}
             disabled={busy}
             placeholder="从本机列表选择…"
@@ -75,7 +77,7 @@ export const WizardModelStep: React.FC<WizardModelStepProps> = ({
           <input
             id={ids.modelCustomId}
             className={styles.firstRunInput}
-            placeholder="例如 deepseek-chat、gpt-4o"
+            placeholder="例如 deepseek-v4-flash、gpt-5.6"
             value={modelInList ? '' : modelId}
             {...inputProps}
             onChange={(e) => onChange(e.target.value)}
@@ -91,7 +93,7 @@ export const WizardModelStep: React.FC<WizardModelStepProps> = ({
         <input
           id={ids.modelIdField}
           className={styles.firstRunInput}
-          placeholder="输入模型 id（如 deepseek-chat）"
+          placeholder="输入模型 id（如 deepseek-v4-flash）"
           value={modelId}
           {...inputProps}
           onChange={(e) => onChange(e.target.value)}

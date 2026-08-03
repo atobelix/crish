@@ -42,42 +42,47 @@ export const PRESETS: PresetProvider[] = [
     id: 'preset-opencode-go',
     name: 'OpenCode Go 订阅',
     baseUrl: 'https://opencode.ai/zen/go/v1',
-    models: ['deepseek-v4-flash', 'glm-5', 'kimi-k2'],
+    // 模型取 00-catalog 现行旗舰：GLM-5.2（§4.1）、kimi-k3（§5.1）
+    models: ['deepseek-v4-flash', 'glm-5.2', 'kimi-k3'],
     format: 'openai',
   },
   {
     id: 'preset-opencode-zen',
     name: 'OpenCode Zen 订阅',
     baseUrl: 'https://opencode.ai/zen/v1',
-    models: ['deepseek-v4-flash', 'gemini-3-flash', 'claude-3-7-sonnet'],
+    // gemini-3.6-flash（§8.1）、claude-sonnet-5（§1.4）
+    models: ['deepseek-v4-flash', 'gemini-3.6-flash', 'claude-sonnet-5'],
     format: 'openai',
   },
   {
     id: 'preset-deepseek',
     name: 'DeepSeek 官方',
     baseUrl: 'https://api.deepseek.com',
-    models: ['deepseek-chat', 'deepseek-reasoner'],
+    // 旧 alias deepseek-chat/reasoner 已退役，v4 系为现行（§3.1）
+    models: ['deepseek-v4-flash', 'deepseek-v4-pro'],
     format: 'openai',
   },
   {
     id: 'preset-qwen',
     name: '千问 Qwen Portal',
     baseUrl: 'https://portal.qwen.ai/v1',
-    models: ['qwen-max', 'qwen-plus', 'qwen-coder'],
+    // 百炼现行型号（§11.1）
+    models: ['qwen3.7-max', 'qwen3.7-plus', 'qwen3-coder-plus'],
     format: 'openai',
   },
   {
     id: 'preset-openai',
     name: 'OpenAI 兼容',
     baseUrl: 'https://api.openai.com/v1',
-    models: ['gpt-4o', 'o3-mini'],
+    // gpt-5.x 现行（§2.2）
+    models: ['gpt-5.6', 'gpt-5.5'],
     format: 'openai',
   },
   {
     id: 'preset-anthropic',
     name: 'Anthropic 兼容',
     baseUrl: 'https://api.anthropic.com/v1',
-    models: ['claude-3-7-sonnet'],
+    models: ['claude-sonnet-5'],
     format: 'anthropic',
   },
   {
@@ -148,11 +153,20 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
   const checkBusy = busyState.checkBusy;
 
   const setTestBusy = (val: React.SetStateAction<string | null>) =>
-    setBusyState((prev) => ({ ...prev, testBusy: typeof val === 'function' ? val(prev.testBusy) : val }));
+    setBusyState((prev) => ({
+      ...prev,
+      testBusy: typeof val === 'function' ? val(prev.testBusy) : val,
+    }));
   const setScanBusy = (val: React.SetStateAction<boolean>) =>
-    setBusyState((prev) => ({ ...prev, scanBusy: typeof val === 'function' ? val(prev.scanBusy) : val }));
+    setBusyState((prev) => ({
+      ...prev,
+      scanBusy: typeof val === 'function' ? val(prev.scanBusy) : val,
+    }));
   const setCheckBusy = (val: React.SetStateAction<boolean>) =>
-    setBusyState((prev) => ({ ...prev, checkBusy: typeof val === 'function' ? val(prev.checkBusy) : val }));
+    setBusyState((prev) => ({
+      ...prev,
+      checkBusy: typeof val === 'function' ? val(prev.checkBusy) : val,
+    }));
 
   const [modelFilter, setModelFilter] = useState('');
   const [configOpenId, setConfigOpenId] = useState<string | null>(null);
@@ -160,7 +174,10 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
   const [addDraft, setAddDraft] = useState<AddDraft>(() => emptyAddDraft());
   const [cfgDraft, setCfgDraft] = useState<CfgDraft | null>(null);
 
-  const [nameEditState, setNameEditState] = useState<{ editing: boolean; draft: string }>({
+  const [nameEditState, setNameEditState] = useState<{
+    editing: boolean;
+    draft: string;
+  }>({
     editing: false,
     draft: '',
   });
@@ -169,22 +186,30 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
   const nameDraft = nameEditState.draft;
 
   const setEditingName = (val: React.SetStateAction<boolean>) =>
-    setNameEditState((prev) => ({ ...prev, editing: typeof val === 'function' ? val(prev.editing) : val }));
+    setNameEditState((prev) => ({
+      ...prev,
+      editing: typeof val === 'function' ? val(prev.editing) : val,
+    }));
   const setNameDraft = (val: React.SetStateAction<string>) =>
-    setNameEditState((prev) => ({ ...prev, draft: typeof val === 'function' ? val(prev.draft) : val }));
+    setNameEditState((prev) => ({
+      ...prev,
+      draft: typeof val === 'function' ? val(prev.draft) : val,
+    }));
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const selected = useMemo(
     () => profiles.find((p) => p.id === selectedId) || null,
-    [profiles, selectedId],
+    [profiles, selectedId]
   );
 
   const refresh = () => {
     try {
       setProfiles(loadProfiles());
     } catch (e) {
-      onShowToast?.(`读取服务商失败：${e instanceof Error ? e.message : String(e)}`);
+      onShowToast?.(
+        `读取服务商失败：${e instanceof Error ? e.message : String(e)}`
+      );
       setProfiles([]);
     }
   };
@@ -311,7 +336,7 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
       displayName: string;
       contextLength: string;
       caps: Record<ModelCapabilityKey, boolean>;
-    },
+    }
   ) => {
     if (draft.displayName.trim()) {
       setModelDisplayName(profileId, modelId, draft.displayName.trim());
@@ -364,7 +389,8 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
     setConfigOpenId(model);
     setCfgDraft({
       displayName: meta.displayName || '',
-      contextLength: meta.contextLength != null ? String(meta.contextLength) : '',
+      contextLength:
+        meta.contextLength != null ? String(meta.contextLength) : '',
       caps: {
         tools: !!meta.capabilities?.tools,
         vision: !!meta.capabilities?.vision,
@@ -391,7 +417,8 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
     setTestBusy(key);
 
     try {
-      const fresh = loadProfiles().find((p) => p.id === selected.id) || selected;
+      const fresh =
+        loadProfiles().find((p) => p.id === selected.id) || selected;
       const r = await testProviderModel(fresh, model);
       refresh();
       if (!r.ok) {
@@ -408,7 +435,8 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
     if (!selected) return;
     setScanBusy(true);
     try {
-      const fresh = loadProfiles().find((p) => p.id === selected.id) || selected;
+      const fresh =
+        loadProfiles().find((p) => p.id === selected.id) || selected;
       const r = await scanProviderModels(fresh);
       if (r.ok && r.models?.length) {
         const merged = mergeModelIds(fresh.models, r.models);
@@ -429,7 +457,8 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
     if (!selected) return;
     setCheckBusy(true);
     try {
-      const fresh = loadProfiles().find((p) => p.id === selected.id) || selected;
+      const fresh =
+        loadProfiles().find((p) => p.id === selected.id) || selected;
       const firstModel = fresh.models[0] || '';
       const r = await testProviderModel(fresh, firstModel);
       if (r.ok) {
@@ -456,7 +485,9 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
     });
   }, [selected, modelFilter]);
 
-  const modelsCount = selected?.models ? (normalizeModelIds(selected.models) || []).length : 0;
+  const modelsCount = selected?.models
+    ? (normalizeModelIds(selected.models) || []).length
+    : 0;
   const selectedLabel = selected ? profileDisplayLabel(selected) : '';
   const hasKeySelected = selected ? profileHasKey(selected) : false;
   const activeProfileId = getActiveProfileId();

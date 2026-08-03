@@ -19,7 +19,7 @@
 //! TODO(集成 agent)：main.rs 声明 `mod engine` 等本批模块并完成接线
 //! （本文件不声明 mod）。
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -31,6 +31,7 @@ use agent_provider::error::{
 };
 use agent_provider::events::{ProviderStreamEvent as WireEvent, StreamParseError};
 use agent_provider::parse::chat::ChatCompletionsParser;
+use agent_provider::request::cache::build_cache_policy;
 use agent_provider::request::{
     build_chat_completions_request_body, infer_reasoning_vendor, ChatCompletionsRequestOptions,
     MaxTokensField, ReasoningContentMode, ReasoningVendor, RequestBuildContext,
@@ -46,7 +47,9 @@ use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::response::ClassifiedStreamError;
 use conex_types::tool::SystemPromptWireMode;
 use futures_util::{Stream, StreamExt};
-use session_loop::provider::{DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest};
+use session_loop::provider::{
+    DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest,
+};
 use session_loop::stream::{
     ProviderStreamEvent, ProviderUsage, StopReason as LoopStopReason,
 };
@@ -137,6 +140,12 @@ pub(crate) struct EngineProviderConfig {
     pub endpoint: Endpoint,
     /// 是否流式
     pub stream: bool,
+    /// 厂商私有参数透传（对齐 agent-provider `ProviderConfig.extra` 通道，
+    /// P2 §3.4 建议 2：`extra.cache` 覆盖 JSON 经 build_cache_policy 的
+    /// overrides 生效，键名与 P3 CacheBehavior 结构字段对齐）。R2 工作台
+    /// 配置面尚无该通道，恒为空表（overrides=None，能力判定走内置保守兜底）；
+    /// R3（T-23）或配置 UI 接入 P3 开关数据后经此处注入。
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 /// 从 config 模块的 effective_* 源加载生效配置（engine.rs:169-179 等价）
@@ -160,6 +169,8 @@ pub(crate) fn load_provider_endpoint() -> Option<EngineProviderConfig> {
         model,
         endpoint,
         stream,
+        // R2 无 extra 透传通道（见字段注释），P3 开关数据经此注入
+        extra: BTreeMap::new(),
     })
 }
 
@@ -182,6 +193,12 @@ fn provider_url(config: &EngineProviderConfig) -> String {
 ///   由消费方按 [session_loop::stream::ConsumeBuilder] 裁决）；
 /// - 每流恰好一个 Stop，Stop 后流立即结束（解析器保证）；
 /// - 返回流为 `'static`：请求体在返回流之前同步序列化完毕。
+///
+/// usage 口径（P2 §3.3 D，T-16 交付 usage_accounting setter）：本适配层只走
+/// chat-completions 兼容线（OpenAI 系 Included 语义——prompt_tokens 已含缓存），
+/// 消费侧 [session_loop::stream::ConsumeBuilder] 默认 Included 即正确，无需显式
+/// 传参；未来 Anthropic Messages / Gemini 原生适配层接线时必须显式传
+/// `CacheAccounting::Excluded`（prompt 不含缓存口径），接线归该适配层创建处。
 pub(crate) struct HttpProviderCall {
     /// 共享 reqwest 客户端（连接池 / TLS 会话跨 run 复用，AA-02 S-7）
     client: reqwest::Client,
@@ -210,12 +227,28 @@ impl HttpProviderCall {
     /// 键存在性模式，DeepSeek 恒 Require（P1 C3 唯一实现），其余厂商
     /// Omit 保持现状（P1 §3.4 C3 / P1 §3.3 B1 步骤 2.3）。
     fn request_options(&self, request: &ProviderRequest<'_>) -> ChatCompletionsRequestOptions {
+        // 【调度者裁决】engine.rs 只调用 build_cache_policy（唯一运行时判定/消费
+        // 入口，C2）：能力判定收敛在其内部——数据真源 = P3 cache_behavior_for
+        // （矩阵 + catalog 模型级覆盖）；无 catalog 可用时回退内置保守兜底默认
+        // （infer_cache_capability，数据值以 P3 §3.2.2 矩阵为准转录）。
+        // catalog 传 None：R3 T-18/T-19 交付后替换为真实 ModelCatalog（占位
+        // PlaceholderCatalog 恒 None，等价"无 catalog"）；session_id 由
+        // SharedProvider 注入（P2 步骤 4b）；overrides 走 config.extra.cache
+        // 通道（R2 恒空表 → None，见 EngineProviderConfig.extra 注释）。
+        let cache = build_cache_policy(
+            None,
+            Some(&self.config.base_url),
+            Some(&self.config.model),
+            request.session_id.as_deref(),
+            self.config.extra.get("cache"),
+        );
         ChatCompletionsRequestOptions {
             model: Some(self.config.model.clone()),
             stream: Some(self.config.stream),
             max_tokens: request.max_tokens.map(u64::from),
             max_tokens_field: Some(MaxTokensField::MaxTokens),
             reasoning_content: Some(self.reasoning_content_mode()),
+            cache,
             ..ChatCompletionsRequestOptions::default()
         }
     }
@@ -447,6 +480,9 @@ fn to_loop_event(event: WireEvent) -> ProviderStreamEvent {
                 total_tokens: usage.total_tokens,
                 cache_read_tokens: usage.cache_read_tokens,
                 cache_write_tokens: usage.cache_write_tokens,
+                // P2 步骤 1（T-10/T-16）：cacheMissTokens 逐字段透传（E0063 补齐；
+                // 其余协议族 miss 由 cache_breakdown 按口径推导）
+                cache_miss_tokens: usage.cache_miss_tokens,
                 reasoning_tokens: usage.reasoning_tokens,
             }),
         },
@@ -700,7 +736,14 @@ impl DeltaSink for BridgeDeltaSink {
 
 /// Arc 包装的 ProviderCall（[AgentSessionLoop] 按 `Box<dyn ProviderCall>`
 /// 接收；生产者跨 run 共享 provider，需经本包装再装箱）
-struct SharedProvider(Arc<dyn ProviderCall>);
+struct SharedProvider {
+    /// 真实 provider 适配层（共享复用，跨 run 不重建）
+    inner: Arc<dyn ProviderCall>,
+    /// 会话 ID（P2 步骤 4b：ProviderRequest.session_id 的注入源；值与循环内
+    /// AgentSessionContext.session_id 一致——两者同源于 run-task 下发的
+    /// sessionId）
+    session_id: String,
+}
 
 #[async_trait]
 impl ProviderCall for SharedProvider {
@@ -708,7 +751,15 @@ impl ProviderCall for SharedProvider {
         &self,
         request: &ProviderRequest<'a>,
     ) -> Result<ProviderEventStream, ClassifiedStreamError> {
-        self.0.stream(request).await
+        // P2 步骤 4b：把会话 ID 注入 ProviderRequest.session_id（prompt_cache_key
+        // 的键来源；会话内所有请求共享同键，同轮工具循环 + 跨轮，P2 §3.3 B）。
+        // 请求为不可变借用，克隆后改写：messages/system_prompt 仍是借用复制
+        // （0 深拷贝），仅 session_id 属主字符串每轮克隆一次（量级与
+        // build_request 的工具 schema to_vec 相当，可忽略）。适配层
+        // request_options 据此派生缓存键（Key 机制厂商）。
+        let mut request = request.clone();
+        request.session_id = Some(self.session_id.clone());
+        self.inner.stream(&request).await
     }
 }
 
@@ -774,7 +825,10 @@ impl SessionLoopProducer {
             self.session_id.as_str(),
             self.run_id.as_str(),
             self.max_turns,
-            Box::new(SharedProvider(Arc::clone(&self.provider))),
+            Box::new(SharedProvider {
+                inner: Arc::clone(&self.provider),
+                session_id: self.session_id.clone(),
+            }),
             Arc::clone(&self.tool_registry),
         );
         session_loop = session_loop
@@ -795,6 +849,8 @@ impl SessionLoopProducer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_provider::request::cache::{CacheKey, CacheMechanism};
+    use session_loop::provider::ProviderStreamItem;
 
     /// ISO8601 时间戳形状（毫秒精度 + Z 后缀）
     #[test]
@@ -842,6 +898,7 @@ mod tests {
             model: "m".to_string(),
             endpoint: Endpoint::ChatCompletions,
             stream: true,
+            extra: BTreeMap::new(),
         };
         assert_eq!(provider_url(&base), "https://api.example.com/v1/chat/completions");
         let responses = EngineProviderConfig {
@@ -863,6 +920,7 @@ mod tests {
                 total_tokens: Some(3),
                 cache_read_tokens: None,
                 cache_write_tokens: None,
+                cache_miss_tokens: Some(7),
                 reasoning_tokens: None,
             }),
         };
@@ -876,6 +934,8 @@ mod tests {
                 assert!(error.is_none());
                 let usage = usage.expect("usage 透传");
                 assert_eq!(usage.total_tokens, Some(3));
+                // P2：cacheMissTokens 逐字段透传（E0063 补齐）
+                assert_eq!(usage.cache_miss_tokens, Some(7));
             }
             other => panic!("期望 Stop，得到 {other:?}"),
         }
@@ -914,6 +974,7 @@ mod tests {
             model: model.to_string(),
             endpoint: Endpoint::ChatCompletions,
             stream: true,
+            extra: BTreeMap::new(),
         };
         HttpProviderCall::new(client, config)
     }
@@ -928,6 +989,7 @@ mod tests {
             tools: Vec::new(),
             max_tokens: Some(4096),
             system_prompt,
+            session_id: None,
         }
     }
 
@@ -999,6 +1061,7 @@ mod tests {
             model: "random-model".to_string(),
             endpoint: Endpoint::ChatCompletions,
             stream: true,
+            extra: BTreeMap::new(),
         };
         let call = HttpProviderCall::new(reqwest::Client::new(), config.clone());
         assert_eq!(call.reasoning_content_mode(), ReasoningContentMode::Require);
@@ -1008,5 +1071,122 @@ mod tests {
         config.model = "custom-model".to_string();
         let call = HttpProviderCall::new(reqwest::Client::new(), config);
         assert_eq!(call.reasoning_content_mode(), ReasoningContentMode::Omit);
+    }
+
+    // ── P2：build_cache_policy 接线 + session_id 注入（T-17，P2 步骤 4b）────
+
+    /// 构造单条 user 消息 + 会话 ID 的请求（cache 接线断言用）
+    fn session_request<'a>(
+        messages: &'a Vec<Arc<AgentMessage>>,
+        session_id: Option<&'a str>,
+    ) -> ProviderRequest<'a> {
+        ProviderRequest {
+            messages,
+            tools: Vec::new(),
+            max_tokens: Some(4096),
+            system_prompt: None,
+            session_id: session_id.map(str::to_string),
+        }
+    }
+
+    /// request_options 组装 cache：engine.rs 只调用 build_cache_policy（C2 唯一
+    /// 运行时判定/消费入口），能力判定收敛在其内部
+    ///
+    /// 断言（P2 §5.1/§5.3）：
+    /// - DeepSeek：build_cache_policy 归 None → 请求体不含任何 cache 键
+    ///   （省略行为测试钉死，对齐 deepseek-reasonix-cache-analysis.md:111-112）；
+    /// - Key 机制（gpt-4o）+ 会话 ID → 注入 prompt_cache_key（码点钳 64）；
+    /// - Key 机制无会话 ID → 不注入（无键无路由对象）；
+    /// - 未知/本地厂商 → 保守全关。
+    #[test]
+    fn request_options_wires_build_cache_policy() {
+        let user = AgentMessage {
+            id: "user-1".to_string(),
+            role: AgentMessageRole::User,
+            created_at: "2026-08-03T00:00:00.000Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "你好".to_string(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        };
+        let messages = vec![Arc::new(user)];
+        let request = session_request(&messages, Some("ses-abc"));
+
+        // DeepSeek：省略整个 cache 参数组（机制 Auto + omit 恒 true）
+        let deepseek = test_provider_call("deepseek-v4");
+        assert!(deepseek.request_options(&request).cache.is_none());
+        let body = build_chat_completions_request_body(
+            &deepseek.request_options(&request),
+            &deepseek.build_context(&request),
+        );
+        assert!(body.get("prompt_cache_key").is_none());
+        assert!(body.get("prompt_cache_retention").is_none());
+        assert!(body.get("prompt_cache_options").is_none());
+
+        // Key 机制（gpt-4o）+ 会话 ID → 注入缓存策略与 wire 键
+        let openai = test_provider_call("gpt-4o");
+        let options = openai.request_options(&request);
+        let policy = options.cache.clone().expect("Key 机制应注入缓存策略");
+        assert_eq!(policy.mechanism, CacheMechanism::Key);
+        assert_eq!(policy.cache_key, Some(CacheKey("ses-abc".to_string())));
+        let body = build_chat_completions_request_body(&options, &openai.build_context(&request));
+        assert_eq!(body["prompt_cache_key"], "ses-abc");
+
+        // Key 机制无会话 ID → 无键可发，整体不注入（session_id? 短路）
+        let no_session = session_request(&messages, None);
+        assert!(openai.request_options(&no_session).cache.is_none());
+
+        // 未知/本地厂商（base_url 无关键字 + model 前缀未命中）→ 保守全关
+        let ollama = test_provider_call("llama-3.1");
+        assert!(ollama.request_options(&request).cache.is_none());
+    }
+
+    /// 捕获请求的测试 provider（session_id 注入断言用）
+    struct CaptureProvider {
+        captured: Arc<Mutex<Option<String>>>,
+    }
+
+    #[async_trait]
+    impl ProviderCall for CaptureProvider {
+        async fn stream<'a>(
+            &self,
+            request: &ProviderRequest<'a>,
+        ) -> Result<ProviderEventStream, ClassifiedStreamError> {
+            *self
+                .captured
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = request.session_id.clone();
+            let stream: ProviderEventStream =
+                Box::pin(futures_util::stream::empty::<ProviderStreamItem>());
+            Ok(stream)
+        }
+    }
+
+    /// SharedProvider::stream 把会话 ID 注入 ProviderRequest.session_id
+    /// （P2 步骤 4b：prompt_cache_key 键来源；值 = AgentSessionContext.session_id
+    /// 同源——两者同源于 run-task 下发的 sessionId）
+    #[tokio::test]
+    async fn shared_provider_injects_session_id() {
+        let captured = Arc::new(Mutex::new(None));
+        let shared = SharedProvider {
+            inner: Arc::new(CaptureProvider {
+                captured: Arc::clone(&captured),
+            }),
+            session_id: "ses-42".to_string(),
+        };
+        let messages = Vec::<Arc<AgentMessage>>::new();
+        let request = session_request(&messages, None);
+        let stream = shared.stream(&request).await.expect("空流应成功");
+        drop(stream);
+        assert_eq!(
+            captured
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .as_deref(),
+            Some("ses-42"),
+            "会话 ID 应注入 ProviderRequest.session_id"
+        );
     }
 }

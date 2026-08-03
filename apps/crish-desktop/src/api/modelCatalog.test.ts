@@ -53,7 +53,8 @@ import {
 import { saveProfiles } from './providerProfiles';
 
 function entry(
-  partial: Partial<CatalogModelEntry> & Pick<CatalogModelEntry, 'profileId' | 'model'>,
+  partial: Partial<CatalogModelEntry> &
+    Pick<CatalogModelEntry, 'profileId' | 'model'>
 ): CatalogModelEntry {
   return {
     profileId: partial.profileId,
@@ -69,8 +70,10 @@ describe('modelCatalog', () => {
   });
 
   it('guessContextLength uses known ids but does not invent provider defaults', () => {
-    expect(guessContextLength('deepseek-chat')).toBe(64_000);
-    expect(guessContextLength('gpt-4o-mini')).toBe(128_000);
+    expect(guessContextLength('deepseek-v4-flash')).toBe(1_000_000);
+    expect(guessContextLength('gpt-5.6')).toBe(1_050_000);
+    // 已退役的旧 alias 不再有映射（deepseek-chat 系 v3 时代 id）
+    expect(guessContextLength('deepseek-chat')).toBeUndefined();
     // 用户自建 id：无已知映射则 undefined（非写死 vendor 表冒充）
     expect(guessContextLength('my-custom-ft-2026')).toBeUndefined();
   });
@@ -144,14 +147,16 @@ describe('modelCatalog', () => {
   it('getModelMeta defaults enabled true with optional context', () => {
     const meta = getModelMeta('any', 'deepseek-v4-flash');
     expect(meta.enabled).toBe(true);
-    expect(meta.contextLength).toBe(128_000);
+    expect(meta.contextLength).toBe(1_000_000);
     expect(meta.profileId).toBe('any');
   });
 
   describe('pure helpers: normalize / dedupe / usable / pick', () => {
     it('normalizeModelIdText trims unicode whitespace and NFC', () => {
       expect(normalizeModelIdText('  gpt-4o  ')).toBe('gpt-4o');
-      expect(normalizeModelIdText('\u3000deepseek-chat\u3000')).toBe('deepseek-chat');
+      expect(normalizeModelIdText('\u3000deepseek-chat\u3000')).toBe(
+        'deepseek-chat'
+      );
       expect(normalizeModelIdText(null)).toBe('');
       expect(normalizeModelIdText(undefined)).toBe('');
       expect(normalizeModelIdText({})).toBe('');
@@ -167,7 +172,7 @@ describe('modelCatalog', () => {
           profileId: '  p1  ',
           model: '\u3000m1\u3000',
           hasKey: 1 as unknown as boolean,
-        }),
+        })
       ).toEqual({
         profileId: 'p1',
         profileName: 'p1',
@@ -184,8 +189,13 @@ describe('modelCatalog', () => {
           entry({ profileId: 'a', model: 'm' }),
           null,
           { profileId: 'b' },
-          entry({ profileId: 'c', model: 'n', profileName: '丙', hasKey: true }),
-        ]),
+          entry({
+            profileId: 'c',
+            model: 'n',
+            profileName: '丙',
+            hasKey: true,
+          }),
+        ])
       ).toEqual([
         entry({ profileId: 'a', model: 'm' }),
         entry({ profileId: 'c', model: 'n', profileName: '丙', hasKey: true }),
@@ -194,16 +204,29 @@ describe('modelCatalog', () => {
 
     it('dedupeCatalogEntries keeps first profileId+model and allows same model across providers', () => {
       const list = dedupeCatalogEntries([
-        entry({ profileId: 'a', model: 'same', profileName: 'A1', hasKey: false }),
-        entry({ profileId: 'a', model: 'same', profileName: 'A2', hasKey: true }),
-        entry({ profileId: 'b', model: 'same', profileName: 'B', hasKey: true }),
+        entry({
+          profileId: 'a',
+          model: 'same',
+          profileName: 'A1',
+          hasKey: false,
+        }),
+        entry({
+          profileId: 'a',
+          model: 'same',
+          profileName: 'A2',
+          hasKey: true,
+        }),
+        entry({
+          profileId: 'b',
+          model: 'same',
+          profileName: 'B',
+          hasKey: true,
+        }),
         entry({ profileId: 'a', model: 'other' }),
       ]);
-      expect(list.map((e) => `${e.profileId}/${e.model}/${e.profileName}`)).toEqual([
-        'a/same/A1',
-        'b/same/B',
-        'a/other/a',
-      ]);
+      expect(
+        list.map((e) => `${e.profileId}/${e.model}/${e.profileName}`)
+      ).toEqual(['a/same/A1', 'b/same/B', 'a/other/a']);
       expect(catalogEntryKey(list[0])).toBe('a::same');
     });
 
@@ -219,9 +242,11 @@ describe('modelCatalog', () => {
         'with-key',
         'no-key',
       ]);
-      expect(filterUsableCatalogEntries(list, { requireKey: true }).map((e) => e.model)).toEqual([
-        'with-key',
-      ]);
+      expect(
+        filterUsableCatalogEntries(list, { requireKey: true }).map(
+          (e) => e.model
+        )
+      ).toEqual(['with-key']);
     });
 
     it('pickDefaultCatalogEntry never invents mimo; empty → null', () => {
@@ -241,9 +266,11 @@ describe('modelCatalog', () => {
           entry({ profileId: 'x', model: 'user-ft', hasKey: true }),
           entry({ profileId: 'y', model: 'real-chat', hasKey: true }),
         ],
-        { preferredProfileId: 'x', preferredModel: 'user-ft' },
+        { preferredProfileId: 'x', preferredModel: 'user-ft' }
       );
-      expect(pref).toEqual(entry({ profileId: 'x', model: 'user-ft', hasKey: true }));
+      expect(pref).toEqual(
+        entry({ profileId: 'x', model: 'user-ft', hasKey: true })
+      );
 
       // preferred model only
       const byModel = pickDefaultCatalogEntry(
@@ -251,7 +278,7 @@ describe('modelCatalog', () => {
           entry({ profileId: 'a', model: 'alpha', hasKey: true }),
           entry({ profileId: 'b', model: 'beta', hasKey: true }),
         ],
-        { preferredModel: 'beta' },
+        { preferredModel: 'beta' }
       );
       expect(byModel?.model).toBe('beta');
     });
@@ -274,8 +301,18 @@ describe('modelCatalog', () => {
         },
       ]);
       expect(built).toEqual([
-        entry({ profileId: 'on', model: 'm1', profileName: '开', hasKey: true }),
-        entry({ profileId: 'on', model: 'm2', profileName: '开', hasKey: true }),
+        entry({
+          profileId: 'on',
+          model: 'm1',
+          profileName: '开',
+          hasKey: true,
+        }),
+        entry({
+          profileId: 'on',
+          model: 'm2',
+          profileName: '开',
+          hasKey: true,
+        }),
       ]);
       expect(isEmptyCatalog(built)).toBe(false);
     });
@@ -284,15 +321,21 @@ describe('modelCatalog', () => {
       expect(catalogEntryDisplayLabel(null)).toBe('未选择模型');
       expect(
         catalogEntryDisplayLabel(
-          entry({ profileId: 'ds', model: 'deepseek-chat', profileName: 'DeepSeek' }),
-        ),
+          entry({
+            profileId: 'ds',
+            model: 'deepseek-chat',
+            profileName: 'DeepSeek',
+          })
+        )
       ).toBe('DeepSeek · deepseek-chat');
       expect(formatModelEnabledLabel(true)).toBe('已启用');
       expect(formatModelEnabledLabel(false)).toBe('已禁用');
       expect(formatLastTestLabel(undefined)).toBe('未测试');
-      expect(formatLastTestLabel({ ok: true, latencyMs: 42.6, at: 1 })).toBe('连通正常 43ms');
+      expect(formatLastTestLabel({ ok: true, latencyMs: 42.6, at: 1 })).toBe(
+        '连通正常 43ms'
+      );
       expect(formatLastTestLabel({ ok: false, at: 1, error: 'HTTP 401' })).toBe(
-        '连通失败：HTTP 401',
+        '连通失败：HTTP 401'
       );
       expect(formatLastTestLabel({ ok: false, at: 1 })).toBe('连通失败');
     });
@@ -310,7 +353,9 @@ describe('modelCatalog', () => {
     ]);
     expect(listAvailablePickerModels()).toEqual([]);
     expect(pickDefaultFromLocalCatalog()).toBeNull();
-    expect(pickDefaultFromLocalCatalog({ preferredModel: 'mimo-v2.5' })).toBeNull();
+    expect(
+      pickDefaultFromLocalCatalog({ preferredModel: 'mimo-v2.5' })
+    ).toBeNull();
   });
 
   it('pickDefaultFromLocalCatalog prefers keyed local models', () => {

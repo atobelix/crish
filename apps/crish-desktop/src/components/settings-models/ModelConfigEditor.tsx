@@ -105,16 +105,24 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
   setSelectedId,
 }) => {
   return (
-    <section className={`${styles.modelsDetail} models-detail`} aria-label={selected ? `服务商 · ${selectedLabel}` : '服务商'}>
+    <section
+      className={`${styles.modelsDetail} models-detail`}
+      aria-label={selected ? `服务商 · ${selectedLabel}` : '服务商'}
+    >
       {!selected ? (
         <div className={`${styles.mrdEmpty} mrd-empty`}>
-          {profiles.length === 0 ? '从左侧添加服务商以开始' : '在左侧选择一个服务商'}
+          {profiles.length === 0
+            ? '从左侧添加服务商以开始'
+            : '在左侧选择一个服务商'}
         </div>
       ) : (
         <div className={`${styles.mrdBody} mrd-body`}>
           {/* Detail header */}
           <div className="mrd-head">
-            <div className="mrd-head-left" style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <div
+              className="mrd-head-left"
+              style={{ display: 'inline-flex', alignItems: 'center' }}
+            >
               {editingName && selected.id.startsWith('custom-') ? (
                 <input
                   className="mrd-title"
@@ -122,7 +130,10 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                   autoFocus
                   onChange={(e) => setNameDraft(e.target.value)}
                   onBlur={() => {
-                    if (nameDraft.trim() && nameDraft.trim() !== selected.name) {
+                    if (
+                      nameDraft.trim() &&
+                      nameDraft.trim() !== selected.name
+                    ) {
                       upsertProfile({ ...selected, name: nameDraft.trim() });
                       refresh();
                     }
@@ -166,10 +177,12 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                       transition: 'border-color 0.15s ease',
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--text-secondary)';
+                      e.currentTarget.style.borderColor =
+                        'var(--text-secondary)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                      e.currentTarget.style.borderColor =
+                        'var(--border-subtle)';
                     }}
                   >
                     {selectedLabel}
@@ -179,7 +192,10 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                 <h3 className="mrd-title">{selectedLabel}</h3>
               )}
             </div>
-            <div className="mrd-head-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div
+              className="mrd-head-right"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
               <button
                 type="button"
                 className="ui-btn ui-btn-sm"
@@ -189,13 +205,25 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                   fontSize: '12px',
                   fontWeight: 500,
                   borderRadius: '6px',
-                  border: selected.enabled !== false ? '1px solid color-mix(in srgb, var(--color-active) 30%, transparent)' : '1px solid var(--border-subtle)',
-                  background: selected.enabled !== false ? 'color-mix(in srgb, var(--color-active) 12%, transparent)' : 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
-                  color: selected.enabled !== false ? 'var(--color-active)' : 'var(--text-tertiary)',
+                  border:
+                    selected.enabled !== false
+                      ? '1px solid color-mix(in srgb, var(--color-active) 30%, transparent)'
+                      : '1px solid var(--border-subtle)',
+                  background:
+                    selected.enabled !== false
+                      ? 'color-mix(in srgb, var(--color-active) 12%, transparent)'
+                      : 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
+                  color:
+                    selected.enabled !== false
+                      ? 'var(--color-active)'
+                      : 'var(--text-tertiary)',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
                 }}
-                onClick={() => { setProfileEnabled(selected.id, selected.enabled === false); refresh(); }}
+                onClick={() => {
+                  setProfileEnabled(selected.id, selected.enabled === false);
+                  refresh();
+                }}
               >
                 {selected.enabled !== false ? '已启用' : '已停用'}
               </button>
@@ -216,11 +244,23 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                         zIndex: 'var(--z-card-footer)',
                       }}
                     >
-                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>确定删除？</span>
+                      <span
+                        style={{
+                          fontSize: '12px',
+                          color: 'var(--text-secondary)',
+                        }}
+                      >
+                        确定删除？
+                      </span>
                       <button
                         type="button"
                         className="ui-btn ui-btn-secondary ui-btn-sm"
-                        style={{ height: '24px', padding: '0 8px', fontSize: '11px', borderRadius: '5px' }}
+                        style={{
+                          height: '24px',
+                          padding: '0 8px',
+                          fontSize: '11px',
+                          borderRadius: '5px',
+                        }}
                         onClick={() => {
                           const next = removeProfile(selected.id);
                           setProfiles(next);
@@ -233,7 +273,12 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                       <button
                         type="button"
                         className="ui-btn ui-btn-ghost ui-btn-sm"
-                        style={{ height: '24px', padding: '0 8px', fontSize: '11px', borderRadius: '5px' }}
+                        style={{
+                          height: '24px',
+                          padding: '0 8px',
+                          fontSize: '11px',
+                          borderRadius: '5px',
+                        }}
                         onClick={() => setConfirmDeleteId(null)}
                       >
                         取消
@@ -244,7 +289,11 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                       <button
                         type="button"
                         className="ui-btn ui-btn-ghost ui-btn-sm"
-                        style={{ padding: '0 6px', height: '28px', color: 'var(--text-tertiary)' }}
+                        style={{
+                          padding: '0 6px',
+                          height: '28px',
+                          color: 'var(--text-tertiary)',
+                        }}
                         onClick={() => setConfirmDeleteId(selected.id)}
                       >
                         <Lucide.Trash2 size={14} />
@@ -260,39 +309,64 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
           {selected.id.startsWith('custom-') && (
             <div className={`${styles.mrdFields} mrd-fields`}>
               <div className={`${styles.mrdField} mrd-field`}>
-                <label className={`${styles.mrdFieldLabel} mrd-field-label`}>Base URL</label>
+                <label className={`${styles.mrdFieldLabel} mrd-field-label`}>
+                  Base URL
+                </label>
                 <input
                   className={`${styles.mrdFieldInput} mrd-field-input`}
                   value={selected.baseUrl}
                   placeholder="https://api.example.com/v1"
                   spellCheck={false}
-                  onChange={(e) => { upsertProfile({ ...selected, baseUrl: e.target.value }); refresh(); }}
+                  onChange={(e) => {
+                    upsertProfile({ ...selected, baseUrl: e.target.value });
+                    refresh();
+                  }}
                   onBlur={() => {
                     if (!selected) return;
-                    void saveProfileBaseUrl(selected.id, selected.baseUrl).then((r) => {
-                      if (!r.ok) notify(false, `地址保存失败：${r.error || '未知错误'}`);
-                      refresh();
-                    });
+                    void saveProfileBaseUrl(selected.id, selected.baseUrl).then(
+                      (r) => {
+                        if (!r.ok)
+                          notify(
+                            false,
+                            `地址保存失败：${r.error || '未知错误'}`
+                          );
+                        refresh();
+                      }
+                    );
                   }}
                 />
               </div>
               <div className={`${styles.mrdField} mrd-field`}>
-                <label className={`${styles.mrdFieldLabel} mrd-field-label`}>API Key</label>
+                <label className={`${styles.mrdFieldLabel} mrd-field-label`}>
+                  API Key
+                </label>
                 <div className={`${styles.mrdKeyRow} mrd-key-row`}>
                   <input
                     className={`${styles.mrdFieldInput} mrd-field-input`}
                     type="password"
-                    placeholder={hasKeySelected ? '••••••••••••••••••••' : '粘贴 API Key'}
+                    placeholder={
+                      hasKeySelected ? '••••••••••••••••••••' : '粘贴 API Key'
+                    }
                     value={keyDraft}
                     onChange={(e) => setKeyDraft(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && keyDraft.trim()) { e.preventDefault(); void saveKey(); } }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && keyDraft.trim()) {
+                        e.preventDefault();
+                        void saveKey();
+                      }
+                    }}
                   />
                   <button
                     type="button"
                     className="ui-btn ui-btn-secondary ui-btn-sm"
                     disabled={!keyDraft.trim()}
                     onClick={() => void saveKey()}
-                    style={{ borderRadius: '7px', height: '34px', padding: '0 14px', flexShrink: 0 }}
+                    style={{
+                      borderRadius: '7px',
+                      height: '34px',
+                      padding: '0 14px',
+                      flexShrink: 0,
+                    }}
                   >
                     保存
                   </button>
@@ -303,7 +377,9 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
 
           {/* Model list header */}
           <div className={`${styles.mrdModelsHead} mrd-models-head`}>
-            <span className={`${styles.mrdModelsLabel} mrd-models-label`}>模型列表</span>
+            <span className={`${styles.mrdModelsLabel} mrd-models-label`}>
+              模型列表
+            </span>
             <div className={`${styles.mrdModelsActions} mrd-models-actions`}>
               <Tooltip content="检查服务商连通性">
                 <button
@@ -311,10 +387,24 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                   className="ui-btn ui-btn-ghost ui-btn-sm"
                   disabled={checkBusy}
                   onClick={() => void runCheck()}
-                  style={{ height: '28px', width: '28px', padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                  style={{
+                    height: '28px',
+                    width: '28px',
+                    padding: '0',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
                   aria-label="检查连通性"
                 >
-                  {checkBusy ? <Lucide.Loader2 size={13} className={styles.loadingSpinner} /> : <Lucide.Wifi size={13} />}
+                  {checkBusy ? (
+                    <Lucide.Loader2
+                      size={13}
+                      className={styles.loadingSpinner}
+                    />
+                  ) : (
+                    <Lucide.Wifi size={13} />
+                  )}
                 </button>
               </Tooltip>
               <Tooltip content="自动获取服务商模型列表">
@@ -323,14 +413,38 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                   className="ui-btn ui-btn-ghost ui-btn-sm"
                   disabled={scanBusy}
                   onClick={() => void runScan()}
-                  style={{ height: '28px', width: '28px', padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                  style={{
+                    height: '28px',
+                    width: '28px',
+                    padding: '0',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
                   aria-label="自动获取"
                 >
-                  {scanBusy ? <Lucide.Loader2 size={13} className={styles.loadingSpinner} /> : <Lucide.RefreshCw size={13} />}
+                  {scanBusy ? (
+                    <Lucide.Loader2
+                      size={13}
+                      className={styles.loadingSpinner}
+                    />
+                  ) : (
+                    <Lucide.RefreshCw size={13} />
+                  )}
                 </button>
               </Tooltip>
               <div style={{ position: 'relative' }}>
-                <Lucide.Search size={12} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', pointerEvents: 'none' }} />
+                <Lucide.Search
+                  size={12}
+                  style={{
+                    position: 'absolute',
+                    left: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-tertiary)',
+                    pointerEvents: 'none',
+                  }}
+                />
                 <input
                   type="text"
                   placeholder="搜索..."
@@ -344,8 +458,18 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                 <button
                   type="button"
                   className="ui-btn ui-btn-ghost ui-btn-sm"
-                  onClick={() => { setManualOpen(!manualOpen); setAddDraft(emptyAddDraft()); }}
-                  style={{ height: '28px', width: '28px', padding: '0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                  onClick={() => {
+                    setManualOpen(!manualOpen);
+                    setAddDraft(emptyAddDraft());
+                  }}
+                  style={{
+                    height: '28px',
+                    width: '28px',
+                    padding: '0',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
                   aria-label="添加模型"
                 >
                   <Lucide.Plus size={13} />
@@ -360,15 +484,43 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
               <div className={`${styles.mrdAddFormFields} mrd-add-form-fields`}>
                 <label className={`${styles.mrdAddLabel} mrd-add-label`}>
                   <span>模型 ID *</span>
-                  <input className={`${styles.mrdFieldInput} mrd-field-input`} placeholder="如 deepseek-chat" value={addDraft.modelId} onChange={(e) => setAddDraft((d) => ({ ...d, modelId: e.target.value }))} spellCheck={false} />
+                  <input
+                    className={`${styles.mrdFieldInput} mrd-field-input`}
+                    placeholder="如 deepseek-v4-flash"
+                    value={addDraft.modelId}
+                    onChange={(e) =>
+                      setAddDraft((d) => ({ ...d, modelId: e.target.value }))
+                    }
+                    spellCheck={false}
+                  />
                 </label>
                 <label className={`${styles.mrdAddLabel} mrd-add-label`}>
                   <span>展示名称</span>
-                  <input className={`${styles.mrdFieldInput} mrd-field-input`} placeholder="可选" value={addDraft.displayName} onChange={(e) => setAddDraft((d) => ({ ...d, displayName: e.target.value }))} />
+                  <input
+                    className={`${styles.mrdFieldInput} mrd-field-input`}
+                    placeholder="可选"
+                    value={addDraft.displayName}
+                    onChange={(e) =>
+                      setAddDraft((d) => ({
+                        ...d,
+                        displayName: e.target.value,
+                      }))
+                    }
+                  />
                 </label>
                 <label className={`${styles.mrdAddLabel} mrd-add-label`}>
                   <span>上下文长度</span>
-                  <input className={`${styles.mrdFieldInput} mrd-field-input`} placeholder="128000" value={addDraft.contextLength} onChange={(e) => setAddDraft((d) => ({ ...d, contextLength: e.target.value }))} />
+                  <input
+                    className={`${styles.mrdFieldInput} mrd-field-input`}
+                    placeholder="128000"
+                    value={addDraft.contextLength}
+                    onChange={(e) =>
+                      setAddDraft((d) => ({
+                        ...d,
+                        contextLength: e.target.value,
+                      }))
+                    }
+                  />
                 </label>
               </div>
               <div className={`${styles.mrdAddFormFooter} mrd-add-form-footer`}>
@@ -376,16 +528,42 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                   {MODEL_CAPABILITY_OPTIONS.map((opt) => {
                     const on = !!addDraft.caps[opt.key];
                     return (
-                      <label key={opt.key} className={`${styles.mrdCapPill} mrd-cap-pill ${on ? styles.isOn + ' is-on' : ''}`}>
-                        <input type="checkbox" style={{ display: 'none' }} checked={on} onChange={(e) => setAddDraft((d) => ({ ...d, caps: { ...d.caps, [opt.key]: e.target.checked } }))} />
+                      <label
+                        key={opt.key}
+                        className={`${styles.mrdCapPill} mrd-cap-pill ${on ? styles.isOn + ' is-on' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          style={{ display: 'none' }}
+                          checked={on}
+                          onChange={(e) =>
+                            setAddDraft((d) => ({
+                              ...d,
+                              caps: { ...d.caps, [opt.key]: e.target.checked },
+                            }))
+                          }
+                        />
                         {opt.label}
                       </label>
                     );
                   })}
                 </div>
                 <div style={{ display: 'flex', gap: '6px' }}>
-                  <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" onClick={() => setManualOpen(false)}>取消</button>
-                  <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" disabled={!addDraft.modelId.trim()} onClick={handleManualAdd}>添加</button>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-ghost ui-btn-sm"
+                    onClick={() => setManualOpen(false)}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-secondary ui-btn-sm"
+                    disabled={!addDraft.modelId.trim()}
+                    onClick={handleManualAdd}
+                  >
+                    添加
+                  </button>
                 </div>
               </div>
             </div>
@@ -397,14 +575,26 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
               const meta = getModelMeta(selected.id, m);
               const off = meta.enabled === false;
               const tKey = `${selected.id}::${m}`;
-              const isLive = getActiveProfileId() === selected.id && getActiveModelId() === m;
+              const isLive =
+                getActiveProfileId() === selected.id &&
+                getActiveModelId() === m;
               const expanded = configOpenId === m && !!cfgDraft;
-              const display = expanded && cfgDraft?.displayName?.trim()
-                ? cfgDraft.displayName.trim()
-                : formatModelDisplayName(selected.id, m, meta);
-              const liveCtxVal = expanded && cfgDraft
-                ? (() => { const n = parseInt(cfgDraft.contextLength.replace(/[^\d]/g, ''), 10); return Number.isFinite(n) && n > 0 ? n : meta.contextLength; })()
-                : meta.contextLength;
+              const display =
+                expanded && cfgDraft?.displayName?.trim()
+                  ? cfgDraft.displayName.trim()
+                  : formatModelDisplayName(selected.id, m, meta);
+              const liveCtxVal =
+                expanded && cfgDraft
+                  ? (() => {
+                      const n = parseInt(
+                        cfgDraft.contextLength.replace(/[^\d]/g, ''),
+                        10
+                      );
+                      return Number.isFinite(n) && n > 0
+                        ? n
+                        : meta.contextLength;
+                    })()
+                  : meta.contextLength;
               const liveCtxLabel = formatContextLabel(liveCtxVal);
               const showCtx = liveCtxLabel && liveCtxLabel !== '—';
 
@@ -414,7 +604,10 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                   className={`${styles.mrdModelRow} mrd-model-row ${off ? 'is-off' : ''} ${isLive ? 'is-live' : ''} ${expanded ? 'is-expanded' : ''}`}
                   onClick={(e) => {
                     const target = e.target as HTMLElement;
-                    if (target.closest('.models-switch') || target.closest('.mrd-delete-btn')) {
+                    if (
+                      target.closest('.models-switch') ||
+                      target.closest('.mrd-delete-btn')
+                    ) {
                       return;
                     }
                     if (expanded) closeConfig();
@@ -423,15 +616,44 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                   style={{ cursor: 'pointer' }}
                 >
                   <div className={`${styles.mrdModelInfo} mrd-model-info`}>
-                    <span className={`${styles.mrdModelName} mrd-model-name`}>{display}</span>
+                    <span className={`${styles.mrdModelName} mrd-model-name`}>
+                      {display}
+                    </span>
                     <div className="mrd-model-meta">
-                      {showCtx && <span className={`${styles.mrdCtxPill} mrd-ctx-pill`}>{liveCtxLabel}</span>}
-                      {meta.capabilities?.tools && <span className={`${styles.mrdCapTag} mrd-cap-tag`} aria-label="支持工具调用"><Lucide.Wrench size={10} /></span>}
-                      {meta.capabilities?.vision && <span className={`${styles.mrdCapTag} mrd-cap-tag`} aria-label="支持视觉"><Lucide.Eye size={10} /></span>}
-                      {meta.capabilities?.reasoning && <span className={`${styles.mrdCapTag} mrd-cap-tag`} aria-label="支持思考"><Lucide.BrainCircuit size={10} /></span>}
+                      {showCtx && (
+                        <span className={`${styles.mrdCtxPill} mrd-ctx-pill`}>
+                          {liveCtxLabel}
+                        </span>
+                      )}
+                      {meta.capabilities?.tools && (
+                        <span
+                          className={`${styles.mrdCapTag} mrd-cap-tag`}
+                          aria-label="支持工具调用"
+                        >
+                          <Lucide.Wrench size={10} />
+                        </span>
+                      )}
+                      {meta.capabilities?.vision && (
+                        <span
+                          className={`${styles.mrdCapTag} mrd-cap-tag`}
+                          aria-label="支持视觉"
+                        >
+                          <Lucide.Eye size={10} />
+                        </span>
+                      )}
+                      {meta.capabilities?.reasoning && (
+                        <span
+                          className={`${styles.mrdCapTag} mrd-cap-tag`}
+                          aria-label="支持思考"
+                        >
+                          <Lucide.BrainCircuit size={10} />
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <div className={`${styles.mrdModelActions} mrd-model-actions`}>
+                  <div
+                    className={`${styles.mrdModelActions} mrd-model-actions`}
+                  >
                     <Tooltip content={off ? '已停用，点击启用' : '点击停用'}>
                       <button
                         type="button"
@@ -450,8 +672,18 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                       <button
                         type="button"
                         className="ui-btn ui-btn-ghost ui-btn-sm"
-                        style={{ padding: '0 5px', height: '26px', color: expanded ? 'var(--accent-primary)' : 'var(--text-tertiary)' }}
-                        onClick={(e) => { e.stopPropagation(); if (expanded) closeConfig(); else openConfigFor(m); }}
+                        style={{
+                          padding: '0 5px',
+                          height: '26px',
+                          color: expanded
+                            ? 'var(--accent-primary)'
+                            : 'var(--text-tertiary)',
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (expanded) closeConfig();
+                          else openConfigFor(m);
+                        }}
                       >
                         <Lucide.SlidersHorizontal size={13} />
                       </button>
@@ -460,8 +692,17 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                       <button
                         type="button"
                         className="ui-btn ui-btn-ghost ui-btn-sm mrd-delete-btn"
-                        style={{ padding: '0 5px', height: '26px', color: 'var(--text-tertiary)' }}
-                        onClick={(e) => { e.stopPropagation(); removeModelFromProfile(selected.id, m); if (configOpenId === m) closeConfig(); refresh(); }}
+                        style={{
+                          padding: '0 5px',
+                          height: '26px',
+                          color: 'var(--text-tertiary)',
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeModelFromProfile(selected.id, m);
+                          if (configOpenId === m) closeConfig();
+                          refresh();
+                        }}
                       >
                         <Lucide.Trash2 size={13} />
                       </button>
@@ -470,15 +711,42 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
 
                   {/* Expanded config sub-panel */}
                   {expanded && cfgDraft && (
-                    <div className={`${styles.modelConfigPanel} mrd-model-cfg`} onClick={(e) => e.stopPropagation()}>
+                    <div
+                      className={`${styles.modelConfigPanel} mrd-model-cfg`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <div className={`${styles.mrdCfgFields} mrd-cfg-fields`}>
-                        <label className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
+                        <label
+                          className={`${styles.mrdCfgLabel} mrd-cfg-label`}
+                        >
                           <span>展示名称</span>
-                          <input className={`${styles.mrdFieldInput} mrd-field-input`} value={cfgDraft.displayName} placeholder={m} onChange={(e) => setCfgDraft((d) => d ? ({ ...d, displayName: e.target.value }) : null)} />
+                          <input
+                            className={`${styles.mrdFieldInput} mrd-field-input`}
+                            value={cfgDraft.displayName}
+                            placeholder={m}
+                            onChange={(e) =>
+                              setCfgDraft((d) =>
+                                d ? { ...d, displayName: e.target.value } : null
+                              )
+                            }
+                          />
                         </label>
-                        <label className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
+                        <label
+                          className={`${styles.mrdCfgLabel} mrd-cfg-label`}
+                        >
                           <span>上下文长度</span>
-                          <input className={`${styles.mrdFieldInput} mrd-field-input`} value={cfgDraft.contextLength} placeholder="如 1000000" onChange={(e) => setCfgDraft((d) => d ? ({ ...d, contextLength: e.target.value }) : null)} />
+                          <input
+                            className={`${styles.mrdFieldInput} mrd-field-input`}
+                            value={cfgDraft.contextLength}
+                            placeholder="如 1000000"
+                            onChange={(e) =>
+                              setCfgDraft((d) =>
+                                d
+                                  ? { ...d, contextLength: e.target.value }
+                                  : null
+                              )
+                            }
+                          />
                         </label>
                       </div>
                       <div className={`${styles.mrdCfgFooter} mrd-cfg-footer`}>
@@ -486,14 +754,36 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                           {MODEL_CAPABILITY_OPTIONS.map((opt) => {
                             const on = !!cfgDraft.caps[opt.key];
                             return (
-                              <label key={opt.key} className={`${styles.mrdCapPill} mrd-cap-pill ${on ? styles.isOn + ' is-on' : ''}`}>
-                                <input type="checkbox" style={{ display: 'none' }} checked={on} onChange={(e) => setCfgDraft((d) => d ? ({ ...d, caps: { ...d.caps, [opt.key]: e.target.checked } }) : null)} />
+                              <label
+                                key={opt.key}
+                                className={`${styles.mrdCapPill} mrd-cap-pill ${on ? styles.isOn + ' is-on' : ''}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  style={{ display: 'none' }}
+                                  checked={on}
+                                  onChange={(e) =>
+                                    setCfgDraft((d) =>
+                                      d
+                                        ? {
+                                            ...d,
+                                            caps: {
+                                              ...d.caps,
+                                              [opt.key]: e.target.checked,
+                                            },
+                                          }
+                                        : null
+                                    )
+                                  }
+                                />
                                 {opt.label}
                               </label>
                             );
                           })}
                         </div>
-                        <div className={`${styles.mrdCfgActions} mrd-cfg-actions`}>
+                        <div
+                          className={`${styles.mrdCfgActions} mrd-cfg-actions`}
+                        >
                           {meta.lastTest && (
                             <span
                               style={{
@@ -504,27 +794,55 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
                                 color: !meta.lastTest.ok
                                   ? 'var(--accent-red)'
                                   : (meta.lastTest.latencyMs || 0) < 400
-                                  ? 'var(--accent-green)'
-                                  : (meta.lastTest.latencyMs || 0) < 1200
-                                  ? 'var(--accent-orange)'
-                                  : 'var(--accent-red)'
+                                    ? 'var(--accent-green)'
+                                    : (meta.lastTest.latencyMs || 0) < 1200
+                                      ? 'var(--accent-orange)'
+                                      : 'var(--accent-red)',
                               }}
-                              title={meta.lastTest.error || (meta.lastTest.ok ? '测试成功' : '测试失败')}
+                              title={
+                                meta.lastTest.error ||
+                                (meta.lastTest.ok ? '测试成功' : '测试失败')
+                              }
                             >
                               {meta.lastTest.ok
                                 ? `${meta.lastTest.latencyMs}ms`
-                                : meta.lastTest.error?.includes('超时') || meta.lastTest.error?.includes('timeout')
-                                ? '超时'
-                                : '失败'}
+                                : meta.lastTest.error?.includes('超时') ||
+                                    meta.lastTest.error?.includes('timeout')
+                                  ? '超时'
+                                  : '失败'}
                             </span>
                           )}
                           <Tooltip content="测试连通性">
-                            <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" disabled={testBusy === tKey} onClick={() => void runTest(m)}>
-                              {testBusy === tKey ? <Lucide.Loader2 size={13} className={styles.loadingSpinner} /> : <Lucide.Wifi size={13} />}
+                            <button
+                              type="button"
+                              className="ui-btn ui-btn-ghost ui-btn-sm"
+                              disabled={testBusy === tKey}
+                              onClick={() => void runTest(m)}
+                            >
+                              {testBusy === tKey ? (
+                                <Lucide.Loader2
+                                  size={13}
+                                  className={styles.loadingSpinner}
+                                />
+                              ) : (
+                                <Lucide.Wifi size={13} />
+                              )}
                             </button>
                           </Tooltip>
-                          <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" onClick={closeConfig}>收起</button>
-                          <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={saveConfig}>保存</button>
+                          <button
+                            type="button"
+                            className="ui-btn ui-btn-ghost ui-btn-sm"
+                            onClick={closeConfig}
+                          >
+                            收起
+                          </button>
+                          <button
+                            type="button"
+                            className="ui-btn ui-btn-secondary ui-btn-sm"
+                            onClick={saveConfig}
+                          >
+                            保存
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -534,10 +852,14 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
             })}
 
             {modelsCount === 0 && (
-              <div className={`${styles.mrdModelEmpty} mrd-model-empty`}>暂无模型 · 点击右上角「+」手动添加</div>
+              <div className={`${styles.mrdModelEmpty} mrd-model-empty`}>
+                暂无模型 · 点击右上角「+」手动添加
+              </div>
             )}
             {modelsCount > 0 && modelsList.length === 0 && (
-              <div className={`${styles.mrdModelEmpty} mrd-model-empty`}>无匹配的「{modelFilter.trim()}」</div>
+              <div className={`${styles.mrdModelEmpty} mrd-model-empty`}>
+                无匹配的「{modelFilter.trim()}」
+              </div>
             )}
           </div>
         </div>

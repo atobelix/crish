@@ -30,13 +30,18 @@ describe('pricingStore 4D', () => {
 
   it('resolveModelPrice exact + fuzzy match', () => {
     expect(resolveModelPrice('test-model')?.inputPerMTok).toBe(10);
-    expect(resolveModelPrice('prefix-test-model-suffix')?.model).toBe('test-model');
+    expect(resolveModelPrice('prefix-test-model-suffix')?.model).toBe(
+      'test-model'
+    );
     expect(resolveModelPrice('no-such-model')).toBeNull();
   });
 
   it('estimateCostUsd is 2D full price (no cache)', () => {
     // 1e6 prompt + 1e6 completion → 10 + 20 = 30
-    expect(estimateCostUsd('test-model', 1_000_000, 1_000_000)).toBeCloseTo(30, 8);
+    expect(estimateCostUsd('test-model', 1_000_000, 1_000_000)).toBeCloseTo(
+      30,
+      8
+    );
   });
 
   it('estimateCostUsd4d with zero cache equals 2D', () => {
@@ -49,7 +54,10 @@ describe('pricingStore 4D', () => {
     // prompt=1000, completion=200, read=400, write=100
     // nonCached=500
     const expected =
-      (500 / 1e6) * 10 + (200 / 1e6) * 20 + (100 / 1e6) * 12.5 + (400 / 1e6) * 1;
+      (500 / 1e6) * 10 +
+      (200 / 1e6) * 20 +
+      (100 / 1e6) * 12.5 +
+      (400 / 1e6) * 1;
     const got = estimateCostUsd4d('test-model', 1000, 200, 400, 100);
     expect(got).toBeCloseTo(expected, 12);
     expect(DEFAULT_CACHE_READ_MULTIPLIER).toBe(0.1);
@@ -62,8 +70,20 @@ describe('pricingStore 4D', () => {
     const read = 400;
     const write = 0;
     const full = estimateCostUsd('test-model', prompt, completion);
-    const actual = estimateCostUsd4d('test-model', prompt, completion, read, write);
-    const save = estimateSavingsUsd('test-model', prompt, completion, read, write);
+    const actual = estimateCostUsd4d(
+      'test-model',
+      prompt,
+      completion,
+      read,
+      write
+    );
+    const save = estimateSavingsUsd(
+      'test-model',
+      prompt,
+      completion,
+      read,
+      write
+    );
     expect(save).toBeCloseTo(Math.max(0, full - actual), 12);
     // read cheaper than full input → positive savings
     expect(save).toBeGreaterThan(0);
@@ -87,9 +107,9 @@ describe('pricingStore 4D', () => {
 
   it('DEFAULT_PRICES still loads when LS empty', () => {
     localStorage.removeItem(PRICES_KEY);
-    const hit = resolveModelPrice('gpt-4o');
+    const hit = resolveModelPrice('gpt-5.6');
     expect(hit?.inputPerMTok).toBe(
-      DEFAULT_PRICES.find((p) => p.model === 'gpt-4o')?.inputPerMTok,
+      DEFAULT_PRICES.find((p) => p.model === 'gpt-5.6')?.inputPerMTok
     );
   });
 
@@ -98,7 +118,10 @@ describe('pricingStore 4D', () => {
       cacheReadMultiplier: DEFAULT_CACHE_READ_MULTIPLIER,
       cacheWriteMultiplier: DEFAULT_CACHE_WRITE_MULTIPLIER,
     });
-    saveCachePriceOpts({ cacheReadMultiplier: 0.05, cacheWriteMultiplier: 1.5 });
+    saveCachePriceOpts({
+      cacheReadMultiplier: 0.05,
+      cacheWriteMultiplier: 1.5,
+    });
     expect(loadCachePriceOpts()).toEqual({
       cacheReadMultiplier: 0.05,
       cacheWriteMultiplier: 1.5,
@@ -107,7 +130,10 @@ describe('pricingStore 4D', () => {
     // nonCached=600; Pcr=10*0.05=0.5
     // cost = 600/1e6*10 + 400/1e6*0.5
     const expected = (600 / 1e6) * 10 + (400 / 1e6) * 0.5;
-    expect(estimateCostUsd4d('test-model', 1000, 0, 400, 0)).toBeCloseTo(expected, 12);
+    expect(estimateCostUsd4d('test-model', 1000, 0, 400, 0)).toBeCloseTo(
+      expected,
+      12
+    );
   });
 
   it('saveCachePriceOpts rejects negative / NaN with defaults', () => {

@@ -40,12 +40,14 @@ export type ModelMeta = {
   contextLength?: number | undefined;
   /** 支持的能力 */
   capabilities?: ModelCapabilities | undefined;
-  lastTest?: {
-    ok: boolean;
-    latencyMs?: number | undefined;
-    at: number;
-    error?: string | undefined;
-  } | undefined;
+  lastTest?:
+    | {
+        ok: boolean;
+        latencyMs?: number | undefined;
+        at: number;
+        error?: string | undefined;
+      }
+    | undefined;
 };
 
 /**
@@ -73,7 +75,11 @@ function metaKey(profileId: string, model: string): string {
  */
 export function normalizeModelIdText(raw: unknown): string {
   if (raw == null) return '';
-  if (typeof raw !== 'string' && typeof raw !== 'number' && typeof raw !== 'boolean') {
+  if (
+    typeof raw !== 'string' &&
+    typeof raw !== 'number' &&
+    typeof raw !== 'boolean'
+  ) {
     return '';
   }
   let s = String(raw);
@@ -88,7 +94,8 @@ export function normalizeModelIdText(raw: unknown): string {
 export function normalizeModelIds(raw: unknown): string[] {
   if (!raw) return [];
   if (Array.isArray(raw)) return raw.map(normalizeModelIdText).filter(Boolean);
-  if (typeof raw === 'string') return raw.split(',').map(normalizeModelIdText).filter(Boolean);
+  if (typeof raw === 'string')
+    return raw.split(',').map(normalizeModelIdText).filter(Boolean);
   return [];
 }
 
@@ -104,7 +111,7 @@ export function mergeModelIds(...lists: unknown[]): string[] {
 
 /** 目录项去重键：profileId::model（与 meta 存储键同形） */
 export function catalogEntryKey(
-  entry: Pick<CatalogModelEntry, 'profileId' | 'model'> | null | undefined,
+  entry: Pick<CatalogModelEntry, 'profileId' | 'model'> | null | undefined
 ): string {
   if (!entry) return '';
   const profileId = normalizeModelIdText(entry.profileId);
@@ -118,7 +125,7 @@ export function catalogEntryKey(
  * profileId / model 必填；空 name 回退 profileId；非法 → null。
  */
 export function normalizeCatalogEntry(
-  raw: Partial<CatalogModelEntry> | null | undefined,
+  raw: Partial<CatalogModelEntry> | null | undefined
 ): CatalogModelEntry | null {
   if (!raw || typeof raw !== 'object') return null;
   const profileId = normalizeModelIdText(raw.profileId);
@@ -153,7 +160,7 @@ export function normalizeCatalogEntries(list: unknown): CatalogModelEntry[] {
  * 不合并跨供应商的同名 model（id 可撞名）。
  */
 export function dedupeCatalogEntries(
-  list: readonly CatalogModelEntry[] | null | undefined,
+  list: readonly CatalogModelEntry[] | null | undefined
 ): CatalogModelEntry[] {
   if (!list || list.length === 0) return [];
   const seen = new Set<string>();
@@ -177,7 +184,7 @@ export type UsableCatalogOpts = {
 /** 目录项是否可用（纯）：非空 id + 可选密钥要求 */
 export function isUsableCatalogEntry(
   entry: CatalogModelEntry | null | undefined,
-  opts?: UsableCatalogOpts,
+  opts?: UsableCatalogOpts
 ): boolean {
   if (!entry) return false;
   const profileId = normalizeModelIdText(entry.profileId);
@@ -190,7 +197,7 @@ export function isUsableCatalogEntry(
 /** 过滤可用目录项（纯） */
 export function filterUsableCatalogEntries(
   list: readonly CatalogModelEntry[] | null | undefined,
-  opts?: UsableCatalogOpts,
+  opts?: UsableCatalogOpts
 ): CatalogModelEntry[] {
   if (!list || list.length === 0) return [];
   return list.filter((e) => isUsableCatalogEntry(e, opts));
@@ -213,7 +220,7 @@ export type PickDefaultCatalogOpts = {
  */
 export function pickDefaultCatalogEntry(
   list: readonly CatalogModelEntry[] | null | undefined,
-  opts?: PickDefaultCatalogOpts,
+  opts?: PickDefaultCatalogOpts
 ): CatalogModelEntry | null {
   const usable = filterUsableCatalogEntries(dedupeCatalogEntries(list ?? []), {
     requireKey: opts?.requireKey,
@@ -224,7 +231,9 @@ export function pickDefaultCatalogEntry(
   const prefModel = normalizeModelIdText(opts?.preferredModel ?? '');
 
   if (prefProfile && prefModel) {
-    const hit = usable.find((e) => e.profileId === prefProfile && e.model === prefModel);
+    const hit = usable.find(
+      (e) => e.profileId === prefProfile && e.model === prefModel
+    );
     if (hit) return hit;
   }
   if (prefModel) {
@@ -250,11 +259,14 @@ export function pickDefaultCatalogEntry(
  * 结果已经 normalize + dedupe + usable。
  */
 export function buildCatalogEntriesFromProfiles(
-  profiles: readonly Pick<
-    ProviderProfile,
-    'id' | 'name' | 'models' | 'enabled' | 'hasKey' | 'apiKey'
-  >[] | null | undefined,
-  isModelEnabled?: (profileId: string, model: string) => boolean,
+  profiles:
+    | readonly Pick<
+        ProviderProfile,
+        'id' | 'name' | 'models' | 'enabled' | 'hasKey' | 'apiKey'
+      >[]
+    | null
+    | undefined,
+  isModelEnabled?: (profileId: string, model: string) => boolean
 ): CatalogModelEntry[] {
   if (!profiles || profiles.length === 0) return [];
   const raw: CatalogModelEntry[] = [];
@@ -263,7 +275,9 @@ export function buildCatalogEntriesFromProfiles(
     const profileId = normalizeModelIdText(p.id);
     if (!profileId) continue;
     const profileName = normalizeModelIdText(p.name) || profileId;
-    const hasKey = Boolean(p.hasKey || (typeof p.apiKey === 'string' && p.apiKey.trim()));
+    const hasKey = Boolean(
+      p.hasKey || (typeof p.apiKey === 'string' && p.apiKey.trim())
+    );
     const models = Array.isArray(p.models) ? p.models : [];
     for (const m of models) {
       const model = normalizeModelIdText(m);
@@ -277,10 +291,12 @@ export function buildCatalogEntriesFromProfiles(
 
 /** 展示标签：「供应商 · 模型」；空 → 中文「未选择模型」 */
 export function catalogEntryDisplayLabel(
-  entry: CatalogModelEntry | null | undefined,
+  entry: CatalogModelEntry | null | undefined
 ): string {
   if (!entry) return '未选择模型';
-  const name = normalizeModelIdText(entry.profileName) || normalizeModelIdText(entry.profileId);
+  const name =
+    normalizeModelIdText(entry.profileName) ||
+    normalizeModelIdText(entry.profileId);
   const model = normalizeModelIdText(entry.model);
   if (!name && !model) return '未选择模型';
   if (!name) return model;
@@ -289,18 +305,21 @@ export function catalogEntryDisplayLabel(
 }
 
 /** 启用状态中文标签（纯） */
-export function formatModelEnabledLabel(enabled: boolean | null | undefined): string {
+export function formatModelEnabledLabel(
+  enabled: boolean | null | undefined
+): string {
   return enabled === false ? '已禁用' : '已启用';
 }
 
 /** 连通测试结果中文标签（纯） */
 export function formatLastTestLabel(
-  lastTest: ModelMeta['lastTest'] | null | undefined,
+  lastTest: ModelMeta['lastTest'] | null | undefined
 ): string {
   if (!lastTest) return '未测试';
   if (lastTest.ok) {
     const ms =
-      typeof lastTest.latencyMs === 'number' && Number.isFinite(lastTest.latencyMs)
+      typeof lastTest.latencyMs === 'number' &&
+      Number.isFinite(lastTest.latencyMs)
         ? ` ${Math.round(lastTest.latencyMs)}ms`
         : '';
     return `连通正常${ms}`;
@@ -314,9 +333,11 @@ export function formatLastTestLabel(
  * 调用方据此不得注入硬编码演示默认。
  */
 export function isEmptyCatalog(
-  list: readonly CatalogModelEntry[] | null | undefined,
+  list: readonly CatalogModelEntry[] | null | undefined
 ): boolean {
-  return filterUsableCatalogEntries(dedupeCatalogEntries(list ?? [])).length === 0;
+  return (
+    filterUsableCatalogEntries(dedupeCatalogEntries(list ?? [])).length === 0
+  );
 }
 
 function loadMap(): MetaMap {
@@ -338,22 +359,27 @@ function saveMap(map: MetaMap) {
   }
 }
 
-/** 常见模型默认上下文（仅作缺省展示，可被扫描/手改覆盖） */
+/**
+ * 常见模型默认上下文（仅作缺省展示，可被扫描/手改覆盖）。
+ * 来源：docs/cache-optimization/00-vendor-model-pricing-catalog.md（2026-08-02）：
+ * - gpt-5.6 / gpt-5.5：§2.2（1,050,000）；gpt-4.1 仍受 §2.1 24h 保留支持，沿用 1M
+ * - claude-sonnet-5 / claude-haiku-4-5：§1.4（litellm 副本）；opus-4-5 / sonnet-4-5 沿用 200k
+ * - deepseek-v4-flash / deepseek-v4-pro：§3.1（1,000,000）
+ * - gemini-3.x 窗口 catalog 未收录，沿用旧值 1M（风险项，见 R0.5 审计）
+ */
 const KNOWN_CONTEXT: Record<string, number> = {
-  'gpt-4o': 128_000,
-  'gpt-4o-mini': 128_000,
+  'gpt-5.6': 1_050_000,
+  'gpt-5.5': 1_050_000,
   'gpt-4.1': 1_000_000,
-  'o1': 200_000,
-  'o3-mini': 200_000,
+  'claude-sonnet-5': 1_000_000,
+  'claude-haiku-4-5': 200_000,
+  'claude-opus-4-5': 200_000,
   'claude-sonnet-4-5': 200_000,
-  'claude-opus-4': 200_000,
-  'claude-3-5-sonnet': 200_000,
-  'deepseek-chat': 64_000,
-  'deepseek-v4-flash': 128_000,
-  'deepseek-reasoner': 64_000,
+  'deepseek-v4-flash': 1_000_000,
+  'deepseek-v4-pro': 1_000_000,
   'mimo-v2.5': 128_000,
-  'gemini-1.5-pro': 1_000_000,
-  'gemini-2.0-flash': 1_000_000,
+  'gemini-3.6-flash': 1_000_000,
+  'gemini-3.5-flash': 1_000_000,
 };
 
 export function guessContextLength(model: string): number | undefined {
@@ -414,8 +440,11 @@ export function upsertModelMeta(
   profileId: string,
   model: string,
   patch: Partial<
-    Pick<ModelMeta, 'enabled' | 'contextLength' | 'lastTest' | 'displayName' | 'capabilities'>
-  >,
+    Pick<
+      ModelMeta,
+      'enabled' | 'contextLength' | 'lastTest' | 'displayName' | 'capabilities'
+    >
+  >
 ): ModelMeta {
   const map = loadMap();
   const k = metaKey(profileId, model);
@@ -440,14 +469,18 @@ export function upsertModelMeta(
   return next;
 }
 
-export function setModelEnabled(profileId: string, model: string, enabled: boolean): ModelMeta {
+export function setModelEnabled(
+  profileId: string,
+  model: string,
+  enabled: boolean
+): ModelMeta {
   return upsertModelMeta(profileId, model, { enabled });
 }
 
 export function setModelContextLength(
   profileId: string,
   model: string,
-  contextLength: number | undefined,
+  contextLength: number | undefined
 ): ModelMeta {
   return upsertModelMeta(profileId, model, { contextLength });
 }
@@ -455,7 +488,7 @@ export function setModelContextLength(
 export function setModelDisplayName(
   profileId: string,
   model: string,
-  displayName: string | undefined,
+  displayName: string | undefined
 ): ModelMeta {
   return upsertModelMeta(profileId, model, {
     displayName: displayName?.trim() || undefined,
@@ -466,7 +499,7 @@ export function setModelCapability(
   profileId: string,
   model: string,
   key: ModelCapabilityKey,
-  on: boolean,
+  on: boolean
 ): ModelMeta {
   const prev = getModelMeta(profileId, model);
   return upsertModelMeta(profileId, model, {
@@ -478,7 +511,7 @@ export function setModelCapability(
 export function moveModelMeta(
   profileId: string,
   fromModel: string,
-  toModel: string,
+  toModel: string
 ): ModelMeta | null {
   const from = normalizeModelIdText(fromModel);
   const to = normalizeModelIdText(toModel);
@@ -496,7 +529,7 @@ export function moveModelMeta(
 export function formatModelDisplayName(
   profileId: string,
   model: string,
-  meta?: ModelMeta | null,
+  meta?: ModelMeta | null
 ): string {
   const m = meta || getModelMeta(profileId, model);
   const dn = typeof m.displayName === 'string' ? m.displayName.trim() : '';
@@ -504,7 +537,9 @@ export function formatModelDisplayName(
 }
 
 /** 能力摘要，如「工具 · 视觉」；全关/无 → 空串 */
-export function formatCapabilitiesLabel(caps?: ModelCapabilities | null): string {
+export function formatCapabilitiesLabel(
+  caps?: ModelCapabilities | null
+): string {
   if (!caps) return '';
   const parts: string[] = [];
   for (const opt of MODEL_CAPABILITY_OPTIONS) {
@@ -519,7 +554,8 @@ export function formatCapabilitiesLabel(caps?: ModelCapabilities | null): string
  */
 export function formatContextLabel(n?: number | null): string {
   if (n == null || !Number.isFinite(n) || n <= 0) return '—';
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (n >= 1_000_000)
+    return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
   if (n >= 1000) return `${Math.round(n / 1000)}k`;
   return String(Math.round(n));
 }
@@ -561,7 +597,7 @@ function chatCompletionsUrl(baseUrl: string): string {
  */
 async function httpRequest(
   url: string,
-  init: { method: string; headers?: Record<string, string>; body?: string },
+  init: { method: string; headers?: Record<string, string>; body?: string }
 ): Promise<{ ok: boolean; status: number; text: string }> {
   const method = (init.method || 'GET').toUpperCase();
   // GET/HEAD 不要带 Content-Type，避免多余 preflight（直连时）
@@ -572,15 +608,16 @@ async function httpRequest(
   }
 
   // 1) 桌面壳原生 HTTP（命令未注册 / 非 Tauri → missing，fallthrough 代理）
-  const tauriRes = await invokeResult<{ ok?: boolean; status?: number; body?: string }>(
-    'workbench_http_request',
-    {
-      url,
-      method,
-      headers,
-      body: init.body ?? null,
-    },
-  );
+  const tauriRes = await invokeResult<{
+    ok?: boolean;
+    status?: number;
+    body?: string;
+  }>('workbench_http_request', {
+    url,
+    method,
+    headers,
+    body: init.body ?? null,
+  });
   if (tauriRes.status === 'ok') {
     const res = tauriRes.data;
     return {
@@ -686,7 +723,7 @@ function ensureOpenAiCompatibleRoot(baseUrl: string): string {
 
 /** 扫描提供商模型列表（OpenAI 兼容 /models） */
 export async function scanProviderModels(
-  profile: ProviderProfile,
+  profile: ProviderProfile
 ): Promise<{ ok: boolean; models: string[]; error?: string }> {
   // 始终用本地最新 profile（含密钥），避免 UI 态过期
   const fresh = loadProfiles().find((p) => p.id === profile.id) || profile;
@@ -721,13 +758,21 @@ export async function scanProviderModels(
       };
     }
     let data: {
-      data?: Array<{ id?: string; context_length?: number; max_model_len?: number }>;
+      data?: Array<{
+        id?: string;
+        context_length?: number;
+        max_model_len?: number;
+      }>;
       models?: Array<{ id?: string } | string>;
     };
     try {
       data = JSON.parse(res.text) as typeof data;
     } catch {
-      return { ok: false, models: [], error: '响应不是 JSON，请检查 Base URL 是否指向 API 根路径' };
+      return {
+        ok: false,
+        models: [],
+        error: '响应不是 JSON，请检查 Base URL 是否指向 API 根路径',
+      };
     }
     const rawList = Array.isArray(data.data)
       ? data.data
@@ -745,9 +790,11 @@ export async function scanProviderModels(
         if (!id) continue;
         models.push(id);
         const ctx =
-          typeof (item as { context_length?: number }).context_length === 'number'
+          typeof (item as { context_length?: number }).context_length ===
+          'number'
             ? (item as { context_length: number }).context_length
-            : typeof (item as { max_model_len?: number }).max_model_len === 'number'
+            : typeof (item as { max_model_len?: number }).max_model_len ===
+                'number'
               ? (item as { max_model_len: number }).max_model_len
               : undefined;
         if (ctx && ctx > 0) {
@@ -755,7 +802,9 @@ export async function scanProviderModels(
         }
       }
     }
-    const unique = Array.from(new Set(models)).sort((a, b) => a.localeCompare(b));
+    const unique = Array.from(new Set(models)).sort((a, b) =>
+      a.localeCompare(b)
+    );
     for (const m of unique) {
       const ctx = guessContextLength(m);
       const caps = guessModelCapabilities(m);
@@ -773,7 +822,7 @@ export async function scanProviderModels(
 /** 轻量连通测试：发极短 completion */
 export async function testProviderModel(
   profile: ProviderProfile,
-  model: string,
+  model: string
 ): Promise<{ ok: boolean; latencyMs?: number; error?: string }> {
   const fresh = loadProfiles().find((p) => p.id === profile.id) || profile;
   // K-01：明文只经会话内内存缓存（saveProfileKey 写入）；profile 对象不再带 apiKey
@@ -781,9 +830,7 @@ export async function testProviderModel(
   if (!key) {
     const r = {
       ok: false,
-      error: fresh.hasKey
-        ? '密钥未载入，请重新输入并点「保存」'
-        : '未配置密钥',
+      error: fresh.hasKey ? '密钥未载入，请重新输入并点「保存」' : '未配置密钥',
     };
     upsertModelMeta(fresh.id, model, {
       lastTest: { ok: false, at: Date.now(), error: r.error },
@@ -808,14 +855,22 @@ export async function testProviderModel(
   }
 
   // Define timeout promise of 5 seconds
-  const timeoutPromise = new Promise<{ ok: boolean; latencyMs?: number; error?: string }>((_, reject) => {
+  const timeoutPromise = new Promise<{
+    ok: boolean;
+    latencyMs?: number;
+    error?: string;
+  }>((_, reject) => {
     setTimeout(() => {
       reject(new Error('连接超时（超过 5 秒）'));
     }, 5000);
   });
 
   // T03.7：probe-provider-chat 幽灵命令已删，HTTP 直连为唯一路径
-  const doTest = async (): Promise<{ ok: boolean; latencyMs?: number; error?: string }> => {
+  const doTest = async (): Promise<{
+    ok: boolean;
+    latencyMs?: number;
+    error?: string;
+  }> => {
     const started = performance.now();
     const res = await httpRequest(url, {
       method: 'POST',
@@ -866,16 +921,21 @@ export function listPickerProfiles(): ProviderProfile[] {
  * 空列表时返回 []（调用方不得回落 mimo 等硬编码默认）。
  */
 export function listAvailablePickerModels(): CatalogModelEntry[] {
-  return buildCatalogEntriesFromProfiles(listPickerProfiles(), (profileId, model) => {
-    const meta = getModelMeta(profileId, model);
-    return meta.enabled !== false;
-  });
+  return buildCatalogEntriesFromProfiles(
+    listPickerProfiles(),
+    (profileId, model) => {
+      const meta = getModelMeta(profileId, model);
+      return meta.enabled !== false;
+    }
+  );
 }
 
 /**
  * 从当前本机目录挑选默认模型（读 LS，无副作用）。
  * 空 catalog → null，**不**发明远程 vendor 默认。
  */
-export function pickDefaultFromLocalCatalog(opts?: PickDefaultCatalogOpts): CatalogModelEntry | null {
+export function pickDefaultFromLocalCatalog(
+  opts?: PickDefaultCatalogOpts
+): CatalogModelEntry | null {
   return pickDefaultCatalogEntry(listAvailablePickerModels(), opts);
 }

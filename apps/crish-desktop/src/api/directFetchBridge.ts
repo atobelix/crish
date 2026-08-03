@@ -34,7 +34,9 @@ import { getActiveModelId, getActiveProfile } from './providerProfiles';
 import { useSettingsStore } from '../store';
 
 /** 递归规范化与确定性排序 JSON Schema 键名与 required 数组 */
-export function canonicalizeJsonSchema(schema: Record<string, unknown> | undefined): Record<string, unknown> {
+export function canonicalizeJsonSchema(
+  schema: Record<string, unknown> | undefined
+): Record<string, unknown> {
   if (!schema || typeof schema !== 'object') {
     return { type: 'object', properties: {} };
   }
@@ -46,7 +48,9 @@ export function canonicalizeJsonSchema(schema: Record<string, unknown> | undefin
 
   if (schema.properties && typeof schema.properties === 'object') {
     const sortedProps: Record<string, unknown> = {};
-    const keys = Object.keys(schema.properties as Record<string, unknown>).sort();
+    const keys = Object.keys(
+      schema.properties as Record<string, unknown>
+    ).sort();
     for (const key of keys) {
       sortedProps[key] = (schema.properties as Record<string, unknown>)[key];
     }
@@ -61,9 +65,15 @@ export function canonicalizeJsonSchema(schema: Record<string, unknown> | undefin
 }
 
 /** 格式化确定性排序的 Tool 定义 */
-export function formatStableTools(tools?: Array<{ name: string; description: string; inputSchema?: Record<string, unknown> }>) {
+export function formatStableTools(
+  tools?: Array<{
+    name: string;
+    description: string;
+    inputSchema?: Record<string, unknown>;
+  }>
+) {
   if (!tools || tools.length === 0) return undefined;
-  
+
   const sorted = [...tools].sort((a, b) => a.name.localeCompare(b.name));
   return sorted.map((t) => ({
     type: 'function',
@@ -76,8 +86,14 @@ export function formatStableTools(tools?: Array<{ name: string; description: str
 }
 
 /** 构建前缀 Hash 键，用于 OpenAI / DeepSeek Prompt Cache Affinity */
-export function buildStableCacheKey(systemPrompt?: string, tools?: ReturnType<typeof formatStableTools>): string {
-  const payload = JSON.stringify({ systemPrompt: systemPrompt || '', tools: tools || [] });
+export function buildStableCacheKey(
+  systemPrompt?: string,
+  tools?: ReturnType<typeof formatStableTools>
+): string {
+  const payload = JSON.stringify({
+    systemPrompt: systemPrompt || '',
+    tools: tools || [],
+  });
   let hash = 0x811c9dc5;
   for (let i = 0; i < payload.length; i++) {
     hash ^= payload.charCodeAt(i);
@@ -143,7 +159,7 @@ export function streamViaDirectFetch(
   callbacks: StreamCallbacks,
   sessionId: string,
   assistantMsgId: string,
-  options?: StreamRequestOptions,
+  options?: StreamRequestOptions
 ): () => void {
   void sessionId;
   void assistantMsgId;
@@ -151,10 +167,14 @@ export function streamViaDirectFetch(
   let finished = false;
 
   const activeProfile = getActiveProfile();
-  const activeModel = getActiveModelId() || 'deepseek-chat';
+  const activeModel = getActiveModelId() || 'deepseek-v4-flash';
 
-  if (!activeProfile || (!activeProfile.apiKey && !activeProfile.oauthToken?.accessToken)) {
-    const errorMsg = '未检测到 Daemon 服务，且尚未配置活动服务商与 API Key/OAuth Token。请在设置 → 模型中配置。';
+  if (
+    !activeProfile ||
+    (!activeProfile.apiKey && !activeProfile.oauthToken?.accessToken)
+  ) {
+    const errorMsg =
+      '未检测到 Daemon 服务，且尚未配置活动服务商与 API Key/OAuth Token。请在设置 → 模型中配置。';
     if (callbacks.onRunError) callbacks.onRunError(errorMsg, 'config');
     else callbacks.onChunk(errorMsg);
     callbacks.onComplete();
@@ -166,8 +186,10 @@ export function streamViaDirectFetch(
     baseUrl = `${baseUrl}/chat/completions`;
   }
 
-  const apiKey = activeProfile.apiKey || activeProfile.oauthToken?.accessToken || '';
-  const thinkingLevel = useSettingsStore.getState().appSettings?.defaultThinkingLevel;
+  const apiKey =
+    activeProfile.apiKey || activeProfile.oauthToken?.accessToken || '';
+  const thinkingLevel =
+    useSettingsStore.getState().appSettings?.defaultThinkingLevel;
   const thinkingParams = buildThinkingParams(thinkingLevel);
 
   // 1. Stable System Prompt & Tools
@@ -217,7 +239,7 @@ export function streamViaDirectFetch(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(payload),
         signal: controller.signal,
@@ -275,10 +297,14 @@ export function streamViaDirectFetch(
                   0;
                 const missTokens =
                   data.usage.prompt_cache_miss_tokens ??
-                  (data.usage.prompt_tokens ? Math.max(0, data.usage.prompt_tokens - hitTokens) : 0);
+                  (data.usage.prompt_tokens
+                    ? Math.max(0, data.usage.prompt_tokens - hitTokens)
+                    : 0);
 
                 if (hitTokens > 0 || missTokens > 0) {
-                  callbacks.onThought?.(`[KV Cache: ${hitTokens} hit / ${missTokens} miss]`);
+                  callbacks.onThought?.(
+                    `[KV Cache: ${hitTokens} hit / ${missTokens} miss]`
+                  );
                 }
               }
 
@@ -287,9 +313,15 @@ export function streamViaDirectFetch(
 
               const delta = choice.delta || {};
               // DeepSeek / Qwen / OpenAI reasoning content delta
-              if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) {
+              if (
+                typeof delta.reasoning_content === 'string' &&
+                delta.reasoning_content
+              ) {
                 callbacks.onThought(delta.reasoning_content);
-              } else if (typeof delta.reasoning === 'string' && delta.reasoning) {
+              } else if (
+                typeof delta.reasoning === 'string' &&
+                delta.reasoning
+              ) {
                 callbacks.onThought(delta.reasoning);
               } else if (typeof delta.thinking === 'string' && delta.thinking) {
                 callbacks.onThought(delta.thinking);

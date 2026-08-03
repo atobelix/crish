@@ -27,16 +27,26 @@ export const DEFAULT_CACHE_READ_MULTIPLIER = 0.1;
 /** cacheWrite token 费率相对 inputPerMTok 的默认系数 */
 export const DEFAULT_CACHE_WRITE_MULTIPLIER = 1.25;
 
-/** Official-ish defaults (USD / 1M tokens) — user-editable */
+/**
+ * Official-ish defaults (USD / 1M tokens) — user-editable.
+ *
+ * 数据来源：docs/cache-optimization/00-vendor-model-pricing-catalog.md（2026-08-02）：
+ * - gpt-5.6：§2.2（litellm 副本口径，input 5e-06 / output 3e-05）
+ * - deepseek-v4-flash / deepseek-v4-pro：§3.1
+ * - claude-haiku-4-5 / claude-sonnet-4-5 / claude-opus-4-5：§1.1
+ * - glm-5.2：§4.1（官方直连 USD 价）
+ * - grok-4.5：§6.1
+ * 注：Kimi（§5.1）、MiniMax（§7.1）、豆包（§9.1）官方价为 CNY，Qwen 命中价未获取（§11.3），均不纳入本 USD 表。
+ */
 export const DEFAULT_PRICES: ModelPrice[] = [
-  { model: 'gpt-4o', inputPerMTok: 2.5, outputPerMTok: 10 },
-  { model: 'gpt-4o-mini', inputPerMTok: 0.15, outputPerMTok: 0.6 },
-  { model: 'deepseek-chat', inputPerMTok: 0.27, outputPerMTok: 1.1 },
+  { model: 'gpt-5.6', inputPerMTok: 5, outputPerMTok: 30 },
   { model: 'deepseek-v4-flash', inputPerMTok: 0.14, outputPerMTok: 0.28 },
-  { model: 'mimo-v2.5', inputPerMTok: 0.5, outputPerMTok: 1.5 },
-  { model: 'claude-3-5-sonnet', inputPerMTok: 3, outputPerMTok: 15 },
-  { model: 'gemini-1.5-pro', inputPerMTok: 1.25, outputPerMTok: 5 },
-  { model: 'gemini-1.5-flash', inputPerMTok: 0.075, outputPerMTok: 0.3 },
+  { model: 'deepseek-v4-pro', inputPerMTok: 0.435, outputPerMTok: 0.87 },
+  { model: 'claude-haiku-4-5', inputPerMTok: 1, outputPerMTok: 5 },
+  { model: 'claude-sonnet-4-5', inputPerMTok: 3, outputPerMTok: 15 },
+  { model: 'claude-opus-4-5', inputPerMTok: 5, outputPerMTok: 25 },
+  { model: 'glm-5.2', inputPerMTok: 1.4, outputPerMTok: 4.4 },
+  { model: 'grok-4.5', inputPerMTok: 2, outputPerMTok: 6 },
 ];
 
 export function loadPrices(): ModelPrice[] {
@@ -69,7 +79,7 @@ export function resolveModelPrice(model: string): ModelPrice | null {
   const exact = prices.find((p) => p.model === model);
   if (exact) return exact;
   const fuzzy = prices.find(
-    (p) => model.includes(p.model) || p.model.includes(model),
+    (p) => model.includes(p.model) || p.model.includes(model)
   );
   return fuzzy ?? null;
 }
@@ -80,11 +90,14 @@ export function resolveModelPrice(model: string): ModelPrice | null {
 export function estimateCostUsd(
   model: string,
   inputTokens: number,
-  outputTokens: number,
+  outputTokens: number
 ): number {
   const hit = resolveModelPrice(model);
   if (!hit) return 0;
-  return (inputTokens / 1e6) * hit.inputPerMTok + (outputTokens / 1e6) * hit.outputPerMTok;
+  return (
+    (inputTokens / 1e6) * hit.inputPerMTok +
+    (outputTokens / 1e6) * hit.outputPerMTok
+  );
 }
 
 /**
@@ -101,7 +114,7 @@ export function estimateCostUsd4d(
   promptTokens: number,
   completionTokens: number,
   cacheReadTokens: number,
-  cacheWriteTokens: number,
+  cacheWriteTokens: number
 ): number {
   const hit = resolveModelPrice(model);
   if (!hit) return 0;
@@ -111,7 +124,10 @@ export function estimateCostUsd4d(
   const Pcr = inputPerMTok * opts.cacheReadMultiplier;
   const Pcw = inputPerMTok * opts.cacheWriteMultiplier;
 
-  const nonCached = Math.max(0, promptTokens - cacheReadTokens - cacheWriteTokens);
+  const nonCached = Math.max(
+    0,
+    promptTokens - cacheReadTokens - cacheWriteTokens
+  );
   return (
     (nonCached / 1e6) * inputPerMTok +
     (completionTokens / 1e6) * outputPerMTok +
@@ -128,10 +144,16 @@ export function estimateSavingsUsd(
   promptTokens: number,
   completionTokens: number,
   cacheReadTokens: number,
-  cacheWriteTokens: number,
+  cacheWriteTokens: number
 ): number {
   const full = estimateCostUsd(model, promptTokens, completionTokens);
-  const actual = estimateCostUsd4d(model, promptTokens, completionTokens, cacheReadTokens, cacheWriteTokens);
+  const actual = estimateCostUsd4d(
+    model,
+    promptTokens,
+    completionTokens,
+    cacheReadTokens,
+    cacheWriteTokens
+  );
   return Math.max(0, full - actual);
 }
 
@@ -139,17 +161,20 @@ export function estimateSavingsUsd(
 export function loadCachePriceOpts(): CachePriceOpts {
   try {
     const raw = localStorage.getItem(CACHE_OPTS_KEY);
-    if (!raw) return {
-      cacheReadMultiplier: DEFAULT_CACHE_READ_MULTIPLIER,
-      cacheWriteMultiplier: DEFAULT_CACHE_WRITE_MULTIPLIER,
-    };
+    if (!raw)
+      return {
+        cacheReadMultiplier: DEFAULT_CACHE_READ_MULTIPLIER,
+        cacheWriteMultiplier: DEFAULT_CACHE_WRITE_MULTIPLIER,
+      };
     const o = JSON.parse(raw) as Partial<CachePriceOpts>;
-    const read = typeof o.cacheReadMultiplier === 'number' && o.cacheReadMultiplier > 0
-      ? o.cacheReadMultiplier
-      : DEFAULT_CACHE_READ_MULTIPLIER;
-    const write = typeof o.cacheWriteMultiplier === 'number' && o.cacheWriteMultiplier > 0
-      ? o.cacheWriteMultiplier
-      : DEFAULT_CACHE_WRITE_MULTIPLIER;
+    const read =
+      typeof o.cacheReadMultiplier === 'number' && o.cacheReadMultiplier > 0
+        ? o.cacheReadMultiplier
+        : DEFAULT_CACHE_READ_MULTIPLIER;
+    const write =
+      typeof o.cacheWriteMultiplier === 'number' && o.cacheWriteMultiplier > 0
+        ? o.cacheWriteMultiplier
+        : DEFAULT_CACHE_WRITE_MULTIPLIER;
     return { cacheReadMultiplier: read, cacheWriteMultiplier: write };
   } catch {
     return {
@@ -163,16 +188,26 @@ export function loadCachePriceOpts(): CachePriceOpts {
  * 保存 cache 费率选项。非正数/NaN 值回落到默认值。
  * @returns 实际保存的选项（用于校验）
  */
-export function saveCachePriceOpts(opts: Partial<CachePriceOpts>): CachePriceOpts {
-  const read = typeof opts.cacheReadMultiplier === 'number' && opts.cacheReadMultiplier > 0
-    ? opts.cacheReadMultiplier
-    : DEFAULT_CACHE_READ_MULTIPLIER;
-  const write = typeof opts.cacheWriteMultiplier === 'number' && opts.cacheWriteMultiplier > 0
-    ? opts.cacheWriteMultiplier
-    : DEFAULT_CACHE_WRITE_MULTIPLIER;
-  const normalized: CachePriceOpts = { cacheReadMultiplier: read, cacheWriteMultiplier: write };
+export function saveCachePriceOpts(
+  opts: Partial<CachePriceOpts>
+): CachePriceOpts {
+  const read =
+    typeof opts.cacheReadMultiplier === 'number' && opts.cacheReadMultiplier > 0
+      ? opts.cacheReadMultiplier
+      : DEFAULT_CACHE_READ_MULTIPLIER;
+  const write =
+    typeof opts.cacheWriteMultiplier === 'number' &&
+    opts.cacheWriteMultiplier > 0
+      ? opts.cacheWriteMultiplier
+      : DEFAULT_CACHE_WRITE_MULTIPLIER;
+  const normalized: CachePriceOpts = {
+    cacheReadMultiplier: read,
+    cacheWriteMultiplier: write,
+  };
   try {
     localStorage.setItem(CACHE_OPTS_KEY, JSON.stringify(normalized));
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return normalized;
 }
