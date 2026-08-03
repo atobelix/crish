@@ -12,7 +12,11 @@ workspace = true
 
 [dependencies]
 # G5 清理（2026-08-03）：agent-tools 无任何引用（run/events/persist/session/restore
-# 均为编排逻辑，工具执行未接线，cargo machete 实证）；后续工具执行接线时按需加回。
+# 均为编排逻辑，工具执行未接线，cargo machete 实证）；I5-M6（C6 依赖图调度器）
+# 按「后续工具执行接线时按需加回」约定加回：flow_graph.rs 复用 RecursionGuard
+# （check_recursion_guard / DEFAULT_RECURSION_GUARD）做并发预算判定，并经
+# SubagentSpawner 契约启动流程节点（agent-tools 为叶子 crate，无循环依赖）。
+agent-tools = { path = "../agent-tools" }
 async-trait = { workspace = true }
 conex-db = { path = "../conex-db" }
 conex-types = { path = "../conex-types" }
@@ -27,6 +31,11 @@ tracing = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 # Criterion 基准（PE-09 T09.7：event_chain，仅 dev-dependency）
 criterion = { workspace = true }
+# flow_scheduler.rs 集成测试：TempWorkspace（RAII 临时库目录，重启恢复场景）
+conex-test-utils = { path = "../conex-test-utils" }
+# multi_agent.rs 端到端链路（I7-M12）：压缩环节经 conex-compaction
+# CompactionEngine::compact_agent_messages 契约面（链路测试域消费）
+conex-compaction = { path = "../conex-compaction" }
 
 [[bench]]
 name = "event_chain"

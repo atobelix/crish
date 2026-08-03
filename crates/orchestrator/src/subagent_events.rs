@@ -1,0 +1,447 @@
+//! 子代理域事件源唯一发射方（I5-M7 契约；I7-M14 收口）
+//!
+//! 定位（02 方案 M7 内容 4 / M14 内容 2）：`subagent-started` /
+//! `subagent-event` / `subagent-ended` 三事件由本模块**唯一发射**——03 方案
+//! E1 的 `subagent.start` / `subagent.end` 钩子只消费本发射面、**只挂钩
+//! 不补源**（E1 不得在 orchestrator 域重复发射）。
+//!
+//! 信封对齐基准：`apps/crish-desktop/src/api/chat-bridge/handlers/
+//! subagentHandlers.ts:12-63`（前端解析器，本模块不改前端）：
+//! - `subagent-started`：subagentId / subagentRunId / parentRunId（信封
+//!   runId = 父 run）/ parentToolCallId / description / mode；
+//! - `subagent-event`：subagentId / subagentRunId / event（结构化负载）；
+//! - `subagent-ended`：subagentId / subagentRunId / status / summary。
+//!
+//! 背压分级（M7 注册表锁定，registry_drift 护栏）：
+//! - `subagent-started` / `subagent-ended`：**Critical**（必达，EventQueue
+//!   落库不丢）；
+//! - `subagent-event`：按 kind——progress=**Delta**（不落库不阻塞 drive
+//!   loop）、message/tool=**Soft**（尽力落库）。
+//!
+//! 发射点（引擎侧接线位）：
+//! - spawn 成功 → [SubagentEventEmitter::emit_started]（FlowScheduler 已接）；
+//! - 运行中增量 → [SubagentEventEmitter::emit_event]（子代理 run 实时事件
+//!   流派生，引擎侧接线）；
+//! - 收口（终态）→ [SubagentEventEmitter::emit_ended]（FlowScheduler 已接）。
+//!
+//! 序列语义：经 [EventQueue] 推送（store 端会话级原子计数器取号，T08.12），
+//! 会话内全局单调；runId（父 run）由信封 emit 层注入（03 §5.3-2），本模块
+//! 只推事件体，`parent_run_id` 经 [SubagentEmitContext] 随调用携带。
+
+use std::sync::Arc;
+
+use conex_types::events::{
+    AgentEvent, SubagentEndStatus, SubagentEventKind, SubagentEventPayload,
+};
+
+use crate::events::{EventQueue, PersistError, SequencedEvent};
+use crate::persist::Store;
+use crate::now_iso_utc;
+
+/// 发射上下文（父 run 归属：信封 runId = parent_run_id，03 §5.3-2）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubagentEmitContext {
+    /// 事件归属会话（父会话）
+    pub session_id: String,
+    /// 父 run id（信封 runId 注入值 = 父 run，01 B1-2 ParentID 语义）
+    pub parent_run_id: String,
+}
+
+/// `subagent-started` 载荷（信封对齐 subagentHandlers.ts:17-26）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubagentStartedInfo {
+    /// 子代理 id（session_agents.agent_id）
+    pub subagent_id: String,
+    /// 子代理 run id（同一 run 续跑不变，C1 硬约束）
+    pub subagent_run_id: String,
+    /// 角色（wire 名；缺省 researcher，前端 AgentBrowsePad 语义）
+    pub role: String,
+    /// 能力模式（wire 名；缺省 read-write）
+    pub capability_mode: String,
+    /// ISO8601 时间戳（首次创建时间，M4 started_at 同源）
+    pub started_at: String,
+    /// 人读描述（前端缺省 '协作 agent'）
+    pub description: Option<String>,
+    /// 调度模式（research/research_single/solve/write，前端缺省 research）
+    pub mode: Option<String>,
+    /// 父 run 发起 spawn 的工具调用 id
+    pub parent_tool_call_id: Option<String>,
+}
+
+/// `subagent-event` 载荷（event 为结构化负载，前端整体透传）
+#[derive(Debug, Clone, PartialEq)]
+pub struct SubagentEventInfo {
+    /// 子代理 id
+    pub subagent_id: String,
+    /// 子代理 run id
+    pub subagent_run_id: String,
+    /// 事件类别（progress/message/tool；背压随 kind）
+    pub kind: SubagentEventKind,
+    /// 类别负载（progress 携带进度片段、message 携带消息、tool 携带工具摘要）
+    pub payload: Option<serde_json::Value>,
+}
+
+/// `subagent-ended` 载荷（status 规范值 completed/failed/cancelled，
+/// 前端正则映射 stopped/failed/completed，subagentHandlers.ts:50-56）
+#[derive(Debug, Clone, PartialEq)]
+pub struct SubagentEndedInfo {
+    /// 子代理 id
+    pub subagent_id: String,
+    /// 子代理 run id
+    pub subagent_run_id: String,
+    /// 终态（Rust 只发规范值，不产生 stopped）
+    pub status: SubagentEndStatus,
+    /// 收尾摘要（可选）
+    pub summary: Option<String>,
+}
+
+impl SubagentEndedInfo {
+    /// 从 M2 三方状态机终态构造（completed→Completed；其余终态→Failed，
+    /// 被终止 run 归一 failed，I0 裁决；cancelled 由引擎侧显式传）
+    pub fn from_subagent_state(
+        subagent_id: impl Into<String>,
+        subagent_run_id: impl Into<String>,
+        state: agent_tools::tools::subagent::SubagentState,
+    ) -> Self {
+        let status = match state {
+            agent_tools::tools::subagent::SubagentState::Completed => {
+                SubagentEndStatus::Completed
+            }
+            _ => SubagentEndStatus::Failed,
+        };
+        Self {
+            subagent_id: subagent_id.into(),
+            subagent_run_id: subagent_run_id.into(),
+            status,
+            summary: None,
+        }
+    }
+}
+
+/// 构造 `subagent-started` 事件（信封对齐 subagentHandlers.ts:17-26）
+pub fn build_subagent_started(
+    ctx: &SubagentEmitContext,
+    info: &SubagentStartedInfo,
+) -> AgentEvent {
+    AgentEvent::SubagentStarted {
+        session_id: ctx.session_id.clone(),
+        subagent_id: info.subagent_id.clone(),
+        subagent_run_id: info.subagent_run_id.clone(),
+        role: info.role.clone(),
+        capability_mode: info.capability_mode.clone(),
+        started_at: info.started_at.clone(),
+        description: info.description.clone(),
+        mode: info.mode.clone(),
+        parent_tool_call_id: info.parent_tool_call_id.clone(),
+    }
+}
+
+/// 构造 `subagent-event` 事件（event 为结构化负载）
+pub fn build_subagent_event(ctx: &SubagentEmitContext, info: &SubagentEventInfo) -> AgentEvent {
+    AgentEvent::SubagentEvent {
+        session_id: ctx.session_id.clone(),
+        subagent_id: info.subagent_id.clone(),
+        subagent_run_id: info.subagent_run_id.clone(),
+        event: SubagentEventPayload {
+            kind: info.kind,
+            payload: info.payload.clone(),
+        },
+    }
+}
+
+/// 构造 `subagent-ended` 事件（status 规范值 + endedAt 时间戳）
+pub fn build_subagent_ended(ctx: &SubagentEmitContext, info: &SubagentEndedInfo) -> AgentEvent {
+    AgentEvent::SubagentEnded {
+        session_id: ctx.session_id.clone(),
+        subagent_id: info.subagent_id.clone(),
+        subagent_run_id: info.subagent_run_id.clone(),
+        status: info.status,
+        summary: info.summary.clone(),
+        ended_at: now_iso_utc(),
+    }
+}
+
+/// 子代理事件发射器（唯一发射方落地；经 [EventQueue] 推送）
+///
+/// 每次发射自建 [EventQueue]（store 端会话级原子计数器取号，T08.12：
+/// 会话内全局单调、跨 run 不重置——base_sequence 仅作本地镜像初值，
+/// 不破坏序列连续性）。
+///
+/// 失败语义：发射失败返回错误，由调用方决定（FlowScheduler 接线为
+/// 「事件只观测不阻塞编排」，记录日志继续）。
+pub struct SubagentEventEmitter {
+    store: Arc<dyn Store>,
+}
+
+impl SubagentEventEmitter {
+    /// 新建发射器（共享 store；序列由 store 端原子计数器保证）
+    pub fn new(store: Arc<dyn Store>) -> Self {
+        Self { store }
+    }
+
+    /// spawn 成功发射 `subagent-started`（Critical 必达落库）
+    pub async fn emit_started(
+        &self,
+        ctx: &SubagentEmitContext,
+        info: &SubagentStartedInfo,
+    ) -> Result<SequencedEvent, PersistError> {
+        let mut queue = EventQueue::new(self.store.clone(), 1);
+        queue
+            .push(&ctx.session_id, build_subagent_started(ctx, info))
+            .await
+    }
+
+    /// 运行中发射 `subagent-event`（progress=Delta 不落库不阻塞；
+    /// message/tool=Soft 尽力落库）
+    pub async fn emit_event(
+        &self,
+        ctx: &SubagentEmitContext,
+        info: &SubagentEventInfo,
+    ) -> Result<SequencedEvent, PersistError> {
+        let mut queue = EventQueue::new(self.store.clone(), 1);
+        queue
+            .push(&ctx.session_id, build_subagent_event(ctx, info))
+            .await
+    }
+
+    /// 收口发射 `subagent-ended`（Critical 必达落库）
+    pub async fn emit_ended(
+        &self,
+        ctx: &SubagentEmitContext,
+        info: &SubagentEndedInfo,
+    ) -> Result<SequencedEvent, PersistError> {
+        let mut queue = EventQueue::new(self.store.clone(), 1);
+        queue
+            .push(&ctx.session_id, build_subagent_ended(ctx, info))
+            .await
+    }
+}
+
+/// 从 spawn 请求/结果装配 `subagent-started` 信息（FlowScheduler 接线用；
+/// role/capability 缺省与前端缺省语义对齐）
+pub(crate) fn started_info_from_spawn(
+    request: &agent_tools::tools::subagent::SubagentSpawnRequest,
+    result: &agent_tools::tools::subagent::SubagentSpawnResult,
+) -> SubagentStartedInfo {
+    SubagentStartedInfo {
+        subagent_id: result.subagent_id.clone(),
+        subagent_run_id: result.subagent_run_id.clone(),
+        role: request
+            .role
+            .map(|r| r.as_str())
+            .unwrap_or("researcher")
+            .to_string(),
+        capability_mode: request
+            .capability_mode
+            .map(|m| m.as_str())
+            .unwrap_or("read-write")
+            .to_string(),
+        started_at: now_iso_utc(),
+        description: request.description.clone(),
+        mode: request.mode.clone(),
+        parent_tool_call_id: request.parent_tool_call_id.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_tools::tools::subagent::SubagentState;
+    use conex_types::events::{event_backpressure, BackpressureLevel};
+    use crate::persist::InMemoryStore;
+
+    fn ctx() -> SubagentEmitContext {
+        SubagentEmitContext {
+            session_id: "sess-main".to_string(),
+            parent_run_id: "run-main".to_string(),
+        }
+    }
+
+    fn started_info() -> SubagentStartedInfo {
+        SubagentStartedInfo {
+            subagent_id: "sub-1".to_string(),
+            subagent_run_id: "sub-run-1".to_string(),
+            role: "researcher".to_string(),
+            capability_mode: "read-only".to_string(),
+            started_at: "2026-08-04T00:00:00.000Z".to_string(),
+            description: Some("调研模块 A".to_string()),
+            mode: Some("research".to_string()),
+            parent_tool_call_id: Some("call_1".to_string()),
+        }
+    }
+
+    fn ended_info(status: SubagentEndStatus) -> SubagentEndedInfo {
+        SubagentEndedInfo {
+            subagent_id: "sub-1".to_string(),
+            subagent_run_id: "sub-run-1".to_string(),
+            status,
+            summary: Some("完成".to_string()),
+        }
+    }
+
+    // ── 信封对齐（subagentHandlers.ts 消费字段逐一在场）──
+
+    #[test]
+    fn started_envelope_matches_frontend_contract() {
+        let event = build_subagent_started(&ctx(), &started_info());
+        let value = serde_json::to_value(&event).unwrap();
+        assert_eq!(value["type"], "subagent-started");
+        // 前端消费字段（subagentHandlers.ts:17-26）：subagentId/subagentRunId/
+        // description/mode/parentToolCallId（parentRunId 由信封 runId 注入）
+        assert_eq!(value["subagentId"], "sub-1");
+        assert_eq!(value["subagentRunId"], "sub-run-1");
+        assert_eq!(value["description"], "调研模块 A");
+        assert_eq!(value["mode"], "research");
+        assert_eq!(value["parentToolCallId"], "call_1");
+        // 展示字段（role/capabilityMode/startedAt）必填在场
+        assert_eq!(value["role"], "researcher");
+        assert_eq!(value["capabilityMode"], "read-only");
+        assert_eq!(value["startedAt"], "2026-08-04T00:00:00.000Z");
+    }
+
+    #[test]
+    fn event_envelope_matches_frontend_contract() {
+        let info = SubagentEventInfo {
+            subagent_id: "sub-1".to_string(),
+            subagent_run_id: "sub-run-1".to_string(),
+            kind: SubagentEventKind::Progress,
+            payload: Some(serde_json::json!({ "text": "50%" })),
+        };
+        let event = build_subagent_event(&ctx(), &info);
+        let value = serde_json::to_value(&event).unwrap();
+        assert_eq!(value["type"], "subagent-event");
+        // 前端整体透传（subagentHandlers.ts:38-42）
+        assert_eq!(value["subagentId"], "sub-1");
+        assert_eq!(value["subagentRunId"], "sub-run-1");
+        assert_eq!(value["event"]["kind"], "progress");
+        assert_eq!(value["event"]["payload"]["text"], "50%");
+    }
+
+    #[test]
+    fn ended_envelope_matches_frontend_contract() {
+        let event = build_subagent_ended(&ctx(), &ended_info(SubagentEndStatus::Completed));
+        let value = serde_json::to_value(&event).unwrap();
+        assert_eq!(value["type"], "subagent-ended");
+        // 前端消费字段（subagentHandlers.ts:57-62）：status/summary；
+        // completed 命中前端正则 → completed 展示
+        assert_eq!(value["subagentId"], "sub-1");
+        assert_eq!(value["subagentRunId"], "sub-run-1");
+        assert_eq!(value["status"], "completed");
+        assert_eq!(value["summary"], "完成");
+        assert!(value["endedAt"].is_string(), "endedAt 必填 ISO8601");
+    }
+
+    // ── 背压分级（M7 注册表锁定）──
+
+    #[test]
+    fn backpressure_classification() {
+        assert_eq!(
+            event_backpressure(&build_subagent_started(&ctx(), &started_info())),
+            BackpressureLevel::Critical,
+            "subagent-started 必达落库"
+        );
+        assert_eq!(
+            event_backpressure(&build_subagent_ended(&ctx(), &ended_info(SubagentEndStatus::Failed))),
+            BackpressureLevel::Critical,
+            "subagent-ended 必达落库"
+        );
+        for (kind, expected) in [
+            (SubagentEventKind::Progress, BackpressureLevel::Delta),
+            (SubagentEventKind::Message, BackpressureLevel::Soft),
+            (SubagentEventKind::Tool, BackpressureLevel::Soft),
+        ] {
+            let info = SubagentEventInfo {
+                subagent_id: "sub-1".to_string(),
+                subagent_run_id: "sub-run-1".to_string(),
+                kind,
+                payload: None,
+            };
+            assert_eq!(
+                event_backpressure(&build_subagent_event(&ctx(), &info)),
+                expected,
+                "subagent-event {:?} 背压分级不符",
+                kind
+            );
+        }
+    }
+
+    // ── 发射点（mock 生命周期触发事件）──
+
+    #[tokio::test]
+    async fn emitter_pushes_started_and_ended_exactly_once() {
+        let mem = Arc::new(InMemoryStore::new());
+        let store: Arc<dyn Store> = mem.clone();
+        let emitter = SubagentEventEmitter::new(store);
+
+        // 完整生命周期：spawn → 运行中增量 → 收口
+        emitter.emit_started(&ctx(), &started_info()).await.unwrap();
+        emitter
+            .emit_event(
+                &ctx(),
+                &SubagentEventInfo {
+                    subagent_id: "sub-1".to_string(),
+                    subagent_run_id: "sub-run-1".to_string(),
+                    kind: SubagentEventKind::Progress,
+                    payload: None,
+                },
+            )
+            .await
+            .unwrap();
+        emitter
+            .emit_ended(&ctx(), &ended_info(SubagentEndStatus::Completed))
+            .await
+            .unwrap();
+
+        let stored = mem.events();
+        let types: Vec<&str> = stored.iter().map(|e| e.event_type.as_str()).collect();
+        // started/ended Critical 落库；progress 为 Delta 不落库
+        assert_eq!(
+            types,
+            vec!["subagent-started", "subagent-ended"],
+            "started/ended 落库且各一次，progress 不落库"
+        );
+        // 序列连续（store 端原子计数器，T08.12）：progress 也取号（2）但
+        // 不落库，故落库序列为 1 与 3——无空洞语义 = 取号连续，非落库连续
+        let seqs: Vec<u64> = stored.iter().map(|e| e.sequence).collect();
+        assert_eq!(seqs, vec![1, 3], "started=1、progress 取号 2 不落库、ended=3");
+    }
+
+    #[tokio::test]
+    async fn emitter_soft_kind_is_persisted() {
+        let mem = Arc::new(InMemoryStore::new());
+        let store: Arc<dyn Store> = mem.clone();
+        let emitter = SubagentEventEmitter::new(store);
+
+        // message/tool 类为 Soft：尽力落库
+        for kind in [SubagentEventKind::Message, SubagentEventKind::Tool] {
+            emitter
+                .emit_event(
+                    &ctx(),
+                    &SubagentEventInfo {
+                        subagent_id: "sub-1".to_string(),
+                        subagent_run_id: "sub-run-1".to_string(),
+                        kind,
+                        payload: None,
+                    },
+                )
+                .await
+                .unwrap();
+        }
+        let stored = mem.events();
+        assert_eq!(stored.len(), 2, "Soft 类事件落库");
+        assert!(stored.iter().all(|e| e.event_type == "subagent-event"));
+    }
+
+    #[tokio::test]
+    async fn ended_from_state_maps_terminal_status() {
+        // completed → Completed；failed（含被终止归一）→ Failed
+        let completed = SubagentEndedInfo::from_subagent_state(
+            "sub-1",
+            "sub-run-1",
+            SubagentState::Completed,
+        );
+        assert_eq!(completed.status, SubagentEndStatus::Completed);
+        let failed = SubagentEndedInfo::from_subagent_state("sub-1", "sub-run-1", SubagentState::Failed);
+        assert_eq!(failed.status, SubagentEndStatus::Failed);
+    }
+}

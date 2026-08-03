@@ -55,7 +55,7 @@
 | 无系统上下文重注入 | system_prompt 恒空；无字节级一致保证 | M1 + M11（重注入 + 禁用开关 + 注入上限） |
 | 无检查点采集/恢复 | 安全点无采集钩子；restore.rs 无续跑注入 | M5（采集 + RewindPlan 接线 + 降级路径） |
 | 无配额 | C5 探索类文档配额设计完成、实现为零 | M11（配额计数 + 主 agent 凭证） |
-| 事件面不完整 | 27 引擎事件（24 既有 + M7 新增 3）未映射到 14 钩子事件；model/compression 事件源缺失 | M12/M13/M14（联测 + 映射表 + 事件源补齐） |
+| 事件面不完整 | 31 引擎事件（24 基 + security-audit + subagent 3 + cache 3）未映射到 14 钩子事件；model/compression 事件源缺失 | M12/M13/M14（联测 + 映射表 + 事件源补齐） |
 
 ### 1.3 借鉴点映射（ref-analysis 01/02 的落地位置）
 
@@ -264,18 +264,18 @@
 - **三问**：隔离边界——联测只读产品代码；干预入口——无（测试域）；持久化——测试夹具的库态经既有接口构造。
 - **验收命令**：`cargo test -p session-loop -p orchestrator -p agent-tools -p conex-db`（04 §4.1 全量门禁第一组）；`npm run typecheck`；`npm run test:desktop-helpers`；`npx knip`（04 §4.1 全量门禁，主线二完成态判定）。
 
-### M13 事件映射表 27→14（I7 事件面完备，I8 生态挂接面）
+### M13 事件映射表 31→14（I7 事件面完备，I8 生态挂接面）
 
-- **目标**：把 27 引擎事件（24 既有 + M7 新增 3）映射到 14 钩子事件，产出冻结文档与测试，作为 I8 生态轮的挂接面。
-- **文件域（对接现有模块）**：独占 `docs/multi-agent-repair/improvement/` 下映射表文档（新增）+ `crates/conex-types` 类型测试（冻结测试，仿 `hookPayloadMap` 类型层面对应）；只读：`crates/session-loop/src/hooks.rs:30-37`（HookEventKind 3 事件现状）、`apps/crish-desktop/src/api/chat-bridge/handlers/`（24 既有引擎事件定义，M7 新增 3 在 conex-types 注册表）。
-- **内容**：27 引擎事件（24 既有 + M7 新增 subagent-started/subagent-event/subagent-ended 三事件，I7 时引擎事件面总计数）→ 14 钩子事件（hooks.ts 面）映射表，**映射表取 14 钩子面**：每行 = 引擎事件名 → 钩子事件名 → payload 字段映射 → 背压级别 → 是否落库；未挂钩的引擎事件继续走事件总线消费（对齐 03 §2.2 无对应钩子清单语义）；冻结测试断言映射表与代码定义同步（注册表漂移护栏同款机制）。
+- **目标**：把 31 引擎事件（24 基 + security-audit + subagent 3 + cache 3）映射到 14 钩子事件，产出冻结文档与测试，作为 I8 生态轮的挂接面。
+- **文件域（对接现有模块）**：独占 `docs/multi-agent-repair/improvement/` 下映射表文档（新增）+ `crates/conex-types` 类型测试（冻结测试，仿 `hookPayloadMap` 类型层面对应）+ `packages/shared-types/src/hooks.ts`（事件名 12 → 14 补齐，E1 继续补载荷接口）；只读：`crates/session-loop/src/hooks.rs:30-37`（HookEventKind 3 事件现状）、`apps/crish-desktop/src/api/chat-bridge/handlers/`（既有引擎事件定义，subagent 3 在 conex-types 注册表）。
+- **内容**：31 引擎事件（24 基 + security-audit + subagent-started/subagent-event/subagent-ended 三事件 + cache 3，I7 时引擎事件面总计数）→ 14 钩子事件（hooks.ts 面）映射表，**映射表取 14 钩子面**：每行 = 引擎事件名 → 钩子事件名 → payload 字段映射 → 背压级别 → 是否落库；11 个引擎事件映射 12 个钩子（tool-end 一源双钩）+ 2 个补源钩子（model.beforeRequest/afterResponse），**31 = 11 + 20**；未挂钩的 20 个引擎事件继续走事件总线消费（对齐 03 §2.2 无对应钩子清单语义）；冻结测试断言映射表与代码定义同步（注册表漂移护栏同款机制：`crates/conex-types/tests/event_hook_mapping.rs` + `packages/shared-types/src/hooks.test.ts`）。
 - **三问**：隔离边界——只做映射不做转发（事件源补齐归 M14）；干预入口——无（文档+测试域）；持久化——映射表文档 + 类型测试。
 - **验收命令**：`cargo test -p conex-types`；断言映射表与 HookEventKind/payload 定义无漂移。
 
 ### M14 事件源补齐（I7，I8 生态挂接面）
 
 - **目标**：补齐 I8 生态轮缺失的事件源：session.start/end、subagent.start/end、model.beforeRequest/afterResponse、context.compact.*。
-- **文件域（对接现有模块）**：独占 `crates/agent-provider/src/events.rs`（model.beforeRequest/afterResponse 发射，复用 ProviderStreamEvent 结构）+ 压缩域（context.compact.* 接 M10 的压缩事件）+ 会话/子代理生命周期发射点（session.start/end；subagent 域三事件接 M7 发射面，唯一发射方约定见内容 2）；独占 conex-types 事件注册表新增类型（与 M13 约定：M13 只读既有 27 事件定义（24 存量 + M7 新增 3），新增类型归 M14）；只读：`crates/session-loop/src/hooks.rs`（HookEventKind 扩展位，I8 消费）。
+- **文件域（对接现有模块）**：独占 `crates/agent-provider/src/events.rs`（model.beforeRequest/afterResponse 发射，复用 ProviderStreamEvent 结构）+ 压缩域（context.compact.* 接 M10 的压缩事件）+ 会话/子代理生命周期发射点（session.start/end；subagent 域三事件接 M7 发射面，唯一发射方约定见内容 2）；独占 conex-types 事件注册表新增类型（与 M13 约定：M13 只读既有 31 事件定义（24 基 + security-audit + subagent 3 + cache 3），新增类型归 M14）；只读：`crates/session-loop/src/hooks.rs`（HookEventKind 扩展位，I8 消费）。
 - **内容**：
   1. 按 06 文档遗留清单补齐事件源（model/compression 事件源缺失项）：model.beforeRequest/afterResponse 经 agent-provider events.rs 发射、context.compact.* 接 M10 压缩事件（context-compression-start/end 既有点位）、session.start/end 接 run 生命周期发射点；
   2. **subagent 域事件源唯一发射方**：subagent-started/subagent-event/subagent-ended 三事件（M7 定义的信封与发射面）在本任务收口为唯一发射方——03 方案 E1 的 subagent.start/subagent.end 钩子只消费该发射面、**只挂钩不补源**（E1 不得在 orchestrator 域重复发射；03 §2.3「需补事件源」清单中 subagent 两项由 M7/M14 承接）；
@@ -330,7 +330,7 @@
 
 - **问题识别**：
   1. C1–C10 各能力单测已绿，但缺全链路联测与崩溃一致性扩展（并发预算跨重启未验证）；
-  2. 27 引擎事件（24 既有 + M7 新增 3）未映射到 14 钩子事件——I8 生态轮挂接面无着落；
+  2. 31 引擎事件（24 基 + security-audit + subagent 3 + cache 3）未映射到 14 钩子事件——I8 生态轮挂接面无着落；
   3. model/compression 事件源缺失（06 文档遗留清单）。
 - **任务分解**：M12（联测 + 崩溃一致性扩展，测试域）｜M13（事件映射表 + 冻结测试，文档 + 类型测试域）｜M14（事件源补齐，事件发射域）。文件域互斥：crates/orchestrator/tests/（M12 独占）、docs + conex-types 类型测试（M13 独占，只读既有事件定义）、agent-provider/src/events.rs 与事件注册表新增（M14 独占）；三域互不相交。
 - **Agent 分配**：3 个（M12 联测 Agent、M13 映射表 Agent、M14 事件源 Agent）。
@@ -359,7 +359,7 @@ I6 恢复压缩: M9 四级阶梯（retry.rs → steering_queue.rs 落库 → Ses
              M11 系统上下文重注入（engine.rs build_context 主体 + system_reinject_* 键）+ C5 配额（explore_docs_* 键）
         ▼
 I7 集成终验: M12 联测核销（04 §4.1 清单 + 崩溃一致性扩展）→ 主线二完成态判定
-             M13 事件映射表 27→14 + M14 事件源补齐 ──▶ I8 生态轮挂接面（hooks.rs 扩展位）
+             M13 事件映射表 31→14 + M14 事件源补齐 ──▶ I8 生态轮挂接面（hooks.rs 扩展位）
 ```
 
 整合要点：
@@ -386,7 +386,7 @@ I7 集成终验: M12 联测核销（04 §4.1 清单 + 崩溃一致性扩展）�
 | M10 | C9 | `cargo test -p conex-compaction` | 五字段模板；原始消息可读回；失败降级不中断 + 事件记录；system 完整保留；阈值可配；G8 输出截断核销 |
 | M11 | C10+C5 | `cargo test -p agent-tools` + engine 域测试 | system 段字节一致；skill 变更联动；禁用开关；上限截断记录；配额拒绝/用尽/重启不超额/非 researcher 不限/可配 |
 | M12 | 全链路 | 04 §4.1 全量门禁四连 | 10 能力关键测试名逐条核销；崩溃一致性扩展 |
-| M13 | 映射表 | `cargo test -p conex-types` | 27→14 映射无漂移（冻结测试，24 既有 + M7 新增 3） |
+| M13 | 映射表 | `cargo test -p conex-types` + `npm run typecheck` + shared-types vitest | 31→14 映射无漂移（冻结测试：11 映射 + 20 无对应 = 31 全集、14 钩子名双向锁定、tool-end 双钩特例、背压 Critical 列锁定、hooks.ts 字面量存在） |
 | M14 | 事件源 | `cargo test -p agent-provider -p conex-types` | 四类事件源可观测；注册表护栏通过 |
 
 I7 收尾全量门禁（04 §4.1）：

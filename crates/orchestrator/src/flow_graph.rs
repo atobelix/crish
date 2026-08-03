@@ -36,8 +36,13 @@ use agent_tools::tools::subagent::{
     SubagentSpawnRequest, SubagentSpawner, SubagentState, DEFAULT_RECURSION_GUARD,
 };
 use conex_db::LocalDb;
+use conex_types::events::SubagentEndStatus;
 use conex_types::SessionAgent;
 use serde::{Deserialize, Serialize};
+
+use crate::subagent_events::{
+    SubagentEmitContext, SubagentEndedInfo, SubagentEventEmitter, started_info_from_spawn,
+};
 
 // ── 依赖图模型（04 C6 §2.1：after / parallel 声明）───────────────
 
@@ -401,6 +406,9 @@ pub struct FlowNodeRuntime {
     /// 关联的子代理 run id（None = 未启动；挂接外部 run 也落此映射）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent_run_id: Option<String>,
+    /// 关联的子代理 id（M14：subagent-ended 发射需要；spawn 成功时记录）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subagent_id: Option<String>,
     /// 合成唤醒已发出（幂等：同节点只唤醒一次，防 gate 死观测）
     #[serde(default)]
     pub wakeup_sent: bool,
@@ -411,6 +419,7 @@ impl FlowNodeRuntime {
         Self {
             node_id,
             subagent_run_id: None,
+            subagent_id: None,
             wakeup_sent: false,
         }
     }
@@ -755,6 +764,9 @@ pub struct FlowScheduler {
     wakeups: VecDeque<FlowWakeup>,
     /// 重启数据不一致上报（load 积压，首轮 advance 一次性带出）
     restart_reports: Vec<FlowReport>,
+    /// 子代理事件发射器（M14 唯一发射方；None = 纯编排逻辑不发射。
+    /// 事件只观测不阻塞编排：发射失败记录日志继续）
+    subagent_events: Option<SubagentEventEmitter>,
 }
 
 impl FlowScheduler {
@@ -786,7 +798,15 @@ impl FlowScheduler {
             meta,
             wakeups: VecDeque::new(),
             restart_reports: Vec::new(),
+            subagent_events: None,
         })
+    }
+
+    /// 挂载子代理事件发射器（M14：spawn 成功发 subagent-started、
+    /// 收口发 subagent-ended；不挂载则不发射——编排纯逻辑域保持零事件）
+    pub fn with_subagent_event_emitter(mut self, emitter: SubagentEventEmitter) -> Self {
+        self.subagent_events = Some(emitter);
+        self
     }
 
     /// 会话 id
@@ -985,6 +1005,36 @@ impl FlowScheduler {
                             .entry(node_id.clone())
                             .or_insert_with(|| FlowNodeRuntime::new(node_id.clone()));
                         runtime.subagent_run_id = Some(result.subagent_run_id.clone());
+                        // M14：spawn 成功发射 subagent-started（唯一发射方；
+                        // 事件只观测不阻塞编排——失败记录日志继续）
+                        if let Some(emitter) = &self.subagent_events {
+                            let ctx = SubagentEmitContext {
+                                session_id: self.session_id.clone(),
+                                parent_run_id: self
+                                    .planner_run_id
+                                    .clone()
+                                    .unwrap_or_default(),
+                            };
+                            match emitter
+                                .emit_started(
+                                    &ctx,
+                                    &started_info_from_spawn(&request, &result),
+                                )
+                                .await
+                            {
+                                Ok(_) => {}
+                                Err(error) => {
+                                    tracing::warn!(
+                                        target: "subagent_events",
+                                        event = "emit_started_failed",
+                                        subagent_run_id = %result.subagent_run_id,
+                                        error = %error,
+                                        "subagent-started 发射失败（不阻塞编排）"
+                                    );
+                                }
+                            }
+                            runtime.subagent_id = Some(result.subagent_id.clone());
+                        }
                         out.started.push(FlowStarted {
                             node_id: node_id.clone(),
                             subagent_run_id: result.subagent_run_id,
@@ -1079,6 +1129,46 @@ impl FlowScheduler {
         self.budget.release();
         let next = FlowNodeState::from_subagent(state);
         self.states.insert(node_id.clone(), next);
+        // M14：收口发射 subagent-ended（唯一发射方；事件只观测不阻塞编排——
+        // 失败记录日志继续；subagent_id 缺省回退 run id，保证信封完整性）
+        if let Some(emitter) = &self.subagent_events {
+            let ctx = SubagentEmitContext {
+                session_id: self.session_id.clone(),
+                parent_run_id: self.planner_run_id.clone().unwrap_or_default(),
+            };
+            let subagent_id = self
+                .runtime
+                .get(&node_id)
+                .and_then(|r| r.subagent_id.clone())
+                .unwrap_or_else(|| subagent_run_id.to_string());
+            let status = match next {
+                FlowNodeState::Completed => SubagentEndStatus::Completed,
+                _ => SubagentEndStatus::Failed,
+            };
+            match emitter
+                .emit_ended(
+                    &ctx,
+                    &SubagentEndedInfo {
+                        subagent_id,
+                        subagent_run_id: subagent_run_id.to_string(),
+                        status,
+                        summary: None,
+                    },
+                )
+                .await
+            {
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(
+                        target: "subagent_events",
+                        event = "emit_ended_failed",
+                        subagent_run_id = %subagent_run_id,
+                        error = %error,
+                        "subagent-ended 发射失败（不阻塞编排）"
+                    );
+                }
+            }
+        }
         // 失败策略（04 C6 行为 5：abort=Block / skip=Skip / retry_once=Report）
         let mut fail_reports = Vec::new();
         if next == FlowNodeState::Failed {
@@ -1280,6 +1370,7 @@ impl FlowScheduler {
             meta,
             wakeups: VecDeque::new(),
             restart_reports,
+            subagent_events: None,
         };
         scheduler.persist_budget()?;
         Ok(scheduler)

@@ -13,12 +13,15 @@
 //! 流已产出内容时中途错误不重试（02 §六.7），abort 一律直接传播。
 
 use std::future::Future;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use conex_types::error::ProviderErrorKind;
 
 use crate::error::ProviderError;
+use crate::events::{
+    ModelRequestInfo, ModelRequestObserver, ModelResponseInfo,
+};
 use crate::sse::{AbortHandle, SseFrame};
 
 /// Retry-After 绝对上限（对齐 TS MAX_RETRY_AFTER_MS = 5 分钟，
@@ -332,10 +335,37 @@ pub struct StreamAttempt {
 /// - 循环内对可重试错误按 [RetryPolicy] 退避等待后重试；abort 与不可重试错误
 ///   立即上抛；流已产出内容时中途错误不重试；
 /// - 成功返回完整帧序列（B2.8 消费层再解析为事件）。
+///
+/// M14：本函数为 [provider_stream_with_observer] 的薄包装（不挂观测器，
+/// 保持既有调用面与语义不变）。
 pub async fn provider_stream<F, Fut>(
     policy: &RetryPolicy,
     sleeper: &mut dyn RetrySleeper,
     state: &mut RetryState,
+    attempt: F,
+) -> Result<Vec<SseFrame>, ProviderError>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = StreamAttempt>,
+{
+    provider_stream_with_observer(policy, sleeper, state, None, attempt).await
+}
+
+/// 高层流封装（带 model 请求生命周期观测器，M14：model.beforeRequest /
+/// model.afterResponse 事件源发射点）
+///
+/// 发射语义：
+/// - **请求前**（before-request）：每次尝试发起前发射（含重试循环内的
+///   每一次尝试；`attempt` 从 1 起递增）；
+/// - **响应后**（after-response）：每次尝试结束后发射（成功/失败均触发，
+///   携带 ok/error 与单次耗时）；
+/// - 观测器只观测不改写：回调失败不影响请求路径（trait 为不可失败签名）；
+/// - `None` = 不发射（与 [provider_stream] 行为一致）。
+pub async fn provider_stream_with_observer<F, Fut>(
+    policy: &RetryPolicy,
+    sleeper: &mut dyn RetrySleeper,
+    state: &mut RetryState,
+    observer: Option<&dyn ModelRequestObserver>,
     mut attempt: F,
 ) -> Result<Vec<SseFrame>, ProviderError>
 where
@@ -343,26 +373,68 @@ where
     Fut: Future<Output = StreamAttempt>,
 {
     loop {
+        let attempt_number = state.retries + 1;
+        let started = Instant::now();
+        if let Some(observer) = observer {
+            observer.on_before_request(&ModelRequestInfo {
+                url: None,
+                model: None,
+                max_tokens: None,
+                attempt: attempt_number,
+            });
+        }
         let outcome = attempt().await;
+        let duration_ms = started.elapsed().as_millis() as u64;
         match outcome {
             // 成功：返回完整帧
             StreamAttempt {
                 error: None,
                 frames,
                 ..
-            } => return Ok(frames),
+            } => {
+                if let Some(observer) = observer {
+                    observer.on_after_response(&ModelResponseInfo {
+                        status: None,
+                        ok: true,
+                        error: None,
+                        duration_ms,
+                        usage: None,
+                    });
+                }
+                return Ok(frames);
+            }
             // 已产出内容：不重试，直接上抛（02 §六.7 语义）
             StreamAttempt {
                 error: Some(error),
                 produced_content: true,
                 ..
-            } => return Err(error),
+            } => {
+                if let Some(observer) = observer {
+                    observer.on_after_response(&ModelResponseInfo {
+                        status: None,
+                        ok: false,
+                        error: Some(error.to_string()),
+                        duration_ms,
+                        usage: None,
+                    });
+                }
+                return Err(error);
+            }
             // 未产出内容：可重试则退避等待后重试，否则上抛
             StreamAttempt {
                 error: Some(error),
                 produced_content: false,
                 ..
             } => {
+                if let Some(observer) = observer {
+                    observer.on_after_response(&ModelResponseInfo {
+                        status: None,
+                        ok: false,
+                        error: Some(error.to_string()),
+                        duration_ms,
+                        usage: None,
+                    });
+                }
                 // abort 一律直接传播（02 §4.2 第 1 行）
                 if matches!(error, ProviderError::Aborted) {
                     return Err(error);
@@ -890,6 +962,176 @@ mod tests {
         assert!(matches!(error, ProviderError::Server { .. }));
         // 尝试 1 失败 → 等 750ms → 尝试 2 失败 → 等 1250ms → 尝试 3（预算耗尽，停止）
         assert_eq!(attempts.load(Ordering::SeqCst), 3);
+    }
+
+    // ── M14：model 请求生命周期观测器（before-request / after-response 发射点）──
+
+    /// 记录式观测器：按序记录 before/after 事件
+    struct RecordingObserver {
+        before: Arc<std::sync::Mutex<Vec<u32>>>,
+        after: Arc<std::sync::Mutex<Vec<bool>>>,
+    }
+
+    impl RecordingObserver {
+        fn new() -> Self {
+            Self {
+                before: Arc::new(std::sync::Mutex::new(Vec::new())),
+                after: Arc::new(std::sync::Mutex::new(Vec::new())),
+            }
+        }
+
+        fn events(&self) -> (Vec<u32>, Vec<bool>) {
+            (
+                self.before.lock().unwrap().clone(),
+                self.after.lock().unwrap().clone(),
+            )
+        }
+    }
+
+    impl ModelRequestObserver for RecordingObserver {
+        fn on_before_request(&self, info: &ModelRequestInfo) {
+            self.before.lock().unwrap().push(info.attempt);
+        }
+
+        fn on_after_response(&self, info: &ModelResponseInfo) {
+            self.after.lock().unwrap().push(info.ok);
+        }
+    }
+
+    /// 每次尝试「请求前 → 尝试 → 响应后」成对发射；重试循环内每次尝试均发射
+    /// （before-request 的 attempt 从 1 起递增）
+    #[tokio::test]
+    async fn observer_emits_before_and_after_per_attempt() {
+        let policy = default_policy();
+        let observer = RecordingObserver::new();
+        let attempts = Arc::new(AtomicU32::new(0));
+        let counter = attempts.clone();
+        let mut sleeper = MockSleeper {
+            sleeps: Vec::new(),
+        };
+        let mut state = RetryState::new();
+        let result = provider_stream_with_observer(
+            &policy,
+            &mut sleeper,
+            &mut state,
+            Some(&observer),
+            move || {
+                let counter = counter.clone();
+                async move {
+                    let n = counter.fetch_add(1, Ordering::SeqCst);
+                    if n < 2 {
+                        StreamAttempt {
+                            frames: vec![],
+                            error: Some(server_error()),
+                            produced_content: false,
+                        }
+                    } else {
+                        StreamAttempt {
+                            frames: vec![],
+                            error: None,
+                            produced_content: false,
+                        }
+                    }
+                }
+            },
+        )
+        .await
+        .unwrap();
+        assert!(result.is_empty());
+        let (before, after) = observer.events();
+        // 3 次尝试：before-request 各一次（attempt 1/2/3），after-response 各一次
+        assert_eq!(before, vec![1, 2, 3], "请求前每次尝试发射且 attempt 递增");
+        assert_eq!(after, vec![false, false, true], "响应后每次尝试发射（ok 标记）");
+        // 发射顺序保证：before 先于对应 after（成对配对）
+        assert_eq!(before.len(), after.len(), "before/after 必须成对");
+    }
+
+    /// 成功路径只发射一对 before/after（无重试时 attempt 恒为 1）
+    #[tokio::test]
+    async fn observer_single_attempt_on_success() {
+        let policy = default_policy();
+        let observer = RecordingObserver::new();
+        let mut sleeper = MockSleeper {
+            sleeps: Vec::new(),
+        };
+        let mut state = RetryState::new();
+        let result = provider_stream_with_observer(
+            &policy,
+            &mut sleeper,
+            &mut state,
+            Some(&observer),
+            || async {
+                StreamAttempt {
+                    frames: vec![],
+                    error: None,
+                    produced_content: false,
+                }
+            },
+        )
+        .await
+        .unwrap();
+        assert!(result.is_empty());
+        let (before, after) = observer.events();
+        assert_eq!(before, vec![1]);
+        assert_eq!(after, vec![true]);
+        assert!(sleeper.sleeps.is_empty());
+    }
+
+    /// 观测器不改变重试语义：不可重试错误只发射一对后上抛
+    #[tokio::test]
+    async fn observer_non_retryable_single_pair() {
+        let policy = default_policy();
+        let observer = RecordingObserver::new();
+        let mut sleeper = MockSleeper {
+            sleeps: Vec::new(),
+        };
+        let mut state = RetryState::new();
+        let error = provider_stream_with_observer(
+            &policy,
+            &mut sleeper,
+            &mut state,
+            Some(&observer),
+            || async {
+                StreamAttempt {
+                    frames: vec![],
+                    error: Some(ProviderError::Auth { status: Some(401) }),
+                    produced_content: false,
+                }
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, ProviderError::Auth { .. }));
+        let (before, after) = observer.events();
+        assert_eq!(before, vec![1], "不可重试：只发射一次 before");
+        assert_eq!(after, vec![false], "失败尝试 after-response 标记 ok=false");
+    }
+
+    /// 无观测器时行为与既有 provider_stream 一致（零事件零开销）
+    #[tokio::test]
+    async fn without_observer_emits_nothing() {
+        let policy = default_policy();
+        let mut sleeper = MockSleeper {
+            sleeps: Vec::new(),
+        };
+        let mut state = RetryState::new();
+        let observer: Option<&dyn ModelRequestObserver> = None;
+        let result = provider_stream_with_observer(
+            &policy,
+            &mut sleeper,
+            &mut state,
+            observer,
+            || async {
+                StreamAttempt {
+                    frames: vec![],
+                    error: None,
+                    produced_content: false,
+                }
+            },
+        )
+        .await
+        .unwrap();
+        assert!(result.is_empty());
     }
 
     // ── 测试辅助：epoch → HTTP-date 文本（与 parse_http_date 互逆）──

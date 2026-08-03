@@ -19,23 +19,43 @@
 //! - T12.7 写失败不假装可回放：end_reason = event-store-write-failed；
 //! - pending FIFO 恢复：崩溃前未消费输入按创建时间升序（含 id 决胜）恢复。
 
+// G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
+#![allow(clippy::disallowed_methods)]
+
 mod common;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
+use agent_tools::tools::subagent::{
+    SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult, SubagentSpawner,
+    SubagentState,
+};
+use async_trait::async_trait;
 use conex_db::{LocalDb, PendingInput, RunStatus, StoredRun};
+use conex_test_utils::TempWorkspace;
+use conex_types::error::ProviderErrorKind;
 use conex_types::events::RunTerminalStatus;
 use conex_types::session::AgentEndReason;
+use conex_types::SessionAgent;
 use orchestrator::events::{EventQueue, drive_outcome};
+use orchestrator::flow_graph::{
+    FlowDeclaration, FlowNode, FlowNodeState, FlowScheduler, FLOW_RELEASED_KEY,
+    FLOW_RESERVED_KEY,
+};
 use orchestrator::persist::{LocalDbStore, SessionSequencer, Store};
+use orchestrator::recovery::{
+    fingerprint, RecoveryCoordinator, RecoveryRetryPolicy, RunFailureContext,
+};
 use orchestrator::restore::{
     CANCEL_INTERRUPTED_ERROR, INTERRUPTED_ERROR, INTERRUPTED_REASON, RUN_INTERRUPTED_EVENT,
     RestoreManager, RestoreMode, SnapshotError, SnapshotFileStore, SnapshotStore, StateSnapshot,
 };
 use orchestrator::run::{EVENT_STORE_WRITE_FAILED_REASON, RunError, RunHandle, RunManager};
-use orchestrator::session::SessionRecord;
+use orchestrator::session::{SessionRecord, SessionTree};
+use orchestrator::steering_queue::PendingMessageQueue;
 
 use common::{agent_end, agent_start, message_end, outcome, setup};
 
@@ -568,4 +588,235 @@ async fn sqlite_restart_full_crash_cycle_recovers_and_continues() {
     );
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ── T12 扩展（I7-M12）：并发预算跨重启验证 ─────────────────────────
+// 同一崩溃窗口内同时落 flow 预算（C6 reserve/release）与 recovery
+// Episode 预算（C7 恢复预算制）+ 阶梯 2 通知，重启后三类状态全部恢复：
+// - flow 预算按「活跃 + 已终态」重算（reserved=2 / released=1 / in_flight=1），
+//   落库键一致（防 double-charge）；
+// - recovery Episode 计数保留（不重放授权）、未耗尽仍可恢复；
+// - 未处理阶梯 2 通知仍在队列（C7 验收 5）。
+
+/// 崩溃窗口落库 spawner（真实 SQLite：session_agents 行落库，
+/// pending 首写即 running——FlowScheduler::load 的状态重建数据源）
+struct DbSpawner {
+    db: LocalDb,
+    session_id: String,
+    seq: AtomicUsize,
+}
+
+impl DbSpawner {
+    fn with_db(db: LocalDb, session_id: &str) -> Arc<Self> {
+        Arc::new(Self {
+            db,
+            session_id: session_id.to_string(),
+            seq: AtomicUsize::new(0),
+        })
+    }
+}
+
+impl std::fmt::Debug for DbSpawner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DbSpawner").finish_non_exhaustive()
+    }
+}
+
+#[async_trait]
+impl SubagentSpawner for DbSpawner {
+    async fn spawn(
+        &self,
+        req: &SubagentSpawnRequest,
+    ) -> Result<SubagentSpawnResult, SubagentSpawnError> {
+        let n = self.seq.fetch_add(1, Ordering::SeqCst);
+        let run_id = format!("crash-run-{n}");
+        let mut agents = self
+            .db
+            .load_session_agents(&self.session_id)
+            .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
+        agents.push(SessionAgent {
+            id: format!("sub-{n}"),
+            subagent_run_id: run_id.clone(),
+            parent_session_id: self.session_id.clone(),
+            parent_run_id: req.parent_run_id.clone().unwrap_or_default(),
+            parent_tool_call_id: req.parent_tool_call_id.clone(),
+            description: req.flow_node_id.clone().unwrap_or_default(),
+            mode: String::new(),
+            status: "running".to_string(),
+            summary: None,
+            messages: Vec::new(),
+            started_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as i64,
+            ended_at: None,
+            depth: Some(1),
+            subagent_path_json: None,
+        });
+        self.db
+            .save_session_agents(&self.session_id, &agents)
+            .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
+        Ok(SubagentSpawnResult {
+            subagent_id: format!("sub-{n}"),
+            subagent_run_id: run_id,
+            session_id: format!("sess-{n}"),
+            status: SubagentState::Running,
+            summary: None,
+            flow_node_id: req.flow_node_id.clone(),
+        })
+    }
+}
+
+/// 依赖图节点构造（parallel 全开，A→B 依赖）
+fn flow_node(id: &str, depends_on: &[&str]) -> FlowNode {
+    FlowNode {
+        id: id.to_string(),
+        task: format!("任务 {id}"),
+        depends_on: depends_on.iter().map(|s| s.to_string()).collect(),
+        parallel: true,
+        on_failed: None,
+        is_composite: false,
+    }
+}
+
+/// 更新 session_agents 行状态（模拟引擎侧子代理终态落库）
+fn set_row_status(db: &LocalDb, session_id: &str, run_id: &str, status: &str) {
+    let mut agents = db.load_session_agents(session_id).expect("读取行失败");
+    let row = agents
+        .iter_mut()
+        .find(|a| a.subagent_run_id == run_id)
+        .expect("run 行必须存在");
+    row.status = status.to_string();
+    db.save_session_agents(session_id, &agents).expect("保存行失败");
+}
+
+/// 当前 UTC 毫秒
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+#[tokio::test]
+async fn flow_budget_and_recovery_episodes_survive_crash_window() {
+    let ws = TempWorkspace::new("crash_flow_recovery");
+    let db_path = ws.path().join("sessions.db");
+    let session_id = "sess-crash";
+    let fp = fingerprint("sub-recovery", "崩溃窗口任务");
+
+    // 阶段一：进程存活期间（flow 预算 + 恢复预算 + 阶梯 2 通知全部落库）
+    {
+        let db = LocalDb::open(&db_path).unwrap();
+        db.insert_session(session_id, "崩溃会话").unwrap();
+        let spawner = DbSpawner::with_db(db.clone(), session_id);
+        // ── C6 预算：a 完成、b 运行中（reserved=2 / released=1 / in_flight=1）──
+        let mut sched =
+            FlowScheduler::new(session_id, spawner.clone(), Arc::new(db.clone())).unwrap();
+        let adv = sched
+            .declare_flow(&FlowDeclaration {
+                tasks: vec![flow_node("a", &[]), flow_node("b", &["a"])],
+                planner_run_id: Some("planner-1".to_string()),
+            })
+            .await
+            .unwrap();
+        let run_a = adv.started[0].subagent_run_id.clone();
+        set_row_status(&db, session_id, &run_a, "completed");
+        sched
+            .on_subagent_terminal(&run_a, SubagentState::Completed)
+            .await
+            .unwrap();
+        // 崩溃：b 运行中未完成，调度器实例丢弃（预留未释放）
+        drop(sched);
+        // ── C7 预算 + 阶梯 2 通知：fork 消费 1 个 Episode、通知落库（pending）──
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let tree = Arc::new(Mutex::new(SessionTree::new(session_id)));
+        tree.lock()
+            .unwrap()
+            .append("leaf-root", serde_json::json!({}))
+            .unwrap();
+        let mut coordinator = RecoveryCoordinator::new(
+            session_id,
+            Arc::new(db.clone()),
+            queue.clone(),
+            tree.clone(),
+            spawner.clone(),
+            RecoveryRetryPolicy::default(),
+        )
+        .unwrap();
+        let ctx = RunFailureContext {
+            subagent_id: "sub-recovery".to_string(),
+            subagent_run_id: "run-1".to_string(),
+            task: "崩溃窗口任务".to_string(),
+            error_kind: ProviderErrorKind::RateLimit,
+            retries: 6,
+            retry_elapsed_ms: 61_000,
+            produced_content: false,
+            from_leaf_id: Some("leaf-root".to_string()),
+            started_at_ms: now_ms() - 1_000,
+            inject_bytes: 100,
+            window_bytes: 10_000,
+        };
+        // 阶梯 2：通知落库（pending=true，重启后仍可见）
+        coordinator.on_subagent_run_failure(&ctx).await.unwrap();
+        // 阶梯 3：fork 消费预算（重启后计数保留）
+        coordinator.fork_and_reassign(&ctx).await.unwrap();
+        assert_eq!(coordinator.budget().count(&fp), 1);
+    } // 连接关闭 = 进程退出
+
+    // 阶段二：进程重启（同一库文件重开，等效真实重启）
+    let db = LocalDb::open(&db_path).unwrap();
+    let spawner = DbSpawner::with_db(db.clone(), session_id);
+    let rows = db.load_session_agents(session_id).unwrap();
+    let restored =
+        FlowScheduler::load(session_id, spawner.clone(), Arc::new(db.clone()), &rows).unwrap();
+
+    // ── flow 预算重算：reserved=2、released=1、in_flight=1（防 double-charge）──
+    let budget = restored.budget();
+    assert_eq!(budget.in_flight(), 1, "活跃 run 保留预留");
+    assert_eq!(budget.reserved(), 2);
+    assert_eq!(budget.released(), 1);
+    assert_eq!(
+        db.get_session_meta(FLOW_RESERVED_KEY).unwrap().as_deref(),
+        Some("2"),
+        "重算值回写库（与内存一致）"
+    );
+    assert_eq!(
+        db.get_session_meta(FLOW_RELEASED_KEY).unwrap().as_deref(),
+        Some("1"),
+        "已终态预留被 released 抵消"
+    );
+    // 节点状态从 session_agents 行重建：a 已终态不重复启动、b 运行中
+    assert_eq!(restored.node_state("a"), Some(FlowNodeState::Completed));
+    assert_eq!(restored.node_state("b"), Some(FlowNodeState::Running));
+
+    // ── recovery Episode 计数跨重启：保留、未耗尽仍可恢复 ──
+    let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+    let tree = Arc::new(Mutex::new(SessionTree::new(session_id)));
+    let mut coordinator = RecoveryCoordinator::new(
+        session_id,
+        Arc::new(db.clone()),
+        queue.clone(),
+        tree,
+        spawner.clone(),
+        RecoveryRetryPolicy::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        coordinator.budget().count(&fp),
+        1,
+        "Episode 计数跨重启保留（不重放授权）"
+    );
+    assert!(coordinator.budget().can_recover(&fp), "预算未耗尽仍可恢复");
+    // 阶梯 2 通知跨重启保留（04 C7 验收 5）
+    assert_eq!(
+        coordinator.pending_notifications(),
+        1,
+        "未处理通知重启后仍在队列（pending 位）"
+    );
+    // 重启后恢复队列条目（引擎侧 restore_steering_notifications 接线点）
+    coordinator
+        .restore_steering_notifications()
+        .expect("通知恢复入队必须成功");
+    assert!(!queue.lock().unwrap().is_empty(), "重启后 steering 条目重新入队");
 }

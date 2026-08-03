@@ -82,6 +82,55 @@ pub struct CacheBreakdown {
     pub input_total: u64,
 }
 
+/// model 请求信息（`before-request` 载荷，M14：model.beforeRequest 事件源）
+///
+/// 请求前发射点装配（引擎侧接线位）：url/model/max_tokens 由请求构建
+/// 完成后填充；`attempt` 为第几次尝试（重试循环内从 1 起）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelRequestInfo {
+    /// 请求 URL（endpoint）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// 生效模型名
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// 本次调用 max_tokens（None = 未限制）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u64>,
+    /// 第几次尝试（1 起；重试循环内每次尝试递增）
+    pub attempt: u32,
+}
+
+/// model 响应信息（`after-response` 载荷，M14：model.afterResponse 事件源）
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelResponseInfo {
+    /// HTTP 状态码（流前响应可观测；无 HTTP 层信息为 None）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<u16>,
+    /// 本次尝试是否成功（2xx / 无错误）
+    pub ok: bool,
+    /// 失败文案（ok=false 时携带）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// 单次尝试耗时（毫秒）
+    pub duration_ms: u64,
+    /// 响应用量（流成功收口时携带）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<ProviderUsage>,
+}
+
+/// model 请求生命周期观测器（M14：before-request / after-response 发射点
+/// 消费面；I8 生态轮接 HookRegistry 的 model.beforeRequest / model.afterResponse
+/// 钩子——本 trait 只观测不改写，失败不阻塞请求路径）
+pub trait ModelRequestObserver: Send + Sync {
+    /// 请求前回调（每次尝试发起前）
+    fn on_before_request(&self, info: &ModelRequestInfo);
+    /// 响应后回调（每次尝试结束后；成功/失败均触发）
+    fn on_after_response(&self, info: &ModelResponseInfo);
+}
+
 impl ProviderUsage {
     /// 按协议族口径归一化派生缓存拆分（P2 §3.3 D；C9 口径真源）
     ///
@@ -183,6 +232,13 @@ pub enum ProviderStreamEvent {
     /// 观测诊断（复用 conex-types 的 ProviderDiagnostic）
     #[serde(rename_all = "camelCase")]
     ProviderDiagnostic { diagnostic: ProviderDiagnostic },
+    /// 请求前（M14：model.beforeRequest 事件源；重试循环每次尝试前发射）
+    #[serde(rename = "before-request", rename_all = "camelCase")]
+    BeforeRequest { info: ModelRequestInfo },
+    /// 响应后（M14：model.afterResponse 事件源；每次尝试结束后发射，
+    /// 成功/失败均触发）
+    #[serde(rename = "after-response", rename_all = "camelCase")]
+    AfterResponse { info: ModelResponseInfo },
     /// 终止事件，每流恰好一个（02 §六.9）
     #[serde(rename_all = "camelCase")]
     Stop {
@@ -313,6 +369,36 @@ mod tests {
                 input: serde_json::json!({ "path": "/tmp/a" }),
             },
             diagnostic_event(),
+            // M14：请求生命周期观测事件（before-request / after-response）
+            ProviderStreamEvent::BeforeRequest {
+                info: ModelRequestInfo {
+                    url: Some("https://api.example.com/v1/chat/completions".into()),
+                    model: Some("deepseek-v4".into()),
+                    max_tokens: Some(4096),
+                    attempt: 2,
+                },
+            },
+            ProviderStreamEvent::AfterResponse {
+                info: ModelResponseInfo {
+                    status: Some(200),
+                    ok: true,
+                    error: None,
+                    duration_ms: 812,
+                    usage: Some(ProviderUsage {
+                        prompt_tokens: Some(100),
+                        ..ProviderUsage::default()
+                    }),
+                },
+            },
+            ProviderStreamEvent::AfterResponse {
+                info: ModelResponseInfo {
+                    status: Some(503),
+                    ok: false,
+                    error: Some("upstream down".into()),
+                    duration_ms: 34,
+                    usage: None,
+                },
+            },
             stop_event(StopReason::Stop),
             stop_event(StopReason::ToolCall),
             stop_event(StopReason::Length),
@@ -323,6 +409,46 @@ mod tests {
             let back: ProviderStreamEvent = serde_json::from_str(&json).unwrap();
             assert_eq!(event, back, "roundtrip 失败: {json}");
         }
+    }
+
+    /// M14：before-request / after-response 的 wire 形状（kebab-case type +
+    /// camelCase 字段，复用 ProviderStreamEvent 通道结构）
+    #[test]
+    fn model_lifecycle_wire_names() {
+        let before = ProviderStreamEvent::BeforeRequest {
+            info: ModelRequestInfo {
+                url: None,
+                model: Some("m".into()),
+                max_tokens: None,
+                attempt: 1,
+            },
+        };
+        let value = serde_json::to_value(&before).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "type": "before-request",
+                "info": { "model": "m", "attempt": 1 }
+            })
+        );
+
+        let after = ProviderStreamEvent::AfterResponse {
+            info: ModelResponseInfo {
+                status: None,
+                ok: false,
+                error: Some("boom".into()),
+                duration_ms: 5,
+                usage: None,
+            },
+        };
+        let value = serde_json::to_value(&after).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "type": "after-response",
+                "info": { "ok": false, "error": "boom", "durationMs": 5 }
+            })
+        );
     }
 
     #[test]
