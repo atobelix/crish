@@ -1,6 +1,6 @@
 //! 域事件契约（Rust enum 为双端唯一事实源）
 //!
-//! [AgentEvent] 是 24 种域事件的 serde tagged enum（顶层 `type`），全部字段
+//! [AgentEvent] 是 27 种域事件的 serde tagged enum（顶层 `type`），全部字段
 //! serde camelCase，字段结构以 03-frontend-contract.md §1.1-1.6 清单与 §5.1
 //! 硬依赖表为准。机器可读导出见 contracts/engine-events.json（事件注册表），
 //! 前端 TS 类型与解析器由 scripts/generate-engine-bindings.mjs 生成，落点
@@ -104,7 +104,63 @@ pub enum ApprovalDecision {
     Expired,
 }
 
-/// 24 种域事件（tagged enum，双端契约唯一事实源）
+// ── 缓存测量域载荷（P5 S3 §3.1.2/§3.1.3 新增；仅测量展示，不干预循环）──
+
+/// run 级缓存统计（P5 §3.1.2；`RunOutcome.cache_stats` 与
+/// `cache-stats-updated.stats` 共用同一类型，T-36 tracker.finish() 产出）
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunCacheStats {
+    /// 输入 token（Included 系已含缓存；Excluded 系不含）
+    pub prompt_tokens: u64,
+    /// 输出 token
+    pub completion_tokens: u64,
+    /// 总 token
+    pub total_tokens: u64,
+    /// 缓存命中读取 token
+    pub cache_read_tokens: u64,
+    /// 缓存写入 token
+    pub cache_write_tokens: u64,
+    /// 未命中输入 token（服务端直报优先，否则按口径推导）
+    pub cache_miss_tokens: u64,
+    /// 有真实 usage 的 turn 数（0 = 无样本，前端隐藏而非显示 0%）
+    pub sample_count: u64,
+    /// 命中率 = cache_read / input_total（input_total == 0 → None，前端隐藏）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hit_ratio: Option<f64>,
+    /// 写入占比 = cache_write / input_total
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub write_ratio: Option<f64>,
+    /// 本 run 审计出的浪费量（detectMiss 累计）
+    pub missed_tokens: u64,
+    /// 缓存温暖截止（now + ttl_for(provider, model)）；前端据此驱动冷缓存预警
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warm_until_ms: Option<u64>,
+}
+
+/// 缓存 miss 归因分类（jcode 10 类收缩为 8 类；wire kebab-case，P5 §3.1.1）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MissAttribution {
+    /// 基线模型 ≠ 当前模型（pi：不豁免，正常计费应计数）
+    ModelSwitch,
+    /// 基线代数内发生过压缩（P4 事件；重置后不计 miss，此为历史归因）
+    Compaction,
+    /// 签名对比：system/tools/messages 哈希变化（harness 自伤）
+    PrefixChanged,
+    /// idleMs ≥ ttl_for(provider, model)（P3 TTL 表）
+    IdleTtlExpired,
+    /// 无基线 / 跨会话（正常首次）
+    Cold,
+    /// 报告过缓存但本轮 read == 0（jcode ZeroRead）
+    ZeroRead,
+    /// 命中率低于阈值且不属于上述类（jcode LowRead）
+    LowRead,
+    /// 无法归类（兜底）
+    Unknown,
+}
+
+/// 27 种域事件（tagged enum，双端契约唯一事实源）
 ///
 /// 顶层 `type` 为事件名（kebab-case），事件字段全部 camelCase；
 /// 字段清单与类型映射见 contracts/engine-events.json（事件注册表），
@@ -328,6 +384,41 @@ pub enum AgentEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+
+    // ── 缓存测量域（P5 S3 §3.1.3 新增；仅测量展示，不干预循环）──
+    /// run 收口时发出的会话级缓存统计快照（runId 由信封注入，不占事件体；
+    /// 发射策略：run 收口经收口轨发一次，不按 turn 刷屏）
+    #[serde(rename = "cache-stats-updated", rename_all = "camelCase")]
+    CacheStatsUpdated {
+        session_id: String,
+        timestamp: String,
+        stats: RunCacheStats,
+    },
+    /// 缓存浪费审计命中（阈值：missed_tokens ≥ 20_000 或 missed_cost ≥ $0.1
+    /// 才发射；attribution 为 kebab-case 归因分类）
+    #[serde(rename = "cache-waste-alert", rename_all = "camelCase")]
+    CacheWasteAlert {
+        session_id: String,
+        timestamp: String,
+        attribution: MissAttribution,
+        missed_tokens: u64,
+        idle_ms: u64,
+        model_changed: bool,
+        /// 预估浪费金额（USD；engine 按 P3 价格估算后填充，None = 无价格数据）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        missed_cost_usd: Option<f64>,
+    },
+    /// 冷缓存预警（Rust 只在 run 启动、cold_cache_check 命中时发一次；
+    /// 空闲期间的提示由前端 warmUntilMs tick 驱动，不后台轮询）
+    #[serde(rename = "cold-cache-warning", rename_all = "camelCase")]
+    ColdCacheWarning {
+        session_id: String,
+        timestamp: String,
+        ttl_seconds: u64,
+        idle_ms: u64,
+        /// 预估重发 token = 上次请求 input_total
+        resend_estimate_tokens: u64,
+    },
 }
 
 /// 事件类型名宏：由同一份变体名 → wire 名清单展开出
@@ -350,7 +441,7 @@ macro_rules! engine_event_type_names {
         }
 
         impl AgentEvent {
-            /// 全部事件类型名（enum 声明顺序，与事件注册表编号 1-24 一一对应）
+            /// 全部事件类型名（enum 声明顺序，与事件注册表编号 1-27 一一对应）
             pub const ALL_TYPE_NAMES: &'static [&'static str] = &[$($name),+];
         }
     };
@@ -381,6 +472,9 @@ engine_event_type_names! {
     CheckpointCreated => "checkpoint-created",
     CheckpointRestored => "checkpoint-restored",
     RunTerminal => "run-terminal",
+    CacheStatsUpdated => "cache-stats-updated",
+    CacheWasteAlert => "cache-waste-alert",
+    ColdCacheWarning => "cold-cache-warning",
 }
 
 /// 事件信封（emit 层统一注入 runId/sequence/schemaVersion，03 §5.3-2/6）

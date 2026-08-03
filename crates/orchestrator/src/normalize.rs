@@ -18,7 +18,7 @@
 use conex_types::events::{AgentEvent, AgentEventEnvelope, RunTerminalStatus};
 use conex_types::session::AgentEndReason;
 
-/// 事件体 `sessionId` 字段的可变引用（全部 24 种事件均携带该字段）
+/// 事件体 `sessionId` 字段的可变引用（全部 27 种事件均携带该字段）
 fn event_session_id_mut(event: &mut AgentEvent) -> &mut String {
     match event {
         AgentEvent::AgentStart { session_id, .. } => session_id,
@@ -45,6 +45,9 @@ fn event_session_id_mut(event: &mut AgentEvent) -> &mut String {
         AgentEvent::CheckpointCreated { session_id, .. } => session_id,
         AgentEvent::CheckpointRestored { session_id, .. } => session_id,
         AgentEvent::RunTerminal { session_id, .. } => session_id,
+        AgentEvent::CacheStatsUpdated { session_id, .. } => session_id,
+        AgentEvent::CacheWasteAlert { session_id, .. } => session_id,
+        AgentEvent::ColdCacheWarning { session_id, .. } => session_id,
     }
 }
 

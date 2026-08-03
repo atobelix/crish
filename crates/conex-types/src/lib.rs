@@ -25,7 +25,8 @@ pub use error::{
 };
 pub use events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision, EVENT_ENVELOPE_SCHEMA_VERSION,
-    PermissionBehavior, PermissionDecision, PermissionRequest, RunTerminalStatus, ToolMetadata,
+    MissAttribution, PermissionBehavior, PermissionDecision, PermissionRequest, RunCacheStats,
+    RunTerminalStatus, ToolMetadata,
 };
 pub use history::HistoryMessage;
 pub use message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};

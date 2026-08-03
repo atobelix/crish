@@ -1,21 +1,25 @@
 ﻿//! 事件 schema 版本化兼容测试（PE-03 T03.10 / PE-12 T12.5/T12.6）
 //!
 //! 覆盖：
-//! - v1 golden fixture（tests/fixtures/events-v1/，24 事件每类 ≥1 条，无
+//! - v1 golden fixture（tests/fixtures/events-v1/，27 事件每类 ≥1 条，无
 //!   schemaVersion 的 v1 形状）反序列化全部成功，schemaVersion 缺省补 1；
 //! - 关键字段抽查（含旧 RuntimeError `error: String` 形态）；
 //! - 完整信封帧（runId/sequence）解析；
 //! - 新信封序列化恒带 `schemaVersion: 1`；未来版本号透传不丢弃；
-//! - 变体数一致性断言：24 == 本清单 == 33-event-schema-changelog.md v1 表登记数
-//!   （新增事件类型必须同步登记 changelog + 本清单 + fixtures，T12.6 门禁）。
+//! - 变体数一致性断言：27 == 本清单 == 33-event-schema-changelog.md v1 表登记数
+//!   （新增事件类型必须同步登记 changelog + 本清单 + fixtures，T12.6 门禁；
+//!   2026-08-03 P5 S3 兼容新增 cache-* 三事件，24 → 27）；
+//! - 缓存测量域三变体（P5 S3 §3.1.3）serde roundtrip / camelCase / 缺省字段。
 
-use conex_types::{AgentEventEnvelope, EVENT_ENVELOPE_SCHEMA_VERSION};
+use conex_types::{
+    AgentEvent, AgentEventEnvelope, EVENT_ENVELOPE_SCHEMA_VERSION, MissAttribution, RunCacheStats,
+};
 use serde_json::{json, Value};
 
 /// 统一 fixture 访问辅助（T11.3 golden 规范：tests/common/mod.rs 单一实现）
 mod common;
 
-/// v1 基线 24 事件类型清单（与 changelog v1 表逐条对应，PE-12 T12.6 门禁）
+/// v1 基线 27 事件类型清单（与 changelog v1 表逐条对应，PE-12 T12.6 门禁）
 const V1_EVENT_TYPES: &[&str] = &[
     "agent-start",
     "agent-end",
@@ -41,24 +45,28 @@ const V1_EVENT_TYPES: &[&str] = &[
     "checkpoint-created",
     "checkpoint-restored",
     "run-terminal",
+    // 缓存测量域（P5 S3 §3.1.3 兼容新增，2026-08-03；登记于 changelog §四 1.1 行）
+    "cache-stats-updated",
+    "cache-waste-alert",
+    "cold-cache-warning",
 ];
 
-// ── 1. 变体数一致性：24 清单 ↔ fixtures ↔ changelog ──
+// ── 1. 变体数一致性：27 清单 ↔ fixtures ↔ changelog ──
 
 #[test]
-fn v1_baseline_has_exactly_24_event_types() {
-    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（24）
+fn v1_baseline_has_exactly_27_event_types() {
+    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（27）
     assert_eq!(
         V1_EVENT_TYPES.len(),
-        24,
-        "v1 基线必须是 24 事件（与 changelog 登记数一致）"
+        27,
+        "v1 基线必须是 27 事件（与 changelog 登记数一致；24 基线 + P5 cache-* 三变体）"
     );
     let unique: std::collections::HashSet<&&str> = V1_EVENT_TYPES.iter().collect();
-    assert_eq!(unique.len(), 24, "清单内事件名不得重复");
+    assert_eq!(unique.len(), 27, "清单内事件名不得重复");
 }
 
 #[test]
-fn v1_fixture_files_cover_all_24_event_types() {
+fn v1_fixture_files_cover_all_event_types() {
     // 每个事件类型必须有对应的 v1 golden fixture（PE-12 T12.6 步骤 1）
     for name in V1_EVENT_TYPES {
         let path = common::v1_fixture_dir().join(format!("event-{name}.json"));
@@ -66,11 +74,22 @@ fn v1_fixture_files_cover_all_24_event_types() {
     }
 }
 
+#[test]
+fn v1_event_types_cover_all_agent_event_variants() {
+    // V1_EVENT_TYPES 与 AgentEvent 全量变体逐项一致（T12.6 门禁：
+    // 新增变体漏登记本清单 / 本清单超前于变体都立即失败）
+    assert_eq!(
+        V1_EVENT_TYPES,
+        AgentEvent::ALL_TYPE_NAMES,
+        "V1_EVENT_TYPES 清单必须与 AgentEvent 全部变体（声明序）一一对应"
+    );
+}
+
 // ── 2. v1 旧事件解析：无 schemaVersion 缺省补 1 ──
 
 #[test]
 fn v1_fixtures_parse_and_default_schema_version_one() {
-    // 全部 24 条 v1 样本（无 schemaVersion 字段）反序列化无错；
+    // 全部 27 条 v1 样本（无 schemaVersion 字段）反序列化无错；
     // schemaVersion 缺省视为 1（旧帧向后兼容），type_name 与文件一一对应
     for name in V1_EVENT_TYPES {
         let raw = common::v1_fixture(name);
@@ -204,6 +223,113 @@ fn upgrade_on_read_reserializes_with_schema_version() {
     assert_eq!(reserialized["runId"], "run-1");
     assert_eq!(reserialized["sequence"], 42);
     assert_eq!(reserialized["terminal"], "completed");
+}
+
+// ── 4. 缓存测量域（P5 S3 §3.1.3）：三变体 serde 契约 ──
+
+const TS: &str = "2026-07-31T00:00:00.000Z";
+
+fn run_cache_stats_fixture() -> RunCacheStats {
+    RunCacheStats {
+        prompt_tokens: 1000,
+        completion_tokens: 120,
+        total_tokens: 1120,
+        cache_read_tokens: 200,
+        cache_write_tokens: 0,
+        cache_miss_tokens: 800,
+        sample_count: 1,
+        hit_ratio: Some(0.2),
+        write_ratio: Some(0.0),
+        missed_tokens: 0,
+        warm_until_ms: None,
+    }
+}
+
+#[test]
+fn cache_stats_updated_roundtrip_and_camel_case() {
+    // cache-stats-updated：RunCacheStats 载荷 camelCase + roundtrip 保真
+    let event = AgentEvent::CacheStatsUpdated {
+        session_id: "s1".into(),
+        timestamp: TS.into(),
+        stats: run_cache_stats_fixture(),
+    };
+    assert_eq!(event.type_name(), "cache-stats-updated");
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "cache-stats-updated");
+    let stats = &json["stats"];
+    assert_eq!(stats["promptTokens"], 1000);
+    assert_eq!(stats["cacheReadTokens"], 200);
+    assert_eq!(stats["cacheMissTokens"], 800);
+    assert_eq!(stats["sampleCount"], 1);
+    assert_eq!(stats["hitRatio"], 0.2);
+    assert_eq!(stats["writeRatio"], 0.0);
+    // 可选字段 None 时必须省略（skip_serializing_if 纪律）
+    assert!(stats.get("warmUntilMs").is_none(), "None 可选字段必须省略");
+    let back: AgentEvent = serde_json::from_value(json).unwrap();
+    assert_eq!(back, event, "cache-stats-updated roundtrip 保真");
+}
+
+#[test]
+fn cache_waste_alert_roundtrip_and_missed_cost_omitted_when_none() {
+    // cache-waste-alert：attribution kebab-case + missedCostUsd None 省略
+    let event = AgentEvent::CacheWasteAlert {
+        session_id: "s1".into(),
+        timestamp: TS.into(),
+        attribution: MissAttribution::IdleTtlExpired,
+        missed_tokens: 21_000,
+        idle_ms: 360_000,
+        model_changed: false,
+        missed_cost_usd: None,
+    };
+    assert_eq!(event.type_name(), "cache-waste-alert");
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["attribution"], "idle-ttl-expired");
+    assert_eq!(json["missedTokens"], 21_000);
+    assert_eq!(json["idleMs"], 360_000);
+    assert_eq!(json["modelChanged"], false);
+    assert!(json.get("missedCostUsd").is_none(), "None 可选字段必须省略");
+    let back: AgentEvent = serde_json::from_value(json).unwrap();
+    assert_eq!(back, event, "cache-waste-alert roundtrip 保真");
+}
+
+#[test]
+fn cache_waste_alert_missing_cost_field_defaults_to_none() {
+    // 缺省字段兼容：瘦帧无 missedCostUsd 也能解析（serde default 补 None）
+    let raw = json!({
+        "type": "cache-waste-alert",
+        "sessionId": "s1",
+        "timestamp": TS,
+        "attribution": "cold",
+        "missedTokens": 500,
+        "idleMs": 0,
+        "modelChanged": false,
+    });
+    let event: AgentEvent = serde_json::from_value(raw).unwrap();
+    match event {
+        AgentEvent::CacheWasteAlert { missed_cost_usd, .. } => {
+            assert_eq!(missed_cost_usd, None, "缺省字段必须补 None");
+        }
+        other => panic!("type 判别错误：{}", other.type_name()),
+    }
+}
+
+#[test]
+fn cold_cache_warning_roundtrip_and_camel_case() {
+    // cold-cache-warning：ttlSeconds/idleMs/resendEstimateTokens camelCase
+    let event = AgentEvent::ColdCacheWarning {
+        session_id: "s1".into(),
+        timestamp: TS.into(),
+        ttl_seconds: 300,
+        idle_ms: 360_000,
+        resend_estimate_tokens: 1000,
+    };
+    assert_eq!(event.type_name(), "cold-cache-warning");
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["ttlSeconds"], 300);
+    assert_eq!(json["idleMs"], 360_000);
+    assert_eq!(json["resendEstimateTokens"], 1000);
+    let back: AgentEvent = serde_json::from_value(json).unwrap();
+    assert_eq!(back, event, "cold-cache-warning roundtrip 保真");
 }
 
 /// 变体数与 changelog 一致性的辅助断言入口：消费方（测试/CI）可遍历

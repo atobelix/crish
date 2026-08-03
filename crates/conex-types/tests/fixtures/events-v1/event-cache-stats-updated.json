@@ -1,0 +1,18 @@
+{
+  "runId": "run-1",
+  "sessionId": "s1",
+  "stats": {
+    "cacheMissTokens": 800,
+    "cacheReadTokens": 200,
+    "cacheWriteTokens": 0,
+    "completionTokens": 120,
+    "hitRatio": 0.2,
+    "missedTokens": 0,
+    "promptTokens": 1000,
+    "sampleCount": 1,
+    "totalTokens": 1120,
+    "writeRatio": 0.0
+  },
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "type": "cache-stats-updated"
+}

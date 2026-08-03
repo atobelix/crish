@@ -5,8 +5,8 @@
 //! contracts/engine-events.json 是给生成脚本（scripts/generate-engine-bindings.mjs）
 //! 的机器可读导出，本测试把注册表与 Rust 侧真实 serde 行为双向锁定：
 //!
-//! - 事件清单：注册表 24 个 type 名与顺序 == [AgentEvent::ALL_TYPE_NAMES]
-//!   （enum 声明顺序，编号 1-24 连续）；
+//! - 事件清单：注册表 27 个 type 名与顺序 == [AgentEvent::ALL_TYPE_NAMES]
+//!   （enum 声明顺序，编号 1-27 连续）；
 //! - 事件字段：按注册表必填字段构造样本 → 反序列化为 [AgentEvent] →
 //!   回序列化，断言必填字段全部在场、且无注册表外字段（字段名漂移即失败）；
 //! - 载荷结构：同一模式逐类型回环（struct + tagged enum 全变体）；
@@ -19,11 +19,11 @@
 
 use conex_types::{
     AgentEndReason, AgentEvent, AgentMessage, AgentMessageBlock, AgentMessageRole,
-    ApprovalDecision, PermissionRequest, ProviderDiagnostic, ProviderDiagnosticPhase,
-    ProviderErrorKind, RunTerminalStatus, RuntimeCheckpointKind, RuntimeCheckpointRecord,
-    RuntimeCheckpointRestoreRecord, SystemPromptWireMode, ToolArtifact, ToolArtifactKind,
-    ToolBatchCall, ToolBatchResult, ToolCallBlock, ToolCategory, ToolConcurrency, ToolMetadata,
-    ToolOutput, ToolProgressUpdate,
+    ApprovalDecision, MissAttribution, PermissionRequest, ProviderDiagnostic,
+    ProviderDiagnosticPhase, ProviderErrorKind, RunCacheStats, RunTerminalStatus,
+    RuntimeCheckpointKind, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord,
+    SystemPromptWireMode, ToolArtifact, ToolArtifactKind, ToolBatchCall, ToolBatchResult,
+    ToolCallBlock, ToolCategory, ToolConcurrency, ToolMetadata, ToolOutput, ToolProgressUpdate,
 };
 use conex_types::tool::{
     CompressionCacheInvalidation, ContextCompressionCacheBoundaryMetadata,
@@ -189,12 +189,12 @@ fn registry_event_types_match_enum_declaration_order() {
     let reg = registry();
     assert_eq!(reg.contract, "engine-events", "注册表契约名必须为 engine-events");
     assert_eq!(reg.schema_version, 1);
-    assert_eq!(reg.event_count, 24);
-    assert_eq!(reg.events.len(), 24, "事件注册表必须是 24 条");
+    assert_eq!(reg.event_count, 27);
+    assert_eq!(reg.events.len(), 27, "事件注册表必须是 27 条");
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        24,
-        "AgentEvent enum 必须是 24 种域事件"
+        27,
+        "AgentEvent enum 必须是 27 种域事件"
     );
     for (i, ev) in reg.events.iter().enumerate() {
         assert_eq!(ev.id as usize, i + 1, "事件编号必须从 1 连续递增");
@@ -234,7 +234,7 @@ fn type_name_guess(wire: &str) -> String {
 // ── 2. 事件字段与 serde 行为锁定 ──
 
 #[test]
-fn event_fields_match_serde_wire_for_all_24() {
+fn event_fields_match_serde_wire_for_all_events() {
     let reg = registry();
     for ev in &reg.events {
         let sample = build_event_sample(&reg, ev);
@@ -307,6 +307,7 @@ fn check_payload_struct(reg: &Registry, rust_name: &str) {
         "ContextCompressionRecord" => {
             check_roundtrip::<ContextCompressionRecord>(rust_name, fields, sample)
         }
+        "RunCacheStats" => check_roundtrip::<RunCacheStats>(rust_name, fields, sample),
         other => panic!("注册表含未接入漂移检查的载荷类型 {other}"),
     }
 }
@@ -422,6 +423,7 @@ fn enum_values_match_serde_wire() {
         CompressionCacheInvalidation,
         4
     );
+    check_enum!(reg, "MissAttribution", MissAttribution, 8);
 }
 
 // ── 5. 可达性：注册表不允许死条目 ──
@@ -429,7 +431,7 @@ fn enum_values_match_serde_wire() {
 #[test]
 fn registry_entries_are_reachable_from_events() {
     let reg = registry();
-    // 从 24 事件出发做传递闭包；JsonValue/string/number/boolean 为基元。
+    // 从 27 事件出发做传递闭包；JsonValue/string/number/boolean 为基元。
     let mut reachable: std::collections::BTreeSet<String> =
         reg.events.iter().flat_map(|e| e.fields.iter()).map(|f| f.ts_type.clone()).collect();
     let mut queue: Vec<String> = reachable.iter().cloned().collect();

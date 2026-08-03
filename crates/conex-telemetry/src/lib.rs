@@ -19,6 +19,7 @@
 //! crates; it must not depend on any higher-level crate (no tauri, no
 //! agent-workbench).
 
+pub mod cache;
 pub mod crash;
 pub mod file;
 pub mod format;

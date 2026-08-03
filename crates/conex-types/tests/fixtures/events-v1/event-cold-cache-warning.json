@@ -1,0 +1,9 @@
+{
+  "idleMs": 360000,
+  "resendEstimateTokens": 1000,
+  "runId": "run-1",
+  "sessionId": "s1",
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "ttlSeconds": 300,
+  "type": "cold-cache-warning"
+}
