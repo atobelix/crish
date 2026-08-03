@@ -17,6 +17,7 @@ pub mod fs;
 pub mod search;
 pub mod shell;
 
+use crate::audit::{NoopAuditSink, SecurityAuditSink};
 use crate::definition::ToolError;
 use crate::registry::ToolRegistry;
 use conex_types::error::codes;
@@ -26,7 +27,8 @@ use std::sync::Arc;
 /// 内置工具统一定制配置（由工具执行器注入，模型入参不可覆盖）
 ///
 /// R3 T9：`workspace_root` 移至执行期 `ToolContext`（会话级），
-/// 本配置仅保留构造期默认值（shell 超时 / 输出上限 / 回收站根）。
+/// 本配置仅保留构造期默认值（shell 超时 / 输出上限 / 回收站根 /
+/// 审计 sink）。
 #[derive(Debug, Clone)]
 pub struct BuiltinToolConfig {
     /// shell 工具默认超时（毫秒），任务书要求默认 30 秒
@@ -35,6 +37,9 @@ pub struct BuiltinToolConfig {
     pub default_shell_max_output_bytes: usize,
     /// 删除工具回收站根目录（I2-S3：None 时执行期回退工作区 `.crish-trash`）
     pub trash_root: Option<PathBuf>,
+    /// 安全审计 sink（I2-S8：删除/重定向/拦截发射 security-audit 事件；
+    /// None = 不接线，工具回退 no-op，审计仅走结构化 tracing 日志）
+    pub audit_sink: Option<Arc<dyn SecurityAuditSink>>,
 }
 
 impl Default for BuiltinToolConfig {
@@ -43,6 +48,7 @@ impl Default for BuiltinToolConfig {
             default_shell_timeout_ms: 30_000,
             default_shell_max_output_bytes: 200_000,
             trash_root: None,
+            audit_sink: None,
         }
     }
 }
@@ -57,20 +63,30 @@ pub fn register_builtin_tools_with_config(
     registry: &mut ToolRegistry,
     config: BuiltinToolConfig,
 ) -> Result<(), ToolError> {
+    let audit_sink = config
+        .audit_sink
+        .unwrap_or_else(|| Arc::new(NoopAuditSink) as Arc<dyn SecurityAuditSink>);
     registry.register(Arc::new(fs::ReadFileTool::new(None)))?;
     registry.register(Arc::new(fs::WriteFileTool::new()))?;
     registry.register(Arc::new(fs::ListDirTool::new()))?;
     registry.register(Arc::new(fs::FileStatTool::new()))?;
     registry.register(Arc::new(search::GrepSearchTool::new()))?;
     registry.register(Arc::new(search::FuzzyFindTool::new()))?;
-    registry.register(Arc::new(shell::ShellCommandTool::new(
+    registry.register(Arc::new(shell::ShellCommandTool::with_audit_sink(
         config.default_shell_timeout_ms,
         config.default_shell_max_output_bytes,
         config.trash_root.clone(),
+        Arc::clone(&audit_sink),
     )))?;
     registry.register(Arc::new(diff::DiffTextTool::new()))?;
-    registry.register(Arc::new(delete::DeleteFileTool::new(config.trash_root.clone())))?;
-    registry.register(Arc::new(delete::DeleteDirTool::new(config.trash_root.clone())))?;
+    registry.register(Arc::new(delete::DeleteFileTool::with_audit_sink(
+        config.trash_root.clone(),
+        Arc::clone(&audit_sink),
+    )))?;
+    registry.register(Arc::new(delete::DeleteDirTool::with_audit_sink(
+        config.trash_root.clone(),
+        audit_sink,
+    )))?;
     Ok(())
 }
 

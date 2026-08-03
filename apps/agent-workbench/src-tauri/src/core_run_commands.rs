@@ -34,7 +34,10 @@ use agent_provider::request::build_system_prompt;
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision as WireApprovalDecision, PermissionRequest,
     RunTerminalStatus,
+    SecurityAuditDecision,
+    SecurityAuditOperation,
 };
+use conex_types::impact::ImpactAssessment;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::{codes, ContextBudget, CrishError, CrishErrorPayload, HistoryMessage};
 use orchestrator::events::{build_run_terminal, drive_outcome, EventQueue};
@@ -1822,9 +1825,29 @@ pub struct TrashRestoreResponse {
 pub(crate) fn trash_restore(
     app: tauri::AppHandle,
     entry_id: String,
+    session_id: Option<String>,
+    state: tauri::State<'_, Arc<CoreRunState>>,
 ) -> Result<TrashRestoreResponse, CoreError> {
     let root = trash_root_for(&app)?;
-    trash_restore_at(&root, &entry_id)
+    // I2-S8：恢复前取条目大小（恢复成功后条目已从清单移除，必须先行）
+    let size = conex_fs::trash::TrashService::new(&root)
+        .list()
+        .into_iter()
+        .find(|e| e.id == entry_id.trim())
+        .map(|e| e.size)
+        .unwrap_or(0);
+    let response = trash_restore_at(&root, &entry_id)?;
+    // I2-S8：恢复动作审计（decision=restored；经事件桥发前端事件流，
+    // sessionId 由调用方（S5 恢复面板接线）携带，缺失时仅落审计日志）
+    emit_trash_audit(
+        &state.bridge,
+        session_id.as_deref(),
+        SecurityAuditOperation::TrashRestore,
+        SecurityAuditDecision::Restored,
+        &response.original_path,
+        size,
+    );
+    Ok(response)
 }
 
 /// 纯函数核心（测试直测）：按条目 id 恢复到原路径
@@ -1855,9 +1878,30 @@ pub struct TrashPurgeResponse {
 pub(crate) fn trash_purge(
     app: tauri::AppHandle,
     entry_id: String,
+    session_id: Option<String>,
+    state: tauri::State<'_, Arc<CoreRunState>>,
 ) -> Result<TrashPurgeResponse, CoreError> {
     let root = trash_root_for(&app)?;
-    trash_purge_at(&root, &entry_id)
+    // I2-S8：清除前取条目原路径与大小（清除成功后条目已从清单移除）
+    let entry = conex_fs::trash::TrashService::new(&root)
+        .list()
+        .into_iter()
+        .find(|e| e.id == entry_id.trim());
+    let (original_path, size) = entry
+        .as_ref()
+        .map(|e| (e.original_path.to_string_lossy().into_owned(), e.size))
+        .unwrap_or_else(|| (entry_id.to_string(), 0));
+    let response = trash_purge_at(&root, &entry_id)?;
+    // I2-S8：清除动作审计（decision=purged；经事件桥发前端事件流）
+    emit_trash_audit(
+        &state.bridge,
+        session_id.as_deref(),
+        SecurityAuditOperation::TrashPurge,
+        SecurityAuditDecision::Purged,
+        &original_path,
+        size,
+    );
+    Ok(response)
 }
 
 /// 纯函数核心（测试直测）：彻底清除条目（显式用户调用，不可恢复）
@@ -1873,6 +1917,74 @@ pub(crate) fn trash_purge_at(
         ok: true,
         entry_id: entry_id.to_string(),
     })
+}
+
+/// 回收站恢复/清除动作的审计发射（I2-S8）
+///
+/// 发射形态：`security-audit` 信封（runId/sequence 为 None——用户级引擎
+/// 命令不属 run 上下文，前端对缺失 runId 的信封放行不过滤）；`session_id`
+/// 由调用方携带（S5 恢复面板接线后传入），缺失时跳过 wire-out 仅落
+/// 结构化审计日志。事件落库（EventQueue append_event）属 run 上下文
+/// 数据面，本命令面无会话序列上下文，登记为 I3 遗留（见方案 §2 S8）。
+fn emit_trash_audit(
+    bridge: &EventBridge,
+    session_id: Option<&str>,
+    operation: SecurityAuditOperation,
+    decision: SecurityAuditDecision,
+    original_path: &str,
+    size_bytes: u64,
+) -> EmitReport {
+    let Some(session_id) = session_id else {
+        tracing::info!(
+            target: "security.audit",
+            kind = "trash-command",
+            operation = ?operation,
+            decision = ?decision,
+            path = original_path,
+            "回收站命令审计（未携带会话上下文，跳过事件发射）"
+        );
+        return EmitReport::default();
+    };
+    let event = AgentEvent::SecurityAudit {
+        session_id: session_id.to_string(),
+        timestamp: now_iso_utc(),
+        operation,
+        targets: vec![original_path.to_string()],
+        impact: ImpactAssessment {
+            file_count: 1,
+            total_size_bytes: size_bytes,
+            directory_count: 0,
+            cross_directory: false,
+            flagged: false,
+        },
+        decision,
+        permission_mode: None,
+        tool_call_id: None,
+    };
+    let envelope = AgentEventEnvelope::new(event, None, None);
+    tracing::info!(
+        target: "security.audit",
+        kind = "trash-command",
+        session_id,
+        operation = ?operation,
+        decision = ?decision,
+        path = original_path,
+        "回收站命令审计：已发前端事件流"
+    );
+    bridge.emit_envelope(&envelope)
+}
+
+/// 当前 UTC 时间 ISO8601 字符串（毫秒精度；复用既有 civil_from_days
+/// 换算，与 orchestrator / session-loop 同源）
+fn now_iso_utc() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = now.as_secs();
+    let millis = now.subsec_millis();
+    let (hours, mins, sec) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
+    let (year, month, day) = civil_from_days((secs / 86400) as i64);
+    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{millis:03}Z")
 }
 
 // ── 测试 ──────────────────────────────────────────────────────────
@@ -2317,5 +2429,122 @@ mod tests {
         assert_eq!(listed.entries.len(), 1);
         assert_eq!(listed.entries[0].id, entry.id);
         assert!(listed.trash_root.ends_with(".crish-trash"));
+    }
+
+    // ── I2-S8：回收站恢复/清除动作审计发射 ──
+
+    /// 记录型发射器（核心事件桥测试替身；Emitter trait 公开可注入）
+    #[derive(Default)]
+    struct RecordingEmitter(std::sync::Mutex<Vec<String>>);
+
+    impl crate::core_event_bridge::Emitter for RecordingEmitter {
+        fn emit(&self, _channel: &str, payload: &str) {
+            self.0.lock().unwrap().push(payload.to_string());
+        }
+    }
+
+    fn recording_bridge() -> (EventBridge, Arc<RecordingEmitter>) {
+        let emitter = Arc::new(RecordingEmitter::default());
+        let bridge = EventBridge::new(
+            "workbench-run-event",
+            Arc::clone(&emitter) as Arc<dyn crate::core_event_bridge::Emitter>,
+        );
+        (bridge, emitter)
+    }
+
+    /// trash_restore / trash_purge 动作带会话上下文时，经事件桥发射
+    /// security-audit 信封（decision=restored/purged，runId 缺省前端放行）
+    #[test]
+    fn emit_trash_audit_sends_security_audit_envelope() {
+        let (bridge, emitter) = recording_bridge();
+
+        let report = emit_trash_audit(
+            &bridge,
+            Some("s1"),
+            SecurityAuditOperation::TrashRestore,
+            SecurityAuditDecision::Restored,
+            "a.txt",
+            5,
+        );
+        assert_eq!(
+            report,
+            EmitReport {
+                emitted: 1,
+                buffered: 0,
+                dropped: 0
+            }
+        );
+
+        // 先取回载荷再断言（Mutex 不可重入：guard 存活期间不得再发射）
+        let payloads = emitter.0.lock().unwrap().clone();
+        assert_eq!(payloads.len(), 1, "恢复动作应发射 1 条审计信封");
+        let v: serde_json::Value =
+            serde_json::from_str(&payloads[0]).expect("载荷为合法 JSON");
+        assert_eq!(v["type"], "security-audit");
+        assert_eq!(v["sessionId"], "s1");
+        assert_eq!(v["operation"], "trash-restore");
+        assert_eq!(v["decision"], "restored");
+        assert_eq!(v["targets"][0], "a.txt");
+        assert_eq!(v["impact"]["fileCount"], 1);
+        assert_eq!(v["impact"]["totalSizeBytes"], 5);
+        // runId/sequence 缺省：用户级引擎命令不属 run 上下文（前端放行不过滤）
+        assert!(v.get("runId").is_none(), "runId 应缺省");
+        assert!(v.get("sequence").is_none(), "sequence 应缺省");
+        assert_eq!(v["schemaVersion"], 1);
+
+        let report_purge = emit_trash_audit(
+            &bridge,
+            Some("s1"),
+            SecurityAuditOperation::TrashPurge,
+            SecurityAuditDecision::Purged,
+            "b.txt",
+            8,
+        );
+        assert_eq!(report_purge.emitted, 1);
+        let payloads2 = emitter.0.lock().unwrap().clone();
+        let v2: serde_json::Value =
+            serde_json::from_str(&payloads2[1]).expect("载荷为合法 JSON");
+        assert_eq!(v2["operation"], "trash-purge");
+        assert_eq!(v2["decision"], "purged");
+    }
+
+    /// 未携带会话上下文：跳过事件发射（wire 零条），仅落审计日志
+    #[test]
+    fn emit_trash_audit_without_session_skips_wire_out() {
+        let (bridge, emitter) = recording_bridge();
+
+        let report = emit_trash_audit(
+            &bridge,
+            None,
+            SecurityAuditOperation::TrashRestore,
+            SecurityAuditDecision::Restored,
+            "a.txt",
+            5,
+        );
+        assert_eq!(report, EmitReport::default(), "无会话上下文不发射");
+        assert!(emitter.0.lock().unwrap().is_empty(), "事件桥不得收到载荷");
+    }
+
+    /// 审计信封中的事件体可被 AgentEvent 契约反序列化（事件类型注册表一致）
+    #[test]
+    fn emit_trash_audit_payload_parses_as_security_audit() {
+        let (bridge, emitter) = recording_bridge();
+        emit_trash_audit(
+            &bridge,
+            Some("s1"),
+            SecurityAuditOperation::TrashPurge,
+            SecurityAuditDecision::Purged,
+            "c.txt",
+            12,
+        );
+        let payload = &emitter.0.lock().unwrap()[0];
+        let envelope: AgentEventEnvelope = serde_json::from_str(payload).unwrap();
+        assert_eq!(envelope.type_name(), "security-audit");
+        let AgentEvent::SecurityAudit { decision, impact, .. } = envelope.event else {
+            panic!("应为 security-audit 事件");
+        };
+        assert_eq!(decision, SecurityAuditDecision::Purged);
+        assert_eq!(impact.file_count, 1);
+        assert_eq!(impact.total_size_bytes, 12);
     }
 }

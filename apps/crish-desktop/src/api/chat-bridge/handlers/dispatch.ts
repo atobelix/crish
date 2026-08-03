@@ -89,6 +89,9 @@ export const engineDispatchTable: {
   'cache-stats-updated': (_env, _envelope) => {},
   'cache-waste-alert': (_env, _envelope) => {},
   'cold-cache-warning': (_env, _envelope) => {},
+  // 安全审计域（I2-S8；先注册显式空实现，宽容静默忽略——审计面板 /
+  // S9 审批弹窗影响面数据源由 I3 接线消费）
+  'security-audit': (_env, _envelope) => {},
 };
 
 type LegacyHandler = (env: HandlerEnv, envelope: LegacyEnvelope) => void;

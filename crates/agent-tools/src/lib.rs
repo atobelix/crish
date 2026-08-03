@@ -19,6 +19,7 @@
 //!   远端 MCP 工具经名称前缀适配为 Tool 进入统一执行器
 
 pub mod context;
+pub mod audit;
 pub mod definition;
 pub mod executor;
 pub mod idempotency;
@@ -32,6 +33,9 @@ pub mod tools;
 pub use context::{
     create_mock_tool_context, AbortToken, AskCallback, AskChannel, AskDecision, NoopAskChannel,
     ToolContext,
+};
+pub use audit::{
+    security_audit_event, AuditSink, NoopAuditSink, RecordingAuditSink, SecurityAuditSink,
 };
 pub use definition::{default_input_schema, Tool, ToolDefinition, ToolError};
 pub use executor::{execute_with_output_policy, ExecutorContext, ToolExecutionPolicy, ToolResult};

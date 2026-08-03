@@ -48,6 +48,7 @@ fn event_session_id_mut(event: &mut AgentEvent) -> &mut String {
         AgentEvent::CacheStatsUpdated { session_id, .. } => session_id,
         AgentEvent::CacheWasteAlert { session_id, .. } => session_id,
         AgentEvent::ColdCacheWarning { session_id, .. } => session_id,
+        AgentEvent::SecurityAudit { session_id, .. } => session_id,
     }
 }
 

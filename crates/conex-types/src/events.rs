@@ -14,6 +14,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::impact::ImpactAssessment;
 use crate::message::{AgentMessage, AgentMessageBlock};
 use crate::session::AgentEndReason;
 use crate::tool::{
@@ -55,6 +56,45 @@ pub struct PermissionDecision {
     pub reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
+}
+
+// ── 安全审计域（I2-S8：高危操作审计事件 payload 枚举）──
+
+/// 审计操作类别（`security-audit.operation`，wire kebab-case）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SecurityAuditOperation {
+    /// 删除（delete_file / delete_dir / shell 删除形态重定向）
+    Delete,
+    /// 回收站条目恢复（trash_restore）
+    TrashRestore,
+    /// 回收站条目彻底清除（trash_purge）
+    TrashPurge,
+    /// git 回退（git-revert 形态，预留供 S6 面积审计）
+    GitRevert,
+    /// 命令执行（command-exec 形态，红线拦截等）
+    CommandExec,
+}
+
+/// 审计处置决策（`security-audit.decision`，wire lowercase）
+///
+/// 覆盖任务卡两组取值：删除接管/重定向（redirected）、红线与形态拦截
+/// （blocked）、审批三态（approved/denied）、恢复动作（restored/purged）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SecurityAuditDecision {
+    /// 被红线/形态拦截（未执行）
+    Blocked,
+    /// 已批准执行
+    Approved,
+    /// 被拒绝
+    Denied,
+    /// 已重定向到删除接管接口（未物理删除，可恢复）
+    Redirected,
+    /// 回收站条目已恢复
+    Restored,
+    /// 回收站条目已彻底清除
+    Purged,
 }
 
 /// 工具元数据（审批请求附带）
@@ -160,7 +200,7 @@ pub enum MissAttribution {
     Unknown,
 }
 
-/// 27 种域事件（tagged enum，双端契约唯一事实源）
+/// 28 种域事件（tagged enum，双端契约唯一事实源）
 ///
 /// 顶层 `type` 为事件名（kebab-case），事件字段全部 camelCase；
 /// 字段清单与类型映射见 contracts/engine-events.json（事件注册表），
@@ -419,6 +459,29 @@ pub enum AgentEvent {
         /// 预估重发 token = 上次请求 input_total
         resend_estimate_tokens: u64,
     },
+
+    // ── 安全审计域（I2-S8：高危操作审计事件）──
+    /// 高危操作审计（删除接管/重定向/恢复/红线拦截；影响面载荷供 S9
+    /// 审批弹窗与审计面板；runId 由 emit 层经信封注入，不占事件体）
+    #[serde(rename = "security-audit", rename_all = "camelCase")]
+    SecurityAudit {
+        session_id: String,
+        timestamp: String,
+        /// 审计操作类别（delete/trash-restore/trash-purge/git-revert/command-exec）
+        operation: SecurityAuditOperation,
+        /// 目标路径列表
+        targets: Vec<String>,
+        /// 影响面（文件数/总大小/目录数/跨目录/谨慎标记）
+        impact: ImpactAssessment,
+        /// 处置决策（blocked/approved/denied/redirected/restored/purged）
+        decision: SecurityAuditDecision,
+        /// 权限模式（ask/full-access/plan；emit 层可注入，工具侧为 None）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        permission_mode: Option<String>,
+        /// 工具调用 id（工具侧发射时填充；None = 非工具上下文，如引擎命令）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tool_call_id: Option<String>,
+    },
 }
 
 /// 事件类型名宏：由同一份变体名 → wire 名清单展开出
@@ -475,6 +538,7 @@ engine_event_type_names! {
     CacheStatsUpdated => "cache-stats-updated",
     CacheWasteAlert => "cache-waste-alert",
     ColdCacheWarning => "cold-cache-warning",
+    SecurityAudit => "security-audit",
 }
 
 /// 事件信封（emit 层统一注入 runId/sequence/schemaVersion，03 §5.3-2/6）

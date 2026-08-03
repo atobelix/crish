@@ -16,3 +16,5 @@ sha2 = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# I2-S8：ImpactAssessment 上移至 conex-types（wire 契约归属），本 crate 重导出
+conex-types = { path = "../conex-types" }

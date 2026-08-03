@@ -49,20 +49,22 @@ const V1_EVENT_TYPES: &[&str] = &[
     "cache-stats-updated",
     "cache-waste-alert",
     "cold-cache-warning",
+    // 安全审计域（I2-S8 兼容新增，2026-08-03；登记于 changelog §四 1.2 行）
+    "security-audit",
 ];
 
-// ── 1. 变体数一致性：27 清单 ↔ fixtures ↔ changelog ──
+// ── 1. 变体数一致性：28 清单 ↔ fixtures ↔ changelog ──
 
 #[test]
-fn v1_baseline_has_exactly_27_event_types() {
-    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（27）
+fn v1_baseline_has_exactly_28_event_types() {
+    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（28）
     assert_eq!(
         V1_EVENT_TYPES.len(),
-        27,
-        "v1 基线必须是 27 事件（与 changelog 登记数一致；24 基线 + P5 cache-* 三变体）"
+        28,
+        "v1 基线必须是 28 事件（27 基线 + I2-S8 security-audit 变体）"
     );
     let unique: std::collections::HashSet<&&str> = V1_EVENT_TYPES.iter().collect();
-    assert_eq!(unique.len(), 27, "清单内事件名不得重复");
+    assert_eq!(unique.len(), 28, "清单内事件名不得重复");
 }
 
 #[test]
@@ -337,4 +339,117 @@ fn cold_cache_warning_roundtrip_and_camel_case() {
 #[allow(dead_code)]
 fn v1_event_types() -> &'static [&'static str] {
     V1_EVENT_TYPES
+}
+
+// ── 5. 安全审计域（I2-S8）：security-audit serde 契约 ──
+
+use conex_types::{ImpactAssessment, SecurityAuditDecision, SecurityAuditOperation};
+
+#[test]
+fn security_audit_roundtrip_and_camel_case() {
+    // security-audit：operation/decision lowercase、impact 载荷 camelCase、
+    // 可选字段 None 省略、runId 不占事件体（emit 层信封注入）
+    let event = AgentEvent::SecurityAudit {
+        session_id: "s1".into(),
+        timestamp: TS.into(),
+        operation: SecurityAuditOperation::Delete,
+        targets: vec!["sub/a.txt".into(), "sub/b.txt".into()],
+        impact: ImpactAssessment {
+            file_count: 2,
+            total_size_bytes: 8,
+            directory_count: 1,
+            cross_directory: true,
+            flagged: false,
+        },
+        decision: SecurityAuditDecision::Redirected,
+        permission_mode: None,
+        tool_call_id: Some("tc-1".into()),
+    };
+    assert_eq!(event.type_name(), "security-audit");
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "security-audit");
+    assert_eq!(json["operation"], "delete");
+    assert_eq!(json["targets"][0], "sub/a.txt");
+    assert_eq!(json["impact"]["fileCount"], 2);
+    assert_eq!(json["impact"]["totalSizeBytes"], 8);
+    assert_eq!(json["impact"]["crossDirectory"], true);
+    assert_eq!(json["decision"], "redirected");
+    assert_eq!(json["toolCallId"], "tc-1");
+    // 可选字段 None 时必须省略（skip_serializing_if 纪律）
+    assert!(json.get("permissionMode").is_none(), "None 可选字段必须省略");
+    // runId 属信封注入（03 §5.3-2），事件体不得携带
+    assert!(json.get("runId").is_none(), "runId 不得出现在事件体");
+    let back: AgentEvent = serde_json::from_value(json).unwrap();
+    assert_eq!(back, event, "security-audit roundtrip 保真");
+}
+
+#[test]
+fn security_audit_decision_wire_values() {
+    // 决策枚举 wire lowercase 全量锚定（blocked/approved/denied/redirected/
+    // restored/purged——覆盖删除接管、审批与恢复动作三组语义）
+    for (value, decision) in [
+        ("blocked", SecurityAuditDecision::Blocked),
+        ("approved", SecurityAuditDecision::Approved),
+        ("denied", SecurityAuditDecision::Denied),
+        ("redirected", SecurityAuditDecision::Redirected),
+        ("restored", SecurityAuditDecision::Restored),
+        ("purged", SecurityAuditDecision::Purged),
+    ] {
+        let parsed: SecurityAuditDecision =
+            serde_json::from_value(serde_json::json!(value)).unwrap();
+        assert_eq!(parsed, decision, "决策值 {value}");
+        assert_eq!(
+            serde_json::to_value(parsed).unwrap(),
+            serde_json::json!(value),
+            "决策值 {value} 回写"
+        );
+    }
+    for (value, operation) in [
+        ("delete", SecurityAuditOperation::Delete),
+        ("trash-restore", SecurityAuditOperation::TrashRestore),
+        ("trash-purge", SecurityAuditOperation::TrashPurge),
+        ("git-revert", SecurityAuditOperation::GitRevert),
+        ("command-exec", SecurityAuditOperation::CommandExec),
+    ] {
+        let parsed: SecurityAuditOperation =
+            serde_json::from_value(serde_json::json!(value)).unwrap();
+        assert_eq!(parsed, operation, "操作值 {value}");
+        assert_eq!(
+            serde_json::to_value(parsed).unwrap(),
+            serde_json::json!(value),
+            "操作值 {value} 回写"
+        );
+    }
+}
+
+#[test]
+fn security_audit_missing_optional_fields_default_to_none() {
+    // 缺省字段兼容：瘦帧无 permissionMode/toolCallId 也能解析
+    let raw = json!({
+        "type": "security-audit",
+        "sessionId": "s1",
+        "timestamp": TS,
+        "operation": "command-exec",
+        "targets": [],
+        "impact": {
+            "fileCount": 0,
+            "totalSizeBytes": 0,
+            "directoryCount": 0,
+            "crossDirectory": false,
+            "flagged": false,
+        },
+        "decision": "blocked",
+    });
+    let event: AgentEvent = serde_json::from_value(raw).unwrap();
+    match event {
+        AgentEvent::SecurityAudit {
+            permission_mode,
+            tool_call_id,
+            ..
+        } => {
+            assert_eq!(permission_mode, None, "缺省 permissionMode 必须补 None");
+            assert_eq!(tool_call_id, None, "缺省 toolCallId 必须补 None");
+        }
+        other => panic!("type 判别错误：{}", other.type_name()),
+    }
 }

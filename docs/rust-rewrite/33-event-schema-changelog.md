@@ -6,14 +6,14 @@
 > 与 T03.9 契约文档 `docs/rust-rewrite/contracts/engine-ipc-contract.md`（E7 产出）同册——
 > 本 changelog 是该契约文档的「事件载荷版本化」分册，契约文档「事件关联」节引用本文件；
 > 边界：**命令变更走 T03.9 changelog，事件变更走本 changelog**（PE-12 T12.5 步骤 4）。
-> 代码真源：`crates/conex-types/src/events.rs`（AgentEvent 27 变体 + AgentEventEnvelope；
-> 2026-08-03 P5 缓存测量域兼容新增 3 变体，24 → 27）。
+> 代码真源：`crates/conex-types/src/events.rs`（AgentEvent 28 变体 + AgentEventEnvelope；
+> 2026-08-03 P5 缓存测量域兼容新增 3 变体，24 → 27；I2-S8 安全审计域兼容新增 1 变体，27 → 28）。
 
 ## 一、版本模型
 
 | 面                               | 机制                                  | 说明                                                                                                                             |
 | -------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 事件体（AgentEvent）             | 无版本字段                            | 域类型纯净，27 变体字段不带版本；演进靠 changelog + 兼容测试锚定（D3）                                                           |
+| 事件体（AgentEvent）             | 无版本字段                            | 域类型纯净，28 变体字段不带版本；演进靠 changelog + 兼容测试锚定（D3）                                                           |
 | 信封（wire，AgentEventEnvelope） | 顶层 `schemaVersion`（u32，当前恒 1） | 序列化层注入（`EVENT_ENVELOPE_SCHEMA_VERSION`）；**旧帧无该字段缺省视为 1**，解析不报错（向后兼容）                              |
 | 持久化 payload                   | **不引入版本列**（D3）                | 事件存储不写 schema 版本列；兼容由 serde 规则 + 本 changelog 测试锚定；未来按版本迁移 payload 的需求登记 v5 候选（PE-12 §六 L1） |
 
@@ -37,11 +37,11 @@
 变更门禁（DoD 勾稽项，登记 30-verification-checklist 候选）：
 
 1. 新增事件类型 ↔ changelog 登记 ↔ `V1_EVENT_TYPES` 清单 ↔ fixture 四者一一对应
-   （`v1_baseline_has_exactly_27_event_types` 等一致性断言锁定，T12.6）；
+   （`v1_baseline_has_exactly_28_event_types` 等一致性断言锁定，T12.6）；
 2. 任何字段变更必须同步更新本 changelog 与 fixtures 目录，评审勾稽；
 3. 信封序列化恒注入 `schemaVersion: 1`（`new_envelope_serializes_schema_version_one`）。
 
-## 三、v1 基线（2026-08-01 冻结 24 事件；2026-08-03 兼容新增 cache-* 三事件 → 当前 27 事件 + 信封）
+## 三、v1 基线（2026-08-01 冻结 24 事件；2026-08-03 兼容新增 cache-* 三事件 → 27；I2-S8 新增 security-audit → 当前 28 事件 + 信封）
 
 > 事件体字段全部 camelCase；顶层 `type` 为 kebab-case tag；`runId`/`sequence`/`schemaVersion`
 > 为信封注入字段（不在事件体内）。消费方引用见 30-verification-checklist.md §4 核对矩阵。
@@ -81,6 +81,7 @@
 | 25  | cache-stats-updated           | sessionId, timestamp, stats                                           | —             | 前端会话统计面板（P5 S3；仅测量展示，不干预循环；runId 由信封注入）   |
 | 26  | cache-waste-alert             | sessionId, timestamp, attribution, missedTokens, idleMs, modelChanged | missedCostUsd | 前端预警提示条（阈值驱动；attribution kebab-case）                    |
 | 27  | cold-cache-warning            | sessionId, timestamp, ttlSeconds, idleMs, resendEstimateTokens        | —             | 前端冷缓存提示（Rust 仅 run 启动发一次；空闲提示走 warmUntilMs tick） |
+| 28  | security-audit                | sessionId, timestamp, operation, targets, impact, decision            | permissionMode, toolCallId | 安全审计面板 / S9 审批弹窗影响面数据源（I2-S8：删除接管/重定向/恢复/红线拦截；runId 由信封注入） |
 
 ## 四、变更登记表
 
@@ -88,6 +89,7 @@
 | ---------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | 1.1（候选）                              | runtime-error                                                | error: `String` → `CrishError`                                                                                                                      | **major**（字段类型变化）                          | 载荷 `code` 优先、回退 `message`（旧持久化事件无 code 时降级读取；IPC 载荷保持 message 字段名 + 新增 code）                                                                                                                                                                                                                                                     | EventRouter.ts onRuntimeError → surfaceStreamFailure（解析层兼容 code/message 双读）                                | PE-04 R4 / T04.3-3（错误类型升级归 PE-06 T06.5.x 落地，任务书另以 T04.5 引述）；PE-12 T12.5 步骤 5 |
 | 1.1（minor 兼容新增，已落地 2026-08-03） | cache-stats-updated / cache-waste-alert / cold-cache-warning | 新增 3 个事件类型（缓存测量域，P5 S3）；新增可选字段：`missedCostUsd`（cache-waste-alert）、`RunCacheStats.hitRatio` / `writeRatio` / `warmUntilMs` | **minor**（兼容新增：新增事件类型 + 新增可选字段） | 信封 `schemaVersion` 不变（恒 1，无该字段旧帧照常解析）；新增可选字段一律 `#[serde(default, skip_serializing_if = "Option::is_none")]`（缺失补默认、序列化省略）；旧解析器对未知 `type` 静默忽略（前端宽容归一器兜底，T-38 落地）；`V1_EVENT_TYPES` 清单 24 → 27（`v1_baseline_has_exactly_27_event_types`，原 24 基线断言同步更新）；v1 同形 fixture 追加 3 条 | 前端 CacheDomainEvent 归一器（T-38）；会话缓存统计面板 / 预警提示条；仅测量展示，不干预循环（不破坏既有 24 帧解析） | P5 S3 §3.1.3；A3 P1-1；90-final T-37/T-38                                                          |
+| 1.2（minor 兼容新增，已落地 2026-08-03） | security-audit | 新增 1 个事件类型（安全审计域，I2-S8）；新增载荷类型 `ImpactAssessment`（fileCount/totalSizeBytes/directoryCount/crossDirectory/flagged）；新增枚举 `SecurityAuditOperation`（delete/trash-restore/trash-purge/git-revert/command-exec）与 `SecurityAuditDecision`（blocked/approved/denied/redirected/restored/purged） | **minor**（兼容新增：新增事件类型） | 信封 `schemaVersion` 不变（恒 1）；可选字段 `permissionMode`/`toolCallId` 一律 `#[serde(default, skip_serializing_if = "Option::is_none")]`；`runId` 由 emit 层信封注入不占事件体（03 §5.3-2）；旧解析器对未知 `type` 静默忽略；`V1_EVENT_TYPES` 清单 27 → 28（`v1_baseline_has_exactly_28_event_types`）；v1 同形 fixture 追加 1 条；`ImpactAssessment` 定义自 conex-fs 上移至 conex-types（wire 契约归属），conex-fs 重导出保持既有 API | 前端 dispatch 表注册宽容空实现（对齐 cache 域 T-38 模式）；审计面板 / S9 审批弹窗影响面数据源（I3 接线） | I2-S8（01-安全监控与删除接管方案 §2 S8）                          |
 
 > 首个 major 候选登记说明：PE-04 域（T04.3-3/R4，前端解析 T04.4-3）的
 > `RuntimeError.error: String → CrishError` 是当前已知的第一个破坏性演进（若适用——即
@@ -98,12 +100,12 @@
 
 | 锚点                                | 位置                                                                                                                                                            | 断言                                                                                            |
 | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| v1 fixture 解析（27 事件全量）      | `crates/conex-types/tests/fixtures/events-v1/` + `tests/events_schema_version.rs`                                                                               | 无 schemaVersion 旧帧全部解析成功、缺省补 1、type_name 与文件一一对应（27 == changelog 登记数） |
+| v1 fixture 解析（28 事件全量）      | `crates/conex-types/tests/fixtures/events-v1/` + `tests/events_schema_version.rs`                                                                               | 无 schemaVersion 旧帧全部解析成功、缺省补 1、type_name 与文件一一对应（28 == changelog 登记数） |
 | 旧 RuntimeError String 形态         | `event-runtime-error.json`                                                                                                                                      | error 为字符串可解析（major 演进锚点）                                                          |
 | 完整信封帧                          | `frame-with-runid-sequence.json`                                                                                                                                | runId/sequence 保真 + schemaVersion 缺省 1                                                      |
 | 信封序列化                          | `new_envelope_serializes_schema_version_one` / events_roundtrip.rs                                                                                              | 序列化恒含 `schemaVersion: 1`；runId/sequence 缺省时仍注入                                      |
 | 双端 golden（Rust 产出 ↔ 前端消费） | `apps/agent-workbench/src-tauri/tests/event_bridge.rs`（16 项硬依赖 + schemaVersion 断言）、`apps/crish-desktop/src/api/daemon-chat-bridge/EventRouter.test.ts` | 每条载荷含 schemaVersion: 1；前端未知键 schemaVersion 静默忽略（白名单消费）                    |
-| 变体数一致性                        | `v1_baseline_has_exactly_27_event_types`                                                                                                                        | 27 == changelog 表登记数（新增事件漏登记即红）                                                  |
+| 变体数一致性                        | `v1_baseline_has_exactly_28_event_types`                                                                                                                        | 28 == changelog 表登记数（新增事件漏登记即红）                                                  |
 
 ## 六、执行注记
 

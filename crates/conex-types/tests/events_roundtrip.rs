@@ -5,10 +5,11 @@
 use conex_types::{
     AgentEndReason, AgentEvent, AgentEventEnvelope, AgentMessage, AgentMessageBlock,
     AgentMessageRole, ApprovalDecision, ContextCompressionRecord,
-    ContextCompressionReason, ContextCompressionTrigger, PermissionBehavior,
-    PermissionDecision, PermissionRequest, ProviderDiagnostic, ProviderDiagnosticPhase,
-    ProviderErrorKind, RunTerminalStatus, RuntimeCheckpointKind, RuntimeCheckpointRecord,
-    RuntimeCheckpointRestoreRecord, ToolArtifactKind, ToolBatchCall, ToolBatchResult,
+    ContextCompressionReason, ContextCompressionTrigger, ImpactAssessment,
+    PermissionBehavior, PermissionDecision, PermissionRequest, ProviderDiagnostic,
+    ProviderDiagnosticPhase, ProviderErrorKind, RunTerminalStatus, RuntimeCheckpointKind,
+    RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, SecurityAuditDecision,
+    SecurityAuditOperation, ToolArtifactKind, ToolBatchCall, ToolBatchResult,
     ToolCallBlock, ToolCategory, ToolConcurrency, ToolMetadata, ToolOutput,
     ToolProgressUpdate,
 };
@@ -204,7 +205,7 @@ fn restore() -> RuntimeCheckpointRestoreRecord {
     }
 }
 
-/// 24 种域事件各构造一个实例（03 §1.1-1.6 全清单）
+/// 25 种域事件各构造一个实例（03 §1.1-1.6 全清单 + I2-S8 安全审计域）
 fn all_events() -> Vec<AgentEvent> {
     let s = "s1".to_string();
     vec![
@@ -348,6 +349,23 @@ fn all_events() -> Vec<AgentEvent> {
             terminal: RunTerminalStatus::Completed,
             error: None,
         },
+        // I2-S8：安全审计事件（删除接管/重定向/恢复/红线拦截）
+        AgentEvent::SecurityAudit {
+            session_id: "s1".to_string(),
+            timestamp: TS.into(),
+            operation: SecurityAuditOperation::Delete,
+            targets: vec!["a.txt".into()],
+            impact: ImpactAssessment {
+                file_count: 1,
+                total_size_bytes: 5,
+                directory_count: 0,
+                cross_directory: false,
+                flagged: false,
+            },
+            decision: SecurityAuditDecision::Redirected,
+            permission_mode: Some("full-access".into()),
+            tool_call_id: Some("tc-1".into()),
+        },
     ]
 }
 
@@ -355,12 +373,12 @@ fn event_type_name(event: &AgentEvent) -> &'static str {
     event.type_name()
 }
 
-// ── 1. 24 事件穷举 roundtrip ──
+// ── 1. 25 事件穷举 roundtrip ──
 
 #[test]
-fn all_24_events_roundtrip() {
+fn all_25_events_roundtrip() {
     let events = all_events();
-    assert_eq!(events.len(), 24, "AgentEvent 必须是 24 种域事件");
+    assert_eq!(events.len(), 25, "AgentEvent 必须是 25 种域事件");
     for event in events {
         let json = serde_json::to_string(&event).expect("序列化失败");
         let back: AgentEvent = serde_json::from_str(&json).expect("反序列化失败");
@@ -369,7 +387,7 @@ fn all_24_events_roundtrip() {
 }
 
 #[test]
-fn all_24_event_types_have_expected_wire_type_name() {
+fn all_25_event_types_have_expected_wire_type_name() {
     let expected = [
         "agent-start",
         "agent-end",
@@ -395,6 +413,7 @@ fn all_24_event_types_have_expected_wire_type_name() {
         "checkpoint-created",
         "checkpoint-restored",
         "run-terminal",
+        "security-audit",
     ];
     for (event, name) in all_events().iter().zip(expected) {
         let json = serde_json::to_value(event).unwrap();

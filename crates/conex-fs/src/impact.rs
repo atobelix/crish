@@ -4,28 +4,14 @@
 //! 作为审计事件载荷与（S9）审批弹窗数据源。目标缺失按跳过处理
 //! （评估非安全边界，真实删除仍由 trash 服务守卫）；遍历一律使用
 //! 不跟随符号链接的 `symlink_metadata`，避免符号链接环导致死循环。
+//!
+//! 载荷类型 `ImpactAssessment` 属于双端事件契约（wire 结构），定义已
+//! 上移至 conex-types（`conex_types::impact`），本模块重导出以保持既有
+//! 消费方 API（`conex_fs::impact::ImpactAssessment`）不变。
 
-use serde::{Deserialize, Serialize};
+pub use conex_types::impact::{IMPACT_FLAG_FILE_THRESHOLD, ImpactAssessment};
+
 use std::path::{Path, PathBuf};
-
-/// 谨慎标记阈值（05 §13.1「>20 文件或跨目录谨慎」语义）
-pub const IMPACT_FLAG_FILE_THRESHOLD: u64 = 20;
-
-/// 影响面评估结果（camelCase 对齐工具输出与事件载荷）
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ImpactAssessment {
-    /// 目标文件数（直接文件 + 目录内递归文件；符号链接按单文件计）
-    pub file_count: u64,
-    /// 总大小（字节）
-    pub total_size_bytes: u64,
-    /// 目录目标数
-    pub directory_count: u64,
-    /// 文件目标分布在多个父目录（跨目录结构）
-    pub cross_directory: bool,
-    /// 谨慎标记（file_count > [IMPACT_FLAG_FILE_THRESHOLD]）
-    pub flagged: bool,
-}
 
 /// 对一组删除目标评估影响面（缺失/不可读目标跳过）
 pub fn assess(targets: &[PathBuf]) -> ImpactAssessment {

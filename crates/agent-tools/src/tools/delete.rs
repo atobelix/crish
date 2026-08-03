@@ -12,12 +12,15 @@
 //! 输出含 `entryId`（TrashEntry id）供后续恢复（trash_restore 引擎命令消费），
 //! 并明示 `recoverable: app-trash` 可恢复路径类型与降级状态。
 
+use crate::audit::{NoopAuditSink, SecurityAuditSink, security_audit_event};
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::tools::{display_path, optional_bool, require_string, resolve_workspace_path};
 use async_trait::async_trait;
 use conex_fs::trash::{TrashKind, TrashService};
+use conex_types::events::{SecurityAuditDecision, SecurityAuditOperation};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// 未注入回收站根时的兜底目录名（工作区下）
 pub(crate) const DEFAULT_TRASH_DIR_NAME: &str = ".crish-trash";
@@ -34,11 +37,24 @@ fn trash_service_for(config_root: &Option<PathBuf>, ctx: &ToolContext) -> TrashS
 pub(crate) struct DeleteFileTool {
     def: ToolDefinition,
     trash_root: Option<PathBuf>,
+    /// 安全审计 sink（I2-S8：删除动作发射 security-audit；未接线时 no-op）
+    audit_sink: Arc<dyn SecurityAuditSink>,
 }
 
 impl DeleteFileTool {
-    /// 新建删除工具（trash_root 为回收站根；None 时执行期回退工作区 `.crish-trash`）
+    /// 新建删除工具（trash_root 为回收站根；None 时执行期回退工作区 `.crish-trash`）。
+    /// G11a 备注：非 test 构建无生产消费者（注册面统一经 with_audit_sink
+    /// 注入审计 sink），本构造器供测试直接覆盖——dead_code 静音。
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn new(trash_root: Option<PathBuf>) -> Self {
+        Self::with_audit_sink(trash_root, Arc::new(NoopAuditSink))
+    }
+
+    /// 新建删除工具并注入审计 sink（I2-S8 发射点接线；默认 no-op）
+    pub(crate) fn with_audit_sink(
+        trash_root: Option<PathBuf>,
+        audit_sink: Arc<dyn SecurityAuditSink>,
+    ) -> Self {
         Self {
             def: ToolDefinition {
                 name: "delete_file".to_string(),
@@ -56,6 +72,7 @@ impl DeleteFileTool {
                 fatal_on_error: false,
             },
             trash_root,
+            audit_sink,
         }
     }
 }
@@ -75,7 +92,15 @@ impl Tool for DeleteFileTool {
         ctx: &ToolContext,
         args: serde_json::Value,
     ) -> Result<serde_json::Value, ToolError> {
-        execute_delete(ctx, args, "delete_file", self.trash_root.clone(), true).await
+        execute_delete(
+            ctx,
+            args,
+            "delete_file",
+            self.trash_root.clone(),
+            Arc::clone(&self.audit_sink),
+            true,
+        )
+        .await
     }
 }
 
@@ -83,11 +108,24 @@ impl Tool for DeleteFileTool {
 pub(crate) struct DeleteDirTool {
     def: ToolDefinition,
     trash_root: Option<PathBuf>,
+    /// 安全审计 sink（I2-S8：删除动作发射 security-audit；未接线时 no-op）
+    audit_sink: Arc<dyn SecurityAuditSink>,
 }
 
 impl DeleteDirTool {
-    /// 新建删除工具（trash_root 为回收站根；None 时执行期回退工作区 `.crish-trash`）
+    /// 新建删除工具（trash_root 为回收站根；None 时执行期回退工作区 `.crish-trash`）。
+    /// G11a 备注：非 test 构建无生产消费者（注册面统一经 with_audit_sink
+    /// 注入审计 sink），本构造器供测试直接覆盖——dead_code 静音。
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn new(trash_root: Option<PathBuf>) -> Self {
+        Self::with_audit_sink(trash_root, Arc::new(NoopAuditSink))
+    }
+
+    /// 新建删除工具并注入审计 sink（I2-S8 发射点接线；默认 no-op）
+    pub(crate) fn with_audit_sink(
+        trash_root: Option<PathBuf>,
+        audit_sink: Arc<dyn SecurityAuditSink>,
+    ) -> Self {
         Self {
             def: ToolDefinition {
                 name: "delete_dir".to_string(),
@@ -105,6 +143,7 @@ impl DeleteDirTool {
                 fatal_on_error: false,
             },
             trash_root,
+            audit_sink,
         }
     }
 }
@@ -124,16 +163,26 @@ impl Tool for DeleteDirTool {
         ctx: &ToolContext,
         args: serde_json::Value,
     ) -> Result<serde_json::Value, ToolError> {
-        execute_delete(ctx, args, "delete_dir", self.trash_root.clone(), false).await
+        execute_delete(
+            ctx,
+            args,
+            "delete_dir",
+            self.trash_root.clone(),
+            Arc::clone(&self.audit_sink),
+            false,
+        )
+        .await
     }
 }
 
-/// 删除执行公共面：路径校验（工作区越界拒绝）→ 类型断言 → 移入回收站
+/// 删除执行公共面：路径校验（工作区越界拒绝）→ 类型断言 → 移入回收站 →
+/// 发射安全审计事件（decision=redirected，影响面来自预检）
 async fn execute_delete(
     ctx: &ToolContext,
     args: serde_json::Value,
     tool_name: &str,
     trash_root: Option<PathBuf>,
+    audit_sink: Arc<dyn SecurityAuditSink>,
     require_file: bool,
 ) -> Result<serde_json::Value, ToolError> {
     let path_str = require_string(&args, "path")?;
@@ -162,6 +211,16 @@ async fn execute_delete(
     let entry = service
         .trash_file(&target, backup)
         .map_err(|e| ToolError::execution_failed(tool_name, format!("{display}: {e}")))?;
+    // I2-S8：删除接管审计事件（decision=redirected，影响面来自预检）——
+    // 经审计 sink 发射（引擎侧接线后汇入事件流落库；未接线 no-op）
+    audit_sink.emit(&security_audit_event(
+        &ctx.session_id,
+        SecurityAuditOperation::Delete,
+        vec![display.clone()],
+        impact,
+        SecurityAuditDecision::Redirected,
+        None,
+    ));
     // 审计记录（结构化安全审计日志；工具结果经 tool-end 事件流落库）
     tracing::info!(
         target: "security.audit",
@@ -381,5 +440,53 @@ mod tests {
         assert_eq!(impact["flagged"], false);
         // 影响面在移入回收站后仍可读取（预检先于删除执行）
         assert_eq!(TrashService::new(trash.path()).list().len(), 1);
+    }
+
+    /// I2-S8：删除工具经审计 sink 发射 security-audit 事件（decision=redirected，
+    /// 影响面载荷来自预检；permissionMode 由 emit 层注入恒为 None）
+    #[tokio::test]
+    async fn delete_emits_security_audit_event() {
+        use crate::audit::RecordingAuditSink;
+        use conex_types::events::{SecurityAuditDecision as Decision, SecurityAuditOperation as Op};
+        use conex_types::AgentEvent;
+
+        let ws = TempWorkspace::new("del_audit");
+        ws.write_file("sub/a.txt", "aaaa");
+        ws.write_file("sub/b.txt", "bbbb");
+        let trash = TempWorkspace::new("del_audit_trash");
+        let sink = Arc::new(RecordingAuditSink::new());
+        let tool = DeleteDirTool::with_audit_sink(
+            Some(trash.path().clone()),
+            Arc::clone(&sink) as Arc<dyn SecurityAuditSink>,
+        );
+
+        tool.execute(&mock_ctx(&ws), json!({ "path": "sub" }))
+            .await
+            .unwrap();
+        let events = sink.emitted();
+        assert_eq!(events.len(), 1, "删除工具应发射 1 条审计事件");
+        match &events[0] {
+            AgentEvent::SecurityAudit {
+                session_id,
+                operation,
+                targets,
+                impact,
+                decision,
+                permission_mode,
+                tool_call_id,
+                ..
+            } => {
+                assert_eq!(session_id, "mock-session");
+                assert_eq!(operation, &Op::Delete);
+                assert_eq!(targets, &vec!["sub".to_string()], "目标为工作区相对路径");
+                assert_eq!(impact.file_count, 2);
+                assert_eq!(impact.total_size_bytes, 8);
+                assert_eq!(impact.directory_count, 1);
+                assert_eq!(decision, &Decision::Redirected);
+                assert!(permission_mode.is_none(), "permissionMode 由 emit 层注入");
+                assert!(tool_call_id.is_none(), "工具侧无调用 id 上下文");
+            }
+            other => panic!("应为 security-audit，实际 {}", other.type_name()),
+        }
     }
 }

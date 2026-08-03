@@ -8,6 +8,7 @@ pub mod context;
 pub mod error;
 pub mod events;
 pub mod history;
+pub mod impact;
 pub mod message;
 pub mod response;
 pub mod session;
@@ -26,9 +27,10 @@ pub use error::{
 pub use events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision, EVENT_ENVELOPE_SCHEMA_VERSION,
     MissAttribution, PermissionBehavior, PermissionDecision, PermissionRequest, RunCacheStats,
-    RunTerminalStatus, ToolMetadata,
+    RunTerminalStatus, SecurityAuditDecision, SecurityAuditOperation, ToolMetadata,
 };
 pub use history::HistoryMessage;
+pub use impact::{IMPACT_FLAG_FILE_THRESHOLD, ImpactAssessment};
 pub use message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
 pub use response::{ClassifiedStreamError, ProviderOutput};
 pub use session::{AgentEndReason, AgentSessionContext, AgentSessionEvent, AgentSessionState};

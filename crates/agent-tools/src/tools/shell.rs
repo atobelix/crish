@@ -12,6 +12,7 @@
 //!    命令体再经 UTF-8 → base64 包进 scriptblock，避免引号/管道被外壳二次解析
 //! 4. 执行：tokio 子进程，stdout/stderr 管道收集，超时树杀，输出按上限截断
 
+use crate::audit::{NoopAuditSink, SecurityAuditSink, security_audit_event};
 use crate::context::{AskDecision, ToolContext};
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::tools::{
@@ -23,8 +24,10 @@ use conex_fs::impact::ImpactAssessment;
 use conex_fs::trash::TrashService;
 use conex_sandbox::gatekeeper::{CommandGatekeeper, GatekeeperResult};
 use conex_sandbox::semantics::{CommandClass, SemanticAnalysis};
+use conex_types::events::{SecurityAuditDecision, SecurityAuditOperation};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Arc;
 use tokio::process::Command as TokioCommand;
 use tokio::time::{timeout, Duration};
 
@@ -48,13 +51,34 @@ pub(crate) struct ShellCommandTool {
     /// 删除重定向的回收站根（I2-S4：None 时执行期回退工作区 `.crish-trash`，
     /// 与 delete 工具共用 `BuiltinToolConfig.trash_root`）
     trash_root: Option<PathBuf>,
+    /// 安全审计 sink（I2-S8：重定向/拦截发射 security-audit；未接线时 no-op）
+    audit_sink: Arc<dyn SecurityAuditSink>,
 }
 
 impl ShellCommandTool {
+    /// 新建命令工具（默认 no-op 审计 sink）。G11a 备注：非 test 构建无
+    /// 生产消费者（注册面统一经 with_audit_sink 注入审计 sink），本构造器
+    /// 供测试直接覆盖——dead_code 静音。
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn new(
         default_timeout_ms: u64,
         max_output_bytes: usize,
         trash_root: Option<PathBuf>,
+    ) -> Self {
+        Self::with_audit_sink(
+            default_timeout_ms,
+            max_output_bytes,
+            trash_root,
+            Arc::new(NoopAuditSink),
+        )
+    }
+
+    /// 新建命令工具并注入审计 sink（I2-S8 发射点接线；默认 no-op）
+    pub(crate) fn with_audit_sink(
+        default_timeout_ms: u64,
+        max_output_bytes: usize,
+        trash_root: Option<PathBuf>,
+        audit_sink: Arc<dyn SecurityAuditSink>,
     ) -> Self {
         Self {
             def: ToolDefinition {
@@ -77,6 +101,7 @@ impl ShellCommandTool {
             default_timeout_ms,
             max_output_bytes,
             trash_root,
+            audit_sink,
         }
     }
 }
@@ -129,6 +154,13 @@ impl Tool for ShellCommandTool {
         let root_str = gate_path(workspace_root);
         let verdict = gatekeeper.check_command_with_context(&command, &[], &cwd_str, &root_str);
         if verdict == GatekeeperResult::Blocked || gatekeeper.patterns().is_match(&command) {
+            // I2-S8：红线拦截审计事件（decision=blocked，operation=command-exec）
+            emit_blocked_audit(
+                &self.audit_sink,
+                ctx,
+                SecurityAuditOperation::CommandExec,
+                vec![command.clone()],
+            );
             return Err(ToolError::new(
                 TOOL_COMMAND_BLOCKED,
                 format!(
@@ -175,6 +207,7 @@ impl Tool for ShellCommandTool {
                 &cwd,
                 self.trash_root.clone(),
                 ctx,
+                Arc::clone(&self.audit_sink),
             );
         }
 
@@ -186,11 +219,33 @@ impl Tool for ShellCommandTool {
 const DELETE_REDIRECT_GUIDANCE: &str =
     "如确需删除请改用 delete_file / delete_dir 工具（统一删除接口，可恢复）";
 
+/// 拦截类审计发射（I2-S8：decision=blocked；targets 为被拦目标/命令原文；
+/// 影响面未知 → 空载荷，与审计字段语义一致——操作未执行）
+fn emit_blocked_audit(
+    audit_sink: &Arc<dyn SecurityAuditSink>,
+    ctx: &ToolContext,
+    operation: SecurityAuditOperation,
+    targets: Vec<String>,
+) {
+    audit_sink.emit(&security_audit_event(
+        &ctx.session_id,
+        operation,
+        targets,
+        ImpactAssessment::default(),
+        SecurityAuditDecision::Blocked,
+        None,
+    ));
+}
+
 /// 删除形态重定向（I2-S4 主入口）：
 /// - 间接执行包裹删除形态 → 整链拦截 + 引导（外层无法安全解析内层目标）；
 /// - 复合链含删除段 → 整链拦截 + 引导（链内其他段副作用不可控，不代为执行）；
 /// - 纯删除命令 → 解析目标（工作区外一律拒绝）→ trash 服务移入回收站 →
 ///   返回 TrashEntry 列表（entryId 供恢复）+ 影响面审计载荷。
+///
+/// 审计（I2-S8）：拦截分支发射 decision=blocked，成功重定向发射
+/// decision=redirected（影响面来自预检）。
+#[allow(clippy::too_many_arguments)]
 fn redirect_or_intercept_delete(
     analysis: &SemanticAnalysis,
     command: &str,
@@ -198,10 +253,17 @@ fn redirect_or_intercept_delete(
     cwd: &Path,
     trash_root: Option<PathBuf>,
     ctx: &ToolContext,
+    audit_sink: Arc<dyn SecurityAuditSink>,
 ) -> Result<serde_json::Value, ToolError> {
     // 1. 间接执行包裹（bash -c 'rm x' / xargs rm 等）：内层目标无法安全解析，
     //    整链拦截 + 引导，防包裹绕过统一删除门禁
     if analysis.has_indirect_delete {
+        emit_blocked_audit(
+            &audit_sink,
+            ctx,
+            SecurityAuditOperation::Delete,
+            vec![command.to_string()],
+        );
         return Err(ToolError::new(
             TOOL_COMMAND_BLOCKED,
             format!(
@@ -215,6 +277,12 @@ fn redirect_or_intercept_delete(
         .iter()
         .any(|s| s.class != CommandClass::DeleteShape);
     if has_non_delete_segment {
+        emit_blocked_audit(
+            &audit_sink,
+            ctx,
+            SecurityAuditOperation::Delete,
+            vec![command.to_string()],
+        );
         return Err(ToolError::new(
             TOOL_COMMAND_BLOCKED,
             format!(
@@ -224,6 +292,12 @@ fn redirect_or_intercept_delete(
     }
     // 3. 无法解析删除目标（如 rm --cached 无路径）→ 拦截 + 引导
     if analysis.delete_targets.is_empty() {
+        emit_blocked_audit(
+            &audit_sink,
+            ctx,
+            SecurityAuditOperation::Delete,
+            vec![command.to_string()],
+        );
         return Err(ToolError::new(
             TOOL_COMMAND_BLOCKED,
             format!(
@@ -234,7 +308,18 @@ fn redirect_or_intercept_delete(
     // 4. 解析目标：相对 cwd 解析 + 工作区包含性校验（越界一律拒绝，不引导不降级）
     let mut targets = Vec::new();
     for target in &analysis.delete_targets {
-        targets.push(resolve_delete_target(workspace_root, cwd, target)?);
+        match resolve_delete_target(workspace_root, cwd, target) {
+            Ok(t) => targets.push(t),
+            Err(e) => {
+                emit_blocked_audit(
+                    &audit_sink,
+                    ctx,
+                    SecurityAuditOperation::Delete,
+                    vec![target.clone()],
+                );
+                return Err(e);
+            }
+        }
     }
     // 5. trash 服务执行（模式 B：应用内回收站；未注入根时回退工作区 .crish-trash）
     let service_root = trash_root.unwrap_or_else(|| workspace_root.join(DEFAULT_TRASH_DIR_NAME));
@@ -245,6 +330,12 @@ fn redirect_or_intercept_delete(
     for target in &targets {
         let display = display_path(workspace_root, target);
         if target == workspace_root || target == cwd {
+            emit_blocked_audit(
+                &audit_sink,
+                ctx,
+                SecurityAuditOperation::Delete,
+                vec![display.clone()],
+            );
             return Err(ToolError::new(
                 TOOL_COMMAND_BLOCKED,
                 format!(
@@ -270,14 +361,24 @@ fn redirect_or_intercept_delete(
             }
         }
     }
-    // 6. 审计日志（结构化安全审计；工具结果经 tool-end 事件流落库）
-    let entry_ids: Vec<&str> = entries
-        .iter()
-        .filter_map(|e| e["entryId"].as_str())
-        .collect();
+    // 6. 审计：重定向成功（decision=redirected，影响面来自预检）——
+    //    经审计 sink 发射（引擎侧接线后汇入事件流落库；未接线 no-op）
     let target_displays: Vec<String> = targets
         .iter()
         .map(|t| t.display().to_string())
+        .collect();
+    audit_sink.emit(&security_audit_event(
+        &ctx.session_id,
+        SecurityAuditOperation::Delete,
+        target_displays.clone(),
+        impact,
+        SecurityAuditDecision::Redirected,
+        None,
+    ));
+    // 7. 审计日志（结构化安全审计；工具结果经 tool-end 事件流落库）
+    let entry_ids: Vec<&str> = entries
+        .iter()
+        .filter_map(|e| e["entryId"].as_str())
         .collect();
     tracing::info!(
         target: "security.audit",
@@ -1101,6 +1202,140 @@ mod tests {
         assert!(out["redirect"]["guidance"].as_str().unwrap().contains("delete_file"));
         assert_eq!(out["trashEntries"].as_array().unwrap().len(), 1);
         assert!(out["text"].as_str().unwrap().contains("trash_restore"));
+    }
+
+    /// S8：删除形态重定向发射 security-audit（decision=redirected，影响面载荷）
+    #[tokio::test]
+    async fn delete_redirect_emits_security_audit_event() {
+        use crate::audit::RecordingAuditSink;
+        use conex_types::events::SecurityAuditOperation as Op;
+        use conex_types::AgentEvent;
+
+        let ws = TempWorkspace::new("shell_s8_audit");
+        ws.write_file("sub/a.txt", "aaaa");
+        ws.write_file("sub/b.txt", "bbbb");
+        let trash = TempWorkspace::new("shell_s8_audit_trash");
+        let sink = Arc::new(RecordingAuditSink::new());
+        let t = ShellCommandTool::with_audit_sink(
+            30_000,
+            200_000,
+            Some(trash.path().clone()),
+            Arc::clone(&sink) as Arc<dyn SecurityAuditSink>,
+        );
+
+        t.execute(&ctx(&ws), json!({ "command": "rm -rf sub" }))
+            .await
+            .unwrap();
+        let events = sink.emitted();
+        assert_eq!(events.len(), 1, "重定向应发射 1 条审计事件");
+        match &events[0] {
+            AgentEvent::SecurityAudit {
+                operation,
+                targets,
+                impact,
+                decision,
+                ..
+            } => {
+                assert_eq!(operation, &Op::Delete);
+                assert_eq!(
+                    targets,
+                    &vec![ws.path().join("sub").display().to_string()],
+                    "目标为解析后的绝对路径"
+                );
+                assert_eq!(impact.file_count, 2);
+                assert_eq!(impact.total_size_bytes, 8);
+                assert_eq!(decision, &conex_types::events::SecurityAuditDecision::Redirected);
+            }
+            other => panic!("应为 security-audit，实际 {}", other.type_name()),
+        }
+    }
+
+    /// S8：拦截分支发射 security-audit（decision=blocked）——复合链 / 间接执行 /
+    /// 通配符 / 工作区外四种形态各一条
+    #[tokio::test]
+    async fn delete_intercept_emits_blocked_audit() {
+        use crate::audit::RecordingAuditSink;
+        use conex_types::events::SecurityAuditDecision as Decision;
+        use conex_types::events::SecurityAuditOperation as Op;
+        use conex_types::AgentEvent;
+
+        let ws = TempWorkspace::new("shell_s8_block");
+        ws.write_file("x.txt", "keep");
+        let trash = TempWorkspace::new("shell_s8_block_trash");
+        let sink = Arc::new(RecordingAuditSink::new());
+        let t = ShellCommandTool::with_audit_sink(
+            30_000,
+            200_000,
+            Some(trash.path().clone()),
+            Arc::clone(&sink) as Arc<dyn SecurityAuditSink>,
+        );
+
+        for cmd in [
+            "echo done && rm x.txt",
+            "bash -c 'rm -rf x.txt'",
+            "rm *.txt",
+            "rm C:\\Users\\x\\Desktop\\f.txt",
+        ] {
+            assert!(
+                t.execute(&ctx(&ws), json!({ "command": cmd })).await.is_err(),
+                "命令 {cmd:?} 应被拦截"
+            );
+        }
+        let events = sink.emitted();
+        assert_eq!(events.len(), 4, "四种拦截形态各发射 1 条审计事件");
+        for event in &events {
+            match event {
+                AgentEvent::SecurityAudit {
+                    operation,
+                    decision,
+                    ..
+                } => {
+                    assert_eq!(operation, &Op::Delete, "拦截对象为删除形态");
+                    assert_eq!(decision, &Decision::Blocked, "拦截决策为 blocked");
+                }
+                other => panic!("应为 security-audit，实际 {}", other.type_name()),
+            }
+        }
+    }
+
+    /// S8：红线命令（rm -rf /）经门禁拦截时发射 security-audit
+    /// （operation=command-exec，decision=blocked）
+    #[tokio::test]
+    async fn redline_blocked_emits_security_audit() {
+        use crate::audit::RecordingAuditSink;
+        use conex_types::events::SecurityAuditDecision as Decision;
+        use conex_types::events::SecurityAuditOperation as Op;
+        use conex_types::AgentEvent;
+
+        let ws = TempWorkspace::new("shell_s8_redline");
+        let sink = Arc::new(RecordingAuditSink::new());
+        let t = ShellCommandTool::with_audit_sink(
+            30_000,
+            200_000,
+            None,
+            Arc::clone(&sink) as Arc<dyn SecurityAuditSink>,
+        );
+
+        let err = t
+            .execute(&ctx(&ws), json!({ "command": "rm -rf /" }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), TOOL_COMMAND_BLOCKED);
+        let events = sink.emitted();
+        assert_eq!(events.len(), 1, "红线拦截应发射 1 条审计事件");
+        match &events[0] {
+            AgentEvent::SecurityAudit {
+                operation,
+                targets,
+                decision,
+                ..
+            } => {
+                assert_eq!(operation, &Op::CommandExec);
+                assert_eq!(targets, &vec!["rm -rf /".to_string()]);
+                assert_eq!(decision, &Decision::Blocked);
+            }
+            other => panic!("应为 security-audit，实际 {}", other.type_name()),
+        }
     }
 
     /// 越界 / 特殊路径被拒时：不产生任何回收站条目（不半删除）
