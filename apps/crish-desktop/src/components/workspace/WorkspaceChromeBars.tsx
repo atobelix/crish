@@ -12,8 +12,7 @@ import { WorkspaceStrip } from './WorkspaceStrip';
 import { SessionStrip } from './SessionStrip';
 import type { WorkspaceChromeProps } from './workspaceChromeHooks';
 
-export { WorkspaceStrip, SessionStrip };
-export type { WorkspaceChromeProps as Props };
+export { };
 
 /** 两行一体：inset 内容卡顶（工作区 folder + 会话 pill） */
 export const WorkspaceChromeBars: React.FC<WorkspaceChromeProps> = (props) => {

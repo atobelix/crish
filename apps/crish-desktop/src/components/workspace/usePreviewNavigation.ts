@@ -358,6 +358,3 @@ export function usePreviewNavigation(
     onFrameError,
   };
 }
-
-// 供调用方引用面板 id（aria-controls 一致性）
-export { HIST_PANEL_ID };

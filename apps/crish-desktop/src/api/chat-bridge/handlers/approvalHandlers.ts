@@ -14,6 +14,7 @@ import { getCommandPermissions, getPermissionMode } from '../../storeAccess';
 import { logInternalError } from '../../userFacingErrors';
 import { extractApprovalCommandArgs } from '../../engineEventSchema';
 import { parseApprovalRiskMeta } from '../../approvalMeta';
+import { parseApprovalPayload } from '../../approvalPayload';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 
@@ -30,7 +31,10 @@ export function onApprovalRequested(
   const req = isRecord(raw.request) ? raw.request : raw;
   const toolCallId = event.request.toolCallId.trim();
   if (!toolCallId) {
-    logInternalError('engine-protocol', 'approval-requested missing toolCallId');
+    logInternalError(
+      'engine-protocol',
+      'approval-requested missing toolCallId'
+    );
     return;
   }
   const toolName = event.request.toolName.trim() || 'command';
@@ -43,7 +47,11 @@ export function onApprovalRequested(
   const explanation = String(
     req.summary ?? req.reason ?? req.message ?? toolName
   ).trim();
+  // S9：宽容解析审批载荷（revertGate 面积 / 删除影响面）；无载荷 → null，
+  // approvalMeta 不带 payload（卡渲染走既有行为，不新增噪音）
+  const payload = parseApprovalPayload(raw);
   const approvalMeta = parseApprovalRiskMeta(raw);
+  const metaWithPayload = payload ? { ...approvalMeta, payload } : approvalMeta;
 
   if (approvalFlow.debugSets().pending.includes(toolCallId)) {
     return;
@@ -80,7 +88,7 @@ export function onApprovalRequested(
               toolName,
               args,
               explanation,
-              approvalMeta
+              metaWithPayload
             );
           }
         });
@@ -98,7 +106,7 @@ export function onApprovalRequested(
       toolName,
       args,
       explanation,
-      approvalMeta
+      metaWithPayload
     );
   } else {
     callbacks.onToolStart(toolCallId, toolName, args, explanation);

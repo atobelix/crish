@@ -37,23 +37,6 @@ export type SettingsTabType =
   | 'plugins'
   | 'security';
 
-/**
- * 工作区已知面板 card id（文档/收窄用）。
- * CardState.id 仍为 string：允许扩展 id，勿强制只列本联合。
- */
-export type KnownPanelCardId =
-  | 'chat'
-  | 'agent'
-  | 'overview'
-  | 'files'
-  | 'preview'
-  | 'diff'
-  | 'terminal'
-  | 'tasks'
-  | 'runtime'
-  | 'settings'
-  | 'plan';
-
 /** 工作区单卡：id 为面板 key，title 为展示名 */
 export interface CardState {
   /** 面板 id；常见值见 {@link KnownPanelCardId} */
@@ -140,28 +123,10 @@ export interface FileDiff {
  * - current-session：在触发时的活动会话执行
  * - new-session：新建会话执行
  */
-export type CronTargetSession = 'current-session' | 'new-session';
+type CronTargetSession = 'current-session' | 'new-session';
 
 /** 定时任务启停状态（demo / RuntimePanel；非引擎 workflow 状态机） */
-export type CronJobStatus = 'active' | 'paused';
-
-/**
- * 本地/演示用计划任务（store.scheduledTasks）。
- * 正式引擎 workflow 另有形状；本类型不发明远端 cron 列表字段。
- * 字段与 `clientApi.CronJob` / storeAccess.isCronJob 一致，可结构互赋。
- */
-export interface CronJob {
-  /** 非空 id（normalize 时 trim） */
-  id: string;
-  /** cron 表达式，如 `0 3 * * *` */
-  cronExpression: string;
-  /** 触发时注入的提示/任务描述 */
-  prompt: string;
-  targetSession: CronTargetSession;
-  status: CronJobStatus;
-  /** 下次运行时间展示串（ISO 或本地格式化文本） */
-  nextRun: string;
-}
+type CronJobStatus = 'active' | 'paused';
 
 // ── 消息 / 工具 / 审批 ─────────────────────────────────────────────────────
 
@@ -169,11 +134,11 @@ export interface CronJob {
  * 审批风险等级（BE-04 展示用，可选字段）。
  * 与 approvalMeta.ApprovalRiskLevel 取值一致；store 侧全可选，解析后再收成完整 meta。
  */
-export type MessageApprovalRiskLevel =
+type MessageApprovalRiskLevel =
   'low' | 'medium' | 'high' | 'critical' | 'unknown';
 
 /** 审批风险来源：后端事实 / 派生 / 未知 */
-export type MessageApprovalRiskSource = 'backend' | 'derived' | 'unknown';
+type MessageApprovalRiskSource = 'backend' | 'derived' | 'unknown';
 
 /** 后端审批风险事实（BE-04）；仅展示，不按工具名猜 */
 export interface MessageToolApprovalMeta {
@@ -189,7 +154,7 @@ export interface MessageToolApprovalMeta {
 }
 
 /** 回退面积（C3/S6 载荷；字段可空 = 未知，与 revert.rs RevertArea 对齐） */
-export interface RevertAreaPayload {
+interface RevertAreaPayload {
   fileCount?: number | null;
   lineCount?: number | null;
   crossDirectory?: boolean | null;
@@ -214,7 +179,7 @@ export interface RevertGatePayload {
 }
 
 /** 删除影响面（S8 ImpactAssessment；字段可空 = 未知） */
-export interface DeleteImpactPayload {
+interface DeleteImpactPayload {
   fileCount?: number | null;
   totalSizeBytes?: number | null;
   directoryCount?: number | null;
@@ -244,7 +209,7 @@ export type MessageToolApprovalPayload =
  * 适用于从原始事件水合时部分字段未提供的场景。
  * 转入 store 时应使用 compactObj 剔除 undefined 字段，得到 MessageToolApprovalMeta。
  */
-export type MessageToolApprovalMetaInput = {
+type MessageToolApprovalMetaInput = {
   trustZone?: string | undefined;
   risk?: string | undefined;
   riskReason?: string | undefined;
@@ -376,7 +341,7 @@ export interface MessageToolCall {
  * 适用于从原始事件流构造 toolCall 时部分字段尚未提供的场景。
  * 转入 store 前应使用 compactObj 剔除 undefined 字段，得到 MessageToolCall。
  */
-export interface MessageToolCallInput {
+interface MessageToolCallInput {
   id: string;
   name: string;
   arguments: string;
@@ -425,7 +390,7 @@ export interface SessionMessageToolCallResult {
 }
 
 /** 时间线块类型：正文段 / 工具调用锚点 / 图片块 */
-export type MessageTimelineBlockType = 'text' | 'tool_call' | 'image';
+type MessageTimelineBlockType = 'text' | 'tool_call' | 'image';
 
 /**
  * 消息时间线块（按发生顺序交错 text / tool_call / image）。
@@ -449,7 +414,7 @@ export interface MessageTimelineBlock {
  *
  * 字段语义与 SessionMessage 一一对应，仅是允许显式 undefined。
  */
-export interface SessionMessageInput {
+interface SessionMessageInput {
   id: string;
   sender: MessageSender;
   text?: string | undefined;
@@ -513,7 +478,7 @@ export interface SessionMessage {
  * 协作子 agent 状态。
  * stopped=用户停止/取消（非失败）；failed=异常失败。
  */
-export type SessionAgentStatus = 'running' | 'completed' | 'failed' | 'stopped';
+type SessionAgentStatus = 'running' | 'completed' | 'failed' | 'stopped';
 
 /** 主会话下的协作子 agent（run_subagent） */
 export interface SessionAgent {
@@ -537,27 +502,6 @@ export interface SessionAgent {
   /** 嵌套深度：0=主会话直接子 agent，n=第 n+1 级嵌套子 agent */
   depth?: number | undefined;
   /** 从根 agent 到当前 agent 的 id 路径链（含自身），用于树结构追踪 */
-  subagentPath?: string[] | undefined;
-}
-
-/**
- * SessionAgent 的「输入形态」：从原始事件构造时部分字段可能为 undefined。
- * 转入 store 前应使用 compactObj 剔除 undefined 字段，得到 SessionAgent。
- */
-export interface SessionAgentInput {
-  id: string;
-  subagentRunId: string;
-  parentSessionId: string;
-  parentRunId: string;
-  parentToolCallId?: string | undefined;
-  description: string;
-  mode: string;
-  status: SessionAgentStatus;
-  summary?: string | undefined;
-  messages: SessionMessageInput[];
-  startedAt: number | undefined;
-  endedAt?: number | undefined;
-  depth?: number | undefined;
   subagentPath?: string[] | undefined;
 }
 
@@ -630,7 +574,7 @@ export interface SessionGoalMode {
  *   - 改用独立 `timestampSource` discriminator 字段标记来源；timestamp 始终是 ISO 串
  *   - 侧栏显示层根据 source 决定渲染「远程」徽标还是相对时间
  */
-export type SessionTimestampSource = 'local' | 'remote';
+type SessionTimestampSource = 'local' | 'remote';
 
 /**
  * 外部会话导入溯源（Claude Code / Codex）。
@@ -707,20 +651,4 @@ export interface DropPreviewState {
   width?: number;
   height?: number;
   className?: string;
-}
-
-/**
- * 流式渲染运行态：仅承载与「正在流式输出的消息」相关的临时渲染指针。
- *
- * 设计动机：
- *   - SessionMessage.streamTextOffset 是「消息自身持久化字段」，用于回放历史时切分 text 段
- *   - StreamingMessageRenderState 是「会话级运行态」，由 sessionActions 在工具插入 /
- *     文本更新时同步维护，避免反复在 message 上读改写
- *   - 二者语义相关但用途不同：前者是数据快照，后者是当前流式上下文
- *
- * 字段：
- *   - streamTextOffset：当前已切分到 text 段的起始偏移；当文本被截断或回退时重置为 0
- */
-export interface StreamingMessageRenderState {
-  streamTextOffset: number;
 }

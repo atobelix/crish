@@ -5,7 +5,7 @@
 import React from 'react';
 import styles from './RuntimePanel.module.css';
 
-export type RuntimeSectionCount = {
+type RuntimeSectionCount = {
   /** 可见计数（0 时上层不传，避免空数字噪音） */
   label: string;
   /** 读屏播报（如「3 个进行中」） */

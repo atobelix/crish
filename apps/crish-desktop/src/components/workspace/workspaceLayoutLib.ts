@@ -22,13 +22,7 @@ export function workspaceOrdinalLabel(wsId: string): string {
   return raw || '1';
 }
 
-/** 列宽占比 → 读屏百分比（整数，避免冗长小数） */
-export function ratioToPercent(ratio: number): number {
-  if (!Number.isFinite(ratio) || ratio <= 0) return 0;
-  return Math.max(0, Math.min(100, Math.round(ratio * 100)));
-}
-
-export type RenderedGroup = CardGroupState & { origGroupIdx: number };
+type RenderedGroup = CardGroupState & { origGroupIdx: number };
 export type RenderedColumn = Omit<ColumnState, 'groups'> & {
   origColIdx: number;
   groups: RenderedGroup[];

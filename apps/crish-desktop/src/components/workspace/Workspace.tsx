@@ -25,7 +25,7 @@ interface WorkspaceProps {
 }
 
 // re-export：WorkspaceCanvas 等消费方经壳层取渲染类型
-export type { RenderedGroup, RenderedColumn } from './workspaceLayoutLib';
+export type {  RenderedColumn } from './workspaceLayoutLib';
 
 /**
  * 工作区壳组件：容器 + 拆分 chrome + 读屏 live region + 画布/空态编排。
