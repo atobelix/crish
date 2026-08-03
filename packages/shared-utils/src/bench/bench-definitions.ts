@@ -1,4 +1,5 @@
-import type { PerfBenchmark } from "./perf-benchmark";
+import type { PerfBenchmark } from './perf-benchmark';
+import type { ToolDefinition } from '../cache/cache-rules';
 
 function noopSetup(): Promise<void> {
   return Promise.resolve();
@@ -17,28 +18,69 @@ function generateLargeDiff(lineCount: number): string {
     lines.push(`--- a/file${h}.ts`);
     lines.push(`+++ b/file${h}.ts`);
     lines.push(`@@ -${lineNum},${del + ctx} +${lineNum},${add + ctx} @@`);
-    for (let i = 0; i < ctx; i++) { lines.push(` ctx${i}`); }
-    for (let i = 0; i < del; i++) { lines.push(`-del${i}`); }
-    for (let i = 0; i < add; i++) { lines.push(`+add${i}`); }
+    for (let i = 0; i < ctx; i++) {
+      lines.push(` ctx${i}`);
+    }
+    for (let i = 0; i < del; i++) {
+      lines.push(`-del${i}`);
+    }
+    for (let i = 0; i < add; i++) {
+      lines.push(`+add${i}`);
+    }
     lineNum += hunkLines;
   }
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 function generateMessages(count: number): Array<Record<string, unknown>> {
   const msgs: Array<Record<string, unknown>> = [];
   for (let i = 0; i < count; i++) {
-    msgs.push({ id: `msg-${i}`, role: i % 2 === 0 ? "user" : "assistant", content: "x".repeat(200), ts: Date.now() });
+    msgs.push({
+      id: `msg-${i}`,
+      role: i % 2 === 0 ? 'user' : 'assistant',
+      content: 'x'.repeat(200),
+      ts: Date.now(),
+    });
   }
   return msgs;
 }
 
+/** 缓存 schema 规范化基准：100 个含嵌套 schema 的工具定义（P6 §3.5.3） */
+function generateCacheBenchmarkTools(count: number): ToolDefinition[] {
+  const tools: ToolDefinition[] = [];
+  for (let i = 0; i < count; i++) {
+    tools.push({
+      name: `tool_${i}`,
+      description: `缓存基准工具 ${i}`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          [i % 2 === 0 ? 'alpha' : 'beta']: {
+            type: 'object',
+            properties: {
+              nested: {
+                type: 'array',
+                items: { type: 'string', enum: ['a', 'b'] },
+              },
+            },
+            required: ['nested'],
+          },
+          flag: { type: 'boolean', const: true },
+        },
+        required: ['flag'],
+        $defs: { Shared: { type: 'string' } },
+      },
+    });
+  }
+  return tools;
+}
+
 export const BENCHMARKS: PerfBenchmark[] = [
   {
-    name: "lru.cache.10k.hits",
+    name: 'lru.cache.10k.hits',
     setup: noopSetup,
     run: async () => {
-      const { LruMap } = await import("../bounded-map");
+      const { LruMap } = await import('../bounded-map');
       const map = new LruMap<number, number>(1000);
       for (let i = 0; i < 10000; i++) {
         map.set(i, i);
@@ -50,10 +92,10 @@ export const BENCHMARKS: PerfBenchmark[] = [
     target: { maxMs: 5, minOps: 200 },
   },
   {
-    name: "bounded-map.set.10k",
+    name: 'bounded-map.set.10k',
     setup: noopSetup,
     run: async () => {
-      const { BoundedMap } = await import("../bounded-map");
+      const { BoundedMap } = await import('../bounded-map');
       const map = new BoundedMap<number, number>(100, undefined);
       for (let i = 0; i < 10000; i++) {
         map.set(i, i);
@@ -64,18 +106,18 @@ export const BENCHMARKS: PerfBenchmark[] = [
     target: { maxMs: 10, minOps: 100 },
   },
   {
-    name: "jsonl.append.1000",
+    name: 'jsonl.append.1000',
     setup: async () => {
-      const { mkdtemp } = await import("node:fs/promises");
-      const { join } = await import("node:path");
-      const { tmpdir } = await import("node:os");
-      const dir = await mkdtemp(join(tmpdir(), "crish-bench-"));
-      const { writeFileSync } = await import("node:fs");
-      writeFileSync(join(dir, "bench.jsonl"), "", "utf8");
+      const { mkdtemp } = await import('node:fs/promises');
+      const { join } = await import('node:path');
+      const { tmpdir } = await import('node:os');
+      const dir = await mkdtemp(join(tmpdir(), 'crish-bench-'));
+      const { writeFileSync } = await import('node:fs');
+      writeFileSync(join(dir, 'bench.jsonl'), '', 'utf8');
       (globalThis as unknown as Record<string, string>).__benchDir = dir;
     },
     run: async () => {
-      const { JsonlAppendBatcher } = await import("../jsonl-append-batcher");
+      const { JsonlAppendBatcher } = await import('../jsonl-append-batcher');
       const dir = (globalThis as unknown as Record<string, string>).__benchDir;
       const batcher = new JsonlAppendBatcher({
         filePath: `${dir}/bench.jsonl`,
@@ -85,13 +127,15 @@ export const BENCHMARKS: PerfBenchmark[] = [
         fsyncDirectoryOnFlush: false,
       });
       for (let i = 0; i < 1000; i++) {
-        await batcher.append(JSON.stringify({ index: i, data: "x".repeat(64) }));
+        await batcher.append(
+          JSON.stringify({ index: i, data: 'x'.repeat(64) })
+        );
       }
       await batcher.flush();
       await batcher.close();
     },
     teardown: async () => {
-      const { rm } = await import("node:fs/promises");
+      const { rm } = await import('node:fs/promises');
       const dir = (globalThis as unknown as Record<string, string>).__benchDir;
       await rm(dir!, { recursive: true, force: true });
     },
@@ -100,10 +144,10 @@ export const BENCHMARKS: PerfBenchmark[] = [
     target: { maxMs: 10, minOps: 100 },
   },
   {
-    name: "deep-equal.1k.props",
+    name: 'deep-equal.1k.props',
     setup: noopSetup,
     run: async () => {
-      const { deepEqual } = await import("../deep-equal");
+      const { deepEqual } = await import('../deep-equal');
       const a: Record<string, number> = {};
       const b: Record<string, number> = {};
       for (let i = 0; i < 1000; i++) {
@@ -117,10 +161,10 @@ export const BENCHMARKS: PerfBenchmark[] = [
     target: { maxMs: 1, minOps: 1000 },
   },
   {
-    name: "async-mutex.contention.100",
+    name: 'async-mutex.contention.100',
     setup: noopSetup,
     run: async () => {
-      const { AsyncMutex } = await import("../async-mutex");
+      const { AsyncMutex } = await import('../async-mutex');
       const mutex = new AsyncMutex();
       const tasks = [];
       for (let i = 0; i < 100; i++) {
@@ -128,7 +172,7 @@ export const BENCHMARKS: PerfBenchmark[] = [
           mutex.runExclusive(async () => {
             await Promise.resolve();
             return i;
-          }),
+          })
         );
       }
       await Promise.all(tasks);
@@ -138,10 +182,10 @@ export const BENCHMARKS: PerfBenchmark[] = [
     target: { maxMs: 5, minOps: 200 },
   },
   {
-    name: "ring-buffer.10k.rw",
+    name: 'ring-buffer.10k.rw',
     setup: noopSetup,
     run: async () => {
-      const { RingBuffer } = await import("../ring-buffer");
+      const { RingBuffer } = await import('../ring-buffer');
       const buf = new RingBuffer<number>(1000);
       for (let i = 0; i < 10000; i++) {
         buf.push(i);
@@ -154,10 +198,10 @@ export const BENCHMARKS: PerfBenchmark[] = [
     target: { maxMs: 5, minOps: 200 },
   },
   {
-    name: "object.clone.1k",
+    name: 'object.clone.1k',
     setup: noopSetup,
     run: async () => {
-      const { clone } = await import("../object");
+      const { clone } = await import('../object');
       const obj: Record<string, number> = {};
       for (let i = 0; i < 1000; i++) {
         obj[`k${i}`] = i;
@@ -169,10 +213,11 @@ export const BENCHMARKS: PerfBenchmark[] = [
     target: { maxMs: 2, minOps: 500 },
   },
   {
-    name: "diff.parse.10k",
+    name: 'diff.parse.10k',
     setup: noopSetup,
     run: async () => {
-      const { StreamingDiffParser } = await import("../file/streaming-diff-parser");
+      const { StreamingDiffParser } =
+        await import('../file/streaming-diff-parser');
       const diff = generateLargeDiff(10000);
       const parser = new StreamingDiffParser();
       parser.feed(diff);
@@ -183,21 +228,21 @@ export const BENCHMARKS: PerfBenchmark[] = [
     target: { maxMs: 50, minOps: 20 },
   },
   {
-    name: "session.serialize.500msg",
+    name: 'session.serialize.500msg',
     setup: noopSetup,
     run: async () => {
       const msgs = generateMessages(500);
-      msgs.map((m) => JSON.stringify(m)).join("\n");
+      msgs.map((m) => JSON.stringify(m)).join('\n');
     },
     iterations: 30,
     warmupIterations: 5,
     target: { maxMs: 20, minOps: 50 },
   },
   {
-    name: "cache.lru.10k",
+    name: 'cache.lru.10k',
     setup: noopSetup,
     run: async () => {
-      const { LruMap } = await import("../bounded-map");
+      const { LruMap } = await import('../bounded-map');
       const cache = new LruMap<string, number>(1000);
       for (let i = 0; i < 10000; i++) {
         cache.set(`k${i}`, i);
@@ -209,10 +254,10 @@ export const BENCHMARKS: PerfBenchmark[] = [
     target: { maxMs: 5, minOps: 200 },
   },
   {
-    name: "mutex.contention.10",
+    name: 'mutex.contention.10',
     setup: noopSetup,
     run: async () => {
-      const { AsyncMutex } = await import("../async-mutex");
+      const { AsyncMutex } = await import('../async-mutex');
       const mutex = new AsyncMutex();
       const tasks = [];
       for (let i = 0; i < 10; i++) {
@@ -220,10 +265,45 @@ export const BENCHMARKS: PerfBenchmark[] = [
           mutex.runExclusive(async () => {
             await Promise.resolve();
             return i;
-          }),
+          })
         );
       }
       await Promise.all(tasks);
+    },
+    iterations: 50,
+    warmupIterations: 5,
+    target: { maxMs: 2, minOps: 500 },
+  },
+  {
+    // 缓存 schema 规范化基准（P6 §3.5.3）：100 个含嵌套 schema 的工具定义，
+    // 跑 canonicalizeJsonSchema（R2 确定性重建）+ formatStableTools（R1 排序映射）。
+    // 依据：每次 run-task 组装时执行一次，防止 P1 TS 侧镜像/重构引入回归。
+    name: 'cache.schema.canonicalize.100tools',
+    setup: noopSetup,
+    run: async () => {
+      const { canonicalizeJsonSchema, formatStableTools } =
+        await import('../cache/cache-rules');
+      const tools = generateCacheBenchmarkTools(100);
+      for (const tool of tools) {
+        canonicalizeJsonSchema(tool.inputSchema);
+      }
+      formatStableTools(tools);
+    },
+    iterations: 50,
+    warmupIterations: 5,
+    target: { maxMs: 5, minOps: 200 },
+  },
+  {
+    // 缓存键推导基准（P6 §3.5.3）：1000 次 derivePromptCacheKey（R3），
+    // 覆盖 100+ 码点长 sessionId 的 64 码点钳制路径与短 ID 原样路径。
+    name: 'cache.key.derive.1000',
+    setup: noopSetup,
+    run: async () => {
+      const { derivePromptCacheKey } = await import('../cache/cache-rules');
+      const longSessionId = `sess-${'缓'.repeat(70)}-0123456789`;
+      for (let i = 0; i < 1000; i++) {
+        derivePromptCacheKey(i % 2 === 0 ? longSessionId : `sess-${i % 500}`);
+      }
     },
     iterations: 50,
     warmupIterations: 5,

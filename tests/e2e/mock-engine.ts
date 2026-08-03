@@ -701,3 +701,153 @@ export function restoreSessionIndexSeed(): Record<string, string> {
     crish_folder_order_v1: JSON.stringify(['常规会话']),
   };
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// 缓存 fixture（P6 §3.5.1，T-45；事件形状供 T-48 cache-telemetry.spec.ts 消费）
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 带缓存 usage 的完整旅程 fixture（P6 §3.5.1，T-45）。
+ *
+ * 事件编排：message-start → message-delta → message-end（携带
+ * `message.metadata.usage`，ProviderUsage camelCase 挂载点，Included 形态：
+ * promptTokens 已含缓存读）→ run-terminal → cache-stats-updated
+ * （run 收口时的会话级缓存统计快照，RunCacheStats camelCase）。
+ *
+ * 命中率断言口径（P6 §3.5.1 / C9）：hitRate = cacheReadTokens / inputTotal，
+ * inputTotal = miss + read + write；本 fixture 为 Included 形态，
+ * inputTotal = promptTokens = 12000 → 75%（9000/12000）。
+ *
+ * 事件形状清单（T-48 消费面，camelCase）：
+ * - `message-end.message.metadata.usage`：
+ *   `{ promptTokens: 12000, completionTokens: 400, cacheReadTokens: 9000,
+ *     cacheWriteTokens: 500, reasoningTokens: 60 }`
+ * - `cache-stats-updated`（runId/sessionId/sequence 由引擎自动补齐）：
+ *   `{ type: 'cache-stats-updated', timestamp, stats: { promptTokens,
+ *     completionTokens, totalTokens, cacheReadTokens, cacheWriteTokens,
+ *     cacheMissTokens, sampleCount, hitRatio, writeRatio } }`
+ */
+export function cacheUsageRunEvents(): MockEvent[] {
+  return [
+    { type: 'message-start' },
+    {
+      type: 'message-delta',
+      block: { type: 'text', text: '本次运行命中缓存：读取 9000 缓存 token。' },
+    },
+    {
+      type: 'message-end',
+      message: {
+        role: 'assistant',
+        content: '本次运行命中缓存：读取 9000 缓存 token。',
+        blocks: [
+          {
+            type: 'text',
+            text: '本次运行命中缓存：读取 9000 缓存 token。',
+          },
+        ],
+        metadata: {
+          usage: {
+            promptTokens: 12000,
+            completionTokens: 400,
+            cacheReadTokens: 9000,
+            cacheWriteTokens: 500,
+            reasoningTokens: 60,
+          },
+        },
+      },
+    },
+    { type: 'run-terminal', terminal: 'completed' },
+    {
+      type: 'cache-stats-updated',
+      timestamp: '2026-08-03T00:00:00.000Z',
+      stats: {
+        promptTokens: 12000,
+        completionTokens: 400,
+        totalTokens: 12400,
+        cacheReadTokens: 9000,
+        cacheWriteTokens: 500,
+        cacheMissTokens: 2500,
+        sampleCount: 1,
+        hitRatio: 0.75,
+        writeRatio: 500 / 12000,
+      },
+    },
+  ];
+}
+
+/**
+ * 无 cache 字段的老形态 run fixture（P6 §3.5.1，T-45）：
+ * message-end 不携带 metadata.usage、无 cache-stats-updated 事件。
+ * 兼容性断言：渲染层不得出现徽标、不得显示 0% 误导（C15 null 语义）。
+ */
+export function legacyNoUsageRunEvents(): MockEvent[] {
+  return [
+    { type: 'message-start' },
+    {
+      type: 'message-delta',
+      block: { type: 'text', text: '老形态消息：不携带缓存计量字段。' },
+    },
+    {
+      type: 'message-end',
+      message: {
+        role: 'assistant',
+        content: '老形态消息：不携带缓存计量字段。',
+        blocks: [
+          {
+            type: 'text',
+            text: '老形态消息：不携带缓存计量字段。',
+          },
+        ],
+      },
+    },
+    { type: 'run-terminal', terminal: 'completed' },
+  ];
+}
+
+/**
+ * 命中率边界 fixture（e2e 用例④，P6 §3.5.1）：
+ * usage 存在但 cacheReadTokens 确为 0（厂商已上报、确为未命中）——
+ * 与「未上报 → null → 隐藏」必须可区分（C15），渲染层应显示
+ * 「未命中」态而非 0% 误导（文案细节归 P5，P6 只钉徽标行为）。
+ */
+export function zeroCacheReadRunEvents(): MockEvent[] {
+  return [
+    { type: 'message-start' },
+    {
+      type: 'message-delta',
+      block: { type: 'text', text: '本次运行未命中缓存。' },
+    },
+    {
+      type: 'message-end',
+      message: {
+        role: 'assistant',
+        content: '本次运行未命中缓存。',
+        blocks: [{ type: 'text', text: '本次运行未命中缓存。' }],
+        metadata: {
+          usage: {
+            promptTokens: 100,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+          },
+        },
+      },
+    },
+    { type: 'run-terminal', terminal: 'completed' },
+  ];
+}
+
+/**
+ * 构造 cache-stats-updated 事件（RunCacheStats camelCase，
+ * shared-types/events.ts:214 契约；timestamp 缺省注入当前时间，
+ * runId/sessionId/sequence 由引擎自动补齐）。
+ * 供 T-48 cache-telemetry.spec.ts 组合多 run 命中率上升等场景复用。
+ */
+export function cacheStatsUpdatedEvent(
+  stats: Record<string, unknown>
+): MockEvent {
+  return {
+    type: 'cache-stats-updated',
+    timestamp: new Date().toISOString(),
+    stats,
+  };
+}

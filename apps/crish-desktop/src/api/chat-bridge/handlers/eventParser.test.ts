@@ -513,3 +513,104 @@ describe('parseBridgeEvent（P5 S3 缓存测量域三事件）', () => {
     expect(alert.attribution).toBe('zero-read');
   });
 });
+
+describe('parseBridgeEvent（P6 S4：message-end 携带 metadata.usage 与缓存事件未知字段容忍）', () => {
+  it('message-end 完整消息携带 metadata.usage（ProviderUsage camelCase）解析成功且 usage 结构化可读', () => {
+    const r = parseBridgeEvent({
+      type: 'message-end',
+      sessionId: 's',
+      message: {
+        id: 'm-1',
+        role: 'assistant',
+        createdAt: 't',
+        blocks: [{ type: 'text', text: 'hi' }],
+        metadata: {
+          usage: {
+            promptTokens: 12000,
+            cacheReadTokens: 9000,
+            cacheWriteTokens: 500,
+          },
+        },
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect(r.data.type).toBe('message-end');
+      const usage = (r.data.event.message.metadata as { usage?: unknown })
+        ?.usage;
+      expect(usage).toMatchObject({
+        promptTokens: 12000,
+        cacheReadTokens: 9000,
+        cacheWriteTokens: 500,
+      });
+    }
+  });
+
+  it('宽容路径 message-end：缺信封字段（sessionId）→ 归一器直通 message，metadata.usage 原样保留', () => {
+    const r = parseBridgeEvent({
+      type: 'message-end',
+      message: {
+        id: 'm-2',
+        role: 'assistant',
+        createdAt: 't',
+        blocks: [],
+        metadata: { usage: { promptTokens: 100, cached_tokens: 70 } },
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      const usage = (r.data.event.message.metadata as { usage?: unknown })
+        ?.usage;
+      expect(usage).toMatchObject({ promptTokens: 100, cached_tokens: 70 });
+    }
+  });
+
+  it('message-end 缺 message → parseErr（宽容归一器不伪造消息，不静默吞）', () => {
+    const r = parseBridgeEvent({ type: 'message-end', sessionId: 's' });
+    expect(r.ok).toBe(false);
+    if (r.ok === false) expect(r.error.length).toBeGreaterThan(0);
+  });
+
+  it('cache-stats-updated 未知字段容忍：多余字段不破坏解析，已知字段语义保留', () => {
+    const r = parseBridgeEvent({
+      type: 'cache-stats-updated',
+      sessionId: 's',
+      stats: { promptTokens: 100, futureField: { nested: 1 } },
+      extraTopLevel: 'ignored',
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect(r.data.event.stats.promptTokens).toBe(100);
+      expect('futureField' in r.data.event.stats).toBe(false);
+    }
+  });
+
+  it('cache-waste-alert 未知字段容忍：多余字段不改变归因与计数语义', () => {
+    const r = parseBridgeEvent({
+      type: 'cache-waste-alert',
+      sessionId: 's',
+      attribution: 'cold',
+      missedTokens: 20000,
+      vendorNote: 'extra',
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect(r.data.event.attribution).toBe('cold');
+      expect(r.data.event.missedTokens).toBe(20000);
+    }
+  });
+
+  it('cold-cache-warning 未知字段容忍：多余字段不改变 TTL 与重发估算', () => {
+    const r = parseBridgeEvent({
+      type: 'cold-cache-warning',
+      sessionId: 's',
+      ttlSeconds: 300,
+      unknownField: [1, 2],
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect(r.data.event.ttlSeconds).toBe(300);
+      expect(r.data.event.resendEstimateTokens).toBe(0);
+    }
+  });
+});

@@ -51,6 +51,12 @@ import {
   onSubagentEnded,
   onError,
 } from './subagentHandlers';
+import {
+  onCacheStatsUpdated,
+  onCacheWasteAlert,
+  onColdCacheWarning,
+} from './cacheEventHandlers';
+import { onSecurityAudit } from './securityAuditHandlers';
 
 export type EngineHandler<ET extends EngineEventType> = (
   env: HandlerEnv,
@@ -84,14 +90,14 @@ export const engineDispatchTable: {
   'checkpoint-created': onCheckpointCreated,
   'checkpoint-restored': onCheckpointRestored,
   'run-terminal': onRunTerminal,
-  // 缓存测量域三事件（P5 S3；T-38 先注册显式空实现，宽容静默忽略——
-  // 对齐老前端不识别新事件类型的 tolerance，T-48 负责真实展示消费接线）
-  'cache-stats-updated': (_env, _envelope) => {},
-  'cache-waste-alert': (_env, _envelope) => {},
-  'cold-cache-warning': (_env, _envelope) => {},
-  // 安全审计域（I2-S8；先注册显式空实现，宽容静默忽略——审计面板 /
-  // S9 审批弹窗影响面数据源由 I3 接线消费）
-  'security-audit': (_env, _envelope) => {},
+  // 缓存测量域三事件（P5 S3；T-38 注册显式空实现，T-48 接线真实消费 →
+  // cacheEventsStore → SessionCacheStatsPanel 展示）
+  'cache-stats-updated': onCacheStatsUpdated,
+  'cache-waste-alert': onCacheWasteAlert,
+  'cold-cache-warning': onColdCacheWarning,
+  // 安全审计域（I2-S8 事件面 → I3-S9 接线）：security-audit → securityAuditStore
+  // （审计日志视图 / 恢复面板数据源）
+  'security-audit': onSecurityAudit,
 };
 
 type LegacyHandler = (env: HandlerEnv, envelope: LegacyEnvelope) => void;

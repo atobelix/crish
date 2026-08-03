@@ -65,6 +65,7 @@ function assistantRowPropsEqual(
     prev.msg.blocks === next.msg.blocks &&
     prev.msg.thinkingTime === next.msg.thinkingTime &&
     prev.msg.timestamp === next.msg.timestamp &&
+    prev.msg.cacheMetrics === next.msg.cacheMetrics &&
     prev.isPinned === next.isPinned &&
     prev.isSearchHit === next.isSearchHit &&
     prev.isFollowUp === next.isFollowUp &&
@@ -224,8 +225,10 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
           toolStackProps={toolStackProps}
         />
 
-        {/* P6 骨架挂载（T-46）：无数据源 → 恒传 null 隐藏；T-48 接线真实 metrics */}
-        <CacheMetricsBadge metrics={null} />
+        {/* T-48：badge 挂真实 metrics（消息级数据链：message-end →
+            computeCacheMetricsFromUsage → SessionMessage.cacheMetrics）；
+            null / undefined = 未上报 → 组件内部隐藏（C15 无 0% 误导） */}
+        <CacheMetricsBadge metrics={msg.cacheMetrics?.metrics ?? null} />
       </div>
 
       {!isThinkingMsg && msg.status !== 'processing' && (

@@ -17,11 +17,7 @@ import {
   usageDaysForChart,
   type UsageSnapshot,
 } from '../../api/usageStore';
-import {
-  SettingsPage,
-  SettingsSection,
-  SettingsCard,
-} from './SettingsUI';
+import { SettingsPage, SettingsSection, SettingsCard } from './SettingsUI';
 import { Tooltip } from '../Tooltip';
 
 type Props = {
@@ -38,8 +34,6 @@ function formatUsd(n: number, digits = 4): string {
   return `$${v.toFixed(digits)}`;
 }
 
-
-
 function safeLoadPrices(): { list: ModelPrice[]; error: string | null } {
   try {
     return { list: loadPrices(), error: null };
@@ -47,8 +41,6 @@ function safeLoadPrices(): { list: ModelPrice[]; error: string | null } {
     return { list: [], error: String(err) };
   }
 }
-
-
 
 const EditablePriceRow: React.FC<{
   row: ModelPrice;
@@ -58,14 +50,13 @@ const EditablePriceRow: React.FC<{
   const [inputVal, setInputVal] = useState(String(row.inputPerMTok));
   const [outputVal, setOutputVal] = useState(String(row.outputPerMTok));
   const hasChanged =
-    Number(inputVal) !== row.inputPerMTok || Number(outputVal) !== row.outputPerMTok;
+    Number(inputVal) !== row.inputPerMTok ||
+    Number(outputVal) !== row.outputPerMTok;
 
   return (
     <div className={styles.priceRow}>
       <Tooltip content={row.model}>
-        <span className={styles.priceRowModel}>
-          {row.model}
-        </span>
+        <span className={styles.priceRowModel}>{row.model}</span>
       </Tooltip>
       <input
         value={inputVal}
@@ -82,7 +73,11 @@ const EditablePriceRow: React.FC<{
       <button
         type="button"
         className="ui-btn ui-btn-secondary ui-btn-sm"
-        disabled={!hasChanged || Number.isNaN(Number(inputVal)) || Number.isNaN(Number(outputVal))}
+        disabled={
+          !hasChanged ||
+          Number.isNaN(Number(inputVal)) ||
+          Number.isNaN(Number(outputVal))
+        }
         onClick={() => {
           onSave(Number(inputVal), Number(outputVal));
         }}
@@ -102,9 +97,15 @@ const EditablePriceRow: React.FC<{
 
 export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
   const [pricesModalOpen, setPricesModalOpen] = useState(false);
-  const [priceList, setPriceList] = useState<ModelPrice[]>(() => safeLoadPrices().list);
+  const [priceList, setPriceList] = useState<ModelPrice[]>(
+    () => safeLoadPrices().list
+  );
   const [_pricesError, setPricesError] = useState<string | null>(null);
-  const [priceDraft, setPriceDraft] = useState({ model: '', input: '', output: '' });
+  const [priceDraft, setPriceDraft] = useState({
+    model: '',
+    input: '',
+    output: '',
+  });
   const [priceFilter, setPriceFilter] = useState('');
   const [history, setHistory] = useState<UsageSnapshot | null>(null);
   const [chartDays, setChartDays] = useState<7 | 14>(7);
@@ -120,7 +121,7 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
         setPricesError(null);
       }
     },
-    [onShowToast],
+    [onShowToast]
   );
 
   useEffect(() => {
@@ -142,11 +143,9 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [pricesModalOpen]);
 
-
-
   const dayBars = useMemo(
-    () => history ? usageDaysForChart(chartDays, history) : [],
-    [chartDays, history],
+    () => (history ? usageDaysForChart(chartDays, history) : []),
+    [chartDays, history]
   );
   const dayMax = useMemo(() => {
     let m = 0;
@@ -213,10 +212,7 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
           className={styles.modalOverlay}
           onClick={() => setPricesModalOpen(false)}
         >
-          <div
-            className={styles.modalBox}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className={styles.modalBox} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
               <span className={styles.modalTitle}>
                 模型价格配置 (USD / 1M Tokens)
@@ -254,9 +250,7 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
                 />
               ))}
               {filteredPrices.length === 0 && (
-                <div className={styles.modalEmptyState}>
-                  无匹配的模型价格
-                </div>
+                <div className={styles.modalEmptyState}>无匹配的模型价格</div>
               )}
             </div>
 
@@ -264,20 +258,26 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
               <input
                 placeholder="添加模型 ID..."
                 value={priceDraft.model}
-                onChange={(e) => setPriceDraft((d) => ({ ...d, model: e.target.value }))}
+                onChange={(e) =>
+                  setPriceDraft((d) => ({ ...d, model: e.target.value }))
+                }
                 className={`settings-field-input ${styles.modalAddInputFlex2}`}
                 spellCheck={false}
               />
               <input
                 placeholder="入 $/1M"
                 value={priceDraft.input}
-                onChange={(e) => setPriceDraft((d) => ({ ...d, input: e.target.value }))}
+                onChange={(e) =>
+                  setPriceDraft((d) => ({ ...d, input: e.target.value }))
+                }
                 className={`settings-field-input ${styles.modalAddInputFlex1}`}
               />
               <input
                 placeholder="出 $/1M"
                 value={priceDraft.output}
-                onChange={(e) => setPriceDraft((d) => ({ ...d, output: e.target.value }))}
+                onChange={(e) =>
+                  setPriceDraft((d) => ({ ...d, output: e.target.value }))
+                }
                 className={`settings-field-input ${styles.modalAddInputFlex1}`}
               />
               <button
@@ -301,7 +301,7 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
             </div>
           </div>
         </div>,
-        document.body,
+        document.body
       )
     : null;
 
@@ -339,6 +339,24 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
                     {formatUsd(history.totalCost)}
                   </span>
                 </div>
+                {/* T-48：缓存列（P5 S7）——命中读取 / 缓存节省；无数据时隐藏 */}
+                {history.totalCacheRead > 0 && (
+                  <div className={styles.statItem}>
+                    <span className={styles.statLabel}>缓存命中读取</span>
+                    <span className={styles.statValue}>
+                      {formatTokenCount(history.totalCacheRead)}{' '}
+                      <span className={styles.statUnit}>tokens</span>
+                    </span>
+                  </div>
+                )}
+                {history.totalSavedCost > 0 && (
+                  <div className={styles.statItem}>
+                    <span className={styles.statLabel}>缓存节省</span>
+                    <span className={styles.statValueCost}>
+                      {formatUsd(history.totalSavedCost)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Daily Trend Chart */}
@@ -376,32 +394,32 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
                         key={d.day}
                         content={`${d.day}\n输入: ${formatTokenCount(d.input)}\n输出: ${formatTokenCount(d.output)}`}
                       >
-                        <div
-                          className={styles.chartBarCol}
-                        >
-                        <div className={styles.chartBarInner}>
-                          {total > 0 ? (
-                            <div
-                              className={styles.chartBarStack}
-                              style={{ height: `${Math.max(4, heightPct)}%` }}
-                            >
+                        <div className={styles.chartBarCol}>
+                          <div className={styles.chartBarInner}>
+                            {total > 0 ? (
                               <div
-                                className={styles.chartBarOut}
-                                style={{ height: `${outPct}%` }}
-                              />
-                              <div
-                                className={styles.chartBarIn}
-                                style={{ height: `${inPct}%` }}
-                              />
-                            </div>
-                          ) : (
-                            <div className={styles.chartBarEmpty} />
-                          )}
+                                className={styles.chartBarStack}
+                                style={{ height: `${Math.max(4, heightPct)}%` }}
+                              >
+                                <div
+                                  className={styles.chartBarOut}
+                                  style={{ height: `${outPct}%` }}
+                                />
+                                <div
+                                  className={styles.chartBarIn}
+                                  style={{ height: `${inPct}%` }}
+                                />
+                              </div>
+                            ) : (
+                              <div className={styles.chartBarEmpty} />
+                            )}
+                          </div>
+                          <span className={styles.chartBarLabel}>
+                            {dateLabel}
+                          </span>
                         </div>
-                        <span className={styles.chartBarLabel}>{dateLabel}</span>
-                      </div>
-                    </Tooltip>
-                  );
+                      </Tooltip>
+                    );
                   })}
                 </div>
 
@@ -420,20 +438,30 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
               {/* Model Breakdown */}
               {history.models.length > 0 && (
                 <div className={styles.modelsSection}>
-                  <span className={styles.modelsSectionTitle}>模型使用分布</span>
+                  <span className={styles.modelsSectionTitle}>
+                    模型使用分布
+                  </span>
                   <div className={styles.modelsList}>
                     {history.models.map((m) => {
                       const t = m.input + m.output;
                       const maxM = history.models[0]
-                        ? history.models[0].input + history.models[0].output || 1
+                        ? history.models[0].input + history.models[0].output ||
+                          1
                         : 1;
-                      const barWidth = Math.max(4, Math.round((t / maxM) * 100));
+                      const barWidth = Math.max(
+                        4,
+                        Math.round((t / maxM) * 100)
+                      );
+                      // T-48：模型级缓存列——命中率口径 C9（hitRatio = cacheRead / inputTotal，
+                      // 本桶 input 即 promptTokens 增量），无缓存数据时不显示 0% 误导
+                      const hitRatio =
+                        m.cacheRead > 0 && m.input > 0
+                          ? (m.cacheRead / m.input) * 100
+                          : null;
                       return (
                         <div key={m.model} className={styles.modelRow}>
                           <Tooltip content={m.model}>
-                            <span className={styles.modelName}>
-                              {m.model}
-                            </span>
+                            <span className={styles.modelName}>{m.model}</span>
                           </Tooltip>
                           <div className={styles.modelBarTrack}>
                             <div
@@ -443,8 +471,20 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
                           </div>
                           <span className={styles.modelTokens}>
                             {formatTokenCount(t)}{' '}
-                            <span className={styles.modelTokensUnit}>tokens</span>
+                            <span className={styles.modelTokensUnit}>
+                              tokens
+                            </span>
                           </span>
+                          {hitRatio !== null && (
+                            <span
+                              className={styles.modelCacheMeta}
+                              data-testid={`model-cache-meta-${m.model}`}
+                            >
+                              命中 {hitRatio.toFixed(0)}% · 读{' '}
+                              {formatTokenCount(m.cacheRead)} · 省{' '}
+                              {formatUsd(m.savedCost)}
+                            </span>
+                          )}
                         </div>
                       );
                     })}

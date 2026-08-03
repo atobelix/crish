@@ -168,8 +168,10 @@ const R2_PARITY_SAMPLES: ParitySample[] = [
     expected: { type: ['string', 'number'] },
   },
   {
+    // 与 Rust 侧样例逐条一致：输入为 ["integer","integer"]（去重后单元素 →
+    // 收敛为单值字符串，Rust 侧同输入同期望，T-44 双向核对对齐）
     name: 'r2.3 type 数组单元素',
-    input: { type: ['integer'] },
+    input: { type: ['integer', 'integer'] },
     expected: { type: 'integer' },
   },
   {

@@ -17,7 +17,11 @@
 import type { Settings } from '../api/clientApi';
 import type { MessageCacheState } from '@crish/shared-types';
 export type AppSettings = Settings;
-export type GroupState = { id: string; cards: CardState[]; activeCardId: string | null };
+export type GroupState = {
+  id: string;
+  cards: CardState[];
+  activeCardId: string | null;
+};
 
 export type SettingsTabType =
   | 'profile'
@@ -166,11 +170,7 @@ export interface CronJob {
  * 与 approvalMeta.ApprovalRiskLevel 取值一致；store 侧全可选，解析后再收成完整 meta。
  */
 export type MessageApprovalRiskLevel =
-  | 'low'
-  | 'medium'
-  | 'high'
-  | 'critical'
-  | 'unknown';
+  'low' | 'medium' | 'high' | 'critical' | 'unknown';
 
 /** 审批风险来源：后端事实 / 派生 / 未知 */
 export type MessageApprovalRiskSource = 'backend' | 'derived' | 'unknown';
@@ -184,7 +184,60 @@ export interface MessageToolApprovalMeta {
   requiresDoubleConfirm?: boolean;
   recommendSnapshot?: boolean;
   source?: MessageApprovalRiskSource;
+  /** S9 审批载荷（revertGate 面积 / 删除影响面），宽容缺失 */
+  payload?: MessageToolApprovalPayload;
 }
+
+/** 回退面积（C3/S6 载荷；字段可空 = 未知，与 revert.rs RevertArea 对齐） */
+export interface RevertAreaPayload {
+  fileCount?: number | null;
+  lineCount?: number | null;
+  crossDirectory?: boolean | null;
+  refAgeSeconds?: number | null;
+}
+
+/** 回退审批载荷（revert.rs approval_payload 的 revertGate 形状） */
+export interface RevertGatePayload {
+  form?: string | null;
+  targetRef?: string | null;
+  target?: string | null;
+  area?: RevertAreaPayload | null;
+  thresholds?: {
+    maxFiles?: number | null;
+    maxLines?: number | null;
+    maxRefAgeHours?: number | null;
+  } | null;
+  /** 审批人标注（C3：裁决权归用户；engine 侧恒为 "user"） */
+  approver?: string | null;
+  /** 拒绝/载荷统一指引（与 S6 拒绝文案同源） */
+  guidance?: string | null;
+}
+
+/** 删除影响面（S8 ImpactAssessment；字段可空 = 未知） */
+export interface DeleteImpactPayload {
+  fileCount?: number | null;
+  totalSizeBytes?: number | null;
+  directoryCount?: number | null;
+  crossDirectory?: boolean | null;
+  flagged?: boolean | null;
+}
+
+/** 删除类审批载荷（delete_file/delete_dir 调用：目标清单 + 影响面） */
+export interface DeleteApprovalPayload {
+  /** 删除目标路径清单（从工具参数提取） */
+  targets: string[];
+  /** 影响面（S8 事件载荷；缺失 = 未上报，前端宽容降级） */
+  impact?: DeleteImpactPayload | null;
+}
+
+/**
+ * S9 审批弹窗数据源载荷（宽容解析自 approval-requested 事件）。
+ * kind 为判别：revert-gate = 大面积回退审批；delete = 删除确认。
+ */
+export type MessageToolApprovalPayload =
+  | { kind: 'revert-gate'; revertGate: RevertGatePayload }
+  | { kind: 'delete'; deleteImpact: DeleteApprovalPayload }
+  | { kind: 'unknown' };
 
 /**
  * 审批 meta 的「显式可空」形态：所有字段都允许 undefined，
@@ -199,6 +252,7 @@ export type MessageToolApprovalMetaInput = {
   requiresDoubleConfirm?: boolean | undefined;
   recommendSnapshot?: boolean | undefined;
   source?: MessageApprovalRiskSource | undefined;
+  payload?: MessageToolApprovalPayload | undefined;
 };
 
 // ── 图片引用 ───────────────────────────────────────────────────────────────
@@ -248,10 +302,7 @@ export interface MessageImageRef {
  *     由调用方根据 approvalDecision 决定后续流转（重试 / 终止）
  */
 export type MessageToolCallStatus =
-  | 'running'
-  | 'success'
-  | 'error'
-  | 'pending_approval';
+  'running' | 'success' | 'error' | 'pending_approval';
 
 /**
  * 用户审批决定（与工具执行结果解耦）。
@@ -347,7 +398,8 @@ export type MessageSender = 'user' | 'assistant';
  * 用户/助手消息处理状态（可选）。
  * queued=排队待发; processing=流式中; completed=终态（成功收口，不含 error 枚举）。
  */
-export type SessionMessageStatus = 'queued' | 'processing' | 'completed' | 'error';
+export type SessionMessageStatus =
+  'queued' | 'processing' | 'completed' | 'error';
 
 /**
  * 工具调用结果回执：当一条消息是工具调用的「结果回执」时，
@@ -442,11 +494,13 @@ export interface SessionMessage {
   /** 本条消息中所有图片的结构化索引（跨 text block + tool call 汇总） */
   images?: MessageImageRef[] | undefined;
   /** 运行错误诊断详情 */
-  errorDetail?: {
-    message: string;
-    kind: string;
-    technical?: string;
-  } | undefined;
+  errorDetail?:
+    | {
+        message: string;
+        kind: string;
+        technical?: string;
+      }
+    | undefined;
   /**
    * 消息级缓存指标（T-48；P6 `MessageCacheState` 契约）。
    * null / undefined = 老数据或引擎未上报 → 渲染层隐藏（不显示 0% 误导，C15）；
@@ -459,11 +513,7 @@ export interface SessionMessage {
  * 协作子 agent 状态。
  * stopped=用户停止/取消（非失败）；failed=异常失败。
  */
-export type SessionAgentStatus =
-  | 'running'
-  | 'completed'
-  | 'failed'
-  | 'stopped';
+export type SessionAgentStatus = 'running' | 'completed' | 'failed' | 'stopped';
 
 /** 主会话下的协作子 agent（run_subagent） */
 export interface SessionAgent {
@@ -548,7 +598,6 @@ export interface SessionAgentPatch {
    */
   subagentRunId?: string;
 }
-
 
 /** /goal 任务清单项（与 TasksCard `- [ ]` 解析对齐） */
 export interface SessionGoalTask {
@@ -645,11 +694,7 @@ export interface SessionState {
 
 /** 标签拖拽落点预览方向 */
 export type DropPreviewDirection =
-  | 'top'
-  | 'bottom'
-  | 'left'
-  | 'right'
-  | 'merge';
+  'top' | 'bottom' | 'left' | 'right' | 'merge';
 
 /** 工作区 DnD 落点预览（null 表示无预览） */
 export interface DropPreviewState {

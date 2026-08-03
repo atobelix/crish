@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import styles from './RuntimePanel.module.css';
 import {
   useSettingsField,
@@ -13,6 +13,10 @@ import { ApprovalSection } from './ApprovalSection';
 import { PlansSection } from './PlansSection';
 import { useRuntimePanelData } from './useRuntimePanelData';
 import { SessionCacheStatsPanel } from './SessionCacheStatsPanel';
+import { useCacheEventsStore } from '../../api/chat-bridge/handlers/cacheEventsStore';
+import { useSecurityAuditStore } from '../../api/chat-bridge/handlers/securityAuditStore';
+import { SecurityAuditSection } from './SecurityAuditSection';
+import { TrashSection } from './TrashSection';
 import {
   formatEngineStatusFull,
   formatEngineStatusShort,
@@ -43,6 +47,19 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
   const cronJobs = useSettingsField(selectScheduledTasks);
   const ds = useEngineState();
   const data = useRuntimePanelData();
+  const cachePanel = useCacheEventsStore();
+  const auditEntries = useSecurityAuditStore((s) => s.entries);
+
+  // T-48：冷缓存 tick——最近一 run 的 warmUntilMs 已过期时提示
+  // 「下次将重发 ~X tokens」（每 run 只提示一次，store 内去重）。
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    useCacheEventsStore.getState().tickColdCheck(now);
+  }, [now]);
 
   if (ds.loading) {
     return (
@@ -118,8 +135,13 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
         </div>
       </RuntimeSection>
 
-      {/* P6 骨架挂载（T-46）：会话级统计无数据源 → 恒传 null 空态；T-48 接线真实 stats */}
-      <SessionCacheStatsPanel stats={null} />
+      {/* T-48：会话级缓存统计接线——cache 三事件 → cacheEventsStore →
+          SessionCacheStatsPanel（累计 runStats + 预警 + 冷缓存提示） */}
+      <SessionCacheStatsPanel
+        stats={cachePanel.runStats}
+        alerts={cachePanel.alerts}
+        coldHint={cachePanel.coldHint}
+      />
 
       <LiveTasksSection
         liveTasks={data.liveTasks}
@@ -141,6 +163,10 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
         onShowToast={onShowToast}
         onFocusSession={data.focusSession}
       />
+
+      <TrashSection onShowToast={onShowToast} />
+
+      <SecurityAuditSection entries={auditEntries} />
 
       <PlansSection
         workflows={ds.workflows}

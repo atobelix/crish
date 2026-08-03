@@ -30,11 +30,10 @@ function attachCacheMetricsToStoreMessage(
     metrics,
     source: 'engine-message-end',
   };
+  // 注意：必须经 sessions[]（autoIndex 中间件的 canonical 数组）写入——
+  // 直接改 sessionsById 会在下一次 sessions 变更重建索引时被覆盖。
   useLayoutStore.setState((state) => {
-    const sess = state.sessionsById[sessionId];
-    // T-48 debug trace（e2e 排查用，收口前移除）
-    // eslint-disable-next-line no-console
-    console.log('[cache-metrics-attach]', { sessionId, messageId, hasSess: !!sess, msgCount: sess?.messages?.length ?? -1 });
+    const sess = state.sessions.find((s) => s.id === sessionId);
     if (!sess?.messages) return;
     let target = messageId
       ? sess.messages.find((m) => m.id === messageId)
@@ -49,26 +48,9 @@ function attachCacheMetricsToStoreMessage(
         }
       }
     }
-    // eslint-disable-next-line no-console
-    console.log('[cache-metrics-attach] target:', target ? target.id : 'NONE');
     if (!target) return;
     target.cacheMetrics = cacheState;
   });
-  const after = useLayoutStore.getState();
-  const sess = after.sessionsById[sessionId];
-  const t = sess?.messages?.find(
-    (m) => m.id === (messageId || undefined)
-  );
-  // eslint-disable-next-line no-console
-  console.log(
-    '[cache-metrics-attach] after-setState:',
-    JSON.stringify({
-      found: !!t,
-      last: sess?.messages?.slice(-1)[0]?.id,
-      lastCache: sess?.messages?.slice(-1)[0]?.cacheMetrics ?? null,
-      sessionRefInSessions: after.sessions.some((s) => s.id === sessionId),
-    })
-  );
 }
 
 /**
@@ -104,9 +86,13 @@ function positiveNum(v: unknown): number | undefined {
  * 从 message-end 消息的 metadata 派生消息级缓存指标。
  * - `metadata.cacheBreakdown`（Rust 已按 C9 口径派生，camelCase
  *   read/write/miss/inputTotal）优先；
- * - 否则从 `metadata.usage`（ProviderUsage camelCase：cacheReadTokens /
- *   cacheWriteTokens / cacheMissTokens）取值并本地推导 hitRate/writeRate；
- * - 无任何缓存字段 / 全零 → null（未上报，隐藏而非 0%）。
+ * - 否则从 `metadata.usage`（ProviderUsage camelCase：promptTokens /
+ *   cacheReadTokens / cacheWriteTokens / cacheMissTokens）取值并本地推导；
+ * - Included 形态兜底（T-48）：未直报 cacheMissTokens 但上报 promptTokens
+ *   时，inputTotal = promptTokens（C9 恒等式隐含 miss = prompt - read - write）；
+ * - C15 null 语义：usage 存在且上报了非零输入（prompt）→ 「已上报确为 0」
+ *   的非 null 结果（0 与 null 必须可区分，P6 §3.6.1 / e2e 用例④）；
+ *   完全无任何字段 / 全零 breakdown → null（未上报，隐藏而非 0%）。
  */
 export function computeCacheMetricsFromUsage(
   metadata: unknown
@@ -125,19 +111,37 @@ export function computeCacheMetricsFromUsage(
   const miss = breakdown
     ? positiveNum(breakdown.miss)
     : positiveNum(usage?.cacheMissTokens);
-  if (read === undefined && write === undefined && miss === undefined)
-    return null;
 
   let inputTotal: number | undefined;
   if (breakdown) {
     inputTotal = positiveNum(breakdown.inputTotal);
   } else {
     const sum = (miss ?? 0) + (read ?? 0) + (write ?? 0);
-    if (sum > 0) inputTotal = sum;
+    const prompt = positiveNum(usage?.promptTokens);
+    if (prompt !== undefined && prompt >= (read ?? 0) + (write ?? 0)) {
+      // Included 形态（权威口径）：promptTokens = inputTotal = miss + read + write，
+      // miss 未直报时隐含 = prompt - read - write（T-45 fixture 75% 口径）
+      inputTotal = prompt;
+    } else if (sum > 0) {
+      // Excluded / 部分上报：inputTotal = 已上报 miss + read + write
+      inputTotal = sum;
+    }
   }
+
+  // usage 显式声明了缓存字段（值可为 0）→ 「已上报确为 0」与未上报可区分（C15）
+  const explicitCache =
+    usage != null &&
+    (usage.cacheReadTokens !== undefined ||
+      usage.cacheWriteTokens !== undefined ||
+      usage.cacheMissTokens !== undefined);
+  const hasCounts =
+    read !== undefined || write !== undefined || miss !== undefined;
+  // 全零且无 inputTotal 可推导 → null（隐藏）；「确为 0」需 inputTotal 锚定命中率
+  if (!hasCounts && !(explicitCache && inputTotal !== undefined)) return null;
+
   const hitRate =
-    inputTotal !== undefined && inputTotal > 0 && read !== undefined
-      ? read / inputTotal
+    inputTotal !== undefined && inputTotal > 0
+      ? (read ?? 0) / inputTotal
       : undefined;
   const writeRate =
     inputTotal !== undefined && inputTotal > 0 && write !== undefined

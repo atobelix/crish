@@ -14,6 +14,11 @@
  * CI 分层归属（PE-11 §1.3 / T11.7.4）：
  *   中层（PR）→ `npx playwright test tests/e2e`（本 config）
  *   慢层（nightly/发布前）→ visual + native-smoke
+ *
+ * 超时分层（G15c，冷启动基建）：
+ *   webServer 启动就绪 180s > 用例超时 30s > 断言超时 8s
+ *   （webServer 侧双保险：port TCP 探测 + url HTTP 健康检查轮询，
+ *    就绪判定 = 端口可连 且 dev server 返回 2xx/3xx）
  */
 import { defineConfig } from '@playwright/test';
 
@@ -24,6 +29,10 @@ export default defineConfig({
   testIgnore: /tauri-native-smoke\.spec\.ts$/,
   fullyParallel: true,
   reporter: [['list']],
+  expect: {
+    // 断言层默认超时（spec 内显式 timeout 8s 为局部覆盖，语义一致）
+    timeout: 8_000,
+  },
   use: {
     baseURL: 'http://localhost:5174',
     screenshot: 'only-on-failure',
@@ -40,8 +49,12 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm --workspace @crish/crish-desktop run dev',
-    port: 5174,
+    // G15c 修正（T-48 轮内协调）：Playwright 校验 port 与 url 互斥
+    // （`Either 'port' or 'url' should be specified`），url 已含端口且
+    // 提供 HTTP 级就绪健康检查（2xx/3xx 轮询），保留 url 即覆盖原意图
+    url: 'http://localhost:5174',
     reuseExistingServer: true,
-    timeout: 120_000,
+    // 冷启动余量：120s → 180s（CI 慢层 60min 预算内可容忍，本地体验差）
+    timeout: 180_000,
   },
 });

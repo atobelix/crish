@@ -217,7 +217,9 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .chartSegmentBtn:hover {
@@ -392,6 +394,15 @@
   color: var(--text-secondary);
 }
 
+/* 模型级缓存列（T-48）：命中率/读取/节省，无缓存数据时不渲染 */
+.modelCacheMeta {
+  flex: 0 0 auto;
+  font-size: var(--font-size-xxs);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
 /* ----- Bottom actions bar ----- */
 .actionsBar {
   display: flex;
@@ -425,6 +436,11 @@
 }
 
 @keyframes shimmer {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }
