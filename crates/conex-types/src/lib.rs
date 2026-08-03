@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 // 消费方同时使用模块路径（conex_types::events::AgentEvent）与根级重导出
 // （conex_types::AgentEvent），两形并存；本处为唯一接线点。
 
+pub mod context;
 pub mod error;
 pub mod events;
+pub mod history;
 pub mod message;
 pub mod response;
 pub mod session;
@@ -14,6 +16,7 @@ pub mod transition;
 
 // codes 常量集在 error.rs 内（`pub mod codes`），根级重导出供
 // orchestrator / 壳命令面以 `conex_types::codes` 引用（R6 接线点）。
+pub use context::{CONTEXT_SAFETY_TOKENS, ContextBudget, SessionContextMeta};
 pub use error::codes;
 
 pub use error::{
@@ -24,6 +27,7 @@ pub use events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision, EVENT_ENVELOPE_SCHEMA_VERSION,
     PermissionBehavior, PermissionDecision, PermissionRequest, RunTerminalStatus, ToolMetadata,
 };
+pub use history::HistoryMessage;
 pub use message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
 pub use response::{ClassifiedStreamError, ProviderOutput};
 pub use session::{AgentEndReason, AgentSessionContext, AgentSessionEvent, AgentSessionState};

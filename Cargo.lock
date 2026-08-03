@@ -907,6 +907,7 @@ name = "conex-compaction"
 version = "0.1.0"
 dependencies = [
  "conex-types",
+ "serde_json",
 ]
 
 [[package]]
@@ -934,6 +935,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "hex",
+ "serde",
+ "serde_json",
  "sha2",
 ]
 

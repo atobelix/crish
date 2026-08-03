@@ -11,5 +11,8 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-# G5 清理（2026-08-03）：serde/serde_json 无任何引用（CompactionEngine 纯内存逻辑，cargo machete 实证）
+# T-32（R4）：AgentMessage 面估算需解析 metadata.usage / metadata.cacheBreakdown
+# （serde_json::Value 字段访问），测试构造 usage JSON 亦依赖 json! 宏；
+# G5 清理（2026-08-03）时曾移除 serde_json（旧 Message 面无引用），本任务恢复。
+serde_json = { workspace = true }
 conex-types = { path = "../conex-types" }

@@ -10,6 +10,9 @@
 //!   容量 1000，覆盖最旧），对齐 pi 的 steer/followUp 分环（01 §五.5）。
 //! - `control`：ControlBus——L0-L3 控制意图队列，drain 聚合优先级
 //!   force_cancel > cooperative_stop > soft_inject（01 §2.10）。
+//! - `hydrate`：历史水合映射（P4 阶段 1-2 / §3.2.3，T-28）——`HistoryMessage`
+//!   纯映射为 `Vec<Arc<AgentMessage>>`，供壳层 `with_initial_conversation_arc`
+//!   冷启动水合接线（T-29/T-30）。
 //! - `safe_point`：applySafePointControl——安全点检查，把控制总线意图
 //!   映射为循环动作（force_cancel 可立即中断；cooperative_stop 等安全点；
 //!   soft_inject 只读消费不打断流）。
@@ -34,6 +37,7 @@
 pub mod approval;
 pub mod control;
 pub mod hooks;
+pub mod hydrate;
 pub mod input;
 pub mod provider;
 pub mod r#loop;
