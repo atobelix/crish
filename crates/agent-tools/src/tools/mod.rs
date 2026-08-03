@@ -66,6 +66,7 @@ pub fn register_builtin_tools_with_config(
     registry.register(Arc::new(shell::ShellCommandTool::new(
         config.default_shell_timeout_ms,
         config.default_shell_max_output_bytes,
+        config.trash_root.clone(),
     )))?;
     registry.register(Arc::new(diff::DiffTextTool::new()))?;
     registry.register(Arc::new(delete::DeleteFileTool::new(config.trash_root.clone())))?;

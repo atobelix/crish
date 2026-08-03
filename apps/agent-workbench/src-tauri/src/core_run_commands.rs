@@ -25,6 +25,7 @@
 //! `app.manage(Arc::new(CoreRunState::new(...)))`（restore 在 manage 之前）。
 
 use std::collections::{HashMap, VecDeque};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -43,6 +44,7 @@ use orchestrator::run::{CancelMode, RunEngine, RunHandle, RunManager};
 use orchestrator::session::SessionRecord;
 use session_loop::hydrate::hydrate_history;
 use session_loop::tool_events::ApprovalDecision;
+use tauri::Manager as _;
 use session_loop::{
     AbortSignal, ApprovalGate, ControlBus, DeltaSink, PermissionMode, RunOutcome, SessionLoopOptions,
     ToolBatchOptions,
@@ -1735,6 +1737,144 @@ async fn emit_approval_resolved(
     }
 }
 
+// ── trash 命令（I2-S5：误删恢复入口，引擎命令面）────────────────────
+
+/// 回收站根注入配置（main.rs `app.manage`；对齐 `BuiltinToolConfig.trash_root`
+/// 语义：`None` = 未注入 → 执行期回退活动工作区 `.crish-trash`，与
+/// delete_file / delete_dir 工具的兜底一致——保证恢复面板与删除工具
+/// 落入同一回收站根，恢复才找得到条目）。
+#[derive(Debug, Clone, Default)]
+pub struct TrashRootConfig {
+    /// 回收站根（数据目录或显式配置根；None = 走工作区兜底）
+    pub root: Option<PathBuf>,
+}
+
+/// 兜底回收站目录名（对齐 agent-tools delete.rs 的 DEFAULT_TRASH_DIR_NAME）
+const DEFAULT_TRASH_DIR_NAME: &str = ".crish-trash";
+
+/// 解析回收站根：
+/// 1. 托管状态注入优先（main.rs 配置注入点，数据目录或显式根）；
+/// 2. 未注入 → 活动工作区 `.crish-trash`（S3 执行期兜底语义）；
+/// 工作区注册表不可用 → 结构化错误（不静默退化）。
+fn trash_root_for(app: &tauri::AppHandle) -> Result<PathBuf, CoreError> {
+    if let Some(config) = app.try_state::<TrashRootConfig>() {
+        if let Some(root) = &config.root {
+            return Ok(root.clone());
+        }
+    }
+    let guard = crate::workspace::resolve_guard(app, "").map_err(|e| {
+        CoreError::Internal(format!(
+            "无法解析回收站根（工作区注册表不可用）：{}: {}",
+            e.code, e.message
+        ))
+    })?;
+    Ok(guard.root().join(DEFAULT_TRASH_DIR_NAME))
+}
+
+/// 回收站错误 → CoreError 映射（按文案归类，对齐 03 §5.3 协议）
+fn map_trash_err(err: &anyhow::Error) -> CoreError {
+    let msg = err.to_string();
+    if msg.contains("不存在") || msg.contains("缺失") {
+        CoreError::NotFound(msg)
+    } else if msg.contains("非法条目") || msg.contains("拒绝覆盖") || msg.contains("校验失败") {
+        CoreError::InvalidInput(msg)
+    } else {
+        CoreError::Io(msg)
+    }
+}
+
+/// trash_list 返回（条目清单 + 回收站根；无条目时 entries 为空数组）
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashListResponse {
+    pub entries: Vec<conex_fs::trash::TrashEntry>,
+    pub trash_root: String,
+}
+
+/// 列出回收站条目（误删恢复入口；数据源 = 回收站登记扫描，
+/// 条目含路径 / 删除时间 / 类型 / 大小 / 校验和）
+#[tauri::command]
+pub(crate) fn trash_list(app: tauri::AppHandle) -> Result<TrashListResponse, CoreError> {
+    let root = trash_root_for(&app)?;
+    trash_list_at(&root)
+}
+
+/// 纯函数核心（测试直测）：按回收站根列出条目
+pub(crate) fn trash_list_at(root: &std::path::Path) -> Result<TrashListResponse, CoreError> {
+    let service = conex_fs::trash::TrashService::new(root);
+    Ok(TrashListResponse {
+        entries: service.list(),
+        trash_root: root.to_string_lossy().into_owned(),
+    })
+}
+
+/// trash_restore 返回（恢复成功的目标路径）
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashRestoreResponse {
+    pub ok: bool,
+    pub original_path: String,
+}
+
+/// 按条目 id 恢复到原路径（校验 checksum 防篡改；原路径已存在拒绝覆盖；
+/// 恢复失败返回结构化错误，条目保留在回收站）
+#[tauri::command]
+pub(crate) fn trash_restore(
+    app: tauri::AppHandle,
+    entry_id: String,
+) -> Result<TrashRestoreResponse, CoreError> {
+    let root = trash_root_for(&app)?;
+    trash_restore_at(&root, &entry_id)
+}
+
+/// 纯函数核心（测试直测）：按条目 id 恢复到原路径
+pub(crate) fn trash_restore_at(
+    root: &std::path::Path,
+    entry_id: &str,
+) -> Result<TrashRestoreResponse, CoreError> {
+    let service = conex_fs::trash::TrashService::new(root);
+    let restored = service
+        .restore(entry_id.trim())
+        .map_err(|e| map_trash_err(&e))?;
+    Ok(TrashRestoreResponse {
+        ok: true,
+        original_path: restored.to_string_lossy().into_owned(),
+    })
+}
+
+/// trash_purge 返回（已彻底清除的条目 id）
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashPurgeResponse {
+    pub ok: bool,
+    pub entry_id: String,
+}
+
+/// 彻底清除条目（显式用户调用，不可恢复）
+#[tauri::command]
+pub(crate) fn trash_purge(
+    app: tauri::AppHandle,
+    entry_id: String,
+) -> Result<TrashPurgeResponse, CoreError> {
+    let root = trash_root_for(&app)?;
+    trash_purge_at(&root, &entry_id)
+}
+
+/// 纯函数核心（测试直测）：彻底清除条目（显式用户调用，不可恢复）
+pub(crate) fn trash_purge_at(
+    root: &std::path::Path,
+    entry_id: &str,
+) -> Result<TrashPurgeResponse, CoreError> {
+    let service = conex_fs::trash::TrashService::new(root);
+    service
+        .purge(entry_id.trim())
+        .map_err(|e| map_trash_err(&e))?;
+    Ok(TrashPurgeResponse {
+        ok: true,
+        entry_id: entry_id.to_string(),
+    })
+}
+
 // ── 测试 ──────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1914,6 +2054,8 @@ mod tests {
             turn_index: 2,
             tool_call_count: 1,
             steering_count: 0,
+            // T-36：缓存统计字段（本构造点无样本 → None，缺省向后兼容）
+            cache_stats: None,
         };
         let history = to_history_messages(&outcome);
         assert_eq!(history.len(), 4);
@@ -1969,6 +2111,8 @@ mod tests {
             turn_index: 1,
             tool_call_count: 1,
             steering_count: 0,
+            // T-36：缓存统计字段（本构造点无样本 → None，缺省向后兼容）
+            cache_stats: None,
         };
         cache.store("s1", to_history_messages(&outcome));
         let restored = cached_history_to_conversation(cache.get("s1").unwrap());
@@ -2055,5 +2199,123 @@ mod tests {
         assert_eq!(iso8601_to_epoch_millis("2026-07-31T00:00:01Z"), 1_785_456_001_000);
         // 失败兜底 0
         assert_eq!(iso8601_to_epoch_millis("not-a-date"), 0);
+    }
+
+    // ── I2-S5：trash 命令（误删恢复入口）────────────────────────
+
+    static TRASH_TMP_SEQ: AtomicU64 = AtomicU64::new(0);
+
+    /// 测试用临时目录（独立命名，drop 自动清理）
+    struct TrashTempDir(PathBuf);
+
+    impl TrashTempDir {
+        fn new(prefix: &str) -> Self {
+            let seq = TRASH_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "conex_trash_cmd_{prefix}_{}_{seq}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn path(&self) -> &PathBuf {
+            &self.0
+        }
+
+        fn write(&self, rel: &str, content: &str) -> PathBuf {
+            let p = self.0.join(rel);
+            if let Some(parent) = p.parent() {
+                std::fs::create_dir_all(parent).unwrap();
+            }
+            std::fs::write(&p, content).unwrap();
+            p
+        }
+    }
+
+    impl Drop for TrashTempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// trash_list / trash_restore 往返：条目可见、恢复后字节一致、登记清除
+    #[test]
+    fn trash_commands_list_restore_roundtrip() {
+        let ws = TrashTempDir::new("rt");
+        let file = ws.write("a.txt", "hello trash command");
+        let trash = TrashTempDir::new("root");
+
+        // 种入条目（删除接口与恢复命令同根）
+        let entry = conex_fs::trash::TrashService::new(trash.path())
+            .trash_file(&file, true)
+            .unwrap();
+
+        let listed = trash_list_at(trash.path()).unwrap();
+        assert_eq!(listed.entries.len(), 1);
+        assert_eq!(listed.entries[0].id, entry.id);
+        assert_eq!(listed.entries[0].original_path, file);
+        assert_eq!(listed.entries[0].size, 19);
+        assert!(listed.entries[0].checksum.is_some(), "backup=true 写校验和");
+        assert!(listed.trash_root.contains("root"), "trash_root: {}", listed.trash_root);
+
+        let restored = trash_restore_at(trash.path(), &entry.id).unwrap();
+        assert!(restored.ok);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "hello trash command");
+        assert!(
+            trash_list_at(trash.path()).unwrap().entries.is_empty(),
+            "恢复成功后登记应清除"
+        );
+    }
+
+    /// trash_purge：彻底清除后条目消失、恢复报 NotFound
+    #[test]
+    fn trash_purge_removes_entry_and_restore_fails() {
+        let ws = TrashTempDir::new("purge");
+        let file = ws.write("doomed.txt", "gone");
+        let trash = TrashTempDir::new("root");
+        let service = conex_fs::trash::TrashService::new(trash.path());
+        let entry = service.trash_file(&file, false).unwrap();
+
+        let purged = trash_purge_at(trash.path(), &entry.id).unwrap();
+        assert!(purged.ok);
+        assert_eq!(purged.entry_id, entry.id);
+        assert!(trash_list_at(trash.path()).unwrap().entries.is_empty());
+
+        let err = trash_restore_at(trash.path(), &entry.id).unwrap_err();
+        assert!(matches!(err, CoreError::NotFound(_)), "err: {err}");
+    }
+
+    /// 非法 entry_id → InvalidInput；不存在的条目 → NotFound（防路径穿越）
+    #[test]
+    fn trash_restore_rejects_invalid_and_missing_entry_ids() {
+        let trash = TrashTempDir::new("root");
+
+        let err = trash_restore_at(trash.path(), "../../evil").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)), "err: {err}");
+        let err = trash_restore_at(trash.path(), "a/b").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)), "err: {err}");
+        let err = trash_restore_at(trash.path(), "nope").unwrap_err();
+        assert!(matches!(err, CoreError::NotFound(_)), "err: {err}");
+        let err = trash_purge_at(trash.path(), "../evil").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)), "err: {err}");
+    }
+
+    /// 未注入回收站根 → 兜底活动工作区 `.crish-trash`（与删除工具一致）
+    #[test]
+    fn trash_root_falls_back_to_workspace_dot_crish_trash() {
+        let ws = TrashTempDir::new("ws");
+        let file = ws.write("notes.txt", "workspace fallback");
+
+        // 兜底根 = <工作区>/.crish-trash（resolve_guard 路径由 workspace 域测试覆盖，
+        // 此处验证兜底目录名的登记/列出语义与删除工具一致）
+        let root = ws.path().join(DEFAULT_TRASH_DIR_NAME);
+        let service = conex_fs::trash::TrashService::new(&root);
+        let entry = service.trash_file(&file, true).unwrap();
+
+        let listed = trash_list_at(&root).unwrap();
+        assert_eq!(listed.entries.len(), 1);
+        assert_eq!(listed.entries[0].id, entry.id);
+        assert!(listed.trash_root.ends_with(".crish-trash"));
     }
 }

@@ -156,16 +156,35 @@ async fn execute_delete(
     }
 
     let backup = optional_bool(&args, "backup").unwrap_or(true);
+    // I2-S8：删除前影响面预检（文件数 / 大小 / 跨目录），随工具结果与审计日志输出
+    let impact = conex_fs::impact::assess(std::slice::from_ref(&target));
     let service = trash_service_for(&trash_root, ctx);
     let entry = service
         .trash_file(&target, backup)
         .map_err(|e| ToolError::execution_failed(tool_name, format!("{display}: {e}")))?;
+    // 审计记录（结构化安全审计日志；工具结果经 tool-end 事件流落库）
+    tracing::info!(
+        target: "security.audit",
+        kind = "delete",
+        session_id = %ctx.session_id,
+        tool = %tool_name,
+        target_path = ?target,
+        entry_id = %entry.id,
+        impact = ?impact,
+        "删除接管审计：目标已移入回收站（可恢复）"
+    );
 
-    Ok(delete_output(&entry, &display, service.root(), backup))
+    Ok(delete_output(&entry, &display, service.root(), backup, impact))
 }
 
-/// 结构化输出：TrashEntry 全字段 + 展示路径 + 可恢复路径类型 + 文本摘要
-fn delete_output(entry: &conex_fs::trash::TrashEntry, display: &str, trash_root: &Path, backup: bool) -> serde_json::Value {
+/// 结构化输出：TrashEntry 全字段 + 展示路径 + 可恢复路径类型 + 影响面 + 文本摘要
+fn delete_output(
+    entry: &conex_fs::trash::TrashEntry,
+    display: &str,
+    trash_root: &Path,
+    backup: bool,
+    impact: conex_fs::impact::ImpactAssessment,
+) -> serde_json::Value {
     let kind_text = match entry.kind {
         TrashKind::File => "文件",
         TrashKind::Dir => "目录",
@@ -181,6 +200,7 @@ fn delete_output(entry: &conex_fs::trash::TrashEntry, display: &str, trash_root:
     v["backup"] = serde_json::Value::Bool(backup);
     v["recoverable"] = serde_json::Value::String("app-trash".to_string());
     v["trashRoot"] = serde_json::Value::String(trash_root.to_string_lossy().into_owned());
+    v["impact"] = serde_json::to_value(impact).expect("ImpactAssessment 序列化不应失败");
     v["text"] = serde_json::Value::String(text);
     v
 }
@@ -338,5 +358,28 @@ mod tests {
 
         let entries = TrashService::new(trash.path()).list();
         assert!(entries[0].checksum.is_none());
+    }
+
+    /// I2-S8：删除工具输出携带影响面审计载荷（S8 测试：删除工具调用产生审计记录）
+    #[tokio::test]
+    async fn delete_tool_output_carries_impact_audit() {
+        let ws = TempWorkspace::new("del_impact");
+        ws.write_file("sub/a.txt", "aaaa");
+        ws.write_file("sub/b.txt", "bbbb");
+        let trash = TempWorkspace::new("del_impact_trash");
+        let tool = DeleteDirTool::new(Some(trash.path().clone()));
+
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "sub" }))
+            .await
+            .unwrap();
+        let impact = &out["impact"];
+        assert_eq!(impact["fileCount"], 2);
+        assert_eq!(impact["totalSizeBytes"], 8);
+        assert_eq!(impact["directoryCount"], 1);
+        assert!(impact["crossDirectory"].as_bool().is_some());
+        assert_eq!(impact["flagged"], false);
+        // 影响面在移入回收站后仍可读取（预检先于删除执行）
+        assert_eq!(TrashService::new(trash.path()).list().len(), 1);
     }
 }

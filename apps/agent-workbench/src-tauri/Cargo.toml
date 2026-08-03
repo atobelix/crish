@@ -36,6 +36,9 @@ notify = { version = "8", features = [] }
 memmap2 = "0.9"
 tracing.workspace = true
 async-trait.workspace = true
+# trash 服务 API 契约（conex-fs::trash 返回 anyhow::Result）；G5 清理时 trash 未创建，
+# S5 接线后恢复依赖
+anyhow.workspace = true
 conex-sandbox = { path = "../../../crates/conex-sandbox" }
 conex-types = { path = "../../../crates/conex-types" }
 conex-compaction = { path = "../../../crates/conex-compaction" }

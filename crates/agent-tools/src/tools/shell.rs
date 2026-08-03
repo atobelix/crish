@@ -4,16 +4,26 @@
 //! 1. 命令门禁：conex-sandbox CommandGatekeeper 检查，Blocked → tool.command_blocked，
 //!    RequiresApproval → 经 ctx.ask 审批通道发起真实审批（R4 T10；未接线时
 //!    返回 tool.requires_approval，执行器分类为 ApprovalRequired 透传审批状态）
-//! 2. Windows 包装：系统 PowerShell + -EncodedCommand（UTF-16LE → base64），
+//! 2. 删除形态重定向（I2-S4）：semantics 判定 DeleteShape 的命令不再直接执行，
+//!    改走删除接管接口（conex-fs trash 服务，目标移入回收站并可恢复）；
+//!    复合链 / 间接执行包裹删除形态整链拦截 + 引导（链内其他段副作用不可控）；
+//!    工作区外目标一律拒绝。红线仍由门禁先行 100% 拦截（S2）。
+//! 3. Windows 包装：系统 PowerShell + -EncodedCommand（UTF-16LE → base64），
 //!    命令体再经 UTF-8 → base64 包进 scriptblock，避免引号/管道被外壳二次解析
-//! 3. 执行：tokio 子进程，stdout/stderr 管道收集，超时树杀，输出按上限截断
+//! 4. 执行：tokio 子进程，stdout/stderr 管道收集，超时树杀，输出按上限截断
 
 use crate::context::{AskDecision, ToolContext};
 use crate::definition::{Tool, ToolDefinition, ToolError};
-use crate::tools::{display_path, optional_string, optional_u64, require_string, resolve_workspace_path};
+use crate::tools::{
+    display_path, optional_string, optional_u64, require_string, resolve_workspace_path,
+    delete::DEFAULT_TRASH_DIR_NAME,
+};
 use async_trait::async_trait;
+use conex_fs::impact::ImpactAssessment;
+use conex_fs::trash::TrashService;
 use conex_sandbox::gatekeeper::{CommandGatekeeper, GatekeeperResult};
-use std::path::Path;
+use conex_sandbox::semantics::{CommandClass, SemanticAnalysis};
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tokio::process::Command as TokioCommand;
 use tokio::time::{timeout, Duration};
@@ -35,10 +45,17 @@ pub(crate) struct ShellCommandTool {
     def: ToolDefinition,
     default_timeout_ms: u64,
     max_output_bytes: usize,
+    /// 删除重定向的回收站根（I2-S4：None 时执行期回退工作区 `.crish-trash`，
+    /// 与 delete 工具共用 `BuiltinToolConfig.trash_root`）
+    trash_root: Option<PathBuf>,
 }
 
 impl ShellCommandTool {
-    pub(crate) fn new(default_timeout_ms: u64, max_output_bytes: usize) -> Self {
+    pub(crate) fn new(
+        default_timeout_ms: u64,
+        max_output_bytes: usize,
+        trash_root: Option<PathBuf>,
+    ) -> Self {
         Self {
             def: ToolDefinition {
                 name: "shell_command".to_string(),
@@ -59,6 +76,7 @@ impl ShellCommandTool {
             },
             default_timeout_ms,
             max_output_bytes,
+            trash_root,
         }
     }
 }
@@ -144,8 +162,218 @@ impl Tool for ShellCommandTool {
             }
         }
 
+        // I2-S4：删除形态重定向——semantics 判定 DeleteShape 的命令不再直接
+        // 执行，改走删除接管接口（trash 服务，移入回收站可恢复）；复合链 /
+        // 间接执行包裹删除形态整链拦截 + 引导。红线（Redline）已由上方门禁
+        // 100% 拦截（S2），此处只处理删除形态。
+        let analysis = conex_sandbox::semantics::analyze(&command);
+        if analysis.overall_class == CommandClass::DeleteShape || analysis.has_indirect_delete {
+            return redirect_or_intercept_delete(
+                &analysis,
+                &command,
+                workspace_root,
+                &cwd,
+                self.trash_root.clone(),
+                ctx,
+            );
+        }
+
         run_command(&command, &cwd, timeout_ms, max_output_bytes).await
     }
+}
+
+/// 删除形态引导文案（模型可改走统一删除接口）
+const DELETE_REDIRECT_GUIDANCE: &str =
+    "如确需删除请改用 delete_file / delete_dir 工具（统一删除接口，可恢复）";
+
+/// 删除形态重定向（I2-S4 主入口）：
+/// - 间接执行包裹删除形态 → 整链拦截 + 引导（外层无法安全解析内层目标）；
+/// - 复合链含删除段 → 整链拦截 + 引导（链内其他段副作用不可控，不代为执行）；
+/// - 纯删除命令 → 解析目标（工作区外一律拒绝）→ trash 服务移入回收站 →
+///   返回 TrashEntry 列表（entryId 供恢复）+ 影响面审计载荷。
+fn redirect_or_intercept_delete(
+    analysis: &SemanticAnalysis,
+    command: &str,
+    workspace_root: &Path,
+    cwd: &Path,
+    trash_root: Option<PathBuf>,
+    ctx: &ToolContext,
+) -> Result<serde_json::Value, ToolError> {
+    // 1. 间接执行包裹（bash -c 'rm x' / xargs rm 等）：内层目标无法安全解析，
+    //    整链拦截 + 引导，防包裹绕过统一删除门禁
+    if analysis.has_indirect_delete {
+        return Err(ToolError::new(
+            TOOL_COMMAND_BLOCKED,
+            format!(
+                "PermissionDenied: 检测到间接执行包裹的物理删除形态（eval / bash -c / xargs 等），已拦截；{DELETE_REDIRECT_GUIDANCE}。原始命令：{command}"
+            ),
+        ));
+    }
+    // 2. 复合链：任一段命中删除形态 → 整链拦截（其他段副作用不可控，不代为执行）
+    let has_non_delete_segment = analysis
+        .segments
+        .iter()
+        .any(|s| s.class != CommandClass::DeleteShape);
+    if has_non_delete_segment {
+        return Err(ToolError::new(
+            TOOL_COMMAND_BLOCKED,
+            format!(
+                "PermissionDenied: 检测到复合命令链中的物理删除形态，整链已拦截（链内其他段副作用不可控）；{DELETE_REDIRECT_GUIDANCE}。原始命令：{command}"
+            ),
+        ));
+    }
+    // 3. 无法解析删除目标（如 rm --cached 无路径）→ 拦截 + 引导
+    if analysis.delete_targets.is_empty() {
+        return Err(ToolError::new(
+            TOOL_COMMAND_BLOCKED,
+            format!(
+                "PermissionDenied: 检测到物理删除形态但无法解析删除目标；{DELETE_REDIRECT_GUIDANCE}。原始命令：{command}"
+            ),
+        ));
+    }
+    // 4. 解析目标：相对 cwd 解析 + 工作区包含性校验（越界一律拒绝，不引导不降级）
+    let mut targets = Vec::new();
+    for target in &analysis.delete_targets {
+        targets.push(resolve_delete_target(workspace_root, cwd, target)?);
+    }
+    // 5. trash 服务执行（模式 B：应用内回收站；未注入根时回退工作区 .crish-trash）
+    let service_root = trash_root.unwrap_or_else(|| workspace_root.join(DEFAULT_TRASH_DIR_NAME));
+    let service = TrashService::new(&service_root);
+    // 影响面预检必须先于删除（目标移入回收站后原路径已不存在）
+    let impact = conex_fs::impact::assess(&targets);
+    let mut entries = Vec::new();
+    for target in &targets {
+        let display = display_path(workspace_root, target);
+        if target == workspace_root || target == cwd {
+            return Err(ToolError::new(
+                TOOL_COMMAND_BLOCKED,
+                format!(
+                    "PermissionDenied: 删除目标为工作区根或当前工作目录，拒绝执行：{display}；{DELETE_REDIRECT_GUIDANCE}"
+                ),
+            ));
+        }
+        match service.trash_file(target, true) {
+            Ok(entry) => {
+                let mut v = serde_json::to_value(&entry)
+                    .unwrap_or_else(|_| serde_json::json!({}));
+                v["path"] = serde_json::Value::String(display);
+                v["entryId"] = serde_json::Value::String(entry.id.clone());
+                entries.push(v);
+            }
+            Err(e) => {
+                return Err(ToolError::execution_failed(
+                    "shell_command",
+                    format!(
+                        "删除重定向失败（{display}）：{e}；已移入回收站的条目可经 trash_restore 恢复"
+                    ),
+                ));
+            }
+        }
+    }
+    // 6. 审计日志（结构化安全审计；工具结果经 tool-end 事件流落库）
+    let entry_ids: Vec<&str> = entries
+        .iter()
+        .filter_map(|e| e["entryId"].as_str())
+        .collect();
+    let target_displays: Vec<String> = targets
+        .iter()
+        .map(|t| t.display().to_string())
+        .collect();
+    tracing::info!(
+        target: "security.audit",
+        kind = "delete-redirect",
+        session_id = %ctx.session_id,
+        command = %command,
+        targets = ?target_displays,
+        entry_ids = ?entry_ids,
+        impact = ?impact,
+        "删除形态重定向审计：shell 删除命令已改走回收站接口（可恢复）"
+    );
+    Ok(build_redirect_output(
+        command,
+        workspace_root,
+        cwd,
+        &targets,
+        &entries,
+        impact,
+        &service_root,
+    ))
+}
+
+/// 解析删除目标：相对 cwd 拼接后做工作区包含性校验；通配符 / 特殊路径 /
+/// 工作区外目标一律拒绝（I2-S4 内容 3：越界目标不引导不降级）。
+fn resolve_delete_target(
+    workspace_root: &Path,
+    cwd: &Path,
+    target: &str,
+) -> Result<PathBuf, ToolError> {
+    let trimmed = target.trim();
+    if trimmed.is_empty() || matches!(trimmed, "." | ".." | "~") || trimmed.starts_with('~') {
+        return Err(ToolError::new(
+            TOOL_COMMAND_BLOCKED,
+            format!("删除目标为特殊路径，已拒绝：{target:?}；请改用 delete_file / delete_dir 指定明确路径"),
+        ));
+    }
+    if trimmed.contains(['*', '?', '[']) {
+        return Err(ToolError::new(
+            TOOL_COMMAND_BLOCKED,
+            format!("删除目标含通配符，已拒绝：{target:?}；请改用 delete_file / delete_dir 指定明确路径"),
+        ));
+    }
+    let raw = Path::new(trimmed);
+    let candidate = if raw.is_absolute() {
+        raw.to_path_buf()
+    } else {
+        cwd.join(raw)
+    };
+    resolve_workspace_path(workspace_root, &candidate.to_string_lossy()).map_err(|_| {
+        ToolError::new(
+            TOOL_COMMAND_BLOCKED,
+            format!("删除目标在工作区外或越界，已拒绝：{target:?}"),
+        )
+    })
+}
+
+/// 重定向结果：TrashEntry 列表（entryId 供恢复）+ 影响面 + 引导文案
+fn build_redirect_output(
+    command: &str,
+    workspace_root: &Path,
+    cwd: &Path,
+    targets: &[PathBuf],
+    entries: &[serde_json::Value],
+    impact: ImpactAssessment,
+    trash_root: &Path,
+) -> serde_json::Value {
+    let target_displays: Vec<String> = targets
+        .iter()
+        .map(|t| display_path(workspace_root, t))
+        .collect();
+    let entry_ids: Vec<&str> = entries
+        .iter()
+        .filter_map(|e| e["entryId"].as_str())
+        .collect();
+    let text = format!(
+        "检测到物理删除形态，已重定向到删除接管接口（未物理删除）：{} 个目标已移入回收站（条目 {}）。\n\
+         可恢复路径类型：应用内回收站。恢复：调用 trash_restore（entryId={}）。",
+        entries.len(),
+        entry_ids.join(", "),
+        entry_ids.first().copied().unwrap_or(""),
+    );
+    serde_json::json!({
+        "command": command,
+        "cwd": cwd.display().to_string(),
+        "redirected": true,
+        "redirect": {
+            "kind": "delete-redirect",
+            "reason": "semantics 判定为删除形态（DeleteShape），已改走删除接管接口（回收站），未物理删除",
+            "targets": target_displays,
+            "guidance": DELETE_REDIRECT_GUIDANCE,
+        },
+        "trashEntries": entries,
+        "impact": impact,
+        "trashRoot": trash_root.to_string_lossy().into_owned(),
+        "text": text,
+    })
 }
 
 /// 门禁比较用路径串：剥离 `\\?\` 前缀、反斜杠转斜杠、Windows 小写
@@ -463,7 +691,7 @@ mod tests {
     use std::sync::Arc;
 
     fn tool() -> ShellCommandTool {
-        ShellCommandTool::new(30_000, 200_000)
+        ShellCommandTool::new(30_000, 200_000, None)
     }
 
     /// 测试用会话上下文：workspace_root 指向临时工作区
@@ -604,7 +832,7 @@ mod tests {
     #[tokio::test]
     async fn shell_timeout_kills_and_marks() {
         let ws = TempWorkspace::new("shell_timeout");
-        let t = ShellCommandTool::new(30_000, 200_000);
+        let t = ShellCommandTool::new(30_000, 200_000, None);
         let command = if cfg!(windows) {
             "Start-Sleep -Seconds 10"
         } else {
@@ -685,5 +913,208 @@ mod tests {
         assert_eq!(format_command_result("out", "", Some(3), false), "out\n\n(exit 3)");
         assert_eq!(format_command_result("", "", Some(3), false), "(exit 3)");
         assert_eq!(format_command_result("out", "", None, true), "out\n\n(命令超时)");
+    }
+
+    // ===== I2-S4：删除形态重定向（rm/del/Remove-Item/git rm → trash 服务）=====
+
+    /// 任务卡验收：`rm -rf ./tmp/foo` 经执行链 → 不实际删除 → 产生 trash entry
+    #[tokio::test]
+    async fn delete_shape_redirected_to_trash_not_executed() {
+        let ws = TempWorkspace::new("shell_s4_rm");
+        ws.write_file("tmp/foo.txt", "doomed");
+        let trash = TempWorkspace::new("shell_s4_trash");
+        let t = ShellCommandTool::new(30_000, 200_000, Some(trash.path().clone()));
+
+        let out = t
+            .execute(&ctx(&ws), json!({ "command": "rm -rf ./tmp/foo.txt" }))
+            .await
+            .unwrap();
+        // 重定向而非直接执行
+        assert_eq!(out["redirected"], true);
+        assert_eq!(out["redirect"]["kind"], "delete-redirect");
+        // 目标未物理删除（原路径消失 = 已移入回收站），回收站产生条目
+        assert!(!ws.path().join("tmp/foo.txt").exists(), "原路径消失（已移入回收站）");
+        let entries = TrashService::new(trash.path()).list();
+        assert_eq!(entries.len(), 1, "必须产生 trash entry");
+        assert_eq!(out["trashEntries"][0]["entryId"], entries[0].id);
+        // 可恢复：恢复后字节一致
+        TrashService::new(trash.path()).restore(&entries[0].id).unwrap();
+        assert_eq!(ws.read_file("tmp/foo.txt"), "doomed");
+    }
+
+    /// 任务卡验收：`git status` 正常执行（非删除命令不受影响；临时工作区非
+    /// git 仓库时 git 自身以 128 退出，断言关键是「真实执行而非被拦截」）
+    #[tokio::test]
+    async fn git_status_executes_normally() {
+        let ws = TempWorkspace::new("shell_s4_git");
+        let t = tool();
+        let out = t
+            .execute(&ctx(&ws), json!({ "command": "git status" }))
+            .await
+            .unwrap();
+        assert!(
+            out.get("redirected").is_none(),
+            "非删除命令结果不得带重定向标记"
+        );
+        assert_eq!(out["timedOut"], false);
+        assert!(
+            out["exitCode"].is_number(),
+            "git 应真实执行并产生退出码"
+        );
+    }
+
+    /// 删除形态全变体：rm / del / Remove-Item / git rm 一律重定向
+    #[tokio::test]
+    async fn delete_shape_variants_redirected() {
+        for (cmd, target) in [
+            ("rm file.txt", "file.txt"),
+            ("del file.txt", "file.txt"),
+            ("Remove-Item -LiteralPath file.txt -Force", "file.txt"),
+            ("git rm file.txt", "file.txt"),
+        ] {
+            let ws = TempWorkspace::new("shell_s4_var");
+            ws.write_file(target, "variant");
+            let trash = TempWorkspace::new("shell_s4_var_trash");
+            let t = ShellCommandTool::new(30_000, 200_000, Some(trash.path().clone()));
+
+            let out = t
+                .execute(&ctx(&ws), json!({ "command": cmd }))
+                .await
+                .unwrap_or_else(|e| panic!("命令 {cmd:?} 应重定向而非报错：{e}"));
+            assert_eq!(out["redirected"], true, "命令 {cmd:?} 应被重定向");
+            assert_eq!(
+                TrashService::new(trash.path()).list().len(),
+                1,
+                "命令 {cmd:?} 应产生 trash entry"
+            );
+            assert!(!ws.path().join(target).exists());
+        }
+    }
+
+    /// 复合链：`echo done && rm x` → 整链拦截 + 引导（不执行任何段、不代为删除）
+    #[tokio::test]
+    async fn compound_chain_with_delete_intercepted() {
+        let ws = TempWorkspace::new("shell_s4_chain");
+        ws.write_file("x.txt", "keep");
+        let trash = TempWorkspace::new("shell_s4_chain_trash");
+        let t = ShellCommandTool::new(30_000, 200_000, Some(trash.path().clone()));
+
+        let err = t
+            .execute(&ctx(&ws), json!({ "command": "echo done && rm x.txt" }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), TOOL_COMMAND_BLOCKED);
+        assert!(err.to_string().contains("复合命令链"));
+        assert!(err.to_string().contains("delete_file"));
+        // 链未执行：文件仍在、回收站无条目
+        assert!(ws.path().join("x.txt").exists(), "整链拦截后不得删除任何文件");
+        assert_eq!(TrashService::new(trash.path()).list().len(), 0);
+    }
+
+    /// 间接执行包裹删除形态：`bash -c 'rm -rf tmp/foo'` → 拦截 + 引导
+    #[tokio::test]
+    async fn indirect_delete_wrapper_intercepted() {
+        let ws = TempWorkspace::new("shell_s4_indirect");
+        ws.write_file("tmp/foo.txt", "keep");
+        let trash = TempWorkspace::new("shell_s4_indirect_trash");
+        let t = ShellCommandTool::new(30_000, 200_000, Some(trash.path().clone()));
+
+        let err = t
+            .execute(&ctx(&ws), json!({ "command": "bash -c 'rm -rf tmp/foo.txt'" }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), TOOL_COMMAND_BLOCKED);
+        assert!(err.to_string().contains("间接执行"));
+        assert!(ws.path().join("tmp/foo.txt").exists(), "间接执行删除形态不得执行");
+        assert_eq!(TrashService::new(trash.path()).list().len(), 0);
+    }
+
+    /// 工作区外目标：一律拒绝（不引导不降级）
+    #[tokio::test]
+    async fn delete_target_outside_workspace_rejected() {
+        let ws = TempWorkspace::new("shell_s4_outside");
+        let t = tool();
+        let err = t
+            .execute(
+                &ctx(&ws),
+                json!({ "command": "rm C:\\Users\\x\\Desktop\\f.txt" }),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), TOOL_COMMAND_BLOCKED);
+        assert!(err.to_string().contains("工作区外"));
+    }
+
+    /// 工作区根 / 当前工作目录目标：拒绝（rm -rf -- ./ 归一会命中）
+    #[tokio::test]
+    async fn delete_target_workspace_root_rejected() {
+        let ws = TempWorkspace::new("shell_s4_root");
+        let t = tool();
+        let err = t
+            .execute(&ctx(&ws), json!({ "command": "rm -rf -- ./" }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), TOOL_COMMAND_BLOCKED);
+        assert!(err.to_string().contains("工作区根"));
+    }
+
+    /// 通配符 / 特殊路径目标：拒绝并引导改用删除接口
+    #[tokio::test]
+    async fn delete_target_glob_rejected() {
+        let ws = TempWorkspace::new("shell_s4_glob");
+        let t = tool();
+        for cmd in ["rm *.txt", "rm -rf tmp/*"] {
+            let err = t
+                .execute(&ctx(&ws), json!({ "command": cmd }))
+                .await
+                .unwrap_err();
+            assert_eq!(err.code(), TOOL_COMMAND_BLOCKED, "命令 {cmd:?}");
+            assert!(err.to_string().contains("通配符"), "命令 {cmd:?}");
+        }
+        let err = t
+            .execute(&ctx(&ws), json!({ "command": "rm ~/notes.txt" }))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("特殊路径"));
+    }
+
+    /// S8：重定向结果携带影响面审计载荷（文件数 / 大小 / 跨目录 / 谨慎标记）
+    #[tokio::test]
+    async fn delete_redirect_carries_impact_audit() {
+        let ws = TempWorkspace::new("shell_s8_impact");
+        ws.write_file("sub/a.txt", "aaaa");
+        ws.write_file("sub/b.txt", "bbbb");
+        let trash = TempWorkspace::new("shell_s8_trash");
+        let t = ShellCommandTool::new(30_000, 200_000, Some(trash.path().clone()));
+
+        let out = t
+            .execute(&ctx(&ws), json!({ "command": "rm -rf sub" }))
+            .await
+            .unwrap();
+        let impact = &out["impact"];
+        assert_eq!(impact["fileCount"], 2);
+        assert_eq!(impact["totalSizeBytes"], 8);
+        assert_eq!(impact["directoryCount"], 1);
+        assert_eq!(impact["flagged"], false);
+        // 审计字段：重定向 kind / 引导 / 回收站条目
+        assert_eq!(out["redirect"]["kind"], "delete-redirect");
+        assert!(out["redirect"]["guidance"].as_str().unwrap().contains("delete_file"));
+        assert_eq!(out["trashEntries"].as_array().unwrap().len(), 1);
+        assert!(out["text"].as_str().unwrap().contains("trash_restore"));
+    }
+
+    /// 越界 / 特殊路径被拒时：不产生任何回收站条目（不半删除）
+    #[tokio::test]
+    async fn rejected_delete_produces_no_trash_entries() {
+        let ws = TempWorkspace::new("shell_s4_noentry");
+        ws.write_file("a.txt", "x");
+        let trash = TempWorkspace::new("shell_s4_noentry_trash");
+        let t = ShellCommandTool::new(30_000, 200_000, Some(trash.path().clone()));
+
+        for cmd in ["echo hi && rm a.txt", "rm *.txt"] {
+            assert!(t.execute(&ctx(&ws), json!({ "command": cmd })).await.is_err());
+        }
+        assert_eq!(TrashService::new(trash.path()).list().len(), 0);
+        assert!(ws.path().join("a.txt").exists());
     }
 }

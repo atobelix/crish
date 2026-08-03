@@ -2,7 +2,9 @@
 //!
 //! - `path_utils`：路径安全（safe_canonicalize / compute_file_hash / ensure_parent_dir）
 //! - `trash`：回收站服务（删除接管统一接口，I2-S3）
+//! - `impact`：删除影响面评估（I2-S8：文件数 / 大小 / 跨目录预检）
 
+pub mod impact;
 pub mod trash;
 
 pub mod path_utils {
