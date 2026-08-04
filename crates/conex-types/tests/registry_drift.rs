@@ -476,10 +476,40 @@ fn enum_values_match_serde_wire() {
         4
     );
     check_enum!(reg, "MissAttribution", MissAttribution, 8);
-    check_enum!(reg, "SecurityAuditOperation", SecurityAuditOperation, 5);
+    check_enum!(reg, "SecurityAuditOperation", SecurityAuditOperation, 6);
     check_enum!(reg, "SecurityAuditDecision", SecurityAuditDecision, 6);
     check_enum!(reg, "SubagentEventKind", SubagentEventKind, 3);
     check_enum!(reg, "SubagentEndStatus", SubagentEndStatus, 3);
+}
+
+/// 事件总数仍为 31：`operation` 是 security-audit 载荷内的字段值
+/// （SecurityAuditOperation 枚举），不是独立事件类型——新增 operation
+/// 值不改变事件清单；本测试锚定「注册表值 ↔ serde 行为」双向不漂移。
+#[test]
+fn security_audit_undeclared_write_operation_stays_in_sync() {
+    let reg = registry();
+    // 事件总数保持 31（operation 值是载荷内字段，非独立事件类型）
+    assert_eq!(reg.event_count, 31, "新增 operation 值不得改变事件总数");
+    assert_eq!(reg.events.len(), 31);
+
+    // 注册表必须登记 undeclared-write（T-ESC-02 新值）
+    let spec = &reg.enums["SecurityAuditOperation"];
+    assert!(
+        spec.values.contains(&"undeclared-write".to_string()),
+        "注册表 SecurityAuditOperation 必须登记 undeclared-write：{:?}",
+        spec.values
+    );
+
+    // wire 值双向一致（serde rename 锁定）
+    let parsed: SecurityAuditOperation =
+        serde_json::from_value(Value::String("undeclared-write".into()))
+            .unwrap_or_else(|e| panic!("undeclared-write 反序列化失败：{e}"));
+    assert_eq!(parsed, SecurityAuditOperation::UndeclaredWrite);
+    assert_eq!(
+        serde_json::to_value(parsed).unwrap(),
+        Value::String("undeclared-write".into()),
+        "undeclared-write 回写不一致"
+    );
 }
 
 // ── 5. 可达性：注册表不允许死条目 ──

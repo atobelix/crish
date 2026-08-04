@@ -74,6 +74,12 @@ pub enum SecurityAuditOperation {
     GitRevert,
     /// 命令执行（command-exec 形态，红线拦截等）
     CommandExec,
+    /// 未声明写入（T-ESC-02：工具外写文件——脚本逃逸监视判定出的
+    /// 未声明变更；decision 取 Denied 语义：非引擎批准路径的操作。
+    /// 事件体结构零改动，targets 承载变更路径、impact.file_count 承载
+    /// 聚合数，见 REQ-逃逸追踪分析 §3.2）
+    #[serde(rename = "undeclared-write")]
+    UndeclaredWrite,
 }
 
 /// 审计处置决策（`security-audit.decision`，wire lowercase）

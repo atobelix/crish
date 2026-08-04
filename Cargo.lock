@@ -32,6 +32,7 @@ name = "agent-tools"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "conex-db",
  "conex-diff",
  "conex-fs",
  "conex-sandbox",
@@ -907,6 +908,7 @@ name = "conex-compaction"
 version = "0.1.0"
 dependencies = [
  "conex-types",
+ "serde",
  "serde_json",
 ]
 
@@ -934,10 +936,15 @@ name = "conex-fs"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "conex-test-utils",
+ "conex-types",
  "hex",
+ "notify",
  "serde",
  "serde_json",
  "sha2",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1124,6 +1131,7 @@ version = "0.1.0"
 dependencies = [
  "agent-provider",
  "agent-tools",
+ "anyhow",
  "async-trait",
  "base64 0.22.1",
  "chardetng",
@@ -3984,8 +3992,11 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 name = "orchestrator"
 version = "0.1.0"
 dependencies = [
+ "agent-tools",
  "async-trait",
+ "conex-compaction",
  "conex-db",
+ "conex-test-utils",
  "conex-types",
  "criterion",
  "serde",
@@ -5304,10 +5315,14 @@ version = "0.1.0"
 dependencies = [
  "agent-tools",
  "async-trait",
+ "conex-compaction",
+ "conex-fs",
+ "conex-telemetry",
  "conex-test-utils",
  "conex-types",
  "criterion",
  "futures",
+ "regex",
  "serde",
  "serde_json",
  "tokio",

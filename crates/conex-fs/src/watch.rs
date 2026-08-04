@@ -1,0 +1,803 @@
+//! 工作区文件监视（T-ESC-01 数据面：脚本逃逸追踪的 watcher 服务）
+//!
+//! 逃逸追踪主方案（docs/feature-gap-analysis/REQ-逃逸追踪分析.md §3）：
+//! run 期间用 notify 8 实时监视工作区文件变更，产出 [FileChangeEvent]
+//! 事件流（经 mpsc 通道），供 session-loop 装配层的消费循环聚合判定
+//! （T-ESC-02 判定面消费）。
+//!
+//! - `ChangeKind` / `FileChangeEvent` / `UndeclaredWrite`：wire 契约形状
+//!   （serde 属性与 REQ-逃逸追踪分析 §3.2 逐字一致）；
+//! - `WorkspaceWatcher`：notify 8 封装——递归监视 + 排除清单（相对目录
+//!   前缀 + glob）+ 事件通道 + Rename 聚合（删除+新建配对为 Renamed）。
+//!
+//! 平台说明（§5.4 风险）：notify 8 在 Windows 用 ReadDirectoryChangesW，
+//! rename 常表现为 Remove+Create 两事件（或 Modify(Name(From/To))），
+//! 本模块以 [RENAME_WINDOW_MS] 时间窗做路径配对（同父目录约束），
+//! 窗口外独立发射；配对不保证跨平台一致（Windows 实测见测试）。
+
+use notify::event::{ModifyKind, RenameMode};
+use notify::{EventKind, RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Rename 聚合窗口（毫秒）：窗口内 Remove → Create 配对为 Renamed。
+/// 默认 2000ms（独立删除后短期内重建同名文件会被聚合为 Renamed，
+/// 语义上同样带破坏性，可接受；测试用 [WorkspaceWatcher::start_with_window]
+/// 收紧窗口加速用例）。
+pub const RENAME_WINDOW_MS: i64 = 2000;
+
+/// 事件通道容量（1024：run 期间普通构建规模下不阻塞 notify 回调）
+const CHANNEL_CAPACITY: usize = 1024;
+
+/// 变更类型（wire kebab-case）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ChangeKind {
+    /// 内容修改（Modify）
+    Modified,
+    /// 新建（Create）
+    Created,
+    /// 删除（Remove）
+    Removed,
+    /// 改名（Rename：from → to，删除+新建聚合）
+    Renamed,
+}
+
+/// 单条工作区文件变更（watcher 产出，判定前）
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileChangeEvent {
+    /// 规范化绝对路径（symlink 已解析、工作区内、Windows 大小写折叠）
+    pub path: PathBuf,
+    /// 变更类型
+    pub kind: ChangeKind,
+    /// 改名场景的源路径（kind == Renamed 时 Some）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<PathBuf>,
+    /// 事件发生时刻（纪元毫秒，对齐全仓 epoch ms 惯例）
+    pub occurred_at_ms: i64,
+}
+
+/// 未声明写入归因报告（判定后、审计前）
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UndeclaredWrite {
+    /// 会话标识
+    pub session_id: String,
+    /// run 标识（信封注入，事件体可留空由 emit 层填）
+    pub run_id: String,
+    /// 聚合后的变更清单（同 run 同路径去重、按时间排序）
+    pub changes: Vec<FileChangeEvent>,
+    /// 时间窗起点（第一个变更时刻）
+    pub first_occurred_at_ms: i64,
+    /// 时间窗终点（最后一个变更时刻，事件发射时刻）
+    pub last_occurred_at_ms: i64,
+    /// 变更文件数（聚合后）
+    pub file_count: usize,
+    /// 是否含删除/改名类（高风险标记，供 UI 着色）
+    pub has_destructive: bool,
+}
+
+/// 待配对删除记录（Rename 聚合中间态：Remove 先到，等窗口内 Create）
+#[derive(Debug, Clone)]
+struct PendingRemove {
+    /// 规范化绝对路径（待配对源路径）
+    path: PathBuf,
+    /// 删除事件时刻（纪元毫秒）
+    occurred_at_ms: i64,
+}
+
+/// 待配对删除共享队列（notify 回调与 flush 线程共享；锁中毒按项目
+/// 约定恢复式处理：记录错误、取回内值继续，不 panic）
+type PendingRemoves = std::sync::Arc<std::sync::Mutex<Vec<PendingRemove>>>;
+
+/// flush 线程轮询间隔（毫秒）：删除转正的实时性粒度
+const FLUSH_POLL_MS: u64 = 100;
+
+/// 工作区文件监视服务（notify 8 封装）
+///
+/// 结构字段与 REQ-逃逸追踪分析 §3.2 逐字一致：`excludes_glob` 为排除
+/// glob 配置位（当前 start 恒为空，P3 装配面注入）；`tx` 是通道持有锚
+/// （Sender 被持有则通道保持打开，消费方 recv 不会提前返回 None）。
+pub struct WorkspaceWatcher {
+    /// 监视根（规范化绝对路径）
+    root: PathBuf,
+    /// 排除根（相对工作区）
+    exclude: Vec<PathBuf>,
+    /// 排除 glob（如 "**/*.snap"；start 时为空，P3 装配面按需注入）
+    #[allow(dead_code)]
+    excludes_glob: Vec<String>,
+    /// 事件通道发送端（持有锚：防通道随 Sender drop 提前关闭）
+    #[allow(dead_code)]
+    tx: tokio::sync::mpsc::Sender<FileChangeEvent>,
+    /// 待配对删除共享队列（stop 时 flush 剩余条目用；flush 线程经
+    /// WeakSender 生命周期自动退出，无需显式停止信号）
+    pending_removes: PendingRemoves,
+    /// notify 句柄（持有防 Drop 停监视；Drop 即停止，兜底）
+    _watcher: notify::RecommendedWatcher,
+}
+
+impl WorkspaceWatcher {
+    /// 启动监视（run 开始调用）；返回事件接收端
+    pub fn start(
+        root: impl Into<PathBuf>,
+        exclude: Vec<PathBuf>,
+    ) -> anyhow::Result<(Self, tokio::sync::mpsc::Receiver<FileChangeEvent>)> {
+        Self::start_with_window(root, exclude, RENAME_WINDOW_MS)
+    }
+
+    /// 启动监视并指定 Rename 聚合窗口（毫秒；测试与装配面可收紧）
+    ///
+    /// `exclude` 为相对工作区的目录列表（组件级前缀匹配，Windows
+    /// 大小写折叠）；`rename_window_ms` 为 Remove → Create 配对的
+    /// 时间窗，窗口越短误配对越少、独立删除的 Removed 发射越及时。
+    pub fn start_with_window(
+        root: impl Into<PathBuf>,
+        exclude: Vec<PathBuf>,
+        rename_window_ms: i64,
+    ) -> anyhow::Result<(Self, tokio::sync::mpsc::Receiver<FileChangeEvent>)> {
+        let root = root.into();
+        let root = normalize_abs_path(&root);
+        if !root.is_dir() {
+            anyhow::bail!("watcher 根目录不存在：{}", root.display());
+        }
+        let (tx, rx) = tokio::sync::mpsc::channel(CHANNEL_CAPACITY);
+        let pending_removes: PendingRemoves =
+            std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut state = WatcherState::new(
+            tx.clone(),
+            root.clone(),
+            exclude.clone(),
+            pending_removes.clone(),
+            rename_window_ms,
+        );
+        let watcher = notify::RecommendedWatcher::new(
+            move |res: notify::Result<notify::Event>| state.handle(res),
+            notify::Config::default(),
+        )
+        .map_err(|e| anyhow::anyhow!("notify watcher 创建失败：{e}"))?;
+        let mut watcher = watcher;
+        watcher
+            .watch(&root, RecursiveMode::Recursive)
+            .map_err(|e| anyhow::anyhow!("notify 监视注册失败（{}）：{e}", root.display()))?;
+        // flush 线程：周期检查待配对删除队列，超窗条目转正发射 Removed。
+        // 生命周期经 WeakSender 管理：WorkspaceWatcher drop（唯一强引用
+        // 消失）后 upgrade 失败自动退出，无需显式停止信号。
+        spawn_flush_loop(tx.downgrade(), pending_removes.clone(), rename_window_ms);
+        Ok((
+            Self {
+                root,
+                exclude,
+                excludes_glob: Vec::new(),
+                tx,
+                pending_removes,
+                _watcher: watcher,
+            },
+            rx,
+        ))
+    }
+
+    /// 停止监视（run 结束调用；Drop 兜底）
+    ///
+    /// 解除根监视并 flush 剩余待配对删除（run 收口：不再等待 Create，
+    /// 窗口内未配对的 Remove 立即转正为 Removed）；此后不再有新事件
+    /// 回调，通道中已排队的事件由消费方按 run 收口 flush 或随
+    /// receiver drop 丢弃（停止后无新事件语义）；句柄随 Drop 销毁，
+    /// 通知线程自然停止，flush 线程经 WeakSender 失效自动退出。
+    pub fn stop(&mut self) {
+        let _ = self._watcher.unwatch(&self.root);
+        let now = epoch_millis_now();
+        let leftover: Vec<PendingRemove> = {
+            let mut inner = lock_pending(&self.pending_removes);
+            std::mem::take(&mut *inner)
+        };
+        for pr in leftover {
+            let _ = self.tx.try_send(FileChangeEvent {
+                path: pr.path,
+                kind: ChangeKind::Removed,
+                from: None,
+                occurred_at_ms: now,
+            });
+        }
+    }
+
+    /// 监视根（规范化绝对路径，调试/装配面取用）
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// 排除根列表（相对工作区，与 start 入参一致）
+    pub fn exclude(&self) -> &[PathBuf] {
+        &self.exclude
+    }
+}
+
+/// notify 回调状态机（move 进回调闭包；路径过滤 + Rename 聚合 + 发射）
+struct WatcherState {
+    tx: tokio::sync::mpsc::Sender<FileChangeEvent>,
+    /// 规范化监视根（排除判定基准）
+    root: PathBuf,
+    /// 排除根（绝对化，组件级前缀匹配）
+    exclude: Vec<PathBuf>,
+    /// 排除 glob（"**/*.snap" 形态，路径段级匹配）
+    excludes_glob: Vec<String>,
+    /// 待配对删除记录（Rename 聚合中间态；flush 线程共享）
+    pending_removes: PendingRemoves,
+    /// Rename 聚合窗口（毫秒）
+    rename_window_ms: i64,
+}
+
+impl WatcherState {
+    fn new(
+        tx: tokio::sync::mpsc::Sender<FileChangeEvent>,
+        root: PathBuf,
+        exclude: Vec<PathBuf>,
+        pending_removes: PendingRemoves,
+        rename_window_ms: i64,
+    ) -> Self {
+        // 排除清单绝对化（相对工作区解析为 root 下的绝对路径）
+        let exclude: Vec<PathBuf> = exclude
+            .iter()
+            .map(|e| normalize_abs_path(&root.join(e)))
+            .collect();
+        Self {
+            tx,
+            root,
+            exclude,
+            excludes_glob: Vec::new(),
+            pending_removes,
+            rename_window_ms,
+        }
+    }
+
+    /// 处理单条 notify 结果（错误静默丢弃：监视失败不 panic，
+    /// 交由 run 收口兜底；事件风暴时通道满则直接忽略发送失败，
+    /// 诚实丢失并留待 run 末指纹复核兜底）
+    fn handle(&mut self, res: notify::Result<notify::Event>) {
+        let Ok(event) = res else {
+            return;
+        };
+        let now = epoch_millis_now();
+        match event.kind {
+            EventKind::Create(_) => {
+                for p in &event.paths {
+                    self.emit_create(p, now);
+                }
+            }
+            EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+                for p in &event.paths {
+                    self.pend_remove(p, now);
+                }
+            }
+            EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
+                for p in &event.paths {
+                    self.emit_create(p, now);
+                }
+            }
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
+                if let [from, to] = event.paths.as_slice() {
+                    self.emit_renamed(from, to, now);
+                }
+            }
+            EventKind::Modify(ModifyKind::Data(_))
+            | EventKind::Modify(ModifyKind::Metadata(_))
+            | EventKind::Modify(ModifyKind::Any) => {
+                for p in &event.paths {
+                    if self.is_excluded(p) {
+                        continue;
+                    }
+                    self.emit(FileChangeEvent {
+                        path: normalize_abs_path(p),
+                        kind: ChangeKind::Modified,
+                        from: None,
+                        occurred_at_ms: now,
+                    });
+                }
+            }
+            // 访问/元数据类与无法分类事件：不产出（避免误报）
+            EventKind::Access(_)
+            | EventKind::Any
+            | EventKind::Other
+            | EventKind::Modify(ModifyKind::Name(RenameMode::Any))
+            | EventKind::Modify(ModifyKind::Name(RenameMode::Other))
+            | EventKind::Modify(ModifyKind::Other) => {}
+        }
+    }
+
+    /// 删除事件入待配对队列（排除清单过滤先行；flush 线程负责转正）
+    fn pend_remove(&mut self, path: &Path, now: i64) {
+        if self.is_excluded(path) {
+            return;
+        }
+        lock_pending(&self.pending_removes).push(PendingRemove {
+            path: normalize_abs_path(path),
+            occurred_at_ms: now,
+        });
+    }
+
+    /// 新建事件：窗口内优先与待配对删除聚合为 Renamed，否则独立 Created
+    fn emit_create(&mut self, path: &Path, now: i64) {
+        if self.is_excluded(path) {
+            return;
+        }
+        let path = normalize_abs_path(path);
+        // 配对约束：窗口内 + 同父目录（防跨目录独立删除+新建误聚合）
+        let parent = path.parent().map(Path::to_path_buf);
+        let mut inner = lock_pending(&self.pending_removes);
+        let hit = inner.iter().position(|pr| {
+            let age = now - pr.occurred_at_ms;
+            age >= 0 && age <= self.rename_window_ms
+                && pr.path.parent().map(Path::to_path_buf) == parent
+        });
+        if let Some(idx) = hit {
+            let from = inner.remove(idx);
+            drop(inner);
+            self.emit_renamed(&from.path, &path, now);
+        } else {
+            drop(inner);
+            self.emit(FileChangeEvent {
+                path,
+                kind: ChangeKind::Created,
+                from: None,
+                occurred_at_ms: now,
+            });
+        }
+    }
+
+    /// 发射 Renamed（from → to；两路径同源时跳过，防自循环事件）
+    fn emit_renamed(&mut self, from: &Path, to: &Path, now: i64) {
+        let from = normalize_abs_path(from);
+        let to = normalize_abs_path(to);
+        if from == to {
+            return;
+        }
+        self.emit(FileChangeEvent {
+            path: to,
+            kind: ChangeKind::Renamed,
+            from: Some(from),
+            occurred_at_ms: now,
+        });
+    }
+
+    /// 发射单条事件（通道满/已关闭时静默丢弃）
+    fn emit(&mut self, ev: FileChangeEvent) {
+        let _ = self.tx.try_send(ev);
+    }
+
+    /// 排除判定：绝对路径命中排除根（组件级前缀）或排除 glob 即排除
+    fn is_excluded(&self, path: &Path) -> bool {
+        let np = normalize_for_compare(path);
+        for e in &self.exclude {
+            let ne = normalize_for_compare(e);
+            if np == ne || np.starts_with(&format!("{ne}{MAIN_SEP}")) {
+                return true;
+            }
+        }
+        let rel = path.strip_prefix(&self.root).unwrap_or(path);
+        let rel_norm = rel
+            .to_string_lossy()
+            .replace(['/', '\\'], &MAIN_SEP.to_string());
+        self.excludes_glob
+            .iter()
+            .any(|g| glob_match(g, &rel_norm))
+    }
+}
+
+/// 待配对删除队列锁读取（锁中毒恢复：记录错误、取回内值继续，不 panic）
+fn lock_pending(shared: &PendingRemoves) -> std::sync::MutexGuard<'_, Vec<PendingRemove>> {
+    shared.lock().unwrap_or_else(|e| {
+        tracing::error!("watcher 待配对删除队列锁中毒，按恢复模式继续：{e}");
+        e.into_inner()
+    })
+}
+
+/// flush 线程主体：周期检查待配对删除队列，窗口超时条目转正发射
+/// Removed（独立删除不等待 Create，保证删除事件的实时产出）
+///
+/// 生命周期经 WeakSender 管理：`tx` 强引用只有 WorkspaceWatcher 持有，
+/// 其 drop 后 `upgrade()` 失败即退出（≤一个轮询周期残留）；
+/// `try_send` 失败（通道满/已关闭）静默丢弃（诚实丢失语义）。
+fn spawn_flush_loop(
+    weak_tx: tokio::sync::mpsc::WeakSender<FileChangeEvent>,
+    pending_removes: PendingRemoves,
+    rename_window_ms: i64,
+) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_millis(FLUSH_POLL_MS));
+        let Some(tx) = weak_tx.upgrade() else {
+            break;
+        };
+        let now = epoch_millis_now();
+        let expired: Vec<PendingRemove> = {
+            let mut inner = lock_pending(&pending_removes);
+            let expired: Vec<PendingRemove> = inner
+                .iter()
+                .filter(|pr| now - pr.occurred_at_ms > rename_window_ms)
+                .cloned()
+                .collect();
+            inner.retain(|pr| now - pr.occurred_at_ms <= rename_window_ms);
+            expired
+        };
+        for pr in expired {
+            let _ = tx.try_send(FileChangeEvent {
+                path: pr.path,
+                kind: ChangeKind::Removed,
+                from: None,
+                occurred_at_ms: now,
+            });
+        }
+    });
+}
+
+/// 统一分隔符（排除前缀拼接用）
+const MAIN_SEP: char = std::path::MAIN_SEPARATOR;
+
+/// 规范化绝对路径：symlink 解析（canonicalize）+ 剥离 `\\?\` verbatim 前缀
+///
+/// 与 write_paths 的 resolve_workspace_path 输出形态对齐（strip
+/// `\\?\` / `\\?\UNC\`），保证事件路径与声明路径可比较；
+/// Windows 大小写折叠由比较层（normalize_for_compare）承担。
+fn normalize_abs_path(p: &Path) -> PathBuf {
+    let canon = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    strip_verbatim(&canon)
+}
+
+/// 剥离 `\\?\` / `\\?\UNC\` 前缀（防御性兜底：canonicalize 输出可能带）
+fn strip_verbatim(p: &Path) -> PathBuf {
+    let s = p.to_string_lossy();
+    #[cfg(windows)]
+    {
+        if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+            return PathBuf::from(format!("\\{rest}"));
+        }
+        if let Some(rest) = s.strip_prefix(r"\\?\") {
+            return PathBuf::from(rest.to_string());
+        }
+    }
+    p.to_path_buf()
+}
+
+/// 归一化路径（用于排除/配对比较）：统一分隔符 + Windows 小写 +
+/// 去尾部分隔符，与 write_paths 的 normalize_for_compare 同语义
+/// （跨平台确定性一致）
+fn normalize_for_compare(p: &Path) -> String {
+    let mut s = p.to_string_lossy().replace(['/', '\\'], &MAIN_SEP.to_string());
+    #[cfg(windows)]
+    {
+        s = s.to_lowercase();
+    }
+    if s.len() > 1 {
+        s = s.trim_end_matches(std::path::MAIN_SEPARATOR).to_string();
+    }
+    s
+}
+
+/// 简易 glob 匹配（排除清单用，路径段级）：
+///
+/// - `*`：段内任意字符序列（不含分隔符）；
+/// - `?`：段内单个任意字符；
+/// - `**`：跨层通配（支持 `**/` 前缀与裸 `**` 匹配整棵子树）。
+///
+/// 实现边界（诚实声明）：不支持字符类 `[...]` 与花括号 `{a,b}`；
+/// 路径统一以 `/` 分隔后匹配（Windows 分隔符先归一）。
+fn glob_match(pattern: &str, path: &str) -> bool {
+    let pat_segs: Vec<&str> = pattern.split('/').filter(|s| !s.is_empty()).collect();
+    let path_segs: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    // `**` 出现在模式末尾（无尾段）视为整树匹配
+    if pat_segs == ["**"] {
+        return true;
+    }
+    glob_segs(&pat_segs, &path_segs)
+}
+
+/// glob 段序列匹配（`**` 展开 0..n 段，其余段逐个 glob 匹配）
+fn glob_segs(pat: &[&str], path: &[&str]) -> bool {
+    match (pat, path) {
+        ([], []) => true,
+        ([], [_, ..]) => false,
+        (["**"], _) => true,
+        (_, []) => false,
+        (["**", rest @ ..], _) => {
+            // `**` 吞 0..n 段后继续匹配剩余模式
+            (0..=path.len()).any(|take| glob_segs(rest, &path[take..]))
+        }
+        ([p, rest @ ..], [s, tail @ ..]) => seg_match(p, s) && glob_segs(rest, tail),
+    }
+}
+
+/// 单段 glob 匹配（`*` 任意序列、`?` 单字符，递归展开；字符级切片，
+/// 避免对多字节字符（中文路径）在非 UTF-8 边界切片 panic）
+fn seg_match(pat: &str, s: &str) -> bool {
+    let pat: Vec<char> = pat.chars().collect();
+    let s: Vec<char> = s.chars().collect();
+    seg_match_chars(&pat, &s)
+}
+
+/// 字符级 glob 匹配核心（`*` 吞 0..n 个字符）
+fn seg_match_chars(pat: &[char], s: &[char]) -> bool {
+    match (pat, s) {
+        ([], []) => true,
+        ([], _) => false,
+        (['*', rest @ ..], _) => (0..=s.len()).any(|take| seg_match_chars(rest, &s[take..])),
+        (['?', rest @ ..], [_, s_rest @ ..]) => seg_match_chars(rest, s_rest),
+        ([c, rest @ ..], [sc, s_rest @ ..]) if c == sc => seg_match_chars(rest, s_rest),
+        _ => false,
+    }
+}
+
+/// 当前纪元毫秒（对齐全仓 epoch ms 惯例；本 crate 叶子依赖不引
+/// agent-tools 的 epoch_millis，本地等价实现）
+fn epoch_millis_now() -> i64 {
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(d) => d.as_millis() as i64,
+        Err(_) => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
+    #![allow(clippy::disallowed_methods)]
+
+    use super::*;
+    use conex_test_utils::TempWorkspace;
+    use std::fs;
+    use std::time::Duration;
+
+    /// 短窗口 start（测试收紧聚合窗口，删除转正等待短）
+    fn start_fast(
+        ws: &TempWorkspace,
+        exclude: Vec<PathBuf>,
+    ) -> (WorkspaceWatcher, tokio::sync::mpsc::Receiver<FileChangeEvent>) {
+        WorkspaceWatcher::start_with_window(ws.path(), exclude, 300)
+            .expect("watcher 启动失败")
+    }
+
+    /// 轮询收集接收端事件直到超时（notify 回调异步到达）
+    fn drain(rx: &mut tokio::sync::mpsc::Receiver<FileChangeEvent>, timeout_ms: u64) -> Vec<FileChangeEvent> {
+        let deadline = std::time::Instant::now() + Duration::from_millis(timeout_ms);
+        let mut out = Vec::new();
+        while std::time::Instant::now() < deadline {
+            match rx.try_recv() {
+                Ok(ev) => out.push(ev),
+                Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Err(_) => break,
+            }
+        }
+        out
+    }
+
+    /// 找某路径某类型的首条事件
+    fn find<'a>(
+        events: &'a [FileChangeEvent],
+        kind: ChangeKind,
+        rel: &str,
+        ws: &TempWorkspace,
+    ) -> Option<&'a FileChangeEvent> {
+        events
+            .iter()
+            .find(|e| e.kind == kind && e.path == ws.path().join(rel))
+    }
+
+    #[test]
+    fn watcher_emits_create_modify_remove() {
+        let ws = TempWorkspace::new("watch_cmr");
+        ws.write_file("a.txt", "v1");
+        let (mut watcher, mut rx) = start_fast(&ws, vec![]);
+
+        // 写（Create）
+        ws.write_file("b.txt", "x");
+        let events = drain(&mut rx, 800);
+        let created = find(&events, ChangeKind::Created, "b.txt", &ws);
+        assert!(created.is_some(), "新建必须产出 Created 事件：{events:?}");
+        assert_eq!(created.unwrap().from, None, "Created 不带 from");
+        assert!(created.unwrap().occurred_at_ms > 0, "必须带时间戳");
+
+        // 改（Modify）
+        ws.write_file("b.txt", "y");
+        let events = drain(&mut rx, 800);
+        assert!(
+            find(&events, ChangeKind::Modified, "b.txt", &ws).is_some(),
+            "内容修改必须产出 Modified 事件：{events:?}"
+        );
+
+        // 删（Remove；等短窗口转正）
+        fs::remove_file(ws.path().join("b.txt")).unwrap();
+        let events = drain(&mut rx, 1200);
+        assert!(
+            find(&events, ChangeKind::Removed, "b.txt", &ws).is_some(),
+            "删除必须产出 Removed 事件：{events:?}"
+        );
+
+        watcher.stop();
+    }
+
+    #[test]
+    fn watcher_exclude_dir_produces_no_events() {
+        let ws = TempWorkspace::new("watch_excl");
+        ws.write_file("src/main.txt", "x");
+        let (mut watcher, mut rx) = start_fast(&ws, vec![PathBuf::from("vendor")]);
+
+        // 排除目录内写文件：不产事件
+        ws.write_file("vendor/lib.js", "x");
+        let events = drain(&mut rx, 500);
+        assert!(
+            events.is_empty(),
+            "排除目录必须不产事件：{events:?}"
+        );
+
+        // 排除目录外照常产出
+        ws.write_file("src/lib.js", "x");
+        let events = drain(&mut rx, 800);
+        assert!(
+            find(&events, ChangeKind::Created, "src/lib.js", &ws).is_some(),
+            "非排除路径必须照常产出：{events:?}"
+        );
+
+        watcher.stop();
+    }
+
+    #[test]
+    fn watcher_rename_aggregates_to_renamed() {
+        let ws = TempWorkspace::new("watch_rn");
+        ws.write_file("a.txt", "x");
+        let (mut watcher, mut rx) = start_fast(&ws, vec![]);
+
+        fs::rename(ws.path().join("a.txt"), ws.path().join("b.txt")).unwrap();
+        let events = drain(&mut rx, 1000);
+        match events.iter().find(|e| e.kind == ChangeKind::Renamed) {
+            Some(ev) => {
+                assert_eq!(ev.path, ws.path().join("b.txt"), "to 必须为新路径");
+                assert_eq!(ev.from.as_deref(), Some(ws.path().join("a.txt").as_path()), "from 必须为源路径");
+            }
+            None => {
+                // Windows 实测偏差：若 rename 拆成独立 Remove+Create 且
+                // Create 先到（无配对），如实记录行为而非静默通过
+                panic!("rename 未聚合为 Renamed：{events:?}");
+            }
+        }
+
+        watcher.stop();
+    }
+
+    #[test]
+    fn watcher_independent_remove_then_create_not_merged() {
+        let ws = TempWorkspace::new("watch_indep");
+        ws.write_file("x.txt", "x");
+        let (mut watcher, mut rx) = start_fast(&ws, vec![]);
+
+        fs::remove_file(ws.path().join("x.txt")).unwrap();
+        let events = drain(&mut rx, 1200);
+        assert!(
+            find(&events, ChangeKind::Removed, "x.txt", &ws).is_some(),
+            "独立删除必须产出 Removed：{events:?}"
+        );
+
+        ws.write_file("y.txt", "y");
+        let events = drain(&mut rx, 800);
+        assert!(
+            find(&events, ChangeKind::Created, "y.txt", &ws).is_some(),
+            "独立新建必须产出 Created：{events:?}"
+        );
+        assert!(
+            events.iter().all(|e| e.kind != ChangeKind::Renamed),
+            "跨路径独立删除+新建不得聚合为 Renamed：{events:?}"
+        );
+
+        watcher.stop();
+    }
+
+    #[test]
+    fn watcher_stop_produces_no_more_events() {
+        let ws = TempWorkspace::new("watch_stop");
+        ws.write_file("a.txt", "x");
+        let (mut watcher, mut rx) = start_fast(&ws, vec![]);
+        ws.write_file("b.txt", "x");
+        let events = drain(&mut rx, 800);
+        assert!(!events.is_empty(), "启动期必须有事件");
+
+        watcher.stop();
+        ws.write_file("c.txt", "x");
+        let events = drain(&mut rx, 500);
+        assert!(
+            events.is_empty(),
+            "停止后必须无事件：{events:?}"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn watcher_windows_rename_and_write_semantics() {
+        // Windows（ReadDirectoryChangesW）平台实测：子目录内 rename 与
+        // 写入语义必须产事件（聚合形态允许 Renamed 或 Remove+Create）
+        let ws = TempWorkspace::new("watch_win");
+        ws.write_file("sub/a.txt", "x");
+        let (mut watcher, mut rx) = start_fast(&ws, vec![]);
+
+        // 子目录内写入（递归监视必须覆盖子目录）
+        ws.write_file("sub/deep/b.txt", "x");
+        let events = drain(&mut rx, 1000);
+        assert!(
+            find(&events, ChangeKind::Created, "sub/deep/b.txt", &ws).is_some(),
+            "递归监视子目录写入必须产事件：{events:?}"
+        );
+
+        // 子目录内 rename（聚合形态如实记录）
+        fs::rename(ws.path().join("sub/a.txt"), ws.path().join("sub/c.txt")).unwrap();
+        let events = drain(&mut rx, 1500);
+        let renamed = events.iter().any(|e| e.kind == ChangeKind::Renamed);
+        let remove_create = find(&events, ChangeKind::Removed, "sub/a.txt", &ws).is_some()
+            && find(&events, ChangeKind::Created, "sub/c.txt", &ws).is_some();
+        assert!(
+            renamed || remove_create,
+            "Windows rename 必须产出 Renamed 或 Remove+Create：{events:?}"
+        );
+
+        watcher.stop();
+    }
+
+    #[test]
+    fn glob_match_covers_star_question_doublestar() {
+        assert!(glob_match("*.snap", "a.snap"));
+        assert!(!glob_match("*.snap", "a.txt"));
+        assert!(glob_match("**/*.snap", "a/b/c.snap"));
+        assert!(glob_match("**/*.snap", "c.snap"), "`**/` 应匹配零层");
+        assert!(glob_match("a?c.txt", "abc.txt"));
+        assert!(!glob_match("a?c.txt", "ac.txt"));
+        assert!(glob_match("**", "anything/deep"));
+        assert!(glob_match("node_modules", "node_modules"));
+        assert!(glob_match("**/node_modules/**", "a/node_modules/b/x"));
+        assert!(!glob_match("node_modules/*", "node_modules/a/b"));
+    }
+
+    #[test]
+    fn serde_wire_shapes_match_design() {
+        // ChangeKind wire kebab-case
+        assert_eq!(
+            serde_json::to_string(&ChangeKind::Renamed).unwrap(),
+            "\"renamed\""
+        );
+        // FileChangeEvent camelCase + from 省略
+        let ev = FileChangeEvent {
+            path: PathBuf::from("C:/ws/a.txt"),
+            kind: ChangeKind::Modified,
+            from: None,
+            occurred_at_ms: 1234,
+        };
+        let json = serde_json::to_value(&ev).unwrap();
+        assert_eq!(json["path"], "C:/ws/a.txt");
+        assert_eq!(json["kind"], "modified");
+        assert_eq!(json["occurredAtMs"], 1234);
+        assert!(json.get("from").is_none(), "None 的 from 必须省略");
+        // from 在场
+        let ev = FileChangeEvent {
+            path: PathBuf::from("C:/ws/b.txt"),
+            kind: ChangeKind::Renamed,
+            from: Some(PathBuf::from("C:/ws/a.txt")),
+            occurred_at_ms: 1235,
+        };
+        let json = serde_json::to_value(&ev).unwrap();
+        assert_eq!(json["from"], "C:/ws/a.txt");
+        // roundtrip 保真
+        let back: FileChangeEvent = serde_json::from_value(json).unwrap();
+        assert_eq!(back, ev);
+        // UndeclaredWrite 结构（判定后、审计前）roundtrip
+        let report = UndeclaredWrite {
+            session_id: "s1".into(),
+            run_id: "r1".into(),
+            changes: vec![ev],
+            first_occurred_at_ms: 1,
+            last_occurred_at_ms: 1235,
+            file_count: 1,
+            has_destructive: true,
+        };
+        let json = serde_json::to_value(&report).unwrap();
+        assert_eq!(json["sessionId"], "s1");
+        assert_eq!(json["hasDestructive"], true);
+        let back: UndeclaredWrite = serde_json::from_value(json).unwrap();
+        assert_eq!(back, report);
+    }
+}

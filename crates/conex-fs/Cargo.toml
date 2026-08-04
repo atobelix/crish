@@ -18,3 +18,14 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 # I2-S8：ImpactAssessment 上移至 conex-types（wire 契约归属），本 crate 重导出
 conex-types = { path = "../conex-types" }
+# T-ESC-01：脚本逃逸监视 watcher（notify 8 与壳层同版本，workspace 声明）；
+# tokio 供事件通道（tx: mpsc::Sender，方案 §3.2 签名逐字一致）；
+# tracing 供锁中毒恢复日志（PE-07 T07.6 A 模式）
+notify = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# 测试基础设施域（T11.7）：TempWorkspace 临时工作区（watcher 单测锚点
+# write_paths.rs:391-410 同模式）
+conex-test-utils = { path = "../conex-test-utils" }

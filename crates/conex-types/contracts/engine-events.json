@@ -1,0 +1,2508 @@
+{
+  "contract": "engine-events",
+  "schemaVersion": 1,
+  "eventCount": 31,
+  "description": "Rust 域事件契约注册表（唯一事实源：crates/conex-types/src/events.rs 的 AgentEvent enum）。本文件是机器可读导出，由生成脚本 scripts/generate-engine-bindings.mjs 消费，产出 TS 类型与解析器（packages/shared-types/src/generated/engine/**）。任何修改必须同步 events.rs（cargo test -p conex-types 的 registry_drift 测试锁定两侧一致）。事件编号即本表顺序（1-31），对应 enum 声明顺序。每事件 backpressure 字段为背压三级分类（delta/soft/critical，04 报告 1e）；subagent-event 的 kindBackpressure 为类别级分类（progress=delta、message/tool=soft）。",
+  "events": [
+    {
+      "id": 1,
+      "type": "agent-start",
+      "rustVariant": "AgentStart",
+      "domain": "agent",
+      "description": "run 启动",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 2,
+      "type": "agent-end",
+      "rustVariant": "AgentEnd",
+      "domain": "agent",
+      "description": "run 结束；reason 必填，error 可选",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "reason",
+          "type": "AgentEndReason",
+          "required": true,
+          "description": "收场原因（kebab-case）"
+        },
+        {
+          "name": "error",
+          "type": "string",
+          "required": false,
+          "description": "错误信息（可选）"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 3,
+      "type": "turn-start",
+      "rustVariant": "TurnStart",
+      "domain": "turn",
+      "description": "一轮开始",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "turnIndex",
+          "type": "number",
+          "required": true,
+          "description": "轮次序号"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 4,
+      "type": "turn-end",
+      "rustVariant": "TurnEnd",
+      "domain": "turn",
+      "description": "一轮结束（toolCallCount 供观测）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "turnIndex",
+          "type": "number",
+          "required": true,
+          "description": "轮次序号"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "toolCallCount",
+          "type": "number",
+          "required": true,
+          "description": "本轮工具调用数"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 5,
+      "type": "message-start",
+      "rustVariant": "MessageStart",
+      "domain": "message",
+      "description": "消息开始（水合投影以 message-end 为准）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "message",
+          "type": "AgentMessage",
+          "required": true,
+          "description": "消息全文（前端硬依赖）"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 6,
+      "type": "message-delta",
+      "rustVariant": "MessageDelta",
+      "domain": "message",
+      "description": "增量正文/思考块（前端硬依赖 block.text 与 messageId）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "messageId",
+          "type": "string",
+          "required": true,
+          "description": "消息稳定 id"
+        },
+        {
+          "name": "block",
+          "type": "AgentMessageBlock",
+          "required": true,
+          "description": "增量块（text/thought）"
+        }
+      ],
+      "backpressure": "delta"
+    },
+    {
+      "id": 7,
+      "type": "message-end",
+      "rustVariant": "MessageEnd",
+      "domain": "message",
+      "description": "消息终态全文（前端硬依赖 role/content/blocks 与稳定 id）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "message",
+          "type": "AgentMessage",
+          "required": true,
+          "description": "消息终态全文"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 8,
+      "type": "tool-start",
+      "rustVariant": "ToolStart",
+      "domain": "tool",
+      "description": "单工具调用开始（前端硬依赖 call.id/toolName）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "batchId",
+          "type": "string",
+          "required": true,
+          "description": "批次 id"
+        },
+        {
+          "name": "call",
+          "type": "ToolBatchCall",
+          "required": true,
+          "description": "单次调用描述"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 9,
+      "type": "tool-update",
+      "rustVariant": "ToolUpdate",
+      "domain": "tool",
+      "description": "工具执行进度增量（预留 tool-args-delta 增量参数流）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "batchId",
+          "type": "string",
+          "required": true,
+          "description": "批次 id"
+        },
+        {
+          "name": "toolCallId",
+          "type": "string",
+          "required": true,
+          "description": "工具调用 id"
+        },
+        {
+          "name": "update",
+          "type": "ToolProgressUpdate",
+          "required": true,
+          "description": "进度增量载荷"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 10,
+      "type": "tool-end",
+      "rustVariant": "ToolEnd",
+      "domain": "tool",
+      "description": "单工具调用结束（前端硬依赖 result.id/toolCallId/output/isError）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "batchId",
+          "type": "string",
+          "required": true,
+          "description": "批次 id"
+        },
+        {
+          "name": "result",
+          "type": "ToolBatchResult",
+          "required": true,
+          "description": "调用结果"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 11,
+      "type": "tool-batch-start",
+      "rustVariant": "ToolBatchStart",
+      "domain": "tool",
+      "description": "工具批量开始（前端显式 ignore）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "batchId",
+          "type": "string",
+          "required": true,
+          "description": "批次 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "required": true,
+          "description": "批次摘要"
+        },
+        {
+          "name": "calls",
+          "type": "ToolBatchCall[]",
+          "required": true,
+          "description": "批内调用列表"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 12,
+      "type": "tool-batch-end",
+      "rustVariant": "ToolBatchEnd",
+      "domain": "tool",
+      "description": "工具批量结束（前端显式 ignore）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "batchId",
+          "type": "string",
+          "required": true,
+          "description": "批次 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "calls",
+          "type": "ToolBatchResult[]",
+          "required": true,
+          "description": "批内结果列表"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 13,
+      "type": "tool-input-repaired",
+      "rustVariant": "ToolInputRepaired",
+      "domain": "tool",
+      "description": "工具入参修复记录（validation/repair 流程）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "toolCallId",
+          "type": "string",
+          "required": true,
+          "description": "工具调用 id"
+        },
+        {
+          "name": "toolName",
+          "type": "string",
+          "required": true,
+          "description": "工具名"
+        },
+        {
+          "name": "notes",
+          "type": "string[]",
+          "required": true,
+          "description": "修复说明列表"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 14,
+      "type": "context-compression-start",
+      "rustVariant": "ContextCompressionStart",
+      "domain": "compression",
+      "description": "上下文压缩开始",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true,
+          "description": "压缩原因"
+        },
+        {
+          "name": "tokensBefore",
+          "type": "number",
+          "required": true,
+          "description": "压缩前 token 数"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 15,
+      "type": "context-compression-end",
+      "rustVariant": "ContextCompressionEnd",
+      "domain": "compression",
+      "description": "上下文压缩结束（aborted 标志；error 可选）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "result",
+          "type": "ContextCompressionRecord",
+          "required": false,
+          "description": "压缩记录（可选）"
+        },
+        {
+          "name": "aborted",
+          "type": "boolean",
+          "required": true,
+          "description": "是否被中止"
+        },
+        {
+          "name": "error",
+          "type": "string",
+          "required": false,
+          "description": "错误信息（可选）"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 16,
+      "type": "provider-diagnostic",
+      "rustVariant": "ProviderDiagnostic",
+      "domain": "diagnostic",
+      "description": "provider 运行诊断（前端仅 logInternalError）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "diagnostic",
+          "type": "ProviderDiagnostic",
+          "required": true,
+          "description": "诊断载荷"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 17,
+      "type": "runtime-error",
+      "rustVariant": "RuntimeError",
+      "domain": "diagnostic",
+      "description": "运行期观测性错误（不直接 finish，等 run-terminal/agent-end 收口）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "error",
+          "type": "string",
+          "required": true,
+          "description": "错误信息"
+        },
+        {
+          "name": "retryable",
+          "type": "boolean",
+          "required": false,
+          "description": "是否可重试"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 18,
+      "type": "runtime-steering",
+      "rustVariant": "RuntimeSteering",
+      "domain": "diagnostic",
+      "description": "steering 注入/诊断消息",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true,
+          "description": "注入原因"
+        },
+        {
+          "name": "message",
+          "type": "AgentMessage",
+          "required": true,
+          "description": "steering 消息"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 19,
+      "type": "runtime-intervention-required",
+      "rustVariant": "RuntimeInterventionRequired",
+      "domain": "diagnostic",
+      "description": "需人工介入（choices 为候选动作；run 以 stop 收场）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true,
+          "description": "介入原因"
+        },
+        {
+          "name": "choices",
+          "type": "string[]",
+          "required": true,
+          "description": "候选动作列表"
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "required": true,
+          "description": "人工可读说明"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 20,
+      "type": "approval-requested",
+      "rustVariant": "ApprovalRequested",
+      "domain": "approval",
+      "description": "审批请求（前端硬依赖 request.toolCallId/toolName/parameters）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "request",
+          "type": "PermissionRequest",
+          "required": true,
+          "description": "权限请求载荷"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 21,
+      "type": "approval-resolved",
+      "rustVariant": "ApprovalResolved",
+      "domain": "approval",
+      "description": "审批结果（前端硬依赖 toolCallId + decision 规范值；requestId 保留兼容）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "toolCallId",
+          "type": "string",
+          "required": true,
+          "description": "工具调用 id"
+        },
+        {
+          "name": "requestId",
+          "type": "string",
+          "required": false,
+          "description": "请求 id（兼容保留）"
+        },
+        {
+          "name": "decision",
+          "type": "ApprovalDecision",
+          "required": true,
+          "description": "审批决策（approved/denied/expired）"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 22,
+      "type": "checkpoint-created",
+      "rustVariant": "CheckpointCreated",
+      "domain": "checkpoint",
+      "description": "检查点已创建",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "checkpoint",
+          "type": "RuntimeCheckpointRecord",
+          "required": true,
+          "description": "检查点记录"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 23,
+      "type": "checkpoint-restored",
+      "rustVariant": "CheckpointRestored",
+      "domain": "checkpoint",
+      "description": "检查点已恢复",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "restore",
+          "type": "RuntimeCheckpointRestoreRecord",
+          "required": true,
+          "description": "恢复记录"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 24,
+      "type": "run-terminal",
+      "rustVariant": "RunTerminal",
+      "domain": "diagnostic",
+      "description": "run 终态（前端硬依赖 terminal + error；runId 必须存在）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "runId",
+          "type": "string",
+          "required": true,
+          "description": "run id（信封注入值一致）"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "terminal",
+          "type": "RunTerminalStatus",
+          "required": true,
+          "description": "终态（completed/cancelled/failed）"
+        },
+        {
+          "name": "error",
+          "type": "string",
+          "required": false,
+          "description": "错误信息（可选）"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 25,
+      "type": "cache-stats-updated",
+      "rustVariant": "CacheStatsUpdated",
+      "domain": "cache",
+      "description": "run 收口时发出的会话级缓存统计快照（P5 S3；仅测量展示，不干预循环）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "stats",
+          "type": "RunCacheStats",
+          "required": true,
+          "description": "run 级缓存统计"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 26,
+      "type": "cache-waste-alert",
+      "rustVariant": "CacheWasteAlert",
+      "domain": "cache",
+      "description": "缓存浪费审计命中（阈值 missed_tokens ≥ 20000 或 missed_cost ≥ $0.1 才发射）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "attribution",
+          "type": "MissAttribution",
+          "required": true,
+          "description": "miss 归因分类（kebab-case）"
+        },
+        {
+          "name": "missedTokens",
+          "type": "number",
+          "required": true,
+          "description": "浪费 token 数"
+        },
+        {
+          "name": "idleMs",
+          "type": "number",
+          "required": true,
+          "description": "距上次请求空闲毫秒数"
+        },
+        {
+          "name": "modelChanged",
+          "type": "boolean",
+          "required": true,
+          "description": "是否模型切换"
+        },
+        {
+          "name": "missedCostUsd",
+          "type": "number",
+          "required": false,
+          "description": "预估浪费金额（USD；无价格数据时省略）"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 27,
+      "type": "cold-cache-warning",
+      "rustVariant": "ColdCacheWarning",
+      "domain": "cache",
+      "description": "冷缓存预警（Rust 只在 run 启动、cold_cache_check 命中时发一次）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "ttlSeconds",
+          "type": "number",
+          "required": true,
+          "description": "TTL 秒数（P3 路由表）"
+        },
+        {
+          "name": "idleMs",
+          "type": "number",
+          "required": true,
+          "description": "空闲毫秒数"
+        },
+        {
+          "name": "resendEstimateTokens",
+          "type": "number",
+          "required": true,
+          "description": "预估重发 token（上次请求 input_total）"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 28,
+      "type": "security-audit",
+      "rustVariant": "SecurityAudit",
+      "domain": "security",
+      "description": "高危操作审计（删除接管/重定向/恢复/红线拦截；影响面载荷供 S9 审批弹窗与审计面板；runId 由 emit 层经信封注入）",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "operation",
+          "type": "SecurityAuditOperation",
+          "required": true,
+          "description": "审计操作（delete/trash-restore/trash-purge/git-revert/command-exec/undeclared-write）"
+        },
+        {
+          "name": "targets",
+          "type": "string[]",
+          "required": true,
+          "description": "目标路径列表"
+        },
+        {
+          "name": "impact",
+          "type": "ImpactAssessment",
+          "required": true,
+          "description": "影响面（文件数/总大小/目录数/跨目录/谨慎标记）"
+        },
+        {
+          "name": "decision",
+          "type": "SecurityAuditDecision",
+          "required": true,
+          "description": "处置决策（blocked/approved/denied/redirected/restored/purged）"
+        },
+        {
+          "name": "permissionMode",
+          "type": "string",
+          "required": false,
+          "description": "权限模式（ask/full-access/plan；emit 层可注入，工具侧为 None）"
+        },
+        {
+          "name": "toolCallId",
+          "type": "string",
+          "required": false,
+          "description": "工具调用 id（工具侧发射时填充；None = 非工具上下文）"
+        }
+      ],
+      "backpressure": "critical"
+    },
+    {
+      "id": 29,
+      "type": "subagent-started",
+      "rustVariant": "SubagentStarted",
+      "domain": "subagent",
+      "description": "子代理启动（run_subagent spawn；runId 由信封注入 = 父 run；前端消费 subagentId/subagentRunId/parentRunId/parentToolCallId/description/mode）",
+      "backpressure": "critical",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "subagentId",
+          "type": "string",
+          "required": true,
+          "description": "子代理 id"
+        },
+        {
+          "name": "subagentRunId",
+          "type": "string",
+          "required": true,
+          "description": "子代理 run id（续跑不变）"
+        },
+        {
+          "name": "role",
+          "type": "string",
+          "required": true,
+          "description": "子代理角色（SubagentRole 对齐）"
+        },
+        {
+          "name": "capabilityMode",
+          "type": "string",
+          "required": true,
+          "description": "能力模式（readonly/read-write 等）"
+        },
+        {
+          "name": "startedAt",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 首次创建时间（@dynamic）"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "description": "人读描述（前端缺省 '协作 agent'）"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "required": false,
+          "description": "调度模式（research/research_single/solve/write）"
+        },
+        {
+          "name": "parentToolCallId",
+          "type": "string",
+          "required": false,
+          "description": "父 run 发起 spawn 的工具调用 id"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "type": "subagent-event",
+      "rustVariant": "SubagentEvent",
+      "domain": "subagent",
+      "description": "子代理过程事件（event 为结构化负载；背压分级随 kind：progress=Delta 可丢、message/tool=Soft 尽力）",
+      "backpressure": "delta",
+      "kindBackpressure": {
+        "progress": "delta",
+        "message": "soft",
+        "tool": "soft"
+      },
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "subagentId",
+          "type": "string",
+          "required": true,
+          "description": "子代理 id"
+        },
+        {
+          "name": "subagentRunId",
+          "type": "string",
+          "required": true,
+          "description": "子代理 run id"
+        },
+        {
+          "name": "event",
+          "type": "SubagentEventPayload",
+          "required": true,
+          "description": "结构化负载（kind + payload）"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "subagent-ended",
+      "rustVariant": "SubagentEnded",
+      "domain": "subagent",
+      "description": "子代理结束（status 规范值 completed/failed/cancelled；前端正则映射 stopped/failed/completed；Critical 级必达落库）",
+      "backpressure": "critical",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "subagentId",
+          "type": "string",
+          "required": true,
+          "description": "子代理 id"
+        },
+        {
+          "name": "subagentRunId",
+          "type": "string",
+          "required": true,
+          "description": "子代理 run id"
+        },
+        {
+          "name": "status",
+          "type": "SubagentEndStatus",
+          "required": true,
+          "description": "终态（completed/failed/cancelled）"
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "required": false,
+          "description": "收尾摘要（可选）"
+        },
+        {
+          "name": "endedAt",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        }
+      ]
+    }
+  ],
+  "types": {
+    "AgentMessage": {
+      "kind": "struct",
+      "description": "会话消息（message-start/message-end/runtime-steering 载荷）",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "description": "消息稳定 id"
+        },
+        {
+          "name": "role",
+          "type": "AgentMessageRole",
+          "required": true,
+          "description": "消息角色（lowercase）"
+        },
+        {
+          "name": "createdAt",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "blocks",
+          "type": "AgentMessageBlock[]",
+          "required": true,
+          "description": "内容块序列"
+        },
+        {
+          "name": "metadata",
+          "type": "JsonValue",
+          "required": false,
+          "description": "附加元数据"
+        },
+        {
+          "name": "clientMessageId",
+          "type": "string",
+          "required": false,
+          "description": "客户端幂等键（水合 rekey 优先）"
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "required": false,
+          "description": "正文兜底字段"
+        }
+      ]
+    },
+    "AgentMessageBlock": {
+      "kind": "tagged",
+      "tag": "type",
+      "description": "消息内容块（tagged enum：text/thought/tool-call/tool-result）",
+      "variants": [
+        {
+          "name": "text",
+          "description": "正文块",
+          "fields": [
+            {
+              "name": "text",
+              "type": "string",
+              "required": true,
+              "description": "正文"
+            }
+          ]
+        },
+        {
+          "name": "thought",
+          "description": "思考块",
+          "fields": [
+            {
+              "name": "text",
+              "type": "string",
+              "required": true,
+              "description": "思考内容"
+            },
+            {
+              "name": "redacted",
+              "type": "boolean",
+              "required": false,
+              "description": "是否已脱敏"
+            }
+          ]
+        },
+        {
+          "name": "tool-call",
+          "description": "工具调用块",
+          "fields": [
+            {
+              "name": "id",
+              "type": "string",
+              "required": true,
+              "description": "工具调用 id"
+            },
+            {
+              "name": "toolName",
+              "type": "string",
+              "required": true,
+              "description": "工具名"
+            },
+            {
+              "name": "input",
+              "type": "JsonValue",
+              "required": true,
+              "description": "结构化入参"
+            }
+          ]
+        },
+        {
+          "name": "tool-result",
+          "description": "工具结果块",
+          "fields": [
+            {
+              "name": "toolCallId",
+              "type": "string",
+              "required": true,
+              "description": "工具调用 id"
+            },
+            {
+              "name": "toolName",
+              "type": "string",
+              "required": true,
+              "description": "工具名"
+            },
+            {
+              "name": "output",
+              "type": "ToolOutput",
+              "required": true,
+              "description": "工具输出"
+            },
+            {
+              "name": "isError",
+              "type": "boolean",
+              "required": true,
+              "description": "是否错误"
+            }
+          ]
+        }
+      ]
+    },
+    "ToolOutput": {
+      "kind": "struct",
+      "description": "工具输出（text/json/artifacts 三选一承载）",
+      "fields": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "文本输出"
+        },
+        {
+          "name": "json",
+          "type": "JsonValue",
+          "required": false,
+          "description": "结构化输出"
+        },
+        {
+          "name": "artifacts",
+          "type": "ToolArtifact[]",
+          "required": false,
+          "description": "附属产物列表"
+        }
+      ]
+    },
+    "ToolArtifact": {
+      "kind": "struct",
+      "description": "工具输出附属产物",
+      "fields": [
+        {
+          "name": "kind",
+          "type": "ToolArtifactKind",
+          "required": true,
+          "description": "产物类别（lowercase）"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "description": "标题"
+        },
+        {
+          "name": "uri",
+          "type": "string",
+          "required": false,
+          "description": "URI"
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "文本内容"
+        },
+        {
+          "name": "metadata",
+          "type": "JsonValue",
+          "required": false,
+          "description": "附加元数据"
+        }
+      ]
+    },
+    "ToolBatchCall": {
+      "kind": "struct",
+      "description": "单次工具调用（tool-start.call / tool-batch-start.calls 载荷）",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "description": "工具调用 id（前端协议失败判定键）"
+        },
+        {
+          "name": "toolName",
+          "type": "string",
+          "required": true,
+          "description": "工具名（前端协议失败判定键）"
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "required": true,
+          "description": "人读摘要"
+        },
+        {
+          "name": "input",
+          "type": "JsonValue",
+          "required": true,
+          "description": "结构化入参（JSON 对象）"
+        },
+        {
+          "name": "category",
+          "type": "ToolCategory",
+          "required": true,
+          "description": "工具类别（kebab-case）"
+        },
+        {
+          "name": "concurrency",
+          "type": "ToolConcurrency",
+          "required": true,
+          "description": "并发模式（lowercase）"
+        }
+      ]
+    },
+    "ToolBatchResult": {
+      "kind": "struct",
+      "description": "单次工具调用结果（tool-end.result / tool-batch-end.calls 载荷）",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "description": "工具调用 id"
+        },
+        {
+          "name": "toolName",
+          "type": "string",
+          "required": true,
+          "description": "工具名"
+        },
+        {
+          "name": "output",
+          "type": "ToolOutput",
+          "required": true,
+          "description": "工具输出"
+        },
+        {
+          "name": "isError",
+          "type": "boolean",
+          "required": true,
+          "description": "是否错误"
+        },
+        {
+          "name": "durationMs",
+          "type": "number",
+          "required": true,
+          "description": "执行耗时（毫秒）"
+        }
+      ]
+    },
+    "ToolProgressUpdate": {
+      "kind": "struct",
+      "description": "工具执行进度增量（tool-update.update 载荷）",
+      "fields": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "文本增量"
+        },
+        {
+          "name": "json",
+          "type": "JsonValue",
+          "required": false,
+          "description": "结构化增量"
+        },
+        {
+          "name": "metadata",
+          "type": "JsonValue",
+          "required": false,
+          "description": "附加元数据（tool-args-delta 走此）"
+        }
+      ]
+    },
+    "ProviderDiagnostic": {
+      "kind": "struct",
+      "description": "provider 运行诊断（provider-diagnostic.diagnostic 载荷）",
+      "fields": [
+        {
+          "name": "phase",
+          "type": "ProviderDiagnosticPhase",
+          "required": true,
+          "description": "诊断阶段（kebab-case）"
+        },
+        {
+          "name": "providerId",
+          "type": "string",
+          "required": false,
+          "description": "provider 标识"
+        },
+        {
+          "name": "endpoint",
+          "type": "string",
+          "required": false,
+          "description": "端点名"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "required": false,
+          "description": "请求 URL"
+        },
+        {
+          "name": "attempt",
+          "type": "number",
+          "required": false,
+          "description": "尝试次数"
+        },
+        {
+          "name": "maxAttempts",
+          "type": "number",
+          "required": false,
+          "description": "最大尝试次数"
+        },
+        {
+          "name": "elapsedMs",
+          "type": "number",
+          "required": false,
+          "description": "耗时（毫秒）"
+        },
+        {
+          "name": "status",
+          "type": "number",
+          "required": false,
+          "description": "HTTP 状态码"
+        },
+        {
+          "name": "statusText",
+          "type": "string",
+          "required": false,
+          "description": "状态文本"
+        },
+        {
+          "name": "retryable",
+          "type": "boolean",
+          "required": false,
+          "description": "是否可重试"
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": false,
+          "description": "原因"
+        },
+        {
+          "name": "errorKind",
+          "type": "ProviderErrorKind",
+          "required": false,
+          "description": "错误分类（kebab-case）"
+        },
+        {
+          "name": "retryAfterMs",
+          "type": "number",
+          "required": false,
+          "description": "建议重试间隔（毫秒）"
+        },
+        {
+          "name": "chunks",
+          "type": "number",
+          "required": false,
+          "description": "流块数"
+        },
+        {
+          "name": "bytes",
+          "type": "number",
+          "required": false,
+          "description": "字节数"
+        },
+        {
+          "name": "headers",
+          "type": "JsonValue",
+          "required": false,
+          "description": "响应头"
+        },
+        {
+          "name": "configuredModel",
+          "type": "string",
+          "required": false,
+          "description": "配置的模型"
+        },
+        {
+          "name": "actualModel",
+          "type": "string",
+          "required": false,
+          "description": "实际模型"
+        },
+        {
+          "name": "modelMismatch",
+          "type": "boolean",
+          "required": false,
+          "description": "模型不一致"
+        },
+        {
+          "name": "streamRequested",
+          "type": "boolean",
+          "required": false,
+          "description": "是否请求流式"
+        },
+        {
+          "name": "systemPromptWireMode",
+          "type": "SystemPromptWireMode",
+          "required": false,
+          "description": "system 提示词接线方式"
+        },
+        {
+          "name": "hasSystemRole",
+          "type": "boolean",
+          "required": false,
+          "description": "是否含 system 角色"
+        },
+        {
+          "name": "systemPromptPresent",
+          "type": "boolean",
+          "required": false,
+          "description": "system 提示词是否在场"
+        },
+        {
+          "name": "systemMessageCount",
+          "type": "number",
+          "required": false,
+          "description": "system 消息数"
+        },
+        {
+          "name": "rewrittenSystemMessageCount",
+          "type": "number",
+          "required": false,
+          "description": "重写后的 system 消息数"
+        },
+        {
+          "name": "messageCount",
+          "type": "number",
+          "required": false,
+          "description": "消息数"
+        },
+        {
+          "name": "toolCount",
+          "type": "number",
+          "required": false,
+          "description": "工具数"
+        },
+        {
+          "name": "messageRoleCounts",
+          "type": "JsonValue",
+          "required": false,
+          "description": "各角色消息计数"
+        },
+        {
+          "name": "partial",
+          "type": "JsonValue",
+          "required": false,
+          "description": "工具调用解析失败时的部分载荷"
+        }
+      ]
+    },
+    "RuntimeCheckpointRecord": {
+      "kind": "struct",
+      "description": "检查点记录（checkpoint-created.checkpoint 载荷）",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "description": "检查点 id"
+        },
+        {
+          "name": "kind",
+          "type": "RuntimeCheckpointKind",
+          "required": true,
+          "description": "检查点类别（kebab-case）"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": true,
+          "description": "标签"
+        },
+        {
+          "name": "toolCallId",
+          "type": "string",
+          "required": true,
+          "description": "工具调用 id"
+        },
+        {
+          "name": "toolName",
+          "type": "string",
+          "required": true,
+          "description": "工具名"
+        },
+        {
+          "name": "artifactUri",
+          "type": "string",
+          "required": false,
+          "description": "产物 URI"
+        },
+        {
+          "name": "manifestPath",
+          "type": "string",
+          "required": false,
+          "description": "清单路径"
+        },
+        {
+          "name": "snapshotPath",
+          "type": "string",
+          "required": false,
+          "description": "快照路径"
+        },
+        {
+          "name": "sourcePath",
+          "type": "string",
+          "required": false,
+          "description": "源路径"
+        },
+        {
+          "name": "metadata",
+          "type": "JsonValue",
+          "required": false,
+          "description": "附加元数据"
+        }
+      ]
+    },
+    "RuntimeCheckpointRestoreRecord": {
+      "kind": "struct",
+      "description": "检查点恢复记录（checkpoint-restored.restore 载荷）",
+      "fields": [
+        {
+          "name": "checkpointId",
+          "type": "string",
+          "required": true,
+          "description": "检查点 id"
+        },
+        {
+          "name": "toolCallId",
+          "type": "string",
+          "required": true,
+          "description": "工具调用 id"
+        },
+        {
+          "name": "toolName",
+          "type": "string",
+          "required": true,
+          "description": "工具名"
+        },
+        {
+          "name": "restored",
+          "type": "string[]",
+          "required": true,
+          "description": "已恢复的文件"
+        },
+        {
+          "name": "deleted",
+          "type": "string[]",
+          "required": true,
+          "description": "已删除的文件"
+        },
+        {
+          "name": "skipped",
+          "type": "string[]",
+          "required": true,
+          "description": "跳过的文件"
+        },
+        {
+          "name": "metadata",
+          "type": "JsonValue",
+          "required": false,
+          "description": "附加元数据"
+        }
+      ]
+    },
+    "ToolMetadata": {
+      "kind": "struct",
+      "description": "工具元数据（审批请求附带）",
+      "fields": [
+        {
+          "name": "category",
+          "type": "string",
+          "required": false,
+          "description": "类别"
+        },
+        {
+          "name": "isReadOnly",
+          "type": "boolean",
+          "required": false,
+          "description": "是否只读"
+        },
+        {
+          "name": "fatalOnError",
+          "type": "boolean",
+          "required": false,
+          "description": "错误是否致命"
+        },
+        {
+          "name": "concurrency",
+          "type": "string",
+          "required": false,
+          "description": "并发模式"
+        }
+      ]
+    },
+    "PermissionRequest": {
+      "kind": "struct",
+      "description": "权限请求（approval-requested.request 载荷）",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "description": "请求 id"
+        },
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "cwd",
+          "type": "string",
+          "required": true,
+          "description": "工作目录"
+        },
+        {
+          "name": "toolCallId",
+          "type": "string",
+          "required": true,
+          "description": "工具调用 id（前端硬依赖）"
+        },
+        {
+          "name": "toolName",
+          "type": "string",
+          "required": true,
+          "description": "工具名（前端硬依赖）"
+        },
+        {
+          "name": "parameters",
+          "type": "JsonValue",
+          "required": true,
+          "description": "参数包"
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "required": true,
+          "description": "人读摘要"
+        },
+        {
+          "name": "toolMetadata",
+          "type": "ToolMetadata",
+          "required": true,
+          "description": "工具元数据"
+        },
+        {
+          "name": "metadata",
+          "type": "JsonValue",
+          "required": false,
+          "description": "附加元数据"
+        }
+      ]
+    },
+    "ContextCompressionPolicyMetadata": {
+      "kind": "struct",
+      "description": "压缩策略元数据",
+      "fields": [
+        {
+          "name": "tier",
+          "type": "ContextCompressionPolicyTier",
+          "required": true,
+          "description": "策略层级（lowercase）"
+        },
+        {
+          "name": "action",
+          "type": "ContextCompressionPolicyAction",
+          "required": true,
+          "description": "策略动作（kebab-case）"
+        },
+        {
+          "name": "forced",
+          "type": "boolean",
+          "required": true,
+          "description": "是否强制"
+        },
+        {
+          "name": "thresholdExceeded",
+          "type": "boolean",
+          "required": true,
+          "description": "是否超阈值"
+        },
+        {
+          "name": "providerRetry",
+          "type": "boolean",
+          "required": true,
+          "description": "是否 provider 重试"
+        }
+      ]
+    },
+    "ContextCompressionHandoffMetadata": {
+      "kind": "struct",
+      "description": "压缩交接元数据",
+      "fields": [
+        {
+          "name": "trigger",
+          "type": "ContextCompressionTrigger",
+          "required": true,
+          "description": "触发点（lowercase）"
+        },
+        {
+          "name": "reason",
+          "type": "ContextCompressionReason",
+          "required": true,
+          "description": "原因（lowercase）"
+        },
+        {
+          "name": "tier",
+          "type": "ContextCompressionPolicyTier",
+          "required": true,
+          "description": "策略层级"
+        },
+        {
+          "name": "action",
+          "type": "ContextCompressionPolicyAction",
+          "required": true,
+          "description": "策略动作"
+        },
+        {
+          "name": "providerRetry",
+          "type": "boolean",
+          "required": true,
+          "description": "是否 provider 重试"
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "required": true,
+          "description": "摘要"
+        },
+        {
+          "name": "compressedMessageCount",
+          "type": "number",
+          "required": true,
+          "description": "压缩消息数"
+        },
+        {
+          "name": "keptMessageCount",
+          "type": "number",
+          "required": true,
+          "description": "保留消息数"
+        },
+        {
+          "name": "tokensBefore",
+          "type": "number",
+          "required": true,
+          "description": "压缩前 token 数"
+        },
+        {
+          "name": "tokensAfter",
+          "type": "number",
+          "required": true,
+          "description": "压缩后 token 数"
+        },
+        {
+          "name": "thresholdTokens",
+          "type": "number",
+          "required": true,
+          "description": "阈值 token 数"
+        },
+        {
+          "name": "firstKeptMessageId",
+          "type": "string",
+          "required": false,
+          "description": "首个保留消息 id"
+        },
+        {
+          "name": "lastMessageId",
+          "type": "string",
+          "required": false,
+          "description": "最后消息 id"
+        },
+        {
+          "name": "lastUserMessageId",
+          "type": "string",
+          "required": false,
+          "description": "最后用户消息 id"
+        },
+        {
+          "name": "completedTaskSummaries",
+          "type": "string[]",
+          "required": true,
+          "description": "已完成任务摘要"
+        },
+        {
+          "name": "pendingTasks",
+          "type": "string[]",
+          "required": true,
+          "description": "待办任务"
+        },
+        {
+          "name": "sessionEvents",
+          "type": "string[]",
+          "required": true,
+          "description": "会话事件"
+        },
+        {
+          "name": "fileSnapshotHints",
+          "type": "string[]",
+          "required": true,
+          "description": "文件快照提示"
+        },
+        {
+          "name": "recentSuccessfulCommands",
+          "type": "string[]",
+          "required": true,
+          "description": "最近成功命令"
+        },
+        {
+          "name": "recentFailedDiagnostics",
+          "type": "string[]",
+          "required": true,
+          "description": "最近失败诊断"
+        }
+      ]
+    },
+    "ContextCompressionCacheBoundaryMetadata": {
+      "kind": "struct",
+      "description": "压缩缓存边界元数据",
+      "fields": [
+        {
+          "name": "kind",
+          "type": "string",
+          "required": true,
+          "description": "恒定字面量 context-compression-cache-boundary"
+        },
+        {
+          "name": "version",
+          "type": "number",
+          "required": true,
+          "description": "恒定版本 1"
+        },
+        {
+          "name": "stablePrefixHash",
+          "type": "string",
+          "required": true,
+          "description": "稳定前缀哈希"
+        },
+        {
+          "name": "cacheKey",
+          "type": "string",
+          "required": true,
+          "description": "缓存键"
+        },
+        {
+          "name": "structuredSummaryCacheKey",
+          "type": "string",
+          "required": true,
+          "description": "结构化摘要缓存键"
+        },
+        {
+          "name": "structuredSummaryStableHash",
+          "type": "string",
+          "required": true,
+          "description": "结构化摘要稳定哈希"
+        },
+        {
+          "name": "invalidates",
+          "type": "CompressionCacheInvalidation[]",
+          "required": true,
+          "description": "失效目标（kebab-case）"
+        },
+        {
+          "name": "invalidationReason",
+          "type": "ContextCompressionReason",
+          "required": true,
+          "description": "失效原因"
+        },
+        {
+          "name": "compressedMessageIds",
+          "type": "string[]",
+          "required": true,
+          "description": "压缩消息 id 列表"
+        },
+        {
+          "name": "keptMessageIds",
+          "type": "string[]",
+          "required": true,
+          "description": "保留消息 id 列表"
+        },
+        {
+          "name": "firstKeptMessageId",
+          "type": "string",
+          "required": false,
+          "description": "首个保留消息 id"
+        }
+      ]
+    },
+    "ContextCompressionRecord": {
+      "kind": "struct",
+      "description": "上下文压缩记录（context-compression-end.result 载荷）",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "description": "记录 id"
+        },
+        {
+          "name": "trigger",
+          "type": "ContextCompressionTrigger",
+          "required": true,
+          "description": "触发点（lowercase）"
+        },
+        {
+          "name": "reason",
+          "type": "ContextCompressionReason",
+          "required": false,
+          "description": "原因（可选）"
+        },
+        {
+          "name": "policy",
+          "type": "ContextCompressionPolicyMetadata",
+          "required": false,
+          "description": "策略元数据（可选）"
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "required": true,
+          "description": "摘要"
+        },
+        {
+          "name": "firstKeptMessageId",
+          "type": "string",
+          "required": false,
+          "description": "首个保留消息 id"
+        },
+        {
+          "name": "compressedMessageIds",
+          "type": "string[]",
+          "required": true,
+          "description": "压缩消息 id 列表"
+        },
+        {
+          "name": "keptMessageIds",
+          "type": "string[]",
+          "required": true,
+          "description": "保留消息 id 列表"
+        },
+        {
+          "name": "tokensBefore",
+          "type": "number",
+          "required": true,
+          "description": "压缩前 token 数"
+        },
+        {
+          "name": "tokensAfter",
+          "type": "number",
+          "required": true,
+          "description": "压缩后 token 数"
+        },
+        {
+          "name": "thresholdTokens",
+          "type": "number",
+          "required": false,
+          "description": "阈值 token 数（可选）"
+        },
+        {
+          "name": "createdAt",
+          "type": "string",
+          "required": true,
+          "description": "ISO8601 时间戳"
+        },
+        {
+          "name": "handoff",
+          "type": "ContextCompressionHandoffMetadata",
+          "required": false,
+          "description": "交接元数据（可选）"
+        },
+        {
+          "name": "cacheBoundary",
+          "type": "ContextCompressionCacheBoundaryMetadata",
+          "required": false,
+          "description": "缓存边界元数据（可选）"
+        },
+        {
+          "name": "details",
+          "type": "JsonValue",
+          "required": false,
+          "description": "详细载荷（可选）"
+        }
+      ]
+    },
+    "RunCacheStats": {
+      "kind": "struct",
+      "description": "run 级缓存统计（cache-stats-updated.stats 载荷；T-36 tracker.finish() 产出）",
+      "fields": [
+        {
+          "name": "promptTokens",
+          "type": "number",
+          "required": true,
+          "description": "输入 token"
+        },
+        {
+          "name": "completionTokens",
+          "type": "number",
+          "required": true,
+          "description": "输出 token"
+        },
+        {
+          "name": "totalTokens",
+          "type": "number",
+          "required": true,
+          "description": "总 token"
+        },
+        {
+          "name": "cacheReadTokens",
+          "type": "number",
+          "required": true,
+          "description": "缓存命中读取 token"
+        },
+        {
+          "name": "cacheWriteTokens",
+          "type": "number",
+          "required": true,
+          "description": "缓存写入 token"
+        },
+        {
+          "name": "cacheMissTokens",
+          "type": "number",
+          "required": true,
+          "description": "未命中输入 token"
+        },
+        {
+          "name": "sampleCount",
+          "type": "number",
+          "required": true,
+          "description": "有真实 usage 的 turn 数"
+        },
+        {
+          "name": "hitRatio",
+          "type": "number",
+          "required": false,
+          "description": "命中率（read/input_total；无样本时省略）"
+        },
+        {
+          "name": "writeRatio",
+          "type": "number",
+          "required": false,
+          "description": "写入占比（write/input_total）"
+        },
+        {
+          "name": "missedTokens",
+          "type": "number",
+          "required": true,
+          "description": "审计出的浪费量"
+        },
+        {
+          "name": "warmUntilMs",
+          "type": "number",
+          "required": false,
+          "description": "缓存温暖截止（epoch ms；无 TTL 数据时省略）"
+        }
+      ]
+    },
+    "ImpactAssessment": {
+      "kind": "struct",
+      "description": "操作影响面评估（security-audit.impact 载荷；删除/回退执行前预检产出）",
+      "fields": [
+        {
+          "name": "fileCount",
+          "type": "number",
+          "required": true,
+          "description": "目标文件数"
+        },
+        {
+          "name": "totalSizeBytes",
+          "type": "number",
+          "required": true,
+          "description": "总大小（字节）"
+        },
+        {
+          "name": "directoryCount",
+          "type": "number",
+          "required": true,
+          "description": "目录目标数"
+        },
+        {
+          "name": "crossDirectory",
+          "type": "boolean",
+          "required": true,
+          "description": "文件目标是否跨多个父目录"
+        },
+        {
+          "name": "flagged",
+          "type": "boolean",
+          "required": true,
+          "description": "谨慎标记（fileCount > 20）"
+        }
+      ]
+    },
+    "SubagentEventPayload": {
+      "kind": "struct",
+      "description": "子代理事件结构化负载（subagent-event.event 载荷；前端整体透传）",
+      "fields": [
+        {
+          "name": "kind",
+          "type": "SubagentEventKind",
+          "required": true,
+          "description": "事件类别（progress/message/tool）"
+        },
+        {
+          "name": "payload",
+          "type": "JsonValue",
+          "required": false,
+          "description": "类别负载"
+        }
+      ]
+    }
+  },
+  "enums": {
+    "AgentMessageRole": {
+      "wire": "lowercase",
+      "description": "消息角色",
+      "values": [
+        "system",
+        "user",
+        "assistant",
+        "tool"
+      ]
+    },
+    "AgentEndReason": {
+      "wire": "kebab-case",
+      "description": "run 结束原因",
+      "values": [
+        "stop",
+        "max-turns",
+        "aborted",
+        "error",
+        "stopped"
+      ]
+    },
+    "RunTerminalStatus": {
+      "wire": "lowercase",
+      "description": "run 终态",
+      "values": [
+        "completed",
+        "cancelled",
+        "failed"
+      ]
+    },
+    "ApprovalDecision": {
+      "wire": "lowercase",
+      "description": "审批决策（Rust 只发规范值）",
+      "values": [
+        "approved",
+        "denied",
+        "expired"
+      ]
+    },
+    "ToolCategory": {
+      "wire": "kebab-case",
+      "description": "工具类别",
+      "values": [
+        "terminal",
+        "filesystem",
+        "network",
+        "mcp",
+        "skill",
+        "agent",
+        "internal"
+      ]
+    },
+    "ToolConcurrency": {
+      "wire": "lowercase",
+      "description": "工具并发模式",
+      "values": [
+        "parallel",
+        "sequential",
+        "exclusive"
+      ]
+    },
+    "ToolArtifactKind": {
+      "wire": "lowercase",
+      "description": "工具输出产物类别",
+      "values": [
+        "file",
+        "diff",
+        "image",
+        "link",
+        "log"
+      ]
+    },
+    "ProviderDiagnosticPhase": {
+      "wire": "kebab-case",
+      "description": "provider 诊断阶段",
+      "values": [
+        "request-start",
+        "response-start",
+        "sse-first-byte",
+        "retry",
+        "request-error",
+        "stream-end",
+        "endpoint-fallback",
+        "transport-fallback",
+        "model-selected",
+        "model-mismatch",
+        "invalid-tool-call"
+      ]
+    },
+    "SystemPromptWireMode": {
+      "wire": "kebab-case",
+      "description": "system 提示词接线方式",
+      "values": [
+        "native-system-role",
+        "user-prefix"
+      ]
+    },
+    "ProviderErrorKind": {
+      "wire": "kebab-case",
+      "description": "provider 错误分类",
+      "values": [
+        "aborted",
+        "payload-too-large",
+        "gateway-challenge",
+        "auth",
+        "quota",
+        "endpoint-unavailable",
+        "context-length-exceeded",
+        "invalid-request",
+        "rate-limit",
+        "server-error",
+        "timeout",
+        "network",
+        "unknown"
+      ]
+    },
+    "RuntimeCheckpointKind": {
+      "wire": "kebab-case",
+      "description": "检查点类别",
+      "values": [
+        "workspace-checkpoint",
+        "git-checkpoint",
+        "file-snapshot"
+      ]
+    },
+    "ContextCompressionTrigger": {
+      "wire": "lowercase",
+      "description": "上下文压缩触发点",
+      "values": [
+        "auto",
+        "preflight",
+        "manual",
+        "threshold",
+        "overflow",
+        "idle",
+        "incomplete",
+        "handoff"
+      ]
+    },
+    "ContextCompressionReason": {
+      "wire": "lowercase",
+      "description": "上下文压缩原因",
+      "values": [
+        "manual",
+        "threshold",
+        "overflow",
+        "idle",
+        "incomplete",
+        "handoff"
+      ]
+    },
+    "ContextCompressionPolicyTier": {
+      "wire": "lowercase",
+      "description": "压缩策略层级",
+      "values": [
+        "manual",
+        "proactive",
+        "recovery",
+        "background",
+        "handoff"
+      ]
+    },
+    "ContextCompressionPolicyAction": {
+      "wire": "kebab-case",
+      "description": "压缩策略动作",
+      "values": [
+        "compact",
+        "promote-handoff"
+      ]
+    },
+    "CompressionCacheInvalidation": {
+      "wire": "kebab-case",
+      "description": "缓存失效目标",
+      "values": [
+        "prompt-stable-prefix",
+        "message-history",
+        "usage-baseline",
+        "volatile-context"
+      ]
+    },
+    "MissAttribution": {
+      "wire": "kebab-case",
+      "description": "缓存 miss 归因分类（jcode 10 类收缩为 8 类）",
+      "values": [
+        "model-switch",
+        "compaction",
+        "prefix-changed",
+        "idle-ttl-expired",
+        "cold",
+        "zero-read",
+        "low-read",
+        "unknown"
+      ]
+    },
+    "SecurityAuditOperation": {
+      "wire": "kebab-case",
+      "description": "审计操作类别（I2-S8 安全审计域；T-ESC-02 增 undeclared-write——脚本逃逸监视判定的工具外写入）",
+      "values": [
+        "delete",
+        "trash-restore",
+        "trash-purge",
+        "git-revert",
+        "command-exec",
+        "undeclared-write"
+      ]
+    },
+    "SecurityAuditDecision": {
+      "wire": "lowercase",
+      "description": "审计处置决策（I2-S8 安全审计域；blocked/approved/denied/redirected + 恢复动作 restored/purged）",
+      "values": [
+        "blocked",
+        "approved",
+        "denied",
+        "redirected",
+        "restored",
+        "purged"
+      ]
+    },
+    "SubagentEventKind": {
+      "wire": "kebab-case",
+      "description": "子代理事件类别（I5-M7 subagent 域；progress 可丢、message/tool 尽力）",
+      "values": [
+        "progress",
+        "message",
+        "tool"
+      ]
+    },
+    "SubagentEndStatus": {
+      "wire": "lowercase",
+      "description": "子代理终态（I5-M7 subagent 域；completed/failed/cancelled——cancelled 前端映射 stopped 展示）",
+      "values": [
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    }
+  }
+}

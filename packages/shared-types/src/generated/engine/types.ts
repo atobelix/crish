@@ -59,7 +59,7 @@ export type CompressionCacheInvalidation = (typeof COMPRESSION_CACHE_INVALIDATIO
 export const MISS_ATTRIBUTION_VALUES = ["model-switch","compaction","prefix-changed","idle-ttl-expired","cold","zero-read","low-read","unknown"] as const;
 export type MissAttribution = (typeof MISS_ATTRIBUTION_VALUES)[number];
 
-export const SECURITY_AUDIT_OPERATION_VALUES = ["delete","trash-restore","trash-purge","git-revert","command-exec"] as const;
+export const SECURITY_AUDIT_OPERATION_VALUES = ["delete","trash-restore","trash-purge","git-revert","command-exec","undeclared-write"] as const;
 export type SecurityAuditOperation = (typeof SECURITY_AUDIT_OPERATION_VALUES)[number];
 
 export const SECURITY_AUDIT_DECISION_VALUES = ["blocked","approved","denied","redirected","restored","purged"] as const;

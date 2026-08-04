@@ -3,9 +3,12 @@
 //! - `path_utils`：路径安全（safe_canonicalize / compute_file_hash / ensure_parent_dir）
 //! - `trash`：回收站服务（删除接管统一接口，I2-S3）
 //! - `impact`：删除影响面评估（I2-S8：文件数 / 大小 / 跨目录预检）
+//! - `watch`：工作区文件监视（T-ESC-01：脚本逃逸追踪数据面——notify 8 封装
+//!   事件流 + Rename 聚合 + 排除清单，供 session-loop 判定面消费）
 
 pub mod impact;
 pub mod trash;
+pub mod watch;
 
 pub mod path_utils {
     use anyhow::{bail, Result};

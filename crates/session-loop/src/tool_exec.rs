@@ -684,6 +684,10 @@ impl ToolExecutor {
             write_claim_holder: None,
             // I6-M11 C5：探索类文档配额未接线（None = 不检查）
             explore_docs_quota: None,
+            // 后台任务管理器/日志落盘根未接线（A1 域新字段占位：None =
+            // 无后台任务能力、截断不落盘；真实接线由引擎装配面注入）
+            background: None,
+            log_root: None,
         };
         // ── 中间件链 + 插件钩子（审批已通过，进入执行面；优先级语义
         //    见模块头注：审批优先于中间件，中间件 Block 不绕过审批）──

@@ -50,6 +50,7 @@ pub mod stream;
 pub mod testing;
 pub mod tool_events;
 pub mod tool_exec;
+pub mod undeclared_detector;
 
 pub use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
 pub use approval::ApprovalChannel;
@@ -89,3 +90,4 @@ pub use tool_events::{
     ToolErrorKind, ToolEvent,
 };
 pub use tool_exec::{ToolExecCtx, ToolExecutor, ToolBatchOutcome};
+pub use undeclared_detector::{RegistryBackedDetector, UndeclaredWriteDetector};
