@@ -31,6 +31,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use agent_provider::request::build_system_prompt;
+use agent_tools::audit::{AuditSink, SecurityAuditSink};
 use conex_db::LocalDb;
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision as WireApprovalDecision, PermissionRequest,
@@ -48,8 +49,9 @@ use session_loop::hydrate::hydrate_history;
 use session_loop::tool_events::ApprovalDecision;
 use tauri::Manager as _;
 use session_loop::{
-    AbortSignal, ApprovalGate, ControlBus, DeltaSink, PermissionMode, RunOutcome, SessionLoopOptions,
-    ToolBatchOptions,
+    AbortSignal, ApprovalGate, ControlBus, DeltaSink, EscapeWatchConfig, EscapeWatchHandle,
+    EscapeWatchInjector, PermissionMode, RunOutcome, SessionLoopOptions, ToolBatchOptions,
+    spawn_escape_watch,
 };
 
 use crate::core_error::CoreError;
@@ -287,6 +289,9 @@ pub(crate) struct ActiveRun {
     bridge: Arc<BufferedRunEventBridge>,
     /// 实时 delta 是否激活（T09.1：激活时收口 message-delta 跳过不双发）
     delta_sink_active: bool,
+    /// 逃逸监视句柄（T-ESC-03：run 起停钩子；None = 未启用。Mutex 包装：
+    /// drive / finalize 路径经锁 take 出句柄后 async 收口，锁不跨 await）
+    escape_watch: Mutex<Option<EscapeWatchHandle>>,
 }
 
 /// 活动 run 的引擎取消接口（[orchestrator::run::RunEngine] 实现：
@@ -314,6 +319,60 @@ impl RunEngine for ActiveRunEngine {
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         bus.request_force_cancel(Some(reason.to_string()), Some("ui".to_string()));
+    }
+}
+
+/// 逃逸监视审计 sink（T-ESC-03 壳层适配）：security-audit 事件经本 run
+/// 缓冲事件桥实时广播（信封 sequence=None 实时预览，前端审计面板实时
+/// 可见；与审批门 broadcast 同构）。落库（append_event）留 F12 端到端
+/// 验收登记（REQ-逃逸追踪分析 §3.3 发射点 1）。
+#[derive(Debug)]
+struct BridgeAuditSink {
+    /// 本 run 缓冲事件桥
+    bridge: Arc<BufferedRunEventBridge>,
+    /// run 标识（信封注入）
+    run_id: String,
+}
+
+impl BridgeAuditSink {
+    /// 新建桥接审计 sink（run 级实例）
+    fn new(bridge: Arc<BufferedRunEventBridge>, run_id: String) -> Self {
+        Self { bridge, run_id }
+    }
+}
+
+impl SecurityAuditSink for BridgeAuditSink {
+    fn emit(&self, event: &AgentEvent) {
+        let envelope = AgentEventEnvelope::new(event.clone(), Some(self.run_id.clone()), None);
+        self.bridge.emit(&envelope);
+        self.bridge.flush();
+    }
+}
+
+/// 逃逸监视主 agent 注入器（T-ESC-03 壳层适配）：归因摘要经 L1
+/// followUp 环注入会话（D8：run 内不注入，run idle promote 后成为
+/// 下一条用户消息——主 agent 下一轮即可看到，REQ §3.3 第 3 点；
+/// 注入频率限流由聚合报告粒度承担）
+struct ControlBusInjector {
+    /// 本 run 控制总线（std Mutex，锁不跨 await 持有）
+    bus: Arc<Mutex<ControlBus>>,
+}
+
+impl ControlBusInjector {
+    /// 新建注入器（总线与 run 同生命周期）
+    fn new(bus: Arc<Mutex<ControlBus>>) -> Self {
+        Self { bus }
+    }
+}
+
+impl EscapeWatchInjector for ControlBusInjector {
+    fn inject(&self, text: &str) {
+        let mut bus = self.bus.lock().unwrap_or_else(|e| e.into_inner());
+        bus.request_follow_up(
+            crate::engine::user_message(text, None),
+            Some("escape-watch".to_string()),
+            Some("system".to_string()),
+        );
     }
 }
 
@@ -379,6 +438,7 @@ impl SessionHistoryCache {
     /// 1. 条数上限：保留最近 `max_messages` 条（截掉最旧）；
     /// 2. 安全前缀：逐条前移直到首条为 user（不保留孤儿 tool/system
     ///    首条与带未配对 ToolCall 的 assistant 首条——wire 400 风险）。
+    ///
     /// 会话数超限：FIFO 淘汰最久未更新的会话。
     pub(crate) fn store(&self, session_id: &str, mut messages: Vec<HistoryMessage>) {
         if messages.len() > self.max_messages {
@@ -746,11 +806,12 @@ impl CoreRunState {
         snapshots: Arc<dyn SnapshotStore>,
         bridge: EventBridge,
         diagnostics: Arc<StatusDiagnostics>,
+        background_manager: Option<Arc<dyn agent_tools::background::BackgroundTaskManager>>,
     ) -> Self {
         Self {
             store: Arc::clone(&store),
             run_manager: RunManager::new(store),
-            engine: EngineHandle::new(),
+            engine: EngineHandle::new(background_manager),
             bridge,
             active_runs: Mutex::new(HashMap::new()),
             diagnostics,
@@ -1177,6 +1238,16 @@ async fn drive_run_loop(
                 error = %error,
                 "drive_outcome 失败（防御性收口）"
             );
+            // T-ESC-03：失败收口同样停止监视 + flush 剩余事件
+            // （run 中崩溃不泄漏监视任务，REQ §5.4 风险缓解）
+            let escape_handle = active
+                .escape_watch
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
+            if let Some(mut handle) = escape_handle {
+                handle.shutdown().await;
+            }
             finalize_failed(&state, &active, &error.to_string()).await;
             return;
         }
@@ -1214,6 +1285,17 @@ async fn drive_run_loop(
         dropped = report.dropped,
         "事件发射完成（缓冲桥）"
     );
+
+    // T-ESC-03 run 收口钩子：停止监视 + flush 剩余事件（聚合补发最后
+    // 一条报告——审计经桥广播，注入经 followUp 环落会话，REQ §3.5.1）
+    let escape_handle = active
+        .escape_watch
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
+    if let Some(mut handle) = escape_handle {
+        handle.shutdown().await;
+    }
 
     // 4-5. 终态：移出注册表 + 快照（T08.6 触发点 A；cursor 已由
     //      drive_outcome 维护并在 finalize 落库）
@@ -1288,6 +1370,17 @@ async fn write_back_cache_stats(
 /// - 终态事件尽力发出（run-terminal 唯一终态，03 §5.2-2）；
 /// - lastError 写入（T04.5-1：finalize_failed 写入点）。
 async fn finalize_failed(state: &Arc<CoreRunState>, active: &ActiveRun, message: &str) {
+    // T-ESC-03：失败收口兜底停止监视 + flush（drive 错误分支已收口
+    // 时此处幂等跳过——句柄经 take 已取出）
+    let escape_handle = active
+        .escape_watch
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
+    if let Some(mut handle) = escape_handle {
+        handle.shutdown().await;
+    }
+
     let session_id = active.session_id.clone();
     let run_id = active.run_id.clone();
     let mut run = active.handle.lock().await;
@@ -1372,25 +1465,41 @@ fn active_run(state: &CoreRunState, run_id: &str) -> Result<Arc<ActiveRun>, Core
 /// 接线前由前端下发；T-33 预算钳制消费）。混合路线（P4 §3.2.3）：
 /// 前端 history 为空/未传时回退引擎侧 SessionHistoryCache（缓存主，
 /// run 收口写入的权威增量）；两者皆空 = 现状单消息 run（向后兼容）。
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunTaskOptions {
+    pub run_id: String,
+    pub session_id: String,
+    pub prompt: Option<String>,
+    pub mode: Option<String>,
+    pub cwd: Option<String>,
+    pub permission_mode: Option<String>,
+    pub client_message_id: Option<String>,
+    pub assistant_client_message_id: Option<String>,
+    pub system_prompt: Option<String>,
+    pub history: Option<Vec<HistoryMessage>>,
+    pub context_window: Option<u32>,
+}
+
 #[tauri::command]
 pub(crate) async fn core_run_task(
     state: tauri::State<'_, Arc<CoreRunState>>,
-    run_id: String,
-    session_id: String,
-    prompt: Option<String>,
-    mode: Option<String>,
-    cwd: Option<String>,
-    permission_mode: Option<String>,
-    client_message_id: Option<String>,
-    assistant_client_message_id: Option<String>,
-    system_prompt: Option<String>,
-    history: Option<Vec<HistoryMessage>>,
-    context_window: Option<u32>,
+    options: RunTaskOptions,
 ) -> Result<RunTaskResponse, CoreError> {
     let state = Arc::clone(state.inner());
     // 参数校验（S-15：trim + 显式 InvalidInput）
-    let run_id = run_id.trim().to_string();
-    let session_id = session_id.trim().to_string();
+    let run_id = options.run_id.trim().to_string();
+    let session_id = options.session_id.trim().to_string();
+    let prompt = options.prompt;
+    let mode = options.mode;
+    let cwd = options.cwd;
+    let permission_mode = options.permission_mode;
+    let client_message_id = options.client_message_id;
+    let assistant_client_message_id = options.assistant_client_message_id;
+    let system_prompt = options.system_prompt;
+    let history = options.history;
+    let context_window = options.context_window;
+
     if run_id.is_empty() || session_id.is_empty() {
         return Err(CoreError::invalid_input("runId / sessionId 不能为空"));
     }
@@ -1493,11 +1602,56 @@ pub(crate) async fn core_run_task(
     // 循环选项（cwd / assistant clientMessageId / 幂等；21-log §5.2 回补）
     // P1 B1：systemPrompt 入站规范化一次（trim + 空值 → None），全链透传原始
     // P4 T-30：context_budget 装配进 options（预算钳制 + 预检压缩消费入口）
+
+    // ── T-ESC-03 P3 装配面：逃逸监视启动钩子（run 开始）──────────
+    // 监视根 = cwd（工作目录，run 驱动的工作区根）；watcher.start →
+    // 消费任务 spawn（聚合 → 审计发射 + 主 agent 注入，REQ §3.5.1），
+    // 句柄绑定 ActiveRun 随 run 收口（shutdown = stop + flush 剩余）。
+    // 监视启动失败仅告警不阻断 run（监视是追踪面，REQ §3.6 不阻断）；
+    // 判定器本轮未接线（write_claims 总接线点在 F7 T-EG-06，届时须
+    // 同时经 EscapeWatchConfig::with_detector 注入
+    // RegistryBackedDetector）——当前仅依赖监视事件直接发射（「工具
+    // 审计覆盖」第二来源兜底，REQ §3.1:349-356）。
+    let control_bus = Arc::new(Mutex::new(ControlBus::new()));
+    let (escape_watch, escape_config) = if let Some(dir) = cwd.clone() {
+        let root = PathBuf::from(dir);
+        let config = EscapeWatchConfig::new(
+            root.clone(),
+            session_id.clone(),
+            run_id.clone(),
+            Arc::new(BridgeAuditSink::new(Arc::clone(&bridge), run_id.clone())) as AuditSink,
+        )
+        .with_injector(Arc::new(ControlBusInjector::new(Arc::clone(&control_bus))));
+        match spawn_escape_watch(root, config.clone()) {
+            Ok(handle) => {
+                tracing::info!(
+                    target: "run",
+                    run_id = %run_id,
+                    "逃逸监视已启动（T-ESC-03）"
+                );
+                (Some(handle), Some(config))
+            }
+            Err(error) => {
+                tracing::warn!(
+                    target: "run",
+                    run_id = %run_id,
+                    error = %error,
+                    "逃逸监视启动失败（仅告警，run 继续）"
+                );
+                (None, None)
+            }
+        }
+    } else {
+        (None, None)
+    };
+
     let options = SessionLoopOptions {
         cwd: cwd.clone(),
         assistant_client_message_id: assistant_client_message_id.clone(),
         system_prompt: build_system_prompt(system_prompt),
         context_budget,
+        // T-ESC-03：逃逸监视配置透传（装配上下文，LoopState 不消费）
+        escape_watch: escape_config,
         ..SessionLoopOptions::default()
     };
     let tool_options = ToolBatchOptions {
@@ -1564,11 +1718,12 @@ pub(crate) async fn core_run_task(
         run_id: run_id.clone(),
         handle: handle_shared,
         queue,
-        control_bus: Arc::new(Mutex::new(ControlBus::new())),
+        control_bus: Arc::clone(&control_bus),
         abort_signal: AbortSignal::new(),
         approval: approval_gate,
         bridge,
         delta_sink_active: true,
+        escape_watch: Mutex::new(escape_watch),
     });
     state
         .active_runs
@@ -1828,6 +1983,7 @@ const DEFAULT_TRASH_DIR_NAME: &str = ".crish-trash";
 /// 解析回收站根：
 /// 1. 托管状态注入优先（main.rs 配置注入点，数据目录或显式根）；
 /// 2. 未注入 → 活动工作区 `.crish-trash`（S3 执行期兜底语义）；
+///
 /// 工作区注册表不可用 → 结构化错误（不静默退化）。
 /// pub(crate)：供 fs_commands/delete.rs（UI 删除命令）复用，保证
 /// UI 删除与 AI 删除落入同一回收站根（S11 G2 删除接管收敛）。
@@ -2428,6 +2584,7 @@ mod tests {
             snapshots,
             bridge,
             Arc::new(StatusDiagnostics::new()),
+            None,
         ))
     }
 
