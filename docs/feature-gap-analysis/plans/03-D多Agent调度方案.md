@@ -31,10 +31,10 @@
 | 需求 | 判定 | 一句话结论 | 本方案动作 |
 | :--- | :---: | :--- | :--- |
 | REQ-D01 动态派发 | 🟡 部分 | 单发完整；Role 固定 5 枚举、无批量派发、上限 6 < 约定 12 | T-D-05（标签）、T-D-06（批量 + 上限） |
-| REQ-D02 工作区隔离 | ❌ 缺 | 仅写路径互斥 + 只读裁剪；隔离模式恒 `none` | T-D-11（评估，待定夺） |
-| REQ-D03 默认当前模型 | 🟡 部分 | 继承天然满足；多模型模式全缺 | T-D-10（待定夺） |
-| REQ-D04 自定义 Agent 类型 | 🟡 部分 | 骨架已有；缺 task_type 等 7 项、无路径硬沙箱 | T-D-07、T-D-08 |
-| REQ-D05 DAG 调度 | ✅ 已实现 | flow_graph 完整（超规格） | 保留不动；可视化 T-D-12（待定夺） |
+| REQ-D02 工作区隔离 | ❌ 缺 | 仅写路径互斥 + 只读裁剪；隔离模式恒 `none` | T-D-11（已决策：暂缓，保持中间态） |
+| REQ-D03 默认当前模型 | 🟡 部分 | 继承天然满足；多模型模式全缺 | T-D-10（已决策：不做，仅预留 model_override 扩展点） |
+| REQ-D04 自定义 Agent 类型 | 🟡 部分 | 骨架已有；缺 task_type 等 7 项、无路径硬沙箱 | T-D-07、T-D-08（参数收敛为五项）、T-D-14（权限传递层） |
+| REQ-D05 DAG 调度 | ✅ 已实现 | flow_graph 完整（超规格） | 保留不动；可视化 T-D-12（已决策：做，F11b） |
 | REQ-D06 全局事件总线 | 🟡 部分 | 基础设施远超需求；无 topic Pub/Sub；与"纯内存"冲突 | T-D-04（需求修订） |
 | REQ-D07 事件驱动唤醒 | ✅ 已实现 | 三模式等待 + 批量推送 + L1 注入 | 无动作 |
 | REQ-D08 生命周期管理 | 🟡 部分 | list/kill/resume 已实现；kill_all 缺；maxDepth=3 与裁决冲突 | T-D-01/T-D-02（嵌套）、T-D-09（kill_all/resume） |
@@ -70,13 +70,15 @@
 | 8 | SubagentDefinition 缺 7 项参数 | `subagent.ts:45-62` 骨架 | T-D-07（定义扩展） |
 | 9 | 无 task_type 默认权限映射 | 需求 4.2 表（`REQ-agent-engine-capabilities.md:482-491`） | T-D-07（default_permissions 纯函数） |
 | 10 | 无 allowed_write_paths Rust 侧硬沙箱 | `write_paths.rs:289-296` 只做合法性 + 互斥，不做越权拒绝 | T-D-08（check_write_allowance） |
-| 11 | 无 enable_command_tools / enable_mcp_tools 独立开关 | `readonly.rs:19-48` 只有整组裁剪 | T-D-08（filter_registry 通用化） |
+| 11 | 无 enable_command_tools / enable_mcp_tools 独立开关 | `readonly.rs:19-48` 只有整组裁剪 | 参数收敛消解：开关不落地，命令策略按 task_type 默认集下沉（T-D-08 filter_registry 通用化）、MCP 默认继承父 |
 | 12 | kill_all 无入口 | 引擎侧无批量终止 API（现状分析 §8.4-2） | T-D-09 |
 | 13 | resume 无显式命令 | fork 三态已实现（`recovery.rs:382-457`），无命令面 | T-D-09（resume_subagent） |
 | 14 | 引擎侧 SubagentSpawner 未接线 | grep 全仓仅测试域实现（现状分析 §1.2-6） | T-D-13（引擎接线） |
-| 15 | 多模型模式全缺 | `config/provider.rs:229-249` 全局单例 | T-D-10（待定夺） |
-| 16 | share/branch 隔离缺 | `subagent.ts:19-20` 恒 `none` | T-D-11（待定夺） |
-| 17 | DAG 可视化缺 | `FlowNodeState` 可查（`flow_graph.rs:357-369`） | T-D-12（待定夺） |
+| 15 | 多模型模式全缺 | `config/provider.rs:229-249` 全局单例 | T-D-10（已决策：不做，仅预留 model_override 扩展点随 T-D-07 落地） |
+| 16 | share/branch 隔离缺 | `subagent.ts:19-20` 恒 `none` | T-D-11（已决策：暂缓） |
+| 17 | DAG 可视化缺 | `FlowNodeState` 可查（`flow_graph.rs:357-369`） | T-D-12（已决策：做，F11b） |
+| 18 | 子代理审批无主 agent 裁决路径 | `permission.rs:133-134` 审批人恒为 UI 用户，载荷无请求方字段（`events.rs:184-201`） | T-D-14（权限传递层，用户定夺核心新设计） |
+| 19 | REQ-D04 九参数过细 | `REQ-agent-engine-capabilities.md:466-478` 逐项开关冗余 | 收敛为五项（T-D-07/08 修订） |
 
 ### 1.4 明确保留/不动的面（非放弃既有功能）
 
@@ -97,7 +99,7 @@
 
 ### 2.1 任务编号与归属
 
-本方案共 **13 个任务卡**（T-D-01 ~ T-D-13），其中 3 个为**待用户定夺项**（T-D-10/T-D-11/T-D-12，不默认排入轮次，设计完整、标注成本，最终由用户决定）：
+本方案共 **14 个任务卡**（T-D-01 ~ T-D-14），其中 T-D-10/T-D-11/T-D-12 已由用户定夺（不做/暂缓/做），T-D-14 为用户定夺的**权限传递层**新设计（并入 R-D2）：
 
 | 任务 | 名称 | 所属需求 | 轮次 | 文件域（独占） |
 | :--- | :--- | :--- | :--- | :--- |
@@ -107,13 +109,14 @@
 | T-D-04 | REQ-D06 事件持久化需求修订 | REQ-D06 裁决 | R-D1 | `docs/feature-gap-analysis/`（纯文档） |
 | T-D-05 | REQ-D01 补缺·Role 自由标签（display_label） | REQ-D01 | R-D2 | 与 T-D-07 合并分配（共享 subagent.rs） |
 | T-D-06 | REQ-D01 补缺·批量派发 + 上限 12 对齐 | REQ-D01 | R-D3 | `agent-tools/subagent.rs`、`shared-types/subagent.ts` |
-| T-D-07 | REQ-D04 自定义 Agent 类型（定义 + 权限映射 + 注册表） | REQ-D04 | R-D2 | `agent-tools/subagent.rs`、`shared-types/subagent.ts`、`conex-db/schema.rs` + 迁移、`AgentTeamBoard.tsx` |
-| T-D-08 | REQ-D04 硬沙箱（allowed_write_paths 拦截 + 工具开关） | REQ-D04 | R-D2 | `agent-tools/write_paths.rs`、`fs.rs`、`readonly.rs`、`mod.rs` |
+| T-D-07 | REQ-D04 自定义 Agent 类型（定义 + 默认权限集 + 注册表；九参数收敛为五项） | REQ-D04 | R-D2 | `agent-tools/subagent.rs`、`shared-types/subagent.ts`、`conex-db/schema.rs` + 迁移、`AgentTeamBoard.tsx` |
+| T-D-08 | REQ-D04 硬沙箱（allowed_write_paths 拦截 + 命令白名单按 task_type 下沉） | REQ-D04 | R-D2 | `agent-tools/write_paths.rs`、`fs.rs`、`readonly.rs`、`mod.rs` |
 | T-D-09 | REQ-D08 生命周期补缺（kill_all + resume_subagent） | REQ-D08 | R-D3 | `orchestrator/`、`session-loop/control.rs`、`conex-db/agents.rs` |
-| T-D-10 | REQ-D03 多模型模式 | REQ-D03 | 待定夺 | （设计 + 成本，不排入） |
-| T-D-11 | REQ-D02 share/branch 工作区隔离 | REQ-D02 | 待定夺 | （设计 + 成本，不排入） |
-| T-D-12 | REQ-D05 DAG 可视化（Mermaid） | REQ-D05 | 待定夺 | （设计 + 成本，不排入） |
+| T-D-10 | REQ-D03 多模型模式（**已决策：不做**，仅预留 model_override 扩展点） | REQ-D03 | 字段随 R-D2（T-D-07） | 并入 T-D-07 契约面（SpawnRequest 字段 + 构造点 None） |
+| T-D-11 | REQ-D02 share/branch 工作区隔离（**已决策：暂缓**） | REQ-D02 | 暂缓 | （设计 + 成本保留，不排入） |
+| T-D-12 | REQ-D05 DAG 可视化（**已决策：做**，纯 CSS/SVG + 开关） | REQ-D05 | R-D3 后独立小轮（F11b） | 引擎查询命令（`session_commands.rs`）+ 前端（`crish-desktop` workspace 域） |
 | T-D-13 | 引擎侧 SubagentSpawner 接线 | REQ-D01 落地前提 | R-D3 | `apps/agent-workbench/src-tauri/`（独占） |
+| T-D-14 | **权限传递层**（requester 字段 + 裁决者路由 + 提示词申请指引；用户定夺核心新设计） | 用户定夺新增 | R-D2 | `conex-types/events.rs` 族、`session-loop/tool_events.rs`、`workbench core_run_commands.rs`、`agent-tools/subagent_inject.rs` |
 
 ### 2.2 任务卡四要素约定
 
@@ -127,13 +130,13 @@
 ### 2.3 逻辑执行顺序（不排优先级）
 
 ```
-R-D1（裁决落地）→ R-D2（类型与沙箱）→ R-D3（批量与生命周期 + 引擎接线）
+R-D1（裁决落地）→ R-D2（类型与沙箱 + 权限传递层）→ R-D3（批量与生命周期 + 引擎接线）→ 独立小轮（T-D-12 DAG 可视化，已决策做）
 ```
 
 - R-D1 先行：嵌套禁止是用户裁决，且 R-D2/R-D3 的派发参数扩展（task_type / 批量）都要在"仅主 Agent 可派发"语义下设计；maxDepth=1 先落地可避免后续任务的守卫快照假设错误；
-- R-D2 次之：自定义类型与硬沙箱是"派发外围控制面"的主体，其契约（SpawnRequest 扩展字段）是 R-D3 引擎接线（T-D-13）的输入；
+- R-D2 次之：自定义类型（五项参数）与硬沙箱是"派发外围控制面"的主体，其契约（SpawnRequest 扩展字段 + 默认权限集）是 R-D3 引擎接线（T-D-13）的输入；**权限传递层（T-D-14）并入 R-D2**——默认权限集随 task_type 定义装配，子代理审批路由复用既有 ApprovalGate 机制，属同轮契约面扩展；
 - R-D3 收尾：批量派发、kill_all/resume、引擎 spawner 接线——三者共同构成"多子代理会话级管理"的完整能力面；T-D-13 依赖 R-D2 冻结的契约，放最后并行不冲突。
-- 待定夺项（T-D-10/11/12）不占用轮次，用户决定后插入对应轮次或另起一轮。
+- 已定夺项：T-D-10 不做（仅 model_override 字段随 T-D-07 契约面预留）；T-D-11 暂缓（不占用轮次）；T-D-12 做（R-D3 后独立小轮，编排见 00 总方案 §3.14a/F11b）。
 
 ---
 
@@ -462,13 +465,14 @@ npm run typecheck
 
 ---
 
-### 3.7 T-D-07 REQ-D04 自定义 Agent 类型（定义 + 权限映射 + 注册表）
+### 3.7 T-D-07 REQ-D04 自定义 Agent 类型（定义 + 默认权限集 + 注册表；参数收敛为五项）
 
-**定位**：REQ-D04 的 9 项参数中现状仅约 4 项有等价物（`subagent.ts:45-62` 骨架）。本任务补齐数据结构、task_type 默认权限映射与定义注册表，并合并执行 T-D-05（display_label，共享文件域）。
+**定位**：REQ-D04 的 9 项参数中现状仅约 4 项有等价物（`subagent.ts:45-62` 骨架）。按用户定夺"**权限不要太细**"（`调研-权限传递层.md` §3），九参数**收敛为五项**：保留 `name` / `description` / `system_prompt` / `task_type` / `allowed_write_paths`（可选），删除 `enable_write_tools` / `enable_command_tools` / `enable_mcp_tools` / `allowed_read_paths`——前三项由 task_type 默认集派生，读路径默认全工作区无安全增益；主 agent 配置负担从"逐项决策"降到"（可选的）一处路径"。并合并执行 T-D-05（display_label，共享文件域）与 T-D-10 的 `model_override` 扩展点预留（已决策：多模型不做）。
 
 #### 输入
 
 - `REQ-agent-engine-capabilities.md` §4.1（9 项参数表，`:466-478`）与 §4.2（默认映射表，`:480-491`）；
+- `调研-权限传递层.md` §2.2（六套默认权限集）与 §3.2（参数收敛表）；
 - `REQ-D-现状分析.md` §4.4（字段映射建议，`:309-327`）；
 - `subagent.ts:44`（插件 manifest 声明面，禁令 22）。
 
@@ -483,30 +487,31 @@ export type SubagentTaskType =
 interface SubagentDefinition {
   // ...既有字段不变...
   readonly taskType?: SubagentTaskType;
-  readonly enableWriteTools?: boolean;
   readonly allowedWritePaths?: readonly string[];
-  readonly allowedReadPaths?: readonly string[];
-  readonly enableCommandTools?: boolean;
-  readonly enableMcpTools?: boolean;
+  readonly modelOverride?: string;   // 扩展点预留（T-D-10：多模型不做），不暴露 UI，不实现逻辑
 }
 ```
+
+> 收敛声明：`enableWriteTools` / `allowedReadPaths` / `enableCommandTools` / `enableMcpTools` **不在定义契约中**（九参数收敛为五项，验收断言"字段不存在"）。
 
 **（2）Rust 侧（`subagent.rs` 新增）**
 
 - `TaskType` 枚举（6 变体）+ `parse`/`as_str`（wire 名 kebab-case，对齐 TS）；
-- **`default_permissions(task_type) -> DefaultPermissions` 纯函数**（需求 4.2 表落地）：
+- **`default_permissions(task_type) -> DefaultPermissions` 纯函数**（六套默认权限集，`调研-权限传递层.md` §2.2 表落地）：
 
-  | task_type | write_enabled | command_enabled | 备注 |
-  | :--- | :--- | :--- | :--- |
-  | analysis | false | false | 全关 |
-  | design | true | false | 路径由定义提供（默认空 = 不限制路径） |
-  | review | true | false | 同上 |
-  | implementation | true | true | 全开 |
-  | organization | true | false | 路径由定义提供 |
-  | commit | false | true | 命令仅限 git（细化见 T-D-08） |
+  | task_type | 工具集 | 写路径沙箱 | 命令策略 | 备注 |
+  | :--- | :--- | :--- | :--- | :--- |
+  | analysis | 只读白名单（复用 `readonly.rs:27-34`） | 无写 | 无命令 | 只读调研，不产生任何改动 |
+  | design | 只读白名单 + 仅 `write_file` | 方案文档目录（配额凭证式，granted=true quota=1） | 无命令 | 可产出一份设计文档 |
+  | review | 同 design | 评审报告目录（缺省不限制 + 配额 1） | 无命令 | 可产出一份评审报告 |
+  | implementation | 全工具集 | 工作区根 `workspace_root`（即天然白名单） | 构建/测试类命令（语义层 CommandClass 过滤） | 可读写工作区 + 常用命令 |
+  | organization | 只读白名单 + 写 | 主 agent 显式给目录（不配 = 退化为只读） | 无命令 | 可在指定文档目录整理/编辑 |
+  | commit | 仅 `shell_command` | 无写文件工具 | 命令前缀过滤 git（T-D-08 细化） | 仅 git 操作，不碰其他 |
 
-- `SubagentSpawnRequest`（`subagent.rs:303-332`）增加 `task_type` / `enable_write_tools` / `allowed_write_paths` / `allowed_read_paths` / `enable_command_tools` / `enable_mcp_tools`（全部 Option，None = 不覆盖继承值）；
-- **合并语义**（现状分析 §4.4 实施要点 2）：引擎侧 spawn 时按"定义字段 > task_type 默认"合并生效——定义显式字段优先，缺省取 `default_permissions(task_type)`；
+  - 默认集由**系统硬编码**，spawn 时引擎自动装配（T-D-13）；主 agent 不用配、也不必知道细节，文档/UI 只展示"一句话边界"；
+  - 默认集在会话级 `permissionMode` 之上叠加：父会话 full-access 不传导给子代理（`调研-权限传递层.md` §2.1 独立价值）；
+- `SubagentSpawnRequest`（`subagent.rs:303-332`）增加 `task_type` / `allowed_write_paths`（全部 Option，None = 不覆盖继承值）；**不增加** enable_* 与 allowed_read_paths 字段（参数收敛）；追加 `model_override: Option<String>`（扩展点预留：默认 None = 继承当前模型，引擎侧恒不消费，见 §3.10）；
+- **合并语义**（现状分析 §4.4 实施要点 2）：引擎侧 spawn 时按"定义字段 > task_type 默认集"合并生效——定义显式字段优先，缺省取 `default_permissions(task_type)`；
 - 禁令 21 保持：task_type 是新维度，不并入 role/capabilityMode（`subagent.ts:8-12`）；
 - T-D-05 并入：`display_label: Option<String>` 字段 + schema `displayLabel` 参数 + 出站信封回显（见 §3.5）。
 
@@ -518,7 +523,7 @@ interface SubagentDefinition {
 
 **（4）落库**
 
-- `session_agents`（`schema.rs:50-66`）新列：`task_type`、`display_label`、`allowed_write_paths_json`、`allowed_read_paths_json`（走 migrate.rs 迁移）；enable_* 布尔由 task_type + 定义合并后落入 run 级策略（不落库或落 run 级记录，见 T-D-08 约定）；
+- `session_agents`（`schema.rs:50-66`）新列：`task_type`、`display_label`、`allowed_write_paths_json`（走 migrate.rs 迁移）；enable_* 布尔已删除，由 task_type 默认集派生后落入 run 级策略（见 T-D-08 约定）；`model_override` 不落库（扩展点预留、恒 None）；
 - `load_session_agents`（`agents.rs:9-89`）读回新列。
 
 **（5）前端**
@@ -534,28 +539,32 @@ npm run typecheck
 npx vitest run src
 ```
 
-- `default_permissions` 六映射逐一断言（implementation→{true,true}、analysis→{false,false}、commit→{false,true} 等）；
-- 定义实例化测试：注册一个含全部 9 项的 definition，agentId 解析出完整 SpawnRequest，合并语义正确（显式字段覆盖 task_type 默认）；
+- `default_permissions` 六套默认集逐一断言（implementation→全工具+工作区沙箱+构建/测试命令、analysis→只读白名单无命令、commit→仅 git 命令、design/review→写配额=1 等，对齐 `调研-权限传递层.md` §5 测试锚点）；
+- **参数收敛断言**：定义契约中不存在 `enable_write_tools` / `enable_command_tools` / `enable_mcp_tools` / `allowed_read_paths` 字段（编译/类型级断言）；`default_permissions` 六映射 + 定义字段覆盖合并语义；
+- 定义实例化测试：注册一个含五项参数的 definition，agentId 解析出完整 SpawnRequest，合并语义正确（显式字段覆盖 task_type 默认）；
 - 迁移测试：新列可读写，旧库兼容（迁移脚本幂等）；
-- display_label 读回 + 前端 title 优先。
+- display_label 读回 + 前端 title 优先；
+- `SubagentSpawnRequest` 全构造点显式 `model_override: None`（编译器强制）。
 
 #### 注意事项
 
-- 本任务与 T-D-08 的**契约冻结点**：T-D-08 需要消费 `allowed_write_paths` 与 enable_* 的 run 级策略形态。本任务冻结约定：spawn 请求携带原始字段，**run 级 WritePolicy 结构由 T-D-08 在 `write_paths.rs` 定义**，引擎侧（T-D-13）把字段转成策略后注册——本任务不依赖 T-D-08 的具体类型，只按字段名约定传递；
-- `subagent.rs`/`subagent.ts`/`schema.rs` 本轮由本任务独占（含 T-D-05 合并项），T-D-08 只碰 `write_paths.rs`/`fs.rs`/`readonly.rs`/`mod.rs`——文件域互斥；
-- 命令工具"仅限 git"的细化（commit 类型）：在 T-D-08 的工具裁剪机制上按命令过滤实现，本任务只冻结 `command_enabled` 语义。
+- 本任务与 T-D-08 的**契约冻结点**：T-D-08 需要消费 `allowed_write_paths` 与 task_type 派生的命令策略。本任务冻结约定：spawn 请求携带原始字段，**run 级 WritePolicy 结构由 T-D-08 在 `write_paths.rs` 定义**，引擎侧（T-D-13）把字段与默认集合并后转成策略再注册——本任务不依赖 T-D-08 的具体类型，只按字段名约定传递；
+- `subagent.rs`/`subagent.ts`/`schema.rs` 本轮由本任务独占（含 T-D-05 合并项与 T-D-10 的 model_override 字段），T-D-08 只碰 `write_paths.rs`/`fs.rs`/`readonly.rs`/`mod.rs`——文件域互斥；
+- 命令策略"仅 git / 构建测试白名单"的口径统一：在 T-D-08 的工具裁剪机制上按 task_type 默认策略实现，本任务只冻结 `DefaultPermissions` 语义；口径差异（语义层 CommandClass vs 前缀过滤）按 `调研-权限传递层.md` 开放问题 6.5 评审统一；
+- 多模型扩展点：`model_override` 字段注释指向 `调研-可视化与扩展点.md` §3 与本文 §3.10，**不得附带任何消费逻辑**（违背"不做"决策）。
 
 ---
 
-### 3.8 T-D-08 REQ-D04 硬沙箱（allowed_write_paths 拦截 + 工具开关）
+### 3.8 T-D-08 REQ-D04 硬沙箱（allowed_write_paths 拦截 + 命令策略按 task_type 下沉）
 
-**定位**：REQ-D04 验收关键——"allowed_write_paths 为 Rust 侧硬性沙箱拦截，即使 Agent 的 Prompt 中未约束写入范围，系统也会在文件写入时进行路径校验并拒绝越界操作"（`REQ-agent-engine-capabilities.md:492`）。现状 `validate_write_path`（`write_paths.rs:289-296`）只做合法性 + 互斥登记，不做越权拒绝。
+**定位**：REQ-D04 验收关键——"allowed_write_paths 为 Rust 侧硬性沙箱拦截，即使 Agent 的 Prompt 中未约束写入范围，系统也会在文件写入时进行路径校验并拒绝越界操作"（`REQ-agent-engine-capabilities.md:492`）。现状 `validate_write_path`（`write_paths.rs:289-296`）只做合法性 + 互斥登记，不做越权拒绝。按用户定夺"权限不要太细"：**enable_command_tools / enable_mcp_tools 逐项开关不再作为定义字段**（命令过滤下沉为 task_type 默认策略、MCP 默认继承父代理面），**allowed_read_paths 不再落地**（读不改状态、默认全工作区可读，无安全增益，`调研-权限传递层.md` §3.2）。
 
 #### 输入
 
-- `REQ-D-现状分析.md` §4.4 实施要点 1（白名单与互斥的分层关系：先越权拒绝、再冲突拒绝）、3（工具开关复用裁剪机制）；
+- `REQ-D-现状分析.md` §4.4 实施要点 1（白名单与互斥的分层关系：先越权拒绝、再冲突拒绝）；
 - `write_paths.rs:172-223`（claim 多路径原子声明）、`:303-318`（claim_write_guard 接线位）、`:333-355`（overlaps 前缀语义 + Windows 大小写折叠——路径匹配逻辑直接复用）；
-- `readonly.rs:19-48`（白名单 fail-closed 裁剪，推广为通用机制）。
+- `readonly.rs:19-48`（白名单 fail-closed 裁剪，推广为通用机制）；
+- `调研-权限传递层.md` §2.2（命令策略按 task_type 默认）与开放问题 6.5（命令白名单口径）。
 
 #### 产出（文件域：`crates/agent-tools/src/write_paths.rs`、`crates/agent-tools/src/tools/fs.rs`、`crates/agent-tools/src/readonly.rs`、`crates/agent-tools/src/tools/mod.rs`）
 
@@ -563,7 +572,7 @@ npx vitest run src
 
 - 在 `write_paths.rs` 新增 run 级写策略结构：
   ```rust
-  /// run 级硬性写入允许集（None = 不限制路径，仅受 enable_write_tools 控制）
+  /// run 级硬性写入允许集（None = 不限制路径；implementation 默认 = 工作区根）
   pub enum WritePathPolicy { Allowed(Vec<PathBuf>), Unrestricted }
   ```
 - 新增纯函数 `check_write_allowance(policy: &WritePathPolicy, target: &Path) -> Result<(), WriteAllowanceError>`：
@@ -573,25 +582,26 @@ npx vitest run src
 - **挂接顺序**：写工具（write_file/delete_file/delete_dir，`fs.rs`）执行前——**先 `check_write_allowance`（越权拒绝）→ 再 `claim_write_guard`（冲突拒绝，`write_paths.rs:303-318`）**；两机制串行叠加，互斥注册表（`write_paths.rs:129-140`）原样保留（用户决策 5）；
 - 语义说明：白名单是"允许集"（权限沙箱），互斥是"并发控制"，一先一后不冲突。
 
-**（2）只读路径限制（allowed_read_paths）**
-
-- `read_file`/`list_dir`/`grep_search` 等只读工具入口增加可选只读策略校验（run 级 `ReadPathPolicy`，结构对齐 WritePathPolicy）；
-- 实现为纯函数 `check_read_allowance`（同一前缀匹配逻辑复用）；
-- 无只读策略（未定义 allowed_read_paths）→ 放行（需求 4.1：为空则允许读取全部工作区）。
-
-**（3）工具开关（enable_command_tools / enable_mcp_tools）**
+**（2）命令策略下沉（按 task_type 默认集，替代 enable_command_tools 开关）**
 
 - 把 `filter_readonly_registry`（`readonly.rs:40-48`）的白名单 fail-closed 过滤逻辑**推广为通用 `filter_registry(registry, predicate)`**（保留原有 fail-closed 语义）；
-- `enable_command_tools=false` → 剔除 `shell_command`；
-- `enable_mcp_tools=false` → 剔除 MCP 工具（工具装配处按命名空间过滤，MCP 工具注册面在引擎侧，`engine.rs:768` mcp_context_injection 关联面）；
-- commit 类型的"命令仅限 git"：在 shell 命令执行门禁处增加命令前缀过滤（仅允许 `git` 开头的命令），作为 task_type=commit 的默认策略（细化项，见 T-D-07 约定）。
+- 工具级裁剪：`analysis/design/review/organization` → 只读白名单（`readonly.rs:27-34`）+ design/review 附加 `write_file`；`commit` → 仅 `shell_command`（无写文件工具）；`implementation` → 全工具集；
+- 命令级过滤（shell 命令执行门禁处，按 task_type 派生策略）：
+  - `commit`：命令前缀过滤（仅允许 `git` 开头）；
+  - `implementation`：构建/测试类命令白名单（复用 `permission.rs:119-121` `semantics::analyze` 的 `CommandClass` 语义层分类，不维护命令前缀表）；
+  - 其余 task_type：无命令（工具面已剔除 shell_command，命令级过滤为兜底）；
+- **MCP 工具**：不做独立开关，默认继承父代理 MCP 面（`调研-权限传递层.md` §3.2）；需要单独收紧/放开走权限申请通道（T-D-14）。
+
+**（3）只读路径限制（allowed_read_paths：不落地）**
+
+- 用户定夺收敛：`allowed_read_paths` 已从定义契约删除，`ReadPathPolicy` / `check_read_allowance` **不实现**（读不改状态、默认全工作区可读；确有需要走权限申请，`调研-权限传递层.md` §3.2）；如后续需要，结构可与 WritePathPolicy 同构扩展，本轮不做。
 
 **（4）测试**
 
 - 越权写拒绝：Allowed(["docs/"]) 下写 `src/main.rs` → `tool.write_not_allowed`；写 `docs/a.md` → 放行；
 - 前缀边界：`a/b` 与 `a/bc` 不误匹配、Windows 大小写折叠生效；
 - 与互斥叠加：白名单放行但路径被他人占用 → 仍返回 `tool.write_path_conflict`（互斥错误，`write_paths.rs:79-109`）；
-- 工具开关：read-only 裁剪回归 + enable_command_tools=false 剔除 shell_command + MCP 剔除。
+- 工具级裁剪：read-only 裁剪回归 + `commit` 无写文件工具 + 命令前缀过滤（非 git 前缀拒绝）+ implementation 命令分类过滤。
 
 #### 验收标准
 
@@ -604,13 +614,16 @@ cargo test -p conex-types
 ```
 
 - 硬沙箱拦截在 Rust 侧生效（不依赖 Prompt 遵守）；
-- 互斥机制回归全绿（未破坏用户决策 5 的保留项）。
+- 互斥机制回归全绿（未破坏用户决策 5 的保留项）；
+- 命令策略断言：commit 子代理 `git status` 放行、`npm install` 拒绝；implementation 子代理构建/测试类命令放行、网络发布类拒绝；
+- 契约断言：定义字段面无 enable_command_tools / enable_mcp_tools（参数收敛）。
 
 #### 注意事项
 
 - 本任务不碰 `subagent.rs`/`subagent.ts`/`schema.rs`（T-D-07 独占）；引擎侧策略注册（T-D-13）按 T-D-07 冻结的字段名约定消费；
 - `tool.write_not_allowed` 错误码登记走 conex-types 注册表流程（与 T-D-02 相同纪律）；
-- 硬沙箱是**权限层**，不是并发层——两个语义都必须在错误文案中区分（越权 vs 冲突），前端与主 Agent 才能正确编排。
+- 硬沙箱是**权限层**，不是并发层——两个语义都必须在错误文案中区分（越权 vs 冲突），前端与主 Agent 才能正确编排；
+- 命令白名单口径（semantic CommandClass vs 前缀过滤）两类并存，按 `调研-权限传递层.md` 开放问题 6.5 在实现前评审统一一次。
 
 ---
 
@@ -673,35 +686,45 @@ npm run typecheck
 
 ---
 
-### 3.10 T-D-10 REQ-D03 多模型模式（待用户定夺项）
+### 3.10 T-D-10 REQ-D03 多模型模式（已决策：不做，仅预留扩展点）
 
-**定位**：REQ-D03 的默认继承语义天然满足（`config/provider.rs:229-249` 全局单例解析、`subagent.rs:394-396` 子代理 run 同通道），缺口只在多模型模式（设置开关 + per-run 覆盖 + AI 自动配置）。按用户要求：**体验类功能由用户定夺**，本任务只做设计 + 成本，**不默认排入轮次**。
+**定位**：REQ-D03 的默认继承语义天然满足（`config/provider.rs:229-249` 全局单例解析、`subagent.rs:394-396` 子代理 run 同通道）。**用户已定夺：多模型模式不做**（不实现设置开关、不做 per-run 覆盖逻辑、不做 AI 自动选型），**但预留扩展点**——`SubagentSpawnRequest` 增加 `model_override: Option<String>` 字段（默认 None = 继承当前模型），引擎侧 resolve 链**不写任何分支逻辑**，UI/调度均不暴露。理由：大模型做决策/规划、小模型做执行是趋势；字段在结构体里是"文档化契约"，未来做时只加逻辑不改形状，本轮成本 ≈ 0（`调研-可视化与扩展点.md` §3）。
 
-#### 设计要点（若用户决定做）
+#### 预留内容（随 T-D-07 的 SpawnRequest 契约面落地，不独立占轮次）
 
-1. **per-run 覆盖通道**：`SubagentSpawnRequest` 增加 `model_override: Option<String>`（+ 可选 `provider_override`）；引擎侧子代理 run 装配时把覆盖值注入 ProviderCall 装配位（`config/provider.rs:229-249` 解析链加可选覆盖层），未指定沿用全局解析（默认继承语义不变）；
-2. **设置开关**：前端 provider 设置 + `apps/agent-workbench/src-tauri/src/config/provider.rs:190-195`（effective_model）增加"多模型并行"布尔开关；关闭时引擎侧忽略 spawn 请求的 model_override（对齐需求"字段无效或被忽略"，`REQ-agent-engine-capabilities.md:448`）；
-3. **AI 自动配置**：模型选择表达为 run_subagent 参数即可（主 Agent 按"用轻量模型做搜索"自然语言选型），引擎无额外逻辑；ModelCatalog 查询接口保证按能力过滤可用（现状分析 §3.4-3）；
-4. **验收**：开启后不同子 Agent 可用不同模型；关闭时 model 参数被忽略（断言子代理 run 的模型解析结果与主 Agent 一致）。
+1. **字段预留**：`SubagentSpawnRequest`（`subagent.rs:303-332` 结构体末尾）追加：
+   ```rust
+   /// 模型覆盖（扩展点预留：None = 继承当前模型；多模型模式未实现，
+   /// 引擎侧恒不消费此字段——见 docs/feature-gap-analysis/调研-可视化与扩展点.md §3）
+   #[serde(default, skip_serializing_if = "Option::is_none")]
+   pub model_override: Option<String>,
+   ```
+   `SubagentSpawnRequest` 为纯 Rust 结构体（无 serde 派生），字段不存在 wire 兼容问题；
+2. **构造点全覆盖**：全部 spawn 请求构造点显式补 `model_override: None`（流程节点 `flow_graph.rs:985-999`、测试域 spawner `subagent.rs:648/1150`、`orchestrator/tests/*`、`recovery.rs` 等——编译器逐个报错驱动），编译期即保证全量覆盖；
+3. **不实现边界**：run_subagent 工具 schema（`subagent.rs:456-498`）**不加 model 参数**（`additionalProperties: false` 不变，UI 与工具面不暴露）；引擎侧 `effective_model` 解析链（`config/provider.rs:190-196`）零改动；前端 providerProfiles/modelCatalog 零改动；
+4. **文档标注**：字段注释指向本小节与调研文档；未来实现位 = 子代理 run 装配 ProviderCall 时若 `model_override = Some(m)` 覆盖全局解析结果（`调研-可视化与扩展点.md` §3.3），本轮不写消费代码。
 
-#### 成本评估
-
-- 工作量约 1 个任务卡（契约 + 开关 + 引擎装配 + 测试），与 R-D2/R-D3 文件域有部分重叠（subagent.rs 的 SpawnRequest——若并入 R-D2 的 T-D-07 可顺带扩展，成本可降为 0.5 卡）；
-- **建议**：若用户不急需多模型并行（当前全局单例 + 继承已覆盖 2/3 验收标准），可先不做；决定做时优先挂在 T-D-07 的 SpawnRequest 扩展上（同字段面），避免独立一轮。
-
-#### 验收命令（若实施）
+#### 验收标准（随 T-D-07 / T-D-13 合并执行）
 
 ```powershell
-cargo test -p agent-provider
 cargo test -p agent-tools subagent
-npm run typecheck
+cargo test --workspace
 ```
+
+- `SubagentSpawnRequest` 实例化处必须显式写 `model_override: None`（编译器强制，无需独立测试）；
+- `cargo test --workspace` 全量回归（纯类型变更）；
+- 默认继承语义不变：spawn 未携带 model 覆盖参数时，子代理 run 解析出的模型与主 Agent 一致（T-D-13 验收覆盖）；
+- 前端零改动（typecheck 无 diff）。
+
+#### 不做 `provider_override`
+
+03-D 原方案写了 `+ 可选 provider_override`，但"大/小模型分工"场景下 provider 通常同源（同一网关不同模型），先留 `model_override` 单字段即可；真做多模型时 provider 覆盖可再扩展（同字段面追加），避免一次预留两个没人用的字段（`调研-可视化与扩展点.md` §3.4）。
 
 ---
 
-### 3.11 T-D-11 REQ-D02 share/branch 工作区隔离（待用户定夺项）
+### 3.11 T-D-11 REQ-D02 share/branch 工作区隔离（已决策：暂缓）
 
-**定位**：REQ-D02 三模式中 `inherit` 天然满足（共享工作区 + 写互斥兜底），`share`/`branch` 依赖 Git Worktree，原登记为**有意推迟**（`subagent.ts:19-20` 注释 "worktree/process 推迟"）。按用户要求：**提升体验的功能可以想，但最终由用户定夺**。本任务只做方案设计 + 成本评估，**不默认排入轮次**。
+**定位**：REQ-D02 三模式中 `inherit` 天然满足（共享工作区 + 写互斥兜底），`share`/`branch` 依赖 Git Worktree，原登记为**有意推迟**（`subagent.ts:19-20` 注释 "worktree/process 推迟"）。**用户已定夺：暂缓**——保持现有中间态（写路径互斥 + 只读裁剪 + allowed_write_paths 硬沙箱 + 回收站/审计可恢复），决定做时另起独立轮。本节保留原设计要点与成本评估备查，不排入任何轮次。
 
 #### 设计要点（若用户决定做）
 
@@ -726,22 +749,35 @@ cargo test -p agent-tools write_paths
 （集成验证：branch 修改不影响主工作区、终止后 worktree 清理、未合并产出保留通知）
 ```
 
+**状态注记**：用户已定夺暂缓（`00-总方案与轮次编排.md` §5.0 #2）；上述设计与成本评估保留备查，不再更新。
+
 ---
 
-### 3.12 T-D-12 REQ-D05 DAG 可视化（待用户定夺项）
+### 3.12 T-D-12 REQ-D05 DAG 可视化（已决策：做，纯 CSS/SVG + 开关可下线）
 
-**定位**：REQ-D05 5.4 可视化标注为"可选增强"（`REQ-agent-engine-capabilities.md:534-536`）。状态数据已在 `FlowNodeState`（`flow_graph.rs:357-369`）与 `flow_state` 键中可查（`flow_graph.rs:664-678` 持久化键）。按用户要求列为待定夺项。
+**定位**：REQ-D05 5.4 可视化标注为"可选增强"（`REQ-agent-engine-capabilities.md:534-536`）。状态数据已在 `FlowNodeState`（`flow_graph.rs:357-369`）与 `flow_state` 键中可查（`flow_graph.rs:664-678` 持久化键）。**用户已定夺：做**——纯 CSS/SVG 渲染（符合视觉体系、零图形库依赖），以 `flow_dag_visible` 功能开关（默认关）保证随时可下线；渲染方式由原方案的 Mermaid **改为纯 CSS/SVG**（项目无图形库依赖先例，Mermaid 的运行时解析/主题不一致/样式注入与 token 体系冲突；DAG 节点规模 ≤ 20，手写分层布局够用）。排期：R-D3 后独立小轮（00 总方案 F11b，见 `00-总方案与轮次编排.md` §3.14a）。
 
-#### 设计要点（若用户决定做）
+#### 设计要点（依据 `调研-可视化与扩展点.md` §2）
 
-1. **只读查询命令**：引擎侧新增只读命令返回节点状态列表 + 依赖边（pending/running/completed/failed/blocked，`flow_graph.rs:357-369`）；
-2. **前端渲染**：Mermaid 渲染（成本远低于 React Flow，现状分析 §5.4-1 建议）；在前端会话视图嵌入只读 DAG 图；
-3. 不新增写入面（可视化只读，编排权仍在主 Agent）。
+1. **只读查询命令**：引擎侧新增 `get_flow_snapshot(session_id)`，返回 `{ nodes: [{ id, task, dependsOn, parallel, isComposite, state, subagentRunId }] }`——读 `flow_declaration` + `flow_state` + `load_session_agents` 按 `subagent_run_id` 拼装状态；放 `session_commands.rs` 域（对齐既有 `get_session_meta` / `load_session_agents` 命令位）；不新增写入面（编排权仍在主 Agent）；
+2. **前端渲染**：纯 CSS/SVG——`FlowDagView` 区段组件（RuntimeSection 基座）+ `flowDagLayout.ts` 纯函数层（拓扑分层/边生成/状态色映射/空态判定/计数文案）+ `flowDagStore.ts`（zustand 事件 store）；节点 DOM 卡片（token 变量：`--bg-card`/`--hairline-strong`/`--radius-lg`），状态色映射对齐 AgentTeamBoard 语义（pending 灰 / running 蓝 spinner / completed 绿 / failed 红 / blocked 橙降透明度）；连线用 CSS 边框线方案；空态不渲染；
+3. **功能开关**：`flow_dag_visible`（localStorage 直读键 `crish_flow_dag_visible`，`'true'/'1'` → true，缺失/脏值 → false 安全默认）；**不混入 settingsStore.appSettings**（引擎事件权威回灌会覆盖）；开关关 → 区段零挂载、零请求、零事件订阅；彻底下线 = 删前端组件，引擎零改动（查询命令是通用只读面保留无害）；
+4. **数据流**：事件驱动刷新（subagent-started/ended 信封补 `flowNodeId`，二期增强）或首版降级"快照 + 轻量轮询（≥2s）"；Blocked 由快照刷新兜底；
+5. **测试锚点**：纯函数层（拓扑分层三节点链 [0,1,2]、并行同层、状态色五态映射、空态判定、计数文案）+ 组件（渲染/空态/开关 off 零挂载——**可下线验收锚点**）+ hook（开关读取）+ store（事件入列）；门禁含 `npm run check:ui-layer`。
 
 #### 成本评估
 
-- 工作量约 **0.5 任务卡**（查询命令 + Mermaid 渲染 + 测试）；
+- 工作量约 **0.5~1 任务卡**（只读查询命令 + 前端组件 + 开关 + 测试）；
 - 收益：可观测性提升；**不影响任何验收标准**（REQ-D05 验收 4 条全部与引擎行为相关，可视化是附加）。
+
+#### 验收命令（F11b 轮执行）
+
+```powershell
+cargo test -p crish-agent-workbench
+npm run typecheck
+npx vitest run src
+npm run check:ui-layer
+```
 
 ---
 
@@ -752,7 +788,7 @@ cargo test -p agent-tools write_paths
 #### 输入
 
 - `subagent.rs:388-407`（SubagentSpawner 职责清单：守卫快照 → 落库 → 独立 run → 流程关联）；
-- T-D-06 冻结的 `spawn_many` trait 契约、T-D-07 冻结的 SpawnRequest 扩展字段、T-D-08 的 WritePathPolicy、T-D-03 的提示词注入段；
+- T-D-06 冻结的 `spawn_many` trait 契约、T-D-07 冻结的 SpawnRequest 扩展字段（五项参数 + model_override）与六套默认权限集、T-D-08 的 WritePathPolicy 与命令策略、T-D-03 的提示词注入段、T-D-14 的权限申请上下文（ApprovalRequester 装配）；
 - 恢复阶梯 2 的通知面（`recovery.rs:333-380` steering 条目）与 L1 注入通道（`wait_subagents.rs:387-388` inject）。
 
 #### 产出（文件域：`apps/agent-workbench/src-tauri/` 独占）
@@ -761,8 +797,8 @@ cargo test -p agent-tools write_paths
 
 - 实现 `SubagentSpawner`（`subagent.rs:401-407`）：
   1. **守卫快照采集**：深度沿 parent_run_id 链（主会话 = 0，直接子代理 = 1），兄弟/并发按未终态记账（对齐 M6 并发预算口径，`flow_graph.rs:974-983`）→ `check_recursion_guard` + `check_ancestor_chain`（`subagent.rs:253-297`）；depth>0 发起 → T-D-02 的 `NestingDenied`（结构化错误）；
-  2. **session_agents 落库**（`schema.rs:50-66`：agent_id / subagent_run_id / parent 链 / depth / 新列 task_type、display_label 等）；
-  3. **独立 run 启动**：走 core_run_task 同通道（`subagent.rs:394-396` 注释），**子代理 run 装配 ContextInjector 时注入 T-D-03 的提示词段**（与 started_at 同通道）+ 按 T-D-07 合并后的权限字段生成 WritePathPolicy/ReadPathPolicy 并注册（T-D-08 结构）+ 工具注册表裁剪（T-D-02：剔除 run_subagent；T-D-08：command/MCP 开关）；
+  2. **session_agents 落库**（`schema.rs:50-66`：agent_id / subagent_run_id / parent 链 / depth / 新列 task_type、display_label、allowed_write_paths_json 等）；
+  3. **独立 run 启动**：走 core_run_task 同通道（`subagent.rs:394-396` 注释），**子代理 run 装配 ContextInjector 时注入 T-D-03 的提示词段**（与 started_at 同通道）+ **按 task_type 默认权限集装配**（工具注册表裁剪：只读白名单 / 全工具 / 仅 git；命令策略：构建测试类 / git 前缀；`filter_registry`，T-D-08 结构）+ **定义字段覆盖合并**（显式 allowed_write_paths 生成 WritePathPolicy 注册，`Allowed` 优先于默认工作区根）+ **装配 T-D-14 的权限申请上下文**（ApprovalRequester 注入，子代理审批默认路由给主 agent 裁决）；
   4. **流程关联**：`flow_node_id`/`is_composite`（`subagent.rs:326-331`）随落库记录，终态事件经 `on_subagent_terminal` 回传 FlowScheduler（`flow_graph.rs:1096-1210`）；
   5. `spawn_many`（T-D-06）批量实现：前瞻快照统一守卫 → 全部通过后逐条落库启动（原子语义）。
 - `BuiltinToolConfig.subagent_spawner` 接线（`mod.rs:50-57`）在引擎装配点注入生产实现；wait_channel（`mod.rs:57`）同步接线。
@@ -772,6 +808,8 @@ cargo test -p agent-tools write_paths
 - 单发/批量/自定义类型端到端：run_subagent → 子代理 run 启动 → 终态事件回传 → 主 Agent 经 steering 收到通知；
 - 嵌套拒绝端到端：子代理 run 内 run_subagent → 结构化错误（工具面剔除 + 守卫兜底双验证）；
 - 提示词注入断言（T-D-03 的 request_system_prompt 验证）；
+- 默认权限集端到端：spawn 未带权限字段 → 子代理 run 按 task_type 默认集装配（analysis 无写工具、commit 仅 git、implementation 工作区沙箱）；
+- 权限申请链路端到端：子代理 run 触发审批 → 请求携带 requester=子代理 run id → 主 agent 裁决（Mock 裁决器）；
 - DAG 端到端：declare_flow → spawn 节点 run → 终态推进（对齐 `orchestrator/tests/multi_agent.rs` 契约层等价面，`multi_agent.rs:777` 注释）。
 
 #### 验收标准
@@ -784,13 +822,118 @@ npm run typecheck
 
 - run_subagent 不再返回 `common.unsupported`（生产环境接线完成）；
 - 全部测试域 spawner（DbSpawner 等）行为对齐生产实现（契约一致回归）；
-- 默认模型继承链路确认：spawn 未携带 model 覆盖参数时，子代理 run 经 ProviderCall 装配链解析出的模型与主 Agent 一致（`config/provider.rs` 全局单例链路，REQ-D03 默认继承语义——对应 00 总方案附录 A REQ-D03 行，`00-总方案与轮次编排.md` 附录 A）；多模型覆盖属 T-D-10 待定夺项，不在本轮范围。
+- 默认模型继承链路确认：spawn 未携带 model 覆盖参数时，子代理 run 经 ProviderCall 装配链解析出的模型与主 Agent 一致（`config/provider.rs` 全局单例链路，REQ-D03 默认继承语义——对应 00 总方案附录 A REQ-D03 行，`00-总方案与轮次编排.md` 附录 A）；`model_override` 恒为 None 且无消费逻辑（T-D-10 扩展点预留终态）。
 
 #### 注意事项
 
-- 本任务依赖 R-D1（T-D-01/02/03）与 R-D2（T-D-06/07/08）冻结的契约，是**最后一个排入轮次的代码任务**；
+- 本任务依赖 R-D1（T-D-01/02/03）与 R-D2（T-D-06/07/08/14）冻结的契约，是 **D 链上最后一个引擎侧代码任务**（F11b 的 T-D-12 为其后只读查询 + 前端组件）；
 - workbench 文件域在 R-D3 由本任务独占（T-D-06/T-D-09 分属 agent-tools 与 orchestrator 域）；
 - 若 workbench 域代码量过大（spawn 装配点分散），允许把"前端展示/按钮"拆给 T-D-09 的 Agent（不同文件域），但 spawn 装配路径必须本任务独占。
+
+---
+
+### 3.14 权限传递层设计摘要（用户定夺核心新设计）
+
+> 完整设计见 `docs/feature-gap-analysis/调研-权限传递层.md`（默认权限集 §2.2、申请时序 §2.3、数据结构 §2.4、复用点清单 §2.5、测试锚点 §5）。本节为任务书可引用的摘要。
+
+**用户定夺**：子代理的只读/权限相关设定**不要太细**——主 agent 逐项配置反而搞不清楚、考虑不全面子代理就挂了；改为「**系统默认权限集**（安全、够用、由系统给）+ **权限申请传递层**（子代理实在有需要 → 向主 agent 申请 → 主 agent 审批后放行）」。
+
+**三层模型**（自上而下，裁决优先级：安全基线 > 默认集 > 显式覆盖 > 运行时申请）：
+
+```
+┌─ 第 3 层：运行中权限申请（PermissionRequest → 主 agent 裁决 → 放行/拒绝）┐
+├─ 第 2 层：主 agent 显式配置（可选覆盖：allowed_write_paths；默认全 None）──┤
+├─ 第 1 层：系统默认权限集（task_type 六枚举默认映射，spawn 时自动装配）─────┤
+└─ 第 0 层：安全基线（红线命令 Deny / C3 大面积回退审批，不可豁免）────────┘
+```
+
+**核心机制（复用现有 ApprovalGate，只改"谁裁决"）**：
+
+- 现状：`PermissionVerdict::NeedsApproval` → `ApprovalGateImpl.request_approval`（广播 approval-requested + oneshot 等待）→ `core_approve_tool / core_deny_tool`（UI 命令）→ `approval-resolved`；`permission.rs:133-134` 明确"审批人 = 用户，主 Agent 仅转呈"；
+- 改动面（约 3 处小改，零新机制）：
+  1. **请求载荷扩展**：`PermissionRequest`（`events.rs:184-201`）新增 `requester_run_id: Option<String>`（None = 主 agent；Some = 子代理 run id）与 `reason: Option<String>`（子代理申请理由）——新增字段全 Option、serde 缺省，向后兼容；
+  2. **裁决者路由**：新增纯函数 `route_approval(source) -> Arbiter`——`ApprovalSource::MainAgent → Arbiter::User`（现状不变）；`ApprovalSource::Subagent { run_id, task_type } → Arbiter::MainAgent`（新默认；无父 run 兜底 User）；子代理身份从 `ToolExecCtx.run_id` + 父 run 关系（`SubagentEmitContext.parent_run_id`）判定；
+  3. **广播目标分支**：`ApprovalGateImpl.request_approval` 按路由结果转呈——子代理来源的请求路由给主 agent 裁决面（主 agent 裁决动作 = 复用同一 `resolve` 入口，oneshot 等待天然支持"审批者换成主 agent"）；主 agent 可转用户（`ArbiterDecision::EscalateToUser`，本轮可先只做 Approved/Denied，转用户为可选分支）；
+- **ApprovalGate trait 签名扩展**（方案 A，`tool_events.rs:69-77`）：`request_approval(..., requester: Option<&ApprovalRequester>)`，`ApprovalRequester { run_id, task_type, reason }`——参数全 Option，向后兼容现有实现与 MockGate；
+- **不改的安全基线**：红线不可豁免（`permission.rs:96-107`）、plan 模式写类直接拒绝、I-02 待审批集合防伪造校验（`core_run_commands.rs:175-203`）、approval-requested/resolved 事件原样落库。
+
+**默认权限集（随 T-D-07 的 `default_permissions` 落地，见 §3.7）**：六种 task_type 各一套"够用"默认，由系统硬编码、spawn 时自动装配，主 agent 不用配也不必知道细节（文档/UI 只展示一句话边界）；**父会话 full-access 不传导**——子代理的边界不由父会话宽容度决定。
+
+**拒绝路径与提示词指引**（对齐 `explore_quota.rs` 先例）：
+
+- 拒绝文案：「权限申请被主 agent 拒绝：<理由>。如需继续，请把诉求与替代方案以消息形式回报主 agent（说明为什么需要该权限、将执行什么操作、影响范围），由主 agent 重新裁决或调整任务后重试。」；
+- 子代理提示词注入段（`permission_relay_section`，随 T-D-14 落地）：「你执行任务时使用系统分配的默认权限（按任务类型自动配置，无需你申请）。当任务确需超出默认权限的操作时：不要自己假设已获得授权，也不要绕过工具边界；发起权限申请并说明理由（需要什么、做什么、影响什么）；申请由主 agent 审批：批准后继续执行，拒绝后按拒绝理由调整做法；不要反复用相同理由重复申请，被拒后先回报主 agent 沟通。」
+
+**测试锚点**（`调研-权限传递层.md` §5）：路由纯函数分类；申请→主 agent 放行链路（MockGate 记录 requester）；拒绝→子代理收到含"主 agent 拒绝/回报主 agent"指引；主 agent 链路不回归（requester=None → UI 流程）；超时 Expired 不中断；六默认集装配断言；参数收敛断言。
+
+---
+
+### 3.15 T-D-14 权限传递层（requester 字段 + 裁决者路由 + 提示词申请指引）
+
+**定位**：用户定夺"权限不要太细 + 权限申请传递层"的落地任务（设计摘要见 §3.14，完整设计见 `调研-权限传递层.md`）。默认权限集装配随 T-D-07 的 `default_permissions` 与 T-D-13 的 spawner 落地；本任务落地**申请→主 agent 裁决**链路本身。并入 R-D2（F8）。
+
+#### 输入
+
+- `调研-权限传递层.md` 全文（§1 现状机制 / §2 设计 / §4 接线 / §5 测试锚点）；
+- `crates/conex-types/src/events.rs:184-201`（PermissionRequest）、`crates/session-loop/src/tool_events.rs:58-77`（ApprovalGate）、`crates/session-loop/src/tool_exec.rs:657-669`（ask 装配）、`apps/agent-workbench/src-tauri/src/core_run_commands.rs:124-262`（ApprovalGateImpl）、`:1726-1775`（裁决入口）；
+- `crates/agent-tools/src/explore_quota.rs`（凭证模式先例）、`subagent_inject.rs`（注入段先例）。
+
+#### 产出（文件域：`crates/conex-types/src/events.rs` 族、`crates/session-loop/src/tool_events.rs` + 新建路由模块、`apps/agent-workbench/src-tauri/src/core_run_commands.rs`、`crates/agent-tools/src/subagent_inject.rs`）
+
+**（1）请求载荷扩展（conex-types）**
+
+- `PermissionRequest` 新增 `requester_run_id: Option<String>`（None = 主 agent run；Some = 子代理 run id，裁决者路由依据）与 `reason: Option<String>`（子代理申请理由，提示词协议要求"需要更高权限时说明理由"）；
+- 新增字段全 Option + `#[serde(default, skip_serializing_if = "Option::is_none")]`，向后兼容；随载荷 jsonb 落库，无 schema 变更（`调研-权限传递层.md` §4.2）。
+
+**（2）ApprovalGate 签名扩展 + 路由纯函数（session-loop）**
+
+- `ApprovalGate::request_approval` 签名追加 `requester: Option<&ApprovalRequester>`（`ApprovalRequester { run_id, task_type: Option<String>, reason: Option<String> }`，`tool_events.rs:69-77`）；参数全 Option，现有实现与 MockGate 编译兼容；
+- 新增 `ApprovalSource` 枚举与 `route_approval(source) -> Arbiter` 纯函数（MainAgent→User；Subagent→MainAgent；无父 run 兜底 User）——独立模块可单测；
+- 执行器（`tool_exec.rs`）在 `call_verdict` 返回 NeedsApproval 时，从 `ToolExecCtx.run_id` + 父 run 关系构造 `ApprovalRequester`（`None` = 主 agent run）透传给 gate。
+
+**（3）广播目标路由（workbench）**
+
+- `ApprovalGateImpl.request_approval`（`core_run_commands.rs:207-262`）载荷构造（`:216-226`）填充新字段；广播按 `route_approval` 分支——子代理来源的请求转呈主 agent 裁决面（事件仍照发 approval-requested，前端可观测）；
+- 主 agent 裁决动作复用 `core_approve_tool / core_deny_tool`（`:1726-1775`）的 `resolve`（`:175-203`）——主 agent 裁决 = 调用同一入口（新增引擎侧裁决命令或在主 agent run 的 steering 面注入审批待办，任务书按 `调研-权限传递层.md` §2.3 第 4 步定稿）；审批超时沿用 `APPROVAL_TIMEOUT=120s`；
+- **守卫不变**：待审批集合校验（I-02 防伪造）与状态机恢复（`:191-202`）原样保留。
+
+**（4）子代理提示词权限申请指引（agent-tools）**
+
+- 新增 `permission_relay_section(task_type, 边界一句话)` 固定注入段（文案见 §3.14 拒绝路径节；对齐 `explore_docs_credential_section` 固定结构、可快照断言）；
+- 挂载：引擎 spawn 子代理 run 时经 `CONTEXT_INJECTION_ORDER` 挂载（T-D-13 装配路径接入，本任务只实现段常量 + 装配函数 + 测试）；
+- 快照测试（对齐 `explore_quota.rs:587-606` 模式）。
+
+**（5）测试**
+
+- 路由纯函数：MainAgent→User；Subagent→MainAgent；子代理 run 无父 run 时兜底 User；
+- 链路（MockGate，对齐 `approval.rs:151-167`）：子代理 run 内工具触发 NeedsApproval → gate 收到 requester.run_id=子代理 run id + reason → 主 agent 裁决 Approved → 工具执行成功、approval-requested/resolved 事件齐全；
+- 拒绝路径：主 agent 裁决 Denied → 子代理收到 `UserDenied` 结果，错误文案含"主 agent 拒绝"与"回报主 agent"指引（对齐 `explore_quota.rs:165-174` 断言风格）；
+- 不回归：主 agent run 内工具审批 requester=None → 路由 User → 既有 UI 审批流程全绿；
+- 超时：主 agent 不裁决 → Expired → 子代理 run 不中断、工具返回 approval_expired（`approval.rs:253-264` 先例）。
+
+#### 验收标准
+
+```powershell
+cargo test -p conex-types
+cargo test -p session-loop
+cargo test -p agent-tools
+cargo test -p crish-agent-workbench
+cargo test --workspace
+npm run typecheck
+```
+
+- `route_approval` 分类断言全绿；申请→主 agent 放行/拒绝链路断言全绿；
+- 子代理 run 的 system_prompt 含权限申请指引段（快照断言）；
+- 主 agent 审批链路零回归（既有 approval 测试全绿）；
+- `PermissionRequest` 载荷序列化兼容（缺省字段旧解析器可读）。
+
+#### 注意事项
+
+- 事件基线不变（41）：本轮只扩展 PermissionRequest 载荷字段，不新增事件类型（`00-总方案与轮次编排.md` §3.16 F8 行）；
+- `core_run_commands.rs` 所有权：F7（EG2 E-A2）→ F8（D2-3）→ F9（CF3 A8），轮间转移按 §3.17 表执行；
+- `events.rs` 族所有权：F6（CF2 C-A1）→ F8（D2-3）→ F9（CF3 A4）；
+- 死锁风险（主 agent 正在 wait 该子代理时裁决）按 `调研-权限传递层.md` 开放问题 6.4 处理：超时兜底 + 路由层检测"裁决者 run 正在 wait 该子代理"时转用户或自动拒绝——实现前做一次时序评审；
+- 持久化待办（主 agent 离线时申请悬挂）第一版不做（开放问题 6.1，P2），路由层预留"裁决方不在线 → 转用户兜底"分支。
 
 ---
 
@@ -801,10 +944,11 @@ npm run typecheck
 | 轮次 | 目标 | 任务包 | 并行依据 |
 | :--- | :--- | :--- | :--- |
 | R-D1 | 嵌套禁止裁决全量落地 + 提示词结构化 + 事件持久化修订 | T-D-01+T-D-02（合并）、T-D-03、T-D-04 | agent-tools / workbench-engine / docs 三域互斥 |
-| R-D2 | 自定义 Agent 类型 + 硬沙箱 + 展示标签 | T-D-05+T-D-07（合并）、T-D-08 | 契约文件域（subagent.rs/subagent.ts/schema.rs/前端）与沙箱文件域（write_paths.rs/fs.rs/readonly.rs/mod.rs）互斥 |
+| R-D2 | 自定义 Agent 类型（五项参数 + 默认权限集）+ 硬沙箱 + 展示标签 + **权限传递层** | T-D-05+T-D-07（合并）、T-D-08、**T-D-14** | 契约文件域（subagent.rs/subagent.ts/schema.rs/前端）、沙箱文件域（write_paths.rs/fs.rs/readonly.rs/mod.rs）、传递层文件域（events.rs 族/tool_events.rs/core_run_commands.rs/subagent_inject.rs）三域互斥 |
 | R-D3 | 批量派发 + 上限对齐 + 生命周期补缺 + 引擎接线 | T-D-06、T-D-09、T-D-13 | agent-tools / orchestrator+session-loop+conex-db / workbench 三域互斥 |
+| R-D3 后独立小轮 | DAG 可视化（已决策：做） | T-D-12 | 引擎查询命令（session_commands.rs）与前端（crish-desktop workspace 域）两域互斥；编排见 00 总方案 F11b |
 
-轮间依赖：R-D2 依赖 R-D1（maxDepth=1 语义先落地，权限设计不悬空）；R-D3 依赖 R-D2（T-D-13 消费 T-D-06/07/08 契约）；R-D3 结束后全模块验收（`cargo test --workspace` + 前端基线对照）。
+轮间依赖：R-D2 依赖 R-D1（maxDepth=1 语义先落地，权限设计不悬空）；R-D3 依赖 R-D2（T-D-13 消费 T-D-06/07/08/14 契约）；R-D3 结束后全模块验收（`cargo test --workspace` + 前端基线对照），T-D-12 独立小轮随后执行（依赖 R-D3 的 spawner 接线产物），再入总方案 F12 终验。
 
 ### 4.2 R-D1 轮：嵌套禁止 + 提示词结构化 + 事件持久化修订
 
@@ -846,27 +990,29 @@ npm run typecheck
 - 通过标准：嵌套相关测试全部按新语义（depth=1 通过、depth=2 拒绝）；提示词注入断言通过；REQ-D06 修订完成且无"纯内存"残留；
 - 输出到 R-D2：T-D-01/02 冻结的"仅主 Agent 可派发"语义、T-D-03 冻结文案、R-D1 轮次报告。
 
-### 4.3 R-D2 轮：自定义 Agent 类型 + 硬沙箱 + 展示标签
+### 4.3 R-D2 轮：自定义 Agent 类型（五项参数）+ 硬沙箱 + 展示标签 + 权限传递层
 
 #### 4.3.1 问题识别
 
-- REQ-D04 的 7 项参数缺失（数据结构面）与 4 条验收未达成；
+- REQ-D04 的参数缺失（数据结构面）与验收未达成——按用户定夺"权限不要太细"，九参数**收敛为五项**（删 enable_* 与 allowed_read_paths，`调研-权限传递层.md` §3.2）；
 - REQ-D01 的 Role 自由标签（展示面）；
-- 依据 R-D1 的 maxDepth=1 语义，权限设计在"子 Agent 无后代"前提下展开（task_type 映射不涉及嵌套授权）。
+- **权限传递层**（用户定夺核心新设计）：子代理审批路由给主 agent 裁决（T-D-14）；
+- 依据 R-D1 的 maxDepth=1 语义，权限设计在"子 Agent 无后代"前提下展开（task_type 默认集不涉及嵌套授权）。
 
 #### 4.3.2 任务分解与 Agent 分配
 
 | Agent | 任务包 | 文件域（独占） | 任务卡 |
 | :--- | :--- | :--- | :--- |
-| Agent-D2-1 | 定义扩展 + 权限映射 + 注册表 + display_label | `packages/shared-types/src/subagent.ts`、`crates/agent-tools/src/tools/subagent.rs`、`crates/conex-db/src/schema.rs` + migrate、`crates/conex-db/src/agents.rs`、`apps/crish-desktop`（AgentTeamBoard.tsx 等展示组件） | T-D-05、T-D-07 |
-| Agent-D2-2 | 硬沙箱 + 工具开关 | `crates/agent-tools/src/write_paths.rs`、`crates/agent-tools/src/tools/fs.rs`、`crates/agent-tools/src/readonly.rs`、`crates/agent-tools/src/tools/mod.rs`、`crates/conex-types/src/error/`（错误码登记） | T-D-08 |
+| Agent-D2-1 | 定义扩展（五项参数 + model_override 扩展点）+ 默认权限集 + 注册表 + display_label | `packages/shared-types/src/subagent.ts`、`crates/agent-tools/src/tools/subagent.rs`、`crates/conex-db/src/schema.rs` + migrate、`crates/conex-db/src/agents.rs`、`apps/crish-desktop`（AgentTeamBoard.tsx 等展示组件） | T-D-05、T-D-07 |
+| Agent-D2-2 | 硬沙箱 + 命令策略下沉 | `crates/agent-tools/src/write_paths.rs`、`crates/agent-tools/src/tools/fs.rs`、`crates/agent-tools/src/readonly.rs`、`crates/agent-tools/src/tools/mod.rs`、`crates/conex-types/src/error/`（错误码登记） | T-D-08 |
+| Agent-D2-3 | 权限传递层（载荷扩展 + 路由 + 提示词申请指引） | `crates/conex-types/src/events.rs` 族、`crates/session-loop/src/tool_events.rs` + 新建路由模块、`apps/agent-workbench/src-tauri/src/core_run_commands.rs`、`crates/agent-tools/src/subagent_inject.rs` | T-D-14 |
 
 #### 4.3.3 并行要点（文件域互斥）
 
-- Agent-D2-1 与 Agent-D2-2 文件域**零重叠**（契约文件 vs 沙箱文件）；但两者编译在同一 crate（agent-tools）——并行期间各自只编译自己的模块；crate 级集成（spawn 装配）留给 R-D3 的 T-D-13，本轮的模块级测试独立可跑；
-- 契约冻结点（T-D-07 → T-D-08 / T-D-13）：SpawnRequest 扩展字段名（`task_type` / `enable_write_tools` / `allowed_write_paths` / `allowed_read_paths` / `enable_command_tools` / `enable_mcp_tools`）在**本轮开始前**由主调度 Agent 写入两个任务包，双方按冻结签名开发，轮内不沟通；
-- `conex-types` 错误码登记：T-D-02（R-D1）已登记 `SUBAGENT_NESTING_DENIED`，本轮 T-D-08 登记 `WRITE_NOT_ALLOWED`——不同码位，无冲突；若注册表文件是单一源文件，由 Agent-D2-2 独占（`conex-types/src/error/` 列入其文件域）；
-- 前端 `AgentTeamBoard.tsx` 归 Agent-D2-1 独占；Agent-D2-2 不碰前端。
+- 三个 Agent 文件域**零重叠**（契约文件 / 沙箱文件 / 传递层文件）；但 D2-1 与 D2-2 编译在同一 crate（agent-tools）、D2-3 跨三个 crate 的独立文件——并行期间各自只编译自己的模块；crate 级集成（spawn 装配）留给 R-D3 的 T-D-13，本轮的模块级测试独立可跑；
+- 契约冻结点（T-D-07 → T-D-08 / T-D-13 / T-D-14）：SpawnRequest 扩展字段名（`task_type` / `allowed_write_paths`，不含 enable_* 与 allowed_read_paths——参数收敛）+ `model_override`（扩展点预留）+ `ApprovalGate::request_approval` 签名扩展与 `ApprovalRequester` 结构在**本轮开始前**由主调度 Agent 写入各任务包，三方按冻结签名开发，轮内不沟通；
+- `conex-types` 错误码登记：T-D-02（R-D1）已登记 `SUBAGENT_NESTING_DENIED`，本轮 T-D-08 登记 `WRITE_NOT_ALLOWED`——不同码位，无冲突；若注册表文件是单一源文件，由 Agent-D2-2 独占（`conex-types/src/error/` 列入其文件域）；`conex-types/src/events.rs` 族由 Agent-D2-3 独占（载荷扩展），与错误码文件不同，无重叠；
+- 前端 `AgentTeamBoard.tsx` 归 Agent-D2-1 独占；Agent-D2-2/D2-3 不碰前端。
 
 #### 4.3.4 汇总与验证
 
@@ -880,12 +1026,14 @@ npm run typecheck
   cargo test -p agent-tools mod
   cargo test -p conex-db
   cargo test -p conex-types
+  cargo test -p session-loop
+  cargo test -p crish-agent-workbench
   npm run typecheck
   npx vitest run src
   ```
-- 通过标准：`default_permissions` 六映射断言全绿；越权写拒绝 + 互斥叠加回归；display_label 前端优先显示；
+- 通过标准：`default_permissions` 六套默认集断言全绿；定义契约无 enable_* / allowed_read_paths 字段（参数收敛）；越权写拒绝 + 互斥叠加回归；display_label 前端优先显示；`route_approval` 分类断言 + 申请→主 agent 放行/拒绝链路断言全绿；
 - 注意：前端基线失败项（oklchColorGuard / userFacingErrors / sessionRustDbWriteModel / DiffCard.perf）与本轮无关，对照基线判定，不把基线失败计入本轮失败；
-- 输出到 R-D3：冻结契约（SpawnRequest 扩展 + WritePathPolicy/ReadPathPolicy 签名 + spawn_many trait）、R-D2 轮次报告。
+- 输出到 R-D3：冻结契约（SpawnRequest 五项扩展 + model_override + WritePathPolicy 签名 + ApprovalRequester/route_approval 签名 + spawn_many trait）、R-D2 轮次报告。
 
 ### 4.4 R-D3 轮：批量派发 + 生命周期补缺 + 引擎接线
 
@@ -919,22 +1067,22 @@ npm run typecheck
   npm run typecheck
   npx vitest run src
   ```
-- 通过标准：批量派发原子性（任一拒绝零 run）；kill_all 清零 + 产出保留；resume fork 生效；run_subagent 生产环境不再 `unsupported`；DAG 端到端（declare_flow → 节点 run → 终态推进）全绿；
-- 输出：最终轮次报告 + 待用户定夺项清单（T-D-10/11/12 维持待定状态，决策后按 §5 建议插入）。
+- 通过标准：批量派发原子性（任一拒绝零 run）；kill_all 清零 + 产出保留；resume fork 生效；run_subagent 生产环境不再 `unsupported`；默认权限集端到端装配断言；权限申请链路端到端（子代理申请 → 主 agent 裁决）；DAG 端到端（declare_flow → 节点 run → 终态推进）全绿；
+- 输出：最终轮次报告 + 已定夺项状态（T-D-10 不做 / T-D-11 暂缓 / T-D-12 做，见 §5）。
 
 ---
 
 ## 5. 待用户定夺项清单
 
-以下三项为**体验增强类**功能，按用户要求只做设计评估，最终由用户决定是否实施。未决定前不排入任何轮次。
+**2026-08-04 用户已对全部三项定夺**（对应 00 总方案 §5.0 决策总览）：多模型**不做**（仅预留扩展点）、share/branch **暂缓**、DAG 可视化**做**。下表标注决策状态，原设计要点与成本保留备查：
 
-| 项 | 需求来源 | 设计要点 | 成本 | 建议 |
-| :--- | :--- | :--- | :--- | :--- |
-| **多模型模式** | REQ-D03 | `model_override` 覆盖通道 + 设置界面开关（关闭时忽略 model 参数）+ AI 自动配置（主 Agent 选型） | 约 1 任务卡（若挂 T-D-07 的 SpawnRequest 扩展，可降至 0.5） | 默认继承已满足 2/3 验收；不急需可先不做；决定做时优先并入 R-D2 字段面 |
-| **share/branch 工作区隔离** | REQ-D02 | worktree 管理器（创建/登记/清理/合并）+ 脏工作区禁建 + workspace_root 指向 worktree + 终止清理（未合并产出保留通知）+ 恢复阶梯交互 | 约 2 完整任务卡 + 引擎接线增量 | 单用户桌面场景下，"写互斥 + 只读裁剪 + 硬沙箱（T-D-08）"已是务实中间态；worktree 的"实验不污染主工作区"收益与回收站/审计的可恢复保障重叠，建议暂缓 |
-| **DAG 可视化** | REQ-D05 5.4（可选） | 只读查询命令（节点状态 + 依赖边）+ Mermaid 渲染；数据已在 `FlowNodeState`（`flow_graph.rs:357-369`） | 约 0.5 任务卡 | 低成本可观测性增强；不影响任何验收标准，可作为下一个插入项 |
+| 项 | 需求来源 | 决策 | 设计要点 | 成本 | 落点 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **多模型模式** | REQ-D03 | **已决策：不做** | 仅预留 `SubagentSpawnRequest.model_override: Option<String>` 字段（默认 None，全部构造点显式 None），引擎零逻辑、UI 零暴露、run_subagent schema 不加参数 | 约 0（字段随 T-D-07 契约面落地） | 随 T-D-07/T-D-13 合并执行，见 §3.10 修订 |
+| **share/branch 工作区隔离** | REQ-D02 | **已决策：暂缓** | worktree 管理器（创建/登记/清理/合并）+ 脏工作区禁建 + workspace_root 指向 worktree + 终止清理（未合并产出保留通知）+ 恢复阶梯交互 | 约 2 完整任务卡 + 引擎接线增量 | 保持现有中间态；决定做时另起独立轮，见 §3.11 |
+| **DAG 可视化** | REQ-D05 5.4（可选） | **已决策：做** | 只读查询命令 `get_flow_snapshot`（节点状态 + 依赖边）+ **纯 CSS/SVG** 渲染（FlowDagView + flowDagLayout 纯函数层）+ `flow_dag_visible` 开关（默认关、可下线） | 约 0.5~1 任务卡 | R-D3 后独立小轮（00 总方案 F11b），见 §3.12 修订 |
 
-决策后的插入路径：多模型 → 并入 R-D2 或另起 R-D4（视决定时机）；share/branch → 另起独立轮（2 任务卡 + 集成验证，文件域：引擎新模块 + 调度/恢复集成）；可视化 → 独立小轮或并入任一收尾轮。
+决策后的插入路径：多模型 → 字段随 T-D-07（R-D2）落地，不排轮次；share/branch → 另起独立轮（2 任务卡 + 集成验证）；可视化 → R-D3 后独立小轮（F11b）。
 
 ---
 
@@ -974,8 +1122,9 @@ npm run typecheck
 | `cargo test -p orchestrator flow_scheduler` | flow_graph 回归 | T-D-01/06 |
 | `cargo test -p orchestrator crash_consistency` | kill_all 崩溃一致性 | T-D-09 |
 | `cargo test -p conex-db` | 新列迁移与读回 | T-D-05/07 |
-| `cargo test -p conex-types` | 错误码登记 | T-D-02/08 |
-| `cargo test -p agent-workbench` | 引擎 spawner + 提示词注入 | T-D-03/13 |
+| `cargo test -p conex-types` | 错误码登记 + PermissionRequest 载荷扩展 | T-D-02/08/14 |
+| `cargo test -p session-loop` | 审批路由与申请→裁决链路（MockGate） | T-D-14 |
+| `cargo test -p agent-workbench` | 引擎 spawner + 提示词注入 + 审批路由分支 | T-D-03/13/14 |
 | `cargo test --workspace` | 全模块最终验证（73 套件基线） | R-D3 终验 |
 | `npm run typecheck` | TS 契约 + 前端 | 每轮 |
 | `npx vitest run src` | 前端单测（基线失败项对照：oklchColorGuard / userFacingErrors / sessionRustDbWriteModel / DiffCard.perf） | 每轮 |
@@ -983,4 +1132,4 @@ npm run typecheck
 ---
 
 > **文档结束**
-> 本方案为模块 D（多 Agent 协同调度框架）的实施依据：两处冲突按用户裁决执行，13 个任务卡覆盖派发外围缺口，3 轮按逻辑顺序推进，3 项体验增强列为待用户定夺。方案落地时以代码为真源，行号引用如有漂移以实际代码为准。
+> 本方案为模块 D（多 Agent 协同调度框架）的实施依据：两处冲突按用户裁决执行，14 个任务卡覆盖派发外围缺口与权限传递层（用户定夺核心新设计），3 轮按逻辑顺序推进（另附 T-D-12 独立小轮），3 项体验增强已定夺（不做/暂缓/做）。方案落地时以代码为真源，行号引用如有漂移以实际代码为准。
