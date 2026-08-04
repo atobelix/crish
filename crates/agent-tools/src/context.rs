@@ -115,6 +115,14 @@ pub struct ToolContext {
     /// 探索类文档配额上下文（I6-M11 C5：read-only 子代理写文档配额检查；
     /// None = 非探索类或未接线，不检查）
     pub explore_docs_quota: Option<ExploreDocsQuotaContext>,
+    /// 后台任务管理器（T-AB-02：None = 未接线，shell 超时保持「树杀」现状；
+    /// 参照 write_claims 注入模式，由执行器按会话装配；工具执行期优先
+    /// 读本字段，回退 BuiltinToolConfig.background_manager）
+    pub background: Option<Arc<dyn crate::background::BackgroundTaskManager>>,
+    /// 会话日志根目录（T-AB-03：同步命令截断落盘
+    /// `<log_root>/sessions/<session_id>/<ts>-<seq>.log`；None = 截断不落盘，
+    /// 仅返回截断结果无 logPath，不失败）
+    pub log_root: Option<PathBuf>,
 }
 
 /// 探索类文档配额检查上下文（C5，I6-M11）
@@ -148,6 +156,8 @@ impl ToolContext {
             write_claims: None,
             write_claim_holder: None,
             explore_docs_quota: None,
+            background: None,
+            log_root: None,
         }
     }
 }
@@ -168,6 +178,8 @@ pub fn create_mock_tool_context() -> ToolContext {
         write_claims: None,
         write_claim_holder: None,
         explore_docs_quota: None,
+        background: None,
+        log_root: None,
     }
 }
 

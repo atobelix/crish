@@ -55,6 +55,10 @@ pub struct BuiltinToolConfig {
     /// 结构化不可用错误；引擎侧接线后经此通道做事件驱动等待、dispatch_*
     /// 落库与 L1 注入——agent-tools 只定义契约）
     pub subagent_wait_channel: Option<Arc<dyn wait_subagents::SubagentWaitChannel>>,
+    /// 后台任务管理器（T-AB-02：None = 未接线，shell 超时保持「树杀」现状；
+    /// 引擎侧实现 BackgroundTaskManager 并注入——A3 注册表经本字段透传，
+    /// 执行期会话级覆盖走 ToolContext.background）
+    pub background_manager: Option<Arc<dyn crate::background::BackgroundTaskManager>>,
 }
 
 impl Default for BuiltinToolConfig {
@@ -66,6 +70,7 @@ impl Default for BuiltinToolConfig {
             audit_sink: None,
             subagent_spawner: None,
             subagent_wait_channel: None,
+            background_manager: None,
         }
     }
 }
@@ -89,11 +94,12 @@ pub fn register_builtin_tools_with_config(
     registry.register(Arc::new(fs::FileStatTool::new()))?;
     registry.register(Arc::new(search::GrepSearchTool::new()))?;
     registry.register(Arc::new(search::FuzzyFindTool::new()))?;
-    registry.register(Arc::new(shell::ShellCommandTool::with_audit_sink(
+    registry.register(Arc::new(shell::ShellCommandTool::with_background_manager(
         config.default_shell_timeout_ms,
         config.default_shell_max_output_bytes,
         config.trash_root.clone(),
         Arc::clone(&audit_sink),
+        config.background_manager.clone(),
     )))?;
     registry.register(Arc::new(diff::DiffTextTool::new()))?;
     registry.register(Arc::new(delete::DeleteFileTool::with_audit_sink(

@@ -330,7 +330,11 @@ fn lock_inner(inner: &Mutex<Vec<WritePathClaim>>) -> std::sync::MutexGuard<'_, V
 /// `a/b/c.txt` 与 `a/b/` 冲突、`a/b` 与 `a/b` 冲突（同路径双向命中），
 /// `a/b` 与 `a/bc` 不冲突（组件边界）。比较基于 [normalize_for_compare]：
 /// 统一分隔符 + Windows 小写 + 去尾部分隔符，跨平台确定性一致。
-fn paths_overlap_normalized(a: &Path, b: &Path) -> bool {
+///
+/// 可见性：T-ESC-02（脚本逃逸追踪判定面）——session-loop 判定器复用
+/// 本语义做「声明路径 vs 监视事件路径」比对，按 REQ-逃逸追踪分析 §3.2
+/// 对外公开（声明基准复用，语义单一来源不复制实现）。
+pub fn paths_overlap_normalized(a: &Path, b: &Path) -> bool {
     let na = normalize_for_compare(a);
     let nb = normalize_for_compare(b);
     if na == nb {

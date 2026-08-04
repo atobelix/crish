@@ -277,6 +277,9 @@ mod tests {
             write_claims: None,
             write_claim_holder: None,
             explore_docs_quota: None,
+            // T-AB-02/03：中间件执行路径不接线后台管理器与日志根（None）
+            background: None,
+            log_root: None,
         };
         let mut current = input;
         for m in chain {

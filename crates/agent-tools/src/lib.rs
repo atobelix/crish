@@ -22,6 +22,7 @@
 
 pub mod context;
 pub mod audit;
+pub mod background;
 pub mod backup;
 pub mod definition;
 pub mod explore_quota;
@@ -45,6 +46,12 @@ pub use context::{
 };
 pub use audit::{
     security_audit_event, AuditSink, NoopAuditSink, RecordingAuditSink, SecurityAuditSink,
+};
+// T-AB-02（后台任务契约，冻结接口 #1/#2）：trait 与数据结构导出——
+// 壳层（A3 注册表）与 R-AB2 工具面按冻结形状消费
+pub use background::{
+    BackgroundAdoptRequest, BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskRef,
+    BackgroundTaskStatus, KillResult, LogSlice, ResourceSample, TaskState,
 };
 pub use definition::{default_input_schema, Tool, ToolDefinition, ToolError};
 pub use executor::{execute_with_output_policy, ExecutorContext, ToolExecutionPolicy, ToolResult};
