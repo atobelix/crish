@@ -201,6 +201,14 @@ pub struct SessionLoopOptions {
     /// TTL 由壳层装配（engine 侧 SessionLoopProducer 构造，T-40 接线点；
     /// TTL 走 P3 cache_ttl_for_provider_model 查询，0 = 未知）。
     pub cache_tracking: Option<CacheTrackingConfig>,
+    /// 逃逸监视装配配置（T-ESC-03 P3 装配面）：None = 不启用逃逸监视
+    /// （现状行为）。装配上下文透传——壳层 run 起停钩子消费：run 开始
+    /// 经 [crate::escape_watch::spawn_escape_watch] 启动监视并 spawn 消费
+    /// 任务（聚合 → 审计发射 + 主 agent 注入），run 收口经
+    /// [crate::escape_watch::EscapeWatchHandle::shutdown] 停止并 flush 剩余
+    /// 事件；LoopState 不消费本字段（消费循环由壳层 spawn，见
+    /// REQ-逃逸追踪分析 §3.5.1）。
+    pub escape_watch: Option<crate::escape_watch::EscapeWatchConfig>,
 }
 
 impl Default for SessionLoopOptions {
@@ -227,6 +235,8 @@ impl Default for SessionLoopOptions {
             max_auto_compactions_per_run: 1,
             // P5 S2 / T-36：缓存测量缺省关闭（未配置即现状行为）
             cache_tracking: None,
+            // T-ESC-03：逃逸监视缺省关闭（未配置即现状行为）
+            escape_watch: None,
         }
     }
 }

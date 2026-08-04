@@ -38,6 +38,7 @@ pub mod approval;
 pub mod cache_tracker;
 pub mod checkpoint;
 pub mod control;
+pub mod escape_watch;
 pub mod hooks;
 pub mod hydrate;
 pub mod input;
@@ -59,6 +60,11 @@ pub use cache_tracker::{CacheMiss, CacheStatsTracker, CacheTrackingConfig};
 pub use control::{
     level_for_kind, ControlBus, ControlDrainAction, ControlIntent, ControlIntentInput,
     ControlKind, ControlLevel,
+};
+pub use escape_watch::{
+    EscapeAggregator, EscapeWatchConfig, EscapeWatchHandle, EscapeWatchInjector,
+    build_escape_injection_text, escape_exclude_paths, spawn_escape_watch,
+    spawn_escape_watch_consumer,
 };
 pub use hooks::{
     HookAction, HookDispatchOutcome, HookError, HookEvent, HookEventKind, HookFailStrategy,
