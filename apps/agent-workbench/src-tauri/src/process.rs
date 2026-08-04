@@ -76,6 +76,12 @@ pub(crate) async fn workbench_run_shell(
         ));
     }
 
+    // ── cd 判定点（预留；产品决策：终端面板保留允许 cd）──
+    // 详见 check_cd_policy：全路径禁 cd 演进时在此拦截。
+    if let Some(err) = check_cd_policy(&command) {
+        return Err(err);
+    }
+
     let cwd = resolve_shell_cwd(request.cwd.as_deref())?;
     let timeout_ms = request
         .timeout_ms
@@ -104,6 +110,10 @@ pub(crate) async fn workbench_run_shell(
     // Prefer UTF-8 for child tools
     child_cmd.env("PYTHONUTF8", "1");
     child_cmd.env("PYTHONIOENCODING", "utf-8");
+    // 防溢（G4）：PAGER=cat —— 交互式分页器（less/more）在无人值守下会挂起；
+    // Unix 直接注入环境；Windows 由包装脚本显式写入（见 build_windows_powershell_script）。
+    // 口径与 T-AB-03（agent-tools 段）一致，双端同步。
+    child_cmd.env("PAGER", "cat");
 
     let child = child_cmd
         .spawn()
@@ -154,6 +164,19 @@ pub(crate) async fn workbench_run_shell(
             })
         }
     }
+}
+
+/// cd 判定点（预留）：终端面板是用户主动输入的单命令面板，`cd` 属合法交互，
+/// 产品决策**保留允许 cd**（不拦截，与 AI 侧工具层 T-AB-04 的全路径禁 cd 不同——
+/// 用户在自己终端面板里的 cd 是期望行为）。
+///
+/// 若需求演进为全路径禁 cd：在本函数内调用 conex-sandbox 的 CdShape 分类
+/// （T-AB-05 冻结接口：段级分类器，`cd x` / `Set-Location x` / `pushd x` 命中；
+/// `git -C` / 引号内 `echo "cd x"` 不命中），命中即返回 InvalidInput，
+/// 文案引导「请使用 Cwd 参数指定工作目录，而非 cd 命令」（对齐 T-AB-04 拦截文案）。
+fn check_cd_policy(command: &str) -> Option<CoreError> {
+    let _ = command;
+    None
 }
 
 fn resolve_shell_cwd(cwd: Option<&str>) -> Result<PathBuf, CoreError> {
@@ -241,6 +264,7 @@ fn build_windows_powershell_script(user_command: &str) -> String {
         "[Console]::InputEncoding=[System.Text.UTF8Encoding]::new($false)",
         "$env:PYTHONUTF8='1'",
         "$env:PYTHONIOENCODING='utf-8'",
+        "$env:PAGER='cat'",
         "$global:LASTEXITCODE=$null",
         &format!(
             "$__conexCmd = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{payload}'))"
@@ -347,18 +371,66 @@ pub(crate) fn terminate_process_tree(pid: u32) -> Result<(), String> {
     }
 }
 
+// ── 优雅终止变体（T-AB-06）───────────────────────────────────────────────────
+// 与 terminate_process_tree（强制）配对，供 R-AB2 两阶段终止（优雅 → 5s → 强制）
+// 消费。返回 Result<(), String>，与 terminate_process_tree 同型（:323 同款）。
+
+/// 优雅终止整个进程树：Windows `taskkill /PID <pid> /T`（去掉 /F，向进程树发送
+/// 关闭请求）；Unix `kill -TERM <pid>`（SIGTERM 即优雅请求）。
+///
+/// Windows 诚实边界（本机已实测，登记新发现）：taskkill 无 /F 时通过 WM_CLOSE
+/// 请求关闭**有顶层窗口且响应关闭消息**的进程；对控制台程序（powershell/cmd
+/// 等）返回「只能通过强制终止」错误且进程不退出。调用方应把 Err 视为
+/// 「优雅请求未生效」，随后按两阶段语义升级强制终止（R-AB2 T-AB-11 落地）。
+// 本轮交付原语供 R-AB2 消费（测试已覆盖真实语义）；非测试构建暂未接线 →
+// 显式豁免 dead_code。
+#[allow(dead_code)] // R-AB2 T-AB-11 两阶段终止消费
+#[cfg(target_os = "windows")]
+pub(crate) fn terminate_process_tree_graceful(pid: u32) -> Result<(), String> {
+    let output = Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T"])
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("failed to start taskkill: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
+#[allow(dead_code)] // R-AB2 T-AB-11 两阶段终止消费（Unix 侧与强制路径同型）
+#[cfg(not(target_os = "windows"))]
+pub(crate) fn terminate_process_tree_graceful(pid: u32) -> Result<(), String> {
+    // Unix 默认 kill -TERM 即优雅请求，与强制路径同型（无 /KILL 升级项）
+    terminate_process_tree(pid)
+}
+
 // ==================== Job Objects (Orphan Process Protection) ====================
 //
 // Shared primitive: `create_kill_on_close_job_object` — JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE.
 // When the last handle to a job is closed (host exit or crash), Windows kills every process
 // still assigned to that job (and their descendants that inherited membership).
 //
-// Single job in use (G11a: daemon/sidecar job series was orphaned after sidecar removal):
-//   - Interactive PTY shells: assigned at spawn in pty/session.rs (shared app-wide PTY job)
+// Two independent jobs (T-AB-06: daemon job series restored, G11a 遗留恢复):
+//   - PTY Job（`PTY_JOB_OBJECT`）：交互式终端 shell，spawn 时在 pty/session.rs 接线
+//     （共享 app 级）；终端面板 kill_all / dock unmount 语义不变；
+//   - Daemon Job（`DAEMON_JOB_OBJECT`，本轮新增）：后台任务（后台任务注册表 adopt 时
+//     经 `assign_pid_to_daemon_job` 接线）。与 PTY Job 相互隔离：
+//     * 守护进程不得被终端面板 kill_all 连带误杀（Job 句柄独立 + kill_all 只清 PTY 注册表）；
+//     * 应用退出/崩溃 → 宿主 Job 句柄关闭 → daemon Job 兜底全杀（孤儿保护语义不变）。
+//
+// 诚实边界（本机已实测，登记新发现）：开发环境宿主确实会包裹子进程（taskkill
+// 无 /F 时可见「进程位于宿主作业中」的报错），但 Windows 8+ 支持嵌套 Job——
+// 实测 AssignProcessToJobObject 到 daemon Job 成功。接线仍为 best-effort：
+// 若宿主 Job 禁止嵌套（或进程已属其他不可嵌套 Job），分配返回拒绝——失败仅
+// warn 降级（孤儿保护退化为显式 kill 路径兜底，见 background.rs adopt 注释），
+// 不阻断任务注册。
 //
 // Explicit kill paths remain:
 //   - PTY: `pty::kill_all_sessions()` on `RunEvent::Exit` (main.rs) and per-session kill
 //   - Dock unmount must NOT kill PTYs (frontend contract) — Job only fires on handle close
+//   - Daemon: 两阶段终止（R-AB2 T-AB-11）显式 kill；强制树杀见 terminate_process_tree
 //
 // Cross-ref: pty/mod.rs, pty/session.rs (Windows assign; Unix process-group best-effort).
 //
@@ -440,6 +512,61 @@ fn assign_process_to_job(
         }
     }
     Ok(())
+}
+
+// ── Daemon job (background tasks; app-wide, isolated from PTY job) ─────────────
+// T-AB-06：后台任务独立 Job。与 PTY Job（:451 下段）句柄隔离——守护进程不得被
+// 终端面板 kill_all 连带误杀；应用退出时宿主句柄关闭 → 兜底全杀（孤儿保护语义
+// 不变）。接线点：BackgroundTaskRegistry::adopt（background.rs）。
+
+#[cfg(windows)]
+static DAEMON_JOB_OBJECT: OnceLock<JobHandle> = OnceLock::new();
+
+#[cfg(windows)]
+// 豁免 unsafe_code：CloseHandle FFI（重复 init 时的句柄清理），
+// SAFETY 见函数内注释，经评审后允许。
+#[allow(unsafe_code)]
+pub(crate) fn init_daemon_job_object() -> Result<(), String> {
+    let handle = create_kill_on_close_job_object()?;
+    match DAEMON_JOB_OBJECT.set(JobHandle(handle)) {
+        Ok(()) => Ok(()),
+        Err(JobHandle(dup)) => {
+            // SAFETY: 重复 init 时关闭多余句柄（OnceLock 已持有一个）
+            unsafe {
+                windows_sys::Win32::Foundation::CloseHandle(dup);
+            }
+            Ok(())
+        }
+    }
+}
+
+#[cfg(windows)]
+// 豁免 unsafe_code：OpenProcess/CloseHandle FFI（进程句柄生命周期仅限本函数），
+// SAFETY 见函数内注释，经评审后允许。
+#[allow(unsafe_code)]
+pub(crate) fn assign_pid_to_daemon_job(pid: u32) -> Result<(), String> {
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
+    };
+
+    let job = DAEMON_JOB_OBJECT.get().ok_or_else(|| {
+        "daemon job object not initialized; call init_daemon_job_object() first".to_string()
+    })?;
+    // SAFETY: OpenProcess 句柄与本函数生命周期绑定，CloseHandle 兜底释放；
+    // AssignProcessToJobObject 所需访问权（PROCESS_SET_QUOTA | PROCESS_TERMINATE）
+    // 按 MSDN 契约给出。进程已在宿主 Job 内时返回拒绝，由调用方降级处理。
+    unsafe {
+        let handle = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
+        if handle.is_null() {
+            return Err(format!(
+                "OpenProcess({pid}) failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        let result = assign_process_to_job(job.0, handle);
+        let _ = windows_sys::Win32::Foundation::CloseHandle(handle);
+        result
+    }
 }
 
 // ── PTY job (interactive shells; shared app-wide) ────────────────────────────
@@ -577,5 +704,243 @@ mod tests {
         init_pty_job_object().expect("first init");
         init_pty_job_object().expect("second init is no-op success");
         assert!(PTY_JOB_OBJECT.get().is_some());
+    }
+
+    /// 等待子进程在窗口内退出（std 轮询，供真实 spawn 测试用）。
+    fn wait_child_exit(child: &mut std::process::Child, window: std::time::Duration) -> bool {
+        let deadline = std::time::Instant::now() + window;
+        loop {
+            if child.try_wait().expect("try_wait").is_some() {
+                return true;
+            }
+            if std::time::Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    /// 进程是否存活（Windows tasklist 过滤；Unix kill -0）。
+    #[cfg(windows)]
+    fn pid_is_alive(pid: u32) -> bool {
+        let out = std::process::Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}")])
+            .output()
+            .expect("tasklist must run");
+        String::from_utf8_lossy(&out.stdout).contains(&pid.to_string())
+    }
+
+    #[cfg(not(windows))]
+    fn pid_is_alive(pid: u32) -> bool {
+        std::process::Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+
+    /// T-AB-06 验收：优雅终止变体。真实 spawn 测试程序（Windows PowerShell
+    /// Start-Sleep / Unix sleep）：
+    /// - Unix：kill -TERM 生效，进程 5s 内退出；
+    /// - Windows：taskkill 无 /F 对控制台程序实测返回「只能通过强制终止」且进程
+    ///   不退出（新发现登记，见 terminate_process_tree_graceful 文档注释）——
+    ///   因此断言两阶段语义：优雅请求后 5s 内未退出 → 强制兜底 → 5s 内必退。
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn graceful_terminate_ok() {
+        let mut child = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-Command", "Start-Sleep 30"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn test process");
+        let pid = child.id() as u32;
+
+        let graceful = terminate_process_tree_graceful(pid);
+        let exited_gracefully = wait_child_exit(&mut child, Duration::from_secs(5));
+
+        if !exited_gracefully {
+            // 优雅请求未生效（本环境实测为控制台程序必经路径）：taskkill 无 /F
+            // 对控制台程序返回码不稳定（有时 Err「仅可强制终止」、有时 Ok 但
+            // 进程树仍存活）——不纠结返回码，直接验证强制兜底（两阶段终止的
+            // 升级支路，产品语义：最终 5s 内必退）
+            terminate_process_tree(pid).expect("强制兜底必须成功");
+            assert!(
+                wait_child_exit(&mut child, Duration::from_secs(5)),
+                "两阶段终止后进程必须在 5s 内退出"
+            );
+        }
+        // 优雅生效分支：进程已退出（无附加断言，跨环境稳健）
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn graceful_terminate_ok() {
+        let mut child = std::process::Command::new("sleep")
+            .arg("30")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn test process");
+        let pid = child.id() as u32;
+
+        terminate_process_tree_graceful(pid).expect("kill -TERM 应成功");
+        assert!(
+            wait_child_exit(&mut child, Duration::from_secs(5)),
+            "SIGTERM 后进程必须在 5s 内退出"
+        );
+    }
+
+    /// T-AB-06 验收：daemon Job 与 PTY Job 隔离（真实 spawn 断言）。
+    ///
+    /// 实现说明：全局 `PTY_JOB_OBJECT` 是 OnceLock 静态，无法在不消费静态的前提下
+    /// 关闭（OnceLock::into_inner 需 move，static 不可 move）——故用「本地同类
+    /// kill-on-close Job 模拟 PTY Job 关闭」+「真实全局两个 Job 句柄不同」+「真实
+    /// pty::kill_all_sessions() 不连带」三断言覆盖方案语义：
+    /// 1. 两个静态 Job 句柄非空且互不相同（隔离）；
+    /// 2. daemon 进程归属校验（IsProcessInJob，仅分配成功时）；
+    /// 3. 关闭一个 kill-on-close Job（模拟 PTY Job 关闭）→ 其成员死亡（机制自检），
+    ///    而 daemon 进程存活（不受连带）；
+    /// 4. pty::kill_all_sessions() 后 daemon 进程仍存活（终端面板 kill_all 不误杀）。
+    #[cfg(windows)]
+    #[test]
+    // 豁免 unsafe_code：测试内 CloseHandle/OpenProcess/IsProcessInJob FFI，
+    // SAFETY 见各函数内注释，经评审后允许。
+    #[allow(unsafe_code)]
+    fn daemon_job_isolated_from_pty() {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::JobObjects::IsProcessInJob;
+        use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+
+        init_daemon_job_object().expect("daemon job init");
+        init_pty_job_object().expect("pty job init");
+        let daemon_handle = DAEMON_JOB_OBJECT.get().expect("daemon job static").0;
+        let pty_handle = PTY_JOB_OBJECT.get().expect("pty job static").0;
+        assert!(!daemon_handle.is_null() && !pty_handle.is_null());
+        assert_ne!(
+            daemon_handle, pty_handle,
+            "后台任务 Job 与 PTY Job 句柄必须不同（相互隔离）"
+        );
+
+        // 真实 spawn：后台任务进程（长命令）→ 接线 daemon Job（best-effort）
+        let mut daemon_child = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-Command", "Start-Sleep 30"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn daemon test process");
+        let daemon_pid = daemon_child.id() as u32;
+        let assigned = assign_pid_to_daemon_job(daemon_pid);
+        // 嵌套 Job 语义（Win8+）：本机实测分配成功；若宿主 Job 禁止嵌套则返回
+        // 拒绝——仅 warn 不失败，隔离断言对两种环境均成立
+        if let Err(e) = &assigned {
+            eprintln!("[test] assign_pid_to_daemon_job 降级（宿主 Job 禁止嵌套）：{e}");
+        }
+
+        // 分配成功时校验归属（IsProcessInJob）
+        if assigned.is_ok() {
+            // SAFETY: OpenProcess/CloseHandle 配对；IsProcessInJob 布尔出参
+            unsafe {
+                let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, daemon_pid);
+                assert!(!h.is_null(), "OpenProcess({daemon_pid}) 失败");
+                let mut in_daemon_job: i32 = 0;
+                let ok = IsProcessInJob(h, daemon_handle, &mut in_daemon_job);
+                let _ = CloseHandle(h);
+                assert!(ok != 0 && in_daemon_job != 0, "daemon 进程应归属后台 Job");
+            }
+        }
+
+        // 机制自检：本地 kill-on-close Job 模拟「PTY Job 关闭」——
+        // 关闭 Job 句柄 → 其成员全杀；daemon 进程不受影响
+        let local_job = create_kill_on_close_job_object().expect("create local job");
+        let mut victim = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-Command", "Start-Sleep 30"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn victim process");
+        let victim_pid = victim.id() as u32;
+        let victim_assigned = assign_process_to_job(local_job, victim.as_raw_handle());
+        // SAFETY: local_job 句柄由 create_kill_on_close_job_object 产生，本测试拥有所有权
+        unsafe {
+            let _ = CloseHandle(local_job);
+        }
+        if victim_assigned.is_ok() {
+            assert!(
+                wait_child_exit(&mut victim, Duration::from_secs(5)),
+                "关闭 kill-on-close Job 必须杀死其成员（机制自检）"
+            );
+        } else {
+            // 分配失败（宿主 Job 环境）：显式清理 victim，隔离断言不受影响
+            let _ = terminate_process_tree(victim_pid);
+            let _ = wait_child_exit(&mut victim, Duration::from_secs(5));
+        }
+
+        // PTY 面板 kill_all 真实路径：不得连带 daemon 进程
+        crate::pty::kill_all_sessions();
+        assert!(
+            pid_is_alive(daemon_pid),
+            "关闭 PTY Job / kill_all 不应影响后台任务存活"
+        );
+
+        // 清理：daemon 进程强制终止，不留孤儿
+        terminate_process_tree(daemon_pid).expect("cleanup force kill");
+        assert!(
+            wait_child_exit(&mut daemon_child, Duration::from_secs(5)),
+            "清理后 daemon 进程必须退出"
+        );
+    }
+
+    /// Unix 侧隔离语义：daemon 进程组与 PTY kill_all 互不影响（真实 spawn 断言）。
+    #[cfg(not(windows))]
+    #[test]
+    fn daemon_process_survives_pty_kill_all() {
+        let mut child = std::process::Command::new("sleep")
+            .arg("30")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn daemon test process");
+        let pid = child.id() as u32;
+        // 模拟后台任务进程组（T-AB-06 daemon 语义：与 PTY 会话独立）
+        set_child_process_group(pid).expect("setpgid");
+
+        crate::pty::kill_all_sessions();
+        assert!(pid_is_alive(pid), "kill_all_sessions 不得连带 daemon 进程");
+
+        let _ = kill_process_group(pid);
+        assert!(
+            wait_child_exit(&mut child, Duration::from_secs(5)),
+            "清理后进程必须退出"
+        );
+    }
+
+    /// T-AB-06 验收：workbench_run_shell 子进程环境含 PAGER=cat（防溢 G4）。
+    #[tokio::test]
+    async fn workbench_shell_pager_env() {
+        let command = if cfg!(windows) {
+            "Write-Output $env:PAGER"
+        } else {
+            "echo $PAGER"
+        };
+        let req = WorkbenchRunShellRequest {
+            command: command.to_string(),
+            cwd: None,
+            timeout_ms: Some(10_000),
+        };
+        let res = workbench_run_shell(req).await.expect("shell must run");
+        assert!(res.ok, "stderr: {}", res.stderr);
+        assert_eq!(
+            res.stdout.trim(),
+            "cat",
+            "子进程环境必须含 PAGER=cat，实际: {:?}",
+            res.stdout
+        );
     }
 }

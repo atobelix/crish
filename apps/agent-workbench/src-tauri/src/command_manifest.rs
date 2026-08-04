@@ -59,7 +59,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（78 条 = 注册面 74 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（81 条 = 注册面 77 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：append_session_messages /
@@ -80,6 +80,10 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("workbench_open_host_target", "workbench", "gui", true),
         entry("workbench_open_path_default", "workbench", "gui", true),
         entry("workbench_list_file_openers", "workbench", "gui", true),
+        // F1（R-AB1 T-AB-08）：后台任务三条查询命令恢复（B01/B02 查询面）
+        entry("workbench_list_background_tasks", "workbench", "gui", true),
+        entry("workbench_get_background_task_output", "workbench", "gui", true),
+        entry("workbench_cancel_background_task", "workbench", "gui", true),
         entry("workbench_select_folder", "workbench", "gui", true),
         entry("workbench_list_directory", "workbench", "gui", true),
         entry("workbench_read_file_content", "workbench", "gui", true),
@@ -174,7 +178,7 @@ mod tests {
     use super::*;
 
     /// 条数公式化：总数 = 注册面 + 登记先行（镜像前端 commandManifest.test.ts：
-    /// 78 = 注册面 74 + 登记先行 4；变更时双端同步）。
+    /// 81 = 注册面 77 + 登记先行 4；变更时双端同步）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -185,8 +189,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 78, "总数 78（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 74, "注册面 74");
+        assert_eq!(total, 81, "总数 81（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 77, "注册面 77");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -307,7 +311,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 78);
+        assert_eq!(manifest.commands.len(), 81);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 }

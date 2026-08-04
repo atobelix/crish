@@ -25,6 +25,7 @@
 //! - **退出钩子**：`RunEvent::Exit` 时 PTY 清理 +
 //!   [CoreRunState::save_snapshot_blocking]（独立线程）。
 
+mod background;
 mod buffer;
 mod catalog_commands;
 mod command_manifest;
@@ -76,6 +77,11 @@ macro_rules! command_registry {
 command_registry![
     // ── GUI 专属面（workbench_*，§2.3）──
     ("workbench_run_shell", process::workbench_run_shell),
+    // T-AB-08：后台任务查询面恢复（B01/B02；list/get_output/cancel 三命令，
+    // 形状对齐前端 backgroundTasksApi.ts 解析层）
+    ("workbench_list_background_tasks", background::workbench_list_background_tasks),
+    ("workbench_get_background_task_output", background::workbench_get_background_task_output),
+    ("workbench_cancel_background_task", background::workbench_cancel_background_task),
     // PE-07 T07.3（C-02/C-03/C-04）：git 参数数组执行 + 参数 schema 白名单
     ("workbench_git_run", git::workbench_git_run),
     ("workbench_fs_delete_file", fs_commands::workbench_fs_delete_file),
@@ -302,12 +308,22 @@ fn main() {
             let snapshots: Arc<dyn orchestrator::restore::SnapshotStore> =
                 Arc::new(orchestrator::restore::SnapshotFileStore::new(&snapshot_path));
 
-            // 核心运行状态（store / 快照 / 事件桥 / 诊断注入）
+            // ⑧b 后台任务注册表（T-AB-07：G1 最小底座）独立托管（不并入
+            // CoreRunState，职责单一）。回收语义：run 结束不回收任务（会话级
+            // 存活）；应用退出 → process.rs daemon Job 兜底全杀（孤儿保护与
+            // PTY Job 同族且相互隔离）。工具执行器装配 ToolContext.background
+            // 经 BuiltinToolConfig 透传（冻结接口 #1）：引擎侧接线点在
+            // engine.rs:617（F1 轮末已装配 register_builtin_tools_with_config）。
+            let background_tasks = Arc::new(background::BackgroundTaskRegistry::new());
+
+            // 核心运行状态（store / 快照 / 事件桥 / 诊断 / 后台任务管理器注入）
             let core_state = Arc::new(core_run_commands::CoreRunState::new(
                 Arc::clone(&store),
                 Arc::clone(&snapshots),
                 bridge.clone(),
                 Arc::clone(diagnostics),
+                Some(Arc::clone(&background_tasks)
+                    as Arc<dyn agent_tools::background::BackgroundTaskManager>),
             ));
 
             // ⑦ restore：run_in_runtime 在 manage(CoreRunState) 之前执行
@@ -320,10 +336,11 @@ fn main() {
                 });
             }
 
-            // ⑧ CoreRunState / EventBridge / SharedDb manage
+            // ⑧ CoreRunState / EventBridge / SharedDb / 后台任务注册表 manage
             app.manage(Arc::clone(&core_state));
             app.manage(bridge);
             app.manage(shared_db);
+            app.manage(Arc::clone(&background_tasks));
 
             // ⑨ 模型目录（P3 步骤 5）：内置表挂 Tauri state（catalog_get /
             //    catalog_refresh 消费；覆盖/扫描合并仅经命令入口进行）

@@ -43,10 +43,10 @@ use agent_provider::request::{
 };
 use agent_provider::sse::{AbortFlag, StreamDiagnosticContext, StreamReadOptions};
 use agent_provider::transport::{stream_frames, StreamFrameEvent};
+use agent_tools::background::BackgroundTaskManager;
 use agent_tools::definition::{ToolDefinition, ToolError};
 use agent_tools::mcp::{register_plugin_server, McpClientBridge, McpServerConfig};
-use agent_tools::registry::ToolRegistry;
-use async_trait::async_trait;
+use agent_tools::registry::ToolRegistry;use async_trait::async_trait;
 use conex_types::error::ProviderErrorKind;
 use conex_types::events::{AgentEvent, AgentEventEnvelope, MissAttribution, RunCacheStats};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
@@ -609,12 +609,20 @@ pub(crate) struct EngineHandle {
 
 impl EngineHandle {
     /// 初始化引擎（加载生效配置 + 内置工具注册；失败仅降级未就绪）
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(background_manager: Option<Arc<dyn BackgroundTaskManager>>) -> Self {
         let client = Arc::new(reqwest::Client::new());
 
-        // 内置工具注册（B5.2：fs / shell / search / diff）
+        // 内置工具注册（B5.2：fs / shell / search / diff；F1 R-AB1：
+        // BuiltinToolConfig 注入后台任务管理器，经 ToolContext.background
+        // 透传给 shell 工具——adopt 通道就位）
         let mut registry = ToolRegistry::new();
-        if let Err(error) = agent_tools::tools::register_builtin_tools(&mut registry) {
+        let config = agent_tools::tools::BuiltinToolConfig {
+            background_manager,
+            ..agent_tools::tools::BuiltinToolConfig::default()
+        };
+        if let Err(error) =
+            agent_tools::tools::register_builtin_tools_with_config(&mut registry, config)
+        {
             tracing::warn!(
                 target: "engine",
                 error = %error,
@@ -830,7 +838,7 @@ impl EngineHandle {
 
 impl Default for EngineHandle {
     fn default() -> Self {
-        Self::new()
+        Self::new(None)
     }
 }
 
@@ -2875,7 +2883,7 @@ mod tests {
     /// mcp.* 错误上抛且注册表不污染
     #[tokio::test]
     async fn register_plugin_mcp_server_integration() {
-        let engine = EngineHandle::new();
+        let engine = EngineHandle::new(None);
 
         // 错误路径：非法命令 → mcp.connection_failed，注册表无残留
         let bad = McpServerConfig::new("missing", "definitely-not-a-real-command-xyz");
