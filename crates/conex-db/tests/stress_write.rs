@@ -11,6 +11,9 @@
 //! 运行方式（release，显式跑；默认不进常规 CI）：
 //!   cargo test -p conex-db --release --test stress_write -- --ignored --nocapture
 
+// G2 禁令豁免：测试临时 DB 清理（非产品删除路径，可恢复语义不适用）。
+#![allow(clippy::disallowed_methods)]
+
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -97,6 +100,7 @@ fn sample_message(id: &str, sender: &str, ts: i64) -> SessionMessage {
         tool_calls_json: None,
         blocks_json: None,
         tool_call_results_json: None,
+        usage: None,
     }
 }
 

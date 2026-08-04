@@ -1,5 +1,8 @@
 //! 单元测试（原 lib.rs tests 模块整体迁入，行为不变）。
 
+// G2 禁令豁免：测试临时 DB 清理（非产品删除路径，可恢复语义不适用）。
+#![allow(clippy::disallowed_methods)]
+
 use super::*;
 use crate::messages::parse_session_messages_flexible;
 use crate::schema::create_v5_schema;
@@ -137,6 +140,7 @@ fn sample_message(id: &str, sender: &str, ts: i64) -> SessionMessage {
         tool_calls_json: None,
         blocks_json: None,
         tool_call_results_json: None,
+        usage: None,
     }
 }
 
@@ -746,6 +750,72 @@ fn usage_json_column_read_write_roundtrip() {
         .query_row("SELECT usage_json FROM session_messages WHERE id='m2'", [], |r| r.get(0))
         .unwrap();
     assert_eq!(raw2, None, "无 usage 行读回 NULL");
+}
+
+#[test]
+fn save_load_session_body_usage_roundtrip() {
+    // save → load 全链路：usage_json 列往返，camelCase CacheUsage JSON 原样透传
+    let db = LocalDb::open_in_memory().unwrap();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+
+    let usage_json = r#"{"promptTokens":12000,"cacheReadTokens":9000,"cacheWriteTokens":500,"cacheMissTokens":3000}"#;
+    let mut with_usage = sample_message("m1", "assistant", 100);
+    with_usage.usage = Some(usage_json.to_string());
+    let mut without_usage = sample_message("m2", "user", 200);
+    without_usage.usage = None;
+    db.save_session_body("s1", &[with_usage, without_usage]).unwrap();
+
+    let loaded = db.load_session_body("s1").unwrap();
+    assert_eq!(loaded.len(), 2);
+    // usage 与前端写入的 JSON 逐字节一致（Rust 侧不解析不转换）
+    assert_eq!(loaded[0].usage.as_deref(), Some(usage_json));
+    assert_eq!(loaded[1].usage, None, "None 往返保持 None");
+}
+
+#[test]
+fn append_session_messages_usage_roundtrip() {
+    // append 路径同样写 usage_json 列
+    let db = LocalDb::open_in_memory().unwrap();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+    db.save_session_body("s1", &[sample_message("m1", "user", 1)]).unwrap();
+
+    let mut m2 = sample_message("m2", "assistant", 2);
+    m2.usage = Some(r#"{"promptTokens":9000,"cacheReadTokens":8000}"#.to_string());
+    let mut m3 = sample_message("m3", "user", 3);
+    m3.usage = None;
+    db.append_session_messages("s1", &[m2, m3]).unwrap();
+
+    let loaded = db.load_session_body("s1").unwrap();
+    assert_eq!(loaded.len(), 3);
+    assert_eq!(
+        loaded[1].usage.as_deref(),
+        Some(r#"{"promptTokens":9000,"cacheReadTokens":8000}"#),
+        "append 写入的 usage 回读一致"
+    );
+    assert_eq!(loaded[2].usage, None, "append 缺省 usage 回读 None");
+}
+
+#[test]
+fn load_session_body_usage_none_for_legacy_rows() {
+    // 旧库行（v5 之前无 usage_json 列值）→ 列 NULL → usage None，兼容不炸
+    let db = LocalDb::open_in_memory().unwrap();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+    db.save_session_body("s1", &[sample_message("m1", "user", 1)]).unwrap();
+
+    // 直接以旧形态 SQL 补插一行（不携带 usage_json 列）
+    let conn = db.conn.lock().unwrap();
+    conn.execute(
+        "INSERT INTO session_messages (session_id, seq, id, sender, text, timestamp)
+         VALUES ('s1', 1, 'legacy-m', 'assistant', '旧数据', 3)",
+        [],
+    )
+    .unwrap();
+    drop(conn);
+
+    let loaded = db.load_session_body("s1").unwrap();
+    assert_eq!(loaded.len(), 2);
+    assert_eq!(loaded[1].id, "legacy-m");
+    assert_eq!(loaded[1].usage, None, "旧行 usage_json 为 NULL → None");
 }
 
 #[test]

@@ -171,6 +171,12 @@ pub struct SessionMessage {
     pub blocks_json: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_call_results_json: Option<String>,
+    /// 消息级 usage 快照（v5 列 usage_json 的投影，P5 C8）。
+    /// 内容为前端写入的 camelCase CacheUsage JSON 原样透传（如
+    /// `{"promptTokens":12000,"cacheReadTokens":9000}`），Rust 侧不转换
+    /// 不解析，解析/派生在回读面完成；无快照（含全零，C15）→ None 不落库。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<String>,
 }
 
 /// 协作子 agent（对齐 SessionAgent in store/types.ts L383-405）
@@ -425,6 +431,7 @@ mod tests {
             tool_calls_json: None,
             blocks_json: None,
             tool_call_results_json: None,
+            usage: None,
         };
         let json = serde_json::to_value(&msg).unwrap();
         assert_eq!(json["id"], "m1");
@@ -437,6 +444,7 @@ mod tests {
         assert!(json.get("thinking").is_none());
         assert!(json.get("streamTextOffset").is_none());
         assert!(json.get("toolCallsJson").is_none());
+        assert!(json.get("usage").is_none());
     }
 
     #[test]
@@ -453,10 +461,17 @@ mod tests {
             tool_calls_json: Some(r#"[]"#.into()),
             blocks_json: None,
             tool_call_results_json: None,
+            usage: Some(r#"{"promptTokens":12000,"cacheReadTokens":9000}"#.into()),
         };
         let json = serde_json::to_string(&msg).unwrap();
         let back: SessionMessage = serde_json::from_str(&json).unwrap();
         assert_eq!(msg, back);
+        // usage 线上键为 camelCase 原形（透传字符串，Rust 侧不解析）
+        let value = serde_json::to_value(&msg).unwrap();
+        assert_eq!(
+            value["usage"],
+            r#"{"promptTokens":12000,"cacheReadTokens":9000}"#
+        );
     }
 
     #[test]
@@ -466,6 +481,22 @@ mod tests {
         let msg: SessionMessage = serde_json::from_str(raw).unwrap();
         assert_eq!(msg.id, "m1");
         assert_eq!(msg.thinking_time, Some(5));
+    }
+
+    #[test]
+    fn session_message_usage_absent_deserializes_to_none() {
+        // 旧数据（无 usage 键）反序列化 → None，不炸
+        let raw = r#"{"id":"m1","sender":"user","text":"hi","timestamp":100}"#;
+        let msg: SessionMessage = serde_json::from_str(raw).unwrap();
+        assert_eq!(msg.usage, None);
+        // 携带 usage 键（前端契约形状）→ 原样透传字符串
+        let raw2 = r#"{"id":"m2","sender":"assistant","timestamp":101,
+                       "usage":"{\"promptTokens\":12000,\"cacheReadTokens\":9000}"}"#;
+        let msg2: SessionMessage = serde_json::from_str(raw2).unwrap();
+        assert_eq!(
+            msg2.usage.as_deref(),
+            Some(r#"{"promptTokens":12000,"cacheReadTokens":9000}"#)
+        );
     }
 
     #[test]
@@ -492,6 +523,7 @@ mod tests {
                 tool_calls_json: None,
                 blocks_json: None,
                 tool_call_results_json: None,
+                usage: None,
             }],
             started_at: 50,
             ended_at: Some(150),

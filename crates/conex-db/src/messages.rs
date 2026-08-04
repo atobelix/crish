@@ -16,7 +16,7 @@ impl LocalDb {
             .prepare(
                 "SELECT id, sender, text, thinking, timestamp, status,
                         stream_text_offset, thinking_time, tool_calls_json,
-                        blocks_json, tool_call_results_json
+                        blocks_json, tool_call_results_json, usage_json
                  FROM session_messages
                  WHERE session_id = ?1
                  ORDER BY seq ASC",
@@ -37,6 +37,7 @@ impl LocalDb {
                     tool_calls_json: row.get(8)?,
                     blocks_json: row.get(9)?,
                     tool_call_results_json: row.get(10)?,
+                    usage: row.get(11)?,
                 })
             })
             .map_err(|e| self.latch_error("load_session_body_map", e))?
@@ -74,8 +75,8 @@ impl LocalDb {
                 "INSERT INTO session_messages (
                     session_id, seq, id, sender, text, thinking, timestamp, status,
                     stream_text_offset, thinking_time, tool_calls_json,
-                    blocks_json, tool_call_results_json
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                    blocks_json, tool_call_results_json, usage_json
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 rusqlite::params![
                     session_id,
                     seq_i64,
@@ -90,6 +91,7 @@ impl LocalDb {
                     msg.tool_calls_json,
                     msg.blocks_json,
                     msg.tool_call_results_json,
+                    msg.usage,
                 ],
             )
             .map_err(|e| self.latch_error("save_session_body_insert", e))?;
@@ -134,8 +136,8 @@ impl LocalDb {
                 "INSERT INTO session_messages (
                     session_id, seq, id, sender, text, thinking, timestamp, status,
                     stream_text_offset, thinking_time, tool_calls_json,
-                    blocks_json, tool_call_results_json
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                    blocks_json, tool_call_results_json, usage_json
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 rusqlite::params![
                     session_id,
                     seq,
@@ -150,6 +152,7 @@ impl LocalDb {
                     msg.tool_calls_json,
                     msg.blocks_json,
                     msg.tool_call_results_json,
+                    msg.usage,
                 ],
             )
             .map_err(|e| self.latch_error("append_session_messages_insert", e))?;

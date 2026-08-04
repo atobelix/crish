@@ -28,6 +28,7 @@ fn message(i: usize, text_len: usize) -> SessionMessage {
         tool_calls_json: None,
         blocks_json: None,
         tool_call_results_json: None,
+        usage: None,
     }
 }
 

@@ -74,6 +74,9 @@ impl LocalDb {
                         tool_calls_json: row.get(8)?,
                         blocks_json: row.get(9)?,
                         tool_call_results_json: row.get(10)?,
+                        // session_agent_messages 无 usage_json 列（v5 仅
+                        // session_messages 有），子 agent 消息不回放缓存指标
+                        usage: None,
                     })
                 })
                 .map_err(|e| self.latch_error("load_session_agents_msg_map", e))?

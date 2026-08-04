@@ -12,6 +12,9 @@
 //! - 升级后全部 API 可用：run 生命周期 / reserve_sequence / append_event /
 //!   messages / agents / pending / cleanup / import_from_localstorage 走一遍。
 
+// G2 禁令豁免：测试临时 DB 清理（非产品删除路径，可恢复语义不适用）。
+#![allow(clippy::disallowed_methods)]
+
 use conex_db::{LocalDb, RunStatus, LATEST_VERSION, SCHEMA_VERSION_STRING};
 use conex_types::{SessionAgent, SessionMessage};
 use rusqlite::Connection;
@@ -521,6 +524,7 @@ fn sample_message(id: &str, sender: &str) -> SessionMessage {
         tool_calls_json: None,
         blocks_json: None,
         tool_call_results_json: None,
+        usage: None,
     }
 }
 
