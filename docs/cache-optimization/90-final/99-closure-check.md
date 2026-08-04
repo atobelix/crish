@@ -84,3 +84,17 @@ R7 审计（R7-audit-leftover.md §2.2）确认 2.4/2.5/2.6/2.7 四个既有标�
 - 缓存优化域源码遗留：仅 R5-D3（4）与 R6-D5（5）两项为开放状态，均为**已登记推迟项**，非本轮收口范围，不阻塞终验。
 - 模型目录专项遗留 7 项中 6 项为日期驱动/外部核实类，1 项（#6）部分完成（例外条款已补、后缀契约待办）。
 - 本文件全部结论可回溯至 R7-audit-leftover.md、99-project-closure.md 与本次实读位置；未修改任何源代码。
+
+## 2026-08-04 系统性收口批次 2（追加）
+
+| #   | 项                                                                                                    | 状态                             |
+| --- | ----------------------------------------------------------------------------------------------------- | -------------------------------- |
+| C14 | T-40 core_run_commands.rs 合并（run_usage 真实实现/收口落库/producer 装配，as_local_db downcast）     | ✅ 已关闭（ac554c99）            |
+| C15 | 消息级 cacheMetrics 回放面（sessionRustDb usage 写读 + Rust SessionMessage.usage 落库闭环）           | ✅ 已关闭（ac554c99 + d1b0dde2） |
+| C16 | x-grok-conv-id 发送层接线（affinity_http_headers）                                                    | ✅ 已关闭（ac554c99）            |
+| C17 | comparison.md 10 节补标 + schema 例外条款                                                             | ✅ 已关闭（ac554c99）            |
+| C18 | 循环依赖 TDZ（sessionRustDb→messageHandlers→store）——A3 引入，已提取 cacheMetricsCompute 无环模块修复 | ✅ 已关闭（74243f7d）            |
+| C19 | e2e boot 窗口放宽（5s→15s，冷启动 flake 缓解）                                                        | ✅ 已关闭（74243f7d）            |
+| C20 | 终验：cargo 80 套件 0 失败；vitest 4283 通过（11 失败全归因既有/外部）；e2e 缓存域单 worker 9/9 全绿  | ✅ 已验证                        |
+
+> 遗留（待触发条件，非阻塞）：glm-4-5-x apiModel 待核实、Gemini 3.5/3.6 存储费、GLM 存储费 9/1 恢复价、DeepSeek 峰谷生效、v4-pro Responses 8 月中旬刷新、models.dev 远程源接入（后续专项）、Kimi adaptive 待原生 Messages 轨、并行 e2e flake（T-45 已登记，单 worker 全绿）。
