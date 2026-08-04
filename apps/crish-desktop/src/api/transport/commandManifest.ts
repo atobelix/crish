@@ -15,10 +15,10 @@
 import { invokeTyped } from '../tauriInvoke';
 
 /** 契约版本（semver，§2.5 约定；与 Rust COMMAND_MANIFEST_CONTRACT_VERSION 同步） */
-export const COMMAND_MANIFEST_CONTRACT_VERSION = '1.0.0';
+const COMMAND_MANIFEST_CONTRACT_VERSION = '1.0.0';
 
 /** 清单条目（对应 Rust CommandManifestEntry，serde camelCase） */
-export interface CommandManifestEntry {
+interface CommandManifestEntry {
   name: string;
   /** 分组（core / config / session / md / perf / workbench） */
   family: string;
@@ -66,6 +66,10 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('workbench_open_host_target', 'workbench', 'gui'),
     entry('workbench_open_path_default', 'workbench', 'gui'),
     entry('workbench_list_file_openers', 'workbench', 'gui'),
+    // F1（R-AB1 T-AB-08）：后台任务三条查询命令恢复（与 Rust 侧 manifest 同步）
+    entry('workbench_list_background_tasks', 'workbench', 'gui'),
+    entry('workbench_get_background_task_output', 'workbench', 'gui'),
+    entry('workbench_cancel_background_task', 'workbench', 'gui'),
     entry('workbench_select_folder', 'workbench', 'gui'),
     entry('workbench_list_directory', 'workbench', 'gui'),
     entry('workbench_read_file_content', 'workbench', 'gui'),

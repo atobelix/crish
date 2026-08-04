@@ -33,8 +33,8 @@ describe('commandManifest', () => {
       // 变更 Rust 侧时同步本快照，双向条数由两端测试锁定
       // PE-07：T07.3（git_run/fs_delete_file）+ T07.4（profile_apply/secret_reveal）已接线
       // P3 步骤 5（C7 ③）：catalog_get / catalog_refresh 已接线
-      expect(registered).toBe(71);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(75);
+      expect(registered).toBe(74);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(78);
     });
 
     it('命令名唯一', () => {
