@@ -1,11 +1,12 @@
-//! 命令语义分析层（I1-S1）：拆段 / 间接执行识别 / 字段级规范化 / 六类分类。
+//! 命令语义分析层（I1-S1）：拆段 / 间接执行识别 / 字段级规范化 / 七类分类。
 //!
 //! 设计目标：静态正则必然被等价变形绕过（`rm -rf -- ./`、`&&` 链、PowerShell 变体），
-//! 本模块先建"拆段 + 间接执行递归 + 规范化"底座，再产出六类分类，
-//! 供 S2（极端危险拦截）、S4（删除形态重定向）、S6（git 回退面积）消费。
+//! 本模块先建"拆段 + 间接执行递归 + 规范化"底座，再产出七类分类，
+//! 供 S2（极端危险拦截）、S4（删除形态重定向）、S6（git 回退面积）、
+//! T-AB-05（禁 cd 语义层）消费。
 //! lib.rs 的 gatekeeper 接入在 S2 完成，本模块保持纯函数、无 I/O。
 
-/// 命令分类（六类，S1 规格第 4 条）
+/// 命令分类（七类：S1 规格六类 + T-AB-05 新增 cd 形态）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandClass {
     /// 普通命令（git status / npm test / ls 等）
@@ -20,6 +21,9 @@ pub enum CommandClass {
     GitRevertShape,
     /// 间接执行（bash -c / eval / sudo 包裹），递归分析内层
     Indirect,
+    /// cd 形态（cd / Set-Location / sl / pushd / popd，T-AB-05 禁 cd 语义层），
+    /// 依赖进程内目录状态，命令面据此引导改用 Cwd 参数
+    CdShape,
 }
 
 /// 单个命令段（拆段结果）
@@ -40,12 +44,17 @@ pub struct CommandSegment {
 pub struct SemanticAnalysis {
     /// 拆段列表
     pub segments: Vec<CommandSegment>,
-    /// 整体分类（任一段 Redline 则 Redline；否则按优先级 Dangerous > GitRevertShape > DeleteShape > Indirect > Normal）
+    /// 整体分类（任一段 Redline 则 Redline；否则按优先级
+    /// Dangerous > GitRevertShape > DeleteShape > CdShape > Indirect > Normal；
+    /// T-AB-05：cd 形态与删除形态独立判定，链内同时命中时删除优先）
     pub overall_class: CommandClass,
     /// 聚合的删除目标（去重保序）
     pub delete_targets: Vec<String>,
     /// 聚合的 git 回退形态描述
     pub git_revert_forms: Vec<String>,
+    /// 间接执行内层含删除形态（`bash -c 'rm x'` / `xargs rm` 等包裹，
+    /// I2-S4：外层无法安全解析内层目标，命令面据此整链拦截 + 引导）
+    pub has_indirect_delete: bool,
 }
 
 /// 间接执行命令名（小写）
@@ -58,6 +67,12 @@ const INDIRECT_COMMANDS: &[&str] = &[
 const DELETE_COMMANDS: &[&str] = &[
     "rm", "rmdir", "del", "erase", "rd", "remove-item", "git",
 ];
+
+/// cd 形态命令名（小写，T-AB-05 禁 cd 语义层）：
+/// Windows cmd 的 cd（含 cd /d、cd ..）、PowerShell 的 Set-Location 及其别名
+/// cd / sl，以及 pushd / popd（Push-Location / Pop-Location 别名——
+/// 壳层 workbench_run_shell 走 powershell -EncodedCommand，PowerShell 别名全量纳入）
+const CD_COMMANDS: &[&str] = &["cd", "set-location", "sl", "pushd", "popd"];
 
 /// 危险形态命令名（小写，红线段对象）
 const DANGEROUS_COMMANDS: &[&str] = &[
@@ -78,6 +93,7 @@ pub fn analyze(command_line: &str) -> SemanticAnalysis {
     let mut segments = Vec::new();
     let mut delete_targets = Vec::new();
     let mut git_revert_forms = Vec::new();
+    let mut has_indirect_delete = false;
 
     for seg in raw_segments {
         let (command, args) = split_command_args(&seg);
@@ -88,6 +104,14 @@ pub fn analyze(command_line: &str) -> SemanticAnalysis {
             class: classify(&normalized, &args, &seg),
             targets: Vec::new(),
         };
+
+        // I2-S4：间接执行内层删除形态标记（bash -c 'rm x' / xargs rm 等——
+        // 外层命令无法安全解析内层目标，命令面据此拦截 + 引导，防包裹绕过）
+        if INDIRECT_COMMANDS.contains(&normalized.as_str())
+            && analyze_indirect(&seg).overall_class == CommandClass::DeleteShape
+        {
+            has_indirect_delete = true;
+        }
 
         if is_delete_command(&normalized) {
             segment.targets = extract_delete_targets(&normalized, &args);
@@ -115,6 +139,7 @@ pub fn analyze(command_line: &str) -> SemanticAnalysis {
         overall_class,
         delete_targets,
         git_revert_forms,
+        has_indirect_delete,
     }
 }
 
@@ -435,6 +460,7 @@ fn analyze_indirect(segment_raw: &str) -> SemanticAnalysis {
             overall_class: CommandClass::Normal,
             delete_targets: Vec::new(),
             git_revert_forms: Vec::new(),
+            has_indirect_delete: false,
         },
     }
 }
@@ -475,25 +501,37 @@ fn classify(command: &str, args: &[String], segment_raw: &str) -> CommandClass {
         return CommandClass::DeleteShape;
     }
 
-    // 3. git 回退形态
+    // 3. cd 形态（T-AB-05 禁 cd 语义层）：段首命令名命中 cd 家族即标记。
+    //    与删除形态互不干扰：cd 不在 DELETE_COMMANDS、删除命令也不在 CD_COMMANDS，
+    //    两条路径独立判定；引号内的 "cd x" 经拆参后命令名是 echo，天然不命中；
+    //    git -C / npm --prefix / python -m 等形态命令名不是 cd 家族，同样不命中
+    if CD_COMMANDS.contains(&command) {
+        return CommandClass::CdShape;
+    }
+
+    // 4. git 形态：git rm 属删除形态（走删除接管，S1 规格第 5 条），
+    //    其余子命令按回退形态 / 普通命令判定
     if command == "git" {
+        if args.first().map(|s| s.as_str()) == Some("rm") {
+            return CommandClass::DeleteShape;
+        }
         if classify_git_revert(args).is_some() {
             return CommandClass::GitRevertShape;
         }
         return CommandClass::Normal;
     }
 
-    // 4. 红线形态（确定性毁灭目标，100% 拦截层）
+    // 5. 红线形态（确定性毁灭目标，100% 拦截层）
     if REDLINE_COMMANDS.contains(&command) {
         return CommandClass::Redline;
     }
 
-    // 5. 危险形态
+    // 6. 危险形态
     if DANGEROUS_COMMANDS.contains(&command) {
         return CommandClass::Dangerous;
     }
 
-    // 5. curl|bash 管道（stdin 管道间接执行）——在整体分析后处理，这里按 Dangerous 提示
+    // 7. curl|bash 管道（stdin 管道间接执行）——在整体分析后处理，这里按 Dangerous 提示
     if command == "curl" || command == "wget" {
         return CommandClass::Dangerous;
     }
@@ -561,16 +599,19 @@ fn classify_git_revert(args: &[String]) -> Option<String> {
                 None
             }
         }
-        "rm" => Some("git rm".to_string()),
         _ => None,
     }
 }
 
-/// 整体分类：任一段 Redline 则 Redline；否则优先级 Dangerous > GitRevertShape > DeleteShape > Indirect > Normal。
+/// 整体分类：任一段 Redline 则 Redline；否则优先级
+/// Dangerous > GitRevertShape > DeleteShape > CdShape > Indirect > Normal
+/// （T-AB-05：cd 形态与删除形态互不干扰，链内同时命中时删除优先——
+/// 与方案第 4 点「先删除后 cd」的执行序一致）。
 fn overall(segments: &[CommandSegment]) -> CommandClass {
     let mut has_dangerous = false;
     let mut has_revert = false;
     let mut has_delete = false;
+    let mut has_cd = false;
     let mut has_indirect = false;
     for s in segments {
         match s.class {
@@ -578,6 +619,7 @@ fn overall(segments: &[CommandSegment]) -> CommandClass {
             CommandClass::Dangerous => has_dangerous = true,
             CommandClass::GitRevertShape => has_revert = true,
             CommandClass::DeleteShape => has_delete = true,
+            CommandClass::CdShape => has_cd = true,
             CommandClass::Indirect => has_indirect = true,
             CommandClass::Normal => {}
         }
@@ -588,11 +630,37 @@ fn overall(segments: &[CommandSegment]) -> CommandClass {
         CommandClass::GitRevertShape
     } else if has_delete {
         CommandClass::DeleteShape
+    } else if has_cd {
+        CommandClass::CdShape
     } else if has_indirect {
         CommandClass::Indirect
     } else {
         CommandClass::Normal
     }
+}
+
+/// 公开分类入口（T-AB-05 冻结签名，供 T-AB-04 调用）：
+/// 入参为整条命令的拆段列表（段为单位，段内若仍含 && 等复合分隔符会再次拆开），
+/// 返回整链分类，优先级与整体分类一致
+/// （Redline > Dangerous > GitRevertShape > DeleteShape > CdShape > Indirect > Normal）。
+/// 内部复用拆段 / 段分类 / 整体判定逻辑，与 analyze 完全同口径。
+pub fn classify_command_segments(segments: &[String]) -> CommandClass {
+    let mut classified = Vec::new();
+    for seg in segments {
+        // 引号感知拆段：echo "a && b" 保持单段，段内 cd 不会漏拆也不会误拆
+        for piece in split_segments(seg) {
+            let (command, args) = split_command_args(&piece);
+            let normalized = normalize_command(&command);
+            let class = classify(&normalized, &args, &piece);
+            classified.push(CommandSegment {
+                command: normalized,
+                args,
+                class,
+                targets: Vec::new(),
+            });
+        }
+    }
+    overall(&classified)
 }
 
 #[cfg(test)]
@@ -738,5 +806,152 @@ mod tests {
     fn windows_drive_root_redline() {
         let a = analyze("rd /s /q C:\\");
         assert_eq!(a.overall_class, CommandClass::Redline);
+    }
+
+    #[test]
+    fn git_rm_is_delete_shape() {
+        let a = analyze("git rm file.txt");
+        assert_eq!(a.overall_class, CommandClass::DeleteShape);
+        assert!(a.delete_targets.contains(&"file.txt".to_string()));
+        assert!(a.git_revert_forms.is_empty(), "git rm 属删除形态，不计入回退清单");
+        assert!(!a.has_indirect_delete);
+    }
+
+    #[test]
+    fn git_rm_cached_is_delete_shape() {
+        // --cached 只解除跟踪不物理删除，仍按删除形态识别（目标为空由命令面兜底）
+        let a = analyze("git rm --cached file.txt");
+        assert_eq!(a.overall_class, CommandClass::DeleteShape);
+        assert!(!a.delete_targets.is_empty());
+    }
+
+    #[test]
+    fn indirect_delete_wrapper_flagged() {
+        let a = analyze("bash -c 'rm -rf tmp/foo'");
+        assert!(a.has_indirect_delete, "间接执行内层删除形态必须置标记");
+        // 不升级整体分类（保持 Indirect），由命令面（I2-S4）消费该标记拦截
+        assert_eq!(a.overall_class, CommandClass::Indirect);
+    }
+
+    #[test]
+    fn indirect_xargs_rm_flagged() {
+        let a = analyze("xargs rm -rf tmp/foo");
+        assert!(a.has_indirect_delete);
+    }
+
+    #[test]
+    fn indirect_normal_inner_not_flagged() {
+        let a = analyze("bash -c 'echo hi'");
+        assert!(!a.has_indirect_delete);
+        assert_eq!(a.overall_class, CommandClass::Indirect);
+    }
+
+    #[test]
+    fn plain_delete_has_no_indirect_flag() {
+        let a = analyze("rm -rf tmp/foo");
+        assert!(!a.has_indirect_delete);
+        assert_eq!(a.overall_class, CommandClass::DeleteShape);
+    }
+
+    // ===== T-AB-05：禁 cd 语义层 =====
+
+    #[test]
+    fn cd_shape_detected() {
+        let a = analyze("cd sub");
+        assert_eq!(a.overall_class, CommandClass::CdShape);
+        assert_eq!(a.segments[0].class, CommandClass::CdShape);
+    }
+
+    #[test]
+    fn cd_dotdot_and_drive_flag_detected() {
+        assert_eq!(analyze("cd ..").overall_class, CommandClass::CdShape);
+        assert_eq!(analyze("cd /d C:\\").overall_class, CommandClass::CdShape);
+    }
+
+    #[test]
+    fn powershell_cd_family_detected() {
+        assert_eq!(analyze("Set-Location D:\\code").overall_class, CommandClass::CdShape);
+        assert_eq!(analyze("sl sub").overall_class, CommandClass::CdShape);
+        assert_eq!(analyze("pushd sub").overall_class, CommandClass::CdShape);
+        assert_eq!(analyze("popd").overall_class, CommandClass::CdShape);
+    }
+
+    #[test]
+    fn quoted_cd_inside_string_not_detected() {
+        // 引号内 "cd x" 是 echo 的参数，命令名不是 cd 家族，不命中
+        assert_eq!(analyze("echo \"cd x\"").overall_class, CommandClass::Normal);
+        assert_eq!(analyze("echo cd x").overall_class, CommandClass::Normal);
+    }
+
+    #[test]
+    fn non_stateful_forms_not_detected() {
+        // 不依赖进程内目录状态的形态：git -C / npm --prefix / python -m
+        assert_eq!(analyze("git -C src status").overall_class, CommandClass::Normal);
+        assert_eq!(analyze("npm --prefix ./sub run build").overall_class, CommandClass::Normal);
+        assert_eq!(analyze("python -m pip install x").overall_class, CommandClass::Normal);
+    }
+
+    #[test]
+    fn cd_chain_with_delete_priority_delete_wins() {
+        // 复合链同时命中：cd 段标记 CdShape，rm 段标记 DeleteShape，
+        // 整体按删除优先（先删除后 cd，执行序不变）
+        let a = analyze("cd x && rm -rf y");
+        assert_eq!(a.segments[0].class, CommandClass::CdShape);
+        assert_eq!(a.segments[1].class, CommandClass::DeleteShape);
+        assert_eq!(a.overall_class, CommandClass::DeleteShape);
+    }
+
+    #[test]
+    fn cd_chain_without_delete_overall_cd() {
+        let a = analyze("cd sub && git status");
+        assert_eq!(a.overall_class, CommandClass::CdShape);
+    }
+
+    #[test]
+    fn cd_does_not_trigger_delete_shape() {
+        // 两条路径独立判定：cd 段不触发删除形态，也不产生删除目标
+        let a = analyze("cd x");
+        assert_eq!(a.segments[0].class, CommandClass::CdShape);
+        assert!(a.delete_targets.is_empty());
+        assert!(!a.has_indirect_delete);
+    }
+
+    #[test]
+    fn path_prefixed_cd_normalized() {
+        // 与 /bin/rm 归一逻辑同构：/usr/bin/cd 归一后仍是 cd
+        let a = analyze("/usr/bin/cd /tmp");
+        assert_eq!(a.overall_class, CommandClass::CdShape);
+    }
+
+    #[test]
+    fn classify_command_segments_entry_works() {
+        // 公开入口（冻结签名）：单段命中
+        assert_eq!(
+            classify_command_segments(&["cd x".to_string()]),
+            CommandClass::CdShape
+        );
+        assert_eq!(
+            classify_command_segments(&["Set-Location x".to_string()]),
+            CommandClass::CdShape
+        );
+        // 复合链：删除优先，cd 判定独立生效
+        assert_eq!(
+            classify_command_segments(&["cd x".to_string(), "rm -rf y".to_string()]),
+            CommandClass::DeleteShape
+        );
+        // 未拆段兜底：段内仍含 && 时再次拆开判定
+        assert_eq!(
+            classify_command_segments(&["cd x && rm -rf y".to_string()]),
+            CommandClass::DeleteShape
+        );
+        // 不命中形态：整体 Normal
+        assert_eq!(
+            classify_command_segments(&["git -C src status".to_string()]),
+            CommandClass::Normal
+        );
+        assert_eq!(
+            classify_command_segments(&["echo hi".to_string(), "git status".to_string()]),
+            CommandClass::Normal
+        );
     }
 }

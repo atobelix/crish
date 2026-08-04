@@ -1,4 +1,7 @@
 pub mod semantics;
+// T-AB-05 新增公开导出：禁 cd 语义层分类入口（供 T-AB-04 调用，
+// 冻结签名 classify_command_segments(&[String]) -> CommandClass）
+pub use semantics::{classify_command_segments, CommandClass};
 pub mod gatekeeper {
     use regex::RegexSet;
     use serde::{Deserialize, Serialize};
@@ -342,6 +345,53 @@ mod tests {
         assert_eq!(
             gk.check_command("git", &["status"]),
             GatekeeperResult::Allowed
+        );
+    }
+
+    // ===== I3-S6：C3 CommandPolicy 兜底确认（静态审批正则 + 语义层覆盖）=====
+
+    /// 兜底仍生效：git reset --hard / git clean -f 在 approval_patterns 命中 →
+    /// RequiresApproval（C3 第二层防线，命令门禁级）
+    #[test]
+    fn approval_patterns_still_cover_revert_forms() {
+        let gk = CommandGatekeeper::new();
+        assert_eq!(
+            gk.check_command("git reset --hard HEAD~5", &[]),
+            GatekeeperResult::RequiresApproval,
+            "git reset --hard 必须仍命中审批正则"
+        );
+        assert_eq!(
+            gk.check_command("git", &["reset", "--hard", "HEAD~5"]),
+            GatekeeperResult::RequiresApproval
+        );
+        assert_eq!(
+            gk.check_command("git clean -f", &[]),
+            GatekeeperResult::RequiresApproval,
+            "git clean -f 必须仍命中审批正则"
+        );
+        assert_eq!(
+            gk.check_command("git", &["clean", "-fd"]),
+            GatekeeperResult::RequiresApproval,
+            "clean 组合短选项变体同样命中"
+        );
+    }
+
+    /// git checkout <旧ref> 不在 approval_patterns（静态正则缺位）——该形态由
+    /// 语义层 GitRevertShape（S1）+ C3 判定点（S6，agent-tools decide 链）覆盖；
+    /// 本层只锁定「分支切换不误拦」：checkout main 与 checkout <旧ref> 均放行，
+    /// 大面积判定不在门禁层（避免把分支切换误升级为审批）
+    #[test]
+    fn checkout_old_ref_semantics_covered_outside_gatekeeper() {
+        let gk = CommandGatekeeper::new();
+        assert_eq!(
+            gk.check_command("git checkout abc1234", &[]),
+            GatekeeperResult::Allowed,
+            "checkout <旧ref> 由语义层覆盖，门禁层不误拦"
+        );
+        assert_eq!(
+            gk.check_command("git checkout main", &[]),
+            GatekeeperResult::Allowed,
+            "分支切换保持放行"
         );
     }
 }
