@@ -24,13 +24,19 @@
  * 当前所有错误一律回退 localStorage，避免单点错误阻塞会话读写。
  */
 
-import type { SessionAgent, SessionMessage, SessionState } from '../../store/layoutStore';
+import type {
+  SessionAgent,
+  SessionMessage,
+  SessionState,
+} from '../../store/layoutStore';
 import type {
   MessageTimelineBlock,
   MessageToolCall,
   SessionMessageToolCallResult,
 } from '../../store/types';
 import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
+import type { MessageCacheState } from '@crish/shared-types';
+import { computeCacheMetricsFromUsage } from '../chat-bridge/handlers/messageHandlers';
 import { coerceSessionTimestamp } from '../sessionTime';
 import { prepareSessionsForUi } from '../sessionTitle';
 import { normalizeAssistantTimeline } from '../toolPresentation';
@@ -41,7 +47,6 @@ import {
   parseSessionIndexEntry,
   parseSessionIndexList,
   parseSessionMessage,
-  parseSessionMessages,
   sanitizeMessagesForHydrate,
   hydrateSessionAgents,
   safeParseJson,
@@ -78,6 +83,15 @@ interface RustSessionMessage {
   toolCallsJson?: string | null;
   blocksJson?: string | null;
   toolCallResultsJson?: string | null;
+  /**
+   * 消息级 usage 快照（P5 C8：v5 列 usage_json 的 IPC 投影）。
+   * 线上键为 camelCase 的 `usage`，内容为 CacheUsage 形状的 JSON 字符串
+   * （如 `{"promptTokens":12000,"cacheReadTokens":9000}`，与 conex-db
+   * tests.rs `usage_json_column_read_write_roundtrip` fixture 同形）。
+   * R6-D5 核对结论：Rust `SessionMessage` 结构体尚未实现该字段（serde
+   * 未知字段静默丢弃）——前端按契约先行写入，待 Rust 侧补字段后生效。
+   */
+  usage?: string | null;
 }
 
 /**
@@ -129,7 +143,9 @@ interface RustImportStats {
 
 // ── 形状转换：JS → Rust ────────────────────────────────────────────────────
 
-function messageToolCallsToJson(toolCalls: MessageToolCall[] | undefined): string | null {
+function messageToolCallsToJson(
+  toolCalls: MessageToolCall[] | undefined
+): string | null {
   if (!toolCalls || toolCalls.length === 0) return null;
   try {
     return JSON.stringify(toolCalls);
@@ -138,7 +154,9 @@ function messageToolCallsToJson(toolCalls: MessageToolCall[] | undefined): strin
   }
 }
 
-function messageBlocksToJson(blocks: MessageTimelineBlock[] | undefined): string | null {
+function messageBlocksToJson(
+  blocks: MessageTimelineBlock[] | undefined
+): string | null {
   if (!blocks || blocks.length === 0) return null;
   try {
     return JSON.stringify(blocks);
@@ -148,11 +166,35 @@ function messageBlocksToJson(blocks: MessageTimelineBlock[] | undefined): string
 }
 
 function toolCallResultsToJson(
-  results: SessionMessageToolCallResult[] | undefined,
+  results: SessionMessageToolCallResult[] | undefined
 ): string | null {
   if (!results || results.length === 0) return null;
   try {
     return JSON.stringify(results);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * SessionMessage.cacheMetrics → usage_json 快照（R6-D5 写入面）。
+ * - 只落原始计数（read/write/miss）与 inputTotal；inputTotal 以 Included
+ *   权威口径映射为 promptTokens（T-45 fixture 契约），回放时
+ *   computeCacheMetricsFromUsage 可重派生命中率；
+ * - hitRate/writeRate 为派生值不落库（回放可重算）；
+ * - 无缓存指标（含全零）→ null（不写 usage_json，C15：0 与未上报不可混淆）。
+ */
+function messageUsageToJson(msg: SessionMessage): string | null {
+  const m = msg.cacheMetrics?.metrics;
+  if (!m) return null;
+  const usage: Record<string, number> = {};
+  if (m.cacheReadTokens != null) usage.cacheReadTokens = m.cacheReadTokens;
+  if (m.cacheWriteTokens != null) usage.cacheWriteTokens = m.cacheWriteTokens;
+  if (m.cacheMissTokens != null) usage.cacheMissTokens = m.cacheMissTokens;
+  if (m.inputTotal != null) usage.promptTokens = m.inputTotal;
+  if (Object.keys(usage).length === 0) return null;
+  try {
+    return JSON.stringify(usage);
   } catch {
     return null;
   }
@@ -176,6 +218,8 @@ function toRustSessionMessage(msg: SessionMessage): RustSessionMessage {
   if (bl != null) out.blocksJson = bl;
   const tr = toolCallResultsToJson(msg.toolCallResults);
   if (tr != null) out.toolCallResultsJson = tr;
+  const usage = messageUsageToJson(msg);
+  if (usage != null) out.usage = usage;
   return out;
 }
 
@@ -191,7 +235,8 @@ function toRustSessionAgent(agent: SessionAgent): RustSessionAgent {
     messages: (agent.messages || []).map(toRustSessionMessage),
     startedAt: agent.startedAt,
   };
-  if (agent.parentToolCallId != null) out.parentToolCallId = agent.parentToolCallId;
+  if (agent.parentToolCallId != null)
+    out.parentToolCallId = agent.parentToolCallId;
   if (agent.summary != null) out.summary = agent.summary;
   if (agent.endedAt != null) out.endedAt = agent.endedAt;
   if (agent.depth != null) out.depth = agent.depth;
@@ -205,35 +250,6 @@ function toRustSessionAgent(agent: SessionAgent): RustSessionAgent {
   return out;
 }
 
-function pinnedIdsToJson(ids: string[] | undefined): string | null {
-  if (!ids || ids.length === 0) return null;
-  try {
-    return JSON.stringify(ids);
-  } catch {
-    return null;
-  }
-}
-
-export function toRustSessionIndexEntry(entry: SessionIndexEntry): RustSessionIndexEntry {
-  const out: RustSessionIndexEntry = {
-    id: entry.id,
-    title: entry.title,
-    folder: entry.folder,
-    isPinned: entry.isPinned,
-    isArchived: entry.isArchived,
-    timestamp: entry.timestamp,
-    updatedAt: entry.updatedAt,
-    messageCount: entry.messageCount,
-  };
-  if (entry.branchParentId != null) out.branchParentId = entry.branchParentId;
-  const pins = pinnedIdsToJson(entry.pinnedMessageIds);
-  if (pins != null) out.pinnedMessageIds = pins;
-  if (entry.engineCursor != null) out.engineCursor = entry.engineCursor;
-  if (entry.engineLastRunId != null) out.engineLastRunId = entry.engineLastRunId;
-  if (entry.hydratedFromEngine != null) out.hydratedFromEngine = entry.hydratedFromEngine;
-  return out;
-}
-
 // ── 形状转换：Rust → JS ────────────────────────────────────────────────────
 
 function parseJsonArray<T>(raw: string | null | undefined, fallback: T): T {
@@ -241,8 +257,28 @@ function parseJsonArray<T>(raw: string | null | undefined, fallback: T): T {
   return safeParseJson<T>(raw, fallback);
 }
 
+/**
+ * usage_json → 消息级缓存状态（R6-D5 回放面）。
+ * - 复用消息级派生纯函数 computeCacheMetricsFromUsage：从 CacheUsage 形状
+ *   快照重派生命中率（C9 口径唯一真源），与 message-end 实时链同源；
+ * - null / 坏 JSON / 全零 → undefined（C15：未上报 → 隐藏而非 0%）；
+ * - source 标 engine-message-end：快照源头即 message-end（写入侧契约），
+ *   消费面（CacheMetricsBadge）只读 metrics，source 为溯源信息。
+ */
+function cacheStateFromUsageJson(
+  raw: string | null | undefined
+): MessageCacheState | undefined {
+  if (raw == null || raw === '') return undefined;
+  const usage = safeParseJson<unknown>(raw, null);
+  const metrics = computeCacheMetricsFromUsage({ usage });
+  if (!metrics) return undefined;
+  return { metrics, source: 'engine-message-end' };
+}
+
 /** Rust SessionMessage → JS SessionMessage（JSON 字符串字段还原为数组） */
-function fromRustSessionMessage(rust: RustSessionMessage): SessionMessage | null {
+function fromRustSessionMessage(
+  rust: RustSessionMessage
+): SessionMessage | null {
   // 复用 sessionHydration 的形状守卫，确保数据干净
   const normalized: unknown = {
     id: rust.id,
@@ -251,7 +287,9 @@ function fromRustSessionMessage(rust: RustSessionMessage): SessionMessage | null
     ...(rust.text != null ? { text: rust.text } : {}),
     ...(rust.thinking != null ? { thinking: rust.thinking } : {}),
     ...(rust.status != null ? { status: rust.status } : {}),
-    ...(rust.streamTextOffset != null ? { streamTextOffset: rust.streamTextOffset } : {}),
+    ...(rust.streamTextOffset != null
+      ? { streamTextOffset: rust.streamTextOffset }
+      : {}),
     ...(rust.thinkingTime != null ? { thinkingTime: rust.thinkingTime } : {}),
     ...(rust.toolCallsJson != null
       ? { toolCalls: parseJsonArray<unknown[]>(rust.toolCallsJson, []) }
@@ -260,10 +298,21 @@ function fromRustSessionMessage(rust: RustSessionMessage): SessionMessage | null
       ? { blocks: parseJsonArray<unknown[]>(rust.blocksJson, []) }
       : {}),
     ...(rust.toolCallResultsJson != null
-      ? { toolCallResults: parseJsonArray<unknown[]>(rust.toolCallResultsJson, []) }
+      ? {
+          toolCallResults: parseJsonArray<unknown[]>(
+            rust.toolCallResultsJson,
+            []
+          ),
+        }
       : {}),
   };
-  return parseSessionMessage(normalized);
+  const parsed = parseSessionMessage(normalized);
+  if (!parsed) return null;
+  // 徽标回放：usage_json 回读 → 派生 cacheMetrics（守卫是白名单不携带该字段，
+  // 因此在守卫之后挂载；无 usage → 不写字段，渲染层隐藏）
+  const cacheMetrics = cacheStateFromUsageJson(rust.usage);
+  if (cacheMetrics) parsed.cacheMetrics = cacheMetrics;
+  return parsed;
 }
 
 function fromRustSessionMessages(list: RustSessionMessage[]): SessionMessage[] {
@@ -291,7 +340,9 @@ function fromRustSessionAgent(rust: RustSessionAgent): SessionAgent | null {
     status: rust.status,
     messages: fromRustSessionMessages(rust.messages || []),
     startedAt: rust.startedAt,
-    ...(rust.parentToolCallId != null ? { parentToolCallId: rust.parentToolCallId } : {}),
+    ...(rust.parentToolCallId != null
+      ? { parentToolCallId: rust.parentToolCallId }
+      : {}),
     ...(rust.summary != null ? { summary: rust.summary } : {}),
     ...(rust.endedAt != null ? { endedAt: rust.endedAt } : {}),
     ...(rust.depth != null ? { depth: rust.depth } : {}),
@@ -311,7 +362,9 @@ function fromRustSessionAgents(list: RustSessionAgent[]): SessionAgent[] {
 }
 
 /** Rust SessionIndexEntry → JS SessionIndexEntry */
-function fromRustSessionIndexEntry(rust: RustSessionIndexEntry): SessionIndexEntry | null {
+function fromRustSessionIndexEntry(
+  rust: RustSessionIndexEntry
+): SessionIndexEntry | null {
   const pinnedIds = rust.pinnedMessageIds
     ? parseJsonArray<string[]>(rust.pinnedMessageIds, [])
     : undefined;
@@ -324,16 +377,24 @@ function fromRustSessionIndexEntry(rust: RustSessionIndexEntry): SessionIndexEnt
     timestamp: rust.timestamp,
     updatedAt: rust.updatedAt,
     messageCount: rust.messageCount,
-    ...(rust.branchParentId != null ? { branchParentId: rust.branchParentId } : {}),
+    ...(rust.branchParentId != null
+      ? { branchParentId: rust.branchParentId }
+      : {}),
     ...(pinnedIds && pinnedIds.length ? { pinnedMessageIds: pinnedIds } : {}),
     ...(rust.engineCursor != null ? { engineCursor: rust.engineCursor } : {}),
-    ...(rust.engineLastRunId != null ? { engineLastRunId: rust.engineLastRunId } : {}),
-    ...(rust.hydratedFromEngine != null ? { hydratedFromEngine: rust.hydratedFromEngine } : {}),
+    ...(rust.engineLastRunId != null
+      ? { engineLastRunId: rust.engineLastRunId }
+      : {}),
+    ...(rust.hydratedFromEngine != null
+      ? { hydratedFromEngine: rust.hydratedFromEngine }
+      : {}),
   };
   return parseSessionIndexEntry(normalized);
 }
 
-function fromRustSessionIndexEntries(list: RustSessionIndexEntry[]): SessionIndexEntry[] {
+function fromRustSessionIndexEntries(
+  list: RustSessionIndexEntry[]
+): SessionIndexEntry[] {
   if (!Array.isArray(list)) return [];
   const out: SessionIndexEntry[] = [];
   for (const r of list) {
@@ -362,10 +423,49 @@ function lsLoadSessionIndex(): SessionIndexEntry[] {
 
 function lsSaveSessionIndex(entries: SessionIndexEntry[]): void {
   try {
-    localStorage.setItem(SESSION_INDEX_KEY, JSON.stringify(parseSessionIndexList(entries)));
+    localStorage.setItem(
+      SESSION_INDEX_KEY,
+      JSON.stringify(parseSessionIndexList(entries))
+    );
   } catch {
     /* quota / private mode */
   }
+}
+
+/**
+ * 从原始存盘 JSON 恢复 cacheMetrics（R6-D5 回放面，localStorage 回退路径）。
+ * lsSaveSessionBody 整条 JSON.stringify SessionMessage（含 cacheMetrics），
+ * 而 parseSessionMessage 是白名单守卫不携带该字段 → 读回时重新挂载，
+ * 与 SQLite usage_json 回读（fromRustSessionMessage）行为对齐。
+ * MessageCacheState 形状守卫：metrics 非空对象 + source 枚举合法才挂载，
+ * 其余情况原样返回（坏数据不传播）。
+ */
+function attachStoredCacheMetrics(
+  parsed: SessionMessage | null,
+  raw: unknown
+): SessionMessage | null {
+  if (!parsed) return null;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return parsed;
+  const cache = (raw as Record<string, unknown>).cacheMetrics;
+  if (!cache || typeof cache !== 'object' || Array.isArray(cache))
+    return parsed;
+  const cm = cache as Record<string, unknown>;
+  const metrics = cm.metrics;
+  if (!metrics || typeof metrics !== 'object' || Array.isArray(metrics))
+    return parsed;
+  const source = cm.source;
+  if (
+    source !== 'engine-message-end' &&
+    source !== 'degraded-direct' &&
+    source !== null
+  ) {
+    return parsed;
+  }
+  parsed.cacheMetrics = {
+    metrics: metrics as MessageCacheState['metrics'],
+    source: source as MessageCacheState['source'],
+  };
+  return parsed;
 }
 
 function lsLoadSessionBody(sessionId: string): SessionMessage[] {
@@ -374,7 +474,14 @@ function lsLoadSessionBody(sessionId: string): SessionMessage[] {
     if (!raw) return [];
     // 兼容 JSON 数组与 JSONL 两种历史格式
     if (raw.trimStart().startsWith('[')) {
-      return parseSessionMessages(safeParseJson<unknown>(raw, null));
+      const parsed = safeParseJson<unknown>(raw, null);
+      if (!Array.isArray(parsed)) return [];
+      const out: SessionMessage[] = [];
+      for (const item of parsed) {
+        const m = attachStoredCacheMetrics(parseSessionMessage(item), item);
+        if (m) out.push(m);
+      }
+      return out;
     }
     // JSONL 路径：用 parseSessionMessage 逐行解析（与 sessionHydration 历史行为一致）
     const out: SessionMessage[] = [];
@@ -382,7 +489,8 @@ function lsLoadSessionBody(sessionId: string): SessionMessage[] {
       const t = line.trim();
       if (!t) continue;
       try {
-        const m = parseSessionMessage(JSON.parse(t));
+        const item = JSON.parse(t);
+        const m = attachStoredCacheMetrics(parseSessionMessage(item), item);
         if (m) out.push(m);
       } catch {
         /* skip bad line */
@@ -394,23 +502,17 @@ function lsLoadSessionBody(sessionId: string): SessionMessage[] {
   }
 }
 
-function lsSaveSessionBody(sessionId: string, messages: SessionMessage[]): void {
+function lsSaveSessionBody(
+  sessionId: string,
+  messages: SessionMessage[]
+): void {
   try {
     localStorage.setItem(
       SESSION_BODY_PREFIX + sessionId,
-      JSON.stringify(messages),
+      JSON.stringify(messages)
     );
   } catch {
     /* quota */
-  }
-}
-
-function lsDeleteSessionBody(sessionId: string): void {
-  try {
-    localStorage.removeItem(SESSION_BODY_PREFIX + sessionId);
-    localStorage.removeItem(SESSION_AGENTS_PREFIX + sessionId);
-  } catch {
-    /* ignore */
   }
 }
 
@@ -418,7 +520,9 @@ function lsLoadSessionAgents(sessionId: string): SessionAgent[] {
   try {
     const raw = localStorage.getItem(SESSION_AGENTS_PREFIX + sessionId);
     if (!raw) return [];
-    return hydrateSessionAgents(parseSessionAgents(safeParseJson<unknown>(raw, null)));
+    return hydrateSessionAgents(
+      parseSessionAgents(safeParseJson<unknown>(raw, null))
+    );
   } catch {
     return [];
   }
@@ -432,7 +536,7 @@ function lsSaveSessionAgents(sessionId: string, agents: SessionAgent[]): void {
     }
     localStorage.setItem(
       SESSION_AGENTS_PREFIX + sessionId,
-      JSON.stringify(agents.slice(0, SESSION_AGENTS_SAVE_CAP)),
+      JSON.stringify(agents.slice(0, SESSION_AGENTS_SAVE_CAP))
     );
   } catch {
     /* quota */
@@ -486,7 +590,7 @@ function lsSaveFolderOrder(order: string[]): void {
  * 加载会话索引列表。
  * 命令缺失 → 回退 localStorage。
  */
-export async function listSessions(): Promise<SessionIndexEntry[]> {
+async function listSessions(): Promise<SessionIndexEntry[]> {
   const res = await invokeResult<RustSessionIndexEntry[]>('list_sessions');
   if (res.status === 'ok') return fromRustSessionIndexEntries(res.data || []);
   return lsLoadSessionIndex();
@@ -496,9 +600,13 @@ export async function listSessions(): Promise<SessionIndexEntry[]> {
  * 加载会话正文消息。
  * 命令缺失 → 回退 localStorage。
  */
-export async function loadSessionBody(sessionId: string): Promise<SessionMessage[]> {
+export async function loadSessionBody(
+  sessionId: string
+): Promise<SessionMessage[]> {
   if (!sessionId?.trim() || isPendingDraft(sessionId)) return [];
-  const res = await invokeResult<RustSessionMessage[]>('load_session_body', { sessionId });
+  const res = await invokeResult<RustSessionMessage[]>('load_session_body', {
+    sessionId,
+  });
   if (res.status === 'ok') return fromRustSessionMessages(res.data || []);
   return lsLoadSessionBody(sessionId);
 }
@@ -508,9 +616,9 @@ export async function loadSessionBody(sessionId: string): Promise<SessionMessage
  * 命令缺失 → 回退 localStorage（同步）。
  * I-DRAFT：PENDING_DRAFT 哨兵永不写 body。
  */
-export async function saveSessionBody(
+async function saveSessionBody(
   sessionId: string,
-  messages: SessionMessage[],
+  messages: SessionMessage[]
 ): Promise<void> {
   if (!sessionId?.trim() || isPendingDraft(sessionId)) return;
   const msgs = messages || [];
@@ -532,22 +640,15 @@ export async function saveSessionBody(
 }
 
 /**
- * 删除会话（级联删除 messages / agents / agent_messages）。
- */
-export async function deleteSession(sessionId: string): Promise<void> {
-  if (!sessionId?.trim()) return;
-  const res = await invokeResult<void>('delete_session', { sessionId });
-  if (res.status === 'ok') return;
-  lsDeleteSessionBody(sessionId);
-}
-
-/**
  * 加载会话下的协作子 agent。
  */
-export async function loadSessionAgents(sessionId: string): Promise<SessionAgent[]> {
+async function loadSessionAgents(sessionId: string): Promise<SessionAgent[]> {
   if (!sessionId?.trim() || isPendingDraft(sessionId)) return [];
-  const res = await invokeResult<RustSessionAgent[]>('load_session_agents', { sessionId });
-  if (res.status === 'ok') return hydrateSessionAgents(fromRustSessionAgents(res.data || []));
+  const res = await invokeResult<RustSessionAgent[]>('load_session_agents', {
+    sessionId,
+  });
+  if (res.status === 'ok')
+    return hydrateSessionAgents(fromRustSessionAgents(res.data || []));
   return lsLoadSessionAgents(sessionId);
 }
 
@@ -555,9 +656,9 @@ export async function loadSessionAgents(sessionId: string): Promise<SessionAgent
  * 保存会话下的协作子 agent。
  * I-DRAFT：PENDING_DRAFT 哨兵永不写 agents。
  */
-export async function saveSessionAgents(
+async function saveSessionAgents(
   sessionId: string,
-  agents: SessionAgent[],
+  agents: SessionAgent[]
 ): Promise<void> {
   if (!sessionId?.trim() || isPendingDraft(sessionId)) return;
   if (!agents || agents.length === 0) {
@@ -570,7 +671,9 @@ export async function saveSessionAgents(
     lsSaveSessionAgents(sessionId, []);
     return;
   }
-  const rustAgents = agents.slice(0, SESSION_AGENTS_SAVE_CAP).map(toRustSessionAgent);
+  const rustAgents = agents
+    .slice(0, SESSION_AGENTS_SAVE_CAP)
+    .map(toRustSessionAgent);
   const res = await invokeResult<void>('save_session_agents', {
     sessionId,
     agents: rustAgents,
@@ -600,7 +703,10 @@ export async function getSessionMeta(key: string): Promise<string | null> {
 /**
  * 写入会话级元数据键。
  */
-export async function setSessionMeta(key: string, value: string): Promise<void> {
+export async function setSessionMeta(
+  key: string,
+  value: string
+): Promise<void> {
   if (!key?.trim()) return;
   const res = await invokeResult<void>('set_session_meta', { key, value });
   if (res.status === 'ok') return;
@@ -615,7 +721,7 @@ export async function setSessionMeta(key: string, value: string): Promise<void> 
 /**
  * 清理不在 activeIds 中的会话（孤儿清理）。
  */
-export async function cleanupOrphanSessions(activeIds: string[]): Promise<number> {
+async function cleanupOrphanSessions(activeIds: string[]): Promise<number> {
   const res = await invokeResult<number>('cleanup_orphan_sessions', {
     activeIds: activeIds || [],
   });
@@ -660,7 +766,7 @@ export interface ImportFromLocalStorageData {
  * 返回迁移统计；命令缺失时返回 null（调用方应直接走 localStorage 路径）。
  */
 export async function importFromLocalStorage(
-  data: ImportFromLocalStorageData,
+  data: ImportFromLocalStorageData
 ): Promise<RustImportStats | null> {
   const res = await invokeResult<RustImportStats>('import_from_localstorage', {
     indexJson: data.indexJson,
@@ -671,14 +777,6 @@ export async function importFromLocalStorage(
   });
   if (res.status === 'ok') return res.data;
   return null;
-}
-
-/** 触发会话 updated_at 刷新（用于侧栏排序热更新） */
-export async function touchSession(sessionId: string): Promise<void> {
-  if (!sessionId?.trim()) return;
-  const res = await invokeResult<void>('touch_session', { sessionId });
-  if (res.status === 'ok') return;
-  // localStorage 路径无对应操作（ updatedAt 由 sessionsToIndex 维护）
 }
 
 // ── 复合 API：hydrateSessionsFromRust ──────────────────────────────────────
@@ -713,7 +811,7 @@ export async function hydrateSessionsFromRust(): Promise<{
       sessions: [],
       activeSessionId: await getSessionMeta('active_session_id'),
       folderOrder: parseFolderOrder(
-        safeParseJson<unknown>(await getSessionMeta('folder_order'), null),
+        safeParseJson<unknown>(await getSessionMeta('folder_order'), null)
       ),
     };
   }
@@ -740,16 +838,26 @@ export async function hydrateSessionsFromRust(): Promise<{
         timestamp: coerceSessionTimestamp(e.id, e.timestamp, sanitized),
         messages: sanitized,
         agents,
-        ...(e.branchParentId !== undefined ? { branchParentId: e.branchParentId } : {}),
-        ...(e.pinnedMessageIds?.length ? { pinnedMessageIds: e.pinnedMessageIds } : {}),
-        ...(e.engineCursor !== undefined ? { engineCursor: e.engineCursor } : {}),
-        ...(e.engineLastRunId !== undefined ? { engineLastRunId: e.engineLastRunId } : {}),
-        ...(e.hydratedFromEngine !== undefined ? { hydratedFromEngine: e.hydratedFromEngine } : {}),
+        ...(e.branchParentId !== undefined
+          ? { branchParentId: e.branchParentId }
+          : {}),
+        ...(e.pinnedMessageIds?.length
+          ? { pinnedMessageIds: e.pinnedMessageIds }
+          : {}),
+        ...(e.engineCursor !== undefined
+          ? { engineCursor: e.engineCursor }
+          : {}),
+        ...(e.engineLastRunId !== undefined
+          ? { engineLastRunId: e.engineLastRunId }
+          : {}),
+        ...(e.hydratedFromEngine !== undefined
+          ? { hydratedFromEngine: e.hydratedFromEngine }
+          : {}),
         // importMeta 仅存 localStorage 索引；SQLite 行无此列，从 LS 索引水合时带回
         ...(e.importMeta ? { importMeta: e.importMeta } : {}),
       };
       return state;
-    }),
+    })
   );
 
   const activeRaw = await getSessionMeta('active_session_id');
@@ -759,7 +867,9 @@ export async function hydrateSessionsFromRust(): Promise<{
   const activeSessionId =
     active && prepared.some((s) => s.id === active) ? active : null;
   const folderOrderRaw = await getSessionMeta('folder_order');
-  const folderOrder = parseFolderOrder(safeParseJson<unknown>(folderOrderRaw, null));
+  const folderOrder = parseFolderOrder(
+    safeParseJson<unknown>(folderOrderRaw, null)
+  );
 
   return { sessions: prepared, activeSessionId, folderOrder };
 }
@@ -784,11 +894,11 @@ export async function persistAllSessionsRust(
   options?: {
     /** 把 SessionState[] 投影为索引条目（侧栏元数据真相源） */
     sessionsToIndex?: (sessions: SessionState[]) => SessionIndexEntry[];
-  },
+  }
 ): Promise<void> {
   // I-DRAFT：persist 路径剔除 PENDING_DRAFT，永不写 sessions[]/body
   const list = (sessions || []).filter(
-    (s) => Boolean(s?.id) && !isPendingDraft(s.id),
+    (s) => Boolean(s?.id) && !isPendingDraft(s.id)
   );
   const activePersistable =
     activeSessionId && !isPendingDraft(activeSessionId) ? activeSessionId : '';
@@ -821,7 +931,7 @@ export async function persistAllSessionsRust(
     if (!s?.id) continue;
     keepIds.add(s.id);
     const msgs = (s.messages || []).map((m) =>
-      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m,
+      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
     );
     if (msgs.length > 0) {
       bodyJobs.push(saveSessionBody(s.id, msgs));
@@ -851,11 +961,11 @@ export async function persistAllSessionsRust(
 function persistAllSessionsLocalFallback(
   sessions: SessionState[],
   activeSessionId: string,
-  folderOrder: string[],
+  folderOrder: string[]
 ): void {
   // 调用方已 filter；再拒一次 draft
   const list = (sessions || []).filter(
-    (s) => Boolean(s?.id) && !isPendingDraft(s.id),
+    (s) => Boolean(s?.id) && !isPendingDraft(s.id)
   );
   const keep = new Set(list.map((s) => s.id).filter(Boolean) as string[]);
 
@@ -863,7 +973,7 @@ function persistAllSessionsLocalFallback(
   for (const s of list) {
     if (!s?.id) continue;
     const msgs = (s.messages || []).map((m) =>
-      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m,
+      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
     );
     if (msgs.length > 0) {
       lsSaveSessionBody(s.id, msgs);
@@ -880,8 +990,10 @@ function persistAllSessionsLocalFallback(
     }
     for (const k of keys) {
       let id: string | null = null;
-      if (k.startsWith(SESSION_BODY_PREFIX)) id = k.slice(SESSION_BODY_PREFIX.length);
-      else if (k.startsWith(SESSION_AGENTS_PREFIX)) id = k.slice(SESSION_AGENTS_PREFIX.length);
+      if (k.startsWith(SESSION_BODY_PREFIX))
+        id = k.slice(SESSION_BODY_PREFIX.length);
+      else if (k.startsWith(SESSION_AGENTS_PREFIX))
+        id = k.slice(SESSION_AGENTS_PREFIX.length);
       if (id != null && !keep.has(id)) localStorage.removeItem(k);
     }
   } catch {
@@ -906,11 +1018,11 @@ export function persistAllSessionsSyncViaLocalStorage(
   folderOrder: string[],
   options?: {
     sessionsToIndex?: (sessions: SessionState[]) => SessionIndexEntry[];
-  },
+  }
 ): void {
   // I-DRAFT：sync flush 同样剔除 PENDING_DRAFT
   const list = (sessions || []).filter(
-    (s) => Boolean(s?.id) && !isPendingDraft(s.id),
+    (s) => Boolean(s?.id) && !isPendingDraft(s.id)
   );
   const keep = new Set(list.map((s) => s.id).filter(Boolean) as string[]);
   const activePersistable =
@@ -927,7 +1039,7 @@ export function persistAllSessionsSyncViaLocalStorage(
   for (const s of list) {
     if (!s?.id) continue;
     const msgs = (s.messages || []).map((m) =>
-      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m,
+      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
     );
     // beforeunload 同步路径：仅镜像非空正文，避免把未 hydrate 懒壳写成 []
     if (msgs.length > 0) {
@@ -944,8 +1056,10 @@ export function persistAllSessionsSyncViaLocalStorage(
     }
     for (const k of keys) {
       let id: string | null = null;
-      if (k.startsWith(SESSION_BODY_PREFIX)) id = k.slice(SESSION_BODY_PREFIX.length);
-      else if (k.startsWith(SESSION_AGENTS_PREFIX)) id = k.slice(SESSION_AGENTS_PREFIX.length);
+      if (k.startsWith(SESSION_BODY_PREFIX))
+        id = k.slice(SESSION_BODY_PREFIX.length);
+      else if (k.startsWith(SESSION_AGENTS_PREFIX))
+        id = k.slice(SESSION_AGENTS_PREFIX.length);
       if (id != null && !keep.has(id)) localStorage.removeItem(k);
     }
   } catch {

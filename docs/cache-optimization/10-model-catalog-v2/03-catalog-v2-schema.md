@@ -92,6 +92,13 @@
 | `cacheWritePrice1h` | 条件必填 | f64（per_1M） | Anthropic `above_1hr` 档（litellm `cache_creation_input_token_cost_above_1hr` 直抄）；MiniMax 官方「写入后 1h 窗口命中」口径**不**落此字段（用 `cacheWritePrice` + `cacheTtl` 表达，02-litellm §6.4）；1h 档存在时必填 |
 | `cacheWriteFree`    | **必填** | bool          | 写免费显式位：true = 写免费（此时 `cacheWritePrice` 必须为 0 或 null）；false = 有写价或未收录（与 `cacheWritePrice: null` 区分）                                                                                      |
 
+> **例外条款（C 组，2026-08-04 补记）**：`cacheReadPrice` 条件必填（`supportsPromptCaching=true` 时必填）存在两条合法豁免，豁免条目不视为转录错误：
+>
+> 1. **pro 档无缓存输入折扣**：pro 档模型（`gpt-5.x-pro` / `o1-pro` / `o3-pro` 等）官方明确无缓存输入折扣——`cacheReadPrice: null` 且 `supportsPromptCaching: true`，必须 `notes` 标注「pro 档无缓存折扣，P5 按全价估算」（对应 99-project-closure.md 遗留项 6 S3 的 OpenAI pro 6 条）；
+> 2. **读价未获取**：厂商有缓存但官方未公布读价绝对值——`cacheReadPrice: null` + `priceStatus: "unavailable"` + `notes` 说明（与 §1.3 未收录三态一致，对应 gemini 变体 / glm-4-32b / qwen preview 等条目）。
+>
+> 前端费率表同口径：`cacheReadPrice: null` 原样透传（前端不填 0、不折算），前后端一致；P5 对 null 读价按全价处理（不享受折扣）。
+
 ### D. 扩展价格（9：条件必填 4 + 可选 5）
 
 | 字段                                             | 级别     | 类型 / 值域                                | 说明                                                                                                                                                                   |

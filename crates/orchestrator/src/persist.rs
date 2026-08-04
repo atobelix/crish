@@ -186,6 +186,16 @@ pub trait Store: Send + Sync {
 
     /// 删除一条待处理输入（返回是否实际删除了行）
     async fn delete_pending_input(&self, id: &str) -> StoreResult<bool>;
+
+    /// 下转型访问器：返回底层 [LocalDb] 连接（T-40：CoreRunState 消费
+    /// `get_run_usage` / `save_run_usage` 的 run usage 数据面，runs 表
+    /// v5 列）。
+    ///
+    /// 默认返回 None（非破坏性）——[InMemoryStore] 等测试替身无 SQLite
+    /// 连接；[LocalDbStore] 覆写为克隆连接（Arc +1）。
+    fn as_local_db(&self) -> Option<LocalDb> {
+        None
+    }
 }
 
 /// 会话级 sequence 分配器（T08.12 Q23）
@@ -591,6 +601,12 @@ impl LocalDbStore {
 
 #[async_trait]
 impl Store for LocalDbStore {
+    /// T-40：下转型返回底层 [LocalDb]（Clone = Arc +1）——run usage
+    /// 数据面（get_run_usage / save_run_usage，runs 表 v5 列）经此访问。
+    fn as_local_db(&self) -> Option<LocalDb> {
+        Some(self.db.clone())
+    }
+
     async fn insert_run(
         &self,
         run_id: &str,
@@ -723,6 +739,21 @@ impl Store for LocalDbStore {
 mod tests {
     use super::*;
     use conex_types::CrishErrorCategory;
+
+    /// T-40：下转型访问器——LocalDbStore 返回底层连接（run usage 数据面），
+    /// InMemoryStore 保持默认 None（无 SQLite 连接）
+    #[test]
+    fn as_local_db_downcasts_local_db_store_only() {
+        let db = LocalDb::open_in_memory().unwrap();
+        let local: Arc<dyn Store> = Arc::new(LocalDbStore::new(db));
+        assert!(local.as_local_db().is_some(), "LocalDbStore 必须可下转");
+
+        let memory: Arc<dyn Store> = Arc::new(InMemoryStore::new());
+        assert!(
+            memory.as_local_db().is_none(),
+            "InMemoryStore 无 SQLite 连接（默认 None）"
+        );
+    }
 
     #[test]
     fn in_memory_store_run_roundtrip() {

@@ -38,6 +38,8 @@
 
 ### 2.1 前缀字节稳定
 
+> **状态：已落地（R0-R7 缓存优化多 Agent 方案，2026-08-03；跨 run 前缀由 2.13 承载）**
+
 **参考软件共性（最底层、全行业共识）**
 
 - 所有自动缓存都是前缀匹配，任意格式差异（换行、字段顺序、JSON 序列化）都可能整体失效（vendor-cache-mechanisms.md:420-424，第 11.1 节"通用规则"）。
@@ -60,6 +62,8 @@
 3. 若未来做压缩，先在 docs 层面固定"compaction 是唯一 cache-reset 点"原则（参考 deepseek-reasonix-cache-analysis.md:19-25）。
 
 ### 2.2 tools 排序与 schema 规范化
+
+> **状态：已落地（R0-R7 缓存优化多 Agent 方案，2026-08-03）**
 
 **参考软件共性**
 
@@ -84,6 +88,8 @@
 3. 将 directFetchBridge.ts:37-76 的 canonicalizeJsonSchema 语义在 Rust 侧复刻（用于 schema 内部字段确定性），供未来 schema 规范化使用。
 
 ### 2.3 system prompt 稳定性
+
+> **状态：已落地（R0-R7 缓存优化多 Agent 方案，2026-08-03）**
 
 **参考软件共性**
 
@@ -210,6 +216,8 @@
 
 ### 2.8 压缩/compaction 与缓存交互
 
+> **状态：已落地（R0-R7 缓存优化多 Agent 方案，2026-08-03）**
+
 **参考软件共性**
 
 - Reasonix：compaction 分级（soft 0.5 通知 / snip 0.6 / compact 0.8 / force 0.9）+ fold 经济学 + compactStuck 锁存防每轮重写前缀（deepseek-reasonix-cache-analysis.md:156-177）。
@@ -235,6 +243,8 @@
 
 ### 2.9 上下文超限恢复
 
+> **状态：已落地（R0-R7 缓存优化多 Agent 方案，2026-08-03）**
+
 **参考软件共性**
 
 - pi：三路溢出检测（错误正则 26 条 + 静默溢出 input+cacheRead>window + 截断溢出 length+output=0+占满窗口），溢出只重试一次防死循环；**核心口径 input + cacheRead 才是真实提示预算**（pi-cache-analysis.md:13-18、106-114）。
@@ -257,6 +267,8 @@
 3. 溢出判定口径统一为 input+cacheRead（对齐 pi overflow.ts:142-158）。
 
 ### 2.10 缓存命中率测量与展示
+
+> **状态：已落地（R0-R7 缓存优化多 Agent 方案，2026-08-03；遗留：消息级回放面缺失，见 R6-D5）**
 
 **参考软件共性**
 
@@ -281,6 +293,8 @@
 
 ### 2.11 缓存浪费审计
 
+> **状态：已落地（R0-R7 缓存优化多 Agent 方案，2026-08-03；遗留：逐 miss 归因发射点延迟，R5-D5 以 run 级兜底）**
+
 **参考软件共性**
 
 - pi：`missedTokens = min(prev.promptTokens, cur.promptTokens) - cacheRead` + 1024 噪声地板；reportedCache 粘性标记区分"cache-read-only 厂商全 miss"与"不报告缓存厂商不计"；压缩重置基线；TUI 阈值 20k tokens / $0.1 弹提示并归因（model switch / Nm idle）（pi-cache-analysis.md:265-299）。
@@ -300,6 +314,8 @@
 2. 前端在 miss 超阈值时提示并归因（时间间隔 / 工具集变化 / 压缩），对齐 jcode 的归因台账思想（cache_invalidation.rs 模式）。
 
 ### 2.12 本地模型/定价目录缓存
+
+> **状态：已落地（R0-R7 缓存优化多 Agent 方案，2026-08-03）**
 
 **参考软件共性**
 
@@ -322,6 +338,8 @@
 
 ### 2.13 历史消息回流 LLM
 
+> **状态：已落地（R0-R7 缓存优化多 Agent 方案，2026-08-03）**
+
 **参考软件共性**
 
 - 参考软件全部每轮重发完整历史（Reasonix buildRequest 无条件序列化全部消息，deepseek-reasonix-cache-analysis.md:13；Kimi v2 resolveRequest 带全部上下文历史，kimi-code-cache-analysis.md:70-72；opencode/pi/jcode/Claude Code 同理）。只有 Codex 的 WebSocket 路径用 previous_response_id 增量（codex-cli-cache-analysis.md:174-179）。
@@ -343,6 +361,8 @@
 **crish 现状证据**：无 WebSocket LLM 传输；Tauri IPC（getTransport → core_run_task）每 run 重建 loop 全量发送。crish 的双端是 Tauri IPC 而非 LLM WebSocket，本维度**不适用**（不评差距），但 Codex 的"增量输入"思想可映射为 crish 的"历史回流时只传增量消息"（见 4.2 路线 B 的优化）。
 
 ### 2.15 会话亲和 header
+
+> **状态：已落地（R0-R7 缓存优化多 Agent 方案，2026-08-03；affinity_header 默认关闭按设计）**
 
 **参考软件共性**
 

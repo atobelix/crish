@@ -31,11 +31,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use agent_provider::request::build_system_prompt;
+use conex_db::LocalDb;
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision as WireApprovalDecision, PermissionRequest,
-    RunTerminalStatus,
-    SecurityAuditDecision,
-    SecurityAuditOperation,
+    RunCacheStats, RunTerminalStatus, SecurityAuditDecision, SecurityAuditOperation,
 };
 use conex_types::impact::ImpactAssessment;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
@@ -849,9 +848,41 @@ impl CoreRunState {
         None
     }
 
-    /// run usage 域（未接线时 None，前端回退估算——contract 注释约定）
-    pub fn run_usage(&self, _run_id: &str) -> Option<RunUsage> {
-        None
+    /// run usage 域（T-40 真实实现，R5-D3 轮末合并接线）
+    ///
+    /// 数据源 = runs 表 v5 列（T-39 `get_run_usage`，drive_run_loop 收口
+    /// `save_run_usage` 写入）；经 [Self::local_db] 下转型取底层连接。
+    /// 无 LocalDb（InMemoryStore 等测试替身）/ 无样本（sample_count == 0，
+    /// 含 v4 迁移旧行）/ 读失败 → None——前端回退估算（contract 注释约定：
+    /// usage 域未接线时 None）。
+    pub fn run_usage(&self, run_id: &str) -> Option<RunUsage> {
+        let db = self.local_db()?;
+        let stats = match db.get_run_usage(run_id) {
+            Ok(Some(stats)) => stats,
+            Ok(None) => return None,
+            Err(error) => {
+                tracing::warn!(
+                    target: "run",
+                    run_id,
+                    error = %error,
+                    "get_run_usage 读失败（usage 查询回退前端估算）"
+                );
+                return None;
+            }
+        };
+        RunUsage::from_run_cache_stats(stats)
+    }
+
+    /// T-40（R5-D3 轮末合并接线 ④）：store 下转型取 [LocalDb]——run
+    /// usage 数据面（get_run_usage / save_run_usage，runs 表 v5 列）经
+    /// 此访问。
+    ///
+    /// 实现说明：生产路径 store 恒为 [orchestrator::persist::LocalDbStore]
+    /// （main.rs 接线），经 [orchestrator::persist::Store::as_local_db] 返回
+    /// 连接克隆（Arc +1）；非 LocalDb 实现（InMemoryStore 测试替身）保持
+    /// 默认 None——usage 查询回退前端估算，不阻塞其他功能。
+    pub fn local_db(&self) -> Option<LocalDb> {
+        self.store.as_local_db()
     }
 
     /// 共享 store（查询命令 / 集成接线用）
@@ -1122,6 +1153,14 @@ async fn drive_run_loop(
     // 随收口自然携带（缓存基线重建，P4 §3.6 I5 / C13）
     state.session_history.store(&session_id, to_history_messages(&outcome));
 
+    // T-40 缓存测量收口（P5 S5 §3.2 数据流，R5-D3 轮末合并接线 ②）：
+    // outcome.cache_stats 非空（tracker.finish 产物，T-36）→ 会话级状态
+    // 写回（下一 run 冷缓存预警 / 模型切换检测）+ save_run_usage 落库
+    // （runs 表 v5 列，T-39）——实现细节见 [write_back_cache_stats]
+    if let Some(stats) = &outcome.cache_stats {
+        write_back_cache_stats(&state, &session_id, &run_id, *stats).await;
+    }
+
     // 2. drive_outcome（锁在作用域内持有，错误路径先释放再收口）
     let driven = {
         let mut run = active.handle.lock().await;
@@ -1185,6 +1224,61 @@ async fn drive_run_loop(
         .remove(&run_id);
     state.save_snapshot_now().await;
     tracing::info!(target: "run", "drive_run_loop 收口（终态）");
+}
+
+/// T-40 缓存测量收口（P5 S5 §3.2 数据流，R5-D3 轮末合并接线 ②；
+/// 拆分独立函数以便测试直测）：
+///
+/// 1. **会话级状态写回**：经 `state.engine.update_cache_session` 写入
+///    EngineHandle（下一 run 冷缓存预警 / 模型切换检测数据源；内存态
+///    跨 run 续接，跨重启由 runs 表 v5 列兜底，T-39）。跟踪配置缺失
+///    （provider 未就绪/重载）时跳过写回——本 run 已无跟踪上下文，
+///    仅告警不中断收口；
+/// 2. **save_run_usage 落库**：runs 表 v5 列幂等 UPDATE（T-39；
+///    core_get_run_snapshot.usage 查询数据面）。db 经 [CoreRunState::local_db]
+///    从 store 下转型取得——非 LocalDb 实现（InMemoryStore 测试替身）
+///    跳过落库。写路径走 `spawn_blocking`（P05：消除同步直调对 tokio
+///    worker 的阻塞，与 session_commands.rs 既有模式一致）。
+///
+/// 失败仅告警不中断收口（usage 查询面回退前端估算，contract 约定）。
+async fn write_back_cache_stats(
+    state: &CoreRunState,
+    session_id: &str,
+    run_id: &str,
+    stats: RunCacheStats,
+) {
+    if let Some(config) = state.engine.cache_tracking_config() {
+        state.engine.update_cache_session(session_id, &stats, &config.model);
+    } else {
+        tracing::warn!(
+            target: "run",
+            run_id,
+            "收口缓存统计但缓存跟踪配置缺失（跳过会话级状态写回）"
+        );
+    }
+    let Some(db) = state.local_db() else {
+        return;
+    };
+    let run_id_owned = run_id.to_string();
+    match tokio::task::spawn_blocking(move || db.save_run_usage(&run_id_owned, stats)).await {
+        Ok(Ok(())) => {}
+        Ok(Err(failure)) => {
+            tracing::warn!(
+                target: "run",
+                run_id,
+                error = %failure,
+                "save_run_usage 落库失败（usage 查询回退前端估算）"
+            );
+        }
+        Err(join_error) => {
+            tracing::warn!(
+                target: "run",
+                run_id,
+                error = %join_error,
+                "save_run_usage spawn_blocking join 失败（usage 查询回退前端估算）"
+            );
+        }
+    }
 }
 
 /// 错误路径收口（四源失败 / 防御性驱动失败）
@@ -1455,7 +1549,14 @@ pub(crate) async fn core_run_task(
         Some(delta_sink),
         initial_conversation,
         message,
-    );
+    )
+    // T-40（P5 S5 §3.2，R5-D3 轮末合并接线 ①）：缓存测量装配——
+    // with_cache_tracking：tracking 配置（provider / model / TTL，
+    // engine 侧 cache_tracking_config 产出；None = 不测量，行为与现状
+    // 一致）；with_cache_session：上一 run 会话缓存状态（冷缓存预警 +
+    // 模型切换检测数据源，engine 侧 cache_session 按会话维护）
+    .with_cache_tracking(state.engine.cache_tracking_config())
+    .with_cache_session(state.engine.cache_session(&session_id));
 
     // 注册活动 run 并 spawn 驱动循环
     let active = Arc::new(ActiveRun {
@@ -2285,6 +2386,136 @@ mod tests {
         assert_eq!(iso8601_to_epoch_millis("2026-07-31T00:00:01Z"), 1_785_456_001_000);
         // 失败兜底 0
         assert_eq!(iso8601_to_epoch_millis("not-a-date"), 0);
+    }
+
+    // ── T-40：缓存测量收口（R5-D3 轮末合并接线 ②③④）────────────
+
+    use conex_db::RunStatus;
+    use orchestrator::persist::{InMemoryStore, LocalDbStore};
+
+    /// 测试用 run 级缓存统计（hit_ratio / write_ratio 置 None——与
+    /// get_run_usage 读回形状一致，可整型断言）
+    fn cache_stats(warm_until_ms: Option<u64>, missed_tokens: u64) -> RunCacheStats {
+        RunCacheStats {
+            prompt_tokens: 10_000,
+            completion_tokens: 100,
+            total_tokens: 10_100,
+            cache_read_tokens: 9_000,
+            cache_write_tokens: 500,
+            cache_miss_tokens: 500,
+            sample_count: 1,
+            hit_ratio: None,
+            write_ratio: None,
+            missed_tokens,
+            warm_until_ms,
+        }
+    }
+
+    static CORE_TMP_SEQ: AtomicU64 = AtomicU64::new(0);
+
+    /// 测试用 CoreRunState（临时目录快照存储 + 记录型事件桥 + 独立诊断）
+    fn core_state_with_store(store: Arc<dyn Store>) -> Arc<CoreRunState> {
+        let (bridge, _emitter) = recording_bridge();
+        let seq = CORE_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let snapshots: Arc<dyn SnapshotStore> = Arc::new(
+            orchestrator::restore::SnapshotFileStore::new(std::env::temp_dir().join(format!(
+                "conex_core_state_{}_{seq}_snapshot.json",
+                std::process::id()
+            ))),
+        );
+        Arc::new(CoreRunState::new(
+            store,
+            snapshots,
+            bridge,
+            Arc::new(StatusDiagnostics::new()),
+        ))
+    }
+
+    /// ③ run_usage 真实返回：LocalDb 路径——save_run_usage 落库 →
+    /// run_usage 读回 → RunUsage 全字段映射（runs 表 v5 列，T-39）
+    #[test]
+    fn run_usage_returns_persisted_stats_from_local_db() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        db.insert_run("r1", "s1", RunStatus::Completed, Some("stop"), 0)
+            .unwrap();
+        let stats = cache_stats(Some(61_000), 12_000);
+        db.save_run_usage("r1", stats).unwrap();
+
+        let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+        let usage = state.run_usage("r1").expect("已落库 usage 必须返回");
+        assert_eq!(usage.prompt_tokens, 10_000);
+        assert_eq!(usage.completion_tokens, 100);
+        assert_eq!(usage.sample_count, 1);
+        assert_eq!(usage.cache_read_tokens, Some(9_000));
+        assert_eq!(usage.cache_write_tokens, Some(500));
+        assert_eq!(usage.cache_miss_tokens, Some(500));
+        // hit_ratio 按 C9 重算：read / (miss + read + write)
+        assert_eq!(usage.hit_ratio, Some(9_000.0 / 10_000.0));
+        assert_eq!(usage.write_ratio, Some(500.0 / 10_000.0));
+        assert_eq!(usage.missed_tokens, Some(12_000));
+        assert_eq!(usage.warm_until_ms, Some(61_000));
+        // 不存在的 run → None（前端回退估算）
+        assert!(state.run_usage("missing").is_none());
+    }
+
+    /// ③ 兜底：store 非 LocalDb（InMemoryStore 测试替身）→ run_usage
+    /// None（local_db 下转失败路径，usage 查询回退前端估算）
+    #[test]
+    fn run_usage_falls_back_none_without_local_db() {
+        let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+        assert!(state.local_db().is_none(), "非 LocalDb store 不得下转");
+        assert!(state.run_usage("r1").is_none());
+    }
+
+    /// ② 收口落库：write_back_cache_stats 经 LocalDb 写回 runs 表 v5 列
+    /// （save_run_usage 幂等 UPDATE），读回整型一致
+    #[tokio::test]
+    async fn write_back_cache_stats_persists_run_usage_to_local_db() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        db.insert_run("r1", "s1", RunStatus::Completed, Some("stop"), 0)
+            .unwrap();
+        let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+
+        let stats = cache_stats(Some(61_000), 12_000);
+        write_back_cache_stats(&state, "s1", "r1", stats).await;
+
+        let read_back = db
+            .get_run_usage("r1")
+            .expect("读回不应失败")
+            .expect("收口必须落库");
+        assert_eq!(read_back, stats);
+        // 收口不 panic 且落库失败路径不中断（本场景无失败，仅验证无害）
+        write_back_cache_stats(&state, "s1", "r1", stats).await;
+    }
+
+    /// ② 兜底：store 非 LocalDb（InMemoryStore）→ 落库跳过（无 SQLite
+    /// 连接），收口流程不 panic、不中断
+    #[tokio::test]
+    async fn write_back_cache_stats_skips_save_without_local_db() {
+        let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+        write_back_cache_stats(&state, "s1", "r1", cache_stats(None, 0)).await;
+    }
+
+    /// ④ EngineHandle 会话缓存状态写读面（跨 CoreRunState 可达）：
+    /// update_cache_session → cache_session 读回——write_back_cache_stats
+    /// 的 update 分支数据源契约（配置分支依赖 provider 生效配置，
+    /// 测试环境未就绪 → 装配侧由 engine.rs 测试覆盖）
+    #[test]
+    fn engine_cache_session_roundtrip_through_core_state() {
+        let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+        let stats = cache_stats(Some(61_000), 0);
+        state
+            .engine
+            .update_cache_session("s1", &stats, "deepseek-v4-flash");
+        let session = state.engine.cache_session("s1");
+        assert_eq!(session.last_stats, Some(stats));
+        assert_eq!(session.last_model.as_deref(), Some("deepseek-v4-flash"));
+        // 未写过的会话 → 缺省状态（默认值）
+        let untouched = state.engine.cache_session("other");
+        assert!(untouched.last_stats.is_none());
+        assert!(untouched.last_model.is_none());
     }
 
     // ── I2-S5：trash 命令（误删恢复入口）────────────────────────

@@ -34,7 +34,8 @@ use agent_provider::models::{
 };
 use agent_provider::events::{ProviderStreamEvent as WireEvent, StreamParseError};
 use agent_provider::parse::chat::ChatCompletionsParser;
-use agent_provider::request::cache::build_cache_policy;
+use agent_provider::request::cache::{build_cache_policy, CachePolicy};
+use agent_provider::request::build::affinity_http_headers;
 use agent_provider::request::{
     build_chat_completions_request_body, infer_reasoning_vendor, ChatCompletionsRequestOptions,
     MaxTokensField, ReasoningContentMode, ReasoningVendor, RequestBuildContext,
@@ -344,6 +345,16 @@ impl HttpProviderCall {
             _ => ReasoningContentMode::Omit,
         }
     }
+
+    /// 发送层基础请求头组装（G1 遗留 1 消费点）：Authorization 固定头 + 亲和头
+    /// 追加（build.rs [affinity_http_headers] 产物）。policy = request_options
+    /// 产出的 options.cache（Grok + 会话 ID → x-grok-conv-id 粘性路由头随请求
+    /// 真实发出）；None / 无亲和头 → 零追加头，请求行为与现状一致。
+    fn request_headers(&self, policy: Option<&CachePolicy>) -> Vec<(&'static str, String)> {
+        let mut headers = vec![("Authorization", format!("Bearer {}", self.config.api_key))];
+        headers.extend(affinity_http_headers(policy));
+        headers
+    }
 }
 
 #[async_trait]
@@ -360,14 +371,14 @@ impl ProviderCall for HttpProviderCall {
         let url = provider_url(&self.config);
 
         // 2. HTTP 请求（共享连接池；传输层错误分类后上抛）
-        let response = match self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_key))
-            .json(&body)
-            .send()
-            .await
-        {
+        // G1 遗留 1：亲和头合并进基础请求头（request_headers = Authorization
+        // 固定头 + affinity_http_headers 追加，build.rs 消费点）——Grok
+        // x-grok-conv-id 粘性路由头随请求真实发出；其余厂商零新增头。
+        let mut request_builder = self.client.post(&url);
+        for (name, value) in self.request_headers(options.cache.as_ref()) {
+            request_builder = request_builder.header(name, value);
+        }
+        let response = match request_builder.json(&body).send().await {
             Ok(response) => response,
             Err(error) => {
                 // 流前传输错误（reqwest 层）：分类后上抛（02 §四.1）
@@ -1832,6 +1843,55 @@ mod tests {
         // 未知/本地厂商（base_url 无关键字 + model 前缀未命中）→ 保守全关
         let ollama = test_provider_call("llama-3.1");
         assert!(ollama.request_options(&request).cache.is_none());
+    }
+
+    /// G1 遗留 1：发送层基础请求头合并亲和头（affinity_http_headers 消费点）。
+    /// Grok + 会话 ID → x-grok-conv-id 出现（值 = 会话 ID，与 cache_key 同源
+    /// 前 64 码点）；其他厂商（OpenAI / DeepSeek / 未知）与无会话 → 不出现；
+    /// Authorization 恒在（既有固定头不受影响）。
+    #[test]
+    fn request_headers_merges_affinity_header() {
+        let user = AgentMessage {
+            id: "user-1".to_string(),
+            role: AgentMessageRole::User,
+            created_at: "2026-08-03T00:00:00.000Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "你好".to_string(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        };
+        let messages = vec![Arc::new(user)];
+        let request = session_request(&messages, Some("ses-abc"));
+
+        // Grok（catalog 真源路径）：x-grok-conv-id 随基础请求头出现
+        let grok = test_provider_call("grok-4.5");
+        let options = grok.request_options(&request);
+        let headers = grok.request_headers(options.cache.as_ref());
+        assert!(headers.iter().any(|(name, _)| name == &"Authorization"));
+        assert!(
+            headers
+                .iter()
+                .any(|(name, value)| name == &"x-grok-conv-id" && value == "ses-abc"),
+            "Grok 应注入 x-grok-conv-id"
+        );
+
+        // 无会话 ID → 无亲和头（仅 Authorization）
+        let no_session = session_request(&messages, None);
+        let headers = grok.request_headers(grok.request_options(&no_session).cache.as_ref());
+        assert!(headers.iter().any(|(name, _)| name == &"Authorization"));
+        assert!(!headers.iter().any(|(name, _)| name == &"x-grok-conv-id"));
+
+        // 其他厂商（OpenAI / DeepSeek / 未知）：亲和头不出现
+        for model in ["gpt-4o", "deepseek-v4", "llama-3.1"] {
+            let call = test_provider_call(model);
+            let headers = call.request_headers(call.request_options(&request).cache.as_ref());
+            assert!(
+                !headers.iter().any(|(name, _)| name == &"x-grok-conv-id"),
+                "{model} 不应注入 x-grok-conv-id"
+            );
+        }
     }
 
     /// 捕获请求的测试 provider（session_id 注入断言用）
