@@ -11,11 +11,15 @@
 //! - `wait_subagents`：wait_subagents（I5-M8）——三模式调度等待
 //!   （await-all/timer/parallel-work）+ 事件驱动等待原语 + dispatch_*
 //!   持久化 + 运行中注入（注册面 11→12）
+//! - `background_task`：background_task（T-AB-13）——后台任务管理命令面
+//!   （list/status/read_log/send_input/kill），经 ToolContext.background
+//!   访问 BackgroundTaskManager（注册面 12→13）
 //!
 //! 全部工具实现 `Tool` trait，经 `register_builtin_tools` 统一注册进 ToolRegistry。
 //! 各工具的会话级数据（工作区根目录等）执行时从 `ToolContext` 读取
 //! （R3 T9：BuiltinToolConfig 仅承载构造期默认配置，不再注入 workspace_root）。
 
+pub mod background_task;
 pub mod delete;
 pub mod diff;
 pub mod fs;
@@ -88,6 +92,9 @@ pub fn register_builtin_tools_with_config(
     let audit_sink = config
         .audit_sink
         .unwrap_or_else(|| Arc::new(NoopAuditSink) as Arc<dyn SecurityAuditSink>);
+    // background_task：manager 执行期经 ToolContext.background 读取
+    // （会话级装配由执行器负责），注册面构造零依赖
+    registry.register(Arc::new(background_task::BackgroundTaskTool::new()))?;
     registry.register(Arc::new(fs::ReadFileTool::new(None)))?;
     registry.register(Arc::new(fs::WriteFileTool::new()))?;
     registry.register(Arc::new(fs::ListDirTool::new()))?;
@@ -467,7 +474,7 @@ mod tests {
     fn register_builtin_tools_registers_all() {
         let mut registry = ToolRegistry::new();
         register_builtin_tools(&mut registry).unwrap();
-        assert_eq!(registry.len(), 12);
+        assert_eq!(registry.len(), 13);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -476,6 +483,7 @@ mod tests {
         assert_eq!(
             names,
             [
+                "background_task",
                 "delete_dir",
                 "delete_file",
                 "diff_text",
