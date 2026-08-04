@@ -36,7 +36,7 @@ import type {
 } from '../../store/types';
 import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
 import type { MessageCacheState } from '@crish/shared-types';
-import { computeCacheMetricsFromUsage } from '../chat-bridge/handlers/messageHandlers';
+import { computeCacheMetricsFromUsage } from '../chat-bridge/handlers/cacheMetricsCompute';
 import { coerceSessionTimestamp } from '../sessionTime';
 import { prepareSessionsForUi } from '../sessionTitle';
 import { normalizeAssistantTimeline } from '../toolPresentation';
