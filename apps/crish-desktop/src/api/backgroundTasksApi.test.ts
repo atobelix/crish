@@ -451,7 +451,37 @@ describe('canCancelBackgroundTask & decideCancelBackgroundTask', () => {
 });
 
 describe('parseCancelBackgroundTaskResult', () => {
-  it('parses wrapped task or direct object; null on bad', () => {
+  it('KillResult::killed → cancelled 投影（含 snake_case 兼容）', () => {
+    expect(
+      parseCancelBackgroundTaskResult({ killed: { taskId: 'c1', viaForce: false } }),
+    ).toMatchObject({ id: 'c1', label: 'c1', state: 'cancelled' });
+    expect(
+      parseCancelBackgroundTaskResult({ killed: { task_id: 'c2', via_force: true } }),
+    ).toMatchObject({ id: 'c2', state: 'cancelled' });
+  });
+
+  it('KillResult::alreadyExited → 终态投影（exitCode 决定成败）', () => {
+    expect(
+      parseCancelBackgroundTaskResult({ alreadyExited: { taskId: 'e1', exitCode: 0 } }),
+    ).toMatchObject({ id: 'e1', state: 'succeeded' });
+    expect(
+      parseCancelBackgroundTaskResult({ alreadyExited: { taskId: 'e2', exitCode: 1 } }),
+    ).toMatchObject({ id: 'e2', state: 'failed' });
+    expect(
+      parseCancelBackgroundTaskResult({ alreadyExited: { taskId: 'e3', exitCode: null } }),
+    ).toMatchObject({ id: 'e3', state: 'succeeded' });
+  });
+
+  it('KillResult::failed → unknown 投影 + reason 摘要', () => {
+    expect(
+      parseCancelBackgroundTaskResult({ failed: { taskId: 'f1', reason: '拒绝终止' } }),
+    ).toMatchObject({ id: 'f1', state: 'unknown', summary: '拒绝终止' });
+    expect(
+      parseCancelBackgroundTaskResult({ failed: { taskId: 'f2' } }),
+    ).toMatchObject({ id: 'f2', state: 'unknown' });
+  });
+
+  it('兼容旧包裹形状与直接对象；null / 畸形 → null', () => {
     expect(
       parseCancelBackgroundTaskResult({
         task: { id: 'c1', state: 'cancelled', title: 'X' },
@@ -462,6 +492,8 @@ describe('parseCancelBackgroundTaskResult', () => {
     ).toMatchObject({ id: 'c2', state: 'cancelled' });
     expect(parseCancelBackgroundTaskResult(null)).toBeNull();
     expect(parseCancelBackgroundTaskResult({ task: { label: 'no-id' } })).toBeNull();
+    expect(parseCancelBackgroundTaskResult({ killed: { viaForce: true } })).toBeNull();
+    expect(parseCancelBackgroundTaskResult({ alreadyExited: {} })).toBeNull();
   });
 });
 
@@ -474,18 +506,103 @@ describe('listBackgroundTasks', () => {
     expect(mockedInvoke).toHaveBeenCalledWith('workbench_list_background_tasks');
   });
 
-  it('parses and dedupes invoke payload', async () => {
+  it('parses real wire payload ({ tasks: [...] }) and dedupes', async () => {
     mockedInvoke.mockResolvedValueOnce({
       tasks: [
-        { id: 'a', state: 'running', label: 'A' },
-        { id: 'a', state: 'failed', label: 'dup' },
-        { id: 'b', status: 'success' },
+        {
+          taskId: 'a',
+          command: 'npm run dev',
+          status: 'running',
+          startedAt: 100,
+          duration: 500,
+          finishedAt: null,
+          exitCode: null,
+          logPath: 'C:/logs/a.log',
+          lineCount: 3,
+          lastOutputAt: 590,
+          isDaemon: false,
+          ownerRunId: null,
+        },
+        { taskId: 'a', command: 'npm run dev', status: 'failed' },
+        {
+          taskId: 'b',
+          command: 'npm run build',
+          status: 'completed',
+          startedAt: 200,
+          duration: 300,
+          finishedAt: 500,
+          exitCode: 0,
+          logPath: 'C:/logs/b.log',
+          lineCount: 10,
+          lastOutputAt: 490,
+          isDaemon: false,
+          ownerRunId: 'run-1',
+        },
       ],
     });
     const list = await listBackgroundTasks();
     expect(list).toHaveLength(2);
-    expect(list[0]).toMatchObject({ id: 'a', label: 'A', state: 'running' });
-    expect(list[1]).toMatchObject({ id: 'b', state: 'succeeded' });
+    // wire 无 label 字段：label 回退 command 前 64 字符
+    expect(list[0]).toMatchObject({
+      id: 'a',
+      label: 'npm run dev',
+      state: 'running',
+      startedAt: 100,
+    });
+    expect(list[1]).toMatchObject({
+      id: 'b',
+      label: 'npm run build',
+      state: 'succeeded',
+      startedAt: 200,
+    });
+  });
+
+  it('terminal wire entries render without summary (resource missing tolerated)', async () => {
+    mockedInvoke.mockResolvedValueOnce({
+      tasks: [
+        {
+          taskId: 't1',
+          command: 'npm run build',
+          status: 'completed',
+          startedAt: 1_700_000_000_000,
+          duration: 5000,
+          finishedAt: 1_700_000_005_000,
+          exitCode: 0,
+          logPath: 'C:/logs/t1.log',
+          lineCount: 42,
+          lastOutputAt: 1_700_000_004_900,
+          isDaemon: false,
+          ownerRunId: null,
+        },
+        {
+          taskId: 't2',
+          command: 'npm test',
+          status: 'failed',
+          startedAt: 1_700_000_010_000,
+          duration: 3000,
+          finishedAt: 1_700_000_013_000,
+          exitCode: 1,
+          logPath: 'C:/logs/t2.log',
+          lineCount: 7,
+          lastOutputAt: 1_700_000_012_900,
+          isDaemon: false,
+          ownerRunId: 'run-1',
+        },
+      ],
+    });
+    const list = await listBackgroundTasks();
+    expect(list).toHaveLength(2);
+    // 终态任务完整渲染：状态映射 + label 回退 + startedAt 直读
+    expect(list[0]).toMatchObject({
+      id: 't1',
+      label: 'npm run build',
+      state: 'succeeded',
+      command: 'npm run build',
+      startedAt: 1_700_000_000_000,
+    });
+    expect(list[0].summary).toBeUndefined();
+    expect(list[1]).toMatchObject({ id: 't2', state: 'failed' });
+    expect(list[1].summary).toBeUndefined();
   });
 });
 
@@ -495,8 +612,21 @@ describe('getBackgroundTaskOutput', () => {
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
-  it('trims id and parses payload', async () => {
-    mockedInvoke.mockResolvedValueOnce({ output: 'log line' });
+  it('trims id and parses wire payload (output = status.tail)', async () => {
+    mockedInvoke.mockResolvedValueOnce({
+      output: 'log line',
+      taskId: 'tid',
+      status: 'running',
+      exitCode: null,
+      logPath: 'C:/logs/tid.log',
+      durationMs: 100,
+      lineCount: 3,
+      lastOutputAtMs: 90,
+      resource: null,
+      tail: 'log line',
+      prompt: null,
+      terminationDiagnostics: [],
+    });
     await expect(getBackgroundTaskOutput('  tid  ')).resolves.toBe('log line');
     expect(mockedInvoke).toHaveBeenCalledWith('workbench_get_background_task_output', {
       taskId: 'tid',
@@ -506,6 +636,36 @@ describe('getBackgroundTaskOutput', () => {
   it('null invoke → empty string', async () => {
     mockedInvoke.mockResolvedValueOnce(null);
     await expect(getBackgroundTaskOutput('x')).resolves.toBe('');
+  });
+
+  it('failure is tolerated: rejected invoke → empty string (fallback display)', async () => {
+    mockedInvoke.mockRejectedValueOnce(new Error('NotFound'));
+    await expect(getBackgroundTaskOutput('missing')).resolves.toBe('');
+  });
+
+  it('resource present as full sample does not disturb output parse', async () => {
+    mockedInvoke.mockResolvedValueOnce({
+      output: 'tail-1\ntail-2',
+      taskId: 'r1',
+      status: 'completed',
+      exitCode: 0,
+      logPath: 'C:/logs/r1.log',
+      durationMs: 500,
+      lineCount: 2,
+      lastOutputAtMs: 490,
+      resource: {
+        sampledAtMs: 480,
+        cpuPercent: 12.5,
+        rssBytes: 1048576,
+        lastOutputAtMs: 490,
+        ioReadBytes: 0,
+        ioWriteBytes: 0,
+      },
+      tail: 'tail-1\ntail-2',
+      prompt: null,
+      terminationDiagnostics: [],
+    });
+    await expect(getBackgroundTaskOutput('r1')).resolves.toBe('tail-1\ntail-2');
   });
 });
 
@@ -518,16 +678,25 @@ describe('cancelBackgroundTask', () => {
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
-  it('invokes and parses cancelled task', async () => {
+  it('invokes and parses KillResult::killed as cancelled', async () => {
     mockedInvoke.mockResolvedValueOnce({
-      task: { id: 'run', state: 'cancelled', title: 'Job' },
+      killed: { taskId: 'run', viaForce: false },
     });
     const known = [task({ id: 'run', state: 'running' })];
     const res = await cancelBackgroundTask('run', known);
-    expect(res).toMatchObject({ id: 'run', state: 'cancelled', label: 'Job' });
+    expect(res).toMatchObject({ id: 'run', label: 'run', state: 'cancelled' });
     expect(mockedInvoke).toHaveBeenCalledWith('workbench_cancel_background_task', {
       taskId: 'run',
     });
+  });
+
+  it('parses KillResult::alreadyExited as terminal info', async () => {
+    mockedInvoke.mockResolvedValueOnce({
+      alreadyExited: { taskId: 'run', exitCode: 0 },
+    });
+    const known = [task({ id: 'run', state: 'running' })];
+    const res = await cancelBackgroundTask('run', known);
+    expect(res).toMatchObject({ id: 'run', state: 'succeeded' });
   });
 
   it('null invoke → null', async () => {

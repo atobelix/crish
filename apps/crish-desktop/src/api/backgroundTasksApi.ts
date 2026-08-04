@@ -1,8 +1,18 @@
 /**
- * 后台常驻任务：列表 + 输出（经 Tauri sidecar）。
+ * 后台常驻任务：列表 + 输出（经 Tauri 命令面，Rust 侧三条 workbench_* 命令）。
  * 展示在运行状态；点击后在终端面板展开详情。
  *
  * 纯函数（parse / normalize / filter / cancel 语义）无 DOM / invoke 依赖，便于单测。
+ *
+ * 命令返回形状（对齐 F1 冻结的 Rust 契约，background.rs）：
+ * - workbench_list_background_tasks → `{ tasks: [...] }`，条目为 camelCase wire
+ *   （taskId / command / status / startedAt / ...），无 label / summary 字段，
+ *   label 由解析层回退到 command 前 64 字符；
+ * - workbench_get_background_task_output → `{ output, ...status 全字段 }`，
+ *   `output` 即 status.tail（最近 20 行），前端 parseBackgroundTaskOutput 直读；
+ * - workbench_cancel_background_task → KillResult 三态（serde external tagging）：
+ *   `{ killed: { taskId, viaForce } }` / `{ alreadyExited: { taskId, exitCode } }`
+ *   / `{ failed: { taskId, reason } }`。
  */
 
 import { invokeCmd } from './tauriInvoke';
@@ -493,8 +503,13 @@ export function decideCancelBackgroundTask(
 }
 
 /**
- * 将 cancel 响应中的 task 投影为 BackgroundTaskInfo；失败 → null。
- * 支持 { task } 包裹或直接 task 对象。
+ * 将 cancel 响应投影为 BackgroundTaskInfo；失败 → null。
+ * 兼容两种形状：
+ * - 旧 sidecar 形状：`{ task }` 包裹或直接 task 对象（保留兼容）；
+ * - Rust KillResult 三态（serde external tagging）：
+ *   `{ killed: { taskId, viaForce } }` → cancelled；
+ *   `{ alreadyExited: { taskId, exitCode } }` → 终态（exitCode ≠ 0 → failed）；
+ *   `{ failed: { taskId, reason } }` → unknown + reason 摘要（取消未生效）。
  */
 export function parseCancelBackgroundTaskResult(
   data: unknown,
@@ -503,23 +518,68 @@ export function parseCancelBackgroundTaskResult(
   const root = asRec(data);
   if (!root) return null;
   if (root.task != null) return parseBackgroundTask(root.task);
+
+  // KillResult 三态投影（Rust serde：killed / alreadyExited / failed）
+  const killed = asRec(root.killed);
+  if (killed) return projectionFromKillResult(killed, 'cancelled');
+  const exited = asRec(root.alreadyExited);
+  if (exited) {
+    const code = exited.exitCode ?? exited.exit_code;
+    return projectionFromKillResult(
+      exited,
+      typeof code === 'number' && code !== 0 ? 'failed' : 'succeeded',
+    );
+  }
+  const failed = asRec(root.failed);
+  if (failed) {
+    const base = projectionFromKillResult(failed, 'unknown');
+    if (!base) return null;
+    const reason =
+      typeof failed.reason === 'string' && failed.reason.trim()
+        ? failed.reason.trim()
+        : undefined;
+    return reason !== undefined ? { ...base, summary: reason } : base;
+  }
   return parseBackgroundTask(root);
+}
+
+/**
+ * KillResult 变体 → 任务投影（id 缺失 → null；label 回退 id）。
+ * 状态由调用方按变体语义指定（kill 响应本身不含状态字段）。
+ */
+function projectionFromKillResult(
+  v: Record<string, unknown>,
+  state: BackgroundTaskState,
+): BackgroundTaskInfo | null {
+  const id = normalizeBackgroundTaskId(v.taskId ?? v.task_id);
+  if (!id) return null;
+  return { id, label: id, state };
 }
 
 // ── Tauri 边界（薄封装，解析走纯函数） ───────────────────────────────
 
+/** 列表：`{ tasks: [...] }`（Rust camelCase wire，无 label / summary 字段）。 */
 export async function listBackgroundTasks(): Promise<BackgroundTaskInfo[]> {
   const data = await invokeCmd<unknown>('workbench_list_background_tasks');
   return parseBackgroundTaskList(data);
 }
 
+/**
+ * 输出：`{ output, ...status 全字段 }`——`output` 即 status.tail。
+ * 容错：任务不存在（NotFound）或命令失败 → 空串，由展示层回退
+ * （summary / command / 占位文案），不抛错、不打断面板。
+ */
 export async function getBackgroundTaskOutput(taskId: string): Promise<string> {
   const id = normalizeBackgroundTaskId(taskId);
   if (!id) return '';
-  const data = await invokeCmd<unknown>('workbench_get_background_task_output', {
-    taskId: id,
-  });
-  return parseBackgroundTaskOutput(data);
+  try {
+    const data = await invokeCmd<unknown>('workbench_get_background_task_output', {
+      taskId: id,
+    });
+    return parseBackgroundTaskOutput(data);
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -527,6 +587,8 @@ export async function getBackgroundTaskOutput(taskId: string): Promise<string> {
  * - 缺 id → null
  * - 若传入 knownTasks 且决策不可 cancel → null（不打 invoke）
  * - invoke 失败 / 缺命令 → null
+ * - 响应为 KillResult：killed → cancelled；alreadyExited → 终态；
+ *   failed → unknown（取消未生效，reason 进 summary）
  */
 export async function cancelBackgroundTask(
   taskId: string,
