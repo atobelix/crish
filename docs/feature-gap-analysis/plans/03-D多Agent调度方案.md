@@ -74,7 +74,7 @@
 | 12 | kill_all 无入口 | 引擎侧无批量终止 API（现状分析 §8.4-2） | T-D-09 |
 | 13 | resume 无显式命令 | fork 三态已实现（`recovery.rs:382-457`），无命令面 | T-D-09（resume_subagent） |
 | 14 | 引擎侧 SubagentSpawner 未接线 | grep 全仓仅测试域实现（现状分析 §1.2-6） | T-D-13（引擎接线） |
-| 15 | 多模型模式全缺 | `config.rs:229-249` 全局单例 | T-D-10（待定夺） |
+| 15 | 多模型模式全缺 | `config/provider.rs:229-249` 全局单例 | T-D-10（待定夺） |
 | 16 | share/branch 隔离缺 | `subagent.ts:19-20` 恒 `none` | T-D-11（待定夺） |
 | 17 | DAG 可视化缺 | `FlowNodeState` 可查（`flow_graph.rs:357-369`） | T-D-12（待定夺） |
 
@@ -622,7 +622,7 @@ cargo test -p conex-types
 
 - `REQ-D-现状分析.md` §8.4-2（kill_all 建议）与 §8.4-3（resume 命令建议）；
 - `control.rs:43-67`（L0-L3 协议，ForceCancel→L3）、`control.rs:205-207`（L3 队列面）、`safe_point.rs:117-121`（终止优先级聚合）；
-- `recovery.rs:21-27`（fork 接线契约）、`:382-457`（fork_and_reassign / ForkContextMode / ForkRecord）、`:418-435`（decide_fork_context）、`:259-329`（Episode 预算）；
+- `recovery.rs:21-27`（fork 接线契约）、`:1026`（fork_and_reassign）、`:392-457`（ForkContextMode / decide_fork_context / ForkRecord 区）、`:259-329`（Episode 预算）；
 - `agents.rs:9-89`（load_session_agents 查询条件扩展位）。
 
 #### 产出（文件域：`crates/orchestrator/`、`crates/session-loop/src/control.rs`、`crates/conex-db/src/agents.rs`）
@@ -641,7 +641,7 @@ cargo test -p conex-types
 **（2）resume_subagent 命令**
 
 - 新增 `resume_subagent` 引擎命令：入参 `subagent_id` + `prompt`（可选）；
-- 内部走 `fork_and_reassign`（`recovery.rs:21-27` 接线契约）：原 run 置 failed（`recovery.rs:22-27`）、fork 新 run 承接同一目标；
+- 内部走 `fork_and_reassign`（`recovery.rs:1026`，接线契约 `recovery.rs:21-27`）：原 run 置 failed（`recovery.rs:22-27`）、fork 新 run 承接同一目标；
 - 上下文继承走既有三态判定 `decide_fork_context`（`recovery.rs:418-435`：≤24h 窗口 + ≤80% 字节占比 → Verbatim；超限摘要；空内容 New）；
 - 消费 Episode 预算（`recovery.rs:259-329` 操作指纹 + 默认 3）——与恢复阶梯共用预算池，防无限 fork；
 - 前端按钮（可选，不阻塞验收）：`AgentCard`/`AgentTeamBoard` 的 failed 卡片提供 resume 动作。
@@ -675,11 +675,11 @@ npm run typecheck
 
 ### 3.10 T-D-10 REQ-D03 多模型模式（待用户定夺项）
 
-**定位**：REQ-D03 的默认继承语义天然满足（`config.rs:229-249` 全局单例解析、`subagent.rs:394-396` 子代理 run 同通道），缺口只在多模型模式（设置开关 + per-run 覆盖 + AI 自动配置）。按用户要求：**体验类功能由用户定夺**，本任务只做设计 + 成本，**不默认排入轮次**。
+**定位**：REQ-D03 的默认继承语义天然满足（`config/provider.rs:229-249` 全局单例解析、`subagent.rs:394-396` 子代理 run 同通道），缺口只在多模型模式（设置开关 + per-run 覆盖 + AI 自动配置）。按用户要求：**体验类功能由用户定夺**，本任务只做设计 + 成本，**不默认排入轮次**。
 
 #### 设计要点（若用户决定做）
 
-1. **per-run 覆盖通道**：`SubagentSpawnRequest` 增加 `model_override: Option<String>`（+ 可选 `provider_override`）；引擎侧子代理 run 装配时把覆盖值注入 ProviderCall 装配位（`config.rs:229-249` 解析链加可选覆盖层），未指定沿用全局解析（默认继承语义不变）；
+1. **per-run 覆盖通道**：`SubagentSpawnRequest` 增加 `model_override: Option<String>`（+ 可选 `provider_override`）；引擎侧子代理 run 装配时把覆盖值注入 ProviderCall 装配位（`config/provider.rs:229-249` 解析链加可选覆盖层），未指定沿用全局解析（默认继承语义不变）；
 2. **设置开关**：前端 provider 设置 + `apps/agent-workbench/src-tauri/src/config/provider.rs:190-195`（effective_model）增加"多模型并行"布尔开关；关闭时引擎侧忽略 spawn 请求的 model_override（对齐需求"字段无效或被忽略"，`REQ-agent-engine-capabilities.md:448`）；
 3. **AI 自动配置**：模型选择表达为 run_subagent 参数即可（主 Agent 按"用轻量模型做搜索"自然语言选型），引擎无额外逻辑；ModelCatalog 查询接口保证按能力过滤可用（现状分析 §3.4-3）；
 4. **验收**：开启后不同子 Agent 可用不同模型；关闭时 model 参数被忽略（断言子代理 run 的模型解析结果与主 Agent 一致）。
@@ -783,7 +783,8 @@ npm run typecheck
 ```
 
 - run_subagent 不再返回 `common.unsupported`（生产环境接线完成）；
-- 全部测试域 spawner（DbSpawner 等）行为对齐生产实现（契约一致回归）。
+- 全部测试域 spawner（DbSpawner 等）行为对齐生产实现（契约一致回归）；
+- 默认模型继承链路确认：spawn 未携带 model 覆盖参数时，子代理 run 经 ProviderCall 装配链解析出的模型与主 Agent 一致（`config/provider.rs` 全局单例链路，REQ-D03 默认继承语义——对应 00 总方案附录 A REQ-D03 行，`00-总方案与轮次编排.md` 附录 A）；多模型覆盖属 T-D-10 待定夺项，不在本轮范围。
 
 #### 注意事项
 
