@@ -655,11 +655,29 @@ pub(crate) struct EngineHandle {
     /// 命令面经 main.rs（A9）消费）
     #[allow(dead_code)] // A9：workflow 命令登记消费
     scheduler_registry: Option<Arc<crate::sched::SchedulerRegistry>>,
+    /// 子代理 spawn 通道（T-D-13：SubagentSpawner 契约实现；经
+    /// BuiltinToolConfig.subagent_spawner 注入 run_subagent 工具——
+    /// None = 未接线，run_subagent 返回 common.unsupported 降级）
+    #[cfg_attr(not(test), allow(dead_code))] // 测试断言面消费（装配验证）
+    subagent_spawner: Option<Arc<dyn agent_tools::tools::subagent::SubagentSpawner>>,
 }
 
 impl EngineHandle {
-    /// 初始化引擎（加载生效配置 + 内置工具注册；失败仅降级未就绪）
+    /// 初始化引擎（加载生效配置 + 内置工具注册；失败仅降级未就绪）。
+    ///
+    /// T-D-13：spawn 通道未注入（None）——run_subagent 返回
+    /// common.unsupported 降级；生产装配走 [Self::new_with_spawner]。
     pub(crate) fn new(background_manager: Option<Arc<dyn BackgroundTaskManager>>) -> Self {
+        Self::new_with_spawner(background_manager, None)
+    }
+
+    /// 初始化引擎并注入子代理 spawn 通道（T-D-13 生产装配点：CoreRunState
+    /// 创建 spawner 实例后传入，经 BuiltinToolConfig.subagent_spawner 接线
+    /// run_subagent 工具）
+    pub(crate) fn new_with_spawner(
+        background_manager: Option<Arc<dyn BackgroundTaskManager>>,
+        subagent_spawner: Option<Arc<dyn agent_tools::tools::subagent::SubagentSpawner>>,
+    ) -> Self {
         let client = Arc::new(reqwest::Client::new());
 
         // G5 T-CF-06/07：TimerRegistry 装配（pending sink = 真实
@@ -749,6 +767,10 @@ impl EngineHandle {
             subagent_wait_channel: Some(
                 Arc::clone(&wait_channel) as Arc<dyn SubagentWaitChannel>
             ),
+            // T-D-13：子代理 spawn 通道注入（None = run_subagent 返回
+            // common.unsupported；生产装配点 = CoreRunState 构造 spawner 后
+            // 经 new_with_spawner 传入）
+            subagent_spawner: subagent_spawner.clone(),
             ..agent_tools::tools::BuiltinToolConfig::default()
         };
         if let Err(error) =
@@ -802,6 +824,7 @@ impl EngineHandle {
             terminal_stream,
             last_wakeup,
             scheduler_registry,
+            subagent_spawner,
         }
     }
 
@@ -828,6 +851,21 @@ impl EngineHandle {
         *self.provider_config.lock().unwrap_or_else(|e| e.into_inner()) = provider_config;
         self.ready.store(ready, Ordering::SeqCst);
         *self.ready_reason.lock().unwrap_or_else(|e| e.into_inner()) = ready_reason;
+    }
+
+    /// 测试面：注入 provider 适配层与生效配置并置就绪（T-D-13 端到端测试
+    /// 用——run_task_impl 完整装配不依赖磁盘 config，CI 确定性；经
+    /// [Self::cache_tracking_config] 同步生效——默认模型继承断言数据源）
+    #[cfg(test)]
+    pub(crate) fn inject_provider_for_test(
+        &self,
+        provider: Arc<dyn ProviderCall>,
+        config: EngineProviderConfig,
+    ) {
+        *self.provider.lock().unwrap_or_else(|e| e.into_inner()) = Some(provider);
+        *self.provider_config.lock().unwrap_or_else(|e| e.into_inner()) = Some(config);
+        self.ready.store(true, Ordering::SeqCst);
+        *self.ready_reason.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     /// engineReady（provider 配置齐备即可发起调用）

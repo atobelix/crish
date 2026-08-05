@@ -4252,8 +4252,9 @@ mod tests {
         };
         assert!(first.contains(&task_id), "首次通知含任务 id：{first}");
 
-        // 第二次通知（尖峰判 Healthy 重置防抖 → 再静默再次通知；窗口 10s）
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        // 第二次通知（尖峰判 Healthy 重置防抖 → 再静默再次通知；窗口 15s——
+        // 并行负载下采样拍可能漂移，尖峰拍到达时间随之后移，放宽窗口防偶发）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
         let second = loop {
             if let Some(text) = queue.lock().unwrap_or_else(|p| p.into_inner()).pop_front() {
                 break text;

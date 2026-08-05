@@ -51,6 +51,9 @@ mod resource;
 
 mod session_commands;
 mod status_diagnostics;
+// T-D-13：子代理生产 spawner（SubagentSpawner 引擎侧接线；bin 模块，
+// 与 core_run_commands / engine 同目标，互引 crate:: 内部路径）
+mod subagent_spawner;
 mod timers;
 mod sched;
 mod workflow_commands;
@@ -355,6 +358,9 @@ fn main() {
                 Some(Arc::clone(&background_tasks)
                     as Arc<dyn agent_tools::background::BackgroundTaskManager>),
             ));
+            // T-D-13：子代理 spawner 注入面装配（launcher / db / wait 广播 /
+            // steering 队列——Arc 构造完成后注入，spawner 在 engine 内）
+            core_state.finalize_subagent_spawner();
 
             // ⑦ restore：run_in_runtime 在 manage(CoreRunState) 之前执行
             //（成功 seed_sequences + 立即快照；失败降级不阻断，门禁经

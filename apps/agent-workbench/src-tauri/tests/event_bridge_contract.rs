@@ -133,6 +133,9 @@ fn permission_request() -> PermissionRequest {
             concurrency: None,
         },
         metadata: None,
+        // T-D-14 权限传递层：主 agent 请求缺省 None（向后兼容）
+        requester_run_id: None,
+        reason: None,
     }
 }
 

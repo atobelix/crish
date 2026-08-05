@@ -38,7 +38,10 @@ use agent_tools::backup::BackupMiddleware;
 use agent_tools::background::{
     BackgroundAdoptRequest, BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskRef, TaskState,
 };
+use agent_tools::context::ExploreDocsQuotaContext;
 use agent_tools::definition::ToolError;
+use agent_tools::tools::subagent::SubagentState;
+use agent_tools::write_paths::{WritePathPolicy, WritePathRegistry};
 use conex_db::LocalDb;
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision as WireApprovalDecision, PermissionRequest,
@@ -69,7 +72,10 @@ use session_loop::{
 use crate::core_error::CoreError;
 use crate::core_event_bridge::{EmitReport, EventBridge};
 use crate::core_query_commands::{BackgroundTasksSummary, RestoreStatus, RunUsage, SnapshotStatus};
-use crate::engine::{BridgeDeltaSink, BufferedRunEventBridge, EngineHandle, SessionLoopProducer};
+use crate::engine::{
+    BridgeDeltaSink, BufferedRunEventBridge, ContextInjection, ContextInjectionKind, ContextInjector,
+    EngineHandle, SessionLoopProducer,
+};
 use crate::status_diagnostics::StatusDiagnostics;
 
 /// run 的 max-turns 预算（对齐 01 §1.5：独立预算 reason）
@@ -360,6 +366,10 @@ pub(crate) struct ActiveRun {
     /// force_cancel 置位；收口判定「用户消息到达后的正常收场不触发续
     /// run」的依据）
     user_touched: AtomicBool,
+    /// 子代理 run 装配配置（T-D-13：Some = 本 run 是子代理 run——收口
+    /// 时经 spawner 终态处理（记账释放 / 事件发射 / steering 通知）；
+    /// None = 普通 run，收口行为与现状一致）
+    subagent: Option<crate::subagent_spawner::SubagentRunConfig>,
 }
 
 /// 活动 run 的引擎取消接口（[orchestrator::run::RunEngine] 实现：
@@ -1177,6 +1187,11 @@ pub struct CoreRunState {
     /// 预装配——经 run_task_impl 复用装配拉起新 run；测试经
     /// set_resume_launcher 注入替身断言判定与注入载荷）
     resume_launcher: Mutex<Option<ResumeLauncher>>,
+    /// 子代理生产 spawner（T-D-13：SubagentSpawner 契约引擎侧实现；
+    /// 同一实例经 EngineHandle 注入 run_subagent 工具 + 本状态持有——
+    /// 注入面（launcher / db / wait 广播 / steering 队列）经
+    /// [Self::finalize_subagent_spawner] 装配）
+    subagent_spawner: Arc<crate::subagent_spawner::SubagentSpawnerImpl>,
 }
 
 impl CoreRunState {
@@ -1194,17 +1209,25 @@ impl CoreRunState {
         // 可选联动 + 汇总查询面）；引擎与状态共享同一包装实例——工具执行
         // 链 adopt（agent-tools shell.rs）经引擎注入的 trait 引用走到装饰器。
         let background = Arc::new(RunAwareBackgroundManager::new(background_manager));
+        // T-D-13：子代理生产 spawner 实例（注入槽为空；launcher / db /
+        // wait 广播 / steering 队列经 [Self::finalize_subagent_spawner]
+        // 装配——Arc 构造完成后注入，防构造期循环引用）
+        let subagent_spawner = Arc::new(crate::subagent_spawner::SubagentSpawnerImpl::new());
         // T-CF-11：idle 待命唤醒源接线——跨 run steering 队列与定时器
         // 活跃判定经 EngineHandle 访问器取得（engine.rs:775-783，R-CF3
         // 装配收口预留）；SchedulerRegistry enabled 判定由 A5 装配后经
         // set_cron_has_enabled 注入。
-        let engine = EngineHandle::new(
+        let engine = EngineHandle::new_with_spawner(
             // 引擎侧注入包装实例（保持 Option 语义：未接线 = 引擎无
             // 后台任务通道，与接线前行为一致）
             background
                 .inner
                 .is_some()
                 .then(|| Arc::clone(&background) as Arc<dyn BackgroundTaskManager>),
+            // T-D-13：spawn 通道注入（run_subagent 工具接线；None =
+            // run_subagent 返回 common.unsupported 降级）
+            Some(Arc::clone(&subagent_spawner)
+                as Arc<dyn agent_tools::tools::subagent::SubagentSpawner>),
         );
         let pending_queue = engine.timer_steering_queue();
         let timer_registry = engine.timer_registry();
@@ -1247,6 +1270,7 @@ impl CoreRunState {
             cron_has_enabled: Mutex::new(None),
             resume_empty_streak: Mutex::new(HashMap::new()),
             resume_launcher: Mutex::new(Some(resume_launcher)),
+            subagent_spawner,
         }
     }
 
@@ -1408,6 +1432,59 @@ impl CoreRunState {
     /// restore 是否完成（run_task 门禁；查询命令 restore.state 数据源）
     pub fn restore_ready(&self) -> bool {
         self.restore_ready.load(Ordering::SeqCst)
+    }
+
+    // ── T-D-13：子代理 spawner 注入面装配与终态处理 ────────────────
+
+    /// 装配 spawner 注入面（main.rs 在 Arc 构造完成后调用）：启动器
+    /// （Weak 引用本状态，run 启动走 run_task_impl 同通道）、行存储
+    /// （LocalDb 下转型）、wait 通道终态广播、跨 run steering 队列
+    /// （主 agent 唤醒通知落点）。
+    pub(crate) fn finalize_subagent_spawner(self: &Arc<Self>) {
+        let launcher: Arc<dyn crate::subagent_spawner::SubagentRunLauncher> =
+            Arc::new(CoreRunStateLauncher {
+                state: Arc::downgrade(self),
+            });
+        self.subagent_spawner.init(
+            Some(launcher),
+            self.local_db(),
+            Some(self.engine.terminal_stream()),
+            Some(Arc::clone(&self.pending_queue)),
+        );
+    }
+
+    /// 子代理 run 终态处理（drive_run_loop 收口调用）：终态状态映射 →
+    /// spawner 统一收口（记账释放 / 行更新 / subagent-ended 发射 / wait
+    /// 通道 feed / steering 通知）。
+    pub(crate) async fn on_subagent_run_terminal(
+        &self,
+        cfg: &crate::subagent_spawner::SubagentRunConfig,
+        status: conex_db::RunStatus,
+    ) {
+        let state = match status {
+            conex_db::RunStatus::Completed => SubagentState::Completed,
+            _ => SubagentState::Failed,
+        };
+        self.subagent_spawner.on_subagent_terminal(cfg, state).await;
+    }
+
+    /// 子代理生命周期服务（T-D-09：kill_all / resume_subagent 命令面
+    /// 依赖；db 与 [orchestrator::lifecycle::ForceCancelSink]（本状态实现）
+    /// 装配；LocalDb 不可用（测试替身 store）→ None）
+    #[cfg_attr(not(test), allow(dead_code))] // T-D-12 命令面消费；测试断言面消费
+    pub(crate) fn lifecycle_service(
+        self: &Arc<Self>,
+    ) -> Option<orchestrator::lifecycle::SubagentLifecycleService> {
+        let db = self.local_db()?;
+        // Arc 宽化：CoreRunState 实现 ForceCancelSink → trait object 引用
+        // （先克隆具体类型再宽化——编译器对 Arc::clone 的 trait object
+        // 目标推断不收敛，显式两步断开）
+        let this: Arc<CoreRunState> = Arc::clone(self);
+        let control: Arc<dyn orchestrator::lifecycle::ForceCancelSink> = this;
+        Some(orchestrator::lifecycle::SubagentLifecycleService::new(
+            Arc::new(db),
+            control,
+        ))
     }
 
     /// 最近快照代数（查询命令 snapshot.generation 数据源）
@@ -1627,6 +1704,55 @@ impl CoreRunState {
     pub fn save_snapshot_blocking(self: &Arc<Self>) {
         let this = Arc::clone(self);
         tauri::async_runtime::block_on(async move { this.save_snapshot_now().await });
+    }
+}
+
+// ── T-D-13：子代理 run 启动器（Weak 引用切断 CoreRunState 类型递归）──
+
+/// 子代理 run 启动器生产实现：经 [crate::subagent_spawner::SubagentRunLauncher]
+/// trait object 调用 [run_task_impl]（core_run_task 同通道）——spawner 在
+/// CoreRunState 内（engine 注入面），run 启动回调 CoreRunState，Weak 引用
+/// 避免 Arc 循环强引用（进程级单例，Weak 升级失败为启动器未装配兜底）。
+#[derive(Debug)]
+pub(crate) struct CoreRunStateLauncher {
+    /// 状态弱引用（finalize 装配时注入；主进程存活期恒可升级）
+    state: std::sync::Weak<CoreRunState>,
+}
+
+#[async_trait::async_trait]
+impl crate::subagent_spawner::SubagentRunLauncher for CoreRunStateLauncher {
+    async fn launch(
+        &self,
+        options: RunTaskOptions,
+    ) -> Result<RunTaskResponse, CoreError> {
+        let state = self.state.upgrade().ok_or_else(|| {
+            CoreError::internal("子代理 run 启动失败：CoreRunState 已释放（启动器弱引用失效）")
+        })?;
+        run_task_impl(state, options).await
+    }
+}
+
+// ── T-D-09/T-D-13：ForceCancelSink 接线（kill_all 的引擎侧实现）────
+
+/// L3 强停投递（[orchestrator::lifecycle::ForceCancelSink]）：按
+/// subagent_run_id 定位活动 run 的控制总线，投递 L3 `request_force_cancel`
+/// （reason 携带 `subagent_force_cancel:<run_id>` 可观测标识）；无该 run
+/// 的运行实例（已终态 / 重启后未恢复）→ false（调用方按未终态汇总）。
+impl orchestrator::lifecycle::ForceCancelSink for CoreRunState {
+    fn request_force_cancel(&self, subagent_run_id: &str, reason: &str) -> bool {
+        let active = self
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let Some(run) = active.get(subagent_run_id) else {
+            return false;
+        };
+        // std Mutex 不跨 await 持有：投递为同步调用，锁在语句内释放
+        run.control_bus
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .request_subagent_force_cancel(subagent_run_id, Some(reason));
+        true
     }
 }
 
@@ -1863,6 +1989,8 @@ pub(crate) async fn spawn_idle_resume_run(
         history: None,
         context_window: None,
         parent_run_id: None,
+        // T-D-13：续 run 为普通 run（子代理配置仅 spawner 构造）
+        subagent_config: None,
     };
     if let Err(error) = run_task_impl(Arc::clone(&state), options).await {
         tracing::warn!(
@@ -2014,6 +2142,23 @@ pub(crate) async fn drive_run_loop(
     // 终态后均持续运行、日志持续累积；会话切换同理不受影响。此处仅释放
     // 「当前 run」上下文（owner_run_id 注入槽，供下一 run 复用）。
     state.background.clear_current_run(&run_id);
+    // T-D-13：spawner 侧 run 上下文释放（当前活动 run 定位槽）
+    state.subagent_spawner.clear_current_run(&session_id, &run_id);
+
+    // ── T-D-13：子代理 run 终态收口（记账释放 / 行更新 / subagent-ended
+    // 发射 / wait 通道 feed / steering 通知）──
+    // 须在 decide_idle_resume 之前完成：steering 条目入队后，收口判定
+    // 「队列非空」→ 主 agent 下一 run 自动唤醒收到子代理完成通知。
+    if let Some(cfg) = active.subagent.clone() {
+        let terminal_status = {
+            let run = active.handle.lock().await;
+            run.status
+        };
+        state
+            .on_subagent_run_terminal(&cfg, terminal_status)
+            .await;
+    }
+
     state.save_snapshot_now().await;
     tracing::info!(
         target: "run",
@@ -2026,42 +2171,50 @@ pub(crate) async fn drive_run_loop(
     // enabled Cron（判定器注入）；三源全空 → AI 休眠待用户。队列条目批量
     // 转出注入新 run（对齐 D07 批量推送），摘要文本已由生成侧按 §4.8
     // 模板拼入条目原文。空转护栏：连续 3 次续 run 无 AI 产出 → 停止。
-    if let Some(inject) = decide_idle_resume(
-        &state,
-        &active,
-        resume_reason,
-        // 「有 AI 产出」= 完成过 turn 或执行过工具（空转 run 两者皆 0）
-        resume_turn_index > 0 || resume_tool_calls > 0,
-    )
-    .await
-    {
-        tracing::info!(
-            target: "run",
-            session_id = %session_id,
-            run_id = %run_id,
-            inject_messages = inject.len(),
-            "idle 待命命中：自动续开一轮 run（队列条目批量注入 / 定时器 / Cron 源）"
-        );
-        let launcher = state
-            .resume_launcher
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone();
-        match launcher {
-            Some(launcher) => launcher(&state, &session_id, inject).await,
-            None => {
-                // 防御分支：拉起器未注入（生产恒注入——CoreRunState::new
-                // 预装配生产拉起器，见 [production_resume_launcher]）。
-                // 不在此处直接引用 run_task_impl：drive_run_loop 与
-                // run_task_impl 相互包含 opaque future 会让 auto-trait
-                // 检查无法终止（Rust 限制）——经 trait object 拉起器
-                // （叶子类型）切断类型递归。未注入时跳过续 run 并记日志。
-                tracing::warn!(
-                    target: "run",
-                    session_id = %session_id,
-                    run_id = %run_id,
-                    "idle 续 run 拉起器未注入（跳过本轮续 run）"
-                );
+    //
+    // T-D-13：**子代理 run 不参与 idle 待命续 run**——子代理是一次性任务，
+    // 收口即完成（终态通知已由 [Self::on_subagent_run_terminal] 发出）；若
+    // 子代理收口也判定 idle 续 run，会消费自己入队的 steering 条目造成
+    // 自续循环（靠空转护栏刹停，浪费模型调用）。steering 条目保留在队列，
+    // 由主 agent 会话的收口消费（通知链路完整）。
+    if active.subagent.is_none() {
+        if let Some(inject) = decide_idle_resume(
+            &state,
+            &active,
+            resume_reason,
+            // 「有 AI 产出」= 完成过 turn 或执行过工具（空转 run 两者皆 0）
+            resume_turn_index > 0 || resume_tool_calls > 0,
+        )
+        .await
+        {
+            tracing::info!(
+                target: "run",
+                session_id = %session_id,
+                run_id = %run_id,
+                inject_messages = inject.len(),
+                "idle 待命命中：自动续开一轮 run（队列条目批量注入 / 定时器 / Cron 源）"
+            );
+            let launcher = state
+                .resume_launcher
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            match launcher {
+                Some(launcher) => launcher(&state, &session_id, inject).await,
+                None => {
+                    // 防御分支：拉起器未注入（生产恒注入——CoreRunState::new
+                    // 预装配生产拉起器，见 [production_resume_launcher]）。
+                    // 不在此处直接引用 run_task_impl：drive_run_loop 与
+                    // run_task_impl 相互包含 opaque future 会让 auto-trait
+                    // 检查无法终止（Rust 限制）——经 trait object 拉起器
+                    // （叶子类型）切断类型递归。未注入时跳过续 run 并记日志。
+                    tracing::warn!(
+                        target: "run",
+                        session_id = %session_id,
+                        run_id = %run_id,
+                        "idle 续 run 拉起器未注入（跳过本轮续 run）"
+                    );
+                }
             }
         }
     }
@@ -2202,6 +2355,14 @@ async fn finalize_failed(state: &Arc<CoreRunState>, active: &ActiveRun, message:
     // T-AB-19 失败收口显式接线（与成功收口同一契约）：不清理后台任务
     // 注册表、不级联杀任务——任务属会话级；仅释放「当前 run」上下文。
     state.background.clear_current_run(&run_id);
+    // T-D-13：spawner 侧 run 上下文释放 + 子代理终态收口（防御性失败
+    // 路径同样归一 failed——记账释放 / 行更新 / 事件发射 / 通知面）
+    state.subagent_spawner.clear_current_run(&active.session_id, &run_id);
+    if let Some(cfg) = active.subagent.clone() {
+        state
+            .on_subagent_run_terminal(&cfg, conex_db::RunStatus::Failed)
+            .await;
+    }
     state.save_snapshot_now().await;
 }
 
@@ -2254,6 +2415,10 @@ pub struct RunTaskOptions {
     /// None = 主 agent run / 无父 run（审批裁决者 = 用户，现状不变）；
     /// Some = 子代理 run 的父 run id（审批请求路由给主 agent 裁决）
     pub parent_run_id: Option<String>,
+    /// 子代理 run 装配配置（T-D-13：仅引擎内部 spawner 构造；IPC 命令面
+    /// 不携带——serde 缺省 None = 普通 run，装配行为与现状一致）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subagent_config: Option<crate::subagent_spawner::SubagentRunConfig>,
 }
 
 #[tauri::command]
@@ -2284,6 +2449,11 @@ pub(crate) async fn run_task_impl(
     let system_prompt = options.system_prompt;
     let history = options.history;
     let context_window = options.context_window;
+    // T-D-13：子代理 run 装配配置（None = 普通 run，装配行为与现状一致）
+    let subagent_config = options.subagent_config;
+    // T-D-14：父 run 归属（审批裁决者路由 + spawner 侧 run 注册表——先于
+    // SessionLoopOptions 遮蔽取出，避免「options 已被 move」借用错误）
+    let parent_run_id = options.parent_run_id.clone();
 
     if run_id.is_empty() || session_id.is_empty() {
         return Err(CoreError::invalid_input("runId / sessionId 不能为空"));
@@ -2314,7 +2484,31 @@ pub(crate) async fn run_task_impl(
     let Some(provider) = state.engine.provider() else {
         return Err(CoreError::internal("engine not ready（provider 配置缺失）"));
     };
-    let tool_registry = state.engine.tool_registry();
+    // T-D-13：子代理 run 的工具注册表按 task_type 默认权限集裁剪
+    // （filter_registry_for_task_type，T-D-08 fail-closed 白名单）+ 剔除
+    // run_subagent（T-D-02 工具面防护：子代理无派发能力，防浪费非安全
+    // 边界；守卫层 NestingDenied 兜底）。普通 run 保持引擎共享注册表。
+    let base_registry = state.engine.tool_registry();
+    let tool_registry = match &subagent_config {
+        Some(config) => {
+            let task_type_wire = config.task_type.as_deref().unwrap_or("analysis");
+            let filtered = agent_tools::readonly::filter_registry_for_task_type(
+                &base_registry,
+                task_type_wire,
+            )
+            .map_err(|error| {
+                CoreError::internal(format!("子代理工具集裁剪失败：{error}"))
+            })?;
+            let filtered = agent_tools::readonly::filter_registry(&filtered, |name| {
+                name != agent_tools::tools::subagent::SUBAGENT_SPAWNER_TOOL_NAME
+            })
+            .map_err(|error| {
+                CoreError::internal(format!("子代理工具集剔除失败：{error}"))
+            })?;
+            Arc::new(filtered)
+        }
+        None => base_registry,
+    };
 
     // 注册 run（queued → initializing → running，落库）
     let handle = state
@@ -2349,7 +2543,7 @@ pub(crate) async fn run_task_impl(
         run_id.clone(),
         session_id.clone(),
         // T-D-14：父 run 归属（子代理 run 由 spawner 携带；None = 主 agent）
-        options.parent_run_id.clone(),
+        parent_run_id.clone(),
         broadcast,
         Arc::clone(&handle_shared),
         state.store.clone(),
@@ -2432,6 +2626,112 @@ pub(crate) async fn run_task_impl(
         (None, None)
     };
 
+    // ── T-D-13：子代理 run 装配块（默认权限集 / 提示词注入 / 配额）──
+    // 普通 run（subagent_config = None）全部保持现状（None 不装配）。
+    // - 写路径沙箱（T-D-08）：显式 allowed_write_paths → WritePathPolicy
+    //   注册（Allowed 优先）；无显式字段且 implementation → 工作区根沙箱；
+    //   其余类型工具面/配额面闭合，不注册策略（不强制越权检查）；
+    // - 权限申请上下文（T-D-14）：design/review 装配配额凭证
+    //   （granted=true quota=1，session_meta 后端）；
+    // - 提示词注入（ContextInjector）：T-D-03 角色约束段 + C2 started_at
+    //   段 + git 回退指引段 + T-D-14 权限申请指引段 + 产出目录段
+    //   （主控已定产出目录时）。
+    let subagent_injector: Option<ContextInjector> = None;
+    let subagent_write_registry: Option<Arc<WritePathRegistry>> = None;
+    let subagent_quota: Option<ExploreDocsQuotaContext> = None;
+    let (subagent_write_registry, subagent_quota, subagent_injector) =
+        match &subagent_config {
+            None => (subagent_write_registry, subagent_quota, subagent_injector),            Some(config) => {
+                // 工作区根解析链（与 loop 装配块同源：显式 cwd → 当前目录）
+                let root = cwd
+                    .clone()
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| {
+                        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+                    });
+                // 写路径沙箱装配
+                let write_registry = match &config.allowed_write_paths {
+                    Some(paths) => {
+                        let policy = WritePathPolicy::from_entries(&root, paths.clone())
+                            .map_err(|error| {
+                                CoreError::internal(format!("写路径白名单解析失败：{error}"))
+                            })?;
+                        Some(Arc::new(
+                            WritePathRegistry::new(session_id.clone(), &root)
+                                .with_write_policy(policy),
+                        ))
+                    }
+                    None => match config.task_type.as_deref() {
+                        // implementation 默认 = 工作区根沙箱（Allowed 白名单）
+                        Some("implementation") => Some(Arc::new(
+                            WritePathRegistry::new(session_id.clone(), &root)
+                                .with_write_policy(WritePathPolicy::Allowed(vec![root.clone()])),
+                        )),
+                        // 其余类型：工具面（只读/仅 shell）+ 配额面闭合，
+                        // 不注册策略（越权检查不强制）
+                        _ => None,
+                    },
+                };
+                // 权限申请上下文（design/review 配额凭证；T-D-14）
+                let quota = match config.task_type.as_deref() {
+                    Some("design") | Some("review") => state.local_db().map(|db| {
+                        ExploreDocsQuotaContext {
+                            session_id: session_id.clone(),
+                            run_id: run_id.clone(),
+                            granted: true,
+                            quota: 1,
+                            store: Some(Arc::new(
+                                conex_db::SessionMetaExploreDocsQuotaStore::new(db),
+                            )),
+                        }
+                    }),
+                    _ => None,
+                };
+                // 提示词注入段装配（M1 挂载形状：title + content → push）
+                let mut injector = ContextInjector::new();
+                // T-D-03：子代理角色约束（主 Agent run 装配点不调用——
+                // 「主 Agent run 不含本段」断言的关键差异点）
+                crate::engine::push_subagent_role_constraint(&mut injector);
+                // C2：started_at 段 + git 回退谨慎指引（started_at 与落库同源）
+                for (title, content) in agent_tools::subagent_inject::subagent_session_injections(
+                    Some(config.started_at_ms),
+                    agent_tools::subagent_inject::DEFAULT_REF_AGE_THRESHOLD_HOURS,
+                ) {
+                    injector.push(ContextInjection::new(
+                        ContextInjectionKind::System,
+                        title,
+                        content,
+                    ));
+                }
+                // T-D-14：权限申请指引段（任务类型 + 一句话边界参数化）
+                let boundary = config
+                    .task_type
+                    .as_deref()
+                    .and_then(agent_tools::tools::subagent::TaskType::parse)
+                    .map(|t| t.boundary_summary());
+                let (title, content) =
+                    agent_tools::subagent_inject::permission_relay_injection(
+                        config.task_type.as_deref(),
+                        boundary,
+                    );
+                injector.push(ContextInjection::new(
+                    ContextInjectionKind::System,
+                    title,
+                    content,
+                ));
+                // 产出目录段（主控已定产出目录时注入）
+                if let Some(dir) = &config.output_dir {
+                    let (title, content) = agent_tools::subagent_inject::output_dir_injection(dir);
+                    injector.push(ContextInjection::new(
+                        ContextInjectionKind::System,
+                        title,
+                        content,
+                    ));
+                }
+                (write_registry, quota, Some(injector))
+            }
+        };
+
     let options = SessionLoopOptions {
         cwd: cwd.clone(),
         assistant_client_message_id: assistant_client_message_id.clone(),
@@ -2450,7 +2750,13 @@ pub(crate) async fn run_task_impl(
         tool_middleware: vec![Arc::new(BackupMiddleware::with_defaults(None))],
         // T-D-14 权限传递层：父 run 归属透传执行器（审批请求来源判定与
         // 裁决者路由依据；None = 主 agent run，现状行为）
-        parent_run_id: options.parent_run_id.clone(),
+        parent_run_id: parent_run_id.clone(),
+        // T-D-13：子代理 run 的写路径沙箱注册表（with_write_policy 装配；
+        // None = 普通 run，loop 装配块按工作区根新建无策略注册表）
+        write_claims: subagent_write_registry.clone(),
+        // T-D-13：子代理 run 的配额上下文（design/review 凭证；None =
+        // 主 agent 不受配额约束，现状行为）
+        explore_docs_quota: subagent_quota.clone(),
         ..SessionLoopOptions::default()
     };
     let tool_options = ToolBatchOptions {
@@ -2509,12 +2815,21 @@ pub(crate) async fn run_task_impl(
     // 一致）；with_cache_session：上一 run 会话缓存状态（冷缓存预警 +
     // 模型切换检测数据源，engine 侧 cache_session 按会话维护）
     .with_cache_tracking(state.engine.cache_tracking_config())
-    .with_cache_session(state.engine.cache_session(&session_id));
+    .with_cache_session(state.engine.cache_session(&session_id))
+    // T-D-13：子代理 run 的上下文注入通道（角色约束 / started_at /
+    // 权限申请指引 / 产出目录段；None = 无注入，system_prompt 原样透传）
+    .with_context_injector(subagent_injector);
 
     // T-AB-19：登记当前 run 上下文（owner_run_id 注入槽）——须在 spawn
     // drive_run_loop 之前，保证 run 内工具执行链 adopt 时已可见；run
     // 终态（drive_run_loop 收口 / finalize_failed）经 clear_current_run 释放。
     state.background.set_current_run(&run_id);
+    // T-D-13：spawner 侧 run 上下文登记（深度记账 + 当前活动 run 定位——
+    // 子代理 spawn 时按发起会话解析父 run；收口经 clear 释放）
+    state
+        .subagent_spawner
+        .register_run(&run_id, &session_id, parent_run_id.clone());
+    state.subagent_spawner.set_current_run(&session_id, &run_id);
 
     // 注册活动 run 并 spawn 驱动循环
     let active = Arc::new(ActiveRun {
@@ -2529,6 +2844,8 @@ pub(crate) async fn run_task_impl(
         delta_sink_active: true,
         escape_watch: Mutex::new(escape_watch),
         user_touched: AtomicBool::new(false),
+        // T-D-13：子代理 run 装配配置随活动 run 登记（收口终态处理依据）
+        subagent: subagent_config.clone(),
     });
     state
         .active_runs
@@ -3067,6 +3384,13 @@ mod tests {
     use conex_types::session::AgentEndReason;
     use conex_types::tool::ToolOutput;
     use orchestrator::steering_queue::SteeringInputEntry;
+    // T-D-13 集成测试面：TestProvider 脚本驱动 + ProviderCall
+    use session_loop::testing::TestProvider;
+    use session_loop::stream::{ProviderStreamEvent, StopReason};
+    use session_loop::provider::ProviderCall;
+    use agent_provider::config::Endpoint;
+    use crate::engine::EngineProviderConfig;
+    use std::collections::BTreeMap;
 
     /// 便捷构造 HistoryMessage（缺省无 thinking/无 JSON 载荷字段）
     fn hmsg(id: &str, sender: &str, text: Option<&str>) -> HistoryMessage {
@@ -4110,6 +4434,8 @@ mod tests {
             delta_sink_active: true,
             escape_watch: Mutex::new(None),
             user_touched: AtomicBool::new(false),
+            // T-D-13：测试驱动路径的子代理配置缺省 None（普通 run 语义）
+            subagent: None,
         })
     }
 
@@ -4811,6 +5137,821 @@ mod tests {
         assert!(
             verdict.unwrap().is_empty(),
             "队列空时无注入文本（空注入保持待命）"
+        );
+    }
+
+    // ======================================================================
+    // T-D-13：引擎侧 SubagentSpawner 集成测试（生产 spawner 全链路）
+    // ======================================================================
+
+    /// 会话索引条目（测试用主会话）
+    fn subagent_test_session_entry(id: &str) -> conex_types::SessionIndexEntry {
+        conex_types::SessionIndexEntry {
+            id: id.to_string(),
+            title: format!("会话 {id}"),
+            folder: String::new(),
+            is_pinned: false,
+            is_archived: false,
+            branch_parent_id: None,
+            timestamp: "2026-08-05T00:00:00.000Z".to_string(),
+            updated_at: 1,
+            message_count: 0,
+            pinned_message_ids: None,
+            engine_cursor: Some(0),
+            engine_last_run_id: None,
+            hydrated_from_engine: Some(true),
+        }
+    }
+
+    /// 按会话路由的测试 provider（确定性脚本分配）：ProviderRequest.session_id
+    /// 由 SharedProvider 注入（loop 的会话 id）——主 agent 会话（非 sub-sess-*
+    /// 前缀）走主脚本序列，子代理会话走子脚本序列。消除共享 TestProvider
+    /// 调用序号交错导致的脚本分配不确定（T-D-13 端到端测试基建）。
+    #[derive(Debug)]
+    struct SessionRoutedProvider {
+        main: Arc<TestProvider>,
+        sub: Arc<TestProvider>,
+    }
+
+    #[async_trait::async_trait]
+    impl ProviderCall for SessionRoutedProvider {
+        async fn stream<'a>(
+            &self,
+            request: &session_loop::provider::ProviderRequest<'a>,
+        ) -> Result<
+            session_loop::provider::ProviderEventStream,
+            conex_types::response::ClassifiedStreamError,
+        > {
+            let target = match request.session_id.as_deref() {
+                Some(s) if s.starts_with("sub-sess-") => &self.sub,
+                _ => &self.main,
+            };
+            target.stream(request).await
+        }
+    }
+
+    /// 集成装配：LocalDbStore 状态 + spawner 注入面 + 会话路由 TestProvider
+    /// 引擎就绪。返回 (state, db, main_provider, sub_provider, emitter)。
+    fn subagent_state_with_providers(
+        main: Arc<TestProvider>,
+        sub: Arc<TestProvider>,
+        model: &str,
+    ) -> (
+        Arc<CoreRunState>,
+        LocalDb,
+        Arc<TestProvider>,
+        Arc<TestProvider>,
+        Arc<RecordingEmitter>,
+    ) {
+        let (bridge, emitter) = recording_bridge();
+        let db = LocalDb::open_in_memory().expect("内存库");
+        db.upsert_session_entry(&subagent_test_session_entry("sess-main"))
+            .expect("会话条目");
+        let seq = CORE_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let snapshots: Arc<dyn SnapshotStore> = Arc::new(
+            orchestrator::restore::SnapshotFileStore::new(std::env::temp_dir().join(format!(
+                "conex_subagent_e2e_{}_{seq}_snapshot.json",
+                std::process::id()
+            ))),
+        );
+        let state = Arc::new(CoreRunState::new(
+            Arc::new(LocalDbStore::new(db.clone())),
+            snapshots,
+            bridge,
+            Arc::new(StatusDiagnostics::new()),
+            None,
+        ));
+        // T-D-13：spawner 注入面装配（launcher / db / 广播 / steering 队列）
+        state.finalize_subagent_spawner();
+        let routed: Arc<dyn ProviderCall> = Arc::new(SessionRoutedProvider {
+            main: Arc::clone(&main),
+            sub: Arc::clone(&sub),
+        });
+        let config = EngineProviderConfig {
+            base_url: "http://test.local/v1".to_string(),
+            api_key: "test-key".to_string(),
+            model: model.to_string(),
+            endpoint: Endpoint::ChatCompletions,
+            stream: true,
+            extra: BTreeMap::new(),
+        };
+        state.engine.inject_provider_for_test(routed, config);
+        (state, db, main, sub, emitter)
+    }
+
+    /// 主 agent 会话的测试脚本（通用形态：派发调用 + 收口 + 兜底）
+    fn main_agent_scripts(spawn_call: serde_json::Value) -> Vec<Vec<ProviderStreamEvent>> {
+        vec![
+            vec![
+                ProviderStreamEvent::text("开始派发。"),
+                ProviderStreamEvent::tool_call(Some("c1".to_string()), "run_subagent", spawn_call),
+                ProviderStreamEvent::stop(StopReason::ToolCall),
+            ],
+            vec![
+                ProviderStreamEvent::text("已派发。"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            // 兜底（idle 续 run 等越界调用）：安全收口
+            vec![
+                ProviderStreamEvent::text("收到通知。"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            vec![
+                ProviderStreamEvent::text("继续。"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+        ]
+    }
+
+    /// 轮询等待全部活动 run 收口（tauri::async_runtime::spawn 的任务在
+    /// 独立 tokio 任务执行；窗口内未收口则 panic）
+    async fn wait_all_runs_terminal(state: &CoreRunState, window: Duration) {
+        let deadline = tokio::time::Instant::now() + window;
+        loop {
+            let active = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
+            if active.is_empty() {
+                return;
+            }
+            eprintln!("等待收口中：活动 run = {:?}", active.keys().collect::<Vec<_>>());
+            drop(active);
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "活动 run 未在窗口内全部收口"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+    }
+
+    /// 轮询等待子代理行进入终态（completed/failed）
+    async fn wait_agent_rows_terminal(db: &LocalDb, session_id: &str, expect: usize, window: Duration) {
+        let deadline = tokio::time::Instant::now() + window;
+        loop {
+            let rows = db.load_session_agents(session_id).expect("读行");
+            let terminal = rows
+                .iter()
+                .filter(|r| r.status == "completed" || r.status == "failed")
+                .count();
+            if terminal >= expect {
+                return;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "子代理行未在窗口内进入终态（{terminal}/{expect}）"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+    }
+
+    fn test_options(run_id: &str, session_id: &str, prompt: &str) -> RunTaskOptions {
+        RunTaskOptions {
+            run_id: run_id.to_string(),
+            session_id: session_id.to_string(),
+            prompt: Some(prompt.to_string()),
+            mode: Some("task".to_string()),
+            cwd: None,
+            // 主 agent run 用 full-access：工具批不弹审批（permission_mode
+            // None = 全批审批的既有语义；子代理 run 的权限面由 spawner 装配
+            // None——full-access 不传导，测试聚焦子代理侧）
+            permission_mode: Some("full-access".to_string()),
+            client_message_id: None,
+            assistant_client_message_id: None,
+            system_prompt: None,
+            history: None,
+            context_window: None,
+            parent_run_id: None,
+            subagent_config: None,
+        }
+    }
+
+    /// 主 agent 裁决助手（Mock 裁决器语义）：轮询并批准全部挂起审批
+    /// （子代理 run 工具调用 → 审批路由主 agent → 测试直接裁决放行；
+    /// 返回裁决次数）
+    async fn resolve_all_pending_approvals(state: &CoreRunState, window: Duration) -> usize {
+        let deadline = tokio::time::Instant::now() + window;
+        let mut resolved = 0usize;
+        loop {
+            let run_ids: Vec<String> = {
+                let active = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
+                active.keys().cloned().collect()
+            };
+            let mut acted = false;
+            for run_id in run_ids {
+                let run = {
+                    let active = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
+                    active.get(&run_id).cloned()
+                };
+                if let Some(run) = run {
+                    let call_id = {
+                        let pending = run
+                            .approval
+                            .pending
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner());
+                        pending.keys().next().cloned()
+                    };
+                    if let Some(call_id) = call_id {
+                        run.approval
+                            .resolve(&call_id, ApprovalDecision::Approved)
+                            .await
+                            .expect("主 agent 裁决应成功");
+                        resolved += 1;
+                        acted = true;
+                    }
+                }
+            }
+            if !acted {
+                // 无挂起审批且已无活动 run → 完成；否则继续等待新审批
+                let empty = state
+                    .active_runs
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .is_empty();
+                if empty {
+                    return resolved;
+                }
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "活动 run 存在但审批未在窗口内触发"
+                );
+                tokio::time::sleep(Duration::from_millis(30)).await;
+            }
+        }
+    }
+
+    /// 验收 1：单发/批量端到端——run_subagent 不再 unsupported → 子代理 run
+    /// 真实启动 → 终态事件回传（父会话落库 + wait 广播）→ 主 Agent 经
+    /// steering 收到通知；提示词注入断言（角色约束 / 权限申请 / started_at
+    /// / git 回退段）。
+    #[tokio::test]
+    async fn run_subagent_end_to_end_not_unsupported_with_terminal_and_steering() {
+        // 主 agent 脚本：第 1 次调用 = 派发两个子代理（批量 tasks）；
+        // 第 2 次调用（工具结果回合）= 正常收口；子代理脚本 = 安全收口
+        //（text + stop，无工具调用）；会话路由 provider 保证脚本确定性
+        let main = Arc::new(TestProvider::with_scripts(vec![
+            vec![
+                ProviderStreamEvent::text("我将并行派发两个调研子代理。"),
+                ProviderStreamEvent::tool_call(
+                    Some("c1".to_string()),
+                    "run_subagent",
+                    serde_json::json!({
+                        "tasks": [
+                            { "prompt": "调研模块 A", "taskType": "analysis", "displayLabel": "调研A" },
+                            { "prompt": "调研模块 B", "taskType": "analysis", "displayLabel": "调研B" }
+                        ]
+                    }),
+                ),
+                ProviderStreamEvent::stop(StopReason::ToolCall),
+            ],
+            vec![
+                ProviderStreamEvent::text("两个子代理已派发，等待结果。"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            vec![
+                ProviderStreamEvent::text("收到通知。"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            vec![
+                ProviderStreamEvent::text("继续。"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+        ]));
+        let sub = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("调研完成。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, main, sub, _emitter) =
+            subagent_state_with_providers(main, sub, "deepseek-v4-flash");
+        state.run_restore().await;
+
+        // 主 agent run（完整 run_task_impl → drive_run_loop）
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-main", "sess-main", "并行派发两个调研子代理"),
+        )
+        .await
+        .expect("主 agent run 发起成功");
+        // 等待全部 run（主 agent + 两个子代理）收口；子代理行进入终态
+        wait_all_runs_terminal(&state, Duration::from_secs(20)).await;
+        wait_agent_rows_terminal(&db, "sess-main", 2, Duration::from_secs(10)).await;
+
+        // 1. 工具不再返回 common.unsupported：两个子代理行落库 + 结果信封
+        let rows = db.load_session_agents("sess-main").expect("读行");
+        assert_eq!(rows.len(), 2, "批量派发应落库两行");
+        assert!(rows.iter().all(|r| r.parent_run_id == "run-main"));
+        // 批量条目契约（D3-1 冻结：tasks 条目仅 prompt/role/displayLabel/
+        // capabilityMode/timeoutMs/description）不携带 taskType——落库 None，
+        // 引擎装配按缺省 analysis（最安全 fail-closed）
+        assert!(rows.iter().all(|r| r.task_type.is_none()));
+        assert!(rows.iter().all(|r| r.depth == Some(1)));
+        assert_eq!(rows[0].display_label.as_deref(), Some("调研A"));
+        assert_eq!(rows[1].display_label.as_deref(), Some("调研B"));
+
+        // 2. 子代理 run 真实启动并收口：行进入终态（completed/failed）
+        assert!(
+            rows.iter().all(|r| r.status == "completed" || r.status == "failed"),
+            "子代理行终态：{rows:?}"
+        );
+
+        // 3. 终态事件回传：subagent-started + subagent-ended 落库（父会话）
+        let events = db.query_events("sess-main", 0, Some(200)).expect("事件查询");
+        let started = events
+            .iter()
+            .filter(|e| e.event_type == "subagent-started")
+            .count();
+        let ended = events
+            .iter()
+            .filter(|e| e.event_type == "subagent-ended")
+            .count();
+        assert_eq!(started, 2, "subagent-started 每次 spawn 发射一次");
+        assert_eq!(ended, 2, "subagent-ended 每个终态发射一次");
+
+        // 4. 主 Agent 经 steering 收到通知：子代理终态条目入队后，主 agent
+        //    的 idle 待命续 run（decide_idle_resume）消费条目并注入——通知
+        //    载体 = 队列条目（未被消费时）或续 run 的注入消息（已消费时）
+        let entries = {
+            let mut queue = state.pending_queue.lock().unwrap_or_else(|e| e.into_inner());
+            queue.dequeue_all()
+        };
+        let queue_notified = entries
+            .iter()
+            .any(|e| e.is_steering && e.text.contains("子代理"));
+        let injected_notified = main.requests().iter().any(|r| {
+            r.messages
+                .iter()
+                .any(|m| m.text().contains("子代理"))
+        });
+        assert!(
+            queue_notified || injected_notified,
+            "主 agent 必须经 steering 收到子代理完成通知（队列条目或续 run 注入消息）"
+        );
+
+        // 5. 提示词注入断言：子代理 run 的 provider 请求 system_prompt 含
+        //    注入段（会话路由 provider：sub 请求全部来自子代理 run——
+        //    确定性，不依赖调用序号筛选）
+        let sub_prompts: Vec<String> = sub
+            .requests()
+            .iter()
+            .filter_map(|r| r.system_prompt.clone())
+            .collect();
+        assert_eq!(sub_prompts.len(), 2, "两个子代理 run 各一次带注入的请求");
+        for prompt in &sub_prompts {
+            // T-D-03：子代理角色约束（主 agent run 不含本段）
+            assert!(prompt.contains("## 子代理角色约束"));
+            assert!(prompt.contains("所有子 Agent 由主 Agent 分配"));
+            // T-D-14：权限申请指引
+            assert!(prompt.contains("## 权限申请指引"));
+            assert!(prompt.contains("申请由主 agent 审批"));
+            // C2：started_at 注入 + git 回退谨慎指引
+            assert!(prompt.contains("## 会话注入（started_at）"));
+            assert!(prompt.contains("## git 回退谨慎指引"));
+        }
+        // 主 agent run 不含子代理角色约束段
+        let main_prompt = main
+            .requests()
+            .first()
+            .and_then(|r| r.system_prompt.clone())
+            .unwrap_or_default();
+        assert!(
+            !main_prompt.contains("## 子代理角色约束"),
+            "主 Agent run 不含角色约束段（T-D-03 关键差异点）"
+        );
+    }
+
+    /// 验收 2：嵌套拒绝端到端——守卫兜底（NestingDenied 结构化错误）确定性
+    /// 验证（T-D-02：子 Agent 无派发能力）。工具面剔除（子代理注册表无
+    /// run_subagent）为同一 filter 机制（[filter_registry] 谓词），其装配
+    /// 生效由验收 3（analysis 无写工具 is_error）同构验证 + agent-tools
+    /// filter 单测覆盖；此处子代理 run 用安全脚本收口。
+    #[tokio::test]
+    async fn subagent_run_nesting_denied_both_tool_surface_and_guard() {
+        // 会话路由 provider：主 agent 脚本（派发 + 收口 + 兜底）；
+        // 子代理脚本 = 安全收口（无嵌套调用）
+        let main = Arc::new(TestProvider::with_scripts(main_agent_scripts(
+            serde_json::json!({ "prompt": "调研模块 A", "taskType": "analysis" }),
+        )));
+        let sub = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("调研完成，回报主 agent。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _main, _sub, _emitter) =
+            subagent_state_with_providers(main, sub, "deepseek-v4-flash");
+        state.run_restore().await;
+
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-main", "sess-main", "派发一个子代理"),
+        )
+        .await
+        .expect("主 agent run 发起成功");
+        resolve_all_pending_approvals(&state, Duration::from_secs(10)).await;
+        wait_all_runs_terminal(&state, Duration::from_secs(20)).await;
+        wait_agent_rows_terminal(&db, "sess-main", 1, Duration::from_secs(10)).await;
+
+        // 端到端基线：子代理 run 真实启动并收口（恰好一行子代理——嵌套
+        // 未发生）
+        let rows = db.load_session_agents("sess-main").unwrap();
+        assert_eq!(rows.len(), 1, "嵌套派发不得产生额外子代理行");
+        assert!(
+            rows[0].status == "completed" || rows[0].status == "failed",
+            "子代理行终态"
+        );
+
+        // 守卫兜底验证：直接经 spawner 以「存活子代理 run」为发起者再 spawn
+        // → NestingDenied（T-D-02 结构化错误：所有子 Agent 由主 Agent 分配）。
+        // note_depth_for_test 构造存活子代理场景（真实 spawn 的 run 已终态、
+        // 记账已释放——测试面直接登记深度，避免 drive_run_loop 收口竞态）
+        state.subagent_spawner.set_current_run("sess-main", "sub-run-live");
+        state
+            .subagent_spawner
+            .note_depth_for_test("sub-run-live", 1, "sess-main");
+        let req = agent_tools::tools::subagent::SubagentSpawnRequest {
+            agent_id: None,
+            prompt: "再派发".to_string(),
+            role: None,
+            capability_mode: None,
+            allowed_tools: None,
+            timeout_ms: None,
+            description: None,
+            mode: None,
+            parent_session_id: "sess-main".to_string(),
+            parent_run_id: None,
+            parent_tool_call_id: None,
+            flow_node_id: None,
+            is_composite: false,
+            task_type: None,
+            allowed_write_paths: None,
+            display_label: None,
+            model_override: None,
+        };
+        let err = agent_tools::tools::subagent::SubagentSpawner::spawn(
+            &*state.subagent_spawner,
+            &req,
+        )
+        .await
+        .expect_err("子代理发起 spawn 必须 NestingDenied");
+        assert_eq!(err.code(), "subagent.nesting_denied");
+        assert!(
+            err.message().contains("所有子 Agent 由主 Agent 分配"),
+            "结构化错误含编排指引：{}",
+            err.message()
+        );
+        // 零 run：拒绝不产生新行
+        assert_eq!(
+            db.load_session_agents("sess-main").unwrap().len(),
+            1,
+            "NestingDenied 零 run"
+        );
+    }
+
+    /// 验收 3：默认权限集端到端——analysis 无写工具（工具面裁剪，
+    /// write_file 调用得到 is_error 工具结果）。会话路由 provider 确定性：
+    /// 子代理脚本 = write_file 尝试（越界路径不写盘）+ 收口。
+    #[tokio::test]
+    async fn default_permission_sets_end_to_end() {
+        // 探测文件：analysis 子代理无写工具，写盘不可能发生（probe 仅
+        // 兜底断言面，不依赖工作区夹具）
+        let probe = std::env::temp_dir().join(format!(
+            "subagent_analysis_probe_{}.md",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&probe);
+        let main = Arc::new(TestProvider::with_scripts(main_agent_scripts(
+            serde_json::json!({ "prompt": "只读调研", "taskType": "analysis" }),
+        )));
+        // analysis 子代理：确定性尝试 write_file（默认集无写工具 →
+        // is_error；审批（ask 语义）由主 agent 裁决放行后执行）
+        let sub = Arc::new(TestProvider::with_scripts(vec![
+            vec![
+                ProviderStreamEvent::text("尝试写文件。"),
+                ProviderStreamEvent::tool_call(
+                    Some("c2".to_string()),
+                    "write_file",
+                    serde_json::json!({ "path": "../escape.md", "content": "x" }),
+                ),
+                ProviderStreamEvent::stop(StopReason::ToolCall),
+            ],
+            vec![
+                ProviderStreamEvent::text("写文件不可用。"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+        ]));
+        let (state, db, _main, sub, _emitter) =
+            subagent_state_with_providers(main, sub, "deepseek-v4-flash");
+        state.run_restore().await;
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-main", "sess-main", "派发 analysis 子代理"),
+        )
+        .await
+        .expect("主 agent run 发起成功");
+        // analysis 子代理的 write_file 尝试触发审批（ask 语义）→ 主 agent
+        // 裁决放行 → 工具执行（unknown tool，is_error）→ 收口
+        resolve_all_pending_approvals(&state, Duration::from_secs(10)).await;
+        wait_all_runs_terminal(&state, Duration::from_secs(20)).await;
+        wait_agent_rows_terminal(&db, "sess-main", 1, Duration::from_secs(10)).await;
+
+        // analysis 默认集 = 只读白名单：write_file 调用必须 is_error
+        // （工具不在注册表，unknown tool 分类）——端到端工具面证据
+        // （sub provider 请求全部来自子代理 run，确定性遍历）
+        let sub_requests = sub.requests();
+        assert!(!sub_requests.is_empty(), "analysis 子代理至少一次请求");
+        let mut write_file_error = false;
+        for req in &sub_requests {
+            for msg in &req.messages {
+                for block in &msg.blocks {
+                    if let AgentMessageBlock::ToolResult {
+                        tool_name,
+                        is_error,
+                        ..
+                    } = block
+                    {
+                        if tool_name == "write_file" {
+                            write_file_error = *is_error;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(write_file_error, "analysis 子代理无写工具（工具结果 is_error）");
+        // 兜底：工作区未产生文件（无写工具的天然结果）
+        assert!(!probe.exists(), "analysis 无写工具，不得写盘");
+    }
+
+    /// 验收 4：权限申请链路端到端——子代理 run 触发审批 → 请求载荷
+    /// requester_run_id = 子代理 run id → 主 agent 裁决（ApprovalGateImpl
+    /// resolve 入口，Mock 裁决器语义 = 测试直接裁决）。
+    ///
+    /// 确定性设计：第一阶段（主 agent 派发子代理 1）收口后，直接经
+    /// spawner 发起子代理 run 2（不经 run_subagent 工具）——此时共享
+    /// TestProvider 无竞争调用，子代理 run 2 的请求确定性回退到兜底脚本
+    /// （write_file 越界尝试 → 触发审批 → 不写盘）。
+    #[tokio::test]
+    async fn subagent_approval_carries_requester_run_id_and_resolves() {
+        // 会话路由 provider 确定性：主 agent 脚本（派发 + 收口 + 兜底）；
+        // 子代理脚本 = write_file 越界尝试 + 收口（任何子代理 run 拿到都
+        // 确定性触发审批且不写盘——path_escape 拒绝）
+        let main = Arc::new(TestProvider::with_scripts(main_agent_scripts(
+            serde_json::json!({ "prompt": "实现功能", "taskType": "implementation" }),
+        )));
+        let sub = Arc::new(TestProvider::with_scripts(vec![
+            vec![
+                ProviderStreamEvent::text("开始实现。"),
+                ProviderStreamEvent::tool_call(
+                    Some("c2".to_string()),
+                    "write_file",
+                    serde_json::json!({ "path": "../escape.md", "content": "x" }),
+                ),
+                ProviderStreamEvent::stop(StopReason::ToolCall),
+            ],
+            vec![
+                ProviderStreamEvent::text("写文件被拒，调整方案。"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            // 兜底（子代理 run 2 等越界调用）：write_file 尝试
+            vec![
+                ProviderStreamEvent::text("继续实现。"),
+                ProviderStreamEvent::tool_call(
+                    Some("c3".to_string()),
+                    "write_file",
+                    serde_json::json!({ "path": "../escape.md", "content": "x" }),
+                ),
+                ProviderStreamEvent::stop(StopReason::ToolCall),
+            ],
+            vec![
+                ProviderStreamEvent::text("已处理。"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+        ]));
+        let (state, db, _main, _sub, emitter) =
+            subagent_state_with_providers(main, sub, "deepseek-v4-flash");
+        state.run_restore().await;
+        // 第一阶段：主 agent 派发子代理 1（implementation）并收口全部 run
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-main", "sess-main", "派发 implementation 子代理"),
+        )
+        .await
+        .expect("主 agent run 发起成功");
+        resolve_all_pending_approvals(&state, Duration::from_secs(15)).await;
+        wait_all_runs_terminal(&state, Duration::from_secs(20)).await;
+        wait_agent_rows_terminal(&db, "sess-main", 1, Duration::from_secs(10)).await;
+
+        // 第二阶段：直接经 spawner 发起子代理 run 2（implementation）——
+        // 确定性触发审批（requester_run_id = 子代理 run 2）
+        let second = agent_tools::tools::subagent::SubagentSpawnRequest {
+            agent_id: None,
+            prompt: "实现功能 B".to_string(),
+            role: None,
+            capability_mode: None,
+            allowed_tools: None,
+            timeout_ms: None,
+            description: None,
+            mode: None,
+            parent_session_id: "sess-main".to_string(),
+            parent_run_id: Some("run-main".to_string()),
+            parent_tool_call_id: None,
+            flow_node_id: None,
+            is_composite: false,
+            task_type: Some(agent_tools::tools::subagent::TaskType::Implementation),
+            allowed_write_paths: None,
+            display_label: None,
+            model_override: None,
+        };
+        let spawned = agent_tools::tools::subagent::SubagentSpawner::spawn(
+            &*state.subagent_spawner,
+            &second,
+        )
+        .await
+        .expect("spawn 子代理 run 2 应成功");
+
+        // 等待子代理 run 2 触发审批（approval-requested 广播含
+        // requester_run_id = 子代理 run 2 id；Mock 裁决器 = 测试直接经
+        // ApprovalGateImpl.resolve（主 agent 裁决面入口，I-02 校验）批准）
+        let sub_run_id = spawned.subagent_run_id.clone();
+        let (approved, requester_checked) = {
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+            loop {
+                // 审批广播捕获：emitter 记录 JSON 信封，扫描全部载荷找
+                // requester_run_id = 本 run 的 approval-requested（先发后等
+                // 契约：广播在等待前发出——命中即裁决，不等待广播消费时序）
+                let payloads = emitter.0.lock().unwrap().clone();
+                let matched: Option<(String, serde_json::Value)> = payloads
+                    .iter()
+                    .filter(|p| p.contains("approval-requested"))
+                    .filter_map(|p| {
+                        let value: serde_json::Value = serde_json::from_str(p).ok()?;
+                        // 扁平载荷：{request: {requesterRunId, ...}, runId, type}
+                        let requester = value
+                            .get("request")?
+                            .get("requesterRunId")?
+                            .as_str()?
+                            .to_string();
+                        (requester == sub_run_id).then_some((requester, value))
+                    })
+                    .next();
+                if let Some((requester, value)) = matched {
+                    // 载荷断言：requester_run_id = 子代理 run id
+                    let got = requester == sub_run_id;
+                    // 主 agent 裁决（Mock 裁决器：批准）
+                    let active = state
+                        .active_runs
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .get(&sub_run_id)
+                        .cloned();
+                    if let Some(run) = active {
+                        let call_id = {
+                            let pending = run
+                                .approval
+                                .pending
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner());
+                            pending.keys().next().cloned()
+                        };
+                        if let Some(call_id) = call_id {
+                            run.approval
+                                .resolve(&call_id, ApprovalDecision::Approved)
+                                .await
+                                .expect("主 agent 裁决应成功");
+                            break (true, got);
+                        }
+                    }
+                    let _ = value;
+                }
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "子代理审批未在窗口内触发（approval-requested 广播缺失或 requester 不匹配）"
+                );
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        };
+        assert!(approved, "子代理审批必须被主 agent 裁决");
+        assert!(
+            requester_checked,
+            "审批请求载荷必须携带 requester_run_id = 子代理 run id"
+        );
+        wait_all_runs_terminal(&state, Duration::from_secs(20)).await;
+        wait_agent_rows_terminal(&db, "sess-main", 2, Duration::from_secs(10)).await;
+    }
+    /// 验收 5：kill_all 引擎侧实现（T-D-09/T-D-13 ForceCancelSink 接线）——
+    /// 按 subagent_run_id 定位活动 run 的 ControlBus 投递 L3 强停 + 行归一
+    /// failed（产出保留）。
+    #[tokio::test]
+    async fn kill_all_delivers_force_cancel_and_normalizes_rows() {
+        let (state, db) = {
+            let (s, d, _m, _s, _e) = subagent_state_with_providers(
+                Arc::new(TestProvider::new(vec![
+                    ProviderStreamEvent::text("占位。"),
+                    ProviderStreamEvent::stop(StopReason::Stop),
+                ])),
+                Arc::new(TestProvider::new(vec![
+                    ProviderStreamEvent::text("占位。"),
+                    ProviderStreamEvent::stop(StopReason::Stop),
+                ])),
+                "deepseek-v4-flash",
+            );
+            (s, d)
+        };
+        state.run_restore().await;
+        // 准备：子代理行（running）+ 活动 run（ActiveRun 挂 active_runs）
+        let sub_run_id = "sub-run-kill";
+        let sub_session = "sub-sess-kill";
+        db.upsert_session_entry(&subagent_test_session_entry("sess-main")).unwrap();
+        // 子代理会话条目（run 表外键约束：start_run 需要会话行）
+        db.upsert_session_entry(&subagent_test_session_entry(sub_session)).unwrap();
+        // 子代理行落库（模拟 spawner 产物；running 状态）
+        {
+            let mut rows = db.load_session_agents("sess-main").unwrap();
+            rows.push(conex_types::SessionAgent {
+                id: "sub-kill".to_string(),
+                subagent_run_id: sub_run_id.to_string(),
+                parent_session_id: "sess-main".to_string(),
+                parent_run_id: "run-main".to_string(),
+                parent_tool_call_id: None,
+                description: String::new(),
+                mode: "research".to_string(),
+                status: "running".to_string(),
+                summary: None,
+                messages: Vec::new(),
+                started_at: 1,
+                ended_at: None,
+                depth: Some(1),
+                subagent_path_json: None,
+                task_type: None,
+                display_label: None,
+                allowed_write_paths_json: None,
+            });
+            db.save_session_agents("sess-main", &rows).unwrap();
+        }
+        // 活动 run（子代理 run 的 ActiveRun 挂注册表——L3 投递目标）
+        let active = build_active_run(&state, sub_session, sub_run_id).await;
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(sub_run_id.to_string(), Arc::clone(&active));
+
+        // 生命周期服务（ForceCancelSink = CoreRunState 实现）
+        let service = state
+            .lifecycle_service()
+            .expect("LocalDb 路径必须可装配生命周期服务");
+        let outcome = service.kill_all("sess-main", "test-kill").expect("kill_all 应成功");
+        assert_eq!(outcome.terminated.len(), 1, "L3 强停投递成功");
+        assert_eq!(outcome.terminated[0].subagent_run_id, sub_run_id);
+        assert!(outcome.non_terminal.is_empty(), "活动 run 可达 → 无未终态汇总");
+
+        // 行归一 failed（产出保留：summary/messages 不动）
+        let rows = db.load_session_agents("sess-main").unwrap();
+        let row = rows.iter().find(|r| r.subagent_run_id == sub_run_id).unwrap();
+        assert_eq!(row.status, "failed");
+        assert!(row.ended_at.is_some(), "ended_at 补齐");
+
+        // L3 强停意图已投递到目标 run 的 ControlBus（reason 携带标识）
+        let intents = active
+            .control_bus
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .drain();
+        assert_eq!(intents.len(), 1, "恰好一条 L3 强停意图");
+        assert_eq!(
+            intents[0].reason.as_deref(),
+            Some("subagent_force_cancel:sub-run-kill"),
+            "reason 携带可观测标识（control.rs:296 语义）"
+        );
+
+        // 不可达 run（无活动实例）→ 未终态汇总（不 panic）
+        let mut ghost_rows = db.load_session_agents("sess-main").unwrap();
+        ghost_rows.push(conex_types::SessionAgent {
+            id: "sub-ghost".to_string(),
+            subagent_run_id: "sub-run-ghost".to_string(),
+            parent_session_id: "sess-main".to_string(),
+            parent_run_id: "run-main".to_string(),
+            parent_tool_call_id: None,
+            description: String::new(),
+            mode: "research".to_string(),
+            status: "running".to_string(),
+            summary: None,
+            messages: Vec::new(),
+            started_at: 1,
+            ended_at: None,
+            depth: Some(1),
+            subagent_path_json: None,
+            task_type: None,
+            display_label: None,
+            allowed_write_paths_json: None,
+        });
+        db.save_session_agents("sess-main", &ghost_rows).unwrap();
+        let again = service.kill_all("sess-main", "test-kill-2").expect("kill_all 应成功");
+        // sub-run-kill 已 failed（不在 running 过滤面）→ 本轮仅 ghost 目标
+        assert_eq!(again.terminated.len(), 0, "已终态行不在过滤面");
+        assert_eq!(again.non_terminal.len(), 1, "ghost run 未投递汇总");
+        assert!(again.non_terminal[0].reason.contains("未投递"));
+        // ghost 行同样归一 failed
+        let rows = db.load_session_agents("sess-main").unwrap();
+        assert!(
+            rows.iter()
+                .filter(|r| r.subagent_run_id == "sub-run-ghost")
+                .all(|r| r.status == "failed")
         );
     }
 }

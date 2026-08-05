@@ -17,7 +17,7 @@ use agent_tools::definition::{Tool, ToolDefinition};
 use agent_tools::registry::ToolRegistry;
 use conex_types::tool::{ToolBatchCall, ToolCategory, ToolConcurrency};
 use criterion::{criterion_group, criterion_main, Criterion};
-use session_loop::tool_events::{ApprovalDecision, ApprovalGate, ToolBatchOptions};
+use session_loop::tool_events::{ApprovalDecision, ApprovalGate, ApprovalRequester, ToolBatchOptions};
 use session_loop::tool_exec::{ToolExecCtx, ToolExecutor};
 
 /// 慢工具（50ms 模拟真实 I/O 工具；输出小）
@@ -62,6 +62,7 @@ impl ApprovalGate for InstantApprovalGate {
         _call_id: &str,
         _tool_name: &str,
         _args: &serde_json::Value,
+        _requester: Option<&ApprovalRequester>,
     ) -> ApprovalDecision {
         ApprovalDecision::Approved
     }
@@ -111,7 +112,11 @@ fn bench_tool_batch(c: &mut Criterion) {
                     run_id: "r1".into(),
                     session_id: "s1".into(),
                     cwd: None,
+                    parent_run_id: None,
                     workspace_root: None,
+                    write_claims: None,
+                    explore_docs_quota: None,
+                    output_dir: None,
                 };
                 let options = ToolBatchOptions {
                     timeout: Duration::from_secs(10),
@@ -135,7 +140,11 @@ fn bench_tool_batch(c: &mut Criterion) {
                     run_id: "r1".into(),
                     session_id: "s1".into(),
                     cwd: None,
+                    parent_run_id: None,
                     workspace_root: None,
+                    write_claims: None,
+                    explore_docs_quota: None,
+                    output_dir: None,
                 };
                 let options = ToolBatchOptions {
                     timeout: Duration::from_secs(10),
