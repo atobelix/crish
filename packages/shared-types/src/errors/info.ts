@@ -410,7 +410,7 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     public: true,
     action: 'action.store.cleanup_or_expand',
   },
-  // ── subagent 域（2 正式码 + 1 reserved）──
+  // ── subagent 域（3 正式码 + 1 reserved）──
   'subagent.depth_exceeded': {
     code: 'subagent.depth_exceeded',
     title: '子代理递归深度超限',
@@ -418,6 +418,14 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     retryable: false,
     public: true,
     action: 'action.subagent.reduce_depth',
+  },
+  'subagent.nesting_denied': {
+    code: 'subagent.nesting_denied',
+    title: '子代理不允许派发子代理',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.subagent.ask_main_agent',
   },
   'subagent.deadlock_detected': {
     code: 'subagent.deadlock_detected',

@@ -61,8 +61,9 @@ export type CrishErrorCode =
   | 'store.read_failed'
   | 'store.corrupted'
   | 'store.capacity_exceeded'
-  // ── subagent 域（2 正式码 + 1 reserved）──
+  // ── subagent 域（3 正式码 + 1 reserved）──
   | 'subagent.depth_exceeded'
+  | 'subagent.nesting_denied'
   | 'subagent.deadlock_detected'
   | 'subagent.timeout'
   // ── plugin 域（3 正式码）──
