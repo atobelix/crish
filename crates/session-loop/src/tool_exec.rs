@@ -46,10 +46,13 @@ use crate::tool_events::{
     ApprovalDecision, ApprovalGate, ClassifiedToolResult, FailStrategy, ToolBatchOptions,
     ToolErrorKind, ToolEvent,
 };
-use agent_tools::context::{AbortToken, AskCallback, NoopAskChannel, ToolContext};
+use agent_tools::context::{
+    AbortToken, AskCallback, ExploreDocsQuotaContext, NoopAskChannel, ToolContext,
+};
 use agent_tools::definition::ToolError;
 use agent_tools::executor::{execute_with_output_policy, ExecutorContext, ToolExecutionPolicy};
 use agent_tools::idempotency::ToolIdempotencyGuard;
+use agent_tools::write_paths::WritePathRegistry;
 use agent_tools::middleware::{
     AfterExecuteResult, BeforeExecuteResult, MiddlewareTimeoutConfig, ToolExecutionContext,
     ToolMiddleware,
@@ -74,6 +77,13 @@ pub struct ToolExecCtx {
     /// 工作区根目录（R3 T9：会话级 ToolContext.workspace_root 来源；
     /// None 时回退 cwd / 当前目录）
     pub workspace_root: Option<PathBuf>,
+    /// 写路径互斥注册表（I4-M3：会话级，与 workspace_root 同源——装配
+    /// 于 [crate::r#loop::AgentSessionLoop::with_options]，总接线点
+    /// T-EG-06；None = 写工具不强制互斥，向后兼容）
+    pub write_claims: Option<Arc<WritePathRegistry>>,
+    /// 探索类文档配额上下文（I6-M11 C5：含配额 store 实例；None = 不
+    /// 检查——主 agent 默认不受配额约束，04 C5「主 agent 自身不消耗」）
+    pub explore_docs_quota: Option<ExploreDocsQuotaContext>,
 }
 
 /// 批处理产出：结果 + 事件序列 + 致命错误
@@ -151,6 +161,16 @@ impl ToolExecutor {
     /// 是否启用幂等守卫（测试 / 观测用）
     pub fn idempotency_enabled(&self) -> bool {
         self.idempotency.is_some()
+    }
+
+    /// 中间件链名称快照（#[cfg(test)] 观测面：loop 装配测试断言默认链
+    /// 生效——T-EG-06 装配后链 = 写前自动备份中间件）
+    #[cfg(test)]
+    pub fn middleware_names(&self) -> Vec<String> {
+        self.middleware
+            .iter()
+            .map(|m| m.name().to_string())
+            .collect()
     }
 
     /// 注入中间件链（替换现有链；空链 = 不启用）。
@@ -678,12 +698,18 @@ impl ToolExecutor {
                 .unwrap_or_else(|| {
                     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
                 }),
-            // I4-M3：写路径互斥注册表未接线（None = 写工具不强制互斥）；
-            // 接线由执行器按会话装配（M2 子代理执行上下文注入注册表与持有者）
-            write_claims: None,
-            write_claim_holder: None,
-            // I6-M11 C5：探索类文档配额未接线（None = 不检查）
-            explore_docs_quota: None,
+            // I4-M3：写路径互斥注册表——会话级装配（与 workspace_root 同源，
+            // 由 AgentSessionLoop::with_options 创建并经 ToolExecCtx 注入；
+            // None = 写工具不强制互斥，测试与直连场景向后兼容）
+            write_claims: ctx.write_claims.clone(),
+            // 写声明持有者：当前 run 标识（M2 子代理执行上下文注入子代理
+            // run id；主循环装配为 run 级归属——同 run 内工具再声明不互斥，
+            // 跨 run 重叠即冲突）
+            write_claim_holder: Some(ctx.run_id.clone()),
+            // I6-M11 C5：探索类文档配额上下文（含配额 store 实例，会话级
+            // 装配经 ToolExecCtx 透传；None = 不检查——非探索类不受配额
+            // 约束，04 C5：主 agent 自身不消耗）
+            explore_docs_quota: ctx.explore_docs_quota.clone(),
             // 后台任务管理器/日志落盘根未接线（A1 域新字段占位：None =
             // 无后台任务能力、截断不落盘；真实接线由引擎装配面注入）
             background: None,
@@ -1409,8 +1435,7 @@ mod tests {
         ToolExecCtx {
             run_id: "run-1".into(),
             session_id: "sess-1".into(),
-            cwd: None,
-            workspace_root: None,
+            ..Default::default()
         }
     }
 

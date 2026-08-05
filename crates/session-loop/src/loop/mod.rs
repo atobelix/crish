@@ -21,11 +21,15 @@
 //! stop + 诊断）；cooperative_stop → stopped（D1）；max-turns 为独立预算
 //! reason（01 §1.5）。
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
+use agent_tools::backup::BackupMiddleware;
+use agent_tools::context::ExploreDocsQuotaContext;
 use agent_tools::idempotency::ToolIdempotencyGuard;
 use agent_tools::middleware::ToolMiddleware;
 use agent_tools::registry::ToolRegistry;
+use agent_tools::write_paths::WritePathRegistry;
 use async_trait::async_trait;
 use conex_compaction::{CompactionPolicy, Summarizer};
 use conex_types::context::ContextBudget;
@@ -35,12 +39,14 @@ use conex_types::message::AgentMessage;
 use conex_types::session::{AgentSessionEvent as E, AgentSessionState as S, AgentSessionState};
 
 use crate::cache_tracker::{build_tracker, CacheStatsTracker, CacheTrackingConfig};
+use crate::escape_watch::EscapeWatchConfig;
 use crate::provider::{DeltaSink, ProviderCall};
 use crate::steering::{
     RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions,
 };
 use crate::tool_events::{ApprovalGate, ToolBatchOptions};
 use crate::tool_exec::{ToolExecCtx, ToolExecutor};
+use crate::undeclared_detector::RegistryBackedDetector;
 
 mod end;
 mod handlers;
@@ -201,6 +207,20 @@ pub struct SessionLoopOptions {
     /// TTL 由壳层装配（engine 侧 SessionLoopProducer 构造，T-40 接线点；
     /// TTL 走 P3 cache_ttl_for_provider_model 查询，0 = 未知）。
     pub cache_tracking: Option<CacheTrackingConfig>,
+    /// 写路径互斥注册表（I4-M3，总接线点 T-EG-06）：装配于
+    /// [Self::with_options]——显式注入优先，缺省按工作区根新建（会话级，
+    /// 与 workspace_root 同源）；经 tool_ctx 注入工具执行面（写类工具
+    /// 声明互斥）。**装配时同时注入逃逸监视判定器**：经
+    /// [crate::escape_watch::EscapeWatchConfig::with_detector] 挂载
+    /// [crate::undeclared_detector::RegistryBackedDetector]，与工具执行
+    /// 共享同一注册表实例（T-ESC-03 交接点，escape_watch.rs:17-24）。
+    /// None = 由装配面按工作区根新建（非禁用）。
+    pub write_claims: Option<Arc<WritePathRegistry>>,
+    /// 探索类文档配额上下文（I6-M11 C5，总接线点 T-EG-06）：经 tool_ctx
+    /// 注入工具执行面（read-only 子代理写文档配额检查，配额按会话计数）。
+    /// None = 主 agent 不受配额约束（04 C5「主 agent 自身不消耗」；
+    /// 子代理 run 的配额上下文由 spawner 装配，本字段承载主循环装配面）。
+    pub explore_docs_quota: Option<ExploreDocsQuotaContext>,
     /// 逃逸监视装配配置（T-ESC-03 P3 装配面）：None = 不启用逃逸监视
     /// （现状行为）。装配上下文透传——壳层 run 起停钩子消费：run 开始
     /// 经 [crate::escape_watch::spawn_escape_watch] 启动监视并 spawn 消费
@@ -208,7 +228,7 @@ pub struct SessionLoopOptions {
     /// [crate::escape_watch::EscapeWatchHandle::shutdown] 停止并 flush 剩余
     /// 事件；LoopState 不消费本字段（消费循环由壳层 spawn，见
     /// REQ-逃逸追踪分析 §3.5.1）。
-    pub escape_watch: Option<crate::escape_watch::EscapeWatchConfig>,
+    pub escape_watch: Option<EscapeWatchConfig>,
 }
 
 impl Default for SessionLoopOptions {
@@ -224,7 +244,12 @@ impl Default for SessionLoopOptions {
             cwd: None,
             assistant_client_message_id: None,
             idempotency_enabled: false,
-            tool_middleware: Vec::new(),
+            // T-EG-06（总接线点）：默认中间件链 = 写前自动备份（S10b）——
+            // BackupMiddleware::with_defaults(None)，trash_root=None 执行期
+            // 回退工作区 `.crish-trash`（与删除工具兜底同源）。壳层装配
+            // 时可在 options 侧整体替换（如 core_run_commands.rs）。
+            tool_middleware: vec![Arc::new(BackupMiddleware::with_defaults(None))
+                as Arc<dyn ToolMiddleware>],
             hooks: None,
             system_prompt: None,
             // P4 阶段 2-2/3-2：预算与压缩配置全部缺省 None/1——未配置即现状
@@ -235,6 +260,11 @@ impl Default for SessionLoopOptions {
             max_auto_compactions_per_run: 1,
             // P5 S2 / T-36：缓存测量缺省关闭（未配置即现状行为）
             cache_tracking: None,
+            // T-EG-06：注册表与配额上下文缺省 None——with_options 装配块
+            // 负责按工作区根新建注册表并注入 ESC 判定器；配额 None =
+            // 主 agent 不受配额约束（04 C5「主 agent 自身不消耗」）
+            write_claims: None,
+            explore_docs_quota: None,
             // T-ESC-03：逃逸监视缺省关闭（未配置即现状行为）
             escape_watch: None,
         }
@@ -288,18 +318,26 @@ impl AgentSessionLoop {
             session_id.clone(),
             max_turns,
             steering,
-            options,
+            options.clone(),
             tool_registry.clone(),
         );
         Self {
             state,
             provider,
-            tool_executor: ToolExecutor::new(tool_registry),
+            // T-EG-06：默认中间件链（写前自动备份）经 with_middleware 注入
+            // 执行器——with_options 派生同步会整体替换链（options 同源）
+            tool_executor: ToolExecutor::new(tool_registry)
+                .with_middleware(options.tool_middleware.clone()),
             tool_ctx: ToolExecCtx {
                 run_id,
                 session_id: session_id.clone(),
                 cwd: None,
                 workspace_root: None,
+                // I4-M3 / I6-M11 C5：写路径注册表与配额上下文装配在
+                // with_options（总接线点 T-EG-06），构造期保持 None
+                // （未装配 = 写工具不强制互斥 / 不检查配额，向后兼容）
+                write_claims: None,
+                explore_docs_quota: None,
             },
             tool_options: ToolBatchOptions::default(),
             approval: None,
@@ -315,9 +353,48 @@ impl AgentSessionLoop {
     /// `idempotency_enabled` → 重建工具执行器（开启时创建幂等守卫并注入，
     /// 关闭时移除守卫）；`tool_middleware` / `hooks` → 同步到工具执行器。
     ///
+    /// T-EG-06 引擎装配块（总接线点）：写路径注册表（互斥）按工作区根
+    /// 解析链装配进 tool_ctx，同一注册表实例注入逃逸监视判定器；配额
+    /// 上下文透传 tool_ctx。四线装配（write_paths / quota / middleware /
+    /// ESC 判定器）在本方法一次完成。
+    ///
     /// 顺序约束（Rust builder 语义，Option 字段构造期定）：`with_options` /
     /// `with_tool_options` / `with_approval` 必须在 `run()` 之前调用。
-    pub fn with_options(mut self, options: SessionLoopOptions) -> Self {
+    pub fn with_options(mut self, mut options: SessionLoopOptions) -> Self {
+        // ── 引擎装配块（T-EG-06：互斥 / 配额 / 中间件链 / ESC 判定器）──
+        // 工作区根解析链：显式 workspace_root → options.cwd → 当前目录
+        // （与 ToolContext.workspace_root 既有回退语义一致，
+        // tool_exec.rs:684-690；None 时写工具无互斥基准，回退当前目录）
+        let root = self
+            .tool_ctx
+            .workspace_root
+            .clone()
+            .or_else(|| options.cwd.clone().map(PathBuf::from))
+            .unwrap_or_else(|| {
+                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+            });
+        // 写路径互斥注册表（I4-M3）：显式注入 → 复用 tool_ctx 既有 →
+        // 按根新建（会话级，与工作区根同源——工具执行面与 ESC 判定器
+        // 共享同一实例）
+        let registry = options
+            .write_claims
+            .clone()
+            .or_else(|| self.tool_ctx.write_claims.clone())
+            .unwrap_or_else(|| Arc::new(WritePathRegistry::new(&self.session_id, &root)));
+        self.tool_ctx.workspace_root = Some(root);
+        self.tool_ctx.write_claims = Some(Arc::clone(&registry));
+        // 逃逸监视判定器注入（T-ESC-03 交接点）：装配后形态 = detector
+        // 已挂载 RegistryBackedDetector——run 内工具写路径声明即视为已
+        // 声明覆盖（审计静默跳过），声明释放后恢复未声明上报
+        if let Some(config) = options.escape_watch.take() {
+            options.escape_watch = Some(config.with_detector(Arc::new(
+                RegistryBackedDetector::new(Arc::clone(&registry)),
+            )));
+        }
+        // 探索类文档配额上下文（I6-M11 C5）：经 tool_ctx 透传工具执行面；
+        // None = 主 agent 不受配额约束（04 C5「主 agent 自身不消耗」）
+        self.tool_ctx.explore_docs_quota = options.explore_docs_quota.clone();
+
         self.state.options = options.clone();
         // 预算/压缩派生状态同步（P4 阶段 2-2/3-2）：LoopState 的
         // budget / compaction_policy / summarizer 与 options 同源，
@@ -399,6 +476,16 @@ impl AgentSessionLoop {
     /// 控制总线共享句柄（外部入队 L1/L2/L3 意图）
     pub fn control_bus(&self) -> Arc<std::sync::Mutex<crate::control::ControlBus>> {
         self.state.control_bus.clone()
+    }
+
+    /// 逃逸监视装配配置（T-ESC-03 §3.5.1：壳层 run 起停钩子消费）。
+    ///
+    /// 返回**装配后形态**：经 [Self::with_options] 装配块完成判定器注入
+    /// （detector = [RegistryBackedDetector]，与工具执行共享同一注册表
+    /// 实例）；壳层在 spawn 监视消费任务（[crate::escape_watch::spawn_escape_watch]）
+    /// 前读取本配置。
+    pub fn escape_watch_config(&self) -> Option<EscapeWatchConfig> {
+        self.state.options.escape_watch.clone()
     }
 
     /// 当前对话（只读，测试 / 观测用；Arc 共享形态，PE-09 T09.3.2）
@@ -720,6 +807,25 @@ mod tests {
             options.cache_tracking.is_none(),
             "cache_tracking 缺省 None = 不启用缓存测量（T-36 向后兼容）"
         );
+        // T-EG-06：默认中间件链 = 写前自动备份（S10b，1 项名为 backup；
+        // trash_root=None 执行期回退工作区 .crish-trash）
+        assert_eq!(options.tool_middleware.len(), 1, "默认链恰 1 项");
+        assert_eq!(
+            options.tool_middleware[0].name(),
+            "backup",
+            "默认链 = 写前自动备份中间件"
+        );
+        // T-EG-06：注册表与配额缺省 None（装配发生在 with_options 装配块：
+        // 注册表按工作区根新建并注入 ESC 判定器；配额 None = 主 agent
+        // 不受约束）
+        assert!(
+            options.write_claims.is_none(),
+            "write_claims 缺省 None = 由 with_options 按根新建"
+        );
+        assert!(
+            options.explore_docs_quota.is_none(),
+            "explore_docs_quota 缺省 None = 主 agent 不受配额约束"
+        );
     }
 
     /// T06.4.4：with_options 派生状态同步——cwd 联动到工具执行上下文
@@ -875,5 +981,202 @@ mod tests {
         let mut loop2 = AgentSessionLoop::new("s1", "r2", 16, Box::new(provider2), registry());
         let outcome2 = loop2.run(user_input("hi")).await;
         assert!(outcome2.cache_stats.is_none(), "未配置缓存测量 → cache_stats 为 None");
+    }
+
+    // ── T-EG-06：引擎装配冒烟（互斥 / 配额 / 中间件链 / ESC 判定器）──
+
+    /// 装配探针工具：记录工具执行面见到的装配状态（注册表 / 配额 /
+    /// 持有者 / 写路径声明结果），供 smoke 测试断言 with_options 装配块
+    /// 的四线接线是否真实生效
+    #[derive(Debug, Default)]
+    struct AssemblyProbeTool {
+        observed: Arc<std::sync::Mutex<AssemblyProbeRecord>>,
+    }
+
+    /// 探针观测记录（执行面装配状态快照）
+    #[derive(Debug, Default, Clone)]
+    struct AssemblyProbeRecord {
+        /// 写路径互斥注册表是否已注入
+        write_claims_some: bool,
+        /// 配额上下文是否已注入
+        quota_some: bool,
+        /// 写声明持有者（应为当前 run 标识）
+        holder: Option<String>,
+        /// 执行面声明写路径是否成功
+        claim_ok: bool,
+    }
+
+    impl AssemblyProbeTool {
+        /// 取观测记录（测试断言）
+        fn observed(&self) -> AssemblyProbeRecord {
+            self.observed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone()
+        }
+    }
+
+    #[async_trait]
+    impl agent_tools::definition::Tool for AssemblyProbeTool {
+        fn name(&self) -> &str {
+            "assembly_probe"
+        }
+
+        fn definition(&self) -> &agent_tools::definition::ToolDefinition {
+            static DEF: std::sync::OnceLock<agent_tools::definition::ToolDefinition> =
+                std::sync::OnceLock::new();
+            DEF.get_or_init(|| agent_tools::definition::ToolDefinition {
+                name: "assembly_probe".to_string(),
+                description: "装配冒烟探针".to_string(),
+                input_schema: serde_json::json!({"type": "object"}),
+                dangerous: false,
+                fatal_on_error: false,
+            })
+        }
+
+        async fn execute(
+            &self,
+            ctx: &agent_tools::context::ToolContext,
+            _args: serde_json::Value,
+        ) -> Result<serde_json::Value, agent_tools::definition::ToolError> {
+            // 执行面声明写路径（守卫为临时值，随 execute 结束释放——
+            // run 后注册表无残留即证明 guard 无泄漏）
+            let claim_ok = match &ctx.write_claims {
+                Some(reg) => {
+                    let holder = ctx
+                        .write_claim_holder
+                        .clone()
+                        .unwrap_or_else(|| ctx.session_id.clone());
+                    reg.claim_one(holder, "probe.txt", agent_tools::write_paths::ClaimMode::Write)
+                        .is_ok()
+                }
+                None => false,
+            };
+            *self.observed.lock().unwrap_or_else(|e| e.into_inner()) = AssemblyProbeRecord {
+                write_claims_some: ctx.write_claims.is_some(),
+                quota_some: ctx.explore_docs_quota.is_some(),
+                holder: ctx.write_claim_holder.clone(),
+                claim_ok,
+            };
+            Ok(serde_json::json!({"probe": true}))
+        }
+    }
+
+    /// T-EG-06 装配冒烟：with_options 装配块四线接线全链路生效——
+    /// 注册表（互斥）/ 配额 / 默认中间件链 / ESC 判定器注入；run 后
+    /// 守卫无泄漏；判定器与工具执行共享同一注册表实例
+    #[tokio::test]
+    async fn assembly_smoke_wires_registry_quota_middleware_and_detector() {
+        use agent_tools::audit::{AuditSink, RecordingAuditSink};
+        use agent_tools::context::ExploreDocsQuotaContext;
+        use agent_tools::explore_quota::InMemoryExploreDocsQuotaStore;
+        use conex_fs::watch::{ChangeKind, FileChangeEvent};
+        use conex_test_utils::TempWorkspace;
+        use conex_types::session::AgentEndReason;
+        use crate::stream::{ProviderStreamEvent, StopReason};
+
+        let ws = TempWorkspace::new("eg06_assembly_smoke");
+        // 探针工具注册进注册表（run 内工具调用走执行面）
+        let probe = Arc::new(AssemblyProbeTool::default());
+        let mut reg = ToolRegistry::new();
+        reg.register(Arc::clone(&probe) as Arc<dyn agent_tools::definition::Tool>)
+            .expect("注册探针工具");
+        // 两轮脚本：第 1 轮工具调用（探针），第 2 轮文字收尾
+        let provider = TestProvider::with_scripts(vec![
+            vec![
+                ProviderStreamEvent::tool_call(
+                    Some("call_probe".into()),
+                    "assembly_probe",
+                    serde_json::json!({}),
+                ),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            vec![
+                ProviderStreamEvent::text("装配完成"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+        ]);
+
+        let sink = Arc::new(RecordingAuditSink::new());
+        let quota_store = Arc::new(InMemoryExploreDocsQuotaStore::new());
+        let mut loop_ =
+            AgentSessionLoop::new("s1", "run-eg06", 16, Box::new(provider), Arc::new(reg));
+        loop_ = loop_.with_options(SessionLoopOptions {
+            cwd: Some(ws.path_str()),
+            // 配额上下文（内存 store 后端）：主循环装配面透传 tool_ctx
+            explore_docs_quota: Some(ExploreDocsQuotaContext {
+                session_id: "s1".to_string(),
+                run_id: "run-eg06".to_string(),
+                granted: true,
+                quota: 1,
+                store: Some(
+                    Arc::clone(&quota_store)
+                        as Arc<dyn agent_tools::explore_quota::ExploreDocsQuotaStore>,
+                ),
+            }),
+            // ESC 装配配置：with_options 装配块注入判定器（与注册表同实例）
+            escape_watch: Some(EscapeWatchConfig::new(
+                ws.path(),
+                "s1",
+                "run-eg06",
+                Arc::clone(&sink) as AuditSink,
+            )),
+            ..Default::default()
+        });
+
+        let outcome = loop_.run(user_input("装配冒烟")).await;
+        assert_eq!(outcome.reason, AgentEndReason::Stop, "装配冒烟 run 应正常收场");
+        assert!(outcome.error.is_none());
+
+        // 1) 工具执行面装配可见（注册表 / 配额 / 持有者 / 声明成功）
+        let record = probe.observed();
+        assert!(record.write_claims_some, "执行面必须看到注册表");
+        assert!(record.quota_some, "执行面必须看到配额上下文");
+        assert_eq!(
+            record.holder.as_deref(),
+            Some("run-eg06"),
+            "写声明持有者 = 当前 run 标识"
+        );
+        assert!(record.claim_ok, "执行面声明写路径必须成功");
+
+        // 2) 注册表无泄漏：run 后活跃声明为空（探针声明随执行结束释放）
+        let registry = loop_
+            .tool_ctx
+            .write_claims
+            .clone()
+            .expect("装配后注册表必须存在");
+        assert!(
+            registry.active_claims().is_empty(),
+            "run 后不得残留活跃声明（guard 无泄漏）"
+        );
+
+        // 3) 中间件链生效：默认链 = 写前自动备份（backup）
+        assert_eq!(
+            loop_.tool_executor.middleware_names(),
+            vec!["backup".to_string()],
+            "默认中间件链 = 备份中间件"
+        );
+
+        // 4) ESC 判定器：装配后注入；与工具执行共享同一注册表实例——
+        // 同注册表声明后 is_declared 命中，释放后不命中
+        let esc = loop_
+            .escape_watch_config()
+            .expect("装配后 ESC 配置必须存在");
+        let detector = esc
+            .detector
+            .clone()
+            .expect("装配后必须注入判定器");
+        let event = FileChangeEvent {
+            path: ws.path().join("probe.txt"),
+            kind: ChangeKind::Created,
+            from: None,
+            occurred_at_ms: 1,
+        };
+        let guard = registry
+            .claim_one("test", "probe.txt", agent_tools::write_paths::ClaimMode::Write)
+            .expect("手动声明成功");
+        assert!(detector.is_declared(&event), "已声明路径必须命中判定器");
+        drop(guard);
+        assert!(!detector.is_declared(&event), "声明释放后不得命中判定器");
     }
 }
