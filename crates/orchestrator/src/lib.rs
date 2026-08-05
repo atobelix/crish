@@ -23,6 +23,10 @@
 //!   [recovery::RecoveryCoordinator]（阶梯 1 自动重试 → 阶梯 2 主 agent
 //!   激活 steering → 阶梯 3 fork 三态上下文继承 → 阶梯 4 上报用户），
 //!   操作指纹 + Episode 预算（`recover_*` 键命名空间）；
+//! - [`lifecycle`]：子代理生命周期补缺（T-D-09）——kill_all 批量终止
+//!   （过滤 running 子代理 + L3 强停投递 + 终态归一 failed）与
+//!   resume_subagent 显式恢复（fork_and_reassign 消费端命令面，共用
+//!   Episode 预算池）；
 //! - [`task_events`]：任务域事件唤醒消费面（T-AB-18）——唤醒摘要批量
 //!   注入（[task_events::TaskWakeBatch]）、security-audit 审计留痕
 //!   （[task_events::TaskAuditAccumulator]）、C7 衔接
@@ -40,6 +44,7 @@
 
 pub mod events;
 pub mod flow_graph;
+pub mod lifecycle;
 pub mod normalize;
 pub mod persist;
 pub mod recovery;

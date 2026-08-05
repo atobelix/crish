@@ -151,6 +151,12 @@ impl SubagentSpawner for RecordingSpawner {
                 ended_at: None,
                 depth: Some(1),
                 subagent_path_json: None,
+                // T-D-07 v6 新列：测试域 spawner 透传请求字段（模型覆盖不落库）
+                task_type: req.task_type.map(|t| t.as_str().to_string()),
+                display_label: req.display_label.clone(),
+                allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
+                    serde_json::to_string(paths).expect("路径白名单序列化不应失败")
+                }),
             });
             db.save_session_agents(&self.session_id, &agents)
                 .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
@@ -162,6 +168,7 @@ impl SubagentSpawner for RecordingSpawner {
             status: SubagentState::Running,
             summary: None,
             flow_node_id: req.flow_node_id.clone(),
+            display_label: req.display_label.clone(),
         })
     }
 }

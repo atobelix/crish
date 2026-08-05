@@ -285,6 +285,25 @@ impl ControlBus {
         )
     }
 
+    /// T-D-09：kill_all / resume_subagent 向子代理 run 投递 L3 强停——
+    /// 直连 [Self::request_force_cancel]（L3 队列面），reason 携带
+    /// `subagent_force_cancel:<run_id>` 可观测标识（与注入信封
+    /// `subagent_inject:<id>` 同风格）。
+    ///
+    /// 注：本总线为被杀目标 run（子代理 run）的实例；引擎侧按
+    /// subagent_run_id 定位其总线后调用。L0-L3 协议与聚合优先级
+    /// 不变（force_cancel > cooperative_stop > soft_inject）。
+    pub fn request_subagent_force_cancel(
+        &mut self,
+        subagent_run_id: &str,
+        source: Option<&str>,
+    ) -> ControlIntent {
+        self.request_force_cancel(
+            Some(format!("subagent_force_cancel:{subagent_run_id}")),
+            source.map(str::to_string),
+        )
+    }
+
     /// pi followUp：仅 run idle 时注入
     pub fn request_follow_up(
         &mut self,
@@ -693,5 +712,25 @@ mod tests {
         // 同毫秒两次注入 id 不碰撞（自增序号）
         let m2 = subagent_inject_message("sub-1", "继续");
         assert_ne!(m1.id, m2.id);
+    }
+
+    // ── T-D-09：kill_all / resume 的 L3 强停投递信封 ──────────────
+
+    /// kill_all / resume 投递 L3 强停：reason 携带 run 标识、drain 聚合
+    /// 为 ForceCancel（聚合优先级不变），不入 steer/followUp 环
+    #[test]
+    fn subagent_force_cancel_envelope_is_l3() {
+        let mut bus = ControlBus::new();
+        let intent = bus.request_subagent_force_cancel("run-9", Some("kill_all"));
+        assert_eq!(intent.kind, ControlKind::ForceCancel);
+        assert_eq!(intent.level, ControlLevel::L3);
+        assert_eq!(intent.reason.as_deref(), Some("subagent_force_cancel:run-9"));
+        assert_eq!(intent.source.as_deref(), Some("kill_all"));
+        match bus.drain_as_action() {
+            ControlDrainAction::ForceCancel { reason, .. } => {
+                assert_eq!(reason.as_deref(), Some("subagent_force_cancel:run-9"));
+            }
+            other => panic!("L3 强停应聚合为 ForceCancel：{other:?}"),
+        }
     }
 }

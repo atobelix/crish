@@ -45,6 +45,7 @@ use orchestrator::flow_graph::{
     FlowDeclaration, FlowNode, FlowNodeState, FlowScheduler, FLOW_RELEASED_KEY,
     FLOW_RESERVED_KEY,
 };
+use orchestrator::lifecycle::SubagentLifecycleService;
 use orchestrator::persist::{LocalDbStore, SessionSequencer, Store};
 use orchestrator::recovery::{
     fingerprint, RecoveryCoordinator, RecoveryRetryPolicy, RunFailureContext,
@@ -57,7 +58,7 @@ use orchestrator::run::{EVENT_STORE_WRITE_FAILED_REASON, RunError, RunHandle, Ru
 use orchestrator::session::{SessionRecord, SessionTree};
 use orchestrator::steering_queue::PendingMessageQueue;
 
-use common::{agent_end, agent_start, message_end, outcome, setup};
+use common::{agent_end, agent_start, message_end, outcome, setup, RecordingCancelSink};
 
 /// 无快照的恢复器（全量重放路径；与 restore.rs 内部测试同构）
 struct NoSnapshots;
@@ -652,6 +653,12 @@ impl SubagentSpawner for DbSpawner {
             ended_at: None,
             depth: Some(1),
             subagent_path_json: None,
+            // T-D-07 v6 新列：测试域 spawner 透传请求字段（模型覆盖不落库）
+            task_type: req.task_type.map(|t| t.as_str().to_string()),
+            display_label: req.display_label.clone(),
+            allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
+                serde_json::to_string(paths).expect("路径白名单序列化不应失败")
+            }),
         });
         self.db
             .save_session_agents(&self.session_id, &agents)
@@ -663,6 +670,7 @@ impl SubagentSpawner for DbSpawner {
             status: SubagentState::Running,
             summary: None,
             flow_node_id: req.flow_node_id.clone(),
+            display_label: req.display_label.clone(),
         })
     }
 }
@@ -819,4 +827,95 @@ async fn flow_budget_and_recovery_episodes_survive_crash_window() {
         .restore_steering_notifications()
         .expect("通知恢复入队必须成功");
     assert!(!queue.lock().unwrap().is_empty(), "重启后 steering 条目重新入队");
+}
+
+// ── T-D-09 扩展：kill_all 崩溃一致性（kill_all 后重启，session_agents
+//    状态一致）─────────────────────────────────────────────────────
+// kill_all 批量终止把 running 行统一归一 failed 并落库（终态收口在服务侧，
+// 不依赖引擎异步回写）——进程随后崩溃/重启，行状态必须保持一致；流程编排
+// 从行重建后全部节点终态、无残留运行节点（防 double-charge）。
+
+#[tokio::test]
+async fn kill_all_rows_stay_terminal_across_restart() {
+    let ws = TempWorkspace::new("killall_crash");
+    let db_path = ws.path().join("sessions.db");
+    let session_id = "sess-killall";
+    // 阶段一：声明编排 → spawn 3 个 running 子代理 → 补产出消息 → kill_all
+    {
+        let db = LocalDb::open(&db_path).unwrap();
+        db.insert_session(session_id, "主会话").unwrap();
+        let spawner = DbSpawner::with_db(db.clone(), session_id);
+        let mut sched =
+            FlowScheduler::new(session_id, spawner.clone(), Arc::new(db.clone())).unwrap();
+        let adv = sched
+            .declare_flow(&FlowDeclaration {
+                tasks: vec![
+                    flow_node("a", &[]),
+                    flow_node("b", &[]),
+                    flow_node("c", &[]),
+                ],
+                planner_run_id: Some("planner-1".to_string()),
+            })
+            .await
+            .unwrap();
+        assert_eq!(adv.started.len(), 3, "三个并行节点全部启动");
+        // 崩溃窗口内写入的产出消息（重启后必须保留）
+        let mut rows = db.load_session_agents(session_id).unwrap();
+        let now = now_ms();
+        for row in &mut rows {
+            row.messages.push(conex_types::SessionMessage {
+                id: format!("msg-{}", row.id),
+                sender: "user".to_string(),
+                text: Some(format!("产出 {}", row.id)),
+                thinking: None,
+                timestamp: now,
+                status: None,
+                stream_text_offset: None,
+                thinking_time: None,
+                tool_calls_json: None,
+                blocks_json: None,
+                tool_call_results_json: None,
+                usage: None,
+            });
+        }
+        db.save_session_agents(session_id, &rows).unwrap();
+        // kill_all：逐个投递 L3 强停 + 行归一 failed（终态收口在服务侧）
+        let sink = RecordingCancelSink::new(true);
+        let service = SubagentLifecycleService::new(Arc::new(db.clone()), sink.clone());
+        let outcome = service.kill_all(session_id, "kill_all").unwrap();
+        assert_eq!(outcome.terminated.len(), 3);
+        assert_eq!(sink.calls().len(), 3, "全部 running run 收到 L3 强停");
+        let rows = db.load_session_agents(session_id).unwrap();
+        assert!(rows.iter().all(|r| r.status == "failed"));
+    } // 连接关闭 = 进程退出（kill_all 之后无其它写入，等效崩溃）
+
+    // 阶段二：重启——session_agents 状态一致（无 running 残留、产出保留）
+    let db = LocalDb::open(&db_path).unwrap();
+    let rows = db.load_session_agents(session_id).unwrap();
+    assert_eq!(rows.len(), 3);
+    assert!(
+        rows.iter().all(|r| r.status == "failed"),
+        "kill_all 后重启：全部行保持 failed（状态一致）"
+    );
+    assert!(
+        rows.iter().all(|r| r.ended_at.is_some()),
+        "ended_at 跨重启保留"
+    );
+    assert!(
+        rows.iter().all(|r| !r.messages.is_empty()),
+        "产出消息跨重启保留（session_agent_messages 级联）"
+    );
+    // FlowScheduler 从行重建：全部节点终态、无残留运行节点
+    let spawner = DbSpawner::with_db(db.clone(), session_id);
+    let restored =
+        FlowScheduler::load(session_id, spawner.clone(), Arc::new(db.clone()), &rows).unwrap();
+    for node in ["a", "b", "c"] {
+        assert_eq!(
+            restored.node_state(node),
+            Some(FlowNodeState::Failed),
+            "节点 {node} 从行重建为终态"
+        );
+    }
+    assert!(restored.flow_terminal(), "编排全终态（无残留节点）");
+    assert_eq!(restored.budget_in_flight(), 0, "无运行残留（预算不 double-charge）");
 }

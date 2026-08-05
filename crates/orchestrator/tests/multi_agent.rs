@@ -181,6 +181,7 @@ impl SubagentSpawner for ChainSpawner {
             status: SubagentState::Running,
             summary: None,
             flow_node_id: req.flow_node_id.clone(),
+            display_label: req.display_label.clone(),
         })
     }
 }
@@ -271,6 +272,7 @@ impl MockEngine {
                     status: SubagentState::Running,
                     summary: None,
                     flow_node_id: Some(s.node_id.clone()),
+                    display_label: None,
                 },
                 &req,
             )
@@ -604,6 +606,12 @@ async fn full_chain_dependency_graph_to_reinjection() {
         parent_tool_call_id: None,
         flow_node_id: None,
         is_composite: false,
+        // T-D-07 定义扩展：直调路径不携带（None = 缺省 analysis + 默认集）
+        task_type: None,
+        allowed_write_paths: None,
+        display_label: None,
+        // 扩展点预留：全构造点显式 None（编译器强制）
+        model_override: None,
     };
     let x_result = engine.spawn_and_emit_started(&x_req).await;
     let ids = vec![sub_a.clone(), x_result.subagent_id.clone()];
@@ -838,6 +846,12 @@ async fn chain_event_envelopes_carry_subagent_identity() {
         parent_tool_call_id: Some("call-1".to_string()),
         flow_node_id: None,
         is_composite: false,
+        // T-D-07 定义扩展：信封路径不携带（None = 缺省 analysis + 默认集）
+        task_type: None,
+        allowed_write_paths: None,
+        display_label: None,
+        // 扩展点预留：全构造点显式 None（编译器强制）
+        model_override: None,
     };
     let result = engine.spawn_and_emit_started(&req).await;
     // 信封：subagent-started 落库且字段齐全（Critical）

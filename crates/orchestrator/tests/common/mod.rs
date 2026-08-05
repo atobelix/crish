@@ -77,6 +77,39 @@ impl RunEngine for TestEngine {
     }
 }
 
+/// T-D-09：kill_all / resume 的 L3 强停投递替身（记录投递调用 +
+/// 可配置投递结果，模拟引擎「有无该 run 运行实例」）
+pub struct RecordingCancelSink {
+    calls: Arc<Mutex<Vec<(String, String)>>>,
+    /// 是否模拟投递成功（false = 引擎无该 run 的运行实例）
+    deliver: bool,
+}
+
+impl RecordingCancelSink {
+    /// 新建替身（deliver = 投递结果模拟）
+    pub fn new(deliver: bool) -> Arc<Self> {
+        Arc::new(Self {
+            calls: Arc::new(Mutex::new(Vec::new())),
+            deliver,
+        })
+    }
+
+    /// 已投递的 (run_id, reason) 调用序列
+    pub fn calls(&self) -> Vec<(String, String)> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+impl orchestrator::lifecycle::ForceCancelSink for RecordingCancelSink {
+    fn request_force_cancel(&self, subagent_run_id: &str, reason: &str) -> bool {
+        self.calls
+            .lock()
+            .unwrap()
+            .push((subagent_run_id.to_string(), reason.to_string()));
+        self.deliver
+    }
+}
+
 // ── 事件构件（字段最小化，供 drive 流程入队）──
 
 /// agent-start 事件（sessionId 显式给定，模拟运行时产出）
@@ -141,6 +174,9 @@ pub fn approval_requested(session: &str, tool_call_id: &str) -> AgentEvent {
             summary: "写入文件".to_string(),
             tool_metadata: Default::default(),
             metadata: None,
+            // T-D-14 权限传递层：主 agent 请求缺省 None（向后兼容）
+            requester_run_id: None,
+            reason: None,
         },
         timestamp: TS.into(),
     }
