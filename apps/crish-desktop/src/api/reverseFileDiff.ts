@@ -163,7 +163,7 @@ export async function reverseFileDiffToDisk(
     if (applied.alreadyApplied) {
       return { ok: true, mode: 'search_replace', alreadyApplied: true };
     }
-    await writeTextFile(filePath, applied.content);
+    await writeTextFile(filePath, applied.content, true);
     return { ok: true, mode: 'search_replace' };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

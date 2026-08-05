@@ -12,7 +12,7 @@
 import type { DiffChange, FileDiff } from '../store/types';
 import { readTextFile, writeTextFile } from './workspaceFsApi';
 
-export type ApplyDiffMode = 'full_write' | 'search_replace';
+type ApplyDiffMode = 'full_write' | 'search_replace';
 
 export type ClassifyFileDiffResult =
   | { ok: true; mode: ApplyDiffMode }
@@ -503,7 +503,7 @@ export async function applyFileDiffToDisk(diff: FileDiff): Promise<ApplyFileDiff
       } catch {
         // 文件不存在 → 新建
       }
-      await writeTextFile(filePath, content);
+      await writeTextFile(filePath, content, true);
       return { ok: true, mode: 'full_write' };
     }
 
@@ -523,7 +523,7 @@ export async function applyFileDiffToDisk(diff: FileDiff): Promise<ApplyFileDiff
     } catch (e) {
       // 纯新增片段且文件不存在时，可直接写 newStr（old 为空）
       if (!oldStr && newStr) {
-        await writeTextFile(filePath, newStr);
+        await writeTextFile(filePath, newStr, true);
         return { ok: true, mode: 'search_replace' };
       }
       const msg = e instanceof Error ? e.message : String(e);
@@ -545,7 +545,7 @@ export async function applyFileDiffToDisk(diff: FileDiff): Promise<ApplyFileDiff
     if (applied.alreadyApplied) {
       return { ok: true, mode: 'search_replace', alreadyApplied: true };
     }
-    await writeTextFile(filePath, applied.content);
+    await writeTextFile(filePath, applied.content, true);
     return { ok: true, mode: 'search_replace' };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

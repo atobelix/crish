@@ -32,6 +32,7 @@ use std::time::Duration;
 
 use agent_provider::request::build_system_prompt;
 use agent_tools::audit::{AuditSink, SecurityAuditSink};
+use agent_tools::backup::BackupMiddleware;
 use agent_tools::background::{
     BackgroundAdoptRequest, BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskRef, TaskState,
 };
@@ -1983,6 +1984,15 @@ pub(crate) async fn core_run_task(
         context_budget,
         // T-ESC-03：逃逸监视配置透传（装配上下文，LoopState 不消费）
         escape_watch: escape_config,
+        // T-EG-05（F7）：写前自动备份中间件装配（S10b）——备份根经
+        // with_defaults(None) 执行期回退工作区 `.crish-trash`，与 UI 删除
+        // 命令（trash_root_for 未注入时兜底，core_run_commands.rs:2356）及
+        // 工具侧 BuiltinToolConfig.trash_root（引擎装配处亦为 None）同源，
+        // 保证恢复面板与写前快照落入同一回收站根；中间件链经
+        // options.tool_middleware → loop/mod.rs:343 with_middleware 同步到
+        // 工具执行器（消费侧循环装配由 F7 T-EG-06 负责，本处只做 options
+        // 侧构造）。
+        tool_middleware: vec![Arc::new(BackupMiddleware::with_defaults(None))],
         ..SessionLoopOptions::default()
     };
     let tool_options = ToolBatchOptions {

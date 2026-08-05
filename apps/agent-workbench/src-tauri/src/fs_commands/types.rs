@@ -13,6 +13,9 @@ pub(crate) const ERR_INTERNAL: &str = "internal_error";
 pub(crate) const ERR_NOT_FOUND: &str = "path_not_found";
 pub(crate) const ERR_NOT_DIRECTORY: &str = "not_directory";
 pub(crate) const ERR_NOT_FILE: &str = "not_file";
+/// 目标已存在且未显式允许覆盖（T-EG-05：默认拒绝覆盖口径，对齐
+/// 工具侧 write_file 的 overwrite 语义，消除「工具拒绝、命令允许」分裂）
+pub(crate) const ERR_FILE_EXISTS: &str = "file_exists";
 pub(crate) const ERR_OUTSIDE_WORKSPACE: &str = "outside_workspace";
 pub(crate) const ERR_READ_DIRECTORY: &str = "read_directory_failed";
 pub(crate) const ERR_READ_FILE: &str = "read_file_failed";

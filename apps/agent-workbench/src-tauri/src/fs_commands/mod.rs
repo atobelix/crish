@@ -37,13 +37,18 @@ pub(crate) fn read_file_content(
 }
 
 /// 写入文件内容（PE-07 T07.2：无 workspace_root 参数，根由 WorkspaceRegistry 解析）。
+///
+/// T-EG-05（F7）：overwrite 语义与工具侧 write_file 对齐——默认拒绝覆盖
+/// （已存在且未显式 overwrite=true → file_exists 错误）；Option<bool> 让
+/// 未传参调用方保持「默认拒绝覆盖」语义（与前端 workspaceFsApi 同步）。
 #[tauri::command]
 pub(crate) fn write_file_content(
     app: tauri::AppHandle,
     path: String,
     content: String,
+    overwrite: Option<bool>,
 ) -> Result<types::WriteFileContentResult, FileCommandError> {
-    write::write_file_content(&app, path, content)
+    write::write_file_content(&app, path, content, overwrite.unwrap_or(false))
 }
 
 /// 删除单个文件（PE-07 T07.3 C-03：替代 PowerShell Remove-Item 拼串）。
@@ -77,7 +82,7 @@ mod tests {
     };
 
     use crate::fs_commands::types::{self, FileCommandError, ReadPolicy, MAX_TEXT_FILE_BYTES};
-    use crate::fs_commands::{delete, directory, read, WorkspaceFsGuard};
+    use crate::fs_commands::{delete, directory, read, write, WorkspaceFsGuard};
 
     struct TestDir {
         path: PathBuf,
@@ -122,6 +127,15 @@ mod tests {
 
     fn guard_for(root: &Path) -> WorkspaceFsGuard {
         WorkspaceFsGuard::new(root).expect("create guard")
+    }
+
+    fn write_file_content_at_root(
+        root: &Path,
+        path: &str,
+        content: &str,
+        overwrite: bool,
+    ) -> Result<types::WriteFileContentResult, FileCommandError> {
+        write::write_file_content_with_guard(&guard_for(root), path, content, overwrite)
     }
 
     fn read_file_content_at_root(
@@ -293,6 +307,51 @@ mod tests {
         let missing = temp.path().join("no-such-root");
         let err = WorkspaceFsGuard::new(&missing).expect_err("unreachable root must be rejected");
         assert_eq!(err.code, types::ERR_INTERNAL);
+    }
+
+    // ── T-EG-05：overwrite 语义（默认拒绝覆盖，与工具侧 write_file 对齐）──
+
+    /// 已存在 + 未显式 overwrite → file_exists 拒绝，内容不被改动
+    #[test]
+    fn write_file_content_rejects_existing_by_default() {
+        let temp = TestDir::new();
+        let root = temp.path().join("workspace");
+        fs::create_dir(&root).expect("create root");
+        let file = root.join("a.txt");
+        fs::write(&file, "original").expect("write file");
+
+        assert_error_code(
+            write_file_content_at_root(&root, "a.txt", "overwritten", false),
+            types::ERR_FILE_EXISTS,
+        );
+        assert_eq!(fs::read_to_string(&file).expect("read"), "original", "拒绝后不得改动原文件");
+    }
+
+    /// 已存在 + overwrite=true → 放行覆盖写入
+    #[test]
+    fn write_file_content_existing_with_overwrite_true_succeeds() {
+        let temp = TestDir::new();
+        let root = temp.path().join("workspace");
+        fs::create_dir(&root).expect("create root");
+        let file = root.join("a.txt");
+        fs::write(&file, "original").expect("write file");
+
+        let result = write_file_content_at_root(&root, "a.txt", "new", true).expect("overwrite");
+        assert_eq!(fs::read_to_string(&file).expect("read"), "new");
+        assert!(result.path.ends_with("a.txt"));
+    }
+
+    /// 目标不存在 → overwrite 参数无影响，默认即放行（新建语义不变）
+    #[test]
+    fn write_file_content_new_file_default_succeeds() {
+        let temp = TestDir::new();
+        let root = temp.path().join("workspace");
+        fs::create_dir(&root).expect("create root");
+
+        let result =
+            write_file_content_at_root(&root, "fresh.txt", "hello", false).expect("create file");
+        assert_eq!(fs::read_to_string(root.join("fresh.txt")).expect("read"), "hello");
+        assert_eq!(result.bytes_written, 5);
     }
 
     #[cfg(unix)]

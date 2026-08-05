@@ -36,7 +36,7 @@ function parentPath(p: string): string {
   return norm.slice(0, i) || norm;
 }
 
-export function getFsRoot(): string {
+function getFsRoot(): string {
   return getWorkspacePath() || '';
 }
 
@@ -172,11 +172,22 @@ export async function readTextFile(
   throw new Error('当前环境无法读取本地文件（需桌面壳）');
 }
 
-export async function writeTextFile(filePath: string, content: string): Promise<void> {
+/**
+ * 写入文件内容（T-EG-05：overwrite 语义与壳层命令 / 工具侧 write_file
+ * 对齐——默认拒绝覆盖，已存在文件需显式传 overwrite=true 才放行；
+ * 新建文件不受影响）。覆盖写入的调用方（如 applyFileDiff full_write）
+ * 必须显式传 true，避免「写入被拒」回归。
+ */
+export async function writeTextFile(
+  filePath: string,
+  content: string,
+  overwrite = false,
+): Promise<void> {
   const path = resolveWorkspacePath(filePath);
   const res = await invokeResult('write_file_content', {
     path,
     content,
+    overwrite,
     workspaceRoot: workspaceRootArg(),
   });
   if (res.status === 'ok') return;
@@ -328,10 +339,6 @@ export function addPendingFileAnnotation(input: {
 
 export function countPendingFileAnnotations(): number {
   return pendingAnnotations.length;
-}
-
-export function peekPendingFileAnnotations(): PendingFileAnnotation[] {
-  return [...pendingAnnotations];
 }
 
 /** 取出并清空待发送批注（发送用户消息时调用） */

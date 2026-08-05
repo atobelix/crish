@@ -433,7 +433,7 @@ describe('applyFileDiffToDisk', () => {
     };
     const r = await applyFileDiffToDisk(d);
     expect(r).toEqual({ ok: true, mode: 'full_write' });
-    expect(writeTextFile).toHaveBeenCalledWith('new.ts', 'hello');
+    expect(writeTextFile).toHaveBeenCalledWith('new.ts', 'hello', true);
   });
 
   it('rejects search_replace when old appears multiple times', async () => {
@@ -498,7 +498,7 @@ describe('applyFileDiffToDisk', () => {
     };
     const r = await applyFileDiffToDisk(d);
     expect(r).toEqual({ ok: true, mode: 'search_replace' });
-    expect(writeTextFile).toHaveBeenCalledWith('ok.ts', 'const a = 2\n');
+    expect(writeTextFile).toHaveBeenCalledWith('ok.ts', 'const a = 2\n', true);
   });
 
   it('rejects unsafe path without writing', async () => {
@@ -563,7 +563,7 @@ describe('applyFileDiffToDisk', () => {
     };
     const r = await applyFileDiffToDisk(d);
     expect(r.ok).toBe(true);
-    expect(writeTextFile).toHaveBeenCalledWith('src/nested/file.ts', 'x');
+    expect(writeTextFile).toHaveBeenCalledWith('src/nested/file.ts', 'x', true);
   });
 
   it('rejects both-present conflict without writing', async () => {
@@ -618,7 +618,7 @@ describe('applyFileDiffToDisk', () => {
     };
     const r = await applyFileDiffToDisk(d);
     expect(r).toEqual({ ok: true, mode: 'search_replace' });
-    expect(writeTextFile).toHaveBeenCalledWith('append.ts', 'base\ntail');
+    expect(writeTextFile).toHaveBeenCalledWith('append.ts', 'base\ntail', true);
   });
 
   it('rejects Windows reserved path without IO', async () => {
