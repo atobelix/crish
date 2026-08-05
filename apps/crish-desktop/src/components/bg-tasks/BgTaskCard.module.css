@@ -1,0 +1,453 @@
+/* 后台任务卡片样式（T-AB-20）：状态徽标 / 异常高亮 / prompt 横幅 / 日志尾部 / 操作面 */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5);
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 异常高亮：failed / killed 卡片（danger 边框与底色淡染） */
+.card.isAbnormal {
+  border-color: var(--color-error-border);
+  background: color-mix(in srgb, var(--color-error-bg) 55%, var(--bg-secondary));
+}
+
+/* 疑似卡死：warning 淡染 */
+.card.isSuspicious {
+  border-color: var(--color-warning-bg);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.headMain {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.headMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+/* 状态徽标（色调按状态区分） */
+.badge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-nano);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-dense);
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+}
+
+.badge.isRunning {
+  color: var(--text-on-accent);
+  background: var(--accent-blue);
+}
+
+.badge.isSucceeded {
+  color: var(--text-on-accent);
+  background: var(--accent-green);
+}
+
+.badge.isFailed {
+  color: var(--text-on-danger);
+  background: var(--accent-danger);
+}
+
+.badge.isKilled {
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+}
+
+.badge.isQueued {
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+}
+
+.badge.isTimedOut {
+  color: var(--text-on-accent);
+  background: var(--accent-orange);
+}
+
+.title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.duration {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 疑似卡死标记 */
+.suspiciousMark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0_5);
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-nano);
+  font-weight: var(--font-weight-medium);
+  color: var(--warning-color);
+  background: var(--color-warning-bg);
+  line-height: var(--line-height-dense);
+  white-space: nowrap;
+}
+
+/* 退出码徽标 */
+.exitCode {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-nano);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-danger);
+  background: color-mix(in srgb, var(--color-error-bg) 55%, transparent);
+  line-height: var(--line-height-dense);
+  white-space: nowrap;
+}
+
+.command {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xxs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: var(--line-height-compact);
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* prompt 等待输入横幅（高亮） */
+.promptBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1_5);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-warning-bg);
+  border: 1px solid var(--border-subtle);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.promptLabel {
+  flex-shrink: 0;
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--warning-color);
+  white-space: nowrap;
+  line-height: var(--line-height-compact);
+}
+
+.promptText {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xxs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  line-height: var(--line-height-compact);
+}
+
+.resource {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  line-height: var(--line-height-compact);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 日志尾部展开区 */
+.logTail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.logTailPre {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xxs);
+  line-height: var(--line-height-compact);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 120px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.expandToggle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0_5);
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  line-height: var(--line-height-compact);
+}
+
+.expandToggle:hover {
+  color: var(--text-secondary);
+}
+
+.expandToggle:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: default;
+}
+
+/* 操作面：kill / send_input */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.actionRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.killBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0_5);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-error-border);
+  background: transparent;
+  font-size: var(--font-size-xxs);
+  color: var(--text-danger);
+  cursor: pointer;
+  line-height: var(--line-height-compact);
+}
+
+.killBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-error-bg) 55%, transparent);
+}
+
+.killBtn:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: default;
+}
+
+/* kill 二次确认行 */
+.confirmRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-error-bg) 40%, var(--bg-secondary));
+  min-width: 0;
+  max-width: 100%;
+}
+
+.confirmText {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-xxs);
+  color: var(--text-secondary);
+  line-height: var(--line-height-compact);
+}
+
+.confirmBtns {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.btnGhost {
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  font-size: var(--font-size-xxs);
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: var(--line-height-compact);
+}
+
+.btnGhost:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.btnGhost:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: default;
+}
+
+.btnDanger {
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-danger);
+  background: var(--accent-danger);
+  font-size: var(--font-size-xxs);
+  color: var(--text-on-danger);
+  cursor: pointer;
+  line-height: var(--line-height-compact);
+}
+
+.btnDanger:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btnDanger:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: default;
+}
+
+/* kill 三态反馈条 */
+.feedback {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xxs);
+  line-height: var(--line-height-compact);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.feedback.isOk {
+  color: var(--text-success);
+}
+
+.feedback.isInfo {
+  color: var(--text-secondary);
+}
+
+.feedback.isError {
+  color: var(--text-danger);
+}
+
+/* send_input 表单 */
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.inputField {
+  flex: 1;
+  min-width: 120px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xxs);
+  color: var(--text-primary);
+  line-height: var(--line-height-compact);
+  box-sizing: border-box;
+}
+
+.inputField:focus {
+  border-color: var(--accent-color);
+  outline: none;
+}
+
+.inputField:disabled {
+  opacity: var(--opacity-disabled);
+}
+
+.newlineToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0_5);
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.newlineToggle input {
+  margin: 0;
+}
+
+.sendBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0_5);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-color);
+  background: transparent;
+  font-size: var(--font-size-xxs);
+  color: var(--accent-color);
+  cursor: pointer;
+  line-height: var(--line-height-compact);
+}
+
+.sendBtn:hover:not(:disabled) {
+  background: var(--accent-light);
+}
+
+.sendBtn:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: default;
+}
+
+/* 打开中（防连点）视觉降级 */
+.isOpening {
+  opacity: 0.7;
+  pointer-events: none;
+}

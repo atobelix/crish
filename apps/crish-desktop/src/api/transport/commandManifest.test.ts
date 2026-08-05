@@ -29,12 +29,13 @@ describe('commandManifest', () => {
       ).length;
       const pending = BUILTIN_COMMAND_MANIFEST.commands.length - registered;
       expect(pending).toBeGreaterThan(0);
-      // 与 Rust COMMAND_MANIFEST（75 = 71 注册面 + 4 登记先行）保持同步；
+      // 与 Rust COMMAND_MANIFEST（82 = 78 注册面 + 4 登记先行）保持同步；
       // 变更 Rust 侧时同步本快照，双向条数由两端测试锁定
       // PE-07：T07.3（git_run/fs_delete_file）+ T07.4（profile_apply/secret_reveal）已接线
       // P3 步骤 5（C7 ③）：catalog_get / catalog_refresh 已接线
-      expect(registered).toBe(74);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(78);
+      // F3（T-AB-19）：workbench_send_input 已接线
+      expect(registered).toBe(75);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(79);
     });
 
     it('命令名唯一', () => {

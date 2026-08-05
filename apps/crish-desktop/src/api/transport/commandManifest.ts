@@ -45,7 +45,7 @@ function entry(
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（75 = 注册面 71 + 登记先行 4；§7.2 推算 ≈75）。
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（79 = 注册面 75 + 登记先行 4；§7.2 推算 ≈75）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
  * commandManifest.test.ts 的条数/登记断言拦截。
@@ -70,6 +70,9 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('workbench_list_background_tasks', 'workbench', 'gui'),
     entry('workbench_get_background_task_output', 'workbench', 'gui'),
     entry('workbench_cancel_background_task', 'workbench', 'gui'),
+    // F3（T-AB-19 顺手接线）：stdin 注入命令面（sendBackgroundTaskInput
+    // 等待的 Rust 命令；T-AB-20 操作面）——与 Rust command_manifest.rs 82/78 镜像
+    entry('workbench_send_input', 'workbench', 'gui'),
     entry('workbench_select_folder', 'workbench', 'gui'),
     entry('workbench_list_directory', 'workbench', 'gui'),
     entry('workbench_read_file_content', 'workbench', 'gui'),
