@@ -253,12 +253,17 @@ pub(crate) struct WriteFileTool {
 /// 写文件支持编码枚举（对齐 TS write_file 的 encoding 参数）
 const WRITE_ENCODINGS: &[&str] = &["utf-8", "utf-8-bom", "utf-16le", "utf-16be"];
 
+/// 覆盖拒绝错误码（REQ-E02 本地域码；对齐 write_paths.rs:37 的
+/// tool.write_path_conflict 先例——不入 conex-types 注册表，执行器按错误码
+/// 分类路由：文件已存在为确定拒绝，需显式 overwrite=true 才可放行）
+pub(crate) const TOOL_FILE_EXISTS: &str = "tool.file_exists";
+
 impl WriteFileTool {
     pub(crate) fn new() -> Self {
         Self {
             def: ToolDefinition {
                 name: "write_file".to_string(),
-                description: "写文件到工作区（覆盖写入，自动创建父目录，可指定编码）。".to_string(),
+                description: "写文件到工作区（默认拒绝覆盖已有文件，覆盖需显式传 overwrite=true；自动创建父目录，可指定编码）。".to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -268,6 +273,11 @@ impl WriteFileTool {
                             "type": "string",
                             "enum": ["utf-8", "utf-8-bom", "utf-16le", "utf-16be"],
                             "description": "写入编码，缺省时已存在文件按 BOM 续写原编码，新文件默认 utf-8"
+                        },
+                        "overwrite": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "文件已存在时是否允许覆盖，默认 false（已存在则报错，需显式 true 才覆盖）"
                         }
                     },
                     "required": ["path", "content"],
@@ -302,6 +312,17 @@ impl Tool for WriteFileTool {
         // I4-M3：写路径互斥——执行期声明写路径，冲突拒绝（谁占用/何时）；
         // 未接线（write_claims = None）不强制；守卫随函数结束自动释放
         let _claim = claim_write_guard(ctx, &path_str, ClaimMode::Write)?;
+        // REQ-E02：默认拒绝覆盖——存在性检查紧跟写路径声明、先于任何写盘意图；
+        // 文件已存在且未显式 overwrite=true → 结构化错误，文案指引 AI 显式传参
+        let overwrite = parse_overwrite_flag(&args)?;
+        if file_path.exists() && !overwrite {
+            return Err(ToolError::new(
+                TOOL_FILE_EXISTS,
+                format!(
+                    "write_file: 目标文件已存在（{display}）。如需覆盖请显式设置 overwrite=true；该操作默认拒绝覆盖已有文件"
+                ),
+            ));
+        }
         // I6-M11 C5：探索类子代理写文档配额检查（未装配 = 非探索类，放行）
         crate::explore_quota::guard_explore_docs_write(ctx)?;
 
@@ -336,7 +357,10 @@ impl Tool for WriteFileTool {
 }
 
 /// 解析写入编码：显式指定优先；否则已存在文件按 BOM 续写，新文件默认 utf-8
-fn resolve_write_encoding(
+/// F5 遗留可见性收尾：提升 pub(crate) 供 replace.rs 复用（其内部镜像了
+/// 本函数与 encode_text，见 replace.rs:561-626）；去重由后续轮次执行，
+/// 本轮只改可见性
+pub(crate) fn resolve_write_encoding(
     file_path: &Path,
     requested: Option<&str>,
 ) -> Result<String, ToolError> {
@@ -369,7 +393,8 @@ fn resolve_write_encoding(
 }
 
 /// 按编码编码文本（utf-8 / utf-8-bom / utf-16le / utf-16be，带 BOM）
-fn encode_text(content: &str, encoding: &str) -> Result<Vec<u8>, ToolError> {
+/// pub(crate)：同上可见性收尾，replace.rs 去重时直接复用
+pub(crate) fn encode_text(content: &str, encoding: &str) -> Result<Vec<u8>, ToolError> {
     let utf8 = content.as_bytes();
     let mut out = Vec::with_capacity(utf8.len() * 2 + 2);
     match encoding {
@@ -397,6 +422,16 @@ fn encode_text(content: &str, encoding: &str) -> Result<Vec<u8>, ToolError> {
         }
     }
     Ok(out)
+}
+
+/// 解析 overwrite 标志：缺省 false（REQ-E02 默认拒绝覆盖语义）；
+/// 显式传值必须为布尔，非布尔为结构化入参错误
+fn parse_overwrite_flag(args: &serde_json::Value) -> Result<bool, ToolError> {
+    let Some(v) = args.get("overwrite") else {
+        return Ok(false);
+    };
+    v.as_bool()
+        .ok_or_else(|| ToolError::invalid_input("overwrite must be a boolean"))
 }
 
 /// 目录条目（对齐 TS list 工具的 items 结构 + size/mtime）
@@ -898,12 +933,74 @@ mod tests {
             .unwrap();
         let bytes = std::fs::read(ws.path().join("u16.txt")).unwrap();
         assert!(bytes.starts_with(&[0xFF, 0xFE]));
-        // 不传编码时按 BOM 续写原编码
-        tool.execute(&mock_ctx(&ws), json!({ "path": "u16.txt", "content": "yo" }))
+        // 不传编码时按 BOM 续写原编码（目标已存在 → 显式 overwrite=true）
+        tool.execute(&mock_ctx(&ws), json!({ "path": "u16.txt", "content": "yo", "overwrite": true }))
             .await
             .unwrap();
         let bytes = std::fs::read(ws.path().join("u16.txt")).unwrap();
         assert!(bytes.starts_with(&[0xFF, 0xFE]));
+    }
+
+    #[tokio::test]
+    async fn write_file_rejects_overwrite_by_default() {
+        // REQ-E02：文件已存在且未显式 overwrite=true → 结构化拒绝，原文件字节不变；
+        // 与备份中间件协同说明：middleware before 钩子在 execute 之前运行
+        // （backup.rs:20-21、242-266），拒绝覆盖会留下一条无意义快照条目——
+        // 接受该行为（条目无害），不为此加清理逻辑
+        let ws = TempWorkspace::new("fs_no_overwrite");
+        ws.write_file("keep.txt", "original");
+        let tool = WriteFileTool::new();
+        let err = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "keep.txt", "content": "replaced" }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), TOOL_FILE_EXISTS);
+        assert!(err.to_string().contains("keep.txt"));
+        assert!(err.to_string().contains("overwrite=true"), "错误文案须指引 AI 显式传参");
+        assert_eq!(ws.read_file("keep.txt"), "original", "拒绝时文件字节必须不变");
+        // 显式 overwrite=false 同样拒绝
+        let err = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "keep.txt", "content": "x", "overwrite": false }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), TOOL_FILE_EXISTS);
+        // 非布尔 overwrite：结构化入参错误
+        let err = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "keep.txt", "content": "x", "overwrite": "yes" }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "tool.invalid_input");
+    }
+
+    #[tokio::test]
+    async fn write_file_overwrite_true_allows_replace() {
+        // REQ-E02：显式 overwrite=true 放行覆盖，内容替换并返回新快照标记
+        let ws = TempWorkspace::new("fs_overwrite_ok");
+        ws.write_file("ov.txt", "old");
+        let tool = WriteFileTool::new();
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "ov.txt", "content": "new", "overwrite": true }))
+            .await
+            .unwrap();
+        assert_eq!(out["path"], "ov.txt");
+        assert_eq!(out["encoding"], "utf-8");
+        assert_eq!(ws.read_file("ov.txt"), "new");
+        assert!(out["newSnapshotTag"].as_str().unwrap().len() >= 12);
+    }
+
+    #[tokio::test]
+    async fn write_file_overwrite_irrelevant_for_new_file() {
+        // REQ-E02：目标文件不存在时 overwrite 参数无影响——缺省与显式 false 均可新建
+        let ws = TempWorkspace::new("fs_overwrite_new");
+        let tool = WriteFileTool::new();
+        tool.execute(&mock_ctx(&ws), json!({ "path": "n1.txt", "content": "a" }))
+            .await
+            .unwrap();
+        tool.execute(&mock_ctx(&ws), json!({ "path": "n2.txt", "content": "b", "overwrite": false }))
+            .await
+            .unwrap();
+        assert_eq!(ws.read_file("n1.txt"), "a");
+        assert_eq!(ws.read_file("n2.txt"), "b");
     }
 
     #[tokio::test]

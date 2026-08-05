@@ -114,7 +114,15 @@ impl ToolMiddleware for BackupMiddleware {
                 modified_input: None,
             });
         }
-        let Some(path_str) = input.get("path").and_then(Value::as_str) else {
+        // 写目标入参名归一：write_file/multi_replace 等写类工具统一取
+        // 目标路径（multi_replace 的 schema 入参是 `target_file`，与
+        // write_file 的 `path` 不同名——F5 L1 登记缺口，此处回退识别，
+        // 保证写前快照对 multi_replace 同样生效）
+        let path_str = input
+            .get("path")
+            .or_else(|| input.get("target_file"))
+            .and_then(Value::as_str);
+        let Some(path_str) = path_str else {
             // 无路径目标：无备份义务，放行
             return Ok(BeforeExecuteResult::Proceed {
                 modified_input: None,
