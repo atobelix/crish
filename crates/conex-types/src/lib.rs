@@ -14,6 +14,7 @@ pub mod impact;
 pub mod message;
 pub mod response;
 pub mod session;
+pub mod timer;
 pub mod tool;
 pub mod transition;
 
@@ -43,6 +44,7 @@ pub use impact::{IMPACT_FLAG_FILE_THRESHOLD, ImpactAssessment};
 pub use message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
 pub use response::{ClassifiedStreamError, ProviderOutput};
 pub use session::{AgentEndReason, AgentSessionContext, AgentSessionEvent, AgentSessionState};
+pub use timer::{TimerCondition, TimerDeclaration, TimerHandle};
 pub use tool::{
     ContextCompressionRecord, ContextCompressionReason, ContextCompressionTrigger,
     ProviderDiagnostic, ProviderDiagnosticPhase, RuntimeCheckpointKind, RuntimeCheckpointRecord,

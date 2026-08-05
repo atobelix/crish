@@ -1,6 +1,6 @@
 //! 域事件契约（Rust enum 为双端唯一事实源）
 //!
-//! [AgentEvent] 是 38 种域事件的 serde tagged enum（顶层 `type`），全部字段
+//! [AgentEvent] 是 40 种域事件的 serde tagged enum（顶层 `type`），全部字段
 //! serde camelCase，字段结构以 03-frontend-contract.md §1.1-1.6 清单与 §5.1
 //! 硬依赖表为准。机器可读导出见 contracts/engine-events.json（事件注册表），
 //! 前端 TS 类型与解析器由 scripts/generate-engine-bindings.mjs 生成，落点
@@ -276,11 +276,13 @@ pub enum MissAttribution {
     Unknown,
 }
 
-/// 31 种域事件（tagged enum，双端契约唯一事实源）
+/// 40 种域事件（tagged enum，双端契约唯一事实源）
 ///
 /// 顶层 `type` 为事件名（kebab-case），事件字段全部 camelCase；
 /// 字段清单与类型映射见 contracts/engine-events.json（事件注册表），
 /// 前端 TS 由生成脚本产出（见模块文档）。
+/// 2026-08-05 T-CF-04 定时器域兼容新增 2 变体（timer-fired/timer-cancelled），
+/// 38 → 40；cron-fired 留 T-CF-08（F9 轮，至 41）。
 ///
 /// 跨进程序列化是主用途，事件按值短暂传递，变体间内存差异非热点，
 /// 故不装箱（装箱会破坏调用方 API 形态），显式允许 large_enum_variant。
@@ -709,6 +711,36 @@ pub enum AgentEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         diagnostics: Option<String>,
     },
+
+    // ── 定时器域（T-CF-04：02-CF 方案 §4.1/§4.7 定时器事件；runId 由
+    //     emit 层信封注入——定时器事件无 run 归属，发射时置空串或
+    //    timer-<id> 伪 runId，见 [AgentEventEnvelope::run_id] 描述；唤醒走
+    //    steering 面而非事件面，事件仅数据面：落库 + 前端可观测，§4.7）──
+
+    /// 定时器到期（TimerRegistry 到期触发；Critical 必达落库；唤醒摘要
+    /// 「<prompt>（定时器 <id> 已到期）」，T-CF-12）
+    #[serde(rename = "timer-fired", rename_all = "camelCase")]
+    TimerFired {
+        session_id: String,
+        /// 定时器 id（timer-<seq>）
+        timer_id: String,
+        /// 到期注入的提示内容
+        prompt: String,
+        /// 触发时刻（epoch 毫秒）
+        fired_at_ms: u64,
+    },
+    /// 定时器已取消（早退命中 / AI 显式取消；Soft 尽力投递；
+    /// reason 规范值 early-exit|cancelled）
+    #[serde(rename = "timer-cancelled", rename_all = "camelCase")]
+    TimerCancelled {
+        session_id: String,
+        /// 定时器 id（timer-<seq>）
+        timer_id: String,
+        /// 取消原因（early-exit|cancelled）
+        reason: String,
+        /// 取消时刻（epoch 毫秒）
+        cancelled_at_ms: u64,
+    },
 }
 
 /// 事件类型名宏：由同一份变体名 → wire 名清单展开出
@@ -731,7 +763,7 @@ macro_rules! engine_event_type_names {
         }
 
         impl AgentEvent {
-            /// 全部事件类型名（enum 声明顺序，与事件注册表编号 1-38 一一对应）
+            /// 全部事件类型名（enum 声明顺序，与事件注册表编号 1-40 一一对应）
             pub const ALL_TYPE_NAMES: &'static [&'static str] = &[$($name),+];
         }
     };
@@ -776,6 +808,8 @@ engine_event_type_names! {
     TaskCompleted => "task-completed",
     TaskFailed => "task-failed",
     TaskKilled => "task-killed",
+    TimerFired => "timer-fired",
+    TimerCancelled => "timer-cancelled",
 }
 
 /// 事件 → 背压级别（静态可判定，04 报告 1e；与事件注册表 backpressure 字段
@@ -786,10 +820,11 @@ engine_event_type_names! {
 /// - Delta（可丢）：message-delta（既有非持久化语义）、subagent-event 的
 ///   progress 类、task-output / task-heartbeat（任务域增量，不落库）；
 /// - Soft（尽力）：subagent-event 的 message/tool 类、task-suspicious
-///   （健康判定通知，尽力投递并留痕）；
+///   （健康判定通知，尽力投递并留痕）、timer-cancelled（定时器取消通知，
+///   早退命中/显式取消，02-CF §4.7）；
 /// - Critical（必达）：其余全部（含 subagent-started/subagent-ended、终态、
 ///   审批、审计、任务域终态 task-started/task-completed/task-failed/
-///   task-killed 等）。
+///   task-killed、定时器域 timer-fired 等）。
 pub fn event_backpressure(event: &AgentEvent) -> BackpressureLevel {
     match event {
         AgentEvent::MessageDelta { .. } => BackpressureLevel::Delta,
@@ -807,6 +842,10 @@ pub fn event_backpressure(event: &AgentEvent) -> BackpressureLevel {
         | AgentEvent::TaskCompleted { .. }
         | AgentEvent::TaskFailed { .. }
         | AgentEvent::TaskKilled { .. } => BackpressureLevel::Critical,
+        // 定时器域（02-CF 方案 §4.7 表：timer-fired=Critical 必达落库——
+        // 数据面，唤醒走 steering 面；timer-cancelled=Soft 尽力投递）
+        AgentEvent::TimerFired { .. } => BackpressureLevel::Critical,
+        AgentEvent::TimerCancelled { .. } => BackpressureLevel::Soft,
         _ => BackpressureLevel::Critical,
     }
 }
@@ -840,6 +879,10 @@ pub fn subagent_event_kind_backpressure(kind: SubagentEventKind) -> Backpressure
 #[derive(Debug, Clone, PartialEq)]
 pub struct AgentEventEnvelope {
     pub event: AgentEvent,
+    /// 事件归属 run id（emit 层注入；缺失时前端放行不过滤但多 run 并发
+    /// 过滤失效）。定时器域事件（timer-fired/timer-cancelled）无 run 归属，
+    /// 发射方置空串或 `timer-<id>` 伪 runId（02-CF 方案 §4.7 定稿）——
+    /// 前端按 timerId 消费，不依赖 runId 分组。
     pub run_id: Option<String>,
     pub sequence: Option<u64>,
     /// 信封 schema 版本（wire 层注入，camelCase `schemaVersion`；当前恒为 1）

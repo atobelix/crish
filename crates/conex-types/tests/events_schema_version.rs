@@ -1,16 +1,18 @@
-﻿//! 事件 schema 版本化兼容测试（PE-03 T03.10 / PE-12 T12.5/T12.6）
+//! 事件 schema 版本化兼容测试（PE-03 T03.10 / PE-12 T12.5/T12.6）
 //!
 //! 覆盖：
-//! - v1 golden fixture（tests/fixtures/events-v1/，27 事件每类 ≥1 条，无
+//! - v1 golden fixture（tests/fixtures/events-v1/，40 事件每类 ≥1 条，无
 //!   schemaVersion 的 v1 形状）反序列化全部成功，schemaVersion 缺省补 1；
 //! - 关键字段抽查（含旧 RuntimeError `error: String` 形态）；
 //! - 完整信封帧（runId/sequence）解析；
 //! - 新信封序列化恒带 `schemaVersion: 1`；未来版本号透传不丢弃；
-//! - 变体数一致性断言：38 == 本清单 == 33-event-schema-changelog.md v1 表登记数
+//! - 变体数一致性断言：40 == 本清单 == 33-event-schema-changelog.md v1 表登记数
 //!   （新增事件类型必须同步登记 changelog + 本清单 + fixtures，T12.6 门禁；
 //!   2026-08-03 P5 S3 兼容新增 cache-* 三事件，24 → 27；I2-S8 新增
 //!   security-audit，27 → 28；I5-M7 新增 subagent 域三事件，28 → 31；
-//!   2026-08-04 T-AB-17 任务域兼容新增七事件，31 → 38）；
+//!   2026-08-04 T-AB-17 任务域兼容新增七事件，31 → 38；
+//!   2026-08-05 T-CF-04 定时器域兼容新增两事件，38 → 40；cron-fired 留
+//!   T-CF-08 F9 轮至 41）；
 //! - 缓存测量域三变体（P5 S3 §3.1.3）serde roundtrip / camelCase / 缺省字段；
 //! - 任务域七变体（T-AB-17，01 方案 §4.5 冻结契约）serde roundtrip /
 //!   camelCase / 缺省字段 / 信封 schemaVersion。
@@ -23,10 +25,12 @@ use serde_json::{json, Value};
 /// 统一 fixture 访问辅助（T11.3 golden 规范：tests/common/mod.rs 单一实现）
 mod common;
 
-/// v1 基线 38 事件类型清单（与 changelog v1 表逐条对应，PE-12 T12.6 门禁；
+/// v1 基线 40 事件类型清单（与 changelog v1 表逐条对应，PE-12 T12.6 门禁；
 /// 2026-08-04 T-AB-17 任务域兼容新增七事件，31 → 38，登记于 changelog §四
-/// 1.4 行；原 `v1_baseline_has_exactly_31_event_types` 断言随基线演进改名
-/// 为 38 并同步更新——旧名即留痕，见测试体注释）
+/// 1.4 行；2026-08-05 T-CF-04 定时器域兼容新增两事件，38 → 40，登记于
+/// changelog §四 1.5 行；原 `v1_baseline_has_exactly_31_event_types` /
+/// `v1_baseline_has_exactly_38_event_types` 断言随基线演进改名并同步更新——
+/// 旧名即留痕，见测试体注释）
 const V1_EVENT_TYPES: &[&str] = &[
     "agent-start",
     "agent-end",
@@ -70,26 +74,31 @@ const V1_EVENT_TYPES: &[&str] = &[
     "task-completed",
     "task-failed",
     "task-killed",
+    // 定时器域（T-CF-04 兼容新增，2026-08-05；登记于 changelog §四 1.5 行；
+    // cron-fired 留 T-CF-08 F9 轮，至 41）
+    "timer-fired",
+    "timer-cancelled",
 ];
 
 // ── 1. 变体数一致性：38 清单 ↔ fixtures ↔ changelog ──
 
-/// v1 基线必须为 38 事件（31 基线 + T-AB-17 任务域七变体）。
+/// v1 基线必须为 40 事件（38 基线 + T-CF-04 定时器域两变体）。
 ///
 /// 原断言名 `v1_baseline_has_exactly_31_event_types`（2026-08-03 冻结 31
-/// 事件基线）随 2026-08-04 任务域兼容新增改名升级——基线演进留痕：
-/// 28 → 31 → 38 一路只增不减，均为 minor 兼容新增（旧解析器对未知 `type`
-/// 静默忽略，信封 schemaVersion 恒 1 不变）。
+/// 事件基线）与 `v1_baseline_has_exactly_38_event_types`（2026-08-04 任务域
+/// 演进）随基线演进改名升级——基线演进留痕：28 → 31 → 38 → 40 一路只增
+/// 不减，均为 minor 兼容新增（旧解析器对未知 `type` 静默忽略，信封
+/// schemaVersion 恒 1 不变；cron-fired 留 T-CF-08 F9 轮至 41）。
 #[test]
-fn v1_baseline_has_exactly_38_event_types() {
-    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（38）
+fn v1_baseline_has_exactly_40_event_types() {
+    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（40）
     assert_eq!(
         V1_EVENT_TYPES.len(),
-        38,
-        "v1 基线必须是 38 事件（31 基线 + T-AB-17 任务域七变体）"
+        40,
+        "v1 基线必须是 40 事件（38 基线 + T-CF-04 定时器域两变体）"
     );
     let unique: std::collections::HashSet<&&str> = V1_EVENT_TYPES.iter().collect();
-    assert_eq!(unique.len(), 38, "清单内事件名不得重复");
+    assert_eq!(unique.len(), 40, "清单内事件名不得重复");
 }
 
 #[test]

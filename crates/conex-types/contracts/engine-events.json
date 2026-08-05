@@ -1,8 +1,8 @@
 {
   "contract": "engine-events",
   "schemaVersion": 1,
-  "eventCount": 38,
-  "description": "Rust 域事件契约注册表（唯一事实源：crates/conex-types/src/events.rs 的 AgentEvent enum）。本文件是机器可读导出，由生成脚本 scripts/generate-engine-bindings.mjs 消费，产出 TS 类型与解析器（packages/shared-types/src/generated/engine/**）。任何修改必须同步 events.rs（cargo test -p conex-types 的 registry_drift 测试锁定两侧一致）。事件编号即本表顺序（1-38），对应 enum 声明顺序。每事件 backpressure 字段为背压三级分类（delta/soft/critical，04 报告 1e）；subagent-event 的 kindBackpressure 为类别级分类（progress=delta、message/tool=soft）。",
+  "eventCount": 40,
+  "description": "Rust 域事件契约注册表（唯一事实源：crates/conex-types/src/events.rs 的 AgentEvent enum）。本文件是机器可读导出，由生成脚本 scripts/generate-engine-bindings.mjs 消费，产出 TS 类型与解析器（packages/shared-types/src/generated/engine/**）。任何修改必须同步 events.rs（cargo test -p conex-types 的 registry_drift 测试锁定两侧一致）。事件编号即本表顺序（1-40），对应 enum 声明顺序（2026-08-05 T-CF-04 定时器域兼容新增 timer-fired/timer-cancelled，38 → 40；cron-fired 留 T-CF-08 F9 轮至 41）。每事件 backpressure 字段为背压三级分类（delta/soft/critical，04 报告 1e）；subagent-event 的 kindBackpressure 为类别级分类（progress=delta、message/tool=soft）。",
   "events": [
     {
       "id": 1,
@@ -1382,6 +1382,74 @@
           "type": "string",
           "required": false,
           "description": "终止诊断（附加说明；可选）"
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "type": "timer-fired",
+      "rustVariant": "TimerFired",
+      "domain": "timer",
+      "description": "定时器到期（T-CF-04：TimerRegistry 到期触发；Critical 必达落库——数据面，AI 实际唤醒走 steering 条目，事件与唤醒解耦；runId 由 emit 层信封注入，无 run 归属时置空串或 timer-<id> 伪 runId，02-CF 方案 §4.7）",
+      "backpressure": "critical",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timerId",
+          "type": "string",
+          "required": true,
+          "description": "定时器 id（timer-<seq>）"
+        },
+        {
+          "name": "prompt",
+          "type": "string",
+          "required": true,
+          "description": "到期注入的提示内容"
+        },
+        {
+          "name": "firedAtMs",
+          "type": "number",
+          "required": true,
+          "description": "触发时刻（epoch 毫秒）"
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "type": "timer-cancelled",
+      "rustVariant": "TimerCancelled",
+      "domain": "timer",
+      "description": "定时器已取消（T-CF-04：早退命中 / AI 显式取消；Soft 尽力投递；runId 由 emit 层信封注入，无 run 归属时置空串或 timer-<id> 伪 runId，02-CF 方案 §4.7）",
+      "backpressure": "soft",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "timerId",
+          "type": "string",
+          "required": true,
+          "description": "定时器 id（timer-<seq>）"
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true,
+          "description": "取消原因（early-exit|cancelled）"
+        },
+        {
+          "name": "cancelledAtMs",
+          "type": "number",
+          "required": true,
+          "description": "取消时刻（epoch 毫秒）"
         }
       ]
     }

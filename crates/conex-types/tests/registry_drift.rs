@@ -5,8 +5,9 @@
 //! contracts/engine-events.json 是给生成脚本（scripts/generate-engine-bindings.mjs）
 //! 的机器可读导出，本测试把注册表与 Rust 侧真实 serde 行为双向锁定：
 //!
-//! - 事件清单：注册表 38 个 type 名与顺序 == [AgentEvent::ALL_TYPE_NAMES]
-//!   （enum 声明顺序，编号 1-38 连续）；
+//! - 事件清单：注册表 40 个 type 名与顺序 == [AgentEvent::ALL_TYPE_NAMES]
+//!   （enum 声明顺序，编号 1-40 连续；2026-08-05 T-CF-04 定时器域兼容新增
+//!   timer-fired/timer-cancelled，38 → 40；cron-fired 留 T-CF-08 F9 轮至 41）；
 //! - 事件字段：按注册表必填字段构造样本 → 反序列化为 [AgentEvent] →
 //!   回序列化，断言必填字段全部在场、且无注册表外字段（字段名漂移即失败）；
 //! - 载荷结构：同一模式逐类型回环（struct + tagged enum 全变体）；
@@ -199,12 +200,12 @@ fn registry_event_types_match_enum_declaration_order() {
     let reg = registry();
     assert_eq!(reg.contract, "engine-events", "注册表契约名必须为 engine-events");
     assert_eq!(reg.schema_version, 1);
-    assert_eq!(reg.event_count, 38);
-    assert_eq!(reg.events.len(), 38, "事件注册表必须是 38 条");
+    assert_eq!(reg.event_count, 40);
+    assert_eq!(reg.events.len(), 40, "事件注册表必须是 40 条");
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        38,
-        "AgentEvent enum 必须是 38 种域事件"
+        40,
+        "AgentEvent enum 必须是 40 种域事件"
     );
     for (i, ev) in reg.events.iter().enumerate() {
         assert_eq!(ev.id as usize, i + 1, "事件编号必须从 1 连续递增");
@@ -482,16 +483,17 @@ fn enum_values_match_serde_wire() {
     check_enum!(reg, "SubagentEndStatus", SubagentEndStatus, 3);
 }
 
-/// 事件总数仍为 38：`operation` 是 security-audit 载荷内的字段值
+/// 事件总数仍为 40：`operation` 是 security-audit 载荷内的字段值
 /// （SecurityAuditOperation 枚举），不是独立事件类型——新增 operation
 /// 值不改变事件清单；本测试锚定「注册表值 ↔ serde 行为」双向不漂移。
 #[test]
 fn security_audit_undeclared_write_operation_stays_in_sync() {
     let reg = registry();
-    // 事件总数保持 38（operation 值是载荷内字段，非独立事件类型；
-    // 2026-08-04 T-AB-17 任务域兼容新增七事件，31 → 38）
-    assert_eq!(reg.event_count, 38, "新增 operation 值不得改变事件总数");
-    assert_eq!(reg.events.len(), 38);
+    // 事件总数保持 40（operation 值是载荷内字段，非独立事件类型；
+    // 2026-08-04 T-AB-17 任务域兼容新增七事件，31 → 38；
+    // 2026-08-05 T-CF-04 定时器域兼容新增两事件，38 → 40）
+    assert_eq!(reg.event_count, 40, "新增 operation 值不得改变事件总数");
+    assert_eq!(reg.events.len(), 40);
 
     // 注册表必须登记 undeclared-write（T-ESC-02 新值）
     let spec = &reg.enums["SecurityAuditOperation"];
@@ -518,7 +520,7 @@ fn security_audit_undeclared_write_operation_stays_in_sync() {
 #[test]
 fn registry_entries_are_reachable_from_events() {
     let reg = registry();
-    // 从 38 事件出发做传递闭包；JsonValue/string/number/boolean 为基元。
+    // 从 40 事件出发做传递闭包；JsonValue/string/number/boolean 为基元。
     let mut reachable: std::collections::BTreeSet<String> =
         reg.events.iter().flat_map(|e| e.fields.iter()).map(|f| f.ts_type.clone()).collect();
     let mut queue: Vec<String> = reachable.iter().cloned().collect();
@@ -686,6 +688,8 @@ fn subagent_event_kind_backpressure_matches_registry() {
 /// - 任务域（T-AB-17，01 方案 §4.5 表）：task-output/task-heartbeat=Delta
 ///   （可丢不落库）、task-suspicious=Soft（尽力投递留痕）、task-started/
 ///   task-completed/task-failed/task-killed=Critical（终态必达落库）；
+/// - 定时器域（T-CF-04，02-CF §4.7 表）：timer-fired=Critical（数据面必达
+///   落库）、timer-cancelled=Soft（早退命中/显式取消，尽力投递）；
 /// - 终态/审批/审计等既有关键事件保持 Critical（不改变既有丢帧语义）。
 #[test]
 fn backpressure_classification_semantics_anchored() {
@@ -709,6 +713,9 @@ fn backpressure_classification_semantics_anchored() {
     for wire in ["task-started", "task-completed", "task-failed", "task-killed"] {
         assert_eq!(level_of(wire), "critical", "任务事件 {wire} 为 Critical（终态必达落库）");
     }
+    // 定时器域两事件分级锚定（T-CF-04 §4.7 冻结契约，防分级漂移）
+    assert_eq!(level_of("timer-fired"), "critical", "timer-fired 为 Critical（数据面必达落库）");
+    assert_eq!(level_of("timer-cancelled"), "soft", "timer-cancelled 为 Soft（尽力投递）");
     // 既有关键事件全部保持 Critical（对齐 buffer.rs drop_class_of：非 delta 全 Critical）
     for wire in [
         "agent-start",
@@ -723,5 +730,118 @@ fn backpressure_classification_semantics_anchored() {
         "security-audit",
     ] {
         assert_eq!(level_of(wire), "critical", "事件 {wire} 必须保持 Critical（既有语义）");
+    }
+}
+
+// ── 8. 定时器域（T-CF-04：02-CF 方案 §4.1/§4.7 冻结契约）──
+
+/// timer-fired 背压必须为 Critical（02-CF §4.7 表：必达落库——数据面，
+/// AI 实际唤醒走 steering 面，事件与唤醒解耦）
+#[test]
+fn timer_fired_backpressure_is_critical() {
+    let event = AgentEvent::TimerFired {
+        session_id: "s1".into(),
+        timer_id: "timer-1".into(),
+        prompt: "检查编译".into(),
+        fired_at_ms: 1_785_456_600_000,
+    };
+    assert_eq!(event_backpressure(&event), BackpressureLevel::Critical);
+}
+
+/// timer-cancelled 背压必须为 Soft（02-CF §4.7 表：尽力投递——早退命中/
+/// 显式取消的通知，可丢弃重发）
+#[test]
+fn timer_cancelled_backpressure_is_soft() {
+    let event = AgentEvent::TimerCancelled {
+        session_id: "s1".into(),
+        timer_id: "timer-1".into(),
+        reason: "early-exit".into(),
+        cancelled_at_ms: 1_785_456_600_000,
+    };
+    assert_eq!(event_backpressure(&event), BackpressureLevel::Soft);
+}
+
+/// 累计基线 40（00 总方案 §3.16 / 02-CF §4.7 登记流程）：两枚定时器事件
+/// 按 enum 声明序登记为 39/40（timer-fired=critical、timer-cancelled=soft），
+/// 字段全量必填且与 serde 行为一致；cron-fired 留 T-CF-08（F9 轮，至 41），
+/// 本轮不得提前登记。
+#[test]
+fn registry_drift_timer_events_registered() {
+    let reg = registry();
+    // 累计基线：38 → 40（cron-fired 留 F9 至 41）
+    assert_eq!(reg.event_count, 40, "F6 轮末累计基线必须为 40");
+    assert_eq!(reg.events.len(), 40);
+    assert_eq!(
+        AgentEvent::ALL_TYPE_NAMES.len(),
+        40,
+        "AgentEvent enum 变体数必须为 40"
+    );
+
+    // timer-fired（39）：Critical 必达落库，字段 sessionId/timerId/prompt/firedAtMs
+    let fired = reg
+        .events
+        .iter()
+        .find(|e| e.wire == "timer-fired")
+        .expect("注册表必须登记 timer-fired");
+    assert_eq!(fired.id, 39, "timer-fired 编号必须为 39（声明序）");
+    assert_eq!(fired.rust_variant, "TimerFired");
+    assert_eq!(fired.domain, "timer", "timer-fired 必须归属 timer 域");
+    assert_eq!(fired.backpressure, "critical", "timer-fired 必须为 Critical（必达落库）");
+    assert!(fired.kind_backpressure.is_none(), "timer-fired 不得登记 kindBackpressure");
+    let fired_fields: Vec<&str> = fired.fields.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(
+        fired_fields,
+        vec!["sessionId", "timerId", "prompt", "firedAtMs"],
+        "timer-fired 字段形状与 §4.7 不符"
+    );
+
+    // timer-cancelled（40）：Soft 尽力投递，字段 sessionId/timerId/reason/cancelledAtMs
+    let cancelled = reg
+        .events
+        .iter()
+        .find(|e| e.wire == "timer-cancelled")
+        .expect("注册表必须登记 timer-cancelled");
+    assert_eq!(cancelled.id, 40, "timer-cancelled 编号必须为 40（声明序）");
+    assert_eq!(cancelled.rust_variant, "TimerCancelled");
+    assert_eq!(cancelled.domain, "timer", "timer-cancelled 必须归属 timer 域");
+    assert_eq!(cancelled.backpressure, "soft", "timer-cancelled 必须为 Soft（尽力投递）");
+    assert!(
+        cancelled.kind_backpressure.is_none(),
+        "timer-cancelled 不得登记 kindBackpressure"
+    );
+    let cancelled_fields: Vec<&str> = cancelled.fields.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(
+        cancelled_fields,
+        vec!["sessionId", "timerId", "reason", "cancelledAtMs"],
+        "timer-cancelled 字段形状与 §4.7 不符"
+    );
+
+    // 两事件字段全部必填（无可选字段；reason 为 String 承载 early-exit|cancelled）
+    for ev in [&fired, &cancelled] {
+        assert!(
+            ev.fields.iter().all(|f| f.required),
+            "事件 {} 的字段必须全部必填",
+            ev.wire
+        );
+    }
+
+    // cron-fired 留 T-CF-08（F9 轮，至 41）：本轮不得提前登记
+    assert!(
+        reg.events.iter().all(|e| e.wire != "cron-fired"),
+        "cron-fired 必须留 T-CF-08（F9 轮，至 41），不得提前登记"
+    );
+
+    // 注册表样本 ↔ serde 行为双向一致（build_event_sample 构造 → 反序列化
+    // → 回序列化，必填字段全在场）
+    for ev in [&fired, &cancelled] {
+        let sample = build_event_sample(&reg, ev);
+        let parsed: AgentEvent = serde_json::from_value(sample)
+            .unwrap_or_else(|e| panic!("事件 {} 按注册表样本反序列化失败：{e}", ev.wire));
+        assert_eq!(
+            parsed.type_name(),
+            ev.wire,
+            "事件 {} 的 type_name 与注册表 wire 不一致",
+            ev.wire
+        );
     }
 }
