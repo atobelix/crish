@@ -1,0 +1,9 @@
+{
+  "cronId": "cron-1",
+  "expression": "0 9 * * *",
+  "firedAtMs": 1785456600000,
+  "iteration": 1,
+  "prompt": "检查编译",
+  "sessionId": "s1",
+  "type": "cron-fired"
+}

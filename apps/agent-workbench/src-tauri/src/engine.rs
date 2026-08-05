@@ -48,6 +48,13 @@ use agent_tools::definition::{ToolDefinition, ToolError};
 use agent_tools::mcp::{register_plugin_server, McpClientBridge, McpServerConfig};
 use agent_tools::registry::ToolRegistry;
 use agent_tools::tools::set_timer::TimerChannel;
+use agent_tools::tools::wait_subagents::{DispatchDeclaration, SubagentWaitChannel};
+// R-CF3 装配收口（T-CF-10）：wait 通道契约与适配器经库目标引入
+// （wait_channel.rs 是库模块，bin 目标自动依赖同包 lib）
+use crish_agent_workbench::wait_channel::{
+    ControlBusResolver, EventStreamBroadcast, MemoryAgentSource, MemoryWaitStore,
+    NoopControlBusResolver, SubagentStatusSource, WaitChannel, WaitStore,
+};
 use async_trait::async_trait;
 use conex_types::error::ProviderErrorKind;
 use conex_types::events::{AgentEvent, AgentEventEnvelope, MissAttribution, RunCacheStats};
@@ -72,6 +79,7 @@ use crate::buffer::{drop_class_of, EventBuffer};
 use crate::core_event_bridge::{EmitReport, EventBridge};
 use crate::fs_commands::skills::RustSkill;
 use crate::timers::{AgentEventSink, MemoryTimerStore, QueuePendingSink, TimerRegistry};
+use crate::watchdog::{LastWakeupTracker, Watchdog, WatchdogOptions};
 
 /// 首字节超时（等待流首个字节到达；None = 不设限，对齐 normalizeStreamTimeoutMs）
 const DEFAULT_FIRST_BYTE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -576,6 +584,17 @@ fn to_loop_event(event: WireEvent) -> ProviderStreamEvent {
 
 // ── EngineHandle ──────────────────────────────────────────────────
 
+/// T-CF-10/13 共享适配桥：WaitChannel 的 dispatch 声明存储
+/// （wait_channel.rs 库目标 [MemoryWaitStore]）同时作为 A7 watchdog 的
+/// 声明读取源——同一实例双 trait 注入（[WaitStore] ↔ [crate::watchdog::DispatchStore]），
+/// wait 落库即 watchdog 可读，重启恢复数据面统一（watchdog.rs 的
+/// MemoryDispatchStore 为测试面独立实现，生产装配统一走本桥）。
+impl crate::watchdog::DispatchStore for MemoryWaitStore {
+    fn load_declarations(&self) -> Vec<DispatchDeclaration> {
+        WaitStore::load_all(self)
+    }
+}
+
 /// 引擎句柄（B6.4：provider 生效配置 + 工具注册表 + engineReady）
 ///
 /// - `ready()`：provider 配置三件套（baseUrl/model/apiKey）齐备即可发起
@@ -617,6 +636,25 @@ pub(crate) struct EngineHandle {
     /// 到期条目落在真实队列，R-CF3 idle 续 run 装配收口时消费）
     #[allow(dead_code)] // R-CF3：续 run 收口接线
     timer_steering_queue: Arc<Mutex<PendingMessageQueue>>,
+    /// 子代理等待通道（T-CF-10：SubagentWaitChannel 契约实现；经
+    /// BuiltinToolConfig.subagent_wait_channel 注入 wait_subagents 工具）
+    wait_channel: Arc<dyn SubagentWaitChannel>,
+    /// dispatch 声明存储（WaitChannel 落库 / A7 watchdog 读取的共享
+    /// 实例；conex-db session_meta 真适配接线见 wait_channel.rs 模块头
+    /// 注记——与 TimerStore 同一接线缺口）
+    dispatch_store: Arc<MemoryWaitStore>,
+    /// subagent-ended 事件流广播（EventQueue 旁路适配：wait_for_terminal
+    /// 的订阅面；事件收口旁路点 feed 接线在 R-CF3 后续轮落地）
+    #[allow(dead_code)] // R-CF3：事件收口旁路点 feed 接线
+    terminal_stream: Arc<EventStreamBroadcast>,
+    /// 最近事件唤醒跟踪（watchdog 失联判定数据源；事件消费旁路点
+    /// mark_wakeup 接线在 R-CF3 后续轮，接线前 None = 从未唤醒）
+    #[allow(dead_code)] // R-CF3：事件消费旁路点 mark_wakeup 接线
+    last_wakeup: Arc<LastWakeupTracker>,
+    /// Cron 调度注册表（T-CF-09 A5 提供；None = 未装配降级，workflow
+    /// 命令面经 main.rs（A9）消费）
+    #[allow(dead_code)] // A9：workflow 命令登记消费
+    scheduler_registry: Option<Arc<crate::sched::SchedulerRegistry>>,
 }
 
 impl EngineHandle {
@@ -652,14 +690,65 @@ impl EngineHandle {
             );
         }
 
+        // ── T-CF-10：WaitChannel 装配（SubagentWaitChannel 契约实现）──
+        // dispatch 声明存储与 A7 watchdog 共享（同一实例双 trait 注入，
+        // 桥接 impl 见文件头部「T-CF-10/13 共享适配桥」段）；终态事件流
+        // 广播为事件收口旁路点的订阅面（wait 通道不直接持有 EventQueue）
+        let dispatch_store = Arc::new(MemoryWaitStore::new());
+        let terminal_stream = Arc::new(EventStreamBroadcast::new());
+        let wait_channel = Arc::new(WaitChannel::new(
+            Arc::clone(&dispatch_store) as Arc<dyn WaitStore>,
+            Arc::new(MemoryAgentSource::new()) as Arc<dyn SubagentStatusSource>,
+            Arc::clone(&terminal_stream),
+            Arc::new(NoopControlBusResolver) as Arc<dyn ControlBusResolver>,
+        ));
+
+        // ── T-CF-13：Watchdog 装配（A7 提供 pub(crate) 构造器与 spawn）──
+        // 最近事件唤醒跟踪（事件消费旁路点 mark_wakeup 接线在 R-CF3
+        // 后续轮；接线前 None = 从未唤醒，视为超时触发兜底）
+        let last_wakeup = Arc::new(LastWakeupTracker::new());
+        // 引擎级无会话归属：空串占位；会话级 watchdog 由 T-CF-11（A8）
+        // idle 续 run 收口按会话 spawn（watchdog.rs 头部注记）。
+        // active_timer_probe：TimerRegistry 无同步计数接口（timers.rs
+        // 本轮只读），缺省 0 不抑制兜底——同步计数接线登记遗留问题
+        let watchdog = Arc::new(Watchdog::new(
+            String::new(),
+            Arc::clone(&timer_steering_queue),
+            Arc::clone(&dispatch_store) as Arc<dyn crate::watchdog::DispatchStore>,
+            Arc::clone(&last_wakeup),
+            Arc::new(|| 0),
+            WatchdogOptions::default(),
+        ));
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            crate::watchdog::spawn(&runtime, Arc::clone(&watchdog));
+        } else {
+            tracing::debug!(
+                target: "engine",
+                "Watchdog 装配跳过：当前上下文无 tokio runtime"
+            );
+        }
+
+        // ── T-CF-09：SchedulerRegistry 装配（A5 提供 pub(crate) 构造器）──
+        // 已按 A5 落盘签名对齐（pending/events/store/launcher 四适配；
+        // launcher 未接线 → is_daemon 触发降级 steering 注入，防丢唤醒）
+        let scheduler_registry = assemble_scheduler_registry(&timer_steering_queue);
+
         // 内置工具注册（B5.2：fs / shell / search / diff；F1 R-AB1：
         // BuiltinToolConfig 注入后台任务管理器，经 ToolContext.background
         // 透传给 shell 工具——adopt 通道就位；G5 T-CF-05/06：timer_channel
-        // 注入 TimerRegistry 契约，set_timer / cancel_timer 工具消费）
+        // 注入 TimerRegistry 契约，set_timer / cancel_timer 工具消费；
+        // T-CF-10：subagent_wait_channel 注入 WaitChannel 契约，
+        // wait_subagents 工具消费）
         let mut registry = ToolRegistry::new();
         let config = agent_tools::tools::BuiltinToolConfig {
             background_manager,
             timer_channel: Some(Arc::clone(&timer_registry) as Arc<dyn TimerChannel>),
+            // 装配收口（T-CF-10）：BuiltinToolConfig 全字段显式注入后改走
+            // register_builtin_tools_with_config（现状默认注册处）；未装配
+            // 字段保持 Default（None 语义，工具返回 common.unsupported 降级）
+            subagent_wait_channel: Some(
+                Arc::clone(&wait_channel) as Arc<dyn SubagentWaitChannel>
+            ),
             ..agent_tools::tools::BuiltinToolConfig::default()
         };
         if let Err(error) =
@@ -708,6 +797,11 @@ impl EngineHandle {
             cache_sessions: Mutex::new(HashMap::new()),
             timer_registry,
             timer_steering_queue,
+            wait_channel,
+            dispatch_store,
+            terminal_stream,
+            last_wakeup,
+            scheduler_registry,
         }
     }
 
@@ -780,6 +874,40 @@ impl EngineHandle {
     #[allow(dead_code)] // R-CF3：续 run 收口接线
     pub(crate) fn timer_steering_queue(&self) -> Arc<Mutex<PendingMessageQueue>> {
         Arc::clone(&self.timer_steering_queue)
+    }
+
+    /// 子代理等待通道（T-CF-10 装配产物；SubagentWaitChannel 契约面，
+    /// 与注入 wait_subagents 工具的是同一实例）
+    #[cfg_attr(not(test), allow(dead_code))] // 测试断言面消费；生产经工具注册表消费
+    pub(crate) fn wait_channel(&self) -> Arc<dyn SubagentWaitChannel> {
+        Arc::clone(&self.wait_channel)
+    }
+
+    /// dispatch 声明存储（T-CF-10/13 共享实例；wait 落库 / watchdog 读取
+    /// / 测试断言读面）
+    #[cfg_attr(not(test), allow(dead_code))] // 测试断言面消费
+    pub(crate) fn dispatch_store(&self) -> Arc<MemoryWaitStore> {
+        Arc::clone(&self.dispatch_store)
+    }
+
+    /// 终态事件流广播（T-CF-10：事件收口旁路点 feed 接线用——任何
+    /// subagent-ended 事件到达即灌入广播，wait 订阅者同步消费）
+    #[allow(dead_code)] // R-CF3：事件收口旁路点 feed 接线
+    pub(crate) fn terminal_stream(&self) -> Arc<EventStreamBroadcast> {
+        Arc::clone(&self.terminal_stream)
+    }
+
+    /// 最近事件唤醒跟踪（T-CF-13：事件消费旁路点 mark_wakeup 接线用）
+    #[allow(dead_code)] // R-CF3：事件消费旁路点 mark_wakeup 接线
+    pub(crate) fn last_wakeup(&self) -> Arc<LastWakeupTracker> {
+        Arc::clone(&self.last_wakeup)
+    }
+
+    /// Cron 调度注册表（T-CF-09 装配产物；None = 未装配降级；
+    /// A9 workflow 命令登记消费）
+    #[allow(dead_code)] // A9：workflow 命令登记消费
+    pub(crate) fn scheduler_registry(&self) -> Option<Arc<crate::sched::SchedulerRegistry>> {
+        self.scheduler_registry.clone()
     }
 
     /// 注册插件 MCP server（E5 内容 1）：PluginMcpDeclaration（stdio
@@ -897,6 +1025,43 @@ impl Default for EngineHandle {
     fn default() -> Self {
         Self::new(None)
     }
+}
+
+/// T-CF-09：Cron 调度注册表装配（A5 提供 pub(crate) 构造器与 restore；
+/// 已按 A5 落盘签名对齐：pending / events / store / launcher 四适配——
+/// pending 落真实 PendingMessageQueue（与定时器同队列）、events 用 sched
+/// 的事件槽（缓冲 + 日志，EventBridge 真适配后续轮）、store 用 sched 的
+/// 内存版（`sched_<id>` 键形状已冻结，conex-db 真适配与 TimerStore 同一
+/// 接线缺口）。
+///
+/// is_daemon 独立 run 拉起点（[crate::sched::DaemonRunLauncher]）暂不
+/// 接线：RunProducer 的 prompt 注入适配在 A8 域（T-CF-11 core_run_commands），
+/// 未接线时 daemon 触发降级为 steering 注入（sched.rs 防丢唤醒语义）。
+///
+/// 装配失败降级（None 保持 unsupported 语义，不阻塞引擎启动）。
+fn assemble_scheduler_registry(
+    timer_steering_queue: &Arc<Mutex<PendingMessageQueue>>,
+) -> Option<Arc<crate::sched::SchedulerRegistry>> {
+    let registry = Arc::new(crate::sched::SchedulerRegistry::new(
+        Arc::new(crate::sched::QueuePendingSink::new(Arc::clone(timer_steering_queue))),
+        Arc::new(crate::sched::SchedEventSink::new()),
+        crate::sched::MemorySchedStore::shared(),
+        None,
+    ));
+    // 启动恢复：扫描已持久化声明重建 cron sleep（与 TimerRegistry::restore
+    // 同模式；try_current 守卫：纯同步构造上下文跳过，不 panic）
+    if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+        let registry = Arc::clone(&registry);
+        runtime.spawn(async move {
+            registry.restore().await;
+        });
+    } else {
+        tracing::debug!(
+            target: "engine",
+            "SchedulerRegistry 启动恢复跳过：当前上下文无 tokio runtime"
+        );
+    }
+    Some(registry)
 }
 
 // ── BufferedRunEventBridge：缓冲 + 序列化 + 发射组装 ───────────────
@@ -3234,5 +3399,160 @@ mod timer_wiring_tests {
             entries[0].text
         );
         assert!(entries[0].is_steering, "条目应带 steering 保护位");
+    }
+}
+
+/// T-CF-10 装配测试：EngineHandle 的 WaitChannel 接线面。
+///
+/// 独立模块（不与上方既有 tests 模块共享上下文），聚焦
+/// `engine_registers_wait_channel` 等验收断言。
+#[cfg(test)]
+mod wait_wiring_tests {
+    use super::*;
+    use agent_tools::context::create_mock_tool_context;
+    use agent_tools::tools::wait_subagents::WaitMode;
+    use conex_types::events::SubagentEndStatus;
+
+    /// EngineHandle::new 后 wait_subagents 工具已注册且 WaitChannel 已
+    /// 接线：parallel-work 非阻塞快照不再返回 unsupported；声明经工具
+    /// 落库到引擎共享 dispatch 存储（与 watchdog 同一数据面）。
+    #[tokio::test]
+    async fn engine_registers_wait_channel() {
+        let engine = EngineHandle::new(None);
+        // 工具注册面（T-CF-10：通道为 None 时工具才返回 unsupported）
+        let names: Vec<String> = engine
+            .tool_registry()
+            .list_definitions()
+            .iter()
+            .map(|d| d.name.clone())
+            .collect();
+        assert!(
+            names.iter().any(|n| n == "wait_subagents"),
+            "wait_subagents 应已注册：{names:?}"
+        );
+        // 端到端：parallel-work（非阻塞快照路径）不再返回 unsupported
+        let tool = engine
+            .tool_registry()
+            .get("wait_subagents")
+            .expect("wait_subagents 已注册");
+        let ctx = create_mock_tool_context();
+        let out = tool
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "subagentIds": ["sa-1", "sa-2"],
+                    "mode": "parallel-work"
+                }),
+            )
+            .await
+            .expect("WaitChannel 已接线，parallel-work 不应返回 unsupported");
+        assert_eq!(out["mode"], "parallel-work");
+        assert_eq!(out["allTerminal"], false);
+        assert_eq!(out["agents"][0]["subagentId"], "sa-1");
+        assert_eq!(out["agents"][0]["status"], "running");
+        // 声明已落库：引擎共享 dispatch 存储（watchdog 读同一数据面）
+        let loaded = engine.dispatch_store().load_all();
+        assert_eq!(loaded.len(), 1, "工具执行应持久化调度声明");
+        assert_eq!(loaded[0].mode, WaitMode::ParallelWork);
+        assert_eq!(
+            loaded[0].subagent_ids,
+            vec!["sa-1".to_string(), "sa-2".to_string()]
+        );
+        // 等待通道契约面可用（与工具注入同一实例）
+        let snapshot = engine
+            .wait_channel()
+            .snapshot(&["sa-1".to_string()])
+            .await
+            .expect("snapshot 应可用");
+        assert_eq!(snapshot[0].subagent_id, "sa-1");
+    }
+
+    /// 引擎级事件驱动等待全链路：wait_subagents await-all 等待期间，
+    /// 终态事件经引擎持有的广播实例 feed（EventQueue 旁路适配的接线
+    /// 面）→ 提前返回；返回后订阅断流。
+    #[tokio::test]
+    async fn engine_wait_channel_wakeup_via_terminal_stream() {
+        let engine = EngineHandle::new(None);
+        let tool = engine
+            .tool_registry()
+            .get("wait_subagents")
+            .expect("wait_subagents 已注册");
+        let ctx = create_mock_tool_context();
+        let wait_task = tokio::spawn({
+            let tool = tool;
+            let ctx = ctx;
+            async move {
+                tool.execute(
+                    &ctx,
+                    serde_json::json!({
+                        "subagentIds": ["sa-1"],
+                        "mode": "await-all",
+                        "timeoutMs": 60_000
+                    }),
+                )
+                .await
+            }
+        });
+        // 等待订阅建立（wait_for_terminal 与 feed 之间的同步点）
+        let stream = engine.terminal_stream();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+        while tokio::time::Instant::now() < deadline {
+            if stream.subscriber_count() > 0 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        assert!(
+            stream.subscriber_count() > 0,
+            "wait 期间应已订阅终态事件流"
+        );
+        // feed subagent-ended（事件收口旁路点接线面的同构调用）
+        stream.feed(&AgentEvent::SubagentEnded {
+            session_id: "mock-session".to_string(),
+            subagent_id: "sa-1".to_string(),
+            subagent_run_id: "run-sa-1".to_string(),
+            status: SubagentEndStatus::Completed,
+            summary: Some("完成".to_string()),
+            ended_at: now_iso_utc(),
+        });
+        let out = tokio::time::timeout(Duration::from_secs(5), wait_task)
+            .await
+            .expect("工具应在超时窗口内返回")
+            .expect("tokio 任务 join 失败（工具执行任务 panic）")
+            .expect("工具执行不应报错");
+        assert_eq!(out["allTerminal"], true);
+        assert_eq!(out["agents"][0]["status"], "completed");
+        assert_eq!(
+            stream.subscriber_count(),
+            0,
+            "wait 返回后订阅应断流（mpsc drop）"
+        );
+    }
+
+    /// 装配降级：watchdog 与 wait 通道的共享 dispatch 存储桥接——
+    /// wait 落库后 watchdog 可读（同一实例双 trait 注入断言）
+    #[tokio::test]
+    async fn engine_dispatch_store_bridges_to_watchdog() {
+        let engine = EngineHandle::new(None);
+        let declaration = DispatchDeclaration {
+            mode: WaitMode::AwaitAll,
+            wait_ms: None,
+            subagent_ids: vec!["sa-1".to_string()],
+            dispatched_at_ms: 1_000,
+        };
+        engine
+            .wait_channel()
+            .persist_declaration(&declaration)
+            .await
+            .expect("声明落库应成功");
+        // 桥接读面：watchdog 的 DispatchStore 看到同一数据
+        let store = engine.dispatch_store();
+        let as_watchdog: Arc<dyn crate::watchdog::DispatchStore> = store;
+        let declarations = as_watchdog.load_declarations();
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].subagent_ids, vec!["sa-1".to_string()]);
+        // 唤醒跟踪面可用（watchdog 失联判定数据源）
+        engine.last_wakeup().mark_wakeup_at(2_000);
+        assert_eq!(engine.last_wakeup().last_wakeup_ms(), Some(2_000));
     }
 }

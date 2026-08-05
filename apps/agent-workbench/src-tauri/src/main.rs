@@ -48,9 +48,15 @@ mod power;
 mod process;
 mod pty;
 mod resource;
+
 mod session_commands;
 mod status_diagnostics;
 mod timers;
+mod sched;
+mod workflow_commands;
+mod wakeup_summary;
+
+mod watchdog;
 mod workspace;
 
 use std::sync::{Arc, RwLock};
@@ -172,6 +178,14 @@ command_registry![
     ("trash_list", core_run_commands::trash_list),
     ("trash_restore", core_run_commands::trash_restore),
     ("trash_purge", core_run_commands::trash_purge),
+    // ── workflow 命令面（T-CF-14：六条实装，消除前端幽灵命令；
+    //    wire 名 kebab-case，经 #[tauri::command(rename=...)] 对齐）──
+    ("create-workflow", workflow_commands::create_workflow),
+    ("list-workflows", workflow_commands::list_workflows),
+    ("update-workflow", workflow_commands::update_workflow),
+    ("delete-workflow", workflow_commands::delete_workflow),
+    ("trigger-workflow", workflow_commands::trigger_workflow),
+    ("list-workflow-runs", workflow_commands::list_workflow_runs),
 ];
 
 /// 当前生效日志级别：`CRISH_LOG_LEVEL` 优先，dev debug / release info
@@ -344,8 +358,16 @@ fn main() {
             // ⑧ CoreRunState / EventBridge / SharedDb / 后台任务注册表 manage
             app.manage(Arc::clone(&core_state));
             app.manage(bridge);
-            app.manage(shared_db);
+            app.manage(shared_db.clone());
             app.manage(Arc::clone(&background_tasks));
+
+            // ⑧c workflow 命令后端（T-CF-14：六条命令的托管状态；session_meta
+            // `sched_*` 键持久化 + steering 队列；SchedulerRegistry 委托槽在
+            // A3 装配收口后经 WorkflowBackend::set_registry 注入——见
+            // workflow_commands.rs 模块头「委托边界」）
+            app.manage(workflow_commands::WorkflowCommandState::new(
+                shared_db.local_db(),
+            ));
 
             // ⑨ 模型目录（P3 步骤 5）：内置表挂 Tauri state（catalog_get /
             //    catalog_refresh 消费；覆盖/扫描合并仅经命令入口进行）

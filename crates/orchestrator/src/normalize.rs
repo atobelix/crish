@@ -67,6 +67,9 @@ fn event_session_id_mut(event: &mut AgentEvent) -> &mut String {
         // 定时器事件无 run 归属时 sessionId 可空串，由本归一化补会话）
         AgentEvent::TimerFired { session_id, .. } => session_id,
         AgentEvent::TimerCancelled { session_id, .. } => session_id,
+        // T-CF-08 cron 域事件（均携带 sessionId；M6 域补齐归一化位，
+        // cron 事件无 run 归属时 sessionId 可空串，由本归一化补会话）
+        AgentEvent::CronFired { session_id, .. } => session_id,
     }
 }
 

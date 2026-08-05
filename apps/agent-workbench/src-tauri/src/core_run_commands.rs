@@ -25,7 +25,9 @@
 //! `app.manage(Arc::new(CoreRunState::new(...)))`（restore 在 manage 之前）。
 
 use std::collections::{HashMap, VecDeque};
+use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -44,12 +46,14 @@ use conex_types::events::{
 };
 use conex_types::impact::ImpactAssessment;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+use conex_types::session::AgentEndReason;
 use conex_types::{codes, ContextBudget, CrishError, CrishErrorPayload, HistoryMessage};
 use orchestrator::events::{build_run_terminal, drive_outcome, EventQueue};
 use orchestrator::persist::{SessionSequencer, Store};
 use orchestrator::restore::{RestoreManager, RestoreMode, RestoreOutcome, SnapshotStore, StateSnapshot};
 use orchestrator::run::{CancelMode, RunEngine, RunHandle, RunManager};
 use orchestrator::session::SessionRecord;
+use orchestrator::PendingMessageQueue;
 use session_loop::hydrate::hydrate_history;
 use session_loop::approval_router::{
     classify_source, route_approval, route_approval_guarded, arbiter_metadata,
@@ -352,6 +356,10 @@ pub(crate) struct ActiveRun {
     /// 逃逸监视句柄（T-ESC-03：run 起停钩子；None = 未启用。Mutex 包装：
     /// drive / finalize 路径经锁 take 出句柄后 async 收口，锁不跨 await）
     escape_watch: Mutex<Option<EscapeWatchHandle>>,
+    /// T-CF-11：本 run 是否有用户交互（用户经 L1 soft_inject 注入消息 /
+    /// force_cancel 置位；收口判定「用户消息到达后的正常收场不触发续
+    /// run」的依据）
+    user_touched: AtomicBool,
 }
 
 /// 活动 run 的引擎取消接口（[orchestrator::run::RunEngine] 实现：
@@ -1149,6 +1157,26 @@ pub struct CoreRunState {
     /// 工具链 adopt 的 owner_run_id 注入槽 + L3 可选联动 + 状态汇总
     /// 查询面；引擎侧注入同一包装实例，工具执行链 adopt 走装饰器）
     background: Arc<RunAwareBackgroundManager>,
+    /// T-CF-11：跨 run steering 队列（PendingMessageQueue——定时器到期 /
+    /// Cron 触发 / 子代理完成 / watchdog 兜底通知的落点；与
+    /// [EngineHandle::timer_steering_queue] 同一实例，收口处非空判定 +
+    /// 批量转出注入续 run）
+    pending_queue: Arc<Mutex<PendingMessageQueue>>,
+    /// T-CF-11：定时器活跃判定器（TimerRegistry 非空封装；None = 未接线
+    /// ——收口时不因定时器续 run。生产在 [Self::new] 经
+    /// [EngineHandle::timer_registry] 的 list_active 封装注入；测试可替换）
+    timer_has_active: Mutex<Option<WakeSourceCheck>>,
+    /// T-CF-11：enabled Cron 判定器（SchedulerRegistry 非空封装；None =
+    /// 未接线——Cron 不参与续 run 判定，行为与接线前一致。A5 sched.rs
+    /// 装配后经 [Self::set_cron_has_enabled] 注入）
+    cron_has_enabled: Mutex<Option<WakeSourceCheck>>,
+    /// T-CF-11：idle 续 run 空转护栏计数（session_id → 连续无 AI 产出
+    /// 的续 run 轮数；有产出清零，超 [IDLE_RESUME_MAX_EMPTY_ROUNDS] 停止）
+    resume_empty_streak: Mutex<HashMap<String, u32>>,
+    /// T-CF-11：idle 续 run 拉起器（生产 = [production_resume_launcher]
+    /// 预装配——经 run_task_impl 复用装配拉起新 run；测试经
+    /// set_resume_launcher 注入替身断言判定与注入载荷）
+    resume_launcher: Mutex<Option<ResumeLauncher>>,
 }
 
 impl CoreRunState {
@@ -1166,17 +1194,33 @@ impl CoreRunState {
         // 可选联动 + 汇总查询面）；引擎与状态共享同一包装实例——工具执行
         // 链 adopt（agent-tools shell.rs）经引擎注入的 trait 引用走到装饰器。
         let background = Arc::new(RunAwareBackgroundManager::new(background_manager));
+        // T-CF-11：idle 待命唤醒源接线——跨 run steering 队列与定时器
+        // 活跃判定经 EngineHandle 访问器取得（engine.rs:775-783，R-CF3
+        // 装配收口预留）；SchedulerRegistry enabled 判定由 A5 装配后经
+        // set_cron_has_enabled 注入。
+        let engine = EngineHandle::new(
+            // 引擎侧注入包装实例（保持 Option 语义：未接线 = 引擎无
+            // 后台任务通道，与接线前行为一致）
+            background
+                .inner
+                .is_some()
+                .then(|| Arc::clone(&background) as Arc<dyn BackgroundTaskManager>),
+        );
+        let pending_queue = engine.timer_steering_queue();
+        let timer_registry = engine.timer_registry();
+        let timer_has_active: WakeSourceCheck = Arc::new(move || {
+            let registry = Arc::clone(&timer_registry);
+            Box::pin(async move { !registry.list_active().await.is_empty() })
+        });
+        // T-CF-11：生产续 run 拉起器预装配（trait object 叶子类型——
+        // drive_run_loop 经 trait object 调用，不直接包含 run_task_impl
+        // 的 opaque future，避免 auto-trait 检查递归限制；测试经
+        // set_resume_launcher 覆盖替身）
+        let resume_launcher = production_resume_launcher();
         Self {
             store: Arc::clone(&store),
             run_manager: RunManager::new(store),
-            engine: EngineHandle::new(
-                // 引擎侧注入包装实例（保持 Option 语义：未接线 = 引擎无
-                // 后台任务通道，与接线前行为一致）
-                background
-                    .inner
-                    .is_some()
-                    .then(|| Arc::clone(&background) as Arc<dyn BackgroundTaskManager>),
-            ),
+            engine,
             bridge,
             active_runs: Mutex::new(HashMap::new()),
             diagnostics,
@@ -1198,7 +1242,44 @@ impl CoreRunState {
             snapshot_written_at: Mutex::new(None),
             session_history: SessionHistoryCache::new(),
             background,
+            pending_queue,
+            timer_has_active: Mutex::new(Some(timer_has_active)),
+            cron_has_enabled: Mutex::new(None),
+            resume_empty_streak: Mutex::new(HashMap::new()),
+            resume_launcher: Mutex::new(Some(resume_launcher)),
         }
+    }
+
+    /// T-CF-11：注入 Cron enabled 判定器（A5 sched.rs SchedulerRegistry
+    /// 装配后由装配点（A3 engine.rs 装配收口）调用；None = 未接线，Cron
+    /// 不参与续 run 判定。接线前标记 dead_code——冻结接口预编码，见
+    /// F9 轮次报告跨 Agent 接口登记）
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn set_cron_has_enabled(&self, check: Option<WakeSourceCheck>) {
+        *self
+            .cron_has_enabled
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = check;
+    }
+
+    /// T-CF-11：注入定时器活跃判定器（测试可替换；None = 收口时不因
+    /// 定时器续 run）
+    #[cfg(test)]
+    pub(crate) fn set_timer_has_active(&self, check: Option<WakeSourceCheck>) {
+        *self
+            .timer_has_active
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = check;
+    }
+
+    /// T-CF-11：注入 idle 续 run 拉起器（测试替身断言判定与注入载荷；
+    /// None = 恢复生产路径 [production_resume_launcher] 的缺省行为）
+    #[cfg(test)]
+    pub(crate) fn set_resume_launcher(&self, launcher: Option<ResumeLauncher>) {
+        *self
+            .resume_launcher
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = launcher;
     }
 
     /// setup 完成标记（PE-01 T01.2：setup 失败 = false，不假装成功）
@@ -1549,6 +1630,250 @@ impl CoreRunState {
     }
 }
 
+// ── T-CF-11：会话级 idle 待命 + 自动续 run（G7 / REQ-C04 验收 1/2）──
+
+/// T-CF-11：生产续 run 拉起器构造（CoreRunState::new 预装配；测试经
+/// set_resume_launcher 覆盖替身）。
+///
+/// 实现经 [ResumeLauncher] trait object（`Pin<Box<dyn Future + Send>>`
+/// 叶子类型）间接引用 [run_task_impl]：drive_run_loop 与 run_task_impl
+/// 相互包含 opaque future 会让 auto-trait（Send）检查无法终止（Rust
+/// 限制："fetching the hidden types of an opaque inside of the defining
+/// scope is not supported"）——trait object 断链后检查可终止。
+fn production_resume_launcher() -> ResumeLauncher {
+    let launcher: ResumeLauncher = Arc::new(|state, session_id, messages| {
+        let state = Arc::clone(state);
+        let session_id = session_id.to_string();
+        Box::pin(async move {
+            idle_resume::spawn_idle_resume_run(state, session_id, messages).await;
+        })
+    });
+    launcher
+}
+
+//
+// 独立子模块（文件内）：drive_run_loop 与 run_task_impl 相互引用 opaque
+// future（drive_run_loop 收口经 spawn_idle_resume_run 拉起新 run →
+// run_task_impl → spawn(drive_run_loop)），同模块内递归 async fn 的
+// auto-trait（Send）检查不被 Rust 支持（"fetching the hidden types of an
+// opaque inside of the defining scope"）——跨模块定义后检查可终止。
+mod idle_resume {
+    use super::*;
+
+    /// 续 run 连续空转护栏上限（连续 N 次续 run 均无 AI 产出 → 停止续 run，
+    /// 防空转风暴；默认 3 次）
+    pub(super) const IDLE_RESUME_MAX_EMPTY_ROUNDS: u32 = 3;
+
+    /// T-CF-11：唤醒源非空判定器（TimerRegistry 活跃 / SchedulerRegistry
+    /// enabled 的判定封装；async 谓词——list_active 为 async 调用）。
+    ///
+    /// 生产接线：TimerRegistry 非空判定在 [CoreRunState::new] 经
+    /// [EngineHandle::timer_registry] 的 list_active 封装注入；SchedulerRegistry
+    /// 非空判定由 A5 sched.rs 装配后经 [CoreRunState::set_cron_has_enabled]
+    /// 注入（未注入 = None，Cron 不参与续 run 判定，行为与接线前一致）。
+    pub(crate) type WakeSourceCheck =
+        Arc<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
+
+/// T-CF-11：idle 续 run 拉起器（async；生产 = 经 [spawn_idle_resume_run]
+/// 复用 run 装配拉起新 run；测试 = 注入替身断言判定与注入载荷）
+pub(crate) type ResumeLauncher = Arc<
+    dyn Fn(
+            &Arc<CoreRunState>,
+            &str,
+            Vec<AgentMessage>,
+        ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+        + Send
+        + Sync,
+>;
+
+/// T-CF-11：idle 待命续 run 判定（drive_run_loop 收口处调用）
+///
+/// 续 run 条件（任一满足，02-CF 方案 T-CF-11 第 1 点）：
+/// - [PendingMessageQueue] 非空（跨 run steering 条目：子代理完成、定时器
+///   到期、Cron 触发、watchdog 兜底通知——条目生成侧已按 §4.8 模板拼入
+///   wakeup_summary 摘要文本，注入即条目原文）；
+/// - TimerRegistry 存在活跃定时器（timer_has_active 判定器非空）；
+/// - enabled Cron 任务（cron_has_enabled 判定器非空）。
+///
+/// 不续 run（硬条件与用户语义）：
+/// - run 非正常收场（reason != Stop：Aborted / Stopped = 用户取消，
+///   Error / MaxTurns = 异常边界，保守不续）；
+/// - 用户显式结束：force_cancel（abort_signal 触发，双保险）/ 用户消息
+///   到达后的正常收场（本 run 有用户 L1 交互，user_touched）；
+/// - 三源全空（队列空 + 定时器表空 + Cron 表空）→ run 正常收场，AI 休眠
+///   待用户（T-CF-11 第 3 点开放问题 4）；
+/// - 续 run 连续 N 次（默认 3 次）均无 AI 产出 → 停止续 run（防空转风暴）
+///   并记日志。
+///
+/// 返回：None = 不续 run；Some(messages) = 续 run（messages = 队列条目
+/// 批量转出的注入消息；空 Vec = 仅定时器/Cron 源触发——无队列条目文本
+/// 可注入，仍续 run 保持待命，事件条目入队后经下一次收口送达）。
+pub(crate) async fn decide_idle_resume(
+    state: &CoreRunState,
+    active: &ActiveRun,
+    reason: AgentEndReason,
+    had_ai_output: bool,
+) -> Option<Vec<AgentMessage>> {
+    // 1. 用户取消 / 异常收场不续（force_cancel → abort_signal + reason
+    //    Aborted/Stopped；判定双保险）
+    if active.abort_signal.is_aborted() || reason != AgentEndReason::Stop {
+        return None;
+    }
+    // 2. 用户消息到达后的正常收场不续（本 run 内经 L1 收到用户消息）
+    if active.user_touched.load(Ordering::SeqCst) {
+        return None;
+    }
+    // 3. 唤醒源判定：队列（首要唤醒源）非空直接命中；否则查定时器 /
+    //    Cron 判定器（锁内取克隆，锁不跨 await 持有——AA-02 并发模型）
+    let queue_pending = {
+        let queue = state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        queue.has_pending()
+    };
+    let timer_check = state
+        .timer_has_active
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    let timer_active = if !queue_pending {
+        match timer_check {
+            Some(check) => check().await,
+            None => false,
+        }
+    } else {
+        false
+    };
+    let cron_check = state
+        .cron_has_enabled
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    let cron_enabled = if !queue_pending && !timer_active {
+        match cron_check {
+            Some(check) => check().await,
+            None => false,
+        }
+    } else {
+        false
+    };
+    if !(queue_pending || timer_active || cron_enabled) {
+        // 4. 三源全空：run 正常收场，AI 休眠待用户（硬条件）
+        return None;
+    }
+    // 5. 空转护栏（仅续 run 路径计数）：本 run 有 AI 产出 → 清零；
+    //    否则 +1，连续 N 次（默认 3 次）无产出 → 停止续 run 并记日志
+    {
+        let mut streak = state
+            .resume_empty_streak
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let entry = streak.entry(active.session_id.clone()).or_insert(0);
+        if had_ai_output {
+            *entry = 0;
+        } else {
+            *entry += 1;
+            if *entry > IDLE_RESUME_MAX_EMPTY_ROUNDS {
+                tracing::info!(
+                    target: "run",
+                    session_id = %active.session_id,
+                    consecutive_empty = *entry,
+                    limit = IDLE_RESUME_MAX_EMPTY_ROUNDS,
+                    "idle 续 run 停止：连续 N 次无 AI 产出（防空转风暴）"
+                );
+                return None;
+            }
+        }
+    }
+    // 6. 队列条目批量转出为注入消息（无队列条目 = 仅定时器/Cron 源，
+    //    空注入保持待命）
+    if queue_pending {
+        let mut queue = state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        return Some(drain_pending_to_inject_messages(&mut queue, &active.session_id));
+    }
+    Some(Vec::new())
+}
+
+/// T-CF-11：PendingMessageQueue 条目批量转出 → 注入消息（对齐 D07 批量
+/// 推送：一次续 run 承载全部条目，不逐条唤醒）。
+///
+/// 注入文本 = 队列条目原文（生成侧已按 §4.8 模板拼入 wakeup_summary
+/// 摘要，与 prompt 并存）；多条条目按序拼接（换行分隔）为一条用户角色
+/// 消息——对齐 D8「条目作为下一条用户消息注入」语义（steering_queue.rs
+/// :86-106，注入消息带 `{kind:"steering"}` 元数据供下游识别）。
+/// 消息 id 沿用首条条目 id 保证幂等（对齐 transfer_follow_up 的 id 沿用）。
+fn drain_pending_to_inject_messages(
+    queue: &mut PendingMessageQueue,
+    _session_id: &str,
+) -> Vec<AgentMessage> {
+    let entries = queue.dequeue_all();
+    if entries.is_empty() {
+        return Vec::new();
+    }
+    let text = entries
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let first = &entries[0];
+    vec![AgentMessage {
+        id: first.id.clone(),
+        role: AgentMessageRole::User,
+        created_at: crate::engine::now_iso_utc(),
+        blocks: vec![AgentMessageBlock::Text { text }],
+        metadata: Some(serde_json::json!({ "kind": "steering" })),
+        client_message_id: None,
+        content: None,
+    }]
+}
+
+/// T-CF-11：idle 续 run 拉起（收口处判定命中后调用）——复用
+/// [run_task_impl] 的 run 装配拉起新 run（新 run id / 新 producer /
+/// 新 ActiveRun / 新 drive_run_loop；history 回退 SessionHistoryCache，
+/// 上一轮收口已缓存——历史自动续接，T-29 混合路线）。
+///
+/// prompt = 注入消息文本（队列条目批量聚合；仅定时器/Cron 源触发时为
+/// 空文本——AI 醒来保持待命态，等待事件条目入队后经下一次收口送达）；
+/// mode 标记 `idle-resume`（可观测：前端区分自动续 run 与用户发起的
+/// run）。失败仅告警不重试（下一收口再判定；空转护栏防风暴）。
+pub(crate) async fn spawn_idle_resume_run(
+    state: Arc<CoreRunState>,
+    session_id: String,
+    inject: Vec<AgentMessage>,
+) {
+    let text = inject
+        .iter()
+        .map(|message| message.text())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let options = RunTaskOptions {
+        run_id: crate::engine::new_message_id("idle-resume"),
+        session_id: session_id.clone(),
+        prompt: Some(text),
+        mode: Some("idle-resume".to_string()),
+        cwd: None,
+        permission_mode: None,
+        client_message_id: None,
+        assistant_client_message_id: None,
+        system_prompt: None,
+        history: None,
+        context_window: None,
+        parent_run_id: None,
+    };
+    if let Err(error) = run_task_impl(Arc::clone(&state), options).await {
+        tracing::warn!(
+            target: "run",
+            session_id,
+            error = %error,
+            "idle 续 run 拉起失败（下一收口再判定；空转护栏防风暴）"
+        );
+    }
+}
+
 // ── drive_run_loop ────────────────────────────────────────────────
 
 /// run 驱动循环（B6.1：produce → drive_outcome → emit → 终态）
@@ -1564,7 +1889,7 @@ impl CoreRunState {
 ///    sequence，T08.4），终态记录落库；
 /// 5. 终态：移出活动注册表 + 快照（T08.6 触发点 A）；
 /// 6. 错误路径：drive 失败（防御性）→ [finalize_failed]。
-async fn drive_run_loop(
+pub(crate) async fn drive_run_loop(
     state: Arc<CoreRunState>,
     active: Arc<ActiveRun>,
     mut producer: Box<dyn RunProducer>,
@@ -1580,6 +1905,11 @@ async fn drive_run_loop(
     // 1. produce（单次即覆盖整个 run：多 turn 由 AgentSessionLoop 内部驱动；
     //    未来 goal 多轮模式在本循环续轮）
     let outcome = producer.produce().await;
+    // T-CF-11：产出信号提前捕获（outcome 随后被 drive_outcome 消费——
+    // reason / turn_index / tool_call_count 为 Copy 字段，收口判定用）
+    let resume_reason = outcome.reason;
+    let resume_turn_index = outcome.turn_index;
+    let resume_tool_calls = outcome.tool_call_count;
 
     // T-29 收口写入（P4 阶段 1-4）：run 引擎侧收口后，把对话消息收口为
     // HistoryMessage 原子替换 SessionHistoryCache——不落库、不改写会话语义
@@ -1690,7 +2020,61 @@ async fn drive_run_loop(
         run_id = %run_id,
         "drive_run_loop 收口（终态）：后台任务注册表未清理、任务不级联杀（T-AB-19 契约）"
     );
-}
+
+    // ── T-CF-11：idle 待命续 run（收口处判定；run 正常结束而非用户取消）──
+    // 唤醒源：PendingMessageQueue 非空（跨 run steering 条目）/ 活跃定时器 /
+    // enabled Cron（判定器注入）；三源全空 → AI 休眠待用户。队列条目批量
+    // 转出注入新 run（对齐 D07 批量推送），摘要文本已由生成侧按 §4.8
+    // 模板拼入条目原文。空转护栏：连续 3 次续 run 无 AI 产出 → 停止。
+    if let Some(inject) = decide_idle_resume(
+        &state,
+        &active,
+        resume_reason,
+        // 「有 AI 产出」= 完成过 turn 或执行过工具（空转 run 两者皆 0）
+        resume_turn_index > 0 || resume_tool_calls > 0,
+    )
+    .await
+    {
+        tracing::info!(
+            target: "run",
+            session_id = %session_id,
+            run_id = %run_id,
+            inject_messages = inject.len(),
+            "idle 待命命中：自动续开一轮 run（队列条目批量注入 / 定时器 / Cron 源）"
+        );
+        let launcher = state
+            .resume_launcher
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        match launcher {
+            Some(launcher) => launcher(&state, &session_id, inject).await,
+            None => {
+                // 防御分支：拉起器未注入（生产恒注入——CoreRunState::new
+                // 预装配生产拉起器，见 [production_resume_launcher]）。
+                // 不在此处直接引用 run_task_impl：drive_run_loop 与
+                // run_task_impl 相互包含 opaque future 会让 auto-trait
+                // 检查无法终止（Rust 限制）——经 trait object 拉起器
+                // （叶子类型）切断类型递归。未注入时跳过续 run 并记日志。
+                tracing::warn!(
+                    target: "run",
+                    session_id = %session_id,
+                    run_id = %run_id,
+                    "idle 续 run 拉起器未注入（跳过本轮续 run）"
+                );
+            }
+        }
+    }
+} // drive_run_loop 收口闭
+} // mod idle_resume 闭合（drive_run_loop 与 run_task_impl 的 opaque
+  // future 跨模块定义 + trait object 拉起器切断类型递归，Send 检查可终止）
+
+/// T-CF-11 / drive_run_loop 子模块 re-export（drive_run_loop 与
+/// run_task_impl 相互引用 opaque future，跨模块定义后 Send 检查可终止；
+/// 外层与测试经此引用）
+use idle_resume::{ResumeLauncher, WakeSourceCheck, drive_run_loop};
+#[cfg(test)]
+use idle_resume::decide_idle_resume;
 
 /// T-40 缓存测量收口（P5 S5 §3.2 数据流，R5-D3 轮末合并接线 ②；
 /// 拆分独立函数以便测试直测）：
@@ -1877,7 +2261,17 @@ pub(crate) async fn core_run_task(
     state: tauri::State<'_, Arc<CoreRunState>>,
     options: RunTaskOptions,
 ) -> Result<RunTaskResponse, CoreError> {
-    let state = Arc::clone(state.inner());
+    run_task_impl(Arc::clone(state.inner()), options).await
+}
+
+/// run 任务命令体（core_run_task 与 T-CF-11 idle 续 run 共用装配路径；
+/// 测试可直调，不依赖 Tauri runtime——对齐 background.rs「契约体」模式）。
+/// owned Arc 参数：future 内不持有引用，保证 Send（spawn 任务内可 await）。
+pub(crate) async fn run_task_impl(
+    state: Arc<CoreRunState>,
+    options: RunTaskOptions,
+) -> Result<RunTaskResponse, CoreError> {
+    let state = Arc::clone(&state);
     // 参数校验（S-15：trim + 显式 InvalidInput）
     let run_id = options.run_id.trim().to_string();
     let session_id = options.session_id.trim().to_string();
@@ -2134,6 +2528,7 @@ pub(crate) async fn core_run_task(
         bridge,
         delta_sink_active: true,
         escape_watch: Mutex::new(escape_watch),
+        user_touched: AtomicBool::new(false),
     });
     state
         .active_runs
@@ -2212,6 +2607,9 @@ pub(crate) async fn run_control_impl(
                 .map(|kind| kind == "follow_up")
                 .unwrap_or(level == "follow_up");
             let injected = crate::engine::user_message(&text, None);
+            // T-CF-11：用户经 L1 注入消息 → 标记用户交互（收口判定
+            // 「用户消息到达后的正常收场不触发续 run」）
+            active.user_touched.store(true, Ordering::SeqCst);
             let mut bus = active
                 .control_bus
                 .lock()
@@ -2237,6 +2635,8 @@ pub(crate) async fn run_control_impl(
         }
         // L3：强停（可立即中断；AbortSignal + 总线）
         "force_cancel" => {
+            // T-CF-11：用户显式取消 → 标记用户交互（收口不续 run 双保险）
+            active.user_touched.store(true, Ordering::SeqCst);
             active.abort_signal.abort();
             {
                 let mut bus = active
@@ -2666,6 +3066,7 @@ mod tests {
     use conex_types::message::{AgentMessageBlock, AgentMessageRole, ToolCallBlock};
     use conex_types::session::AgentEndReason;
     use conex_types::tool::ToolOutput;
+    use orchestrator::steering_queue::SteeringInputEntry;
 
     /// 便捷构造 HistoryMessage（缺省无 thinking/无 JSON 载荷字段）
     fn hmsg(id: &str, sender: &str, text: Option<&str>) -> HistoryMessage {
@@ -3708,17 +4109,33 @@ mod tests {
             bridge,
             delta_sink_active: true,
             escape_watch: Mutex::new(None),
+            user_touched: AtomicBool::new(false),
         })
     }
 
     /// 测试生产者：返回预置收口结果（驱动 drive_run_loop 一次终态）
     struct TestProducer {
         outcome: RunOutcome,
+        /// 共享 produce 调用计数（T-CF-11 续 run 断言；续 run 链各轮共享）
+        calls: Arc<AtomicU64>,
+    }
+
+    impl TestProducer {
+        /// 新建生产者（独立计数）
+        fn new(outcome: RunOutcome) -> Self {
+            Self::with_calls(outcome, Arc::new(AtomicU64::new(0)))
+        }
+
+        /// 新建生产者（共享计数——断言跨轮 produce 总调用次数）
+        fn with_calls(outcome: RunOutcome, calls: Arc<AtomicU64>) -> Self {
+            Self { outcome, calls }
+        }
     }
 
     #[async_trait::async_trait]
     impl RunProducer for TestProducer {
         async fn produce(&mut self) -> RunOutcome {
+            self.calls.fetch_add(1, Ordering::SeqCst);
             std::mem::replace(&mut self.outcome, canned_outcome())
         }
     }
@@ -3863,9 +4280,7 @@ mod tests {
         drive_run_loop(
             Arc::clone(&state),
             Arc::clone(&active),
-            Box::new(TestProducer {
-                outcome: canned_outcome(),
-            }),
+            Box::new(TestProducer::new(canned_outcome())),
         )
         .await;
 
@@ -3912,9 +4327,7 @@ mod tests {
         drive_run_loop(
             Arc::clone(&state),
             Arc::clone(&active),
-            Box::new(TestProducer {
-                outcome: canned_outcome(),
-            }),
+            Box::new(TestProducer::new(canned_outcome())),
         )
         .await;
 
@@ -4106,9 +4519,7 @@ mod tests {
         drive_run_loop(
             Arc::clone(&state),
             Arc::clone(&active_a),
-            Box::new(TestProducer {
-                outcome: canned_outcome(),
-            }),
+            Box::new(TestProducer::new(canned_outcome())),
         )
         .await;
 
@@ -4123,9 +4534,7 @@ mod tests {
         drive_run_loop(
             Arc::clone(&state),
             Arc::clone(&active_b),
-            Box::new(TestProducer {
-                outcome: canned_outcome(),
-            }),
+            Box::new(TestProducer::new(canned_outcome())),
         )
         .await;
 
@@ -4136,5 +4545,272 @@ mod tests {
 
         // 清理
         let _ = registry.kill(&adopted.task_id).await;
+    }
+
+    // ── T-CF-11：idle 待命续 run（G7 / REQ-C04 验收 1/2）────────────
+
+    /// 测试用续 run 拉起器替身：记录注入消息 + 用共享计数 producer 再驱动
+    /// 一轮（模拟「新 run 的 produce」——续 run 链；队列已转空 → 收口
+    /// 判定不续，链自然终止）
+    fn resume_launcher_probe(
+        calls: Arc<AtomicU64>,
+        injected: Arc<Mutex<Vec<Vec<AgentMessage>>>>,
+    ) -> ResumeLauncher {
+        let launcher: ResumeLauncher = Arc::new(move |state, session_id, messages| {
+            let calls = Arc::clone(&calls);
+            let injected = Arc::clone(&injected);
+            let state = Arc::clone(state);
+            let session_id = session_id.to_string();
+            Box::pin(async move {
+                injected
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push(messages);
+                // 续 run 链：以新 run id 再驱动一轮（队列已清空 → 收口不再续）
+                let active = build_active_run(&state, &session_id, "run-resume-1").await;
+                state
+                    .active_runs
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert("run-resume-1".to_string(), Arc::clone(&active));
+                drive_run_loop(
+                    state,
+                    active,
+                    Box::new(TestProducer::with_calls(canned_outcome(), calls)),
+                )
+                .await;
+            })
+        });
+        launcher
+    }
+
+    /// 记录型拉起器替身（仅计数，不拉起新 run）
+    fn counting_launcher(counter: Arc<AtomicU64>) -> ResumeLauncher {
+        let launcher: ResumeLauncher = Arc::new(move |_state, _session_id, _messages| {
+            let counter = Arc::clone(&counter);
+            Box::pin(async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+            })
+        });
+        launcher
+    }
+
+    /// 验收：收口时队列有 1 条目（跨 run steering：子代理完成）→ 自动续开
+    /// 一轮 run——produce 再次调用 + 条目原文进入注入消息
+    #[tokio::test]
+    async fn idle_resume_run_when_queue_non_empty() {
+        let (state, _registry) = state_with_background();
+        // 队列条目（与引擎同实例的 PendingMessageQueue；生成侧已按 §4.8
+        // 模板拼入唤醒摘要，注入即条目原文）
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(SteeringInputEntry::steering(
+                "e1",
+                "子代理 sa-1（分析）已完成：completed",
+                1_785_456_000_000,
+            ));
+        let calls = Arc::new(AtomicU64::new(0));
+        let injected: Arc<Mutex<Vec<Vec<AgentMessage>>>> = Arc::new(Mutex::new(Vec::new()));
+        state.set_resume_launcher(Some(resume_launcher_probe(
+            Arc::clone(&calls),
+            Arc::clone(&injected),
+        )));
+
+        let active = build_active_run(&state, "s1", "run-1").await;
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("run-1".to_string(), Arc::clone(&active));
+        drive_run_loop(
+            Arc::clone(&state),
+            active,
+            Box::new(TestProducer::with_calls(canned_outcome(), Arc::clone(&calls))),
+        )
+        .await;
+
+        // produce 再次调用（首轮 + 续 run 轮）
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            2,
+            "队列非空应收口后自动续开一轮 run"
+        );
+        // 条目进入注入消息（原文含摘要文本；批量聚合为单条）
+        let probe = injected.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(probe.len(), 1, "应恰好拉起一次续 run");
+        assert_eq!(probe[0].len(), 1, "批量注入 = 单条聚合消息（不逐条唤醒）");
+        assert!(
+            probe[0][0].text().contains("子代理 sa-1（分析）已完成"),
+            "注入消息应含条目原文：{}",
+            probe[0][0].text()
+        );
+        // 条目已批量转出，队列清空
+        assert!(
+            state
+                .pending_queue
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty(),
+            "条目批量转出后队列应清空"
+        );
+    }
+
+    /// 验收：队列空 + 定时器表空 + Cron 表空（未接线）→ 不续 run（produce
+    /// 次数不增；AI 休眠待用户）
+    #[tokio::test]
+    async fn idle_no_resume_when_all_empty() {
+        let (state, _registry) = state_with_background();
+        let calls = Arc::new(AtomicU64::new(0));
+        let launcher_calls = Arc::new(AtomicU64::new(0));
+        state.set_resume_launcher(Some(counting_launcher(Arc::clone(&launcher_calls))));
+
+        let active = build_active_run(&state, "s1", "run-1").await;
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("run-1".to_string(), Arc::clone(&active));
+        drive_run_loop(
+            Arc::clone(&state),
+            active,
+            Box::new(TestProducer::with_calls(canned_outcome(), Arc::clone(&calls))),
+        )
+        .await;
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "三源全空不得续 run");
+        assert_eq!(
+            launcher_calls.load(Ordering::SeqCst),
+            0,
+            "三源全空时续 run 拉起器不得被调用"
+        );
+    }
+
+    /// 验收：连续 3 次续 run 均无 AI 产出 → 停止续 run（防空转风暴；
+    /// 第 4 次判定返回 None）；有产出后护栏清零恢复
+    #[tokio::test]
+    async fn idle_resume_stops_after_consecutive_empty() {
+        let (state, _registry) = state_with_background();
+        // 定时器判定器持续活跃（唤醒源保持——验证护栏独立于唤醒源）
+        state.set_timer_has_active(Some(Arc::new(|| Box::pin(async { true }))));
+        let active = build_active_run(&state, "s1", "run-1").await;
+
+        // 连续空转（无 AI 产出）：前 3 次判定命中（续 run）
+        for round in 1..=3u32 {
+            let verdict =
+                decide_idle_resume(&state, &active, AgentEndReason::Stop, false).await;
+            assert!(verdict.is_some(), "第 {round} 次无产出续 run 应命中（护栏上限 3）");
+        }
+        // 第 4 次：连续 3 次无产出 → 停止续 run
+        let stopped = decide_idle_resume(&state, &active, AgentEndReason::Stop, false).await;
+        assert!(stopped.is_none(), "连续 3 次无产出后应停止续 run");
+
+        // 有产出 → 计数清零，重新可续
+        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true).await;
+        assert!(verdict.is_some(), "有产出后护栏清零，续 run 恢复");
+        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, false).await;
+        assert!(verdict.is_some(), "清零后空转计数从 1 重新开始");
+    }
+
+    /// 验收：用户取消路径不触发续 run（force_cancel → abort_signal +
+    /// reason=Aborted；队列即使非空也不续）
+    #[tokio::test]
+    async fn idle_resume_not_on_user_cancel() {
+        let (state, _registry) = state_with_background();
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000));
+        let launcher_calls = Arc::new(AtomicU64::new(0));
+        state.set_resume_launcher(Some(counting_launcher(Arc::clone(&launcher_calls))));
+
+        let active = build_active_run(&state, "s1", "run-1").await;
+        // force_cancel 语义（run_control_impl L3 路径）：abort_signal 触发
+        active.abort_signal.abort();
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("run-1".to_string(), Arc::clone(&active));
+        // 取消后的收口 outcome：reason=Aborted（producer 按 abort 收场）
+        let cancelled = RunOutcome {
+            reason: AgentEndReason::Aborted,
+            ..canned_outcome()
+        };
+        drive_run_loop(
+            Arc::clone(&state),
+            active,
+            Box::new(TestProducer::new(cancelled)),
+        )
+        .await;
+
+        assert_eq!(
+            launcher_calls.load(Ordering::SeqCst),
+            0,
+            "用户取消不得触发续 run"
+        );
+    }
+
+    /// 补充：用户消息到达后的正常收场不触发续 run（本 run 内经 L1
+    /// soft_inject 收到用户消息 → user_touched 置位；队列非空也不续）
+    #[tokio::test]
+    async fn idle_resume_not_after_user_interaction() {
+        let (state, _registry) = state_with_background();
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enqueue(SteeringInputEntry::steering("e1", "子代理完成", 1000));
+        let launcher_calls = Arc::new(AtomicU64::new(0));
+        state.set_resume_launcher(Some(counting_launcher(Arc::clone(&launcher_calls))));
+
+        let active = build_active_run(&state, "s1", "run-1").await;
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("run-1".to_string(), Arc::clone(&active));
+        // 用户经 L1 注入消息（soft_inject，source=ui）
+        run_control_impl(
+            &state,
+            "run-1",
+            "soft_inject",
+            Some("请继续".to_string()),
+            None,
+            None,
+        )
+        .await
+        .expect("soft_inject 应成功");
+
+        drive_run_loop(
+            Arc::clone(&state),
+            active,
+            Box::new(TestProducer::new(canned_outcome())),
+        )
+        .await;
+
+        assert_eq!(
+            launcher_calls.load(Ordering::SeqCst),
+            0,
+            "用户消息到达后的正常收场不得触发续 run"
+        );
+    }
+
+    /// 补充：enabled Cron 任务（SchedulerRegistry 判定器注入）→ 收口时
+    /// 队列空也续 run（保持待命）；无队列条目 → 空注入
+    #[tokio::test]
+    async fn idle_resume_when_cron_enabled() {
+        let (state, _registry) = state_with_background();
+        state.set_cron_has_enabled(Some(Arc::new(|| Box::pin(async { true }))));
+        let active = build_active_run(&state, "s1", "run-1").await;
+
+        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true).await;
+        assert!(verdict.is_some(), "Cron enabled 应触发续 run");
+        assert!(
+            verdict.unwrap().is_empty(),
+            "队列空时无注入文本（空注入保持待命）"
+        );
     }
 }

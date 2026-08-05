@@ -59,7 +59,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（82 条 = 注册面 78 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（88 条 = 注册面 84 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：append_session_messages /
@@ -160,6 +160,14 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("trash_list", "core", "engine", true),
         entry("trash_restore", "core", "engine", true),
         entry("trash_purge", "core", "engine", true),
+        // ── workflow 命令面（T-CF-14：六条实装，消除前端幽灵命令；
+        //    wire 名 kebab-case，Rust 侧经 #[tauri::command(rename=...)] 对齐）──
+        entry("create-workflow", "workflow", "engine", true),
+        entry("list-workflows", "workflow", "engine", true),
+        entry("update-workflow", "workflow", "engine", true),
+        entry("delete-workflow", "workflow", "engine", true),
+        entry("trigger-workflow", "workflow", "engine", true),
+        entry("list-workflow-runs", "workflow", "engine", true),
         // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
         entry("append_session_messages", "session", "engine", false),
         entry("workbench_open_workspace", "workbench", "gui", false),
@@ -181,7 +189,7 @@ mod tests {
     use super::*;
 
     /// 条数公式化：总数 = 注册面 + 登记先行（镜像前端 commandManifest.test.ts：
-    /// 82 = 注册面 78 + 登记先行 4；变更时双端同步）。
+    /// 88 = 注册面 84 + 登记先行 4；变更时双端同步）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -192,8 +200,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 82, "总数 82（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 78, "注册面 78");
+        assert_eq!(total, 88, "总数 88（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 84, "注册面 84");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -277,6 +285,32 @@ mod tests {
         }
     }
 
+    /// workflow 命令六条强制登记（T-CF-14：消除前端幽灵命令；注册面
+    /// 必须含全部六条且 registered=true，与 main.rs 注册逐项一致）。
+    #[test]
+    fn workflow_commands_registered_in_manifest() {
+        let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
+            .commands
+            .iter()
+            .map(|c| (c.name, c))
+            .collect();
+        for name in [
+            "create-workflow",
+            "list-workflows",
+            "update-workflow",
+            "delete-workflow",
+            "trigger-workflow",
+            "list-workflow-runs",
+        ] {
+            let entry = by_name
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} 必须登记 manifest（T-CF-14）"));
+            assert!(entry.registered, "{name} 已接线应 registered=true");
+            assert_eq!(entry.family, "workflow", "{name} 属 workflow 族");
+            assert_eq!(entry.surface, "engine", "{name} 属引擎契约面");
+        }
+    }
+
     /// 序列化契约：serde camelCase（contractVersion / family / surface / registered）。
     #[test]
     fn manifest_serializes_to_camel_case() {
@@ -314,7 +348,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 82);
+        assert_eq!(manifest.commands.len(), 88);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 }

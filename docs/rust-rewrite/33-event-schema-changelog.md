@@ -6,17 +6,18 @@
 > 与 T03.9 契约文档 `docs/rust-rewrite/contracts/engine-ipc-contract.md`（E7 产出）同册——
 > 本 changelog 是该契约文档的「事件载荷版本化」分册，契约文档「事件关联」节引用本文件；
 > 边界：**命令变更走 T03.9 changelog，事件变更走本 changelog**（PE-12 T12.5 步骤 4）。
-> 代码真源：`crates/conex-types/src/events.rs`（AgentEvent 40 变体 + AgentEventEnvelope；
+> 代码真源：`crates/conex-types/src/events.rs`（AgentEvent 41 变体 + AgentEventEnvelope；
 > 2026-08-03 P5 缓存测量域兼容新增 3 变体，24 → 27；I2-S8 安全审计域兼容新增 1 变体，27 → 28；
 > I5-M7 子代理域兼容新增 3 变体，28 → 31；
 > 2026-08-04 T-AB-17 任务域兼容新增 7 变体，31 → 38；
-> 2026-08-05 T-CF-04 定时器域兼容新增 2 变体，38 → 40（cron-fired 留 T-CF-08 F9 轮至 41））。
+> 2026-08-05 T-CF-04 定时器域兼容新增 2 变体，38 → 40；
+> 同日 T-CF-08 cron 域兼容新增 1 变体（cron-fired），40 → 41）。
 
 ## 一、版本模型
 
 | 面                               | 机制                                  | 说明                                                                                                                             |
 | -------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 事件体（AgentEvent）             | 无版本字段                            | 域类型纯净，40 变体字段不带版本；演进靠 changelog + 兼容测试锚定（D3）                                                           |
+| 事件体（AgentEvent）             | 无版本字段                            | 域类型纯净，41 变体字段不带版本；演进靠 changelog + 兼容测试锚定（D3）                                                           |
 | 信封（wire，AgentEventEnvelope） | 顶层 `schemaVersion`（u32，当前恒 1） | 序列化层注入（`EVENT_ENVELOPE_SCHEMA_VERSION`）；**旧帧无该字段缺省视为 1**，解析不报错（向后兼容）                              |
 | 持久化 payload                   | **不引入版本列**（D3）                | 事件存储不写 schema 版本列；兼容由 serde 规则 + 本 changelog 测试锚定；未来按版本迁移 payload 的需求登记 v5 候选（PE-12 §六 L1） |
 
@@ -40,11 +41,11 @@
 变更门禁（DoD 勾稽项，登记 30-verification-checklist 候选）：
 
 1. 新增事件类型 ↔ changelog 登记 ↔ `V1_EVENT_TYPES` 清单 ↔ fixture 四者一一对应
-   （`v1_baseline_has_exactly_40_event_types` 等一致性断言锁定，T12.6）；
+   （`v1_baseline_has_exactly_41_event_types` 等一致性断言锁定，T12.6）；
 2. 任何字段变更必须同步更新本 changelog 与 fixtures 目录，评审勾稽；
 3. 信封序列化恒注入 `schemaVersion: 1`（`new_envelope_serializes_schema_version_one`）。
 
-## 三、v1 基线（2026-08-01 冻结 24 事件；2026-08-03 兼容新增 cache-* 三事件 → 27；I2-S8 新增 security-audit → 28；I5-M7 新增 subagent 域三事件 → 31；2026-08-04 T-AB-17 任务域新增七事件 → 38；2026-08-05 T-CF-04 定时器域新增两事件 → 当前 40 事件 + 信封；cron-fired 留 T-CF-08 F9 轮至 41）
+## 三、v1 基线（2026-08-01 冻结 24 事件；2026-08-03 兼容新增 cache-* 三事件 → 27；I2-S8 新增 security-audit → 28；I5-M7 新增 subagent 域三事件 → 31；2026-08-04 T-AB-17 任务域新增七事件 → 38；2026-08-05 T-CF-04 定时器域新增两事件 → 40；同日 T-CF-08 cron 域新增 cron-fired → 当前 41 事件 + 信封）
 
 > 事件体字段全部 camelCase；顶层 `type` 为 kebab-case tag；`runId`/`sequence`/`schemaVersion`
 > 为信封注入字段（不在事件体内）。消费方引用见 30-verification-checklist.md §4 核对矩阵。
@@ -97,6 +98,7 @@
 | 38  | task-killed                   | sessionId, taskId, viaForce                                           | diagnostics                 | 任务已被终止（T-AB-17：kill 成功含两阶段升级；Critical 必达落库；唤醒摘要「任务 <id> 已被终止」） |
 | 39  | timer-fired                   | sessionId, timerId, prompt, firedAtMs                                 | —                           | 定时器到期（T-CF-04：TimerRegistry 到期触发；Critical 必达落库——数据面，AI 实际唤醒走 steering 条目，事件与唤醒解耦，02-CF §4.7；runId 由 emit 层信封注入，无 run 归属时置空串或 timer-<id> 伪 runId；唤醒摘要「<prompt>（定时器 <id> 已到期）」） |
 | 40  | timer-cancelled               | sessionId, timerId, reason, cancelledAtMs                             | —                           | 定时器已取消（T-CF-04：早退命中 / AI 显式取消；Soft 尽力投递；reason 规范值 early-exit\|cancelled；runId 由 emit 层信封注入，无 run 归属时置空串或 timer-<id> 伪 runId） |
+| 41  | cron-fired                    | sessionId, cronId, prompt, expression, iteration, firedAtMs           | —                           | cron 已触发（T-CF-08：SchedulerRegistry 触发；Critical 必达落库——数据面，AI 实际唤醒走 steering 条目，事件与唤醒解耦，02-CF §4.7；runId 由 emit 层信封注入，无 run 归属时置空串或 cron-<id> 伪 runId；唤醒摘要「<prompt>（cron <id> 第 <n> 次触发）」） |
 
 ## 四、变更登记表
 
@@ -108,6 +110,7 @@
 | 1.3（minor 兼容新增，已落地 2026-08-03） | subagent-started / subagent-event / subagent-ended | 新增 3 个事件类型（子代理域，I5-M7 C8 事件契约）；新增载荷类型 `SubagentEventPayload`（kind/payload）；新增枚举 `SubagentEventKind`（progress/message/tool）与 `SubagentEndStatus`（completed/failed/cancelled）；事件注册表新增背压三级分类 `backpressure` 字段（delta/soft/critical，04 报告 1e；subagent-event 另带 `kindBackpressure`：progress=delta、message/tool=soft） | **minor**（兼容新增：新增事件类型 + 新注册表字段） | 信封 `schemaVersion` 不变（恒 1）；新增可选字段一律 `#[serde(default, skip_serializing_if = "Option::is_none")]`（subagent-started 的 description/mode/parentToolCallId、subagent-ended 的 summary、SubagentEventPayload 的 payload）；`runId` 由 emit 层信封注入 = 父 run（ParentID 语义，01 B1-2）；旧解析器对未知 `type` 静默忽略；`V1_EVENT_TYPES` 清单 28 → 31（`v1_baseline_has_exactly_31_event_types`）；v1 同形 fixture 追加 3 条；生成链路 engine-events.json 28 → 31 + 每事件 backpressure 字段，生成产物新增 `ENGINE_EVENT_BACKPRESSURE` / `SUBAGENT_EVENT_KIND_BACKPRESSURE` 常量；Rust 侧新增 `event_backpressure` / `subagent_event_kind_backpressure` 静态判定函数（registry_drift 护栏双向锁定）；前端 dispatch 表 engine 域补 subagent-* 三键（转发 legacy handler 消费 raw，宽容形态仍走 legacy 信封） | 前端 subagentHandlers.ts（legacy 信封直出，I4 已就绪，本轮只读对齐不改解析器）；engineDispatchTable 补键；AgentTeamBoard 生命周期展示（M6/M8 消费） | I5-M7（02-多Agent调度实现方案 §2 M7；04 报告 1e 背压分级） |
 | 1.4（minor 兼容新增，2026-08-04） | task-started / task-output / task-heartbeat / task-suspicious / task-completed / task-failed / task-killed | 新增 7 个事件类型（任务域，T-AB-17；01 方案 §4.5 七事件冻结契约）；注册表每事件登记 backpressure：task-output/task-heartbeat=delta（可丢不落库）、task-suspicious=soft（尽力投递留痕）、task-started/task-completed/task-failed/task-killed=critical（终态必达落库） | **minor**（兼容新增：新增事件类型） | 信封 `schemaVersion` 不变（恒 1）；新增可选字段一律 `#[serde(default, skip_serializing_if = "Option::is_none")]`（task-output 的 line/chunk/lineCount、task-killed 的 diagnostics）；`runId` 由 emit 层信封注入 = 发起 run（任务归属，ownerRunId 为任务来源字段与信封 runId 正交）；旧解析器对未知 `type` 静默忽略；`V1_EVENT_TYPES` 清单 31 → 38（`v1_baseline_has_exactly_31_event_types` 改名 `v1_baseline_has_exactly_38_event_types`，旧名留痕注释）；v1 同形 fixture 追加 7 条；事件注册表 31 → 38；Rust 侧 `event_backpressure` 静态判定函数扩展任务域分支（registry_drift 双向锁定 + 分级语义锚定测试）；发射点在壳层 T-AB-16/C3（本行只冻结契约与静态判定）；前端本轮不改（dispatch 表扩展位留待 C5/C6 域接线） | 前端本轮不消费（任务交互面 T-AB-20 消费 backgroundTasksApi，非事件面）；orchestrator 唤醒消费面（T-AB-18：摘要注入 / security-audit 留痕 / C7 steering） | T-AB-17（01-AB命令执行与后台任务方案 §4.5 事件表，冻结契约） |
 | 1.5（minor 兼容新增，2026-08-05） | timer-fired / timer-cancelled | 新增 2 个事件类型（定时器域，T-CF-04；02-CF 方案 §4.1/§4.7 冻结契约）；注册表每事件登记 backpressure：timer-fired=critical（必达落库——数据面）、timer-cancelled=soft（尽力投递）；新增载荷类型 `TimerCondition`/`TimerHandle`/`TimerDeclaration`（§4.1，crates/conex-types/src/timer.rs，不入注册表——无事件引用，registry_drift 可达性护栏禁止死条目） | **minor**（兼容新增：新增事件类型） | 信封 `schemaVersion` 不变（恒 1）；两事件字段全部必填（无新增可选字段）；`runId` 由 emit 层信封注入——定时器事件**无 run 归属**，发射时置空串或 `timer-<id>` 伪 runId（02-CF §4.7 定稿，信封 run_id 字段描述写明）；旧解析器对未知 `type` 静默忽略；`V1_EVENT_TYPES` 清单 38 → 40（`v1_baseline_has_exactly_38_event_types` 改名 `v1_baseline_has_exactly_40_event_types`，旧名留痕注释）；v1 同形 fixture 追加 2 条；事件注册表 38 → 40；Rust 侧 `event_backpressure` 静态判定函数扩展定时器域分支（registry_drift 双向锁定 + 分级语义锚定测试）；`cron-fired` 留 T-CF-08（F9 轮，累计 41，不提前登记）；前端本轮不改 | 前端本轮不消费（定时器交互面 T-CF-11 消费 TimerChannel 工具面，非事件面）；orchestrator 唤醒消费面 T-CF-12 摘要模板 | T-CF-04（02-CF 定时唤醒与工具方案 §4.7 事件接入表，冻结契约） |
+| 1.6（minor 兼容新增，2026-08-05） | cron-fired | 新增 1 个事件类型（cron 域，T-CF-08；02-CF 方案 §4.4/§4.7 冻结契约）；注册表登记 backpressure：cron-fired=critical（必达落库——数据面）；事件字段 sessionId/cronId/prompt/expression/iteration/firedAtMs 全部必填 | **minor**（兼容新增：新增事件类型） | 信封 `schemaVersion` 不变（恒 1）；事件字段全部必填（无新增可选字段）；`runId` 由 emit 层信封注入——cron 事件**无 run 归属**，发射时置空串或 `cron-<id>` 伪 runId（02-CF §4.7 定稿，信封 run_id 字段描述写明）；旧解析器对未知 `type` 静默忽略；`V1_EVENT_TYPES` 清单 40 → 41（`v1_baseline_has_exactly_40_event_types` 改名 `v1_baseline_has_exactly_41_event_types`，旧名留痕注释）；v1 同形 fixture 追加 1 条（event-cron-fired.json）；事件注册表 40 → 41；Rust 侧 `event_backpressure` 静态判定函数扩展 cron 域分支（registry_drift 双向锁定 + 分级语义锚定测试）；hooks 不扩展（02-CF §4.7：cron-fired 无对应钩子，event_hook_mapping 无对应清单 29 → 30）；引擎侧 CronFired 发射点在 T-CF-09 sched.rs（本行只冻结契约与静态判定）；前端本轮不改 | 前端本轮不消费（cron 交互面 T-CF-14 workflow 命令面，非事件面）；orchestrator 唤醒消费面 T-CF-12 摘要模板（cron_fired_summary） | T-CF-08（02-CF 定时唤醒与工具方案 §4.4/§4.7 冻结契约） |
 
 > 首个 major 候选登记说明：PE-04 域（T04.3-3/R4，前端解析 T04.4-3）的
 > `RuntimeError.error: String → CrishError` 是当前已知的第一个破坏性演进（若适用——即
@@ -118,12 +121,12 @@
 
 | 锚点                                | 位置                                                                                                                                                            | 断言                                                                                            |
 | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| v1 fixture 解析（40 事件全量）      | `crates/conex-types/tests/fixtures/events-v1/` + `tests/events_schema_version.rs`                                                                               | 无 schemaVersion 旧帧全部解析成功、缺省补 1、type_name 与文件一一对应（40 == changelog 登记数） |
+| v1 fixture 解析（41 事件全量）      | `crates/conex-types/tests/fixtures/events-v1/` + `tests/events_schema_version.rs`                                                                               | 无 schemaVersion 旧帧全部解析成功、缺省补 1、type_name 与文件一一对应（41 == changelog 登记数） |
 | 旧 RuntimeError String 形态         | `event-runtime-error.json`                                                                                                                                      | error 为字符串可解析（major 演进锚点）                                                          |
 | 完整信封帧                          | `frame-with-runid-sequence.json`                                                                                                                                | runId/sequence 保真 + schemaVersion 缺省 1                                                      |
 | 信封序列化                          | `new_envelope_serializes_schema_version_one` / events_roundtrip.rs                                                                                              | 序列化恒含 `schemaVersion: 1`；runId/sequence 缺省时仍注入                                      |
 | 双端 golden（Rust 产出 ↔ 前端消费） | `apps/agent-workbench/src-tauri/tests/event_bridge.rs`（16 项硬依赖 + schemaVersion 断言）、`apps/crish-desktop/src/api/daemon-chat-bridge/EventRouter.test.ts` | 每条载荷含 schemaVersion: 1；前端未知键 schemaVersion 静默忽略（白名单消费）                    |
-| 变体数一致性                        | `v1_baseline_has_exactly_40_event_types`                                                                                                                        | 40 == changelog 表登记数（新增事件漏登记即红；原 `v1_baseline_has_exactly_38_event_types` 随 2026-08-05 定时器域演进改名，38 → 40 留痕） |
+| 变体数一致性                        | `v1_baseline_has_exactly_41_event_types`                                                                                                                        | 41 == changelog 表登记数（新增事件漏登记即红；原 `v1_baseline_has_exactly_38_event_types` / `v1_baseline_has_exactly_40_event_types` 随 2026-08-05 定时器域与 cron 域演进改名，38 → 40 → 41 留痕） |
 
 ## 六、执行注记
 
