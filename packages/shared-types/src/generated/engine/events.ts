@@ -266,9 +266,85 @@ export interface EngineSubagentEndedEvent {
   endedAt: string;
 }
 
-export type EngineEvent = EngineAgentStartEvent | EngineAgentEndEvent | EngineTurnStartEvent | EngineTurnEndEvent | EngineMessageStartEvent | EngineMessageDeltaEvent | EngineMessageEndEvent | EngineToolStartEvent | EngineToolUpdateEvent | EngineToolEndEvent | EngineToolBatchStartEvent | EngineToolBatchEndEvent | EngineToolInputRepairedEvent | EngineContextCompressionStartEvent | EngineContextCompressionEndEvent | EngineProviderDiagnosticEvent | EngineRuntimeErrorEvent | EngineRuntimeSteeringEvent | EngineRuntimeInterventionRequiredEvent | EngineApprovalRequestedEvent | EngineApprovalResolvedEvent | EngineCheckpointCreatedEvent | EngineCheckpointRestoredEvent | EngineRunTerminalEvent | EngineCacheStatsUpdatedEvent | EngineCacheWasteAlertEvent | EngineColdCacheWarningEvent | EngineSecurityAuditEvent | EngineSubagentStartedEvent | EngineSubagentEventEvent | EngineSubagentEndedEvent;
+export interface EngineTaskStartedEvent {
+  type: "task-started";
+  sessionId: string;
+  taskId: string;
+  command: string;
+  cwd: string;
+  ownerRunId: string;
+  isDaemon: boolean;
+}
 
-export const ENGINE_EVENT_TYPES = ["agent-start","agent-end","turn-start","turn-end","message-start","message-delta","message-end","tool-start","tool-update","tool-end","tool-batch-start","tool-batch-end","tool-input-repaired","context-compression-start","context-compression-end","provider-diagnostic","runtime-error","runtime-steering","runtime-intervention-required","approval-requested","approval-resolved","checkpoint-created","checkpoint-restored","run-terminal","cache-stats-updated","cache-waste-alert","cold-cache-warning","security-audit","subagent-started","subagent-event","subagent-ended"] as const;
+export interface EngineTaskOutputEvent {
+  type: "task-output";
+  sessionId: string;
+  taskId: string;
+  line?: string;
+  chunk?: string;
+  lineCount?: number;
+}
+
+export interface EngineTaskHeartbeatEvent {
+  type: "task-heartbeat";
+  sessionId: string;
+  taskId: string;
+  resource: JsonValue;
+}
+
+export interface EngineTaskSuspiciousEvent {
+  type: "task-suspicious";
+  sessionId: string;
+  taskId: string;
+  silenceMs: number;
+  lastOutputAtMs: number;
+}
+
+export interface EngineTaskCompletedEvent {
+  type: "task-completed";
+  sessionId: string;
+  taskId: string;
+  exitCode: number;
+  durationMs: number;
+  lineCount: number;
+}
+
+export interface EngineTaskFailedEvent {
+  type: "task-failed";
+  sessionId: string;
+  taskId: string;
+  exitCode: number;
+  tail: string[];
+  durationMs: number;
+}
+
+export interface EngineTaskKilledEvent {
+  type: "task-killed";
+  sessionId: string;
+  taskId: string;
+  viaForce: boolean;
+  diagnostics?: string;
+}
+
+export interface EngineTimerFiredEvent {
+  type: "timer-fired";
+  sessionId: string;
+  timerId: string;
+  prompt: string;
+  firedAtMs: number;
+}
+
+export interface EngineTimerCancelledEvent {
+  type: "timer-cancelled";
+  sessionId: string;
+  timerId: string;
+  reason: string;
+  cancelledAtMs: number;
+}
+
+export type EngineEvent = EngineAgentStartEvent | EngineAgentEndEvent | EngineTurnStartEvent | EngineTurnEndEvent | EngineMessageStartEvent | EngineMessageDeltaEvent | EngineMessageEndEvent | EngineToolStartEvent | EngineToolUpdateEvent | EngineToolEndEvent | EngineToolBatchStartEvent | EngineToolBatchEndEvent | EngineToolInputRepairedEvent | EngineContextCompressionStartEvent | EngineContextCompressionEndEvent | EngineProviderDiagnosticEvent | EngineRuntimeErrorEvent | EngineRuntimeSteeringEvent | EngineRuntimeInterventionRequiredEvent | EngineApprovalRequestedEvent | EngineApprovalResolvedEvent | EngineCheckpointCreatedEvent | EngineCheckpointRestoredEvent | EngineRunTerminalEvent | EngineCacheStatsUpdatedEvent | EngineCacheWasteAlertEvent | EngineColdCacheWarningEvent | EngineSecurityAuditEvent | EngineSubagentStartedEvent | EngineSubagentEventEvent | EngineSubagentEndedEvent | EngineTaskStartedEvent | EngineTaskOutputEvent | EngineTaskHeartbeatEvent | EngineTaskSuspiciousEvent | EngineTaskCompletedEvent | EngineTaskFailedEvent | EngineTaskKilledEvent | EngineTimerFiredEvent | EngineTimerCancelledEvent;
+
+export const ENGINE_EVENT_TYPES = ["agent-start","agent-end","turn-start","turn-end","message-start","message-delta","message-end","tool-start","tool-update","tool-end","tool-batch-start","tool-batch-end","tool-input-repaired","context-compression-start","context-compression-end","provider-diagnostic","runtime-error","runtime-steering","runtime-intervention-required","approval-requested","approval-resolved","checkpoint-created","checkpoint-restored","run-terminal","cache-stats-updated","cache-waste-alert","cold-cache-warning","security-audit","subagent-started","subagent-event","subagent-ended","task-started","task-output","task-heartbeat","task-suspicious","task-completed","task-failed","task-killed","timer-fired","timer-cancelled"] as const;
 export type EngineEventType = (typeof ENGINE_EVENT_TYPES)[number];
 
 export const ENGINE_EVENT_BACKPRESSURE = {
@@ -302,7 +378,16 @@ export const ENGINE_EVENT_BACKPRESSURE = {
   "security-audit": "critical",
   "subagent-started": "critical",
   "subagent-event": "delta",
-  "subagent-ended": "critical"
+  "subagent-ended": "critical",
+  "task-started": "critical",
+  "task-output": "delta",
+  "task-heartbeat": "delta",
+  "task-suspicious": "soft",
+  "task-completed": "critical",
+  "task-failed": "critical",
+  "task-killed": "critical",
+  "timer-fired": "critical",
+  "timer-cancelled": "soft"
 } as const;
 export type EngineEventBackpressure = (typeof ENGINE_EVENT_BACKPRESSURE)[EngineEventType];
 

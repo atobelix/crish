@@ -46,7 +46,9 @@ use agent_provider::transport::{stream_frames, StreamFrameEvent};
 use agent_tools::background::BackgroundTaskManager;
 use agent_tools::definition::{ToolDefinition, ToolError};
 use agent_tools::mcp::{register_plugin_server, McpClientBridge, McpServerConfig};
-use agent_tools::registry::ToolRegistry;use async_trait::async_trait;
+use agent_tools::registry::ToolRegistry;
+use agent_tools::tools::set_timer::TimerChannel;
+use async_trait::async_trait;
 use conex_types::error::ProviderErrorKind;
 use conex_types::events::{AgentEvent, AgentEventEnvelope, MissAttribution, RunCacheStats};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
@@ -54,6 +56,7 @@ use conex_types::response::ClassifiedStreamError;
 use conex_types::tool::SystemPromptWireMode;
 use conex_telemetry::cache::WARN_MISSED_TOKENS;
 use futures_util::{Stream, StreamExt};
+use orchestrator::PendingMessageQueue;
 use session_loop::provider::{
     DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest,
 };
@@ -68,6 +71,7 @@ use session_loop::{
 use crate::buffer::{drop_class_of, EventBuffer};
 use crate::core_event_bridge::{EmitReport, EventBridge};
 use crate::fs_commands::skills::RustSkill;
+use crate::timers::{AgentEventSink, MemoryTimerStore, QueuePendingSink, TimerRegistry};
 
 /// 首字节超时（等待流首个字节到达；None = 不设限，对齐 normalizeStreamTimeoutMs）
 const DEFAULT_FIRST_BYTE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -605,6 +609,14 @@ pub(crate) struct EngineHandle {
     /// 会话级缓存测量状态（T-40：跨 run 冷缓存预警 + 模型切换检测数据源；
     /// 内存态，跨重启由 runs 表 v5 列兜底——warm_until_ms 落库，T-39）
     cache_sessions: Mutex<HashMap<String, SessionCacheState>>,
+    /// 定时器注册表（G5 T-CF-06/07：register/cancel/到期 steering 注入/
+    /// 早退钩子；TimerChannel 契约实现，经 BuiltinToolConfig.timer_channel
+    /// 注入 set_timer / cancel_timer 工具——engine.rs:617 装配处扩展）
+    timer_registry: Arc<TimerRegistry>,
+    /// 定时器 steering 落点（PendingMessageQueue 适配的底层队列；
+    /// 到期条目落在真实队列，R-CF3 idle 续 run 装配收口时消费）
+    #[allow(dead_code)] // R-CF3：续 run 收口接线
+    timer_steering_queue: Arc<Mutex<PendingMessageQueue>>,
 }
 
 impl EngineHandle {
@@ -612,12 +624,42 @@ impl EngineHandle {
     pub(crate) fn new(background_manager: Option<Arc<dyn BackgroundTaskManager>>) -> Self {
         let client = Arc::new(reqwest::Client::new());
 
+        // G5 T-CF-06/07：TimerRegistry 装配（pending sink = 真实
+        // PendingMessageQueue、event sink = 缓冲适配、store = 内存适配；
+        // conex-db session_meta 与 EventBridge 真适配接线在 R-CF3 装配
+        // 收口，见 timers.rs 头部注记）
+        let timer_steering_queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let timer_registry = Arc::new(TimerRegistry::new(
+            Arc::new(QueuePendingSink::new(Arc::clone(&timer_steering_queue))),
+            Arc::new(AgentEventSink::new()),
+            MemoryTimerStore::shared(),
+        ));
+        // 启动恢复：扫描已持久化声明，重建未到期定时器 / 补发已到期未
+        // 注入（内存 store 下为空集；conex-db 真适配接线后此处即重启
+        // 恢复入口——T-CF-06 §4）。try_current 守卫：纯同步构造上下文
+        // （无 tokio runtime 的测试/装配路径）跳过，不 panic。
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            runtime.spawn({
+                let registry = Arc::clone(&timer_registry);
+                async move {
+                    registry.restore().await;
+                }
+            });
+        } else {
+            tracing::debug!(
+                target: "engine",
+                "TimerRegistry 启动恢复跳过：当前上下文无 tokio runtime"
+            );
+        }
+
         // 内置工具注册（B5.2：fs / shell / search / diff；F1 R-AB1：
         // BuiltinToolConfig 注入后台任务管理器，经 ToolContext.background
-        // 透传给 shell 工具——adopt 通道就位）
+        // 透传给 shell 工具——adopt 通道就位；G5 T-CF-05/06：timer_channel
+        // 注入 TimerRegistry 契约，set_timer / cancel_timer 工具消费）
         let mut registry = ToolRegistry::new();
         let config = agent_tools::tools::BuiltinToolConfig {
             background_manager,
+            timer_channel: Some(Arc::clone(&timer_registry) as Arc<dyn TimerChannel>),
             ..agent_tools::tools::BuiltinToolConfig::default()
         };
         if let Err(error) =
@@ -664,6 +706,8 @@ impl EngineHandle {
             ready_reason: Mutex::new(ready_reason),
             provider_config: Mutex::new(provider_config),
             cache_sessions: Mutex::new(HashMap::new()),
+            timer_registry,
+            timer_steering_queue,
         }
     }
 
@@ -723,6 +767,19 @@ impl EngineHandle {
     #[allow(dead_code)] // E5 接线：core_run_commands 装配 run 启停时消费
     pub(crate) fn mcp_bridge(&self) -> Arc<McpClientBridge> {
         Arc::clone(&self.mcp_bridge)
+    }
+
+    /// 定时器注册表（T-CF-06 装配产物；TimerChannel 契约经
+    /// BuiltinToolConfig.timer_channel 注入工具注册）
+    #[allow(dead_code)] // R-CF3：wait/channel/scheduler 装配收口时消费
+    pub(crate) fn timer_registry(&self) -> Arc<TimerRegistry> {
+        Arc::clone(&self.timer_registry)
+    }
+
+    /// 定时器 steering 队列（到期条目落点；R-CF3 idle 续 run 消费）
+    #[allow(dead_code)] // R-CF3：续 run 收口接线
+    pub(crate) fn timer_steering_queue(&self) -> Arc<Mutex<PendingMessageQueue>> {
+        Arc::clone(&self.timer_steering_queue)
     }
 
     /// 注册插件 MCP server（E5 内容 1）：PluginMcpDeclaration（stdio
@@ -3103,5 +3160,79 @@ mod tests {
         assert_eq!(count, 4, "重复注册不得重复并入");
         // 生命周期收口
         engine.mcp_bridge().stop_all().await;
+    }
+}
+
+/// T-CF-06 装配测试：EngineHandle 的 TimerRegistry 接线面。
+///
+/// 独立模块（不与上方既有 tests 模块共享上下文），聚焦
+/// `engine_injects_timer_channel` 一项验收断言。
+#[cfg(test)]
+mod timer_wiring_tests {
+    use super::*;
+    use conex_types::timer::TimerCondition;
+
+    /// EngineHandle::new 后 set_timer / cancel_timer 工具已注册且
+    /// TimerChannel 已接线：register / cancel / list_active 不再返回
+    /// unsupported；到期 steering 条目落在引擎持有的真实
+    /// PendingMessageQueue（group_id = timer-<id>）。
+    #[tokio::test]
+    async fn engine_injects_timer_channel() {
+        let engine = EngineHandle::new(None);
+        // 工具注册面（T-CF-05 登记；通道为 None 时工具才返回 unsupported）
+        let names: Vec<String> = engine
+            .tool_registry()
+            .list_definitions()
+            .iter()
+            .map(|d| d.name.clone())
+            .collect();
+        assert!(
+            names.iter().any(|n| n == "set_timer"),
+            "set_timer 应已注册：{names:?}"
+        );
+        assert!(
+            names.iter().any(|n| n == "cancel_timer"),
+            "cancel_timer 应已注册：{names:?}"
+        );
+        // 契约接线：经 TimerChannel 注册/取消/活跃列表（TimerRegistry 实现）
+        let channel: Arc<dyn TimerChannel> = engine.timer_registry();
+        let handle = channel
+            .register(1, "装配检查".to_string(), TimerCondition::Never)
+            .await
+            .expect("timer_channel 已接线，register 不应 unsupported");
+        assert_eq!(handle.timer_id, "timer-0");
+        let active = channel.list_active().await.expect("list_active 应可用");
+        assert_eq!(active.len(), 1, "活跃列表应含刚注册的定时器");
+        let cancelled = channel
+            .cancel(&handle.timer_id)
+            .await
+            .expect("cancel 应可用");
+        assert!(cancelled);
+        assert!(
+            channel.list_active().await.expect("list_active 应可用").is_empty(),
+            "取消后活跃列表应为空"
+        );
+        // 真实 PendingMessageQueue 落点：注册新定时器到期 → 队列出现
+        // group_id=timer-<id> 条目、text 含 prompt（生产装配全链路）
+        let handle_b = channel
+            .register(1, "装配链路检查".to_string(), TimerCondition::Never)
+            .await
+            .expect("注册应成功");
+        tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+        let queue = engine.timer_steering_queue();
+        let mut queue = queue.lock().unwrap_or_else(|e| e.into_inner());
+        let entries = queue.dequeue_all();
+        assert_eq!(entries.len(), 1, "到期应恰好注入一条 steering 条目");
+        assert_eq!(
+            entries[0].group_id.as_deref().map(str::to_string),
+            Some(format!("timer-{}", handle_b.timer_id)),
+            "group_id 应为 timer-<id>"
+        );
+        assert!(
+            entries[0].text.contains("装配链路检查"),
+            "条目文本应含 prompt：{}",
+            entries[0].text
+        );
+        assert!(entries[0].is_steering, "条目应带 steering 保护位");
     }
 }

@@ -6,7 +6,7 @@
 // Regenerate: node scripts/generate-engine-bindings.mjs
 // =======================================================================
 
-import type { EngineEvent, EngineAgentStartEvent, EngineAgentEndEvent, EngineTurnStartEvent, EngineTurnEndEvent, EngineMessageStartEvent, EngineMessageDeltaEvent, EngineMessageEndEvent, EngineToolStartEvent, EngineToolUpdateEvent, EngineToolEndEvent, EngineToolBatchStartEvent, EngineToolBatchEndEvent, EngineToolInputRepairedEvent, EngineContextCompressionStartEvent, EngineContextCompressionEndEvent, EngineProviderDiagnosticEvent, EngineRuntimeErrorEvent, EngineRuntimeSteeringEvent, EngineRuntimeInterventionRequiredEvent, EngineApprovalRequestedEvent, EngineApprovalResolvedEvent, EngineCheckpointCreatedEvent, EngineCheckpointRestoredEvent, EngineRunTerminalEvent, EngineCacheStatsUpdatedEvent, EngineCacheWasteAlertEvent, EngineColdCacheWarningEvent, EngineSecurityAuditEvent, EngineSubagentStartedEvent, EngineSubagentEventEvent, EngineSubagentEndedEvent } from "./events";
+import type { EngineEvent, EngineAgentStartEvent, EngineAgentEndEvent, EngineTurnStartEvent, EngineTurnEndEvent, EngineMessageStartEvent, EngineMessageDeltaEvent, EngineMessageEndEvent, EngineToolStartEvent, EngineToolUpdateEvent, EngineToolEndEvent, EngineToolBatchStartEvent, EngineToolBatchEndEvent, EngineToolInputRepairedEvent, EngineContextCompressionStartEvent, EngineContextCompressionEndEvent, EngineProviderDiagnosticEvent, EngineRuntimeErrorEvent, EngineRuntimeSteeringEvent, EngineRuntimeInterventionRequiredEvent, EngineApprovalRequestedEvent, EngineApprovalResolvedEvent, EngineCheckpointCreatedEvent, EngineCheckpointRestoredEvent, EngineRunTerminalEvent, EngineCacheStatsUpdatedEvent, EngineCacheWasteAlertEvent, EngineColdCacheWarningEvent, EngineSecurityAuditEvent, EngineSubagentStartedEvent, EngineSubagentEventEvent, EngineSubagentEndedEvent, EngineTaskStartedEvent, EngineTaskOutputEvent, EngineTaskHeartbeatEvent, EngineTaskSuspiciousEvent, EngineTaskCompletedEvent, EngineTaskFailedEvent, EngineTaskKilledEvent, EngineTimerFiredEvent, EngineTimerCancelledEvent } from "./events";
 import type { AgentMessage, AgentMessageBlock, AgentMessageBlockText, AgentMessageBlockThought, AgentMessageBlockToolCall, AgentMessageBlockToolResult, ToolOutput, ToolArtifact, ToolBatchCall, ToolBatchResult, ToolProgressUpdate, ProviderDiagnostic, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, ToolMetadata, PermissionRequest, ContextCompressionPolicyMetadata, ContextCompressionHandoffMetadata, ContextCompressionCacheBoundaryMetadata, ContextCompressionRecord, RunCacheStats, ImpactAssessment, SubagentEventPayload, AgentMessageRole, AgentEndReason, RunTerminalStatus, ApprovalDecision, ToolCategory, ToolConcurrency, ToolArtifactKind, ProviderDiagnosticPhase, SystemPromptWireMode, ProviderErrorKind, RuntimeCheckpointKind, ContextCompressionTrigger, ContextCompressionReason, ContextCompressionPolicyTier, ContextCompressionPolicyAction, CompressionCacheInvalidation, MissAttribution, SecurityAuditOperation, SecurityAuditDecision, SubagentEventKind, SubagentEndStatus } from "./types";
 import { AGENT_MESSAGE_ROLE_VALUES, AGENT_END_REASON_VALUES, RUN_TERMINAL_STATUS_VALUES, APPROVAL_DECISION_VALUES, TOOL_CATEGORY_VALUES, TOOL_CONCURRENCY_VALUES, TOOL_ARTIFACT_KIND_VALUES, PROVIDER_DIAGNOSTIC_PHASE_VALUES, SYSTEM_PROMPT_WIRE_MODE_VALUES, PROVIDER_ERROR_KIND_VALUES, RUNTIME_CHECKPOINT_KIND_VALUES, CONTEXT_COMPRESSION_TRIGGER_VALUES, CONTEXT_COMPRESSION_REASON_VALUES, CONTEXT_COMPRESSION_POLICY_TIER_VALUES, CONTEXT_COMPRESSION_POLICY_ACTION_VALUES, COMPRESSION_CACHE_INVALIDATION_VALUES, MISS_ATTRIBUTION_VALUES, SECURITY_AUDIT_OPERATION_VALUES, SECURITY_AUDIT_DECISION_VALUES, SUBAGENT_EVENT_KIND_VALUES, SUBAGENT_END_STATUS_VALUES } from "./types";
 import type { JsonValue } from "../../primitive-types";
@@ -1570,6 +1570,198 @@ export function parseEngineSubagentEndedEvent(v: unknown): ParseResult<EngineSub
   });
 }
 
+export function parseEngineTaskStartedEvent(v: unknown): ParseResult<EngineTaskStartedEvent> {
+  if (!isRecord(v)) return parseErr("EngineTaskStartedEvent: payload must be an object");
+  if (v["type"] !== "task-started") return parseErr("EngineTaskStartedEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const taskId = reqField(v, "taskId", checkString);
+  if (!taskId.ok) return taskId;
+  const command = reqField(v, "command", checkString);
+  if (!command.ok) return command;
+  const cwd = reqField(v, "cwd", checkString);
+  if (!cwd.ok) return cwd;
+  const ownerRunId = reqField(v, "ownerRunId", checkString);
+  if (!ownerRunId.ok) return ownerRunId;
+  const isDaemon = reqField(v, "isDaemon", checkBoolean);
+  if (!isDaemon.ok) return isDaemon;
+  return parseOk({
+    type: "task-started",
+    sessionId: sessionId.data,
+    taskId: taskId.data,
+    command: command.data,
+    cwd: cwd.data,
+    ownerRunId: ownerRunId.data,
+    isDaemon: isDaemon.data,
+  });
+}
+
+export function parseEngineTaskOutputEvent(v: unknown): ParseResult<EngineTaskOutputEvent> {
+  if (!isRecord(v)) return parseErr("EngineTaskOutputEvent: payload must be an object");
+  if (v["type"] !== "task-output") return parseErr("EngineTaskOutputEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const taskId = reqField(v, "taskId", checkString);
+  if (!taskId.ok) return taskId;
+  const line = optField(v, "line", checkString);
+  if (!line.ok) return line;
+  const chunk = optField(v, "chunk", checkString);
+  if (!chunk.ok) return chunk;
+  const lineCount = optField(v, "lineCount", checkNumber);
+  if (!lineCount.ok) return lineCount;
+  return parseOk({
+    type: "task-output",
+    sessionId: sessionId.data,
+    taskId: taskId.data,
+    ...(line.data !== undefined ? { line: line.data } : {}),
+    ...(chunk.data !== undefined ? { chunk: chunk.data } : {}),
+    ...(lineCount.data !== undefined ? { lineCount: lineCount.data } : {}),
+  });
+}
+
+export function parseEngineTaskHeartbeatEvent(v: unknown): ParseResult<EngineTaskHeartbeatEvent> {
+  if (!isRecord(v)) return parseErr("EngineTaskHeartbeatEvent: payload must be an object");
+  if (v["type"] !== "task-heartbeat") return parseErr("EngineTaskHeartbeatEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const taskId = reqField(v, "taskId", checkString);
+  if (!taskId.ok) return taskId;
+  const resource = reqField(v, "resource", checkJsonValue);
+  if (!resource.ok) return resource;
+  return parseOk({
+    type: "task-heartbeat",
+    sessionId: sessionId.data,
+    taskId: taskId.data,
+    resource: resource.data,
+  });
+}
+
+export function parseEngineTaskSuspiciousEvent(v: unknown): ParseResult<EngineTaskSuspiciousEvent> {
+  if (!isRecord(v)) return parseErr("EngineTaskSuspiciousEvent: payload must be an object");
+  if (v["type"] !== "task-suspicious") return parseErr("EngineTaskSuspiciousEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const taskId = reqField(v, "taskId", checkString);
+  if (!taskId.ok) return taskId;
+  const silenceMs = reqField(v, "silenceMs", checkNumber);
+  if (!silenceMs.ok) return silenceMs;
+  const lastOutputAtMs = reqField(v, "lastOutputAtMs", checkNumber);
+  if (!lastOutputAtMs.ok) return lastOutputAtMs;
+  return parseOk({
+    type: "task-suspicious",
+    sessionId: sessionId.data,
+    taskId: taskId.data,
+    silenceMs: silenceMs.data,
+    lastOutputAtMs: lastOutputAtMs.data,
+  });
+}
+
+export function parseEngineTaskCompletedEvent(v: unknown): ParseResult<EngineTaskCompletedEvent> {
+  if (!isRecord(v)) return parseErr("EngineTaskCompletedEvent: payload must be an object");
+  if (v["type"] !== "task-completed") return parseErr("EngineTaskCompletedEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const taskId = reqField(v, "taskId", checkString);
+  if (!taskId.ok) return taskId;
+  const exitCode = reqField(v, "exitCode", checkNumber);
+  if (!exitCode.ok) return exitCode;
+  const durationMs = reqField(v, "durationMs", checkNumber);
+  if (!durationMs.ok) return durationMs;
+  const lineCount = reqField(v, "lineCount", checkNumber);
+  if (!lineCount.ok) return lineCount;
+  return parseOk({
+    type: "task-completed",
+    sessionId: sessionId.data,
+    taskId: taskId.data,
+    exitCode: exitCode.data,
+    durationMs: durationMs.data,
+    lineCount: lineCount.data,
+  });
+}
+
+export function parseEngineTaskFailedEvent(v: unknown): ParseResult<EngineTaskFailedEvent> {
+  if (!isRecord(v)) return parseErr("EngineTaskFailedEvent: payload must be an object");
+  if (v["type"] !== "task-failed") return parseErr("EngineTaskFailedEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const taskId = reqField(v, "taskId", checkString);
+  if (!taskId.ok) return taskId;
+  const exitCode = reqField(v, "exitCode", checkNumber);
+  if (!exitCode.ok) return exitCode;
+  const tail = reqField(v, "tail", (x) => parseArrayOf(x, checkString));
+  if (!tail.ok) return tail;
+  const durationMs = reqField(v, "durationMs", checkNumber);
+  if (!durationMs.ok) return durationMs;
+  return parseOk({
+    type: "task-failed",
+    sessionId: sessionId.data,
+    taskId: taskId.data,
+    exitCode: exitCode.data,
+    tail: tail.data,
+    durationMs: durationMs.data,
+  });
+}
+
+export function parseEngineTaskKilledEvent(v: unknown): ParseResult<EngineTaskKilledEvent> {
+  if (!isRecord(v)) return parseErr("EngineTaskKilledEvent: payload must be an object");
+  if (v["type"] !== "task-killed") return parseErr("EngineTaskKilledEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const taskId = reqField(v, "taskId", checkString);
+  if (!taskId.ok) return taskId;
+  const viaForce = reqField(v, "viaForce", checkBoolean);
+  if (!viaForce.ok) return viaForce;
+  const diagnostics = optField(v, "diagnostics", checkString);
+  if (!diagnostics.ok) return diagnostics;
+  return parseOk({
+    type: "task-killed",
+    sessionId: sessionId.data,
+    taskId: taskId.data,
+    viaForce: viaForce.data,
+    ...(diagnostics.data !== undefined ? { diagnostics: diagnostics.data } : {}),
+  });
+}
+
+export function parseEngineTimerFiredEvent(v: unknown): ParseResult<EngineTimerFiredEvent> {
+  if (!isRecord(v)) return parseErr("EngineTimerFiredEvent: payload must be an object");
+  if (v["type"] !== "timer-fired") return parseErr("EngineTimerFiredEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const timerId = reqField(v, "timerId", checkString);
+  if (!timerId.ok) return timerId;
+  const prompt = reqField(v, "prompt", checkString);
+  if (!prompt.ok) return prompt;
+  const firedAtMs = reqField(v, "firedAtMs", checkNumber);
+  if (!firedAtMs.ok) return firedAtMs;
+  return parseOk({
+    type: "timer-fired",
+    sessionId: sessionId.data,
+    timerId: timerId.data,
+    prompt: prompt.data,
+    firedAtMs: firedAtMs.data,
+  });
+}
+
+export function parseEngineTimerCancelledEvent(v: unknown): ParseResult<EngineTimerCancelledEvent> {
+  if (!isRecord(v)) return parseErr("EngineTimerCancelledEvent: payload must be an object");
+  if (v["type"] !== "timer-cancelled") return parseErr("EngineTimerCancelledEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const timerId = reqField(v, "timerId", checkString);
+  if (!timerId.ok) return timerId;
+  const reason = reqField(v, "reason", checkString);
+  if (!reason.ok) return reason;
+  const cancelledAtMs = reqField(v, "cancelledAtMs", checkNumber);
+  if (!cancelledAtMs.ok) return cancelledAtMs;
+  return parseOk({
+    type: "timer-cancelled",
+    sessionId: sessionId.data,
+    timerId: timerId.data,
+    reason: reason.data,
+    cancelledAtMs: cancelledAtMs.data,
+  });
+}
+
 export function parseEngineEvent(v: unknown): ParseResult<EngineEvent> {
   if (!isRecord(v)) return parseErr("engine event must be an object");
   const t = v["type"];
@@ -1606,6 +1798,15 @@ export function parseEngineEvent(v: unknown): ParseResult<EngineEvent> {
     case "subagent-started": return parseEngineSubagentStartedEvent(v);
     case "subagent-event": return parseEngineSubagentEventEvent(v);
     case "subagent-ended": return parseEngineSubagentEndedEvent(v);
+    case "task-started": return parseEngineTaskStartedEvent(v);
+    case "task-output": return parseEngineTaskOutputEvent(v);
+    case "task-heartbeat": return parseEngineTaskHeartbeatEvent(v);
+    case "task-suspicious": return parseEngineTaskSuspiciousEvent(v);
+    case "task-completed": return parseEngineTaskCompletedEvent(v);
+    case "task-failed": return parseEngineTaskFailedEvent(v);
+    case "task-killed": return parseEngineTaskKilledEvent(v);
+    case "timer-fired": return parseEngineTimerFiredEvent(v);
+    case "timer-cancelled": return parseEngineTimerCancelledEvent(v);
     default: return parseErr("unknown engine event type '" + t + "'");
   }
 }

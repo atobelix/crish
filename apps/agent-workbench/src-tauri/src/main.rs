@@ -50,6 +50,7 @@ mod pty;
 mod resource;
 mod session_commands;
 mod status_diagnostics;
+mod timers;
 mod workspace;
 
 use std::sync::{Arc, RwLock};
