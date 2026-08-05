@@ -4,7 +4,11 @@
 //! - 打通 spawn 入口：注册 run_subagent 工具（agent-tools 注册面 10→11）；
 //! - 子代理 = 独立会话 + run（parent_id 链），session_agents 行落库；
 //! - 三方状态机映射（TS SubagentState ↔ DB status CHECK 集，I0 已裁决）；
-//! - 递归守卫（maxDepth=3 / maxSiblings=5 / maxConcurrent=6，DEFAULT_RECURSION_GUARD）
+//! - 递归守卫（maxDepth=1（仅主 Agent 可派发，用户裁决）/ maxSiblings=5 /
+//!   maxConcurrent=6，DEFAULT_RECURSION_GUARD）——子 Agent 无派发能力，
+//!   嵌套发起（新会话深度 > 1）返回 NestingDenied（subagent.nesting_denied，
+//!   T-D-02 结构化错误，文案带「所有子 Agent 由主 Agent 分配」指引）；
+//!   工具面剔除 run_subagent（filter_out_subagent_spawner，防浪费非安全边界）；
 //!   与祖先链死锁检查（DeadlockCheckInput 语义，O(depth)）；
 //! - 伪造审批防护（结果信封层边界声明，ref-analysis 01 Top 3）；
 //! - 写操作挂 I3 审批基础设施（AskChannel 接线面原样挂靠，不重建）。
@@ -181,8 +185,13 @@ pub struct RecursionGuardConfig {
 }
 
 /// 唯一权威默认值（对齐 DEFAULT_RECURSION_GUARD，shared-types/subagent.ts:36）
+///
+/// maxDepth=1 是「仅主 Agent 可派发」的最终防线（用户裁决，REQ-D08 kill 项）：
+/// 主 Agent（深度 0）可派发直接子代理（新会话深度 1）；子 Agent 内再派发
+/// （新会话深度 ≥ 2）由守卫层返回 [RecursionGuardRejection::NestingDenied]。
+/// maxSiblings / maxConcurrent 本轮不动（上限 12 对齐属 T-D-06）。
 pub const DEFAULT_RECURSION_GUARD: RecursionGuardConfig = RecursionGuardConfig {
-    max_depth: 3,
+    max_depth: 1,
     max_siblings: 5,
     max_concurrent: 6,
 };
@@ -191,7 +200,8 @@ pub const DEFAULT_RECURSION_GUARD: RecursionGuardConfig = RecursionGuardConfig {
 /// 兄弟/并发按未终态子代理记账——M6 并发预算同口径）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RecursionGuardSnapshot {
-    /// 当前会话沿 parent_id 链的深度（主会话 = 0，直接子代理 = 1）
+    /// 新会话沿 parent_id 链的深度（主会话的子代理 = 1，沿链递增；
+    /// T-D-02：maxDepth=1 下新会话深度 > 1 即嵌套违规，发起者是子 Agent）
     pub depth: usize,
     /// 父 run 下未终态的子代理数（兄弟并发）
     pub active_siblings: usize,
@@ -204,6 +214,10 @@ pub struct RecursionGuardSnapshot {
 pub enum RecursionGuardRejection {
     /// 递归深度超限（maxDepth；01 Top 6：超深快速失败而非排队）
     DepthExceeded { current: usize, max: usize },
+    /// 嵌套禁止（T-D-02，用户裁决）：maxDepth=1 且新会话深度 > 1——
+    /// 发起者本身是子 Agent，无派发能力；错误文案带编排指引
+    /// （「所有子 Agent 由主 Agent 分配」）
+    NestingDenied { current: usize, max: usize },
     /// 兄弟并发超限（maxSiblings）
     SiblingsExceeded { current: usize, max: usize },
     /// 全局并发超限（maxConcurrent）
@@ -213,26 +227,31 @@ pub enum RecursionGuardRejection {
 }
 
 impl RecursionGuardRejection {
-    /// 错误码（错误码注册表仅含 subagent 域 3 正式码，conex-types 只读：
-    /// 深度超限与死锁为专用码；兄弟/并发超限复用最接近的 subagent 域
-    /// 永久码 depth_exceeded，语义差异由 message 显式承载——专用码登记
-    /// 待 conex-types 演进，见交付报告遗留）
+    /// 错误码（错误码注册表 subagent 域 4 正式码，conex-types：深度超限、
+    /// 死锁与嵌套禁止为专用码；兄弟/并发超限复用最接近的 subagent 域
+    /// 永久码 depth_exceeded，语义差异由 message 显式承载）
     pub fn code(&self) -> &'static str {
         match self {
             Self::DepthExceeded { .. }
             | Self::SiblingsExceeded { .. }
             | Self::ConcurrentExceeded { .. } => codes::SUBAGENT_DEPTH_EXCEEDED,
+            Self::NestingDenied { .. } => codes::SUBAGENT_NESTING_DENIED,
             Self::DeadlockDetected { .. } => codes::SUBAGENT_DEADLOCK_DETECTED,
         }
     }
 
-    /// 结构化错误文案（含指引：减少递归层级 / 减少并发合并任务 / 终止循环链）
+    /// 结构化错误文案（含指引：减少递归层级 / 上报主 Agent 请求派发 /
+    /// 减少并发合并任务 / 终止循环链）
     pub fn message(&self) -> String {
         match self {
             Self::DepthExceeded { current, max } => format!(
                 "递归深度超限（maxDepth={max}，当前 {current}）：请减少递归层级，\
                  或把任务拆给同级子代理并行处理"
             ),
+            Self::NestingDenied { .. } =>
+                "你没有创建子 Agent 的能力；所有子 Agent 由主 Agent 分配。\
+                 请通过消息/上报向主 Agent 请求派发。"
+                    .to_string(),
             Self::SiblingsExceeded { current, max } => format!(
                 "兄弟并发超限（maxSiblings={max}，当前 {current}）：请减少并发/合并任务，\
                  等待部分子代理完成后重试"
@@ -248,12 +267,31 @@ impl RecursionGuardRejection {
     }
 }
 
-/// 递归守卫检查（纯函数）：深度 → 兄弟 → 并发依次判定（01 Top 6：
-/// 深层无容量即失败防死锁），全部通过返回 Ok。
+/// 递归守卫检查（纯函数）：嵌套禁止 → 深度 → 兄弟 → 并发依次判定
+/// （01 Top 6：深层无容量即失败防死锁），全部通过返回 Ok。
+///
+/// 语义裁决（T-D-01/02 合并，任务书内部张力按此收敛）：
+/// 快照 depth = **新会话（spawn 结果）沿 parent_id 链的深度**（主 Agent 的
+/// 直接子代理 = 1）。maxDepth=1（仅主 Agent 可派发）下：
+/// - 新会话深度 > 1（发起者是子 Agent）→ [RecursionGuardRejection::NestingDenied]
+///   （专用变体 + 专用错误码 subagent.nesting_denied，文案带「所有子 Agent
+///   由主 Agent 分配」指引）——T-D-02 语义；
+/// - 新会话深度 = 1（主 Agent 派发直接子代理，含 flow_graph 流程节点快照
+///   depth 恒为 1，`flow_graph.rs:974-983`）→ 恒通过嵌套判定——T-D-01
+///   item 6「流程快照不受 maxDepth=1 影响」据此成立，flow_scheduler 回归全绿；
+/// - 其它 maxDepth 配置（>1）下深度超限仍返回 [RecursionGuardRejection::DepthExceeded]
+///   ——「DepthExceeded 语义保留」据此成立（max=1 时 depth>1 即嵌套违规，
+///   NestingDenied 优先命中，二者不共存）。
 pub fn check_recursion_guard(
     snapshot: RecursionGuardSnapshot,
     config: RecursionGuardConfig,
 ) -> Result<(), RecursionGuardRejection> {
+    if config.max_depth == 1 && snapshot.depth > 1 {
+        return Err(RecursionGuardRejection::NestingDenied {
+            current: snapshot.depth,
+            max: config.max_depth,
+        });
+    }
     if snapshot.depth > config.max_depth {
         return Err(RecursionGuardRejection::DepthExceeded {
             current: snapshot.depth,
@@ -294,6 +332,26 @@ pub fn check_ancestor_chain(input: &DeadlockCheckInput) -> Result<(), RecursionG
         });
     }
     Ok(())
+}
+
+// ── 工具面防护（T-D-02：子代理无派发能力，工具面剔除 run_subagent）──
+
+/// run_subagent 工具名（子代理注册表剔除对象）
+pub const SUBAGENT_SPAWNER_TOOL_NAME: &str = "run_subagent";
+
+/// 剔除 run_subagent 的工具名列表过滤（T-D-02 工具面防护，防浪费非安全
+/// 边界）：子代理 run 装配工具注册表时调用，剔除派发工具，保留等待原语
+/// wait_subagents 与其它工具（wait 语义与嵌套无关，本轮不剔除）。
+///
+/// 引擎侧（T-D-13 装配点）按「发起者是否主 Agent」决定是否调用本函数；
+/// 即使工具面未剔除，守卫层 [check_recursion_guard] 的 NestingDenied
+/// 仍兜底拒绝（安全边界在守卫层）。
+pub fn filter_out_subagent_spawner<'a>(tool_names: &[&'a str]) -> Vec<&'a str> {
+    tool_names
+        .iter()
+        .copied()
+        .filter(|name| *name != SUBAGENT_SPAWNER_TOOL_NAME)
+        .collect()
 }
 
 // ── spawn 契约（引擎侧接线面）────────────────────────────────────
@@ -355,6 +413,9 @@ pub struct SubagentSpawnResult {
 pub enum SubagentSpawnError {
     /// 递归守卫拒绝（深度/兄弟/并发/死锁超限——拒绝 spawn，零 run）
     GuardRejected(RecursionGuardRejection),
+    /// 嵌套禁止（T-D-02：子 Agent 无派发能力，结构化错误透出
+    /// 「所有子 Agent 由主 Agent 分配」指引；错误码 subagent.nesting_denied）
+    NestingDenied(RecursionGuardRejection),
     /// session_agents 落库失败
     PersistFailed(String),
     /// 独立 run 启动失败（引擎侧 spawn run 失败）
@@ -368,6 +429,7 @@ impl SubagentSpawnError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::GuardRejected(rejection) => rejection.code(),
+            Self::NestingDenied(rejection) => rejection.code(),
             Self::PersistFailed(_) => codes::STORE_WRITE_FAILED,
             Self::SpawnFailed(_) => codes::TOOL_EXECUTION_FAILED,
             Self::Unavailable(_) => codes::COMMON_UNSUPPORTED,
@@ -378,6 +440,7 @@ impl SubagentSpawnError {
     pub fn message(&self) -> String {
         match self {
             Self::GuardRejected(rejection) => rejection.message(),
+            Self::NestingDenied(rejection) => rejection.message(),
             Self::PersistFailed(reason) => format!("子代理落库失败：{reason}"),
             Self::SpawnFailed(reason) => format!("子代理 run 启动失败：{reason}"),
             Self::Unavailable(reason) => format!("run_subagent 未接线：{reason}"),
@@ -639,6 +702,15 @@ mod tests {
             }
         }
 
+        /// 嵌套禁止构造：直接产出 [SubagentSpawnError::NestingDenied] 变体
+        /// （T-D-02 验收：工具出站映射走专用错误变体 + 专用错误码）
+        fn rejecting_nesting(rejection: RecursionGuardRejection) -> Self {
+            Self {
+                requests: Mutex::new(Vec::new()),
+                outcome: Err(SubagentSpawnError::NestingDenied(rejection)),
+            }
+        }
+
         fn requests(&self) -> Vec<SubagentSpawnRequest> {
             self.requests.lock().unwrap().clone()
         }
@@ -832,22 +904,103 @@ mod tests {
     fn guard_depth_exceeded_rejected() {
         let config = DEFAULT_RECURSION_GUARD;
         let snapshot = RecursionGuardSnapshot {
-            depth: 4,
+            depth: 2,
+            active_siblings: 0,
+            active_concurrent: 0,
+        };
+        let err = check_recursion_guard(snapshot, config).unwrap_err();
+        // T-D-01 验收：depth=2/max=1 被拒。maxDepth=1 下「新会话深度 2」
+        // 即嵌套违规（发起者是子 Agent），T-D-02 语义优先命中 NestingDenied
+        // 专用变体（DepthExceeded 语义保留由 guard_depth_exceeded_semantics_
+        // preserved 覆盖——max>1 配置下深度超限仍返回 DepthExceeded）
+        assert_eq!(
+            err.code(),
+            codes::SUBAGENT_NESTING_DENIED,
+            "max=1 下新会话深度 2 = 嵌套违规，拒绝 spawn"
+        );
+        assert!(err.message().contains("所有子 Agent 由主 Agent 分配"));
+        assert_eq!(
+            err,
+            RecursionGuardRejection::NestingDenied {
+                current: 2,
+                max: 1
+            }
+        );
+    }
+
+    #[test]
+    fn guard_depth_exceeded_semantics_preserved() {
+        // DepthExceeded 语义保留：非 1 的 maxDepth 配置下，新会话深度超过
+        // 界限仍按 DepthExceeded 拒绝（max=2：深度 3 拒绝、深度 2 通过）
+        let config = RecursionGuardConfig {
+            max_depth: 2,
+            max_siblings: 5,
+            max_concurrent: 6,
+        };
+        let err = check_recursion_guard(
+            RecursionGuardSnapshot {
+                depth: 3,
+                active_siblings: 0,
+                active_concurrent: 0,
+            },
+            config,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), codes::SUBAGENT_DEPTH_EXCEEDED);
+        assert!(err.message().contains("减少递归层级"));
+        assert_eq!(
+            err,
+            RecursionGuardRejection::DepthExceeded {
+                current: 3,
+                max: 2
+            }
+        );
+        // 边界深度（2 = max）通过
+        assert!(check_recursion_guard(
+            RecursionGuardSnapshot {
+                depth: 2,
+                active_siblings: 0,
+                active_concurrent: 0,
+            },
+            config,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn guard_nesting_denied() {
+        // T-D-02 验收（守卫层最终防线）：子 Agent 发起 spawn（新会话深度 2，
+        // 发起者自身深度 1）→ NestingDenied 专用变体 + 专用错误码
+        // subagent.nesting_denied + 编排指引文案
+        let config = DEFAULT_RECURSION_GUARD;
+        let snapshot = RecursionGuardSnapshot {
+            depth: 2,
             active_siblings: 0,
             active_concurrent: 0,
         };
         let err = check_recursion_guard(snapshot, config).unwrap_err();
         assert_eq!(
             err.code(),
-            codes::SUBAGENT_DEPTH_EXCEEDED,
-            "深度超限拒绝 spawn"
+            codes::SUBAGENT_NESTING_DENIED,
+            "嵌套禁止使用专用错误码（不复用 depth_exceeded，避免前端文案歧义）"
         );
-        assert!(err.message().contains("减少递归层级"));
+        assert!(
+            err.message().contains("你没有创建子 Agent 的能力"),
+            "文案必须声明子 Agent 无派发能力"
+        );
+        assert!(
+            err.message().contains("所有子 Agent 由主 Agent 分配"),
+            "文案必须带「所有子 Agent 由主 Agent 分配」指引"
+        );
+        assert!(
+            err.message().contains("请通过消息/上报向主 Agent 请求派发"),
+            "文案必须带上报指引"
+        );
         assert_eq!(
             err,
-            RecursionGuardRejection::DepthExceeded {
-                current: 4,
-                max: 3
+            RecursionGuardRejection::NestingDenied {
+                current: 2,
+                max: 1
             }
         );
     }
@@ -903,20 +1056,39 @@ mod tests {
     #[test]
     fn guard_within_limits_allowed() {
         let config = DEFAULT_RECURSION_GUARD;
-        // 边界值全部通过（maxDepth=3 / maxSiblings=5 / maxConcurrent=6）
+        // T-D-01 验收：depth=1 通过、depth=2 拒绝。边界值语义
+        // （maxDepth=1 / maxSiblings=5 / maxConcurrent=6）：
+        // - depth=1（主 Agent 派发直接子代理，含 flow_graph 流程节点快照
+        //   depth 恒为 1）在嵌套判定界限内，通过；
+        // - depth=0（主 Agent 自身上下文）同样通过（主 Agent spawn 回归）；
+        // - 兄弟/并发取边界值 5/6 通过。
         let snapshot = RecursionGuardSnapshot {
-            depth: 3,
+            depth: 1,
             active_siblings: 5,
             active_concurrent: 6,
         };
         assert!(check_recursion_guard(snapshot, config).is_ok());
-        // 深度优先判定：深度超限时即使兄弟/并发未超限也拒绝
         let snapshot = RecursionGuardSnapshot {
-            depth: 4,
+            depth: 0,
             active_siblings: 0,
             active_concurrent: 0,
         };
-        assert!(check_recursion_guard(snapshot, config).is_err());
+        assert!(check_recursion_guard(snapshot, config).is_ok());
+        // 深度 2（子 Agent 发起）拒绝：嵌套判定优先命中，即使兄弟/并发
+        // 未超限也拒绝
+        let snapshot = RecursionGuardSnapshot {
+            depth: 2,
+            active_siblings: 0,
+            active_concurrent: 0,
+        };
+        assert_eq!(
+            check_recursion_guard(snapshot, config),
+            Err(RecursionGuardRejection::NestingDenied {
+                current: 2,
+                max: 1
+            }),
+            "depth=2 必须拒绝（嵌套禁止优先于深度/兄弟/并发判定）"
+        );
     }
 
     #[test]
@@ -974,6 +1146,108 @@ mod tests {
         assert!(err.to_string().contains("减少并发/合并任务"));
         // spawner 已校验但未产出 run（零 run 语义由引擎侧保证，见落库测试）
         assert_eq!(spawner.requests().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn nesting_denied_maps_to_structured_tool_error() {
+        // T-D-02 验收（工具出站）：嵌套禁止经 SubagentSpawnError::NestingDenied
+        // 原样映射为 ToolError——错误码 subagent.nesting_denied、文案带
+        // 「所有子 Agent 由主 Agent 分配」指引
+        let spawner = Arc::new(RecordingSpawner::rejecting_nesting(
+            RecursionGuardRejection::NestingDenied {
+                current: 2,
+                max: 1,
+            },
+        ));
+        let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+        let ctx = create_mock_tool_context();
+        let err = tool
+            .execute(&ctx, serde_json::json!({ "prompt": "任务" }))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            err.code(),
+            codes::SUBAGENT_NESTING_DENIED,
+            "嵌套禁止错误码必须为 subagent.nesting_denied"
+        );
+        assert!(
+            err.to_string().contains("所有子 Agent 由主 Agent 分配"),
+            "文案必须带「所有子 Agent 由主 Agent 分配」指引"
+        );
+        assert!(
+            err.to_string().contains("请通过消息/上报向主 Agent 请求派发"),
+            "文案必须带上报指引"
+        );
+    }
+
+    #[tokio::test]
+    async fn main_agent_spawn_regression_via_tool() {
+        // 主 Agent（深度 0）spawn 回归：工具直调路径不受嵌套禁止影响
+        let spawner = Arc::new(RecordingSpawner::ok());
+        let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+        let ctx = create_mock_tool_context();
+        let out = tool
+            .execute(&ctx, serde_json::json!({ "prompt": "任务" }))
+            .await
+            .expect("主 Agent spawn 必须成功");
+        assert_eq!(out["status"], "running");
+        assert_eq!(spawner.requests().len(), 1);
+    }
+
+    // ── 工具面防护（T-D-02：filter_out_subagent_spawner 纯函数）────────
+
+    #[test]
+    fn filter_removes_run_subagent_keeps_wait_subagents() {
+        let names: Vec<&str> = vec![
+            "read_file",
+            "run_subagent",
+            "wait_subagents",
+            "shell_command",
+            "write_file",
+        ];
+        let out = filter_out_subagent_spawner(&names);
+        assert_eq!(
+            out,
+            vec!["read_file", "wait_subagents", "shell_command", "write_file"],
+            "run_subagent 必须剔除，wait_subagents 与其它工具保留"
+        );
+        assert!(!out.contains(&"run_subagent"), "剔除后不得残留 run_subagent");
+    }
+
+    #[test]
+    fn filter_identity_when_no_run_subagent() {
+        // 输入不含 run_subagent：原样返回（顺序保持，防装配面破坏）
+        let names: Vec<&str> = vec!["read_file", "wait_subagents", "grep_search"];
+        assert_eq!(filter_out_subagent_spawner(&names), names);
+    }
+
+    #[test]
+    fn filter_empty_input_returns_empty() {
+        assert!(filter_out_subagent_spawner(&[]).is_empty());
+    }
+
+    #[test]
+    fn filter_works_on_builtin_tool_set() {
+        // 全量内置工具名上验证：只剔除 run_subagent，其余 12 个保留
+        let all: Vec<&str> = vec![
+            "background_task",
+            "delete_dir",
+            "delete_file",
+            "diff_text",
+            "file_stat",
+            "fuzzy_find",
+            "grep_search",
+            "list_dir",
+            "read_file",
+            "run_subagent",
+            "shell_command",
+            "wait_subagents",
+            "write_file",
+        ];
+        let out = filter_out_subagent_spawner(&all);
+        assert_eq!(out.len(), 12, "全量 13 工具剔除 run_subagent 后剩 12");
+        assert!(!out.contains(&"run_subagent"));
+        assert!(out.contains(&"wait_subagents"), "wait 原语保留");
     }
 
     // ── 三方状态映射 ──────────────────────────────────────────────
@@ -1172,8 +1446,15 @@ mod tests {
                     .unwrap_or(&0),
                 active_concurrent: self.active_concurrent.load(Ordering::SeqCst),
             };
-            check_recursion_guard(snapshot, self.guard)
-                .map_err(SubagentSpawnError::GuardRejected)?;
+            check_recursion_guard(snapshot, self.guard).map_err(|rejection| match rejection {
+                // T-D-02：嵌套禁止走专用错误变体（错误码 subagent.nesting_denied，
+                // 文案带「所有子 Agent 由主 Agent 分配」指引）——引擎侧
+                // spawner（T-D-13）按同一映射实现
+                RecursionGuardRejection::NestingDenied { .. } => {
+                    SubagentSpawnError::NestingDenied(rejection)
+                }
+                other => SubagentSpawnError::GuardRejected(other),
+            })?;
 
             // 2. 落库（pending 首写即 running）
             let n = self.seq.fetch_add(1, Ordering::SeqCst);
@@ -1272,36 +1553,57 @@ mod tests {
         db.insert_session("sess-main", "主会话").expect("插入会话失败");
         let spawner = DbSpawner::new(db.clone());
 
-        // 主会话 → 子代理（深度 1，落 sess-main）
+        // 主会话（深度 0）→ 子代理（新会话深度 1，落 sess-main）：通过
         let child = spawner
             .spawn(&request("任务 A", "sess-main", Some("run-main")))
             .await
             .expect("第一层 spawn 应成功");
-        // 子代理（在子会话中）→ 孙代理（深度 2，落子会话）
+        assert!(
+            child.subagent_run_id.starts_with("sub-run-1-"),
+            "第一层 run id 应带深度 1 前缀（测试记账推导）"
+        );
+        let rows = spawner
+            .db
+            .load_session_agents("sess-main")
+            .expect("读取第一层落库行失败");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].depth, Some(1), "主 Agent 直接子代理深度 = 1");
+        assert_eq!(
+            rows[0].parent_run_id, "run-main",
+            "parent 链指向父 run"
+        );
+        assert_eq!(
+            rows[0].parent_session_id, "sess-main",
+            "parent 链指向父会话"
+        );
+
+        // 子代理（子会话中，自身深度 1）→ 孙代理（新会话深度 2）：T-D-02
+        // 嵌套禁止，专用变体拒绝且零 run（守卫层兜底：工具面外也无法绕过）
         db.insert_session(&child.session_id, "子会话")
             .expect("插入子会话失败");
-        let grand = spawner
+        let err = spawner
             .spawn(&request("任务 B", &child.session_id, Some(&child.subagent_run_id)))
             .await
-            .expect("第二层 spawn 应成功");
-        assert!(
-            grand.subagent_run_id.starts_with("sub-run-2-"),
-            "第二层 run id 应带深度 2 前缀（测试记账推导）"
+            .unwrap_err();
+        assert_eq!(
+            err,
+            SubagentSpawnError::NestingDenied(RecursionGuardRejection::NestingDenied {
+                current: 2,
+                max: 1
+            }),
+            "子 Agent 发起 spawn 必须返回 NestingDenied（T-D-02 验收）"
         );
+        assert_eq!(err.code(), codes::SUBAGENT_NESTING_DENIED);
+        assert!(
+            err.message().contains("所有子 Agent 由主 Agent 分配"),
+            "文案必须带「所有子 Agent 由主 Agent 分配」指引"
+        );
+        // 零 run 语义：被拒后子会话落库行数为 0
         let rows = spawner
             .db
             .load_session_agents(&child.session_id)
             .expect("读取第二层落库行失败");
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].depth, Some(2), "深度沿 parent_id 链递增");
-        assert_eq!(
-            rows[0].parent_run_id, child.subagent_run_id,
-            "parent 链指向父 run"
-        );
-        assert_eq!(
-            rows[0].parent_session_id, child.session_id,
-            "parent 链指向父会话"
-        );
+        assert_eq!(rows.len(), 0, "嵌套拒绝不得产生任何 run 行");
     }
 
     #[tokio::test]
@@ -1346,10 +1648,11 @@ mod tests {
         db.insert_session("sess-main", "主会话").expect("插入会话失败");
         let spawner = DbSpawner::new(db.clone());
 
-        // 构造深度 4 的链（maxDepth=3）：逐层 spawn 到第 4 层必须被拒
+        // maxDepth=1 下链长上限 = 1：第 1 层（深度 1）成功，第 2 层（深度 2）
+        // 嵌套禁止快速失败（判定序：嵌套 → 深度 → 兄弟 → 并发）
         let mut parent_session = "sess-main".to_string();
         let mut parent_run: Option<String> = Some("run-main".to_string());
-        for level in 1..=4 {
+        for level in 1..=2 {
             db.insert_session(&parent_session, "会话").ok();
             let result = spawner
                 .spawn(&request(
@@ -1359,27 +1662,33 @@ mod tests {
                 ))
                 .await;
             match level {
-                1..=3 => {
-                    let result = result.expect("前三层 spawn 应成功");
+                1 => {
+                    let result = result.expect("第一层 spawn 应成功");
                     parent_session = result.session_id.clone();
                     parent_run = Some(result.subagent_run_id.clone());
                 }
-                4 => {
+                2 => {
                     let err = result.unwrap_err();
                     assert_eq!(
                         err,
-                        SubagentSpawnError::GuardRejected(
-                            RecursionGuardRejection::DepthExceeded {
-                                current: 4,
-                                max: 3
+                        SubagentSpawnError::NestingDenied(
+                            RecursionGuardRejection::NestingDenied {
+                                current: 2,
+                                max: 1
                             }
                         ),
-                        "第 4 层（深度 4 > maxDepth=3）必须快速失败"
+                        "第 2 层（新会话深度 2 > maxDepth=1）必须快速失败"
                     );
                 }
                 _ => unreachable!(),
             }
         }
+        // 零 run 语义：被拒层不落库（子会话中 0 行）
+        let rows = spawner
+            .db
+            .load_session_agents(&parent_session)
+            .expect("读取第二层落库行失败");
+        assert_eq!(rows.len(), 0, "嵌套拒绝不得产生任何 run 行");
     }
 
     // ── 审批通道挂靠（I3 原样挂靠，写类调用产生审批记录）──────────

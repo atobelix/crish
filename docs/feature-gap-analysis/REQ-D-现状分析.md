@@ -32,7 +32,7 @@
 | REQ-D03 默认当前模型 | 🟡 部分 | 继承语义天然满足（全局单例配置）；多模型并行完全缺失（无开关、无 per-run 覆盖） |
 | REQ-D04 自定义 Agent 类型 | 🟡 部分 | SubagentDefinition 骨架已有；缺 task_type / enable_write_tools / allowed_write_paths 硬拦截等 7 项 |
 | REQ-D05 DAG 调度 | ✅ 已实现 | flow_graph 完整：环检测 / gate / on_failed 三策略 / 并发预算 / 重启恢复 / 合成唤醒；缺前端可视化（可选） |
-| REQ-D06 全局事件总线 | 🟡 部分 | 基础设施远超需求（序列 + 落库 + 背压分级）；但无"自定义 topic Pub/Sub"语义；且与需求"纯内存"冲突（见 §6.4 专业判断） |
+| REQ-D06 全局事件总线 | 🟡 部分 | 基础设施远超需求（序列 + 落库 + 背压分级）；但无"自定义 topic Pub/Sub"语义（§6.5 可选后续项） | 持久化冲突已闭环：用户裁决分层持久化保留，需求文档 REQ-D06 6.4 已修订（§6.4） |
 | REQ-D07 事件驱动唤醒 | ✅ 已实现 | wait_subagents 三模式 + 事件驱动等待 + L1 注入 + 合成唤醒，无轮询 |
 | REQ-D08 生命周期管理 | 🟡 部分 | list/kill(L3)/resume(fork 三态) 已实现；kill_all 无专门入口；maxDepth=3 与"子 Agent 不允许嵌套"冲突（需改 1） |
 
@@ -414,16 +414,16 @@ interface SubagentDefinition {
 - 预定义系统 topic：`agent.started` / `agent.completed` / `agent.failed` / `task.output`；自定义业务 topic（如 `rust-build.done`）；
 - 事件内容：`topic` / `sender` / `timestamp` / `payload`；
 - 与 DAG 集成：DAG 引擎内部监听 `agent.completed` / `agent.failed` 驱动下游；
-- 安全约束：子 Agent 只能发布不能命令；**事件总线为内存级通信，不持久化（重启后清空）**；如需持久化审计由主控订阅记录；
+- 安全约束：子 Agent 只能发布不能命令；**事件总线为内存级通信，不持久化（重启后清空）**（**已修订**：见 §6.4 修订闭环，改为分层持久化）；如需持久化审计由主控订阅记录；
 - 验收：可发布/订阅自定义 topic；事件到达唤醒订阅方；DAG 通过事件总线驱动任务流转。
 
 ### 6.2 现状证据
 
 **（1）事件基础设施：序列化 + 落库 + 背压分级（远超"内存级"）**
 
-- 事件模型：`conex-types/src/events.rs:287` 起 `AgentEvent` 枚举（类型化变体，如 `SubagentStarted` 561 / `SubagentEvent` 584 / `SubagentEnded` 593），type_name 落库（`events.rs:661-663`）；
+- 事件模型：`conex-types/src/events.rs:293` 起 `AgentEvent` 枚举（类型化变体，如 `SubagentStarted` 567 / `SubagentEvent` 590 / `SubagentEnded` 599），type_name 由宏展开落库（`events.rs:719-740`）；
 - 落库：events 表 `(session_id, sequence)` 组合主键（`schema.rs:139-147`），`session_sequence` 会话级原子取号（`schema.rs:182-185`）；
-- 背压分级：`BackpressureLevel { Delta, Soft, Critical }`（`conex-types/events.rs:175-181`），`event_backpressure`（`events.rs:676-685`）：Delta 可丢不落库、Soft 尽力、Critical 必达落库；
+- 背压分级：`BackpressureLevel { Delta, Soft, Critical }`（`conex-types/events.rs:175-181`），`event_backpressure`（`events.rs:793-812`）：Delta 可丢不落库、Soft 尽力、Critical 必达落库；
 - EventQueue（`crates/orchestrator/src/events.rs:106-180`）：取号 → 非持久化分流（delta 不落库不阻塞 drive loop）→ 持久化事件同步等待落库；持久化失败 → run 标记 failed（`events.rs:12-14`）；
 - 子代理事件：`SubagentEventEmitter`（`crates/orchestrator/src/subagent_events.rs:172-218`）三发射点（started / event / ended），背压：started/ended = Critical 必达、progress = Delta、message/tool = Soft（`subagent_events.rs:15-19`）。
 
@@ -445,20 +445,22 @@ interface SubagentDefinition {
 - ✅ 基础设施面（序列 / 落库 / 背压 / 终端推送 / 钩子消费）完整且远超需求；
 - ❌ **Pub/Sub 语义**（topic 发布订阅）不存在——现状是"单向事件流 + 点对点回传"；
 - ❌ 验收标准 1（发布/订阅自定义 topic）与验收标准 3（DAG 通过事件总线驱动）在字面意义上未达成；
-- ⚠️ **与需求文档 6.4"内存级不持久化"冲突**：现状 Critical 事件落库（events 表）。
+- ⚠️ 原"需求内存级不持久化 vs 现状 Critical 落库"冲突**已闭环**（见 §6.4 决议与 §6.3 注）。
 
-### 6.4 冲突点专业判断：分层持久化 vs 纯内存
+> **修订闭环**：用户已裁决：按分层持久化保留，需求文档已修订（REQ-D06 6.4，`REQ-agent-engine-capabilities.md:576-584`）。REQ-D06 剩余差距仅为 topic Pub/Sub（§6.5 可选后续项），不再含持久化冲突项。
 
-**结论：现有"Critical 必达落库 + Delta 不落库"的分层持久化是对的，需求文档 6.4 的"纯内存"应判定为过时/低优先级约束，建议按现状保留并修订需求文档。**
+### 6.4 冲突点专业判断与修订闭环：分层持久化 vs 内存级不持久化
+
+**结论：现有"Critical 必达落库 + Delta 不落库"的分层持久化是对的，需求文档 6.4 原"内存级不持久化"约束应判定为过时/低优先级约束。已闭环：用户已裁决按分层持久化保留，需求文档 REQ-D06 6.4 已修订为分层持久化表述（`REQ-agent-engine-capabilities.md:576-584`）。**
 
 论证（结合崩溃恢复 / 审计 / 补投三面）：
 
-1. **崩溃恢复面**：子代理终态（subagent-ended，Critical）若只在内存，进程崩溃后主 Agent 无法得知"哪个子代理完成/失败"；DAG 调度器恢复虽不直接依赖 events 表（`flow_graph.rs:1281+` 从 session_agents 行 + flow_* 键重建），但"补投"依赖终态事件的持久化留痕——恢复阶梯 2 的通知（`recover_notifications`，`recovery.rs:76-82`）与 steering 补排（`restore_steering_notifications`，`recovery.rs:52-54`）都是"落库后重启可恢复"的实例。纯内存总线 + 重启清空 = 子代理完成信号永久丢失。
+1. **崩溃恢复面**：子代理终态（subagent-ended，Critical）若只在内存，进程崩溃后主 Agent 无法得知"哪个子代理完成/失败"；DAG 调度器恢复虽不直接依赖 events 表（`flow_graph.rs:1281+` 从 session_agents 行 + flow_* 键重建），但"补投"依赖终态事件的持久化留痕——恢复阶梯 2 的通知（`recover_notifications`，`recovery.rs:76-82`）与 steering 补排（`restore_steering_notifications`，`recovery.rs:1220`）都是"落库后重启可恢复"的实例。内存级总线 + 重启清空 = 子代理完成信号永久丢失。
 2. **审计面**：events 表是会话级审计底账（recovery-* 域事件留痕：`recovery.rs:96-104` 五个恢复域事件类型），若按需求"由主控订阅记录"则主控 Agent 本身也是易失的（进程内），审计链断裂；"引擎落库 + 引擎恢复"比"主控订阅 + 主控记录"可靠一个数量级。
 3. **补投面**：DAG 推进依赖终态事件（`on_subagent_terminal`）；若事件仅内存，恢复后调度器必须靠 session_agents 行状态差量重推（现状 load 正是这么做的），两者并存时**落库事件是校验锚点**（崩溃一致性测试 `crash_consistency.rs` 覆盖）。
-4. **成本面**：SQLite 单会话事件量级小（Delta 已分流不落库），落库开销可忽略；"纯内存"省不了什么。
+4. **成本面**：SQLite 单会话事件量级小（Delta 已分流不落库），落库开销可忽略；内存级方案省不了什么。
 
-**需求文档修订建议**：把 REQ-D06 6.4 改为"事件按背压分级持久化（Critical 必达落库、Delta 可丢不落库）；自定义业务 topic 若为纯诊断类可按 Delta 处理"。
+**需求文档修订闭环**：已按裁决把 REQ-D06 6.4 修订为"事件按背压分级持久化：Critical 必达落库（重启后可重放）、Soft 尽力投递（通知留痕，可落库、不阻塞）、Delta 内存级可丢不落库；自定义业务 topic 若为纯诊断类按 Delta 处理"（`REQ-agent-engine-capabilities.md:576-584`）。本修订为**文档对齐现状**，不改代码（与 BackpressureLevel 三档语义一致：`conex-types/events.rs:167-188`）。
 
 ### 6.5 差距与建议（topic Pub/Sub 的务实落地）
 
@@ -621,7 +623,7 @@ fork 三态继承已覆盖"网络问题恢复"（阶梯 1 自动重试优先于 
 | REQ-D03 默认当前模型 | 🟡 | `config.rs:229-249`（全局解析）、`subagent.rs:303-332`（无 model 字段） | 继承 ✅；多模型模式全缺 |
 | REQ-D04 自定义 Agent 类型 | 🟡 | `subagent.ts:45-62`（Definition）、`readonly.rs`（裁剪） | 缺 task_type 等 7 项；无路径硬沙箱 |
 | REQ-D05 DAG 调度 | ✅ | `flow_graph.rs:90-122`（声明）、`219-251`（校验）、`918-1090`（advance）、`1096-1210`（终态）、`1281+`（恢复） | 仅可视化（可选）与主 Agent 声明入口 |
-| REQ-D06 全局事件总线 | 🟡 | `conex-types/events.rs:175-181`（背压）、`orchestrator/events.rs:106-180`（队列）、`subagent_events.rs:172-218`（发射器）、`hooks.rs:59-106`（14 钩子） | 无 topic Pub/Sub；需求"纯内存"与现状落库冲突（建议修订需求） |
+| REQ-D06 全局事件总线 | 🟡 | `conex-types/events.rs:175-181`（背压）、`orchestrator/events.rs:106-180`（队列）、`subagent_events.rs:172-218`（发射器）、`hooks.rs:59-106`（14 钩子） | 无 topic Pub/Sub（§6.5 可选后续项）；持久化冲突已闭环（§6.4：用户裁决分层持久化，需求文档已修订） |
 | REQ-D07 事件驱动唤醒 | ✅ | `wait_subagents.rs:41-72`（三模式）、`233`（事件等待原语）、`steering_queue.rs:181-213`（批量）、`flow_graph.rs:513-523`（合成唤醒） | 完成通知缺 role 字段；上报无工具化入口（P2） |
 | REQ-D08 生命周期 | 🟡 | `control.rs:43-67`（L3）、`recovery.rs:198-457`（恢复阶梯/fork）、`agents.rs:9-89`（list）、`subagent.rs:185`（maxDepth=3） | kill_all 缺失；maxDepth 未按用户裁决改 1 |
 
@@ -633,7 +635,7 @@ fork 三态继承已覆盖"网络问题恢复"（阶梯 1 自动重试优先于 
 | **P0-2** | maxDepth 3→1（用户裁决执行） | 8 个改造点见 §8.4(1)；含工具面剔除 run_subagent | 0.5 任务卡 |
 | **P0-3** | 并发上限与"一轮 12"对齐 | maxConcurrent 6→12 争议裁决（§1.4-3） | 0.5 任务卡 |
 | **P1-1** | REQ-D04 字段扩展 + 路径硬沙箱 | 9 项参数映射 + `check_write_allowance` 前置拦截（§4.4） | 1.5 任务卡 |
-| **P1-2** | REQ-D06 topic 扩展 + 需求文档修订（纯内存 → 分层持久化） | `AgentEvent::CustomTopic` 注册式扩展（§6.5） | 1 任务卡 |
+| **P1-2** | REQ-D06 topic 扩展（需求文档持久化修订已完成） | `AgentEvent::CustomTopic` 注册式扩展（§6.5）；需求文档 REQ-D06 6.4 已修订为分层持久化（§6.4 闭环） | 1 任务卡 |
 | **P1-3** | declare_flow 工具化（主 Agent 声明 DAG 入口） | 编排能力交还主 Agent（§5.4-2） | 1 任务卡 |
 | **P2-1** | 批量派发参数 / 主 Agent 声明入口二选一 | §1.4-2 | 1 任务卡 |
 | **P2-2** | worktree share/branch 隔离 | 评估登记，暂缓（§2.4-2） | 2 任务卡（若做） |
@@ -645,14 +647,14 @@ fork 三态继承已覆盖"网络问题恢复"（阶梯 1 自动重试优先于 
 | # | 冲突 | 需求文档立场 | 现状 | 裁决建议 |
 | :--- | :--- | :--- | :--- | :--- |
 | 1 | **嵌套** | REQ-D08 kill 括号（用户裁决）：子 Agent 不允许再嵌套 | maxDepth=3 允许嵌套（`subagent.rs:185`） | **执行用户裁决**：maxDepth 改 1（§8.4-1 改造点清单）；同时修订需求文档 REQ-D08 正式落为"仅主 Agent 可派发" |
-| 2 | **事件持久化** | REQ-D06 6.4：内存级不持久化，重启清空 | Critical 必达落库（events 表），Delta 不落库 | **保留现状分层持久化**，修订需求文档（§6.4 论证：崩溃恢复/审计/补投三面）；自定义 topic 若引入按 Delta/Soft 级处理 |
+| 2 | **事件持久化** | REQ-D06 6.4：内存级不持久化，重启清空 | Critical 必达落库（events 表），Delta 不落库 | **已闭环**：用户裁决保留现状分层持久化；需求文档 REQ-D06 6.4 已修订（Critical 落库可重放、Soft 尽力投递、Delta 不落库，§6.4）；自定义 topic 若引入按 Delta/Soft 级处理（§6.5 可选后续项） |
 | 3 | **调度上限** | REQ-D01：单轮上限遵守项目约定（12） | maxConcurrent=6 / maxSiblings=5 | 修订：maxConcurrent 提到 12（会话级硬上限），兄弟并发维持 5；或修订需求为 6。需用户裁决 |
 | 4 | **Role 语义** | REQ-D01：Role 为 2-5 字自由标签 | Role 固定 5 枚举（禁令 21 防双维度） | 保持枚举 + 新增 display_label 自由文本展示位（§1.4-1），两者不冲突 |
 | 5 | **隔离模式** | REQ-D02：三隔离模式 | `isolationMode` 恒 `'none'`（worktree 推迟） | 承认差距（❌），登记 P2 评估；互斥 + 只读裁剪为中间态（§2.4） |
 
 ### 9.4 结论
 
-模块 D 整体完成度约 **60%**：调度核心（DAG、等待、恢复、事件基础设施）已远超需求规格，缺口集中在**派发/权限/隔离的"外围控制面"**（批量、自定义类型、路径沙箱、worktree、kill_all）以及**两处与需求文档的实质性冲突**（嵌套深度、事件持久化）。建议按 §9.2 的 P0-1/P0-2/P0-3 先行推进——三者都是"小改动、高裁决价值"，其余按 P1/P2 排期；冲突点 1、2 需要在本文档评审时由用户拍板后回写需求文档。
+模块 D 整体完成度约 **60%**：调度核心（DAG、等待、恢复、事件基础设施）已远超需求规格，缺口集中在**派发/权限/隔离的"外围控制面"**（批量、自定义类型、路径沙箱、worktree、kill_all）以及**两处与需求文档的实质性冲突**（嵌套深度、事件持久化）。建议按 §9.2 的 P0-1/P0-2/P0-3 先行推进——三者都是"小改动、高裁决价值"，其余按 P1/P2 排期；冲突点 2（事件持久化）已由用户裁决并闭环（需求文档 REQ-D06 6.4 已修订，§6.4）；冲突点 1（嵌套）用户已裁决 maxDepth=1，由 F4 轮 T-D-01~03 落地并回写 REQ-D08。
 
 ---
 

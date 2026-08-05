@@ -6,7 +6,7 @@
 //! - 03-ERROR-MIGRATION.md §2.2（码表）/ §6（IPC 序列化）
 //!
 //! 设计要点：
-//! - CrishError 用 struct 而非 enum（77 码跨 20 域，enum 不可维护）
+//! - CrishError 用 struct 而非 enum（78 码跨 20 域，enum 不可维护）
 //! - 错误码通过 codes 模块常量 + CRISH_ERROR_REGISTRY 静态注册表表达
 //! - CrishErrorPayload 是 IPC 序列化类型，字段与 TS 端 CrishErrorPayload 一一对应
 //! - cause 链递归深度上限 8（CRISH_ERROR_CAUSE_MAX_DEPTH）
@@ -46,7 +46,7 @@ pub struct CrishErrorInfo {
     pub action: &'static str,
 }
 
-/// 错误码常量集（TS 端 CrishErrorCode 同构，77 码 / 20 域）
+/// 错误码常量集（TS 端 CrishErrorCode 同构，78 码 / 20 域）
 ///
 /// 来源：packages/shared-types/src/errors/codes.ts
 /// 权威：03-ERROR-MIGRATION.md §2.2
@@ -109,9 +109,13 @@ pub mod codes {
     pub const STORE_READ_FAILED: &str = "store.read_failed";
     pub const STORE_CORRUPTED: &str = "store.corrupted";
     pub const STORE_CAPACITY_EXCEEDED: &str = "store.capacity_exceeded";
-    // ── subagent 域（2 正式码 + 1 reserved）──
+    // ── subagent 域（3 正式码 + 1 reserved）──
     pub const SUBAGENT_DEPTH_EXCEEDED: &str = "subagent.depth_exceeded";
     pub const SUBAGENT_DEADLOCK_DETECTED: &str = "subagent.deadlock_detected";
+    /// 嵌套禁止（T-D-02，用户裁决 REQ-D08：仅主 Agent 可派发子 Agent；
+    /// 子 Agent 内调用 run_subagent 一律拒绝——新语义单独登记，不复用
+    /// depth_exceeded 避免前端文案歧义）
+    pub const SUBAGENT_NESTING_DENIED: &str = "subagent.nesting_denied";
     pub const SUBAGENT_TIMEOUT: &str = "subagent.timeout";
     // ── plugin 域（3 正式码）──
     pub const PLUGIN_NOT_FOUND: &str = "plugin.not_found";
@@ -155,7 +159,7 @@ pub mod codes {
     pub const GOAL_MAX_ROUNDS: &str = "goal.max_rounds";
 }
 
-/// 错误码元信息注册表（TS 端 CRISH_ERROR_REGISTRY 同构，77 条）
+/// 错误码元信息注册表（TS 端 CRISH_ERROR_REGISTRY 同构，78 条）
 static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy::new(|| {
     let mut m = HashMap::with_capacity(80);
     // ── config 域 ──
@@ -423,6 +427,11 @@ static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy:
         category: CrishErrorCategory::Permanent, retryable: false,
         is_public: true, action: "action.subagent.break_cycle",
     });
+    m.insert(codes::SUBAGENT_NESTING_DENIED, CrishErrorInfo {
+        code: codes::SUBAGENT_NESTING_DENIED, title: "子代理嵌套禁止",
+        category: CrishErrorCategory::Permanent, retryable: false,
+        is_public: true, action: "action.subagent.ask_main_agent",
+    });
     m.insert(codes::SUBAGENT_TIMEOUT, CrishErrorInfo {
         code: codes::SUBAGENT_TIMEOUT, title: "子代理超时",
         category: CrishErrorCategory::Transient, retryable: true,
@@ -603,7 +612,7 @@ fn now_millis() -> i64 {
 /// Crish 错误类型（struct，非 enum）
 ///
 /// Crish 错误类型（struct，非 enum），与 TS 端 CrishError class 同构。
-/// 77 码通过 code: String 表达，
+/// 78 码通过 code: String 表达，
 /// category/retryable 由 info(code) 在构造时决定，可通过 with_* 覆盖。
 /// cause 链在 to_error_payload 时按 depth 截断。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -996,16 +1005,16 @@ impl RunTerminal {
     }
 }
 
-// ── CoreError → 77 码显式映射（PE-03 T03.3 动作 1，AU-04 D8 边界）──
+// ── CoreError → 78 码显式映射（PE-03 T03.3 动作 1，AU-04 D8 边界）──
 //
-// IPC 面唯一协议为 CoreError `{kind, detail}`；web 网关 HTTP 层需要 77 码时，
+// IPC 面唯一协议为 CoreError `{kind, detail}`；web 网关 HTTP 层需要 78 码时，
 // 一律经本函数显式映射（单一真源，禁止散落 map_err）。映射表见
 // PE-03 §2.4.2（Q30：`From<CoreError> for CrishError` 类型删除归 PE-06 T06.5.4，
 // 本函数只做显式映射，不落类型删除）。
 
-/// 把 `CoreError` 映射为 77 码体系主码（PE-03 §2.4.2 映射表成文）。
+/// 把 `CoreError` 映射为 78 码体系主码（PE-03 §2.4.2 映射表成文）。
 ///
-/// | CoreError kind | 77 码主码 | 说明 |
+/// | CoreError kind | 78 码主码 | 说明 |
 /// |---|---|---|
 /// | InvalidInput | common.invalid_input | 参数校验失败 |
 /// | Encoding | common.encoding | 编解码失败 |
@@ -1206,7 +1215,7 @@ mod tests {
 
     // ── PE-03 T03.3：core_error_code 显式映射（6 kind × 主码表 + 注册存在性）──
 
-    /// 6 个 kind 全部映射到 77 码体系主码（§2.4.2 映射表逐行断言）。
+    /// 6 个 kind 全部映射到 78 码体系主码（§2.4.2 映射表逐行断言）。
     #[test]
     fn core_error_code_maps_all_kinds() {
         assert_eq!(core_error_code(&CoreError::InvalidInput("x".into())), codes::COMMON_INVALID_INPUT);

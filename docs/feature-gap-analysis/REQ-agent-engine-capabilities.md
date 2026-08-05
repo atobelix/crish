@@ -576,12 +576,25 @@ AI 的执行模型应为**事件驱动**，而非轮询驱动。当 AI 没有需
 #### 6.4 安全约束
 
 - 子 Agent 只能发布事件，不能直接"命令"其他子 Agent 执行操作（指挥权保留在主控 Agent）。
-- 事件总线为内存级通信，不持久化（重启后清空）。如需持久化审计，由主控 Agent 订阅并记录。
+- 事件按**背压分级持久化（分层持久化）**：**Critical 事件必达落库（重启后可重放，是崩溃恢复、审计底账与 DAG 补投的校验锚点）**；Soft 事件尽力投递（通知留痕，可落库、不阻塞）；Delta 事件内存级可丢（不落库）。自定义业务 topic 若为纯诊断类按 Delta 处理。如需进一步审计，可由主控 Agent 订阅记录。
+
+#### 6.5 Critical 事件落库面清单（附证据，供评审核查）
+
+| 事件域 | 具体事件 | 背压级 | 证据 |
+| :--- | :--- | :--- | :--- |
+| 子代理生命周期 | `SubagentStarted`（`conex-types/events.rs:567`）/ `SubagentEnded`（`conex-types/events.rs:599`） | Critical | `orchestrator/src/subagent_events.rs:15-19` |
+| 子代理消息 | `SubagentEventKind::Message`（`conex-types/events.rs:129`） | Soft | `orchestrator/src/subagent_events.rs:15-19`；`conex-types/events.rs:797-798` |
+| 子代理进度 | progress 类（`SubagentEventKind::Progress`） | Delta | `orchestrator/src/subagent_events.rs:15-19` |
+| 恢复域 | recovery-* 五类事件（`orchestrator/src/recovery.rs:96-104`） | Critical | 恢复阶梯事件留痕 events 表（`orchestrator/src/recovery.rs:46,592`） |
+| 审计面 | security-audit 审计事件（写操作处置留痕） | Critical | `agent-tools/src/audit.rs:23-26`（SecurityAuditSink） |
+
+说明：Delta 不落库由 `orchestrator/src/events.rs` 事件类别分流实现（`event_class`，`orchestrator/src/events.rs:44-47`：progress 类不落库不阻塞 drive loop）；本条为**文档对齐现状**，不改代码。
 
 **验收标准**：
 - [ ] Agent 可发布和订阅自定义 topic 事件。
 - [ ] 事件到达时订阅方 Agent 被正确唤醒。
 - [ ] DAG 调度引擎通过事件总线驱动任务流转。
+- [ ] Critical 事件必达落库，重启后可重放；Soft 事件尽力投递（通知留痕）；Delta 事件不落库可丢。
 
 ---
 
@@ -613,7 +626,12 @@ AI 的执行模型应为**事件驱动**，而非轮询驱动。当 AI 没有需
 
 **详细规格**：
 - `list`：列出所有活跃子 Agent 及其 ConversationId、Role、当前状态、启动时间。
-- `kill`：终止指定子 Agent（子 Agent 不允许再嵌套子agent，仅有主agent有生成子agent的能力以及拥有子agent的生命周期管理）。被终止的子 Agent 的日志和产出保留，`branch` 工作区被清理。
+- `kill`：终止指定子 Agent。被终止的子 Agent 的日志和产出保留，`branch` 工作区被清理。
+
+**嵌套禁止裁决（用户裁决，落为规格正文）**：
+- `run_subagent` 仅主 Agent（深度 0）可调用；子 Agent 内调用一律拒绝（结构化错误：`subagent.nesting_denied`，错误文案「你没有创建子 Agent 的能力；所有子 Agent 由主 Agent 分配。请通过消息/上报向主 Agent 请求派发。」）。
+- 工具面：子代理 run 装配工具注册表时剔除 `run_subagent`（防浪费，非安全边界）；守卫层兜底拒绝（`maxDepth=1` + `NestingDenied`）。
+- 子 Agent 深度恒为 1，无派发能力；等待原语 `wait_subagents` 保留（等待语义与嵌套无关）。
 - `kill_all`：终止所有子 Agent 及其后代。
 - `resume`：用于恢复被杀死的（或者因为网络问题）子agent，携带其id、名称、prompt激活子agent
 

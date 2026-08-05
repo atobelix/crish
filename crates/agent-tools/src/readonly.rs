@@ -33,18 +33,32 @@ pub const READONLY_TOOL_NAMES: [&str; 6] = [
     "diff_text",
 ];
 
-/// 按只读白名单裁剪注册表（fail-closed：白名单外的工具全部剔除）
+/// 按名称白名单裁剪注册表（通用过滤函数，fail-closed：名单外的工具全部剔除）
 ///
 /// 返回新注册表，原注册表不受影响。注册失败在源注册表名称唯一的前提下
 /// 不可能发生（白名单 ⊆ 源工具集，名称不重复），`?` 透传保持诚实。
-pub fn filter_readonly_registry(registry: &ToolRegistry) -> Result<ToolRegistry, ToolError> {
+///
+/// T-D-02 复用：子代理 run 装配工具注册表时，除只读裁剪外还按发起者
+/// 身份剔除 run_subagent（工具面防护，防浪费非安全边界；守卫层兜底）。
+pub fn filter_registry_by_names(
+    registry: &ToolRegistry,
+    allowed: &[&str],
+) -> Result<ToolRegistry, ToolError> {
     let mut filtered = ToolRegistry::new();
     for tool in registry.list() {
-        if READONLY_TOOL_NAMES.contains(&tool.name()) {
+        if allowed.contains(&tool.name()) {
             filtered.register(tool)?;
         }
     }
     Ok(filtered)
+}
+
+/// 按只读白名单裁剪注册表（fail-closed：白名单外的工具全部剔除）
+///
+/// 返回新注册表，原注册表不受影响。行为由通用过滤函数
+/// [filter_registry_by_names] 提供（提取复用，T-D-02）。
+pub fn filter_readonly_registry(registry: &ToolRegistry) -> Result<ToolRegistry, ToolError> {
+    filter_registry_by_names(registry, &READONLY_TOOL_NAMES)
 }
 
 #[cfg(test)]
@@ -120,5 +134,22 @@ mod tests {
         for name in WRITE_TOOL_NAMES.iter().chain(READONLY_TOOL_NAMES.iter()) {
             assert!(reg.has(name), "{name} 必须存在于内置工具集");
         }
+    }
+
+    #[test]
+    fn filter_registry_by_names_uses_custom_whitelist() {
+        // 通用过滤函数（T-D-02 提取）：按任意名单裁剪，fail-closed
+        let mut reg = ToolRegistry::new();
+        register_builtin_tools(&mut reg).unwrap();
+        let keep = ["read_file", "grep_search", "wait_subagents"];
+        let out = filter_registry_by_names(&reg, &keep).unwrap();
+        assert_eq!(out.len(), keep.len());
+        for name in keep {
+            assert!(out.has(name), "{name} 必须保留");
+        }
+        assert!(!out.has("run_subagent"), "名单外的 run_subagent 必须剔除");
+        // 原注册表不受影响（非破坏性裁剪）
+        assert_eq!(reg.len(), 13);
+        assert!(reg.has("run_subagent"));
     }
 }

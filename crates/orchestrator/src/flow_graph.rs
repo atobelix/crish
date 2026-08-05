@@ -7,7 +7,9 @@
 //!
 //! 三问：
 //! - 隔离边界：依赖图只推进不回溯（已 completed 不重复启动）；并发预算
-//!   只统计流程节点预留（全局守卫由引擎侧 spawner 的 RecursionGuard 兜底）；
+//!   只统计流程节点预留（全局守卫由引擎侧 spawner 的 RecursionGuard 兜底——
+//!   maxDepth=1 嵌套禁止，T-D-01：流程节点全部为主 Agent 直接子节点，
+//!   快照 depth 恒为 1，不受嵌套禁止影响）；
 //! - 干预入口：终态事件驱动推进（[FlowScheduler::on_subagent_terminal]），
 //!   主 agent 唯一编排者（子 agent 无权修改依赖图），L3 强停由引擎侧兜底；
 //! - 持久化：编排声明与运行时状态存 session_meta `flow_*` 键命名空间
@@ -626,6 +628,9 @@ impl FlowError {
                     max,
                 }
             }
+            // T-D-01 确认：NestingDenied 等深度类拒绝不会经流程快照产生
+            // （流程快照 depth 恒为 1，maxDepth=1 嵌套判定按「新会话深度
+            // > 1」命中）——若意外出现按 InvalidState 上报兜底
             other => Self::InvalidState {
                 message: format!("递归守卫意外拒绝：{}", other.message()),
             },
@@ -785,6 +790,10 @@ impl FlowScheduler {
             graph: None,
             planner_run_id: None,
             default_strategy: read_meta_strategy(&*meta)?,
+            // T-D-01 确认：max_depth 跟随 DEFAULT_RECURSION_GUARD（=1，仅
+            // 主 Agent 可派发）；流程节点全部为主 Agent 直接子节点（新会话
+            // 深度恒 1），嵌套拒绝（NestingDenied）按「新会话深度 > 1」判定，
+            // 流程快照 depth 恒为 1 不受影响（见 advance 快照注释）
             guard: RecursionGuardConfig {
                 max_depth: DEFAULT_RECURSION_GUARD.max_depth,
                 max_siblings,
@@ -889,6 +898,8 @@ impl FlowScheduler {
         // 声明时刻刷新可配位（flow_on_failed / 预算 / 自动排队）
         let (max_siblings, max_concurrent, auto_spawn_composite) =
             read_meta_config(&*self.meta)?;
+        // T-D-01 确认：max_depth 跟随 DEFAULT_RECURSION_GUARD（=1）；流程
+        // 节点全部为主 Agent 直接子节点，快照 depth 恒为 1 不受影响
         self.guard = RecursionGuardConfig {
             max_depth: DEFAULT_RECURSION_GUARD.max_depth,
             max_siblings,
@@ -932,6 +943,8 @@ impl FlowScheduler {
                 break;
             }
             // 1. Block 传播（失败 + Block 策略 → 依赖节点阻塞，含传递）
+            // T-D-01 确认：Block 按依赖边传播，与「父子链」无关；嵌套禁止
+            // （maxDepth=1）后流程节点无后代，传播语义不受影响
             self.propagate_block(&graph, &mut out);
             // 2. 就绪节点（声明序）：合成唤醒 → 预算 reserve → spawn
             let ready_ids: Vec<FlowNodeId> = graph
@@ -970,7 +983,12 @@ impl FlowScheduler {
                     }
                 }
                 // 并发预算 reserve（复用 RecursionGuard：maxSiblings 先命中，
-                // maxConcurrent 兜底；快照按流程内当前在途计数）
+                // maxConcurrent 兜底；快照按流程内当前在途计数）。
+                // T-D-01 语义确认：流程节点快照 depth 恒为 1（主 Agent 直接
+                // 子节点；子 Agent 无后代，流程节点全部是主 Agent 的直接子
+                // 节点），maxDepth=1 下嵌套拒绝（NestingDenied）按「新会话
+                // 深度 > 1」判定——流程快照深度 1 恒在界限内，不受嵌套禁止
+                // 影响；预算维度（siblings/concurrent）照常作为预算门。
                 let in_flight = self.budget.in_flight() as usize;
                 let snapshot = RecursionGuardSnapshot {
                     depth: 1,
@@ -1250,7 +1268,9 @@ impl FlowScheduler {
             });
         }
         // 预算校验（复用 RecursionGuard：挂接的外部 run 同样占用并发预算，
-        // 预算满时拒绝挂接——等后续终态事件释放槽位再重试）
+        // 预算满时拒绝挂接——等后续终态事件释放槽位再重试）。
+        // T-D-01 确认：快照 depth 恒为 1（主 Agent 直接子节点），maxDepth=1
+        // 嵌套禁止按「新会话深度 > 1」判定，此处不受影响；预算维度照常
         let in_flight = self.budget.in_flight() as usize;
         let snapshot = RecursionGuardSnapshot {
             depth: 1,
@@ -1357,6 +1377,8 @@ impl FlowScheduler {
             graph: Some(graph),
             planner_run_id: declaration.planner_run_id.clone(),
             default_strategy,
+            // T-D-01 确认：max_depth 跟随 DEFAULT_RECURSION_GUARD（=1）；
+            // 流程节点快照 depth 恒为 1，恢复语义不受嵌套禁止影响
             guard: RecursionGuardConfig {
                 max_depth: DEFAULT_RECURSION_GUARD.max_depth,
                 max_siblings,

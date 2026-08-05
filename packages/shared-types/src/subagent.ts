@@ -1,5 +1,9 @@
 // packages/shared-types/src/subagent.ts
 // 约束来源：ANTI_OVERENGINEERING_GUARDRAILS.md 禁令 20-22 与本 Round 推迟项
+//
+// 嵌套禁止裁决（用户裁决，REQ-D08 kill 项，T-D-01/02 落地）：
+// maxDepth=1 —— 仅主 Agent（深度 0）可派发子 Agent；子 Agent 深度 1，
+// 无派发能力。Rust 侧 DEFAULT_RECURSION_GUARD 为唯一权威默认值，两侧同值。
 
 /** 子代理角色（标签，仅用于展示与过滤，不影响调度）— 禁令 21 */
 export type SubagentRole =
@@ -21,7 +25,7 @@ export type SubagentIsolationMode = 'none';
 
 /** 递归守卫配置（ROUND-09 §3.2 唯一权威默认值） */
 export interface RecursionGuardConfig {
-  /** 最大递归深度，默认 3 */
+  /** 最大递归深度，默认 1（仅主 Agent 可派发，用户裁决；T-D-01/02） */
   readonly maxDepth: number;
   /** 最大兄弟并发数，默认 5 */
   readonly maxSiblings: number;
@@ -34,7 +38,8 @@ export interface RecursionGuardConfig {
 }
 
 export const DEFAULT_RECURSION_GUARD: Readonly<RecursionGuardConfig> = {
-  maxDepth: 3,
+  // maxDepth=1：嵌套禁止（仅主 Agent 可派发；与 Rust 侧同值同语义）
+  maxDepth: 1,
   maxSiblings: 5,
   maxConcurrent: 6,
   totalTokenBudget: 0,
