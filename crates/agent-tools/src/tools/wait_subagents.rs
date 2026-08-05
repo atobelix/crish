@@ -13,6 +13,10 @@
 //!   优先事件而非轮询）——[wait_for_terminal_events] 原语即该语义载体；
 //! - dispatch_* session_meta：调度模式声明持久化（await-all/timer 参数 +
 //!   已分发子代理清单），重启后恢复「等待什么」；
+//! - G02 完成通知（outputFiles，T-EG-10）：终态载荷附带子代理产出文件
+//!   清单（path/summary/bytes，方案 §4.6），来源为 write_claims 持有者
+//!   记录（引擎强制，不依赖 AI 自觉）；dispatch_outputs 键承载持久化
+//!   副本，旧数据 parse 容错（对齐 explore_quota.rs:70-88）；
 //! - 运行中注入（04 C8 §2.2）：wait 期间主 agent 可向子代理注入提示词，
 //!   经目标 run 的 L1 steer 环（session-loop control.rs 的
 //!   request_subagent_inject，transfer 语义）——注入不打断子代理执行。
@@ -24,10 +28,13 @@
 
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
+use crate::write_paths::{ClaimMode, WritePathRegistry};
 use async_trait::async_trait;
 use conex_types::error::codes;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
@@ -87,6 +94,9 @@ pub const DISPATCH_META_KEY_WAIT_MS: &str = "dispatch_wait_ms";
 pub const DISPATCH_META_KEY_AGENTS: &str = "dispatch_agents";
 /// 分发时刻键（epoch 毫秒；重启后据此计算剩余等待）
 pub const DISPATCH_META_KEY_DISPATCHED_AT: &str = "dispatch_dispatched_at";
+/// 各子代理产出文件清单键（JSON 对象：subagent_id → [SubagentOutput]
+/// 数组；G02 完成通知字段，T-EG-10；旧数据无该键 = 空清单，parse 容错）
+pub const DISPATCH_META_KEY_OUTPUTS: &str = "dispatch_outputs";
 
 // ── 状态摘要 ─────────────────────────────────────────────────────
 
@@ -116,6 +126,150 @@ pub struct SubagentWaitResult {
     pub timed_out: bool,
     /// 各子代理状态摘要（按入参顺序）
     pub agents: Vec<SubagentWaitStatus>,
+}
+
+// ── 产出文件（G02 完成通知字段，T-EG-10）─────────────────────────
+
+/// 子代理产出文件（REQ-G02「附带文件路径与内容摘要」的结构化承载，
+/// 方案 §4.6 载荷草案：path / summary / bytes）
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubagentOutput {
+    /// 产出文件相对路径（工作区内；无法相对化时回退绝对路径）
+    pub path: String,
+    /// 内容摘要（子代理最终消息摘要；缺失时取文件首行概述）
+    pub summary: String,
+    /// 产出字节数（供主控生成汇总索引：文件名 / 行数 / 摘要）
+    pub bytes: u64,
+}
+
+/// 从 write_claims 持有者记录收集子代理产出文件（引擎强制，不依赖 AI 自觉）
+///
+/// 规则：
+/// - 来源：注册表活跃声明中 holder 匹配且为写模式的路径（F7 已接线；
+///   holder 身份对齐声明侧——引擎以 run id 作 holder 时需在调用侧映射
+///   为 subagent id，见轮次报告对接细节）；
+/// - 目录声明展开为直接子文件（产出文档按 NN-*.md 约定平铺，不递归）；
+/// - 已被删除 / 不存在的路径跳过；去重 + 排序（确定性输出）；
+/// - 摘要：优先子代理最终消息摘要，缺失时取文件首行概述（§4.6）；
+/// - 注册表未接线（None）→ 空清单（fail-open，不报错）。
+pub fn collect_subagent_output_files(
+    registry: Option<&WritePathRegistry>,
+    holder: &str,
+    workspace_root: &Path,
+    summary: Option<&str>,
+) -> Vec<SubagentOutput> {
+    let Some(registry) = registry else {
+        return Vec::new();
+    };
+    let mut paths = registry
+        .active_claims()
+        .into_iter()
+        .filter(|claim| claim.holder == holder && claim.mode == ClaimMode::Write)
+        .flat_map(|claim| resolved_output_paths(&claim.path))
+        .collect::<Vec<_>>();
+    // 去重 + 排序：同一路径经目录展开与单文件声明重复命中时只保留一份；
+    // 排序保证输出确定（汇总索引稳定、测试可断言）
+    paths.sort();
+    paths.dedup();
+    paths
+        .into_iter()
+        .map(|path| SubagentOutput {
+            path: super::display_path(workspace_root, &path),
+            summary: summary
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| first_line_summary(&path)),
+            bytes: std::fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0),
+        })
+        .collect()
+}
+
+/// 单条声明的产出路径展开：文件声明原样返回；目录声明取直接子文件
+/// （不递归——产出文档按约定平铺在产出目录下，递归会误收嵌套子目录）；
+/// 声明路径已不存在（运行期删除 / 从未创建）→ 空
+fn resolved_output_paths(claim_path: &PathBuf) -> Vec<PathBuf> {
+    if claim_path.is_file() {
+        return vec![claim_path.clone()];
+    }
+    if claim_path.is_dir() {
+        return std::fs::read_dir(claim_path)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .map(|entry| entry.path())
+                    .filter(|path| path.is_file())
+                    .collect()
+            })
+            .unwrap_or_default();
+    }
+    Vec::new()
+}
+
+/// 文件首行概述（§4.6：摘要 = 子代理最终消息摘要或首行概述；
+/// 读取失败 / 空文件 → 空摘要；取前 200 字符防超长）
+fn first_line_summary(path: &Path) -> String {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| {
+            text.lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty())
+                .map(|line| line.chars().take(200).collect())
+        })
+        .unwrap_or_default()
+}
+
+/// 各子代理产出清单序列化（dispatch_outputs 键值：JSON 对象
+/// subagent_id → [SubagentOutput] 数组）
+pub fn dispatch_outputs_value(outputs: &HashMap<String, Vec<SubagentOutput>>) -> String {
+    serde_json::to_string(outputs).unwrap_or_else(|_| "{}".to_string())
+}
+
+/// 各子代理产出清单解析（容错：缺失 / 损坏 → 空清单，不 panic；
+/// 对齐 explore_quota.rs:70-88 的 parse 容错模式——旧数据无该键时
+/// 回到空清单，不回退）
+pub fn parse_dispatch_outputs(value: Option<&str>) -> HashMap<String, Vec<SubagentOutput>> {
+    let Some(value) = value else {
+        return HashMap::new();
+    };
+    let Ok(parsed) = serde_json::from_str::<Value>(value) else {
+        return HashMap::new();
+    };
+    let Some(object) = parsed.as_object() else {
+        return HashMap::new();
+    };
+    let mut outputs = HashMap::new();
+    for (subagent_id, files) in object {
+        // 条目级容错：非法条目跳过，不因单条损坏丢弃全部
+        let files = files
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| {
+                        let path = item.get("path")?.as_str()?.trim();
+                        if path.is_empty() {
+                            return None;
+                        }
+                        Some(SubagentOutput {
+                            path: path.to_string(),
+                            summary: item
+                                .get("summary")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .to_string(),
+                            bytes: item.get("bytes").and_then(Value::as_u64).unwrap_or(0),
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if !files.is_empty() {
+            outputs.insert(subagent_id.clone(), files);
+        }
+    }
+    outputs
 }
 
 // ── 调度声明（持久化载荷，重启恢复「等待什么」）──────────────────
@@ -371,6 +525,16 @@ pub trait SubagentWaitChannel: Send + Sync + std::fmt::Debug {
         declaration: &DispatchDeclaration,
     ) -> Result<(), SubagentWaitError>;
 
+    /// 持久化各子代理产出文件清单（dispatch_outputs 键；重启后恢复
+    /// 「各子代理产出」。缺省实现不落库（no-op）——引擎侧重载后写
+    /// session_meta，F10 未接线时静默跳过，不阻塞等待主流程）
+    async fn persist_outputs(
+        &self,
+        _outputs: &HashMap<String, Vec<SubagentOutput>>,
+    ) -> Result<(), SubagentWaitError> {
+        Ok(())
+    }
+
     /// 非阻塞快照：各指定子代理当前状态摘要
     async fn snapshot(
         &self,
@@ -463,7 +627,7 @@ impl Tool for WaitSubagentsTool {
         &self.def
     }
 
-    async fn execute(&self, _ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         // 入参解析：subagentIds 必填非空；mode/timeoutMs/inject 可选
         let ids: Vec<String> = args
             .get("subagentIds")
@@ -579,7 +743,30 @@ impl Tool for WaitSubagentsTool {
                 .map_err(|e| ToolError::new(e.code(), e.message()))?,
         };
 
-        // 结果信封：结构化摘要（不重放全量消息）
+        // 终态产出收集（G02 完成通知字段）：从 write_claims 持有者记录
+        // 按子代理身份收集产出文件（引擎强制，不依赖 AI 自觉）；摘要取
+        // 子代理最终消息摘要。空结果不持久化、载荷输出空数组
+        let mut outputs_by_agent: HashMap<String, Vec<SubagentOutput>> = HashMap::new();
+        for agent in &result.agents {
+            let files = collect_subagent_output_files(
+                ctx.write_claims.as_deref(),
+                &agent.subagent_id,
+                &ctx.workspace_root,
+                agent.summary.as_deref(),
+            );
+            if !files.is_empty() {
+                outputs_by_agent.insert(agent.subagent_id.clone(), files);
+            }
+        }
+        if !outputs_by_agent.is_empty() {
+            channel
+                .persist_outputs(&outputs_by_agent)
+                .await
+                .map_err(|e| ToolError::new(e.code(), e.message()))?;
+        }
+
+        // 结果信封：结构化摘要（不重放全量消息）；终态载荷附带 outputFiles
+        //（path/summary/bytes，供主控汇总各子代理产出路径，REQ-G02）
         Ok(serde_json::json!({
             "mode": result.mode.as_str(),
             "allTerminal": result.all_terminal,
@@ -590,6 +777,11 @@ impl Tool for WaitSubagentsTool {
                 "summary": a.summary,
                 "elapsedMs": a.elapsed_ms,
                 "terminal": a.terminal,
+                "outputFiles": outputs_by_agent.get(&a.subagent_id).map(|files| files.iter().map(|o| serde_json::json!({
+                    "path": o.path,
+                    "summary": o.summary,
+                    "bytes": o.bytes,
+                })).collect::<Vec<_>>()).unwrap_or_default(),
             })).collect::<Vec<_>>(),
         }))
     }
@@ -601,7 +793,7 @@ mod tests {
     #![allow(clippy::disallowed_methods)]
 
     use super::*;
-    use crate::context::create_mock_tool_context;
+    use crate::context::{create_mock_tool_context, ToolContext};
     use conex_test_utils::TempWorkspace;
     use std::sync::Mutex;
     use tokio::sync::mpsc;
@@ -614,6 +806,7 @@ mod tests {
         persists: Mutex<Vec<DispatchDeclaration>>,
         injects: Mutex<Vec<(String, String)>>,
         waits: Mutex<Vec<(Vec<String>, Option<u64>)>>,
+        output_persists: Mutex<Vec<HashMap<String, Vec<SubagentOutput>>>>,
         snap: Vec<SubagentWaitStatus>,
         wait_result: SubagentWaitResult,
     }
@@ -624,6 +817,7 @@ mod tests {
                 persists: Mutex::new(Vec::new()),
                 injects: Mutex::new(Vec::new()),
                 waits: Mutex::new(Vec::new()),
+                output_persists: Mutex::new(Vec::new()),
                 snap,
                 wait_result,
             }
@@ -640,6 +834,10 @@ mod tests {
         fn waits(&self) -> Vec<(Vec<String>, Option<u64>)> {
             self.waits.lock().unwrap().clone()
         }
+
+        fn output_persists(&self) -> Vec<HashMap<String, Vec<SubagentOutput>>> {
+            self.output_persists.lock().unwrap().clone()
+        }
     }
 
     #[async_trait]
@@ -649,6 +847,14 @@ mod tests {
             declaration: &DispatchDeclaration,
         ) -> Result<(), SubagentWaitError> {
             self.persists.lock().unwrap().push(declaration.clone());
+            Ok(())
+        }
+
+        async fn persist_outputs(
+            &self,
+            outputs: &HashMap<String, Vec<SubagentOutput>>,
+        ) -> Result<(), SubagentWaitError> {
+            self.output_persists.lock().unwrap().push(outputs.clone());
             Ok(())
         }
 
@@ -1401,5 +1607,269 @@ mod tests {
             SubagentWaitError::Unavailable("e".to_string()).code(),
             "common.unsupported"
         );
+    }
+
+    // ── 产出文件（G02 完成通知字段，T-EG-10）──────────────────────
+
+    /// 从 write_claims 持有者记录收集产出文件：写模式声明命中、目录声明
+    /// 展开为直接子文件（不递归）、其他持有者与删除模式声明排除、
+    /// 摘要取子代理最终消息摘要、字节数为实际文件大小、路径为工作区相对
+    #[test]
+    fn output_files_collected_from_write_claims() {
+        let ws = TempWorkspace::new("output_files_collect");
+        let root = ws.path();
+        std::fs::write(root.join("01-kernel-analysis.md"), "# 内核分析\n正文").unwrap();
+        std::fs::create_dir_all(root.join("docs")).unwrap();
+        std::fs::write(root.join("docs/02-frontend.md"), "# 前端分析").unwrap();
+        std::fs::create_dir_all(root.join("docs/nested")).unwrap();
+        std::fs::write(root.join("docs/nested/03-inner.md"), "嵌套子目录").unwrap();
+        std::fs::write(root.join("99-delete-mode.md"), "删除模式声明").unwrap();
+        std::fs::write(root.join("04-other-holder.md"), "其他持有者").unwrap();
+        let registry = Arc::new(WritePathRegistry::new("s1", root));
+        // 子代理 sub-1：单文件声明 + 目录级声明（产出目录语义）
+        let _a = registry
+            .claim_one("sub-1", "01-kernel-analysis.md", ClaimMode::Write)
+            .unwrap();
+        let _b = registry.claim_one("sub-1", "docs", ClaimMode::Write).unwrap();
+        // 其他持有者 / 删除模式声明 → 不得混入产出清单
+        let _c = registry
+            .claim_one("sub-2", "04-other-holder.md", ClaimMode::Write)
+            .unwrap();
+        let _d = registry
+            .claim_one("sub-3", "99-delete-mode.md", ClaimMode::Delete)
+            .unwrap();
+
+        let files = collect_subagent_output_files(
+            Some(&registry),
+            "sub-1",
+            root,
+            Some("sub-1 完成"),
+        );
+        let paths = files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>();
+        assert_eq!(
+            paths,
+            ["01-kernel-analysis.md", "docs/02-frontend.md"],
+            "目录声明展开为直接子文件，嵌套子目录与越权持有者/删除模式不产出"
+        );
+        // 字节数为实际文件大小
+        assert_eq!(files[0].bytes, "# 内核分析\n正文".len() as u64);
+        assert_eq!(files[1].bytes, "# 前端分析".len() as u64);
+        // 摘要取子代理最终消息摘要（同一子代理全部产出共享）
+        assert_eq!(files[0].summary, "sub-1 完成");
+        assert_eq!(files[1].summary, "sub-1 完成");
+    }
+
+    /// 无最终消息摘要时摘要回退文件首行概述（§4.6）；空文件 → 空摘要
+    #[test]
+    fn output_files_summary_falls_back_to_first_line() {
+        let ws = TempWorkspace::new("output_files_summary");
+        let root = ws.path();
+        std::fs::write(root.join("a.md"), "# 标题\n\n正文第二行").unwrap();
+        std::fs::write(root.join("empty.md"), "").unwrap();
+        let registry = Arc::new(WritePathRegistry::new("s1", root));
+        let _a = registry.claim_one("sub-1", "a.md", ClaimMode::Write).unwrap();
+        let _b = registry
+            .claim_one("sub-1", "empty.md", ClaimMode::Write)
+            .unwrap();
+
+        let files = collect_subagent_output_files(Some(&registry), "sub-1", root, None);
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0].summary, "# 标题", "首行概述（跳过空行）");
+        assert_eq!(files[1].summary, "", "空文件无首行可概述");
+    }
+
+    /// 声明路径已被删除 → 不产出（运行期删除的中间文件不进完成通知）
+    #[test]
+    fn output_files_skip_deleted_paths() {
+        let ws = TempWorkspace::new("output_files_deleted");
+        let root = ws.path();
+        std::fs::write(root.join("gone.md"), "已删除").unwrap();
+        let registry = Arc::new(WritePathRegistry::new("s1", root));
+        let _a = registry.claim_one("sub-1", "gone.md", ClaimMode::Write).unwrap();
+        std::fs::remove_file(root.join("gone.md")).unwrap();
+        let files = collect_subagent_output_files(Some(&registry), "sub-1", root, None);
+        assert!(files.is_empty(), "删除后的路径不得出现在产出清单");
+    }
+
+    /// 注册表未接线（None）→ 空清单（fail-open，不报错）
+    #[test]
+    fn output_files_unwired_registry_returns_empty() {
+        assert!(collect_subagent_output_files(None, "sub-1", Path::new("."), None).is_empty());
+    }
+
+    /// await-all 终态载荷附带 outputFiles（path/summary/bytes），且产出
+    /// 清单随 dispatch_* 持久化（persist_outputs 调用，G02 完成通知字段）
+    #[tokio::test]
+    async fn await_all_envelope_carries_output_files() {
+        let ws = TempWorkspace::new("wait_output_files");
+        let root = ws.path();
+        std::fs::write(root.join("01-kernel-analysis.md"), "KERNEL_BODY").unwrap();
+        let registry = Arc::new(WritePathRegistry::new("s1", root));
+        let _guard = registry
+            .claim_one("sub-1", "01-kernel-analysis.md", ClaimMode::Write)
+            .unwrap();
+        let done = SubagentWaitResult {
+            mode: WaitMode::AwaitAll,
+            all_terminal: true,
+            timed_out: false,
+            agents: vec![SubagentWaitStatus {
+                subagent_id: "sub-1".to_string(),
+                status: SubagentState::Completed,
+                summary: Some("内核分析完成".to_string()),
+                elapsed_ms: 12_000,
+                terminal: true,
+            }],
+        };
+        let channel = Arc::new(RecordingWaitChannel::new(Vec::new(), done));
+        let tool = WaitSubagentsTool::with_channel(Some(channel.clone()));
+        let mut ctx = ToolContext::new("s1", root.to_path_buf());
+        ctx.write_claims = Some(Arc::clone(&registry));
+
+        let out = tool
+            .execute(&ctx, serde_json::json!({ "subagentIds": ["sub-1"] }))
+            .await
+            .unwrap();
+        // 结构与内容断言：路径相对化、摘要取最终消息、字节数为实际大小
+        let files = out["agents"][0]["outputFiles"]
+            .as_array()
+            .expect("outputFiles 必须是数组");
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0]["path"], "01-kernel-analysis.md");
+        assert_eq!(files[0]["summary"], "内核分析完成");
+        assert_eq!(files[0]["bytes"], 11, "KERNEL_BODY 共 11 字节");
+        // 产出清单已随 dispatch 持久化（dispatch_outputs 键承载）
+        let output_persists = channel.output_persists();
+        assert_eq!(output_persists.len(), 1);
+        assert_eq!(output_persists[0]["sub-1"].len(), 1);
+        assert_eq!(output_persists[0]["sub-1"][0].path, "01-kernel-analysis.md");
+    }
+
+    /// 未接线 write_claims（None）→ 载荷输出空数组，等待主流程不受影响
+    #[tokio::test]
+    async fn await_all_envelope_output_files_empty_when_unwired() {
+        let done = SubagentWaitResult {
+            mode: WaitMode::AwaitAll,
+            all_terminal: true,
+            timed_out: false,
+            agents: vec![status("sub-1", SubagentState::Completed, 12_000)],
+        };
+        let channel = Arc::new(RecordingWaitChannel::new(Vec::new(), done));
+        let tool = WaitSubagentsTool::with_channel(Some(channel.clone()));
+        let ctx = create_mock_tool_context();
+        let out = tool
+            .execute(&ctx, serde_json::json!({ "subagentIds": ["sub-1"] }))
+            .await
+            .unwrap();
+        assert_eq!(out["agents"][0]["outputFiles"].as_array().unwrap().len(), 0);
+        assert!(
+            channel.output_persists().is_empty(),
+            "无产出不得触发持久化"
+        );
+    }
+
+    // ── dispatch_outputs 持久化 JSON：往返与旧数据兼容 ─────────────
+
+    /// 序列化 → 解析往返一致
+    #[test]
+    fn dispatch_outputs_value_roundtrip() {
+        let mut outputs = HashMap::new();
+        outputs.insert(
+            "sub-1".to_string(),
+            vec![
+                SubagentOutput {
+                    path: "01-kernel-analysis.md".to_string(),
+                    summary: "内核分析完成".to_string(),
+                    bytes: 1_024,
+                },
+                SubagentOutput {
+                    path: "docs/02-frontend.md".to_string(),
+                    summary: "内核分析完成".to_string(),
+                    bytes: 512,
+                },
+            ],
+        );
+        outputs.insert(
+            "sub-2".to_string(),
+            vec![SubagentOutput {
+                path: "03-missing.md".to_string(),
+                summary: String::new(),
+                bytes: 0,
+            }],
+        );
+        let value = dispatch_outputs_value(&outputs);
+        let parsed = parse_dispatch_outputs(Some(&value));
+        assert_eq!(parsed, outputs, "序列化 → 解析往返一致");
+    }
+
+    /// 旧数据兼容（parse 容错，对齐 explore_quota.rs:70-88）：
+    /// 缺失键 / 损坏 JSON / 非对象 → 空清单，不回退
+    #[test]
+    fn dispatch_outputs_parse_tolerant_for_old_data() {
+        assert!(parse_dispatch_outputs(None).is_empty(), "旧格式无该键 → 空");
+        assert!(parse_dispatch_outputs(Some("not-json")).is_empty(), "损坏 JSON → 空");
+        assert!(parse_dispatch_outputs(Some("[1, 2]")).is_empty(), "非对象 → 空");
+        assert!(parse_dispatch_outputs(Some("{}")).is_empty(), "空对象 → 空");
+    }
+
+    /// 条目级容错：单条损坏不影响其余条目解析（bytes 非法值按 0 兜底）
+    #[test]
+    fn dispatch_outputs_parse_entry_level_tolerance() {
+        let value = r#"{
+            "sub-1": [
+                {"path": "01.md", "summary": "s", "bytes": 12},
+                {"path": ""},
+                {"summary": "缺路径"}
+            ],
+            "sub-2": "不是数组",
+            "sub-3": [{"path": "03.md", "bytes": "非数字"}]
+        }"#;
+        let parsed = parse_dispatch_outputs(Some(value));
+        assert_eq!(parsed.len(), 2, "非法条目与非法键跳过，合法条目保留");
+        // sub-1：仅合法条目保留，非法条目丢弃
+        assert_eq!(parsed["sub-1"].len(), 1);
+        assert_eq!(parsed["sub-1"][0].path, "01.md");
+        assert_eq!(parsed["sub-1"][0].summary, "s");
+        assert_eq!(parsed["sub-1"][0].bytes, 12);
+        // sub-3：path 合法即保留，bytes 非法值按 0 兜底（容错不丢弃）
+        assert_eq!(parsed["sub-3"].len(), 1);
+        assert_eq!(parsed["sub-3"][0].path, "03.md");
+        assert_eq!(parsed["sub-3"][0].bytes, 0);
+    }
+
+    /// 旧格式 dispatch 数据解析不回退：有无 dispatch_outputs 键均可恢复
+    /// 声明（未知键忽略，from_meta_pairs 既有 `_ => {}` 容错）
+    #[test]
+    fn dispatch_declaration_parses_with_and_without_outputs_key() {
+        // 旧格式（F9 及以前，无 dispatch_outputs 键）
+        let old = vec![
+            ("dispatch_mode", "await-all".to_string()),
+            ("dispatch_wait_ms", "0".to_string()),
+            ("dispatch_agents", "[\"sub-1\",\"sub-2\"]".to_string()),
+            ("dispatch_dispatched_at", "1000".to_string()),
+        ];
+        let decl = DispatchDeclaration::from_meta_pairs(old).expect("旧格式必须可恢复");
+        assert_eq!(decl.subagent_ids, vec!["sub-1", "sub-2"]);
+        // 新格式（含 dispatch_outputs 键）同样可恢复，键值互不影响
+        let mut outputs = HashMap::new();
+        outputs.insert(
+            "sub-1".to_string(),
+            vec![SubagentOutput {
+                path: "01.md".to_string(),
+                summary: "s".to_string(),
+                bytes: 12,
+            }],
+        );
+        let new = vec![
+            ("dispatch_mode", "await-all".to_string()),
+            ("dispatch_wait_ms", "0".to_string()),
+            ("dispatch_agents", "[\"sub-1\",\"sub-2\"]".to_string()),
+            ("dispatch_dispatched_at", "1000".to_string()),
+            (DISPATCH_META_KEY_OUTPUTS, dispatch_outputs_value(&outputs)),
+        ];
+        let decl = DispatchDeclaration::from_meta_pairs(new).expect("新格式必须可恢复");
+        assert_eq!(decl.subagent_ids, vec!["sub-1", "sub-2"]);
+        // dispatch_outputs 值经独立解析函数读回（声明结构不含该字段）
+        let parsed = parse_dispatch_outputs(Some(&dispatch_outputs_value(&outputs)));
+        assert_eq!(parsed, outputs);
     }
 }

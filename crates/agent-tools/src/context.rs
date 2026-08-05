@@ -119,6 +119,10 @@ pub struct ToolContext {
     /// 参照 write_claims 注入模式，由执行器按会话装配；工具执行期优先
     /// 读本字段，回退 BuiltinToolConfig.background_manager）
     pub background: Option<Arc<dyn crate::background::BackgroundTaskManager>>,
+    /// 产出目录解析服务（T-EG-08 REQ-G01：None = 未接线，resolve_output_dir
+    /// 返回 common.unsupported 结构化错误；引擎侧装配 OutputWorkspace 后
+    /// 注入——对齐 explore_docs_quota 的会话级注入模式）
+    pub output_dir: Option<Arc<dyn crate::tools::output_dir::OutputDirResolver>>,
     /// 会话日志根目录（T-AB-03：同步命令截断落盘
     /// `<log_root>/sessions/<session_id>/<ts>-<seq>.log`；None = 截断不落盘，
     /// 仅返回截断结果无 logPath，不失败）
@@ -157,6 +161,7 @@ impl ToolContext {
             write_claim_holder: None,
             explore_docs_quota: None,
             background: None,
+            output_dir: None,
             log_root: None,
         }
     }
@@ -179,6 +184,7 @@ pub fn create_mock_tool_context() -> ToolContext {
         write_claim_holder: None,
         explore_docs_quota: None,
         background: None,
+        output_dir: None,
         log_root: None,
     }
 }

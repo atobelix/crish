@@ -34,6 +34,12 @@
 //! F5 EG 追加（REQ-E03 提示词面）：[comment_preservation_section] 固定注入段，
 //! 约束替换时 replacement_content 完整承载原注释行——与 C2 注入同构，挂载
 //! 点仍在引擎侧 build_context（M1 注入点，主体归 C10，本模块只提供固定片段）。
+//!
+//! F10 EG 追加（REQ-G01 文档工作区）：[output_dir_section] 参数化注入段，
+//! 主控确定产出目录后通知 AI（「工作目录路径在创建后通知 AI」），与 C2 /
+//! REQ-E03 注入同构；挂载点仍在引擎侧（主 agent 系统提示词与子代理注入
+//! 面，主控已确定产出目录时 spawn 注入），实际装配归 F11 T-D-13，本模块
+//! 只提供注入函数与快照断言。
 
 use crate::revert::DEFAULT_REVERT_MAX_REF_AGE_HOURS;
 
@@ -57,6 +63,10 @@ pub const COMMENT_PRESERVATION_TITLE: &str = "注释保留规范";
 /// 权限申请指引段标题（T-D-14 权限传递层；M1 `ContextInjection.title`
 /// 使用；render 渲染为 `## 权限申请指引`，快照断言锚点）
 pub const PERMISSION_RELAY_TITLE: &str = "权限申请指引";
+/// 文档产出目录注入段标题（T-EG-09 REQ-G01 通知 AI；M1
+/// `ContextInjection.title` 使用；render 渲染为 `## 文档产出目录`，
+/// 快照断言锚点）
+pub const OUTPUT_DIR_SECTION_TITLE: &str = "文档产出目录";
 
 /// epoch ms → ISO8601（毫秒精度 UTC，`2026-07-31T08:00:00.000Z`；与
 /// engine.rs now_iso_utc / session-loop hydrate.rs 同源的 Howard Hinnant
@@ -195,6 +205,39 @@ pub fn permission_relay_injection(task_type: Option<&str>, boundary: Option<&str
     (
         PERMISSION_RELAY_TITLE.to_string(),
         permission_relay_section(task_type, boundary),
+    )
+}
+
+/// 文档产出目录注入段正文（不含标题行；REQ-G01「工作目录路径在创建后
+/// 通知 AI」提示词面落地，提示词协议层固定片段，快照断言对象）。
+///
+/// 语义（REQ-agent-engine-capabilities.md REQ-G01 / 04 方案 T-EG-09）：
+/// 主控确定产出目录后通知 AI——本次会话文档产出默认写入该目录；用户
+/// 指定路径优先；目录首次写入时自动创建（惰性，无需手动建目录）。
+///
+/// 参数化：`path` 为产出目录路径（resolve_output_dir 返回值，G-A1 域），
+/// 动态字段；文案结构固定，仅路径片段随调用变化，可快照断言（对齐
+/// explore_quota credential_section / git_revert_caution_section 参数化
+/// 先例）。
+/// 挂载方经 `ContextInjection::new(kind, OUTPUT_DIR_SECTION_TITLE, content)`
+/// 挂载（F11 T-D-13 引擎 spawn 装配路径接入；主控已确定产出目录时注入，
+/// 主 agent 系统提示词与子代理注入面同构）。
+pub fn output_dir_section(path: &str) -> String {
+    format!(
+        "- 本次会话的文档产出目录为 `{path}`（首次写入时自动创建）；\n\
+         - 用户指定路径优先：若用户已另行指定产出路径，以用户指定为准；\n\
+         - 后续文档产出默认写入该目录。"
+    )
+}
+
+/// 文档产出目录注入项（M1 挂载形状）：返回 `(标题, 正文)`，挂载方
+/// `ContextInjector::push(ContextInjection::new(kind, title, content))`。
+/// 主控已确定产出目录时按需调用（主 agent 系统提示词与子代理注入面
+/// 同构挂载点；F11 T-D-13 spawn 装配接入）。
+pub fn output_dir_injection(path: &str) -> (String, String) {
+    (
+        OUTPUT_DIR_SECTION_TITLE.to_string(),
+        output_dir_section(path),
     )
 }
 
@@ -480,5 +523,46 @@ mod tests {
         let generic = permission_relay_section(None, None);
         assert!(!generic.contains("任务类型为"));
         assert!(generic.starts_with("你执行任务时使用系统分配的默认权限"));
+    }
+
+    // ── T-EG-09 产出目录注入段（REQ-G01 通知 AI）──
+
+    /// 段固定结构（快照断言面，对齐 explore_quota.rs:587-606 credential_section
+    /// / comment_preservation_section 模式）：路径参数化——同一路径两次构建
+    /// 字节一致 + 核心文案关键词命中（目录路径 / 首次写入自动创建 /
+    /// 用户指定优先 / 后续默认写入）+ 除路径外结构字节一致
+    #[test]
+    fn output_dir_section_is_fixed_and_snapshotable() {
+        let path = "C:\\work\\proj\\.agent-outputs\\2026-08-05-sess-1";
+        let section = output_dir_section(path);
+        // 核心文案：目录路径通知 / 惰性创建 / 用户指定优先 / 默认写入
+        assert!(section.contains("文档产出目录"));
+        assert!(section.contains(path));
+        assert!(section.contains("首次写入时自动创建"));
+        assert!(section.contains("用户指定路径优先"));
+        assert!(section.contains("默认写入该目录"));
+        // 快照：同一路径两次构建字节一致
+        assert_eq!(
+            section,
+            output_dir_section(path),
+            "同一路径两次构建字节一致"
+        );
+        // 参数化：换路径仅路径片段变化，除路径外结构字节一致
+        let other_path = "C:\\work\\proj\\.agent-outputs\\2026-08-06-sess-2";
+        let other = output_dir_section(other_path);
+        assert!(other.contains(other_path));
+        assert!(!other.contains(path));
+        let normalize = |s: String| s.replace(path, "{path}").replace(other_path, "{path}");
+        assert_eq!(
+            normalize(section.clone()),
+            normalize(other),
+            "除路径外结构字节一致"
+        );
+        // 标题锚点固定（M1 render 渲染为 `## 文档产出目录`）
+        assert_eq!(OUTPUT_DIR_SECTION_TITLE, "文档产出目录");
+        // 注入项形状：标题 + 正文
+        let (title, content) = output_dir_injection(path);
+        assert_eq!(title, OUTPUT_DIR_SECTION_TITLE);
+        assert_eq!(content, section);
     }
 }

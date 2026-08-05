@@ -246,7 +246,7 @@ mod tests {
         }
         assert!(!out.has("run_subagent"), "名单外的 run_subagent 必须剔除");
         // 原注册表不受影响（非破坏性裁剪）
-        assert_eq!(reg.len(), 16);
+        assert_eq!(reg.len(), 17);
         assert!(reg.has("run_subagent"));
     }
 
@@ -267,7 +267,7 @@ mod tests {
         let empty = filter_registry(&reg, |_| false).unwrap();
         assert!(empty.is_empty());
         // 原注册表不受影响
-        assert_eq!(reg.len(), 16);
+        assert_eq!(reg.len(), 17);
     }
 
     /// 六类型各自工具面：analysis/organization 只读、design/review 只读 +
@@ -326,7 +326,7 @@ mod tests {
             assert!(!out.has("write_file"));
         }
         // 原注册表不受影响（非破坏性裁剪）
-        assert_eq!(reg.len(), 16);
+        assert_eq!(reg.len(), 17);
         assert!(reg.has("write_file"));
     }
 

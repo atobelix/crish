@@ -20,6 +20,9 @@
 //! - `set_timer`：set_timer / cancel_timer（T-CF-05）——一次性后台定时器
 //!   注册与取消 + TimerChannel 契约（后台静默运行不阻塞、早退条件
 //!   never/any/task-id、同 sender 单活跃定时器约束；注册面 14→16）
+//! - `output_dir`：resolve_output_dir（T-EG-08 / REQ-G01）——会话文档产出
+//!   目录解析（显式 folder 优先 / 默认 .agent-outputs/<YYYY-MM-DD>-<会话标识>/
+//!   惰性与幂等 / 只读子代理不自选；注册面 16→17）
 //!
 //! 全部工具实现 `Tool` trait，经 `register_builtin_tools` 统一注册进 ToolRegistry。
 //! 各工具的会话级数据（工作区根目录等）执行时从 `ToolContext` 读取
@@ -29,6 +32,9 @@ pub mod background_task;
 pub mod delete;
 pub mod diff;
 pub mod fs;
+// T-EG-08：resolve_output_dir 工具模块声明（注册面 16→17 由本文件下方
+// register_builtin_tools_with_config 负责；会话数据经 ctx.output_dir 注入）
+pub mod output_dir;
 // T-EG-01：multi_replace 工具模块声明（注册入注册表由 T-EG-02 负责，
 // 本行仅使新文件进入编译与测试面）
 pub mod replace;
@@ -150,6 +156,11 @@ pub fn register_builtin_tools_with_config(
     registry.register(Arc::new(set_timer::CancelTimerTool::with_channel(
         config.timer_channel.clone(),
     )))?;
+    // resolve_output_dir（T-EG-08 / REQ-G01）：查询类工具——解析会话文档
+    // 产出目录（显式 folder 优先 / 默认日期目录 / 惰性幂等）；服务经
+    // ToolContext.output_dir 注入（None = 未接线，工具返回 common.unsupported）；
+    // 只读类不写盘，按任务书定稿不加入 WRITE_TOOL_NAMES
+    registry.register(Arc::new(output_dir::ResolveOutputDirTool::new()))?;
     Ok(())
 }
 
@@ -541,7 +552,7 @@ mod tests {
     fn register_builtin_tools_registers_all() {
         let mut registry = ToolRegistry::new();
         register_builtin_tools(&mut registry).unwrap();
-        assert_eq!(registry.len(), 16);
+        assert_eq!(registry.len(), 17);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -561,6 +572,7 @@ mod tests {
                 "list_dir",
                 "multi_replace_file_content",
                 "read_file",
+                "resolve_output_dir",
                 "run_subagent",
                 "set_timer",
                 "shell_command",
