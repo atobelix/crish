@@ -10,7 +10,7 @@ use crate::tools::{
     clamp_text_by_lines, decode_text, display_path, epoch_millis, optional_string, require_string,
     resolve_workspace_path, snapshot_tag,
 };
-use crate::write_paths::{claim_write_guard, ClaimMode};
+use crate::write_paths::{check_write_allowance_for_ctx, claim_write_guard, ClaimMode};
 use async_trait::async_trait;
 use std::path::Path;
 
@@ -309,6 +309,11 @@ impl Tool for WriteFileTool {
         let content = require_string(&args, "content")?;
         let file_path = resolve_workspace_path(&ctx.workspace_root, &path_str)?;
         let display = display_path(&ctx.workspace_root, &file_path);
+        // T-D-08（REQ-D04 硬沙箱）：先越权拒绝（权限允许集 → tool.write_not_allowed），
+        // 再冲突拒绝（并发互斥 → tool.write_path_conflict）——白名单是"允许集"
+        // （权限沙箱）、互斥是"并发控制"（并发层），一先一后串行叠加；
+        // 未接线（write_claims = None）或未装配策略不强制，行为与现状一致
+        check_write_allowance_for_ctx(ctx, &file_path)?;
         // I4-M3：写路径互斥——执行期声明写路径，冲突拒绝（谁占用/何时）；
         // 未接线（write_claims = None）不强制；守卫随函数结束自动释放
         let _claim = claim_write_guard(ctx, &path_str, ClaimMode::Write)?;

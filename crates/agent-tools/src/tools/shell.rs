@@ -405,6 +405,11 @@ fn redirect_or_intercept_delete(
             }
         }
     }
+    // T-D-08：删除重定向目标的硬沙箱越权拒绝（白名单下目标不在允许集 → 整链
+    // 拒绝；未装配策略 = 不强制；先越权后互斥，串行叠加）
+    for target in &targets {
+        crate::write_paths::check_write_allowance_for_ctx(ctx, target)?;
+    }
     // I4-M3：删除重定向目标的写路径互斥——全部目标先声明（Delete 模式）再执行，
     // 任一目标被占用 → 整链拒绝（不产生部分删除）；未接线（None）不强制；
     // 守卫集合随函数结束自动释放

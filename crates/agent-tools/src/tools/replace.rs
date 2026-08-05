@@ -94,7 +94,10 @@ impl Tool for MultiReplaceFileTool {
         // chunk 解析 + 行号范围校验（start<=end、1-indexed；target_content 非空）
         let chunks = parse_chunks(&args)?;
 
-        // 2. 写路径互斥声明（未接线 = None 不强制；接线后冲突报 tool.write_path_conflict）
+        // 2. 硬沙箱越权拒绝（T-D-08：Allowed 白名单下目标不在允许集 → 拒绝；
+        //    未装配策略 = 不强制；先越权后互斥，串行叠加）
+        crate::write_paths::check_write_allowance_for_ctx(ctx, &file_path)?;
+        // 3. 写路径互斥声明（未接线 = None 不强制；接线后冲突报 tool.write_path_conflict）
         let _claim = claim_write_guard(ctx, &path_str, ClaimMode::Write)?;
         // 3. 探索类子代理写文档配额检查（未装配 = 放行，与 write_file 同款）
         crate::explore_quota::guard_explore_docs_write(ctx)?;
@@ -815,7 +818,7 @@ function Component() {
         args["target_file"] = json!("src/a.ts");
         tool().execute(&mock_ctx(&ws), args).await.unwrap();
         WriteFileTool::new()
-            .execute(&mock_ctx(&ws), json!({ "path": "src/b.ts", "content": COMPONENT_TS_EXPECTED }))
+            .execute(&mock_ctx(&ws), json!({ "path": "src/b.ts", "content": COMPONENT_TS_EXPECTED, "overwrite": true }))
             .await
             .unwrap();
 

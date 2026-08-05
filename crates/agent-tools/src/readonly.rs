@@ -9,9 +9,19 @@
 //! 裁剪语义为**白名单**（fail-closed）：不在 [READONLY_TOOL_NAMES] 内的
 //! 工具一律剔除（含未来新增的未分类工具），防止新写工具漏网。
 //!
-//! 挂接点：M2 run_subagent spawn 时按 capabilityMode 选择工具注册表
-//! （[filter_readonly_registry]），shell_command 不进入只读集——bash
-//! 副作用无法静态预知，删除形态重定向不能覆盖全部写形态，故整体剔除。
+//! T-D-08 起推广为 task_type 默认集裁剪（REQ-D04 命令/工具开关下沉）：
+//! - [filter_registry]：通用注册表过滤（按名字谓词，fail-closed）；
+//! - [filter_registry_for_task_type]：按任务类型派生默认工具集
+//!   （analysis/organization → 只读白名单；design/review → 只读 + write_file；
+//!   commit → 仅 shell_command；implementation → 全工具集；未知 → 只读回退）；
+//! - [command_allowed_for_task_type]：命令级白名单判定（shell 执行门禁兜底
+//!   ——commit 仅 git 前缀、implementation 复用语义层 CommandClass 分类，
+//!   其余类型无命令）；供引擎侧 T-D-13 在 spawn 装配时消费。
+//!
+//! 挂接点：M2 run_subagent spawn 时按 capabilityMode / task_type 选择工具注册表
+//! （[filter_readonly_registry] / [filter_registry_for_task_type]），
+//! shell_command 不进入只读集——bash 副作用无法静态预知，删除形态重定向
+//! 不能覆盖全部写形态，故整体剔除。
 
 use crate::definition::ToolError;
 use crate::registry::ToolRegistry;
@@ -35,6 +45,27 @@ pub const READONLY_TOOL_NAMES: [&str; 6] = [
     "diff_text",
 ];
 
+/// commit 类型默认工具集（仅 shell_command；命令前缀过滤 git 见命令策略）
+pub const COMMIT_TOOL_NAMES: [&str; 1] = ["shell_command"];
+
+/// 通用注册表裁剪（fail-closed：谓词返回 false 的工具一律剔除）
+///
+/// 返回新注册表，原注册表不受影响。注册失败在源注册表名称唯一的前提下
+/// 不可能发生（保留集 ⊆ 源工具集，名称不重复），`?` 透传保持诚实。
+/// 谓词按工具名判定（`Fn(&str) -> bool`），名字规则集中一处。
+pub fn filter_registry(
+    registry: &ToolRegistry,
+    keep: impl Fn(&str) -> bool,
+) -> Result<ToolRegistry, ToolError> {
+    let mut filtered = ToolRegistry::new();
+    for tool in registry.list() {
+        if keep(tool.name()) {
+            filtered.register(tool)?;
+        }
+    }
+    Ok(filtered)
+}
+
 /// 按名称白名单裁剪注册表（通用过滤函数，fail-closed：名单外的工具全部剔除）
 ///
 /// 返回新注册表，原注册表不受影响。注册失败在源注册表名称唯一的前提下
@@ -46,13 +77,7 @@ pub fn filter_registry_by_names(
     registry: &ToolRegistry,
     allowed: &[&str],
 ) -> Result<ToolRegistry, ToolError> {
-    let mut filtered = ToolRegistry::new();
-    for tool in registry.list() {
-        if allowed.contains(&tool.name()) {
-            filtered.register(tool)?;
-        }
-    }
-    Ok(filtered)
+    filter_registry(registry, |name| allowed.contains(&name))
 }
 
 /// 按只读白名单裁剪注册表（fail-closed：白名单外的工具全部剔除）
@@ -61,6 +86,76 @@ pub fn filter_registry_by_names(
 /// [filter_registry_by_names] 提供（提取复用，T-D-02）。
 pub fn filter_readonly_registry(registry: &ToolRegistry) -> Result<ToolRegistry, ToolError> {
     filter_registry_by_names(registry, &READONLY_TOOL_NAMES)
+}
+
+/// 按任务类型派生默认工具集裁剪（T-D-08；供引擎侧 T-D-13 spawn 装配）
+///
+/// 默认集映射（对齐《调研-权限传递层》§2.2，工具面）：
+/// - `analysis` / `organization` → 只读白名单（fail-closed，无写工具无命令）；
+/// - `design` / `review` → 只读白名单 + `write_file`（文档产出）；
+/// - `commit` → 仅 `shell_command`（命令前缀过滤 git，无写文件工具）；
+/// - `implementation` → 全工具集（写路径沙箱与命令策略另行装配）；
+/// - 未知 / 空 → 回退 `analysis` 语义（只读白名单，最安全）。
+///
+/// 说明：run_subagent 的发起者身份剔除（工具面防护，T-D-02）不在本函数内，
+/// 由装配方叠加；MCP 工具无独立开关，默认继承父代理面。
+pub fn filter_registry_for_task_type(
+    registry: &ToolRegistry,
+    task_type: &str,
+) -> Result<ToolRegistry, ToolError> {
+    match task_type {
+        "analysis" | "organization" => filter_registry_by_names(registry, &READONLY_TOOL_NAMES),
+        "design" | "review" => filter_registry(registry, |name| {
+            READONLY_TOOL_NAMES.contains(&name) || name == "write_file"
+        }),
+        "commit" => filter_registry_by_names(registry, &COMMIT_TOOL_NAMES),
+        "implementation" => filter_registry(registry, |_| true),
+        // 未知/缺省：最安全回退（对齐缺省 task_type = analysis 的口径）
+        _ => filter_registry_by_names(registry, &READONLY_TOOL_NAMES),
+    }
+}
+
+/// 命令级白名单判定（按任务类型派生命令策略；T-D-08，shell 命令执行门禁
+/// 兜底过滤——工具面已剔除 shell_command 的类型此处一并拒绝）
+///
+/// - `commit` → 仅 `git` 命令（前缀过滤口径：命令首词必须为 git）；
+/// - `implementation` → 构建/测试类命令白名单：复用语义层
+///   `semantics::analyze` 的 CommandClass 分类（不维护命令前缀表），
+///   整体分类必须为 Normal，且不被既有门禁判定为需审批/拦截
+///   （网络发布 npm/cargo publish、提权 sudo 等形态经
+///   `CommandGatekeeper` 兜底拒绝）；
+/// - 其余 / 未知 → 一律拒绝（无命令）。
+pub fn command_allowed_for_task_type(task_type: &str, command_line: &str) -> bool {
+    let cmd = command_line.trim();
+    if cmd.is_empty() {
+        return false;
+    }
+    match task_type {
+        "commit" => first_token(cmd) == "git",
+        "implementation" => {
+            use conex_sandbox::gatekeeper::{CommandGatekeeper, GatekeeperResult};
+            use conex_sandbox::semantics::{analyze, CommandClass};
+            // 语义层分类：非普通命令（红线/危险/删除/回退/间接/cd 形态）一律拒绝
+            if analyze(cmd).overall_class != CommandClass::Normal {
+                return false;
+            }
+            // 既有门禁兜底：网络发布 / 提权 / 强推等需审批形态不进默认集
+            // （子代理需要时走权限申请通道，T-D-14）
+            matches!(
+                CommandGatekeeper::new().check_command(cmd, &[]),
+                GatekeeperResult::Allowed
+            )
+        }
+        _ => false,
+    }
+}
+
+/// 命令首词提取（按空白切分的第一段；空串返回空）
+fn first_token(command_line: &str) -> &str {
+    command_line
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
 }
 
 #[cfg(test)]
@@ -153,5 +248,167 @@ mod tests {
         // 原注册表不受影响（非破坏性裁剪）
         assert_eq!(reg.len(), 16);
         assert!(reg.has("run_subagent"));
+    }
+
+    // ===== T-D-08：通用 filter_registry + task_type 默认集裁剪 =====
+
+    /// 通用过滤函数（谓词按工具名判定，fail-closed）：真谓词全保留、假谓词全剔除
+    #[test]
+    fn filter_registry_with_predicate() {
+        let mut reg = ToolRegistry::new();
+        register_builtin_tools(&mut reg).unwrap();
+        // 内置工具名均含下划线：真谓词 → 全量保留（新注册表，原表不动）
+        let out = filter_registry(&reg, |name| name.contains('_')).unwrap();
+        assert_eq!(out.len(), reg.len());
+        for name in ["read_file", "write_file", "shell_command", "run_subagent"] {
+            assert!(out.has(name), "{name} 必须命中谓词");
+        }
+        // 假谓词 → 空注册表（fail-closed 底线）
+        let empty = filter_registry(&reg, |_| false).unwrap();
+        assert!(empty.is_empty());
+        // 原注册表不受影响
+        assert_eq!(reg.len(), 16);
+    }
+
+    /// 六类型各自工具面：analysis/organization 只读、design/review 只读 +
+    /// write_file、commit 仅 shell_command、implementation 全工具集
+    #[test]
+    fn filter_registry_for_task_type_six_faces() {
+        let mut reg = ToolRegistry::new();
+        register_builtin_tools(&mut reg).unwrap();
+        // analysis / organization → 只读白名单（无写工具、无命令工具）
+        for tt in ["analysis", "organization"] {
+            let out = filter_registry_for_task_type(&reg, tt).unwrap();
+            assert_eq!(out.len(), READONLY_TOOL_NAMES.len(), "{tt} 应为只读白名单");
+            for name in READONLY_TOOL_NAMES {
+                assert!(out.has(name), "{tt} 必须保留只读工具 {name}");
+            }
+            for name in WRITE_TOOL_NAMES {
+                assert!(!out.has(name), "{tt} 不得含写工具 {name}");
+            }
+            assert!(!out.has("run_subagent"), "{tt} 不得含 run_subagent");
+        }
+        // design / review → 只读白名单 + write_file
+        for tt in ["design", "review"] {
+            let out = filter_registry_for_task_type(&reg, tt).unwrap();
+            assert_eq!(
+                out.len(),
+                READONLY_TOOL_NAMES.len() + 1,
+                "{tt} 应为只读白名单 + write_file"
+            );
+            for name in READONLY_TOOL_NAMES {
+                assert!(out.has(name));
+            }
+            assert!(out.has("write_file"), "{tt} 必须附加 write_file");
+            assert!(!out.has("delete_file"), "{tt} 不得含删除工具");
+            assert!(!out.has("shell_command"), "{tt} 不得含命令工具");
+        }
+        // commit → 仅 shell_command（无写文件工具）
+        let out = filter_registry_for_task_type(&reg, "commit").unwrap();
+        assert_eq!(out.len(), 1, "commit 工具面应仅 shell_command");
+        assert!(out.has("shell_command"));
+        assert!(!out.has("write_file"));
+        assert!(!out.has("read_file"));
+        // implementation → 全工具集
+        let out = filter_registry_for_task_type(&reg, "implementation").unwrap();
+        assert_eq!(out.len(), reg.len(), "implementation 应全工具集");
+        assert!(out.has("write_file"));
+        assert!(out.has("shell_command"));
+        assert!(out.has("run_subagent"));
+        // 未知 / 空 → 最安全回退（analysis 语义：只读白名单）
+        for tt in ["", "bogus", "unknown-type"] {
+            let out = filter_registry_for_task_type(&reg, tt).unwrap();
+            assert_eq!(
+                out.len(),
+                READONLY_TOOL_NAMES.len(),
+                "未知 task_type {tt:?} 应回退只读白名单"
+            );
+            assert!(!out.has("write_file"));
+        }
+        // 原注册表不受影响（非破坏性裁剪）
+        assert_eq!(reg.len(), 16);
+        assert!(reg.has("write_file"));
+    }
+
+    // ===== T-D-08：命令级白名单（command_allowed_for_task_type）=====
+
+    /// commit：仅 git 前缀（命令首词 = git）；非 git 一律拒绝
+    #[test]
+    fn command_policy_commit_only_git() {
+        for cmd in [
+            "git status",
+            "git add -A",
+            "git commit -m \"msg\"",
+            "git -C src status",
+            "git push origin main",
+        ] {
+            assert!(
+                command_allowed_for_task_type("commit", cmd),
+                "commit 命令 {cmd:?} 必须放行"
+            );
+        }
+        for cmd in [
+            "npm install",
+            "cargo test",
+            "ls -la",
+            "gitty status",
+            "gitx commit",
+            "bash git status",
+            "",
+            "   ",
+        ] {
+            assert!(
+                !command_allowed_for_task_type("commit", cmd),
+                "非 git 前缀命令 {cmd:?} 必须拒绝"
+            );
+        }
+    }
+
+    /// implementation：构建/测试类普通命令放行（CommandClass Normal +
+    /// 门禁放行）；发布/提权/毁灭/回退/间接/删除形态拒绝
+    #[test]
+    fn command_policy_implementation_build_test_whitelist() {
+        for cmd in [
+            "cargo build",
+            "cargo test --workspace",
+            "npm test",
+            "npm run build",
+            "tsc --noEmit",
+            "python -m pytest tests",
+        ] {
+            assert!(
+                command_allowed_for_task_type("implementation", cmd),
+                "构建/测试命令 {cmd:?} 必须放行"
+            );
+        }
+        for cmd in [
+            "npm publish",
+            "cargo publish",
+            "sudo apt-get install x",
+            "rm -rf src",
+            "git reset --hard HEAD~1",
+            "cd src",
+            "bash -c 'cargo build'",
+            "mkfs.ext4 /dev/sdb",
+            "",
+        ] {
+            assert!(
+                !command_allowed_for_task_type("implementation", cmd),
+                "非构建/测试命令 {cmd:?} 必须拒绝"
+            );
+        }
+    }
+
+    /// 其余类型（含未知）：无命令——工具面已剔除 shell_command，命令级为兜底
+    #[test]
+    fn command_policy_other_task_types_no_commands() {
+        for tt in ["analysis", "design", "review", "organization", "", "bogus"] {
+            for cmd in ["git status", "cargo build", "npm publish", "ls -la"] {
+                assert!(
+                    !command_allowed_for_task_type(tt, cmd),
+                    "{tt:?} 类型命令 {cmd:?} 必须拒绝"
+                );
+            }
+        }
     }
 }

@@ -189,6 +189,9 @@ async fn execute_delete(
     let path_str = require_string(&args, "path")?;
     let target = resolve_workspace_path(&ctx.workspace_root, &path_str)?;
     let display = display_path(&ctx.workspace_root, &target);
+    // T-D-08：硬沙箱越权拒绝（Allowed 白名单下删除目标不在允许集 → 拒绝；
+    // 未装配策略 = 不强制，与 write_file 同款；先越权后互斥，串行叠加）
+    crate::write_paths::check_write_allowance_for_ctx(ctx, &target)?;
     // I4-M3：写路径互斥——删除目标声明 Delete 模式；冲突拒绝（谁占用/何时），
     // 守卫随函数结束自动释放（任何错误路径均释放，不残留记账）
     let _claim = claim_write_guard(ctx, &path_str, ClaimMode::Delete)?;

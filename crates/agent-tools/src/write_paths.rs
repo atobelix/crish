@@ -15,6 +15,18 @@
 //! - **校验**：复用 `resolve_workspace_path`（symlink 解析后比较、拒绝 `..`、
 //!   拒绝工作区外、Windows 大小写折叠），另拒绝 glob（`* ? [`）。
 //!
+//! T-D-08 起增补 run 级硬沙箱（REQ-D04 越权拒绝，权限层）：
+//! - **[WritePathPolicy]**（`Allowed` 允许集 / `Unrestricted` 不限制）经
+//!   [check_write_allowance] 在写工具执行前拦截：目标不在任何允许前缀下 →
+//!   `tool.write_not_allowed`（conex-types 已登记，Permanent 不可重试）；
+//! - 允许集与互斥注册表同载体装配（[WritePathRegistry::with_write_policy]，
+//!   引擎侧 T-D-13 把 spawn 字段与 task_type 默认集合并后转策略再注册），
+//!   但**语义独立**——白名单是"允许集"（权限沙箱）、互斥是"并发控制"，
+//!   挂接顺序一先一后串行叠加：先 [check_write_allowance_for_ctx]（越权拒绝）
+//!   → 再 `claim_write_guard`（冲突拒绝）；
+//! - 未接线语义扩展：`write_claims = None` 或注册表未装配策略 → 不强制，
+//!   写工具保持现状行为（测试与直连场景不受影响）。
+//!
 //! 未接线语义：`ToolContext.write_claims = None` 时写工具不强制互斥
 //! （现状行为保持，测试与直连场景不受影响）；接线由执行器按会话装配
 //! （session-loop ToolExecutor 或 M2 子代理执行上下文）。
@@ -27,6 +39,7 @@ use crate::context::ToolContext;
 use crate::definition::ToolError;
 use crate::tools::epoch_millis;
 use crate::tools::resolve_workspace_path;
+use conex_types::error::codes;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -108,6 +121,114 @@ impl WritePathConflict {
     }
 }
 
+// ==================== T-D-08：run 级硬沙箱（REQ-D04 越权拒绝） ====================
+
+/// run 级硬性写入允许集（None = 不限制路径；implementation 默认 = 工作区根）
+///
+/// 权限沙箱（不是并发层）：`Allowed` 为白名单前缀集合，目标必须落在任一
+/// 允许前缀下（组件边界语义 + Windows 大小写折叠，复用 [paths_overlap_normalized]
+/// 的归一化底座）；`Unrestricted` 不做路径限制。引擎侧（T-D-13）把 spawn 的
+/// `allowed_write_paths` 字段与 task_type 默认集合并后经 [WritePathPolicy::from_entries]
+/// 构造，再装配进 [WritePathRegistry]（[WritePathRegistry::with_write_policy]）。
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum WritePathPolicy {
+    /// 白名单允许集：目标必须在任一允许前缀下（空列表 = 全部拒绝，fail-closed）
+    Allowed(Vec<PathBuf>),
+    /// 不限制路径（缺省；implementation 的默认集由引擎装配为工作区根）
+    #[default]
+    Unrestricted,
+}
+
+impl WritePathPolicy {
+    /// 从原始路径条目构造策略（供引擎 T-D-13 装配与测试使用）
+    ///
+    /// - 空列表 → [WritePathPolicy::Unrestricted]（REQ-D04：`allowed_write_paths`
+    ///   为空 = 不做路径限制，仅受工具面控制）；
+    /// - 每条目经 [validate_write_path] 校验并解析为规范化绝对路径
+    ///   （glob 拒绝 / `..` 越界拒绝 / 工作区外拒绝），保证白名单与写工具
+    ///   执行期目标在同一坐标空间（绝对路径）比较。
+    pub fn from_entries(workspace_root: &Path, entries: Vec<String>) -> Result<Self, ToolError> {
+        if entries.is_empty() {
+            return Ok(WritePathPolicy::Unrestricted);
+        }
+        let resolved: Vec<PathBuf> = entries
+            .iter()
+            .map(|e| validate_write_path(workspace_root, e))
+            .collect::<Result<_, _>>()?;
+        Ok(WritePathPolicy::Allowed(resolved))
+    }
+}
+
+/// 写路径越权（结构化错误载荷：目标路径 + 允许范围提示）
+///
+/// 与 [WritePathConflict]（并发冲突）语义区分：本错误属权限层——路径合法
+/// 且未被占用，只是不在 run 级允许集内；文案指引调整目标或走权限申请通道。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WriteAllowanceError {
+    /// 本次请求的目标路径（规范化绝对路径）
+    pub requested_path: PathBuf,
+    /// 当前允许范围（白名单前缀；提示用）
+    pub allowed: Vec<PathBuf>,
+}
+
+impl std::fmt::Display for WriteAllowanceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let allowed = if self.allowed.is_empty() {
+            "无（写入被整体禁止）".to_string()
+        } else {
+            self.allowed
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join("、")
+        };
+        write!(
+            f,
+            "写入路径不在允许范围内：{}；当前允许范围：{}。如需写入，请调整目标路径或向主 agent 申请权限",
+            self.requested_path.display(),
+            allowed,
+        )
+    }
+}
+
+impl WriteAllowanceError {
+    /// 转为工具错误（错误码 `tool.write_not_allowed`，conex-types 已登记，
+    /// Permanent / 不可重试；消息含目标路径与允许范围提示）
+    pub fn into_tool_error(self) -> ToolError {
+        ToolError::new(codes::TOOL_WRITE_NOT_ALLOWED, format!("{self}"))
+    }
+}
+
+impl From<WriteAllowanceError> for ToolError {
+    fn from(e: WriteAllowanceError) -> Self {
+        e.into_tool_error()
+    }
+}
+
+/// 硬沙箱越权判定（纯函数，无副作用；T-D-08 核心）
+///
+/// - [WritePathPolicy::Unrestricted] → 放行（不限制路径）；
+/// - [WritePathPolicy::Allowed] → 目标必须在任一允许前缀下（组件边界 +
+///   Windows 大小写折叠），否则拒绝，返回 [WriteAllowanceError]（含目标与
+///   允许范围提示，`?` 转换为 `tool.write_not_allowed`）。
+pub fn check_write_allowance(
+    policy: &WritePathPolicy,
+    target: &Path,
+) -> Result<(), WriteAllowanceError> {
+    match policy {
+        WritePathPolicy::Unrestricted => Ok(()),
+        WritePathPolicy::Allowed(allowed) => {
+            if allowed.iter().any(|p| is_within_allowed(target, p)) {
+                return Ok(());
+            }
+            Err(WriteAllowanceError {
+                requested_path: target.to_path_buf(),
+                allowed: allowed.clone(),
+            })
+        }
+    }
+}
+
 /// 写路径声明守卫（RAII）：Drop 时释放本持有者的全部声明
 ///
 /// - 工具执行期：守卫随 execute 作用域结束（成功 / 错误 / panic / 取消）
@@ -136,6 +257,9 @@ pub struct WritePathRegistry {
     session_id: String,
     workspace_root: PathBuf,
     default_ttl_ms: u64,
+    /// run 级硬沙箱允许集（T-D-08：None = 未装配策略，不强制越权检查；
+    /// 与互斥声明同载体，但语义独立——白名单是"允许集"，互斥是"并发控制"）
+    write_policy: Option<WritePathPolicy>,
     inner: Mutex<Vec<WritePathClaim>>,
 }
 
@@ -155,8 +279,22 @@ impl WritePathRegistry {
             session_id: session_id.into(),
             workspace_root: workspace_root.as_ref().into(),
             default_ttl_ms,
+            write_policy: None,
             inner: Mutex::new(Vec::new()),
         }
+    }
+
+    /// 装配 run 级写允许集（T-D-08 硬沙箱；引擎侧 T-D-13 转策略后注册。
+    /// 消费方：[check_write_allowance_for_ctx] 在写工具执行前先做越权检查，
+    /// 再走互斥声明——权限层与并发层一先一后，互不替代）
+    pub fn with_write_policy(mut self, policy: WritePathPolicy) -> Self {
+        self.write_policy = Some(policy);
+        self
+    }
+
+    /// 当前装配的写允许集（None = 未装配，越权检查不强制）
+    pub fn write_policy(&self) -> Option<&WritePathPolicy> {
+        self.write_policy.as_ref()
     }
 
     /// 声明写路径（多路径原子化：任一校验失败或冲突即整体拒绝，不产生部分声明）
@@ -317,6 +455,25 @@ pub(crate) fn claim_write_guard(
         .map(Some)
 }
 
+/// 工具执行期硬沙箱越权检查助手（T-D-08 写工具接线入口）
+///
+/// 挂接顺序：写工具执行前**先**本函数（越权拒绝 → `tool.write_not_allowed`），
+/// **再** [claim_write_guard]（冲突拒绝 → `tool.write_path_conflict`）——
+/// 白名单是"允许集"（权限沙箱）、互斥是"并发控制"，一先一后串行叠加；
+/// 未接线（`write_claims = None`）或注册表未装配策略 → 放行（现状行为）。
+pub(crate) fn check_write_allowance_for_ctx(
+    ctx: &ToolContext,
+    target: &Path,
+) -> Result<(), WriteAllowanceError> {
+    let Some(registry) = ctx.write_claims.as_ref() else {
+        return Ok(());
+    };
+    let Some(policy) = registry.write_policy() else {
+        return Ok(());
+    };
+    check_write_allowance(policy, target)
+}
+
 /// 锁读取助手：中毒恢复（A 模式，PE-07 T07.6：记录错误、取回内值继续，不 panic）
 fn lock_inner(inner: &Mutex<Vec<WritePathClaim>>) -> std::sync::MutexGuard<'_, Vec<WritePathClaim>> {
     inner.lock().unwrap_or_else(|e| {
@@ -342,6 +499,22 @@ pub fn paths_overlap_normalized(a: &Path, b: &Path) -> bool {
     }
     let sep = std::path::MAIN_SEPARATOR.to_string();
     na.starts_with(&format!("{nb}{sep}")) || nb.starts_with(&format!("{na}{sep}"))
+}
+
+/// 白名单前缀判定（T-D-08 硬沙箱：目标是否落在允许前缀下）
+///
+/// 语义与 [paths_overlap_normalized] 同源（组件级前缀 + Windows 大小写折叠）：
+/// `a/b/c.txt` 命中白名单 `a/b/`、`a/b` 与 `a/b` 双向命中，`a/b` 与 `a/bc`
+/// 不误匹配（组件边界）。方向性：只判「目标在允许前缀内」单侧——
+/// 白名单是允许集，允许项之间互不影响。
+fn is_within_allowed(target: &Path, allowed: &Path) -> bool {
+    let nt = normalize_for_compare(target);
+    let na = normalize_for_compare(allowed);
+    if nt == na {
+        return true;
+    }
+    let sep = std::path::MAIN_SEPARATOR.to_string();
+    nt.starts_with(&format!("{na}{sep}"))
 }
 
 /// 归一化（用于 Overlaps 比较；与 tools/mod.rs 的内部归一化同语义）
@@ -649,5 +822,212 @@ mod tests {
             .await
             .unwrap();
         assert!(ws.path().join("src/main.rs").is_file());
+    }
+
+    // ===== T-D-08：硬沙箱（WritePathPolicy + check_write_allowance）=====
+
+    /// Unrestricted（不限制路径）→ 任何目标放行
+    #[test]
+    fn allowance_unrestricted_allows_everything() {
+        let policy = WritePathPolicy::Unrestricted;
+        assert!(check_write_allowance(&policy, Path::new("C:/any/where.txt")).is_ok());
+        assert!(check_write_allowance(&policy, Path::new("相对/路径.txt")).is_ok());
+    }
+
+    /// Allowed 命中/未命中：docs/a.md 放行、src/main.rs 拒绝（tool.write_not_allowed，
+    /// 载荷含目标路径与允许范围提示）
+    #[test]
+    fn allowance_matches_prefix_and_rejects_outside() {
+        let ws = TempWorkspace::new("wp_allowance");
+        let policy = WritePathPolicy::from_entries(ws.path(), vec!["docs/".to_string()]).unwrap();
+        // 命中：白名单前缀 docs/ 下的文件与目录自身均放行
+        assert!(check_write_allowance(&policy, &ws.path().join("docs/a.md")).is_ok());
+        assert!(check_write_allowance(&policy, &ws.path().join("docs")).is_ok());
+        assert!(check_write_allowance(&policy, &ws.path().join("docs/sub/nested.md")).is_ok());
+        // 未命中：src/main.rs 不在允许范围 → tool.write_not_allowed
+        let err = check_write_allowance(&policy, &ws.path().join("src/main.rs")).unwrap_err();
+        assert_eq!(err.requested_path, ws.path().join("src/main.rs"));
+        assert!(!err.allowed.is_empty(), "载荷必须含允许范围提示");
+        let tool_err = err.into_tool_error();
+        assert_eq!(tool_err.code(), codes::TOOL_WRITE_NOT_ALLOWED);
+        assert!(tool_err.to_string().contains("src/main.rs"), "消息须含目标路径");
+        assert!(tool_err.to_string().contains("docs"), "消息须含允许范围");
+        assert!(tool_err.to_string().contains("主 agent"), "消息须含申请指引");
+    }
+
+    /// 前缀边界：a/b 与 a/bc 不误匹配（组件边界）、a/b 与 a/b/c.txt 命中
+    #[test]
+    fn allowance_component_boundary_no_false_positive() {
+        let ws = TempWorkspace::new("wp_allowance_boundary");
+        let policy = WritePathPolicy::from_entries(ws.path(), vec!["a/b".to_string()]).unwrap();
+        assert!(check_write_allowance(&policy, &ws.path().join("a/b")).is_ok());
+        assert!(check_write_allowance(&policy, &ws.path().join("a/b/c.txt")).is_ok());
+        assert!(check_write_allowance(&policy, &ws.path().join("a/bc")).is_err());
+        assert!(check_write_allowance(&policy, &ws.path().join("a/bc.txt")).is_err());
+        assert!(check_write_allowance(&policy, &ws.path().join("a/bc/d.txt")).is_err());
+        let err = check_write_allowance(&policy, &ws.path().join("a/bc/d.txt")).unwrap_err();
+        assert_eq!(
+            err.into_tool_error().code(),
+            codes::TOOL_WRITE_NOT_ALLOWED,
+            "未命中必须返回 tool.write_not_allowed"
+        );
+    }
+
+    /// Windows 语义：大小写折叠（复用 normalize_for_compare）
+    #[cfg(windows)]
+    #[test]
+    fn allowance_case_folding_on_windows() {
+        let ws = TempWorkspace::new("wp_allowance_case");
+        let policy =
+            WritePathPolicy::from_entries(ws.path(), vec!["Src/File.TXT".to_string()]).unwrap();
+        assert!(check_write_allowance(&policy, &ws.path().join("src/file.txt")).is_ok());
+        assert!(check_write_allowance(&policy, &ws.path().join("SRC/FILE.TXT")).is_ok());
+        assert!(check_write_allowance(&policy, &ws.path().join("src/other.md")).is_err());
+    }
+
+    /// 显式空允许集 = 全部拒绝（fail-closed 兜底）
+    #[test]
+    fn allowance_empty_whitelist_denies_all() {
+        let policy = WritePathPolicy::Allowed(Vec::new());
+        let err = check_write_allowance(&policy, Path::new("anything")).unwrap_err();
+        assert!(err.allowed.is_empty());
+        assert_eq!(err.into_tool_error().code(), codes::TOOL_WRITE_NOT_ALLOWED);
+    }
+
+    /// from_entries：空列表 → Unrestricted（REQ-D04 口径）；glob/越界条目拒绝；
+    /// 相对条目解析为规范化绝对路径
+    #[test]
+    fn from_entries_empty_unrestricted_and_bad_entries_rejected() {
+        let ws = TempWorkspace::new("wp_from_entries");
+        assert_eq!(
+            WritePathPolicy::from_entries(ws.path(), Vec::new()).unwrap(),
+            WritePathPolicy::Unrestricted,
+            "空条目列表 = 不做路径限制（REQ-D04）"
+        );
+        let err = WritePathPolicy::from_entries(ws.path(), vec!["docs/*.md".to_string()])
+            .unwrap_err();
+        assert_eq!(err.code(), "tool.invalid_input", "glob 条目必须拒绝");
+        let err = WritePathPolicy::from_entries(ws.path(), vec!["../outside".to_string()])
+            .unwrap_err();
+        assert_eq!(err.code(), "tool.path_escape", "越界条目必须拒绝");
+        let policy = WritePathPolicy::from_entries(ws.path(), vec!["docs/".to_string()]).unwrap();
+        let WritePathPolicy::Allowed(paths) = policy else {
+            panic!("非空条目必须为 Allowed");
+        };
+        assert_eq!(paths, vec![ws.path().join("docs")], "条目必须解析为绝对路径");
+    }
+
+    /// 注册表策略载体：with_write_policy 装配 / 缺省不装配
+    #[test]
+    fn registry_policy_roundtrip() {
+        let ws = TempWorkspace::new("wp_policy_reg");
+        let policy = WritePathPolicy::from_entries(ws.path(), vec!["docs/".to_string()]).unwrap();
+        let reg = Arc::new(WritePathRegistry::new("s1", ws.path()).with_write_policy(policy));
+        match reg.write_policy() {
+            Some(WritePathPolicy::Allowed(paths)) => {
+                assert_eq!(paths, &vec![ws.path().join("docs")]);
+            }
+            other => panic!("装配后必须为 Allowed，实际 {other:?}"),
+        }
+        let plain = Arc::new(WritePathRegistry::new("s2", ws.path()));
+        assert!(plain.write_policy().is_none(), "缺省注册表不装配策略");
+    }
+
+    /// 工具级硬沙箱：Allowed(["docs/"]) 下写 src/main.rs → tool.write_not_allowed、
+    /// 写 docs/a.md 放行（权限层生效，与 Prompt 无关）
+    #[tokio::test]
+    async fn write_file_respects_hard_sandbox() {
+        let ws = TempWorkspace::new("wp_sandbox");
+        let registry = Arc::new(
+            WritePathRegistry::new("s1", ws.path()).with_write_policy(
+                WritePathPolicy::from_entries(ws.path(), vec!["docs/".to_string()]).unwrap(),
+            ),
+        );
+        let ctx = ToolContext {
+            workspace_root: ws.path().clone(),
+            write_claims: Some(Arc::clone(&registry)),
+            write_claim_holder: Some("runA".to_string()),
+            explore_docs_quota: None,
+            ..create_mock_tool_context()
+        };
+        let tool = WriteFileTool::new();
+        // 越权写：src/main.rs 不在允许集 → tool.write_not_allowed，不得写盘
+        let err = tool
+            .execute(&ctx, json!({ "path": "src/main.rs", "content": "x" }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), codes::TOOL_WRITE_NOT_ALLOWED);
+        assert!(!ws.path().join("src/main.rs").exists(), "越权拒绝时不得写盘");
+        // 白名单内写 docs/a.md → 放行
+        tool.execute(&ctx, json!({ "path": "docs/a.md", "content": "x" }))
+            .await
+            .unwrap();
+        assert_eq!(ws.read_file("docs/a.md"), "x");
+    }
+
+    /// 两机制串行叠加：白名单放行但被占用 → 仍 tool.write_path_conflict
+    /// （先越权拒绝、再冲突拒绝；错误码必须区分——越权 vs 冲突）
+    #[tokio::test]
+    async fn sandbox_and_conflict_serial_stack() {
+        let ws = TempWorkspace::new("wp_sandbox_serial");
+        let registry = Arc::new(
+            WritePathRegistry::new("s1", ws.path()).with_write_policy(
+                WritePathPolicy::from_entries(ws.path(), vec!["docs/".to_string()]).unwrap(),
+            ),
+        );
+        // 子代理 A 长期声明 docs/（白名单内，占用者 B 的互斥面）
+        let _a_guard = registry.claim_one("runA", "docs", ClaimMode::Write).unwrap();
+        let ctx_b = ToolContext {
+            workspace_root: ws.path().clone(),
+            write_claims: Some(Arc::clone(&registry)),
+            write_claim_holder: Some("runB".to_string()),
+            explore_docs_quota: None,
+            ..create_mock_tool_context()
+        };
+        let tool = WriteFileTool::new();
+        // 越权优先：src/main.rs 不在允许集 → tool.write_not_allowed（不落互斥检查）
+        let err = tool
+            .execute(&ctx_b, json!({ "path": "src/main.rs", "content": "x" }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), codes::TOOL_WRITE_NOT_ALLOWED);
+        // 白名单放行但被占用 → tool.write_path_conflict（互斥拒绝，机制串行生效）
+        let err = tool
+            .execute(&ctx_b, json!({ "path": "docs/a.md", "content": "x" }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), TOOL_WRITE_PATH_CONFLICT);
+        assert!(err.to_string().contains("runA"));
+        assert!(!ws.path().join("docs/a.md").exists(), "冲突拒绝时不得写盘");
+        // 占用释放后：白名单内放行
+        drop(_a_guard);
+        tool.execute(&ctx_b, json!({ "path": "docs/a.md", "content": "x" }))
+            .await
+            .unwrap();
+        assert_eq!(ws.read_file("docs/a.md"), "x");
+    }
+
+    /// 未装配策略（未接线 / 注册表无策略）：写工具保持现状行为（回归）
+    #[tokio::test]
+    async fn unwired_policy_context_no_enforcement() {
+        let ws = TempWorkspace::new("wp_policy_unwired");
+        let tool = WriteFileTool::new();
+        tool.execute(&mock_ctx(&ws), json!({ "path": "anywhere.txt", "content": "hi" }))
+            .await
+            .unwrap();
+        assert_eq!(ws.read_file("anywhere.txt"), "hi");
+        // 注册表接线但未装配策略：同样不强制
+        let registry = Arc::new(WritePathRegistry::new("s1", ws.path()));
+        let ctx = ToolContext {
+            workspace_root: ws.path().clone(),
+            write_claims: Some(registry),
+            write_claim_holder: Some("runA".to_string()),
+            explore_docs_quota: None,
+            ..create_mock_tool_context()
+        };
+        tool.execute(&ctx, json!({ "path": "out.txt", "content": "hi" }))
+            .await
+            .unwrap();
+        assert_eq!(ws.read_file("out.txt"), "hi");
     }
 }
