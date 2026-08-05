@@ -5,11 +5,17 @@
 //! - 子代理 = 独立会话 + run（parent_id 链），session_agents 行落库；
 //! - 三方状态机映射（TS SubagentState ↔ DB status CHECK 集，I0 已裁决）；
 //! - 递归守卫（maxDepth=1（仅主 Agent 可派发，用户裁决）/ maxSiblings=5 /
-//!   maxConcurrent=6，DEFAULT_RECURSION_GUARD）——子 Agent 无派发能力，
+//!   maxConcurrent=12（T-D-06 上限 12 对齐），DEFAULT_RECURSION_GUARD）——
+//!   子 Agent 无派发能力，
 //!   嵌套发起（新会话深度 > 1）返回 NestingDenied（subagent.nesting_denied，
 //!   T-D-02 结构化错误，文案带「所有子 Agent 由主 Agent 分配」指引）；
 //!   工具面剔除 run_subagent（filter_out_subagent_spawner，防浪费非安全边界）；
 //!   与祖先链死锁检查（DeadlockCheckInput 语义，O(depth)）；
+//! - 批量派发（T-D-06：REQ-D02 无依赖平铺并行）：run_subagent 的 tasks 数组
+//!   一次创建 N 个并行子代理（与 prompt 单发互斥，防歧义）；spawn_many 契约
+//!   的原子语义——前瞻快照统一守卫（depth 共享、siblings/concurrent 按 N
+//!   预加后一次判定），任一拒绝 → 整体失败零 run（session_agents 无新增行）；
+//!   批量与 DAG 调度器（flow_graph.rs）并存，两机制不互斥，编排权在主 Agent；
 //! - 伪造审批防护（结果信封层边界声明，ref-analysis 01 Top 3）；
 //! - 写操作挂 I3 审批基础设施（AskChannel 接线面原样挂靠，不重建）。
 //!
@@ -485,11 +491,13 @@ pub struct RecursionGuardConfig {
 /// maxDepth=1 是「仅主 Agent 可派发」的最终防线（用户裁决，REQ-D08 kill 项）：
 /// 主 Agent（深度 0）可派发直接子代理（新会话深度 1）；子 Agent 内再派发
 /// （新会话深度 ≥ 2）由守卫层返回 [RecursionGuardRejection::NestingDenied]。
-/// maxSiblings / maxConcurrent 本轮不动（上限 12 对齐属 T-D-06）。
+/// maxSiblings=5 保持（兄弟并发应小于全局并发，现状分析 §1.4-3）；
+/// maxConcurrent=12 为 T-D-06 上限 12 对齐终态（6→12，flow_graph 预算判定
+/// 引用本默认值自动跟随）。
 pub const DEFAULT_RECURSION_GUARD: RecursionGuardConfig = RecursionGuardConfig {
     max_depth: 1,
     max_siblings: 5,
-    max_concurrent: 6,
+    max_concurrent: 12,
 };
 
 /// 守卫判定输入快照（由引擎侧采集：深度沿 parent_id 链数、
@@ -777,6 +785,31 @@ pub trait SubagentSpawner: Send + Sync + std::fmt::Debug {
         &self,
         req: &SubagentSpawnRequest,
     ) -> Result<SubagentSpawnResult, SubagentSpawnError>;
+
+    /// 批量派发（T-D-06：REQ-D02 无依赖平铺并行）：tasks 数组 → 逐条 spawn，
+    /// 返回结果数组（顺序与入参一致，每条 subagentId/subagentRunId/
+    /// sessionId/status）。
+    ///
+    /// **原子语义契约**：整体成功或整体失败——先对全部 N 个任务做**前瞻
+    /// 快照统一守卫**（depth 共享、active_siblings / active_concurrent 按 N
+    /// 预加后一次经 [check_recursion_guard]），任一拒绝 → 返回错误且**零 run**
+    /// （session_agents 无新增行，不产生部分成功）；全部通过 → 逐条落库 +
+    /// 启动（对齐 declare_flow staged-clone 原子语义，flow_graph.rs:866-909）。
+    ///
+    /// **默认实现 = 循环单发（非原子兜底）**：只做编译期便利，不满足原子
+    /// 语义——循环单发即「任一失败时前序已产生 run」的部分成功形态，故引擎
+    /// 侧（T-D-13）必须覆写为原子实现；本模块内原子性验证走测试域 spawner
+    /// （DbSpawner::spawn_many，conex-db dev-dependency）。
+    async fn spawn_many(
+        &self,
+        requests: &[SubagentSpawnRequest],
+    ) -> Result<Vec<SubagentSpawnResult>, SubagentSpawnError> {
+        let mut results = Vec::with_capacity(requests.len());
+        for req in requests {
+            results.push(self.spawn(req).await?);
+        }
+        Ok(results)
+    }
 }
 
 // ── 伪造审批防护（ref-analysis 01 Top 3）──────────────────────────
@@ -823,15 +856,18 @@ impl RunSubagentTool {
         Self {
             def: ToolDefinition {
                 name: "run_subagent".to_string(),
-                description: "启动一个独立子代理会话与 run（父代理编排用）：子代理在独立会话中工作，\
-                              完成后由主 agent 编排下一步。返回 subagentId/subagentRunId/sessionId/status。"
+                description: "启动独立子代理会话与 run（父代理编排用）：子代理在独立会话中工作，\
+                              完成后由主 agent 编排下一步。支持单发（prompt）与批量派发（tasks：\
+                              一次创建 N 个并行子代理，无依赖平铺并行，REQ-D02 语义；任一守卫拒绝\
+                              → 整体失败零 run）；prompt 与 tasks 互斥二选一。返回\
+                              subagentId/subagentRunId/sessionId/status。"
                     .to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
                         "prompt": {
                             "type": "string",
-                            "description": "任务目标（必填）：子代理在独立会话中执行的指令"
+                            "description": "任务目标（单发路径必填；与 tasks 互斥，二选一）：子代理在独立会话中执行的指令"
                         },
                         "agentId": {
                             "type": "string",
@@ -878,9 +914,45 @@ impl RunSubagentTool {
                         "displayLabel": {
                             "type": "string",
                             "description": "角色展示标签（2-5 字自由文本，可选；仅展示，不影响调度）"
+                        },
+                        "tasks": {
+                            "type": "array",
+                            "description": "批量派发（与 prompt 互斥，二选一）：一次创建 N 个并行子代理（无依赖平铺并行，REQ-D02 语义）；原子性——任一守卫拒绝整体失败零 run。条目字段：prompt（必填）/ role / displayLabel / capabilityMode / timeoutMs / description",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "prompt": {
+                                        "type": "string",
+                                        "description": "任务目标（必填）：该子代理在独立会话中执行的指令"
+                                    },
+                                    "role": {
+                                        "type": "string",
+                                        "enum": ["researcher", "implementer", "reviewer", "debugger", "planner"],
+                                        "description": "角色标签（可选，仅展示与过滤，不影响调度）"
+                                    },
+                                    "displayLabel": {
+                                        "type": "string",
+                                        "description": "角色展示标签（2-5 字自由文本，可选；仅展示，不影响调度）"
+                                    },
+                                    "capabilityMode": {
+                                        "type": "string",
+                                        "enum": ["read-only", "read-write", "execute", "all"],
+                                        "description": "能力模式（可选，控制实际权限；read-only 裁剪工具集）"
+                                    },
+                                    "timeoutMs": {
+                                        "type": "number",
+                                        "description": "单次执行超时毫秒数（可选，缺省不限制）"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "description": "子代理描述（可选，展示用）"
+                                    }
+                                },
+                                "required": ["prompt"],
+                                "additionalProperties": false
+                            }
                         }
                     },
-                    "required": ["prompt"],
                     "additionalProperties": false
                 }),
                 dangerous: false,
@@ -889,6 +961,168 @@ impl RunSubagentTool {
             spawner,
         }
     }
+
+    /// 批量派发分支（T-D-06）：tasks 数组逐条装配请求 → [SubagentSpawner::spawn_many]
+    /// → 结果数组信封（顺序与入参一致，每条 subagentId/subagentRunId/
+    /// sessionId/status/summary/displayLabel）。
+    ///
+    /// 顶层单发参数（agentId/role/capabilityMode/allowedTools/timeoutMs/
+    /// description/mode/taskType/allowedWritePaths/displayLabel）在批量模式下
+    /// 不适用（以 tasks 条目内字段为准），显式给出即结构化拒绝（与
+    /// prompt+tasks 互斥同一「防歧义」语义）。
+    async fn execute_many(
+        &self,
+        ctx: &ToolContext,
+        tasks: &[BatchTaskArg],
+        args: &Value,
+    ) -> Result<Value, ToolError> {
+        for key in [
+            "agentId",
+            "role",
+            "capabilityMode",
+            "allowedTools",
+            "timeoutMs",
+            "description",
+            "mode",
+            "taskType",
+            "allowedWritePaths",
+            "displayLabel",
+        ] {
+            if args.get(key).is_some() {
+                return Err(ToolError::invalid_input(format!(
+                    "批量派发（tasks）下顶层参数 {key} 不适用：请在 tasks 条目内配置\
+                     （role/capabilityMode/displayLabel/timeoutMs/description）"
+                )));
+            }
+        }
+        // spawn 通道未接线 → 结构化不可用错误（引擎集成前零副作用）
+        let Some(spawner) = &self.spawner else {
+            return Err(ToolError::new(
+                codes::COMMON_UNSUPPORTED,
+                "run_subagent 未接线：spawn 通道未装配（引擎集成后可用）",
+            ));
+        };
+
+        let requests: Vec<SubagentSpawnRequest> = tasks
+            .iter()
+            .map(|task| SubagentSpawnRequest {
+                agent_id: None,
+                prompt: task.prompt.clone(),
+                role: task.role,
+                capability_mode: task.capability_mode,
+                allowed_tools: None,
+                timeout_ms: task.timeout_ms,
+                description: task.description.clone(),
+                mode: None,
+                parent_session_id: ctx.session_id.clone(),
+                parent_run_id: None,
+                parent_tool_call_id: None,
+                // 工具直调路径不携带流程关联（C6 调度器经 spawner 直接 spawn）
+                flow_node_id: None,
+                is_composite: false,
+                task_type: None,
+                allowed_write_paths: None,
+                display_label: task.display_label.clone(),
+                // 扩展点预留：批量路径同样恒不解析 modelOverride（T-D-10）
+                model_override: None,
+            })
+            .collect();
+        // 原子语义由 spawner 实现承担：任一守卫拒绝 → 整体失败零 run
+        let results = spawner
+            .spawn_many(&requests)
+            .await
+            .map_err(|e| ToolError::new(e.code(), e.message()))?;
+
+        // 结果数组信封：summary 逐条经伪造审批防护（01 Top 3）；
+        // display_label 回显（T-D-05，前端 title 优先展示）
+        Ok(serde_json::json!({
+            "results": results.iter().map(|result| serde_json::json!({
+                "subagentId": result.subagent_id,
+                "subagentRunId": result.subagent_run_id,
+                "sessionId": result.session_id,
+                "status": result.status.as_str(),
+                "summary": result.summary.as_ref().map(|s| apply_forgery_boundary(s)),
+                "displayLabel": result.display_label,
+            })).collect::<Vec<_>>(),
+        }))
+    }
+}
+
+// ── 批量派发解析（T-D-06：tasks 数组）────────────────────────────
+
+/// 批量任务条目（tasks 数组元素，字段对齐方案 schema：prompt/role/
+/// displayLabel/capabilityMode/timeoutMs/description）
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BatchTaskArg {
+    /// 任务目标（必填）
+    prompt: String,
+    /// 角色标签（可选，仅展示/过滤）
+    role: Option<SubagentRole>,
+    /// 能力模式（可选；read-only 裁剪工具集）
+    capability_mode: Option<SubagentCapabilityMode>,
+    /// 角色展示标签（可选，仅展示）
+    display_label: Option<String>,
+    /// 单次执行超时毫秒（可选）
+    timeout_ms: Option<u64>,
+    /// 描述（可选，展示用）
+    description: Option<String>,
+}
+
+/// 解析 tasks 入参（T-D-06 批量分支；缺省 None = 单发路径）。
+/// 结构校验：tasks 必须是非空对象数组；条目 prompt 必填非空；枚举字段
+/// 未知即结构化拒绝（对齐 role/capabilityMode 单发拒绝面）。
+fn parse_tasks(args: &Value) -> Result<Option<Vec<BatchTaskArg>>, ToolError> {
+    let Some(raw) = args.get("tasks") else {
+        return Ok(None);
+    };
+    let items = raw
+        .as_array()
+        .ok_or_else(|| ToolError::invalid_input("tasks 必须是对象数组"))?;
+    if items.is_empty() {
+        return Err(ToolError::invalid_input("tasks 不得为空数组"));
+    }
+    let mut tasks = Vec::with_capacity(items.len());
+    for item in items {
+        let obj = item
+            .as_object()
+            .ok_or_else(|| ToolError::invalid_input("tasks 条目必须是对象"))?;
+        let prompt = obj
+            .get("prompt")
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty())
+            .ok_or_else(|| ToolError::invalid_input("tasks 条目缺少必填 prompt"))?
+            .to_string();
+        let role = match obj.get("role").and_then(Value::as_str) {
+            Some(raw_role) => Some(SubagentRole::parse(raw_role).ok_or_else(|| {
+                ToolError::invalid_input(format!("未知角色：{raw_role}"))
+            })?),
+            None => None,
+        };
+        let capability_mode = match obj.get("capabilityMode").and_then(Value::as_str) {
+            Some(raw_mode) => Some(SubagentCapabilityMode::parse(raw_mode).ok_or_else(|| {
+                ToolError::invalid_input(format!("未知能力模式：{raw_mode}"))
+            })?),
+            None => None,
+        };
+        let display_label = obj
+            .get("displayLabel")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let timeout_ms = obj.get("timeoutMs").and_then(Value::as_u64);
+        let description = obj
+            .get("description")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        tasks.push(BatchTaskArg {
+            prompt,
+            role,
+            capability_mode,
+            display_label,
+            timeout_ms,
+            description,
+        });
+    }
+    Ok(Some(tasks))
 }
 
 #[async_trait]
@@ -906,8 +1140,38 @@ impl Tool for RunSubagentTool {
         ctx: &ToolContext,
         args: Value,
     ) -> Result<Value, ToolError> {
-        // 入参解析：prompt 必填；role/capabilityMode/allowedTools/timeoutMs 可选
-        let prompt = super::require_string(&args, "prompt")?;
+        // T-D-06 单发/批量互斥：prompt 与 tasks 二选一（防歧义）
+        let prompt = super::optional_string(&args, "prompt");
+        let tasks = parse_tasks(&args)?;
+        if tasks.is_some() && prompt.is_some() {
+            return Err(ToolError::invalid_input(
+                "tasks 与 prompt 不能同时提供：单发与批量互斥，请二选一\
+                 （单发给 prompt，批量派发给 tasks）",
+            ));
+        }
+        // 批量分支（T-D-06）：tasks 数组 → spawn_many（原子语义：任一守卫
+        // 拒绝 → 整体失败零 run，不产生部分成功）
+        if let Some(tasks) = tasks {
+            return self.execute_many(ctx, &tasks, &args).await;
+        }
+        // 单发分支：prompt 必填
+        let Some(prompt) = prompt else {
+            return Err(ToolError::invalid_input(
+                "prompt 或 tasks 必须提供其一：单发给 prompt，批量派发给 tasks",
+            ));
+        };
+        // 控制字符拒绝（对齐原 require_string 校验面）
+        if prompt.chars().any(|c| {
+            matches!(
+                c,
+                '\u{0000}'..='\u{0008}' | '\u{000b}' | '\u{000c}' | '\u{000e}'..='\u{001f}' | '\u{007f}'
+            )
+        }) {
+            return Err(ToolError::invalid_input(
+                "prompt contains invalid control characters",
+            ));
+        }
+        // 入参解析：role/capabilityMode/allowedTools/timeoutMs 可选
         let agent_id = super::optional_string(&args, "agentId");
         let role = match super::optional_string(&args, "role") {
             Some(raw) => Some(SubagentRole::parse(&raw).ok_or_else(|| {
@@ -1527,6 +1791,193 @@ mod tests {
         assert!(err.to_string().contains("未接线"));
     }
 
+    // ── T-D-06：批量派发（tasks 数组）──────────────────────────────
+
+    #[tokio::test]
+    async fn tool_batch_rejects_tasks_and_prompt_together() {
+        // 单发/批量互斥（防歧义）：tasks 与 prompt 同给 → 结构化拒绝，
+        // 不得发起任何 spawn
+        let spawner = Arc::new(RecordingSpawner::ok());
+        let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+        let ctx = create_mock_tool_context();
+        let err = tool
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "prompt": "单发任务",
+                    "tasks": [{ "prompt": "批量任务 A" }]
+                }),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "tool.invalid_input");
+        assert!(err.to_string().contains("互斥"));
+        assert!(spawner.requests().is_empty(), "互斥拒绝不得发起 spawn");
+    }
+
+    #[tokio::test]
+    async fn tool_batch_rejects_empty_or_non_array_tasks() {
+        let spawner = Arc::new(RecordingSpawner::ok());
+        let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+        let ctx = create_mock_tool_context();
+        let err = tool
+            .execute(&ctx, serde_json::json!({ "tasks": [] }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "tool.invalid_input");
+        assert!(err.to_string().contains("不得为空"));
+        let err = tool
+            .execute(&ctx, serde_json::json!({ "tasks": "not-an-array" }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "tool.invalid_input");
+        assert!(spawner.requests().is_empty());
+    }
+
+    #[tokio::test]
+    async fn tool_batch_rejects_top_level_single_params() {
+        // 批量模式下顶层单发参数不适用（条目内字段为准）：显式给出即
+        // 结构化拒绝，防静默歧义（与 prompt+tasks 互斥同一语义）
+        let spawner = Arc::new(RecordingSpawner::ok());
+        let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+        let ctx = create_mock_tool_context();
+        for (key, value) in [
+            ("agentId", serde_json::json!("def-x")),
+            ("role", serde_json::json!("researcher")),
+            ("timeoutMs", serde_json::json!(30_000)),
+        ] {
+            let mut args = serde_json::json!({ "tasks": [{ "prompt": "任务" }] });
+            args[key] = value;
+            let err = tool.execute(&ctx, args).await.unwrap_err();
+            assert_eq!(err.code(), "tool.invalid_input", "{key} 必须被拒");
+            assert!(err.to_string().contains("不适用"), "{key} 文案须说明不适用");
+        }
+        assert!(spawner.requests().is_empty());
+    }
+
+    #[tokio::test]
+    async fn tool_batch_rejects_unknown_enum_in_task_item() {
+        // 条目级枚举拒绝（对齐单发 role/capabilityMode 拒绝面）：
+        // 任一条目非法 → 整体拒绝，零 spawn
+        let spawner = Arc::new(RecordingSpawner::ok());
+        let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+        let ctx = create_mock_tool_context();
+        let err = tool
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "tasks": [
+                        { "prompt": "任务 A" },
+                        { "prompt": "任务 B", "role": "wizard" }
+                    ]
+                }),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "tool.invalid_input");
+        assert!(err.to_string().contains("未知角色"));
+        let err = tool
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "tasks": [{ "prompt": "任务 A", "capabilityMode": "super" }]
+                }),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "tool.invalid_input");
+        assert!(err.to_string().contains("未知能力模式"));
+        // 条目缺 prompt / prompt 为空 → 拒绝
+        let err = tool
+            .execute(&ctx, serde_json::json!({ "tasks": [{ "role": "researcher" }] }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "tool.invalid_input");
+        assert!(spawner.requests().is_empty(), "任一条目非法不得发起 spawn");
+    }
+
+    #[tokio::test]
+    async fn tool_batch_dispatches_three_tasks_in_order() {
+        // 一次派发 3 个任务：经默认 spawn_many 循环单发逐条装配请求
+        // （顺序保持），出站信封为 results 数组（每条 subagentId/status）
+        let spawner = Arc::new(RecordingSpawner::ok());
+        let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+        let ctx = ToolContext {
+            session_id: "parent-sess".to_string(),
+            ..create_mock_tool_context()
+        };
+        let out = tool
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "tasks": [
+                        { "prompt": "任务 A", "role": "researcher", "displayLabel": "调研员" },
+                        { "prompt": "任务 B", "capabilityMode": "read-only", "timeoutMs": 120_000, "description": "调研 B" },
+                        { "prompt": "任务 C" }
+                    ]
+                }),
+            )
+            .await
+            .expect("批量派发应成功");
+        let requests = spawner.requests();
+        assert_eq!(requests.len(), 3, "3 个任务逐条 spawn");
+        assert_eq!(requests[0].prompt, "任务 A");
+        assert_eq!(requests[1].prompt, "任务 B");
+        assert_eq!(requests[2].prompt, "任务 C");
+        // 条目字段逐条装配
+        assert_eq!(requests[0].role, Some(SubagentRole::Researcher));
+        assert_eq!(requests[0].display_label.as_deref(), Some("调研员"));
+        assert_eq!(requests[1].capability_mode, Some(SubagentCapabilityMode::ReadOnly));
+        assert_eq!(requests[1].timeout_ms, Some(120_000));
+        assert_eq!(requests[1].description.as_deref(), Some("调研 B"));
+        assert_eq!(requests[2].role, None, "条目缺省字段 = None");
+        // 父会话 = 工具执行会话；流程关联/扩展点恒 None
+        for req in &requests {
+            assert_eq!(req.parent_session_id, "parent-sess");
+            assert_eq!(req.flow_node_id, None);
+            assert!(!req.is_composite);
+            assert_eq!(req.model_override, None, "批量路径 model_override 恒 None");
+        }
+        // 出站信封：results 数组，每条含 subagentId/subagentRunId/sessionId/status
+        let results = out["results"].as_array().expect("results 必须是数组");
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0]["subagentId"], "sub-1");
+        assert_eq!(results[0]["status"], "running");
+        assert_eq!(results[0]["displayLabel"], "调研员");
+        assert_eq!(results[2]["sessionId"], "sub-sess-1");
+    }
+
+    #[tokio::test]
+    async fn tool_batch_without_spawner_returns_structured_unavailable() {
+        let tool = RunSubagentTool::new();
+        let ctx = create_mock_tool_context();
+        let err = tool
+            .execute(&ctx, serde_json::json!({ "tasks": [{ "prompt": "任务" }] }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "common.unsupported");
+        assert!(err.to_string().contains("未接线"));
+    }
+
+    #[tokio::test]
+    async fn spawn_many_default_impl_loops_single_spawn() {
+        // 默认实现契约：循环单发（非原子兜底）——2 个请求逐条走 spawn，
+        // 记录 2 次、返回 2 条结果；原子语义由覆写实现承担（DbSpawner）
+        let spawner = RecordingSpawner::ok();
+        let reqs = vec![
+            request("任务 A", "sess-main", Some("run-main")),
+            request("任务 B", "sess-main", Some("run-main")),
+        ];
+        let results = spawner
+            .spawn_many(&reqs)
+            .await
+            .expect("默认实现逐条 spawn 应成功");
+        assert_eq!(results.len(), 2);
+        assert_eq!(spawner.requests().len(), 2);
+        assert_eq!(spawner.requests()[0].prompt, "任务 A");
+        assert_eq!(spawner.requests()[1].prompt, "任务 B");
+    }
+
     // ── C6 调度器扩展：流程关联字段（flow_node_id / is_composite）────────
 
     #[tokio::test]
@@ -1604,7 +2055,7 @@ mod tests {
         let config = RecursionGuardConfig {
             max_depth: 2,
             max_siblings: 5,
-            max_concurrent: 6,
+            max_concurrent: 12,
         };
         let err = check_recursion_guard(
             RecursionGuardSnapshot {
@@ -1704,7 +2155,7 @@ mod tests {
         let snapshot = RecursionGuardSnapshot {
             depth: 1,
             active_siblings: 0,
-            active_concurrent: 7,
+            active_concurrent: 13,
         };
         let err = check_recursion_guard(snapshot, config).unwrap_err();
         assert_eq!(
@@ -1716,25 +2167,37 @@ mod tests {
         assert_eq!(
             err,
             RecursionGuardRejection::ConcurrentExceeded {
-                current: 7,
-                max: 6
-            }
+                current: 13,
+                max: 12
+            },
+            "T-D-06 边界：maxConcurrent=12 时第 13 个并发被拒"
         );
+    }
+
+    #[test]
+    fn default_guard_limits_terminal_values() {
+        // T-D-06 终态断言（上限 12 对齐）：maxConcurrent=12（6→12）/
+        // maxSiblings=5（保持，兄弟并发应小于全局并发）/ maxDepth=1
+        // （嵌套禁止，仅主 Agent 可派发）
+        let guard = DEFAULT_RECURSION_GUARD;
+        assert_eq!(guard.max_depth, 1, "maxDepth=1（仅主 Agent 可派发）");
+        assert_eq!(guard.max_siblings, 5, "maxSiblings=5 保持");
+        assert_eq!(guard.max_concurrent, 12, "maxConcurrent=12 终态（6→12）");
     }
 
     #[test]
     fn guard_within_limits_allowed() {
         let config = DEFAULT_RECURSION_GUARD;
         // T-D-01 验收：depth=1 通过、depth=2 拒绝。边界值语义
-        // （maxDepth=1 / maxSiblings=5 / maxConcurrent=6）：
+        // （maxDepth=1 / maxSiblings=5 / maxConcurrent=12）：
         // - depth=1（主 Agent 派发直接子代理，含 flow_graph 流程节点快照
         //   depth 恒为 1）在嵌套判定界限内，通过；
         // - depth=0（主 Agent 自身上下文）同样通过（主 Agent spawn 回归）；
-        // - 兄弟/并发取边界值 5/6 通过。
+        // - 兄弟/并发取边界值 5/12 通过（第 13 个并发才被拒）。
         let snapshot = RecursionGuardSnapshot {
             depth: 1,
             active_siblings: 5,
-            active_concurrent: 6,
+            active_concurrent: 12,
         };
         assert!(check_recursion_guard(snapshot, config).is_ok());
         let snapshot = RecursionGuardSnapshot {
@@ -2055,6 +2518,65 @@ mod tests {
                 .finish_non_exhaustive()
         }
 
+        /// 守卫判定（T-D-02 映射：嵌套禁止走专用错误变体，错误码
+        /// subagent.nesting_denied；其余复用 GuardRejected）——引擎侧
+        /// spawner（T-D-13）按同一映射实现
+        fn check_guard(&self, snapshot: RecursionGuardSnapshot) -> Result<(), SubagentSpawnError> {
+            check_recursion_guard(snapshot, self.guard).map_err(|rejection| match rejection {
+                RecursionGuardRejection::NestingDenied { .. } => {
+                    SubagentSpawnError::NestingDenied(rejection)
+                }
+                other => SubagentSpawnError::GuardRejected(other),
+            })
+        }
+
+        /// 落库 + 记账 + 结果（守卫已在调用方完成——单发经 [Self::spawn]
+        /// 检查，批量经 [Self::spawn_many] 前瞻统一检查；此处不重复检查，
+        /// 否则批量逐条路径会与「前瞻预加」判定产生中间态偏差）
+        async fn spawn_unchecked(
+            &self,
+            req: &SubagentSpawnRequest,
+            depth: usize,
+        ) -> Result<SubagentSpawnResult, SubagentSpawnError> {
+            let parent_run = req.parent_run_id.as_deref().unwrap_or_default();
+
+            // 落库（pending 首写即 running）
+            let n = self.seq.fetch_add(1, Ordering::SeqCst);
+            let subagent_id = format!("sub-{depth}-{n}");
+            let subagent_run_id = format!("sub-run-{depth}-{n}");
+            let now = 1_700_000_000;
+            let row = self.row_for(req, &subagent_id, &subagent_run_id, depth, now);
+            let mut agents = self
+                .db
+                .load_session_agents(&req.parent_session_id)
+                .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
+            agents.push(row);
+            self.db
+                .save_session_agents(&req.parent_session_id, &agents)
+                .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
+
+            // 记账（已分配语义；终态释放由引擎侧完成）
+            {
+                let mut siblings = self.active_siblings.lock().unwrap();
+                *siblings.entry(parent_run.to_string()).or_insert(0) += 1;
+            }
+            self.active_concurrent.fetch_add(1, Ordering::SeqCst);
+            self.run_depths
+                .lock()
+                .unwrap()
+                .insert(subagent_run_id.clone(), depth);
+
+            Ok(SubagentSpawnResult {
+                subagent_id,
+                subagent_run_id,
+                session_id: format!("sub-sess-{depth}-{n}"),
+                status: SubagentState::Running,
+                summary: None,
+                flow_node_id: req.flow_node_id.clone(),
+                display_label: req.display_label.clone(),
+            })
+        }
+
         /// 落库行构造（pending 首写即 running；depth 沿 parent_run_id 链）
         fn row_for(
             &self,
@@ -2122,51 +2644,56 @@ mod tests {
                     .unwrap_or(&0),
                 active_concurrent: self.active_concurrent.load(Ordering::SeqCst),
             };
-            check_recursion_guard(snapshot, self.guard).map_err(|rejection| match rejection {
-                // T-D-02：嵌套禁止走专用错误变体（错误码 subagent.nesting_denied，
-                // 文案带「所有子 Agent 由主 Agent 分配」指引）——引擎侧
-                // spawner（T-D-13）按同一映射实现
-                RecursionGuardRejection::NestingDenied { .. } => {
-                    SubagentSpawnError::NestingDenied(rejection)
-                }
-                other => SubagentSpawnError::GuardRejected(other),
-            })?;
+            self.check_guard(snapshot)?;
+            // 2. 落库 + 记账 + 结果（守卫已通过）
+            self.spawn_unchecked(req, depth).await
+        }
 
-            // 2. 落库（pending 首写即 running）
-            let n = self.seq.fetch_add(1, Ordering::SeqCst);
-            let subagent_id = format!("sub-{depth}-{n}");
-            let subagent_run_id = format!("sub-run-{depth}-{n}");
-            let now = 1_700_000_000;
-            let row = self.row_for(req, &subagent_id, &subagent_run_id, depth, now);
-            let mut agents = self
-                .db
-                .load_session_agents(&req.parent_session_id)
-                .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
-            agents.push(row);
-            self.db
-                .save_session_agents(&req.parent_session_id, &agents)
-                .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
-
-            // 3. 记账（已分配语义；终态释放由引擎侧完成）
-            {
-                let mut siblings = self.active_siblings.lock().unwrap();
-                *siblings.entry(parent_run.to_string()).or_insert(0) += 1;
+        /// 批量派发（T-D-06 原子语义）：**前瞻快照统一守卫**——批量任务
+        /// 同父（parent_run_id 取首条），depth 共享，active_siblings /
+        /// active_concurrent 按 N 预加后一次判定；任一拒绝 → 整体失败
+        /// **零 run**（session_agents 无新增行，不产生部分成功）；全部
+        /// 通过 → 逐条落库 + 启动（顺序与入参一致）。
+        ///
+        /// 注：逐条落库阶段若出现持久化失败（DB 写入错误，测试域不触发），
+        /// 前序行已落库——该路径属灾难性失败，由引擎侧负责回滚；
+        /// 「零 run」保证针对守卫拒绝（验收断言 session_agents 无新增行）。
+        async fn spawn_many(
+            &self,
+            requests: &[SubagentSpawnRequest],
+        ) -> Result<Vec<SubagentSpawnResult>, SubagentSpawnError> {
+            if requests.is_empty() {
+                return Ok(Vec::new());
             }
-            self.active_concurrent.fetch_add(1, Ordering::SeqCst);
-            self.run_depths
+            let n = requests.len();
+            let parent_run = requests[0].parent_run_id.as_deref().unwrap_or_default();
+            let depth = self
+                .run_depths
                 .lock()
                 .unwrap()
-                .insert(subagent_run_id.clone(), depth);
-
-            Ok(SubagentSpawnResult {
-                subagent_id,
-                subagent_run_id,
-                session_id: format!("sub-sess-{depth}-{n}"),
-                status: SubagentState::Running,
-                summary: None,
-                flow_node_id: req.flow_node_id.clone(),
-                display_label: req.display_label.clone(),
-            })
+                .get(parent_run)
+                .copied()
+                .unwrap_or(0)
+                + 1;
+            let snapshot = RecursionGuardSnapshot {
+                depth,
+                active_siblings: self
+                    .active_siblings
+                    .lock()
+                    .unwrap()
+                    .get(parent_run)
+                    .copied()
+                    .unwrap_or(0)
+                    + n,
+                active_concurrent: self.active_concurrent.load(Ordering::SeqCst) + n,
+            };
+            self.check_guard(snapshot)?;
+            // 全部通过 → 逐条落库 + 启动
+            let mut results = Vec::with_capacity(n);
+            for req in requests {
+                results.push(self.spawn_unchecked(req, depth).await?);
+            }
+            Ok(results)
         }
     }
 
@@ -2408,6 +2935,225 @@ mod tests {
             .load_session_agents(&parent_session)
             .expect("读取第二层落库行失败");
         assert_eq!(rows.len(), 0, "嵌套拒绝不得产生任何 run 行");
+    }
+
+    // ── T-D-06：批量派发原子性（spawn_many 前瞻快照统一守卫）────────
+
+    #[tokio::test]
+    async fn spawn_many_three_tasks_all_persist_unique_ids() {
+        // 一次派发 3 个任务全部成功：返回 3 条唯一 id（subagentId /
+        // subagentRunId 两两不重复），session_agents 新增 3 行，顺序与
+        // 入参一致（T-D-06 验收 1）
+        let ws = TempWorkspace::new("subagent_many_ok");
+        let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
+        db.insert_session("sess-main", "主会话").expect("插入会话失败");
+        let spawner = DbSpawner::new(db.clone());
+        let reqs = vec![
+            request("任务 A", "sess-main", Some("run-main")),
+            request("任务 B", "sess-main", Some("run-main")),
+            request("任务 C", "sess-main", Some("run-main")),
+        ];
+        let results = spawner.spawn_many(&reqs).await.expect("批量派发应成功");
+        assert_eq!(results.len(), 3);
+        let mut ids: Vec<&str> = results.iter().map(|r| r.subagent_id.as_str()).collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 3, "3 条 subagentId 必须唯一");
+        for (i, result) in results.iter().enumerate() {
+            assert_eq!(result.status, SubagentState::Running);
+            assert_eq!(result.subagent_id, format!("sub-1-{i}"), "深度 1 首批发 id 序号 {i}");
+            assert_eq!(result.subagent_run_id, format!("sub-run-1-{i}"));
+        }
+        let agents = db
+            .load_session_agents("sess-main")
+            .expect("读取落库行失败");
+        assert_eq!(agents.len(), 3, "3 个任务全部落库");
+        let mut run_ids: Vec<&str> = agents.iter().map(|a| a.subagent_run_id.as_str()).collect();
+        run_ids.sort();
+        run_ids.dedup();
+        assert_eq!(run_ids.len(), 3, "3 条 subagentRunId 必须唯一");
+    }
+
+    #[tokio::test]
+    async fn spawn_many_guard_rejection_concurrent_zero_run() {
+        // N 个任务任一触发守卫拒绝 → 整体失败零 run：并发已顶满 12
+        //（A:5 + B:5 + C:2，各父兄弟 ≤ maxSiblings=5），再批量派发 1 个 →
+        // 前瞻预加 12+1=13 > maxConcurrent=12 → ConcurrentExceeded，
+        // session_agents 无新增行（T-D-06 验收 2）
+        let ws = TempWorkspace::new("subagent_many_conc");
+        let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
+        db.insert_session("sess-main", "主会话").expect("插入会话失败");
+        let spawner = DbSpawner::new(db.clone());
+        for (parent_run, count) in [("run-a", 5), ("run-b", 5), ("run-c", 2)] {
+            for i in 0..count {
+                spawner
+                    .spawn(&request(
+                        &format!("任务 {parent_run}-{i}"),
+                        "sess-main",
+                        Some(parent_run),
+                    ))
+                    .await
+                    .expect("并发预算内 spawn 应成功");
+            }
+        }
+        assert_eq!(spawner.active_concurrent.load(Ordering::SeqCst), 12);
+        let err = spawner
+            .spawn_many(&[request("任务 13", "sess-main", Some("run-d"))])
+            .await
+            .unwrap_err();
+        assert_eq!(
+            err,
+            SubagentSpawnError::GuardRejected(RecursionGuardRejection::ConcurrentExceeded {
+                current: 13,
+                max: 12
+            }),
+            "前瞻预加 12+1=13 超 maxConcurrent=12，整体拒绝"
+        );
+        // 零 run：落库行数不变（12 行，无第 13 行）
+        let agents = spawner
+            .db
+            .load_session_agents("sess-main")
+            .expect("读取落库行失败");
+        assert_eq!(agents.len(), 12, "批量守卫拒绝不得产生任何 run 行");
+    }
+
+    #[tokio::test]
+    async fn spawn_many_guard_rejection_siblings_zero_run() {
+        // 批量前瞻预加命中兄弟并发：同父已有 4 兄弟，批量 2 个 →
+        // 4+2=6 > maxSiblings=5 → SiblingsExceeded（判定序先于全局并发），
+        // 整体失败零 run
+        let ws = TempWorkspace::new("subagent_many_sib");
+        let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
+        db.insert_session("sess-main", "主会话").expect("插入会话失败");
+        let spawner = DbSpawner::new(db.clone());
+        for i in 0..4 {
+            spawner
+                .spawn(&request(&format!("任务 {i}"), "sess-main", Some("run-main")))
+                .await
+                .expect("兄弟预算内 spawn 应成功");
+        }
+        let err = spawner
+            .spawn_many(&[
+                request("批量 A", "sess-main", Some("run-main")),
+                request("批量 B", "sess-main", Some("run-main")),
+            ])
+            .await
+            .unwrap_err();
+        assert_eq!(
+            err,
+            SubagentSpawnError::GuardRejected(RecursionGuardRejection::SiblingsExceeded {
+                current: 6,
+                max: 5
+            }),
+            "前瞻预加 4+2=6 超 maxSiblings=5，整体拒绝"
+        );
+        let agents = spawner
+            .db
+            .load_session_agents("sess-main")
+            .expect("读取落库行失败");
+        assert_eq!(agents.len(), 4, "批量拒绝不得产生任何 run 行");
+    }
+
+    #[tokio::test]
+    async fn spawn_many_boundary_concurrent_12_allowed() {
+        // 边界允许侧：并发 9（A:5 + B:4）时批量 3 个 → 前瞻 9+3=12 =
+        // maxConcurrent=12 → 全部成功落库；第 13 个并发才被拒（拒绝侧
+        // 见 spawn_many_guard_rejection_concurrent_zero_run）
+        let ws = TempWorkspace::new("subagent_many_bound");
+        let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
+        db.insert_session("sess-main", "主会话").expect("插入会话失败");
+        let spawner = DbSpawner::new(db.clone());
+        for (parent_run, count) in [("run-a", 5), ("run-b", 4)] {
+            for i in 0..count {
+                spawner
+                    .spawn(&request(
+                        &format!("任务 {parent_run}-{i}"),
+                        "sess-main",
+                        Some(parent_run),
+                    ))
+                    .await
+                    .expect("并发预算内 spawn 应成功");
+            }
+        }
+        let results = spawner
+            .spawn_many(&[
+                request("批量 A", "sess-main", Some("run-c")),
+                request("批量 B", "sess-main", Some("run-c")),
+                request("批量 C", "sess-main", Some("run-c")),
+            ])
+            .await
+            .expect("前瞻 9+3=12 恰在上限内应成功");
+        assert_eq!(results.len(), 3);
+        assert_eq!(spawner.active_concurrent.load(Ordering::SeqCst), 12);
+        let agents = spawner
+            .db
+            .load_session_agents("sess-main")
+            .expect("读取落库行失败");
+        assert_eq!(agents.len(), 12, "边界 12 个并发全部落库");
+    }
+
+    #[tokio::test]
+    async fn spawn_many_empty_input_returns_empty() {
+        // 空批量防御：成功返回空结果，零落库
+        let ws = TempWorkspace::new("subagent_many_empty");
+        let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
+        db.insert_session("sess-main", "主会话").expect("插入会话失败");
+        let spawner = DbSpawner::new(db);
+        let results = spawner.spawn_many(&[]).await.expect("空批量应成功返回空");
+        assert!(results.is_empty());
+        assert_eq!(
+            spawner
+                .db
+                .load_session_agents("sess-main")
+                .expect("读取落库行失败")
+                .len(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn tool_batch_three_tasks_unique_ids_via_db_spawner() {
+        // 工具路径 + 测试域原子 spawner 全链路：一次派发 3 个任务全部
+        // 成功，返回 3 条唯一 id，session_agents 新增 3 行（T-D-06 验收 1）
+        let ws = TempWorkspace::new("subagent_many_tool");
+        let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
+        db.insert_session("sess-main", "主会话").expect("插入会话失败");
+        let tool = RunSubagentTool::with_spawner(Some(Arc::new(DbSpawner::new(db.clone()))));
+        let ctx = ToolContext {
+            session_id: "sess-main".to_string(),
+            ..create_mock_tool_context()
+        };
+        let out = tool
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "tasks": [
+                        { "prompt": "任务 A", "role": "researcher" },
+                        { "prompt": "任务 B", "capabilityMode": "read-only" },
+                        { "prompt": "任务 C" }
+                    ]
+                }),
+            )
+            .await
+            .expect("批量派发应成功");
+        let results = out["results"].as_array().expect("results 必须是数组");
+        assert_eq!(results.len(), 3);
+        let mut ids: Vec<String> = results
+            .iter()
+            .map(|r| {
+                r["subagentId"]
+                    .as_str()
+                    .expect("subagentId 必须存在")
+                    .to_string()
+            })
+            .collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 3, "3 条 subagentId 必须唯一");
+        let agents = db
+            .load_session_agents("sess-main")
+            .expect("读取落库行失败");
+        assert_eq!(agents.len(), 3, "3 个任务全部落库");
     }
 
     // ── 审批通道挂靠（I3 原样挂靠，写类调用产生审批记录）──────────

@@ -41,9 +41,12 @@ export type SubagentIsolationMode = 'none';
 export interface RecursionGuardConfig {
   /** 最大递归深度，默认 1（仅主 Agent 可派发，用户裁决；T-D-01/02） */
   readonly maxDepth: number;
-  /** 最大兄弟并发数，默认 5 */
+  /** 最大兄弟并发数，默认 5（保持；兄弟并发应小于全局并发） */
   readonly maxSiblings: number;
-  /** 最大全局并发数，默认 6 */
+  /**
+   * 最大全局并发数，默认 12（T-D-06 上限 12 对齐，6→12；
+   * 与 Rust 侧 DEFAULT_RECURSION_GUARD 同值同语义）
+   */
   readonly maxConcurrent: number;
   /** 全局 token 预算，默认 0（不限制，ROUND-09 §3 推迟组件） */
   readonly totalTokenBudget: number;
@@ -55,7 +58,8 @@ export const DEFAULT_RECURSION_GUARD: Readonly<RecursionGuardConfig> = {
   // maxDepth=1：嵌套禁止（仅主 Agent 可派发；与 Rust 侧同值同语义）
   maxDepth: 1,
   maxSiblings: 5,
-  maxConcurrent: 6,
+  // T-D-06：上限 12 对齐（6→12，maxSiblings=5 保持）
+  maxConcurrent: 12,
   totalTokenBudget: 0,
   totalTimeoutMs: 0,
 };

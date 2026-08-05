@@ -675,7 +675,8 @@ pub const FLOW_ON_FAILED_KEY: &str = "flow_on_failed";
 pub const FLOW_RESERVED_KEY: &str = "flow_reserved";
 /// 预算已释放计数键
 pub const FLOW_RELEASED_KEY: &str = "flow_released";
-/// 全局并发上限键（默认 RecursionGuardConfig.max_concurrent = 6）
+/// 全局并发上限键（默认 RecursionGuardConfig.max_concurrent = 12，
+/// T-D-06 上限 12 对齐，跟随 DEFAULT_RECURSION_GUARD）
 pub const FLOW_MAX_CONCURRENT_KEY: &str = "flow_max_concurrent";
 /// 兄弟并发上限键（默认 RecursionGuardConfig.max_siblings = 5）
 pub const FLOW_MAX_SIBLINGS_KEY: &str = "flow_max_siblings";
@@ -989,6 +990,12 @@ impl FlowScheduler {
                 // 节点），maxDepth=1 下嵌套拒绝（NestingDenied）按「新会话
                 // 深度 > 1」判定——流程快照深度 1 恒在界限内，不受嵌套禁止
                 // 影响；预算维度（siblings/concurrent）照常作为预算门。
+                // T-D-06 确认：预算默认值跟随 DEFAULT_RECURSION_GUARD
+                // （max_concurrent 6→12 自动生效，meta 未配置 flow_max_concurrent
+                // 时按 12 预算）；批量派发（spawn_many，无依赖平铺并行）与
+                // DAG 调度器并存——流程节点仍逐条经 spawn 启动（预算 reserve
+                // 逐节点判定，语义不变），批量原子性由 spawner 层承担，不改变
+                // 本模块的预算判定行为。
                 let in_flight = self.budget.in_flight() as usize;
                 let snapshot = RecursionGuardSnapshot {
                     depth: 1,
