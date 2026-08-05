@@ -1,7 +1,8 @@
 // packages/shared-types/src/errors/codes.ts
 // 错误码权威定义，来源：./03-ERROR-MIGRATION.md §2.2
-// 实测码数：67 正式码 + 10 reserved 码 = 77 码 / 20 域
-// （R6 扩展：新增 goal 域 3 码，event_store.read_failed 已在 R1 注册）
+// 实测码数：72 正式码 + 10 reserved 码 = 82 码 / 20 域
+// （R6 扩展：新增 goal 域 3 码，event_store.read_failed 已在 R1 注册；
+//  PE-03 T03.3 补 store.io / common.invalid_input / common.encoding）
 
 export type CrishErrorCode =
   // ── config 域（3 正式码）──
@@ -57,11 +58,13 @@ export type CrishErrorCode =
   | 'mcp.connection_failed'
   | 'mcp.protocol_violation'
   | 'mcp.server_not_found'
-  // ── store 域（4 正式码）──
+  // ── store 域（5 正式码）──
   | 'store.write_failed'
   | 'store.read_failed'
   | 'store.corrupted'
   | 'store.capacity_exceeded'
+  // PE-03 T03.3：存储/IO 失败（CoreError::Io 显式映射主码，与 store.write_failed 分流）
+  | 'store.io'
   // ── subagent 域（3 正式码 + 1 reserved）──
   | 'subagent.depth_exceeded'
   | 'subagent.nesting_denied'
@@ -94,10 +97,13 @@ export type CrishErrorCode =
   | 'telemetry.export_failed'
   | 'telemetry.trace_lost'
   | 'log.write_failed'
-  // ── common 域（3 正式码）──
+  // ── common 域（5 正式码）──
   | 'common.unknown'
   | 'common.unsupported'
   | 'common.not_found'
+  // PE-03 T03.3：参数校验失败 / 编解码失败（CoreError::InvalidInput/Encoding 映射主码）
+  | 'common.invalid_input'
+  | 'common.encoding'
   // ── security 域（1 正式码，新增域）──
   | 'security.ssrf_rejected'
   // ── goal 域（3 正式码，R6 新增域）──

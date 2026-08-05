@@ -3163,21 +3163,25 @@ mod tests {
         // 子代理 run 的写类调用（shell_command 需审批形态）经 ctx.ask
         // 接线面（引擎侧由 ApprovalChannel → ApprovalGate 实现）产生审批
         // 请求；放行后继续执行（命令失败非致命，本测试只断言审批记录）。
+        // 审计修复（T-3 预检高严重度）：原用例真实执行 `git push --force
+        // origin main`——mock 上下文 cwd 为仓库根，存在真实强推与网络依赖
+        // 隐患；改为同形态写类命令（重定向写文件），审批挂靠语义不变。
         let recorder = RecordingAskChannel::allowing();
         let mut ctx = create_mock_tool_context();
         ctx.ask = Some(Arc::new(recorder.clone()) as AskCallback);
         let tool = ShellCommandTool::new(30_000, 200_000, None);
+        let command = "echo hello > ask_probe.txt";
         let out = tool
             .execute(
                 &ctx,
-                serde_json::json!({ "command": "git push --force origin main" }),
+                serde_json::json!({ "command": command }),
             )
             .await
             .expect("审批放行后命令执行不应返回工具错误（非致命）");
         let calls = recorder.calls();
         assert_eq!(calls.len(), 1, "写类调用必须产生一次审批请求");
         assert_eq!(calls[0].0, "shell_command");
-        assert_eq!(calls[0].1["command"], "git push --force origin main");
+        assert_eq!(calls[0].1["command"], command);
         assert!(out.get("exitCode").is_some(), "命令已执行（审批放行语义）");
     }
 

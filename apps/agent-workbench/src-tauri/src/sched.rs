@@ -907,16 +907,6 @@ mod tests {
         }
     }
 
-    /// 断言触发条目文本（§4.8 Cron 模板：<prompt>（cron <id> 第 N 次触发））
-    fn assert_fire_text(entry: &SteeringProbe, cron_id: &str, iteration: u64) {
-        assert_eq!(
-            entry.text,
-            format!("检查编译结果（cron {cron_id} 第 {iteration} 次触发）"),
-            "触发条目文本：{}",
-            entry.text
-        );
-    }
-
     // ── T-CF-09：触发 / MaxIterations / IsDaemon / 恢复 / 非法表达式 ──
 
     /// 触发后 PendingMessageQueue 出现 cron-<id> 条目（完成通知同组

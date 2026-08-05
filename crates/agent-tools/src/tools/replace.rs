@@ -161,9 +161,9 @@ impl Tool for MultiReplaceFileTool {
         }
 
         // 9. 一次性原子落盘（同目录临时文件 + rename；Windows 先 remove 再 rename）
-        //    编码解析/编码复用 fs.rs 同构实现（本地镜像，见文件尾注释）
-        let encoding = resolve_write_encoding(&file_path, None)?;
-        let out_bytes = encode_text(&new_text, &encoding)?;
+        //    编码解析/编码直接复用 fs.rs 的 pub(crate) 实现（F5 本地镜像已去重）
+        let encoding = crate::tools::fs::resolve_write_encoding(&file_path, None)?;
+        let out_bytes = crate::tools::fs::encode_text(&new_text, &encoding)?;
         atomic_write(&file_path, &out_bytes)?;
 
         // 10. 配额消耗 + 输出（对齐 write_file 输出形状 fs.rs:210-217）
@@ -561,78 +561,9 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), ToolError> {
 }
 
 // ---------------------------------------------------------------------------
-// 编码解析/编码本地镜像（与 fs.rs:339-400 的 resolve_write_encoding / encode_text
-// 同构实现，保证行为一致）
-//
-// fs.rs 的这两个函数为模块私有，按任务书「若需可见性调整，登记由主调度裁决」，
-// 本轮不改 fs.rs（其行为属 E2 域 T-EG-04 的范围）；此处镜像复刻以完成
-// 「写回按 BOM 续写原编码」契约。待主调度裁决将二者提升为 pub(crate) 后，
-// 删除本镜像直接复用 fs.rs 实现。
+// （原编码解析/编码本地镜像 resolve_write_encoding / encode_text 已于 F7 可见性
+// 收尾后删除——直接复用 fs.rs:368/402 的 pub(crate) 实现，行为同构不再双份维护）
 // ---------------------------------------------------------------------------
-
-/// 写文件支持编码枚举（对齐 fs.rs:254 的 WRITE_ENCODINGS）
-const WRITE_ENCODINGS: &[&str] = &["utf-8", "utf-8-bom", "utf-16le", "utf-16be"];
-
-/// 解析写入编码（镜像 fs.rs:339-369）：显式指定优先；否则已存在文件按 BOM 续写
-fn resolve_write_encoding(file_path: &Path, requested: Option<&str>) -> Result<String, ToolError> {
-    if let Some(enc) = requested {
-        if WRITE_ENCODINGS.contains(&enc) {
-            return Ok(enc.to_string());
-        }
-        return Err(ToolError::invalid_input(format!(
-            "encoding must be one of {WRITE_ENCODINGS:?}, got {enc:?}"
-        )));
-    }
-    if file_path.is_file() {
-        if let Ok(mut f) = std::fs::File::open(file_path) {
-            use std::io::Read;
-            let mut head = [0u8; 4];
-            let n = f.read(&mut head).unwrap_or(0);
-            let head = &head[..n];
-            if head.starts_with(&[0xFF, 0xFE]) {
-                return Ok("utf-16le".to_string());
-            }
-            if head.starts_with(&[0xFE, 0xFF]) {
-                return Ok("utf-16be".to_string());
-            }
-            if head.starts_with(&[0xEF, 0xBB, 0xBF]) {
-                return Ok("utf-8-bom".to_string());
-            }
-        }
-    }
-    Ok("utf-8".to_string())
-}
-
-/// 按编码编码文本（镜像 fs.rs:372-400）：utf-8 / utf-8-bom / utf-16le / utf-16be，带 BOM
-fn encode_text(content: &str, encoding: &str) -> Result<Vec<u8>, ToolError> {
-    let utf8 = content.as_bytes();
-    let mut out = Vec::with_capacity(utf8.len() * 2 + 2);
-    match encoding {
-        "utf-8" => out.extend_from_slice(utf8),
-        "utf-8-bom" => {
-            out.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
-            out.extend_from_slice(utf8);
-        }
-        "utf-16le" => {
-            out.extend_from_slice(&[0xFF, 0xFE]);
-            for u in content.encode_utf16() {
-                out.extend_from_slice(&u.to_le_bytes());
-            }
-        }
-        "utf-16be" => {
-            out.extend_from_slice(&[0xFE, 0xFF]);
-            for u in content.encode_utf16() {
-                out.extend_from_slice(&u.to_be_bytes());
-            }
-        }
-        other => {
-            return Err(ToolError::invalid_input(format!(
-                "unsupported encoding: {other:?}"
-            )));
-        }
-    }
-    Ok(out)
-}
 
 #[cfg(test)]
 mod tests {

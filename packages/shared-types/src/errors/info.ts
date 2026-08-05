@@ -1,7 +1,7 @@
 // packages/shared-types/src/errors/info.ts
 // 错误码元信息注册表，来源：./03-ERROR-MIGRATION.md §2.2
-// 实测条目数：67 正式码 + 10 reserved 码 = 77 条
-// （R6 扩展：新增 goal 域 3 码）
+// 实测条目数：72 正式码 + 10 reserved 码 = 82 条
+// （R6 扩展：新增 goal 域 3 码；PE-03 T03.3 补 store.io / common.invalid_input / common.encoding）
 
 import type { CrishErrorCode, CrishErrorCategory } from './codes';
 
@@ -385,10 +385,18 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     public: true,
     action: 'action.mcp.check_config',
   },
-  // ── store 域（4 正式码）──
+  // ── store 域（5 正式码）──
   'store.write_failed': {
     code: 'store.write_failed',
     title: '存储写入失败',
+    category: 'transient',
+    retryable: true,
+    public: true,
+    action: 'action.store.retry_write',
+  },
+  'store.io': {
+    code: 'store.io',
+    title: '存储/IO 失败',
     category: 'transient',
     retryable: true,
     public: true,
@@ -610,7 +618,7 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     public: false,
     action: 'action.log.retry_write',
   },
-  // ── common 域（3 正式码）──
+  // ── common 域（5 正式码）──
   'common.unknown': {
     code: 'common.unknown',
     title: '未知错误',
@@ -618,6 +626,22 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     retryable: false,
     public: true,
     action: 'action.common.report_bug',
+  },
+  'common.invalid_input': {
+    code: 'common.invalid_input',
+    title: '参数非法',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.common.check_field',
+  },
+  'common.encoding': {
+    code: 'common.encoding',
+    title: '编解码失败',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.common.check_encoding',
   },
   'common.unsupported': {
     code: 'common.unsupported',

@@ -362,9 +362,7 @@ impl Tool for WriteFileTool {
 }
 
 /// 解析写入编码：显式指定优先；否则已存在文件按 BOM 续写，新文件默认 utf-8
-/// F5 遗留可见性收尾：提升 pub(crate) 供 replace.rs 复用（其内部镜像了
-/// 本函数与 encode_text，见 replace.rs:561-626）；去重由后续轮次执行，
-/// 本轮只改可见性
+/// 可见性 pub(crate)：供 replace.rs 直接复用（F7 提升后其本地镜像已删除去重）
 pub(crate) fn resolve_write_encoding(
     file_path: &Path,
     requested: Option<&str>,
@@ -398,7 +396,7 @@ pub(crate) fn resolve_write_encoding(
 }
 
 /// 按编码编码文本（utf-8 / utf-8-bom / utf-16le / utf-16be，带 BOM）
-/// pub(crate)：同上可见性收尾，replace.rs 去重时直接复用
+/// pub(crate)：replace.rs 复用（本地镜像已去重）
 pub(crate) fn encode_text(content: &str, encoding: &str) -> Result<Vec<u8>, ToolError> {
     let utf8 = content.as_bytes();
     let mut out = Vec::with_capacity(utf8.len() * 2 + 2);

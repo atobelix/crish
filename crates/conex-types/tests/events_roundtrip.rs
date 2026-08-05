@@ -1,17 +1,19 @@
-//! B1.5 序列化契约测试：24 事件穷举 roundtrip + 03 §5.1 硬依赖表字段锚定
+//! B1.5 序列化契约测试：41 事件穷举 roundtrip + 03 §5.1 硬依赖表字段锚定
 //!
-//! 对齐 core-event-projector.test.ts:457（24 种 AgentEvent 穷举不遗漏）。
+//! 穷举清单与 [AgentEvent::ALL_TYPE_NAMES]（引擎事件名宏同源生成）动态对照，
+//! 新增事件变体在两处登记后本测试自动纳入，不再硬编码事件数。
 
 use conex_types::{
     AgentEndReason, AgentEvent, AgentEventEnvelope, AgentMessage, AgentMessageBlock,
     AgentMessageRole, ApprovalDecision, ContextCompressionRecord,
     ContextCompressionReason, ContextCompressionTrigger, ImpactAssessment,
-    PermissionBehavior, PermissionDecision, PermissionRequest, ProviderDiagnostic,
-    ProviderDiagnosticPhase, ProviderErrorKind, RunTerminalStatus, RuntimeCheckpointKind,
-    RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, SecurityAuditDecision,
-    SecurityAuditOperation, SubagentEndStatus, SubagentEventKind, SubagentEventPayload,
-    ToolArtifactKind, ToolBatchCall, ToolBatchResult, ToolCallBlock, ToolCategory,
-    ToolConcurrency, ToolMetadata, ToolOutput, ToolProgressUpdate,
+    MissAttribution, PermissionBehavior, PermissionDecision, PermissionRequest,
+    ProviderDiagnostic, ProviderDiagnosticPhase, ProviderErrorKind, RunCacheStats,
+    RunTerminalStatus, RuntimeCheckpointKind, RuntimeCheckpointRecord,
+    RuntimeCheckpointRestoreRecord, SecurityAuditDecision, SecurityAuditOperation,
+    SubagentEndStatus, SubagentEventKind, SubagentEventPayload, ToolArtifactKind,
+    ToolBatchCall, ToolBatchResult, ToolCallBlock, ToolCategory, ToolConcurrency,
+    ToolMetadata, ToolOutput, ToolProgressUpdate,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -121,6 +123,18 @@ fn permission_request() -> PermissionRequest {
             concurrency: None,
         },
         metadata: None,
+        // T-D-14 权限传递层：主 agent 请求缺省 None（向后兼容缺省面）
+        requester_run_id: None,
+        reason: None,
+    }
+}
+
+/// T-D-14 载荷扩展的另一种样本：子代理请求携带请求方身份与理由
+fn subagent_permission_request() -> PermissionRequest {
+    PermissionRequest {
+        requester_run_id: Some("run-sub-1".into()),
+        reason: Some("需要写入默认范围外的报告目录".into()),
+        ..permission_request()
     }
 }
 
@@ -205,9 +219,27 @@ fn restore() -> RuntimeCheckpointRestoreRecord {
     }
 }
 
-/// 35 种域事件各构造一个实例（03 §1.1-1.6 全清单 + I2-S8 安全审计域 +
-/// I5-M7 子代理域三事件 + T-AB-17 任务域七事件；缓存测量域三事件的 serde
-/// 契约另由 events_schema_version.rs §4 专测覆盖，不重复构造）
+/// 缓存统计样本（对齐 events_schema_version.rs §4 的 fixture 形状）
+fn run_cache_stats_fixture() -> RunCacheStats {
+    RunCacheStats {
+        prompt_tokens: 1000,
+        completion_tokens: 120,
+        total_tokens: 1120,
+        cache_read_tokens: 200,
+        cache_write_tokens: 0,
+        cache_miss_tokens: 800,
+        sample_count: 1,
+        hit_ratio: Some(0.2),
+        write_ratio: Some(0.0),
+        missed_tokens: 0,
+        warm_until_ms: None,
+    }
+}
+
+/// 41 种域事件各构造一个实例，顺序与 [AgentEvent::ALL_TYPE_NAMES] 一一对应
+/// （03 §1.1-1.6 全清单 + P5 S3 缓存测量域三事件 + I2-S8 安全审计域 +
+/// I5-M7 子代理域三事件 + T-AB-17 任务域七事件 + T-CF-04 定时器域两事件 +
+/// T-CF-08 cron 域一事件；全量穷举不再按域豁免）
 fn all_events() -> Vec<AgentEvent> {
     let s = "s1".to_string();
     vec![
@@ -351,6 +383,28 @@ fn all_events() -> Vec<AgentEvent> {
             terminal: RunTerminalStatus::Completed,
             error: None,
         },
+        // P5 S3：缓存测量域三事件（仅测量展示，不干预循环）
+        AgentEvent::CacheStatsUpdated {
+            session_id: "s1".to_string(),
+            timestamp: TS.into(),
+            stats: run_cache_stats_fixture(),
+        },
+        AgentEvent::CacheWasteAlert {
+            session_id: "s1".to_string(),
+            timestamp: TS.into(),
+            attribution: MissAttribution::IdleTtlExpired,
+            missed_tokens: 21_000,
+            idle_ms: 360_000,
+            model_changed: false,
+            missed_cost_usd: None,
+        },
+        AgentEvent::ColdCacheWarning {
+            session_id: "s1".to_string(),
+            timestamp: TS.into(),
+            ttl_seconds: 300,
+            idle_ms: 360_000,
+            resend_estimate_tokens: 1000,
+        },
         // I2-S8：安全审计事件（删除接管/重定向/恢复/红线拦截）
         AgentEvent::SecurityAudit {
             session_id: "s1".to_string(),
@@ -444,6 +498,28 @@ fn all_events() -> Vec<AgentEvent> {
             via_force: true,
             diagnostics: Some("两阶段升级后强制终止".to_string()),
         },
+        // T-CF-04：定时器域两事件（唤醒走 steering 面，事件仅数据面）
+        AgentEvent::TimerFired {
+            session_id: "s1".to_string(),
+            timer_id: "timer-1".to_string(),
+            prompt: "检查编译结果".to_string(),
+            fired_at_ms: 1_785_456_000_000,
+        },
+        AgentEvent::TimerCancelled {
+            session_id: "s1".to_string(),
+            timer_id: "timer-1".to_string(),
+            reason: "early-exit".to_string(),
+            cancelled_at_ms: 1_785_456_000_000,
+        },
+        // T-CF-08：cron 域一事件（SchedulerRegistry 触发，事件与唤醒解耦）
+        AgentEvent::CronFired {
+            session_id: "s1".to_string(),
+            cron_id: "cron-1".to_string(),
+            prompt: "检查编译结果".to_string(),
+            expression: "0 * * * *".to_string(),
+            iteration: 2,
+            fired_at_ms: 1_785_456_000_000,
+        },
     ]
 }
 
@@ -451,12 +527,17 @@ fn event_type_name(event: &AgentEvent) -> &'static str {
     event.type_name()
 }
 
-// ── 1. 35 事件穷举 roundtrip ──
+// ── 1. 全事件穷举 roundtrip（与 ALL_TYPE_NAMES 动态对照）──
 
 #[test]
-fn all_35_events_roundtrip() {
+fn all_events_roundtrip() {
     let events = all_events();
-    assert_eq!(events.len(), 35, "AgentEvent 必须是 35 种域事件（穷举覆盖清单）");
+    assert_eq!(
+        events.len(),
+        AgentEvent::ALL_TYPE_NAMES.len(),
+        "穷举清单必须与全量类型名清单一致（当前 {} 种；新增事件变体需在 all_events 登记）",
+        AgentEvent::ALL_TYPE_NAMES.len()
+    );
     for event in events {
         let json = serde_json::to_string(&event).expect("序列化失败");
         let back: AgentEvent = serde_json::from_str(&json).expect("反序列化失败");
@@ -465,46 +546,12 @@ fn all_35_events_roundtrip() {
 }
 
 #[test]
-fn all_35_event_types_have_expected_wire_type_name() {
-    let expected = [
-        "agent-start",
-        "agent-end",
-        "turn-start",
-        "turn-end",
-        "message-start",
-        "message-delta",
-        "message-end",
-        "tool-start",
-        "tool-update",
-        "tool-end",
-        "tool-batch-start",
-        "tool-batch-end",
-        "tool-input-repaired",
-        "context-compression-start",
-        "context-compression-end",
-        "provider-diagnostic",
-        "runtime-error",
-        "runtime-steering",
-        "runtime-intervention-required",
-        "approval-requested",
-        "approval-resolved",
-        "checkpoint-created",
-        "checkpoint-restored",
-        "run-terminal",
-        "security-audit",
-        "subagent-started",
-        "subagent-event",
-        "subagent-ended",
-        // T-AB-17：任务域七事件
-        "task-started",
-        "task-output",
-        "task-heartbeat",
-        "task-suspicious",
-        "task-completed",
-        "task-failed",
-        "task-killed",
-    ];
-    for (event, name) in all_events().iter().zip(expected) {
+fn all_event_types_have_expected_wire_type_name() {
+    // 动态对照：穷举清单与 ALL_TYPE_NAMES（引擎事件名宏同源生成）逐项 zip，
+    // 顺序必须一一对应——新增事件变体在两处登记后本测试自动纳入
+    let events = all_events();
+    assert_eq!(events.len(), AgentEvent::ALL_TYPE_NAMES.len());
+    for (event, name) in events.iter().zip(AgentEvent::ALL_TYPE_NAMES.iter().copied()) {
         let json = serde_json::to_value(event).unwrap();
         assert_eq!(json["type"], name, "顶层 type 字段（03 §5.1-1）");
         // 每个事件都携带 sessionId
@@ -911,8 +958,8 @@ fn envelope_omits_run_id_and_sequence_when_absent() {
 }
 
 #[test]
-fn envelope_roundtrip_all_24_events_with_run_id_and_sequence() {
-    // 全部 24 事件经信封（注入 runId/sequence）往返一致，
+fn envelope_roundtrip_all_events_with_run_id_and_sequence() {
+    // 全部事件经信封（注入 runId/sequence）往返一致，
     // 且 run-terminal 的事件体 runId 与信封注入值保持一致
     for event in all_events() {
         let envelope = AgentEventEnvelope::new(event.clone(), Some("run-1".into()), Some(7));
@@ -1016,4 +1063,61 @@ fn value_type_helper_smoke() {
     assert_eq!(json["input"]["path"], "a.txt");
     let back: ToolBatchCall = serde_json::from_value(json).unwrap();
     assert_eq!(back.input, serde_json::json!({ "path": "a.txt" }));
+}
+
+// ── T-D-14 权限传递层：PermissionRequest 载荷扩展兼容 ──
+
+/// 旧解析器可读（缺省字段 + 未知字段容忍）：子代理请求载荷（含
+/// requesterRunId/reason）反序列化到「旧字段集合」的解析器不失败——
+/// serde 缺省忽略未知字段，旧解析器按已知字段读取。
+#[test]
+fn extended_payload_readable_by_legacy_field_set_parser() {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct LegacyPermissionRequestView {
+        id: String,
+        session_id: String,
+        tool_call_id: String,
+        tool_name: String,
+    }
+    let json = serde_json::to_string(&subagent_permission_request()).unwrap();
+    let legacy: LegacyPermissionRequestView = serde_json::from_str(&json)
+        .expect("旧字段集解析器必须能读扩展后的载荷（未知字段缺省忽略）");
+    assert_eq!(legacy.id, "pr-1");
+    assert_eq!(legacy.session_id, "s1");
+    assert_eq!(legacy.tool_call_id, "tc-1");
+    assert_eq!(legacy.tool_name, "write_file");
+}
+
+/// 新解析器读旧载荷：缺省字段 → None（向后兼容）
+#[test]
+fn legacy_payload_reads_new_optional_fields_as_none() {
+    let legacy_json = serde_json::json!({
+        "id": "pr-1",
+        "sessionId": "s1",
+        "cwd": "/ws",
+        "toolCallId": "tc-1",
+        "toolName": "write_file",
+        "parameters": { "path": "a.txt" },
+        "summary": "写入文件",
+        "toolMetadata": { "category": "filesystem" },
+    });
+    let parsed: PermissionRequest = serde_json::from_value(legacy_json)
+        .expect("旧载荷缺省新字段必须可反序列化");
+    assert_eq!(parsed.requester_run_id, None, "缺省 requesterRunId → None");
+    assert_eq!(parsed.reason, None, "缺省 reason → None");
+    // 主 agent 请求（缺省）序列化不携带新字段（skip_serializing_if）
+    let out = serde_json::to_value(&parsed).unwrap();
+    assert!(out.get("requesterRunId").is_none(), "None 字段不得序列化");
+    assert!(out.get("reason").is_none(), "None 字段不得序列化");
+}
+
+/// 子代理请求载荷：wire 字段 camelCase + 往返一致
+#[test]
+fn subagent_payload_roundtrips_with_camel_case_wire() {
+    let json = serde_json::to_value(&subagent_permission_request()).unwrap();
+    assert_eq!(json["requesterRunId"], "run-sub-1");
+    assert_eq!(json["reason"], "需要写入默认范围外的报告目录");
+    let back: PermissionRequest = serde_json::from_value(json).unwrap();
+    assert_eq!(subagent_permission_request(), back, "子代理载荷往返一致");
 }

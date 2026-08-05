@@ -51,6 +51,10 @@ pub struct IdempotencyContext {
     pub tool_name: String,
     /// 可选快照标记：有则作为更强键（“工具名@标记”）
     pub snapshot_tag: Option<String>,
+    /// 额外键素材（F7 遗留 2 接线）：路径类工具同参对「已存在/不存在」文件
+    /// 结果不同（如 write_file overwrite=false → tool.file_exists），由执行器
+    /// 在构造上下文时追加「目标存在状态」探针；无额外素材时为空、键与旧版一致
+    pub extra_key_material: Vec<String>,
 }
 
 impl IdempotencyContext {
@@ -65,6 +69,7 @@ impl IdempotencyContext {
             session_id: session_id.into(),
             tool_name: tool_name.into(),
             snapshot_tag: None,
+            extra_key_material: Vec::new(),
         }
     }
 
@@ -287,7 +292,10 @@ impl ToolIdempotencyGuard {
 }
 
 /// 执行键：优先“工具名@快照标记”（ctx 显式标记或入参 snapshotTag 字段），
-/// 否则“工具名:参数规范 hash”
+/// 否则“工具名:参数规范 hash”；
+/// `extra_key_material` 逐个拼接到 hash 键尾部（`|` 分隔）——键素材含
+/// 路径存在状态等执行结果相关探针，check/record 各自实时探测，保证
+/// 「同参但文件状态不同」的调用不共享键
 pub fn execution_key(ctx: &IdempotencyContext, args: &Value) -> String {
     let tag = ctx
         .snapshot_tag
@@ -295,7 +303,14 @@ pub fn execution_key(ctx: &IdempotencyContext, args: &Value) -> String {
         .or_else(|| args.get("snapshotTag").and_then(Value::as_str));
     match tag {
         Some(tag) => format!("{}@{tag}", ctx.tool_name),
-        None => format!("{}:{:016x}", ctx.tool_name, args_hash(args)),
+        None => {
+            let mut key = format!("{}:{:016x}", ctx.tool_name, args_hash(args));
+            for extra in &ctx.extra_key_material {
+                key.push('|');
+                key.push_str(extra);
+            }
+            key
+        }
     }
 }
 
@@ -539,6 +554,28 @@ mod tests {
         assert_eq!(canonicalize_json(&json!(null)), "null");
         assert_eq!(canonicalize_json(&json!("a\"b\\c")), r#""a\"b\\c""#);
         assert_eq!(canonicalize_json(&json!([1, 2])), "[1,2]");
+    }
+
+    /// F7 遗留 2：额外键素材折叠——同参不同存在状态素材不得共享键，
+    /// 同素材重复计算键一致（去重判定依赖的幂等性）
+    #[test]
+    fn extra_key_material_splits_hash_keys() {
+        let mut c = ctx("run-1", "sess-1", "write_file");
+        let args = json!({ "path": "a.txt", "content": "x", "overwrite": false });
+        let base = execution_key(&c, &args);
+
+        c.extra_key_material = vec!["path:exists=true".to_string()];
+        let present = execution_key(&c, &args);
+        assert_ne!(base, present, "存在性素材不同不得共享键");
+        assert_eq!(execution_key(&c, &args), present, "同素材键必须稳定");
+
+        c.extra_key_material = vec!["path:exists=false".to_string()];
+        let absent = execution_key(&c, &args);
+        assert_ne!(present, absent, "exists=true/false 必须分键");
+
+        // 快照标记路径不折叠素材（更强键，格式保持不变）
+        c.snapshot_tag = Some("tag-1".to_string());
+        assert_eq!(execution_key(&c, &args), "write_file@tag-1");
     }
 
     // ── 持久化钩子 ──

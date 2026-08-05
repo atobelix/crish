@@ -431,26 +431,12 @@ pub(crate) fn epoch_millis(t: Option<std::time::SystemTime>) -> i64 {
         .unwrap_or(0)
 }
 
-/// 截断字符串到上限，附截断说明
-///
-/// 字符边界截断语义（可能切行中间）按契约保持不变；当前 read_file 已改用
-/// `clamp_text_by_lines`（行边界），本函数保留供既有语义调用方（如 grep
-/// 文本视图）使用，暂无调用方时以 allow(dead_code) 保留避免误删。
-#[allow(dead_code)]
-pub(crate) fn clamp_text(text: &str, limit: usize) -> (String, bool) {
-    if text.chars().count() <= limit {
-        return (text.to_string(), false);
-    }
-    let shown: String = text.chars().take(limit).collect();
-    (shown, true)
-}
-
 /// 行级截断助手（T-CF-01）：先按行数上限钳制，再按字符预算钳制；
 /// 字符超限时从预算位置向前回退到最近完整行边界（不切行中间）。
 /// 返回 (被保留文本, 保留的完整行数, 是否发生钳制)。
 ///
-/// 与 `clamp_text` 的分工：`clamp_text` 在字符边界直接截断（可能切行中间），
-/// 供 grep 等既有调用方使用，行为保持不变；本助手保证返回文本以完整行结尾，
+/// 历史 `clamp_text`（字符边界截断，read_file 改造前的旧助手）已删除——
+/// F3 登记的 dead_code 裁决（全仓无调用方）；本助手保证返回文本以完整行结尾，
 /// 供 read_file 行粒度续读使用。
 pub(crate) fn clamp_text_by_lines(
     text: &str,

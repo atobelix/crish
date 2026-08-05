@@ -134,13 +134,36 @@ pub async fn execute_with_output_policy(
 ///
 /// snapshotTag 取入参携带值（如 edit 类工具的 snapshotTag 字段），
 /// 作为文件状态类工具的更精确键；ctx 无需显式提供。
+/// 键素材另附加「目标存在性」探针（F7 遗留 2 接线）：路径类工具同参对
+/// 「已存在/不存在」文件的结果不同（如 write_file overwrite=false →
+/// tool.file_exists），参数 hash 键须含目标当前存在状态，否则同一键会掩盖
+/// 结果差异。check 与 record 各自实时探测：record 记录的是执行后的状态，
+/// 重试时状态一致则去重、状态翻转（如外部删除后重试）则重新执行。
 fn build_idempotency_context(ctx: &ExecutorContext, tool_name: &str, args: &Value) -> IdempotencyContext {
     IdempotencyContext {
         run_id: ctx.run_id.clone(),
         session_id: ctx.session_id.clone(),
         tool_name: tool_name.to_string(),
         snapshot_tag: args.get("snapshotTag").and_then(Value::as_str).map(String::from),
+        extra_key_material: path_existence_markers(ctx, args),
     }
+}
+
+/// 目标存在性键素材：对带 path / target_file 入参的工具，以 cwd 为基准解析
+/// 目标路径并探测存在状态；cwd 缺失时返回空（行为与未接线一致，纯增量）。
+fn path_existence_markers(ctx: &ExecutorContext, args: &Value) -> Vec<String> {
+    let Some(cwd) = &ctx.cwd else {
+        return Vec::new();
+    };
+    let mut markers = Vec::new();
+    for key in ["path", "target_file"] {
+        if let Some(raw) = args.get(key).and_then(Value::as_str) {
+            // join 遇绝对路径自动替换基准（write_file schema 允许绝对路径）
+            let target = std::path::Path::new(cwd).join(raw);
+            markers.push(format!("{key}:exists={}", target.exists()));
+        }
+    }
+    markers
 }
 
 #[cfg(test)]
@@ -442,6 +465,73 @@ mod tests {
             .unwrap();
         assert!(!second.deduplicated);
         assert_eq!(tool.call_count(), 2);
+    }
+
+    /// F7 遗留 2：目标存在性探针——同 path 入参，文件「不存在 → 创建 → 重试」
+    /// 键素材翻转（exists=false → exists=true），不共享键、重试重新执行；
+    /// 文件状态未翻转的重试仍按原键去重。
+    #[tokio::test]
+    async fn path_existence_marker_splits_keys_on_state_flip() {
+        let tool = CountingTool::new();
+        let root = std::env::temp_dir().join(format!(
+            "agent_tools_idem_probe_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let target = root.join("a.txt");
+
+        let guard = ToolIdempotencyGuard::new();
+        let policy = ToolExecutionPolicy::default();
+        let exec_ctx = ExecutorContext {
+            cwd: Some(root.to_string_lossy().into_owned()),
+            ..ctx()
+        };
+        let args = json!({ "path": "a.txt" });
+
+        // 首次：文件不存在 → 执行（键素材 exists=false）
+        let first = execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &exec_ctx, Some(&guard), &policy)
+            .await
+            .unwrap();
+        assert!(!first.deduplicated);
+        assert_eq!(tool.call_count(), 1);
+
+        // 外部创建目标（模拟文件状态翻转）→ 重试键素材 exists=true，
+        // 与已记录键（exists=false）不同 → 重新执行而非去重
+        std::fs::write(&target, "x").unwrap();
+        let second = execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &exec_ctx, Some(&guard), &policy)
+            .await
+            .unwrap();
+        assert!(!second.deduplicated, "状态翻转后不得去重");
+        assert_eq!(tool.call_count(), 2);
+
+        // 状态不再翻转 → 第三次命中已记录键（exists=true）去重
+        let third = execute_with_output_policy(&tool, args, &tool_ctx(), &exec_ctx, Some(&guard), &policy)
+            .await
+            .unwrap();
+        assert!(third.deduplicated, "状态一致应去重");
+        assert_eq!(tool.call_count(), 2);
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// F7 遗留 2 对照：cwd 缺失时不附加探针，键与既有实现一致
+    /// （无 cwd 的执行上下文行为不受影响）
+    #[tokio::test]
+    async fn path_existence_marker_absent_without_cwd() {
+        let tool = CountingTool::new();
+        let guard = ToolIdempotencyGuard::new();
+        let policy = ToolExecutionPolicy::default();
+        let args = json!({ "path": "a.txt" });
+
+        execute_with_output_policy(&tool, args.clone(), &tool_ctx(), &ctx(), Some(&guard), &policy)
+            .await
+            .unwrap();
+        let second = execute_with_output_policy(&tool, args, &tool_ctx(), &ctx(), Some(&guard), &policy)
+            .await
+            .unwrap();
+        assert!(second.deduplicated);
+        assert_eq!(tool.call_count(), 1);
     }
 
     /// 测试用大输出工具：返回 200 字符文本 + artifacts

@@ -108,6 +108,13 @@ command_registry![
     ("workbench_open_host_target", host_openers::workbench_open_host_target),
     ("workbench_open_path_default", host_openers::workbench_open_path_default),
     ("workbench_list_file_openers", host_openers::workbench_list_file_openers),
+    // Tauri rename 语义核对（F7 遗留 4）：generate_handler! 以 Rust 函数名为
+    // invoke 键，除非函数带 #[tauri::command(rename = "...")]（先例：
+    // markdown_commands.rs / workflow_commands.rs）——本族四命令未加 rename，
+    // 函数名即前端实际 invoke 名（write_file_content / read_file_content /
+    // list_directory / select_folder，workspaceFsApi.ts 以函数名调用），元组名
+    // workbench_* 仅作 manifest / 注册面对照标签；改名对齐需前端 invoke 同步
+    // （crish-desktop 域），登记为已知分裂、待前后端同轮推进，不强行单侧修复
     ("workbench_select_folder", fs_commands::select_folder),
     ("workbench_list_directory", fs_commands::list_directory),
     ("workbench_read_file_content", fs_commands::read_file_content),
