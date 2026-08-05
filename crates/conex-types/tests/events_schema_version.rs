@@ -6,10 +6,14 @@
 //! - 关键字段抽查（含旧 RuntimeError `error: String` 形态）；
 //! - 完整信封帧（runId/sequence）解析；
 //! - 新信封序列化恒带 `schemaVersion: 1`；未来版本号透传不丢弃；
-//! - 变体数一致性断言：27 == 本清单 == 33-event-schema-changelog.md v1 表登记数
+//! - 变体数一致性断言：38 == 本清单 == 33-event-schema-changelog.md v1 表登记数
 //!   （新增事件类型必须同步登记 changelog + 本清单 + fixtures，T12.6 门禁；
-//!   2026-08-03 P5 S3 兼容新增 cache-* 三事件，24 → 27）；
-//! - 缓存测量域三变体（P5 S3 §3.1.3）serde roundtrip / camelCase / 缺省字段。
+//!   2026-08-03 P5 S3 兼容新增 cache-* 三事件，24 → 27；I2-S8 新增
+//!   security-audit，27 → 28；I5-M7 新增 subagent 域三事件，28 → 31；
+//!   2026-08-04 T-AB-17 任务域兼容新增七事件，31 → 38）；
+//! - 缓存测量域三变体（P5 S3 §3.1.3）serde roundtrip / camelCase / 缺省字段；
+//! - 任务域七变体（T-AB-17，01 方案 §4.5 冻结契约）serde roundtrip /
+//!   camelCase / 缺省字段 / 信封 schemaVersion。
 
 use conex_types::{
     AgentEvent, AgentEventEnvelope, EVENT_ENVELOPE_SCHEMA_VERSION, MissAttribution, RunCacheStats,
@@ -19,7 +23,10 @@ use serde_json::{json, Value};
 /// 统一 fixture 访问辅助（T11.3 golden 规范：tests/common/mod.rs 单一实现）
 mod common;
 
-/// v1 基线 31 事件类型清单（与 changelog v1 表逐条对应，PE-12 T12.6 门禁）
+/// v1 基线 38 事件类型清单（与 changelog v1 表逐条对应，PE-12 T12.6 门禁；
+/// 2026-08-04 T-AB-17 任务域兼容新增七事件，31 → 38，登记于 changelog §四
+/// 1.4 行；原 `v1_baseline_has_exactly_31_event_types` 断言随基线演进改名
+/// 为 38 并同步更新——旧名即留痕，见测试体注释）
 const V1_EVENT_TYPES: &[&str] = &[
     "agent-start",
     "agent-end",
@@ -55,20 +62,34 @@ const V1_EVENT_TYPES: &[&str] = &[
     "subagent-started",
     "subagent-event",
     "subagent-ended",
+    // 任务域（T-AB-17 兼容新增，2026-08-04；登记于 changelog §四 1.4 行）
+    "task-started",
+    "task-output",
+    "task-heartbeat",
+    "task-suspicious",
+    "task-completed",
+    "task-failed",
+    "task-killed",
 ];
 
-// ── 1. 变体数一致性：31 清单 ↔ fixtures ↔ changelog ──
+// ── 1. 变体数一致性：38 清单 ↔ fixtures ↔ changelog ──
 
+/// v1 基线必须为 38 事件（31 基线 + T-AB-17 任务域七变体）。
+///
+/// 原断言名 `v1_baseline_has_exactly_31_event_types`（2026-08-03 冻结 31
+/// 事件基线）随 2026-08-04 任务域兼容新增改名升级——基线演进留痕：
+/// 28 → 31 → 38 一路只增不减，均为 minor 兼容新增（旧解析器对未知 `type`
+/// 静默忽略，信封 schemaVersion 恒 1 不变）。
 #[test]
-fn v1_baseline_has_exactly_31_event_types() {
-    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（31）
+fn v1_baseline_has_exactly_38_event_types() {
+    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（38）
     assert_eq!(
         V1_EVENT_TYPES.len(),
-        31,
-        "v1 基线必须是 31 事件（28 基线 + I5-M7 subagent 域三变体）"
+        38,
+        "v1 基线必须是 38 事件（31 基线 + T-AB-17 任务域七变体）"
     );
     let unique: std::collections::HashSet<&&str> = V1_EVENT_TYPES.iter().collect();
-    assert_eq!(unique.len(), 31, "清单内事件名不得重复");
+    assert_eq!(unique.len(), 38, "清单内事件名不得重复");
 }
 
 #[test]
@@ -95,7 +116,7 @@ fn v1_event_types_cover_all_agent_event_variants() {
 
 #[test]
 fn v1_fixtures_parse_and_default_schema_version_one() {
-    // 全部 27 条 v1 样本（无 schemaVersion 字段）反序列化无错；
+    // 全部 38 条 v1 样本（无 schemaVersion 字段）反序列化无错；
     // schemaVersion 缺省视为 1（旧帧向后兼容），type_name 与文件一一对应
     for name in V1_EVENT_TYPES {
         let raw = common::v1_fixture(name);
@@ -621,5 +642,265 @@ fn subagent_ended_roundtrip_and_status_wire_values() {
             assert_eq!(summary, None, "缺省 summary 必须补 None");
         }
         other => panic!("type 判别错误：{}", other.type_name()),
+    }
+}
+
+// ── 7. 任务域（T-AB-17：01 方案 §4.5 七事件冻结契约）serde 契约 ──
+
+/// 任务域七事件各构造一个信封（schemaVersion=1），逐一断言：
+/// 顶层 type kebab-case、payload 字段 camelCase、信封扁平注入
+/// runId/schemaVersion、roundtrip 保真。
+#[test]
+fn task_events_envelopes_camel_case_and_schema_version_one() {
+    let cases: Vec<(AgentEvent, &str, Vec<&str>)> = vec![
+        (
+            AgentEvent::TaskStarted {
+                session_id: "s1".into(),
+                task_id: "t-1".into(),
+                command: "cargo build".into(),
+                cwd: "/ws".into(),
+                owner_run_id: "run-main".into(),
+                is_daemon: false,
+            },
+            "task-started",
+            vec!["taskId", "command", "cwd", "ownerRunId", "isDaemon"],
+        ),
+        (
+            AgentEvent::TaskOutput {
+                session_id: "s1".into(),
+                task_id: "t-1".into(),
+                line: Some("building...".into()),
+                chunk: None,
+                line_count: Some(42),
+            },
+            "task-output",
+            vec!["taskId"],
+        ),
+        (
+            AgentEvent::TaskHeartbeat {
+                session_id: "s1".into(),
+                task_id: "t-1".into(),
+                resource: json!({ "cpuPercent": 12.5, "rssBytes": 1024 }),
+            },
+            "task-heartbeat",
+            vec!["taskId", "resource"],
+        ),
+        (
+            AgentEvent::TaskSuspicious {
+                session_id: "s1".into(),
+                task_id: "t-1".into(),
+                silence_ms: 65_000,
+                last_output_at_ms: 1_785_456_000_000,
+            },
+            "task-suspicious",
+            vec!["taskId", "silenceMs", "lastOutputAtMs"],
+        ),
+        (
+            AgentEvent::TaskCompleted {
+                session_id: "s1".into(),
+                task_id: "t-1".into(),
+                exit_code: 0,
+                duration_ms: 1200,
+                line_count: 99,
+            },
+            "task-completed",
+            vec!["taskId", "exitCode", "durationMs", "lineCount"],
+        ),
+        (
+            AgentEvent::TaskFailed {
+                session_id: "s1".into(),
+                task_id: "t-1".into(),
+                exit_code: 1,
+                tail: vec!["最后一行".into()],
+                duration_ms: 800,
+            },
+            "task-failed",
+            vec!["taskId", "exitCode", "tail", "durationMs"],
+        ),
+        (
+            AgentEvent::TaskKilled {
+                session_id: "s1".into(),
+                task_id: "t-1".into(),
+                via_force: true,
+                diagnostics: Some("5s 宽限后强制终止".into()),
+            },
+            "task-killed",
+            vec!["taskId", "viaForce", "diagnostics"],
+        ),
+    ];
+    for (event, type_name, camel_fields) in cases {
+        assert_eq!(event.type_name(), type_name, "type_name 必须为 {type_name}");
+        // 信封扁平注入：runId + schemaVersion 恒 1（T-AB-17 契约：信封
+        // schemaVersion 不变，恒 1；旧解析器对未知 type 静默忽略）
+        let envelope = AgentEventEnvelope::new(event, Some("run-main".into()), Some(1));
+        let json = serde_json::to_value(&envelope).unwrap();
+        assert_eq!(json["type"], type_name, "顶层 type 必须为 {type_name}");
+        assert_eq!(json["runId"], "run-main", "信封 runId 扁平注入");
+        assert_eq!(json["schemaVersion"], 1, "信封 schemaVersion 必须为 1");
+        assert!(json.get("event").is_none(), "不得二次包装 event 键");
+        for field in camel_fields {
+            assert!(json.get(field).is_some(), "{type_name} 缺 camelCase 字段 {field}");
+        }
+        // runId 属信封注入（03 §5.3-2），事件体由信封承载不占 payload 键
+        // roundtrip 保真
+        let back: AgentEventEnvelope = serde_json::from_value(json).unwrap();
+        assert_eq!(back.type_name(), type_name, "{type_name} roundtrip 保真");
+    }
+}
+
+/// task-output 的 line/chunk 二选一语义（T-AB-17 §4.5）：可选字段 None
+/// 时必须省略（skip_serializing_if 纪律）；瘦帧缺省解析补 None
+/// （serde default 补位，minor 兼容）。
+#[test]
+fn task_output_optional_fields_omitted_and_default_to_none() {
+    let slim = AgentEvent::TaskOutput {
+        session_id: "s1".into(),
+        task_id: "t-1".into(),
+        line: None,
+        chunk: None,
+        line_count: None,
+    };
+    let json = serde_json::to_value(&slim).unwrap();
+    assert_eq!(json["type"], "task-output");
+    assert!(json.get("line").is_none(), "None 可选字段必须省略");
+    assert!(json.get("chunk").is_none(), "None 可选字段必须省略");
+    assert!(json.get("lineCount").is_none(), "None 可选字段必须省略");
+
+    let full = json!({
+        "type": "task-output",
+        "sessionId": "s1",
+        "taskId": "t-1",
+        "chunk": "二进制块",
+        "lineCount": 7,
+    });
+    let parsed: AgentEvent = serde_json::from_value(full).unwrap();
+    match parsed {
+        AgentEvent::TaskOutput {
+            task_id, line, chunk, line_count, ..
+        } => {
+            assert_eq!(task_id, "t-1");
+            assert_eq!(line, None, "缺省 line 必须补 None");
+            assert_eq!(chunk.as_deref(), Some("二进制块"));
+            assert_eq!(line_count, Some(7));
+        }
+        other => panic!("type 判别错误：{}", other.type_name()),
+    }
+}
+
+/// task-killed 的 diagnostics 可选：None 省略、瘦帧补 None。
+#[test]
+fn task_killed_diagnostics_omitted_when_none() {
+    let event = AgentEvent::TaskKilled {
+        session_id: "s1".into(),
+        task_id: "t-1".into(),
+        via_force: false,
+        diagnostics: None,
+    };
+    let json = serde_json::to_value(&event).unwrap();
+    assert!(json.get("diagnostics").is_none(), "None 可选字段必须省略");
+    assert_eq!(json["viaForce"], false);
+
+    let slim = json!({
+        "type": "task-killed",
+        "sessionId": "s1",
+        "taskId": "t-1",
+        "viaForce": true,
+    });
+    let parsed: AgentEvent = serde_json::from_value(slim).unwrap();
+    match parsed {
+        AgentEvent::TaskKilled { diagnostics, .. } => {
+            assert_eq!(diagnostics, None, "缺省 diagnostics 必须补 None");
+        }
+        other => panic!("type 判别错误：{}", other.type_name()),
+    }
+}
+
+/// 任务域七事件背压分级（T-AB-17 §4.5 表）：output/heartbeat=Delta 可丢、
+/// suspicious=Soft 尽力、started/completed/failed/killed=Critical 必达——
+/// 与事件注册表 backpressure 字段及 `event_backpressure` 静态判定一致
+/// （registry_drift 双向锁定，本测试锚定静态判定的分级结果）。
+#[test]
+fn task_events_backpressure_levels() {
+    use conex_types::events::event_backpressure;
+    use conex_types::BackpressureLevel;
+    fn started(task_id: &str) -> AgentEvent {
+        AgentEvent::TaskStarted {
+            session_id: "s1".into(),
+            task_id: task_id.into(),
+            command: "cargo build".into(),
+            cwd: "/ws".into(),
+            owner_run_id: "run-main".into(),
+            is_daemon: false,
+        }
+    }
+    let cases: Vec<(AgentEvent, BackpressureLevel)> = vec![
+        (
+            AgentEvent::TaskOutput {
+                session_id: "s1".into(),
+                task_id: "t-1".into(),
+                line: Some("x".into()),
+                chunk: None,
+                line_count: None,
+            },
+            BackpressureLevel::Delta,
+        ),
+        (
+            AgentEvent::TaskHeartbeat {
+                session_id: "s1".into(),
+                task_id: "t-1".into(),
+                resource: json!({}),
+            },
+            BackpressureLevel::Delta,
+        ),
+        (
+            AgentEvent::TaskSuspicious {
+                session_id: "s1".into(),
+                task_id: "t-1".into(),
+                silence_ms: 60_000,
+                last_output_at_ms: 0,
+            },
+            BackpressureLevel::Soft,
+        ),
+        (
+            started("t-1"),
+            BackpressureLevel::Critical,
+        ),
+        (
+            AgentEvent::TaskCompleted {
+                session_id: "s1".into(),
+                task_id: "t-1".into(),
+                exit_code: 0,
+                duration_ms: 100,
+                line_count: 1,
+            },
+            BackpressureLevel::Critical,
+        ),
+        (
+            AgentEvent::TaskFailed {
+                session_id: "s1".into(),
+                task_id: "t-1".into(),
+                exit_code: 1,
+                tail: vec![],
+                duration_ms: 100,
+            },
+            BackpressureLevel::Critical,
+        ),
+        (
+            AgentEvent::TaskKilled {
+                session_id: "s1".into(),
+                task_id: "t-1".into(),
+                via_force: false,
+                diagnostics: None,
+            },
+            BackpressureLevel::Critical,
+        ),
+    ];
+    for (event, expected) in cases {
+        assert_eq!(
+            event_backpressure(&event),
+            expected,
+            "{} 背压分级不符",
+            event.type_name()
+        );
     }
 }

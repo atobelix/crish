@@ -5,8 +5,8 @@
 //! contracts/engine-events.json 是给生成脚本（scripts/generate-engine-bindings.mjs）
 //! 的机器可读导出，本测试把注册表与 Rust 侧真实 serde 行为双向锁定：
 //!
-//! - 事件清单：注册表 31 个 type 名与顺序 == [AgentEvent::ALL_TYPE_NAMES]
-//!   （enum 声明顺序，编号 1-31 连续）；
+//! - 事件清单：注册表 38 个 type 名与顺序 == [AgentEvent::ALL_TYPE_NAMES]
+//!   （enum 声明顺序，编号 1-38 连续）；
 //! - 事件字段：按注册表必填字段构造样本 → 反序列化为 [AgentEvent] →
 //!   回序列化，断言必填字段全部在场、且无注册表外字段（字段名漂移即失败）；
 //! - 载荷结构：同一模式逐类型回环（struct + tagged enum 全变体）；
@@ -199,12 +199,12 @@ fn registry_event_types_match_enum_declaration_order() {
     let reg = registry();
     assert_eq!(reg.contract, "engine-events", "注册表契约名必须为 engine-events");
     assert_eq!(reg.schema_version, 1);
-    assert_eq!(reg.event_count, 31);
-    assert_eq!(reg.events.len(), 31, "事件注册表必须是 31 条");
+    assert_eq!(reg.event_count, 38);
+    assert_eq!(reg.events.len(), 38, "事件注册表必须是 38 条");
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        31,
-        "AgentEvent enum 必须是 31 种域事件"
+        38,
+        "AgentEvent enum 必须是 38 种域事件"
     );
     for (i, ev) in reg.events.iter().enumerate() {
         assert_eq!(ev.id as usize, i + 1, "事件编号必须从 1 连续递增");
@@ -482,15 +482,16 @@ fn enum_values_match_serde_wire() {
     check_enum!(reg, "SubagentEndStatus", SubagentEndStatus, 3);
 }
 
-/// 事件总数仍为 31：`operation` 是 security-audit 载荷内的字段值
+/// 事件总数仍为 38：`operation` 是 security-audit 载荷内的字段值
 /// （SecurityAuditOperation 枚举），不是独立事件类型——新增 operation
 /// 值不改变事件清单；本测试锚定「注册表值 ↔ serde 行为」双向不漂移。
 #[test]
 fn security_audit_undeclared_write_operation_stays_in_sync() {
     let reg = registry();
-    // 事件总数保持 31（operation 值是载荷内字段，非独立事件类型）
-    assert_eq!(reg.event_count, 31, "新增 operation 值不得改变事件总数");
-    assert_eq!(reg.events.len(), 31);
+    // 事件总数保持 38（operation 值是载荷内字段，非独立事件类型；
+    // 2026-08-04 T-AB-17 任务域兼容新增七事件，31 → 38）
+    assert_eq!(reg.event_count, 38, "新增 operation 值不得改变事件总数");
+    assert_eq!(reg.events.len(), 38);
 
     // 注册表必须登记 undeclared-write（T-ESC-02 新值）
     let spec = &reg.enums["SecurityAuditOperation"];
@@ -517,7 +518,7 @@ fn security_audit_undeclared_write_operation_stays_in_sync() {
 #[test]
 fn registry_entries_are_reachable_from_events() {
     let reg = registry();
-    // 从 31 事件出发做传递闭包；JsonValue/string/number/boolean 为基元。
+    // 从 38 事件出发做传递闭包；JsonValue/string/number/boolean 为基元。
     let mut reachable: std::collections::BTreeSet<String> =
         reg.events.iter().flat_map(|e| e.fields.iter()).map(|f| f.ts_type.clone()).collect();
     let mut queue: Vec<String> = reachable.iter().cloned().collect();
@@ -682,6 +683,9 @@ fn subagent_event_kind_backpressure_matches_registry() {
 /// - message-delta 保持 Delta（既有非持久化语义，buffer.rs 先例）；
 /// - subagent-started / subagent-ended 为 Critical（必达落库）；
 /// - subagent-event 基级为 Delta（progress 类可丢），kind 级再分 message/tool=Soft；
+/// - 任务域（T-AB-17，01 方案 §4.5 表）：task-output/task-heartbeat=Delta
+///   （可丢不落库）、task-suspicious=Soft（尽力投递留痕）、task-started/
+///   task-completed/task-failed/task-killed=Critical（终态必达落库）；
 /// - 终态/审批/审计等既有关键事件保持 Critical（不改变既有丢帧语义）。
 #[test]
 fn backpressure_classification_semantics_anchored() {
@@ -698,6 +702,13 @@ fn backpressure_classification_semantics_anchored() {
     assert_eq!(level_of("subagent-started"), "critical", "subagent-started 必达");
     assert_eq!(level_of("subagent-ended"), "critical", "subagent-ended 必达");
     assert_eq!(level_of("subagent-event"), "delta", "subagent-event 基级为 Delta");
+    // 任务域七事件分级锚定（T-AB-17 §4.5 冻结契约，防分级漂移）
+    assert_eq!(level_of("task-output"), "delta", "task-output 为 Delta（可丢不落库）");
+    assert_eq!(level_of("task-heartbeat"), "delta", "task-heartbeat 为 Delta（可丢不落库）");
+    assert_eq!(level_of("task-suspicious"), "soft", "task-suspicious 为 Soft（尽力投递留痕）");
+    for wire in ["task-started", "task-completed", "task-failed", "task-killed"] {
+        assert_eq!(level_of(wire), "critical", "任务事件 {wire} 为 Critical（终态必达落库）");
+    }
     // 既有关键事件全部保持 Critical（对齐 buffer.rs drop_class_of：非 delta 全 Critical）
     for wire in [
         "agent-start",

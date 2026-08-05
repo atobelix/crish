@@ -1,8 +1,8 @@
 {
   "contract": "engine-events",
   "schemaVersion": 1,
-  "eventCount": 31,
-  "description": "Rust 域事件契约注册表（唯一事实源：crates/conex-types/src/events.rs 的 AgentEvent enum）。本文件是机器可读导出，由生成脚本 scripts/generate-engine-bindings.mjs 消费，产出 TS 类型与解析器（packages/shared-types/src/generated/engine/**）。任何修改必须同步 events.rs（cargo test -p conex-types 的 registry_drift 测试锁定两侧一致）。事件编号即本表顺序（1-31），对应 enum 声明顺序。每事件 backpressure 字段为背压三级分类（delta/soft/critical，04 报告 1e）；subagent-event 的 kindBackpressure 为类别级分类（progress=delta、message/tool=soft）。",
+  "eventCount": 38,
+  "description": "Rust 域事件契约注册表（唯一事实源：crates/conex-types/src/events.rs 的 AgentEvent enum）。本文件是机器可读导出，由生成脚本 scripts/generate-engine-bindings.mjs 消费，产出 TS 类型与解析器（packages/shared-types/src/generated/engine/**）。任何修改必须同步 events.rs（cargo test -p conex-types 的 registry_drift 测试锁定两侧一致）。事件编号即本表顺序（1-38），对应 enum 声明顺序。每事件 backpressure 字段为背压三级分类（delta/soft/critical，04 报告 1e）；subagent-event 的 kindBackpressure 为类别级分类（progress=delta、message/tool=soft）。",
   "events": [
     {
       "id": 1,
@@ -1120,6 +1120,268 @@
           "type": "string",
           "required": true,
           "description": "ISO8601 时间戳"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "type": "task-started",
+      "rustVariant": "TaskStarted",
+      "domain": "task",
+      "description": "后台任务启动（adopt 成功；Critical 必达落库；ownerRunId 供 orchestrator 按来源过滤——主 agent 与其派发的子 agent run 看到的任务按来源归组，T-AB-18 可见性消费）",
+      "backpressure": "critical",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "taskId",
+          "type": "string",
+          "required": true,
+          "description": "任务 id（后台任务注册表主键）"
+        },
+        {
+          "name": "command",
+          "type": "string",
+          "required": true,
+          "description": "命令摘要（人读，含 argv 摘要；T-AB-18 审计 command 摘要字段）"
+        },
+        {
+          "name": "cwd",
+          "type": "string",
+          "required": true,
+          "description": "工作目录"
+        },
+        {
+          "name": "ownerRunId",
+          "type": "string",
+          "required": true,
+          "description": "发起 run id（任务归属来源：主 agent run / 子 agent run）"
+        },
+        {
+          "name": "isDaemon",
+          "type": "boolean",
+          "required": true,
+          "description": "是否守护进程（run 终态后仍持续运行）"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "type": "task-output",
+      "rustVariant": "TaskOutput",
+      "domain": "task",
+      "description": "任务输出增量（Delta 可丢不落库；转发器节流推送 60ms，继承旧 task-output 语义；line 或 chunk 二选一）",
+      "backpressure": "delta",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "taskId",
+          "type": "string",
+          "required": true,
+          "description": "任务 id"
+        },
+        {
+          "name": "line",
+          "type": "string",
+          "required": false,
+          "description": "单行输出（不含行尾换行；line 或 chunk 二选一）"
+        },
+        {
+          "name": "chunk",
+          "type": "string",
+          "required": false,
+          "description": "输出块（行语义不可分时使用）"
+        },
+        {
+          "name": "lineCount",
+          "type": "number",
+          "required": false,
+          "description": "累计行数（转发器行数索引，供前端进度展示）"
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "type": "task-heartbeat",
+      "rustVariant": "TaskHeartbeat",
+      "domain": "task",
+      "description": "任务资源心跳（Delta 可丢不落库；仅启用 resourceMonitor 的任务由采样 loop 发射）",
+      "backpressure": "delta",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "taskId",
+          "type": "string",
+          "required": true,
+          "description": "任务 id"
+        },
+        {
+          "name": "resource",
+          "type": "JsonValue",
+          "required": true,
+          "description": "资源摘要（CPU 百分比 / RSS 字节 / 最近输出时间等，采样端组装）"
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "type": "task-suspicious",
+      "rustVariant": "TaskSuspicious",
+      "domain": "task",
+      "description": "任务疑似卡死（Soft 尽力投递并留痕；健康判定转 Suspicious 时发射，非终态可重复）",
+      "backpressure": "soft",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "taskId",
+          "type": "string",
+          "required": true,
+          "description": "任务 id"
+        },
+        {
+          "name": "silenceMs",
+          "type": "number",
+          "required": true,
+          "description": "静默时长（毫秒）"
+        },
+        {
+          "name": "lastOutputAtMs",
+          "type": "number",
+          "required": true,
+          "description": "最近一次输出时间（epoch 毫秒）"
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "type": "task-completed",
+      "rustVariant": "TaskCompleted",
+      "domain": "task",
+      "description": "任务自然退出且退出码为 0（Critical 必达落库；唤醒摘要「任务 <id> 已完成，退出码 0」）",
+      "backpressure": "critical",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "taskId",
+          "type": "string",
+          "required": true,
+          "description": "任务 id"
+        },
+        {
+          "name": "exitCode",
+          "type": "number",
+          "required": true,
+          "description": "退出码（0 = 成功）"
+        },
+        {
+          "name": "durationMs",
+          "type": "number",
+          "required": true,
+          "description": "运行时长（毫秒）"
+        },
+        {
+          "name": "lineCount",
+          "type": "number",
+          "required": true,
+          "description": "累计行数"
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "type": "task-failed",
+      "rustVariant": "TaskFailed",
+      "domain": "task",
+      "description": "任务自然退出且退出码非 0（Critical 必达落库；C7 恢复阶梯衔接源，唤醒摘要「任务 <id> 异常退出（exit code N），附最后 20 行日志」）",
+      "backpressure": "critical",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "taskId",
+          "type": "string",
+          "required": true,
+          "description": "任务 id"
+        },
+        {
+          "name": "exitCode",
+          "type": "number",
+          "required": true,
+          "description": "退出码（非 0）"
+        },
+        {
+          "name": "tail",
+          "type": "string[]",
+          "required": true,
+          "description": "日志尾部（最后 20 行，read_log 尾部读取产出）"
+        },
+        {
+          "name": "durationMs",
+          "type": "number",
+          "required": true,
+          "description": "运行时长（毫秒）"
+        }
+      ]
+    },
+    {
+      "id": 38,
+      "type": "task-killed",
+      "rustVariant": "TaskKilled",
+      "domain": "task",
+      "description": "任务已被终止（kill 成功含两阶段升级；Critical 必达落库；唤醒摘要「任务 <id> 已被终止」）",
+      "backpressure": "critical",
+      "fields": [
+        {
+          "name": "sessionId",
+          "type": "string",
+          "required": true,
+          "description": "会话 id"
+        },
+        {
+          "name": "taskId",
+          "type": "string",
+          "required": true,
+          "description": "任务 id"
+        },
+        {
+          "name": "viaForce",
+          "type": "boolean",
+          "required": true,
+          "description": "是否强制终止（两阶段升级后为 true）"
+        },
+        {
+          "name": "diagnostics",
+          "type": "string",
+          "required": false,
+          "description": "终止诊断（附加说明；可选）"
         }
       ]
     }

@@ -205,8 +205,9 @@ fn restore() -> RuntimeCheckpointRestoreRecord {
     }
 }
 
-/// 28 种域事件各构造一个实例（03 §1.1-1.6 全清单 + I2-S8 安全审计域 +
-/// I5-M7 子代理域三事件）
+/// 35 种域事件各构造一个实例（03 §1.1-1.6 全清单 + I2-S8 安全审计域 +
+/// I5-M7 子代理域三事件 + T-AB-17 任务域七事件；缓存测量域三事件的 serde
+/// 契约另由 events_schema_version.rs §4 专测覆盖，不重复构造）
 fn all_events() -> Vec<AgentEvent> {
     let s = "s1".to_string();
     vec![
@@ -396,6 +397,53 @@ fn all_events() -> Vec<AgentEvent> {
             summary: Some("完成调研".into()),
             ended_at: TS.into(),
         },
+        // T-AB-17：任务域七事件（01 方案 §4.5 冻结契约）
+        AgentEvent::TaskStarted {
+            session_id: "s1".to_string(),
+            task_id: "t-1".to_string(),
+            command: "cargo build".to_string(),
+            cwd: "/ws".to_string(),
+            owner_run_id: "run-main".to_string(),
+            is_daemon: false,
+        },
+        AgentEvent::TaskOutput {
+            session_id: "s1".to_string(),
+            task_id: "t-1".to_string(),
+            line: Some("building...".to_string()),
+            chunk: None,
+            line_count: Some(42),
+        },
+        AgentEvent::TaskHeartbeat {
+            session_id: "s1".to_string(),
+            task_id: "t-1".to_string(),
+            resource: json!({ "cpuPercent": 12.5, "rssBytes": 1048576 }),
+        },
+        AgentEvent::TaskSuspicious {
+            session_id: "s1".to_string(),
+            task_id: "t-1".to_string(),
+            silence_ms: 65_000,
+            last_output_at_ms: 1_785_456_000_000,
+        },
+        AgentEvent::TaskCompleted {
+            session_id: "s1".to_string(),
+            task_id: "t-1".to_string(),
+            exit_code: 0,
+            duration_ms: 1200,
+            line_count: 99,
+        },
+        AgentEvent::TaskFailed {
+            session_id: "s1".to_string(),
+            task_id: "t-1".to_string(),
+            exit_code: 1,
+            tail: vec!["error: mismatched types".to_string()],
+            duration_ms: 800,
+        },
+        AgentEvent::TaskKilled {
+            session_id: "s1".to_string(),
+            task_id: "t-1".to_string(),
+            via_force: true,
+            diagnostics: Some("两阶段升级后强制终止".to_string()),
+        },
     ]
 }
 
@@ -403,12 +451,12 @@ fn event_type_name(event: &AgentEvent) -> &'static str {
     event.type_name()
 }
 
-// ── 1. 28 事件穷举 roundtrip ──
+// ── 1. 35 事件穷举 roundtrip ──
 
 #[test]
-fn all_28_events_roundtrip() {
+fn all_35_events_roundtrip() {
     let events = all_events();
-    assert_eq!(events.len(), 28, "AgentEvent 必须是 28 种域事件");
+    assert_eq!(events.len(), 35, "AgentEvent 必须是 35 种域事件（穷举覆盖清单）");
     for event in events {
         let json = serde_json::to_string(&event).expect("序列化失败");
         let back: AgentEvent = serde_json::from_str(&json).expect("反序列化失败");
@@ -417,7 +465,7 @@ fn all_28_events_roundtrip() {
 }
 
 #[test]
-fn all_28_event_types_have_expected_wire_type_name() {
+fn all_35_event_types_have_expected_wire_type_name() {
     let expected = [
         "agent-start",
         "agent-end",
@@ -447,6 +495,14 @@ fn all_28_event_types_have_expected_wire_type_name() {
         "subagent-started",
         "subagent-event",
         "subagent-ended",
+        // T-AB-17：任务域七事件
+        "task-started",
+        "task-output",
+        "task-heartbeat",
+        "task-suspicious",
+        "task-completed",
+        "task-failed",
+        "task-killed",
     ];
     for (event, name) in all_events().iter().zip(expected) {
         let json = serde_json::to_value(event).unwrap();

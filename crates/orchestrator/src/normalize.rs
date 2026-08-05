@@ -54,6 +54,15 @@ fn event_session_id_mut(event: &mut AgentEvent) -> &mut String {
         AgentEvent::SubagentStarted { session_id, .. } => session_id,
         AgentEvent::SubagentEvent { session_id, .. } => session_id,
         AgentEvent::SubagentEnded { session_id, .. } => session_id,
+        // T-AB-17 任务域七事件（均携带 sessionId；M6 域补齐归一化位，
+        // emit 出口统一注入语义不变——C1 验证补丁由 C2 正式落位）
+        AgentEvent::TaskStarted { session_id, .. } => session_id,
+        AgentEvent::TaskOutput { session_id, .. } => session_id,
+        AgentEvent::TaskHeartbeat { session_id, .. } => session_id,
+        AgentEvent::TaskSuspicious { session_id, .. } => session_id,
+        AgentEvent::TaskCompleted { session_id, .. } => session_id,
+        AgentEvent::TaskFailed { session_id, .. } => session_id,
+        AgentEvent::TaskKilled { session_id, .. } => session_id,
     }
 }
 

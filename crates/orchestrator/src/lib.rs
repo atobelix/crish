@@ -22,7 +22,11 @@
 //! - [`recovery`]：C7 四级恢复阶梯 + 恢复预算制（I6-M9）——
 //!   [recovery::RecoveryCoordinator]（阶梯 1 自动重试 → 阶梯 2 主 agent
 //!   激活 steering → 阶梯 3 fork 三态上下文继承 → 阶梯 4 上报用户），
-//!   操作指纹 + Episode 预算（`recover_*` 键命名空间）。
+//!   操作指纹 + Episode 预算（`recover_*` 键命名空间）；
+//! - [`task_events`]：任务域事件唤醒消费面（T-AB-18）——唤醒摘要批量
+//!   注入（[task_events::TaskWakeBatch]）、security-audit 审计留痕
+//!   （[task_events::TaskAuditAccumulator]）、C7 衔接
+//!   （[task_events::steer_for_task_failed]）、ownerRunId 来源过滤。
 //!
 //! 语义来源：05-test-mapping.md §2.8 / §5.4（run::drive / run::cancel /
 //! run::approval / run::fail / run::restore / session::tree / store::pending /
@@ -44,6 +48,7 @@ pub mod run;
 pub mod session;
 pub mod steering_queue;
 pub mod subagent_events;
+pub mod task_events;
 
 pub use normalize::{allows_auto_continue, is_terminal_event, normalize_envelope, terminal_status_for_end_reason};
 pub use steering_queue::PendingMessageQueue;

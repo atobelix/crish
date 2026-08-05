@@ -1,6 +1,6 @@
 //! 域事件契约（Rust enum 为双端唯一事实源）
 //!
-//! [AgentEvent] 是 31 种域事件的 serde tagged enum（顶层 `type`），全部字段
+//! [AgentEvent] 是 38 种域事件的 serde tagged enum（顶层 `type`），全部字段
 //! serde camelCase，字段结构以 03-frontend-contract.md §1.1-1.6 清单与 §5.1
 //! 硬依赖表为准。机器可读导出见 contracts/engine-events.json（事件注册表），
 //! 前端 TS 类型与解析器由 scripts/generate-engine-bindings.mjs 生成，落点
@@ -607,6 +607,108 @@ pub enum AgentEvent {
         /// ISO8601 时间戳
         ended_at: String,
     },
+
+    // ── 任务域（T-AB-17：AB 命令执行与后台任务，01 方案 §4.5 七事件冻结
+    //    契约；背压分级入注册表，registry_drift 护栏锁定；runId 由 emit 层
+    //    信封注入 = 发起 run）──
+
+    /// 后台任务启动（adopt 成功；Critical 必达落库；ownerRunId 供
+    /// orchestrator 按来源过滤——主 agent 与其派发的子 agent run 看到的
+    /// 任务按来源归组，T-AB-18 可见性消费）
+    #[serde(rename = "task-started", rename_all = "camelCase")]
+    TaskStarted {
+        session_id: String,
+        /// 任务 id（后台任务注册表主键）
+        task_id: String,
+        /// 命令摘要（人读，含 argv 摘要；T-AB-18 审计 command 摘要字段）
+        command: String,
+        /// 工作目录
+        cwd: String,
+        /// 发起 run id（任务归属来源：主 agent run / 子 agent run）
+        owner_run_id: String,
+        /// 是否守护进程（run 终态后仍持续运行）
+        is_daemon: bool,
+    },
+    /// 任务输出增量（Delta 可丢不落库；转发器节流推送 60ms，继承旧
+    /// task-output 语义；line 或 chunk 二选一）
+    #[serde(rename = "task-output", rename_all = "camelCase")]
+    TaskOutput {
+        session_id: String,
+        /// 任务 id
+        task_id: String,
+        /// 单行输出（不含行尾换行；line 或 chunk 二选一）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        line: Option<String>,
+        /// 输出块（行语义不可分时使用）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        chunk: Option<String>,
+        /// 累计行数（转发器行数索引，供前端进度展示）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        line_count: Option<u64>,
+    },
+    /// 任务资源心跳（Delta 可丢不落库；仅启用 resourceMonitor 的任务由
+    /// 采样 loop 发射）
+    #[serde(rename = "task-heartbeat", rename_all = "camelCase")]
+    TaskHeartbeat {
+        session_id: String,
+        /// 任务 id
+        task_id: String,
+        /// 资源摘要（CPU 百分比 / RSS 字节 / 最近输出时间等，采样端组装）
+        resource: serde_json::Value,
+    },
+    /// 任务疑似卡死（Soft 尽力投递并留痕；健康判定转 Suspicious 时发射，
+    /// 非终态可重复；通知文案「任务 <id> 疑似卡死（<M> 秒无输出）」）
+    #[serde(rename = "task-suspicious", rename_all = "camelCase")]
+    TaskSuspicious {
+        session_id: String,
+        /// 任务 id
+        task_id: String,
+        /// 静默时长（毫秒）
+        silence_ms: u64,
+        /// 最近一次输出时间（epoch 毫秒）
+        last_output_at_ms: u64,
+    },
+    /// 任务自然退出且退出码为 0（Critical 必达落库；唤醒摘要
+    /// 「任务 <id> 已完成，退出码 0」）
+    #[serde(rename = "task-completed", rename_all = "camelCase")]
+    TaskCompleted {
+        session_id: String,
+        /// 任务 id
+        task_id: String,
+        /// 退出码（0 = 成功）
+        exit_code: i32,
+        /// 运行时长（毫秒）
+        duration_ms: u64,
+        /// 累计行数
+        line_count: u64,
+    },
+    /// 任务自然退出且退出码非 0（Critical 必达落库；C7 恢复阶梯衔接源，
+    /// 唤醒摘要「任务 <id> 异常退出（exit code N），附最后 20 行日志」）
+    #[serde(rename = "task-failed", rename_all = "camelCase")]
+    TaskFailed {
+        session_id: String,
+        /// 任务 id
+        task_id: String,
+        /// 退出码（非 0）
+        exit_code: i32,
+        /// 日志尾部（最后 20 行，read_log 尾部读取产出）
+        tail: Vec<String>,
+        /// 运行时长（毫秒）
+        duration_ms: u64,
+    },
+    /// 任务已被终止（kill 成功含两阶段升级；Critical 必达落库；唤醒摘要
+    /// 「任务 <id> 已被终止」）
+    #[serde(rename = "task-killed", rename_all = "camelCase")]
+    TaskKilled {
+        session_id: String,
+        /// 任务 id
+        task_id: String,
+        /// 是否强制终止（两阶段升级后为 true）
+        via_force: bool,
+        /// 终止诊断（附加说明；可选）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        diagnostics: Option<String>,
+    },
 }
 
 /// 事件类型名宏：由同一份变体名 → wire 名清单展开出
@@ -629,7 +731,7 @@ macro_rules! engine_event_type_names {
         }
 
         impl AgentEvent {
-            /// 全部事件类型名（enum 声明顺序，与事件注册表编号 1-27 一一对应）
+            /// 全部事件类型名（enum 声明顺序，与事件注册表编号 1-38 一一对应）
             pub const ALL_TYPE_NAMES: &'static [&'static str] = &[$($name),+];
         }
     };
@@ -667,6 +769,13 @@ engine_event_type_names! {
     SubagentStarted => "subagent-started",
     SubagentEvent => "subagent-event",
     SubagentEnded => "subagent-ended",
+    TaskStarted => "task-started",
+    TaskOutput => "task-output",
+    TaskHeartbeat => "task-heartbeat",
+    TaskSuspicious => "task-suspicious",
+    TaskCompleted => "task-completed",
+    TaskFailed => "task-failed",
+    TaskKilled => "task-killed",
 }
 
 /// 事件 → 背压级别（静态可判定，04 报告 1e；与事件注册表 backpressure 字段
@@ -675,10 +784,12 @@ engine_event_type_names! {
 ///
 /// 分级规则：
 /// - Delta（可丢）：message-delta（既有非持久化语义）、subagent-event 的
-///   progress 类；
-/// - Soft（尽力）：subagent-event 的 message/tool 类；
+///   progress 类、task-output / task-heartbeat（任务域增量，不落库）；
+/// - Soft（尽力）：subagent-event 的 message/tool 类、task-suspicious
+///   （健康判定通知，尽力投递并留痕）；
 /// - Critical（必达）：其余全部（含 subagent-started/subagent-ended、终态、
-///   审批、审计等）。
+///   审批、审计、任务域终态 task-started/task-completed/task-failed/
+///   task-killed 等）。
 pub fn event_backpressure(event: &AgentEvent) -> BackpressureLevel {
     match event {
         AgentEvent::MessageDelta { .. } => BackpressureLevel::Delta,
@@ -686,6 +797,16 @@ pub fn event_backpressure(event: &AgentEvent) -> BackpressureLevel {
             SubagentEventKind::Progress => BackpressureLevel::Delta,
             SubagentEventKind::Message | SubagentEventKind::Tool => BackpressureLevel::Soft,
         },
+        // 任务域（01 方案 §4.5 表：output/heartbeat=Delta 可丢不落库、
+        // suspicious=Soft 尽力投递、其余终态=Critical 必达落库）
+        AgentEvent::TaskOutput { .. } | AgentEvent::TaskHeartbeat { .. } => {
+            BackpressureLevel::Delta
+        }
+        AgentEvent::TaskSuspicious { .. } => BackpressureLevel::Soft,
+        AgentEvent::TaskStarted { .. }
+        | AgentEvent::TaskCompleted { .. }
+        | AgentEvent::TaskFailed { .. }
+        | AgentEvent::TaskKilled { .. } => BackpressureLevel::Critical,
         _ => BackpressureLevel::Critical,
     }
 }
