@@ -35,6 +35,7 @@
 //! steering/、runtime-components/。
 
 pub mod approval;
+pub mod approval_router;
 pub mod cache_tracker;
 pub mod checkpoint;
 pub mod control;
@@ -55,6 +56,11 @@ pub mod undeclared_detector;
 
 pub use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
 pub use approval::ApprovalChannel;
+pub use approval_router::{
+    APPROVAL_REASON_ARG_KEY, ARBITER_WIRE_MAIN_AGENT, ARBITER_WIRE_USER, ApprovalSource, Arbiter,
+    approval_reason_from_args, arbiter_metadata, classify_source, relay_denied_message,
+    requester_from_context, route_approval, route_approval_guarded,
+};
 pub use cache_tracker::{CacheMiss, CacheStatsTracker, CacheTrackingConfig};
 
 pub use control::{
@@ -92,8 +98,8 @@ pub use stream::{
 };
 pub use testing::{TestProvider, TestTool};
 pub use tool_events::{
-    ApprovalDecision, ApprovalGate, ClassifiedToolResult, FailStrategy, ToolBatchOptions,
-    ToolErrorKind, ToolEvent,
+    ApprovalDecision, ApprovalGate, ApprovalRequester, ClassifiedToolResult, FailStrategy,
+    ToolBatchOptions, ToolErrorKind, ToolEvent,
 };
 pub use tool_exec::{ToolExecCtx, ToolExecutor, ToolBatchOutcome};
 pub use undeclared_detector::{RegistryBackedDetector, UndeclaredWriteDetector};

@@ -221,6 +221,11 @@ pub struct SessionLoopOptions {
     /// None = 主 agent 不受配额约束（04 C5「主 agent 自身不消耗」；
     /// 子代理 run 的配额上下文由 spawner 装配，本字段承载主循环装配面）。
     pub explore_docs_quota: Option<ExploreDocsQuotaContext>,
+    /// 父 run 归属（T-D-14 权限传递层，总接线点 T-EG-06）：经 tool_ctx
+    /// 透传工具执行面——审批请求据此判定来源（子代理 run → 裁决者 =
+    /// 主 agent；主 agent run → 裁决者 = 用户）。None = 主 agent run /
+    /// 无父 run（现状）；子代理 run 的父 run 归属由 spawner（T-D-13）装配。
+    pub parent_run_id: Option<String>,
     /// 逃逸监视装配配置（T-ESC-03 P3 装配面）：None = 不启用逃逸监视
     /// （现状行为）。装配上下文透传——壳层 run 起停钩子消费：run 开始
     /// 经 [crate::escape_watch::spawn_escape_watch] 启动监视并 spawn 消费
@@ -265,6 +270,9 @@ impl Default for SessionLoopOptions {
             // 主 agent 不受配额约束（04 C5「主 agent 自身不消耗」）
             write_claims: None,
             explore_docs_quota: None,
+            // T-D-14：父 run 归属缺省 None = 主 agent run（审批裁决者 =
+            // 用户，现状行为；子代理 spawner 装配时显式注入）
+            parent_run_id: None,
             // T-ESC-03：逃逸监视缺省关闭（未配置即现状行为）
             escape_watch: None,
         }
@@ -333,12 +341,15 @@ impl AgentSessionLoop {
                 session_id: session_id.clone(),
                 cwd: None,
                 workspace_root: None,
-                // I4-M3 / I6-M11 C5：写路径注册表与配额上下文装配在
-                // with_options（总接线点 T-EG-06），构造期保持 None
-                // （未装配 = 写工具不强制互斥 / 不检查配额，向后兼容）
-                write_claims: None,
-                explore_docs_quota: None,
-            },
+            // I4-M3 / I6-M11 C5：写路径注册表与配额上下文装配在
+            // with_options（总接线点 T-EG-06），构造期保持 None
+            // （未装配 = 写工具不强制互斥 / 不检查配额，向后兼容）
+            write_claims: None,
+            explore_docs_quota: None,
+            // T-D-14：父 run 归属随 with_options 装配（构造期 None =
+            // 主 agent run，审批裁决者 = 用户，现状行为）
+            parent_run_id: None,
+        },
             tool_options: ToolBatchOptions::default(),
             approval: None,
             delta_sink: None,
@@ -394,6 +405,9 @@ impl AgentSessionLoop {
         // 探索类文档配额上下文（I6-M11 C5）：经 tool_ctx 透传工具执行面；
         // None = 主 agent 不受配额约束（04 C5「主 agent 自身不消耗」）
         self.tool_ctx.explore_docs_quota = options.explore_docs_quota.clone();
+        // T-D-14 权限传递层：父 run 归属经 tool_ctx 透传执行器（审批请求
+        // 来源判定与裁决者路由依据；None = 主 agent run）
+        self.tool_ctx.parent_run_id = options.parent_run_id.clone();
 
         self.state.options = options.clone();
         // 预算/压缩派生状态同步（P4 阶段 2-2/3-2）：LoopState 的

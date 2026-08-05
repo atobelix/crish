@@ -41,10 +41,13 @@
 //! 语义来源：01-session-loop-semantics.md §2.8 / §五.8；05-test-mapping.md §2.3
 
 use crate::approval::ApprovalChannel;
+use crate::approval_router::{
+    approval_reason_from_args, relay_denied_message, requester_from_context,
+};
 use crate::hooks::{HookEvent, HookRegistry};
 use crate::tool_events::{
-    ApprovalDecision, ApprovalGate, ClassifiedToolResult, FailStrategy, ToolBatchOptions,
-    ToolErrorKind, ToolEvent,
+    ApprovalDecision, ApprovalGate, ApprovalRequester, ClassifiedToolResult, FailStrategy,
+    ToolBatchOptions, ToolErrorKind, ToolEvent,
 };
 use agent_tools::context::{
     AbortToken, AskCallback, ExploreDocsQuotaContext, NoopAskChannel, ToolContext,
@@ -61,6 +64,7 @@ use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
 use agent_tools::registry::ToolRegistry;
 use agent_tools::revert::RevertPolicy;
 use conex_types::tool::{ToolBatchCall, ToolConcurrency};
+use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -74,6 +78,10 @@ pub struct ToolExecCtx {
     pub session_id: String,
     /// 工作目录
     pub cwd: Option<String>,
+    /// 父 run 归属（T-D-14 权限传递层）：None = 主 agent run / 无父 run；
+    /// Some = 子代理 run 的父 run id（spawner 装配，经 SessionLoopOptions
+    /// 透传）——审批请求据此判定来源（子代理 → 裁决者 = 主 agent）
+    pub parent_run_id: Option<String>,
     /// 工作区根目录（R3 T9：会话级 ToolContext.workspace_root 来源；
     /// None 时回退 cwd / 当前目录）
     pub workspace_root: Option<PathBuf>,
@@ -309,6 +317,9 @@ impl ToolExecutor {
                 //（dangerous → ask 问询 / plan 拒绝 / full-access 放行）；
                 // 未设置时沿用既有语义（approval_enabled → 全批审批）。
                 let mut approvals: Vec<Option<ApprovalDecision>> = vec![None; group.len()];
+                // T-D-14：并行组逐项请求方身份（拒绝文案按来源分支：
+                // 子代理申请被拒 → 含「主 agent 拒绝 / 回报主 agent」指引）
+                let mut requesters: Vec<Option<ApprovalRequester>> = vec![None; group.len()];
                 let approval_active = options.approval_enabled && approval.is_some();
                 if approval_active {
                     if let Some(gate) = approval.as_deref() {
@@ -318,10 +329,15 @@ impl ToolExecutor {
                             if self.call_verdict(call, options) == PermissionVerdict::NeedsApproval
                             {
                                 needs.push(pos);
+                                let requester = self.approval_requester_for(ctx, &call.input);
+                                requesters[pos] = requester.clone();
                                 events.push(ToolEvent::ApprovalRequested {
                                     call_id: call.id.clone(),
                                     tool_name: call.tool_name.clone(),
                                     args: call.input.clone(),
+                                    // T-D-14：子代理 run 携带请求方身份（理由
+                                    // 从入参保留键提取；主 agent run = None）
+                                    requester,
                                 });
                             }
                         }
@@ -333,8 +349,9 @@ impl ToolExecutor {
                             }
                             let idx = group[pos];
                             let call = &calls[idx];
+                            let requester = requesters[pos].as_ref();
                             let decision = gate
-                                .request_approval(&call.id, &call.tool_name, &call.input)
+                                .request_approval(&call.id, &call.tool_name, &call.input, requester)
                                 .await;
                             approvals[pos] = Some(decision);
                         }
@@ -388,7 +405,7 @@ impl ToolExecutor {
                                         &call.id,
                                         &call.tool_name,
                                         ToolErrorKind::UserDenied,
-                                        format!("user denied: {reason}"),
+                                        denied_message(requesters[pos].is_some(), &reason),
                                     )
                                 }
                                 Some(ApprovalDecision::Expired) => ClassifiedToolResult::error(
@@ -563,13 +580,16 @@ impl ToolExecutor {
                 PermissionVerdict::Deny => denied_result(call, options),
                 PermissionVerdict::NeedsApproval => {
                     // 审批：approval-requested 事件先发出，再挂起等待（防死锁）
+                    // T-D-14：请求方身份（子代理 run + 理由）随事件与门调用透传
+                    let requester = self.approval_requester_for(ctx, &call.input);
                     events.push(ToolEvent::ApprovalRequested {
                         call_id: call.id.clone(),
                         tool_name: call.tool_name.clone(),
                         args: call.input.clone(),
+                        requester: requester.clone(),
                     });
                     let decision = gate
-                        .request_approval(&call.id, &call.tool_name, &call.input)
+                        .request_approval(&call.id, &call.tool_name, &call.input, requester.as_ref())
                         .await;
                     match decision {
                         ApprovalDecision::Approved => {
@@ -583,7 +603,7 @@ impl ToolExecutor {
                             &call.id,
                             &call.tool_name,
                             ToolErrorKind::UserDenied,
-                            format!("user denied: {reason}"),
+                            denied_message(requester.is_some(), &reason),
                         ),
                         ApprovalDecision::Expired => ClassifiedToolResult::error(
                             &call.id,
@@ -674,6 +694,9 @@ impl ToolExecutor {
         // 并入批事件流，保持 tool-start → approval-requested → tool-end 顺序）。
         let abort_token = AbortToken::new();
         let mut approval_channel: Option<Arc<ApprovalChannel>> = None;
+        // T-D-14：请求方身份（子代理 run + 理由）随审批通道透传——工具内
+        // 审批提问（ctx.ask）同样按来源路由；主 agent run = None
+        let requester = self.approval_requester_for(ctx, &call.input);
         let ask: Option<AskCallback> = match options.permission_mode {
             Some(PermissionMode::FullAccess) => Some(Arc::new(NoopAskChannel)),
             _ => approval.as_ref().map(|gate| {
@@ -682,6 +705,7 @@ impl ToolExecutor {
                     &call.id,
                     abort.cloned(),
                     abort_token.clone(),
+                    requester.clone(),
                 ));
                 approval_channel = Some(Arc::clone(&channel));
                 channel as AskCallback
@@ -1094,13 +1118,16 @@ impl ToolExecutor {
             PermissionVerdict::NeedsApproval => match approval {
                 Some(gate) => {
                     let mut extra = extra;
+                    // T-D-14：请求方身份（子代理 run + 理由）随事件与门调用透传
+                    let requester = self.approval_requester_for(ctx, &call.input);
                     extra.push(ToolEvent::ApprovalRequested {
                         call_id: call.id.clone(),
                         tool_name: call.tool_name.clone(),
                         args: call.input.clone(),
+                        requester: requester.clone(),
                     });
                     let decision = gate
-                        .request_approval(&call.id, &call.tool_name, &call.input)
+                        .request_approval(&call.id, &call.tool_name, &call.input, requester.as_ref())
                         .await;
                     match decision {
                         ApprovalDecision::Approved => {
@@ -1114,7 +1141,7 @@ impl ToolExecutor {
                                 &call.id,
                                 &call.tool_name,
                                 ToolErrorKind::UserDenied,
-                                format!("user denied: {reason}"),
+                                denied_message(requester.is_some(), &reason),
                             ),
                             extra,
                         ),
@@ -1163,6 +1190,18 @@ impl ToolExecutor {
             }
             None => PermissionVerdict::NeedsApproval,
         }
+    }
+
+    /// 构造审批请求方（T-D-14 权限传递层，任务书第 4 步）：子代理 run
+    /// （有父 run 归属）→ Some（`run_id` = 子代理 run id，申请理由从工具
+    /// 入参保留键 [crate::approval_router::APPROVAL_REASON_ARG_KEY] 提取）；
+    /// 主 agent run（无父 run 归属）→ None（裁决者 = 用户，既有流程不变）。
+    fn approval_requester_for(&self, ctx: &ToolExecCtx, args: &Value) -> Option<ApprovalRequester> {
+        requester_from_context(
+            &ctx.run_id,
+            ctx.parent_run_id.as_deref(),
+            approval_reason_from_args(args),
+        )
     }
 
     /// C3 兜底拒绝文案：大面积回退 + 审批通道缺失（approval=None）时阈值
@@ -1246,6 +1285,17 @@ fn denied_result(call: &ToolBatchCall, options: &ToolBatchOptions) -> Classified
         ToolErrorKind::UserDenied,
         format!("permission denied by {mode} mode: {}", call.tool_name),
     )
+}
+
+/// 审批拒绝文案（T-D-14）：子代理申请被拒（`subagent_request = true`）→
+/// 含「主 agent 拒绝」与「回报主 agent」指引（对齐 explore_quota 先例）；
+/// 主 agent run 拒绝 → 既有「user denied: …」文案（零回归）。
+fn denied_message(subagent_request: bool, reason: &str) -> String {
+    if subagent_request {
+        relay_denied_message(reason)
+    } else {
+        format!("user denied: {reason}")
+    }
 }
 
 /// 取消全部未执行项（cancel-siblings）
@@ -1944,6 +1994,7 @@ mod tests {
             _call_id: &str,
             _tool_name: &str,
             _args: &Value,
+            _requester: Option<&ApprovalRequester>,
         ) -> ApprovalDecision {
             self.decision.clone()
         }
@@ -1960,6 +2011,7 @@ mod tests {
             call_id: &str,
             _tool_name: &str,
             _args: &Value,
+            _requester: Option<&ApprovalRequester>,
         ) -> ApprovalDecision {
             self.order
                 .lock()
@@ -1981,6 +2033,7 @@ mod tests {
             call_id: &str,
             _tool_name: &str,
             _args: &Value,
+            _requester: Option<&ApprovalRequester>,
         ) -> ApprovalDecision {
             self.order
                 .lock()
@@ -2002,6 +2055,7 @@ mod tests {
             call_id: &str,
             _tool_name: &str,
             _args: &Value,
+            _requester: Option<&ApprovalRequester>,
         ) -> ApprovalDecision {
             if call_id == self.deny {
                 ApprovalDecision::Denied {
@@ -2033,12 +2087,32 @@ mod tests {
             _call_id: &str,
             _tool_name: &str,
             _args: &Value,
+            _requester: Option<&ApprovalRequester>,
         ) -> ApprovalDecision {
             self.decisions
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .pop_front()
                 .unwrap_or(ApprovalDecision::Approved)
+        }
+    }
+
+    /// 记录请求方身份的测试门（T-D-14：断言子代理请求透传 requester）
+    struct RequesterRecordingApproval {
+        decision: ApprovalDecision,
+        received: Arc<std::sync::Mutex<Option<ApprovalRequester>>>,
+    }
+    #[async_trait::async_trait]
+    impl ApprovalGate for RequesterRecordingApproval {
+        async fn request_approval(
+            &self,
+            _call_id: &str,
+            _tool_name: &str,
+            _args: &Value,
+            requester: Option<&ApprovalRequester>,
+        ) -> ApprovalDecision {
+            *self.received.lock().unwrap() = requester.cloned();
+            self.decision.clone()
         }
     }
 
@@ -3595,6 +3669,188 @@ mod tests {
                 "[tool.execution_failed] 工具 fail 执行失败：boom".to_string()
             )],
             "tool.error 只广播失败调用（携带错误文案）"
+        );
+    }
+
+    // ── T-D-14 权限传递层：子代理审批链路 ──
+
+    /// 子代理上下文（有父 run 归属）+ 危险工具入参（含申请理由保留键）
+    fn subagent_ctx() -> ToolExecCtx {
+        ToolExecCtx {
+            run_id: "run-sub-1".into(),
+            session_id: "sess-1".into(),
+            parent_run_id: Some("run-main".into()),
+            ..Default::default()
+        }
+    }
+
+    /// 申请→主 agent 放行链路：子代理 run 内工具触发 NeedsApproval →
+    /// gate 收到 requester（run_id = 子代理 run id + reason）→ 主 agent
+    /// 裁决 Approved → 工具执行成功、approval-requested 事件携带请求方
+    #[tokio::test]
+    async fn subagent_approval_flow_reaches_gate_with_requester_and_executes() {
+        let reg = registry_with(vec![Arc::new(DangerousTool)]);
+        let exec = ToolExecutor::new(reg);
+        let received = Arc::new(std::sync::Mutex::new(None));
+        let gate = Arc::new(RequesterRecordingApproval {
+            decision: ApprovalDecision::Approved,
+            received: Arc::clone(&received),
+        });
+        let calls = vec![ToolBatchCall {
+            id: "c1".into(),
+            tool_name: "dangerous_tool".into(),
+            summary: "子代理越界写".into(),
+            input: serde_json::json!({
+                "path": "outside.md",
+                "approval_reason": "需要写入默认范围外的报告目录",
+            }),
+            category: conex_types::tool::ToolCategory::Filesystem,
+            concurrency: ToolConcurrency::Sequential,
+        }];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Ask),
+            ..Default::default()
+        };
+        let out = exec
+            .execute_batch(&calls, &subagent_ctx(), Some(gate), &opts, None)
+            .await;
+        // 工具执行成功（主 agent 放行）
+        assert!(out.results[0].is_ok(), "结果: {:?}", out.results[0]);
+        assert!(out.fatal.is_none());
+        // gate 收到 requester：run_id = 子代理 run id + reason
+        let requester = received.lock().unwrap().clone().expect("gate 必收到 requester");
+        assert_eq!(requester.run_id, "run-sub-1", "requester.run_id 应为子代理 run id");
+        assert_eq!(
+            requester.reason.as_deref(),
+            Some("需要写入默认范围外的报告目录"),
+            "requester.reason 应透传申请理由"
+        );
+        // approval-requested 事件齐全且携带请求方
+        let requested = out
+            .events
+            .iter()
+            .find(|e| matches!(e, ToolEvent::ApprovalRequested { .. }))
+            .expect("应有 approval-requested 事件");
+        match requested {
+            ToolEvent::ApprovalRequested { requester, .. } => {
+                assert_eq!(
+                    requester.as_ref().map(|r| r.run_id.as_str()),
+                    Some("run-sub-1")
+                );
+                assert_eq!(
+                    requester.as_ref().and_then(|r| r.reason.as_deref()),
+                    Some("需要写入默认范围外的报告目录")
+                );
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    /// 拒绝路径：主 agent 裁决 Denied → 子代理收到 UserDenied，错误文案
+    /// 含「主 agent 拒绝」与「回报主 agent」指引（对齐 explore_quota 断言面）
+    #[tokio::test]
+    async fn subagent_denied_carries_relay_guidance() {
+        let reg = registry_with(vec![Arc::new(DangerousTool)]);
+        let exec = ToolExecutor::new(reg);
+        let gate = Arc::new(RequesterRecordingApproval {
+            decision: ApprovalDecision::Denied {
+                reason: "写入范围超出默认集".into(),
+            },
+            received: Arc::new(std::sync::Mutex::new(None)),
+        });
+        let calls = vec![ToolBatchCall {
+            id: "c1".into(),
+            tool_name: "dangerous_tool".into(),
+            summary: "子代理越界写".into(),
+            input: serde_json::json!({ "path": "outside.md", "approval_reason": "需要越界写入" }),
+            category: conex_types::tool::ToolCategory::Filesystem,
+            concurrency: ToolConcurrency::Sequential,
+        }];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Ask),
+            ..Default::default()
+        };
+        let out = exec
+            .execute_batch(&calls, &subagent_ctx(), Some(gate), &opts, None)
+            .await;
+        assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::UserDenied));
+        let message = out.results[0].error_message.as_deref().unwrap_or("");
+        assert!(message.contains("主 agent 拒绝"), "message: {message}");
+        assert!(message.contains("回报主 agent"), "message: {message}");
+        assert!(message.contains("写入范围超出默认集"), "message: {message}");
+        // 拒绝非致命（run 不中断）
+        assert!(out.fatal.is_none());
+    }
+
+    /// 不回归：主 agent run（无父 run）审批 requester=None → 既有
+    /// 「user denied: …」文案（UI 流程零回归）
+    #[tokio::test]
+    async fn main_agent_approval_requester_none_and_legacy_denied_text() {
+        let reg = registry_with(vec![Arc::new(DangerousTool)]);
+        let exec = ToolExecutor::new(reg);
+        let received = Arc::new(std::sync::Mutex::new(None));
+        let gate = Arc::new(RequesterRecordingApproval {
+            decision: ApprovalDecision::Denied {
+                reason: "no".into(),
+            },
+            received: Arc::clone(&received),
+        });
+        let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Ask),
+            ..Default::default()
+        };
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), Some(gate), &opts, None)
+            .await;
+        // gate 收到 requester = None（主 agent run 不携带子代理身份）
+        assert!(
+            received.lock().unwrap().is_none(),
+            "主 agent run 审批 requester 应为 None"
+        );
+        // 既有拒绝文案不变（无「回报主 agent」注入）
+        let message = out.results[0].error_message.as_deref().unwrap_or("");
+        assert_eq!(message, "user denied: no");
+        assert!(!message.contains("回报主 agent"), "message: {message}");
+    }
+
+    /// 超时：主 agent 不裁决 → Expired → 子代理 run 不中断（非致命）、
+    /// 工具返回 approval_expired
+    #[tokio::test]
+    async fn subagent_approval_expired_does_not_interrupt_run() {
+        let reg = registry_with(vec![Arc::new(DangerousTool)]);
+        let exec = ToolExecutor::new(reg);
+        let gate = Arc::new(RequesterRecordingApproval {
+            decision: ApprovalDecision::Expired,
+            received: Arc::new(std::sync::Mutex::new(None)),
+        });
+        let calls = vec![ToolBatchCall {
+            id: "c1".into(),
+            tool_name: "dangerous_tool".into(),
+            summary: "子代理越界写".into(),
+            input: serde_json::json!({ "path": "outside.md", "approval_reason": "需要越界写入" }),
+            category: conex_types::tool::ToolCategory::Filesystem,
+            concurrency: ToolConcurrency::Sequential,
+        }];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            permission_mode: Some(PermissionMode::Ask),
+            ..Default::default()
+        };
+        let out = exec
+            .execute_batch(&calls, &subagent_ctx(), Some(gate), &opts, None)
+            .await;
+        assert_eq!(
+            out.results[0].error_kind,
+            Some(ToolErrorKind::ApprovalExpired),
+            "超时 → 工具返回 approval_expired"
+        );
+        assert!(
+            out.fatal.is_none(),
+            "approval_expired 非致命：子代理 run 不中断"
         );
     }
 }

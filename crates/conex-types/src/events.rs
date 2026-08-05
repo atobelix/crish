@@ -204,6 +204,17 @@ pub struct PermissionRequest {
     pub tool_metadata: ToolMetadata,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
+    // ── 权限传递层（T-D-14，用户定夺「权限申请传递层」落地）──
+    // 新增字段全 Option + serde 缺省，向后兼容（旧载荷缺省可读、缺省不
+    // 序列化）；随载荷 jsonb 落库，无 schema 变更（调研-权限传递层.md §4.2）。
+    /// 请求方 run 归属（None = 主 agent run；Some = 子代理 run id）——
+    /// 裁决者路由依据（子代理来源 → 主 agent 裁决；主 agent 来源 → 用户）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requester_run_id: Option<String>,
+    /// 子代理申请理由（提示词协议要求「需要更高权限时说明理由」；
+    /// 主 agent 裁决面展示与审计用；主 agent 自身请求恒 None）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 /// approval-resolved 决策规范值（03 §5.3-3：Rust 只发

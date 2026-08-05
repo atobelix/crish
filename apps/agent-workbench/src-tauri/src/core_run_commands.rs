@@ -51,7 +51,10 @@ use orchestrator::restore::{RestoreManager, RestoreMode, RestoreOutcome, Snapsho
 use orchestrator::run::{CancelMode, RunEngine, RunHandle, RunManager};
 use orchestrator::session::SessionRecord;
 use session_loop::hydrate::hydrate_history;
-use session_loop::tool_events::ApprovalDecision;
+use session_loop::approval_router::{
+    classify_source, route_approval, route_approval_guarded, arbiter_metadata,
+};
+use session_loop::tool_events::{ApprovalDecision, ApprovalRequester};
 use tauri::Manager as _;
 use session_loop::{
     AbortSignal, ApprovalGate, ControlBus, DeltaSink, EscapeWatchConfig, EscapeWatchHandle,
@@ -141,6 +144,16 @@ pub(crate) struct ApprovalGateImpl {
     run_id: String,
     /// 会话标识
     session_id: String,
+    /// 父 run 归属（T-D-14 权限传递层）：None = 主 agent run / 无父 run
+    /// （审批裁决者 = 用户，现状不变）；Some = 子代理 run 的父 run id
+    /// （审批请求路由给主 agent 裁决，可经死锁防护转用户兜底）
+    parent_run_id: Option<String>,
+    /// 死锁检测器（T-D-14 开放问题 6.4，时序评审见 approval_router.rs 模块
+    /// 头注）：判定「裁决者（主 agent）正在 wait 本 run（子代理）」——
+    /// 命中时路由转用户打破 120s 空等；None = 未接线（退化纯超时兜底，
+    /// 行为与现状一致）。真实 wait 态信号源 = orchestrator 子代理跟踪器
+    /// （wait_subagents 工具执行期间标记），由 F11 T-D-13 引擎接线注入。
+    deadlock_detector: Option<Box<dyn Fn(&str) -> bool + Send + Sync>>,
     /// 广播 approval-requested（先发后等；信封 sequence=None 实时预览，
     /// 收口流携带持久化序列）
     broadcast: Box<dyn Fn(AgentEvent) + Send + Sync>,
@@ -159,6 +172,7 @@ impl ApprovalGateImpl {
     pub(crate) fn new(
         run_id: String,
         session_id: String,
+        parent_run_id: Option<String>,
         broadcast: Box<dyn Fn(AgentEvent) + Send + Sync>,
         handle: Arc<tokio::sync::Mutex<RunHandle>>,
         store: Arc<dyn Store>,
@@ -167,12 +181,27 @@ impl ApprovalGateImpl {
         Self {
             run_id,
             session_id,
+            parent_run_id,
+            deadlock_detector: None,
             broadcast,
             pending: std::sync::Mutex::new(HashMap::new()),
             handle,
             store,
             cwd,
         }
+    }
+
+    /// 注入死锁检测器（T-D-14 开放问题 6.4）：判定「裁决者 run 正在 wait
+    /// 本 run（子代理）」——命中时审批请求路由转用户（UI 裁决面不受主
+    /// agent wait 状态阻塞）；不注入 = 纯超时兜底（120s Expired，子代理
+    /// run 不中断，行为与现状一致）。
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn with_deadlock_detector(
+        mut self,
+        detector: Box<dyn Fn(&str) -> bool + Send + Sync>,
+    ) -> Self {
+        self.deadlock_detector = Some(detector);
+        self
     }
 
     /// 解析审批（core_approve_tool / core_deny_tool 入口）
@@ -217,8 +246,27 @@ impl ApprovalGate for ApprovalGateImpl {
         call_id: &str,
         tool_name: &str,
         args: &serde_json::Value,
+        requester: Option<&ApprovalRequester>,
     ) -> ApprovalDecision {
-        // 1. 广播 approval-requested（防死锁：先发出再等待，01 §五.8；
+        // 1. 来源分类 + 裁决者路由（T-D-14 权限传递层）：子代理来源 →
+        //    主 agent 裁决（默认）；主 agent 来源 → 用户（现状不变）；
+        //    死锁检测命中（主 agent 正在 wait 该子代理）→ 转用户兜底。
+        let source = classify_source(&self.run_id, self.parent_run_id.as_deref());
+        let arbiter = self
+            .deadlock_detector
+            .as_ref()
+            .map(|detector| route_approval_guarded(&source, detector(&self.run_id)))
+            .unwrap_or_else(|| route_approval(&source));
+        tracing::info!(
+            target: "approval",
+            run_id = %self.run_id,
+            parent_run_id = ?self.parent_run_id,
+            arbiter = ?arbiter,
+            requester_run_id = requester.map(|r| r.run_id.as_str()),
+            "审批请求（权限传递层裁决者路由）"
+        );
+
+        // 2. 广播 approval-requested（防死锁：先发出再等待，01 §五.8；
         //    实时通道 sequence=None 预览，持久化副本随收口流落库）
         let request = PermissionRequest {
             id: format!("approval-{call_id}"),
@@ -229,7 +277,14 @@ impl ApprovalGate for ApprovalGateImpl {
             parameters: args.clone(),
             summary: format!("call {tool_name}"),
             tool_metadata: Default::default(),
-            metadata: None,
+            // T-D-14：路由分支可观测落点——子代理来源路由给主 agent 时
+            // metadata.arbiter=main-agent（前端据此渲染主 agent 裁决面）；
+            // 用户裁决面 None（主 agent run 现状载荷字节不变）
+            metadata: arbiter_metadata(arbiter),
+            // T-D-14：请求方身份（子代理 run id + 申请理由）随载荷广播
+            // 与落库（None = 主 agent run，向后兼容）
+            requester_run_id: requester.map(|r| r.run_id.clone()),
+            reason: requester.and_then(|r| r.reason.clone()),
         };
         (self.broadcast)(AgentEvent::ApprovalRequested {
             session_id: self.session_id.clone(),
@@ -1811,6 +1866,10 @@ pub struct RunTaskOptions {
     pub system_prompt: Option<String>,
     pub history: Option<Vec<HistoryMessage>>,
     pub context_window: Option<u32>,
+    /// 父 run 归属（T-D-14 权限传递层，F11 T-D-13 spawner 装配时携带）：
+    /// None = 主 agent run / 无父 run（审批裁决者 = 用户，现状不变）；
+    /// Some = 子代理 run 的父 run id（审批请求路由给主 agent 裁决）
+    pub parent_run_id: Option<String>,
 }
 
 #[tauri::command]
@@ -1895,6 +1954,8 @@ pub(crate) async fn core_run_task(
     let approval_gate = Arc::new(ApprovalGateImpl::new(
         run_id.clone(),
         session_id.clone(),
+        // T-D-14：父 run 归属（子代理 run 由 spawner 携带；None = 主 agent）
+        options.parent_run_id.clone(),
         broadcast,
         Arc::clone(&handle_shared),
         state.store.clone(),
@@ -1993,6 +2054,9 @@ pub(crate) async fn core_run_task(
         // 工具执行器（消费侧循环装配由 F7 T-EG-06 负责，本处只做 options
         // 侧构造）。
         tool_middleware: vec![Arc::new(BackupMiddleware::with_defaults(None))],
+        // T-D-14 权限传递层：父 run 归属透传执行器（审批请求来源判定与
+        // 裁决者路由依据；None = 主 agent run，现状行为）
+        parent_run_id: options.parent_run_id.clone(),
         ..SessionLoopOptions::default()
     };
     let tool_options = ToolBatchOptions {
@@ -2668,6 +2732,191 @@ mod tests {
         assert_eq!(json, "\"denied\"");
         let approved = serde_json::to_string(&WireApprovalDecision::Approved).unwrap();
         assert_eq!(approved, "\"approved\"");
+    }
+
+    // ── T-D-14 权限传递层：审批门载荷与裁决者路由 ──
+
+    /// 组装子代理 run 的审批门（父 run 归属注入；广播落到记录发射器）
+    async fn subagent_gate(
+        state: &CoreRunState,
+        session_id: &str,
+        run_id: &str,
+        parent_run_id: Option<&str>,
+        deadlock_detector: Option<Box<dyn Fn(&str) -> bool + Send + Sync>>,
+    ) -> (Arc<ApprovalGateImpl>, Arc<RecordingEmitter>) {
+        let handle = Arc::new(tokio::sync::Mutex::new(
+            state
+                .run_manager
+                .start_run(session_id, run_id)
+                .await
+                .expect("start_run"),
+        ));
+        let (bridge, emitter) = recording_bridge();
+        let broadcast_bridge = Arc::new(BufferedRunEventBridge::new(bridge, run_id.to_string()));
+        let broadcast_run_id = run_id.to_string();
+        let broadcast = Box::new(move |event: AgentEvent| {
+            let envelope = AgentEventEnvelope::new(event, Some(broadcast_run_id.clone()), None);
+            broadcast_bridge.emit(&envelope);
+            broadcast_bridge.flush();
+        });
+        let mut gate = ApprovalGateImpl::new(
+            run_id.to_string(),
+            session_id.to_string(),
+            parent_run_id.map(str::to_string),
+            broadcast,
+            handle,
+            state.store.clone(),
+            None,
+        );
+        if let Some(detector) = deadlock_detector {
+            gate = gate.with_deadlock_detector(detector);
+        }
+        (Arc::new(gate), emitter)
+    }
+
+    /// 子代理审批请求 → 广播载荷携带 requesterRunId/reason + 路由
+    /// metadata.arbiter=main-agent（转呈主 agent 裁决面）；主 agent 裁决
+    /// 复用 core_approve_tool/core_deny_tool 的 resolve 入口 → Approved
+    #[tokio::test]
+    async fn gate_routes_subagent_request_to_main_agent_arbiter() {
+        let (state, _registry) = state_with_background();
+        let (gate, emitter) = subagent_gate(&state, "sess-gate", "run-sub-1", Some("run-main"), None)
+            .await;
+        let requester = ApprovalRequester {
+            run_id: "run-sub-1".to_string(),
+            task_type: None,
+            reason: Some("需要写入默认范围外的路径".to_string()),
+        };
+        let gate_owner = Arc::clone(&gate);
+        let rq = requester.clone();
+        let wait = tokio::spawn(async move {
+            gate_owner
+                .request_approval(
+                    "tc-1",
+                    "write_file",
+                    &serde_json::json!({ "path": "x.md" }),
+                    Some(&rq),
+                )
+                .await
+        });
+        // 等待广播 + pending 注册后裁决（主 agent 裁决 = 同一 resolve 入口）
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        gate.resolve("tc-1", ApprovalDecision::Approved)
+            .await
+            .expect("resolve 应放行（I-02 校验通过）");
+        let decision = tokio::time::timeout(Duration::from_secs(2), wait)
+            .await
+            .expect("审批应在时限内返回")
+            .expect("request_approval 不应 panic");
+        assert_eq!(decision, ApprovalDecision::Approved);
+        // 广播载荷：requesterRunId / reason / 路由 arbiter=main-agent
+        let payloads = emitter.0.lock().unwrap().clone();
+        let envelope: serde_json::Value = serde_json::from_str(&payloads[0]).unwrap();
+        assert_eq!(envelope["type"], "approval-requested");
+        assert_eq!(envelope["request"]["requesterRunId"], "run-sub-1");
+        assert_eq!(envelope["request"]["reason"], "需要写入默认范围外的路径");
+        assert_eq!(envelope["request"]["metadata"]["arbiter"], "main-agent");
+    }
+
+    /// 死锁防护（开放问题 6.4）：裁决者（主 agent）正在 wait 该子代理 →
+    /// 路由转用户（metadata 不标注 main-agent，载荷仍携带请求方身份）；
+    /// 未检测到 wait → 保持主 agent 裁决（metadata.arbiter=main-agent）
+    #[tokio::test]
+    async fn gate_deflects_approval_when_arbiter_waiting_on_subagent() {
+        let (state, _registry) = state_with_background();
+        // detector 命中（主 agent 正在 wait run-sub-1）
+        let (gate_waiting, emitter_waiting) = subagent_gate(
+            &state,
+            "sess-gate",
+            "run-sub-1",
+            Some("run-main"),
+            Some(Box::new(|_subagent_run_id| true)),
+        )
+        .await;
+        // detector 未命中
+        let (gate_clear, emitter_clear) = subagent_gate(
+            &state,
+            "sess-gate",
+            "run-sub-2",
+            Some("run-main"),
+            Some(Box::new(|_subagent_run_id| false)),
+        )
+        .await;
+        let requester_waiting = ApprovalRequester {
+            run_id: "run-sub-1".to_string(),
+            task_type: None,
+            reason: None,
+        };
+        let requester_clear = ApprovalRequester {
+            run_id: "run-sub-2".to_string(),
+            task_type: None,
+            reason: None,
+        };
+        for (gate, emitter, requester, expecting_main_agent) in [
+            (Arc::clone(&gate_waiting), emitter_waiting, requester_waiting, false),
+            (Arc::clone(&gate_clear), emitter_clear, requester_clear, true),
+        ] {
+            let gate_owner = Arc::clone(&gate);
+            let rq = requester.clone();
+            let wait = tokio::spawn(async move {
+                gate_owner
+                    .request_approval(
+                        "tc-1",
+                        "write_file",
+                        &serde_json::json!({}),
+                        Some(&rq),
+                    )
+                    .await
+            });
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            gate.resolve("tc-1", ApprovalDecision::Approved)
+                .await
+                .expect("resolve 应放行");
+            let _decision = tokio::time::timeout(Duration::from_secs(2), wait)
+                .await
+                .expect("审批应在时限内返回")
+                .expect("request_approval 不应 panic");
+            let payloads = emitter.0.lock().unwrap().clone();
+            let envelope: serde_json::Value = serde_json::from_str(&payloads[0]).unwrap();
+            assert_eq!(envelope["request"]["requesterRunId"], requester.run_id);
+            if expecting_main_agent {
+                assert_eq!(envelope["request"]["metadata"]["arbiter"], "main-agent");
+            } else {
+                assert!(
+                    envelope["request"]["metadata"].is_null()
+                        || envelope["request"]["metadata"].get("arbiter").is_none(),
+                    "死锁防护转用户：不应标注 main-agent 裁决面"
+                );
+            }
+        }
+    }
+
+    /// 不回归：主 agent run（无父 run）审批 requester=None → 载荷缺省
+    /// requesterRunId/reason/metadata（既有 UI 审批流程载荷字节不变）
+    #[tokio::test]
+    async fn main_agent_gate_payload_legacy_byte_identical() {
+        let (state, _registry) = state_with_background();
+        let (gate, emitter) = subagent_gate(&state, "sess-main", "run-main", None, None).await;
+        let gate_owner = Arc::clone(&gate);
+        let wait = tokio::spawn(async move {
+            gate_owner
+                .request_approval("tc-1", "write_file", &serde_json::json!({}), None)
+                .await
+        });
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        gate.resolve("tc-1", ApprovalDecision::Approved)
+            .await
+            .expect("resolve 应放行");
+        let _decision = tokio::time::timeout(Duration::from_secs(2), wait)
+            .await
+            .expect("审批应在时限内返回")
+            .expect("request_approval 不应 panic");
+        let payloads = emitter.0.lock().unwrap().clone();
+        let envelope: serde_json::Value = serde_json::from_str(&payloads[0]).unwrap();
+        let request = &envelope["request"];
+        assert!(request.get("requesterRunId").is_none(), "主 agent 请求不应携带 requesterRunId");
+        assert!(request.get("reason").is_none(), "主 agent 请求不应携带 reason");
+        assert!(request.get("metadata").is_none(), "主 agent 请求不应携带 metadata");
     }
 
     /// 用户注入消息形状（L1 soft_inject 落环载荷）
@@ -3442,6 +3691,7 @@ mod tests {
         let approval = Arc::new(ApprovalGateImpl::new(
             run_id.to_string(),
             session_id.to_string(),
+            None,
             broadcast,
             Arc::clone(&handle),
             state.store.clone(),

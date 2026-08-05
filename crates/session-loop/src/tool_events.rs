@@ -35,6 +35,9 @@ pub enum ToolEvent {
         call_id: String,
         tool_name: String,
         args: Value,
+        /// 请求方身份（T-D-14 权限传递层；None = 主 agent run，裁决者 = 用户；
+        /// Some = 子代理 run，裁决者默认 = 主 agent）
+        requester: Option<ApprovalRequester>,
     },
     /// 单工具结束（携带完整分类结果：成功输出 / 错误码+文案）
     ToolEnd {
@@ -64,15 +67,38 @@ pub enum ApprovalDecision {
     Expired,
 }
 
+/// 审批请求方身份（T-D-14 权限传递层，用户定夺「子代理申请 → 主 agent 裁决」）
+///
+/// - `None` = 主 agent run（现状不变：裁决者 = 用户，UI 审批流程）；
+/// - `Some` = 子代理 run（新默认：裁决者 = 主 agent，可转用户兜底）；
+/// 子代理身份判定 = 本 run 有父 run 归属（`ToolExecCtx.run_id` + 父 run 关系）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApprovalRequester {
+    /// 请求方 run id（None = 主 agent run；Some = 子代理 run id，裁决者路由依据）
+    pub run_id: String,
+    /// 子代理任务类型（task_type 六枚举，spawn 时装配；None = 未知/未接线，
+    /// 由 F11 T-D-13 spawner 注入面补齐）
+    pub task_type: Option<String>,
+    /// 子代理申请理由（提示词协议要求「需要更高权限时说明理由」；执行器
+    /// 原样透传，不做语义解析；None = 未附理由）
+    pub reason: Option<String>,
+}
+
 /// 审批门抽象：由编排层（B4/B6）实现真实审批流程
 #[async_trait::async_trait]
 pub trait ApprovalGate: Send + Sync {
     /// 请求审批并等待决策。实现方须保证先广播 approval-requested 再挂起。
+    ///
+    /// `requester`（T-D-14 权限传递层）：None = 主 agent run；Some = 子代理
+    /// run（携带 run id / 任务类型 / 申请理由）——实现方按此构造载荷
+    /// `requester_run_id` / `reason` 字段并路由裁决者。参数全 Option，
+    /// 现有实现与测试 MockGate 签名兼容。
     async fn request_approval(
         &self,
         call_id: &str,
         tool_name: &str,
         args: &Value,
+        requester: Option<&ApprovalRequester>,
     ) -> ApprovalDecision;
 }
 

@@ -234,7 +234,12 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                     timestamp: crate::steering::now_iso_utc(),
                 });
             }
-            ToolEvent::ApprovalRequested { call_id, tool_name, args } => {
+            ToolEvent::ApprovalRequested {
+                call_id,
+                tool_name,
+                args,
+                requester,
+            } => {
                 // approval-requested 事件先于等待发出（防死锁，01 §五.8）；
                 // 真实 PermissionRequest 由 B4/B6 审批层补齐
                 state.events.push(AgentEvent::ApprovalRequested {
@@ -249,6 +254,10 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                         summary: format!("call {tool_name}"),
                         tool_metadata: Default::default(),
                         metadata: None,
+                        // T-D-14：请求方身份随事件落库（子代理 run 携带
+                        // run id + 理由；主 agent run = None）
+                        requester_run_id: requester.as_ref().map(|r| r.run_id.clone()),
+                        reason: requester.as_ref().and_then(|r| r.reason.clone()),
                     },
                     timestamp: crate::steering::now_iso_utc(),
                 });

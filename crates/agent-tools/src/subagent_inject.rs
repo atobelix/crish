@@ -54,6 +54,9 @@ pub const REVERT_CAUTION_TITLE: &str = "git 回退谨慎指引";
 /// 注释保留规范段标题（M1 `ContextInjection.title` 使用；render 渲染为
 /// `## 注释保留规范`，快照断言锚点）
 pub const COMMENT_PRESERVATION_TITLE: &str = "注释保留规范";
+/// 权限申请指引段标题（T-D-14 权限传递层；M1 `ContextInjection.title`
+/// 使用；render 渲染为 `## 权限申请指引`，快照断言锚点）
+pub const PERMISSION_RELAY_TITLE: &str = "权限申请指引";
 
 /// epoch ms → ISO8601（毫秒精度 UTC，`2026-07-31T08:00:00.000Z`；与
 /// engine.rs now_iso_utc / session-loop hydrate.rs 同源的 Howard Hinnant
@@ -151,6 +154,48 @@ pub fn comment_preservation_section() -> String {
      （Rustdoc/JSDoc/行内注释）；\n\
      - 生成 replacement_content 时如无必要，不得改写注释内容。"
         .to_string()
+}
+
+/// 权限申请指引注入段正文（不含标题行；T-D-14 权限传递层，提示词协议层
+/// 固定片段，快照断言对象）。
+///
+/// 文案语义（调研-权限传递层.md §2.6 / 03-D方案.md §3.14 拒绝路径节）：
+/// 子代理使用系统分配的默认权限（无需申请）；确需超出默认权限时发起申请
+/// 并说明理由；申请由主 agent 审批（批准继续 / 拒绝后按理由调整）；不反复
+/// 相同理由重复申请、被拒后先回报主 agent 沟通。
+///
+/// 参数化：`task_type`（六枚举，如 implementation）与 `boundary`（一句话
+/// 边界，如「可读写工作区 + 常用构建/测试命令」）为动态字段（T-D-07 默认
+/// 集注册表值，spawn 时装配）；均缺省时产出纯通用段（主 agent 不配也能
+/// 派，不显式声明任务类型时子代理仍收到申请纪律）。结构固定可快照断言。
+/// 挂载方经 `ContextInjection::new(kind, PERMISSION_RELAY_TITLE, content)`
+/// 挂载（F11 T-D-13 引擎 spawn 装配路径接入）。
+pub fn permission_relay_section(task_type: Option<&str>, boundary: Option<&str>) -> String {
+    let scope = match (task_type, boundary) {
+        (Some(task_type), Some(boundary)) => {
+            format!("你的任务类型为「{task_type}」，默认权限边界：{boundary}。\n")
+        }
+        (Some(task_type), None) => format!("你的任务类型为「{task_type}」。\n"),
+        _ => String::new(),
+    };
+    format!(
+        "{scope}你执行任务时使用系统分配的默认权限（按任务类型自动配置，无需你申请）。\n\
+         当任务确需超出默认权限的操作（写默认范围外的路径、执行命令、调用 MCP 工具等）时：\n\
+         - 不要自己假设已获得授权，也不要绕过工具边界；\n\
+         - 发起权限申请并说明理由（需要什么、做什么、影响什么）；\n\
+         - 申请由主 agent 审批：批准后继续执行，拒绝后按拒绝理由调整做法；\n\
+         - 不要反复用相同理由重复申请，被拒后先回报主 agent 沟通。"
+    )
+}
+
+/// 权限申请指引注入项（M1 挂载形状）：返回 `(标题, 正文)`，挂载方
+/// `ContextInjector::push(ContextInjection::new(kind, title, content))`。
+/// T-D-13 引擎 spawn 装配路径按需调用（子代理 run 才挂载）。
+pub fn permission_relay_injection(task_type: Option<&str>, boundary: Option<&str>) -> (String, String) {
+    (
+        PERMISSION_RELAY_TITLE.to_string(),
+        permission_relay_section(task_type, boundary),
+    )
 }
 
 /// 目标 ref 年代判定（C2 行为 2 的引擎侧辅助判定）：ref 提交时间是否
@@ -359,5 +404,81 @@ mod tests {
         // 阈值可配：默认 24 不触发，调小后触发
         assert!(!ref_older_than_threshold(started, started - 23 * hour_ms, 24));
         assert!(ref_older_than_threshold(started, started - 23 * hour_ms, 23));
+    }
+
+    // ── T-D-14 权限传递层：权限申请指引段 ──
+
+    /// 段固定结构（快照断言面，对齐 explore_quota credential_section /
+    /// comment_preservation_section 模式）：通用段（无参数）两次构建字节
+    /// 一致 + 核心纪律关键词命中（系统默认权限 / 超出默认权限申请 /
+    /// 主 agent 审批 / 说明理由 / 不反复申请 / 被拒回报）
+    #[test]
+    fn permission_relay_section_is_fixed_and_snapshotable() {
+        let section = permission_relay_section(None, None);
+        // 核心纪律：系统默认权限（无需申请）、超出默认才申请、
+        // 申请由主 agent 审批、说明理由、不反复申请、被拒先回报
+        assert!(section.contains("系统分配的默认权限"));
+        assert!(section.contains("无需你申请"));
+        assert!(section.contains("超出默认权限"));
+        assert!(section.contains("发起权限申请并说明理由"));
+        assert!(section.contains("需要什么、做什么、影响什么"));
+        assert!(section.contains("主 agent 审批"));
+        assert!(section.contains("批准后继续执行"));
+        assert!(section.contains("拒绝后按拒绝理由调整做法"));
+        assert!(section.contains("不要反复用相同理由重复申请"));
+        assert!(section.contains("被拒后先回报主 agent 沟通"));
+        assert!(section.contains("不要自己假设已获得授权"));
+        assert!(section.contains("不要绕过工具边界"));
+        // 快照：无参数、两次构建字节一致
+        assert_eq!(section, permission_relay_section(None, None));
+        // 标题锚点固定（M1 render 渲染为 `## 权限申请指引`）
+        assert_eq!(PERMISSION_RELAY_TITLE, "权限申请指引");
+        // 注入项形状：标题 + 正文
+        let (title, content) = permission_relay_injection(None, None);
+        assert_eq!(title, PERMISSION_RELAY_TITLE);
+        assert_eq!(content, section);
+    }
+
+    /// 参数化：task_type 与边界一句话注入首行（动态字段），结构其余
+    /// 字节一致（除参数行外固定）
+    #[test]
+    fn permission_relay_section_parameterized_scope_line() {
+        let generic = permission_relay_section(None, None);
+        let typed = permission_relay_section(
+            Some("implementation"),
+            Some("可读写工作区 + 常用构建/测试命令"),
+        );
+        assert!(typed.contains("你的任务类型为「implementation」"));
+        assert!(typed.contains("默认权限边界：可读写工作区 + 常用构建/测试命令"));
+        assert!(!generic.contains("你的任务类型为"));
+        // 仅 task_type（无边界）→ 只有任务类型行
+        let typed_only = permission_relay_section(Some("analysis"), None);
+        assert!(typed_only.contains("你的任务类型为「analysis」。"));
+        assert!(!typed_only.contains("默认权限边界"));
+        // 结构归一化后字节一致（参数行之外固定）
+        let normalize = |s: String| {
+            s.split('\n')
+                .filter(|l| !l.contains("你的任务类型为"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        assert_eq!(normalize(generic), normalize(typed.clone()));
+        // 同一参数两次构建字节一致（快照断言面）
+        assert_eq!(
+            typed,
+            permission_relay_section(
+                Some("implementation"),
+                Some("可读写工作区 + 常用构建/测试命令")
+            )
+        );
+    }
+
+    /// 主 agent / 未声明任务类型：通用段（不显式声明任务类型时子代理
+    /// 仍收到申请纪律——主 agent 不配也能派）
+    #[test]
+    fn permission_relay_section_defaults_to_generic() {
+        let generic = permission_relay_section(None, None);
+        assert!(!generic.contains("任务类型为"));
+        assert!(generic.starts_with("你执行任务时使用系统分配的默认权限"));
     }
 }
