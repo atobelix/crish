@@ -95,14 +95,15 @@ pub use revert_guard::{
     RevertCounterGuard, RevertGuardOutcome, RevertGuardReason, StreakVerdict,
     DEFAULT_REVERT_WINDOW_SECONDS, REVERT_WINDOW_SECONDS_KEY,
 };
-// I4-M4（C2 创建时间注入 + git 回退谨慎指引）：注入内容模块——started_at
-// 注入段 / 续跑不刷新解析 / git 回退指引固定文案 / ref 年代判定，经 M1
-// 注入点只读挂载（engine.rs build_context 主体归 C10，M4 不并写）
+// I4-M4（C2 创建时间注入 + git 回退谨慎指引）+ F5 EG（REQ-E03 注释保留
+// 注入段）：注入内容模块——started_at 注入段 / 续跑不刷新解析 / git 回退
+// 指引固定文案 / ref 年代判定 / 注释保留固定文案，经 M1 注入点只读挂载
+// （engine.rs build_context 主体归 C10，M4 不并写）
 pub use subagent_inject::{
-    git_revert_caution_section, iso8601_from_epoch_ms, ref_older_than_threshold,
-    resolve_started_at, started_at_section, subagent_session_injections,
-    DEFAULT_REF_AGE_THRESHOLD_HOURS, DYNAMIC_MARKER, REVERT_CAUTION_TITLE,
-    STARTED_AT_SECTION_TITLE,
+    comment_preservation_section, git_revert_caution_section, iso8601_from_epoch_ms,
+    ref_older_than_threshold, resolve_started_at, started_at_section, subagent_session_injections,
+    COMMENT_PRESERVATION_TITLE, DEFAULT_REF_AGE_THRESHOLD_HOURS, DYNAMIC_MARKER,
+    REVERT_CAUTION_TITLE, STARTED_AT_SECTION_TITLE,
 };
 pub use tools::{
     register_builtin_tools, register_builtin_tools_with_config, BuiltinToolConfig,

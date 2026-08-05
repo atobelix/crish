@@ -30,6 +30,10 @@
 //! 创建时间），续跑 run 由引擎侧复用库值经 [resolve_started_at] 解析；
 //! 本模块不触达 conex-db（agent-tools 是叶子 crate，对齐 revert_guard.rs
 //! 接线约定——读写库在引擎侧完成，本模块只收 i64 时间戳纯值）。
+//!
+//! F5 EG 追加（REQ-E03 提示词面）：[comment_preservation_section] 固定注入段，
+//! 约束替换时 replacement_content 完整承载原注释行——与 C2 注入同构，挂载
+//! 点仍在引擎侧 build_context（M1 注入点，主体归 C10，本模块只提供固定片段）。
 
 use crate::revert::DEFAULT_REVERT_MAX_REF_AGE_HOURS;
 
@@ -47,6 +51,9 @@ pub const STARTED_AT_SECTION_TITLE: &str = "会话注入（started_at）";
 /// git 回退指引段标题（M1 `ContextInjection.title` 使用；render 渲染为
 /// `## git 回退谨慎指引`，快照断言锚点）
 pub const REVERT_CAUTION_TITLE: &str = "git 回退谨慎指引";
+/// 注释保留规范段标题（M1 `ContextInjection.title` 使用；render 渲染为
+/// `## 注释保留规范`，快照断言锚点）
+pub const COMMENT_PRESERVATION_TITLE: &str = "注释保留规范";
 
 /// epoch ms → ISO8601（毫秒精度 UTC，`2026-07-31T08:00:00.000Z`；与
 /// engine.rs now_iso_utc / session-loop hydrate.rs 同源的 Howard Hinnant
@@ -125,6 +132,25 @@ pub fn git_revert_caution_section(threshold_hours: u64) -> String {
          未经审批不会执行；\n\
          - 回退被拒或超阈值时，请缩小回退范围或改用单文件修复。"
     )
+}
+
+/// 注释保留规范注入段正文（不含标题行；REQ-E03 提示词面落地，提示词协议层
+/// 固定片段，快照断言对象）。
+///
+/// 约束核心（04 方案 1.4 保险二）：替换时 `replacement_content` 必须完整
+/// 承载目标区间内的原注释行，防止生成替换内容时遗漏原文注释；与本次修改
+/// 无关的注释与文档字符串（Rustdoc/JSDoc/行内注释）不得被删除、修改或
+/// 移位。机制面由 E01 精确匹配工具天然保证（未被 target_content 覆盖的
+/// 内容不动），本段为提示词协议层补充约束。
+/// 挂载方经 `ContextInjection::new(kind, COMMENT_PRESERVATION_TITLE, content)`
+/// 挂载。
+pub fn comment_preservation_section() -> String {
+    "- 替换时，replacement_content 必须完整承载目标区间内的原注释行\
+     （Rustdoc/JSDoc/行内注释）；\n\
+     - 不得删除、修改、移位与本次修改无关的注释与文档字符串\
+     （Rustdoc/JSDoc/行内注释）；\n\
+     - 生成 replacement_content 时如无必要，不得改写注释内容。"
+        .to_string()
 }
 
 /// 目标 ref 年代判定（C2 行为 2 的引擎侧辅助判定）：ref 提交时间是否
@@ -271,6 +297,30 @@ mod tests {
             normalize(guidance_48),
             "除阈值数字外结构字节一致"
         );
+    }
+
+    /// REQ-E03 提示词面（04 方案 1.4 保险二）：注释保留段固定结构 + 固定
+    /// 文案（快照断言：两次构建字节一致 + 核心约束关键词命中）
+    #[test]
+    fn comment_preservation_section_is_fixed_and_snapshotable() {
+        let section = comment_preservation_section();
+        // 核心约束关键词：完整承载原注释行 / 不得删除修改移位 / 如无必要不改写
+        assert!(section.contains("replacement_content"));
+        assert!(section.contains("完整承载"));
+        assert!(section.contains("原注释行"));
+        assert!(section.contains("不得删除、修改、移位"));
+        assert!(section.contains("与本次修改无关的注释与文档字符串"));
+        assert!(section.contains("Rustdoc/JSDoc/行内注释"));
+        assert!(section.contains("如无必要"));
+        assert!(section.contains("不得改写注释内容"));
+        // 快照：无参数、两次构建字节一致（对齐 explore_quota credential_section 模式）
+        assert_eq!(
+            section,
+            comment_preservation_section(),
+            "固定注入段两次构建字节一致"
+        );
+        // 标题锚点固定（M1 render 渲染为 `## 注释保留规范`）
+        assert_eq!(COMMENT_PRESERVATION_TITLE, "注释保留规范");
     }
 
     /// 注入项集合：无 started_at → 空（无注入行为不变）；有值 → 两段齐全
