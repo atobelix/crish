@@ -312,13 +312,12 @@ describe('validateWorkflowSchedule / normalizeWorkflowSchedule', () => {
     expect(validateWorkflowSchedule('nope').ok).toBe(false);
   });
 
-  it('rejects cron even when expression is valid (engine unsupported)', () => {
+  it('accepts valid cron expressions (F9 engine support unblocked)', () => {
     const r = validateWorkflowSchedule({
       type: 'cron',
       cronExpression: '0 9 * * *',
     });
-    expect(r.ok).toBe(false);
-    if (r.ok === false) expect(r.error).toMatch(/暂不支持 cron/);
+    expect(r.ok).toBe(true);
     const bad = validateWorkflowSchedule({ type: 'cron', expression: 'bad' });
     expect(bad.ok).toBe(false);
     if (bad.ok === false) expect(bad.error).toMatch(/cron/);
@@ -335,7 +334,8 @@ describe('validateWorkflowSchedule / normalizeWorkflowSchedule', () => {
     expect(
       normalizeWorkflowSchedule({ type: 'cron', expression: '0 * * * *' })
     ).toEqual({
-      type: 'manual',
+      type: 'cron',
+      expression: '0 * * * *',
     });
     expect(
       normalizeWorkflowSchedule({

@@ -1,6 +1,4 @@
 export const BACKEND_NOT_WIRED_CODE = "backend-not-wired" as const;
-export const DAEMON_DISCONNECTED_CODE = "daemon-disconnected" as const;
-export const PROTOCOL_ERROR_CODE = "protocol-error" as const;
 export const UNSUPPORTED_CODE = "unsupported" as const;
 
 export interface BackendNotWiredAllowlistEntry {
@@ -9,26 +7,19 @@ export interface BackendNotWiredAllowlistEntry {
   owner?: string;
 }
 
-export type RegisteredTauriCommandStatus =
+type RegisteredTauriCommandStatus =
   | "implemented"
   | "experimental"
   | typeof BACKEND_NOT_WIRED_CODE
   | typeof UNSUPPORTED_CODE;
-export type RegisteredTauriCommandSurface = "product" | "developer-diagnostics" | "subagent-control";
-export type TauriCommandRegistrationStatus = "registered" | "debug-only" | "not-registered";
+type RegisteredTauriCommandSurface = "product" | "developer-diagnostics" | "subagent-control";
+type TauriCommandRegistrationStatus = "registered" | "debug-only" | "not-registered";
 export type BackendCapabilityStatus =
   | "ok"
   | "implemented"
   | "experimental"
   | "degraded"
   | typeof BACKEND_NOT_WIRED_CODE
-  | typeof UNSUPPORTED_CODE;
-export type BridgeViewStatusCode =
-  | "ok"
-  | "empty"
-  | typeof BACKEND_NOT_WIRED_CODE
-  | typeof DAEMON_DISCONNECTED_CODE
-  | typeof PROTOCOL_ERROR_CODE
   | typeof UNSUPPORTED_CODE;
 
 export interface RegisteredTauriCommand {
@@ -105,6 +96,27 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   { command: "import_from_localstorage", status: "implemented", feature: "localstorage session import" },
   { command: "touch_session", status: "implemented", feature: "session touch" },
   { command: "upsert_session_entry", status: "implemented", feature: "session entry upsert" },
+  // ── F 轮新增命令（F1/F3 后台任务 + F10 产出根 + F11b DAG 快照 + catalog/trash）──
+  { command: "workbench_list_background_tasks", status: "implemented", feature: "background task list" },
+  { command: "workbench_get_background_task_output", status: "implemented", feature: "background task output" },
+  { command: "workbench_cancel_background_task", status: "implemented", feature: "background task cancel" },
+  { command: "workbench_send_input", status: "implemented", feature: "background task stdin input" },
+  { command: "config_get_outputs_root", status: "implemented", feature: "outputs root read" },
+  { command: "config_set_outputs_root", status: "implemented", feature: "outputs root write" },
+  { command: "set_session_output_root", status: "implemented", feature: "session outputs root override" },
+  { command: "get_flow_snapshot", status: "implemented", feature: "DAG flow snapshot read" },
+  { command: "catalog_get", status: "implemented", feature: "model catalog read" },
+  { command: "catalog_refresh", status: "implemented", feature: "model catalog refresh" },
+  { command: "trash_list", status: "implemented", feature: "trash list" },
+  { command: "trash_purge", status: "implemented", feature: "trash purge" },
+  { command: "trash_restore", status: "implemented", feature: "trash restore" },
+  // ── workflow 域六条（F9 T-CF-14，wire 名 kebab-case）──
+  { command: "create-workflow", status: "implemented", feature: "workflow create" },
+  { command: "list-workflows", status: "implemented", feature: "workflow list" },
+  { command: "update-workflow", status: "implemented", feature: "workflow update" },
+  { command: "delete-workflow", status: "implemented", feature: "workflow delete" },
+  { command: "trigger-workflow", status: "implemented", feature: "workflow trigger" },
+  { command: "list-workflow-runs", status: "implemented", feature: "workflow runs list" },
   // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
   { command: "core_md_render", status: "implemented", feature: "markdown render" },
   { command: "core_md_render_batch", status: "implemented", feature: "markdown batch render" },
@@ -159,68 +171,12 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   },
 ];
 
-export interface BackendNotWiredDiagnostic extends BackendNotWiredAllowlistEntry {
+interface BackendNotWiredDiagnostic extends BackendNotWiredAllowlistEntry {
   code: typeof BACKEND_NOT_WIRED_CODE;
   command: string;
   message: string;
   severity: "warning";
   source: "tauri-command-registry";
-}
-
-export interface BackendCommandDiagnostic {
-  code:
-    | typeof BACKEND_NOT_WIRED_CODE
-    | typeof DAEMON_DISCONNECTED_CODE
-    | typeof PROTOCOL_ERROR_CODE
-    | typeof UNSUPPORTED_CODE;
-  command: string;
-  feature: string;
-  message: string;
-  severity: "warning" | "error";
-  source: "tauri-bridge" | "tauri-command-registry";
-  cause?: unknown;
-}
-
-export interface BridgeViewStatus {
-  status: BridgeViewStatusCode;
-  ok: boolean;
-  empty: boolean;
-  command?: string;
-  diagnostic?: BackendCommandDiagnostic;
-}
-
-export interface BackendDiagnosticResult {
-  ok: false;
-  diagnostic: BackendCommandDiagnostic;
-}
-
-export interface BackendNotWiredResult {
-  notWired: true;
-  diagnostic: BackendNotWiredDiagnostic;
-}
-
-export interface BackendNotWiredTextResult extends BackendNotWiredResult {
-  content: string;
-}
-
-export type BackendNotWiredArrayResult<T> = T[] & BackendNotWiredResult;
-export type BackendDiagnosticArrayResult<T> = T[] & BackendDiagnosticResult;
-
-export interface BackendDiagnosticTextResult extends BackendDiagnosticResult {
-  content: string;
-}
-
-export class BackendNotWiredError extends Error {
-  readonly code = BACKEND_NOT_WIRED_CODE;
-  readonly command: string;
-  readonly diagnostic: BackendNotWiredDiagnostic;
-
-  constructor(diagnostic: BackendNotWiredDiagnostic) {
-    super(`${diagnostic.code}: ${diagnostic.command} is not wired (${diagnostic.feature})`);
-    this.name = "BackendNotWiredError";
-    this.command = diagnostic.command;
-    this.diagnostic = diagnostic;
-  }
 }
 
 export const TAURI_COMMAND_REGISTRY: ReadonlyMap<string, RegisteredTauriCommand> = new Map(
@@ -417,11 +373,7 @@ export function shouldHaveTauriRegistration(entry: RegisteredTauriCommand): bool
   return entry.tauriRegistration !== "not-registered";
 }
 
-export function shouldHaveReleaseTauriRegistration(entry: RegisteredTauriCommand): boolean {
-  return shouldHaveTauriRegistration(entry) && entry.tauriRegistration !== "debug-only";
-}
-
-export function createBackendNotWiredDiagnostic(
+function createBackendNotWiredDiagnostic(
   command: string,
   allowlist: Record<string, BackendNotWiredAllowlistEntry> = BACKEND_NOT_WIRED_COMMAND_ALLOWLIST
 ): BackendNotWiredDiagnostic {
@@ -437,208 +389,6 @@ export function createBackendNotWiredDiagnostic(
     source: "tauri-command-registry",
     ...entry,
   };
-}
-
-export function createBackendNotWiredError(command: string): BackendNotWiredError {
-  return new BackendNotWiredError(createBackendNotWiredDiagnostic(command));
-}
-
-export function createBackendNotWiredResult(command: string): BackendNotWiredResult {
-  return {
-    notWired: true,
-    diagnostic: createBackendNotWiredDiagnostic(command),
-  };
-}
-
-export function createBackendNotWiredArrayResult<T>(command: string): BackendNotWiredArrayResult<T> {
-  return Object.assign([] as unknown as T[], createBackendNotWiredResult(command));
-}
-
-export function createBackendNotWiredTextResult(command: string): BackendNotWiredTextResult {
-  return {
-    content: "",
-    ...createBackendNotWiredResult(command),
-  };
-}
-
-export function isBackendNotWiredCommand(command: string): boolean {
-  return command in BACKEND_NOT_WIRED_COMMAND_ALLOWLIST;
-}
-
-export function createBackendCommandDiagnostic(
-  command: string,
-  cause: unknown,
-  options: { feature?: string; message?: string } = {}
-): BackendCommandDiagnostic {
-  const entry = TAURI_COMMAND_REGISTRY.get(command);
-  const code = classifyBackendFailure(cause);
-  return {
-    code,
-    command,
-    feature: options.feature ?? entry?.feature ?? command,
-    message: options.message ?? backendFailureMessage(code, command, cause),
-    severity: code === UNSUPPORTED_CODE ? "warning" : "error",
-    source: "tauri-bridge",
-    cause,
-  };
-}
-
-export function createUnsupportedCommandDiagnostic(
-  command: string,
-  cause: unknown = "This Workbench bridge feature is unsupported in the current frontend environment.",
-  options: { feature?: string; message?: string } = {}
-): BackendCommandDiagnostic {
-  const entry = TAURI_COMMAND_REGISTRY.get(command);
-  return {
-    code: UNSUPPORTED_CODE,
-    command,
-    feature: options.feature ?? entry?.feature ?? command,
-    message: options.message ?? `Unsupported Workbench bridge command ${command}: ${stringifyCause(cause)}`,
-    severity: "warning",
-    source: "tauri-bridge",
-    cause,
-  };
-}
-
-export function createBackendDiagnosticResult(
-  command: string,
-  cause: unknown,
-  options?: { feature?: string; message?: string }
-): BackendDiagnosticResult {
-  return {
-    ok: false,
-    diagnostic: createBackendCommandDiagnostic(command, cause, options),
-  };
-}
-
-export function createBackendDiagnosticArrayResult<T>(
-  command: string,
-  cause: unknown,
-  options?: { feature?: string; message?: string }
-): BackendDiagnosticArrayResult<T> {
-  return Object.assign([] as unknown as T[], createBackendDiagnosticResult(command, cause, options));
-}
-
-export function createBackendDiagnosticTextResult(
-  command: string,
-  cause: unknown,
-  options?: { feature?: string; message?: string }
-): BackendDiagnosticTextResult {
-  return {
-    content: "",
-    ...createBackendDiagnosticResult(command, cause, options),
-  };
-}
-
-export function isBackendDiagnosticResult(value: unknown): value is BackendDiagnosticResult {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      (value as { ok?: unknown }).ok === false &&
-      typeof (value as { diagnostic?: { code?: unknown } }).diagnostic?.code === "string"
-  );
-}
-
-export function getBridgeViewStatus(value: unknown, command: string | undefined): BridgeViewStatus {
-  if (isBackendDiagnosticResult(value)) {
-    return {
-      status: value.diagnostic.code,
-      ok: false,
-      empty: Array.isArray(value) ? value.length === 0 : false,
-      command: value.diagnostic.command,
-      diagnostic: value.diagnostic,
-    };
-  }
-
-  if (isBackendNotWiredResult(value)) {
-    return {
-      status: BACKEND_NOT_WIRED_CODE,
-      ok: false,
-      empty: Array.isArray(value) ? value.length === 0 : false,
-      command: value.diagnostic.command,
-      diagnostic: value.diagnostic,
-    };
-  }
-
-  return {
-    status: Array.isArray(value) && value.length === 0 ? "empty" : "ok",
-    ok: true,
-    empty: Array.isArray(value) && value.length === 0,
-    ...(command !== undefined ? { command } : {}),
-  };
-}
-
-export function isBackendNotWiredResult(value: unknown): value is BackendNotWiredResult {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      (value as { notWired?: unknown }).notWired === true &&
-      (value as { diagnostic?: { code?: unknown } }).diagnostic?.code === BACKEND_NOT_WIRED_CODE
-  );
-}
-
-function classifyBackendFailure(
-  cause: unknown
-): typeof DAEMON_DISCONNECTED_CODE | typeof PROTOCOL_ERROR_CODE | typeof UNSUPPORTED_CODE {
-  const message = stringifyCause(cause).toLowerCase();
-  if (
-    message.includes("unsupported") ||
-    message.includes("not supported") ||
-    message.includes("not wired") ||
-    message.includes("unknown command") ||
-    message.includes("command not found") ||
-    message.includes("not registered")
-  ) {
-    return UNSUPPORTED_CODE;
-  }
-  if (
-    message.includes("sidecar not connected") ||
-    message.includes("sidecar disconnected") ||
-    message.includes("daemon disconnected") ||
-    message.includes("not connected") ||
-    message.includes("connection closed") ||
-    message.includes("websocket") ||
-    message.includes("timed out waiting for") ||
-    message.includes("channel closed")
-  ) {
-    return DAEMON_DISCONNECTED_CODE;
-  }
-  return PROTOCOL_ERROR_CODE;
-}
-
-function backendFailureMessage(
-  code: typeof DAEMON_DISCONNECTED_CODE | typeof PROTOCOL_ERROR_CODE | typeof UNSUPPORTED_CODE,
-  command: string,
-  cause: unknown
-): string {
-  const detail = stringifyCause(cause);
-  const prefix =
-    code === UNSUPPORTED_CODE
-      ? "Backend command is unsupported while running"
-      : code === DAEMON_DISCONNECTED_CODE
-        ? "Daemon is disconnected while running"
-        : "Backend protocol failed while running";
-  return detail ? `${prefix} ${command}: ${detail}` : `${prefix} ${command}.`;
-}
-
-function stringifyCause(cause: unknown): string {
-  if (cause instanceof Error) return cause.message;
-  if (typeof cause === "string") return cause;
-  try {
-    return JSON.stringify(cause);
-  } catch {
-    return String(cause);
-  }
-}
-
-export function isBackendNotWiredError(value: unknown): value is BackendNotWiredError {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      (value as { code?: unknown }).code === BACKEND_NOT_WIRED_CODE &&
-      typeof (value as { command?: unknown }).command === "string" &&
-      (value as { diagnostic?: { code?: unknown } }).diagnostic?.code === BACKEND_NOT_WIRED_CODE
-  );
 }
 
 function readAllGenerateHandlerBlocks(source: string): string[] {

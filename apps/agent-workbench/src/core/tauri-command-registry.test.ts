@@ -142,15 +142,15 @@ describe("Tauri command registry", () => {
       .sort();
 
     expect([...registered]).toEqual(wired);
-    expect(registered.size).toBe(69);
+    expect(registered.size).toBe(88);
   });
 
-  it("keeps the B6.4 surface: 69 registered commands plus 4 registered-first entries", () => {
+  it("keeps the B6.4 surface: 88 registered commands plus 4 registered-first entries", () => {
     const wired = REGISTERED_TAURI_COMMANDS.filter(shouldHaveTauriRegistration);
     const pending = REGISTERED_TAURI_COMMANDS.filter((entry) => !shouldHaveTauriRegistration(entry));
 
-    expect(REGISTERED_TAURI_COMMANDS).toHaveLength(73);
-    expect(wired).toHaveLength(69);
+    expect(REGISTERED_TAURI_COMMANDS).toHaveLength(92);
+    expect(wired).toHaveLength(88);
     expect(pending).toHaveLength(4);
     expect(pending.map((entry) => entry.command).sort()).toEqual([
       "append_session_messages",
@@ -221,7 +221,7 @@ describe("Tauri command registry", () => {
       scripts: Record<string, string>;
     };
 
-    expect(pkg.workspaces).toHaveLength(8);
+    expect(pkg.workspaces).toHaveLength(10);
     for (const workspace of pkg.workspaces) {
       expect(workspace).toMatch(/^(apps|packages)\//);
     }
@@ -251,7 +251,7 @@ describe("Tauri command registry", () => {
   it("does not expose unsupported or not-wired entries as fully wired product capabilities", () => {
     const productCommands = REGISTERED_TAURI_COMMANDS.filter(isProductCapabilityCommand);
 
-    expect(productCommands).toHaveLength(69);
+    expect(productCommands).toHaveLength(88);
     expect(productCommands.every((entry) => commandCapabilityStatus(entry) !== UNSUPPORTED_CODE)).toBe(true);
     expect(productCommands.every((entry) => commandCapabilityStatus(entry) !== BACKEND_NOT_WIRED_CODE)).toBe(true);
     expect(productCommands.every((entry) => entry.status === "implemented")).toBe(true);

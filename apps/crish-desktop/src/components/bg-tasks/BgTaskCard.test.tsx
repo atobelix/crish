@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * BgTaskCard 测试（T-AB-20）：任务卡片四态渲染（running / completed / failed / killed）
  * 与资源快照缺失容忍；prompt 高亮条件；疑似卡死标记；日志尾部展开。

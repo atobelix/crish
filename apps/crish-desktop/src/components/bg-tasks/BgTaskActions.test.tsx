@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * BgTaskActions 测试（T-AB-20）：kill 二次确认 + KillResult 三态反馈渲染；
  * send_input 输入框调用契约（appendNewline 默认 true）；prompt 推荐输入预填。
