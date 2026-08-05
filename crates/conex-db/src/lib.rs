@@ -10,6 +10,7 @@
 //! - [`events`]：events 表读写与会话级 sequence 取号
 //! - [`runs`]：run 生命周期 / pending_inputs / RunStatus / run 级 usage 落库
 //! - [`import`]：localStorage 历史数据一次性导入
+//! - [`explore_docs_quota_store`]：探索类文档配额 session_meta 存储（C5 后端）
 //!
 //! 对外公共面由本文件原样 re-export，签名与既有调用方（orchestrator /
 //! agent-workbench / 迁移测试 / upgrade_e2e）保持兼容。
@@ -17,6 +18,7 @@
 mod agents;
 mod error;
 mod events;
+mod explore_docs_quota_store;
 mod import;
 mod messages;
 mod migrate;
@@ -26,6 +28,7 @@ mod sessions;
 
 pub use error::{DbFailure, DbFailureKind};
 pub use events::StoredEvent;
+pub use explore_docs_quota_store::SessionMetaExploreDocsQuotaStore;
 pub use runs::{ParseRunStatusError, PendingInput, RunStatus, StoredRun};
 
 use rusqlite::Connection;
