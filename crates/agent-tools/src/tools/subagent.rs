@@ -3163,14 +3163,22 @@ mod tests {
         // 子代理 run 的写类调用（shell_command 需审批形态）经 ctx.ask
         // 接线面（引擎侧由 ApprovalChannel → ApprovalGate 实现）产生审批
         // 请求；放行后继续执行（命令失败非致命，本测试只断言审批记录）。
-        // 审计修复（T-3 预检高严重度）：原用例真实执行 `git push --force
-        // origin main`——mock 上下文 cwd 为仓库根，存在真实强推与网络依赖
-        // 隐患；改为同形态写类命令（重定向写文件），审批挂靠语义不变。
+        // 审计修复（T-3 预检高严重度）：原用例在 mock 上下文（cwd 默认
+        // 仓库根）真实执行 `git push --force origin main`——存在真实强推
+        // 与网络依赖隐患；改为在**临时目录**执行同形态写类命令：临时目录
+        // 非 git 仓库，命令必然快速失败但审批挂靠语义不变（测试只断言
+        // 审批记录与 exitCode 存在，不关心成败）。
         let recorder = RecordingAskChannel::allowing();
         let mut ctx = create_mock_tool_context();
+        let probe_dir = std::env::temp_dir().join(format!(
+            "ask_probe_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&probe_dir).ok();
+        ctx.workspace_root = probe_dir;
         ctx.ask = Some(Arc::new(recorder.clone()) as AskCallback);
         let tool = ShellCommandTool::new(30_000, 200_000, None);
-        let command = "echo hello > ask_probe.txt";
+        let command = "git push --force origin main";
         let out = tool
             .execute(
                 &ctx,
