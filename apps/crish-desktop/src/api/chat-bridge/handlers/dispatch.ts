@@ -67,6 +67,7 @@ import {
   onTaskKilled,
   onTimerFired,
   onTimerCancelled,
+  onCronFired,
 } from './taskEventHandlers';
 
 export type EngineHandler<ET extends EngineEventType> = (
@@ -128,6 +129,8 @@ export const engineDispatchTable: {
   // 定时器域两事件（F6 T-CF-04 数据面；唤醒走 steering 面，前端显式空实现）
   'timer-fired': onTimerFired,
   'timer-cancelled': onTimerCancelled,
+  // Cron 域（F9 T-CF-08 数据面；唤醒走 steering 面，前端显式空实现）
+  'cron-fired': onCronFired,
 };
 
 type LegacyHandler = (env: HandlerEnv, envelope: LegacyEnvelope) => void;

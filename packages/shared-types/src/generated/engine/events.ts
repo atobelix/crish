@@ -344,9 +344,19 @@ export interface EngineTimerCancelledEvent {
   cancelledAtMs: number;
 }
 
-export type EngineEvent = EngineAgentStartEvent | EngineAgentEndEvent | EngineTurnStartEvent | EngineTurnEndEvent | EngineMessageStartEvent | EngineMessageDeltaEvent | EngineMessageEndEvent | EngineToolStartEvent | EngineToolUpdateEvent | EngineToolEndEvent | EngineToolBatchStartEvent | EngineToolBatchEndEvent | EngineToolInputRepairedEvent | EngineContextCompressionStartEvent | EngineContextCompressionEndEvent | EngineProviderDiagnosticEvent | EngineRuntimeErrorEvent | EngineRuntimeSteeringEvent | EngineRuntimeInterventionRequiredEvent | EngineApprovalRequestedEvent | EngineApprovalResolvedEvent | EngineCheckpointCreatedEvent | EngineCheckpointRestoredEvent | EngineRunTerminalEvent | EngineCacheStatsUpdatedEvent | EngineCacheWasteAlertEvent | EngineColdCacheWarningEvent | EngineSecurityAuditEvent | EngineSubagentStartedEvent | EngineSubagentEventEvent | EngineSubagentEndedEvent | EngineTaskStartedEvent | EngineTaskOutputEvent | EngineTaskHeartbeatEvent | EngineTaskSuspiciousEvent | EngineTaskCompletedEvent | EngineTaskFailedEvent | EngineTaskKilledEvent | EngineTimerFiredEvent | EngineTimerCancelledEvent;
+export interface EngineCronFiredEvent {
+  type: "cron-fired";
+  sessionId: string;
+  cronId: string;
+  prompt: string;
+  expression: string;
+  iteration: number;
+  firedAtMs: number;
+}
 
-export const ENGINE_EVENT_TYPES = ["agent-start","agent-end","turn-start","turn-end","message-start","message-delta","message-end","tool-start","tool-update","tool-end","tool-batch-start","tool-batch-end","tool-input-repaired","context-compression-start","context-compression-end","provider-diagnostic","runtime-error","runtime-steering","runtime-intervention-required","approval-requested","approval-resolved","checkpoint-created","checkpoint-restored","run-terminal","cache-stats-updated","cache-waste-alert","cold-cache-warning","security-audit","subagent-started","subagent-event","subagent-ended","task-started","task-output","task-heartbeat","task-suspicious","task-completed","task-failed","task-killed","timer-fired","timer-cancelled"] as const;
+export type EngineEvent = EngineAgentStartEvent | EngineAgentEndEvent | EngineTurnStartEvent | EngineTurnEndEvent | EngineMessageStartEvent | EngineMessageDeltaEvent | EngineMessageEndEvent | EngineToolStartEvent | EngineToolUpdateEvent | EngineToolEndEvent | EngineToolBatchStartEvent | EngineToolBatchEndEvent | EngineToolInputRepairedEvent | EngineContextCompressionStartEvent | EngineContextCompressionEndEvent | EngineProviderDiagnosticEvent | EngineRuntimeErrorEvent | EngineRuntimeSteeringEvent | EngineRuntimeInterventionRequiredEvent | EngineApprovalRequestedEvent | EngineApprovalResolvedEvent | EngineCheckpointCreatedEvent | EngineCheckpointRestoredEvent | EngineRunTerminalEvent | EngineCacheStatsUpdatedEvent | EngineCacheWasteAlertEvent | EngineColdCacheWarningEvent | EngineSecurityAuditEvent | EngineSubagentStartedEvent | EngineSubagentEventEvent | EngineSubagentEndedEvent | EngineTaskStartedEvent | EngineTaskOutputEvent | EngineTaskHeartbeatEvent | EngineTaskSuspiciousEvent | EngineTaskCompletedEvent | EngineTaskFailedEvent | EngineTaskKilledEvent | EngineTimerFiredEvent | EngineTimerCancelledEvent | EngineCronFiredEvent;
+
+export const ENGINE_EVENT_TYPES = ["agent-start","agent-end","turn-start","turn-end","message-start","message-delta","message-end","tool-start","tool-update","tool-end","tool-batch-start","tool-batch-end","tool-input-repaired","context-compression-start","context-compression-end","provider-diagnostic","runtime-error","runtime-steering","runtime-intervention-required","approval-requested","approval-resolved","checkpoint-created","checkpoint-restored","run-terminal","cache-stats-updated","cache-waste-alert","cold-cache-warning","security-audit","subagent-started","subagent-event","subagent-ended","task-started","task-output","task-heartbeat","task-suspicious","task-completed","task-failed","task-killed","timer-fired","timer-cancelled","cron-fired"] as const;
 export type EngineEventType = (typeof ENGINE_EVENT_TYPES)[number];
 
 export const ENGINE_EVENT_BACKPRESSURE = {
@@ -389,7 +399,8 @@ export const ENGINE_EVENT_BACKPRESSURE = {
   "task-failed": "critical",
   "task-killed": "critical",
   "timer-fired": "critical",
-  "timer-cancelled": "soft"
+  "timer-cancelled": "soft",
+  "cron-fired": "critical"
 } as const;
 export type EngineEventBackpressure = (typeof ENGINE_EVENT_BACKPRESSURE)[EngineEventType];
 

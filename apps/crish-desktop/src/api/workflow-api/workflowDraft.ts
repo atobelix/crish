@@ -83,7 +83,6 @@ export const WORKFLOW_SCHEDULE_PRESETS: WorkflowSchedulePreset[] = [
   },
 ];
 
-/** 调度能力说明（无文件监听等 OS 级触发） */
 export const WORKFLOW_SCHEDULE_CAPABILITY_NOTE =
   '当前引擎调度类型：手动、每天、间隔分钟。文件变更（fileWatch）/ Git 推送等触发需引擎侧支持，客户端不会独立监听磁盘或远程仓库；可用「间隔分钟」软轮询近似。';
 
@@ -98,6 +97,8 @@ export const WORKFLOW_SCHEDULE_PLANNED_TYPES = [
     hint: '需引擎 file watcher；当前请用间隔分钟软轮询代替',
   },
 ];
+
+/** 名称/说明含「监听类」关键词时的软提示（非真实 file watcher） */
 
 /** 名称/说明含「监听类」关键词时的软提示（非真实 file watcher） */
 const WATCH_HINT_RE =

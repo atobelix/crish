@@ -2,33 +2,14 @@
  * 引擎 workflow 调度与触发配置管理
  */
 
-export type {
-  WorkflowScheduleType,
-  WorkflowScheduleDraft,
-  WorkflowSchedulePreset,
-  WorkflowJobsEmptyKind,
-} from './workflowDraft';
-
-export {
-  WORKFLOW_SCHEDULE_TYPES,
-  WORKFLOW_SCHEDULE_PRESETS,
-  WORKFLOW_SCHEDULE_CAPABILITY_NOTE,
-  WORKFLOW_SCHEDULE_PLANNED_TYPES,
-  WORKFLOW_JOBS_EMPTY_LABELS,
-  watchTriggerHint,
-  workflowJobsEmptyLabel,
-  resolveWorkflowJobsEmptyCopy,
-  workflowEnabledLabel,
-  validateWorkflowDraft,
-  emptyWorkflowDraft,
-  buildScheduleFromDraft,
-} from './workflowDraft';
-
-/** 与 daemon WorkflowSchedule 对齐（引擎仅 manual / daily / intervalMinutes） */
+/** 与 daemon WorkflowSchedule 对齐（引擎 manual / daily / intervalMinutes；
+ * T-CF-14 起 cron 5 字段表达式亦可下发——前端校验通过即放行，Rust 侧
+ * parse_cron 二次校验，失败返回 Rust 侧真实错误文案） */
 export type WorkflowSchedule =
   | { type: 'manual' }
   | { type: 'daily'; time: string; timezone: string }
-  | { type: 'intervalMinutes'; intervalMinutes: number };
+  | { type: 'intervalMinutes'; intervalMinutes: number }
+  | { type: 'cron'; expression: string };
 
 /** 默认每日时刻（与 empty draft / 引擎展示一致） */
 export const DEFAULT_DAILY_TIME = '09:00';
@@ -185,7 +166,8 @@ export type CronValidationResult =
   | { ok: false; error: string };
 
 /**
- * 校验标准 5 字段 cron 表达式（展示/守卫用；引擎当前不下发 cron）。
+ * 校验标准 5 字段 cron 表达式（展示/守卫用；T-CF-14 起表达式合法即可下发，
+ * 本校验器保留作前端双重校验的第一道，第二道是 Rust 侧 parse_cron）。
  * 拒绝空串、秒级 6 字段、命名月/周、以及越界字段。
  */
 export function validateCronExpression(expr: unknown): CronValidationResult {
@@ -261,8 +243,9 @@ export function defaultTimezone(): string {
 }
 
 /**
- * 守卫坏调度：仅放行引擎支持的 manual / daily / intervalMinutes。
- * cron 即使表达式合法也拒绝下发（引擎未支持），返回中文错误。
+ * 守卫坏调度：放行引擎支持的 manual / daily / intervalMinutes / cron。
+ * cron 表达式合法即放行（原样下发；Rust 侧 parse_cron 二次校验，失败
+ * 返回 Rust 侧真实错误文案——前端校验器保留作双重校验的第一道）。
  */
 export function validateWorkflowSchedule(
   raw: unknown
@@ -326,11 +309,8 @@ export function validateWorkflowSchedule(
     if (cv.ok === false) {
       return { ok: false, error: cv.error };
     }
-    // 表达式合法但引擎不下发
-    return {
-      ok: false,
-      error: '引擎暂不支持 cron 调度，请改用「每天」或「间隔分钟」',
-    };
+    // 表达式合法即可下发（T-CF-14 解除拒绝；Rust 侧 parse_cron 兜底）
+    return { ok: true, schedule: { type: 'cron', expression: cv.expression } };
   }
 
   if (t === 'weekly' || t === 'fileWatch' || t === 'onFileChange') {

@@ -34,8 +34,8 @@ describe('commandManifest', () => {
       // PE-07：T07.3（git_run/fs_delete_file）+ T07.4（profile_apply/secret_reveal）已接线
       // P3 步骤 5（C7 ③）：catalog_get / catalog_refresh 已接线
       // F3（T-AB-19）：workbench_send_input 已接线
-      expect(registered).toBe(75);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(79);
+      expect(registered).toBe(81);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(85);
     });
 
     it('命令名唯一', () => {

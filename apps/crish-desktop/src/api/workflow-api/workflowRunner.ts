@@ -1,11 +1,14 @@
 /**
  * 引擎 workflow 执行与运行状态管理。
  *
- * T03.7：Tauri 下无 workflow 引擎（list/create/update/delete/trigger-workflow、
- * list-workflow-runs 均为幽灵命令，Rust 侧无）——运行类函数显式不可用
- * （返回空表 / ok:false），纯助手（标题、文案、状态标签）保留。
+ * T-CF-14：六条 Rust 命令已实装（create-workflow / list-workflows /
+ * update-workflow / delete-workflow / trigger-workflow / list-workflow-runs），
+ * 本模块从「幽灵声明（恒不可用）」改为真实 invokeCmd IPC——保留 TS 类型面
+ * 与解析层，只换实现。非 Tauri 环境 / 命令缺失时 invokeCmd 返回 null，
+ * 按「不可用」降级（错误在 Rust 侧以 CoreError {kind, detail} 返回）。
  */
 
+import { invokeCmd, invokeResult } from '../tauriInvoke';
 import type { WorkflowSchedule } from './workflowScheduler';
 
 export type WorkflowDefinition = {
@@ -23,24 +26,86 @@ export type WorkflowDefinition = {
   [key: string]: unknown;
 };
 
-/** T03.7：无 workflow 引擎，恒返回空表（显式不可用） */
-export async function listWorkflows(): Promise<WorkflowDefinition[]> {
-  return [];
+/** Rust 侧 wire 形状（camelCase；与 WorkflowDefinition 同构） */
+type WorkflowWire = {
+  id: string;
+  name: string;
+  prompt: string;
+  cwd?: string | null;
+  mode?: string | null;
+  enabled: boolean;
+  schedule?: WorkflowSchedule;
+  createdAt: string;
+  updatedAt: string;
+  nextRunAt?: string | null;
+  lastRunAt?: string | null;
+};
+
+/** create / update 响应（wire：{ workflow }） */
+type WorkflowMutationWire = { workflow?: WorkflowWire };
+
+/** 解析 wire 条目 → WorkflowDefinition（可空字段归一） */
+function parseWorkflowWire(raw: WorkflowWire | null | undefined): WorkflowDefinition | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const w = raw as Record<string, unknown>;
+  const out: WorkflowDefinition = {
+    id: String(w.id ?? ''),
+    name: String(w.name ?? ''),
+    prompt: String(w.prompt ?? ''),
+    enabled: w.enabled !== false,
+  };
+  if (w.cwd != null) out.cwd = String(w.cwd);
+  if (w.mode != null) out.mode = String(w.mode);
+  if (w.schedule != null) out.schedule = w.schedule as WorkflowSchedule;
+  for (const key of ['createdAt', 'updatedAt', 'nextRunAt', 'lastRunAt'] as const) {
+    if (w[key] != null) out[key] = String(w[key]);
+  }
+  return out;
 }
 
-export async function createWorkflow(_input: {
+/** 解析 wire 列表 → WorkflowDefinition 列表（非法载荷降级为空表） */
+function parseWorkflowList(raw: unknown): WorkflowDefinition[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => parseWorkflowWire(item as WorkflowWire))
+    .filter((w): w is WorkflowDefinition => w !== undefined);
+}
+
+/** 列表：真实读 list-workflows（缺失/失败降级空表，与旧恒空语义兼容） */
+export async function listWorkflows(): Promise<WorkflowDefinition[]> {
+  const data = await invokeCmd<WorkflowWire[]>('list-workflows');
+  return parseWorkflowList(data);
+}
+
+/** 创建：真实走 create-workflow 命令 */
+export async function createWorkflow(input: {
   name: string;
   prompt: string;
   schedule?: WorkflowSchedule;
   cwd?: string;
   enabled?: boolean;
 }): Promise<{ ok: boolean; workflow?: WorkflowDefinition; error?: string }> {
-  return { ok: false, error: '引擎不支持 workflow（create-workflow 不可用）' };
+  const data = await invokeCmd<WorkflowMutationWire>('create-workflow', {
+    name: input.name,
+    prompt: input.prompt,
+    schedule: input.schedule,
+    ...(input.cwd !== undefined && { cwd: input.cwd }),
+    ...(input.enabled !== undefined && { enabled: input.enabled }),
+  });
+  if (!data) {
+    return { ok: false, error: '引擎 workflow 命令不可用（引擎未就绪或未接线）' };
+  }
+  const workflow = parseWorkflowWire(data.workflow);
+  if (!workflow) {
+    return { ok: false, error: '创建失败：引擎返回了无效的 workflow 数据' };
+  }
+  return { ok: true, workflow };
 }
 
+/** 更新：真实走 update-workflow 命令（部分字段补丁） */
 export async function updateWorkflow(
-  _workflowId: string,
-  _patch: {
+  workflowId: string,
+  patch: {
     name?: string;
     prompt?: string;
     schedule?: WorkflowSchedule;
@@ -48,24 +113,58 @@ export async function updateWorkflow(
     cwd?: string;
   }
 ): Promise<{ ok: boolean; workflow?: WorkflowDefinition; error?: string }> {
-  return { ok: false, error: '引擎不支持 workflow（update-workflow 不可用）' };
+  const data = await invokeCmd<WorkflowMutationWire>('update-workflow', {
+    workflowId,
+    ...(patch.name !== undefined && { name: patch.name }),
+    ...(patch.prompt !== undefined && { prompt: patch.prompt }),
+    ...(patch.schedule !== undefined && { schedule: patch.schedule }),
+    ...(patch.enabled !== undefined && { enabled: patch.enabled }),
+    ...(patch.cwd !== undefined && { cwd: patch.cwd }),
+  });
+  if (!data) {
+    return { ok: false, error: '引擎 workflow 命令不可用（引擎未就绪或未接线）' };
+  }
+  const workflow = parseWorkflowWire(data.workflow);
+  if (!workflow) {
+    return { ok: false, error: '更新失败：引擎返回了无效的 workflow 数据' };
+  }
+  return { ok: true, workflow };
 }
 
+/** 删除：真实走 delete-workflow 命令（成功返回 null，须用三态 invokeResult
+ *  区分成败——invokeCmd 会把成功 null 与失败 null 混为一谈） */
 export async function deleteWorkflow(
-  _workflowId: string
+  workflowId: string
 ): Promise<{ ok: boolean; error?: string }> {
-  return { ok: false, error: '引擎不支持 workflow（delete-workflow 不可用）' };
+  const res = await invokeResult<null>('delete-workflow', { workflowId });
+  if (res.status === 'ok') return { ok: true };
+  const message =
+    res.status === 'missing'
+      ? '引擎 workflow 命令不可用（引擎未就绪或未接线）'
+      : res.message || '删除失败';
+  return { ok: false, error: message };
 }
 
+/** 立即触发：真实走 trigger-workflow 命令（runId/sessionId 由引擎触发路径产出） */
 export async function triggerWorkflow(
-  _workflowId: string
+  workflowId: string
 ): Promise<{
   ok: boolean;
   error?: string;
   runId?: string;
   sessionId?: string;
 }> {
-  return { ok: false, error: '引擎不支持 workflow（trigger-workflow 不可用）' };
+  const data = await invokeCmd<{ runId?: string | null; sessionId?: string | null }>(
+    'trigger-workflow',
+    { workflowId }
+  );
+  if (!data) {
+    return { ok: false, error: '引擎 workflow 命令不可用（引擎未就绪或未接线）' };
+  }
+  const out: { ok: boolean; runId?: string; sessionId?: string } = { ok: true };
+  if (data.runId) out.runId = data.runId;
+  if (data.sessionId) out.sessionId = data.sessionId;
+  return out;
 }
 
 /** 引擎 workflow 运行历史 */
@@ -79,11 +178,15 @@ export type WorkflowRunEntry = {
   error?: string | undefined;
 };
 
-/** T03.7：无 workflow 引擎，恒返回空表（显式不可用） */
+/** 运行历史：真实读 list-workflow-runs（可按 workflowId 过滤；缺失降级空表） */
 export async function listWorkflowRuns(
-  _workflowId?: string
+  workflowId?: string
 ): Promise<WorkflowRunEntry[]> {
-  return [];
+  const data = await invokeCmd<WorkflowRunEntry[]>('list-workflow-runs', {
+    ...(workflowId !== undefined && { workflowId }),
+  });
+  if (!Array.isArray(data)) return [];
+  return data;
 }
 
 export function workflowRunStatusLabel(status?: string): string {

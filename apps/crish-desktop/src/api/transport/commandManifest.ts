@@ -142,6 +142,14 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     // ── 模型目录（P3 步骤 5：catalog_get / catalog_refresh；C7 三处登记 ③）──
     entry('catalog_get', 'core', 'engine'),
     entry('catalog_refresh', 'core', 'engine'),
+    // ── workflow 域六条（F9 T-CF-14：命令实装 + 前端去幽灵化；Rust 侧
+    //    manifest 88 = 注册面 84 + 登记先行 4 的镜像同步）──
+    entry('create_workflow', 'workflow', 'engine'),
+    entry('list_workflows', 'workflow', 'engine'),
+    entry('update_workflow', 'workflow', 'engine'),
+    entry('delete_workflow', 'workflow', 'engine'),
+    entry('trigger_workflow', 'workflow', 'engine'),
+    entry('list_workflow_runs', 'workflow', 'engine'),
     // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
     // PE-07 T07.4：config_profile_apply / config_secret_reveal 已接线（registered=true）
     entry('append_session_messages', 'session', 'engine', false),

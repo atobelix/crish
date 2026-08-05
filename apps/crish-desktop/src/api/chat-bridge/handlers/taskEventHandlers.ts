@@ -70,4 +70,10 @@ export function onTimerCancelled(
   _envelope: EngineEnvelope<'timer-cancelled'>
 ): void {}
 
+/** Cron 域（F9 T-CF-08）：数据面显式空实现（唤醒走 steering 面） */
+export function onCronFired(
+  _env: HandlerEnv,
+  _envelope: EngineEnvelope<'cron-fired'>
+): void {}
+
 export { resolveRunId };
