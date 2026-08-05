@@ -47,6 +47,7 @@ mod perf;
 mod power;
 mod process;
 mod pty;
+mod resource;
 mod session_commands;
 mod status_diagnostics;
 mod workspace;
@@ -82,6 +83,9 @@ command_registry![
     ("workbench_list_background_tasks", background::workbench_list_background_tasks),
     ("workbench_get_background_task_output", background::workbench_get_background_task_output),
     ("workbench_cancel_background_task", background::workbench_cancel_background_task),
+    // T-AB-20：后台任务 stdin 注入（sendBackgroundTaskInput 等待的命令面；
+    // F3 T-AB-19 顺手注册，参数 camelCase taskId/text/appendNewline）
+    ("workbench_send_input", background::workbench_send_input),
     // PE-07 T07.3（C-02/C-03/C-04）：git 参数数组执行 + 参数 schema 白名单
     ("workbench_git_run", git::workbench_git_run),
     ("workbench_fs_delete_file", fs_commands::workbench_fs_delete_file),

@@ -32,6 +32,10 @@ use std::time::Duration;
 
 use agent_provider::request::build_system_prompt;
 use agent_tools::audit::{AuditSink, SecurityAuditSink};
+use agent_tools::background::{
+    BackgroundAdoptRequest, BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskRef, TaskState,
+};
+use agent_tools::definition::ToolError;
 use conex_db::LocalDb;
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision as WireApprovalDecision, PermissionRequest,
@@ -56,7 +60,7 @@ use session_loop::{
 
 use crate::core_error::CoreError;
 use crate::core_event_bridge::{EmitReport, EventBridge};
-use crate::core_query_commands::{RestoreStatus, RunUsage, SnapshotStatus};
+use crate::core_query_commands::{BackgroundTasksSummary, RestoreStatus, RunUsage, SnapshotStatus};
 use crate::engine::{BridgeDeltaSink, BufferedRunEventBridge, EngineHandle, SessionLoopProducer};
 use crate::status_diagnostics::StatusDiagnostics;
 
@@ -740,6 +744,296 @@ fn assemble_context_budget(context_window: u32) -> ContextBudget {
     }
 }
 
+// ── T-AB-19：run 感知后台任务管理器（owner_run_id 注入装饰器）────
+
+/// run 感知后台任务管理器（T-AB-19 装饰器，包壳 [BackgroundTaskManager]）
+///
+/// 职责（方案 §7.4 T-AB-19 第 1/3 点）：
+/// - **owner_run_id 注入**：工具执行链的 adopt 调用点（agent-tools
+///   shell.rs:1088）构造请求时 `owner_run_id` 恒 None——本装饰器在请求
+///   进入注册表前注入「当前 run 上下文」的 runId（审计与过滤用，不级联
+///   杀）；请求已显式携带（非 None）时透传不改写；
+/// - **L3 可选联动**：`graceful_stop_tasks_for_run`——对指定 run 的普通
+///   任务（is_daemon=false）发起优雅终止（两阶段 kill）；默认不联动，
+///   仅 `core_run_control` L3 force 且配置项开启时调用；
+/// - **状态汇总查询面**：`summary`——core_get_status.backgroundTasks 数据源。
+///
+/// 上下文约定：run 开始（[core_run_task]）→ `set_current_run(run_id)`；
+/// run 终态（[drive_run_loop] 收口 / [finalize_failed]）→
+/// `clear_current_run(run_id)`（仅清匹配者）。**不清理注册表、不级联杀
+/// 任务**——任务属会话级，registry 生命周期独立于 run（T-AB-12 只读
+/// 契约升级为显式收口契约，run_end_* 测试锚定）。
+///
+/// 诚实边界：引擎与注册表均为进程内单例，装饰器维护「最近启动的 run」
+/// 单一上下文槽；多会话并发 run 时以最近启动者为准（owner_run_id 是
+/// 审计元数据粒度，不参与生命周期决策，误差不产生行为差异）。
+#[derive(Debug)]
+pub(crate) struct RunAwareBackgroundManager {
+    /// 被包壳的注册表（None = 未接线，测试环境；adopt/list 等返回
+    /// 工具未接线错误，生产路径恒 Some）
+    inner: Option<Arc<dyn BackgroundTaskManager>>,
+    /// 当前 run 上下文（owner_run_id 注入槽；std Mutex 不跨 await 持有）
+    current_run_id: Mutex<Option<String>>,
+}
+
+impl RunAwareBackgroundManager {
+    /// 新建装饰器（包壳 main.rs 注入的注册表）
+    pub(crate) fn new(inner: Option<Arc<dyn BackgroundTaskManager>>) -> Self {
+        Self {
+            inner,
+            current_run_id: Mutex::new(None),
+        }
+    }
+
+    /// run 启动：登记当前 run 上下文（[core_run_task] spawn 前调用）
+    pub(crate) fn set_current_run(&self, run_id: &str) {
+        *self
+            .current_run_id
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(run_id.to_string());
+    }
+
+    /// run 终态：释放当前 run 上下文（仅清匹配者——多会话并发 run 时
+    /// 较晚启动者占槽，较早结束者不清，避免误伤仍在运行的 run）
+    pub(crate) fn clear_current_run(&self, run_id: &str) {
+        let mut slot = self
+            .current_run_id
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if slot.as_deref() == Some(run_id) {
+            *slot = None;
+        }
+    }
+
+    /// 当前 run 上下文（测试与诊断用）
+    #[cfg(test)]
+    pub(crate) fn current_run(&self) -> Option<String> {
+        self.current_run_id
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// 后台任务汇总（core_get_status.backgroundTasks 数据源）
+    ///
+    /// 口径说明（与前端状态栏 / 诊断面板展示对齐）：
+    /// - `active_count`：活跃（Running）任务数——不含终态与已归档条目；
+    /// - `daemon_count`：活跃守护进程数（is_daemon=true 且 Running）——
+    ///   与 activeCount 同口径（「守护进程仍在运行」语义）；
+    /// - `last_finished`：最近终态（全量口径取 finished_at_ms 最大；
+    ///   尚无终态任务时 None）。
+    ///
+    /// 未接线（注册表缺失）或查询失败 → 全零缺省（展示型数据，前端
+    /// 显示「无任务」而非报错）。
+    pub(crate) async fn summary(&self) -> BackgroundTasksSummary {
+        let Some(manager) = &self.inner else {
+            return BackgroundTasksSummary::default();
+        };
+        match manager.list(true).await {
+            Ok(tasks) => {
+                let mut last_finished: Option<(u64, String, String)> = None;
+                for info in &tasks {
+                    if info.status == TaskState::Running {
+                        continue;
+                    }
+                    if let Some(finished_at) = info.finished_at_ms {
+                        if last_finished
+                            .as_ref()
+                            .is_none_or(|(max_at, _, _)| finished_at > *max_at)
+                        {
+                            last_finished = Some((
+                                finished_at,
+                                info.task_id.clone(),
+                                task_state_wire_name(info.status).to_string(),
+                            ));
+                        }
+                    }
+                }
+                BackgroundTasksSummary {
+                    active_count: tasks
+                        .iter()
+                        .filter(|info| info.status == TaskState::Running)
+                        .count(),
+                    daemon_count: tasks
+                        .iter()
+                        .filter(|info| info.is_daemon && info.status == TaskState::Running)
+                        .count(),
+                    last_finished: last_finished.map(|(finished_at, task_id, status)| {
+                        crate::core_query_commands::LastTaskTerminal {
+                            task_id,
+                            status,
+                            finished_at_ms: finished_at as i64,
+                        }
+                    }),
+                }
+            }
+            Err(error) => {
+                tracing::warn!(
+                    target: "run",
+                    error = %error,
+                    "后台任务汇总查询失败（返回全零缺省）"
+                );
+                BackgroundTasksSummary::default()
+            }
+        }
+    }
+
+    /// T-AB-19 可选接线：对指定 run 的普通任务（is_daemon=false）发起
+    /// 优雅终止（注册表两阶段 kill：优雅 → 5s → 强制）。
+    ///
+    /// 默认不联动：仅 `core_run_control` L3 force 且配置项
+    /// `CONEX_RUN_CONTROL_L3_TASK_CANCEL` 开启时调用（职责单一，避免
+    /// 误杀，对齐方案 REQ 4.3）。守护任务（is_daemon=true）与其它 run
+    /// 的任务一律不碰。best-effort：单任务失败仅告警，不中断整批。
+    pub(crate) async fn graceful_stop_tasks_for_run(&self, run_id: &str) {
+        let Some(manager) = &self.inner else {
+            return;
+        };
+        let tasks = match manager.list(false).await {
+            Ok(tasks) => tasks,
+            Err(error) => {
+                tracing::warn!(
+                    target: "run",
+                    run_id,
+                    error = %error,
+                    "L3 联动：任务查询失败（跳过联动，run 强停不受影响）"
+                );
+                return;
+            }
+        };
+        for info in tasks
+            .iter()
+            .filter(|info| info.owner_run_id.as_deref() == Some(run_id) && !info.is_daemon)
+        {
+            match manager.kill(&info.task_id).await {
+                Ok(result) => {
+                    tracing::info!(
+                        target: "run",
+                        run_id,
+                        task_id = %info.task_id,
+                        kill = ?result,
+                        "L3 联动：当前 run 的普通任务已发起优雅终止"
+                    );
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        target: "run",
+                        run_id,
+                        task_id = %info.task_id,
+                        error = %error,
+                        "L3 联动：任务终止失败（best-effort 继续）"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// T-AB-19 配置项（默认关闭）：L3 force 取消时是否对「当前 run 的普通
+/// 任务（is_daemon=false）」发起优雅终止（两阶段 kill）。
+///
+/// 配置面现状：通用设置存储（config store）尚无布尔项，暂以环境变量
+/// `CONEX_RUN_CONTROL_L3_TASK_CANCEL=1` 开启（进程级配置项，登记于
+/// T-AB-19 交付说明；接入设置面板后改读设置项，默认值保持 false）。
+fn l3_force_cancel_tasks_enabled() -> bool {
+    matches!(
+        std::env::var("CONEX_RUN_CONTROL_L3_TASK_CANCEL").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes")
+    )
+}
+
+/// 任务状态 wire 名（TaskState kebab-case 序列化名；汇总面用）
+fn task_state_wire_name(state: TaskState) -> &'static str {
+    match state {
+        TaskState::Running => "running",
+        TaskState::Completed => "completed",
+        TaskState::Failed => "failed",
+        TaskState::Killed => "killed",
+    }
+}
+
+#[async_trait::async_trait]
+impl BackgroundTaskManager for RunAwareBackgroundManager {
+    /// adopt：注入 owner_run_id（工具链恒 None → 当前 run 上下文；
+    /// 显式携带时透传不改写），其余原样转发注册表。
+    async fn adopt(&self, mut req: BackgroundAdoptRequest) -> Result<BackgroundTaskRef, ToolError> {
+        if req.owner_run_id.is_none() {
+            req.owner_run_id = self
+                .current_run_id
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+        }
+        match &self.inner {
+            Some(manager) => manager.adopt(req).await,
+            None => Err(ToolError::new(
+                codes::TOOL_NOT_FOUND,
+                "后台任务注册表未接线（RunAwareBackgroundManager）",
+            )),
+        }
+    }
+
+    async fn list(&self, include_finished: bool) -> Result<Vec<BackgroundTaskInfo>, ToolError> {
+        match &self.inner {
+            Some(manager) => manager.list(include_finished).await,
+            None => Err(ToolError::new(
+                codes::TOOL_NOT_FOUND,
+                "后台任务注册表未接线（RunAwareBackgroundManager）",
+            )),
+        }
+    }
+
+    async fn status(&self, task_id: &str) -> Result<agent_tools::background::BackgroundTaskStatus, ToolError> {
+        match &self.inner {
+            Some(manager) => manager.status(task_id).await,
+            None => Err(ToolError::new(
+                codes::TOOL_NOT_FOUND,
+                "后台任务注册表未接线（RunAwareBackgroundManager）",
+            )),
+        }
+    }
+
+    async fn read_log(
+        &self,
+        task_id: &str,
+        start_line: Option<u64>,
+        max_lines: u64,
+    ) -> Result<agent_tools::background::LogSlice, ToolError> {
+        match &self.inner {
+            Some(manager) => manager.read_log(task_id, start_line, max_lines).await,
+            None => Err(ToolError::new(
+                codes::TOOL_NOT_FOUND,
+                "后台任务注册表未接线（RunAwareBackgroundManager）",
+            )),
+        }
+    }
+
+    async fn send_input(
+        &self,
+        task_id: &str,
+        text: &str,
+        append_newline: bool,
+    ) -> Result<(), ToolError> {
+        match &self.inner {
+            Some(manager) => manager.send_input(task_id, text, append_newline).await,
+            None => Err(ToolError::new(
+                codes::TOOL_NOT_FOUND,
+                "后台任务注册表未接线（RunAwareBackgroundManager）",
+            )),
+        }
+    }
+
+    async fn kill(&self, task_id: &str) -> Result<agent_tools::background::KillResult, ToolError> {
+        match &self.inner {
+            Some(manager) => manager.kill(task_id).await,
+            None => Err(ToolError::new(
+                codes::TOOL_NOT_FOUND,
+                "后台任务注册表未接线（RunAwareBackgroundManager）",
+            )),
+        }
+    }
+}
+
 // ── CoreRunState ──────────────────────────────────────────────────
 
 /// 核心运行状态（B6.4：进程内核心的共享状态）
@@ -795,6 +1089,10 @@ pub struct CoreRunState {
     /// T-29：per-session 历史缓存（P4 阶段 1-3/1-4；运行期内存态，
     /// 不落库——前端 history 为空时回退，混合路线"引擎侧缓存主"）
     session_history: SessionHistoryCache,
+    /// T-AB-19：run 感知后台任务管理器（包壳 main.rs 注入的注册表——
+    /// 工具链 adopt 的 owner_run_id 注入槽 + L3 可选联动 + 状态汇总
+    /// 查询面；引擎侧注入同一包装实例，工具执行链 adopt 走装饰器）
+    background: Arc<RunAwareBackgroundManager>,
 }
 
 impl CoreRunState {
@@ -808,10 +1106,21 @@ impl CoreRunState {
         diagnostics: Arc<StatusDiagnostics>,
         background_manager: Option<Arc<dyn agent_tools::background::BackgroundTaskManager>>,
     ) -> Self {
+        // T-AB-19：注册表包壳为 run 感知装饰器（owner_run_id 注入 + L3
+        // 可选联动 + 汇总查询面）；引擎与状态共享同一包装实例——工具执行
+        // 链 adopt（agent-tools shell.rs）经引擎注入的 trait 引用走到装饰器。
+        let background = Arc::new(RunAwareBackgroundManager::new(background_manager));
         Self {
             store: Arc::clone(&store),
             run_manager: RunManager::new(store),
-            engine: EngineHandle::new(background_manager),
+            engine: EngineHandle::new(
+                // 引擎侧注入包装实例（保持 Option 语义：未接线 = 引擎无
+                // 后台任务通道，与接线前行为一致）
+                background
+                    .inner
+                    .is_some()
+                    .then(|| Arc::clone(&background) as Arc<dyn BackgroundTaskManager>),
+            ),
             bridge,
             active_runs: Mutex::new(HashMap::new()),
             diagnostics,
@@ -832,6 +1141,7 @@ impl CoreRunState {
             restore_last_sequence: Mutex::new(None),
             snapshot_written_at: Mutex::new(None),
             session_history: SessionHistoryCache::new(),
+            background,
         }
     }
 
@@ -944,6 +1254,13 @@ impl CoreRunState {
     /// 默认 None——usage 查询回退前端估算，不阻塞其他功能。
     pub fn local_db(&self) -> Option<LocalDb> {
         self.store.as_local_db()
+    }
+
+    /// T-AB-19：后台任务汇总（core_get_status.backgroundTasks 数据源；
+    /// 活跃任务数 / 守护进程数 / 最近终态——口径见
+    /// [RunAwareBackgroundManager::summary]）
+    pub async fn background_tasks_summary(&self) -> BackgroundTasksSummary {
+        self.background.summary().await
     }
 
     /// 共享 store（查询命令 / 集成接线用）
@@ -1304,8 +1621,19 @@ async fn drive_run_loop(
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .remove(&run_id);
+    // T-AB-19 run 终态显式接线：**不清理后台任务注册表、不级联杀任务**
+    // ——任务属会话级（registry 生命周期独立于 run，T-AB-12 只读契约升级
+    // 为显式收口契约；run_end_daemon_survives / run_end_normal_task_survives
+    // _no_cascade 测试锚定）。守护任务（is_daemon=true）与普通任务在 run
+    // 终态后均持续运行、日志持续累积；会话切换同理不受影响。此处仅释放
+    // 「当前 run」上下文（owner_run_id 注入槽，供下一 run 复用）。
+    state.background.clear_current_run(&run_id);
     state.save_snapshot_now().await;
-    tracing::info!(target: "run", "drive_run_loop 收口（终态）");
+    tracing::info!(
+        target: "run",
+        run_id = %run_id,
+        "drive_run_loop 收口（终态）：后台任务注册表未清理、任务不级联杀（T-AB-19 契约）"
+    );
 }
 
 /// T-40 缓存测量收口（P5 S5 §3.2 数据流，R5-D3 轮末合并接线 ②；
@@ -1431,6 +1759,9 @@ async fn finalize_failed(state: &Arc<CoreRunState>, active: &ActiveRun, message:
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .remove(&run_id);
+    // T-AB-19 失败收口显式接线（与成功收口同一契约）：不清理后台任务
+    // 注册表、不级联杀任务——任务属会话级；仅释放「当前 run」上下文。
+    state.background.clear_current_run(&run_id);
     state.save_snapshot_now().await;
 }
 
@@ -1712,6 +2043,11 @@ pub(crate) async fn core_run_task(
     .with_cache_tracking(state.engine.cache_tracking_config())
     .with_cache_session(state.engine.cache_session(&session_id));
 
+    // T-AB-19：登记当前 run 上下文（owner_run_id 注入槽）——须在 spawn
+    // drive_run_loop 之前，保证 run 内工具执行链 adopt 时已可见；run
+    // 终态（drive_run_loop 收口 / finalize_failed）经 clear_current_run 释放。
+    state.background.set_current_run(&run_id);
+
     // 注册活动 run 并 spawn 驱动循环
     let active = Arc::new(ActiveRun {
         session_id: session_id.clone(),
@@ -1763,8 +2099,21 @@ pub(crate) async fn core_run_control(
     reason: Option<String>,
     payload: Option<serde_json::Value>,
 ) -> Result<(), CoreError> {
-    let active = active_run(state.inner(), run_id.trim())?;
-    match level.as_str() {
+    run_control_impl(state.inner(), run_id.trim(), &level, message, reason, payload).await
+}
+
+/// run 控制命令体（测试直调，不依赖 Tauri runtime；对齐 background.rs
+/// 「契约体」模式）
+pub(crate) async fn run_control_impl(
+    state: &Arc<CoreRunState>,
+    run_id: &str,
+    level: &str,
+    message: Option<String>,
+    reason: Option<String>,
+    payload: Option<serde_json::Value>,
+) -> Result<(), CoreError> {
+    let active = active_run(state, run_id)?;
+    match level {
         // L0：继续当前 run（不入队）
         "continue" => Ok(()),
         // L1：软注入（不打断流；消息入 steer / followUp 环）
@@ -1815,14 +2164,26 @@ pub(crate) async fn core_run_control(
         // L3：强停（可立即中断；AbortSignal + 总线）
         "force_cancel" => {
             active.abort_signal.abort();
-            let mut bus = active
-                .control_bus
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
-            bus.request_force_cancel(
-                Some(reason.unwrap_or_else(|| "ui-force-cancel".to_string())),
-                Some("ui".to_string()),
-            );
+            {
+                let mut bus = active
+                    .control_bus
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                bus.request_force_cancel(
+                    Some(reason.unwrap_or_else(|| "ui-force-cancel".to_string())),
+                    Some("ui".to_string()),
+                );
+            }
+            // T-AB-19 L0-L3 控制总线对接：L2 / L3 **不触碰任务**——任务属
+            // 会话级，run 控制只作用于 run 本身（职责单一，避免误杀，对齐
+            // 方案 REQ 4.3；l3_force_cancel_keeps_tasks 测试锚定）。可选联动
+            // 默认关闭（配置项 CONEX_RUN_CONTROL_L3_TASK_CANCEL，见
+            // [l3_force_cancel_tasks_enabled]）：开启时 L3 force 对「当前
+            // run 的普通任务（is_daemon=false）」发起优雅终止（两阶段 kill，
+            // best-effort，不阻断强停）。
+            if l3_force_cancel_tasks_enabled() {
+                state.background.graceful_stop_tasks_for_run(&active.run_id).await;
+            }
             Ok(())
         }
         other => Err(CoreError::invalid_input(format!("未知 level：{other}"))),
@@ -1833,6 +2194,11 @@ pub(crate) async fn core_run_control(
 
 /// 取消 run（过渡双线（03 §4.2）：IPC 模式经 run-control 单线为主，
 /// 本命令保留双线兼容——L2 协作 / L3 强制，模式回落走 RunEngine 语义）
+///
+/// T-AB-19 显式接线：取消**不清理后台任务注册表、不级联杀任务**——
+/// 任务属会话级（registry 生命周期独立于 run）；run 终态（aborted /
+/// cancelled）统一由 drive_run_loop 收口（含 owner_run_id 上下文释放），
+/// 本命令只请求取消，不做任何任务域操作。
 #[tauri::command]
 pub(crate) async fn core_cancel_run(
     state: tauri::State<'_, Arc<CoreRunState>>,
@@ -1862,7 +2228,7 @@ pub(crate) async fn core_cancel_run(
         target: "run",
         run_id = %active.run_id,
         path = ?path,
-        "core_cancel_run（终态由 drive_run_loop 收口）"
+        "core_cancel_run（终态由 drive_run_loop 收口）：后台任务注册表未清理、任务不级联杀（T-AB-19 契约）"
     );
     Ok(CancelRunResponse {
         ok: true,
@@ -2908,5 +3274,607 @@ mod tests {
         assert_eq!(decision, SecurityAuditDecision::Purged);
         assert_eq!(impact.file_count, 1);
         assert_eq!(impact.total_size_bytes, 12);
+    }
+
+    // ── T-AB-19：run 生命周期整合（owner_run_id / 守护进程 / L0-L3）────
+
+    use crate::background::BackgroundTaskRegistry;
+    use std::process::Stdio;
+    use tokio::process::Child;
+
+    /// 测试注册表序号：每个测试独占日志根（并行测试互不污染）
+    static BG_TMP_SEQ: AtomicU64 = AtomicU64::new(0);
+
+    /// L3 配置项测试串行锁：环境变量为进程级，「默认不联动」与「开启
+    /// 联动」两组测试共享锁，避免并行运行时互相污染环境变量
+    static L3_CONFIG_LOCK: Mutex<()> = Mutex::new(());
+
+    /// 测试用长运行命令（adopt 后保持 Running；20s 窗口足够测试收尾）
+    fn long_command() -> &'static str {
+        if cfg!(windows) {
+            "Start-Sleep -Seconds 20"
+        } else {
+            "sleep 20"
+        }
+    }
+
+    /// 测试用持续输出命令（每 100ms 一行，约 4s；日志增长断言用）
+    fn output_command() -> &'static str {
+        if cfg!(windows) {
+            "1..40 | ForEach-Object { Write-Output ('line ' + $_); Start-Sleep -Milliseconds 100 }"
+        } else {
+            "i=0; while [ $i -lt 40 ]; do echo line $i; i=$((i+1)); sleep 0.1; done"
+        }
+    }
+
+    /// 测试注册表（独立日志根；不启动归档循环，30 分钟保留足够）
+    fn bg_test_registry() -> Arc<BackgroundTaskRegistry> {
+        let seq = BG_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "crish-bg-run-lifecycle-{}-{seq}",
+            std::process::id()
+        ));
+        BackgroundTaskRegistry::with_log_root(root, Duration::from_secs(30 * 60))
+    }
+
+    /// 测试命令构造（PowerShell / bash 平台分支；kill_on_drop=false +
+    /// 双管道，对齐 T-AB-02 后台托管契约）
+    fn build_test_command(command: &str) -> tokio::process::Command {
+        let mut cmd = if cfg!(windows) {
+            let mut c = tokio::process::Command::new("powershell.exe");
+            c.args(["-NoProfile", "-Command", command]);
+            c
+        } else {
+            let mut c = tokio::process::Command::new("bash");
+            c.args(["-c", command]);
+            c
+        };
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(false);
+        cmd
+    }
+
+    /// 真实 spawn 测试子进程（工具执行链 spawn 语义）
+    fn spawn_test_child(command: &str) -> Child {
+        let mut cmd = build_test_command(command);
+        cmd.stdin(Stdio::null());
+        cmd.spawn().expect("spawn test child")
+    }
+
+    /// adopt 请求构造（owner_run_id 恒 None——模拟工具执行链；注入由
+    /// RunAwareBackgroundManager 装饰器完成）
+    fn adopt_request(child: Child, command: &str, is_daemon: bool) -> BackgroundAdoptRequest {
+        BackgroundAdoptRequest {
+            child,
+            command: command.to_string(),
+            cwd: PathBuf::from("."),
+            is_daemon,
+            resource_monitor: false,
+            owner_run_id: None,
+        }
+    }
+
+    #[cfg(windows)]
+    fn pid_is_alive(pid: u32) -> bool {
+        let out = std::process::Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}")])
+            .output()
+            .expect("tasklist must run");
+        String::from_utf8_lossy(&out.stdout).contains(&pid.to_string())
+    }
+
+    #[cfg(not(windows))]
+    fn pid_is_alive(pid: u32) -> bool {
+        std::process::Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+
+    /// 测试用 CoreRunState（注入包装后的真实注册表；独立快照与事件桥）
+    fn core_state_with_background(
+        store: Arc<dyn Store>,
+        registry: Arc<BackgroundTaskRegistry>,
+    ) -> Arc<CoreRunState> {
+        let (bridge, _emitter) = recording_bridge();
+        let seq = CORE_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let snapshots: Arc<dyn SnapshotStore> = Arc::new(
+            orchestrator::restore::SnapshotFileStore::new(std::env::temp_dir().join(format!(
+                "conex_core_state_{}_{seq}_snapshot.json",
+                std::process::id()
+            ))),
+        );
+        Arc::new(CoreRunState::new(
+            store,
+            snapshots,
+            bridge,
+            Arc::new(StatusDiagnostics::new()),
+            Some(Arc::clone(&registry) as Arc<dyn BackgroundTaskManager>),
+        ))
+    }
+
+    /// 便捷构造「状态 + 注册表」对（InMemoryStore 测试替身）
+    fn state_with_background() -> (Arc<CoreRunState>, Arc<BackgroundTaskRegistry>) {
+        let registry = bg_test_registry();
+        let state = core_state_with_background(Arc::new(InMemoryStore::new()), Arc::clone(&registry));
+        (state, registry)
+    }
+
+    /// 组装活动 run（测试直驱 drive_run_loop 的收口路径；装配面与
+    /// core_run_task 对齐：EventQueue / 缓冲桥 / 审批门 / 逃逸监视 None）
+    async fn build_active_run(
+        state: &CoreRunState,
+        session_id: &str,
+        run_id: &str,
+    ) -> Arc<ActiveRun> {
+        let handle = Arc::new(tokio::sync::Mutex::new(
+            state
+                .run_manager
+                .start_run(session_id, run_id)
+                .await
+                .expect("start_run"),
+        ));
+        let queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
+            state.store.clone(),
+            0,
+        )));
+        let bridge = Arc::new(BufferedRunEventBridge::new(
+            state.bridge.clone(),
+            run_id.to_string(),
+        ));
+        let broadcast_bridge = Arc::clone(&bridge);
+        let broadcast_run_id = run_id.to_string();
+        let broadcast = Box::new(move |event: AgentEvent| {
+            let envelope = AgentEventEnvelope::new(event, Some(broadcast_run_id.clone()), None);
+            broadcast_bridge.emit(&envelope);
+            broadcast_bridge.flush();
+        });
+        let approval = Arc::new(ApprovalGateImpl::new(
+            run_id.to_string(),
+            session_id.to_string(),
+            broadcast,
+            Arc::clone(&handle),
+            state.store.clone(),
+            None,
+        ));
+        Arc::new(ActiveRun {
+            session_id: session_id.to_string(),
+            run_id: run_id.to_string(),
+            handle,
+            queue,
+            control_bus: Arc::new(Mutex::new(ControlBus::new())),
+            abort_signal: AbortSignal::new(),
+            approval,
+            bridge,
+            delta_sink_active: true,
+            escape_watch: Mutex::new(None),
+        })
+    }
+
+    /// 测试生产者：返回预置收口结果（驱动 drive_run_loop 一次终态）
+    struct TestProducer {
+        outcome: RunOutcome,
+    }
+
+    #[async_trait::async_trait]
+    impl RunProducer for TestProducer {
+        async fn produce(&mut self) -> RunOutcome {
+            std::mem::replace(&mut self.outcome, canned_outcome())
+        }
+    }
+
+    /// 预置收口结果（Stop 正常收口；事件流为空，仅 run-terminal）
+    fn canned_outcome() -> RunOutcome {
+        RunOutcome {
+            reason: AgentEndReason::Stop,
+            error: None,
+            diagnostic: None,
+            messages: vec![Arc::new(amsg(
+                "u1",
+                AgentMessageRole::User,
+                vec![text_block("run 终态测试")],
+            ))],
+            events: Vec::new(),
+            turn_index: 0,
+            tool_call_count: 0,
+            steering_count: 0,
+            cache_stats: None,
+        }
+    }
+
+    /// 轮询至任务终态（窗口内未到则 panic）
+    async fn wait_task_terminal(
+        registry: &BackgroundTaskRegistry,
+        task_id: &str,
+        window: Duration,
+    ) {
+        let deadline = tokio::time::Instant::now() + window;
+        loop {
+            let status = registry.status(task_id).await.expect("status");
+            if status.status != TaskState::Running {
+                return;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "任务 {task_id} 未在窗口内进入终态"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    /// T-AB-19 验收：工具执行链 adopt 后 `owner_run_id` 等于当前 runId——
+    /// 装饰器在请求进入注册表前注入「当前 run 上下文」；无上下文恒 None
+    /// （现状兜底）；显式携带透传不改写；run 终态清除上下文后回到 None。
+    #[tokio::test]
+    async fn adopt_records_owner_run() {
+        let (state, registry) = state_with_background();
+
+        // run 上下文未设置 → 恒 None（未注入路径兜底）
+        let child = spawn_test_child(long_command());
+        let r0 = state
+            .background
+            .adopt(adopt_request(child, "no-run", false))
+            .await
+            .expect("adopt");
+        let listed = registry.list(true).await.expect("list");
+        let i0 = listed.iter().find(|i| i.task_id == r0.task_id).unwrap();
+        assert_eq!(i0.owner_run_id, None, "无 run 上下文不得注入");
+
+        // 工具执行链语义：run 开始登记上下文 → adopt（owner_run_id 恒
+        // None）→ 注入当前 runId
+        state.background.set_current_run("run-owner-1");
+        let child = spawn_test_child(long_command());
+        let r1 = state
+            .background
+            .adopt(adopt_request(child, "in-run", false))
+            .await
+            .expect("adopt");
+        let listed = registry.list(true).await.expect("list");
+        let i1 = listed.iter().find(|i| i.task_id == r1.task_id).unwrap();
+        assert_eq!(
+            i1.owner_run_id.as_deref(),
+            Some("run-owner-1"),
+            "adopt 后 owner_run_id 必须等于当前 runId"
+        );
+
+        // 显式携带（非 None）→ 透传不改写
+        let child = spawn_test_child(long_command());
+        let mut req = adopt_request(child, "explicit", false);
+        req.owner_run_id = Some("run-other".to_string());
+        let r2 = state.background.adopt(req).await.expect("adopt");
+        let listed = registry.list(true).await.expect("list");
+        let i2 = listed.iter().find(|i| i.task_id == r2.task_id).unwrap();
+        assert_eq!(i2.owner_run_id.as_deref(), Some("run-other"), "显式携带不得被覆盖");
+
+        // run 终态（收口路径清除上下文）→ 后续 adopt 回到 None
+        state.background.clear_current_run("run-owner-1");
+        assert_eq!(state.background.current_run(), None, "run 终态应释放上下文");
+        let child = spawn_test_child(long_command());
+        let r3 = state
+            .background
+            .adopt(adopt_request(child, "after-run", false))
+            .await
+            .expect("adopt");
+        let listed = registry.list(true).await.expect("list");
+        let i3 = listed.iter().find(|i| i.task_id == r3.task_id).unwrap();
+        assert_eq!(i3.owner_run_id, None, "run 终态后 adopt 不得注入旧 runId");
+
+        // 清理
+        for r in [r0, r1, r2, r3] {
+            let _ = registry.kill(&r.task_id).await;
+        }
+    }
+
+    /// T-AB-19 验收：守护进程任务（is_daemon=true）在 run 终态后存活
+    /// 且日志持续累积（run 终态 → 任务存活 → 日志增长，端到端收口路径）
+    #[tokio::test]
+    async fn run_end_daemon_survives() {
+        let (state, registry) = state_with_background();
+        state.background.set_current_run("run-daemon-1");
+        let child = spawn_test_child(output_command());
+        let pid = child.id().expect("spawned pid");
+        let adopted = state
+            .background
+            .adopt(adopt_request(child, "run-daemon", true))
+            .await
+            .expect("adopt");
+
+        // 等首行输出（转发器就位，日志已开始累积）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(8);
+        loop {
+            let status = registry.status(&adopted.task_id).await.expect("status");
+            if status.line_count > 0 {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "守护任务迟迟无输出"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        // 驱动 run 终态（真实 drive_run_loop 收口路径）
+        let active = build_active_run(&state, "s1", "run-daemon-1").await;
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("run-daemon-1".to_string(), Arc::clone(&active));
+        drive_run_loop(
+            Arc::clone(&state),
+            Arc::clone(&active),
+            Box::new(TestProducer {
+                outcome: canned_outcome(),
+            }),
+        )
+        .await;
+
+        // run 终态后：任务存活（Running、pid 存活）+ 日志持续累积
+        let s1 = registry.status(&adopted.task_id).await.expect("status");
+        assert_eq!(s1.status, TaskState::Running, "守护任务在 run 终态后必须存活");
+        assert!(pid_is_alive(pid), "守护任务进程必须存活");
+        let lines_before = s1.line_count;
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+        let s2 = registry.status(&adopted.task_id).await.expect("status");
+        assert!(
+            s2.line_count > lines_before,
+            "run 终态后日志必须持续累积：{lines_before} -> {}",
+            s2.line_count
+        );
+        // 收口路径释放了「当前 run」上下文（下一 run 可复用注入槽）
+        assert_eq!(state.background.current_run(), None);
+
+        // 清理
+        let _ = registry.kill(&adopted.task_id).await;
+    }
+
+    /// T-AB-19 验收：普通任务（is_daemon=false）在 run 终态后不被级联杀
+    /// （pid 存活；registry 生命周期独立于 run——T-AB-12 契约显式锚定）
+    #[tokio::test]
+    async fn run_end_normal_task_survives_no_cascade() {
+        let (state, registry) = state_with_background();
+        state.background.set_current_run("run-normal-1");
+        let child = spawn_test_child(long_command());
+        let pid = child.id().expect("spawned pid");
+        let adopted = state
+            .background
+            .adopt(adopt_request(child, "run-normal-task", false))
+            .await
+            .expect("adopt");
+
+        // 驱动 run 终态
+        let active = build_active_run(&state, "s1", "run-normal-1").await;
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("run-normal-1".to_string(), Arc::clone(&active));
+        drive_run_loop(
+            Arc::clone(&state),
+            Arc::clone(&active),
+            Box::new(TestProducer {
+                outcome: canned_outcome(),
+            }),
+        )
+        .await;
+
+        // run 终态后：普通任务不被级联杀
+        assert!(pid_is_alive(pid), "普通任务不得被 run 终态级联杀（pid 存活）");
+        let status = registry.status(&adopted.task_id).await.expect("status");
+        assert_eq!(status.status, TaskState::Running, "任务状态不得被改写");
+        assert_eq!(state.background.current_run(), None);
+
+        // 清理
+        let _ = registry.kill(&adopted.task_id).await;
+    }
+
+    /// T-AB-19 验收：L3 force 取消后任务仍存活（默认不联动——职责单一，
+    /// 避免误杀，对齐方案 REQ 4.3）
+    #[tokio::test]
+    async fn l3_force_cancel_keeps_tasks() {
+        // 环境变量为进程级：与开启联动测试共用串行锁（默认断言不受污染）
+        let _guard = L3_CONFIG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var("CONEX_RUN_CONTROL_L3_TASK_CANCEL");
+
+        let (state, registry) = state_with_background();
+        state.background.set_current_run("run-l3-default");
+        let child = spawn_test_child(long_command());
+        let pid = child.id().expect("spawned pid");
+        let adopted = state
+            .background
+            .adopt(adopt_request(child, "l3-normal", false))
+            .await
+            .expect("adopt");
+        let active = build_active_run(&state, "s1", "run-l3-default").await;
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("run-l3-default".to_string(), Arc::clone(&active));
+
+        run_control_impl(&state, "run-l3-default", "force_cancel", None, Some("测试".to_string()), None)
+            .await
+            .expect("force_cancel");
+
+        // 默认不联动：任务存活（未终止、仍在注册表）
+        let listed = registry.list(true).await.expect("list");
+        let info = listed
+            .iter()
+            .find(|i| i.task_id == adopted.task_id)
+            .expect("任务仍在注册表");
+        assert_eq!(info.status, TaskState::Running, "L3 默认不得触碰任务");
+        assert!(pid_is_alive(pid), "任务进程必须存活（默认不联动）");
+
+        // 清理
+        let _ = registry.kill(&adopted.task_id).await;
+    }
+
+    /// T-AB-19 可选接线（配置项开启）：L3 force 对当前 run 的普通任务
+    /// （is_daemon=false）发起优雅终止，守护任务不触碰——默认关闭，本
+    /// 测试显式开启环境变量验证联动语义
+    #[tokio::test]
+    async fn l3_force_cancel_kills_normal_tasks_when_enabled() {
+        let _guard = L3_CONFIG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("CONEX_RUN_CONTROL_L3_TASK_CANCEL", "1");
+
+        let (state, registry) = state_with_background();
+        state.background.set_current_run("run-l3-on");
+        // 普通任务（联动目标：将被优雅终止）
+        let child = spawn_test_child(long_command());
+        let normal = state
+            .background
+            .adopt(adopt_request(child, "l3-normal-kill", false))
+            .await
+            .expect("adopt");
+        // 守护任务（联动豁免：不触碰）
+        let child = spawn_test_child(long_command());
+        let daemon_pid = child.id().expect("spawned pid");
+        let daemon = state
+            .background
+            .adopt(adopt_request(child, "l3-daemon-keep", true))
+            .await
+            .expect("adopt");
+        let active = build_active_run(&state, "s1", "run-l3-on").await;
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("run-l3-on".to_string(), Arc::clone(&active));
+
+        run_control_impl(&state, "run-l3-on", "force_cancel", None, Some("测试".to_string()), None)
+            .await
+            .expect("force_cancel");
+
+        // 普通任务进入终态（两阶段 kill），守护任务存活
+        wait_task_terminal(&registry, &normal.task_id, Duration::from_secs(10)).await;
+        let normal_status = registry.status(&normal.task_id).await.expect("status");
+        assert_eq!(
+            normal_status.status,
+            TaskState::Killed,
+            "普通任务应被优雅终止（Killed）：{:?}",
+            normal_status.status
+        );
+        let daemon_status = registry.status(&daemon.task_id).await.expect("status");
+        assert_eq!(
+            daemon_status.status,
+            TaskState::Running,
+            "守护任务不得被 L3 联动触碰"
+        );
+        assert!(pid_is_alive(daemon_pid), "守护任务进程必须存活");
+
+        // 清理
+        let _ = registry.kill(&daemon.task_id).await;
+    }
+
+    /// T-AB-19 验收：core_get_status 含任务汇总字段——活跃任务数 /
+    /// 守护进程数 / 最近终态（数据源 = CoreRunState 汇总访问器；wire
+    /// 形状 camelCase 由 core_query_commands 单测锚定）
+    #[tokio::test]
+    async fn get_status_reports_tasks() {
+        let (state, registry) = state_with_background();
+        state.background.set_current_run("run-status-1");
+
+        // 守护任务 + 普通任务（活跃）
+        let child = spawn_test_child(long_command());
+        let daemon = state
+            .background
+            .adopt(adopt_request(child, "status-daemon", true))
+            .await
+            .expect("adopt");
+        let child = spawn_test_child(long_command());
+        let normal = state
+            .background
+            .adopt(adopt_request(child, "status-normal", false))
+            .await
+            .expect("adopt");
+        // 终态任务（自然退出）
+        let child = spawn_test_child("exit 0");
+        let finished = state
+            .background
+            .adopt(adopt_request(child, "status-finished", false))
+            .await
+            .expect("adopt");
+        wait_task_terminal(&registry, &finished.task_id, Duration::from_secs(8)).await;
+
+        let summary = state.background_tasks_summary().await;
+        assert_eq!(summary.active_count, 2, "活跃任务数 = 守护 + 普通");
+        assert_eq!(summary.daemon_count, 1, "守护进程数 = 活跃守护任务数");
+        let last = summary
+            .last_finished
+            .as_ref()
+            .expect("有终态任务必须给出最近终态");
+        assert_eq!(&last.task_id, &finished.task_id);
+        assert_eq!(last.status, "completed");
+
+        // wire 形状（camelCase，core_get_status 透出面）
+        let json = serde_json::to_value(&summary).unwrap();
+        assert_eq!(json["activeCount"], 2);
+        assert_eq!(json["daemonCount"], 1);
+        assert_eq!(json["lastFinished"]["taskId"], finished.task_id);
+        assert_eq!(json["lastFinished"]["status"], "completed");
+
+        // 清理
+        for r in [daemon, normal] {
+            let _ = registry.kill(&r.task_id).await;
+        }
+    }
+
+    /// T-AB-19 会话切换契约锚定：任务属会话级（registry 生命周期独立于
+    /// run 与会话）——会话 A 的 run 结束并切换到会话 B 发起新 run 后，
+    /// 会话 A 的任务仍存活
+    #[tokio::test]
+    async fn session_switch_keeps_tasks() {
+        let (state, registry) = state_with_background();
+
+        // 会话 A：run 内 adopt 守护任务
+        state.background.set_current_run("run-sess-a");
+        let child = spawn_test_child(long_command());
+        let pid = child.id().expect("spawned pid");
+        let adopted = state
+            .background
+            .adopt(adopt_request(child, "sess-a-task", true))
+            .await
+            .expect("adopt");
+
+        // 会话 A run 终态
+        let active_a = build_active_run(&state, "sess-a", "run-sess-a").await;
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("run-sess-a".to_string(), Arc::clone(&active_a));
+        drive_run_loop(
+            Arc::clone(&state),
+            Arc::clone(&active_a),
+            Box::new(TestProducer {
+                outcome: canned_outcome(),
+            }),
+        )
+        .await;
+
+        // 会话切换：会话 B 发起新 run 并终态（注册表不被任何会话边界清理）
+        state.background.set_current_run("run-sess-b");
+        let active_b = build_active_run(&state, "sess-b", "run-sess-b").await;
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("run-sess-b".to_string(), Arc::clone(&active_b));
+        drive_run_loop(
+            Arc::clone(&state),
+            Arc::clone(&active_b),
+            Box::new(TestProducer {
+                outcome: canned_outcome(),
+            }),
+        )
+        .await;
+
+        // 会话 A 的任务在会话切换后仍存活
+        assert!(pid_is_alive(pid), "会话切换后任务必须存活");
+        let status = registry.status(&adopted.task_id).await.expect("status");
+        assert_eq!(status.status, TaskState::Running);
+
+        // 清理
+        let _ = registry.kill(&adopted.task_id).await;
     }
 }

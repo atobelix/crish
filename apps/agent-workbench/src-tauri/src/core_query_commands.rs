@@ -117,6 +117,33 @@ pub struct SnapshotStatus {
     pub last_error: Option<String>,
 }
 
+/// 后台任务最近终态条目（T-AB-19：core_get_status.backgroundTasks.lastFinished）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastTaskTerminal {
+    pub task_id: String,
+    /// 终态 wire 名（completed / failed / killed）
+    pub status: String,
+    /// 终态时间（epoch ms）
+    pub finished_at_ms: i64,
+}
+
+/// 后台任务汇总域（T-AB-19 增量：core_get_status.backgroundTasks 数据源；
+/// 前端状态栏与诊断面板展示）。
+///
+/// 口径（与 core_run_commands.rs [RunAwareBackgroundManager::summary] 一致）：
+/// - `active_count`：活跃（Running）任务数——不含终态与已归档条目；
+/// - `daemon_count`：活跃守护进程数（is_daemon=true 且 Running）；
+/// - `last_finished`：最近终态（无终态任务时缺省）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundTasksSummary {
+    pub active_count: usize,
+    pub daemon_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_finished: Option<LastTaskTerminal>,
+}
+
 /// core_get_status 返回体（AU-04 F2 冻结 v1，serde camelCase）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -147,6 +174,10 @@ pub struct CoreStatus {
     // ── PE-08 增量（T08.6）──
     pub restore: RestoreStatus,
     pub snapshot: SnapshotStatus,
+    // ── T-AB-19 增量（run 生命周期整合）──
+    /// 后台任务汇总（活跃任务数 / 守护进程数 / 最近终态；未接线或
+    /// 查询失败 = 全零缺省——前端展示「无任务」）
+    pub background_tasks: BackgroundTasksSummary,
 }
 
 /// 组装 CoreStatus（**唯一**组装函数；F2 串行序：PE-01 → PE-04 → PE-08 以追加参数并入，
@@ -169,6 +200,8 @@ pub fn build_status(
     // PE-08 增量（T08.6）
     restore: RestoreStatus,
     snapshot: SnapshotStatus,
+    // T-AB-19 增量（run 生命周期整合：后台任务汇总）
+    background_tasks: BackgroundTasksSummary,
 ) -> CoreStatus {
     CoreStatus {
         initialized,
@@ -184,6 +217,7 @@ pub fn build_status(
         last_error,
         restore,
         snapshot,
+        background_tasks,
     }
 }
 
@@ -228,7 +262,8 @@ use crate::core_run_commands::CoreRunState;
 /// core_get_status：核心状态查询（03 §3.2 B；无硬编码 true 字段）。
 ///
 /// 数据源全部来自 State / 静态存储（main.rs 接线）：
-/// - `core`（Arc<CoreRunState>）：initialized / engineReady / restore / snapshot；
+/// - `core`（Arc<CoreRunState>）：initialized / engineReady / restore /
+///   snapshot / backgroundTasks（T-AB-19：后台任务汇总，异步查询注册表）；
 /// - `diagnostics`（Arc<StatusDiagnostics>，R1；main.rs 与 CoreRunState 共享
 ///   同一实例，避免写入侧与读取侧漂移）：diagnostics / lastError；
 /// - `gatekeeper`（SharedGatekeeper）：就绪诊断预留接入点（当前仅占位，未消费）；
@@ -236,7 +271,7 @@ use crate::core_run_commands::CoreRunState;
 /// - `search`（SharedSearchState）：searchIndexReady（文件数 > 0 推断）；
 /// - `db`（SharedDb）：dbReady。
 #[tauri::command]
-pub fn core_get_status(
+pub async fn core_get_status(
     core: State<'_, Arc<CoreRunState>>,
     diagnostics: State<'_, Arc<StatusDiagnostics>>,
     _gatekeeper: State<'_, SharedGatekeeper>,
@@ -279,6 +314,7 @@ pub fn core_get_status(
         }),
         core.restore_status(),
         core.snapshot_status(),
+        core.background_tasks_summary().await,
     ))
 }
 
@@ -639,6 +675,15 @@ mod tests {
                 written_at: Some(1_700_000_000_002),
                 last_error: None,
             },
+            BackgroundTasksSummary {
+                active_count: 3,
+                daemon_count: 1,
+                last_finished: Some(LastTaskTerminal {
+                    task_id: "task-9".to_string(),
+                    status: "completed".to_string(),
+                    finished_at_ms: 1_700_000_000_003,
+                }),
+            },
         );
         let json = serde_json::to_value(&status).unwrap();
         // 基线字段 camelCase
@@ -668,6 +713,15 @@ mod tests {
         assert_eq!(json["restore"]["lastSequence"], 41);
         assert_eq!(json["snapshot"]["generation"], 1);
         assert_eq!(json["snapshot"]["writtenAt"], 1_700_000_000_002_i64);
+        // T-AB-19 增量（后台任务汇总）
+        assert_eq!(json["backgroundTasks"]["activeCount"], 3);
+        assert_eq!(json["backgroundTasks"]["daemonCount"], 1);
+        assert_eq!(json["backgroundTasks"]["lastFinished"]["taskId"], "task-9");
+        assert_eq!(json["backgroundTasks"]["lastFinished"]["status"], "completed");
+        assert_eq!(
+            json["backgroundTasks"]["lastFinished"]["finishedAtMs"],
+            1_700_000_000_003_i64
+        );
         // 不得出现 snake_case 键
         for key in [
             "search_index_ready",
@@ -677,6 +731,10 @@ mod tests {
             "log_level",
             "log_dir",
             "last_error",
+            "background_tasks",
+            "active_count",
+            "daemon_count",
+            "last_finished",
         ] {
             assert!(json.get(key).is_none(), "不得出现 snake_case 键 {key}");
         }
@@ -713,6 +771,7 @@ mod tests {
                 written_at: None,
                 last_error: None,
             },
+            BackgroundTasksSummary::default(),
         );
         let json = serde_json::to_value(&status).unwrap();
         assert_eq!(json["initialized"], false);
@@ -722,6 +781,38 @@ mod tests {
         assert_eq!(json["restore"]["state"], "pending");
         assert!(json["restore"].get("lastSequence").is_none());
         assert_eq!(json["snapshot"]["generation"], 0);
+        assert_eq!(json["backgroundTasks"]["activeCount"], 0, "未接线汇总 = 0");
+        assert_eq!(json["backgroundTasks"]["daemonCount"], 0);
+        assert!(
+            json["backgroundTasks"].get("lastFinished").is_none(),
+            "无终态任务时 lastFinished 缺省"
+        );
+    }
+
+    /// T-AB-19：后台任务汇总 wire 形状（camelCase + lastFinished 缺省规则）
+    #[test]
+    fn background_tasks_summary_serializes_camel_case() {
+        let summary = BackgroundTasksSummary {
+            active_count: 2,
+            daemon_count: 1,
+            last_finished: Some(LastTaskTerminal {
+                task_id: "task-3".to_string(),
+                status: "killed".to_string(),
+                finished_at_ms: 1_700_000_000_010,
+            }),
+        };
+        let json = serde_json::to_value(&summary).unwrap();
+        assert_eq!(json["activeCount"], 2);
+        assert_eq!(json["daemonCount"], 1);
+        assert_eq!(json["lastFinished"]["taskId"], "task-3");
+        assert_eq!(json["lastFinished"]["status"], "killed");
+        assert_eq!(json["lastFinished"]["finishedAtMs"], 1_700_000_000_010_i64);
+        assert!(json.get("active_count").is_none(), "不得出现 snake_case 键");
+
+        let empty = BackgroundTasksSummary::default();
+        let json = serde_json::to_value(&empty).unwrap();
+        assert_eq!(json["activeCount"], 0);
+        assert!(json.get("lastFinished").is_none(), "缺省值跳过序列化");
     }
 
     #[test]
