@@ -4,7 +4,8 @@
 //! `BUILTIN_COMMAND_MANIFEST` 是本文件的**内置快照镜像**（启动拉取失败 / 非 Tauri
 //! 环境回退面），双端手工同步，条数由双端测试锁定：
 //! - Rust 侧：本文件 `manifest_*` 测试（条数公式化 / 幽灵命令排除 / 新增命令登记）；
-//! - 前端侧：`commandManifest.test.ts`（73 = 注册面 69 + 登记先行 4）。
+//! - 前端侧：`commandManifest.test.ts`（88 = 注册面 84 + 登记先行 4，
+//!   F11b 后待镜像同步为 89 = 85 + 4）。
 //!
 //! 维护规则：
 //! - `registered = true` 子集 = main.rs `make_handlers!` 当前注册面（integration agent
@@ -59,7 +60,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（91 条 = 注册面 87 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（92 条 = 注册面 88 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：append_session_messages /
@@ -137,6 +138,9 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("import_from_localstorage", "session", "engine", true),
         entry("touch_session", "session", "engine", true),
         entry("upsert_session_entry", "session", "engine", true),
+        // F11b（T-D-12）：DAG 只读快照查询（flow_dag_visible 开关关闭时
+        // 前端不调用本命令，只读通用面保留无害）
+        entry("get_flow_snapshot", "session", "engine", true),
         // G03 会话级产出根覆盖（T-EG-12：session_meta `{session_id}:output_root`）
         entry("set_session_output_root", "session", "engine", true),
         // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
@@ -194,7 +198,7 @@ mod tests {
     use super::*;
 
     /// 条数公式化：总数 = 注册面 + 登记先行（镜像前端 commandManifest.test.ts：
-    /// 91 = 注册面 87 + 登记先行 4；变更时双端同步）。
+    /// 92 = 注册面 88 + 登记先行 4；变更时双端同步）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -205,8 +209,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 91, "总数 91（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 87, "注册面 87");
+        assert_eq!(total, 92, "总数 92（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 88, "注册面 88");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -353,7 +357,24 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 91);
+        assert_eq!(manifest.commands.len(), 92);
         assert_eq!(manifest.contract_version, "1.0.0");
+    }
+
+    /// get_flow_snapshot 登记断言（F11b T-D-12 联动）：会话族只读查询命令
+    /// 必须登记且 registered=true（与 main.rs make_handlers! 注册逐项一致）。
+    #[test]
+    fn manifest_registers_get_flow_snapshot() {
+        let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
+            .commands
+            .iter()
+            .map(|c| (c.name, c))
+            .collect();
+        let entry = by_name
+            .get("get_flow_snapshot")
+            .unwrap_or_else(|| panic!("get_flow_snapshot 必须登记 manifest（T-D-12）"));
+        assert_eq!(entry.family, "session", "get_flow_snapshot 属 session 族");
+        assert_eq!(entry.surface, "engine", "get_flow_snapshot 属引擎契约面");
+        assert!(entry.registered, "get_flow_snapshot 已接线应 registered=true");
     }
 }

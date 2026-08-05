@@ -157,6 +157,9 @@ command_registry![
     ("import_from_localstorage", session_commands::import_from_localstorage),
     ("touch_session", session_commands::touch_session),
     ("upsert_session_entry", session_commands::upsert_session_entry),
+    // F11b（T-D-12）：DAG 只读快照查询（flow_dag_visible 开关关闭时不调用，
+    // 只读通用面保留无害）
+    ("get_flow_snapshot", session_commands::get_flow_snapshot),
     // G03 会话级产出根覆盖（T-EG-12：session_meta `{session_id}:output_root`）
     ("set_session_output_root", outputs_config::set_session_output_root),
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族；实现函数在
