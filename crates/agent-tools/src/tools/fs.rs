@@ -7,7 +7,7 @@
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::tools::{
-    clamp_text, decode_text, display_path, epoch_millis, optional_string, require_string,
+    clamp_text_by_lines, decode_text, display_path, epoch_millis, optional_string, require_string,
     resolve_workspace_path, snapshot_tag,
 };
 use crate::write_paths::{claim_write_guard, ClaimMode};
@@ -16,6 +16,9 @@ use std::path::Path;
 
 /// 读文件默认字符上限（对齐 TS read 工具默认 maxBytes）
 pub(crate) const DEFAULT_READ_MAX_BYTES: usize = 256_000;
+
+/// 读文件默认单次最大行数（对齐 REQ 示例 800）
+pub(crate) const DEFAULT_READ_MAX_LINES: usize = 800;
 
 /// 读文件工具：返回文本内容与元数据，超限截断并附标记
 pub(crate) struct ReadFileTool {
@@ -28,12 +31,16 @@ impl ReadFileTool {
         Self {
             def: ToolDefinition {
                 name: "read_file".to_string(),
-                description: "读取工作区文本文件：校验路径安全，超长内容截断并标记。".to_string(),
+                description: "读取工作区文本文件：支持行号范围（startLine/endLine）与行粒度续读（contentOffset），字符预算截断保证在完整行边界；二进制文件返回文件引用（binary: true，不报错）。".to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
                         "path": { "type": "string", "description": "工作区文件路径（相对或绝对）" },
-                        "maxBytes": { "type": "number", "description": "返回内容字符数上限，默认 256000" }
+                        "startLine": { "type": "number", "description": "可选，1-indexed 起始行（缺省 1）" },
+                        "endLine": { "type": "number", "description": "可选，1-indexed 结束行（闭区间；缺省 = 窗口起点 + maxLines - 1）" },
+                        "contentOffset": { "type": "number", "description": "可选，行粒度续读偏移 = 已返回的完整行数（缺省 0，续读不切行中间）" },
+                        "maxLines": { "type": "number", "description": "可选，单次最大行数（缺省 800）" },
+                        "maxBytes": { "type": "number", "description": "可选，返回内容字符数上限，缺省 256000；超限时截断点回退到最近完整行边界" }
                     },
                     "required": ["path"],
                     "additionalProperties": false
@@ -80,35 +87,111 @@ impl Tool for ReadFileTool {
             ));
         }
 
+        // T-CF-01：入参解析——行窗口（1-indexed 闭区间）/ 续读偏移 / 行数与字符双上限；
+        // startLine>endLine 为结构化入参错误
+        let start_line = parse_line_arg(&args, "startLine", false)?.unwrap_or(1);
+        let end_line_arg = parse_line_arg(&args, "endLine", false)?;
+        let content_offset = parse_line_arg(&args, "contentOffset", true)?.unwrap_or(0);
+        let max_lines =
+            parse_line_arg(&args, "maxLines", false)?.unwrap_or(DEFAULT_READ_MAX_LINES);
+        let max_bytes = parse_line_arg(&args, "maxBytes", false)?.unwrap_or(self.max_bytes);
+        if let Some(end_line) = end_line_arg {
+            if start_line > end_line {
+                return Err(ToolError::invalid_input(
+                    "startLine must be less than or equal to endLine",
+                ));
+            }
+        }
+
         let bytes = std::fs::read(&file_path)
             .map_err(|e| ToolError::execution_failed("read_file", format!("{display}: {e}")))?;
         let decoded = decode_text(&bytes);
+
+        // T-CF-01：二进制文件引用形态（替代报错拒绝）——text 置空，附提示
         if decoded.is_binary {
-            return Err(ToolError::execution_failed(
-                "read_file",
-                format!("File is binary and cannot be read as text: {display}"),
-            ));
+            return Ok(serde_json::json!({
+                "path": display,
+                "kind": "file",
+                "bytes": bytes.len(),
+                "size": bytes.len(),
+                "encoding": decoded.encoding,
+                "hasBom": false,
+                "binary": true,
+                "lineCount": 0,
+                "totalChars": 0,
+                "shownChars": 0,
+                "startLine": start_line,
+                "endLine": end_line_arg.unwrap_or(start_line),
+                "truncated": false,
+                "content_truncated": false,
+                "nextContentOffset": 0,
+                "hint": "二进制文件无法按文本读取，请使用 file_stat / 系统查看器打开",
+                "text": "",
+            }));
         }
 
+        // 行优先读取：解码 → 按 \n 切行 → 应用窗口与偏移 → 双重钳制
+        let lines: Vec<&str> = decoded.text.lines().collect();
+        let total_lines = lines.len();
         let total_chars = decoded.text.chars().count();
-        let (shown, truncated) = clamp_text(&decoded.text, self.max_bytes);
-        let line_count = decoded.text.lines().count();
-        let tag = snapshot_tag(&file_path).unwrap_or_default();
 
-        let text = if truncated {
-            let header = format!(
-                "path: {display}\nsnapshotTag: {tag}\nencoding: {}\nlines: {line_count}\n\
-                 truncated: true (showing {} of {total_chars} chars; file has {} bytes)\n---\n",
-                decoded.encoding,
+        // 窗口起点：startLine-1 与 contentOffset 取大（续读偏移可平移窗口）；
+        // 窗口终点：显式 endLine（1-indexed 闭区间 → 0-based 半开同值），
+        // 缺省 = 窗口起点 + maxLines；越界钳制到文件末尾并保证空窗口合法
+        let window_start = (start_line - 1).max(content_offset);
+        let window_end = end_line_arg
+            .unwrap_or(window_start.saturating_add(max_lines))
+            .min(total_lines)
+            .max(window_start);
+        let window_text = if window_start >= total_lines {
+            String::new()
+        } else {
+            lines[window_start..window_end].join("\n")
+        };
+
+        // maxLines 行数钳制 + maxBytes 字符预算钳制（回退完整行边界）
+        let (shown, shown_lines, _) = clamp_text_by_lines(&window_text, max_bytes, max_lines);
+        // nextContentOffset = 累计已返回完整行数（不超文件总行数）
+        let next_content_offset = (window_start + shown_lines).min(total_lines);
+        // 两个标志语义分离：truncated 仅表示字符预算截断；content_truncated 表示还有行未返回
+        let char_truncated = window_text.chars().count() > max_bytes;
+        let content_truncated = next_content_offset < total_lines;
+        let end_line_echo = end_line_arg.unwrap_or(window_start.saturating_add(max_lines));
+        let out_of_range = window_start >= total_lines;
+
+        let tag = snapshot_tag(&file_path).unwrap_or_default();
+        let mut header = format!(
+            "path: {display}\nsnapshotTag: {tag}\nencoding: {}\nlines: {total_lines}\nstartLine: {start_line}, endLine: {end_line_echo}\n",
+            decoded.encoding,
+        );
+        if char_truncated {
+            header.push_str(&format!(
+                "truncated: true (showing {} of {total_chars} chars; file has {} bytes)\n",
                 shown.chars().count(),
                 bytes.len(),
-            );
+            ));
+        }
+        if content_truncated {
+            header.push_str(&format!(
+                "content_truncated: true (nextContentOffset: {next_content_offset}, {} lines remaining)\n",
+                total_lines - next_content_offset,
+            ));
+        }
+        if out_of_range {
+            header.push_str(&format!(
+                "window out of range: requested window starts beyond file end ({total_lines} lines)\n",
+            ));
+        }
+        header.push_str("---\n");
+
+        let text = if char_truncated {
             format!("{header}{shown}\n... truncated ...")
+        } else if content_truncated {
+            format!(
+                "{header}{shown}\n... {} lines remaining, use contentOffset to continue ...",
+                total_lines - next_content_offset,
+            )
         } else {
-            let header = format!(
-                "path: {display}\nsnapshotTag: {tag}\nencoding: {}\nlines: {line_count}\n---\n",
-                decoded.encoding,
-            );
             format!("{header}{shown}")
         };
 
@@ -118,14 +201,48 @@ impl Tool for ReadFileTool {
             "bytes": bytes.len(),
             "encoding": decoded.encoding,
             "hasBom": decoded.has_bom,
-            "lineCount": line_count,
+            "lineCount": total_lines,
+            "startLine": start_line,
+            "endLine": end_line_echo,
             "totalChars": total_chars,
             "shownChars": shown.chars().count(),
             "snapshotTag": tag,
-            "truncated": truncated,
+            "truncated": char_truncated,
+            "content_truncated": content_truncated,
+            "nextContentOffset": next_content_offset,
+            "hint": if out_of_range {
+                Some(format!("请求的行窗口超出文件末尾（文件共 {total_lines} 行）"))
+            } else {
+                None
+            },
             "text": text,
         }))
     }
+}
+
+/// 解析可选行号/上限入参：必须为非负整数；
+/// zero_allowed=false 时 0 视为非法（startLine/endLine/maxLines/maxBytes 从 1 起）
+fn parse_line_arg(
+    args: &serde_json::Value,
+    key: &str,
+    zero_allowed: bool,
+) -> Result<Option<usize>, ToolError> {
+    let Some(v) = args.get(key) else {
+        return Ok(None);
+    };
+    let f = v
+        .as_f64()
+        .ok_or_else(|| ToolError::invalid_input(format!("{key} must be a number")))?;
+    if !f.is_finite() || f < 0.0 || f.fract() != 0.0 {
+        return Err(ToolError::invalid_input(format!(
+            "{key} must be a non-negative integer"
+        )));
+    }
+    let n = f as u64;
+    if !zero_allowed && n == 0 {
+        return Err(ToolError::invalid_input(format!("{key} must be >= 1")));
+    }
+    Ok(Some(n as usize))
 }
 
 /// 写文件工具：自动建父目录，BOM 续写既有编码；幂等守卫标记留 B5.3
@@ -283,16 +400,27 @@ fn encode_text(content: &str, encoding: &str) -> Result<Vec<u8>, ToolError> {
 }
 
 /// 目录条目（对齐 TS list 工具的 items 结构 + size/mtime）
+/// T-CF-03：新增 path（相对目录根，/ 分隔，目录条目带尾部 /）与 count（目录直接子项数）
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DirEntry {
     name: String,
+    /// 相对目录根的相对路径；根目录自身条目为空串；目录条目带尾部 `/`
+    path: String,
     #[serde(rename = "type")]
     kind: &'static str,
     is_file: bool,
     is_directory: bool,
+    /// 仅目录条目：read_dir 直接子项数；读失败 -1（宽容，不失败）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    count: Option<i64>,
     size: u64,
     mtime: i64,
+}
+
+/// 统计目录直接子项数；read_dir 失败返回 -1（T-CF-03 宽容语义）
+fn count_direct_children(dir: &Path) -> i64 {
+    std::fs::read_dir(dir).map(|rd| rd.count() as i64).unwrap_or(-1)
 }
 
 /// 列目录工具：返回条目清单（name/type/isFile/isDirectory/size/mtime）
@@ -305,7 +433,7 @@ impl ListDirTool {
         Self {
             def: ToolDefinition {
                 name: "list_dir".to_string(),
-                description: "列出工作区目录下的文件与文件夹条目。".to_string(),
+                description: "列出工作区目录下的文件与文件夹条目，含相对路径（path）与目录子项数（count）。".to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -364,11 +492,26 @@ impl Tool for ListDirTool {
             } else {
                 "other"
             };
+            // T-CF-03：path = 相对目录根的相对路径（/ 分隔）；目录条目带尾部 /
+            let rel_path = display_path(&dir, &dir.join(&name));
+            let path = if is_dir && !rel_path.is_empty() {
+                format!("{rel_path}/")
+            } else {
+                rel_path
+            };
+            // T-CF-03：count 仅目录条目统计直接子项数，读失败 -1（宽容）
+            let count = if is_dir {
+                Some(count_direct_children(&dir.join(&name)))
+            } else {
+                None
+            };
             items.push(DirEntry {
                 name,
+                path,
                 kind,
                 is_file,
                 is_directory: is_dir,
+                count,
                 size: meta.as_ref().map(|m| m.len()).unwrap_or(0),
                 mtime: epoch_millis(meta.as_ref().ok().and_then(|m| m.modified().ok())),
             });
@@ -492,6 +635,18 @@ mod tests {
         }
     }
 
+    /// 提取 read_file 返回 text 的正文部分（剥离 header 与尾部续读标记）
+    fn body_of(t: &serde_json::Value) -> String {
+        let text = t["text"].as_str().unwrap();
+        text.split("---\n")
+            .nth(1)
+            .unwrap_or("")
+            .split("\n...")
+            .next()
+            .unwrap_or("")
+            .to_string()
+    }
+
     #[tokio::test]
     async fn read_file_roundtrip() {
         let ws = TempWorkspace::new("fs_read");
@@ -512,16 +667,37 @@ mod tests {
     #[tokio::test]
     async fn read_file_truncates_oversize_content() {
         let ws = TempWorkspace::new("fs_trunc");
-        ws.write_file("big.txt", "abcdefghijklmnopqrstuvwxyz");
-        let tool = ReadFileTool::new(Some(10));
+        ws.write_file("big.txt", "hello world\nsecond line");
+        let tool = ReadFileTool::new(Some(14));
         let out = tool.execute(&mock_ctx(&ws), json!({ "path": "big.txt" })).await.unwrap();
         assert_eq!(out["truncated"], true);
-        assert_eq!(out["shownChars"], 10);
-        assert_eq!(out["totalChars"], 26);
+        assert_eq!(out["shownChars"], 11);
+        assert_eq!(out["totalChars"], 23);
         let text = out["text"].as_str().unwrap();
         assert!(text.contains("truncated: true"));
         assert!(text.contains("... truncated ..."));
-        assert!(text.contains("abcdefghij"));
+        // 完整行边界：第一行完整保留，第二行不切半
+        assert!(text.contains("hello world"));
+        assert!(!text.contains("second"));
+    }
+
+    #[tokio::test]
+    async fn read_file_truncation_at_line_boundary() {
+        // 超长单行 + 极小 maxBytes：回退到最近完整行边界 → 空正文，不留截断残留
+        let ws = TempWorkspace::new("fs_line_boundary");
+        ws.write_file("long.txt", "a".repeat(10_000).as_str());
+        let tool = ReadFileTool::new(Some(100));
+        let out = tool.execute(&mock_ctx(&ws), json!({ "path": "long.txt" })).await.unwrap();
+        assert_eq!(out["truncated"], true);
+        assert_eq!(out["shownChars"], 0);
+        assert_eq!(out["totalChars"], 10_000);
+        let text = out["text"].as_str().unwrap();
+        assert!(text.ends_with("... truncated ..."));
+        // 正文完全为空：超长单行无法容纳，不留截断残留（hash 等头部无关）
+        assert!(body_of(&out).is_empty());
+        // 剩余行存在 → content_truncated 标记
+        assert_eq!(out["content_truncated"], true);
+        assert_eq!(out["nextContentOffset"], 0);
     }
 
     #[tokio::test]
@@ -547,14 +723,147 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn read_file_rejects_binary() {
+    async fn read_file_binary_returns_reference() {
+        // T-CF-01：二进制返回引用而非报错（替代旧 read_file_rejects_binary 语义）
         let ws = TempWorkspace::new("fs_binary");
         ws.write_file("bin.bin", "");
         let p = ws.path().join("bin.bin");
         std::fs::write(&p, [0u8, 1u8, 2u8]).unwrap();
         let tool = ReadFileTool::new(None);
-        let err = tool.execute(&mock_ctx(&ws), json!({ "path": "bin.bin" })).await.unwrap_err();
-        assert!(err.to_string().contains("binary"));
+        let out = tool.execute(&mock_ctx(&ws), json!({ "path": "bin.bin" })).await.unwrap();
+        assert_eq!(out["binary"], true);
+        assert_eq!(out["bytes"], 3);
+        assert_eq!(out["size"], 3);
+        assert_eq!(out["text"], "");
+        assert!(out["hint"].as_str().unwrap().contains("file_stat"));
+        assert_eq!(out["truncated"], false);
+    }
+
+    #[tokio::test]
+    async fn read_file_line_range_returns_exact_window() {
+        // 20 行文件，startLine=3/endLine=5 只返回 3~5 行（1-indexed 闭区间）
+        let ws = TempWorkspace::new("fs_line_range");
+        let content = (1..=20).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        ws.write_file("r.txt", content.as_str());
+        let tool = ReadFileTool::new(None);
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "r.txt", "startLine": 3, "endLine": 5 }))
+            .await
+            .unwrap();
+        assert_eq!(out["startLine"], 3);
+        assert_eq!(out["endLine"], 5);
+        assert_eq!(out["lineCount"], 20);
+        let text = out["text"].as_str().unwrap();
+        assert!(text.contains("line 3\nline 4\nline 5"));
+        assert!(!text.contains("line 2"));
+        assert!(!text.contains("line 6"));
+        // 窗口后仍有内容 → 剩余行存在标记
+        assert_eq!(out["content_truncated"], true);
+    }
+
+    #[tokio::test]
+    async fn read_file_line_range_clamped_to_max_lines() {
+        // 1000 行缺省参数：只返回 800 行，content_truncated=true 且 nextContentOffset=800
+        let ws = TempWorkspace::new("fs_line_max");
+        let content = (1..=1000).map(|i| format!("line {i:04}")).collect::<Vec<_>>().join("\n");
+        ws.write_file("m.txt", content.as_str());
+        let tool = ReadFileTool::new(None);
+        let out = tool.execute(&mock_ctx(&ws), json!({ "path": "m.txt" })).await.unwrap();
+        assert_eq!(out["content_truncated"], true);
+        assert_eq!(out["nextContentOffset"], 800);
+        assert_eq!(out["truncated"], false);
+        let text = out["text"].as_str().unwrap();
+        assert!(text.contains("line 0001"));
+        assert!(text.contains("line 0800"));
+        assert!(!text.contains("line 0801"));
+        assert!(text.contains("content_truncated: true"));
+        // 正文恰为 800 行（header 在 --- 之前，剥尾部续读标记）
+        assert_eq!(body_of(&out).lines().count(), 800);
+    }
+
+    #[tokio::test]
+    async fn read_file_content_offset_resumes() {
+        // maxLines=5 读两次（第二次 contentOffset=5）：两次正文拼接 === 全文，无行被切半
+        let ws = TempWorkspace::new("fs_offset");
+        let content = (1..=10).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        ws.write_file("o.txt", content.as_str());
+        let tool = ReadFileTool::new(None);
+        let first = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "o.txt", "maxLines": 5 }))
+            .await
+            .unwrap();
+        assert_eq!(first["content_truncated"], true);
+        assert_eq!(first["nextContentOffset"], 5);
+        let second = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "o.txt", "maxLines": 5, "contentOffset": 5 }))
+            .await
+            .unwrap();
+        assert_eq!(second["content_truncated"], false);
+        assert_eq!(second["nextContentOffset"], 10);
+        let joined = format!("{}\n{}", body_of(&first), body_of(&second));
+        assert_eq!(joined, content);
+    }
+
+    #[tokio::test]
+    async fn read_file_utf16_line_range() {
+        // UTF-16LE（带 BOM）文件：解码后按行切分，行号读取正确
+        let ws = TempWorkspace::new("fs_u16range");
+        let mut bytes = vec![0xFF, 0xFE];
+        for u in "u1\nu2\nu3\nu4\nu5\n".encode_utf16() {
+            bytes.extend_from_slice(&u.to_le_bytes());
+        }
+        let p = ws.path().join("u.txt");
+        std::fs::write(&p, bytes).unwrap();
+        let tool = ReadFileTool::new(None);
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "u.txt", "startLine": 2, "endLine": 3 }))
+            .await
+            .unwrap();
+        assert_eq!(out["encoding"], "utf-16le");
+        assert_eq!(out["lineCount"], 5);
+        let text = out["text"].as_str().unwrap();
+        assert!(text.contains("u2\nu3"));
+        assert!(!text.contains("u1"));
+        assert!(!text.contains("u4"));
+    }
+
+    #[tokio::test]
+    async fn read_file_line_range_edge_cases() {
+        let ws = TempWorkspace::new("fs_range_edge");
+        let content = (1..=10).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        ws.write_file("e.txt", content.as_str());
+        let tool = ReadFileTool::new(None);
+        // startLine > endLine：结构化入参错误
+        let err = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "e.txt", "startLine": 5, "endLine": 3 }))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("startLine"));
+        // startLine 超出总行数：空窗口 + nextContentOffset = 总行数
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "e.txt", "startLine": 99 }))
+            .await
+            .unwrap();
+        assert_eq!(out["content_truncated"], false);
+        assert_eq!(out["nextContentOffset"], 10);
+        let body = body_of(&out);
+        assert!(body.trim().is_empty());
+        assert!(out["hint"].as_str().unwrap().contains("超出文件末尾"));
+        // contentOffset 超出文件：空 + nextContentOffset = 总行数
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "e.txt", "contentOffset": 500 }))
+            .await
+            .unwrap();
+        assert_eq!(out["nextContentOffset"], 10);
+        // 非整数入参报错
+        assert!(tool
+            .execute(&mock_ctx(&ws), json!({ "path": "e.txt", "maxLines": -1 }))
+            .await
+            .is_err());
+        assert!(tool
+            .execute(&mock_ctx(&ws), json!({ "path": "e.txt", "contentOffset": "x" }))
+            .await
+            .is_err());
     }
 
     #[tokio::test]
@@ -635,6 +944,49 @@ mod tests {
         assert!(items[1]["size"].as_u64().unwrap() >= 2);
         assert!(items[1]["mtime"].as_i64().unwrap() > 0);
         assert_eq!(items[2]["name"], "b.txt");
+    }
+
+    #[tokio::test]
+    async fn list_dir_entries_have_relative_path() {
+        // T-CF-03：子项 path 为相对路径，目录条目带 / 后缀语义
+        let ws = TempWorkspace::new("fs_list_path");
+        ws.write_file("a.txt", "aa");
+        ws.write_file("sub/c.txt", "cc");
+        let tool = ListDirTool::new();
+        let out = tool.execute(&mock_ctx(&ws), json!({})).await.unwrap();
+        let items = out["items"].as_array().unwrap();
+        let dir_item = items.iter().find(|i| i["name"] == "sub").unwrap();
+        assert_eq!(dir_item["path"], "sub/");
+        let file_item = items.iter().find(|i| i["name"] == "a.txt").unwrap();
+        assert_eq!(file_item["path"], "a.txt");
+    }
+
+    #[tokio::test]
+    async fn list_dir_directory_count() {
+        // T-CF-03：含 3 文件的目录 count=3；文件条目 count 缺省（字段不出现）
+        let ws = TempWorkspace::new("fs_list_count");
+        ws.write_file("sub/a1.txt", "1");
+        ws.write_file("sub/a2.txt", "2");
+        ws.write_file("sub/a3.txt", "3");
+        ws.write_file("top.txt", "t");
+        let tool = ListDirTool::new();
+        let out = tool.execute(&mock_ctx(&ws), json!({})).await.unwrap();
+        let items = out["items"].as_array().unwrap();
+        let dir_item = items.iter().find(|i| i["name"] == "sub").unwrap();
+        assert_eq!(dir_item["count"], 3);
+        let file_item = items.iter().find(|i| i["name"] == "top.txt").unwrap();
+        assert!(file_item.get("count").is_none());
+    }
+
+    #[tokio::test]
+    async fn list_dir_unreadable_dir_count_minus_one() {
+        // T-CF-03：read_dir 失败目录 count=-1（宽容，不报错）。
+        // Windows 无法稳定构造无权限目录，改用不存在的路径验证计数助手
+        let missing = std::env::temp_dir().join("fs_count_missing_xyz");
+        assert_eq!(count_direct_children(&missing), -1);
+        let ws = TempWorkspace::new("fs_list_unreadable");
+        ws.write_file("ok/x.txt", "x");
+        assert_eq!(count_direct_children(&ws.path().join("ok")), 1);
     }
 
     #[tokio::test]

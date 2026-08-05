@@ -1,7 +1,8 @@
 //! 搜索工具（任务书 B5.2：grep_search / fuzzy_find）
 //!
-//! - grep_search：目录递归文本搜索（子串或正则），支持 glob 过滤，
-//!   默认排除 .git / node_modules 等非源码目录，返回 path/line/column/text
+//! - grep_search：目录递归文本搜索（子串或正则），支持 glob 过滤与排除式 glob，
+//!   默认排除 .git / node_modules 等非源码目录；行级模式返回 path/line/column/text，
+//!   文件级模式（matchPerLine=false）返回命中文件路径 + 每文件命中行数
 //! - fuzzy_find：模糊文件名查找，复用 conex-search 的模糊匹配与目录索引
 
 use crate::context::ToolContext;
@@ -43,6 +44,14 @@ struct GrepMatch {
     text: String,
 }
 
+/// 文件级模式单条结果（对齐 grep -l 语义：命中文件路径 + 命中行数）
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileMatch {
+    path: String,
+    match_count: usize,
+}
+
 /// grep 文本搜索工具
 pub(crate) struct GrepSearchTool {
     def: ToolDefinition,
@@ -53,7 +62,7 @@ impl GrepSearchTool {
         Self {
             def: ToolDefinition {
                 name: "grep_search".to_string(),
-                description: "在工作区目录内递归搜索文本（子串或正则），支持 glob 过滤，默认排除 .git/node_modules 等目录。".to_string(),
+                description: "在工作区目录内递归搜索文本（子串或正则），支持 glob 过滤与排除式 glob（excludeGlobs），默认排除 .git/node_modules 等目录；matchPerLine=false 时输出文件级结果（命中文件路径 + 每文件命中行数，grep -l 语义）。".to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -61,8 +70,10 @@ impl GrepSearchTool {
                         "path": { "type": "string", "description": "搜索根目录，缺省为工作区根" },
                         "regex": { "type": "boolean", "description": "query 是否按正则解释，缺省 false" },
                         "glob": { "type": "string", "description": "glob 过滤（如 *.rs、src/**），只匹配符合的文件" },
+                        "excludeGlobs": { "type": "array", "items": { "type": "string" }, "description": "排除式 glob 列表（如 **/generated/*.rs），命中即跳过该文件；判定优先级高于 glob 与内置目录排除" },
                         "caseSensitive": { "type": "boolean", "description": "子串模式是否大小写敏感，缺省 true" },
-                        "maxMatches": { "type": "number", "description": "最大返回匹配数，默认 200" },
+                        "matchPerLine": { "type": "boolean", "description": "true 为行级模式（缺省，逐行输出命中）；false 为文件级模式（只输出命中文件路径与每文件命中行数）" },
+                        "maxMatches": { "type": "number", "description": "最大返回匹配数（行级按命中行计，文件级按文件数计），默认 200" },
                         "maxFiles": { "type": "number", "description": "最大访问文件数，默认 2000" },
                         "maxFileBytes": { "type": "number", "description": "单个文件参与搜索的大小上限（字节），默认 512000" }
                     },
@@ -97,6 +108,16 @@ impl Tool for GrepSearchTool {
         let use_regex = optional_bool(&args, "regex").unwrap_or(false);
         let glob = optional_string(&args, "glob");
         let case_sensitive = optional_bool(&args, "caseSensitive").unwrap_or(true);
+        let match_per_line = optional_bool(&args, "matchPerLine").unwrap_or(true);
+        let exclude_globs: Vec<String> = args
+            .get("excludeGlobs")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
         let max_matches = optional_u64(&args, "maxMatches").unwrap_or(DEFAULT_MAX_MATCHES);
         let max_files = optional_u64(&args, "maxFiles").unwrap_or(DEFAULT_MAX_FILES);
         let max_file_bytes = optional_u64(&args, "maxFileBytes").unwrap_or(DEFAULT_MAX_FILE_BYTES);
@@ -113,10 +134,23 @@ impl Tool for GrepSearchTool {
 
         let root_display = display_path(&root, &root);
         let mut matches: Vec<GrepMatch> = Vec::new();
+        let mut files: Vec<FileMatch> = Vec::new();
         let mut visited_files: u64 = 0;
         let mut truncated = false;
 
-        for file in walk_files(&root, glob.as_deref(), max_files) {
+        // 行命中判定：返回命中的字节偏移（行级模式用于列号，文件级模式只判是否命中）
+        let line_hit = |line: &str| -> Option<usize> {
+            if let Some(re) = &matcher {
+                re.find(line).map(|m| m.start())
+            } else if case_sensitive {
+                line.find(&query)
+            } else {
+                line.to_lowercase()
+                    .find(&query.to_lowercase())
+            }
+        };
+
+        for file in walk_files(&root, glob.as_deref(), &exclude_globs, max_files) {
             visited_files += 1;
             let metadata = match std::fs::metadata(&file) {
                 Ok(m) => m,
@@ -134,46 +168,74 @@ impl Tool for GrepSearchTool {
             }
             let text = String::from_utf8_lossy(&bytes);
             let display = display_path(&root, &file);
-            for (idx, raw_line) in text.split('\n').enumerate() {
-                let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
-                let hit = if let Some(re) = &matcher {
-                    re.find(line).map(|m| (m.start(), m.end() - m.start()))
-                } else if case_sensitive {
-                    line.find(&query).map(|s| (s, query.len()))
-                } else {
-                    line.to_lowercase()
-                        .find(&query.to_lowercase())
-                        .map(|s| (s, query.len()))
-                };
-                if let Some((byte_offset, _)) = hit {
-                    matches.push(GrepMatch {
-                        path: display.clone(),
-                        line: idx + 1,
-                        column: line[..byte_offset.min(line.len())].chars().count() + 1,
-                        text: line.trim().to_string(),
+            if match_per_line {
+                // 行级模式：逐行输出命中（现状行为）
+                for (idx, raw_line) in text.split('\n').enumerate() {
+                    let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
+                    if let Some(byte_offset) = line_hit(line) {
+                        matches.push(GrepMatch {
+                            path: display.clone(),
+                            line: idx + 1,
+                            column: line[..byte_offset.min(line.len())].chars().count() + 1,
+                            text: line.trim().to_string(),
+                        });
+                        if matches.len() as u64 >= max_matches {
+                            truncated = true;
+                            break;
+                        }
+                    }
+                }
+                if truncated {
+                    break;
+                }
+            } else {
+                // 文件级模式（grep -l）：只统计命中行数，文件路径去重（每文件一个条目）
+                let hit_lines = text
+                    .split('\n')
+                    .map(|raw| raw.strip_suffix('\r').unwrap_or(raw))
+                    .filter(|line| line_hit(line).is_some())
+                    .count();
+                if hit_lines > 0 {
+                    files.push(FileMatch {
+                        path: display,
+                        match_count: hit_lines,
                     });
-                    if matches.len() as u64 >= max_matches {
+                    // 文件级与行级共用 maxMatches 上限，文件级按文件数计
+                    if files.len() as u64 >= max_matches {
                         truncated = true;
                         break;
                     }
                 }
             }
-            if truncated {
-                break;
-            }
         }
 
+        let result_count = if match_per_line { matches.len() } else { files.len() };
+        let count_label = if match_per_line { "matches" } else { "files" };
         let header = format!(
-            "query: {query}\nroot: {root_display}\nmatches: {}\nvisitedFiles: {visited_files}\n{}---",
-            matches.len(),
-            if truncated { "truncated: true\n" } else { "" },
+            "query: {query}\nroot: {root_display}\n{count_label}: {result_count}\nvisitedFiles: {visited_files}\n{}---",
+            if truncated {
+                "truncated: true\n结果已达上限，请缩小搜索范围或增加 maxMatches\n"
+            } else {
+                ""
+            },
         );
-        let body = if matches.is_empty() {
+        let body = if match_per_line {
+            if matches.is_empty() {
+                "(no matches)".to_string()
+            } else {
+                matches
+                    .iter()
+                    .map(|m| format!("{}:{}:{}: {}", m.path, m.line, m.column, m.text))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+        } else if files.is_empty() {
             "(no matches)".to_string()
         } else {
-            matches
+            // 文件级：每行一个「路径:命中行数」
+            files
                 .iter()
-                .map(|m| format!("{}:{}:{}: {}", m.path, m.line, m.column, m.text))
+                .map(|f| format!("{}:{}", f.path, f.match_count))
                 .collect::<Vec<_>>()
                 .join("\n")
         };
@@ -182,16 +244,24 @@ impl Tool for GrepSearchTool {
             "query": query,
             "root": root_display,
             "visitedFiles": visited_files,
-            "matchCount": matches.len(),
+            "matchCount": result_count,
             "truncated": truncated,
             "matches": matches,
+            "files": files,
             "text": format!("{header}\n{body}"),
         }))
     }
 }
 
-/// 递归遍历目录：gitignore 感知 + 跳过非源码目录 + glob 过滤
-fn walk_files(root: &Path, glob: Option<&str>, max_files: u64) -> Vec<PathBuf> {
+/// 递归遍历目录：gitignore 感知 + 排除式 glob + 跳过非源码目录 + 正例 glob 过滤
+///
+/// 判定优先级：excludeGlobs（排除式 glob）→ SKIP_DIRS（内置目录）→ 正例 glob
+fn walk_files(
+    root: &Path,
+    glob: Option<&str>,
+    excludes: &[String],
+    max_files: u64,
+) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let walker = WalkBuilder::new(root)
         .hidden(true)
@@ -208,6 +278,22 @@ fn walk_files(root: &Path, glob: Option<&str>, max_files: u64) -> Vec<PathBuf> {
             continue;
         }
         let path = entry.path();
+        // 相对路径统一 / 分隔符（glob 判定用）
+        let rel = path.strip_prefix(root).unwrap_or(path);
+        let rel_str = rel.to_string_lossy().replace('\\', "/");
+        // 排除式 glob：命中即跳过（优先级最高，先于内置目录与正例 glob）
+        if excludes.iter().any(|pattern| {
+            if pattern.contains('/') {
+                glob_match(pattern, &rel_str)
+            } else {
+                glob_match(
+                    pattern,
+                    rel_str.rsplit('/').next().unwrap_or(&rel_str),
+                )
+            }
+        }) {
+            continue;
+        }
         let skip = path.components().any(|comp| {
             comp.as_os_str()
                 .to_str()
@@ -218,8 +304,6 @@ fn walk_files(root: &Path, glob: Option<&str>, max_files: u64) -> Vec<PathBuf> {
             continue;
         }
         if let Some(pattern) = glob {
-            let rel = path.strip_prefix(root).unwrap_or(path);
-            let rel_str = rel.to_string_lossy().replace('\\', "/");
             let matched = if pattern.contains('/') {
                 glob_match(pattern, &rel_str)
             } else {
@@ -553,11 +637,124 @@ mod tests {
         ws.write_file("a.txt", "x");
         ws.write_file("node_modules/b.txt", "x");
         ws.write_file(".git/c.txt", "x");
-        let files = walk_files(ws.path(), None, 100);
+        let files = walk_files(ws.path(), None, &[], 100);
         let names: Vec<String> = files
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
             .collect();
         assert_eq!(names, vec!["a.txt"]);
+    }
+
+    #[tokio::test]
+    async fn grep_file_level_returns_unique_files() {
+        let ws = TempWorkspace::new("search_file_level");
+        ws.write_file("a.txt", "needle one\nneedle two\nplain\n");
+        ws.write_file("b.txt", "needle only once\n");
+        ws.write_file("c.txt", "nothing here\n");
+        let tool = GrepSearchTool::new();
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "query": "needle", "matchPerLine": false }))
+            .await
+            .unwrap();
+        // 同文件多命中只出现一次：a.txt（2 行）+ b.txt（1 行）= 2 个文件
+        assert_eq!(out["matchCount"], 2);
+        let files = out["files"].as_array().unwrap();
+        assert_eq!(files.len(), 2);
+        // matches 置空数组
+        assert_eq!(out["matches"].as_array().unwrap().len(), 0);
+        assert_eq!(out["truncated"], false);
+        // 去重且 matchCount 为真实命中行数
+        let a = files.iter().find(|f| f["path"] == "a.txt").unwrap();
+        assert_eq!(a["matchCount"], 2);
+        let b = files.iter().find(|f| f["path"] == "b.txt").unwrap();
+        assert_eq!(b["matchCount"], 1);
+        assert!(files.iter().all(|f| f["path"] != "c.txt"));
+    }
+
+    #[tokio::test]
+    async fn grep_file_level_shares_max_matches() {
+        let ws = TempWorkspace::new("search_file_lim");
+        for i in 0..5 {
+            ws.write_file(&format!("f{i}.txt"), "needle\nneedle again\n");
+        }
+        let tool = GrepSearchTool::new();
+        let out = tool
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "query": "needle", "matchPerLine": false, "maxMatches": 2 }),
+            )
+            .await
+            .unwrap();
+        // 文件级按文件数计上限：只返回 2 个文件且置 truncated
+        assert_eq!(out["matchCount"], 2);
+        assert_eq!(out["files"].as_array().unwrap().len(), 2);
+        assert_eq!(out["truncated"], true);
+    }
+
+    #[tokio::test]
+    async fn grep_exclude_globs_filtered() {
+        let ws = TempWorkspace::new("search_exclude");
+        ws.write_file("src/generated/gen.rs", "needle\n");
+        ws.write_file("src/keep.rs", "needle\n");
+        ws.write_file("src/normal.txt", "needle\n");
+        let tool = GrepSearchTool::new();
+        let out = tool
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "query": "needle", "excludeGlobs": ["**/generated/*.rs"] }),
+            )
+            .await
+            .unwrap();
+        let paths: Vec<&str> = out["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["path"].as_str().unwrap())
+            .collect();
+        // generated 目录被排除，同根其他文件正常
+        assert!(!paths.iter().any(|p| p.contains("generated")));
+        assert!(paths.contains(&"src/keep.rs"));
+        assert!(paths.contains(&"src/normal.txt"));
+        assert_eq!(out["matchCount"], 2);
+    }
+
+    #[tokio::test]
+    async fn grep_truncated_hint_present() {
+        let ws = TempWorkspace::new("search_hint");
+        for i in 0..5 {
+            ws.write_file(&format!("f{i}.txt"), "needle\n");
+        }
+        let tool = GrepSearchTool::new();
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "query": "needle", "maxMatches": 1 }))
+            .await
+            .unwrap();
+        assert_eq!(out["truncated"], true);
+        let text = out["text"].as_str().unwrap();
+        assert!(text.contains("结果已达上限，请缩小搜索范围或增加 maxMatches"));
+    }
+
+    #[tokio::test]
+    async fn grep_skip_dirs_still_active() {
+        let ws = TempWorkspace::new("search_skip_dirs");
+        ws.write_file("src/a.rs", "needle\n");
+        ws.write_file("node_modules/pkg/index.js", "needle\n");
+        ws.write_file("src/generated/gen.rs", "needle\n");
+        let tool = GrepSearchTool::new();
+        let out = tool
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "query": "needle", "excludeGlobs": ["**/generated/*.rs"] }),
+            )
+            .await
+            .unwrap();
+        let paths: Vec<&str> = out["matches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["path"].as_str().unwrap())
+            .collect();
+        // 排除 glob 与 SKIP_DIRS 双过滤：node_modules 与 generated 均不出现
+        assert_eq!(paths, vec!["src/a.rs"]);
     }
 }
