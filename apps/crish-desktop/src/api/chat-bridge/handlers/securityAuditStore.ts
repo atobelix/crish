@@ -1,5 +1,6 @@
 /**
- * 安全审计事件数据源（I3-S9 任务 4；I2-S8 事件面已交付）。
+ * 安全审计事件数据源（I3-S9 任务 4；I2-S8 事件面已交付；
+ * T-ESC-04 逃逸展示面扩展）。
  *
  * `security-audit` 事件（EngineSecurityAuditEvent）经 dispatch 注册的
  * handler 写入本 store，SecurityAuditSection / RuntimePanel 订阅消费——
@@ -9,24 +10,35 @@
  * 语义：
  * - entries 为最近 [MAX_AUDIT_ENTRIES] 条（20），超限丢弃最旧；
  * - 无事件 → entries 空数组 → 区段空态（隐藏而非展示噪音）；
- * - 事件 payload（operation/decision/targets/impact）宽容透传。
+ * - 事件 payload（operation/decision/targets/impact）宽容透传；
+ * - impact 上扩展字段 hasDestructive（逃逸监视高风险标记：变更含
+ *   删除/改名类）按可选字段宽容处理——数据面填充前不报错、填充后
+ *   直接生效（REQ-逃逸追踪分析 §5.2 P4）。
  */
 import { create } from 'zustand';
 import type { ImpactAssessment } from '../../../../../../packages/shared-types/src/generated/engine';
+
+/** 影响面载荷（生成契约 + 逃逸监视扩展字段，宽容可选） */
+export type AuditImpact = ImpactAssessment & {
+  /** 高风险标记：变更含删除/改名类（逃逸监视报告 has_destructive，
+   *  wire camelCase），数据面接线前可能缺失 */
+  hasDestructive?: boolean;
+};
 
 /** 审计条目（security-audit 事件归一形态） */
 export interface SecurityAuditEntry {
   sessionId: string;
   /** 事件时间戳（ISO8601 字符串，原样保留） */
   timestamp: string;
-  /** 操作类别：delete / trash-restore / trash-purge / git-revert / command-exec */
+  /** 操作类别：delete / trash-restore / trash-purge / git-revert /
+   *  command-exec / undeclared-write（T-ESC-02 逃逸监视新值） */
   operation: string;
   /** 处置决策：blocked / approved / denied / redirected / restored / purged */
   decision: string;
   /** 目标路径清单 */
   targets: string[];
-  /** 影响面（文件数/大小/跨目录/谨慎标记） */
-  impact: ImpactAssessment;
+  /** 影响面（文件数/大小/跨目录/谨慎标记/高风险标记） */
+  impact: AuditImpact;
   permissionMode?: string;
   toolCallId?: string;
   /** 事件到达本 store 的本地时间（epoch ms，展示排序） */
@@ -63,6 +75,7 @@ const OPERATION_LABELS: Readonly<Record<string, string>> = Object.freeze({
   'trash-purge': '清除',
   'git-revert': '回退',
   'command-exec': '命令执行',
+  'undeclared-write': '未声明写入',
 });
 
 /** 处置决策 → 中文短标签（未知原样返回） */

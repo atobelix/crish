@@ -1,8 +1,15 @@
 /**
- * 安全审计日志视图（I3-S9 任务 4；数据源 = security-audit 事件 → store）。
+ * 安全审计日志视图（I3-S9 任务 4；数据源 = security-audit 事件 → store；
+ * T-ESC-04 逃逸展示面扩展）。
  *
  * RuntimePanel 区段：最近审计条目（操作 · 决策 · 目标 · 影响面），
  * 空态隐藏噪音。展示顺序：最近在前（store 追加尾部，此处逆序）。
+ *
+ * 着色语义（点标）：
+ * - 默认绿色（常规操作）；
+ * - impact.flagged → 橙色（谨慎标记）；
+ * - impact.hasDestructive → 红色（逃逸监视高风险：变更含删除/改名类，
+ *   见 REQ-逃逸追踪分析 §5.2 P4；优先级高于 flagged）。
  */
 import React from 'react';
 import styles from './RuntimePanel.module.css';
@@ -44,7 +51,13 @@ export const SecurityAuditSection: React.FC<SecurityAuditSectionProps> = ({
       >
         {visible.map((entry, i) => {
           const key = `${entry.toolCallId ?? entry.timestamp}-${i}`;
+          const destructive = entry.impact?.hasDestructive === true;
           const flagged = entry.impact?.flagged;
+          const dotClass = destructive
+            ? styles.danger
+            : flagged
+              ? styles.warn
+              : styles.on;
           return (
             <div
               key={key}
@@ -54,7 +67,7 @@ export const SecurityAuditSection: React.FC<SecurityAuditSectionProps> = ({
             >
               <div className={styles.rowMain}>
                 <span
-                  className={`${styles.dot} ${flagged ? styles.warn : styles.on}`}
+                  className={`${styles.dot} ${dotClass}`}
                   aria-hidden
                 />
                 <div className={styles.rowText}>

@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 /**
- * SecurityAuditSection 安全审计日志视图测试（I3-S9 任务 4）。
+ * SecurityAuditSection 安全审计日志视图测试（I3-S9 任务 4；
+ * T-ESC-04 逃逸展示面扩展）。
  *
  * 覆盖点：
  * - 无事件 → 不渲染（隐藏噪音）；
  * - 条目渲染：操作 · 决策 · 目标/影响面摘要；最近在前；
- * - 超过 MAX_VISIBLE 只展示最近 8 条（计数仍显示总数）。
+ * - 超过 MAX_VISIBLE 只展示最近 8 条（计数仍显示总数）；
+ * - 逃逸监视：undeclared-write 渲染「未声明写入」文案；
+ * - 高风险着色分支：hasDestructive（红）> flagged（橙）> 默认（绿）。
  */
 import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -106,5 +109,87 @@ describe('SecurityAuditSection', () => {
 
     expect(screen.getAllByTestId('audit-entry')).toHaveLength(8);
     expect(screen.getByText('12 条')).toBeInTheDocument();
+  });
+
+  it('逃逸监视：undeclared-write 渲染「未声明写入」文案（T-ESC-04）', () => {
+    render(
+      <SecurityAuditSection
+        entries={[
+          entry({
+            operation: 'undeclared-write',
+            decision: 'denied',
+            targets: ['src/x.ts'],
+            impact: {
+              fileCount: 3,
+              totalSizeBytes: 0,
+              directoryCount: 0,
+              crossDirectory: false,
+              flagged: false,
+            },
+          }),
+        ]}
+      />
+    );
+
+    expect(screen.getByText('未声明写入 · 已拒绝')).toBeInTheDocument();
+    expect(screen.getByText(/src\/x\.ts/)).toBeInTheDocument();
+    expect(screen.getByText(/3 个文件/)).toBeInTheDocument();
+  });
+
+  it('高风险着色分支：hasDestructive 红色优先于 flagged 橙色（T-ESC-04）', () => {
+    const { container } = render(
+      <SecurityAuditSection
+        entries={[
+          entry({
+            operation: 'undeclared-write',
+            targets: ['x'],
+            impact: {
+              fileCount: 2,
+              totalSizeBytes: 0,
+              directoryCount: 0,
+              crossDirectory: false,
+              flagged: true,
+              hasDestructive: true,
+            },
+          }),
+          entry({
+            operation: 'command-exec',
+            targets: ['y'],
+            impact: {
+              fileCount: 2,
+              totalSizeBytes: 0,
+              directoryCount: 0,
+              crossDirectory: false,
+              flagged: true,
+              hasDestructive: false,
+            },
+          }),
+          entry({
+            operation: 'trash-restore',
+            targets: ['z'],
+            impact: {
+              fileCount: 1,
+              totalSizeBytes: 0,
+              directoryCount: 0,
+              crossDirectory: false,
+              flagged: false,
+            },
+          }),
+        ]}
+      />
+    );
+
+    const dots = container.querySelectorAll('[aria-hidden="true"]');
+    expect(dots).toHaveLength(3);
+    // 展示顺序最近在前（数组逆序）：常规 → 橙色 → 红色
+    // 常规 → 绿色
+    expect(dots[0]!.className).toMatch(/on/);
+    expect(dots[0]!.className).not.toMatch(/danger/);
+    // 仅谨慎标记 → 橙色警告点
+    expect(dots[1]!.className).toMatch(/warn/);
+    expect(dots[1]!.className).not.toMatch(/danger/);
+    // 含删除/改名类变更 → 红色高风险点（优先级高于橙色）
+    expect(dots[2]!.className).toMatch(/danger/);
+    expect(dots[2]!.className).not.toMatch(/warn/);
   });
 });

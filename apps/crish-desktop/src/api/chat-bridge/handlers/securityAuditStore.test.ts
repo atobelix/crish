@@ -92,12 +92,13 @@ describe('useSecurityAuditStore', () => {
 });
 
 describe('审计中文标签', () => {
-  it('operation 标签：五类 + 未知原样', () => {
+  it('operation 标签：六类 + 未知原样', () => {
     expect(auditOperationLabel('delete')).toBe('删除');
     expect(auditOperationLabel('trash-restore')).toBe('恢复');
     expect(auditOperationLabel('trash-purge')).toBe('清除');
     expect(auditOperationLabel('git-revert')).toBe('回退');
     expect(auditOperationLabel('command-exec')).toBe('命令执行');
+    expect(auditOperationLabel('undeclared-write')).toBe('未声明写入');
     expect(auditOperationLabel('custom-op')).toBe('custom-op');
   });
 
