@@ -17,6 +17,8 @@ import { useCacheEventsStore } from '../../api/chat-bridge/handlers/cacheEventsS
 import { useSecurityAuditStore } from '../../api/chat-bridge/handlers/securityAuditStore';
 import { SecurityAuditSection } from './SecurityAuditSection';
 import { TrashSection } from './TrashSection';
+import { FlowDagView } from './FlowDagView';
+import { useFlowDagVisible } from '../../hooks/useFlowDagVisible';
 import {
   formatEngineStatusFull,
   formatEngineStatusShort,
@@ -49,6 +51,10 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
   const data = useRuntimePanelData();
   const cachePanel = useCacheEventsStore();
   const auditEntries = useSecurityAuditStore((s) => s.entries);
+
+  // T-D-12：编排图功能开关（localStorage 直读键 crish_flow_dag_visible，
+  // 默认关；关闭时区段零挂载零请求零事件订阅——可随时下线）。
+  const flowDagVisible = useFlowDagVisible();
 
   // T-48：冷缓存 tick——最近一 run 的 warmUntilMs 已过期时提示
   // 「下次将重发 ~X tokens」（每 run 只提示一次，store 内去重）。
@@ -167,6 +173,10 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
       <TrashSection onShowToast={onShowToast} />
 
       <SecurityAuditSection entries={auditEntries} />
+
+      {/* T-D-12：编排图区段（DAG 只读可视化；开关默认关——
+          关闭时零挂载、零查询请求、零事件订阅，可下线锚点） */}
+      {flowDagVisible ? <FlowDagView /> : null}
 
       <PlansSection
         workflows={ds.workflows}

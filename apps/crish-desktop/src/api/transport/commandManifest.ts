@@ -118,6 +118,8 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('load_session_agents', 'session', 'engine'),
     entry('save_session_agents', 'session', 'engine'),
     entry('get_session_meta', 'session', 'engine'),
+    // F11b（T-D-12）：DAG 只读快照查询
+    entry('get_flow_snapshot', 'session', 'engine'),
     entry('set_session_meta', 'session', 'engine'),
     // F10（T-EG-12）：会话级产出根覆盖
     entry('set_session_output_root', 'session', 'engine'),
