@@ -10,6 +10,20 @@ export type SubagentRole =
   'researcher' | 'implementer' | 'reviewer' | 'debugger' | 'planner';
 
 /**
+ * 子代理任务类型（REQ-D04 收敛，T-D-07）— 禁令 21 保持：新维度，
+ * 不并入 role / capabilityMode。
+ * 驱动系统默认权限集（Rust 侧 default_permissions 六映射），
+ * 缺省 = analysis（最安全，fail-closed）；主 agent 不用配、也不必知道细节。
+ */
+export type SubagentTaskType =
+  | 'analysis'
+  | 'design'
+  | 'review'
+  | 'implementation'
+  | 'organization'
+  | 'commit';
+
+/**
  * 能力模式（控制实际权限）— 禁令 21
  * 调度器只看 capabilityMode，role 是元数据。
  * 禁止 role 与 capabilityMode 并存的"双重维度"。
@@ -64,7 +78,31 @@ export interface SubagentDefinition {
   readonly allowedTools?: readonly string[];
   /** 隔离模式（ROUND-09 §3，第一版仅 none） */
   readonly isolationMode?: SubagentIsolationMode;
+  /**
+   * 任务类型（可选；缺省 analysis——最安全默认；默认权限集由系统映射，
+   * T-D-07；驱动引擎侧 default_permissions，主 agent 不用配细节）
+   */
+  readonly taskType?: SubagentTaskType;
+  /**
+   * 显式写路径白名单（可选；硬沙箱输入——Rust 侧按此越权拒绝，
+   * T-D-08；缺省 = 按 taskType 默认集装配，如 implementation=工作区根）
+   */
+  readonly allowedWritePaths?: readonly string[];
+  /**
+   * 模型覆盖（扩展点预留，T-D-10 已决策「多模型不做」）：
+   * 不暴露 UI、不实现任何消费逻辑，引擎侧恒不读取；全构造点显式不传
+   * （Rust 侧编译器强制 None）。详见「调研-可视化与扩展点.md」§3。
+   */
+  readonly modelOverride?: string;
 }
+
+/**
+ * 收敛声明（REQ-D04 九参数收敛为五项，调研-权限传递层.md §3.2）：
+ * enableWriteTools / enableCommandTools / enableMcpTools / allowedReadPaths
+ * **不在定义契约中**——前三项由 taskType 默认集派生（系统硬编码），
+ * 读路径默认全工作区可读（无安全增益）。验收断言：上述字段不存在于
+ * 本契约（类型级——字段引用即编译错误）。
+ */
 
 /** 子代理实例运行时状态（SubagentInstance 的一部分，Round 9 完整实现） */
 export interface SubagentInstanceSnapshot {

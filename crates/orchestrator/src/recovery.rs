@@ -1121,6 +1121,12 @@ impl RecoveryCoordinator {
             parent_tool_call_id: None,
             flow_node_id: None,
             is_composite: false,
+            // T-D-07 定义扩展：恢复 fork 路径不携带任务类型/写路径/标签
+            task_type: None,
+            allowed_write_paths: None,
+            display_label: None,
+            // 扩展点预留：全构造点显式 None（编译器强制）
+            model_override: None,
         };
         let spawned = self
             .spawner
@@ -1429,6 +1435,7 @@ mod tests {
                 status: SubagentState::Running,
                 summary: None,
                 flow_node_id: None,
+                display_label: None,
             })
         }
     }

@@ -1014,6 +1014,13 @@ impl FlowScheduler {
                     parent_tool_call_id: None,
                     flow_node_id: Some(node_id.clone()),
                     is_composite: node.is_composite,
+                    // T-D-07 定义扩展：调度器路径不携带任务类型/写路径/标签
+                    // （None = 引擎按缺省 analysis + 默认集装配）
+                    task_type: None,
+                    allowed_write_paths: None,
+                    display_label: None,
+                    // 扩展点预留：全构造点显式 None（编译器强制）
+                    model_override: None,
                 };
                 match self.spawner.spawn(&request).await {
                     Ok(result) => {

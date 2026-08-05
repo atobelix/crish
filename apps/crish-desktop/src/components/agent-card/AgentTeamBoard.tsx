@@ -88,10 +88,19 @@ function normalizeAgentId(id: string | null | undefined): string | null {
   return t ? t : null;
 }
 
-/** 展示名：description → mode → id → 中文兜底 */
-function agentTitle(agent: SessionAgent): string {
-  const raw = (agent.description || agent.mode || agent.id || '').trim();
-  return raw || '子智能体';
+/** 展示名：displayLabel → description → mode → id → 中文兜底（T-D-05 label 优先）；
+ * 空白候选跳过（对齐 openAgentPanel 的空串跳过语义，防空白标签阻塞兜底链） */
+export function agentTitle(agent: SessionAgent): string {
+  for (const candidate of [
+    agent.displayLabel,
+    agent.description,
+    agent.mode,
+    agent.id,
+  ]) {
+    const t = (candidate || '').trim();
+    if (t) return t;
+  }
+  return '子智能体';
 }
 
 /** 运行中优先 → 失败 → 已停止 → 完成；同组新在前 */

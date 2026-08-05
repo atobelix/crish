@@ -209,6 +209,16 @@ pub struct SessionAgent {
     pub depth: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent_path_json: Option<String>,
+    /// 任务类型（wire kebab-case 六枚举，T-D-07；v6 新列；驱动系统默认
+    /// 权限集的落库快照，展示/审计用——权限判定在引擎侧按默认集装配）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_type: Option<String>,
+    /// 角色展示标签（2-5 字自由文本，仅展示不影响调度，T-D-05；v6 新列）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_label: Option<String>,
+    /// 显式写路径白名单（JSON 字符串数组，硬沙箱消费输入，T-D-07；v6 新列）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_write_paths_json: Option<String>,
 }
 
 /// 会话索引条目（对齐 SessionIndexEntry in sessionPersistenceTypes.ts L20-36）
@@ -531,11 +541,22 @@ mod tests {
             ended_at: Some(150),
             depth: Some(0),
             subagent_path_json: Some(r#"["a1"]"#.into()),
+            task_type: Some("analysis".into()),
+            display_label: Some("Rust 内核分析师".into()),
+            allowed_write_paths_json: Some(r#"["docs/notes"]"#.into()),
         };
         let json = serde_json::to_string(&agent).unwrap();
         let back: SessionAgent = serde_json::from_str(&json).unwrap();
         assert_eq!(agent, back);
         assert_eq!(back.messages.len(), 1);
+        // 缺省兼容：旧载荷无新字段 → 反序列化为 None
+        let legacy = r#"{"id":"a1","subagentRunId":"r1","parentSessionId":"s1",
+                         "parentRunId":"p1","description":"","mode":"",
+                         "status":"completed","messages":[],"startedAt":0}"#;
+        let old: SessionAgent = serde_json::from_str(legacy).unwrap();
+        assert_eq!(old.task_type, None);
+        assert_eq!(old.display_label, None);
+        assert_eq!(old.allowed_write_paths_json, None);
     }
 
     #[test]

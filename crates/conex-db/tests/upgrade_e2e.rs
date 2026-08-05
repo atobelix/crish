@@ -388,6 +388,10 @@ fn upgrade_e2e_v3_to_v4_all_apis_usable_after_upgrade() {
     let loaded = db.load_session_agents("s3").unwrap();
     assert_eq!(loaded.len(), 1);
     assert_eq!(loaded[0].messages.len(), 1);
+    // T-D-07 v6 新列：升级后写入与读回一致（display_label 读回验收）
+    assert_eq!(loaded[0].task_type.as_deref(), Some("analysis"));
+    assert_eq!(loaded[0].display_label.as_deref(), Some("测试分析师"));
+    assert_eq!(loaded[0].allowed_write_paths_json, None);
 
     // ── 待处理输入 ──
     db.save_pending_input("p2", "s1", Some("r-new"), r#"{"type":"text"}"#).unwrap();
@@ -544,5 +548,8 @@ fn sample_agent(id: &str) -> SessionAgent {
         ended_at: Some(1),
         depth: Some(0),
         subagent_path_json: None,
+        task_type: Some("analysis".to_string()),
+        display_label: Some("测试分析师".to_string()),
+        allowed_write_paths_json: None,
     }
 }

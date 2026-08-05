@@ -276,6 +276,9 @@ fn delete_session_cascades() {
             ended_at: Some(100),
             depth: Some(0),
             subagent_path_json: None,
+            task_type: None,
+            display_label: None,
+            allowed_write_paths_json: None,
         }],
     )
     .unwrap();
@@ -309,6 +312,9 @@ fn save_and_load_session_agents() {
             ended_at: Some(200),
             depth: Some(0),
             subagent_path_json: Some(r#"["a1"]"#.into()),
+            task_type: Some("analysis".into()),
+            display_label: Some("Rust 内核分析师".into()),
+            allowed_write_paths_json: Some(r#"["docs/notes"]"#.into()),
         },
         SessionAgent {
             id: "a2".into(),
@@ -325,6 +331,9 @@ fn save_and_load_session_agents() {
             ended_at: None,
             depth: Some(1),
             subagent_path_json: None,
+            task_type: Some("implementation".into()),
+            display_label: None,
+            allowed_write_paths_json: None,
         },
     ];
     db.save_session_agents("s1", &agents).unwrap();
@@ -336,6 +345,16 @@ fn save_and_load_session_agents() {
     assert_eq!(loaded[0].summary.as_deref(), Some("done"));
     assert_eq!(loaded[1].id, "a2");
     assert!(loaded[1].messages.is_empty());
+    // T-D-07 v6 新列读写（display_label 读回 + task_type / 写路径白名单）
+    assert_eq!(loaded[0].task_type.as_deref(), Some("analysis"));
+    assert_eq!(loaded[0].display_label.as_deref(), Some("Rust 内核分析师"));
+    assert_eq!(
+        loaded[0].allowed_write_paths_json.as_deref(),
+        Some(r#"["docs/notes"]"#)
+    );
+    assert_eq!(loaded[1].task_type.as_deref(), Some("implementation"));
+    assert_eq!(loaded[1].display_label, None, "未声明的列为 None");
+    assert_eq!(loaded[1].allowed_write_paths_json, None);
 }
 
 #[test]

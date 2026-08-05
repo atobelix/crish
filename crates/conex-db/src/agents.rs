@@ -16,7 +16,8 @@ impl LocalDb {
             .prepare(
                 "SELECT agent_id, subagent_run_id, parent_session_id, parent_run_id,
                         parent_tool_call_id, description, mode, status, summary,
-                        started_at, ended_at, depth, subagent_path_json
+                        started_at, ended_at, depth, subagent_path_json,
+                        task_type, display_label, allowed_write_paths_json
                  FROM session_agents
                  WHERE session_id = ?1
                  ORDER BY started_at ASC, agent_id ASC",
@@ -39,6 +40,11 @@ impl LocalDb {
                     ended_at: row.get(10)?,
                     depth: row.get(11)?,
                     subagent_path_json: row.get(12)?,
+                    // v6 新列（T-D-07 定义扩展）：task_type / display_label /
+                    // allowed_write_paths_json（model_override 不落库）
+                    task_type: row.get(13)?,
+                    display_label: row.get(14)?,
+                    allowed_write_paths_json: row.get(15)?,
                     messages: Vec::new(),
                 })
             })
@@ -115,8 +121,9 @@ impl LocalDb {
                 "INSERT INTO session_agents (
                     session_id, agent_id, subagent_run_id, parent_session_id, parent_run_id,
                     parent_tool_call_id, description, mode, status, summary,
-                    started_at, ended_at, depth, subagent_path_json
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                    started_at, ended_at, depth, subagent_path_json,
+                    task_type, display_label, allowed_write_paths_json
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
                 rusqlite::params![
                     session_id,
                     agent.id,
@@ -132,6 +139,9 @@ impl LocalDb {
                     agent.ended_at,
                     agent.depth,
                     agent.subagent_path_json,
+                    agent.task_type,
+                    agent.display_label,
+                    agent.allowed_write_paths_json,
                 ],
             )
             .map_err(|e| self.latch_error("save_session_agents_insert", e))?;

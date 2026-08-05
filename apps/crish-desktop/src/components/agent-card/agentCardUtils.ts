@@ -15,7 +15,7 @@ export const STATUS_LABEL: Record<SessionAgent['status'], string> = {
 };
 
 /** 浏览列表排序：运行中 → 失败 → 已停止 → 完成；同组新在前 */
-export function rankAgentStatus(st: SessionAgent['status']): number {
+function rankAgentStatus(st: SessionAgent['status']): number {
   if (st === 'running') return 0;
   if (st === 'failed') return 1;
   if (st === 'stopped') return 2;
@@ -47,8 +47,19 @@ export function formatAgentDuration(agent: SessionAgent): string | null {
   return m > 0 ? `${h} 小时 ${m} 分` : `${h} 小时`;
 }
 
+/** 展示名：displayLabel → description → mode → id → 默认（T-D-05 label 优先）；
+ * 空白候选跳过（对齐 openAgentPanel 的空串跳过语义，防空白标签阻塞兜底链） */
 export function agentDisplayName(agent: SessionAgent): string {
-  return (agent.description || agent.mode || agent.id || '子智能体').trim() || '子智能体';
+  for (const candidate of [
+    agent.displayLabel,
+    agent.description,
+    agent.mode,
+    agent.id,
+  ]) {
+    const t = (candidate || '').trim();
+    if (t) return t;
+  }
+  return '子智能体';
 }
 
 export function countPendingApprovals(agent: SessionAgent): number {

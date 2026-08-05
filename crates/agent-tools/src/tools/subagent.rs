@@ -31,6 +31,8 @@ use crate::definition::{Tool, ToolDefinition, ToolError};
 use async_trait::async_trait;
 use conex_types::error::codes;
 use serde_json::Value;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 // ── 子代理角色与能力模式（对齐 shared-types/subagent.ts）──────────
@@ -108,6 +110,300 @@ impl SubagentCapabilityMode {
             "all" => Some(Self::All),
             _ => None,
         }
+    }
+}
+
+// ── 任务类型与系统默认权限集（T-D-07：REQ-D04 定义扩展）──────────
+
+/// 子代理任务类型（对齐 SubagentTaskType，shared-types/subagent.ts）
+///
+/// 六枚举与 TS 契约一一对应，wire 名 kebab-case。任务类型是**新维度**，
+/// 不并入 role / capabilityMode（禁令 21 保持，subagent.ts:8-12）：
+/// - role 是展示/过滤标签（不影响调度）；
+/// - capabilityMode 是既有能力档（read-only 做工具集裁剪）；
+/// - task_type 驱动系统默认权限集（[default_permissions]），缺省 =
+///   analysis（最安全，fail-closed，配少不配错）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskType {
+    /// 只读调研，不产生任何改动
+    Analysis,
+    /// 只读 + 可在方案文档目录产出一份设计文档
+    Design,
+    /// 只读 + 可在评审报告目录产出一份评审报告
+    Review,
+    /// 可读写工作区 + 常用构建/测试命令
+    Implementation,
+    /// 只读 + 可在指定文档目录整理/编辑文档
+    Organization,
+    /// 仅 git 操作，不碰其他
+    Commit,
+}
+
+impl TaskType {
+    /// wire 名（kebab-case，对齐 TS 枚举字面量）
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Analysis => "analysis",
+            Self::Design => "design",
+            Self::Review => "review",
+            Self::Implementation => "implementation",
+            Self::Organization => "organization",
+            Self::Commit => "commit",
+        }
+    }
+
+    /// 从 wire 名解析（未知返回 None，由调用方报结构化错误）
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "analysis" => Some(Self::Analysis),
+            "design" => Some(Self::Design),
+            "review" => Some(Self::Review),
+            "implementation" => Some(Self::Implementation),
+            "organization" => Some(Self::Organization),
+            "commit" => Some(Self::Commit),
+            _ => None,
+        }
+    }
+
+    /// 一句话边界（给主 agent / UI 展示用，调研-权限传递层.md §2.2
+    /// 第二列；系统默认集的实现细节不暴露）
+    pub fn boundary_summary(&self) -> &'static str {
+        match self {
+            Self::Analysis => "只读调研，不产生任何改动",
+            Self::Design => "只读 + 可在方案文档目录产出一份设计文档",
+            Self::Review => "只读 + 可在评审报告目录产出一份评审报告",
+            Self::Implementation => "可读写工作区 + 常用构建/测试命令",
+            Self::Organization => "只读 + 可在指定文档目录整理/编辑文档",
+            Self::Commit => "仅 git 操作，不碰其他",
+        }
+    }
+}
+
+/// 默认权限集的工具集面（D2-2 按此裁剪工具注册表，fail-closed 白名单语义）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefaultToolSet {
+    /// 只读白名单（复用 readonly.rs:27-34 的 READONLY_TOOL_NAMES 六工具）
+    ReadOnlyWhitelist,
+    /// 只读白名单 + 仅 write_file（design/review 可产出一份文档）
+    ReadOnlyPlusWriteFile,
+    /// 全工具集（implementation；写路径沙箱 = 工作区根兜底）
+    Full,
+    /// 仅 shell_command（commit；命令前缀过滤 git）
+    ShellOnly,
+}
+
+/// 默认权限集的写路径沙箱面（D2-2 落地为 run 级 WritePolicy 的输入）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefaultWriteScope {
+    /// 无写（analysis）
+    None,
+    /// 凭证式配额（design/review：granted=true quota=1；目录为会话配置的
+    /// 方案文档/评审报告目录，缺省不限制具体目录——对齐 explore_quota
+    /// 「配额凭证只能由主 agent 在 spawn 时给出」模式，explore_quota.rs:9-10）
+    Quota { granted: bool, quota: usize },
+    /// 工作区根（implementation：workspace_root 即天然白名单）
+    WorkspaceRoot,
+    /// 主 agent 显式给的目录（organization：不配 = 退化为只读，fail-closed）
+    MainAgentDirs,
+    /// 无写文件工具（commit：只经 shell_command 走 git，不碰文件）
+    NoWriteTools,
+}
+
+/// 默认权限集的命令策略面（D2-2 按此过滤命令工具；「仅 git / 构建测试
+/// 白名单」口径差异见调研-权限传递层.md 开放问题 6.5，评审统一）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefaultCommandPolicy {
+    /// 无命令（analysis/design/review/organization）
+    None,
+    /// 构建/测试类命令（implementation：语义层 CommandClass 过滤，
+    /// 复用 permission.rs:119-121 的 semantics::analyze 分类）
+    BuildTest,
+    /// 仅 git 前缀命令（commit，T-D-08 细化）
+    GitOnly,
+}
+
+/// 系统默认权限集（T-D-07：task_type 六枚举各一套「够用」默认，
+/// 调研-权限传递层.md §2.2 表落地；**默认值由系统硬编码，主 agent
+/// 不用配、也不必知道细节**——文档/UI 只展示 [TaskType::boundary_summary]
+/// 的一句话边界）。
+///
+/// **消费约定（与 D2-2 的字段名契约，T-D-07/08 冻结点）**：D2-2（T-D-08）
+/// 在 `write_paths.rs` / `readonly.rs` / `tools/mod.rs` 落地 run 级策略时
+/// 按本结构**字段名**消费，不依赖本模块的类型之外的具体策略类型：
+/// - `tool_set` → 工具注册表裁剪（白名单 fail-closed）；
+/// - `write_scope` → run 级 WritePolicy（Allowed/配额/无写）输入；
+/// - `command_policy` → 命令工具过滤（CommandClass 语义层 / git 前缀）。
+///
+/// 引擎侧（T-D-13）在 spawn 时把「定义显式字段 > 默认集」合并后转成
+/// 策略再注册。
+///
+/// 默认集在会话级 permissionMode 之上叠加：父会话 full-access 不传导给
+/// 子代理（调研-权限传递层.md §2.1 独立价值）——判定与装配均在执行层。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DefaultPermissions {
+    /// 工具集面
+    pub tool_set: DefaultToolSet,
+    /// 写路径沙箱面
+    pub write_scope: DefaultWriteScope,
+    /// 命令策略面
+    pub command_policy: DefaultCommandPolicy,
+}
+
+/// 任务类型 → 系统默认权限集（**纯函数**，六映射固定；调研-权限传递层.md
+/// §2.2 表 + 03-D 方案 §3.7 表落地）：
+///
+/// | task_type | 工具集 | 写路径沙箱 | 命令策略 |
+/// | :--- | :--- | :--- | :--- |
+/// | analysis | 只读白名单（readonly.rs:27-34 语义） | 无写 | 无命令 |
+/// | design | 只读白名单 + 仅 write_file | 方案文档目录（配额凭证式 granted=true quota=1） | 无命令 |
+/// | review | 同 design | 评审报告目录（缺省不限制 + 配额 1） | 无命令 |
+/// | implementation | 全工具集 | 工作区根（workspace_root 即天然白名单） | 构建/测试类（语义层 CommandClass） |
+/// | organization | 只读白名单 + 写 | 主 agent 显式目录（不配 = 退化为只读） | 无命令 |
+/// | commit | 仅 shell_command | 无写文件工具 | git 前缀过滤 |
+pub fn default_permissions(task_type: TaskType) -> DefaultPermissions {
+    match task_type {
+        TaskType::Analysis => DefaultPermissions {
+            tool_set: DefaultToolSet::ReadOnlyWhitelist,
+            write_scope: DefaultWriteScope::None,
+            command_policy: DefaultCommandPolicy::None,
+        },
+        TaskType::Design | TaskType::Review => DefaultPermissions {
+            tool_set: DefaultToolSet::ReadOnlyPlusWriteFile,
+            write_scope: DefaultWriteScope::Quota {
+                granted: true,
+                quota: 1,
+            },
+            command_policy: DefaultCommandPolicy::None,
+        },
+        TaskType::Implementation => DefaultPermissions {
+            tool_set: DefaultToolSet::Full,
+            write_scope: DefaultWriteScope::WorkspaceRoot,
+            command_policy: DefaultCommandPolicy::BuildTest,
+        },
+        TaskType::Organization => DefaultPermissions {
+            tool_set: DefaultToolSet::ReadOnlyPlusWriteFile,
+            write_scope: DefaultWriteScope::MainAgentDirs,
+            command_policy: DefaultCommandPolicy::None,
+        },
+        TaskType::Commit => DefaultPermissions {
+            tool_set: DefaultToolSet::ShellOnly,
+            write_scope: DefaultWriteScope::NoWriteTools,
+            command_policy: DefaultCommandPolicy::GitOnly,
+        },
+    }
+}
+
+// ── 子代理定义与注册表（T-D-07 冻结结构，引擎侧 T-D-13 落位）────
+
+/// 子代理定义（REQ-D04 五项收敛参数 + display_label + model_override
+/// 扩展点；TS 契约 SubagentDefinition 的 Rust 投影，shared-types/subagent.ts）
+///
+/// **参数收敛**（调研-权限传递层.md §3.2）：enable_write_tools /
+/// enable_command_tools / enable_mcp_tools / allowed_read_paths **不在
+/// 定义中**——前三项由 task_type 默认集派生，读路径默认全工作区可读；
+/// 主 agent 配置负担从「逐项决策」降到「（可选的）一处路径」。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubagentDefinition {
+    /// 定义唯一标识（agentId，run_subagent 按此检索注册表）
+    pub id: String,
+    /// 展示名
+    pub name: String,
+    /// 人读职责描述
+    pub description: Option<String>,
+    /// 完整系统指令
+    pub system_prompt: Option<String>,
+    /// 任务类型（可选；缺省 analysis——最安全默认）
+    pub task_type: Option<TaskType>,
+    /// 显式写路径白名单（可选；硬沙箱输入，覆盖 task_type 默认集）
+    pub allowed_write_paths: Option<Vec<PathBuf>>,
+    /// 角色展示标签（2-5 字自由文本，仅展示不影响调度；T-D-05）
+    pub display_label: Option<String>,
+    /// 模型覆盖（扩展点预留，T-D-10 已决策「多模型不做」）：
+    /// **不得附带任何消费逻辑**——引擎侧恒不读取；解析/装配全构造点
+    /// 显式 None（编译器强制，新增消费即编译断裂）。详见
+    /// 「调研-可视化与扩展点.md」§3 与 03-D 方案 §3.10。
+    pub model_override: Option<String>,
+}
+
+impl SubagentDefinition {
+    /// 生效任务类型（缺省 = analysis，最安全，fail-closed）
+    pub fn effective_task_type(&self) -> TaskType {
+        self.task_type.unwrap_or(TaskType::Analysis)
+    }
+
+    /// 生效写路径白名单（**合并语义**：定义显式字段 > task_type 默认集，
+    /// 现状分析 §4.4 实施要点 2）。Some = 显式白名单直接生效（越权拒绝
+    /// 按此拦截，T-D-08）；None = 不覆盖，引擎侧按 [default_permissions]
+    /// 的 write_scope 装配（implementation = 工作区根等）。
+    pub fn effective_write_paths(&self) -> Option<Vec<PathBuf>> {
+        self.allowed_write_paths.clone()
+    }
+
+    /// 生效展示标签（display_label 优先，缺省取 name；前端兜底链
+    /// displayLabel → description → mode → id → 子智能体）
+    pub fn effective_display_label(&self) -> String {
+        self.display_label
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| self.name.clone())
+    }
+}
+
+/// 定义注册表错误
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubagentRegistryError {
+    /// 重复 id（拒绝覆盖，防静默替换——定义是主 agent 的声明资产）
+    DuplicateId(String),
+}
+
+/// 子代理定义注册表（T-D-07 **冻结结构**，引擎侧 T-D-13 落位）。
+///
+/// 持久化面（F11 T-D-13）：session_meta 或插件 manifest 加载
+/// （`subagent.ts:44` 插件面注释已预留）；本模块只提供内存 HashMap 容器
+/// 与检索/合并纯函数，不感知持久化介质。「定义后可多次实例化」：
+/// agentId 每次解析同一份定义 → 与显式参数合并 → 装配 SpawnRequest，
+/// 天然支持多次 spawn。
+#[derive(Debug, Clone, Default)]
+pub struct SubagentDefinitionRegistry {
+    /// 定义容器（key = 定义 id / agentId）
+    definitions: HashMap<String, SubagentDefinition>,
+}
+
+impl SubagentDefinitionRegistry {
+    /// 新建空注册表
+    pub fn new() -> Self {
+        Self {
+            definitions: HashMap::new(),
+        }
+    }
+
+    /// 注册定义（重复 id 拒绝）
+    pub fn register(&mut self, def: SubagentDefinition) -> Result<(), SubagentRegistryError> {
+        if self.definitions.contains_key(&def.id) {
+            return Err(SubagentRegistryError::DuplicateId(def.id));
+        }
+        self.definitions.insert(def.id.clone(), def);
+        Ok(())
+    }
+
+    /// 按 agent_id 检索定义
+    pub fn get(&self, agent_id: &str) -> Option<&SubagentDefinition> {
+        self.definitions.get(agent_id)
+    }
+
+    /// 是否已注册
+    pub fn contains(&self, agent_id: &str) -> bool {
+        self.definitions.contains_key(agent_id)
+    }
+
+    /// 定义数量
+    pub fn len(&self) -> usize {
+        self.definitions.len()
+    }
+
+    /// 是否为空
+    pub fn is_empty(&self) -> bool {
+        self.definitions.is_empty()
     }
 }
 
@@ -387,6 +683,18 @@ pub struct SubagentSpawnRequest {
     /// 综合节点标记（C6 合成唤醒扩展：综合 run 记录 is_composite 与
     /// planner_run_id 亲和，jcode NodeMeta.planner 对齐；非综合为 false）
     pub is_composite: bool,
+    /// 任务类型（可选；驱动系统默认权限集 [default_permissions]；
+    /// None = 不覆盖继承值/定义值，引擎侧按缺省 analysis 处理）
+    pub task_type: Option<TaskType>,
+    /// 显式写路径白名单（可选；**硬沙箱输入**——D2-2/T-D-08 落 run 级
+    /// WritePolicy 后按此越权拒绝；None = 按 task_type 默认集装配）
+    pub allowed_write_paths: Option<Vec<PathBuf>>,
+    /// 角色展示标签（可选；仅展示，不影响调度；T-D-05）
+    pub display_label: Option<String>,
+    /// 模型覆盖（扩展点预留，T-D-10「多模型不做」）：**全构造点显式
+    /// None（编译器强制）**，引擎侧恒不消费（新增消费即编译断裂），
+    /// 不落库（session_agents 无对应列）。
+    pub model_override: Option<String>,
 }
 
 /// 子代理 spawn 结果（工具出站信封载荷）
@@ -406,6 +714,8 @@ pub struct SubagentSpawnResult {
     /// 请求携带的流程节点 id 回显（C6 调度器扩展：引擎侧可据此关联
     /// 依赖图节点；非流程 spawn 为 None）
     pub flow_node_id: Option<String>,
+    /// 角色展示标签回显（T-D-05：出站信封携带，前端 title 优先展示）
+    pub display_label: Option<String>,
 }
 
 /// spawn 失败（结构化错误，映射为 ToolError 出站）
@@ -554,6 +864,20 @@ impl RunSubagentTool {
                             "type": "string",
                             "enum": ["research", "research_single", "solve", "write"],
                             "description": "执行模式（可选，对齐前端 AgentBrowsePad 语义）"
+                        },
+                        "taskType": {
+                            "type": "string",
+                            "enum": ["analysis", "design", "review", "implementation", "organization", "commit"],
+                            "description": "任务类型（可选，缺省 analysis）：驱动系统默认权限集（工具集/写路径沙箱/命令策略），主 agent 不用配细节"
+                        },
+                        "allowedWritePaths": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "显式写路径白名单（可选，硬沙箱输入）：覆盖 task_type 默认集，越界写入被拦截；缺省按默认集装配（如 implementation=工作区根）"
+                        },
+                        "displayLabel": {
+                            "type": "string",
+                            "description": "角色展示标签（2-5 字自由文本，可选；仅展示，不影响调度）"
                         }
                     },
                     "required": ["prompt"],
@@ -617,6 +941,30 @@ impl Tool for RunSubagentTool {
         let timeout_ms = super::optional_u64(&args, "timeoutMs");
         let description = super::optional_string(&args, "description");
         let mode = super::optional_string(&args, "mode");
+        let task_type = match super::optional_string(&args, "taskType") {
+            Some(raw) => Some(TaskType::parse(&raw).ok_or_else(|| {
+                ToolError::invalid_input(format!("未知任务类型：{raw}"))
+            })?),
+            None => None,
+        };
+        let allowed_write_paths: Option<Vec<PathBuf>> = match args.get("allowedWritePaths") {
+            Some(value) => Some(
+                value
+                    .as_array()
+                    .ok_or_else(|| {
+                        ToolError::invalid_input("allowedWritePaths 必须是字符串数组")
+                    })?
+                    .iter()
+                    .map(|v| {
+                        v.as_str().map(PathBuf::from).ok_or_else(|| {
+                            ToolError::invalid_input("allowedWritePaths 必须是字符串数组")
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+            None => None,
+        };
+        let display_label = super::optional_string(&args, "displayLabel");
 
         // spawn 通道未接线 → 结构化不可用错误（引擎集成前零副作用）
         let Some(spawner) = &self.spawner else {
@@ -641,13 +989,20 @@ impl Tool for RunSubagentTool {
             // 工具直调路径不携带流程关联（C6 调度器经 spawner 直接 spawn）
             flow_node_id: None,
             is_composite: false,
+            task_type,
+            allowed_write_paths,
+            display_label,
+            // 扩展点预留：工具路径恒不解析 modelOverride 入参（T-D-10 多模型
+            // 不做，不得附带消费逻辑）——全构造点显式 None（编译器强制）
+            model_override: None,
         };
         let result = spawner
             .spawn(&request)
             .await
             .map_err(|e| ToolError::new(e.code(), e.message()))?;
 
-        // 结果信封：summary 文案经伪造审批防护处理（01 Top 3）
+        // 结果信封：summary 文案经伪造审批防护处理（01 Top 3）；
+        // display_label 回显（T-D-05，前端 title 优先展示）
         let summary = result.summary.map(|s| apply_forgery_boundary(&s));
         Ok(serde_json::json!({
             "subagentId": result.subagent_id,
@@ -655,6 +1010,7 @@ impl Tool for RunSubagentTool {
             "sessionId": result.session_id,
             "status": result.status.as_str(),
             "summary": summary,
+            "displayLabel": result.display_label,
         }))
     }
 }
@@ -691,6 +1047,7 @@ mod tests {
                     status: SubagentState::Running,
                     summary: Some("子代理已启动".to_string()),
                     flow_node_id: None,
+                    display_label: None,
                 }),
             }
         }
@@ -726,6 +1083,8 @@ mod tests {
             let mut result = self.outcome.clone()?;
             // C6 调度器扩展：flow_node_id 回显（引擎侧据此关联依赖图节点）
             result.flow_node_id = req.flow_node_id.clone();
+            // T-D-05：display_label 回显（出站信封携带）
+            result.display_label = req.display_label.clone();
             Ok(result)
         }
     }
@@ -844,6 +1203,316 @@ mod tests {
         assert_eq!(out["subagentRunId"], "sub-run-1");
         assert_eq!(out["sessionId"], "sub-sess-1");
         assert_eq!(out["status"], "running");
+    }
+
+    // ── T-D-07：任务类型 / 默认权限集 / 定义注册表 / display_label ──
+
+    #[test]
+    fn task_type_parse_as_str_roundtrip_kebab_case() {
+        // 六枚举 wire 名 kebab-case 往返 + 未知名拒绝（对齐 TS 契约）
+        let all = [
+            (TaskType::Analysis, "analysis"),
+            (TaskType::Design, "design"),
+            (TaskType::Review, "review"),
+            (TaskType::Implementation, "implementation"),
+            (TaskType::Organization, "organization"),
+            (TaskType::Commit, "commit"),
+        ];
+        for (variant, wire) in all {
+            assert_eq!(variant.as_str(), wire, "wire 名必须 kebab-case");
+            assert_eq!(TaskType::parse(wire), Some(variant), "wire 名可解析回枚举");
+            assert!(
+                !wire.contains('_'),
+                "wire 名不得含下划线（kebab-case 契约）"
+            );
+        }
+        assert_eq!(TaskType::parse("wizard"), None, "未知任务类型解析为 None");
+        assert_eq!(TaskType::parse(""), None);
+    }
+
+    #[test]
+    fn task_type_boundary_summary_available_for_ui() {
+        // 一句话边界（给主 agent / UI 展示）：六枚举全部有边界文案
+        for variant in [
+            TaskType::Analysis,
+            TaskType::Design,
+            TaskType::Review,
+            TaskType::Implementation,
+            TaskType::Organization,
+            TaskType::Commit,
+        ] {
+            let summary = variant.boundary_summary();
+            assert!(!summary.is_empty(), "边界文案不得为空");
+            assert!(
+                summary.contains('，') || summary.contains('+') || summary.contains('仅'),
+                "边界文案应为人读一句话"
+            );
+        }
+    }
+
+    #[test]
+    fn default_permissions_analysis_readonly_no_write_no_command() {
+        // 验收锚点（调研-权限传递层.md §5 默认权限集）：analysis =
+        // 只读白名单（复用 readonly.rs:27-34 语义）、无写、无命令
+        let p = default_permissions(TaskType::Analysis);
+        assert_eq!(p.tool_set, DefaultToolSet::ReadOnlyWhitelist);
+        assert_eq!(p.write_scope, DefaultWriteScope::None);
+        assert_eq!(p.command_policy, DefaultCommandPolicy::None);
+    }
+
+    #[test]
+    fn default_permissions_design_and_review_quota_one() {
+        // design/review：只读白名单 + 仅 write_file、凭证式配额 1、无命令
+        for task_type in [TaskType::Design, TaskType::Review] {
+            let p = default_permissions(task_type);
+            assert_eq!(p.tool_set, DefaultToolSet::ReadOnlyPlusWriteFile);
+            assert_eq!(
+                p.write_scope,
+                DefaultWriteScope::Quota {
+                    granted: true,
+                    quota: 1
+                },
+                "{task_type:?} 写配额 = 1（凭证式）"
+            );
+            assert_eq!(p.command_policy, DefaultCommandPolicy::None);
+        }
+    }
+
+    #[test]
+    fn default_permissions_implementation_full_workspace_build_test() {
+        // implementation：全工具集 + 工作区根沙箱 + 构建/测试类命令
+        let p = default_permissions(TaskType::Implementation);
+        assert_eq!(p.tool_set, DefaultToolSet::Full);
+        assert_eq!(p.write_scope, DefaultWriteScope::WorkspaceRoot);
+        assert_eq!(p.command_policy, DefaultCommandPolicy::BuildTest);
+    }
+
+    #[test]
+    fn default_permissions_organization_main_agent_dirs_fail_closed() {
+        // organization：只读 + 写、主 agent 显式目录（不配退化为只读）、无命令
+        let p = default_permissions(TaskType::Organization);
+        assert_eq!(p.tool_set, DefaultToolSet::ReadOnlyPlusWriteFile);
+        assert_eq!(p.write_scope, DefaultWriteScope::MainAgentDirs);
+        assert_eq!(p.command_policy, DefaultCommandPolicy::None);
+    }
+
+    #[test]
+    fn default_permissions_commit_shell_only_git_prefix() {
+        // commit：仅 shell_command + git 前缀命令，无写文件工具
+        let p = default_permissions(TaskType::Commit);
+        assert_eq!(p.tool_set, DefaultToolSet::ShellOnly);
+        assert_eq!(p.write_scope, DefaultWriteScope::NoWriteTools);
+        assert_eq!(p.command_policy, DefaultCommandPolicy::GitOnly);
+    }
+
+    #[test]
+    fn parameter_convergence_definition_has_no_enable_switches() {
+        // 参数收敛断言（类型级）：REQ-D04 九参数收敛为五项（调研-
+        // 权限传递层.md §3.2）——enable_write_tools / enable_command_tools /
+        // enable_mcp_tools / allowed_read_paths **不存在于定义契约**
+        // （SubagentDefinition 字段即全部收敛参数，引用不存在的字段 =
+        // 编译错误，此处以「构造完整定义 + 全字段读取」做类型级锚定）。
+        let def = SubagentDefinition {
+            id: "def-x".to_string(),
+            name: "调研员".to_string(),
+            description: Some("调研模块 A".to_string()),
+            system_prompt: Some("你是调研员".to_string()),
+            task_type: Some(TaskType::Analysis),
+            allowed_write_paths: Some(vec![PathBuf::from("docs/notes")]),
+            display_label: Some("Rust 内核分析师".to_string()),
+            // 扩展点预留：显式 None（编译器强制）
+            model_override: None,
+        };
+        assert_eq!(def.id, "def-x");
+        assert_eq!(def.name, "调研员");
+        assert_eq!(def.effective_task_type(), TaskType::Analysis);
+        assert_eq!(
+            def.effective_write_paths(),
+            Some(vec![PathBuf::from("docs/notes")])
+        );
+        assert_eq!(def.effective_display_label(), "Rust 内核分析师");
+        assert_eq!(def.model_override, None, "扩展点预留必须恒 None");
+    }
+
+    #[test]
+    fn definition_registry_resolves_and_merges_fields_over_defaults() {
+        // 定义实例化验收：注册五项参数定义 → agentId 解析完整 spawn 字段 →
+        // 合并语义正确（显式字段覆盖 task_type 默认集）
+        let mut registry = SubagentDefinitionRegistry::new();
+        assert!(registry.is_empty());
+        registry
+            .register(SubagentDefinition {
+                id: "def-impl".to_string(),
+                name: "实现员".to_string(),
+                description: None,
+                system_prompt: None,
+                task_type: Some(TaskType::Implementation),
+                // 显式白名单覆盖 implementation 默认集（工作区根）
+                allowed_write_paths: Some(vec![PathBuf::from("crates/foo")]),
+                display_label: Some("实现工程师".to_string()),
+                model_override: None,
+            })
+            .expect("首次注册应成功");
+        assert!(!registry.is_empty());
+        assert_eq!(registry.len(), 1);
+        assert!(registry.contains("def-impl"));
+
+        // agentId 解析：同一份定义可反复解析（天然支持多次实例化）
+        let def = registry.get("def-impl").expect("定义可检索");
+        assert_eq!(def.effective_task_type(), TaskType::Implementation);
+        assert_eq!(
+            def.effective_write_paths(),
+            Some(vec![PathBuf::from("crates/foo")]),
+            "显式字段必须覆盖 task_type 默认集"
+        );
+        assert_eq!(def.effective_display_label(), "实现工程师");
+        let again = registry.get("def-impl").expect("再次解析同一份定义");
+        assert_eq!(again, def, "解析结果稳定（多次实例化基础）");
+
+        // 重复 id 拒绝（防静默替换）
+        let dup = SubagentDefinition {
+            id: "def-impl".to_string(),
+            name: "冒充者".to_string(),
+            description: None,
+            system_prompt: None,
+            task_type: None,
+            allowed_write_paths: None,
+            display_label: None,
+            model_override: None,
+        };
+        assert_eq!(
+            registry.register(dup),
+            Err(SubagentRegistryError::DuplicateId("def-impl".to_string()))
+        );
+        assert_eq!(registry.len(), 1, "被拒注册不得污染注册表");
+
+        // 缺省语义：task_type 缺省 = analysis（最安全）；display_label
+        // 缺省取 name；write_paths None = 引擎按默认集装配
+        let plain = SubagentDefinition {
+            id: "def-plain".to_string(),
+            name: "通用子代理".to_string(),
+            description: None,
+            system_prompt: None,
+            task_type: None,
+            allowed_write_paths: None,
+            display_label: None,
+            model_override: None,
+        };
+        assert_eq!(plain.effective_task_type(), TaskType::Analysis);
+        assert_eq!(plain.effective_write_paths(), None);
+        assert_eq!(plain.effective_display_label(), "通用子代理");
+    }
+
+    #[tokio::test]
+    async fn tool_parses_task_type_write_paths_and_display_label() {
+        // T-D-07 入参解析：taskType / allowedWritePaths / displayLabel →
+        // SpawnRequest；displayLabel 出站信封回显（T-D-05）
+        let spawner = Arc::new(RecordingSpawner::ok());
+        let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+        let ctx = ToolContext {
+            session_id: "parent-sess".to_string(),
+            ..create_mock_tool_context()
+        };
+        let out = tool
+            .execute(
+                &ctx,
+                serde_json::json!({
+                    "prompt": "完成模块 A",
+                    "taskType": "implementation",
+                    "allowedWritePaths": ["crates/foo", "docs/notes"],
+                    "displayLabel": "实现工程师"
+                }),
+            )
+            .await
+            .unwrap();
+        let requests = spawner.requests();
+        assert_eq!(requests.len(), 1);
+        let req = &requests[0];
+        assert_eq!(req.task_type, Some(TaskType::Implementation));
+        assert_eq!(
+            req.allowed_write_paths,
+            Some(vec![PathBuf::from("crates/foo"), PathBuf::from("docs/notes")])
+        );
+        assert_eq!(req.display_label.as_deref(), Some("实现工程师"));
+        // 全构造点 model_override 显式 None（编译器强制断言）
+        assert_eq!(req.model_override, None, "工具路径 model_override 恒 None");
+        // 出站信封回显 displayLabel
+        assert_eq!(out["displayLabel"], "实现工程师");
+    }
+
+    #[tokio::test]
+    async fn tool_rejects_unknown_task_type() {
+        // 未知 taskType 结构化拒绝（对齐 role/capabilityMode 的拒绝面；
+        // displayLabel 是独立自由文本字段，不在拒绝面内）
+        let spawner = Arc::new(RecordingSpawner::ok());
+        let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+        let ctx = create_mock_tool_context();
+        let err = tool
+            .execute(
+                &ctx,
+                serde_json::json!({ "prompt": "调查 X", "taskType": "wizard" }),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "tool.invalid_input");
+        assert!(err.to_string().contains("未知任务类型"));
+        assert!(spawner.requests().is_empty(), "拒绝不得发起 spawn");
+    }
+
+    #[tokio::test]
+    async fn tool_rejects_non_array_allowed_write_paths() {
+        let spawner = Arc::new(RecordingSpawner::ok());
+        let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+        let ctx = create_mock_tool_context();
+        let err = tool
+            .execute(
+                &ctx,
+                serde_json::json!({ "prompt": "调查 X", "allowedWritePaths": "docs" }),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "tool.invalid_input");
+        assert!(err.to_string().contains("必须是字符串数组"));
+        assert!(spawner.requests().is_empty());
+    }
+
+    #[tokio::test]
+    async fn tool_display_label_accepts_free_text_not_enum() {
+        // T-D-05 验收：displayLabel 是自由文本独立字段，非枚举拒绝面——
+        // 传入「wizard」等自由标签不被拒（现有拒绝测试只针对 role /
+        // capabilityMode / taskType 枚举字段）
+        let spawner = Arc::new(RecordingSpawner::ok());
+        let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+        let ctx = create_mock_tool_context();
+        let out = tool
+            .execute(
+                &ctx,
+                serde_json::json!({ "prompt": "任务", "displayLabel": "wizard" }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out["displayLabel"], "wizard");
+        assert_eq!(
+            spawner.requests()[0].display_label.as_deref(),
+            Some("wizard")
+        );
+    }
+
+    #[tokio::test]
+    async fn tool_without_extension_args_leaves_defaults() {
+        // 未传扩展参数：task_type / write_paths / display_label 全 None
+        // （None = 不覆盖继承值/定义值，引擎按缺省 analysis + 默认集装配）
+        let spawner = Arc::new(RecordingSpawner::ok());
+        let tool = RunSubagentTool::with_spawner(Some(spawner.clone()));
+        let ctx = create_mock_tool_context();
+        tool.execute(&ctx, serde_json::json!({ "prompt": "任务" }))
+            .await
+            .unwrap();
+        let req = &spawner.requests()[0];
+        assert_eq!(req.task_type, None);
+        assert_eq!(req.allowed_write_paths, None);
+        assert_eq!(req.display_label, None);
+        assert_eq!(req.model_override, None);
     }
 
     #[tokio::test]
@@ -1410,6 +2079,13 @@ mod tests {
                 ended_at: None,
                 depth: Some(depth as i64),
                 subagent_path_json: None,
+                // T-D-07 落库面：task_type / display_label / 写路径白名单
+                // 随 spawn 请求落库（model_override 扩展点预留不落库）
+                task_type: req.task_type.map(|t| t.as_str().to_string()),
+                display_label: req.display_label.clone(),
+                allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
+                    serde_json::to_string(paths).expect("路径白名单序列化不应失败")
+                }),
             }
         }
     }
@@ -1489,6 +2165,7 @@ mod tests {
                 status: SubagentState::Running,
                 summary: None,
                 flow_node_id: req.flow_node_id.clone(),
+                display_label: req.display_label.clone(),
             })
         }
     }
@@ -1512,6 +2189,11 @@ mod tests {
             parent_tool_call_id: None,
             flow_node_id: None,
             is_composite: false,
+            task_type: None,
+            allowed_write_paths: None,
+            display_label: None,
+            // 扩展点预留：测试构造点同样显式 None（编译器强制）
+            model_override: None,
         }
     }
 
@@ -1544,6 +2226,43 @@ mod tests {
         assert_eq!(row.status, "running", "pending 首写即 running");
         assert_ne!(row.status, "pending", "落库面不得出现 pending");
         assert!(is_db_status_allowed(&row.status));
+    }
+
+    #[tokio::test]
+    async fn spawn_persists_task_type_columns_and_reads_back() {
+        // T-D-07 落库链路：task_type / display_label / allowed_write_paths
+        // 随 spawn 落库并经 load_session_agents 读回（model_override 扩展点
+        // 预留不落库——SessionAgent 无该字段，类型级保证）
+        let ws = TempWorkspace::new("subagent_ext_db");
+        let db = conex_db::LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
+        db.insert_session("sess-main", "主会话").expect("插入会话失败");
+        let spawner = DbSpawner::new(db.clone());
+
+        let mut req = request("实现任务", "sess-main", Some("run-main"));
+        req.task_type = Some(TaskType::Implementation);
+        req.allowed_write_paths = Some(vec![PathBuf::from("crates/foo")]);
+        req.display_label = Some("实现工程师".to_string());
+        req.model_override = None;
+        let result = spawner.spawn(&req).await.expect("spawn 应成功");
+
+        // 读回断言：三列与请求一致
+        let agents = db
+            .load_session_agents("sess-main")
+            .expect("读取落库行失败");
+        assert_eq!(agents.len(), 1);
+        let row = &agents[0];
+        assert_eq!(row.task_type.as_deref(), Some("implementation"), "task_type 落库");
+        assert_eq!(
+            row.display_label.as_deref(),
+            Some("实现工程师"),
+            "display_label 落库"
+        );
+        assert_eq!(
+            row.allowed_write_paths_json.as_deref(),
+            Some(r#"["crates/foo"]"#),
+            "allowed_write_paths 以 JSON 数组落库"
+        );
+        assert_eq!(row.id, result.subagent_id);
     }
 
     #[tokio::test]

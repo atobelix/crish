@@ -33,7 +33,18 @@ import {
   shouldResetAllowConfirmArmed,
   type ApprovalRiskChip,
 } from '../../api/chatApprovalUi';
-import type { MessageToolApprovalMeta } from '../../store/types';
+import {
+  approverLabel,
+  DELETE_UNKNOWN_IMPACT_HINT,
+  deleteImpactSummary,
+  formatRefAge,
+  revertGateSummary,
+  shortPath,
+} from '../../api/approvalPayload';
+import type {
+  MessageToolApprovalMeta,
+  MessageToolApprovalPayload,
+} from '../../store/types';
 
 type Props = {
   msgId: string;
@@ -54,24 +65,27 @@ type Props = {
 };
 
 function toRiskMeta(
-  riskMeta?: MessageToolApprovalMeta | ApprovalRiskMeta | null,
+  riskMeta?: MessageToolApprovalMeta | ApprovalRiskMeta | null
 ): ApprovalRiskMeta | null {
   if (!riskMeta) return null;
   return {
     ...(riskMeta.trustZone !== undefined && { trustZone: riskMeta.trustZone }),
     ...(riskMeta.risk !== undefined && { risk: riskMeta.risk }),
-    ...(riskMeta.riskReason !== undefined && { riskReason: riskMeta.riskReason }),
+    ...(riskMeta.riskReason !== undefined && {
+      riskReason: riskMeta.riskReason,
+    }),
     riskLevel: riskMeta.riskLevel || 'unknown',
     requiresDoubleConfirm: Boolean(riskMeta.requiresDoubleConfirm),
     recommendSnapshot: Boolean(riskMeta.recommendSnapshot),
     source: riskMeta.source || 'unknown',
+    ...(riskMeta.payload !== undefined && { payload: riskMeta.payload }),
   };
 }
 
 /** 将 helper 产出的英/代码 chips 本地化为中文短标签（不改 chatApprovalUi） */
 function localizeRiskChips(
   chips: ApprovalRiskChip[],
-  riskMeta: ApprovalRiskMeta | null,
+  riskMeta: ApprovalRiskMeta | null
 ): ApprovalRiskChip[] {
   if (chips.length === 0) return chips;
   return chips.map((chip) => {
@@ -116,6 +130,137 @@ function dedupeChipLabels(chips: ApprovalRiskChip[]): ApprovalRiskChip[] {
   }
   return out;
 }
+
+/**
+ * S9 审批影响面区段（数据源 = approval-requested 载荷，宽容缺失）：
+ * - revert-gate：回退面积摘要（文件数/行数/ref 年代/跨目录/目标）+ 阈值 +
+ *   审批人标注 + 指引（S6 拒绝文案同源）；
+ * - delete：目标清单 + impact 摘要 + 降级提示（impact 未上报时显式提示）。
+ * 无载荷 → null（既有卡行为不变，不新增噪音）。
+ */
+const ApprovalPayloadSection: React.FC<{
+  payload?: MessageToolApprovalPayload | null | undefined;
+}> = ({ payload }) => {
+  if (!payload || payload.kind === 'unknown') return null;
+
+  if (payload.kind === 'revert-gate') {
+    const gate = payload.revertGate;
+    const summary = revertGateSummary(gate);
+    const area = gate.area;
+    const chips: string[] = [];
+    if (area?.fileCount != null) chips.push(`${area.fileCount} 个文件`);
+    if (area?.lineCount != null) chips.push(`${area.lineCount} 行`);
+    if (area?.refAgeSeconds != null)
+      chips.push(`ref 年代 ${formatRefAge(area.refAgeSeconds)}`);
+    if (area?.crossDirectory) chips.push('跨目录');
+    if (gate.targetRef) chips.push(`目标 ${gate.targetRef}`);
+    const approver = approverLabel(gate.approver);
+    if (approver) chips.push(approver);
+    return (
+      <div
+        className={styles.approvalCardMeta}
+        role="list"
+        aria-label="回退影响面"
+        data-testid="approval-payload-revert"
+      >
+        {summary ? (
+          <div
+            className={styles.approvalCardDesc}
+            data-testid="revert-gate-summary"
+          >
+            {summary}
+          </div>
+        ) : null}
+        {chips.length > 0 ? (
+          <div role="list" aria-label="回退影响面标签">
+            {chips.map((label) => (
+              <span
+                key={label}
+                role="listitem"
+                className={`${styles.approvalCardChip} ${styles.approvalCardChipDanger}`}
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {gate.guidance ? (
+          <div
+            className={styles.approvalCardHint}
+            role="note"
+            data-testid="revert-gate-guidance"
+          >
+            {gate.guidance}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  const { deleteImpact } = payload;
+  const impactSummary = deleteImpactSummary(deleteImpact.impact);
+  const flagged = deleteImpact.impact?.flagged;
+  const targets = deleteImpact.targets.slice(0, 4);
+  const more = deleteImpact.targets.length - targets.length;
+  return (
+    <div
+      className={styles.approvalCardMeta}
+      role="list"
+      aria-label="删除影响面"
+      data-testid="approval-payload-delete"
+    >
+      {targets.length > 0 ? (
+        <div
+          className={styles.approvalCardCmdWrap}
+          role="list"
+          aria-label="删除目标清单"
+        >
+          {targets.map((t) => (
+            <code
+              key={t}
+              role="listitem"
+              className={styles.approvalCardCmd}
+              data-testid="delete-target"
+            >
+              {shortPath(t)}
+            </code>
+          ))}
+          {more > 0 ? (
+            <span className={styles.approvalCardHint}>
+              …等共 {deleteImpact.targets.length} 个目标
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {impactSummary ? (
+        <div
+          className={styles.approvalCardDesc}
+          data-testid="delete-impact-summary"
+        >
+          {impactSummary}
+        </div>
+      ) : null}
+      {flagged ? (
+        <div
+          className={`${styles.approvalCardHint} ${styles.approvalCardHintWarn}`}
+          role="alert"
+          data-testid="delete-impact-flagged"
+        >
+          影响面大（超过阈值），请仔细核对后再允许
+        </div>
+      ) : null}
+      {!impactSummary ? (
+        <div
+          className={styles.approvalCardHint}
+          role="note"
+          data-testid="delete-impact-unknown"
+        >
+          {DELETE_UNKNOWN_IMPACT_HINT}
+        </div>
+      ) : null}
+    </div>
+  );
+};
 
 export const ApprovalAskCard: React.FC<Props> = ({
   msgId,
@@ -180,7 +325,7 @@ export const ApprovalAskCard: React.FC<Props> = ({
 
   const showSummary = Boolean(summary && summary !== question);
   const showReason = Boolean(
-    riskMeta?.riskReason && riskMeta.riskReason !== summary,
+    riskMeta?.riskReason && riskMeta.riskReason !== summary
   );
   const hasCmd = Boolean(cmd && cmd.trim());
   const hasExtraDesc = showSummary || showReason;
@@ -260,7 +405,10 @@ export const ApprovalAskCard: React.FC<Props> = ({
     setTimeoutPercent(100);
 
     const interval = setInterval(() => {
-      const pct = Math.max(0, Math.min(100, (remainingMs / timeoutTotalRef.current) * 100));
+      const pct = Math.max(
+        0,
+        Math.min(100, (remainingMs / timeoutTotalRef.current) * 100)
+      );
       setTimeoutPercent(pct);
     }, 100);
     return () => clearInterval(interval);
@@ -282,7 +430,7 @@ export const ApprovalAskCard: React.FC<Props> = ({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
       const focusable = root.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
       );
       if (focusable.length === 0) return;
       const first = focusable[0];
@@ -369,7 +517,8 @@ export const ApprovalAskCard: React.FC<Props> = ({
     : `需要你的确认：${question}`;
 
   const describedByParts: string[] = [];
-  if (showSummary || showReason || riskAriaSummary) describedByParts.push(descId);
+  if (showSummary || showReason || riskAriaSummary)
+    describedByParts.push(descId);
   if (chips.length > 0) describedByParts.push(chipsId);
   if (confirmArmed) describedByParts.push(warnId);
   const describedBy =
@@ -410,10 +559,7 @@ export const ApprovalAskCard: React.FC<Props> = ({
           {statusText}
           {zoneHint ? (
             <Tooltip content={zoneTitle}>
-              <span className={styles.approvalCardZone}>
-                {' '}
-                · {zoneHint}
-              </span>
+              <span className={styles.approvalCardZone}> · {zoneHint}</span>
             </Tooltip>
           ) : null}
         </span>
@@ -426,7 +572,10 @@ export const ApprovalAskCard: React.FC<Props> = ({
           {summary}
         </div>
       ) : showReason ? (
-        <Tooltip content={riskMeta?.riskReason || ''} disabled={!riskMeta?.riskReason}>
+        <Tooltip
+          content={riskMeta?.riskReason || ''}
+          disabled={!riskMeta?.riskReason}
+        >
           <div
             className={`${styles.approvalCardDesc} ${styles.approvalCardReason}`}
             id={descId}
@@ -440,7 +589,10 @@ export const ApprovalAskCard: React.FC<Props> = ({
         </div>
       ) : null}
       {showSummary && showReason ? (
-        <Tooltip content={riskMeta?.riskReason || ''} disabled={!riskMeta?.riskReason}>
+        <Tooltip
+          content={riskMeta?.riskReason || ''}
+          disabled={!riskMeta?.riskReason}
+        >
           <div
             className={`${styles.approvalCardDesc} ${styles.approvalCardReason}`}
           >
@@ -487,6 +639,7 @@ export const ApprovalAskCard: React.FC<Props> = ({
           </code>
         </div>
       ) : null}
+      <ApprovalPayloadSection payload={riskMeta?.payload} />
       {riskMeta?.recommendSnapshot ? (
         <div className={styles.approvalCardHint} role="note">
           建议先确认项目快照/可回退后再允许
@@ -519,13 +672,20 @@ export const ApprovalAskCard: React.FC<Props> = ({
           aria-label="补充说明（可选）"
         />
         {note.length > 0 || density === 'default' ? (
-          <span className={styles.approvalCardCount} aria-hidden={note.length === 0}>
+          <span
+            className={styles.approvalCardCount}
+            aria-hidden={note.length === 0}
+          >
             {note.length}/500
           </span>
         ) : null}
       </label>
 
-      <div className={styles.approvalCardActions} role="group" aria-label="审批操作">
+      <div
+        className={styles.approvalCardActions}
+        role="group"
+        aria-label="审批操作"
+      >
         {confirmArmed ? (
           <Tooltip content="取消二次确认准备 (Esc)">
             <button
@@ -599,7 +759,7 @@ export const ApprovalAskCard: React.FC<Props> = ({
           aria-valuenow={Math.round(timeoutPercent)}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`审批剩余时间 ${Math.ceil((remainingMs) / 1000)} 秒`}
+          aria-label={`审批剩余时间 ${Math.ceil(remainingMs / 1000)} 秒`}
         >
           <span
             className={styles.approvalCardTimeoutFill}

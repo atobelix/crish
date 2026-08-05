@@ -1,6 +1,7 @@
-//! 迁移链域：`PRAGMA user_version` 驱动的版本化迁移（v1→v5，PE-08 T08.7 + P5 §3.1.4）。
-//! 逐版本独立事务、幂等可重试；DROP 前备份（[backup_before_drop]）；
-//! 新库直接建 v5 结构。迁移实现保持原样，由 `LocalDb::open` 触发。
+//! 迁移链域：`PRAGMA user_version` 驱动的版本化迁移（v1→v6，PE-08 T08.7 + P5 §3.1.4
+//! 及 T-D-07 v6 新列）。逐版本独立事务、幂等可重试；DROP 前备份由
+//! [backup_before_drop] 执行；新库直接建 v5 结构。迁移实现保持原样，
+//! 由 `LocalDb::open` 触发。
 
 use super::schema::{create_v1_schema, create_v5_schema};
 use super::{DbFailure, DbFailureKind, LocalDb, BACKUP_KEEP, LATEST_VERSION, SCHEMA_VERSION_STRING};
@@ -35,7 +36,7 @@ impl LocalDb {
             eprintln!("[conex-db] 迁移备份失败 v{version}: {e}（路径 {}）", path.display());
         }
         // 清理旧备份，只保留最近 BACKUP_KEEP 份
-        let mut backups: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)
+        let mut backups: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
             .ok()
             .into_iter()
             .flatten()
@@ -117,6 +118,7 @@ impl LocalDb {
                 3 => migrate_v2_to_v3(&tx),
                 4 => migrate_v3_to_v4(&tx),
                 5 => migrate_v4_to_v5(&tx),
+                6 => migrate_v5_to_v6(&tx),
                 _ => unreachable!(),
             };
             if let Err(e) = step_result {
@@ -132,11 +134,11 @@ impl LocalDb {
                 .map_err(|e| self.latch_error(&format!("migrate_commit_v{version}"), e))?;
             conn.execute_batch(&format!("PRAGMA user_version = {version};"))
                 .map_err(|e| self.latch_error(&format!("user_version_set_v{version}"), e))?;
-            // v5 纯 ADD COLUMN 无 DROP：跳过备份，保持「DROP 前备份」语义。
+            // v5/v6 纯 ADD COLUMN 无 DROP：跳过备份，保持「DROP 前备份」语义。
             // （backup_file_contains_pre_migration_data / upgrade_e2e_backup_*
-            // 锚定 v3→v4 只产 .bak-v4，v5 不额外产生备份）
+            // 锚定 v3→v4 只产 .bak-v4，v5/v6 不额外产生备份）
             if let Some(p) = &path {
-                if version != 5 {
+                if version != 5 && version != 6 {
                     self.backup_before_drop(p, version);
                 }
             }
@@ -346,7 +348,7 @@ fn table_columns(
 /// - runs：prompt/completion/total/cache_read/cache_write/cache_miss/sample_count/missed_tokens
 ///   （NOT NULL DEFAULT 0，旧行自动补 0）+ warm_until_ms（NULL 兼容）；
 /// - session_messages：usage_json TEXT（消息级 usage 快照，前端 saveSessionBody 写入面）。
-/// hit_ratio / write_ratio 不落库（可派生，口径一致）。
+///   hit_ratio / write_ratio 不落库（可派生，口径一致）。
 fn migrate_v4_to_v5(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
     let runs_cols = table_columns(tx, "runs")?;
     let add_run_col = |col: &str, ddl: &str| -> Result<(), rusqlite::Error> {
@@ -368,5 +370,44 @@ fn migrate_v4_to_v5(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Erro
     if !msg_cols.iter().any(|c| c == "usage_json") {
         tx.execute_batch("ALTER TABLE session_messages ADD COLUMN usage_json TEXT;")?;
     }
+    Ok(())
+}
+
+/// v5 → v6：session_agents 补定义扩展三列（T-D-07，REQ-D04 收敛参数落库）。
+///
+/// 纯 ADD COLUMN（无 DROP、无重建），col-check 幂等（对齐 v1→v2 / v4→v5 模式，
+/// migrate.rs:161-183）：
+/// - `task_type` TEXT：任务类型 wire 名快照（analysis/design/...，kebab-case）；
+/// - `display_label` TEXT：角色展示标签（2-5 字自由文本，T-D-05）；
+/// - `allowed_write_paths_json` TEXT：显式写路径白名单（JSON 字符串数组，
+///   硬沙箱消费输入）。
+///
+/// 旧行三列自动补 NULL（Option 语义，读回 None = 未声明）；`model_override`
+/// 扩展点预留**不落库**（T-D-10「多模型不做」，无对应列）。
+/// 表缺失守卫（对齐 v3→v4 的 session_sequence 存在性检查，migrate.rs:305-309）：
+/// 极简/异常库可能无 session_agents 表——跳过本步，由迁移收尾的
+/// ensure（create_v5_schema，含新列）补建，兼容不炸。
+fn migrate_v5_to_v6(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
+    let has_agents: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_agents'",
+        [],
+        |r| r.get(0),
+    )?;
+    if has_agents == 0 {
+        return Ok(());
+    }
+    let agent_cols = table_columns(tx, "session_agents")?;
+    let add_agent_col = |col: &str, ddl: &str| -> Result<(), rusqlite::Error> {
+        if !agent_cols.iter().any(|c| c == col) {
+            tx.execute_batch(&format!("ALTER TABLE session_agents ADD COLUMN {ddl};"))?;
+        }
+        Ok(())
+    };
+    add_agent_col("task_type", "task_type TEXT")?;
+    add_agent_col("display_label", "display_label TEXT")?;
+    add_agent_col(
+        "allowed_write_paths_json",
+        "allowed_write_paths_json TEXT",
+    )?;
     Ok(())
 }

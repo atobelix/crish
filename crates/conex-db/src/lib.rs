@@ -44,9 +44,11 @@ pub struct LocalDb {
 }
 
 /// 当前 schema 版本（PE-08 T08.7：PRAGMA user_version 驱动的版本化迁移）。
-pub const LATEST_VERSION: u32 = 5;
+/// v6：session_agents 新列 task_type / display_label / allowed_write_paths_json
+/// （T-D-07 定义扩展落库，纯 ADD COLUMN）。
+pub const LATEST_VERSION: u32 = 6;
 /// session_meta 中登记的 schema 版本字符串（与 PRAGMA user_version 保持一致）。
-pub const SCHEMA_VERSION_STRING: &str = "5";
+pub const SCHEMA_VERSION_STRING: &str = "6";
 /// 孤儿会话宽限期（毫秒）：updated_at 距今小于该值的会话不被清理（PE-08 T08.2）。
 pub const ORPHAN_GRACE_MS: i64 = 300_000;
 /// session_meta 中可配宽限期的键。
