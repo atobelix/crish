@@ -12,9 +12,9 @@
 //!   见 tools/delete.rs），本中间件跳过（[BUILTIN_BACKUP_TOOLS]），避免双份
 //!   快照——删除走工具内置、写类走中间件快照；
 //! - 本中间件覆盖**非删除但会修改文件**的工具（默认 [default_backup_tools]
-//!   为 write_file）：执行前把目标文件**复制快照**进回收站域
-//!   （[conex_fs::trash::TrashService::snapshot]，原路径保留，工具随后覆盖
-//!   写入），快照条目可在回收站登记中列出并经 restore_force 覆盖恢复。
+//!   为 write_file / multi_replace_file_content）：执行前把目标文件**复制快照**
+//!   进回收站域（[conex_fs::trash::TrashService::snapshot]，原路径保留，工具
+//!   随后覆盖写入），快照条目可在回收站登记中列出并经 restore_force 覆盖恢复。
 //!
 //! 失败策略（安全优先）：快照失败 → [BeforeExecuteResult::Block]（阻止操作）；
 //! 成功 → Proceed。目标为「原不存在」的新文件时登记 nil-content 条目
@@ -39,8 +39,14 @@ use std::path::PathBuf;
 pub const BUILTIN_BACKUP_TOOLS: [&str; 2] = ["delete_file", "delete_dir"];
 
 /// 默认声明需备份的工具名单（写类工具：覆盖写入前快照）
+///
+/// 含 multi_replace_file_content（T-EG-02 名单登记）：与 write_file 同为
+/// 非删除写类工具，写前快照语义一致。
 pub fn default_backup_tools() -> Vec<String> {
-    vec!["write_file".to_string()]
+    vec![
+        "write_file".to_string(),
+        "multi_replace_file_content".to_string(),
+    ]
 }
 
 /// 删除前自动备份中间件（S10b）
@@ -213,6 +219,17 @@ mod tests {
             executed: Arc::clone(&executed),
         };
         (tool, executed)
+    }
+
+    #[test]
+    fn default_backup_tools_covers_write_and_multi_replace() {
+        // 名单登记护栏（T-EG-02）：写类工具必须声明写前快照
+        let names = default_backup_tools();
+        assert!(names.contains(&"write_file".to_string()), "write_file 必须在备份名单");
+        assert!(
+            names.contains(&"multi_replace_file_content".to_string()),
+            "multi_replace_file_content 必须在备份名单"
+        );
     }
 
     #[tokio::test]

@@ -14,6 +14,9 @@
 //! - `background_task`：background_task（T-AB-13）——后台任务管理命令面
 //!   （list/status/read_log/send_input/kill），经 ToolContext.background
 //!   访问 BackgroundTaskManager（注册面 12→13）
+//! - `multi_replace`：multi_replace_file_content（T-EG-01/02）——对同一文件
+//!   的多个非连续代码块做精确原文替换，任一 Chunk 匹配失败整体回滚
+//!   （注册面 13→14）
 //!
 //! 全部工具实现 `Tool` trait，经 `register_builtin_tools` 统一注册进 ToolRegistry。
 //! 各工具的会话级数据（工作区根目录等）执行时从 `ToolContext` 读取
@@ -23,6 +26,9 @@ pub mod background_task;
 pub mod delete;
 pub mod diff;
 pub mod fs;
+// T-EG-01：multi_replace 工具模块声明（注册入注册表由 T-EG-02 负责，
+// 本行仅使新文件进入编译与测试面）
+pub mod replace;
 pub mod search;
 pub mod shell;
 pub mod subagent;
@@ -97,6 +103,10 @@ pub fn register_builtin_tools_with_config(
     registry.register(Arc::new(background_task::BackgroundTaskTool::new()))?;
     registry.register(Arc::new(fs::ReadFileTool::new(None)))?;
     registry.register(Arc::new(fs::WriteFileTool::new()))?;
+    // multi_replace_file_content（T-EG-01/02）：多块精确原文替换，schema
+    // 按方案 04 §4.1 冻结（target_file + replacement_chunks），写类工具，
+    // 与 write_file 同列注册面
+    registry.register(Arc::new(replace::MultiReplaceFileTool::new()))?;
     registry.register(Arc::new(fs::ListDirTool::new()))?;
     registry.register(Arc::new(fs::FileStatTool::new()))?;
     registry.register(Arc::new(search::GrepSearchTool::new()))?;
@@ -514,7 +524,7 @@ mod tests {
     fn register_builtin_tools_registers_all() {
         let mut registry = ToolRegistry::new();
         register_builtin_tools(&mut registry).unwrap();
-        assert_eq!(registry.len(), 13);
+        assert_eq!(registry.len(), 14);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -531,6 +541,7 @@ mod tests {
                 "fuzzy_find",
                 "grep_search",
                 "list_dir",
+                "multi_replace_file_content",
                 "read_file",
                 "run_subagent",
                 "shell_command",

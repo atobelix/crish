@@ -1,9 +1,10 @@
 //! 只读子代理工具集裁剪（I4-M3 内容 3：Reasonix ReadOnlySubagentToolRegistry 落地）
 //!
 //! capabilityMode = read-only 的子代理（researcher 类）只允许只读工具：
-//! 其工具集剔除全部写类（write_file / delete_file / delete_dir /
-//! shell_command），仅保留 read_file / list_dir / file_stat / grep_search /
-//! fuzzy_find / diff_text。比提示词纪律可靠——执行层根本拿不到写工具。
+//! 其工具集剔除全部写类（write_file / multi_replace_file_content /
+//! delete_file / delete_dir / shell_command），仅保留 read_file /
+//! list_dir / file_stat / grep_search / fuzzy_find / diff_text。比提示词
+//! 纪律可靠——执行层根本拿不到写工具。
 //!
 //! 裁剪语义为**白名单**（fail-closed）：不在 [READONLY_TOOL_NAMES] 内的
 //! 工具一律剔除（含未来新增的未分类工具），防止新写工具漏网。
@@ -16,8 +17,9 @@ use crate::definition::ToolError;
 use crate::registry::ToolRegistry;
 
 /// 写类工具名单（只读子代理整体剔除）
-pub const WRITE_TOOL_NAMES: [&str; 4] = [
+pub const WRITE_TOOL_NAMES: [&str; 5] = [
     "write_file",
+    "multi_replace_file_content",
     "delete_file",
     "delete_dir",
     "shell_command",
@@ -149,7 +151,7 @@ mod tests {
         }
         assert!(!out.has("run_subagent"), "名单外的 run_subagent 必须剔除");
         // 原注册表不受影响（非破坏性裁剪）
-        assert_eq!(reg.len(), 13);
+        assert_eq!(reg.len(), 14);
         assert!(reg.has("run_subagent"));
     }
 }
