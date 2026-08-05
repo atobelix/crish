@@ -151,7 +151,7 @@ mod tests {
         }
         assert!(!out.has("run_subagent"), "名单外的 run_subagent 必须剔除");
         // 原注册表不受影响（非破坏性裁剪）
-        assert_eq!(reg.len(), 14);
+        assert_eq!(reg.len(), 16);
         assert!(reg.has("run_subagent"));
     }
 }

@@ -17,6 +17,9 @@
 //! - `multi_replace`：multi_replace_file_content（T-EG-01/02）——对同一文件
 //!   的多个非连续代码块做精确原文替换，任一 Chunk 匹配失败整体回滚
 //!   （注册面 13→14）
+//! - `set_timer`：set_timer / cancel_timer（T-CF-05）——一次性后台定时器
+//!   注册与取消 + TimerChannel 契约（后台静默运行不阻塞、早退条件
+//!   never/any/task-id、同 sender 单活跃定时器约束；注册面 14→16）
 //!
 //! 全部工具实现 `Tool` trait，经 `register_builtin_tools` 统一注册进 ToolRegistry。
 //! 各工具的会话级数据（工作区根目录等）执行时从 `ToolContext` 读取
@@ -30,6 +33,7 @@ pub mod fs;
 // 本行仅使新文件进入编译与测试面）
 pub mod replace;
 pub mod search;
+pub mod set_timer;
 pub mod shell;
 pub mod subagent;
 pub mod wait_subagents;
@@ -69,6 +73,10 @@ pub struct BuiltinToolConfig {
     /// 引擎侧实现 BackgroundTaskManager 并注入——A3 注册表经本字段透传，
     /// 执行期会话级覆盖走 ToolContext.background）
     pub background_manager: Option<Arc<dyn crate::background::BackgroundTaskManager>>,
+    /// 定时器通道（T-CF-05：None = 未接线，set_timer / cancel_timer 返回
+    /// 结构化不可用错误；引擎侧实现 TimerRegistry 适配后经此通道注入——
+    /// agent-tools 只定义契约，早退/冲突判定与到期注入在引擎侧）
+    pub timer_channel: Option<Arc<dyn set_timer::TimerChannel>>,
 }
 
 impl Default for BuiltinToolConfig {
@@ -81,6 +89,7 @@ impl Default for BuiltinToolConfig {
             subagent_spawner: None,
             subagent_wait_channel: None,
             background_manager: None,
+            timer_channel: None,
         }
     }
 }
@@ -132,6 +141,14 @@ pub fn register_builtin_tools_with_config(
     )))?;
     registry.register(Arc::new(wait_subagents::WaitSubagentsTool::with_channel(
         config.subagent_wait_channel.clone(),
+    )))?;
+    // set_timer / cancel_timer（T-CF-05）：一次性后台定时器注册与取消，
+    // timer_channel 字段透传（None = 未接线，工具返回 common.unsupported）
+    registry.register(Arc::new(set_timer::SetTimerTool::with_channel(
+        config.timer_channel.clone(),
+    )))?;
+    registry.register(Arc::new(set_timer::CancelTimerTool::with_channel(
+        config.timer_channel.clone(),
     )))?;
     Ok(())
 }
@@ -524,7 +541,7 @@ mod tests {
     fn register_builtin_tools_registers_all() {
         let mut registry = ToolRegistry::new();
         register_builtin_tools(&mut registry).unwrap();
-        assert_eq!(registry.len(), 14);
+        assert_eq!(registry.len(), 16);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -534,6 +551,7 @@ mod tests {
             names,
             [
                 "background_task",
+                "cancel_timer",
                 "delete_dir",
                 "delete_file",
                 "diff_text",
@@ -544,6 +562,7 @@ mod tests {
                 "multi_replace_file_content",
                 "read_file",
                 "run_subagent",
+                "set_timer",
                 "shell_command",
                 "wait_subagents",
                 "write_file",
@@ -552,6 +571,14 @@ mod tests {
         // 重复注册报版本冲突
         let err = register_builtin_tools(&mut registry).unwrap_err();
         assert_eq!(err.code(), "tool.version_conflict");
+    }
+
+    #[test]
+    fn builtin_config_has_timer_channel() {
+        // 回归基线（T-CF-05）：timer_channel 缺省 None——
+        // 未接线环境工具返回 common.unsupported，不 panic
+        let config = BuiltinToolConfig::default();
+        assert!(config.timer_channel.is_none());
     }
 
     #[tokio::test]

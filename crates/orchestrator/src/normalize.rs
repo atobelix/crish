@@ -63,6 +63,10 @@ fn event_session_id_mut(event: &mut AgentEvent) -> &mut String {
         AgentEvent::TaskCompleted { session_id, .. } => session_id,
         AgentEvent::TaskFailed { session_id, .. } => session_id,
         AgentEvent::TaskKilled { session_id, .. } => session_id,
+        // T-CF-04 定时器域两事件（均携带 sessionId；M6 域补齐归一化位，
+        // 定时器事件无 run 归属时 sessionId 可空串，由本归一化补会话）
+        AgentEvent::TimerFired { session_id, .. } => session_id,
+        AgentEvent::TimerCancelled { session_id, .. } => session_id,
     }
 }
 

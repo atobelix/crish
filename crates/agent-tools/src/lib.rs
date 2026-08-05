@@ -108,6 +108,12 @@ pub use subagent_inject::{
 pub use tools::{
     register_builtin_tools, register_builtin_tools_with_config, BuiltinToolConfig,
 };
+// T-CF-05（G5 契约面 / REQ-C01）：定时器契约导出——引擎侧 TimerRegistry
+// 适配（T-CF-06）与注册面按冻结形状消费；工具类本身为 crate 内注册面专用
+// （对齐 wait_subagents / subagent 先例，不导出）。[TimerCondition] /
+// [TimerHandle] 属 conex-types timer 模块（§4.1 冻结承载），引擎侧直接走
+// conex_types::timer 导入，不在本 crate 重复 re-export
+pub use tools::set_timer::{TimerChannel, TimerError, MAX_TIMER_DURATION_SECONDS};
 // I4-M3（写路径互斥与只读裁剪）：write_paths 引擎级互斥 + readonly 只读
 // 子代理工具集裁剪；claim_write_guard 为 crate 内部工具接线助手，不导出
 pub use readonly::{
