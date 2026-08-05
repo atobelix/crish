@@ -59,7 +59,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（88 条 = 注册面 84 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（91 条 = 注册面 87 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：append_session_messages /
@@ -104,6 +104,9 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("config_secret_clear", "config", "engine", true),
         entry("config_profile_apply", "config", "engine", true),
         entry("config_secret_reveal", "config", "engine", true),
+        // ── G03 产出根配置（T-EG-12：agentOutputsRoot 全局设置 + 校验）──
+        entry("config_get_outputs_root", "config", "engine", true),
+        entry("config_set_outputs_root", "config", "engine", true),
         // ── 工具旧组（E1，§2.2-E）──
         entry("core_check_command", "core", "engine", true),
         entry("core_search_files", "core", "engine", true),
@@ -134,6 +137,8 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("import_from_localstorage", "session", "engine", true),
         entry("touch_session", "session", "engine", true),
         entry("upsert_session_entry", "session", "engine", true),
+        // G03 会话级产出根覆盖（T-EG-12：session_meta `{session_id}:output_root`）
+        entry("set_session_output_root", "session", "engine", true),
         // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
         entry("core_md_render", "core", "engine", true),
         entry("core_md_render_batch", "core", "engine", true),
@@ -189,7 +194,7 @@ mod tests {
     use super::*;
 
     /// 条数公式化：总数 = 注册面 + 登记先行（镜像前端 commandManifest.test.ts：
-    /// 88 = 注册面 84 + 登记先行 4；变更时双端同步）。
+    /// 91 = 注册面 87 + 登记先行 4；变更时双端同步）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -200,8 +205,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 88, "总数 88（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 84, "注册面 84");
+        assert_eq!(total, 91, "总数 91（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 87, "注册面 87");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -348,7 +353,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 88);
+        assert_eq!(manifest.commands.len(), 91);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 }

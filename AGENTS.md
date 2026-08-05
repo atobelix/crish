@@ -23,6 +23,27 @@
 - 派单前明确：输入文档、产出路径、验收标准、文件冲突注意事项（同文件串行）。
 - 子 Agent 可读最终计划文档，但只执行分配给自己的任务；执行中发现任务书未覆盖的问题上报调度者裁决。
 
+## 多 Agent 协作文档产出约定（REQ-G02 流程层）
+
+多 Agent 协作文档产出的共享目录、文件名分配、汇总索引与格式约定。对齐 `docs/multi-agent-repair/` 的现实惯例（README.md:7-14），草案见 `docs/feature-gap-analysis/plans/04-EG编辑工具与文档工作区方案.md` §4.5（OutputConvention），主控与子代理均须遵守。
+
+1. **共享产出目录**（resolve_output_dir 返回值语义）：
+   - 默认返回 `<workspace_root>/.agent-outputs/<YYYY-MM-DD>-<session_id>/`（本地时区、日期零填充）；用户显式指定 folder 时优先直接使用（不创建目录）；
+   - 同会话重复调用返回同一路径（幂等，写入 session_meta `"{session_id}:output_dir"` 持久化）；目录**惰性创建**——首次写入时自动创建，解析本身不落盘；
+   - 产出根必须在 workspace_root 内（path_within_root 校验），不污染源码目录（REQ-G03）；**只读子代理不允许自选输出目录**（忽略/拒绝 folder，仅按主 Agent 规划返回）。
+
+2. **文件名分配**：主控在派发时于 prompt 中为每个子代理分配唯一产出文件名 `NN-<模块标题>.md`（NN 从 01 递增，00 留给汇总索引）；标题为简短模块名，禁止含路径分隔符。引擎强制面（I4-M3 写路径互斥）保证：不同文件并行写放行、同一文件并发写被拒绝（write_paths.rs:459-469、561-582）。
+
+3. **汇总索引生成流程**（主控职责）：wait_subagents(await-all) 收齐全部终态（终态载荷携带 outputFiles：path/summary/bytes）→ 调用 list_dir 列出共享产出目录 → 调用 write_file(00-summary.md, overwrite=true) 生成汇总索引（清单表：文件名 / 标题 / 行数 / 摘要）；最小方案不新增专用汇总工具（list_outputs 类工具列为后续增强）。
+
+4. **文档格式**：UTF-8 无 BOM、中文内容（REQ-G02 验收）。
+
+5. **探索类子代理配额红线**（对齐 docs/multi-agent-repair/05-协同操作约束与安全.md:195-200）：探索类（调研/分析/勘察）子代理**最多写一份文档**，且**必须由主 Agent 分配写作任务**才允许写；未获分配不得主动写第二份文档（含补充文档、分析报告），探索结果默认以汇报/汇总物形式返回。该红线已由引擎强制面接线落地（explore_docs_quota 装配于主执行器 ToolContext），超限写入会被引擎拒绝，不再仅靠提示词纪律约束。
+
+6. **输出目录清理约定**（会话删除）：删除会话 → 读取 session_meta 产出目录 → `.agent-outputs/<session_id>` 走 conex-fs trash 删除接管（trash.rs:26-29 铁律，不直接 remove）→ **通知用户**（清理结果 + 回收站位置）；完整链路由 T-EG-12 扩展落地。
+
+7. **产出目录与 git 隔离**：产出根 `.agent-outputs/` 为运行期目录，已在 `.gitignore` 忽略（与 `.crish-trash` 等并列）；子代理产出文档一律不提交。若产出目录内存在历史已跟踪文件，需先执行 `git rm --cached -r .agent-outputs/` 从索引移除（保留工作区文件）并提交，此后新增产出不再入库；可用 `git check-ignore -v .agent-outputs/test` 验证命中。
+
 ## 引用规则
 
 - 引用代码位置统一用 `文件路径:行号`。

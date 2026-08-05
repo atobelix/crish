@@ -142,18 +142,73 @@ pub async fn save_session_body(
     Ok(())
 }
 
+/// delete_session 返回（G03 T-EG-12：清理通知载荷 = 清理结果 + 回收站位置）。
+///
+/// 前端可据 `notice` 展示清理结果，据 `trashRoot` 引导用户到回收站恢复。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteSessionResult {
+    /// 是否清理了产出目录（false = 无产出目录或越界被安全跳过）
+    pub cleaned: bool,
+    /// 已移入回收站的产出目录清单（绝对路径）
+    pub trashed_dirs: Vec<String>,
+    /// 回收站根位置（误删恢复入口，与删除工具同源）
+    pub trash_root: String,
+    /// 通知文案（清理结果 + 回收站位置，供前端展示）
+    pub notice: String,
+}
+
+/// delete_session 的 spawn_blocking 段（可测）：删除前读取产出元数据
+/// （`{session_id}:output_dir` / `{session_id}:output_root`，G01/G03 键），
+/// 再删除会话行——meta 必须先读后删，否则行消失后无法定位产出目录。
+fn delete_session_and_read_meta(
+    db: &LocalDb,
+    session_id: &str,
+) -> Result<(Option<String>, Option<String>), DbFailure> {
+    let dir_key = crate::outputs_config::session_meta_key_of(
+        session_id,
+        crate::outputs_config::SESSION_META_KEY_OUTPUT_DIR,
+    );
+    let root_key = crate::outputs_config::session_meta_key_of(
+        session_id,
+        crate::outputs_config::SESSION_META_KEY_OUTPUT_ROOT,
+    );
+    let dir = db.get_session_meta(&dir_key)?;
+    let root = db.get_session_meta(&root_key)?;
+    db.delete_session(session_id)?;
+    Ok((dir, root))
+}
+
 #[tauri::command]
 pub async fn delete_session(
     session_id: String,
+    app: tauri::AppHandle,
     db_state: State<'_, SharedDb>,
-) -> Result<(), CoreError> {
+) -> Result<DeleteSessionResult, CoreError> {
     require_session_id(&session_id)?;
     let db = db_state.inner().local_db();
-    tokio::task::spawn_blocking(move || db.delete_session(&session_id))
+    // 删除前读产出 meta → 删除会话行（spawn_blocking 内，避免阻塞命令线程）
+    let meta_session_id = session_id.clone();
+    let meta = tokio::task::spawn_blocking(move || {
+        delete_session_and_read_meta(&db, &meta_session_id)
+    })
         .await
         .map_err(|e| CoreError::Internal(format!("delete_session join: {e}")))?
         .map_err(map_db_err)?;
-    Ok(())
+    // 产出目录清理（G03 T-EG-12 完整链路：删除 → 进回收站（trash 接管）→
+    // 通知用户；越界安全红线由清理侧裁决）
+    let cleanup = crate::outputs_config::cleanup_session_outputs(
+        &app,
+        &session_id,
+        meta.0.as_deref(),
+        meta.1.as_deref(),
+    )?;
+    Ok(DeleteSessionResult {
+        cleaned: cleanup.cleaned,
+        trashed_dirs: cleanup.trashed_dirs,
+        trash_root: cleanup.trash_root,
+        notice: cleanup.notice,
+    })
 }
 
 #[tauri::command]
@@ -301,6 +356,10 @@ pub async fn upsert_session_entry(
 
 #[cfg(test)]
 mod tests {
+    // G2 禁令豁免：本模块含会话删除清理链路测试（临时目录清理 /
+    // 临时文件写入，非产品删除路径，可恢复语义不适用）。
+    #![allow(clippy::disallowed_methods)]
+
     use super::*;
 
     fn sample_entry(id: &str) -> SessionIndexEntry {
@@ -483,5 +542,144 @@ mod tests {
 
         let list = inner.list_sessions().unwrap();
         assert_eq!(list[0].message_count, 2);
+    }
+
+    // ── G03 T-EG-12：会话删除清理完整链路 ──
+
+    /// 测试用临时目录（独立命名，drop 自动清理）
+    struct TempDir(std::path::PathBuf);
+
+    impl TempDir {
+        fn new(prefix: &str) -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
+            let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "conex_sess_del_{prefix}_{}_{seq}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// delete_session_and_read_meta：删除前读产出 meta，删除后会话行消失
+    #[test]
+    fn delete_session_reads_output_meta_before_delete() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.upsert_session_entry(&sample_entry("s1")).unwrap();
+        let out_dir_key = crate::outputs_config::session_meta_key_of(
+            "s1",
+            crate::outputs_config::SESSION_META_KEY_OUTPUT_DIR,
+        );
+        let out_root_key = crate::outputs_config::session_meta_key_of(
+            "s1",
+            crate::outputs_config::SESSION_META_KEY_OUTPUT_ROOT,
+        );
+        db.set_session_meta(&out_dir_key, "/tmp/conex/x/2026-08-05-s1")
+            .unwrap();
+        db.set_session_meta(&out_root_key, ".agent-outputs").unwrap();
+
+        let (dir, root) = delete_session_and_read_meta(&db, "s1").unwrap();
+        assert_eq!(dir.as_deref(), Some("/tmp/conex/x/2026-08-05-s1"));
+        assert_eq!(root.as_deref(), Some(".agent-outputs"));
+        assert!(db.list_sessions().unwrap().is_empty(), "会话行应已删除");
+        // 库层现状：session_meta 为独立 KV 表（schema.rs:250 无 FK 级联），
+        // 会话删除后键残留——清理链已消费键值，首次 resolve 覆盖写，无害；
+        // 补 delete_session_meta / 级联清理列为遗留（conex-db 域）。
+        assert!(
+            db.get_session_meta(&out_dir_key).unwrap().is_some(),
+            "当前库层保留 session_meta 键（见注释说明）"
+        );
+    }
+
+    /// 完整链路（T-EG-12 验收）：删除会话 → 产出目录进回收站（trash 注册
+    /// 断言）→ 清理通知发出（notice 含结果与回收站位置）
+    #[test]
+    fn delete_session_cleanup_full_chain_trashes_outputs_and_notifies() {
+        // 场景：内存库会话 s1 + 工作区产出目录（G01 落键精确命中）
+        let db = LocalDb::open_in_memory().unwrap();
+        db.upsert_session_entry(&sample_entry("s1")).unwrap();
+        let ws = TempDir::new("ws");
+        let trash = TempDir::new("trash");
+        let out_dir = ws.0.join(".agent-outputs/2026-08-05-s1");
+        std::fs::create_dir_all(out_dir.join("sub")).unwrap();
+        std::fs::write(out_dir.join("sub/a.md"), "产出文档").unwrap();
+        let out_dir_key = crate::outputs_config::session_meta_key_of(
+            "s1",
+            crate::outputs_config::SESSION_META_KEY_OUTPUT_DIR,
+        );
+        db.set_session_meta(&out_dir_key, out_dir.to_str().unwrap())
+            .unwrap();
+
+        // ① 删除会话（spawn_blocking 段直测）
+        let (dir, root) = delete_session_and_read_meta(&db, "s1").unwrap();
+        assert_eq!(dir.as_deref(), Some(out_dir.to_str().unwrap()));
+        assert!(root.is_none());
+        assert!(db.list_sessions().unwrap().is_empty());
+
+        // ② 产出目录清理（trash 接管：conex-fs trash，不直接 remove）
+        let result = crate::outputs_config::cleanup_session_outputs_at(
+            trash.path(),
+            ws.path(),
+            "s1",
+            dir.as_deref(),
+            root.as_deref(),
+            None,
+            false,
+        );
+        assert!(result.cleaned, "notice: {}", result.notice);
+        assert_eq!(result.trashed_dirs, vec![out_dir.to_string_lossy().into_owned()]);
+        assert!(!out_dir.exists(), "产出目录应已移入回收站");
+
+        // ③ trash 注册断言：条目可见、原路径正确、类型为目录
+        let service = conex_fs::trash::TrashService::new(trash.path());
+        let entries = service.list();
+        assert_eq!(entries.len(), 1, "回收站登记应有且仅有一条");
+        assert_eq!(entries[0].original_path, out_dir);
+        assert_eq!(entries[0].kind, conex_fs::trash::TrashKind::Dir);
+
+        // ④ 清理通知发出：结果 + 回收站位置
+        assert!(result.notice.contains("移入回收站"));
+        assert!(result.notice.contains("回收站位置"));
+        assert!(result.trash_root.contains("trash"), "回收站位置应指向 trash 根：{}", result.trash_root);
+    }
+
+    /// 无产出目录的会话删除：清理为干净 no-op，通知说明无需清理
+    #[test]
+    fn delete_session_cleanup_no_outputs_noop_notice() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.upsert_session_entry(&sample_entry("s1")).unwrap();
+        let ws = TempDir::new("ws");
+        let trash = TempDir::new("trash");
+
+        let (dir, root) = delete_session_and_read_meta(&db, "s1").unwrap();
+        assert!(dir.is_none() && root.is_none());
+
+        let result = crate::outputs_config::cleanup_session_outputs_at(
+            trash.path(),
+            ws.path(),
+            "s1",
+            dir.as_deref(),
+            root.as_deref(),
+            None,
+            false,
+        );
+        assert!(!result.cleaned);
+        assert!(result.notice.contains("未发现会话产出目录"));
+        assert!(result.notice.contains("回收站位置"));
+        assert!(
+            conex_fs::trash::TrashService::new(trash.path()).list().is_empty()
+        );
     }
 }

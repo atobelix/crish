@@ -125,9 +125,12 @@ fn exec_ctx_wired(
         run_id: "run-B".to_string(),
         session_id: "sess-1".to_string(),
         cwd: Some(ws.path_str()),
+        parent_run_id: None,
         workspace_root: Some(ws.path().clone()),
         write_claims,
         explore_docs_quota,
+        // T-EG-08：产出目录解析器（G01；e01 域用例不消费，None 即可）
+        output_dir: None,
     }
 }
 

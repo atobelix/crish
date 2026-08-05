@@ -58,6 +58,7 @@ mod wakeup_summary;
 
 mod watchdog;
 mod workspace;
+mod outputs_config;
 
 use std::sync::{Arc, RwLock};
 
@@ -120,6 +121,9 @@ command_registry![
     ("config_secret_clear", config::config_secret_clear),
     ("config_profile_apply", config::config_profile_apply),
     ("config_secret_reveal", config::config_secret_reveal),
+    // ── G03 产出根配置（T-EG-12：agentOutputsRoot 全局设置 + 校验）──
+    ("config_get_outputs_root", outputs_config::config_get_outputs_root),
+    ("config_set_outputs_root", outputs_config::config_set_outputs_root),
     // ── 工具旧组（E1，§2.2-E）──
     ("core_check_command", core_commands::core_check_command),
     ("core_search_files", core_commands::core_search_files),
@@ -150,6 +154,8 @@ command_registry![
     ("import_from_localstorage", session_commands::import_from_localstorage),
     ("touch_session", session_commands::touch_session),
     ("upsert_session_entry", session_commands::upsert_session_entry),
+    // G03 会话级产出根覆盖（T-EG-12：session_meta `{session_id}:output_root`）
+    ("set_session_output_root", outputs_config::set_session_output_root),
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族；实现函数在
     //    markdown_commands.rs，经 `#[tauri::command(rename = ...)]` 对齐 wire 名）──
     ("core_md_render", markdown_commands::md_render),
@@ -304,6 +310,11 @@ fn main() {
             // 工作区 `.crish-trash`，与删除工具兜底一致；对齐
             // BuiltinToolConfig.trash_root 语义）
             app.manage(core_run_commands::TrashRootConfig::default());
+
+            // ④c 全局产出根配置注入（G03 T-EG-12：agentOutputsRoot 默认
+            // `.agent-outputs`；命令侧可经 config_set_outputs_root 覆盖，
+            // 校验保证产出根位于工作区内）
+            app.manage(outputs_config::OutputsRootConfig::default());
 
             // ⑤ 共享状态：命令闸门 / 搜索索引 / 压缩能力标记
             app.manage(core_commands::SharedGatekeeper::new());

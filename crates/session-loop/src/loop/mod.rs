@@ -221,6 +221,10 @@ pub struct SessionLoopOptions {
     /// None = 主 agent 不受配额约束（04 C5「主 agent 自身不消耗」；
     /// 子代理 run 的配额上下文由 spawner 装配，本字段承载主循环装配面）。
     pub explore_docs_quota: Option<ExploreDocsQuotaContext>,
+    /// 产出目录解析服务（G01，T-EG-08）：resolve_output_dir 工具后端。
+    /// None = 装配期按工作区根自动装配 [OutputWorkspace]（InMemory store，
+    /// 会话内幂等；生产持久化后端由壳层注入 session_meta store——F11）。
+    pub output_dir: Option<Arc<dyn agent_tools::tools::output_dir::OutputDirResolver>>,
     /// 父 run 归属（T-D-14 权限传递层，总接线点 T-EG-06）：经 tool_ctx
     /// 透传工具执行面——审批请求据此判定来源（子代理 run → 裁决者 =
     /// 主 agent；主 agent run → 裁决者 = 用户）。None = 主 agent run /
@@ -270,6 +274,9 @@ impl Default for SessionLoopOptions {
             // 主 agent 不受配额约束（04 C5「主 agent 自身不消耗」）
             write_claims: None,
             explore_docs_quota: None,
+            // T-EG-08：产出目录解析器缺省 None——with_options 装配块自动
+            // 装配 OutputWorkspace（InMemory store，工作区根同源）
+            output_dir: None,
             // T-D-14：父 run 归属缺省 None = 主 agent run（审批裁决者 =
             // 用户，现状行为；子代理 spawner 装配时显式注入）
             parent_run_id: None,
@@ -349,6 +356,8 @@ impl AgentSessionLoop {
             // T-D-14：父 run 归属随 with_options 装配（构造期 None =
             // 主 agent run，审批裁决者 = 用户，现状行为）
             parent_run_id: None,
+            // T-EG-08：产出目录解析器随 with_options 装配（构造期 None）
+            output_dir: None,
         },
             tool_options: ToolBatchOptions::default(),
             approval: None,
@@ -405,6 +414,19 @@ impl AgentSessionLoop {
         // 探索类文档配额上下文（I6-M11 C5）：经 tool_ctx 透传工具执行面；
         // None = 主 agent 不受配额约束（04 C5「主 agent 自身不消耗」）
         self.tool_ctx.explore_docs_quota = options.explore_docs_quota.clone();
+        // T-EG-08 REQ-G01：产出目录解析服务——显式注入 → 自动装配
+        //（OutputWorkspace + InMemory store，工作区根同源；会话内幂等，
+        // 目录名首次 resolve 冻结；生产持久化后端 F11 由壳层注入）
+        let output_dir = options
+            .output_dir
+            .clone()
+            .unwrap_or_else(|| {
+                Arc::new(agent_tools::tools::output_dir::OutputWorkspace::new(
+                    self.tool_ctx.workspace_root.clone().unwrap_or_default(),
+                    Arc::new(agent_tools::tools::output_dir::InMemoryOutputDirStore::new()),
+                ))
+            });
+        self.tool_ctx.output_dir = Some(output_dir);
         // T-D-14 权限传递层：父 run 归属经 tool_ctx 透传执行器（审批请求
         // 来源判定与裁决者路由依据；None = 主 agent run）
         self.tool_ctx.parent_run_id = options.parent_run_id.clone();

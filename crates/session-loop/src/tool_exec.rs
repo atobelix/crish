@@ -92,6 +92,10 @@ pub struct ToolExecCtx {
     /// 探索类文档配额上下文（I6-M11 C5：含配额 store 实例；None = 不
     /// 检查——主 agent 默认不受配额约束，04 C5「主 agent 自身不消耗」）
     pub explore_docs_quota: Option<ExploreDocsQuotaContext>,
+    /// 产出目录解析器（G01：resolve_output_dir 工具后端；None = 未装配，
+    /// 工具返回 common.unsupported——与 subagent_spawner 接线模式同款）
+    pub output_dir:
+        Option<Arc<dyn agent_tools::tools::output_dir::OutputDirResolver>>,
 }
 
 /// 批处理产出：结果 + 事件序列 + 致命错误
@@ -734,6 +738,10 @@ impl ToolExecutor {
             // 装配经 ToolExecCtx 透传；None = 不检查——非探索类不受配额
             // 约束，04 C5：主 agent 自身不消耗）
             explore_docs_quota: ctx.explore_docs_quota.clone(),
+            // T-EG-08 REQ-G01：产出目录解析服务——经 ToolExecCtx 透传
+            //（loop 装配面默认注入 OutputWorkspace；None = 未接线，
+            // resolve_output_dir 返回 common.unsupported）
+            output_dir: ctx.output_dir.clone(),
             // 后台任务管理器/日志落盘根未接线（A1 域新字段占位：None =
             // 无后台任务能力、截断不落盘；真实接线由引擎装配面注入）
             background: None,

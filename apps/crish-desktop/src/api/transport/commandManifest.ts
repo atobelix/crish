@@ -90,6 +90,9 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('config_secret_clear', 'config', 'engine'),
     entry('config_profile_apply', 'config', 'engine'),
     entry('config_secret_reveal', 'config', 'engine'),
+    // F10（T-EG-12）：产出根两级配置（全局 + 会话级）
+    entry('config_get_outputs_root', 'config', 'engine'),
+    entry('config_set_outputs_root', 'config', 'engine'),
     // ── 工具旧组（E1，§2.2-E）──
     entry('core_check_command', 'core', 'engine'),
     entry('core_search_files', 'core', 'engine'),
@@ -116,6 +119,8 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('save_session_agents', 'session', 'engine'),
     entry('get_session_meta', 'session', 'engine'),
     entry('set_session_meta', 'session', 'engine'),
+    // F10（T-EG-12）：会话级产出根覆盖
+    entry('set_session_output_root', 'session', 'engine'),
     entry('cleanup_orphan_sessions', 'session', 'engine'),
     entry('import_from_localstorage', 'session', 'engine'),
     entry('touch_session', 'session', 'engine'),

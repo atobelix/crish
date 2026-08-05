@@ -80,6 +80,8 @@ reference/crish-desktop/
 .agent-runtime/
 .codex-tool-scratch/
 .firecrawl/
+# AI 文档产出根（G03 路径隔离：T-EG-12，与 .crish-trash 等运行期目录并列）
+.agent-outputs/
 
 # Rust build artifacts
 target-tauri-smoke/
