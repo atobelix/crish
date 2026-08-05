@@ -1300,6 +1300,45 @@ impl ContextInjector {
     }
 }
 
+// ── T-D-03：子代理角色约束注入段（F4 R-D1；spawn 装配路径 F11 T-D-13 接入）──
+
+/// 子代理角色约束注入段标题（T-D-03 冻结文案：测试断言锚点；
+/// [ContextInjector::render] 渲染为 `## 子代理角色约束`）
+#[allow(dead_code)] // F11 T-D-13 接线：spawn 装配路径消费（本文件测试先行断言）
+pub(crate) const SUBAGENT_ROLE_CONSTRAINT_TITLE: &str = "子代理角色约束";
+
+/// 子代理角色约束注入段正文（T-D-03 冻结文案：测试断言全文匹配）。
+///
+/// 静态文本，不含 `@dynamic` 字段，纳入 C10 字节级一致断言范围；冻结
+/// 文案如需调整，必须同步更新测试断言与 T-D-02 的结构化错误文案
+/// （两者表述一致，防模型混淆）。
+#[allow(dead_code)] // F11 T-D-13 接线：spawn 装配路径消费（本文件测试先行断言）
+pub(crate) const SUBAGENT_ROLE_CONSTRAINT_CONTENT: &str = "你没有创建子 Agent 的能力；所有子 Agent 由主 Agent 分配。\
+     如需并行子任务、拆解或汇报，请通过消息/上报通道向主 Agent 提出，由主 Agent 统一派发。";
+
+/// T-D-03：向 [ContextInjector] 追加「子代理角色约束」注入段（System 段）。
+///
+/// 仅**子代理 run** 的装配路径调用本函数（主 Agent run 的装配点不调用）
+/// ——这是「主 Agent run 不含本段」测试断言的关键差异点。
+///
+/// 与 C2 started_at 注入同通道同机制（`subagent_inject.rs:13-16` 挂载
+/// 先例）：[ContextInjection] 是只读注册项，静态文本经
+/// [ContextInjector::push] 挂载；System 按 [CONTEXT_INJECTION_ORDER]
+/// 在首段位（位于基础系统段之后、Skills 段之前），与其他 System 注入段
+/// 保持 push 序（[ContextInjector::render] 稳定排序语义）。
+///
+/// 当前生产 spawn 装配路径未落定（T-D-13 在 F11/R-D3）——本函数即
+/// T-D-13 的接入约定：T-D-13 启动子代理 run、装配 ContextInjector 时
+/// 调用 `push_subagent_role_constraint(&mut injector)` 挂载本段。
+#[allow(dead_code)] // F11 T-D-13 接线：spawn 装配路径消费（本文件测试先行断言）
+pub(crate) fn push_subagent_role_constraint(injector: &mut ContextInjector) {
+    injector.push(ContextInjection::new(
+        ContextInjectionKind::System,
+        SUBAGENT_ROLE_CONSTRAINT_TITLE,
+        SUBAGENT_ROLE_CONSTRAINT_CONTENT,
+    ));
+}
+
 // ── SessionLoopProducer ───────────────────────────────────────────
 
 /// Arc 包装的 ProviderCall（[AgentSessionLoop] 按 `Box<dyn ProviderCall>`
@@ -2742,6 +2781,125 @@ mod tests {
             provider_base.request_system_prompt(0).as_deref(),
             Some("基础系统提示"),
             "无注入 → 基础段原样透传（现状）"
+        );
+    }
+
+    // ── T-D-03：子代理角色约束注入（F4 R-D1；spawn 装配路径 F11 T-D-13 接入）──
+
+    /// T-D-03 冻结文案（测试断言锚点）：段标题/正文/类型三者与任务书一致；
+    /// 段类型 = System（按 [CONTEXT_INJECTION_ORDER] 首段位）；静态文本
+    /// 不含 `@dynamic` 标记，纳入 C10 字节级一致断言范围
+    #[test]
+    fn subagent_role_constraint_frozen_text_is_exact() {
+        assert_eq!(SUBAGENT_ROLE_CONSTRAINT_TITLE, "子代理角色约束");
+        assert_eq!(
+            SUBAGENT_ROLE_CONSTRAINT_CONTENT,
+            "你没有创建子 Agent 的能力；所有子 Agent 由主 Agent 分配。如需并行子任务、拆解或汇报，请通过消息/上报通道向主 Agent 提出，由主 Agent 统一派发。"
+        );
+        assert!(
+            !SUBAGENT_ROLE_CONSTRAINT_CONTENT.contains("@dynamic"),
+            "静态文本不得带动态字段标记"
+        );
+        let mut injector = ContextInjector::new();
+        push_subagent_role_constraint(&mut injector);
+        assert_eq!(
+            injector.kinds(),
+            vec![ContextInjectionKind::System],
+            "段类型 = System（按 CONTEXT_INJECTION_ORDER 首段位）"
+        );
+    }
+
+    /// T-D-03 渲染契约（render 拼接顺序回归）：基础系统段置首、角色约束段
+    /// 紧随其后（System 首段位，位于 Skills 段之前）；两次构建字节一致
+    /// （C10 快照断言面）
+    #[test]
+    fn subagent_role_constraint_renders_after_base_before_skills() {
+        let mut injector = ContextInjector::new();
+        // 子代理装配面：角色约束段 + Skills 段（验证 System 首段位）
+        push_subagent_role_constraint(&mut injector);
+        injector.push(ContextInjection::new(
+            ContextInjectionKind::Skills,
+            "Skill 定义",
+            "skill-body",
+        ));
+        let rendered = injector
+            .render(Some("基础系统提示".to_string()))
+            .expect("有注入段时必然产出");
+        assert!(rendered.starts_with("基础系统提示"), "基础系统段必须置首");
+        let constraint = rendered
+            .find("## 子代理角色约束")
+            .expect("角色约束段存在");
+        let skills = rendered.find("## Skill 定义").expect("skill 段存在");
+        assert!(constraint < skills, "System 段位于 Skills 段之前（首段位）");
+        // 段渲染形状：`## {title}\n{content}`，段间 \n\n 分隔
+        let section = format!("## {SUBAGENT_ROLE_CONSTRAINT_TITLE}\n{SUBAGENT_ROLE_CONSTRAINT_CONTENT}");
+        assert!(rendered.contains(&section), "角色约束段渲染为 `## 标题\n正文`");
+        // C10 字节级一致：同一配置两次构建逐字节一致
+        let second = injector
+            .render(Some("基础系统提示".to_string()))
+            .expect("有注入段时必然产出");
+        assert_eq!(rendered, second, "静态注入段两次构建必须逐字节一致");
+    }
+
+    /// T-D-03 produce 级（子代理 run 装配面）：经 request_system_prompt 取
+    /// system_prompt，断言含冻结文案全文；注入段归类 system 角色、不进
+    /// 会话对话（独立于压缩预算）
+    #[tokio::test]
+    async fn subagent_run_system_prompt_contains_frozen_constraint() {
+        let mut injector = ContextInjector::new();
+        push_subagent_role_constraint(&mut injector);
+        let (producer, provider) = test_producer(None, SessionLoopOptions::default());
+        let mut producer = producer.with_context_injector(Some(injector));
+        producer.produce().await;
+
+        let sent_system = provider
+            .request_system_prompt(0)
+            .expect("注入后请求必须携带 system prompt");
+        assert!(
+            sent_system.contains("你没有创建子 Agent 的能力；所有子 Agent 由主 Agent 分配"),
+            "system_prompt 必须含冻结文案前半句"
+        );
+        assert!(
+            sent_system.contains("如需并行子任务、拆解或汇报，请通过消息/上报通道向主 Agent 提出，由主 Agent 统一派发。"),
+            "system_prompt 必须含冻结文案后半句"
+        );
+        assert!(sent_system.contains("## 子代理角色约束"), "段标题渲染可见");
+        // 注入段归类 system 角色，不进会话对话（独立于压缩预算）
+        let sent_messages = provider.request_message_arcs(0);
+        assert!(
+            sent_messages
+                .iter()
+                .all(|m| m.role != AgentMessageRole::System),
+            "注入段不得混入会话消息（system 角色面 = system_prompt）"
+        );
+    }
+
+    /// T-D-03 主 Agent run 差异断言：主 Agent 装配点不调用
+    /// push_subagent_role_constraint → system_prompt 不含本段
+    /// （即便装配了其他注入段，角色约束段也不出现）
+    #[tokio::test]
+    async fn main_agent_run_excludes_subagent_role_constraint() {
+        // 主 Agent 装配面：仅常规注入段（Skills），无角色约束段
+        let mut injector = ContextInjector::new();
+        injector.push(EngineHandle::skill_context_injection(&[sample_skill(
+            "code-review",
+            "代码评审",
+            "按正确性优先评审。",
+        )]));
+        let (producer, provider) = test_producer(None, SessionLoopOptions::default());
+        let mut producer = producer.with_context_injector(Some(injector));
+        producer.produce().await;
+
+        let sent_system = provider
+            .request_system_prompt(0)
+            .expect("有注入段时请求必带 system prompt");
+        assert!(
+            !sent_system.contains("子代理角色约束"),
+            "主 Agent run 不得含角色约束段标题"
+        );
+        assert!(
+            !sent_system.contains("你没有创建子 Agent 的能力"),
+            "主 Agent run 不得含冻结文案"
         );
     }
 
