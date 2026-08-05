@@ -352,6 +352,14 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     public: true,
     action: 'action.tool.refresh_and_retry',
   },
+  'tool.write_not_allowed': {
+    code: 'tool.write_not_allowed',
+    title: '写入路径不在允许范围内',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.tool.request_path_allowance',
+  },
   // ── mcp 域（3 正式码）──
   'mcp.connection_failed': {
     code: 'mcp.connection_failed',

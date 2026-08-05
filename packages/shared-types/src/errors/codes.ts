@@ -46,12 +46,13 @@ export type CrishErrorCode =
   | 'context.length_exceeded'
   | 'context.compaction_failed'
   | 'context.heal_failed'
-  // ── tool 域（5 正式码）──
+  // ── tool 域（6 正式码）──
   | 'tool.not_found'
   | 'tool.invalid_input'
   | 'tool.execution_failed'
   | 'tool.path_escape'
   | 'tool.version_conflict'
+  | 'tool.write_not_allowed'
   // ── mcp 域（3 正式码）──
   | 'mcp.connection_failed'
   | 'mcp.protocol_violation'

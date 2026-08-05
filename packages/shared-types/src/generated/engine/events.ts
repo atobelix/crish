@@ -8,6 +8,8 @@
 
 import type { AgentEndReason, AgentMessage, AgentMessageBlock, ToolBatchCall, ToolProgressUpdate, ToolBatchResult, ContextCompressionRecord, ProviderDiagnostic, PermissionRequest, ApprovalDecision, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, RunTerminalStatus, RunCacheStats, MissAttribution, SecurityAuditOperation, ImpactAssessment, SecurityAuditDecision, SubagentEventPayload, SubagentEventKind, SubagentEndStatus } from "./types";
 
+import type { JsonValue } from "../../primitive-types";
+
 export interface EngineAgentStartEvent {
   type: "agent-start";
   sessionId: string;

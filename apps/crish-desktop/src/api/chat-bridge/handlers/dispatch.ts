@@ -57,6 +57,17 @@ import {
   onColdCacheWarning,
 } from './cacheEventHandlers';
 import { onSecurityAudit } from './securityAuditHandlers';
+import {
+  onTaskStarted,
+  onTaskOutput,
+  onTaskHeartbeat,
+  onTaskSuspicious,
+  onTaskCompleted,
+  onTaskFailed,
+  onTaskKilled,
+  onTimerFired,
+  onTimerCancelled,
+} from './taskEventHandlers';
 
 export type EngineHandler<ET extends EngineEventType> = (
   env: HandlerEnv,
@@ -105,6 +116,18 @@ export const engineDispatchTable: {
   'subagent-started': onSubagentStarted as unknown as EngineHandler<'subagent-started'>,
   'subagent-event': onSubagentEvent as unknown as EngineHandler<'subagent-event'>,
   'subagent-ended': onSubagentEnded as unknown as EngineHandler<'subagent-ended'>,
+  // 任务域七事件（F3 T-AB-17 数据面；UI 展示层轮询策略下显式空实现，
+  // 事件驱动刷新接线待后续轮——taskEventHandlers.ts）
+  'task-started': onTaskStarted,
+  'task-output': onTaskOutput,
+  'task-heartbeat': onTaskHeartbeat,
+  'task-suspicious': onTaskSuspicious,
+  'task-completed': onTaskCompleted,
+  'task-failed': onTaskFailed,
+  'task-killed': onTaskKilled,
+  // 定时器域两事件（F6 T-CF-04 数据面；唤醒走 steering 面，前端显式空实现）
+  'timer-fired': onTimerFired,
+  'timer-cancelled': onTimerCancelled,
 };
 
 type LegacyHandler = (env: HandlerEnv, envelope: LegacyEnvelope) => void;
