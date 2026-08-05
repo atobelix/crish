@@ -1,12 +1,19 @@
-//! 后台任务注册表（T-AB-07 底座 + R-AB2 T-AB-09/10 日志生命周期与 stdin 注入）
+//! 后台任务注册表（T-AB-07 底座 + R-AB2 T-AB-09/10 日志生命周期与 stdin 注入
+//! + R-AB3 T-AB-15/16 资源采样与健康判定）
 //!
 //! 职责：
 //! - [BackgroundTaskRegistry]：任务注册表（`task-<seq>` 命名空间独立于 pty id）、
-//!   日志根（`host_paths::app_dir()/logs/tasks`）、保留时长（默认 30 分钟，可注入）；
-//! - [TaskHandle]：任务句柄（info + child + writer + sampler + stdin 槽位）；
+//!   日志根（`host_paths::app_dir()/logs/tasks`）、保留时长（默认 30 分钟，可注入）、
+//!   资源采样配置与通知投递器（T-AB-15/16）；
+//! - [TaskHandle]：任务句柄（info + child + writer + sampler + stdin 槽位 +
+//!   notifier）；
 //! - writer 转发循环：stdout/stderr → 落盘 `<task_id>.log`（带 `[out]`/`[err]` 行前缀）
-//!   + 内存预览 + 行计数 + 每 512 行 `.meta.json` checkpoint + 行尾提示检测；
-//! - read_log：行号范围读取（尾部读取 / checkpoint 二分定位）；send_input：stdin 注入。
+//!   + 内存预览 + 行计数 + 每 512 行 `.meta.json` checkpoint + 行尾提示检测 +
+//!   Crashed 通知（T-AB-16 3：resourceMonitor 任务非零退出 → 通知附最后 20 行）；
+//! - read_log：行号范围读取（尾部读取 / checkpoint 二分定位）；send_input：stdin 注入；
+//! - 采样循环（T-AB-15 3）：resourceMonitor 任务挂 [TaskHandle::sampler]——
+//!   周期 2s 采集 CPU/RSS → 更新 `info.resource` + 落盘 `.samples.jsonl` +
+//!   健康三态判定（T-AB-16 1）+ Suspicious 通知（防抖，同任务保持期间仅一次）。
 //!
 //! 关键口径（实现文档，诚实边界）：
 //! - 日志编码：`decode_console_bytes`（先按 UTF-8，失败 lossy，与 agent-tools
@@ -25,7 +32,20 @@
 //!   `Stdio::piped()` 才能接通）；本侧对「未接管道」按 stdin_closed 分类处理；
 //! - 提示检测：行尾字面后缀匹配（常量模式，等价轻量正则），命中仅「候选提示」就位
 //!   （info.prompt + meta 落盘），由 AI 判断是否发送输入；通知接线
-//!   （PendingNudgeChannel::enqueue，nudge.rs:192）留 R-AB3 消费本就位字段。
+//!   （PendingNudgeChannel::enqueue，nudge.rs:192）已由 T-AB-16 经
+//!   [crate::resource::TaskNotifier] 抽象落地（生产未接线 → 留痕，测试注入队列）。
+//!
+//! 资源段接线状态（T-AB-15/16，登记偏差）：
+//! - 通知通道一（nudge）：`PendingNudgeChannel` 实例在 orchestrator 的
+//!   `PendingMessageQueue` 内部，壳层无访问入口 → 生产默认 None（通知文本经
+//!   tracing 留痕），待 C2 / T-AB-18 接线；测试注入内存队列断言；
+//! - 通知通道二（事件）：task-suspicious（Soft）/ task-failed（Critical）经
+//!   [crate::resource::EventSink] 槽发射（默认 [crate::resource::LogEventSink]
+//!   结构化留痕）——C2（T-AB-17）在 conex-types 落地 AgentEvent 七事件变体后，
+//!   以信封构造替换实现（payload 按冻结契约 §4.5 组装，零改动迁移）；
+//! - Windows 采样：`QueryInformationJobObject` 需要 daemon Job 句柄——句柄封装在
+//!   `process.rs` 私有 static（OnceLock）内，为落地采样在 process.rs 追加一行
+//!   只读 getter（`daemon_job_handle`，纯暴露不改行为，报主 Agent 裁决）。
 //!
 //! 回收语义：run 结束不回收任务（会话级存活）；应用退出 → daemon Job 兜底全杀
 //! （process.rs DAEMON_JOB_OBJECT，adopt 时接线，best-effort）。孤儿句柄：
@@ -39,12 +59,18 @@
 //! 不依赖 Tauri runtime）。
 
 use crate::core_error::CoreError;
+use crate::core_event_bridge::EventBridge;
 use crate::perf::fs::{file_info, read_chunk};
 use crate::process::now_millis;
+use crate::resource::{
+    cpu_percent_from_delta, judge_health, sample_usage, EventSink, ProcessHealth, RawUsage,
+    ResourceMonitorConfig, TaskNotifier,
+};
 use agent_tools::background::{
     BackgroundAdoptRequest, BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskRef,
-    BackgroundTaskStatus, KillResult, LogSlice, TaskState,
+    BackgroundTaskStatus, KillResult, LogSlice, ResourceSample, TaskState,
 };
+use conex_types::events::{AgentEvent, AgentEventEnvelope};
 use agent_tools::definition::ToolError;
 use conex_types::error::codes;
 use serde::{Deserialize, Serialize};
@@ -127,6 +153,61 @@ const KILL_GRACEFUL_WINDOW: Duration = Duration::from_secs(5);
 /// 两阶段终止阶段二：强制终止后的等待窗口（5s，仍不退出 → Failed）。
 const KILL_FORCE_WINDOW: Duration = Duration::from_secs(5);
 
+/// 采样间隔下限（毫秒，T-AB-15 3）：测试注入更短周期时防御性抬底——interval
+/// 极短拍会空转烧 CPU，且采样本身有微秒级 FFI 开销，200ms 下限足以满足
+/// 测试的确定性断言（首采样丢弃 → 第二拍起有效）。
+const RESOURCE_SAMPLE_INTERVAL_MIN_MS: u64 = 200;
+
+// ============================================================================
+// 资源采样注入与 Suspicious 防抖（T-AB-15/16 可测性接线）
+// ============================================================================
+
+/// 采样源注入槽（T-AB-15）：生产默认 [crate::resource::sample_usage]（真实
+/// JobObject /proc 采集）。
+///
+/// 登记（T-AB-15 诚实边界 + 测试稳定性）：Windows 侧采样读的是**全进程唯一**
+/// daemon Job 对象（process.rs DAEMON_JOB_OBJECT，OnceLock 单例）——并行测试
+/// 下其他测试的子进程同属该 Job，其 CPU 读数会污染本任务采样（启动尖峰 /
+/// 持续输出的进程可把本任务拍内 CPU% 抬过活跃阈值）。健康类测试因此注入
+/// 静默 / 脚本化替身（判定输入确定性可控），真实采集路径仍由
+/// resource_sample_collected / resource_samples_persisted 覆盖。
+pub(crate) type SamplerFn = Arc<dyn Fn(u32) -> Result<RawUsage, String> + Send + Sync>;
+
+/// Suspicious 通知防抖状态机（T-AB-16 2 语义：同任务保持期间仅一次，恢复
+/// Healthy 后重置）。
+///
+/// 每拍喂入健康判定结果，返回「本拍是否应投递通知」：
+/// - Healthy：重置防抖（不通知）——CPU 抖动等临时活跃视为「恢复 Healthy」，
+///   按方案语义允许后续重新进入 Suspicious 时再次通知（合法重复通知场景）；
+/// - Suspicious：保持期间内仅首次返回 true，其余保持拍返回 false；
+/// - Crashed：不参与本状态机（终态由 finish_task 走 notify_failed）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct SuspiciousDebounce {
+    /// 当前 Suspicious 保持期内是否已通知过
+    armed: bool,
+}
+
+impl SuspiciousDebounce {
+    /// 喂入一拍判定结果，返回是否应投递 Suspicious 通知。
+    pub(crate) fn observe(&mut self, health: ProcessHealth) -> bool {
+        match health {
+            ProcessHealth::Healthy => {
+                self.armed = false;
+                false
+            }
+            ProcessHealth::Suspicious => {
+                if self.armed {
+                    false
+                } else {
+                    self.armed = true;
+                    true
+                }
+            }
+            ProcessHealth::Crashed => false,
+        }
+    }
+}
+
 // ============================================================================
 // 注册表与任务句柄
 // ============================================================================
@@ -137,8 +218,9 @@ const KILL_FORCE_WINDOW: Duration = Duration::from_secs(5);
 /// - `task_seq`: `task-<seq>` 命名（命名空间独立于 pty id `pty/mod.rs:104-111`）；
 /// - `log_root`: 任务日志根（`host_paths::app_dir()` 同款，`process.rs:168-174`）；
 /// - `retention`: 保留时长（默认 30 分钟，可注入便于测试；归档清理 T-AB-12 落地）；
-/// - `max_tasks`: 注册表条目上限（T-AB-12 5 容量兜底，默认 200，可注入便于测试）。
-#[derive(Debug)]
+/// - `max_tasks`: 注册表条目上限（T-AB-12 5 容量兜底，默认 200，可注入便于测试）；
+/// - `sampler`: 采样源（T-AB-15：生产默认 [crate::resource::sample_usage]；
+///   测试可注入静默/脚本化替身——见 [SamplerFn] 登记说明）。
 pub struct BackgroundTaskRegistry {
     tasks: Mutex<HashMap<String, Arc<TaskHandle>>>,
     task_seq: AtomicU64,
@@ -147,6 +229,23 @@ pub struct BackgroundTaskRegistry {
     max_tasks: usize,
     /// 归档循环启动标记（幂等：线程/命令面二次调用不再重复 spawn）
     archive_loop_started: AtomicBool,
+    /// 资源采样配置（T-AB-15：默认 2s 采样 / 60s 静默阈值；测试注入短阈值）
+    resource_config: ResourceMonitorConfig,
+    /// 任务通知投递器（T-AB-16：nudge + 事件双通道；生产默认留痕，测试注入；
+    /// Mutex 支持生产路径经 `set_event_bridge` 接线替换默认发射实现）
+    notifier: Mutex<TaskNotifier>,
+    /// 采样源（T-AB-15 注入槽；默认 sample_usage，测试注入替身）
+    sampler: SamplerFn,
+}
+
+impl std::fmt::Debug for BackgroundTaskRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BackgroundTaskRegistry")
+            .field("log_root", &self.log_root)
+            .field("retention", &self.retention)
+            .field("max_tasks", &self.max_tasks)
+            .finish_non_exhaustive()
+    }
 }
 
 /// 任务句柄（所有权在托管方）
@@ -162,7 +261,9 @@ pub struct BackgroundTaskRegistry {
 /// - `stdin`: 子进程 stdin 写入槽（T-AB-10；终态收尾清空，写入失败清空）；
 /// - `diagnostics`: 终止诊断留痕（T-AB-11：优雅发送时间 / 强制升级原因；
 ///   status().termination_diagnostics 透传）；
-/// - `sampler`: 资源采样任务空位（R-AB3 填充）。
+/// - `notifier`: 任务通知投递器（T-AB-16：Suspicious/Crashed 双通道，adopt 时
+///   从 registry 克隆共享通道）；
+/// - `sampler`: 资源采样任务（T-AB-15：仅 resourceMonitor 任务 Some）。
 #[derive(Debug)]
 pub(crate) struct TaskHandle {
     info: Arc<RwLock<BackgroundTaskInfo>>,
@@ -170,11 +271,15 @@ pub(crate) struct TaskHandle {
     child: Arc<Mutex<Option<Child>>>,
     #[allow(dead_code)] // 归档清理（retention 到期）时 await 收口 writer
     writer: JoinHandle<()>,
-    #[allow(dead_code)] // R-AB3 资源采样（A04）时消费
+    // 采样循环句柄：终态自退出（无外部 join 需求），字段保持所有权防 drop
+    #[allow(dead_code)] // T-AB-15 采样任务（仅 resourceMonitor 任务 Some，终态自退出）
     sampler: Option<JoinHandle<()>>,
     preview: Arc<Mutex<OutputPreview>>,
     stdin: Arc<TokioMutex<Option<ChildStdin>>>,
     diagnostics: Arc<Mutex<Vec<String>>>,
+    // 通知投递器：writer/sampler 闭包持克隆，本字段保持 registry 侧引用
+    #[allow(dead_code)] // 通知通道由克隆共享，字段本身无读取消费者
+    notifier: TaskNotifier,
 }
 
 /// 输出内存预览（转发器维护；有界）
@@ -623,7 +728,30 @@ impl BackgroundTaskRegistry {
     }
 
     /// 纯构造（不启动归档线程；`new()` 与 `with_config` 共用）。
+    /// 资源段字段取默认：采样配置 2s/60s、通知投递器未接线（留痕兜底）。
     fn construct(log_root: PathBuf, retention: Duration, max_tasks: usize) -> Self {
+        Self::construct_with(
+            log_root,
+            retention,
+            max_tasks,
+            ResourceMonitorConfig::default(),
+            TaskNotifier::unwired(),
+            Arc::new(sample_usage),
+        )
+    }
+
+    /// 全量构造（`construct` 与资源段注入式构造共用）。
+    ///
+    /// 资源段注入项（T-AB-15/16 测试场景）：`resource_config` 短采样周期 +
+    /// 短静默阈值便于确定性断言；`notifier` 注入内存 nudge 队列 / 事件收集器。
+    fn construct_with(
+        log_root: PathBuf,
+        retention: Duration,
+        max_tasks: usize,
+        resource_config: ResourceMonitorConfig,
+        notifier: TaskNotifier,
+        sampler: SamplerFn,
+    ) -> Self {
         let registry = Self {
             tasks: Mutex::new(HashMap::new()),
             task_seq: AtomicU64::new(0),
@@ -631,6 +759,9 @@ impl BackgroundTaskRegistry {
             retention,
             max_tasks,
             archive_loop_started: AtomicBool::new(false),
+            resource_config,
+            notifier: Mutex::new(notifier),
+            sampler,
         };
         // Windows：daemon Job 兜底（应用退出 → 宿主句柄关闭 → 后台任务树全杀；
         // 与 PTY Job 相互隔离，见 process.rs Job Objects 段）
@@ -643,6 +774,69 @@ impl BackgroundTaskRegistry {
             );
         }
         registry
+    }
+
+    /// 资源段注入式构造（T-AB-15/16 测试场景：短采样周期/短静默阈值 +
+    /// 通知通道注入；采样源为真实 [crate::resource::sample_usage]；启动归档
+    /// 循环线程，与 `with_config` 同款 Arc 语义）。
+    #[allow(dead_code)] // 生产走 new()/with_config；本构造供资源与健康测试
+    pub(crate) fn with_resource_options(
+        log_root: PathBuf,
+        retention: Duration,
+        max_tasks: usize,
+        resource_config: ResourceMonitorConfig,
+        notifier: TaskNotifier,
+    ) -> Arc<Self> {
+        Self::with_resource_monitor(
+            log_root,
+            retention,
+            max_tasks,
+            resource_config,
+            notifier,
+            Arc::new(sample_usage),
+        )
+    }
+
+    /// 资源段全量注入式构造（T-AB-15/16 测试场景）：额外注入采样源替身——
+    /// 健康类测试用静默/脚本化替身（[SamplerFn] 登记说明：共享 daemon Job
+    /// 在并行测试下的 CPU 读数受其他测试子进程污染，替身使判定输入确定性
+    /// 可控）；启动归档循环线程，与 `with_resource_options` 同款 Arc 语义。
+    #[allow(dead_code)] // 测试专用构造（健康类测试注入采样替身）
+    pub(crate) fn with_resource_monitor(
+        log_root: PathBuf,
+        retention: Duration,
+        max_tasks: usize,
+        resource_config: ResourceMonitorConfig,
+        notifier: TaskNotifier,
+        sampler: SamplerFn,
+    ) -> Arc<Self> {
+        let shared = Arc::new(Self::construct_with(
+            log_root,
+            retention,
+            max_tasks,
+            resource_config,
+            notifier,
+            sampler,
+        ));
+        shared.spawn_archive_loop();
+        shared
+    }
+
+    /// 事件发射接线（T-AB-16 通道二生产路径）：把 [EventBridgeSink] 并入
+    /// 通知投递器（替换默认 [LogEventSink] 留痕实现）。
+    ///
+    /// 接线点（登记偏差）：main.rs 在构造 registry 后调用一次（main.rs 属 C3
+    /// 域，本轮不在壳侧改动——事件发射当前经 LogEventSink 结构化留痕，
+    /// C3/T-AB-19 接线后即切换为真实事件通道发射，payload 形状不变）。
+    #[allow(dead_code)] // 接线点在 C3（main.rs），接线后消除；测试构建同样未接线故用普通 allow
+    pub(crate) fn set_event_bridge(&self, bridge: EventBridge, session_id: String) {
+        self.notifier
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .set_event_sink(Arc::new(EventBridgeSink {
+                bridge,
+                session_id,
+            }));
     }
 
     /// 启动归档循环（60s tick，spawn_snapshot_loop 同款周期任务语义；幂等——
@@ -940,8 +1134,15 @@ impl BackgroundTaskManager for BackgroundTaskRegistry {
         write_meta_now(&info, &meta_path, &[], 0, false, None, 0);
 
         // 转发循环：双流 → 落盘 + 内存预览 + 行计数 + checkpoint + 提示检测；
-        // EOF 全闭后收尾（wait + 终态 meta + stdin 槽清空 + 状态机）。
-        // Arc 循环安全：writer 持 shared 克隆，任务完成即释放，无泄漏。
+        // EOF 全闭后收尾（wait + 终态 meta + stdin 槽清空 + 状态机 +
+        // Crashed 通知）。Arc 循环安全：writer 持 shared 克隆，任务完成即释放，
+        // 无泄漏。
+        let notifier = self
+            .notifier
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+        let resource_monitor = req.resource_monitor;
         let writer = tokio::spawn({
             let info = Arc::clone(&info);
             let child_slot = Arc::clone(&child_slot);
@@ -949,22 +1150,50 @@ impl BackgroundTaskManager for BackgroundTaskRegistry {
             let stdin_slot = Arc::clone(&stdin_slot);
             let log_path = log_path.clone();
             let meta_path = meta_path.clone();
+            let notifier = notifier.clone();
             async move {
                 let state =
                     forward_streams(&info, &preview, stdout, stderr, &log_path, &meta_path).await;
-                finish_task(&info, &child_slot, &stdin_slot, &meta_path, state).await;
+                finish_task(
+                    &info,
+                    &child_slot,
+                    &stdin_slot,
+                    &meta_path,
+                    state,
+                    &notifier,
+                    resource_monitor,
+                )
+                .await;
             }
         });
+
+        // 资源采样循环（T-AB-15 3）：仅启用 resourceMonitor 的任务挂载；
+        // 与转发器同属 tokio runtime 的独立任务（不额外开 OS 线程），
+        // 采样开销微秒级（JobObject FFI / /proc 读）。
+        let sampler = if resource_monitor {
+            Some(spawn_resource_monitor_loop(
+                Arc::clone(&info),
+                pid,
+                log_path.with_extension("samples.jsonl"),
+                notifier.clone(),
+                self.resource_config,
+                task_id.clone(),
+                self.sampler.clone(),
+            ))
+        } else {
+            None
+        };
 
         let handle = Arc::new(TaskHandle {
             info,
             pid,
             child: child_slot,
             writer,
-            sampler: None,
+            sampler,
             preview,
             stdin: stdin_slot,
             diagnostics: Arc::new(Mutex::new(Vec::new())),
+            notifier,
         });
         self.tasks
             .lock()
@@ -1571,7 +1800,8 @@ fn write_output_line(
 }
 
 /// 收尾：双流 EOF 后取 child 收口（wait），写终态 meta（exit_code/finished_at），
-/// 清空 stdin 槽位（终态后 send_input 确定性 stdin_closed），最后推进状态机。
+/// 清空 stdin 槽位（终态后 send_input 确定性 stdin_closed），推进状态机，
+/// 最后投递 Crashed 通知（T-AB-16 3：仅 resourceMonitor 任务）。
 ///
 /// 顺序即屏障：状态翻转为终态是收尾的最后一步（全部落盘、sync、meta 均已
 /// 完成）——status()/list() 读到终态即保证 tail/line_count 与文件自洽
@@ -1582,6 +1812,8 @@ async fn finish_task(
     stdin_slot: &Arc<TokioMutex<Option<ChildStdin>>>,
     meta_path: &Path,
     mut state: LogState,
+    notifier: &TaskNotifier,
+    resource_monitor: bool,
 ) {
     // 1) 日志文件 sync（退出后文件可读）
     state.log.sync();
@@ -1665,6 +1897,236 @@ async fn finish_task(
         info_guard.finished_at_ms = Some(finished_at_ms);
         info_guard.duration_ms = finished_at_ms.saturating_sub(info_guard.started_at_ms);
     }
+
+    // 6) Crashed 通知（T-AB-16 3）：仅 resourceMonitor 任务 + 非零退出码。
+    //    尾部日志复用 read_log_tail（read_log(None, 20) 的底层实现，T-AB-09；
+    //    日志文件已在 1) sync，文件内容完整）。终态只发生一次，通知天然不重复；
+    //    Crashed 不自动杀、不自动降级超时（通知由 AI 裁决，见 notifier 文案）。
+    if resource_monitor {
+        if let Some(code) = exit_code {
+            if code != 0 {
+                let (task_id, log_path, line_count, started_at_ms) = {
+                    let guard = info.read().unwrap_or_else(|p| p.into_inner());
+                    (
+                        guard.task_id.clone(),
+                        PathBuf::from(guard.log_path.clone()),
+                        guard.line_count,
+                        guard.started_at_ms,
+                    )
+                };
+                let (tail, _, _) = read_log_tail(&log_path, line_count, 20);
+                notifier.notify_failed(
+                    &task_id,
+                    code,
+                    &tail.join("\n"),
+                    finished_at_ms.saturating_sub(started_at_ms),
+                );
+            }
+        }
+    }
+}
+
+// ── 资源采样循环（T-AB-15 3 / T-AB-16 1/2）──────────────────────────────────
+
+/// 事件发射到 `workbench-run-event` 通道的接线实现（T-AB-16 通道二生产路径；
+/// 由 [BackgroundTaskRegistry::set_event_bridge] 注入——C3 在 main.rs 接线）。
+///
+/// payload（冻结契约 §4.5 形状，[crate::resource::TaskNotifier] 组装）→
+/// C2 已落地的 AgentEvent 七事件变体（conex-types events.rs，T-AB-17）→
+/// [AgentEventEnvelope] → [EventBridge::emit_envelope]。
+///
+/// 登记偏差（C1 发射点 ↔ C2 契约）：C2 变体含**必填** `session_id` 字段而
+/// §4.5 冻结表无该字段；壳层任务注册表无会话概念（任务为会话级存活、独立于
+/// run）——本实现以注册表注入的 `session_id` 填充（main.rs 接线时传当前会话
+/// id，缺省空串占位），事件归属经信封 runId 与 payload ownerRunId 表达。
+#[derive(Clone)]
+#[allow(dead_code)] // 生产构造点 = set_event_bridge（C3 main.rs 接线），接线后消除
+pub(crate) struct EventBridgeSink {
+    /// 事件桥（Tauri 通道 / 测试替身，Clone 共享）
+    bridge: EventBridge,
+    /// 事件体 session_id（注册表注入；占位见上）
+    session_id: String,
+}
+
+impl std::fmt::Debug for EventBridgeSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EventBridgeSink")
+            .field("session_id", &self.session_id)
+            .finish_non_exhaustive()
+    }
+}
+
+impl EventSink for EventBridgeSink {
+    fn emit(&self, event_type: &str, payload: serde_json::Value) {
+        // 按冻结契约 §4.5 把 payload 展开为 AgentEvent 变体（字段名 camelCase
+        // 由 serde rename_all 处理，此处为 Rust 字段名）
+        let event = match event_type {
+            "task-suspicious" => AgentEvent::TaskSuspicious {
+                session_id: self.session_id.clone(),
+                task_id: payload
+                    .get("taskId")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                silence_ms: payload.get("silenceMs").and_then(serde_json::Value::as_u64).unwrap_or(0),
+                last_output_at_ms: payload
+                    .get("lastOutputAtMs")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0),
+            },
+            "task-failed" => AgentEvent::TaskFailed {
+                session_id: self.session_id.clone(),
+                task_id: payload
+                    .get("taskId")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                exit_code: payload
+                    .get("exitCode")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(0) as i32,
+                // C2 形状：tail 为逐行 Vec<String>（最后 20 行，read_log 尾部读取
+                // 产出语义）；payload 中为换行拼接文本，按行拆回
+                tail: payload
+                    .get("tail")
+                    .and_then(serde_json::Value::as_str)
+                    .map(|s| s.lines().map(str::to_string).collect())
+                    .unwrap_or_default(),
+                duration_ms: payload
+                    .get("durationMs")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0),
+            },
+            other => {
+                tracing::warn!(
+                    target: "background",
+                    event_type = other,
+                    "未知任务域事件类型（跳过发射）"
+                );
+                return;
+            }
+        };
+        // 信封：runId/sequence 不注入（任务为会话级存活、独立于 run 上下文；
+        // 前端对无 runId 事件放行不过滤，T-AB-18 消费面按 payload 归组）
+        let envelope = AgentEventEnvelope::new(event, None, None);
+        self.bridge.emit_envelope(&envelope);
+    }
+}
+
+/// 资源采样循环：仅启用 resourceMonitor 的任务挂载（[TaskHandle::sampler]）。
+///
+/// 流程（每拍）：
+/// 1. 终态短路：任务已进入终态（writer 收口）→ 循环退出；
+/// 2. 采集（[SamplerFn]——生产 [crate::resource::sample_usage]，测试可注入
+///    替身）——失败（Job 句柄缺失 / 进程已退出）跳过本拍（不阻断任务执行）；
+/// 3. 首采样无基线 → 仅记录基线（丢弃本拍，cpu_percent 不出现 NaN/异常值）；
+/// 4. 后续拍：周期差值/墙钟差值算 CPU% → 组装 [ResourceSample]
+///    （last_output_at_ms 事件驱动读取——转发器读到字节即更新，非采样轮询）
+///    → 更新 info.resource → 追加 `.samples.jsonl`（best-effort 落盘，
+///    复用 perf/jsonl.rs:49-72）；
+/// 5. 健康判定（T-AB-16 1，仅资源任务）：Healthy → 重置防抖；Suspicious →
+///    经 [SuspiciousDebounce] 防抖投递通知（保持期间仅一次，恢复 Healthy
+///    重置；双通道经 notifier 投递，见 [crate::resource::TaskNotifier] 接线
+///    状态说明）。
+///
+/// 诚实边界：采样与转发器是两个独立 tokio 任务（同 runtime，不额外开 OS
+/// 线程）；采样失败不影响任务生命周期（由 writer 管理）。
+#[allow(clippy::too_many_arguments)]
+fn spawn_resource_monitor_loop(
+    info: Arc<RwLock<BackgroundTaskInfo>>,
+    pid: u32,
+    samples_path: PathBuf,
+    notifier: TaskNotifier,
+    config: ResourceMonitorConfig,
+    task_id: String,
+    sampler: SamplerFn,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        // interval 首拍立即完成 → 跳过（对齐 spawn_snapshot_loop 范式，
+        // core_run_commands.rs:1156）；此后每拍 = sample_interval_ms
+        let mut interval = tokio::time::interval(Duration::from_millis(
+            config
+                .sample_interval_ms
+                .max(RESOURCE_SAMPLE_INTERVAL_MIN_MS),
+        ));
+        interval.tick().await;
+        // 基线：首采样无基线 → 丢弃（无差值即无无效值）
+        let mut baseline: Option<(RawUsage, u64)> = None;
+        // Suspicious 防抖状态机（T-AB-16 2：保持期间仅一次，恢复 Healthy 重置）
+        let mut debounce = SuspiciousDebounce::default();
+        loop {
+            interval.tick().await;
+            {
+                let guard = info.read().unwrap_or_else(|p| p.into_inner());
+                if BackgroundTaskRegistry::is_terminal(guard.status) {
+                    break; // 终态：writer 已收口，采样停止
+                }
+            }
+            let Ok(raw) = (sampler)(pid) else {
+                tracing::debug!(
+                    target: "background",
+                    task_id = %task_id,
+                    pid,
+                    "资源采样失败，本拍跳过"
+                );
+                continue;
+            };
+            let now = now_millis() as u64;
+            let Some((prev_raw, prev_wall)) = baseline.take() else {
+                // 首采样：仅建立基线，丢弃本拍
+                baseline = Some((raw, now));
+                continue;
+            };
+            baseline = Some((raw, now));
+            let cpu_percent = cpu_percent_from_delta(&prev_raw, &raw, prev_wall, now);
+            let last_output_at_ms = info
+                .read()
+                .unwrap_or_else(|p| p.into_inner())
+                .last_output_at_ms;
+            let sample = ResourceSample {
+                sampled_at_ms: now,
+                cpu_percent,
+                rss_bytes: raw.rss_bytes,
+                last_output_at_ms,
+                io_read_bytes: 0, // 首版恒 0（诚实边界：进程树 I/O 聚合繁琐，列为可选）
+                io_write_bytes: 0,
+            };
+            if let Ok(mut guard) = info.write() {
+                guard.resource = Some(sample.clone());
+            }
+            // 落盘 `.samples.jsonl`（best-effort：失败仅 debug 留痕，不阻断采样）
+            match serde_json::to_string(&sample) {
+                Ok(line) => {
+                    if let Err(e) =
+                        crate::perf::jsonl::append_jsonl_lines(&samples_path, &[line], false)
+                    {
+                        tracing::debug!(
+                            target: "background",
+                            task_id = %task_id,
+                            error = %e,
+                            "采样落盘失败（本拍跳过）"
+                        );
+                    }
+                }
+                Err(e) => tracing::debug!(
+                    target: "background",
+                    task_id = %task_id,
+                    error = %e,
+                    "采样序列化失败（本拍跳过）"
+                ),
+            }
+            // 健康判定（T-AB-16 1/2）+ Suspicious 通知（SuspiciousDebounce 防抖：
+            // 保持期间仅一次，恢复 Healthy 重置后再次 Suspicious 才重新通知；
+            // Crashed 属终态，由 finish_task 6 通知，不经采样判定）
+            if debounce.observe(judge_health(now, last_output_at_ms, cpu_percent, &config)) {
+                notifier.notify_suspicious(
+                    &task_id,
+                    config.silence_threshold_ms,
+                    last_output_at_ms,
+                );
+            }
+        }
+    })
 }
 
 // ── 两阶段终止等待 helper（T-AB-11）─────────────────────────────────────────
@@ -1972,6 +2434,41 @@ pub(crate) async fn workbench_cancel_background_task(
     task_id: String,
 ) -> Result<KillResult, CoreError> {
     state.inner().kill(&task_id).await.map_err(tool_err_to_core)
+}
+
+/// send_input 命令契约体（测试直调，不依赖 Tauri runtime；语义与
+/// registry.send_input 完全一致：默认追加 `\n`，失败分类 task_not_found /
+/// stdin_closed，未知 taskId → CoreError::NotFound）。
+pub(crate) async fn build_send_input_response(
+    registry: &BackgroundTaskRegistry,
+    task_id: &str,
+    text: &str,
+    append_newline: bool,
+) -> Result<(), CoreError> {
+    registry
+        .send_input(task_id, text, append_newline)
+        .await
+        .map_err(tool_err_to_core)
+}
+
+/// 向后台任务 stdin 注入输入（T-AB-10 2 操作面；T-AB-20 前端
+/// sendBackgroundTaskInput 的 Rust 命令面——前端 backgroundTasksApi.ts 已
+/// 接线等待本命令，F3 轮注册补齐）。参数 camelCase：taskId / text /
+/// appendNewline（缺省 true 追加换行）。成功返回 unit，失败按 CoreError 分类。
+#[tauri::command]
+pub(crate) async fn workbench_send_input(
+    state: tauri::State<'_, Arc<BackgroundTaskRegistry>>,
+    task_id: String,
+    text: String,
+    append_newline: Option<bool>,
+) -> Result<(), CoreError> {
+    build_send_input_response(
+        state.inner(),
+        &task_id,
+        &text,
+        append_newline.unwrap_or(true),
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -2476,6 +2973,59 @@ mod tests {
     }
 
     // ── T-AB-09 日志生命周期 ──────────────────────────────────────────────
+
+    /// T-AB-20 验收：send_input 命令面契约（build_send_input_response 直调，
+    /// 不依赖 Tauri runtime）——未知 → NotFound；运行中 stdin 接通 → 注入成功；
+    /// 终态 / 未接管道 → stdin_closed 分类错误；append_newline 默认追加换行。
+    #[tokio::test]
+    async fn workbench_send_input_contract() {
+        let registry = test_registry();
+        let cwd = std::env::current_dir().expect("cwd");
+
+        // 未知 → NotFound（tool_err_to_core 保形映射）
+        let err = build_send_input_response(&registry, "task-nope", "hi", true)
+            .await
+            .expect_err("send_input unknown");
+        assert!(
+            matches!(err, CoreError::NotFound(_)),
+            "未知任务应映射为 CoreError::NotFound，实际 {err:?}"
+        );
+
+        // 运行中 + stdin 管道接通 → 注入成功（got=<输入> 端到端）
+        let child = spawn_test_child_with_stdin(INTERACTIVE_PROMPT_COMMAND);
+        let r1 = registry
+            .adopt(adopt_request(child, "send-input-contract", &cwd, false, None))
+            .await
+            .expect("adopt");
+        build_send_input_response(&registry, &r1.task_id, "y", true)
+            .await
+            .expect("send_input 注入成功");
+        let status = wait_for_terminal(&registry, &r1.task_id, Duration::from_secs(10)).await;
+        assert_eq!(status.status, TaskState::Completed);
+        assert!(
+            status.tail.contains("got=y"),
+            "stdin 注入应到达进程（got=y）：{:?}",
+            status.tail
+        );
+
+        // append_newline=false：不追加换行 → 进程仍在等待输入（Running）
+        let child = spawn_test_child_with_stdin(INTERACTIVE_PROMPT_COMMAND);
+        let r2 = registry
+            .adopt(adopt_request(child, "send-input-no-newline", &cwd, false, None))
+            .await
+            .expect("adopt");
+        build_send_input_response(&registry, &r2.task_id, "y", false)
+            .await
+            .expect("send_input no-newline");
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let status = registry.status(&r2.task_id).await.expect("status");
+        assert_eq!(
+            status.status,
+            TaskState::Running,
+            "不追加换行时进程应仍在等待输入（Running）"
+        );
+        let _ = registry.kill(&r2.task_id).await;
+    }
 
     /// 验收：1000 行输出任务 `read_log(None, 100)` → 返回 901~1000 行且每行完整
     /// （完整行边界；total_lines 与 line_count 一致）。
@@ -3296,5 +3846,537 @@ mod tests {
             let s = registry_b.status(id).await.expect("status");
             assert!(BackgroundTaskRegistry::is_terminal(s.status), "{id} 仍可查询");
         }
+    }
+
+    // ── T-AB-15 资源采集原语 ──────────────────────────────────────────────
+
+    /// 短周期测试注册表（资源段专用）：500ms 采样 / 2s 静默阈值 + 通知队列注入；
+    /// 采样源为真实 [crate::resource::sample_usage]（resource_* 验收用）。
+    /// 返回 (registry, queue)。
+    fn resource_test_registry() -> (
+        Arc<BackgroundTaskRegistry>,
+        Arc<Mutex<VecDeque<String>>>,
+    ) {
+        let (queue, sampler) = (Arc::new(Mutex::new(VecDeque::new())), Arc::new(sample_usage));
+        resource_test_registry_with_sampler(queue, sampler)
+    }
+
+    /// 短周期测试注册表 + 采样源替身注入（健康类测试用）：500ms 采样 / 2s
+    /// 静默阈值 + 通知队列注入 + 自定义采样源。
+    /// 返回 (registry, queue)。
+    fn resource_test_registry_with_sampler(
+        queue: Arc<Mutex<VecDeque<String>>>,
+        sampler: SamplerFn,
+    ) -> (Arc<BackgroundTaskRegistry>, Arc<Mutex<VecDeque<String>>>) {
+        let seq = TEST_SEQ.fetch_add(1, Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "crish-bg-resource-{}-{seq}",
+            std::process::id()
+        ));
+        let registry = BackgroundTaskRegistry::with_resource_monitor(
+            root,
+            Duration::from_secs(30 * 60),
+            MAX_BACKGROUND_TASKS,
+            ResourceMonitorConfig {
+                sample_interval_ms: 500,
+                silence_threshold_ms: 2000,
+            },
+            TaskNotifier::with_nudge_queue(Arc::clone(&queue)),
+            sampler,
+        );
+        (registry, queue)
+    }
+
+    /// 静默采样替身：CPU 累计恒定（差值恒 0%）——模拟无 CPU 消耗的静默任务，
+    /// 判定输入确定性可控（不受共享 daemon Job 的并行测试污染，见 [SamplerFn]）。
+    fn silent_sampler() -> SamplerFn {
+        Arc::new(|_pid| {
+            Ok::<RawUsage, String>(RawUsage {
+                cpu_ms: 1000,
+                rss_bytes: 4096,
+            })
+        })
+    }
+
+    /// 脚本化采样替身：静默恒定 → 第 `spike_at` 次采样注入一次 CPU 尖峰
+    /// （+300ms，2s 窗口下 60% ≫ 活跃阈值 1%）→ 恢复静默。用于确定性复现
+    /// 「Suspicious 保持期被 CPU 抖动打断 → 恢复 Healthy 重置防抖 → 再次
+    /// Suspicious 重新通知」的合法重复通知场景（T-AB-16 2 语义）。
+    fn spiking_sampler(spike_at: u64) -> SamplerFn {
+        let n = Arc::new(AtomicU64::new(0));
+        let n2 = Arc::clone(&n);
+        Arc::new(move |_pid| {
+            let i = n2.fetch_add(1, Ordering::Relaxed);
+            let cpu_ms = if i == spike_at { 1300 } else { 1000 };
+            Ok::<RawUsage, String>(RawUsage {
+                cpu_ms,
+                rss_bytes: 4096,
+            })
+        })
+    }
+
+    /// 启用 resourceMonitor 的 adopt 请求（T-AB-15 验收用）。
+    fn adopt_request_monitored(
+        child: Child,
+        command: &str,
+        cwd: &Path,
+    ) -> BackgroundAdoptRequest {
+        let mut req = adopt_request(child, command, cwd, false, None);
+        req.resource_monitor = true;
+        req
+    }
+
+    /// 验收：启用 resourceMonitor 的真实长跑任务——采样后 `status().resource`
+    /// 非空且 `cpu_percent ∈ [0,100]`、`rss_bytes > 0`、快照内 `last_output_at_ms`
+    /// 与 status 一致且随输出更新。
+    ///
+    /// 采样口径：首拍建基线（丢弃），第二拍起产生有效采样（本测试轮询等待
+    /// resource 非空——首采样丢弃语义的集成断言由 resource_first_sample_dropped
+    /// 单元覆盖）。
+    #[tokio::test]
+    async fn resource_sample_collected() {
+        let (registry, _queue) = resource_test_registry();
+        let child = spawn_test_child(OUTPUT_COMMAND);
+        let r = registry
+            .adopt(adopt_request_monitored(child, "resource-sample", Path::new(".")))
+            .await
+            .expect("adopt");
+        let task_id = r.task_id.clone();
+
+        // 轮询等待第一份有效采样（窗口 20s：首拍丢弃 + 500ms 周期 + 输出命令 4s）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        let first_output_at = loop {
+            let status = registry.status(&task_id).await.expect("status");
+            if let Some(res) = &status.resource {
+                assert!(
+                    res.cpu_percent.is_finite(),
+                    "cpu_percent 必须为有限值：{}",
+                    res.cpu_percent
+                );
+                assert!(
+                    (0.0..=100.0).contains(&res.cpu_percent),
+                    "cpu_percent 应在 [0,100]：{}",
+                    res.cpu_percent
+                );
+                assert!(res.rss_bytes > 0, "rss_bytes 应 > 0：{}", res.rss_bytes);
+                assert_eq!(
+                    res.last_output_at_ms, status.last_output_at_ms,
+                    "快照内 last_output_at_ms 与 status 一致（事件驱动刷新）"
+                );
+                break res.last_output_at_ms;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "采样迟迟未生效（首采样丢弃后应有有效采样）"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        };
+
+        // last_output_at_ms 随输出更新：输出命令持续产出，再等一拍后应增长
+        tokio::time::sleep(Duration::from_millis(700)).await;
+        let status = registry.status(&task_id).await.expect("status");
+        assert!(
+            status.last_output_at_ms >= first_output_at,
+            "last_output_at_ms 应随输出单调更新：{first_output_at} -> {}",
+            status.last_output_at_ms
+        );
+
+        // 清理
+        let _ = registry.kill(&task_id).await;
+    }
+
+    /// 验收：首采样无基线不产生无效值（cpu_percent 不出现 NaN/异常值）——
+    /// 单元断言差值语义（零差值 → 0.0、墙钟零差值不除零、差值回退 clamp 0）；
+    /// 真实任务路径的「首拍仅建基线」由 resource_sample_collected 的首份
+    /// 采样有效性断言覆盖。
+    #[test]
+    fn resource_first_sample_dropped() {
+        let prev = RawUsage {
+            cpu_ms: 1000,
+            rss_bytes: 4096,
+        };
+        // 首采样基线自身不产生差值（零差值 → 0.0 而非 NaN）
+        let same = RawUsage {
+            cpu_ms: 1000,
+            rss_bytes: 4096,
+        };
+        let pct = cpu_percent_from_delta(&prev, &same, 1_000, 3_000);
+        assert!(pct.is_finite() && pct >= 0.0 && pct <= 100.0, "零差值不得出 NaN：{pct}");
+        // 墙钟零差值：不除零
+        assert_eq!(cpu_percent_from_delta(&prev, &same, 3_000, 3_000), 0.0);
+        // 差值回退（进程 CPU 时间非单调的防御）：clamp 0
+        let lower = RawUsage {
+            cpu_ms: 800,
+            rss_bytes: 4096,
+        };
+        assert_eq!(cpu_percent_from_delta(&prev, &lower, 1_000, 3_000), 0.0);
+        // 正常差值：500ms CPU / 2s 墙钟 = 25%
+        let busy = RawUsage {
+            cpu_ms: 1500,
+            rss_bytes: 4096,
+        };
+        assert_eq!(cpu_percent_from_delta(&prev, &busy, 1_000, 3_000), 25.0);
+    }
+
+    /// 验收：`.samples.jsonl` 内容为合法 JSONL 且条数随时间增长
+    /// （复用 append_jsonl_lines 落盘，perf/jsonl.rs:49-72）。
+    #[tokio::test]
+    async fn resource_samples_persisted() {
+        let (registry, _queue) = resource_test_registry();
+        let child = spawn_test_child(OUTPUT_COMMAND);
+        let r = registry
+            .adopt(adopt_request_monitored(child, "resource-persist", Path::new(".")))
+            .await
+            .expect("adopt");
+        let task_id = r.task_id.clone();
+        let samples_path = {
+            let status = registry.status(&task_id).await.expect("status");
+            PathBuf::from(status.log_path).with_extension("samples.jsonl")
+        };
+
+        // 轮询等待至少 2 条采样（首拍丢弃 → 第二拍起写盘）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        let first_count = loop {
+            if samples_path.exists() {
+                let raw = std::fs::read_to_string(&samples_path).expect("读 samples");
+                let lines: Vec<&str> = raw.lines().filter(|l| !l.is_empty()).collect();
+                if lines.len() >= 2 {
+                    // 逐行合法 JSON + 冻结字段形状（camelCase）
+                    for line in &lines {
+                        let v: serde_json::Value =
+                            serde_json::from_str(line).expect("每行必须为合法 JSON");
+                        for key in [
+                            "sampledAtMs",
+                            "cpuPercent",
+                            "rssBytes",
+                            "lastOutputAtMs",
+                            "ioReadBytes",
+                            "ioWriteBytes",
+                        ] {
+                            assert!(v.get(key).is_some(), "采样缺字段 {key}: {v}");
+                        }
+                        assert_eq!(v["ioReadBytes"], 0, "I/O 首版恒 0（诚实边界）");
+                        assert_eq!(v["ioWriteBytes"], 0, "I/O 首版恒 0（诚实边界）");
+                    }
+                    break lines.len();
+                }
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "samples.jsonl 迟迟未累积（首采样丢弃后应持续写盘）"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        };
+
+        // 条数随时间增长：再等 1s（≥ 2 拍）后应更多
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        let raw = std::fs::read_to_string(&samples_path).expect("读 samples");
+        let second_count = raw.lines().filter(|l| !l.is_empty()).count();
+        assert!(
+            second_count > first_count,
+            "采样条数应随时间增长：{first_count} -> {second_count}"
+        );
+
+        // 清理
+        let _ = registry.kill(&task_id).await;
+    }
+
+    /// 验收：未启用 resourceMonitor 的任务 `resource: None` 且不落盘
+    /// `.samples.jsonl`（采样 loop 未挂载）。
+    #[tokio::test]
+    async fn resource_disabled_none() {
+        let (registry, _queue) = resource_test_registry();
+        let child = spawn_test_child(LONG_COMMAND);
+        let r = registry
+            .adopt(adopt_request(child, "resource-disabled", Path::new("."), false, None))
+            .await
+            .expect("adopt");
+        let task_id = r.task_id.clone();
+
+        // 等几拍采样周期（若误挂载采样则此时应已落盘/置位）
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+        let status = registry.status(&task_id).await.expect("status");
+        assert!(
+            status.resource.is_none(),
+            "未启用 resourceMonitor 的任务 resource 必须为 None：{:?}",
+            status.resource
+        );
+        let samples_path = PathBuf::from(status.log_path).with_extension("samples.jsonl");
+        assert!(
+            !samples_path.exists(),
+            "未启用采样不得创建 .samples.jsonl"
+        );
+
+        // 清理
+        let _ = registry.kill(&task_id).await;
+    }
+
+    // ── T-AB-16 健康判定三态 + 通知 ────────────────────────────────────────
+
+    /// 防抖状态机纯单测（T-AB-16 2 语义确定性证明；注入 mock 判定序列——
+    /// 即「直接注入已静默的 mock 状态」，不受真实采样/共享 daemon Job 影响）：
+    /// 同任务保持期间仅一次，恢复 Healthy 后重置。
+    #[test]
+    fn debounce_suspicious_notifies_once_per_keep_period() {
+        let mut d = SuspiciousDebounce::default();
+        // 保持期间：连续 Suspicious 仅首次通知
+        assert!(d.observe(ProcessHealth::Suspicious), "首次 Suspicious 应通知");
+        assert!(!d.observe(ProcessHealth::Suspicious), "保持期第二次不得通知");
+        assert!(!d.observe(ProcessHealth::Suspicious), "保持期第三次不得通知");
+        // 恢复 Healthy 重置后，再次进入 Suspicious 才允许新通知
+        assert!(!d.observe(ProcessHealth::Healthy), "Healthy 不通知");
+        assert!(
+            d.observe(ProcessHealth::Suspicious),
+            "恢复 Healthy 后再次 Suspicious 应重新通知（重置语义）"
+        );
+        assert!(!d.observe(ProcessHealth::Suspicious), "新保持期第二次不得通知");
+        // 重置后保持期内连续多次 Healthy → 不通知且保持重置
+        assert!(!d.observe(ProcessHealth::Healthy), "重置不通知");
+        assert!(!d.observe(ProcessHealth::Healthy), "连续 Healthy 不通知");
+        assert!(
+            d.observe(ProcessHealth::Suspicious),
+            "再次重置后仍可重新通知"
+        );
+    }
+
+    /// 防抖状态机纯单测：Healthy 稳态永不通知；Crashed 不参与防抖。
+    #[test]
+    fn debounce_healthy_steady_never_notifies() {
+        let mut d = SuspiciousDebounce::default();
+        for _ in 0..8 {
+            assert!(
+                !d.observe(ProcessHealth::Healthy),
+                "Healthy 稳态不得产生任何通知"
+            );
+        }
+        assert!(
+            !d.observe(ProcessHealth::Crashed),
+            "Crashed 不参与防抖（终态由 finish_task 通知）"
+        );
+        // Crashed 不清除也未武装防抖：后续 Suspicious 仍按保持期语义通知
+        assert!(
+            d.observe(ProcessHealth::Suspicious),
+            "Crashed 拍不影响后续 Suspicious 判定"
+        );
+    }
+
+    /// 验收：Suspicious 检测 + 通知去重——注入短静默阈值（2s）的静默任务 →
+    /// 转 Suspicious、nudge 队列收到通知（文案含任务 id / 疑似卡死 / 由 AI 裁决）
+    /// 且同任务保持期间不重复通知。
+    ///
+    /// 判定输入注入静默采样替身（[silent_sampler]，判定稳定为「CPU 近零 +
+    /// 无输出 → Suspicious」）：真实采样读共享 daemon Job 的 CPU 读数受并行
+    /// 测试子进程污染（[SamplerFn] 登记说明），替身使「保持期间仅一次」断言
+    /// 确定性成立；CPU 抖动导致的合法重复通知（恢复 Healthy 重置）由
+    /// health_healthy_reset_reenables_notification 单独覆盖。
+    #[tokio::test]
+    async fn health_suspicious_detected() {
+        let (registry, queue) = resource_test_registry_with_sampler(
+            Arc::new(Mutex::new(VecDeque::new())),
+            silent_sampler(),
+        );
+        let child = spawn_test_child(LONG_COMMAND);
+        let r = registry
+            .adopt(adopt_request_monitored(child, "health-suspicious", Path::new(".")))
+            .await
+            .expect("adopt");
+        let task_id = r.task_id.clone();
+
+        // 轮询等待 Suspicious 通知入队（2s 静默阈值 + 采样拍；窗口 25s）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(25);
+        let text = loop {
+            if let Some(text) = queue.lock().unwrap_or_else(|p| p.into_inner()).pop_front() {
+                break text;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "静默任务迟迟未触发 Suspicious 通知"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        };
+        assert!(text.contains(&task_id), "通知含任务 id：{text}");
+        assert!(text.contains("疑似卡死"), "文案含疑似卡死：{text}");
+        assert!(text.contains("2 秒无输出"), "文案含静默时长（M=2s）：{text}");
+        assert!(text.contains("由 AI 裁决"), "文案注明 AI 裁决：{text}");
+
+        // 防抖：保持期间再等 3s（多拍采样），队列不得出现重复通知（判定
+        // 输入为静默替身 → 保持期间判定恒为 Suspicious，断言确定性成立）
+        tokio::time::sleep(Duration::from_millis(3000)).await;
+        assert!(
+            queue.lock().unwrap_or_else(|p| p.into_inner()).is_empty(),
+            "同任务保持期间不得重复通知（防抖）：{:?}",
+            queue.lock().unwrap_or_else(|p| p.into_inner())
+        );
+
+        // 清理
+        let _ = registry.kill(&task_id).await;
+    }
+
+    /// 验收：Suspicious 保持期被 CPU 抖动打断后的**合法重复通知**（T-AB-16 2
+    /// 语义：「同任务防抖——保持期间仅一次，恢复 Healthy 后重置」）。
+    ///
+    /// 注入脚本化采样替身（[spiking_sampler]）确定性复现 flaky 报告中的
+    /// 场景：首通知后采样读入一次 CPU 尖峰（判 Healthy → 重置防抖）→ 再静默
+    /// （判 Suspicious）→ 第二次通知。断言恰好两次（每次保持期仅一次），
+    /// 确认实现与方案语义一致——CPU 抖动产生的重复通知属合法行为而非 bug。
+    #[tokio::test]
+    async fn health_healthy_reset_reenables_notification() {
+        // 采样拍序：拍 1 建基线（丢弃），拍 2 起判定；spike_at=8 → 拍 9
+        // （约 t=4.5s，首通知 ~2.5s 之后）注入尖峰 → 拍 10 起恢复静默
+        let (registry, queue) = resource_test_registry_with_sampler(
+            Arc::new(Mutex::new(VecDeque::new())),
+            spiking_sampler(8),
+        );
+        let child = spawn_test_child(LONG_COMMAND);
+        let r = registry
+            .adopt(adopt_request_monitored(
+                child,
+                "health-reset-renotify",
+                Path::new("."),
+            ))
+            .await
+            .expect("adopt");
+        let task_id = r.task_id.clone();
+
+        // 第一次通知（静默 2s 阈值 + 采样拍；窗口 25s）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(25);
+        let first = loop {
+            if let Some(text) = queue.lock().unwrap_or_else(|p| p.into_inner()).pop_front() {
+                break text;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "静默任务迟迟未触发首次 Suspicious 通知"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        };
+        assert!(first.contains(&task_id), "首次通知含任务 id：{first}");
+
+        // 第二次通知（尖峰判 Healthy 重置防抖 → 再静默再次通知；窗口 10s）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let second = loop {
+            if let Some(text) = queue.lock().unwrap_or_else(|p| p.into_inner()).pop_front() {
+                break text;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "恢复 Healthy 后再次静默应重新通知（防抖重置）"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        };
+        assert!(second.contains(&task_id), "第二次通知含任务 id：{second}");
+        assert!(second.contains("疑似卡死"), "第二次通知文案含疑似卡死：{second}");
+
+        // 尖峰已过、判定恒为 Suspicious：再等 2s 不得出现第三次（每次保持期
+        // 仅一次——恢复 Healthy 重置语义只允许「一次重置 → 一次新通知」）
+        tokio::time::sleep(Duration::from_millis(2000)).await;
+        assert!(
+            queue.lock().unwrap_or_else(|p| p.into_inner()).is_empty(),
+            "恢复 Healthy 后应恰好重新通知一次，不得再次重复：{:?}",
+            queue.lock().unwrap_or_else(|p| p.into_inner())
+        );
+
+        // 清理
+        let _ = registry.kill(&task_id).await;
+    }
+
+    /// 验收：Healthy 无误报——持续输出任务（last_output_at_ms 不断刷新）
+    /// 不产生 Suspicious 通知；任务自然完成后再等几拍也不通知。
+    #[tokio::test]
+    async fn health_healthy_no_false_positive() {
+        let (registry, queue) = resource_test_registry();
+        let child = spawn_test_child(OUTPUT_COMMAND);
+        let r = registry
+            .adopt(adopt_request_monitored(child, "health-healthy", Path::new(".")))
+            .await
+            .expect("adopt");
+        let task_id = r.task_id.clone();
+
+        // 等待自然完成（OUTPUT_COMMAND ~4s 持续输出；窗口 15s）
+        let _ = wait_for_terminal(&registry, &task_id, Duration::from_secs(15)).await;
+        // 终态后采样循环已退出（无后续判定），队列应始终为空
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        assert!(
+            queue.lock().unwrap_or_else(|p| p.into_inner()).is_empty(),
+            "持续输出任务不得误报 Suspicious"
+        );
+    }
+
+    /// 验收：Crashed 通知——非零退出（启用 resourceMonitor）→ 队列收到通知
+    /// 且附最后 20 行日志（复用 read_log 尾部读取语义）。
+    #[tokio::test]
+    async fn health_crashed_notified() {
+        let (registry, queue) = resource_test_registry();
+        let command = if cfg!(windows) {
+            "Write-Output 'crash-line-1'; Write-Output 'crash-line-2'; exit 7"
+        } else {
+            "echo crash-line-1; echo crash-line-2; exit 7"
+        };
+        let child = spawn_test_child(command);
+        let r = registry
+            .adopt(adopt_request_monitored(child, "health-crashed", Path::new(".")))
+            .await
+            .expect("adopt");
+        let task_id = r.task_id.clone();
+
+        let status = wait_for_terminal(&registry, &task_id, Duration::from_secs(15)).await;
+        assert_eq!(status.status, TaskState::Failed, "exit 7 → Failed");
+        // 终态即屏障：writer 收口时已投递 Crashed 通知，队列应恰好 1 条
+        let text = queue
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .pop_front()
+            .expect("非零退出应收到 Crashed 通知");
+        assert!(text.contains(&task_id), "通知含任务 id：{text}");
+        assert!(text.contains("异常退出"), "文案含异常退出：{text}");
+        assert!(text.contains("exit code 7"), "文案含退出码：{text}");
+        assert!(text.contains("crash-line-2"), "附最后 20 行日志（含末行）：{text}");
+        assert!(text.contains("由 AI 裁决"), "文案注明 AI 裁决：{text}");
+        assert!(
+            queue.lock().unwrap_or_else(|p| p.into_inner()).is_empty(),
+            "Crashed 通知只投递一次（终态唯一）"
+        );
+    }
+
+    /// 验收：不自动杀——Suspicious 判定后进程仍存活（显式断言不自动杀、
+    /// 不自动降级超时，T-AB-16 4 严格不做）。
+    ///
+    /// 判定输入注入静默采样替身（与 health_suspicious_detected 同理：真实
+    /// 采样读共享 daemon Job 受并行测试污染，替身保证 Suspicious 判定必然
+    /// 且稳定到达——本测试只关心「判定后不杀进程」，与 CPU 读数无关）。
+    #[tokio::test]
+    async fn health_no_autokill() {
+        let (registry, queue) = resource_test_registry_with_sampler(
+            Arc::new(Mutex::new(VecDeque::new())),
+            silent_sampler(),
+        );
+        let child = spawn_test_child(LONG_COMMAND);
+        let pid = child.id().expect("spawned pid");
+        let r = registry
+            .adopt(adopt_request_monitored(child, "health-no-autokill", Path::new(".")))
+            .await
+            .expect("adopt");
+        let task_id = r.task_id.clone();
+
+        // 等待 Suspicious 通知（= 判定已发生）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(25);
+        loop {
+            if !queue.lock().unwrap_or_else(|p| p.into_inner()).is_empty() {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "静默任务迟迟未触发 Suspicious 通知"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        // 显式断言：Suspicious 判定后进程仍存活（系统不自动终止）
+        assert!(pid_is_alive(pid), "Suspicious 判定不得自动杀进程（pid={pid}）");
+        // 再等 2s（多拍判定后）确认仍未杀
+        tokio::time::sleep(Duration::from_millis(2000)).await;
+        assert!(pid_is_alive(pid), "Suspicious 持续期间进程必须存活（pid={pid}）");
+
+        // 清理
+        let _ = registry.kill(&task_id).await;
     }
 }

@@ -849,6 +849,12 @@ impl Default for EngineHandle {
 /// - [Self::emit]：信封 → 序列化 → 按 runId 入缓冲（P9：入队时序列化，
 ///   丢帧判定只需事件类别；丢帧报告汇入 tracing，S-8）；
 /// - [Self::flush]：冲刷本 run 缓冲并发射（顺序保持，载荷直接 emit）。
+impl std::fmt::Debug for BufferedRunEventBridge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BufferedRunEventBridge").finish_non_exhaustive()
+    }
+}
+
 pub(crate) struct BufferedRunEventBridge {
     /// 底层事件桥（Tauri 通道）
     bridge: EventBridge,

@@ -569,6 +569,17 @@ pub(crate) fn assign_pid_to_daemon_job(pid: u32) -> Result<(), String> {
     }
 }
 
+/// daemon Job 句柄访问器（T-AB-15 Windows 资源采样消费：`QueryInformationJobObject`
+/// 需要 Job 句柄；句柄在 OnceLock 内生命周期与进程一致，仅借用不可转移）。
+///
+/// 接线说明（登记偏差）：daemon Job 句柄原先封装在模块私有 static 中，资源
+/// 采样原语（resource.rs）无法获取——本 getter 为纯只读暴露（不改行为，
+/// 不触碰 Job 生命周期），供 background.rs 资源段采样接线，报主 Agent 裁决。
+#[cfg(windows)]
+pub(crate) fn daemon_job_handle() -> Option<windows_sys::Win32::Foundation::HANDLE> {
+    DAEMON_JOB_OBJECT.get().map(|h| h.0)
+}
+
 // ── PTY job (interactive shells; shared app-wide) ────────────────────────────
 // One job for all PTY sessions: simplest correct tree lifecycle. Host crash closes
 // the handle → OS kills every assigned shell and descendants. Per-session kill and
@@ -641,6 +652,7 @@ pub(crate) fn kill_process_group(pid: u32) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::disallowed_methods)]
     use super::*;
 
     #[tokio::test]
@@ -755,9 +767,9 @@ mod tests {
             .stderr(Stdio::null())
             .spawn()
             .expect("spawn test process");
-        let pid = child.id() as u32;
+        let pid = child.id();
 
-        let graceful = terminate_process_tree_graceful(pid);
+        let _graceful = terminate_process_tree_graceful(pid);
         let exited_gracefully = wait_child_exit(&mut child, Duration::from_secs(5));
 
         if !exited_gracefully {
@@ -784,7 +796,7 @@ mod tests {
             .stderr(Stdio::null())
             .spawn()
             .expect("spawn test process");
-        let pid = child.id() as u32;
+        let pid = child.id();
 
         terminate_process_tree_graceful(pid).expect("kill -TERM 应成功");
         assert!(
@@ -833,7 +845,7 @@ mod tests {
             .stderr(Stdio::null())
             .spawn()
             .expect("spawn daemon test process");
-        let daemon_pid = daemon_child.id() as u32;
+        let daemon_pid = daemon_child.id();
         let assigned = assign_pid_to_daemon_job(daemon_pid);
         // 嵌套 Job 语义（Win8+）：本机实测分配成功；若宿主 Job 禁止嵌套则返回
         // 拒绝——仅 warn 不失败，隔离断言对两种环境均成立
@@ -864,7 +876,7 @@ mod tests {
             .stderr(Stdio::null())
             .spawn()
             .expect("spawn victim process");
-        let victim_pid = victim.id() as u32;
+        let victim_pid = victim.id();
         let victim_assigned = assign_process_to_job(local_job, victim.as_raw_handle());
         // SAFETY: local_job 句柄由 create_kill_on_close_job_object 产生，本测试拥有所有权
         unsafe {
@@ -907,7 +919,7 @@ mod tests {
             .stderr(Stdio::null())
             .spawn()
             .expect("spawn daemon test process");
-        let pid = child.id() as u32;
+        let pid = child.id();
         // 模拟后台任务进程组（T-AB-06 daemon 语义：与 PTY 会话独立）
         set_child_process_group(pid).expect("setpgid");
 
