@@ -19,7 +19,6 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { Menu } from './Menu';
@@ -32,13 +31,9 @@ afterEach(() => {
   cleanup();
 });
 
-/** 读取同目录 CSS 文件文本（断言钳制契约存在）；vitest 会拦截 .css 的 URL 导入，故用 cwd 路径 */
+/** 读取同目录 CSS 文件文本（断言钳制契约存在）；vitest 会拦截 .css 的 URL 导入，故用 import.meta.url 相对定位文件本身（不依赖 process.cwd，规避并行 worker 负载下的 cwd 假设） */
 function readCssText(relPathFromMenu: string): string {
-  const dir = join(
-    process.cwd(),
-    'apps/crish-desktop/src/components/ui/Menu'
-  );
-  return readFileSync(join(dir, relPathFromMenu), 'utf8');
+  return readFileSync(new URL(relPathFromMenu, import.meta.url), 'utf8');
 }
 
 function makeOptions(count: number) {
