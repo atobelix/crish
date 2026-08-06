@@ -25,8 +25,8 @@ use conex_types::{SessionAgent, SessionMessage};
 use orchestrator::flow_graph::{FlowDeclaration, FlowNode, FlowNodeState, FlowScheduler};
 use orchestrator::lifecycle::{LifecycleError, ResumeOutcome, SubagentLifecycleService};
 use orchestrator::recovery::{
-    fingerprint, ForkContextMode, RecoveryCoordinator, RecoveryLadder, RecoveryRetryPolicy,
-    RunFailureContext,
+    fingerprint, ForkContextMode, RecoveryCoordinator, RecoveryError, RecoveryLadder,
+    RecoveryRetryPolicy, RecoveryStore, RunFailureContext,
 };
 use orchestrator::session::SessionTree;
 use orchestrator::steering_queue::PendingMessageQueue;
@@ -421,6 +421,106 @@ async fn kill_all_reports_undelivered_as_non_terminal() {
     assert!(
         rows.iter().all(|a| a.status == "failed"),
         "行已归一 failed（投递失败不影响状态收口）"
+    );
+}
+
+/// L3 强停投递替身：投递时同步插入一条新的 running 行（模拟引擎在
+/// kill_all 查询面之后、写面前并发 spawn 落库——11-T3 竞态回归面）
+struct SpawnDuringCancelSink {
+    db: LocalDb,
+    session_id: String,
+    insert_run_id: String,
+}
+
+impl SpawnDuringCancelSink {
+    fn new(db: LocalDb, session_id: &str, insert_run_id: &str) -> Arc<Self> {
+        Arc::new(Self {
+            db,
+            session_id: session_id.to_string(),
+            insert_run_id: insert_run_id.to_string(),
+        })
+    }
+}
+
+impl orchestrator::lifecycle::ForceCancelSink for SpawnDuringCancelSink {
+    fn request_force_cancel(&self, _subagent_run_id: &str, _reason: &str) -> bool {
+        // 并发 spawn 落库面 = 单行 upsert（与迁移后的 spawner 同面）
+        let row = SessionAgent {
+            id: "sub-race".to_string(),
+            subagent_run_id: self.insert_run_id.clone(),
+            parent_session_id: self.session_id.clone(),
+            parent_run_id: "planner-1".to_string(),
+            parent_tool_call_id: None,
+            description: "竞态行".to_string(),
+            mode: String::new(),
+            status: "running".to_string(),
+            summary: None,
+            messages: vec![user_msg("竞态产出")],
+            started_at: now_ms(),
+            ended_at: None,
+            depth: Some(1),
+            subagent_path_json: None,
+            task_type: None,
+            display_label: None,
+            allowed_write_paths_json: None,
+        };
+        self.db.upsert_session_agent(&row).unwrap();
+        true
+    }
+}
+
+/// 竞态回归（11-T3）：kill_all 写面期间并发 spawn 的行不丢失——
+/// 旧全量先删后插会把查询面之后新增的行整批删除；单行定点写下保留
+#[tokio::test]
+async fn kill_all_preserves_row_spawned_during_kill() {
+    let session_id = "s-race";
+    let db = Arc::new(LocalDb::open_in_memory().unwrap());
+    db.insert_session(session_id, "主会话").unwrap();
+    let now = now_ms();
+    let rows = vec![
+        agent_row(
+            "sub-1", "run-1", "running", now, session_id, None, vec![user_msg("产出 1")],
+        ),
+        agent_row(
+            "sub-2", "run-2", "running", now, session_id, None, vec![user_msg("产出 2")],
+        ),
+    ];
+    db.save_session_agents(session_id, &rows).unwrap();
+
+    // 投递发生在 kill_all 查询面之后、写面前 → 模拟「kill 中 spawn」
+    let sink = SpawnDuringCancelSink::new(db.as_ref().clone(), session_id, "run-race");
+    let service = SubagentLifecycleService::new(db.clone(), sink.clone());
+    let outcome = service.kill_all(session_id, "kill_all").unwrap();
+    assert_eq!(outcome.terminated.len(), 2, "目标行照常终止");
+
+    let rows = db.load_session_agents(session_id).unwrap();
+    assert_eq!(rows.len(), 3, "kill 中 spawn 的行不丢失（行数 = 两方之和）");
+    let race = rows
+        .iter()
+        .find(|a| a.subagent_run_id == "run-race")
+        .expect("并发 spawn 行必须存在");
+    assert_eq!(race.status, "running", "非目标行不被误改");
+    assert_eq!(race.parent_session_id, session_id, "并发行字段原样");
+    assert_eq!(race.depth, Some(1), "并发行字段原样");
+    let by_id = |id: &str| rows.iter().find(|a| a.id == id).unwrap();
+    assert_eq!(by_id("sub-1").status, "failed", "目标行归一 failed");
+    assert_eq!(by_id("sub-2").status, "failed");
+    assert_eq!(by_id("sub-1").messages.len(), 1, "目标行 messages 保留");
+}
+
+/// 恢复域真实落库面（RecoveryStore for LocalDb）：set_subagent_path 缺行
+/// 按 affected=0 判定 NotFound（11-T3 迁移后语义不变）
+#[tokio::test]
+async fn recovery_store_set_subagent_path_missing_row_returns_not_found() {
+    let db = Arc::new(LocalDb::open_in_memory().unwrap());
+    db.insert_session("s1", "主会话").unwrap();
+    let store: Arc<dyn RecoveryStore> = db.clone();
+    let err = store
+        .set_subagent_path("s1", "no-such-run", r#"["leaf-a"]"#)
+        .expect_err("缺行必须 NotFound");
+    assert!(
+        matches!(err, RecoveryError::NotFound { .. }),
+        "缺行应 NotFound：{err:?}"
     );
 }
 

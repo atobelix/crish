@@ -291,6 +291,8 @@ impl SubagentSpawnerImpl {
 
         // 2. session_agents 落库（pending 首写即 running；v6 新列随行）
         //    db 访问收敛在块内（MutexGuard 不跨 await 持有——AA-02 并发模型）
+        //    单行 upsert（11-T3）：ON CONFLICT DO UPDATE，不触碰既有行与
+        //    messages（全量先删后插在并发写面已废弃）
         let row = self.row_for(req, &subagent_id, &subagent_run_id, &session_id, depth, now);
         {
             let db = self.db.lock().unwrap_or_else(|e| e.into_inner());
@@ -299,11 +301,7 @@ impl SubagentSpawnerImpl {
                     "session_agents 存储未注入（LocalDb 未装配）".to_string(),
                 ));
             };
-            let mut agents = db
-                .load_session_agents(&req.parent_session_id)
-                .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
-            agents.push(row);
-            db.save_session_agents(&req.parent_session_id, &agents)
+            db.upsert_session_agent(&row)
                 .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
             // 会话索引条目幂等写入（子代理独立会话；与前端会话列表同表）
             let entry = conex_types::SessionIndexEntry {
@@ -377,21 +375,16 @@ impl SubagentSpawnerImpl {
         };
         if let Err(error) = launch_result {
             // 启动失败：行归一 failed（防僵尸 running 行；产出保留语义同
-            // kill_all 归一）——灾难性失败路径，守卫「零 run」不适用
+            // kill_all 归一）——灾难性失败路径，守卫「零 run」不适用；
+            // 单行定点写（11-T3）：只动本行，缺行静默（失败仍上抛）
             let db = self.db.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(db) = db.as_ref() {
-                if let Ok(mut agents) = db.load_session_agents(&req.parent_session_id) {
-                    if let Some(row) = agents
-                        .iter_mut()
-                        .find(|a| a.subagent_run_id == subagent_run_id)
-                    {
-                        row.status = SubagentState::Failed.to_db_status().to_string();
-                        if row.ended_at.is_none() {
-                            row.ended_at = Some(now_ms());
-                        }
-                    }
-                    let _ = db.save_session_agents(&req.parent_session_id, &agents);
-                }
+                let _ = db.update_session_agent_status(
+                    &req.parent_session_id,
+                    &subagent_run_id,
+                    SubagentState::Failed.to_db_status(),
+                    Some(now_ms()),
+                );
             }
             drop(db);
             return Err(SubagentSpawnError::SpawnFailed(error.to_string()));

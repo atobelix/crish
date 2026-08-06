@@ -236,6 +236,10 @@ pub struct BackgroundTaskRegistry {
     notifier: Mutex<TaskNotifier>,
     /// 采样源（T-AB-15 注入槽；默认 sample_usage，测试注入替身）
     sampler: SamplerFn,
+    /// 30 方案 P3：任务事件消费器注入槽（EventBridgeSink 构造时读取
+    /// 快照；顺序契约：先 set_task_event_consumer 后 set_event_bridge——
+    /// 批 3 main.rs 装配轮按此序，30 文档 §5 改动点 3）
+    task_event_consumer: Mutex<Option<Arc<crate::task_event_consumer::TaskEventConsumer>>>,
 }
 
 impl std::fmt::Debug for BackgroundTaskRegistry {
@@ -762,6 +766,7 @@ impl BackgroundTaskRegistry {
             resource_config,
             notifier: Mutex::new(notifier),
             sampler,
+            task_event_consumer: Mutex::new(None),
         };
         // Windows：daemon Job 兜底（应用退出 → 宿主句柄关闭 → 后台任务树全杀；
         // 与 PTY Job 相互隔离，见 process.rs Job Objects 段）
@@ -828,15 +833,38 @@ impl BackgroundTaskRegistry {
     /// 接线点（登记偏差）：main.rs 在构造 registry 后调用一次（main.rs 属 C3
     /// 域，本轮不在壳侧改动——事件发射当前经 LogEventSink 结构化留痕，
     /// C3/T-AB-19 接线后即切换为真实事件通道发射，payload 形状不变）。
+    /// 30 方案 P3：EventBridgeSink 构造时读取注册表 task_event_consumer
+    /// 快照（顺序契约：先 set_task_event_consumer 后 set_event_bridge）。
     #[allow(dead_code)] // 接线点在 C3（main.rs），接线后消除；测试构建同样未接线故用普通 allow
     pub(crate) fn set_event_bridge(&self, bridge: EventBridge, session_id: String) {
+        // P3：消费器快照（None = 未接线，事件照常发射但不消费）
+        let consumer = self
+            .task_event_consumer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         self.notifier
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .set_event_sink(Arc::new(EventBridgeSink {
                 bridge,
                 session_id,
+                consumer,
             }));
+    }
+
+    /// 30 方案 P3：注入任务事件消费器（main.rs 装配轮在 set_event_bridge
+    /// 之前调用——EventBridgeSink 构造时读取快照，注入晚于接线则不生效，
+    /// 顺序契约见 30 文档 §5 改动点 3）
+    #[cfg_attr(not(test), allow(dead_code))] // 生产注入点 = main.rs 装配轮（批 3）；接线前标记 dead_code
+    pub(crate) fn set_task_event_consumer(
+        &self,
+        consumer: Arc<crate::task_event_consumer::TaskEventConsumer>,
+    ) {
+        *self
+            .task_event_consumer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(consumer);
     }
 
     /// 启动归档循环（60s tick，spawn_snapshot_loop 同款周期任务语义；幂等——
@@ -1988,6 +2016,9 @@ pub(crate) struct EventBridgeSink {
     bridge: EventBridge,
     /// 事件体 session_id（注册表注入；占位见上）
     session_id: String,
+    /// 30 方案 P3：任务事件消费器（set_event_bridge 构造时读取注册表
+    /// 快照；None = 未接线——事件照常发射，仅不做消费面接线）
+    consumer: Option<Arc<crate::task_event_consumer::TaskEventConsumer>>,
 }
 
 impl std::fmt::Debug for EventBridgeSink {
@@ -2140,6 +2171,12 @@ impl EventSink for EventBridgeSink {
                 return;
             }
         };
+        // 30 方案 P3：任务事件消费面（task_events.rs 接线）——终态即入队
+        // + security-audit 直发（域隔离不经 engine audit_sink）；消费器为
+        // None（未注入）时仅发射事件，不消费
+        if let Some(consumer) = &self.consumer {
+            consumer.on_task_event(&event);
+        }
         // 信封：runId/sequence 不注入（任务为会话级存活、独立于 run 上下文；
         // 前端对无 runId 事件放行不过滤，T-AB-18 消费面按 payload 归组）
         let envelope = AgentEventEnvelope::new(event, None, None);
@@ -4791,6 +4828,7 @@ mod tests {
         let sink = EventBridgeSink {
             bridge,
             session_id: "s1".to_string(),
+            consumer: None,
         };
         let cases: Vec<(&str, serde_json::Value)> = vec![
             (
@@ -4889,6 +4927,74 @@ mod tests {
                 "类型名一致"
             );
         }
+    }
+
+    /// 验收（30 方案 P3 挂接点）：set_task_event_consumer 注入注册表 →
+    /// set_event_bridge 构造 EventBridgeSink 时读取快照（顺序契约）→
+    /// emit 构造的 AgentEvent 同步进入消费面（终态即入队共享队列 +
+    /// security-audit 直发）。
+    #[test]
+    fn task_event_consumer_wired_into_sink_enqueues_wake() {
+        use orchestrator::task_events::TASK_WAKE_GROUP_ID;
+        use orchestrator::PendingMessageQueue;
+
+        let registry = test_registry();
+        let (bridge, emitter) = recording_bridge();
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let consumer = Arc::new(crate::task_event_consumer::TaskEventConsumer::new(
+            Arc::clone(&queue),
+            bridge.clone(),
+            String::new(),
+        ));
+        // 顺序契约：先注入消费器，后接线事件桥（构造时读取快照）
+        registry.set_task_event_consumer(Arc::clone(&consumer));
+        registry.set_event_bridge(bridge, String::new());
+        // 注册表注入槽可见性断言（快照来源）
+        assert!(
+            registry.task_event_consumer.lock().unwrap().is_some(),
+            "set_task_event_consumer 后注入槽必须非空"
+        );
+
+        // 经生产发射链（EventBridgeSink::emit，与 set_event_bridge 构造的
+        // 消费器快照同型）触发消费面
+        let sink = EventBridgeSink {
+            bridge: EventBridge::new(
+                "workbench-run-event",
+                Arc::new(RecordingEmitter::default())
+                    as Arc<dyn crate::core_event_bridge::Emitter>,
+            ),
+            session_id: String::new(),
+            consumer: Some(Arc::clone(&consumer)),
+        };
+        sink.emit(
+            "task-started",
+            serde_json::json!({
+                "taskId": "t-wired", "command": "cargo check", "cwd": "C:/work",
+                "ownerRunId": "run-1", "isDaemon": false,
+            }),
+        );
+        sink.emit(
+            "task-completed",
+            serde_json::json!({ "taskId": "t-wired", "exitCode": 0, "durationMs": 10, "lineCount": 1 }),
+        );
+
+        // 消费面落点：共享 steering 队列出现唤醒条目（group_id = task-wake）
+        let queue = queue.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(queue.len(), 1, "终态事件经消费面入队");
+        let entry = queue.peek().unwrap();
+        assert_eq!(entry.group_id.as_deref(), Some(TASK_WAKE_GROUP_ID));
+        assert_eq!(entry.text, "任务 t-wired 已完成，退出码 0");
+        // 消费面直发的 security-audit 两条（started + completed）
+        let envelopes: Vec<AgentEventEnvelope> = emitter
+            .calls()
+            .iter()
+            .map(|(_, p)| parse_envelope(p))
+            .collect();
+        let audit_count = envelopes
+            .iter()
+            .filter(|e| e.type_name() == "security-audit")
+            .count();
+        assert_eq!(audit_count, 2, "started + completed 各直发一条 security-audit");
     }
 
     /// 验收（30 方案 P2 装配面）：set_event_bridge 接线后 TaskNotifier 不再

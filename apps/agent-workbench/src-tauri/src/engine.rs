@@ -655,6 +655,13 @@ pub(crate) struct EngineHandle {
     /// 命令面经 main.rs（A9）消费）
     #[allow(dead_code)] // A9：workflow 命令登记消费
     scheduler_registry: Option<Arc<crate::sched::SchedulerRegistry>>,
+    /// 定时器事件缓冲（T-CF-06 装配产物；P4 drain 转发接线：经
+    /// [Self::timer_event_sink] 暴露给 [forward_drained_timer_events] 与
+    /// 批 3 main.rs drain 任务周期消费——事件不再终老于缓冲，A10 N-05）
+    timer_event_sink: Arc<AgentEventSink>,
+    /// cron 事件缓冲（T-CF-09 装配产物；同 timer 的 drain 转发路径——
+    /// cron-fired 单臂，conex-types 仅 CronFired 变体，无 cron-cancelled）
+    scheduler_event_sink: Arc<crate::sched::SchedEventSink>,
     /// 子代理 spawn 通道（T-D-13：SubagentSpawner 契约实现；经
     /// BuiltinToolConfig.subagent_spawner 注入 run_subagent 工具——
     /// None = 未接线，run_subagent 返回 common.unsupported 降级）
@@ -685,9 +692,18 @@ impl EngineHandle {
         // conex-db session_meta 与 EventBridge 真适配接线在 R-CF3 装配
         // 收口，见 timers.rs 头部注记）
         let timer_steering_queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        // P4（30 方案 §4）：事件缓冲实例由引擎持有（经
+        // [Self::timer_event_sink] 访问器暴露给 drain 转发 helper 与
+        // 批 3 main.rs drain 任务；TimerRegistry 注入同一 Arc——
+        // 缓冲 → 转发同实例，不出现第二份无人消费的缓冲）
+        let timer_event_sink = Arc::new(AgentEventSink::new());
+        // 显式 trait 化（先 clone 出 Arc<AgentEventSink> 再经赋值 unsize
+        // 强转——Arc::clone 泛型推断无法经引用反向强转）
+        let timer_event_sink_trait: Arc<dyn crate::timers::EventSink> =
+            timer_event_sink.clone();
         let timer_registry = Arc::new(TimerRegistry::new(
             Arc::new(QueuePendingSink::new(Arc::clone(&timer_steering_queue))),
-            Arc::new(AgentEventSink::new()),
+            timer_event_sink_trait,
             MemoryTimerStore::shared(),
         ));
         // 启动恢复：扫描已持久化声明，重建未到期定时器 / 补发已到期未
@@ -748,8 +764,14 @@ impl EngineHandle {
 
         // ── T-CF-09：SchedulerRegistry 装配（A5 提供 pub(crate) 构造器）──
         // 已按 A5 落盘签名对齐（pending/events/store/launcher 四适配；
-        // launcher 未接线 → is_daemon 触发降级 steering 注入，防丢唤醒）
-        let scheduler_registry = assemble_scheduler_registry(&timer_steering_queue);
+        // launcher 未接线 → is_daemon 触发降级 steering 注入，防丢唤醒）。
+        // P4：事件缓冲实例由引擎持有（同 timer_event_sink 模式，经
+        // [Self::scheduler_event_sink] 暴露给 drain 转发路径）
+        let scheduler_event_sink = Arc::new(crate::sched::SchedEventSink::new());
+        let scheduler_registry = assemble_scheduler_registry(
+            &timer_steering_queue,
+            Arc::clone(&scheduler_event_sink),
+        );
 
         // 内置工具注册（B5.2：fs / shell / search / diff；F1 R-AB1：
         // BuiltinToolConfig 注入后台任务管理器，经 ToolContext.background
@@ -824,6 +846,8 @@ impl EngineHandle {
             terminal_stream,
             last_wakeup,
             scheduler_registry,
+            timer_event_sink,
+            scheduler_event_sink,
             subagent_spawner,
         }
     }
@@ -946,6 +970,22 @@ impl EngineHandle {
     #[allow(dead_code)] // A9：workflow 命令登记消费
     pub(crate) fn scheduler_registry(&self) -> Option<Arc<crate::sched::SchedulerRegistry>> {
         self.scheduler_registry.clone()
+    }
+
+    /// 定时器事件缓冲（T-CF-06 装配产物；P4 drain 转发路径的入口——
+    /// [forward_drained_timer_events] 与本测试面消费，批 3 main.rs
+    /// drain 任务经本访问器周期取走缓冲转发到 EventBridge）
+    #[cfg_attr(not(test), allow(dead_code))] // 批 3：main.rs drain 任务接线后移除
+    pub(crate) fn timer_event_sink(&self) -> Arc<crate::timers::AgentEventSink> {
+        Arc::clone(&self.timer_event_sink)
+    }
+
+    /// cron 事件缓冲（T-CF-09 装配产物；drain 转发路径同 timer——
+    /// cron-fired 单臂，conex-types 仅 CronFired 变体，cancel 走
+    /// 数据面 + steering 面，无 cron-cancelled 发射目标）
+    #[cfg_attr(not(test), allow(dead_code))] // 批 3：main.rs drain 任务接线后移除
+    pub(crate) fn scheduler_event_sink(&self) -> Arc<crate::sched::SchedEventSink> {
+        Arc::clone(&self.scheduler_event_sink)
     }
 
     /// 注册插件 MCP server（E5 内容 1）：PluginMcpDeclaration（stdio
@@ -1077,12 +1117,15 @@ impl Default for EngineHandle {
 /// 未接线时 daemon 触发降级为 steering 注入（sched.rs 防丢唤醒语义）。
 ///
 /// 装配失败降级（None 保持 unsupported 语义，不阻塞引擎启动）。
+/// event sink 由引擎持有（P4：缓冲实例经 [EngineHandle::scheduler_event_sink]
+/// 暴露，drain 转发路径与 TimerRegistry 侧同模式）。
 fn assemble_scheduler_registry(
     timer_steering_queue: &Arc<Mutex<PendingMessageQueue>>,
+    scheduler_event_sink: Arc<crate::sched::SchedEventSink>,
 ) -> Option<Arc<crate::sched::SchedulerRegistry>> {
     let registry = Arc::new(crate::sched::SchedulerRegistry::new(
         Arc::new(crate::sched::QueuePendingSink::new(Arc::clone(timer_steering_queue))),
-        Arc::new(crate::sched::SchedEventSink::new()),
+        scheduler_event_sink,
         crate::sched::MemorySchedStore::shared(),
         None,
     ));
@@ -1100,6 +1143,49 @@ fn assemble_scheduler_registry(
         );
     }
     Some(registry)
+}
+
+// ── P4：缓冲事件 drain 转发（30 方案 §4 改动点 2）───────────────────
+// 定时器 / cron 事件缓冲（AgentEventSink / SchedEventSink）到真实
+// EventBridge 的转发路径：drain 取走缓冲 → 信封直发（runId/sequence
+// 不注入，对齐 EventBridgeSink 先例 background.rs:2145——timer/cron
+// 事件无 run 归属，前端按 timerId/cronId 消费）。批 3 装配轮以 500ms
+// tick 周期调用（main.rs drain 任务）——事件从缓冲到真实桥延迟
+// ≤ 500ms；drain 为 Vec::take 语义，空缓冲返回 0，重复调用不重复转发。
+
+/// 缓冲定时器事件 → 信封直发；返回实际发射条数
+/// （[EventBridge::emit_envelope] 序列化失败条目不计数）。
+#[cfg_attr(not(test), allow(dead_code))] // 批 3：main.rs drain 任务接线后移除
+pub(crate) fn forward_drained_timer_events(sink: &AgentEventSink, bridge: &EventBridge) -> usize {
+    forward_drained_events(sink.drain(), bridge)
+}
+
+/// 缓冲 cron 事件 → 信封直发（cron-fired 单臂：conex-types 契约仅
+/// CronFired 变体，无 cron-cancelled 发射目标；cancel 走数据面 + steering
+/// 面）；返回实际发射条数，周期与延迟语义同 [forward_drained_timer_events]。
+#[cfg_attr(not(test), allow(dead_code))] // 批 3：main.rs drain 任务接线后移除
+pub(crate) fn forward_drained_scheduler_events(
+    sink: &crate::sched::SchedEventSink,
+    bridge: &EventBridge,
+) -> usize {
+    forward_drained_events(sink.drain(), bridge)
+}
+
+/// drain 转发公共实现（缓冲事件 → 信封直发；runId/sequence 不注入）
+fn forward_drained_events(events: Vec<AgentEvent>, bridge: &EventBridge) -> usize {
+    let mut forwarded = 0usize;
+    for event in events {
+        let envelope = AgentEventEnvelope::new(event, None, None);
+        forwarded += bridge.emit_envelope(&envelope).emitted;
+    }
+    if forwarded > 0 {
+        tracing::debug!(
+            target: "engine",
+            forwarded,
+            "timer/cron 缓冲事件已转发到事件桥"
+        );
+    }
+    forwarded
 }
 
 // ── BufferedRunEventBridge：缓冲 + 序列化 + 发射组装 ───────────────
@@ -3629,5 +3715,216 @@ mod wait_wiring_tests {
         // 唤醒跟踪面可用（watchdog 失联判定数据源）
         engine.last_wakeup().mark_wakeup_at(2_000);
         assert_eq!(engine.last_wakeup().last_wakeup_ms(), Some(2_000));
+    }
+}
+
+/// P4（30 方案 §4）事件缓冲 drain 转发测试：timer/cron 缓冲 → 真实
+/// EventBridge 的信封直发形状，与访问器到达生产装配实例的断言面。
+///
+/// 独立模块（不与上方既有 tests 模块共享上下文）。生产 sink（引擎装配
+/// 实例）与测试收集器实例隔离：EngineHandle::new 每用例新建，无污染。
+#[cfg(test)]
+mod event_drain_tests {
+    use super::*;
+    use crate::core_event_bridge::Emitter;
+    use crate::sched::{CronEvent, EventSink as SchedEventSinkTrait};
+    use crate::timers::{EventSink as TimerEventSinkTrait, TimerEvent};
+    use conex_types::timer::TimerCondition;
+
+    /// 测试发射器：记录 (channel, payload) 序列（对齐 core_event_bridge
+    /// 测试先例 RecordingEmitter）
+    #[derive(Default)]
+    struct RecordingEmitter {
+        calls: Mutex<Vec<(String, String)>>,
+    }
+
+    impl RecordingEmitter {
+        fn calls(&self) -> Vec<(String, String)> {
+            self.calls.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        }
+    }
+
+    impl Emitter for RecordingEmitter {
+        fn emit(&self, channel: &str, payload: &str) {
+            self.calls
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push((channel.to_string(), payload.to_string()));
+        }
+    }
+
+    /// 构造记录桥（通道名恒 workbench-run-event）
+    fn recording_bridge() -> (EventBridge, Arc<RecordingEmitter>) {
+        let emitter = Arc::new(RecordingEmitter::default());
+        let bridge = EventBridge::new(
+            "workbench-run-event",
+            Arc::clone(&emitter) as Arc<dyn Emitter>,
+        );
+        (bridge, emitter)
+    }
+
+    /// 定时器缓冲事件 → forward helper → 信封形状断言：runId/sequence
+    /// 不注入（None）、事件体字段级断言（timerId/prompt/firedAtMs 与
+    /// timer-cancelled 的 reason/cancelledAtMs）；二次转发空缓冲返回 0
+    /// （Vec::take 语义，不重复转发）。
+    #[test]
+    fn drain_forward_emits_envelopes_without_runid() {
+        let sink = AgentEventSink::new();
+        TimerEventSinkTrait::emit(
+            &sink,
+            TimerEvent::Fired {
+                timer_id: "timer-0".to_string(),
+                prompt: "检查编译结果".to_string(),
+                fired_at_ms: 1_700_000_000_123,
+            },
+        );
+        TimerEventSinkTrait::emit(
+            &sink,
+            TimerEvent::Cancelled {
+                timer_id: "timer-1".to_string(),
+                reason: crate::timers::TimerCancelReason::EarlyExit,
+                cancelled_at_ms: 1_700_000_000_456,
+            },
+        );
+        let (bridge, emitter) = recording_bridge();
+        let forwarded = forward_drained_timer_events(&sink, &bridge);
+        assert_eq!(forwarded, 2, "两条缓冲事件应全部转发");
+        let calls = emitter.calls();
+        assert_eq!(calls.len(), 2);
+        for (channel, _) in &calls {
+            assert_eq!(channel, "workbench-run-event");
+        }
+        // 信封顶层形状：type 正确、无 runId/sequence、schemaVersion=1
+        let first: serde_json::Value =
+            serde_json::from_str(&calls[0].1).expect("载荷应为合法 JSON");
+        assert_eq!(first["type"], "timer-fired");
+        assert!(first.get("runId").is_none(), "timer 事件不得注入 runId");
+        assert!(first.get("sequence").is_none(), "timer 事件不得注入 sequence");
+        assert_eq!(first["schemaVersion"], 1);
+        assert_eq!(first["sessionId"], "");
+        assert_eq!(first["timerId"], "timer-0");
+        assert_eq!(first["prompt"], "检查编译结果");
+        assert_eq!(first["firedAtMs"], 1_700_000_000_123_u64);
+        let second: serde_json::Value =
+            serde_json::from_str(&calls[1].1).expect("载荷应为合法 JSON");
+        assert_eq!(second["type"], "timer-cancelled");
+        assert_eq!(second["timerId"], "timer-1");
+        assert_eq!(second["reason"], "early-exit");
+        assert_eq!(second["cancelledAtMs"], 1_700_000_000_456_u64);
+        // 二次转发空缓冲 → 0（drain 已取走，不重复转发）
+        assert_eq!(
+            forward_drained_timer_events(&sink, &bridge),
+            0,
+            "空缓冲转发应返回 0"
+        );
+    }
+
+    /// cron 缓冲事件 → forward helper → 信封形状断言（cron-fired 单臂：
+    /// conex-types 仅 CronFired 变体，字段 cronId/prompt/expression/
+    /// iteration/firedAtMs 字段级断言；runId/sequence 不注入）。
+    #[test]
+    fn drain_forward_scheduler_emits_envelopes_without_runid() {
+        let sink = crate::sched::SchedEventSink::new();
+        SchedEventSinkTrait::emit(
+            &sink,
+            CronEvent::Fired {
+                cron_id: "cron-0".to_string(),
+                prompt: "每日备份".to_string(),
+                expression: "0 3 * * *".to_string(),
+                iteration: 3,
+                fired_at_ms: 1_700_000_000_789,
+            },
+        );
+        let (bridge, emitter) = recording_bridge();
+        let forwarded = forward_drained_scheduler_events(&sink, &bridge);
+        assert_eq!(forwarded, 1, "一条缓冲事件应全部转发");
+        let calls = emitter.calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "workbench-run-event");
+        let payload: serde_json::Value =
+            serde_json::from_str(&calls[0].1).expect("载荷应为合法 JSON");
+        assert_eq!(payload["type"], "cron-fired");
+        assert!(payload.get("runId").is_none(), "cron 事件不得注入 runId");
+        assert!(payload.get("sequence").is_none(), "cron 事件不得注入 sequence");
+        assert_eq!(payload["schemaVersion"], 1);
+        assert_eq!(payload["cronId"], "cron-0");
+        assert_eq!(payload["prompt"], "每日备份");
+        assert_eq!(payload["expression"], "0 3 * * *");
+        assert_eq!(payload["iteration"], 3);
+        assert_eq!(payload["firedAtMs"], 1_700_000_000_789_u64);
+        // 二次转发空缓冲 → 0
+        assert_eq!(
+            forward_drained_scheduler_events(&sink, &bridge),
+            0,
+            "空缓冲转发应返回 0"
+        );
+    }
+
+    /// 访问器到达生产装配实例：EngineHandle::new 装配的缓冲与
+    /// TimerRegistry/SchedulerRegistry 注入的是同一 Arc——定时器到期 →
+    /// 缓冲出现 TimerFired；cron 触发 → 缓冲出现 CronFired；drain 转发
+    /// 后真实桥收到信封（与 :690 装配点同一实例的功能性证明）。
+    #[tokio::test]
+    async fn engine_accessors_reach_production_sinks() {
+        let engine = EngineHandle::new(None);
+        // 访问器稳定实例（两次取回同一 Arc）
+        assert!(Arc::ptr_eq(
+            &engine.timer_event_sink(),
+            &engine.timer_event_sink()
+        ));
+        assert!(Arc::ptr_eq(
+            &engine.scheduler_event_sink(),
+            &engine.scheduler_event_sink()
+        ));
+        // 定时器面：注册 1 秒定时器 → 到期 → 生产缓冲出现 TimerFired
+        // （与 TimerRegistry 注入同一缓冲实例的功能性证明）
+        let channel: Arc<dyn TimerChannel> = engine.timer_registry();
+        let handle = channel
+            .register(1, "drain 装配检查".to_string(), TimerCondition::Never)
+            .await
+            .expect("timer_channel 已接线，register 不应 unsupported");
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+        let timer_events = engine.timer_event_sink().drain();
+        assert!(
+            timer_events.iter().any(|e| matches!(
+                e,
+                AgentEvent::TimerFired { ref timer_id, ref prompt, .. }
+                    if timer_id == &handle.timer_id && prompt == "drain 装配检查"
+            )),
+            "到期事件应到达生产缓冲：{timer_events:?}"
+        );
+        channel.cancel(&handle.timer_id).await.ok();
+        // cron 面：注入短触发延迟（测试钩子）→ 注册 → 触发 → 生产缓冲
+        // 出现 CronFired（与 SchedulerRegistry 注入同一缓冲实例）
+        let registry = engine.scheduler_registry().expect("装配后应为 Some");
+        registry.set_fire_override_ms(40);
+        let cron_id = registry
+            .register(crate::sched::CronTaskInput {
+                expression: "* * * * *".to_string(),
+                prompt: "drain cron 检查".to_string(),
+                max_iterations: Some(1),
+                is_daemon: false,
+            })
+            .await
+            .expect("cron 注册应成功");
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        // 转发路径端到端：经访问器取走生产缓冲 → 真实桥信封（runId
+        // 不注入）；payload 字段级断言即「同一缓冲实例」的功能性证明
+        let (bridge, emitter) = recording_bridge();
+        let forwarded = forward_drained_scheduler_events(&engine.scheduler_event_sink(), &bridge);
+        assert_eq!(forwarded, 1, "cron 触发事件应经访问器转发到真实桥");
+        let payload: serde_json::Value =
+            serde_json::from_str(&emitter.calls()[0].1).expect("载荷应为合法 JSON");
+        assert_eq!(payload["type"], "cron-fired");
+        assert_eq!(payload["cronId"], cron_id);
+        assert_eq!(payload["prompt"], "drain cron 检查");
+        assert_eq!(payload["iteration"], 1);
+        assert!(payload.get("runId").is_none(), "cron 事件不得注入 runId");
+        // drain 已取走 → 缓冲为空（Vec::take 语义，不重复转发）
+        assert!(
+            engine.scheduler_event_sink().drain().is_empty(),
+            "转发后生产缓冲应为空"
+        );
+        // 清理：max_iterations=1 已自停（enabled=false 落库），无残留声明
     }
 }

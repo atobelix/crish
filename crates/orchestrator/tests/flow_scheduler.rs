@@ -31,7 +31,8 @@ use conex_types::SessionAgent;
 use orchestrator::flow_graph::{
     FailStrategy, FlowDeclaration, FlowError, FlowGraphError, FlowMetaStore, FlowNode,
     FlowNodeState, FlowReportKind, FlowScheduler, FLOW_AUTO_COMPOSITE_KEY,
-    FLOW_DECLARATION_KEY, FLOW_ON_FAILED_KEY, FLOW_RELEASED_KEY, FLOW_RESERVED_KEY,
+    FLOW_DECLARATION_KEY, FLOW_MAX_SIBLINGS_KEY, FLOW_ON_FAILED_KEY, FLOW_RELEASED_KEY,
+    FLOW_RESERVED_KEY,
 };
 
 // ── 测试替身 ──────────────────────────────────────────────────────
@@ -289,6 +290,155 @@ async fn parallel_burst_peak_respects_max_concurrent_event_driven() {
     }
     assert_eq!(spawner.requests().len(), 10, "10 个 parallel 任务全部启动");
     assert!(in_flight_peak <= 6, "并发峰值全程 ≤ maxConcurrent");
+}
+
+// ── parallel 同级串行约束（裁决 D2：同级 = 同 depends_on 集合）───
+
+#[tokio::test]
+async fn serial_siblings_start_in_declaration_order() {
+    let (mut sched, spawner, _meta) = harness();
+    // 同波次（depends_on=[]）两 parallel=false 节点：声明序为串行顺序
+    let mut n1 = node("n1", &[]);
+    n1.parallel = false;
+    let mut n2 = node("n2", &[]);
+    n2.parallel = false;
+    let adv = sched
+        .declare_flow(&decl(vec![n1, n2]))
+        .await
+        .unwrap();
+    assert_eq!(adv.started.len(), 1, "同波次 parallel=false 首轮只启动声明序第一个");
+    assert_eq!(adv.started[0].node_id, "n1");
+    assert_eq!(sched.node_state("n1"), Some(FlowNodeState::Running));
+    assert_eq!(
+        sched.node_state("n2"),
+        Some(FlowNodeState::Pending),
+        "前驱同级未完成（Running）不得启动"
+    );
+    assert_eq!(spawner.requests().len(), 1, "spawn1 先于终态事件");
+    // n1 Completed → n2 启动（终态事件驱动推进，不轮询）
+    let run_n1 = adv.started[0].subagent_run_id.clone();
+    let adv2 = sched
+        .on_subagent_terminal(&run_n1, SubagentState::Completed)
+        .await
+        .unwrap();
+    assert_eq!(adv2.started.len(), 1);
+    assert_eq!(adv2.started[0].node_id, "n2", "spawn2 在 terminal 事件后");
+    assert_eq!(sched.node_state("n2"), Some(FlowNodeState::Running));
+    assert_eq!(spawner.requests().len(), 2, "spawn 时序：n1 先、n2 在终态事件后");
+    // n2 完成 → 编排终态
+    let run_n2 = adv2.started[0].subagent_run_id.clone();
+    let adv3 = sched
+        .on_subagent_terminal(&run_n2, SubagentState::Completed)
+        .await
+        .unwrap();
+    assert!(adv3.flow_terminal);
+    assert!(adv3.started.is_empty());
+    assert_eq!(spawner.requests().len(), 2, "全程只 spawn 两个节点");
+}
+
+#[tokio::test]
+async fn parallel_siblings_spawn_concurrently() {
+    let (mut sched, spawner, _meta) = harness();
+    // 同波次 parallel=true 两节点：同一轮 advance 均进入 Running
+    let adv = sched
+        .declare_flow(&decl(vec![node("p1", &[]), node("p2", &[])]))
+        .await
+        .unwrap();
+    let ids: Vec<&str> = adv.started.iter().map(|s| s.node_id.as_str()).collect();
+    assert_eq!(ids, vec!["p1", "p2"], "同轮就绪集合含两节点（并行不受约束）");
+    assert_eq!(sched.node_state("p1"), Some(FlowNodeState::Running));
+    assert_eq!(sched.node_state("p2"), Some(FlowNodeState::Running));
+    assert_eq!(spawner.requests().len(), 2);
+}
+
+#[tokio::test]
+async fn serial_constraint_applies_per_wave_independently() {
+    let (mut sched, spawner, _meta) = harness();
+    // 两波次：波 1 = [a1, a2]（同 depends_on=[]，串行）；波 2 = [b1, b2]
+    // （同 depends_on=[a1, a2]，串行）——异波次互不约束（混合场景）
+    let mut a1 = node("a1", &[]);
+    a1.parallel = false;
+    let mut a2 = node("a2", &[]);
+    a2.parallel = false;
+    let mut b1 = node("b1", &["a1", "a2"]);
+    b1.parallel = false;
+    let mut b2 = node("b2", &["a1", "a2"]);
+    b2.parallel = false;
+    let adv = sched.declare_flow(&decl(vec![a1, a2, b1, b2])).await.unwrap();
+    assert_eq!(adv.started.len(), 1);
+    assert_eq!(adv.started[0].node_id, "a1", "波 1 串行首节点");
+    assert_eq!(sched.node_state("a2"), Some(FlowNodeState::Pending));
+    let run_a1 = adv.started[0].subagent_run_id.clone();
+    let adv2 = sched
+        .on_subagent_terminal(&run_a1, SubagentState::Completed)
+        .await
+        .unwrap();
+    assert_eq!(adv2.started.len(), 1);
+    assert_eq!(adv2.started[0].node_id, "a2", "波 1 串行第二步");
+    let run_a2 = adv2.started[0].subagent_run_id.clone();
+    let adv3 = sched
+        .on_subagent_terminal(&run_a2, SubagentState::Completed)
+        .await
+        .unwrap();
+    assert_eq!(adv3.started.len(), 1);
+    assert_eq!(adv3.started[0].node_id, "b1", "波 2 首节点（依赖满足后）");
+    assert_eq!(sched.node_state("b2"), Some(FlowNodeState::Pending), "波 2 内串行");
+    let run_b1 = adv3.started[0].subagent_run_id.clone();
+    let adv4 = sched
+        .on_subagent_terminal(&run_b1, SubagentState::Completed)
+        .await
+        .unwrap();
+    assert_eq!(adv4.started.len(), 1);
+    assert_eq!(adv4.started[0].node_id, "b2", "波 2 串行第二步");
+    let run_b2 = adv4.started[0].subagent_run_id.clone();
+    let adv5 = sched
+        .on_subagent_terminal(&run_b2, SubagentState::Completed)
+        .await
+        .unwrap();
+    assert!(adv5.flow_terminal);
+    assert_eq!(spawner.requests().len(), 4, "两波次各串行两步");
+}
+
+#[tokio::test]
+async fn serial_siblings_do_not_deadlock_with_budget_one() {
+    let (mut sched, spawner, meta) = harness();
+    // 预算 1（maxSiblings=0：首个 spawn 时 current=0 通过，此后 current>0 拒绝）；
+    // 同波次含 parallel=false 串行对 + 一个 parallel=true 节点竞争槽位
+    meta.set_meta(FLOW_MAX_SIBLINGS_KEY, "0").unwrap();
+    let mut n1 = node("n1", &[]);
+    n1.parallel = false;
+    let mut n2 = node("n2", &[]);
+    n2.parallel = false;
+    let adv = sched
+        .declare_flow(&decl(vec![n1, n2, node("p3", &[])]))
+        .await
+        .unwrap();
+    assert_eq!(adv.started.len(), 1, "预算 1：同一时刻只 spawn 一个节点");
+    assert_eq!(adv.started[0].node_id, "n1", "声明序靠前且就绪者先 spawn");
+    assert_eq!(sched.node_state("n2"), Some(FlowNodeState::Pending), "串行前驱未完成不启动");
+    // 逐个终态事件推进：n2、p3 依次启动——预算不足只延迟、不永久阻塞
+    let run_n1 = adv.started[0].subagent_run_id.clone();
+    let adv2 = sched
+        .on_subagent_terminal(&run_n1, SubagentState::Completed)
+        .await
+        .unwrap();
+    assert_eq!(adv2.started.len(), 1);
+    assert_eq!(adv2.started[0].node_id, "n2", "前驱完成后第二节点启动");
+    let run_n2 = adv2.started[0].subagent_run_id.clone();
+    let adv3 = sched
+        .on_subagent_terminal(&run_n2, SubagentState::Completed)
+        .await
+        .unwrap();
+    assert_eq!(adv3.started.len(), 1);
+    assert_eq!(adv3.started[0].node_id, "p3", "并行节点随后补位");
+    let run_p3 = adv3.started[0].subagent_run_id.clone();
+    let adv4 = sched
+        .on_subagent_terminal(&run_p3, SubagentState::Completed)
+        .await
+        .unwrap();
+    assert!(adv4.flow_terminal, "预算不足不引入死锁（终态事件驱动推进）");
+    assert_eq!(spawner.requests().len(), 3, "三个节点全部启动");
+    assert_eq!(sched.budget_in_flight(), 0, "全部终态后预算归零");
 }
 
 // ── on_failed 三策略（04 C6 验收 3/4 + 任务卡 Skip/Block/Report）──

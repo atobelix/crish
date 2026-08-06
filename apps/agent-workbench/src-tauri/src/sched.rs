@@ -26,8 +26,9 @@
 //!
 //! 装配（engine.rs `EngineHandle::new`，A3 / T-CF-10 统一接线）：
 //! - pending sink = [QueuePendingSink]（真实 PendingMessageQueue）；
-//! - event sink = [SchedEventSink]（缓冲 + 日志；EventBridge 真适配接线
-//!   在装配收口）；
+//! - event sink = [SchedEventSink]（缓冲 + 日志；事件面接线 = engine.rs
+//!   `forward_drained_scheduler_events` 周期 drain 转发到 EventBridge，
+//!   main.rs drain 任务装配在批 3，30 方案 §4）；
 //! - store = [MemorySchedStore]（conex-db 真适配需要 db 句柄，装配收口
 //!   接线；session_meta 无前缀枚举接口，真适配需配套 `sched_ids` 索引键，
 //!   本文件已按 `sched_<id>` 键形状实现内存版——与 timers.rs 同款取舍）；
@@ -235,10 +236,11 @@ impl PendingSink for QueuePendingSink {
 }
 
 /// AgentEvent 适配事件槽（CronEvent → AgentEvent 单点映射；
-/// 事件面真接线在 R-CF3 以 EventBridge 适配器替换本实现，当前缓冲
-/// 供测试断言与调试观测）
+/// 缓冲 + 日志，事件面经 engine.rs `forward_drained_scheduler_events`
+/// 周期 drain 转发到 EventBridge（P4，30 方案 §4）——本层不直接
+/// 依赖事件桥，转发由引擎装配面持有，缓冲供测试断言与调试观测）
 pub(crate) struct SchedEventSink {
-    /// 已发射事件缓冲（R-CF3 消费 / 测试断言）
+    /// 已发射事件缓冲（drain 转发 / 测试断言）
     buffered: Mutex<Vec<AgentEvent>>,
 }
 
@@ -250,8 +252,9 @@ impl SchedEventSink {
         }
     }
 
-    /// 取走缓冲事件（测试断言 + R-CF3 事件面转发）
-    #[allow(dead_code)] // R-CF3：EventBridge 适配器替换时移除
+    /// 取走缓冲事件（drain 转发 helper（engine.rs）与测试断言消费；
+    /// Vec::take 语义，空缓冲返回空集）
+    #[allow(dead_code)] // P4 批 3：main.rs drain 任务接线后移除
     pub(crate) fn drain(&self) -> Vec<AgentEvent> {
         std::mem::take(&mut *self.buffered.lock().unwrap_or_else(|e| e.into_inner()))
     }
@@ -280,7 +283,7 @@ impl EventSink for SchedEventSink {
         tracing::debug!(
             target: "sched",
             event = agent_event.type_name(),
-            "cron 事件已发射（缓冲；事件面接线 R-CF3）"
+            "cron 事件已发射（缓冲；drain 转发 P4 接线）"
         );
         self.buffered
             .lock()

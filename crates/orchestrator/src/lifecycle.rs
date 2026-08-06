@@ -21,7 +21,6 @@
 //! 引擎侧接线（ForceCancelSink 实现 = 按 run 定位 ControlBus 投递）在
 //! workbench 域（T-D-13），本模块不感知具体总线实例。
 
-use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
 
@@ -157,8 +156,8 @@ impl SubagentLifecycleService {
     ///   subagent.rs to_db_status 语义）；
     /// - **无递归**：maxDepth=1（T-D-01）后子代理无后代，无需递归遍历；
     /// - 产出保留：只改 status/ended_at，summary / messages / 路径原样
-    ///   保留（save_session_agents 全量重写不删数据；回收站与
-    ///   session_agent_messages 级联为既有机制，无新增）；
+    ///   保留（单行定点写 update_session_agent_status，只动目标行；
+    ///   回收站与 session_agent_messages 级联为既有机制，无新增）；
     /// - FlowScheduler 侧每个终态事件自然触发 on_subagent_terminal 推进
     ///   （flow_graph.rs:1121），本服务不做额外编排。
     ///
@@ -184,8 +183,6 @@ impl SubagentLifecycleService {
                 non_terminal: Vec::new(),
             });
         }
-        let target_run_ids: HashSet<&str> =
-            targets.iter().map(|a| a.subagent_run_id.as_str()).collect();
         // 逐个投递 L3 强停（无递归：子代理无后代，不遍历层级）
         let mut terminated = Vec::new();
         let mut non_terminal = Vec::new();
@@ -204,18 +201,22 @@ impl SubagentLifecycleService {
                 });
             }
         }
-        // 终态统一归一 failed（只改 status/ended_at，产出保留）
+        // 终态统一归一 failed（单行定点写：只动 targets 快照中的目标行，
+        // 非目标行与 messages 原样保留；kill_all 期间引擎并发 spawn 的
+        // 新行不再被全量先删后插覆写删除——11-T3 N05 根因收束）
         let now = now_ms();
-        let mut rows = self.db.load_session_agents(session_id).map_err(db_err)?;
-        for row in &mut rows {
-            if target_run_ids.contains(row.subagent_run_id.as_str()) {
-                row.status = "failed".to_string();
-                if row.ended_at.is_none() {
-                    row.ended_at = Some(now);
-                }
-            }
+        for agent in &targets {
+            // 缺行静默成功（affected=0 不报错：目标行在投递期间被删时
+            // 宽容跳过，与 save 面语义一致）
+            self.db
+                .update_session_agent_status(
+                    session_id,
+                    &agent.subagent_run_id,
+                    "failed",
+                    Some(now),
+                )
+                .map_err(db_err)?;
         }
-        self.db.save_session_agents(session_id, &rows).map_err(db_err)?;
         Ok(KillAllOutcome {
             terminated,
             non_terminal,
@@ -321,33 +322,29 @@ impl SubagentLifecycleService {
 
     /// 把子代理行终态归一 failed（ended_at 缺省补当前时间）。
     ///
-    /// kill_all / resume 共用；不改动其余字段（summary / messages /
-    /// 路径等产出保留）。
+    /// kill_all / resume 共用；单行定点写（update_session_agent_status），
+    /// 不改动其余字段（summary / messages / 路径等产出保留）；
+    /// 缺行按 affected=0 判定 NotFound。
     fn mark_row_failed(
         &self,
         session_id: &str,
         subagent_run_id: &str,
     ) -> Result<(), LifecycleError> {
-        let mut rows = self.db.load_session_agents(session_id).map_err(db_err)?;
-        let now = now_ms();
-        let mut hit = false;
-        for row in &mut rows {
-            if row.subagent_run_id == subagent_run_id {
-                row.status = "failed".to_string();
-                if row.ended_at.is_none() {
-                    row.ended_at = Some(now);
-                }
-                hit = true;
-            }
-        }
-        if !hit {
+        let affected = self
+            .db
+            .update_session_agent_status(
+                session_id,
+                subagent_run_id,
+                "failed",
+                Some(now_ms()),
+            )
+            .map_err(db_err)?;
+        if affected == 0 {
             return Err(LifecycleError::NotFound {
                 message: format!("子代理 run 不存在：{subagent_run_id}（会话 {session_id}）"),
             });
         }
-        self.db
-            .save_session_agents(session_id, &rows)
-            .map_err(db_err)
+        Ok(())
     }
 }
 

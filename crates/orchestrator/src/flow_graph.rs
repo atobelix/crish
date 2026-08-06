@@ -5,6 +5,12 @@
 //! reserve/release、重启恢复、合成唤醒（不轮询）。本模块为调度核心，
 //! session.rs 主写权归 C6（M6）保持（本模块独立成文件，不并写 SessionTree）。
 //!
+//! parallel 串行约束（裁决 D2 冻结：同级 = 同 depends_on 集合）：同波次
+//! （depends_on 集合相同）的节点中，parallel=false 者须等待声明序在前、
+//! 同样 parallel=false 的同级节点全部进入终态后才就绪；parallel=true 者
+//! 不受约束（显式声明并发）。实现落点：is_ready + serial_predecessor_pending
+//! 判定，advance 无需结构性改动（就绪集合每轮重算 + 终态事件驱动重推进）。
+//!
 //! 三问：
 //! - 隔离边界：依赖图只推进不回溯（已 completed 不重复启动）；并发预算
 //!   只统计流程节点预留（全局守卫由引擎侧 spawner 的 RecursionGuard 兜底——
@@ -46,7 +52,8 @@ use crate::subagent_events::{
     SubagentEmitContext, SubagentEndedInfo, SubagentEventEmitter, started_info_from_spawn,
 };
 
-// ── 依赖图模型（04 C6 §2.1：after / parallel 声明）───────────────
+// ── 依赖图模型（04 C6 §2.1：after / parallel 声明；
+//    parallel=false = 同 depends_on 集合同级串行，声明序为串行顺序）───
 
 /// 流程节点 id（主 agent 声明，会话内唯一）
 pub type FlowNodeId = String;
@@ -98,8 +105,12 @@ pub struct FlowNode {
     /// 才允许启动本节点；空 = 无前置，可首批启动）
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub depends_on: Vec<FlowNodeId>,
-    /// 是否允许与无依赖关系的同级节点并发（false = 与同级串行，
-    /// 声明序为串行顺序）
+    /// 是否允许与同级节点并发（false = 与同级串行，声明序为串行顺序）。
+    ///
+    /// 同级 = depends_on 集合相同的节点（同一波次同时就绪，裁决 D2）：
+    /// false 时须等待声明序在前、同 depends_on 集合、且同样 parallel=false
+    /// 的节点全部进入终态后才就绪（Failed 按生效策略放宽，与依赖判定
+    /// 同口径）；true = 不受约束，显式声明并发。异波次节点互不影响。
     #[serde(default)]
     pub parallel: bool,
     /// 节点级失败策略覆盖（None = 会话级 `flow_on_failed` 默认）
@@ -1244,8 +1255,9 @@ impl FlowScheduler {
     /// 挂接外部 run 到综合节点（合成唤醒观测态：主 agent 收到唤醒事件后
     /// 自行 spawn 综合 run，引擎侧把 run id 挂回节点）。
     ///
-    /// gate 强制对挂接同样生效：仅当全部前置 completed（running 不算）
-    /// 且节点未启动时才允许挂接。
+    /// gate 强制对挂接同样生效：仅当全部前置 completed（running 不算）、
+    /// 节点未启动、且无未终态的串行同级（[Self::is_ready] 统一判定，
+    /// 含裁决 D2 同级串行约束）时才允许挂接。
     pub fn attach_run(&mut self, node_id: &str, subagent_run_id: &str) -> Result<(), FlowError> {
         let Some(graph) = &self.graph else {
             return Err(FlowError::NotFound {
@@ -1455,19 +1467,62 @@ impl FlowScheduler {
 
     /// gate 强制：就绪 = 待启动且全部前置 completed（running 不算；
     /// 前置 failed 时按失败节点的生效策略放宽——Skip / Report 视为
-    /// 满足，Block 视为阻塞）
+    /// 满足，Block 视为阻塞）+ 同级串行约束（裁决 D2：parallel=false
+    /// 节点须等声明序在前、同 depends_on 集合的串行同级全部终态，
+    /// 见 [Self::serial_predecessor_pending]）
     fn is_ready(&self, node: &FlowNode) -> bool {
         if self.states.get(&node.id).copied() != Some(FlowNodeState::Pending) {
             return false;
         }
-        node.depends_on.iter().all(|dep| match self.states.get(dep) {
+        if !node.depends_on.iter().all(|dep| match self.states.get(dep) {
             Some(FlowNodeState::Completed) => true,
             Some(FlowNodeState::Failed) => matches!(
                 self.effective_strategy(dep),
                 FailStrategy::Skip | FailStrategy::Report
             ),
             _ => false,
-        })
+        }) {
+            return false;
+        }
+        !self.serial_predecessor_pending(node)
+    }
+
+    /// 同波次串行前置检查（裁决 D2 冻结：同级 = 同 depends_on 集合）：
+    /// 声明序在前（graph.nodes() 即声明序）、同 depends_on 集合、
+    /// parallel=false、且状态未达「满足」判定（[Self::serial_predecessor_satisfied]）
+    /// 的同级节点存在 → 尚未就绪。parallel=true 节点不受本约束。
+    fn serial_predecessor_pending(&self, node: &FlowNode) -> bool {
+        if node.parallel {
+            return false;
+        }
+        let Some(graph) = self.graph.as_ref() else {
+            return false;
+        };
+        graph
+            .nodes()
+            .iter()
+            .take_while(|n| n.id != node.id)
+            .any(|n| {
+                n.depends_on == node.depends_on
+                    && !n.parallel
+                    && !self.serial_predecessor_satisfied(n)
+            })
+    }
+
+    /// 串行前置「满足」判定（与 is_ready 依赖判定同口径，
+    /// flow_graph.rs:1463-1470）：Completed / Blocked → 满足；Failed →
+    /// 生效策略 Skip / Report 满足、Block 不满足——Blocked 传播由
+    /// [Self::propagate_block] 先行处理（本节点被置 Blocked 终态后
+    /// is_ready 不再命中），此处不重复拦截；其余非终态 → 不满足。
+    fn serial_predecessor_satisfied(&self, node: &FlowNode) -> bool {
+        match self.states.get(&node.id).copied() {
+            Some(FlowNodeState::Completed | FlowNodeState::Blocked) => true,
+            Some(FlowNodeState::Failed) => matches!(
+                self.effective_strategy(&node.id),
+                FailStrategy::Skip | FailStrategy::Report
+            ),
+            _ => false,
+        }
     }
 
     /// Block 传播：待启动节点任一前置为 Blocked，或前置 Failed 且其
@@ -1546,6 +1601,7 @@ impl FlowScheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_tools::tools::subagent::{SubagentSpawnError, SubagentSpawnResult};
 
     fn node(id: &str, depends_on: &[&str]) -> FlowNode {
         FlowNode {
@@ -1751,6 +1807,146 @@ mod tests {
         assert_eq!(budget.reserved(), 5);
         assert_eq!(budget.released(), 3);
         assert_eq!(budget.in_flight(), 2, "已完成任务预留被 released 抵消");
+    }
+
+    // ── is_ready 同级串行约束（裁决 D2：同级 = 同 depends_on 集合）──
+
+    /// is_ready 单测用最小 spawner（仅满足构造签名，不真正 spawn）
+    #[derive(Debug)]
+    struct NoopSpawner;
+
+    #[async_trait::async_trait]
+    impl SubagentSpawner for NoopSpawner {
+        async fn spawn(
+            &self,
+            _req: &SubagentSpawnRequest,
+        ) -> Result<SubagentSpawnResult, SubagentSpawnError> {
+            unreachable!("is_ready 单测不发起 spawn")
+        }
+    }
+
+    /// is_ready 单测用空 meta（全部键缺省 → 默认策略 Block / 默认预算）
+    struct EmptyMeta;
+
+    impl FlowMetaStore for EmptyMeta {
+        fn get_meta(&self, _key: &str) -> Result<Option<String>, FlowError> {
+            Ok(None)
+        }
+
+        fn set_meta(&self, _key: &str, _value: &str) -> Result<(), FlowError> {
+            Ok(())
+        }
+    }
+
+    /// is_ready 单测构造：调度器 + 指定图（全部节点 Pending 初始态）
+    fn sched_with_graph(tasks: Vec<FlowNode>) -> FlowScheduler {
+        let spawner = Arc::new(NoopSpawner);
+        let meta = Arc::new(EmptyMeta);
+        let mut sched = FlowScheduler::new("sess-u", spawner, meta).expect("调度器创建失败");
+        let graph = FlowGraph::from_declaration(&declaration(tasks)).expect("声明应接受");
+        for node in graph.nodes() {
+            sched.states.insert(node.id.clone(), FlowNodeState::Pending);
+        }
+        sched.graph = Some(graph);
+        sched
+    }
+
+    #[test]
+    fn is_ready_same_wave_serial_blocks_until_predecessor_terminal() {
+        // 同波次（depends_on=[]）两 parallel=false 节点：声明序在前的
+        // 未终态时后置不就绪；终态后就绪；Failed + Block 策略不满足
+        let mut n1 = node("n1", &[]);
+        n1.parallel = false;
+        let mut n2 = node("n2", &[]);
+        n2.parallel = false;
+        let mut sched = sched_with_graph(vec![n1, n2]);
+        let n2_node = sched.graph.as_ref().unwrap().node("n2").unwrap().clone();
+        sched.states.insert("n1".to_string(), FlowNodeState::Running);
+        assert!(
+            !sched.is_ready(&n2_node),
+            "前驱同级 Running 时不得就绪（同波次串行）"
+        );
+        sched.states.insert("n1".to_string(), FlowNodeState::Completed);
+        assert!(sched.is_ready(&n2_node), "前驱同级终态后就绪");
+        sched.states.insert("n1".to_string(), FlowNodeState::Failed);
+        assert!(
+            !sched.is_ready(&n2_node),
+            "前驱 Failed + 默认 Block 策略不满足（由 propagate_block 置 Blocked）"
+        );
+    }
+
+    #[test]
+    fn is_ready_same_wave_serial_but_different_waves_free() {
+        // 波 1（depends_on=[]）：a → y 串行；波 2（depends_on=[a]）：x 独立
+        // ——异波次互不约束，即使同为 parallel=false
+        let mut a = node("a", &[]);
+        a.parallel = false;
+        let mut x = node("x", &["a"]);
+        x.parallel = false;
+        let mut y = node("y", &[]);
+        y.parallel = false;
+        let mut sched = sched_with_graph(vec![a, x, y]);
+        let graph = sched.graph.as_ref().unwrap();
+        let x_node = graph.node("x").unwrap().clone();
+        let y_node = graph.node("y").unwrap().clone();
+        sched.states.insert("a".to_string(), FlowNodeState::Running);
+        assert!(
+            !sched.is_ready(&y_node),
+            "同波次前驱 Running → y 不就绪"
+        );
+        assert!(
+            !sched.is_ready(&x_node),
+            "x 依赖（a）未完成 → 不就绪"
+        );
+        // a 终态：同波次 y 就绪；异波次 x 也同时就绪（两波次并行推进）
+        sched.states.insert("a".to_string(), FlowNodeState::Completed);
+        assert!(sched.is_ready(&y_node));
+        assert!(
+            sched.is_ready(&x_node),
+            "异波次不受 parallel 串行约束"
+        );
+    }
+
+    #[test]
+    fn is_ready_parallel_flag_waives_serial_constraint() {
+        // parallel=true 节点不受同级串行约束（前驱同级运行中也就绪）
+        let mut n1 = node("n1", &[]);
+        n1.parallel = false;
+        let n2 = node("n2", &[]); // helper 默认 parallel=true
+        let mut sched = sched_with_graph(vec![n1, n2]);
+        let n2_node = sched.graph.as_ref().unwrap().node("n2").unwrap().clone();
+        sched.states.insert("n1".to_string(), FlowNodeState::Running);
+        assert!(
+            sched.is_ready(&n2_node),
+            "parallel=true 显式并发，不受串行约束"
+        );
+    }
+
+    #[test]
+    fn is_ready_serial_predecessor_failed_with_skip_strategy_satisfied() {
+        // 前驱同级 Failed + Skip 策略 → 视为满足（与 is_ready 依赖判定同口径）
+        let mut n1 = node("n1", &[]);
+        n1.parallel = false;
+        n1.on_failed = Some(FailStrategy::Skip);
+        let mut n2 = node("n2", &[]);
+        n2.parallel = false;
+        let mut sched = sched_with_graph(vec![n1, n2]);
+        let n2_node = sched.graph.as_ref().unwrap().node("n2").unwrap().clone();
+        sched.states.insert("n1".to_string(), FlowNodeState::Failed);
+        assert!(
+            sched.is_ready(&n2_node),
+            "Failed + Skip 生效策略视为满足"
+        );
+        // 对照：Report 同样视为满足
+        let mut n1 = node("n1", &[]);
+        n1.parallel = false;
+        n1.on_failed = Some(FailStrategy::Report);
+        let mut n2 = node("n2", &[]);
+        n2.parallel = false;
+        let mut sched2 = sched_with_graph(vec![n1, n2]);
+        let n2_node2 = sched2.graph.as_ref().unwrap().node("n2").unwrap().clone();
+        sched2.states.insert("n1".to_string(), FlowNodeState::Failed);
+        assert!(sched2.is_ready(&n2_node2), "Failed + Report 视为满足");
     }
 
     // ── 节点状态映射 ──────────────────────────────────────────────

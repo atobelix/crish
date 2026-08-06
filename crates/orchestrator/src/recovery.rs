@@ -582,8 +582,8 @@ pub fn build_user_report(
 /// 恢复域持久化抽象（session_meta / events 表 / run 状态 / 子代理路径）。
 ///
 /// 实现方职责：全部经 conex-db 既有接口（get_session_meta / set_session_meta /
-/// append_event / reserve_sequence / update_run_status / load_session_agents /
-/// save_session_agents），不新增表结构与库方法。
+/// append_event / reserve_sequence / update_run_status / update_session_agent_path），
+/// 不新增表结构与库方法。
 pub trait RecoveryStore: Send + Sync {
     /// 读 session_meta 键（None = 键不存在）
     fn get_meta(&self, key: &str) -> Result<Option<String>, RecoveryError>;
@@ -677,22 +677,20 @@ impl RecoveryStore for LocalDb {
         subagent_run_id: &str,
         path_json: &str,
     ) -> Result<(), RecoveryError> {
-        let mut agents = self
-            .load_session_agents(session_id)
-            .map_err(|e| RecoveryError::PersistFailed {
-                message: e.to_string(),
-            })?;
-        let row = agents
-            .iter_mut()
-            .find(|a| a.subagent_run_id == subagent_run_id)
-            .ok_or_else(|| RecoveryError::NotFound {
+        // 单行定点写（11-T3）：只更新目标行路径列，不触碰其余行与
+        // messages；缺行按 affected=0 判定 NotFound（与旧 load→find→save
+        // 语义一致，且不再有全量覆写竞态）
+        let affected =
+            conex_db::LocalDb::update_session_agent_path(self, session_id, subagent_run_id, path_json)
+                .map_err(|e| RecoveryError::PersistFailed {
+                    message: e.to_string(),
+                })?;
+        if affected == 0 {
+            return Err(RecoveryError::NotFound {
                 message: format!("子代理行不存在：{subagent_run_id}"),
-            })?;
-        row.subagent_path_json = Some(path_json.to_string());
-        self.save_session_agents(session_id, &agents)
-            .map_err(|e| RecoveryError::PersistFailed {
-                message: e.to_string(),
-            })
+            });
+        }
+        Ok(())
     }
 }
 

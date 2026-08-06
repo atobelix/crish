@@ -77,6 +77,7 @@ use crate::engine::{
     EngineHandle, SessionLoopProducer,
 };
 use crate::status_diagnostics::StatusDiagnostics;
+use crate::task_event_consumer::TaskEventConsumer;
 
 /// run 的 max-turns 预算（对齐 01 §1.5：独立预算 reason）
 const MAX_TURNS_DEFAULT: u32 = 64;
@@ -1197,6 +1198,11 @@ pub struct CoreRunState {
     /// [EngineHandle::timer_steering_queue] 同一实例，收口处非空判定 +
     /// 批量转出注入续 run）
     pending_queue: Arc<Mutex<PendingMessageQueue>>,
+    /// 30 方案 P3：任务事件消费器（task_events.rs 消费面接线——与
+    /// [Self::pending_queue] 同实例、bridge 直发 security-audit（域隔离
+    /// 不经 engine audit_sink）；main.rs 装配轮经
+    /// [Self::task_events] 注入 background 注册表）
+    task_events: Arc<TaskEventConsumer>,
     /// T-CF-11：定时器活跃判定器（TimerRegistry 非空封装；None = 未接线
     /// ——收口时不因定时器续 run。生产在 [Self::new] 经
     /// [EngineHandle::timer_registry] 的 list_active 封装注入；测试可替换）
@@ -1255,6 +1261,14 @@ impl CoreRunState {
                 as Arc<dyn agent_tools::tools::subagent::SubagentSpawner>),
         );
         let pending_queue = engine.timer_steering_queue();
+        // 30 方案 P3：任务事件消费器（与 pending_queue 同实例；bridge 为
+        // 本状态持有实例的克隆——security-audit 直发不经 engine audit_sink，
+        // 30 文档 §9 域隔离接口约定）
+        let task_events = Arc::new(TaskEventConsumer::new(
+            Arc::clone(&pending_queue),
+            bridge.clone(),
+            String::new(), // 空串占位（任务为会话级存活，归属经 payload ownerRunId）
+        ));
         let timer_registry = engine.timer_registry();
         let timer_has_active: WakeSourceCheck = Arc::new(move || {
             let registry = Arc::clone(&timer_registry);
@@ -1291,6 +1305,7 @@ impl CoreRunState {
             session_history: SessionHistoryCache::new(),
             background,
             pending_queue,
+            task_events,
             timer_has_active: Mutex::new(Some(timer_has_active)),
             cron_has_enabled: Mutex::new(None),
             resume_empty_streak: Mutex::new(HashMap::new()),
@@ -1452,6 +1467,22 @@ impl CoreRunState {
     /// 共享 store（查询命令 / 集成接线用）
     pub fn store(&self) -> Arc<dyn Store> {
         Arc::clone(&self.store)
+    }
+
+    /// 30 方案 P3：共享 steering 队列（与引擎 [EngineHandle::timer_steering_queue]
+    /// 同一实例；P6（批 3 装配轮）经此注入 workflow 队列——消除队列双实例，
+    /// 对齐 [Self::store] Arc::clone 模式）
+    #[cfg_attr(not(test), allow(dead_code))] // 消费方 = P6 装配轮（批 3）；接线前标记 dead_code（对齐 set_cron_has_enabled 先例）
+    pub(crate) fn steering_queue(&self) -> Arc<Mutex<PendingMessageQueue>> {
+        Arc::clone(&self.pending_queue)
+    }
+
+    /// 30 方案 P3：任务事件消费器（main.rs 装配轮接线
+    /// `background_tasks.set_task_event_consumer(core_state.task_events())`——
+    /// 必须在 set_event_bridge 之前调用，EventBridgeSink 构造时读取快照）
+    #[cfg_attr(not(test), allow(dead_code))] // 消费方 = main.rs 装配轮（批 3）；接线前标记 dead_code（对齐 set_cron_has_enabled 先例）
+    pub(crate) fn task_events(&self) -> Arc<TaskEventConsumer> {
+        Arc::clone(&self.task_events)
     }
 
     /// restore 是否完成（run_task 门禁；查询命令 restore.state 数据源）
@@ -4053,6 +4084,47 @@ mod tests {
         let state = core_state_with_store(Arc::new(InMemoryStore::new()));
         assert!(state.local_db().is_none(), "非 LocalDb store 不得下转");
         assert!(state.run_usage("r1").is_none());
+    }
+
+    /// 验收（30 方案 P3）：steering_queue 访问器与引擎队列同一 Arc 实例
+    /// （消费器与定时器/Cron 共用同一队列，杜绝双实例分叉）。
+    #[test]
+    fn core_state_steering_queue_accessor_same_instance() {
+        let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+        let via_state = state.steering_queue();
+        let via_engine = state.engine.timer_steering_queue();
+        assert!(
+            Arc::ptr_eq(&via_state, &via_engine),
+            "访问器与引擎 timer_steering_queue 必须同一 Arc 实例"
+        );
+    }
+
+    /// 验收（30 方案 P3）：task_events 消费器装配可达（CoreRunState::new
+    /// 内与 pending_queue 同实例构造，无独立队列分叉）。
+    #[test]
+    fn core_state_task_events_consumer_shares_queue() {
+        let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+        let consumer = state.task_events();
+        // 经消费器终态入队 → 访问器侧可见（同一共享队列的字段级断言）
+        consumer.on_task_event(&AgentEvent::TaskStarted {
+            session_id: String::new(),
+            task_id: "t-a".into(),
+            command: "cargo build".into(),
+            cwd: "/ws".into(),
+            owner_run_id: "run-main".into(),
+            is_daemon: false,
+        });
+        consumer.on_task_event(&AgentEvent::TaskCompleted {
+            session_id: String::new(),
+            task_id: "t-a".into(),
+            exit_code: 0,
+            duration_ms: 1200,
+            line_count: 99,
+        });
+        let queue = state.steering_queue();
+        let queue = queue.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(queue.len(), 1, "消费器条目落入共享队列");
+        assert_eq!(queue.peek().unwrap().text, "任务 t-a 已完成，退出码 0");
     }
 
     /// ② 收口落库：write_back_cache_stats 经 LocalDb 写回 runs 表 v5 列

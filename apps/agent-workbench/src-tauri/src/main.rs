@@ -36,6 +36,7 @@ mod core_error;
 mod core_event_bridge;
 mod core_query_commands;
 mod core_run_commands;
+mod task_event_consumer;
 mod dev_mcp;
 mod engine;
 mod fs_commands;
