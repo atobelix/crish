@@ -10,9 +10,10 @@
  *   store，随下一轮轮询快照全量覆盖——数据面拉取回读快照时，任务不存在或
  *   suspicious !== true 即清除置标（双源对照一致性语义）；
  * - task-output / task-heartbeat 仅计数/日志水位（不触发拉取，防高频噪声）；
- * - timer/cron 展示面本轮未接线：handler 保留「最近一次事件轻量记录 + 日志」
- *   可观测空实现并标注待接线面（不冒充已实现），同时发刷新信号驱动
- *   workflow 运行历史随之更新（只发信号，不维护增量状态）。
+ * - timer/cron 展示面（L2）：timer-fired / timer-cancelled / cron-fired 三事件
+ *   维护运行期轻量摘要（活跃定时器集合 / cron 累计触发 / 最近事件），经
+ *   订阅面（subscribeTimerCron）供 TimerCronSection 可观测展示——事件视角
+ *   摘要，不冒充真实注册表状态；同时发刷新信号驱动列表拉取。
  *
  * 事件变体不含 runId 字段（信封扁平化注入），宽容路径经 raw 顶层读取兜底。
  */
@@ -50,6 +51,105 @@ const suspiciousMarks = new Map<string, number>();
 
 /** 刷新节流记录：key = `${type}:${id}` → 最近一次触发拉取的时间戳 */
 const refreshThrottle = new Map<string, number>();
+
+// ── timer/cron 展示面摘要（L2）────────────────────────────────
+
+/** 摘要事件视图（最近事件列表条目；cron 触发附迭代序号） */
+export interface TimerCronEventView {
+  type: 'timer-fired' | 'timer-cancelled' | 'cron-fired';
+  /** 实体 id（timerId / cronId） */
+  id: string;
+  /** 到达时间戳（毫秒） */
+  atMs: number;
+  /** cron 迭代序号（cron-fired 载荷；缺失时为空） */
+  iteration?: number;
+}
+
+/**
+ * timer/cron 运行期摘要（事件视角，供 TimerCronSection 展示）：
+ * - activeTimers：timer-fired 添加、timer-cancelled 移除（运行期内近似活跃）；
+ * - 计数与最近触发时间：只统计数据面事件到达，不冒充注册表真实状态；
+ * - recent：最近 timer/cron 事件（有界环形，倒序）。
+ */
+export interface TimerCronSummary {
+  /** 活跃定时器数（事件视角近似） */
+  activeTimers: number;
+  /** timer-fired 累计次数 */
+  timerFiredTotal: number;
+  /** cron-fired 累计次数 */
+  cronFiredTotal: number;
+  /** 最近 timer-fired 时间戳（无则 null） */
+  lastTimerFiredAtMs: number | null;
+  /** 最近 cron-fired 时间戳（无则 null） */
+  lastCronFiredAtMs: number | null;
+  /** 最近 timer/cron 事件（≤ 3 条，按到达时间倒序） */
+  recent: TimerCronEventView[];
+}
+
+/** 最近事件列表容量：超出后淘汰最早一条（运行期内有界） */
+const TIMER_CRON_RECENT_CAP = 3;
+
+/** 活跃定时器集合（事件视角：timer-fired 添加 / timer-cancelled 移除） */
+const activeTimerIds = new Set<string>();
+let timerFiredTotal = 0;
+let cronFiredTotal = 0;
+let lastTimerFiredAtMs: number | null = null;
+let lastCronFiredAtMs: number | null = null;
+/** 最近事件环形缓冲（新事件插头部，超限截断） */
+const timerCronRecent: TimerCronEventView[] = [];
+
+/** 摘要快照缓存（useSyncExternalStore 需要引用稳定，变化时重建） */
+let _timerCronSummary: TimerCronSummary | null = null;
+/** 摘要订阅者（TimerCronSection 展示订阅面） */
+const timerCronListeners = new Set<() => void>();
+
+function notifyTimerCron(): void {
+  _timerCronSummary = null;
+  for (const cb of timerCronListeners) {
+    try {
+      cb();
+    } catch (err) {
+      logInternalError('timer-cron-summary-listener', err);
+    }
+  }
+}
+
+/** 摘要快照（惰性重建；订阅面 getSnapshot 用） */
+function buildTimerCronSummary(): TimerCronSummary {
+  if (_timerCronSummary !== null) return _timerCronSummary;
+  _timerCronSummary = {
+    activeTimers: activeTimerIds.size,
+    timerFiredTotal,
+    cronFiredTotal,
+    lastTimerFiredAtMs,
+    lastCronFiredAtMs,
+    recent: [...timerCronRecent],
+  };
+  return _timerCronSummary;
+}
+
+/** timer/cron 事件入摘要（共享：记录 + 环形缓冲 + 通知） */
+function recordTimerCron(view: TimerCronEventView): void {
+  timerCronRecent.unshift(view);
+  if (timerCronRecent.length > TIMER_CRON_RECENT_CAP) timerCronRecent.pop();
+  notifyTimerCron();
+}
+
+/**
+ * timer/cron 摘要订阅（L2 展示面接线点）：组件订阅事件驱动更新，
+ * 返回退订函数（组件卸载即退订，防泄漏）。
+ */
+export function subscribeTimerCron(cb: () => void): () => void {
+  timerCronListeners.add(cb);
+  return () => {
+    timerCronListeners.delete(cb);
+  };
+}
+
+/** timer/cron 摘要快照（展示数据源；useSyncExternalStore getSnapshot） */
+export function getTimerCronSummary(): TimerCronSummary {
+  return buildTimerCronSummary();
+}
 
 /** 刷新信号订阅者（轮询层接入点：收到信号即提前拉取本域快照） */
 const refreshListeners = new Set<() => void>();
@@ -230,12 +330,12 @@ export function onTaskKilled(
   requestRefresh('task-killed', e.taskId);
 }
 
-// ── 定时器域两事件 + cron 域一事件（可观测空实现，待接线面）──────
+// ── 定时器域两事件 + cron 域一事件（L2 展示面接线）──────────────
 
 /**
- * 定时器触发：展示面未接线——「最近一次事件轻量记录 + 日志」可观测空实现
- * （标注待接线面，不冒充已实现）；同时发刷新信号驱动 workflow 运行历史
- * 拉取（AI 实际唤醒走 steering 面，02-CF §4.7 分工）。
+ * 定时器触发：数据面展示接线——活跃集合添加 + 累计计数 + 最近事件摘要
+ * （TimerCronSection 数据源），并发刷新信号驱动列表拉取
+ * （AI 实际唤醒走 steering 面，02-CF §4.7 分工）。
  */
 export function onTimerFired(
   _env: HandlerEnv,
@@ -244,14 +344,18 @@ export function onTimerFired(
   const e = envelope.event;
   const runId = resolveRunId(envelope);
   recordEvent('timer-fired', e.timerId, runId);
-  logger.info(`timer-fired（数据面，展示面待接线）：timerId=${e.timerId}`, {
+  activeTimerIds.add(e.timerId);
+  timerFiredTotal += 1;
+  lastTimerFiredAtMs = nowMs();
+  recordTimerCron({ type: 'timer-fired', id: e.timerId, atMs: nowMs() });
+  logger.info(`timer-fired（数据面）：timerId=${e.timerId}`, {
     module: 'data-plane',
     ...(runId ? { runId } : {}),
   });
   requestRefresh('timer-fired', e.timerId);
 }
 
-/** 定时器取消：可观测空实现（同 onTimerFired 语义） */
+/** 定时器取消：活跃集合移除 + 最近事件摘要（同 onTimerFired 语义） */
 export function onTimerCancelled(
   _env: HandlerEnv,
   envelope: EngineEnvelope<'timer-cancelled'>
@@ -259,14 +363,16 @@ export function onTimerCancelled(
   const e = envelope.event;
   const runId = resolveRunId(envelope);
   recordEvent('timer-cancelled', e.timerId, runId);
-  logger.info(`timer-cancelled（数据面，展示面待接线）：timerId=${e.timerId}`, {
+  activeTimerIds.delete(e.timerId);
+  recordTimerCron({ type: 'timer-cancelled', id: e.timerId, atMs: nowMs() });
+  logger.info(`timer-cancelled（数据面）：timerId=${e.timerId}`, {
     module: 'data-plane',
     ...(runId ? { runId } : {}),
   });
   requestRefresh('timer-cancelled', e.timerId);
 }
 
-/** Cron 触发（F9 T-CF-08）：可观测空实现 + 刷新信号（可驱动 workflowRuns 刷新） */
+/** Cron 触发（F9 T-CF-08）：累计计数 + 最近事件摘要 + 刷新信号 */
 export function onCronFired(
   _env: HandlerEnv,
   envelope: EngineEnvelope<'cron-fired'>
@@ -274,7 +380,15 @@ export function onCronFired(
   const e = envelope.event;
   const runId = resolveRunId(envelope);
   recordEvent('cron-fired', e.cronId, runId);
-  logger.info(`cron-fired（数据面，展示面待接线）：cronId=${e.cronId}`, {
+  cronFiredTotal += 1;
+  lastCronFiredAtMs = nowMs();
+  recordTimerCron({
+    type: 'cron-fired',
+    id: e.cronId,
+    atMs: nowMs(),
+    iteration: typeof e.iteration === 'number' ? e.iteration : undefined,
+  });
+  logger.info(`cron-fired（数据面）：cronId=${e.cronId}`, {
     module: 'data-plane',
     ...(runId ? { runId } : {}),
   });
@@ -317,13 +431,21 @@ export function setDataPlanePullForTests(fn: DataPlanePull | null): void {
   pullImpl = fn ?? defaultDataPlanePull;
 }
 
-/** 测试复位：清空记录/置标/节流/订阅者，恢复默认拉取 */
+/** 测试复位：清空记录/置标/节流/订阅者/timer-cron 摘要，恢复默认拉取 */
 export function clearDataPlaneStateForTests(): void {
   recentEvents.clear();
   suspiciousMarks.clear();
   refreshThrottle.clear();
   refreshListeners.clear();
   pullImpl = defaultDataPlanePull;
+  activeTimerIds.clear();
+  timerFiredTotal = 0;
+  cronFiredTotal = 0;
+  lastTimerFiredAtMs = null;
+  lastCronFiredAtMs = null;
+  timerCronRecent.length = 0;
+  _timerCronSummary = null;
+  timerCronListeners.clear();
 }
 
 export { resolveRunId };

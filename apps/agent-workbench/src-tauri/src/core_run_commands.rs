@@ -5203,7 +5203,7 @@ mod tests {
             .expect("force_cancel");
 
         // 普通任务进入终态（两阶段 kill），守护任务存活
-        wait_task_terminal(&registry, &normal.task_id, Duration::from_secs(10)).await;
+        wait_task_terminal(&registry, &normal.task_id, Duration::from_secs(30)).await;
         let normal_status = registry.status(&normal.task_id).await.expect("status");
         assert_eq!(
             normal_status.status,
@@ -5251,7 +5251,7 @@ mod tests {
             .adopt(adopt_request(child, "status-finished", false))
             .await
             .expect("adopt");
-        wait_task_terminal(&registry, &finished.task_id, Duration::from_secs(8)).await;
+        wait_task_terminal(&registry, &finished.task_id, Duration::from_secs(30)).await;
 
         let summary = state.background_tasks_summary().await;
         assert_eq!(summary.active_count, 2, "活跃任务数 = 守护 + 普通");
@@ -5935,8 +5935,8 @@ mod tests {
         .await
         .expect("主 agent run 发起成功");
         // 等待全部 run（主 agent + 两个子代理）收口；子代理行进入终态
-        wait_all_runs_terminal(&state, Duration::from_secs(20)).await;
-        wait_agent_rows_terminal(&db, "sess-main", 2, Duration::from_secs(10)).await;
+        wait_all_runs_terminal(&state, Duration::from_secs(30)).await;
+        wait_agent_rows_terminal(&db, "sess-main", 2, Duration::from_secs(20)).await;
 
         // 1. 工具不再返回 common.unsupported：两个子代理行落库 + 结果信封
         let rows = db.load_session_agents("sess-main").expect("读行");
@@ -6047,9 +6047,9 @@ mod tests {
         )
         .await
         .expect("主 agent run 发起成功");
-        resolve_all_pending_approvals(&state, Duration::from_secs(10)).await;
-        wait_all_runs_terminal(&state, Duration::from_secs(20)).await;
-        wait_agent_rows_terminal(&db, "sess-main", 1, Duration::from_secs(10)).await;
+        resolve_all_pending_approvals(&state, Duration::from_secs(20)).await;
+        wait_all_runs_terminal(&state, Duration::from_secs(30)).await;
+        wait_agent_rows_terminal(&db, "sess-main", 1, Duration::from_secs(20)).await;
 
         // 端到端基线：子代理 run 真实启动并收口（恰好一行子代理——嵌套
         // 未发生）
@@ -6150,9 +6150,9 @@ mod tests {
         .expect("主 agent run 发起成功");
         // analysis 子代理的 write_file 尝试触发审批（ask 语义）→ 主 agent
         // 裁决放行 → 工具执行（unknown tool，is_error）→ 收口
-        resolve_all_pending_approvals(&state, Duration::from_secs(10)).await;
-        wait_all_runs_terminal(&state, Duration::from_secs(20)).await;
-        wait_agent_rows_terminal(&db, "sess-main", 1, Duration::from_secs(10)).await;
+        resolve_all_pending_approvals(&state, Duration::from_secs(20)).await;
+        wait_all_runs_terminal(&state, Duration::from_secs(30)).await;
+        wait_agent_rows_terminal(&db, "sess-main", 1, Duration::from_secs(20)).await;
 
         // analysis 默认集 = 只读白名单：write_file 调用必须 is_error
         // （工具不在注册表，unknown tool 分类）——端到端工具面证据
@@ -6236,9 +6236,9 @@ mod tests {
         )
         .await
         .expect("主 agent run 发起成功");
-        resolve_all_pending_approvals(&state, Duration::from_secs(15)).await;
-        wait_all_runs_terminal(&state, Duration::from_secs(20)).await;
-        wait_agent_rows_terminal(&db, "sess-main", 1, Duration::from_secs(10)).await;
+        resolve_all_pending_approvals(&state, Duration::from_secs(20)).await;
+        wait_all_runs_terminal(&state, Duration::from_secs(30)).await;
+        wait_agent_rows_terminal(&db, "sess-main", 1, Duration::from_secs(20)).await;
 
         // 第二阶段：直接经 spawner 发起子代理 run 2（implementation）——
         // 确定性触发审批（requester_run_id = 子代理 run 2）
@@ -6334,8 +6334,8 @@ mod tests {
             requester_checked,
             "审批请求载荷必须携带 requester_run_id = 子代理 run id"
         );
-        wait_all_runs_terminal(&state, Duration::from_secs(20)).await;
-        wait_agent_rows_terminal(&db, "sess-main", 2, Duration::from_secs(10)).await;
+        wait_all_runs_terminal(&state, Duration::from_secs(30)).await;
+        wait_agent_rows_terminal(&db, "sess-main", 2, Duration::from_secs(20)).await;
     }
     /// 验收 5：kill_all 引擎侧实现（T-D-09/T-D-13 ForceCancelSink 接线）——
     /// 按 subagent_run_id 定位活动 run 的 ControlBus 投递 L3 强停 + 行归一
@@ -6674,9 +6674,9 @@ mod tests {
         .await
         .expect("force_cancel 应成功");
         // 真实 loop 在下一安全点收场：agent-end reason == aborted
-        let end_reason = wait_run_end_reason(&active, Duration::from_secs(10)).await;
+        let end_reason = wait_run_end_reason(&active, Duration::from_secs(30)).await;
         assert_eq!(end_reason, "aborted", "L3 强停后 run 必须以 aborted 终态");
-        let agent_reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(5)).await;
+        let agent_reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
         assert_eq!(
             agent_reason, "aborted",
             "L3 强停后 loop 的 agent-end 收场 reason 必须为 aborted"
@@ -6722,7 +6722,7 @@ mod tests {
         )
         .await
         .expect("cooperative_stop 应成功");
-        let agent_reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(10)).await;
+        let agent_reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
         assert_eq!(
             agent_reason, "stopped",
             "L2 协作停止后 loop 必须以 stopped 收场（D1 独立 reason）"
@@ -6806,7 +6806,7 @@ mod tests {
             .get("run-l1-e2e")
             .cloned()
             .expect("run 已注册");
-        let end_reason = wait_run_end_reason(&active, Duration::from_secs(10)).await;
+        let end_reason = wait_run_end_reason(&active, Duration::from_secs(30)).await;
         assert_eq!(end_reason, "stop", "L1 注入不改变收场（正常 stop）");
     }
 
@@ -6844,7 +6844,7 @@ mod tests {
             state.request_force_cancel("run-kill-e2e", "test-kill-all"),
             "kill_all 投递必须命中活动 run"
         );
-        let agent_reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(10)).await;
+        let agent_reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
         assert_eq!(
             agent_reason, "aborted",
             "kill_all 后目标 run 必须以 aborted 收场"
@@ -7076,7 +7076,7 @@ mod tests {
             .get("run-esc-suppress")
             .cloned()
             .expect("run 已注册");
-        let _ = wait_run_end_reason(&active, Duration::from_secs(15)).await;
+        let _ = wait_run_end_reason(&active, Duration::from_secs(30)).await;
         let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
         while !active.driver_finished() {
             assert!(
@@ -7137,7 +7137,7 @@ mod tests {
         .await
         .expect("run 发起成功");
         // 未声明写入 → undeclared-write 审计（收口 flush 兜底发射）
-        wait_for_audit_operation(&emitter, "undeclared-write", Duration::from_secs(15)).await;
+        wait_for_audit_operation(&emitter, "undeclared-write", Duration::from_secs(30)).await;
         // 审计载荷字段级断言（operation / decision=denied / targets）
         let payloads = emitter.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let reported = payloads.iter().any(|p| {
@@ -7198,7 +7198,7 @@ mod tests {
         .await
         .expect("run 发起成功");
         // 未声明兄弟路径上报（同一 run 内判定器生效）
-        wait_for_audit_operation(&emitter, "undeclared-write", Duration::from_secs(15)).await;
+        wait_for_audit_operation(&emitter, "undeclared-write", Duration::from_secs(30)).await;
         // 执行面注入的注册表与判定器同源：声明路径不产生独立审计条目
         let payloads = emitter.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let any_escape_txt = payloads.iter().any(|p| {
@@ -7314,7 +7314,7 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
         // security-audit command-exec 记录（started + completed 两记录直发）
-        wait_for_audit_operation(&emitter, "command-exec", Duration::from_secs(15)).await;
+        wait_for_audit_operation(&emitter, "command-exec", Duration::from_secs(30)).await;
         let payloads = emitter.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let audits: Vec<&String> = payloads
             .iter()
@@ -7735,7 +7735,7 @@ mod tests {
 
         // 等待 run 收口（收口处 await 审计落库 worker 排空；此处轮询
         // 兜底驱动任务与测试主线的微小竞态窗口）
-        wait_all_runs_terminal(&state, Duration::from_secs(20)).await;
+        wait_all_runs_terminal(&state, Duration::from_secs(30)).await;
         let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
         let (audit_sequence, audit_payload) = loop {
             let events = db.query_events("sess-main", 0, Some(200)).expect("事件查询");

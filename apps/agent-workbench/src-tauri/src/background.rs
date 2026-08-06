@@ -2789,6 +2789,11 @@ mod tests {
     }
 
     /// 轮询至终态（窗口内未到则 panic）。
+    ///
+    /// 窗口取值纪律（负载型 flaky 治理）：本测试二进制每个用例都可能真实
+    /// spawn PowerShell（启动 1-10s+，全量并行时系统负载放大数倍）——窗口
+    /// 一律取 30s 以上，宁可失败时多等，不可因负载误报；轮询本身无多余
+    /// 等待成本（终态早到早返回）。
     async fn wait_for_terminal(
         registry: &BackgroundTaskRegistry,
         task_id: &str,
@@ -2809,6 +2814,7 @@ mod tests {
     }
 
     /// 轮询至 tail 非空（输出命令断言用）。
+    /// 窗口纪律同 wait_for_terminal：30s 起步（PowerShell 冷启动负载放大）。
     async fn wait_until_tail_non_empty(
         registry: &BackgroundTaskRegistry,
         task_id: &str,
@@ -2829,6 +2835,7 @@ mod tests {
     }
 
     /// 轮询至 prompt 就位（提示检测断言用；窗口内未到则 panic）。
+    /// 窗口纪律同 wait_for_terminal：30s 起步（PowerShell 冷启动负载放大）。
     async fn wait_for_prompt(
         registry: &BackgroundTaskRegistry,
         task_id: &str,
@@ -2914,7 +2921,7 @@ mod tests {
             .adopt(adopt_request(child, "sync", Path::new("."), false, None))
             .await
             .expect("adopt");
-        let status = wait_for_terminal(&registry, &task_ref.task_id, Duration::from_secs(5)).await;
+        let status = wait_for_terminal(&registry, &task_ref.task_id, Duration::from_secs(30)).await;
         assert_eq!(status.status, TaskState::Completed);
         assert_eq!(status.exit_code, Some(0));
         // 同步命令不应停留在 Running
@@ -2938,7 +2945,7 @@ mod tests {
             .adopt(adopt_request(child, "ok-cmd", &cwd, false, None))
             .await
             .expect("adopt ok");
-        let s1 = wait_for_terminal(&registry, &r1.task_id, Duration::from_secs(5)).await;
+        let s1 = wait_for_terminal(&registry, &r1.task_id, Duration::from_secs(30)).await;
         assert_eq!(s1.status, TaskState::Completed);
         assert_eq!(s1.exit_code, Some(0));
         // 终态固化：list 快照含 finishedAtMs，且不早于 startedAtMs
@@ -2956,7 +2963,7 @@ mod tests {
             .adopt(adopt_request(child, "fail-cmd", &cwd, false, None))
             .await
             .expect("adopt fail");
-        let s2 = wait_for_terminal(&registry, &r2.task_id, Duration::from_secs(5)).await;
+        let s2 = wait_for_terminal(&registry, &r2.task_id, Duration::from_secs(30)).await;
         assert_eq!(s2.status, TaskState::Failed);
         assert_eq!(s2.exit_code, Some(7));
         let all = registry.list(true).await.expect("list");
@@ -3090,14 +3097,17 @@ mod tests {
     #[tokio::test]
     async fn workbench_get_background_task_output_contract() {
         let registry = test_registry();
-        let child = spawn_test_child(OUTPUT_COMMAND);
+        // 用 20s 持续输出命令（而非 ~4s 的 OUTPUT_COMMAND）：增长断言要求两次
+        // 读取都落在任务存活期——负载下任务可能早于第二次读取自然完成
+        // （line_count 停止增长）而误报
+        let child = spawn_test_child(LOG_KILL_COMMAND);
         let pid = child.id().expect("spawned pid");
         let r = registry
             .adopt(adopt_request(child, "output-contract", Path::new("."), false, None))
             .await
             .expect("adopt");
 
-        let first = wait_until_tail_non_empty(&registry, &r.task_id, Duration::from_secs(5)).await;
+        let first = wait_until_tail_non_empty(&registry, &r.task_id, Duration::from_secs(60)).await;
         assert!(!first.tail.is_empty(), "运行中任务 tail 必须非空");
         let first_lines = first.line_count;
         assert!(first_lines > 0, "行计数应 > 0");
@@ -3158,7 +3168,7 @@ mod tests {
             .adopt(adopt_request(child, "cancel-finished", &cwd, false, None))
             .await
             .expect("adopt");
-        let _ = wait_for_terminal(&registry, &r2.task_id, Duration::from_secs(5)).await;
+        let _ = wait_for_terminal(&registry, &r2.task_id, Duration::from_secs(30)).await;
         let result = registry.kill(&r2.task_id).await.expect("kill terminal");
         match result {
             KillResult::AlreadyExited { task_id, exit_code } => {
@@ -3197,7 +3207,7 @@ mod tests {
         build_send_input_response(&registry, &r1.task_id, "y", true)
             .await
             .expect("send_input 注入成功");
-        let status = wait_for_terminal(&registry, &r1.task_id, Duration::from_secs(10)).await;
+        let status = wait_for_terminal(&registry, &r1.task_id, Duration::from_secs(30)).await;
         assert_eq!(status.status, TaskState::Completed);
         assert!(
             status.tail.contains("got=y"),
@@ -3234,7 +3244,7 @@ mod tests {
             .adopt(adopt_request(child, "log-tail", Path::new("."), false, None))
             .await
             .expect("adopt");
-        let status = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(30)).await;
+        let status = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(60)).await;
         assert_eq!(status.status, TaskState::Completed);
 
         let slice = registry
@@ -3264,7 +3274,7 @@ mod tests {
             .adopt(adopt_request(child, "log-range", Path::new("."), false, None))
             .await
             .expect("adopt");
-        let _ = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(30)).await;
+        let _ = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(60)).await;
 
         let slice = registry
             .read_log(&r.task_id, Some(500), 100)
@@ -3301,9 +3311,9 @@ mod tests {
             .await
             .expect("adopt");
         // 等有输出后外部树杀（进程被杀 → 管道 EOF → writer 收尾到终态）
-        let _ = wait_until_tail_non_empty(&registry, &r.task_id, Duration::from_secs(10)).await;
+        let _ = wait_until_tail_non_empty(&registry, &r.task_id, Duration::from_secs(60)).await;
         let _ = crate::process::terminate_process_tree(pid);
-        let status = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(10)).await;
+        let status = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(30)).await;
         assert!(
             BackgroundTaskRegistry::is_terminal(status.status),
             "树杀后应收敛到终态，实际 {:?}",
@@ -3313,8 +3323,11 @@ mod tests {
         // 日志文件仍存在，read_log 可读且行数与文件一致
         let log_path = PathBuf::from(status.log_path);
         assert!(log_path.exists(), "任务终止不得删除 .log");
+        // 读取上限取 250 行（LOG_KILL_COMMAND 上限 200 行）：负载下「等首行 →
+        // 树杀」间隔可能被放大，杀前累积可能超 100 行——上限低于总行数时
+        // 尾部读取返回不全（start_line≠1），曾为负载型 flaky
         let slice = registry
-            .read_log(&r.task_id, None, 100)
+            .read_log(&r.task_id, None, 250)
             .await
             .expect("read_log");
         assert!(slice.total_lines > 0, "被杀前已累积的输出应可读");
@@ -3336,7 +3349,7 @@ mod tests {
             .adopt(adopt_request(child, "log-meta", Path::new("."), false, None))
             .await
             .expect("adopt");
-        let status = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(30)).await;
+        let status = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(60)).await;
         assert_eq!(status.status, TaskState::Completed);
 
         let log_path = PathBuf::from(status.log_path);
@@ -3443,7 +3456,7 @@ mod tests {
             .await
             .expect("send_input 成功");
 
-        let status = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(15)).await;
+        let status = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(30)).await;
         assert_eq!(status.status, TaskState::Completed, "收到输入后应正常完成");
         let slice = registry
             .read_log(&r.task_id, None, 10)
@@ -3464,7 +3477,7 @@ mod tests {
             .await
             .expect("adopt");
 
-        let prompt = wait_for_prompt(&registry, &r.task_id, Duration::from_secs(10)).await;
+        let prompt = wait_for_prompt(&registry, &r.task_id, Duration::from_secs(60)).await;
         assert_eq!(prompt, "Continue? [Y/n]", "prompt 内容为命中行");
 
         // meta 同步落盘
@@ -3473,7 +3486,7 @@ mod tests {
         let meta = read_meta(&meta_path).expect("meta 存在且可解析");
         assert_eq!(meta.prompt.as_deref(), Some("Continue? [Y/n]"), "meta 含 prompt");
 
-        let _ = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(5)).await;
+        let _ = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(30)).await;
     }
 
     /// 验收：进程退出后 send_input 返回 stdin_closed 风格错误，且后续调用持续
@@ -3486,7 +3499,7 @@ mod tests {
             .adopt(adopt_request(child, "stdin-closed", Path::new("."), false, None))
             .await
             .expect("adopt");
-        let _ = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(5)).await;
+        let _ = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(30)).await;
 
         let err = registry
             .send_input(&r.task_id, "x", true)
@@ -3541,7 +3554,8 @@ mod tests {
             .await
             .expect("send_input");
 
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        // 轮询探测输出（30s 窗口：PowerShell 冷启动在并行负载下可能超 10s）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
         let tail = loop {
             let status = registry.status(&r.task_id).await.expect("status");
             if status.tail.contains("first=") {
@@ -3556,7 +3570,7 @@ mod tests {
         assert!(tail.contains("first=121"), "应收到单个 y 字节（121）：{tail}");
         assert!(tail.contains("extra=0"), "append_newline=false 不得追加换行：{tail}");
 
-        let _ = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(5)).await;
+        let _ = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(30)).await;
         let _ = std::fs::remove_file(&script_path);
     }
 
@@ -3693,7 +3707,7 @@ mod tests {
             .adopt(adopt_request(child, "kill-exited-0", &cwd, false, None))
             .await
             .expect("adopt");
-        let _ = wait_for_terminal(&registry, &r1.task_id, Duration::from_secs(5)).await;
+        let _ = wait_for_terminal(&registry, &r1.task_id, Duration::from_secs(30)).await;
         match registry.kill(&r1.task_id).await.expect("kill") {
             KillResult::AlreadyExited { task_id, exit_code } => {
                 assert_eq!(task_id, r1.task_id);
@@ -3708,7 +3722,7 @@ mod tests {
             .adopt(adopt_request(child, "kill-exited-7", &cwd, false, None))
             .await
             .expect("adopt");
-        let _ = wait_for_terminal(&registry, &r2.task_id, Duration::from_secs(5)).await;
+        let _ = wait_for_terminal(&registry, &r2.task_id, Duration::from_secs(30)).await;
         match registry.kill(&r2.task_id).await.expect("kill") {
             KillResult::AlreadyExited { task_id, exit_code } => {
                 assert_eq!(task_id, r2.task_id);
@@ -3729,7 +3743,7 @@ mod tests {
             .await
             .expect("adopt");
         // 等有输出后 kill（两阶段终止路径）
-        let _ = wait_until_tail_non_empty(&registry, &r.task_id, Duration::from_secs(10)).await;
+        let _ = wait_until_tail_non_empty(&registry, &r.task_id, Duration::from_secs(60)).await;
         let result = registry.kill(&r.task_id).await.expect("kill");
         assert!(
             matches!(result, KillResult::Killed { .. }),
@@ -3760,7 +3774,7 @@ mod tests {
             "crish-bg-kill-archived-{}-{seq}",
             std::process::id()
         ));
-        let registry = BackgroundTaskRegistry::with_log_root(root, Duration::from_secs(2));
+        let registry = BackgroundTaskRegistry::with_log_root(root, Duration::from_secs(5));
         let command = if cfg!(windows) {
             "Write-Output 'archived-task'; exit 0"
         } else {
@@ -3771,11 +3785,12 @@ mod tests {
             .adopt(adopt_request(child, "kill-archived", Path::new("."), false, None))
             .await
             .expect("adopt");
-        let _ = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(5)).await;
-        // 等 2s 保留期过 → 归档清扫
-        tokio::time::sleep(Duration::from_millis(2300)).await;
+        let _ = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(30)).await;
+        // 等 5s 保留期过 → 归档清扫（睡眠取 5.6s，负载下留 600ms 余量；
+        // 窗口只须大于保留期，「等更久」方向安全）
+        tokio::time::sleep(Duration::from_millis(5600)).await;
         let archived = registry.archive_expired();
-        assert_eq!(archived, 1, "2s 保留到期应归档 1 条");
+        assert_eq!(archived, 1, "5s 保留到期应归档 1 条");
 
         let err = registry.kill(&r.task_id).await.expect_err("kill archived");
         assert_eq!(err.code(), codes::TOOL_NOT_FOUND);
@@ -3799,7 +3814,7 @@ mod tests {
             "crish-bg-retention-{}-{seq}",
             std::process::id()
         ));
-        let registry = BackgroundTaskRegistry::with_log_root(root, Duration::from_secs(2));
+        let registry = BackgroundTaskRegistry::with_log_root(root, Duration::from_secs(5));
         let command = if cfg!(windows) {
             "Write-Output 'retained-task'; exit 0"
         } else {
@@ -3810,20 +3825,22 @@ mod tests {
             .adopt(adopt_request(child, "retention-task", Path::new("."), false, None))
             .await
             .expect("adopt");
-        let status = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(5)).await;
+        let status = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(30)).await;
         let log_path = PathBuf::from(status.log_path);
         let meta_path = log_path.with_extension("meta.json");
         assert!(log_path.exists(), "终态任务日志存在（任务有输出）");
 
-        // 保留期内（未过期）：任务仍可查询（list(true) 含 / status 可答）
+        // 保留期内（未过期）：任务仍可查询（list(true) 含 / status 可答）。
+        // 保留期 5s：给「终态翻转 → 首次 list」之间的调度停顿留出余量
+        // （list 带惰性归档清扫，停顿超保留期会误归档而误报）
         let all = registry.list(true).await.expect("list");
         assert!(
             all.iter().any(|i| i.task_id == r.task_id),
             "保留期内终态任务仍应可查询（终态保留语义）"
         );
 
-        // 2s 保留期过后：归档清扫
-        tokio::time::sleep(Duration::from_millis(2300)).await;
+        // 5s 保留期过后：归档清扫（睡眠 5.6s，留 600ms 余量）
+        tokio::time::sleep(Duration::from_millis(5600)).await;
         let archived = registry.archive_expired();
         assert_eq!(archived, 1, "到期终态条目应被归档");
 
@@ -3874,7 +3891,7 @@ mod tests {
             .adopt(adopt_request(child, "run-finished", Path::new("."), false, None))
             .await
             .expect("adopt");
-        let _ = wait_for_terminal(&registry, &r2.task_id, Duration::from_secs(5)).await;
+        let _ = wait_for_terminal(&registry, &r2.task_id, Duration::from_secs(30)).await;
 
         // 模拟 run 终态收口：registry 无 run 级清理入口——「什么都不做」即契约
         let all = registry.list(true).await.expect("list");
@@ -3958,12 +3975,13 @@ mod tests {
                 .await
                 .expect("adopt");
             // 首条等待输出落盘（被淘汰条目的 .log 保留断言前提；等待期间
-            // 条目数 1 ≤ 3，不会触发淘汰）
+            // 条目数 1 ≤ 3，不会触发淘汰）。窗口 60s：PowerShell 冷启动在
+            // 并行负载下可能数十秒（曾为负载型 flaky 现场）
             if i == 0 {
                 let _ = wait_until_tail_non_empty(
                     &registry_a,
                     &r.task_id,
-                    Duration::from_secs(5),
+                    Duration::from_secs(60),
                 )
                 .await;
             }
@@ -3977,18 +3995,32 @@ mod tests {
             "最旧条目 cap-run-0 应被 FIFO 淘汰"
         );
         let pid0 = pid_first.expect("首条 pid");
-        assert!(
-            !pid_is_alive(pid0),
-            "运行中淘汰应先终止进程（pid={pid0}）"
-        );
+        // taskkill 返回后进程可能尚在消亡中：轮询等待退出（3s 窗口）
+        let kill_deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+        loop {
+            if !pid_is_alive(pid0) {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < kill_deadline,
+                "运行中淘汰应先终止进程（pid={pid0}）"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
         // 被淘汰条目 .log 保留（OUTPUT_COMMAND 首行输出已落盘）
         let log0 = root_a.join(format!("{}.log", ids[0]));
         assert!(log0.exists(), "容量淘汰不得删除 .log");
-        // 剩余条目仍可查询（未被误淘汰；OUTPUT_COMMAND 约 4s 自然结束，断言
-        // 在此前完成，状态仍为 Running）
+        // 剩余条目仍可查询（未被误淘汰）：断言对象是「条目未被淘汰」而非
+        // 运行状态——负载下后三条可能已自然完成（OUTPUT_COMMAND 约 4s），
+        // 自然完成的条目同样不应被误淘汰，仍可 status 查询
         for id in &ids[1..] {
             let s = registry_a.status(id).await.expect("status");
-            assert_eq!(s.status, TaskState::Running, "{id} 不应被淘汰");
+            assert_eq!(s.task_id, *id, "{id} 不应被淘汰");
+            assert!(
+                BackgroundTaskRegistry::is_terminal(s.status) || s.status == TaskState::Running,
+                "{id} 状态应合法（Running 或自然终态）：{:?}",
+                s.status
+            );
         }
         // 清理：kill 剩余 3 条（可能已自然完成 → AlreadyExited，无妨）
         for id in &ids[1..] {
@@ -4023,7 +4055,7 @@ mod tests {
                 .await
                 .expect("adopt");
             // 等终态后再 adopt 下一条（保证淘汰对象为终态条目）
-            let _ = wait_for_terminal(&registry_b, &r.task_id, Duration::from_secs(5)).await;
+            let _ = wait_for_terminal(&registry_b, &r.task_id, Duration::from_secs(30)).await;
             ids_b.push(r.task_id);
         }
         let all = registry_b.list(true).await.expect("list");
@@ -4221,7 +4253,11 @@ mod tests {
     #[tokio::test]
     async fn resource_samples_persisted() {
         let (registry, _queue) = resource_test_registry();
-        let child = spawn_test_child(OUTPUT_COMMAND);
+        // 用 20s 持续输出命令（而非 ~4s 的 OUTPUT_COMMAND）：采样循环在任务
+        // 终态即停止（见 spawn_resource_monitor_loop）——「条数随时间增长」
+        // 断言要求第二次读取时任务仍存活，短命令在负载下可能早于第二次
+        // 读取自然完成（计数停涨）而误报
+        let child = spawn_test_child(LOG_KILL_COMMAND);
         let r = registry
             .adopt(adopt_request_monitored(child, "resource-persist", Path::new(".")))
             .await
@@ -4450,9 +4486,9 @@ mod tests {
         };
         assert!(first.contains(&task_id), "首次通知含任务 id：{first}");
 
-        // 第二次通知（尖峰判 Healthy 重置防抖 → 再静默再次通知；窗口 15s——
-        // 并行负载下采样拍可能漂移，尖峰拍到达时间随之后移，放宽窗口防偶发）
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        // 第二次通知（尖峰判 Healthy 重置防抖 → 再静默再次通知；窗口 30s——
+        // 并行负载下采样拍可能大幅漂移，尖峰拍到达时间随之后移，放宽窗口防偶发）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
         let second = loop {
             if let Some(text) = queue.lock().unwrap_or_else(|p| p.into_inner()).pop_front() {
                 break text;
@@ -4492,7 +4528,7 @@ mod tests {
         let task_id = r.task_id.clone();
 
         // 等待自然完成（OUTPUT_COMMAND ~4s 持续输出；窗口 15s）
-        let _ = wait_for_terminal(&registry, &task_id, Duration::from_secs(15)).await;
+        let _ = wait_for_terminal(&registry, &task_id, Duration::from_secs(30)).await;
         // 终态后采样循环已退出（无后续判定），队列应始终为空
         tokio::time::sleep(Duration::from_millis(1000)).await;
         assert!(
@@ -4518,7 +4554,7 @@ mod tests {
             .expect("adopt");
         let task_id = r.task_id.clone();
 
-        let status = wait_for_terminal(&registry, &task_id, Duration::from_secs(15)).await;
+        let status = wait_for_terminal(&registry, &task_id, Duration::from_secs(30)).await;
         assert_eq!(status.status, TaskState::Failed, "exit 7 → Failed");
         // 终态即屏障：writer 收口时已投递 Crashed 通知，队列应恰好 1 条
         let text = queue
@@ -4662,7 +4698,7 @@ mod tests {
 
         // 收集全部事件至 task-completed（完成事件在 writer 收口时发射）
         let envelopes =
-            wait_for_event_type(&emitter, "task-completed", Duration::from_secs(15)).await;
+            wait_for_event_type(&emitter, "task-completed", Duration::from_secs(30)).await;
         // 事件序断言：started 首位、output 在 completed 前、completed 收尾
         assert_eq!(envelopes[0].type_name(), "task-started", "首事件必须为 task-started");
         let types: Vec<&str> = envelopes.iter().map(|e| e.type_name()).collect();
@@ -4756,7 +4792,7 @@ mod tests {
             .expect("adopt");
         let task_id = r.task_id.clone();
 
-        let envelopes = wait_for_event_type(&emitter, "task-failed", Duration::from_secs(15)).await;
+        let envelopes = wait_for_event_type(&emitter, "task-failed", Duration::from_secs(30)).await;
         let failed = envelopes
             .iter()
             .find(|e| e.type_name() == "task-failed")
@@ -4801,7 +4837,7 @@ mod tests {
             "运行中任务 kill 应返回 Killed"
         );
 
-        let envelopes = wait_for_event_type(&emitter, "task-killed", Duration::from_secs(15)).await;
+        let envelopes = wait_for_event_type(&emitter, "task-killed", Duration::from_secs(30)).await;
         let killed = envelopes
             .iter()
             .find(|e| e.type_name() == "task-killed")
@@ -5024,7 +5060,7 @@ mod tests {
         assert!(envelope.run_id.is_none(), "任务事件信封不注入 runId");
         assert!(envelope.sequence.is_none(), "任务事件信封不注入 sequence");
 
-        let _ = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(5)).await;
+        let _ = wait_for_terminal(&registry, &r.task_id, Duration::from_secs(30)).await;
     }
 
     /// 验收（34 方案 §2.4 契约）：list 快照 wire 序列化含 `suspicious` 键，

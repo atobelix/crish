@@ -19,6 +19,8 @@ import {
   listBackgroundTasks,
   type BackgroundTaskInfo,
 } from '../api/backgroundTasksApi';
+import { ensureDataPlaneRouter } from '../api/chat-bridge/dataPlaneRouter';
+import { onDataPlaneRefresh } from '../api/chat-bridge/handlers/taskEventHandlers';
 
 export interface WorkflowRunInfo {
   id: string;
@@ -86,6 +88,8 @@ function _normalizeBgTasks(next: BackgroundTaskInfo[]): BackgroundTaskInfo[] {
 let _refCount = 0;
 let _intervalId: ReturnType<typeof setInterval> | null = null;
 let _unsubState: (() => void) | null = null;
+let _unsubDataPlane: (() => void) | null = null;
+let _unsubDataPlaneRefresh: (() => void) | null = null;
 let _workflowsLoaded = false;
 
 type Listener = () => void;
@@ -166,6 +170,16 @@ function _startSingleton(): void {
   _unsubState = transport.onStatus((s) =>
     _setState({ engineOnline: s === 'connected' })
   );
+  // L1 数据面路由生产激活（14-T7 装配点，A-04 邻接）：轮询层持有
+  // ensureDataPlaneRouter() 引用 → transport.onMessage fanout 订阅生效，
+  // task/timer/cron 十类事件经 dataPlaneRouter 消费（刷新信号 + 展示面数据源）。
+  // 归零时随单例一起退订（refcount 对齐，防常驻监听泄漏）。
+  _unsubDataPlane = ensureDataPlaneRouter();
+  // 数据面刷新信号接线：终态/timer/cron 事件到达 → 提前拉取本域快照，
+  // 不等下一个 4s 轮询周期（事件 → 拉取 闭环；节流由数据面 1s 窗口合并）。
+  _unsubDataPlaneRefresh = onDataPlaneRefresh(() => {
+    void _tick();
+  });
   void _tick();
   void _loadWorkflows();
   _intervalId = setInterval(() => void _tick(), 4000);
@@ -179,6 +193,14 @@ function _stopSingleton(): void {
   if (_unsubState !== null) {
     _unsubState();
     _unsubState = null;
+  }
+  if (_unsubDataPlaneRefresh !== null) {
+    _unsubDataPlaneRefresh();
+    _unsubDataPlaneRefresh = null;
+  }
+  if (_unsubDataPlane !== null) {
+    _unsubDataPlane();
+    _unsubDataPlane = null;
   }
   _workflowsLoaded = false;
   _state = { ..._state, loading: true };

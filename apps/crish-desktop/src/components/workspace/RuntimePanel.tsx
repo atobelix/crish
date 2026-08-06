@@ -9,6 +9,7 @@ import { useEngineState } from '../../hooks/useEngineState';
 import { RuntimeSection } from './RuntimeSection';
 import { LiveTasksSection } from './LiveTasksSection';
 import { BgTasksSection } from './BgTasksSection';
+import { TimerCronSection } from './TimerCronSection';
 import { ApprovalSection } from './ApprovalSection';
 import { PlansSection } from './PlansSection';
 import { useRuntimePanelData } from './useRuntimePanelData';
@@ -162,6 +163,10 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
         engineOnline={ds.engineOnline}
         onShowToast={onShowToast}
       />
+
+      {/* L2：定时/Cron 数据面展示——timer-fired/timer-cancelled/cron-fired
+          事件经 taskEventHandlers 摘要订阅（事件驱动更新，无事件空态） */}
+      <TimerCronSection />
 
       <ApprovalSection
         approvals={ds.pendingApprovals}

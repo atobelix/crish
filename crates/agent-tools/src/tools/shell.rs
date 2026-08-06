@@ -1451,6 +1451,7 @@ mod tests {
             .await
             .unwrap_err();
         // 审批事件产生：通道被问询一次
+        // （timeoutMs 5000 仅约束「拒绝路径不执行命令」，命令本身未跑，无负载风险）
         assert_eq!(
             *requested.lock().unwrap_or_else(|e| e.into_inner()),
             vec!["shell_command".to_string()]
@@ -1475,11 +1476,13 @@ mod tests {
             ask: Some(ask),
             ..ctx(&ws)
         };
-        // 越界命令（gatekeeper RequiresApproval）：经审批放行后真正执行
+        // 越界命令（gatekeeper RequiresApproval）：经审批放行后真正执行。
+        // timeoutMs 用 60s：并行全量跑时 PowerShell 冷启动可能超过 5s，
+        // 5s 上限曾导致负载型 flaky（命令被误判超时 → exitCode 为空）
         let out = t
             .execute(
                 &ctx,
-                json!({ "command": "echo sudo-hi", "timeoutMs": 5000 }),
+                json!({ "command": "echo sudo-hi", "timeoutMs": 60000 }),
             )
             .await
             .unwrap();
@@ -2141,10 +2144,12 @@ mod tests {
         } else {
             "echo fast-done"
         };
+        // 窗口取 60s：断言语义是「快速命令在窗口内完成」——窗口只须足够大，
+        // 并行全量跑时 PowerShell 冷启动可能超过 5s（曾导致误转后台 flaky）
         let out = t
             .execute(
                 &ctx,
-                json!({ "command": command, "mode": "auto-background", "waitMsBeforeAsync": 5000 }),
+                json!({ "command": command, "mode": "auto-background", "waitMsBeforeAsync": 60000 }),
             )
             .await
             .unwrap();

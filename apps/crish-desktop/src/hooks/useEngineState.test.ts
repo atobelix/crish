@@ -17,15 +17,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { BackgroundTaskInfo } from '../api/backgroundTasksApi';
 import { useEngineState } from './useEngineState';
+import { resetDataPlaneRouterForTests } from '../api/chat-bridge/dataPlaneRouter';
+import { clearDataPlaneStateForTests } from '../api/chat-bridge/handlers/taskEventHandlers';
 
 // ── mock 面：仅替换出站边界（transport / 状态与任务轮询 / workflow 列表） ──
 
-const mocks = vi.hoisted(() => ({
-  getTransport: vi.fn(),
-  fetchEngineLiveStatus: vi.fn(),
-  listBackgroundTasks: vi.fn(),
-  listWorkflows: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  /** transport.onMessage 监听器集合（L1 激活测试：注入式发射数据面事件） */
+  const dataPlaneListeners = new Set<(msg: Record<string, unknown>) => void>();
+  return {
+    getTransport: vi.fn(),
+    fetchEngineLiveStatus: vi.fn(),
+    listBackgroundTasks: vi.fn(),
+    listWorkflows: vi.fn(),
+    dataPlaneListeners,
+    /** 注入式发射：向 transport fanout 广播一条事件（模拟 Rust emit 到达） */
+    fireDataPlane: (msg: Record<string, unknown>) => {
+      for (const cb of [...dataPlaneListeners]) cb(msg);
+    },
+  };
+});
 
 vi.mock('../api/transport', () => ({
   getTransport: mocks.getTransport,
@@ -75,16 +86,29 @@ beforeEach(() => {
     value: 'visible',
     configurable: true,
   });
+  mocks.dataPlaneListeners.clear();
   mocks.getTransport.mockReturnValue({
     isReady: () => true,
     onStatus: () => () => undefined,
+    // L1 装配面：useEngineState 单例启动即订阅 transport.onMessage
+    // （ensureDataPlaneRouter 持有引用）；回调注册进集合供注入式发射
+    onMessage: (cb: (msg: Record<string, unknown>) => void) => {
+      mocks.dataPlaneListeners.add(cb);
+      return () => {
+        mocks.dataPlaneListeners.delete(cb);
+      };
+    },
   });
   mocks.fetchEngineLiveStatus.mockResolvedValue(LIVE_STATUS);
   mocks.listWorkflows.mockResolvedValue([]);
+  mocks.listBackgroundTasks.mockReset();
+  mocks.listBackgroundTasks.mockResolvedValue([]);
 });
 
 afterEach(() => {
   for (const unmount of mounted.splice(0)) unmount();
+  resetDataPlaneRouterForTests();
+  clearDataPlaneStateForTests();
   vi.useRealTimers();
 });
 
@@ -151,5 +175,74 @@ describe('轮询身份抖动防护（bgTasks 内容级比较）', () => {
     await flushTicks(4000);
     expect(result.current.bgTasks).not.toBe(firstRef);
     expect(result.current.bgTasks.map((t) => t.id)).toEqual(['t1', 't2']);
+  });
+});
+
+describe('L1 数据面路由生产激活（轮询层持有 ensureDataPlaneRouter）', () => {
+  it('单例启动即装配数据面路由：transport.onMessage 被订阅（生产激活点）', async () => {
+    const { unmount } = renderHook(() => useEngineState());
+    await flushTicks(0);
+
+    // 装配判据：轮询层持有引用 → transport.onMessage 注册数据面监听
+    expect(mocks.dataPlaneListeners.size).toBe(1);
+    unmount();
+  });
+
+  it('事件到达 → 刷新信号触发拉取（timer-fired 驱动 listBackgroundTasks）', async () => {
+    const { unmount } = renderHook(() => useEngineState());
+    mounted.push(unmount);
+    await flushTicks(4000);
+    // 清掉首轮轮询 + 装配拉取产生的调用基线
+    const baseline = mocks.listBackgroundTasks.mock.calls.length;
+
+    // 注入式发射：数据面事件经 transport fanout 到达 → 数据面路由消费 →
+    // 刷新信号（节流放行）→ 提前拉取（不等下一个 4s 轮询周期）
+    await act(async () => {
+      mocks.fireDataPlane({
+        type: 'timer-fired',
+        timerId: 'tm1',
+        prompt: '检查构建',
+      });
+    });
+    await flushTicks(0);
+
+    expect(mocks.listBackgroundTasks.mock.calls.length).toBeGreaterThan(
+      baseline,
+    );
+  });
+
+  it('终态类任务事件同样驱动拉取（task-completed → listBackgroundTasks）', async () => {
+    const { unmount } = renderHook(() => useEngineState());
+    mounted.push(unmount);
+    await flushTicks(4000);
+    const baseline = mocks.listBackgroundTasks.mock.calls.length;
+
+    await act(async () => {
+      mocks.fireDataPlane({ type: 'task-completed', taskId: 't1' });
+    });
+    await flushTicks(0);
+
+    expect(mocks.listBackgroundTasks.mock.calls.length).toBeGreaterThan(
+      baseline,
+    );
+  });
+
+  it('最后一个订阅者卸载 → 数据面路由退订（refcount 归零，事件不再被消费）', async () => {
+    const { unmount } = renderHook(() => useEngineState());
+    await flushTicks(4000);
+    expect(mocks.dataPlaneListeners.size).toBe(1);
+
+    unmount();
+    await flushTicks(0);
+    // 归零退订：transport.onMessage 监听器集合清空
+    expect(mocks.dataPlaneListeners.size).toBe(0);
+
+    const baseline = mocks.listBackgroundTasks.mock.calls.length;
+    await act(async () => {
+      mocks.fireDataPlane({ type: 'timer-fired', timerId: 'tm2', prompt: 'x' });
+    });
+    await flushTicks(0);
+    // 退订后事件无人消费：不触发任何拉取
+    expect(mocks.listBackgroundTasks.mock.calls.length).toBe(baseline);
   });
 });

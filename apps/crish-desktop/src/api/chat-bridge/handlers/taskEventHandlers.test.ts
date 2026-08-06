@@ -37,6 +37,8 @@ import {
   clearDataPlaneStateForTests,
   getRecentDataPlaneEvents,
   getSuspiciousMarks,
+  getTimerCronSummary,
+  subscribeTimerCron,
   DATA_PLANE_REFRESH_THROTTLE_MS,
 } from './taskEventHandlers';
 
@@ -314,5 +316,103 @@ describe('resolveRunId 转正：raw 顶层 runId 落入轻量记录', () => {
     onTaskStarted(env, withoutRunId as unknown as EngineEnvelope<'task-started'>);
     const rec2 = getRecentDataPlaneEvents().find((r) => r.type === 'task-started' && r.id === 't2');
     expect(rec2?.runId).toBe('');
+  });
+});
+
+describe('timer/cron 展示面摘要（L2：事件 → 摘要 → 订阅者）', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_700_000_000_000);
+    clearDataPlaneStateForTests();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    clearDataPlaneStateForTests();
+  });
+
+  it('timer-fired：活跃定时器 + 累计计数 + 最近事件摘要写出', () => {
+    const env = makeEnv();
+    onTimerFired(
+      env,
+      envelope<EngineEnvelope<'timer-fired'>>('timer-fired', { timerId: 'tm1', prompt: 'p' })
+    );
+    const s = getTimerCronSummary();
+    expect(s.activeTimers).toBe(1);
+    expect(s.timerFiredTotal).toBe(1);
+    expect(s.lastTimerFiredAtMs).toBe(1_700_000_000_000);
+    expect(s.recent[0]).toMatchObject({ type: 'timer-fired', id: 'tm1' });
+  });
+
+  it('同一定时器重复触发：活跃数不重复计，累计次数递增', () => {
+    const env = makeEnv();
+    onTimerFired(env, envelope<EngineEnvelope<'timer-fired'>>('timer-fired', { timerId: 'tm1' }));
+    onTimerFired(env, envelope<EngineEnvelope<'timer-fired'>>('timer-fired', { timerId: 'tm1' }));
+    const s = getTimerCronSummary();
+    expect(s.activeTimers).toBe(1);
+    expect(s.timerFiredTotal).toBe(2);
+    expect(s.recent).toHaveLength(2); // 重复触发也留痕（可观测水位）
+  });
+
+  it('timer-cancelled：活跃集合移除；最近事件列表保留取消留痕', () => {
+    const env = makeEnv();
+    onTimerFired(env, envelope<EngineEnvelope<'timer-fired'>>('timer-fired', { timerId: 'tm1' }));
+    onTimerCancelled(
+      env,
+      envelope<EngineEnvelope<'timer-cancelled'>>('timer-cancelled', { timerId: 'tm1', reason: 'x' })
+    );
+    const s = getTimerCronSummary();
+    expect(s.activeTimers).toBe(0);
+    expect(s.recent[0]).toMatchObject({ type: 'timer-cancelled', id: 'tm1' });
+    expect(s.recent).toHaveLength(2);
+  });
+
+  it('cron-fired：累计触发 + 迭代序号 + 最近触发时间', () => {
+    const env = makeEnv();
+    onCronFired(
+      env,
+      envelope<EngineEnvelope<'cron-fired'>>('cron-fired', { cronId: 'c1', prompt: 'p', expression: '* * * * *', iteration: 3 })
+    );
+    const s = getTimerCronSummary();
+    expect(s.cronFiredTotal).toBe(1);
+    expect(s.lastCronFiredAtMs).toBe(1_700_000_000_000);
+    expect(s.recent[0]).toMatchObject({ type: 'cron-fired', id: 'c1', iteration: 3 });
+  });
+
+  it('最近事件列表有界：超过 3 条淘汰最早（环形缓冲）', () => {
+    const env = makeEnv();
+    for (let i = 0; i < 5; i++) {
+      onTimerFired(
+        env,
+        envelope<EngineEnvelope<'timer-fired'>>('timer-fired', { timerId: `tm${i}` })
+      );
+    }
+    expect(getTimerCronSummary().recent).toHaveLength(3);
+    expect(getTimerCronSummary().recent[0]?.id).toBe('tm4'); // 最新在前
+    expect(getTimerCronSummary().recent[2]?.id).toBe('tm2'); // 最早被淘汰
+  });
+
+  it('快照引用稳定：无变化时同一引用，事件到达后重建（useSyncExternalStore 契约）', () => {
+    const env = makeEnv();
+    const before = getTimerCronSummary();
+    expect(getTimerCronSummary()).toBe(before);
+    onTimerFired(env, envelope<EngineEnvelope<'timer-fired'>>('timer-fired', { timerId: 'tm1' }));
+    const after = getTimerCronSummary();
+    expect(after).not.toBe(before);
+    expect(getTimerCronSummary()).toBe(after);
+  });
+
+  it('订阅者：事件到达通知一次，退订后不再通知', () => {
+    const env = makeEnv();
+    const cb = vi.fn();
+    const unsub = subscribeTimerCron(cb);
+    onTimerFired(env, envelope<EngineEnvelope<'timer-fired'>>('timer-fired', { timerId: 'tm1' }));
+    onCronFired(
+      env,
+      envelope<EngineEnvelope<'cron-fired'>>('cron-fired', { cronId: 'c1', iteration: 1 })
+    );
+    expect(cb).toHaveBeenCalledTimes(2);
+    unsub();
+    onTimerFired(env, envelope<EngineEnvelope<'timer-fired'>>('timer-fired', { timerId: 'tm2' }));
+    expect(cb).toHaveBeenCalledTimes(2);
   });
 });
