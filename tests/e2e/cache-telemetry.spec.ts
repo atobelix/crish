@@ -18,7 +18,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { type MockEvent } from './mock-engine';
-import { openApp as waitAppReady } from './helpers/boot';
+import { openApp as waitAppReady, typeIntoComposer } from './helpers/boot';
 
 const RUN_DELAY_MS = 30;
 
@@ -223,7 +223,7 @@ async function openRuntimePanel(page: Page) {
 
 async function sendPrompt(page: Page, text: string) {
   const input = page.locator('[data-testid="chat-input"]');
-  await input.fill(text);
+  await typeIntoComposer(page, text);
   await input.press('Enter');
 }
 

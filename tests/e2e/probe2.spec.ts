@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { installMockEngine, fenceRunEvents } from './mock-engine';
+import { typeIntoComposer } from './helpers/boot';
 
 test('probe fence final state', async ({ page }) => {
   await installMockEngine(page, {
@@ -13,7 +14,7 @@ test('probe fence final state', async ({ page }) => {
   });
 
   const input = page.locator('[data-testid="chat-input"]');
-  await input.fill('给我一段代码');
+  await typeIntoComposer(page, '给我一段代码');
   await input.press('Enter');
 
   const assistantRow = page.locator('.msg-row-assistant').first();

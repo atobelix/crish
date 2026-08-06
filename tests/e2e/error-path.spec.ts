@@ -14,12 +14,13 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import { installMockEngine, errorRunConfig } from './mock-engine';
+import { typeIntoComposer, expectComposerText } from './helpers/boot';
 
 async function openApp(page: Page) {
   await installMockEngine(page, { runStream: errorRunConfig() });
   await page.goto('/');
-  await expect(page.locator('#root')).toBeVisible();
-  await expect(page.locator('[data-testid="chat-input"]')).toBeVisible();
+  await expect(page.locator('#root')).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('[data-testid="chat-input"]')).toBeVisible({ timeout: 20000 });
 }
 
 test.describe('E2E-L2 错误路径（error-path）', () => {
@@ -27,7 +28,7 @@ test.describe('E2E-L2 错误路径（error-path）', () => {
     await openApp(page);
 
     const input = page.locator('[data-testid="chat-input"]');
-    await input.fill('请帮我执行一个任务');
+    await typeIntoComposer(page, '请帮我执行一个任务');
     await input.press('Enter');
 
     // ── ① 运行提示条可见（RunNoticeBar：data-testid="run-notice"）──
@@ -63,8 +64,8 @@ test.describe('E2E-L2 错误路径（error-path）', () => {
 
     // ── ③ 可重试：错误后输入框可用 ──
     await expect(input).toBeEditable();
-    await input.fill('重试一次');
-    await expect(input).toHaveValue('重试一次');
+    await typeIntoComposer(page, '重试一次');
+    await expectComposerText(page, '重试一次');
   });
 
   test('引擎错误时 runCount 已记录且 runId 下发（非空跑证据）', async ({
@@ -73,7 +74,7 @@ test.describe('E2E-L2 错误路径（error-path）', () => {
     await openApp(page);
 
     const input = page.locator('[data-testid="chat-input"]');
-    await input.fill('触发错误');
+    await typeIntoComposer(page, '触发错误');
     await input.press('Enter');
 
     await expect(page.locator('[data-testid="run-notice"]')).toBeVisible({

@@ -31,13 +31,13 @@ import {
   engineState,
   MOCK_HANDLE,
 } from './mock-engine';
-import { openApp } from './helpers/boot';
+import { openApp, typeIntoComposer } from './helpers/boot';
 
 /** 发送一条消息并等待引擎收到 run-task（lastRun 就绪） */
 async function sendAndWaitRun(page: Page): Promise<void> {
   const input = page.locator('[data-testid="chat-input"]');
   await expect(input).toBeVisible();
-  await input.fill('触发缓存统计');
+  await typeIntoComposer(page, '触发缓存统计');
   await input.press('Enter');
   await expect
     .poll(() =>

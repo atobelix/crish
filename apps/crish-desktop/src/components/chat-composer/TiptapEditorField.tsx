@@ -39,6 +39,27 @@ import { parseFromMarkdown } from './serialization/markdownDeserializer';
 import type { TiptapEditorFieldProps, TiptapEditorFieldHandle } from './composerTypes';
 import styles from './TiptapEditorField.module.css';
 
+/**
+ * 安全取编辑器挂载后的 DOM 节点。
+ *
+ * tiptap v3 的 editor.view getter 在 EditorView 未挂载时返回 Proxy 兜底
+ * （永不返回 null，故 `!editor.view` 型守卫失效），访问 view.dom 等属性
+ * 会抛 "The editor view is not available. Cannot access view['dom']"。
+ * 挂载/卸载竞态（React 18 StrictMode 双挂载、宿主 effect 早于 EditorContent
+ * attach 等）下统一经本函数取值，未就绪一律返回 null，调用方静默跳过。
+ */
+function safeViewDom(
+  editor: { view?: unknown; isDestroyed?: boolean } | null | undefined
+): HTMLElement | null {
+  try {
+    if (!editor || editor.isDestroyed) return null;
+    const dom = (editor.view as { dom?: HTMLElement } | undefined)?.dom;
+    return dom ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** 编辑器最大长度防爆上限（与草稿截断一致，SRS 安全红线兜底） */
 const COMPOSER_MAX_LENGTH = 100000;
 
@@ -306,7 +327,8 @@ export const TiptapEditorField = React.forwardRef<
   // （宿主 props 恒定 undefined 时仅在挂载期执行一次移除）。
   useEffect(() => {
     if (!editor) return;
-    const dom = editor.view.dom;
+    const dom = safeViewDom(editor);
+    if (!dom) return;
     if (ariaLabel) dom.setAttribute('aria-label', ariaLabel);
     dom.setAttribute('role', 'combobox');
     dom.setAttribute('aria-haspopup', 'listbox');
@@ -344,8 +366,12 @@ export const TiptapEditorField = React.forwardRef<
 
   // 占位符切换（processing 双态）后强制重算装饰
   useEffect(() => {
-    if (editor) {
-      editor.view.dispatch(editor.state.tr);
+    if (editor && !editor.isDestroyed && safeViewDom(editor)) {
+      try {
+        editor.view.dispatch(editor.state.tr);
+      } catch {
+        // 挂载竞态下 view 未就绪：跳过本次装饰重算（下一轮事务自然覆盖）
+      }
     }
   }, [editor, placeholder]);
 
@@ -368,8 +394,12 @@ export const TiptapEditorField = React.forwardRef<
     // 卸载清理：组件销毁后回调不再触碰编辑器（防 destroyed 编辑器空指针）
     const rafId = requestAnimationFrame(() => {
       if (!editor || editor.isDestroyed) return;
-      const doc = parseFromMarkdown(safeContent);
-      editor.commands.setContent(doc);
+      try {
+        const doc = parseFromMarkdown(safeContent);
+        editor.commands.setContent(doc);
+      } catch {
+        // 挂载竞态下 view 未就绪：放弃本次水合（后续内容变更会再次触发）
+      }
       lastContentRef.current = safeContent;
     });
     return () => cancelAnimationFrame(rafId);
@@ -377,9 +407,8 @@ export const TiptapEditorField = React.forwardRef<
 
   // Track composition events directly on the editor DOM node for CJK protection
   useEffect(() => {
-    if (!editor || !editor.view || !editor.view.dom) return;
-
-    const dom = editor.view.dom;
+    const dom = safeViewDom(editor);
+    if (!dom) return;
 
     const handleCompositionStart = () => {
       isComposingRef.current = true;
@@ -407,7 +436,8 @@ export const TiptapEditorField = React.forwardRef<
   // 走 onExit 统一清理（aria-expanded/controls/activedescendant + 弹层销毁）。
   useEffect(() => {
     if (!editor) return;
-    const dom = editor.view.dom;
+    const dom = safeViewDom(editor);
+    if (!dom) return;
     const onEscapeCapture = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const view = editor.view;
@@ -425,7 +455,11 @@ export const TiptapEditorField = React.forwardRef<
 
   // autoFocus：挂载后聚焦编辑器（rAF 等待布局稳定）
   const focusEditor = useCallback(() => {
-    editorRef.current?.commands.focus();
+    try {
+      editorRef.current?.commands.focus();
+    } catch {
+      // 挂载竞态下 view 未就绪：忽略本次聚焦（用户点击会自行聚焦）
+    }
   }, []);
 
   useEffect(() => {

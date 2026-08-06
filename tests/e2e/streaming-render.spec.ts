@@ -13,6 +13,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
+import { typeIntoComposer } from './helpers/boot';
 import {
   installMockEngine,
   fenceRunEvents,
@@ -25,13 +26,13 @@ async function openApp(
 ) {
   await installMockEngine(page, runStream);
   await page.goto('/');
-  await expect(page.locator('#root')).toBeVisible();
-  await expect(page.locator('[data-testid="chat-input"]')).toBeVisible();
+  await expect(page.locator('#root')).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('[data-testid="chat-input"]')).toBeVisible({ timeout: 20000 });
 }
 
 async function sendAndGetAssistantRow(page: Page, prompt: string) {
   const input = page.locator('[data-testid="chat-input"]');
-  await input.fill(prompt);
+  await typeIntoComposer(page, prompt);
   await input.press('Enter');
   const assistantRow = page.locator('.msg-row-assistant').first();
   await expect(assistantRow).toBeVisible();

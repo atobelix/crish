@@ -16,6 +16,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
+import { typeIntoComposer, expectComposerText } from './helpers/boot';
 import {
   installMockEngine,
   fullJourneyRunEvents,
@@ -30,8 +31,8 @@ async function openApp(
 ) {
   await installMockEngine(page, config);
   await page.goto('/');
-  await expect(page.locator('#root')).toBeVisible();
-  await expect(page.locator('[data-testid="sidebar"]')).toBeVisible();
+  await expect(page.locator('#root')).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('[data-testid="sidebar"]')).toBeVisible({ timeout: 20000 });
   // 引擎门闩：应用容器 data-engine-ready 属性由 useEngineBootstrap 驱动
   await expect(page.locator('[data-engine-ready="true"]')).toBeVisible({
     timeout: 8000,
@@ -53,9 +54,9 @@ test.describe('E2E-L2 完整旅程（full-journey）', () => {
 
     // ── ③ 发送：输入框文字清空、用户消息入列 ──
     const prompt = '帮我看看当前目录结构';
-    await input.fill(prompt);
+    await typeIntoComposer(page, prompt);
     await input.press('Enter');
-    await expect(input).toHaveValue('');
+    await expectComposerText(page, '');
 
     // 用户消息出现（.msg-row-user）
     const userRow = page.locator('.msg-row-user');
@@ -148,7 +149,7 @@ test.describe('E2E-L2 完整旅程（full-journey）', () => {
       runStream: { events: fullJourneyRunEvents(), delayMs: 30 },
     });
     const input = page.locator('[data-testid="chat-input"]');
-    await input.fill('hello');
+    await typeIntoComposer(page, 'hello');
     await input.press('Enter');
 
     // 等引擎收到 run-task

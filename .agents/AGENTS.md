@@ -113,3 +113,10 @@ To allow AI assistants (like Cursor, Grok, or Antigravity) to connect via the `t
 ## 5. Mandatory Verification Command Suite Execution
 
 - **Full Verification After Major Changes**: All agents MUST strictly execute and pass the complete command verification suite defined in [FULL_CHECK_COMMANDS.md](file:///c:/Software/conex/FULL_CHECK_COMMANDS.md) after completing any major refactor, modification, or iteration round. Continuously append all required check commands to [FULL_CHECK_COMMANDS.md](file:///c:/Software/conex/FULL_CHECK_COMMANDS.md) and reference it across all agent directives.
+
+## 6. Color Spaces & Modern CSS Syntax (色彩规范与现代 CSS 语法)
+
+- **Prefer HSLA & Slash Alpha**: Avoid legacy `rgba(r,g,b,a)`. Prefer `hsl(h s l / a)` or `hsla(h s l / a)` for UI components and Design Tokens (unify using slash `/` to separate opacity, e.g. `hsl(210 20% 98% / 0.8)`).
+- **Perceptual Gradients (OKLCH/LCH)**: Use `oklch()` / `lch()` for rich, perceptually uniform gradient animations (always provide sRGB/HSL `@supports` fallbacks).
+- **Light/Dark Adjustments (HWB)**: Use `hwb()` for precise whiteness/blackness adjustments and subtle masks/shadows.
+- **Canvas Color Adaptors**: Canvas 2D / WebGL requires RGBA; encapsulate pixel array conversions using an entry-level Color Adaptor layer.

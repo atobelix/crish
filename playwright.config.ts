@@ -28,6 +28,10 @@ export default defineConfig({
   // vitest spec（进程级冒烟）不归 Playwright 管
   testIgnore: /tauri-native-smoke\.spec\.ts$/,
   fullyParallel: true,
+  // 并发收敛（tiptap 接线后冷编译回归记录 2026-08-07）：fullyParallel 下 26 用例
+  // 同时触发 vite 首屏编译，早期页面 bundle 未就绪 → 白屏（sidebar/chat-input 缺失）。
+  // 限制 worker（= 同时页面数）为 4，编译压力骤降；用例预算 26/4≈7 轮，无感。
+  workers: 4,
   reporter: [['list']],
   expect: {
     // 断言层默认超时（spec 内显式 timeout 8s 为局部覆盖，语义一致）
