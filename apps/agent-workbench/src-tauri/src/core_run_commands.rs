@@ -376,6 +376,10 @@ pub(crate) struct ActiveRun {
     /// 时经 spawner 终态处理（记账释放 / 事件发射 / steering 通知）；
     /// None = 普通 run，收口行为与现状一致）
     subagent: Option<crate::subagent_spawner::SubagentRunConfig>,
+    /// L4（F12）：审计落库 worker 句柄（run 级；收口处 take + await
+    /// 排空——保证审计底账在 run 终态前全部落库；None = 测试驱动路径
+    /// 未装配）
+    audit_persist: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
 }
 
 impl ActiveRun {
@@ -428,29 +432,85 @@ impl RunEngine for ActiveRunEngine {
 
 /// 逃逸监视审计 sink（T-ESC-03 壳层适配）：security-audit 事件经本 run
 /// 缓冲事件桥实时广播（信封 sequence=None 实时预览，前端审计面板实时
-/// 可见；与审批门 broadcast 同构）。落库（append_event）留 F12 端到端
-/// 验收登记（REQ-逃逸追踪分析 §3.3 发射点 1）。
+/// 可见；与审批门 broadcast 同构）。落库（append_event）L4（F12）已
+/// 接线：同步广播外另发持久化通道，由单 worker 按发射序
+/// reserve_sequence + append_event 落库（events 表审计底账；广播保实时、
+/// 落库保底账，双轨并存）。
 #[derive(Debug)]
 struct BridgeAuditSink {
     /// 本 run 缓冲事件桥
     bridge: Arc<BufferedRunEventBridge>,
     /// run 标识（信封注入）
     run_id: String,
+    /// 审计持久化通道（L4：worker 按发射序落库；发送失败 = worker 已
+    /// 退出，落库尽力而为，广播不受影响）
+    persist: tokio::sync::mpsc::UnboundedSender<AgentEvent>,
 }
 
 impl BridgeAuditSink {
-    /// 新建桥接审计 sink（run 级实例）
-    fn new(bridge: Arc<BufferedRunEventBridge>, run_id: String) -> Self {
-        Self { bridge, run_id }
+    /// 新建桥接审计 sink（run 级实例；persist 通道由 run 装配轮创建，
+    /// worker 与 run 同生命周期）
+    fn new(
+        bridge: Arc<BufferedRunEventBridge>,
+        run_id: String,
+        persist: tokio::sync::mpsc::UnboundedSender<AgentEvent>,
+    ) -> Self {
+        Self {
+            bridge,
+            run_id,
+            persist,
+        }
     }
 }
 
 impl SecurityAuditSink for BridgeAuditSink {
     fn emit(&self, event: &AgentEvent) {
+        // L4（F12）：审计底账落库——先发持久化通道（worker 按发射序
+        // reserve + append_event；通道关闭仅告警，广播已保实时轨）
+        if let Err(error) = self.persist.send(event.clone()) {
+            tracing::warn!(
+                target: "audit",
+                run_id = %self.run_id,
+                error = %error,
+                "审计落库通道已关闭（保留实时轨，落库尽力而为）"
+            );
+        }
         let envelope = AgentEventEnvelope::new(event.clone(), Some(self.run_id.clone()), None);
         self.bridge.emit(&envelope);
         self.bridge.flush();
     }
+}
+
+/// 审计落库 worker（L4：审计底账持久化——广播保实时、落库保底账）
+///
+/// 单 worker 串行消费 mpsc 通道：严格保持发射序 → 会话级 sequence
+/// 单调不逆序；复用 [orchestrator::events::EventQueue] 的
+/// `push_terminal_best_effort` 尽力语义（store 失败仅告警，审计不阻断
+/// run、不标记 run 失败）。生命周期：随 run 收口（桥引用全部释放 →
+/// sender drop 发出关闭信号 → 排空后退出；收口处 await 保证终态前
+/// 落库完成）。
+fn spawn_audit_persistence(
+    queue: Arc<tokio::sync::Mutex<EventQueue>>,
+    session_id: String,
+    mut rx: tokio::sync::mpsc::UnboundedReceiver<AgentEvent>,
+) -> tauri::async_runtime::JoinHandle<()> {
+    tauri::async_runtime::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            let sequenced = queue
+                .lock()
+                .await
+                .push_terminal_best_effort(&session_id, event)
+                .await;
+            if !sequenced.persisted {
+                tracing::warn!(
+                    target: "audit",
+                    session_id = %session_id,
+                    event_type = sequenced.event.type_name(),
+                    "审计事件落库失败（保留实时轨，审计底账尽力而为）"
+                );
+            }
+        }
+    })
 }
 
 /// 逃逸监视主 agent 注入器（T-ESC-03 壳层适配）：归因摘要经 L1
@@ -1554,6 +1614,10 @@ impl CoreRunState {
         cfg: &crate::subagent_spawner::SubagentRunConfig,
         status: conex_db::RunStatus,
     ) {
+        // T-CF-13（R-CF3）：子代理终态事件到达壳层即视为一次唤醒——
+        // 等待期间的关键事件源（watchdog 失联判定数据源；长等待中
+        // 子代理完成事件推进 last_wakeup，防误报"无唤醒"）
+        self.engine.last_wakeup().mark_wakeup();
         let state = match status {
             conex_db::RunStatus::Completed => SubagentState::Completed,
             _ => SubagentState::Failed,
@@ -2127,6 +2191,10 @@ pub(crate) async fn drive_run_loop(
     // 1. produce（单次即覆盖整个 run：多 turn 由 AgentSessionLoop 内部驱动；
     //    未来 goal 多轮模式在本循环续轮）
     let outcome = producer.produce().await;
+    // 产出完成即释放生产者：其持有的 options（含逃逸监视配置引用 →
+    // 审计桥引用）随 Drop 归还——审计落库 worker 的通道关闭时点
+    // 确定性依据（收口 await 排空不依赖生产者存活，L4）
+    drop(producer);
     // T-CF-11：产出信号提前捕获（outcome 随后被 drive_outcome 消费——
     // reason / turn_index / tool_call_count 为 Copy 字段，收口判定用）
     let resume_reason = outcome.reason;
@@ -2182,6 +2250,10 @@ pub(crate) async fn drive_run_loop(
     let mut report = EmitReport::default();
     let mut runtime_error: Option<String> = None;
     for sequenced in driven.events {
+        // T-CF-13（R-CF3）：事件收口旁路点 mark_wakeup 接线——任何事件
+        // 到达即更新 last_wakeup（watchdog 失联判定数据源；子代理等待
+        // 期间有事件到达则不误报"无唤醒"）
+        state.engine.last_wakeup().mark_wakeup();
         // T09.1：实时轨已发 delta，收口流 message-delta 跳过不双发
         // （序列号已分配；持久化不落库；前端按 messageId 累加，AA-06 F1）
         if active.delta_sink_active && matches!(sequenced.event, AgentEvent::MessageDelta { .. }) {
@@ -2233,6 +2305,18 @@ pub(crate) async fn drive_run_loop(
     // 释放，防 session 泄漏；与 escape_watch 句柄同生命周期收口——
     // 重复注销幂等，finalize_failed 失败路径不重复进入本函数）
     state.engine.audit_sink().unregister(&session_id);
+    // L4（F12）：审计落库收口——注销即释放桥引用（sender drop 发出
+    // 通道关闭信号），await worker 排空全部审计事件再报 run 终态
+    // （审计底账在终态前完整落库；None = 测试驱动路径未装配）。
+    // 先 take 出句柄再 await：std Mutex 锁不跨 await 持有（AA-02）
+    let audit_worker = active
+        .audit_persist
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
+    if let Some(handle) = audit_worker {
+        let _ = handle.await;
+    }
     // T-AB-19 run 终态显式接线：**不清理后台任务注册表、不级联杀任务**
     // ——任务属会话级（registry 生命周期独立于 run，T-AB-12 只读契约升级
     // 为显式收口契约；run_end_daemon_survives / run_end_normal_task_survives
@@ -2454,6 +2538,18 @@ async fn finalize_failed(state: &Arc<CoreRunState>, active: &ActiveRun, message:
     // drive 错误分支未走 drive_run_loop 正常收口，本处兜底——重复
     // 注销幂等）
     state.engine.audit_sink().unregister(&session_id);
+    // L4（F12）：失败收口同样排空审计落库 worker（注销即释放桥引用
+    // 发出通道关闭信号；await 保证失败收口前审计底账完整落库；
+    // None = 测试驱动路径未装配）。先 take 出句柄再 await：
+    // std Mutex 锁不跨 await 持有（AA-02）
+    let audit_worker = active
+        .audit_persist
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
+    if let Some(handle) = audit_worker {
+        let _ = handle.await;
+    }
     // T-AB-19 失败收口显式接线（与成功收口同一契约）：不清理后台任务
     // 注册表、不级联杀任务——任务属会话级；仅释放「当前 run」上下文。
     state.background.clear_current_run(&run_id);
@@ -2715,8 +2811,20 @@ pub(crate) async fn run_task_impl(
     //
     // 15-T-6（裁决 D9）：run 级审计桥实例（工具级审计路由与逃逸监视
     // 共用——同一 run 缓冲事件桥双注入，无重复广播；注册语句见下方
-    // 装配块）。
-    let bridge_audit_sink = Arc::new(BridgeAuditSink::new(Arc::clone(&bridge), run_id.clone()));
+    // 装配块）。L4（F12）：审计底账落库接线——持久化通道 + 单 worker
+    // （按发射序 reserve + append_event 落库 events 表；句柄随
+    // ActiveRun 收口 await 排空，终态前落库完成）
+    let (audit_persist_tx, audit_persist_rx) = tokio::sync::mpsc::unbounded_channel();
+    let audit_worker = spawn_audit_persistence(
+        Arc::clone(&queue),
+        session_id.clone(),
+        audit_persist_rx,
+    );
+    let bridge_audit_sink = Arc::new(BridgeAuditSink::new(
+        Arc::clone(&bridge),
+        run_id.clone(),
+        audit_persist_tx,
+    ));
     let escape_root = resolve_escape_watch_root(cwd.as_deref());
     let control_bus = Arc::new(Mutex::new(ControlBus::new()));
     // 30-P5：共享写路径注册表（会话级，与逃逸监视根同源）——工具执行
@@ -2773,8 +2881,9 @@ pub(crate) async fn run_task_impl(
     // 工具级 security-audit（shell/delete 经 BuiltinToolConfig.audit_sink
     // 发射，接线前 NoopAuditSink 静默丢弃）经路由 sink 送达本 run 缓冲
     // 事件桥（信封注入 run_id → 前端审计面板 per-run 面实时可见，34-T7
-    // 口径；落库随 F12 端到端登记，本卡不新增落库面）。与逃逸监视共用
-    // 同一 BridgeAuditSink 实例（同一 run 桥双注入，无重复广播）。
+    // 口径；L4（F12）已补落库面——审计底账经持久化 worker 写入 events
+    // 表，见 [spawn_audit_persistence]）。与逃逸监视共用同一
+    // BridgeAuditSink 实例（同一 run 桥双注入，无重复广播）。
     // **域隔离边界**（30 §9 最终口径）：任务域审计（10-P3
     // TaskAuditAccumulator → EventBridge 直发，operation=command-exec）
     // **不经本路由 sink**——本卡只承接工具级审计，两路均以
@@ -3017,6 +3126,8 @@ pub(crate) async fn run_task_impl(
         driver: Mutex::new(None),
         // T-D-13：子代理 run 装配配置随活动 run 登记（收口终态处理依据）
         subagent: subagent_config.clone(),
+        // L4（F12）：审计落库 worker 句柄（收口处 take + await 排空）
+        audit_persist: Mutex::new(Some(audit_worker)),
     });
     state
         .active_runs
@@ -4733,6 +4844,8 @@ mod tests {
             user_touched: AtomicBool::new(false),
             // T-D-13：测试驱动路径的子代理配置缺省 None（普通 run 语义）
             subagent: None,
+            // L4（F12）：测试驱动路径未装配审计落库 worker（收口跳过）
+            audit_persist: Mutex::new(None),
         })
     }
 
@@ -4780,6 +4893,54 @@ mod tests {
             steering_count: 0,
             cache_stats: None,
         }
+    }
+
+    // ── L3（R-CF3）：事件收口 mark_wakeup 生产接线 ──────────────
+
+    /// 事件收口接线：drive_run_loop 事件 emit 循环推进 last_wakeup——
+    /// run 事件到达后 watchdog 失联判定数据源不再恒 None（防误报
+    /// "无唤醒"；watchdog 侧判定逻辑由 watchdog.rs 单测覆盖）
+    #[tokio::test]
+    async fn drive_run_loop_marks_wakeup_on_events() {
+        let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+        assert!(
+            state.engine.last_wakeup().last_wakeup_ms().is_none(),
+            "接线断言前：从未有事件到达（None）"
+        );
+        let active = build_active_run(&state, "s1", "run-l3-1").await;
+        drive_run_loop(
+            Arc::clone(&state),
+            Arc::clone(&active),
+            Box::new(TestProducer::new(canned_outcome())),
+        )
+        .await;
+        assert!(
+            state.engine.last_wakeup().last_wakeup_ms().is_some(),
+            "run 事件到达后 last_wakeup 应更新（watchdog 不再误报无唤醒）"
+        );
+    }
+
+    /// 子代理终态收口接线：on_subagent_run_terminal 推进 last_wakeup——
+    /// 等待期间的关键事件源（长等待中不误报"无唤醒"）
+    #[tokio::test]
+    async fn subagent_terminal_marks_wakeup() {
+        let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+        let cfg = crate::subagent_spawner::SubagentRunConfig {
+            subagent_id: "sa-1".to_string(),
+            subagent_run_id: "run-sa-1".to_string(),
+            parent_session_id: "s1".to_string(),
+            task_type: None,
+            allowed_write_paths: None,
+            output_dir: None,
+            started_at_ms: 1_000,
+        };
+        state
+            .on_subagent_run_terminal(&cfg, RunStatus::Completed)
+            .await;
+        assert!(
+            state.engine.last_wakeup().last_wakeup_ms().is_some(),
+            "子代理终态事件到达后 last_wakeup 应更新"
+        );
     }
 
     /// 轮询至任务终态（窗口内未到则 panic）
@@ -7399,10 +7560,12 @@ mod tests {
         let run_id = "audit-sink-r1";
         let active = build_active_run(&state, session_id, run_id).await;
         // 模拟 run_task_impl 装配：run 启动注册（BridgeAuditSink 包装
-        // 同一 run 级桥——与生产装配同构）
+        // 同一 run 级桥——与生产装配同构；持久化通道为测试占位）
+        let (_audit_tx, _audit_rx) = tokio::sync::mpsc::unbounded_channel::<AgentEvent>();
         let bridge_audit = Arc::new(BridgeAuditSink::new(
             Arc::clone(&active.bridge),
             run_id.to_string(),
+            _audit_tx,
         ));
         state
             .engine
@@ -7440,20 +7603,24 @@ mod tests {
         let (state, _registry) = state_with_background();
         // 第一 run 注册
         let run_1 = build_active_run(&state, "audit-sink-s2", "audit-sink-r2a").await;
+        let (_tx_1, _rx_1) = tokio::sync::mpsc::unbounded_channel::<AgentEvent>();
         state.engine.audit_sink().register(
             "audit-sink-s2",
             Arc::new(BridgeAuditSink::new(
                 Arc::clone(&run_1.bridge),
                 "audit-sink-r2a".to_string(),
+                _tx_1,
             )) as AuditSink,
         );
         // 第二 run 覆盖注册（后注册者覆盖语义）
         let run_2 = build_active_run(&state, "audit-sink-s2", "audit-sink-r2b").await;
+        let (_tx_2, _rx_2) = tokio::sync::mpsc::unbounded_channel::<AgentEvent>();
         state.engine.audit_sink().register(
             "audit-sink-s2",
             Arc::new(BridgeAuditSink::new(
                 Arc::clone(&run_2.bridge),
                 "audit-sink-r2b".to_string(),
+                _tx_2,
             )) as AuditSink,
         );
         assert_eq!(state.engine.audit_sink().route_count(), 1);
@@ -7479,6 +7646,131 @@ mod tests {
             state.engine.audit_sink().route_count(),
             0,
             "连续 run 收口后注册表必须清空"
+        );
+    }
+
+    // ── L4（F12）：security-audit 落库接线（append_event 持久化）──
+
+    /// 测试用 security-audit 事件（delete 操作；形状对齐
+    /// agent-tools audit.rs security_audit_event 构造器）
+    fn audit_delete_event(session_id: &str, decision: SecurityAuditDecision) -> AgentEvent {
+        agent_tools::audit::security_audit_event(
+            session_id,
+            SecurityAuditOperation::Delete,
+            vec!["a.txt".to_string()],
+            ImpactAssessment {
+                file_count: 1,
+                total_size_bytes: 0,
+                directory_count: 0,
+                cross_directory: false,
+                flagged: false,
+            },
+            decision,
+            None,
+        )
+    }
+
+    /// 桥接审计 sink 双轨发射：emit → 实时广播（缓冲桥）+ 持久化通道
+    /// （worker 按发射序落库）——广播保实时、落库保审计底账并存
+    #[test]
+    fn bridge_audit_sink_broadcasts_and_queues_persistence() {
+        let (bridge, emitter) = recording_bridge();
+        let buffered = Arc::new(BufferedRunEventBridge::new(bridge, "run-audit"));
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<AgentEvent>();
+        let sink = BridgeAuditSink::new(Arc::clone(&buffered), "run-audit".to_string(), tx);
+        sink.emit(&audit_delete_event("s1", SecurityAuditDecision::Blocked));
+
+        // 实时轨：缓冲桥收到并冲刷（记录发射器一条 security-audit 信封）
+        let payloads = emitter.0.lock().unwrap().clone();
+        assert_eq!(payloads.len(), 1, "实时广播一条");
+        let v: serde_json::Value = serde_json::from_str(&payloads[0]).expect("载荷为合法 JSON");
+        assert_eq!(v["type"], "security-audit");
+        assert_eq!(v["decision"], "blocked");
+
+        // 持久化轨：同一事件已入通道（worker 按序 reserve + append_event）
+        let received = rx.try_recv().expect("审计事件应进入持久化通道");
+        assert!(
+            matches!(received, AgentEvent::SecurityAudit { .. }),
+            "持久化通道应收到 security-audit 事件"
+        );
+    }
+
+    /// L4（F12）端到端：审计事件落库——run 内经路由 sink 发射
+    /// security-audit → run 收口后 events 表可读回（sequence 分配 +
+    /// 载荷保真；实时广播与落库底账双轨并存）
+    #[tokio::test]
+    async fn security_audit_persists_into_events_table() {
+        // provider 脚本暂停 2s：保证 run 活动窗口内发射审计事件
+        // （路由注册在 spawn 前同步完成，窗口内发射必达桥）
+        let main = Arc::new(
+            TestProvider::new(vec![
+                ProviderStreamEvent::text("正在执行任务。"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ])
+            .with_pause(0, 2_000),
+        );
+        let sub = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("调研完成。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _main, _sub, emitter) =
+            subagent_state_with_providers(main, sub, "deepseek-v4-flash");
+        state.run_restore().await;
+
+        // 完整 run_task_impl → drive_run_loop（run 启动注册审计路由）
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-audit-1", "sess-main", "执行一次安全审计任务"),
+        )
+        .await
+        .expect("run 发起成功");
+
+        // run 活动窗口内：经路由型审计 sink 发射工具级 security-audit
+        //（模拟 shell/delete 审计；run 级 BridgeAuditSink 承接 → 实时
+        // 广播 + 持久化通道）
+        state
+            .engine
+            .audit_sink()
+            .emit(&audit_delete_event("sess-main", SecurityAuditDecision::Denied));
+
+        // 等待 run 收口（收口处 await 审计落库 worker 排空；此处轮询
+        // 兜底驱动任务与测试主线的微小竞态窗口）
+        wait_all_runs_terminal(&state, Duration::from_secs(20)).await;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let (audit_sequence, audit_payload) = loop {
+            let events = db.query_events("sess-main", 0, Some(200)).expect("事件查询");
+            if let Some(found) = events
+                .iter()
+                .find(|e| e.event_type == "security-audit")
+                .map(|e| (e.sequence, e.payload.clone()))
+            {
+                break found;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "审计事件未在窗口内落库"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        };
+
+        // 1. 审计底账：events 表可读回（append_event 持久化 + sequence 分配）
+        assert!(
+            audit_sequence >= 1,
+            "审计事件应有分配的 sequence：{audit_sequence}"
+        );
+        let payload: serde_json::Value =
+            serde_json::from_str(&audit_payload).expect("落库载荷为合法 JSON");
+        assert_eq!(payload["decision"], "denied", "落库载荷决策保真");
+
+        // 2. 实时轨并存：同一审计事件也经缓冲桥广播（前端审计面板可见）
+        let broadcast = emitter.0.lock().unwrap().clone();
+        assert!(
+            broadcast.iter().any(|p| {
+                serde_json::from_str::<serde_json::Value>(p)
+                    .map(|v| v["type"] == "security-audit")
+                    .unwrap_or(false)
+            }),
+            "实时广播应与落库并存（广播保实时、落库保底账）"
         );
     }
 }

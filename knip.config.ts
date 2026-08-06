@@ -53,10 +53,8 @@ const config: KnipConfig = {
     // 门禁脚本按路径字符串消费的活文件（非 import，knip 无法跟踪）：
     // - store/index.ts：scripts/check-no-as-any-store.mjs BARREL_REQUIRED 校验目标
     // - store/rustCoreStore.ts：store/index.ts 桶文件 re-export 下游，随桶被门禁覆盖
-    // - styles/tokens/zindex.ts：apps/crish-desktop/scripts/check-zindex.mjs 双源一致性校验目标
     'apps/crish-desktop/src/store/index.ts',
     'apps/crish-desktop/src/store/rustCoreStore.ts',
-    'apps/crish-desktop/src/styles/tokens/zindex.ts',
     // R7 plugin-sdk 迁移预留资产（方案 01 §3 定义；R7 落地后移出本清单）
     'packages/shared-types/src/hooks.ts',
     'packages/shared-types/src/plugin.ts',

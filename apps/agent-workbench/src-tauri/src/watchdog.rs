@@ -21,8 +21,9 @@
 //!   A3 定夺；R-CF3 续 run 消费）；
 //! - store = [DispatchStore] 适配（session_meta `dispatch_*` 键读取；
 //!   默认内存实现 [MemoryDispatchStore]，conex-db 真适配在 R-CF3 接线）；
-//! - last_wakeup = [LastWakeupTracker]（A3 在事件消费旁路点调用
-//!   `mark_wakeup`；接线前 None = 从未唤醒，视为超时触发）；
+//! - last_wakeup = [LastWakeupTracker]（事件消费旁路点已接线：壳层
+//!   在事件收口处调用 `mark_wakeup`（R-CF3 核销），任何事件到达即
+//!   更新；None 仅存于从未有事件到达的冷启动窗口，视为超时触发）；
 //! - active_timer_probe = 活跃定时器计数探测（>0 = AI 已设置定时器等待
 //!   机制，抑制兜底——REQ-C05「既没有设置定时器」条件；A3 可在
 //!   TimerRegistry 装配点旁维护计数镜像，或经其他同步数据源注入）；
@@ -71,11 +72,12 @@ fn format_duration_ms(ms: u64) -> String {
 
 // ── 事件唤醒跟踪（"无任何事件唤醒"判定数据源）──────────────────────
 
-/// 最近事件唤醒时刻跟踪器（引擎侧共享；EventQueue 消费旁路记录，
+/// 最近事件唤醒时刻跟踪器（引擎侧共享；事件消费旁路记录，
 /// T-CF-07 的旁路点复用）
 ///
-/// 语义：`mark_wakeup` 由装配方在事件消费旁路点调用（任何事件到达即
-/// 视为一次唤醒）；`None` = 从未唤醒（视为超时，触发兜底）。
+/// 语义：`mark_wakeup` 由壳层在事件收口处调用（core_run_commands
+/// drive_run_loop 事件 emit 循环与子代理终态收口，任何事件到达即
+/// 视为一次唤醒）；`None` = 从未有事件到达（视为超时，触发兜底）。
 #[derive(Default)]
 pub(crate) struct LastWakeupTracker {
     /// 最近唤醒时刻（epoch 毫秒；None = 从未）
@@ -83,14 +85,12 @@ pub(crate) struct LastWakeupTracker {
 }
 
 impl LastWakeupTracker {
-    /// 新建跟踪器（初始 None = 从未唤醒）
-    #[cfg_attr(not(test), allow(dead_code))] // R-CF3：A3 装配接线后移除
+    /// 新建跟踪器（初始 None = 从未有事件到达）
     pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    /// 标记一次事件唤醒（时刻取系统时钟；事件旁路接线点调用）
-    #[allow(dead_code)] // R-CF3：A3 事件旁路接线后移除
+    /// 标记一次事件唤醒（时刻取系统时钟；壳层事件收口处接线调用）
     pub(crate) fn mark_wakeup(&self) {
         self.mark_wakeup_at(now_ms());
     }
@@ -190,8 +190,8 @@ pub(crate) struct Watchdog {
 }
 
 impl Watchdog {
-    /// 新建 watchdog（适配器与配置由装配方注入）
-    #[allow(dead_code)] // R-CF3：A3 装配接线后移除
+    /// 新建 watchdog（适配器与配置由装配方注入；装配已接线：
+    /// engine.rs 引擎装配点构造并 spawn，R-CF3 核销）
     pub(crate) fn new(
         session_id: String,
         queue: Arc<Mutex<PendingMessageQueue>>,
@@ -302,9 +302,8 @@ impl Watchdog {
     }
 }
 
-/// spawn 入口（每会话一个 tokio 周期任务；engine.rs 装配由 A3 统一完成，
-/// 见任务书装配收口单点纪律）
-#[allow(dead_code)] // R-CF3：A3 装配接线后移除
+/// spawn 入口（每会话一个 tokio 周期任务；engine.rs 引擎装配点已接线，
+/// R-CF3 核销）
 pub(crate) fn spawn(
     runtime: &tokio::runtime::Handle,
     watchdog: Arc<Watchdog>,

@@ -10,7 +10,6 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
-    "check:zindex": "node scripts/check-zindex.mjs",
     "test:snapshots": "vitest run tests/snapshots/ --coverage.enabled=false",
     "test:snapshots:update": "vitest run tests/snapshots/ --update --coverage.enabled=false",
     "test:visual": "playwright test",

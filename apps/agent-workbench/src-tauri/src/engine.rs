@@ -597,7 +597,7 @@ fn to_loop_event(event: WireEvent) -> ProviderStreamEvent {
 ///   发射的 security-audit，现状走 NoopAuditSink 静默丢弃）按
 ///   session_id 路由到该会话当前活动 run 的审计桥（[BridgeAuditSink]
 ///   → 缓冲事件桥 → 前端审计面板 per-run 面实时可见，34-T7 口径；
-///   落库随 F12 端到端登记，本卡不新增落库面）；
+///   L4（F12）已补落库面——桥内持久化通道 → events 表审计底账）；
 /// - **域隔离边界**（30 §9 最终口径）：任务域审计（10-P3
 ///   TaskAuditAccumulator → EventBridge 直发，operation=command-exec）
 ///   **不经本 sink**——本 sink 只承接工具面审计，两路均以
@@ -744,9 +744,9 @@ pub(crate) struct EngineHandle {
     /// 的订阅面；经 [Self::terminal_stream] 访问器被 CoreRunState
     /// finalize_subagent_spawner 消费，陈旧 allow 已核销）
     terminal_stream: Arc<EventStreamBroadcast>,
-    /// 最近事件唤醒跟踪（watchdog 失联判定数据源；事件消费旁路点
-    /// mark_wakeup 接线在 R-CF3 后续轮，接线前 None = 从未唤醒）
-    #[allow(dead_code)] // R-CF3：事件消费旁路点 mark_wakeup 接线
+    /// 最近事件唤醒跟踪（watchdog 失联判定数据源；事件收口处已接线：
+    /// 壳层 drive_run_loop 事件 emit 循环与子代理终态收口调用
+    /// mark_wakeup（R-CF3 核销），任何事件到达即更新）
     last_wakeup: Arc<LastWakeupTracker>,
     /// Cron 调度注册表（T-CF-09 A5 提供；None = 未装配降级，workflow
     /// 命令面经 main.rs（A9）消费——30 方案 P6/P7 后经
@@ -838,8 +838,8 @@ impl EngineHandle {
         ));
 
         // ── T-CF-13：Watchdog 装配（A7 提供 pub(crate) 构造器与 spawn）──
-        // 最近事件唤醒跟踪（事件消费旁路点 mark_wakeup 接线在 R-CF3
-        // 后续轮；接线前 None = 从未唤醒，视为超时触发兜底）
+        // 最近事件唤醒跟踪（事件收口处 mark_wakeup 已接线：壳层事件
+        // emit 循环与子代理终态收口驱动，R-CF3 核销）
         let last_wakeup = Arc::new(LastWakeupTracker::new());
         // 引擎级无会话归属：空串占位；会话级 watchdog 由 T-CF-11（A8）
         // idle 续 run 收口按会话 spawn（watchdog.rs 头部注记）。
@@ -1053,8 +1053,9 @@ impl EngineHandle {
         Arc::clone(&self.terminal_stream)
     }
 
-    /// 最近事件唤醒跟踪（T-CF-13：事件消费旁路点 mark_wakeup 接线用）
-    #[allow(dead_code)] // R-CF3：事件消费旁路点 mark_wakeup 接线
+    /// 最近事件唤醒跟踪（T-CF-13：事件收口处 mark_wakeup 接线消费方 =
+    /// core_run_commands drive_run_loop 事件 emit 循环与子代理终态收口，
+    /// 已接线）
     pub(crate) fn last_wakeup(&self) -> Arc<LastWakeupTracker> {
         Arc::clone(&self.last_wakeup)
     }

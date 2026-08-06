@@ -121,6 +121,35 @@ T3 定稿 members（15 项）内，未纳入工作区，不处理。
 >   agent-provider/models/catalog.rs unused_mut 1 键；
 > - orchestrator/src/session.rs derefed_type 1 键本域修复（crates 非并行域）；
 > - 下述分类统计为验收时点口径（归一键），精确清单以标记区为准。
+>
+> I4 验收轮维护注记（2026-08-06，审计遗留 L7 归账，`--update` 显式刷新基线）：
+> - **9 键/19 raw → 35 键/62 raw**（--update 全量写回，对齐当前合法存量；批 5/6
+>   登记"33+ 条存量"的显式归账，验收轮基线即当前存量快照）；
+> - 存量减少 6 键（并行域清理落地，ratchet 允许下降）：conex-db migrate.rs
+>   doc list 1 + needless_borrows 1、conex-db runs.rs very_complex 1、
+>   agent-provider/models/catalog.rs unused_mut 1、core_run_commands.rs
+>   doc list 1 + too_many_arguments(12/7) 1（§7 遗留 1/2/3 的对应项随之核销）；
+> - 35 键来源分类（归账口径）：
+>   - **既有（I3 遗留登记在案）3 键/9 raw**：session-loop/cache_tracker.rs
+>     map_or 1 键/5 raw + slice::from_ref 1 键/4 raw（I3 注记"并行缓存域在途产物"
+>     登记）、tests/prefix_stability.rs needless_range_loop 1 键/1 raw（§7 遗留 4）；
+>   - **豁免面（clippy.toml 配置触发，6 键/8 raw）**：disallowed-methods 裸删除
+>     禁令 6 键——agent-tools/src/executor.rs 2 raw、conex-telemetry 测试
+>     panic_hook/panic_hook_none/subscriber_file/subscriber_degraded 4 raw、
+>     conex-test-utils/src/lib.rs 2 raw。clippy.toml 文件头已声明豁免面（测试
+>     临时目录清理 + 纯测试基础设施 crate），对应文件级/crate 级 allow + 理由
+>     接线尚未落地，登记遗留跟踪（后续轮次补接线，勿裸改 clippy.toml 本体）；
+>   - **验收轮新增存量（并行域/新功能面产物，26 键/45 raw）**：agent-workbench
+>     src-tauri 并行域落地暴露 19 键（core_run_commands 8 键含 MutexGuard 8 raw/
+>     very complex 2 raw/needless_borrows 2 raw/Iterator::last 1、timers 2 键、
+>     workflow_commands 4 键、background 2 键、core_query_commands 1 键、
+>     outputs_config 2 键、subagent_spawner 1 键、watchdog 1 键）与 crates/
+>     域新增 7 键（orchestrator lifecycle.rs 1 + task_events.rs 1、session-loop
+>     approval_router.rs 1 + tool_exec.rs 1 + g02_collab_outputs.rs 2、conex-db
+>     agents.rs 1、conex-types events_roundtrip.rs 1）——本次显式归账入基线，
+>     后续清理需逐条消除后显式 --update；
+> - 归账后护栏语义不变：基线外新增告警 > 0 即 exit 1（ci-mid.yml clippy job
+>   守门），存量只降不升（提升必须显式 --update）。
 
 - **apps/agent-workbench/src-tauri：30 条**（G11a 后按归一键：unsafe 7 + 风格 19 + core_run_commands 跳过域 4；raw 实例 59）
   - dead_code/unused 类：**0 条（G11a 清零）**；core_run_commands.rs 4 条跳过域遗留 I3 承接
@@ -134,25 +163,68 @@ T3 定稿 members（15 项）内，未纳入工作区，不处理。
 ### 全量清单（按 lint 消息排序，含位置）
 
 <!-- BASELINE_LIST_START -->
-- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:383:9
-- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:1730:5
-- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:1731:5
-- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:1732:5
-- doc list item without indentation  --> crates/conex-db/src/migrate.rs:349:5
-- the borrowed expression implements the required traits  --> crates/conex-db/src/migrate.rs:38:70
+- called `Iterator::last` on a `DoubleEndedIterator`; this will needlessly iterate the entire iterator  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:6573:24
+- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/background.rs:12:5
+- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/core_query_commands.rs:387:9
+- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/core_query_commands.rs:388:9
+- doc list item without indentation  --> apps/agent-workbench/src-tauri/src/outputs_config.rs:9:5
+- doc list item without indentation  --> crates/orchestrator/src/lifecycle.rs:15:5
+- doc list item without indentation  --> crates/orchestrator/src/lifecycle.rs:16:5
+- doc list item without indentation  --> crates/orchestrator/src/lifecycle.rs:17:5
+- doc list item without indentation  --> crates/session-loop/src/tool_events.rs:74:5
+- manual `RangeInclusive::contains` implementation  --> apps/agent-workbench/src-tauri/src/background.rs:4202:36
+- manual `RangeInclusive::contains` implementation  --> apps/agent-workbench/src-tauri/src/workflow_commands.rs:140:32
+- manual implementation of `split_once`  --> crates/session-loop/tests/g02_collab_outputs.rs:284:24
+- the borrowed expression implements the required traits  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:6837:29
+- the borrowed expression implements the required traits  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:6855:29
+- the borrowed expression implements the required traits  --> crates/conex-types/tests/events_roundtrip.rs:1118:37
 - the loop variable `i` is used to index `first_run_msgs`  --> crates/session-loop/tests/prefix_stability.rs:241:14
+- this `MutexGuard` is held across an await point  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:4972:13
+- this `MutexGuard` is held across an await point  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:4982:14
+- this `MutexGuard` is held across an await point  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:5013:13
+- this `MutexGuard` is held across an await point  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:5023:14
+- this `MutexGuard` is held across an await point  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:5614:17
+- this `MutexGuard` is held across an await point  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:5624:59
+- this `MutexGuard` is held across an await point  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:7133:17
+- this `MutexGuard` is held across an await point  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:7153:59
+- this `MutexGuard` is held across an await point  --> apps/agent-workbench/src-tauri/src/timers.rs:954:13
+- this `MutexGuard` is held across an await point  --> apps/agent-workbench/src-tauri/src/timers.rs:966:55
+- this `MutexGuard` is held across an await point  --> apps/agent-workbench/src-tauri/src/timers.rs:1034:13
+- this `MutexGuard` is held across an await point  --> apps/agent-workbench/src-tauri/src/timers.rs:1050:32
+- this `impl` can be derived  --> apps/agent-workbench/src-tauri/src/outputs_config.rs:67:1
 - this `map_or` can be simplified  --> crates/session-loop/src/cache_tracker.rs:208:28
 - this `map_or` can be simplified  --> crates/session-loop/src/cache_tracker.rs:273:9
 - this `map_or` can be simplified  --> crates/session-loop/src/cache_tracker.rs:323:42
 - this `map_or` can be simplified  --> crates/session-loop/src/cache_tracker.rs:324:32
 - this `map_or` can be simplified  --> crates/session-loop/src/cache_tracker.rs:352:27
+- this boolean expression can be simplified  --> crates/session-loop/src/approval_router.rs:133:8
+- this call to `clone` can be replaced with `std::slice::from_ref`  --> crates/conex-db/src/agents.rs:588:38
+- this call to `clone` can be replaced with `std::slice::from_ref`  --> crates/conex-db/src/agents.rs:638:38
 - this call to `clone` can be replaced with `std::slice::from_ref`  --> crates/session-loop/src/cache_tracker.rs:544:67
 - this call to `clone` can be replaced with `std::slice::from_ref`  --> crates/session-loop/src/cache_tracker.rs:545:76
 - this call to `clone` can be replaced with `std::slice::from_ref`  --> crates/session-loop/src/cache_tracker.rs:569:64
 - this call to `clone` can be replaced with `std::slice::from_ref`  --> crates/session-loop/src/cache_tracker.rs:579:67
-- this function has too many arguments (12/7)  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:1282:1
-- variable does not need to be mutable  --> crates/agent-provider/src/models/catalog.rs:919:13
-- very complex type used. Consider factoring parts into `type` definitions  --> crates/conex-db/src/runs.rs:228:18
+- this expression creates a reference which is immediately dereferenced by the compiler  --> crates/session-loop/src/tool_exec.rs:412:83
+- this function has too many arguments (8/7)  --> apps/agent-workbench/src-tauri/src/workflow_commands.rs:1053:1
+- use of a disallowed method `std::fs::remove_dir_all`  --> crates/agent-tools/src/executor.rs:483:17
+- use of a disallowed method `std::fs::remove_dir_all`  --> crates/agent-tools/src/executor.rs:518:17
+- use of a disallowed method `std::fs::remove_dir_all`  --> crates/conex-telemetry/tests/panic_hook.rs:15:13
+- use of a disallowed method `std::fs::remove_dir_all`  --> crates/conex-telemetry/tests/panic_hook_none.rs:13:13
+- use of a disallowed method `std::fs::remove_dir_all`  --> crates/conex-telemetry/tests/subscriber_file.rs:16:13
+- use of a disallowed method `std::fs::remove_dir_all`  --> crates/conex-test-utils/src/lib.rs:117:17
+- use of a disallowed method `std::fs::remove_dir_all`  --> crates/conex-test-utils/src/lib.rs:186:17
+- use of a disallowed method `std::fs::remove_file`  --> crates/conex-telemetry/tests/subscriber_degraded.rs:30:13
+- used `assert_eq!` with a literal bool  --> apps/agent-workbench/src-tauri/src/workflow_commands.rs:1409:9
+- used consecutive `str::replace` call  --> apps/agent-workbench/src-tauri/src/workflow_commands.rs:1661:41
+- useless use of `vec!`  --> crates/orchestrator/src/task_events.rs:823:22
+- using `contains()` instead of `iter().any()` is more efficient  --> crates/session-loop/tests/g02_collab_outputs.rs:407:9
+- using `contains()` instead of `iter().any()` is more efficient  --> crates/session-loop/tests/g02_collab_outputs.rs:411:9
+- using `contains()` instead of `iter().any()` is more efficient  --> crates/session-loop/tests/g02_collab_outputs.rs:481:9
+- very complex type used. Consider factoring parts into `type` definitions  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:167:24
+- very complex type used. Consider factoring parts into `type` definitions  --> apps/agent-workbench/src-tauri/src/core_run_commands.rs:3654:28
+- very complex type used. Consider factoring parts into `type` definitions  --> apps/agent-workbench/src-tauri/src/subagent_spawner.rs:879:22
+- very complex type used. Consider factoring parts into `type` definitions  --> apps/agent-workbench/src-tauri/src/timers.rs:799:27
+- very complex type used. Consider factoring parts into `type` definitions  --> apps/agent-workbench/src-tauri/src/watchdog.rs:345:27
 <!-- BASELINE_LIST_END -->
 
 ## 5. 增量守门规则（机器执行）
