@@ -32,6 +32,13 @@
   outline: none;
 }
 
+/* RL-01 落地面特例（data-empty-kind="session-empty"）：焦点混色 ≤5% */
+.container[data-empty-kind='session-empty']:focus-within {
+  border-color: color-mix(in srgb, var(--border-color) 95%, var(--text-primary) 5%) !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
 .containerDense {
   --composer-line-height: 1.4;
   padding: 6px 10px;

@@ -1,4 +1,4 @@
-﻿/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * apps/crish-desktop/src/components/chat-composer/composerTypes.ts
  * Single Source of Truth Type Contracts for Tiptap Chat Composer
@@ -63,8 +63,26 @@ export interface TiptapEditorFieldProps {
   onSendMarkdown?: (markdown: string) => void;
   onMarkdownChange?: (markdown: string) => void;
   onCompositionChange?: (isComposing: boolean) => void;
-  onDropFiles?: (files: FileList | File[]) => void;
-  onPasteImage?: (file: File) => void;
+  onDropFiles?: (files: File[]) => void;
+  onPasteImage?: (file: File, event: ClipboardEvent) => void;
+  /** 无障碍标签（透传至可编辑根节点） */
+  ariaLabel?: string;
+  /** 斜杠弹层 combobox 链（对齐 ComposerField 语义） */
+  ariaExpanded?: boolean | undefined;
+  ariaControls?: string | undefined;
+  ariaHasPopup?: (boolean | 'false' | 'true' | 'menu' | 'listbox' | 'tree' | 'grid' | 'dialog') | undefined;
+  ariaActivedescendant?: string | undefined;
+  ariaAutocomplete?: ('none' | 'inline' | 'list' | 'both') | undefined;
+  /** 宿主系统/skill 斜杠命令（经引用桥接动态更新，无需重建编辑器） */
+  slashExtraItems?: SlashCommandItem[];
+  /** 挂载后自动聚焦编辑器 */
+  autoFocus?: boolean;
+}
+
+/** 编辑器命令式句柄（适配层发送前同步用） */
+export interface TiptapEditorFieldHandle {
+  /** 同步获取当前编辑器 markdown（绕过 150ms 防抖） */
+  getMarkdown: () => string;
 }
 
 export interface UseTiptapComposerStateOptions {

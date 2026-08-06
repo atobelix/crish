@@ -1,11 +1,14 @@
-﻿/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * apps/crish-desktop/src/components/chat-composer/TiptapEditorField.tsx
  * Tiptap ProseMirror field for chat composer with IME protection (CRM-03), keymaps, drop & paste handlers.
+ * 40 方案 T3 补全：Mention 注册、CodeBlock Enter 保护、DOMPurify 粘贴清洗、动态占位符。
+ * 性能：编辑器装配（extensions/editorProps/onUpdate）useMemo 一次性稳定，回调全部经 ref
+ * 桥接，避免 tiptap v3 useEditor 每渲染 setOptions 重建 ExtensionManager。
  * CI Guardrail: UI Component (Max 500 lines of effective code, Max 12 useState)
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 
 import { useEditor, EditorContent } from '@tiptap/react';
 
@@ -16,13 +19,24 @@ import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
 
 import TaskItem from '@tiptap/extension-task-item';
-import { SlashExtension } from './SlashExtension';
+
+import Link from '@tiptap/extension-link';
+
+import DOMPurify from 'dompurify';
+import { SlashExtension, MentionExtension } from './SlashExtension';
+import type { SlashCommandItem } from './composerTypes';
 import { serializeToMarkdown } from './serialization/markdownSerializer';
 import { parseFromMarkdown } from './serialization/markdownDeserializer';
-import type { TiptapEditorFieldProps } from './composerTypes';
+import type { TiptapEditorFieldProps, TiptapEditorFieldHandle } from './composerTypes';
 import styles from './TiptapEditorField.module.css';
 
-export const TiptapEditorField: React.FC<TiptapEditorFieldProps> = ({
+/** 编辑器最大长度防爆上限（与草稿截断一致，SRS 安全红线兜底） */
+const COMPOSER_MAX_LENGTH = 100000;
+
+export const TiptapEditorField = React.forwardRef<
+  TiptapEditorFieldHandle,
+  TiptapEditorFieldProps
+>(({
   placeholder = 'Type a message or press / for commands...',
   disabled = false,
   sendShortcut = 'enter',
@@ -32,122 +46,219 @@ export const TiptapEditorField: React.FC<TiptapEditorFieldProps> = ({
   onCompositionChange,
   onDropFiles,
   onPasteImage,
-}) => {
+  ariaLabel,
+  ariaExpanded,
+  ariaControls,
+  ariaHasPopup,
+  ariaActivedescendant,
+  ariaAutocomplete,
+  slashExtraItems,
+  autoFocus = false,
+}, ref) => {
   const isComposingRef = useRef<boolean>(false);
-  const lastContentRef = useRef<string | undefined>(content);
+  // 记录编辑器「已呈现」内容（发送/水合同步更新）；初始为 undefined 保证首帧水合执行
+  const lastContentRef = useRef<string | undefined>(undefined);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const editorRef = useRef<any>(null);
 
-  const editor = useEditor({
-    editable: !disabled,
-    extensions: [
+  // ── 动态 prop 经 ref 桥接（编辑器装配一次性稳定，避免重建）─────────────────
+  const placeholderRef = useRef<string>(placeholder ?? '');
+  const sendShortcutRef = useRef<'enter' | 'ctrlEnter'>(sendShortcut);
+  const slashExtraItemsRef = useRef<SlashCommandItem[]>([]);
+  const callbacksRef = useRef({
+    onSendMarkdown,
+    onMarkdownChange,
+    onCompositionChange,
+    onDropFiles,
+    onPasteImage,
+  });
+
+  useEffect(() => {
+    placeholderRef.current = placeholder ?? '';
+  }, [placeholder]);
+
+  useEffect(() => {
+    sendShortcutRef.current = sendShortcut;
+  }, [sendShortcut]);
+
+  useEffect(() => {
+    slashExtraItemsRef.current = slashExtraItems ?? [];
+  }, [slashExtraItems]);
+
+  useEffect(() => {
+    callbacksRef.current = {
+      onSendMarkdown,
+      onMarkdownChange,
+      onCompositionChange,
+      onDropFiles,
+      onPasteImage,
+    };
+  }, [onSendMarkdown, onMarkdownChange, onCompositionChange, onDropFiles, onPasteImage]);
+
+  // ── 编辑器装配（稳定实例）─────────────────────────────────────────────────
+  // 注意：装配一次性固定（useMemo 空依赖），回调全部经 ref 桥接取最新值；
+  // aria 属性为运行期动态值，走下方 DOM setAttribute 同步（不经装配重建）。
+  const editorOptions = useMemo(() => {
+    const extensions = [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
         codeBlock: {},
       }),
       Placeholder.configure({
-        placeholder: placeholder ?? '',
+        // 动态占位符：函数形式每次装饰时读取最新值（processing 双态）
+        placeholder: () => placeholderRef.current ?? '',
       }),
+      // 链接 mark 注册（对齐序列化 link 分支，[text](url) 水合保真；不自动链接）
+      Link.configure({ openOnClick: false, autolink: false, linkOnPaste: false }),
       TaskList,
       TaskItem.configure({
         nested: true,
       }),
-      SlashExtension,
-    ],
-    onUpdate: ({ editor }) => {
-      // 性能优化：防抖处理海量节点下的 serializeToMarkdown 计算，避免主线程卡顿
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-      debounceTimerRef.current = setTimeout(() => {
-        const json = editor.getJSON();
-        const markdown = serializeToMarkdown(json);
-        lastContentRef.current = markdown;
-        if (onMarkdownChange) {
-          onMarkdownChange(markdown);
+      MentionExtension,
+      // 宿主系统/skill 命令以引用桥接，动态更新无需重建编辑器
+      SlashExtension.configure({ extraItemsRef: slashExtraItemsRef }),
+    ];
+
+    return {
+      extensions,
+      onUpdate: ({ editor }: any) => {
+        // 性能优化：防抖处理海量节点下的 serializeToMarkdown 计算，避免主线程卡顿
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
         }
-      }, 150);
-    },
-    editorProps: {
-      attributes: {
-        class: styles.proseMirrorField ?? '',
+        debounceTimerRef.current = setTimeout(() => {
+          const markdown = serializeToMarkdown(editor.getJSON());
+          lastContentRef.current = markdown;
+          callbacksRef.current.onMarkdownChange?.(markdown);
+        }, 150);
       },
-      handleKeyDown: (view: any, event: KeyboardEvent | any) => {
-        // CRM-03: IME Composition Protection Gate
-        if (view.composing || event.isComposing || isComposingRef.current) {
-          if (onCompositionChange) {
-            onCompositionChange(true);
-          }
-          return false; // Pass through to browser native CJK IME candidate selection
-        }
-
-        const isShift = event.shiftKey;
-        const isCtrlOrCmd = event.ctrlKey || event.metaKey;
-
-        // Shift+Enter inserts hard break
-        if (event.key === 'Enter' && isShift) {
-          return false;
-        }
-
-        // Send Keymaps
-        if (event.key === 'Enter') {
-          let shouldSend = false;
-
-          if (sendShortcut === 'enter' && !isShift && !isCtrlOrCmd) {
-            shouldSend = true;
-          } else if (sendShortcut === 'ctrlEnter' && isCtrlOrCmd) {
-            shouldSend = true;
+      editorProps: {
+        attributes: {
+          class: styles.proseMirrorField ?? '',
+          'data-testid': 'chat-input',
+        },
+        handleKeyDown: (view: any, event: KeyboardEvent | any) => {
+          // CRM-03: IME Composition Protection Gate（view.composing + event.isComposing + DOM 监听）
+          if (view.composing || event.isComposing || isComposingRef.current) {
+            callbacksRef.current.onCompositionChange?.(true);
+            return false; // Pass through to browser native CJK IME candidate selection
           }
 
-          if (shouldSend) {
-            event.preventDefault();
-            if (!editor) return true;
+          const isShift = event.shiftKey;
+          const isCtrlOrCmd = event.ctrlKey || event.metaKey;
 
-            // 强制立即执行一次同步转换以保证发送内容最新
-            const json = editor.getJSON();
-            const markdown = serializeToMarkdown(json).trim() || editor.getText().trim();
+          // Shift+Enter inserts hard break
+          if (event.key === 'Enter' && isShift) {
+            return false;
+          }
 
-            if (markdown && onSendMarkdown) {
-              onSendMarkdown(markdown);
-              editor.commands.clearContent();
-              lastContentRef.current = '';
-              if (onMarkdownChange) {
-                onMarkdownChange('');
-              }
+          // CodeBlock Enter 保护（SRS 3.7.1）：代码块内 Enter 只换行，绝不触发发送
+          if (event.key === 'Enter' && view.state.selection.$from.parent.type.name === 'codeBlock') {
+            return false;
+          }
+
+          // Send Keymaps
+          if (event.key === 'Enter') {
+            let shouldSend = false;
+
+            if (sendShortcutRef.current === 'enter' && !isShift && !isCtrlOrCmd) {
+              shouldSend = true;
+            } else if (sendShortcutRef.current === 'ctrlEnter' && isCtrlOrCmd) {
+              shouldSend = true;
             }
+
+            if (shouldSend) {
+              event.preventDefault();
+              const editor = editorRef.current;
+              if (!editor) return true;
+
+              // 强制立即执行一次同步转换以保证发送内容最新
+              const json = editor.getJSON();
+              const markdown = serializeToMarkdown(json).trim() || editor.getText().trim();
+
+              if (markdown && callbacksRef.current.onSendMarkdown) {
+                callbacksRef.current.onSendMarkdown(markdown);
+                editor.commands.clearContent();
+                lastContentRef.current = '';
+                callbacksRef.current.onMarkdownChange?.('');
+              }
+              return true;
+            }
+          }
+
+          return false;
+        },
+        handleDrop: (view: any, event: DragEvent | any, _slice: any, moved: boolean) => {
+          if (!moved && event.dataTransfer && event.dataTransfer.files.length > 0) {
+            event.preventDefault();
+            callbacksRef.current.onDropFiles?.(Array.from(event.dataTransfer.files));
             return true;
           }
-        }
+          return false;
+        },
+        handlePaste: (view: any, event: any) => {
+          const clipboardData = event.clipboardData;
+          if (!clipboardData) return false;
 
-        return false;
-      },
-      handleDrop: (view: any, event: DragEvent | any, _slice: any, moved: boolean) => {
-        if (!moved && event.dataTransfer && event.dataTransfer.files.length > 0) {
-          event.preventDefault();
-          if (onDropFiles) {
-            onDropFiles(Array.from(event.dataTransfer.files));
-          }
-          return true;
-        }
-        return false;
-      },
-      handlePaste: (view: any, event: ClipboardEvent | any) => {
-        const items = event.clipboardData?.items;
-        if (items && items.length > 0) {
-          for (let i = 0; i < items.length; i++) {
-            if (items[i].type.startsWith('image/')) {
-              const file = items[i].getAsFile();
-              if (file && onPasteImage) {
-                event.preventDefault();
-                onPasteImage(file);
-                return true;
+          // 1. 图片粘贴 → 转交适配层（宿主附件链），不落入编辑器
+          const items = clipboardData.items;
+          if (items && items.length > 0) {
+            for (let idx = 0; idx < items.length; idx++) {
+              const item = items.item ? items.item(idx) : items[idx];
+              if (item && item.type.startsWith('image/')) {
+                const file = item.getAsFile();
+                if (file) {
+                  event.preventDefault();
+                  callbacksRef.current.onPasteImage?.(file, event);
+                  return true;
+                }
               }
             }
           }
-        }
-        return false;
+
+          // 2. HTML 粘贴 → DOMPurify 清洗后以安全 HTML 插入（防 XSS 注入）
+          const html = clipboardData.getData('text/html');
+          if (html) {
+            event.preventDefault();
+            const cleaned = DOMPurify.sanitize(html, {
+              FORBID_TAGS: [
+                'script',
+                'style',
+                'iframe',
+                'object',
+                'embed',
+                'form',
+                'link',
+                'meta',
+                'img',
+                'video',
+                'audio',
+                'source',
+                'input',
+                'button',
+                'textarea',
+              ],
+              FORBID_ATTR: ['style', 'onerror', 'onload', 'onclick'],
+            });
+            view.pasteHTML(cleaned);
+            return true;
+          }
+
+          // 3. 纯文本由 ProseMirror 默认处理
+          return false;
+        },
       },
-    },
-  });
+    };
+  }, []);
+
+  const editor = useEditor(editorOptions);
+
+  useEffect(() => {
+    editorRef.current = editor ?? null;
+    return () => {
+      editorRef.current = null;
+    };
+  }, [editor]);
 
   useEffect(() => {
     return () => {
@@ -164,15 +275,67 @@ export const TiptapEditorField: React.FC<TiptapEditorFieldProps> = ({
     }
   }, [editor, disabled]);
 
+  // aria 属性动态同步（装配 attributes 静态，运行期经 DOM setAttribute 更新，
+  // 对齐 ComposerField textarea 的 aria 实时语义；T10 扩展 activedescendant 全链）
+  useEffect(() => {
+    if (!editor) return;
+    const dom = editor.view.dom;
+    if (ariaLabel) dom.setAttribute('aria-label', ariaLabel);
+    if (ariaHasPopup === 'listbox' || typeof ariaExpanded === 'boolean') {
+      dom.setAttribute('role', 'combobox');
+    } else {
+      dom.removeAttribute('role');
+    }
+    if (typeof ariaExpanded === 'boolean') {
+      dom.setAttribute('aria-expanded', String(ariaExpanded));
+    } else {
+      dom.removeAttribute('aria-expanded');
+    }
+    if (ariaControls) {
+      dom.setAttribute('aria-controls', ariaControls);
+    } else {
+      dom.removeAttribute('aria-controls');
+    }
+    if (ariaHasPopup !== undefined) {
+      dom.setAttribute('aria-haspopup', String(ariaHasPopup));
+    } else {
+      dom.removeAttribute('aria-haspopup');
+    }
+    if (ariaActivedescendant) {
+      dom.setAttribute('aria-activedescendant', ariaActivedescendant);
+    } else {
+      dom.removeAttribute('aria-activedescendant');
+    }
+    if (ariaAutocomplete) {
+      dom.setAttribute('aria-autocomplete', ariaAutocomplete);
+    } else {
+      dom.removeAttribute('aria-autocomplete');
+    }
+  }, [
+    editor,
+    ariaLabel,
+    ariaExpanded,
+    ariaControls,
+    ariaHasPopup,
+    ariaActivedescendant,
+    ariaAutocomplete,
+  ]);
+
+  // 占位符切换（processing 双态）后强制重算装饰
+  useEffect(() => {
+    if (editor) {
+      editor.view.dispatch(editor.state.tr);
+    }
+  }, [editor, placeholder]);
+
   // Sync editor DOM content with content prop (CRM-02 Session Draft Hydration)
   // 性能优化：流式输出与海量节点场景下，移除 O(N) 的 currentMarkdown 序列化
   // 添加内存截断防爆策略
   useEffect(() => {
     if (!editor || content === undefined) return;
-    
-    const COMPOSER_MAX_LENGTH = 100000;
+
     let safeContent = content;
-    
+
     // 防爆内存截断策略（安全红线兜底：严格视口防 OOM）
     if (safeContent.length > COMPOSER_MAX_LENGTH) {
       safeContent = safeContent.slice(0, COMPOSER_MAX_LENGTH) + '\n\n>[!WARNING]\n>内容过长已被防爆截断，请清理后继续。';
@@ -181,11 +344,14 @@ export const TiptapEditorField: React.FC<TiptapEditorFieldProps> = ({
     if (safeContent === lastContentRef.current) return;
 
     // 采用 requestAnimationFrame 调度渲染，确保 120Hz/60Hz 不掉帧
-    requestAnimationFrame(() => {
+    // 卸载清理：组件销毁后回调不再触碰编辑器（防 destroyed 编辑器空指针）
+    const rafId = requestAnimationFrame(() => {
+      if (!editor || editor.isDestroyed) return;
       const doc = parseFromMarkdown(safeContent);
       editor.commands.setContent(doc);
       lastContentRef.current = safeContent;
     });
+    return () => cancelAnimationFrame(rafId);
   }, [editor, content]);
 
   // Track composition events directly on the editor DOM node for CJK protection
@@ -196,16 +362,12 @@ export const TiptapEditorField: React.FC<TiptapEditorFieldProps> = ({
 
     const handleCompositionStart = () => {
       isComposingRef.current = true;
-      if (onCompositionChange) {
-        onCompositionChange(true);
-      }
+      callbacksRef.current.onCompositionChange?.(true);
     };
 
     const handleCompositionEnd = () => {
       isComposingRef.current = false;
-      if (onCompositionChange) {
-        onCompositionChange(false);
-      }
+      callbacksRef.current.onCompositionChange?.(false);
     };
 
     dom.addEventListener('compositionstart', handleCompositionStart);
@@ -215,11 +377,31 @@ export const TiptapEditorField: React.FC<TiptapEditorFieldProps> = ({
       dom.removeEventListener('compositionstart', handleCompositionStart);
       dom.removeEventListener('compositionend', handleCompositionEnd);
     };
-  }, [editor, onCompositionChange]);
+  }, [editor]);
+
+  // autoFocus：挂载后聚焦编辑器（rAF 等待布局稳定）
+  const focusEditor = useCallback(() => {
+    editorRef.current?.commands.focus();
+  }, []);
+
+  useEffect(() => {
+    if (!autoFocus) return;
+    const id = requestAnimationFrame(focusEditor);
+    return () => cancelAnimationFrame(id);
+  }, [autoFocus, focusEditor]);
+
+  // 命令式句柄：发送前同步取最新 markdown（绕过防抖）
+  useImperativeHandle(ref, () => ({
+    getMarkdown: () => {
+      const editor = editorRef.current;
+      if (!editor) return '';
+      return serializeToMarkdown(editor.getJSON()).trim() || editor.getText().trim();
+    },
+  }), []);
 
   return (
     <div
-      className={`${styles.fieldWrapper} ${disabled ? styles.disabled : ''}`}
+      className={`${styles.fieldWrapper}${disabled ? ` ${styles.disabled}` : ''}`}
       onClick={() => {
         if (!disabled && editor) {
           editor.commands.focus();
@@ -229,4 +411,7 @@ export const TiptapEditorField: React.FC<TiptapEditorFieldProps> = ({
       <EditorContent editor={editor} />
     </div>
   );
-};
+});
+TiptapEditorField.displayName = 'TiptapEditorField';
+
+

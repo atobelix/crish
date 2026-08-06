@@ -16,6 +16,13 @@ import {
   Code,
   Quote,
   HelpCircle,
+  Target,
+  BookOpen,
+  Calendar,
+  Users,
+  Globe,
+  PlayCircle,
+  Sparkles,
 } from 'lucide-react';
 import type { SlashMenuProps, SlashCommandItem } from './composerTypes';
 import styles from './TiptapSlashMenu.module.css';
@@ -29,6 +36,14 @@ const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: 
   CheckSquare,
   Code,
   Quote,
+  // 宿主系统命令图标（/goal /learn /schedule /teamwork /browser /simulate 等）
+  Target,
+  BookOpen,
+  Calendar,
+  Users,
+  Globe,
+  PlayCircle,
+  Sparkles,
 };
 
 export interface SlashMenuRefHandle {
@@ -98,6 +113,10 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
 
     const rawRect = typeof clientRect === 'function' ? clientRect() : clientRect;
     const rect = rawRect || new DOMRect(0, 0, 0, 0);
+    // 锚点层仅用于坐标定位（隐藏、不响应指针），z 轴必须与弹层同层语义一致
+    const varZPopover = typeof window !== 'undefined'
+      ? getComputedStyle(document.documentElement).getPropertyValue('--z-popover').trim()
+      : '';
     const triggerStyle: React.CSSProperties = {
       position: 'fixed',
       top: rect.top,
@@ -106,7 +125,7 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
       height: rect.height || 1,
       pointerEvents: 'none',
       visibility: 'hidden',
-      zIndex: 200,
+      zIndex: Number(varZPopover) || 200,
     };
 
     return (
@@ -123,38 +142,48 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
             onOpenAutoFocus={(e) => e.preventDefault()}
             onCloseAutoFocus={(e) => e.preventDefault()}
           >
-            {items.length === 0 ? (
-              <div className={styles.emptyMessage}>No matching commands</div>
-            ) : (
-              items.map((item: SlashCommandItem, index: number) => {
-                const IconComponent =
-                  (item.iconName && ICON_MAP[item.iconName]) || HelpCircle;
-                const isActive = index === selectedIndex;
+            <div
+              className={styles.menuList}
+              role="listbox"
+              aria-label="斜杠命令"
+            >
+              {items.length === 0 ? (
+                <div className={styles.emptyMessage} role="presentation">
+                  无匹配命令
+                </div>
+              ) : (
+                items.map((item: SlashCommandItem, index: number) => {
+                  const IconComponent =
+                    (item.iconName && ICON_MAP[item.iconName]) || HelpCircle;
+                  const isActive = index === selectedIndex;
 
-                return (
-                  <button
-                    key={item.id || item.title}
-                    ref={(el) => { itemRefs.current[index] = el; }}
-                    type="button"
-                    className={`${styles.menuItem} ${isActive ? styles.menuItemActive : ''}`}
-                    onClick={() => selectItem(index)}
-                    onMouseEnter={() => setSelectedIndex(index)}
-                  >
-                    <div className={styles.iconWrapper}>
-                      <IconComponent size={16} />
-                    </div>
-                    <div className={styles.itemText}>
-                      <span className={styles.itemTitle}>{item.title}</span>
-                      {item.description && (
-                        <span className={styles.itemDescription}>
-                          {item.description}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })
-            )}
+                  return (
+                    <button
+                      key={item.id || item.title}
+                      ref={(el) => { itemRefs.current[index] = el; }}
+                      type="button"
+                      role="option"
+                      aria-selected={isActive}
+                      className={`${styles.menuItem} ${isActive ? styles.menuItemActive : ''}`}
+                      onClick={() => selectItem(index)}
+                      onMouseEnter={() => setSelectedIndex(index)}
+                    >
+                      <div className={styles.iconWrapper}>
+                        <IconComponent size={16} aria-hidden />
+                      </div>
+                      <div className={styles.itemText}>
+                        <span className={styles.itemTitle}>{item.title}</span>
+                        {item.description && (
+                          <span className={styles.itemDescription}>
+                            {item.description}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>

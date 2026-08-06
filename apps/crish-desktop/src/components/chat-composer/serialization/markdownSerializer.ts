@@ -1,4 +1,4 @@
-﻿/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * apps/crish-desktop/src/components/chat-composer/serialization/markdownSerializer.ts
  * Convert ProseMirror AST JSON tree into GFM Markdown string (CRM-04).
@@ -67,6 +67,25 @@ function serializeInline(node: JSONContent): string {
 }
 
 /**
+ * 序列化列表项内容为「行数组」：段落（含 hardBreak）与嵌套列表块
+ * 逐行展开、不以空行分隔，保证嵌套列表 roundtrip 可逆（T5 保真）。
+ */
+function serializeItemContent(content: JSONContent[] | undefined): string[] {
+  if (!content || content.length === 0) return [];
+  const lines: string[] = [];
+  for (const child of content) {
+    if (child.type === 'paragraph') {
+      const text = (child.content || []).map(serializeInline).join('');
+      if (text) lines.push(...text.split('\n'));
+    } else {
+      const block = serializeBlockNodes([child], '');
+      if (block) lines.push(...block.split('\n'));
+    }
+  }
+  return lines;
+}
+
+/**
  * Serializes block node content or children array.
  */
 function serializeBlockNodes(nodes: JSONContent[], indent = ''): string {
@@ -115,11 +134,15 @@ function serializeBlockNodes(nodes: JSONContent[], indent = ''): string {
         for (const item of node.content || []) {
           if (item.type === 'taskItem') {
             const checked = item.attrs?.checked ? 'x' : ' ';
-            const itemContent = serializeBlockNodes(item.content || [], '').trim();
-            const lines = itemContent.split('\n');
-            const firstLine = lines[0] || '';
-            const restLines = lines.slice(1).map((l) => (l ? `      ${l}` : l)).join('\n');
-            const formattedItem = restLines ? `- [${checked}] ${firstLine}\n${restLines}` : `- [${checked}] ${firstLine}`;
+            const itemLines = serializeItemContent(item.content || []);
+            const firstLine = itemLines[0] || '';
+            const restLines = itemLines
+              .slice(1)
+              .map((l) => (l ? `      ${l}` : l))
+              .join('\n');
+            const formattedItem = restLines
+              ? `- [${checked}] ${firstLine}\n${restLines}`
+              : `- [${checked}] ${firstLine}`;
             items.push(`${indent}${formattedItem}`);
           }
         }
@@ -131,11 +154,15 @@ function serializeBlockNodes(nodes: JSONContent[], indent = ''): string {
         const items: string[] = [];
         for (const item of node.content || []) {
           if (item.type === 'listItem') {
-            const itemContent = serializeBlockNodes(item.content || [], '').trim();
-            const lines = itemContent.split('\n');
-            const firstLine = lines[0] || '';
-            const restLines = lines.slice(1).map((l) => (l ? `  ${l}` : l)).join('\n');
-            const formattedItem = restLines ? `- ${firstLine}\n${restLines}` : `- ${firstLine}`;
+            const itemLines = serializeItemContent(item.content || []);
+            const firstLine = itemLines[0] || '';
+            const restLines = itemLines
+              .slice(1)
+              .map((l) => (l ? `  ${l}` : l))
+              .join('\n');
+            const formattedItem = restLines
+              ? `- ${firstLine}\n${restLines}`
+              : `- ${firstLine}`;
             items.push(`${indent}${formattedItem}`);
           }
         }
@@ -150,11 +177,15 @@ function serializeBlockNodes(nodes: JSONContent[], indent = ''): string {
           if (item.type === 'listItem') {
             const prefix = `${index}. `;
             const indentPadding = ' '.repeat(prefix.length);
-            const itemContent = serializeBlockNodes(item.content || [], '').trim();
-            const lines = itemContent.split('\n');
-            const firstLine = lines[0] || '';
-            const restLines = lines.slice(1).map((l) => (l ? `${indentPadding}${l}` : l)).join('\n');
-            const formattedItem = restLines ? `${prefix}${firstLine}\n${restLines}` : `${prefix}${firstLine}`;
+            const itemLines = serializeItemContent(item.content || []);
+            const firstLine = itemLines[0] || '';
+            const restLines = itemLines
+              .slice(1)
+              .map((l) => (l ? `${indentPadding}${l}` : l))
+              .join('\n');
+            const formattedItem = restLines
+              ? `${prefix}${firstLine}\n${restLines}`
+              : `${prefix}${firstLine}`;
             items.push(`${indent}${formattedItem}`);
             index++;
           }

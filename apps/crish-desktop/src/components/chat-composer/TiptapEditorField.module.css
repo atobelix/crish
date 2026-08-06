@@ -1,56 +1,85 @@
 /**
  * apps/crish-desktop/src/components/chat-composer/TiptapEditorField.module.css
- * Visual Softness Rules (RL-01) compliant CSS Module for Tiptap ProseMirror field
+ * 编辑器视觉：token 体系对齐宿主 ChatComposer.module.css（textarea 同族）。
+ * - 编辑区透明，复用宿主容器 --composer-bg 壳（边框/焦点态由容器统一管）；
+ * - 增高语义：--composer-max-lines × --composer-line-height（适配层注入，同 textarea 防漂移）；
+ * - 红线：零阴影、占位符 text-tertiary、行内 code 用 8% mix 底、hover 才着色。
  */
 
 .fieldWrapper {
   position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: center;
   width: 100%;
-  border-radius: var(--radius-md, 8px);
-  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
-  background-color: var(--bg-surface, #ffffff);
-  transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease;
+  border-radius: var(--radius-md);
   box-shadow: none !important;
 }
 
-.fieldWrapper:focus-within {
-  /* RL-01 Standard Focus State: Strict 5% mix */
-  border-color: color-mix(in srgb, var(--border-color) 95%, var(--text-primary) 5%) !important;
-  box-shadow: none !important;
-  outline: none;
-}
-
-/* RL-01 Empty Landing State Exception (data-empty-kind="session-empty"): Max 5% mix */
-:global([data-empty-kind="session-empty"]) .fieldWrapper:focus-within {
-  border-color: color-mix(in srgb, var(--border-color) 95%, var(--text-primary) 5%) !important;
-  box-shadow: none !important;
-  outline: none;
+.fieldWrapper.disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
 }
 
 .proseMirrorField {
-  min-height: 80px;
-  max-height: 320px;
+  min-height: calc(
+    1em * var(--composer-line-height, 1.45) * var(--composer-min-lines, 2)
+  );
+  max-height: calc(
+    1em * var(--composer-line-height, 1.45) * var(--composer-max-lines, 10)
+  );
   overflow-y: auto;
-  padding: 10px 14px;
   outline: none;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--text-primary, #1e293b);
+  box-shadow: none !important;
+  caret-color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--composer-line-height, 1.45);
+  color: var(--text-primary);
+  padding: 0;
+  margin: 0;
+  scrollbar-width: thin;
+  word-break: break-word;
+  box-sizing: border-box;
 }
 
+.proseMirrorField:focus {
+  outline: none;
+  box-shadow: none !important;
+}
+
+/* 段落紧凑排布（对齐 textarea 语义，段落间不留大间隙） */
 .proseMirrorField :global(p) {
-  margin: 0 0 0.5em 0;
+  margin: 0;
 }
 
-.proseMirrorField :global(p:last-child) {
-  margin-bottom: 0;
+/* 节点基线样式（review_arch 建议 2：heading/taskList/blockquote/pre/code 显式 token 化） */
+.proseMirrorField :global(h1),
+.proseMirrorField :global(h2),
+.proseMirrorField :global(h3) {
+  margin: 0.5em 0 0.3em;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  line-height: var(--line-height-dense);
 }
 
-/* TaskList and TaskItem styles */
+.proseMirrorField :global(h1) {
+  font-size: 1.4em;
+}
+
+.proseMirrorField :global(h2) {
+  font-size: 1.2em;
+}
+
+.proseMirrorField :global(h3) {
+  font-size: 1.05em;
+}
+
 .proseMirrorField :global(ul[data-type="taskList"]) {
   list-style: none;
   padding: 0;
-  margin: 0.5em 0;
+  margin: 0.4em 0;
 }
 
 .proseMirrorField :global(ul[data-type="taskList"] li) {
@@ -69,36 +98,88 @@
   flex: 1 1 auto;
 }
 
-/* Code block styles */
+.proseMirrorField :global(ul),
+.proseMirrorField :global(ol) {
+  margin: 0.4em 0;
+  padding-left: 1.4em;
+}
+
+.proseMirrorField :global(blockquote) {
+  margin: 0.4em 0;
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.proseMirrorField :global(hr) {
+  border: none;
+  border-top: var(--hairline-width, 1px) solid var(--border-color);
+  margin: 0.6em 0;
+}
+
 .proseMirrorField :global(pre) {
-  background: var(--bg-code, #f8fafc);
-  color: var(--text-code, #0f172a);
-  font-family: var(--font-mono, monospace);
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-sm, 6px);
-  margin: 0.5em 0;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  margin: 0.4em 0;
   overflow-x: auto;
 }
 
-.proseMirrorField :global(code) {
-  background: var(--bg-code-inline, rgba(0, 0, 0, 0.05));
-  padding: 0.15em 0.35em;
-  border-radius: 4px;
-  font-size: 0.9em;
-  font-family: var(--font-mono, monospace);
+.proseMirrorField :global(pre code) {
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
 }
 
-/* Tiptap Placeholder extension styling */
+.proseMirrorField :global(code) {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  padding: 0.15em 0.35em;
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+/* 占位符（Placeholder 扩展）：text-tertiary，对齐宿主 textarea::placeholder */
 .proseMirrorField :global(p.is-editor-empty:first-child::before) {
-  color: var(--text-secondary, #94a3b8);
+  color: var(--text-tertiary);
   content: attr(data-placeholder);
   float: left;
   height: 0;
   pointer-events: none;
 }
 
-.disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  background-color: var(--bg-disabled, #f1f5f9);
+/* Mention chip（MentionExtension 渲染，全局类） */
+:global(.mention-chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  color: var(--accent-color);
+  font-size: 0.9em;
+  font-weight: var(--font-weight-medium);
+  user-select: none;
+  cursor: default;
+}
+
+/* dense 模式（侧栏/内联）：收紧字号，行高随容器变量 */
+:global([data-composer-dense="1"]) .proseMirrorField {
+  font-size: var(--font-size-sm, 13px);
+}
+
+.proseMirrorField::-webkit-scrollbar {
+  width: 4px;
+}
+
+.proseMirrorField::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-tertiary) 20%, transparent);
+  border-radius: 2px;
+}
+
+.proseMirrorField::-webkit-scrollbar-track {
+  background: transparent;
 }

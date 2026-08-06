@@ -5,6 +5,70 @@
 
 import type { JSONContent } from './markdownSerializer';
 
+/** 列表项标记（任务 / 无序 / 有序），用于嵌套列表识别 */
+const ANY_LIST_MARKER_RE = /^\s*-\s*\[[ xX]\]\s+|^\s*[-*+]\s+|^\s*\d+\.\s+/;
+
+const TASK_ITEM_RE = /^\s*-\s*\[([ xX])\]\s+(.*)$/;
+const BULLET_ITEM_RE = /^\s*[-*+]\s+(.*)$/;
+const ORDERED_ITEM_RE = /^\s*(\d+)\.\s+(.*)$/;
+
+/** 去除多行公共缩进（嵌套块递归解析前调用） */
+function stripCommonIndent(lines: string[]): string[] {
+  const indents = lines
+    .filter((l) => l && l.trim().length > 0)
+    .map((l) => (l.match(/^\s*/) ?? [''])[0].length);
+  if (indents.length === 0) return lines;
+  const common = Math.min(...indents);
+  return lines.map((l) => l.slice(common));
+}
+
+/**
+ * 收集一个列表项的后继行（从 start 开始）：
+ * - 缩进普通行 → 续行文本（itemLines）
+ * - 缩进列表标记行 → 收集连续嵌套块（subBlocks，交给 parseFromMarkdown 递归解析）
+ * - 无缩进 / 空行 → 终止（后续由外层循环解析为新项或段落）
+ */
+function collectListItemTail(
+  lines: string[],
+  start: number
+): { textLines: string[]; subBlocks: string[][]; next: number } {
+  const textLines: string[] = [];
+  const subBlocks: string[][] = [];
+  let i = start;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line || !line.trim()) break;
+    if (!/^\s/.test(line)) break;
+    if (ANY_LIST_MARKER_RE.test(line)) {
+      const indent = (line.match(/^\s*/) ?? [''])[0].length;
+      const block: string[] = [];
+      while (i < lines.length) {
+        const l = lines[i];
+        if (!l || !l.trim()) break;
+        if ((l.match(/^\s*/) ?? [''])[0].length < indent) break;
+        block.push(l);
+        i++;
+      }
+      subBlocks.push(block);
+      continue;
+    }
+    textLines.push(line.trim());
+    i++;
+  }
+  return { textLines, subBlocks, next: i };
+}
+
+/** 嵌套块去公共缩进后递归解析为子节点序列 */
+function parseSubBlocks(blocks: string[][]): JSONContent[] {
+  const out: JSONContent[] = [];
+  for (const block of blocks) {
+    const stripped = stripCommonIndent(block);
+    const inner = parseFromMarkdown(stripped.join('\n'));
+    if (inner.content) out.push(...inner.content);
+  }
+  return out;
+}
+
 /**
  * Parses inline GFM markdown string into an array of ProseMirror inline JSONContent nodes.
  * Supports mention metadata (id:kind), nested inline marks (bold + code, link + bold), and hardBreaks (\n).
@@ -220,35 +284,29 @@ export function parseFromMarkdown(markdown: string): JSONContent {
       continue;
     }
 
-    // 4. Task list: - [ ] Task or - [x] Task (supports multiline indented item content)
-    const taskMatch = line.match(/^\s*-\s*\[([ xX])\]\s*(.*)/);
+    // 4. Task list: - [ ] Task or - [x] Task（支持嵌套列表与缩进续行）
+    const taskMatch = line.match(TASK_ITEM_RE);
     if (taskMatch) {
       const taskItems: JSONContent[] = [];
       while (i < lines.length) {
         const curLine = lines[i];
         if (!curLine) break;
-        const tm = curLine.match(/^\s*-\s*\[([ xX])\]\s*(.*)/);
+        const tm = curLine.match(TASK_ITEM_RE);
         if (!tm || tm[1] === undefined || tm[2] === undefined) break;
         const checked = tm[1].toLowerCase() === 'x';
         const itemLines: string[] = [tm[2]];
         i++;
-        while (i < lines.length) {
-          const nextL = lines[i];
-          if (nextL === undefined || !nextL.trim()) break;
-          if (/^\s*-\s*\[([ xX])\]/.test(nextL) || /^\s*[-*+]\s+/.test(nextL) || /^\s*\d+\.\s+/.test(nextL) || nextL.trim().startsWith('#')) {
-            break;
-          }
-          if (/^\s{2,}/.test(nextL)) {
-            itemLines.push(nextL.trim());
-            i++;
-          } else {
-            break;
-          }
-        }
+        const tail = collectListItemTail(lines, i);
+        itemLines.push(...tail.textLines);
+        i = tail.next;
+        const itemContent: JSONContent[] = [
+          { type: 'paragraph', content: parseInline(itemLines.join('\n')) },
+        ];
+        itemContent.push(...parseSubBlocks(tail.subBlocks));
         taskItems.push({
           type: 'taskItem',
           attrs: { checked },
-          content: [{ type: 'paragraph', content: parseInline(itemLines.join('\n')) }],
+          content: itemContent,
         });
       }
       content.push({
@@ -258,33 +316,27 @@ export function parseFromMarkdown(markdown: string): JSONContent {
       continue;
     }
 
-    // 5. Bullet list: - Item or * Item
-    const bulletMatch = line.match(/^\s*[-*+]\s+(.*)/);
+    // 5. Bullet list: - Item or * Item（支持嵌套列表与缩进续行）
+    const bulletMatch = line.match(BULLET_ITEM_RE);
     if (bulletMatch) {
       const listItems: JSONContent[] = [];
       while (i < lines.length) {
         const curLine = lines[i];
         if (!curLine) break;
-        const bm = curLine.match(/^\s*[-*+]\s+(.*)/);
+        const bm = curLine.match(BULLET_ITEM_RE);
         if (!bm || bm[1] === undefined) break;
         const itemLines: string[] = [bm[1]];
         i++;
-        while (i < lines.length) {
-          const nextL = lines[i];
-          if (nextL === undefined || !nextL.trim()) break;
-          if (/^\s*[-*+]\s+/.test(nextL) || /^\s*\d+\.\s+/.test(nextL) || nextL.trim().startsWith('#')) {
-            break;
-          }
-          if (/^\s{2,}/.test(nextL)) {
-            itemLines.push(nextL.trim());
-            i++;
-          } else {
-            break;
-          }
-        }
+        const tail = collectListItemTail(lines, i);
+        itemLines.push(...tail.textLines);
+        i = tail.next;
+        const itemContent: JSONContent[] = [
+          { type: 'paragraph', content: parseInline(itemLines.join('\n')) },
+        ];
+        itemContent.push(...parseSubBlocks(tail.subBlocks));
         listItems.push({
           type: 'listItem',
-          content: [{ type: 'paragraph', content: parseInline(itemLines.join('\n')) }],
+          content: itemContent,
         });
       }
       content.push({
@@ -294,34 +346,28 @@ export function parseFromMarkdown(markdown: string): JSONContent {
       continue;
     }
 
-    // 6. Ordered list: 1. Item
-    const orderedMatch = line.match(/^\s*(\d+)\.\s+(.*)/);
+    // 6. Ordered list: 1. Item（支持嵌套列表与缩进续行）
+    const orderedMatch = line.match(ORDERED_ITEM_RE);
     if (orderedMatch && orderedMatch[1]) {
       const listItems: JSONContent[] = [];
       const startNum = parseInt(orderedMatch[1], 10);
       while (i < lines.length) {
         const curLine = lines[i];
         if (!curLine) break;
-        const om = curLine.match(/^\s*\d+\.\s+(.*)/);
-        if (!om || om[1] === undefined) break;
-        const itemLines: string[] = [om[1]];
+        const om = curLine.match(ORDERED_ITEM_RE);
+        if (!om || om[1] === undefined || om[2] === undefined) break;
+        const itemLines: string[] = [om[2]];
         i++;
-        while (i < lines.length) {
-          const nextL = lines[i];
-          if (nextL === undefined || !nextL.trim()) break;
-          if (/^\s*\d+\.\s+/.test(nextL) || /^\s*[-*+]\s+/.test(nextL) || nextL.trim().startsWith('#')) {
-            break;
-          }
-          if (/^\s{2,}/.test(nextL)) {
-            itemLines.push(nextL.trim());
-            i++;
-          } else {
-            break;
-          }
-        }
+        const tail = collectListItemTail(lines, i);
+        itemLines.push(...tail.textLines);
+        i = tail.next;
+        const itemContent: JSONContent[] = [
+          { type: 'paragraph', content: parseInline(itemLines.join('\n')) },
+        ];
+        itemContent.push(...parseSubBlocks(tail.subBlocks));
         listItems.push({
           type: 'listItem',
-          content: [{ type: 'paragraph', content: parseInline(itemLines.join('\n')) }],
+          content: itemContent,
         });
       }
       content.push({

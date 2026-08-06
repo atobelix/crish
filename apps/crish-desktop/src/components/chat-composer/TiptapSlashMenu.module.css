@@ -1,61 +1,62 @@
 /**
  * apps/crish-desktop/src/components/chat-composer/TiptapSlashMenu.module.css
- * Radix Popover Menu Styling for Tiptap Chat Composer (CRM-01, RL-01)
+ * 斜杠菜单视觉：token 体系对齐宿主（ChatComposer.module.css slashPopover 同族）。
+ * 红线：零阴影（box-shadow: none !important）、焦点/悬浮混色 ≤10%（宿主语义 7%）、
+ * 克制动效（仅透明度入场，无位移/缩放）、z-index 走 var(--z-popover)。
  */
 
-@keyframes slideUpAndFade {
+/* 克制动效：仅透明度 0.15s 入场（对齐 --transition-popover-enter 语义），无位移缩放 */
+@keyframes popoverFadeIn {
   from {
     opacity: 0;
-    transform: translateY(4px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 
 .popoverContent {
-  z-index: 200;
+  z-index: var(--z-popover);
   width: 256px;
-  max-height: 320px;
+  max-height: min(320px, 40vh);
   overflow-y: auto;
-  background-color: var(--bg-surface, #ffffff);
-  border: 1px solid color-mix(in srgb, var(--border-color, #e2e8f0) 95%, var(--text-primary, #0f172a) 5%) !important;
-  border-radius: 8px;
-  padding: 4px;
+  background: var(--bg-elevated);
+  border: var(--hairline-width, 1px) solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-1);
+  outline: none;
   box-shadow: none !important;
+  animation: popoverFadeIn 0.15s ease-out;
+  scrollbar-width: thin;
+}
+
+.menuList {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  outline: none;
-  animation: slideUpAndFade 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  will-change: transform, opacity;
 }
 
 .menuItem {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   width: 100%;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: transparent;
+  padding: var(--space-1) var(--space-2);
   border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
   text-align: left;
   cursor: pointer;
-  color: var(--text-primary, #0f172a);
-  font-size: 13px;
-  transition: background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), transform 0.1s ease;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm, 13px);
+  transition: background-color var(--transition-micro), color var(--transition-micro);
   outline: none;
 }
 
 .menuItem:hover,
 .menuItemActive {
-  background-color: color-mix(in srgb, var(--bg-surface-hover, #f1f5f9) 92%, var(--text-primary, #0f172a) 8%);
-}
-
-.menuItem:active {
-  transform: scale(0.98);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
 }
 
 .iconWrapper {
@@ -64,9 +65,9 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 4px;
-  background-color: color-mix(in srgb, var(--border-color, #e2e8f0) 50%, var(--bg-surface, #ffffff) 50%);
-  color: var(--text-secondary, #64748b);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -74,20 +75,21 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-width: 0;
 }
 
 .itemTitle {
-  font-weight: 500;
-  line-height: 1.2;
-  color: var(--text-primary, #0f172a);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-dense);
+  color: var(--text-primary);
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
 }
 
 .itemDescription {
-  font-size: 11px;
-  color: var(--text-muted, #94a3b8);
+  font-size: var(--font-size-micro);
+  color: var(--text-tertiary);
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
@@ -95,22 +97,9 @@
 }
 
 .emptyMessage {
-  padding: 12px;
-  font-size: 12px;
-  color: var(--text-muted, #94a3b8);
+  padding: var(--space-2);
+  font-size: var(--font-size-micro);
+  color: var(--text-tertiary);
   text-align: center;
-}
-
-.mentionChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background-color: color-mix(in srgb, var(--accent-color, #3b82f6) 12%, transparent);
-  color: var(--accent-color, #2563eb);
-  font-size: 0.9em;
-  font-weight: 500;
   user-select: none;
-  cursor: default;
 }

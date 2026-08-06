@@ -1,4 +1,4 @@
-﻿/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * apps/crish-desktop/src/components/chat-composer/SlashExtension.ts
  * Tiptap Slash Command Extension & Mention Chip Extension (CRM-01, FR-102, FR-103)
@@ -126,10 +126,14 @@ export const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
   },
 ];
 
-export const getSuggestionItems = (query: string): SlashCommandItem[] => {
+export const getSuggestionItems = (
+  query: string,
+  extraItems: SlashCommandItem[] = []
+): SlashCommandItem[] => {
   const q = query.toLowerCase().trim();
-  if (!q) return DEFAULT_SLASH_COMMANDS;
-  return DEFAULT_SLASH_COMMANDS.filter((item) => {
+  const all = [...DEFAULT_SLASH_COMMANDS, ...extraItems];
+  if (!q) return all;
+  return all.filter((item) => {
     return (
       item.title.toLowerCase().includes(q) ||
       item.description.toLowerCase().includes(q) ||
@@ -138,14 +142,21 @@ export const getSuggestionItems = (query: string): SlashCommandItem[] => {
   });
 };
 
+/** SlashExtension 可配置选项：宿主系统/skill 命令以引用桥接（动态更新不重建编辑器） */
+export interface SlashExtensionOptions {
+  extraItemsRef?: { current: SlashCommandItem[] };
+}
+
 /**
  * Slash Command Tiptap Extension triggering on '/'
  */
-export const SlashExtension = Extension.create({
+export const SlashExtension = Extension.create<SlashExtensionOptions>({
   name: 'slashCommands',
 
   addOptions() {
     return {
+      // 默认 undefined：configure 时 mergeDeep 直接替换（嵌套默认值会被深合并吞掉引用）
+      extraItemsRef: undefined,
       suggestion: {
         char: '/',
         command: ({ editor, range, props }: any) => {
@@ -160,7 +171,8 @@ export const SlashExtension = Extension.create({
       Suggestion({
         editor: this.editor,
         char: '/',
-        items: ({ query }: { query: string }) => getSuggestionItems(query),
+        items: ({ query }: { query: string }) =>
+          getSuggestionItems(query, this.options.extraItemsRef?.current ?? []),
         command: ({ editor, range, props }: any) => {
           props.command({ editor, range });
         },
