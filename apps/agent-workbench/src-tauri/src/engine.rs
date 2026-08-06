@@ -43,6 +43,7 @@ use agent_provider::request::{
 };
 use agent_provider::sse::{AbortFlag, StreamDiagnosticContext, StreamReadOptions};
 use agent_provider::transport::{stream_frames, StreamFrameEvent};
+use agent_tools::audit::{AuditSink, SecurityAuditSink};
 use agent_tools::background::BackgroundTaskManager;
 use agent_tools::definition::{ToolDefinition, ToolError};
 use agent_tools::mcp::{register_plugin_server, McpClientBridge, McpServerConfig};
@@ -56,8 +57,11 @@ use crish_agent_workbench::wait_channel::{
     NoopControlBusResolver, SubagentStatusSource, WaitChannel, WaitStore,
 };
 use async_trait::async_trait;
+use conex_types::denied_stats::DeniedStats;
 use conex_types::error::ProviderErrorKind;
-use conex_types::events::{AgentEvent, AgentEventEnvelope, MissAttribution, RunCacheStats};
+use conex_types::events::{
+    AgentEvent, AgentEventEnvelope, MissAttribution, RunCacheStats, SecurityAuditDecision,
+};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::response::ClassifiedStreamError;
 use conex_types::tool::SystemPromptWireMode;
@@ -584,6 +588,104 @@ fn to_loop_event(event: WireEvent) -> ProviderStreamEvent {
 
 // ── EngineHandle ──────────────────────────────────────────────────
 
+// ── 15-T-6（裁决 D9）：路由型审计 sink ────────────────────────────
+
+/// 路由型审计 sink（15-T-6 接线，裁决 D9）：run 级桥注册表 +
+/// G10 denied 计数
+///
+/// - 工具级审计（shell/delete 等工具经 `BuiltinToolConfig.audit_sink`
+///   发射的 security-audit，现状走 NoopAuditSink 静默丢弃）按
+///   session_id 路由到该会话当前活动 run 的审计桥（[BridgeAuditSink]
+///   → 缓冲事件桥 → 前端审计面板 per-run 面实时可见，34-T7 口径；
+///   落库随 F12 端到端登记，本卡不新增落库面）；
+/// - **域隔离边界**（30 §9 最终口径）：任务域审计（10-P3
+///   TaskAuditAccumulator → EventBridge 直发，operation=command-exec）
+///   **不经本 sink**——本 sink 只承接工具面审计，两路均以
+///   security-audit 事件形态经 run 桥到达前端，无重复无遗漏；
+/// - 计数面（G10）：denied 决策同步计入共享 [DeniedStats]（与
+///   agent-tools `CountingAuditSink` :94-105 同构语义），月度报告
+///   经 [DeniedStats::summary] 拉取。
+#[derive(Debug)]
+pub(crate) struct RoutingAuditSink {
+    /// session_id → 该会话当前活动 run 的审计桥（run 启动注册、收口注销）
+    routes: Mutex<HashMap<String, AuditSink>>,
+    /// G10 denied 计数（引擎级共享实例）
+    stats: Arc<DeniedStats>,
+}
+
+impl RoutingAuditSink {
+    /// 新建路由注册表（共享统计实例）
+    pub(crate) fn new(stats: Arc<DeniedStats>) -> Self {
+        Self {
+            routes: Mutex::new(HashMap::new()),
+            stats,
+        }
+    }
+
+    /// run 启动注册；同 session 多 run 并发 → 后注册者覆盖（新 run 覆盖
+    /// 旧 run，与事件收口旁路点口径一致——会话内串行守卫下同 session
+    /// 同时仅一个活动 run，覆盖为防御性语义）
+    pub(crate) fn register(&self, session_id: &str, sink: AuditSink) {
+        self.routes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(session_id.to_string(), sink);
+    }
+
+    /// run 收口强制注销（防 session 泄漏）；重复注销幂等
+    pub(crate) fn unregister(&self, session_id: &str) {
+        self.routes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(session_id);
+    }
+
+    /// 已注册路由数（测试断言面：收口注销无残留）
+    #[cfg_attr(not(test), allow(dead_code))] // 测试断言面消费
+    pub(crate) fn route_count(&self) -> usize {
+        self.routes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
+    }
+}
+
+impl SecurityAuditSink for RoutingAuditSink {
+    fn emit(&self, event: &AgentEvent) {
+        let AgentEvent::SecurityAudit {
+            session_id,
+            decision,
+            ..
+        } = event
+        else {
+            return;
+        };
+        // G10：denied 决策同步计数（与 CountingAuditSink 同构语义，
+        // 其余决策转发不计数）
+        if *decision == SecurityAuditDecision::Denied {
+            self.stats.record_security_audit_denied();
+        }
+        // 锁内仅取路由句柄克隆，不持锁跨 emit 调用（sink 可能重入）
+        let sink = self
+            .routes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(session_id)
+            .cloned();
+        match sink {
+            Some(sink) => sink.emit(event),
+            None => {
+                // 无活动 run / 未注册 → tracing 兜底（Noop 语义不 panic）
+                tracing::debug!(
+                    target: "audit",
+                    session_id,
+                    "审计事件无活动 run 路由，tracing 兜底"
+                );
+            }
+        }
+    }
+}
+
 /// T-CF-10/13 共享适配桥：WaitChannel 的 dispatch 声明存储
 /// （wait_channel.rs 库目标 [MemoryWaitStore]）同时作为 A7 watchdog 的
 /// 声明读取源——同一实例双 trait 注入（[WaitStore] ↔ [crate::watchdog::DispatchStore]），
@@ -657,6 +759,11 @@ pub(crate) struct EngineHandle {
     /// cron 事件缓冲（T-CF-09 装配产物；同 timer 的 drain 转发路径——
     /// cron-fired 单臂，conex-types 仅 CronFired 变体，无 cron-cancelled）
     scheduler_event_sink: Arc<crate::sched::SchedEventSink>,
+    /// 路由型审计 sink（15-T-6 裁决 D9）：工具级 security-audit 事件经
+    /// run 级桥注册表送达前端审计面板（run 启动注册 / 收口注销由
+    /// CoreRunState 驱动）；G10 denied 计数共享实例。任务域审计
+    /// （10-P3）EventBridge 直发、不经本 sink（30 §9 域隔离）
+    audit_sink: Arc<RoutingAuditSink>,
     // T-D-13 精简：spawner 字段冗余（全仓无读取方，A8 D3）——实际
     // spawner 由 CoreRunState::finalize_subagent_spawner 自管，构造参数
     // 保留经 BuiltinToolConfig.subagent_spawner 注入 run_subagent 工具
@@ -766,6 +873,16 @@ impl EngineHandle {
             Arc::clone(&scheduler_event_sink),
         );
 
+        // ── 15-T-6（裁决 D9）：路由型 audit_sink 装配 ──────────────
+        // G10 denied 计数实例（引擎级共享；workbench 侧零 DeniedStats
+        // 使用点实证——本装配即接线点）+ run 级桥注册表。工具级审计
+        // （shell/delete 的 security-audit，现状 NoopAuditSink 静默丢弃）
+        // 经 BuiltinToolConfig.audit_sink 注入本 sink，run 启动注册 /
+        // 收口注销由 CoreRunState 驱动（core_run_commands.rs run 装配
+        // 块）。域隔离：任务域审计（10-P3 TaskAuditAccumulator →
+        // EventBridge 直发）不经本 sink（30 §9 最终口径）。
+        let audit_sink = Arc::new(RoutingAuditSink::new(Arc::new(DeniedStats::new())));
+
         // 内置工具注册（B5.2：fs / shell / search / diff；F1 R-AB1：
         // BuiltinToolConfig 注入后台任务管理器，经 ToolContext.background
         // 透传给 shell 工具——adopt 通道就位；G5 T-CF-05/06：timer_channel
@@ -786,6 +903,10 @@ impl EngineHandle {
             // common.unsupported；生产装配点 = CoreRunState 构造 spawner 后
             // 经 new_with_spawner 传入）
             subagent_spawner: subagent_spawner.clone(),
+            // 15-T-6（裁决 D9）：路由型审计 sink 注入（shell/delete 工具
+            // security-audit 发射点接线；现状 None = NoopAuditSink 静默
+            // 丢弃，接线后经 run 桥到达前端审计面板）
+            audit_sink: Some(Arc::clone(&audit_sink) as AuditSink),
             ..agent_tools::tools::BuiltinToolConfig::default()
         };
         if let Err(error) =
@@ -840,6 +961,7 @@ impl EngineHandle {
             scheduler_registry,
             timer_event_sink,
             scheduler_event_sink,
+            audit_sink,
         }
     }
 
@@ -896,6 +1018,12 @@ impl EngineHandle {
     /// CoreRunState::new 装配 timer_has_active 判定器，已接线）
     pub(crate) fn timer_registry(&self) -> Arc<TimerRegistry> {
         Arc::clone(&self.timer_registry)
+    }
+
+    /// 路由型审计 sink（15-T-6 装配产物；消费方 = CoreRunState run
+    /// 启动注册 / 收口注销，已接线）
+    pub(crate) fn audit_sink(&self) -> Arc<RoutingAuditSink> {
+        Arc::clone(&self.audit_sink)
     }
 
     /// 定时器 steering 队列（到期条目落点；R-CF3 idle 续 run 消费——
@@ -3693,6 +3821,7 @@ mod event_drain_tests {
     use crate::core_event_bridge::Emitter;
     use crate::sched::{CronEvent, EventSink as SchedEventSinkTrait};
     use crate::timers::{EventSink as TimerEventSinkTrait, TimerEvent};
+    use conex_types::events::SecurityAuditOperation;
     use conex_types::timer::TimerCondition;
 
     /// 测试发射器：记录 (channel, payload) 序列（对齐 core_event_bridge
@@ -3890,5 +4019,99 @@ mod event_drain_tests {
             "转发后生产缓冲应为空"
         );
         // 清理：max_iterations=1 已自停（enabled=false 落库），无残留声明
+    }
+
+    // ── 15-T-6（裁决 D9）：RoutingAuditSink 路由分发 / G10 计数 ───
+
+    /// 测试用 security-audit 事件（决策参数化；形状对齐
+    /// agent-tools audit.rs security_audit_event 构造器）
+    fn routing_test_audit_event(session_id: &str, decision: SecurityAuditDecision) -> AgentEvent {
+        agent_tools::audit::security_audit_event(
+            session_id,
+            SecurityAuditOperation::Delete,
+            vec!["a.txt".to_string()],
+            conex_types::impact::ImpactAssessment {
+                file_count: 1,
+                total_size_bytes: 0,
+                directory_count: 0,
+                cross_directory: false,
+                flagged: false,
+            },
+            decision,
+            None,
+        )
+    }
+
+    /// 路由分发（多 session）：各会话审计事件仅达自己的 run 桥；未注册
+    /// 会话 tracing 兜底不 panic 不送达
+    #[test]
+    fn routing_audit_sink_dispatches_per_session() {
+        let sink = RoutingAuditSink::new(Arc::new(DeniedStats::new()));
+        let s1 = Arc::new(agent_tools::audit::RecordingAuditSink::new());
+        let s2 = Arc::new(agent_tools::audit::RecordingAuditSink::new());
+        sink.register("s1", Arc::clone(&s1) as AuditSink);
+        sink.register("s2", Arc::clone(&s2) as AuditSink);
+        assert_eq!(sink.route_count(), 2);
+        sink.emit(&routing_test_audit_event("s1", SecurityAuditDecision::Blocked));
+        sink.emit(&routing_test_audit_event("s2", SecurityAuditDecision::Blocked));
+        // 各会话事件仅达自己的 run 桥
+        assert_eq!(s1.emitted().len(), 1);
+        assert_eq!(s2.emitted().len(), 1);
+        // 未注册会话 → tracing 兜底（不 panic、不送达）
+        sink.emit(&routing_test_audit_event("ghost", SecurityAuditDecision::Blocked));
+        assert_eq!(s1.emitted().len(), 1);
+        assert_eq!(s2.emitted().len(), 1);
+    }
+
+    /// G10 denied 计数：仅 denied 决策计数（引擎级共享统计），全部事件
+    /// 原样转发
+    #[test]
+    fn routing_audit_sink_counts_denied_globally() {
+        let stats = Arc::new(DeniedStats::new());
+        let sink = RoutingAuditSink::new(Arc::clone(&stats));
+        let s1 = Arc::new(agent_tools::audit::RecordingAuditSink::new());
+        sink.register("s1", Arc::clone(&s1) as AuditSink);
+        sink.emit(&routing_test_audit_event("s1", SecurityAuditDecision::Denied));
+        sink.emit(&routing_test_audit_event("s1", SecurityAuditDecision::Redirected));
+        sink.emit(&routing_test_audit_event("s1", SecurityAuditDecision::Denied));
+        // 仅 denied 计数（G10），全部事件转发
+        assert_eq!(stats.summary().security_audit_denied, 2);
+        assert_eq!(s1.emitted().len(), 3);
+    }
+
+    /// 收口注销：unregister 后路由不再送达；重复注销幂等；注册表无残留
+    #[test]
+    fn routing_audit_sink_unregister_is_idempotent() {
+        let sink = RoutingAuditSink::new(Arc::new(DeniedStats::new()));
+        let s1 = Arc::new(agent_tools::audit::RecordingAuditSink::new());
+        sink.register("s1", Arc::clone(&s1) as AuditSink);
+        assert_eq!(sink.route_count(), 1);
+        sink.unregister("s1");
+        sink.unregister("s1");
+        assert_eq!(sink.route_count(), 0, "重复注销幂等，注册表无残留");
+        sink.emit(&routing_test_audit_event("s1", SecurityAuditDecision::Blocked));
+        assert!(s1.emitted().is_empty(), "注销后事件不再送达（tracing 兜底）");
+    }
+
+    /// 同 session 多 run 并发注册 → 后注册者覆盖（新 run 覆盖旧 run，
+    /// 与事件收口旁路点口径一致）
+    #[test]
+    fn routing_audit_sink_later_register_overwrites() {
+        let sink = RoutingAuditSink::new(Arc::new(DeniedStats::new()));
+        let old = Arc::new(agent_tools::audit::RecordingAuditSink::new());
+        let new = Arc::new(agent_tools::audit::RecordingAuditSink::new());
+        sink.register("s1", Arc::clone(&old) as AuditSink);
+        sink.register("s1", Arc::clone(&new) as AuditSink);
+        sink.emit(&routing_test_audit_event("s1", SecurityAuditDecision::Blocked));
+        assert!(old.emitted().is_empty(), "旧 run 桥应被新 run 覆盖");
+        assert_eq!(new.emitted().len(), 1);
+    }
+
+    /// 引擎装配面：BuiltinToolConfig.audit_sink 注入的与访问器取回的是
+    /// 同一实例（路由 sink 经工具注册表接线到引擎共享统计）
+    #[test]
+    fn engine_audit_sink_accessor_reaches_shared_instance() {
+        let engine = EngineHandle::new(None);
+        assert!(Arc::ptr_eq(&engine.audit_sink(), &engine.audit_sink()));
     }
 }

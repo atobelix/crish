@@ -1,8 +1,10 @@
 //! 子代理等待通道（G4 / REQ-C05；T-CF-10，R-CF3）
 //!
 //! 职责（02-CF 方案 §4.2 / 7.4 T-CF-10）：
-//! - [WaitChannel]：`SubagentWaitChannel` 契约四方法引擎侧实现——
+//! - [WaitChannel]：`SubagentWaitChannel` 契约五方法引擎侧实现——
 //!   [SubagentWaitChannel::persist_declaration]（dispatch_* 声明落库）/
+//!   [SubagentWaitChannel::persist_outputs]（dispatch_outputs 产出清单落库，
+//!   T-EG-10 G02 完成通知字段的持久化副本）/
 //!   [SubagentWaitChannel::snapshot]（session_agents 行状态摘要）/
 //!   [SubagentWaitChannel::wait_for_terminal]（事件驱动等待）/
 //!   [SubagentWaitChannel::inject]（目标 run 的 L1 steer 环注入）；
@@ -14,9 +16,10 @@
 //!
 //! 适配器契约（对齐 timers.rs 的 PendingSink/EventSink/TimerStore 注入范式，
 //! 本模块为库目标模块，装配由 engine.rs 统一完成）：
-//! - [WaitStore]：dispatch 声明持久化（conex-db session_meta `dispatch_*`
-//!   键适配；默认内存实现 [MemoryWaitStore]，conex-db 真适配需装配点提供
-//!   db 句柄——与 TimerStore 同一接线缺口，登记遗留问题）；
+//! - [WaitStore]：dispatch 声明与产出清单持久化（conex-db session_meta
+//!   `dispatch_*` / `dispatch_outputs` 键适配；默认内存实现
+//!   [MemoryWaitStore]，conex-db 真适配需装配点提供 db 句柄——与
+//!   TimerStore 同一接线缺口，登记遗留问题）；
 //! - [SubagentStatusSource]：会话子代理状态行读取（session_agents 行适配；
 //!   默认内存实现 [MemoryAgentSource]）；
 //! - [EventStreamBroadcast]：subagent-ended 事件流广播（EventQueue 旁路
@@ -33,13 +36,15 @@
 //! DispatchStore 桥接 impl 在 engine.rs，见该处注记），wait 落库即 watchdog
 //! 可读，重启恢复数据面统一。
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use agent_tools::tools::subagent::SubagentState;
 use agent_tools::tools::wait_subagents::{
-    wait_for_terminal_events, DispatchDeclaration, SubagentTerminalEvent, SubagentWaitChannel,
-    SubagentWaitError, SubagentWaitResult, SubagentWaitStatus,
+    dispatch_outputs_value, parse_dispatch_outputs, wait_for_terminal_events, DispatchDeclaration,
+    SubagentOutput, SubagentTerminalEvent, SubagentWaitChannel, SubagentWaitError,
+    SubagentWaitResult, SubagentWaitStatus,
 };
 use async_trait::async_trait;
 use conex_types::events::{AgentEvent, SubagentEndStatus};
@@ -62,13 +67,22 @@ fn now_ms() -> u64 {
 
 // ── 适配器契约（装配注入面）────────────────────────────────────────
 
-/// dispatch 声明持久化适配（conex-db session_meta `dispatch_*` 键；
-/// wait 落库 / watchdog 读取共用的数据面）
+/// dispatch 声明与产出清单持久化适配（conex-db session_meta
+/// `dispatch_*` / `dispatch_outputs` 键；wait 落库 / watchdog 读取共用的
+/// 数据面）
 pub trait WaitStore: Send + Sync {
     /// 读取全部声明（重启恢复 / watchdog 扫描 / 分发基准时刻恢复用）
     fn load_all(&self) -> Vec<DispatchDeclaration>;
     /// 保存声明（幂等：同一分发时刻覆盖；保留最近若干条）
     fn save(&self, declaration: &DispatchDeclaration);
+    /// 保存各子代理产出清单（`dispatch_outputs` 键；整表覆盖语义，
+    /// 天然有界——不引入 [DECLARATION_CAP] 式条数上限）
+    fn save_outputs(
+        &self,
+        outputs: &HashMap<String, Vec<SubagentOutput>>,
+    ) -> Result<(), SubagentWaitError>;
+    /// 读取各子代理产出清单（解析容错：缺失 / 损坏 → 空表，fail-open）
+    fn load_outputs(&self) -> HashMap<String, Vec<SubagentOutput>>;
 }
 
 /// 子代理状态行读取适配（session_agents 行；snapshot 数据源）
@@ -88,12 +102,16 @@ pub trait ControlBusResolver: Send + Sync {
 // ── 默认生产适配器 ────────────────────────────────────────────────
 
 /// 内存持久化适配（引擎默认装配；conex-db session_meta 真适配在 R-CF3
-/// 后续轮接线——键形状已冻结为 wait_subagents.rs:83-89 的 dispatch_*，
-/// 真适配用 [DispatchDeclaration::to_meta_pairs] / `from_meta_pairs` 落读）
+/// 后续轮接线——键形状已冻结为 wait_subagents.rs:83-99 的 dispatch_* 与
+/// `dispatch_outputs`，真适配用 [DispatchDeclaration::to_meta_pairs] /
+/// `from_meta_pairs` 与 `dispatch_outputs_value` / `parse_dispatch_outputs`
+/// 落读）
 #[derive(Default)]
 pub struct MemoryWaitStore {
     /// 声明列表（保留最近 [DECLARATION_CAP] 条；watchdog 取最近分发时刻）
     declarations: Mutex<Vec<DispatchDeclaration>>,
+    /// 各子代理产出清单（单键 `dispatch_outputs` 整表覆盖，天然有界）
+    outputs: Mutex<HashMap<String, Vec<SubagentOutput>>>,
 }
 
 impl MemoryWaitStore {
@@ -121,6 +139,25 @@ impl WaitStore for MemoryWaitStore {
             list.sort_by_key(|d| std::cmp::Reverse(d.dispatched_at_ms));
             list.truncate(DECLARATION_CAP);
         }
+    }
+
+    fn save_outputs(
+        &self,
+        outputs: &HashMap<String, Vec<SubagentOutput>>,
+    ) -> Result<(), SubagentWaitError> {
+        // 经序列化 → 解析往返落库：与 session_meta 真适配（conex-db）
+        // 读取形状闭环一致——dispatch_outputs_value 容错恒非失败（失败
+        // 回退 "{}"），解析容错归一（空路径条目剔除），落库即「读回
+        // 与写入一致」的规范形态
+        let value = dispatch_outputs_value(outputs);
+        let parsed = parse_dispatch_outputs(Some(&value));
+        *self.outputs.lock().unwrap_or_else(|e| e.into_inner()) = parsed;
+        // 内存实现恒成功；PersistFailed 为未来 conex-db 适配预留出口
+        Ok(())
+    }
+
+    fn load_outputs(&self) -> HashMap<String, Vec<SubagentOutput>> {
+        self.outputs.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }
 
@@ -324,6 +361,22 @@ impl SubagentWaitChannel for WaitChannel {
         Ok(())
     }
 
+    /// 持久化各子代理产出清单（`dispatch_outputs` 键；G02 完成通知字段
+    /// 的持久化副本，重启后恢复「各子代理产出」）
+    async fn persist_outputs(
+        &self,
+        outputs: &HashMap<String, Vec<SubagentOutput>>,
+    ) -> Result<(), SubagentWaitError> {
+        // 失败 → PersistFailed（内存实现不触发；未来 conex-db 适配面）
+        self.store.save_outputs(outputs)?;
+        tracing::info!(
+            target: "wait_channel",
+            count = outputs.len(),
+            "各子代理产出清单已持久化（dispatch_outputs 键）"
+        );
+        Ok(())
+    }
+
     /// 非阻塞快照：读会话子代理状态行（session_agents）返回
     /// [SubagentWaitStatus] 摘要列表（按入参顺序）。
     ///
@@ -425,9 +478,13 @@ impl SubagentWaitChannel for WaitChannel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_tools::tools::wait_subagents::WaitMode;
+    use agent_tools::tools::wait_subagents::{
+        dispatch_outputs_value, parse_dispatch_outputs, WaitMode, DISPATCH_META_KEY_OUTPUTS,
+        SubagentOutput,
+    };
     use conex_types::events::AgentEvent;
     use session_loop::control::ControlKind;
+    use std::collections::HashMap;
 
     /// 测试通道（mock 适配器；返回通道与可断言适配器句柄）
     fn test_channel() -> (
@@ -535,6 +592,99 @@ mod tests {
                 .expect("追加应成功");
         }
         assert_eq!(store.load_all().len(), DECLARATION_CAP, "条数上限应生效");
+    }
+
+    // ── persist_outputs 覆写落库（15-T-7 / DD6-T7）─────────────────
+
+    /// persist_outputs 落库 → 读回一致（dispatch_outputs 键形状冻结；
+    /// 整表覆盖语义天然有界，不引入条数上限）
+    #[tokio::test]
+    async fn wait_channel_persist_outputs_roundtrip() {
+        let (channel, store, _, _) = test_channel();
+        let mut outputs = HashMap::new();
+        outputs.insert(
+            "sa-1".to_string(),
+            vec![SubagentOutput {
+                path: "01-kernel-analysis.md".to_string(),
+                summary: "内核分析完成".to_string(),
+                bytes: 1_024,
+            }],
+        );
+        outputs.insert(
+            "sa-2".to_string(),
+            vec![SubagentOutput {
+                path: "docs/02-frontend.md".to_string(),
+                summary: String::new(),
+                bytes: 512,
+            }],
+        );
+        channel
+            .persist_outputs(&outputs)
+            .await
+            .expect("产出清单落库应成功");
+        // 同实例读回一致（dispatch_outputs 键承载的解析后结构）
+        assert_eq!(store.load_outputs(), outputs, "读回应与写入一致");
+        // 键形状冻结：对齐 wait_subagents.rs:99 的 DISPATCH_META_KEY_OUTPUTS
+        assert_eq!(DISPATCH_META_KEY_OUTPUTS, "dispatch_outputs", "键形状冻结");
+        // 整表覆盖：再次落库（仅 sa-3）→ 旧清单被覆盖不合并（天然有界）
+        let mut second = HashMap::new();
+        second.insert(
+            "sa-3".to_string(),
+            vec![SubagentOutput {
+                path: "03-report.md".to_string(),
+                summary: "第三子代理产出".to_string(),
+                bytes: 64,
+            }],
+        );
+        channel
+            .persist_outputs(&second)
+            .await
+            .expect("覆盖落库应成功");
+        assert_eq!(store.load_outputs(), second, "整表覆盖语义（旧条目清除）");
+        assert_eq!(store.load_outputs().len(), 1, "单键覆盖天然有界");
+    }
+
+    /// 落库数据经序列化形状读回一致（模拟 conex-db 真适配路径：
+    /// session_meta 的 dispatch_outputs 键值经序列化 → 解析恢复，
+    /// 即「新 store 实例读回」闭环）
+    #[tokio::test]
+    async fn wait_channel_persist_outputs_survives_serialized_read_back() {
+        let (channel, store, _, _) = test_channel();
+        let mut outputs = HashMap::new();
+        outputs.insert(
+            "sa-1".to_string(),
+            vec![SubagentOutput {
+                path: "01-kernel-analysis.md".to_string(),
+                summary: "内核分析完成".to_string(),
+                bytes: 1_024,
+            }],
+        );
+        channel
+            .persist_outputs(&outputs)
+            .await
+            .expect("产出清单落库应成功");
+        // 与序列化键值闭环一致：解析 dispatch_outputs 序列化形状应还原落库内容
+        let serialized = dispatch_outputs_value(&store.load_outputs());
+        let recovered = parse_dispatch_outputs(Some(&serialized));
+        assert_eq!(recovered, outputs, "序列化读回与落库一致");
+        assert!(
+            serialized.contains("01-kernel-analysis.md"),
+            "序列化载荷应含产出路径"
+        );
+        // 损坏 / 缺失键值 → 空表（parse 容错，重启恢复不 panic）
+        assert!(parse_dispatch_outputs(None).is_empty(), "缺失键 → 空表");
+        assert!(parse_dispatch_outputs(Some("not-json")).is_empty(), "损坏值 → 空表");
+    }
+
+    /// 未落库 / 空清单 → 空表（fail-open，不 panic）
+    #[test]
+    fn memory_wait_store_load_outputs_fail_open_empty() {
+        let store = MemoryWaitStore::new();
+        assert!(store.load_outputs().is_empty(), "未落库 → 空表（fail-open）");
+        store
+            .save_outputs(&HashMap::new())
+            .expect("空清单落库应成功");
+        assert!(store.load_outputs().is_empty(), "空清单覆盖后仍为空表");
     }
 
     /// 注册两个 mock 子代理并发射 subagent-ended 事件流 →

@@ -2229,6 +2229,10 @@ pub(crate) async fn drive_run_loop(
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .remove(&run_id);
+    // 15-T-6（裁决 D9）：工具级审计路由收口注销（run 级桥随 run 结束
+    // 释放，防 session 泄漏；与 escape_watch 句柄同生命周期收口——
+    // 重复注销幂等，finalize_failed 失败路径不重复进入本函数）
+    state.engine.audit_sink().unregister(&session_id);
     // T-AB-19 run 终态显式接线：**不清理后台任务注册表、不级联杀任务**
     // ——任务属会话级（registry 生命周期独立于 run，T-AB-12 只读契约升级
     // 为显式收口契约；run_end_daemon_survives / run_end_normal_task_survives
@@ -2446,6 +2450,10 @@ async fn finalize_failed(state: &Arc<CoreRunState>, active: &ActiveRun, message:
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .remove(&run_id);
+    // 15-T-6（裁决 D9）：失败收口同样注销工具级审计路由（防泄漏；
+    // drive 错误分支未走 drive_run_loop 正常收口，本处兜底——重复
+    // 注销幂等）
+    state.engine.audit_sink().unregister(&session_id);
     // T-AB-19 失败收口显式接线（与成功收口同一契约）：不清理后台任务
     // 注册表、不级联杀任务——任务属会话级；仅释放「当前 run」上下文。
     state.background.clear_current_run(&run_id);
@@ -2704,6 +2712,11 @@ pub(crate) async fn run_task_impl(
     // - 工具执行面声明写路径（options.write_claims 注入共享注册表）→
     //   声明覆盖静默（审计不误报）；
     // - 声明释放 / 未声明写入 → 上报（未声明写审计）。
+    //
+    // 15-T-6（裁决 D9）：run 级审计桥实例（工具级审计路由与逃逸监视
+    // 共用——同一 run 缓冲事件桥双注入，无重复广播；注册语句见下方
+    // 装配块）。
+    let bridge_audit_sink = Arc::new(BridgeAuditSink::new(Arc::clone(&bridge), run_id.clone()));
     let escape_root = resolve_escape_watch_root(cwd.as_deref());
     let control_bus = Arc::new(Mutex::new(ControlBus::new()));
     // 30-P5：共享写路径注册表（会话级，与逃逸监视根同源）——工具执行
@@ -2722,7 +2735,9 @@ pub(crate) async fn run_task_impl(
             root.clone(),
             session_id.clone(),
             run_id.clone(),
-            Arc::new(BridgeAuditSink::new(Arc::clone(&bridge), run_id.clone())) as AuditSink,
+            // 15-T-6：与工具级审计路由共用同一 run 级桥（同一
+            // BridgeAuditSink 实例双注入，无重复广播）
+            Arc::clone(&bridge_audit_sink) as AuditSink,
         )
         .with_injector(Arc::new(ControlBusInjector::new(Arc::clone(&control_bus))))
         // 30-P5：判定器在 spawn 前注入（与 write_claims 同一 registry
@@ -2753,6 +2768,22 @@ pub(crate) async fn run_task_impl(
     } else {
         (None, None)
     };
+
+    // ── 15-T-6（裁决 D9）：工具级审计路由注册（run 级桥）──────────
+    // 工具级 security-audit（shell/delete 经 BuiltinToolConfig.audit_sink
+    // 发射，接线前 NoopAuditSink 静默丢弃）经路由 sink 送达本 run 缓冲
+    // 事件桥（信封注入 run_id → 前端审计面板 per-run 面实时可见，34-T7
+    // 口径；落库随 F12 端到端登记，本卡不新增落库面）。与逃逸监视共用
+    // 同一 BridgeAuditSink 实例（同一 run 桥双注入，无重复广播）。
+    // **域隔离边界**（30 §9 最终口径）：任务域审计（10-P3
+    // TaskAuditAccumulator → EventBridge 直发，operation=command-exec）
+    // **不经本路由 sink**——本卡只承接工具级审计，两路均以
+    // security-audit 事件形态经 run 桥到达前端，无重复无遗漏。
+    // 收口注销在 drive_run_loop / finalize_failed 强制执行（防泄漏）。
+    state
+        .engine
+        .audit_sink()
+        .register(&session_id, Arc::clone(&bridge_audit_sink) as AuditSink);
 
     // ── T-D-13：子代理 run 装配块（默认权限集 / 提示词注入 / 配额）──
     // 普通 run（subagent_config = None）全部保持现状（None 不装配）。
@@ -7353,5 +7384,101 @@ mod tests {
             );
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
+    }
+
+    // ── 15-T-6（裁决 D9）：审计路由注册/收口注销（run 生命周期面）──
+
+    /// run 启动注册 → drive_run_loop 收口强制注销（注册表无残留断言：
+    /// 审计路由随 run 生命周期不泄漏；与 escape_watch 句柄同生命周期
+    /// 收口对齐）。注册走与 run_task_impl 同构的 BridgeAuditSink 装配，
+    /// 收口走真实 drive_run_loop 终态路径。
+    #[tokio::test]
+    async fn audit_sink_route_registered_at_run_start_unregistered_on_close() {
+        let (state, _registry) = state_with_background();
+        let session_id = "audit-sink-s1";
+        let run_id = "audit-sink-r1";
+        let active = build_active_run(&state, session_id, run_id).await;
+        // 模拟 run_task_impl 装配：run 启动注册（BridgeAuditSink 包装
+        // 同一 run 级桥——与生产装配同构）
+        let bridge_audit = Arc::new(BridgeAuditSink::new(
+            Arc::clone(&active.bridge),
+            run_id.to_string(),
+        ));
+        state
+            .engine
+            .audit_sink()
+            .register(session_id, bridge_audit as AuditSink);
+        assert_eq!(
+            state.engine.audit_sink().route_count(),
+            1,
+            "run 启动后会话路由应已注册"
+        );
+        // 驱动 run 终态（真实 drive_run_loop 收口路径）
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(run_id.to_string(), Arc::clone(&active));
+        drive_run_loop(
+            Arc::clone(&state),
+            active,
+            Box::new(TestProducer::new(canned_outcome())),
+        )
+        .await;
+        // 收口注销：注册表无残留
+        assert_eq!(
+            state.engine.audit_sink().route_count(),
+            0,
+            "run 收口后审计路由必须注销（防 session 泄漏）"
+        );
+    }
+
+    /// 会话串行守卫下重复 run：前一 run 注册被后一 run 覆盖，收口后
+    /// 注册表整体清空（多 run 并发路由注册者覆盖语义 + 收口注销）
+    #[tokio::test]
+    async fn audit_sink_route_cleared_after_consecutive_runs() {
+        let (state, _registry) = state_with_background();
+        // 第一 run 注册
+        let run_1 = build_active_run(&state, "audit-sink-s2", "audit-sink-r2a").await;
+        state.engine.audit_sink().register(
+            "audit-sink-s2",
+            Arc::new(BridgeAuditSink::new(
+                Arc::clone(&run_1.bridge),
+                "audit-sink-r2a".to_string(),
+            )) as AuditSink,
+        );
+        // 第二 run 覆盖注册（后注册者覆盖语义）
+        let run_2 = build_active_run(&state, "audit-sink-s2", "audit-sink-r2b").await;
+        state.engine.audit_sink().register(
+            "audit-sink-s2",
+            Arc::new(BridgeAuditSink::new(
+                Arc::clone(&run_2.bridge),
+                "audit-sink-r2b".to_string(),
+            )) as AuditSink,
+        );
+        assert_eq!(state.engine.audit_sink().route_count(), 1);
+        // 收口两个 run（各走一次真实 drive_run_loop 终态路径）
+        for (run_id, active) in [
+            ("audit-sink-r2a", run_1),
+            ("audit-sink-r2b", run_2),
+        ] {
+            state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(run_id.to_string(), Arc::clone(&active));
+            drive_run_loop(
+                Arc::clone(&state),
+                active,
+                Box::new(TestProducer::new(canned_outcome())),
+            )
+            .await;
+        }
+        // 收口注销幂等 + 注册表无残留
+        assert_eq!(
+            state.engine.audit_sink().route_count(),
+            0,
+            "连续 run 收口后注册表必须清空"
+        );
     }
 }
