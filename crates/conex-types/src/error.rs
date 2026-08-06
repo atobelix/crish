@@ -1058,24 +1058,30 @@ pub fn from_core_error_with_context(
     err: CoreError,
     invalid_input_code: &'static str,
 ) -> CrishError {
+    // 主码一律经 core_error_code 单一真源（PE-03 §2.4.2 映射表，12-T-PD-07）：
+    // 双入口（core_error_code / from_core_error_with_context）共用同一映射，
+    // 禁止散落 map_err 猜测映射（AU-04 D8 边界）。
+    //
+    // 语义备案（32 文档 DD3-T7）：Encoding 从 store.corrupted 切至
+    // common.encoding——未来调用方如需「编码损坏」语义须显式走
+    // STORE_CORRUPTED；Io 从 store.write_failed 切至 store.io——无方向
+    // 信息时主码兜底，方向性分流仍由 map_io_err 承担。码值均已注册，
+    // conex-types 与 TS 共享码表无双端同步需求。
+    let code = core_error_code(&err);
     match err {
+        // Q30 契约：InvalidInput 由调用方按上下文选精确码（如
+        // tool.invalid_input、session.invalid_session），不走主码兜底
         CoreError::InvalidInput(msg) => CrishError::new(invalid_input_code, msg),
-        CoreError::Encoding(msg) => {
-            // 编解码失败本质是数据损坏
-            CrishError::new(codes::STORE_CORRUPTED, msg)
-        }
-        CoreError::Io(msg) => {
-            // 无方向信息，默认 write_failed
-            // 调用方应优先用 map_io_err 按 e.kind() 分流
-            CrishError::new(codes::STORE_WRITE_FAILED, msg)
-        }
+        CoreError::Encoding(msg) => CrishError::new(code, msg),
+        CoreError::Io(msg) => CrishError::new(code, msg),
         CoreError::NotFound(msg) => {
-            // 无资源类型上下文，走兜底 common.unknown，携带 legacyKind 标记
-            CrishError::new(codes::COMMON_UNKNOWN, msg)
+            // 主码 common.not_found（单一真源）+ legacyKind 标记保留：
+            // 兼容旧 IPC 消费方按 kind 分支的路径
+            CrishError::new(code, msg)
                 .with_metadata(serde_json::json!({ "legacyKind": "NotFound" }))
         }
-        CoreError::Cancelled => CrishError::new(codes::RUNTIME_ABORTED, "cancelled"),
-        CoreError::Internal(msg) => CrishError::new(codes::COMMON_UNKNOWN, msg),
+        CoreError::Cancelled => CrishError::new(code, "cancelled"),
+        CoreError::Internal(msg) => CrishError::new(code, msg),
     }
 }
 
@@ -1192,7 +1198,9 @@ mod tests {
             CoreError::NotFound("missing".into()),
             codes::COMMON_UNSUPPORTED,
         );
-        assert_eq!(err.code, codes::COMMON_UNKNOWN);
+        // 12-T-PD-07：NotFound 主码按单一真源切至 common.not_found
+        // （原兜底 common.unknown 随之统一），legacyKind 标记保留
+        assert_eq!(err.code, codes::COMMON_NOT_FOUND);
         assert_eq!(
             err.metadata.as_ref().and_then(|m| m.get("legacyKind")),
             Some(&serde_json::json!("NotFound"))
@@ -1288,6 +1296,36 @@ mod tests {
         codes_seen.sort_unstable();
         codes_seen.dedup();
         assert_eq!(codes_seen.len(), before, "6 个 kind 的主码必须互不相同");
+    }
+
+    /// 双入口一致性（12-T-PD-07）：`from_core_error_with_context` 与
+    /// `core_error_code` 对同一 kind 产出同一主码——双映射入口共用单一
+    /// 真源，杜绝「core_error_code 说 common.encoding、上下文映射却说
+    /// store.corrupted」的码分裂。InvalidInput 例外：Q30 契约由调用方
+    /// 按上下文选精确码，传入主码本身时双入口一致（其余 5 种 kind 的
+    /// 入参 "x" 被忽略，码走单一真源）。
+    #[test]
+    fn dual_mapping_entries_agree() {
+        let kinds = [
+            CoreError::InvalidInput("x".into()),
+            CoreError::Encoding("x".into()),
+            CoreError::Io("x".into()),
+            CoreError::NotFound("x".into()),
+            CoreError::Cancelled,
+            CoreError::Internal("x".into()),
+        ];
+        for k in kinds {
+            let expected = core_error_code(&k);
+            let invalid_input_code = match k {
+                CoreError::InvalidInput(_) => expected,
+                _ => "x",
+            };
+            let mapped = from_core_error_with_context(k, invalid_input_code);
+            assert_eq!(
+                mapped.code, expected,
+                "双入口对 kind 的主码必须一致（单一真源，禁止散落 map_err）"
+            );
+        }
     }
 
     #[test]

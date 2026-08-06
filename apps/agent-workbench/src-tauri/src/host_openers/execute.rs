@@ -13,7 +13,10 @@
 // open_path_with_default_app）执行前必过 CommandGatekeeper 双防线
 // （check_command + patterns 逐参匹配，见文件头安全模型与各函数体内校验），
 // 是「子进程经命令门禁」的门禁落地处本身。
-#![allow(clippy::disallowed_methods)]
+// 收敛说明：2026-08-06 由模块级 `#![allow]` 收敛为函数级豁免 + 理由
+// （对齐 clippy.toml 豁免面「函数级 allow + 理由」，33 方案 DD4-T2），
+// 模块级豁免会连带覆盖未来新增代码（豁免面蔓延），函数级仅覆盖三个
+// 门禁函数本身；本段注释保留为函数级理由的引用源。
 
 use std::{
     path::{Path, PathBuf},
@@ -32,6 +35,11 @@ use crate::host_openers::types::{
     HostOpenTarget, HostOpenTargetKindForResult, ResolvedOpenTarget,
 };
 
+// G2 禁令豁免：host opener 执行面——本函数所有拉起点（.spawn()）执行前必过
+// CommandGatekeeper 双防线（check_command + patterns 逐参匹配，见函数体内
+// gatekeeper 校验与文件头安全模型），即门禁落地处本身；函数级 allow
+// （对齐 clippy.toml 豁免面「函数级 allow + 理由」），理由详见文件头安全模型。
+#[allow(clippy::disallowed_methods)]
 pub(crate) fn open_host_target(
     opener_id: String,
     target: HostOpenTarget,
@@ -121,6 +129,12 @@ pub(crate) fn open_host_target(
     })
 }
 
+// G2 禁令豁免：host opener 执行面——本函数拉起点（.spawn()，仅 Windows 分支）
+// 执行前必过 CommandGatekeeper 双防线（check_command + patterns 逐参匹配，
+// 见函数体内 gatekeeper 校验与文件头安全模型），即门禁落地处本身；
+// 函数级 allow（对齐 clippy.toml 豁免面「函数级 allow + 理由」），
+// 理由详见文件头安全模型。
+#[allow(clippy::disallowed_methods)]
 fn open_with_shortcut(
     lnk_path: &str,
     target: HostOpenTarget,
@@ -208,6 +222,13 @@ fn open_with_shortcut(
     }
 }
 
+// G2 禁令豁免：host opener 执行面——本函数所有拉起点（.spawn()，
+// Windows cmd start / macOS open / 其余 Unix xdg-open 三个 cfg 分支）
+// 执行前必过 CommandGatekeeper 双防线（check_command + patterns 逐参匹配，
+// 见函数体内 gatekeeper 校验与文件头安全模型），即门禁落地处本身；
+// 函数级 allow 覆盖函数体全部 cfg 分支（对齐 clippy.toml 豁免面
+// 「函数级 allow + 理由」），理由详见文件头安全模型。
+#[allow(clippy::disallowed_methods)]
 pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult, CoreError> {
     let target = path.trim().to_string();
     if target.is_empty() {

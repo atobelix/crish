@@ -17,8 +17,9 @@
 //!
 //! **委托边界**（A5 已落盘面 vs 命令层自有语义）：
 //! - create → registry.register / delete → registry.cancel / list →
-//!   registry.snapshot（A5 显式为 T-CF-14 预留）；装配（A3 收口）后
-//!   经 [WorkflowBackend::set_registry] 注入共享实例；
+//!   registry.snapshot（A5 显式为 T-CF-14 预留）；30 方案 P6 装配收口
+//!   后经 [WorkflowBackend::set_registry] 注入共享实例（main.rs 装配轮
+//!   调用，消除队列双实例 + 注册表委托生产转正）；
 //! - update / trigger / list-workflow-runs 无 registry 表面（A5 未暴露），
 //!   由命令层元数据层承载：workflow 展示字段（name/cwd/mode/schedule/
 //!   createdAt/updatedAt/lastRunAt）与运行历史（`sched_runs` 键）本层
@@ -578,18 +579,35 @@ pub(crate) struct WorkflowCommandState {
 }
 
 impl WorkflowCommandState {
-    /// 新建（setup 装配：session_meta 真存储 + 真实 steering 队列；
-    /// 注册表委托槽初始为空——A3 装配收口后经
+    /// 新建（setup 装配：session_meta 真存储 + 引擎共享 steering 队列——
+    /// 30 方案 P6：队列与 [crate::core_run_commands::CoreRunState] 的
+    /// pending_queue 同一 Arc 实例，消除 A5-H01a 队列双实例——触发注入
+    /// 落真实队列，idle 续 run 消费唤醒；注册表委托槽初始为空，经
     /// [WorkflowBackend::set_registry] 注入共享实例，见模块头「委托边界」）
-    pub(crate) fn new(db: LocalDb) -> Self {
+    pub(crate) fn new(
+        db: LocalDb,
+        steering_queue: Arc<Mutex<PendingMessageQueue>>,
+    ) -> Self {
         Self {
             backend: Arc::new(WorkflowBackend::new(
                 Arc::new(SessionMetaWorkflowStore::new(db)),
-                Arc::new(QueueSteeringSink::new(Arc::new(Mutex::new(
-                    PendingMessageQueue::new(),
-                )))),
+                Arc::new(QueueSteeringSink::new(steering_queue)),
             )),
         }
+    }
+
+    /// 注入 SchedulerRegistry 委托（30 方案 P6 装配收口唯一入口；
+    /// 透传 [WorkflowBackend::set_registry]——main.rs 装配轮调用）
+    pub(crate) fn set_registry(&self, registry: Arc<SchedulerRegistry>) {
+        self.backend.set_registry(registry);
+    }
+
+    /// 后端句柄（测试访问：装配轮集成断言「注入队列 = 命令层落点」——
+    /// 生产命令经同模块 `state.inner().backend` 直取，本访问器仅测试面
+    /// 使用，cfg(test) 门控零非测试构建 dead_code）
+    #[cfg(test)]
+    pub(crate) fn backend(&self) -> Arc<WorkflowBackend> {
+        Arc::clone(&self.backend)
     }
 }
 
@@ -623,8 +641,8 @@ impl WorkflowBackend {
     }
 
     /// 注入 SchedulerRegistry 委托（装配收口唯一入口；重复注入覆盖）。
-    /// 当前仅测试面消费——A3 装配收口后由装配点调用（模块头「委托边界」）
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// 生产装配点 = main.rs 装配轮（P6）：core_state.scheduler_registry()
+    /// 经本方法注入共享注册表——create 即真实注册调度，不再命令层退化。
     pub(crate) fn set_registry(&self, registry: Arc<SchedulerRegistry>) {
         *self.registry.lock().unwrap_or_else(|e| e.into_inner()) = Some(registry);
     }
@@ -926,6 +944,10 @@ impl WorkflowBackend {
             "workflow 已立即触发（steering 条目已注入）"
         );
         Ok(TriggerResult {
+            // 30 方案 P6 注记：队列接通后 trigger 注入条目真实唤醒 idle
+            // 续 run——真实 run 由引擎承接（续 run 装配产出 run_id /
+            // session_id），命令层立即触发保持空返回值不伪造 run 句柄
+            // （契约不变，运行历史以命令层 sched_runs 近似真源）。
             run_id: None,
             session_id: None,
         })
@@ -1477,6 +1499,88 @@ mod tests {
         assert!(!persisted[0].enabled, "cancel 应 enabled=false 落库");
         assert!(registry.snapshot().iter().all(|t| !t.enabled));
         assert!(backend.list().is_empty(), "元数据列表应移除");
+    }
+
+    /// 验收（30 方案 P6）：trigger → steering 条目落入真实共享队列——
+    /// QueueSteeringSink 适配 PendingMessageQueue（group_id = cron-<id>
+    /// 原位替换去重、is_steering 受保护位、摘要文本含 prompt 与第 N 次触发）
+    #[tokio::test]
+    async fn trigger_workflow_enqueues_shared_steering() {
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let backend = Arc::new(WorkflowBackend::new(
+            Arc::new(MemoryWorkflowStore::default()),
+            Arc::new(QueueSteeringSink::new(Arc::clone(&queue))),
+        ));
+        let view = backend
+            .create(
+                "手动巡检".to_string(),
+                "检查仓库状态".to_string(),
+                WorkflowScheduleWire::Manual,
+                None,
+                None,
+                true,
+            )
+            .await
+            .expect("manual 创建应成功");
+        backend.trigger(&view.id).expect("触发应成功");
+
+        let queue = queue.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(queue.len(), 1, "触发必须写入共享队列");
+        let entry = queue.peek().expect("队列必有条目");
+        assert_eq!(
+            entry.group_id.as_deref(),
+            Some(format!("{CRON_ID_PREFIX}{}", view.id).as_str()),
+            "group_id 应为 cron-<id>"
+        );
+        assert!(entry.is_steering, "触发条目为 steering 受保护位");
+        assert!(
+            entry.text.contains("检查仓库状态") && entry.text.contains("第 1 次触发"),
+            "摘要文本应含 prompt 与触发计数：{}",
+            entry.text
+        );
+    }
+
+    /// 验收（30 方案 P6）：create（cron 表达式）→ 注册表快照含 next_fire
+    /// ——真实注册调度接入（不再只落库）；注册表表内条目即活跃（P7
+    /// has_active 判定真源）。
+    #[tokio::test]
+    async fn create_workflow_registers_real_scheduler() {
+        use crate::sched::{MemorySchedStore, SchedEventSink, SchedStore};
+
+        let pending: Arc<dyn crate::sched::PendingSink> = Arc::new(SchedProbe::default());
+        let events: Arc<dyn crate::sched::EventSink> = Arc::new(SchedEventSink::new());
+        let sched_store: Arc<dyn SchedStore> = MemorySchedStore::shared();
+        let registry = Arc::new(SchedulerRegistry::new(pending, events, sched_store, None));
+        let backend = Arc::new(WorkflowBackend::new(
+            Arc::new(MemoryWorkflowStore::default()),
+            Arc::new(ProbeSink::default()) as Arc<dyn SteeringSink>,
+        ));
+        backend.set_registry(Arc::clone(&registry));
+
+        let view = backend
+            .create(
+                "每日备份".to_string(),
+                "执行备份".to_string(),
+                daily_schedule("07:00"),
+                None,
+                None,
+                true,
+            )
+            .await
+            .expect("委托模式创建应成功");
+        let snapshot = registry.snapshot();
+        assert_eq!(snapshot.len(), 1, "注册表应有同源任务");
+        assert_eq!(snapshot[0].cron_id, view.id);
+        assert!(
+            snapshot[0].next_fire_at_ms > 0,
+            "快照应含 next_fire（真实调度，不再只落库）"
+        );
+        assert!(
+            registry.has_active(),
+            "表内条目即活跃（P7 cron_has_enabled 判定真源）"
+        );
+        // 清理：取消防触发任务泄漏（daily 表达式真实 sleep 挂起）
+        registry.cancel(&view.id).await.expect("清理取消应成功");
     }
 
     // ── 表达式校验与 next_fire（委托 parse_cron 纯函数）────────────

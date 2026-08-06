@@ -39,3 +39,8 @@ harness = false
 # 此处仅补 feature 声明，不新增任何新 crate 到依赖树。
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+
+# G5 豁免登记（2026-08-03）：uuid 处于并行域开发中（models/ 目录接线、
+# lib.rs 有未提交改动），避免删除破坏并行 Agent 编译；待并行域稳定后复核。
+[package.metadata.cargo-machete]
+ignored = ["uuid"]

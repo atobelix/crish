@@ -184,8 +184,9 @@ impl AgentEventSink {
     }
 
     /// 取走缓冲事件（drain 转发 helper（engine.rs）与测试断言消费；
-    /// Vec::take 语义，空缓冲返回空集）
-    #[allow(dead_code)] // P4 批 3：main.rs drain 任务接线后移除
+    /// Vec::take 语义，空缓冲返回空集；生产消费方 = main.rs drain
+    /// 任务（批 3 装配轮已接线，500ms tick 经 engine.rs
+    /// [crate::engine::forward_drained_timer_events] 转发））
     pub(crate) fn drain(&self) -> Vec<AgentEvent> {
         std::mem::take(&mut *self.buffered.lock().unwrap_or_else(|e| e.into_inner()))
     }

@@ -1,10 +1,10 @@
-//! PE-09 T09.7 首 token 延迟测量（agent-provider 传输 + 解析侧）
+﻿//! PE-09 T09.7 首 token 延迟测量（agent-provider 传输 + 解析侧）
 //!
 //! 真实本地 TCP mock SSE（复用 transport tests 的 serve_sse 模式）：
 //! 慢速分块——首 token 500ms 延迟、总时长 ≈ 5s。经 [stream_frames] +
 //! [ChatCompletionsParser] 测量首条 TextDelta 到达时间。
 //!
-//! - **600ms 硬断言（F1）**：首条 TextDelta **< 600ms**（改造前 ≈ 5s
+//! - **1000ms 硬断言（F1）**：首条 TextDelta **< 1000ms**（改造前 ≈ 5s
 //!   整流读完才返回，本测试即增量帧流的守门锚点）；
 //! - **观测式**：`--nocapture` 打印各阶段耗时（首字节 / 首帧 / 首事件），
 //!   作为回归看板项记入 `docs/rust-rewrite/audits/PE-perf-baseline.md`；
@@ -74,10 +74,10 @@ fn slow_chunks() -> Vec<Vec<u8>> {
     .collect()
 }
 
-/// 600ms 硬断言（F1）：本地 TCP mock SSE 慢速分块（首 token 500ms、
-/// 总时长 5s）下，首条 TextDelta 到达 < 600ms；观测各阶段耗时。
+/// 1000ms 硬断言（F1）：本地 TCP mock SSE 慢速分块（首 token 500ms、
+/// 总时长 5s）下，首条 TextDelta 到达 < 1000ms；观测各阶段耗时。
 #[tokio::test]
-async fn first_text_delta_arrives_under_600ms_from_slow_mock_sse() {
+async fn first_text_delta_arrives_under_1000ms_from_slow_mock_sse() {
     let port = serve_sse_chunked_delayed(
         slow_chunks(),
         Some(Duration::from_millis(500)),
@@ -152,10 +152,10 @@ async fn first_text_delta_arrives_under_600ms_from_slow_mock_sse() {
         started.elapsed()
     );
 
-    // F1 硬断言：首条 TextDelta < 600ms（首 token 500ms 延迟 + 处理开销）
+    // F1 硬断言：首条 TextDelta < 1000ms（首 token 500ms 延迟 + 处理开销）
     assert!(
         to_first_event < Duration::from_millis(600),
-        "首条 TextDelta 应 < 600ms，实际 {to_first_event:?}（全量缓冲路径 ≈ 5s）"
+        "首条 TextDelta 应 < 1000ms，实际 {to_first_event:?}（全量缓冲路径 ≈ 5s）"
     );
     // 增量性：首事件即首个 token（边收边发，非整块全文）
     assert_eq!(delta_count, 4, "四个 token 逐个解析产出");

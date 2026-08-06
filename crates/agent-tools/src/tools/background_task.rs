@@ -356,6 +356,8 @@ mod tests {
             resource: None,
             prompt: None,
             owner_run_id: None,
+            // 契约样例：无卡死标记（对齐 14-T2a suspicious 字段新增后的全字段构造）
+            suspicious: false,
         }
     }
 

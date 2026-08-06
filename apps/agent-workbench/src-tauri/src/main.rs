@@ -384,24 +384,61 @@ fn main() {
             }
 
             // ⑧ CoreRunState / EventBridge / SharedDb / 后台任务注册表 manage
+            // （bridge 以 clone 入管：原值继续供任务事件接线与 drain 任务使用）
             app.manage(Arc::clone(&core_state));
-            app.manage(bridge);
+            app.manage(bridge.clone());
             app.manage(shared_db.clone());
             app.manage(Arc::clone(&background_tasks));
 
-            // ⑧c workflow 命令后端（T-CF-14：六条命令的托管状态；session_meta
-            // `sched_*` 键持久化 + steering 队列；SchedulerRegistry 委托槽在
-            // A3 装配收口后经 WorkflowBackend::set_registry 注入——见
-            // workflow_commands.rs 模块头「委托边界」）
-            app.manage(workflow_commands::WorkflowCommandState::new(
+            // ⑧b+ 30 方案 P2/P3 装配：后台任务事件面接线（生产发射链）——
+            // ① 任务事件消费器注入（先于 set_event_bridge：EventBridgeSink
+            // 构造时读取消费器快照，顺序契约见 task_event_consumer.rs 模块
+            // 头）；② 事件桥并入通知投递器（替换默认 LogEventSink 留痕，
+            // 七事件经 workbench-run-event 发射 + security-audit 直发）
+            background_tasks.set_task_event_consumer(core_state.task_events());
+            background_tasks.set_event_bridge(bridge.clone(), String::new());
+
+            // ⑧c workflow 命令后端（T-CF-14：六条命令的托管状态；30 方案
+            // P6 装配收口：steering 队列注入引擎共享队列（消除 A5-H01a
+            // 队列双实例——trigger 注入真实落引擎队列，idle 续 run 消费
+            // 唤醒）；SchedulerRegistry 委托经 set_registry 注入共享注册
+            // 表（create 即真实注册调度，A5-H01b 生产转正））
+            let workflow_state = workflow_commands::WorkflowCommandState::new(
                 shared_db.local_db(),
-            ));
+                core_state.steering_queue(),
+            );
+            if let Some(reg) = core_state.scheduler_registry() {
+                workflow_state.set_registry(reg);
+            } else {
+                tracing::warn!(
+                    target: "setup",
+                    "SchedulerRegistry 装配降级（workflow 走命令层独立退化路径，Cron 不参与续 run 判定）"
+                );
+            }
+            app.manage(workflow_state);
 
             // ⑨ 模型目录（P3 步骤 5）：内置表挂 Tauri state（catalog_get /
             //    catalog_refresh 消费；覆盖/扫描合并仅经命令入口进行）
             app.manage(Arc::new(RwLock::new(
                 agent_provider::models::ModelCatalog::bundled(),
             )));
+
+            // 30 方案 P4：timer/cron 缓冲事件 drain 任务（500ms tick 调
+            // 引擎转发 helper——缓冲事件 → 信封直发事件桥，A10 N-05 断头路
+            // 消除；延迟 ≤ 500ms，drain 为 Vec::take 语义，空缓冲零开销；
+            // 对齐 watchdog spawn 先例：tauri runtime 内无限循环 + 周期 sleep）
+            {
+                let timer_sink = core_state.timer_event_sink();
+                let sched_sink = core_state.scheduler_event_sink();
+                let drain_bridge = bridge.clone();
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        engine::forward_drained_timer_events(&timer_sink, &drain_bridge);
+                        engine::forward_drained_scheduler_events(&sched_sink, &drain_bridge);
+                    }
+                });
+            }
 
             // 周期快照（T08.6 触发点 B：默认 60s，仅活动 run 存在时保存；
             // 幂等，restore 完成与否均可启动）

@@ -1208,8 +1208,10 @@ pub struct CoreRunState {
     /// [EngineHandle::timer_registry] 的 list_active 封装注入；测试可替换）
     timer_has_active: Mutex<Option<WakeSourceCheck>>,
     /// T-CF-11：enabled Cron 判定器（SchedulerRegistry 非空封装；None =
-    /// 未接线——Cron 不参与续 run 判定，行为与接线前一致。A5 sched.rs
-    /// 装配后经 [Self::set_cron_has_enabled] 注入）
+    /// 未接线——Cron 不参与续 run 判定，行为与接线前一致。30 方案 P7：
+    /// 生产在 [Self::new] 内直接装配（engine.scheduler_registry() 非空
+    /// 封装 has_active，对齐 timer_has_active 先例）；setter 保留测试
+    /// 替换槽）
     cron_has_enabled: Mutex<Option<WakeSourceCheck>>,
     /// T-CF-11：idle 续 run 空转护栏计数（session_id → 连续无 AI 产出
     /// 的续 run 轮数；有产出清零，超 [IDLE_RESUME_MAX_EMPTY_ROUNDS] 停止）
@@ -1246,8 +1248,8 @@ impl CoreRunState {
         let subagent_spawner = Arc::new(crate::subagent_spawner::SubagentSpawnerImpl::new());
         // T-CF-11：idle 待命唤醒源接线——跨 run steering 队列与定时器
         // 活跃判定经 EngineHandle 访问器取得（engine.rs:775-783，R-CF3
-        // 装配收口预留）；SchedulerRegistry enabled 判定由 A5 装配后经
-        // set_cron_has_enabled 注入。
+        // 装配收口预留）；SchedulerRegistry enabled 判定在下方经
+        // engine.scheduler_registry() 直接装配（30 方案 P7）。
         let engine = EngineHandle::new_with_spawner(
             // 引擎侧注入包装实例（保持 Option 语义：未接线 = 引擎无
             // 后台任务通道，与接线前行为一致）
@@ -1273,6 +1275,20 @@ impl CoreRunState {
         let timer_has_active: WakeSourceCheck = Arc::new(move || {
             let registry = Arc::clone(&timer_registry);
             Box::pin(async move { !registry.list_active().await.is_empty() })
+        });
+        // 30 方案 P7：enabled Cron 判定器装配（对齐 timer_has_active 先例
+        // ——SchedulerRegistry 非空封装：表内条目即活跃（停止/取消时已
+        // 移除，sched.rs has_active 语义自洽）。None = 装配降级（引擎
+        // scheduler_registry 为 None），Cron 不参与续 run 判定，行为与
+        // 接线前一致（main.rs 装配轮已加 warn 提示——D-29 精神）。
+        let scheduler_registry = engine.scheduler_registry();
+        let cron_has_enabled: Option<WakeSourceCheck> = scheduler_registry.map(|reg| {
+            let reg = Arc::clone(&reg);
+            let check: WakeSourceCheck = Arc::new(move || {
+                let reg = Arc::clone(&reg);
+                Box::pin(async move { reg.has_active() })
+            });
+            check
         });
         // T-CF-11：生产续 run 拉起器预装配（trait object 叶子类型——
         // drive_run_loop 经 trait object 调用，不直接包含 run_task_impl
@@ -1307,18 +1323,19 @@ impl CoreRunState {
             pending_queue,
             task_events,
             timer_has_active: Mutex::new(Some(timer_has_active)),
-            cron_has_enabled: Mutex::new(None),
+            cron_has_enabled: Mutex::new(cron_has_enabled),
             resume_empty_streak: Mutex::new(HashMap::new()),
             resume_launcher: Mutex::new(Some(resume_launcher)),
             subagent_spawner,
         }
     }
 
-    /// T-CF-11：注入 Cron enabled 判定器（A5 sched.rs SchedulerRegistry
-    /// 装配后由装配点（A3 engine.rs 装配收口）调用；None = 未接线，Cron
-    /// 不参与续 run 判定。接线前标记 dead_code——冻结接口预编码，见
-    /// F9 轮次报告跨 Agent 接口登记）
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// T-CF-11：注入 Cron enabled 判定器（30 方案 P7 后为测试替换槽——
+    /// 生产在 [Self::new] 内直接装配 engine.scheduler_registry() 的
+    /// has_active 封装；测试经本方法注入替身/清空断言判定分支。cfg(test)
+    /// 门控对齐 [Self::set_timer_has_active] 先例——非测试构建无生产
+    /// 调用方，函数体整体不编译，零 dead_code 警告）
+    #[cfg(test)]
     pub(crate) fn set_cron_has_enabled(&self, check: Option<WakeSourceCheck>) {
         *self
             .cron_has_enabled
@@ -1469,20 +1486,40 @@ impl CoreRunState {
         Arc::clone(&self.store)
     }
 
-    /// 30 方案 P3：共享 steering 队列（与引擎 [EngineHandle::timer_steering_queue]
-    /// 同一实例；P6（批 3 装配轮）经此注入 workflow 队列——消除队列双实例，
-    /// 对齐 [Self::store] Arc::clone 模式）
-    #[cfg_attr(not(test), allow(dead_code))] // 消费方 = P6 装配轮（批 3）；接线前标记 dead_code（对齐 set_cron_has_enabled 先例）
+    /// 30 方案 P3/P6：共享 steering 队列（与引擎
+    /// [EngineHandle::timer_steering_queue] 同一实例；P6（批 3 装配轮）
+    /// 经此注入 workflow 队列——消除队列双实例，对齐 [Self::store]
+    /// Arc::clone 模式；消费方 = main.rs 装配轮（已接线））
     pub(crate) fn steering_queue(&self) -> Arc<Mutex<PendingMessageQueue>> {
         Arc::clone(&self.pending_queue)
     }
 
     /// 30 方案 P3：任务事件消费器（main.rs 装配轮接线
     /// `background_tasks.set_task_event_consumer(core_state.task_events())`——
-    /// 必须在 set_event_bridge 之前调用，EventBridgeSink 构造时读取快照）
-    #[cfg_attr(not(test), allow(dead_code))] // 消费方 = main.rs 装配轮（批 3）；接线前标记 dead_code（对齐 set_cron_has_enabled 先例）
+    /// 必须在 set_event_bridge 之前调用，EventBridgeSink 构造时读取快照；
+    /// 消费方 = main.rs 装配轮（已接线））
     pub(crate) fn task_events(&self) -> Arc<TaskEventConsumer> {
         Arc::clone(&self.task_events)
+    }
+
+    /// 30 方案 P6/P7：Cron 调度注册表（透传引擎句柄；None = 装配降级）。
+    /// 消费方：main.rs 装配轮（P6 WorkflowBackend::set_registry）+
+    /// [Self::new]（P7 cron_has_enabled 判定器装配）
+    pub(crate) fn scheduler_registry(&self) -> Option<Arc<crate::sched::SchedulerRegistry>> {
+        self.engine.scheduler_registry()
+    }
+
+    /// 30 方案 P4：定时器事件缓冲（main.rs drain 任务 500ms tick 取走
+    /// 缓冲 → [crate::engine::forward_drained_timer_events] 转发到事件桥；
+    /// 与引擎装配实例同一 Arc）
+    pub(crate) fn timer_event_sink(&self) -> Arc<crate::timers::AgentEventSink> {
+        self.engine.timer_event_sink()
+    }
+
+    /// 30 方案 P4：cron 事件缓冲（同 timer 的 drain 转发路径——cron-fired
+    /// 单臂，cancel 走数据面 + steering 面，无 cron-cancelled 发射目标）
+    pub(crate) fn scheduler_event_sink(&self) -> Arc<crate::sched::SchedEventSink> {
+        self.engine.scheduler_event_sink()
     }
 
     /// restore 是否完成（run_task 门禁；查询命令 restore.state 数据源）
@@ -1851,8 +1888,9 @@ mod idle_resume {
     ///
     /// 生产接线：TimerRegistry 非空判定在 [CoreRunState::new] 经
     /// [EngineHandle::timer_registry] 的 list_active 封装注入；SchedulerRegistry
-    /// 非空判定由 A5 sched.rs 装配后经 [CoreRunState::set_cron_has_enabled]
-    /// 注入（未注入 = None，Cron 不参与续 run 判定，行为与接线前一致）。
+    /// 非空判定在 [CoreRunState::new] 经 [EngineHandle::scheduler_registry]
+    /// 的 has_active 封装注入（30 方案 P7；None = 装配降级，Cron 不参与
+    /// 续 run 判定，行为与接线前一致）。
     pub(crate) type WakeSourceCheck =
         Arc<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
 
@@ -4127,6 +4165,77 @@ mod tests {
         assert_eq!(queue.peek().unwrap().text, "任务 t-a 已完成，退出码 0");
     }
 
+    /// 验收（30 方案 P7）：cron_has_enabled 在 CoreRunState::new 内装配——
+    /// 真实引擎路径下判定器非 None（SchedulerRegistry 非空封装
+    /// has_active；与 timer_has_active 先例对称，A5-H02 生产缺失消除）
+    #[test]
+    fn cron_has_enabled_assembled_in_new() {
+        let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+        let check = state
+            .cron_has_enabled
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        assert!(
+            check.is_some(),
+            "CoreRunState::new 必须装配 cron_has_enabled 判定器（真实引擎路径）"
+        );
+        // scheduler_registry 访问器同步可达（P6 装配面数据源）
+        assert!(
+            state.scheduler_registry().is_some(),
+            "引擎装配后 scheduler_registry 应为 Some"
+        );
+    }
+
+    /// 验收（30 方案 P6 装配轮）：WorkflowCommandState 注入共享队列后，
+    /// 命令层触发条目真实落入 CoreRunState 的 pending_queue——同实例
+    /// 的行为级证明（main.rs 装配行：WorkflowCommandState::new(db,
+    /// core_state.steering_queue())；消除 A5-H01a 队列双实例）
+    #[tokio::test]
+    async fn main_assembly_shared_queue_single_instance() {
+        let db = LocalDb::open_in_memory().expect("内存库");
+        db.upsert_session_entry(&subagent_test_session_entry("s1"))
+            .expect("会话条目");
+        let state = core_state_with_store(Arc::new(LocalDbStore::new(db.clone())));
+        // main.rs 装配轮同序构造
+        let workflow_state = crate::workflow_commands::WorkflowCommandState::new(
+            db,
+            state.steering_queue(),
+        );
+        let view = workflow_state
+            .backend()
+            .create(
+                "装配检查".to_string(),
+                "检查仓库".to_string(),
+                crate::workflow_commands::WorkflowScheduleWire::Manual,
+                None,
+                None,
+                true,
+            )
+            .await
+            .expect("创建应成功");
+        workflow_state
+            .backend()
+            .trigger(&view.id)
+            .expect("触发应成功");
+        // 条目落入引擎共享队列（命令层注入 sink 与 CoreRunState 同一实例）
+        let queue = state.steering_queue();
+        let queue = queue.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(queue.len(), 1, "命令层触发必须落入引擎共享队列");
+        let entry = queue.peek().expect("队列必有条目");
+        assert!(entry.is_steering, "workflow 条目为 steering 受保护位");
+        assert!(
+            entry.text.contains("检查仓库"),
+            "条目含 workflow prompt 触发模板：{}",
+            entry.text
+        );
+        assert_eq!(
+            entry.group_id.as_deref(),
+            Some(format!("cron-{}", view.id).as_str()),
+            "group_id = cron-<id>"
+        );
+    }
+
     /// ② 收口落库：write_back_cache_stats 经 LocalDb 写回 runs 表 v5 列
     /// （save_run_usage 幂等 UPDATE），读回整型一致
     #[tokio::test]
@@ -5290,6 +5399,52 @@ mod tests {
         assert!(
             verdict.unwrap().is_empty(),
             "队列空时无注入文本（空注入保持待命）"
+        );
+    }
+
+    /// 验收（30 方案 P7，E2E-7 后半）：真实 SchedulerRegistry 注册 enabled
+    /// cron → 收口判定队列空也续 run（保持待命，不再休眠）——判定器经
+    /// has_active 真实生效（注册表表内条目即活跃，非测试替身注入）
+    #[tokio::test]
+    async fn decide_idle_resume_cron_source_resumes() {
+        let (state, _registry) = state_with_background();
+        let registry = state.scheduler_registry().expect("装配后应为 Some");
+        // 注入超长触发延迟：仅占位活跃（表内条目即活跃），测试窗口内不触发
+        registry.set_fire_override_ms(3_600_000);
+        let cron_id = registry
+            .register(crate::sched::CronTaskInput {
+                expression: "* * * * *".to_string(),
+                prompt: "cron 待命检查".to_string(),
+                max_iterations: Some(1),
+                is_daemon: false,
+            })
+            .await
+            .expect("cron 注册应成功");
+        let active = build_active_run(&state, "s1", "run-1").await;
+        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true).await;
+        assert!(
+            verdict.is_some(),
+            "注册 enabled cron 后队列空也应续 run 保持待命（Cron 源真实生效）"
+        );
+        assert!(
+            verdict.unwrap().is_empty(),
+            "队列空时无注入文本（空注入保持待命）"
+        );
+        // 清理：cancel 移除声明（防跨测试污染）
+        registry.cancel(&cron_id).await.ok();
+    }
+
+    /// 验收（30 方案 P7）：判定器 None（SchedulerRegistry 装配降级）→
+    /// Cron 源 false——与接线前行为一致（三源全空不续 run）
+    #[tokio::test]
+    async fn scheduler_none_degrades_cron_off() {
+        let (state, _registry) = state_with_background();
+        state.set_cron_has_enabled(None);
+        let active = build_active_run(&state, "s1", "run-1").await;
+        let verdict = decide_idle_resume(&state, &active, AgentEndReason::Stop, true).await;
+        assert!(
+            verdict.is_none(),
+            "Cron 判定器 None → Cron 源 false（与接线前行为一致，三源全空不续 run）"
         );
     }
 
@@ -6883,5 +7038,316 @@ mod tests {
         let none = resolve_escape_watch_root(None);
         let current = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         assert_eq!(none, current);
+    }
+
+    // ── 批 3 装配轮端到端（30 方案 §十：E2E-5/6/7）──────────────────────
+
+    /// 30-P3/P2 验收（E2E-5）：任务完成 → 主 agent 唤醒注入 + security-audit
+    /// 留痕——生产装配序（先 set_task_event_consumer 后 set_event_bridge）
+    /// 接线真实注册表：adopt 真实子进程（RunAware 装饰器注入 owner）→
+    /// 完成 → 引擎共享队列出现「任务 <id> 已完成，退出码 0」条目 +
+    /// command-exec 审计两记录（started / completed）
+    #[tokio::test]
+    async fn task_completion_wakes_main_agent_e2e() {
+        let registry = bg_test_registry();
+        let (bridge, emitter) = recording_bridge();
+        let seq = CORE_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let snapshots: Arc<dyn SnapshotStore> = Arc::new(
+            orchestrator::restore::SnapshotFileStore::new(std::env::temp_dir().join(format!(
+                "conex_e2e5_{}_{seq}_snapshot.json",
+                std::process::id()
+            ))),
+        );
+        let state = Arc::new(CoreRunState::new(
+            Arc::new(InMemoryStore::new()),
+            snapshots,
+            bridge.clone(),
+            Arc::new(StatusDiagnostics::new()),
+            Some(Arc::clone(&registry) as Arc<dyn BackgroundTaskManager>),
+        ));
+        // 生产装配序（30 §8.1：consumer 先于 bridge——EventBridgeSink
+        // 构造时读取消费器快照）
+        registry.set_task_event_consumer(state.task_events());
+        registry.set_event_bridge(bridge, String::new());
+        // owner 注入：经 RunAwareBackgroundManager 装饰器（adopt 时当前
+        // run id 写入 owner_run_id——任务归属主 agent 唤醒的前提）
+        state.background.set_current_run("run-e2e5");
+
+        // adopt 真实子进程（立即退出码 0 → completed 终态；resource_monitor
+        // = true——finish_task 仅对受监视任务发射 task-completed（background.rs
+        // 终态通知条件），与生产「长任务资源监视」路径一致）
+        let child = spawn_test_child("exit 0");
+        let r = state
+            .background
+            .adopt(BackgroundAdoptRequest {
+                child,
+                command: "e2e5-cmd".to_string(),
+                cwd: PathBuf::from("."),
+                is_daemon: false,
+                resource_monitor: true,
+                owner_run_id: None,
+            })
+            .await
+            .expect("adopt 应成功");
+        let task_id = r.task_id.clone();
+
+        // 完成 → 共享队列出现唤醒条目（轮询窗口内必达）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        loop {
+            let queue = state.steering_queue();
+            let mut queue = queue.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(entry) = queue.peek() {
+                assert!(
+                    entry.text.contains(&format!("任务 {task_id} 已完成，退出码 0")),
+                    "唤醒条目应为完成摘要模板：{}",
+                    entry.text
+                );
+                assert_eq!(
+                    entry.group_id.as_deref(),
+                    Some(orchestrator::task_events::TASK_WAKE_GROUP_ID),
+                    "任务唤醒条目 group_id = task-wake"
+                );
+                queue.clear();
+                break;
+            }
+            drop(queue);
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "任务完成唤醒条目未在窗口内落入共享队列"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        // security-audit command-exec 记录（started + completed 两记录直发）
+        wait_for_audit_operation(&emitter, "command-exec", Duration::from_secs(15)).await;
+        let payloads = emitter.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let audits: Vec<&String> = payloads
+            .iter()
+            .filter(|p| {
+                let value: serde_json::Value =
+                    serde_json::from_str(p).ok().unwrap_or_default();
+                value["type"] == "security-audit"
+                    && value["operation"] == "command-exec"
+            })
+            .collect();
+        assert!(
+            audits.len() >= 2,
+            "started + completed 应各直发一条 command-exec 审计：{}",
+            audits.len()
+        );
+        // 审计载荷携带任务 id（targets 可检索）
+        assert!(
+            audits.iter().any(|p| p.contains(&format!("\"{task_id}\""))),
+            "审计 targets 应承载任务 id"
+        );
+    }
+
+    /// 30-P4 验收（E2E-6）：timer/cron 到期事件经 drain 转发到事件桥——
+    /// 真实引擎装配（经 CoreRunState）→ 定时器到期缓冲 TimerFired / cron
+    /// 触发缓冲 CronFired → forward helper（main.rs drain 任务同一转发
+    /// 路径）→ workbench-run-event 信封（runId/sequence 不注入，字段级
+    /// 断言）——A10 N-05 缓冲事件不再终老
+    #[tokio::test]
+    async fn timer_and_cron_events_drain_forwarded_e2e() {
+        let (bridge, emitter) = recording_bridge();
+        let seq = CORE_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let snapshots: Arc<dyn SnapshotStore> = Arc::new(
+            orchestrator::restore::SnapshotFileStore::new(std::env::temp_dir().join(format!(
+                "conex_e2e6_{}_{seq}_snapshot.json",
+                std::process::id()
+            ))),
+        );
+        let state = Arc::new(CoreRunState::new(
+            Arc::new(InMemoryStore::new()),
+            snapshots,
+            bridge.clone(),
+            Arc::new(StatusDiagnostics::new()),
+            None,
+        ));
+
+        // 定时器面：注册 1 秒定时器（register 第一参为秒）→ 到期 → 生产
+        // 缓冲出现 TimerFired → 转发 helper → 事件桥信封（字段级断言）
+        let channel: Arc<dyn agent_tools::tools::set_timer::TimerChannel> =
+            state.engine.timer_registry();
+        let handle = channel
+            .register(
+                1,
+                "e2e6 定时器".to_string(),
+                conex_types::timer::TimerCondition::Never,
+            )
+            .await
+            .expect("timer_channel 已接线，register 不应 unsupported");
+        tokio::time::sleep(Duration::from_millis(1300)).await;
+        let forwarded =
+            crate::engine::forward_drained_timer_events(&state.timer_event_sink(), &bridge);
+        assert_eq!(forwarded, 1, "到期 timer-fired 应经转发路径发射");
+        let payloads = emitter.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let first: serde_json::Value =
+            serde_json::from_str(&payloads[0]).expect("载荷应为合法 JSON");
+        assert_eq!(first["type"], "timer-fired");
+        assert!(first.get("runId").is_none(), "timer 事件不得注入 runId");
+        assert!(first.get("sequence").is_none(), "timer 事件不得注入 sequence");
+        assert_eq!(first["sessionId"], "");
+        assert_eq!(first["prompt"], "e2e6 定时器");
+        assert_eq!(first["timerId"], handle.timer_id);
+        channel.cancel(&handle.timer_id).await.ok();
+
+        // cron 面：短触发延迟（测试钩子）→ 触发 → 生产缓冲 CronFired →
+        // 转发 helper → 事件桥信封（cron-fired 字段级断言）
+        let registry = state.scheduler_registry().expect("装配后应为 Some");
+        registry.set_fire_override_ms(40);
+        let cron_id = registry
+            .register(crate::sched::CronTaskInput {
+                expression: "* * * * *".to_string(),
+                prompt: "e2e6 cron".to_string(),
+                max_iterations: Some(1),
+                is_daemon: false,
+            })
+            .await
+            .expect("cron 注册应成功");
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let forwarded = crate::engine::forward_drained_scheduler_events(
+            &state.scheduler_event_sink(),
+            &bridge,
+        );
+        assert_eq!(forwarded, 1, "cron-fired 应经转发路径发射");
+        let payloads = emitter.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let second: serde_json::Value =
+            serde_json::from_str(&payloads[1]).expect("载荷应为合法 JSON");
+        assert_eq!(second["type"], "cron-fired");
+        assert!(second.get("runId").is_none(), "cron 事件不得注入 runId");
+        assert!(second.get("sequence").is_none(), "cron 事件不得注入 sequence");
+        assert_eq!(second["cronId"], cron_id);
+        assert_eq!(second["prompt"], "e2e6 cron");
+        // 缓冲已取走（Vec::take 语义，不重复转发）
+        assert!(
+            state.scheduler_event_sink().drain().is_empty(),
+            "转发后生产缓冲应为空"
+        );
+    }
+
+    /// 30-P6/P7 验收（E2E-7）：create-workflow（cron 表达式）→ 注册表真实
+    /// 调度触发 → steering 条目入共享队列 → run 收口续 run 唤醒——下一轮
+    /// provider 对话包含 workflow prompt 注入（真实 loop + 真实队列 +
+    /// 真实注册表 + 真实判定器，全链路端到端）
+    #[tokio::test]
+    async fn workflow_cron_fire_wakes_resume_run_e2e() {
+        let provider = Arc::new(
+            TestProvider::with_scripts(vec![
+                vec![
+                    ProviderStreamEvent::text("第一轮"),
+                    ProviderStreamEvent::stop(StopReason::Stop),
+                ],
+                vec![
+                    ProviderStreamEvent::text("收到 workflow 唤醒"),
+                    ProviderStreamEvent::stop(StopReason::Stop),
+                ],
+            ])
+            // 500ms 栅栏：确保首个 cron 触发（override 40ms）在 run 1 收口
+            // 前入队——首轮收口即命中队列唤醒（注入文本落到首续 run 轮）
+            .with_pause(0, 500),
+        );
+        let (state, db, _emitter) = run_control_test_state(Arc::clone(&provider));
+        state.run_restore().await;
+
+        // P6 装配（main.rs 装配轮同序）：共享队列 + 注册表委托注入
+        let workflow_state = crate::workflow_commands::WorkflowCommandState::new(
+            db.clone(),
+            state.steering_queue(),
+        );
+        let registry = state.scheduler_registry().expect("装配后应为 Some");
+        workflow_state.set_registry(Arc::clone(&registry));
+        // 短触发延迟：create 后 ~40ms cron 触发 → 条目入共享队列
+        registry.set_fire_override_ms(40);
+        let view = workflow_state
+            .backend()
+            .create(
+                "每日检查".to_string(),
+                "执行检查并报告".to_string(),
+                crate::workflow_commands::WorkflowScheduleWire::Cron {
+                    expression: "* * * * *".to_string(),
+                },
+                None,
+                None,
+                true,
+            )
+            .await
+            .expect("workflow 创建应成功");
+
+        // run 发起（500ms 栅栏内 cron 已触发入队——条目带 workflow prompt；
+        // run 收口后 decide_idle_resume 队列源命中唤醒）
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-wf-e2e", "s1", "发起 run"),
+        )
+        .await
+        .expect("run 发起成功");
+        // 收口续 run：续 run 轮 provider 请求的对话包含 workflow prompt
+        // 注入（§4.8 模板：`<prompt>（cron <id> 第 N 次触发）`）。栅栏保证
+        // 首 fire 先于首轮收口，注入文本落首续 run 轮（请求序号 1）；
+        // 仍扫描窗口序号 0..6 兜底毫秒级竞态（首轮先于触发收口时空注入
+        // 待命、文本落后续 run 轮）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        let mut injected = false;
+        loop {
+            for idx in 0..6 {
+                if provider
+                    .request_message_arcs(idx)
+                    .iter()
+                    .any(|m| m.text().contains("执行检查并报告") && m.text().contains(&view.id))
+                {
+                    injected = true;
+                    break;
+                }
+            }
+            if injected {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "workflow cron 唤醒未在窗口内到达续 run 对话"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        // 取消 cron：终止 40ms 反复触发（create 委托 register 为
+        // max_iterations=None——每次触发替换 steering 条目并重建 sleep，
+        // 属真实调度语义；取消后表内条目移除，has_active 归 false，
+        // 防续 run 链无限延伸）
+        registry.cancel(&view.id).await.ok();
+        // 唤醒条目已批量转出（续 run 消费后队列清空——轮询窗口内；
+        // 取消前最后一次触发可能刚入队，需等待当前续 run 链转出）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let empty = state
+                .pending_queue
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty();
+            if empty {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "workflow 唤醒条目应被续 run 批量转出"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        // 收口复核：轮询至两次 run-terminal（首轮 + 续 run 轮）落库——
+        // 注入到达对话的时刻先于续 run 收口，终态落库需等待
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        loop {
+            let events = db.query_events("s1", 0, Some(500)).expect("事件查询");
+            let terminals = events
+                .iter()
+                .filter(|e| e.event_type == "run-terminal")
+                .count();
+            if terminals >= 2 {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "应发生首轮 + 续 run 两次 run-terminal：{terminals}"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
     }
 }

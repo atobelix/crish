@@ -253,8 +253,9 @@ impl SchedEventSink {
     }
 
     /// 取走缓冲事件（drain 转发 helper（engine.rs）与测试断言消费；
-    /// Vec::take 语义，空缓冲返回空集）
-    #[allow(dead_code)] // P4 批 3：main.rs drain 任务接线后移除
+    /// Vec::take 语义，空缓冲返回空集；生产消费方 = main.rs drain
+    /// 任务（批 3 装配轮已接线，500ms tick 经 engine.rs
+    /// [crate::engine::forward_drained_scheduler_events] 转发））
     pub(crate) fn drain(&self) -> Vec<AgentEvent> {
         std::mem::take(&mut *self.buffered.lock().unwrap_or_else(|e| e.into_inner()))
     }
@@ -516,8 +517,8 @@ impl SchedulerRegistry {
     }
 
     /// 活跃判定（T-CF-11 idle 待命续 run 用：存在 enabled 且未达上限的
-    /// cron 任务——表内条目即活跃，停止 / 取消时已移除）
-    #[allow(dead_code)] // R-CF3：idle 续 run（T-CF-11，A8）接线后移除
+    /// cron 任务——表内条目即活跃，停止 / 取消时已移除；30 方案 P7：
+    /// 生产消费方 = CoreRunState::new 装配的 cron_has_enabled 判定器）
     pub(crate) fn has_active(&self) -> bool {
         !self
             .components

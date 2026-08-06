@@ -138,15 +138,21 @@ impl Tool for GrepSearchTool {
         let mut visited_files: u64 = 0;
         let mut truncated = false;
 
-        // 行命中判定：返回命中的字节偏移（行级模式用于列号，文件级模式只判是否命中）
+        // 行命中判定：返回命中的字节偏移（行级模式用于列号，文件级模式只判是否命中）。
+        // 大小写不敏感分支经 char 级折叠换算回原始行字节偏移（见 case_insensitive_char_column），
+        // 保证偏移恒位于 char 边界——折叠变长/变短（İ 2B→3B、ﬀ 3B→2B）不产生越界偏移
         let line_hit = |line: &str| -> Option<usize> {
             if let Some(re) = &matcher {
                 re.find(line).map(|m| m.start())
             } else if case_sensitive {
                 line.find(&query)
             } else {
-                line.to_lowercase()
-                    .find(&query.to_lowercase())
+                case_insensitive_char_column(line, &query).map(|col| {
+                    line.char_indices()
+                        .nth(col - 1)
+                        .map(|(b, _)| b)
+                        .unwrap_or(line.len())
+                })
             }
         };
 
@@ -176,7 +182,8 @@ impl Tool for GrepSearchTool {
                         matches.push(GrepMatch {
                             path: display.clone(),
                             line: idx + 1,
-                            column: line[..byte_offset.min(line.len())].chars().count() + 1,
+                            // 防御层：字节偏移换算列号不 panic（非 char 边界回退到最近边界）
+                            column: char_boundary_column(line, byte_offset),
                             text: line.trim().to_string(),
                         });
                         if matches.len() as u64 >= max_matches {
@@ -251,6 +258,59 @@ impl Tool for GrepSearchTool {
             "text": format!("{header}\n{body}"),
         }))
     }
+}
+
+/// 大小写不敏感命中换算（32 文档 DD3-T2 A1-M1 修复核心）：返回原始行 1-based char 列号。
+///
+/// 旧实现 `line.to_lowercase().find(&query.to_lowercase())` 的字节偏移来自折叠串，
+/// 再对原始行切片——Unicode 大小写折叠改变字节长度（İ U+0130 2B→i̇ 3B、ﬀ U+FB00 3B→ff 2B）
+/// 时偏移落在原始行非 char 边界 → panic 或列号错位。本函数改为 char 级双游标换算：
+/// 对原始行逐字符折叠（char::to_lowercase），同步记录每个折叠字符对应的原始 char 游标
+/// （折叠 1→多字符由迭代消费对齐），在折叠串中查找折叠后 query 的前缀匹配，命中点
+/// 映射回原始行 char 列号。与 str::to_lowercase 语义一致（char 级折叠拼接），
+/// ASCII 面列号数值与旧实现相同。
+fn case_insensitive_char_column(line: &str, query: &str) -> Option<usize> {
+    // 空查询对齐 line.find("") 语义：恒定命中行首（列号 1）；windows(0) 会 panic，须提前返回
+    if query.is_empty() {
+        return Some(1);
+    }
+    let qchars: Vec<char> = query.to_lowercase().chars().collect();
+    let mut folded: Vec<char> = Vec::new();
+    let mut origin: Vec<usize> = Vec::new();
+    for (idx, ch) in line.chars().enumerate() {
+        for fc in ch.to_lowercase() {
+            folded.push(fc);
+            origin.push(idx);
+        }
+    }
+    let qlen = qchars.len();
+    if qlen > folded.len() {
+        return None;
+    }
+    folded
+        .windows(qlen)
+        .position(|w| w == qchars.as_slice())
+        .map(|start| origin[start] + 1)
+}
+
+/// 字节偏移 → 1-based char 列号（兜底防 panic 防御层，32 文档 DD3-T2 改动点②）。
+///
+/// 原实现 `line[..off]` 切片在偏移非 char 边界时 panic；本函数以 Option 语义取前缀，
+/// `None`（偏移落在多字节字符内部）时按 is_char_boundary 递减回退到最近 char 边界再取前缀，
+/// 列号数值对 char 边界偏移与旧实现完全一致。未来其它偏移来源亦不 panic。
+fn char_boundary_column(line: &str, byte_offset: usize) -> usize {
+    let off = byte_offset.min(line.len());
+    let safe = match line.get(..off) {
+        Some(prefix) => prefix,
+        None => {
+            let mut b = off;
+            while b > 0 && !line.is_char_boundary(b) {
+                b -= 1;
+            }
+            &line[..b]
+        }
+    };
+    safe.chars().count() + 1
 }
 
 /// 递归遍历目录：gitignore 感知 + 排除式 glob + 跳过非源码目录 + 正例 glob 过滤

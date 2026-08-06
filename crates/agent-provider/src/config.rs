@@ -332,6 +332,9 @@ fn sanitize_secret_ref(reference: &str) -> Result<String, ConfigError> {
 
 #[cfg(test)]
 mod tests {
+    // G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
+    #![allow(clippy::disallowed_methods)]
+
     use super::*;
     use std::sync::Mutex;
 

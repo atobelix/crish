@@ -152,6 +152,10 @@ impl Aggregate {
             ProviderStreamEvent::ProviderDiagnostic { diagnostic } => {
                 self.diagnostics.push(diagnostic);
             }
+            // M14：model 请求生命周期观测事件（before-request / after-response）
+            // 不参与聚合——消费面在 I8 钩子桥（model.beforeRequest / afterResponse）
+            ProviderStreamEvent::BeforeRequest { .. }
+            | ProviderStreamEvent::AfterResponse { .. } => {}
             ProviderStreamEvent::Stop { reason, error, usage } => {
                 self.finish_reason = Some(reason);
                 if reason == StopReason::Error {

@@ -8,7 +8,7 @@
 //! - G7 自适应思考（模型目录 v2）：Opus 4.7+ / Sonnet 5+（含 Fable/Mythos 5 与
 //!   SAP 倒置形态）按模型系列前缀切 `thinking{type:"adaptive",display:"summarized"}`
 //!   + 顶层 `effort`；display 强制 summarized 保证思考摘要存活——新版默认 omitted
-//!   会吐空 thinking 块，块内容漂移破坏缓存前缀（对齐 opencode transform.ts:791-794）
+//!     会吐空 thinking 块，块内容漂移破坏缓存前缀（对齐 opencode transform.ts:791-794）
 
 use serde_json::{json, Value};
 
