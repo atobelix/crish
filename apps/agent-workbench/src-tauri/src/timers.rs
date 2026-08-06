@@ -43,7 +43,6 @@ use conex_types::events::AgentEvent;
 use conex_types::timer::{TimerCondition, TimerDeclaration, TimerHandle};
 use orchestrator::steering_queue::SteeringInputEntry;
 use orchestrator::PendingMessageQueue;
-use tokio::time::Instant;
 
 /// 定时器 id 前缀（`timer-<seq>`，命名风格对齐 `task-<seq>` 先例）
 const TIMER_ID_PREFIX: &str = "timer-";
@@ -296,14 +295,30 @@ pub(crate) struct TimerRegistry {
     store: Arc<dyn TimerStore>,
     /// timer-<seq> 原子计数
     seq: AtomicU64,
+    /// 全域时间基准（epoch 毫秒；生产 = [now_ms]，测试 = AtomicU64 驱动，
+    /// 对齐 watchdog.rs 时钟注入模式——到期判定 / 事件时间戳统一走注入
+    /// 基准，消除「注入时钟与 Instant 真实时钟混用」）
+    now: Arc<dyn Fn() -> u64 + Send + Sync>,
 }
 
 impl TimerRegistry {
-    /// 新建注册表（适配器由装配方注入）
+    /// 新建注册表（适配器由装配方注入；时间基准 = 生产实时钟 [now_ms]）
     pub(crate) fn new(
         pending: Arc<dyn PendingSink>,
         events: Arc<dyn EventSink>,
         store: Arc<dyn TimerStore>,
+    ) -> Self {
+        Self::with_clock(pending, events, store, Arc::new(now_ms))
+    }
+
+    /// 新建注册表并注入自定义时间基准（测试面注入 Arc 驱动的
+    /// 可推进时钟；生产路径经 [Self::new] 委托本方法走默认实时钟，
+    /// 生产 / 测试共用同一实现）
+    pub(crate) fn with_clock(
+        pending: Arc<dyn PendingSink>,
+        events: Arc<dyn EventSink>,
+        store: Arc<dyn TimerStore>,
+        now: Arc<dyn Fn() -> u64 + Send + Sync>,
     ) -> Self {
         Self {
             timers: Arc::new(Mutex::new(HashMap::new())),
@@ -312,6 +327,7 @@ impl TimerRegistry {
             events,
             store,
             seq: AtomicU64::new(0),
+            now,
         }
     }
 
@@ -349,7 +365,7 @@ impl TimerRegistry {
         // 3. id 分配与时间基准
         let seq = self.seq.fetch_add(1, Ordering::SeqCst);
         let timer_id = format!("{TIMER_ID_PREFIX}{seq}");
-        let now = now_ms();
+        let now = (self.now)();
         let expires_at_ms = now.saturating_add(duration_seconds * 1000);
         let handle = TimerHandle {
             timer_id: timer_id.clone(),
@@ -407,7 +423,7 @@ impl TimerRegistry {
                 self.events.emit(TimerEvent::Cancelled {
                     timer_id: timer_id.to_string(),
                     reason: TimerCancelReason::Cancelled,
-                    cancelled_at_ms: now_ms(),
+                    cancelled_at_ms: (self.now)(),
                 });
                 tracing::info!(target: "timers", timer_id, "定时器已显式取消");
                 Ok(true)
@@ -440,7 +456,7 @@ impl TimerRegistry {
     ///   sleep（重登记 early_exit 映射）；
     /// - 已到期未注入 → 补发到期流程（防丢）。
     pub(crate) async fn restore(&self) {
-        let now = now_ms();
+        let now = (self.now)();
         for declaration in self.store.load_all() {
             // 已终态（fired / cancelled）声明跳过——防重启重复注入
             if declaration.fired || declaration.cancelled {
@@ -463,6 +479,7 @@ impl TimerRegistry {
                     &self.pending,
                     &self.events,
                     &self.store,
+                    &self.now,
                     &declaration,
                 );
                 continue;
@@ -520,7 +537,7 @@ impl TimerRegistry {
         if senders.is_empty() {
             return;
         }
-        let now = now_ms();
+        let now = (self.now)();
         // Task 条件：early_exit 表精确命中（sender → timer_id）。
         // 注意：remove 的锁守卫必须提前释放再进取消流程——std Mutex
         // 不可重入，cancel_early_exit 内部会再次锁 early_exit（清表项），
@@ -595,23 +612,35 @@ impl TimerRegistry {
         Some(entry)
     }
 
-    /// 到期触发任务：sleep_until 到期 → 同步 fire（catch_unwind 兜底，
-    /// 记日志不炸引擎——tokio 任务 panic 由 JoinError 捕获，双保险）。
+    /// 到期触发任务：10ms 粒度轮询时间基准，`now() >= expires_at_ms`
+    /// 即 fire（同步 fire + catch_unwind 兜底，记日志不炸引擎——tokio
+    /// 任务 panic 由 JoinError 捕获，双保险）。
+    ///
+    /// 轮询取代单次 sleep_until：统一生产 / 测试一条路径（注入时钟下
+    /// sleep_until 按 Instant 真实时钟等待会与注入时钟失配），生产最小
+    /// 注册时长 1s，10ms 抖动语义等价；cancel 仍经 abort 取消。
     ///
     /// 任务克隆注册表的组件 Arc（timers / early_exit / pending / events /
-    /// store），不自引用注册表本体——避免「注册表 → 条目 → 任务 → 注册表」
-    /// 的循环引用。
+    /// store / now），不自引用注册表本体——避免「注册表 → 条目 → 任务 →
+    /// 注册表」的循环引用。
     fn spawn_fire_task(&self, declaration: TimerDeclaration) -> tokio::task::JoinHandle<()> {
         let timers = Arc::clone(&self.timers);
         let early_exit = Arc::clone(&self.early_exit);
         let pending = Arc::clone(&self.pending);
         let events = Arc::clone(&self.events);
         let store = Arc::clone(&self.store);
-        let sleep = declaration.expires_at_ms.saturating_sub(now_ms());
+        let now = Arc::clone(&self.now);
+        let expires_at_ms = declaration.expires_at_ms;
         tokio::spawn(async move {
-            tokio::time::sleep_until(Instant::now() + Duration::from_millis(sleep)).await;
+            // 10ms 粒度轮询：now() >= expires_at_ms 即 fire（interval 首拍
+            // 立即检查——未到期不 fire，随后每 10ms 一检）
+            let mut interval = tokio::time::interval(Duration::from_millis(10));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            while now() < expires_at_ms {
+                interval.tick().await;
+            }
             let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                fire_timer(&timers, &early_exit, &pending, &events, &store, &declaration);
+                fire_timer(&timers, &early_exit, &pending, &events, &store, &now, &declaration);
             }));
             if let Err(panic) = outcome {
                 tracing::error!(
@@ -637,6 +666,7 @@ fn fire_timer(
     pending: &Arc<dyn PendingSink>,
     events: &Arc<dyn EventSink>,
     store: &Arc<dyn TimerStore>,
+    now: &Arc<dyn Fn() -> u64 + Send + Sync>,
     declaration: &TimerDeclaration,
 ) {
     // 幂等守卫：终态声明不注入（防重启重复注入）
@@ -654,7 +684,7 @@ fn fire_timer(
         return;
     }
     clear_early_exit(early_exit, &declaration.timer_id);
-    let fired_at_ms = now_ms();
+    let fired_at_ms = now();
     // 1. 事件（Critical 数据面落库；适配器接线见头部注记）
     events.emit(TimerEvent::Fired {
         timer_id: declaration.timer_id.clone(),
@@ -751,32 +781,6 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
 mod tests {
     use super::*;
 
-    /// 测试桩：steering 落点记录
-    #[derive(Debug, Clone, PartialEq)]
-    struct SteeringProbe {
-        group_id: String,
-        text: String,
-        enqueued_at_ms: u64,
-    }
-
-    /// 测试桩：steering 落点（记录 + 可断言）
-    #[derive(Default)]
-    struct ProbePending {
-        entries: Mutex<Vec<SteeringProbe>>,
-    }
-
-    impl PendingSink for ProbePending {
-        fn enqueue_steering(&self, timer_id: &str, text: String, enqueued_at_ms: u64) {
-            self.entries.lock().unwrap_or_else(|e| e.into_inner()).push(
-                SteeringProbe {
-                    group_id: steering_group_id(timer_id),
-                    text,
-                    enqueued_at_ms,
-                },
-            );
-        }
-    }
-
     /// 测试桩：事件发射记录
     #[derive(Default)]
     struct ProbeEvents {
@@ -789,30 +793,73 @@ mod tests {
         }
     }
 
-    /// 构造测试注册表（mock 适配器 + 共享内存 store）
+    /// 构造测试注册表（真实 QueuePendingSink 落点 + mock 事件 + 共享
+    /// 内存 store + 注入时钟）。时钟初始 1_000_000（对齐 watchdog.rs
+    /// 测试时钟同值）；返回队列句柄与时钟句柄供断言 / 推进。
     fn test_registry() -> (
         Arc<TimerRegistry>,
-        Arc<ProbePending>,
+        Arc<Mutex<PendingMessageQueue>>,
         Arc<ProbeEvents>,
         Arc<MemoryTimerStore>,
+        Arc<AtomicU64>,
     ) {
-        let pending = Arc::new(ProbePending::default());
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
         let events = Arc::new(ProbeEvents::default());
         let store = MemoryTimerStore::shared();
-        let registry = Arc::new(TimerRegistry::new(
-            Arc::clone(&pending) as Arc<dyn PendingSink>,
+        let clock = Arc::new(AtomicU64::new(1_000_000));
+        let shared = Arc::clone(&clock);
+        let now: Arc<dyn Fn() -> u64 + Send + Sync> =
+            Arc::new(move || shared.load(Ordering::Relaxed));
+        let registry = Arc::new(TimerRegistry::with_clock(
+            Arc::new(QueuePendingSink::new(Arc::clone(&queue))),
             Arc::clone(&events) as Arc<dyn EventSink>,
             Arc::clone(&store) as Arc<dyn TimerStore>,
+            now,
         ));
-        (registry, pending, events, store)
+        (registry, queue, events, store, clock)
     }
 
-    /// 断言当前早退通知条目存在（group_id = timer-<id>）
-    fn assert_early_exit_notice(pending: &ProbePending, timer_id: &str, sender: &str) {
-        let entries = pending.entries.lock().unwrap_or_else(|e| e.into_inner());
+    /// 消费式队列快照（dequeue_all 取走全部条目；同测试多处断言时
+    /// 须分别重新取快照——对齐真实队列 replaceOrEnqueue 语义）
+    fn queue_snapshot(queue: &Arc<Mutex<PendingMessageQueue>>) -> Vec<SteeringInputEntry> {
+        queue.lock().unwrap_or_else(|e| e.into_inner()).dequeue_all()
+    }
+
+    /// 队列当前条目数（非消费；poll_until 轮询条件用）
+    fn queue_len(queue: &Arc<Mutex<PendingMessageQueue>>) -> usize {
+        queue.lock().unwrap_or_else(|e| e.into_inner()).len()
+    }
+
+    /// 轮询收口辅助：时钟推进后等待条件成立；真实时间上限 500ms 护栏
+    /// （~50×10ms 轮询窗，与到期任务同粒度），超时 panic——防时钟未
+    /// 推进时测试悬挂。
+    async fn poll_until<F>(mut condition: F)
+    where
+        F: FnMut() -> bool,
+    {
+        let deadline = std::time::Instant::now() + Duration::from_millis(500);
+        loop {
+            if condition() {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "poll_until 超时：条件在 500ms 内未成立（时钟是否已推进越过到期点？）"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    /// 断言当前早退通知条目存在（group_id = timer-<id>；消费式队列快照）
+    fn assert_early_exit_notice(
+        queue: &Arc<Mutex<PendingMessageQueue>>,
+        timer_id: &str,
+        sender: &str,
+    ) {
+        let entries = queue_snapshot(queue);
         assert!(
             entries.iter().any(|p| {
-                p.group_id == steering_group_id(timer_id)
+                p.group_id.as_deref() == Some(steering_group_id(timer_id).as_str())
                     && p.text == format!("定时器 {timer_id} 已因 {sender} 完成而取消")
             }),
             "应存在早退通知条目：{entries:?}"
@@ -837,20 +884,30 @@ mod tests {
     /// TimerFired 事件均已产出；声明 fired=true 落库。
     #[tokio::test]
     async fn timer_registry_fires_steering_entry() {
-        let (registry, pending, events, store) = test_registry();
+        let (registry, queue, events, store, clock) = test_registry();
         let handle = registry
             .register(1, "检查编译结果".to_string(), TimerCondition::Never)
             .await
             .expect("注册应成功");
         assert_eq!(handle.timer_id, "timer-0");
-        // 到期等待（注册时长下限 1 秒；本 crate tokio 无 test-util，
-        // 用真实时间等待）
-        tokio::time::sleep(Duration::from_millis(1200)).await;
-        let entries = pending.entries.lock().unwrap_or_else(|e| e.into_inner());
+        // 冻结时钟下注册：未推进 → 未到期不发射（确定性，无真实等待）
+        assert!(
+            queue_snapshot(&queue).is_empty(),
+            "未到期不得注入 steering 条目"
+        );
+        assert!(
+            events.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+            "未到期不得发射 TimerFired"
+        );
+        // 推进时钟越过到期点（expires_at = 注册时钟 + 1s）→ 轮询任务
+        // fire；poll_until 收口（500ms 真实上限护栏）
+        clock.store(clock.load(Ordering::Relaxed) + 2_000, Ordering::Relaxed);
+        poll_until(|| queue_len(&queue) == 1).await;
+        let entries = queue_snapshot(&queue);
         assert_eq!(entries.len(), 1, "应恰好注入一条 steering 条目");
         assert_eq!(
-            entries[0].group_id,
-            steering_group_id("timer-0"),
+            entries[0].group_id.as_deref(),
+            Some(steering_group_id("timer-0").as_str()),
             "group_id 应为 timer-<id>"
         );
         assert!(
@@ -858,7 +915,7 @@ mod tests {
             "steering 文本应含 prompt：{}",
             entries[0].text
         );
-        // TimerFired 已发射
+        // TimerFired 已发射（恰好一条：fired_at_ms 走注入时钟）
         let emitted = events.emitted.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(emitted.len(), 1);
         assert!(matches!(
@@ -876,7 +933,7 @@ mod tests {
     /// TimerCancelled(reason=cancelled) 已发射。
     #[tokio::test]
     async fn timer_registry_cancel_stops_fire() {
-        let (registry, pending, events, store) = test_registry();
+        let (registry, queue, events, store, clock) = test_registry();
         let handle = registry
             .register(1, "不应到期".to_string(), TimerCondition::Never)
             .await
@@ -886,10 +943,12 @@ mod tests {
             .await
             .expect("取消应成功");
         assert!(cancelled);
-        // 到期窗口内不得注入 steering（abort 生效）
-        tokio::time::sleep(Duration::from_millis(1200)).await;
+        // 推进时钟越过到期点 + 100ms 收口窗：abort 生效则无到期条目
+        // （推进是必须的——防「未 abort 而时钟未到」的假绿）
+        clock.store(clock.load(Ordering::Relaxed) + 2_000, Ordering::Relaxed);
+        tokio::time::sleep(Duration::from_millis(100)).await;
         assert!(
-            pending.entries.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+            queue_snapshot(&queue).is_empty(),
             "取消后不得有到期条目"
         );
         let emitted = events.emitted.lock().unwrap_or_else(|e| e.into_inner());
@@ -908,63 +967,93 @@ mod tests {
         assert!(matches!(again, Err(TimerError::IdNotFound)));
     }
 
-    /// 重启恢复：注册 → 重建注册表（共享 store）→ restore →
-    /// 剩余时间重建 sleep 且到期恰好注入一次；已到期已注入的声明
-    /// 恢复后不重复注入。
+    /// 重启恢复：注册 → 重建注册表（共享 store + 共享注入时钟）→
+    /// restore → 剩余时间重建轮询且到期恰好注入一次；已到期已注入的
+    /// 声明恢复后不重复注入。
     #[tokio::test]
     async fn timer_registry_persists_and_recovers() {
         let store = MemoryTimerStore::shared();
-        // 第一阶段注册表：注册 1 秒定时器（落库）
-        let (registry_a, _, events_a) = {
-            let pending = Arc::new(ProbePending::default());
+        // 共享注入时钟：重启模拟下时间连续（阶段 A 残留 fire 任务与
+        // 阶段 B/C 同基准，均只向自己的探针发射，不互相污染）
+        let clock = Arc::new(AtomicU64::new(1_000_000));
+        let shared = Arc::clone(&clock);
+        let now: Arc<dyn Fn() -> u64 + Send + Sync> =
+            Arc::new(move || shared.load(Ordering::Relaxed));
+        // 阶段 A（注册后、时钟推进前）：未到期不发射（确定性断言）
+        // 探针本地仅块内断言用；残留 fire 任务持有其 Arc，注入不受影响
+        let (registry_a, _queue_a, _events_a) = {
+            let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
             let events = Arc::new(ProbeEvents::default());
-            let registry = Arc::new(TimerRegistry::new(
-                Arc::clone(&pending) as Arc<dyn PendingSink>,
+            let registry = Arc::new(TimerRegistry::with_clock(
+                Arc::new(QueuePendingSink::new(Arc::clone(&queue))),
                 Arc::clone(&events) as Arc<dyn EventSink>,
                 Arc::clone(&store) as Arc<dyn TimerStore>,
+                Arc::clone(&now),
             ));
             let handle = registry
                 .register(1, "重启恢复".to_string(), TimerCondition::Never)
                 .await
                 .expect("注册应成功");
             assert_eq!(handle.timer_id, "timer-0");
-            (registry, pending, events)
+            // 三态断言之一：未到期不发射（时钟冻结下确定性成立）
+            assert!(
+                queue_snapshot(&queue).is_empty(),
+                "阶段 A：未到期不得注入 steering 条目"
+            );
+            assert!(
+                events.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+                "阶段 A：未到期不得发射 TimerFired"
+            );
+            (registry, queue, events)
         };
-        drop(registry_a); // 模拟重启（注册表消亡，store 残留）
-        // 第二阶段注册表：restore 扫描重建
-        let (_registry_b, pending_b, events_b) = {
-            let pending = Arc::new(ProbePending::default());
+        drop(registry_a); // 模拟重启（注册表消亡，store 残留；残留 fire
+                          // 任务仅向自己的探针发射，不污染阶段 B 断言）
+        // 阶段 B：restore 扫描重建 → 推进时钟 → 恰好注入一条
+        let (_registry_b, queue_b, events_b) = {
+            let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
             let events = Arc::new(ProbeEvents::default());
-            let registry = Arc::new(TimerRegistry::new(
-                Arc::clone(&pending) as Arc<dyn PendingSink>,
+            let registry = Arc::new(TimerRegistry::with_clock(
+                Arc::new(QueuePendingSink::new(Arc::clone(&queue))),
                 Arc::clone(&events) as Arc<dyn EventSink>,
                 Arc::clone(&store) as Arc<dyn TimerStore>,
+                Arc::clone(&now),
             ));
             registry.restore().await;
-            (registry, pending, events)
+            (registry, queue, events)
         };
-        // 未到期 → 重建 sleep，到期后注入恰好一次
-        tokio::time::sleep(Duration::from_millis(1200)).await;
-        let entries = pending_b.entries.lock().unwrap_or_else(|e| e.into_inner());
+        clock.store(clock.load(Ordering::Relaxed) + 2_000, Ordering::Relaxed);
+        poll_until(|| queue_len(&queue_b) == 1).await;
+        let entries = queue_snapshot(&queue_b);
         assert_eq!(entries.len(), 1, "恢复后到期应注入恰好一条");
-        assert_eq!(entries[0].group_id, steering_group_id("timer-0"));
-        assert!(
-            !events_a.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty()
-                || !events_b.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
-            "恢复后到期应发射 TimerFired"
+        assert_eq!(
+            entries[0].group_id.as_deref(),
+            Some(steering_group_id("timer-0").as_str())
         );
-        // 再模拟一次重启：声明已 fired=true → 不得重复注入
-        let pending_c = Arc::new(ProbePending::default());
-        let events_c = Arc::new(ProbeEvents::default());
-        let registry_c = Arc::new(TimerRegistry::new(
-            Arc::clone(&pending_c) as Arc<dyn PendingSink>,
-            Arc::clone(&events_c) as Arc<dyn EventSink>,
-            Arc::clone(&store) as Arc<dyn TimerStore>,
+        // 三态断言之二：恢复侧恰好一条 TimerFired（残留任务只向
+        // events_a 发射，events_b 计数不受污染）
+        let emitted_b = events_b.emitted.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(emitted_b.len(), 1, "恢复侧应恰好发射一条 TimerFired");
+        assert!(matches!(
+            emitted_b[0],
+            TimerEvent::Fired { ref timer_id, .. } if timer_id == "timer-0"
         ));
-        registry_c.restore().await;
+        // 再模拟一次重启：声明已 fired=true → 不得重复注入
+        let (_registry_c, queue_c, events_c) = {
+            let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+            let events = Arc::new(ProbeEvents::default());
+            let registry = Arc::new(TimerRegistry::with_clock(
+                Arc::new(QueuePendingSink::new(Arc::clone(&queue))),
+                Arc::clone(&events) as Arc<dyn EventSink>,
+                Arc::clone(&store) as Arc<dyn TimerStore>,
+                Arc::clone(&now),
+            ));
+            registry.restore().await;
+            (registry, queue, events)
+        };
+        // 三态断言之三：fired=true 不重复注入（短窗收口后断言空）
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert!(
-            pending_c.entries.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+            queue_snapshot(&queue_c).is_empty(),
             "fired=true 的声明恢复后不得重复注入"
         );
         assert!(
@@ -977,7 +1066,7 @@ mod tests {
     /// 同 sender 重复注册 → Conflict；取消后再注册 → 成功。
     #[tokio::test]
     async fn timer_registry_conflict_rejected() {
-        let (registry, _, _, _) = test_registry();
+        let (registry, _, _, _, _) = test_registry();
         let first = registry
             .register(1, "第一次".to_string(), TimerCondition::Task("task-42".to_string()))
             .await
@@ -1003,7 +1092,7 @@ mod tests {
     /// 非法时长拒绝（0 / 超上限 → InvalidDuration）
     #[tokio::test]
     async fn timer_registry_rejects_invalid_duration() {
-        let (registry, _, _, _) = test_registry();
+        let (registry, _, _, _, _) = test_registry();
         for bad in [0u64, 86401] {
             let result = registry
                 .register(bad, "非法时长".to_string(), TimerCondition::Never)
@@ -1030,14 +1119,14 @@ mod tests {
     /// (reason=early-exit) 已发射、早退通知已注入、无到期注入。
     #[tokio::test]
     async fn timer_condition_any_cancels_on_any_message() {
-        let (registry, pending, events, store) = test_registry();
+        let (registry, queue, events, store, clock) = test_registry();
         let handle = registry
             .register(1, "any 条件".to_string(), TimerCondition::Any)
             .await
             .expect("注册应成功");
         // 注入 mock SubagentEnded → 早退
         registry.on_event(&subagent_ended("task-99")).await;
-        assert_early_exit_notice(pending.as_ref(), &handle.timer_id, "task-99");
+        assert_early_exit_notice(&queue, &handle.timer_id, "task-99");
         {
             let emitted = events.emitted.lock().unwrap_or_else(|e| e.into_inner());
             assert!(matches!(
@@ -1051,14 +1140,14 @@ mod tests {
             persisted.iter().all(|d| d.cancelled),
             "早退后声明应标 cancelled=true"
         );
-        // 到期窗口内无到期注入（任务已 abort）
-        tokio::time::sleep(Duration::from_millis(1200)).await;
-        let entries = pending.entries.lock().unwrap_or_else(|e| e.into_inner());
-        assert_eq!(entries.len(), 1, "仅应有早退通知，无到期条目");
+        // 早退路径无需等待到期：任务已 abort——推进时钟越过到期点 +
+        // 100ms 收口窗，断言无到期条目（防「未 abort 而时钟未到」假绿）
+        clock.store(clock.load(Ordering::Relaxed) + 2_000, Ordering::Relaxed);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let entries = queue_snapshot(&queue);
         assert!(
-            entries[0].text.contains("已因 task-99 完成而取消"),
-            "早退通知文本：{}",
-            entries[0].text
+            entries.is_empty(),
+            "早退后不得有到期条目（任务已 abort）：{entries:?}"
         );
     }
 
@@ -1066,18 +1155,22 @@ mod tests {
     /// 目标 sender 终态 → 取消且无到期注入。
     #[tokio::test]
     async fn timer_condition_task_cancels_only_target() {
-        let (registry, pending, _, _) = test_registry();
+        let (registry, queue, _, _, clock) = test_registry();
         let handle = registry
             .register(1, "task 条件".to_string(), TimerCondition::Task("task-42".to_string()))
             .await
             .expect("注册应成功");
-        // task-99 终态 → 不取消，到期正常注入
+        // task-99 终态 → 不取消，推进时钟 → 到期恰好注入一条
         registry.on_event(&subagent_ended("task-99")).await;
-        tokio::time::sleep(Duration::from_millis(1200)).await;
+        clock.store(clock.load(Ordering::Relaxed) + 2_000, Ordering::Relaxed);
+        poll_until(|| queue_len(&queue) == 1).await;
         {
-            let entries = pending.entries.lock().unwrap_or_else(|e| e.into_inner());
+            let entries = queue_snapshot(&queue);
             assert_eq!(entries.len(), 1, "非目标 sender 不应早退，应正常到期");
-            assert_eq!(entries[0].group_id, steering_group_id(&handle.timer_id));
+            assert_eq!(
+                entries[0].group_id.as_deref(),
+                Some(steering_group_id(&handle.timer_id).as_str())
+            );
             assert!(entries[0].text.contains("已到期"), "应为到期条目：{}", entries[0].text);
         }
         // 目标 sender 终态 → 取消且无到期注入（锁守卫已随块结束释放——
@@ -1088,21 +1181,21 @@ mod tests {
             .await
             .expect("注册应成功");
         registry.on_event(&subagent_ended("task-42")).await;
-        assert_early_exit_notice(pending.as_ref(), &handle_b.timer_id, "task-42");
-        tokio::time::sleep(Duration::from_millis(1200)).await;
-        let entries = pending.entries.lock().unwrap_or_else(|e| e.into_inner());
-        assert_eq!(entries.len(), 2, "第二次注册的定时器应被早退，无到期条目");
+        assert_early_exit_notice(&queue, &handle_b.timer_id, "task-42");
+        // 早退路径无需等待：推进时钟 + 100ms 收口窗，断言无到期条目
+        clock.store(clock.load(Ordering::Relaxed) + 2_000, Ordering::Relaxed);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let entries = queue_snapshot(&queue);
         assert!(
-            entries[1].text.contains("已因 task-42 完成而取消"),
-            "第二条应为早退通知：{}",
-            entries[1].text
+            entries.is_empty(),
+            "第二次注册的定时器应被早退，无到期条目：{entries:?}"
         );
     }
 
     /// 联测：task-42 活跃期间重复注册 → Conflict；取消后再注册成功。
     #[tokio::test]
     async fn timer_condition_conflict_rejected() {
-        let (registry, _, _, _) = test_registry();
+        let (registry, _, _, _, _) = test_registry();
         registry
             .register(1, "第一".to_string(), TimerCondition::Task("task-42".to_string()))
             .await
@@ -1138,22 +1231,23 @@ mod tests {
     /// 其他定时器的 TimerFired 同为内部事件，亦不触发。
     #[tokio::test]
     async fn timer_any_ignores_own_fire() {
-        let (registry, pending, events, store) = test_registry();
+        let (registry, queue, events, store, clock) = test_registry();
         let handle = registry
             .register(1, "any 自产排除".to_string(), TimerCondition::Any)
             .await
             .expect("注册应成功");
-        // 注入自产 TimerFired（事件面路径模拟）→ 不早退
+        // 注入自产 TimerFired（事件面路径模拟）→ 不早退（fired_at_ms
+        // 走注入时钟，与注册基准一致）
         registry
             .on_event(&AgentEvent::TimerFired {
                 session_id: String::new(),
                 timer_id: handle.timer_id.clone(),
                 prompt: "自产".to_string(),
-                fired_at_ms: now_ms(),
+                fired_at_ms: clock.load(Ordering::Relaxed),
             })
             .await;
         assert!(
-            pending.entries.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+            queue_snapshot(&queue).is_empty(),
             "自产 TimerFired 不应触发早退"
         );
         // 注入其他定时器的 TimerFired → 同为内部事件，亦不触发
@@ -1162,12 +1256,13 @@ mod tests {
                 session_id: String::new(),
                 timer_id: "timer-other".to_string(),
                 prompt: "他者".to_string(),
-                fired_at_ms: now_ms(),
+                fired_at_ms: clock.load(Ordering::Relaxed),
             })
             .await;
-        // 到期正常注入（未被早退）
-        tokio::time::sleep(Duration::from_millis(1200)).await;
-        let entries = pending.entries.lock().unwrap_or_else(|e| e.into_inner());
+        // 推进时钟越过到期点 → 正常到期注入（未被早退）
+        clock.store(clock.load(Ordering::Relaxed) + 2_000, Ordering::Relaxed);
+        poll_until(|| queue_len(&queue) == 1).await;
+        let entries = queue_snapshot(&queue);
         assert_eq!(entries.len(), 1, "自产事件排除后应正常到期注入");
         assert!(entries[0].text.contains("已到期"));
         assert!(

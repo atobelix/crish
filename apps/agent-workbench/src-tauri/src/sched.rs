@@ -820,38 +820,6 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
 mod tests {
     use super::*;
 
-    /// 测试桩：steering 落点记录
-    #[derive(Debug, Clone, PartialEq)]
-    struct SteeringProbe {
-        group_id: String,
-        text: String,
-        enqueued_at_ms: u64,
-    }
-
-    /// 测试桩：steering 落点（记录 + 可断言；同组条目原位替换，
-    /// 对齐真实 [QueuePendingSink] 的 replaceOrEnqueue 语义——断言
-    /// 行为与生产落点一致）
-    #[derive(Default)]
-    struct ProbePending {
-        entries: Mutex<Vec<SteeringProbe>>,
-    }
-
-    impl PendingSink for ProbePending {
-        fn enqueue_steering(&self, cron_id: &str, text: String, enqueued_at_ms: u64) {
-            let probe = SteeringProbe {
-                group_id: steering_group_id(cron_id),
-                text,
-                enqueued_at_ms,
-            };
-            let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some(existing) = entries.iter_mut().find(|e| e.group_id == probe.group_id) {
-                *existing = probe;
-            } else {
-                entries.push(probe);
-            }
-        }
-    }
-
     /// 测试桩：事件发射记录
     #[derive(Default)]
     struct ProbeEvents {
@@ -882,14 +850,24 @@ mod tests {
         }
     }
 
-    /// 构造测试注册表（mock 适配器 + 共享内存 store；launcher 未接线）
+    /// 队列快照（消费式读取：dequeue_all 取空队列；同一测试多处断言
+    /// 须分别重取——每次读取独立快照，前一次读取不残留）
+    fn snapshot_queue(queue: &Arc<Mutex<PendingMessageQueue>>) -> Vec<SteeringInputEntry> {
+        queue.lock().unwrap_or_else(|e| e.into_inner()).dequeue_all()
+    }
+
+    /// 构造测试注册表（真实 PendingMessageQueue 落点 + 共享内存 store；
+    /// launcher 未接线）
     fn test_registry() -> (
         Arc<SchedulerRegistry>,
-        Arc<ProbePending>,
+        Arc<Mutex<PendingMessageQueue>>,
         Arc<ProbeEvents>,
         Arc<MemorySchedStore>,
     ) {
-        let pending = Arc::new(ProbePending::default());
+        // pending 落点装配真实 QueuePendingSink（对齐引擎装配
+        // engine.rs:1084 同构——验证真实 replaceOrEnqueue 语义）
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let pending = Arc::new(QueuePendingSink::new(Arc::clone(&queue)));
         let events = Arc::new(ProbeEvents::default());
         let store = MemorySchedStore::shared();
         let registry = Arc::new(SchedulerRegistry::new(
@@ -898,7 +876,7 @@ mod tests {
             Arc::clone(&store) as Arc<dyn SchedStore>,
             None,
         ));
-        (registry, pending, events, store)
+        (registry, queue, events, store)
     }
 
     /// 构造注册入参（prompt 固定「检查编译结果」）
@@ -927,11 +905,14 @@ mod tests {
         assert_eq!(cron_id, "cron-0");
         // 等待触发 + max 停止（40ms 周期内完成）
         tokio::time::sleep(Duration::from_millis(300)).await;
-        // 队列出现 cron-<id> 条目（max=1：触发条目被「已完成」通知同组
-        // 替换，队列保留通知条目）
-        let entries = pending.entries.lock().unwrap_or_else(|e| e.into_inner());
+        // 真实队列出现 cron-<id> 条目（max=1：触发条目被「已完成」通知
+        // 同组 replaceOrEnqueue 替换，队列保留通知条目）
+        let entries = snapshot_queue(&pending);
         assert_eq!(entries.len(), 1, "应恰好一条 steering 条目");
-        assert_eq!(entries[0].group_id, steering_group_id(&cron_id));
+        assert_eq!(
+            entries[0].group_id.as_deref(),
+            Some(steering_group_id(&cron_id).as_str())
+        );
         assert!(
             entries[0].text.contains("已达最大触发次数 1，已停止"),
             "完成通知文本：{}",
@@ -969,12 +950,15 @@ mod tests {
             .expect("注册应成功");
         // 等待两次触发 + 停止（40ms 周期 ×2 + 收口余量）
         tokio::time::sleep(Duration::from_millis(500)).await;
-        // 队列最终 = [完成通知]：触发条目同组（cron-<id>）逐次
+        // 真实队列最终 = [完成通知]：触发条目同组（cron-<id>）逐次
         // replaceOrEnqueue 替换（第 1 次被第 2 次替换，第 2 次被完成
-        // 通知替换）——去重语义对齐真实 QueuePendingSink
-        let entries = pending.entries.lock().unwrap_or_else(|e| e.into_inner());
+        // 通知替换）——去重语义即真实 QueuePendingSink
+        let entries = snapshot_queue(&pending);
         assert_eq!(entries.len(), 1, "应仅剩完成通知（触发条目同组替换）");
-        assert_eq!(entries[0].group_id, steering_group_id("cron-0"));
+        assert_eq!(
+            entries[0].group_id.as_deref(),
+            Some(steering_group_id("cron-0").as_str())
+        );
         assert!(
             entries[0].text.contains("cron cron-0 已达最大触发次数 2，已停止"),
             "完成通知文本：{}",
@@ -1002,7 +986,8 @@ mod tests {
     /// prompt 作为初始消息、无 steering 注入（daemon 路径）。
     #[tokio::test]
     async fn scheduler_registry_is_daemon_spawns_run() {
-        let pending = Arc::new(ProbePending::default());
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let pending = Arc::new(QueuePendingSink::new(Arc::clone(&queue)));
         let events = Arc::new(ProbeEvents::default());
         let launcher = Arc::new(ProbeLauncher::default());
         let store = MemorySchedStore::shared();
@@ -1032,7 +1017,7 @@ mod tests {
         );
         // daemon 成功路径不走 steering 触发注入（无「第 N 次触发」条目；
         // max=1 停止后仅剩完成通知）
-        let entries = pending.entries.lock().unwrap_or_else(|e| e.into_inner());
+        let entries = snapshot_queue(&queue);
         assert!(
             entries.iter().all(|e| !e.text.contains("第 1 次触发")),
             "daemon 成功路径不应注入触发条目：{entries:?}"
@@ -1060,9 +1045,12 @@ mod tests {
             .await
             .expect("注册应成功");
         tokio::time::sleep(Duration::from_millis(300)).await;
-        let entries = pending.entries.lock().unwrap_or_else(|e| e.into_inner());
+        let entries = snapshot_queue(&pending);
         assert_eq!(entries.len(), 1, "launcher 未接线应降级为 steering 条目（同组替换）");
-        assert_eq!(entries[0].group_id, steering_group_id("cron-0"));
+        assert_eq!(
+            entries[0].group_id.as_deref(),
+            Some(steering_group_id("cron-0").as_str())
+        );
         assert!(
             entries[0].text.contains("守护进程检查（cron cron-0 第"),
             "降级条目文本应含 prompt 与唤醒模板：{}",
@@ -1078,7 +1066,8 @@ mod tests {
     /// launcher 启动失败（fail=true）→ 降级 steering 注入（防丢唤醒）。
     #[tokio::test]
     async fn scheduler_registry_daemon_launch_failure_falls_back_to_steering() {
-        let pending = Arc::new(ProbePending::default());
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let pending = Arc::new(QueuePendingSink::new(Arc::clone(&queue)));
         let events = Arc::new(ProbeEvents::default());
         let launcher = Arc::new(ProbeLauncher { fail: true, ..Default::default() });
         let store = MemorySchedStore::shared();
@@ -1100,7 +1089,7 @@ mod tests {
             .expect("注册应成功");
         tokio::time::sleep(Duration::from_millis(300)).await;
         // 启动失败 → 降级 steering 条目（文本 = prompt + 唤醒模板）
-        let entries = pending.entries.lock().unwrap_or_else(|e| e.into_inner());
+        let entries = snapshot_queue(&queue);
         assert_eq!(entries.len(), 1, "启动失败应降级为 steering 条目（同组替换）");
         assert!(
             entries[0].text.contains("守护进程检查（cron cron-0 第"),
@@ -1120,7 +1109,8 @@ mod tests {
         // 阶段 A：注册（不设 override → 真实分钟级 next_fire_at），
         // 注册表立即消亡（模拟重启；store 残留）
         let next_fire_at_snapshot = {
-            let pending = Arc::new(ProbePending::default());
+            let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+            let pending = Arc::new(QueuePendingSink::new(Arc::clone(&queue)));
             let events = Arc::new(ProbeEvents::default());
             let registry = Arc::new(SchedulerRegistry::new(
                 Arc::clone(&pending) as Arc<dyn PendingSink>,
@@ -1140,8 +1130,9 @@ mod tests {
         };
         // 阶段 B：模拟重启 → restore（测试钩子注入短延迟验证重建 sleep
         // 生效；未到期任务不修改 next_fire_at）
-        let (registry_b, pending_b, events_b) = {
-            let pending = Arc::new(ProbePending::default());
+        let (registry_b, queue_b, events_b) = {
+            let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+            let pending = Arc::new(QueuePendingSink::new(Arc::clone(&queue)));
             let events = Arc::new(ProbeEvents::default());
             let registry = Arc::new(SchedulerRegistry::new(
                 Arc::clone(&pending) as Arc<dyn PendingSink>,
@@ -1158,13 +1149,16 @@ mod tests {
                 "重启恢复应保留 next_fire_at_ms"
             );
             assert!(registry.has_active(), "未到期任务恢复后应为活跃（sleep 已重建）");
-            (registry, pending, events)
+            (registry, queue, events)
         };
         // 触发恰好一次（max=1 → 停止）
         tokio::time::sleep(Duration::from_millis(300)).await;
-        let entries = pending_b.entries.lock().unwrap_or_else(|e| e.into_inner());
+        let entries = snapshot_queue(&queue_b);
         assert_eq!(entries.len(), 1, "恢复后触发应恰好一条");
-        assert_eq!(entries[0].group_id, steering_group_id("cron-0"));
+        assert_eq!(
+            entries[0].group_id.as_deref(),
+            Some(steering_group_id("cron-0").as_str())
+        );
         assert!(
             entries[0].text.contains("已达最大触发次数 1，已停止"),
             "恢复触发收口应为完成通知：{}",
@@ -1176,7 +1170,8 @@ mod tests {
         assert!(!persisted[0].enabled);
         assert!(!registry_b.has_active());
         // 阶段 C：再次模拟重启 → enabled=false 跳过 → 不重复触发
-        let pending_c = Arc::new(ProbePending::default());
+        let queue_c = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let pending_c = Arc::new(QueuePendingSink::new(Arc::clone(&queue_c)));
         let events_c = Arc::new(ProbeEvents::default());
         let registry_c = Arc::new(SchedulerRegistry::new(
             Arc::clone(&pending_c) as Arc<dyn PendingSink>,
@@ -1188,7 +1183,7 @@ mod tests {
         registry_c.restore().await;
         tokio::time::sleep(Duration::from_millis(150)).await;
         assert!(
-            pending_c.entries.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+            snapshot_queue(&queue_c).is_empty(),
             "enabled=false 的声明恢复后不得重复触发"
         );
         assert!(
@@ -1242,7 +1237,7 @@ mod tests {
         // 触发窗口内不得注入（sleep 已 abort）
         tokio::time::sleep(Duration::from_millis(300)).await;
         assert!(
-            pending.entries.lock().unwrap_or_else(|e| e.into_inner()).is_empty(),
+            snapshot_queue(&pending).is_empty(),
             "取消后不得有触发条目"
         );
         assert!(
