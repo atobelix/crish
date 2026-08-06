@@ -604,12 +604,6 @@ impl crate::watchdog::DispatchStore for MemoryWaitStore {
 /// - 跨会话并发安全：provider 只读共享（Mutex<Option<Arc<dyn ProviderCall>>>），
 ///   std Mutex 不跨 await 持有（AA-02 并发模型注记）。
 pub(crate) struct EngineHandle {
-    /// 共享 reqwest 客户端（连接池跨 run 复用，AA-02 S-7）。
-    ///
-    /// G11a 备注：本字段仅被 `reload()` 读取（config_update 后的重载接线
-    /// 在引擎集成域推进中），new() 仅写入——dead_code 静音待接线。
-    #[allow(dead_code)]
-    client: Arc<reqwest::Client>,
     /// 生效的 provider 适配层（None = 配置缺失降级未就绪）
     provider: Mutex<Option<Arc<dyn ProviderCall>>>,
     /// 工具注册表（只读共享）
@@ -633,8 +627,9 @@ pub(crate) struct EngineHandle {
     /// 注入 set_timer / cancel_timer 工具——engine.rs:617 装配处扩展）
     timer_registry: Arc<TimerRegistry>,
     /// 定时器 steering 落点（PendingMessageQueue 适配的底层队列；
-    /// 到期条目落在真实队列，R-CF3 idle 续 run 装配收口时消费）
-    #[allow(dead_code)] // R-CF3：续 run 收口接线
+    /// 到期条目落在真实队列，R-CF3 idle 续 run 装配收口消费——经
+    /// [Self::timer_steering_queue] 访问器被 CoreRunState::new 消费，
+    /// 陈旧 allow 已核销）
     timer_steering_queue: Arc<Mutex<PendingMessageQueue>>,
     /// 子代理等待通道（T-CF-10：SubagentWaitChannel 契约实现；经
     /// BuiltinToolConfig.subagent_wait_channel 注入 wait_subagents 工具）
@@ -644,16 +639,16 @@ pub(crate) struct EngineHandle {
     /// 注记——与 TimerStore 同一接线缺口）
     dispatch_store: Arc<MemoryWaitStore>,
     /// subagent-ended 事件流广播（EventQueue 旁路适配：wait_for_terminal
-    /// 的订阅面；事件收口旁路点 feed 接线在 R-CF3 后续轮落地）
-    #[allow(dead_code)] // R-CF3：事件收口旁路点 feed 接线
+    /// 的订阅面；经 [Self::terminal_stream] 访问器被 CoreRunState
+    /// finalize_subagent_spawner 消费，陈旧 allow 已核销）
     terminal_stream: Arc<EventStreamBroadcast>,
     /// 最近事件唤醒跟踪（watchdog 失联判定数据源；事件消费旁路点
     /// mark_wakeup 接线在 R-CF3 后续轮，接线前 None = 从未唤醒）
     #[allow(dead_code)] // R-CF3：事件消费旁路点 mark_wakeup 接线
     last_wakeup: Arc<LastWakeupTracker>,
     /// Cron 调度注册表（T-CF-09 A5 提供；None = 未装配降级，workflow
-    /// 命令面经 main.rs（A9）消费）
-    #[allow(dead_code)] // A9：workflow 命令登记消费
+    /// 命令面经 main.rs（A9）消费——30 方案 P6/P7 后经
+    /// [Self::scheduler_registry] 访问器被装配轮消费，allow 已核销）
     scheduler_registry: Option<Arc<crate::sched::SchedulerRegistry>>,
     /// 定时器事件缓冲（T-CF-06 装配产物；P4 drain 转发接线：经
     /// [Self::timer_event_sink] 暴露给 [forward_drained_timer_events] 与
@@ -831,7 +826,6 @@ impl EngineHandle {
         };
 
         Self {
-            client,
             provider: Mutex::new(provider),
             tool_registry,
             mcp_bridge,
@@ -850,31 +844,6 @@ impl EngineHandle {
             scheduler_event_sink,
             subagent_spawner,
         }
-    }
-
-    /// 重载生效配置（config_update 后调用；失败降级未就绪）。
-    ///
-    /// G11a 备注：config_update → EngineHandle::reload 的接线尚未落地
-    /// （引擎集成域），当前仅 client 字段在此读取——dead_code 静音待接线。
-    #[allow(dead_code)]
-    pub(crate) fn reload(&self) {
-        let (provider, ready, ready_reason, provider_config) = match load_provider_endpoint() {
-            Some(config) => {
-                let provider: Arc<dyn ProviderCall> =
-                    Arc::new(HttpProviderCall::new((*self.client).clone(), config.clone()));
-                (Some(provider), true, None, Some(config))
-            }
-            None => (
-                None,
-                false,
-                Some("provider 配置缺失（baseUrl/model/apiKey）".to_string()),
-                None,
-            ),
-        };
-        *self.provider.lock().unwrap_or_else(|e| e.into_inner()) = provider;
-        *self.provider_config.lock().unwrap_or_else(|e| e.into_inner()) = provider_config;
-        self.ready.store(ready, Ordering::SeqCst);
-        *self.ready_reason.lock().unwrap_or_else(|e| e.into_inner()) = ready_reason;
     }
 
     /// 测试面：注入 provider 适配层与生效配置并置就绪（T-D-13 端到端测试
@@ -926,14 +895,14 @@ impl EngineHandle {
     }
 
     /// 定时器注册表（T-CF-06 装配产物；TimerChannel 契约经
-    /// BuiltinToolConfig.timer_channel 注入工具注册）
-    #[allow(dead_code)] // R-CF3：wait/channel/scheduler 装配收口时消费
+    /// BuiltinToolConfig.timer_channel 注入工具注册；消费方 =
+    /// CoreRunState::new 装配 timer_has_active 判定器，已接线）
     pub(crate) fn timer_registry(&self) -> Arc<TimerRegistry> {
         Arc::clone(&self.timer_registry)
     }
 
-    /// 定时器 steering 队列（到期条目落点；R-CF3 idle 续 run 消费）
-    #[allow(dead_code)] // R-CF3：续 run 收口接线
+    /// 定时器 steering 队列（到期条目落点；R-CF3 idle 续 run 消费——
+    /// CoreRunState::new 经本访问器取共享队列，已接线）
     pub(crate) fn timer_steering_queue(&self) -> Arc<Mutex<PendingMessageQueue>> {
         Arc::clone(&self.timer_steering_queue)
     }
@@ -953,8 +922,8 @@ impl EngineHandle {
     }
 
     /// 终态事件流广播（T-CF-10：事件收口旁路点 feed 接线用——任何
-    /// subagent-ended 事件到达即灌入广播，wait 订阅者同步消费）
-    #[allow(dead_code)] // R-CF3：事件收口旁路点 feed 接线
+    /// subagent-ended 事件到达即灌入广播，wait 订阅者同步消费；消费方 =
+    /// CoreRunState finalize_subagent_spawner，已接线）
     pub(crate) fn terminal_stream(&self) -> Arc<EventStreamBroadcast> {
         Arc::clone(&self.terminal_stream)
     }
@@ -966,24 +935,23 @@ impl EngineHandle {
     }
 
     /// Cron 调度注册表（T-CF-09 装配产物；None = 未装配降级；
-    /// A9 workflow 命令登记消费）
-    #[allow(dead_code)] // A9：workflow 命令登记消费
+    /// 消费方：CoreRunState::new（P7 cron_has_enabled 判定器装配）+
+    /// main.rs 装配轮（P6 WorkflowBackend::set_registry），已接线）
     pub(crate) fn scheduler_registry(&self) -> Option<Arc<crate::sched::SchedulerRegistry>> {
         self.scheduler_registry.clone()
     }
 
     /// 定时器事件缓冲（T-CF-06 装配产物；P4 drain 转发路径的入口——
-    /// [forward_drained_timer_events] 与本测试面消费，批 3 main.rs
-    /// drain 任务经本访问器周期取走缓冲转发到 EventBridge）
-    #[cfg_attr(not(test), allow(dead_code))] // 批 3：main.rs drain 任务接线后移除
+    /// [forward_drained_timer_events] 与本测试面消费，main.rs
+    /// drain 任务经本访问器周期取走缓冲转发到 EventBridge，已接线）
     pub(crate) fn timer_event_sink(&self) -> Arc<crate::timers::AgentEventSink> {
         Arc::clone(&self.timer_event_sink)
     }
 
     /// cron 事件缓冲（T-CF-09 装配产物；drain 转发路径同 timer——
     /// cron-fired 单臂，conex-types 仅 CronFired 变体，cancel 走
-    /// 数据面 + steering 面，无 cron-cancelled 发射目标）
-    #[cfg_attr(not(test), allow(dead_code))] // 批 3：main.rs drain 任务接线后移除
+    /// 数据面 + steering 面，无 cron-cancelled 发射目标；main.rs
+    /// drain 任务经本访问器消费，已接线）
     pub(crate) fn scheduler_event_sink(&self) -> Arc<crate::sched::SchedEventSink> {
         Arc::clone(&self.scheduler_event_sink)
     }
@@ -1050,7 +1018,7 @@ impl EngineHandle {
     /// 生效 provider 配置（缓存测量装配数据源；None = 未就绪）。
     /// 注：core_run_commands 装配 SessionLoopProducer 时经
     /// [Self::cache_tracking_config] 消费本值——T-40 轮末合并接线。
-    #[allow(dead_code)]
+    #[allow(dead_code)] // T-40 轮末合并接线：core_run_commands 装配 producer 时消费（A8 §1.2 登记面），接线后移除
     pub(crate) fn provider_config(&self) -> Option<EngineProviderConfig> {
         self.provider_config
             .lock()
@@ -1082,7 +1050,7 @@ impl EngineHandle {
 
     /// 收口写回会话缓存状态（drive_run_loop 在 produce 后调用，
     /// T-40 轮末合并接线；供下一 run 冷缓存预警 / 模型切换检测）
-    #[allow(dead_code)]
+    #[allow(dead_code)] // T-40 轮末合并接线：drive_run_loop 收口写回会话缓存状态（A8 §1.2 登记面），接线后移除
     pub(crate) fn update_cache_session(
         &self,
         session_id: &str,
@@ -1154,8 +1122,8 @@ fn assemble_scheduler_registry(
 // ≤ 500ms；drain 为 Vec::take 语义，空缓冲返回 0，重复调用不重复转发。
 
 /// 缓冲定时器事件 → 信封直发；返回实际发射条数
-/// （[EventBridge::emit_envelope] 序列化失败条目不计数）。
-#[cfg_attr(not(test), allow(dead_code))] // 批 3：main.rs drain 任务接线后移除
+/// （[EventBridge::emit_envelope] 序列化失败条目不计数；生产消费方 =
+/// main.rs drain 任务 500ms tick，已接线）
 pub(crate) fn forward_drained_timer_events(sink: &AgentEventSink, bridge: &EventBridge) -> usize {
     forward_drained_events(sink.drain(), bridge)
 }
@@ -1163,7 +1131,6 @@ pub(crate) fn forward_drained_timer_events(sink: &AgentEventSink, bridge: &Event
 /// 缓冲 cron 事件 → 信封直发（cron-fired 单臂：conex-types 契约仅
 /// CronFired 变体，无 cron-cancelled 发射目标；cancel 走数据面 + steering
 /// 面）；返回实际发射条数，周期与延迟语义同 [forward_drained_timer_events]。
-#[cfg_attr(not(test), allow(dead_code))] // 批 3：main.rs drain 任务接线后移除
 pub(crate) fn forward_drained_scheduler_events(
     sink: &crate::sched::SchedEventSink,
     bridge: &EventBridge,
@@ -1441,7 +1408,7 @@ fn model_switched(last: Option<&str>, current: Option<&str>) -> bool {
 /// 非测试构建静音：M1 只立通道，生产消费面仅 [ContextInjector::render]
 /// （produce 装配）；变体/构造面由 M4（started_at）/M5（检查点摘要）/
 /// M11（系统上下文重注入）与测试消费，轮末接线后移除 allow。
-#[allow(dead_code)]
+#[allow(dead_code)] // M1/M4/M5/M11 挂载消费（本域测试先行断言，A8 §1.2 登记面），接线后移除
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum ContextInjectionKind {
     /// 系统提示词基础段（systemPrompt；先于一切）
@@ -1536,7 +1503,7 @@ impl ContextInjector {
     }
 
     /// 是否启用注入（默认开；C10 禁用开关）
-    #[allow(dead_code)]
+    #[allow(dead_code)] // M11 消费（本域测试先行断言，A8 §1.2 登记面），接线后移除
     pub(crate) fn is_enabled(&self) -> bool {
         self.enabled
     }
@@ -1766,7 +1733,7 @@ pub(crate) struct SessionLoopProducer {
 impl SessionLoopProducer {
     /// 新建 run 生产者（permissionMode 与 clientMessageId 已由 core_run_task
     /// 归一为循环选项与用户消息）
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)] // 参数为 run 装配上下文聚合注入（provider/工具注册表/循环选项/批量选项/审批门/delta 流/水合对话/用户消息），各参数来源独立，收缩将退化为全局态或拆分 struct 而收益低
     pub(crate) fn new(
         session_id: String,
         run_id: String,

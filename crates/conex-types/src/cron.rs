@@ -476,6 +476,9 @@ fn local_offset_via_win32() -> i32 {
     // 调用成功后全部字段有效），无指针逃逸与生命周期问题，对齐
     // agent-provider credentials.rs 的 DPAPI FFI 评审先例。
     #[allow(unsafe_code)]
+    // SAFETY: GetLocalTime 恒成功（kernel32 无失败返回值），调用成功时全部字段
+    // 有效（Win32 文档保证）；仅写栈上 SystemTimeFields POD（repr(C) 8×u16），
+    // 无指针逃逸；外部函数声明与结构布局已核对
     unsafe {
         GetLocalTime(&mut st);
     }

@@ -1,17 +1,6 @@
-export const BACKEND_NOT_WIRED_CODE = "backend-not-wired" as const;
 export const UNSUPPORTED_CODE = "unsupported" as const;
 
-export interface BackendNotWiredAllowlistEntry {
-  feature: string;
-  reason: string;
-  owner?: string;
-}
-
-type RegisteredTauriCommandStatus =
-  | "implemented"
-  | "experimental"
-  | typeof BACKEND_NOT_WIRED_CODE
-  | typeof UNSUPPORTED_CODE;
+type RegisteredTauriCommandStatus = "implemented" | "experimental" | typeof UNSUPPORTED_CODE;
 type RegisteredTauriCommandSurface = "product" | "developer-diagnostics" | "subagent-control";
 type TauriCommandRegistrationStatus = "registered" | "debug-only" | "not-registered";
 export type BackendCapabilityStatus =
@@ -19,7 +8,6 @@ export type BackendCapabilityStatus =
   | "implemented"
   | "experimental"
   | "degraded"
-  | typeof BACKEND_NOT_WIRED_CODE
   | typeof UNSUPPORTED_CODE;
 
 export interface RegisteredTauriCommand {
@@ -171,28 +159,9 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   },
 ];
 
-interface BackendNotWiredDiagnostic extends BackendNotWiredAllowlistEntry {
-  code: typeof BACKEND_NOT_WIRED_CODE;
-  command: string;
-  message: string;
-  severity: "warning";
-  source: "tauri-command-registry";
-}
-
 export const TAURI_COMMAND_REGISTRY: ReadonlyMap<string, RegisteredTauriCommand> = new Map(
   REGISTERED_TAURI_COMMANDS.map((entry) => [entry.command, entry])
 );
-
-export const BACKEND_NOT_WIRED_COMMAND_ALLOWLIST: Record<string, BackendNotWiredAllowlistEntry> =
-  Object.fromEntries(
-    REGISTERED_TAURI_COMMANDS.filter((entry) => entry.capabilityStatus === BACKEND_NOT_WIRED_CODE).map((entry) => [
-      entry.command,
-      {
-        feature: entry.feature,
-        reason: entry.reason ?? "This Workbench bridge command is intentionally marked unsupported.",
-      },
-    ])
-  );
 
 export interface TauriCommandRegistryDiff {
   invoked: string[];
@@ -200,12 +169,9 @@ export interface TauriCommandRegistryDiff {
   frontendRegistered: string[];
   frontendProductCommands: string[];
   frontendWiredCommands: string[];
-  frontendUnsupported: BackendNotWiredDiagnostic[];
-  allowedUnwired: BackendNotWiredDiagnostic[];
   missingFrontendRegistry: string[];
   missingRustRegistration: string[];
   missing: string[];
-  staleAllowlist: string[];
 }
 
 export function extractInvokedTauriCommands(source: string): string[] {
@@ -315,8 +281,7 @@ export function extractRegisteredTauriCommands(source: string): string[] {
 
 export function diffTauriCommandRegistry(
   bridgeSource: string,
-  rustMainSource: string,
-  allowlist: Record<string, BackendNotWiredAllowlistEntry> = BACKEND_NOT_WIRED_COMMAND_ALLOWLIST
+  rustMainSource: string
 ): TauriCommandRegistryDiff {
   const invoked = extractInvokedTauriCommands(bridgeSource);
   const registered = extractRegisteredTauriCommands(rustMainSource);
@@ -328,18 +293,11 @@ export function diffTauriCommandRegistry(
     .sort();
   const frontendRegistered = frontendProductCommands;
   const registeredSet = new Set(registered);
-  const invokedSet = new Set(invoked);
   const frontendRegistrySet = new Set<string>(REGISTERED_TAURI_COMMANDS.map((entry) => entry.command));
 
-  const allowedUnwired = invoked
-    .filter((command) => allowlist[command])
-    .map((command) => createBackendNotWiredDiagnostic(command, allowlist));
   const missingFrontendRegistry = invoked.filter((command) => !frontendRegistrySet.has(command));
   const missingRustRegistration = frontendWiredCommands.filter((command) => !registeredSet.has(command));
   const missing = [...new Set([...missingFrontendRegistry, ...missingRustRegistration])].sort();
-  const staleAllowlist = Object.keys(allowlist)
-    .filter((command) => !invokedSet.has(command))
-    .sort();
 
   return {
     invoked,
@@ -347,12 +305,9 @@ export function diffTauriCommandRegistry(
     frontendRegistered,
     frontendProductCommands,
     frontendWiredCommands,
-    frontendUnsupported: allowedUnwired,
-    allowedUnwired,
     missingFrontendRegistry,
     missingRustRegistration,
     missing,
-    staleAllowlist,
   };
 }
 
@@ -364,31 +319,12 @@ export function isProductCapabilityCommand(entry: RegisteredTauriCommand): boole
   return (
     (entry.surface ?? "product") === "product" &&
     (entry.status === "implemented" || entry.status === "experimental") &&
-    commandCapabilityStatus(entry) !== UNSUPPORTED_CODE &&
-    commandCapabilityStatus(entry) !== BACKEND_NOT_WIRED_CODE
+    commandCapabilityStatus(entry) !== UNSUPPORTED_CODE
   );
 }
 
 export function shouldHaveTauriRegistration(entry: RegisteredTauriCommand): boolean {
   return entry.tauriRegistration !== "not-registered";
-}
-
-function createBackendNotWiredDiagnostic(
-  command: string,
-  allowlist: Record<string, BackendNotWiredAllowlistEntry> = BACKEND_NOT_WIRED_COMMAND_ALLOWLIST
-): BackendNotWiredDiagnostic {
-  const entry = allowlist[command] ?? {
-    feature: command,
-    reason: "The Workbench bridge references this Tauri command, but it is not registered in the backend.",
-  };
-  return {
-    code: BACKEND_NOT_WIRED_CODE,
-    command,
-    message: `${BACKEND_NOT_WIRED_CODE}: ${command} is not wired to the Tauri backend.`,
-    severity: "warning",
-    source: "tauri-command-registry",
-    ...entry,
-  };
 }
 
 function readAllGenerateHandlerBlocks(source: string): string[] {

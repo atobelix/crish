@@ -463,7 +463,9 @@ unsafe impl Send for JobHandle {}
 // 豁免 unsafe_code：Sync 标记（SAFETY 见下）——JobHandle 仅含整数句柄，
 // 经评审后允许。
 #[allow(unsafe_code)]
-// SAFETY: JobHandle 仅含整数句柄
+// SAFETY: JobHandle 仅含整数句柄；句柄一经 DAEMON_JOB_OBJECT/PTY_JOB_OBJECT
+// OnceLock 初始化后只读（get() 只读借用），进程生命周期内不被并发关闭；
+// Close 仅发生在重复 init 的失败路径且持有独占写
 unsafe impl Sync for JobHandle {}
 
 /// Create an anonymous job with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`.
@@ -665,6 +667,9 @@ pub(crate) fn kill_process_group(pid: u32) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    // G2 禁令豁免：测试 mod——真实 spawn 探测命令门禁语义（11 红线下目标
+    // 断言 Blocked）+ pid 存活探测（tasklist / kill -0，T-AB-06/07 验收辅助），
+    // 非产品执行面；测试 mod 内 allow + 理由（对齐 clippy.toml 豁免面）。
     #![allow(clippy::disallowed_methods)]
     use super::*;
 

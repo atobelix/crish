@@ -182,6 +182,9 @@ mod win_time {
     pub(super) fn local_and_utc_epoch_secs() -> (i64, i64) {
         let mut local = SystemTime::default();
         let mut utc = SystemTime::default();
+        // SAFETY: GetLocalTime/GetSystemTime 恒成功（kernel32 文档无失败返回值），
+        // 仅写入栈上 SystemTime POD（repr(C) 布局与 Win32 SYSTEMTIME 一一对应，
+        // 见结构体注释）；无指针逃逸，调用后立即逐字段拷贝；结构体生命周期限于本函数
         unsafe {
             GetLocalTime(&mut local);
             GetSystemTime(&mut utc);

@@ -36,9 +36,10 @@ impl SecretString {
         // SAFETY: 写入全零字节会破坏 UTF-8 不变量，但此处仅在丢弃前或测试中调用，
         // 覆写后字符串不再被读取，不违反借用期内的不变量约束。
         // 这一模式与 zeroize 等内存擦除库的常见做法一致。
+        // volatile 写防优化器消除清零循环（A7 U-01 强化，裁决 D11）
         let bytes = unsafe { buf.as_mut_vec() };
         for byte in bytes.iter_mut() {
-            *byte = 0;
+            unsafe { std::ptr::write_volatile(byte, 0) };
         }
     }
 }
