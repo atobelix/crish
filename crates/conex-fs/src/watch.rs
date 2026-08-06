@@ -106,9 +106,12 @@ pub struct WorkspaceWatcher {
     /// 排除根（相对工作区）
     exclude: Vec<PathBuf>,
     /// 排除 glob（如 "**/*.snap"；start 时为空，P3 装配面按需注入）
+    // G11a 备注：P3 装配面注入预留（当前 start 恒为空）——接线后移除。
     #[allow(dead_code)]
     excludes_glob: Vec<String>,
     /// 事件通道发送端（持有锚：防通道随 Sender drop 提前关闭）
+    // G11a 备注：通道持有锚（Sender 被持有则通道保持打开）——无读取消费者，
+    // 结构语义注释见上。
     #[allow(dead_code)]
     tx: tokio::sync::mpsc::Sender<FileChangeEvent>,
     /// 待配对删除共享队列（stop 时 flush 剩余条目用；flush 线程经

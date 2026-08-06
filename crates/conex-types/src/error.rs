@@ -50,7 +50,6 @@ pub struct CrishErrorInfo {
 ///
 /// 来源：packages/shared-types/src/errors/codes.ts
 /// 权威：03-ERROR-MIGRATION.md §2.2
-#[allow(non_upper_case_globals)]
 pub mod codes {
     // ── config 域（3 正式码）──
     pub const CONFIG_INVALID: &str = "config.invalid";

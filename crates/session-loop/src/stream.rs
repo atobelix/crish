@@ -118,6 +118,9 @@ impl ProviderUsage {
 }
 
 /// 低级流事件（对齐 agent-provider::events::ProviderStreamEvent，02 §1.1 表）
+// G2 允许理由（clippy::large_enum_variant）：流载荷变体语义必然大（诊断/
+// 工具调用等变体含完整数据快照），Box 化破坏模式匹配便利性与序列化契约
+// （事件面契约冻结，与 agent-provider::events 同理由）。
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]

@@ -525,6 +525,9 @@ impl ToolExecutor {
     }
 
     /// 执行单个工具（顺序路径：完整事件序列 + 审批）
+    // G2 允许理由（clippy::too_many_arguments）：参数为工具执行上下文聚合
+    // 注入（批调用/下标/执行上下文/审批门/批选项/中止信号/事件收集/致命
+    // 错误槽），各参数来源独立，收缩将退化为全局态或拆分 struct 而收益低。
     #[allow(clippy::too_many_arguments)]
     async fn execute_one(
         &self,

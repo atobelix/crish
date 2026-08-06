@@ -2,8 +2,6 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
-  BACKEND_NOT_WIRED_CODE,
-  BACKEND_NOT_WIRED_COMMAND_ALLOWLIST,
   REGISTERED_TAURI_COMMANDS,
   TAURI_COMMAND_REGISTRY,
   UNSUPPORTED_CODE,
@@ -97,9 +95,6 @@ describe("Tauri command registry", () => {
     expect(diff.missingFrontendRegistry).toEqual([]);
     expect(diff.missingRustRegistration).toEqual([]);
     expect(diff.missing).toEqual([]);
-    expect(diff.staleAllowlist).toEqual([]);
-    expect(Object.keys(BACKEND_NOT_WIRED_COMMAND_ALLOWLIST)).toEqual([]);
-    expect(diff.allowedUnwired).toEqual([]);
   });
 
   it("passes a product command marked implemented when it is present in the backend", () => {
@@ -221,7 +216,7 @@ describe("Tauri command registry", () => {
       scripts: Record<string, string>;
     };
 
-    expect(pkg.workspaces).toHaveLength(10);
+    expect(pkg.workspaces).toHaveLength(7);
     for (const workspace of pkg.workspaces) {
       expect(workspace).toMatch(/^(apps|packages)\//);
     }
@@ -253,7 +248,6 @@ describe("Tauri command registry", () => {
 
     expect(productCommands).toHaveLength(88);
     expect(productCommands.every((entry) => commandCapabilityStatus(entry) !== UNSUPPORTED_CODE)).toBe(true);
-    expect(productCommands.every((entry) => commandCapabilityStatus(entry) !== BACKEND_NOT_WIRED_CODE)).toBe(true);
     expect(productCommands.every((entry) => entry.status === "implemented")).toBe(true);
     expect(productCommands.every(shouldHaveTauriRegistration)).toBe(true);
   });

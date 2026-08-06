@@ -35,7 +35,6 @@ use super::super::handlers::{
 use super::super::LoopError;
 
 /// executing-tools handler（01 §2.8）
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle(
     state: &mut LoopState,
     executor: &ToolExecutor,

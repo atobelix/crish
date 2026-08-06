@@ -664,6 +664,10 @@ mod tests {
     /// I4 补充（C14）：溢出压缩阶梯同样经 Summarizer trait 边界——
     /// 摘要器只收到丢弃消息（无 session_id / 无缓存键 / 无 tools / 无
     /// system 参数；trait 签名即隔离保证），L2 文本进入事件载荷
+    // G2 允许理由（clippy::type_complexity）：测试局部嵌套类型
+    // （RecordingSummarizer 回调签名含 Arc<Mutex<Vec<(Vec<String>,
+    // Option<String>)>>>），类型由被测接口依赖链自然形成，定义别名可缓解
+    // 但改动扩散大、豁免面小。
     #[tokio::test]
     #[allow(clippy::type_complexity)]
     async fn overflow_compaction_uses_summarizer_without_affinity() {

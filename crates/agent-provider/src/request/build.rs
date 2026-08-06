@@ -25,6 +25,9 @@ use super::vendor::{
 };
 
 /// maxTokens 字段名（对齐 OpenAICompatibleMaxTokensField）
+// G2 允许理由（clippy::enum_variant_names）：变体名按协议源命名对齐
+// （max_tokens / max_completion_tokens / max_output_tokens 为第三方协议
+// 字段名，不可缩写）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(clippy::enum_variant_names)]
 pub enum MaxTokensField {

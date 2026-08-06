@@ -20,9 +20,9 @@
 //! - T-EG-06（引擎总接线，F7 已落地）：write_claims / explore_docs_quota 经
 //!   ToolExecCtx 注入——用例 1/2/3/4 引擎层执行依赖，已满足；
 //! - T-EG-08（resolve_output_dir 工具 + OutputWorkspace 服务，G-A1 域）：
-//!   未落地（output_dir.rs 与 ToolContext.output_dir 均不存在）→ 用例 1 的
-//!   resolve 段走「契约模拟」分支（注册表出现该工具后自动切换真实调用，
-//!   无需改测试），登记轮次报告；
+//!   已落地（F10 装配进内置注册表，output_dir.rs 与 ToolContext.output_dir
+//!   均为真实实现）→ 用例 1/3 的 resolve 段走真实工具分支（工具缺失即
+//!   not_found 失败，无模拟兜底），核销登记；
 //! - T-EG-09（产出目录注入段，G-A2 域）：subagent_inject.rs 已实现
 //!   output_dir_section（工作区改动）——测试面不直接依赖，轮末门禁快照验证；
 //! - T-EG-10（wait_subagents outputFiles 载荷，G-A3 域）：未落地
@@ -54,8 +54,8 @@ const WRITE_FILE_TOOL: &str = "write_file";
 /// 列目录工具注册名（对齐 tools/fs.rs:475）
 const LIST_DIR_TOOL: &str = "list_dir";
 
-/// 产出目录解析工具注册名（T-EG-08 契约键；注册表缺省 = 未装配，用例走
-/// 契约模拟分支，见 [resolve_output_dir_contract]）
+/// 产出目录解析工具注册名（T-EG-08 契约键；注册表缺省 = 未装配 → 工具
+/// 查表 not_found 直接失败，无模拟兜底分支，见 [resolve_output_dir_contract]）
 const RESOLVE_OUTPUT_DIR_TOOL: &str = "resolve_output_dir";
 
 /// 会话标识（测试统一会话域；写路径互斥与配额均按会话隔离）
@@ -164,68 +164,61 @@ async fn run_single(
     outcome.results.into_iter().next().expect("批内必须有结果")
 }
 
-/// 主控 resolve_output_dir 契约执行点（T-EG-08 装配面；返回产出目录相对路径）
+/// 主控 resolve_output_dir 契约执行点（T-EG-08 已装配；返回产出目录相对路径）
 ///
-/// - T-EG-08 已落地（注册表含 resolve_output_dir 工具）→ 真实工具调用：
-///   断言目录名日期前缀格式 `^\d{4}-\d{2}-\d{2}-`（§4.4 契约，本地时区
-///   零填充）、userSpecified=false、dirCreated=false 且目录未创建（惰性）；
-/// - T-EG-08 未落地（当前状态）→ 按契约草案在测试内生成
-///   `.agent-outputs/<session_id>/` 并 warn 登记；T-EG-08 落地后本函数
-///   自动切换真实分支，无需改测试（编译对齐偏差登记见轮次报告）。
-async fn resolve_output_dir_contract(
-    exec: &ToolExecutor,
-    reg: &ToolRegistry,
-    ws: &TempWorkspace,
-) -> String {
-    if reg.get(RESOLVE_OUTPUT_DIR_TOOL).is_some() {
-        // 真实分支（T-EG-08 落地后生效）：主控身份调用，无 folder → 默认生成
-        let ctx = exec_ctx(ws, "run-main", None, None);
-        let r = run_single(
-            exec,
-            &ctx,
-            &tool_call("r1", RESOLVE_OUTPUT_DIR_TOOL, json!({})),
-        )
-        .await;
-        assert!(
-            r.is_ok(),
-            "resolve_output_dir 必须执行成功：{:?}",
-            r.error_message
-        );
-        let out = &r.output;
-        let path = out["path"]
-            .as_str()
-            .expect("resolve_output_dir 输出必须含 path");
-        assert_eq!(out["userSpecified"], false, "默认生成非用户指定");
-        assert_eq!(out["dirCreated"], false, "惰性：解析不创建目录");
-        // 目录名日期前缀（§4.4：`<YYYY-MM-DD>-<session_id>`，本地时区零填充）
-        let dir_name = path
-            .trim_end_matches('/')
-            .rsplit('/')
-            .next()
-            .unwrap_or_default();
-        let b = dir_name.as_bytes();
-        let date_prefixed = b.len() > 10
-            && b[..4].iter().all(u8::is_ascii_digit)
-            && b[4] == b'-'
-            && b[5..7].iter().all(u8::is_ascii_digit)
-            && b[7] == b'-'
-            && b[8..10].iter().all(u8::is_ascii_digit)
-            && b[10] == b'-';
-        assert!(
-            date_prefixed,
-            "产出目录名必须带本地时区日期前缀 YYYY-MM-DD-（§4.4 契约）：{dir_name}"
-        );
-        assert!(
-            !ws.path().join(path.trim_end_matches('/')).exists(),
-            "惰性创建：解析后目录不得存在（首次写入才创建）"
-        );
-        path.trim_end_matches('/').to_string()
-    } else {
-        tracing::warn!(
-            "G-A6(T-EG-13): resolve_output_dir 未装配（T-EG-08 未落地），本用例 resolve 段走契约模拟分支"
-        );
-        format!(".agent-outputs/{SESSION_ID}")
-    }
+/// 无条件走真实工具调用（T-EG-08 随 F10 落地进内置注册表；工具缺失时
+/// 执行器按未注册工具直接失败，`r.is_ok()` 断言即触发——无静默降级面）：
+/// 断言目录名日期前缀格式 `^\d{4}-\d{2}-\d{2}-`（§4.4 契约，本地时区
+/// 零填充）+ 会话后缀 `-<session_id>`、userSpecified=false、
+/// dirCreated=false 且目录未创建（惰性）。
+async fn resolve_output_dir_contract(exec: &ToolExecutor, ws: &TempWorkspace) -> String {
+    // 真实分支（T-EG-08 已落地）：主控身份调用，无 folder → 默认生成
+    let ctx = exec_ctx(ws, "run-main", None, None);
+    let r = run_single(
+        exec,
+        &ctx,
+        &tool_call("r1", RESOLVE_OUTPUT_DIR_TOOL, json!({})),
+    )
+    .await;
+    assert!(
+        r.is_ok(),
+        "resolve_output_dir 必须执行成功：{:?}",
+        r.error_message
+    );
+    let out = &r.output;
+    let path = out["path"]
+        .as_str()
+        .expect("resolve_output_dir 输出必须含 path");
+    assert_eq!(out["userSpecified"], false, "默认生成非用户指定");
+    assert_eq!(out["dirCreated"], false, "惰性：解析不创建目录");
+    // 目录名日期前缀（§4.4：`<YYYY-MM-DD>-<session_id>`，本地时区零填充）
+    let dir_name = path
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or_default();
+    let b = dir_name.as_bytes();
+    let date_prefixed = b.len() > 10
+        && b[..4].iter().all(u8::is_ascii_digit)
+        && b[4] == b'-'
+        && b[5..7].iter().all(u8::is_ascii_digit)
+        && b[7] == b'-'
+        && b[8..10].iter().all(u8::is_ascii_digit)
+        && b[10] == b'-';
+    assert!(
+        date_prefixed,
+        "产出目录名必须带本地时区日期前缀 YYYY-MM-DD-（§4.4 契约）：{dir_name}"
+    );
+    // 会话后缀（`-<session_id>`，§4.4 契约与输出目录名同源）
+    assert!(
+        dir_name.ends_with(&format!("-{SESSION_ID}")),
+        "产出目录名必须带会话后缀 -{SESSION_ID}：{dir_name}"
+    );
+    assert!(
+        !ws.path().join(path.trim_end_matches('/')).exists(),
+        "惰性创建：解析后目录不得存在（首次写入才创建）"
+    );
+    path.trim_end_matches('/').to_string()
 }
 
 /// G02 场景 spawn + 并行产出辅助（对齐 5.8 时序第 2/3 步）：
@@ -298,7 +291,7 @@ fn title_of(file_name: &str) -> String {
 /// → A/B 并行 write_file 不同文件 → 放行；惰性创建：resolve 后目录不存在、
 /// 首次写入自动创建（REQ-G01:811）。
 ///
-/// 依赖 T-EG-08（resolve 段，当前走契约模拟分支）与 T-EG-06（写路径互斥
+/// 依赖 T-EG-08（resolve 段，已落地走真实分支）与 T-EG-06（写路径互斥
 /// 接线，已满足）；子代理声明语义对齐 write_paths.rs:636-646 兄弟文件测试。
 #[tokio::test]
 async fn g02_parallel_siblings_writes_allowed() {
@@ -306,7 +299,7 @@ async fn g02_parallel_siblings_writes_allowed() {
     let reg = builtin_registry();
     let exec = ToolExecutor::new(Arc::clone(&reg));
     // 主控 resolve_output_dir（T-EG-08 装配面契约执行点）
-    let out_rel = resolve_output_dir_contract(&exec, &reg, &ws).await;
+    let out_rel = resolve_output_dir_contract(&exec, &ws).await;
     // 惰性创建前置断言：resolve 后目录不得存在（REQ-G01:811 验收）
     assert!(
         !ws.path().join(&out_rel).exists(),
@@ -399,7 +392,7 @@ async fn g02_summary_index_via_list_and_write() {
     // 主控 resolve + spawn A/B 并行产出（复用场景 1 流程）
     let reg = builtin_registry();
     let exec = ToolExecutor::new(Arc::clone(&reg));
-    let out_rel = resolve_output_dir_contract(&exec, &reg, &ws).await;
+    let out_rel = resolve_output_dir_contract(&exec, &ws).await;
     let (registry, rel_a, rel_b) = spawn_and_write_collab(&ws, &out_rel).await;
 
     // ── 主控（run-main，无配额上下文）：list_dir 列产出目录 ──

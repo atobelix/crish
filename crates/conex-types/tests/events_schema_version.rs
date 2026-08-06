@@ -373,6 +373,8 @@ fn cold_cache_warning_roundtrip_and_camel_case() {
 
 /// 变体数与 changelog 一致性的辅助断言入口：消费方（测试/CI）可遍历
 /// [V1_EVENT_TYPES] 与 changelog v1 表人工勾稽（T12.8 登记 30 号清单）。
+// 测试专用构造：契约勾稽辅助入口（消费方为人工/CI 遍历，测试自身不调用），
+// 变体数随 changelog 演进——dead_code 静音。
 #[allow(dead_code)]
 fn v1_event_types() -> &'static [&'static str] {
     V1_EVENT_TYPES

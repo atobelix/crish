@@ -421,9 +421,9 @@ impl TaskNotifier {
         }
     }
 
-    /// 接线事件发射槽（生产路径：C3 在 main.rs 构造 registry 后注入
-    /// EventBridgeSink——见 background.rs 资源段接线说明）
-    #[allow(dead_code)] // 生产接线点 = set_event_bridge（C3 main.rs），接线后消除
+    /// 接线事件发射槽（生产路径：main.rs 装配轮经
+    /// background.rs `set_event_bridge` 注入 EventBridgeSink——30 方案
+    /// P2/P3 接线后本方法生产可达，E2 核销）
     pub(crate) fn set_event_sink(&mut self, sink: Arc<dyn EventSink>) {
         self.event_sink = Some(sink);
     }

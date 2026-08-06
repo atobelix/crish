@@ -905,6 +905,10 @@ mod tests {
 
     /// 摘要隔离（C14）：摘要器只收到丢弃消息（trait 边界不携带会话/
     /// 缓存亲和参数——无缓存键断言）；Err → 降级 L1 占位符，压缩仍完成
+    // G2 允许理由（clippy::type_complexity）：测试局部嵌套类型
+    // （RecordingSummarizer 回调签名含 Arc<Mutex<Vec<(Vec<String>,
+    // Option<String>)>>>），类型由被测接口依赖链自然形成，定义别名可缓解
+    // 但改动扩散大、豁免面小。
     #[tokio::test]
     #[allow(clippy::type_complexity)]
     async fn summarizer_receives_dropped_only_and_err_falls_back_to_l1() {

@@ -234,6 +234,9 @@ impl LocalDb {
             message: format!("lock poisoned: {e}"),
             kind: DbFailureKind::Lock,
         })?;
+        // G2 允许理由（clippy::type_complexity）：存储层查询行元组（9 列
+        // 计数字段 + 可选时间戳），类型由 SQL 列依赖链自然形成，定义别名
+        // 可缓解但改动扩散大、豁免面小。
         #[allow(clippy::type_complexity)]
         let row: Option<(i64, i64, i64, i64, i64, i64, i64, i64, Option<i64>)> = conn
             .query_row(

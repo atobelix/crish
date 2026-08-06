@@ -614,3 +614,199 @@ describe('parseBridgeEvent（P6 S4：message-end 携带 metadata.usage 与缓存
     }
   });
 });
+
+describe('parseBridgeEvent（14-T5 数据面 10 类宽容归一：strict 失败后生效）', () => {
+  it('task-* 七类缺字段/类型漂移输入归一成功且字段落默认值', () => {
+    const started = parseBridgeEvent({
+      type: 'task-started',
+      isDaemon: 'true',
+    });
+    expect(started.ok).toBe(true);
+    if (started.ok && started.data.kind === 'engine') {
+      expect(started.data.type).toBe('task-started');
+      expect(started.data.event.taskId).toBe('');
+      expect(started.data.event.command).toBe('');
+      expect(started.data.event.ownerRunId).toBe('');
+      expect(started.data.event.isDaemon).toBe(false);
+    }
+
+    const output = parseBridgeEvent({ type: 'task-output', taskId: 't-1' });
+    expect(output.ok).toBe(true);
+    if (output.ok && output.data.kind === 'engine') {
+      expect(output.data.event.taskId).toBe('t-1');
+      expect(output.data.event.line).toBeUndefined();
+      expect(output.data.event.lineCount).toBeUndefined();
+    }
+
+    const heartbeat = parseBridgeEvent({ type: 'task-heartbeat' });
+    expect(heartbeat.ok).toBe(true);
+    if (heartbeat.ok && heartbeat.data.kind === 'engine') {
+      expect(heartbeat.data.event.taskId).toBe('');
+      expect(heartbeat.data.event.resource).toEqual({});
+    }
+
+    const suspicious = parseBridgeEvent({
+      type: 'task-suspicious',
+      silenceMs: '500',
+    });
+    expect(suspicious.ok).toBe(true);
+    if (suspicious.ok && suspicious.data.kind === 'engine') {
+      expect(suspicious.data.event.silenceMs).toBe(0);
+      expect(suspicious.data.event.lastOutputAtMs).toBe(0);
+    }
+
+    const completed = parseBridgeEvent({ type: 'task-completed' });
+    expect(completed.ok).toBe(true);
+    if (completed.ok && completed.data.kind === 'engine') {
+      expect(completed.data.event.exitCode).toBe(0);
+      expect(completed.data.event.durationMs).toBe(0);
+      expect(completed.data.event.lineCount).toBe(0);
+    }
+
+    const failed = parseBridgeEvent({
+      type: 'task-failed',
+      tail: '最后一行',
+    });
+    expect(failed.ok).toBe(true);
+    if (failed.ok && failed.data.kind === 'engine') {
+      expect(failed.data.event.exitCode).toBe(0);
+      expect(failed.data.event.tail).toEqual(['最后一行']);
+    }
+
+    const killed = parseBridgeEvent({ type: 'task-killed', viaForce: 'true' });
+    expect(killed.ok).toBe(true);
+    if (killed.ok && killed.data.kind === 'engine') {
+      expect(killed.data.event.viaForce).toBe(false);
+      expect(killed.data.event.diagnostics).toBeUndefined();
+    }
+  });
+
+  it('timer/cron 三类缺字段/类型漂移输入归一成功且字段落默认值', () => {
+    const fired = parseBridgeEvent({ type: 'timer-fired' });
+    expect(fired.ok).toBe(true);
+    if (fired.ok && fired.data.kind === 'engine') {
+      expect(fired.data.event.timerId).toBe('');
+      expect(fired.data.event.prompt).toBe('');
+      expect(fired.data.event.firedAtMs).toBe(0);
+    }
+
+    const cancelled = parseBridgeEvent({
+      type: 'timer-cancelled',
+      cancelledAtMs: '123',
+    });
+    expect(cancelled.ok).toBe(true);
+    if (cancelled.ok && cancelled.data.kind === 'engine') {
+      expect(cancelled.data.event.reason).toBe('');
+      expect(cancelled.data.event.cancelledAtMs).toBe(0);
+    }
+
+    const cron = parseBridgeEvent({ type: 'cron-fired', iteration: '3' });
+    expect(cron.ok).toBe(true);
+    if (cron.ok && cron.data.kind === 'engine') {
+      expect(cron.data.event.cronId).toBe('');
+      expect(cron.data.event.expression).toBe('');
+      expect(cron.data.event.iteration).toBe(0);
+      expect(cron.data.event.firedAtMs).toBe(0);
+    }
+  });
+
+  it('security-audit 宽容归一：缺 impact/枚举漂移落默认值不抛', () => {
+    const r = parseBridgeEvent({
+      type: 'security-audit',
+      operation: 'bogus-op',
+      decision: 'maybe',
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect(r.data.event.operation).toBe('command-exec');
+      expect(r.data.event.decision).toBe('denied');
+      expect(r.data.event.targets).toEqual([]);
+      expect(r.data.event.impact).toEqual({
+        fileCount: 0,
+        totalSizeBytes: 0,
+        directoryCount: 0,
+        crossDirectory: false,
+        flagged: false,
+      });
+    }
+  });
+
+  it('十类漂移输入全部返回 ok 而非 parseErr（不进 unknown 登记路径）', () => {
+    const types = [
+      'task-started',
+      'task-output',
+      'task-heartbeat',
+      'task-suspicious',
+      'task-completed',
+      'task-failed',
+      'task-killed',
+      'timer-fired',
+      'timer-cancelled',
+      'cron-fired',
+      'security-audit',
+    ];
+    for (const type of types) {
+      const r = parseBridgeEvent({ type });
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('strict 可解析的规范输入与宽容归一器输出等价（防双轨分叉）', () => {
+    const completed = parseBridgeEvent({
+      type: 'task-completed',
+      sessionId: 's',
+      taskId: 't-1',
+      exitCode: 0,
+      durationMs: 1200,
+      lineCount: 42,
+    });
+    expect(completed.ok).toBe(true);
+    if (completed.ok && completed.data.kind === 'engine') {
+      expect(completed.data.event).toMatchObject({
+        taskId: 't-1',
+        exitCode: 0,
+        durationMs: 1200,
+        lineCount: 42,
+      });
+    }
+
+    const fired = parseBridgeEvent({
+      type: 'timer-fired',
+      sessionId: 's',
+      timerId: 'timer-1',
+      prompt: '提醒',
+      firedAtMs: 1000,
+    });
+    expect(fired.ok).toBe(true);
+    if (fired.ok && fired.data.kind === 'engine') {
+      expect(fired.data.event).toMatchObject({
+        timerId: 'timer-1',
+        prompt: '提醒',
+        firedAtMs: 1000,
+      });
+    }
+
+    const audit = parseBridgeEvent({
+      type: 'security-audit',
+      sessionId: 's',
+      timestamp: 't',
+      operation: 'delete',
+      decision: 'blocked',
+      targets: ['/a'],
+      impact: {
+        fileCount: 2,
+        totalSizeBytes: 10,
+        directoryCount: 1,
+        crossDirectory: false,
+        flagged: false,
+      },
+    });
+    expect(audit.ok).toBe(true);
+    if (audit.ok && audit.data.kind === 'engine') {
+      expect(audit.data.event.operation).toBe('delete');
+      expect(audit.data.event.decision).toBe('blocked');
+      expect(audit.data.event.targets).toEqual(['/a']);
+      expect(audit.data.event.impact.fileCount).toBe(2);
+    }
+  });
+});

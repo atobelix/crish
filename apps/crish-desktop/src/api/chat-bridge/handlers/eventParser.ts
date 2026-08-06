@@ -4,7 +4,8 @@
  * 解析顺序：
  * 1. 优先 T6 生成解析器 parseEngineEvent（严格契约，载荷完整时直出具体信封类型）；
  * 2. 生成解析器覆盖不了的前端宽容形态（缺 sessionId/timestamp 等信封字段、
- *    历史别名 text-delta / run-completed / run-failed / run-cancelled）由
+ *    历史别名 text-delta / run-completed / run-failed / run-cancelled、
+ *    数据面 task 系与 timer、cron、security-audit 形状漂移）由
  *    本文件的宽容归一器兜底，全部收敛在本单一入口；
  * 3. 信封级遗留事件（subagent-* / error）以 legacy 信封直出；
  * 4. 其余一律 parseErr，由 EventRouter 显式登记 unknown-case（可观测，不静默吞）。
@@ -20,11 +21,24 @@ import {
 import {
   AGENT_END_REASON_VALUES,
   MISS_ATTRIBUTION_VALUES,
+  SECURITY_AUDIT_OPERATION_VALUES,
+  SECURITY_AUDIT_DECISION_VALUES,
 } from '../../../../../../packages/shared-types/src/generated/engine';
 import type {
   EngineEvent,
   EngineEventType,
   EngineCacheWasteAlertEvent,
+  EngineSecurityAuditEvent,
+  EngineTaskStartedEvent,
+  EngineTaskOutputEvent,
+  EngineTaskHeartbeatEvent,
+  EngineTaskSuspiciousEvent,
+  EngineTaskCompletedEvent,
+  EngineTaskFailedEvent,
+  EngineTaskKilledEvent,
+  EngineTimerFiredEvent,
+  EngineTimerCancelledEvent,
+  EngineCronFiredEvent,
   AgentMessage,
   AgentMessageBlock,
   AgentMessageBlockToolCall,
@@ -45,7 +59,11 @@ import type {
   ToolConcurrency,
   RunCacheStats,
   MissAttribution,
+  SecurityAuditOperation,
+  SecurityAuditDecision,
+  ImpactAssessment,
 } from '../../../../../../packages/shared-types/src/generated/engine';
+import type { JsonValue } from '../../../../../../packages/shared-types/src/primitive-types';
 import { blockText } from './eventUtils';
 import { logInternalError } from '../../userFacingErrors';
 
@@ -321,6 +339,61 @@ function normalizeRunCacheStats(rawStats: unknown): RunCacheStats {
   const warmUntilMs = num(r.warmUntilMs);
   if (warmUntilMs !== undefined) stats.warmUntilMs = warmUntilMs;
   return stats;
+}
+
+// ── 数据面 10 类事件宽容兜底辅助（14-T5：strict 失败后生效）──
+
+/** 双形态取值：camelCase 优先、snake_case 兜底（风格对齐 backgroundTasksApi 双容错） */
+function alt(
+  raw: Record<string, unknown>,
+  camel: string,
+  snake: string
+): unknown {
+  const v = raw[camel];
+  return v !== undefined ? v : raw[snake];
+}
+
+/** 日志尾部容错：字符串按单元素数组收窄，数组过滤字符串元素，其余空数组 */
+function tailArray(v: unknown): string[] {
+  if (typeof v === 'string') return [v];
+  return strArray(v);
+}
+
+/** 资源快照宽容读取：JSON 可序列化值直通，畸形/缺失回退空对象 */
+function normalizeResource(v: unknown): JsonValue {
+  if (v === null || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+    return v as JsonValue;
+  }
+  if (Array.isArray(v) || isRecord(v)) return v as JsonValue;
+  return {};
+}
+
+/** 安全审计操作类别判定（wire kebab-case 六值） */
+function isAuditOperation(v: unknown): v is SecurityAuditOperation {
+  return (
+    typeof v === 'string' &&
+    (SECURITY_AUDIT_OPERATION_VALUES as readonly string[]).includes(v)
+  );
+}
+
+/** 安全审计处置决策判定（wire lowercase 六值） */
+function isAuditDecision(v: unknown): v is SecurityAuditDecision {
+  return (
+    typeof v === 'string' &&
+    (SECURITY_AUDIT_DECISION_VALUES as readonly string[]).includes(v)
+  );
+}
+
+/** 影响面宽容归一：逐项容错，畸形/缺失回退全零空对象 */
+function normalizeImpact(rawImpact: unknown): ImpactAssessment {
+  const r = isRecord(rawImpact) ? rawImpact : {};
+  return {
+    fileCount: num(r.fileCount) ?? 0,
+    totalSizeBytes: num(r.totalSizeBytes) ?? 0,
+    directoryCount: num(r.directoryCount) ?? 0,
+    crossDirectory: r.crossDirectory === true,
+    flagged: r.flagged === true,
+  };
 }
 
 const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
@@ -641,6 +714,146 @@ const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
       },
       raw
     ),
+  // ── 数据面 10 类宽容兜底（14-T5）──
+  // 输出类型显式复用生成事件类型标注（packages/shared-types 生成类型，防漂移），
+  // 字段 camelCase/snake_case 双形态读取，统一经 withEnvelopeRunId 补信封 runId。
+  'task-started': (raw): EngineTaskStartedEvent =>
+    withEnvelopeRunId(
+      {
+        type: 'task-started',
+        sessionId: str(alt(raw, 'sessionId', 'session_id')),
+        taskId: str(alt(raw, 'taskId', 'task_id')),
+        command: str(raw.command),
+        cwd: str(raw.cwd),
+        ownerRunId: str(alt(raw, 'ownerRunId', 'owner_run_id')),
+        isDaemon: alt(raw, 'isDaemon', 'is_daemon') === true,
+      },
+      raw
+    ),
+  'task-output': (raw): EngineTaskOutputEvent => {
+    const event: EngineTaskOutputEvent = {
+      type: 'task-output',
+      sessionId: str(alt(raw, 'sessionId', 'session_id')),
+      taskId: str(alt(raw, 'taskId', 'task_id')),
+    };
+    const line = str(raw.line);
+    if (line) event.line = line;
+    const chunk = str(raw.chunk);
+    if (chunk) event.chunk = chunk;
+    const lineCount = num(alt(raw, 'lineCount', 'line_count'));
+    if (lineCount !== undefined) event.lineCount = lineCount;
+    return withEnvelopeRunId(event, raw);
+  },
+  'task-heartbeat': (raw): EngineTaskHeartbeatEvent =>
+    withEnvelopeRunId(
+      {
+        type: 'task-heartbeat',
+        sessionId: str(alt(raw, 'sessionId', 'session_id')),
+        taskId: str(alt(raw, 'taskId', 'task_id')),
+        resource: normalizeResource(raw.resource),
+      },
+      raw
+    ),
+  'task-suspicious': (raw): EngineTaskSuspiciousEvent =>
+    withEnvelopeRunId(
+      {
+        type: 'task-suspicious',
+        sessionId: str(alt(raw, 'sessionId', 'session_id')),
+        taskId: str(alt(raw, 'taskId', 'task_id')),
+        silenceMs: num(alt(raw, 'silenceMs', 'silence_ms')) ?? 0,
+        lastOutputAtMs: num(alt(raw, 'lastOutputAtMs', 'last_output_at_ms')) ?? 0,
+      },
+      raw
+    ),
+  'task-completed': (raw): EngineTaskCompletedEvent =>
+    withEnvelopeRunId(
+      {
+        type: 'task-completed',
+        sessionId: str(alt(raw, 'sessionId', 'session_id')),
+        taskId: str(alt(raw, 'taskId', 'task_id')),
+        exitCode: num(alt(raw, 'exitCode', 'exit_code')) ?? 0,
+        durationMs: num(alt(raw, 'durationMs', 'duration_ms')) ?? 0,
+        lineCount: num(alt(raw, 'lineCount', 'line_count')) ?? 0,
+      },
+      raw
+    ),
+  'task-failed': (raw): EngineTaskFailedEvent =>
+    withEnvelopeRunId(
+      {
+        type: 'task-failed',
+        sessionId: str(alt(raw, 'sessionId', 'session_id')),
+        taskId: str(alt(raw, 'taskId', 'task_id')),
+        exitCode: num(alt(raw, 'exitCode', 'exit_code')) ?? 0,
+        tail: tailArray(raw.tail),
+        durationMs: num(alt(raw, 'durationMs', 'duration_ms')) ?? 0,
+      },
+      raw
+    ),
+  'task-killed': (raw): EngineTaskKilledEvent => {
+    const event: EngineTaskKilledEvent = {
+      type: 'task-killed',
+      sessionId: str(alt(raw, 'sessionId', 'session_id')),
+      taskId: str(alt(raw, 'taskId', 'task_id')),
+      viaForce: alt(raw, 'viaForce', 'via_force') === true,
+    };
+    const diagnostics = str(raw.diagnostics);
+    if (diagnostics) event.diagnostics = diagnostics;
+    return withEnvelopeRunId(event, raw);
+  },
+  'timer-fired': (raw): EngineTimerFiredEvent =>
+    withEnvelopeRunId(
+      {
+        type: 'timer-fired',
+        sessionId: str(alt(raw, 'sessionId', 'session_id')),
+        timerId: str(alt(raw, 'timerId', 'timer_id')),
+        prompt: str(raw.prompt),
+        firedAtMs: num(alt(raw, 'firedAtMs', 'fired_at_ms')) ?? 0,
+      },
+      raw
+    ),
+  'timer-cancelled': (raw): EngineTimerCancelledEvent =>
+    withEnvelopeRunId(
+      {
+        type: 'timer-cancelled',
+        sessionId: str(alt(raw, 'sessionId', 'session_id')),
+        timerId: str(alt(raw, 'timerId', 'timer_id')),
+        reason: str(raw.reason),
+        cancelledAtMs: num(alt(raw, 'cancelledAtMs', 'cancelled_at_ms')) ?? 0,
+      },
+      raw
+    ),
+  'cron-fired': (raw): EngineCronFiredEvent =>
+    withEnvelopeRunId(
+      {
+        type: 'cron-fired',
+        sessionId: str(alt(raw, 'sessionId', 'session_id')),
+        cronId: str(alt(raw, 'cronId', 'cron_id')),
+        prompt: str(raw.prompt),
+        expression: str(raw.expression),
+        iteration: num(raw.iteration) ?? 0,
+        firedAtMs: num(alt(raw, 'firedAtMs', 'fired_at_ms')) ?? 0,
+      },
+      raw
+    ),
+  // security-audit：已真实消费（securityAuditHandlers → store），宽容兜底
+  // 防形状漂移落 unknown；枚举漂移 operation 兜底 command-exec、
+  // decision 兜底 denied（安全向 fail-closed）
+  'security-audit': (raw): EngineSecurityAuditEvent => {
+    const event: EngineSecurityAuditEvent = {
+      type: 'security-audit',
+      sessionId: str(alt(raw, 'sessionId', 'session_id')),
+      timestamp: str(raw.timestamp),
+      operation: isAuditOperation(raw.operation) ? raw.operation : 'command-exec',
+      targets: strArray(raw.targets),
+      impact: normalizeImpact(raw.impact),
+      decision: isAuditDecision(raw.decision) ? raw.decision : 'denied',
+    };
+    const permissionMode = str(alt(raw, 'permissionMode', 'permission_mode'));
+    if (permissionMode) event.permissionMode = permissionMode;
+    const toolCallId = str(alt(raw, 'toolCallId', 'tool_call_id'));
+    if (toolCallId) event.toolCallId = toolCallId;
+    return withEnvelopeRunId(event, raw);
+  },
 };
 
 function isLegacyEventType(type: string): type is LegacyEventType {

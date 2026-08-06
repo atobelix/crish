@@ -8,14 +8,11 @@
   "workspaces": [
     "apps/crish-desktop",
     "apps/agent-workbench",
-    "packages/logger",
     "packages/plugin-import-claude-codex",
     "packages/plugin-sdk",
     "packages/shared-types",
     "packages/shared-utils",
-    "packages/telemetry",
-    "packages/test-utils",
-    "packages/conex-mdx"
+    "packages/test-utils"
   ],
   "scripts": {
     "build": "turbo run build",
@@ -40,7 +37,7 @@
     "startup:cold": "npx tsx tests/startup/measure-cold-start.ts",
     "startup:warm": "npx tsx tests/startup/measure-warm-start.ts",
     "check:workbench": "npm --workspace @crish/agent-workbench run cli:check",
-    "typecheck": "tsc --noEmit -p apps/crish-desktop/tsconfig.app.json && tsc --noEmit -p apps/crish-desktop/tsconfig.node.json && tsc --noEmit -p apps/agent-workbench/tsconfig.json && tsc --noEmit -p packages/logger && tsc --noEmit -p packages/shared-types && tsc --noEmit -p packages/shared-utils && tsc --noEmit -p packages/telemetry",
+    "typecheck": "tsc --noEmit -p apps/crish-desktop/tsconfig.app.json && tsc --noEmit -p apps/crish-desktop/tsconfig.node.json && tsc --noEmit -p apps/agent-workbench/tsconfig.json && tsc --noEmit -p packages/shared-types && tsc --noEmit -p packages/shared-utils",
     "check:desktop": "npm --workspace @crish/crish-desktop run typecheck && npm run check:ui-layer",
     "check:ui-layer": "node scripts/check-ui-layer.mjs",
     "check:store-types": "node scripts/check-no-as-any-store.mjs",

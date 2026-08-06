@@ -579,6 +579,8 @@ fn emit_report_shape_for_direct_bridge() {
 }
 
 /// 无背压直发桥的载荷获取（与 emit_and_get 同一语义，供桥序列化路径复用）
+// 测试专用构造：桥序列化路径复用辅助（载荷获取语义与 emit_and_get 一致，
+// 供契约测试锚定桥协议）——dead_code 静音。
 #[allow(dead_code)]
 fn _bridge_serialize(bridge: &EventBridge, event: AgentEvent) -> Value {
     let envelope = AgentEventEnvelope::new(event, Some("r1".into()), Some(1));

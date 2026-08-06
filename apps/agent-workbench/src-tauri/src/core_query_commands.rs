@@ -182,6 +182,9 @@ pub struct CoreStatus {
 
 /// 组装 CoreStatus（**唯一**组装函数；F2 串行序：PE-01 → PE-04 → PE-08 以追加参数并入，
 /// 与 Tauri 解耦，纯数据组装可单测）。
+// G2 允许理由（clippy::too_many_arguments）：参数为状态快照聚合注入（基线
+// 标志/提供方状态/诊断/恢复/快照/后台任务汇总等，随 F2 串行序追加并入），
+// 各参数来源独立，收缩将退化为全局态或拆分 struct 而收益低。
 #[allow(clippy::too_many_arguments)]
 pub fn build_status(
     // PE-01 基线（T01.1 / T01.2）

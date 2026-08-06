@@ -657,11 +657,9 @@ pub(crate) struct EngineHandle {
     /// cron 事件缓冲（T-CF-09 装配产物；同 timer 的 drain 转发路径——
     /// cron-fired 单臂，conex-types 仅 CronFired 变体，无 cron-cancelled）
     scheduler_event_sink: Arc<crate::sched::SchedEventSink>,
-    /// 子代理 spawn 通道（T-D-13：SubagentSpawner 契约实现；经
-    /// BuiltinToolConfig.subagent_spawner 注入 run_subagent 工具——
-    /// None = 未接线，run_subagent 返回 common.unsupported 降级）
-    #[cfg_attr(not(test), allow(dead_code))] // 测试断言面消费（装配验证）
-    subagent_spawner: Option<Arc<dyn agent_tools::tools::subagent::SubagentSpawner>>,
+    // T-D-13 精简：spawner 字段冗余（全仓无读取方，A8 D3）——实际
+    // spawner 由 CoreRunState::finalize_subagent_spawner 自管，构造参数
+    // 保留经 BuiltinToolConfig.subagent_spawner 注入 run_subagent 工具
 }
 
 impl EngineHandle {
@@ -842,7 +840,6 @@ impl EngineHandle {
             scheduler_registry,
             timer_event_sink,
             scheduler_event_sink,
-            subagent_spawner,
         }
     }
 

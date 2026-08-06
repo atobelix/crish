@@ -1,4 +1,4 @@
-﻿//! 逃逸监视装配层（T-ESC-03 P3 装配面：run 生命周期 + 聚合限流发射）
+//! 逃逸监视装配层（T-ESC-03 P3 装配面：run 生命周期 + 聚合限流发射）
 //!
 //! 逃逸追踪主方案（docs/feature-gap-analysis/REQ-逃逸追踪分析.md §3）：
 //! run 期间 watcher 事件 → 判定（声明覆盖跳过）→ 聚合（同 run 同路径
@@ -14,14 +14,16 @@
 //! - [EscapeAggregator]：聚合器纯逻辑（同路径去重、批阈值、破坏性
 //!   标记、时间窗字段）。
 //!
-//! 判定器接线（§3.1 关键决策点 + 任务卡第 6 点）：本轮 `write_claims`
-//! 尚未接线（总接线点在 F7 的 R-EG2，T-EG-06 才装配
-//! `Arc<WritePathRegistry>`），[EscapeWatchConfig::detector] 缺省 None
-//! = 仅依赖监视事件直接发射（「工具审计覆盖」第二来源兜底语义，
-//! REQ §3.1:349-356）；F7 装配注册表时必须同时经
-//! [EscapeWatchConfig::with_detector] 注入
-//! [crate::undeclared_detector::RegistryBackedDetector]（交接点，登记
-//! 于轮次报告核对项）。
+//! 判定器接线（§3.1 关键决策点 + 任务卡第 6 点，C-36 已闭环）：
+//! 壳层 run 装配（core_run_commands.rs，30 方案 P5 接线，2026-08-05 批 1
+//! 落地）经 [EscapeWatchConfig::with_detector] 注入
+//! [crate::undeclared_detector::RegistryBackedDetector]，且同一
+//! `WritePathRegistry` 实例成对注入 loop 的 write_claims（双端注入成对，
+//! 共用解析 helper [resolve_escape_watch_root] 杜绝根解析双处漂移）——
+//! 工具声明覆盖即判定器命中，未声明写入经监视事件上报（E2E-3 声明静默 /
+//! 未声明上报两端到端断言锚定）。[EscapeWatchConfig::detector] 缺省
+//! None 仅表示未装配降级（无注册表时依赖监视事件直接发射的兜底语义，
+//! REQ §3.1:349-356）。
 //!
 //! 发射语义（§3.3:482-509）：审计事件 operation=undeclared-write、
 //! targets=变更路径（绝对路径，与 delete/shell 审计惯例一致）、
@@ -67,9 +69,9 @@ pub struct EscapeWatchConfig {
     pub audit_sink: AuditSink,
     /// 主 agent 注入回调（None = 不注入，仅审计发射）
     pub injector: Option<Arc<dyn EscapeWatchInjector>>,
-    /// 判定器（None = 仅依赖监视事件直接发射——write_claims 未接线时
-    /// 的「工具审计覆盖」第二来源兜底；F7 T-EG-06 装配注册表时必须
-    /// 注入 [crate::undeclared_detector::RegistryBackedDetector]）
+    /// 判定器（None = 仅依赖监视事件直接发射——write_claims 未接线的
+    /// 「工具审计覆盖」第二来源兜底；30 方案 P5 后生产装配恒注入
+    /// [crate::undeclared_detector::RegistryBackedDetector]，C-36 已闭环）
     pub detector: Option<Arc<dyn UndeclaredWriteDetector>>,
     /// 批量限流阈值（聚合路径数；默认 [DEFAULT_BATCH_SIZE]）
     pub batch_size: usize,

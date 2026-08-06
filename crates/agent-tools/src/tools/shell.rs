@@ -329,7 +329,6 @@ fn emit_blocked_audit(
 ///
 /// 审计（I2-S8）：拦截分支发射 decision=blocked，成功重定向发射
 /// decision=redirected（影响面来自预检）。
-#[allow(clippy::too_many_arguments)]
 fn redirect_or_intercept_delete(
     analysis: &SemanticAnalysis,
     command: &str,
@@ -731,6 +730,9 @@ fn parse_mode(args: &serde_json::Value) -> Result<ShellMode, ToolError> {
 }
 
 /// 执行命令并收集输出（T-AB-01 流式化 + T-AB-02 三模式）
+// G2 允许理由（clippy::too_many_arguments）：参数为上下文聚合注入（命令/
+// cwd/超时/输出上限/模式/等待时长/后台收养/日志根/会话号等），各参数来源
+// 独立，收缩将退化为全局态或拆分 struct 而收益低。
 // G2 禁令豁免（clippy.toml 文件头「豁免面」）：命令门禁执行面——本函数只被
 // shell 工具调用，且调用前必经 CommandGatekeeper 检查（blocked/approval，
 // 见本文件 execute），是「子进程经命令门禁」的门禁落地处本身。
@@ -1071,7 +1073,6 @@ impl BoundedPreview {
 }
 
 /// adopt 转移（T-AB-02）：Child 所有权交 registry；返回 background 结果信封
-#[allow(clippy::too_many_arguments)]
 async fn adopt_child(
     manager: Arc<dyn BackgroundTaskManager>,
     child: tokio::process::Child,
@@ -1111,6 +1112,9 @@ async fn adopt_child(
 }
 
 /// 同步结果构造（T-AB-01/03）：截断判定 + 有界预览结果 + 截断落盘 + 建议
+// G2 允许理由（clippy::too_many_arguments）：参数为命令执行上下文聚合注入
+// （命令/cwd/退出码/时长/双输出累加器/截断上限/日志根/会话号），各参数来源
+// 独立，收缩将退化为全局态或拆分 struct 而收益低。
 #[allow(clippy::too_many_arguments)]
 fn build_sync_result(
     command: &str,

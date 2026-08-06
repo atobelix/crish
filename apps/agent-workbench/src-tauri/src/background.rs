@@ -1774,6 +1774,9 @@ async fn forward_streams(
 /// 行级累积：剥离行尾 \r\n → 解码（decode_console_bytes 口径）→ 落盘（带
 /// `[out]`/`[err]` 前缀）→ 行计数 + 最近输出时间 → 预览 → 周期 checkpoint →
 /// 行尾提示检测。空行也是行（行计数语义），不跳过。
+// G2 允许理由（clippy::too_many_arguments）：参数为任务输出流水线上下文
+// 聚合注入（任务信息/预览/日志写入器/路径/检查点/轮转状态/丢弃计数等），
+// 各参数来源独立，收缩将退化为全局态或拆分 struct 而收益低。
 #[allow(clippy::too_many_arguments)]
 fn write_output_line(
     info: &Arc<RwLock<BackgroundTaskInfo>>,
@@ -2199,7 +2202,6 @@ impl EventSink for EventBridgeSink {
 ///
 /// 诚实边界：采样与转发器是两个独立 tokio 任务（同 runtime，不额外开 OS
 /// 线程）；采样失败不影响任务生命周期（由 writer 管理）。
-#[allow(clippy::too_many_arguments)]
 fn spawn_resource_monitor_loop(
     info: Arc<RwLock<BackgroundTaskInfo>>,
     pid: u32,
@@ -2663,6 +2665,11 @@ pub(crate) async fn workbench_send_input(
 
 #[cfg(test)]
 mod tests {
+    // G2 禁令豁免：
+    // - 测试临时目录清理（非产品删除路径，可恢复语义不适用）；
+    // - 测试 mod 子进程拉起面：真实 spawn 探测（红线 Blocked 断言 +
+    //   tasklist / kill -0 存活探测辅助，T-AB-06/07 验收），非产品执行面；
+    //   测试 mod 内 allow + 理由（裁决 D8 背书）。
     #![allow(clippy::disallowed_methods)]
     use super::*;
     use std::collections::HashSet;
