@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   detectFileKind,
   FILE_PREVIEW_CHUNK_LINES,
@@ -7,6 +7,7 @@ import {
   nextFilePreviewLineBudget,
   pathBasename,
   pathRelativeToRoot,
+  resolveWorkspacePath,
 } from './workspaceFsApi';
 
 describe('detectFileKind', () => {
@@ -52,5 +53,62 @@ describe('path helpers', () => {
     expect(pathBasename('C:/repo/src/a.ts')).toBe('a.ts');
     expect(pathRelativeToRoot('C:/repo/src/a.ts', 'C:/repo')).toBe('src/a.ts');
     expect(pathRelativeToRoot('C:/repo', 'C:/repo')).toBe('.');
+  });
+});
+
+describe('resolveWorkspacePath（14-T3：工作区根前缀匹配边界修复）', () => {
+  // WORKSPACE_KEY 对齐 projectStore.ts:23（getWorkspacePath 读 localStorage 真实实现）
+  const WORKSPACE_KEY = 'crish_workspace';
+
+  beforeEach(() => {
+    localStorage.setItem(WORKSPACE_KEY, 'c:/work');
+  });
+
+  it.each([
+    // 兄弟前缀目录（根 c:/work 时 c:/workspace 非子路径，必须拒绝）
+    'c:/workspace/x.txt',
+    'c:/workspace',
+    'c:/workspace/',
+    // 前缀碰撞变体（root 再续字符仍非子路径）
+    'c:/workx/x.txt',
+    'c:/work-extra/a.txt',
+  ])('越界拒绝（根 c:/work）：%s', (p) => {
+    expect(resolveWorkspacePath(p)).toBe('');
+  });
+
+  it.each(['c:/work', 'c:/work/', 'C:/WORK/', 'c:\\work\\'])('根自身放行（尾斜杠归一）：%s', (p) => {
+    expect(resolveWorkspacePath(p)).toBe(p);
+  });
+
+  it.each(['c:/work/x.txt', 'c:/work/sub/x.txt', 'C:/WORK/X.TXT'])('根下子路径放行：%s', (p) => {
+    expect(resolveWorkspacePath(p)).toBe(p);
+  });
+
+  it('大小写不敏感：根与路径大小写互换均放行', () => {
+    localStorage.setItem(WORKSPACE_KEY, 'C:/Work');
+    expect(resolveWorkspacePath('c:/work/x.txt')).toBe('c:/work/x.txt');
+    expect(resolveWorkspacePath('c:/work')).toBe('c:/work');
+  });
+
+  it('相对路径拼接到工作区根下', () => {
+    expect(resolveWorkspacePath('x.txt')).toBe('c:/work/x.txt');
+    expect(resolveWorkspacePath('./x.txt')).toBe('c:/work/x.txt');
+    expect(resolveWorkspacePath('sub/dir/x.txt')).toBe('c:/work/sub/dir/x.txt');
+  });
+
+  it('未设置工作区时拒绝绝对路径、相对路径原样返回', () => {
+    localStorage.removeItem(WORKSPACE_KEY);
+    expect(resolveWorkspacePath('c:/work/x.txt')).toBe('');
+    expect(resolveWorkspacePath('x.txt')).toBe('x.txt');
+  });
+
+  it('既有防御保持：遍历/NUL/bidi/保留设备名/超长均拒绝', () => {
+    expect(resolveWorkspacePath('../x.txt')).toBe('');
+    expect(resolveWorkspacePath('c:/work/x/../y.txt')).toBe('');
+    expect(resolveWorkspacePath('c:/work/\u0000x.txt')).toBe('');
+    expect(resolveWorkspacePath('c:/work/\u202Ex.txt')).toBe('');
+    expect(resolveWorkspacePath('c:/work/CON')).toBe('');
+    expect(resolveWorkspacePath('c:/work/com1.txt')).toBe('');
+    expect(resolveWorkspacePath(`c:/work/${'a'.repeat(5000)}`)).toBe('');
   });
 });

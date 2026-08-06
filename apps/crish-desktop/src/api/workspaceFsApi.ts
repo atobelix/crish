@@ -74,10 +74,13 @@ export function resolveWorkspacePath(path: string): string {
   const norm = p.replace(/\\/g, '/');
   if (/(^|\/)\.\.($|\/)/.test(norm)) return '';
   if (isAbsoluteFsPath(p)) {
-    // 绝对路径必须在工作区根目录下
+    // 绝对路径必须在工作区根目录下（路径边界判定：根自身或「根 + /」前缀，
+    // 防止根 c:/work 误放行 c:/workspace/x.txt 这类兄弟前缀目录，A6-H03）
     const root = getFsRoot().trim().replace(/\\/g, '/').replace(/\/+$/, '');
     if (!root) return '';
-    if (!norm.toLowerCase().startsWith(root.toLowerCase())) return '';
+    const r = root.toLowerCase();
+    const n = norm.toLowerCase();
+    if (!(n === r || n.startsWith(r + '/'))) return '';
     return p;
   }
   const root = getFsRoot().trim();

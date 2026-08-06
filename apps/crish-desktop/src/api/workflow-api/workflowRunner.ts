@@ -3,12 +3,18 @@
  *
  * T-CF-14：六条 Rust 命令已实装（create-workflow / list-workflows /
  * update-workflow / delete-workflow / trigger-workflow / list-workflow-runs），
- * 本模块从「幽灵声明（恒不可用）」改为真实 invokeCmd IPC——保留 TS 类型面
- * 与解析层，只换实现。非 Tauri 环境 / 命令缺失时 invokeCmd 返回 null，
- * 按「不可用」降级（错误在 Rust 侧以 CoreError {kind, detail} 返回）。
+ * 本模块从「幽灵声明（恒不可用）」改为真实 invoke IPC——保留 TS 类型面
+ * 与解析层，只换实现。
+ *
+ * 14-T4 错误透传：create / update / trigger 经 invokeTyped 三态
+ * （ok / missing / error）区分「引擎未就绪」与「真实失败」——missing 保留
+ * 不可用文案；error 透传 Rust CoreError 的 message 与 kind（错误码），
+ * 不再被 invokeCmd 折叠为 null、把非法 cron / 重名等真实失败误导成
+ * 「命令不可用」。delete-workflow 成功返回 null，沿用 invokeResult 三态
+ * 区分成败（已示范模式，本任务核对其语义后保持不变）。
  */
 
-import { invokeCmd, invokeResult } from '../tauriInvoke';
+import { invokeCmd, invokeResult, invokeTyped } from '../tauriInvoke';
 import type { WorkflowSchedule } from './workflowScheduler';
 
 export type WorkflowDefinition = {
@@ -77,32 +83,36 @@ export async function listWorkflows(): Promise<WorkflowDefinition[]> {
   return parseWorkflowList(data);
 }
 
-/** 创建：真实走 create-workflow 命令 */
+/** 创建：真实走 create-workflow 命令（三态：missing 未就绪 / error 透传消息与错误码） */
 export async function createWorkflow(input: {
   name: string;
   prompt: string;
   schedule?: WorkflowSchedule;
   cwd?: string;
   enabled?: boolean;
-}): Promise<{ ok: boolean; workflow?: WorkflowDefinition; error?: string }> {
-  const data = await invokeCmd<WorkflowMutationWire>('create-workflow', {
+}): Promise<{ ok: boolean; workflow?: WorkflowDefinition; error?: string; kind?: string }> {
+  const res = await invokeTyped<WorkflowMutationWire>('create-workflow', {
     name: input.name,
     prompt: input.prompt,
     schedule: input.schedule,
     ...(input.cwd !== undefined && { cwd: input.cwd }),
     ...(input.enabled !== undefined && { enabled: input.enabled }),
   });
-  if (!data) {
+  if (res.status === 'missing') {
     return { ok: false, error: '引擎 workflow 命令不可用（引擎未就绪或未接线）' };
   }
-  const workflow = parseWorkflowWire(data.workflow);
+  if (res.status === 'error') {
+    // 透传 Rust CoreError 的 message 与 kind（错误码），供 UI 分类展示
+    return { ok: false, error: res.message || '创建失败', kind: res.kind };
+  }
+  const workflow = parseWorkflowWire(res.data.workflow);
   if (!workflow) {
     return { ok: false, error: '创建失败：引擎返回了无效的 workflow 数据' };
   }
   return { ok: true, workflow };
 }
 
-/** 更新：真实走 update-workflow 命令（部分字段补丁） */
+/** 更新：真实走 update-workflow 命令（部分字段补丁；三态语义同创建） */
 export async function updateWorkflow(
   workflowId: string,
   patch: {
@@ -112,8 +122,8 @@ export async function updateWorkflow(
     enabled?: boolean;
     cwd?: string;
   }
-): Promise<{ ok: boolean; workflow?: WorkflowDefinition; error?: string }> {
-  const data = await invokeCmd<WorkflowMutationWire>('update-workflow', {
+): Promise<{ ok: boolean; workflow?: WorkflowDefinition; error?: string; kind?: string }> {
+  const res = await invokeTyped<WorkflowMutationWire>('update-workflow', {
     workflowId,
     ...(patch.name !== undefined && { name: patch.name }),
     ...(patch.prompt !== undefined && { prompt: patch.prompt }),
@@ -121,10 +131,14 @@ export async function updateWorkflow(
     ...(patch.enabled !== undefined && { enabled: patch.enabled }),
     ...(patch.cwd !== undefined && { cwd: patch.cwd }),
   });
-  if (!data) {
+  if (res.status === 'missing') {
     return { ok: false, error: '引擎 workflow 命令不可用（引擎未就绪或未接线）' };
   }
-  const workflow = parseWorkflowWire(data.workflow);
+  if (res.status === 'error') {
+    // 透传 Rust CoreError 的 message 与 kind（错误码），供 UI 分类展示
+    return { ok: false, error: res.message || '更新失败', kind: res.kind };
+  }
+  const workflow = parseWorkflowWire(res.data.workflow);
   if (!workflow) {
     return { ok: false, error: '更新失败：引擎返回了无效的 workflow 数据' };
   }
@@ -145,25 +159,31 @@ export async function deleteWorkflow(
   return { ok: false, error: message };
 }
 
-/** 立即触发：真实走 trigger-workflow 命令（runId/sessionId 由引擎触发路径产出） */
+/** 立即触发：真实走 trigger-workflow 命令（runId/sessionId 由引擎触发路径产出；
+ *  三态：missing 未就绪 / error 透传消息与错误码；成功路径形状不变） */
 export async function triggerWorkflow(
   workflowId: string
 ): Promise<{
   ok: boolean;
   error?: string;
+  kind?: string;
   runId?: string;
   sessionId?: string;
 }> {
-  const data = await invokeCmd<{ runId?: string | null; sessionId?: string | null }>(
+  const res = await invokeTyped<{ runId?: string | null; sessionId?: string | null }>(
     'trigger-workflow',
     { workflowId }
   );
-  if (!data) {
+  if (res.status === 'missing') {
     return { ok: false, error: '引擎 workflow 命令不可用（引擎未就绪或未接线）' };
   }
+  if (res.status === 'error') {
+    // 透传 Rust CoreError 的 message 与 kind（错误码），供 UI 分类展示
+    return { ok: false, error: res.message || '触发失败', kind: res.kind };
+  }
   const out: { ok: boolean; runId?: string; sessionId?: string } = { ok: true };
-  if (data.runId) out.runId = data.runId;
-  if (data.sessionId) out.sessionId = data.sessionId;
+  if (res.data.runId) out.runId = res.data.runId;
+  if (res.data.sessionId) out.sessionId = res.data.sessionId;
   return out;
 }
 

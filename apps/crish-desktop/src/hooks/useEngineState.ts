@@ -41,6 +41,46 @@ const EMPTY_BG_TASKS: BackgroundTaskInfo[] = Object.freeze(
   []
 ) as unknown as BackgroundTaskInfo[];
 
+/**
+ * bgTasks 内容级比较（轮询身份抖动防护，A6-M03）。
+ *
+ * dedupeBackgroundTasksById 恒返回新数组（空列表也返回新 `[]`），
+ * 直接入列会让 _setState 的浅等防护（引用比较）被击穿——
+ * 每 4s 轮询全订阅者重渲。入列前先做内容级比较：
+ * length 相同 + 逐项引用比较，不等退 JSON 序列化相等。
+ */
+function _sameBgTasksContent(
+  a: readonly BackgroundTaskInfo[],
+  b: readonly BackgroundTaskInfo[],
+): boolean {
+  if (a.length !== b.length) return false;
+  let refSame = true;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      refSame = false;
+      break;
+    }
+  }
+  if (refSame) return true;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * bgTasks 入列前身份归一：
+ * - 空列表复用模块级 EMPTY_BG_TASKS（catch 分支与正常「内容空」分支同源）；
+ * - 与当前内容级相等 → 复用当前引用（浅等防护生效，不触发订阅者）；
+ * - 内容真实变化 → 放行新引用（通知订阅者）。
+ */
+function _normalizeBgTasks(next: BackgroundTaskInfo[]): BackgroundTaskInfo[] {
+  if (next.length === 0) return EMPTY_BG_TASKS;
+  if (_sameBgTasksContent(next, _state.bgTasks)) return _state.bgTasks;
+  return next;
+}
+
 // ─── 模块级单例 ────────────────────────────────────────────────
 
 let _refCount = 0;
@@ -102,7 +142,7 @@ async function _tick(): Promise<void> {
       engineOnline: live.connected,
       activeRuns: live.activeRuns,
       pendingApprovals: live.pendingApprovals,
-      bgTasks: bgs,
+      bgTasks: _normalizeBgTasks(bgs),
     });
   } catch {
     // 网络错误保留上次状态，不写新空对象

@@ -1,7 +1,9 @@
 /**
- * workflowRunner 测试（T-CF-14 前端去幽灵化）：
- * - createWorkflow 不再恒 false、listWorkflows 不再恒空——真实 invokeCmd IPC；
+ * workflowRunner 测试（T-CF-14 前端去幽灵化 + 14-T4 错误透传）：
+ * - createWorkflow 不再恒 false、listWorkflows 不再恒空——真实 invoke IPC；
  * - mock invoke 断言 wire 形状（命令名 + 参数 camelCase）；
+ * - create / update / trigger 走 invokeTyped 三态：missing 未就绪文案、
+ *   error 透传原始 message + kind、成功路径形状不变；
  * - delete-workflow 成功返回 null，须经 invokeResult 三态区分成败。
  */
 
@@ -10,9 +12,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../tauriInvoke', () => ({
   invokeCmd: vi.fn(),
   invokeResult: vi.fn(),
+  invokeTyped: vi.fn(),
 }));
 
-import { invokeCmd, invokeResult } from '../tauriInvoke';
+import { invokeCmd, invokeResult, invokeTyped } from '../tauriInvoke';
 import {
   createWorkflow,
   deleteWorkflow,
@@ -24,10 +27,12 @@ import {
 
 const mockedInvoke = vi.mocked(invokeCmd);
 const mockedInvokeResult = vi.mocked(invokeResult);
+const mockedInvokeTyped = vi.mocked(invokeTyped);
 
 beforeEach(() => {
   mockedInvoke.mockReset();
   mockedInvokeResult.mockReset();
+  mockedInvokeTyped.mockReset();
 });
 
 afterEach(() => {
@@ -75,18 +80,21 @@ describe('listWorkflows', () => {
 });
 
 describe('createWorkflow', () => {
-  it('不再恒 false：invoke 返回 { workflow } → ok:true 且带回 workflow', async () => {
-    mockedInvoke.mockResolvedValue({
-      workflow: {
-        id: 'cron-1',
-        name: '巡检',
-        prompt: '巡检工作区',
-        enabled: true,
-        schedule: { type: 'manual' },
-        createdAt: '2026-08-05T00:00:00.000Z',
-        updatedAt: '2026-08-05T00:00:00.000Z',
-        nextRunAt: null,
-        lastRunAt: null,
+  it('不再恒 false：invoke 返回 ok 态 { workflow } → ok:true 且带回 workflow', async () => {
+    mockedInvokeTyped.mockResolvedValue({
+      status: 'ok',
+      data: {
+        workflow: {
+          id: 'cron-1',
+          name: '巡检',
+          prompt: '巡检工作区',
+          enabled: true,
+          schedule: { type: 'manual' },
+          createdAt: '2026-08-05T00:00:00.000Z',
+          updatedAt: '2026-08-05T00:00:00.000Z',
+          nextRunAt: null,
+          lastRunAt: null,
+        },
       },
     });
     const res = await createWorkflow({
@@ -95,7 +103,7 @@ describe('createWorkflow', () => {
       schedule: { type: 'manual' },
       enabled: true,
     });
-    expect(mockedInvoke).toHaveBeenCalledWith('create-workflow', {
+    expect(mockedInvokeTyped).toHaveBeenCalledWith('create-workflow', {
       name: '巡检',
       prompt: '巡检工作区',
       schedule: { type: 'manual' },
@@ -106,15 +114,18 @@ describe('createWorkflow', () => {
   });
 
   it('cron 调度原样下发（表达式透传）', async () => {
-    mockedInvoke.mockResolvedValue({
-      workflow: {
-        id: 'cron-2',
-        name: 'cron 任务',
-        prompt: 'x',
-        enabled: true,
-        schedule: { type: 'cron', expression: '0 9 * * *' },
-        createdAt: '2026-08-05T00:00:00.000Z',
-        updatedAt: '2026-08-05T00:00:00.000Z',
+    mockedInvokeTyped.mockResolvedValue({
+      status: 'ok',
+      data: {
+        workflow: {
+          id: 'cron-2',
+          name: 'cron 任务',
+          prompt: 'x',
+          enabled: true,
+          schedule: { type: 'cron', expression: '0 9 * * *' },
+          createdAt: '2026-08-05T00:00:00.000Z',
+          updatedAt: '2026-08-05T00:00:00.000Z',
+        },
       },
     });
     const res = await createWorkflow({
@@ -122,42 +133,72 @@ describe('createWorkflow', () => {
       prompt: 'x',
       schedule: { type: 'cron', expression: '0 9 * * *' },
     });
-    expect(mockedInvoke).toHaveBeenCalledWith(
+    expect(mockedInvokeTyped).toHaveBeenCalledWith(
       'create-workflow',
       expect.objectContaining({ schedule: { type: 'cron', expression: '0 9 * * *' } })
     );
     expect(res.ok).toBe(true);
   });
 
-  it('invoke 缺失 → ok:false + 错误文案（引擎未就绪）', async () => {
-    mockedInvoke.mockResolvedValue(null);
+  it('missing 态 → ok:false + 不可用文案（引擎未就绪）', async () => {
+    mockedInvokeTyped.mockResolvedValue({ status: 'missing' });
     const res = await createWorkflow({ name: 'x', prompt: 'y' });
     expect(res.ok).toBe(false);
     expect(res.error).toContain('不可用');
+    expect(res.kind).toBeUndefined();
+  });
+
+  it('error 态 → 透传原始 message + kind，不再折叠为「命令不可用」', async () => {
+    mockedInvokeTyped.mockResolvedValue({
+      status: 'error',
+      kind: 'InvalidInput',
+      message: 'cron 表达式非法：分/时字段越界',
+    });
+    const res = await createWorkflow({ name: 'x', prompt: 'y' });
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('cron 表达式非法：分/时字段越界');
+    expect(res.error).not.toContain('不可用');
+    expect(res.kind).toBe('InvalidInput');
   });
 });
 
 describe('updateWorkflow', () => {
-  it('workflowId + 部分补丁走 update-workflow', async () => {
-    mockedInvoke.mockResolvedValue({
-      workflow: {
-        id: 'cron-1',
-        name: '新名',
-        prompt: '旧提示',
-        enabled: true,
-        schedule: { type: 'manual' },
-        createdAt: '2026-08-05T00:00:00.000Z',
-        updatedAt: '2026-08-05T00:00:00.000Z',
+  it('workflowId + 部分补丁走 update-workflow（ok 态成功）', async () => {
+    mockedInvokeTyped.mockResolvedValue({
+      status: 'ok',
+      data: {
+        workflow: {
+          id: 'cron-1',
+          name: '新名',
+          prompt: '旧提示',
+          enabled: true,
+          schedule: { type: 'manual' },
+          createdAt: '2026-08-05T00:00:00.000Z',
+          updatedAt: '2026-08-05T00:00:00.000Z',
+        },
       },
     });
     const res = await updateWorkflow('cron-1', { name: '新名', enabled: true });
-    expect(mockedInvoke).toHaveBeenCalledWith('update-workflow', {
+    expect(mockedInvokeTyped).toHaveBeenCalledWith('update-workflow', {
       workflowId: 'cron-1',
       name: '新名',
       enabled: true,
     });
     expect(res.ok).toBe(true);
     expect(res.workflow?.name).toBe('新名');
+  });
+
+  it('error 态 → 透传原始 message + kind（重名/非法调度不再显示为不可用）', async () => {
+    mockedInvokeTyped.mockResolvedValue({
+      status: 'error',
+      kind: 'InvalidInput',
+      message: 'workflow 名称与已有任务重复',
+    });
+    const res = await updateWorkflow('cron-1', { name: '重名任务' });
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('workflow 名称与已有任务重复');
+    expect(res.error).not.toContain('不可用');
+    expect(res.kind).toBe('InvalidInput');
   });
 });
 
@@ -177,29 +218,61 @@ describe('deleteWorkflow', () => {
     expect(res.ok).toBe(false);
     expect(res.error).toContain('不可用');
   });
+
+  it('error 态 → ok:false + 透传原始 message（示范模式核对）', async () => {
+    mockedInvokeResult.mockResolvedValue({
+      status: 'error',
+      message: '该任务正在运行，无法删除',
+    });
+    const res = await deleteWorkflow('cron-1');
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('该任务正在运行，无法删除');
+  });
 });
 
 describe('triggerWorkflow', () => {
-  it('ok:true 且透传 runId/sessionId（引擎触发路径产出）', async () => {
-    mockedInvoke.mockResolvedValue({ runId: 'run-42', sessionId: 'ses-7' });
+  it('ok 态：透传 runId/sessionId（引擎触发路径产出），成功路径形状不变', async () => {
+    mockedInvokeTyped.mockResolvedValue({
+      status: 'ok',
+      data: { runId: 'run-42', sessionId: 'ses-7' },
+    });
     const res = await triggerWorkflow('cron-1');
-    expect(mockedInvoke).toHaveBeenCalledWith('trigger-workflow', {
+    expect(mockedInvokeTyped).toHaveBeenCalledWith('trigger-workflow', {
       workflowId: 'cron-1',
     });
     expect(res).toMatchObject({ ok: true, runId: 'run-42', sessionId: 'ses-7' });
   });
 
   it('runId 为空时仍 ok（触发已注入 steering 面）', async () => {
-    mockedInvoke.mockResolvedValue({ runId: null, sessionId: null });
+    mockedInvokeTyped.mockResolvedValue({
+      status: 'ok',
+      data: { runId: null, sessionId: null },
+    });
     const res = await triggerWorkflow('cron-1');
     expect(res.ok).toBe(true);
     expect(res.runId).toBeUndefined();
   });
 
-  it('invoke 缺失 → ok:false', async () => {
-    mockedInvoke.mockResolvedValue(null);
+  it('missing 态 → ok:false + 不可用文案', async () => {
+    mockedInvokeTyped.mockResolvedValue({ status: 'missing' });
     const res = await triggerWorkflow('cron-1');
     expect(res.ok).toBe(false);
+    expect(res.error).toContain('不可用');
+  });
+
+  it('error 态 → 透传原始 message + kind，且不带 runId/sessionId', async () => {
+    mockedInvokeTyped.mockResolvedValue({
+      status: 'error',
+      kind: 'NotFound',
+      message: '未找到 cron-404 对应的任务',
+    });
+    const res = await triggerWorkflow('cron-404');
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('未找到 cron-404 对应的任务');
+    expect(res.error).not.toContain('不可用');
+    expect(res.kind).toBe('NotFound');
+    expect(res.runId).toBeUndefined();
+    expect(res.sessionId).toBeUndefined();
   });
 });
 

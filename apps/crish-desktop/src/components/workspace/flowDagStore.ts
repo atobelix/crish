@@ -28,7 +28,18 @@ export const useFlowDagStore = create<FlowDagState>((set) => ({
   snapshotAt: null,
 
   pushNodes: (nodes) =>
-    set({ nodes, snapshotAt: Date.now() }),
+    set((prev) => {
+      // 轮询身份抖动防护（A6-M03）：3s 轮询恒产生新数组引用，
+      // 与当前内容级相等（同引用 / JSON 序列化相等）→ 复用旧引用，
+      // nodes 字段引用不变（不触发 FlowDagView 无谓重渲）；
+      // snapshotAt 仍更新——空数据入列语义保持（null 重复入列同样更新时间戳）。
+      const same =
+        prev.nodes === nodes ||
+        (prev.nodes !== null &&
+          nodes !== null &&
+          JSON.stringify(prev.nodes) === JSON.stringify(nodes));
+      return same ? { snapshotAt: Date.now() } : { nodes, snapshotAt: Date.now() };
+    }),
 
   reset: () => set({ nodes: null, snapshotAt: null }),
 }));

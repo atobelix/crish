@@ -1,6 +1,8 @@
 /**
  * RuntimePanel 后台常驻区段：后台任务列表 + 打开终端输出（防连点）。
  * 打开是可预期操作不 toast；读取失败仅错误提示并回退展示。
+ * suspicious 装配：轮询快照含 suspicious:true 时行内展示「疑似卡死」标记
+ * （34 文档 DD5-T2a 前端装配测试配套；走 task.suspicious 字段路径）。
  */
 import React, { useState } from 'react';
 import * as Lucide from 'lucide-react';
@@ -17,6 +19,7 @@ import {
   emptyBgTasksHint,
   formatBgTaskMeta,
 } from './runtimePanelLib';
+import { SUSPICIOUS_TASK_TEXT } from '../bg-tasks/bgTaskCardLib';
 
 export type BgTasksSectionProps = {
   bgTasks: BackgroundTaskInfo[];
@@ -85,13 +88,16 @@ export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
               command: t.command,
               opening,
             });
+            // suspicious 装配：轮询快照经 parseBackgroundTask 落地的字段，
+            // true 时行内渲染「疑似卡死」标记并同步进 aria 声明
+            const suspicious = t.suspicious === true;
             return (
               <Tooltip key={t.id} content="在终端中查看输出">
                 <div
                   className={`${styles.row} ${styles.isClickable}${opening ? ` ${styles.isOpening}` : ''}`}
                   role="button"
                   tabIndex={0}
-                  aria-label={`${t.label}，${stateZh}，在终端中查看输出`}
+                  aria-label={`${t.label}，${stateZh}${suspicious ? `，${SUSPICIOUS_TASK_TEXT}` : ''}，在终端中查看输出`}
                   aria-busy={opening || undefined}
                   onClick={() => {
                     void openBgTask(t);
@@ -108,6 +114,12 @@ export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
                     <div className={styles.rowText}>
                       <span className={styles.rowTitle}>{t.label}</span>
                       <span className={styles.rowMeta}>{meta}</span>
+                      {suspicious ? (
+                        <span className={styles.rowMeta}>
+                          <Lucide.AlertTriangle size={12} aria-hidden />
+                          {SUSPICIOUS_TASK_TEXT}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   <Lucide.ChevronRight size={16} className={styles.rowChevron} aria-hidden />
