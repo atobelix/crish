@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 /**
  * ModelBadgePickerMenu（ui/Menu 基座迁移版）交互测试：
  * 打开/选择（激活模型）/Esc/外点关闭/管理入口
  */
+import React from 'react';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { useState } from 'react';

@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 /**
  * PermissionModeMenu（ui/Menu 基座迁移版）交互测试：
  * 打开/选择/Esc/键盘漫游/外点关闭
  */
+import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { PermissionModeMenu } from './PermissionModeMenu';

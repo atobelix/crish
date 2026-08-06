@@ -1,6 +1,8 @@
+// @vitest-environment jsdom
 /**
  * ui/Button 基础测试：渲染/交互/a11y
  */
+import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Button } from './Button';

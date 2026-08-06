@@ -1,0 +1,191 @@
+/**
+ * apps/crish-desktop/src/components/chat-composer/TiptapComposerContainer.module.css
+ * Dual-box visual structure CSS geometry & connected toolbar styles
+ */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+  border-radius: 12px;
+  background-color: var(--bg-primary, var(--background, #ffffff));
+  box-shadow: none !important;
+  transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+/* Focused / active container state - strict 5% contrast mix */
+.container:focus-within {
+  border-color: color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.12)) 95%, var(--text-primary, #000000) 5%);
+  box-shadow: none !important;
+}
+
+/* Landing empty layout state - max 5% contrast mix */
+.container[data-empty-kind='session-empty']:focus-within {
+  border-color: color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.12)) 95%, var(--text-primary, #000000) 5%);
+}
+
+.container[data-disabled='true'] {
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+/* Attachment strip */
+.attachStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.12)) 80%, transparent);
+  background-color: var(--bg-secondary, rgba(0, 0, 0, 0.02));
+}
+
+.attachChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background-color: var(--bg-secondary, rgba(0, 0, 0, 0.04));
+  border: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.12)) 90%, transparent);
+  font-size: 12px;
+  color: var(--text-primary, #111111);
+}
+
+.attachChipImage {
+  padding-left: 4px;
+}
+
+.attachThumb {
+  width: 22px;
+  height: 22px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.attachIcon {
+  color: var(--text-secondary, #666666);
+}
+
+.attachName {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachRemoveBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary, #666666);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.attachRemoveBtn:hover {
+  background-color: rgba(0, 0, 0, 0.08);
+  color: var(--text-primary, #000000);
+}
+
+/* Footer Actions connected sub-box */
+.footerActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.12)) 80%, transparent);
+  background-color: var(--bg-secondary, rgba(0, 0, 0, 0.02));
+  border-radius: 0 0 12px 12px;
+}
+
+.leftTools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rightTools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plusBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #555555);
+  cursor: pointer;
+  transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.1s ease;
+}
+
+.plusBtn:hover {
+  background-color: var(--bg-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-primary, #000000);
+}
+
+.plusBtn:active {
+  transform: scale(0.95);
+}
+
+.sendBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 6px;
+  background-color: var(--accent-color, #0066cc);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.1s ease;
+}
+
+.sendBtn:hover {
+  opacity: 0.9;
+}
+
+.sendBtn:active {
+  transform: scale(0.97);
+}
+
+.stopBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.15));
+  border-radius: 6px;
+  background-color: var(--bg-secondary, rgba(255, 0, 0, 0.05));
+  color: var(--danger-color, #d32f2f);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.stopBtn:hover {
+  background-color: rgba(255, 0, 0, 0.1);
+}
+
+.stopBtn:active {
+  transform: scale(0.97);
+}

@@ -1,0 +1,116 @@
+/**
+ * apps/crish-desktop/src/components/chat-composer/TiptapSlashMenu.module.css
+ * Radix Popover Menu Styling for Tiptap Chat Composer (CRM-01, RL-01)
+ */
+
+@keyframes slideUpAndFade {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.popoverContent {
+  z-index: 200;
+  width: 256px;
+  max-height: 320px;
+  overflow-y: auto;
+  background-color: var(--bg-surface, #ffffff);
+  border: 1px solid color-mix(in srgb, var(--border-color, #e2e8f0) 95%, var(--text-primary, #0f172a) 5%) !important;
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: none !important;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  outline: none;
+  animation: slideUpAndFade 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-primary, #0f172a);
+  font-size: 13px;
+  transition: background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), transform 0.1s ease;
+  outline: none;
+}
+
+.menuItem:hover,
+.menuItemActive {
+  background-color: color-mix(in srgb, var(--bg-surface-hover, #f1f5f9) 92%, var(--text-primary, #0f172a) 8%);
+}
+
+.menuItem:active {
+  transform: scale(0.98);
+}
+
+.iconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--border-color, #e2e8f0) 50%, var(--bg-surface, #ffffff) 50%);
+  color: var(--text-secondary, #64748b);
+  flex-shrink: 0;
+}
+
+.itemText {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.itemTitle {
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--text-primary, #0f172a);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.itemDescription {
+  font-size: 11px;
+  color: var(--text-muted, #94a3b8);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.emptyMessage {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-muted, #94a3b8);
+  text-align: center;
+}
+
+.mentionChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--accent-color, #3b82f6) 12%, transparent);
+  color: var(--accent-color, #2563eb);
+  font-size: 0.9em;
+  font-weight: 500;
+  user-select: none;
+  cursor: default;
+}

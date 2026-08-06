@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * R6-D5：消息级 cacheMetrics 持久化回放面测试（sessionRustDb）。
  *

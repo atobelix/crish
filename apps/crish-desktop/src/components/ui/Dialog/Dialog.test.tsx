@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * ui/Dialog 基座测试：Esc 关闭、焦点归还、Tab 循环、inert 旁路还原、aria
  */

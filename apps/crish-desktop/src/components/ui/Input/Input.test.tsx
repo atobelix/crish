@@ -1,6 +1,8 @@
+// @vitest-environment jsdom
 /**
  * ui/Input 基础测试：渲染/交互/a11y
  */
+import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useState } from 'react';

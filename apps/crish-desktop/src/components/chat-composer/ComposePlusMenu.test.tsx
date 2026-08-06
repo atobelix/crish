@@ -1,9 +1,13 @@
+// @vitest-environment jsdom
 /**
  * ComposePlusMenu（ui/Menu 基座）交互测试：
  * 打开/选择/Esc/触发防冒泡
  */
+import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
+import React from 'react';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import React from 'react';
 import { ComposePlusMenu } from './ComposePlusMenu';
 import styles from './ComposePlusMenu.module.css';
 

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * commandMap 集中命令名清单测试（T18 终态：WS 双命名空间已删除）：
  * - 纯命令名直传：命令名 ∈ 清单 registered 面 → 原样放行；清单外一律 null；
@@ -90,17 +91,13 @@ describe('commandMap', () => {
       }
     });
 
-    it('③ 类调用点已清零（PE-03 T03.7）：workflow / cron / scoped-context / probe / sync 无映射，解析 null（显式 missing）', () => {
-      // T03.7 裁决：list-capabilities 回补（并入 core_get_status.mcpStatus），
-      // 其余 21 处调用点删除；以下 type 不再有任何 transport.request 调用方，
-      // 此处仅断言清单校验下的显式 missing（不静默兜底）。
+    it('③ 类调用点已清零（PE-03 T03.7 修正：F9 workflow 实装后六条转为 registered）：cron / scoped-context / probe / sync 无映射，解析 null（显式 missing）；workflow 六条为 F9 真实命令，不再在此清单', () => {
+      // T03.7 裁决 + F9 修正：workflow 六条命令于 F9（T-CF-14）实装为
+      // registered Tauri 命令（command_manifest 88=84+4）——原 T03.7 的
+      // "workflow 无映射" 断言在实装后过时，移出 null 清单（见 :99 旁
+      // 白名单断言覆盖 registered 解析）；其余 type 无 transport.request
+      // 调用方，此处仅断言清单校验下的显式 missing（不静默兜底）。
       for (const t of [
-        'list-workflows',
-        'create-workflow',
-        'update-workflow',
-        'delete-workflow',
-        'trigger-workflow',
-        'list-workflow-runs',
         'cron.list_tasks',
         'cron.upsert_task',
         'cron.delete_task',

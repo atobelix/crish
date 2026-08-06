@@ -1,9 +1,13 @@
+// @vitest-environment jsdom
 /**
  * SettingsQuickMenu（ui/Menu 基座迁移版）交互测试：
  * 打开/Esc 还原焦点/键盘漫游/外点关闭不抢焦点
  */
+import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
+import React from 'react';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import React from 'react';
 import { SettingsQuickMenu } from './SettingsQuickMenu';
 
 afterEach(() => {

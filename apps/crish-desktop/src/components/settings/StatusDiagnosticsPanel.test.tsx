@@ -1,8 +1,10 @@
+// @vitest-environment jsdom
 /**
  * 设置 · 状态诊断面板渲染测试（PE-04 T04.5-2）。
  * mock fetchEngineStatus 数据源，断言四区（子系统就绪 / 日志配置 /
  * 最近错误 / 最近诊断）与错误醒目提示。
  */
+import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { StatusDiagnosticsPanel } from './StatusDiagnosticsPanel';

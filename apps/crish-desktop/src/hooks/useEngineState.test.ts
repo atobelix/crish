@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * useEngineState 轮询身份抖动防护测试（14-T6，A6-M03）。
  *

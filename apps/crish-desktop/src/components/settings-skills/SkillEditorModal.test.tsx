@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 /**
  * 技能发现弹窗（PE-05 T05.2 #4）关键行为测试：
  * 候选勾选列表渲染 / 跳过（按钮 + Esc + 遮罩同一动作）/ 全启 / 启用所选
  */
+import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { SkillEditorModal } from './SkillEditorModal';

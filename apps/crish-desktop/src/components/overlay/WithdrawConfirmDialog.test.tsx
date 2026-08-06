@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 /**
  * 撤回二次确认对话框（PE-05 T05.2 #3）关键行为测试：
  * alertdialog 语义 / Esc 取消 / 初始聚焦取消按钮 / 确认按钮
  */
+import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { WithdrawConfirmDialog } from './WithdrawConfirmDialog';

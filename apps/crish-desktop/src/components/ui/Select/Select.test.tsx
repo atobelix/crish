@@ -1,6 +1,8 @@
+// @vitest-environment jsdom
 /**
  * ui/Select 测试：受控选中、listbox 语义、键盘漫游、a11y
  */
+import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { useState } from 'react';

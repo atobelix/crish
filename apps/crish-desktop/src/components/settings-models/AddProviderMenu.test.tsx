@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 /**
  * ModelsSettingsTab「添加服务商」菜单（ui/Menu 基座迁移版）交互测试：
  * 打开/选择/Esc/键盘漫游/全局类依赖已清除（module 类渲染）
  */
+import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { useState } from 'react';

@@ -1,5 +1,7 @@
+// @vitest-environment jsdom
 import { render, screen, waitFor } from '@testing-library/react';
 import { useRef, type ReactNode } from 'react';
+import React from 'react';
 import { describe, expect, it, vi, afterEach, beforeAll, afterAll } from 'vitest';
 import { useLayoutStore } from '../store/layoutStore';
 import type {

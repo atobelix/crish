@@ -15,6 +15,7 @@
  * 已删除路径（IncrementalMarkdownParser / data-block-id / data-block-tail /
  * visible 暂停）不再断言（D0 residual）。
  */
+import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 import { AsyncMarkdownBlock } from './AsyncMarkdownBlock';

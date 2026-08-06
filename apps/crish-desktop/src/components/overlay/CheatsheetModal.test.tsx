@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 /**
  * 快捷键帮助弹窗（PE-05 T05.2 #2）关键行为测试：
  * 打开渲染 / Esc 关闭 / 关闭按钮 / 搜索分组过滤
  */
+import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { CheatsheetModal } from './CheatsheetModal';

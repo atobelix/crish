@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 /**
  * 诊断日志弹窗（PE-05 T05.2 #1）关键行为测试：
  * 打开渲染 / Esc 关闭 / 遮罩点击关闭 / 清空日志动作
  */
+import React from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { TelemetryDialog } from './TelemetryDialog';

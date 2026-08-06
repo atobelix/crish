@@ -1,6 +1,8 @@
+// @vitest-environment jsdom
 /**
  * ui/Tooltip 测试：hover 展示、disabled 短路、ref 透传（历史修复回归）
  */
+import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { Tooltip } from './Tooltip';
