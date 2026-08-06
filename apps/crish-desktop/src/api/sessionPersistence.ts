@@ -63,22 +63,18 @@ export {
 } from './session-persistence/sessionLocalStorage';
 
 // ── Stream D 新增：SQLite 持久化层 + 数据迁移 ──────────────────────────────
+// 对齐 sessionRustDb 当前导出面（F-A 收尾）：loadSessionAgents / saveSessionAgents /
+// saveSessionBody / listSessions / cleanupOrphanSessions 已收敛为模块私有辅助，
+// deleteSession / touchSession / toRustSessionIndexEntry 在重构中移除且无消费方，
+// 门面仅转发公开 API，保留并行域重构方向。
 export {
-  cleanupOrphanSessions,
-  deleteSession as deleteSessionRust,
   getSessionMeta,
   hydrateSessionsFromRust,
   importFromLocalStorage,
-  listSessions,
-  loadSessionAgents as loadSessionAgentsRust,
   loadSessionBody as loadSessionBodyRust,
   persistAllSessionsRust,
   persistAllSessionsSyncViaLocalStorage,
-  saveSessionAgents as saveSessionAgentsRust,
-  saveSessionBody as saveSessionBodyRust,
   setSessionMeta,
-  touchSession,
-  toRustSessionIndexEntry,
   type ImportFromLocalStorageData,
 } from './session-persistence/sessionRustDb';
 

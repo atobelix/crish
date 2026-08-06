@@ -41,6 +41,7 @@ import {
   persistAllSessionsRust,
   persistAllSessionsSyncViaLocalStorage,
 } from './sessionRustDb';
+import { invokeResult } from '../tauriInvoke';
 import { prepareSessionsForUi } from '../sessionTitle';
 
 // ── 内存假库（模拟 Rust 侧 SQLite 行为） ────────────────────────────────────
@@ -236,6 +237,13 @@ describe('写并发：并发批次各自全量落库，最后写者胜', () => {
   it('快速连续 commit：两批次各自完整落库，无截断/无交错，最终 = 最后写入批次', async () => {
     const { db, call } = makeFakeDb({ saveDelayMs: 20 });
     installFakeTransport(call);
+
+    // 预热 invoke 懒加载（F-A 收尾修复基线失败）：tauriInvoke.getTauriInvoke
+    // 冷启动存在竞态——首个并发调用置位 tauriChecked 后 await 动态 import，
+    // 同一时刻的第二个调用会读到 cachedInvoke=null 而整体回退 localStorage，
+    // 与本用例「并发写」语义无关。预热一次让两个批次真正并发走 SQLite 路径。
+    await invokeResult('list_sessions');
+    call.mockClear();
 
     // 两个 debounce 批次未 await 直接并发（模拟 350ms 窗口内连续 commit）
     const batch1 = sess('s1', [msg('m1', 'user'), msg('m2', 'assistant')]);

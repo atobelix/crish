@@ -487,6 +487,12 @@ export interface SessionAgent {
   parentSessionId: string;
   parentRunId: string;
   parentToolCallId?: string;
+  /**
+   * 自由文本角色标签（T-D-05 display_label；2-5 字，仅展示不影响调度）。
+   * 展示名兜底链优先取本字段：displayLabel → description → mode → id。
+   * 缺省/空白视为未提供，由 agentCardUtils.agentDisplayName 等兜底。
+   */
+  displayLabel?: string;
   description: string;
   /** 引擎 mode 字符串（如 explore / implement）；不在此收窄枚举 */
   mode: string;

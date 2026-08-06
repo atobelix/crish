@@ -5,17 +5,14 @@ import {
   isPendingDraft,
   isPendingDraftSessionId,
 } from './draftSession';
-import {
-  PENDING_DRAFT as SHARED_PENDING_DRAFT,
-  PENDING_DRAFT_SESSION_ID as SHARED_ID,
-} from '@crish/shared-types';
+import { PENDING_DRAFT_SESSION_ID as SHARED_ID } from '@crish/shared-types';
 
 describe('draftSession / shared-types 对齐', () => {
   it('PENDING_DRAFT 与 shared-types 同一引用与字面量', () => {
     expect(PENDING_DRAFT_SESSION_ID).toBe('__pending_draft__');
     expect(PENDING_DRAFT).toBe(PENDING_DRAFT_SESSION_ID);
     expect(PENDING_DRAFT_SESSION_ID).toBe(SHARED_ID);
-    expect(PENDING_DRAFT).toBe(SHARED_PENDING_DRAFT);
+    expect(PENDING_DRAFT).toBe(SHARED_ID);
   });
 
   it('isPendingDraft 与 isPendingDraftSessionId 一致', () => {

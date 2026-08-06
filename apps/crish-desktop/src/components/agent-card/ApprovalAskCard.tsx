@@ -64,10 +64,15 @@ type Props = {
   onTimeout?: (() => void) | undefined;
 };
 
+/**
+ * 归一化风险事实；payload（S9 审批载荷）仅后端来源 MessageToolApprovalMeta
+ * 携带，UI 归一形态 ApprovalRiskMeta 无此字段——用 in 收窄后透传。
+ */
 function toRiskMeta(
   riskMeta?: MessageToolApprovalMeta | ApprovalRiskMeta | null
-): ApprovalRiskMeta | null {
+): (ApprovalRiskMeta & { payload?: MessageToolApprovalPayload }) | null {
   if (!riskMeta) return null;
+  const payload = 'payload' in riskMeta ? riskMeta.payload : undefined;
   return {
     ...(riskMeta.trustZone !== undefined && { trustZone: riskMeta.trustZone }),
     ...(riskMeta.risk !== undefined && { risk: riskMeta.risk }),
@@ -78,7 +83,7 @@ function toRiskMeta(
     requiresDoubleConfirm: Boolean(riskMeta.requiresDoubleConfirm),
     recommendSnapshot: Boolean(riskMeta.recommendSnapshot),
     source: riskMeta.source || 'unknown',
-    ...(riskMeta.payload !== undefined && { payload: riskMeta.payload }),
+    ...(payload !== undefined && { payload }),
   };
 }
 

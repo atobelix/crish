@@ -8,10 +8,19 @@
  * @see packages/shared-types/src/session-identity.ts
  */
 
-export {
+import {
   PENDING_DRAFT_SESSION_ID,
-  PENDING_DRAFT,
   isPendingDraftSessionId,
-  /** 历史 API 名：等价 isPendingDraftSessionId */
-  isPendingDraftSessionId as isPendingDraft,
 } from '@crish/shared-types';
+
+export { PENDING_DRAFT_SESSION_ID, isPendingDraftSessionId };
+
+/**
+ * 历史 API 名：等价 PENDING_DRAFT_SESSION_ID。
+ * shared-types 仅导出 PENDING_DRAFT_SESSION_ID（session-identity 真源），
+ * 该别名在本地保持（F-A 收尾对齐导出面）。
+ */
+export const PENDING_DRAFT = PENDING_DRAFT_SESSION_ID;
+
+/** 历史 API 名：等价 isPendingDraftSessionId */
+export const isPendingDraft = isPendingDraftSessionId;

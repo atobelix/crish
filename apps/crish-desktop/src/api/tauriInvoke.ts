@@ -105,18 +105,27 @@ function extractErrorKind(err: unknown): { kind: string; message: string } {
 }
 
 let cachedInvoke: typeof import('@tauri-apps/api/core').invoke | null = null;
-let tauriChecked = false;
+let invokeCheckPromise: Promise<typeof import('@tauri-apps/api/core').invoke | null> | null =
+  null;
 
 async function getTauriInvoke() {
-  if (tauriChecked) return cachedInvoke;
-  tauriChecked = true;
-  try {
-    const mod = await import('@tauri-apps/api/core');
-    cachedInvoke = mod?.invoke || null;
-  } catch {
-    cachedInvoke = null;
+  // 冷启动竞态修复（F-A 收尾审计发现，d9e5b61e 起存在）：原实现先置
+  // tauriChecked=true 再 await import——首个并发调用期间第二个调用读到
+  // cachedInvoke=null 会整批静默回退 localStorage（sessionRustDbWriteModel
+  // 基线失败根因）。改为 promise 共享：首个调用持有检查 promise，后续
+  // 调用 await 同一 promise，结果一致。
+  if (!invokeCheckPromise) {
+    invokeCheckPromise = (async () => {
+      try {
+        const mod = await import('@tauri-apps/api/core');
+        cachedInvoke = mod?.invoke || null;
+      } catch {
+        cachedInvoke = null;
+      }
+      return cachedInvoke;
+    })();
   }
-  return cachedInvoke;
+  return invokeCheckPromise;
 }
 
 /**
