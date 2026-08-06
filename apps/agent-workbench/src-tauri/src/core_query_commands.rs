@@ -381,7 +381,8 @@ impl RunUsage {
     /// - hit_ratio / write_ratio 不直接透传（DB 落库不存派生值，T-39），
     ///   统一按 C9 恒等式重算：`input_total = miss + read + write`；
     ///   `input_total == 0` → None。
-    #[allow(dead_code)] // T-40 轮末合并：CoreRunState::run_usage 消费（core_run_commands.rs）
+    /// T-40 轮末合并已兑现：CoreRunState::run_usage 消费（core_run_commands.rs
+    /// get_run_usage 回退路径 + 测试），E1 过期 allow 已删除（13-T5 核销）。
     pub fn from_run_cache_stats(stats: RunCacheStats) -> Option<RunUsage> {
         if stats.sample_count == 0 {
             return None;

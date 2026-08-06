@@ -99,6 +99,10 @@ fn walk_dir(dir: &Path, parents: &mut Vec<PathBuf>) -> (u64, u64) {
 
 #[cfg(test)]
 mod tests {
+    // G2 禁令豁免：测试 mod——junction 环测试辅助用 cmd mklink /J 建目录
+    // 联接（命令名固定、参数为临时目录路径），非产品执行面；
+    // 测试 mod 内 allow + 理由（裁决 D8 背书）。
+    #![allow(clippy::disallowed_methods)]
     use super::*;
 
     /// 测试用临时目录（drop 自动清理）

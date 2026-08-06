@@ -288,7 +288,9 @@ fn split_command_args(segment: &str) -> (String, Vec<String>) {
     }
 }
 
-/// 命令名规范化：小写、去路径前缀（/bin/rm -> rm）。
+/// 命令名规范化：小写、去路径前缀（/bin/rm -> rm）、去 .exe 扩展名
+/// （powershell.exe -> powershell，12-T-PD-04 ML5 顺带：
+/// cmd.exe / del.exe 等 Windows 可执行文件形态一并命中既有清单）。
 fn normalize_command(command: &str) -> String {
     let trimmed = command.trim();
     let name = if trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2 {
@@ -301,7 +303,18 @@ fn normalize_command(command: &str) -> String {
         .rsplit(['/', '\\'])
         .next()
         .unwrap_or(name);
-    base.to_lowercase()
+    // 去 .exe 扩展名（大小写不敏感）：扩展名剥除后再小写归一，
+    // 使 powershell.exe / cmd.exe / del.exe 与 INDIRECT_COMMANDS / DELETE_COMMANDS 对齐
+    let stem = {
+        let bytes = base.as_bytes();
+        let n = bytes.len();
+        if n >= 4 && bytes[n - 4..].eq_ignore_ascii_case(b".exe") {
+            &base[..n - 4]
+        } else {
+            base
+        }
+    };
+    stem.to_lowercase()
 }
 
 fn is_delete_command(cmd: &str) -> bool {
@@ -481,11 +494,37 @@ fn analyze_indirect(segment_raw: &str) -> SemanticAnalysis {
             inner
         }
         "foreach-object" => {
+            // 12-T-PD-04（A2-M2）：scriptblock 删除形态识别。
+            // 形态 A：遇 -Process 取其后的剩余全部参数 join（对齐 bash -c rest 拼接先例）；
+            // 形态 B：首 token 以 { 开头时，自该 token 起至 } 终止的序列剥花括号后 join
+            // （$_ / $_.FullName 等管道变量按普通 token 保留）——两形态结果统一
+            // 剥首尾花括号后递归 analyze()（对齐 find -exec 拼接先例）。
+            // 边界（任务卡文档化）：嵌套花括号与字符串字面量内的花括号不做配对处理，
+            // 第一层花括号即 scriptblock 整体边界；内层复合命令由 analyze 自然拆段。
             let mut inner: Option<String> = None;
-            let mut iter = args.iter().peekable();
+            let mut iter = args.iter();
             while let Some(a) = iter.next() {
                 if a == "-Process" {
-                    inner = iter.next().cloned();
+                    let rest: Vec<&String> = iter.by_ref().collect();
+                    if !rest.is_empty() {
+                        let joined = rest
+                            .iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        inner = Some(strip_scriptblock_braces(&joined));
+                    }
+                    break;
+                }
+                if a.starts_with('{') {
+                    let mut parts = vec![a.clone()];
+                    for nxt in iter.by_ref() {
+                        parts.push(nxt.clone());
+                        if nxt.contains('}') {
+                            break;
+                        }
+                    }
+                    inner = Some(strip_scriptblock_braces(&parts.join(" ")));
                     break;
                 }
             }
@@ -504,6 +543,20 @@ fn analyze_indirect(segment_raw: &str) -> SemanticAnalysis {
             has_indirect_delete: false,
         },
     }
+}
+
+/// 花括号剥离（12-T-PD-04）：拼接串 trim 后去首 `{`、去尾 `}`，
+/// 得到 scriptblock 内层命令文本；无花括号包裹时原样返回。
+/// 首 `{` 恒剥除（foreach-object 两形态收集点均以 `{` 开头确认 scriptblock 形态）；
+/// 尾 `}` 可能因 `;` / `|` 等外层拆段先行被切走（scriptblock 内复合命令），仅在存在时剥除。
+/// 嵌套/字符串内花括号超范围（任务卡文档化边界，
+/// 见 analyze_indirect foreach-object 分支的说明）。
+fn strip_scriptblock_braces(joined: &str) -> String {
+    let trimmed = joined.trim();
+    // `{` / `}` 均为单字节 ASCII，剥除后切片必然落在字符边界上
+    let without_open = trimmed.strip_prefix('{').unwrap_or(trimmed);
+    let without_close = without_open.strip_suffix('}').unwrap_or(without_open);
+    without_close.trim().to_string()
 }
 
 /// 单段分类（含间接执行递归升级）。
@@ -1051,5 +1104,94 @@ mod tests {
         // 行尾孤反斜杠（cd /d C:\，:866 用例形态）不再吞字符：拆参后反斜杠保留
         let (_, args) = split_command_args("cd /d C:\\");
         assert_eq!(args, vec!["/d".to_string(), "C:\\".to_string()]);
+    }
+
+    // ===== 12-T-PD-04：PowerShell scriptblock 删除形态（A2-M2 + ML5）=====
+
+    #[test]
+    fn foreach_object_scriptblock_delete_flagged() {
+        // 管道 + scriptblock 主形态：ForEach-Object { Remove-Item $_ }
+        // 修复前无 { 主形态识别，整链判 Normal（间接删除盲区）
+        let a = analyze("Get-ChildItem | ForEach-Object { Remove-Item $_ }");
+        assert!(
+            a.has_indirect_delete,
+            "scriptblock 内层 Remove-Item 必须置间接删除标记"
+        );
+        // 判定语义不变：内层 DeleteShape 不升级整体分类，保持 Indirect（对齐 :829 契约）
+        assert_eq!(a.overall_class, CommandClass::Indirect);
+        // 无空格紧凑形态：{Remove-Item $_} 首尾花括号一体剥除
+        let b = analyze("ForEach-Object {Remove-Item $_}");
+        assert!(b.has_indirect_delete);
+        // 管道变量形态：$_.FullName 等按普通 token 保留
+        let c = analyze("gci | ForEach-Object { Remove-Item -Path $_.FullName -Force }");
+        assert!(c.has_indirect_delete);
+    }
+
+    #[test]
+    fn foreach_object_scriptblock_normal_not_flagged() {
+        // 非删除 scriptblock 不误报：内层 Normal 不置标记
+        let a = analyze("Get-ChildItem | ForEach-Object { Write-Output $_ }");
+        assert!(!a.has_indirect_delete);
+        assert_eq!(a.overall_class, CommandClass::Indirect);
+        // 空 scriptblock 与纯变量形态同样不误报
+        let b = analyze("ForEach-Object { }");
+        assert!(!b.has_indirect_delete);
+        let c = analyze("ForEach-Object { $_ }");
+        assert!(!c.has_indirect_delete);
+    }
+
+    #[test]
+    fn foreach_object_dash_process_scriptblock_flagged() {
+        // -Process 显式参数形态：修复前只取其后单个 token，{ Remove-Item 拆开后漏判
+        let a = analyze("ForEach-Object -Process { Remove-Item $_ }");
+        assert!(a.has_indirect_delete);
+        assert_eq!(a.overall_class, CommandClass::Indirect);
+        // -Process 后剩余全部参数 join（对齐 bash -c rest 拼接先例），多 token 不丢
+        let b = analyze("ForEach-Object -Process { Remove-Item -Path $_ -Force }");
+        assert!(b.has_indirect_delete);
+        // -Process 后无 scriptblock 的普通表达式不误报
+        let c = analyze("ForEach-Object -Process { Write-Output 'hi' }");
+        assert!(!c.has_indirect_delete);
+    }
+
+    #[test]
+    fn powershell_exe_command_delete_flagged() {
+        // ML5：normalize_command 去 .exe 扩展名（大小写不敏感）——
+        // powershell.exe / cmd.exe / del.exe 形态一并命中既有清单
+        let a = analyze("powershell.exe -Command 'Remove-Item C:\\temp\\a.txt'");
+        assert!(a.has_indirect_delete);
+        assert_eq!(a.overall_class, CommandClass::Indirect);
+        let b = analyze("cmd.exe /c del C:\\temp\\a.txt");
+        assert!(b.has_indirect_delete);
+        let c = analyze("del.exe C:\\temp\\a.txt");
+        assert_eq!(c.overall_class, CommandClass::DeleteShape);
+        assert!(c.delete_targets.iter().any(|t| t == "C:\\temp\\a.txt"));
+        // 扩展名大小写变体：PowerShell.EXE
+        let d = analyze("powershell.EXE -Command 'Remove-Item x'");
+        assert!(d.has_indirect_delete);
+        // 带路径前缀形态：C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+        let e = analyze("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -Command 'Remove-Item x'");
+        assert!(e.has_indirect_delete);
+    }
+
+    #[test]
+    fn pipeline_direct_remove_item_detected() {
+        // 管道删除整体识别：管道末段裸 Remove-Item（无位置参数，目标走管道输入）
+        // 仍命中删除形态，供 S4 删除形态重定向接管
+        let a = analyze("Get-ChildItem C:\\x | Remove-Item -Force");
+        assert_eq!(a.overall_class, CommandClass::DeleteShape);
+        assert!(!a.has_indirect_delete);
+    }
+
+    #[test]
+    fn scriptblock_compound_delete_detected() {
+        // scriptblock 内复合命令：join 后由 analyze 自然拆段（; 拆段）
+        let a = analyze("ForEach-Object { Remove-Item x; Write-Output ok }");
+        assert!(a.has_indirect_delete);
+        // 复合链整体识别：scriptblock 与其它段并存时标记仍置位；
+        // 整体分类按既有优先级判定（CdShape > Indirect，cd 段存在时不升级）
+        let b = analyze("cd x && ForEach-Object { Remove-Item $_ }");
+        assert!(b.has_indirect_delete);
+        assert_eq!(b.overall_class, CommandClass::CdShape);
     }
 }

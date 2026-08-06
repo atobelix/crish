@@ -343,6 +343,11 @@ fn decode_console_bytes(raw: &[u8]) -> String {
 
 // ==================== Process Termination ====================
 
+// G2 禁令豁免（clippy.toml 豁免面「内部进程管理原语」）：taskkill /PID /T /F
+// 进程树强制终止（T-AB-06 孤儿保护显式 kill 路径）——命令对象为固定系统工具、
+// 参数仅 PID 数字拼接（无用户自由参数）；output() 同步等待型，子进程不脱离
+// 会话存活，与 spawn 禁令意图（防未 enroll 常驻子进程）不同。
+#[allow(clippy::disallowed_methods)]
 #[cfg(target_os = "windows")]
 pub(crate) fn terminate_process_tree(pid: u32) -> Result<(), String> {
     let output = Command::new("taskkill")
@@ -357,6 +362,10 @@ pub(crate) fn terminate_process_tree(pid: u32) -> Result<(), String> {
     }
 }
 
+// G2 禁令豁免（clippy.toml 豁免面「内部进程管理原语」）：kill -TERM 进程树
+// 终止（Unix 分支，同 Windows taskkill 语义）——固定系统工具 + PID 数字参数，
+// output() 同步等待型，子进程不脱离会话存活。
+#[allow(clippy::disallowed_methods)]
 #[cfg(not(target_os = "windows"))]
 pub(crate) fn terminate_process_tree(pid: u32) -> Result<(), String> {
     let output = Command::new("kill")
@@ -384,7 +393,11 @@ pub(crate) fn terminate_process_tree(pid: u32) -> Result<(), String> {
 /// 「优雅请求未生效」，随后按两阶段语义升级强制终止（R-AB2 T-AB-11 落地）。
 // 本轮交付原语供 R-AB2 消费（测试已覆盖真实语义）；非测试构建暂未接线 →
 // 显式豁免 dead_code。
+// G2 禁令豁免（clippy.toml 豁免面「内部进程管理原语」）：taskkill /PID /T
+// 进程树优雅终止（R-AB2 T-AB-11 两阶段终止优雅路径）——固定系统工具 + PID
+// 数字参数，output() 同步等待型，子进程不脱离会话存活。
 #[allow(dead_code)] // R-AB2 T-AB-11 两阶段终止消费
+#[allow(clippy::disallowed_methods)]
 #[cfg(target_os = "windows")]
 pub(crate) fn terminate_process_tree_graceful(pid: u32) -> Result<(), String> {
     let output = Command::new("taskkill")

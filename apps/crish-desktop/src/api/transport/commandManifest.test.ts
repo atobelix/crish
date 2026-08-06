@@ -2,11 +2,17 @@
  * commandManifest 测试（PE-03 T03.1）：
  * - 内置快照与 Rust `command_manifest.rs` 对齐（条数 = 注册面 + 登记先行、
  *   9 条新增登记齐备、幽灵命令排除、命令名唯一）——双端手工同步的双向守门；
+ * - 动态对照（镜像守门）：`extractRustManifestNames()` 直读 Rust 真源（经
+ *   `import.meta.url` 上溯仓库根），读失败 fail 不 skip + 提取数哨兵 ≥ 90 +
+ *   断言三式（registered 子集逐名 / 总数 / 登记先行双向一致）——防摆设化；
  * - `initCommandManifest`：拉取成功（mock core_list_commands）→ 真源生效；
  * - 拉取失败（missing）→ 回退内置快照（不崩）；
  * - `isRegisteredCommand`：registered / 登记先行（false）/ 未知名三分支。
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockTauriCommand } from '../../test-setup';
 import {
@@ -29,13 +35,14 @@ describe('commandManifest', () => {
       ).length;
       const pending = BUILTIN_COMMAND_MANIFEST.commands.length - registered;
       expect(pending).toBeGreaterThan(0);
-      // 与 Rust COMMAND_MANIFEST（82 = 78 注册面 + 4 登记先行）保持同步；
+      // 与 Rust COMMAND_MANIFEST（92 = 注册面 88 + 登记先行 4）保持同步；
       // 变更 Rust 侧时同步本快照，双向条数由两端测试锁定
       // PE-07：T07.3（git_run/fs_delete_file）+ T07.4（profile_apply/secret_reveal）已接线
       // P3 步骤 5（C7 ③）：catalog_get / catalog_refresh 已接线
       // F3（T-AB-19）：workbench_send_input 已接线
-      expect(registered).toBe(85);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(89);
+      // F9（T-CF-14）：workflow 六条 kebab 接线；I2-S5：trash 三条接线
+      expect(registered).toBe(88);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(92);
     });
 
     it('命令名唯一', () => {
@@ -162,6 +169,123 @@ describe('commandManifest', () => {
         initCommandManifest(),
       ]);
       expect(impl).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── 动态对照（镜像守门，34 文档 DD5-T1 §1.4）──
+  // 直读 Rust 真源 command_manifest.rs 与内置快照双向核对：
+  // - 仓库根定位：import.meta.url 反推测试文件绝对路径，逐级上溯至真源存在目录
+  //   （monorepo 根；不停在子 workspace 的 package.json），不依赖 process.cwd()；
+  // - 读失败/文件缺失 → 抛错（测试 fail），严禁 catch 后 skip——否则回归「摆设
+  //   测试」（00 计划总文档 §6.1 风险 6）；
+  // - 哨兵：提取数 ≥ 90（真源 92），提取语法漂移/正则失配空集时直接 fail；
+  // - 断言三式：registered 子集逐名带差异清单 + 总数一致 + 登记先行双向一致。
+
+  /** Rust 真源相对仓库根的路径（路径耦合由 existsSync fail 兜底） */
+  const RUST_MANIFEST_REL = 'apps/agent-workbench/src-tauri/src/command_manifest.rs';
+
+  function locateRepoRoot(): string {
+    let dir = dirname(fileURLToPath(import.meta.url));
+    while (true) {
+      if (existsSync(join(dir, RUST_MANIFEST_REL))) return dir;
+      const parent = dirname(dir);
+      if (parent === dir) {
+        throw new Error(
+          `无法定位仓库根：上溯未找到 ${RUST_MANIFEST_REL}（起始于 ${dir}）`
+        );
+      }
+      dir = parent;
+    }
+  }
+
+  function readRustManifestSource(): string {
+    const file = join(locateRepoRoot(), RUST_MANIFEST_REL);
+    if (!existsSync(file)) {
+      // 文件缺失/读失败必须 fail 不 skip：镜像守门失效即红
+      throw new Error(`Rust 真源缺失：${file}（动态对照必须 fail，不得 skip）`);
+    }
+    return readFileSync(file, 'utf8');
+  }
+
+  /** 去注释（行注释 // 与块注释，含 //! 文档注释）后按四元组正则提取 Rust entry 调用面 */
+  function extractRustManifestNames(): {
+    registered: string[];
+    pending: string[];
+  } {
+    const stripped = readRustManifestSource()
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '');
+    // Rust entry() 签名恒四参（name/family/surface/registered），
+    // 勿复用 TS 三/四参正则（34 文档 §1.4 约定）
+    const re =
+      /entry\(\s*"([^"]+)",\s*"[^"]+",\s*"[^"]+",\s*(true|false)\s*\)/g;
+    const registered: string[] = [];
+    const pending: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(stripped)) !== null) {
+      (m[2] === 'true' ? registered : pending).push(m[1]);
+    }
+    return { registered, pending };
+  }
+
+  /** 惰性缓存：Rust 真源只读一次，提取失败在用例内显式抛错（fail 不 skip） */
+  let cachedRust: { registered: string[]; pending: string[] } | null = null;
+  function rustManifestOnce(): { registered: string[]; pending: string[] } {
+    if (!cachedRust) cachedRust = extractRustManifestNames();
+    return cachedRust;
+  }
+
+  describe('动态对照（镜像守门：直读 Rust command_manifest.rs 真源）', () => {
+    it('哨兵：Rust 提取数 ≥ 90（防提取语法漂移/正则失配空集摆设化）', () => {
+      const rust = rustManifestOnce();
+      const total = rust.registered.length + rust.pending.length;
+      expect(total).toBeGreaterThanOrEqual(90);
+    });
+
+    it('断言一式：前端 registered ⊇ Rust registered（逐名断言，缺失带差异清单）', () => {
+      const rust = rustManifestOnce();
+      const frontend = new Set(
+        BUILTIN_COMMAND_MANIFEST.commands
+          .filter((c) => c.registered)
+          .map((c) => c.name)
+      );
+      const missing = rust.registered.filter((name) => !frontend.has(name));
+      expect(
+        missing,
+        `前端 registered 缺失 ${missing.length} 条：${missing.join(', ')}` +
+          '（镜像守门：内置快照与 Rust 真源漂移）'
+      ).toEqual([]);
+    });
+
+    it('断言二式：前端总数 = Rust 总数（92；总数一致 + 一式子集 ⇒ registered 全等）', () => {
+      const rust = rustManifestOnce();
+      const total = rust.registered.length + rust.pending.length;
+      expect(total).toBe(92);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(total);
+    });
+
+    it('断言三式：登记先行（registered=false）名集合双向一致', () => {
+      const rust = rustManifestOnce();
+      const frontendPending = new Set(
+        BUILTIN_COMMAND_MANIFEST.commands
+          .filter((c) => !c.registered)
+          .map((c) => c.name)
+      );
+      const rustPending = new Set(rust.pending);
+      const rustOnly = [...rustPending].filter(
+        (name) => !frontendPending.has(name)
+      );
+      const frontendOnly = [...frontendPending].filter(
+        (name) => !rustPending.has(name)
+      );
+      expect(
+        rustOnly,
+        `Rust 有而前端缺的登记先行：${rustOnly.join(', ')}`
+      ).toEqual([]);
+      expect(
+        frontendOnly,
+        `前端多出的登记先行（Rust 真源无）：${frontendOnly.join(', ')}`
+      ).toEqual([]);
     });
   });
 });

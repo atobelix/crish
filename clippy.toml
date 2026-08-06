@@ -33,4 +33,17 @@ disallowed-methods = [
     # 否则等价变形（tokio Command）可绕过 std::process 禁令（04 1a 坑 1）。
     { path = "std::process::Command::spawn", reason = "子进程必须经命令门禁/进程注册面，禁止裸拉起；豁免面：agent-tools shell/mcp bridge、agent-workbench process/git/host_openers（均为门禁通过后的执行面，函数级 allow + 理由）" },
     { path = "tokio::process::Command::spawn", reason = "与 std::process::Command::spawn 同禁令（防等价变形绕过）；豁免面：agent-tools shell 执行面、agent-workbench process/git（均先过 CommandGatekeeper/白名单校验，函数级 allow + 理由）" },
+    # 禁同步拉起子进程面：output()/status() 同样拉起子进程并同步等待，是 spawn
+    # 禁令的等价绕过面（A7 §6 H1），一并禁止，理由同 spawn「防等价变形绕过」。
+    # 豁免面：
+    #   - 内部进程管理原语（taskkill / kill / tasklist）：进程树终止与存活探测是
+    #     固定系统工具调用（参数仅 PID 数字拼接，无用户自由参数），output()/status()
+    #     同步等待型、子进程不脱离会话存活（与 spawn 禁令意图不同），函数级 allow + 理由；
+    #   - CLI 桥灰区（agent-workbench cli_bridge.rs）：npm CLI 同步拉起面——命令名
+    #     白名单 + CommandGatekeeper 双防线 + cwd 固定工作区，显式登记灰区
+    #     （无进程注册面，未来可升级 process_registry 包装），函数级 allow + 理由。
+    { path = "std::process::Command::output", reason = "与 spawn 同禁令（同步拉起面防等价变形绕过，A7 §6 H1）；豁免面见上文注释（内部进程管理原语 + CLI 桥灰区，函数级 allow + 理由）" },
+    { path = "std::process::Command::status", reason = "与 std::process::Command::output 同禁令（防等价变形绕过）；豁免面同上" },
+    { path = "tokio::process::Command::output", reason = "与 std::process::Command::output 同禁令（防等价变形绕过）；豁免面同上" },
+    { path = "tokio::process::Command::status", reason = "与 std::process::Command::output 同禁令（防等价变形绕过）；豁免面同上" },
 ]

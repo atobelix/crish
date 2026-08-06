@@ -3525,7 +3525,11 @@ fn now_iso_utc() -> String {
 
 #[cfg(test)]
 mod tests {
-    // G2 禁令豁免：测试临时目录清理（非产品删除路径，可恢复语义不适用）。
+    // G2 禁令豁免：
+    // - 测试临时目录清理（非产品删除路径，可恢复语义不适用）；
+    // - 测试 mod 子进程拉起面：真实 spawn 探测（红线 Blocked 断言 +
+    //   tasklist / kill -0 存活探测辅助，T-AB-06/07 验收），非产品执行面；
+    //   测试 mod 内 allow + 理由（裁决 D8 背书）。
     #![allow(clippy::disallowed_methods)]
 
     use super::*;

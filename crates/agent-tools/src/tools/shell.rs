@@ -1334,6 +1334,11 @@ fn format_command_result(
 }
 
 /// 终止进程树：Windows taskkill 树杀，其它平台 kill -TERM
+// G2 禁令豁免（clippy.toml 豁免面「内部进程管理原语」）：taskkill 树杀——
+// 工具执行面终止原语：命令已过命令门禁才产生进程，树杀是执行后的生命周期
+// 清理（同 process.rs terminate_process_tree 语义）；固定系统工具 + PID 数字
+// 参数，output() 同步等待型，子进程不脱离会话存活。
+#[allow(clippy::disallowed_methods)]
 #[cfg(target_os = "windows")]
 fn terminate_process_tree(pid: u32) -> Result<(), String> {
     let output = std::process::Command::new("taskkill")
@@ -1349,6 +1354,10 @@ fn terminate_process_tree(pid: u32) -> Result<(), String> {
 }
 
 /// 终止进程树（Unix 简化版：kill -TERM）
+// G2 禁令豁免（clippy.toml 豁免面「内部进程管理原语」）：kill -TERM 进程树
+// 终止（Unix 分支，同 Windows taskkill 语义）——固定系统工具 + PID 数字参数，
+// output() 同步等待型，子进程不脱离会话存活。
+#[allow(clippy::disallowed_methods)]
 #[cfg(not(target_os = "windows"))]
 fn terminate_process_tree(pid: u32) -> Result<(), String> {
     let output = std::process::Command::new("kill")
@@ -1365,6 +1374,10 @@ fn terminate_process_tree(pid: u32) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    // G2 禁令豁免：测试 mod——真实 spawn 探测命令门禁语义（红线目标断言
+    // Blocked）+ pid 存活探测（tasklist / kill -0，T-AB-06/07 验收辅助），
+    // 非产品执行面；测试 mod 内 allow + 理由（裁决 D8 背书）。
+    #![allow(clippy::disallowed_methods)]
     use super::*;
     use crate::background::{
         BackgroundTaskInfo, BackgroundTaskRef, BackgroundTaskStatus, KillResult, LogSlice,

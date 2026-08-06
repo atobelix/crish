@@ -830,12 +830,10 @@ impl BackgroundTaskRegistry {
     /// 事件发射接线（T-AB-16 通道二生产路径）：把 [EventBridgeSink] 并入
     /// 通知投递器（替换默认 [LogEventSink] 留痕实现）。
     ///
-    /// 接线点（登记偏差）：main.rs 在构造 registry 后调用一次（main.rs 属 C3
-    /// 域，本轮不在壳侧改动——事件发射当前经 LogEventSink 结构化留痕，
-    /// C3/T-AB-19 接线后即切换为真实事件通道发射，payload 形状不变）。
+    /// 装配点：main.rs 装配轮（30 方案 P2/P3）构造 registry 后调用一次
+    /// ——七事件经 workbench-run-event 真实发射（E3 核销）。
     /// 30 方案 P3：EventBridgeSink 构造时读取注册表 task_event_consumer
     /// 快照（顺序契约：先 set_task_event_consumer 后 set_event_bridge）。
-    #[allow(dead_code)] // 接线点在 C3（main.rs），接线后消除；测试构建同样未接线故用普通 allow
     pub(crate) fn set_event_bridge(&self, bridge: EventBridge, session_id: String) {
         // P3：消费器快照（None = 未接线，事件照常发射但不消费）
         let consumer = self
@@ -855,8 +853,7 @@ impl BackgroundTaskRegistry {
 
     /// 30 方案 P3：注入任务事件消费器（main.rs 装配轮在 set_event_bridge
     /// 之前调用——EventBridgeSink 构造时读取快照，注入晚于接线则不生效，
-    /// 顺序契约见 30 文档 §5 改动点 3）
-    #[cfg_attr(not(test), allow(dead_code))] // 生产注入点 = main.rs 装配轮（批 3）；接线前标记 dead_code
+    /// 顺序契约见 30 文档 §5 改动点 3；消费方 = main.rs 装配轮，已接线）
     pub(crate) fn set_task_event_consumer(
         &self,
         consumer: Arc<crate::task_event_consumer::TaskEventConsumer>,
@@ -1999,7 +1996,8 @@ async fn finish_task(
 // ── 资源采样循环（T-AB-15 3 / T-AB-16 1/2）──────────────────────────────────
 
 /// 事件发射到 `workbench-run-event` 通道的接线实现（T-AB-16 通道二生产路径；
-/// 由 [BackgroundTaskRegistry::set_event_bridge] 注入——C3 在 main.rs 接线）。
+/// 由 [BackgroundTaskRegistry::set_event_bridge] 注入——main.rs 装配轮接线，
+/// 30 方案 P2/P3 后生产构造点存在，E4 核销）。
 ///
 /// payload（冻结契约 §4.5 形状，[crate::resource::TaskNotifier] 组装）→
 /// C2 已落地的 AgentEvent 七事件变体（conex-types events.rs，T-AB-17）→
@@ -2010,7 +2008,6 @@ async fn finish_task(
 /// run）——本实现以注册表注入的 `session_id` 填充（main.rs 接线时传当前会话
 /// id，缺省空串占位），事件归属经信封 runId 与 payload ownerRunId 表达。
 #[derive(Clone)]
-#[allow(dead_code)] // 生产构造点 = set_event_bridge（C3 main.rs 接线），接线后消除
 pub(crate) struct EventBridgeSink {
     /// 事件桥（Tauri 通道 / 测试替身，Clone 共享）
     bridge: EventBridge,

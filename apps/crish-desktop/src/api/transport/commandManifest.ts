@@ -45,10 +45,11 @@ function entry(
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（79 = 注册面 75 + 登记先行 4；§7.2 推算 ≈75）。
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（92 = 注册面 88 + 登记先行 4；与
+ * command_manifest.rs:63 行注释及 manifest_count_matches_registered_surface 测试对齐）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
- * commandManifest.test.ts 的条数/登记断言拦截。
+ * commandManifest.test.ts 的条数/登记断言 + 动态对照测试（直读 Rust 真源）拦截。
  */
 export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
   contractVersion: COMMAND_MANIFEST_CONTRACT_VERSION,
@@ -71,7 +72,7 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('workbench_get_background_task_output', 'workbench', 'gui'),
     entry('workbench_cancel_background_task', 'workbench', 'gui'),
     // F3（T-AB-19 顺手接线）：stdin 注入命令面（sendBackgroundTaskInput
-    // 等待的 Rust 命令；T-AB-20 操作面）——与 Rust command_manifest.rs 82/78 镜像
+    // 等待的 Rust 命令；T-AB-20 操作面）——与 Rust command_manifest.rs 88/92 镜像
     entry('workbench_send_input', 'workbench', 'gui'),
     entry('workbench_select_folder', 'workbench', 'gui'),
     entry('workbench_list_directory', 'workbench', 'gui'),
@@ -149,14 +150,19 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     // ── 模型目录（P3 步骤 5：catalog_get / catalog_refresh；C7 三处登记 ③）──
     entry('catalog_get', 'core', 'engine'),
     entry('catalog_refresh', 'core', 'engine'),
-    // ── workflow 域六条（F9 T-CF-14：命令实装 + 前端去幽灵化；Rust 侧
-    //    manifest 88 = 注册面 84 + 登记先行 4 的镜像同步）──
-    entry('create_workflow', 'workflow', 'engine'),
-    entry('list_workflows', 'workflow', 'engine'),
-    entry('update_workflow', 'workflow', 'engine'),
-    entry('delete_workflow', 'workflow', 'engine'),
-    entry('trigger_workflow', 'workflow', 'engine'),
-    entry('list_workflow_runs', 'workflow', 'engine'),
+    // ── 误删恢复（I2-S5：trash_list / trash_restore / trash_purge；Rust
+    //    command_manifest.rs :169-171 已登记、main.rs 已注册，trashApi.ts 实调用）──
+    entry('trash_list', 'core', 'engine'),
+    entry('trash_restore', 'core', 'engine'),
+    entry('trash_purge', 'core', 'engine'),
+    // ── workflow 域六条（F9 T-CF-14：命令实装 + 前端去幽灵化；wire 名 kebab-case，
+    //    与 Rust `#[tauri::command(rename=...)]` 对齐；92 = 注册面 88 + 登记先行 4 镜像）──
+    entry('create-workflow', 'workflow', 'engine'),
+    entry('list-workflows', 'workflow', 'engine'),
+    entry('update-workflow', 'workflow', 'engine'),
+    entry('delete-workflow', 'workflow', 'engine'),
+    entry('trigger-workflow', 'workflow', 'engine'),
+    entry('list-workflow-runs', 'workflow', 'engine'),
     // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
     // PE-07 T07.4：config_profile_apply / config_secret_reveal 已接线（registered=true）
     entry('append_session_messages', 'session', 'engine', false),

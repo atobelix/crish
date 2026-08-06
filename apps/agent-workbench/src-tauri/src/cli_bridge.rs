@@ -79,6 +79,14 @@ fn run_workbench_cli_json(command: &str, args: Vec<String>) -> Result<Value, Str
     })
 }
 
+// G2 禁令豁免（clippy.toml 豁免面「CLI 桥灰区」）：npm CLI 同步拉起面——
+// 命令名白名单（status/continue/background-demo/run/run-json/goal-run/goal-json
+// 七个固定子命令，见本函数 matches! 校验）+ CommandGatekeeper 双防线
+// （check_command + patterns 逐参）+ cwd 固定工作区 + 同步等待型
+// （.output() 等待完成，不产生脱离会话的常驻子进程）。
+// 【灰区显式登记】当前无进程注册面，属已知灰区（A7 §6 H1 点名项），
+// 注释声明「未来可升级 process_registry 包装」——只登记状态，不引入新机制。
+#[allow(clippy::disallowed_methods)]
 fn run_workbench_cli_raw(
     command: &str,
     extra_args: Vec<String>,
