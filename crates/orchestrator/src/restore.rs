@@ -3,12 +3,15 @@
 //! [RestoreManager::restore] 为冷启动恢复主流程（05 §5.4 run::restore /
 //! store::pending）：
 //! - **重启扫描**：从 [Store] 恢复全部 runs；in-flight run（queued /
-//!   initializing / running / awaiting-approval / cancelling）→ 终态
-//!   interrupted（previousStatus 审计字段落库为 `run-interrupted` 审计事件，
-//!   终态变化可追溯；05 §2.8 orchestrator.test.ts:404 语义）；
+//!   initializing / running / awaiting-approval / cancelling / **completing**）
+//!   → 终态 interrupted（previousStatus 审计字段落库为 `run-interrupted`
+//!   审计事件，终态变化可追溯；05 §2.8 orchestrator.test.ts:404 语义）；
 //! - **blocked 终态保真**：blocked 类状态（Failed + goal-blocked 等 reason）
 //!   与其它终态记录（completed / failed / cancelled）**原样保留不打断**
 //!   （05 §2.8 orchestrator.test.ts:640 / :702 语义）；
+//! - **未知字面量保真**：DB 行 / 快照中的未知状态字面量（裁决 D3，
+//!   11-T1）以 `RunStatus::Unknown` 透传——既不打断也不改写，
+//!   [RestoreOutcome::unknown_status_runs] 显式上报（诚实滞留取舍）；
 //! - **pending 输入恢复**：从 conex-db load_pending_inputs 恢复（FIFO：
 //!   创建时间升序，含 id 决胜；05 §2.8 orchestrator.test.ts:360 语义）；
 //! - **快照**：全量快照（[StateSnapshot]）+ 增量恢复（lastSequence 后
@@ -91,6 +94,9 @@ pub struct RestoreOutcome {
     pub pending_inputs: Vec<PendingInput>,
     /// 本次恢复打断的 run（previousStatus 审计）
     pub interrupted: Vec<InterruptedRun>,
+    /// 未知状态字面量保留的 run（run_id + 原字面量；裁决 D3，11-T1——
+    /// 不打断、不改写，显式上报对冲「诚实滞留」）
+    pub unknown_status_runs: Vec<(String, String)>,
     /// 事件流锚点（lastSequence：其后事件为增量流）
     pub last_sequence: u64,
     /// 快照回退说明（None = 未回退；快照损坏/缺失回退时含原因）
@@ -208,11 +214,14 @@ impl From<&StoredRun> for SnapshotRun {
 }
 
 impl SnapshotRun {
-    /// 还原为库内 run 记录
+    /// 还原为库内 run 记录（裁决 D3：未知字面量放宽为 Unknown 透传，
+    /// 与 DB 行路径一致——fail-closed → fail-open 保真，快照不再拒绝加载）
     pub fn to_stored_run(&self) -> Result<StoredRun, SnapshotError> {
-        let status = RunStatus::from_str(&self.status).map_err(|e| {
-            SnapshotError::new("snapshot_run_status", e.message)
-        })?;
+        let status = match RunStatus::from_str(&self.status) {
+            Ok(status) => status,
+            // 未知字面量原样保留（快照往返一致，as_str 原样读回）
+            Err(_) => RunStatus::Unknown(self.status.clone()),
+        };
         Ok(StoredRun {
             run_id: self.run_id.clone(),
             session_id: self.session_id.clone(),
@@ -535,13 +544,25 @@ impl RestoreManager {
         // 2. runs 全量扫描（run 表为权威数据源）
         let mut runs = store.query_runs().await?;
 
-        // 3. in-flight → interrupted（previousStatus 审计）
+        // 3. in-flight → interrupted（previousStatus 审计）；未知字面量
+        //    保真保留（is_inflight 已滤）并显式上报
         let mut interrupted = Vec::new();
+        let mut unknown_status_runs = Vec::new();
         for run in runs.iter_mut() {
-            if !is_inflight(run.status) {
+            if !is_inflight(run.status.clone()) {
+                // 未知字面量：不打断、不改写，显式上报（裁决 D3 诚实滞留）
+                if let RunStatus::Unknown(literal) = &run.status {
+                    tracing::warn!(
+                        target: "restore",
+                        run_id = %run.run_id,
+                        status = %literal,
+                        "未知状态字面量保留（不打断、不改写）"
+                    );
+                    unknown_status_runs.push((run.run_id.clone(), literal.clone()));
+                }
                 continue;
             }
-            let previous_status = run.status;
+            let previous_status = run.status.clone();
             let (db_status, error) = match previous_status {
                 // 取消流程被打断 → cancelled；其余 in-flight → failed
                 RunStatus::Cancelling => (RunStatus::Cancelled, CANCEL_INTERRUPTED_ERROR),
@@ -568,7 +589,7 @@ impl RestoreManager {
             store
                 .update_run_status(
                     &run.run_id,
-                    db_status,
+                    db_status.clone(),
                     Some(INTERRUPTED_REASON),
                     Some(cursor as i64),
                 )
@@ -648,6 +669,7 @@ impl RestoreManager {
             runs,
             pending_inputs,
             interrupted,
+            unknown_status_runs,
             last_sequence,
             snapshot_note,
             snapshot_generation: snapshot
@@ -664,16 +686,24 @@ impl Default for RestoreManager {
     }
 }
 
-/// 是否 in-flight 状态（重启时需打断为 interrupted；05 §2.8:404）
+/// 是否 in-flight 状态（重启时需打断为 interrupted；05 §2.8:404；
+/// 11-T4：completing 收口被打断 → failed，不再永久卡 completing；
+/// 裁决 D3：Unknown 保真不打断——未知字面量无法区分中间态与终态，
+/// 打断=改写对可能已完成的 run 是破坏性操作）
 fn is_inflight(status: RunStatus) -> bool {
-    matches!(
-        status,
+    match status {
+        // 五态 + completing（11-T4）→ in-flight
         RunStatus::Queued
-            | RunStatus::Initializing
-            | RunStatus::Running
-            | RunStatus::AwaitingApproval
-            | RunStatus::Cancelling
-    )
+        | RunStatus::Initializing
+        | RunStatus::Running
+        | RunStatus::AwaitingApproval
+        | RunStatus::Cancelling
+        | RunStatus::Completing => true,
+        // 未知字面量保真保留、不打断（裁决 D3，显式列出防默认臂误命中）
+        RunStatus::Unknown(_) => false,
+        // 终态不打断
+        RunStatus::Completed | RunStatus::Failed | RunStatus::Cancelled => false,
+    }
 }
 
 /// 会话内下一个可用序列号（恢复审计事件续接用）
@@ -780,13 +810,14 @@ mod tests {
     #[tokio::test]
     async fn restore_marks_in_flight_runs_interrupted_with_previous_status() {
         let (mem, store) = setup();
-        // 五个 in-flight 状态 + 一个终态（保真）
+        // 六个 in-flight 状态（含 completing，11-T4）+ 一个终态（保真）
         for (run_id, status) in [
             ("r_queued", RunStatus::Queued),
             ("r_init", RunStatus::Initializing),
             ("r_running", RunStatus::Running),
             ("r_approval", RunStatus::AwaitingApproval),
             ("r_cancelling", RunStatus::Cancelling),
+            ("r_completing", RunStatus::Completing),
             ("r_done", RunStatus::Completed),
         ] {
             store
@@ -805,14 +836,14 @@ mod tests {
             .unwrap();
 
         assert_eq!(outcome.mode, RestoreMode::FullReplay);
-        // in-flight → interrupted（queued/init/running/approval → failed；
-        // cancelling → cancelled）
+        // in-flight → interrupted（queued/init/running/approval/completing
+        // → failed；cancelling → cancelled）
         let by_id: std::collections::HashMap<&str, &conex_db::StoredRun> = outcome
             .runs
             .iter()
             .map(|r| (r.run_id.as_str(), r))
             .collect();
-        for id in ["r_queued", "r_init", "r_running", "r_approval"] {
+        for id in ["r_queued", "r_init", "r_running", "r_approval", "r_completing"] {
             assert_eq!(by_id[id].status, RunStatus::Failed, "{id} → failed");
             assert_eq!(by_id[id].end_reason.as_deref(), Some(INTERRUPTED_REASON));
         }
@@ -826,7 +857,7 @@ mod tests {
         assert_eq!(by_id["r_done"].end_reason.as_deref(), Some("stop"));
 
         // 审计记录：previousStatus 可追溯，终态映射正确
-        assert_eq!(outcome.interrupted.len(), 5);
+        assert_eq!(outcome.interrupted.len(), 6);
         let prev: Vec<&str> = outcome
             .interrupted
             .iter()
@@ -834,7 +865,14 @@ mod tests {
             .collect();
         assert_eq!(
             prev,
-            vec!["queued", "initializing", "running", "awaiting-approval", "cancelling"]
+            vec![
+                "queued",
+                "initializing",
+                "running",
+                "awaiting-approval",
+                "cancelling",
+                "completing"
+            ]
         );
         let statuses: Vec<&str> = outcome
             .interrupted
@@ -843,8 +881,8 @@ mod tests {
             .collect();
         assert_eq!(
             statuses,
-            vec!["failed", "failed", "failed", "failed", "cancelled"],
-            "cancelling → cancelled，其余 → failed"
+            vec!["failed", "failed", "failed", "failed", "cancelled", "failed"],
+            "cancelling → cancelled，其余（含 completing）→ failed"
         );
         assert!(outcome
             .interrupted
@@ -858,20 +896,21 @@ mod tests {
             .filter(|e| e.event_type == RUN_INTERRUPTED_EVENT)
             .map(|e| e.event_type.as_str())
             .collect();
-        assert_eq!(audit.len(), 5, "每个被打断的 run 一条审计事件");
+        assert_eq!(audit.len(), 6, "每个被打断的 run 一条审计事件");
         // T08.4：打断路径 cursor = 审计事件前会话最大已落库序列（逐条递增）
         assert_eq!(by_id["r_queued"].cursor, 0, "首个打断前无事件");
         assert_eq!(by_id["r_init"].cursor, 1);
         assert_eq!(by_id["r_running"].cursor, 2);
         assert_eq!(by_id["r_approval"].cursor, 3);
-        assert_eq!(by_id["r_cancelling"].cursor, 4, "最后打断前会话最大序列=4");
-        // 审计事件序列连续 1..=5（与 cursor 口径一致）
+        assert_eq!(by_id["r_cancelling"].cursor, 4, "取消打断前会话最大序列=4");
+        assert_eq!(by_id["r_completing"].cursor, 5, "completing 打断前会话最大序列=5");
+        // 审计事件序列连续 1..=6（与 cursor 口径一致）
         let audit_seqs: Vec<u64> = events
             .iter()
             .filter(|e| e.event_type == RUN_INTERRUPTED_EVENT)
             .map(|e| e.sequence)
             .collect();
-        assert_eq!(audit_seqs, vec![1, 2, 3, 4, 5]);
+        assert_eq!(audit_seqs, vec![1, 2, 3, 4, 5, 6]);
         let payload = &events[0].payload;
         let value: serde_json::Value = serde_json::from_str(payload).unwrap();
         assert_eq!(value["previousStatus"], "queued");
@@ -880,6 +919,64 @@ mod tests {
     }
 
     // ── blocked 终态保真 / 终态记录原样保留 ──
+
+    /// 11-T1（N04，裁决 D3）：未知状态字面量恢复保真——不打断（无
+    /// run-interrupted 事件）、不改写（as_str 原样）、RestoreOutcome
+    /// 显式上报（unknown_status_runs 含 run_id + 原字面量）。
+    #[tokio::test]
+    async fn restore_preserves_unknown_status_runs_with_reporting() {
+        let (mem, store) = setup();
+        // 未知字面量 run + 对照：终态 run（保真不打断）+ in-flight run（正常打断）
+        store
+            .insert_run("r_unknown", "s1", RunStatus::Unknown("sneaky".into()), None, 0)
+            .await
+            .unwrap();
+        store
+            .insert_run("r_done", "s1", RunStatus::Completed, Some("stop"), 0)
+            .await
+            .unwrap();
+        store
+            .insert_run("r_running", "s1", RunStatus::Running, None, 0)
+            .await
+            .unwrap();
+
+        let outcome = RestoreManager::new()
+            .restore(store.as_ref(), &NoSnapshots)
+            .await
+            .unwrap();
+
+        // 未知 run：原样保留（保真），as_str 往返一致
+        let by_id: std::collections::HashMap<&str, &conex_db::StoredRun> = outcome
+            .runs
+            .iter()
+            .map(|r| (r.run_id.as_str(), r))
+            .collect();
+        assert_eq!(
+            by_id["r_unknown"].status,
+            RunStatus::Unknown("sneaky".to_string()),
+            "未知字面量透传保真"
+        );
+        assert_eq!(by_id["r_unknown"].status.as_str(), "sneaky");
+        assert_eq!(by_id["r_unknown"].end_reason, None, "未知 run 不被改写");
+        // 显式上报：run_id + 原字面量（诚实滞留）
+        assert_eq!(
+            outcome.unknown_status_runs,
+            vec![("r_unknown".to_string(), "sneaky".to_string())]
+        );
+        // 不打断：未知 run 不在 interrupted 审计中；终态 run 亦不受影响
+        assert_eq!(outcome.interrupted.len(), 1, "仅 in-flight run 被打断");
+        assert_eq!(outcome.interrupted[0].run_id, "r_running");
+        // 事件表无未知 run 的 run-interrupted 审计事件（仅 in-flight 一条）
+        let events = mem.events();
+        let audit: Vec<&str> = events
+            .iter()
+            .filter(|e| e.event_type == RUN_INTERRUPTED_EVENT)
+            .map(|e| e.event_type.as_str())
+            .collect();
+        assert_eq!(audit.len(), 1);
+        // 终态保真不受影响
+        assert_eq!(by_id["r_done"].status, RunStatus::Completed);
+    }
 
     #[tokio::test]
     async fn restore_preserves_blocked_and_terminal_records() {
@@ -987,6 +1084,35 @@ mod tests {
             .insert_run("r_snap", "s1", RunStatus::Completed, Some("stop"), 1)
             .await
             .unwrap();
+        // 11-T1：快照含未知字面量不再拒绝加载（fail-open 保真）——
+        // 存（StoredRun → SnapshotRun）→ 读（to_stored_run）往返 as_str 原样
+        let unknown_snapshot_run = SnapshotRun {
+            run_id: "r_unknown_snap".to_string(),
+            session_id: "s1".to_string(),
+            status: "sneaky".to_string(),
+            end_reason: None,
+            cursor: 0,
+            created_at: 100,
+            updated_at: 200,
+        };
+        let back = unknown_snapshot_run.to_stored_run().unwrap();
+        assert_eq!(
+            back.status,
+            RunStatus::Unknown("sneaky".to_string()),
+            "快照未知字面量透传为 Unknown"
+        );
+        assert_eq!(back.status.as_str(), "sneaky", "快照往返 as_str 原样");
+        // 已知字面量快照仍正常解析
+        assert_eq!(
+            SnapshotRun {
+                status: "completing".to_string(),
+                ..unknown_snapshot_run
+            }
+            .to_stored_run()
+            .unwrap()
+            .status,
+            RunStatus::Completing
+        );
         let snapshot = StateSnapshot::build(1, 0, sessions, runs, Vec::new());
         assert!(snapshot.valid(), "构造的快照应通过 checksum 校验");
 

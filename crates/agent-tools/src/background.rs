@@ -116,6 +116,10 @@ pub struct BackgroundTaskInfo {
     pub prompt: Option<String>,
     /// run 关联（继承旧 runIndex 语义，不自动级联杀）
     pub owner_run_id: Option<String>,
+    /// 疑似卡死标记（14-T2a wire：健康判定转 Suspicious 时置位，Healthy 复位；
+    /// 保持期/Crashed 不写，终态保留最后一次写值——前端轮询经此字段渲染
+    /// 「疑似卡死」标记，见 34 方案 §2.3）
+    pub suspicious: bool,
 }
 
 /// status 返回（REQ-B02：状态 + 退出码 + 日志位置 + 时长 + 资源快照 + 尾部）

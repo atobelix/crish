@@ -12,7 +12,12 @@ use std::str::FromStr;
 // ════════════════════════════════════════════════════════════════════
 
 /// run 状态字面量（对齐 restore.rs 快照 / frontend RunStatus 契约）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// 裁决 D3（11-T1）：新增 [Unknown] 变体透传未知字面量，放弃 `Copy`
+/// 派生（Unknown 携带 String）。透传语义——读边界（DB 行 / 快照）对
+/// 未知字面量保真保留，不静默改写为 failed；写边界保持严格（FromStr
+/// 不解析未知，恢复等生产写面不会落未知字面量）。
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunStatus {
     Queued,
     Initializing,
@@ -24,11 +29,14 @@ pub enum RunStatus {
     Completed,
     Failed,
     Cancelled,
+    /// 未知状态字面量（roundtrip 保真透传；不参与 FromStr 解析——
+    /// 写边界保持严格，恢复面语义不动）
+    Unknown(String),
 }
 
 impl RunStatus {
-    /// 状态字面量（runs.status 列存储值）
-    pub fn as_str(&self) -> &'static str {
+    /// 状态字面量（runs.status 列存储值；Unknown 透传原始字面量）
+    pub fn as_str(&self) -> &str {
         match self {
             RunStatus::Queued => "queued",
             RunStatus::Initializing => "initializing",
@@ -39,6 +47,7 @@ impl RunStatus {
             RunStatus::Completed => "completed",
             RunStatus::Failed => "failed",
             RunStatus::Cancelled => "cancelled",
+            RunStatus::Unknown(s) => s,
         }
     }
 }
@@ -225,6 +234,7 @@ impl LocalDb {
             message: format!("lock poisoned: {e}"),
             kind: DbFailureKind::Lock,
         })?;
+        #[allow(clippy::type_complexity)]
         let row: Option<(i64, i64, i64, i64, i64, i64, i64, i64, Option<i64>)> = conn
             .query_row(
                 "SELECT prompt_tokens, completion_tokens, total_tokens,
@@ -358,10 +368,15 @@ impl LocalDb {
     }
 }
 
-/// runs 行 → StoredRun 映射（status 字面量解析失败按 Unknown 兜底）
+/// runs 行 → StoredRun 映射（status 字面量解析失败按 Unknown 透传保真，
+/// 不再静默改写为 failed——裁决 D3，恢复面据此保真保留并显式上报）
 fn map_run_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredRun> {
     let status_str: String = row.get(2)?;
-    let status = RunStatus::from_str(&status_str).unwrap_or(RunStatus::Failed);
+    let status = match RunStatus::from_str(&status_str) {
+        Ok(status) => status,
+        // 未知字面量原样保留（行内 status 不被改写，roundtrip 保真）
+        Err(_) => RunStatus::Unknown(status_str),
+    };
     Ok(StoredRun {
         run_id: row.get(0)?,
         session_id: row.get(1)?,

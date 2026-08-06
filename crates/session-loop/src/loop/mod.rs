@@ -22,7 +22,7 @@
 //! reason（01 §1.5）。
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use agent_tools::backup::BackupMiddleware;
 use agent_tools::context::ExploreDocsQuotaContext;
@@ -514,12 +514,44 @@ impl AgentSessionLoop {
         self.state.control_bus.clone()
     }
 
-    /// 逃逸监视装配配置（T-ESC-03 §3.5.1：壳层 run 起停钩子消费）。
+    /// 注入外部控制总线（30-P1 run 控制面接线）：替换 [LoopState] 自建
+    /// 实例——壳层（ActiveRun）与内核共享同一总线，core_run_control 的
+    /// L1/L2/L3 意图经本总线在安全点被真实消费（运行中 run 有外部终止
+    /// 路径，A4-H2 断头路消除）。
+    ///
+    /// 必须 `run()` 前调用（check_control 读字段引用，run 内不可变）；
+    /// 未调用时保持自建实例（现状行为向后兼容）。
+    pub fn with_control_bus(mut self, bus: Arc<Mutex<crate::control::ControlBus>>) -> Self {
+        tracing::debug!(
+            target: "session_loop",
+            "外部控制总线注入（替换 LoopState 自建实例）"
+        );
+        self.state.control_bus = bus;
+        self
+    }
+
+    /// 注入外部 abort 信号（30-P1）：壳层 ActiveRun 与 loop 共享同一
+    /// 实例（AbortSignal 内部共享 [AtomicBool]，克隆即同一触发面——
+    /// safe_point.rs:369 测试已证克隆共享语义）。
+    ///
+    /// 必须 `run()` 前调用；未调用时保持自建信号（现状行为向后兼容）。
+    pub fn with_abort_signal(mut self, signal: crate::safe_point::AbortSignal) -> Self {
+        tracing::debug!(
+            target: "session_loop",
+            "外部 abort 信号注入（与壳层共享同一触发面）"
+        );
+        self.state.abort_signal = signal;
+        self
+    }
+
+    /// 逃逸监视装配配置（T-ESC-03 §3.5.1 / 30-P5 时序更正）。
     ///
     /// 返回**装配后形态**：经 [Self::with_options] 装配块完成判定器注入
     /// （detector = [RegistryBackedDetector]，与工具执行共享同一注册表
-    /// 实例）；壳层在 spawn 监视消费任务（[crate::escape_watch::spawn_escape_watch]）
-    /// 前读取本配置。
+    /// 实例）。壳层 spawn 监视（[crate::escape_watch::spawn_escape_watch]）
+    /// 使用自身构造的配置实例（run_task_impl 装配点已含 detector，不再
+    /// 依赖本 getter）；本配置保留为装配后形态供观测 / 调试（30-P5：
+    /// 生产零消费现状保持，注释标注）。
     pub fn escape_watch_config(&self) -> Option<EscapeWatchConfig> {
         self.state.options.escape_watch.clone()
     }
@@ -552,6 +584,18 @@ impl AgentSessionLoop {
         );
         let _enter = run_span.enter();
         tracing::info!(message_len = input.blocks.len(), "run 启动");
+        // 装配观测（30-P1 改动点 6，防注入时序回退）：run 起始记录 abort
+        // 信号状态——若已触发说明外部强停在 run 启动前已到达（合法场景：
+        // 用户取消先于 run 真正开始，L3 ≤ 下一安全点收场，不阻断）；壳层
+        // 「每 run 重建 loop + 新信号」契约由装配面保证（run_task_impl
+        // 每 run 新建 AbortSignal），跨 run 泄漏语义登记 A4-M3 邻接
+        //（AbortSignal::reset 不实现——Notify 无法复位）。仅观测不阻断。
+        if self.state.abort_signal.is_aborted() {
+            tracing::info!(
+                target: "session_loop",
+                "run 起始 abort 信号已触发（启动前取消：安全点立即收场）"
+            );
+        }
         // 每 run 全新状态机（会话 / 对话 / 输入队列跨 run 持久）
         self.state.machine = crate::state::AgentSessionMachine::new(
             self.session_id.clone(),

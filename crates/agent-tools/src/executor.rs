@@ -68,7 +68,8 @@ pub struct ToolResult {
 /// 2. 执行工具（R3 T9：携带会话级 ToolContext，失败返回 ToolError，
 ///    且不记录幂等键，允许重试）
 /// 3. 输出预算：超出 budget_bytes 时截断并附加 contextBudget 标记字段
-/// 4. 记录幂等键（成功执行后）
+/// 4. 记录幂等键（成功执行后；store 先写、失败不写内存——record 失败
+///    返回错误，同进程重试走执行路径重新执行，11-T6 语义）
 pub async fn execute_with_output_policy(
     tool: &dyn Tool,
     args: Value,
@@ -117,6 +118,8 @@ pub async fn execute_with_output_policy(
     if policy.idempotency {
         if let Some(guard) = guard {
             let idem_ctx = build_idempotency_context(ctx, tool.name(), &args);
+            // 记录失败（如 store 持久化失败）直接传播错误：工具已执行，
+            // 但幂等键未写内存——重试不命中去重、重新执行（11-T6 语义）
             guard.record(&idem_ctx, &args).await?;
         }
     }
@@ -633,5 +636,109 @@ mod tests {
                 .unwrap();
         assert!(second.deduplicated);
         assert_eq!(tool.call_count(), 1);
+    }
+
+    /// 测试用故障注入 store：前 N 次 append_key 返回错误（模拟幂等记录
+    /// 持久化失败），之后恢复为正常追加；统计 append 调用次数供断言。
+    struct FlakyAppendStore {
+        keys: Mutex<HashMap<String, Vec<String>>>,
+        failures_left: Mutex<usize>,
+        append_calls: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl IdempotencyStore for FlakyAppendStore {
+        // 测试专属 store（cfg(test)）同 FakeStore 处置：expect 保留但标注
+        async fn load_keys(&self, domain: &str) -> Result<Vec<String>, ToolError> {
+            Ok(self
+                .keys
+                .lock()
+                .expect("测试 store 锁中毒后不可恢复")
+                .get(domain)
+                .cloned()
+                .unwrap_or_default())
+        }
+
+        async fn append_key(&self, domain: &str, key: &str) -> Result<(), ToolError> {
+            self.append_calls.fetch_add(1, Ordering::SeqCst);
+            let mut left = self
+                .failures_left
+                .lock()
+                .expect("测试 store 锁中毒后不可恢复");
+            if *left > 0 {
+                *left -= 1;
+                return Err(ToolError::new(
+                    "test.append_injected_failure",
+                    "模拟幂等记录持久化失败",
+                ));
+            }
+            self.keys
+                .lock()
+                .expect("测试 store 锁中毒后不可恢复")
+                .entry(domain.to_string())
+                .or_default()
+                .push(key.to_string());
+            Ok(())
+        }
+    }
+
+    /// 11-T6 判据①扩展：首次执行成功后幂等记录落盘失败 → 整体返回错误
+    /// （错误文案含「已执行但持久化失败」）；同进程重试内存无键 → 走执行
+    /// 路径重新执行（结果标记 deduplicated=false + 二次执行计数），而非
+    /// 假去重；记录成功后第三次同参调用去重。
+    #[tokio::test]
+    async fn execution_result_persisted_via_store_retries_after_append_failure() {
+        let store = Arc::new(FlakyAppendStore {
+            keys: Mutex::new(HashMap::new()),
+            failures_left: Mutex::new(1),
+            append_calls: Arc::new(AtomicUsize::new(0)),
+        });
+        let guard = ToolIdempotencyGuard::with_store(store.clone());
+        let tool = CountingTool::new();
+        let args = json!({ "path": "a.txt" });
+
+        // 首次：工具执行成功，但幂等记录落盘失败 → 返回错误而非假成功
+        let err = execute_with_output_policy(
+            &tool,
+            args.clone(),
+            &tool_ctx(),
+            &ctx(),
+            Some(&guard),
+            &ToolExecutionPolicy::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().contains("幂等记录持久化失败"), "错误文案须含持久化失败语义");
+        assert_eq!(tool.call_count(), 1);
+
+        // 重试：内存无键（store 未落盘）→ 走执行路径重新执行
+        let retry = execute_with_output_policy(
+            &tool,
+            args.clone(),
+            &tool_ctx(),
+            &ctx(),
+            Some(&guard),
+            &ToolExecutionPolicy::default(),
+        )
+        .await
+        .unwrap();
+        assert!(!retry.deduplicated, "store 失败后的重试不得被去重");
+        assert_eq!(tool.call_count(), 2);
+
+        // 第三次：记录已成功落盘 → 同参去重
+        let third = execute_with_output_policy(
+            &tool,
+            args,
+            &tool_ctx(),
+            &ctx(),
+            Some(&guard),
+            &ToolExecutionPolicy::default(),
+        )
+        .await
+        .unwrap();
+        assert!(third.deduplicated, "store 记录成功后同参应去重");
+        assert_eq!(tool.call_count(), 2);
+        // 落盘调用共 2 次：首次失败注入 + 重试成功（新守卫懒加载不追加）
+        assert_eq!(store.append_calls.load(Ordering::SeqCst), 2);
     }
 }

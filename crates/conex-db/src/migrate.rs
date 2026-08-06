@@ -1,7 +1,10 @@
 //! 迁移链域：`PRAGMA user_version` 驱动的版本化迁移（v1→v6，PE-08 T08.7 + P5 §3.1.4
-//! 及 T-D-07 v6 新列）。逐版本独立事务、幂等可重试；DROP 前备份由
-//! [backup_before_drop] 执行；新库直接建 v5 结构。迁移实现保持原样，
-//! 由 `LocalDb::open` 触发。
+//! 及 T-D-07 v6 新列）。逐版本独立事务、幂等可重试；DROP 前备份采用
+//! 「事务前 checkpoint + 备份」时序（[backup_before_drop]，见 [migrate]）：
+//! 版本升级事务 commit 之前先 `PRAGMA wal_checkpoint(TRUNCATE)` 固化旧库到
+//! 主文件再拷贝，备份内容确定 = 本版本迁移前完整旧库（11-T2 时序确定化）；
+//! 备份失败按裁定案（2026-08-06）告警不阻断迁移。新库直接建 v5 结构。
+//! 迁移实现保持原样，由 `LocalDb::open` 触发。
 
 use super::schema::{create_v1_schema, create_v5_schema};
 use super::{DbFailure, DbFailureKind, LocalDb, BACKUP_KEEP, LATEST_VERSION, SCHEMA_VERSION_STRING};
@@ -19,13 +22,19 @@ impl LocalDb {
     }
 
     /// 迁移备份：整库拷贝到 `sessions.db.bak-v{n}`，保留最近 [BACKUP_KEEP] 份。
+    ///
+    /// 11-T2 时序契约：调用方（[migrate]）必须在版本升级事务 commit 之前
+    /// 先执行 `PRAGMA wal_checkpoint(TRUNCATE)` 再调用本函数——拷贝的主文件
+    /// = 完整旧库形态（与 autocheckpoint 偶然时机无关，黄金字节对比测试锁定）。
+    /// 返回 `Err(原因)` = 备份失败（不阻断迁移，由调用方 [report_backup_failure]
+    /// 输出告警并落可观测键）。
     #[allow(clippy::disallowed_methods)]
     // G2 禁令豁免（clippy.toml 文件头「豁免面」）：迁移备份轮转——删除对象是
     // 迁移时本库自产的最旧备份（新备份已生成，旧备份被取代），非用户文件，
     // 进回收站/快照会留下陈旧 DB 副本（含敏感数据），轮转物理删除更正确。
-    fn backup_before_drop(&self, path: &Path, version: u32) {
+    fn backup_before_drop(&self, path: &Path, version: u32) -> Result<(), String> {
         let Some(dir) = path.parent() else {
-            return;
+            return Err("无父目录".into());
         };
         let name = path
             .file_name()
@@ -33,7 +42,7 @@ impl LocalDb {
             .unwrap_or_else(|| "sessions.db".into());
         let backup = dir.join(format!("{name}.bak-v{version}"));
         if let Err(e) = std::fs::copy(path, &backup) {
-            eprintln!("[conex-db] 迁移备份失败 v{version}: {e}（路径 {}）", path.display());
+            return Err(format!("{e}（路径 {}）", path.display()));
         }
         // 清理旧备份，只保留最近 BACKUP_KEEP 份
         let mut backups: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
@@ -55,13 +64,37 @@ impl LocalDb {
                 backups.remove(0);
             }
         }
+        Ok(())
+    }
+
+    /// 备份失败告警（裁定案 2026-08-06：告警不阻断迁移——版本升级继续）。
+    /// 结构化告警输出（含版本号与备份路径）+ 写入 session_meta 可观测键
+    /// `migration_backup_failed`（JS 侧经 get_session_meta 读取）；可观测键
+    /// 写入失败不影响迁移（顺带增强，不强制）。
+    fn report_backup_failure(
+        &self,
+        conn: &rusqlite::Connection,
+        version: u32,
+        path: &Path,
+        detail: &str,
+    ) {
+        eprintln!(
+            "[conex-db] 迁移备份失败 v{version}: {detail}（备份路径 {}）—— 按裁定案告警不阻断迁移，版本升级继续",
+            path.display()
+        );
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO session_meta (key, value) VALUES ('migration_backup_failed', ?1)",
+            rusqlite::params![format!("v{version}: {detail}")],
+        );
     }
 
     /// Run schema migrations.
     ///
     /// 版本化迁移（PE-08 T08.7）：以 `PRAGMA user_version` 为权威源，
     /// 从当前版本逐级迁移到 [LATEST_VERSION]；每版本独立事务、幂等可重试；
-    /// DROP 前备份（[backup_before_drop]）；新库直接建 v5 结构。
+    /// DROP 前备份（[backup_before_drop]），时序确定化（11-T2）：
+    /// 每版本「checkpoint(TRUNCATE) → 备份」先于版本事务 commit 执行，
+    /// 备份失败告警不阻断迁移（2026-08-06 裁定案）；新库直接建 v5 结构。
     pub(crate) fn migrate(&self) -> Result<(), DbFailure> {
         let mut conn = self.conn.lock().map_err(|e| DbFailure {
             message: format!("lock poisoned: {e}"),
@@ -110,6 +143,28 @@ impl LocalDb {
         let start_version = if current == 0 { 1 } else { current };
 
         for version in (start_version + 1)..=LATEST_VERSION {
+            // 备份时序（11-T2 确定化）：版本事务 commit 之前执行
+            // 「checkpoint(TRUNCATE) → 拷贝备份」。TRUNCATE 后 WAL 清空、
+            // 主文件 = 完整旧库态，拷贝内容确定（与 autocheckpoint 偶然时机无关）。
+            // v5/v6 纯 ADD COLUMN 无 DROP：跳过备份，保持「DROP 前备份」语义。
+            // （backup_file_contains_pre_migration_data / upgrade_e2e_backup_*
+            // 锚定 v3→v4 只产 .bak-v4，v5/v6 不额外产生备份）
+            if let Some(p) = &path {
+                if version != 5 && version != 6 {
+                    // checkpoint 失败 → 备份内容不确定，按备份失败处理：
+                    // 告警 + 跳过本次备份，不阻断迁移（裁定案）
+                    if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);") {
+                        self.report_backup_failure(
+                            &conn,
+                            version,
+                            p,
+                            &format!("wal_checkpoint(TRUNCATE) 失败: {e}"),
+                        );
+                    } else if let Err(detail) = self.backup_before_drop(p, version) {
+                        self.report_backup_failure(&conn, version, p, &detail);
+                    }
+                }
+            }
             let tx = conn
                 .transaction()
                 .map_err(|e| self.latch_error(&format!("migrate_tx_v{version}"), e))?;
@@ -134,14 +189,6 @@ impl LocalDb {
                 .map_err(|e| self.latch_error(&format!("migrate_commit_v{version}"), e))?;
             conn.execute_batch(&format!("PRAGMA user_version = {version};"))
                 .map_err(|e| self.latch_error(&format!("user_version_set_v{version}"), e))?;
-            // v5/v6 纯 ADD COLUMN 无 DROP：跳过备份，保持「DROP 前备份」语义。
-            // （backup_file_contains_pre_migration_data / upgrade_e2e_backup_*
-            // 锚定 v3→v4 只产 .bak-v4，v5/v6 不额外产生备份）
-            if let Some(p) = &path {
-                if version != 5 && version != 6 {
-                    self.backup_before_drop(p, version);
-                }
-            }
         }
 
         // 迁移完成后 ensure v5 结构（补触发器/索引；幂等）

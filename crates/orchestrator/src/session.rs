@@ -888,7 +888,7 @@ pub fn plan_conversation_rewind(input: &PlanRewindInput) -> Result<RewindPlan, R
         .iter()
         .filter(|run| {
             run.session_id == input.session.session_id
-                && !RunStateMachine::new(run.status).is_terminal()
+                && !RunStateMachine::new(run.status.clone()).is_terminal()
         })
         .map(|run| run.run_id.clone())
         .collect();
@@ -898,7 +898,7 @@ pub fn plan_conversation_rewind(input: &PlanRewindInput) -> Result<RewindPlan, R
         if run.session_id != input.session.session_id {
             continue;
         }
-        if !RunStateMachine::new(run.status).is_terminal() {
+        if !RunStateMachine::new(run.status.clone()).is_terminal() {
             cancellations.push(RewindRunCancellation {
                 run_id: run.run_id.clone(),
                 role: RewindRunRole::SessionRun,
@@ -915,7 +915,7 @@ pub fn plan_conversation_rewind(input: &PlanRewindInput) -> Result<RewindPlan, R
             .runs
             .iter()
             .find(|run| run.run_id == subagent.subagent_run_id)
-            .map(|run| RunStateMachine::new(run.status).is_terminal())
+            .map(|run| RunStateMachine::new(run.status.clone()).is_terminal())
             .unwrap_or(false);
         if terminal {
             continue;

@@ -214,8 +214,14 @@ impl ToolIdempotencyGuard {
 
     /// 记录已执行（执行成功后调用；失败执行不记录，允许重试）
     ///
-    /// 配置了持久化 store 时同步追加（save_checkpoint 语义），
-    /// 追加失败返回错误（内存键已写入，上层可决定是否视为不可恢复）。
+    /// 写序为「store 先写、内存后写」（11-T6 幂等 record 一致性）：
+    /// - store 写入成功（或无 store）后才写内存键——store 失败时内存不
+    ///   残留，内存与 store 保持一致（均无键），重试走执行路径重新执行，
+    ///   不再产生「内存键已写、store 未落盘」的假去重分叉；
+    /// - store 追加失败返回错误，错误文案携带「工具已执行，但幂等记录
+    ///   持久化失败」语义（`append_key` 幂等契约：重复写不报错）。
+    /// - store 先写后、内存写前崩溃 → store 有键内存无 → 下次 check 懒
+    ///   加载收敛（不产生重复副作用）。
     pub async fn record(
         &self,
         ctx: &IdempotencyContext,
@@ -224,6 +230,20 @@ impl ToolIdempotencyGuard {
         let domain = ctx.domain();
         self.ensure_loaded(&domain).await?;
         let key = execution_key(ctx, args);
+        if let Some(store) = &self.store {
+            // 先落盘（append_key 幂等：重复写不报错）
+            if let Err(cause) = store.append_key(&domain, &key).await {
+                // store 失败 → 不写内存键、直接返回错误：同进程重试
+                // check 不命中内存键，重新执行而非假去重
+                return Err(ToolError::new(
+                    cause.code(),
+                    format!(
+                        "工具已执行，但幂等记录持久化失败（domain={domain}, key={key}）：{cause}"
+                    ),
+                ));
+            }
+        }
+        // store 成功（或无 store）后才写内存键
         self.domains
             .lock()
             .unwrap_or_else(recover_lock)
@@ -231,9 +251,6 @@ impl ToolIdempotencyGuard {
             .or_default()
             .keys
             .insert(key.clone());
-        if let Some(store) = &self.store {
-            store.append_key(&domain, &key).await?;
-        }
         Ok(())
     }
 
@@ -634,6 +651,107 @@ mod tests {
         let guard2 = ToolIdempotencyGuard::with_store(store.clone());
         let next = guard2.check(&c, &args).await.unwrap();
         assert!(matches!(next, IdempotencyDecision::Deduplicated { .. }));
+    }
+
+    /// 故障注入 store：前 N 次 append_key 返回错误（模拟持久化失败），
+    /// 之后恢复为正常追加；统计 append 调用次数供断言。
+    struct FaultInjectingStore {
+        keys: Mutex<HashMap<String, Vec<String>>>,
+        failures_left: Mutex<usize>,
+        append_calls: Mutex<usize>,
+    }
+
+    impl FaultInjectingStore {
+        fn with_append_failures(n: usize) -> Self {
+            Self {
+                keys: Mutex::new(HashMap::new()),
+                failures_left: Mutex::new(n),
+                append_calls: Mutex::new(0),
+            }
+        }
+
+        fn append_calls(&self) -> usize {
+            *self.append_calls.lock().expect("测试 store 锁中毒后不可恢复")
+        }
+    }
+
+    #[async_trait]
+    impl IdempotencyStore for FaultInjectingStore {
+        // 测试专属 store（cfg(test)）同 FakeStore 处置：expect 保留但标注
+        async fn load_keys(&self, domain: &str) -> Result<Vec<String>, ToolError> {
+            Ok(self
+                .keys
+                .lock()
+                .expect("测试 store 锁中毒后不可恢复")
+                .get(domain)
+                .cloned()
+                .unwrap_or_default())
+        }
+
+        async fn append_key(&self, domain: &str, key: &str) -> Result<(), ToolError> {
+            *self
+                .append_calls
+                .lock()
+                .expect("测试 store 锁中毒后不可恢复") += 1;
+            let mut left = self
+                .failures_left
+                .lock()
+                .expect("测试 store 锁中毒后不可恢复");
+            if *left > 0 {
+                *left -= 1;
+                return Err(ToolError::new(
+                    "test.append_injected_failure",
+                    "模拟幂等记录持久化失败",
+                ));
+            }
+            self.keys
+                .lock()
+                .expect("测试 store 锁中毒后不可恢复")
+                .entry(domain.to_string())
+                .or_default()
+                .push(key.to_string());
+            Ok(())
+        }
+    }
+
+    /// 11-T6 判据①：store 追加失败 → record 返回 Err（文案含「已执行但
+    /// 持久化失败」）→ 内存键不残留，同进程同参 check 返回 Execute；
+    /// store 恢复后 record 成功 → 同参去重；新守卫（模拟重启）共享同一
+    /// store 懒加载后去重生效——全程无假去重、无重复副作用。
+    #[tokio::test]
+    async fn record_store_failure_leaves_no_memory_key_and_retry_reexecutes() {
+        let store = Arc::new(FaultInjectingStore::with_append_failures(1));
+        let guard = ToolIdempotencyGuard::with_store(store.clone());
+        let c = ctx("run-1", "sess-1", "write_file");
+        let args = json!({ "path": "a.txt", "content": "hi" });
+
+        // 首次 record：store 追加失败 → record 返回错误（工具已执行、记录未落）
+        let err = guard.record(&c, &args).await.unwrap_err();
+        assert!(err.to_string().contains("幂等记录持久化失败"), "错误文案须含持久化失败语义");
+        assert!(err.to_string().contains(&c.domain()));
+        // 内存键不残留：同进程同参 check 仍为 Execute（重试可再执行）
+        assert!(matches!(
+            guard.check(&c, &args).await.unwrap(),
+            IdempotencyDecision::Execute { .. }
+        ));
+
+        // store 恢复后 record 成功 → store 有键、同参 check 去重
+        guard.record(&c, &args).await.unwrap();
+        let keys = store.load_keys(&c.domain()).await.unwrap();
+        assert_eq!(keys.len(), 1);
+        // 追加调用共 2 次：首次失败注入 + 恢复后成功
+        assert_eq!(store.append_calls(), 2);
+        assert!(matches!(
+            guard.check(&c, &args).await.unwrap(),
+            IdempotencyDecision::Deduplicated { .. }
+        ));
+
+        // 新守卫（模拟进程重启）共享同一 store：懒加载去重生效
+        let guard2 = ToolIdempotencyGuard::with_store(store.clone());
+        assert!(matches!(
+            guard2.check(&c, &args).await.unwrap(),
+            IdempotencyDecision::Deduplicated { .. }
+        ));
     }
 
     // ── PE-07 T07.6 用例 1：锁中毒恢复（Q16 处置验证） ──

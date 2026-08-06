@@ -71,8 +71,8 @@ use session_loop::stream::{
     ProviderStreamEvent, ProviderUsage, StopReason as LoopStopReason,
 };
 use session_loop::{
-    AgentSessionLoop, ApprovalGate, CacheTrackingConfig, RunOutcome, SessionLoopOptions,
-    ToolBatchOptions,
+    AbortSignal, AgentSessionLoop, ApprovalGate, CacheTrackingConfig, ControlBus, RunOutcome,
+    SessionLoopOptions, ToolBatchOptions,
 };
 
 use crate::buffer::{drop_class_of, EventBuffer};
@@ -1667,6 +1667,14 @@ pub(crate) struct SessionLoopProducer {
     /// 原样透传——默认行为与现状一致。注入段经 [ContextInjector::render]
     /// 汇入 system_prompt 面，独立于压缩预算）
     context_injector: Option<ContextInjector>,
+    /// 外部控制总线（30-P1 run 控制面：None = loop 自建实例，现状行为；
+    /// Some = produce 装配时经 with_control_bus 注入——壳层 ActiveRun
+    /// 与内核共享同一总线，运行中 run 有真实外部终止路径）
+    control_bus: Option<Arc<Mutex<ControlBus>>>,
+    /// 外部 abort 信号（30-P1：None = loop 自建信号；Some = produce 装配
+    /// 时经 with_abort_signal 注入——壳层 ActiveRun 与内核共享同一触发面，
+    /// L3 强停 / kill_all 经同一信号生效）
+    abort_signal: Option<AbortSignal>,
 }
 
 impl SessionLoopProducer {
@@ -1703,6 +1711,9 @@ impl SessionLoopProducer {
             cache_session: SessionCacheState::default(),
             // M1：注入通道缺省关闭（未装配 = 现状行为，system_prompt 原样透传）
             context_injector: None,
+            // 30-P1：run 控制面缺省关闭（未装配 = loop 自建总线/信号，现状行为）
+            control_bus: None,
+            abort_signal: None,
         }
     }
 
@@ -1728,6 +1739,23 @@ impl SessionLoopProducer {
     #[allow(dead_code)] // M4/M5/M11 经此挂载（本文件测试先行断言）
     pub(crate) fn with_context_injector(mut self, injector: Option<ContextInjector>) -> Self {
         self.context_injector = injector;
+        self
+    }
+
+    /// 30-P1：装配外部控制总线（run 控制面接线）——produce 在
+    /// `with_options` 之后、`run()` 之前注入 loop（builder 顺序契约：
+    /// 必须 run() 前，check_control 读字段引用）；壳层 ActiveRun 与
+    /// loop 共享同一实例，core_run_control 的 L1/L2/L3 意图真实可达。
+    pub(crate) fn with_control_bus(mut self, bus: Arc<Mutex<ControlBus>>) -> Self {
+        self.control_bus = Some(bus);
+        self
+    }
+
+    /// 30-P1：装配外部 abort 信号（L3 强停触发面）——produce 在
+    /// `with_options` 之后、`run()` 之前注入 loop；壳层 ActiveRun 与
+    /// loop 共享同一实例（AbortSignal 克隆共享 [AtomicBool]）。
+    pub(crate) fn with_abort_signal(mut self, signal: AbortSignal) -> Self {
+        self.abort_signal = Some(signal);
         self
     }
 
@@ -1794,6 +1822,15 @@ impl SessionLoopProducer {
         session_loop = session_loop
             .with_options(self.options.clone())
             .with_tool_options(self.tool_options.clone());
+        // 30-P1：run 控制面装配（with_options 之后、run() 之前——builder
+        // 顺序契约）——壳层与 loop 同源：同一控制总线 + 同一 abort 信号
+        // 实例（A4-H2 断头路消除：check_control 安全点真实消费外部意图）
+        if let Some(bus) = &self.control_bus {
+            session_loop = session_loop.with_control_bus(Arc::clone(bus));
+        }
+        if let Some(signal) = &self.abort_signal {
+            session_loop = session_loop.with_abort_signal(signal.clone());
+        }
         if let Some(approval) = &self.approval {
             session_loop = session_loop.with_approval(Arc::clone(approval));
         }

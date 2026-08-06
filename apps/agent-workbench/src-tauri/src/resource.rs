@@ -29,8 +29,10 @@
 //!     [LogEventSink] 结构化日志留痕（payload 按冻结契约 §4.5 组装，C2 落地后
 //!     以信封构造替换发射实现，payload 形状不变，零改动迁移）。
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
+
+use crate::process::now_millis;
 
 // ============================================================================
 // 采样配置与健康判定三态（方案 §4.3 冻结形状）
@@ -318,16 +320,67 @@ impl EventSink for LogEventSink {
 ///   实例在 orchestrator 的 `PendingMessageQueue` 内部，壳层无访问入口 →
 ///   生产路径 None（通知文本经 tracing 留痕），测试注入内存队列断言；
 /// - 通道二：任务域事件发射（task-suspicious = Soft 分级 / task-failed =
-///   Critical 分级，§4.5）。
+///   Critical 分级，§4.5；30 方案 P2 补全七事件投递方法：started/output/
+///   heartbeat/completed/killed，payload 按 conex-types events.rs 变体字段
+///   组装，camelCase 由 serde 处理）。
 ///
 /// 防抖（同任务保持期间仅一次，恢复 Healthy 重置）由采样循环负责，
 /// 本投递器只做「检测后的投递」。
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub(crate) struct TaskNotifier {
     /// nudge 文本队列（生产 None；测试注入）
     nudge_queue: Option<Arc<Mutex<VecDeque<String>>>>,
     /// 事件发射槽（生产默认 None → LogEventSink 留痕；测试注入内存收集器）
     event_sink: Option<Arc<dyn EventSink>>,
+    /// 输出节流聚合器（task-output 高频事件 100ms 窗口合并；按任务 id 隔离
+    /// 窗口，Arc 共享保证 Clone 语义）
+    output_throttle: Arc<Mutex<OutputThrottle>>,
+}
+
+/// 输出节流窗口时长（毫秒）：task-output 高频聚合窗口（30 方案 P2）。
+const OUTPUT_THROTTLE_WINDOW_MS: u64 = 100;
+
+/// 单任务输出节流窗口状态（100ms 聚合：窗口内只记最后一行与最新累计行数，
+/// 窗口边界发一条 task-output）
+#[derive(Debug, Clone)]
+struct OutputWindow {
+    /// 窗口起点（epoch 毫秒）
+    window_start_ms: u64,
+    /// 窗口内最后一行（聚合内容）
+    last_line: String,
+    /// 窗口内最新累计行数
+    line_count: u64,
+    /// 已发射的累计行数（去重：窗口内容已发射则不再重复发）
+    last_emitted_count: u64,
+}
+
+/// 输出节流聚合器：按任务 id 隔离窗口（TaskNotifier 为注册表级共享实例，
+/// 多任务并发时互不串扰）；窗口时长可注入（测试用短窗口确定性断言）。
+#[derive(Debug)]
+struct OutputThrottle {
+    /// 窗口时长（毫秒；生产 100ms，测试可注入短窗口）
+    window_ms: u64,
+    /// 各任务当前窗口（task_id → 窗口状态）
+    windows: HashMap<String, OutputWindow>,
+}
+
+impl Default for OutputThrottle {
+    fn default() -> Self {
+        Self {
+            window_ms: OUTPUT_THROTTLE_WINDOW_MS,
+            windows: HashMap::new(),
+        }
+    }
+}
+
+impl Default for TaskNotifier {
+    fn default() -> Self {
+        Self {
+            nudge_queue: None,
+            event_sink: None,
+            output_throttle: Arc::new(Mutex::new(OutputThrottle::default())),
+        }
+    }
 }
 
 impl TaskNotifier {
@@ -342,6 +395,7 @@ impl TaskNotifier {
         Self {
             nudge_queue: Some(queue),
             event_sink: None,
+            ..Default::default()
         }
     }
 
@@ -351,6 +405,19 @@ impl TaskNotifier {
         Self {
             nudge_queue: None,
             event_sink: Some(sink),
+            ..Default::default()
+        }
+    }
+
+    /// 注入节流窗口时长（测试用：短窗口确定性断言输出聚合；其余字段默认）
+    #[cfg_attr(not(test), allow(dead_code))] // 测试专用构造（生产走 unwired + set_event_sink）
+    pub(crate) fn with_output_window_ms(window_ms: u64) -> Self {
+        Self {
+            output_throttle: Arc::new(Mutex::new(OutputThrottle {
+                window_ms,
+                windows: HashMap::new(),
+            })),
+            ..Default::default()
         }
     }
 
@@ -410,6 +477,153 @@ impl TaskNotifier {
                 "exitCode": exit_code,
                 "tail": tail,
                 "durationMs": duration_ms,
+            }),
+        );
+    }
+
+    // ── T-AB-17 七事件补全投递（30 方案 P2：payload 按 conex-types events.rs
+    //    变体字段组装，camelCase 由 serde 处理）──
+
+    /// 任务启动投递（adopt 成功即发；Critical 必达）。payload 对齐
+    /// TaskStarted 变体：taskId/command/cwd/ownerRunId/isDaemon（无
+    /// pid/started_at_ms 字段，以 command/cwd/owner_run_id/is_daemon 为准）。
+    pub(crate) fn notify_started(
+        &self,
+        task_id: &str,
+        command: &str,
+        cwd: &str,
+        owner_run_id: &str,
+        is_daemon: bool,
+    ) {
+        self.emit_event(
+            "task-started",
+            serde_json::json!({
+                "taskId": task_id,
+                "command": command,
+                "cwd": cwd,
+                "ownerRunId": owner_run_id,
+                "isDaemon": is_daemon,
+            }),
+        );
+    }
+
+    /// 任务输出投递（Delta 可丢；100ms 节流窗口聚合——窗口内只记
+    /// last_line/line_count，窗口边界发一条；终态通知前冲刷窗口）。
+    pub(crate) fn notify_output(&self, task_id: &str, line: &str, line_count: u64) {
+        let now = now_millis() as u64;
+        let mut throttle = self
+            .output_throttle
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        // 窗口时长先取副本（entry 可变借用与 throttle 字段读冲突，且锁内
+        // 时长不变——测试注入窗口也发生在构造期）
+        let window_ms = throttle.window_ms;
+        let entry = throttle
+            .windows
+            .entry(task_id.to_string())
+            .or_insert_with(|| OutputWindow {
+                window_start_ms: now,
+                last_line: String::new(),
+                line_count: 0,
+                last_emitted_count: 0,
+            });
+        entry.last_line = line.to_string();
+        entry.line_count = line_count;
+        // 窗口边界：距窗口起点 ≥ 窗口时长且存在未发射内容 → 聚合发一条
+        let window_elapsed = now.saturating_sub(entry.window_start_ms) >= window_ms;
+        if window_elapsed && entry.line_count > entry.last_emitted_count {
+            entry.window_start_ms = now;
+            entry.last_emitted_count = entry.line_count;
+            let last_line = entry.last_line.clone();
+            let line_count = entry.line_count;
+            drop(throttle);
+            self.emit_event(
+                "task-output",
+                serde_json::json!({
+                    "taskId": task_id,
+                    "line": last_line,
+                    "lineCount": line_count,
+                }),
+            );
+        }
+    }
+
+    /// 任务资源心跳投递（Delta 可丢；仅启用 resourceMonitor 的任务由采样
+    /// 循环发射；resource 摘要为采样端组装的结构化 JSON）
+    pub(crate) fn notify_heartbeat(&self, task_id: &str, resource: serde_json::Value) {
+        self.emit_event(
+            "task-heartbeat",
+            serde_json::json!({
+                "taskId": task_id,
+                "resource": resource,
+            }),
+        );
+    }
+
+    /// 任务自然退出成功投递（Critical 必达；发送前冲刷输出节流窗口，
+    /// 保证窗口内最后一行输出不丢失）
+    pub(crate) fn notify_completed(
+        &self,
+        task_id: &str,
+        exit_code: i32,
+        duration_ms: u64,
+        line_count: u64,
+    ) {
+        self.flush_output(task_id);
+        self.emit_event(
+            "task-completed",
+            serde_json::json!({
+                "taskId": task_id,
+                "exitCode": exit_code,
+                "durationMs": duration_ms,
+                "lineCount": line_count,
+            }),
+        );
+    }
+
+    /// 任务被终止投递（Critical 必达；via_force=两阶段升级，diagnostics 为
+    /// kill 两阶段留痕，无留痕时 None）；发送前冲刷输出节流窗口。
+    pub(crate) fn notify_killed(
+        &self,
+        task_id: &str,
+        via_force: bool,
+        diagnostics: Option<String>,
+    ) {
+        self.flush_output(task_id);
+        self.emit_event(
+            "task-killed",
+            serde_json::json!({
+                "taskId": task_id,
+                "viaForce": via_force,
+                "diagnostics": diagnostics,
+            }),
+        );
+    }
+
+    /// 冲刷输出节流窗口：窗口内存在未发射内容（累计行数大于已发射数）时
+    /// 补发一条聚合输出（终态通知前调用，窗口未闭合的最后一行不丢失；
+    /// 已发射则幂等跳过，不重复发射）。
+    fn flush_output(&self, task_id: &str) {
+        let mut throttle = self
+            .output_throttle
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let Some(entry) = throttle.windows.get_mut(task_id) else {
+            return;
+        };
+        if entry.line_count <= entry.last_emitted_count {
+            return;
+        }
+        entry.last_emitted_count = entry.line_count;
+        let last_line = entry.last_line.clone();
+        let line_count = entry.line_count;
+        drop(throttle);
+        self.emit_event(
+            "task-output",
+            serde_json::json!({
+                "taskId": task_id,
+                "line": last_line,
+                "lineCount": line_count,
             }),
         );
     }
@@ -530,6 +744,7 @@ mod tests {
         let notifier = TaskNotifier {
             nudge_queue: Some(queue.clone()),
             event_sink: Some(Arc::new(MemSink(emitted.clone()))),
+            ..Default::default()
         };
 
         notifier.notify_suspicious("task-7", 60_000, 1234);
@@ -566,6 +781,155 @@ mod tests {
             assert_eq!(events[1].1["exitCode"], 7);
             assert_eq!(events[1].1["tail"], "line1\nline2");
             assert_eq!(events[1].1["durationMs"], 999);
+        }
+    }
+
+    /// 五新投递方法载荷断言（30 方案 P2）：started/output/heartbeat/completed/
+    /// killed 的 payload 与 conex-types events.rs 变体字段逐一对齐
+    /// （taskId/command/cwd/ownerRunId/isDaemon；taskId/line/lineCount；
+    /// taskId/resource；taskId/exitCode/durationMs/lineCount；
+    /// taskId/viaForce/diagnostics）。
+    #[test]
+    fn notifier_five_new_methods_payloads() {
+        struct MemSink(Arc<Mutex<Vec<(String, serde_json::Value)>>>);
+        impl std::fmt::Debug for MemSink {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "MemSink")
+            }
+        }
+        impl EventSink for MemSink {
+            fn emit(&self, event_type: &str, payload: serde_json::Value) {
+                self.0.lock().unwrap().push((event_type.to_string(), payload));
+            }
+        }
+        let emitted = Arc::new(Mutex::new(Vec::new()));
+        let notifier = TaskNotifier {
+            event_sink: Some(Arc::new(MemSink(Arc::clone(&emitted)))),
+            ..Default::default()
+        };
+
+        notifier.notify_started("task-1", "npm install", "C:/work", "run-9", true);
+        // 同一节流窗口内两条输出 → 窗口未闭合不发射（合并断言见节流用例）
+        notifier.notify_output("task-1", "line-a", 1);
+        notifier.notify_output("task-1", "line-b", 2);
+        // 完成投递前冲刷窗口：补发聚合 output（窗口内最后一行 + 最新行数）
+        notifier.notify_completed("task-1", 0, 1234, 2);
+        notifier.notify_heartbeat("task-1", serde_json::json!({ "cpuPercent": 5.0 }));
+        notifier.notify_killed("task-2", true, Some("强制终止升级".to_string()));
+
+        let events = emitted.lock().unwrap();
+        // 序号：started(0) / output-flush(1) / completed(2) / heartbeat(3) / killed(4)
+        assert_eq!(events.len(), 5, "五方法应各发射一条（输出窗口在完成时冲刷）");
+        // started：taskId/command/cwd/ownerRunId/isDaemon
+        assert_eq!(events[0].0, "task-started");
+        let p = &events[0].1;
+        assert_eq!(p["taskId"], "task-1");
+        assert_eq!(p["command"], "npm install");
+        assert_eq!(p["cwd"], "C:/work");
+        assert_eq!(p["ownerRunId"], "run-9");
+        assert_eq!(p["isDaemon"], true);
+        // output（冲刷）：聚合内容 = 窗口内最后一行 + 最新累计行数
+        assert_eq!(events[1].0, "task-output");
+        let p = &events[1].1;
+        assert_eq!(p["taskId"], "task-1");
+        assert_eq!(p["line"], "line-b");
+        assert_eq!(p["lineCount"], 2);
+        // completed：taskId/exitCode/durationMs/lineCount
+        assert_eq!(events[2].0, "task-completed");
+        let p = &events[2].1;
+        assert_eq!(p["taskId"], "task-1");
+        assert_eq!(p["exitCode"], 0);
+        assert_eq!(p["durationMs"], 1234);
+        assert_eq!(p["lineCount"], 2);
+        // heartbeat：taskId/resource（资源摘要原样透传）
+        assert_eq!(events[3].0, "task-heartbeat");
+        let p = &events[3].1;
+        assert_eq!(p["taskId"], "task-1");
+        assert_eq!(p["resource"]["cpuPercent"], 5.0);
+        // killed：taskId/viaForce/diagnostics
+        assert_eq!(events[4].0, "task-killed");
+        let p = &events[4].1;
+        assert_eq!(p["taskId"], "task-2");
+        assert_eq!(p["viaForce"], true);
+        assert_eq!(p["diagnostics"], "强制终止升级");
+    }
+
+    /// 输出节流断言（30 方案 P2）：注入短窗口（30ms）——窗口内多条输出合并
+    /// 为一条（条数与聚合内容）；窗口边界发一条；已发射内容不重复。
+    #[test]
+    fn task_output_throttled_window() {
+        struct MemSink(Arc<Mutex<Vec<(String, serde_json::Value)>>>);
+        impl std::fmt::Debug for MemSink {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "MemSink")
+            }
+        }
+        impl EventSink for MemSink {
+            fn emit(&self, event_type: &str, payload: serde_json::Value) {
+                self.0.lock().unwrap().push((event_type.to_string(), payload));
+            }
+        }
+        let emitted = Arc::new(Mutex::new(Vec::new()));
+        // 注入 30ms 短窗口（生产默认 100ms）+ 内存事件收集器
+        let mut notifier = TaskNotifier::with_output_window_ms(30);
+        notifier.set_event_sink(Arc::new(MemSink(Arc::clone(&emitted))));
+
+        // 窗口内两条输出：合并不发射（条数 0）
+        notifier.notify_output("task-9", "line-1", 1);
+        notifier.notify_output("task-9", "line-2", 2);
+        assert_eq!(
+            emitted.lock().unwrap().len(),
+            0,
+            "窗口内输出必须合并（不逐条发射）"
+        );
+
+        // 窗口边界：超过 30ms 后再次输出 → 聚合发一条（内容 = 最后一行）
+        std::thread::sleep(std::time::Duration::from_millis(40));
+        notifier.notify_output("task-9", "line-3", 3);
+        {
+            let events = emitted.lock().unwrap();
+            assert_eq!(events.len(), 1, "窗口边界应恰发一条聚合输出");
+            assert_eq!(events[0].0, "task-output");
+            assert_eq!(events[0].1["line"], "line-3", "聚合内容 = 窗口内最后一行");
+            assert_eq!(events[0].1["lineCount"], 3, "聚合行数 = 最新累计行数");
+        }
+
+        // 新窗口内一条输出（未到边界）后立即完成：终态冲刷补发窗口内
+        // 最后一行（line-4），再发 completed——窗口未闭合内容不丢失
+        notifier.notify_output("task-9", "line-4", 4);
+        notifier.notify_completed("task-9", 0, 999, 4);
+        {
+            let events = emitted.lock().unwrap();
+            assert_eq!(events.len(), 3, "冲刷补发 + completed 共 2 条新事件");
+            assert_eq!(events[1].0, "task-output", "冲刷补发的是聚合输出");
+            assert_eq!(events[1].1["line"], "line-4", "补发内容 = 窗口内最后一行");
+            assert_eq!(events[1].1["lineCount"], 4);
+            assert_eq!(events[2].0, "task-completed");
+        }
+        // 再次完成（无新输出内容）：flush 幂等——不再补发 task-output，
+        // 仅新增一条 task-completed（事件非幂等由调用方保证单次）
+        notifier.notify_completed("task-9", 0, 999, 4);
+        {
+            let events = emitted.lock().unwrap();
+            assert_eq!(events.len(), 4, "第二次完成只发 completed");
+            assert_eq!(events[3].0, "task-completed");
+            assert_eq!(
+                events.iter().filter(|e| e.0 == "task-output").count(),
+                2,
+                "flush 幂等：已发射输出不得重复补发"
+            );
+        }
+
+        // 任务隔离：另一任务窗口互不串扰（新窗口首条输出未到边界不发射）
+        notifier.notify_output("task-10", "other-line", 1);
+        {
+            let events = emitted.lock().unwrap();
+            assert_eq!(events.len(), 4, "其他任务输出不得发射（按任务隔离）");
+            assert_eq!(
+                events.iter().filter(|e| e.0 == "task-output").count(),
+                2,
+                "task-10 首条输出未到边界，不得进入发射流"
+            );
         }
     }
 }

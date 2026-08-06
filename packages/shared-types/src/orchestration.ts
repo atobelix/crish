@@ -2,7 +2,17 @@ import type { JsonObject } from "./primitive-types";
 import type { AgentEvent } from "./events";
 
 export type SessionStatus = "open" | "closed" | "archived";
-export type RunStatus = "queued" | "running" | "awaiting-approval" | "cancelling" | "cancelled" | "completed" | "failed";
+// RunStatus 放宽（审计 11-T1 / 裁决 D3）：string 兜底使未知状态字面量
+// 通过类型检查；消费面「原样显示」未知字面量（不 panic、落默认分支）。
+export type RunStatus =
+  | "queued"
+  | "running"
+  | "awaiting-approval"
+  | "cancelling"
+  | "cancelled"
+  | "completed"
+  | "failed"
+  | (string & {});
 export type RunOutcome = "completed" | "blocked" | "cancelled" | "failed";
 
 export type RunOutcomeReason =

@@ -122,10 +122,11 @@ impl RunStateMachine {
 
     /// 当前状态
     pub fn state(&self) -> RunStatus {
-        self.state
+        self.state.clone()
     }
 
-    /// 是否已到终态（completed / failed / cancelled）
+    /// 是否已到终态（completed / failed / cancelled；Unknown 显式排除——
+    /// 死态不可迁移、不属于三终态，由 [Self::transition] 拒绝一切事件）
     pub fn is_terminal(&self) -> bool {
         matches!(
             self.state,
@@ -135,7 +136,7 @@ impl RunStateMachine {
 
     /// 应用转移；成功返回新状态，终态与未定义转移显式失败
     pub fn transition(&mut self, event: RunLifecycleEvent) -> Result<RunStatus, TransitionError> {
-        let next = match (self.state, event) {
+        let next = match (&self.state, event) {
             (RunStatus::Queued, RunLifecycleEvent::Start) => RunStatus::Initializing,
             (RunStatus::Queued, RunLifecycleEvent::ForceInterrupt) => RunStatus::Failed,
             (RunStatus::Initializing, RunLifecycleEvent::RuntimeReady) => RunStatus::Running,
@@ -162,19 +163,26 @@ impl RunStateMachine {
             // 终态拒绝任何转移（05 §2.8：终态拒绝再转移）
             (RunStatus::Completed | RunStatus::Failed | RunStatus::Cancelled, _) => {
                 return Err(TransitionError {
-                    from: self.state,
+                    from: self.state.clone(),
+                    event: event.as_str(),
+                });
+            }
+            // Unknown 为死态（裁决 D3）：任何事件一律拒绝迁移，保真滞留
+            (RunStatus::Unknown(_), _) => {
+                return Err(TransitionError {
+                    from: self.state.clone(),
                     event: event.as_str(),
                 });
             }
             // 未定义转移显式失败
             _ => {
                 return Err(TransitionError {
-                    from: self.state,
+                    from: self.state.clone(),
                     event: event.as_str(),
                 });
             }
         };
-        self.state = next;
+        self.state = next.clone();
         Ok(next)
     }
 }
@@ -285,13 +293,13 @@ impl RunHandle {
         Self {
             run_id: run_id.to_string(),
             session_id: session_id.to_string(),
-            status: initial,
+            status: initial.clone(),
             created_at: now,
             updated_at: now,
             cursor: 0,
             end_reason: None,
             error: None,
-            machine: RunStateMachine::new(initial),
+            machine: RunStateMachine::new(initial.clone()),
             terminal_sent: false,
             cancel: None,
         }
@@ -334,7 +342,7 @@ impl RunHandle {
         }
         let next = self.machine.transition(event).map_err(RunError::Transition)?;
         store
-            .update_run_status(&self.run_id, next, None, None)
+            .update_run_status(&self.run_id, next.clone(), None, None)
             .await
             .map_err(RunError::Store)?;
         self.status = next;
@@ -442,7 +450,7 @@ impl RunHandle {
         store
             .update_run_status(
                 &self.run_id,
-                self.status,
+                self.status.clone(),
                 Some(end_reason),
                 Some(terminal_cursor as i64),
             )
@@ -676,7 +684,7 @@ mod tests {
     #[test]
     fn machine_terminal_states_reject_further_transitions() {
         for terminal in [RunStatus::Completed, RunStatus::Failed, RunStatus::Cancelled] {
-            let mut m = RunStateMachine::new(terminal);
+            let mut m = RunStateMachine::new(terminal.clone());
             for event in [
                 RunLifecycleEvent::Start,
                 RunLifecycleEvent::RuntimeReady,
@@ -696,6 +704,36 @@ mod tests {
         let err = m.transition(RunLifecycleEvent::ApprovalResolved).unwrap_err();
         assert_eq!(err.from, RunStatus::Queued);
         assert_eq!(err.event, "APPROVAL_RESOLVED");
+    }
+
+    /// 11-T1（裁决 D3）：Unknown 为死态——is_terminal 显式排除（不属于
+    /// 三终态），任何事件一律拒绝迁移（保真滞留，不可迁移）
+    #[test]
+    fn machine_unknown_status_is_dead_state_rejecting_all_events() {
+        let mut m = RunStateMachine::new(RunStatus::Unknown("sneaky".to_string()));
+        assert!(!m.is_terminal(), "Unknown 不属于三终态（显式排除）");
+        assert_eq!(m.state(), RunStatus::Unknown("sneaky".to_string()));
+        // 全事件面逐一拒绝
+        for event in [
+            RunLifecycleEvent::Start,
+            RunLifecycleEvent::RuntimeReady,
+            RunLifecycleEvent::InitError,
+            RunLifecycleEvent::ApprovalRequested,
+            RunLifecycleEvent::ApprovalResolved,
+            RunLifecycleEvent::CancelRequested,
+            RunLifecycleEvent::CancelConfirmed,
+            RunLifecycleEvent::AgentStop,
+            RunLifecycleEvent::MaxTurnsReached,
+            RunLifecycleEvent::GoalComplete,
+            RunLifecycleEvent::RuntimeError,
+            RunLifecycleEvent::Finalized,
+            RunLifecycleEvent::FinalizeError,
+            RunLifecycleEvent::ForceInterrupt,
+        ] {
+            let err = m.transition(event).unwrap_err();
+            assert_eq!(err.from, RunStatus::Unknown("sneaky".to_string()), "{event:?} 应被拒绝");
+            assert_eq!(m.state(), RunStatus::Unknown("sneaky".to_string()), "状态不变（死态滞留）");
+        }
     }
 
     #[test]

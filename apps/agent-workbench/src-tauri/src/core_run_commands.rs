@@ -65,8 +65,8 @@ use session_loop::tool_events::{ApprovalDecision, ApprovalRequester};
 use tauri::Manager as _;
 use session_loop::{
     AbortSignal, ApprovalGate, ControlBus, DeltaSink, EscapeWatchConfig, EscapeWatchHandle,
-    EscapeWatchInjector, PermissionMode, RunOutcome, SessionLoopOptions, ToolBatchOptions,
-    spawn_escape_watch,
+    EscapeWatchInjector, PermissionMode, RegistryBackedDetector, RunOutcome, SessionLoopOptions,
+    ToolBatchOptions, spawn_escape_watch,
 };
 
 use crate::core_error::CoreError;
@@ -362,6 +362,11 @@ pub(crate) struct ActiveRun {
     /// 逃逸监视句柄（T-ESC-03：run 起停钩子；None = 未启用。Mutex 包装：
     /// drive / finalize 路径经锁 take 出句柄后 async 收口，锁不跨 await）
     escape_watch: Mutex<Option<EscapeWatchHandle>>,
+    /// 驱动任务句柄（30-P1：spawn(drive_run_loop) 的 JoinHandle）。
+    /// Mutex<Option> 形态——ActiveRun 构造在前、spawn 在后，句柄经
+    /// [Self::set_driver] 事后登记；收口**不 await**（JoinHandle drop 即
+    /// detach，tokio 语义，防挂起），句柄供可观测与未来 join
+    driver: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     /// T-CF-11：本 run 是否有用户交互（用户经 L1 soft_inject 注入消息 /
     /// force_cancel 置位；收口判定「用户消息到达后的正常收场不触发续
     /// run」的依据）
@@ -370,6 +375,26 @@ pub(crate) struct ActiveRun {
     /// 时经 spawner 终态处理（记账释放 / 事件发射 / steering 通知）；
     /// None = 普通 run，收口行为与现状一致）
     subagent: Option<crate::subagent_spawner::SubagentRunConfig>,
+}
+
+impl ActiveRun {
+    /// 登记驱动任务句柄（30-P1；spawn 后调用一次，重复登记覆盖——驱动
+    /// 任务每 run 仅一个）
+    pub(crate) fn set_driver(&self, handle: tauri::async_runtime::JoinHandle<()>) {
+        *self.driver.lock().unwrap_or_else(|e| e.into_inner()) = Some(handle);
+    }
+
+    /// 驱动任务是否已收口（观测 / 测试轮询；不 await，语义 = tokio
+    /// JoinHandle::is_finished——已收口 / 已取消均成立）
+    #[cfg_attr(not(test), allow(dead_code))] // 测试断言面消费；生产供未来 join/观测（30-P1 句柄管理）
+    pub(crate) fn driver_finished(&self) -> bool {
+        self.driver
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|handle| handle.inner().is_finished())
+            .unwrap_or(false)
+    }
 }
 
 /// 活动 run 的引擎取消接口（[orchestrator::run::RunEngine] 实现：
@@ -2152,7 +2177,7 @@ pub(crate) async fn drive_run_loop(
     if let Some(cfg) = active.subagent.clone() {
         let terminal_status = {
             let run = active.handle.lock().await;
-            run.status
+            run.status.clone()
         };
         state
             .on_subagent_run_terminal(&cfg, terminal_status)
@@ -2382,6 +2407,19 @@ fn active_run(state: &CoreRunState, run_id: &str) -> Result<Arc<ActiveRun>, Core
         .ok_or_else(|| CoreError::NotFound(format!("run 不存在或已终态：{run_id}")))
 }
 
+/// 逃逸监视根解析（30-P5 共用 helper，与 loop 装配块 with_options 解析链
+/// 同源：workspace_root → cwd → 当前目录；壳层 workspace_root 恒 None，
+/// 等效 cwd → current_dir）。
+///
+/// run 装配面的三处根解析共用本函数（单一真源，杜绝双处漂移复发——
+/// 00 风险 2）：逃逸监视 spawn 根 / 共享写路径注册表根 / 子代理沙箱根。
+/// None（无 cwd）时监视不启动、注册表以 current_dir 为根、run 装配不
+/// panic（E2E-3 无 cwd 分支）。
+fn resolve_escape_watch_root(cwd: Option<&str>) -> PathBuf {
+    cwd.map(PathBuf::from)
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+}
+
 // ── 命令：core_run_task ───────────────────────────────────────────
 
 /// 发起一次 run（03 §3.2 A 组；返回 {runId, sessionId} 回执）
@@ -2588,12 +2626,27 @@ pub(crate) async fn run_task_impl(
     // 监视根 = cwd（工作目录，run 驱动的工作区根）；watcher.start →
     // 消费任务 spawn（聚合 → 审计发射 + 主 agent 注入，REQ §3.5.1），
     // 句柄绑定 ActiveRun 随 run 收口（shutdown = stop + flush 剩余）。
-    // 监视启动失败仅告警不阻断 run（监视是追踪面，REQ §3.6 不阻断）；
-    // 判定器本轮未接线（write_claims 总接线点在 F7 T-EG-06，届时须
-    // 同时经 EscapeWatchConfig::with_detector 注入
-    // RegistryBackedDetector）——当前仅依赖监视事件直接发射（「工具
-    // 审计覆盖」第二来源兜底，REQ §3.1:349-356）。
+    // 监视启动失败仅告警不阻断 run（监视是追踪面，REQ §3.6 不阻断）。
+    //
+    // 30-P5 时序更正（A4-H1 / C-36 假闭环消除）：判定器在本装配点直接
+    // 注入（spawn_escape_watch 的 config 是值传递，装配后即就位，不再
+    // 依赖 loop 侧 with_options 的配置副本）——detector 与 write_claims
+    // 同一 registry 实例（双端注入成对，评审清单项）：
+    // - 工具执行面声明写路径（options.write_claims 注入共享注册表）→
+    //   声明覆盖静默（审计不误报）；
+    // - 声明释放 / 未声明写入 → 上报（未声明写审计）。
+    let escape_root = resolve_escape_watch_root(cwd.as_deref());
     let control_bus = Arc::new(Mutex::new(ControlBus::new()));
+    // 30-P5：共享写路径注册表（会话级，与逃逸监视根同源）——工具执行
+    // 面与逃逸判定器读同一实例；loop 侧 with_options 解析链
+    // （options.write_claims 优先）保持同源
+    let shared_registry = Arc::new(WritePathRegistry::new(session_id.clone(), &escape_root));
+    // 30-P1：每 run 新建 abort 信号（M3 契约「每 run 重建 loop + 新信号」——
+    // AbortSignal 共享 AtomicBool 不可复位，跨 run 泄漏语义禁止复用；
+    // 同一实例注入 ActiveRun 与 loop，L3 强停 / kill_all 经同一触发面）。
+    // AbortSignal::reset 不实现（Notify 无法复位，跨 run 泄漏语义登记
+    // A4-M3 邻接，以「每 run 新信号」契约兜底）
+    let abort_signal = AbortSignal::new();
     let (escape_watch, escape_config) = if let Some(dir) = cwd.clone() {
         let root = PathBuf::from(dir);
         let config = EscapeWatchConfig::new(
@@ -2602,7 +2655,13 @@ pub(crate) async fn run_task_impl(
             run_id.clone(),
             Arc::new(BridgeAuditSink::new(Arc::clone(&bridge), run_id.clone())) as AuditSink,
         )
-        .with_injector(Arc::new(ControlBusInjector::new(Arc::clone(&control_bus))));
+        .with_injector(Arc::new(ControlBusInjector::new(Arc::clone(&control_bus))))
+        // 30-P5：判定器在 spawn 前注入（与 write_claims 同一 registry
+        // 实例——声明写静默 / 未声明上报；消除 detector 恒 None 的
+        // C-36 假闭环）
+        .with_detector(Arc::new(RegistryBackedDetector::new(Arc::clone(
+            &shared_registry,
+        ))));
         match spawn_escape_watch(root, config.clone()) {
             Ok(handle) => {
                 tracing::info!(
@@ -2642,13 +2701,10 @@ pub(crate) async fn run_task_impl(
     let (subagent_write_registry, subagent_quota, subagent_injector) =
         match &subagent_config {
             None => (subagent_write_registry, subagent_quota, subagent_injector),            Some(config) => {
-                // 工作区根解析链（与 loop 装配块同源：显式 cwd → 当前目录）
-                let root = cwd
-                    .clone()
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|| {
-                        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-                    });
+                // 工作区根解析链（30-P5：与 loop 装配块同源，经共用 helper
+                // resolve_escape_watch_root——单一真源，杜绝双处漂移复发；
+                // 壳层 workspace_root 恒 None，等效 cwd → current_dir）
+                let root = resolve_escape_watch_root(cwd.as_deref());
                 // 写路径沙箱装配
                 let write_registry = match &config.allowed_write_paths {
                     Some(paths) => {
@@ -2752,8 +2808,12 @@ pub(crate) async fn run_task_impl(
         // 裁决者路由依据；None = 主 agent run，现状行为）
         parent_run_id: parent_run_id.clone(),
         // T-D-13：子代理 run 的写路径沙箱注册表（with_write_policy 装配；
-        // None = 普通 run，loop 装配块按工作区根新建无策略注册表）
-        write_claims: subagent_write_registry.clone(),
+        // 子代理沙箱优先，策略注册逻辑不动）；普通 run 由 None 变
+        // Some(shared_registry)——30-P5：与逃逸判定器同一实例（双端注入
+        // 成对：工具声明写不误报未声明）
+        write_claims: subagent_write_registry
+            .clone()
+            .or_else(|| Some(Arc::clone(&shared_registry))),
         // T-D-13：子代理 run 的配额上下文（design/review 凭证；None =
         // 主 agent 不受配额约束，现状行为）
         explore_docs_quota: subagent_quota.clone(),
@@ -2818,7 +2878,14 @@ pub(crate) async fn run_task_impl(
     .with_cache_session(state.engine.cache_session(&session_id))
     // T-D-13：子代理 run 的上下文注入通道（角色约束 / started_at /
     // 权限申请指引 / 产出目录段；None = 无注入，system_prompt 原样透传）
-    .with_context_injector(subagent_injector);
+    .with_context_injector(subagent_injector)
+    // 30-P1：run 控制面接线——壳层与 loop 同源（同一控制总线 + 同一
+    // abort 信号实例；check_control 安全点消费，运行中 run 有真实外部
+    // 终止路径：core_run_control → 总线 → run 终止，L3 ≤ 下一安全点
+    // 收场）。builder 顺序契约：with_* 在 run() 前（produce 内装配，
+    // loop/mod.rs with_control_bus 注释）
+    .with_control_bus(Arc::clone(&control_bus))
+    .with_abort_signal(abort_signal.clone());
 
     // T-AB-19：登记当前 run 上下文（owner_run_id 注入槽）——须在 spawn
     // drive_run_loop 之前，保证 run 内工具执行链 adopt 时已可见；run
@@ -2838,12 +2905,16 @@ pub(crate) async fn run_task_impl(
         handle: handle_shared,
         queue,
         control_bus: Arc::clone(&control_bus),
-        abort_signal: AbortSignal::new(),
+        // 30-P1：与 loop 共享同一信号实例（克隆即同一触发面；L3 强停
+        // 经 ActiveRun.abort_signal 或 run_control_impl 任一入口生效）
+        abort_signal: abort_signal.clone(),
         approval: approval_gate,
         bridge,
         delta_sink_active: true,
         escape_watch: Mutex::new(escape_watch),
         user_touched: AtomicBool::new(false),
+        // 30-P1：spawn 句柄经 set_driver 事后登记（构造在前、spawn 在后）
+        driver: Mutex::new(None),
         // T-D-13：子代理 run 装配配置随活动 run 登记（收口终态处理依据）
         subagent: subagent_config.clone(),
     });
@@ -2852,7 +2923,16 @@ pub(crate) async fn run_task_impl(
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .insert(run_id.clone(), Arc::clone(&active));
-    tauri::async_runtime::spawn(drive_run_loop(state, active, Box::new(producer)));
+    // 30-P1 改动点 4：JoinHandle 管理——spawn 句柄存入 ActiveRun（驱动
+    // 任务持同一 active 实例）；收口不 await（JoinHandle drop 即 detach，
+    // tokio 语义，防挂起）；句柄供可观测与未来 join（测试经
+    // driver_finished 轮询断言）
+    let driver = tauri::async_runtime::spawn(drive_run_loop(
+        state,
+        Arc::clone(&active),
+        Box::new(producer),
+    ));
+    active.set_driver(driver);
 
     tracing::info!(
         target: "run",
@@ -4433,6 +4513,7 @@ mod tests {
             bridge,
             delta_sink_active: true,
             escape_watch: Mutex::new(None),
+            driver: Mutex::new(None),
             user_touched: AtomicBool::new(false),
             // T-D-13：测试驱动路径的子代理配置缺省 None（普通 run 语义）
             subagent: None,
@@ -5953,5 +6034,782 @@ mod tests {
                 .filter(|r| r.subagent_run_id == "sub-run-ghost")
                 .all(|r| r.status == "failed")
         );
+    }
+
+    // ── 30-P1 / 30-P5：run 控制面端到端 + 逃逸判定器时序 ─────────
+
+    /// 测试临时工作区（RAII 清理）。conex_test_utils 为 dev-dependency
+    /// 且本卡禁改 Cargo.toml——自备最小等价物（真实目录 + 真实文件，
+    /// 逃逸监视真实 watcher 的监视根）
+    struct TestWorkspace {
+        path: PathBuf,
+    }
+
+    impl TestWorkspace {
+        fn new(tag: &str) -> Self {
+            let seq = CORE_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "conex_escape_e2e_{tag}_{}_{seq}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&path).expect("临时目录创建");
+            Self { path }
+        }
+
+        fn path_str(&self) -> String {
+            self.path.display().to_string()
+        }
+
+        fn write_file(&self, rel: &str, content: &str) {
+            std::fs::write(self.path.join(rel), content).expect("测试写文件");
+        }
+    }
+
+    impl Drop for TestWorkspace {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    /// 测试状态（真实 CoreRunState + LocalDb + 注入 TestProvider 引擎；
+    /// run_task_impl → drive_run_loop 完整装配真实 loop；会话 s1 条目
+    /// 已建——start_run 外键前置）
+    fn run_control_test_state(
+        provider: Arc<TestProvider>,
+    ) -> (Arc<CoreRunState>, LocalDb, Arc<RecordingEmitter>) {
+        let (bridge, emitter) = recording_bridge();
+        let db = LocalDb::open_in_memory().expect("内存库");
+        db.upsert_session_entry(&subagent_test_session_entry("s1"))
+            .expect("会话条目");
+        let seq = CORE_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let snapshots: Arc<dyn SnapshotStore> = Arc::new(
+            orchestrator::restore::SnapshotFileStore::new(std::env::temp_dir().join(format!(
+                "conex_run_control_{}_{seq}_snapshot.json",
+                std::process::id()
+            ))),
+        );
+        let state = Arc::new(CoreRunState::new(
+            Arc::new(LocalDbStore::new(db.clone())),
+            snapshots,
+            bridge,
+            Arc::new(StatusDiagnostics::new()),
+            None,
+        ));
+        let routed: Arc<dyn ProviderCall> = provider;
+        let config = EngineProviderConfig {
+            base_url: "http://test.local/v1".to_string(),
+            api_key: "test-key".to_string(),
+            model: "deepseek-v4-flash".to_string(),
+            endpoint: Endpoint::ChatCompletions,
+            stream: true,
+            extra: BTreeMap::new(),
+        };
+        state.engine.inject_provider_for_test(routed, config);
+        (state, db, emitter)
+    }
+
+    /// 测试选项（带 cwd；cwd = 逃逸监视根 / 共享注册表根）
+    fn test_options_with_cwd(
+        run_id: &str,
+        session_id: &str,
+        prompt: &str,
+        cwd: &str,
+    ) -> RunTaskOptions {
+        RunTaskOptions {
+            cwd: Some(cwd.to_string()),
+            ..test_options(run_id, session_id, prompt)
+        }
+    }
+
+    /// 轮询活动 run 句柄的终态 end_reason（真实 loop 收口后 drive_outcome
+    /// finalize 写入；窗口内未终态则 panic）
+    async fn wait_run_end_reason(active: &Arc<ActiveRun>, window: Duration) -> String {
+        let deadline = tokio::time::Instant::now() + window;
+        loop {
+            let run = active.handle.lock().await;
+            if let Some(reason) = &run.end_reason {
+                return reason.clone();
+            }
+            drop(run);
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "run 未在窗口内终态"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+    }
+
+    /// 轮询会话事件库中的 agent-end 事件（真实 loop 收口落库；返回
+    /// reason——RunOutcome.reason 的持久化镜像，kebab-case）
+    async fn wait_run_agent_end_reason(
+        db: &LocalDb,
+        session_id: &str,
+        window: Duration,
+    ) -> String {
+        let deadline = tokio::time::Instant::now() + window;
+        loop {
+            let events = db.query_events(session_id, 0, Some(500)).expect("事件查询");
+            for event in &events {
+                if event.event_type != "agent-end" {
+                    continue;
+                }
+                let payload: serde_json::Value =
+                    serde_json::from_str(&event.payload).expect("agent-end 载荷为合法 JSON");
+                if let Some(reason) = payload["reason"].as_str() {
+                    return reason.to_string();
+                }
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "agent-end 事件未在窗口内落库"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+    }
+
+    /// 事件桥载荷 → security-audit 操作列表（判定器审计断言用）
+    fn audit_operations(emitter: &RecordingEmitter) -> Vec<String> {
+        emitter
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .filter_map(|p| {
+                let value: serde_json::Value = serde_json::from_str(p).ok()?;
+                if value["type"] == "security-audit" {
+                    Some(
+                        value["operation"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_string(),
+                    )
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// 轮询至事件桥出现指定 operation 的 security-audit（窗口内未到则
+    /// panic——不静默降级）
+    async fn wait_for_audit_operation(
+        emitter: &Arc<RecordingEmitter>,
+        operation: &str,
+        window: Duration,
+    ) {
+        let deadline = tokio::time::Instant::now() + window;
+        loop {
+            if audit_operations(emitter).iter().any(|op| op == operation) {
+                return;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "未在窗口内收到 {operation} 审计"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+    }
+
+    /// 30-P1 验收（E2E-1）：L3 force_cancel 真实终止运行中的 run——
+    /// TestProvider 栅栏挂起流（pause 3s），L3 经 run_control_impl →
+    /// abort_signal + 控制总线 → 下一安全点（stream 结束）ABORT →
+    /// agent-end reason == aborted（真实 loop 消费，不再只置位）
+    #[tokio::test]
+    async fn l3_force_cancel_aborts_running_run() {
+        let provider = Arc::new(
+            TestProvider::new(vec![
+                ProviderStreamEvent::text("第一轮"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ])
+            .with_pause(0, 3_000),
+        );
+        let (state, db, _emitter) = run_control_test_state(provider.clone());
+        state.run_restore().await;
+
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-l3-e2e", "s1", "发起 run"),
+        )
+        .await
+        .expect("run 发起成功");
+        let active = state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("run-l3-e2e")
+            .cloned()
+            .expect("run 已注册");
+        // L3 强停（用户取消路径：abort_signal + 总线 force_cancel 双写）
+        run_control_impl(
+            &state,
+            "run-l3-e2e",
+            "force_cancel",
+            None,
+            Some("用户取消".to_string()),
+            None,
+        )
+        .await
+        .expect("force_cancel 应成功");
+        // 真实 loop 在下一安全点收场：agent-end reason == aborted
+        let end_reason = wait_run_end_reason(&active, Duration::from_secs(10)).await;
+        assert_eq!(end_reason, "aborted", "L3 强停后 run 必须以 aborted 终态");
+        let agent_reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(5)).await;
+        assert_eq!(
+            agent_reason, "aborted",
+            "L3 强停后 loop 的 agent-end 收场 reason 必须为 aborted"
+        );
+    }
+
+    /// 30-P1 验收（E2E-1）：L2 cooperative_stop 真实到达运行中的 run——
+    /// 协作停止不等 abort：安全点 D1 驱动到 done，agent-end reason ==
+    /// stopped（独立 reason，非 aborted 非 stop）
+    #[tokio::test]
+    async fn l2_cooperative_stop_reaches_stopped() {
+        let provider = Arc::new(
+            TestProvider::new(vec![
+                ProviderStreamEvent::text("第一轮"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ])
+            .with_pause(0, 3_000),
+        );
+        let (state, db, _emitter) = run_control_test_state(provider.clone());
+        state.run_restore().await;
+
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-l2-e2e", "s1", "发起 run"),
+        )
+        .await
+        .expect("run 发起成功");
+        let active = state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("run-l2-e2e")
+            .cloned()
+            .expect("run 已注册");
+        // L2 协作停止（入控制总线，不触发 abort_signal）
+        run_control_impl(
+            &state,
+            "run-l2-e2e",
+            "cooperative_stop",
+            None,
+            Some("用户停止".to_string()),
+            None,
+        )
+        .await
+        .expect("cooperative_stop 应成功");
+        let agent_reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(10)).await;
+        assert_eq!(
+            agent_reason, "stopped",
+            "L2 协作停止后 loop 必须以 stopped 收场（D1 独立 reason）"
+        );
+        // 协作停止不是取消：run-terminal 终态为 completed 而非 cancelled
+        // （L2 不置 cancel_requested，终态本体由 drive_outcome 权威映射）
+        let _ = active;
+        let events = db.query_events("s1", 0, Some(500)).expect("事件查询");
+        let terminal = events
+            .iter()
+            .filter(|e| e.event_type == "run-terminal")
+            .last()
+            .expect("run-terminal 必须落库");
+        let payload: serde_json::Value =
+            serde_json::from_str(&terminal.payload).expect("run-terminal 载荷为合法 JSON");
+        assert_eq!(
+            payload["terminal"], "completed",
+            "L2 协作停止归 completed 而非 cancelled：{payload}"
+        );
+    }
+
+    /// 30-P1 验收（E2E-1）：L1 soft_inject 真实到达运行中的 run——
+    /// followUp 注入 → turn-complete 空闲 promote → 下一轮请求对话包含
+    /// 注入消息（conversation 增长，真实 loop 消费，不再只置位）
+    #[tokio::test]
+    async fn l1_soft_inject_reaches_session() {
+        let provider = Arc::new(
+            TestProvider::with_scripts(vec![
+                vec![
+                    ProviderStreamEvent::text("第一轮"),
+                    ProviderStreamEvent::stop(StopReason::Stop),
+                ],
+                vec![
+                    ProviderStreamEvent::text("收到注入"),
+                    ProviderStreamEvent::stop(StopReason::Stop),
+                ],
+            ])
+            .with_pause(0, 3_000),
+        );
+        let (state, _db, _emitter) = run_control_test_state(Arc::clone(&provider));
+        state.run_restore().await;
+
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-l1-e2e", "s1", "发起 run"),
+        )
+        .await
+        .expect("run 发起成功");
+        // 栅栏窗口内注入（流仍挂起，注入不打断流）
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        run_control_impl(
+            &state,
+            "run-l1-e2e",
+            "follow_up",
+            Some("注入消息A".to_string()),
+            Some("l1-test".to_string()),
+            None,
+        )
+        .await
+        .expect("follow_up 应成功");
+        // 注入消息真实进入会话：下一轮 provider 请求的对话包含注入文本
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        loop {
+            let injected = provider.request_message_arcs(1).iter().any(|m| {
+                m.text().contains("注入消息A")
+            });
+            if injected {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "注入消息未在窗口内进入会话对话"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        // 收口复核：run 正常收场（注入不打断流）
+        let active = state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("run-l1-e2e")
+            .cloned()
+            .expect("run 已注册");
+        let end_reason = wait_run_end_reason(&active, Duration::from_secs(10)).await;
+        assert_eq!(end_reason, "stop", "L1 注入不改变收场（正常 stop）");
+    }
+
+    /// 30-P1 验收（E2E-1）：kill_all 引擎侧实现（ForceCancelSink :1751
+    /// 路径）→ 目标 run 真实终止——L3 强停经同一控制总线投递，运行中
+    /// run 在下一安全点以 aborted 收场
+    #[tokio::test]
+    async fn kill_all_aborts_target_run() {
+        let provider = Arc::new(
+            TestProvider::new(vec![
+                ProviderStreamEvent::text("第一轮"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ])
+            .with_pause(0, 3_000),
+        );
+        let (state, db, _emitter) = run_control_test_state(provider.clone());
+        state.run_restore().await;
+
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-kill-e2e", "s1", "发起 run"),
+        )
+        .await
+        .expect("run 发起成功");
+        let active = state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("run-kill-e2e")
+            .cloned()
+            .expect("run 已注册");
+        // kill_all 的引擎侧实现：ForceCancelSink（:1751 路径，bus L3 投递）
+        use orchestrator::lifecycle::ForceCancelSink as _;
+        assert!(
+            state.request_force_cancel("run-kill-e2e", "test-kill-all"),
+            "kill_all 投递必须命中活动 run"
+        );
+        let agent_reason = wait_run_agent_end_reason(&db, "s1", Duration::from_secs(10)).await;
+        assert_eq!(
+            agent_reason, "aborted",
+            "kill_all 后目标 run 必须以 aborted 收场"
+        );
+        let _ = active;
+    }
+
+    /// 30-P1 改动点 4：spawn(drive_run_loop) 的 JoinHandle 已登记——
+    /// 构造后句柄存在（不 await）；run 收口后 is_finished() 轮询成立
+    #[tokio::test]
+    async fn active_run_driver_joinhandle_saved() {
+        let provider = Arc::new(
+            TestProvider::new(vec![
+                ProviderStreamEvent::text("收口"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ])
+            .with_pause(0, 1_000),
+        );
+        let (state, _db, _emitter) = run_control_test_state(provider.clone());
+        state.run_restore().await;
+
+        run_task_impl(
+            Arc::clone(&state),
+            test_options("run-drv-e2e", "s1", "发起 run"),
+        )
+        .await
+        .expect("run 发起成功");
+        let active = state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("run-drv-e2e")
+            .cloned()
+            .expect("run 已注册");
+        // 句柄已登记（spawn 后同步写入；ActiveRun 构造先例断言）
+        assert!(
+            active
+                .driver
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_some(),
+            "spawn 后 driver JoinHandle 必须已登记"
+        );
+        // 收口后 is_finished() 轮询成立（不 await 句柄本身——防挂起语义）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        while !active.driver_finished() {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "驱动任务未在窗口内收口"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+    }
+
+    /// 30-P5 验收（E2E-2）：真实 watcher 触发逃逸注入 → 主 agent
+    /// followUp 真实到达——批量写入触发聚合报告 → 注入经同一控制总线
+    /// 落 followUp 环 → 安全点消费 → 下一轮对话包含归因摘要
+    #[tokio::test]
+    async fn escape_watch_inject_reaches_main_agent() {
+        let ws = TestWorkspace::new("esc_inject_e2e");
+        let provider = Arc::new(
+            TestProvider::with_scripts(vec![
+                vec![
+                    ProviderStreamEvent::text("第一轮"),
+                    ProviderStreamEvent::stop(StopReason::Stop),
+                ],
+                vec![
+                    ProviderStreamEvent::text("收到注入"),
+                    ProviderStreamEvent::stop(StopReason::Stop),
+                ],
+            ])
+            .with_pause(0, 5_000),
+        );
+        let (state, _db, _emitter) = run_control_test_state(Arc::clone(&provider));
+        state.run_restore().await;
+
+        run_task_impl(
+            Arc::clone(&state),
+            test_options_with_cwd("run-esc-inj", "s1", "发起 run", &ws.path_str()),
+        )
+        .await
+        .expect("run 发起成功");
+        // 栅栏窗口内批量写入（≥ batch_size 触发即时聚合报告 → 注入）
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        for i in 0..12 {
+            ws.write_file(&format!("f{i}.txt"), "escape");
+        }
+        // 注入真实到达：下一轮 provider 请求的对话包含归因摘要（含 run 标识）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        loop {
+            let injected = provider.request_message_arcs(1).iter().any(|m| {
+                m.text().contains("检测到工具外写入")
+                    && m.text().contains("run-esc-inj")
+            });
+            if injected {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "逃逸注入未在窗口内到达会话对话"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+    }
+
+    /// 逃逸探针工具（30-P5 判定器端到端）：可选声明写路径 → 写文件 →
+    /// 持声明休眠（让 watcher 事件落入声明窗口，notify 事件延迟通常
+    /// <200ms，2s 窗口确定性充足）→ 释放。记录执行面注入的注册表 Arc
+    ///（同一实例断言用）
+    struct EscapeProbeTool {
+        /// 声明写路径（Some = 声明覆盖静默路径；None = 未声明上报路径）
+        claim_path: Option<String>,
+        /// 额外写入的未声明路径（与声明路径成对验证同一注册表）
+        extra_unclaimed: Option<String>,
+        /// 记录执行面注入的注册表（30-P5 双端注入成对断言）
+        observed_registry: Arc<Mutex<Option<Arc<WritePathRegistry>>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl agent_tools::definition::Tool for EscapeProbeTool {
+        fn name(&self) -> &str {
+            "escape_probe"
+        }
+
+        fn definition(&self) -> &agent_tools::definition::ToolDefinition {
+            static DEF: std::sync::OnceLock<agent_tools::definition::ToolDefinition> =
+                std::sync::OnceLock::new();
+            DEF.get_or_init(|| agent_tools::definition::ToolDefinition {
+                name: "escape_probe".to_string(),
+                description: "逃逸判定器探针".to_string(),
+                input_schema: serde_json::json!({"type": "object"}),
+                dangerous: false,
+                fatal_on_error: false,
+            })
+        }
+
+        async fn execute(
+            &self,
+            ctx: &agent_tools::context::ToolContext,
+            _args: serde_json::Value,
+        ) -> Result<serde_json::Value, ToolError> {
+            *self
+                .observed_registry
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = ctx.write_claims.clone();
+            let write = |rel: &str, content: &str| {
+                std::fs::write(ctx.workspace_root.join(rel), content)
+                    .map_err(|error| {
+                        ToolError::execution_failed(
+                            "escape_probe",
+                            &format!("写文件失败 {rel}：{error}"),
+                        )
+                    })
+            };
+            if let Some(claim) = &self.claim_path {
+                let holder = ctx
+                    .write_claim_holder
+                    .clone()
+                    .unwrap_or_else(|| ctx.session_id.clone());
+                let registry = ctx
+                    .write_claims
+                    .clone()
+                    .expect("装配后执行面必须注入写路径注册表");
+                let _guard = registry
+                    .claim_one(holder, claim, agent_tools::write_paths::ClaimMode::Write)
+                    .map_err(|error| {
+                        ToolError::execution_failed(
+                            "escape_probe",
+                            &format!("声明写路径失败 {claim}：{error}"),
+                        )
+                    })?;
+                write(claim, "declared")?;
+                // 持声明窗口：守卫在本块内保持（notify 事件延迟通常
+                // <200ms，2s 窗口确定性充足）——声明覆盖判定在事件到达
+                // 时仍有效；声明释放后该路径恢复未声明上报
+                tokio::time::sleep(Duration::from_millis(2_000)).await;
+            }
+            if let Some(extra) = &self.extra_unclaimed {
+                write(extra, "unclaimed")?;
+            }
+            Ok(serde_json::json!({"probe": true}))
+        }
+    }
+
+    /// 30-P5 验收（E2E-3）：声明写路径静默——工具声明覆盖的写入不产生
+    /// undeclared-write 审计（判定器与工具执行面同源：声明覆盖跳过）
+    #[tokio::test]
+    async fn escape_detector_claims_suppress_audit_e2e() {
+        let ws = TestWorkspace::new("esc_suppress_e2e");
+        let observed = Arc::new(Mutex::new(None));
+        let tool = Arc::new(EscapeProbeTool {
+            claim_path: Some("escape.txt".to_string()),
+            extra_unclaimed: None,
+            observed_registry: Arc::clone(&observed),
+        });
+        let provider = Arc::new(TestProvider::with_scripts(vec![
+            vec![
+                ProviderStreamEvent::tool_call(
+                    Some("call_probe".into()),
+                    "escape_probe",
+                    serde_json::json!({}),
+                ),
+                ProviderStreamEvent::stop(StopReason::ToolCall),
+            ],
+            vec![
+                ProviderStreamEvent::text("完成"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+        ]));
+        let (state, _db, emitter) = run_control_test_state(Arc::clone(&provider));
+        state
+            .engine
+            .tool_registry()
+            .register_runtime(Arc::clone(&tool) as Arc<dyn agent_tools::definition::Tool>)
+            .expect("探针工具注册");
+        state.run_restore().await;
+
+        run_task_impl(
+            Arc::clone(&state),
+            test_options_with_cwd("run-esc-suppress", "s1", "发起 run", &ws.path_str()),
+        )
+        .await
+        .expect("run 发起成功");
+        // 收口（逃逸监视 shutdown flush 已完成——驱动任务收口后注册表移除）
+        let active = state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get("run-esc-suppress")
+            .cloned()
+            .expect("run 已注册");
+        let _ = wait_run_end_reason(&active, Duration::from_secs(15)).await;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        while !active.driver_finished() {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "驱动任务未在窗口内收口"
+            );
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        // 声明覆盖静默：事件桥无 undeclared-write 审计
+        let ops = audit_operations(&emitter);
+        assert!(
+            !ops.iter().any(|op| op == "undeclared-write"),
+            "声明覆盖的写入不得产生 undeclared-write 审计：{ops:?}"
+        );
+        // 执行面确实注入了注册表（探针观测；与判定器同源的前提）
+        assert!(
+            observed.lock().unwrap_or_else(|e| e.into_inner()).is_some(),
+            "工具执行面必须注入写路径注册表（30-P5 write_claims 恒注入）"
+        );
+    }
+
+    /// 30-P5 验收（E2E-3）：未声明路径写入上报——工具未声明的写入产生
+    /// undeclared-write 审计（判定器生效的正面路径）
+    #[tokio::test]
+    async fn escape_detector_unclaimed_path_reports_e2e() {
+        let ws = TestWorkspace::new("esc_report_e2e");
+        let tool = Arc::new(EscapeProbeTool {
+            claim_path: None,
+            extra_unclaimed: Some("escape_probe.txt".to_string()),
+            observed_registry: Arc::new(Mutex::new(None)),
+        });
+        let provider = Arc::new(TestProvider::with_scripts(vec![
+            vec![
+                ProviderStreamEvent::tool_call(
+                    Some("call_probe".into()),
+                    "escape_probe",
+                    serde_json::json!({}),
+                ),
+                ProviderStreamEvent::stop(StopReason::ToolCall),
+            ],
+            vec![
+                ProviderStreamEvent::text("完成"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+        ]));
+        let (state, _db, emitter) = run_control_test_state(Arc::clone(&provider));
+        state
+            .engine
+            .tool_registry()
+            .register_runtime(Arc::clone(&tool) as Arc<dyn agent_tools::definition::Tool>)
+            .expect("探针工具注册");
+        state.run_restore().await;
+
+        run_task_impl(
+            Arc::clone(&state),
+            test_options_with_cwd("run-esc-report", "s1", "发起 run", &ws.path_str()),
+        )
+        .await
+        .expect("run 发起成功");
+        // 未声明写入 → undeclared-write 审计（收口 flush 兜底发射）
+        wait_for_audit_operation(&emitter, "undeclared-write", Duration::from_secs(15)).await;
+        // 审计载荷字段级断言（operation / decision=denied / targets）
+        let payloads = emitter.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let reported = payloads.iter().any(|p| {
+            let value: serde_json::Value = serde_json::from_str(p).ok().unwrap_or_default();
+            value["type"] == "security-audit"
+                && value["operation"] == "undeclared-write"
+                && value["decision"] == "denied"
+                && value["targets"]
+                    .as_array()
+                    .map(|t| t.iter().any(|v| {
+                        v.as_str()
+                            .map(|s| s.contains("escape_probe"))
+                            .unwrap_or(false)
+                    }))
+                    .unwrap_or(false)
+        });
+        assert!(reported, "未声明写入必须上报（含 targets 路径）");
+    }
+
+    /// 30-P5 验收：write_claims 与判定器同一 Arc 实例（双端注入成对）——
+    /// 探针工具声明路径静默（判定器看到声明）、未声明兄弟路径上报
+    /// （判定器读同一注册表）——行为级同一实例证明
+    #[tokio::test]
+    async fn write_claims_injected_registry_shared_with_tool_ctx() {
+        let ws = TestWorkspace::new("esc_pair_e2e");
+        let observed = Arc::new(Mutex::new(None));
+        let tool = Arc::new(EscapeProbeTool {
+            claim_path: Some("escape.txt".to_string()),
+            extra_unclaimed: Some("sibling.txt".to_string()),
+            observed_registry: Arc::clone(&observed),
+        });
+        let provider = Arc::new(TestProvider::with_scripts(vec![
+            vec![
+                ProviderStreamEvent::tool_call(
+                    Some("call_probe".into()),
+                    "escape_probe",
+                    serde_json::json!({}),
+                ),
+                ProviderStreamEvent::stop(StopReason::ToolCall),
+            ],
+            vec![
+                ProviderStreamEvent::text("完成"),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+        ]));
+        let (state, _db, emitter) = run_control_test_state(Arc::clone(&provider));
+        state
+            .engine
+            .tool_registry()
+            .register_runtime(Arc::clone(&tool) as Arc<dyn agent_tools::definition::Tool>)
+            .expect("探针工具注册");
+        state.run_restore().await;
+
+        run_task_impl(
+            Arc::clone(&state),
+            test_options_with_cwd("run-esc-pair", "s1", "发起 run", &ws.path_str()),
+        )
+        .await
+        .expect("run 发起成功");
+        // 未声明兄弟路径上报（同一 run 内判定器生效）
+        wait_for_audit_operation(&emitter, "undeclared-write", Duration::from_secs(15)).await;
+        // 执行面注入的注册表与判定器同源：声明路径不产生独立审计条目
+        let payloads = emitter.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let any_escape_txt = payloads.iter().any(|p| {
+            let value: serde_json::Value = serde_json::from_str(p).ok().unwrap_or_default();
+            value["operation"] == "undeclared-write"
+                && value["targets"]
+                    .as_array()
+                    .map(|t| {
+                        t.iter().any(|v| {
+                            v.as_str()
+                                .map(|s| s.contains("escape.txt"))
+                                .unwrap_or(false)
+                        })
+                    })
+                    .unwrap_or(false)
+        });
+        assert!(
+            !any_escape_txt,
+            "声明覆盖的路径不得出现在 undeclared-write 审计中"
+        );
+    }
+
+    /// 30-P5：逃逸监视根解析 helper 与 with_options 解析链同源——
+    /// 无 cwd 场景（None → current_dir）与显式 cwd 两分支
+    #[test]
+    fn escape_root_resolution_matches_with_options() {
+        // 显式 cwd：原样解析（与 with_options 的 options.cwd 分支一致）
+        let explicit = resolve_escape_watch_root(Some("C:\\work\\proj"));
+        assert_eq!(explicit, PathBuf::from("C:\\work\\proj"));
+        // None → current_dir（与 with_options 的 current_dir 兜底一致；
+        // 该分支下监视不启动、注册表以 current_dir 为根、run 装配不
+        // panic——既有 run 测试（cwd=None）持续覆盖）
+        let none = resolve_escape_watch_root(None);
+        let current = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        assert_eq!(none, current);
     }
 }
