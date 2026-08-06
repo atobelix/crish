@@ -4,7 +4,7 @@
  * - onMsg 仅做信封预过滤（runId 归属 + sequence 游标）后交给 parseBridgeEvent；
  * - parseBridgeEvent 为唯一解析入口：优先 T6 生成解析器 parseEngineEvent，
  *   宽容形态（缺信封字段、text-delta / run-* 别名）在 handlers/eventParser 收敛；
- * - 分派走 handlers/dispatch 的 engineDispatchTable（24 键全覆盖）与
+ * - 分派走 handlers/dispatch 的 engineDispatchTable（41 键全覆盖）与
  *   legacyDispatchTable（subagent-* / error），handler 入参为具体事件信封类型；
  * - 未知事件（非生成类型且无归一器）进 registerUnknownEvent 显式登记，
  *   可观测、不静默吞；
@@ -26,6 +26,7 @@ import {
   type BridgeEventEnvelope,
 } from './handlers/eventParser';
 import { dispatchEvent } from './handlers/dispatch';
+import { isDataPlaneEventType } from './dataPlaneRouter';
 import type { HandlerEnv, SendLike } from './handlers/handlerEnv';
 import type { StreamState } from './handlers/streamState';
 
@@ -81,6 +82,10 @@ export class EventRouter {
   /** 主路径分派：入参为具体事件信封类型（engine 或 legacy），未知形态不达此方法 */
   handleAgentEvent(envelope: BridgeEventEnvelope): void {
     if (this.state.cancelled || this.state.finished) return;
+    // 双面隔离（14-T7）：数据面类型（task-* / timer-* / cron-fired）由全局
+    // 数据面路由（dataPlaneRouter）消费，per-run 面直接 return 防重复
+    // dispatch（34 §8.3）
+    if (isDataPlaneEventType(envelope.type)) return;
     dispatchEvent(this.env, envelope);
   }
 
