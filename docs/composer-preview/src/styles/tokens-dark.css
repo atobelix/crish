@@ -1,0 +1,345 @@
+/* ================================================================
+ * Conex Composer — Dark Theme Tokens (Warm Olive-Gray)
+ *
+ * 以 [data-theme="dark"] 选择器覆盖亮色变量。
+ * 暖灰暗色体系——所有灰阶带微暖黄绿底色，与亮色模式的橄榄灰一脉相承：
+ *   背景三级 #1C1C19 → #222220 → #2C2C28
+ *   文字暖白三级 #E8E8E0 → #A8A8A0 → #787870
+ *
+ * 使用方式：在 <html> 或 <body> 上添加 data-theme="dark"
+ * ================================================================ */
+
+[data-theme="dark"] {
+  /* ── 1. 颜色（暖灰暗色） ── */
+  --bg-primary:    #1C1C19;
+  --bg-secondary:  #222220;
+  --bg-tertiary:   #2C2C28;
+  --bg-elevated:   #323230;
+  --bg-hover:      rgba(232, 232, 224, 0.06);
+  --bg-active:     rgba(232, 232, 224, 0.09);
+  --bg-selected:   rgba(82, 156, 180, 0.15);
+
+  --text-primary:     #E8E8E0;
+  --text-secondary:   #A8A8A0;
+  --text-tertiary:    #787870;
+  --text-placeholder: #585850;
+  --text-muted:       #484840;
+  --text-inverse:     #1C1C19;
+  --text-link:        #6BB0C8;
+  --text-link-hover:  #8CC8DC;
+
+  --border-light:   #2E2E2A;
+  --border-default: #3A3A34;
+  --border-medium:  #4A4A42;
+  --border-focus:   rgba(107, 176, 200, 0.4);
+
+  /* 语义色 */
+  --accent-blue:   #529cca;
+  --accent-red:    #e07c73;
+  --accent-green:  #5fb580;
+  --accent-yellow: #d9a348;
+  --accent-purple: #9d7cbf;
+  --accent-orange: #cb7c38;
+
+  --color-red:    #e07c73;
+  --color-green:  #5fb580;
+  --color-yellow: #d9a348;
+  --color-blue:   #529cca;
+  --color-purple: #9d7cbf;
+  --color-orange: #cb7c38;
+  --color-pink:   #d69ab9;
+  --color-brown:  #a08064;
+  --color-gray:   #8b8b8b;
+
+  /* 背景色块 */
+  --bg-color-red:    rgba(224, 124, 115, 0.12);
+  --bg-color-green:  rgba(95, 181, 128, 0.12);
+  --bg-color-yellow: rgba(217, 163, 72, 0.12);
+  --bg-color-blue:   rgba(82, 156, 202, 0.12);
+  --bg-color-purple: rgba(157, 124, 191, 0.12);
+  --bg-color-orange: rgba(203, 124, 56, 0.12);
+  --bg-color-pink:   rgba(214, 154, 185, 0.12);
+  --bg-color-gray:   rgba(139, 139, 139, 0.12);
+
+  /* ── 2. 阴影 ── */
+  --shadow-xs:      0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm:      0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md:      0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-lg:      0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px rgba(0, 0, 0, 0.3);
+  --shadow-xl:      0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px rgba(0, 0, 0, 0.3);
+  --shadow-popover: 0 8px 30px rgba(0, 0, 0, 0.55),
+                    0 0 0 1px rgba(255, 255, 255, 0.06);
+
+  /* ── 3. 代码块 ── */
+  --code-bg:        #1E1E1B;
+  --code-header-bg: #26261F;
+  --code-font-size: 13px;
+
+  /* ── 4. Callout ── */
+  --callout-bg-note:      rgba(82, 156, 202, 0.05);
+  --callout-border-note:  #529cca;
+  --callout-bg-tip:       rgba(95, 181, 128, 0.05);
+  --callout-border-tip:   #5fb580;
+  --callout-bg-important: rgba(157, 124, 191, 0.05);
+  --callout-border-important: #9d7cbf;
+  --callout-bg-warning:   rgba(217, 163, 72, 0.05);
+  --callout-border-warning: #d9a348;
+  --callout-bg-caution:   rgba(224, 124, 115, 0.05);
+  --callout-border-caution: #e07c73;
+}
+
+/* 暗色模式下 Header 毛玻璃需要调整底色 */
+[data-theme="dark"] .editor-header {
+  background-color: rgba(28, 28, 25, 0.85);
+}
+
+/* 暗色模式下的选区颜色 */
+[data-theme="dark"] ::selection {
+  background-color: rgba(45, 170, 219, 0.3);
+}
+
+/* 暗色模式下的滚动条 */
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #3A3A34;
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #4A4A42;
+}
+
+/* ================================================================
+ * 暗色模式下的 highlight.js 代码高亮配色
+ * ================================================================ */
+[data-theme="dark"] .code-block-view__pre .hljs-comment,
+[data-theme="dark"] .code-block-view__pre .hljs-quote {
+  color: #6a6a6a;
+}
+[data-theme="dark"] .code-block-view__pre .hljs-keyword,
+[data-theme="dark"] .code-block-view__pre .hljs-selector-tag,
+[data-theme="dark"] .code-block-view__pre .hljs-literal,
+[data-theme="dark"] .code-block-view__pre .hljs-section,
+[data-theme="dark"] .code-block-view__pre .hljs-doctag,
+[data-theme="dark"] .code-block-view__pre .hljs-type,
+[data-theme="dark"] .code-block-view__pre .hljs-name,
+[data-theme="dark"] .code-block-view__pre .hljs-strong {
+  color: #c39bd3;
+}
+[data-theme="dark"] .code-block-view__pre .hljs-string,
+[data-theme="dark"] .code-block-view__pre .hljs-title,
+[data-theme="dark"] .code-block-view__pre .hljs-selector-id,
+[data-theme="dark"] .code-block-view__pre .hljs-selector-class,
+[data-theme="dark"] .code-block-view__pre .hljs-template-tag {
+  color: #7ec89e;
+}
+[data-theme="dark"] .code-block-view__pre .hljs-number,
+[data-theme="dark"] .code-block-view__pre .hljs-symbol,
+[data-theme="dark"] .code-block-view__pre .hljs-bullet,
+[data-theme="dark"] .code-block-view__pre .hljs-link,
+[data-theme="dark"] .code-block-view__pre .hljs-meta {
+  color: #e0a458;
+}
+[data-theme="dark"] .code-block-view__pre .hljs-attr,
+[data-theme="dark"] .code-block-view__pre .hljs-attribute,
+[data-theme="dark"] .code-block-view__pre .hljs-variable,
+[data-theme="dark"] .code-block-view__pre .hljs-template-variable,
+[data-theme="dark"] .code-block-view__pre .hljs-built_in {
+  color: #6db3d8;
+}
+[data-theme="dark"] .code-block-view__pre .hljs-deletion { color: #e07c73; }
+[data-theme="dark"] .code-block-view__pre .hljs-addition { color: #7ec89e; }
+
+/* 暗色模式下行内代码 */
+[data-theme="dark"] {
+  --inline-code-bg: rgba(255, 255, 255, 0.10);
+  --inline-code-color: #e07c73;
+  --inline-mark-bg: rgba(217, 163, 72, 0.22);
+  --link-underline: rgba(82, 156, 202, 0.34);
+  --link-underline-hover: rgba(82, 156, 202, 0.85);
+}
+
+/* 暗色模式下 Tooltip */
+[data-theme="dark"] .tooltip-bubble {
+  background-color: #3A3A34;
+  color: #E8E8E0;
+}
+
+/* ================================================================
+ * 暗色模式 — 深度覆盖（SlashMenu / BlockMenu / 媒体块 / 空状态）
+ * ================================================================ */
+
+/* SlashMenu 图标：暗色下降饱和度，避免刺眼 */
+[data-theme="dark"] .slash-menu__icon-wrap {
+  filter: saturate(0.75) brightness(1.1);
+}
+
+/* BlockMenu 暗色 */
+[data-theme="dark"] .block-menu {
+  background: #2C2C28;
+}
+[data-theme="dark"] .block-menu__search {
+  background: #26261F;
+  border-color: #2E2E2A;
+}
+[data-theme="dark"] .block-menu__toggle {
+  background: rgba(255, 255, 255, 0.12);
+}
+[data-theme="dark"] .block-menu__toggle.is-on {
+  background: var(--accent-blue);
+}
+[data-theme="dark"] .block-menu__toggle-thumb {
+  background: #d0d0d0;
+}
+
+/* 音频播放器暗色 */
+[data-theme="dark"] .audio-block {
+  background: #222220;
+}
+[data-theme="dark"] .audio-block__track {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+/* 文件块暗色 */
+[data-theme="dark"] .file-block {
+  background: #222220;
+}
+[data-theme="dark"] .file-block__icon {
+  background: rgba(82, 156, 202, 0.15);
+}
+
+/* 书签块暗色 */
+[data-theme="dark"] .bookmark-block {
+  background: #1E1E1B;
+}
+[data-theme="dark"] .bookmark-block:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* 嵌入块暗色 */
+[data-theme="dark"] .embed-block {
+  background: #1E1E1B;
+}
+[data-theme="dark"] .embed-block__skeleton {
+  background: #26261F;
+}
+
+/* 空状态虚线框暗色：降低对比度 */
+[data-theme="dark"] .block-empty {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme="dark"] .block-empty:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* 表格暗色 */
+[data-theme="dark"] .ProseMirror th {
+  background: #26261F;
+}
+[data-theme="dark"] .ProseMirror td,
+[data-theme="dark"] .ProseMirror th {
+  border-color: #2E2E2A;
+}
+
+/* 列布局暗色 */
+[data-theme="dark"] .column-layout__col:empty::before {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 选项卡暗色 */
+[data-theme="dark"] .tabs-block__header {
+  background: #26261F;
+}
+[data-theme="dark"] .tabs-block__tab--active {
+  background: #1C1C19;
+}
+
+/* 同步块暗色 */
+[data-theme="dark"] .synced-block:hover {
+  border-color: var(--accent-red);
+}
+[data-theme="dark"] .synced-block__badge {
+  background: #1C1C19;
+}
+
+/* 目录块暗色 */
+[data-theme="dark"] .toc-block {
+  background: #222220;
+}
+
+/* Mention 暗色 */
+[data-theme="dark"] .mention-inline:hover {
+  background: rgba(82, 156, 202, 0.18);
+}
+
+/* Date 暗色 */
+[data-theme="dark"] .date-inline:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ================================================================
+ * prefers-reduced-motion — 全局动效降级
+ *
+ * 用户开启「减少动态效果」时，禁用所有过渡和动画。
+ * 只保留 opacity 变化（无障碍最低门槛）。
+ * ================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ================================================================
+ * :focus-visible — 键盘用户可见焦点环
+ *
+ * 仅在键盘导航时显示。鼠标/触摸不显示。
+ * ================================================================ */
+
+:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* 编辑区 contenteditable 不需要焦点环 */
+.ProseMirror:focus-visible,
+.editor-content:focus-visible {
+  outline: none;
+}
+
+/* ================================================================
+ * Live Preview — 暗色语法标记颜色
+ * ================================================================ */
+
+[data-theme="dark"] {
+  --syntax-color: rgba(255, 255, 255, 0.45);
+  --inline-code-bg: rgba(200, 200, 200, 0.12);
+  --inline-code-color: #f97583;
+  --inline-mark-bg: rgba(250, 204, 21, 0.18);
+  --link-underline: rgba(82, 156, 202, 0.35);
+  --link-underline-hover: rgba(82, 156, 202, 0.85);
+}
+
+/* ================================================================
+ * Mermaid / Chart 暗色
+ * ================================================================ */
+
+[data-theme="dark"] .mermaid-block {
+  background: #1E1E1B;
+}
+[data-theme="dark"] .mermaid-block__skeleton {
+  background: #26261F;
+}
+[data-theme="dark"] .mermaid-block__skeleton::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+}
+
+[data-theme="dark"] .chart-block {
+  background: #1E1E1B;
+}
+[data-theme="dark"] .chart-block__type-btn.is-active {
+  background: #2C2C28;
+}

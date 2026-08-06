@@ -1,0 +1,377 @@
+/* ================================================================
+ * Conex Composer — Micro-Animations & Transitions
+ * 所有微动效集中定义，确保一致性和高级质感
+ * ================================================================ */
+
+/* ────────────────────────────────────────────
+ * 区块出入场动画
+ * ──────────────────────────────────────────── */
+@keyframes block-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes block-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* 新插入的区块 */
+.ProseMirror > *:not(.ProseMirror-gapcursor) {
+  animation: block-enter 200ms ease-out;
+}
+
+/* ────────────────────────────────────────────
+ * 渐变切换动画（编辑 ↔ 渲染模式）
+ * ──────────────────────────────────────────── */
+@keyframes fade-switch {
+  0% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+.fence-marker,
+.code-block__header,
+.block-toolbar {
+  animation: fade-switch 180ms ease-out;
+}
+
+/* ────────────────────────────────────────────
+ * 菜单弹出动画
+ * ──────────────────────────────────────────── */
+@keyframes menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes menu-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+.slash-menu,
+.bubble-menu,
+.context-menu,
+.popover,
+.dropdown__menu,
+.date-picker,
+.filter-property-picker,
+.settings-panel,
+.db-form__options-panel,
+.db-form__type-picker {
+  animation: menu-enter 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ────────────────────────────────────────────
+ * Tooltip 渐入
+ * ──────────────────────────────────────────── */
+@keyframes tooltip-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+  to {
+    opacity: 0.95;
+    transform: translateX(-50%) translateY(-6px);
+  }
+}
+
+.tooltip-bubble--top {
+  animation: tooltip-enter 120ms ease-out;
+}
+
+@keyframes tooltip-enter-bottom {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 0.95;
+    transform: translateX(-50%) translateY(6px);
+  }
+}
+
+.tooltip-bubble--bottom {
+  animation: tooltip-enter-bottom 120ms ease-out;
+}
+
+/* ────────────────────────────────────────────
+ * 卡片悬浮微动效
+ * ──────────────────────────────────────────── */
+.db-kanban__card,
+.db-gallery__card,
+.bookmark-block,
+.file-block {
+  transition: transform var(--transition-fast),
+              box-shadow var(--transition-fast),
+              background-color var(--transition-fast);
+}
+
+.db-kanban__card:hover,
+.db-gallery__card:hover {
+  transform: translateY(-1px);
+}
+
+/* ────────────────────────────────────────────
+ * Checkbox 勾选动画
+ * ──────────────────────────────────────────── */
+@keyframes check-bounce {
+  0% { transform: scale(0); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.cell-checkbox__input:checked::before,
+[data-type="taskItem"][data-checked="true"] input[type="checkbox"]::before {
+  animation: check-bounce 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ────────────────────────────────────────────
+ * 折叠展开动画
+ * ──────────────────────────────────────────── */
+.toggle-heading__content,
+.toggle-list__content {
+  transition: max-height 250ms cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 200ms ease;
+}
+
+.toggle-heading__content--collapsed,
+.toggle-list__content--collapsed {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+/* ────────────────────────────────────────────
+ * 行高亮滑入
+ * ──────────────────────────────────────────── */
+@keyframes row-highlight {
+  from { background-color: var(--bg-color-blue); }
+  to { background-color: transparent; }
+}
+
+.db-table__row--just-added {
+  animation: row-highlight 800ms ease-out;
+}
+
+/* ────────────────────────────────────────────
+ * 按钮点击涟漪
+ * ──────────────────────────────────────────── */
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at var(--ripple-x, 50%) var(--ripple-y, 50%),
+    rgba(0, 0, 0, 0.06) 0%,
+    transparent 60%);
+  transition: opacity 200ms ease;
+}
+
+.btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn:active::after {
+  opacity: 1;
+}
+
+/* ────────────────────────────────────────────
+ * 滚动条美化（WebKit）
+ * ──────────────────────────────────────────── */
+.editor-content::-webkit-scrollbar,
+.slash-menu::-webkit-scrollbar,
+.dropdown__menu::-webkit-scrollbar,
+.db-table-container::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.editor-content::-webkit-scrollbar-track,
+.slash-menu::-webkit-scrollbar-track,
+.dropdown__menu::-webkit-scrollbar-track,
+.db-table-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.editor-content::-webkit-scrollbar-thumb,
+.slash-menu::-webkit-scrollbar-thumb,
+.dropdown__menu::-webkit-scrollbar-thumb,
+.db-table-container::-webkit-scrollbar-thumb {
+  background-color: rgba(55, 53, 47, 0.12);
+  border-radius: 3px;
+}
+
+.editor-content::-webkit-scrollbar-thumb:hover,
+.slash-menu::-webkit-scrollbar-thumb:hover,
+.dropdown__menu::-webkit-scrollbar-thumb:hover,
+.db-table-container::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(55, 53, 47, 0.24);
+}
+
+/* ────────────────────────────────────────────
+ * Focus Ring（Keyboard Focus Only）
+ * ──────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* 移除 mouse-focus 时的 outline */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ────────────────────────────────────────────
+ * 块拖拽手柄
+ * ──────────────────────────────────────────── */
+.block-drag-handle {
+  position: absolute;
+  left: -28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+}
+
+.ProseMirror > *:hover > .block-drag-handle,
+.ProseMirror > .has-focus > .block-drag-handle {
+  opacity: 1;
+}
+
+.block-drag-handle:hover {
+  color: var(--text-secondary);
+  background-color: var(--bg-hover);
+}
+
+.block-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* ────────────────────────────────────────────
+ * 块添加按钮（+）
+ * ──────────────────────────────────────────── */
+.block-add-handle {
+  position: absolute;
+  left: -28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+  font-size: 16px;
+  font-weight: 300;
+}
+
+.ProseMirror > *:hover > .block-add-handle {
+  opacity: 1;
+}
+
+.block-add-handle:hover {
+  color: var(--text-secondary);
+  background-color: var(--bg-hover);
+}
+
+/* ────────────────────────────────────────────
+ * 选区高亮（覆盖默认浏览器选区颜色）
+ * ──────────────────────────────────────────── */
+.ProseMirror ::selection {
+  background-color: rgba(35, 131, 226, 0.14);
+}
+
+/* ────────────────────────────────────────────
+ * 平滑闪烁光标
+ * ──────────────────────────────────────────── */
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.ProseMirror .ProseMirror-cursor {
+  animation: cursor-blink 1.1s step-end infinite;
+}
+
+/* ────────────────────────────────────────────
+ * Loading 骨架屏
+ * ──────────────────────────────────────────── */
+@keyframes skeleton-pulse {
+  0% { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-secondary) 0%,
+    var(--bg-tertiary) 40%,
+    var(--bg-secondary) 80%
+  );
+  background-size: 200px 100%;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+.skeleton--text {
+  height: 14px;
+  width: 80%;
+  margin-bottom: var(--space-2);
+}
+
+.skeleton--title {
+  height: 24px;
+  width: 60%;
+  margin-bottom: var(--space-4);
+}
+
+.skeleton--avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+.skeleton--rect {
+  width: 100%;
+  height: 120px;
+}

@@ -1,0 +1,26 @@
+/* ================================================================
+ * Conex Composer — 区块样式聚合
+ *
+ * 顺序：先通用外壳，再具体区块。
+ * 外壳提供的 .block-shell / .field / .segmented 是各区块共用的基座，
+ * 必须先于使用它们的文件加载。
+ * ================================================================ */
+
+/* 通用外壳与表单控件 */
+@import './block-shell.css';
+@import './block-affordances.css';
+
+/* 文本类区块 */
+@import './code-block.css';
+@import './code-block-view.css';
+@import './fenced.css';
+
+/* 布局类区块 */
+@import './layout-blocks.css';
+
+/* 媒体与数据类区块 */
+@import './media-layout.css';
+@import './media-data-blocks.css';
+@import './table.css';
+@import './database.css';
+@import './form.css';

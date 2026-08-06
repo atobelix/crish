@@ -1,0 +1,416 @@
+/* ================================================================
+ * Conex Composer ?Form View Styles
+ * 参考 Notion 表单截图中的视觉细节
+ * ================================================================ */
+
+/* 表单视图容器 */
+.db-form {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-16) var(--space-8);
+}
+
+/* 表单标题 */
+.db-form__title {
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  color: var(--text-placeholder);
+  outline: none;
+  border: none;
+  background: transparent;
+  width: 100%;
+  margin-bottom: var(--space-2);
+}
+
+.db-form__title:focus,
+.db-form__title:not(:empty) {
+  color: var(--text-primary);
+}
+
+/* 表单描述 */
+.db-form__description {
+  font-size: var(--text-base);
+  color: var(--text-placeholder);
+  outline: none;
+  border: none;
+  background: transparent;
+  width: 100%;
+  margin-bottom: var(--space-8);
+}
+
+/* 权限提示条 */
+.db-form__permission {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-8);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.db-form__permission-icon {
+  color: var(--text-tertiary);
+}
+
+.db-form__permission-change {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.db-form__permission-change:hover {
+  color: var(--text-primary);
+}
+
+/* 问题卡片 */
+.db-form__question {
+  position: relative;
+  padding: var(--space-8);
+  border: 0.5px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  margin-bottom: var(--space-4);
+  transition: all var(--transition-normal);
+  cursor: pointer;
+}
+
+.db-form__question:hover {
+  border-color: var(--border-default);
+}
+
+.db-form__question--selected {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 1px var(--accent-blue);
+}
+
+.db-form__question-title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--space-4);
+  outline: none;
+}
+
+.db-form__question-subtitle {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-4);
+}
+
+/* 文本输入 */
+.db-form__text-input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 0.5px solid var(--border-light);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.db-form__text-input::placeholder {
+  color: var(--text-placeholder);
+}
+
+.db-form__text-input:focus {
+  border-color: var(--border-focus);
+}
+
+/* 选项列表 */
+.db-form__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.db-form__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.db-form__option-radio {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-default);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.db-form__option-radio:checked {
+  border-color: var(--accent-blue);
+  background-color: var(--accent-blue);
+  box-shadow: inset 0 0 0 3px var(--bg-primary);
+}
+
+.db-form__add-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: var(--space-2) 0;
+  transition: color var(--transition-fast);
+}
+
+.db-form__add-option:hover {
+  color: var(--text-primary);
+}
+
+/* 问题更多选项按钮 */
+.db-form__question-more {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--transition-fast);
+}
+
+.db-form__question:hover .db-form__question-more {
+  opacity: 1;
+}
+
+.db-form__question-more:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* 添加问题按钮 */
+.db-form__add-question {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: var(--space-4) auto;
+  border: 0.5px solid var(--border-light);
+  border-radius: 50%;
+  color: var(--accent-blue);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.db-form__add-question:hover {
+  border-color: var(--accent-blue);
+  background-color: var(--bg-color-blue);
+}
+
+/* 问题选项面板（参考截图中右侧"问题选项"面板）*/
+.db-form__options-panel {
+  position: absolute;
+  right: -280px;
+  top: 0;
+  width: 260px;
+  background-color: var(--bg-primary);
+  border: 0.5px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-4);
+}
+
+.db-form__options-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.db-form__options-panel-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.db-form__options-panel-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.db-form__options-panel-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.db-form__options-panel-item-icon {
+  display: flex;
+  color: var(--text-secondary);
+}
+
+.db-form__options-panel-item-label {
+  flex: 1;
+}
+
+.db-form__options-panel-item-value {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+/* 表单顶栏 */
+.db-form__topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 0.5px solid var(--border-light);
+  margin-bottom: var(--space-8);
+}
+
+.db-form__topbar-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+}
+
+.db-form__topbar-tab--active {
+  background-color: var(--bg-primary);
+  border-color: var(--border-light);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.db-form__topbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.db-form__preview-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 0.5px solid var(--border-light);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  background: var(--bg-primary);
+  transition: all var(--transition-fast);
+}
+
+.db-form__preview-btn:hover {
+  border-color: var(--border-default);
+}
+
+.db-form__share-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background-color: var(--accent-blue);
+  color: var(--text-inverse);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.db-form__share-btn:hover {
+  background-color: #1a6dbf;
+}
+
+/* 类型选择器（参考截图中"选择类型"面板）*/
+.db-form__type-picker {
+  position: absolute;
+  right: -280px;
+  top: 0;
+  width: 220px;
+  background-color: var(--bg-primary);
+  border: 0.5px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-2);
+}
+
+.db-form__type-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.db-form__type-picker-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.db-form__type-picker-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  text-align: left;
+  transition: background-color var(--transition-fast);
+}
+
+.db-form__type-picker-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.db-form__type-picker-item--selected {
+  background-color: var(--bg-active);
+}
+
+.db-form__type-picker-item-icon {
+  display: flex;
+  color: var(--text-secondary);
+  width: 20px;
+  justify-content: center;
+}
+
+/* 拖拽高亮线 */
+.db-form__drag-indicator {
+  height: 3px;
+  background-color: var(--accent-blue);
+  border-radius: var(--radius-pill);
+  margin: var(--space-2) 0;
+  opacity: 0.6;
+}
+

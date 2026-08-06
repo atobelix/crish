@@ -1,0 +1,40 @@
+/* ================================================================
+ * Conex Composer — Styles Entry Point
+ * 按依赖顺序加载：令牌 → 重置 → 基础 → 组件
+ * ================================================================ */
+
+/* 1. 设计令牌（颜色/间距/字体/阴影） */
+@import './tokens.css';
+
+/* 1b. 暗色主题覆盖 */
+@import './tokens-dark.css';
+
+/* 2. 动效规范（缓动/时长/关键帧/工具类）—— 必须紧随令牌，供后续所有层引用 */
+@import './motion.css';
+
+/* 3. CSS Reset */
+@import './reset.css';
+
+/* 4. 排版系统 */
+@import './typography.css';
+
+/* 5. ProseMirror 编辑器基础样式 */
+@import './prosemirror.css';
+
+/* 6. 实时预览：语法标记显隐 + 行内格式 */
+@import './live-preview.css';
+
+/* 7. 补充微动效 & 过渡 */
+@import './animations.css';
+
+/* 8. UI 组件样式 */
+@import './ui/index.css';
+
+/* 9. 编辑器外壳样式 */
+@import './shell.css';
+
+/* 10. 区块样式 */
+@import './blocks/index.css';
+
+/* 11. 菜单样式 */
+@import './menus/index.css';

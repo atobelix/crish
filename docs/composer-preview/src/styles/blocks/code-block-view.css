@@ -1,0 +1,497 @@
+/* ================================================================
+ * 代码块 V2 — 卡片化设计
+ *
+ * 设计原则：
+ *   默认：干净的代码卡片，无 Header，只有代码 + 微弱边框
+ *   Hover：工具栏从顶部淡入（语言标签 + 换行/行号/复制图标）
+ *   工具按钮：极克制的灰色，hover 时才加淡灰背景
+ *
+ * 行号用 CSS 计数器生成而不是写进 DOM 文本：
+ * 复制代码时不会把行号一起带走。
+ * ================================================================ */
+
+.code-block-view {
+  position: relative;
+  border: 1px solid var(--border-default) !important;
+  border-radius: var(--radius-2xl) !important;
+  background: var(--bg-elevated) !important; /* Prototype uses #ffffff */
+  color: var(--code-text);
+  transition: border-color var(--dur-base) var(--ease-standard);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
+}
+.code-block-view:hover {
+  /* 基本上不改变边框颜色 */
+  border-color: color-mix(in srgb, var(--border-default) 96%, var(--text-primary) 4%) !important;
+}
+.code-block-view.is-selected {
+  border-color: var(--border-focus) !important;
+}
+
+/* ────────────────────────────────────────────
+ * 语言标签 (未 hover 时)
+ * ──────────────────────────────────────────── */
+.code-block__lang-label {
+  position: absolute;
+  left: 20px;
+  top: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 5;
+}
+
+.code-block-view:hover .code-block__lang-label,
+.code-block-view:focus-within .code-block__lang-label,
+.code-block-view.is-panel-open .code-block__lang-label,
+.code-block__lang-label.is-hidden {
+  opacity: 0;
+}
+
+/* ────────────────────────────────────────────
+ * 工具栏 — hover 淡入，零布局位移
+ *
+ * absolute 定位在顶部，代码区始终保留 padding-top
+ * 为 toolbar 留出空间。hover 只改 opacity，
+ * 代码位置纹丝不动。
+ * ──────────────────────────────────────────── */
+
+.code-block-header {
+  height: 44px;
+  position: relative;
+}
+
+.code-block__toolbar {
+  position: absolute;
+  inset: 0;
+  padding: 0 16px 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  user-select: none;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-standard);
+}
+.code-block-view:hover .code-block__toolbar,
+.code-block-view:focus-within .code-block__toolbar,
+.code-block-view.is-panel-open .code-block__toolbar {
+  opacity: 1;
+}
+
+/* 代码区预留 */
+.code-block-view__body {
+}
+.code-block__lang-trigger.is-open {
+  /* 当下拉打开时，不仅工具栏不隐藏，默认文本也应该隐藏 */
+}
+
+/* ────────────────────────────────────────────
+ * 语言标签触发器
+ * ──────────────────────────────────────────── */
+
+.code-block__lang-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.code-block__lang-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+.code-block__lang-trigger:hover,
+.code-block__lang-trigger.is-open {
+  color: var(--text-secondary);
+}
+
+.code-block__lang-caret {
+  opacity: 0.5;
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+.code-block__lang-trigger.is-open .code-block__lang-caret {
+  transform: rotate(90deg);
+}
+
+/* ────────────────────────────────────────────
+ * 工具栏按钮 — 极克制的灰色图标
+ * ──────────────────────────────────────────── */
+
+.code-block__toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  background: transparent !important;
+}
+
+.code-block__toolbar-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(0, 0, 0, 0.06);
+  transform: scale(0.4);
+  opacity: 0;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: -1;
+}
+
+.code-block__toolbar-btn:hover {
+  color: var(--text-primary);
+}
+
+.code-block__toolbar-btn:hover::before {
+  transform: scale(1);
+  opacity: 1;
+}
+
+.code-block__toolbar-btn.is-active {
+  color: var(--text-primary);
+}
+.code-block__toolbar-btn.is-copied {
+  color: var(--accent-green);
+}
+
+/* ────────────────────────────────────────────
+ * 极致精致的下拉面板 (参考第二张图)
+ * ──────────────────────────────────────────── */
+
+.code-block__dropdown-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  background: var(--bg-elevated) !important;
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.1), 0 4px 12px -4px rgba(0, 0, 0, 0.04) !important;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 语言选择面板 */
+.code-block__lang-dropdown {
+  left: 0;
+  width: 240px;
+  padding: 6px;
+}
+
+/* 无边框搜索框 */
+.code-block__search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  color: var(--text-tertiary);
+}
+.code-block__search-box svg {
+  flex-shrink: 0;
+}
+.code-block__search-input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  border: none;
+  background: transparent;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  outline: none !important;
+  font-family: var(--font-sans);
+}
+.code-block__search-input:focus,
+.code-block__search-input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+.code-block__search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* 自定义极细滚动条 */
+.code-block__scroll-container {
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.code-block__scroll-container::-webkit-scrollbar {
+  width: 4px;
+}
+.code-block__scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+.code-block__scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+.code-block__scroll-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* 列表与项 */
+.code-block__lang-list {
+  display: flex;
+  flex-direction: column;
+}
+.code-block__list-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 0 10px !important;
+  margin: 1px 0 !important;
+  border: none !important;
+  border-radius: 6px !important;
+  background: transparent;
+  font-size: 13px !important;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background-color 0.1s;
+  text-align: left;
+  outline: none !important;
+  z-index: 1;
+}
+
+.code-block__item-check {
+  margin-left: auto;
+}
+
+.code-block__list-item:focus,
+.code-block__list-item:focus-visible {
+  color: var(--text-secondary);
+}
+
+.code-block__list-item::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(0, 0, 0, 0.04);
+  transform: scale(0.95);
+  opacity: 0;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: -1;
+}
+
+.code-block__list-item:hover::before {
+  transform: scale(1);
+  opacity: 1;
+}
+
+.code-block__list-item.is-active {
+  background: rgba(0, 0, 0, 0.04) !important;
+  color: var(--text-primary) !important;
+  font-weight: normal !important;
+}
+.code-block__list-item.is-danger {
+  color: var(--accent-red);
+}
+.code-block__list-item.is-danger:hover {
+  background: rgba(220, 38, 38, 0.06);
+}
+.code-block__item-icon {
+  margin-right: 8px;
+  opacity: 0.7;
+}
+
+.code-block__lang-empty {
+  padding: var(--space-4);
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+/* 更多面板 */
+.code-block__more-dropdown {
+  right: 0;
+  width: 240px;
+  padding: 6px;
+  font-family: var(--font-sans);
+}
+.code-block__dropdown-section {
+  padding: 6px;
+}
+.code-block__dropdown-title {
+  display: block;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+}
+
+.code-block__filename-input {
+  width: 100%;
+  border: 1px solid transparent;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 6px;
+  padding: 6px 8px;
+  outline: none;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: all 0.2s;
+}
+.code-block__filename-input:hover {
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+.code-block__filename-input:focus {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: transparent;
+}
+.code-block__filename-input:focus,
+.code-block__filename-input:focus-visible {
+  outline: none !important;
+  background: rgba(0, 0, 0, 0.06) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  margin: 0;
+}
+
+.code-block__dropdown-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.08) 50%, transparent 100%);
+  margin: 6px 0;
+  border: none;
+}
+
+/* ────────────────────────────────────────────
+ * 代码正文
+ * ──────────────────────────────────────────── */
+
+.code-block-view__body {
+  position: relative;
+  display: flex;
+  overflow-x: auto;
+  transition: padding-top var(--dur-fast) var(--ease-standard);
+}
+
+.code-block-view__line-numbers {
+  flex-shrink: 0;
+  padding: 0 0 var(--space-6) var(--space-4);
+  margin-right: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--code-font-size);
+  line-height: 1.65;
+  color: var(--text-tertiary);
+  text-align: right;
+  user-select: none;
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  min-width: 32px;
+}
+
+.code-block__line-number {
+  height: 1.65em; /* must match line-height */
+}
+
+.code-block-view__pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0 !important;
+  padding: 0 var(--space-8) var(--space-6) 0 !important;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  font-family: var(--font-mono);
+  font-size: var(--code-font-size);
+  line-height: 1.65;
+  color: var(--code-text);
+  tab-size: 2;
+  white-space: pre;
+}
+
+/* 如果没有行号，给 pre 加回左侧 padding */
+.code-block-view:not(.has-line-numbers) .code-block-view__pre {
+  padding-left: var(--space-8) !important;
+}
+
+.code-block-view.is-wrapped .code-block-view__pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ────────────────────────────────────────────
+ * highlight.js 配色
+ *
+ * 与 Notion 暖灰体系配套的浅色主题，色相控制在 5 个以内。
+ * ──────────────────────────────────────────── */
+
+.code-block-view__pre .hljs-comment,
+.code-block-view__pre .hljs-quote {
+  color: var(--code-text-tertiary);
+  font-style: italic;
+}
+.code-block-view__pre .hljs-keyword,
+.code-block-view__pre .hljs-selector-tag,
+.code-block-view__pre .hljs-literal,
+.code-block-view__pre .hljs-section,
+.code-block-view__pre .hljs-doctag,
+.code-block-view__pre .hljs-type,
+.code-block-view__pre .hljs-name,
+.code-block-view__pre .hljs-strong {
+  color: #9065b0;
+  font-weight: 500;
+}
+.code-block-view__pre .hljs-string,
+.code-block-view__pre .hljs-title,
+.code-block-view__pre .hljs-selector-id,
+.code-block-view__pre .hljs-selector-class,
+.code-block-view__pre .hljs-template-tag {
+  color: #448361;
+}
+.code-block-view__pre .hljs-number,
+.code-block-view__pre .hljs-symbol,
+.code-block-view__pre .hljs-bullet,
+.code-block-view__pre .hljs-link,
+.code-block-view__pre .hljs-meta {
+  color: #d9730d;
+}
+.code-block-view__pre .hljs-attr,
+.code-block-view__pre .hljs-attribute,
+.code-block-view__pre .hljs-variable,
+.code-block-view__pre .hljs-template-variable,
+.code-block-view__pre .hljs-built_in {
+  color: #337ea9;
+}
+.code-block-view__pre .hljs-deletion { color: #d44c47; }
+.code-block-view__pre .hljs-addition { color: #448361; }
+.code-block-view__pre .hljs-emphasis { font-style: italic; }
+
+/* ── Diff 行高亮 ── */
+.code-block-view__pre .line-addition {
+  background: var(--bg-color-green);
+  display: block;
+  margin: 0 calc(-1 * var(--space-8));
+  padding: 0 var(--space-8);
+}
+.code-block-view__pre .line-deletion {
+  background: var(--bg-color-red);
+  display: block;
+  margin: 0 calc(-1 * var(--space-8));
+  padding: 0 var(--space-8);
+}

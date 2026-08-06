@@ -1,4 +1,4 @@
-const apiKey = 'sk-4AtRgbObFKWBB0UZJfddwcxCjLWJ4UppExWePVKcB0F4EFtN4rDpde1FKgfCwdIb';
+const apiKey = process.env.OPENCODE_TEST_API_KEY ?? '';
 const baseUrl = 'https://opencode.ai/zen/go/v1';
 const model = 'deepseek-v4-flash';
 

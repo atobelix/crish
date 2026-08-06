@@ -1,0 +1,312 @@
+/* ================================================================
+ * Conex Composer — Motion System
+ *
+ * 全局动效规范。所有组件的过渡与动画都必须从这里取值，
+ * 不允许在组件里硬编码 duration / cubic-bezier。
+ *
+ * ── 三条硬规则 ──────────────────────────────────────────────
+ *
+ * 1. 只动 transform 与 opacity。
+ *    这两个属性走合成器线程，不触发 layout / paint。
+ *    禁止过渡 width / height / top / left / margin / padding —
+ *    它们每帧都要重排，在长文档里会直接把帧率打穿。
+ *    确需尺寸变化时用 scale()，需位移时用 translate()。
+ *
+ * 2. 进出不对称。
+ *    进场用减速曲线、时长偏长（元素要「落」到位，让眼睛跟得上）；
+ *    退场用加速曲线、时长约为进场的 0.6（让位要干脆，别拖沓）。
+ *
+ * 3. 时长跟随位移距离。
+ *    位移越大、面积越大，时长越长。悬浮态这类零位移的反馈用 --dur-instant，
+ *    整块面板的进出用 --dur-slow。绝不用一个 300ms 打天下。
+ * ================================================================ */
+
+:root {
+  /* ────────────────────────────────────────────
+   * 缓动曲线
+   *
+   * standard    通用；两端都收，适合位置/尺寸变化
+   * decelerate  进场；起步快、落地稳，元素「飞入」感
+   * accelerate  退场；起步稳、离场快，元素「甩出」感
+   * emphasized  强调；比 standard 更强的收束，用于主操作
+   * spring      轻微过冲；仅用于「确认/激活」这类需要弹性反馈的地方
+   * linear      仅用于连续型动画（进度条、旋转 loading）
+   * ──────────────────────────────────────────── */
+  --ease-standard:   cubic-bezier(0.20, 0.00, 0.00, 1.00);
+  --ease-decelerate: cubic-bezier(0.05, 0.70, 0.10, 1.00);
+  --ease-accelerate: cubic-bezier(0.30, 0.00, 0.80, 0.15);
+  --ease-emphasized: cubic-bezier(0.30, 0.00, 0.00, 1.00);
+  --ease-spring:     cubic-bezier(0.34, 1.56, 0.64, 1.00);
+  --ease-linear:     linear;
+
+  /* ────────────────────────────────────────────
+   * 时长阶梯
+   *
+   * instant  悬浮/按下的颜色反馈，快到「感觉不到延迟」
+   * fast     小元素显隐（图标、徽标、语法标记）
+   * base     常规过渡（按钮、菜单项、卡片抬升）
+   * slow     面板/弹层进场，跨度较大的位移
+   * slower   全屏遮罩、抽屉、大面积布局变化
+   * ──────────────────────────────────────────── */
+  --dur-instant: 70ms;
+  --dur-fast:    120ms;
+  --dur-base:    180ms;
+  --dur-slow:    260ms;
+  --dur-slower:  380ms;
+
+  /* 退场统一取进场的 0.6，落在整十毫秒上便于阅读 */
+  --dur-exit-fast: 80ms;
+  --dur-exit-base: 110ms;
+  --dur-exit-slow: 160ms;
+
+  /* ────────────────────────────────────────────
+   * 组合速记
+   * ──────────────────────────────────────────── */
+  --motion-hover:    var(--dur-instant) var(--ease-standard);
+  --motion-press:    var(--dur-instant) var(--ease-accelerate);
+  --motion-enter:    var(--dur-base)    var(--ease-decelerate);
+  --motion-exit:     var(--dur-exit-base) var(--ease-accelerate);
+  --motion-panel-in: var(--dur-slow)    var(--ease-emphasized);
+  --motion-spring:   var(--dur-slow)    var(--ease-spring);
+
+  /* ────────────────────────────────────────────
+   * 位移幅度
+   *
+   * 进场位移要小。8px 以内的位移看起来是「精致」，
+   * 超过 16px 就开始像「廉价的滑入特效」。
+   * ──────────────────────────────────────────── */
+  --shift-hair: 1px;
+  --shift-xs:   2px;
+  --shift-sm:   4px;
+  --shift-md:   6px;
+  --shift-lg:   8px;
+
+  /* 悬浮抬升：卡片类元素上浮的距离与缩放 */
+  --lift-y:     -1px;
+  --lift-scale: 1.004;
+
+  /* 按下回弹：点击时的轻微内缩 */
+  --press-scale: 0.97;
+
+  /* 交错延迟：列表项逐个进场时每项之间的间隔 */
+  --stagger-step: 18ms;
+}
+
+/* ================================================================
+ * 无障碍：尊重系统的「减弱动态效果」
+ *
+ * 不是简单粗暴地全部置零——那会让状态切换失去因果感。
+ * 保留极短的透明度过渡，只去掉位移与缩放。
+ * ================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 1ms;
+    --dur-fast:    1ms;
+    --dur-base:    1ms;
+    --dur-slow:    1ms;
+    --dur-slower:  1ms;
+    --dur-exit-fast: 1ms;
+    --dur-exit-base: 1ms;
+    --dur-exit-slow: 1ms;
+
+    --shift-hair: 0px;
+    --shift-xs:   0px;
+    --shift-sm:   0px;
+    --shift-md:   0px;
+    --shift-lg:   0px;
+
+    --lift-y:      0px;
+    --lift-scale:  1;
+    --press-scale: 1;
+    --stagger-step: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* ================================================================
+ * 通用关键帧
+ *
+ * 命名规则 motion-<动作>-<方向>；进场以 -in 结尾，退场以 -out 结尾。
+ * ================================================================ */
+
+/* 纯淡入淡出：用于不需要方向暗示的元素（遮罩、语法标记） */
+@keyframes motion-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes motion-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* 自下而上：菜单、气泡、Toast —— 暗示「从触发点长出来」 */
+@keyframes motion-rise-in {
+  from { opacity: 0; transform: translate3d(0, var(--shift-md), 0) scale(0.98); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes motion-rise-out {
+  from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  to   { opacity: 0; transform: translate3d(0, var(--shift-xs), 0) scale(0.99); }
+}
+
+/* 自上而下：下拉菜单、通知条 */
+@keyframes motion-drop-in {
+  from { opacity: 0; transform: translate3d(0, calc(-1 * var(--shift-md)), 0) scale(0.98); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+/* 横向滑入：侧边抽屉、行内插入条 */
+@keyframes motion-slide-in-left {
+  from { opacity: 0; transform: translate3d(calc(-1 * var(--shift-lg)), 0, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes motion-slide-in-right {
+  from { opacity: 0; transform: translate3d(var(--shift-lg), 0, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* 中心弹出：对话框、确认弹窗 */
+@keyframes motion-pop-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* 成功脉冲：复制成功、保存完成这类瞬时确认 */
+@keyframes motion-pulse {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+/* 持续旋转：加载指示 */
+@keyframes motion-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 骨架微光：内容加载占位 */
+@keyframes motion-shimmer {
+  from { transform: translate3d(-100%, 0, 0); }
+  to   { transform: translate3d(100%, 0, 0); }
+}
+
+/* 插入指示线：块间拖放落点 */
+@keyframes motion-indicator-in {
+  from { opacity: 0; transform: scaleX(0.4); }
+  to   { opacity: 1; transform: scaleX(1); }
+}
+
+/* ================================================================
+ * 可复用工具类
+ *
+ * 组件优先用这些类，而不是各自重写 animation。
+ * ================================================================ */
+
+.motion-fade-in  { animation: motion-fade-in  var(--motion-enter) both; }
+.motion-rise-in  { animation: motion-rise-in  var(--motion-enter) both; }
+.motion-drop-in  { animation: motion-drop-in  var(--motion-enter) both; }
+.motion-pop-in   { animation: motion-pop-in   var(--motion-panel-in) both; }
+.motion-panel-in { animation: motion-rise-in  var(--motion-panel-in) both; }
+
+.motion-spin     { animation: motion-spin 900ms var(--ease-linear) infinite; }
+.motion-pulse    { animation: motion-pulse var(--dur-slow) var(--ease-spring); }
+
+/**
+ * 交错进场：给列表容器加 .motion-stagger，
+ * 子项会按 --stagger-step 依次入场。
+ * 只对前 12 项生效——再多就该虚拟滚动了，
+ * 而且超过 12 项的交错在感知上只剩「卡顿」。
+ */
+.motion-stagger > * {
+  animation: motion-rise-in var(--motion-enter) both;
+}
+.motion-stagger > *:nth-child(1)  { animation-delay: calc(0  * var(--stagger-step)); }
+.motion-stagger > *:nth-child(2)  { animation-delay: calc(1  * var(--stagger-step)); }
+.motion-stagger > *:nth-child(3)  { animation-delay: calc(2  * var(--stagger-step)); }
+.motion-stagger > *:nth-child(4)  { animation-delay: calc(3  * var(--stagger-step)); }
+.motion-stagger > *:nth-child(5)  { animation-delay: calc(4  * var(--stagger-step)); }
+.motion-stagger > *:nth-child(6)  { animation-delay: calc(5  * var(--stagger-step)); }
+.motion-stagger > *:nth-child(7)  { animation-delay: calc(6  * var(--stagger-step)); }
+.motion-stagger > *:nth-child(8)  { animation-delay: calc(7  * var(--stagger-step)); }
+.motion-stagger > *:nth-child(9)  { animation-delay: calc(8  * var(--stagger-step)); }
+.motion-stagger > *:nth-child(10) { animation-delay: calc(9  * var(--stagger-step)); }
+.motion-stagger > *:nth-child(11) { animation-delay: calc(10 * var(--stagger-step)); }
+.motion-stagger > *:nth-child(n+12) { animation-delay: calc(11 * var(--stagger-step)); }
+
+/**
+ * 悬浮抬升。
+ * 用 transform 而非 box-shadow 过渡——阴影过渡会触发重绘，
+ * 这里让阴影瞬时切换、位移平滑过渡，观感一致但便宜得多。
+ */
+.motion-lift {
+  transition:
+    transform var(--motion-hover),
+    box-shadow var(--motion-hover),
+    background-color var(--motion-hover);
+  will-change: transform;
+}
+.motion-lift:hover {
+  transform: translate3d(0, var(--lift-y), 0) scale(var(--lift-scale));
+}
+.motion-lift:active {
+  transform: translate3d(0, 0, 0) scale(var(--press-scale));
+  transition-timing-function: var(--ease-accelerate);
+}
+
+/**
+ * 可点击元素的通用反馈：背景与文字色的瞬时过渡 + 按下内缩。
+ * 面向图标按钮、菜单项这类高频小控件。
+ */
+.motion-tap {
+  transition:
+    background-color var(--motion-hover),
+    color var(--motion-hover),
+    opacity var(--motion-hover),
+    transform var(--motion-press);
+}
+.motion-tap:active {
+  transform: scale(var(--press-scale));
+}
+
+/**
+ * 悬浮才出现的附属控件（拖拽手柄、加行加列条、行内操作按钮）。
+ *
+ * 关键：用 opacity + visibility 而不是 display，
+ * 这样才能有过渡；visibility 延迟到透明度归零后再切，
+ * 避免元素消失瞬间仍然吃到鼠标事件。
+ */
+.motion-affordance {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard),
+    visibility 0s linear var(--dur-fast);
+}
+.motion-affordance-host:hover .motion-affordance,
+.motion-affordance-host:focus-within .motion-affordance,
+.motion-affordance.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+/* ================================================================
+ * 焦点环
+ *
+ * 统一用 box-shadow 画环，不占布局、不引起位移，
+ * 且能贴合任意圆角。只在键盘导航时出现（:focus-visible）。
+ * ================================================================ */
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--bg-primary),
+    0 0 0 4px var(--border-focus);
+  transition: box-shadow var(--dur-instant) var(--ease-standard);
+}

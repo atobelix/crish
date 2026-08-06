@@ -1,0 +1,299 @@
+/* ================================================================
+ * BlockShell — 块级组件的统一外壳
+ *
+ * 所有面板类区块共用的 chrome：选中环、悬浮工具条、拖拽手柄、空状态。
+ * 这一层决定了整个编辑器「摸起来是不是一致的」——
+ * 因此这里的数值都取自令牌，任何区块都不应该另起炉灶。
+ * ================================================================ */
+
+.block-shell {
+  position: relative;
+  margin: var(--space-6) 0;
+  border-radius: var(--radius-xl);
+
+  /* 选中环用 box-shadow 画：不占布局、不引起位移、能贴合圆角 */
+  box-shadow: 0 0 0 0 transparent;
+  transition: box-shadow var(--dur-base) var(--ease-standard);
+}
+
+.block-shell.is-selected {
+  box-shadow: 0 0 0 2px var(--accent-blue);
+}
+
+/* 悬浮时给一层极淡的底色，暗示「这是一个整体」 */
+.block-shell::after {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--space-2));
+  border-radius: var(--radius-2xl);
+  background: var(--bg-hover);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+.block-shell:hover::after {
+  opacity: 1;
+}
+
+/* ────────────────────────────────────────────
+ * 拖拽手柄
+ * ──────────────────────────────────────────── */
+
+.block-shell__handle {
+  position: absolute;
+  top: var(--space-2);
+  left: calc(-1 * var(--space-16));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 24px;
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  cursor: grab;
+  z-index: 2;
+
+  /* 从右侧微微滑入，暗示它「属于这个块」 */
+  transform: translate3d(var(--shift-sm), 0, 0);
+}
+.motion-affordance-host:hover > .block-shell__handle,
+.motion-affordance-host:focus-within > .block-shell__handle {
+  transform: translate3d(0, 0, 0);
+}
+.block-shell__handle:hover {
+  background: var(--bg-active);
+  color: var(--text-secondary);
+}
+.block-shell__handle:active {
+  cursor: grabbing;
+}
+
+/* ────────────────────────────────────────────
+ * 类型徽标
+ * ──────────────────────────────────────────── */
+
+.block-shell__badge {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-3);
+  z-index: 2;
+  transform: translate3d(0, calc(-1 * var(--shift-xs)), 0);
+}
+.motion-affordance-host:hover > .block-shell__badge {
+  transform: translate3d(0, 0, 0);
+}
+
+.block-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 20px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-xs);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.01em;
+  user-select: none;
+}
+
+.block-badge--ai {
+  background: linear-gradient(135deg, #f3ebff, #eaf1ff);
+  color: var(--accent-purple);
+}
+
+/* ────────────────────────────────────────────
+ * 悬浮工具条
+ * ──────────────────────────────────────────── */
+
+.block-shell__toolbar {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+
+  /* 自上方轻微落下，与块的空间关系一致 */
+  transform: translate3d(0, calc(-1 * var(--shift-sm)), 0);
+}
+.motion-affordance-host:hover > .block-shell__toolbar,
+.motion-affordance-host:focus-within > .block-shell__toolbar {
+  transform: translate3d(0, 0, 0);
+}
+
+.block-shell__action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.block-shell__action:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.block-shell__action.is-active {
+  background: var(--bg-selected);
+  color: var(--accent-blue);
+}
+.block-shell__action.is-danger:hover {
+  background: var(--bg-color-red);
+  color: var(--accent-red);
+}
+
+/* ────────────────────────────────────────────
+ * 空状态
+ * ──────────────────────────────────────────── */
+
+.block-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-10) var(--space-8);
+  border: 0.5px dashed var(--border-default);
+  border-radius: var(--radius-xl);
+  background: var(--bg-primary);
+  cursor: pointer;
+  transition: border-color var(--dur-base) var(--ease-standard),
+              background-color var(--dur-base) var(--ease-standard);
+}
+.block-empty:hover,
+.block-shell:hover .block-empty {
+  border-color: var(--border-medium);
+  background: var(--bg-secondary);
+}
+
+/* 多行布局的空状态（带按钮行） */
+.block-empty--stacked {
+  flex-direction: column;
+  text-align: center;
+  padding: var(--space-12) var(--space-8);
+}
+
+.block-empty__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-xs);
+  color: var(--text-tertiary);
+}
+
+.block-empty__text {
+  flex: 1;
+  min-width: 0;
+}
+.block-empty__title {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.block-empty__hint {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+/* 块内的行内表单（URL 输入等） */
+.block-inline-form {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+/* ================================================================
+ * 通用表单控件
+ * ================================================================ */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.field--row {
+  flex-direction: row;
+  gap: var(--space-8);
+}
+.field__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.field__label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.field__input {
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--space-4);
+  border: 0.5px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  transition: border-color var(--dur-instant) var(--ease-standard),
+              box-shadow var(--dur-instant) var(--ease-standard);
+}
+.field__input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--border-default) 90%, var(--text-primary) 10%);
+  box-shadow: none;
+}
+.field__input::placeholder {
+  color: var(--text-placeholder);
+}
+
+/* 分段控件：一排互斥选项 */
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-tertiary);
+  gap: 2px;
+}
+.segmented__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 26px;
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.segmented__item:hover {
+  color: var(--text-primary);
+}
+.segmented__item.is-active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-xs);
+}
+.segmented--compact .segmented__item {
+  height: 22px;
+  padding: 0 var(--space-3);
+}

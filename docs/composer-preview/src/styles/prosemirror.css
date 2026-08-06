@@ -1,0 +1,598 @@
+/* ================================================================
+ * Conex Composer — ProseMirror Base Styles
+ * Tiptap/ProseMirror 编辑器的基础样式
+ * ================================================================ */
+
+/* ────────────────────────────────────────────
+ * 编辑器容器
+ * ──────────────────────────────────────────── */
+.editor-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  background-color: var(--bg-primary);
+}
+
+.editor-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-16) var(--editor-padding-x);
+  position: relative;
+  max-width: calc(var(--editor-max-width) + var(--editor-padding-x) * 2);
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (max-width: 960px) {
+  .editor-content {
+    padding-left: var(--editor-padding-x-sm);
+    padding-right: var(--editor-padding-x-sm);
+  }
+}
+
+/* ────────────────────────────────────────────
+ * ProseMirror 核心
+ * ──────────────────────────────────────────── */
+.ProseMirror {
+  outline: none;
+  min-height: 100%;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--editor-line-height);
+  color: var(--text-primary);
+  caret-color: var(--text-primary);
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+/* contenteditable 是编辑器的常态焦点区域，不需要 focus ring */
+.ProseMirror:focus,
+.ProseMirror:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* 占位符 */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--text-placeholder);
+  pointer-events: none;
+  height: 0;
+  font-style: normal;
+}
+
+/* ────────────────────────────────────────────
+ * 标题
+ * ──────────────────────────────────────────── */
+.ProseMirror h1 {
+  font-size: var(--text-4xl);
+  font-weight: 700;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.03em;
+  margin-top: 2em;
+  margin-bottom: 4px;
+}
+
+.ProseMirror h2 {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+  margin-top: 1.4em;
+  margin-bottom: 2px;
+}
+
+.ProseMirror h3 {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
+  margin-top: 1em;
+  margin-bottom: 1px;
+}
+
+.ProseMirror h4 {
+  font-size: var(--text-md);
+  font-weight: 600;
+  margin-top: 0.8em;
+  margin-bottom: 1px;
+}
+
+.ProseMirror h5 {
+  font-size: var(--text-base);
+  font-weight: 600;
+  margin-top: 0.6em;
+  margin-bottom: 1px;
+}
+
+.ProseMirror h6 {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 0.6em;
+  margin-bottom: 1px;
+}
+
+/* ────────────────────────────────────────────
+ * 段落
+ * ──────────────────────────────────────────── */
+.ProseMirror p {
+  margin: 0;
+}
+
+/* ────────────────────────────────────────────
+ * 块间距节奏系统
+ *
+ * 不同元素之间的间距差异化，建立清晰的视觉层级；
+ * 标题前留大白，标题后紧跟；代码块/区块前后留白增强呼吸感。
+ * ──────────────────────────────────────────── */
+.ProseMirror > * + * {
+  margin-top: 2px;
+}
+.ProseMirror > * + h1 {
+  margin-top: 2.2em;
+}
+.ProseMirror > * + h2 {
+  margin-top: 1.6em;
+}
+.ProseMirror > * + h3 {
+  margin-top: 1.2em;
+}
+.ProseMirror > * + h4 {
+  margin-top: 0.8em;
+}
+.ProseMirror > h1 + *,
+.ProseMirror > h2 + * {
+  margin-top: 6px;
+}
+.ProseMirror > h3 + *,
+.ProseMirror > h4 + * {
+  margin-top: 4px;
+}
+.ProseMirror > * + pre,
+.ProseMirror > * + .node-view-wrapper {
+  margin-top: 10px;
+}
+.ProseMirror > pre + *,
+.ProseMirror > .node-view-wrapper + * {
+  margin-top: 10px;
+}
+.ProseMirror > * + blockquote {
+  margin-top: 8px;
+}
+.ProseMirror > blockquote + * {
+  margin-top: 8px;
+}
+.ProseMirror > * + hr {
+  margin-top: 16px;
+}
+.ProseMirror > hr + * {
+  margin-top: 16px;
+}
+.ProseMirror > * + ul,
+.ProseMirror > * + ol {
+  margin-top: 4px;
+}
+
+/* ────────────────────────────────────────────
+ * 行内样式
+ * ──────────────────────────────────────────── */
+.ProseMirror strong {
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.ProseMirror em {
+  font-style: italic;
+}
+
+.ProseMirror s {
+  text-decoration: line-through;
+}
+
+.ProseMirror u {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ProseMirror code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--inline-code-color, var(--text-code));
+  background-color: var(--inline-code-bg, var(--bg-color-gray));
+  padding: 0.15em 0.4em;
+  border-radius: var(--radius-sm);
+}
+
+.ProseMirror a {
+  color: var(--text-link);
+  text-decoration: none;
+  border-bottom: 0.05em solid transparent;
+  transition: border-color var(--transition-fast);
+}
+
+.ProseMirror a:hover {
+  border-bottom-color: var(--text-link);
+}
+
+.ProseMirror mark {
+  background-color: var(--inline-mark-bg, var(--bg-color-yellow));
+  color: inherit;
+  padding: 0 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* ────────────────────────────────────────────
+ * 引用块
+ * ──────────────────────────────────────────── */
+.ProseMirror blockquote {
+  border-left: 3px solid var(--border-medium);
+  padding-left: var(--space-8);
+  margin: var(--space-2) 0;
+  color: var(--text-secondary);
+}
+
+.ProseMirror blockquote blockquote {
+  margin-left: var(--space-4);
+}
+
+.ProseMirror blockquote p {
+  margin: 0;
+}
+
+/* ────────────────────────────────────────────
+ * 列表
+ * ──────────────────────────────────────────── */
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: var(--space-12);
+  margin: var(--space-2) 0;
+}
+
+.ProseMirror li {
+  position: relative;
+}
+
+.ProseMirror li > p {
+  margin: 0;
+}
+
+.ProseMirror li + li {
+  margin-top: 2px;
+}
+
+/* 嵌套列表 */
+.ProseMirror li ul,
+.ProseMirror li ol {
+  margin-top: 0;
+}
+
+/* ────────────────────────────────────────────
+ * 任务列表
+ * ──────────────────────────────────────────── */
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.ProseMirror ul[data-type="taskList"] li > label {
+  user-select: none;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-medium);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  position: relative;
+  display: grid;
+  place-content: center;
+  transition: all var(--transition-fast);
+}
+
+.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  transform: scale(0);
+  transition: transform 120ms ease-in-out;
+  background-color: var(--bg-primary);
+  transform-origin: bottom left;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+
+.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
+  background-color: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]:checked::before {
+  transform: scale(1);
+}
+
+.ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+}
+
+/* ────────────────────────────────────────────
+ * 分割线
+ * ──────────────────────────────────────────── */
+.ProseMirror hr {
+  border: none;
+  border-top: 0.5px solid var(--border-light);
+  margin: var(--space-12) 0;
+}
+
+.ProseMirror hr.ProseMirror-selectednode {
+  border-top-color: var(--accent-blue);
+}
+
+/* ────────────────────────────────────────────
+ * 代码块（原生 pre > code 的基础样式；
+ * 自定义 NodeView 会覆盖这些）
+ * ──────────────────────────────────────────── */
+.ProseMirror pre {
+  font-family: var(--font-mono);
+  font-size: var(--code-font-size);
+  line-height: var(--leading-relaxed);
+  background-color: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
+  overflow-x: auto;
+  margin: var(--space-2) 0;
+}
+
+.ProseMirror pre code {
+  color: var(--text-primary);
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+/* ────────────────────────────────────────────
+ * 表格（GFM Markdown 表格）
+ *
+ * 单元格 padding 略宽松以提升可读性。
+ * ──────────────────────────────────────────── */
+.ProseMirror table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-6) 0;
+  overflow: hidden;
+  table-layout: fixed;
+  border-radius: var(--radius-lg);
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  min-width: 100px;
+  padding: var(--space-3) var(--space-5);
+  border: 0.5px solid var(--border-light);
+  vertical-align: top;
+  text-align: left;
+  position: relative;
+}
+
+.ProseMirror th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  background-color: var(--bg-secondary);
+  letter-spacing: 0.01em;
+}
+
+.ProseMirror td > p,
+.ProseMirror th > p {
+  margin: 0;
+}
+
+/* 选中单元格 */
+.ProseMirror .selectedCell {
+  background-color: var(--bg-selected);
+}
+
+/* 列拖拽指示器 */
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background-color: var(--accent-blue);
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* ────────────────────────────────────────────
+ * WikiLink 与 Tag
+ * ──────────────────────────────────────────── */
+.ProseMirror .wiki-link-pill {
+  color: var(--text-link);
+  background-color: var(--bg-color-blue);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.ProseMirror .wiki-link-pill:hover {
+  background-color: rgba(35, 131, 226, 0.15);
+}
+
+.ProseMirror .tag-pill {
+  color: var(--color-gray);
+  background-color: var(--bg-color-gray);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.ProseMirror .tag-pill:hover {
+  background-color: rgba(55, 53, 47, 0.12);
+}
+
+/* ────────────────────────────────────────────
+ * Live Preview 编辑模式的 Markdown 语法标记
+ *
+ * 设计：Obsidian 风格的灰色等宽标记，
+ * 光标进入 mark 时淡入显示，离开后消失。
+ * ──────────────────────────────────────────── */
+
+@keyframes marker-fadein {
+  from { opacity: 0; transform: scaleX(0.8); }
+  to   { opacity: 1; transform: scaleX(1); }
+}
+
+.md-marker {
+  color: var(--md-marker-color);
+  font-family: var(--md-marker-font);
+  font-size: 0.85em;
+  font-weight: 400;
+  user-select: none;
+  pointer-events: none;
+  vertical-align: baseline;
+  letter-spacing: -0.02em;
+  animation: marker-fadein 120ms ease-out;
+  display: inline;
+}
+
+/* 标题行前缀 ## */
+.md-heading-prefix {
+  color: var(--md-marker-color);
+  font-family: var(--md-marker-font);
+  font-weight: 400;
+  font-size: 0.55em;
+  opacity: 0.5;
+  vertical-align: baseline;
+  margin-right: 0.15em;
+  animation: marker-fadein 150ms ease-out;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* ────────────────────────────────────────────
+ * 链接 Live Edit 模式
+ *
+ * 默认：链接以 Notion 风格渲染（蓝色 + 下划线）
+ * 当光标在链接文本内时：
+ * - 显示完整的 [text](url) 语法
+ * - 通过 InlineDecorationPlugin 的 link-editing class 控制
+ * ──────────────────────────────────────────── */
+.ProseMirror a {
+  color: var(--text-link);
+  text-decoration: none;
+  border-bottom: 0.05em solid var(--link-underline, rgba(35, 131, 226, 0.3));
+  transition: border-color var(--transition-fast),
+              background-color var(--transition-fast);
+  cursor: pointer;
+}
+
+.ProseMirror a:hover {
+  border-bottom-color: var(--link-underline-hover, var(--text-link));
+  background-color: rgba(35, 131, 226, 0.04);
+}
+
+/* Ctrl+Click 提示 */
+.ProseMirror a[data-link-preview]::after {
+  content: '\2197';
+  font-size: 0.75em;
+  margin-left: 2px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.ProseMirror a[data-link-preview]:hover::after {
+  opacity: 0.5;
+}
+
+/* ────────────────────────────────────────────
+ * 围栏标记通用样式
+ * ──────────────────────────────────────────── */
+.fence-marker {
+  font-family: var(--font-mono);
+  font-size: var(--fence-font-size);
+  color: var(--fence-color);
+  background-color: var(--fence-bg);
+  padding: var(--space-2) var(--space-4);
+  user-select: none;
+  line-height: var(--leading-normal);
+}
+
+.fence-marker--top {
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-bottom: 0.5px solid var(--border-light);
+}
+
+.fence-marker--bottom {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  border-top: 0.5px solid var(--border-light);
+}
+
+.fence-marker__input {
+  background: transparent;
+  border: none;
+  outline: none;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+
+/* ────────────────────────────────────────────
+ * NodeView 通用包装器 * ──────────────────────────────────────────── */
+.node-view-wrapper {
+  position: relative;
+  margin: var(--space-2) 0;
+}
+
+.node-view-wrapper.is-editing {
+  outline: 2px solid var(--border-focus);
+  border-radius: var(--radius-lg);
+}
+
+/* ────────────────────────────────────────────
+ * 拖拽手柄
+ * ──────────────────────────────────────────── */
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: transparent;
+  cursor: grab;
+  transition: all var(--transition-fast);
+  position: absolute;
+  left: -28px;
+  top: 2px;
+}
+
+.drag-handle:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+/* 仅在鼠标悬停行时显示拖拽手柄 */
+.ProseMirror > *:hover > .drag-handle,
+.ProseMirror > .drag-handle-visible {
+  color: var(--text-tertiary);
+}
+

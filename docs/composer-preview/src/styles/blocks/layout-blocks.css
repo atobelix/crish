@@ -1,0 +1,366 @@
+/* ================================================================
+ * 布局区块：多?/ 选项?/ 目录 / 按钮
+ * ================================================================ */
+
+/* ────────────────────────────────────────────
+ * 多列布局
+ * ──────────────────────────────────────────── */
+
+.column-layout {
+  position: relative;
+}
+
+.column-layout__content {
+  display: grid;
+  grid-template-columns: var(--col-ratios, 1fr 1fr);
+  gap: var(--space-8);
+  align-items: start;
+}
+
+.column-layout__content > [data-type='column'] {
+  min-width: 0;
+  padding: var(--space-2) 0;
+}
+
+/* 分隔条：覆盖层，不参与网格布局，因此拖拽时不会引起重排 */
+.column-layout__dividers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.column-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--space-8);
+  margin-left: calc(-1 * var(--space-4));
+  cursor: col-resize;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.column-divider__grip {
+  width: 2px;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--border-light);
+  opacity: 0;
+  transform: scaleX(1);
+  transform-origin: center;
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard);
+}
+
+.column-layout:hover .column-divider__grip {
+  opacity: 1;
+}
+.column-divider:hover .column-divider__grip {
+  background: var(--accent-blue);
+  transform: scaleX(2);
+}
+.column-divider:active .column-divider__grip {
+  background: var(--accent-blue);
+  transform: scaleX(2.5);
+}
+
+/* ────────────────────────────────────────────
+ * 选项? * ──────────────────────────────────────────── */
+
+.tabs-block {
+  border: 0.5px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.tabs-block__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 0.5px solid var(--border-light);
+  background: var(--bg-secondary);
+}
+
+.tabs-block__list {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs-block__list::-webkit-scrollbar {
+  display: none;
+}
+
+.tabs-block__tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 28px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  z-index: 1;
+  transition: color var(--motion-hover);
+}
+.tabs-block__tab:hover {
+  color: var(--text-primary);
+}
+.tabs-block__tab.is-active {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/**
+ * 活动指示条? *
+ * 这是整个组件里唯一值得做动画的地方：它给标签切换一条连续的空间轨迹? * 让用户看清「从哪来、到哪去」。位置由 JS 测量后写?transform? * 因此切换成本恒定，与标签数量无关? */
+.tabs-block__indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 28px;
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-xs);
+  z-index: 0;
+  transition:
+    transform var(--dur-base) var(--ease-emphasized),
+    width var(--dur-base) var(--ease-emphasized);
+}
+
+.tabs-block__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.tabs-block__close:hover {
+  background: var(--bg-active);
+  color: var(--accent-red);
+}
+
+.tabs-block__rename {
+  width: 88px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  outline: none;
+}
+
+.tabs-block__add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.tabs-block__add:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+/**
+ * 面板显隐? *
+ * tabPanel 没有自己?NodeView（没必要为一个纯容器再挂一?React 组件），
+ * 因此拿不?`is-active` 这类 class。改由父容器?`data-active-index`
+ * 配合 :nth-child 选择——把状态留在一处，避免为了加个 class 去包一层组件? *
+ * 上限 10 个面板，?TabsExtension ?`content: 'tabPanel{1,10}'` 一致? */
+.tabs-block__panels {
+  padding: var(--space-6) var(--space-8);
+}
+.tabs-block__panels > [data-type='tabPanel'] {
+  display: none;
+}
+
+.tabs-block[data-active-index='0'] .tabs-block__panels > [data-type='tabPanel']:nth-child(1),
+.tabs-block[data-active-index='1'] .tabs-block__panels > [data-type='tabPanel']:nth-child(2),
+.tabs-block[data-active-index='2'] .tabs-block__panels > [data-type='tabPanel']:nth-child(3),
+.tabs-block[data-active-index='3'] .tabs-block__panels > [data-type='tabPanel']:nth-child(4),
+.tabs-block[data-active-index='4'] .tabs-block__panels > [data-type='tabPanel']:nth-child(5),
+.tabs-block[data-active-index='5'] .tabs-block__panels > [data-type='tabPanel']:nth-child(6),
+.tabs-block[data-active-index='6'] .tabs-block__panels > [data-type='tabPanel']:nth-child(7),
+.tabs-block[data-active-index='7'] .tabs-block__panels > [data-type='tabPanel']:nth-child(8),
+.tabs-block[data-active-index='8'] .tabs-block__panels > [data-type='tabPanel']:nth-child(9),
+.tabs-block[data-active-index='9'] .tabs-block__panels > [data-type='tabPanel']:nth-child(10) {
+  display: block;
+  animation: motion-fade-in var(--dur-base) var(--ease-decelerate);
+}
+
+/* ────────────────────────────────────────────
+ * 目录
+ * ──────────────────────────────────────────── */
+
+.toc-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--space-4) var(--space-2);
+  border-radius: var(--radius-xl);
+  background: var(--bg-secondary);
+}
+
+.toc-block__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  /* 每深一级缩?16px，用 CSS 变量避免为每一级写一条规?*/
+  padding-left: calc(var(--space-4) + var(--toc-depth, 0) * 16px);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+.toc-block__item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.toc-block__item.is-active {
+  background: var(--bg-selected);
+  color: var(--text-link);
+  font-weight: 500;
+}
+
+.toc-block__dot {
+  width: 4px;
+  height: 4px;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: var(--text-tertiary);
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-spring);
+}
+.toc-block__item:hover .toc-block__dot,
+.toc-block__item.is-active .toc-block__dot {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.toc-block__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toc-block__level {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+.toc-block__item:hover .toc-block__level {
+  opacity: 1;
+}
+
+/* 跳转落点的短暂高?*/
+.ProseMirror .is-toc-target {
+  animation: toc-target-flash 1200ms var(--ease-standard);
+}
+@keyframes toc-target-flash {
+  0%   { background: var(--bg-selected); }
+  100% { background: transparent; }
+}
+
+/* ────────────────────────────────────────────
+ * 按钮? * ──────────────────────────────────────────── */
+
+.button-block {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+}
+
+.button-block__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-hover),
+    border-color var(--motion-hover),
+    color var(--motion-hover),
+    transform var(--motion-press),
+    box-shadow var(--motion-hover);
+}
+.button-block__btn:not(.is-disabled):hover {
+  transform: translate3d(0, var(--lift-y), 0);
+  box-shadow: var(--shadow-sm);
+}
+.button-block__btn:not(.is-disabled):active {
+  transform: scale(var(--press-scale));
+}
+
+.button-block__btn--sm { height: 26px; padding: 0 var(--space-6); font-size: var(--text-xs); }
+.button-block__btn--md { height: 32px; padding: 0 var(--space-8); font-size: var(--text-sm); }
+.button-block__btn--lg { height: 40px; padding: 0 var(--space-10); font-size: var(--text-md); }
+
+.button-block__btn--primary   { background: var(--accent-blue); color: #fff; }
+.button-block__btn--secondary { background: var(--bg-tertiary); color: var(--text-primary); }
+.button-block__btn--outline   { background: transparent; border-color: var(--border-medium); color: var(--text-primary); }
+.button-block__btn--ghost     { background: transparent; color: var(--text-secondary); }
+.button-block__btn--ghost:hover { background: var(--bg-hover); }
+
+.button-block__btn.is-fired {
+  background: var(--accent-green);
+  color: #fff;
+}
+.button-block__btn.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button-block__hint {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.button-block__config {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin-top: var(--space-4);
+  padding: var(--space-8);
+  border: 0.5px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  background: var(--bg-secondary);
+}

@@ -201,3 +201,11 @@ reference/ui-replica/package-lock.json
 
 # turbo cache (opencode/agent �Ự����)
 .turbo/
+
+# 另一会话工作区（codex 会话 scratch 工具 / agent 会话记录）
+.codex-tool-scratch/
+.agents/
+fix-unused.py
+# 运行期备份
+*.bak-*
+orchestrator-snapshot.json.prev

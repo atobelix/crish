@@ -1,0 +1,66 @@
+/* ================================================================
+ * 拖拽上传覆盖层 — Drop Overlay
+ *
+ * 文件拖拽进编辑区时的全屏提示层。
+ * ================================================================ */
+
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  background: rgba(28, 28, 25, 0.6);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+
+  animation: drop-overlay-in var(--dur-fast) var(--ease-decelerate) both;
+}
+
+@keyframes drop-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.drop-overlay__border {
+  position: absolute;
+  inset: var(--space-6);
+  border: 2px dashed var(--accent-blue);
+  border-radius: var(--radius-2xl);
+  animation: drop-border-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes drop-border-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.drop-overlay__icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-2xl);
+  background: var(--accent-blue);
+  color: #fff;
+  animation: drop-icon-bounce 1s var(--ease-standard) infinite;
+}
+
+@keyframes drop-icon-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.drop-overlay__text {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: #fff;
+}
+.drop-overlay__hint {
+  font-size: var(--text-sm);
+  color: rgba(255, 255, 255, 0.6);
+}

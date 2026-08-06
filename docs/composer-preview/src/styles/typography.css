@@ -1,0 +1,155 @@
+/* ================================================================
+ * Conex Composer — Typography
+ * Notion 风格的排版系统
+ * ================================================================ */
+
+/* ────────────────────────────────────────────
+ * 标题层级
+ * ──────────────────────────────────────────── */
+h1, .h1 {
+  font-size: var(--text-4xl);
+  font-weight: 800;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.03em;
+  margin-top: 2em;
+  margin-bottom: 0.25em;
+  color: var(--text-primary);
+}
+
+h2, .h2 {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+  letter-spacing: -0.02em;
+  margin-top: 1.6em;
+  margin-bottom: 0.25em;
+  color: var(--text-primary);
+}
+
+h3, .h3 {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+  letter-spacing: -0.01em;
+  margin-top: 1.2em;
+  margin-bottom: 0.2em;
+  color: var(--text-primary);
+}
+
+h4, .h4 {
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: var(--leading-normal);
+  margin-top: 0.8em;
+  margin-bottom: 0.1em;
+  color: var(--text-primary);
+}
+
+h5, .h5 {
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: var(--leading-normal);
+  margin-top: 0.6em;
+  margin-bottom: 0.1em;
+  color: var(--text-primary);
+}
+
+h6, .h6 {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: var(--leading-normal);
+  margin-top: 0.6em;
+  margin-bottom: 0.1em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* 标题之后紧跟的段落不需要额外上边距 */
+h1 + p, h2 + p, h3 + p,
+h4 + p, h5 + p, h6 + p {
+  margin-top: 0;
+}
+
+/* ────────────────────────────────────────────
+ * 正文
+ * ──────────────────────────────────────────── */
+p {
+  margin: 0;
+  line-height: var(--editor-line-height);
+}
+
+/* ────────────────────────────────────────────
+ * 行内格式 * ──────────────────────────────────────────── */
+strong, b {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+em, i {
+  font-style: italic;
+}
+
+del, s {
+  text-decoration: line-through;
+  color: var(--text-secondary);
+}
+
+u {
+  text-decoration: underline;
+  text-decoration-color: var(--text-primary);
+  text-underline-offset: 3px;
+}
+
+mark {
+  background-color: var(--bg-color-yellow);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* ────────────────────────────────────────────
+ * 行内代码
+ * ──────────────────────────────────────────── */
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--text-code);
+  background-color: var(--bg-color-gray);
+  padding: 0.15em 0.4em;
+  border-radius: var(--radius-sm);
+  word-break: break-word;
+}
+
+/* ────────────────────────────────────────────
+ * 链接
+ * ──────────────────────────────────────────── */
+a {
+  color: var(--text-link);
+  text-decoration: none;
+  border-bottom: 0.05em solid transparent;
+  transition: border-color var(--transition-fast);
+}
+
+a:hover {
+  border-bottom-color: var(--text-link);
+}
+
+/* ────────────────────────────────────────────
+ * 引用
+ * ──────────────────────────────────────────── */
+blockquote {
+  border-left: 3px solid var(--border-medium);
+  padding-left: var(--space-8);
+  margin: var(--space-2) 0;
+  color: var(--text-secondary);
+}
+
+/* ────────────────────────────────────────────
+ * 分割线 * ──────────────────────────────────────────── */
+hr {
+  border: none;
+  border-top: 0.5px solid var(--border-light);
+  margin: var(--space-12) 0;
+}
+

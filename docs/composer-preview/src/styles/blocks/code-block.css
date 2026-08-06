@@ -1,0 +1,221 @@
+/* ================================================================
+ * Conex Composer — Code Block Styles
+ * 代码块的渲染和编辑模式样式
+ * ================================================================ */
+
+.code-block-wrapper {
+  position: relative;
+  margin: var(--space-4) 0;
+  border-radius: var(--radius-lg);
+  border: 0.5px solid var(--code-border);
+  overflow: hidden;
+  background-color: var(--code-bg);
+  color: var(--code-text);
+  transition: border-color var(--transition-fast);
+}
+
+.code-block-wrapper:hover {
+  border-color: var(--code-border-active);
+}
+
+/* 代码块头部（语言标签 + 文件名 + 操作按钮）*/
+.code-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--code-header-bg);
+  border-bottom: 0.5px solid var(--code-border);
+  user-select: none;
+}
+
+.code-block__header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.code-block__lang-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background-color: var(--bg-primary);
+  border: 0.5px solid var(--border-light);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.code-block__lang-badge:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--border-default);
+}
+
+.code-block__filename {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.code-block__header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.code-block__action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-tertiary);
+  transition: all var(--transition-fast);
+}
+
+.code-block__action-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.code-block__action-btn--copied {
+  color: var(--accent-green);
+}
+
+/* 代码内容区域 */
+.code-block__content {
+  padding: var(--space-4) var(--space-6);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--code-font-size);
+  line-height: var(--leading-relaxed);
+  color: var(--text-primary);
+  tab-size: 2;
+}
+
+/* 行号 */
+.code-block__lines {
+  display: flex;
+}
+
+.code-block__line-numbers {
+  display: flex;
+  flex-direction: column;
+  padding-right: var(--space-6);
+  text-align: right;
+  user-select: none;
+  color: var(--text-tertiary);
+  font-size: var(--code-font-size);
+  line-height: var(--leading-relaxed);
+  border-right: 0.5px solid var(--border-light);
+  margin-right: var(--space-6);
+  flex-shrink: 0;
+}
+
+.code-block__line-number {
+  min-width: 2ch;
+}
+
+.code-block__line-number--highlighted {
+  color: var(--text-primary);
+  background-color: var(--bg-color-yellow);
+  margin: 0 calc(-1 * var(--space-2));
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-xs);
+}
+
+/* ================================================================
+ * Diff Block Styles
+ * ================================================================ */
+
+.diff-block-wrapper {
+  position: relative;
+  margin: var(--space-4) 0;
+  border-radius: var(--radius-lg);
+  border: 0.5px solid var(--border-light);
+  overflow: hidden;
+}
+
+.diff-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--code-header-bg);
+  border-bottom: 0.5px solid var(--border-light);
+}
+
+.diff-block__stats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+}
+
+.diff-block__stat--add {
+  color: var(--accent-green);
+}
+
+.diff-block__stat--del {
+  color: var(--accent-red);
+}
+
+.diff-block__table {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--code-font-size);
+  line-height: var(--leading-relaxed);
+  border-collapse: collapse;
+}
+
+.diff-block__line {
+  border: none;
+}
+
+.diff-block__line-num {
+  width: 48px;
+  text-align: right;
+  padding: 0 var(--space-3);
+  color: var(--text-tertiary);
+  user-select: none;
+  vertical-align: top;
+  font-size: var(--text-xs);
+}
+
+.diff-block__line-content {
+  padding: 0 var(--space-4);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.diff-block__line--add {
+  background-color: rgba(46, 160, 67, 0.08);
+}
+
+.diff-block__line--add .diff-block__line-content {
+  color: var(--accent-green);
+}
+
+.diff-block__line--del {
+  background-color: rgba(248, 81, 73, 0.08);
+}
+
+.diff-block__line--del .diff-block__line-content {
+  color: var(--accent-red);
+}
+
+.diff-block__line--header {
+  background-color: var(--bg-color-blue);
+  color: var(--color-blue);
+  font-weight: 500;
+}
+

@@ -1,0 +1,460 @@
+/* ================================================================
+ * 表格
+ *
+ * 分两部分? *   1. 表格本体的排版（在编辑器文档流内? *   2. 悬浮交互覆盖层（position: fixed，浮在文档之上）
+ *
+ * 覆盖层的所有元素默?opacity: 0 + pointer-events 受控? * 只有鼠标靠近对应区域才浮出；这样静态阅读时表格是干净的，
+ * 一旦要操作，控件就在手边? * ================================================================ */
+
+/* ────────────────────────────────────────────
+ * 1. 表格本体
+ * ──────────────────────────────────────────── */
+
+.ProseMirror .md-table {
+  width: 100%;
+  margin: var(--space-8) 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+  overflow: hidden;
+  font-size: var(--text-sm);
+}
+
+.ProseMirror .md-table td,
+.ProseMirror .md-table th {
+  position: relative;
+  min-width: 56px;
+  padding: var(--space-3) var(--space-4);
+  border: 0.5px solid var(--border-light);
+  vertical-align: top;
+  box-sizing: border-box;
+  transition: background-color var(--dur-instant) var(--ease-standard);
+}
+
+.ProseMirror .md-table th {
+  background: var(--bg-secondary);
+  font-weight: 600;
+  text-align: left;
+  color: var(--text-primary);
+}
+
+/**
+ * 单元格背景色? *
+ * 颜色值以 `var(--bg-color-*)` 的形式存?`data-bg` 属性，
+ * 这样主题切换时单元格会跟着变，而不是被写死成某个十六进制值? * CSS 无法把属性值直接当颜色用（`attr()` 的类型化取值尚未普及）? * 因此这里用属性前缀选择器一一映射——十种颜色，穷举成本可以接受? */
+.ProseMirror .md-table [data-bg^='var(--bg-color-gray']   { background: var(--bg-color-gray); }
+.ProseMirror .md-table [data-bg^='var(--bg-color-brown']  { background: var(--bg-color-brown); }
+.ProseMirror .md-table [data-bg^='var(--bg-color-orange'] { background: var(--bg-color-orange); }
+.ProseMirror .md-table [data-bg^='var(--bg-color-yellow'] { background: var(--bg-color-yellow); }
+.ProseMirror .md-table [data-bg^='var(--bg-color-green']  { background: var(--bg-color-green); }
+.ProseMirror .md-table [data-bg^='var(--bg-color-blue']   { background: var(--bg-color-blue); }
+.ProseMirror .md-table [data-bg^='var(--bg-color-purple'] { background: var(--bg-color-purple); }
+.ProseMirror .md-table [data-bg^='var(--bg-color-pink']   { background: var(--bg-color-pink); }
+.ProseMirror .md-table [data-bg^='var(--bg-color-red']    { background: var(--bg-color-red); }
+
+/* 对齐 */
+.ProseMirror .md-table [data-align='left']   { text-align: left; }
+.ProseMirror .md-table [data-align='center'] { text-align: center; }
+.ProseMirror .md-table [data-align='right']  { text-align: right; }
+
+/* 单元格选区（prosemirror-tables ?CellSelection?*/
+.ProseMirror .md-table .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--bg-selected);
+  pointer-events: none;
+}
+
+/* 列宽拖拽把手（prosemirror-tables 提供的元素） */
+.ProseMirror .md-table .column-resize-handle {
+  position: absolute;
+  right: -1px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent-blue);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+.ProseMirror.resize-cursor .md-table .column-resize-handle,
+.ProseMirror .md-table td:hover .column-resize-handle,
+.ProseMirror .md-table th:hover .column-resize-handle {
+  opacity: 1;
+}
+.ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+/* ── 列头排序提示 ── */
+.ProseMirror .md-table th {
+  position: relative;
+}
+.table-sort-hint {
+  position: absolute;
+  right: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  color: var(--text-tertiary);
+  transition: opacity var(--dur-fast) var(--ease-standard);
+  pointer-events: none;
+}
+.ProseMirror .md-table th:hover .table-sort-hint {
+  opacity: 0.6;
+}
+.table-sort-hint.is-sorted {
+  opacity: 1;
+  color: var(--accent-blue);
+}
+
+/* ── 整列/整行选中（蓝色高亮） ── */
+.ProseMirror .md-table .is-column-selected {
+  background: var(--bg-selected) !important;
+  border-color: var(--border-focus);
+}
+.ProseMirror .md-table .is-row-selected td,
+.ProseMirror .md-table .is-row-selected th {
+  background: var(--bg-selected) !important;
+  border-color: var(--border-focus);
+}
+
+/* ── 行尾/列尾 + 添加按钮 ── */
+.table-add-btn {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0.5px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+  z-index: 3;
+}
+.ProseMirror .md-table:hover ~ .table-add-btn,
+.table-add-btn:hover {
+  opacity: 1;
+}
+.table-add-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+.table-add-btn--col {
+  width: 20px;
+  height: 100%;
+  right: -28px;
+  top: 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+.table-add-btn--row {
+  width: 100%;
+  height: 20px;
+  bottom: -28px;
+  left: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+/* ── 空表格引导 ── */
+.ProseMirror .md-table.is-empty td:first-child::before {
+  content: '点击开始编辑...';
+  color: var(--text-placeholder);
+  font-size: var(--text-sm);
+  pointer-events: none;
+}
+
+/* ────────────────────────────────────────────
+ * 2. 悬浮交互覆盖? * ──────────────────────────────────────────── */
+
+.table-affordances {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-sticky);
+  /* 容器自身不吃事件，只有具体控件吃 */
+  pointer-events: none;
+}
+.table-affordances > * {
+  position: fixed;
+  pointer-events: auto;
+}
+
+/* ── ?/ 列手?── */
+
+.tbl-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    background-color var(--motion-hover),
+    color var(--motion-hover);
+}
+.table-affordances:hover .tbl-handle,
+.tbl-handle:focus-visible {
+  opacity: 1;
+}
+.tbl-handle:hover {
+  background: var(--border-medium);
+  color: var(--text-primary);
+}
+
+.tbl-handle--row {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.tbl-handle--col {
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+/* ── ?/ 列之间的插入缝隙 ── */
+
+.tbl-seam {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+.tbl-seam.is-active {
+  opacity: 1;
+}
+
+.tbl-seam__line {
+  position: absolute;
+  border-radius: var(--radius-pill);
+  background: var(--accent-blue);
+  transform-origin: center;
+  animation: motion-indicator-in var(--dur-fast) var(--ease-decelerate);
+}
+.tbl-seam--row .tbl-seam__line {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+}
+.tbl-seam--col .tbl-seam__line {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+}
+
+.tbl-seam__plus {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-blue);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.tbl-seam--row .tbl-seam__plus {
+  left: -8px;
+  top: 50%;
+  margin-top: -8px;
+}
+.tbl-seam--col .tbl-seam__plus {
+  top: -8px;
+  left: 50%;
+  margin-left: -8px;
+}
+
+/* ── 右缘 / 下缘的追加条 ── */
+
+.tbl-append {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+.table-affordances:hover .tbl-append {
+  opacity: 1;
+}
+
+.tbl-append--col { width: 18px; }
+.tbl-append--row { height: 18px; }
+
+.tbl-append__bar {
+  position: absolute;
+  border-radius: var(--radius-pill);
+  background: var(--bg-tertiary);
+  transition:
+    background-color var(--motion-hover),
+    transform var(--dur-fast) var(--ease-standard);
+}
+.tbl-append--col .tbl-append__bar {
+  top: 0;
+  bottom: 0;
+  left: 6px;
+  width: 6px;
+}
+.tbl-append--row .tbl-append__bar {
+  left: 0;
+  right: 0;
+  top: 6px;
+  height: 6px;
+}
+.tbl-append:hover .tbl-append__bar {
+  background: var(--accent-blue);
+}
+
+.tbl-append__plus {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-secondary);
+  transform: scale(0.85);
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    background-color var(--motion-hover),
+    color var(--motion-hover);
+}
+.tbl-append:hover .tbl-append__plus {
+  transform: scale(1);
+  background: var(--accent-blue);
+  color: #fff;
+}
+
+/* ── 右下?── */
+
+.tbl-corner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    background-color var(--motion-hover),
+    color var(--motion-hover),
+    transform var(--dur-fast) var(--ease-spring);
+}
+.table-affordances:hover .tbl-corner {
+  opacity: 1;
+}
+.tbl-corner:hover {
+  background: var(--accent-blue);
+  color: #fff;
+  transform: scale(1.12);
+}
+
+/* ────────────────────────────────────────────
+ * 3. ?/ 列菜? * ──────────────────────────────────────────── */
+
+.tbl-menu {
+  position: fixed;
+  z-index: var(--z-popover);
+  min-width: 216px;
+  padding: var(--space-2);
+  border-radius: var(--radius-xl);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popover);
+  transform-origin: top left;
+  pointer-events: auto;
+}
+
+.tbl-menu__title {
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.tbl-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-instant) var(--ease-standard);
+}
+.tbl-menu__item.is-active {
+  background: var(--bg-hover);
+}
+.tbl-menu__item.is-danger {
+  color: var(--accent-red);
+}
+.tbl-menu__item.is-danger.is-active {
+  background: var(--bg-color-red);
+}
+
+.tbl-menu__label {
+  flex: 1;
+  font-size: var(--text-sm);
+}
+.tbl-menu__shortcut {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.tbl-menu__divider {
+  height: 1px;
+  margin: var(--space-2) var(--space-3);
+  background: var(--border-light);
+}
+
+.tbl-menu__colors {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-2);
+}
+.tbl-menu__swatch {
+  width: 100%;
+  height: 22px;
+  border: 0.5px solid var(--border-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    border-color var(--motion-hover);
+}
+.tbl-menu__swatch:hover {
+  transform: scale(1.08);
+  border-color: var(--border-medium);
+}

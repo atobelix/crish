@@ -1,0 +1,224 @@
+/* ================================================================
+ * Conex Composer — Live Preview（Token-in-Document）
+ *
+ * 本文件负责两件事：
+ *   1. Markdown 语法字符的显隐与降噪；
+ *   2. 行内格式（粗体/斜体/代码/高亮/链接）的呈现。
+ *
+ * 架构前提：`**` `` ` `` `[](…)` 这些字符**真实存在于文档中**，
+ * 并被 mdSyntax 标记包裹。默认全部 display:none，
+ * 只有被 revealPlugin 加上 .is-revealed 的才显示。
+ *
+ * 为什么隐藏用 display:none 而不是宽度动画：
+ *   宽度过渡意味着每帧重排。语法标记的显隐是跟着光标移动实时发生的，
+ *   在长文档里逐帧重排会直接吃掉帧预算。
+ *   因此这里让「占位」瞬时切换、只对「颜色」做淡入——
+ *   观感上依然柔和，但零 layout 成本。
+ * ================================================================ */
+
+:root {
+  /* 语法标记的视觉权重：要看得见，但绝不能抢正文 */
+  --syntax-opacity:       0.34;
+  --syntax-opacity-hover: 0.62;
+  --syntax-color:         var(--text-secondary);
+
+  /* 行内代码 */
+  --inline-code-bg:      rgba(135, 131, 120, 0.15);
+  --inline-code-color:   #eb5757;
+  --inline-code-padding: 0.2em 0.4em;
+
+  /* 行内高亮 */
+  --inline-mark-bg: #fdf3c7;
+
+  /* 链接 */
+  --link-underline:       rgba(35, 131, 226, 0.34);
+  --link-underline-hover: rgba(35, 131, 226, 0.85);
+}
+
+/* ================================================================
+ * 1. 语法标记的显隐
+ * ================================================================ */
+
+.ProseMirror .md-syntax {
+  display: none;
+}
+
+.ProseMirror .md-syntax.is-revealed {
+  display: inline;
+
+  /* 降噪：语法字符永远比正文轻。不继承父级的粗体/斜体，
+     否则 `**` 自己也会被加粗，视觉上和正文混成一团。 */
+  color: var(--syntax-color);
+  opacity: var(--syntax-opacity);
+  font-weight: 400;
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  letter-spacing: -0.01em;
+
+  /* 语法字符不参与选中高亮的语义，但仍可被选中删除 */
+  -webkit-user-select: text;
+  user-select: text;
+
+  animation: motion-syntax-reveal var(--dur-fast) var(--ease-decelerate) both;
+  transition: opacity var(--dur-instant) var(--ease-standard);
+}
+
+/**
+ * 显形动画只动 opacity。
+ * 位移由 display 切换瞬时完成——这是有意的：
+ * 语法标记出现时正文必然要让出位置，与其做一段必然抖动的宽度动画，
+ * 不如让位置一步到位、只让颜色渐显。
+ */
+@keyframes motion-syntax-reveal {
+  from { opacity: 0; }
+  to   { opacity: var(--syntax-opacity); }
+}
+
+/* 鼠标悬到语法标记上时略微加深，暗示「这是可以直接编辑的字符」 */
+.ProseMirror .md-syntax.is-revealed:hover {
+  opacity: var(--syntax-opacity-hover);
+}
+
+/* 光标所在行整体轻微提亮语法标记，强化「当前行是源码态」的心智 */
+.ProseMirror .md-syntax.is-revealed::selection {
+  background: var(--bg-selected);
+}
+
+/* ================================================================
+ * 2. 行内格式
+ *
+ * 注意每条规则都要考虑「语法字符就在这个元素内部」这一事实，
+ * 因此凡是会让语法字符变形的属性（font-weight / font-style /
+ * background / padding）都需要在 .md-syntax 上还原。
+ * ================================================================ */
+
+/* ── 粗体 ── */
+.ProseMirror strong {
+  font-weight: 600;
+  color: inherit;
+}
+
+/* ── 斜体 ── */
+.ProseMirror em {
+  font-style: italic;
+}
+
+/* ── 删除线 ── */
+.ProseMirror s {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: currentColor;
+  opacity: 0.72;
+}
+/* 删除线不该划掉语法字符本身 */
+.ProseMirror s > .md-syntax.is-revealed {
+  text-decoration: none;
+  opacity: var(--syntax-opacity);
+}
+
+/* ── 行内代码 ── */
+.ProseMirror code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  line-height: normal;
+  background: var(--inline-code-bg);
+  color: var(--inline-code-color);
+  padding: var(--inline-code-padding);
+  border-radius: var(--radius-md);
+  /* 让相邻字符不被圆角挤压 */
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+/* 反引号显形时不要再套一层底色，否则会出现「块中块」 */
+.ProseMirror code > .md-syntax.is-revealed {
+  background: none;
+  padding: 0;
+  color: var(--syntax-color);
+}
+
+/* ── 高亮 ── */
+.ProseMirror mark {
+  background: var(--inline-mark-bg);
+  color: inherit;
+  padding: 0.08em 0.12em;
+  border-radius: var(--radius-sm);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.ProseMirror mark > .md-syntax.is-revealed {
+  background: none;
+  padding: 0;
+}
+
+/* ── 链接 ── */
+.ProseMirror .md-link {
+  color: var(--text-link);
+  text-decoration: none;
+  cursor: pointer;
+
+  /* 用 background 画下划线，可以精确控制粗细与颜色过渡，
+     且不会像 text-decoration 那样被降序字母切断 */
+  background-image: linear-gradient(to right, var(--link-underline), var(--link-underline));
+  background-position: 0 100%;
+  background-repeat: repeat-x;
+  background-size: 100% 1px;
+
+  transition:
+    background-size var(--dur-fast) var(--ease-standard),
+    background-image var(--dur-fast) var(--ease-standard),
+    color var(--dur-instant) var(--ease-standard);
+}
+
+.ProseMirror .md-link:hover {
+  color: var(--text-link-hover);
+  background-image: linear-gradient(to right, var(--link-underline-hover), var(--link-underline-hover));
+  background-size: 100% 1.5px;
+}
+
+/* 链接里的 `[` 与 `](url)` 不参与蓝色与下划线 */
+.ProseMirror .md-link > .md-syntax.is-revealed {
+  color: var(--syntax-color);
+  background-image: none;
+}
+
+/* ================================================================
+ * 3. 转义反斜杠
+ *
+ * `\*` 里的反斜杠也是 mdSyntax。它显形时用更低的对比度，
+ * 因为它比格式分隔符更「内部」，用户几乎不需要注意到它。
+ * ================================================================ */
+.ProseMirror .md-syntax.is-revealed:where([data-escape]) {
+  opacity: 0.22;
+}
+
+/* ================================================================
+ * 4. 当前行提示
+ *
+ * 光标所在的文本块给一条极淡的左侧标尺，
+ * 让「哪一行处于源码可编辑态」有一个安静的空间锚点。
+ * 用 ::before 绝对定位，不占据文档流。
+ * ================================================================ */
+.ProseMirror .is-active-block {
+  position: relative;
+}
+.ProseMirror .is-active-block::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  top: 0.18em;
+  bottom: 0.18em;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--border-light);
+  opacity: 0;
+  transform: scaleY(0.4);
+  transform-origin: center;
+  transition:
+    opacity var(--dur-base) var(--ease-decelerate),
+    transform var(--dur-base) var(--ease-decelerate);
+}
+.ProseMirror .is-active-block.has-syntax::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
