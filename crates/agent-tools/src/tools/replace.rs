@@ -113,6 +113,18 @@ impl Tool for MultiReplaceFileTool {
                 format!("{display}: 二进制文件无法做文本替换"),
             ));
         }
+        // 编码护栏（A1-H1，裁决 D4 fail-closed）：解码过程注入过 U+FFFD 的
+        // 文件不是有效 UTF-8（疑似 GBK/latin1 等 legacy 编码），若继续写回
+        // 将按 UTF-8 落盘、原编码字节被静默改写 → 此处拒绝（二进制拒绝在前，
+        // 二进制分支标记恒 false，两错误语义不重叠；encode 侧零改动）
+        if decoded.lossy_replaced {
+            return Err(ToolError::execution_failed(
+                MULTI_REPLACE_TOOL_NAME,
+                format!(
+                    "{display}: 文件不是有效 UTF-8（疑似 GBK/latin1 等 legacy 编码），拒绝替换以防破坏原编码字节；请先将文件转码为 UTF-8 再操作"
+                ),
+            ));
+        }
 
         // 5. EOL 归一化：匹配统一按 \n，写回还原原文件风格（applyFileDiff.ts:287-297）
         let crlf_style = prefers_crlf(&decoded.text);
@@ -1012,6 +1024,38 @@ function Component() {
             })
             .collect();
         assert_eq!(text, "line one changed\nline two\n");
+    }
+
+    #[tokio::test]
+    async fn multi_replace_rejects_legacy_encoding() {
+        // GBK「中文」（D6 D0 CE C4）：无 NUL 的 legacy 编码文件过去被
+        // lossy 解码为 U+FFFD 后按 UTF-8 写回（原字节被静默破坏）；
+        // 编码护栏（A1-H1，裁决 D4 fail-closed）→ 结构化拒绝，文件字节零改动
+        let ws = TempWorkspace::new("mrepl_legacy");
+        let gbk: Vec<u8> = vec![0xD6, 0xD0, 0xCE, 0xC4];
+        std::fs::write(ws.path().join("gbk.txt"), &gbk).unwrap();
+        let before = raw_bytes(&ws, "gbk.txt");
+
+        let err = tool()
+            .execute(
+                &mock_ctx(&ws),
+                json!({
+                    "target_file": "gbk.txt",
+                    "replacement_chunks": [
+                        { "start_line": 1, "end_line": 1, "target_content": "x", "replacement_content": "y" }
+                    ]
+                }),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(err.to_string().contains("legacy 编码"), "错误文案必须含 legacy 编码引导");
+        assert!(err.to_string().contains("转码为 UTF-8"), "错误文案必须含转码引导");
+        assert_eq!(
+            raw_bytes(&ws, "gbk.txt"),
+            before,
+            "编码护栏拒绝后文件字节必须零改动"
+        );
     }
 
     // ==================== 入参校验与错误路径 ====================

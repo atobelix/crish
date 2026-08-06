@@ -197,23 +197,56 @@ fn split_segments(line: &str) -> Vec<String> {
     segments
 }
 
-/// 拆分段为（命令, 参数）：处理引号、转义，命令为第一个 token。
+/// 转义需求字符判定（12-T-PD-03 Windows 路径语义）：
+/// `\` 仅在紧跟这些字符时按转义处理（吞反斜杠、保后字符）；
+/// 后跟普通路径字符（字母/数字/`.`/分隔符等）时反斜杠原样保留，
+/// 使 `rm C:\temp\a.txt` 拆参后不被损坏成 `C:tempa.txt`。
+/// 集合覆盖 shell 元字符与空白（Unix 形态安全网：`\` 后跟空白/引号仍按转义处理）；
+/// 单引号内反斜杠恒为字面量（Unix 语义），不在此判定。
+fn is_escape_requiring(c: char) -> bool {
+    c.is_whitespace()
+        || c == '\''
+        || c == '"'
+        || c == '\\'
+        || c == '$'
+        || c == '`'
+        || c == ';'
+        || c == '&'
+        || c == '|'
+        || c == '('
+        || c == ')'
+        || c == '<'
+        || c == '>'
+}
+
+/// 拆分段为（命令, 参数）：处理引号、上下文判定转义，命令为第一个 token。
+///
+/// 转义语义（12-T-PD-03，单套跨平台、不分支 cfg(windows)）：
+/// - `\` 仅在后跟转义需求字符时吞掉自身、保留后字符（见 is_escape_requiring）；
+///   后跟普通路径字符时原样保留反斜杠——Windows 路径 `C:\temp\a.txt` 完整入参；
+/// - 行尾孤反斜杠（`cd /d C:\`）无下一字符可吞，原样保留；
+/// - 单引号内反斜杠恒为字面量（Unix 语义，`'C:\x\y.txt'` 原样保留）；
+/// - Unix 形态安全网：`echo a\ b`、`rm -rf \` 续行等 `\` 后跟空白仍按转义处理。
 fn split_command_args(segment: &str) -> (String, Vec<String>) {
     let mut tokens = Vec::new();
     let mut current = String::new();
     let mut quote: Option<char> = None;
-    let mut escaped = false;
     let mut started = false;
+    let mut chars = segment.chars().peekable();
 
-    for c in segment.chars() {
-        if escaped {
-            current.push(c);
-            escaped = false;
-            started = true;
-            continue;
-        }
+    while let Some(c) = chars.next() {
         if c == '\\' && quote != Some('\'') {
-            escaped = true;
+            // 上下文判定：后跟转义需求字符才吞反斜杠；
+            // 否则（后跟普通路径字符或行尾无下一字符）原样保留反斜杠
+            if let Some(&next_c) = chars.peek() {
+                if is_escape_requiring(next_c) {
+                    chars.next();
+                    current.push(next_c);
+                    started = true;
+                    continue;
+                }
+            }
+            current.push(c);
             started = true;
             continue;
         }
@@ -327,6 +360,14 @@ fn extract_delete_targets(command: &str, args: &[String]) -> Vec<String> {
     // rm 的短选项：-r -f -R -rf -fr -v -d 等；长选项：--recursive --force --dir 等
     for a in effective.iter().chain(positional.iter()) {
         if a.starts_with('-') {
+            continue;
+        }
+        // ML3 闭环：Windows 风格开关（rd /s /q、del /f /q 等）不入 targets；
+        // 判定口径：归一小写后精确匹配 /s /q /f，其余 `/` 开头（Unix 绝对路径 /tmp/x）
+        // 保持现状入 targets；单字符 Unix 目录名（如 rm /s）被一并跳过为可接受边界——
+        // Windows 风格开关优先，删除目标失真风险远大于该极端目录名形态
+        let lower = a.to_lowercase();
+        if lower == "/s" || lower == "/q" || lower == "/f" {
             continue;
         }
         if a.starts_with("C:") || a.starts_with('C') && a.len() >= 2 && a.as_bytes()[1] == b':' {
@@ -953,5 +994,62 @@ mod tests {
             classify_command_segments(&["echo hi".to_string(), "git status".to_string()]),
             CommandClass::Normal
         );
+    }
+
+    // ===== 12-T-PD-03：Windows 路径语义（A2-M1 + ML3）=====
+
+    #[test]
+    fn rm_bare_windows_path_preserved() {
+        // 裸 Windows 路径：`\` 后跟普通路径字符不剥离，拆参后精确保留原串
+        // （修复前被无条件剥离损坏成 C:tempa.txt）
+        let a = analyze("rm C:\\temp\\a.txt");
+        assert_eq!(a.segments[0].command, "rm");
+        assert_eq!(a.delete_targets, vec!["C:\\temp\\a.txt".to_string()]);
+        assert_eq!(a.overall_class, CommandClass::DeleteShape);
+    }
+
+    #[test]
+    fn rm_backslash_path_with_spaces_in_dirname() {
+        // Windows 路径目录含空格：裸形态空格天然拆 token，关键契约是反斜杠不被剥离
+        // （修复前 `C:\my` 被损坏成 `C:my`）
+        let a = analyze("rm C:\\my dir\\a.txt");
+        let targets = a.delete_targets.clone();
+        assert!(
+            targets.iter().any(|t| t == "C:\\my"),
+            "拆出的盘符前缀保留反斜杠：{:?}",
+            targets
+        );
+        assert!(
+            !targets.iter().any(|t| t == "C:my"),
+            "不允许出现剥离反斜杠的损坏串：{:?}",
+            targets
+        );
+        assert_eq!(a.overall_class, CommandClass::DeleteShape);
+        // 引号 / 转义空格形态：整条含空格路径完整保留为一个目标
+        let b = analyze("rm \"C:\\my dir\\a.txt\"");
+        assert!(b.delete_targets.iter().any(|t| t == "C:\\my dir\\a.txt"));
+        let c = analyze("rm C:\\my\\ dir\\a.txt");
+        assert!(c.delete_targets.iter().any(|t| t == "C:\\my dir\\a.txt"));
+    }
+
+    #[test]
+    fn win_style_flags_not_collected_as_targets() {
+        // ML3：rd /s /q、del /f /q 等 Windows 风格开关不入 targets，盘符路径保持原样
+        let a = analyze("rd /s /q C:\\x");
+        assert_eq!(a.delete_targets, vec!["C:\\x".to_string()]);
+        // 开关仍参与递归/强制判定：rd /s /q C:\ 维持红线（:806 锚点口径不回归）
+        assert_eq!(analyze("rd /s /q C:\\").overall_class, CommandClass::Redline);
+        let c = analyze("del /f /q C:\\x\\a.txt");
+        assert_eq!(c.delete_targets, vec!["C:\\x\\a.txt".to_string()]);
+        // Unix 绝对路径不受影响：/tmp/x 仍入 targets
+        let u = analyze("rm -f /tmp/x");
+        assert!(u.delete_targets.iter().any(|t| t == "/tmp/x"));
+    }
+
+    #[test]
+    fn trailing_backslash_preserved() {
+        // 行尾孤反斜杠（cd /d C:\，:866 用例形态）不再吞字符：拆参后反斜杠保留
+        let (_, args) = split_command_args("cd /d C:\\");
+        assert_eq!(args, vec!["/d".to_string(), "C:\\".to_string()]);
     }
 }

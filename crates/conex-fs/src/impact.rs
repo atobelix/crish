@@ -55,6 +55,11 @@ pub fn assess(targets: &[PathBuf]) -> ImpactAssessment {
 }
 
 /// 递归遍历目录：返回（文件数, 总大小），并把每个文件的父目录记入 parents
+///
+/// 遍历一律使用不跟随符号链接的元数据入口（`symlink_metadata` +
+/// `file_type().is_dir()`，兑现模块头承诺）：目录内的 symlink/junction
+/// 按单条计（取链接自身大小），不跟随目标、不递归——防指向祖先的链接环
+/// 导致无限递归栈溢出。
 fn walk_dir(dir: &Path, parents: &mut Vec<PathBuf>) -> (u64, u64) {
     let mut count = 0u64;
     let mut size = 0u64;
@@ -64,15 +69,24 @@ fn walk_dir(dir: &Path, parents: &mut Vec<PathBuf>) -> (u64, u64) {
     };
     for entry in rd.flatten() {
         let path = entry.path();
-        let meta = match entry.metadata() {
+        let meta = match std::fs::symlink_metadata(&path) {
             Ok(m) => m,
             Err(_) => continue,
         };
-        if meta.is_dir() {
+        let ft = meta.file_type();
+        if ft.is_symlink() {
+            // 符号链接/目录联接（junction）：按单条计（取链接自身大小），
+            // 不跟随目标、不递归（防指向祖先的环导致无限递归栈溢出）
+            count += 1;
+            size += meta.len();
+            if let Some(p) = path.parent() {
+                parents.push(p.to_path_buf());
+            }
+        } else if ft.is_dir() {
             let (files, bytes) = walk_dir(&path, parents);
             count += files;
             size += bytes;
-        } else if meta.is_file() {
+        } else if ft.is_file() {
             count += 1;
             size += meta.len();
             if let Some(p) = path.parent() {
@@ -193,9 +207,54 @@ mod tests {
             d.write("real.txt", "x");
             let _ = symlink(&d.0, d.0.join("loop"));
             let a = assess(&[d.0.clone()]);
-            // 符号链接按文件计，不递归展开（防环）
-            assert!(a.file_count >= 1);
+            // 符号链接按单条计，不递归展开（防环）：real.txt + loop 共 2 条
+            assert_eq!(a.file_count, 2, "顶层 symlink 必须计 1 条且不递归");
+            assert!(a.total_size_bytes >= 1);
         }
         // Windows 无 symlink 权限时跳过该场景
+    }
+
+    #[test]
+    fn subdir_symlink_to_ancestor_not_recursed() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let d = TempDir::new("cycle_sub");
+            d.write("sub/inner.txt", "inner");
+            let _ = symlink(&d.0, d.0.join("sub/loop"));
+            let a = assess(&[d.0.clone()]);
+            // 递归层（walk_dir）的 symlink 指向祖先目录：不得无限递归
+            assert_eq!(
+                a.file_count,
+                2,
+                "sub 内 symlink 指向祖先：inner.txt + loop 共 2 条"
+            );
+        }
+        // Windows 场景由 junction 用例覆盖
+    }
+
+    #[test]
+    fn junction_cycle_inside_dir_not_recursed() {
+        #[cfg(windows)]
+        {
+            use std::process::Command;
+            let d = TempDir::new("junc_sub");
+            d.write("sub/inner.txt", "inner");
+            // cmd mklink /J 建目录联接普通用户可建（无需管理员权限）
+            let out = Command::new("cmd")
+                .args(["/c", "mklink", "/J"])
+                .arg(d.0.join("sub").join("loop"))
+                .arg(&d.0)
+                .output();
+            let ok = out.map(|o| o.status.success()).unwrap_or(false);
+            if !ok {
+                // CI 无 cmd 或目录权限受限时跳过（对齐既有 :202 先例）
+                return;
+            }
+            let a = assess(std::slice::from_ref(&d.0));
+            // 目录内 junction 指向祖先：环内条目计 1 条，不得递归展开
+            assert_eq!(a.file_count, 2, "junction 环必须有限且环内条目计 1 条");
+            assert!(a.total_size_bytes >= 5, "真实文件大小计入");
+        }
     }
 }

@@ -285,6 +285,9 @@ impl TrashService {
                 "条目为快照条目（写前备份，原路径仍存在），请用覆盖恢复接口：{entry_id}"
             );
         }
+        // 原路径全链校验（read_meta 之后、任何移动/复制动作之前，fail-fast）：
+        // 绝对路径 + 无 .. 穿越 + 不在 trash 根内（防 meta.json 被篡改后越界恢复）
+        validate_original_path(&entry.original_path, &self.root)?;
         let is_dir = entry.kind == TrashKind::Dir;
         let payload = entry_dir
             .join(PAYLOAD_DIR)
@@ -322,9 +325,19 @@ impl TrashService {
         }
         let meta = read_meta(&entry_dir)?;
         let entry = &meta.entry;
+        // 原路径全链校验（read_meta 之后、nil-content 删除分支之前，fail-fast）：
+        // 绝对路径 + 无 .. 穿越 + 不在 trash 根内（防 meta.json 被篡改后越界删除）
+        validate_original_path(&entry.original_path, &self.root)?;
         let original = &entry.original_path;
         if !meta.original_existed {
-            // nil-content 条目：恢复 = 删除原路径（快照条目恒为文件）
+            // nil-content 条目：恢复 = 删除原路径（快照条目恒为文件）。
+            // 双条件收紧：仅当 payload 目录确实不存在才允许删除——
+            // payload 意外存在即拒绝（防登记损坏/篡改后误删任意文件）
+            if entry_dir.join(PAYLOAD_DIR).exists() {
+                bail!(
+                    "条目内容意外存在（nil-content 条目不应有 payload），拒绝删除，请检查条目：{entry_id}"
+                );
+            }
             if original.exists() {
                 remove_all(original, false)?;
             }
@@ -399,6 +412,10 @@ impl TrashService {
 }
 
 /// 写登记文件（meta.json）
+///
+/// 原子写：同目录临时文件 `meta.json.agent-tmp` + rename 交换，防崩溃
+/// 半写登记（对齐 replace.rs atomic_write 先例）；Windows 上 rename
+/// 不覆盖既有目标，先 remove 再 rename（同目录无跨卷风险）。
 fn write_meta(
     entry_dir: &Path,
     entry: &TrashEntry,
@@ -413,7 +430,24 @@ fn write_meta(
         original_existed,
     };
     let json = serde_json::to_string_pretty(&meta)?;
-    fs::write(entry_dir.join(META_FILE), json)?;
+    let target = entry_dir.join(META_FILE);
+    let tmp = entry_dir.join(format!("{META_FILE}.agent-tmp"));
+    if let Err(e) = fs::write(&tmp, json) {
+        // 写临时文件失败：清理残骸后透传错误
+        let _ = fs::remove_file(&tmp);
+        return Err(e).with_context(|| format!("写登记临时文件失败：{}", tmp.display()));
+    }
+    // Windows 上 rename 不覆盖既有目标：先 remove 再 rename（同目录无跨卷
+    // 风险；Unix 上 rename 本身原子覆盖，跳过 remove 以保持原子性）
+    #[cfg(windows)]
+    if target.exists() {
+        fs::remove_file(&target)?;
+    }
+    if let Err(e) = fs::rename(&tmp, &target) {
+        // rename 失败：清理临时文件，不留残骸
+        let _ = fs::remove_file(&tmp);
+        return Err(e).with_context(|| format!("原子替换登记文件失败：{}", target.display()));
+    }
     Ok(())
 }
 
@@ -425,6 +459,34 @@ fn read_meta(entry_dir: &Path) -> Result<EntryMeta> {
     let meta: EntryMeta = serde_json::from_str(&content)
         .with_context(|| format!("解析登记文件失败：{}", path.display()))?;
     Ok(meta)
+}
+
+/// 恢复原路径三重校验（防 meta.json 被篡改/损坏后越界移动、复制或删除）
+///
+/// ① 必须是绝对路径（拒绝相对路径）；② 组件不含 `..`（拒绝穿越）；
+/// ③ 不得位于 trash 根内（拒绝把回收站内容当恢复目标）。
+/// 写入侧恒绝对路径（abs_clean 保证），相对/异常路径仅来自登记数据异常，
+/// 拒绝文案提示重建条目。
+fn validate_original_path(original: &Path, trash_root: &Path) -> Result<()> {
+    if !original.is_absolute() {
+        bail!(
+            "原路径不是绝对路径，拒绝恢复（登记数据异常，请重建条目）：{}",
+            original.display()
+        );
+    }
+    if original.components().any(|c| c == Component::ParentDir) {
+        bail!(
+            "原路径含「..」穿越组件，拒绝恢复（登记数据异常，请重建条目）：{}",
+            original.display()
+        );
+    }
+    if path_is_within(trash_root, original) {
+        bail!(
+            "原路径位于回收站根目录内，拒绝恢复：{}",
+            original.display()
+        );
+    }
+    Ok(())
 }
 
 /// 原子移动：同卷 `rename` 优先；失败（跨卷 / 目标已存在等）回退 copy + delete
@@ -472,14 +534,30 @@ fn remove_all(path: &Path, is_dir: bool) -> Result<()> {
 }
 
 /// 目录递归大小（字节）
+///
+/// 遍历统一使用不跟随符号链接的元数据入口（`DirEntry::file_type` +
+/// `symlink_metadata`）：目录内 symlink/junction 按单条计（取链接自身
+/// 大小），不跟随目标、不递归——防指向祖先的链接环导致无限递归栈溢出。
 fn dir_size(path: &Path) -> Result<u64> {
     let mut total = 0u64;
     for entry in fs::read_dir(path)? {
         let entry = entry?;
-        if entry.file_type()?.is_dir() {
+        let ft = entry.file_type()?;
+        if ft.is_symlink() {
+            // 符号链接/目录联接（junction）：按单条计（取链接自身大小），
+            // 不跟随目标、不递归（防指向祖先的环导致无限递归栈溢出）
+            total += std::fs::symlink_metadata(entry.path())
+                .map(|m| m.len())
+                .unwrap_or(0);
+            continue;
+        }
+        if ft.is_dir() {
             total += dir_size(&entry.path())?;
         } else {
-            total += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            // 普通文件：symlink_metadata 与 metadata 等价，统一单一元数据入口
+            total += std::fs::symlink_metadata(entry.path())
+                .map(|m| m.len())
+                .unwrap_or(0);
         }
     }
     Ok(total)
@@ -537,18 +615,35 @@ fn relative_path_of(path: &Path) -> PathBuf {
 
 /// 路径包含性（candidate 在 root 内或与 root 相同）
 ///
-/// 用于「目标不得位于 trash 根内」守卫；Windows 盘符大小写差异
-/// 由 abs_clean 后的字符串前缀比较承担（守卫非攻击边界）。
+/// 用于「目标不得位于 trash 根内」守卫（非攻击边界，防递归为主）；
+/// 归一化口径：统一分隔符 + Windows 大小写不敏感 + 去尾部分隔符，
+/// 与 abs_clean 配合消除盘符大小写差异（对齐 agent-tools mod.rs
+/// `normalize_for_compare`，消除注释声明与实现矛盾）。
 fn path_is_within(root: &Path, candidate: &Path) -> bool {
     let root = abs_clean(root);
     let candidate = abs_clean(candidate);
-    let r = root.to_string_lossy();
-    let c = candidate.to_string_lossy();
+    let r = normalize_for_compare(&root);
+    let c = normalize_for_compare(&candidate);
     if c == r {
         return true;
     }
     let sep = std::path::MAIN_SEPARATOR.to_string();
     c.starts_with(&format!("{r}{sep}"))
+}
+
+/// 比较用归一化：统一分隔符 + Windows 小写 + 去尾部分隔符
+/// （对齐 agent-tools mod.rs normalize_for_compare 口径）
+fn normalize_for_compare(p: &Path) -> String {
+    let sep = std::path::MAIN_SEPARATOR.to_string();
+    let mut s = p.to_string_lossy().replace(['/', '\\'], &sep);
+    #[cfg(windows)]
+    {
+        s = s.to_lowercase();
+    }
+    if s.len() > 1 {
+        s = s.trim_end_matches(std::path::MAIN_SEPARATOR).to_string();
+    }
+    s
 }
 
 /// 条目 id：时间戳（hex 纪元毫秒）+ 序号 + 进程号，进程内唯一且可排序
@@ -961,5 +1056,237 @@ mod tests {
         let meta = std::fs::read_to_string(meta_path).unwrap();
         assert!(meta.contains("\"mode\": \"trash\""));
         assert!(meta.contains("\"originalExisted\": true"));
+    }
+
+    #[test]
+    fn dir_size_does_not_follow_junction_cycle() {
+        #[cfg(windows)]
+        {
+            use std::process::Command;
+            let d = TempDir::new("dirsz_junc");
+            d.write("inner.txt", "payload");
+            // cmd mklink /J 建目录联接普通用户可建（无需管理员权限）；
+            // junction 指向祖先形成环，dir_size 不得递归展开
+            let out = Command::new("cmd")
+                .args(["/c", "mklink", "/J"])
+                .arg(d.0.join("loop"))
+                .arg(&d.0)
+                .output();
+            let ok = out.map(|o| o.status.success()).unwrap_or(false);
+            if !ok {
+                // CI 无 cmd 或目录权限受限时跳过（对齐 impact.rs:202 先例）
+                return;
+            }
+            let size = dir_size(&d.0).unwrap();
+            assert!(size >= 7, "真实文件大小计入");
+            assert!(size <= 10_000_000, "junction 环内大小必须有限（不递归展开）");
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let d = TempDir::new("dirsz_sym");
+            d.write("inner.txt", "payload");
+            let _ = symlink(&d.0, d.0.join("loop"));
+            let size = dir_size(&d.0).unwrap();
+            assert!(size >= 7, "真实文件大小计入");
+            assert!(size <= 10_000_000, "symlink 环内大小必须有限（不递归展开）");
+        }
+    }
+
+    #[test]
+    fn restore_rejects_traversal_original_path() {
+        let src = TempDir::new("trav");
+        let file = src.write("a.txt", "original");
+        let victim = TempDir::new("victim");
+        let victim_file = victim.write("victim.txt", "precious");
+        let svc = service();
+
+        // 移入条目：篡改 meta.json 原路径为相对穿越路径 → restore 拒绝
+        let entry = svc.trash_file(&file, true).unwrap();
+        let entry_dir = svc.root().join(&entry.id);
+        let mut meta = read_meta(&entry_dir).unwrap();
+        meta.entry.original_path = PathBuf::from("..").join("..").join("victim.txt");
+        write_meta(
+            &entry_dir,
+            &meta.entry,
+            meta.backup,
+            meta.snapshot.clone(),
+            meta.original_existed,
+        )
+        .unwrap();
+        let err = svc.restore(&entry.id).unwrap_err();
+        assert!(
+            err.to_string().contains("绝对路径"),
+            "相对原路径应被绝对性校验拒绝：{err}"
+        );
+        assert!(victim_file.exists(), "越界恢复必须被拒绝，victim 不被触碰");
+
+        // 篡改为绝对路径但含 .. 穿越组件 → restore 拒绝
+        let evil_abs = std::env::temp_dir()
+            .join("..")
+            .join("..")
+            .join("victim.txt");
+        meta.entry.original_path = evil_abs.clone();
+        write_meta(
+            &entry_dir,
+            &meta.entry,
+            meta.backup,
+            meta.snapshot.clone(),
+            meta.original_existed,
+        )
+        .unwrap();
+        let err = svc.restore(&entry.id).unwrap_err();
+        assert!(
+            err.to_string().contains("穿越"),
+            "含 .. 的原路径应被穿越校验拒绝：{err}"
+        );
+        assert!(victim_file.exists(), "越界恢复必须被拒绝，victim 不被触碰");
+
+        // restore_force（快照条目）同样拒绝穿越原路径
+        let file2 = src.write("b.txt", "b");
+        let snap = svc.snapshot(&file2).unwrap();
+        let snap_dir = svc.root().join(&snap.id);
+        let mut m2 = read_meta(&snap_dir).unwrap();
+        m2.entry.original_path = evil_abs;
+        write_meta(
+            &snap_dir,
+            &m2.entry,
+            m2.backup,
+            m2.snapshot,
+            m2.original_existed,
+        )
+        .unwrap();
+        let err = svc.restore_force(&snap.id).unwrap_err();
+        assert!(
+            err.to_string().contains("穿越"),
+            "restore_force 同样拒绝穿越原路径：{err}"
+        );
+        assert!(victim_file.exists(), "越界恢复必须被拒绝，victim 不被触碰");
+    }
+
+    #[test]
+    fn restore_rejects_original_path_inside_trash_root() {
+        let src = TempDir::new("inroot");
+        let file = src.write("a.txt", "original");
+        let svc = service();
+
+        // restore 入口：原路径被篡改为 trash 根内 → 拒绝
+        let entry = svc.trash_file(&file, true).unwrap();
+        let entry_dir = svc.root().join(&entry.id);
+        let mut meta = read_meta(&entry_dir).unwrap();
+        meta.entry.original_path = svc.root().join("victim.txt");
+        write_meta(
+            &entry_dir,
+            &meta.entry,
+            meta.backup,
+            meta.snapshot,
+            meta.original_existed,
+        )
+        .unwrap();
+        let err = svc.restore(&entry.id).unwrap_err();
+        assert!(
+            err.to_string().contains("回收站根"),
+            "trash 根内原路径应被拒绝：{err}"
+        );
+
+        // restore_force 入口（快照条目）同样拒绝
+        let file2 = src.write("b.txt", "b");
+        let snap = svc.snapshot(&file2).unwrap();
+        let snap_dir = svc.root().join(&snap.id);
+        let mut m2 = read_meta(&snap_dir).unwrap();
+        m2.entry.original_path = svc.root().join("victim.txt");
+        write_meta(
+            &snap_dir,
+            &m2.entry,
+            m2.backup,
+            m2.snapshot,
+            m2.original_existed,
+        )
+        .unwrap();
+        let err = svc.restore_force(&snap.id).unwrap_err();
+        assert!(
+            err.to_string().contains("回收站根"),
+            "restore_force 同样拒绝 trash 根内原路径：{err}"
+        );
+    }
+
+    #[test]
+    fn restore_force_nil_content_requires_absent_payload() {
+        let src = TempDir::new("nil_payload");
+        let file = src.0.join("fresh.txt");
+        let svc = service();
+
+        // 原不存在 → nil-content 条目（original_existed=false，无 payload）
+        let entry = svc.snapshot(&file).unwrap();
+        let entry_dir = svc.root().join(&entry.id);
+        assert!(!entry_dir.join(PAYLOAD_DIR).exists());
+
+        // 异常数据：nil-content 条目意外出现 payload 目录 → 恢复必须拒绝删除
+        fs::create_dir_all(entry_dir.join(PAYLOAD_DIR).join("x")).unwrap();
+        std::fs::write(&file, "created later").unwrap();
+
+        let err = svc.restore_force(&entry.id).unwrap_err();
+        assert!(
+            err.to_string().contains("payload") || err.to_string().contains("意外存在"),
+            "payload 意外存在必须拒绝删除：{err}"
+        );
+        assert!(file.exists(), "拒绝时不得删除原路径");
+        assert_eq!(svc.list().len(), 1, "拒绝后条目保留");
+    }
+
+    #[test]
+    fn path_is_within_case_and_separator_normalized() {
+        #[cfg(windows)]
+        {
+            // ML6 口径：统一分隔符 + Windows 小写 + 去尾部分隔符
+            // （对齐 agent-tools mod.rs normalize_for_compare）
+            let root = Path::new(r"C:\trash");
+            assert!(path_is_within(root, Path::new(r"C:\TRASH\a")));
+            assert!(path_is_within(root, Path::new(r"c:\trash\a")));
+            assert!(path_is_within(root, Path::new(r"C:/trash/a")));
+            assert!(path_is_within(root, Path::new(r"C:\trash")));
+            assert!(path_is_within(
+                Path::new(r"C:\trash\"),
+                Path::new(r"C:\TRASH\a")
+            ));
+            assert!(!path_is_within(root, Path::new(r"C:\trashx")));
+            assert!(!path_is_within(root, Path::new(r"C:\other\a")));
+        }
+        #[cfg(not(windows))]
+        {
+            // 非 Windows：大小写敏感，仅验证包含关系与去尾分隔符
+            let root = Path::new("/tmp/trash");
+            assert!(path_is_within(root, Path::new("/tmp/trash/a")));
+            assert!(path_is_within(root, Path::new("/tmp/trash")));
+            assert!(path_is_within(
+                Path::new("/tmp/trash/"),
+                Path::new("/tmp/trash/a")
+            ));
+            assert!(!path_is_within(root, Path::new("/tmp/trashx")));
+        }
+    }
+
+    #[test]
+    fn write_meta_leaves_no_tmp_residue() {
+        let src = TempDir::new("meta_tmp");
+        let file = src.write("a.txt", "x");
+        let svc = service();
+
+        let entry = svc.trash_file(&file, true).unwrap();
+        let entry_dir = svc.root().join(&entry.id);
+        assert!(entry_dir.join(META_FILE).exists(), "登记文件已写入");
+        assert!(
+            !entry_dir.join("meta.json.agent-tmp").exists(),
+            "原子写后不得残留临时文件"
+        );
+
+        // 覆盖登记路径（restore_force 前的快照写回）同样不留残留
+        let file2 = src.write("b.txt", "y");
+        let snap = svc.snapshot(&file2).unwrap();
+        let snap_dir = svc.root().join(&snap.id);
+        assert!(
+            !snap_dir.join("meta.json.agent-tmp").exists(),
+            "快照登记原子写后不得残留临时文件"
+        );
     }
 }

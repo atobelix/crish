@@ -338,34 +338,53 @@ pub(crate) struct DecodedText {
     pub has_bom: bool,
     /// 二进制标记：内容含 NUL 字节无法按文本读取
     pub is_binary: bool,
+    /// lossy 标记（编码护栏 A1-H1，裁决 D4 fail-closed）：解码过程是否
+    /// 注入过 U+FFFD 替换字符——非 UTF-8 文本（GBK/latin1 等 legacy 编码）
+    /// 或 UTF-16 孤立代理项。写回类工具据此拒绝，避免原编码字节被静默改写；
+    /// 只读路径（read_file）保持 lossy 诚实显示，不拒不报错。
+    pub lossy_replaced: bool,
 }
 
 /// 解码文本：BOM 探测 utf-8 / utf-16le / utf-16be，NUL 判定二进制
 ///
 /// 注意顺序：BOM 探测必须先于 NUL 检查——UTF-16 文本天然含 `\x00` 字节。
+///
+/// 编码护栏（A1-H1）：仅判定「是否有效 UTF-8」，不做 GBK/latin1 具体编码
+/// 识别（fail-closed 只需知道「不是 UTF-8」；GBK 双字节 0x81~0xFE 引导 vs
+/// latin1 单字节 0x80~0xFF 的差异不构成判定输入，避免编码猜测误判合法 UTF-8）。
 pub(crate) fn decode_text(bytes: &[u8]) -> DecodedText {
     if bytes.starts_with(&[0xFF, 0xFE]) {
+        let (text, lossy_replaced) = decode_utf16(&bytes[2..], true);
         return DecodedText {
-            text: decode_utf16(&bytes[2..], true),
+            text,
             encoding: "utf-16le".to_string(),
             has_bom: true,
             is_binary: false,
+            lossy_replaced,
         };
     }
     if bytes.starts_with(&[0xFE, 0xFF]) {
+        let (text, lossy_replaced) = decode_utf16(&bytes[2..], false);
         return DecodedText {
-            text: decode_utf16(&bytes[2..], false),
+            text,
             encoding: "utf-16be".to_string(),
             has_bom: true,
             is_binary: false,
+            lossy_replaced,
         };
     }
     if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        // BOM 剥离逻辑不变；严格解码失败（BOM 后含非 UTF-8 字节）→ lossy + 标记
+        let (text, lossy_replaced) = match std::str::from_utf8(&bytes[3..]) {
+            Ok(s) => (s.to_string(), false),
+            Err(_) => (String::from_utf8_lossy(&bytes[3..]).into_owned(), true),
+        };
         return DecodedText {
-            text: String::from_utf8_lossy(&bytes[3..]).into_owned(),
+            text,
             encoding: "utf-8".to_string(),
             has_bom: true,
             is_binary: false,
+            lossy_replaced,
         };
     }
     if bytes.contains(&0u8) {
@@ -374,18 +393,26 @@ pub(crate) fn decode_text(bytes: &[u8]) -> DecodedText {
             encoding: "binary".to_string(),
             has_bom: false,
             is_binary: true,
+            lossy_replaced: false,
         };
     }
+    // 无 BOM 分支严格化：先严格解码，失败才 lossy 并置标记
+    // （该路径本身即拒绝，标记恒 false）
+    let (text, lossy_replaced) = match std::str::from_utf8(bytes) {
+        Ok(s) => (s.to_string(), false),
+        Err(_) => (String::from_utf8_lossy(bytes).into_owned(), true),
+    };
     DecodedText {
-        text: String::from_utf8_lossy(bytes).into_owned(),
+        text,
         encoding: "utf-8".to_string(),
         has_bom: false,
         is_binary: false,
+        lossy_replaced,
     }
 }
 
-/// 按 UTF-16 字节序解码（BOM 已剥除）
-fn decode_utf16(bytes: &[u8], little_endian: bool) -> String {
+/// 按 UTF-16 字节序解码（BOM 已剥除）；返回 (文本, 是否发生 lossy 替换)
+fn decode_utf16(bytes: &[u8], little_endian: bool) -> (String, bool) {
     let units: Vec<u16> = bytes
         .chunks_exact(2)
         .map(|c| {
@@ -396,7 +423,11 @@ fn decode_utf16(bytes: &[u8], little_endian: bool) -> String {
             }
         })
         .collect();
-    String::from_utf16_lossy(&units)
+    // 严格尝试：含孤立代理项（UTF-16 非法序列）→ 回退 lossy 并置标记
+    match String::from_utf16(&units) {
+        Ok(s) => (s, false),
+        Err(_) => (String::from_utf16_lossy(&units), true),
+    }
 }
 
 /// 路径包含性检查（Windows 大小写不敏感，按组件语义比较）
@@ -515,15 +546,42 @@ mod tests {
         assert_eq!(d.text, "hello");
         assert!(d.has_bom);
         assert!(!d.is_binary);
+        assert!(!d.lossy_replaced, "合法 BOM UTF-8 不标记 lossy");
 
         let utf16le = b"\xFF\xFEh\x00e\x00l\x00l\x00o\x00".to_vec();
         let d = decode_text(&utf16le);
         assert_eq!(d.text, "hello");
         assert_eq!(d.encoding, "utf-16le");
+        assert!(!d.lossy_replaced, "合法 UTF-16LE 不标记 lossy");
 
         let binary = vec![0u8, 1u8, 2u8, 3u8];
         let d = decode_text(&binary);
         assert!(d.is_binary);
+        assert!(!d.lossy_replaced, "二进制分支标记恒 false");
+    }
+
+    #[test]
+    fn decode_text_marks_lossy_for_invalid_utf8() {
+        // GBK「中文」字节（D6 D0 CE C4）：无 NUL 的 legacy 编码文本，
+        // 严格 UTF-8 解码失败 → lossy_replaced = true（fail-closed 判定面，
+        // 不做 GBK/latin1 具体编码识别）
+        let gbk = vec![0xD6u8, 0xD0, 0xCE, 0xC4];
+        let d = decode_text(&gbk);
+        assert!(!d.is_binary, "GBK 无 NUL 字节，不得被二进制分支捕获");
+        assert!(d.lossy_replaced, "非 UTF-8 必须标记 lossy_replaced");
+        assert!(d.text.contains('\u{FFFD}'), "lossy 解码应注入 U+FFFD");
+
+        // UTF-16LE 孤立代理项（FF FE 00 D8 = 0xD800）：严格 from_utf16 失败
+        let orphan = vec![0xFF, 0xFE, 0x00, 0xD8];
+        let d = decode_text(&orphan);
+        assert_eq!(d.encoding, "utf-16le");
+        assert!(d.lossy_replaced, "UTF-16 孤立代理项必须标记 lossy_replaced");
+
+        // 合法 UTF-8（含中文，无 BOM）→ 不标记
+        let ok = "你好，世界".as_bytes().to_vec();
+        let d = decode_text(&ok);
+        assert_eq!(d.encoding, "utf-8");
+        assert!(!d.lossy_replaced, "合法 UTF-8 不标记 lossy");
     }
 
     #[test]
