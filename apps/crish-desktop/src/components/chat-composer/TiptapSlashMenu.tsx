@@ -1,6 +1,9 @@
 /**
  * apps/crish-desktop/src/components/chat-composer/TiptapSlashMenu.tsx
- * Radix Popover Menu for Slash Suggestions (CRM-01)
+ * Radix Popover Menu for Slash / Mention Suggestions (CRM-01, T8 aria 全链)。
+ * - 键盘漫游与聚焦盾（onOpenAutoFocus/onCloseAutoFocus preventDefault）；
+ * - aria-activedescendant 同步至编辑器 combobox（高亮项随键盘漫游变化）；
+ * - listbox id / label / 空态文案由 suggestion 生命周期注入（斜杠与提及共用）。
  * CI Guardrail: Max 500 lines of effective code
  */
 
@@ -23,6 +26,7 @@ import {
   Globe,
   PlayCircle,
   Sparkles,
+  AtSign,
 } from 'lucide-react';
 import type { SlashMenuProps, SlashCommandItem } from './composerTypes';
 import styles from './TiptapSlashMenu.module.css';
@@ -44,6 +48,8 @@ const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: 
   Globe,
   PlayCircle,
   Sparkles,
+  // 提及候选人图标（@ 触发）
+  AtSign,
 };
 
 export interface SlashMenuRefHandle {
@@ -52,7 +58,16 @@ export interface SlashMenuRefHandle {
 
 export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
   (props, ref) => {
-    const { items, command, isOpen = true, onClose, clientRect } = props;
+    const {
+      items,
+      command,
+      isOpen = true,
+      onClose,
+      clientRect,
+      label = '斜杠命令',
+      emptyMessage = '无匹配命令',
+      listboxId,
+    } = props;
     const [selectedIndex, setSelectedIndex] = useState(0);
     const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -67,6 +82,19 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
         });
       }
     }, [selectedIndex]);
+
+    // aria-activedescendant 全链：编辑器 combobox → 当前高亮 option（T8）。
+    // 卸载（菜单关闭/切换）时清理，退出侧的兜底见 SlashExtension onExit。
+    useEffect(() => {
+      const editorAny = props.editor as any;
+      const dom = editorAny?.view?.dom as HTMLElement | undefined;
+      if (!dom) return;
+      const optionId = `${listboxId ?? 'tiptap-suggestion'}-opt-${selectedIndex}`;
+      if (items.length > 0) dom.setAttribute('aria-activedescendant', optionId);
+      return () => {
+        if (!editorAny?.isDestroyed) dom.removeAttribute('aria-activedescendant');
+      };
+    }, [selectedIndex, items.length, listboxId, props.editor]);
 
     const selectItem = (index: number) => {
       const item = items[index];
@@ -113,10 +141,7 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
 
     const rawRect = typeof clientRect === 'function' ? clientRect() : clientRect;
     const rect = rawRect || new DOMRect(0, 0, 0, 0);
-    // 锚点层仅用于坐标定位（隐藏、不响应指针），z 轴必须与弹层同层语义一致
-    const varZPopover = typeof window !== 'undefined'
-      ? getComputedStyle(document.documentElement).getPropertyValue('--z-popover').trim()
-      : '';
+    // 锚点层仅用于坐标定位（隐藏、不响应指针），z 轴走 var(--z-popover) token（不硬编码数值）
     const triggerStyle: React.CSSProperties = {
       position: 'fixed',
       top: rect.top,
@@ -125,7 +150,7 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
       height: rect.height || 1,
       pointerEvents: 'none',
       visibility: 'hidden',
-      zIndex: Number(varZPopover) || 200,
+      zIndex: 'var(--z-popover)',
     };
 
     return (
@@ -145,11 +170,12 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
             <div
               className={styles.menuList}
               role="listbox"
-              aria-label="斜杠命令"
+              aria-label={label}
+              id={listboxId}
             >
               {items.length === 0 ? (
                 <div className={styles.emptyMessage} role="presentation">
-                  无匹配命令
+                  {emptyMessage}
                 </div>
               ) : (
                 items.map((item: SlashCommandItem, index: number) => {
@@ -163,6 +189,7 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
                       ref={(el) => { itemRefs.current[index] = el; }}
                       type="button"
                       role="option"
+                      id={`${listboxId ?? 'tiptap-suggestion'}-opt-${index}`}
                       aria-selected={isActive}
                       className={`${styles.menuItem} ${isActive ? styles.menuItemActive : ''}`}
                       onClick={() => selectItem(index)}

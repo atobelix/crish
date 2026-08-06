@@ -1,28 +1,27 @@
 /**
- * 主对话输入区：slash 菜单、textarea、发送/停止、附件条、+ 菜单 / 权限。
+ * 主对话输入区：slash 菜单（tiptap 接管）、富文本输入、发送/停止、附件条、+ 菜单 / 权限。
  * 会话次要动作（搜索/导出）在 card-header ChatHeaderMore。
  * 子 agent 通过 ComposerField 复用同一视觉与增高逻辑（侧栏 AgentCard / 内联 InlineAgentPanel）。
+ *
+ * 40 方案 T6 接线：编辑器由 TiptapComposerField 接管；
+ * - 宿主 ComposerSlashMenu 文本注入路径退役（tiptap 菜单已接管键盘与点选）；
+ * - 命令源 filteredCommands 以 baseSlashCommands 桥入编辑器菜单（宿主过滤 + 编辑器 query 精滤）；
+ * - open-schedule 动作经 onSlashMenuPick 回宿主开面板；
+ * - 落地面态（RL-01 5% 焦点混色特例）从祖先 DOM data-empty-kind 感知。
  */
-import React, { useCallback, useEffect, useId, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatComposer.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { slashMenuPick } from '../../api/resolveSlashCommand';
 import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
 import { Tooltip } from '../Tooltip';
 import type { PermissionMode } from '../../api/permissionModes';
 import type { ChatAttachment, QueuedMessage } from '../../hooks/useChatStream';
-import { ComposerField } from './ComposerField';
-import {
-  ComposerSlashMenu,
-  handleSlashKeyDown,
-  type SlashCommandItem,
-} from './ComposerSlashMenu';
+import { TiptapComposerField } from './TiptapComposerField';
 import { ComposerAttachmentBar } from './ComposerAttachmentBar';
 import { ChatQueuePanel } from './ChatQueuePanel';
 
-export type { SlashCommandItem } from './ComposerSlashMenu';
 export type { ComposerFieldProps } from './ComposerField';
 export {
   ComposerField,
@@ -37,11 +36,13 @@ export type ChatComposerProps = {
   setChatInput: (v: string) => void;
   isComposing: boolean;
   setIsComposing: (v: boolean) => void;
-  slashMenuOpen: boolean;
-  setSlashMenuOpen: (v: boolean) => void;
-  slashSelectedIndex: number;
-  setSlashSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
-  filteredCommands: SlashCommandItem[];
+  /** 宿主斜杠菜单状态（ChatCard 契约保留；tiptap 菜单接管后暂不消费） */
+  slashMenuOpen?: boolean;
+  setSlashMenuOpen?: (v: boolean) => void;
+  slashSelectedIndex?: number;
+  setSlashSelectedIndex?: React.Dispatch<React.SetStateAction<number>>;
+  /** 宿主斜杠命令（base + skill，已按输入前缀过滤；桥入 tiptap 菜单） */
+  filteredCommands: Array<{ cmd: string; desc: string }>;
   loadSkillSlash: () => void | Promise<void>;
   onPasteImage: (e: React.ClipboardEvent) => void;
   onSend: () => void;
@@ -67,6 +68,8 @@ export type ChatComposerProps = {
   onSendQueuedNow?: (id: string) => void;
   onEditQueued?: (id: string) => void;
   onDeleteQueued?: (id: string) => void;
+  /** 落地面态（session-empty）；未传时从 DOM 祖先 data-empty-kind 感知 */
+  emptyKind?: string | null;
 };
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -74,10 +77,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   setChatInput,
   isComposing,
   setIsComposing,
-  slashMenuOpen,
-  setSlashMenuOpen,
-  slashSelectedIndex,
-  setSlashSelectedIndex,
   filteredCommands,
   loadSkillSlash,
   onPasteImage,
@@ -102,77 +101,52 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onSendQueuedNow,
   onEditQueued,
   onDeleteQueued,
+  emptyKind: emptyKindProp,
 }) => {
-  const listboxId = useId();
   const plusMenuId = useId();
-  const textAreaDomId = useId();
-  const slashRootRef = useRef<HTMLDivElement>(null);
-  const activeItemRef = useRef<HTMLDivElement | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const fieldContainerRef = useRef<HTMLDivElement>(null);
   const plusBtnRef = useRef<HTMLButtonElement>(null);
 
-  const safeIndex = useMemo(() => {
-    if (filteredCommands.length === 0) return 0;
-    return Math.min(Math.max(0, slashSelectedIndex), filteredCommands.length - 1);
-  }, [filteredCommands.length, slashSelectedIndex]);
-
+  // 落地面态（RL-01 特例）：宿主未透传 emptyKind 时，从 DOM 祖先 data-empty-kind
+  // （chatBody）读取；会话在空态/消息态间切换时经 MutationObserver 同步，
+  // 保证 session-empty 落地面走 5% 焦点混色而非标准 6%。
+  const [emptyKind, setEmptyKind] = useState<string | undefined>(
+    emptyKindProp ?? undefined
+  );
   useEffect(() => {
-    if (!slashMenuOpen) return;
-    if (slashSelectedIndex !== safeIndex) {
-      setSlashSelectedIndex(safeIndex);
-    }
-  }, [slashMenuOpen, slashSelectedIndex, safeIndex, setSlashSelectedIndex]);
-
-  useEffect(() => {
-    if (!slashMenuOpen) return;
-    activeItemRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [slashMenuOpen, safeIndex, filteredCommands.length]);
-
-  useEffect(() => {
-    if (!slashMenuOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (slashRootRef.current?.contains(t)) return;
-      const el = t as HTMLElement | null;
-      if (el?.closest?.('.input-container')) return;
-      setSlashMenuOpen(false);
+    if (emptyKindProp !== undefined && emptyKindProp !== null) return;
+    const root = wrapperRef.current;
+    if (!root) return;
+    const read = () => {
+      const el = root.closest('[data-empty-kind]');
+      setEmptyKind(el?.getAttribute('data-empty-kind') ?? undefined);
     };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [slashMenuOpen, setSlashMenuOpen]);
+    read();
+    const observed = root.closest('[data-main-surface]') ?? root;
+    const mo = new MutationObserver(read);
+    mo.observe(observed, { attributes: true, attributeFilter: ['data-empty-kind'] });
+    return () => mo.disconnect();
+  }, [emptyKindProp]);
 
   const focusComposerTextarea = useCallback(() => {
     const root = fieldContainerRef.current;
-    const ta =
+    // tiptap 编辑器为 contenteditable 根；textarea 分支兼容侧栏 ComposerField 复用
+    const el =
       root?.querySelector?.('textarea.composer-textarea') ??
-      root?.querySelector?.('textarea');
-    if (ta instanceof HTMLTextAreaElement) {
-      ta.focus();
+      root?.querySelector?.('textarea') ??
+      root?.querySelector?.('[contenteditable="true"]');
+    if (el instanceof HTMLElement) {
+      el.focus();
     }
   }, []);
 
-  const applySlashSelection = useCallback(
-    (cmd: string) => {
-      setSlashMenuOpen(false);
-      const pick = slashMenuPick(cmd);
-      if (pick.action === 'open-schedule') {
-        setChatInput('');
-        onOpenSchedule();
-        requestAnimationFrame(focusComposerTextarea);
-        return;
-      }
-      setChatInput(pick.text);
-      requestAnimationFrame(focusComposerTextarea);
-    },
-    [focusComposerTextarea, onOpenSchedule, setChatInput, setSlashMenuOpen],
-  );
-
-  const optionId = useCallback((i: number) => `${listboxId}-opt-${i}`, [listboxId]);
-
-  const slashActiveDesc =
-    slashMenuOpen && filteredCommands.length > 0
-      ? optionId(safeIndex)
-      : undefined;
+  // tiptap 菜单 open-schedule 动作：清空输入并转交宿主开面板（不落输入，对齐原文本注入语义）
+  const handleSlashMenuPick = useCallback(() => {
+    setChatInput('');
+    onOpenSchedule();
+    requestAnimationFrame(focusComposerTextarea);
+  }, [focusComposerTextarea, onOpenSchedule, setChatInput]);
 
   const handleRemoveAttachment = useCallback(
     (name: string) => {
@@ -183,26 +157,24 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
   return (
     <AppErrorBoundary variant="compact" title="输入区出错">
-      <div className={`${styles.composerWrapper}${className ? ` ${className}` : ''}`}>
+      <div
+        ref={wrapperRef}
+        className={`${styles.composerWrapper}${className ? ` ${className}` : ''}`}
+      >
         <ChatQueuePanel
           queue={queuedMessages}
           onSendNow={onSendQueuedNow ?? (() => {})}
           onEdit={onEditQueued ?? (() => {})}
           onDelete={onDeleteQueued ?? (() => {})}
         />
-        <ComposerField
+        <TiptapComposerField
           containerRef={fieldContainerRef}
-          textAreaId={textAreaDomId}
           value={chatInput}
           onChange={(val) => {
             setChatInput(val);
+            // 输入前缀斜杠时预载 skill 命令（tiptap 菜单经引用桥接即时并入）
             if (val.startsWith('/') && !val.includes(' ')) {
-              setSlashMenuOpen(true);
-              setShowPlusMenu(false);
-              setSlashSelectedIndex(0);
               void loadSkillSlash();
-            } else {
-              setSlashMenuOpen(false);
             }
           }}
           onSend={onSend}
@@ -218,39 +190,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           placeholder="输入消息，或键入 / 打开命令…（可粘贴截图）"
           processingPlaceholder="输入排队消息…（当前回复结束后发送，可粘贴截图）"
           ariaLabel="主对话输入"
-          ariaExpanded={slashMenuOpen}
-          {...(slashMenuOpen ? { ariaControls: listboxId } : {})}
-          ariaHasPopup="listbox"
-          ariaActivedescendant={slashActiveDesc}
-          ariaAutocomplete="list"
-          leading={
-            slashMenuOpen ? (
-              <ComposerSlashMenu
-                id={listboxId}
-                filteredCommands={filteredCommands}
-                safeIndex={safeIndex}
-                slashActiveDesc={slashActiveDesc}
-                slashRootRef={slashRootRef}
-                activeItemRef={activeItemRef}
-                onSelect={applySlashSelection}
-                onMouseEnterIndex={setSlashSelectedIndex}
-                optionId={optionId}
-              />
-            ) : null
-          }
-          onKeyDownExtra={(e) =>
-            handleSlashKeyDown(
-              e,
-              slashMenuOpen,
-              filteredCommands,
-              safeIndex,
-              chatInput,
-              setSlashMenuOpen,
-              setSlashSelectedIndex,
-              applySlashSelection,
-              focusComposerTextarea
-            )
-          }
+          baseSlashCommands={filteredCommands}
+          onSlashMenuPick={handleSlashMenuPick}
+          emptyKind={emptyKind}
         />
 
         <ComposerAttachmentBar
@@ -291,7 +233,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                     requestAnimationFrame(() => plusBtnRef.current?.focus());
                   } else {
                     setShowPlusMenu(true);
-                    setSlashMenuOpen(false);
                     onCloseSiblingMenus?.();
                   }
                 }}
@@ -308,7 +249,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                 if (!chatInput.startsWith('/')) {
                   setChatInput(chatInput ? `/${chatInput}` : '/');
                 }
-                setSlashMenuOpen(true);
                 void loadSkillSlash();
                 requestAnimationFrame(focusComposerTextarea);
               }}
@@ -319,7 +259,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               onChange={(m) => {
                 onPermissionChange(m);
                 setShowPlusMenu(false);
-                setSlashMenuOpen(false);
                 onCloseSiblingMenus?.();
               }}
             />

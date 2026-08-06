@@ -15,7 +15,7 @@ import * as Lucide from 'lucide-react';
 import styles from './ChatComposer.module.css';
 import { Tooltip } from '../Tooltip';
 import { TiptapEditorField } from './TiptapEditorField';
-import type { SlashCommandItem, TiptapEditorFieldHandle } from './composerTypes';
+import type { SlashCommandItem, TiptapEditorFieldHandle, MentionCandidate } from './composerTypes';
 import { slashMenuPick } from '../../api/resolveSlashCommand';
 import {
   COMPOSER_DENSE_LINE_HEIGHT,
@@ -61,6 +61,8 @@ export type TiptapComposerFieldProps = ComposerFieldProps & {
   onSlashMenuPick?: (cmd: string) => void;
   /** 宿主文件选择链（编辑器拖放直达） */
   onFilesSelected?: (files: File[]) => void | Promise<void>;
+  /** 提及候选人（@ 触发；未接入宿主候选人源时留空兜底） */
+  mentionCandidates?: ReadonlyArray<MentionCandidate>;
   /** 落地面态（session-empty 走 5% 焦点混色特例） */
   emptyKind?: string;
 };
@@ -110,6 +112,7 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
   baseSlashCommands,
   onSlashMenuPick,
   onFilesSelected,
+  mentionCandidates,
   emptyKind,
 }) => {
   const lines =
@@ -185,6 +188,9 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
   }, [disabled, canSend, value, handleSendMarkdown]);
 
   // ── 粘贴图片转发（宿主 handlePasteImage 读原事件 clipboardData）──────────────
+  // 类型桥说明：宿主 onPaste 契约是 React.ClipboardEvent，编辑器侧为原生
+  // ClipboardEvent；两者仅静态形状不同，运行期宿主只消费 clipboardData/preventDefault，
+  // 因此以一次受限断言转发原事件，不重建合成事件（保持原生对象唯一性）。
   const handlePasteImage = useCallback(
     (_file: File, event: ClipboardEvent) => {
       onPaste?.(event as unknown as React.ClipboardEvent);
@@ -344,6 +350,7 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
         onDropFiles={handleDropFiles}
         onPasteImage={handlePasteImage}
         slashExtraItems={slashExtraItems}
+        mentionCandidates={mentionCandidates}
       />
       <div className={styles.buttons}>
         {isProcessing ? (

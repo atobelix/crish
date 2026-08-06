@@ -49,6 +49,28 @@
   box-shadow: none !important;
 }
 
+/* 选中文本：accent 12% 底（token 语义，克制不抢正文） */
+.proseMirrorField :global(::selection) {
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+}
+
+/* 任务清单勾选：系统 checkbox 仅着色 accent，不重绘形态 */
+.proseMirrorField :global(ul[data-type="taskList"] input[type="checkbox"]) {
+  accent-color: var(--accent-color);
+}
+
+/* 链接 mark（Link 扩展）：token 语义色，仅下划线标记可点性 */
+.proseMirrorField :global(a) {
+  color: var(--accent-color);
+  text-decoration: none;
+  border-bottom: var(--hairline-width, 1px) solid
+    color-mix(in srgb, var(--accent-color) 30%, transparent);
+}
+
+.proseMirrorField :global(a:hover) {
+  border-bottom-color: var(--accent-color);
+}
+
 /* 段落紧凑排布（对齐 textarea 语义，段落间不留大间隙） */
 .proseMirrorField :global(p) {
   margin: 0;

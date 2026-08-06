@@ -1,39 +1,22 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * apps/crish-desktop/src/components/chat-composer/composerTypes.ts
- * Single Source of Truth Type Contracts for Tiptap Chat Composer
+ * tiptap 输入域类型契约（40 方案 T2/T11 收敛后）：
+ * - PermissionMode 以 api/permissionModes 为单一真相源（re-export，消除两源 hack）；
+ * - ChatAttachment / QueuedMessage 以 hooks/useChatStream（宿主）为准，本域不再自声明；
+ * - TiptapComposerContainer / useTiptapComposerState 退役后，其专属类型一并移除。
  * CI Guardrail: Max 800 lines of effective code
  */
 
 import type React from 'react';
 
-export type PermissionMode = 'auto' | 'manual' | 'plan';
+export type { PermissionMode } from '../../api/permissionModes';
 
-export interface ChatAttachment {
-  id?: string;
-  name: string;
-  mime?: string;
-  size?: number;
-  dataUrl?: string;     // Base64 payload for IPC submission
-  objectUrl?: string;   // Blob URL for UI preview rendering
-  text?: string;
-}
-
-export interface QueuedMessage {
+/** 提及候选人（@ 触发；宿主接入候选人源后注入，未接入时为空列表兜底不弹面板） */
+export interface MentionCandidate {
   id: string;
-  text: string;
-  attachments: ChatAttachment[];
-  createdAt: number;
-}
-
-export interface TiptapComposerProps {
-  sessionId: string;
-  placeholder?: string;
-  disabled?: boolean;
-  emptyKind?: 'session-empty' | 'standard' | string;
-  onSend?: (prompt: string, attachments: ChatAttachment[]) => void | Promise<void>;
-  onStop?: () => void;
-  className?: string;
+  label: string;
+  kind?: 'file' | 'agent' | string;
 }
 
 export interface SlashCommandItem {
@@ -53,6 +36,12 @@ export interface SlashMenuProps {
   isOpen: boolean;
   onClose: () => void;
   clientRect?: any;
+  /** 弹层 listbox 语义：aria-label（斜杠=斜杠命令，提及=提及候选人） */
+  label?: string;
+  /** 无匹配空态文案 */
+  emptyMessage?: string;
+  /** listbox id（aria-controls / aria-activedescendant 全链） */
+  listboxId?: string;
 }
 
 export interface TiptapEditorFieldProps {
@@ -75,6 +64,8 @@ export interface TiptapEditorFieldProps {
   ariaAutocomplete?: ('none' | 'inline' | 'list' | 'both') | undefined;
   /** 宿主系统/skill 斜杠命令（经引用桥接动态更新，无需重建编辑器） */
   slashExtraItems?: SlashCommandItem[];
+  /** 提及候选人（@ 触发；引用桥接动态更新，未接入时留空兜底） */
+  mentionCandidates?: ReadonlyArray<MentionCandidate>;
   /** 挂载后自动聚焦编辑器 */
   autoFocus?: boolean;
 }
@@ -83,30 +74,4 @@ export interface TiptapEditorFieldProps {
 export interface TiptapEditorFieldHandle {
   /** 同步获取当前编辑器 markdown（绕过 150ms 防抖） */
   getMarkdown: () => string;
-}
-
-export interface UseTiptapComposerStateOptions {
-  sessionId: string;
-  onSend?: (prompt: string, attachments: ChatAttachment[]) => void | Promise<void>;
-  onStop?: () => void;
-}
-
-export interface UseTiptapComposerStateReturn {
-  attachments: ChatAttachment[];
-  setAttachments: React.Dispatch<React.SetStateAction<ChatAttachment[]>>;
-  permissionMode: PermissionMode;
-  setPermissionMode: (mode: PermissionMode) => void;
-  isComposing: boolean;
-  setIsComposing: (composing: boolean) => void;
-  handleSend: (promptMarkdown?: string) => Promise<void>;
-  handleStopRequest: () => void;
-  handleDropFiles: (files: FileList | File[]) => Promise<void>;
-  handlePasteImage: (file: File) => Promise<void>;
-  sendShortcut: 'enter' | 'ctrlEnter';
-  onMarkdownChange: (markdown: string) => void;
-  content?: string;
-  queuedMessages?: QueuedMessage[];
-  handleSendQueueNow?: (id: string) => void;
-  handleEditQueueMessage?: (id: string) => void;
-  handleDeleteQueueMessage?: (id: string) => void;
 }

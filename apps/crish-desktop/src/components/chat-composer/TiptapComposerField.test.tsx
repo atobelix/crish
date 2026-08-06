@@ -31,6 +31,11 @@ if (typeof Range !== 'undefined' && typeof Range.prototype.getBoundingClientRect
   };
 }
 
+// jsdom 缺口：Element.scrollIntoView 未实现（菜单高亮项滚入视野依赖；布局职责，测试置空）
+if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+}
+
 function getEditorDom(): HTMLElement {
   const el = document.querySelector('[contenteditable="true"]');
   if (!el) throw new Error('编辑器未挂载');

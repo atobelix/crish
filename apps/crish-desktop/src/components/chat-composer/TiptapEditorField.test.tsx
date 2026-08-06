@@ -20,18 +20,74 @@ if (typeof (globalThis as Record<string, unknown>).ClipboardEvent === 'undefined
   };
 }
 
+// jsdom 缺口：Range.getClientRects / getBoundingClientRect 未实现（PM coordsAtPos / 滚动定位依赖）
+if (typeof Range !== 'undefined' && typeof Range.prototype.getClientRects !== 'function') {
+  Range.prototype.getClientRects = function getClientRects() {
+    return [this.getBoundingClientRect()];
+  };
+}
+if (typeof Range !== 'undefined' && typeof Range.prototype.getBoundingClientRect !== 'function') {
+  Range.prototype.getBoundingClientRect = function getBoundingClientRect() {
+    return {
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      width: 0,
+      height: 0,
+      x: 0,
+      y: 0,
+    } as DOMRect;
+  };
+}
+
+// jsdom 缺口：Element.scrollIntoView 未实现（菜单高亮项滚入视野依赖；布局职责，测试置空）
+if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+}
+
 function getEditorDom(): HTMLElement {
   const el = document.querySelector('[contenteditable="true"]');
   if (!el) throw new Error('编辑器未挂载');
   return el as HTMLElement;
 }
 
-/** 逐字符输入（走 beforeinput 真实事务链） */
-function typeText(text: string): void {
+/**
+ * 输入模拟：jsdom 无原生可编辑行为（PM 文本插入依赖浏览器原生 DOM 变更），
+ * 采用「光标处 DOM 变更 + input 事件」驱动 ProseMirror DOMObserver 同步为真实事务
+ * （与 TiptapComposerField.test 同款；beforeinput 合成事件在 jsdom 下不被 PM 消费）。
+ */
+async function typeText(text: string): Promise<void> {
+  await new Promise((r) => setTimeout(r, 60));
   const dom = getEditorDom();
-  for (const ch of text) {
-    fireEvent.beforeInput(dom, { inputType: 'insertText', data: ch });
+  const sel = document.getSelection();
+  let target: Node = dom;
+  let offset = 0;
+  if (sel && sel.rangeCount > 0 && dom.contains(sel.getRangeAt(0).startContainer)) {
+    target = sel.getRangeAt(0).startContainer;
+    offset = sel.getRangeAt(0).startOffset;
+  } else {
+    const lastP = dom.querySelector('p:last-of-type');
+    if (lastP) {
+      target = lastP;
+      offset = lastP.childNodes.length;
+    }
   }
+  const textNode = document.createTextNode(text);
+  if (target.nodeType === Node.TEXT_NODE) {
+    (target as Text).insertData(Math.min(offset, (target as Text).length), text);
+  } else {
+    (target as Element).insertBefore(textNode, (target as Element).childNodes[offset] ?? null);
+  }
+  if (sel) {
+    const range = document.createRange();
+    range.setStart(textNode, textNode.length);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  dom.dispatchEvent(new Event('input', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 50));
 }
 
 describe('TiptapEditorField T3 补全', () => {
@@ -193,5 +249,110 @@ describe('TiptapEditorField T3 补全', () => {
     });
     expect(ref.current?.getMarkdown()).toBe('同步内容');
     expect(screen.getByTestId('chat-input')).toBeTruthy();
+  });
+});
+
+describe('TiptapEditorField T8 提及与 aria 全链', () => {
+  it('空候选人兜底：@ 不弹面板、不崩溃', async () => {
+    render(<TiptapEditorField content="测试" />);
+    const dom = getEditorDom();
+    await waitFor(() => {
+      expect(dom.textContent).toContain('测试');
+    });
+    await typeText('@');
+    await new Promise((r) => setTimeout(r, 300));
+    // 空候选人时不挂载弹层（无 listbox、无 option）
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(dom.getAttribute('aria-expanded')).toBeNull();
+    expect(dom.textContent).toContain('@');
+  });
+
+  it('@ 触发提及菜单，点选插入 mention chip 并序列化 @[label](id:kind)', async () => {
+    const onMarkdownChange = vi.fn();
+    render(
+      <TiptapEditorField
+        content="请分析"
+        mentionCandidates={[
+          { id: 'agent-007', label: 'Agent 史密斯', kind: 'agent' },
+          { id: 'file-1', label: 'index.ts', kind: 'file' },
+        ]}
+        onMarkdownChange={onMarkdownChange}
+      />
+    );
+    const dom = getEditorDom();
+    await waitFor(() => {
+      expect(dom.textContent).toContain('请分析');
+    });
+    await typeText('@');
+    // 提及弹层打开：aria-controls 指向 -mention listbox
+    await waitFor(() => {
+      expect(dom.getAttribute('aria-expanded')).toBe('true');
+    });
+    const listboxId = dom.getAttribute('aria-controls') ?? '';
+    expect(listboxId.endsWith('-mention')).toBe(true);
+    const listbox = () => document.getElementById(listboxId);
+    await waitFor(() => {
+      expect(listbox()?.textContent).toContain('Agent 史密斯');
+    });
+    // 点选候选人 → 插入 mention chip
+    const agentOption = listbox()?.querySelector('button');
+    expect(agentOption).toBeTruthy();
+    fireEvent.click(agentOption as HTMLButtonElement);
+    await waitFor(() => {
+      expect(dom.querySelector('span[data-type="mention"]')).toBeTruthy();
+    });
+    const chip = dom.querySelector('span[data-type="mention"]');
+    expect(chip?.getAttribute('data-id')).toBe('agent-007');
+    expect(chip?.getAttribute('data-kind')).toBe('agent');
+    // 防抖后回流宿主 markdown 含双向保真语法
+    await waitFor(() => {
+      expect(onMarkdownChange).toHaveBeenCalledWith(
+        expect.stringContaining('@[Agent 史密斯](agent-007:agent)')
+      );
+    });
+  });
+
+  it('combobox 基链常驻：role/haspopup/autocomplete', async () => {
+    render(<TiptapEditorField ariaLabel="主对话输入" />);
+    const dom = getEditorDom();
+    await waitFor(() => {
+      expect(dom.getAttribute('role')).toBe('combobox');
+    });
+    expect(dom.getAttribute('aria-label')).toBe('主对话输入');
+    expect(dom.getAttribute('aria-haspopup')).toBe('listbox');
+    expect(dom.getAttribute('aria-autocomplete')).toBe('list');
+  });
+
+  it('斜杠弹层 aria 全链：打开置位 expanded/controls，漫游更新 activedescendant，Esc 清理', async () => {
+    render(<TiptapEditorField />);
+    const dom = getEditorDom();
+    await waitFor(() => {
+      expect(dom.getAttribute('role')).toBe('combobox');
+    });
+    await typeText('/');
+    // 斜杠弹层打开：aria-expanded/controls 置位（controls 指向 -slash listbox）
+    await waitFor(() => {
+      expect(dom.getAttribute('aria-expanded')).toBe('true');
+    });
+    const listboxId = dom.getAttribute('aria-controls') ?? '';
+    expect(listboxId.endsWith('-slash')).toBe(true);
+    await waitFor(() => {
+      expect(document.getElementById(listboxId)?.textContent).toContain('Heading 1');
+    });
+    // 初始高亮首项，activedescendant 指向 listbox 内 option
+    expect(dom.getAttribute('aria-activedescendant')).toBe(`${listboxId}-opt-0`);
+    // 键盘漫游：ArrowDown 高亮下一项，activedescendant 跟随
+    fireEvent.keyDown(dom, { key: 'ArrowDown' });
+    await waitFor(() => {
+      expect(dom.getAttribute('aria-activedescendant')).toBe(`${listboxId}-opt-1`);
+    });
+    // Esc 关闭：combobox 弹层 aria 全部清理
+    fireEvent.keyDown(dom, { key: 'Escape' });
+    await waitFor(() => {
+      expect(dom.getAttribute('aria-expanded')).toBeNull();
+    });
+    expect(dom.getAttribute('aria-controls')).toBeNull();
+    expect(dom.getAttribute('aria-activedescendant')).toBeNull();
+    expect(document.getElementById(listboxId)).toBeNull();
   });
 });

@@ -12,7 +12,7 @@ import {
 } from '../../api/permissionModes';
 
 type Props = {
-  mode: PermissionMode | unknown;
+  mode: PermissionMode;
   onChange: (m: PermissionMode) => void;
 };
 
@@ -22,6 +22,8 @@ type Props = {
  *   与「预估高度 140」hack）；弹出方向 side="top" 对齐原「按钮上方」布局；
  * - 键盘漫游（↑↓/Enter）由基座 options 模式提供；
  * - 每项仍包 Tooltip 展示矩阵提示，选中态打勾。
+ * - 枚举已统一为 api/permissionModes 单一真相源（40 方案 T2/T7）；
+ *   coercePermissionMode 仍保留作为存储/旧值运行期防御。
  */
 export const PermissionModeMenu: React.FC<Props> = ({ mode: modeRaw, onChange }) => {
   const mode = coercePermissionMode(modeRaw);

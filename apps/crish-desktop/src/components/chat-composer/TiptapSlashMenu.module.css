@@ -30,6 +30,17 @@
   scrollbar-width: thin;
 }
 
+.popoverContent::-webkit-scrollbar {
+  width: 4px;
+}
+.popoverContent::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-tertiary) 20%, transparent);
+  border-radius: 2px;
+}
+.popoverContent::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 .menuList {
   display: flex;
   flex-direction: column;

@@ -3,12 +3,14 @@
  * apps/crish-desktop/src/components/chat-composer/TiptapEditorField.tsx
  * Tiptap ProseMirror field for chat composer with IME protection (CRM-03), keymaps, drop & paste handlers.
  * 40 方案 T3 补全：Mention 注册、CodeBlock Enter 保护、DOMPurify 粘贴清洗、动态占位符。
+ * T8 扩展：Mention 建议（@ 触发，候选人引用桥接）、combobox aria 全链
+ * （role/haspopup/autocomplete 常驻，expanded/controls/activedescendant 由 suggestion 生命周期驱动）。
  * 性能：编辑器装配（extensions/editorProps/onUpdate）useMemo 一次性稳定，回调全部经 ref
  * 桥接，避免 tiptap v3 useEditor 每渲染 setOptions 重建 ExtensionManager。
  * CI Guardrail: UI Component (Max 500 lines of effective code, Max 12 useState)
  */
 
-import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef } from 'react';
 
 import { useEditor, EditorContent } from '@tiptap/react';
 
@@ -23,8 +25,15 @@ import TaskItem from '@tiptap/extension-task-item';
 import Link from '@tiptap/extension-link';
 
 import DOMPurify from 'dompurify';
-import { SlashExtension, MentionExtension } from './SlashExtension';
-import type { SlashCommandItem } from './composerTypes';
+import { exitSuggestion } from '@tiptap/suggestion';
+import {
+  SlashExtension,
+  MentionExtension,
+  MentionSuggestionExtension,
+  slashSuggestionKey,
+  mentionSuggestionKey,
+} from './SlashExtension';
+import type { SlashCommandItem, MentionCandidate } from './composerTypes';
 import { serializeToMarkdown } from './serialization/markdownSerializer';
 import { parseFromMarkdown } from './serialization/markdownDeserializer';
 import type { TiptapEditorFieldProps, TiptapEditorFieldHandle } from './composerTypes';
@@ -53,6 +62,7 @@ export const TiptapEditorField = React.forwardRef<
   ariaActivedescendant,
   ariaAutocomplete,
   slashExtraItems,
+  mentionCandidates,
   autoFocus = false,
 }, ref) => {
   const isComposingRef = useRef<boolean>(false);
@@ -60,11 +70,16 @@ export const TiptapEditorField = React.forwardRef<
   const lastContentRef = useRef<string | undefined>(undefined);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef<any>(null);
+  // 弹层 listbox id 命名空间（斜杠/提及各一实例，aria-controls/activedescendant 全链）
+  const listboxBaseId = useId();
+  const slashListboxId = `${listboxBaseId}-slash`;
+  const mentionListboxId = `${listboxBaseId}-mention`;
 
   // ── 动态 prop 经 ref 桥接（编辑器装配一次性稳定，避免重建）─────────────────
   const placeholderRef = useRef<string>(placeholder ?? '');
   const sendShortcutRef = useRef<'enter' | 'ctrlEnter'>(sendShortcut);
   const slashExtraItemsRef = useRef<SlashCommandItem[]>([]);
+  const mentionCandidatesRef = useRef<MentionCandidate[]>([]);
   const callbacksRef = useRef({
     onSendMarkdown,
     onMarkdownChange,
@@ -84,6 +99,10 @@ export const TiptapEditorField = React.forwardRef<
   useEffect(() => {
     slashExtraItemsRef.current = slashExtraItems ?? [];
   }, [slashExtraItems]);
+
+  useEffect(() => {
+    mentionCandidatesRef.current = Array.from(mentionCandidates ?? []);
+  }, [mentionCandidates]);
 
   useEffect(() => {
     callbacksRef.current = {
@@ -116,7 +135,12 @@ export const TiptapEditorField = React.forwardRef<
       }),
       MentionExtension,
       // 宿主系统/skill 命令以引用桥接，动态更新无需重建编辑器
-      SlashExtension.configure({ extraItemsRef: slashExtraItemsRef }),
+      SlashExtension.configure({ extraItemsRef: slashExtraItemsRef, listboxId: slashListboxId }),
+      // @ 提及建议（候选人引用桥接；空列表兜底不弹面板）
+      MentionSuggestionExtension.configure({
+        candidatesRef: mentionCandidatesRef,
+        listboxId: mentionListboxId,
+      }),
     ];
 
     return {
@@ -275,17 +299,18 @@ export const TiptapEditorField = React.forwardRef<
     }
   }, [editor, disabled]);
 
-  // aria 属性动态同步（装配 attributes 静态，运行期经 DOM setAttribute 更新，
-  // 对齐 ComposerField textarea 的 aria 实时语义；T10 扩展 activedescendant 全链）
+  // aria 属性动态同步（装配 attributes 静态，运行期经 DOM setAttribute 更新）。
+  // combobox 基链（role/haspopup/autocomplete）常驻：斜杠与提及双菜单均为 listbox；
+  // expanded/controls/activedescendant 优先由宿主 props 驱动，运行期弹层打开时
+  // 由 suggestion 生命周期（SlashExtension render 工厂）直接置位，两者不会互踩
+  // （宿主 props 恒定 undefined 时仅在挂载期执行一次移除）。
   useEffect(() => {
     if (!editor) return;
     const dom = editor.view.dom;
     if (ariaLabel) dom.setAttribute('aria-label', ariaLabel);
-    if (ariaHasPopup === 'listbox' || typeof ariaExpanded === 'boolean') {
-      dom.setAttribute('role', 'combobox');
-    } else {
-      dom.removeAttribute('role');
-    }
+    dom.setAttribute('role', 'combobox');
+    dom.setAttribute('aria-haspopup', 'listbox');
+    dom.setAttribute('aria-autocomplete', 'list');
     if (typeof ariaExpanded === 'boolean') {
       dom.setAttribute('aria-expanded', String(ariaExpanded));
     } else {
@@ -298,8 +323,6 @@ export const TiptapEditorField = React.forwardRef<
     }
     if (ariaHasPopup !== undefined) {
       dom.setAttribute('aria-haspopup', String(ariaHasPopup));
-    } else {
-      dom.removeAttribute('aria-haspopup');
     }
     if (ariaActivedescendant) {
       dom.setAttribute('aria-activedescendant', ariaActivedescendant);
@@ -308,8 +331,6 @@ export const TiptapEditorField = React.forwardRef<
     }
     if (ariaAutocomplete) {
       dom.setAttribute('aria-autocomplete', ariaAutocomplete);
-    } else {
-      dom.removeAttribute('aria-autocomplete');
     }
   }, [
     editor,
@@ -377,6 +398,29 @@ export const TiptapEditorField = React.forwardRef<
       dom.removeEventListener('compositionstart', handleCompositionStart);
       dom.removeEventListener('compositionend', handleCompositionEnd);
     };
+  }, [editor]);
+
+  // Esc 退出建议状态（capture 阶段兜底）：Radix 弹层在 document-capture 已对
+  // Escape preventDefault，PM 的 keydown 链因 defaultPrevented 被整体跳过
+  // （prosemirror-view eventBelongsToView），suggestion 插件收不到 Esc，
+  // 弹层与 combobox aria 链会滞留。此处以捕获监听直接派发 exit 事务，
+  // 走 onExit 统一清理（aria-expanded/controls/activedescendant + 弹层销毁）。
+  useEffect(() => {
+    if (!editor) return;
+    const dom = editor.view.dom;
+    const onEscapeCapture = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const view = editor.view;
+      if (!view?.state) return;
+      if (slashSuggestionKey.getState(view.state)?.active) {
+        exitSuggestion(view, slashSuggestionKey);
+      }
+      if (mentionSuggestionKey.getState(view.state)?.active) {
+        exitSuggestion(view, mentionSuggestionKey);
+      }
+    };
+    dom.addEventListener('keydown', onEscapeCapture, true);
+    return () => dom.removeEventListener('keydown', onEscapeCapture, true);
   }, [editor]);
 
   // autoFocus：挂载后聚焦编辑器（rAF 等待布局稳定）
