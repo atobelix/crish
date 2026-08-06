@@ -167,19 +167,19 @@ function getRawTextLength(node: Node): number {
 export function getGlobalIndexFromDOMNode(node: Node, offset: number, container: HTMLElement): number | null {
     let el: HTMLElement | null = node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement;
     let foundTokenStart = -1;
-    let foundLineIndex = -1;
+    let lineStart = -1;
     
     while (el && el !== container) {
         if (el.hasAttribute('data-token-start') && foundTokenStart === -1) {
             foundTokenStart = parseInt(el.getAttribute('data-token-start') || '-1', 10);
         }
-        if (el.hasAttribute('data-index') && foundLineIndex === -1) {
-            foundLineIndex = parseInt(el.getAttribute('data-index') || '-1', 10);
+        if (el.hasAttribute('data-line-start') && lineStart === -1) {
+            lineStart = parseInt(el.getAttribute('data-line-start') || '-1', 10);
         }
         el = el.parentElement;
     }
 
-    if (foundTokenStart !== -1 && foundLineIndex !== -1) {
+    if (foundTokenStart !== -1) {
         let subOffset = 0;
         let currentEl: HTMLElement | null = node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement;
         
@@ -196,5 +196,68 @@ export function getGlobalIndexFromDOMNode(node: Node, offset: number, container:
 
         return foundTokenStart + subOffset + offset;
     }
+
+    if (lineStart !== -1) {
+        return lineStart + offset;
+    }
+
     return null;
+}
+
+export function getArrowNavigationIndex(
+    cursorPos: number,
+    direction: 'up' | 'down',
+    container: HTMLElement
+): number | null {
+    const currentRect = getCoordinatesFromIndex(cursorPos, container);
+    if (!currentRect) return null;
+
+    let currentLineEl = null;
+    let currentLineIdx = -1;
+    const lines = container.querySelectorAll('[data-line-start]');
+    
+    for (let i = 0; i < lines.length; i++) {
+        const start = parseInt(lines[i].getAttribute('data-line-start') || '0', 10);
+        const len = parseInt(lines[i].getAttribute('data-line-length') || '0', 10);
+        if (cursorPos >= start && cursorPos <= start + len) {
+            currentLineEl = lines[i];
+            currentLineIdx = parseInt(lines[i].getAttribute('data-line-index') || '-1', 10);
+            break;
+        }
+    }
+
+    if (!currentLineEl || currentLineIdx === -1) return null;
+
+    const targetIdx = direction === 'up' ? currentLineIdx - 1 : currentLineIdx + 1;
+    const targetLineEl = container.querySelector(`[data-line-index="${targetIdx}"]`);
+    
+    if (!targetLineEl) {
+        if (direction === 'up') {
+            return parseInt(currentLineEl.getAttribute('data-line-start') || '0', 10);
+        } else {
+            const start = parseInt(currentLineEl.getAttribute('data-line-start') || '0', 10);
+            const len = parseInt(currentLineEl.getAttribute('data-line-length') || '0', 10);
+            return start + len;
+        }
+    }
+
+    const targetStart = parseInt(targetLineEl.getAttribute('data-line-start') || '0', 10);
+    const targetLen = parseInt(targetLineEl.getAttribute('data-line-length') || '0', 10);
+
+    let bestDist = Infinity;
+    let bestIndex = targetStart;
+
+    for (let i = 0; i <= targetLen; i++) {
+        const globalIdx = targetStart + i;
+        const r = getCoordinatesFromIndex(globalIdx, container);
+        if (r) {
+            const dist = Math.abs(r.left - currentRect.left);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestIndex = globalIdx;
+            }
+        }
+    }
+
+    return bestIndex;
 }

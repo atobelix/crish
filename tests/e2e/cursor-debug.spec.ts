@@ -9,7 +9,7 @@ test.describe('Cursor Position Debug Tests', () => {
   test('Log cursor positions for all 7 interactive zones', async ({ page }) => {
     const locations = [
       { name: '1. 测试区块 1 (Heading)', locator: page.locator('.line-block').filter({ hasText: '测试区块' }).first() },
-      { name: '2. Empty space (Left margin below line 1)', locator: page.locator('.line-block').filter({ hasText: '数学公式' }).first(), offsetX: -50, offsetY: -14 },
+      { name: '2. Empty space (Left margin below line 1)', locator: page.locator('.line-block').filter({ hasText: '基础样式' }).first(), offsetX: -50, offsetY: -14 },
       { name: '3. 加粗 (Bold)', locator: page.locator('span[data-sub-offset]').filter({ hasText: '加粗' }).first() },
       { name: '4. 斜体 (Italic)', locator: page.locator('span[data-sub-offset]').filter({ hasText: '斜体' }).first() },
       { name: '5. 删除线 (Strike)', locator: page.locator('span[data-sub-offset]').filter({ hasText: '删除线' }).first() },

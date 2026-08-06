@@ -73,7 +73,7 @@ test.describe('Comprehensive Syntax Matrix Tests', () => {
     await expect(unclosedBlock).toContainText('~~未闭合的删除线');
   });
 
-  test('Extended syntax (math, sub, sup, kbd, spoiler)', async ({ page }) => {
+  test('Extended syntax (math, sub, sup, kbd, spoiler, block math)', async ({ page }) => {
     // Since we use virtualization, we need to scroll down to find the elements
     await page.evaluate(() => {
         const container = document.querySelector('.editor-container');
@@ -86,20 +86,36 @@ test.describe('Comprehensive Syntax Matrix Tests', () => {
 
     const mathBlock = page.locator('.line-block').filter({ hasText: '数学公式:' }).first();
     await expect(mathBlock).toBeVisible();
-    const mathNodes = mathBlock.locator('.style-math');
-    await expect(mathNodes).toHaveCount(2); // $E = mc^2$ and $e^{i\\pi} + 1 = 0$
+    const mathNodes = mathBlock.locator('.token-math-wrapper');
+    await expect(mathNodes).toHaveCount(2); // $E = mc^2$ and $e^{i\pi} + 1 = 0$
+    await expect(mathNodes.first().locator('.katex')).toBeVisible();
+    await expect(mathNodes.nth(1).locator('.katex')).toBeVisible();
+
+    // Block math $$ ... $$
+    const blockMathLine = page.locator('.line-math-block').first();
+    await expect(blockMathLine).toBeVisible();
+    await expect(blockMathLine.locator('.katex')).toBeVisible();
+    await expect(blockMathLine.locator('.math-block-source')).toContainText('\\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}');
 
     const kbdBlock = page.locator('.line-block').filter({ hasText: '按键标记:' }).first();
     await expect(kbdBlock).toBeVisible();
     const kbdNodes = kbdBlock.locator('.style-kbd');
     await expect(kbdNodes).toHaveCount(4); // Ctrl, C, Cmd, K
+    await expect(kbdNodes.nth(0)).toContainText('Ctrl');
+    await expect(kbdNodes.nth(1)).toContainText('C');
+    await expect(kbdNodes.nth(2)).toContainText('Cmd');
+    await expect(kbdNodes.nth(3)).toContainText('K');
 
     const subSupBlock = page.locator('.line-block').filter({ hasText: '上下标:' }).first();
     await expect(subSupBlock).toBeVisible();
     const subNodes = subSupBlock.locator('.style-sub');
     const supNodes = subSupBlock.locator('.style-sup');
     await expect(subNodes).toHaveCount(2); // <sub>2</sub> and ~2~
+    await expect(subNodes.first()).toContainText('2');
+    await expect(subNodes.nth(1)).toContainText('2');
     await expect(supNodes).toHaveCount(2); // <sup>10</sup> and ^10^
+    await expect(supNodes.first()).toContainText('10');
+    await expect(supNodes.nth(1)).toContainText('10');
 
     const spoilerBlock = page.locator('.line-block').filter({ hasText: '剧透警告:' }).first();
     await expect(spoilerBlock).toBeVisible();

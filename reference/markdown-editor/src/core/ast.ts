@@ -2,6 +2,16 @@ export type LineType =
     | 'body'
     | 'heading'
     | 'code'
+    | 'code_fence_start'
+    | 'code_fence_end'
+    | 'math_fence_start'
+    | 'math_fence_end'
+    | 'math_block'
+    | 'hr'
+    | 'blockquote'
+    | 'table_row'
+    | 'table_header'
+    | 'table_separator'
     | 'empty';
 
 export type InlineType = 
@@ -27,7 +37,9 @@ export type InlineType =
     | 'list_task'
     | 'comment'
     | 'string'
-    | 'keyword';
+    | 'keyword'
+    | 'html_element'
+    | 'html_tag';
 
 export interface InlineNode {
     type: InlineType;
@@ -38,6 +50,17 @@ export interface InlineNode {
     children?: InlineNode[];
     startIndex: number;
     length: number;
+    tagName?: string;
+    attributes?: Record<string, string>;
+    style?: React.CSSProperties;
+}
+
+export type Alignment = 'left' | 'center' | 'right' | null;
+
+export interface TableCellNode {
+    align: Alignment;
+    tokens: InlineNode[];
+    raw: string;
 }
 
 export interface LineNode {
@@ -48,6 +71,14 @@ export interface LineNode {
     inlineTokens: InlineNode[];
     startIndex: number;
     length: number;
+    
+    // Block context metadata
+    listIndent?: number;
+    listPrefix?: string;
+    
+    // Table context
+    tableCells?: TableCellNode[];
+    tableAlignments?: Alignment[];
 }
 
 export interface MarkdownDocument {
