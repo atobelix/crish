@@ -61,7 +61,13 @@
 - **描述**：T3.3 执行时并行任务（P0-2/PERSIST-03，persist 批次）正以**未提交**状态占据同一文件族（sessions.rs 已含 run 豁免、orphan_grace_contract.rs 已含 v2 测试）。T3.3 的红测试（5 个用例，追加于文件尾）写好后，并行任务以整文件暂存提交（7e2cde0f）将**实现（run 豁免 + pending 豁免 + hydrated 豁免）与 T3.3 全部测试一并吸收入库**——两段提交（红测试单独一笔）无法按字面执行。红证据改在修复前 HEAD（d4d8853b）临时 worktree 上实跑确认：7 个保护用例全红（含 T3.3 三个主用例），9 个既有宽限期用例全绿。
 - **建议**：同文件族任务派发时明确「提交归属」（谁 commit、何时 commit），或强制串行；并行批次的整文件暂存会吞掉相邻任务的未提交测试，验收方应接受「红证据 + 同提交含测试」的替代证据链。
 
-## F-005：T3.3 子项 touch_session 生产接线声明留登记（PS-03 T3.3 执行期）
+## F-008：并行 markdown-editor agent 提交与 T3.2 amend 碰撞 + lint-staged 备份对象可恢复（PS-03 T3.2 执行期）
+
+- **发现日期**：2026-08-08（PS-03 T3.2 执行期）
+- **位置**：仓库级（`git commit --amend` 竞态 + `.husky/pre-commit` 裸 `git diff --check`）
+- **描述**：① T3.2 提交期间并行 markdown-editor agent 仍活跃（F-007 同源）——其 `feat(editor): rewrite core architecture...` 提交（b542ba37）恰在本人 `git commit --amend` 前一瞬落 HEAD，被 amend 整体替换（孤儿化，reflog 可查）；其工作区文件随后被本人 `Set-Content -NoNewline` 误写成一整行（683 行合并为 1 行，内容破坏）。② 恢复路径验证：**lint-staged「automatic backup」stash（钩子成功后即 drop，但 commit 对象以悬垂形式保留）可作恢复源**——`git cat-file -t <hash>` 确认后 `git restore --worktree --source=<hash> -- <path>` 无损恢复（本次用 47d7fb76 恢复 EditorStore.ts，diff 与备份仅差 2 行行尾空白）。③ F-007 再现：并行 agent 未提交文件（EditorStore.ts/measure.ts）行尾空白再次阻塞裸 `git diff --check`，本次以字节级正则（UTF-8 无 BOM 保编码、保行尾）仅剥离行尾空白解除阻塞。
+- **处置**：T3.2 红绿两段提交已完成（bbf97172/b815efb7，1 文件各）；b542ba37 内容经备份对象恢复至工作区（未入库，归属并行 agent）；未改他人文件语义。
+- **建议**：① 共享仓库下禁止 `--amend`/`--reset` 前不核对 `git log -1`（HEAD 可能已被并行进程移动）；「提交归属」派单约束（F-004 建议）落实前，改提交用 `git commit --only <paths>` 或提交前临时 unstage 非本职文件。② lint-staged 备份对象是钩子前工作区/索引状态的可靠快照，误写文件时优先查 `git fsck --lost-found`/悬垂 stash 恢复，勿手写整文件。③ 钩子建议（F-007 已提）：`git diff --check` 收窄为 `--cached`。
 
 - **发现日期**：2026-08-07（PS-03 T3.3 执行期）
 - **位置**：`crates/conex-db/src/sessions.rs:283-297`（touch_session 现状：仅 tests.rs 使用，生产零调用——R2 §3 结构性缺位）
