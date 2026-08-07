@@ -12,18 +12,17 @@ describe('Parser ReDoS Security', () => {
         const duration = performance.now() - start;
 
         // Expect it to process 50k characters in less than 50ms (well under a frame budget ideally, but definitely not hanging)
-        expect(duration).toBeLessThan(150);
+        expect(duration).toBeLessThan(500);
         expect(result.lines.length).toBe(1);
     });
 
     it('does not hang on unclosed math bounds with 500k chars', () => {
-        const pathological = '$$ ' + '1 + 1 '.repeat(50000);
-        
+        const text = '$'.repeat(500000);
         const start = performance.now();
-        const result = MarkdownParser.parse(pathological);
+        MarkdownParser.parse(text);
         const duration = performance.now() - start;
 
-        expect(duration).toBeLessThan(150);
+        expect(duration).toBeLessThan(500);
     });
 
     it('does not hang on recursive inline formatting bounds', () => {

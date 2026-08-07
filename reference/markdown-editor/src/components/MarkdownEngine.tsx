@@ -1,18 +1,12 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { MarkdownDocument } from '../core/ast';
 import { BlockRenderer } from './BlockRenderer';
 import { HiddenInput } from './HiddenInput';
 import { CursorLayer } from './CursorLayer';
 import { useEditorStore } from '../core/EditorStore';
-import MarkdownWorker from '../worker/markdown.worker?worker';
 import { MarkdownParser } from '../core/parser';
 
-interface MarkdownEngineProps {
-    markdown: string;
-}
-
-export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ markdown }) => {
+export const MarkdownEngine: React.FC = () => {
     const parentRef = useRef<HTMLDivElement>(null);
     const { lines, lineOffsets: offsets, codeBlockState, setCursorPos } = useEditorStore();
 

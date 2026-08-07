@@ -278,7 +278,7 @@ export class MarkdownParser {
                         tokens.push({
                             type: 'list_task',
                             raw: taskMatch[0],
-                            content: indent + (isChecked ? '☑' : '☐'),
+                            content: isChecked ? '☑ ' : '☐ ',
                             isChecked,
                             localOffset: nestedLocalOffset,
                             length: prefixLen
@@ -294,7 +294,7 @@ export class MarkdownParser {
                             tokens.push({
                                 type: 'list_bullet',
                                 raw: bulletMatch[0],
-                                content: indent + '•',
+                                content: '• ',
                                 localOffset: nestedLocalOffset,
                                 length: prefixLen
                             });
@@ -309,7 +309,7 @@ export class MarkdownParser {
                                 tokens.push({
                                     type: 'list_number',
                                     raw: numberMatch[0],
-                                    content: indent + numberMatch[2] + ' ',
+                                    content: numberMatch[2] + ' ',
                                     localOffset: nestedLocalOffset,
                                     length: prefixLen
                                 });
@@ -332,7 +332,7 @@ export class MarkdownParser {
             listIndent: listPrefix !== undefined ? listIndent : undefined,
             listPrefix: listPrefix ? listPrefix : undefined,
             inlineTokens: tokens,
-            localOffset: 0,
+            localOffset,
             length: lineText.length
         };
     }

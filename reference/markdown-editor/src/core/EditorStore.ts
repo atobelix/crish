@@ -127,7 +127,11 @@ export interface EditorOperation {
     removedLines: string[];
     insertedLineCount: number;
     cursorBefore: number;
+    selectionStartBefore: number;
+    selectionEndBefore: number;
     cursorAfter: number;
+    selectionStartAfter: number;
+    selectionEndAfter: number;
     timestamp: number;
 }
 
@@ -256,7 +260,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     getText: () => get().lines.join('\n'),
     getLineIndex: (pos) => binarySearchLineIndex(get().lineOffsets, pos),
 
-    setText: (text) => set((state) => {
+    setText: (text) => set(() => {
         const lines = text.split('\n');
         
         if (lines.length <= 1000) {
@@ -358,7 +362,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             removedLines,
             insertedLineCount: insertedLines.length,
             cursorBefore: state.cursorPos,
+            selectionStartBefore: state.selectionStart,
+            selectionEndBefore: state.selectionEnd,
             cursorAfter: newPos,
+            selectionStartAfter: newPos,
+            selectionEndAfter: newPos,
             timestamp: Date.now()
         };
         
@@ -432,7 +440,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             removedLines,
             insertedLineCount: insertedLines.length,
             cursorBefore: state.cursorPos,
+            selectionStartBefore: state.selectionStart,
+            selectionEndBefore: state.selectionEnd,
             cursorAfter: s,
+            selectionStartAfter: s,
+            selectionEndAfter: s,
             timestamp: Date.now()
         };
         
@@ -484,7 +496,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             removedLines,
             insertedLineCount: insertedLines.length,
             cursorBefore: state.cursorPos,
+            selectionStartBefore: state.selectionStart,
+            selectionEndBefore: state.selectionEnd,
             cursorAfter: s,
+            selectionStartAfter: s,
+            selectionEndAfter: s,
             timestamp: Date.now()
         };
 
@@ -518,15 +534,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             removedLines: state.lines.slice(op.startLineIdx, op.startLineIdx + op.insertedLineCount),
             insertedLineCount: op.removedLines.length,
             cursorBefore: op.cursorAfter,
+            selectionStartBefore: op.selectionStartAfter,
+            selectionEndBefore: op.selectionEndAfter,
             cursorAfter: op.cursorBefore,
+            selectionStartAfter: op.selectionStartBefore,
+            selectionEndAfter: op.selectionEndBefore,
             timestamp: Date.now()
         };
 
         return {
             ...res,
             cursorPos: op.cursorBefore,
-            selectionStart: op.cursorBefore,
-            selectionEnd: op.cursorBefore,
+            selectionStart: op.selectionStartBefore,
+            selectionEnd: op.selectionEndBefore,
             undoStack: state.undoStack.slice(0, -1),
             redoStack: [...state.redoStack, inverseOp]
         };
@@ -550,15 +570,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             removedLines: state.lines.slice(op.startLineIdx, op.startLineIdx + op.insertedLineCount),
             insertedLineCount: op.removedLines.length,
             cursorBefore: op.cursorAfter,
+            selectionStartBefore: op.selectionStartAfter,
+            selectionEndBefore: op.selectionEndAfter,
             cursorAfter: op.cursorBefore,
+            selectionStartAfter: op.selectionStartBefore,
+            selectionEndAfter: op.selectionEndBefore,
             timestamp: Date.now()
         };
 
         return {
             ...res,
             cursorPos: op.cursorBefore,
-            selectionStart: op.cursorBefore,
-            selectionEnd: op.cursorBefore,
+            selectionStart: op.selectionStartBefore,
+            selectionEnd: op.selectionEndBefore,
             redoStack: state.redoStack.slice(0, -1),
             undoStack: [...state.undoStack, inverseOp]
         };
