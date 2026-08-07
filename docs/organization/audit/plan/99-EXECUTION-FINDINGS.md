@@ -97,3 +97,19 @@
 - **描述**：① 编译破窗三度：P1-S6 绿测试提交前 `cargo check --workspace` 被 flow_graph.rs 未提交改动阻塞（E0502，T3.4 agent 在飞）；提交后又先后被 host_openers/execute.rs 未提交改动（E0277）两度阻塞 `cargo test -p crish-agent-workbench`。均经等待对方提交/修复后自然恢复（最终 `cargo check --workspace` exit=0；全量 `cargo test -p crish-agent-workbench` 454+10+13+17 全绿）。② 钩子阻塞两度：`git diff --check`（裸整树）被并行 agent 未提交行尾空白/EOF 空行拦截（HiddenInput.tsx:49/52 trailing whitespace、shared-types generated/engine/parser.ts:1846 EOF blank line）——按 F-007/F-008 先例字节级剥离解除阻塞（仅空白、不涉语义；EOF 空行剥离在提交瞬间被对方重写重新引入一次，采用「剥离+提交同命令链」缩小竞态后成功）。③ 全量回归首轮 5 失败经 stash 隔离证实均为并行 agent 红测试/竞态（git push refspec x2、host_openers metachar、symlink dangling parent 为并行 P1 红测试，stash 后仍红；snapshot 并发互斥独跑通过）——最终树恢复后该 5 项已随对方绿提交转绿。
 - **处置**：P1-S6 不越界修改他人文件；两段提交（888c34e2 红 / cb23d38c 绿）不受影响；我的改动仅 outputs_config.rs + fs_commands/types.rs（`lexically_normalize` 提 pub(crate)，零行为变更）。
 - **建议**：同 F-009：验证窗口内并行任务不落未提交 WIP；钩子 `git diff --check` 收窄为 `--cached`（F-007 已提，三度复现仍未落实）。
+
+## F-011：P1-S1/S2 修复被并行任务整文件暂存吸收，两段提交改为替代证据链（P1-S1/S2 执行期）
+
+- **发现日期**：2026-08-08（P1-S1/S2 symlink 写逃逸修复，执行期）
+- **位置**：`apps/agent-workbench/src-tauri/src/fs_commands/types.rs`（resolve_for_write dangling 分支修复 + `is_symlink` 辅助）
+- **描述**：红测试提交（bd84997c，4 文件）后，本任务对 types.rs 的修复（ancestor 循环 symlink_metadata 感知 + canonicalize 失败按 outside_workspace 拒绝）在**未提交**窗口被并行任务 P1-S6 的 `git add` 顺带吸收进其绿提交 cb23d38c（types.rs 29 行 = P1-S6 改动 + 本任务修复混同）——与 F-004（T3.3）完全同型。修复已入库、功能正确（壳 fs_commands 20 测试全绿验证），但本任务绿提交（af53d138）只含 conex-fs/agent-tools 两文件。
+- **处置**：不 rewrite 历史（cb23d38c 之后已有多个并行提交依赖）；验收以「红提交 bd84997c + 含 types.rs 修复的 cb23d38c + 绿提交 af53d138 + 壳测试 20 passed 实跑」为替代证据链。
+- **建议**：落实 F-004/F-008 已两度提出的「同文件族提交归属」约束——并行批次对共享文件族（fs_commands/types.rs、session-loop、orchestrator 等）明确谁 commit、何时 commit，或强制串行；`git add` 前核对 `git status` 无他人未提交改动。
+
+## F-012：R1 对 dangling symlink 写入链的推演与 std 实际语义不符（精确化登记）
+
+- **发现日期**：2026-08-08（P1-S1/S2 红测试实跑期）
+- **位置**：`R1-security-recheck.md` §二 ③（:83「create_dir_all 对 dangling symlink 返回 Ok（std 语义：路径已存在即视为成功，不校验目标）」）+ `apps/agent-workbench/src-tauri/src/fs_commands/write.rs:38-44`
+- **描述**：R1 推演「write.rs:38-48 `create_dir_all(parent)` 对 dangling symlink 返回 Ok，`fs::write` 跟随 symlink 在根外落盘」。实测（Windows junction 等价形态，std 语义与 symlink 一致）：`DirBuilder::create_dir_all` 对 dangling 链接**失败**——create_dir 返回 AlreadyExists 后，std 用 `metadata`（跟随链接）复核目录性，目标不存在 → NotFound → 返回 Err。因此 Windows junction 形态下根外**落盘**不发生，实际表现为 resolve_for_write 放行词法路径 + 写链报 write_file_failed（错误码错误、语义错误，但无根外写盘）；Unix/真 symlink 形态的落盘行为依赖各平台 create_dir_all 实现，本环境（无管理员权限）无法实测。
+- **结论**：缺陷本质（resolve 层放行词法路径、dangling 形态不被沙箱感知）经红测试确认成立（红阶段 resolve 返回 Ok 词法路径）；修复后 resolve 层统一 outside_workspace 拒绝，与落盘层行为无关，防御纵深成立。F5-01 的「根外写文件」表述建议在后续文档修订时改为「resolve 放行 + 写链跟随链接（跨平台落盘行为依实现而定）」。
+- **建议**：无代码动作（修复已覆盖两类形态）；审计文档措辞留待自然修订。
