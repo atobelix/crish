@@ -53,7 +53,10 @@ function checkBoolean(v: unknown): ParseResult<boolean> {
   return typeof v === "boolean" ? parseOk(v) : parseErr("expected a boolean");
 }
 
-function checkJsonValue(v: unknown): ParseResult<JsonValue> {
+function checkJsonValue(v: unknown, depth = 0): ParseResult<JsonValue> {
+  // T3.7 D7 depth guard: deep payloads return parseErr("nesting too deep")
+  // instead of recursing to a RangeError (stack overflow) that escapes ParseResult
+  if (depth > 256) return parseErr("nesting too deep");
   if (
     v === null ||
     typeof v === "string" ||
@@ -64,14 +67,14 @@ function checkJsonValue(v: unknown): ParseResult<JsonValue> {
   }
   if (Array.isArray(v)) {
     for (const item of v) {
-      const r = checkJsonValue(item);
+      const r = checkJsonValue(item, depth + 1);
       if (!r.ok) return r;
     }
     return parseOk(v);
   }
   if (isRecord(v)) {
     for (const key of Object.keys(v)) {
-      const r = checkJsonValue(v[key]);
+      const r = checkJsonValue(v[key], depth + 1);
       if (!r.ok) return r;
     }
     return parseOk(v as JsonValue);
@@ -82,7 +85,10 @@ function checkJsonValue(v: unknown): ParseResult<JsonValue> {
 function parseArrayOf<T>(
   v: unknown,
   item: (x: unknown) => ParseResult<T>,
+  depth = 0,
 ): ParseResult<T[]> {
+  // T3.7 D7 depth guard (generated arrays are single-level today; guards future nesting)
+  if (depth > 256) return parseErr("nesting too deep");
   if (!Array.isArray(v)) return parseErr("expected an array");
   const out: T[] = [];
   for (let i = 0; i < v.length; i++) {

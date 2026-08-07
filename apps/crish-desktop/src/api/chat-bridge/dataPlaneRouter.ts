@@ -110,7 +110,18 @@ function handleDataPlaneMessage(msg: Record<string, unknown>): void {
   if (!envelope) return;
   // 只处理数据面类型：run 内类型不被数据面路由拦截（各自消费面分治）
   if (!isDataPlaneEventType(envelope.type)) return;
-  const parsed = parseBridgeEvent(msg);
+  // T3.7 D7：解析异常兜底——异常转可观测登记，不中断消息循环
+  let parsed: ReturnType<typeof parseBridgeEvent>;
+  try {
+    parsed = parseBridgeEvent(msg);
+  } catch (e) {
+    logInternalError('data-plane-parse-failed', {
+      type: envelope.type,
+      error: 'parser threw: ' + String(e),
+      payload: msg,
+    });
+    return;
+  }
   if (parsed.ok !== true) {
     // 数据面类型解析失败属形状漂移：宽容归一器兜底后仍失败 → 可观测，不静默吞
     logInternalError('data-plane-parse-failed', {

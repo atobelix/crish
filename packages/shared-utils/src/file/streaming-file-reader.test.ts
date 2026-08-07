@@ -179,7 +179,8 @@ describe('T3.8 D8 UTF-8 跨块解码（F8-04：跨块半字符 U+FFFD 污染）'
     await reader.open();
     const lines: string[] = [];
     if (readLines) {
-      lines.push(...(await reader.readLines(100)));
+      // 上限取足够大以读完整文件（64KB 用例 5000 行）
+      lines.push(...(await reader.readLines(100000)));
     } else {
       for await (const line of reader) {
         lines.push(line);

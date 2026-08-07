@@ -108,7 +108,16 @@ export class EventRouter {
     }
 
     // C2.2：平铺事件直进主路径（event 信封 / run-ended 别名分支已删）
-    const parsed = parseBridgeEvent(raw);
+    // T3.7 D7：消费侧兜底——生成 parser 已有深度守卫（超限返回 parseErr），
+    // 此处防其余未收敛异常路径（深层载荷曾抛 RangeError 逃逸破坏 fail-closed），
+    // 捕获后转显式登记，不中断事件处理循环
+    let parsed: ReturnType<typeof parseBridgeEvent>;
+    try {
+      parsed = parseBridgeEvent(raw);
+    } catch (e) {
+      this.registerUnknownEvent(raw, 'parser threw: ' + String(e));
+      return;
+    }
     if (parsed.ok !== true) {
       this.registerUnknownEvent(raw, parsed.error);
       return;
@@ -117,7 +126,10 @@ export class EventRouter {
   };
 
   /** 未知事件显式登记：可观测（logInternalError），不静默吞 */
-  private registerUnknownEvent(raw: Record<string, unknown>, error: string): void {
+  private registerUnknownEvent(
+    raw: Record<string, unknown>,
+    error: string
+  ): void {
     logInternalError('engine-unknown-event', {
       error,
       type: String(raw.type ?? raw.event ?? raw.kind ?? ''),
