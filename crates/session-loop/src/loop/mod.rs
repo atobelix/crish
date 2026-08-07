@@ -984,6 +984,56 @@ mod tests {
         assert_eq!(received_code, codes::TOOL_EXECUTION_FAILED);
     }
 
+    // ── F1-01（PS-04 T4.1）：缺省恢复决策红测试 ──
+    // 缺陷：无 recovery_hook 且未 abort 时 `recovery_decision` 缺省返回
+    // Skip（:722），streaming 态被静默降级为 NO_TOOL_CALLS 正常收场——
+    // 与模块头注释「abort 类 → aborted，否则 error 收场」相反（F1-01）。
+
+    /// T4.1-R1（红）：缺省恢复决策**不是** Skip——无 hook、未 abort 时
+    /// 内部错误不得走静默降级路径（修复前返回 Skip，断言失败）
+    #[test]
+    fn recovery_default_is_not_skip() {
+        let provider = TestProvider::text_reply("hi");
+        let loop_ = AgentSessionLoop::new("s1", "r1", 16, Box::new(provider), registry());
+        let err = LoopError::internal("模拟 handler 内部错误");
+        let decision = loop_.recovery_decision(&err);
+        assert_ne!(
+            decision,
+            RecoveryDecision::Skip,
+            "无恢复钩子且未 abort 时缺省不得 Skip（错误被静默降级为正常收场，F1-01）"
+        );
+    }
+
+    /// T4.1-R4（红）：Streaming 态内部错误（无 hook）经 catch 兜底
+    /// （recovery_decision + apply_recovery，即 run() 的 catch 逻辑
+    /// loop/mod.rs:655-661）必须收敛为 error 收场——修复前缺省 Skip →
+    /// 派发 NO_TOOL_CALLS 返回 None（继续循环 → turn-complete 以 stop
+    /// 收场，错误被吞），断言收敛失败
+    #[tokio::test]
+    async fn recovery_default_converges_to_error_not_stop() {
+        use conex_types::session::AgentEndReason;
+        let provider = TestProvider::text_reply("hi");
+        let mut loop_ = AgentSessionLoop::new("s1", "r1", 16, Box::new(provider), registry());
+        // 按 transition.rs:271-307 合法序列推进到 Streaming 态
+        //（Idle --Initialized--> AwaitingInput --InputReady--> PreparingTurn
+        //  --TurnPrepared--> Streaming）
+        loop_.state.machine = crate::state::AgentSessionMachine::new("s1", 16);
+        loop_.state.machine.dispatch(E::Initialized).expect("合法转移：Initialized");
+        loop_.state.machine.dispatch(E::InputReady).expect("合法转移：InputReady");
+        loop_.state.machine.dispatch(E::TurnPrepared).expect("合法转移：TurnPrepared");
+        assert_eq!(loop_.state.machine.state(), S::Streaming);
+        // 模拟 catch 兜底路径（handler 抛内部错误）
+        let err = LoopError::internal("handler 内部错误");
+        let decision = loop_.recovery_decision(&err);
+        let end = loop_.apply_recovery(decision, &err).await;
+        let end = end.expect("缺省恢复必须收敛（错误不得静默降级为继续循环）");
+        assert_eq!(
+            end.reason, AgentEndReason::Error,
+            "streaming 态内部错误必须 error 收场（而非继续循环 stop 收场）"
+        );
+        assert_eq!(end.error.as_deref(), Some("handler 内部错误"));
+    }
+
     /// 构造用户消息（run 输入）
     fn user_input(text: &str) -> AgentMessage {
         AgentMessage {

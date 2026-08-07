@@ -2302,6 +2302,58 @@ mod tests {
         }
     }
 
+    /// 挂起审批门：永不返回决策（模拟审批卡片丢失 / 事件桥断连——
+    /// 只模拟「审批不响应」，超时/abort 收敛必须由内核 select!/timeout
+    /// 真实完成，PS-04 T4.2 防作弊条款 2）
+    struct PendingApproval;
+
+    #[async_trait::async_trait]
+    impl ApprovalGate for PendingApproval {
+        async fn request_approval(
+            &self,
+            _call_id: &str,
+            _tool_name: &str,
+            _args: &Value,
+            _requester: Option<&ApprovalRequester>,
+        ) -> ApprovalDecision {
+            std::future::pending().await
+        }
+    }
+
+    /// 前 hang_after 次问询返回 Approved，之后挂起（requires_approval
+    /// 重试审批挂起测试用：批级审批先通过，重试审批不响应）
+    struct HangAfterApprovals {
+        hang_after: usize,
+        consulted: AtomicUsize,
+    }
+
+    impl HangAfterApprovals {
+        fn new(hang_after: usize) -> Self {
+            Self {
+                hang_after,
+                consulted: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ApprovalGate for HangAfterApprovals {
+        async fn request_approval(
+            &self,
+            _call_id: &str,
+            _tool_name: &str,
+            _args: &Value,
+            _requester: Option<&ApprovalRequester>,
+        ) -> ApprovalDecision {
+            let n = self.consulted.fetch_add(1, Ordering::SeqCst);
+            if n < self.hang_after {
+                ApprovalDecision::Approved
+            } else {
+                std::future::pending().await
+            }
+        }
+    }
+
     /// 记录请求方身份的测试门（T-D-14：断言子代理请求透传 requester）
     struct RequesterRecordingApproval {
         decision: ApprovalDecision,
@@ -2653,6 +2705,139 @@ mod tests {
             .results
             .iter()
             .all(|r| r.error_message.as_deref() == Some("aborted")));
+    }
+
+    // ── F1-02（PS-04 T4.2）：批级审批挂起红测试 ──
+    // 缺陷：三个 `gate.request_approval(...).await` 裸挂起（顺序路径 /
+    // 并行组审批循环 / requires_approval 重试），abort 信号在审批等待
+    // 期间无法打断 run，run 无限悬挂（F1-02）。
+
+    /// T4.2-R3（红，顺序路径 abort 竞速）：审批门挂起不返回 + abort 置位
+    /// → 批执行必须**立即**收敛为取消（不等待 gate）。修复前裸挂起，
+    /// abort 无法打断，外层 tokio timeout 触发（红）
+    #[tokio::test]
+    async fn approval_hang_sequential_abort_race_converges() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            ..Default::default()
+        };
+        let gate = Arc::new(PendingApproval);
+        let abort = AbortSignal::new();
+        // 50ms 后触发 abort（审批仍挂起中）
+        let aborter = {
+            let abort = abort.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                abort.abort();
+            })
+        };
+        let start = std::time::Instant::now();
+        let out = tokio::time::timeout(
+            Duration::from_secs(2),
+            exec.execute_batch(&calls, &exec_ctx(), Some(gate), &opts, Some(&abort)),
+        )
+        .await
+        .expect("审批挂起必须被 abort 竞速收敛（不得悬挂）");
+        let elapsed = start.elapsed();
+        aborter.await.expect("aborter 不应 panic");
+        assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::Cancelled));
+        assert_eq!(out.results[0].error_message.as_deref(), Some("aborted"));
+        assert!(
+            elapsed.as_millis() < 1000,
+            "abort 竞速应在数百 ms 内生效（不等 gate 不响应窗口），实际 {elapsed:?}"
+        );
+    }
+
+    /// T4.2-R3（红，并行组 abort 竞速）：并行组审批循环挂起 + abort →
+    /// 全组有限时间收敛为取消（不悬挂），approval-requested 全组先发
+    /// 事件顺序契约保持
+    #[tokio::test]
+    async fn approval_hang_parallel_group_abort_race_converges() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![
+            call("p0", "echo", ToolConcurrency::Parallel),
+            call("p1", "echo", ToolConcurrency::Parallel),
+        ];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            ..Default::default()
+        };
+        let gate = Arc::new(PendingApproval);
+        let abort = AbortSignal::new();
+        let aborter = {
+            let abort = abort.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                abort.abort();
+            })
+        };
+        let start = std::time::Instant::now();
+        let out = tokio::time::timeout(
+            Duration::from_secs(2),
+            exec.execute_batch(&calls, &exec_ctx(), Some(gate), &opts, Some(&abort)),
+        )
+        .await
+        .expect("并行组审批挂起必须被 abort 竞速收敛（不得悬挂）");
+        let elapsed = start.elapsed();
+        aborter.await.expect("aborter 不应 panic");
+        // 全部以取消收场（无决策 = abort 中断，复用既有取消路径）
+        assert!(out
+            .results
+            .iter()
+            .all(|r| r.error_kind == Some(ToolErrorKind::Cancelled)));
+        assert!(
+            elapsed.as_millis() < 1000,
+            "并行组 abort 竞速应在数百 ms 内收敛，实际 {elapsed:?}"
+        );
+        // approval-requested 全组先发契约保持（等待前已全部广播）
+        let approvals = out
+            .events
+            .iter()
+            .filter(|e| matches!(e, ToolEvent::ApprovalRequested { .. }))
+            .count();
+        assert!(approvals >= 1, "审批请求事件应先于等待发出");
+    }
+
+    /// T4.2-R4（红，requires_approval 重试路径 abort 竞速）：批级审批
+    /// 通过 → 工具返回 ApprovalRequired → 重试审批挂起 + abort → 有限
+    /// 时间收敛为取消（修复前 :1140 裸挂起，红）
+    #[tokio::test]
+    async fn requires_approval_retry_hang_abort_race_converges() {
+        let reg = registry_with(vec![Arc::new(AlwaysRequiresApprovalTool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![call("c1", "always_approval", ToolConcurrency::Sequential)];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            ..Default::default()
+        };
+        // 首次问询（批级审批）通过，重试审批挂起
+        let gate = Arc::new(HangAfterApprovals::new(1));
+        let abort = AbortSignal::new();
+        let aborter = {
+            let abort = abort.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                abort.abort();
+            })
+        };
+        let start = std::time::Instant::now();
+        let out = tokio::time::timeout(
+            Duration::from_secs(2),
+            exec.execute_batch(&calls, &exec_ctx(), Some(gate), &opts, Some(&abort)),
+        )
+        .await
+        .expect("重试审批挂起必须被 abort 竞速收敛（不得悬挂）");
+        let elapsed = start.elapsed();
+        aborter.await.expect("aborter 不应 panic");
+        assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::Cancelled));
+        assert!(
+            elapsed.as_millis() < 1000,
+            "重试审批 abort 竞速应在数百 ms 内收敛，实际 {elapsed:?}"
+        );
     }
 
     // ── R4 T10：真实审批事件（requires_approval / dangerous / permissionMode）──
