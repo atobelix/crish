@@ -851,3 +851,176 @@ export function cacheStatsUpdatedEvent(
     stats,
   };
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// 工具流式 fixture（TOOLS-01 S1 §3.1.5；tool-streaming.spec.ts 消费）
+// 时序契约：tool-batch-start → (tool-start → tool-update* → tool-end)* →
+// tool-batch-end；ToolUpdate 载荷形状 { sessionId, batchId, toolCallId,
+// update: { text?, json?, metadata? }, timestamp }，metadata.kind 字面量
+// tool-progress / tool-args-delta / content-blocks（content-blocks 预留）。
+// runId/sessionId/sequence 由引擎自动补齐。
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 构造 tool-update 事件（契约形状；缺 timestamp/sessionId 即宽容形态，
+ * 走 eventParser 宽容归一器兜底）。供工具流式 spec 组合逐块进度序列复用。
+ */
+export function toolUpdateEvent(
+  update: Record<string, unknown>,
+  opts: { batchId?: string; toolCallId?: string; timestamp?: string } = {}
+): MockEvent {
+  return {
+    type: 'tool-update',
+    batchId: opts.batchId ?? 'batch-s1',
+    toolCallId: opts.toolCallId ?? 'tool-s1',
+    ...(opts.timestamp ? { timestamp: opts.timestamp } : {}),
+    update,
+  };
+}
+
+/**
+ * 工具流式完整旅程（严格契约形状：sessionId/batchId/timestamp 齐全、
+ * call/result 嵌套 → 走生成解析器直出路径）。
+ *
+ * 事件编排：tool-batch-start → tool-start → tool-update×3（text 形态，
+ * metadata.kind="tool-progress"）→ tool-update（json 形态，
+ * metadata.kind="tool-args-delta"）→ tool-end → tool-batch-end →
+ * message-start/delta/end → run-terminal。
+ *
+ * 断言口径（§3.1.5）：ToolUpdate 为展示面事件不进消息历史——update.text
+ * （构建进度…）不得混入 assistant 消息；终值仅由 ToolEnd 承载（build ok）。
+ */
+export function toolStreamingRunEvents(): MockEvent[] {
+  const batchId = 'batch-s1';
+  const toolCallId = 'tool-s1';
+  const call = {
+    id: toolCallId,
+    toolName: 'shell_command',
+    summary: 'npm run build',
+    input: { command: 'npm run build' },
+    category: 'terminal',
+    concurrency: 'sequential',
+  };
+  return [
+    {
+      type: 'tool-batch-start',
+      sessionId: 's',
+      batchId,
+      timestamp: 't0',
+      summary: '执行构建',
+      calls: [call],
+    },
+    { type: 'tool-start', sessionId: 's', batchId, timestamp: 't1', call },
+    toolUpdateEvent(
+      { text: '构建进度 1/3…', metadata: { kind: 'tool-progress' } },
+      { timestamp: 't2' }
+    ),
+    toolUpdateEvent(
+      { text: '构建进度 2/3…', metadata: { kind: 'tool-progress' } },
+      { timestamp: 't3' }
+    ),
+    toolUpdateEvent(
+      { text: '构建进度 3/3…', metadata: { kind: 'tool-progress' } },
+      { timestamp: 't4' }
+    ),
+    toolUpdateEvent(
+      {
+        json: { args: { watch: true } },
+        metadata: { kind: 'tool-args-delta' },
+      },
+      { timestamp: 't5' }
+    ),
+    {
+      type: 'tool-end',
+      sessionId: 's',
+      batchId,
+      timestamp: 't6',
+      result: {
+        id: toolCallId,
+        toolName: 'shell_command',
+        output: { text: 'build ok' },
+        isError: false,
+        durationMs: 1200,
+      },
+    },
+    {
+      type: 'tool-batch-end',
+      sessionId: 's',
+      batchId,
+      timestamp: 't7',
+      calls: [
+        {
+          id: toolCallId,
+          toolName: 'shell_command',
+          output: { text: 'build ok' },
+          isError: false,
+          durationMs: 1200,
+        },
+      ],
+    },
+    { type: 'message-start' },
+    { type: 'message-delta', block: { type: 'text', text: '构建完成。' } },
+    {
+      type: 'message-end',
+      message: {
+        role: 'assistant',
+        content: '构建完成。',
+        blocks: [{ type: 'text', text: '构建完成。' }],
+      },
+    },
+    { type: 'run-terminal', terminal: 'completed' },
+  ];
+}
+
+/**
+ * 工具流式宽容形态（缺 sessionId/timestamp/batchId 信封字段、平铺
+ * id/name/args 形状，对齐既有 full-journey fixture 风格 → 走宽容归一器）。
+ * tool-update 三形态齐发：text 缺 metadata、json 形态、update 非对象
+ * （畸形）兜底为空对象——全部必须被宽容消费且不登记 unknown。
+ */
+export function toolStreamingLenientRunEvents(): MockEvent[] {
+  return [
+    {
+      type: 'tool-start',
+      id: 'tool-l1',
+      name: 'shell_command',
+      args: 'git status',
+      explanation: '检查工作区',
+    },
+    toolUpdateEvent(
+      { text: '检查中…' },
+      { batchId: '', toolCallId: 'tool-l1' }
+    ),
+    toolUpdateEvent(
+      { json: { pending: 2 } },
+      { batchId: '', toolCallId: 'tool-l1' }
+    ),
+    {
+      type: 'tool-update',
+      batchId: 'batch-l1',
+      toolCallId: 'tool-l1',
+      update: 'not-an-object',
+    },
+    {
+      type: 'tool-end',
+      result: {
+        toolCallId: 'tool-l1',
+        toolName: 'shell_command',
+        output: 'clean',
+        isError: false,
+        durationMs: 5,
+      },
+    },
+    { type: 'message-start' },
+    { type: 'message-delta', block: { type: 'text', text: '工作区干净。' } },
+    {
+      type: 'message-end',
+      message: {
+        role: 'assistant',
+        content: '工作区干净。',
+        blocks: [{ type: 'text', text: '工作区干净。' }],
+      },
+    },
+    { type: 'run-terminal', terminal: 'completed' },
+  ];
+}

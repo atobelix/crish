@@ -810,3 +810,84 @@ describe('parseBridgeEvent（14-T5 数据面 10 类宽容归一：strict 失败�
     }
   });
 });
+
+describe('parseBridgeEvent（TOOLS-01 S1：tool-update 流式更新宽容解析）', () => {
+  it('规范 tool-update（text + metadata.kind=tool-progress）经生成解析器直出', () => {
+    const r = parseBridgeEvent({
+      type: 'tool-update',
+      sessionId: 's',
+      batchId: 'batch-1',
+      toolCallId: 't-1',
+      timestamp: 't',
+      update: { text: '进度 1/3', metadata: { kind: 'tool-progress' } },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect(r.data.type).toBe('tool-update');
+      expect(r.data.event.batchId).toBe('batch-1');
+      expect(r.data.event.toolCallId).toBe('t-1');
+      expect(r.data.event.update).toMatchObject({
+        text: '进度 1/3',
+        metadata: { kind: 'tool-progress' },
+      });
+    }
+  });
+
+  it('宽容 tool-update（缺 sessionId/timestamp）经归一器兜底，json/metadata 透传', () => {
+    const r = parseBridgeEvent({
+      type: 'tool-update',
+      batchId: 'batch-2',
+      toolCallId: 't-2',
+      update: {
+        json: { args: { watch: true } },
+        metadata: { kind: 'tool-args-delta' },
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect(r.data.event.update.json).toEqual({ args: { watch: true } });
+      expect(r.data.event.update.metadata).toEqual({
+        kind: 'tool-args-delta',
+      });
+    }
+  });
+
+  it('宽容 tool-update：update 非对象回退空对象，text/json/metadata 三形态齐全', () => {
+    const bad = parseBridgeEvent({
+      type: 'tool-update',
+      batchId: 'b',
+      toolCallId: 't-bad',
+      update: 'not-an-object',
+    });
+    expect(bad.ok).toBe(true);
+    if (bad.ok && bad.data.kind === 'engine') {
+      expect(bad.data.event.update).toEqual({});
+    }
+    const full = parseBridgeEvent({
+      type: 'tool-update',
+      toolCallId: 't-3',
+      update: {
+        text: 'a',
+        json: { n: 1 },
+        metadata: { kind: 'tool-progress' },
+      },
+    });
+    expect(full.ok).toBe(true);
+    if (full.ok && full.data.kind === 'engine') {
+      expect(full.data.event.update).toEqual({
+        text: 'a',
+        json: { n: 1 },
+        metadata: { kind: 'tool-progress' },
+      });
+    }
+  });
+
+  it('宽容 tool-update：缺 update 字段回退空对象（老形态帧不炸）', () => {
+    const r = parseBridgeEvent({ type: 'tool-update', toolCallId: 't-4' });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.kind === 'engine') {
+      expect(r.data.event.toolCallId).toBe('t-4');
+      expect(r.data.event.update).toEqual({});
+    }
+  });
+});
