@@ -17,6 +17,8 @@ import { ApprovalFlowMachine } from '../approvalFlowMachine';
 import type { StreamCallbacks } from '../chatApi';
 import { EventRouter } from './EventRouter';
 import type { StreamState } from './handlers/streamState';
+import * as userFacingErrors from '../userFacingErrors';
+import * as eventParserModule from './handlers/eventParser';
 import {
   ensureDataPlaneRouter,
   resetDataPlaneRouterForTests,
@@ -57,7 +59,13 @@ function fire(msg: Record<string, unknown>): void {
 function payloadFor(type: string): Record<string, unknown> {
   switch (type) {
     case 'task-started':
-      return { taskId: 't1', command: 'echo hi', cwd: '', ownerRunId: '', isDaemon: false };
+      return {
+        taskId: 't1',
+        command: 'echo hi',
+        cwd: '',
+        ownerRunId: '',
+        isDaemon: false,
+      };
     case 'task-output':
       return { taskId: 't1' };
     case 'task-heartbeat':
@@ -75,7 +83,12 @@ function payloadFor(type: string): Record<string, unknown> {
     case 'timer-cancelled':
       return { timerId: 'tm1', reason: 'x' };
     case 'cron-fired':
-      return { cronId: 'c1', prompt: 'p', expression: '* * * * *', iteration: 1 };
+      return {
+        cronId: 'c1',
+        prompt: 'p',
+        expression: '* * * * *',
+        iteration: 1,
+      };
     default:
       return {};
   }
@@ -117,9 +130,19 @@ describe('全局数据面路由（14-T7）', () => {
   it('run 内类型不被数据面路由拦截：不产生记录、不触发拉取', () => {
     const unsub = ensureDataPlaneRouter();
     try {
-      fire({ type: 'message-delta', messageId: 'm1', block: { type: 'text', text: 'x' } });
+      fire({
+        type: 'message-delta',
+        messageId: 'm1',
+        block: { type: 'text', text: 'x' },
+      });
       fire({ type: 'run-terminal', terminal: 'completed' });
-      fire({ type: 'security-audit', sessionId: 's', operation: 'command-exec', decision: 'allowed', targets: [] });
+      fire({
+        type: 'security-audit',
+        sessionId: 's',
+        operation: 'command-exec',
+        decision: 'allowed',
+        targets: [],
+      });
       expect(getRecentDataPlaneEvents()).toHaveLength(0);
       expect(pullMock).not.toHaveBeenCalled();
     } finally {
@@ -181,13 +204,17 @@ describe('全局数据面路由（14-T7）', () => {
 
     // 仍有订阅者：监听保持，事件被消费
     fire({ type: 'task-started', taskId: 't1', command: 'x' });
-    expect(getRecentDataPlaneEvents().some((r) => r.type === 'task-started')).toBe(true);
+    expect(
+      getRecentDataPlaneEvents().some((r) => r.type === 'task-started')
+    ).toBe(true);
     expect(pullMock).toHaveBeenCalledTimes(1);
 
     unsub1();
     clearDataPlaneStateForTests();
     fire({ type: 'task-started', taskId: 't1', command: 'x' });
-    expect(getRecentDataPlaneEvents().some((r) => r.type === 'task-started')).toBe(true);
+    expect(
+      getRecentDataPlaneEvents().some((r) => r.type === 'task-started')
+    ).toBe(true);
 
     unsub2();
     // 归零退订：transport 监听器集合清空，事件不再被消费
@@ -205,5 +232,41 @@ describe('全局数据面路由（14-T7）', () => {
     expect(isDataPlaneEventType('security-audit')).toBe(false);
     expect(isDataPlaneEventType('message-delta')).toBe(false);
     expect(isDataPlaneEventType('run-terminal')).toBe(false);
+  });
+});
+
+describe('数据面路由 parser 异常兜底（T3.7 D7，F8-01 消费面）', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('数据面事件解析抛异常被兜底：登记日志 + 不中断后续消息处理', () => {
+    const unsub = ensureDataPlaneRouter();
+    try {
+      const logSpy = vi.spyOn(userFacingErrors, 'logInternalError');
+      const parserSpy = vi.spyOn(eventParserModule, 'parseBridgeEvent');
+      parserSpy.mockImplementation(() => {
+        throw new Error('parser threw: boom');
+      });
+      // 注入 parser 抛异常：数据面路由不得让异常逃逸（修复前 RangeError 逃逸）
+      expect(() =>
+        fire({ type: 'task-started', taskId: 't1', command: 'x' })
+      ).not.toThrow();
+      expect(logSpy).toHaveBeenCalledWith(
+        'data-plane-parse-failed',
+        expect.objectContaining({
+          error: expect.stringContaining('parser threw'),
+        })
+      );
+
+      // 后续数据面事件照常消费（消息循环不中断）
+      parserSpy.mockRestore();
+      fire({ type: 'task-completed', taskId: 't1' });
+      expect(
+        getRecentDataPlaneEvents().some((r) => r.type === 'task-completed')
+      ).toBe(true);
+    } finally {
+      unsub();
+    }
   });
 });

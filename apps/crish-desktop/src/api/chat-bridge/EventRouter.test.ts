@@ -4,11 +4,13 @@
  * C2.2：`event` 信封分支与 run-ended 别名分支已删，onMsg 平铺事件直进 handleAgentEvent
  * （03 §5.2-1/2）。C2.4：四源失败全部收敛到 surfaceStreamFailure + finish（03 §2.4 表）。
  */
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventRouter } from './EventRouter';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
 import type { StreamState } from './handlers/streamState';
 import type { StreamCallbacks } from '../chatApi';
+import * as userFacingErrors from '../userFacingErrors';
+import * as eventParserModule from './handlers/eventParser';
 
 function makeState(): StreamState {
   return {
@@ -39,7 +41,7 @@ function makeRouter(finish: ReturnType<typeof vi.fn>) {
     'run-test',
     finish,
     vi.fn(),
-    'session-test',
+    'session-test'
   );
   return { router, state, callbacks, approvalFlow };
 }
@@ -429,5 +431,67 @@ describe('EventRouter run-terminal 最小防御解析（C3.2：原 zod safeParse
     });
     expect(onRunError).not.toHaveBeenCalled();
     expect(finish).toHaveBeenCalledWith(false);
+  });
+});
+
+describe('EventRouter 消费侧 parser 异常兜底（T3.7 D7，F8-01 消费面）', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('parseBridgeEvent 抛异常被兜底：registerUnknownEvent 登记 + 不中断事件处理循环', () => {
+    const finish = vi.fn();
+    const { router, callbacks } = makeRouter(finish);
+    const logSpy = vi.spyOn(userFacingErrors, 'logInternalError');
+    const parserSpy = vi.spyOn(eventParserModule, 'parseBridgeEvent');
+
+    // 注入 parser 抛异常（模拟解析器未收敛的异常路径；验证的是消费侧兜底
+    // 而非 parser 本身，故以故障注入方式驱动）
+    parserSpy.mockImplementation(() => {
+      throw new Error('parser threw: boom');
+    });
+    expect(() =>
+      router.onMsg({ type: 'message-delta', runId: 'run-test', sequence: 1 })
+    ).not.toThrow();
+    // 显式登记（不静默吞），错误文案带 parser threw 标记
+    expect(logSpy).toHaveBeenCalledWith(
+      'engine-unknown-event',
+      expect.objectContaining({
+        error: expect.stringContaining('parser threw'),
+      })
+    );
+
+    // 后续正常事件仍被处理（循环不中断）
+    parserSpy.mockRestore();
+    router.onMsg({
+      type: 'message-delta',
+      runId: 'run-test',
+      sequence: 2,
+      block: { type: 'text', text: 'hi' },
+    });
+    expect(callbacks.onChunk).toHaveBeenCalledWith('hi');
+  });
+
+  it('真实深嵌套载荷（5000 层）经 onMsg 消费不抛异常（修复前 RangeError 逃逸）', () => {
+    const finish = vi.fn();
+    const { router } = makeRouter(finish);
+    let input: unknown = 'leaf';
+    for (let i = 0; i < 5000; i++) input = [input];
+    expect(() =>
+      router.onMsg({
+        type: 'message-delta',
+        runId: 'run-test',
+        sequence: 1,
+        sessionId: 's1',
+        timestamp: 't1',
+        messageId: 'm1',
+        block: {
+          type: 'tool-call',
+          id: 'tc-1',
+          toolName: 'shell_command',
+          input,
+        },
+      })
+    ).not.toThrow();
   });
 });
