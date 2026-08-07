@@ -50,16 +50,20 @@ const config: KnipConfig = {
     // 被 lint:all / lint:css 脚本经 stylelint 自动发现使用（stylelint 未本地安装，
     // knip 插件未激活而误报为 unused file）
     '.stylelintrc.cjs',
-    // 门禁脚本按路径字符串消费的活文件（非 import，knip 无法跟踪）：
-    // - store/index.ts：scripts/check-no-as-any-store.mjs BARREL_REQUIRED 校验目标
-    // - store/rustCoreStore.ts：store/index.ts 桶文件 re-export 下游，随桶被门禁覆盖
-    'apps/crish-desktop/src/store/index.ts',
-    'apps/crish-desktop/src/store/rustCoreStore.ts',
     // R7 plugin-sdk 迁移预留资产（方案 01 §3 定义；R7 落地后移出本清单）
-    'packages/shared-types/src/hooks.ts',
-    'packages/shared-types/src/plugin.ts',
-    'packages/shared-types/src/subagent.ts',
+    // 注：PS-02 T2.6 已按 knip Configuration hints 移出 5 项（store/index.ts、
+    // rustCoreStore.ts、hooks.ts、plugin.ts、subagent.ts）——knip 已确认它们
+    // 有真实 import 消费（此前登记已过时），仅保留仍未被引用的 thinking-intensity.ts
     'packages/shared-types/src/thinking-intensity.ts',
+  ],
+  ignoreBinaries: [
+    // PS-02 T2.6：warn 级处置（不阻塞门禁，登记理由防回归）
+    // rimraf：packages/test-utils/package.json "clean": "rimraf dist" 消费，
+    // 经 npm 脚本调用（根 node_modules 提升解析，未声明 devDep）
+    'rimraf',
+    // tasklist：tests/e2e/tauri-native-smoke.spec.ts 经 execSync 调用的
+    // win32 系统二进制（进程存活探测），非 npm 依赖
+    'tasklist',
   ],
   ignoreDependencies: [
     // 被 .husky/pre-commit（npx lint-staged）与 .lintstagedrc.json 使用

@@ -109,6 +109,23 @@ jobs:
       # （透传不可用），故不加 --locked
       - run: cargo machete
 
+  # 死代码门禁（PS-02 T2.6 接线）：error 级规则决定退出码（files/dependencies/
+  # devDependencies/unresolved）；exports/types/unlisted/binaries/duplicates 为
+  # warn 级（594+ 长尾登记 P2 收敛清单，不阻塞）。存量收敛：
+  # AgentToolRowRenderer.tsx 删除（全仓零引用，含字符串/动态引用 + git log 核实）；
+  # rimraf/tasklist 登记 ignoreBinaries（真实消费，见 knip.config.ts 注释）。
+  knip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run knip
+
   # I8 治理收口（G3/G4/G6）：unwrap / 吞错 / 行数 三基线 ratchet。
   # 基线真源：docs/multi-agent-repair/基线记录/{unwrap,swallowed-errors,crate-size}-baseline.md
   # 语义：新增计数/超限文件未登记 → exit 1；提升基线必须显式 --update。

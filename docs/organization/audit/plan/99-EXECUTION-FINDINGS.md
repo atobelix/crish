@@ -21,3 +21,29 @@
 - **位置**：`apps/crish-desktop/tests/recovery/store-boundary.test.ts:14`
 - **描述**：`useSessionStore.setState(_s => ({ sessions: [...s.sessions, …`——形参 `_s` 但引用 `s`，`ReferenceError: s is not defined`。git blame 确认 d82f7468 创建文件时即存在（"handles creating 1000 sessions" 用例从未通过）。根因：测试代码笔误（真实缺陷形态），非 PS-02 引入。已按 T2.1"扩前先确认四目录用例全绿"要求修复为 `_s.sessions`（最小改动，属测试代码修复，任务书允许）。
 - **建议**：无后续动作（已修复并随 T2.1 提交）。
+
+## P2 长尾收敛清单（knip warn 级，PS-02 T2.6 登记，不阻塞门禁）
+
+| 项                | 量  | 位置                                                                                                                                                                                                                                                       | 收敛建议                                                                          |
+| ----------------- | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Unused exports    | 595 | 全仓（agent-workbench/shared 为主）                                                                                                                                                                                                                        | 按域分批收敛（每域一批，导出即消费或删除）；收敛后把 `rules.exports` 收紧为 error |
+| Duplicate exports | 5   | messageWindow.ts（EXPAND_OLDER_STEP/SHOW_ALL_OLDER_THRESHOLD）、tauriInvoke.ts（invokeCmd/tryInvokeTauri）、OverviewQuickActions（OverviewQuickActions/OverviewQuickPrompts）、OverviewStats（OverviewStats/OverviewMetrics）、DevHealthOverlay（default） | 逐文件去重（保留消费方引用的名字）                                                |
+
+## F-004：并行任务 PS-03 期间快层门禁被未提交改动阻塞（PS-02 T2.2/T2.4 验收边界）
+
+- **描述**：`npm run test:coverage -- --project=unit` 与 `npm run test` 在 PS-02 执行期 EXIT=1，唯一失败为 F-001（sessionPersistence 被 PS-03 未提交改动破坏）。经 stash 验证 HEAD 基线全绿；PS-02 改动（vitest 项目重构/coverage 口径）未引入任何失败（5225/5226 通过，唯一失败 = F-001）。
+- **建议**：PS-03 前端持久化族落地后重跑快层门禁，恢复 EXIT=0。
+
+## F-004：T3.3 红测试与修复实现被并行 persist 任务整文件暂存吸收（PS-03 T3.3 执行期）
+
+- **发现日期**：2026-08-07（PS-03 T3.3 执行期）
+- **位置**：`crates/conex-db/src/sessions.rs` + `crates/conex-db/tests/orphan_grace_contract.rs`
+- **描述**：T3.3 执行时并行任务（P0-2/PERSIST-03，persist 批次）正以**未提交**状态占据同一文件族（sessions.rs 已含 run 豁免、orphan_grace_contract.rs 已含 v2 测试）。T3.3 的红测试（5 个用例，追加于文件尾）写好后，并行任务以整文件暂存提交（7e2cde0f）将**实现（run 豁免 + pending 豁免 + hydrated 豁免）与 T3.3 全部测试一并吸收入库**——两段提交（红测试单独一笔）无法按字面执行。红证据改在修复前 HEAD（d4d8853b）临时 worktree 上实跑确认：7 个保护用例全红（含 T3.3 三个主用例），9 个既有宽限期用例全绿。
+- **建议**：同文件族任务派发时明确「提交归属」（谁 commit、何时 commit），或强制串行；并行批次的整文件暂存会吞掉相邻任务的未提交测试，验收方应接受「红证据 + 同提交含测试」的替代证据链。
+
+## F-005：T3.3 子项 touch_session 生产接线声明留登记（PS-03 T3.3 执行期）
+
+- **发现日期**：2026-08-07（PS-03 T3.3 执行期）
+- **位置**：`crates/conex-db/src/sessions.rs:283-297`（touch_session 现状：仅 tests.rs 使用，生产零调用——R2 §3 结构性缺位）
+- **描述**：任务书 T3.3 子项「touch 接线（二阶段可选）」：引擎侧 run 启动/终态落库处（crates/orchestrator run 写入面）与前端活跃会话心跳调用 `touch_session`。实现轮评估：接线面横跨 crates/orchestrator 与前端，超出本任务「只改 conex-db」约束，按任务书条款声明留登记。**必做项（删除条件防护）已落地**：两分支 DELETE 共用 protected 条件（hydrated 豁免 + 非终态 run 豁免 queued/initializing/running/awaiting-approval/completing/cancelling + 未决 pending_inputs 豁免，sessions.rs:235-247），与宽限期 `updated_at < grace_cutoff` AND 协同。
+- **建议**：后续批次接线 touch 时，注意与 upsert_session_entry（前端 350ms persist 顺带刷新 updated_at）的语义叠加；接线后 `touch_session` 才承担「运行期活跃」刷新职责。

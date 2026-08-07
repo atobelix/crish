@@ -52,6 +52,7 @@
     "test:e2e:native": "vitest run tests/e2e/tauri-native-smoke.spec.ts",
     "lint:all": "eslint . --ext .ts,.tsx --max-warnings 0 && npx --yes stylelint@16 \"apps/crish-desktop/src/**/*.css\"",
     "lint": "eslint .",
+    "knip": "knip",
     "lint:depcruise": "depcruise --config .dependency-cruiser.cjs packages apps",
     "check:all": "npm run typecheck && npm run lint:all && npm run test:coverage",
     "format": "prettier --check .",
@@ -70,6 +71,7 @@
     "fast-check": "^3.23.2",
     "globals": "^15.15.0",
     "husky": "^9.1.7",
+    "knip": "^6.32.0",
     "lint-staged": "^17.1.0",
     "prettier": "^3.5.1",
     "tsc-alias": "^1.8.16",
@@ -81,18 +83,6 @@
   },
   "overrides": {
     "esbuild": "^0.28.1"
-  },
-  "dependencies": {},
-  "vitest": {
-    "coverage": {
-      "enabled": true,
-      "thresholds": {
-        "statements": 50,
-        "branches": 40,
-        "functions": 50,
-        "lines": 50
-      }
-    }
   },
   "lint-staged": {
     "*.{ts,tsx}": [
