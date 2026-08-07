@@ -74,6 +74,35 @@ impl LocalDb {
         Ok(agents)
     }
 
+    /// 加载全部 status='running' 的会话协作子代理行（PERSIST-02 P1-3：
+    /// restore 崩溃归一用——子代理运行中崩溃后行残留 running，需归一为
+    /// failed + ended_at，防 FlowScheduler 重建后节点永久 Running）。
+    ///
+    /// 轻量定位查询：只返回 (session_id, subagent_run_id) 键对，不加载
+    /// 行内容与消息——归一写面（[Self::update_session_agent_status]）
+    /// 不需要行内容；消息面由既有加载 API 承担。
+    pub fn load_running_session_agents(&self) -> Result<Vec<(String, String)>, DbFailure> {
+        let conn = self.conn.lock().map_err(|e| DbFailure {
+            message: format!("lock poisoned: {e}"),
+            kind: DbFailureKind::Lock,
+        })?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT session_id, subagent_run_id
+                 FROM session_agents
+                 WHERE status = 'running'",
+            )
+            .map_err(|e| self.latch_error("load_running_session_agents_prepare", e))?;
+
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| self.latch_error("load_running_session_agents_map", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| self.latch_error("load_running_session_agents_collect", e))?;
+        Ok(rows)
+    }
+
     /// 查询扩展（T-D-09）：按父会话 + 状态过滤加载子代理行（kill_all
     /// 过滤面：parent_session_id = 主会话 且 status = running）。
     ///
@@ -475,6 +504,65 @@ mod tests {
             ],
         )
         .unwrap();
+    }
+
+    /// PERSIST-02 P1-3：全库 running 行定位（崩溃归一数据源）——只返回
+    /// running 行键对，终态行不出现；跨会话全量
+    #[test]
+    fn load_running_rows_returns_running_pairs_across_sessions() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.upsert_session_entry(&session_entry("s1")).unwrap();
+        db.upsert_session_entry(&session_entry("s2")).unwrap();
+        db.save_session_agents(
+            "s1",
+            &[
+                agent("a1", "run-1", "running", "s1", None, None, Vec::new()),
+                agent("a2", "run-2", "completed", "s1", Some(200), None, Vec::new()),
+            ],
+        )
+        .unwrap();
+        db.save_session_agents(
+            "s2",
+            &[agent("a3", "run-3", "running", "s2", None, None, Vec::new())],
+        )
+        .unwrap();
+
+        let running = db.load_running_session_agents().unwrap();
+        assert_eq!(running.len(), 2, "仅 running 行（终态行不出现）");
+        assert!(
+            running.contains(&("s1".to_string(), "run-1".to_string())),
+            "跨会话定位 s1/run-1"
+        );
+        assert!(
+            running.contains(&("s2".to_string(), "run-3".to_string())),
+            "跨会话定位 s2/run-3"
+        );
+    }
+
+    /// PERSIST-02 P1-3：归一循环端到端——load_running →
+    /// update_session_agent_status（failed + ended_at）→ 行进入终态
+    /// （restore 崩溃归一的写面等价于 kill_all 逐行语义）
+    #[test]
+    fn running_rows_can_be_normalized_via_update_status() {
+        let db = LocalDb::open_in_memory().unwrap();
+        seed_running_rows(&db, "s1");
+
+        let running = db.load_running_session_agents().unwrap();
+        assert_eq!(running.len(), 2);
+        for (session_id, run_id) in &running {
+            db.update_session_agent_status(session_id, run_id, "failed", Some(999))
+                .unwrap();
+        }
+
+        let rows = db.load_session_agents("s1").unwrap();
+        assert!(rows.iter().all(|r| r.status == "failed"), "全部归一 failed");
+        assert!(rows.iter().all(|r| r.ended_at == Some(999)), "ended_at 落库");
+        assert!(
+            db.load_running_session_agents().unwrap().is_empty(),
+            "归一后无 running 残留（幂等，重复 restore 不再命中）"
+        );
+        // messages 原样保留（单行定点写，级联不触发）
+        assert!(rows.iter().all(|r| r.messages.len() == 1));
     }
 
     /// 更新目标行 status/ended_at；非目标行与 messages 字节原样

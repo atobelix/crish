@@ -460,6 +460,10 @@ fn main() {
         .run(|app_handle, event| {
             // 退出钩子：PTY 清理（优雅路径）+ 退出前快照保存（独立线程，
             // save_snapshot_blocking 为阻塞语义，不拖累事件循环收口）。
+            // PERSIST-02 P1-2：restore 未完成或失败时保存被
+            // build_and_save_snapshot 门禁拒绝（restore_ready 未置位 /
+            // restore_failed 已置位）——防「0 会话半水合快照」覆盖主快照
+            // 导致会话树分支历史永久丢失；跳过时 snapshot_last_error 可观测。
             if let tauri::RunEvent::Exit = event {
                 pty::kill_all_sessions();
                 if let Some(core) = app_handle.try_state::<Arc<core_run_commands::CoreRunState>>() {

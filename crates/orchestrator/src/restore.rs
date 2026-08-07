@@ -17,10 +17,20 @@
 //! - **快照**：全量快照（[StateSnapshot]）+ 增量恢复（lastSequence 后
 //!   增量事件流）+ 损坏回退（checksum 校验，损坏时回退到上一完好备份
 //!   快照，05 §2.8 orchestrator.test.ts:885 语义；无快照 → 全量重放）。
+//! - **逐会话锚点**（PERSIST-02 P1-1）：快照携带每会话已重放的最大
+//!   sequence（[StateSnapshot::session_last_sequence]），增量恢复按
+//!   会话自身锚点取增量——不再用全会话 max 一刀切（事件序列为会话内
+//!   独立，全局 max 作会话级 base 会永久跳过落后会话的快照后事件）；
+//!   旧快照无逐会话锚点 → serde default 回退全局 last_sequence（兼容）。
+//! - **session_agents 归一**（PERSIST-02 P1-3）：子代理运行中崩溃 →
+//!   session_agents 行残留 running；restore 时对 running 行执行
+//!   kill_all 语义归一（failed + ended_at），防 FlowScheduler 重建后
+//!   节点永久 Running、流程卡死。
 //!
 //! 快照文件存储为「主文件 + .prev 备份」双文件模型：每次保存先轮转
 //! （主文件 → 备份）再原子写入（tmp + rename），主文件损坏时回退备份。
 
+use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -289,8 +299,14 @@ pub struct StateSnapshot {
     pub schema_version: u32,
     /// 快照代数（每次保存 +1；恢复时校验）
     pub generation: u64,
-    /// 快照覆盖的最后事件序列号（lastSequence 增量流锚点）
+    /// 快照覆盖的最后事件序列号（lastSequence 增量流锚点，全会话 max）
     pub last_sequence: u64,
+    /// 逐会话锚点（PERSIST-02 P1-1）：session_id → 快照时该会话事件
+    /// max。事件序列为会话内独立，全会话 max 作会话级 base 会跳过
+    /// 落后会话的快照后事件（永久粘性）；恢复按本表取每会话增量起点。
+    /// 旧快照无该字段 → serde default 空表，恢复回退全局 last_sequence。
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub session_last_sequence: HashMap<String, u64>,
     /// 写入时间（epoch ms）
     pub written_at: i64,
     /// 会话记录（含会话树）
@@ -311,12 +327,14 @@ impl StateSnapshot {
         sessions: Vec<SessionRecord>,
         runs: Vec<StoredRun>,
         pending_inputs: Vec<PendingInput>,
+        session_last_sequence: HashMap<String, u64>,
     ) -> Self {
         let mut snapshot = Self {
             snapshot_type: SNAPSHOT_TYPE.to_string(),
             schema_version: SNAPSHOT_SCHEMA_VERSION,
             generation,
             last_sequence,
+            session_last_sequence,
             written_at: now_ms(),
             sessions,
             runs: runs.iter().map(SnapshotRun::from).collect(),
@@ -604,6 +622,49 @@ impl RestoreManager {
             interrupted.push(record);
         }
 
+        // 3b. session_agents 残留 running 归一（PERSIST-02 P1-3）：子代理
+        // 运行中崩溃 → 行 status 残留 running；不归一则 FlowScheduler::load
+        // 重建为 Running 节点，is_ready 要求 Pending → 永不重派发、流程
+        // 永久卡死（flow_graph.rs:1473-1476）。与主 run 打断对称（kill_all
+        // 语义）：running → failed + ended_at 落库。仅 LocalDb 路径可用
+        // （as_local_db 下转；InMemoryStore 等测试替身无 session_agents 面，
+        // 跳过——生产恒为 LocalDbStore）
+        if let Some(db) = store.as_local_db() {
+            let running_rows = db.load_running_session_agents().map_err(|e| {
+                RestoreError::new("load_running_session_agents", e.to_string())
+            })?;
+            if !running_rows.is_empty() {
+                let ended_at = now_ms();
+                for (session_id, subagent_run_id) in &running_rows {
+                    let affected = db
+                        .update_session_agent_status(
+                            session_id,
+                            subagent_run_id,
+                            "failed",
+                            Some(ended_at),
+                        )
+                        .map_err(|e| {
+                            RestoreError::new("normalize_session_agent", e.to_string())
+                        })?;
+                    if affected == 0 {
+                        tracing::warn!(
+                            target: "restore",
+                            session_id,
+                            subagent_run_id,
+                            "归一目标行已消失，跳过"
+                        );
+                    } else {
+                        tracing::info!(
+                            target: "restore",
+                            session_id,
+                            subagent_run_id,
+                            "session_agents running 行归一 failed（崩溃恢复）"
+                        );
+                    }
+                }
+            }
+        }
+
         // 4. 会话记录组装（快照会话 ∪ run 派生会话）
         let mut sessions: Vec<SessionRecord> = snapshot
             .as_ref()
@@ -624,17 +685,33 @@ impl RestoreManager {
 
         // 5. 增量流：lastSequence 后事件重放（会话树叶子移动 + 压缩护栏
         //    重建）+ 锚点推进
-        let snapshot_session_ids: Vec<String> = sessions
-            .iter()
-            .map(|s| s.session_id.clone())
-            .collect();
+        // P1-1：snapshot_session_ids 取**快照自身**会话集合（派生会话不在
+        // 内 → 从 0 全量，不再被全局 max 误伤）
+        let snapshot_session_ids: std::collections::HashSet<&str> = snapshot
+            .as_ref()
+            .map(|snap| {
+                snap.sessions
+                    .iter()
+                    .map(|s| s.session_id.as_str())
+                    .collect()
+            })
+            .unwrap_or_default();
         let base_sequence = snapshot.as_ref().map(|snap| snap.last_sequence).unwrap_or(0);
         let mut last_sequence = base_sequence;
         for session in &mut sessions {
-            // 快照会话从 lastSequence 起增量；新派生会话（快照后出现）
-            // 从 0 全量
-            let base = if snapshot_session_ids.contains(&session.session_id) {
-                base_sequence
+            // P1-1：会话级 base = 该会话自身已重放的最大序列（快照逐会话
+            // 锚点 session_last_sequence）——事件序列为会话内独立，全局
+            // max 作会话级 base 会永久跳过落后会话的快照后事件；旧快照无
+            // 逐会话锚点 → serde default 空表 → 回退全局 last_sequence
+            // （兼容旧语义）；派生会话（快照后出现）从 0 全量
+            let base = if snapshot_session_ids.contains(session.session_id.as_str()) {
+                snapshot
+                    .as_ref()
+                    .and_then(|snap| {
+                        snap.session_last_sequence.get(&session.session_id)
+                    })
+                    .copied()
+                    .unwrap_or(base_sequence)
             } else {
                 0
             };
@@ -1113,7 +1190,7 @@ mod tests {
             .status,
             RunStatus::Completing
         );
-        let snapshot = StateSnapshot::build(1, 0, sessions, runs, Vec::new());
+        let snapshot = StateSnapshot::build(1, 0, sessions, runs, Vec::new(), HashMap::new());
         assert!(snapshot.valid(), "构造的快照应通过 checksum 校验");
 
         // 快照后追加的叶子移动事件（模拟快照后崩溃）
@@ -1166,6 +1243,7 @@ mod tests {
             }],
             Vec::new(),
             Vec::new(),
+            HashMap::new(),
         );
         snapshots.save_snapshot(&v1).unwrap();
         let v2 = StateSnapshot::build(
@@ -1179,6 +1257,7 @@ mod tests {
             }],
             Vec::new(),
             Vec::new(),
+            HashMap::new(),
         );
         snapshots.save_snapshot(&v2).unwrap();
 
@@ -1233,6 +1312,7 @@ mod tests {
             }],
             Vec::new(),
             Vec::new(),
+            HashMap::new(),
         );
         snapshots.save_snapshot(&v1).unwrap();
         std::fs::write(dir.join("snapshot.json"), r#"{"type":"nope"}"#).unwrap();
@@ -1537,7 +1617,7 @@ mod tests {
             }),
         };
         record.current_leaf_id = Some("root".to_string());
-        let snapshot = StateSnapshot::build(1, 3, vec![record], Vec::new(), Vec::new());
+        let snapshot = StateSnapshot::build(1, 3, vec![record], Vec::new(), Vec::new(), HashMap::new());
         assert!(snapshot.valid(), "带 context_meta 的快照应通过 checksum 校验");
         // 快照后（sequence 4）新增一条压缩事件
         store
@@ -1616,5 +1696,277 @@ mod tests {
             session.context_meta().is_none(),
             "损坏载荷不得写入护栏状态（保持 None）"
         );
+    }
+
+    // ── PERSIST-02 P1-1：增量重放锚点修复（多会话） ──
+
+    /// 快照记录辅助：构造带指定会话的 SessionRecord
+    fn snap_session(session_id: &str, leaf: Option<&str>) -> SessionRecord {
+        SessionRecord {
+            session_id: session_id.to_string(),
+            current_leaf_id: leaf.map(str::to_string),
+            branches: Vec::new(),
+            context_meta: None,
+        }
+    }
+
+    /// P1-1 核心场景：会话 A 序列领先（快照 max=100）、会话 B 落后
+    /// （B=30）；快照后 B 追加 leaf-move（seq 31-32）→ 恢复必须按 B 的
+    /// **自身锚点 30** 重放，而非全局 max 100（旧实现永久跳过）。
+    /// 同时断言边界：seq 30（≤ 锚点）的事件不得重放。
+    #[tokio::test]
+    async fn restore_multi_session_incremental_replays_each_session_from_own_anchor() {
+        let (_mem, store) = setup();
+        let mut anchors = HashMap::new();
+        anchors.insert("A".to_string(), 100u64);
+        anchors.insert("B".to_string(), 30u64);
+        let snapshot = StateSnapshot::build(
+            1,
+            100,
+            vec![
+                snap_session("A", Some("leaf_a1")),
+                snap_session("B", Some("leaf_b1")),
+            ],
+            Vec::new(),
+            Vec::new(),
+            anchors,
+        );
+        // 快照后事件：A 追加 1 条（seq 101）；B 追加 2 条（seq 31、32）；
+        // 另在 B 的锚点内（seq 30）放一条「不应重放」的叶子事件
+        store
+            .append_event("A", 101, SESSION_LEAF_MOVED_EVENT, &session_leaf_moved_payload("leaf_a2"))
+            .await
+            .unwrap();
+        store
+            .append_event("B", 30, SESSION_LEAF_MOVED_EVENT, &session_leaf_moved_payload("leaf_b_wrong"))
+            .await
+            .unwrap();
+        store
+            .append_event("B", 31, SESSION_LEAF_MOVED_EVENT, &session_leaf_moved_payload("leaf_b2"))
+            .await
+            .unwrap();
+        store
+            .append_event("B", 32, SESSION_LEAF_MOVED_EVENT, &session_leaf_moved_payload("leaf_b3"))
+            .await
+            .unwrap();
+
+        let outcome = RestoreManager::new()
+            .restore(store.as_ref(), &snapshot_store_holder(&snapshot))
+            .await
+            .unwrap();
+
+        assert_eq!(outcome.mode, RestoreMode::SnapshotIncremental);
+        // A 从自身锚点 100 增量重放
+        let a = outcome.sessions.iter().find(|s| s.session_id == "A").unwrap();
+        assert_eq!(a.current_leaf_id.as_deref(), Some("leaf_a2"), "A 增量重放");
+        // B 从自身锚点 30 增量重放（seq 31、32 生效，seq 30 被锚点排除）
+        let b = outcome.sessions.iter().find(|s| s.session_id == "B").unwrap();
+        assert_eq!(
+            b.current_leaf_id.as_deref(),
+            Some("leaf_b3"),
+            "B 按自身锚点 30 增量重放（旧实现全局 max=100 会永久跳过）"
+        );
+        // 全局锚点推进到真实 max
+        assert_eq!(outcome.last_sequence, 101);
+    }
+
+    /// P1-1 第二缺陷：snapshot_session_ids 必须取**快照自身**会话集合。
+    /// 快照后新建的派生会话（仅 runs 表可见）其历史事件全在全局 max
+    /// 之前——旧实现命中全局 base 被全部跳过；修复后从 0 全量重放。
+    #[tokio::test]
+    async fn restore_derived_session_replays_full_history_before_global_max() {
+        let (_mem, store) = setup();
+        let mut anchors = HashMap::new();
+        anchors.insert("A".to_string(), 100u64);
+        let snapshot = StateSnapshot::build(
+            1,
+            100,
+            vec![snap_session("A", Some("leaf_a1"))],
+            Vec::new(),
+            Vec::new(),
+            anchors,
+        );
+        // 派生会话 C（快照后出现，runs 表可见）：历史事件 seq 1..=5 全在
+        // 全局 max 100 之前
+        store
+            .insert_run("r_c", "C", RunStatus::Completed, Some("stop"), 0)
+            .await
+            .unwrap();
+        for seq in 1..=5 {
+            store
+                .append_event(
+                    "C",
+                    seq,
+                    SESSION_LEAF_MOVED_EVENT,
+                    &session_leaf_moved_payload(&format!("leaf_c{seq}")),
+                )
+                .await
+                .unwrap();
+        }
+
+        let outcome = RestoreManager::new()
+            .restore(store.as_ref(), &snapshot_store_holder(&snapshot))
+            .await
+            .unwrap();
+
+        let c = outcome.sessions.iter().find(|s| s.session_id == "C").unwrap();
+        assert_eq!(
+            c.current_leaf_id.as_deref(),
+            Some("leaf_c5"),
+            "派生会话从 0 全量重放（不被全局 max 误伤）"
+        );
+        assert_eq!(outcome.last_sequence, 100, "全局锚点取 max（100 > C 的 5）");
+    }
+
+    /// 旧快照兼容：无 session_last_sequence（serde default 空表）→ 会话级
+    /// base 回退全局 last_sequence（旧语义，无更优锚点可用）
+    #[tokio::test]
+    async fn restore_legacy_snapshot_without_session_anchors_falls_back_to_global_max() {
+        let (_mem, store) = setup();
+        let snapshot = StateSnapshot::build(
+            1,
+            100,
+            vec![
+                snap_session("A", Some("leaf_a1")),
+                snap_session("B", Some("leaf_b1")),
+            ],
+            Vec::new(),
+            Vec::new(),
+            HashMap::new(),
+        );
+        store
+            .append_event("B", 31, SESSION_LEAF_MOVED_EVENT, &session_leaf_moved_payload("leaf_b_after"))
+            .await
+            .unwrap();
+
+        let outcome = RestoreManager::new()
+            .restore(store.as_ref(), &snapshot_store_holder(&snapshot))
+            .await
+            .unwrap();
+
+        let b = outcome.sessions.iter().find(|s| s.session_id == "B").unwrap();
+        assert_eq!(
+            b.current_leaf_id.as_deref(),
+            Some("leaf_b1"),
+            "旧快照回退全局锚点 100（B 的 seq 31 不重放——兼容语义）"
+        );
+    }
+
+    /// P1-1 对压缩护栏续接的影响：会话 B 落后于全局 max，快照后新增
+    /// 压缩事件（seq 31）必须按 B 自身锚点 30 重放、代数续接 1→2；
+    /// 旧实现（全局 base 100）会跳过 → 护栏永久落后
+    #[tokio::test]
+    async fn restore_multi_session_compression_guard_continues_from_own_anchor() {
+        let (_mem, store) = setup();
+        let mut anchors = HashMap::new();
+        anchors.insert("A".to_string(), 100u64);
+        anchors.insert("B".to_string(), 30u64);
+        let mut b_record = snap_session("B", Some("leaf_b1"));
+        b_record.context_meta = Some(conex_types::context::SessionContextMeta {
+            last_compaction_at: Some(
+                parse_iso8601_epoch_ms("2026-08-03T09:00:00.000Z").unwrap(),
+            ),
+            last_compaction_sequence: Some(30),
+            last_compaction_generation: Some(1),
+            compression_retries: 0,
+        });
+        let snapshot = StateSnapshot::build(
+            1,
+            100,
+            vec![snap_session("A", Some("leaf_a1")), b_record],
+            Vec::new(),
+            Vec::new(),
+            anchors,
+        );
+        // 快照后 B 新增压缩事件（seq 31）
+        store
+            .append_event(
+                "B",
+                31,
+                CONTEXT_COMPRESSION_END_EVENT,
+                &serde_json::to_string(&compression_end_event(
+                    "B",
+                    "2026-08-03T12:00:00.000Z",
+                ))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let outcome = RestoreManager::new()
+            .restore(store.as_ref(), &snapshot_store_holder(&snapshot))
+            .await
+            .unwrap();
+
+        let b = outcome.sessions.iter().find(|s| s.session_id == "B").unwrap();
+        let meta = b.context_meta().expect("快照 meta 必须保留");
+        assert_eq!(meta.last_compaction_sequence, Some(31), "压缩事件按 B 自身锚点重放");
+        assert_eq!(meta.last_compaction_generation, Some(2), "代数增量续接 1→2");
+        let a = outcome.sessions.iter().find(|s| s.session_id == "A").unwrap();
+        assert!(a.context_meta().is_none(), "A 无压缩事件不受影响");
+    }
+
+    // ── PERSIST-02 P1-3：session_agents running 行归一 ──
+
+    /// 子代理行构造（restore 归一测试用，最小字段集）
+    fn agent_row(id: &str, run_id: &str, status: &str, session_id: &str) -> conex_types::SessionAgent {
+        conex_types::SessionAgent {
+            id: id.to_string(),
+            subagent_run_id: run_id.to_string(),
+            parent_session_id: session_id.to_string(),
+            parent_run_id: format!("parent-{run_id}"),
+            parent_tool_call_id: None,
+            description: String::new(),
+            mode: String::new(),
+            status: status.to_string(),
+            summary: None,
+            messages: Vec::new(),
+            started_at: 100,
+            ended_at: None,
+            depth: Some(1),
+            subagent_path_json: None,
+            task_type: None,
+            display_label: None,
+            allowed_write_paths_json: None,
+        }
+    }
+
+    /// P1-3：子代理运行中崩溃 → session_agents 行残留 running；restore
+    /// 归一为 failed + ended_at（kill_all 语义），终态行原样保留。
+    /// 不归一 → FlowScheduler 重建后节点永久 Running，流程卡死。
+    #[tokio::test]
+    async fn restore_normalizes_running_session_agents_to_failed() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        db.insert_session("s2", "s2").unwrap();
+        db.save_session_agents(
+            "s1",
+            &[
+                agent_row("a1", "run-a1", "running", "s1"),
+                agent_row("a2", "run-a2", "completed", "s1"),
+            ],
+        )
+        .unwrap();
+        db.save_session_agents("s2", &[agent_row("a3", "run-a3", "running", "s2")]).unwrap();
+        let store = LocalDbStore::new(db);
+
+        let outcome = RestoreManager::new()
+            .restore(&store, &NoSnapshots)
+            .await
+            .unwrap();
+
+        // running 行归一 failed + ended_at 落库
+        let db = store.as_local_db().expect("LocalDbStore 必须可下转");
+        let s1_rows = db.load_session_agents("s1").unwrap();
+        let a1 = s1_rows.iter().find(|a| a.id == "a1").unwrap();
+        assert_eq!(a1.status, "failed", "running 行归一 failed");
+        assert!(a1.ended_at.is_some(), "ended_at 落库");
+        let a2 = s1_rows.iter().find(|a| a.id == "a2").unwrap();
+        assert_eq!(a2.status, "completed", "终态行原样保留");
+        assert_eq!(a2.ended_at, None, "终态行 ended_at 不被改写");
+        let s2_rows = db.load_session_agents("s2").unwrap();
+        assert_eq!(s2_rows[0].status, "failed", "跨会话全部 running 行归一");
+        assert!(s2_rows[0].ended_at.is_some());
+        assert!(outcome.runs.is_empty(), "runs 表无 run 不受影响");
     }
 }

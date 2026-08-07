@@ -6,6 +6,12 @@ use conex_types::SessionIndexEntry;
 use rusqlite::OptionalExtension;
 
 impl LocalDb {
+    /// 幂等插入会话行（自愈路径 / 引擎兜底用）。
+    ///
+    /// 写入真实 `updated_at`（N0-2 ④ 修复）：此前自愈行 `updated_at=0`，
+    /// 孤儿清理的宽限期（`updated_at < now - grace`）对其永远生效——
+    /// 宽限期形同虚设，boot 窗口的 keepIds 缺失会直接命中这些行。
+    /// 现在自愈行与普通行一样享受宽限期保护。
     pub fn insert_session(&self, id: &str, title: &str) -> Result<(), DbFailure> {
         let conn = self.conn.lock().map_err(|e| DbFailure {
             message: format!("lock poisoned: {e}"),
@@ -13,7 +19,8 @@ impl LocalDb {
         })?;
 
         conn.execute(
-            "INSERT OR IGNORE INTO sessions (id, title) VALUES (?1, ?2)",
+            "INSERT OR IGNORE INTO sessions (id, title, updated_at)
+             VALUES (?1, ?2, strftime('%s','now') * 1000)",
             rusqlite::params![id, title],
         )
         .map_err(|e| self.latch_error("insert_session", e))?;
@@ -174,6 +181,27 @@ impl LocalDb {
 
     /// 清理不在 `active_ids` 中的会话（孤儿清理）。
     /// 返回被删除的会话数。
+    ///
+    /// 安全护栏（P0-2 / PERSIST-03 P1-1 升级 P0 修复，2026-08-07）：
+    /// - **宽限期**（F4/PE-08 T08.2）：`updated_at` 距今小于 `ORPHAN_GRACE_MS`
+    ///   的行跳过删除（值可由 session_meta `orphan_grace_ms` 覆盖）；
+    /// - **引擎子代理会话豁免**：`hydrated_from_engine = 1` 的会话（引擎创建的
+    ///   sub-sess-*，subagent_spawner 落库且永不 touch）不在前端 keepIds、
+    ///   updated_at 永不过期刷新——宽限期无法保护。一律豁免，防止孤儿清理
+    ///   级联删除运行中子代理的会话树 / agents 行 / 审计事件流（删后
+    ///   append_event 因 FK 失败会把子代理 run 标记 failed）；
+    /// - **活动 run 豁免**：存在非终态 run（queued/initializing/running/
+    ///   awaiting-approval/completing/cancelling）的会话跳过删除——防
+    ///   「长 run 中途被清」的 FK 失败与审计断链（PERSIST-03 P2-7 联动校验）；
+    /// - **未决 pending 豁免**：存在未消费 pending_inputs 的会话跳过删除
+    ///   （T3.3/D3：pending 未决即会话仍处于运行期产出待消费状态，级联
+    ///   删除会连 pending 一并清空）。
+    ///
+    /// 综上：即使 keepIds 为空或部分（boot 窗口 / hydrate 未完成），库层也
+    /// **不会全库清空**——只可能删除「非引擎、无活动 run、无未决 pending、
+    /// 超宽限期」的孤儿行。
+    /// 空 keepIds 的显式清空语义由壳层守卫（guard_cleanup_keep + confirm_empty）
+    /// 把关；库层对空 keepIds 仍执行上述护栏 + 宽限期保护。
     pub fn cleanup_orphan_sessions(&self, active_ids: &[String]) -> Result<usize, DbFailure> {
         let mut conn = self.conn.lock().map_err(|e| DbFailure {
             message: format!("lock poisoned: {e}"),
@@ -201,15 +229,32 @@ impl LocalDb {
             .unwrap_or(0);
         let grace_cutoff = now_ms - grace_ms;
 
+        // 豁免条件（两个删除分支共用）：引擎子代理会话 + 活动 run 会话 +
+        // 未决 pending 输入。hydrated_from_engine 为 NULL（普通会话）时
+        // COALESCE 取 0 → 可删。
+        let protected = "COALESCE(hydrated_from_engine, 0) != 1
+            AND NOT EXISTS (
+                SELECT 1 FROM runs r
+                WHERE r.session_id = sessions.id
+                  AND r.status IN (
+                      'queued','initializing','running','awaiting-approval',
+                      'completing','cancelling'
+                  )
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM pending_inputs p
+                WHERE p.session_id = sessions.id
+            )";
+
         let total_before: i64 = tx
             .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
             .map_err(|e| self.latch_error("cleanup_orphan_count_before", e))?;
 
         if active_ids.is_empty() {
             // 空 keepIds 的全表清理由壳层守卫（confirm_empty）把关；
-            // 库层仍执行宽限期保护（近宽限期内新建的会话保留）。
+            // 库层仍执行宽限期 + 豁免保护（近宽限期内新建 / 引擎 / 活动 run 保留）。
             tx.execute(
-                "DELETE FROM sessions WHERE updated_at < ?1",
+                &format!("DELETE FROM sessions WHERE updated_at < ?1 AND {protected}"),
                 rusqlite::params![grace_cutoff],
             )
             .map_err(|e| self.latch_error("cleanup_orphan_delete_all", e))?;
@@ -217,7 +262,7 @@ impl LocalDb {
             // 构造 IN (?, ?, ...) 占位符
             let placeholders: Vec<String> = (0..active_ids.len()).map(|_| "?".to_string()).collect();
             let sql = format!(
-                "DELETE FROM sessions WHERE id NOT IN ({}) AND updated_at < ?{}",
+                "DELETE FROM sessions WHERE id NOT IN ({}) AND updated_at < ?{} AND {protected}",
                 placeholders.join(", "),
                 active_ids.len() + 1
             );

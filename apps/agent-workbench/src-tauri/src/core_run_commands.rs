@@ -1800,19 +1800,39 @@ impl CoreRunState {
     }
 
     /// 组装并保存快照（内容：会话树注册表 + 全部 runs + 逐会话 pending +
-    /// last_sequence = 全会话事件 max；快照只是近似一致，增量重放以锚点补足）
+    /// last_sequence = 全会话事件 max + 逐会话锚点；快照只是近似一致，
+    /// 增量重放以锚点补足）。
+    ///
+    /// PERSIST-02 P1-2 门禁：restore 未完成或失败时**禁止覆盖既有快照
+    /// 文件**——注册表仅在 run_restore 成功路径水合（sessions.extend），
+    /// 未水合时本函数会保存「0 会话 + 全部 runs + last_sequence=0」的
+    /// 半水合快照覆盖主快照，下次恢复全走派生路径（branches 空、
+    /// meta None），会话树分支历史永久丢失。restore 成功后立即保存
+    /// （run_restore 先置 restore_ready 再调本函数）不受影响。
     async fn build_and_save_snapshot(&self) -> Result<u64, String> {
+        if !self.restore_ready.load(Ordering::SeqCst) {
+            return Err("restore 未完成，跳过快照保存（防半水合快照覆盖主快照）".to_string());
+        }
+        if self.restore_failed.load(Ordering::SeqCst) {
+            return Err("restore 失败，跳过快照保存（保留既有快照文件）".to_string());
+        }
         let runs = self.store.query_runs().await.map_err(|e| e.to_string())?;
         let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let mut pending = Vec::new();
         let mut last_sequence = 0u64;
+        // PERSIST-02 P1-1：逐会话锚点（session_id → 该会话事件 max）。
+        // 事件序列为会话内独立，恢复按会话自身锚点取增量，全局 max 作
+        // 会话级 base 会永久跳过落后会话的快照后事件（多会话粘性错误）。
+        let mut session_last_sequence: HashMap<String, u64> = HashMap::new();
         for session in &sessions {
             let events = self
                 .store
                 .query_events(&session.session_id, 0)
                 .await
                 .map_err(|e| e.to_string())?;
-            last_sequence = last_sequence.max(events.iter().map(|e| e.sequence).max().unwrap_or(0));
+            let session_max = events.iter().map(|e| e.sequence).max().unwrap_or(0);
+            last_sequence = last_sequence.max(session_max);
+            session_last_sequence.insert(session.session_id.clone(), session_max);
             pending.extend(
                 self.store
                     .load_pending_inputs(&session.session_id)
@@ -1821,7 +1841,14 @@ impl CoreRunState {
             );
         }
         let generation = self.snapshot_generation.load(Ordering::SeqCst) + 1;
-        let snapshot = StateSnapshot::build(generation, last_sequence, sessions, runs, pending);
+        let snapshot = StateSnapshot::build(
+            generation,
+            last_sequence,
+            sessions,
+            runs,
+            pending,
+            session_last_sequence,
+        );
         self.snapshots
             .save_snapshot(&snapshot)
             .map_err(|e| e.to_string())?;
@@ -4231,6 +4258,124 @@ mod tests {
             Arc::new(StatusDiagnostics::new()),
             None,
         ))
+    }
+
+    // ── PERSIST-02 P1-2：restore 完成/成功前禁止覆盖主快照 ──
+
+    /// restore 完成前（restore_ready=false）保存快照被门禁拒绝——退出钩子
+    /// /周期任务不得用「0 会话半水合快照」覆盖主快照（会话树分支历史
+    /// 永久丢失）；restore 成功后放行。
+    #[tokio::test]
+    async fn snapshot_skipped_before_restore_ready_preserves_main_snapshot() {
+        let (bridge, _emitter) = recording_bridge();
+        let seq = CORE_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "conex_p12_guard_{}_{seq}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("snapshot.json");
+        let snapshots: Arc<dyn SnapshotStore> =
+            Arc::new(orchestrator::restore::SnapshotFileStore::new(&path));
+        // 既有主快照（崩溃前最后完好快照，含会话树分支）
+        let prior = StateSnapshot::build(
+            3,
+            42,
+            vec![SessionRecord {
+                session_id: "s1".to_string(),
+                current_leaf_id: Some("leaf_keep".to_string()),
+                branches: Vec::new(),
+                context_meta: None,
+            }],
+            Vec::new(),
+            Vec::new(),
+            HashMap::new(),
+        );
+        snapshots.save_snapshot(&prior).unwrap();
+        let state = Arc::new(CoreRunState::new(
+            Arc::new(InMemoryStore::new()),
+            snapshots,
+            bridge,
+            Arc::new(StatusDiagnostics::new()),
+            None,
+        ));
+        // restore 尚未完成（restore_ready=false）→ 保存被拒绝，主快照原样
+        state.save_snapshot_now().await;
+        let loaded = orchestrator::restore::SnapshotFileStore::new(&path)
+            .load_snapshot()
+            .unwrap();
+        let (snap, _) = loaded;
+        assert!(snap.is_some(), "主快照必须保留");
+        assert_eq!(snap.unwrap().generation, 3, "主快照未被半水合快照覆盖");
+        assert!(
+            state.snapshot_last_error().is_some(),
+            "拒绝原因经 snapshot.lastError 可观测"
+        );
+        assert_eq!(state.snapshot_generation(), 0, "失败保存不推进 generation");
+        // restore 成功 → 放行（run_restore 先置 restore_ready 再立即保存）
+        state.run_restore().await;
+        let loaded = orchestrator::restore::SnapshotFileStore::new(&path)
+            .load_snapshot()
+            .unwrap();
+        let (snap, _) = loaded;
+        let snap = snap.expect("restore 后快照必须保存");
+        assert_eq!(snap.generation, 1, "恢复后保存（generation 从进程内 0 续接）");
+        assert_eq!(snap.sessions.len(), 1, "快照携带水合后的会话（非 0 会话半水合）");
+        assert_eq!(
+            snap.sessions[0].current_leaf_id.as_deref(),
+            Some("leaf_keep"),
+            "会话树分支从既有快照水合保留"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// restore 失败路径（restore.state=failed）：保存仍被门禁拒绝——退出
+    /// 钩子不得覆盖主快照（保留最后完好快照供下次恢复）；门禁照常放行
+    /// run（不阻塞启动，懒计算兜底）。
+    #[tokio::test]
+    async fn snapshot_skipped_after_restore_failed_preserves_main_snapshot() {
+        // 注入故障快照存储：load_snapshot 恒 Err → run_restore 失败降级；
+        // save_snapshot 记录载荷，断言恢复失败后没有任何保存动作
+        struct FailingSnapshots(std::sync::Mutex<Option<StateSnapshot>>);
+        impl SnapshotStore for FailingSnapshots {
+            fn load_snapshot(
+                &self,
+            ) -> Result<(Option<StateSnapshot>, Option<String>), orchestrator::restore::SnapshotError>
+            {
+                Err(orchestrator::restore::SnapshotError::new(
+                    "load_snapshot",
+                    "注入故障",
+                ))
+            }
+            fn save_snapshot(&self, snapshot: &StateSnapshot) -> Result<(), orchestrator::restore::SnapshotError> {
+                *self.0.lock().unwrap() = Some(snapshot.clone());
+                Ok(())
+            }
+        }
+        let failing = Arc::new(FailingSnapshots(std::sync::Mutex::new(None)));
+        let snapshots: Arc<dyn SnapshotStore> = failing.clone();
+        let state = Arc::new(CoreRunState::new(
+            Arc::new(InMemoryStore::new()),
+            snapshots,
+            recording_bridge().0,
+            Arc::new(StatusDiagnostics::new()),
+            None,
+        ));
+        let outcome = state.run_restore().await;
+        assert!(outcome.is_none(), "restore 失败路径返回 None");
+        assert_eq!(state.restore_status().state, "failed", "restore.state=failed 可观测");
+        assert!(state.restore_ready(), "失败路径不阻塞启动（降级放行）");
+        // restore 失败后保存被拒绝：不覆盖主快照、不推进 generation
+        state.save_snapshot_now().await;
+        assert!(
+            failing.0.lock().unwrap().is_none(),
+            "restore 失败后不得保存任何快照（含半水合）"
+        );
+        assert!(
+            state.snapshot_last_error().is_some(),
+            "拒绝原因经 snapshot.lastError 可观测"
+        );
+        assert_eq!(state.snapshot_generation(), 0, "失败保存不推进 generation");
     }
 
     /// ③ run_usage 真实返回：LocalDb 路径——save_run_usage 落库 →

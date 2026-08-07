@@ -10,6 +10,7 @@ use conex_types::{RunCacheStats, SessionAgent, SessionIndexEntry, SessionMessage
 use rusqlite::Connection;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn open_in_memory_and_migrate() {
@@ -415,6 +416,34 @@ fn touch_session_updates_timestamp() {
     db.touch_session("s1").unwrap();
     let list = db.list_sessions().unwrap();
     assert!(list[0].updated_at >= 1000);
+}
+
+/// N0-2 ④ 回归：insert_session（自愈路径）必须写真实 updated_at——
+/// 此前自愈行 updated_at=0，孤儿清理宽限期对其无效，boot 窗口的
+/// keepIds 缺失会直接命中这些行（宽限期形同虚设）。
+#[test]
+fn insert_session_writes_current_updated_at() {
+    let db = LocalDb::open_in_memory().unwrap();
+    db.insert_session("s1", "").unwrap();
+
+    let list = db.list_sessions().unwrap();
+    assert_eq!(list.len(), 1);
+    let ts = list[0].updated_at;
+    assert!(ts > 0, "自愈行 updated_at 不得为 0（宽限期需生效）");
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    assert!(
+        now - ts < 60_000,
+        "updated_at 应为当前时间附近（now={now}, ts={ts}）"
+    );
+
+    // 幂等：重复 insert 不覆盖既有 updated_at（OR IGNORE）
+    db.insert_session("s1", "dup").unwrap();
+    let list = db.list_sessions().unwrap();
+    assert_eq!(list[0].updated_at, ts, "重复 insert 不重置 updated_at");
 }
 
 #[test]

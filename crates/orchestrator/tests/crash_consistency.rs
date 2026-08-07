@@ -113,6 +113,7 @@ fn snapshot_with_leaf(generation: u64, last_sequence: u64, leaf: &str) -> StateS
         }],
         Vec::new(),
         Vec::new(),
+        HashMap::new(),
     )
 }
 
@@ -547,7 +548,7 @@ async fn sqlite_restart_full_crash_cycle_recovers_and_continues() {
             .save_pending_input("p1", session_id, Some(run_id), r#"{"text":"hi"}"#)
             .await
             .unwrap();
-        let snapshot = StateSnapshot::build(1, 2, Vec::new(), Vec::new(), Vec::new());
+        let snapshot = StateSnapshot::build(1, 2, Vec::new(), Vec::new(), Vec::new(), HashMap::new());
         SnapshotFileStore::new(&snapshot_path)
             .save_snapshot(&snapshot)
             .unwrap();
@@ -917,5 +918,79 @@ async fn kill_all_rows_stay_terminal_across_restart() {
         );
     }
     assert!(restored.flow_terminal(), "编排全终态（无残留节点）");
+    assert_eq!(restored.budget_in_flight(), 0, "无运行残留（预算不 double-charge）");
+}
+
+// ── PERSIST-02 P1-3：running 中崩溃（无 kill_all）重启归一 ────────
+// 子代理运行中进程崩溃 → session_agents 行残留 running；旧实现 restore
+// 只处理 runs 表，FlowScheduler::load 重建为 Running 节点（is_ready 要求
+// Pending → 永不重派发、流程永久卡死，需人工 kill_all）。修复后 restore
+// 对 running 行执行 kill_all 语义归一（failed + ended_at），重启自愈。
+
+#[tokio::test]
+async fn running_subagents_normalized_across_crash_restart() {
+    let ws = TempWorkspace::new("running_subagents_crash");
+    let db_path = ws.path().join("sessions.db");
+    let session_id = "sess-running-crash";
+    // 阶段一：声明编排 → spawn 3 个 running 子代理 → 直接崩溃（不 kill_all）
+    {
+        let db = LocalDb::open(&db_path).unwrap();
+        db.insert_session(session_id, "主会话").unwrap();
+        let spawner = DbSpawner::with_db(db.clone(), session_id);
+        let mut sched =
+            FlowScheduler::new(session_id, spawner.clone(), Arc::new(db.clone())).unwrap();
+        let adv = sched
+            .declare_flow(&FlowDeclaration {
+                tasks: vec![
+                    flow_node("a", &[]),
+                    flow_node("b", &[]),
+                    flow_node("c", &[]),
+                ],
+                planner_run_id: Some("planner-1".to_string()),
+            })
+            .await
+            .unwrap();
+        assert_eq!(adv.started.len(), 3, "三个并行节点全部启动");
+        // 崩溃点：全部行 running、ended_at 未写
+        let rows = db.load_session_agents(session_id).unwrap();
+        assert_eq!(rows.len(), 3);
+        assert!(rows.iter().all(|r| r.status == "running"));
+        assert!(rows.iter().all(|r| r.ended_at.is_none()));
+    } // 连接关闭 = 进程退出（running 中崩溃，无 kill_all）
+
+    // 阶段二：重启 → restore 归一 running 行 → 编排重建全终态（自愈）
+    let db = LocalDb::open(&db_path).unwrap();
+    let store = LocalDbStore::new(db.clone());
+    let outcome = RestoreManager::new()
+        .restore(&store, &NoSnapshots)
+        .await
+        .unwrap();
+    assert!(outcome.runs.is_empty(), "runs 表无主 run（子代理 run 不落 runs 表）");
+
+    // running 行归一 failed + ended_at；终态写面与 kill_all 语义一致
+    let rows = db.load_session_agents(session_id).unwrap();
+    assert_eq!(rows.len(), 3);
+    assert!(
+        rows.iter().all(|r| r.status == "failed"),
+        "崩溃残留 running 行被 restore 归一 failed：{rows:?}"
+    );
+    assert!(
+        rows.iter().all(|r| r.ended_at.is_some()),
+        "ended_at 由 restore 落库"
+    );
+
+    // FlowScheduler 从归一后的行重建：全部节点终态、无残留运行节点，
+    // 流程不再永久 Running（修复前 is_ready 卡死、需人工 kill_all）
+    let spawner = DbSpawner::with_db(db.clone(), session_id);
+    let restored =
+        FlowScheduler::load(session_id, spawner.clone(), Arc::new(db.clone()), &rows).unwrap();
+    for node in ["a", "b", "c"] {
+        assert_eq!(
+            restored.node_state(node),
+            Some(FlowNodeState::Failed),
+            "节点 {node} 从归一后行重建为终态"
+        );
+    }
+    assert!(restored.flow_terminal(), "编排全终态（running 中崩溃重启自愈）");
     assert_eq!(restored.budget_in_flight(), 0, "无运行残留（预算不 double-charge）");
 }
