@@ -105,6 +105,7 @@ mod tests {
 
     use super::path_utils::*;
     use std::io::Write;
+    use std::path::Path;
 
     #[test]
     fn safe_canonicalize_normal_path() {
@@ -137,6 +138,76 @@ mod tests {
     fn safe_canonicalize_allows_within_depth() {
         let result = safe_canonicalize("a/b/c", 5);
         assert!(result.is_ok());
+    }
+
+    /// 目录符号链接（Unix symlink；Windows 优先真 symlink（开发者模式），
+    /// 无权限时回退 junction（mklink /J，普通用户可建）——junction 在 std
+    /// 语义下与 symlink 等效（is_symlink=true / canonicalize 跟随 / 写入跟随），
+    /// 保证无管理员环境也能复现 symlink 逃逸缺陷；失败返回 Err 由调用方跳过）
+    #[cfg(unix)]
+    fn create_dir_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+        std::os::unix::fs::symlink(target, link)
+    }
+
+    #[cfg(windows)]
+    fn create_dir_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+        match std::os::windows::fs::symlink_dir(target, link) {
+            Ok(()) => Ok(()),
+            Err(_) => {
+                let status = std::process::Command::new("cmd")
+                    .args(["/c", "mklink", "/J"])
+                    .arg(link)
+                    .arg(target)
+                    .status()?;
+                if status.success() {
+                    Ok(())
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "failed to create directory symlink",
+                    ))
+                }
+            }
+        }
+    }
+
+    /// 红测试（审计 P1-S1，F3-02/F5-01）：目标不存在但父级为符号链接时，
+    /// safe_canonicalize 必须解析「最深已存在祖先」中的 symlink——父目录
+    /// 指向根外目录时，解析结果应落到根外，由调用方包含性校验拦截。
+    /// 修复前词法归一返回 root/link/new.txt（不解析 link）→ 红。
+    #[test]
+    fn safe_canonicalize_resolves_symlink_parent_for_nonexistent_target() {
+        let temp = std::env::temp_dir().join("conex_fs_test_symlink_escape");
+        let root = temp.join("workspace");
+        let outside = temp.join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let link = root.join("link");
+        if create_dir_symlink(&outside, &link).is_err() {
+            return; // 无符号链接权限环境跳过（Windows 开发者模式）
+        }
+        let p = safe_canonicalize(&root.join("link/new.txt"), 10).unwrap();
+        // 最深已存在祖先（root/link → outside）canonicalize + 剩余成分拼接
+        let expected = outside.canonicalize().unwrap().join("new.txt");
+        assert_eq!(p, expected);
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    /// 语义锁定：dangling symlink（链接目标不存在）无法 canonicalize，
+    /// 最深已存在祖先上溯到根后保持词法尾部——该形态由调用方对词法尾部
+    /// 逐级 symlink_metadata 显式拒绝（双保险），safe_canonicalize 不吞不转。
+    #[test]
+    fn safe_canonicalize_preserves_tail_for_dangling_symlink() {
+        let temp = std::env::temp_dir().join("conex_fs_test_symlink_dangling");
+        let root = temp.join("workspace");
+        std::fs::create_dir_all(&root).unwrap();
+        let link = root.join("link");
+        if create_dir_symlink(&temp.join("outside-ghost"), &link).is_err() {
+            return; // 无符号链接权限环境跳过（Windows 开发者模式）
+        }
+        let p = safe_canonicalize(&root.join("link/new.txt"), 10).unwrap();
+        assert_eq!(p, root.join("link/new.txt"));
+        let _ = std::fs::remove_dir_all(&temp);
     }
 
     #[test]

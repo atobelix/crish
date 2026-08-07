@@ -364,6 +364,83 @@ mod tests {
         std::os::windows::fs::symlink_file(target, link)
     }
 
+    /// 目录符号链接（Unix symlink；Windows 优先真 symlink（开发者模式），
+    /// 无权限时回退 junction（mklink /J，普通用户可建）——junction 在 std
+    /// 语义下与 symlink 等效（is_symlink=true / canonicalize 跟随 / 写入跟随），
+    /// 保证无管理员环境也能复现 symlink 逃逸缺陷；失败返回 Err 由调用方跳过）
+    #[cfg(unix)]
+    fn create_dir_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+        std::os::unix::fs::symlink(target, link)
+    }
+
+    #[cfg(windows)]
+    fn create_dir_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+        match std::os::windows::fs::symlink_dir(target, link) {
+            Ok(()) => Ok(()),
+            Err(_) => {
+                let status = std::process::Command::new("cmd")
+                    .args(["/c", "mklink", "/J"])
+                    .arg(link)
+                    .arg(target)
+                    .status()?;
+                if status.success() {
+                    Ok(())
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "failed to create directory symlink",
+                    ))
+                }
+            }
+        }
+    }
+
+    // ── P1-S2 红测试：symlink 写路径逃逸（F5-01，R1 确认）──
+
+    /// 红测试：dangling symlink 父目录（链接目标不存在）写入必须被拒绝。
+    /// 修复前 resolve_for_write 祖先循环用 Path::exists（跟随链接，dangling
+    /// 为 false）一路上溯到根 → 返回词法路径 → create_dir_all + fs::write
+    /// 跟随 symlink 在根外落盘 → 返回 Ok → 红。
+    #[test]
+    fn write_file_content_rejects_dangling_symlink_parent() {
+        let temp = TestDir::new();
+        let root = temp.path().join("workspace");
+        let outside = temp.path().join("outside");
+        fs::create_dir(&root).expect("create root");
+        let link = root.join("link");
+        if create_dir_symlink(&outside, &link).is_err() {
+            return; // 无符号链接权限环境跳过（Windows 开发者模式）
+        }
+
+        assert_error_code(
+            write_file_content_at_root(&root, "link/new.txt", "pwned", false),
+            types::ERR_OUTSIDE_WORKSPACE,
+        );
+        assert!(!outside.join("new.txt").exists(), "拒绝后不得在根外落盘");
+    }
+
+    /// 契约锁定：非 dangling symlink（链接目标为根外已存在目录）写入同样
+    /// 拒绝——resolve_for_write 祖先循环 canonicalize 已解析到根外（F5-01
+    /// 反向形态，修复前即拦截），防止修复退化。
+    #[test]
+    fn write_file_content_rejects_existing_symlink_dir_escaping_root() {
+        let temp = TestDir::new();
+        let root = temp.path().join("workspace");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&root).expect("create root");
+        fs::create_dir(&outside).expect("create outside");
+        let link = root.join("link");
+        if create_dir_symlink(&outside, &link).is_err() {
+            return; // 无符号链接权限环境跳过（Windows 开发者模式）
+        }
+
+        assert_error_code(
+            write_file_content_at_root(&root, "link/new.txt", "pwned", false),
+            types::ERR_OUTSIDE_WORKSPACE,
+        );
+        assert!(!outside.join("new.txt").exists(), "拒绝后不得在根外落盘");
+    }
+
     // ── S11 补缺：delete_file（删除接管）──
 
     fn delete_at_root(root: &Path, trash_root: &Path, path: &str) -> Result<types::DeleteFileResult, FileCommandError> {

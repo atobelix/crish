@@ -539,6 +539,73 @@ mod tests {
         assert!(resolve_workspace_path(&root, "a\r\nb.txt").is_err());
     }
 
+    /// 目录符号链接（Unix symlink；Windows 优先真 symlink（开发者模式），
+    /// 无权限时回退 junction（mklink /J，普通用户可建）——junction 在 std
+    /// 语义下与 symlink 等效（is_symlink=true / canonicalize 跟随 / 写入跟随），
+    /// 保证无管理员环境也能复现 symlink 逃逸缺陷；失败返回 Err 由调用方跳过）
+    #[cfg(unix)]
+    fn create_dir_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+        std::os::unix::fs::symlink(target, link)
+    }
+
+    #[cfg(windows)]
+    fn create_dir_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+        match std::os::windows::fs::symlink_dir(target, link) {
+            Ok(()) => Ok(()),
+            Err(_) => {
+                let status = std::process::Command::new("cmd")
+                    .args(["/c", "mklink", "/J"])
+                    .arg(link)
+                    .arg(target)
+                    .status()?;
+                if status.success() {
+                    Ok(())
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "failed to create directory symlink",
+                    ))
+                }
+            }
+        }
+    }
+
+    /// 红测试（审计 P1-S1，F3-02）：工作区内 symlink 指向根外已存在目录时，
+    /// `link/new.txt`（目标不存在）必须被拒绝——修复前 safe_canonicalize
+    /// 词法归一不解析父级 symlink，文本包含性校验通过 → 返回 Ok → 红。
+    #[test]
+    fn resolve_workspace_path_rejects_symlink_parent_escaping() {
+        let temp = std::env::temp_dir().join("agent_tools_symlink_escape_test");
+        let root = temp.join("workspace");
+        let outside = temp.join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let link = root.join("link");
+        if create_dir_symlink(&outside, &link).is_err() {
+            return; // 无符号链接权限环境跳过（Windows 开发者模式）
+        }
+        let err = resolve_workspace_path(&root, "link/new.txt").unwrap_err();
+        assert_eq!(err.code(), "tool.path_escape");
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    /// 红测试（审计 P1-S1，F3-02 双保险）：dangling symlink 父目录
+    /// （链接目标不存在，canonicalize 无法解析）也必须被拒绝——修复前
+    /// 词法归一 + 文本包含性校验双通过 → 返回 Ok → 红。
+    #[test]
+    fn resolve_workspace_path_rejects_dangling_symlink_parent() {
+        let temp = std::env::temp_dir().join("agent_tools_symlink_dangling_test");
+        let root = temp.join("workspace");
+        std::fs::create_dir_all(&root).unwrap();
+        let link = root.join("link");
+        if create_dir_symlink(&temp.join("outside-ghost"), &link).is_err() {
+            return; // 无符号链接权限环境跳过（Windows 开发者模式）
+        }
+        let err = resolve_workspace_path(&root, "link/new.txt").unwrap_err();
+        assert_eq!(err.code(), "tool.path_escape");
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
     #[test]
     fn decode_text_detects_bom_and_binary() {
         let bom_utf8 = b"\xEF\xBB\xBFhello".to_vec();
