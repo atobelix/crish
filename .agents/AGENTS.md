@@ -120,3 +120,10 @@ To allow AI assistants (like Cursor, Grok, or Antigravity) to connect via the `t
 - **Perceptual Gradients (OKLCH/LCH)**: Use `oklch()` / `lch()` for rich, perceptually uniform gradient animations (always provide sRGB/HSL `@supports` fallbacks).
 - **Light/Dark Adjustments (HWB)**: Use `hwb()` for precise whiteness/blackness adjustments and subtle masks/shadows.
 - **Canvas Color Adaptors**: Canvas 2D / WebGL requires RGBA; encapsulate pixel array conversions using an entry-level Color Adaptor layer.
+
+## 7. Zero Tolerance for Hacks, Patches, and Process Bypassing (对补丁、妥协与作弊零容忍)
+
+- **Architectural Elegance over Workarounds (追求架构优雅，杜绝补丁思维)**: When fixing edge cases (such as UI/cursor synchronization, coordinate offsets, or DOM mapping), never use fallback loops, distance-guessing heuristics, or ad-hoc compatibility patches. Always identify the root architectural gap and solve it natively (e.g., adding explicit `data-*` token mapping to rendered elements).
+- **No Hook Bypassing (绝对禁止绕过门禁)**: Agents MUST NEVER use `--no-verify` to bypass Git hooks. If a pre-commit hook (like Prettier, ESLint, or Type Checking) fails, the agent must immediately analyze the logs, fix the underlying formatting or compilation error, and re-commit cleanly.
+- **Strict Verification Obligations (严苛的编译与运行验证)**: Before declaring a bug fixed, the agent MUST run the full compiler/typecheck suite (e.g., `npm run typecheck`) and explicitly verify runtime correctness (e.g., via CDP, Playwright E2E tests, or Fuzz testing scripts) to ensure NO regressions or console errors (`console.error`) are introduced. "It builds on my machine" or assuming a fix works without running tests is considered lazy and unacceptable. Proof of execution must be available in logs.
+- **Do Not Be Lazy (禁止避重就轻)**: Complex edge cases are first-class citizens. Do not skip edge conditions or try to ignore minor visual artifacts. Exhaustive testing (including dynamic fuzz testing) is mandatory for core components.

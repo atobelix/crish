@@ -206,12 +206,206 @@ reference/ui-replica/package-lock.json
 
 
 
-# turbo cache (opencode/agent �Ự����)
+**/target/
+apps/agent-workbench/src-tauri/target/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
+
+# One-off agent/codegen scratch scripts (never commit)
+_dump_*.py
+_fix_*.py
+_patch_*.py
+_inspect*.py
+_verify*.py
+_show_*.py
+_list_*.txt
+_neutralize_*.py
+_unify_*.py
+_rename_*.py
+scripts/_*.py
+scripts/wire_*.py
+
+# Reference materials (keep ui-replica for design tracking)
+reference/*
+!reference/ui-replica/
+!reference/ui-replica/**
+reference/ui-replica/node_modules/
+reference/ui-replica/dist/
+reference/ui-replica/package-lock.json
+
+# markdown-editor（自研渲染引擎 + 测试资产，必须入库——测试比项目重要，防丢失防 AI 清理）
+!reference/markdown-editor/
+!reference/markdown-editor/**
+reference/markdown-editor/node_modules/
+reference/markdown-editor/dist/
+reference/markdown-editor/package-lock.json
+
+# ui-replica-refactored (keep for architecture redesign)
+!reference/ui-replica-refactored/
+!reference/ui-replica-refactored/**
+reference/ui-replica-refactored/node_modules/
+reference/ui-replica-refactored/dist/
+
+# newui (keep for state-driven refactoring)
+!reference/newui/
+!reference/newui/**
+
+# crish-desktop (exclude React/TS desktop project folder from git tracking)
+reference/crish-desktop/
+
+# Agent runtime data
+.agent-runtime/
+.codex-tool-scratch/
+.firecrawl/
+# AI 文档产出根（G03 路径隔离：T-EG-12，与 .crish-trash 等运行期目录并列）
+.agent-outputs/
+
+# Rust build artifacts
+target-tauri-smoke/
+target-tauri-dev/
+**/target/
+
+# Dev artifacts
+tail
+timeout
+tsc-errors.txt
+tsc-errors2.txt
+tsc-errors*.txt
+code-tree.txt
+tauri-dev-restart.log
+tauri_stderr.log
+*.log
+
+# Local tool / agent scratch tests (never commit) — also covers test_*.txt, non_existent_dir*, *.log, .codex/, mcps/
+test_*.txt
+test_*.ts
+test spaces in filename.txt
+non_existent_dir/
+non_existent_dir*/
+_find_label_bug.py
+_commit_msg.txt
+debug-output.txt
+test-output.txt
+
+# Codex / MCP local scratch
+.codex/
+mcps/
+
+# Planning documents (keep only ARCHITECTURE.md / README / active docs/)
+0613-*.md
+new.md
+suggestions.md
+suggestions-v2.md
+history.txt
+ARCHITECTURE-IMPROVEMENT.md
+CORE-ARCHITECTURE-IMPROVEMENT.md
+IMPROVEMENT-PLAN.md
+DEVELOPMENT_LOG.md
+FRONTEND-DESIGN-PLAN.md
+
+# Agent workbench planning
+apps/agent-workbench/AGENT-COORDINATION.md
+apps/agent-workbench/FRONTEND-DESIGN-PLAN.md
+apps/agent-workbench/IMPROVEMENT-PLAN.md
+apps/agent-workbench/REFACTOR_PLAN.md
+
+# Local implementer / agent scratch workspace (never commit)
+implementer/
+
+# Rust HTTP provider (separate crate)
+packages/agent-provider-http/target/
+
+# Tauri dev artifacts
+target-tauri-dev/
+target-tauri-smoke/
+
+# Tauri generated schemas
+apps/agent-workbench/src-tauri/gen/
+
+# local junk
+*.orig
+*.orig_utf8
+**/diff.txt
+**/diff_ansi.txt
+**/diff_css.txt
+
+# Antigravity/CDP/local dev temp logs and reports
+*.txt
+*.json
+*.html
+*.png
+*.mjs
+!docs/**/*.md
+!docs/**/*.txt
+!analysis/**/*.md
+!analysis/**/*.txt
+!apps/agent-workbench/src-tauri/gen/schemas/*.json
+!apps/agent-workbench/src-tauri/capabilities/*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!crates/agent-provider/src/models/catalog.json
+
+# Legacy root planning docs moved into docs/archive (keep untracked)
+docs/archive/legacy/0613-0055-plan.md
+docs/archive/legacy/ARCHITECTURE-IMPROVEMENT.md
+docs/archive/legacy/CORE-ARCHITECTURE-IMPROVEMENT.md
+docs/archive/legacy/DEVELOPMENT_LOG.md
+docs/archive/legacy/FRONTEND-DESIGN-PLAN.md
+docs/archive/legacy/IMPROVEMENT-PLAN.md
+docs/archive/legacy/new.md
+docs/archive/legacy/suggestions-v2.md
+docs/archive/legacy/suggestions.md
+
+# Local directories
+scratch/
+test-results/
+temp_icons/
+temp_jcode/
+perf-report/
+debug_investigation/
+apps/crish-desktop/scripts/
+.dependency-cruiser.cjs
+.mcp.json
+.workbuddy/
+.zcode/
+bring-window.ps1
+NUL
+tmp_*
+reference/ui-replica/package-lock.json
+
+
+
+# turbo cache (opencode/agent Ự)
 .turbo/
 
 # 另一会话工作区（codex 会话 scratch 工具 / agent 会话记录）
 .codex-tool-scratch/
-.agents/
 fix-unused.py
 # 运行期备份
 *.bak-*
