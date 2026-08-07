@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createFinishController,
   createStreamCancel,
+  createStreamSession,
   ensureEngineConnected,
   composeSystemPrompt,
   buildHistoryMessages,
@@ -20,7 +21,7 @@ import type { SessionMessage } from '../../store/types';
 import type { Settings } from '../clientApi';
 import { getControlMetrics, resetControlMetrics } from '../controlMetrics';
 
-const { fakeTransport } = vi.hoisted(() => {
+const { fakeTransport, startRunTask, loadSessionBodyMock } = vi.hoisted(() => {
   const fakeTransport = {
     waitUntilConnected: vi.fn(async () => true),
     isReady: vi.fn(() => true),
@@ -31,14 +32,26 @@ const { fakeTransport } = vi.hoisted(() => {
     send: vi.fn(async () => undefined),
     stop: vi.fn(),
   };
-  return { fakeTransport };
+  return {
+    fakeTransport,
+    // P1-F2：startRunTask 观测句柄（取消竞态断言「未被调用」）
+    startRunTask: vi.fn(async () => undefined),
+    // P1-F2：createStreamSession 动态 import 的历史真源 mock（同 tauri 测试）
+    loadSessionBodyMock: vi.fn(async () => []),
+  };
 });
 
 vi.mock('../transport', () => ({
   getTransport: () => fakeTransport,
-  startRunTask: vi.fn(async () => undefined),
+  startRunTask,
   resetTransportForTests: () => undefined,
   TauriTransport: class TauriTransport {},
+}));
+
+// P1-F2：createStreamSession 内 `await import('../session-persistence/sessionRustDb')`
+// 的水合数据源 mock（同 ConnectionLifecycle.tauri.test.ts 模式）
+vi.mock('../session-persistence/sessionRustDb', () => ({
+  loadSessionBody: loadSessionBodyMock,
 }));
 
 vi.mock('../projectStore', async (importOriginal) => {
@@ -418,5 +431,109 @@ describe('ConnectionLifecycle（Tauri IPC 版）', () => {
       expect(getControlMetrics().run_control_L2).toBe(1);
       expect(getControlMetrics().run_control_L3).toBe(0);
     });
+  });
+});
+
+describe('取消与启动竞态（P1-F2：waitUntilConnected 挂起期间 stop）', () => {
+  beforeEach(() => {
+    vi.mocked(fakeTransport.waitUntilConnected).mockResolvedValue(true);
+    vi.mocked(fakeTransport.isReady).mockReturnValue(true);
+    fakeTransport.onMessage.mockClear();
+    startRunTask.mockClear();
+    loadSessionBodyMock.mockClear();
+    loadSessionBodyMock.mockResolvedValue([]);
+    resetControlMetrics();
+  });
+
+  it('waitUntilConnected 挂起期间 cancel → 连接就绪后 startRunTask 不被调用（run 不启动）', async () => {
+    // 手动可控挂起 promise：模拟核心未就绪窗口（1.5s 轮询未完成）
+    let resolveWait!: (value: boolean) => void;
+    const pending = new Promise<boolean>((res) => {
+      resolveWait = res;
+    });
+    vi.mocked(fakeTransport.waitUntilConnected).mockImplementation(
+      () => pending
+    );
+
+    const onComplete = vi.fn();
+    const callbacks: StreamCallbacks = {
+      onChunk: vi.fn(),
+      onThought: vi.fn(),
+      onToolStart: vi.fn(),
+      onToolError: vi.fn(),
+      onToolSuccess: vi.fn(),
+      onComplete,
+    };
+    const state = makeState();
+    const approvalFlow = new ApprovalFlowMachine();
+    const cleanup = vi.fn();
+    const finish = vi.fn();
+
+    // 真实 createStreamSession：挂起在 waitUntilConnected（勿 mock 本体）
+    const sessionPromise = createStreamSession(
+      'cancel during wait',
+      'sess-race-1',
+      'run-race-1',
+      callbacks,
+      undefined,
+      state,
+      () => undefined,
+      finish
+    );
+
+    // 挂起期间用户点停止：置 cancelled/finished 并派发 L3 force_cancel
+    const cancel = createStreamCancel(
+      'run-race-1',
+      callbacks,
+      approvalFlow,
+      cleanup,
+      state
+    );
+    cancel();
+
+    expect(state.cancelled).toBe(true);
+    expect(state.finished).toBe(true);
+
+    // 连接随后就绪：createStreamSession 恢复执行
+    resolveWait(true);
+    await sessionPromise;
+
+    // 取消后 run 不得启动（当前 309 行后无取消检查 → 直接继续 → 红）
+    expect(startRunTask).not.toHaveBeenCalled();
+    // 守卫命中时静默返回：不订阅、不 onChunk/onRunError、不再二次收口
+    expect(fakeTransport.onMessage).not.toHaveBeenCalled();
+    expect(callbacks.onChunk).not.toHaveBeenCalled();
+    expect(finish).not.toHaveBeenCalled();
+    // cancel 自身已收口（onComplete 由 createStreamCancel 触发）
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('正常路径回归：无取消 → startRunTask 被调用且携带正确 runId', async () => {
+    const callbacks: StreamCallbacks = {
+      onChunk: vi.fn(),
+      onThought: vi.fn(),
+      onToolStart: vi.fn(),
+      onToolError: vi.fn(),
+      onToolSuccess: vi.fn(),
+      onComplete: vi.fn(),
+    };
+    const state = makeState();
+
+    await createStreamSession(
+      'normal start',
+      'sess-norm-1',
+      'run-norm-1',
+      callbacks,
+      undefined,
+      state,
+      () => undefined,
+      vi.fn()
+    );
+
+    expect(startRunTask).toHaveBeenCalledTimes(1);
+    const params = startRunTask.mock.calls[0][1] as Record<string, unknown>;
+    expect(params.runId).toBe('run-norm-1');
+    expect(params.prompt).toBe('normal start');
+    expect(params.sessionId).toBe('sess-norm-1');
   });
 });
