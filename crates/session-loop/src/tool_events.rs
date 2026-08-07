@@ -249,6 +249,12 @@ pub struct ToolBatchOptions {
     /// 判定（ask 问询 / plan 拒绝写类 / full-access 放行）；None = 既有
     /// 语义（approval_enabled 开启 → 全部工具调用走审批）。
     pub permission_mode: Option<PermissionMode>,
+    /// 批级审批等待超时（F1-02 修复）：None = 缺省 120s（与编排层
+    /// approval_router 的 APPROVAL_TIMEOUT=120s 超时兜底对齐——审批卡片
+    /// 丢失/事件桥断连时内核强制收敛，run 不再无限悬挂）；超时 →
+    /// [ApprovalDecision::Expired]（复用既有 Expired 分支，非致命）。
+    /// 测试注入短超时验证收敛。
+    pub approval_timeout: Option<Duration>,
 }
 
 impl Default for ToolBatchOptions {
@@ -259,6 +265,7 @@ impl Default for ToolBatchOptions {
             approval_enabled: false,
             output_budget_bytes: None,
             permission_mode: None,
+            approval_timeout: None,
         }
     }
 }

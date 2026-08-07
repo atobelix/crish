@@ -115,14 +115,23 @@ pub trait TurnEndHook: Send + Sync {
 }
 
 /// catch 兜底的恢复决策（01 §2.1 步骤 4：hook.onError 裁决 retry/skip/abort）
+///
+/// 缺省（无 hook 且未 abort）为 [RecoveryDecision::Fatal]——内部错误一律
+/// error 收场，不得静默降级（F1-01）；`Skip`/`Retry` 仅允许恢复钩子显式
+/// 裁决返回。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RecoveryDecision {
-    /// 重试：NO_PROGRESS_CONTINUE 重进 provider 循环（仅 streaming 有效）
+    /// 重试：NO_PROGRESS_CONTINUE 重进 provider 循环（仅 streaming 有效；
+    /// 仅恢复钩子显式裁决）
     Retry,
-    /// 跳过本轮：streaming 下按 NO_TOOL_CALLS 正常收场
+    /// 跳过本轮：streaming 下按 NO_TOOL_CALLS 正常收场（仅恢复钩子显式
+    /// 裁决——缺省不得走此路径，否则内部错误被静默降级，F1-01）
     Skip,
     /// 中止：endReason=aborted
     Abort,
+    /// 致命：不经状态分派，直接 error 收场（缺省决策——不可恢复内部
+    /// 错误必须暴露给用户，不派发 NO_TOOL_CALLS 降级为 stop 收场，F1-01）
+    Fatal,
 }
 
 /// 错误恢复钩子（catch 兜底裁决；缺省：abort 信号 → Abort，否则 error 收场）
@@ -718,8 +727,10 @@ impl AgentSessionLoop {
             // F6：传结构化错误（码分类裁决）
             return hook.decide(err.crish(), self.state.machine.state());
         }
-        // 缺省：不可恢复内部错误 → error 收场（经 apply_recovery 的 Fatal 分支）
-        RecoveryDecision::Skip
+        // 缺省（F1-01 根因修复）：不可恢复内部错误 → Fatal（error 收场），
+        // 与模块头注释「abort 类 → aborted，否则 error 收场」一致——
+        // 不再缺省 Skip 把错误静默降级为 NO_TOOL_CALLS 正常收场
+        RecoveryDecision::Fatal
     }
 
     /// 应用恢复决策；返回 Some 表示 run 已收敛
@@ -789,6 +800,12 @@ impl AgentSessionLoop {
                     return None;
                 }
                 Some(EndDecision::aborted(&self.state))
+            }
+            RecoveryDecision::Fatal => {
+                // 致命（缺省决策）：不经状态分派，直接 error 收场——不派发
+                // NO_TOOL_CALLS（F1-01 根因修复：内部错误不得静默降级为
+                // streaming 正常收场，错误必须随 outcome.error 暴露给用户）
+                Some(EndDecision::error(&self.state, err.message()))
             }
         }
     }
@@ -989,8 +1006,9 @@ mod tests {
     // Skip（:722），streaming 态被静默降级为 NO_TOOL_CALLS 正常收场——
     // 与模块头注释「abort 类 → aborted，否则 error 收场」相反（F1-01）。
 
-    /// T4.1-R1（红）：缺省恢复决策**不是** Skip——无 hook、未 abort 时
-    /// 内部错误不得走静默降级路径（修复前返回 Skip，断言失败）
+    /// T4.1-R1/R2：缺省恢复决策不是 Skip 且恒为 Fatal——无 hook、未 abort
+    /// 时内部错误必须走 error 收场路径（修复前返回 Skip，R1 红；修复后
+    /// 断言缺省恒为 Fatal，R2 绿）
     #[test]
     fn recovery_default_is_not_skip() {
         let provider = TestProvider::text_reply("hi");
@@ -1001,6 +1019,11 @@ mod tests {
             decision,
             RecoveryDecision::Skip,
             "无恢复钩子且未 abort 时缺省不得 Skip（错误被静默降级为正常收场，F1-01）"
+        );
+        assert_eq!(
+            decision,
+            RecoveryDecision::Fatal,
+            "缺省决策应为 Fatal（error 收场，F1-01 契约）"
         );
     }
 
@@ -1032,6 +1055,49 @@ mod tests {
             "streaming 态内部错误必须 error 收场（而非继续循环 stop 收场）"
         );
         assert_eq!(end.error.as_deref(), Some("handler 内部错误"));
+    }
+
+    /// T4.1-R3（契约锁定）：Skip 语义不回归——恢复钩子**显式**返回 Skip
+    /// 时 streaming 态仍按 NO_TOOL_CALLS 继续循环（apply_recovery 返回
+    /// None）；Fatal 恒 error 收场（Some(EndDecision) 且 reason == Error）
+    #[tokio::test]
+    async fn recovery_skip_via_hook_keeps_loop_but_fatal_converges() {
+        use conex_types::session::AgentEndReason;
+
+        struct SkipHook;
+        impl RecoveryHook for SkipHook {
+            fn decide(&self, _error: &CrishError, _state: AgentSessionState) -> RecoveryDecision {
+                RecoveryDecision::Skip
+            }
+        }
+
+        let provider = TestProvider::text_reply("hi");
+        let mut loop_ = AgentSessionLoop::new("s1", "r1", 16, Box::new(provider), registry());
+        loop_ = loop_.with_options(SessionLoopOptions {
+            recovery_hook: Some(Arc::new(SkipHook)),
+            ..Default::default()
+        });
+        // 推进到 Streaming 态（transition.rs 合法序列）
+        loop_.state.machine = crate::state::AgentSessionMachine::new("s1", 16);
+        loop_.state.machine.dispatch(E::Initialized).expect("合法转移：Initialized");
+        loop_.state.machine.dispatch(E::InputReady).expect("合法转移：InputReady");
+        loop_.state.machine.dispatch(E::TurnPrepared).expect("合法转移：TurnPrepared");
+        assert_eq!(loop_.state.machine.state(), S::Streaming);
+
+        let err = LoopError::internal("模拟内部错误");
+        // 钩子显式 Skip：streaming 态继续循环（Skip 语义不回归）
+        let decision = loop_.recovery_decision(&err);
+        assert_eq!(decision, RecoveryDecision::Skip);
+        let end = loop_.apply_recovery(decision, &err).await;
+        assert!(end.is_none(), "钩子显式 Skip 在 streaming 态应继续循环");
+
+        // Fatal：恒 error 收场（不经状态分派）
+        let end = loop_
+            .apply_recovery(RecoveryDecision::Fatal, &err)
+            .await
+            .expect("Fatal 必须收敛");
+        assert_eq!(end.reason, AgentEndReason::Error);
+        assert_eq!(end.error.as_deref(), Some("模拟内部错误"));
     }
 
     /// 构造用户消息（run 输入）

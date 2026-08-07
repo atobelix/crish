@@ -9,6 +9,9 @@
 //! - fatalOnError 判定排除 softDeny/timedOut/cancelled/approval_expired/
 //!   user_denied/approval_required；
 //! - 审批：approval-requested 事件先于挂起等待发出（防死锁）；
+//! - 审批等待（F1-02 修复）：批级审批统一竞速 abort vs 审批门（带超时，
+//!   缺省 120s 与编排层兜底对齐）——abort 触发即取消收场，gate 不响应
+//!   时超时收敛为 Expired，run 不再无限悬挂；
 //! - 审批并行（T09.6/P8）：审批模式并行组不再退化串行——审批逐个 await
 //!   （执行模型 A，UX 与事件顺序不变），通过后执行阶段 join_all 并行；
 //! - 权限判定（R4 T10）：permission_mode 显式设置时按 dangerous 标记三态
@@ -45,6 +48,7 @@ use crate::approval_router::{
     approval_reason_from_args, relay_denied_message, requester_from_context,
 };
 use crate::hooks::{HookEvent, HookRegistry};
+use crate::safe_point::AbortSignal;
 use crate::tool_events::{
     ApprovalDecision, ApprovalGate, ApprovalRequester, ClassifiedToolResult, FailStrategy,
     ToolBatchOptions, ToolErrorKind, ToolEvent,
@@ -108,6 +112,68 @@ pub struct ToolBatchOutcome {
     pub events: Vec<ToolEvent>,
     /// fatalOnError 命中的致命错误文案（有则 run 应以 error 收场）
     pub fatal: Option<String>,
+}
+
+/// 批级审批缺省超时（120s，F1-02 修复）：与编排层 approval_router 的
+/// APPROVAL_TIMEOUT=120s 超时兜底对齐——审批卡片丢失/事件桥断连时
+/// 内核强制收敛（Expired），run 不再无限悬挂。
+const DEFAULT_APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// 审批等待结果（F1-02 修复：abort 竞速 / 门决策 / 超时三路收敛）
+enum ApprovalWaitOutcome {
+    /// abort 竞速命中（不伪造审批事件，按取消收场——对齐
+    /// approval.rs:135 语义）
+    Cancelled,
+    /// 审批门在超时内返回决策（超时 → [ApprovalDecision::Expired]，
+    /// 调用方既有 Expired 分支直接复用）
+    Decision(ApprovalDecision),
+}
+
+/// 审批等待统一竞速封装（F1-02 根因修复）
+///
+/// 批级审批三个 await 点（顺序路径 / 并行组审批循环 /
+/// requires_approval 重试）共用本函数：`tokio::select!{biased}` 竞速
+/// abort 等待 vs 审批门（带超时），对齐 approval.rs:131-160 的
+/// `wait_aborted` + 竞速兜底 is_aborted 复查模式——abort 触发即打断
+/// 审批等待，超时兜底保证 gate 不响应时有限收敛。
+///
+/// 超时语义：`timeout` 为 None 时用 [DEFAULT_APPROVAL_TIMEOUT]；超时
+/// 命中返回 `Expired`（既有 Expired 分支复用：非致命、喂回模型）。
+/// 竞速兜底：超时/裁决与 abort 同时就绪时取消优先（L3 强停语义）。
+async fn approval_wait(
+    gate: &dyn ApprovalGate,
+    call_id: &str,
+    tool_name: &str,
+    input: &Value,
+    requester: Option<&ApprovalRequester>,
+    abort: Option<&AbortSignal>,
+    timeout: Option<Duration>,
+) -> ApprovalWaitOutcome {
+    let t = timeout.unwrap_or(DEFAULT_APPROVAL_TIMEOUT);
+    let wait = gate.request_approval(call_id, tool_name, input, requester);
+    let cancelled = async {
+        match abort {
+            Some(sig) => sig.wait_aborted().await,
+            // 无批级信号：取消分支永不就绪（不参与竞速）
+            None => std::future::pending::<()>().await,
+        }
+    };
+    tokio::select! {
+        biased;
+        () = cancelled => ApprovalWaitOutcome::Cancelled,
+        result = tokio::time::timeout(t, wait) => {
+            // 竞速兜底（对齐 approval.rs:139-141）：等待期间 abort 与
+            // 裁决/超时同时就绪 → 取消优先（L3 强停语义）
+            if abort.map(|s| s.is_aborted()).unwrap_or(false) {
+                return ApprovalWaitOutcome::Cancelled;
+            }
+            match result {
+                Ok(decision) => ApprovalWaitOutcome::Decision(decision),
+                // 超时：Expired（调用方既有分支复用，非致命）
+                Err(_) => ApprovalWaitOutcome::Decision(ApprovalDecision::Expired),
+            }
+        }
+    }
 }
 
 /// 工具批处理执行器
@@ -355,10 +421,31 @@ impl ToolExecutor {
                             let idx = group[pos];
                             let call = &calls[idx];
                             let requester = requesters[pos].as_ref();
-                            let decision = gate
-                                .request_approval(&call.id, &call.tool_name, &call.input, requester)
-                                .await;
-                            approvals[pos] = Some(decision);
+                            // F1-02：竞速 abort vs 审批等待（带超时）——
+                            // abort 命中 → 中断剩余审批（全部按取消收场，
+                            // 复用既有「无决策 = abort 中断」分支）
+                            match approval_wait(
+                                gate,
+                                &call.id,
+                                &call.tool_name,
+                                &call.input,
+                                requester,
+                                abort,
+                                options.approval_timeout,
+                            )
+                            .await
+                            {
+                                ApprovalWaitOutcome::Cancelled => break,
+                                ApprovalWaitOutcome::Decision(decision) => {
+                                    approvals[pos] = Some(decision);
+                                    // 竞速兜底（对齐 approval.rs:139-141）：
+                                    // 裁决到达时 abort 已触发 → 按取消收场，
+                                    // 不再发起剩余审批
+                                    if abort.map(|s| s.is_aborted()).unwrap_or(false) {
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -596,29 +683,48 @@ impl ToolExecutor {
                         args: call.input.clone(),
                         requester: requester.clone(),
                     });
-                    let decision = gate
-                        .request_approval(&call.id, &call.tool_name, &call.input, requester.as_ref())
-                        .await;
-                    match decision {
-                        ApprovalDecision::Approved => {
+                    // F1-02：竞速 abort vs 审批等待（带超时）——abort 命中
+                    // 走取消收场，超时 → Expired 既有分支
+                    match approval_wait(
+                        gate.as_ref(),
+                        &call.id,
+                        &call.tool_name,
+                        &call.input,
+                        requester.as_ref(),
+                        abort,
+                        options.approval_timeout,
+                    )
+                    .await
+                    {
+                        ApprovalWaitOutcome::Cancelled => ClassifiedToolResult::error(
+                            &call.id,
+                            &call.tool_name,
+                            ToolErrorKind::Cancelled,
+                            "aborted",
+                        ),
+                        ApprovalWaitOutcome::Decision(ApprovalDecision::Approved) => {
                             let (r, extra) = self
                                 .execute_single_with_retry(call, ctx, options, abort, Some(Arc::clone(gate)))
                                 .await;
                             events.extend(extra);
                             r
                         }
-                        ApprovalDecision::Denied { reason } => ClassifiedToolResult::error(
-                            &call.id,
-                            &call.tool_name,
-                            ToolErrorKind::UserDenied,
-                            denied_message(requester.is_some(), &reason),
-                        ),
-                        ApprovalDecision::Expired => ClassifiedToolResult::error(
-                            &call.id,
-                            &call.tool_name,
-                            ToolErrorKind::ApprovalExpired,
-                            "approval expired",
-                        ),
+                        ApprovalWaitOutcome::Decision(ApprovalDecision::Denied { reason }) => {
+                            ClassifiedToolResult::error(
+                                &call.id,
+                                &call.tool_name,
+                                ToolErrorKind::UserDenied,
+                                denied_message(requester.is_some(), &reason),
+                            )
+                        }
+                        ApprovalWaitOutcome::Decision(ApprovalDecision::Expired) => {
+                            ClassifiedToolResult::error(
+                                &call.id,
+                                &call.tool_name,
+                                ToolErrorKind::ApprovalExpired,
+                                "approval expired",
+                            )
+                        }
                     }
                 }
             },
@@ -1166,17 +1272,35 @@ impl ToolExecutor {
                         args: call.input.clone(),
                         requester: requester.clone(),
                     });
-                    let decision = gate
-                        .request_approval(&call.id, &call.tool_name, &call.input, requester.as_ref())
-                        .await;
-                    match decision {
-                        ApprovalDecision::Approved => {
+                    // F1-02：竞速 abort vs 审批等待（带超时）——abort 命中
+                    // 走取消收场，超时 → Expired 既有分支
+                    match approval_wait(
+                        gate.as_ref(),
+                        &call.id,
+                        &call.tool_name,
+                        &call.input,
+                        requester.as_ref(),
+                        abort,
+                        options.approval_timeout,
+                    )
+                    .await
+                    {
+                        ApprovalWaitOutcome::Cancelled => (
+                            ClassifiedToolResult::error(
+                                &call.id,
+                                &call.tool_name,
+                                ToolErrorKind::Cancelled,
+                                "aborted",
+                            ),
+                            extra,
+                        ),
+                        ApprovalWaitOutcome::Decision(ApprovalDecision::Approved) => {
                             let (r2, extra2) = self
                                 .execute_single(call, ctx, options, abort, Some(gate))
                                 .await;
                             (r2, [extra, extra2].concat())
                         }
-                        ApprovalDecision::Denied { reason } => (
+                        ApprovalWaitOutcome::Decision(ApprovalDecision::Denied { reason }) => (
                             ClassifiedToolResult::error(
                                 &call.id,
                                 &call.tool_name,
@@ -1185,7 +1309,7 @@ impl ToolExecutor {
                             ),
                             extra,
                         ),
-                        ApprovalDecision::Expired => (
+                        ApprovalWaitOutcome::Decision(ApprovalDecision::Expired) => (
                             ClassifiedToolResult::error(
                                 &call.id,
                                 &call.tool_name,
@@ -2838,6 +2962,107 @@ mod tests {
             elapsed.as_millis() < 1000,
             "重试审批 abort 竞速应在数百 ms 内收敛，实际 {elapsed:?}"
         );
+    }
+
+    /// T4.2-R1（绿，顺序路径超时）：审批门挂起不返回 + 测试注入短超时
+    /// → 批执行在超时内收敛为 Expired（内核 timeout 真实收敛，外层
+    /// tokio timeout 不触发）
+    #[tokio::test]
+    async fn approval_wait_times_out_when_gate_hangs() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            approval_timeout: Some(Duration::from_millis(50)),
+            ..Default::default()
+        };
+        let gate = Arc::new(PendingApproval);
+        let start = std::time::Instant::now();
+        let out = tokio::time::timeout(
+            Duration::from_secs(2),
+            exec.execute_batch(&calls, &exec_ctx(), Some(gate), &opts, None),
+        )
+        .await
+        .expect("审批挂起必须被超时收敛（不得悬挂）");
+        let elapsed = start.elapsed();
+        assert_eq!(
+            out.results[0].error_kind,
+            Some(ToolErrorKind::ApprovalExpired),
+            "超时应复用 Expired 分支"
+        );
+        assert!(
+            elapsed.as_millis() < 1000,
+            "超时应在内核审批超时附近收敛，实际 {elapsed:?}"
+        );
+        // 非致命：喂回模型继续
+        assert!(out.fatal.is_none());
+    }
+
+    /// T4.2-R2（绿，并行组超时）：审批门挂起 + 短超时 → 全组收敛为
+    /// Expired，无悬挂；approval-requested 全组先发事件顺序契约保持
+    #[tokio::test]
+    async fn approval_wait_parallel_group_timeout_converges() {
+        let reg = registry_with(vec![Arc::new(EchoTool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![
+            call("p0", "echo", ToolConcurrency::Parallel),
+            call("p1", "echo", ToolConcurrency::Parallel),
+        ];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            approval_timeout: Some(Duration::from_millis(50)),
+            ..Default::default()
+        };
+        let gate = Arc::new(PendingApproval);
+        let out = tokio::time::timeout(
+            Duration::from_secs(2),
+            exec.execute_batch(&calls, &exec_ctx(), Some(gate), &opts, None),
+        )
+        .await
+        .expect("并行组审批挂起必须被超时收敛（不得悬挂）");
+        assert!(out
+            .results
+            .iter()
+            .all(|r| r.error_kind == Some(ToolErrorKind::ApprovalExpired)));
+        // approval-requested 全组先发契约保持（等待前已全部广播）
+        let approvals = out
+            .events
+            .iter()
+            .filter(|e| matches!(e, ToolEvent::ApprovalRequested { .. }))
+            .count();
+        assert_eq!(approvals, 2, "全组审批请求应先于等待发出");
+        assert!(out.fatal.is_none());
+    }
+
+    /// T4.2-R4（绿，requires_approval 重试路径超时）：批级审批通过 →
+    /// 工具返回 ApprovalRequired → 重试审批挂起 + 短超时 → ApprovalExpired
+    /// 收敛（:1140 点位不再裸挂起）
+    #[tokio::test]
+    async fn requires_approval_retry_hang_times_out() {
+        let reg = registry_with(vec![Arc::new(AlwaysRequiresApprovalTool)]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![call("c1", "always_approval", ToolConcurrency::Sequential)];
+        let opts = ToolBatchOptions {
+            approval_enabled: true,
+            approval_timeout: Some(Duration::from_millis(50)),
+            ..Default::default()
+        };
+        // 首次问询（批级审批）通过，重试审批挂起
+        let gate = Arc::new(HangAfterApprovals::new(1));
+        let out = tokio::time::timeout(
+            Duration::from_secs(2),
+            exec.execute_batch(&calls, &exec_ctx(), Some(gate), &opts, None),
+        )
+        .await
+        .expect("重试审批挂起必须被超时收敛（不得悬挂）");
+        assert_eq!(
+            out.results[0].error_kind,
+            Some(ToolErrorKind::ApprovalExpired),
+            "重试审批超时应收敛为 ApprovalExpired：{:?}",
+            out.results[0]
+        );
+        assert!(out.fatal.is_none());
     }
 
     // ── R4 T10：真实审批事件（requires_approval / dangerous / permissionMode）──
