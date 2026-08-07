@@ -279,6 +279,53 @@ mod tests {
     }
 
     #[test]
+    fn unicode_fold_expansion_target_does_not_panic() {
+        // F3-03（红）：查询串命中折叠展开产物（i + U+0307），目标 `xİ` 小写折叠后
+        // 变长（İ → i + U+0307），旧实现 lib.rs:68 用折叠索引回查原始 Vec 越界 panic。
+        let matcher = FuzzyMatcher::new(false);
+        let (score, indices) = matcher.score_and_indices("i\u{307}", "xİ");
+        assert!(score > 0);
+        // 两个折叠字符均来自原始索引 1（'İ'），坐标回退到原始串
+        assert_eq!(indices, vec![1, 1]);
+    }
+
+    #[test]
+    fn unicode_fold_expansion_query_does_not_panic() {
+        // F3-03（红）同根因的查询侧形态：查询 `İ` 折叠为两字符后，
+        // 旧实现 :68 `orig_q[qi - 1]` 匹配展开第二字符时越界 panic。
+        let matcher = FuzzyMatcher::new(false);
+        let (score, indices) = matcher.score_and_indices("İ", "xİ");
+        assert!(score > 0);
+        assert_eq!(indices, vec![1, 1]);
+    }
+
+    #[test]
+    fn sharp_s_fold_matches_lowercase() {
+        // F3-03 相关回归：实测 Rust 中 ẞ(U+1E9E) 小写折叠为单字符 ß（不展开，
+        // 与审计推演的 "ss" 不符——R1 只实测过 İ 形态），折叠路径应正常匹配。
+        let matcher = FuzzyMatcher::new(false);
+        let (score, indices) = matcher.score_and_indices("ß", "xẞ");
+        assert!(score > 0);
+        assert_eq!(indices, vec![1]);
+    }
+
+    #[test]
+    fn search_files_unicode_fold_no_panic() {
+        // F3-03（红）集成形态：索引内容含 İ 等展开字符 + 折叠查询，
+        // 文件名恰为 "İ" 时折叠索引越过原始长度 → 旧实现 search_files 内 panic。
+        let matcher = FuzzyMatcher::new(false);
+        let paths = vec!["dir/İ".to_string(), "dir/İstanbul.rs".to_string()];
+        let hits = search_files("i\u{307}", &paths, 10, &matcher);
+        assert_eq!(hits.len(), 2);
+        // match_indices 必须是原始文件名坐标，不得越界
+        for hit in &hits {
+            let filename_len = hit.path.rsplit(['/', '\\']).next().unwrap().chars().count();
+            assert!(hit.match_indices.iter().all(|&i| i < filename_len), "越界坐标: {hit:?}");
+            assert!(hit.score > 0);
+        }
+    }
+
+    #[test]
     fn word_boundary_bonus() {
         let matcher = FuzzyMatcher::new(false);
         // "sr" matches "src" at word start vs "descriptor" mid-word
