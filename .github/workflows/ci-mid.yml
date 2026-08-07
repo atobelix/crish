@@ -42,7 +42,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       # 全量测试：L1 单测 + L2 集成 + L3 契约（含流式契约锚点）+ L4 e2e faux
-      - run: cargo test --workspace
+      # --locked（T10.1）：Cargo.lock 已入库，锁漂移在漂移状态下结果不可复现
+      - run: cargo test --workspace --locked
 
   clippy:
     runs-on: ubuntu-latest
@@ -55,7 +56,7 @@ jobs:
       # 口径统一（G7）：--all-targets warn 级 + 基线 ratchet 脚本（G1）。
       # -D warnings 为存量清零后终态（G12 切换）
       # 头部注释旧口径已由 G7 更新。
-      - run: cargo clippy --workspace --all-targets
+      - run: cargo clippy --workspace --all-targets --locked
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -103,6 +104,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+      # machete 例外论证（PS-02 T2.5）：不编译、不解析依赖树，锁漂移不影响
+      # 其结果；实跑 `cargo machete --locked` → Unrecognized argument EXIT=1
+      # （透传不可用），故不加 --locked
       - run: cargo machete
 
   # I8 治理收口（G3/G4/G6）：unwrap / 吞错 / 行数 三基线 ratchet。

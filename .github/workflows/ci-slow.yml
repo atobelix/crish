@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       # 压力场景全部 #[ignore]（T11.6）：release 下运行，不进常规 CI
-      - run: cargo test --workspace --release -- --ignored
+      - run: cargo test --workspace --release --locked -- --ignored
 
   stress-ts:
     runs-on: ubuntu-latest
@@ -76,7 +76,7 @@ jobs:
       - name: 基准（存在基准场景时运行）
         run: |
           if ls crates/*/benches >/dev/null 2>&1; then
-            cargo bench --workspace
+            cargo bench --workspace --locked
           else
             echo "暂无基准场景（crates/*/benches 不存在，PE-09 T09.7 落地后生效）"
           fi

@@ -139,4 +139,4 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       # 关键单元测试快速套件（T11.7 快层）：conex-types（类型/契约域）+
       # session-loop（主循环核心，含流式契约锚点）
-      - run: cargo test -p conex-types -p session-loop
+      - run: cargo test -p conex-types -p session-loop --locked
