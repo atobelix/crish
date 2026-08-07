@@ -273,7 +273,42 @@ pub(crate) fn resolve_workspace_path(
             format!("Path escapes workspace: {input}"),
         ));
     }
+    // 双保险（审计 P1-S1，F3-02/F5-01）：safe_canonicalize 的「最深已存在祖先」
+    // 方案能解析非 dangling symlink，但 dangling symlink 目标不存在无法
+    // canonicalize，词法尾部仍可能残留 symlink 组件——对 canonical 相对根
+    // 的每一级做 symlink_metadata（不跟随链接，dangling 也可见），命中即拒绝。
+    if has_symlink_below_root(&canonical, &canonical_root) {
+        return Err(ToolError::new(
+            codes::TOOL_PATH_ESCAPE,
+            format!("Path escapes workspace: {input}"),
+        ));
+    }
     Ok(canonical)
+}
+
+/// 符号链接组件检测（双保险）：从根开始逐级构造路径并对每级做
+/// symlink_metadata 检查（不跟随链接，dangling 也可见）。文本前缀不匹配
+/// 时返回 false——该形态由 path_within_root 包含性校验兜底拒绝。
+fn has_symlink_below_root(path: &Path, root: &Path) -> bool {
+    let rel = match path.strip_prefix(root) {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+    let mut cur = root.to_path_buf();
+    for comp in rel.components() {
+        match comp {
+            std::path::Component::Normal(name) => {
+                cur.push(name);
+                if let Ok(meta) = std::fs::symlink_metadata(&cur) {
+                    if meta.file_type().is_symlink() {
+                        return true;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 /// 工作区显示路径（对齐 TS displayPath：优先相对路径，根目录自身回退文件名）

@@ -54,7 +54,32 @@ pub mod path_utils {
         match path.canonicalize() {
             Ok(canonical) => Ok(canonical),
             Err(_) => {
-                // If canonicalize fails (path doesn't exist yet), normalize manually
+                // canonicalize 失败（目标或某级祖先不存在）→「最深已存在祖先」
+                // canonicalize + 剩余成分词法拼接（审计 P1-S1，F3-02/F5-01）：
+                // 父级 symlink 由此被解析进结果，调用方做包含性校验即可拦截
+                // 根外写入（修复前纯词法归一不解析任何父级 symlink）。
+                // 注意：dangling symlink（链接目标不存在）无法被 canonicalize，
+                // 该形态保持词法尾部，由调用方对词法尾部逐级 symlink_metadata
+                // 显式拒绝（双保险）。
+                let mut existing = path.to_path_buf();
+                let mut tail: Vec<std::ffi::OsString> = Vec::new();
+                while !existing.exists() {
+                    match existing.file_name() {
+                        Some(name) => {
+                            tail.push(name.to_os_string());
+                            existing.pop();
+                        }
+                        None => break,
+                    }
+                }
+                if existing.exists() {
+                    let mut resolved = existing.canonicalize().unwrap_or(existing);
+                    for name in tail.iter().rev() {
+                        resolved.push(name);
+                    }
+                    return Ok(resolved);
+                }
+                // 兜底：纯词法归一（理论不可达——根总存在；保守保持旧行为）
                 let mut normalized = PathBuf::new();
                 for component in path.components() {
                     match component {
@@ -206,7 +231,10 @@ mod tests {
             return; // 无符号链接权限环境跳过（Windows 开发者模式）
         }
         let p = safe_canonicalize(&root.join("link/new.txt"), 10).unwrap();
-        assert_eq!(p, root.join("link/new.txt"));
+        // 最深已存在祖先（根）canonicalize + 组件级词法拼接（Windows 下
+        // canonicalize 产物带 \\?\ 前缀与反斜杠分隔符，按组件拼接保持形态一致）
+        let expected = root.canonicalize().unwrap().join("link").join("new.txt");
+        assert_eq!(p, expected);
         let _ = std::fs::remove_dir_all(&temp);
     }
 
