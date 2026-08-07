@@ -14,8 +14,9 @@
 
 use crate::audit::{NoopAuditSink, SecurityAuditSink, security_audit_event};
 use crate::background::{BackgroundAdoptRequest, BackgroundTaskManager};
-use crate::context::{AskDecision, ToolContext};
+use crate::context::{AbortToken, AskDecision, ToolContext};
 use crate::definition::{Tool, ToolDefinition, ToolError};
+use crate::streaming::{terminal_only, ToolProgress, ToolStream, ToolStreamItem};
 use crate::tools::{
     display_path, optional_bool, optional_string, optional_u64, require_string,
     resolve_workspace_path, delete::DEFAULT_TRASH_DIR_NAME,
@@ -27,6 +28,7 @@ use conex_fs::trash::TrashService;
 use conex_sandbox::gatekeeper::{CommandGatekeeper, GatekeeperResult};
 use conex_sandbox::semantics::{CommandClass, SemanticAnalysis};
 use conex_types::events::{SecurityAuditDecision, SecurityAuditOperation};
+use futures_util::StreamExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -156,54 +158,79 @@ impl ShellCommandTool {
     }
 }
 
-#[async_trait]
-impl Tool for ShellCommandTool {
-    fn name(&self) -> &str {
-        &self.def.name
-    }
+/// 预检结果（execute / execute_stream 共用准备面，S1 §3.1.6）：
+/// - `Run`：通过全部预检，携带执行参数（门禁 / 审批 / 删除形态 / cd 形态
+///   均已放行）；
+/// - `Done`：无需执行——拦截 / 审批拒绝 / 删除重定向 / 入参错误的既定结果，
+///   两条执行路径经本面保证输出逐字节一致（防各自复制逻辑漂移）。
+enum Prepared {
+    Run(PreparedCommand),
+    Done(Result<serde_json::Value, ToolError>),
+}
 
-    fn definition(&self) -> &ToolDefinition {
-        &self.def
-    }
+/// 通过预检的可执行命令参数（execute / execute_stream 消费）
+struct PreparedCommand {
+    command: String,
+    cwd: PathBuf,
+    timeout_ms: u64,
+    max_output_bytes: usize,
+    mode: ShellMode,
+    wait_ms: u64,
+    is_daemon: bool,
+    resource_monitor: bool,
+    manager: Option<Arc<dyn BackgroundTaskManager>>,
+}
 
-    async fn execute(
-        &self,
-        ctx: &ToolContext,
-        args: serde_json::Value,
-    ) -> Result<serde_json::Value, ToolError> {
-        let command = require_string(&args, "command")?.trim().to_string();
+impl ShellCommandTool {
+    /// 预检（execute / execute_stream 共用）：入参解析 → 命令门禁 →
+    /// 审批通道 → 删除形态重定向 → cd 形态拦截。任何拦截 / 错误收敛为
+    /// `Prepared::Done`（既定结果），放行返回 `Prepared::Run`（执行参数）。
+    ///
+    /// S1 验收（§3.1.6）：流式路径与旧 execute 路径的错误面 / 重定向面
+    /// 逐字节一致——两路径必须共用本函数，不得各自复制逻辑。
+    async fn prepare(&self, ctx: &ToolContext, args: &serde_json::Value) -> Prepared {
+        let command = match require_string(args, "command") {
+            Ok(c) => c.trim().to_string(),
+            Err(e) => return Prepared::Done(Err(e)),
+        };
         if command.is_empty() {
-            return Err(ToolError::invalid_input(
+            return Prepared::Done(Err(ToolError::invalid_input(
                 "command must be a non-empty string",
-            ));
-        }
-        if command.len() > MAX_COMMAND_LEN {
-            return Err(ToolError::invalid_input("command too long"));
-        }
-        let workspace_root = &ctx.workspace_root;
-        let cwd = resolve_workspace_path(
-            workspace_root,
-            &optional_string(&args, "cwd").unwrap_or_else(|| ".".to_string()),
-        )?;
-        if !cwd.is_dir() {
-            return Err(ToolError::invalid_input(format!(
-                "cwd is not a directory: {}",
-                display_path(workspace_root, &cwd)
             )));
         }
-        let timeout_ms = optional_u64(&args, "timeoutMs")
+        if command.len() > MAX_COMMAND_LEN {
+            return Prepared::Done(Err(ToolError::invalid_input("command too long")));
+        }
+        let workspace_root = &ctx.workspace_root;
+        let cwd = match resolve_workspace_path(
+            workspace_root,
+            &optional_string(args, "cwd").unwrap_or_else(|| ".".to_string()),
+        ) {
+            Ok(c) => c,
+            Err(e) => return Prepared::Done(Err(e)),
+        };
+        if !cwd.is_dir() {
+            return Prepared::Done(Err(ToolError::invalid_input(format!(
+                "cwd is not a directory: {}",
+                display_path(workspace_root, &cwd)
+            ))));
+        }
+        let timeout_ms = optional_u64(args, "timeoutMs")
             .unwrap_or(self.default_timeout_ms)
             .clamp(1, MAX_TIMEOUT_MS);
         let max_output_bytes =
-            optional_u64(&args, "maxOutputBytes").unwrap_or(self.max_output_bytes as u64) as usize;
+            optional_u64(args, "maxOutputBytes").unwrap_or(self.max_output_bytes as u64) as usize;
         // T-AB-02：三模式入参（mode / waitMsBeforeAsync / isDaemon / resourceMonitor）
-        let mode = parse_mode(&args)?;
-        let wait_ms = optional_u64(&args, "waitMsBeforeAsync")
+        let mode = match parse_mode(args) {
+            Ok(m) => m,
+            Err(e) => return Prepared::Done(Err(e)),
+        };
+        let wait_ms = optional_u64(args, "waitMsBeforeAsync")
             .unwrap_or(DEFAULT_WAIT_MS_BEFORE_ASYNC)
             .clamp(1, MAX_TIMEOUT_MS);
         let is_daemon =
-            mode == ShellMode::Daemon || optional_bool(&args, "isDaemon").unwrap_or(false);
-        let resource_monitor = optional_bool(&args, "resourceMonitor").unwrap_or(false);
+            mode == ShellMode::Daemon || optional_bool(args, "isDaemon").unwrap_or(false);
+        let resource_monitor = optional_bool(args, "resourceMonitor").unwrap_or(false);
 
         // 命令门禁：越界/危险命令在解析前先拦下（对齐 workbench_run_shell）
         // 上下文字符串统一为门禁比较格式：剥离 \\?\ 前缀、反斜杠转斜杠、Windows 小写
@@ -219,12 +246,12 @@ impl Tool for ShellCommandTool {
                 SecurityAuditOperation::CommandExec,
                 vec![command.clone()],
             );
-            return Err(ToolError::new(
+            return Prepared::Done(Err(ToolError::new(
                 TOOL_COMMAND_BLOCKED,
                 format!(
                     "PermissionDenied: Command blocked by safety red-line gatekeeper: {command}"
                 ),
-            ));
+            )));
         }
         if verdict == GatekeeperResult::RequiresApproval {
             // R4 T10：经 ctx.ask 审批通道发起真实审批——approval-requested
@@ -233,21 +260,21 @@ impl Tool for ShellCommandTool {
             // 未接线（ask: None）时返回 tool.requires_approval，执行器
             // 分类为 ApprovalRequired 透传审批状态（不再折叠 SoftDeny）。
             match &ctx.ask {
-                Some(ask) => match ask.ask(&self.def.name, &args).await {
+                Some(ask) => match ask.ask(&self.def.name, args).await {
                     Ok(AskDecision::Allowed) => {}
                     Ok(AskDecision::Denied { reason }) => {
-                        return Err(ToolError::new(
+                        return Prepared::Done(Err(ToolError::new(
                             TOOL_USER_DENIED,
                             format!("user denied: {reason}"),
-                        ));
+                        )));
                     }
-                    Err(err) => return Err(err),
+                    Err(err) => return Prepared::Done(Err(err)),
                 },
                 None => {
-                    return Err(ToolError::new(
+                    return Prepared::Done(Err(ToolError::new(
                         TOOL_REQUIRES_APPROVAL,
                         format!("Command requires approval: {command}"),
-                    ));
+                    )));
                 }
             }
         }
@@ -258,7 +285,7 @@ impl Tool for ShellCommandTool {
         // 100% 拦截（S2），此处只处理删除形态。
         let analysis = conex_sandbox::semantics::analyze(&command);
         if analysis.overall_class == CommandClass::DeleteShape || analysis.has_indirect_delete {
-            return redirect_or_intercept_delete(
+            return Prepared::Done(redirect_or_intercept_delete(
                 &analysis,
                 &command,
                 workspace_root,
@@ -266,7 +293,7 @@ impl Tool for ShellCommandTool {
                 self.trash_root.clone(),
                 ctx,
                 Arc::clone(&self.audit_sink),
-            );
+            ));
         }
 
         // T-AB-04：第五项「cd 形态」拦截（判定优先级：门禁 → 删除形态 →
@@ -274,17 +301,18 @@ impl Tool for ShellCommandTool {
         // 此处只处理残留的 cd 形态）——纯 cd 命令结构化错误（tool.cd_blocked），
         // 复合链含 cd 段整链拦截 + 引导（链内其他段依赖目录状态，不代为执行）。
         if let Some(err) = intercept_cd_shape(&analysis, &command) {
-            return Err(err);
+            return Prepared::Done(Err(err));
         }
 
-        // 执行：三模式（manager 优先读会话级 ToolContext.background，回退注册配置）
+        // 执行上下文：三模式（manager 优先读会话级 ToolContext.background，
+        // 回退注册配置）
         let manager = ctx
             .background
             .clone()
             .or_else(|| self.background_manager.clone());
-        run_command_maybe_background(
-            &command,
-            &cwd,
+        Prepared::Run(PreparedCommand {
+            command,
+            cwd,
             timeout_ms,
             max_output_bytes,
             mode,
@@ -292,10 +320,79 @@ impl Tool for ShellCommandTool {
             is_daemon,
             resource_monitor,
             manager,
-            ctx.log_root.clone(),
-            &ctx.session_id,
-        )
-        .await
+        })
+    }
+}
+
+#[async_trait]
+impl Tool for ShellCommandTool {
+    fn name(&self) -> &str {
+        &self.def.name
+    }
+
+    fn definition(&self) -> &ToolDefinition {
+        &self.def
+    }
+
+    async fn execute(
+        &self,
+        ctx: &ToolContext,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, ToolError> {
+        match self.prepare(ctx, &args).await {
+            // 预检已定结果（拦截 / 审批拒绝 / 删除重定向 / 入参错误）原样返回
+            Prepared::Done(result) => result,
+            // 执行：三模式（manager 优先读会话级 ToolContext.background，
+            // 回退注册配置）
+            Prepared::Run(c) => {
+                run_command_maybe_background(
+                    &c.command,
+                    &c.cwd,
+                    c.timeout_ms,
+                    c.max_output_bytes,
+                    c.mode,
+                    c.wait_ms,
+                    c.is_daemon,
+                    c.resource_monitor,
+                    c.manager,
+                    ctx.log_root.clone(),
+                    &ctx.session_id,
+                )
+                .await
+            }
+        }
+    }
+
+    /// S1 流式执行（TOOLS-01 §3.1.6）：tokio process 逐块读 stdout/stderr
+    /// （async read），每块 `ToolProgress::Text` 推送（stderr 块带
+    /// `[stderr] ` 前缀——展示面可区分，聚合结果 stderr 字段独立捕获，
+    /// 形状不变）；进程退出后 Terminal 返回聚合结果——复用
+    /// build_sync_result，output/json 形状与 execute 完全一致（退出码 /
+    /// stderr 捕获 / 截断 / 超时 / 落盘）。
+    ///
+    /// 预算：maxOutputBytes 升级为**累计流式字节预算**（§3.1.6）——累计
+    /// 超限即停止推送 Progress（结果仍标记 truncated，语义与现状 200KB
+    /// 上限一致，只是从「事后截断」变「实时截断」）；管道仍持续排空
+    /// （防子进程写满管道阻塞 → 超时误判，行为与 execute 一致）。
+    ///
+    /// abort：每块读取前自查 ctx.abort_token（§3.1.6）——中止即停止推送、
+    /// 杀进程尽快收口（执行器侧 drop 流完成取消，已发 Progress 保留，
+    /// §3.1.8「drop 即取消」）。
+    ///
+    /// 非 sync 模式（auto-background / daemon）回落既有 execute：管道
+    /// 转移 / 收养语义逐字节不变，流式改造只覆盖 sync 路径。
+    async fn execute_stream(&self, ctx: &ToolContext, args: serde_json::Value) -> ToolStream {
+        // 模式预解析：非法 mode 交给 prepare 以既有错误路径收口（此处
+        // 缺省 sync 仅用于路径分流，不改变错误文案）
+        if parse_mode(&args).unwrap_or(ShellMode::Sync) != ShellMode::Sync {
+            return terminal_only(self.execute(ctx, args).await);
+        }
+        match self.prepare(ctx, &args).await {
+            // 预检已定结果（拦截 / 审批拒绝 / 删除重定向 / 入参错误）：
+            // 单元素流，与 execute 返回逐字节一致
+            Prepared::Done(result) => terminal_only(result),
+            Prepared::Run(c) => run_command_streaming(ctx, c).await,
+        }
     }
 }
 
@@ -877,21 +974,14 @@ async fn run_command_maybe_background(
                     }
                     let _ = child.kill().await;
                     let _ = child.wait().await;
-                        let stderr = format!("(命令超时，已终止 · {timeout_ms}ms)");
-                        Ok(serde_json::json!({
-                            "command": command,
-                            "cwd": cwd.display().to_string(),
-                            "shell": shell_label,
-                            "exitCode": null,
-                            "stdout": "",
-                            "stderr": stderr,
-                            "timedOut": true,
-                            "truncated": false,
-                            "durationMs": duration_ms,
-                            "mode": "sync",
-                            "text": stderr,
-                        }))
-                    }
+                    Ok(build_timeout_result(
+                        command,
+                        cwd,
+                        &shell_label,
+                        timeout_ms,
+                        duration_ms,
+                    ))
+                }
                 }
             } else {
                 // 同步模式：树杀语义不变（先 drop 流式 reader 句柄再树杀，
@@ -903,23 +993,350 @@ async fn run_command_maybe_background(
                 }
                 let _ = child.kill().await;
                 let _ = child.wait().await;
-                let stderr = format!("(命令超时，已终止 · {timeout_ms}ms)");
-                Ok(serde_json::json!({
-                    "command": command,
-                    "cwd": cwd.display().to_string(),
-                    "shell": shell_label,
-                    "exitCode": null,
-                    "stdout": "",
-                    "stderr": stderr,
-                    "timedOut": true,
-                    "truncated": false,
-                    "durationMs": duration_ms,
-                    "mode": "sync",
-                    "text": stderr,
-                }))
+                Ok(build_timeout_result(
+                    command,
+                    cwd,
+                    &shell_label,
+                    timeout_ms,
+                    duration_ms,
+                ))
             }
         }
     }
+}
+
+// ==================== S1：流式执行（TOOLS-01 §3.1.6）====================
+
+/// S1 流式执行主入口：spawn 后以状态机逐块读取双管道，进程退出后
+/// Terminal 返回聚合结果（复用 build_sync_result → 与 execute 同步路径
+/// 逐字节一致）。与 execute 的差异只在「读取与推送」：execute 的
+/// stream_until_deadline 静默累积，本路径每个数据块单独推一条
+/// ToolProgress::Text；预算 / abort / 超时语义均与 execute 对齐。
+// G2 禁令豁免（clippy.toml 豁免面「内部进程管理原语」）：tokio spawn——
+// 命令已过命令门禁（prepare）才产生进程，与 run_command_maybe_background
+// 同一豁免面（函数级 allow + 理由）。
+#[allow(clippy::disallowed_methods)]
+async fn run_command_streaming(ctx: &ToolContext, c: PreparedCommand) -> ToolStream {
+    let (program, shell_args, shell_label) =
+        match build_shell_invocation(&c.command) {
+            Ok(v) => v,
+            Err(e) => return terminal_only(Err(ToolError::execution_failed("shell_command", e))),
+        };
+
+    let mut child_cmd = TokioCommand::new(&program);
+    child_cmd
+        .args(&shell_args)
+        .current_dir(&c.cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        // T-AB-02：kill_on_drop(false)——abort / 超时收口由本路径显式杀
+        // （kill_child），drop 不连杀（与 execute 同步路径同构，不双杀）
+        .kill_on_drop(false);
+    // Windows：隐藏控制台闪现（与 execute 同步路径同构）
+    #[cfg(windows)]
+    {
+        #[allow(unused_imports)]
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        child_cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    // 子进程优先 UTF-8 输出（T-AB-03：PAGER=cat 防交互式分页器挂起）
+    child_cmd.env("PYTHONUTF8", "1");
+    child_cmd.env("PYTHONIOENCODING", "utf-8");
+    child_cmd.env("PAGER", "cat");
+
+    let mut child = match child_cmd.spawn() {
+        Ok(child) => child,
+        Err(e) => {
+            return terminal_only(Err(ToolError::execution_failed(
+                "shell_command",
+                format!("failed to spawn {shell_label}: {e}"),
+            )))
+        }
+    };
+    let child_pid = child.id();
+    let out_pipe = match child.stdout.take() {
+        Some(pipe) => pipe,
+        None => {
+            return terminal_only(Err(ToolError::execution_failed(
+                "shell_command",
+                "stdout pipe missing",
+            )))
+        }
+    };
+    let err_pipe = match child.stderr.take() {
+        Some(pipe) => pipe,
+        None => {
+            return terminal_only(Err(ToolError::execution_failed(
+                "shell_command",
+                "stderr pipe missing",
+            )))
+        }
+    };
+
+    let state = ShellStreamState::Running(RunningState {
+        child,
+        out_reader: BufReader::new(out_pipe),
+        err_reader: BufReader::new(err_pipe),
+        acc_out: OutputAccumulator::new(),
+        acc_err: OutputAccumulator::new(),
+        out_eof: false,
+        err_eof: false,
+        cum_bytes: 0,
+        budget_exceeded: false,
+        max_output_bytes: c.max_output_bytes,
+        // sync 路径：等待窗口 = timeoutMs（AI 显式设置的绝对长跑防护上限）
+        deadline: tokio::time::Instant::now() + Duration::from_millis(c.timeout_ms),
+        timeout_ms: c.timeout_ms,
+        command: c.command,
+        cwd: c.cwd,
+        shell_label,
+        started: std::time::Instant::now(),
+        log_root: ctx.log_root.clone(),
+        session_id: ctx.session_id.clone(),
+        abort_token: ctx.abort_token.clone(),
+        child_pid,
+    });
+    futures_util::stream::unfold(state, ShellStreamState::step).boxed()
+}
+
+/// 流式运行期状态（ShellStreamState::Running 载荷，unfold 帧间持有）
+struct RunningState {
+    child: tokio::process::Child,
+    out_reader: BufReader<tokio::process::ChildStdout>,
+    err_reader: BufReader<tokio::process::ChildStderr>,
+    acc_out: OutputAccumulator,
+    acc_err: OutputAccumulator,
+    out_eof: bool,
+    err_eof: bool,
+    /// 流式累计推送字节（stdout+stderr 合计；maxOutputBytes 累计预算）
+    cum_bytes: usize,
+    /// 预算超限标记：停止推送 Progress（管道仍持续排空防死锁）
+    budget_exceeded: bool,
+    max_output_bytes: usize,
+    deadline: tokio::time::Instant,
+    timeout_ms: u64,
+    command: String,
+    cwd: PathBuf,
+    shell_label: String,
+    started: std::time::Instant,
+    log_root: Option<PathBuf>,
+    session_id: String,
+    abort_token: AbortToken,
+    child_pid: Option<u32>,
+}
+
+/// 流式执行状态机
+// G2 允许理由（clippy::large_enum_variant）：状态机实例同一时刻只有
+// 一个（unfold 帧间独占转移），RunningState 大 / Done 为单元是单元素
+// 哨兵的自然形状，装箱只会引入无谓堆分配与借用复杂度。
+#[allow(clippy::large_enum_variant)]
+enum ShellStreamState {
+    /// 管道读取进行中（单帧 = 至多一条 Progress / 一个 Terminal）
+    Running(RunningState),
+    /// 已产出 Terminal，unfold 收口（返回 None）
+    Done,
+}
+
+impl ShellStreamState {
+    /// 单步推进（unfold 帧）：返回 (流项, 下一状态)；Done 收口为 None。
+    ///
+    /// 判定顺序（§3.1.6 流不变式：Progress* + Terminal 恒为末项）：
+    /// 1. abort——每块读取前自查 ctx.abort_token，中止即停止推送、
+    ///    杀进程尽快收口（已聚合字节进 Terminal，供非中止消费方兜底）；
+    /// 2. 超时——sync 窗口（= timeoutMs）耗尽 → 树杀 + timedOut 结果收口
+    ///    （与 execute 同步路径超时形状一致）；
+    /// 3. 双管道 EOF——wait 回收 + 聚合结果收口（build_sync_result 复用）；
+    /// 4. 读块循环——select 交替读 stdout/stderr 单块，每块推一条
+    ///    Progress；预算超限帧不推送（push_chunk 返回 None）续帧排空。
+    async fn step(self) -> Option<(ToolStreamItem, ShellStreamState)> {
+        let mut r = match self {
+            ShellStreamState::Running(r) => r,
+            ShellStreamState::Done => return None,
+        };
+
+        // 1. abort（每块读取前自查）：中止即停止推送、杀进程尽快收口
+        if r.abort_token.is_aborted() {
+            kill_child(r.child, r.child_pid).await;
+            let duration_ms = r.started.elapsed().as_millis() as u64;
+            let terminal = build_sync_result(
+                &r.command,
+                &r.cwd,
+                &r.shell_label,
+                None,
+                duration_ms,
+                &r.acc_out,
+                &r.acc_err,
+                r.max_output_bytes,
+                r.log_root.as_deref(),
+                &r.session_id,
+            );
+            return Some((ToolStreamItem::Terminal(terminal), ShellStreamState::Done));
+        }
+
+        // 2-4：读块循环——直至产生可推帧（Progress）或收口（EOF 双端 / 超时）
+        loop {
+            // 双 EOF：输出已读尽 → wait 回收，聚合结果收口（与 execute
+            // 同步路径同构：退出码 + stdout/stderr 捕获 + 截断 / 落盘）
+            if r.out_eof && r.err_eof {
+                let exit_code = r.child.wait().await.ok().and_then(|s| s.code());
+                let duration_ms = r.started.elapsed().as_millis() as u64;
+                let terminal = build_sync_result(
+                    &r.command,
+                    &r.cwd,
+                    &r.shell_label,
+                    exit_code,
+                    duration_ms,
+                    &r.acc_out,
+                    &r.acc_err,
+                    r.max_output_bytes,
+                    r.log_root.as_deref(),
+                    &r.session_id,
+                );
+                return Some((ToolStreamItem::Terminal(terminal), ShellStreamState::Done));
+            }
+            // 超时：等待窗口（sync = timeoutMs）耗尽 → 树杀 + timedOut 收口
+            if tokio::time::Instant::now() >= r.deadline {
+                kill_child(r.child, r.child_pid).await;
+                let duration_ms = r.started.elapsed().as_millis() as u64;
+                let terminal = Ok(build_timeout_result(
+                    &r.command,
+                    &r.cwd,
+                    &r.shell_label,
+                    r.timeout_ms,
+                    duration_ms,
+                ));
+                return Some((ToolStreamItem::Terminal(terminal), ShellStreamState::Done));
+            }
+            let remain = r
+                .deadline
+                .saturating_duration_since(tokio::time::Instant::now());
+            tokio::select! {
+                // 等待窗口耗尽（与上方 now >= deadline 检查互补）
+                _ = tokio::time::sleep(remain) => {
+                    kill_child(r.child, r.child_pid).await;
+                    let duration_ms = r.started.elapsed().as_millis() as u64;
+                    let terminal = Ok(build_timeout_result(
+                        &r.command,
+                        &r.cwd,
+                        &r.shell_label,
+                        r.timeout_ms,
+                        duration_ms,
+                    ));
+                    return Some((ToolStreamItem::Terminal(terminal), ShellStreamState::Done));
+                }
+                // stdout 块 → Progress（逐块推送，§3.1.8 逐块到达）
+                res = read_one_chunk(&mut r.out_reader), if !r.out_eof => {
+                    // 读取错误按 EOF 处理（管道异常不致命，退出码仍可回收）
+                    let (chunk, eof) = res.unwrap_or_else(|_| (Vec::new(), true));
+                    r.out_eof = eof;
+                    if let Some(item) = push_chunk(&mut r, &chunk, false) {
+                        return Some((item, ShellStreamState::Running(r)));
+                    }
+                }
+                // stderr 块 → Progress（带 [stderr] 前缀）
+                res = read_one_chunk(&mut r.err_reader), if !r.err_eof => {
+                    let (chunk, eof) = res.unwrap_or_else(|_| (Vec::new(), true));
+                    r.err_eof = eof;
+                    if let Some(item) = push_chunk(&mut r, &chunk, true) {
+                        return Some((item, ShellStreamState::Running(r)));
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 累积一个数据块并（未超预算时）构造 Progress 帧：
+/// - 无条件累积到聚合累积器（预览 / 行数 / 最近输出时间，T-AB-01 语义
+///   不变；全量字节供截断落盘 spill_full_output，结果与 execute 一致）；
+/// - 预算判定（§3.1.6）：累计推送字节 + 本块 ≤ maxOutputBytes 才推送；
+///   超限置 budget_exceeded 并停止推送（本块及后续均不推）——「实时截断」，
+///   结果仍经 build_sync_result 标记 truncated（与现状 200KB 语义一致）；
+/// - stderr 块带 `[stderr] ` 前缀（展示面可区分；聚合结果 stderr 字段
+///   独立捕获，形状不变）。
+///
+/// 返回 None = 本块未推送（EOF 空块 / 预算超限），调用方续帧排空管道。
+fn push_chunk(r: &mut RunningState, chunk: &[u8], is_err: bool) -> Option<ToolStreamItem> {
+    if chunk.is_empty() {
+        return None;
+    }
+    let now_ms = epoch_millis_now();
+    if is_err {
+        r.acc_err.append(chunk, now_ms);
+    } else {
+        r.acc_out.append(chunk, now_ms);
+    }
+    if r.budget_exceeded {
+        return None;
+    }
+    if r.cum_bytes + chunk.len() > r.max_output_bytes {
+        r.budget_exceeded = true;
+        return None;
+    }
+    r.cum_bytes += chunk.len();
+    let text = if is_err {
+        format!("[stderr] {}", decode_console_bytes(chunk))
+    } else {
+        decode_console_bytes(chunk)
+    };
+    Some(ToolStreamItem::Progress(ToolProgress::Text { text }))
+}
+
+/// 读取一个可用数据块（fill_buf → consume）：返回 (块内容, 是否 EOF)。
+/// 每帧至多读一块 → 每块独立一条 Progress（逐块到达语义 §3.1.8）；
+/// 块大小 ≤ BufReader 容量，与 drain_available 共用 fill_buf/consume
+/// 语义（缓冲内不残留未消费字节）。
+async fn read_one_chunk<R: AsyncBufRead + Unpin>(
+    reader: &mut R,
+) -> std::io::Result<(Vec<u8>, bool)> {
+    let buf = reader.fill_buf().await?;
+    if buf.is_empty() {
+        return Ok((Vec::new(), true));
+    }
+    // 先取长度再复制：fill_buf 返回的切片借用 reader，consume 需要 &mut——
+    // 复制与长度提前取值可解除借用（NLL）
+    let len = buf.len();
+    let chunk = buf.to_vec();
+    reader.consume(len);
+    Ok((chunk, false))
+}
+
+/// 收口杀进程（abort / 超时共用）：先树杀（Windows taskkill 树 / Unix
+/// kill -TERM），再 kill + wait 回收——与 execute 同步路径超时分支同构
+/// （kill_on_drop(false) 下必须显式杀，防孤儿进程）
+async fn kill_child(mut child: tokio::process::Child, child_pid: Option<u32>) {
+    if let Some(pid) = child_pid {
+        let _ = terminate_process_tree(pid);
+    }
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+}
+
+/// 超时结果构造（T-AB-02：sync 树杀路径与 S1 流式路径共用同一形状——
+/// timedOut=true + 超时文案，对齐改造前语义，防两路径漂移）
+fn build_timeout_result(
+    command: &str,
+    cwd: &Path,
+    shell_label: &str,
+    timeout_ms: u64,
+    duration_ms: u64,
+) -> serde_json::Value {
+    let stderr = format!("(命令超时，已终止 · {timeout_ms}ms)");
+    serde_json::json!({
+        "command": command,
+        "cwd": cwd.display().to_string(),
+        "shell": shell_label,
+        "exitCode": null,
+        "stdout": "",
+        "stderr": stderr,
+        "timedOut": true,
+        "truncated": false,
+        "durationMs": duration_ms,
+        "mode": "sync",
+        "text": stderr,
+    })
 }
 
 /// 流式读取结果（T-AB-01）
@@ -2528,5 +2945,279 @@ mod tests {
             parse_mode(&json!({ "mode": "daemon" })).unwrap(),
             ShellMode::Daemon
         );
+    }
+
+    // ===== S1：流式执行（TOOLS-01 §3.1.6，A3 交付）=====
+
+    /// 收集流式全部项直到 Terminal：返回 (Progress 序列, Terminal 结果)。
+    /// 断言流不变式：Terminal 恒为末项，其后不得再有项。
+    async fn collect_stream(
+        stream: ToolStream,
+    ) -> (Vec<ToolStreamItem>, Result<serde_json::Value, ToolError>) {
+        use futures_util::StreamExt;
+        let mut progress = Vec::new();
+        let mut terminal = None;
+        let mut stream = stream;
+        while let Some(item) = stream.next().await {
+            if item.is_terminal() {
+                terminal = Some(item);
+                break;
+            }
+            progress.push(item);
+        }
+        assert!(stream.next().await.is_none(), "Terminal 后不得再有项");
+        match terminal {
+            Some(ToolStreamItem::Terminal(r)) => (progress, r),
+            _ => panic!("流必须产出恰好一个 Terminal"),
+        }
+    }
+
+    /// 平台无关「分时多块输出」命令：每块输出后睡眠，保证管道内块不合并
+    /// （逐块到达断言的前提）
+    fn chunked_output_cmd() -> String {
+        if cfg!(windows) {
+            "1..3 | ForEach-Object { Write-Output \"chunk-$_\"; Start-Sleep -Milliseconds 200 }"
+                .to_string()
+        } else {
+            "for i in 1 2 3; do echo chunk-$i; sleep 0.2; done".to_string()
+        }
+    }
+
+    /// S1 验收（§3.1.8 流式输出逐块到达）：mock 进程分时输出多块——每块
+    /// 独立 ToolProgress::Text 到达（块间 200ms 间隔 + fill_buf 阻塞读，
+    /// 保证块不合并），全部 Progress 在 Terminal 前，Terminal stdout 为
+    /// 全量拼接
+    #[tokio::test]
+    async fn stream_yields_progress_chunks_then_terminal() {
+        let ws = TempWorkspace::new("shell_stream_chunks");
+        let t = tool();
+        let ctx = ctx(&ws);
+        let stream = t
+            .execute_stream(&ctx, json!({ "command": chunked_output_cmd() }))
+            .await;
+        let (progress, terminal) = collect_stream(stream).await;
+        let out = terminal.expect("流式执行不得失败");
+        assert_eq!(out["timedOut"], false);
+        assert_eq!(out["exitCode"], 0);
+        assert_eq!(out["truncated"], false);
+        // 至少 2 块：块间 200ms 间隔 + 逐帧阻塞读，正常 3 块；极端负载
+        // 下相邻块可能合并，2 块断言保留容错余量（拼接内容仍须完整）
+        assert!(
+            progress.len() >= 2,
+            "多块输出应逐块到达（独立 Progress），实际 {} 块",
+            progress.len()
+        );
+        let joined: String = progress
+            .iter()
+            .filter_map(|p| match p {
+                ToolStreamItem::Progress(ToolProgress::Text { text }) => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        for marker in ["chunk-1", "chunk-2", "chunk-3"] {
+            assert!(joined.contains(marker), "进度拼接须含 {marker}：{joined:?}");
+        }
+        let stdout = out["stdout"].as_str().unwrap();
+        assert_eq!(
+            stdout.trim_end().lines().count(),
+            3,
+            "Terminal stdout 为全量拼接：{stdout:?}"
+        );
+    }
+
+    /// S1 验收（§3.1.8 一致性回归）：同命令 execute / execute_stream 的
+    /// 聚合结果逐字节一致（stdout/stderr/text/exitCode/timedOut/truncated/
+    /// command/shell；durationMs 为执行时序差异，排除比较）
+    #[tokio::test]
+    async fn stream_terminal_matches_execute_bytewise() {
+        let ws = TempWorkspace::new("shell_stream_parity");
+        let t = tool();
+        let ctx = ctx(&ws);
+        let command = if cfg!(windows) {
+            "Write-Output parity-out; [Console]::Error.WriteLine('parity-err'); exit 9"
+        } else {
+            "echo parity-out; echo parity-err >&2; exit 9"
+        };
+        let args = json!({ "command": command });
+        let legacy = t.execute(&ctx, args.clone()).await.unwrap();
+        let (_, terminal) = collect_stream(t.execute_stream(&ctx, args).await).await;
+        let out = terminal.expect("流式执行不得失败");
+        for key in [
+            "command",
+            "shell",
+            "stdout",
+            "stderr",
+            "text",
+            "exitCode",
+            "timedOut",
+            "truncated",
+            "mode",
+        ] {
+            assert_eq!(out[key], legacy[key], "字段 {key} 须与 execute 一致");
+        }
+    }
+
+    /// S1 验收（§3.1.6 累计预算）：maxOutputBytes 升级为累计流式字节预算——
+    /// 超限实时停止推送（已推字节 ≤ 预算），结果仍标记 truncated（头尾
+    /// 预览 + 截断标记，与 execute 一致）；管道持续排空（不超时不失败）
+    #[tokio::test]
+    async fn stream_budget_stops_progress_and_marks_truncation() {
+        let ws = TempWorkspace::new("shell_stream_budget");
+        let t = tool();
+        let ctx = ToolContext {
+            log_root: Some(ws.path().join("logs")),
+            ..ctx(&ws)
+        };
+        let args = json!({ "command": big_output_cmd('q', 1_048_576), "timeoutMs": 30000, "maxOutputBytes": 2048 });
+        let legacy = t.execute(&ctx, args.clone()).await.unwrap();
+        assert_eq!(legacy["truncated"], true, "前置：execute 路径应判定截断");
+        let (progress, terminal) = collect_stream(t.execute_stream(&ctx, args).await).await;
+        let out = terminal.expect("流式执行不得失败");
+        // 预算实时截断：已推字节 ≤ 预算（严格），超限后不再推送
+        let pushed: usize = progress
+            .iter()
+            .map(|p| match p {
+                ToolStreamItem::Progress(ToolProgress::Text { text }) => text.len(),
+                _ => 0,
+            })
+            .sum();
+        assert!(pushed <= 2048, "已推字节不得超过预算：{pushed}");
+        // 截断标记 + 排空语义：结果截断、无超时、与 execute 逐字节一致
+        assert_eq!(out["truncated"], true, "结果须标记 truncation");
+        assert_eq!(out["timedOut"], false, "预算截断不得触发超时（管道持续排空）");
+        assert!(out["stdout"].as_str().unwrap().contains("[output truncated"));
+        for key in ["stdout", "stderr", "exitCode", "timedOut", "truncated"] {
+            assert_eq!(out[key], legacy[key], "字段 {key} 须与 execute 一致");
+        }
+    }
+
+    /// S1 验收（§3.1.8 abort）：执行前已 abort → 零 Progress，尽快收口为
+    /// Terminal（已聚合结果），流不悬挂
+    #[tokio::test]
+    async fn stream_abort_before_start_terminates_promptly() {
+        let ws = TempWorkspace::new("shell_stream_abort_pre");
+        let t = tool();
+        let ctx = ctx(&ws);
+        ctx.abort_token.abort();
+        let stream = t
+            .execute_stream(&ctx, json!({ "command": "echo never-seen" }))
+            .await;
+        let (progress, terminal) = collect_stream(stream).await;
+        assert_eq!(progress.len(), 0, "执行前 abort 不得推任何 Progress");
+        assert!(terminal.is_ok(), "abort 收口为 Terminal(Ok(已聚合结果))");
+    }
+
+    /// S1 验收（§3.1.8 abort）：流中途 abort → 停止推送（已发 Progress
+    /// 保留），杀进程尽快收口（3s 睡眠被中止，收口远快于自然结束），
+    /// 流不变式仍成立（Terminal 恒为末项）
+    #[tokio::test]
+    async fn stream_abort_mid_stream_stops_pushing() {
+        let ws = TempWorkspace::new("shell_stream_abort_mid");
+        let t = tool();
+        let ctx = ctx(&ws);
+        let command = if cfg!(windows) {
+            "Write-Output first; Start-Sleep -Seconds 3"
+        } else {
+            "echo first; sleep 3"
+        };
+        let mut stream = t.execute_stream(&ctx, json!({ "command": command })).await;
+        // 第一帧到达后 abort：首帧可能是 stdout「first」块，也可能是
+        // PowerShell 首启混入的 CLIXML stderr 进度噪音（既有测试注释同述，
+        // shell_streaming_preserves_sync_semantics）——不断言内容，只断言
+        // 是 Progress；块后 3s 睡眠保证 abort 后下一帧必然命中中止检查
+        let first = stream.next().await.expect("第一帧应到达");
+        assert!(
+            matches!(first, ToolStreamItem::Progress(_)),
+            "第一帧应为 Progress"
+        );
+        ctx.abort_token.abort();
+        let started = std::time::Instant::now();
+        let next = stream.next().await;
+        let elapsed = started.elapsed();
+        // 3s 睡眠若未被中止，收口需等自然结束（≈3s）；杀进程收口远快于此
+        assert!(
+            elapsed.as_millis() < 2500,
+            "中止后应杀进程尽快收口，实际 {elapsed:?}"
+        );
+        match next {
+            Some(ToolStreamItem::Terminal(r)) => assert!(r.is_ok(), "收口 Terminal 为已聚合结果"),
+            Some(_) => panic!("abort 后不得再推 Progress"),
+            None => panic!("流必须收口为 Terminal（流不变式）"),
+        }
+    }
+
+    /// S1 错误路径一致性：门禁拦截命令经 execute_stream → Terminal(Err)，
+    /// 与 execute 错误逐字节一致（无 Progress、恒为末项）
+    #[tokio::test]
+    async fn stream_blocked_command_error_terminal_matches_execute() {
+        let ws = TempWorkspace::new("shell_stream_blocked");
+        let t = tool();
+        let ctx = ctx(&ws);
+        let legacy = t
+            .execute(&ctx, json!({ "command": "rm -rf /" }))
+            .await
+            .unwrap_err();
+        let stream = t
+            .execute_stream(&ctx, json!({ "command": "rm -rf /" }))
+            .await;
+        let (progress, terminal) = collect_stream(stream).await;
+        assert_eq!(progress.len(), 0, "拦截路径不得产生 Progress");
+        match terminal {
+            Err(e) => {
+                assert_eq!(e.code(), TOOL_COMMAND_BLOCKED);
+                assert_eq!(e.to_string(), legacy.to_string(), "错误文案与 execute 一致");
+            }
+            Ok(_) => panic!("红线命令必须拦截"),
+        }
+    }
+
+    /// S1 重定向一致性：删除形态经 execute_stream → 重定向结果与 execute
+    /// 结构一致（entryId 为时间戳、两调用产物不同，只比稳定字段；
+    /// 两次调用各用一个目标文件——首次调用已把目标移入回收站）
+    #[tokio::test]
+    async fn stream_delete_redirect_matches_execute() {
+        let ws = TempWorkspace::new("shell_stream_redirect");
+        ws.write_file("tmp/a.txt", "stream");
+        ws.write_file("tmp/b.txt", "stream");
+        let trash = TempWorkspace::new("shell_stream_redirect_trash");
+        let t = ShellCommandTool::new(30_000, 200_000, Some(trash.path().clone()));
+        let ctx = ctx(&ws);
+        let legacy = t
+            .execute(&ctx, json!({ "command": "rm -rf ./tmp/a.txt" }))
+            .await
+            .unwrap();
+        let stream = t
+            .execute_stream(&ctx, json!({ "command": "rm -rf ./tmp/b.txt" }))
+            .await;
+        let (_, terminal) = collect_stream(stream).await;
+        let out = terminal.expect("重定向不得失败");
+        assert_eq!(out["redirected"], legacy["redirected"]);
+        assert_eq!(out["redirect"]["kind"], legacy["redirect"]["kind"]);
+        assert_eq!(out["redirect"]["reason"], legacy["redirect"]["reason"]);
+        assert_eq!(out["trashEntries"].as_array().unwrap().len(), 1);
+        assert_eq!(out["impact"], legacy["impact"]);
+        assert!(out["text"].as_str().unwrap().contains("trash_restore"));
+    }
+
+    /// S1 兼容面：非 sync 模式（auto-background）回落既有 execute——结果
+    /// 与 execute 逐字节一致（窗口内完成，无 taskId）
+    #[tokio::test]
+    async fn stream_non_sync_mode_falls_back_to_execute() {
+        let ws = TempWorkspace::new("shell_stream_fallback");
+        let t = tool();
+        let ctx = ctx(&ws);
+        let args = json!({
+            "command": if cfg!(windows) { "Write-Output fallback-ok" } else { "echo fallback-ok" },
+            "mode": "auto-background",
+            "waitMsBeforeAsync": 60000,
+        });
+        let legacy = t.execute(&ctx, args.clone()).await.unwrap();
+        assert_eq!(legacy["timedOut"], false);
+        let (_, terminal) = collect_stream(t.execute_stream(&ctx, args).await).await;
+        let out = terminal.expect("回落路径不得失败");
+        for key in ["stdout", "exitCode", "timedOut", "mode", "text"] {
+            assert_eq!(out[key], legacy[key], "回落路径字段 {key} 须与 execute 一致");
+        }
+        assert!(out.get("taskId").is_none(), "窗口内完成不得产生 taskId");
     }
 }

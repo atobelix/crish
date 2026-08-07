@@ -53,7 +53,7 @@ use agent_tools::context::{
     AbortToken, AskCallback, ExploreDocsQuotaContext, NoopAskChannel, ToolContext,
 };
 use agent_tools::definition::ToolError;
-use agent_tools::executor::{execute_with_output_policy, ExecutorContext, ToolExecutionPolicy};
+use agent_tools::executor::{execute_stream_with_output_policy, ExecutorContext, ToolExecutionPolicy};
 use agent_tools::idempotency::ToolIdempotencyGuard;
 use agent_tools::write_paths::WritePathRegistry;
 use agent_tools::middleware::{
@@ -63,10 +63,11 @@ use agent_tools::middleware::{
 use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
 use agent_tools::registry::ToolRegistry;
 use agent_tools::revert::RevertPolicy;
-use conex_types::tool::{ToolBatchCall, ToolConcurrency};
+use agent_tools::streaming::ToolProgress;
+use conex_types::tool::{ToolBatchCall, ToolConcurrency, ToolProgressUpdate};
 use serde_json::Value;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// 批处理执行上下文
@@ -853,27 +854,49 @@ impl ToolExecutor {
         // 执行入参 = 中间件链修改后的最终入参（未经 before 链时与原始入参一致）
         let exec_input = current_input.clone();
         let start = std::time::Instant::now();
-        // 执行体 future：幂等守卫开启时透传守卫（execute_with_output_policy
+        // S1（TOOLS-01 §3.1.5）：流式执行 + 进度出站——Progress 经
+        // [tool_progress_update] 映射为 ToolEvent::ToolProgress 入进度缓冲，
+        // 执行完成后并入事件链（时序 tool-start → tool-update* → tool-end；
+        // ToolUpdate 为展示面不进消息历史，终值仍由 ToolEnd 承载）。Content
+        // 阶段 1 不发射（映射返回 None 直接丢弃）；幂等命中路径零 Progress
+        //（executor 内早退不回调，D3）；abort/超时路径已入队的进度保留
+        //（流被 drop 前已回调，契约「已发 Progress 保留」）。
+        let progress_buffer: Arc<Mutex<Vec<ToolEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let progress: Option<Arc<dyn Fn(ToolProgress) + Send + Sync>> = Some(Arc::new({
+            let buffer = Arc::clone(&progress_buffer);
+            let call_id = call.id.clone();
+            move |p: ToolProgress| {
+                if let Some(update) = tool_progress_update(&p) {
+                    buffer.lock().unwrap().push(ToolEvent::ToolProgress {
+                        call_id: call_id.clone(),
+                        update,
+                    });
+                }
+            }
+        }));
+        // 执行体 future：幂等守卫开启时透传守卫（execute_stream_with_output_policy
         // 的幂等去重 + 输出预算语义，T06.4.2/T06.4.4）
         let execute = async {
             if let Some(g) = guard.as_ref() {
-                execute_with_output_policy(
+                execute_stream_with_output_policy(
                     tool.as_ref(),
                     exec_input.clone(),
                     &tool_ctx,
                     &exec_ctx,
                     Some(g.as_ref()),
                     &policy,
+                    progress.clone(),
                 )
                 .await
             } else {
-                execute_with_output_policy(
+                execute_stream_with_output_policy(
                     tool.as_ref(),
                     exec_input.clone(),
                     &tool_ctx,
                     &exec_ctx,
                     None,
                     &policy,
+                    progress.clone(),
                 )
                 .await
             }
@@ -899,6 +922,12 @@ impl ToolExecutor {
             .as_ref()
             .map(|c| c.take_recorded())
             .unwrap_or_default();
+        // S1：进度事件并入事件链（执行 future 已 resolve/drop，缓冲不再
+        // 增长）——后续所有返回分支（abort/超时/成功/失败）自动携带已发
+        // 进度，保持 tool-start → tool-update* → tool-end 时序与
+        // 「abort 后已发 Progress 保留」契约
+        let mut recorded = recorded;
+        recorded.extend(std::mem::take(&mut *progress_buffer.lock().unwrap()));
 
         if let Some(sig) = abort {
             if sig.is_aborted() {
@@ -1263,14 +1292,36 @@ async fn run_hook_with_timeout<T>(
     }
 }
 
+/// S1 出站映射：ToolProgress → ToolProgressUpdate（TOOLS-01 §3.1.5）
+///
+/// - `Text` → `text` 承载 + `metadata.kind = "tool-progress"`；
+/// - `Custom` → `json` 承载 + `metadata.kind = subkind`（与前端预留的
+///   `metadata.kind === 'tool-args-delta'` 消费面同槽位扩展）；
+/// - `Content` → 阶段 1 仅类型定义，返回 None（不发射，`content-blocks`
+///   kind 字面量预留）。
+fn tool_progress_update(p: &ToolProgress) -> Option<ToolProgressUpdate> {
+    match p {
+        ToolProgress::Text { text } => Some(ToolProgressUpdate {
+            text: Some(text.clone()),
+            json: None,
+            metadata: Some(serde_json::json!({ "kind": "tool-progress" })),
+        }),
+        ToolProgress::Custom { subkind, payload } => Some(ToolProgressUpdate {
+            text: None,
+            json: Some(payload.clone()),
+            metadata: Some(serde_json::json!({ "kind": subkind })),
+        }),
+        ToolProgress::Content { .. } => None,
+    }
+}
+
 /// 工具错误 → 分类
 ///
 /// R4 T10：`tool.requires_approval` 不再落入软拒绝分类，归类为
 /// [ToolErrorKind::ApprovalRequired]——真实审批状态透传（有审批门时
 /// [ToolExecutor::execute_single_with_retry] 发起真实审批并重试）；
 /// tool.soft_deny 已无工具产生，落到 execution_failed（枚举保留兼容）。
-fn classify_tool_error(err: &ToolError) -> (ToolErrorKind, String) {
-    let code = err.code();
+fn classify_tool_error(err: &ToolError) -> (ToolErrorKind, String) {    let code = err.code();
     let message = err.to_string();
     let kind = match code {
         "tool.not_found" => ToolErrorKind::NotFound,
@@ -1359,6 +1410,7 @@ mod tests {
     use agent_tools::middleware::ToolExecutionContext;
     use agent_tools::permission::PermissionMode;
     use agent_tools::registry::ToolRegistry;
+    use agent_tools::streaming::{ContentBlock, ToolProgress, ToolStream, ToolStreamItem};
     use async_trait::async_trait;
     use serde_json::Value;
     use std::collections::VecDeque;
@@ -1473,6 +1525,61 @@ mod tests {
         }
     }
 
+    /// S1 流式测试工具：execute_stream 推送 Text/Custom/Content 进度 + 终值
+    ///（验证 execute_stream_with_output_policy 进度回调与事件接线）
+    struct StreamTool {
+        text_chunks: Vec<String>,
+        custom: Option<(String, Value)>,
+        with_content: bool,
+    }
+    #[async_trait::async_trait]
+    impl Tool for StreamTool {
+        fn name(&self) -> &str {
+            "stream"
+        }
+        fn definition(&self) -> &ToolDefinition {
+            static DEF: std::sync::OnceLock<ToolDefinition> = std::sync::OnceLock::new();
+            DEF.get_or_init(|| ToolDefinition {
+                name: "stream".into(),
+                description: "streaming tool".into(),
+                input_schema: serde_json::json!({"type": "object"}),
+                dangerous: false,
+                fatal_on_error: false,
+            })
+        }
+        async fn execute(
+            &self,
+            _ctx: &ToolContext,
+            _args: Value,
+        ) -> Result<Value, ToolError> {
+            // 流式路径不调用 execute（与 execute_stream_with_output_policy
+            // 消费 execute_stream 一致）
+            Err(ToolError::execution_failed("stream", "execute 不应被调用"))
+        }
+        async fn execute_stream(&self, _ctx: &ToolContext, _args: Value) -> ToolStream {
+            let mut items = Vec::new();
+            for t in &self.text_chunks {
+                items.push(ToolStreamItem::Progress(ToolProgress::Text { text: t.clone() }));
+            }
+            if let Some((subkind, payload)) = &self.custom {
+                items.push(ToolStreamItem::Progress(ToolProgress::Custom {
+                    subkind: subkind.clone(),
+                    payload: payload.clone(),
+                }));
+            }
+            if self.with_content {
+                items.push(ToolStreamItem::Progress(ToolProgress::Content {
+                    blocks: vec![ContentBlock {
+                        kind: "image".into(),
+                        data: serde_json::json!({}),
+                    }],
+                }));
+            }
+            items.push(ToolStreamItem::Terminal(Ok(serde_json::json!({ "final": true }))));
+            Box::pin(futures::stream::iter(items))
+        }
+    }
+
     fn registry_with(tools: Vec<Arc<dyn Tool>>) -> Arc<ToolRegistry> {
         let mut reg = ToolRegistry::new();
         for t in tools {
@@ -1517,6 +1624,93 @@ mod tests {
         assert!(matches!(out.events[1], ToolEvent::ToolStart { .. }));
         assert!(matches!(out.events[2], ToolEvent::ToolEnd { .. }));
         assert!(matches!(out.events[3], ToolEvent::BatchEnd { .. }));
+    }
+
+    /// S1 出站映射纯函数（TOOLS-01 §3.1.5）：Text/Custom/Content 三形态
+    #[test]
+    fn progress_update_mapping_shapes() {
+        // Text → text 承载 + metadata.kind = tool-progress
+        let u = tool_progress_update(&ToolProgress::Text { text: "hi".into() }).unwrap();
+        assert_eq!(u.text.as_deref(), Some("hi"));
+        assert!(u.json.is_none());
+        assert_eq!(u.metadata.as_ref().unwrap()["kind"], "tool-progress");
+        // Custom → json 承载 + metadata.kind = subkind（tool-args-delta 同槽位）
+        let u = tool_progress_update(&ToolProgress::Custom {
+            subkind: "tool-args-delta".into(),
+            payload: serde_json::json!({ "a": 1 }),
+        })
+        .unwrap();
+        assert!(u.text.is_none());
+        assert_eq!(u.json.as_ref().unwrap()["a"], 1);
+        assert_eq!(u.metadata.as_ref().unwrap()["kind"], "tool-args-delta");
+        // Content → 阶段 1 不发射（返回 None）
+        assert!(tool_progress_update(&ToolProgress::Content { blocks: vec![] }).is_none());
+    }
+
+    /// S1 事件链路集成：流式工具进度 → ToolEvent::ToolProgress 入事件链，
+    /// 时序 tool-start → tool-update* → tool-end（Content 不发射）
+    #[tokio::test]
+    async fn streaming_progress_events_between_start_and_end() {
+        let reg = registry_with(vec![Arc::new(StreamTool {
+            text_chunks: vec!["第一块".into(), "第二块".into()],
+            custom: Some(("phase".into(), serde_json::json!({ "step": 1 }))),
+            with_content: true,
+        })]);
+        let exec = ToolExecutor::new(reg);
+        let calls = vec![call("c1", "stream", ToolConcurrency::Sequential)];
+        let out = exec
+            .execute_batch(&calls, &exec_ctx(), None, &ToolBatchOptions::default(), None)
+            .await;
+        assert!(out.results[0].is_ok());
+        assert_eq!(out.results[0].output["final"], true);
+        // 事件序列：BatchStart → ToolStart → ToolProgress×3（2 Text + 1
+        // Custom；Content 不发射）→ ToolEnd → BatchEnd
+        let kinds: Vec<&str> = out
+            .events
+            .iter()
+            .map(|e| match e {
+                ToolEvent::BatchStart { .. } => "batch-start",
+                ToolEvent::ToolStart { .. } => "tool-start",
+                ToolEvent::ToolProgress { .. } => "tool-progress",
+                ToolEvent::ToolEnd { .. } => "tool-end",
+                ToolEvent::BatchEnd { .. } => "batch-end",
+                _ => "other",
+            })
+            .collect();
+        assert_eq!(
+            kinds,
+            vec![
+                "batch-start",
+                "tool-start",
+                "tool-progress",
+                "tool-progress",
+                "tool-progress",
+                "tool-end",
+                "batch-end"
+            ],
+            "时序契约：tool-start → tool-update* → tool-end"
+        );
+        // 进度载荷形状：Text 两帧 + Custom 一帧，全部携带 call_id
+        let updates: Vec<&ToolProgressUpdate> = out
+            .events
+            .iter()
+            .filter_map(|e| match e {
+                ToolEvent::ToolProgress { update, .. } => Some(update),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(updates.len(), 3);
+        assert_eq!(updates[0].text.as_deref(), Some("第一块"));
+        assert_eq!(updates[0].metadata.as_ref().unwrap()["kind"], "tool-progress");
+        assert_eq!(updates[1].text.as_deref(), Some("第二块"));
+        assert!(updates[1].json.is_none());
+        assert_eq!(updates[2].json.as_ref().unwrap()["step"], 1);
+        assert_eq!(updates[2].metadata.as_ref().unwrap()["kind"], "phase");
+        for e in &out.events {
+            if let ToolEvent::ToolProgress { call_id, .. } = e {
+                assert_eq!(call_id, "c1", "进度事件携带工具调用 id");
+            }
+        }
     }
 
     #[tokio::test]

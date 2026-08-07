@@ -261,6 +261,18 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                     timestamp: crate::steering::now_iso_utc(),
                 });
             }
+            ToolEvent::ToolProgress { call_id, update } => {
+                // S1 流式进度（TOOLS-01 §3.1.5）：ToolUpdate 出站（展示面，
+                // 携带 batch_id/tool_call_id；不进消息历史——终值仍由
+                // ToolEnd 承载，避免污染对话缓存前缀）
+                state.events.push(AgentEvent::ToolUpdate {
+                    session_id: session_id.clone(),
+                    batch_id: batch_id.clone(),
+                    tool_call_id: call_id.clone(),
+                    update: update.clone(),
+                    timestamp: crate::steering::now_iso_utc(),
+                });
+            }
             ToolEvent::ToolEnd {
                 call_id,
                 tool_name,
@@ -336,5 +348,151 @@ fn tool_output_from_parts(
         text: None,
         json: Some(output.clone()),
         artifacts: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_tools::registry::ToolRegistry;
+    use conex_types::tool::ToolProgressUpdate;
+    use crate::r#loop::SessionLoopOptions;
+    use crate::steering::{
+        RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions,
+    };
+
+    /// 构造最小 LoopState（emit_tool_events 单测驱动）
+    fn state() -> LoopState {
+        let steering = SteeringCoordinator::new(
+            vec![Box::new(RecoverySteeringStrategy::default())],
+            SteeringCoordinatorOptions::default(),
+        );
+        LoopState::new(
+            "sess-1",
+            16,
+            steering,
+            SessionLoopOptions::default(),
+            Arc::new(ToolRegistry::new()),
+        )
+    }
+
+    /// Text 形态出站映射（TOOLS-01 §3.1.5）：text 承载 + metadata.kind =
+    /// tool-progress；batch_id/tool_call_id 透传；时序
+    /// tool-start → tool-update → tool-end 保持；ToolUpdate 不进消息历史
+    #[test]
+    fn tool_progress_text_maps_to_tool_update() {
+        let mut s = state();
+        let events = vec![
+            ToolEvent::BatchStart {
+                batch_id: "batch-1".into(),
+                count: 1,
+            },
+            ToolEvent::ToolStart {
+                call_id: "c1".into(),
+                tool_name: "shell_command".into(),
+                input: serde_json::json!({}),
+                category: ToolCategory::Internal,
+                concurrency: ToolConcurrency::Sequential,
+                summary: "call shell_command".into(),
+            },
+            ToolEvent::ToolProgress {
+                call_id: "c1".into(),
+                update: ToolProgressUpdate {
+                    text: Some("第一块".into()),
+                    json: None,
+                    metadata: Some(serde_json::json!({ "kind": "tool-progress" })),
+                },
+            },
+            ToolEvent::ToolEnd {
+                call_id: "c1".into(),
+                tool_name: "shell_command".into(),
+                is_error: false,
+                duration_ms: 10,
+                output: serde_json::json!({ "out": "x" }),
+                error_code: None,
+                error_message: None,
+            },
+            ToolEvent::BatchEnd {
+                batch_id: "batch-1".into(),
+            },
+        ];
+        emit_tool_events(&mut s, &events);
+        // 事件流时序：tool-batch-start → tool-start → tool-update →
+        // tool-end → tool-batch-end
+        let types: Vec<&str> = s.events.iter().map(|e| e.type_name()).collect();
+        assert_eq!(
+            types,
+            vec![
+                "tool-batch-start",
+                "tool-start",
+                "tool-update",
+                "tool-end",
+                "tool-batch-end"
+            ],
+            "tool-update 必须位于 tool-start 与 tool-end 之间"
+        );
+        match &s.events[2] {
+            AgentEvent::ToolUpdate {
+                batch_id,
+                tool_call_id,
+                update,
+                ..
+            } => {
+                assert_eq!(batch_id, "batch-1", "batch_id 从批上下文透传");
+                assert_eq!(tool_call_id, "c1", "tool_call_id 从执行上下文透传");
+                assert_eq!(update.text.as_deref(), Some("第一块"));
+                assert!(update.json.is_none());
+                assert_eq!(
+                    update.metadata.as_ref().unwrap()["kind"],
+                    "tool-progress",
+                    "Text 形态 metadata.kind 固定为 tool-progress"
+                );
+            }
+            _ => panic!("ToolProgress 应映射为 AgentEvent::ToolUpdate"),
+        }
+        // ToolUpdate 是展示面事件：不进消息历史（终值仍由 ToolEnd 承载）
+        assert!(
+            s.conversation.is_empty(),
+            "emit_tool_events 不得写消息历史（ToolUpdate 不进对话缓存前缀）"
+        );
+    }
+
+    /// Custom 形态出站映射：json 承载 + metadata.kind = subkind（与前端
+    /// tool-args-delta 预留消费面同槽位）
+    #[test]
+    fn tool_progress_custom_maps_to_tool_update() {
+        let mut s = state();
+        let events = vec![
+            ToolEvent::BatchStart {
+                batch_id: "batch-1".into(),
+                count: 1,
+            },
+            ToolEvent::ToolProgress {
+                call_id: "c2".into(),
+                update: ToolProgressUpdate {
+                    text: None,
+                    json: Some(serde_json::json!({ "step": 1 })),
+                    metadata: Some(serde_json::json!({ "kind": "tool-args-delta" })),
+                },
+            },
+        ];
+        emit_tool_events(&mut s, &events);
+        match &s.events[1] {
+            AgentEvent::ToolUpdate {
+                tool_call_id,
+                update,
+                ..
+            } => {
+                assert_eq!(tool_call_id, "c2");
+                assert!(update.text.is_none());
+                assert_eq!(update.json.as_ref().unwrap()["step"], 1);
+                assert_eq!(
+                    update.metadata.as_ref().unwrap()["kind"],
+                    "tool-args-delta",
+                    "Custom 形态 metadata.kind = subkind"
+                );
+            }
+            _ => panic!("ToolProgress 应映射为 AgentEvent::ToolUpdate"),
+        }
     }
 }

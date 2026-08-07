@@ -1,13 +1,15 @@
 //! 工具批处理事件与审批门（任务书 B3.5 的 tool_events 部分）
 //!
-//! - 事件序列：tool-batch-start → (tool-start → approval-requested → tool-end)* → tool-batch-end
+//! - 事件序列：tool-batch-start → (tool-start → approval-requested →
+//!   tool-update* → tool-end)* → tool-batch-end（S1 起 tool-update* 为流式
+//!   进度增量，零或多条，恒位于 tool-start 与 tool-end 之间——TOOLS-01 §3.1.5）
 //! - 审批防死锁：approval-requested 必须先于挂起等待发出（01 §五.8）
 //! - 事件为轻量结构，后续由 orchestrator 转成 AgentEvent（03 §1 清单）
 //!
-//! 语义来源：01-session-loop-semantics.md §2.8 / §五.8
+//! 语义来源：01-session-loop-semantics.md §2.8 / §五.8；TOOLS-01 §3.1.5
 
 use agent_tools::permission::PermissionMode;
-use conex_types::tool::{ToolCategory, ToolConcurrency};
+use conex_types::tool::{ToolCategory, ToolConcurrency, ToolProgressUpdate};
 use serde_json::Value;
 use std::time::Duration;
 
@@ -51,6 +53,16 @@ pub enum ToolEvent {
         error_code: Option<String>,
         /// 错误文案（is_error 时有值）
         error_message: Option<String>,
+    },
+    /// 工具执行进度增量（S1 流式输出，TOOLS-01 §3.1.5）
+    ///
+    /// 恒位于本工具的 ToolStart 与 ToolEnd 之间（tool-start →
+    /// tool-update* → tool-end）；翻译层映射为 AgentEvent::ToolUpdate——
+    /// 展示面事件，不进消息历史（终值仍由 ToolEnd 承载，避免污染
+    /// 对话缓存前缀）。
+    ToolProgress {
+        call_id: String,
+        update: ToolProgressUpdate,
     },
     /// 批次结束
     BatchEnd { batch_id: String },

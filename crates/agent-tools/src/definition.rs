@@ -4,6 +4,7 @@
 //! 第三方工具实现 Tool trait 的执行面 execute，注册后由 ToolRegistry 统一管理。
 
 use crate::context::ToolContext;
+use crate::streaming::{terminal_only, ToolStream};
 use async_trait::async_trait;
 use conex_types::error::{codes, CrishError, CrishErrorPayload};
 use serde::{Deserialize, Serialize};
@@ -155,6 +156,17 @@ pub trait Tool: Send + Sync {
         ctx: &ToolContext,
         args: serde_json::Value,
     ) -> Result<serde_json::Value, ToolError>;
+
+    /// 流式执行（S1 新增，TOOLS-01 §3.1.3；默认实现 = execute 结果包单元素
+    /// 流，旧工具零改动、行为与直接 execute 逐字节一致）。
+    ///
+    /// 流不变式：任意多 Progress、恰好一个 Terminal 且恒为末项；
+    /// 实现须自查 ctx.abort_token（abort 后停止推送并尽快收口，由执行器
+    /// 侧 drop 流完成取消——对齐现状「drop 即取消」）。
+    /// 流式工具亦须保持 execute 可用（供非流式消费者取聚合终值）。
+    async fn execute_stream(&self, ctx: &ToolContext, args: serde_json::Value) -> ToolStream {
+        terminal_only(self.execute(ctx, args).await)
+    }
 }
 
 #[cfg(test)]
@@ -243,5 +255,30 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out, json!({ "echo": { "msg": "你好" } }));
+    }
+
+    /// S1 默认实现验收：未实现 execute_stream 的工具（EchoTool 测试替身）
+    /// 走 execute 包单元素流，输出与旧路径（直接 execute）逐字节一致。
+    #[tokio::test]
+    async fn default_execute_stream_wraps_execute_result() {
+        use crate::context::create_mock_tool_context;
+        use crate::streaming::ToolStreamItem;
+        use crate::test_support::EchoTool;
+        use futures_util::StreamExt;
+
+        let tool = EchoTool::new("echo");
+        let ctx = create_mock_tool_context();
+        let args = json!({ "msg": "你好" });
+
+        let legacy = tool.execute(&ctx, args.clone()).await.unwrap();
+        let mut stream = tool.execute_stream(&ctx, args).await;
+
+        let item = stream.next().await.unwrap();
+        assert!(item.is_terminal(), "默认实现应只产出 Terminal");
+        match item {
+            ToolStreamItem::Terminal(Ok(out)) => assert_eq!(out, legacy, "输出须与旧路径一致"),
+            _ => panic!("默认实现流形状违反契约"),
+        }
+        assert!(stream.next().await.is_none(), "Terminal 后不得再有项");
     }
 }

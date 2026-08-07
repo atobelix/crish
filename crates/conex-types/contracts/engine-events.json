@@ -239,7 +239,24 @@
       "type": "tool-update",
       "rustVariant": "ToolUpdate",
       "domain": "tool",
-      "description": "工具执行进度增量（预留 tool-args-delta 增量参数流）",
+      "description": "工具执行进度增量（S1 流式输出，TOOLS-01 §3.1.5；展示面事件不进消息历史，终值仍由 tool-end 承载；update.metadata.kind 字面量登记见 kindLiterals）",
+      "kindLiterals": [
+        {
+          "kind": "tool-progress",
+          "status": "active",
+          "description": "文本进度增量（ToolProgress::Text 映射：update.text 承载）"
+        },
+        {
+          "kind": "tool-args-delta",
+          "status": "reserved",
+          "description": "增量参数流（预留：前端 partialToolArgs 消费，ToolProgress::Custom subkind 同槽位）"
+        },
+        {
+          "kind": "content-blocks",
+          "status": "reserved",
+          "description": "富内容块进度（ToolProgress::Content，阶段 1 仅类型定义不发射）"
+        }
+      ],
       "fields": [
         {
           "name": "sessionId",
@@ -1780,7 +1797,7 @@
     },
     "ToolProgressUpdate": {
       "kind": "struct",
-      "description": "工具执行进度增量（tool-update.update 载荷）",
+      "description": "工具执行进度增量（tool-update.update 载荷；metadata.kind 字面量：tool-progress 已启用，tool-args-delta/content-blocks 预留）",
       "fields": [
         {
           "name": "text",
@@ -1798,7 +1815,7 @@
           "name": "metadata",
           "type": "JsonValue",
           "required": false,
-          "description": "附加元数据（tool-args-delta 走此）"
+          "description": "附加元数据（kind 字面量：tool-progress 文本进度 / tool-args-delta 增量参数预留 / content-blocks 富内容预留）"
         }
       ]
     },

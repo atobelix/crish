@@ -15,6 +15,8 @@
 //! - `output`：工具输出结构化——序列化（text 优先）与预算截断（B5.3）
 //! - `idempotency`：工具幂等守卫——已执行结果去重（B5.3）
 //! - `executor`：最小工具执行器——单工具执行 + 输出策略 + 幂等检查（B5.3，供 B3.5 消费）
+//! - `streaming`：S1 流式输出协议——ToolStream / ToolProgress / 构造助手
+//!   （TOOLS-01 §3.1，[Progress*, Terminal] 流形状与执行器流式消费路径）
 //! - `tools`：内置工具（fs / shell / search / diff，B5.2），
 //!   复用 conex-fs 路径安全、conex-sandbox 命令门禁、conex-search 模糊搜索、conex-diff
 //! - `mcp`：MCP 桥（B5.4）——server 配置管理（servers）与 stdio 客户端桥（bridge），
@@ -37,6 +39,7 @@ pub mod registry;
 pub mod revert;
 pub mod revert_guard;
 pub mod subagent_inject;
+pub mod streaming;
 pub mod tools;
 pub mod write_paths;
 
@@ -54,7 +57,15 @@ pub use background::{
     BackgroundTaskStatus, KillResult, LogSlice, ResourceSample, TaskState,
 };
 pub use definition::{default_input_schema, Tool, ToolDefinition, ToolError};
-pub use executor::{execute_with_output_policy, ExecutorContext, ToolExecutionPolicy, ToolResult};
+pub use executor::{
+    execute_stream_with_output_policy, execute_with_output_policy, ExecutorContext,
+    ToolExecutionPolicy, ToolResult,
+};
+// S1（TOOLS-01 §3.1.3）：流式输出协议冻结面——ToolStream 类型签名与
+// ToolStreamItem/ToolProgress 形状，消费方（执行器/A2 事件映射）按此导入
+pub use streaming::{
+    terminal_only, with_progress, ContentBlock, ToolProgress, ToolStream, ToolStreamItem,
+};
 pub use permission::{
     decide, decide_command_with_revert, PermissionMode, PermissionVerdict,
 };
