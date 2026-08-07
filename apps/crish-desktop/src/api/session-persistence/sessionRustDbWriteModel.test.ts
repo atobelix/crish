@@ -1,14 +1,19 @@
 /**
  * sessionRustDb 写路径契约测试（Stream D 当前实现）。
  *
- * 契约变更说明（2026-08，R6 收尾 34-cleanup-closure.md:181 判定）：
- * 本文件原为 T08.10 写模型定稿测试（PE-08 任务书 / AA-07 P08 P09 P10：串行队列 +
- * 批次版本戳 + updated_at CAS + 增量脏签名 + 写后校验 + SQLite 优先真相源 + P17 单写路径），
- * 但该写模型自 58ebaa93 起从未实现，随后被 Stream D（d9e5b61e 重构的 sessionRustDb.ts）
- * 取代。本文件已按 Stream D 当前真实契约更新断言，覆盖：
+ * 契约变更说明（2026-08）：
+ * 1. R6 收尾 34-cleanup-closure.md:181 判定：本文件原为 T08.10 写模型定稿测试
+ *    （PE-08 任务书 / AA-07 P08 P09 P10：串行队列 + 批次版本戳 + updated_at CAS +
+ *    增量脏签名 + 写后校验 + SQLite 优先真相源 + P17 单写路径），但该写模型自
+ *    58ebaa93 起从未实现，随后被 Stream D（d9e5b61e 重构的 sessionRustDb.ts）取代。
+ * 2. PS-03 T3.2（D6 写竞态，2026-08-08）契约翻转：删除被错误固化的
+ *    「旧批次晚完成覆盖新批次（最后写者胜，无 CAS 哨兵）」断言（原 :278-308），
+ *    改为正确契约——并发批次间，后发批次（高版本）结果不被先发但晚完成的批次
+ *    （低版本）覆盖；实现为模块级写串行队列（writeChain）+ 批次版本戳 CAS
+ *    （R9：单调递增版本号，非时间戳）。本文件断言覆盖：
  *
- * 1. 写并发：并发批次各自全量落库，最后写者胜（无批次版本戳；store 层 350ms
- *    debounce 承担串行化，见 store-persistence.ts）
+ * 1. 写并发：并发批次按发起序串行落库（模块级 writeChain），每批次完整全量写；
+ *    后发批次最终落库，先发晚完成批次不得回滚（批次版本戳 CAS 兜底）
  * 2. 真相源切换：hydrate 时 LS 索引优先（过渡期契约），正文一律走 SQLite
  *    （LS 正文不再作为正文源）；30 天清理按 LS 会话镜像全量清除（SQLite 唯一真相源）
  * 3. 懒壳：保护窗口由 prepareSessionsForUi（标题/内容/keep）承担；persist 清理按
@@ -59,7 +64,10 @@ function makeFakeDb(opts?: {
   probeDelayMs?: number;
   /** 前 N 次 load_session_body 返回空（模拟读回不一致场景） */
   bodyReadCorruption?: number;
-}): { db: { sessions: Map<string, FakeRow>; meta: Map<string, string> }; call: ReturnType<typeof vi.fn> } {
+}): {
+  db: { sessions: Map<string, FakeRow>; meta: Map<string, string> };
+  call: ReturnType<typeof vi.fn>;
+} {
   const saveDelayMs = opts?.saveDelayMs ?? 0;
   let probeDelayMs = opts?.probeDelayMs ?? 0;
   let bodyReadCorruption = opts?.bodyReadCorruption ?? 0;
@@ -68,86 +76,97 @@ function makeFakeDb(opts?: {
 
   const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-  const call = vi.fn(async (cmd: string, args: Record<string, unknown> = {}) => {
-    switch (cmd) {
-      case 'list_sessions': {
-        if (probeDelayMs > 0) {
-          // 先清零再等待：只延迟首个调用（并发批次控制入队顺序用）
-          const d = probeDelayMs;
-          probeDelayMs = 0;
-          await delay(d);
-        }
-        return { status: 'ok' as const, data: [...sessions.values()].map((r) => r.entry) };
-      }
-      case 'upsert_session_entry': {
-        const e = (args.entry ?? {}) as Record<string, unknown>;
-        const id = String(e.id);
-        const existing = sessions.get(id);
-        sessions.set(id, {
-          entry: { ...(existing?.entry ?? {}), ...e },
-          messages: existing?.messages ?? [],
-          agents: existing?.agents ?? [],
-        });
-        return { status: 'ok' as const, data: undefined };
-      }
-      case 'save_session_body': {
-        if (saveDelayMs > 0) await delay(saveDelayMs);
-        // Stream D 契约：body/agents 写为「先删后插」幂等写（无前置 upsert 步骤）；
-        // 行不存在时自动建行（对齐 Rust 侧 save 语义，非 FK 报错）
-        const id = String(args.sessionId);
-        if (!sessions.has(id)) {
-          sessions.set(id, { entry: {}, messages: [], agents: [] });
-        }
-        const row = sessions.get(id)!;
-        const msgs = (args.messages as unknown[]) || [];
-        row.messages = msgs.map((m, i) => ({ ...(m as object), seq: i }));
-        return { status: 'ok' as const, data: undefined };
-      }
-      case 'load_session_body': {
-        if (bodyReadCorruption > 0) {
-          bodyReadCorruption--;
-          return { status: 'ok' as const, data: [] };
-        }
-        return {
-          status: 'ok' as const,
-          data: sessions.get(String(args.sessionId))?.messages ?? [],
-        };
-      }
-      case 'save_session_agents': {
-        if (saveDelayMs > 0) await delay(saveDelayMs);
-        // 同上：幂等写，行不存在自动建行
-        const id = String(args.sessionId);
-        if (!sessions.has(id)) {
-          sessions.set(id, { entry: {}, messages: [], agents: [] });
-        }
-        sessions.get(id)!.agents = (args.agents as unknown[]) || [];
-        return { status: 'ok' as const, data: undefined };
-      }
-      case 'load_session_agents': {
-        return { status: 'ok' as const, data: sessions.get(String(args.sessionId))?.agents ?? [] };
-      }
-      case 'set_session_meta': {
-        meta.set(String(args.key), String(args.value));
-        return { status: 'ok' as const, data: undefined };
-      }
-      case 'get_session_meta': {
-        return { status: 'ok' as const, data: meta.get(String(args.key)) ?? null };
-      }
-      case 'cleanup_orphan_sessions': {
-        const keep = new Set((args.activeIds as string[]) || []);
-        let deleted = 0;
-        for (const id of [...sessions.keys()]) {
-          if (!keep.has(id)) {
-            sessions.delete(id);
-            deleted++;
+  const call = vi.fn(
+    async (cmd: string, args: Record<string, unknown> = {}) => {
+      switch (cmd) {
+        case 'list_sessions': {
+          if (probeDelayMs > 0) {
+            // 先清零再等待：只延迟首个调用（并发批次控制入队顺序用）
+            const d = probeDelayMs;
+            probeDelayMs = 0;
+            await delay(d);
           }
+          return {
+            status: 'ok' as const,
+            data: [...sessions.values()].map((r) => r.entry),
+          };
         }
-        return { status: 'ok' as const, data: deleted };
+        case 'upsert_session_entry': {
+          const e = (args.entry ?? {}) as Record<string, unknown>;
+          const id = String(e.id);
+          const existing = sessions.get(id);
+          sessions.set(id, {
+            entry: { ...(existing?.entry ?? {}), ...e },
+            messages: existing?.messages ?? [],
+            agents: existing?.agents ?? [],
+          });
+          return { status: 'ok' as const, data: undefined };
+        }
+        case 'save_session_body': {
+          if (saveDelayMs > 0) await delay(saveDelayMs);
+          // Stream D 契约：body/agents 写为「先删后插」幂等写（无前置 upsert 步骤）；
+          // 行不存在时自动建行（对齐 Rust 侧 save 语义，非 FK 报错）
+          const id = String(args.sessionId);
+          if (!sessions.has(id)) {
+            sessions.set(id, { entry: {}, messages: [], agents: [] });
+          }
+          const row = sessions.get(id)!;
+          const msgs = (args.messages as unknown[]) || [];
+          row.messages = msgs.map((m, i) => ({ ...(m as object), seq: i }));
+          return { status: 'ok' as const, data: undefined };
+        }
+        case 'load_session_body': {
+          if (bodyReadCorruption > 0) {
+            bodyReadCorruption--;
+            return { status: 'ok' as const, data: [] };
+          }
+          return {
+            status: 'ok' as const,
+            data: sessions.get(String(args.sessionId))?.messages ?? [],
+          };
+        }
+        case 'save_session_agents': {
+          if (saveDelayMs > 0) await delay(saveDelayMs);
+          // 同上：幂等写，行不存在自动建行
+          const id = String(args.sessionId);
+          if (!sessions.has(id)) {
+            sessions.set(id, { entry: {}, messages: [], agents: [] });
+          }
+          sessions.get(id)!.agents = (args.agents as unknown[]) || [];
+          return { status: 'ok' as const, data: undefined };
+        }
+        case 'load_session_agents': {
+          return {
+            status: 'ok' as const,
+            data: sessions.get(String(args.sessionId))?.agents ?? [],
+          };
+        }
+        case 'set_session_meta': {
+          meta.set(String(args.key), String(args.value));
+          return { status: 'ok' as const, data: undefined };
+        }
+        case 'get_session_meta': {
+          return {
+            status: 'ok' as const,
+            data: meta.get(String(args.key)) ?? null,
+          };
+        }
+        case 'cleanup_orphan_sessions': {
+          const keep = new Set((args.activeIds as string[]) || []);
+          let deleted = 0;
+          for (const id of [...sessions.keys()]) {
+            if (!keep.has(id)) {
+              sessions.delete(id);
+              deleted++;
+            }
+          }
+          return { status: 'ok' as const, data: deleted };
+        }
+        default:
+          return { status: 'missing' as const, data: undefined };
       }
-      default:
-        return { status: 'missing' as const, data: undefined };
     }
-  });
+  );
 
   return { db: { sessions, meta }, call };
 }
@@ -167,7 +186,11 @@ function sessionsToIndex(sessions: SessionState[]): SessionIndexEntry[] {
   }));
 }
 
-function msg(id: string, sender: 'user' | 'assistant', text?: string): SessionMessage {
+function msg(
+  id: string,
+  sender: 'user' | 'assistant',
+  text?: string
+): SessionMessage {
   const t = text ?? `text-${id}`;
   return { id, sender, timestamp: 1_700_000_000_000 + t.length, text: t };
 }
@@ -175,7 +198,7 @@ function msg(id: string, sender: 'user' | 'assistant', text?: string): SessionMe
 function sess(
   id: string,
   messages: SessionMessage[],
-  partial?: Partial<SessionState>,
+  partial?: Partial<SessionState>
 ): SessionState {
   return {
     id,
@@ -233,8 +256,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('写并发：并发批次各自全量落库，最后写者胜', () => {
-  it('快速连续 commit：两批次各自完整落库，无截断/无交错，最终 = 最后写入批次', async () => {
+describe('写并发：串行队列 + 批次版本戳 CAS，后发批次最终落库（T3.2 D6）', () => {
+  it('快速连续 commit：两批次按发起序串行全量落库，最终 = 后发起批次', async () => {
     const { db, call } = makeFakeDb({ saveDelayMs: 20 });
     installFakeTransport(call);
 
@@ -253,18 +276,36 @@ describe('写并发：并发批次各自全量落库，最后写者胜', () => {
       msg('m3', 'user'),
       msg('m4', 'assistant'),
     ]);
-    const p1 = persistAllSessionsRust([batch1], 's1', [DEFAULT_SESSION_FOLDER], {
-      sessionsToIndex,
-    });
-    const p2 = persistAllSessionsRust([batch2], 's1', [DEFAULT_SESSION_FOLDER], {
-      sessionsToIndex,
-    });
+    const p1 = persistAllSessionsRust(
+      [batch1],
+      's1',
+      [DEFAULT_SESSION_FOLDER],
+      {
+        sessionsToIndex,
+      }
+    );
+    const p2 = persistAllSessionsRust(
+      [batch2],
+      's1',
+      [DEFAULT_SESSION_FOLDER],
+      {
+        sessionsToIndex,
+      }
+    );
     await Promise.all([p1, p2]);
 
-    // 两批次均完整落库（各自全量替换语义）；后调用的批次写得更晚 → 最终 = 4 条
-    // （Stream D 无批次版本戳，最后写者胜；串行化由 store 层 350ms debounce 承担）
-    const saves = call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
+    // 两批次按发起序串行落库（模块级 writeChain）：p1 完整落库后 p2 才执行，
+    // 各批次全量替换语义不变；最终 = 后发起批次（高版本）内容。
+    const saves = call.mock.calls.filter(
+      (c) => c[0] === 'save_session_body'
+    ).length;
     expect(saves).toBe(2);
+    // 批次版本戳（R9：单调递增版本号）随 save_session_body 调用路径传递，
+    // 发起序 = 版本序。修复前无版本参数 → batchVersion 缺失，本断言红。
+    const bodyVersions = call.mock.calls
+      .filter((c) => c[0] === 'save_session_body')
+      .map((c) => (c[1] as { batchVersion?: number })?.batchVersion ?? -1);
+    expect(bodyVersions[0]).toBeLessThan(bodyVersions[1]);
     const final = db.sessions.get('s1')?.messages ?? [];
     expect(final).toHaveLength(4);
     expect((final as { id: string }[]).map((m) => m.id)).toEqual([
@@ -275,7 +316,7 @@ describe('写并发：并发批次各自全量落库，最后写者胜', () => {
     ]);
   });
 
-  it('无批次版本戳：晚完成的批次覆盖先完成的批次（最后写者胜，无 CAS 哨兵）', async () => {
+  it('串行队列：晚完成的旧批次不得覆盖新批次（最终 = 新内容）', async () => {
     const { db, call } = makeFakeDb({ saveDelayMs: 5, probeDelayMs: 40 });
     installFakeTransport(call);
 
@@ -287,24 +328,102 @@ describe('写并发：并发批次各自全量落库，最后写者胜', () => {
       msg('m4', 'assistant'),
     ]);
 
-    // p1（旧内容）的 probe 慢 → 其写任务晚完成
-    const p1 = persistAllSessionsRust([oldBatch], 's1', [DEFAULT_SESSION_FOLDER], {
+    // p1（旧内容）先发起，probe 慢 → 修复前其写任务晚完成；p2（新内容）后发起
+    const p1 = persistAllSessionsRust(
+      [oldBatch],
+      's1',
+      [DEFAULT_SESSION_FOLDER],
+      {
+        sessionsToIndex,
+      }
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    const p2 = persistAllSessionsRust(
+      [newBatch],
+      's1',
+      [DEFAULT_SESSION_FOLDER],
+      {
+        sessionsToIndex,
+      }
+    );
+    await Promise.all([p1, p2]);
+
+    // 正确契约（PS-03 T3.2 翻转）：并发批次间，后发批次（高版本）结果不被
+    // 先发但晚完成的批次（低版本）覆盖；旧批次晚完成时最终落库应为新批次内容。
+    // 修复前（无串行队列）：p1 晚完成 → 最终 = ['m1','m2']（旧覆盖新，本用例红）。
+    const saves = call.mock.calls.filter(
+      (c) => c[0] === 'save_session_body'
+    ).length;
+    expect(saves).toBe(2);
+    // 版本戳随调用路径传递且发起序 = 版本序（修复前 batchVersion 缺失 → 红）
+    const bodyVersions = call.mock.calls
+      .filter((c) => c[0] === 'save_session_body')
+      .map((c) => (c[1] as { batchVersion?: number })?.batchVersion ?? -1);
+    expect(bodyVersions[0]).toBeLessThan(bodyVersions[1]);
+    const final = db.sessions.get('s1')?.messages ?? [];
+    expect((final as { id: string }[]).map((m) => m.id)).toEqual([
+      'm1',
+      'm2',
+      'm3',
+      'm4',
+    ]);
+  });
+
+  it('多批次交错（3 批）：最终 = 最新快照，中间批次不得回滚', async () => {
+    const { db, call } = makeFakeDb({ saveDelayMs: 5, probeDelayMs: 80 });
+    installFakeTransport(call);
+
+    const b1 = sess('s1', [msg('m1', 'user'), msg('m2', 'assistant')]);
+    const b2 = sess('s1', [
+      msg('m1', 'user'),
+      msg('m2', 'assistant'),
+      msg('m3', 'user'),
+      msg('m4', 'assistant'),
+    ]);
+    const b3 = sess('s1', [
+      msg('m1', 'user'),
+      msg('m2', 'assistant'),
+      msg('m3', 'user'),
+      msg('m4', 'assistant'),
+      msg('m5', 'user'),
+      msg('m6', 'assistant'),
+    ]);
+
+    // 三批先后发起，每批间隔 10ms；b1 的 probe 最慢（30ms）→ 修复前其写任务
+    // 最后完成，把已落库的新内容回滚成最旧快照。
+    const p1 = persistAllSessionsRust([b1], 's1', [DEFAULT_SESSION_FOLDER], {
       sessionsToIndex,
     });
     await new Promise((r) => setTimeout(r, 10));
-    // p2（新内容）先完成 probe 并先写入
-    const p2 = persistAllSessionsRust([newBatch], 's1', [DEFAULT_SESSION_FOLDER], {
+    const p2 = persistAllSessionsRust([b2], 's1', [DEFAULT_SESSION_FOLDER], {
       sessionsToIndex,
     });
-    await Promise.all([p1, p2]);
+    await new Promise((r) => setTimeout(r, 10));
+    const p3 = persistAllSessionsRust([b3], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+    await Promise.all([p1, p2, p3]);
 
-    // Stream D 契约：旧批次（晚完成）会覆盖新批次（无 updated_at CAS 哨兵），
-    // 因此两次都写、最终 = 后完成的旧批次内容。
-    // 防丢保证由 store 层 debounce 串行化提供（store-persistence.ts:350ms）。
-    const saves = call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
-    expect(saves).toBe(2);
+    // 正确契约：中间批次（b1/b2）被后续批次覆盖但不得回滚，最终 = 最新快照（6 条）
+    const saves = call.mock.calls.filter(
+      (c) => c[0] === 'save_session_body'
+    ).length;
+    expect(saves).toBe(3);
+    // 三批版本严格递增（修复前 batchVersion 缺失 → 红）
+    const bodyVersions = call.mock.calls
+      .filter((c) => c[0] === 'save_session_body')
+      .map((c) => (c[1] as { batchVersion?: number })?.batchVersion ?? -1);
+    expect(bodyVersions[0]).toBeLessThan(bodyVersions[1]);
+    expect(bodyVersions[1]).toBeLessThan(bodyVersions[2]);
     const final = db.sessions.get('s1')?.messages ?? [];
-    expect((final as { id: string }[]).map((m) => m.id)).toEqual(['m1', 'm2']);
+    expect((final as { id: string }[]).map((m) => m.id)).toEqual([
+      'm1',
+      'm2',
+      'm3',
+      'm4',
+      'm5',
+      'm6',
+    ]);
   });
 });
 
@@ -319,11 +438,11 @@ describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契
     // LS 索引存在但内容不同（历史镜像）
     localStorage.setItem(
       SESSION_INDEX_KEY,
-      JSON.stringify([{ ...indexEntry('ls-only', 'LS 会话') }]),
+      JSON.stringify([{ ...indexEntry('ls-only', 'LS 会话') }])
     );
     localStorage.setItem(
       SESSION_BODY_PREFIX + 'ls-only',
-      JSON.stringify([msg('m1', 'user', 'ls body')]),
+      JSON.stringify([msg('m1', 'user', 'ls body')])
     );
     installFakeTransport(call);
 
@@ -338,11 +457,11 @@ describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契
     const { call } = makeFakeDb();
     localStorage.setItem(
       SESSION_INDEX_KEY,
-      JSON.stringify([{ ...indexEntry('ls1', 'LS 会话') }]),
+      JSON.stringify([{ ...indexEntry('ls1', 'LS 会话') }])
     );
     localStorage.setItem(
       SESSION_BODY_PREFIX + 'ls1',
-      JSON.stringify([msg('m1', 'user', 'ls body')]),
+      JSON.stringify([msg('m1', 'user', 'ls body')])
     );
     installFakeTransport(call);
 
@@ -362,19 +481,19 @@ describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契
     // LS 镜像：in-sqlite（已落库）+ ls-only（仅 LS 存在）
     localStorage.setItem(
       SESSION_BODY_PREFIX + 'in-sqlite',
-      JSON.stringify([msg('m1', 'user')]),
+      JSON.stringify([msg('m1', 'user')])
     );
     localStorage.setItem(SESSION_AGENTS_PREFIX + 'in-sqlite', '[]');
     localStorage.setItem(
       SESSION_BODY_PREFIX + 'ls-only',
-      JSON.stringify([msg('m2', 'user')]),
+      JSON.stringify([msg('m2', 'user')])
     );
     localStorage.setItem(
       SESSION_INDEX_KEY,
       JSON.stringify([
         { ...indexEntry('in-sqlite') },
         { ...indexEntry('ls-only', 'LS-only') },
-      ]),
+      ])
     );
     installFakeTransport(call);
 
@@ -384,7 +503,9 @@ describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契
     // 安全前提：清理仅在迁移完成（migration_completed_at 置位）满 30 天后触发，
     // 此时 SQLite 已持有全部会话（含原 ls-only），LS 仅回滚保险。
     expect(localStorage.getItem(SESSION_BODY_PREFIX + 'in-sqlite')).toBeNull();
-    expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 'in-sqlite')).toBeNull();
+    expect(
+      localStorage.getItem(SESSION_AGENTS_PREFIX + 'in-sqlite')
+    ).toBeNull();
     expect(localStorage.getItem(SESSION_BODY_PREFIX + 'ls-only')).toBeNull();
     expect(localStorage.getItem(SESSION_INDEX_KEY)).toBeNull();
     // SQLite 真相源不受清理影响
@@ -394,12 +515,23 @@ describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契
 
   it('30 天清理：索引 key 删除（LS 全量清除）', async () => {
     const { db, call } = makeFakeDb();
-    db.sessions.set('a', { entry: { ...indexEntry('a') }, messages: [], agents: [] });
-    db.sessions.set('b', { entry: { ...indexEntry('b') }, messages: [], agents: [] });
-    localStorage.setItem(SESSION_BODY_PREFIX + 'a', JSON.stringify([msg('m1', 'user')]));
+    db.sessions.set('a', {
+      entry: { ...indexEntry('a') },
+      messages: [],
+      agents: [],
+    });
+    db.sessions.set('b', {
+      entry: { ...indexEntry('b') },
+      messages: [],
+      agents: [],
+    });
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 'a',
+      JSON.stringify([msg('m1', 'user')])
+    );
     localStorage.setItem(
       SESSION_INDEX_KEY,
-      JSON.stringify([{ ...indexEntry('a') }, { ...indexEntry('b') }]),
+      JSON.stringify([{ ...indexEntry('a') }, { ...indexEntry('b') }])
     );
     localStorage.setItem(SESSION_ACTIVE_KEY, 'a');
     localStorage.setItem(SESSION_FOLDER_KEY, JSON.stringify(['常规会话']));
@@ -416,12 +548,17 @@ describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契
     installFakeTransport(call);
 
     // 模拟 30 天清理完成（meta 标记 + 清理置位）
-    db.meta.set('migration_completed_at', String(Date.now() - 31 * 24 * 60 * 60 * 1000));
+    db.meta.set(
+      'migration_completed_at',
+      String(Date.now() - 31 * 24 * 60 * 60 * 1000)
+    );
     await runMigrationCleanupIfNeeded();
     expect(db.meta.get('legacy_localstorage_cleaned')).toBe('1');
 
     const s = sess('s1', [msg('m1', 'user')]);
-    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
     // Stream D 过渡期契约：清理置位后 persist 仍写 LS 索引 / body 镜像
     expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
     expect(localStorage.getItem(SESSION_BODY_PREFIX + 's1')).not.toBeNull();
@@ -440,7 +577,9 @@ describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契
     const { call } = makeFakeDb();
     installFakeTransport(call);
     const s = sess('s1', [msg('m1', 'user')]);
-    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
     expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
     expect(localStorage.getItem(SESSION_BODY_PREFIX + 's1')).not.toBeNull();
   });
@@ -513,11 +652,20 @@ describe('懒壳保护窗口与清理（P10 现状）', () => {
     const ghost = { id: 'ghost', title: '新会话', messages: [] as unknown[] };
     expect(prepareSessionsForUi([ghost], null).map((x) => x.id)).toEqual([]);
     const now = Date.now();
-    const a = { id: 'a', title: '新会话', messages: [] as unknown[], updatedAt: now - 60_000 };
+    const a = {
+      id: 'a',
+      title: '新会话',
+      messages: [] as unknown[],
+      updatedAt: now - 60_000,
+    };
     // lazyShellGraceMs 窗口选项不存在于当前契约 → 近更新空壳仍剪除
-    expect(prepareSessionsForUi([a], null, { lazyShellGraceMs: 0 }).map((x) => x.id)).toEqual([]);
     expect(
-      prepareSessionsForUi([a], null, { lazyShellGraceMs: 120_000 }).map((x) => x.id),
+      prepareSessionsForUi([a], null, { lazyShellGraceMs: 0 }).map((x) => x.id)
+    ).toEqual([]);
+    expect(
+      prepareSessionsForUi([a], null, { lazyShellGraceMs: 120_000 }).map(
+        (x) => x.id
+      )
     ).toEqual([]);
   });
 });
@@ -528,17 +676,24 @@ describe('写路径：每次 commit 全量重写（F7 全量替换语义）', ()
     installFakeTransport(call);
 
     const s = sess('s1', [msg('m1', 'user'), msg('m2', 'assistant')]);
-    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
-    const saves = () => call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+    const saves = () =>
+      call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
     expect(saves()).toBe(1);
 
     // 内容未变 → Stream D 契约：仍全量重写（无增量签名去重）
-    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
     expect(saves()).toBe(2);
 
     // 追加消息 → 继续全量重写
     const s2 = sess('s1', [...s.messages, msg('m3', 'user')]);
-    await persistAllSessionsRust([s2], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
+    await persistAllSessionsRust([s2], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
     expect(saves()).toBe(3);
     expect(db.sessions.get('s1')?.messages).toHaveLength(3);
   });
@@ -547,11 +702,16 @@ describe('写路径：每次 commit 全量重写（F7 全量替换语义）', ()
     const { call } = makeFakeDb();
     installFakeTransport(call);
     const s = sess('s1', [msg('m1', 'user')]);
-    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
-    const saves = () => call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+    const saves = () =>
+      call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
     expect(saves()).toBe(1);
     // 同一内容再次 commit → Stream D 契约：仍重写
-    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
     expect(saves()).toBe(2);
   });
 });
@@ -561,9 +721,13 @@ describe('写后一致性（现状：无读回校验）', () => {
     const { db, call } = makeFakeDb({ bodyReadCorruption: 1 });
     installFakeTransport(call);
     const s = sess('s1', [msg('m1', 'user'), msg('m2', 'assistant')]);
-    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
     // Stream D 契约：persist 不读回核对，save 仅 1 次
-    const saves = call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
+    const saves = call.mock.calls.filter(
+      (c) => c[0] === 'save_session_body'
+    ).length;
     expect(saves).toBe(1);
     expect(db.sessions.get('s1')?.messages).toHaveLength(2);
   });
@@ -572,8 +736,12 @@ describe('写后一致性（现状：无读回校验）', () => {
     const { call } = makeFakeDb();
     installFakeTransport(call);
     const s = sess('s1', [msg('m1', 'user')]);
-    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], { sessionsToIndex });
-    const saves = call.mock.calls.filter((c) => c[0] === 'save_session_body').length;
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+    const saves = call.mock.calls.filter(
+      (c) => c[0] === 'save_session_body'
+    ).length;
     expect(saves).toBe(1);
   });
 });
