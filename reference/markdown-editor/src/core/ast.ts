@@ -4,7 +4,14 @@ export type LineType =
     | 'code'
     | 'empty'
     | 'hr'
-    | 'blockquote';
+    | 'blockquote'
+    | 'code_fence_start'
+    | 'code_fence_end'
+    | 'math_fence_start'
+    | 'math_fence_end'
+    | 'math_block'
+    | 'table_row'
+    | 'table_separator';
 
 export type InlineType = 
     | 'text' 
@@ -29,7 +36,8 @@ export type InlineType =
     | 'list_task'
     | 'comment'
     | 'string'
-    | 'keyword';
+    | 'keyword'
+    | 'html_element';
 
 export interface InlineNode {
     type: InlineType;
@@ -40,15 +48,21 @@ export interface InlineNode {
     children?: InlineNode[];
     localOffset: number;
     length: number;
+    tagName?: string;
+    attributes?: Record<string, string>;
 }
 
 export interface LineNode {
     id: string;
     type: LineType;
     raw: string;
+    content?: string;
     headingLevel?: number;
+    listIndent?: number;
+    listPrefix?: string;
     inlineTokens: InlineNode[];
     length: number;
+    localOffset: number;
 }
 
 export interface MarkdownDocument {

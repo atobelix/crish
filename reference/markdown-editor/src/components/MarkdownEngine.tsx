@@ -78,9 +78,16 @@ export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ markdown }) => {
             // Only use the precise offset if the browser snapped to the SAME line we clicked
             if (foundTokenStart !== -1 && foundLineIndex === clickedLineIndex) {
                 let subOffset = 0;
-                let currentEl: HTMLElement | null = range.startContainer.nodeType === Node.TEXT_NODE
-                    ? range.startContainer.parentElement
-                    : range.startContainer as HTMLElement;
+                
+                let targetNode = range.startContainer;
+                let isText = targetNode.nodeType === Node.TEXT_NODE;
+                if (!isText && range.startOffset >= 0 && range.startOffset < targetNode.childNodes.length) {
+                    targetNode = targetNode.childNodes[range.startOffset];
+                }
+                
+                let currentEl: HTMLElement | null = targetNode.nodeType === Node.TEXT_NODE
+                    ? targetNode.parentElement
+                    : targetNode as HTMLElement;
                 
                 while (currentEl && currentEl !== parentRef.current) {
                     if (currentEl.hasAttribute('data-sub-offset')) {
@@ -93,7 +100,7 @@ export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ markdown }) => {
                     currentEl = currentEl.parentElement;
                 }
 
-                const offset = range.startOffset;
+                const offset = isText ? range.startOffset : 0;
                 setCursorPos(foundTokenStart + subOffset + offset);
                 return;
             }
@@ -142,7 +149,8 @@ export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ markdown }) => {
                         const offset = offsets[virtualRow.index];
                         const isCode = codeBlockState[virtualRow.index];
                         // 2. Synchronously parse ONLY visible lines (cached)
-                        const lineNode = MarkdownParser.parseLine(lineText, isCode);
+                        const lineOffset = offsets[virtualRow.index] ?? 0;
+                        const lineNode = MarkdownParser.parseLine(lineText, lineOffset, isCode);
 
                         return (
                             <div

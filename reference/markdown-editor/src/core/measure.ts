@@ -171,7 +171,16 @@ function getRawTextLength(node: Node): number {
 }
 
 export function getGlobalIndexFromDOMNode(node: Node, offset: number, container: HTMLElement): number | null {
-    let el: HTMLElement | null = node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement;
+    let targetNode = node;
+    let isText = node.nodeType === Node.TEXT_NODE;
+    
+    // If it's an element node, offset is the child index.
+    // We should point to the child node to correctly resolve its data-sub-offset.
+    if (!isText && offset >= 0 && offset < node.childNodes.length) {
+        targetNode = node.childNodes[offset];
+    }
+
+    let el: HTMLElement | null = targetNode.nodeType === Node.TEXT_NODE ? targetNode.parentElement : targetNode as HTMLElement;
     let foundTokenStart = -1;
     let lineStart = -1;
     
@@ -187,7 +196,7 @@ export function getGlobalIndexFromDOMNode(node: Node, offset: number, container:
 
     if (foundTokenStart !== -1) {
         let subOffset = 0;
-        let currentEl: HTMLElement | null = node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement;
+        let currentEl: HTMLElement | null = targetNode.nodeType === Node.TEXT_NODE ? targetNode.parentElement : targetNode as HTMLElement;
         
         while (currentEl && currentEl !== container) {
             if (currentEl.hasAttribute('data-sub-offset')) {
@@ -200,11 +209,11 @@ export function getGlobalIndexFromDOMNode(node: Node, offset: number, container:
             currentEl = currentEl.parentElement;
         }
 
-        return foundTokenStart + subOffset + offset;
+        return foundTokenStart + subOffset + (isText ? offset : 0);
     }
 
     if (lineStart !== -1) {
-        return lineStart + offset;
+        return lineStart + (isText ? offset : 0);
     }
 
     return null;

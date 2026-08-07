@@ -21,7 +21,6 @@ window.__CRISH_SESSION_STORE__ = useEditorStore;
 window.__CRISH_METRICS__ = {
   getCacheStats: () => MarkdownParser.getCacheStats(),
   getLineCount: () => useEditorStore.getState().lines.length,
-  verifyConsistency: () => useEditorStore.getState().verifyConsistency(),
   layoutThrashCount: 0
 };
 

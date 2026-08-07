@@ -71,67 +71,84 @@ export class MarkdownParser {
         return { hits: this.cacheHits, misses: this.cacheMisses, size: this.astCache.size };
     }
 
+    private static shiftInlineOffsets(tokens: InlineNode[], diff: number): InlineNode[] {
+        if (diff === 0) return tokens;
+        return tokens.map(t => ({
+            ...t,
+            localOffset: t.localOffset + diff,
+            children: t.children ? this.shiftInlineOffsets(t.children, diff) : undefined
+        }));
+    }
     
-    public static parseLine(lineText: string, codeState: 'none' | 'fence_start' | 'code' | 'fence_end' | 'math_fence_start' | 'math_fence_end' | 'math_block' | boolean): LineNode {
+    public static parseLine(lineText: string, localOffset: number, codeState: 'none' | 'fence_start' | 'code' | 'fence_end' | 'math_fence_start' | 'math_fence_end' | 'math_block' | boolean): LineNode {
         const cacheKey = codeState + ':' + lineText;
         const cached = this.astCache.get(cacheKey);
         if (cached) {
             this.cacheHits++;
-            return cached;
+            // Need to deep clone the inline tokens to update their localOffset
+            return {
+                ...cached,
+                localOffset,
+                inlineTokens: this.shiftInlineOffsets(cached.inlineTokens, localOffset - cached.localOffset)
+            };
         }
         this.cacheMisses++;
 
-        let node: LineNode;
         if (codeState === 'fence_start') {
-            node = {
+            return {
                 id: this.generateId(),
                 type: 'code_fence_start',
                 raw: lineText,
-                content: lineText,
-                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, localOffset: 0, length: lineText.length }],
-                lineType: 'code'
+                inlineTokens: [{ type: 'code', raw: lineText, content: lineText, localOffset, length: lineText.length }],
+                length: lineText.length,
+                localOffset
             };
-        } else if (codeState === 'code' || codeState === true) {
-            node = this.parseCodeLine(lineText);
-        } else if (codeState === 'fence_end') {
-            node = {
+        }
+        if (codeState === 'fence_end') {
+            return {
                 id: this.generateId(),
                 type: 'code_fence_end',
                 raw: lineText,
-                content: lineText,
-                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, localOffset: 0, length: lineText.length }],
-                lineType: 'code'
+                inlineTokens: [{ type: 'code', raw: lineText, content: lineText, localOffset, length: lineText.length }],
+                length: lineText.length,
+                localOffset
             };
-        } else if (codeState === 'math_fence_start') {
-            node = {
+        }
+        if (codeState === 'math_fence_start') {
+            return {
                 id: this.generateId(),
                 type: 'math_fence_start',
                 raw: lineText,
-                content: lineText,
-                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, localOffset: 0, length: lineText.length }],
-                lineType: 'body'
+                inlineTokens: [{ type: 'math', raw: lineText, content: lineText, localOffset, length: lineText.length }],
+                length: lineText.length,
+                localOffset
             };
-        } else if (codeState === 'math_block') {
-            node = {
+        }
+        if (codeState === 'math_block') {
+            return {
                 id: this.generateId(),
                 type: 'math_block',
                 raw: lineText,
-                content: lineText,
-                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, localOffset: 0, length: lineText.length }],
-                lineType: 'body'
+                inlineTokens: [{ type: 'math', raw: lineText, content: lineText, localOffset, length: lineText.length }],
+                length: lineText.length,
+                localOffset
             };
-        } else if (codeState === 'math_fence_end') {
-            node = {
+        }
+        if (codeState === 'math_fence_end') {
+            return {
                 id: this.generateId(),
                 type: 'math_fence_end',
                 raw: lineText,
-                content: lineText,
-                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, localOffset: 0, length: lineText.length }],
-                lineType: 'body'
+                inlineTokens: [{ type: 'math', raw: lineText, content: lineText, localOffset, length: lineText.length }],
+                length: lineText.length,
             };
-        } else {
-            node = this.parseNormalLine(lineText);
         }
+
+        if (codeState === 'code' || codeState === true) {
+            return this.parseCodeLine(lineText, localOffset);
+        }
+
+        let node = this.parseNormalLine(lineText, localOffset);
 
         if (this.astCache.size > 20000) {
             const keys = Array.from(this.astCache.keys()).slice(0, 5000);
@@ -141,29 +158,29 @@ export class MarkdownParser {
         return node;
     }
 
-    private static parseCodeLine(lineText: string): LineNode {
+    private static parseCodeLine(lineText: string, localOffset: number): LineNode {
         const tokens: InlineNode[] = [];
         
-        
-        const tokenRegex = /(\/\/.+$)|(".*?"|'.*?'|\x60.*?\x60)|\b(function|return|const|let|var|if|else|for|while|import|export)\b/g;
-        let pos = 0;
+        // Simple heuristic tokenizer for code
+        const regex = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|(["'`])(?:(?=(\\?))\3.)*?\2|\b(function|const|let|var|if|else|for|while|return|class|import|export|from|yield|await|async|switch|case|break|continue|default|typeof|instanceof|new|delete|try|catch|finally|throw|void|with)\b/g;
         let match;
+        let pos = 0;
         
-        while ((match = tokenRegex.exec(lineText)) !== null) {
+        while ((match = regex.exec(lineText)) !== null) {
             const matchIndex = match.index;
             if (matchIndex > pos) {
                 const plain = lineText.substring(pos, matchIndex);
-                tokens.push({ type: 'text', raw: plain, content: plain, localOffset: pos, length: plain.length });
+                tokens.push({ type: 'text', raw: plain, content: plain, localOffset: pos + localOffset, length: plain.length });
             }
-
-            if (match[1]) {
-                tokens.push({ type: 'comment', raw: match[0], content: match[0], localOffset: matchIndex, length: match[0].length });
+            
+            if (match[1]) { // comment
+                tokens.push({ type: 'comment', raw: match[0], content: match[0], localOffset: matchIndex + localOffset, length: match[0].length });
             } else if (match[2]) {
-                tokens.push({ type: 'string', raw: match[0], content: match[0], localOffset: matchIndex, length: match[0].length });
+                tokens.push({ type: 'string', raw: match[0], content: match[0], localOffset: matchIndex + localOffset, length: match[0].length });
             } else if (match[3]) {
-                tokens.push({ type: 'keyword', raw: match[0], content: match[0], localOffset: matchIndex, length: match[0].length });
+                tokens.push({ type: 'keyword', raw: match[0], content: match[0], localOffset: matchIndex + localOffset, length: match[0].length });
             } else {
-                tokens.push({ type: 'text', raw: match[0], content: match[0], localOffset: matchIndex, length: match[0].length });
+                tokens.push({ type: 'text', raw: match[0], content: match[0], localOffset: matchIndex + localOffset, length: match[0].length });
             }
             
             pos = matchIndex + match[0].length;
@@ -171,11 +188,11 @@ export class MarkdownParser {
         
         if (pos < lineText.length) {
             const plain = lineText.substring(pos);
-            tokens.push({ type: 'text', raw: plain, content: plain, localOffset: pos, length: plain.length });
+            tokens.push({ type: 'text', raw: plain, content: plain, localOffset: pos + localOffset, length: plain.length });
         }
         
         if (tokens.length === 0) {
-            tokens.push({ type: 'text', raw: lineText || ' ', content: lineText || ' ', localOffset: 0, length: (lineText || ' ').length });
+            tokens.push({ type: 'text', raw: lineText || ' ', content: lineText || ' ', localOffset: localOffset, length: (lineText || ' ').length });
         }
 
         return {
@@ -183,11 +200,12 @@ export class MarkdownParser {
             type: 'code',
             raw: lineText,
             inlineTokens: tokens,
-                        length: lineText.length
+            length: lineText.length,
+            localOffset
         };
     }
 
-    private static parseNormalLine(lineText: string): LineNode {
+    private static parseNormalLine(lineText: string, localOffset: number): LineNode {
         const tokens: InlineNode[] = [];
         let pos = 0;
         
