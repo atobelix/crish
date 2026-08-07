@@ -319,10 +319,10 @@ export class MarkdownParser {
     }
 
     private static INLINE_RULES = [
-        { type: 'image', regex: /^!\[((?:[^\]\\]|\\.)*)\]\(((?:[^)\\]|\\.)*)\)/ },
-        { type: 'link', regex: /^\[((?:[^\]\\]|\\.)+)\]\(((?:[^)\\]|\\.)*)\)/ },
+        { type: 'image', regex: /^!\[((?:[^\]\\]|\\.){0,2000})\]\(((?:[^)\\]|\\.){0,2000})\)/ },
+        { type: 'link', regex: /^\[((?:[^\]\\]|\\.){1,2000})\]\(((?:[^)\\]|\\.){0,2000})\)/ },
         { type: 'checkbox', regex: /^\[\s*[xX\s]\s*\]/ },
-        { type: 'footnote', regex: /^\[\^([0-9a-zA-Z]+)\]/ },
+        { type: 'footnote', regex: /^\[\^([0-9a-zA-Z]{1,100})\]/ },
         { type: 'code', regex: /^(`+)(.*?)\1/ },
         { type: 'bold_italic', start: '***', close: '***' },
         { type: 'bold', start: '**', close: '**' },
@@ -341,10 +341,10 @@ export class MarkdownParser {
         { type: 'kbd', start: '<kbd>', close: '</kbd>' },
         { type: 'sub', start: '<sub>', close: '</sub>' },
         { type: 'sup', start: '<sup>', close: '</sup>' },
-        { type: 'math', regex: /^\$\$((?:[^\$\\]|\\.)+)\$\$/ },
-        { type: 'math', regex: /^\$((?:[^\s\$\\]|\\.)(?:(?:[^\$\\]|\\.)*?(?:[^\s\$\\]|\\.))?)\$/ },
-        { type: 'sup', regex: /^\^([^\s^]+)\^/ },
-        { type: 'sub', regex: /^~([^\s~]+)~/ },
+        { type: 'math', regex: /^\$\$((?:[^\$\\]|\\.){1,2000})\$\$/ },
+        { type: 'math', regex: /^\$((?:[^\s\$\\]|\\.)(?:(?:[^\$\\]|\\.){0,2000}?(?:[^\s\$\\]|\\.))?)\$/ },
+        { type: 'sup', regex: /^\^([^\s^]{1,500})\^/ },
+        { type: 'sub', regex: /^~([^\s~]{1,500})~/ },
         { type: 'spoiler', start: '||', close: '||' },
         { type: 'html_tag', regex: /^<\/?[a-zA-Z][a-zA-Z0-9]*(?:\s+[^>]*)?\/?>/ }
     ];
@@ -472,7 +472,8 @@ export class MarkdownParser {
 
             // Try rules
             let matched = false;
-            const sub = text.substring(i);
+            // Cap inline regex scanning to a maximum of 2000 characters to prevent O(N^2) ReDoS / scanning overhead on massive lines.
+            const sub = text.length - i > 2000 ? text.substring(i, i + 2000) : text.substring(i);
 
             // Check for HTML open tag with possible closing tag on the line
             if (sub.startsWith('<')) {

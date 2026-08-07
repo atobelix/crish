@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useEditorStore } from '../core/EditorStore';
+import { useEditorStore, findNextGraphemeBoundary, findPrevGraphemeBoundary } from '../core/EditorStore';
 import { getCoordinatesFromIndex, getGlobalIndexFromDOMNode, getArrowNavigationIndex } from '../core/measure';
 
 interface HiddenInputProps {
@@ -158,12 +158,30 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        const text = useEditorStore.getState().getText();
+        
+        // Undo / Redo
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+            e.preventDefault();
+            if (e.shiftKey) {
+                useEditorStore.getState().redo();
+            } else {
+                useEditorStore.getState().undo();
+            }
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+            e.preventDefault();
+            useEditorStore.getState().redo();
+            return;
+        }
+
         if (e.key === 'ArrowLeft') {
             e.preventDefault();
-            fastCursorMove(cursorPos - 1);
+            fastCursorMove(findPrevGraphemeBoundary(text, cursorPos));
         } else if (e.key === 'ArrowRight') {
             e.preventDefault();
-            fastCursorMove(cursorPos + 1);
+            fastCursorMove(findNextGraphemeBoundary(text, cursorPos));
         } else if (e.key === 'Backspace') {
             e.preventDefault();
             deleteText(true);

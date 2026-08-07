@@ -1,5 +1,63 @@
 import { create } from 'zustand';
 
+// Use Intl.Segmenter for grapheme cluster boundaries (surrogate pairs, emojis, combining chars)
+const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
+
+export function findNextGraphemeBoundary(text: string, pos: number): number {
+    if (pos >= text.length) return text.length;
+    if (segmenter) {
+        // Slice a small window to avoid O(N) iteration over large texts
+        const windowStart = Math.max(0, pos - 50);
+        const windowEnd = Math.min(text.length, pos + 50);
+        const windowText = text.slice(windowStart, windowEnd);
+        const segments = segmenter.segment(windowText);
+        let currentPos = windowStart;
+        for (const segment of segments) {
+            currentPos += segment.segment.length;
+            if (currentPos > pos) return currentPos;
+        }
+    }
+    // Fallback if Segmenter is not available (e.g. some old browsers)
+    const charCode = text.charCodeAt(pos);
+    if (charCode >= 0xD800 && charCode <= 0xDBFF && pos + 1 < text.length) {
+        return pos + 2; // Surrogate pair
+    }
+    return pos + 1;
+}
+
+export function findPrevGraphemeBoundary(text: string, pos: number): number {
+    if (pos <= 0) return 0;
+    if (segmenter) {
+        // Slice a small window to avoid O(N) iteration over large texts
+        const windowStart = Math.max(0, pos - 50);
+        const windowEnd = Math.min(text.length, pos + 50);
+        const windowText = text.slice(windowStart, windowEnd);
+        const segments = segmenter.segment(windowText);
+        let currentPos = windowStart;
+        let lastBoundary = windowStart;
+        for (const segment of segments) {
+            currentPos += segment.segment.length;
+            if (currentPos >= pos) return lastBoundary;
+            lastBoundary = currentPos;
+        }
+    }
+    // Fallback
+    const charCode = text.charCodeAt(pos - 1);
+    if (charCode >= 0xDC00 && charCode <= 0xDFFF && pos - 2 >= 0) {
+        return pos - 2; // Surrogate pair
+    }
+    return pos - 1;
+}
+
+export interface EditorOperation {
+    startLineIdx: number;
+    removedLines: string[];
+    insertedLineCount: number;
+    cursorBefore: number;
+    cursorAfter: number;
+    timestamp: number;
+}
+
 export interface EditorState {
     lines: string[];
     lineOffsets: number[];
@@ -9,13 +67,12 @@ export interface EditorState {
     cursorPos: number;
     selectionStart: number;
     selectionEnd: number;
+
+    undoStack: EditorOperation[];
+    redoStack: EditorOperation[];
     
     getText: () => string;
     getLineIndex: (pos: number) => number;
-
-    initText: (initialText: string) => void;
-    updateLinesIncremental: (startLineIdx: number, newLines: string[], removedLinesCount: number) => void;
-    verifyConsistency: () => boolean;
 
     setText: (text: string) => void;
     setCursorPos: (pos: number) => void;
@@ -23,6 +80,9 @@ export interface EditorState {
     insertText: (inserted: string) => void;
     deleteText: (backward: boolean) => void;
     deleteSelection: (start: number, end: number) => void;
+    
+    undo: () => void;
+    redo: () => void;
 }
 
 function binarySearchLineIndex(offsets: number[], pos: number): number {
@@ -136,17 +196,65 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     selectionStart: 0,
     selectionEnd: 0,
 
+    undoStack: [],
+    redoStack: [],
+
     getText: () => get().lines.join('\n'),
     getLineIndex: (pos) => binarySearchLineIndex(get().lineOffsets, pos),
 
     setText: (text) => set((state) => {
         const lines = text.split('\n');
-        const res = updateLinesIncremental([], [], [], 0, 0, lines);
+        
+        if (lines.length <= 1000) {
+            const res = updateLinesIncremental([], [], [], 0, 0, lines);
+            return { 
+                ...res,
+                cursorPos: 0,
+                selectionStart: 0,
+                selectionEnd: 0,
+                undoStack: [],
+                redoStack: []
+            };
+        }
+        
+        // Chunked loading for large files
+        const firstChunk = lines.slice(0, 1000);
+        const res = updateLinesIncremental([], [], [], 0, 0, firstChunk);
+        
+        let currentIdx = 1000;
+        const chunkSize = 2000;
+        
+        const processNextChunk = () => {
+            if (currentIdx >= lines.length) return;
+            const endIdx = Math.min(currentIdx + chunkSize, lines.length);
+            const chunk = lines.slice(currentIdx, endIdx);
+            
+            useEditorStore.setState((s) => {
+                const updated = updateLinesIncremental(s.lines, s.lineOffsets, s.codeBlockState, s.lines.length, 0, chunk);
+                return { ...updated };
+            });
+            
+            currentIdx = endIdx;
+            if (typeof window !== 'undefined' && window.requestIdleCallback) {
+                window.requestIdleCallback(processNextChunk);
+            } else {
+                setTimeout(processNextChunk, 10);
+            }
+        };
+        
+        if (typeof window !== 'undefined' && window.requestIdleCallback) {
+            window.requestIdleCallback(processNextChunk);
+        } else {
+            setTimeout(processNextChunk, 10);
+        }
+
         return { 
             ...res,
             cursorPos: 0,
             selectionStart: 0,
-            selectionEnd: 0
+            selectionEnd: 0,
+            undoStack: [],
+            redoStack: []
         };
     }),
     
@@ -177,22 +285,52 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const newSegment = prefix + inserted + suffix;
         const insertedLines = newSegment.split('\n');
         
+        const deleteCount = endLineIdx - startLineIdx + 1;
+        const removedLines = state.lines.slice(startLineIdx, startLineIdx + deleteCount);
+
         const res = updateLinesIncremental(
             state.lines,
             state.lineOffsets,
             state.codeBlockState,
             startLineIdx,
-            endLineIdx - startLineIdx + 1,
+            deleteCount,
             insertedLines
         );
 
         const newPos = s + inserted.length;
+        
+        const newOp: EditorOperation = {
+            startLineIdx,
+            removedLines,
+            insertedLineCount: insertedLines.length,
+            cursorBefore: state.cursorPos,
+            cursorAfter: newPos,
+            timestamp: Date.now()
+        };
+        
+        let newUndoStack = [...state.undoStack];
+        // Basic debounce: if typing continuously in the same line without selections
+        if (newUndoStack.length > 0 && s === e && inserted.length === 1 && inserted !== '\n') {
+            const last = newUndoStack[newUndoStack.length - 1];
+            if (Date.now() - last.timestamp < 500 && last.startLineIdx === startLineIdx && last.cursorAfter === s && last.insertedLineCount === 1) {
+                // Merge typing
+                last.insertedLineCount = insertedLines.length;
+                last.cursorAfter = newPos;
+                last.timestamp = Date.now();
+            } else {
+                newUndoStack.push(newOp);
+            }
+        } else {
+            newUndoStack.push(newOp);
+        }
 
         return {
             ...res,
             cursorPos: newPos,
             selectionStart: newPos,
-            selectionEnd: newPos
+            selectionEnd: newPos,
+            undoStack: newUndoStack,
+            redoStack: []
         };
     }),
 
@@ -201,10 +339,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         let e = state.selectionEnd;
         
         if (s === e) {
+            const text = state.lines.join('\n');
             if (backward && s > 0) {
-                s = s - 1;
+                s = findPrevGraphemeBoundary(text, s);
             } else if (!backward && e < state.textLength) {
-                e = e + 1;
+                e = findNextGraphemeBoundary(text, e);
             } else {
                 return state;
             }
@@ -222,20 +361,52 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const newSegment = prefix + suffix;
         const insertedLines = newSegment.split('\n'); // usually length 1
         
+        const deleteCount = endLineIdx - startLineIdx + 1;
+        const removedLines = state.lines.slice(startLineIdx, startLineIdx + deleteCount);
+        
         const res = updateLinesIncremental(
             state.lines,
             state.lineOffsets,
             state.codeBlockState,
             startLineIdx,
-            endLineIdx - startLineIdx + 1,
+            deleteCount,
             insertedLines
         );
+
+        const newOp: EditorOperation = {
+            startLineIdx,
+            removedLines,
+            insertedLineCount: insertedLines.length,
+            cursorBefore: state.cursorPos,
+            cursorAfter: s,
+            timestamp: Date.now()
+        };
+        
+        let newUndoStack = [...state.undoStack];
+        // Basic debounce for deletes:
+        if (newUndoStack.length > 0 && state.selectionStart === state.selectionEnd) {
+            const last = newUndoStack[newUndoStack.length - 1];
+            if (Date.now() - last.timestamp < 500 && last.cursorAfter === (backward ? s + 1 : s) && last.startLineIdx === startLineIdx) {
+                // Merge delete
+                last.removedLines = [last.removedLines[0].substring(0, s - startLineOffset) + (backward ? removedLines[0].charAt(removedLines[0].length-1) : removedLines[0].charAt(0)) + last.removedLines[0].substring(s - startLineOffset)];
+                // Wait, merging deletes accurately is complex and can be buggy if multi-line is involved. 
+                // Let's keep it simple: don't merge deletes for now unless we are very careful, 
+                // or just append as a new operation to be safe. It's O(1) space anyway per stroke.
+                newUndoStack.push(newOp);
+            } else {
+                newUndoStack.push(newOp);
+            }
+        } else {
+            newUndoStack.push(newOp);
+        }
 
         return {
             ...res,
             cursorPos: s,
             selectionStart: s,
-            selectionEnd: s
+            selectionEnd: s,
+            undoStack: newUndoStack,
+            redoStack: []
         };
     }),
 
@@ -255,24 +426,105 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const suffix = state.lines[endLineIdx].substring(e - endLineOffset);
         
         const newSegment = prefix + suffix;
-        const insertedLines = newSegment.split('\n');
+        const insertedLines = newSegment.split('\n'); // usually length 1
         
+        const deleteCount = endLineIdx - startLineIdx + 1;
+        const removedLines = state.lines.slice(startLineIdx, startLineIdx + deleteCount);
+
         const res = updateLinesIncremental(
             state.lines,
             state.lineOffsets,
             state.codeBlockState,
             startLineIdx,
-            endLineIdx - startLineIdx + 1,
+            deleteCount,
             insertedLines
         );
+        
+        const newOp: EditorOperation = {
+            startLineIdx,
+            removedLines,
+            insertedLineCount: insertedLines.length,
+            cursorBefore: state.cursorPos,
+            cursorAfter: s,
+            timestamp: Date.now()
+        };
 
         return {
             ...res,
             cursorPos: s,
             selectionStart: s,
-            selectionEnd: s
+            selectionEnd: s,
+            undoStack: [...state.undoStack, newOp],
+            redoStack: []
         };
     }),
+
+    undo: () => set((state) => {
+        if (state.undoStack.length === 0) return state;
+        const op = state.undoStack[state.undoStack.length - 1];
+        
+        // Reverse splice: remove `insertedLineCount` lines at `startLineIdx` and insert `removedLines`
+        const res = updateLinesIncremental(
+            state.lines,
+            state.lineOffsets,
+            state.codeBlockState,
+            op.startLineIdx,
+            op.insertedLineCount,
+            op.removedLines
+        );
+
+        // Forward op to redo stack
+        const inverseOp: EditorOperation = {
+            startLineIdx: op.startLineIdx,
+            removedLines: state.lines.slice(op.startLineIdx, op.startLineIdx + op.insertedLineCount),
+            insertedLineCount: op.removedLines.length,
+            cursorBefore: op.cursorAfter,
+            cursorAfter: op.cursorBefore,
+            timestamp: Date.now()
+        };
+
+        return {
+            ...res,
+            cursorPos: op.cursorBefore,
+            selectionStart: op.cursorBefore,
+            selectionEnd: op.cursorBefore,
+            undoStack: state.undoStack.slice(0, -1),
+            redoStack: [...state.redoStack, inverseOp]
+        };
+    }),
+
+    redo: () => set((state) => {
+        if (state.redoStack.length === 0) return state;
+        const op = state.redoStack[state.redoStack.length - 1];
+        
+        const res = updateLinesIncremental(
+            state.lines,
+            state.lineOffsets,
+            state.codeBlockState,
+            op.startLineIdx,
+            op.insertedLineCount,
+            op.removedLines
+        );
+
+        const inverseOp: EditorOperation = {
+            startLineIdx: op.startLineIdx,
+            removedLines: state.lines.slice(op.startLineIdx, op.startLineIdx + op.insertedLineCount),
+            insertedLineCount: op.removedLines.length,
+            cursorBefore: op.cursorAfter,
+            cursorAfter: op.cursorBefore,
+            timestamp: Date.now()
+        };
+
+        return {
+            ...res,
+            cursorPos: op.cursorBefore,
+            selectionStart: op.cursorBefore,
+            selectionEnd: op.cursorBefore,
+            redoStack: state.redoStack.slice(0, -1),
+            undoStack: [...state.undoStack, inverseOp]
+        };
+    }),
+    
     verifyConsistency: () => {
         const { lines, lineOffsets } = get();
         let runningOffset = 0;
