@@ -49,6 +49,7 @@
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "npx playwright test tests/e2e",
+    "test:e2e:smoke": "npx playwright test tests/e2e/ast-block-tables.spec.ts tests/e2e/cache-metrics.spec.ts tests/e2e/cache-telemetry.spec.ts tests/e2e/format-checker.spec.ts tests/e2e/wysiwyg-interaction.spec.ts",
     "test:e2e:native": "vitest run tests/e2e/tauri-native-smoke.spec.ts",
     "lint:all": "eslint . --ext .ts,.tsx --max-warnings 0 && npx --yes stylelint@16 \"apps/crish-desktop/src/**/*.css\"",
     "lint": "eslint .",

@@ -52,14 +52,26 @@ export default defineConfig({
     // E2E-L3 真壳（tauri-driver）发布前层：当前以 tauri-native-smoke（vitest）
     // 进程级冒烟占位；tauri-driver 接线后在此增加 project（见 PE-11 T11.1-3）。
   ],
-  webServer: {
-    command: 'npm --workspace @crish/crish-desktop run dev',
-    // G15c 修正（T-48 轮内协调）：Playwright 校验 port 与 url 互斥
-    // （`Either 'port' or 'url' should be specified`），url 已含端口且
-    // 提供 HTTP 级就绪健康检查（2xx/3xx 轮询），保留 url 即覆盖原意图
-    url: 'http://localhost:5174',
-    reuseExistingServer: true,
-    // 冷启动余量：120s → 180s（CI 慢层 60min 预算内可容忍，本地体验差）
-    timeout: 180_000,
-  },
+  webServer: [
+    {
+      command: 'npm --workspace @crish/crish-desktop run dev',
+      // G15c 修正（T-48 轮内协调）：Playwright 校验 port 与 url 互斥
+      // （`Either 'port' or 'url' should be specified`），url 已含端口且
+      // 提供 HTTP 级就绪健康检查（2xx/3xx 轮询），保留 url 即覆盖原意图
+      url: 'http://localhost:5174',
+      reuseExistingServer: true,
+      // 冷启动余量：120s → 180s（CI 慢层 60min 预算内可容忍，本地体验差）
+      timeout: 180_000,
+    },
+    {
+      // 5 个 markdown-editor 专项 spec（AGENTS.md 保护名单）以 5173 硬编码
+      // URL 驱动 reference/markdown-editor 的引擎 dev server（其 main.tsx
+      // 暴露 window.MarkdownParser / __CRISH_SESSION_STORE__ 测试全局）——
+      // PS-02 T2.7 补挂第二 webServer，CI 上无 5173 时自动拉起（本地可复用）
+      command: 'npm --prefix reference/markdown-editor run dev',
+      url: 'http://localhost:5173',
+      reuseExistingServer: true,
+      timeout: 180_000,
+    },
+  ],
 });

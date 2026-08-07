@@ -34,6 +34,19 @@
 - **描述**：`npm run test:coverage -- --project=unit` 与 `npm run test` 在 PS-02 执行期 EXIT=1，唯一失败为 F-001（sessionPersistence 被 PS-03 未提交改动破坏）。经 stash 验证 HEAD 基线全绿；PS-02 改动（vitest 项目重构/coverage 口径）未引入任何失败（5225/5226 通过，唯一失败 = F-001）。
 - **建议**：PS-03 前端持久化族落地后重跑快层门禁，恢复 EXIT=0。
 
+## F-005：markdown-editor 保护名单 2 spec 依赖 pre-M3/M4 交互模型（PS-02 T2.7 子集偏差登记）
+
+- **位置**：`tests/e2e/ime-composition.spec.ts`、`tests/e2e/keyboard-navigation.spec.ts`
+- **描述**：两 spec 依赖 pre-M3/M4 引擎交互模型：① 空文本时编辑器常驻（`setText('')` 后仍可点击 `.editor-container` 输入）——f772eb99 起 App 空文本卸载编辑器（`textLength > 0` 才渲染 MarkdownEngine，"生成万行超大文档..."占位）；② `window.useEditorStore` 全局——f772eb99 起契约改为 `__CRISH_SESSION_STORE__`（后者已按当前契约修复，前者为引擎设计变更）。实测两 spec 确定性失败（9 失败中的 3 个；另 cursor-debug 1 + editor-fuzz-thrash 5 为既存失败，非保护名单）。D3 要求冒烟子集含 ime-composition，但含已知必红 spec = 复现"知病未医"门禁（T2.2 刚消除的反模式）；PS-02 边界不授权重写用户对抗性测试的交互模型（编辑器域）。
+- **处置**：冒烟子集 = ast-block-tables / cache-telemetry / cache-metrics / format-checker / wysiwyg-interaction（3 保护 + 2 缓存锚点，实测全绿），偏差注释登记于 ci-mid.yml e2e job。
+- **建议**：编辑器域适配任务（ime/keyboard 重写到 M3/M4 交互模型：非空文本 + HiddenInput textarea 路径）后，两 spec 回归冒烟子集。
+
+## F-006：tests/e2e 12 个 spec 硬编码 5173 端口（PS-02 T2.7 修复）
+
+- **位置**：tests/e2e/*.spec.ts（ast-block-tables / format-checker / ime-composition / keyboard-navigation / wysiwyg-interaction / active-token / bug-repro / console-errors / cursor-debug / cursor-position / debug-style / syntax-render）
+- **描述**：12 个 spec `page.goto('http://localhost:5173/')` 硬编码 markdown-editor dev server 端口；主应用已迁移 5174（strictPort）。CI ubuntu 无 5173 服务 → 全部必红；本地因 20:37 启动的 markdown-editor dev server（旧契约 bundle）掩盖问题。修复：playwright.config.ts webServer 数组化，第二项 `npm --prefix reference/markdown-editor run dev`（url 5173，reuseExistingServer 本地复用）；ime/keyboard 的 window 契约已同步当前 main.tsx（`__CRISH_SESSION_STORE__`）。
+- **建议**：其余 7 个 5173 spec（非保护名单，含 cursor-debug/editor-fuzz-thrash 等）在编辑器域任务中一并迁移到契约化 URL（baseURL 相对路径）。
+
 ## F-004：T3.3 红测试与修复实现被并行 persist 任务整文件暂存吸收（PS-03 T3.3 执行期）
 
 - **发现日期**：2026-08-07（PS-03 T3.3 执行期）

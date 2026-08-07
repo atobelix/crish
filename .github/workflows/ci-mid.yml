@@ -109,6 +109,29 @@ jobs:
       # （透传不可用），故不加 --locked
       - run: cargo machete
 
+  # e2e 冒烟子集（PS-02 T2.7 / D3 裁决：进 PR 门禁；全量仍归 ci-slow nightly）。
+  # 子集 = 5 个冒烟 spec：3 个 markdown-editor 专项（ast-block-tables /
+  # format-checker / wysiwyg-interaction，AGENTS.md 保护名单，驱动 5173
+  # reference/markdown-editor dev server，见 playwright.config.ts 第二
+  # webServer）+ cache-telemetry / cache-metrics（缓存链路健康锚点）。
+  # 偏差登记（F-005）：保护名单中的 ime-composition / keyboard-navigation 依赖
+  # pre-M3/M4 交互模型（空文本编辑器常驻 + textarea），当前引擎（f772eb99）
+  # 空文本卸载编辑器——两 spec 确定性失败，需编辑器域适配（另立任务），
+  # 不入冒烟子集；cursor-debug / editor-fuzz-thrash 亦为既存失败（非保护名单）。
+  # vitest 面已不收集 tests/e2e（T2.1），Playwright 唯一拥有者，无重复冲突。
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e:smoke
+
   # 死代码门禁（PS-02 T2.6 接线）：error 级规则决定退出码（files/dependencies/
   # devDependencies/unresolved）；exports/types/unlisted/binaries/duplicates 为
   # warn 级（594+ 长尾登记 P2 收敛清单，不阻塞）。存量收敛：
