@@ -615,19 +615,38 @@ export async function loadSessionBody(
  * 全量保存会话正文（先删后插，事务原子）。
  * 命令缺失 → 回退 localStorage（同步）。
  * I-DRAFT：PENDING_DRAFT 哨兵永不写 body。
+ *
+ * @param batchVersion 批次版本戳（CAS 防线 2，裁决 R9 单调递增版本号）。
+ * 落库前检查该会话已落库的最高版本，陈旧批次（版本 ≤ 已落库版本）直接
+ * 丢弃不覆盖；版本随 IPC 参数传递，Rust 侧可据此实现 updated_at CAS
+ * （任务书 T3.2 ③，Rust 命令面改动不在本实现轮范围）。
  */
 async function saveSessionBody(
   sessionId: string,
-  messages: SessionMessage[]
+  messages: SessionMessage[],
+  batchVersion: number
 ): Promise<void> {
   if (!sessionId?.trim() || isPendingDraft(sessionId)) return;
   const msgs = messages || [];
   const rustMessages = msgs.map(toRustSessionMessage);
+
+  // CAS：该会话已有更高版本批次落库 → 本批次为陈旧批次，直接丢弃不覆盖
+  //（任何并发窗口下旧批次晚到都不得回滚新批次）。
+  const written = writtenBodyBatchVersions.get(sessionId) ?? -1;
+  if (batchVersion <= written) {
+    console.warn(
+      `[sessionPersistence] 丢弃陈旧写批次 v${batchVersion}（会话 ${sessionId} 已落库 v${written}）`
+    );
+    return;
+  }
+
   const res = await invokeResult<void>('save_session_body', {
     sessionId,
     messages: rustMessages,
+    batchVersion,
   });
   if (res.status === 'ok') {
+    writtenBodyBatchVersions.set(sessionId, batchVersion);
     // Stream D 主存 SQLite；非空正文额外镜像到 LS，供 seedSessions 同步路径与 MCP 观测。
     // 空数组不写 LS：避免远程懒壳把 crish_session_body_v1:* 刷成 [] 误报「丢消息」。
     if (msgs.length > 0) {
@@ -874,6 +893,58 @@ export async function hydrateSessionsFromRust(): Promise<{
   return { sessions: prepared, activeSessionId, folderOrder };
 }
 
+// ── 写竞态防线（PS-03 T3.2 D6）：模块级串行队列 + 批次版本戳 CAS ────────────
+
+/**
+ * 模块级写串行队列（主防线）。
+ *
+ * 问题背景（R2 §5 / F5-02）：persist 批次间无队列、无版本戳；store 层 350ms
+ * debounce（store-persistence.ts:136-145）只保证「调度串行」，不保证「IPC
+ * 飞行期互斥」——store 高频变更时两个 persist 周期可并发飞行，旧批次晚完成
+ * 整体覆盖新批次（sessionRustDbWriteModel.test.ts 曾把回滚固化为契约，
+ * T3.2 已翻转）。本队列把每个 persist 批次整体串入 promise 链：
+ *
+ * - 新批次执行前先 await 上一轮 promise → 同一时刻至多一个批次在飞行期，
+ *   同会话写任务严格按发起顺序落库（后发批次最后写，最终 = 最新快照）；
+ * - 单轮失败吞掉，不影响链上后续批次（对齐 persistAllSessionsRust 既有
+ *   「内部 allSettled、不对外抛错」语义）；
+ * - 队列语义 = 每会话保留最新快照：过期批次被后续批次覆盖，不产生回滚。
+ */
+let writeChain: Promise<void> = Promise.resolve();
+
+/**
+ * 批次版本计数器（CAS 防线 2）。
+ *
+ * 裁决 R9：CAS 哨兵用单调递增版本号（替代任务书原方案的 batchAt 时间戳——
+ * ms 粒度在快速连续 commit 下可能相同，无法区分新旧）。每个 persist 调用
+ * 在发起时领取递增版本号（发起序 = 版本序，后发起 = 高版本），版本随
+ * save_session_body 调用路径传递到 IPC 边界，供 Rust 侧未来 updated_at
+ * CAS 消费（任务书 T3.2 ③；Rust 命令面改动不在本实现轮范围）。
+ */
+let batchVersionCounter = 0;
+
+/**
+ * 各会话已落库正文的最高批次版本（CAS 比较基准）。
+ * 串行队列下单上下文内写序已确定，本表是第二道防线：任何路径下旧版本
+ * 批次在落库前被识别并直接丢弃（不覆盖已落库的新版本）。
+ */
+const writtenBodyBatchVersions = new Map<string, number>();
+
+/**
+ * 把持久化任务串入模块级写队列。
+ * 返回任务自身 promise（调用方可 await 感知完成）；链尾由 writeChain 承接，
+ * 单轮失败由 catch 吞掉，保证链永不因单轮异常而断裂。
+ */
+function enqueuePersist(task: () => Promise<void>): Promise<void> {
+  const run = writeChain
+    .then(() => task())
+    .catch(() => {
+      /* 单轮失败吞掉：不影响链上后续批次 */
+    });
+  writeChain = run;
+  return run;
+}
+
 // ── 复合 API：persistAllSessionsRust ────────────────────────────────────────
 
 /**
@@ -884,6 +955,11 @@ export async function hydrateSessionsFromRust(): Promise<{
  *   - activeSessionId / folderOrder 写入 session_meta 表
  *   - 孤儿清理走 cleanup_orphan_sessions
  *   - assistant 消息统一走 normalizeAssistantTimeline（与原 persistAllSessions 对齐）
+ *   - 写竞态防线（PS-03 T3.2 D6）：批次发起时领取单调递增版本号（R9），
+ *     整批任务（probe + 全部写 IPC）串入模块级写队列 writeChain——同会话写
+ *     任务按发起序落库，后发批次最终落库；saveSessionBody 落库前做版本
+ *     CAS，陈旧批次直接丢弃不覆盖。350ms debounce / boot 回灌 / 手动触发
+ *     全部经本入口，版本戳覆盖全部 save_session_body 调用路径。
  *
  * 命令缺失时回退到 localStorage 同步路径（persistAllSessionsSync 等价行为）。
  */
@@ -896,62 +972,71 @@ export async function persistAllSessionsRust(
     sessionsToIndex?: (sessions: SessionState[]) => SessionIndexEntry[];
   }
 ): Promise<void> {
-  // I-DRAFT：persist 路径剔除 PENDING_DRAFT，永不写 sessions[]/body
-  const list = (sessions || []).filter(
-    (s) => Boolean(s?.id) && !isPendingDraft(s.id)
-  );
-  const activePersistable =
-    activeSessionId && !isPendingDraft(activeSessionId) ? activeSessionId : '';
-
-  // 索引层：始终写一份到 localStorage（侧栏元数据真相源，过渡期设计）。
-  // invoke 缺失时，这就是唯一的索引落盘点。
-  if (options?.sessionsToIndex) {
-    try {
-      const entries = options.sessionsToIndex(list);
-      lsSaveSessionIndex(entries);
-    } catch {
-      /* ignore */
-    }
-  }
-
-  // 检测 invoke 可用性（用 list_sessions 作为探针）
-  const probe = await invokeResult<RustSessionIndexEntry[]>('list_sessions');
-  if (probe.status !== 'ok') {
-    // 回退：localStorage 同步路径（索引已写入，只需写 body/agents/meta）
-    persistAllSessionsLocalFallback(list, activePersistable, folderOrder);
-    return;
-  }
-
-  // 1. 写入每个会话的 body + agents（并发）
-  // 空 messages 不调用 save_session_body：Rust 侧是先删后插，空数组会擦掉已落盘正文。
-  // boot 窗口里 seed 的远程懒壳 messages=[] 很常见；等 SQLite 回灌 / 引擎 hydrate 后再写。
-  const keepIds = new Set<string>();
-  const bodyJobs: Promise<void>[] = [];
-  for (const s of list) {
-    if (!s?.id) continue;
-    keepIds.add(s.id);
-    const msgs = (s.messages || []).map((m) =>
-      m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
+  // 批次版本戳：发起时领取（发起序 = 版本序，后发起 = 高版本，R9）。
+  // 整批任务串入模块级写队列，与上一批不并发飞行。
+  const batchVersion = ++batchVersionCounter;
+  await enqueuePersist(async () => {
+    // I-DRAFT：persist 路径剔除 PENDING_DRAFT，永不写 sessions[]/body
+    const list = (sessions || []).filter(
+      (s) => Boolean(s?.id) && !isPendingDraft(s.id)
     );
-    if (msgs.length > 0) {
-      bodyJobs.push(saveSessionBody(s.id, msgs));
+    const activePersistable =
+      activeSessionId && !isPendingDraft(activeSessionId)
+        ? activeSessionId
+        : '';
+
+    // 索引层：始终写一份到 localStorage（侧栏元数据真相源，过渡期设计）。
+    // invoke 缺失时，这就是唯一的索引落盘点。
+    if (options?.sessionsToIndex) {
+      try {
+        const entries = options.sessionsToIndex(list);
+        lsSaveSessionIndex(entries);
+      } catch {
+        /* ignore */
+      }
     }
-    bodyJobs.push(saveSessionAgents(s.id, s.agents || []));
-  }
-  await Promise.allSettled(bodyJobs);
 
-  // 2. 元数据：active_session_id / folder_order
-  const metaJobs: Promise<void>[] = [];
-  if (activePersistable) {
-    metaJobs.push(setSessionMeta('active_session_id', activePersistable));
-  }
-  if (folderOrder && folderOrder.length) {
-    metaJobs.push(setSessionMeta('folder_order', JSON.stringify(folderOrder)));
-  }
-  await Promise.allSettled(metaJobs);
+    // 检测 invoke 可用性（用 list_sessions 作为探针）
+    const probe = await invokeResult<RustSessionIndexEntry[]>('list_sessions');
+    if (probe.status !== 'ok') {
+      // 回退：localStorage 同步路径（索引已写入，只需写 body/agents/meta）
+      persistAllSessionsLocalFallback(list, activePersistable, folderOrder);
+      return;
+    }
 
-  // 3. 孤儿清理
-  await cleanupOrphanSessions(Array.from(keepIds));
+    // 1. 写入每个会话的 body + agents（并发）
+    // 空 messages 不调用 save_session_body：Rust 侧是先删后插，空数组会擦掉已落盘正文。
+    // boot 窗口里 seed 的远程懒壳 messages=[] 很常见；等 SQLite 回灌 / 引擎 hydrate 后再写。
+    const keepIds = new Set<string>();
+    const bodyJobs: Promise<void>[] = [];
+    for (const s of list) {
+      if (!s?.id) continue;
+      keepIds.add(s.id);
+      const msgs = (s.messages || []).map((m) =>
+        m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
+      );
+      if (msgs.length > 0) {
+        bodyJobs.push(saveSessionBody(s.id, msgs, batchVersion));
+      }
+      bodyJobs.push(saveSessionAgents(s.id, s.agents || []));
+    }
+    await Promise.allSettled(bodyJobs);
+
+    // 2. 元数据：active_session_id / folder_order
+    const metaJobs: Promise<void>[] = [];
+    if (activePersistable) {
+      metaJobs.push(setSessionMeta('active_session_id', activePersistable));
+    }
+    if (folderOrder && folderOrder.length) {
+      metaJobs.push(
+        setSessionMeta('folder_order', JSON.stringify(folderOrder))
+      );
+    }
+    await Promise.allSettled(metaJobs);
+
+    // 3. 孤儿清理
+    await cleanupOrphanSessions(Array.from(keepIds));
+  });
 }
 
 /**
@@ -1011,6 +1096,9 @@ function persistAllSessionsLocalFallback(
  *
  * 此函数始终走 localStorage（同步），因为 beforeunload 事件中无法 await IPC。
  * Rust 侧数据由后续 persistAllSessionsRust 在正常生命周期内同步。
+ * 注（PS-03 T3.2）：本路径不调用 save_session_body（无 IPC），故无需批次
+ * 版本戳；SQLite 侧由后续异步 persist 带版本写入（版本戳覆盖全部
+ * save_session_body 调用路径：350ms debounce / boot 回灌 / 手动触发）。
  */
 export function persistAllSessionsSyncViaLocalStorage(
   sessions: SessionState[],
