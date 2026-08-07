@@ -25,7 +25,8 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { mockTauriCommand } from '../../test-setup';
+import { mockTauriCommand, mockTauriError } from '../../test-setup';
+import * as userFacingErrors from '../userFacingErrors';
 
 import type { SessionMessage, SessionState } from '../../store/layoutStore';
 import {
@@ -743,5 +744,131 @@ describe('写后一致性（现状：无读回校验）', () => {
       (c) => c[0] === 'save_session_body'
     ).length;
     expect(saves).toBe(1);
+  });
+});
+
+describe('P1-F1 降级与分叉恢复（T5.1）', () => {
+  // 降级戳 key 前缀（任务书 T5.1 约定 crish_degraded_，与实现契约一致）。
+  // 测试经 localStorage 直接观测降级戳，与生产代码同一可观测面，不 mock 被测行为。
+  const DEGRADED_PREFIX = 'crish_degraded_';
+  const degradedKey = (id: string) => DEGRADED_PREFIX + id;
+
+  it('save_session_body 返回非 ok → 降级分支调用 logInternalError（当前零日志导入 → 先红）', async () => {
+    const { call } = makeFakeDb();
+    installFakeTransport(call);
+    // 预热 invoke 懒加载（tauriInvoke 冷启动竞态），后续调用稳定走 SQLite 路径
+    await invokeResult('list_sessions');
+    // 真实 error 态：抛错消息不匹配 missing 正则 → invokeResult 归 error
+    mockTauriError('save_session_body', new Error('sqlite busy'));
+
+    const logSpy = vi.spyOn(userFacingErrors, 'logInternalError');
+
+    const s = sess('s1', [msg('m1', 'user')]);
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+
+    // P1-F1 契约：invoke 非 ok 降级 LS 必须记录日志（当前代码不调用 → 红）
+    expect(logSpy).toHaveBeenCalledWith(
+      'persist-degraded-ls',
+      expect.objectContaining({ command: 'save_session_body', sessionId: 's1' })
+    );
+  });
+
+  it('同场景 → 降级戳存在（crish_degraded_<id> 已写入；当前无戳 → 先红）', async () => {
+    const { call } = makeFakeDb();
+    installFakeTransport(call);
+    await invokeResult('list_sessions');
+    mockTauriError('save_session_body', new Error('sqlite busy'));
+
+    const s = sess('s1', [msg('m1', 'user')]);
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+
+    // P1-F1 契约：降级写 LS 时打降级戳（当前无戳逻辑 → 红）
+    expect(localStorage.getItem(degradedKey('s1'))).not.toBeNull();
+  });
+
+  it('降级戳存在 + LS 正文为新消息 → hydrate 以 LS 正文为真源并回写 SQLite（当前读 SQLite 旧正文 → 先红）', async () => {
+    const { db, call } = makeFakeDb();
+    // SQLite 持有旧正文（invoke 失败前的快照）
+    db.sessions.set('s1', {
+      entry: { ...indexEntry('s1'), messageCount: 1 },
+      messages: [msg('m1', 'user', 'old sqlite body')],
+      agents: [],
+    });
+    // LS 索引 + 最新正文（降级期间写入）+ 降级戳
+    localStorage.setItem(
+      SESSION_INDEX_KEY,
+      JSON.stringify([{ ...indexEntry('s1') }])
+    );
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 's1',
+      JSON.stringify([msg('m2', 'user', 'new ls body')])
+    );
+    localStorage.setItem(degradedKey('s1'), String(Date.now()));
+    installFakeTransport(call);
+    await invokeResult('list_sessions');
+
+    const res = await hydrateSessionsFromRust();
+
+    // 数据面：命中降级戳 → LS 新正文为真源（修复前 hydrate 读 SQLite 旧正文 → 红）
+    expect(res.sessions[0]?.messages.map((m) => m.id)).toEqual(['m2']);
+    expect(res.sessions[0]?.messages[0]?.text).toBe('new ls body');
+    // 回写修复：save_session_body 以 LS 正文再次被调用（修复前 hydrate 不写 → 红）
+    const repairWrites = call.mock.calls.filter(
+      (c) =>
+        c[0] === 'save_session_body' &&
+        (c[1] as { sessionId?: string })?.sessionId === 's1'
+    );
+    expect(repairWrites.length).toBeGreaterThanOrEqual(1);
+    const repairPayload = repairWrites[0]?.[1] as { messages?: unknown[] };
+    const ids = ((repairPayload.messages ?? []) as { id: string }[]).map(
+      (m) => m.id
+    );
+    expect(ids).toContain('m2');
+    // 回写成功后清戳（修复前无清戳逻辑 → 红）
+    expect(localStorage.getItem(degradedKey('s1'))).toBeNull();
+  });
+
+  it('修复回写后降级戳清除，后续 hydrate 恢复 SQLite 优先（37/37 基线不回归）', async () => {
+    const { db, call } = makeFakeDb();
+    db.sessions.set('s1', {
+      entry: { ...indexEntry('s1'), messageCount: 1 },
+      messages: [msg('m1', 'user', 'old sqlite body')],
+      agents: [],
+    });
+    localStorage.setItem(
+      SESSION_INDEX_KEY,
+      JSON.stringify([{ ...indexEntry('s1') }])
+    );
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 's1',
+      JSON.stringify([msg('m2', 'user', 'new ls body')])
+    );
+    localStorage.setItem(degradedKey('s1'), String(Date.now()));
+    installFakeTransport(call);
+    await invokeResult('list_sessions');
+
+    // 首次 hydrate：LS 真源 + 回写 + 清戳（修复前读 SQLite 旧正文 → 红）
+    const first = await hydrateSessionsFromRust();
+    expect(first.sessions[0]?.messages.map((m) => m.id)).toEqual(['m2']);
+    expect(localStorage.getItem(degradedKey('s1'))).toBeNull();
+
+    // SQLite 侧随后被另一来源写入更新（模拟分叉修复后外部写入）
+    db.sessions.get('s1')!.messages = [msg('m3', 'assistant', 'sqlite newer')];
+    const writesAfterFirst = call.mock.calls.filter(
+      (c) => c[0] === 'save_session_body'
+    ).length;
+
+    // 第二次 hydrate：无降级戳 → SQLite 优先（不回归现状契约），且不再回写
+    const second = await hydrateSessionsFromRust();
+    expect(second.sessions[0]?.messages.map((m) => m.id)).toEqual(['m3']);
+    expect(localStorage.getItem(degradedKey('s1'))).toBeNull();
+    const writesAfterSecond = call.mock.calls.filter(
+      (c) => c[0] === 'save_session_body'
+    ).length;
+    expect(writesAfterSecond).toBe(writesAfterFirst);
   });
 });
