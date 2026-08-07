@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useEditorStore, findNextGraphemeBoundary, findPrevGraphemeBoundary } from '../core/EditorStore';
+import { useEditorStore, findNextGraphemeBoundary, findPrevGraphemeBoundary, snapToGraphemeBoundary } from '../core/EditorStore';
 import { getCoordinatesFromIndex, getGlobalIndexFromDOMNode, getArrowNavigationIndex } from '../core/measure';
 
 interface HiddenInputProps {
@@ -159,6 +159,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         const text = useEditorStore.getState().getText();
+        const { selectionStart, selectionEnd } = useEditorStore.getState();
+        const cursorPos = useEditorStore.getState().cursorPos;
         
         // Undo / Redo
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -178,10 +180,24 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
 
         if (e.key === 'ArrowLeft') {
             e.preventDefault();
-            fastCursorMove(findPrevGraphemeBoundary(text, cursorPos));
+            const newPos = findPrevGraphemeBoundary(text, cursorPos);
+            if (e.shiftKey) {
+                setSelection(selectionStart === cursorPos ? newPos : selectionStart, newPos);
+                fastCursorMove(newPos);
+            } else {
+                if (selectionStart !== selectionEnd) fastCursorMove(selectionStart);
+                else fastCursorMove(newPos);
+            }
         } else if (e.key === 'ArrowRight') {
             e.preventDefault();
-            fastCursorMove(findNextGraphemeBoundary(text, cursorPos));
+            const newPos = findNextGraphemeBoundary(text, cursorPos);
+            if (e.shiftKey) {
+                setSelection(selectionStart === cursorPos ? newPos : selectionStart, newPos);
+                fastCursorMove(newPos);
+            } else {
+                if (selectionStart !== selectionEnd) fastCursorMove(selectionEnd);
+                else fastCursorMove(newPos);
+            }
         } else if (e.key === 'Backspace') {
             e.preventDefault();
             deleteText(true);
@@ -194,40 +210,55 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
             insertText('\n');
         } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
-            const currentText = useEditorStore.getState().text;
-            setSelection(0, currentText.length);
+            setSelection(0, text.length);
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             if (containerRef.current) {
                 const targetIdx = getArrowNavigationIndex(cursorPos, 'up', containerRef.current);
-                if (targetIdx !== null) fastCursorMove(targetIdx);
+                if (targetIdx !== null) {
+                    const newPos = snapToGraphemeBoundary(text, targetIdx);
+                    if (e.shiftKey) {
+                        setSelection(selectionStart === cursorPos ? newPos : selectionStart, newPos);
+                    }
+                    fastCursorMove(newPos);
+                }
             }
         } else if (e.key === 'ArrowDown') {
             e.preventDefault();
             if (containerRef.current) {
                 const targetIdx = getArrowNavigationIndex(cursorPos, 'down', containerRef.current);
-                if (targetIdx !== null) fastCursorMove(targetIdx);
+                if (targetIdx !== null) {
+                    const newPos = snapToGraphemeBoundary(text, targetIdx);
+                    if (e.shiftKey) {
+                        setSelection(selectionStart === cursorPos ? newPos : selectionStart, newPos);
+                    }
+                    fastCursorMove(newPos);
+                }
             }
         } else if (e.key === 'Home') {
             e.preventDefault();
             let lineStart = 0;
-            const currentText = useEditorStore.getState().text;
             for (let i = cursorPos; i >= 0; i--) {
-                if (i === 0 || currentText[i - 1] === '\n') {
+                if (i === 0 || text[i - 1] === '\n') {
                     lineStart = i;
                     break;
                 }
             }
+            if (e.shiftKey) {
+                setSelection(selectionStart === cursorPos ? lineStart : selectionStart, lineStart);
+            }
             fastCursorMove(lineStart);
         } else if (e.key === 'End') {
             e.preventDefault();
-            const currentText = useEditorStore.getState().text;
-            let lineEnd = currentText.length;
-            for (let i = cursorPos; i < currentText.length; i++) {
-                if (currentText[i] === '\n') {
+            let lineEnd = text.length;
+            for (let i = cursorPos; i < text.length; i++) {
+                if (text[i] === '\n') {
                     lineEnd = i;
                     break;
                 }
+            }
+            if (e.shiftKey) {
+                setSelection(selectionStart === cursorPos ? lineEnd : selectionStart, lineEnd);
             }
             fastCursorMove(lineEnd);
         }

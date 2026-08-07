@@ -6,15 +6,24 @@ const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segme
 export function findNextGraphemeBoundary(text: string, pos: number): number {
     if (pos >= text.length) return text.length;
     if (segmenter) {
-        // Slice a small window to avoid O(N) iteration over large texts
-        const windowStart = Math.max(0, pos - 50);
-        const windowEnd = Math.min(text.length, pos + 50);
-        const windowText = text.slice(windowStart, windowEnd);
-        const segments = segmenter.segment(windowText);
-        let currentPos = windowStart;
-        for (const segment of segments) {
-            currentPos += segment.segment.length;
-            if (currentPos > pos) return currentPos;
+        let windowSize = 50;
+        while (true) {
+            const windowStart = Math.max(0, pos - windowSize);
+            const windowEnd = Math.min(text.length, pos + windowSize);
+            const windowText = text.slice(windowStart, windowEnd);
+            const segments = segmenter.segment(windowText);
+            let currentPos = windowStart;
+            for (const segment of segments) {
+                currentPos += segment.segment.length;
+                if (currentPos > pos) {
+                    if (currentPos === windowEnd && windowEnd < text.length) {
+                        break; // Try larger window
+                    }
+                    return currentPos;
+                }
+            }
+            if (windowEnd >= text.length) return text.length;
+            windowSize *= 2;
         }
     }
     // Fallback if Segmenter is not available (e.g. some old browsers)
@@ -28,17 +37,34 @@ export function findNextGraphemeBoundary(text: string, pos: number): number {
 export function findPrevGraphemeBoundary(text: string, pos: number): number {
     if (pos <= 0) return 0;
     if (segmenter) {
-        // Slice a small window to avoid O(N) iteration over large texts
-        const windowStart = Math.max(0, pos - 50);
-        const windowEnd = Math.min(text.length, pos + 50);
-        const windowText = text.slice(windowStart, windowEnd);
-        const segments = segmenter.segment(windowText);
-        let currentPos = windowStart;
-        let lastBoundary = windowStart;
-        for (const segment of segments) {
-            currentPos += segment.segment.length;
-            if (currentPos >= pos) return lastBoundary;
-            lastBoundary = currentPos;
+        let windowSize = 50;
+        while (true) {
+            const windowStart = Math.max(0, pos - windowSize);
+            const windowEnd = Math.min(text.length, pos + windowSize);
+            const windowText = text.slice(windowStart, windowEnd);
+            const segments = segmenter.segment(windowText);
+            let prevPos = windowStart;
+            let broke = false;
+            for (const segment of segments) {
+                const boundary = windowStart + segment.index;
+                if (boundary >= pos) {
+                    if (prevPos === windowStart && windowStart > 0) {
+                        broke = true;
+                        break;
+                    }
+                    return prevPos;
+                }
+                prevPos = boundary;
+            }
+            if (!broke && prevPos < pos) {
+                if (prevPos === windowStart && windowStart > 0) {
+                    // Try larger
+                } else {
+                    return prevPos;
+                }
+            }
+            if (windowStart <= 0) return 0;
+            windowSize *= 2;
         }
     }
     // Fallback
@@ -47,6 +73,53 @@ export function findPrevGraphemeBoundary(text: string, pos: number): number {
         return pos - 2; // Surrogate pair
     }
     return pos - 1;
+}
+
+export function snapToGraphemeBoundary(text: string, pos: number): number {
+    if (pos <= 0) return 0;
+    if (pos >= text.length) return text.length;
+    if (segmenter) {
+        let windowSize = 50;
+        while (true) {
+            const windowStart = Math.max(0, pos - windowSize);
+            const windowEnd = Math.min(text.length, pos + windowSize);
+            const windowText = text.slice(windowStart, windowEnd);
+            const segments = segmenter.segment(windowText);
+            for (const segment of segments) {
+                const boundary = windowStart + segment.index;
+                const endBoundary = boundary + segment.segment.length;
+                if (pos === boundary) {
+                    if (boundary === windowStart && windowStart > 0) {
+                        break; // Expand
+                    }
+                    return pos;
+                }
+                if (pos === endBoundary) {
+                    if (endBoundary === windowEnd && windowEnd < text.length) {
+                        break; // Expand
+                    }
+                    return pos;
+                }
+                if (pos > boundary && pos < endBoundary) {
+                    if ((boundary === windowStart && windowStart > 0) || (endBoundary === windowEnd && windowEnd < text.length)) {
+                        break; // Expand window
+                    }
+                    return (pos - boundary) > (endBoundary - pos) ? endBoundary : boundary;
+                }
+            }
+            if (windowStart <= 0 && windowEnd >= text.length) return pos;
+            windowSize *= 2;
+        }
+    }
+    // Fallback: check if we are in the middle of a surrogate pair
+    const charCode = text.charCodeAt(pos);
+    if (charCode >= 0xDC00 && charCode <= 0xDFFF && pos - 1 >= 0) {
+        const prevCode = text.charCodeAt(pos - 1);
+        if (prevCode >= 0xD800 && prevCode <= 0xDBFF) {
+            return pos - 1; // Snap to the start of the surrogate pair
+        }
+    }
+    return pos;
 }
 
 export interface EditorOperation {
@@ -95,25 +168,6 @@ function binarySearchLineIndex(offsets: number[], pos: number): number {
         else high = mid - 1;
     }
     return Math.max(0, high);
-}
-
-function computeStateFrom(
-    lines: string[], 
-    startIndex: number, 
-    startOffset: number, 
-    startCodeState: boolean
-) {
-    const offsets = new Array(lines.length);
-    const codeBlockState = new Array(lines.length);
-    let currentOffset = startOffset;
-    let inCodeBlock = startCodeState;
-    
-    // Copy prefix unchanged (this is very fast)
-    for (let i = 0; i < startIndex; i++) {
-        offsets[i] = 0; // We don't modify the prefix array, but we need to return it?
-        // Wait, the caller will just splice the array. 
-        // Let's just mutate the store arrays directly or return a new delta?
-    }
 }
 
 // Actually, mutating arrays in Zustand is okay if we copy the array first.
@@ -383,22 +437,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         };
         
         let newUndoStack = [...state.undoStack];
-        // Basic debounce for deletes:
-        if (newUndoStack.length > 0 && state.selectionStart === state.selectionEnd) {
-            const last = newUndoStack[newUndoStack.length - 1];
-            if (Date.now() - last.timestamp < 500 && last.cursorAfter === (backward ? s + 1 : s) && last.startLineIdx === startLineIdx) {
-                // Merge delete
-                last.removedLines = [last.removedLines[0].substring(0, s - startLineOffset) + (backward ? removedLines[0].charAt(removedLines[0].length-1) : removedLines[0].charAt(0)) + last.removedLines[0].substring(s - startLineOffset)];
-                // Wait, merging deletes accurately is complex and can be buggy if multi-line is involved. 
-                // Let's keep it simple: don't merge deletes for now unless we are very careful, 
-                // or just append as a new operation to be safe. It's O(1) space anyway per stroke.
-                newUndoStack.push(newOp);
-            } else {
-                newUndoStack.push(newOp);
-            }
-        } else {
-            newUndoStack.push(newOp);
-        }
+        newUndoStack.push(newOp);
 
         return {
             ...res,

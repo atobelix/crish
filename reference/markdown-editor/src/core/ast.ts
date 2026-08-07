@@ -2,7 +2,9 @@ export type LineType =
     | 'body'
     | 'heading'
     | 'code'
-    | 'empty';
+    | 'empty'
+    | 'hr'
+    | 'blockquote';
 
 export type InlineType = 
     | 'text' 
