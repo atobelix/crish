@@ -2,16 +2,20 @@ import { test, expect } from '@playwright/test';
 
 test.describe('WYSIWYG Interaction & Active State Tests', () => {
   test.beforeEach(async ({ page }) => {
+    page.on('console', (msg) => console.log('BROWSER CONSOLE:', msg.text()));
     await page.goto('http://localhost:5173');
     await page.waitForSelector('.editor-container');
   });
 
   test('Heading prefix visibility toggles on click', async ({ page }) => {
     // Scroll to Heading H1
-    const headingBlock = page.locator('.line-block').filter({ hasText: '一级标题 H1' }).first();
+    const headingBlock = page
+      .locator('.line-block')
+      .filter({ hasText: '一级标题 H1' })
+      .first();
     await expect(headingBlock).toBeVisible();
 
-    // 1. Before click, the source code "# " should NOT be visible 
+    // 1. Before click, the source code "# " should NOT be visible
     // Actually, `.syntax-hidden` has `display: none` unless `.is-active-line` is present on the block.
     const prefix = headingBlock.locator('.token-heading-prefix .syntax-hidden');
     await expect(prefix).toBeHidden();
@@ -29,7 +33,9 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
     await expect(prefix).toHaveText('# ');
   });
 
-  test('Horizontal Rule (HR) toggles between rendered line and source on click', async ({ page }) => {
+  test('Horizontal Rule (HR) toggles between rendered line and source on click', async ({
+    page,
+  }) => {
     // Find the HR block
     const hrBlock = page.locator('.line-hr').first();
     await expect(hrBlock).toBeVisible();
@@ -49,7 +55,7 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
     // 3. After click, rendered HR is hidden, source "---" is visible
     const lineContainer = hrBlock.locator('..').first();
     await expect(lineContainer).toHaveClass(/is-active-line/);
-    
+
     await expect(hrRendered).toBeHidden();
     await expect(hrSource).toBeVisible();
     await expect(hrSource).toHaveText(/---/); // Or *** etc
@@ -57,7 +63,10 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
 
   test('Blockquote toggles prefix visibility on click', async ({ page }) => {
     // Find a blockquote block
-    const quoteBlock = page.locator('.line-blockquote').filter({ hasText: '第一层引用' }).first();
+    const quoteBlock = page
+      .locator('.line-blockquote')
+      .filter({ hasText: '第一层引用' })
+      .first();
     await expect(quoteBlock).toBeVisible();
 
     const quoteSource = quoteBlock.locator('.blockquote-source');
@@ -76,9 +85,14 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
     await expect(quoteSource).toHaveText(/>\s?/);
   });
 
-  test('Inline code toggles backticks when clicking specifically on it', async ({ page }) => {
+  test('Inline code toggles backticks when clicking specifically on it', async ({
+    page,
+  }) => {
     // Find paragraph with inline code
-    const textBlock = page.locator('.line-block').filter({ hasText: '基础样式：' }).first();
+    const textBlock = page
+      .locator('.line-block')
+      .filter({ hasText: '基础样式：' })
+      .first();
     await expect(textBlock).toBeVisible();
 
     // The inline code token
@@ -103,9 +117,13 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
     await expect(syntaxHidden.first()).toHaveText('`');
   });
 
-  test('Code fence start toggles language pill and ``` source on click', async ({ page }) => {
+  test('Code fence start toggles language pill and ``` source on click', async ({
+    page,
+  }) => {
     // Scroll down so virtualizer renders the code block section
-    await page.locator('.editor-container').evaluate(el => el.scrollTop = 1800);
+    await page
+      .locator('.editor-container')
+      .evaluate((el) => (el.scrollTop = 1800));
     await page.waitForTimeout(300);
 
     // Find the code fence start block for javascript
@@ -132,13 +150,20 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
     await expect(fenceSource).toHaveText(/```javascript/);
   });
 
-  test('HTML element renders styled text and reveals raw tags on click', async ({ page }) => {
+  test('HTML element renders styled text and reveals raw tags on click', async ({
+    page,
+  }) => {
     // Scroll down so virtualizer renders the HTML section
-    await page.locator('.editor-container').evaluate(el => el.scrollTop = 2200);
+    await page
+      .locator('.editor-container')
+      .evaluate((el) => (el.scrollTop = 2200));
     await page.waitForTimeout(300);
 
     // Scroll to the HTML tag line
-    const htmlLine = page.locator('.line-block').filter({ hasText: '内联 HTML 标签解析逃逸' }).first();
+    const htmlLine = page
+      .locator('.line-block')
+      .filter({ hasText: '内联 HTML 标签解析逃逸' })
+      .first();
     await expect(htmlLine).toBeVisible();
 
     const htmlElement = htmlLine.locator('.token-html-element').first();
@@ -161,9 +186,14 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
     await expect(hiddenTags.first()).toHaveText('<span style="color: blue">');
   });
 
-  test('Selection range reveals source code for selected tokens while unselected remain previewed', async ({ page }) => {
+  test('Selection range reveals source code for selected tokens while unselected remain previewed', async ({
+    page,
+  }) => {
     // Locate the line with multiple inline styles
-    const line = page.locator('.line-block').filter({ hasText: '基础样式：' }).first();
+    const line = page
+      .locator('.line-block')
+      .filter({ hasText: '基础样式：' })
+      .first();
     await expect(line).toBeVisible();
 
     const boldToken = line.locator('.style-bold').first();
@@ -182,8 +212,11 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
     if (boldBox && italicBox) {
       await page.mouse.move(boldBox.x + 2, boldBox.y + boldBox.height / 2);
       await page.mouse.down();
-      await page.mouse.move(italicBox.x + italicBox.width - 2, italicBox.y + italicBox.height / 2);
-      await page.mouse.up();
+      await page.mouse.move(
+        italicBox.x + italicBox.width - 2,
+        italicBox.y + italicBox.height / 2
+      );
+      // Wait for selectionchange event
       await page.waitForTimeout(150);
 
       // Selected tokens should have .is-active-token and show source syntax
@@ -199,12 +232,19 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
     }
   });
 
-  test('Subscript and Math formula toggle source syntax on click', async ({ page }) => {
+  test('Subscript and Math formula toggle source syntax on click', async ({
+    page,
+  }) => {
     // Scroll down to the extended syntax section
-    await page.locator('.editor-container').evaluate(el => el.scrollTop = 2500);
+    await page
+      .locator('.editor-container')
+      .evaluate((el) => (el.scrollTop = 2500));
     await page.waitForTimeout(200);
 
-    const subSupBlock = page.locator('.line-block').filter({ hasText: '上下标:' }).first();
+    const subSupBlock = page
+      .locator('.line-block')
+      .filter({ hasText: '上下标:' })
+      .first();
     await expect(subSupBlock).toBeVisible();
 
     // The first .style-sub corresponds to <sub>2</sub>
@@ -225,7 +265,10 @@ test.describe('WYSIWYG Interaction & Active State Tests', () => {
     await expect(subHidden.first()).toHaveText('<sub>');
 
     // 4. Test Math formula KaTeX toggle
-    const mathBlock = page.locator('.line-block').filter({ hasText: '数学公式:' }).first();
+    const mathBlock = page
+      .locator('.line-block')
+      .filter({ hasText: '数学公式:' })
+      .first();
     await expect(mathBlock).toBeVisible();
     const mathWrapper = mathBlock.locator('.token-math-wrapper').first();
     await expect(mathWrapper).toBeVisible();

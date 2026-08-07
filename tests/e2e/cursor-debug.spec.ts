@@ -1,116 +1,118 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Cursor Position Debug Tests', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:5173');
-    await page.waitForSelector('.editor-container');
-  });
+// 算法生成各种刁钻的 Markdown 文件
+const generateMarkdown = () => {
+  const blocks = [
+    '# Heading 1',
+    '## Heading 2',
+    '   ### Heading with leading spaces', // Tricky leading spaces
+    'Normal paragraph text here that spans multiple words.',
+    '  Indented paragraph by 2 spaces.',
+    '> Blockquote line 1\n> Blockquote line 2',
+    '- List item 1\n- List item 2',
+    '* [ ] Task list item 1\n* [x] Task list item 2',
+    '```javascript\nconst a = 1;\n```',
+    '```\nNo lang code block\n```',
+    '---', // HR
+    '***', // HR
+    'Line with **bold** and *italic* and ~~strike~~.',
+    'Line with `inline code` and $E=mc^2$.',
+    'Line with <span style="color:red">HTML</span> tags.',
+  ];
 
-  test('Log cursor positions for all 7 interactive zones', async ({ page }) => {
-    const locations = [
-      {
-        name: '1. 测试区块 1 (Heading)',
-        locator: page
-          .locator('.line-block')
-          .filter({ hasText: '测试区块' })
-          .first(),
-      },
-      {
-        name: '2. Empty space (Left margin below line 1)',
-        locator: page
-          .locator('.line-block')
-          .filter({ hasText: '数学公式' })
-          .first(),
-        offsetX: -50,
-        offsetY: -14,
-      },
-      {
-        name: '3. 加粗 (Bold)',
-        locator: page
-          .locator('span[data-sub-offset]')
-          .filter({ hasText: '加粗' })
-          .first(),
-      },
-      {
-        name: '4. 斜体 (Italic)',
-        locator: page
-          .locator('span[data-sub-offset]')
-          .filter({ hasText: '斜体' })
-          .first(),
-      },
-      {
-        name: '5. 删除线 (Strike)',
-        locator: page
-          .locator('span[data-sub-offset]')
-          .filter({ hasText: '删除线' })
-          .first(),
-      },
-      {
-        name: '6. 高亮 (Mark)',
-        locator: page
-          .locator('span[data-sub-offset]')
-          .filter({ hasText: '高亮' })
-          .first(),
-      },
-      {
-        name: '7. 代码 (Inline Code)',
-        locator: page.locator('.style-inline-code').first(),
-      },
-    ];
+  // Shuffle blocks to create a random markdown document
+  for (let i = blocks.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [blocks[i], blocks[j]] = [blocks[j], blocks[i]];
+  }
 
-    console.log('\n--- Cursor Position Debug Results ---');
+  return blocks.join('\n\n');
+};
 
-    for (const loc of locations) {
-      const el = loc.locator;
-      await expect(el).toBeVisible();
+test('Randomized cross-validation of cursor positions', async ({ page }) => {
+  await page.goto('http://localhost:5173');
 
-      const box = await el.boundingBox();
-      if (!box) {
-        console.log(`${loc.name}: Could not find bounding box`);
-        continue;
+  const editor = page.locator('.editor-container');
+  await expect(editor).toBeVisible();
+
+  const markdownContent = generateMarkdown();
+
+  // Inject content and a spy to monitor setCursorPos and getGlobalIndexFromDOMNode
+  await page.evaluate((content) => {
+    window.cursorLogs = [];
+    const store = window.useEditorStore.getState();
+    store.setText(content);
+
+    const originalSetCursorPos = store.setCursorPos;
+
+    // Override setCursorPos to record changes
+    store.setCursorPos = (pos) => {
+      window.cursorLogs.push({ source: 'setCursorPos', pos, time: Date.now() });
+      originalSetCursorPos.call(store, pos);
+    };
+
+    // Spy on selectionchange
+    document.addEventListener('selectionchange', () => {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        window.cursorLogs.push({
+          source: 'selectionchange',
+          event: 'triggered',
+          time: Date.now(),
+        });
       }
+    });
+  }, markdownContent);
 
-      // Calculate click coordinates
-      let clickX = box.x + box.width / 2;
-      let clickY = box.y + box.height / 2;
+  // Wait for rendering
+  await page.waitForTimeout(500);
 
-      // Apply manual offsets for edge cases like "empty space"
-      if (loc.offsetX) clickX = box.x + loc.offsetX;
-      if (loc.offsetY) clickY = box.y + loc.offsetY;
+  // Pick N random lines to click on
+  const lineCount = await page.locator('.line-block').count();
+  const testLines = 10;
 
-      // Ensure we click within the viewport
-      if (clickX < 0) clickX = 5;
+  for (let i = 0; i < testLines; i++) {
+    const randomLineIndex = Math.floor(Math.random() * lineCount);
+    const line = page.locator('.line-block').nth(randomLineIndex);
 
-      // Perform click
-      await page.mouse.click(clickX, clickY);
+    const box = await line.boundingBox();
+    if (!box) continue;
 
-      // Wait a tiny bit for React state update
-      await page.waitForTimeout(50);
+    // Pick a random X offset within the line
+    const randomX = Math.floor(Math.random() * (box.width - 20)) + 10;
+    const clickX = box.x + randomX;
+    const clickY = box.y + box.height / 2;
 
-      // Get cursor position
-      const cursor = page.locator('.cursor-caret');
-      if (await cursor.isVisible()) {
-        const cursorBox = await cursor.boundingBox();
-        if (cursorBox) {
-          console.log(`\nLocation: ${loc.name}`);
-          console.log(
-            `  Clicked at:   X=${clickX.toFixed(2)}, Y=${clickY.toFixed(2)}`
-          );
-          console.log(
-            `  Cursor at:    X=${cursorBox.x.toFixed(2)}, Y=${cursorBox.y.toFixed(2)}`
-          );
-          console.log(
-            `  Delta:        dX=${(cursorBox.x - clickX).toFixed(2)}, dY=${(cursorBox.y - clickY).toFixed(2)}`
-          );
-        } else {
-          console.log(
-            `\nLocation: ${loc.name} -> Cursor visible but no bounding box`
-          );
-        }
-      } else {
-        console.log(`\nLocation: ${loc.name} -> Cursor NOT VISIBLE`);
-      }
+    // Clear logs
+    await page.evaluate(() => {
+      window.cursorLogs = [];
+    });
+
+    // Perform native click
+    await page.mouse.click(clickX, clickY);
+
+    // Wait for events to settle
+    await page.waitForTimeout(100);
+
+    // Get logs
+    const logs = await page.evaluate(() => window.cursorLogs);
+
+    // Check how many times setCursorPos was called
+    const setCursorLogs = logs.filter((l) => l.source === 'setCursorPos');
+
+    if (setCursorLogs.length > 1) {
+      console.log(
+        `Line ${randomLineIndex} multiple setCursorPos calls!`,
+        setCursorLogs
+      );
+      // Assert that if there are multiple calls, they MUST resolve to the SAME index.
+      // Because if MarkdownEngine and selectionchange both trigger, they must agree.
+      const firstPos = setCursorLogs[0].pos;
+      const allMatch = setCursorLogs.every((l) => l.pos === firstPos);
+      expect(
+        allMatch,
+        'Cursor positions from different events must match'
+      ).toBeTruthy();
     }
-    console.log('-----------------------------------\n');
-  });
+  }
 });
