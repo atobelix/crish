@@ -20,7 +20,7 @@
 
 - **架构**：Rust 内核（`crates/`：session-loop/orchestrator/agent-provider/agent-tools/conex-*）+ Tauri 壳（`apps/agent-workbench/src-tauri/`）+ React 前端（`apps/crish-desktop/`）+ 共享 TS 包（`packages/`）。
 - **文档**：`docs/` 是文档总目录；`docs/rust-rewrite/` 是架构重构的活跃文档（00 主方案 / 23 总纲 / 30 执行方案 / 33 事件 changelog / 34 收尾清单）；`docs/organization/` 是治理与评审产物；`docs/archive/` 为归档（legacy/campaigns/redesign/prototypes/provider-m4）；`docs/guides/` 与 `docs/opensource/` 为指南与开源文档。
-- **测试**：Rust `cargo test --workspace`（73 套件基线）；前端 `npm run typecheck` + `npx vitest run src`（基线失败集中在 oklchColorGuard / userFacingErrors / sessionRustDbWriteModel / DiffCard.perf）。
+- **测试**：Rust `cargo test --workspace`（73 套件基线）；前端门禁 `npm run typecheck` + `npm run test:coverage -- --project=unit`（45/70/65/45，快层 ci.yml 强制执行）+ 中层两 job（`npm run test` vitest 全量 / `npx vitest run --config vitest.integration.config.ts` F3 四目录）——PS-02 落地后口径：快层全绿 + 中层两 job 修复（旧基线失败集 4 文件口径已清零，R3 实测 37/37 + 77/77 全绿）。
 - **代码约定**：中文注释（UTF-8 无 BOM）；提交遵循仓库风格（feat/fix/test/docs/chore + 范围）；子 Agent 任务先读对应任务书（`docs/rust-rewrite/plans/PE-*.md`）与相关审查文档。
 
 ## 子 Agent 调度规则（多 Agent 协同）

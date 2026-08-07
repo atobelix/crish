@@ -47,6 +47,13 @@
 - **描述**：12 个 spec `page.goto('http://localhost:5173/')` 硬编码 markdown-editor dev server 端口；主应用已迁移 5174（strictPort）。CI ubuntu 无 5173 服务 → 全部必红；本地因 20:37 启动的 markdown-editor dev server（旧契约 bundle）掩盖问题。修复：playwright.config.ts webServer 数组化，第二项 `npm --prefix reference/markdown-editor run dev`（url 5173，reuseExistingServer 本地复用）；ime/keyboard 的 window 契约已同步当前 main.tsx（`__CRISH_SESSION_STORE__`）。
 - **建议**：其余 7 个 5173 spec（非保护名单，含 cursor-debug/editor-fuzz-thrash 等）在编辑器域任务中一并迁移到契约化 URL（baseURL 相对路径）。
 
+## F-007：并行 agent 未提交 whitespace 阻塞全局提交钩子（PS-02 T2.7/T2.8 提交期）
+
+- **位置**：`reference/markdown-editor/src/core/EditorStore.ts`（220/270/274/339/340 行尾空白，另 BlockRenderer.tsx / parser.ts 同批在改）
+- **描述**：husky pre-commit 的裸 `git diff --check`（无文件参数，检查整个工作树 diff）因并行 agent 的未提交 trailing whitespace 失败——任何 agent 的提交都被阻塞。PS-02 不越界修改他人文件（B9 + 串行链归属），登记等待对方清理。2026-08-07 23:46+ 期间该 agent 仍在迭代（33877b98 后继续改 markdown-editor 引擎）。
+- **处置**：T2.7/T2.8 提交在对方清理后重试（本地全程见证：staged 内容不变，仅等待钩子放行）。
+- **建议**：钩子层面将 `git diff --check` 收窄为暂存文件（lint-staged 已覆盖），或约定并行 agent 提交前自检；本次由对方自然清理解决。
+
 ## F-004：T3.3 红测试与修复实现被并行 persist 任务整文件暂存吸收（PS-03 T3.3 执行期）
 
 - **发现日期**：2026-08-07（PS-03 T3.3 执行期）
