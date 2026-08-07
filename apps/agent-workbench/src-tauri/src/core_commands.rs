@@ -544,6 +544,68 @@ fn map_jsonl_err(e: String) -> CoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use crate::workspace::{RegisterSource, WorkspaceRegistry};
+
+    /// 临时目录基座（测试后自动清理；G2 禁令豁免同 workspace.rs 测试惯例）。
+    struct TestDir {
+        path: PathBuf,
+    }
+
+    impl TestDir {
+        fn new() -> Self {
+            let base = std::env::temp_dir();
+            for attempt in 0..100 {
+                let nanos = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("system time before UNIX_EPOCH")
+                    .as_nanos();
+                let path = base.join(format!(
+                    "conex-search-index-{}-{nanos}-{attempt}",
+                    std::process::id()
+                ));
+                if fs::create_dir(&path).is_ok() {
+                    return Self { path };
+                }
+            }
+            panic!("failed to create temporary test directory");
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    /// 构造 mock app：托管 SharedSearchState + 仅授权 auth_root 的注册表。
+    fn mock_app_with_registry(
+        state: SharedSearchState,
+        reg: WorkspaceRegistry,
+    ) -> tauri::App<tauri::test::MockRuntime> {
+        tauri::test::mock_builder()
+            .manage(reg)
+            .manage(state)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app")
+    }
+
+    /// 注册表：config_dir 注入临时目录 + Dialog 授权 auth_root（其余目录均未授权）。
+    fn registry_authorizing(temp: &TestDir, auth_root: &Path) -> WorkspaceRegistry {
+        let config_dir = temp.path().join("config");
+        fs::create_dir_all(&config_dir).expect("create config dir");
+        let reg = WorkspaceRegistry::init_with_config_dir(&config_dir).expect("init registry");
+        reg.register(auth_root, RegisterSource::Dialog)
+            .expect("dialog register auth_root");
+        reg
+    }
 
     #[test]
     fn shared_compaction_state_defaults_false() {
@@ -603,6 +665,86 @@ mod tests {
         runtime.block_on(async {
             let result = core_search_files("   ".to_string(), None, state).await;
             assert!(matches!(result, Err(CoreError::InvalidInput(_))));
+        });
+    }
+
+    /// T4.4-R1（红 → 绿）：root 不在任何已授权根子树 → 拒绝
+    /// `InvalidInput`（detail 含 workspace_not_granted 文案），且索引不重建。
+    #[test]
+    fn rebuild_search_index_rejects_unapproved_root() {
+        use tauri::Manager as _;
+        let temp = TestDir::new();
+        let auth_root = temp.path().join("auth");
+        let outside_root = temp.path().join("outside");
+        fs::create_dir_all(&auth_root).expect("create auth root");
+        fs::write(auth_root.join("a.txt"), "x").expect("write a");
+        fs::create_dir_all(&outside_root).expect("create outside root");
+        fs::write(outside_root.join("b.txt"), "y").expect("write b");
+
+        let state = SharedSearchState::new();
+        let app = mock_app_with_registry(state, registry_authorizing(&temp, &auth_root));
+        let state = app.state::<SharedSearchState>();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            // 红阶段：旧签名（root, state）；修复后签名追加 app.handle()
+            let state_for_call = state.clone();
+            let result = core_rebuild_search_index(
+                outside_root.to_string_lossy().into_owned(),
+                state_for_call,
+            )
+            .await;
+            match result {
+                Err(CoreError::InvalidInput(detail)) => {
+                    assert!(
+                        detail.contains("workspace_not_granted"),
+                        "detail 应含 workspace_not_granted 文案：{detail}"
+                    );
+                }
+                other => panic!(
+                    "未授权 root 应被拒绝（workspace_not_granted），实际 {other:?}"
+                ),
+            }
+            // 索引不得被重建（保持初始空状态）
+            assert!(
+                state
+                    .files
+                    .read()
+                    .expect("index lock")
+                    .is_empty(),
+                "越界 root 不得重建索引"
+            );
+        });
+    }
+
+    /// T4.4-R2（放行）：root = 授权根（含 1 个文件）→ Ok 且 file_count ≥ 1。
+    #[test]
+    fn rebuild_search_index_allows_authorized_root() {
+        use tauri::Manager as _;
+        let temp = TestDir::new();
+        let auth_root = temp.path().join("auth");
+        let sub = auth_root.join("sub");
+        fs::create_dir_all(&sub).expect("create sub");
+        fs::write(auth_root.join("a.txt"), "x").expect("write a");
+        fs::write(sub.join("b.txt"), "y").expect("write b");
+
+        let state = SharedSearchState::new();
+        let app = mock_app_with_registry(state, registry_authorizing(&temp, &auth_root));
+        let state = app.state::<SharedSearchState>();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let result = core_rebuild_search_index(
+                auth_root.to_string_lossy().into_owned(),
+                state,
+            )
+            .await;
+            let resp = result.expect("授权根应允许建索引");
+            assert!(resp.file_count >= 1, "file_count: {}", resp.file_count);
         });
     }
 

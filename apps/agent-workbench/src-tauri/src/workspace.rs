@@ -77,8 +77,9 @@ impl WorkspaceRegistry {
         Self::init_with_config_dir(&workspace_config_dir())
     }
 
-    /// 指定配置目录初始化（供测试注入临时目录）。
-    fn init_with_config_dir(config_dir: &Path) -> Result<Self, String> {
+    /// 指定配置目录初始化（供测试注入临时目录；PS-04 T4.4 测试经
+    /// `init_with_config_dir` 构造 mock 注册表，故对 crate 内测试可见）。
+    pub(crate) fn init_with_config_dir(config_dir: &Path) -> Result<Self, String> {
         let recent = load_recent_list(config_dir);
         let mut roots: Vec<WorkspaceRoot> = Vec::new();
         // 默认应用根（monorepo 根）作为基础授权；canonicalize 失败则跳过
