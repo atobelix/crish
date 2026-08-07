@@ -1,74 +1,293 @@
-import { runStressTest, SeededRandom, type StressScenario } from "./stress-runner";
+import {
+  runStressTest,
+  SeededRandom,
+  type StressScenario,
+  type InvariantCheck,
+} from './stress-runner';
+// 真实生产模块（PS-02 T2.3 重写：原实现仅 Set 差集自嗨，零产品接触）
+import {
+  mergeSessionDiffFiles,
+  assistantTurnLabel,
+  isDiffSourceMode,
+  type DiffSourceMode,
+} from '../../apps/crish-desktop/src/api/diffPanelHelpers';
+import type {
+  DiffChange,
+  FileDiff,
+} from '../../apps/crish-desktop/src/store/types';
 
-function diffLoadScenario(rng: SeededRandom): AsyncGenerator<() => Promise<unknown>> {
-  const fileCount = 100;
-  const linesPerFile = 5000;
+// 边界说明（审计留痕）：applyFileDiff / reverseFileDiff 依赖 workspaceFsApi
+// （readTextFile/writeTextFile → Tauri invoke），Node 下禁止直连（任务书边界）；
+// 本场景驱动 diffPanelHelpers 纯计算面，diff 计数不变式覆盖
+// "additions/deletions 计数与独立基线一致"（独立基线 = changes 逐项 type 计数）。
 
-  const files: string[][] = [];
-  for (let f = 0; f < fileCount; f++) {
-    const lines: string[] = [];
-    for (let l = 0; l < linesPerFile; l++) {
-      const type = l % 3 === 0 ? "+" : l % 3 === 1 ? "-" : " ";
-      const content = `line-${l}-${rng.nextString(6)}`;
-      lines.push(`${type}${content}`);
+interface DiffRunState {
+  rng: SeededRandom;
+  totalOps: number;
+  totalFiles: number;
+  totalChanges: number;
+  failures: number;
+  failSamples: string[];
+}
+
+const CHANGE_TYPES: readonly DiffChange['type'][] = [
+  'addition',
+  'deletion',
+  'normal',
+];
+
+function makeChange(rng: SeededRandom, index: number): DiffChange {
+  return {
+    type: CHANGE_TYPES[rng.nextInt(CHANGE_TYPES.length)]!,
+    lineNum: index + 1,
+    content: `line ${index} ${rng.nextString(12)}`,
+  };
+}
+
+function makeFileDiff(
+  rng: SeededRandom,
+  path: string,
+  changeCount: number
+): FileDiff {
+  const changes: DiffChange[] = [];
+  for (let i = 0; i < changeCount; i++) {
+    changes.push(makeChange(rng, i));
+  }
+  return {
+    filePath: path,
+    additions: changes.filter((c) => c.type === 'addition').length,
+    deletions: changes.filter((c) => c.type === 'deletion').length,
+    changes,
+    gitStatus: 'M',
+  };
+}
+
+interface TurnFixture {
+  files: FileDiff[];
+}
+
+/**
+ * 构造一轮 AI 改动回合：8 个文件，60-150 条变更；
+ * 约 15% 路径与上一轮重复（触发 mergeSessionDiffFiles 的合并分支）。
+ */
+function makeTurn(
+  rng: SeededRandom,
+  turnIndex: number,
+  prevPaths: Set<string>
+): TurnFixture {
+  const files: FileDiff[] = [];
+  const paths: string[] = [];
+  for (let f = 0; f < 8; f++) {
+    const shared = prevPaths.size > 0 && rng.nextInt(100) < 15;
+    const path = shared
+      ? rng.pick([...prevPaths])
+      : `src/module-${rng.nextIntRange(0, 40)}/file-${rng.nextIntRange(0, 500)}.ts`;
+    paths.push(path);
+    files.push(makeFileDiff(rng, path, rng.nextIntRange(60, 150)));
+  }
+  void turnIndex;
+  return { files };
+}
+
+/** 独立基线校验：合并输出的每条 FileDiff 与输入 turns 逐项对照 */
+function verifyMerge(
+  turns: ReadonlyArray<{ files: FileDiff[] }>,
+  merged: FileDiff[]
+): string[] {
+  const violations: string[] = [];
+
+  // 输出路径唯一
+  const seen = new Set<string>();
+  for (const f of merged) {
+    if (seen.has(f.filePath)) {
+      violations.push(`合并输出路径重复: ${f.filePath}`);
     }
-    files.push(lines);
+    seen.add(f.filePath);
   }
 
-  let fileIndex = 0;
+  // 输入侧按路径分组（独立基线）
+  const byPath = new Map<string, FileDiff[]>();
+  for (const t of turns) {
+    for (const f of t.files) {
+      const list = byPath.get(f.filePath) ?? [];
+      list.push(f);
+      byPath.set(f.filePath, list);
+    }
+  }
 
-  while (true) {
-    const currentFile = fileIndex % files.length;
-    fileIndex++;
-
-    yield async () => {
-      const file = files[currentFile];
-      const stats = {
-        additions: 0,
-        deletions: 0,
-        context: 0,
-        totalLines: file.length,
-      };
-      for (const line of file) {
-        if (line.startsWith("+")) stats.additions++;
-        else if (line.startsWith("-")) stats.deletions++;
-        else stats.context++;
+  for (const f of merged) {
+    const originals = byPath.get(f.filePath) ?? [];
+    if (originals.length === 0) {
+      violations.push(`合并输出出现输入不存在的路径: ${f.filePath}`);
+      continue;
+    }
+    // additions/deletions 计数与独立基线一致
+    const expAdditions = originals.reduce((s, o) => s + o.additions, 0);
+    const expDeletions = originals.reduce((s, o) => s + o.deletions, 0);
+    if (f.additions !== expAdditions) {
+      violations.push(
+        `${f.filePath}: additions ${f.additions} != 基线 ${expAdditions}`
+      );
+    }
+    if (f.deletions !== expDeletions) {
+      violations.push(
+        `${f.filePath}: deletions ${f.deletions} != 基线 ${expDeletions}`
+      );
+    }
+    // 单轮文件应原样透传（字段等价）
+    if (originals.length === 1) {
+      const o = originals[0]!;
+      if (f.changes.length !== o.changes.length) {
+        violations.push(`${f.filePath}: 单轮文件 changes 长度被改动`);
       }
-      return stats;
-    };
+      for (let i = 0; i < Math.min(f.changes.length, o.changes.length); i++) {
+        if (f.changes[i]!.type !== o.changes[i]!.type) {
+          violations.push(`${f.filePath}: 单轮文件 changes[${i}] 类型被改动`);
+          break;
+        }
+      }
+    } else {
+      // 多轮合并：changes 拼接 + 上限 400
+      const sumLen = originals.reduce((s, o) => s + o.changes.length, 0);
+      const expLen = Math.min(400, sumLen);
+      if (f.changes.length !== expLen) {
+        violations.push(
+          `${f.filePath}: 合并 changes ${f.changes.length} != 期望 ${expLen}`
+        );
+      }
+    }
+    // 逐项独立计数（不依赖 FileDiff.additions 字段本身）。
+    // 注意契约：mergeSessionDiffFiles 的 changes 拼接后 .slice(0, 400)（显示截断），
+    // 而 additions/deletions 字段为不截断的累计和（store/types.ts 注释
+    // "与 changes 基本一致，以工具上报为准"）——故仅当未截断（<400）时二者必须一致；
+    // 截断到 400 时字段 > 计数属预期设计，不断言。
+    const addCount = f.changes.filter((c) => c.type === 'addition').length;
+    const delCount = f.changes.filter((c) => c.type === 'deletion').length;
+    if (
+      f.changes.length < 400 &&
+      (addCount !== f.additions || delCount !== f.deletions)
+    ) {
+      violations.push(
+        `${f.filePath}: changes 逐项计数 ${addCount}/${delCount} != 字段 ${f.additions}/${f.deletions}（未截断时不得分叉）`
+      );
+    }
+  }
+  return violations;
+}
 
+/** 回合标签与来源模式判定（diffPanelHelpers 其余导出） */
+function verifyHelpers(rng: SeededRandom): string[] {
+  const violations: string[] = [];
+  for (let i = 0; i < 50; i++) {
+    const fileCount = rng.nextIntRange(0, 20);
+    const label = assistantTurnLabel(
+      { timestamp: String(1_700_000_000_000 + rng.nextIntRange(0, 86400_000)) },
+      i,
+      fileCount
+    );
+    if (fileCount > 0 && !label.includes(`${fileCount} 个文件`)) {
+      violations.push(`label 缺文件数: ${label}`);
+    }
+    if (fileCount === 0 && label.includes('个文件')) {
+      violations.push(`label 0 文件时误带文件数: ${label}`);
+    }
+    if (!/^回合 \d+ /.test(label)) {
+      violations.push(`label 格式异常: ${label}`);
+    }
+  }
+  for (const mode of ['session', 'git', 'list'] as const) {
+    if (!isDiffSourceMode(mode))
+      violations.push(`isDiffSourceMode 拒绝对值 ${mode}`);
+  }
+  for (const bad of ['Session', 'GIT', '', 'unknown', 42] as const) {
+    if (isDiffSourceMode(bad as DiffSourceMode))
+      violations.push(`isDiffSourceMode 误收 ${String(bad)}`);
+  }
+  return violations;
+}
+
+function* diffLoadScenario(
+  state: DiffRunState
+): Generator<() => Promise<unknown>> {
+  const { rng } = state;
+  while (true) {
     yield async () => {
-      const prevIndex = (currentFile - 1 + files.length) % files.length;
-      const prevFile = files[prevIndex];
-      const prevSet = new Set(prevFile);
-      const additions = files[currentFile].filter((l) => !prevSet.has(l)).length;
-      const deletions = prevFile.filter((l) => !new Set(files[currentFile]).has(l)).length;
-      return { additions, deletions };
+      // 数百文件级大 diff fixture：40 回合 × 8 文件 × 60-150 changes
+      const prevPaths = new Set<string>();
+      const turns: TurnFixture[] = [];
+      for (let t = 0; t < 40; t++) {
+        const turn = makeTurn(rng, t, prevPaths);
+        turns.push(turn);
+        for (const f of turn.files) prevPaths.add(f.filePath);
+      }
+
+      const merged = mergeSessionDiffFiles(turns);
+      const violations = [...verifyMerge(turns, merged), ...verifyHelpers(rng)];
+
+      state.totalOps++;
+      state.totalFiles += merged.length;
+      for (const t of turns) {
+        for (const f of t.files) state.totalChanges += f.changes.length;
+      }
+      for (const v of violations) {
+        state.failures++;
+        if (state.failSamples.length < 20) state.failSamples.push(v);
+      }
     };
   }
 }
 
-function createDiffLoadScenario(): () => AsyncGenerator<() => Promise<unknown>> {
-  const seed = DIFF_LOAD_STRESS.seed ?? 42;
-  const rng = new SeededRandom(seed);
-  return () => diffLoadScenario(rng);
+function verifyDiffLoad(state: DiffRunState): InvariantCheck[] {
+  const checks: InvariantCheck[] = [];
+  if (state.totalOps === 0) {
+    return [{ ok: false, message: '0 次合并被执行（空跑）' }];
+  }
+  checks.push({
+    ok: state.failures === 0,
+    message: `全部合并不变式通过（${state.totalOps} ops / ${state.totalFiles} 文件 / ${state.totalChanges} 条 change, 失败 ${state.failures}）`,
+  });
+  for (const sample of state.failSamples) {
+    checks.push({ ok: false, message: `失败样例: ${sample}` });
+  }
+  return checks;
 }
+
+function createDiffRunState(): DiffRunState {
+  return {
+    rng: new SeededRandom(7),
+    totalOps: 0,
+    totalFiles: 0,
+    totalChanges: 0,
+    failures: 0,
+    failSamples: [],
+  };
+}
+
+const diffRunState = createDiffRunState();
 
 export const DIFF_LOAD_STRESS: StressScenario = {
-  name: "large.diff.loading",
+  name: 'large.diff.merge.and.count',
   duration: 20_000,
   concurrency: 1,
-  seed: 42,
-  scenario: createDiffLoadScenario(),
-  expectedErrorRate: 0.02,
+  seed: 7,
+  modules: [
+    'api/diffPanelHelpers.mergeSessionDiffFiles',
+    'api/diffPanelHelpers.assistantTurnLabel',
+  ],
+  scenario: () => diffLoadScenario(diffRunState),
+  verify: () => verifyDiffLoad(diffRunState),
+  expectedErrorRate: 0.01,
   expected: {
-    fps: { min: 20 },
+    // 阈值按实测基线设定并留 ≥30% 余量，见 T2.3 报告
+    ops: { min: 10 },
     memory: { maxHeap: 300 * 1024 * 1024 },
     latency: { p95: 200, p99: 500 },
   },
 };
 
-const isMain = process.argv[1]?.endsWith("stress-diff-load.ts");
+const isMain = process.argv[1]?.endsWith('stress-diff-load.ts');
 if (isMain) {
-  runStressTest(DIFF_LOAD_STRESS).then((result) => process.exit(result.passed ? 0 : 1));
+  runStressTest(DIFF_LOAD_STRESS).then((result) =>
+    process.exit(result.passed ? 0 : 1)
+  );
 }
