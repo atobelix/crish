@@ -82,7 +82,7 @@
 - **处置**：T3.5 不越界修改他人文件（B9）；红绿两段提交（6329e1de/5a67825a）不受影响；全量回归中 3 个失败项（kill_graceful_path / run_end_daemon_survives / scheduler_registry_daemon_without_launcher_falls_back_to_steering，均守护任务/定时器时序类，与快照无关）待树恢复后在隔离态复核是否既存 flaky。
 - **建议**：壳 crate 串行链（PS-01→T3.5→T4.3→T4.4）窗口内对同 crate 并行任务加编译面隔离（如临时 worktree 验证），或约定「验证窗口内不落未提交 WIP」；验收方复核 flaky 时序类测试失败时按「隔离重跑通过」口径放行。
 
-## F-010：load() 反向校验（双防线②）依赖 row.description 承载 flow_node_id——生产 spawner 未落库该字段（PS-03 T3.4 执行期）
+## F-013：load() 反向校验（双防线②）依赖 row.description 承载 flow_node_id——生产 spawner 未落库该字段（PS-03 T3.4 执行期）
 
 - **发现日期**：2026-08-08（PS-03 T3.4 执行期）
 - **位置**：`crates/orchestrator/src/flow_graph.rs`（load 反向校验，本任务新增）+ `apps/agent-workbench/src-tauri/src/subagent_spawner.rs:419-424`（flow_nodes 仅内存 map，不落库）+ `subagent_spawner.rs:682`（row_for 写 description = req.description，flow 请求 description=None → 空串）
