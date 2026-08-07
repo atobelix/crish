@@ -569,6 +569,72 @@ mod tests {
         assert!(err.starts_with(ERR_ARG_NOT_ALLOWED));
     }
 
+    /// P1-S4 红测试：`+` 前缀 refspec（git 原生 force 语义，等价 --force）
+    /// 必须拒绝——绕过 C-04「拒绝 force push」承诺。
+    #[test]
+    fn push_plus_refspec_rejected() {
+        for args in [
+            vec![
+                "push".to_string(),
+                "origin".to_string(),
+                "+refs/heads/main:main".to_string(),
+            ],
+            vec!["push".to_string(), "+refs/heads/main:main".to_string()],
+            vec![
+                "push".to_string(),
+                "origin".to_string(),
+                "+main".to_string(),
+            ],
+        ] {
+            let err = validate_git_args(&args).expect_err("+refspec（force）必须拒绝");
+            assert!(err.starts_with(ERR_ARG_NOT_ALLOWED), "err: {err}");
+        }
+    }
+
+    /// P1-S4 红测试：空 src 删除形态（`:refs/heads/x`）与孤立 refspec
+    /// （`main:`）必须拒绝——可删除远端分支。
+    #[test]
+    fn push_delete_ref_rejected() {
+        for args in [
+            vec![
+                "push".to_string(),
+                "origin".to_string(),
+                ":refs/heads/x".to_string(),
+            ],
+            vec!["push".to_string(), ":refs/heads/x".to_string()],
+            vec!["push".to_string(), "origin".to_string(), ":main".to_string()],
+            vec!["push".to_string(), "origin".to_string(), "main:".to_string()],
+        ] {
+            let err = validate_git_args(&args).expect_err("删除类 refspec 必须拒绝");
+            assert!(err.starts_with(ERR_ARG_NOT_ALLOWED), "err: {err}");
+        }
+    }
+
+    /// P1-S4 契约：合法 push 形态保持放行（无参 / remote / remote+refspec）。
+    #[test]
+    fn push_normal_refspec_passes() {
+        for args in [
+            vec!["push".to_string()],
+            vec!["push".to_string(), "origin".to_string()],
+            vec!["push".to_string(), "origin".to_string(), "main".to_string()],
+            vec!["push".to_string(), "origin".to_string(), "main:main".to_string()],
+            vec![
+                "push".to_string(),
+                "origin".to_string(),
+                "HEAD:refs/heads/main".to_string(),
+            ],
+            vec![
+                "push".to_string(),
+                "origin".to_string(),
+                "feature/x:refs/heads/feature/x".to_string(),
+            ],
+        ] {
+            let validated = validate_git_args(&args)
+                .unwrap_or_else(|e| panic!("case {args:?} must pass, got: {e}"));
+            assert_eq!(validated, args);
+        }
+    }
+
     /// T07.3 用例 4 变体：非白名单子命令拒绝。
     #[test]
     fn unknown_subcommand_rejected() {

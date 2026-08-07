@@ -423,4 +423,37 @@ mod tests {
             other => panic!("expected Internal, got {other:?}"),
         }
     }
+
+    /// P1-S5 红测试：含 cmd 元字符（`&`/`|`）的已存在路径不得放行——
+    /// `cmd /C start "" <target>` 会被 cmd 二次解释（`a&whoami` 拆为
+    /// `start a` + `whoami` 两条命令）。修复语义：拒绝该类路径。
+    // 测试临时目录清理豁免（clippy.toml「测试代码临时目录清理」豁免面）
+    #[allow(clippy::disallowed_methods)]
+    #[test]
+    fn open_path_with_default_app_rejects_metachar_targets() {
+        let dir = std::env::temp_dir().join(format!("conex-opener-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        for name in ["a&whoami", "a&whoami.txt", "a&&whoami", "b|whoami"] {
+            let file = dir.join(name);
+            let _ = std::fs::write(&file, b"x");
+            let target = file.to_string_lossy().to_string();
+            let res = open_path_with_default_app(target.clone());
+            assert!(
+                res.is_err(),
+                "含 cmd 元字符的路径必须拒绝（F6-02 注入面）：`{target}`"
+            );
+            let err = res.unwrap_err();
+            match err {
+                CoreError::InvalidInput(detail) => {
+                    assert!(
+                        detail.contains("InvalidCommand"),
+                        "detail should contain InvalidCommand: {detail}"
+                    );
+                }
+                other => panic!("expected InvalidInput, got {other:?}"),
+            }
+        }
+        // 测试临时目录清理（走 test 豁免面，产物为测试自建）
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
