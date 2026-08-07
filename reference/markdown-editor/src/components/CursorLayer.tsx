@@ -4,9 +4,13 @@ import { getCoordinatesFromIndex, updateActiveElements } from '../core/measure';
 
 interface CursorLayerProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
+  layoutDeps?: string;
 }
 
-export const CursorLayer: React.FC<CursorLayerProps> = ({ containerRef }) => {
+export const CursorLayer: React.FC<CursorLayerProps> = ({
+  containerRef,
+  layoutDeps,
+}) => {
   const { cursorPos, selectionStart, selectionEnd } = useEditorStore();
   const [coords, setCoords] = useState<{
     top: number;
@@ -49,7 +53,7 @@ export const CursorLayer: React.FC<CursorLayerProps> = ({ containerRef }) => {
           rect.bottom - containerRect.top + containerRef.current.scrollTop,
       });
     }
-  }, [cursorPos, selectionStart, selectionEnd, containerRef]);
+  }, [cursorPos, selectionStart, selectionEnd, containerRef, layoutDeps]);
 
   if (!coords || hasSelection) return null;
 

@@ -244,7 +244,13 @@ export const MarkdownEngine: React.FC = () => {
           })}
         </div>
 
-        <CursorLayer containerRef={parentRef} />
+        <CursorLayer
+          containerRef={parentRef}
+          layoutDeps={virtualizer
+            .getVirtualItems()
+            .map((v) => v.start)
+            .join(',')}
+        />
         <HiddenInput containerRef={parentRef} />
       </div>
     </div>
