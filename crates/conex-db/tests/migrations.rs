@@ -901,3 +901,219 @@ fn backup_failure_warns_and_continues_migration() {
     assert_eq!(count_rows(&conn, "events"), 2, "v3→v4 迁移正常完成（孤儿过滤）");
     assert_eq!(count_rows(&conn, "sessions"), 1);
 }
+
+// ══════════ T3.1 D1 迁移幂等化（PS-03）：v3→v4 崩溃重跑自愈 ══════════
+
+/// v4 崩溃中间态 fixture：等价于「v3→v4 迁移 commit 成功、PRAGMA user_version=4
+/// 执行前崩溃」（R2 §1.3/§1.4 推演）——表结构已是 v4 形态（events 组合主键 +
+/// FK、runs/pending 带 FK、session_messages 含 updated_at、metadata 已删、
+/// session_sequence 已重建为 next_sequence 列），但 `PRAGMA user_version` 仍为 3。
+/// 预置 1 条 session + 1 条 message，验证重跑自愈不丢数据。
+fn build_v4_shape_crash_midstate_fixture(db: &TempDb) {
+    let conn = Connection::open(db.path()).unwrap();
+    conn.execute_batch("PRAGMA foreign_keys = OFF;").unwrap();
+    conn.execute_batch(
+        "CREATE TABLE sessions (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL DEFAULT '',
+            folder TEXT NOT NULL DEFAULT '常规会话',
+            is_pinned INTEGER NOT NULL DEFAULT 0,
+            is_archived INTEGER NOT NULL DEFAULT 0,
+            branch_parent_id TEXT,
+            timestamp TEXT NOT NULL DEFAULT '',
+            timestamp_source TEXT,
+            updated_at INTEGER NOT NULL DEFAULT 0,
+            message_count INTEGER NOT NULL DEFAULT 0,
+            pinned_message_ids TEXT,
+            engine_cursor INTEGER,
+            engine_last_run_id TEXT,
+            hydrated_from_engine INTEGER,
+            created_at INTEGER NOT NULL DEFAULT 0
+        ) WITHOUT ROWID;
+        CREATE TABLE events (
+            session_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            event_type TEXT NOT NULL,
+            payload TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (session_id, sequence),
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        ) WITHOUT ROWID;
+        CREATE TABLE runs (
+            run_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            end_reason TEXT,
+            cursor INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        ) WITHOUT ROWID;
+        CREATE INDEX IF NOT EXISTS idx_runs_session ON runs(session_id);
+        CREATE TABLE pending_inputs (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            run_id TEXT,
+            payload TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        ) WITHOUT ROWID;
+        CREATE INDEX IF NOT EXISTS idx_pending_session ON pending_inputs(session_id, created_at);
+        CREATE TABLE session_messages (
+            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            seq INTEGER NOT NULL,
+            id TEXT NOT NULL,
+            sender TEXT NOT NULL CHECK (sender IN ('user','assistant')),
+            text TEXT,
+            thinking TEXT,
+            timestamp INTEGER NOT NULL,
+            status TEXT CHECK (status IN ('queued','processing','completed','error')),
+            stream_text_offset INTEGER,
+            thinking_time INTEGER,
+            tool_calls_json TEXT,
+            blocks_json TEXT,
+            tool_call_results_json TEXT,
+            updated_at INTEGER,
+            PRIMARY KEY (session_id, seq)
+        ) WITHOUT ROWID;
+        CREATE INDEX IF NOT EXISTS idx_session_messages_id ON session_messages(session_id, id);
+        CREATE TABLE session_agents (
+            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            agent_id TEXT NOT NULL,
+            subagent_run_id TEXT NOT NULL,
+            parent_session_id TEXT NOT NULL,
+            parent_run_id TEXT NOT NULL,
+            parent_tool_call_id TEXT,
+            description TEXT NOT NULL DEFAULT '',
+            mode TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL CHECK (status IN ('running','completed','failed','stopped')),
+            summary TEXT,
+            started_at INTEGER NOT NULL,
+            ended_at INTEGER,
+            depth INTEGER DEFAULT 0,
+            subagent_path_json TEXT,
+            PRIMARY KEY (session_id, agent_id)
+        ) WITHOUT ROWID;
+        CREATE TABLE session_agent_messages (
+            session_id TEXT NOT NULL,
+            agent_id TEXT NOT NULL,
+            seq INTEGER NOT NULL,
+            id TEXT NOT NULL,
+            sender TEXT NOT NULL CHECK (sender IN ('user','assistant')),
+            text TEXT,
+            thinking TEXT,
+            timestamp INTEGER NOT NULL,
+            status TEXT CHECK (status IN ('queued','processing','completed','error')),
+            stream_text_offset INTEGER,
+            thinking_time INTEGER,
+            tool_calls_json TEXT,
+            blocks_json TEXT,
+            tool_call_results_json TEXT,
+            PRIMARY KEY (session_id, agent_id, seq),
+            FOREIGN KEY (session_id, agent_id) REFERENCES session_agents(session_id, agent_id) ON DELETE CASCADE
+        ) WITHOUT ROWID;
+        CREATE TABLE session_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
+        CREATE TRIGGER IF NOT EXISTS trg_session_messages_insert
+        AFTER INSERT ON session_messages
+        BEGIN
+            UPDATE sessions SET message_count = message_count + 1 WHERE id = NEW.session_id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_session_messages_delete
+        AFTER DELETE ON session_messages
+        BEGIN
+            UPDATE sessions SET message_count = message_count - 1 WHERE id = OLD.session_id;
+        END;
+        CREATE TABLE session_sequence (
+            session_id TEXT PRIMARY KEY,
+            next_sequence INTEGER NOT NULL DEFAULT 1
+        ) WITHOUT ROWID;
+        INSERT INTO sessions (id, title, folder, updated_at, created_at)
+            VALUES ('s1', '崩溃中间态会话', '生产', 2000, 3000);
+        INSERT INTO session_messages (session_id, seq, id, sender, text, timestamp, status)
+            VALUES ('s1', 0, 'm1', 'user', '中间态消息', 1000, 'completed');
+        INSERT INTO session_agents (session_id, agent_id, subagent_run_id, parent_session_id,
+            parent_run_id, description, mode, status, started_at)
+            VALUES ('s1', 'a1', 'r-a1', 's1', 'p1', '探索', 'explore', 'completed', 1100);
+        INSERT INTO events (session_id, sequence, event_type, payload) VALUES ('s1', 1, 'agent-start', '{}');
+        INSERT INTO runs (run_id, session_id, status, created_at, updated_at) VALUES ('r1', 's1', 'completed', 1200, 1300);
+        INSERT INTO session_sequence (session_id, next_sequence) VALUES ('s1', 2);
+        PRAGMA user_version = 3;",
+    )
+    .unwrap();
+}
+
+/// T3.1 D1 核心用例（红测试）：崩溃中间态库重跑必须自愈——open 成功、
+/// 版本收敛到 LATEST_VERSION、v4/v5/v6 关键列在场、预置数据不丢。
+/// 修复前（user_version 在事务外 + ADD COLUMN 无 col-check）此库重开
+/// 在 `ALTER TABLE session_messages ADD COLUMN updated_at` 抛
+/// `duplicate column name` → open 失败 → failure latch → 库永久不可开。
+#[test]
+fn migration_v3_to_v4_crash_rerun_self_heals() {
+    let temp = TempDb::new("crash-mid");
+    build_v4_shape_crash_midstate_fixture(&temp);
+
+    // 断言 1：open 成功（不进入 failure latch）
+    let db = LocalDb::open(temp.path()).unwrap();
+    assert!(
+        db.get_failure().is_none(),
+        "崩溃中间态重跑不得进入 failure latch"
+    );
+
+    // 断言 2：版本收敛到 LATEST_VERSION
+    assert_eq!(db.user_version().unwrap(), LATEST_VERSION, "版本收敛到 v6");
+
+    // 断言 3：v4/v5/v6 关键列全部在场
+    let conn = Connection::open(temp.path()).unwrap();
+    assert!(
+        table_columns(&conn, "session_messages").contains(&"updated_at".to_string()),
+        "v4 列 session_messages.updated_at 在场"
+    );
+    assert!(
+        table_columns(&conn, "runs").contains(&"prompt_tokens".to_string()),
+        "v5 列 runs.prompt_tokens 在场"
+    );
+    assert!(
+        table_columns(&conn, "session_agents").contains(&"task_type".to_string()),
+        "v6 列 session_agents.task_type 在场"
+    );
+
+    // 断言 4：预置数据保留（结构重跑不丢行）
+    assert_eq!(count_rows(&conn, "sessions"), 1, "会话保留");
+    assert_eq!(count_rows(&conn, "session_messages"), 1, "消息保留");
+    assert_eq!(count_rows(&conn, "events"), 1, "事件保留");
+    assert_eq!(count_rows(&conn, "runs"), 1, "run 保留");
+    assert_eq!(count_rows(&conn, "session_agents"), 1, "agent 保留");
+    let text: String = conn
+        .query_row(
+            "SELECT text FROM session_messages WHERE session_id='s1' AND seq=0",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(text, "中间态消息", "消息正文未被清空");
+
+    // 断言 5：重开幂等（第二次 open 也成功、版本稳定、数据稳定）
+    let db2 = LocalDb::open(temp.path()).unwrap();
+    assert_eq!(db2.user_version().unwrap(), LATEST_VERSION, "二次 open 幂等");
+    let conn = Connection::open(temp.path()).unwrap();
+    assert_eq!(count_rows(&conn, "sessions"), 1);
+    assert_eq!(count_rows(&conn, "session_messages"), 1);
+}
+
+/// T3.1 回归用例：正常 v3 fixture 升级路径不受幂等化改动影响。
+#[test]
+fn migration_normal_v3_upgrade_still_works() {
+    let temp = TempDb::new("v3-normal");
+    build_v3_fixture(&temp);
+
+    let db = LocalDb::open(temp.path()).unwrap();
+    assert!(db.get_failure().is_none());
+    assert_eq!(db.user_version().unwrap(), LATEST_VERSION);
+
+    let conn = Connection::open(temp.path()).unwrap();
+    assert_eq!(count_rows(&conn, "sessions"), 1);
+    assert_eq!(count_rows(&conn, "events"), 2, "孤儿事件被过滤，正常事件保留");
+    assert_eq!(count_rows(&conn, "runs"), 1, "孤儿 run 被过滤");
+    assert!(table_columns(&conn, "session_messages").contains(&"updated_at".to_string()));
+    assert!(table_columns(&conn, "session_agents").contains(&"task_type".to_string()));
+}
