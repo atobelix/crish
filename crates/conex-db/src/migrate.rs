@@ -185,10 +185,14 @@ impl LocalDb {
                 self.set_failure(failure.clone());
                 return Err(failure);
             }
+            // T3.1 D1（PS-03）：user_version 移入迁移事务内——SQLite 的
+            // user_version 参与事务回滚，与结构迁移 commit 原子可见；
+            // 消除「commit 成功 → PRAGMA 前崩溃」死态（R2 §1.3/§1.4）：
+            // 修复后崩溃只可能整体回滚，重跑回到干净的旧版本形态。
+            tx.execute_batch(&format!("PRAGMA user_version = {version};"))
+                .map_err(|e| self.latch_error(&format!("user_version_set_v{version}"), e))?;
             tx.commit()
                 .map_err(|e| self.latch_error(&format!("migrate_commit_v{version}"), e))?;
-            conn.execute_batch(&format!("PRAGMA user_version = {version};"))
-                .map_err(|e| self.latch_error(&format!("user_version_set_v{version}"), e))?;
         }
 
         // 迁移完成后 ensure v5 结构（补触发器/索引；幂等）
@@ -345,29 +349,44 @@ fn migrate_v3_to_v4(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Erro
             SELECT id, session_id, run_id, payload, created_at FROM pending_v3
             WHERE session_id IN (SELECT id FROM sessions);
          DROP TABLE pending_v3;
-         CREATE INDEX IF NOT EXISTS idx_pending_session ON pending_inputs(session_id, created_at);
-
-         ALTER TABLE session_messages ADD COLUMN updated_at INTEGER;",
+         CREATE INDEX IF NOT EXISTS idx_pending_session ON pending_inputs(session_id, created_at);",
     )?;
+    // T3.1 D1（PS-03）：updated_at 加列存在性检查（对齐 v1→v2 / v4→v5 的
+    // col-check 模式）——崩溃中间态重跑（结构已 v4、版本仍 v3）不再因
+    // `duplicate column name: updated_at` 而 latch 死库；本步是 v3→v4
+    // 整段 execute_batch 中唯一非幂等步骤（R2 §1），拆出条件执行后
+    // 结构重建整体幂等，重跑自愈。
+    let msg_cols = table_columns(tx, "session_messages")?;
+    if !msg_cols.iter().any(|c| c == "updated_at") {
+        tx.execute_batch("ALTER TABLE session_messages ADD COLUMN updated_at INTEGER;")?;
+    }
     // session_sequence：v3 形态可能不存在（v1/v2 fixture）——不存在则直接建；
     // 存在则重建对齐 next_sequence 列名并过滤孤儿。
+    // T3.1 D1（PS-03）幂等化补充：崩溃中间态重跑时本表可能已是 v4 形态
+    // （next_sequence 列名）——按源表实际列名判定，避免硬编码
+    // `SELECT next_seq FROM ss_v3` 抛 `no such column: next_seq` 再次 latch 死库。
     let has_ss: i64 = tx.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_sequence'",
         [],
         |r| r.get(0),
     )?;
     if has_ss > 0 {
-        tx.execute_batch(
-            "ALTER TABLE session_sequence RENAME TO ss_v3;
-             CREATE TABLE session_sequence (
-                session_id TEXT PRIMARY KEY,
-                next_sequence INTEGER NOT NULL DEFAULT 1
-             ) WITHOUT ROWID;
-             INSERT INTO session_sequence (session_id, next_sequence)
-                SELECT session_id, next_seq FROM ss_v3
-                WHERE session_id IN (SELECT id FROM sessions);
-             DROP TABLE ss_v3;",
-        )?;
+        let ss_cols = table_columns(tx, "session_sequence")?;
+        if ss_cols.iter().any(|c| c == "next_seq") {
+            // v3 形态（next_seq 列名）：重建对齐 next_sequence + 孤儿过滤
+            tx.execute_batch(
+                "ALTER TABLE session_sequence RENAME TO ss_v3;
+                 CREATE TABLE session_sequence (
+                    session_id TEXT PRIMARY KEY,
+                    next_sequence INTEGER NOT NULL DEFAULT 1
+                 ) WITHOUT ROWID;
+                 INSERT INTO session_sequence (session_id, next_sequence)
+                    SELECT session_id, next_seq FROM ss_v3
+                    WHERE session_id IN (SELECT id FROM sessions);
+                 DROP TABLE ss_v3;",
+            )?;
+        }
+        // 已是 v4 形态（next_sequence 列）：重跑幂等跳过重建
     } else {
         tx.execute_batch(
             "CREATE TABLE IF NOT EXISTS session_sequence (
