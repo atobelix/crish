@@ -707,4 +707,68 @@ mod tests {
             conex_fs::trash::TrashService::new(trash.path()).list().is_empty()
         );
     }
+
+    #[test]
+    fn cleanup_meta_relative_traversal_skipped() {
+        let (trash, ws) = cleanup_fixture();
+        // session_meta output_dir 相对路径含 `..` 逃逸（F5-02 缺口：相对分支
+        // 零校验直接 join，`..` 可越出工作区根）→ 拒绝清理，与绝对分支同口径
+        let outside = TempDir::new("outside");
+        let victim = outside.0.join("Documents/x");
+        std::fs::create_dir_all(&victim).unwrap();
+        // ws 与 outside 同处 temp_dir：一级 `..` 即越出工作区根
+        let rel_escape = format!(
+            "../{}/Documents/x",
+            outside.0.file_name().unwrap().to_string_lossy()
+        );
+        let result = cleanup_session_outputs_at(
+            trash.path(),
+            ws.path(),
+            "s1",
+            Some(&rel_escape),
+            None,
+            None,
+            false,
+        );
+        assert!(!result.cleaned, "相对逃逸 meta 目标不得清理");
+        assert!(victim.exists(), "工作区外目录必须原样保留");
+        assert!(result.skipped_outside, "相对逃逸应标记安全跳过");
+        assert!(result.notice.contains("已跳过清理"), "notice: {}", result.notice);
+        assert!(
+            conex_fs::trash::TrashService::new(trash.path()).list().is_empty(),
+            "相对逃逸目标不得进回收站"
+        );
+    }
+
+    #[test]
+    fn cleanup_meta_relative_target_inside_workspace_trashed() {
+        let (trash, ws) = cleanup_fixture();
+        // 相对路径正常形态（G01 落键相对值）：基于工作区根解析后正常 trash
+        let out_dir = ws.0.join(".agent-outputs/2026-08-05-s1");
+        std::fs::create_dir_all(out_dir.join("sub")).unwrap();
+        let rel = out_dir
+            .strip_prefix(ws.path())
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let result = cleanup_session_outputs_at(
+            trash.path(),
+            ws.path(),
+            "s1",
+            Some(&rel),
+            None,
+            None,
+            false,
+        );
+        assert!(result.cleaned, "notice: {}", result.notice);
+        assert_eq!(
+            result.trashed_dirs,
+            vec![out_dir.to_string_lossy().into_owned()]
+        );
+        assert!(!out_dir.exists(), "工作区内相对目标应进回收站");
+        assert!(!result.skipped_outside);
+        assert!(
+            conex_fs::trash::TrashService::new(trash.path()).list().len() == 1
+        );
+    }
 }
