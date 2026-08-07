@@ -45,10 +45,11 @@ export interface StoreApiLike<S extends PersistableStoreState> {
  * 避免 store-persistence 反向 import api/storeAccess（api → store 大环）。
  * layoutStore（含 SessionActions）天然满足该接口。
  */
-export type SessionActivatableStore<S extends PersistableStoreState> = StoreApiLike<S> & {
-  /** 会话激活（触发引擎懒水合）；不存在时降级为空操作 */
-  setActiveSessionId?: (id: string) => void;
-};
+export type SessionActivatableStore<S extends PersistableStoreState> =
+  StoreApiLike<S> & {
+    /** 会话激活（触发引擎懒水合）；不存在时降级为空操作 */
+    setActiveSessionId?: (id: string) => void;
+  };
 
 export function serializeWorkspaceLayout<S extends PersistableStoreState>(
   state: S
@@ -133,11 +134,22 @@ export function initStorePersistence<S extends PersistableStoreState>(
     }
     lastDomain = domain;
 
+    // boot 窗口守卫（PERSIST-01 P0-2 残余闭合）：hydrate 未完成时
+    // 只允许「非空会话集」的持久化，禁止空列表经 debounce 触发全删
+    // （配合 Rust 库层三护栏 + JS 空 keep 守卫，从时序面堵死清理竞态）。
+    if (!state.hydrationComplete && state.sessions.length === 0) {
+      return;
+    }
+
     if (persistTimer) clearTimeout(persistTimer);
     persistTimer = setTimeout(() => {
       try {
         const cur = store.getState();
-        void persistAllSessions(cur.sessions, cur.activeSessionId, cur.folderOrder);
+        void persistAllSessions(
+          cur.sessions,
+          cur.activeSessionId,
+          cur.folderOrder
+        );
       } catch (e) {
         console.warn('[sessionPersistence] save failed', e);
       }
@@ -199,7 +211,7 @@ export function initStorePersistence<S extends PersistableStoreState>(
           // 用户已在内存中的消息 / 新建会话。
           store.setState((state: PersistableStoreState) => {
             const byId = new Map(
-              restored.sessions.map((s) => [s.id, s] as const),
+              restored.sessions.map((s) => [s.id, s] as const)
             );
             let any = false;
             const next = state.sessions.map((s) => {
@@ -248,7 +260,10 @@ export function initStorePersistence<S extends PersistableStoreState>(
           //  E4 hydrateWorkspaceShell 的 restore 路径竞态）。
           try {
             const after = store.getState();
-            if (after.activeSessionId && after.sessionsById[after.activeSessionId]) {
+            if (
+              after.activeSessionId &&
+              after.sessionsById[after.activeSessionId]
+            ) {
               setActiveSessionId(after.activeSessionId);
             }
           } catch {
@@ -261,7 +276,10 @@ export function initStorePersistence<S extends PersistableStoreState>(
           // 直接写 activeSessionId 绕过 setActiveSessionId，空正文远程壳不会拉引擎。
           // 再走一遍 setActive：焦点幂等，且触发 needsEngineMessageHydrate 懒水合。
           // 同上：仅 hydrate 激活，不建 shell tab（open/focus 归 shell 单一手势）。
-          if (after.activeSessionId && after.sessionsById[after.activeSessionId]) {
+          if (
+            after.activeSessionId &&
+            after.sessionsById[after.activeSessionId]
+          ) {
             setActiveSessionId(after.activeSessionId);
           }
           void persistAllSessions(
