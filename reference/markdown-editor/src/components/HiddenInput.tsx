@@ -35,7 +35,6 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
   // Sync input value with current line text
   useLayoutEffect(() => {
     if (!textareaRef.current) return;
-    const state = useEditorStore.getState();
 
     // Sync physical coordinates whenever cursor or text changes
     if (!containerRef.current) return;

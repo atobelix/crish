@@ -5,7 +5,6 @@ import { HiddenInput } from './HiddenInput';
 import { CursorLayer } from './CursorLayer';
 import { useEditorStore } from '../core/EditorStore';
 import { MarkdownParser } from '../core/parser';
-import { getCoordinatesFromIndex } from '../core/measure';
 
 export const MarkdownEngine: React.FC = () => {
   const parentRef = useRef<HTMLDivElement>(null);

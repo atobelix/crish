@@ -243,9 +243,13 @@ export const BlockRenderer = memo(
         );
 
       case 'body':
-      default:
+      default: {
+        // 列表缩进接线：listIndent 以 padding-left 语义渲染（wrap 续行正确对齐）
+        const indentStyle: React.CSSProperties | undefined = block.listIndent
+          ? { paddingLeft: `${Math.min(block.listIndent, 8) * 6}px` }
+          : undefined;
         return (
-          <div className="line-block">
+          <div className="line-block" style={indentStyle}>
             {block.inlineTokens && block.inlineTokens.length > 0 ? (
               <InlineRenderer
                 tokens={block.inlineTokens}
@@ -256,6 +260,7 @@ export const BlockRenderer = memo(
             )}
           </div>
         );
+      }
     }
   }
 );
