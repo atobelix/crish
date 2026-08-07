@@ -285,6 +285,22 @@ export function composeSystemPrompt(
 }
 
 /**
+ * P1-F2（F5-04）取消竞态判定：run 是否已死（cancelled / finished）。
+ *
+ * 根因：createStreamSession 对 createStreamCancel 为异步并发（fire-and-forget），
+ * waitUntilConnected 挂起期间用户点停止 → cancel 置 cancelled/finished 并派发 L3
+ * force_cancel；若 createStreamSession 在 await 恢复后不检查取消态，仍会订阅并
+ * startRunTask 派发 core_run_task——run 实际启动，且 force_cancel 早于 run 到达
+ * 引擎时取消目标不存在而失效。
+ *
+ * 修复机制：启动流与取消共享同一 state 对象 = 取消信号自然传播到等待方；每个
+ * await 点恢复后先经本判定短路（命中 → 静默 return，不启动 run、不再回调）。
+ */
+function isRunDead(state: StreamState): boolean {
+  return state.finished || state.cancelled;
+}
+
+/**
  * 创建流式 run（C1.2 主路径）：
  * 1. transport.waitUntilConnected(1.5s) —— 核心未就绪直接拒绝（无降级）；
  * 2. 挂 transport.onMessage（listen 事件通道）→ onMessage 回调；
@@ -307,6 +323,10 @@ export async function createStreamSession(
   const transport = getTransport();
   try {
     const ready = await transport.waitUntilConnected(1_500);
+    // P1-F2（F5-04）①：等待连接期间用户点了停止（createStreamCancel 已置
+    // cancelled/finished 并派发 force_cancel）→ 不订阅、不 onChunk/onRunError、
+    // 不启动 run，静默返回（cancel 已自行收口 onComplete）。
+    if (isRunDead(state)) return;
     if (!ready || !transport.isReady()) {
       // C3.4：核心未就绪 → 拒绝启动（无 directFetch 降级）
       logInternalError(
@@ -437,6 +457,12 @@ export async function createStreamSession(
     } catch {
       /* ignore：历史加载失败不阻塞 run（向后兼容） */
     }
+
+    // P1-F2（F5-04）②：参数组装（动态 import / getSettingsEx / loadSessionBody
+    // 等 await 点）期间发生取消 → 短路，不派发 core_run_task（避免 force_cancel
+    // 早于 run 到达引擎而失效，run 全量跑完用户取消无效）。守卫命中前若已订阅，
+    // createStreamCancel 的 cleanup 已退订（cleanupStreamState），无需二次处理。
+    if (isRunDead(state)) return;
 
     await startRunTask(transport, {
       runId,
