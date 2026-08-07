@@ -84,6 +84,9 @@ enum PositionalRule {
     BareValue,
     /// 有限个数普通位置参数（push 的 remote/refspec 等，上限 2）
     Count(usize),
+    /// push refspec（P1-S4）：逐位置参数按 refspec 语法校验——
+    /// 拒绝 `+` 前缀（force 语义）、空 src `:` 删除形态与孤立 refspec
+    PushRefspec,
     /// stash 子命令：首位置参数 ∈ {push, list, pop, apply, drop}
     StashSubcommand,
 }
@@ -120,7 +123,7 @@ fn spec_for(subcommand: &str) -> Option<SubcommandSpec> {
         },
         "push" => SubcommandSpec {
             flags: FLAGS_PUSH,
-            positional: PositionalRule::Count(2),
+            positional: PositionalRule::PushRefspec,
         },
         "branch" => SubcommandSpec {
             flags: FLAGS_BRANCH,
@@ -387,6 +390,23 @@ fn validate_git_args(git_args: &[String]) -> Result<Vec<String>, String> {
                 positionals_seen += 1;
                 validated.push(arg.clone());
             }
+            PositionalRule::PushRefspec => {
+                // P1-S4：`+`/`:` 前缀与孤立 refspec 均为危险形态——
+                // `+refspec` 是 git 原生 force 语义（绕过 C-04「拒绝 force
+                // push」），`:refs/heads/x` 空 src 会删除远端分支。
+                if positionals_seen >= 2 {
+                    return Err(format!(
+                        "{ERR_ARG_NOT_ALLOWED}: too many arguments for `{subcommand}`"
+                    ));
+                }
+                if !is_valid_push_refspec(arg) {
+                    return Err(format!(
+                        "{ERR_ARG_NOT_ALLOWED}: invalid push refspec `{arg}`"
+                    ));
+                }
+                positionals_seen += 1;
+                validated.push(arg.clone());
+            }
             PositionalRule::StashSubcommand => {
                 const STASH_ACTIONS: &[&str] = &["push", "list", "pop", "apply", "drop"];
                 if positionals_seen == 0 {
@@ -427,6 +447,58 @@ fn is_valid_branch_name(name: &str) -> bool {
     }
     name.chars()
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-'))
+}
+
+/// push refspec 校验（P1-S4，R1 复核 F6-01 修复建议的收窄化落地）：
+/// 放行 `<src>[:(refs/)?heads/<dst>]` 形态——src 必填，dst 可为短分支名
+/// （`main`）、`heads/<分支>` 或 `refs/heads/<分支>`；`src`/`dst` 单段均限
+/// `[A-Za-z0-9._/-]+`。拒绝：
+/// - `+` 前缀（git 原生 force 语义，绕过 force-push 审批红线）；
+/// - `:` 前缀（空 src 删除远端分支形态，如 `:refs/heads/x`）；
+/// - 孤立 refspec（`main:` 的 dst 为空，语义含糊一律拒绝）；
+/// - 非 heads 目标面（`refs/tags/...` 等，push 只开放分支面）。
+fn is_valid_push_refspec(name: &str) -> bool {
+    if name.is_empty()
+        || name.len() > MAX_ARG_LEN
+        || name.starts_with('+')
+        || name.starts_with(':')
+    {
+        return false;
+    }
+    // `:` 至多出现一次；`a:b:c` 直接拒绝
+    let mut parts = name.split(':');
+    let src = parts.next().unwrap_or("");
+    let dst = parts.next();
+    if parts.next().is_some() || !is_ref_component(src) {
+        return false;
+    }
+    let Some(dst) = dst else {
+        return true;
+    };
+    if dst.is_empty() {
+        // 孤立 refspec（`main:`）：dst 空，拒绝
+        return false;
+    }
+    if let Some(after_refs) = dst.strip_prefix("refs/") {
+        // 显式 refs/ 前缀：只放行 heads 面，拒绝 tags/remotes 等
+        match after_refs.strip_prefix("heads/") {
+            Some(heads) => !heads.is_empty() && is_ref_component(heads),
+            None => false,
+        }
+    } else if let Some(heads) = dst.strip_prefix("heads/") {
+        !heads.is_empty() && is_ref_component(heads)
+    } else {
+        // 短分支名形态（`main:main` 的 dst=main）
+        is_ref_component(dst)
+    }
+}
+
+/// refspec 单段校验：`[A-Za-z0-9._/-]+`，非空、不以 `-` 开头（防 flag 歧义）。
+fn is_ref_component(s: &str) -> bool {
+    !s.is_empty()
+        && !s.starts_with('-')
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-'))
 }
 
 /// 输出截断：保留头尾各一半，中间省略（对齐 process.rs clamp_output_bytes）。
@@ -585,6 +657,7 @@ mod tests {
                 "origin".to_string(),
                 "+main".to_string(),
             ],
+            vec!["push".to_string(), "origin".to_string(), "+main:main".to_string()],
         ] {
             let err = validate_git_args(&args).expect_err("+refspec（force）必须拒绝");
             assert!(err.starts_with(ERR_ARG_NOT_ALLOWED), "err: {err}");
@@ -604,8 +677,27 @@ mod tests {
             vec!["push".to_string(), ":refs/heads/x".to_string()],
             vec!["push".to_string(), "origin".to_string(), ":main".to_string()],
             vec!["push".to_string(), "origin".to_string(), "main:".to_string()],
+            // 攻击性复核：非 heads 目标面（tag/remote 面）与多冒号畸形 refspec
+            vec![
+                "push".to_string(),
+                "origin".to_string(),
+                "main:refs/tags/v1".to_string(),
+            ],
+            vec![
+                "push".to_string(),
+                "origin".to_string(),
+                "main:refs/remotes/origin/main".to_string(),
+            ],
+            vec!["push".to_string(), "origin".to_string(), "a:b:c".to_string()],
+            // 数量上限：3 个位置参数拒绝
+            vec![
+                "push".to_string(),
+                "origin".to_string(),
+                "main".to_string(),
+                "dev".to_string(),
+            ],
         ] {
-            let err = validate_git_args(&args).expect_err("删除类 refspec 必须拒绝");
+            let err = validate_git_args(&args).expect_err("删除类/畸形 refspec 必须拒绝");
             assert!(err.starts_with(ERR_ARG_NOT_ALLOWED), "err: {err}");
         }
     }

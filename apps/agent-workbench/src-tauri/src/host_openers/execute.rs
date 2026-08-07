@@ -10,9 +10,10 @@
 
 // G2 禁令豁免（clippy.toml 文件头「豁免面」）：host opener 进程执行面——
 // 本文件每个 spawn 点（open_host_target / open_with_shortcut /
-// open_path_with_default_app）执行前必过 CommandGatekeeper 双防线
-// （check_command + patterns 逐参匹配，见文件头安全模型与各函数体内校验），
-// 是「子进程经命令门禁」的门禁落地处本身。
+// open_path_with_default_app 的 macOS/Unix 分支；Windows 默认关联打开
+// 已改 ShellExecuteW 进程内直调，P1-S5）执行前必过 CommandGatekeeper
+// 双防线（check_command + patterns 逐参匹配，见文件头安全模型与各
+// 函数体内校验），是「子进程经命令门禁」的门禁落地处本身。
 // 收敛说明：2026-08-06 由模块级 `#![allow]` 收敛为函数级豁免 + 理由
 // （对齐 clippy.toml 豁免面「函数级 allow + 理由」，33 方案 DD4-T2），
 // 模块级豁免会连带覆盖未来新增代码（豁免面蔓延），函数级仅覆盖三个
@@ -34,6 +35,12 @@ use crate::host_openers::types::{
     host_opener_diagnostic, host_opener_error, to_core_error, HostOpenerError, HostOpenResult,
     HostOpenTarget, HostOpenTargetKindForResult, ResolvedOpenTarget,
 };
+
+/// cmd 元字符拒绝集（P1-S5 纵深防御）：`& | < > ^ ( )` 中 `< > ( )` 在
+/// Windows 文件名非法（实际可触发面为 `& | ^`）；保留全集使拒绝面
+/// 与「cmd 二次解释」语义一一对应，不依赖实现细节（R1 复核 F6-02
+/// 修复建议 2「门禁层对 target 增加 cmd 元字符拒绝」）。
+const CMD_METACHARS: &[char] = &['&', '|', '<', '>', '^', '(', ')'];
 
 // G2 禁令豁免：host opener 执行面——本函数所有拉起点（.spawn()）执行前必过
 // CommandGatekeeper 双防线（check_command + patterns 逐参匹配，见函数体内
@@ -223,9 +230,10 @@ fn open_with_shortcut(
 }
 
 // G2 禁令豁免：host opener 执行面——本函数所有拉起点（.spawn()，
-// Windows cmd start / macOS open / 其余 Unix xdg-open 三个 cfg 分支）
-// 执行前必过 CommandGatekeeper 双防线（check_command + patterns 逐参匹配，
-// 见函数体内 gatekeeper 校验与文件头安全模型），即门禁落地处本身；
+// macOS open / 其余 Unix xdg-open 两个 cfg 分支；Windows 分支 P1-S5
+// 修复后改 ShellExecuteW 进程内直调，无 spawn）执行前必过
+// CommandGatekeeper 双防线 + cmd 元字符拒绝（见函数体内 gatekeeper
+// 校验与文件头安全模型），即门禁落地处本身；
 // 函数级 allow 覆盖函数体全部 cfg 分支（对齐 clippy.toml 豁免面
 // 「函数级 allow + 理由」），理由详见文件头安全模型。
 #[allow(clippy::disallowed_methods)]
@@ -241,8 +249,14 @@ pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult,
     }
 
     let gatekeeper = conex_sandbox::gatekeeper::CommandGatekeeper::new();
+    // P1-S5：`&`/`|` 等 cmd 元字符路径一律拒绝——`cmd /C start "" <target>`
+    // 形态下 target 含 `&` 会被 cmd 二次解释为命令分隔（F6-02 注入链：
+    // 无空格含 `&` 的已存在路径），门禁静态正则只覆盖毁灭性命令，
+    // 不覆盖该注入面，故在此显式拦截（双防线之外的第三重）。
+    let metachar_unsafe = target.chars().any(|c| CMD_METACHARS.contains(&c));
     if gatekeeper.check_command("start", &[&target]) == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
         || gatekeeper.patterns().is_match(&target)
+        || metachar_unsafe
     {
         return Err(to_core_error(host_opener_error(
             "PermissionDenied",
@@ -264,30 +278,30 @@ pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult,
 
     #[cfg(windows)]
     {
-        let status = Command::new("cmd")
-            .args(["/C", "start", "", &target])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
-        match status {
-            Ok(_) => Ok(HostOpenResult {
+        // P1-S5 修复：弃用 `cmd /C start "" <target>`——cmd 对命令行的
+        // 字符串二次解释是注入根源（`&` 拆命令、`%` 变量展开等），即使
+        // 参数数组直传也无法避免（CreateProcess 拼串后由 cmd 重新解析）。
+        // 改 ShellExecuteW 直调：目标以 UTF-16 参数直接交给 shell 执行
+        // 引擎（ShellExecute），无任何命令行解释层（R1 复核 F6-02
+        // 修复建议 1「首选」）。
+        match open_with_shell_execute(&target) {
+            Ok(()) => Ok(HostOpenResult {
                 ok: true,
                 opener_id: "system-default".to_string(),
                 target_kind: HostOpenTargetKindForResult::Path,
                 target: target.clone(),
-                command: "cmd /C start".to_string(),
+                command: "ShellExecute".to_string(),
                 diagnostic: host_opener_diagnostic(
                     "host-opener-launched",
                     "Opened path with system default association.",
-                    Some("cmd /C start".to_string()),
+                    Some("ShellExecute".to_string()),
                     Some(target),
                 ),
             }),
             Err(error) => Err(to_core_error(host_opener_error(
                 "host-opener-spawn-failed",
                 format!("Failed to open with system default: {error}"),
-                Some("cmd /C start".to_string()),
+                Some("ShellExecute".to_string()),
                 Some(target),
             ))),
         }
@@ -353,6 +367,46 @@ pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult,
                 Some(target),
             ))),
         }
+    }
+}
+
+/// P1-S5 修复：Windows 默认关联打开——ShellExecuteW 直调（无 shell 解释层）。
+/// 目标路径以 UTF-16 宽字符参数直传；返回 Err(String) 携带失败原因
+/// （ShellExecuteW 返回值 < 32 为错误码，>32 为成功句柄）。
+#[cfg(windows)]
+fn open_with_shell_execute(target: &str) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    fn to_wide(s: &str) -> Vec<u16> {
+        std::ffi::OsStr::new(s)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    }
+
+    let file: Vec<u16> = to_wide(target);
+    let operation: Vec<u16> = to_wide("open");
+    // SAFETY: file/operation 为 NUL 结尾的宽字符缓冲，lpParameters/lpDirectory
+    // 传空；ShellExecuteW 调用内同步使用指针，返回后不持有，无悬垂风险。
+    let ret = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            operation.as_ptr(),
+            file.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    if ret as isize > 32 {
+        Ok(())
+    } else {
+        Err(format!(
+            "ShellExecuteW returned error code {}",
+            ret as isize
+        ))
     }
 }
 
@@ -433,7 +487,14 @@ mod tests {
     fn open_path_with_default_app_rejects_metachar_targets() {
         let dir = std::env::temp_dir().join(format!("conex-opener-test-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
-        for name in ["a&whoami", "a&whoami.txt", "a&&whoami", "b|whoami"] {
+        for name in [
+            "a&whoami",
+            "a&whoami.txt",
+            "a&&whoami",
+            "b|whoami",
+            "c^whoami",
+            "(evil)",
+        ] {
             let file = dir.join(name);
             let _ = std::fs::write(&file, b"x");
             let target = file.to_string_lossy().to_string();
