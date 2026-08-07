@@ -73,3 +73,11 @@
 - **位置**：`crates/conex-db/src/sessions.rs:283-297`（touch_session 现状：仅 tests.rs 使用，生产零调用——R2 §3 结构性缺位）
 - **描述**：任务书 T3.3 子项「touch 接线（二阶段可选）」：引擎侧 run 启动/终态落库处（crates/orchestrator run 写入面）与前端活跃会话心跳调用 `touch_session`。实现轮评估：接线面横跨 crates/orchestrator 与前端，超出本任务「只改 conex-db」约束，按任务书条款声明留登记。**必做项（删除条件防护）已落地**：两分支 DELETE 共用 protected 条件（hydrated 豁免 + 非终态 run 豁免 queued/initializing/running/awaiting-approval/completing/cancelling + 未决 pending_inputs 豁免，sessions.rs:235-247），与宽限期 `updated_at < grace_cutoff` AND 协同。
 - **建议**：后续批次接线 touch 时，注意与 upsert_session_entry（前端 350ms persist 顺带刷新 updated_at）的语义叠加；接线后 `touch_session` 才承担「运行期活跃」刷新职责。
+
+## F-009：T3.5 验证窗口内并行 agent 未提交 WIP 两度打破共享依赖编译（PS-03 T3.5 执行期）
+
+- **发现日期**：2026-08-08（PS-03 T3.5 执行期）
+- **位置**：`crates/session-loop/src/tool_exec.rs`（第一次）+ `apps/agent-workbench/src-tauri/src/host_openers/execute.rs`（第二次）
+- **描述**：T3.5 红绿验证期间，并行 agent 的**未提交** WIP 两度使 `cargo test -p crish-agent-workbench` / `cargo test -p orchestrator` 编译失败：① `tool_exec.rs` 在 `impl ToolExecutor` 内声明 `pub(crate) enum ApprovalWaitOutcome`（Rust 不允许 impl 关联 enum，20 个 E0425/E0433/E0599）——红证据（4/4 FAILED）与绿证据（4/4 ok）均在此次破窗之前采集；② `host_openers/execute.rs` `*mut c_void` 不实现 `Display`（E0277，format 串误用）——恰好落在 T3.5 全量回归（451 passed / 3 failed）之后，使「失败项是否本任务引入」的复核被阻塞。两次均由对方随后提交/修复自然恢复（session-loop 当前可编译）。
+- **处置**：T3.5 不越界修改他人文件（B9）；红绿两段提交（6329e1de/5a67825a）不受影响；全量回归中 3 个失败项（kill_graceful_path / run_end_daemon_survives / scheduler_registry_daemon_without_launcher_falls_back_to_steering，均守护任务/定时器时序类，与快照无关）待树恢复后在隔离态复核是否既存 flaky。
+- **建议**：壳 crate 串行链（PS-01→T3.5→T4.3→T4.4）窗口内对同 crate 并行任务加编译面隔离（如临时 worktree 验证），或约定「验证窗口内不落未提交 WIP」；验收方复核 flaky 时序类测试失败时按「隔离重跑通过」口径放行。
