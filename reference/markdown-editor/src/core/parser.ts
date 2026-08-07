@@ -141,6 +141,7 @@ export class MarkdownParser {
                 raw: lineText,
                 inlineTokens: [{ type: 'math', raw: lineText, content: lineText, localOffset, length: lineText.length }],
                 length: lineText.length,
+                localOffset
             };
         }
 

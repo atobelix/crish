@@ -63,6 +63,13 @@ reference/ui-replica/node_modules/
 reference/ui-replica/dist/
 reference/ui-replica/package-lock.json
 
+# markdown-editor（自研渲染引擎 + 测试资产，必须入库——测试比项目重要，防丢失防 AI 清理）
+!reference/markdown-editor/
+!reference/markdown-editor/**
+reference/markdown-editor/node_modules/
+reference/markdown-editor/dist/
+reference/markdown-editor/package-lock.json
+
 # ui-replica-refactored (keep for architecture redesign)
 !reference/ui-replica-refactored/
 !reference/ui-replica-refactored/**

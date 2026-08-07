@@ -11,7 +11,6 @@ declare global {
     __CRISH_METRICS__: {
       getCacheStats: () => { hits: number, misses: number, size: number };
       getLineCount: () => number;
-      verifyConsistency: () => boolean;
       layoutThrashCount: number;
     };
   }

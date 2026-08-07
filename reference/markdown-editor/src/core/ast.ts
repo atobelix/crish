@@ -47,9 +47,9 @@ export interface InlineNode {
     isChecked?: boolean;
     children?: InlineNode[];
     localOffset: number;
-    length: number;
     tagName?: string;
     attributes?: Record<string, string>;
+    style?: Record<string, string>;
 }
 
 export interface LineNode {

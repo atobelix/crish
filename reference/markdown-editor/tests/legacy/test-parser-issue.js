@@ -1,5 +1,5 @@
 require('ts-node').register();
-const { MarkdownParser } = require('./reference/markdown-editor/src/core/parser.ts');
+const { MarkdownParser } = require('../../src/core/parser.ts');
 
 const text1 = "mc平方$后面一连串都变成上标了呢。";
 const text2 = "H~2~O 没有正常显示。";
