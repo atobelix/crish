@@ -170,13 +170,16 @@ pub(crate) struct GitRunResult {
 }
 
 /// 本机 git 命令：参数数组执行，禁 shell（T07.3 C-02 修复）。
+///
+/// `R: tauri::Runtime` 泛型：测试注入 MockRuntime 可直接调用（tauri 2 官方
+/// 支持命令参数泛型化，先例 core_commands.rs:170-177），生产走 Wry。
 #[tauri::command]
 // G2 禁令豁免（clippy.toml 文件头「豁免面」）：git 白名单执行面——固定二进制
 // `git` + 参数 schema 白名单（validate_git_args）+ 工作区注册表 cwd 校验，
 // 无任意命令面，是本壳 git 命令的唯一执行点。
 #[allow(clippy::disallowed_methods)]
-pub(crate) async fn workbench_git_run(
-    app: tauri::AppHandle,
+pub(crate) async fn workbench_git_run<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     cwd: String,
     git_args: Vec<String>,
     timeout_ms: Option<u64>,
@@ -247,7 +250,10 @@ pub(crate) async fn workbench_git_run(
 }
 
 /// cwd 校验：canonicalize 后必须 ∈ 已授权根子树（P-01 注册表）。
-fn resolve_git_cwd(app: &tauri::AppHandle, cwd: &str) -> Result<PathBuf, String> {
+fn resolve_git_cwd<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    cwd: &str,
+) -> Result<PathBuf, String> {
     let cwd = cwd.trim();
     if cwd.is_empty() {
         return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: cwd is empty"));
@@ -265,8 +271,14 @@ fn resolve_git_cwd(app: &tauri::AppHandle, cwd: &str) -> Result<PathBuf, String>
         ));
     }
 
-    let reg = crate::workspace::registry(app)
-        .map_err(|e| format!("{}: {}", e.code, e.message))?;
+    // R 泛型下不能用非泛型 workspace::registry(app) 助手，改 try_state 直取
+    // （错误文案与 workspace::registry 的 FileCommandError 映射一致）。
+    use tauri::Manager as _;
+    let reg = app
+        .try_state::<crate::workspace::WorkspaceRegistry>()
+        .ok_or_else(|| {
+            "internal_error: WorkspaceRegistry is not managed; main.rs setup must call app.manage(WorkspaceRegistry::init()...)".to_string()
+        })?;
     let roots = reg.roots();
     if roots.iter().any(|root| is_same_or_child(&canonical, root)) {
         return Ok(canonical);
@@ -812,5 +824,82 @@ mod tests {
         let (text, truncated) = clamp_output_bytes(&small);
         assert!(!truncated);
         assert_eq!(text, "ok");
+    }
+
+    // ── PS-04 T4.5（F4 F1-02）：错误协议统一 CoreError ──
+
+    /// 协议断言：错误必须按 CoreError `{kind, detail}` 形状序列化（前端可
+    /// 按 kind 分类）。String 错误无 kind 字段 → 断言失败（红）。
+    fn assert_core_error_kind<T: std::fmt::Debug>(
+        result: Result<T, String>,
+        expected_kind: &str,
+        detail_hint: &str,
+    ) {
+        let err = result.expect_err("必须返回错误");
+        let json = serde_json::to_value(&err).expect("错误必须可序列化");
+        assert_eq!(
+            json.get("kind").and_then(|v| v.as_str()),
+            Some(expected_kind),
+            "错误必须按 CoreError {{kind,detail}} 协议序列化（当前形态 {json}），detail 应含 {detail_hint}"
+        );
+        let detail = json.get("detail").and_then(|v| v.as_str()).unwrap_or_default();
+        assert!(
+            detail.contains(detail_hint),
+            "detail 应保留 {detail_hint} 文案：{detail}"
+        );
+    }
+
+    /// T4.5-R1（红 → 绿）：空 cwd（参数校验类）→ `CoreError::InvalidInput`，
+    /// serde 形状 `{kind: "InvalidInput", detail: ...}`。
+    #[tokio::test]
+    async fn workbench_git_run_empty_cwd_returns_core_error() {
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let result = workbench_git_run(
+            app.handle().clone(),
+            String::new(),
+            vec!["status".to_string()],
+            None,
+        )
+        .await;
+        assert_core_error_kind(result, "InvalidInput", "cwd is empty");
+    }
+
+    /// T4.5-R1（红 → 绿）变体：越界 cwd（工作区外，路径/注册表类）→
+    /// `CoreError::InvalidInput`，detail 保留 workspace_not_granted 文案。
+    #[tokio::test]
+    async fn workbench_git_run_outside_cwd_returns_core_error() {
+        use crate::workspace::{RegisterSource, WorkspaceRegistry};
+        let base = std::env::temp_dir().join(format!(
+            "conex-git-cwd-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let auth_root = base.join("auth");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&auth_root).expect("create auth root");
+        std::fs::create_dir(&outside).expect("create outside dir");
+        let config_dir = base.join("config");
+        std::fs::create_dir_all(&config_dir).expect("create config dir");
+        let reg = WorkspaceRegistry::init_with_config_dir(&config_dir).expect("init registry");
+        reg.register(&auth_root, RegisterSource::Dialog)
+            .expect("dialog register auth_root");
+        let app = tauri::test::mock_builder()
+            .manage(reg)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let result = workbench_git_run(
+            app.handle().clone(),
+            outside.to_string_lossy().into_owned(),
+            vec!["status".to_string()],
+            None,
+        )
+        .await;
+        assert_core_error_kind(result, "InvalidInput", "workspace_not_granted");
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

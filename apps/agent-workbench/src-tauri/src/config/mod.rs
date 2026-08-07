@@ -15,7 +15,9 @@ mod persistence;
 mod provider;
 mod resolution;
 
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
+#[cfg(not(test))]
+use std::sync::OnceLock;
 
 use conex_types::CoreError;
 
@@ -26,8 +28,21 @@ use persistence::{
 use provider::ApiConfigStore;
 
 // ── Static stores ──
+// 生产（cfg(not(test))）：OnceLock 单例——首次访问时按当前配置目录懒加载。
+// 测试（cfg(test)）：可重置形态——`OnceLock` 无 `&mut` 重置面，命令级测试
+// （config_profile_apply / config_update 等）需要把静态隔离到独立临时目录
+// （禁止写入真实用户配置），故测试面换 `Mutex<Option<T>>` + 
+// [reset_config_stores_for_test]：重置为 None 后，下一次访问按当前
+// `CRISH_WORKBENCH_CONFIG_DIR` 重新懒加载。
+#[cfg(not(test))]
 pub(crate) static API_CONFIG_STORE: OnceLock<Mutex<ApiConfigStore>> = OnceLock::new();
+#[cfg(test)]
+pub(crate) static API_CONFIG_STORE: Mutex<Option<ApiConfigStore>> = Mutex::new(None);
+
+#[cfg(not(test))]
 pub(crate) static PROFILE_SECRET_STORE: OnceLock<Mutex<CredentialStore>> = OnceLock::new();
+#[cfg(test)]
+pub(crate) static PROFILE_SECRET_STORE: Mutex<Option<CredentialStore>> = Mutex::new(None);
 
 // ── Public re-exports ──
 // 使用 glob 确保 Tauri 的 #[tauri::command] 宏生成的辅助项（__cmd__*, __tauri_command_name_*）
@@ -42,11 +57,38 @@ pub(crate) use provider::*;
 pub(crate) fn init_api_config_store() {
     let config_path = default_config_path();
     let secret_path = default_secret_path();
-    let _ = API_CONFIG_STORE
-        .get_or_init(|| Mutex::new(ApiConfigStore::load(config_path, secret_path)));
-    let _ = profile_secret_store();
+    #[cfg(not(test))]
+    {
+        let _ = API_CONFIG_STORE
+            .get_or_init(|| Mutex::new(ApiConfigStore::load(config_path, secret_path)));
+        let _ = profile_secret_store();
+    }
+    #[cfg(test)]
+    {
+        let mut outer = API_CONFIG_STORE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        outer.get_or_insert_with(|| ApiConfigStore::load(config_path, secret_path));
+        let mut secrets = PROFILE_SECRET_STORE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        secrets.get_or_insert_with(|| {
+            CredentialStore::new(profile_secrets_dir().join(".probe"))
+        });
+    }
 }
 
+/// 测试面：把静态配置存储重置为空（下一次访问按当前
+/// `CRISH_WORKBENCH_CONFIG_DIR` 重新懒加载）——命令级测试用，配合
+/// `std::env::set_var` 把静态隔离到独立临时目录，禁止触碰真实用户配置。
+/// 仅 cfg(test) 存在，生产无此面；调用方需自行串行化（并行测试竞态）。
+#[cfg(test)]
+pub(crate) fn reset_config_stores_for_test() {
+    *API_CONFIG_STORE.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    *PROFILE_SECRET_STORE.lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
+#[cfg(not(test))]
 fn profile_secret_store() -> &'static Mutex<CredentialStore> {
     PROFILE_SECRET_STORE.get_or_init(|| {
         Mutex::new(CredentialStore::new(profile_secrets_dir().join(".probe")))
@@ -57,18 +99,48 @@ fn profile_secret_store() -> &'static Mutex<CredentialStore> {
 fn with_profile_secrets_mut<T>(
     operation: impl FnOnce(&mut CredentialStore) -> Result<T, CoreError>,
 ) -> Result<T, CoreError> {
-    let mut guard = profile_secret_store().lock().map_err(|error| {
-        CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
-    })?;
-    operation(&mut guard)
+    #[cfg(not(test))]
+    {
+        let mut guard = profile_secret_store().lock().map_err(|error| {
+            CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
+        })?;
+        operation(&mut guard)
+    }
+    #[cfg(test)]
+    {
+        let mut outer = PROFILE_SECRET_STORE
+            .lock()
+            .map_err(|error| {
+                CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
+            })?;
+        let store = outer.get_or_insert_with(|| {
+            CredentialStore::new(profile_secrets_dir().join(".probe"))
+        });
+        operation(store)
+    }
 }
 
 /// 多 profile 密钥槽锁内读操作（错误统一 CoreError，IPC 面唯一协议）。
 fn with_profile_secrets<T>(
     operation: impl FnOnce(&CredentialStore) -> Result<T, CoreError>,
 ) -> Result<T, CoreError> {
-    let guard = profile_secret_store().lock().map_err(|error| {
-        CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
-    })?;
-    operation(&guard)
+    #[cfg(not(test))]
+    {
+        let guard = profile_secret_store().lock().map_err(|error| {
+            CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
+        })?;
+        operation(&guard)
+    }
+    #[cfg(test)]
+    {
+        let mut outer = PROFILE_SECRET_STORE
+            .lock()
+            .map_err(|error| {
+                CoreError::Internal(format!("profile secret store lock poisoned: {error}"))
+            })?;
+        let store = outer.get_or_insert_with(|| {
+            CredentialStore::new(profile_secrets_dir().join(".probe"))
+        });
+        operation(store)
+    }
 }

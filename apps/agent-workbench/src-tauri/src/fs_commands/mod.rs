@@ -10,9 +10,12 @@ pub(crate) use types::{FileCommandError, WorkspaceFsGuard};
 
 /// 原生目录选择器：唯一「新授权」入口（PE-07 T07.2）。
 /// 选中路径 → WorkspaceRegistry::register(Dialog) → 返回 canonical 路径。
+///
+/// `R: tauri::Runtime` 泛型：测试注入 MockRuntime 可直接调用（先例
+/// core_commands.rs:170-177），生产走 Wry。
 #[tauri::command]
-pub(crate) async fn select_folder(
-    app: tauri::AppHandle,
+pub(crate) async fn select_folder<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
 ) -> Result<types::SelectFolderResult, String> {
     dialog::select_folder(app).await
 }
@@ -61,9 +64,12 @@ pub(crate) fn workbench_fs_delete_file(
 }
 
 /// 发现技能（PE-07 T07.2：workspace_path / extra_dirs 经注册表包含性校验）。
+///
+/// `R: tauri::Runtime` 泛型：测试注入 MockRuntime 可直接调用（先例
+/// core_commands.rs:170-177），生产走 Wry。
 #[tauri::command]
-pub(crate) fn workbench_discover_skills(
-    app: tauri::AppHandle,
+pub(crate) fn workbench_discover_skills<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     workspace_path: Option<String>,
     extra_dirs: Vec<String>,
 ) -> Result<Vec<skills::RustSkill>, String> {
@@ -520,6 +526,65 @@ mod tests {
         assert_error_code(
             delete_at_root(&root, &trash, "ghost.txt"),
             types::ERR_NOT_FOUND,
+        );
+    }
+
+    // ── PS-04 T4.5（F4 F1-02）：错误协议统一 CoreError ──
+
+    /// T4.5-R3（红 → 绿）：`workbench_discover_skills` 的 workspace_path 越界
+    /// → `CoreError::InvalidInput`（serde `{kind, detail}` 形状，detail 保留
+    /// workspace_not_granted 文案）；注册表未托管 → `CoreError::Internal`。
+    /// 修复前返回 String 错误 → kind 缺失 → 红。
+    #[test]
+    fn discover_skills_outside_root_returns_core_error() {
+        use crate::workspace::{RegisterSource, WorkspaceRegistry};
+        let temp = TestDir::new();
+        let auth_root = temp.path().join("auth");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&auth_root).expect("create auth root");
+        fs::create_dir(&outside).expect("create outside dir");
+        let config_dir = temp.path().join("config");
+        fs::create_dir_all(&config_dir).expect("create config dir");
+        let reg = WorkspaceRegistry::init_with_config_dir(&config_dir).expect("init registry");
+        reg.register(&auth_root, RegisterSource::Dialog)
+            .expect("dialog register auth_root");
+        let app = tauri::test::mock_builder()
+            .manage(reg)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+
+        let result = super::workbench_discover_skills(
+            app.handle().clone(),
+            Some(outside.to_string_lossy().into_owned()),
+            Vec::new(),
+        );
+        let err = result.expect_err("越界 workspace_path 必须拒绝");
+        let json = serde_json::to_value(&err).expect("错误必须可序列化");
+        assert_eq!(
+            json.get("kind").and_then(|v| v.as_str()),
+            Some("InvalidInput"),
+            "错误必须按 CoreError {{kind,detail}} 协议序列化（当前形态 {json}）"
+        );
+        let detail = json
+            .get("detail")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        assert!(
+            detail.contains("workspace_not_granted"),
+            "detail 应保留 workspace_not_granted 文案：{detail}"
+        );
+
+        // 注册表未托管 → Internal（命令级不 panic，kind 可分类）
+        let bare = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("bare mock app");
+        let result = super::workbench_discover_skills(bare.handle().clone(), None, Vec::new());
+        let err = result.expect_err("未托管注册表必须拒绝");
+        let json = serde_json::to_value(&err).expect("错误必须可序列化");
+        assert_eq!(
+            json.get("kind").and_then(|v| v.as_str()),
+            Some("Internal"),
+            "未托管注册表应为 CoreError::Internal（当前形态 {json}）"
         );
     }
 

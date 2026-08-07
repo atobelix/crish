@@ -239,12 +239,20 @@ fn get_home_dir() -> Option<PathBuf> {
 }
 
 /// 发现技能（PE-07 T07.2：workspace_path / extra_dirs 经注册表包含性校验）。
-pub(crate) fn workbench_discover_skills(
-    app: &tauri::AppHandle,
+///
+/// `R: tauri::Runtime` 泛型：测试注入 MockRuntime 可直接调用（先例
+/// core_commands.rs:170-177），生产走 Wry。
+pub(crate) fn workbench_discover_skills<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
     workspace_path: Option<String>,
     extra_dirs: Vec<String>,
 ) -> Result<Vec<RustSkill>, String> {
-    let reg = crate::workspace::registry(app).map_err(|e| format!("{}: {}", e.code, e.message))?;
+    use tauri::Manager as _;
+    let reg = app
+        .try_state::<crate::workspace::WorkspaceRegistry>()
+        .ok_or_else(|| {
+            "internal_error: WorkspaceRegistry is not managed; main.rs setup must call app.manage(WorkspaceRegistry::init()...)".to_string()
+        })?;
     let roots = reg.roots();
     let mut skills = Vec::new();
 

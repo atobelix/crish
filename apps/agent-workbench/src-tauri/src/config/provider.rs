@@ -15,10 +15,9 @@
 //! 旧登记名别名删除（F5 单终态，config_command_names_contract.rs 严禁旧名登记）；
 //! `daemon_api_key_source` 删除（daemon sidecar 已随 d82f7468 移除）。
 
-use std::{
-    path::PathBuf,
-    sync::Mutex,
-};
+use std::path::PathBuf;
+#[cfg(not(test))]
+use std::sync::Mutex;
 
 use conex_types::CoreError;
 use serde_json::Value;
@@ -332,31 +331,67 @@ fn core_err(error: String) -> CoreError {
 }
 
 fn with_store<T>(operation: impl FnOnce(&ApiConfigStore) -> T) -> Result<T, CoreError> {
-    let guard = API_CONFIG_STORE
-        .get_or_init(|| {
-            Mutex::new(ApiConfigStore::load(
-                default_config_path(),
-                default_secret_path(),
-            ))
-        })
-        .lock()
-        .map_err(|error| CoreError::Internal(format!("Failed to lock API config store: {error}")))?;
-    Ok(operation(&guard))
+    #[cfg(not(test))]
+    {
+        let guard = API_CONFIG_STORE
+            .get_or_init(|| {
+                Mutex::new(ApiConfigStore::load(
+                    default_config_path(),
+                    default_secret_path(),
+                ))
+            })
+            .lock()
+            .map_err(|error| {
+                CoreError::Internal(format!("Failed to lock API config store: {error}"))
+            })?;
+        Ok(operation(&guard))
+    }
+    #[cfg(test)]
+    {
+        // 测试面：可重置静态（config/mod.rs 注释）——重置后按当前
+        // CRISH_WORKBENCH_CONFIG_DIR 重新懒加载（命令级测试隔离用）。
+        let mut outer = API_CONFIG_STORE
+            .lock()
+            .map_err(|error| {
+                CoreError::Internal(format!("Failed to lock API config store: {error}"))
+            })?;
+        let store = outer.get_or_insert_with(|| {
+            ApiConfigStore::load(default_config_path(), default_secret_path())
+        });
+        Ok(operation(store))
+    }
 }
 
 fn with_store_mut<T>(
     operation: impl FnOnce(&mut ApiConfigStore) -> Result<T, String>,
 ) -> Result<T, CoreError> {
-    let mut guard = API_CONFIG_STORE
-        .get_or_init(|| {
-            Mutex::new(ApiConfigStore::load(
-                default_config_path(),
-                default_secret_path(),
-            ))
-        })
-        .lock()
-        .map_err(|error| CoreError::Internal(format!("Failed to lock API config store: {error}")))?;
-    operation(&mut guard).map_err(core_err)
+    #[cfg(not(test))]
+    {
+        let mut guard = API_CONFIG_STORE
+            .get_or_init(|| {
+                Mutex::new(ApiConfigStore::load(
+                    default_config_path(),
+                    default_secret_path(),
+                ))
+            })
+            .lock()
+            .map_err(|error| {
+                CoreError::Internal(format!("Failed to lock API config store: {error}"))
+            })?;
+        operation(&mut guard).map_err(core_err)
+    }
+    #[cfg(test)]
+    {
+        let mut outer = API_CONFIG_STORE
+            .lock()
+            .map_err(|error| {
+                CoreError::Internal(format!("Failed to lock API config store: {error}"))
+            })?;
+        let store = outer.get_or_insert_with(|| {
+            ApiConfigStore::load(default_config_path(), default_secret_path())
+        });
+        operation(store).map_err(core_err)
+    }
 }
 
 // ── effective_* 全局入口（sidecar / engine / core_query_commands 消费）──

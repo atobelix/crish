@@ -3711,6 +3711,26 @@ fn now_iso_utc() -> String {
 
 // ── 测试 ──────────────────────────────────────────────────────────
 
+/// 测试面：config 静态 store 隔离锁（PS-04 T4.3 命令级测试用）。
+///
+/// `config_profile_apply` / `config_update` 会写 `API_CONFIG_STORE` / 密钥槽
+/// 静态存储；命令级测试必须①并行串行化（set_var/take/init 非并发安全）、
+/// ②重置静态到独立临时目录（禁止触碰真实用户配置——引擎测试的只读初始化
+/// 可能已把静态绑定到 `CRISH_WORKBENCH_CONFIG_DIR` 之外的真实路径）。
+#[cfg(test)]
+pub(crate) static CONFIG_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// 把静态 config store 重置并隔离到 `dir`（T4.3 命令级测试用；调用方必须
+/// 持 [CONFIG_TEST_LOCK]）。测试面静态（cfg(test)）经
+/// [crate::config::reset_config_stores_for_test] 重置为 None 后按当前
+/// `CRISH_WORKBENCH_CONFIG_DIR` 重新懒加载——测试写入永不落到真实用户配置。
+#[cfg(test)]
+pub(crate) fn isolate_config_store(dir: &std::path::Path) {
+    std::env::set_var("CRISH_WORKBENCH_CONFIG_DIR", dir);
+    crate::config::reset_config_stores_for_test();
+    crate::config::init_api_config_store();
+}
+
 #[cfg(test)]
 mod tests {
     // G2 禁令豁免：
@@ -3732,6 +3752,8 @@ mod tests {
     use agent_provider::config::Endpoint;
     use crate::engine::EngineProviderConfig;
     use std::collections::BTreeMap;
+    // T4.3-R2：本地 HTTP 请求捕获服务器（真实 wire 层载荷断言）
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     /// 便捷构造 HistoryMessage（缺省无 thinking/无 JSON 载荷字段）
     fn hmsg(id: &str, sender: &str, text: Option<&str>) -> HistoryMessage {
@@ -4277,6 +4299,381 @@ mod tests {
             Arc::new(StatusDiagnostics::new()),
             None,
         ))
+    }
+
+    // ── PS-04 T4.3（F4 F1-01）：config_profile_apply 后 provider 重载 ──
+
+    /// 独立临时 config 目录（不清理：静态 store 在测试结束后仍可能绑定该
+    /// 目录，删除会触发后续只读初始化的缺省回落——保留无害且避免竞态）。
+    fn temp_config_dir() -> std::path::PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "conex-config-test-{}-{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("create config dir");
+        dir
+    }
+
+    /// 本地 HTTP 请求捕获服务器：T4.3-R2 的「RecordingProvider」——wire 层
+    /// 真实记录每次 provider 请求的 URL 路径 / Authorization / body model
+    /// （不 mock 重载行为：重载是否生效由「新实例的请求载荷」证明）。
+    struct RequestCaptureServer {
+        addr: std::net::SocketAddr,
+        captured: Arc<std::sync::Mutex<Vec<CapturedRequest>>>,
+    }
+
+    #[derive(Debug, Clone)]
+    struct CapturedRequest {
+        path: String,
+        auth_header: Option<String>,
+        body_model: Option<String>,
+    }
+
+    impl RequestCaptureServer {
+        async fn start() -> Arc<Self> {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind local server");
+            let addr = listener.local_addr().expect("local addr");
+            let captured = Arc::new(std::sync::Mutex::new(Vec::new()));
+            let server = Arc::new(Self {
+                addr,
+                captured: Arc::clone(&captured),
+            });
+            tokio::spawn(async move {
+                // 接受少量连接（每次请求一条；幂等重试面内都记录）
+                for _ in 0..8 {
+                    let Ok((mut socket, _)) = listener.accept().await else {
+                        break;
+                    };
+                    let captured = Arc::clone(&captured);
+            tokio::spawn(async move {
+                if let Some(request) = read_http_request(&mut socket).await {
+                    captured
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .push(request);
+                }
+                        // 2xx 即让 client stream() 返回（测试不消费 body）
+                        let _ = socket
+                            .write_all(
+                                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\n",
+                            )
+                            .await;
+                    });
+                }
+            });
+            server
+        }
+
+        fn base_url(&self, path: &str) -> String {
+            format!("http://{}{path}", self.addr)
+        }
+
+        /// 等待捕获到 `n` 个请求（5s 超时兜底，防测试悬挂）
+        async fn wait_for(&self, n: usize) -> Vec<CapturedRequest> {
+            let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(5);
+            loop {
+                let current = self
+                    .captured
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone();
+                if current.len() >= n {
+                    return current;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    return current;
+                }
+                tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+            }
+        }
+    }
+
+    /// 读一条 HTTP 请求（请求行 + 头 + Content-Length 体；1s 读超时防挂起）
+    async fn read_http_request(
+        socket: &mut tokio::net::TcpStream,
+    ) -> Option<CapturedRequest> {
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 1024];
+        let head_end = loop {
+            if let Some(pos) = find_subslice(&buf, b"\r\n\r\n") {
+                break pos + 4;
+            }
+            let n = match tokio::time::timeout(
+                tokio::time::Duration::from_secs(3),
+                socket.read(&mut chunk),
+            )
+            .await
+            {
+                Ok(Ok(n)) => n,
+                Ok(Err(_)) => return None,
+                Err(_) => return None,
+            };
+            if n == 0 {
+                return None;
+            }
+            buf.extend_from_slice(&chunk[..n]);
+        };
+        let head = String::from_utf8_lossy(&buf[..head_end]).into_owned();
+        let mut lines = head.lines();
+        let request_line = lines.next().unwrap_or_default();
+        let path = request_line
+            .split_whitespace()
+            .nth(1)
+            .unwrap_or_default()
+            .to_string();
+        let mut content_length = 0usize;
+        let mut auth_header = None;
+        for line in lines {
+            if let Some((name, value)) = line.split_once(':') {
+                if name.eq_ignore_ascii_case("content-length") {
+                    content_length = value.trim().parse().unwrap_or(0);
+                } else if name.eq_ignore_ascii_case("authorization") {
+                    auth_header = Some(value.trim().to_string());
+                }
+            }
+        }
+        // 请求头与体可能在同一 TCP 段到达——先消费已读缓冲中越过 head_end 的
+        // 字节（否则 body 读会阻塞到超时，误判连接无数据）。
+        let mut body = buf[head_end..].to_vec();
+        while body.len() < content_length {
+            let n = tokio::time::timeout(
+                tokio::time::Duration::from_secs(1),
+                socket.read(&mut chunk),
+            )
+            .await
+            .ok()?
+            .ok()?;
+            if n == 0 {
+                break;
+            }
+            body.extend_from_slice(&chunk[..n]);
+        }
+        let body_model = serde_json::from_slice::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|v| v.get("model").and_then(|m| m.as_str()).map(str::to_string));
+        Some(CapturedRequest {
+            path,
+            auth_header,
+            body_model,
+        })
+    }
+
+    fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+        haystack
+            .windows(needle.len())
+            .position(|window| window == needle)
+    }
+
+    /// T4.3-R2（红 → 绿）：apply 新凭据后**下一次 provider 调用**必须携带
+    /// 新凭据——真实 HTTP 请求载荷断言（URL 路径 = baseUrl、Authorization =
+    /// key、请求体 model）。修复前 `config_profile_apply` 只写 store 不重载
+    /// provider，请求仍按旧 baseUrl/key/model 发出 → 红。
+    #[tokio::test]
+    async fn config_profile_apply_swaps_next_provider_request_payload() {
+        let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = temp_config_dir();
+        isolate_config_store(&dir);
+
+        let server = RequestCaptureServer::start().await;
+        let base_old = server.base_url("/v1-old");
+        let base_new = server.base_url("/v1-new");
+
+        // 旧配置 A：config_update 写 baseUrl/model + config_profile_apply 写 key
+        crate::config::config_update(
+            Some(base_old.clone()),
+            Some("model-a".to_string()),
+            None,
+            None,
+            None,
+        )
+        .await
+        .expect("store base_url/model A");
+        crate::config::config_profile_apply(
+            "p1".to_string(),
+            Some("sk-a".to_string()),
+            None,
+            None,
+        )
+        .expect("store key A");
+        // 引擎在 store A 之上构造（构造时快照 A）。注意：reqwest 客户端在
+        // 引擎构造时读取 HTTP_PROXY 等环境变量——清空保证请求真实直连本地
+        // 服务器（不依赖机器代理配置；其余测试不发起真实 HTTP，无副作用）。
+        for var in [
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+        ] {
+            std::env::remove_var(var);
+        }
+        let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+
+        // 模拟前端 apply 新凭据（key/baseUrl/model 全换）
+        crate::config::config_profile_apply(
+            "p1".to_string(),
+            Some("sk-b".to_string()),
+            Some(base_new.clone()),
+            Some("model-b".to_string()),
+        )
+        .expect("apply B");
+
+        // 下一次 provider 调用：真实 HTTP 请求，载荷必须用新凭据
+        let provider = state.engine.provider().expect("provider 就绪");
+        let messages: Vec<Arc<AgentMessage>> = Vec::new();
+        let request = session_loop::provider::ProviderRequest {
+            messages: &messages,
+            tools: Vec::new(),
+            max_tokens: None,
+            system_prompt: None,
+            session_id: None,
+        };
+        let stream = provider
+            .stream(&request)
+            .await
+            .expect("本地服务器应可发起流");
+        drop(stream);
+
+        let captured = server.wait_for(1).await;
+        assert_eq!(captured.len(), 1, "应恰好捕获 1 个请求");
+        assert!(
+            captured[0].path.starts_with("/v1-new/chat/completions"),
+            "请求 URL 必须用新 baseUrl：{}",
+            captured[0].path
+        );
+        assert_eq!(
+            captured[0].auth_header.as_deref(),
+            Some("Bearer sk-b"),
+            "Authorization 必须用新 key：{:?}",
+            captured[0].auth_header
+        );
+        assert_eq!(
+            captured[0].body_model.as_deref(),
+            Some("model-b"),
+            "请求体 model 必须用新 model：{:?}",
+            captured[0].body_model
+        );
+    }
+
+    /// T4.3-R3（红 → 绿，命令级）：`config_profile_apply` 成功返回后
+    /// `engine.provider_config()` 必须与新 store 值一致（key/baseUrl/model
+    /// 三件套热更新）。修复前引擎只读构造时快照 → 仍旧值 → 红。
+    #[tokio::test]
+    async fn config_profile_apply_refreshes_engine_provider_config() {
+        let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = temp_config_dir();
+        isolate_config_store(&dir);
+
+        crate::config::config_update(
+            Some("https://a.example/v1".to_string()),
+            Some("model-a".to_string()),
+            None,
+            None,
+            None,
+        )
+        .await
+        .expect("store base_url/model A");
+        crate::config::config_profile_apply(
+            "p1".to_string(),
+            Some("sk-a".to_string()),
+            None,
+            None,
+        )
+        .expect("store key A");
+        let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+        assert_eq!(
+            state
+                .engine
+                .provider_config()
+                .expect("构造后就绪")
+                .model,
+            "model-a"
+        );
+
+        // apply 新三件套 → 引擎生效配置必须同步刷新
+        crate::config::config_profile_apply(
+            "p1".to_string(),
+            Some("sk-b".to_string()),
+            Some("https://b.example/v1".to_string()),
+            Some("model-b".to_string()),
+        )
+        .expect("apply B");
+
+        let config = state.engine.provider_config().expect("重载后就绪");
+        assert_eq!(config.api_key, "sk-b", "key 必须热更新");
+        assert_eq!(config.base_url, "https://b.example/v1", "baseUrl 必须热更新");
+        assert_eq!(config.model, "model-b", "model 必须热更新");
+        assert!(state.engine.ready(), "重载后引擎必须就绪");
+        assert!(state.engine.provider().is_some(), "重载后 provider 必须可调用");
+    }
+
+    /// T4.3-R4（红 → 绿，契约）：apiKey 清空（空串）apply 后引擎必须降级
+    /// 未就绪——下一次 run 不得再用旧凭据；重填后恢复就绪。修复前 apply
+    /// 不碰引擎 → 清 key 后仍就绪 → 红。
+    #[tokio::test]
+    async fn config_profile_apply_clearing_key_degrades_engine_ready() {
+        let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = temp_config_dir();
+        isolate_config_store(&dir);
+
+        crate::config::config_update(
+            Some("https://a.example/v1".to_string()),
+            Some("model-a".to_string()),
+            None,
+            None,
+            None,
+        )
+        .await
+        .expect("store base_url/model A");
+        crate::config::config_profile_apply(
+            "p1".to_string(),
+            Some("sk-a".to_string()),
+            None,
+            None,
+        )
+        .expect("store key A");
+        let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+        assert!(state.engine.ready(), "写 key 后就绪");
+
+        // 清空 key：引擎必须降级未就绪（provider=None，不再用旧 key 发请求）
+        crate::config::config_profile_apply(
+            "p1".to_string(),
+            Some(String::new()),
+            None,
+            None,
+        )
+        .expect("clear key");
+        assert!(!state.engine.ready(), "清 key 后引擎必须未就绪");
+        assert!(state.engine.provider().is_none(), "清 key 后 provider 必须为 None");
+        assert!(
+            state.engine.provider_config().is_none(),
+            "清 key 后 provider_config 必须为 None"
+        );
+
+        // 重填后恢复
+        crate::config::config_profile_apply(
+            "p1".to_string(),
+            Some("sk-c".to_string()),
+            None,
+            None,
+        )
+        .expect("refill key");
+        assert!(state.engine.ready(), "重填 key 后恢复就绪");
+        assert_eq!(
+            state
+                .engine
+                .provider_config()
+                .expect("重填后就绪")
+                .api_key,
+            "sk-c"
+        );
     }
 
     // ── PERSIST-02 P1-2：restore 完成/成功前禁止覆盖主快照 ──
