@@ -1223,6 +1223,16 @@ pub struct CoreRunState {
     snapshot_interval_ms: Mutex<u64>,
     /// 最近一次快照代数（恢复成功后的首次保存以 generation+1 续接）
     snapshot_generation: AtomicU64,
+    /// T3.5 D5（F2-11 / R2 §4 修复建议 1）：快照保存互斥锁——三触发
+    /// （终态 [Self::save_snapshot_now] 调用点 / 周期 [Self::spawn_snapshot_loop]
+    /// / 退出 [Self::save_snapshot_blocking]）共用 [Self::save_snapshot_now]
+    /// 入口，锁内完成「generation 读-改-写 + build + 落盘 + 状态回写」全
+    /// 链路。根因：无锁时两路并发保存同读 G 同写 G+1（丢失更新），且轮转
+    /// remove/rename 交叉（实测并发双线程下主/备份同代数 + snapshot_rename
+    /// 错误）。锁为 tokio::sync::Mutex：跨 runtime 可用（退出钩子经
+    /// `tauri::async_runtime::block_on` 从独立 std::thread 汇入同一锁面），
+    /// 无嵌套锁面（唯一持有点），死锁风险低（AU-03 选型确认）。
+    snapshot_mutex: tokio::sync::Mutex<()>,
     /// 快照保存失败显式标记（P16：core_get_status.snapshot.lastError 数据源）
     snapshot_last_error: Mutex<Option<String>>,
     /// 会话树注册表（T08.6 第 4 点；goal 模式未激活时为空数组，快照结构不变）
@@ -1367,6 +1377,7 @@ impl CoreRunState {
             snapshots,
             snapshot_interval_ms: Mutex::new(DEFAULT_SNAPSHOT_INTERVAL_MS),
             snapshot_generation: AtomicU64::new(0),
+            snapshot_mutex: tokio::sync::Mutex::new(()),
             snapshot_last_error: Mutex::new(None),
             sessions: Mutex::new(Vec::new()),
             snapshot_loop_running: AtomicBool::new(false),
@@ -1778,8 +1789,16 @@ impl CoreRunState {
         }
     }
 
-    /// T08.6 触发点 A/B 共用：保存快照（generation 续接；P16 失败显式标记）
+    /// T08.6 触发点 A/B/C 共用：保存快照（generation 续接；P16 失败显式标记）
+    ///
+    /// T3.5 D5（F2-11）：互斥入口——三触发（终态收口 / 周期 loop / 退出
+    /// 钩子）全部汇入本函数；tokio Mutex 守卫跨 await 持有（build 内 store
+    /// 查询与落盘均在锁内），generation 读-改-写原子化：任意时刻至多一路
+    /// 在写，杜绝同进程并发交叉写（R2 §4：修复前两路同读 G 同写 G+1 +
+    /// tmp 同名交叉写可致快照损坏）。std Mutex 锁不跨 await 持有（AA-02），
+    /// 快照互斥必须用 tokio Mutex。
     pub async fn save_snapshot_now(&self) {
+        let _guard = self.snapshot_mutex.lock().await;
         match self.build_and_save_snapshot().await {
             Ok(generation) => {
                 self.snapshot_generation.store(generation, Ordering::SeqCst);

@@ -463,8 +463,18 @@ impl SnapshotStore for SnapshotFileStore {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| io_err("snapshot_mkdir", e))?;
         }
-        // 原子写：tmp + rename（对齐 TS writeStateSnapshotFile 语义）
-        let tmp_path = PathBuf::from(format!("{}.{}.tmp", self.path.display(), std::process::id()));
+        // 原子写：tmp + rename（对齐 TS writeStateSnapshotFile 语义）。
+        // T3.5 D5（R2 §4 修复建议 2）：tmp 名带 generation 唯一化——旧
+        // `{path}.{pid}.tmp` 在同进程内固定，三触发并发保存交叉写同一
+        // tmp 文件（内容混合）且轮转 remove/rename 互扰（Windows rename
+        // 目标存在即失败）；generation 在进程内单调、pid 跨进程区分，
+        // 任何两路并发保存落不同 tmp，交叉写物理上不可能。
+        let tmp_path = PathBuf::from(format!(
+            "{}.{}.{}.tmp",
+            self.path.display(),
+            snapshot.generation,
+            std::process::id()
+        ));
         let body = format!(
             "{}\n",
             serde_json::to_string(snapshot).map_err(|e| {
