@@ -63,62 +63,87 @@ export class MarkdownParser {
         return { offsets, codeBlockState };
     }
 
-    public static parseLine(lineText: string, globalStartIndex: number, codeState: 'none' | 'fence_start' | 'code' | 'fence_end' | 'math_fence_start' | 'math_fence_end' | 'math_block' | boolean): LineNode {
+    private static astCache = new Map<string, LineNode>();
+    public static cacheHits = 0;
+    public static cacheMisses = 0;
+    
+    public static getCacheStats() {
+        return { hits: this.cacheHits, misses: this.cacheMisses, size: this.astCache.size };
+    }
+
+    
+    public static parseLine(lineText: string, codeState: 'none' | 'fence_start' | 'code' | 'fence_end' | 'math_fence_start' | 'math_fence_end' | 'math_block' | boolean): LineNode {
+        const cacheKey = codeState + ':' + lineText;
+        const cached = this.astCache.get(cacheKey);
+        if (cached) {
+            this.cacheHits++;
+            return cached;
+        }
+        this.cacheMisses++;
+
+        let node: LineNode;
         if (codeState === 'fence_start') {
-            return {
+            node = {
                 id: this.generateId(),
                 type: 'code_fence_start',
                 raw: lineText,
-                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, startIndex: globalStartIndex, length: lineText.length }],
-                startIndex: globalStartIndex,
-                length: lineText.length
+                content: lineText,
+                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, localOffset: 0, length: lineText.length }],
+                lineType: 'code'
             };
+        } else if (codeState === 'code' || codeState === true) {
+            node = this.parseCodeLine(lineText);
         } else if (codeState === 'fence_end') {
-            return {
+            node = {
                 id: this.generateId(),
                 type: 'code_fence_end',
                 raw: lineText,
-                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, startIndex: globalStartIndex, length: lineText.length }],
-                startIndex: globalStartIndex,
-                length: lineText.length
+                content: lineText,
+                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, localOffset: 0, length: lineText.length }],
+                lineType: 'code'
             };
         } else if (codeState === 'math_fence_start') {
-            return {
+            node = {
                 id: this.generateId(),
                 type: 'math_fence_start',
                 raw: lineText,
-                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, startIndex: globalStartIndex, length: lineText.length }],
-                startIndex: globalStartIndex,
-                length: lineText.length
-            };
-        } else if (codeState === 'math_fence_end') {
-            return {
-                id: this.generateId(),
-                type: 'math_fence_end',
-                raw: lineText,
-                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, startIndex: globalStartIndex, length: lineText.length }],
-                startIndex: globalStartIndex,
-                length: lineText.length
+                content: lineText,
+                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, localOffset: 0, length: lineText.length }],
+                lineType: 'body'
             };
         } else if (codeState === 'math_block') {
-            return {
+            node = {
                 id: this.generateId(),
                 type: 'math_block',
                 raw: lineText,
-                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, startIndex: globalStartIndex, length: lineText.length }],
-                startIndex: globalStartIndex,
-                length: lineText.length
+                content: lineText,
+                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, localOffset: 0, length: lineText.length }],
+                lineType: 'body'
             };
-        } else if (codeState === 'code' || codeState === true) {
-            return this.parseCodeLine(lineText, globalStartIndex);
+        } else if (codeState === 'math_fence_end') {
+            node = {
+                id: this.generateId(),
+                type: 'math_fence_end',
+                raw: lineText,
+                content: lineText,
+                inlineTokens: [{ type: 'text', raw: lineText, content: lineText, localOffset: 0, length: lineText.length }],
+                lineType: 'body'
+            };
         } else {
-            return this.parseNormalLine(lineText, globalStartIndex);
+            node = this.parseNormalLine(lineText);
         }
+
+        if (this.astCache.size > 20000) {
+            const keys = Array.from(this.astCache.keys()).slice(0, 5000);
+            for (const k of keys) this.astCache.delete(k);
+        }
+        this.astCache.set(cacheKey, node);
+        return node;
     }
 
-    private static parseCodeLine(lineText: string, globalStartIndex: number): LineNode {
+    private static parseCodeLine(lineText: string): LineNode {
         const tokens: InlineNode[] = [];
-        let globalPos = globalStartIndex;
+        
         
         const tokenRegex = /(\/\/.+$)|(".*?"|'.*?'|\x60.*?\x60)|\b(function|return|const|let|var|if|else|for|while|import|export)\b/g;
         let pos = 0;
@@ -128,17 +153,17 @@ export class MarkdownParser {
             const matchIndex = match.index;
             if (matchIndex > pos) {
                 const plain = lineText.substring(pos, matchIndex);
-                tokens.push({ type: 'text', raw: plain, content: plain, startIndex: globalPos + pos, length: plain.length });
+                tokens.push({ type: 'text', raw: plain, content: plain, localOffset: pos, length: plain.length });
             }
 
             if (match[1]) {
-                tokens.push({ type: 'comment', raw: match[0], content: match[0], startIndex: globalPos + matchIndex, length: match[0].length });
+                tokens.push({ type: 'comment', raw: match[0], content: match[0], localOffset: matchIndex, length: match[0].length });
             } else if (match[2]) {
-                tokens.push({ type: 'string', raw: match[0], content: match[0], startIndex: globalPos + matchIndex, length: match[0].length });
+                tokens.push({ type: 'string', raw: match[0], content: match[0], localOffset: matchIndex, length: match[0].length });
             } else if (match[3]) {
-                tokens.push({ type: 'keyword', raw: match[0], content: match[0], startIndex: globalPos + matchIndex, length: match[0].length });
+                tokens.push({ type: 'keyword', raw: match[0], content: match[0], localOffset: matchIndex, length: match[0].length });
             } else {
-                tokens.push({ type: 'text', raw: match[0], content: match[0], startIndex: globalPos + matchIndex, length: match[0].length });
+                tokens.push({ type: 'text', raw: match[0], content: match[0], localOffset: matchIndex, length: match[0].length });
             }
             
             pos = matchIndex + match[0].length;
@@ -146,11 +171,11 @@ export class MarkdownParser {
         
         if (pos < lineText.length) {
             const plain = lineText.substring(pos);
-            tokens.push({ type: 'text', raw: plain, content: plain, startIndex: globalPos + pos, length: plain.length });
+            tokens.push({ type: 'text', raw: plain, content: plain, localOffset: pos, length: plain.length });
         }
         
         if (tokens.length === 0) {
-            tokens.push({ type: 'text', raw: lineText || ' ', content: lineText || ' ', startIndex: globalPos, length: (lineText || ' ').length });
+            tokens.push({ type: 'text', raw: lineText || ' ', content: lineText || ' ', localOffset: 0, length: (lineText || ' ').length });
         }
 
         return {
@@ -158,23 +183,22 @@ export class MarkdownParser {
             type: 'code',
             raw: lineText,
             inlineTokens: tokens,
-            startIndex: globalStartIndex,
-            length: lineText.length
+                        length: lineText.length
         };
     }
 
-    private static parseNormalLine(lineText: string, globalStartIndex: number): LineNode {
+    private static parseNormalLine(lineText: string): LineNode {
         const tokens: InlineNode[] = [];
         let pos = 0;
-        let globalPos = globalStartIndex;
+        
 
         if (!lineText) {
             return {
                 id: this.generateId(),
                 type: 'empty',
                 raw: '',
-                inlineTokens: [{ type: 'text', raw: '', content: '', startIndex: globalPos, length: 0 }],
-                startIndex: globalPos,
+                inlineTokens: [{ type: 'text', raw: '', content: '', localOffset: 0, length: 0 }],
+                localOffset: 0,
                 length: 0
             };
         }
@@ -197,7 +221,7 @@ export class MarkdownParser {
             
             // Now parse block prefixes on the remaining text (either full line or inside blockquote)
             const nestedText = lineText.slice(pos);
-            const nestedGlobalPos = globalPos + pos;
+            const nestedLocalOffset = pos;
             
             const headingMatch = nestedText.match(/^(#{1,6})\s+/);
             if (headingMatch) {
@@ -208,7 +232,7 @@ export class MarkdownParser {
                     type: 'heading_prefix',
                     raw: headingMatch[0],
                     content: '',
-                    startIndex: nestedGlobalPos,
+                    localOffset: nestedLocalOffset,
                     length: prefixLen
                 });
                 pos += prefixLen;
@@ -235,9 +259,9 @@ export class MarkdownParser {
                         tokens.push({
                             type: 'list_task',
                             raw: taskMatch[0],
-                            content: indent + (isChecked ? '☑ ' : '☐ '),
+                            content: indent + (isChecked ? '☑' : '☐'),
                             isChecked,
-                            startIndex: nestedGlobalPos,
+                            localOffset: nestedLocalOffset,
                             length: prefixLen
                         });
                         pos += prefixLen;
@@ -251,8 +275,8 @@ export class MarkdownParser {
                             tokens.push({
                                 type: 'list_bullet',
                                 raw: bulletMatch[0],
-                                content: indent + '• ',
-                                startIndex: nestedGlobalPos,
+                                content: indent + '•',
+                                localOffset: nestedLocalOffset,
                                 length: prefixLen
                             });
                             pos += prefixLen;
@@ -267,7 +291,7 @@ export class MarkdownParser {
                                     type: 'list_number',
                                     raw: numberMatch[0],
                                     content: indent + numberMatch[2] + ' ',
-                                    startIndex: nestedGlobalPos,
+                                    localOffset: nestedLocalOffset,
                                     length: prefixLen
                                 });
                                 pos += prefixLen;
@@ -278,7 +302,7 @@ export class MarkdownParser {
             }
         }
 
-        const parsedTokens = this.parseInlineTokens(lineText.substring(pos), globalPos + pos, true);
+        const parsedTokens = this.parseInlineTokens(lineText.substring(pos), pos, true);
         tokens.push(...parsedTokens);
         
         return {
@@ -289,7 +313,7 @@ export class MarkdownParser {
             listIndent: listPrefix !== undefined ? listIndent : undefined,
             listPrefix: listPrefix ? listPrefix : undefined,
             inlineTokens: tokens,
-            startIndex: globalPos,
+            localOffset: 0,
             length: lineText.length
         };
     }
@@ -325,13 +349,13 @@ export class MarkdownParser {
         { type: 'html_tag', regex: /^<\/?[a-zA-Z][a-zA-Z0-9]*(?:\s+[^>]*)?\/?>/ }
     ];
 
-    private static parseInlineTokens(text: string, globalOffset: number, isTopLevel: boolean = false): InlineNode[] {
-        const res = this.scanTokens(text, 0, globalOffset, null);
+    private static parseInlineTokens(text: string, localOffset: number, isTopLevel: boolean = false): InlineNode[] {
+        const res = this.scanTokens(text, 0, localOffset, null, 0);
         if (!res) {
-            return isTopLevel ? [{ type: 'text', raw: '', content: '', startIndex: globalOffset, length: 0 }] : [];
+            return isTopLevel ? [{ type: 'text', raw: '', content: '', localOffset: localOffset, length: 0 }] : [];
         }
         if (res.tokens.length === 0 && isTopLevel) {
-            res.tokens.push({ type: 'text', raw: '', content: '', startIndex: globalOffset, length: 0 });
+            res.tokens.push({ type: 'text', raw: '', content: '', localOffset: localOffset, length: 0 });
         }
         
         return res.tokens;
@@ -375,7 +399,9 @@ export class MarkdownParser {
         return { attributes, style };
     }
 
-    private static scanTokens(text: string, startIndex: number, globalOffset: number, rule: any | null): { tokens: InlineNode[], length: number } | null {
+    private static scanTokens(text: string, startIndex: number, localOffset: number, rule: any | null, depth: number): { tokens: InlineNode[], length: number } | null {
+        if (depth > 20) return null; // Bailout heuristic to prevent O(N^2) / O(2^N) nesting bomb
+        
         const start = rule ? rule.start : '';
         const close = rule ? rule.close : null;
         let i = startIndex + start.length;
@@ -385,7 +411,7 @@ export class MarkdownParser {
         
         const flushText = () => {
             if (currentRawText.length > 0) {
-                innerTokens.push({ type: 'text', raw: currentRawText, content: currentContentText, startIndex: globalOffset + i - currentRawText.length, length: currentRawText.length });
+                innerTokens.push({ type: 'text', raw: currentRawText, content: currentContentText, localOffset: localOffset + i - currentRawText.length, length: currentRawText.length });
                 currentRawText = '';
                 currentContentText = '';
             }
@@ -470,7 +496,7 @@ export class MarkdownParser {
                                 attributes,
                                 style
                             };
-                            const res = this.scanTokens(text, i, globalOffset, htmlRule);
+                            const res = this.scanTokens(text, i, localOffset, htmlRule, depth + 1);
                             if (res) {
                                 flushText();
                                 innerTokens.push({
@@ -478,7 +504,7 @@ export class MarkdownParser {
                                     raw: text.substring(i, i + res.length),
                                     content: text.substring(i + openTag.length, i + res.length - closeTag.length),
                                     children: res.tokens,
-                                    startIndex: globalOffset + i,
+                                    localOffset: localOffset + i,
                                     length: res.length,
                                     tagName,
                                     attributes,
@@ -530,7 +556,7 @@ export class MarkdownParser {
                             content,
                             url,
                             isChecked,
-                            startIndex: globalOffset + i,
+                            localOffset: localOffset + i,
                             length: raw.length
                         });
                         i += raw.length;
@@ -564,7 +590,7 @@ export class MarkdownParser {
                     }
 
                     if (validStart) {
-                        const res = this.scanTokens(text, i, globalOffset, r);
+                        const res = this.scanTokens(text, i, localOffset, r, depth + 1);
                         if (res) { // successfully parsed the block
                             flushText();
                             innerTokens.push({
@@ -572,7 +598,7 @@ export class MarkdownParser {
                                 raw: text.substring(i, i + res.length),
                                 content: text.substring(i + r.start.length, i + res.length - r.close.length),
                                 children: res.tokens,
-                                startIndex: globalOffset + i,
+                                localOffset: localOffset + i,
                                 length: res.length
                             });
                             i += res.length;

@@ -8,7 +8,11 @@ interface HiddenInputProps {
 
 export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const { cursorPos, insertText, deleteText, setCursorPos, setSelection, text } = useEditorStore();
+    const cursorPos = useEditorStore(state => state.cursorPos);
+    const insertText = useEditorStore(state => state.insertText);
+    const deleteText = useEditorStore(state => state.deleteText);
+    const setCursorPos = useEditorStore(state => state.setCursorPos);
+    const setSelection = useEditorStore(state => state.setSelection);
     const [coords, setCoords] = useState<{ top: number; left: number; height: number } | null>(null);
     const [isComposing, setIsComposing] = useState(false);
     const updateActiveElements = (cursor: number, selStart?: number, selEnd?: number) => {
@@ -88,7 +92,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
                 containerRef.current.scrollTop = top + rect.height - cHeight + 40;
             }
         }
-    }, [cursorPos, text, containerRef]);
+    }, [cursorPos, containerRef]);
 
     useEffect(() => {
         const handleSelectionChange = () => {
@@ -172,7 +176,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
             insertText('\n');
         } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
-            setSelection(0, text.length);
+            const currentText = useEditorStore.getState().text;
+            setSelection(0, currentText.length);
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             if (containerRef.current) {
@@ -188,8 +193,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         } else if (e.key === 'Home') {
             e.preventDefault();
             let lineStart = 0;
+            const currentText = useEditorStore.getState().text;
             for (let i = cursorPos; i >= 0; i--) {
-                if (i === 0 || text[i - 1] === '\n') {
+                if (i === 0 || currentText[i - 1] === '\n') {
                     lineStart = i;
                     break;
                 }
@@ -197,9 +203,10 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
             fastCursorMove(lineStart);
         } else if (e.key === 'End') {
             e.preventDefault();
-            let lineEnd = text.length;
-            for (let i = cursorPos; i < text.length; i++) {
-                if (text[i] === '\n') {
+            const currentText = useEditorStore.getState().text;
+            let lineEnd = currentText.length;
+            for (let i = cursorPos; i < currentText.length; i++) {
+                if (currentText[i] === '\n') {
                     lineEnd = i;
                     break;
                 }

@@ -37,9 +37,9 @@ export function getCoordinatesFromIndex(
 
     if (!targetElement) {
         // Fallback: look for the line container if the index is on an empty line
-        const lineElements = container.querySelectorAll('[data-line-start]');
+        const lineElements = container.hasAttribute('data-line-start') ? [container] : container.querySelectorAll('[data-line-start]');
         for (let i = 0; i < lineElements.length; i++) {
-            const el = lineElements[i];
+            const el = lineElements[i] as Element;
             const start = parseInt(el.getAttribute('data-line-start') || '0', 10);
             const length = parseInt(el.getAttribute('data-line-length') || '0', 10);
             if (index >= start && index <= start + length) {
@@ -122,9 +122,12 @@ function findNodeAndOffset(node: Node, targetOffset: number): { textNode: Node; 
     for (let i = 0; i < node.childNodes.length; i++) {
         const child = node.childNodes[i];
         
-        // CRITICAL: Ignore rendered content fallback (it is NOT part of the raw text offset length!)
-        if (child.nodeType === Node.ELEMENT_NODE && (child as Element).classList.contains('syntax-content')) {
-            continue;
+        // CRITICAL: Ignore rendered content fallback or math previews (they are NOT part of the raw text offset length!)
+        if (child.nodeType === Node.ELEMENT_NODE) {
+            const el = child as Element;
+            if (el.classList.contains('syntax-content') || el.hasAttribute('data-ignore-measure') || el.classList.contains('katex') || el.classList.contains('math-preview')) {
+                continue;
+            }
         }
         
         if (child.nodeType === Node.TEXT_NODE) {
@@ -154,8 +157,11 @@ function getRawTextLength(node: Node): number {
     if (node.nodeType === Node.TEXT_NODE) {
         return node.nodeValue?.length || 0;
     }
-    if (node.nodeType === Node.ELEMENT_NODE && (node as Element).classList.contains('syntax-content')) {
-        return 0;
+    if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as Element;
+        if (el.classList.contains('syntax-content') || el.hasAttribute('data-ignore-measure') || el.classList.contains('katex') || el.classList.contains('math-preview')) {
+            return 0;
+        }
     }
     let len = 0;
     for (let i = 0; i < node.childNodes.length; i++) {
@@ -247,14 +253,43 @@ export function getArrowNavigationIndex(
     let bestDist = Infinity;
     let bestIndex = targetStart;
 
-    for (let i = 0; i <= targetLen; i++) {
-        const globalIdx = targetStart + i;
-        const r = getCoordinatesFromIndex(globalIdx, container);
-        if (r) {
-            const dist = Math.abs(r.left - currentRect.left);
-            if (dist < bestDist) {
-                bestDist = dist;
-                bestIndex = globalIdx;
+    // Fast O(log N) binary search for the closest X coordinate
+    let low = 0;
+    let high = targetLen;
+
+    while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        const globalIdx = targetStart + mid;
+        const r = getCoordinatesFromIndex(globalIdx, targetLineEl as HTMLElement);
+        
+        if (!r) break;
+
+        const dist = Math.abs(r.left - currentRect.left);
+        if (dist < bestDist) {
+            bestDist = dist;
+            bestIndex = globalIdx;
+        }
+
+        if (r.left === currentRect.left) {
+            break; // Exact match
+        } else if (r.left < currentRect.left) {
+            low = mid + 1; // Need to move right
+        } else {
+            high = mid - 1; // Need to move left
+        }
+    }
+
+    // Ensure we check immediate neighbors (because fonts can have non-monotonic local kerning/width variance)
+    for (let offset = -2; offset <= 2; offset++) {
+        const checkIdx = bestIndex + offset;
+        if (checkIdx >= targetStart && checkIdx <= targetStart + targetLen) {
+            const r = getCoordinatesFromIndex(checkIdx, targetLineEl as HTMLElement);
+            if (r) {
+                const dist = Math.abs(r.left - currentRect.left);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestIndex = checkIdx;
+                }
             }
         }
     }

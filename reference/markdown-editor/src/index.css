@@ -1,5 +1,3 @@
-@import 'katex/dist/katex.min.css';
-
 :root {
   /* 纯白、纯黑与灰度 (45, 70, 90) */
   --white: hsl(0, 0%, 100%);
@@ -188,23 +186,12 @@ html, body {
     display: none;
 }
 
-.is-active-token .syntax-hidden,
-.is-empty-token .syntax-hidden {
+.is-active-token .syntax-hidden {
     display: inline;
     color: var(--gray-45);
 }
 
-.is-active-line .token-heading-prefix .syntax-hidden {
-    display: inline;
-    color: var(--gray-45);
-}
-
-.is-active-line .token-heading-prefix .syntax-content {
-    display: none;
-}
-
-.is-active-token .syntax-content,
-.is-active-token .math-preview {
+.is-active-token .syntax-content {
     display: none;
 }
 
@@ -213,13 +200,6 @@ html, body {
 .style-sub { font-size: 0.8em; vertical-align: sub; }
 
 /* Block-level live preview styling */
-.line-hr {
-    height: var(--grid-size);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
 .line-hr .hr-source {
     display: none;
 }
@@ -231,8 +211,7 @@ html, body {
     display: block;
     border: none;
     border-top: 1px solid var(--gray-70);
-    margin: 0;
-    width: 100%;
+    margin: calc(var(--grid-size) / 2) 0;
 }
 .is-active-line .line-hr .hr-rendered {
     display: none;
@@ -253,52 +232,6 @@ html, body {
 }
 .style-sup { font-size: 0.8em; vertical-align: super; }
 .style-math { font-style: italic; font-family: 'Times New Roman', serif; }
-
-/* Inline Math & KaTeX rendering */
-.token-math-wrapper {
-    display: inline-block;
-    vertical-align: middle;
-}
-.token-math-wrapper .math-preview {
-    display: inline-block;
-    vertical-align: middle;
-}
-.token-math-wrapper .math-source {
-    display: none;
-    font-family: var(--font-mono);
-    color: var(--gray-45);
-}
-.is-active-token.token-math-wrapper .math-preview {
-    display: none !important;
-}
-.is-active-token.token-math-wrapper .math-source {
-    display: inline !important;
-}
-
-/* Block Math KaTeX */
-.line-math-block {
-    text-align: center;
-    font-size: 1.1em;
-    padding: calc(var(--grid-size) / 4) 0;
-}
-.line-math-block .math-block-rendered {
-    display: block;
-}
-.line-math-block .math-block-source {
-    display: none;
-    font-family: var(--font-mono);
-    color: var(--gray-45);
-    text-align: center;
-}
-.is-active-line .line-math-block .math-block-rendered,
-.is-active-line.line-math-block .math-block-rendered {
-    display: none !important;
-}
-.is-active-line .line-math-block .math-block-source,
-.is-active-line.line-math-block .math-block-source {
-    display: block !important;
-}
-
 .style-kbd { font-family: var(--font-mono); color: var(--black); font-size: 0.85em; background: var(--gray-90); padding: 0 4px; border-radius: 4px; border-bottom: 2px solid var(--gray-70); }
 .style-spoiler { color: transparent; background: var(--gray-45); border-radius: 3px; cursor: pointer; transition: color 0.2s ease; }
 @keyframes cursor-blink {
@@ -332,48 +265,6 @@ html, body {
 .token-comment { color: var(--gray-45); font-style: italic; }
 .token-keyword { font-weight: bold; color: var(--black); }
 .token-string { color: var(--gray-70); }
-.token-html-tag { font-family: var(--font-mono); color: var(--gray-45); font-size: 0.9em; }
-
-/* Code Fence Mixed Rendering */
-.line-code-fence {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  position: relative;
-}
-
-.line-code-fence-start {
-  padding: 0 4px;
-}
-
-.line-code-fence-end {
-  padding: 0 4px;
-}
-
-.code-fence-source {
-  display: none;
-}
-
-.code-lang-pill {
-  display: inline-block;
-  font-size: 11px;
-  color: var(--gray-45);
-  text-transform: uppercase;
-  font-weight: bold;
-  letter-spacing: 0.5px;
-  user-select: none;
-  background: hsla(0, 0%, 90%, 0.4);
-  padding: 0 6px;
-  border-radius: 3px;
-}
-
-.is-active-line .code-fence-rendered {
-  display: none;
-}
-
-.is-active-line .code-fence-source {
-  display: inline;
-  color: var(--gray-45);
-}
 
 .loading-overlay {
   position: absolute;

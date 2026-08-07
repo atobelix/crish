@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useEditorStore } from './core/EditorStore';
 import { MarkdownEngine } from './components/MarkdownEngine';
 import './index.css';
@@ -138,7 +138,8 @@ function generateMassiveMarkdown(linesCount: number) {
 }
 
 function App() {
-  const { text, setText } = useEditorStore();
+  const textLength = useEditorStore(state => state.textLength);
+  const setText = useEditorStore(state => state.setText);
 
   useEffect(() => {
     // Generate ~10,000 lines of markdown
@@ -148,7 +149,13 @@ function App() {
 
   return (
     <div className="grid-paper">
-      <MarkdownEngine markdown={text} />
+      {textLength > 0 ? (
+        <MarkdownEngine markdown={""} />
+      ) : (
+        <div style={{ display: 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+          <h2>生成万行超大文档...</h2>
+        </div>
+      )}
     </div>
   );
 }

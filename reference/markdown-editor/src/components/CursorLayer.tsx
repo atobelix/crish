@@ -7,7 +7,7 @@ interface CursorLayerProps {
 }
 
 export const CursorLayer: React.FC<CursorLayerProps> = ({ containerRef }) => {
-    const { cursorPos, text } = useEditorStore();
+    const cursorPos = useEditorStore(state => state.cursorPos);
     const [coords, setCoords] = useState<{ top: number; left: number; height: number; bottom: number } | null>(null);
     const [hasSelection, setHasSelection] = useState(false);
 
@@ -68,7 +68,7 @@ export const CursorLayer: React.FC<CursorLayerProps> = ({ containerRef }) => {
                 bottom: rect.bottom - containerRect.top + containerRef.current.scrollTop
             });
         }
-    }, [cursorPos, text, containerRef]);
+    }, [cursorPos, containerRef]);
 
     if (!coords || hasSelection) return null;
 

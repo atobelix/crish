@@ -1,25 +1,20 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import type { MarkdownDocument } from '../core/ast';
 import { BlockRenderer } from './BlockRenderer';
 import { HiddenInput } from './HiddenInput';
 import { CursorLayer } from './CursorLayer';
 import { useEditorStore } from '../core/EditorStore';
+import MarkdownWorker from '../worker/markdown.worker?worker';
 import { MarkdownParser } from '../core/parser';
 
 interface MarkdownEngineProps {
-    markdown?: string;
+    markdown: string;
 }
 
-export const MarkdownEngine: React.FC<MarkdownEngineProps> = () => {
+export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ markdown }) => {
     const parentRef = useRef<HTMLDivElement>(null);
-    const { text, setCursorPos } = useEditorStore();
-    
-    // 1. Synchronously precompute basic line metadata (extremely fast even for 100k lines)
-    const { lines, offsets, codeBlockState } = React.useMemo(() => {
-        const linesArr = text.split('\n');
-        const { offsets, codeBlockState } = MarkdownParser.computeLineOffsets(text);
-        return { lines: linesArr, offsets, codeBlockState };
-    }, [text]);
+    const { lines, lineOffsets: offsets, codeBlockState, setCursorPos } = useEditorStore();
 
     // Virtualization setup: fixed size = 28px perfectly aligns with grid paper CSS
     const virtualizer = useVirtualizer({
@@ -146,15 +141,13 @@ export const MarkdownEngine: React.FC<MarkdownEngineProps> = () => {
                         const lineText = lines[virtualRow.index];
                         const offset = offsets[virtualRow.index];
                         const isCode = codeBlockState[virtualRow.index];
-                        // 2. Synchronously parse ONLY visible lines
-                        const lineNode = MarkdownParser.parseLine(lineText, offset, isCode);
+                        // 2. Synchronously parse ONLY visible lines (cached)
+                        const lineNode = MarkdownParser.parseLine(lineText, isCode);
 
                         return (
                             <div
                                 key={virtualRow.index}
-                                className="line-container"
                                 data-index={virtualRow.index}
-                                data-line-index={virtualRow.index}
                                 data-line-start={offset}
                                 data-line-length={lineText.length}
                                 ref={virtualizer.measureElement}
@@ -166,7 +159,7 @@ export const MarkdownEngine: React.FC<MarkdownEngineProps> = () => {
                                     minHeight: '28px' // Allows wrapping to 56px, 84px etc.
                                 }}
                             >
-                                <BlockRenderer block={lineNode} index={virtualRow.index} />
+                                <BlockRenderer block={lineNode} index={virtualRow.index} lineOffset={offset} />
                             </div>
                         );
                     })}
