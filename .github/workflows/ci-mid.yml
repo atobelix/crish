@@ -4,7 +4,8 @@
 # - cargo test --workspace 全量（L1 单测 + L2 集成 + L3 契约 + L4 e2e faux；
 #   --ignored 压力场景除外，归慢层）
 # - cargo clippy --workspace -- -D warnings
-# - 前端 vitest 全量（vitest.workspace：unit + integration + e2e 项目）
+# - 前端 vitest 全量（vitest.config.ts：unit + integration + native-smoke 项目；
+#   e2e 项目已于 PS-02 T2.1 删除，Playwright spec 归 Playwright 轨道）
 # - F3 专项：integration / fuzz / race / recovery（vitest.integration.config.ts）
 #
 # 触发：PR（合并前必跑）+ main 分支 push（主干兜底）。
@@ -71,14 +72,15 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      # 前端 vitest 全量（vitest.workspace：unit + integration + e2e 项目）
+      # 前端 vitest 全量（vitest.config.ts 项目：unit + integration + native-smoke）
       # 覆盖率门禁在快层 ci.yml 强制执行（unit 项目 --coverage，阈值 45/70/65/45）。
       # 中层不加 --coverage 的理由（2026-08-03 实测基线）：
-      #   - integration 项目实测 3.75% / 61.16% / 33.5% / 3.75%，远低于原 70/60/65/70；
-      #   - e2e 项目 vitest include 命中 Playwright spec（test.describe 与 vitest
-      #     运行器冲突，预存问题），无法在 vitest 下运行；
-      #   强行加 --coverage 只会制造必红门禁，待专项补齐（integration 用例扩增、
-      #   e2e 迁移 playwright runner）后再启用。
+      #   - integration 项目实测 3.75% / 61.16% / 33.5% / 3.75%，远低于 45/70/65/45；
+      #     待 integration 用例扩增后再启用。
+      # PS-02 T2.1 修复后现状：e2e 项目块已删除（原 include 唯一匹配面是 tests/e2e
+      # 的 Playwright spec，test.describe 与 vitest 运行器冲突，21/21 必红）；
+      # Playwright spec 一律归 Playwright（tests/e2e，见下方 e2e job）；
+      # tauri-native-smoke 重归属独立 native-smoke 项目（vitest 进程级冒烟）。
       - run: npm run test -- --reporter=verbose
 
   test:integration:
@@ -91,7 +93,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      # F3 层：integration / fuzz / race / recovery（vitest.integration.config.ts）
+      # F3 层：integration / fuzz / race / recovery 四目录
+      # （vitest.integration.config.ts，PS-02 T2.1 起 test.projects 单项目）
       - run: npx vitest run --config vitest.integration.config.ts --reporter=verbose
 
   machete:
