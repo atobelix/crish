@@ -1043,11 +1043,25 @@ impl FlowScheduler {
                 match self.spawner.spawn(&request).await {
                     Ok(result) => {
                         self.states.insert(node_id.clone(), FlowNodeState::Running);
-                        let runtime = self
-                            .runtime
-                            .entry(node_id.clone())
-                            .or_insert_with(|| FlowNodeRuntime::new(node_id.clone()));
-                        runtime.subagent_run_id = Some(result.subagent_run_id.clone());
+                        // 先写内存 runtime 映射（作用域内完成，随后立即持久化，
+                        // 避免借用冲突：persist 需要 &self 的不可变借用）
+                        {
+                            let runtime = self
+                                .runtime
+                                .entry(node_id.clone())
+                                .or_insert_with(|| FlowNodeRuntime::new(node_id.clone()));
+                            runtime.subagent_run_id = Some(result.subagent_run_id.clone());
+                        }
+                        // D4 双防线①（T3.4）：spawn 状态持久化前置——run 已由
+                        // spawner 落库 session_agents，这里在**任何 await 之前**
+                        // （emit_started 挂起点不再放大窗口）立即持久化节点
+                        // runtime + 预算。崩溃窗口归零：spawn 后任意时刻崩溃，
+                        // flow_state 均已含本节点映射，重启 load 重建为 Running
+                        // 而非 Pending，杜绝重复 spawn（孤儿双跑）。
+                        // 失败按 Err 传播（spawn 已成功则 run 已落库、runtime
+                        // 不落库 = 崩溃窗口形态，重开由双防线②反向校验兜底）
+                        self.persist_runtime()?;
+                        self.persist_budget()?;
                         // M14：spawn 成功发射 subagent-started（唯一发射方；
                         // 事件只观测不阻塞编排——失败记录日志继续）
                         if let Some(emitter) = &self.subagent_events {
@@ -1076,7 +1090,9 @@ impl FlowScheduler {
                                     );
                                 }
                             }
-                            runtime.subagent_id = Some(result.subagent_id.clone());
+                            if let Some(runtime) = self.runtime.get_mut(&node_id) {
+                                runtime.subagent_id = Some(result.subagent_id.clone());
+                            }
                         }
                         out.started.push(FlowStarted {
                             node_id: node_id.clone(),
@@ -1389,6 +1405,40 @@ impl FlowScheduler {
                     });
                 }
             }
+        }
+        // D4 双防线②（T3.4）：反向校验——session_agents 行带 flow_node_id
+        // （测试域 spawner 约定：description 字段承载，DbSpawner /
+        // RecordingSpawner 均 `description: req.flow_node_id`）且指向图中
+        // 某节点、但 flow_state 无该节点 runtime 映射 → 崩溃窗口兜底
+        // （spawn 已落库、runtime 未持久化）：节点按 Failed 处理 +
+        // DataInconsistent 上报，杜绝重启后按 Pending 重复 spawn（孤儿双跑）。
+        // 正向路径已恢复的节点（flow_state 有映射）不受影响；预算重算
+        // （步骤 5）随之把 Failed 计入终态 → released 抵消，防 double-charge。
+        for row in agent_rows {
+            let node_id = &row.description;
+            if node_id.is_empty() {
+                continue;
+            }
+            let Some(node) = graph.node(node_id) else {
+                continue;
+            };
+            if runtime.contains_key(&node.id) {
+                continue; // 正向路径已有映射（flow_state 有 runtime）
+            }
+            if states.get(&node.id).copied() != Some(FlowNodeState::Pending) {
+                continue; // 已被正向/其它逻辑改写（终态等），不覆盖
+            }
+            states.insert(node.id.clone(), FlowNodeState::Failed);
+            restart_reports.push(FlowReport {
+                node_id: node.id.clone(),
+                run_id: Some(row.subagent_run_id.clone()),
+                strategy: None,
+                kind: FlowReportKind::DataInconsistent,
+                message: format!(
+                    "节点 {} 的 run {} 已存在于 session_agents 但 flow_state 无映射（spawn 后崩溃窗口），按失败处理防重复 spawn",
+                    node.id, row.subagent_run_id
+                ),
+            });
         }
         // 5. 预算跨重启重算（防 double-charge）
         let active = states
