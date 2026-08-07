@@ -1,5 +1,12 @@
 # Conex / Crish — Agent 协作指令
 
+## 测试资产保护铁律（2026-08-07 事故后生效）
+
+- `reference/markdown-editor/` 的全部源码与测试**必须入库**（.gitignore 已白名单放行；node_modules/dist 除外）——2026-08-07 曾因 `reference/*` 忽略导致用户测试资产近乎丢失，且 f772eb99 提交顺手删除了 28 个根目录测试（已从 `f772eb99^` 恢复）。**任何会话禁止删除/清理该目录下的测试文件**；如确需删除，先确认已入库并提交删除。
+- `reference/markdown-editor` 的门禁：`npm test`（vitest run tests/unit，含 grapheme/undo/parser-redos/chunk）。改动引擎代码后必须跑通该门禁。
+- 主仓库 tests/e2e 下的 5 个 markdown-editor 专项 spec（ast-block-tables/format-checker/ime-composition/keyboard-navigation/wysiwyg-interaction）是用户针对性测试，**禁止删除**，回归时保留。
+- 测试是资产不是杂物：新增调试/测试脚本后立即 `git add` 提交，不留在未跟踪状态。
+
 ## 输出风格与长度策略
 
 - **长度自适应**：回复长度根据用户问题的复杂度、上下文需求与用户明确的期望决定，不强制精简。
