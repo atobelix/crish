@@ -8,6 +8,8 @@
  * - pointerId 隔离（多指场景只认启动指针）
  * - ghost 跟随（ref + 直接 DOM transform，跳过 React re-render）
  * - window 监听注册统一（pointermove / pointerup / pointercancel + Escape）
+ * - 指针捕获兜底（P1-F5）：start 时 setPointerCapture；lostpointercapture /
+ *   window blur 双兜底走 endGesture(true)，消除指针移出 WebView 后的拖拽悬挂
  * - body class（active 期间挂载 / 结束时卸载）
  *
  * 各控制器只保留 drop 语义差异层（onDragStart / onDragMove / onDrop / onCancel 回调），
@@ -33,13 +35,23 @@ export const DROP_DETECT_INTERVAL_MS = 16; // ~1 frame
 
 // ── 类型 ────────────────────────────────────────────────────────────
 
-export type PointerDragPhase = 'idle' | 'pending' | 'active' | 'committed' | 'cancelled';
+export type PointerDragPhase =
+  'idle' | 'pending' | 'active' | 'committed' | 'cancelled';
 
 export interface PointerDragBaseOptions<T> {
   /** 阈值跨越（pending → active）时调用；返回 false 可中止手势（回到 idle） */
-  onDragStart?: (payload: T, clientX: number, clientY: number) => boolean | void;
+  onDragStart?: (
+    payload: T,
+    clientX: number,
+    clientY: number
+  ) => boolean | void;
   /** active 阶段每次 pointermove 调用（含进入 active 当帧；drop 检测节流由调用方自持） */
-  onDragMove?: (payload: T, clientX: number, clientY: number, e: PointerEvent) => void;
+  onDragMove?: (
+    payload: T,
+    clientX: number,
+    clientY: number,
+    e: PointerEvent
+  ) => void;
   /** pointerup / endGesture 提交（active 阶段）；cancelled 标记用于 lostpointercapture 等外部收尾 */
   onDrop?: (
     payload: T,
@@ -53,7 +65,10 @@ export interface PointerDragBaseOptions<T> {
    * 每次手势结束（drop / cancel / 未拖拽 up）后调用：统一收尾
    * （释放 pointer capture、清理挂载期监听等）。
    */
-  onGestureEnd?: (payload: T | null, outcome: 'drop' | 'cancel' | 'no-drag') => void;
+  onGestureEnd?: (
+    payload: T | null,
+    outcome: 'drop' | 'cancel' | 'no-drag'
+  ) => void;
   /** active 期间挂到 body 的 class */
   bodyClass?: string;
   /** ghost 跟随偏移（默认 GHOST_OFFSET_X/Y） */
@@ -119,7 +134,11 @@ export function usePointerDragBase<T>(
   const [isDragging, setIsDragging] = useState(false);
 
   const offsetOf = useCallback(
-    () => optionsRef.current.ghostOffset ?? { x: GHOST_OFFSET_X, y: GHOST_OFFSET_Y },
+    () =>
+      optionsRef.current.ghostOffset ?? {
+        x: GHOST_OFFSET_X,
+        y: GHOST_OFFSET_Y,
+      },
     []
   );
 
@@ -153,6 +172,16 @@ export function usePointerDragBase<T>(
     };
     phaseRef.current = 'pending';
     didDragRef.current = false;
+    // 指针捕获（P1-F5 根因修复）：拖拽期间指针移出窗口/WebView 后
+    // pointerup 不再派发到页面，若不捕获则 phase 悬挂在 active。
+    // jsdom 无 setPointerCapture 实现、或事件源非 Element 时抛错——
+    // try/catch 兜底，捕获失败仍由 window 监听 + lostpointercapture/blur
+    // 双保险接管收尾。
+    try {
+      e.currentTarget?.setPointerCapture?.(e.pointerId);
+    } catch {
+      // 忽略：捕获不可用时退化为 window 监听路径
+    }
   }, []);
 
   // ── 进入 active 阶段 ─────────────────────────────────────────
@@ -198,7 +227,8 @@ export function usePointerDragBase<T>(
   const handlePointerMove = useCallback(
     (e: PointerEvent) => {
       const phase = phaseRef.current;
-      if (phase === 'idle' || phase === 'committed' || phase === 'cancelled') return;
+      if (phase === 'idle' || phase === 'committed' || phase === 'cancelled')
+        return;
 
       if (phase === 'pending') {
         const pending = pendingRef.current;
@@ -242,11 +272,15 @@ export function usePointerDragBase<T>(
     []
   );
 
-  const notifyGestureEnd = useCallback((outcome: 'drop' | 'cancel' | 'no-drag') => {
-    const payload = activeRef.current?.payload ?? pendingRef.current?.payload ?? null;
-    resetLocal();
-    optionsRef.current.onGestureEnd?.(payload, outcome);
-  }, [resetLocal]);
+  const notifyGestureEnd = useCallback(
+    (outcome: 'drop' | 'cancel' | 'no-drag') => {
+      const payload =
+        activeRef.current?.payload ?? pendingRef.current?.payload ?? null;
+      resetLocal();
+      optionsRef.current.onGestureEnd?.(payload, outcome);
+    },
+    [resetLocal]
+  );
 
   const handlePointerUp = useCallback(
     (e: PointerEvent) => {
@@ -257,7 +291,8 @@ export function usePointerDragBase<T>(
       // 其它 pointer 的 up 不应结束拖拽（如双指场景中第二指抬起）。
       const expectedPointerId =
         pendingRef.current?.pointerId ?? activeRef.current?.pointerId;
-      if (expectedPointerId !== undefined && e.pointerId !== expectedPointerId) return;
+      if (expectedPointerId !== undefined && e.pointerId !== expectedPointerId)
+        return;
 
       // pending：未超过阈值，按 click 处理（不算拖拽）
       if (phase === 'pending') {
@@ -309,6 +344,28 @@ export function usePointerDragBase<T>(
     [finishActiveDrop, notifyGestureEnd]
   );
 
+  // ── 指针捕获兜底（P1-F5）：capture 丢失 / 窗口失焦 → 按取消收尾 ──
+  //
+  // 根因：仅靠 window pointerup 无法覆盖「指针移出 WebView 释放」场景——
+  // 指针事件不再派发，phase 永久悬挂在 active（isDragging 恒 true、body class
+  // 残留）。setPointerCapture 解决「移出后 pointerup 不派发」，但 capture 本身
+  // 会失效（元素移除/其它元素抢占/失焦），故需 lostpointercapture / blur 双兜底：
+  // 捕获丢失与失焦都是「本轮手势已无法正常完结」的信号，统一走 endGesture(true)
+  // （onDrop(cancelled=true) + onGestureEnd('cancel')）复位。
+  // 仅 active/pending 阶段响应：正常 pointerup 后浏览器自动释放捕获会补发
+  // lostpointercapture，此时 phase 已是 committed，守卫直接放行，避免重复收尾。
+  const handleLostCapture = useCallback(() => {
+    const phase = phaseRef.current;
+    if (phase !== 'active' && phase !== 'pending') return;
+    endGesture(true);
+  }, [endGesture]);
+
+  const handleWindowBlur = useCallback(() => {
+    const phase = phaseRef.current;
+    if (phase !== 'active' && phase !== 'pending') return;
+    endGesture(true);
+  }, [endGesture]);
+
   // ── Ghost 元素回调 ref ───────────────────────────────────────
 
   const setGhostRef = useCallback(
@@ -337,6 +394,8 @@ export function usePointerDragBase<T>(
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('pointercancel', handlePointerCancel);
+    window.addEventListener('lostpointercapture', handleLostCapture);
+    window.addEventListener('blur', handleWindowBlur);
 
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -351,9 +410,17 @@ export function usePointerDragBase<T>(
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerCancel);
+      window.removeEventListener('lostpointercapture', handleLostCapture);
+      window.removeEventListener('blur', handleWindowBlur);
       window.removeEventListener('keydown', handleEscape);
     };
-  }, [handlePointerMove, handlePointerUp, handlePointerCancel]);
+  }, [
+    handlePointerMove,
+    handlePointerUp,
+    handlePointerCancel,
+    handleLostCapture,
+    handleWindowBlur,
+  ]);
 
   // body class：active 期间挂载，结束/卸载时移除
   useEffect(() => {
@@ -378,7 +445,15 @@ export function usePointerDragBase<T>(
       consumeDidDrag,
       isActive,
     }),
-    [isDragging, start, cancel, endGesture, setGhostRef, consumeDidDrag, isActive]
+    [
+      isDragging,
+      start,
+      cancel,
+      endGesture,
+      setGhostRef,
+      consumeDidDrag,
+      isActive,
+    ]
   );
 }
 
