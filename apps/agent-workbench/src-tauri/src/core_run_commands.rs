@@ -1449,6 +1449,13 @@ impl CoreRunState {
         self.engine.ready()
     }
 
+    /// 重载引擎 provider 适配层（PS-04 T4.3 / F4 F1-01 接线：config 命令
+    /// 写 store 成功后调用——重建 `HttpProviderCall`（新 key/baseUrl/model
+    /// 快照）并原子交换，下一次 run 用新凭据）。
+    pub(crate) fn reload_provider(&self) {
+        self.engine.reload_provider();
+    }
+
     /// restore 域状态（core_get_status.restore 数据源；F2 冻结形状）
     pub fn restore_status(&self) -> RestoreStatus {
         let state = if !self.restore_started.load(Ordering::SeqCst) {
@@ -4476,6 +4483,7 @@ mod tests {
     /// provider，请求仍按旧 baseUrl/key/model 发出 → 红。
     #[tokio::test]
     async fn config_profile_apply_swaps_next_provider_request_payload() {
+        use tauri::Manager as _;
         let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = temp_config_dir();
         isolate_config_store(&dir);
@@ -4484,23 +4492,14 @@ mod tests {
         let base_old = server.base_url("/v1-old");
         let base_new = server.base_url("/v1-new");
 
-        // 旧配置 A：config_update 写 baseUrl/model + config_profile_apply 写 key
-        crate::config::config_update(
-            Some(base_old.clone()),
-            Some("model-a".to_string()),
-            None,
-            None,
-            None,
-        )
-        .await
-        .expect("store base_url/model A");
-        crate::config::config_profile_apply(
-            "p1".to_string(),
-            Some("sk-a".to_string()),
-            None,
-            None,
-        )
-        .expect("store key A");
+        // 旧配置 A：直接写 store（引擎构造时加载快照 A）
+        crate::config::with_store_mut(|store| {
+            store.set_api_key("sk-a".to_string())?;
+            store.set_base_url(base_old.clone())?;
+            store.set_model("model-a".to_string())?;
+            Ok(())
+        })
+        .expect("store A");
         // 引擎在 store A 之上构造（构造时快照 A）。注意：reqwest 客户端在
         // 引擎构造时读取 HTTP_PROXY 等环境变量——清空保证请求真实直连本地
         // 服务器（不依赖机器代理配置；其余测试不发起真实 HTTP，无副作用）。
@@ -4515,9 +4514,15 @@ mod tests {
             std::env::remove_var(var);
         }
         let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+        let app = tauri::test::mock_builder()
+            .manage(Arc::clone(&state))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let st = app.state::<Arc<CoreRunState>>();
 
         // 模拟前端 apply 新凭据（key/baseUrl/model 全换）
         crate::config::config_profile_apply(
+            st,
             "p1".to_string(),
             Some("sk-b".to_string()),
             Some(base_new.clone()),
@@ -4567,26 +4572,18 @@ mod tests {
     /// 三件套热更新）。修复前引擎只读构造时快照 → 仍旧值 → 红。
     #[tokio::test]
     async fn config_profile_apply_refreshes_engine_provider_config() {
+        use tauri::Manager as _;
         let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = temp_config_dir();
         isolate_config_store(&dir);
 
-        crate::config::config_update(
-            Some("https://a.example/v1".to_string()),
-            Some("model-a".to_string()),
-            None,
-            None,
-            None,
-        )
-        .await
-        .expect("store base_url/model A");
-        crate::config::config_profile_apply(
-            "p1".to_string(),
-            Some("sk-a".to_string()),
-            None,
-            None,
-        )
-        .expect("store key A");
+        crate::config::with_store_mut(|store| {
+            store.set_api_key("sk-a".to_string())?;
+            store.set_base_url("https://a.example/v1".to_string())?;
+            store.set_model("model-a".to_string())?;
+            Ok(())
+        })
+        .expect("store A");
         let state = core_state_with_store(Arc::new(InMemoryStore::new()));
         assert_eq!(
             state
@@ -4596,9 +4593,15 @@ mod tests {
                 .model,
             "model-a"
         );
+        let app = tauri::test::mock_builder()
+            .manage(Arc::clone(&state))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let st = app.state::<Arc<CoreRunState>>();
 
         // apply 新三件套 → 引擎生效配置必须同步刷新
         crate::config::config_profile_apply(
+            st,
             "p1".to_string(),
             Some("sk-b".to_string()),
             Some("https://b.example/v1".to_string()),
@@ -4619,37 +4622,29 @@ mod tests {
     /// 不碰引擎 → 清 key 后仍就绪 → 红。
     #[tokio::test]
     async fn config_profile_apply_clearing_key_degrades_engine_ready() {
+        use tauri::Manager as _;
         let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = temp_config_dir();
         isolate_config_store(&dir);
 
-        crate::config::config_update(
-            Some("https://a.example/v1".to_string()),
-            Some("model-a".to_string()),
-            None,
-            None,
-            None,
-        )
-        .await
-        .expect("store base_url/model A");
-        crate::config::config_profile_apply(
-            "p1".to_string(),
-            Some("sk-a".to_string()),
-            None,
-            None,
-        )
-        .expect("store key A");
+        crate::config::with_store_mut(|store| {
+            store.set_api_key("sk-a".to_string())?;
+            store.set_base_url("https://a.example/v1".to_string())?;
+            store.set_model("model-a".to_string())?;
+            Ok(())
+        })
+        .expect("store A");
         let state = core_state_with_store(Arc::new(InMemoryStore::new()));
         assert!(state.engine.ready(), "写 key 后就绪");
+        let app = tauri::test::mock_builder()
+            .manage(Arc::clone(&state))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let st = app.state::<Arc<CoreRunState>>();
 
         // 清空 key：引擎必须降级未就绪（provider=None，不再用旧 key 发请求）
-        crate::config::config_profile_apply(
-            "p1".to_string(),
-            Some(String::new()),
-            None,
-            None,
-        )
-        .expect("clear key");
+        crate::config::config_profile_apply(st, "p1".to_string(), Some(String::new()), None, None)
+            .expect("clear key");
         assert!(!state.engine.ready(), "清 key 后引擎必须未就绪");
         assert!(state.engine.provider().is_none(), "清 key 后 provider 必须为 None");
         assert!(
@@ -4659,6 +4654,7 @@ mod tests {
 
         // 重填后恢复
         crate::config::config_profile_apply(
+            app.state::<Arc<CoreRunState>>(),
             "p1".to_string(),
             Some("sk-c".to_string()),
             None,

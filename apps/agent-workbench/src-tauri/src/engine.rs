@@ -706,6 +706,9 @@ impl crate::watchdog::DispatchStore for MemoryWaitStore {
 /// - 跨会话并发安全：provider 只读共享（Mutex<Option<Arc<dyn ProviderCall>>>），
 ///   std Mutex 不跨 await 持有（AA-02 并发模型注记）。
 pub(crate) struct EngineHandle {
+    /// 共享 reqwest 客户端（连接池 / TLS 会话跨 run 复用；provider 重载时
+    /// 重建适配层但复用同一客户端——AA-02 S-7 连接池语义保持）
+    http_client: reqwest::Client,
     /// 生效的 provider 适配层（None = 配置缺失降级未就绪）
     provider: Mutex<Option<Arc<dyn ProviderCall>>>,
     /// 工具注册表（只读共享）
@@ -945,6 +948,7 @@ impl EngineHandle {
         };
 
         Self {
+            http_client: (*client).clone(),
             provider: Mutex::new(provider),
             tool_registry,
             mcp_bridge,
@@ -999,6 +1003,44 @@ impl EngineHandle {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
+    }
+
+    /// 重建 provider 适配层并原子交换（F4 F1-01 修复，PS-04 T4.3 接线点：
+    /// `config_profile_apply` / `config_update` 写 store 成功后调用，下一次
+    /// run 立即使用新凭据——key/baseUrl/model 热更新）。
+    ///
+    /// 根因注记：`HttpProviderCall` 持有构造时 `EngineProviderConfig` 快照
+    /// （:285-291），旧实现只在引擎构造时加载一次（:927-945），运行期改配置
+    /// 后 `provider()` 取回的仍是旧适配层（F4 F1-01）。本方法从 store 重新
+    /// `load_provider_endpoint()` → 重建适配层（复用共享连接池客户端）→ Mutex
+    /// 短临界区原子交换 provider + provider_config + ready/ready_reason；
+    /// 全程无 await（模式对齐 `inject_provider_for_test` :975-985）。
+    /// 重建失败（三件套缺失，如 apiKey 清空）→ provider=None + ready=false +
+    /// ready_reason 文案，与构造时降级语义一致。
+    pub(crate) fn reload_provider(&self) {
+        let (provider, ready, ready_reason, provider_config) = match load_provider_endpoint() {
+            Some(config) => {
+                let provider: Arc<dyn ProviderCall> =
+                    Arc::new(HttpProviderCall::new(self.http_client.clone(), config.clone()));
+                (Some(provider), true, None, Some(config))
+            }
+            None => {
+                tracing::warn!(
+                    target: "engine",
+                    "engine not ready: provider 配置缺失（baseUrl/model/apiKey 三件套，apply 后重载）"
+                );
+                (
+                    None,
+                    false,
+                    Some("provider 配置缺失（baseUrl/model/apiKey）".to_string()),
+                    None,
+                )
+            }
+        };
+        *self.provider.lock().unwrap_or_else(|e| e.into_inner()) = provider;
+        *self.provider_config.lock().unwrap_or_else(|e| e.into_inner()) = provider_config;
+        self.ready.store(ready, Ordering::SeqCst);
+        *self.ready_reason.lock().unwrap_or_else(|e| e.into_inner()) = ready_reason;
     }
 
     /// 工具注册表（只读共享）
@@ -4114,5 +4156,110 @@ mod event_drain_tests {
     fn engine_audit_sink_accessor_reaches_shared_instance() {
         let engine = EngineHandle::new(None);
         assert!(Arc::ptr_eq(&engine.audit_sink(), &engine.audit_sink()));
+    }
+
+    // ── PS-04 T4.3（F4 F1-01）：reload_provider 热更新 ──
+
+    /// T4.3-R1：注入旧配置 A → `reload_provider()` → provider_config 的
+    /// model/key/baseUrl 必须变为新值（换 key/模型后下一次 run 用新凭据；
+    /// 修复前 provider 只在构造时加载一次，改配置后不生效）。
+    #[test]
+    fn reload_provider_rebuilds_provider_config_from_store() {
+        use crate::core_run_commands::{isolate_config_store, CONFIG_TEST_LOCK};
+        let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "conex-config-test-{}-{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("create config dir");
+        isolate_config_store(&dir);
+
+        // 旧配置 A（引擎构造时快照）
+        crate::config::with_store_mut(|store| {
+            store.set_api_key("sk-a".to_string())?;
+            store.set_base_url("https://a.example/v1".to_string())?;
+            store.set_model("model-a".to_string())?;
+            Ok(())
+        })
+        .expect("store A");
+        let engine = EngineHandle::new(None);
+        let before = engine.provider_config().expect("构造后就绪");
+        assert_eq!(before.api_key, "sk-a");
+        assert_eq!(before.model, "model-a");
+        assert!(engine.ready());
+
+        // 改 store 为新配置 B → 重载 → 生效配置必须刷新
+        crate::config::with_store_mut(|store| {
+            store.set_api_key("sk-b".to_string())?;
+            store.set_base_url("https://b.example/v1".to_string())?;
+            store.set_model("model-b".to_string())?;
+            Ok(())
+        })
+        .expect("store B");
+        engine.reload_provider();
+        let after = engine.provider_config().expect("重载后就绪");
+        assert_eq!(after.api_key, "sk-b", "key 必须热更新");
+        assert_eq!(after.base_url, "https://b.example/v1", "baseUrl 必须热更新");
+        assert_eq!(after.model, "model-b", "model 必须热更新");
+        assert!(engine.ready(), "重载后就绪");
+        assert!(engine.provider().is_some(), "重载后 provider 可调用");
+    }
+
+    /// T4.3-R1 契约延伸：三件套清空（api_key=空串）后 reload_provider →
+    /// 引擎降级未就绪（ready=false / provider=None / provider_config=None）；
+    /// 重填后恢复。与构造时降级语义一致（F4 F1-01 修复建议 4）。
+    #[test]
+    fn reload_provider_degrades_when_key_cleared_then_recovers() {
+        use crate::core_run_commands::{isolate_config_store, CONFIG_TEST_LOCK};
+        let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "conex-config-test-{}-{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("create config dir");
+        isolate_config_store(&dir);
+
+        crate::config::with_store_mut(|store| {
+            store.set_api_key("sk-a".to_string())?;
+            store.set_base_url("https://a.example/v1".to_string())?;
+            store.set_model("model-a".to_string())?;
+            Ok(())
+        })
+        .expect("store A");
+        let engine = EngineHandle::new(None);
+        assert!(engine.ready());
+
+        // 清空 key（空串）→ 重载 → 降级未就绪（不得再用旧 key 发请求）
+        crate::config::with_store_mut(|store| {
+            store.set_api_key(String::new())?;
+            Ok(())
+        })
+        .expect("clear key");
+        engine.reload_provider();
+        assert!(!engine.ready(), "清 key 后未就绪");
+        assert!(engine.provider().is_none(), "清 key 后 provider=None");
+        assert!(engine.provider_config().is_none(), "清 key 后 provider_config=None");
+        assert!(engine.ready_reason().is_some(), "未就绪原因可诊断");
+
+        // 重填 → 恢复
+        crate::config::with_store_mut(|store| {
+            store.set_api_key("sk-c".to_string())?;
+            Ok(())
+        })
+        .expect("refill key");
+        engine.reload_provider();
+        assert!(engine.ready(), "重填后恢复就绪");
+        assert_eq!(
+            engine.provider_config().expect("重填后就绪").api_key,
+            "sk-c"
+        );
     }
 }

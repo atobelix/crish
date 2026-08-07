@@ -1,6 +1,8 @@
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
+use crate::core_error::CoreError;
+
 /// 技能发现命令（PE-07 T07.2 审计面：skills.rs）。
 ///
 /// - `workspace_path`：改为经 WorkspaceRegistry 解析——必须位于已授权根内
@@ -240,18 +242,24 @@ fn get_home_dir() -> Option<PathBuf> {
 
 /// 发现技能（PE-07 T07.2：workspace_path / extra_dirs 经注册表包含性校验）。
 ///
+/// 错误协议（PS-04 T4.5 / F4 F1-02）：统一 `CoreError {kind, detail}`——
+/// 路径/注册表类（workspace_not_granted、不可解析）→ InvalidInput（detail
+/// 保留现文案）；注册表未托管 → Internal。
+///
 /// `R: tauri::Runtime` 泛型：测试注入 MockRuntime 可直接调用（先例
 /// core_commands.rs:170-177），生产走 Wry。
 pub(crate) fn workbench_discover_skills<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     workspace_path: Option<String>,
     extra_dirs: Vec<String>,
-) -> Result<Vec<RustSkill>, String> {
+) -> Result<Vec<RustSkill>, CoreError> {
     use tauri::Manager as _;
     let reg = app
         .try_state::<crate::workspace::WorkspaceRegistry>()
         .ok_or_else(|| {
-            "internal_error: WorkspaceRegistry is not managed; main.rs setup must call app.manage(WorkspaceRegistry::init()...)".to_string()
+            CoreError::Internal(
+                "internal_error: WorkspaceRegistry is not managed; main.rs setup must call app.manage(WorkspaceRegistry::init()...)".to_string(),
+            )
         })?;
     let roots = reg.roots();
     let mut skills = Vec::new();
@@ -260,7 +268,7 @@ pub(crate) fn workbench_discover_skills<R: tauri::Runtime>(
     if let Some(ws) = workspace_path {
         let ws = ws.trim();
         if !ws.is_empty() {
-            let ws_path = canonicalize_within_roots(ws, &roots)?;
+            let ws_path = canonicalize_within_roots(ws, &roots).map_err(CoreError::InvalidInput)?;
             let roots = [
                 ws_path.join(".conex").join("skills"),
                 ws_path.join(".codex").join("skills"),
@@ -294,7 +302,7 @@ pub(crate) fn workbench_discover_skills<R: tauri::Runtime>(
 
     // 附加目录：每个必须 ⊆ 已授权根，否则整体拒绝
     for dir in extra_dirs {
-        let path = canonicalize_within_roots(&dir, &roots)?;
+        let path = canonicalize_within_roots(&dir, &roots).map_err(CoreError::InvalidInput)?;
         let scope = if path.is_absolute() { "global" } else { "project" };
         discover_in_dir_rust(&path, scope, 0, false, &mut skills);
     }

@@ -1,34 +1,43 @@
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
+use crate::core_error::CoreError;
+
 /// 安装更新 stub：当前仅返回成功，供前端闭环演示。
 /// TODO: 接入真实更新下载/安装流程。
+/// 错误协议（PS-04 T4.5 / F4 F1-02）：返回类型统一 `Result<Value, CoreError>`
+/// （stub 无错误面，签名收敛保证前端按 {kind, detail} 协议消费）。
 #[tauri::command]
-pub(crate) async fn workbench_apply_update() -> Result<serde_json::Value, String> {
+pub(crate) async fn workbench_apply_update() -> Result<serde_json::Value, CoreError> {
     Ok(serde_json::json!({ "ok": true }))
 }
 
 /// 桌面壳原生 HTTP：用于供应商 /models 与连通测试（无浏览器 CORS）
+///
+/// 错误协议（PS-04 T4.5 / F4 F1-02）：参数校验类（method/url）→ InvalidInput；
+/// 网络/客户端构建类 → Io（detail 保留操作名 + 底层消息）。
 #[tauri::command]
 pub(crate) async fn workbench_http_request(
     url: String,
     method: String,
     headers: Option<HashMap<String, String>>,
     body: Option<String>,
-) -> Result<Value, String> {
+) -> Result<Value, CoreError> {
     let method = method.trim().to_uppercase();
     if method != "GET" && method != "POST" && method != "HEAD" {
-        return Err(format!("unsupported method: {method}"));
+        return Err(CoreError::InvalidInput(format!(
+            "unsupported method: {method}"
+        )));
     }
     let url = url.trim();
     if !(url.starts_with("https://") || url.starts_with("http://")) {
-        return Err("url must be http(s)".to_string());
+        return Err(CoreError::InvalidInput("url must be http(s)".to_string()));
     }
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| CoreError::Io(format!("http client build failed: {e}")))?;
 
     let mut req = match method.as_str() {
         "POST" => client.post(url),
@@ -54,7 +63,7 @@ pub(crate) async fn workbench_http_request(
 
     let res = req.send().await.map_err(|e| {
         // 人话错误，避免前端误报「跨域」
-        format!("network: {e}")
+        CoreError::Io(format!("network: {e}"))
     })?;
     let status = res.status().as_u16();
     let text = res.text().await.unwrap_or_default();
@@ -68,10 +77,10 @@ pub(crate) async fn workbench_http_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core_error::CoreError;
 
     /// 协议断言：错误必须按 CoreError `{kind, detail}` 形状序列化。
-    /// String 错误无 kind 字段 → 断言失败（红）。
-    fn assert_core_error_kind<T: std::fmt::Debug>(result: Result<T, String>, expected_kind: &str) {
+    fn assert_core_error_kind<T: std::fmt::Debug>(result: Result<T, CoreError>, expected_kind: &str) {
         let err = result.expect_err("必须返回错误");
         let json = serde_json::to_value(&err).expect("错误必须可序列化");
         assert_eq!(

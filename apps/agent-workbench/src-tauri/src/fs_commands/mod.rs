@@ -6,17 +6,19 @@ pub(crate) mod skills;
 pub(crate) mod types;
 pub(crate) mod write;
 
+pub(crate) use crate::core_error::CoreError;
 pub(crate) use types::{FileCommandError, WorkspaceFsGuard};
 
 /// 原生目录选择器：唯一「新授权」入口（PE-07 T07.2）。
 /// 选中路径 → WorkspaceRegistry::register(Dialog) → 返回 canonical 路径。
+/// 错误协议统一 `CoreError {kind, detail}`（F4 F1-02 / PS-04 T4.5）。
 ///
 /// `R: tauri::Runtime` 泛型：测试注入 MockRuntime 可直接调用（先例
 /// core_commands.rs:170-177），生产走 Wry。
 #[tauri::command]
 pub(crate) async fn select_folder<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
-) -> Result<types::SelectFolderResult, String> {
+) -> Result<types::SelectFolderResult, CoreError> {
     dialog::select_folder(app).await
 }
 
@@ -64,6 +66,7 @@ pub(crate) fn workbench_fs_delete_file(
 }
 
 /// 发现技能（PE-07 T07.2：workspace_path / extra_dirs 经注册表包含性校验）。
+/// 错误协议统一 `CoreError {kind, detail}`（F4 F1-02 / PS-04 T4.5）。
 ///
 /// `R: tauri::Runtime` 泛型：测试注入 MockRuntime 可直接调用（先例
 /// core_commands.rs:170-177），生产走 Wry。
@@ -72,7 +75,7 @@ pub(crate) fn workbench_discover_skills<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     workspace_path: Option<String>,
     extra_dirs: Vec<String>,
-) -> Result<Vec<skills::RustSkill>, String> {
+) -> Result<Vec<skills::RustSkill>, CoreError> {
     skills::workbench_discover_skills(&app, workspace_path, extra_dirs)
 }
 
@@ -88,7 +91,7 @@ mod tests {
     };
 
     use crate::fs_commands::types::{self, FileCommandError, ReadPolicy, MAX_TEXT_FILE_BYTES};
-    use crate::fs_commands::{delete, directory, read, write, WorkspaceFsGuard};
+    use crate::fs_commands::{delete, dialog, directory, read, write, WorkspaceFsGuard};
 
     struct TestDir {
         path: PathBuf,
@@ -530,6 +533,60 @@ mod tests {
     }
 
     // ── PS-04 T4.5（F4 F1-02）：错误协议统一 CoreError ──
+
+    /// T4.5-R2（红 → 绿）：`select_folder` 错误路径统一 CoreError——
+    /// 注册表未托管 → `Internal`；选中路径在已授权根外 → `InvalidInput`。
+    /// 注：对话框 UI 在单元测试环境不可驱动（会阻塞等待用户），错误映射面
+    /// 经 `register_picked_folder`（select_folder 的后半段，生产同一代码）断言。
+    #[test]
+    fn select_folder_error_paths_use_core_error_protocol() {
+        use crate::workspace::{RegisterSource, WorkspaceRegistry};
+        let temp = TestDir::new();
+        let auth_root = temp.path().join("auth");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&auth_root).expect("create auth root");
+        fs::create_dir(&outside).expect("create outside dir");
+
+        // 注册表未托管 → Internal（命令级不 panic，kind 可分类）
+        let bare = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("bare mock app");
+        let err = dialog::register_picked_folder(bare.handle(), outside.clone())
+            .expect_err("未托管注册表必须拒绝");
+        let json = serde_json::to_value(&err).expect("错误必须可序列化");
+        assert_eq!(
+            json.get("kind").and_then(|v| v.as_str()),
+            Some("Internal"),
+            "未托管注册表应为 CoreError::Internal（当前形态 {json}）"
+        );
+
+        // 路径非法（不是目录）→ InvalidInput（路径/注册表类；Dialog 手势
+        // 选中的目录本身无条件授权，非法目标才是拒绝面）
+        let config_dir = temp.path().join("config");
+        fs::create_dir_all(&config_dir).expect("create config dir");
+        let reg = WorkspaceRegistry::init_with_config_dir(&config_dir).expect("init registry");
+        reg.register(&auth_root, RegisterSource::Dialog)
+            .expect("dialog register auth_root");
+        let app = tauri::test::mock_builder()
+            .manage(reg)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        let not_a_dir = temp.path().join("file.txt");
+        fs::write(&not_a_dir, "x").expect("write file");
+        let err = dialog::register_picked_folder(app.handle(), not_a_dir.clone())
+            .expect_err("非目录路径必须拒绝");
+        let json = serde_json::to_value(&err).expect("错误必须可序列化");
+        assert_eq!(
+            json.get("kind").and_then(|v| v.as_str()),
+            Some("InvalidInput"),
+            "非法路径应为 CoreError::InvalidInput（当前形态 {json}）"
+        );
+
+        // 合法目录（授权根内）→ 注册成功（路径返回 canonical）
+        let ok = dialog::register_picked_folder(app.handle(), auth_root.clone())
+            .expect("授权根内应注册成功");
+        assert_eq!(ok.path.as_deref(), Some(auth_root.to_string_lossy().as_ref()));
+    }
 
     /// T4.5-R3（红 → 绿）：`workbench_discover_skills` 的 workspace_path 越界
     /// → `CoreError::InvalidInput`（serde `{kind, detail}` 形状，detail 保留

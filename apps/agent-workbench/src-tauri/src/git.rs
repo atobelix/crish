@@ -26,6 +26,8 @@ use std::process::Stdio;
 use tokio::process::Command as TokioCommand;
 use tokio::time::{timeout, Duration};
 
+use crate::core_error::CoreError;
+
 /// 输出截断上限（每流 256KB）
 const MAX_OUTPUT_BYTES: usize = 256 * 1024;
 /// 参数长度上限（单个数组元素，8KB）
@@ -171,6 +173,10 @@ pub(crate) struct GitRunResult {
 
 /// 本机 git 命令：参数数组执行，禁 shell（T07.3 C-02 修复）。
 ///
+/// 错误协议（PS-04 T4.5 / F4 F1-02）：统一返回 `CoreError {kind, detail}`，
+/// 前端可按 kind 分类——参数/路径/注册表类 → InvalidInput（detail 保留原
+/// 文案），spawn/wait 进程面 → Io。
+///
 /// `R: tauri::Runtime` 泛型：测试注入 MockRuntime 可直接调用（tauri 2 官方
 /// 支持命令参数泛型化，先例 core_commands.rs:170-177），生产走 Wry。
 #[tauri::command]
@@ -183,12 +189,12 @@ pub(crate) async fn workbench_git_run<R: tauri::Runtime>(
     cwd: String,
     git_args: Vec<String>,
     timeout_ms: Option<u64>,
-) -> Result<GitRunResult, String> {
+) -> Result<GitRunResult, CoreError> {
     // 1. cwd 校验：canonicalize 后必须 ∈ WorkspaceRegistry 已授权根子树
-    let git_cwd = resolve_git_cwd(&app, &cwd)?;
+    let git_cwd = resolve_git_cwd(&app, &cwd).map_err(CoreError::InvalidInput)?;
 
     // 2. 参数 schema 白名单校验（返回经 `:(literal)` 处理后的参数）
-    let validated = validate_git_args(&git_args)?;
+    let validated = validate_git_args(&git_args).map_err(CoreError::InvalidInput)?;
 
     // 3. 超时 clamp：默认 30s，上限 120s
     let timeout_ms = timeout_ms
@@ -214,7 +220,7 @@ pub(crate) async fn workbench_git_run<R: tauri::Runtime>(
 
     let child = child_cmd
         .spawn()
-        .map_err(|e| format!("failed to spawn git: {e}"))?;
+        .map_err(|e| CoreError::Io(format!("failed to spawn git: {e}")))?;
     let child_pid = child.id();
 
     let wait_fut = child.wait_with_output();
@@ -232,7 +238,7 @@ pub(crate) async fn workbench_git_run<R: tauri::Runtime>(
                 truncated: trunc_out || trunc_err,
             })
         }
-        Ok(Err(e)) => Err(format!("git wait failed: {e}")),
+        Ok(Err(e)) => Err(CoreError::Io(format!("git wait failed: {e}"))),
         Err(_elapsed) => {
             // 超时：杀进程树（taskkill /T /F，Unix kill -TERM）
             if let Some(pid) = child_pid {
@@ -829,9 +835,9 @@ mod tests {
     // ── PS-04 T4.5（F4 F1-02）：错误协议统一 CoreError ──
 
     /// 协议断言：错误必须按 CoreError `{kind, detail}` 形状序列化（前端可
-    /// 按 kind 分类）。String 错误无 kind 字段 → 断言失败（红）。
+    /// 按 kind 分类），且 kind 为预期值、detail 保留现文案。
     fn assert_core_error_kind<T: std::fmt::Debug>(
-        result: Result<T, String>,
+        result: Result<T, CoreError>,
         expected_kind: &str,
         detail_hint: &str,
     ) {

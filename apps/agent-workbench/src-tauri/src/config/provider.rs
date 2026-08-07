@@ -16,12 +16,14 @@
 //! `daemon_api_key_source` 删除（daemon sidecar 已随 d82f7468 移除）。
 
 use std::path::PathBuf;
+use std::sync::Arc;
 #[cfg(not(test))]
 use std::sync::Mutex;
 
 use conex_types::CoreError;
 use serde_json::Value;
 
+use crate::core_run_commands::CoreRunState;
 use super::credentials::{config_secret_set, CredentialPersistence, CredentialStore};
 use super::env_filter::{
     api_base_url_env_var_names, api_key_env_var_names, credential_mode_env_var_names,
@@ -205,7 +207,7 @@ impl ApiConfigStore {
         })
     }
 
-    fn set_api_key(&mut self, value: String) -> Result<(), String> {
+    pub(crate) fn set_api_key(&mut self, value: String) -> Result<(), String> {
         let value = normalize_config_value(value);
         self.runtime.api_key_touched = true;
         if value.is_empty() {
@@ -237,14 +239,14 @@ impl ApiConfigStore {
         self.save_non_secret_config()
     }
 
-    fn set_base_url(&mut self, value: String) -> Result<(), String> {
+    pub(crate) fn set_base_url(&mut self, value: String) -> Result<(), String> {
         let value = non_empty_config_value(value);
         self.runtime.base_url = value.clone();
         self.persisted.base_url = value;
         self.save_non_secret_config()
     }
 
-    fn set_model(&mut self, value: String) -> Result<(), String> {
+    pub(crate) fn set_model(&mut self, value: String) -> Result<(), String> {
         let value = non_empty_config_value(value);
         self.runtime.model = value.clone();
         self.persisted.model = value;
@@ -362,7 +364,9 @@ fn with_store<T>(operation: impl FnOnce(&ApiConfigStore) -> T) -> Result<T, Core
     }
 }
 
-fn with_store_mut<T>(
+/// 全局 store 可变访问（pub(crate)：engine.rs 测试直写生效配置用，
+/// T4.3-R1；命令面经 config_profile_apply / config_update 写入）。
+pub(crate) fn with_store_mut<T>(
     operation: impl FnOnce(&mut ApiConfigStore) -> Result<T, String>,
 ) -> Result<T, CoreError> {
     #[cfg(not(test))]
@@ -432,8 +436,13 @@ pub(crate) fn config_get() -> Result<Value, CoreError> {
 
 /// 引擎非敏感配置更新（K-01/K-05：载荷不携带明文 apiKey，密钥只经
 /// `config_secret_set` / `config_profile_apply` 落 DPAPI）。
+///
+/// baseUrl/model/endpoint/stream 任一写入成功后重载引擎 provider（F4 F1-01
+/// 修复：重建适配层并原子交换，下一次 run 用新值；`state` 为托管
+/// `Arc<CoreRunState>` 的访问通道——main.rs `app.manage` 注入）。
 #[tauri::command]
 pub(crate) async fn config_update(
+    state: tauri::State<'_, Arc<CoreRunState>>,
     base_url: Option<String>,
     model: Option<String>,
     credential_mode: Option<String>,
@@ -496,6 +505,10 @@ pub(crate) async fn config_update(
         });
     }
 
+    // F4 F1-01：baseUrl/model/endpoint/stream 已写入 store——重载引擎
+    // provider（重建适配层 + 原子交换），下一次 run 生效新值。
+    state.reload_provider();
+
     with_store(|store| {
         let mut snapshot = store.snapshot();
         snapshot["ok"] = serde_json::Value::Bool(true);
@@ -506,12 +519,18 @@ pub(crate) async fn config_update(
 
 /// 把 profile 配置应用到引擎（K-01，F5 终态名）：
 /// - `apiKey`（可选，空串 = 清除）经 `config_secret_set` 落 DPAPI 密钥槽，
-///   再进程内直写引擎 `ApiConfigStore`（明文不经过 webview）；
+///   再进程内直写引擎 `ApiConfigStore`（明文不经过 webview），**并重载
+///   EngineHandle provider**（F4 F1-01 修复：重建 `HttpProviderCall` 新实例
+///   并原子交换，下一次 run 立即用新 key/baseUrl/model——旧实现只写 store
+///   不碰引擎，换凭据后仍用旧适配层发请求）；
 /// - `baseUrl` / `model` 直接写入引擎配置（保存即生效）；
+/// - `state` 为托管 `Arc<CoreRunState>` 的访问通道（main.rs `app.manage`
+///   注入；`CoreRunState::reload_provider` 转发 EngineHandle）；
 /// - 返回脱敏状态：`{ ok, hasApiKey, apiKeyLast4, model, baseUrl,
 ///   credentialMode, credentialPersistence }`。
 #[tauri::command]
 pub(crate) fn config_profile_apply(
+    state: tauri::State<'_, Arc<CoreRunState>>,
     profile_id: String,
     api_key: Option<String>,
     base_url: Option<String>,
@@ -541,6 +560,11 @@ pub(crate) fn config_profile_apply(
         }
         Ok(())
     })?;
+
+    // 2b. F4 F1-01：store 写成功后重载引擎 provider——重建适配层并原子交换。
+    // 清空 key（空串）时 load_provider_endpoint 返回 None → 引擎降级未就绪
+    // （ready=false，下一次 run 不再用旧凭据；语义与构造时一致）。
+    state.reload_provider();
 
     // 3. 脱敏状态返回（K-02：无明文；credentialPersistence 反映 DPAPI 落盘状态）。
     with_store(|store| {
