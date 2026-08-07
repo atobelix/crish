@@ -81,3 +81,19 @@
 - **描述**：T3.5 红绿验证期间，并行 agent 的**未提交** WIP 两度使 `cargo test -p crish-agent-workbench` / `cargo test -p orchestrator` 编译失败：① `tool_exec.rs` 在 `impl ToolExecutor` 内声明 `pub(crate) enum ApprovalWaitOutcome`（Rust 不允许 impl 关联 enum，20 个 E0425/E0433/E0599）——红证据（4/4 FAILED）与绿证据（4/4 ok）均在此次破窗之前采集；② `host_openers/execute.rs` `*mut c_void` 不实现 `Display`（E0277，format 串误用）——恰好落在 T3.5 全量回归（451 passed / 3 failed）之后，使「失败项是否本任务引入」的复核被阻塞。两次均由对方随后提交/修复自然恢复（session-loop 当前可编译）。
 - **处置**：T3.5 不越界修改他人文件（B9）；红绿两段提交（6329e1de/5a67825a）不受影响；全量回归中 3 个失败项（kill_graceful_path / run_end_daemon_survives / scheduler_registry_daemon_without_launcher_falls_back_to_steering，均守护任务/定时器时序类，与快照无关）待树恢复后在隔离态复核是否既存 flaky。
 - **建议**：壳 crate 串行链（PS-01→T3.5→T4.3→T4.4）窗口内对同 crate 并行任务加编译面隔离（如临时 worktree 验证），或约定「验证窗口内不落未提交 WIP」；验收方复核 flaky 时序类测试失败时按「隔离重跑通过」口径放行。
+
+## F-010：load() 反向校验（双防线②）依赖 row.description 承载 flow_node_id——生产 spawner 未落库该字段（PS-03 T3.4 执行期）
+
+- **发现日期**：2026-08-08（PS-03 T3.4 执行期）
+- **位置**：`crates/orchestrator/src/flow_graph.rs`（load 反向校验，本任务新增）+ `apps/agent-workbench/src-tauri/src/subagent_spawner.rs:419-424`（flow_nodes 仅内存 map，不落库）+ `subagent_spawner.rs:682`（row_for 写 description = req.description，flow 请求 description=None → 空串）
+- **描述**：T3.4 双防线②的 load() 反向校验按测试域 spawner 约定（DbSpawner / RecordingSpawner 均 `description: req.flow_node_id`）读取 `row.description` 作为 flow_node_id 载体定位「有 run 行、flow_state 无映射」的节点。但**生产 spawner（SubagentSpawnerImpl）只把 flow_node_id 存进内存 map（:419-424），不落库**；行 description 取 req.description（flow 调度器请求 :1028 恒为 None → 空串）——生产域崩溃窗口形态下反向校验无法定位节点（description 为空），双防线②在生产域退化为不命中。双防线①（spawn 即持久化 runtime，本任务已落地）是生产域主防线，窗口已归零；②仅作为 persist 失败/旧库形态的兜底，生产域该兜底当前缺数据源。
+- **处置**：本任务按「只改 flow_graph.rs 与相关测试」约束落地，未越界改生产 spawner；反向校验按测试域既有约定实现（任务书验收测试即用 DbSpawner，形态 B 命中）；生产域缺口登记待接线。
+- **建议**：后续批次在 SubagentSpawnerImpl.row_for 把 flow_node_id 一并落库（如 description 前缀或新增列），使双防线②在生产域同样生效；接线后 load() 反向校验无需改动（数据源就位即命中）。
+
+## F-010：P1-S6 执行期并行 WIP 三度破窗 + 钩子行尾空白阻塞（P1-S6 执行期）
+
+- **发现日期**：2026-08-08（P1-S6 F5-02 产出目录相对路径校验，执行期）
+- **位置**：`crates/orchestrator/src/flow_graph.rs`（E0502 借用冲突，并行 T3.4 在飞）+ `apps/agent-workbench/src-tauri/src/host_openers/execute.rs`（E0277 `*mut c_void` Display，并行 F6-02 在飞）
+- **描述**：① 编译破窗三度：P1-S6 绿测试提交前 `cargo check --workspace` 被 flow_graph.rs 未提交改动阻塞（E0502，T3.4 agent 在飞）；提交后又先后被 host_openers/execute.rs 未提交改动（E0277）两度阻塞 `cargo test -p crish-agent-workbench`。均经等待对方提交/修复后自然恢复（最终 `cargo check --workspace` exit=0；全量 `cargo test -p crish-agent-workbench` 454+10+13+17 全绿）。② 钩子阻塞两度：`git diff --check`（裸整树）被并行 agent 未提交行尾空白/EOF 空行拦截（HiddenInput.tsx:49/52 trailing whitespace、shared-types generated/engine/parser.ts:1846 EOF blank line）——按 F-007/F-008 先例字节级剥离解除阻塞（仅空白、不涉语义；EOF 空行剥离在提交瞬间被对方重写重新引入一次，采用「剥离+提交同命令链」缩小竞态后成功）。③ 全量回归首轮 5 失败经 stash 隔离证实均为并行 agent 红测试/竞态（git push refspec x2、host_openers metachar、symlink dangling parent 为并行 P1 红测试，stash 后仍红；snapshot 并发互斥独跑通过）——最终树恢复后该 5 项已随对方绿提交转绿。
+- **处置**：P1-S6 不越界修改他人文件；两段提交（888c34e2 红 / cb23d38c 绿）不受影响；我的改动仅 outputs_config.rs + fs_commands/types.rs（`lexically_normalize` 提 pub(crate)，零行为变更）。
+- **建议**：同 F-009：验证窗口内并行任务不落未提交 WIP；钩子 `git diff --check` 收窄为 `--cached`（F-007 已提，三度复现仍未落实）。
