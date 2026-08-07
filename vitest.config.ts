@@ -2,9 +2,9 @@ import { defineConfig } from 'vitest/config';
 
 // vitest 3.2.7 覆盖率门禁配置（2026-08-03 审计修复）。
 //
-// 关键发现：本版本中根配置的 `test.coverage` 块会整体覆盖工作区/项目级
-// （vitest.workspace.ts 与 test.projects 均如此，实测项目级 coverage.thresholds
-// 解析为 undefined），因此阈值必须放在根 coverage 块才生效。
+// 关键发现：本版本中根配置的 `test.coverage` 块会整体覆盖项目级
+// （test.projects 实测项目级 coverage.thresholds 解析为 undefined），
+// 因此阈值必须放在根 coverage 块才生效。
 //
 // 阈值校准依据（实测基线，unit 全量通过语料 4461 用例 + retry=2）：
 //   statements 47.03% / branches 77.38% / functions 69.72% / lines 47.03%
@@ -30,7 +30,10 @@ export default defineConfig({
       enabled: false,
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      include: ['apps/crish-desktop/src/**/*.{ts,tsx}', 'packages/*/src/**/*.{ts,tsx}'],
+      include: [
+        'apps/crish-desktop/src/**/*.{ts,tsx}',
+        'packages/*/src/**/*.{ts,tsx}',
+      ],
       exclude: [
         '**/node_modules/**',
         '**/dist/**',
@@ -100,16 +103,18 @@ export default defineConfig({
       },
       {
         test: {
-          name: 'e2e',
+          name: 'native-smoke',
           environment: 'node',
           setupFiles: ['./vitest.setup.ts'],
           retry: 2,
           testTimeout: 30000,
-          include: [
-            '**/__tests__/e2e/**/*.test.ts',
-            'tests/e2e/**/*.spec.ts',
-            'tests/e2e/**/*.test.ts',
-          ],
+          // L3 进程级原生冒烟（PS-02 T2.1 重归属）：tauri-native-smoke.spec.ts
+          // 是 vitest API 的进程冒烟（`npm run test:e2e:native`），不归 Playwright
+          // 面（playwright.config.ts testIgnore 已排除）。原 e2e 项目块已删除——
+          // 其 include 唯一匹配面就是 tests/e2e 的 Playwright spec（test.describe
+          // 与 vitest 运行器冲突，21/21 必红），删除后项目必空（空项目假绿不可
+          // 接受）；Playwright spec 一律归 Playwright（tests/e2e 全旅程）。
+          include: ['tests/e2e/tauri-native-smoke.spec.ts'],
           exclude: ['**/node_modules/**', '**/dist/**'],
         },
       },

@@ -6,7 +6,8 @@
  *   注入），CI 中层默认全量；`e2e-l3`（真壳 tauri-driver）暂不接线，
  *   保留 project 占位（发布前/nightly 层，见 PE-11 T11.1-3）；
  * - `tauri-native-smoke.spec.ts` 为 vitest 进程级冒烟（`npm run
- *   test:e2e:native`，慢层），不属 Playwright 面 —— testIgnore 排除，
+ *   test:e2e:native`，PS-02 T2.1 起归属 vitest.config.ts 独立 native-smoke
+ *   项目），不属 Playwright 面 —— testIgnore 排除，
  *   避免 `npx playwright test` 误扫 vitest spec；
  * - visual 回归收敛到 `apps/crish-desktop/playwright.config.ts`（testDir
  *   限 `tests/visual`），本 config 不再扫描 app 目录，职责单一。

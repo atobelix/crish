@@ -29,7 +29,7 @@ const config: KnipConfig = {
       entry: [
         // 构建入口锚点（index.html → main.tsx 链路由 vite 插件解析）
         'index.html',
-        // 测试入口（对齐 vitest.workspace.ts / vitest 默认 include 面）
+        // 测试入口（对齐 vitest.config.ts 项目 include 面）
         'src/**/*.test.{ts,tsx}',
         'src/__tests__/**/*.{ts,tsx}',
         'tests/**/*.{test,spec}.{ts,tsx}',

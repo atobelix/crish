@@ -188,10 +188,27 @@ describe.skipIf(!resolveBinaryPath())(
       expect(isProcessAlive(appPid!)).toBe(true);
 
       const exitPromise = new Promise<number | null>((resolve) => {
+        // 进程可能已在 taskkill 前自然退出（竞态）：exitCode 已定即视为干净收口
+        if (appProcess!.exitCode != null) {
+          resolve(appProcess!.exitCode);
+          return;
+        }
         appProcess!.once('exit', (code) => resolve(code));
         // win32 无 SIGTERM 语义，用 taskkill /T（树级）等价于干净收口
         if (process.platform === 'win32') {
-          execSync(`taskkill /T /PID ${appPid}`, { stdio: 'ignore' });
+          try {
+            execSync(`taskkill /T /PID ${appPid}`, { stdio: 'ignore' });
+          } catch {
+            // 容错收口（PS-02 T2.1）：taskkill 失败（进程恰好已退出 / 无权限）时，
+            // 进程已退出（exitCode 已定）视为干净收口；仍存活则 force 兜底，防测试悬挂
+            if (appProcess!.exitCode == null && isProcessAlive(appPid)) {
+              try {
+                execSync(`taskkill /F /T /PID ${appPid}`, { stdio: 'ignore' });
+              } catch {
+                /* force 也失败：交由下方 exitCode 判定收口 */
+              }
+            }
+          }
         } else {
           appProcess!.kill('SIGTERM');
         }
