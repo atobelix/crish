@@ -240,7 +240,7 @@ pub(crate) struct SessionOutputsCleanup {
     pub cleaned: bool,
     /// 已移入回收站的产出目录清单（绝对路径，按路径排序）
     pub trashed_dirs: Vec<String>,
-    /// 产出根越界被安全跳过（安全红线：不清理工作区外内容）
+    /// 产出根或产出目录目标越界被安全跳过（安全红线：不清理工作区外内容）
     pub skipped_outside: bool,
     /// 回收站根位置（清理兜底根，供用户恢复入口）
     pub trash_root: String,
@@ -283,7 +283,8 @@ pub(crate) fn cleanup_session_outputs(
 ///
 /// 目标收集规则：
 /// 1. **精确命中**：session_meta `{session_id}:output_dir`（G01 首次 resolve
-///    落键）指向的目录存在 → trash（绝对路径先过工作区校验，防 meta 逃逸）；
+///    落键）指向的目录存在 → trash（相对/绝对路径同口径先过工作区校验：
+///    相对基于工作区根解析 + 词法展开 `..`，防 meta 逃逸）；
 /// 2. **根下扫描兜底**：按产出根（会话级覆盖 > 全局 > 默认 `.agent-outputs`）
 ///    扫描，目录名 == `session_id` 或以 `-{session_id}` 结尾（日期前缀命名，
 ///    调研-可视化与扩展点.md §4.2）→ 逐个 trash；
@@ -327,18 +328,25 @@ pub(crate) fn cleanup_session_outputs_at(
             };
         }
     };
-    // 目标收集：output_dir 精确命中（含工作区校验，防 session_meta 逃逸）
+    // 目标收集：output_dir 精确命中（相对/绝对同口径先校验，防 session_meta 逃逸）
     let mut targets: Vec<PathBuf> = Vec::new();
+    let mut skipped_targets: Vec<String> = Vec::new();
     if let Some(dir) = output_dir_meta.filter(|d| !d.trim().is_empty()) {
         let p = Path::new(dir);
-        if p.is_absolute() {
-            if allow_outputs_outside_workspace
-                || crate::fs_commands::types::path_is_same_or_child(p, workspace_root)
-            {
-                targets.push(p.to_path_buf());
-            }
+        // 相对路径：基于工作区根解析并词法展开 `..`/`.`（复用
+        // fs_commands/types.rs lexically_normalize）后，与绝对分支同口径
+        // 过包含性校验（F5-02：相对分支原先零校验直接 join，`..` 可逃逸）
+        let resolved = if p.is_absolute() {
+            p.to_path_buf()
         } else {
-            targets.push(workspace_root.join(p));
+            crate::fs_commands::types::lexically_normalize(&workspace_root.join(p))
+        };
+        if allow_outputs_outside_workspace
+            || crate::fs_commands::types::path_is_same_or_child(&resolved, workspace_root)
+        {
+            targets.push(resolved);
+        } else {
+            skipped_targets.push(resolved.to_string_lossy().into_owned());
         }
     }
     // 根下扫描兜底（日期前缀命名 `<YYYY-MM-DD>-<session_id>` / 纯 `<session_id>`）
@@ -373,15 +381,23 @@ pub(crate) fn cleanup_session_outputs_at(
             }
         }
     }
-    let notice = if trashed.is_empty() {
-        format!("未发现会话产出目录，无需清理；回收站位置：{trash_root_str}")
-    } else {
-        format!(
-            "已将会话产出目录 {} 个移入回收站（{}）；回收站位置：{trash_root_str}",
+    let mut notice_parts: Vec<String> = Vec::new();
+    if !trashed.is_empty() {
+        notice_parts.push(format!(
+            "已将会话产出目录 {} 个移入回收站（{}）",
             trashed.len(),
             trashed.join("、")
-        )
-    };
+        ));
+    } else if skipped_targets.is_empty() {
+        notice_parts.push("未发现会话产出目录，无需清理".to_string());
+    }
+    if !skipped_targets.is_empty() {
+        notice_parts.push(format!(
+            "产出目录配置越界（{}），已跳过清理（安全红线）",
+            skipped_targets.join("、")
+        ));
+    }
+    let notice = format!("{}；回收站位置：{trash_root_str}", notice_parts.join("；"));
     tracing::info!(
         target: "outputs",
         session_id,
@@ -391,7 +407,7 @@ pub(crate) fn cleanup_session_outputs_at(
     SessionOutputsCleanup {
         cleaned: !trashed.is_empty(),
         trashed_dirs: trashed,
-        skipped_outside: false,
+        skipped_outside: !skipped_targets.is_empty(),
         trash_root: trash_root_str,
         notice,
     }
@@ -761,9 +777,11 @@ mod tests {
             false,
         );
         assert!(result.cleaned, "notice: {}", result.notice);
+        assert_eq!(result.trashed_dirs.len(), 1);
         assert_eq!(
-            result.trashed_dirs,
-            vec![out_dir.to_string_lossy().into_owned()]
+            Path::new(&result.trashed_dirs[0]),
+            &out_dir,
+            "工作区内相对目标按工作区根解析后进回收站"
         );
         assert!(!out_dir.exists(), "工作区内相对目标应进回收站");
         assert!(!result.skipped_outside);

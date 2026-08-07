@@ -192,7 +192,11 @@ pub(crate) fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
         }
 
         let mut ancestor = lexical.clone();
-        while !ancestor.exists() {
+        // 逐级上溯找「最近存在且非符号链接」的祖先（审计 P1-S2，F5-01）：
+        // Path::exists 跟随链接，dangling symlink 目标不存在会被漏过（一路
+        // 上溯到根 → 词法路径放行 → create_dir_all/fs::write 跟随链接在根外
+        // 落盘）；symlink_metadata 不跟随链接，dangling 也可见——命中即停在此级。
+        while !ancestor.exists() && !is_symlink(&ancestor) {
             if !ancestor.pop() {
                 return Err(FileCommandError::new(
                     ERR_WRITE_FILE,
@@ -200,7 +204,15 @@ pub(crate) fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
                 ));
             }
         }
-        let ancestor_canon = ancestor.canonicalize().unwrap_or_else(|_| ancestor.clone());
+        // 真实解析祖先：dangling symlink（链接目标不存在）canonicalize 失败
+        // → 沙箱无法确认落盘目标在授权根内，按越界拒绝（审计 P1-S2，F5-01：
+        // 旧行为回退词法路径放行，create_dir_all/fs::write 跟随链接根外落盘）。
+        let ancestor_canon = ancestor.canonicalize().map_err(|_| {
+            FileCommandError::new(
+                ERR_OUTSIDE_WORKSPACE,
+                "Path is outside the allowed workspace root.",
+            )
+        })?;
         if !path_is_same_or_child(&ancestor_canon, &self.root) {
             return Err(FileCommandError::new(
                 ERR_OUTSIDE_WORKSPACE,
@@ -212,7 +224,18 @@ pub(crate) fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
     }
 }
 
-fn lexically_normalize(path: &Path) -> PathBuf {
+/// 符号链接检测：symlink_metadata 不跟随链接，dangling 链接（目标不存在）
+/// 同样可见；路径不存在时返回 false。
+fn is_symlink(path: &Path) -> bool {
+    std::fs::symlink_metadata(path)
+        .map(|m| m.file_type().is_symlink())
+        .unwrap_or(false)
+}
+
+/// 词法归一化（展开 `..`/`.` 组件，不触盘）。
+/// 供 WorkspaceRegistry 写路径校验与 outputs_config 产出目录 meta 解析
+/// （F5-02 防 `..` 逃逸：先展开再包含性校验）复用。
+pub(crate) fn lexically_normalize(path: &Path) -> PathBuf {
     use std::path::Component;
     let mut out = PathBuf::new();
     for comp in path.components() {
