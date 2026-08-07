@@ -4378,6 +4378,140 @@ mod tests {
         assert_eq!(state.snapshot_generation(), 0, "失败保存不推进 generation");
     }
 
+    // ── T3.5 D5（F2-11 / F2-39）：快照三触发并发互斥 ────────────
+
+    /// 直读快照文件并校验（不走 SnapshotStore::load_snapshot 的 .prev
+    /// 回退，防「主快照损坏被兜底掩盖」误判——验收断言 1 要求主快照
+    /// 本身可解析且通过 StateSnapshot::valid()）
+    fn read_snapshot_file_direct(path: &std::path::Path) -> Option<StateSnapshot> {
+        let raw = std::fs::read_to_string(path).ok()?;
+        let snapshot: StateSnapshot = serde_json::from_str(&raw).ok()?;
+        snapshot.valid().then_some(snapshot)
+    }
+
+    /// 快照三触发（终态/周期/退出共用 save_snapshot_now 入口）并发保存互斥：
+    /// - 断言 1：最终主快照直读经 StateSnapshot::valid() 通过（文件完整可解析）；
+    /// - 断言 2（R4 修订，AU-02 A5）：join 后第二次代数 > 第一次（单调递增，
+    ///   顺序无关不 flaky）；两次保存代数互异且差恰为 1（读-改-写丢失 →
+    ///   两路同读 G 同写 G+1 → 主/备份同代数必红）；
+    /// - 断言 3：保存后目录无 .tmp 残留（tmp 已 rename 清空）。
+    /// 真实并发形态：两个独立 std::thread（各自 current_thread runtime
+    /// block_on，对齐生产退出钩子「独立 std::thread 调 save_snapshot_blocking」
+    /// 的形态，R2 §4）经 Barrier 对齐后同时保存——OS 抢占式真并行，缺陷必现。
+    /// 不选 tokio::spawn：read-G→store 段无内部 await（query 全为即时就绪），
+    /// 单 worker LIFO 会把两任务串行化执行，缺陷被掩盖（实测 2/2 通过）；
+    /// 不选固定 sleep 编排（防作弊 B5）。
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn snapshot_concurrent_saves_are_mutexed() {
+        let seq = CORE_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "conex_d5_mutex_{}_{seq}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("snapshot.json");
+        let snapshots: Arc<dyn SnapshotStore> =
+            Arc::new(orchestrator::restore::SnapshotFileStore::new(&path));
+        let state = Arc::new(CoreRunState::new(
+            Arc::new(InMemoryStore::new()),
+            snapshots,
+            recording_bridge().0,
+            Arc::new(StatusDiagnostics::new()),
+            None,
+        ));
+        // 注入若干 run：放大「read-G → store-G」窗口（空 store 下整段保存
+        // 微秒级完成；500 条 run 使保存段拉长到数百 µs，双线程并行读 G 时
+        // 另一方几乎不可能在 store 之后才读——竞态必现）
+        for i in 0..500 {
+            state
+                .store
+                .insert_run(
+                    &format!("r_{i}"),
+                    "s1",
+                    RunStatus::Completed,
+                    Some("stop"),
+                    0,
+                )
+                .await
+                .unwrap();
+        }
+        // restore 完成 → 门禁放行 + 首张快照（generation 1，主快照就位；
+        // 空库全量重放路径，对齐 snapshot_skipped_before_restore_ready 先例）
+        assert!(state.run_restore().await.is_some(), "空库全量重放必须成功");
+        assert_eq!(state.snapshot_generation(), 1, "恢复后立即保存（generation 1）");
+        // R4 修订：第一次测量（join 前）
+        let first = state.snapshot_generation();
+        for _ in 0..8 {
+            // 每轮 Barrier 对齐后双线程真实并发保存（退出钩子同形态）
+            let barrier = Arc::new(std::sync::Barrier::new(2));
+            let a = Arc::clone(&state);
+            let b = Arc::clone(&state);
+            let ba = Arc::clone(&barrier);
+            let bb = Arc::clone(&barrier);
+            let thread_a = std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("测试 runtime 可建");
+                ba.wait();
+                rt.block_on(async move { a.save_snapshot_now().await });
+            });
+            let thread_b = std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("测试 runtime 可建");
+                bb.wait();
+                rt.block_on(async move { b.save_snapshot_now().await });
+            });
+            thread_a.join().expect("保存线程 A 正常结束");
+            thread_b.join().expect("保存线程 B 正常结束");
+            // 断言 3：保存后目录无 .tmp 残留
+            let residue: Vec<String> = std::fs::read_dir(&dir)
+                .unwrap()
+                .filter_map(|entry| entry.ok())
+                .map(|entry| entry.file_name().to_string_lossy().to_string())
+                .filter(|name| name.ends_with(".tmp"))
+                .collect();
+            assert!(residue.is_empty(), "保存后目录不得残留 .tmp：{residue:?}");
+            // 断言 2：两次保存代数互异且差恰为 1（顺序无关；
+            // 无互斥时两路同读 G 同写 G+1 → 主/备份同代数 → 本断言必红）
+            let main_snap = read_snapshot_file_direct(&path)
+                .expect("主快照必须存在且通过 checksum 校验（文件完整可解析）");
+            let prev_path = PathBuf::from(format!("{}.prev", path.display()));
+            let prev_snap = read_snapshot_file_direct(&prev_path)
+                .expect("上一份快照轮转为备份且完整可解析");
+            assert_ne!(
+                main_snap.generation, prev_snap.generation,
+                "两次并发保存的代数必须互异（generation 读-改-写丢失 → 两路同代数）"
+            );
+            assert_eq!(
+                main_snap.generation.max(prev_snap.generation)
+                    - main_snap.generation.min(prev_snap.generation),
+                1,
+                "两次保存代数差恰为 1（顺序无关）"
+            );
+            // 断言 1：主快照经 StateSnapshot::valid() 通过（直读已校验），
+            // 内存代数与文件代数一致（取两者较大者）
+            assert_eq!(
+                state.snapshot_generation(),
+                main_snap.generation.max(prev_snap.generation),
+                "内存代数与文件代数一致（较大者）"
+            );
+            assert!(
+                state.snapshot_last_error().is_none(),
+                "互斥下并发保存不得产生错误（无轮转 rename 碰撞）"
+            );
+        }
+        // R4 修订：第二次测量（join 后）> 第一次（单调递增，顺序无关）
+        let second = state.snapshot_generation();
+        assert!(
+            second > first,
+            "R4：join 后第二次代数（{second}）> 第一次（{first}）"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// ③ run_usage 真实返回：LocalDb 路径——save_run_usage 落库 →
     /// run_usage 读回 → RunUsage 全字段映射（runs 表 v5 列，T-39）
     #[test]

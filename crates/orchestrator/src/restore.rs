@@ -1221,6 +1221,49 @@ mod tests {
         assert_eq!(outcome.runs[0].status, RunStatus::Completed);
     }
 
+    /// T3.5 D5 补充用例（F2-39）：同一进程（同 pid）并发 save_snapshot——
+    /// tmp 文件名带 generation 唯一化后，主快照始终是某次完整写入的产物
+    /// （存在且校验和通过）；旧实现 `{path}.{pid}.tmp` 同进程同名，并发
+    /// 保存交叉写同一 tmp + 轮转 remove/rename 互扰，主快照可损坏/缺失
+    /// （R2 §4）。并发竞态下个别保存可能因轮转 rename 碰撞返回 Err（允许），
+    /// 断言面是「主快照文件完整可校验」而非「全部保存成功」。
+    #[test]
+    fn concurrent_snapshot_saves_keep_main_file_intact() {
+        let (store_file, dir) = temp_snapshot_store("concurrent");
+        let store: Arc<dyn SnapshotStore> = Arc::new(store_file);
+        let barrier = Arc::new(std::sync::Barrier::new(4));
+        let mut handles = Vec::new();
+        for thread in 0..4usize {
+            let store = Arc::clone(&store);
+            let barrier = Arc::clone(&barrier);
+            handles.push(std::thread::spawn(move || {
+                barrier.wait();
+                for round in 0..8 {
+                    let generation = (thread * 8 + round + 1) as u64;
+                    let snapshot = StateSnapshot::build(
+                        generation,
+                        generation,
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                        HashMap::new(),
+                    );
+                    let _ = store.save_snapshot(&snapshot);
+                }
+            }));
+        }
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        let main_path = dir.join("snapshot.json");
+        let raw = std::fs::read_to_string(&main_path)
+            .unwrap_or_else(|err| panic!("主快照必须存在（并发保存不得丢失主文件）：{err}"));
+        let snapshot: StateSnapshot = serde_json::from_str(&raw)
+            .unwrap_or_else(|err| panic!("主快照必须可解析：{err}"));
+        assert!(snapshot.valid(), "主快照校验和必须通过（无交叉写混合内容）");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[tokio::test]
     async fn snapshot_corrupt_falls_back_to_previous_intact_snapshot() {
         let (store_file, dir) = temp_snapshot_store("fallback");
