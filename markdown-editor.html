@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Markdown 编辑</title>
+    <style>
+        :root {
+            /* 纯白、纯黑与灰度 (45, 70, 90) */
+            --white: hsl(0, 0%, 100%);
+            --black: hsl(0, 0%, 0%);
+            --gray-45: hsl(0, 0%, 45%);
+            --gray-70: hsl(0, 0%, 70%);
+            --gray-90: hsl(0, 0%, 90%);
+
+            /* 偏黄 2% (HSL 50度) */
+            --yellow-tint-2: hsla(50, 100%, 50%, 0.02);
+            --yellow-text: hsl(50, 100%, 35%);
+
+            /* 选中文本蓝色 HSL (清透浅蓝色) */
+            --blue-selection: hsla(210, 90%, 78%, 0.45);
+
+            --font-mono: Consolas, 'Fira Code', 'Courier New', 'Microsoft YaHei', -apple-system, sans-serif;
+            --grid-size: 28px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            border: none;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* 页面整体居中 */
+        body {
+            background-color: var(--gray-90);
+            color: var(--black);
+            font-family: var(--font-mono);
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        /* 先锋居中格子纸 (响应式兼容桌面端与移动触摸端) */
+        .grid-paper {
+            position: relative;
+            width: min(820px, 94vw);
+            height: min(85vh, 850px);
+            background-color: var(--white);
+            /* 格子线条 + 偏黄 2% */
+            background-image: 
+                linear-gradient(var(--yellow-tint-2), var(--yellow-tint-2)),
+                linear-gradient(var(--gray-90) 1px, transparent 1px),
+                linear-gradient(90deg, var(--gray-90) 1px, transparent 1px);
+            background-size: 100% 100%, var(--grid-size) var(--grid-size), var(--grid-size) var(--grid-size);
+            border: none;
+            box-shadow: none;
+            display: flex;
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        /* 移动端全屏响应式适配 */
+        @media (max-width: 600px) {
+            .grid-paper {
+                width: 100vw;
+                height: 100vh;
+                border-radius: 0;
+            }
+
+            .editor-container {
+                padding: 10px 0.75rem !important;
+            }
+
+            .interactive-checkbox {
+                padding: 4px 6px !important;
+            }
+
+            .interactive-link {
+                padding: 2px 4px !important;
+            }
+        }
+
+        /* 按行块级 DOM 编辑容器 */
+        .editor-container {
+            width: 100%;
+            height: 100%;
+            padding: 14px 1rem;
+            font-family: var(--font-mono);
+            line-height: var(--grid-size);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            outline: none;
+            color: var(--black);
+            caret-color: var(--black);
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        .editor-container::selection,
+        .editor-container *::selection {
+            background-color: var(--blue-selection);
+        }
+
+        /* 独立行块级结构 */
+        .line-block {
+            display: block;
+            width: 100%;
+            min-height: var(--grid-size);
+            line-height: var(--grid-size);
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: var(--font-mono);
+            color: var(--black);
+            margin: 0;
+            padding: 0;
+        }
+
+        /* 真实阶梯标题字号 (H1 - H6) */
+        .line-h1 {
+            font-size: 1.7rem;
+            font-weight: bold;
+        }
+
+        .line-h2 {
+            font-size: 1.38rem;
+            font-weight: bold;
+        }
+
+        .line-h3 {
+            font-size: 1.18rem;
+            font-weight: bold;
+        }
+
+        .line-h4 {
+            font-size: 1.05rem;
+            font-weight: bold;
+        }
+
+        .line-h5 {
+            font-size: 0.95rem;
+            font-weight: bold;
+        }
+
+        .line-h6 {
+            font-size: 0.88rem;
+            font-weight: bold;
+        }
+
+        .line-body {
+            font-size: 14px;
+        }
+
+        .line-code {
+            font-size: 14px;
+            font-family: var(--font-mono);
+        }
+
+        /* 词法与标记样式 */
+        .token-keyword {
+            color: var(--gray-45);
+            font-weight: bold;
+        }
+
+        .token-string {
+            color: var(--yellow-text);
+        }
+
+        .token-comment {
+            color: var(--gray-70);
+            font-style: italic;
+        }
+
+        .token-heading-prefix {
+            color: var(--gray-45);
+            font-weight: normal;
+        }
+
+        .token-list-bullet {
+            color: var(--gray-45);
+            font-weight: bold;
+        }
+
+        .token-list-number {
+            color: var(--gray-45);
+            font-weight: bold;
+        }
+
+        .token-list-task {
+            color: var(--gray-45);
+            font-weight: bold;
+        }
+
+        .interactive-checkbox {
+            cursor: pointer;
+            user-select: none;
+            display: inline-block;
+            padding: 0 2px;
+            transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .interactive-checkbox:active,
+        .interactive-checkbox:hover {
+            transform: scale(1.25);
+            color: var(--black);
+        }
+
+        .interactive-link {
+            color: var(--gray-45);
+            text-decoration: underline;
+            cursor: pointer;
+            position: relative;
+            padding: 0 2px;
+            transition: color 0.15s ease;
+        }
+
+        .interactive-link:hover {
+            color: var(--black);
+        }
+
+        .style-bold {
+            font-weight: bold;
+        }
+
+        .style-italic {
+            font-style: italic;
+        }
+
+        .style-bold-italic {
+            font-weight: bold;
+            font-style: italic;
+        }
+
+        .style-strike {
+            text-decoration: line-through;
+        }
+
+        .style-inline-code {
+            font-family: var(--font-mono);
+            color: var(--black);
+        }
+
+        .style-mark {
+            font-weight: bold;
+            color: var(--yellow-text);
+        }
+
+        .style-image {
+            color: var(--gray-45);
+            font-style: italic;
+        }
+
+        .style-underline {
+            text-decoration: underline;
+        }
+
+        .style-sub {
+            font-size: 0.8em;
+            vertical-align: sub;
+        }
+
+        .style-sup {
+            font-size: 0.8em;
+            vertical-align: super;
+        }
+
+        .style-math {
+            font-style: italic;
+            font-family: 'Times New Roman', serif;
+        }
+
+        .style-kbd {
+            font-family: var(--font-mono);
+            color: var(--black);
+            font-size: 0.85em;
+        }
+
+        .style-spoiler {
+            color: var(--gray-45);
+        }
+
+        .style-checkbox {
+            font-weight: bold;
+            color: var(--gray-45);
+        }
+
+        .style-footnote {
+            font-size: 0.75em;
+            vertical-align: super;
+            color: var(--gray-45);
+        }
+
+        /* 桌面/移动端双端通用 Link Portal 卡片 */
+        .link-floating-portal {
+            position: absolute;
+            background: var(--white);
+            padding: 6px 12px;
+            font-size: 12px;
+            color: var(--gray-45);
+            border-radius: 6px;
+            box-shadow: 0 4px 16px hsla(0, 0%, 0%, 0.12);
+            pointer-events: auto;
+            z-index: 100;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            transform: translateY(-100%);
+            margin-top: -8px;
+            animation: portalFade 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .link-floating-portal a {
+            color: var(--black);
+            text-decoration: underline;
+            font-weight: bold;
+            max-width: 180px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .portal-btn {
+            cursor: pointer;
+            padding: 2px 6px;
+            color: var(--gray-45);
+            font-weight: bold;
+            border-radius: 3px;
+            background: var(--gray-90);
+        }
+
+        .portal-btn:hover {
+            color: var(--black);
+        }
+
+        @keyframes portalFade {
+            from { opacity: 0; transform: translateY(-85%) scale(0.95); }
+            to { opacity: 1; transform: translateY(-100%) scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 桌面与移动端通用无描边居中格子纸 Markdown 编辑器 -->
+    <div class="grid-paper">
+        <div id="editor-container" class="editor-container" contenteditable="true" spellcheck="false"></div>
+        <div id="link-portal" class="link-floating-portal">
+            <a id="portal-url" href="#" target="_blank">https://markdown.org</a>
+            <span id="portal-edit" class="portal-btn">编辑 ✏️</span>
+            <span id="portal-close" class="portal-btn">✕</span>
+        </div>
+    </div>
+
+    <script>
+        const INITIAL_MARKDOWN = `# Markdown 语法示例
+
+## 1. 基础排版
+**加粗文本** 与 *斜体文本* 及 ***加粗斜体***，带有 ~~删除线~~、==高亮标记==、\`行内代码\` 和 <u>下划线</u>，包含 H~2~O 下标 与 X^2^ 上标，支持 $E = mc^2$ 数学公式、<kbd>Ctrl</kbd> + <kbd>C</kbd> 按键、||模糊遮罩||、[x] 任务复选框、[^1] 脚注引用、[访问链接](https://markdown.org) 以及 ![图片说明](https://markdown.org/icon.png)
+
+## 2. 列表
+- 无序列表项 A
+- 无序列表项 B
+  - 子列表项 1
+
+1. 有序列表第一项
+2. 有序列表第二项
+
+- [x] 已完成事项
+- [ ] 待办事项
+
+## 3. 引用与代码
+> 这是一个引用段落。
+
+行内代码: \`const message = "Hello World";\`
+
+\`\`\`javascript
+// 代码块示例
+function greet(name) {
+    console.log(\`Hello, \${name}!\`);
+}
+greet("Markdown");
+\`\`\`
+
+## 4. 表格
+| 项目 | 状态 | 数量 |
+| :--- | :---: | ---: |
+| 任务 A | 已就绪 | 100 |
+| 任务 B | 进行中 | 50 |
+
+---`;
+
+        const container = document.getElementById('editor-container');
+        const linkPortal = document.getElementById('link-portal');
+        const portalUrl = document.getElementById('portal-url');
+        const portalEdit = document.getElementById('portal-edit');
+        const portalClose = document.getElementById('portal-close');
+
+        let documentRawState = INITIAL_MARKDOWN.split('\n');
+        let currentActiveLinkToken = null;
+
+        class TokenMarkdownEngine {
+            escapeHtml(str) {
+                return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+
+            tokenizeLine(lineText) {
+                const tokens = [];
+                let pos = 0;
+
+                if (!lineText) {
+                    tokens.push({
+                        type: 'text',
+                        raw: '',
+                        content: '',
+                        start: 0,
+                        end: 0
+                    });
+                    return { tokens, headingLevel: 0 };
+                }
+
+                const headingMatch = lineText.match(/^(#{1,6})\s+/);
+                let headingLevel = 0;
+
+                if (headingMatch) {
+                    headingLevel = headingMatch[1].length;
+                    const prefixLen = headingMatch[0].length;
+                    tokens.push({
+                        type: 'heading-prefix',
+                        raw: headingMatch[0],
+                        content: '',
+                        start: 0,
+                        end: prefixLen
+                    });
+                    pos = prefixLen;
+                } else {
+                    const taskMatch = lineText.match(/^(\s*)([-*+]\s*\[[xX\s]\])\s+/);
+                    if (taskMatch) {
+                        const prefixLen = taskMatch[0].length;
+                        const indent = taskMatch[1];
+                        const checkRaw = taskMatch[2];
+                        const isChecked = checkRaw.includes('x') || checkRaw.includes('X');
+                        tokens.push({
+                            type: 'list-task',
+                            raw: taskMatch[0],
+                            content: indent + (isChecked ? '☑ ' : '☐ '),
+                            isChecked: isChecked,
+                            start: 0,
+                            end: prefixLen
+                        });
+                        pos = prefixLen;
+                    } else {
+                        const bulletMatch = lineText.match(/^(\s*)([-*+])\s+/);
+                        if (bulletMatch) {
+                            const prefixLen = bulletMatch[0].length;
+                            const indent = bulletMatch[1];
+                            tokens.push({
+                                type: 'list-bullet',
+                                raw: bulletMatch[0],
+                                content: indent + '• ',
+                                start: 0,
+                                end: prefixLen
+                            });
+                            pos = prefixLen;
+                        } else {
+                            const numberMatch = lineText.match(/^(\s*)(\d+\.)\s+/);
+                            if (numberMatch) {
+                                const prefixLen = numberMatch[0].length;
+                                tokens.push({
+                                    type: 'list-number',
+                                    raw: numberMatch[0],
+                                    content: numberMatch[0],
+                                    start: 0,
+                                    end: prefixLen
+                                });
+                                pos = prefixLen;
+                            }
+                        }
+                    }
+                }
+
+                const inlineRegex = /(!\[[^\]]*\]\([^)]+\))|(\[[^\]]+\]\([^)]+\))|(`[^`]+`)|(\*\*\*[^*]+\*\*\*)|(\*\*[^*]+\*\*)|((?<!\*)\*[^*]+\*(?!\*))|(~~[^~]+~~)|(={2,4}[^=]+={2,4})|(<u>[^<]+<\/u>)|(<kbd>[^<]+<\/kbd>)|(<sub>[^<]+<\/sub>|~[^~]+~)|(<sup>[^<]+<\/sup>|\^[^\^]+\^)|(\$[^$]+\$)|(\|\|[^|]+\|\|)|(\[\s*[xX\s]\s*\])|(\[\^[0-9a-zA-Z]+\])/g;
+                inlineRegex.lastIndex = pos;
+
+                let match;
+                while ((match = inlineRegex.exec(lineText)) !== null) {
+                    const matchIndex = match.index;
+                    if (matchIndex > pos) {
+                        const plain = lineText.substring(pos, matchIndex);
+                        tokens.push({
+                            type: 'text',
+                            raw: plain,
+                            content: plain,
+                            start: pos,
+                            end: matchIndex
+                        });
+                    }
+
+                    const rawToken = match[0];
+                    const endPos = matchIndex + rawToken.length;
+
+                    if (rawToken.startsWith('![')) {
+                        const imgTextMatch = rawToken.match(/^!\[([^\]]*)\]/);
+                        const imgText = imgTextMatch ? imgTextMatch[1] : rawToken;
+                        tokens.push({
+                            type: 'image',
+                            raw: rawToken,
+                            content: '🖼️ ' + (imgText || '图片'),
+                            start: matchIndex,
+                            end: endPos
+                        });
+                    } else if (rawToken.startsWith('<kbd>')) {
+                        tokens.push({
+                            type: 'kbd',
+                            raw: rawToken,
+                            content: rawToken.replace(/^<kbd>|<\/kbd>$/g, ''),
+                            start: matchIndex,
+                            end: endPos
+                        });
+                    } else if (rawToken.startsWith('<u>')) {
+                        tokens.push({
+                            type: 'underline',
+                            raw: rawToken,
+                            content: rawToken.replace(/^<u>|<\/u>$/g, ''),
+                            start: matchIndex,
+                            end: endPos
+                        });
+                    } else if (rawToken.startsWith('[')) {
+                        if (rawToken.startsWith('[^')) {
+                            tokens.push({
+                                type: 'footnote',
+                                raw: rawToken,
+                                content: rawToken.replace(/^\[\^|\]$/g, ''),
+                                start: matchIndex,
+                                end: endPos
+                            });
+                        } else if (rawToken.match(/^\[\s*[xX\s]\s*\]/)) {
+                            const isChecked = rawToken.includes('x') || rawToken.includes('X');
+                            tokens.push({
+                                type: 'checkbox',
+                                raw: rawToken,
+                                content: isChecked ? '☑' : '☐',
+                                isChecked: isChecked,
+                                start: matchIndex,
+                                end: endPos
+                            });
+                        } else {
+                            const linkMatch = rawToken.match(/^\[([^\]]+)\]\(([^)]+)\)/);
+                            const linkText = linkMatch ? linkMatch[1] : rawToken;
+                            const linkUrl = linkMatch ? linkMatch[2] : '#';
+                            tokens.push({
+                                type: 'link',
+                                raw: rawToken,
+                                content: linkText,
+                                url: linkUrl,
+                                start: matchIndex,
+                                end: endPos
+                            });
+                        }
+                    } else if (rawToken.startsWith('`')) {
+                        tokens.push({
+                            type: 'inline-code',
+                            raw: rawToken,
+                            content: rawToken.slice(1, -1),
+                            start: matchIndex,
+                            end: endPos
+                        });
+                    } else if (rawToken.startsWith('***')) {
+                        tokens.push({
+                            type: 'bold-italic',
+                            raw: rawToken,
+                            content: rawToken.slice(3, -3),
+                            start: matchIndex,
+                            end: endPos
+                        });
+                    } else if (rawToken.startsWith('**')) {
+                        tokens.push({
+                            type: 'bold',
+                            raw: rawToken,
+                            content: rawToken.slice(2, -2),
+                            start: matchIndex,
+                            end: endPos
+                        });
+                    } else if (rawToken.startsWith('*')) {
+                        tokens.push({
+                            type: 'italic',
+                            raw: rawToken,
+                            content: rawToken.slice(1, -1),
+                            start: matchIndex,
+                            end: endPos
+                        });
+                    } else if (rawToken.startsWith('~~')) {
+                        tokens.push({
+                            type: 'strike',
+                            raw: rawToken,
+                            content: rawToken.slice(2, -2),
+                            start: matchIndex,
+                            end: endPos
+                        });
+                    } else if (rawToken.startsWith('==')) {
+                        const inner = rawToken.replace(/^=+|=+$/g, '');
+                        tokens.push({
+                            type: 'mark',
+                            raw: rawToken,
+                            content: inner,
+                            start: matchIndex,
+                            end: endPos
+                        });
+                    } else if (rawToken.startsWith('<sub>') || (rawToken.startsWith('~') && rawToken.endsWith('~'))) {
+                        const inner = rawToken.replace(/^<sub>|^~|<\/sub>$|~$/g, '');
+                        tokens.push({
+                            type: 'sub',
+                            raw: rawToken,
+                            content: inner,
+                            start: matchIndex,
+                            end: endPos
+                        });
+                    } else if (rawToken.startsWith('<sup>') || (rawToken.startsWith('^') && rawToken.endsWith('^'))) {
+                        const inner = rawToken.replace(/^<sup>|^\^|<\/sup>$|\^$/g, '');
+                        tokens.push({
+                            type: 'sup',
+                            raw: rawToken,
+                            content: inner,
+                            start: matchIndex,
+                            end: endPos
+                        });
+                    } else if (rawToken.startsWith('$')) {
+                        tokens.push({
+                            type: 'math',
+                            raw: rawToken,
+                            content: rawToken.replace(/^\$|\$$/g, ''),
+                            start: matchIndex,
+                            end: endPos
+                        });
+                    } else if (rawToken.startsWith('||')) {
+                        tokens.push({
+                            type: 'spoiler',
+                            raw: rawToken,
+                            content: rawToken.slice(2, -2),
+                            start: matchIndex,
+                            end: endPos
+                        });
+                    }
+
+                    pos = endPos;
+                }
+
+                if (pos < lineText.length) {
+                    const plain = lineText.substring(pos);
+                    tokens.push({
+                        type: 'text',
+                        raw: plain,
+                        content: plain,
+                        start: pos,
+                        end: lineText.length
+                    });
+                }
+
+                if (tokens.length === 0) {
+                    tokens.push({
+                        type: 'text',
+                        raw: '',
+                        content: '',
+                        start: 0,
+                        end: 0
+                    });
+                }
+
+                return { tokens, headingLevel };
+            }
+
+            highlightCodeLine(lineText) {
+                const escaped = this.escapeHtml(lineText);
+                const tokenRegex = /(\/\/.+$)|(".*?"|'.*?'|\x60.*?\x60)|\b(function|return|const|let|var|if|else|for|while|import|export)\b/g;
+                
+                return escaped.replace(tokenRegex, (match, comment, stringToken, keyword) => {
+                    if (comment) return `<span class="token-comment">${comment}</span>`;
+                    if (stringToken) return `<span class="token-string">${stringToken}</span>`;
+                    if (keyword) return `<span class="token-keyword">${keyword}</span>`;
+                    return match;
+                });
+            }
+
+            renderLine(lineText, lineIdx, isActiveLine, selStartRaw, selEndRaw, inCodeBlock, activeTokenIdx = -1) {
+                if (inCodeBlock) {
+                    const content = lineText.trim().startsWith('```') 
+                        ? this.escapeHtml(lineText) 
+                        : this.highlightCodeLine(lineText);
+                    return `<div class="line-block line-code" data-line-idx="${lineIdx}">${content || '<br>'}</div>`;
+                }
+
+                const { tokens, headingLevel } = this.tokenizeLine(lineText);
+                let html = '';
+
+                for (let k = 0; k < tokens.length; k++) {
+                    const token = tokens[k];
+                    const isHeadingPrefix = (token.type === 'heading-prefix');
+                    
+                    let isTokenActive = false;
+                    if (isActiveLine) {
+                        if (isHeadingPrefix) {
+                            isTokenActive = true;
+                        } else if (activeTokenIdx >= 0) {
+                            isTokenActive = (k === activeTokenIdx);
+                        } else if (selStartRaw === selEndRaw) {
+                            isTokenActive = (selStartRaw >= token.start && selStartRaw <= token.end);
+                        } else {
+                            isTokenActive = (token.start < selEndRaw && token.end > selStartRaw);
+                        }
+                    }
+
+                    let displayText = isTokenActive ? token.raw : token.content;
+                    let escapedText = this.escapeHtml(displayText);
+
+                    if (!escapedText && isHeadingPrefix && !isTokenActive) {
+                        continue;
+                    }
+
+                    const dataAttr = `data-token-idx="${k}"`;
+                    const innerHtml = escapedText || '<br>';
+
+                    switch (token.type) {
+                        case 'heading-prefix':
+                            html += `<span ${dataAttr} class="token-heading-prefix">${innerHtml}</span>`;
+                            break;
+                        case 'list-bullet':
+                            html += `<span ${dataAttr} class="token-list-bullet">${innerHtml}</span>`;
+                            break;
+                        case 'list-number':
+                            html += `<span ${dataAttr} class="token-list-number">${innerHtml}</span>`;
+                            break;
+                        case 'list-task':
+                            html += `<span ${dataAttr} class="interactive-checkbox token-list-task" data-line="${lineIdx}">${innerHtml}</span>`;
+                            break;
+                        case 'checkbox':
+                            html += `<span ${dataAttr} class="interactive-checkbox style-checkbox" data-line="${lineIdx}" data-start="${token.start}">${innerHtml}</span>`;
+                            break;
+                        case 'link':
+                            html += `<span ${dataAttr} class="interactive-link style-link" data-line="${lineIdx}" data-start="${token.start}" data-url="${this.escapeHtml(token.url || '#')}">${innerHtml}</span>`;
+                            break;
+                        case 'bold-italic':
+                            html += `<span ${dataAttr} class="style-bold-italic">${innerHtml}</span>`;
+                            break;
+                        case 'bold':
+                            html += `<span ${dataAttr} class="style-bold">${innerHtml}</span>`;
+                            break;
+                        case 'italic':
+                            html += `<span ${dataAttr} class="style-italic">${innerHtml}</span>`;
+                            break;
+                        case 'strike':
+                            html += `<span ${dataAttr} class="style-strike">${innerHtml}</span>`;
+                            break;
+                        case 'inline-code':
+                            html += `<span ${dataAttr} class="style-inline-code">${innerHtml}</span>`;
+                            break;
+                        case 'mark':
+                            html += `<span ${dataAttr} class="style-mark">${innerHtml}</span>`;
+                            break;
+                        case 'image':
+                            html += `<span ${dataAttr} class="style-image">${innerHtml}</span>`;
+                            break;
+                        case 'underline':
+                            html += `<span ${dataAttr} class="style-underline">${innerHtml}</span>`;
+                            break;
+                        case 'sub':
+                            html += `<span ${dataAttr} class="style-sub">${innerHtml}</span>`;
+                            break;
+                        case 'sup':
+                            html += `<span ${dataAttr} class="style-sup">${innerHtml}</span>`;
+                            break;
+                        case 'math':
+                            html += `<span ${dataAttr} class="style-math">${innerHtml}</span>`;
+                            break;
+                        case 'kbd':
+                            html += `<span ${dataAttr} class="style-kbd">${innerHtml}</span>`;
+                            break;
+                        case 'spoiler':
+                            html += `<span ${dataAttr} class="style-spoiler">${innerHtml}</span>`;
+                            break;
+                        case 'footnote':
+                            html += `<span ${dataAttr} class="style-footnote">${innerHtml}</span>`;
+                            break;
+                        case 'text':
+                        default:
+                            html += `<span ${dataAttr}>${innerHtml}</span>`;
+                            break;
+                    }
+                }
+
+                const lineClass = headingLevel > 0 ? `line-h${headingLevel}` : 'line-body';
+                return `<div class="line-block ${lineClass}" data-line-idx="${lineIdx}">${html || '<span data-token-idx="0"><br></span>'}</div>`;
+            }
+
+            parseDocument(rawLines, activeLineIndex, selStartRaw, selEndRaw, activeTokenIdx = -1) {
+                let inCodeBlock = false;
+                let htmlLines = [];
+
+                for (let i = 0; i < rawLines.length; i++) {
+                    const line = rawLines[i];
+                    const trimmed = line.trim();
+                    const isActiveLine = (i === activeLineIndex);
+
+                    if (trimmed.startsWith('```')) {
+                        if (!inCodeBlock) {
+                            inCodeBlock = true;
+                            htmlLines.push(this.renderLine(line, i, isActiveLine, selStartRaw, selEndRaw, true, activeTokenIdx));
+                        } else {
+                            htmlLines.push(this.renderLine(line, i, isActiveLine, selStartRaw, selEndRaw, true, activeTokenIdx));
+                            inCodeBlock = false;
+                        }
+                    } else if (inCodeBlock) {
+                        htmlLines.push(this.renderLine(line, i, isActiveLine, selStartRaw, selEndRaw, true, activeTokenIdx));
+                    } else {
+                        htmlLines.push(this.renderLine(line, i, isActiveLine, selStartRaw, selEndRaw, false, activeTokenIdx));
+                    }
+                }
+
+                return htmlLines.join('');
+            }
+        }
+
+        const engine = new TokenMarkdownEngine();
+
+        function reconstructRawToken(token, domText, isActive) {
+            if (isActive) {
+                return domText;
+            }
+            if (token.content && token.raw.includes(token.content)) {
+                return token.raw.replace(token.content, domText);
+            }
+            return token.raw;
+        }
+
+        function updateRawStateFromDom(lineIdx, activeCaretColumn, activeTokenIdx = -1) {
+            const lineBlock = container.querySelector(`[data-line-idx="${lineIdx}"]`);
+            if (!lineBlock) return;
+
+            const oldLineText = documentRawState[lineIdx] || '';
+            const { tokens } = engine.tokenizeLine(oldLineText);
+            let newRawLine = '';
+
+            for (let k = 0; k < tokens.length; k++) {
+                const token = tokens[k];
+                const domNode = lineBlock.querySelector(`[data-token-idx="${k}"]`);
+                let domText = domNode ? domNode.textContent : token.content;
+
+                const isHeadingPrefix = (token.type === 'heading-prefix');
+                let wasTokenActive = false;
+                if (activeTokenIdx >= 0) {
+                    wasTokenActive = (k === activeTokenIdx) || isHeadingPrefix;
+                } else {
+                    wasTokenActive = (activeCaretColumn >= token.start && activeCaretColumn <= token.end) || isHeadingPrefix;
+                }
+
+                newRawLine += reconstructRawToken(token, domText, wasTokenActive);
+            }
+
+            documentRawState[lineIdx] = newRawLine;
+        }
+
+        function convertRenderedColumnToRawColumn(lineText, renderedColumn, isActiveLine, lastRawColumn) {
+            const { tokens } = engine.tokenizeLine(lineText);
+            let currentRenderedLen = 0;
+
+            for (let token of tokens) {
+                const isHeadingPrefix = (token.type === 'heading-prefix');
+                const wasTokenActive = isActiveLine && (isHeadingPrefix || (lastRawColumn >= token.start && lastRawColumn <= token.end));
+                
+                const tokenRenderedText = wasTokenActive ? token.raw : token.content;
+                const tokenLen = tokenRenderedText.length;
+
+                if (renderedColumn <= currentRenderedLen + tokenLen) {
+                    const offsetInToken = Math.max(0, renderedColumn - currentRenderedLen);
+                    
+                    if (wasTokenActive) {
+                        return token.start + offsetInToken;
+                    } else {
+                        const prefixLen = token.raw.indexOf(token.content);
+                        const effectivePrefix = prefixLen >= 0 ? prefixLen : 0;
+                        return token.start + effectivePrefix + Math.min(offsetInToken, token.content.length);
+                    }
+                }
+
+                currentRenderedLen += tokenLen;
+            }
+
+            return lineText.length;
+        }
+
+        function getCaretPosition(container, lastRawColumn) {
+            const selection = window.getSelection();
+            if (!selection.rangeCount) return { lineIndex: -1, columnIndex: -1, rawColumnIndex: -1, activeTokenIdx: -1, isCollapsed: true };
+            
+            const range = selection.getRangeAt(0);
+            const lineBlocks = container.querySelectorAll('.line-block');
+            
+            for (let i = 0; i < lineBlocks.length; i++) {
+                const block = lineBlocks[i];
+                if (block.contains(range.endContainer)) {
+                    const preRange = document.createRange();
+                    preRange.selectNodeContents(block);
+                    preRange.setEnd(range.endContainer, range.endOffset);
+                    const renderedColumn = preRange.toString().length;
+                    const lineText = documentRawState[i] || '';
+                    const isActiveLine = (i === lastLineIndex);
+
+                    let clickedTokenIdx = -1;
+                    const targetEl = range.endContainer.nodeType === Node.ELEMENT_NODE 
+                        ? range.endContainer 
+                        : range.endContainer.parentElement;
+                    const tokenNode = targetEl ? targetEl.closest('[data-token-idx]') : null;
+
+                    if (tokenNode) {
+                        clickedTokenIdx = parseInt(tokenNode.getAttribute('data-token-idx'), 10);
+                    }
+
+                    let rawColumnIndex;
+                    if (clickedTokenIdx >= 0) {
+                        const { tokens } = engine.tokenizeLine(lineText);
+                        const clickedToken = tokens[clickedTokenIdx];
+                        if (clickedToken) {
+                            const tokenPreRange = document.createRange();
+                            tokenPreRange.selectNodeContents(tokenNode);
+                            tokenPreRange.setEnd(range.endContainer, range.endOffset);
+                            const offsetInToken = tokenPreRange.toString().length;
+
+                            const isHeadingPrefix = (clickedToken.type === 'heading-prefix');
+                            const wasTokenActive = isActiveLine && (isHeadingPrefix || (lastRawColumn >= clickedToken.start && lastRawColumn <= clickedToken.end));
+
+                            if (wasTokenActive) {
+                                rawColumnIndex = clickedToken.start + offsetInToken;
+                            } else {
+                                const prefixLen = clickedToken.raw.indexOf(clickedToken.content);
+                                const effectivePrefix = prefixLen >= 0 ? prefixLen : 0;
+                                rawColumnIndex = clickedToken.start + effectivePrefix + Math.min(offsetInToken, clickedToken.content.length);
+                            }
+                        } else {
+                            rawColumnIndex = convertRenderedColumnToRawColumn(lineText, renderedColumn, isActiveLine, lastRawColumn);
+                        }
+                    } else {
+                        rawColumnIndex = convertRenderedColumnToRawColumn(lineText, renderedColumn, isActiveLine, lastRawColumn);
+                    }
+
+                    return {
+                        lineIndex: i,
+                        columnIndex: renderedColumn,
+                        rawColumnIndex: rawColumnIndex,
+                        activeTokenIdx: clickedTokenIdx,
+                        isCollapsed: selection.isCollapsed
+                    };
+                }
+            }
+            
+            return { lineIndex: -1, columnIndex: -1, rawColumnIndex: -1, activeTokenIdx: -1, isCollapsed: selection.isCollapsed };
+        }
+
+        function setCaretPosition(container, targetLineIndex, targetRawColumnIndex, activeTokenIdx = -1) {
+            const selection = window.getSelection();
+            const range = document.createRange();
+            const block = container.querySelector(`[data-line-idx="${targetLineIndex}"]`);
+            
+            if (block) {
+                const lineText = documentRawState[targetLineIndex] || '';
+                const { tokens } = engine.tokenizeLine(lineText);
+
+                let targetTokenIndex = activeTokenIdx >= 0 ? activeTokenIdx : 0;
+                if (activeTokenIdx < 0) {
+                    for (let i = 0; i < tokens.length; i++) {
+                        const token = tokens[i];
+                        if (targetRawColumnIndex >= token.start && targetRawColumnIndex <= token.end) {
+                            targetTokenIndex = i;
+                            break;
+                        }
+                    }
+                }
+
+                const domNode = block.querySelector(`[data-token-idx="${targetTokenIndex}"]`) || block;
+                const token = tokens[targetTokenIndex] || { start: 0, raw: '', content: '' };
+                const isHeadingPrefix = (token.type === 'heading-prefix');
+                const isTokenActive = (targetTokenIndex === activeTokenIdx) || (targetRawColumnIndex >= token.start && targetRawColumnIndex <= token.end) || isHeadingPrefix;
+
+                let localOffset = targetRawColumnIndex - token.start;
+                if (!isTokenActive) {
+                    const prefixLen = token.raw.indexOf(token.content);
+                    const effectivePrefix = prefixLen >= 0 ? prefixLen : 0;
+                    localOffset = Math.min(Math.max(0, localOffset - effectivePrefix), token.content.length);
+                }
+
+                function getTextNode(node) {
+                    if (node.nodeType === Node.TEXT_NODE) return node;
+                    for (let child of node.childNodes) {
+                        const found = getTextNode(child);
+                        if (found) return found;
+                    }
+                    return node;
+                }
+
+                const textNode = getTextNode(domNode);
+
+                if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+                    const safeOffset = Math.min(Math.max(0, localOffset), textNode.textContent.length);
+                    range.setStart(textNode, safeOffset);
+                    range.collapse(true);
+                } else {
+                    range.selectNodeContents(domNode);
+                    range.collapse(false);
+                }
+
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
+        }
+
+        let lastLineIndex = -1;
+        let lastRawColumnIndex = -1;
+        let lastActiveTokenIdx = -1;
+
+        function refreshEditor(force = false) {
+            const selection = window.getSelection();
+
+            if (!force && selection.rangeCount > 0 && !selection.isCollapsed) {
+                return;
+            }
+
+            const { lineIndex, rawColumnIndex, activeTokenIdx } = getCaretPosition(container, lastRawColumnIndex);
+
+            if (lineIndex >= 0) {
+                if (force || lineIndex !== lastLineIndex || rawColumnIndex !== lastRawColumnIndex || activeTokenIdx !== lastActiveTokenIdx) {
+                    lastLineIndex = lineIndex;
+                    lastRawColumnIndex = rawColumnIndex;
+                    lastActiveTokenIdx = activeTokenIdx;
+
+                    container.innerHTML = engine.parseDocument(documentRawState, lineIndex, rawColumnIndex, rawColumnIndex, activeTokenIdx);
+
+                    if (document.activeElement === container && selection.isCollapsed) {
+                        setCaretPosition(container, lineIndex, rawColumnIndex, activeTokenIdx);
+                    }
+                }
+            }
+        }
+
+        function showLinkPortal(linkEl) {
+            const url = linkEl.getAttribute('data-url');
+            const lineIdx = parseInt(linkEl.getAttribute('data-line'), 10);
+            const startCol = parseInt(linkEl.getAttribute('data-start'), 10);
+            currentActiveLinkToken = { lineIdx, startCol };
+
+            const rect = linkEl.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+
+            portalUrl.textContent = url;
+            portalUrl.href = url;
+            linkPortal.style.left = Math.max(10, Math.min(rect.left - containerRect.left, containerRect.width - 240)) + 'px';
+            linkPortal.style.top = (rect.top - containerRect.top) + 'px';
+            linkPortal.style.display = 'flex';
+        }
+
+        ['click', 'touchend'].forEach(evtType => {
+            container.addEventListener(evtType, (e) => {
+                const checkboxEl = e.target.closest('.interactive-checkbox');
+                if (checkboxEl) {
+                    const lineIdx = parseInt(checkboxEl.getAttribute('data-line'), 10);
+                    if (!isNaN(lineIdx) && lineIdx >= 0 && lineIdx < documentRawState.length) {
+                        let line = documentRawState[lineIdx];
+                        if (line.includes('[x]')) {
+                            line = line.replace('[x]', '[ ]');
+                        } else if (line.includes('[X]')) {
+                            line = line.replace('[X]', '[ ]');
+                        } else if (line.includes('[ ]')) {
+                            line = line.replace('[ ]', '[x]');
+                        }
+                        documentRawState[lineIdx] = line;
+                        refreshEditor(true);
+                        return;
+                    }
+                }
+
+                const linkEl = e.target.closest('.interactive-link');
+                if (linkEl) {
+                    showLinkPortal(linkEl);
+                } else if (!e.target.closest('.link-floating-portal')) {
+                    linkPortal.style.display = 'none';
+                }
+            });
+        });
+
+        portalEdit.addEventListener('click', () => {
+            if (currentActiveLinkToken) {
+                const { lineIdx, startCol } = currentActiveLinkToken;
+                linkPortal.style.display = 'none';
+                container.focus();
+                container.innerHTML = engine.parseDocument(documentRawState, lineIdx, startCol + 1, startCol + 1);
+                setCaretPosition(container, lineIdx, startCol + 1);
+            }
+        });
+
+        portalClose.addEventListener('click', () => {
+            linkPortal.style.display = 'none';
+        });
+
+        // 监听实时输入
+        container.addEventListener('input', () => {
+            const { lineIndex, rawColumnIndex, activeTokenIdx } = getCaretPosition(container, lastRawColumnIndex);
+            if (lineIndex >= 0 && lineIndex < documentRawState.length) {
+                updateRawStateFromDom(lineIndex, rawColumnIndex, activeTokenIdx);
+            }
+            refreshEditor(true);
+        });
+
+        // 监听光标位移与点击
+        ['keyup', 'click', 'select'].forEach(evt => {
+            container.addEventListener(evt, () => {
+                refreshEditor(false);
+            });
+        });
+
+        container.addEventListener('selectionchange', () => {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0 && selection.isCollapsed) {
+                refreshEditor(false);
+            }
+        });
+
+        // 彻底接管 Keydown: 支持无限次回车换行与退格跨行合并
+        container.addEventListener('keydown', (e) => {
+            const { lineIndex, rawColumnIndex } = getCaretPosition(container, lastRawColumnIndex);
+
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (lineIndex >= 0 && lineIndex < documentRawState.length) {
+                    const currentLine = documentRawState[lineIndex];
+                    const lineA = currentLine.substring(0, rawColumnIndex);
+                    const lineB = currentLine.substring(rawColumnIndex);
+
+                    let newLinePrefix = '';
+                    const listNumberMatch = lineA.match(/^(\s*)(\d+)\.\s+/);
+                    const listBulletMatch = lineA.match(/^(\s*)([-*+])\s+/);
+                    const listTaskMatch = lineA.match(/^(\s*)([-*+]\s*\[[xX\s]\])\s+/);
+
+                    if (listTaskMatch) {
+                        newLinePrefix = listTaskMatch[1] + '- [ ] ';
+                    } else if (listBulletMatch) {
+                        newLinePrefix = listBulletMatch[1] + listBulletMatch[2] + ' ';
+                    } else if (listNumberMatch) {
+                        const num = parseInt(listNumberMatch[2], 10) + 1;
+                        newLinePrefix = listNumberMatch[1] + num + '. ';
+                    }
+
+                    documentRawState[lineIndex] = lineA;
+                    documentRawState.splice(lineIndex + 1, 0, newLinePrefix + lineB);
+
+                    lastLineIndex = lineIndex + 1;
+                    lastRawColumnIndex = newLinePrefix.length;
+                    lastActiveTokenIdx = 0;
+
+                    container.innerHTML = engine.parseDocument(documentRawState, lastLineIndex, lastRawColumnIndex, lastRawColumnIndex, 0);
+                    setCaretPosition(container, lastLineIndex, lastRawColumnIndex, 0);
+                }
+            } else if (e.key === 'Backspace') {
+                if (rawColumnIndex === 0 && lineIndex > 0) {
+                    e.preventDefault();
+                    const prevLineLen = documentRawState[lineIndex - 1].length;
+                    documentRawState[lineIndex - 1] += documentRawState[lineIndex];
+                    documentRawState.splice(lineIndex, 1);
+
+                    lastLineIndex = lineIndex - 1;
+                    lastRawColumnIndex = prevLineLen;
+                    lastActiveTokenIdx = -1;
+
+                    container.innerHTML = engine.parseDocument(documentRawState, lastLineIndex, lastRawColumnIndex, lastRawColumnIndex);
+                    setCaretPosition(container, lastLineIndex, lastRawColumnIndex);
+                }
+            } else if (e.key === 'Tab') {
+                e.preventDefault();
+                if (lineIndex >= 0 && lineIndex < documentRawState.length) {
+                    const line = documentRawState[lineIndex];
+                    documentRawState[lineIndex] = line.substring(0, rawColumnIndex) + '    ' + line.substring(rawColumnIndex);
+                    container.innerHTML = engine.parseDocument(documentRawState, lineIndex, rawColumnIndex + 4, rawColumnIndex + 4);
+                    setCaretPosition(container, lineIndex, rawColumnIndex + 4);
+                }
+            }
+        });
+
+        // 初始载入
+        container.innerHTML = engine.parseDocument(documentRawState, -1, -1, -1);
+    </script>
+</body>
+</html>
