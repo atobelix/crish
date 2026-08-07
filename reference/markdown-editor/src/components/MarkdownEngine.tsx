@@ -140,37 +140,21 @@ export const MarkdownEngine: React.FC = () => {
       const lineStart = offsets[clickedLineIndex];
       const lineLen = lines[clickedLineIndex].length;
 
-      // Try to find the closest physical character index on the line
-      const lineEl = parentRef.current?.querySelector(
-        `[data-index="${clickedLineIndex}"]`
-      );
-      if (lineEl && getCoordinatesFromIndex) {
-        // We'll approximate by finding the closest token/character
-        let bestDist = Infinity;
-        let bestIndex = lineStart + lineLen; // default to end
-
-        // Temporarily add active class to measure source elements
-        const wasActive = lineEl.classList.contains('is-active-line');
-        if (!wasActive) lineEl.classList.add('is-active-line');
-
-        for (let i = lineStart; i <= lineStart + lineLen; i++) {
-          const rect = getCoordinatesFromIndex(i, lineEl as HTMLElement);
-          if (rect) {
-            const dist =
-              Math.abs(rect.left - e.clientX) + Math.abs(rect.top - e.clientY);
-            if (dist < bestDist) {
-              bestDist = dist;
-              bestIndex = i;
-            }
+      // Use token-mapping from closest rendered element
+      const tokenEl = (e.target as HTMLElement).closest('[data-token-start]');
+      if (tokenEl) {
+        const startStr = tokenEl.getAttribute('data-token-start');
+        if (startStr) {
+          const start = parseInt(startStr, 10);
+          if (!isNaN(start)) {
+            setCursorPos(start);
+            return; // We found the precise token!
           }
         }
-
-        if (!wasActive) lineEl.classList.remove('is-active-line');
-
-        setCursorPos(bestIndex);
-      } else {
-        setCursorPos(lineStart + lineLen);
       }
+
+      // Final fallback to end of the line
+      setCursorPos(lineStart + lineLen);
     } else {
       // Clicked in the container but outside any specific line (e.g. bottom empty space)
       // Put cursor at the very end of the document

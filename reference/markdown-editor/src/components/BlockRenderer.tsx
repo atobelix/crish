@@ -38,7 +38,11 @@ export const BlockRenderer = memo(
         const lang = block.raw.trim().replace(/^```+/, '').trim() || 'code';
         return (
           <div className="line-block line-code-fence line-code-fence-start">
-            <span className="code-fence-rendered">
+            <span
+              className="code-fence-rendered"
+              data-token-start={lineOffset}
+              data-token-length={block.length}
+            >
               <span className="code-lang-pill">{lang}</span>
             </span>
             <span
@@ -55,7 +59,11 @@ export const BlockRenderer = memo(
       case 'code_fence_end':
         return (
           <div className="line-block line-code-fence line-code-fence-end">
-            <span className="code-fence-rendered"></span>
+            <span
+              className="code-fence-rendered"
+              data-token-start={lineOffset}
+              data-token-length={block.length}
+            ></span>
             <span
               className="code-fence-source"
               data-token-start={lineOffset}
@@ -69,7 +77,13 @@ export const BlockRenderer = memo(
       case 'math_fence_start':
         return (
           <div className="line-block line-code-fence line-code-fence-start">
-            <span className="code-lang-pill code-fence-rendered">math</span>
+            <span
+              className="code-lang-pill code-fence-rendered"
+              data-token-start={lineOffset}
+              data-token-length={block.length}
+            >
+              math
+            </span>
             <span
               className="code-fence-source"
               data-token-start={lineOffset}
@@ -83,7 +97,11 @@ export const BlockRenderer = memo(
       case 'math_fence_end':
         return (
           <div className="line-block line-code-fence line-code-fence-end">
-            <span className="code-fence-rendered"></span>
+            <span
+              className="code-fence-rendered"
+              data-token-start={lineOffset}
+              data-token-length={block.length}
+            ></span>
             <span
               className="code-fence-source"
               data-token-start={lineOffset}
@@ -102,6 +120,8 @@ export const BlockRenderer = memo(
             <div
               className="math-block-rendered"
               dangerouslySetInnerHTML={{ __html: katexHtml }}
+              data-token-start={lineOffset}
+              data-token-length={block.length}
             />
             <div
               className="math-block-source"
@@ -146,7 +166,11 @@ export const BlockRenderer = memo(
       case 'hr':
         return (
           <div className="line-block line-hr">
-            <hr className="hr-rendered" />
+            <hr
+              className="hr-rendered"
+              data-token-start={lineOffset}
+              data-token-length={block.length}
+            />
             <span
               className="hr-source"
               data-token-start={lineOffset}
