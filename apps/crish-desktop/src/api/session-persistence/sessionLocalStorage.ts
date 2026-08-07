@@ -17,7 +17,11 @@
  *   - 未来增补 upsert_session_entry 命令后，索引可彻底迁移到 SQLite
  */
 
-import type { SessionAgent, SessionMessage, SessionState } from '../../store/layoutStore';
+import type {
+  SessionAgent,
+  SessionMessage,
+  SessionState,
+} from '../../store/layoutStore';
 import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
 import { coerceSessionTimestamp } from '../sessionTime';
 import { prepareSessionsForUi } from '../sessionTitle';
@@ -71,6 +75,50 @@ export function saveSessionIndex(entries: SessionIndexEntry[]): void {
   }
 }
 
+// ── quota 截断标志（P1-F3 / F5-03 修复） ─────────────────────────────────────
+//
+// 背景：saveSessionBody 主 setItem 抛 QuotaExceededError 时回退 slice(-100) 落盘，
+// 旧消息被静默丢弃且无任何提示（审计 F5-03）。修复：截断落盘时置位会话级
+// 截断标志（key 前缀 crish_quota_truncated_），hydrate 链读取标志 → 数据面暴露
+// + logInternalError 日志；后续全量写成功（quota 已释放）时清除标志（恢复策略）。
+// 标志自身的读写也 try/catch：quota 耗尽时标志可能写不进，但绝不允许抛错污染
+// 保存主流程。
+
+const QUOTA_TRUNCATED_PREFIX = 'crish_quota_truncated_';
+
+/** 置位会话级 quota 截断标志（截断落盘后调用）。 */
+export function markQuotaTruncated(sessionId: string): void {
+  const id = asNonEmptyString(sessionId);
+  if (!id) return;
+  try {
+    localStorage.setItem(QUOTA_TRUNCATED_PREFIX + id, '1');
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+/** 会话是否存在 quota 截断标志（hydrate / UI 数据面读取）。 */
+export function hasQuotaTruncation(sessionId: string): boolean {
+  const id = asNonEmptyString(sessionId);
+  if (!id) return false;
+  try {
+    return localStorage.getItem(QUOTA_TRUNCATED_PREFIX + id) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** 清除会话级 quota 截断标志（全量写成功即恢复）。 */
+export function clearQuotaTruncation(sessionId: string): void {
+  const id = asNonEmptyString(sessionId);
+  if (!id) return;
+  try {
+    localStorage.removeItem(QUOTA_TRUNCATED_PREFIX + id);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function loadSessionBody(sessionId: string): SessionMessage[] {
   const id = asNonEmptyString(sessionId);
   if (!id || isPendingDraft(id)) return [];
@@ -83,7 +131,7 @@ export function loadSessionBody(sessionId: string): SessionMessage[] {
 
 export function saveSessionBody(
   sessionId: string,
-  messages: SessionMessage[],
+  messages: SessionMessage[]
 ): void {
   const id = asNonEmptyString(sessionId);
   // I-DRAFT：哨兵永不写 body
@@ -93,11 +141,15 @@ export function saveSessionBody(
 
   try {
     localStorage.setItem(key, JSON.stringify(msgs));
+    // 全量写成功 = quota 已释放 → 恢复：清除历史截断标志
+    clearQuotaTruncation(id);
   } catch {
     // quota — 保留最后 100 条
     const fallback = msgs.slice(-100);
     try {
       localStorage.setItem(key, JSON.stringify(fallback));
+      // 截断落盘 → 置位截断标志（P1-F3）：不再静默无痕，hydrate 可提示
+      markQuotaTruncated(id);
     } catch {
       /* quota — drop silently */
     }
@@ -315,14 +367,24 @@ export function hydrateSessionsFromDisk(): {
         folder: e.folder,
         isPinned: e.isPinned,
         isArchived: e.isArchived,
-        ...(e.branchParentId !== undefined ? { branchParentId: e.branchParentId } : {}),
+        ...(e.branchParentId !== undefined
+          ? { branchParentId: e.branchParentId }
+          : {}),
         timestamp: coerceSessionTimestamp(e.id, e.timestamp, messages),
         messages,
-        ...(e.pinnedMessageIds?.length ? { pinnedMessageIds: e.pinnedMessageIds } : {}),
+        ...(e.pinnedMessageIds?.length
+          ? { pinnedMessageIds: e.pinnedMessageIds }
+          : {}),
         agents: loadSessionAgents(e.id),
-        ...(e.engineCursor !== undefined ? { engineCursor: e.engineCursor } : {}),
-        ...(e.engineLastRunId !== undefined ? { engineLastRunId: e.engineLastRunId } : {}),
-        ...(e.hydratedFromEngine !== undefined ? { hydratedFromEngine: e.hydratedFromEngine } : {}),
+        ...(e.engineCursor !== undefined
+          ? { engineCursor: e.engineCursor }
+          : {}),
+        ...(e.engineLastRunId !== undefined
+          ? { engineLastRunId: e.engineLastRunId }
+          : {}),
+        ...(e.hydratedFromEngine !== undefined
+          ? { hydratedFromEngine: e.hydratedFromEngine }
+          : {}),
         ...(e.importMeta ? { importMeta: e.importMeta } : {}),
       };
     });
@@ -371,9 +433,14 @@ export function persistAllSessionsSync(
   activeSessionId: string,
   folderOrder: string[]
 ): void {
-  persistAllSessionsSyncViaLocalStorage(sessions, activeSessionId, folderOrder, {
-    sessionsToIndex,
-  });
+  persistAllSessionsSyncViaLocalStorage(
+    sessions,
+    activeSessionId,
+    folderOrder,
+    {
+      sessionsToIndex,
+    }
+  );
 }
 
 export function resetOrphanScanCache(): void {

@@ -62,6 +62,8 @@ import {
   type SessionIndexEntry,
 } from './sessionPersistenceTypes';
 import { invokeResult } from '../tauriInvoke';
+import { logInternalError } from '../userFacingErrors';
+import { hasQuotaTruncation } from './sessionLocalStorage';
 
 // ── Rust 侧类型（serde camelCase 反序列化产物） ─────────────────────────────
 
@@ -607,6 +609,12 @@ export async function loadSessionBody(
   const res = await invokeResult<RustSessionMessage[]>('load_session_body', {
     sessionId,
   });
+  // P1-F3（F5-03）：LS quota 截断标志 → 数据面日志提示（提示 UI 最小化，仅日志；
+  // 数据面暴露走 sessionLocalStorage.hasQuotaTruncation）。标志存在意味着某次
+  // LS 写入因 quota 超限被截断为最后 100 条，旧消息静默丢失——必须留痕。
+  if (hasQuotaTruncation(sessionId)) {
+    logInternalError('ls-quota-truncated', { sessionId });
+  }
   if (res.status === 'ok') return fromRustSessionMessages(res.data || []);
   return lsLoadSessionBody(sessionId);
 }
