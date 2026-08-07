@@ -94,24 +94,17 @@ export const ComposePlusMenu: React.FC<Props> = ({
 
   if (!open) return null;
 
-  const anchorEl = restoreFocusRef?.current;
-
   return (
     <Menu
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) onClose();
       }}
-      trigger={
-        <div
-          ref={(node) => {
-            if (node && anchorEl) {
-              // 挂载锚点
-            }
-          }}
-          style={{ display: 'none' }}
-        />
-      }
+      // P1-F4 根因修复（F7 F1）：以 restoreFocusRef 真实按钮为 Radix 浮动锚点
+      // （Menu 基座 anchor → Popover.Anchor virtualRef），floating-ui 基于可见
+      // 元素计算坐标；修复前传 display:none 空 div 作 trigger/锚点，其 rect 全 0
+      // → 菜单被定位到视口 (0,0) 左上角。锚点即真实按钮，无需再渲染隐藏元素。
+      anchor={restoreFocusRef}
       options={items}
       align="start"
       side="top"

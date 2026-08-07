@@ -99,28 +99,50 @@ describe('ComposePlusMenu P1-F4 锚点修复', () => {
     expect(document.querySelector('[style*="display: none"]')).toBeNull();
   });
 
-  it('打开菜单后 anchor 元素（真实按钮）仍在文档且可见', async () => {
+  it('打开菜单后菜单以真实按钮为锚定位（floating-ui 基于可见元素 rect）', async () => {
     const anchorRef = React.createRef<HTMLButtonElement>();
+    // 先挂真实按钮并 stub 可见矩形（jsdom getBoundingClientRect 默认全 0），
+    // 让 floating-ui 能按「锚点元素」计算出可观测的菜单位置。
     render(
-      <>
-        <button ref={anchorRef} type="button">
-          ＋
-        </button>
-        <ComposePlusMenu
-          open={true}
-          onClose={() => {}}
-          onAddFiles={() => {}}
-          restoreFocusRef={anchorRef}
-        />
-      </>
+      <button ref={anchorRef} type="button">
+        ＋
+      </button>
+    );
+    const btn = anchorRef.current as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+    vi.spyOn(btn, 'getBoundingClientRect').mockReturnValue({
+      x: 100,
+      y: 200,
+      width: 32,
+      height: 32,
+      top: 200,
+      left: 100,
+      right: 132,
+      bottom: 232,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    render(
+      <ComposePlusMenu
+        open={true}
+        onClose={() => {}}
+        onAddFiles={() => {}}
+        restoreFocusRef={anchorRef}
+      />
     );
     await screen.findByRole('menu');
-    // 锚点 = restoreFocusRef 指向的真实按钮：仍在文档、未被隐藏
-    expect(anchorRef.current).not.toBeNull();
-    expect(document.body.contains(anchorRef.current as HTMLElement)).toBe(true);
-    expect((anchorRef.current as HTMLElement).style.display).not.toBe('none');
-    // 菜单经 Radix 自定义锚点（Popover.Anchor + virtualRef）接入——
-    // 修复前不存在该节点（锚点是 trigger 克隆的 display:none div）→ 红
-    expect(document.querySelector('[data-menu-anchor]')).not.toBeNull();
+    // 修复前：锚点是 display:none 空 div（rect 全 0）→ 菜单定位 (0,0) 附近、
+    // anchor 尺寸 0；修复后：锚点是真实按钮（32×32 @ (100,200)）→ 菜单跟随按钮
+    await waitFor(() => {
+      const wrapper = document.querySelector(
+        '[data-radix-popper-content-wrapper]'
+      );
+      const style = wrapper?.getAttribute('style') ?? '';
+      expect(style).toContain('--radix-popper-anchor-width: 32px');
+      expect(style).toContain('translate(100px');
+    });
+    // 锚点元素（真实按钮）仍在文档且可见（非 display:none）
+    expect(document.body.contains(btn)).toBe(true);
+    expect(btn.style.display).not.toBe('none');
   });
 });

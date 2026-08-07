@@ -113,3 +113,27 @@
 - **描述**：R1 推演「write.rs:38-48 `create_dir_all(parent)` 对 dangling symlink 返回 Ok，`fs::write` 跟随 symlink 在根外落盘」。实测（Windows junction 等价形态，std 语义与 symlink 一致）：`DirBuilder::create_dir_all` 对 dangling 链接**失败**——create_dir 返回 AlreadyExists 后，std 用 `metadata`（跟随链接）复核目录性，目标不存在 → NotFound → 返回 Err。因此 Windows junction 形态下根外**落盘**不发生，实际表现为 resolve_for_write 放行词法路径 + 写链报 write_file_failed（错误码错误、语义错误，但无根外写盘）；Unix/真 symlink 形态的落盘行为依赖各平台 create_dir_all 实现，本环境（无管理员权限）无法实测。
 - **结论**：缺陷本质（resolve 层放行词法路径、dangling 形态不被沙箱感知）经红测试确认成立（红阶段 resolve 返回 Ok 词法路径）；修复后 resolve 层统一 outside_workspace 拒绝，与落盘层行为无关，防御纵深成立。F5-01 的「根外写文件」表述建议在后续文档修订时改为「resolve 放行 + 写链跟随链接（跨平台落盘行为依实现而定）」。
 - **建议**：无代码动作（修复已覆盖两类形态）；审计文档措辞留待自然修订。
+
+## F-014：onCloseSiblingMenus 自关闭接线——「+」菜单点击永远打不开（P1-F4 T5.4 执行期）
+
+- **发现日期**：2026-08-08（P1-F4 T5.4 执行期）
+- **位置**：`apps/crish-desktop/src/components/chat-card/ChatCard.tsx:76`（`onCloseSiblingMenus={() => state.composerProps.setShowPlusMenu(false)}`）+ `apps/crish-desktop/src/components/chat-composer/ChatComposer.tsx:236`（打开「+」菜单时回调 `onCloseSiblingMenus?.()`）
+- **描述**：ChatComposer 的 plus 按钮 onClick else 分支 = `setShowPlusMenu(true)` 后立即调 `onCloseSiblingMenus?.()`；ChatCard 把该回调实现为 `setShowPlusMenu(false)` → React 批处理下最终 state 恒为 false → **点击「+」菜单永远打不开**。jsdom 隔离复现（ChatComposer + 同款接线，aria-expanded 点击后仍 false）；真实浏览器复现（Playwright 点击后 aria-expanded=false、`[role="menu"]` 不存在，无报错）。历史溯源：该接线源自 god-file 时代（1b038154 分解前原样保留），当时 else 分支还有 `setSlashMenuOpen(false)`（slash 菜单已于 9b155259 退役），「兄弟菜单」概念已无目标（PermissionModeMenu 自管 open 状态）——属休眠缺陷，此前无任何测试/交互覆盖到「点击打开」路径。
+- **处置**：**已随 T5.4 修复**（ChatCard.tsx:76 删除该接线 + 注释说明）——不修则 T5.4 的 Playwright 验收（点击打开菜单测定位）无法成立，属验收阻塞项而非范围蔓延。ChatComposer 侧 `onCloseSiblingMenus?.()` 调用与可选 prop 保留（API 兼容，其他宿主可自行接线）。
+- **建议**：ChatCard 全链回归（full-journey 已绿）；后续若引入真正「兄弟菜单」（如权限菜单外置化），再按新语义接线。
+
+## F-015：本地 e2e 环境——5173/5174 被 markdown-editor 陈旧 dev server 占用 + vite dep 二次优化 mixed-hash 致 React 事件系统死（P1-F4 T5.4 执行期）
+
+- **发现日期**：2026-08-08（P1-F4 T5.4 执行期）
+- **位置**：本地环境（非代码）；`playwright.config.ts` webServer `reuseExistingServer: true` + crish-desktop `vite.config.ts` strictPort 5174
+- **描述**：① 本地 5173/5174 被上一会话遗留的两个 markdown-editor vite 实例占用（crish-desktop 是 strictPort 5174）→ Playwright reuseExistingServer 复用错服务，加载到错误页面。② 清理缓存重启后，vite 首次 `--force` 优化 + **懒加载 chunk 触发二次优化**（页面出现 `react.js?v=e7dce037` 与 `chunk-*.js?v=eef4e815` 两种 hash 混载）→ React 双模块实例 → **lazy 子树（BinaryTreeWorkspace 内 ChatCard）事件委托失效**：点击 plus/new-session 全部无效（fiber onClick 直接调用也不生效），而外层 shell（收起侧栏等）正常；期间还伴随 `__name is not defined`（esbuild 块跨优化代引用）。恢复：清 `.vite` 缓存重启 + 预热页触发优化 + 等全量 reload 稳定后测试。
+- **处置**：仅本地环境处置（kill 陈旧进程、清缓存、预热），无代码改动；P1-F4 的 e2e 红绿证据均在稳定环境采集。
+- **建议**：CI 环境不受影响（全新 checkout + npm ci）；本地跑 `npm run test:e2e` 前先确认 5174 归属 crish-desktop（`Invoke-WebRequest` 看 title），并预留首个页面冷编译时间（首次可达 60-90s，playwright webServer 180s 预算内）。
+
+## F-016：matrix-navigation.spec.ts 2 用例既存失败（与 P1-F4 无关，stash 隔离证实）
+
+- **发现日期**：2026-08-08（P1-F4 T5.4 执行期）
+- **位置**：`tests/e2e/matrix-navigation.spec.ts`（M-NAV-01 cursorPos 应为 0 实为其他值；M-NAV-03 cursorPos 应 >1000 未达）
+- **描述**：P1-F4 回归 e2e 时 2 失败。经 `git stash push`（仅 P1-F4 三个源码文件）在**无本次改动**的干净树重跑，同样 2 失败 1 通过——与 P1-F4 无关的既存失败（编辑/光标域，疑似依赖编辑器时序/虚拟化边界，F-005 同类编辑器域问题）。
+- **处置**：登记不修（B9 范围纪律，编辑器域）。
+- **建议**：编辑器域适配任务（F-005 同批）回归该 spec；e2e 提升 PR 门禁（T5.6）前确认其基线。
