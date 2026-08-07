@@ -21,15 +21,34 @@ pub mod fuzzy {
             let orig_q: Vec<char> = query.chars().collect();
             let orig_t: Vec<char> = target.chars().collect();
 
-            let q: Vec<char> = if self.case_sensitive {
-                orig_q.clone()
-            } else {
-                query.to_lowercase().chars().collect()
+            // 折叠 case 时逐字符构建「折叠后位置 → 原始位置」映射（F3-03 根因修复）：
+            // to_lowercase 可将单个字符展开为多个（如 İ(U+0130) → i + U+0307），使折叠
+            // 后的 Vec 比原始 Vec 更长；若用折叠索引直接回查原始 Vec（旧实现 :68）会越界
+            // panic。匹配索引与 case-exact bonus 均须经该映射对齐回原始坐标，而不是用
+            // 下标截断掩盖（clamp 会丢失坐标语义）。
+            let fold_with_map = |orig: &[char]| -> (Vec<char>, Vec<usize>) {
+                let mut folded = Vec::with_capacity(orig.len());
+                let mut to_orig = Vec::with_capacity(orig.len());
+                for (i, &c) in orig.iter().enumerate() {
+                    for fc in c.to_lowercase() {
+                        folded.push(fc);
+                        to_orig.push(i);
+                    }
+                }
+                (folded, to_orig)
             };
-            let t: Vec<char> = if self.case_sensitive {
-                orig_t.clone()
+
+            let identity_map = |len: usize| (0..len).collect::<Vec<usize>>();
+
+            let (q, q_to_orig) = if self.case_sensitive {
+                (orig_q.clone(), identity_map(orig_q.len()))
             } else {
-                target.to_lowercase().chars().collect()
+                fold_with_map(&orig_q)
+            };
+            let (t, t_to_orig) = if self.case_sensitive {
+                (orig_t.clone(), identity_map(orig_t.len()))
+            } else {
+                fold_with_map(&orig_t)
             };
 
             if q.len() > t.len() {
@@ -47,7 +66,9 @@ pub mod fuzzy {
                     break;
                 }
                 if tc == q[qi] {
-                    match_indices.push(ti);
+                    // 记录原始坐标（多字符展开的多个折叠字符可映射到同一原始索引，
+                    // 坐标不越界且单调不减）
+                    match_indices.push(t_to_orig[ti]);
                     qi += 1;
                     consecutive += 1;
 
@@ -64,8 +85,9 @@ pub mod fuzzy {
                         score += 3;
                     }
 
-                    // Case-exact bonus (O(1) index into pre-collected Vec)
-                    if !self.case_sensitive && orig_t[ti] == orig_q[qi - 1] {
+                    // Case-exact bonus: 两侧均经折叠映射对齐回原始坐标，折叠展开
+                    // （查询或目标任一侧）都不会越界
+                    if !self.case_sensitive && orig_t[t_to_orig[ti]] == orig_q[q_to_orig[qi - 1]] {
                         score += 1;
                     }
                 } else {
