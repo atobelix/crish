@@ -1,53 +1,45 @@
-#### H4
-
-# H1 with many spaces
-
 $$
 \sum_{i=1}^n i = \frac{n(n+1)}{2}
 $$
 
-```javascript
-const a = 1;
-```
-
-# H1
-
-$$
-\sum_{i=1}^n i = \frac{n(n+1)}{2}
-$$
-
-> > Nested blockquote
-
-Some text with **bold**.
+A deeply nested _**~~`combo`~~**_!
 
 $$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
 
-### H3
+###### H6
+
+Some text with an ![image](image.png).
 
 ---
 
-Some text with _italic_.
+#Invalid H1 no space
 
-```html
-<div></div>
-```
+$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
 
-Some text with **bold**.
+# H1 with many spaces
+
+---
 
 ```
 No lang fence
 ```
 
-Some text with _italic_.
-
-## H2
-
-$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
+#### H4
 
 ---
 
-A deeply nested _**~~`combo`~~**_!
-
 Some text with ~~strikethrough~~.
 
-> Blockquote with **bold** and _italic_
+Some text with $E=mc^2$.
+
+Some text with an ![image](image.png).
+
+```html
+<div></div>
+```
+
+# H1 with many spaces
+
+---
+
+### H3

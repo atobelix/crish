@@ -1,88 +1,50 @@
----
-
----
-
----
-
----
-
----
-
-Some text with an ![image](image.png).
-
-Some text with $E=mc^2$.
-
----
-
----
-
-> Blockquote with **bold** and _italic_
-
-```html
-<div></div>
-```
-
-$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
-
-```html
-<div></div>
-```
-
-### H3
-
-A deeply nested _**~~`combo`~~**_!
-
-```html
-<div></div>
-```
-
-$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
+$$
+\sum_{i=1}^n i = \frac{n(n+1)}{2}
+$$
 
 > > Nested blockquote
+
+```html
+<div></div>
+```
 
 $$
 \sum_{i=1}^n i = \frac{n(n+1)}{2}
 $$
 
-# H1 with many spaces
+Some text with an ![image](image.png).
 
-> Blockquote with **bold** and _italic_
+Some text with ~~strikethrough~~.
 
-Some text with `inline code`.
-
-```html
-<div></div>
-```
-
-$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
+###### H6
 
 ```
 No lang fence
 ```
 
+Some text with ~~subscript~~ and ^superscript^.
+
+```javascript
+const a = 1;
+```
+
+Some text with ~~subscript~~ and ^superscript^.
+
+$$
+\sum_{i=1}^n i = \frac{n(n+1)}{2}
+$$
+
+$$
+\sum_{i=1}^n i = \frac{n(n+1)}{2}
+$$
+
+#Invalid H1 no space
+
 Some text with _italic_.
 
-Some text with a [link](https://example.com).
+####### Invalid H7
 
-> Blockquote simple
-
-## H2
-
-Some text with a [link](https://example.com).
-
-Some text with **bold**.
-
-Some text with _italic_.
-
-Some text with $E=mc^2$.
-
----
-
-#### H4
-
-# H1 with many spaces
-
-## H2
+$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
 
 #Invalid H1 no space
 
@@ -90,76 +52,86 @@ $$
 \sum_{i=1}^n i = \frac{n(n+1)}{2}
 $$
 
-###### H6
-
-> Blockquote simple
-
-####### Invalid H7
-
-Some text with ~~strikethrough~~.
-
-> > Nested blockquote
-
-```
-No lang fence
-```
+$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
 
 ---
 
+###### H6
+
+### H3
+
+---
+
+$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
+
 Some text with $E=mc^2$.
 
+###### H6
+
+---
+
+Some text with _italic_.
+
+$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
+
+```javascript
+const a = 1;
 ```
-No lang fence
+
+> Blockquote simple
+
+> Blockquote simple
+
+Some text with an ![image](image.png).
+
+Some text with `inline code`.
+
+> Blockquote with **bold** and _italic_
+
+```javascript
+const a = 1;
+```
+
+### H3
+
+#### H4
+
+> Blockquote with **bold** and _italic_
+
+$$
+\sum_{i=1}^n i = \frac{n(n+1)}{2}
+$$
+
+###### H6
+
+---
+
+$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
+
+---
+
+---
+
+---
+
+```html
+<div></div>
 ```
 
 $$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
 
-## H2
-
-$$
-\sum_{i=1}^n i = \frac{n(n+1)}{2}
-$$
-
 ```html
 <div></div>
 ```
 
----
-
-$$
-\sum_{i=1}^n i = \frac{n(n+1)}{2}
-$$
-
-Some text with **bold**.
-
----
-
-#### H4
-
-```
-No lang fence
-```
-
-> Blockquote simple
-
-$$
-\sum_{i=1}^n i = \frac{n(n+1)}{2}
-$$
-
 ```html
 <div></div>
-```
-
-```
-No lang fence
 ```
 
 ####### Invalid H7
 
-```html
-<div></div>
-```
-
-Some text with ~~subscript~~ and ^superscript^.
-
 > Blockquote simple
+
+###### H6
+
+#### H4
