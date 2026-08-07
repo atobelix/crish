@@ -586,6 +586,54 @@ function lsSaveFolderOrder(order: string[]): void {
   }
 }
 
+// ── 降级戳（P1-F1 F5-01） ─────────────────────────────────────────────────────
+//
+// 背景：invoke 失败降级 LS 时若不留下任何痕迹，SQLite 保持旧正文，而 LS 持有
+// 最新正文——下次 hydrate 以 SQLite 为正文源展示旧数据，新消息「丢失」且用户
+// 无从知晓（F5-01）。降级戳记录「该会话 LS 正文为最新、SQLite 可能为旧快照」，
+// hydrate 据此以 LS 正文为真源回灌并回写 SQLite（单向修复路径），消除分叉。
+
+/** 降级戳 key 前缀（任务书 T5.1 约定 crish_degraded_） */
+export const DEGRADED_MARKER_PREFIX = 'crish_degraded_';
+
+function degradedMarkerKey(sessionId: string): string {
+  return DEGRADED_MARKER_PREFIX + sessionId;
+}
+
+/**
+ * 标记会话已降级（值 = 降级时间戳）。
+ * 写入自身 try/catch：quota/隐私模式下戳写不进也不阻塞降级路径（AU-03:127 残余细节）。
+ */
+export function markDegradedSession(sessionId: string): void {
+  try {
+    localStorage.setItem(degradedMarkerKey(sessionId), String(Date.now()));
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+/** 会话是否存在未修复的降级戳。 */
+export function hasDegradedSession(sessionId: string): boolean {
+  try {
+    return localStorage.getItem(degradedMarkerKey(sessionId)) != null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 清除会话降级戳。
+ * 调用时机约束（AU-03:127）：仅在「修复回写 SQLite 成功」后调用——回写失败时
+ * 保持戳，下次 hydrate 重试单向修复，避免分叉在无痕状态下复发。
+ */
+export function clearDegradedSession(sessionId: string): void {
+  try {
+    localStorage.removeItem(degradedMarkerKey(sessionId));
+  } catch {
+    /* ignore */
+  }
+}
+
 // ── 14 个 async API（invoke + localStorage 回退） ──────────────────────────
 
 /**
@@ -660,10 +708,22 @@ async function saveSessionBody(
     if (msgs.length > 0) {
       lsSaveSessionBody(sessionId, msgs);
     }
+    // P1-F1：SQLite 落库成功 = 本会话已无分叉（LS 镜像可能陈旧，如 quota 写失败），
+    // 清除遗留降级戳，防止下次 hydrate 以 LS 旧正文回灌盖掉 SQLite 新数据。
+    clearDegradedSession(sessionId);
     return;
   }
-  // missing / error → localStorage 回退
+  // missing / error → localStorage 回退。P1-F1：降级不再静默——记日志 + 打降级戳，
+  // hydrate 分叉恢复据此识别「LS 正文为最新真源」的会话并回写 SQLite。
+  logInternalError('persist-degraded-ls', {
+    command: 'save_session_body',
+    sessionId,
+    batchVersion,
+    status: res.status,
+  });
   lsSaveSessionBody(sessionId, msgs);
+  // 空正文不标记：无内容可回灌，标记反而会让 hydrate 以空正文盖掉 SQLite 已有数据
+  if (msgs.length > 0) markDegradedSession(sessionId);
 }
 
 /**
@@ -695,6 +755,11 @@ async function saveSessionAgents(
       agents: [],
     });
     if (res.status === 'ok') return;
+    logInternalError('persist-degraded-ls', {
+      command: 'save_session_agents',
+      sessionId,
+      status: res.status,
+    });
     lsSaveSessionAgents(sessionId, []);
     return;
   }
@@ -706,6 +771,12 @@ async function saveSessionAgents(
     agents: rustAgents,
   });
   if (res.status === 'ok') return;
+  // P1-F1：降级可观测（agents 降级不涉及正文分叉，无需打降级戳）
+  logInternalError('persist-degraded-ls', {
+    command: 'save_session_agents',
+    sessionId,
+    status: res.status,
+  });
   lsSaveSessionAgents(sessionId, agents);
 }
 
@@ -737,7 +808,12 @@ export async function setSessionMeta(
   if (!key?.trim()) return;
   const res = await invokeResult<void>('set_session_meta', { key, value });
   if (res.status === 'ok') return;
-  // localStorage 回退
+  // localStorage 回退。P1-F1：降级可观测（meta 无正文分叉语义，不打降级戳）
+  logInternalError('persist-degraded-meta', {
+    command: 'set_session_meta',
+    key,
+    status: res.status,
+  });
   if (key === 'active_session_id') lsSaveActiveSessionId(value);
   if (key === 'folder_order') {
     const order = parseFolderOrder(safeParseJson<unknown>(value, null));
@@ -809,6 +885,57 @@ export async function importFromLocalStorage(
 // ── 复合 API：hydrateSessionsFromRust ──────────────────────────────────────
 
 /**
+ * P1-F1 hydrate 分叉恢复（F5-01 单向修复路径）。
+ *
+ * 会话带降级戳（期间 invoke 失败 → LS 正文为最新、SQLite 为旧快照）时：
+ *   ① 以 LS 正文为真源（跳过 SQLite 读取）；
+ *   ② 回写 SQLite（save_session_body，载荷 = LS 正文，取新批次戳）——回写失败
+ *      （invoke 仍未恢复）→ 保持降级戳待下次 hydrate 重试，不丢数据；本次
+ *      hydrate 仍展示 LS 最新正文；
+ *   ③ 回写成功（或 LS 正文为空、无回灌价值）→ 清戳，后续 hydrate 恢复
+ *      SQLite 优先（37/37 基线契约不回归）。
+ *
+ * 回写直接走 invokeResult 而非 saveSessionBody：修复失败时不能走其降级分支
+ * 的「打戳 → 本函数清戳」抵消序列（AU-03:127：清戳时机 = 回写成功后）。
+ * 批次戳取模块级新版本号，保证不被 CAS（writtenBodyBatchVersions）误判陈旧。
+ */
+async function loadSessionBodyWithDegradedRecovery(
+  sessionId: string
+): Promise<SessionMessage[]> {
+  if (!hasDegradedSession(sessionId)) return loadSessionBody(sessionId);
+
+  const lsMessages = lsLoadSessionBody(sessionId);
+  if (lsMessages.length === 0) {
+    // LS 正文为空：无最新证据可回灌，清戳后按 SQLite 现状加载，
+    // 避免空正文经回灌盖掉 SQLite 已有数据
+    clearDegradedSession(sessionId);
+    return loadSessionBody(sessionId);
+  }
+
+  logInternalError('hydrate-degraded-repair', {
+    sessionId,
+    messageCount: lsMessages.length,
+  });
+  const version = ++batchVersionCounter;
+  const res = await invokeResult<void>('save_session_body', {
+    sessionId,
+    messages: lsMessages.map(toRustSessionMessage),
+    batchVersion: version,
+  });
+  if (res.status === 'ok') {
+    writtenBodyBatchVersions.set(sessionId, version);
+    clearDegradedSession(sessionId);
+  } else {
+    // 回写失败：保持降级戳（下次 hydrate 重试单向修复），日志暴露修复未完成
+    logInternalError('hydrate-degraded-repair-failed', {
+      sessionId,
+      status: res.status,
+    });
+  }
+  return lsMessages;
+}
+
+/**
  * 从存储层加载全部会话（index + bodies + agents），构造 SessionState[]。
  *
  * 索引加载策略（Stream D 过渡期）：
@@ -852,7 +979,7 @@ export async function hydrateSessionsFromRust(): Promise<{
   const sessions: SessionState[] = await Promise.all(
     ordered.map(async (e) => {
       const [messages, agents] = await Promise.all([
-        loadSessionBody(e.id),
+        loadSessionBodyWithDegradedRecovery(e.id),
         loadSessionAgents(e.id),
       ]);
       const sanitized = sanitizeMessagesForHydrate(messages);
@@ -1007,7 +1134,13 @@ export async function persistAllSessionsRust(
     // 检测 invoke 可用性（用 list_sessions 作为探针）
     const probe = await invokeResult<RustSessionIndexEntry[]>('list_sessions');
     if (probe.status !== 'ok') {
-      // 回退：localStorage 同步路径（索引已写入，只需写 body/agents/meta）
+      // 回退：localStorage 同步路径（索引已写入，只需写 body/agents/meta）。
+      // P1-F1：整批降级必须可观测；fallback 写入的 LS 正文是 SQLite 缺失的
+      // 最新快照（启动竞态期 invoke 未就绪即触发），由 fallback 打戳供 hydrate 回灌。
+      logInternalError('persist-degraded-ls', {
+        command: 'list_sessions(probe)',
+        status: probe.status,
+      });
       persistAllSessionsLocalFallback(list, activePersistable, folderOrder);
       return;
     }
@@ -1070,6 +1203,9 @@ function persistAllSessionsLocalFallback(
     );
     if (msgs.length > 0) {
       lsSaveSessionBody(s.id, msgs);
+      // P1-F1：本次降级落 LS 的正文是 SQLite 缺失的最新快照，打戳供 hydrate
+      // 单向修复（以 LS 为真源回灌回写 SQLite）
+      markDegradedSession(s.id);
     }
     lsSaveSessionAgents(s.id, s.agents || []);
   }
