@@ -42,8 +42,8 @@ use conex_types::session::AgentEndReason;
 use conex_types::SessionAgent;
 use orchestrator::events::{EventQueue, drive_outcome};
 use orchestrator::flow_graph::{
-    FlowDeclaration, FlowNode, FlowNodeState, FlowScheduler, FLOW_RELEASED_KEY,
-    FLOW_RESERVED_KEY,
+    FlowDeclaration, FlowNode, FlowNodeState, FlowReportKind, FlowScheduler,
+    FLOW_RELEASED_KEY, FLOW_RESERVED_KEY, FLOW_STATE_KEY,
 };
 use orchestrator::lifecycle::SubagentLifecycleService;
 use orchestrator::persist::{LocalDbStore, SessionSequencer, Store};
@@ -610,11 +610,22 @@ struct DbSpawner {
 
 impl DbSpawner {
     fn with_db(db: LocalDb, session_id: &str) -> Arc<Self> {
+        Self::with_db_seq(db, session_id, 0)
+    }
+
+    /// 指定起始序号构造（重启场景用：阶段一已消费 seq 0，阶段二从 1 起，
+    /// 避免新 run 行与崩溃前行的 agent_id/subagent_run_id 撞 UNIQUE 约束）
+    fn with_db_seq(db: LocalDb, session_id: &str, start_seq: usize) -> Arc<Self> {
         Arc::new(Self {
             db,
             session_id: session_id.to_string(),
-            seq: AtomicUsize::new(0),
+            seq: AtomicUsize::new(start_seq),
         })
+    }
+
+    /// 已 spawn 调用计数（防双跑断言：重启后不再增加）
+    fn spawn_count(&self) -> usize {
+        self.seq.load(Ordering::SeqCst)
     }
 }
 
@@ -993,4 +1004,143 @@ async fn running_subagents_normalized_across_crash_restart() {
     }
     assert!(restored.flow_terminal(), "编排全终态（running 中崩溃重启自愈）");
     assert_eq!(restored.budget_in_flight(), 0, "无运行残留（预算不 double-charge）");
+}
+
+// ── PS-03 T3.4 D4：flow 节点 spawn 后崩溃不重复 spawn（孤儿双跑）──────
+// 复现窗口（R2 §2 / F2-28）：advance 内 spawn Ok 只更新内存
+// （flow_graph.rs:1045-1050），persist_runtime/persist_budget 在整轮循环
+// 末尾（:1127-1130）才执行；spawn 落库成功 → flow_state 未持久化 → 崩溃
+// → 重启 load 全节点初始 Pending（:1359-1363）、仅 flow_state 有映射的
+// 节点改写状态（:1369-1392）→ 该节点保持 Pending → is_ready 放行 →
+// 重复 spawn（孤儿双跑）。
+// 双防线（T3.4）：① spawn 成功即持久化节点 runtime + 预算（任何 await
+// 之前落库，窗口归零）；② load() 反向校验——session_agents 有 run 行、
+// flow_state 无映射的节点按 Failed 处理 + DataInconsistent 上报。
+
+#[tokio::test]
+async fn flow_spawn_then_crash_does_not_double_spawn() {
+    let ws = TempWorkspace::new("flow_spawn_crash");
+    let db_path = ws.path().join("sessions.db");
+    let session_id = "sess-spawn-crash";
+
+    // ── 形态 A（修复后主路径）：declare_flow → a spawn → 立即 drop ──
+    // 等价「spawn 成功后、advance 收尾 persist 前崩溃」：修复后 spawn
+    // 即持久化，崩溃窗口归零；重开库 load 应把 a 重建为 Running（非
+    // Pending），advance 不再 spawn a。
+    let run_a;
+    {
+        let db = LocalDb::open(&db_path).unwrap();
+        db.insert_session(session_id, "崩溃会话").unwrap();
+        let spawner = DbSpawner::with_db(db.clone(), session_id);
+        let mut sched =
+            FlowScheduler::new(session_id, spawner.clone(), Arc::new(db.clone())).unwrap();
+        let adv = sched
+            .declare_flow(&FlowDeclaration {
+                tasks: vec![flow_node("a", &[]), flow_node("b", &["a"])],
+                planner_run_id: Some("planner-1".to_string()),
+            })
+            .await
+            .unwrap();
+        assert_eq!(adv.started.len(), 1, "a 首波 spawn");
+        assert_eq!(adv.started[0].node_id, "a");
+        run_a = adv.started[0].subagent_run_id.clone();
+        // spawn 成功后立即 drop 调度器（不触发 advance 收尾 persist，
+        // 等价 spawn 后崩溃；DbSpawner 的 run 行已落库 session_agents）
+        drop(sched);
+    } // 连接关闭 = 进程崩溃
+
+    // 重开库：load 应把 a 重建为 Running（runtime 已持久化，非 Pending）
+    let db = LocalDb::open(&db_path).unwrap();
+    // 阶段二 spawner 从 seq 1 起（阶段一已消费 seq 0；防 run 行撞 UNIQUE）
+    let spawner = DbSpawner::with_db_seq(db.clone(), session_id, 1);
+    let rows = db.load_session_agents(session_id).unwrap();
+    assert_eq!(rows.len(), 1, "a 的 run 行仅 1 条");
+    let mut restored =
+        FlowScheduler::load(session_id, spawner.clone(), Arc::new(db.clone()), &rows).unwrap();
+    assert_eq!(
+        restored.node_state("a"),
+        Some(FlowNodeState::Running),
+        "a 的 runtime 已持久化：load 重建为 Running（非 Pending）"
+    );
+    // 断言 3（防双跑核心）：advance() 不再 spawn a（spawn 计数不增加、
+    // a 的 run 行数量不变）
+    let spawns_before = spawner.spawn_count();
+    let adv2 = restored.advance().await.unwrap();
+    assert!(adv2.started.is_empty(), "a 已运行，不得重复 spawn");
+    assert_eq!(spawner.spawn_count(), spawns_before, "spawn 调用计数不增加");
+    assert_eq!(
+        db.load_session_agents(session_id).unwrap().len(),
+        1,
+        "a 的 run 行数量不变"
+    );
+    // 断言 4：a 终态后 b 的 Ready 判定与推进不受影响（依赖链语义回归）
+    set_row_status(&db, session_id, &run_a, "completed");
+    let adv3 = restored
+        .on_subagent_terminal(&run_a, SubagentState::Completed)
+        .await
+        .unwrap();
+    assert_eq!(adv3.started.len(), 1, "a 完成后 b 启动");
+    assert_eq!(adv3.started[0].node_id, "b");
+    assert_eq!(restored.node_state("b"), Some(FlowNodeState::Running));
+
+    // ── 形态 B（反向校验兜底）：手工构造崩溃中间态 ──
+    // 用 DbSpawner 直接插入 a 的 run 行 + flow_state 置空（等价修复前
+    // 崩溃窗口：spawn 已落库、runtime 未持久化）→ load 应把 a 置 Failed
+    // + DataInconsistent 上报；advance() 不再 spawn a。
+    let db_path_b = ws.path().join("sessions_b.db");
+    let session_b = "sess-spawn-crash-b";
+    {
+        let db = LocalDb::open(&db_path_b).unwrap();
+        db.insert_session(session_b, "崩溃会话 B").unwrap();
+        let spawner = DbSpawner::with_db(db.clone(), session_b);
+        let mut sched =
+            FlowScheduler::new(session_b, spawner.clone(), Arc::new(db.clone())).unwrap();
+        let adv = sched
+            .declare_flow(&FlowDeclaration {
+                tasks: vec![flow_node("a", &[]), flow_node("b", &["a"])],
+                planner_run_id: Some("planner-1".to_string()),
+            })
+            .await
+            .unwrap();
+        assert_eq!(adv.started.len(), 1);
+        // 崩溃中间态：a 的 run 行已在 session_agents，flow_state 置空
+        // （模拟 spawn 落库后、persist 前崩溃；a 行 status=running）
+        db.set_session_meta(FLOW_STATE_KEY, "[]").unwrap();
+        drop(sched);
+    }
+    let db = LocalDb::open(&db_path_b).unwrap();
+    let spawner = DbSpawner::with_db_seq(db.clone(), session_b, 1);
+    let rows = db.load_session_agents(session_b).unwrap();
+    assert_eq!(rows.len(), 1, "a 的 run 行存在");
+    let mut restored =
+        FlowScheduler::load(session_b, spawner.clone(), Arc::new(db.clone()), &rows).unwrap();
+    // 反向校验：session_agents 有 run、flow_state 无映射 → a = Failed
+    assert_eq!(
+        restored.node_state("a"),
+        Some(FlowNodeState::Failed),
+        "反向校验：a = Failed（修复前为 Pending 并被重复 spawn）"
+    );
+    // 断言 3（防双跑核心）：advance() 不再 spawn a
+    let spawns_before = spawner.spawn_count();
+    let adv = restored.advance().await.unwrap();
+    assert!(
+        adv.reports
+            .iter()
+            .any(|r| r.kind == FlowReportKind::DataInconsistent && r.node_id == "a"),
+        "restart_reports 应含 DataInconsistent：{:?}",
+        adv.reports
+    );
+    assert!(adv.started.is_empty(), "a 已按 Failed 处理，不得重复 spawn");
+    assert_eq!(spawner.spawn_count(), spawns_before, "spawn 调用计数不增加");
+    assert_eq!(
+        db.load_session_agents(session_b).unwrap().len(),
+        1,
+        "a 的 run 行数量不变"
+    );
+    // 断言 4：a Failed（Block 默认）→ b 阻塞；依赖链语义不受影响
+    assert_eq!(
+        restored.node_state("b"),
+        Some(FlowNodeState::Blocked),
+        "a Failed + Block 策略 → b 阻塞（依赖链语义回归）"
+    );
 }
