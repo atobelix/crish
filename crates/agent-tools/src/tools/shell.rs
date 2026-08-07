@@ -1523,6 +1523,19 @@ mod tests {
         assert_eq!(err.code(), TOOL_COMMAND_BLOCKED);
     }
 
+    /// PS-01 T1.5 端到端：换行包裹的毁灭性命令（printf x\n/bin/rm -rf -- /，
+    /// 真实换行）经门禁拦截（先例 shell_blocked_command_rejected:1516）
+    #[tokio::test]
+    async fn shell_newline_wrapped_rm_blocked() {
+        let ws = TempWorkspace::new("shell_newline_blocked");
+        let t = tool();
+        let err = t
+            .execute(&ctx(&ws), json!({ "command": "printf x\n/bin/rm -rf -- /" }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), TOOL_COMMAND_BLOCKED);
+    }
+
     #[tokio::test]
     async fn shell_approval_command_requires_approval() {
         let ws = TempWorkspace::new("shell_approval");

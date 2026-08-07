@@ -26,6 +26,10 @@ pub mod gatekeeper {
                 // Unix 毁灭性命令
                 r"(?i)\brm\s+(-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*)\s+(/|/\*|\*)",
                 r"(?i)\brm\s+--no-preserve-root",
+                // PS-01 T1.3（R1 ③ 盲区）：-- 变体纵深防御——语义层已归一
+                // 拦截 rm -rf -- /，此处补静态层条目（新增，不改写既有 14 条），
+                // host_openers 逐参场景依赖正则兜底（lib.rs:30 注释）
+                r"(?i)\brm\s+(-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*)(\s+--)?\s+(/|/\*|\*)",
                 r"(?i)\bdd\s+if=.*of=/dev/sd[a-z]",
                 // 文件系统创建/格式化（确定性毁灭目标；S2 窄化时误删，host opener 逐参场景依赖正则兜底）
                 r"(?i)\bmkfs(\.[a-z0-9]+)?\s+/dev/sd[a-z]",
@@ -289,6 +293,23 @@ mod tests {
         assert_eq!(
             gk.check_command("rm -rf -- /", &[]),
             GatekeeperResult::Blocked
+        );
+    }
+
+    #[test]
+    fn static_patterns_cover_double_dash_root() {
+        // PS-01 T1.3（R1 ③）：静态正则层补 -- 变体条目（纵深防御——
+        // host_openers 逐参场景依赖正则兜底，lib.rs:30 注释）。
+        // 断言的是静态正则层本身，既有 redline_semantics_blocks_double_dash_root
+        // 语义层断言不受影响。
+        let gk = CommandGatekeeper::new();
+        assert!(
+            gk.patterns().is_match("rm -rf -- /"),
+            "静态正则必须命中 rm -rf -- /"
+        );
+        assert!(
+            gk.patterns().is_match("rm -rf -- /etc"),
+            "静态正则必须命中 rm -rf -- /etc"
         );
     }
 

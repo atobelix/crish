@@ -60,7 +60,7 @@ pub struct SemanticAnalysis {
 /// 间接执行命令名（小写）
 const INDIRECT_COMMANDS: &[&str] = &[
     "eval", "source", ".", "bash", "sh", "cmd", "pwsh", "powershell", "sudo", "xargs", "node",
-    "python", "python3", "find", "foreach-object",
+    "python", "python3", "find", "foreach-object", "iex", "invoke-expression", "start-process",
 ];
 
 /// 删除形态命令名（小写）
@@ -89,6 +89,31 @@ const REDLINE_COMMANDS: &[&str] = &[
 
 /// 解析命令行：拆分复合命令，逐段分析。
 pub fn analyze(command_line: &str) -> SemanticAnalysis {
+    analyze_depth(command_line, 0)
+}
+
+/// 包裹内容递归分析的深度上限（PS-01 T1.2，R2 修订）：
+/// 深度 >16 层 → 段整体 Redline（超限不再递归，杜绝 ReDoS / 栈溢出）。
+const MAX_WRAP_DEPTH: usize = 16;
+
+/// 超限兜底分析结果：整体 Redline、无段（R2：深度 >16 → Redline）。
+fn redline_only_analysis() -> SemanticAnalysis {
+    SemanticAnalysis {
+        segments: Vec::new(),
+        overall_class: CommandClass::Redline,
+        delete_targets: Vec::new(),
+        git_revert_forms: Vec::new(),
+        has_indirect_delete: false,
+    }
+}
+
+/// 带包裹深度的分析入口（PS-01 T1.2）：根调用 depth=0，
+/// 命令替换/反引号/scriptblock 包裹内容递归时 depth 逐层递增，
+/// 超过 MAX_WRAP_DEPTH 即整体 Redline。
+fn analyze_depth(command_line: &str, depth: usize) -> SemanticAnalysis {
+    if depth > MAX_WRAP_DEPTH {
+        return redline_only_analysis();
+    }
     let raw_segments = split_segments(command_line);
     let mut segments = Vec::new();
     let mut delete_targets = Vec::new();
@@ -101,7 +126,7 @@ pub fn analyze(command_line: &str) -> SemanticAnalysis {
         let mut segment = CommandSegment {
             command: normalized.clone(),
             args: args.clone(),
-            class: classify(&normalized, &args, &seg),
+            class: classify_depth(&normalized, &args, &seg, depth),
             targets: Vec::new(),
         };
 
@@ -143,7 +168,8 @@ pub fn analyze(command_line: &str) -> SemanticAnalysis {
     }
 }
 
-/// 复合命令拆段：`&&` / `;` / `||` / `|` / `|&` 拆分；引号内与转义符不拆。
+/// 复合命令拆段：`&&` / `;` / `||` / `|` / `|&` / 换行（`\n` / `\r\n`）拆分；
+/// 引号内与转义符不拆。
 fn split_segments(line: &str) -> Vec<String> {
     let mut segments = Vec::new();
     let mut current = String::new();
@@ -187,6 +213,21 @@ fn split_segments(line: &str) -> Vec<String> {
                 }
                 current = String::new();
             }
+            '\n' | '\r' => {
+                // PS-01 T1.1（R1 ① 盲区）：换行是命令分隔符——模型输出
+                // 以换行分隔两条命令（`printf x\n/bin/rm -rf -- /`）时
+                // 必须拆为两段。\r\n 连续出现只拆一次：\r 后 peek 到 \n
+                // 时吞掉，不产生空段；引号内（quote 状态）与转义后
+                // （escaped 状态）不拆由上方两个状态分支天然覆盖。
+                if c == '\r' && chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+                let trimmed = current.trim();
+                if !trimmed.is_empty() {
+                    segments.push(trimmed.to_string());
+                }
+                current = String::new();
+            }
             _ => current.push(c),
         }
     }
@@ -195,6 +236,125 @@ fn split_segments(line: &str) -> Vec<String> {
         segments.push(trimmed.to_string());
     }
     segments
+}
+
+/// 提取包裹内容（PS-01 T1.2，R1 ② 盲区）：命令替换 `$()`、反引号、
+/// scriptblock `{…}` 的包裹内容整体提取，供 classify 递归分析。
+///
+/// - `$(`…`)`：括号配对提取（可嵌套、支持转义 `\)`）；双引号内也提取
+///   （bash 语义——`echo "$(rm -rf -- /)"` 正是 R1 形态 1）；
+///   单引号内不提取（字面量）。
+/// - 成对反引号 `` ` ``…`` ` ``：支持 `` \` `` 转义；双引号内反引号也
+///   提取，单引号内不提取。
+/// - `{`…`}` scriptblock：第一层花括号即整体边界（对齐
+///   strip_scriptblock_braces 先例 :554-560）。
+///
+/// 嵌套深度不在此限制（配对计数只保证括号配平），递归深度由
+/// analyze_depth / MAX_WRAP_DEPTH 兜底。
+fn extract_wrapped_content(segment_raw: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut chars = segment_raw.chars().peekable();
+    let mut in_single = false;
+    let mut escaped = false;
+
+    while let Some(c) = chars.next() {
+        if in_single {
+            // 单引号内为字面量：$() / 反引号 / {…} 均不提取
+            // （bash 语义，单引号内无转义）
+            if c == '\'' {
+                in_single = false;
+            }
+            continue;
+        }
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match c {
+            '\\' => {
+                // 转义下一字符（覆盖 `\)`、`` \` ``、`\\(` 等形态）
+                escaped = true;
+            }
+            '\'' => {
+                in_single = true;
+            }
+            // 双引号不设状态：$() 与反引号在双引号内仍生效（bash 语义）
+            '$' => {
+                if chars.peek() == Some(&'(') {
+                    chars.next();
+                    if let Some(inner) = take_balanced(&mut chars, '(', ')') {
+                        out.push(inner);
+                    }
+                }
+            }
+            '`' => {
+                if let Some(inner) = take_until_backtick(&mut chars) {
+                    out.push(inner);
+                }
+            }
+            '{' => {
+                if let Some(inner) = take_balanced(&mut chars, '{', '}') {
+                    out.push(inner);
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// 取配对括号内容（不含首括号）：嵌套计数、支持转义（`\` 吞下一字符
+/// 不计数）；括号不配平时返回 None。
+fn take_balanced<I>(chars: &mut std::iter::Peekable<I>, open: char, close: char) -> Option<String>
+where
+    I: Iterator<Item = char>,
+{
+    let mut depth = 1usize;
+    let mut inner = String::new();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            // 转义下一字符按字面量保留（不参与配对计数）
+            if let Some(next) = chars.next() {
+                inner.push(next);
+            }
+            continue;
+        }
+        if c == open {
+            depth += 1;
+            inner.push(c);
+        } else if c == close {
+            depth -= 1;
+            if depth == 0 {
+                return Some(inner);
+            }
+            inner.push(c);
+        } else {
+            inner.push(c);
+        }
+    }
+    None
+}
+
+/// 取成对反引号内容（不含反引号）：支持 `` \` `` 转义；
+/// 遇行尾未闭合返回 None。
+fn take_until_backtick<I>(chars: &mut std::iter::Peekable<I>) -> Option<String>
+where
+    I: Iterator<Item = char>,
+{
+    let mut inner = String::new();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(next) = chars.next() {
+                inner.push(next);
+            }
+            continue;
+        }
+        if c == '`' {
+            return Some(inner);
+        }
+        inner.push(c);
+    }
+    None
 }
 
 /// 转义需求字符判定（12-T-PD-03 Windows 路径语义）：
@@ -236,10 +396,19 @@ fn split_command_args(segment: &str) -> (String, Vec<String>) {
 
     while let Some(c) = chars.next() {
         if c == '\\' && quote != Some('\'') {
+            // 盘符上下文（PS-01 T1.4）：current 形如 `X:`（字母+冒号）时，
+            // 本 `\` 是 Windows 盘符根路径分隔符（`C:\ -Recurse` 形态——
+            // R1 形态 4 的 `ri C:\ -Recurse -Force`），后跟空白/元字符
+            // 不按 Unix 转义处理（否则 `C:\` 被损坏成 `C:`，盘符根红线
+            // 判定落空）。非盘符上下文（`echo a\ b` 等 Unix 转义形态）
+            // 保持既有行为不变。
+            let after_drive = current.len() >= 2
+                && current.as_bytes()[current.len() - 2].is_ascii_alphabetic()
+                && current.as_bytes()[current.len() - 1] == b':';
             // 上下文判定：后跟转义需求字符才吞反斜杠；
             // 否则（后跟普通路径字符或行尾无下一字符）原样保留反斜杠
             if let Some(&next_c) = chars.peek() {
-                if is_escape_requiring(next_c) {
+                if is_escape_requiring(next_c) && !after_drive {
                     chars.next();
                     current.push(next_c);
                     started = true;
@@ -314,11 +483,85 @@ fn normalize_command(command: &str) -> String {
             base
         }
     };
-    stem.to_lowercase()
+    let lower = stem.to_lowercase();
+    // PS-01 T1.4（R1 ④ 修复建议 6）：PowerShell 删除别名归一
+    // `ri` → `remove-item`（Remove-Item 别名）——对齐 `sl`/`pushd`
+    // 直列 CD_COMMANDS 的做法：采用归一而非清单膨胀，使
+    // `ri C:\ -Recurse -Force` 命中既有盘符根红线判定。
+    if lower == "ri" {
+        return "remove-item".to_string();
+    }
+    lower
 }
 
 fn is_delete_command(cmd: &str) -> bool {
     DELETE_COMMANDS.contains(&cmd)
+}
+
+/// 删除命令分类判定（PS-01 T1.4 提炼，供 classify_depth 段首分支与
+/// token 级扫描共用）：提取目标 + 盘符根红线判定（rd /s /q C:\、
+/// remove-item -Recurse -Force 盘符根 → Redline，其余 → DeleteShape）；
+/// 非删除命令（含 git——git 只走回退形态分支）返回 None。
+fn classify_delete_command(command: &str, args: &[String]) -> Option<CommandClass> {
+    if !is_delete_command(command) || command == "git" {
+        return None;
+    }
+    let targets = extract_delete_targets(command, args);
+    if command == "rm" || command == "rmdir" || command == "del" || command == "erase" || command == "rd" || command == "remove-item" {
+        // Windows 风格参数（rd /s /q、del /f /q）与 Unix 风格（-r -f）都算
+        let win_recursive = args.iter().any(|a| a.eq_ignore_ascii_case("/s") || a.eq_ignore_ascii_case("/S"));
+        let win_force = args.iter().any(|a| a.eq_ignore_ascii_case("/q") || a.eq_ignore_ascii_case("/f"));
+        let recursive = has_recursive(args) || win_recursive;
+        let force = has_force(args) || win_force;
+        if targets.iter().any(|t| is_root_target(t)) && (recursive || force) {
+            return Some(CommandClass::Redline);
+        }
+    }
+    Some(CommandClass::DeleteShape)
+}
+
+/// PS-01 T1.4（F3-01 修复建议 2）：token 级「疑似命令名」扫描。
+/// 触发条件（D5）：
+/// ① 段首命令为赋值形态（首 token `$var` 后跟 `=`）——`$x = Remove-Item
+///    C:\ -Recurse -Force` 形态的段首命令名不是删除命令，删除命令藏在
+///    参数里；
+/// ② 段首命令不在任何已知清单且不在打印白名单（echo / write-output /
+///    printf / cat / grep / type）——白名单负例防 `echo rm -rf /` 误拦。
+/// 对后续参数 token 逐个做疑似命令名判定（normalize 归一小写、剥引号/
+/// 路径前缀），命中 REDLINE / DELETE / INDIRECT 清单即按该命令的既有
+/// 分类逻辑判定本段（删除命令复用 classify_delete_command）。
+const PRINT_WHITELIST: &[&str] = &["echo", "write-output", "printf", "cat", "grep", "type"];
+
+fn scan_ps_command_tokens(command: &str, args: &[String]) -> Option<CommandClass> {
+    let is_assignment =
+        command.starts_with('$') && args.first().map(|a| a == "=").unwrap_or(false);
+    let is_known = INDIRECT_COMMANDS.contains(&command)
+        || DELETE_COMMANDS.contains(&command)
+        || CD_COMMANDS.contains(&command)
+        || REDLINE_COMMANDS.contains(&command)
+        || DANGEROUS_COMMANDS.contains(&command)
+        || PRINT_WHITELIST.contains(&command);
+    if !is_assignment && is_known {
+        return None;
+    }
+    // 赋值形态跳过 $var 与 `=` 两个 token，从命令名开始扫描
+    let start = if is_assignment { 1 } else { 0 };
+    for (i, t) in args[start..].iter().enumerate() {
+        let cand = normalize_command(t);
+        if REDLINE_COMMANDS.contains(&cand.as_str()) {
+            return Some(CommandClass::Redline);
+        }
+        if DELETE_COMMANDS.contains(&cand.as_str()) {
+            // 命中删除命令：该 token 之后的内容作为其参数，按既有
+            // 删除分类逻辑判定（盘符根 + 递归/强制 → Redline）
+            let rest: Vec<String> = args[start + i + 1..].to_vec();
+            return classify_delete_command(&cand, &rest);
+        }
+        if INDIRECT_COMMANDS.contains(&cand.as_str()) {
+            return Some(CommandClass::Indirect);
+        }
+    }
+    None
 }
 
 /// 归一化参数：剥离 --，返回有效参数列表（-- 之后的作为位置参数保留语义但标记）。
@@ -442,11 +685,25 @@ fn analyze_indirect(segment_raw: &str) -> SemanticAnalysis {
     let normalized = normalize_command(&command);
     let inner = match normalized.as_str() {
         "bash" | "sh" | "cmd" | "pwsh" | "powershell" | "node" | "python" | "python3" => {
-            // 找 -c / -Command / /c / -e 后的所有剩余参数（join 保留空格，恢复内层命令全文）
+            // PS-01 T1.3（R1 ④ 盲区）：-EncodedCommand / -enc / -e / -E 是
+            // base64 编码隐藏形态（`-e` 是 -EncodedCommand 的短写，原被误当
+            // -Command 把 base64 串当命令分析 → 无效 → Normal → 放行）。
+            // 不追求静态解出内层（F9-01 修复建议 ②），检测到即整体升级
+            // Redline（D2：inner 置不可解析标记，段整体 Redline）。
+            let mut iter = args.iter();
+            while let Some(a) = iter.next() {
+                if a == "-EncodedCommand" || a == "-enc" || a == "-e" || a == "-E"
+                    || a.starts_with("-EncodedCommand=")
+                {
+                    return redline_only_analysis();
+                }
+            }
+            // 找 -c / -Command / /c 后的所有剩余参数（join 保留空格，恢复内层命令全文）；
+            // -e / -E 已移出此分支（见上）
             let mut inner: Option<String> = None;
             let mut iter = args.iter();
             while let Some(a) = iter.next() {
-                if a == "-c" || a == "-Command" || a == "/c" || a == "-e" || a == "-E" {
+                if a == "-c" || a == "-Command" || a == "/c" {
                     let rest: Vec<&String> = iter.by_ref().collect();
                     if !rest.is_empty() {
                         inner = Some(rest.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(" "));
@@ -471,6 +728,45 @@ fn analyze_indirect(segment_raw: &str) -> SemanticAnalysis {
         "sudo" | "xargs" => {
             // 剩余参数为内层命令（sudo bash -c '...' 时 bash 会再被递归）
             Some(args.join(" "))
+        }
+        "iex" | "invoke-expression" => {
+            // PS-01 T1.3（R3 修订）：iex / Invoke-Expression 的剩余参数
+            // 即被解析执行的内层命令（`iex 'rm -rf -- /'` → 提取引号剥离
+            // 后的参数串），join 后递归 analyze（对齐 eval/sudo 先例）
+            Some(args.join(" "))
+        }
+        "start-process" => {
+            // PS-01 T1.3（R3 修订）：Start-Process 启动新进程执行指定命令，
+            // 内层命令藏在 -ArgumentList / -Argument / -Args 参数后
+            // （`Start-Process cmd -ArgumentList '/c rm -rf -- /'`）。
+            // 只提取该参数后的内容——普通形态（Start-Process notepad.exe，
+            // 无参数列表）不提取，避免整段误升级。
+            // 内层首 token 为 cmd 风格 /c（Start-Process cmd -ArgumentList
+            // '/c …'）时剥除：不剥则 analyze 把 /c 当命令名（路径前缀
+            // 剥离归一到 c）→ 落空 Normal → 放行。
+            let mut inner: Option<String> = None;
+            let mut iter = args.iter();
+            while let Some(a) = iter.next() {
+                if a == "-ArgumentList" || a == "-Argument" || a == "-Args" {
+                    let rest: Vec<&String> = iter.by_ref().collect();
+                    if !rest.is_empty() {
+                        let joined = rest
+                            .iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        let stripped = joined.trim_start();
+                        inner = Some(
+                            stripped
+                                .strip_prefix("/c")
+                                .map(|s| s.trim_start().to_string())
+                                .unwrap_or_else(|| joined.clone()),
+                        );
+                    }
+                    break;
+                }
+            }
+            inner
         }
         "find" => {
             // find ... -exec cmd {} \; 提取 cmd
@@ -559,8 +855,42 @@ fn strip_scriptblock_braces(joined: &str) -> String {
     without_close.trim().to_string()
 }
 
-/// 单段分类（含间接执行递归升级）。
+/// 单段分类（含间接执行递归升级）。PS-01 T1.2 起委托 classify_depth
+/// （根深度 0）。
 fn classify(command: &str, args: &[String], segment_raw: &str) -> CommandClass {
+    classify_depth(command, args, segment_raw, 0)
+}
+
+/// 带包裹深度的单段分类（PS-01 T1.2，R1 ② 盲区）：
+/// 包裹提取分支在删除形态分支之前插入，按 D6 升级规则判定。
+fn classify_depth(
+    command: &str,
+    args: &[String],
+    segment_raw: &str,
+    depth: usize,
+) -> CommandClass {
+    // 0. 命令替换/scriptblock 包裹内容递归（PS-01 T1.2）：
+    //    `echo "$(rm -rf -- /)"` / 反引号 / `{ … }` 提取内容逐个递归分析，
+    //    内层升级规则（D6）：Redline → 段 Redline；DeleteShape → 段
+    //    DeleteShape（删除接管语义保持）；Dangerous → 段 Dangerous。
+    //    不引入新 CommandClass。深度超限（>16）由 analyze_depth 入口
+    //    统一拦截（R2 修订：>16 → Redline），本层只判断是否继续提取。
+    //    间接命令（INDIRECT_COMMANDS）跳过本分支：其 scriptblock 包裹
+    //    已由 analyze_indirect 既有路径递归（12-T-PD-04 契约——ForEach-
+    //    Object { Remove-Item $_ } 保持 Indirect + has_indirect_delete，
+    //    不被升级为 DeleteShape，防止既有断言与命令面语义回归）。
+    if depth <= MAX_WRAP_DEPTH && !INDIRECT_COMMANDS.contains(&command) {
+        for inner in extract_wrapped_content(segment_raw) {
+            let inner_class = analyze_depth(&inner, depth + 1).overall_class;
+            match inner_class {
+                CommandClass::Redline => return CommandClass::Redline,
+                CommandClass::DeleteShape => return CommandClass::DeleteShape,
+                CommandClass::Dangerous => return CommandClass::Dangerous,
+                _ => {}
+            }
+        }
+    }
+
     // 1. 间接执行：先递归分析内层
     if INDIRECT_COMMANDS.contains(&command) {
         let inner = analyze_indirect(segment_raw);
@@ -580,19 +910,8 @@ fn classify(command: &str, args: &[String], segment_raw: &str) -> CommandClass {
     }
 
     // 2. 删除形态（含红线判定）——git 除外（git 只走回退形态分支）
-    if is_delete_command(command) && command != "git" {
-        let targets = extract_delete_targets(command, args);
-        if command == "rm" || command == "rmdir" || command == "del" || command == "erase" || command == "rd" || command == "remove-item" {
-            // Windows 风格参数（rd /s /q、del /f /q）与 Unix 风格（-r -f）都算
-            let win_recursive = args.iter().any(|a| a.eq_ignore_ascii_case("/s") || a.eq_ignore_ascii_case("/S"));
-            let win_force = args.iter().any(|a| a.eq_ignore_ascii_case("/q") || a.eq_ignore_ascii_case("/f"));
-            let recursive = has_recursive(args) || win_recursive;
-            let force = has_force(args) || win_force;
-            if targets.iter().any(|t| is_root_target(t)) && (recursive || force) {
-                return CommandClass::Redline;
-            }
-        }
-        return CommandClass::DeleteShape;
+    if let Some(class) = classify_delete_command(command, args) {
+        return class;
     }
 
     // 3. cd 形态（T-AB-05 禁 cd 语义层）：段首命令名命中 cd 家族即标记。
@@ -628,6 +947,12 @@ fn classify(command: &str, args: &[String], segment_raw: &str) -> CommandClass {
     // 7. curl|bash 管道（stdin 管道间接执行）——在整体分析后处理，这里按 Dangerous 提示
     if command == "curl" || command == "wget" {
         return CommandClass::Dangerous;
+    }
+
+    // 8. PS-01 T1.4：token 级疑似命令名扫描（赋值形态 / 未知命令 +
+    //    非打印白名单）——命中清单命令按该命令的既有分类逻辑判定本段
+    if let Some(class) = scan_ps_command_tokens(command, args) {
+        return class;
     }
 
     CommandClass::Normal
@@ -874,6 +1199,209 @@ mod tests {
     fn quoted_semicolon_not_split() {
         let a = analyze("echo \"a;b\"");
         assert_eq!(a.segments.len(), 1);
+        assert_eq!(a.overall_class, CommandClass::Normal);
+    }
+
+    // ===== PS-01 T1.1：换行拆段（R1 ① 盲区）=====
+
+    #[test]
+    fn splits_real_newline_into_segments() {
+        // 换行分隔两命令：printf x\n/bin/rm -rf -- /（真实 \n）拆为 2 段，
+        // 第二段 rm 归一后走既有红线判定
+        let a = analyze("printf x\n/bin/rm -rf -- /");
+        assert_eq!(a.segments.len(), 2);
+        assert_eq!(a.segments[1].command, "rm");
+        assert_eq!(a.overall_class, CommandClass::Redline);
+    }
+
+    #[test]
+    fn splits_crlf_once_no_empty_segment() {
+        // \r\n 双字符只拆一次、不产生空段
+        let a = analyze("echo a\r\nrm -rf -- /");
+        assert_eq!(a.segments.len(), 2, "\\r\\n 必须只产生一次拆分（无空段）");
+        assert_eq!(a.segments[1].class, CommandClass::Redline);
+    }
+
+    #[test]
+    fn newline_inside_quotes_not_split() {
+        // 负例：引号内真实换行不拆段（quote 状态机）
+        let a = analyze("echo \"a\nb\"");
+        assert_eq!(a.segments.len(), 1);
+        assert_eq!(a.overall_class, CommandClass::Normal);
+    }
+
+    #[test]
+    fn escaped_newline_continuation_not_split() {
+        // 负例：`\` + 换行是续行（escaped 状态吞掉），不拆段
+        let a = analyze("echo a\\\nb");
+        assert_eq!(a.segments.len(), 1);
+        assert_eq!(a.overall_class, CommandClass::Normal);
+    }
+
+    // ===== PS-01 T1.2：命令替换/scriptblock 包裹递归（R1 ② 盲区）=====
+
+    #[test]
+    fn cmd_subst_dollar_paren_inner_redline() {
+        // $() 命令替换：双引号内也提取（bash 语义）——R1 形态 1
+        let a = analyze("echo \"$(rm -rf -- /)\"");
+        assert_eq!(a.overall_class, CommandClass::Redline);
+    }
+
+    #[test]
+    fn cmd_subst_nested_recursion() {
+        // 嵌套递归：$() 内层再走间接执行（bash -c）红线升级
+        let a = analyze("echo \"$(bash -c 'rm -rf -- /')\"");
+        assert_eq!(a.overall_class, CommandClass::Redline);
+    }
+
+    #[test]
+    fn backtick_inner_redline() {
+        // 反引号命令替换——R1 形态 2
+        let a = analyze("echo `rm -rf -- /`");
+        assert_eq!(a.overall_class, CommandClass::Redline);
+    }
+
+    #[test]
+    fn scriptblock_inner_delete_upgrades() {
+        // {…} scriptblock 内层删除形态 → 段 DeleteShape（删除接管语义保持）
+        let a = analyze("echo { Remove-Item C:\\x -Recurse -Force }");
+        assert_eq!(a.overall_class, CommandClass::DeleteShape);
+    }
+
+    #[test]
+    fn cmd_subst_inner_delete_upgrades() {
+        // $() 内层删除形态（非盘符根）→ 段 DeleteShape
+        let a = analyze("echo \"$(rm -rf /tmp/x)\"");
+        assert_eq!(a.overall_class, CommandClass::DeleteShape);
+    }
+
+    #[test]
+    fn env_var_ref_not_command_subst() {
+        // 负例：变量引用不是命令替换——$HOME / ${PATH} 不提取不误拦
+        assert_eq!(analyze("echo $HOME").overall_class, CommandClass::Normal);
+        assert_eq!(analyze("echo ${PATH}").overall_class, CommandClass::Normal);
+    }
+
+    #[test]
+    fn single_quoted_dollar_paren_is_literal() {
+        // 负例：单引号内 $() 是字面量，不提取
+        let a = analyze("echo '$(rm -rf -- /)'");
+        assert_eq!(a.overall_class, CommandClass::Normal);
+    }
+
+    #[test]
+    fn cmd_subst_deep_nesting_no_panic() {
+        // 32 层 $() 嵌套（最内层 rm -rf -- /）→ 不 panic 且 Redline
+        // （R2 修订：深度上限 16，>16 → Redline）
+        let mut cmd = String::from("echo ");
+        for _ in 0..32 {
+            cmd.push_str("$(");
+        }
+        cmd.push_str("rm -rf -- /");
+        for _ in 0..32 {
+            cmd.push(')');
+        }
+        let a = analyze(&cmd);
+        assert_eq!(a.overall_class, CommandClass::Redline);
+    }
+
+    // ===== PS-01 T1.3：iex / Invoke-Expression / Start-Process /
+    // -EncodedCommand 拦截（R1 ④ 盲区 + R3 修订）=====
+
+    #[test]
+    fn iex_wrapped_rm_redline() {
+        // iex 包裹（Invoke-Expression 别名）——R1 形态 5
+        let a = analyze("iex 'rm -rf -- /'");
+        assert_eq!(a.overall_class, CommandClass::Redline);
+    }
+
+    #[test]
+    fn invoke_expression_wrapped_rm_redline() {
+        // Invoke-Expression 包裹——R1 形态 6
+        let a = analyze("Invoke-Expression 'rm -rf -- /'");
+        assert_eq!(a.overall_class, CommandClass::Redline);
+    }
+
+    #[test]
+    fn iex_case_and_exe_variant() {
+        // 大小写变体（IEX）与 .exe 形态（normalize 去 .exe 先例）
+        let a = analyze("IEX 'rm -rf -- /'");
+        assert_eq!(a.overall_class, CommandClass::Redline);
+        let b = analyze("iex.exe 'rm -rf -- /'");
+        assert_eq!(b.overall_class, CommandClass::Redline);
+    }
+
+    #[test]
+    fn start_process_wrapped_rm_redline() {
+        // Start-Process 包裹：-ArgumentList 后藏内层命令——R1 形态 7
+        let a = analyze("Start-Process cmd -ArgumentList '/c rm -rf -- /'");
+        assert_eq!(a.overall_class, CommandClass::Redline);
+    }
+
+    #[test]
+    fn encoded_command_flag_redline() {
+        // -EncodedCommand / -e / -enc 三变体（R2 修订样本：
+        // cgBtACAALQByAGYAIAAtAC0AIAAvAA== = UTF-16LE base64("rm -rf -- /")）
+        let b64 = "cgBtACAALQByAGYAIAAtAC0AIAAvAA==";
+        let a = analyze(&format!("powershell -EncodedCommand {b64}"));
+        assert_eq!(a.overall_class, CommandClass::Redline);
+        let b = analyze(&format!("powershell -e {b64}"));
+        assert_eq!(b.overall_class, CommandClass::Redline);
+        let c = analyze(&format!("powershell -enc {b64}"));
+        assert_eq!(c.overall_class, CommandClass::Redline);
+    }
+
+    #[test]
+    fn start_process_plain_not_redline() {
+        // 负例：Start-Process 无参数列表（普通启动）不误拦
+        let a = analyze("Start-Process notepad.exe");
+        assert_eq!(a.overall_class, CommandClass::Normal);
+    }
+
+    // ===== PS-01 T1.4：PS 别名归一 + token 级扫描（F3-01 #1）=====
+
+    #[test]
+    fn ps_alias_ri_normalized_delete() {
+        // ri（Remove-Item 别名）归一到 remove-item → 删除形态 + 目标提取
+        let a = analyze("ri C:\\temp\\f.txt");
+        assert_eq!(a.overall_class, CommandClass::DeleteShape);
+        assert!(a.delete_targets.contains(&"C:\\temp\\f.txt".to_string()));
+    }
+
+    #[test]
+    fn ps_alias_ri_drive_root_redline() {
+        // ri 盘符根 + 递归/强制 → 红线（先例 semantics.rs:400-421、591）
+        let a = analyze("ri C:\\ -Recurse -Force");
+        assert_eq!(a.overall_class, CommandClass::Redline);
+    }
+
+    #[test]
+    fn ps_alias_ri_after_newline_redline() {
+        // T1.1 + T1.4 合击：换行分隔 + PS 删除别名——R1 形态 4
+        let a = analyze("Write-Output x\nri C:\\ -Recurse -Force");
+        assert_eq!(a.overall_class, CommandClass::Redline);
+    }
+
+    #[test]
+    fn ps_assignment_token_scan_redline() {
+        // 赋值形态 token 级扫描：$x = <删除命令> 盘符根 → 红线
+        let a = analyze("$x = Remove-Item C:\\ -Recurse -Force");
+        assert_eq!(a.overall_class, CommandClass::Redline);
+        let b = analyze("$x = ri C:\\ -Recurse -Force");
+        assert_eq!(b.overall_class, CommandClass::Redline);
+    }
+
+    #[test]
+    fn token_scan_echo_no_false_positive() {
+        // 负例：打印白名单段首命令不触发 token 扫描（防 echo rm -rf / 误拦）
+        let a = analyze("echo rm -rf /");
+        assert_eq!(a.overall_class, CommandClass::Normal);
+    }
+
+    #[test]
+    fn token_scan_plain_args_no_false_positive() {
+        // 负例：已知清单段首命令（git）不触发 token 扫描
+        let a = analyze("git status -- rm.txt");
         assert_eq!(a.overall_class, CommandClass::Normal);
     }
 
