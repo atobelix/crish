@@ -706,12 +706,206 @@ body {
 .token-table-cell:not(.is-cell-editing) .math-source,
 .token-table-cell:not(.is-cell-editing) .math-block-source,
 .token-table-cell:not(.is-cell-editing) .code-fence-source,
+}
+.is-active-token.token-math-wrapper .math-preview {
+  display: none !important;
+}
+.is-active-token.token-math-wrapper .math-source {
+  display: inline !important;
+}
+
+/* Block Math KaTeX */
+.line-math-block {
+  text-align: center;
+  font-size: 1.1em;
+  padding: calc(var(--grid-size) / 4) 0;
+}
+.line-math-block .math-block-rendered {
+  display: block;
+}
+.line-math-block .math-block-source {
+  display: none;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  text-align: center;
+}
+.is-active-line .line-math-block .math-block-rendered,
+.is-active-line.line-math-block .math-block-rendered {
+  display: none !important;
+}
+.is-active-line .line-math-block .math-block-source,
+.is-active-line.line-math-block .math-block-source {
+  display: block !important;
+}
+
+.style-kbd {
+  font-family: var(--font-mono);
+  color: var(--black);
+  font-size: 0.85em;
+  background: var(--gray-90);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border-medium);
+  border-bottom: 2px solid hsl(80 10% 76%);
+}
+.style-spoiler {
+  color: transparent;
+  background: var(--gray-70);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+.style-spoiler:active {
+  color: var(--black);
+  background: transparent;
+}
+.style-footnote {
+  font-size: 0.75em;
+  vertical-align: super;
+  color: var(--text-secondary);
+}
+
+.token-heading-prefix {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.token-list-bullet {
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-right: 8px;
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
+  white-space: pre;
+}
+.token-list-number {
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-right: 8px;
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
+  white-space: pre;
+}
+.token-list-task {
+  margin-right: 8px;
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
+  white-space: pre;
+}
+.token-comment {
+  color: var(--text-muted);
+  font-style: italic;
+}
+.token-keyword {
+  font-weight: 600;
+  color: var(--black);
+}
+.token-string {
+  color: var(--text-secondary);
+}
+.token-html-tag {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  font-size: 0.9em;
+}
+
+/* Code Fence Mixed Rendering */
+.line-code-fence {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  position: relative;
+}
+
+.line-code-fence-start {
+  padding: 0 4px;
+}
+
+.line-code-fence-end {
+  padding: 0 4px;
+}
+
+.code-fence-source {
+  display: none;
+}
+
+.code-lang-pill {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  user-select: none;
+  background: hsl(80 12% 90% / 0.7);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.is-active-line .code-fence-rendered {
+  display: none;
+}
+
+.is-active-line .code-fence-source {
+  display: inline;
+  color: var(--text-muted);
+}
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: hsl(80 27.3% 97.8% / 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  backdrop-filter: blur(4px);
+}
+
+@keyframes cursor-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.custom-cursor-blink {
+  animation: cursor-blink 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  box-shadow: 0 0 2px hsl(80 27.3% 97.8% / 0.5);
+}
+
+.ime-hidden-input {
+  color: transparent !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  resize: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Enforce Strict Rendering for Table Cells Not in Edit Mode */
+/* Prevent global .is-active-line or .is-active-token from leaking into unedited cells */
+.token-table-cell:not(.is-cell-editing) .syntax-hidden,
+.token-table-cell:not(.is-cell-editing) .syntax-source,
+.token-table-cell:not(.is-cell-editing) .math-source,
+.token-table-cell:not(.is-cell-editing) .math-block-source,
+.token-table-cell:not(.is-cell-editing) .code-fence-source,
 .token-table-cell:not(.is-cell-editing) .blockquote-guide,
 .token-table-cell:not(.is-cell-editing) .hr-source {
   display: none !important;
 }
 
-.token-table-cell:not(.is-cell-editing) .syntax-content,
 .token-table-cell:not(.is-cell-editing) .math-block-rendered,
 .token-table-cell:not(.is-cell-editing) .code-fence-rendered,
 .token-table-cell:not(.is-cell-editing) .hr-rendered {

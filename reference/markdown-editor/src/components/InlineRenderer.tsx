@@ -277,7 +277,6 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 data-line-index={lineIndex}
                 className={finalClassName}
                 style={cellStyle}
-                onClick={(e) => e.stopPropagation()} // Prevent bubbling to MarkdownEngine and clearing selection
                 onMouseDown={(e) => {
                   if (e.button === 2) return; // Ignore right click
                   e.stopPropagation();
