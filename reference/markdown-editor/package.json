@@ -9,6 +9,9 @@
     "lint": "oxlint",
     "test": "vitest run tests/unit",
     "test:color": "vitest run tests/unit/color-gate.test.ts",
+    "test:gate": "vitest run tests/gate tests/unit",
+    "test:commonmark": "node tests/commonmark/run-compliance.mjs",
+    "test:perf": "node tests/perf/baseline-collect.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
