@@ -44,10 +44,6 @@ pub type ProviderStreamItem = Result<ProviderStreamEvent, ClassifiedStreamError>
 /// 完成序列化）；调用方取消 = drop 流。
 pub type ProviderEventStream = Pin<Box<dyn Stream<Item = ProviderStreamItem> + Send + 'static>>;
 
-/// 全量返回的旧形态别名（流式化前的契约形态；冻结后保留以兼容既有引用面，
-/// 契约不要求删除，PE-09 落地后评估去留）
-pub type StreamResult = Result<Vec<ProviderStreamEvent>, ClassifiedStreamError>;
-
 /// 流式增量转发（T09.1 实时双轨的**实时轨**：delta 实时到前端）
 ///
 /// - 只承载 `message-delta`（text-delta / thought-delta 增量，非持久化类，

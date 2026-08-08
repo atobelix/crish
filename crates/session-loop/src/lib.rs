@@ -78,8 +78,7 @@ pub use hooks::{
 };
 pub use input::{next_batch_seq, AgentInputQueue, InputEnqueueMode, RingBuffer, INPUT_QUEUE_CAPACITY};
 pub use provider::{
-    DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ProviderStreamItem,
-    StreamResult, ToolSchema,
+    DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ProviderStreamItem, ToolSchema,
 };
 pub use r#loop::{
     AgentSessionLoop, EndDecision, RecoveryDecision, RecoveryHook, RunOutcome, SessionLoopOptions,

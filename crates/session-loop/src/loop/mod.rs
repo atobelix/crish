@@ -553,18 +553,6 @@ impl AgentSessionLoop {
         self
     }
 
-    /// 逃逸监视装配配置（T-ESC-03 §3.5.1 / 30-P5 时序更正）。
-    ///
-    /// 返回**装配后形态**：经 [Self::with_options] 装配块完成判定器注入
-    /// （detector = [RegistryBackedDetector]，与工具执行共享同一注册表
-    /// 实例）。壳层 spawn 监视（[crate::escape_watch::spawn_escape_watch]）
-    /// 使用自身构造的配置实例（run_task_impl 装配点已含 detector，不再
-    /// 依赖本 getter）；本配置保留为装配后形态供观测 / 调试（30-P5：
-    /// 生产零消费现状保持，注释标注）。
-    pub fn escape_watch_config(&self) -> Option<EscapeWatchConfig> {
-        self.state.options.escape_watch.clone()
-    }
-
     /// 当前对话（只读，测试 / 观测用；Arc 共享形态，PE-09 T09.3.2）
     pub fn conversation(&self) -> &[Arc<AgentMessage>] {
         &self.state.conversation
@@ -1406,7 +1394,10 @@ mod tests {
         // 4) ESC 判定器：装配后注入；与工具执行共享同一注册表实例——
         // 同注册表声明后 is_declared 命中，释放后不命中
         let esc = loop_
-            .escape_watch_config()
+            .state
+            .options
+            .escape_watch
+            .clone()
             .expect("装配后 ESC 配置必须存在");
         let detector = esc
             .detector
