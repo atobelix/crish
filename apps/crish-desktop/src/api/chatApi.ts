@@ -1,73 +1,25 @@
 /**
  * Chat streaming API surface — **single product entry** for assistant streams.
  *
- * ## Transport SoT (inventory #10)
- * - **Primary:** `streamViaEngine` (daemon WebSocket → `run-task` + event stream).
- * - **Degraded only:** `streamViaDirectFetch` (HTTP SSE to provider). Not a second product path.
- * - Auto fallback lives in `chat-bridge/ConnectionLifecycle.createStreamSession`
- *   behind `ALLOW_AUTO_DIRECT_FETCH_FALLBACK` (soft-deprecated; see flag).
+ * ## Transport SoT（C3.1 终态）
+ * - **唯一通道：** `streamViaEngine`（Tauri IPC transport → `core_run_task` +
+ *   事件流）。daemon WebSocket 与 directFetch 降级链已随 C3.1/C3.4 删除，
+ *   无降级分支、无自动回退。
  *
  * ## Decision tree (call graph)
  * ```
  * streamAssistantResponseApi(prompt, callbacks, sessionId?, asstId?, options?)
- *   └─ streamViaEngine  (always; this module never imports directFetch)
- *        └─ createStreamSession
- *             ├─ daemon WS ready within 1.5s → run-task  [PRIMARY]
- *             └─ !ready || !connected
- *                  ├─ ALLOW_AUTO_DIRECT_FETCH_FALLBACK=true  → streamViaDirectFetch [DEGRADED]
- *                  └─ flag=false → onRunError + finish (refuse start)
+ *   └─ streamViaEngine（唯一通道，无 directFetch/WS 降级）
+ *        └─ createStreamSession（IPC 就绪 → core_run_task 启动 run）
  * ```
  *
- * Cancel: primary uses L2/L3 via `createStreamCancel` / `compositionRoot.runControl`.
- * Degraded: local AbortController only (see ConnectionLifecycle + directFetchBridge headers).
+ * Cancel：L2/L3 经 `createStreamCancel` / `compositionRoot.runControl`。
  *
  * @see docs/plans/progress/architecture-dedup-inventory.md #10
  * @see docs/architecture/system-map-clear.md §3.2
  */
 import { streamViaEngine } from './chatBridge';
 import type { FileDiff, MessageToolApprovalMeta } from '../store/types';
-
-import type { SessionMessage, SessionState } from '../store/layoutStore';
-import {
-  hydrateSessionsFromDisk,
-  loadSessionBody,
-  saveSessionBody,
-} from './sessionPersistence';
-
-export const fetchSessionsApi = async (): Promise<SessionState[]> => {
-  const { sessions } = hydrateSessionsFromDisk();
-  return sessions;
-};
-
-export const saveMessageToDb = (
-  sessionId: string,
-  message: SessionMessage
-): void => {
-  if (!sessionId) return;
-  const current = loadSessionBody(sessionId);
-  const existingIdx = current.findIndex((m) => m.id === message.id);
-  let updated: SessionMessage[];
-  if (existingIdx >= 0) {
-    updated = [...current];
-    updated[existingIdx] = message;
-  } else {
-    updated = [...current, message];
-  }
-  saveSessionBody(sessionId, updated);
-};
-
-export const withdrawMessageFromDb = (
-  sessionId: string,
-  messageId: string
-): void => {
-  if (!sessionId || !messageId) return;
-  const current = loadSessionBody(sessionId);
-  const idx = current.findIndex((m) => m.id === messageId);
-  if (idx !== -1) {
-    const updated = current.slice(0, idx);
-    saveSessionBody(sessionId, updated);
-  }
-};
 
 /** OpenAI-style multimodal content part (user turn) */
 export type ChatContentPart =

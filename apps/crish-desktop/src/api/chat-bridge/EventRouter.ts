@@ -1,7 +1,8 @@
 /**
  * 事件路由器 —— IPC 平铺事件经单一解析入口进 Record<EventType, Handler> 分派表（T7）。
  *
- * - onMsg 仅做信封预过滤（runId 归属 + sequence 游标）后交给 parseBridgeEvent；
+ * - onMsg 仅做信封预过滤（runId 归属；sequence 由引擎单通道保证，前端
+ *   不校验——F5-12 收口删除游标死代码）后交给 parseBridgeEvent；
  * - parseBridgeEvent 为唯一解析入口：优先 T6 生成解析器 parseEngineEvent，
  *   宽容形态（缺信封字段、text-delta / run-* 别名）在 handlers/eventParser 收敛；
  * - 分派走 handlers/dispatch 的 engineDispatchTable（41 键全覆盖）与
@@ -16,10 +17,7 @@
 import type { StreamCallbacks } from '../chatApi';
 import { logInternalError } from '../userFacingErrors';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
-import {
-  extractEventSequence,
-  messageBelongsToRun,
-} from './handlers/eventUtils';
+import { messageBelongsToRun } from './handlers/eventUtils';
 import { resolveEventType } from './handlers/eventType';
 import {
   parseBridgeEvent,
@@ -39,7 +37,6 @@ export class EventRouter {
   private finish: (force?: boolean) => void;
   private tryResumeFinish: () => void;
   private client?: SendLike;
-  private lastAppliedSequence = 0;
 
   constructor(
     state: StreamState,
@@ -59,10 +56,6 @@ export class EventRouter {
     this.finish = finish;
     this.tryResumeFinish = tryResumeFinish;
     this.client = client;
-  }
-
-  getLastAppliedSequence(): number {
-    return this.lastAppliedSequence;
   }
 
   /** 分派环境：各 handler 只经此环境访问共享状态（不直连 Router 实例） */
@@ -97,16 +90,10 @@ export class EventRouter {
 
     if (!messageBelongsToRun(raw.runId, this.runId)) return;
 
-    const seq =
-      extractEventSequence(raw) ??
-      extractEventSequence(raw.event) ??
-      (raw.event && typeof raw.event === 'object'
-        ? extractEventSequence((raw.event as Record<string, unknown>).payload)
-        : null);
-    if (seq != null && seq > this.lastAppliedSequence) {
-      this.lastAppliedSequence = seq;
-    }
-
+    // 顺序契约（F5-12 收口）：事件顺序由引擎单通道（Tauri IPC 串行 + Rust
+    // 侧背压缓冲）保证，前端不校验 sequence，亦不做乱序缓冲/去重/缺口检测。
+    // 事件桥已按「Delta 可丢、message-end 必达」契约实现（03 §5.3-6），
+    // 丢帧类目丢弃不丢 message-end；如未来引入乱序通道，须在此补真游标。
     // C2.2：平铺事件直进主路径（event 信封 / run-ended 别名分支已删）
     // T3.7 D7：消费侧兜底——生成 parser 已有深度守卫（超限返回 parseErr），
     // 此处防其余未收敛异常路径（深层载荷曾抛 RangeError 逃逸破坏 fail-closed），
