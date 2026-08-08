@@ -12,7 +12,7 @@ export interface OpenAICompatibleRetryOptions {
 }
 
 /** Absolute ceiling so a hostile Retry-After cannot stall the loop for hours. */
-export const MAX_RETRY_AFTER_MS = 5 * 60_000;
+const MAX_RETRY_AFTER_MS = 5 * 60_000;
 
 /** 将可选重试配置规范化为必填字段，并做边界钳制 */
 export function normalizeRetryOptions(
@@ -68,28 +68,6 @@ export function retryDelayMs(options: Required<OpenAICompatibleRetryOptions>, at
   if (options.jitterRatio <= 0) return base;
   const spread = base * options.jitterRatio;
   return Math.max(1, Math.floor(base - spread + Math.random() * spread * 2));
-}
-
-/** 是否仍在总重试时间预算内（非有限 / 预算 ≤ 0 / startedAt 在未来视为已耗尽） */
-export function withinRetryBudget(startedAt: number, totalBudgetMs: number): boolean {
-  if (!Number.isFinite(startedAt) || !Number.isFinite(totalBudgetMs) || totalBudgetMs <= 0) {
-    return false;
-  }
-  const now = Date.now();
-  // startedAt 在未来视为无效输入（时钟漂移过大），不允许继续重试
-  if (startedAt > now) return false;
-  return now - startedAt < totalBudgetMs;
-}
-
-/** 剩余重试预算（ms）；耗尽或非法输入（含 startedAt 在未来）→ 0 */
-export function remainingRetryBudgetMs(startedAt: number, totalBudgetMs: number): number {
-  if (!Number.isFinite(startedAt) || !Number.isFinite(totalBudgetMs) || totalBudgetMs <= 0) {
-    return 0;
-  }
-  const now = Date.now();
-  // startedAt 在未来视为无效输入，剩余预算返回 0
-  if (startedAt > now) return 0;
-  return Math.max(0, Math.floor(totalBudgetMs - (now - startedAt)));
 }
 
 /**
