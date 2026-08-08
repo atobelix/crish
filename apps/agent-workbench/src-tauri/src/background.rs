@@ -2705,6 +2705,14 @@ mod tests {
     } else {
         "echo 'Continue? [Y/n]'"
     };
+    /// 先输出一行就绪标记再长睡（kill_graceful_path 同步点：转发器
+    /// 消费到该行即证明子进程已实际开始执行命令——替代固定 sleep，
+    /// 负载下 spawn 延迟不可控）
+    const READY_THEN_SLEEP_COMMAND: &str = if cfg!(windows) {
+        "Write-Output ready; Start-Sleep -Seconds 20"
+    } else {
+        "echo ready; sleep 20"
+    };
     /// 交互命令：等待 stdin 一行输入后输出 "got=<输入>"（send_input 注入测试用）。
     /// 注意：PowerShell Read-Host 在 stdin 重定向时**不会**把提示行写入 stdout
     /// 管道（提示写往控制台宿主），故测试不等待提示出现，直接注入（管道缓冲保证
@@ -3584,13 +3592,26 @@ mod tests {
     #[tokio::test]
     async fn kill_graceful_path() {
         let registry = test_registry();
-        let child = spawn_test_child(LONG_COMMAND);
+        // ready-then-sleep：等就绪行被转发器消费 = 子进程已开始执行命令
+        // （真实同步点；固定 sleep 在负载下可能不足，kill 与进程启动
+        // 竞态 → flaky）
+        let child = spawn_test_child(READY_THEN_SLEEP_COMMAND);
         let r = registry
             .adopt(adopt_request(child, "kill-graceful", Path::new("."), false, None))
             .await
             .expect("adopt");
-        // 确保进入 Running（避免与自然退出竞态）
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(8);
+        loop {
+            let status = registry.status(&r.task_id).await.expect("status");
+            if status.line_count > 0 {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "就绪行迟迟未被消费（子进程未就绪）"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
 
         let started = tokio::time::Instant::now();
         let result = registry.kill(&r.task_id).await.expect("kill");
@@ -4302,10 +4323,22 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(100)).await;
         };
 
-        // 条数随时间增长：再等 1s（≥ 2 拍）后应更多
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-        let raw = std::fs::read_to_string(&samples_path).expect("读 samples");
-        let second_count = raw.lines().filter(|l| !l.is_empty()).count();
+        // 条数随时间增长（F-009 flaky 根因同族：固定 sleep(1000) 在负载
+        // 下采样循环可能未达 2 拍 → 改轮询观测状态，8s 上限充足）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(8);
+        let mut second_count = first_count;
+        loop {
+            let raw = std::fs::read_to_string(&samples_path).expect("读 samples");
+            second_count = raw.lines().filter(|l| !l.is_empty()).count();
+            if second_count > first_count {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "采样条数迟迟不增长"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
         assert!(
             second_count > first_count,
             "采样条数应随时间增长：{first_count} -> {second_count}"

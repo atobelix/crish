@@ -5769,8 +5769,21 @@ mod tests {
         assert_eq!(s1.status, TaskState::Running, "守护任务在 run 终态后必须存活");
         assert!(pid_is_alive(pid), "守护任务进程必须存活");
         let lines_before = s1.line_count;
-        tokio::time::sleep(Duration::from_millis(1200)).await;
-        let s2 = registry.status(&adopted.task_id).await.expect("status");
+        // 日志增长断言条件化（F-009 flaky 根因：固定 sleep(1200) 在负载
+        // 下 writer 转发可能延迟 → 改轮询观测状态，8s 上限充足）
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(8);
+        let mut s2 = s1;
+        loop {
+            s2 = registry.status(&adopted.task_id).await.expect("status");
+            if s2.line_count > lines_before {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "run 终态后日志迟迟不累积"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
         assert!(
             s2.line_count > lines_before,
             "run 终态后日志必须持续累积：{lines_before} -> {}",

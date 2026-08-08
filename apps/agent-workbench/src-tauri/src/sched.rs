@@ -856,6 +856,28 @@ mod tests {
         queue.lock().unwrap_or_else(|e| e.into_inner()).dequeue_all()
     }
 
+    /// 非消费式队列长度（wait_until 轮询条件用——不取空队列）
+    fn queue_len(queue: &Arc<Mutex<PendingMessageQueue>>) -> usize {
+        queue.lock().unwrap_or_else(|e| e.into_inner()).len()
+    }
+
+    /// 条件等待：轮询直到条件满足或 8s 超时（F-009 族 flaky 根因修复——
+    /// fire_override 定时器在负载下可能晚触发，「固定 sleep + 次数断言」
+    /// 不稳；改等可观测状态为同步点）
+    async fn wait_until<F: Fn() -> bool>(what: &str, cond: F) {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(8);
+        loop {
+            if cond() {
+                return;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "等待条件超时（8s）：{what}"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
     /// 构造测试注册表（真实 PendingMessageQueue 落点 + 共享内存 store；
     /// launcher 未接线）
     fn test_registry() -> (
@@ -903,8 +925,23 @@ mod tests {
             .await
             .expect("注册应成功");
         assert_eq!(cron_id, "cron-0");
-        // 等待触发 + max 停止（40ms 周期内完成）
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        // 等待触发 + max 停止（等观测状态：事件 1 条 + 队列出现完成通知；
+        // 固定 sleep 在负载下可能不足 → flaky，见 wait_until）
+        let events_cond = Arc::clone(&events);
+        let pending_cond = Arc::clone(&pending);
+        wait_until(
+            "首次触发完成（CronFired 1 条 + 队列完成通知）",
+            move || {
+                events_cond
+                    .emitted
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .len()
+                    == 1
+                    && queue_len(&pending_cond) == 1
+            },
+        )
+        .await;
         // 真实队列出现 cron-<id> 条目（max=1：触发条目被「已完成」通知
         // 同组 replaceOrEnqueue 替换，队列保留通知条目）
         let entries = snapshot_queue(&pending);
@@ -948,8 +985,22 @@ mod tests {
             .register(test_input("* * * * *", Some(2), false))
             .await
             .expect("注册应成功");
-        // 等待两次触发 + 停止（40ms 周期 ×2 + 收口余量）
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        // 等待两次触发 + 停止（等观测状态：事件 2 条 + 队列仅剩完成通知）
+        let events_cond = Arc::clone(&events);
+        let pending_cond = Arc::clone(&pending);
+        wait_until(
+            "两次触发完成（CronFired 2 条 + 队列完成通知）",
+            move || {
+                events_cond
+                    .emitted
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .len()
+                    == 2
+                    && queue_len(&pending_cond) == 1
+            },
+        )
+        .await;
         // 真实队列最终 = [完成通知]：触发条目同组（cron-<id>）逐次
         // replaceOrEnqueue 替换（第 1 次被第 2 次替换，第 2 次被完成
         // 通知替换）——去重语义即真实 QueuePendingSink
@@ -1007,7 +1058,23 @@ mod tests {
             })
             .await
             .expect("注册应成功");
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        // 等待拉起点与收口（等观测状态：launcher 恰被调用一次 + 队列
+        // 出现完成通知——事件 1 条隐含两次条件都已过段 2）
+        let launcher_cond = Arc::clone(&launcher);
+        let queue_cond = Arc::clone(&queue);
+        wait_until(
+            "daemon run 拉起完成（launcher 调用 1 次 + 完成通知）",
+            move || {
+                launcher_cond
+                    .prompts
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .len()
+                    == 1
+                    && queue_len(&queue_cond) == 1
+            },
+        )
+        .await;
         // launcher 被调用且 prompt 作为初始消息
         let prompts = launcher.prompts.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(
@@ -1044,7 +1111,20 @@ mod tests {
             })
             .await
             .expect("注册应成功");
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        // 等待至少两次触发（等观测状态：同组替换语义需 ≥2 次 fire）
+        let events_cond = Arc::clone(&events);
+        wait_until(
+            "daemon 降级触发 ≥2 次（CronFired 事件 ≥2）",
+            move || {
+                events_cond
+                    .emitted
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .len()
+                    >= 2
+            },
+        )
+        .await;
         let entries = snapshot_queue(&pending);
         assert_eq!(entries.len(), 1, "launcher 未接线应降级为 steering 条目（同组替换）");
         assert_eq!(
@@ -1087,7 +1167,23 @@ mod tests {
             })
             .await
             .expect("注册应成功");
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        // 等待启动失败 → 降级条目出现（等观测状态：≥1 次 fire + 队列
+        // 已有 steering 条目）
+        let events_cond = Arc::clone(&events);
+        let queue_cond = Arc::clone(&queue);
+        wait_until(
+            "launch 失败降级条目出现（CronFired ≥1 + 队列非空）",
+            move || {
+                events_cond
+                    .emitted
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .len()
+                    >= 1
+                    && queue_len(&queue_cond) == 1
+            },
+        )
+        .await;
         // 启动失败 → 降级 steering 条目（文本 = prompt + 唤醒模板）
         let entries = snapshot_queue(&queue);
         assert_eq!(entries.len(), 1, "启动失败应降级为 steering 条目（同组替换）");
@@ -1151,8 +1247,22 @@ mod tests {
             assert!(registry.has_active(), "未到期任务恢复后应为活跃（sleep 已重建）");
             (registry, queue, events)
         };
-        // 触发恰好一次（max=1 → 停止）
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        // 触发恰好一次（max=1 → 停止；等观测状态而非固定 sleep）
+        let events_b_cond = Arc::clone(&events_b);
+        let queue_b_cond = Arc::clone(&queue_b);
+        wait_until(
+            "恢复后触发完成（CronFired 1 条 + 完成通知）",
+            move || {
+                events_b_cond
+                    .emitted
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .len()
+                    == 1
+                    && queue_len(&queue_b_cond) == 1
+            },
+        )
+        .await;
         let entries = snapshot_queue(&queue_b);
         assert_eq!(entries.len(), 1, "恢复后触发应恰好一条");
         assert_eq!(
