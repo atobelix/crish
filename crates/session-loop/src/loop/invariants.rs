@@ -70,7 +70,9 @@ fn big_conversation() -> Vec<Arc<AgentMessage>> {
                     AgentMessageRole::Assistant
                 },
                 created_at: "2026-08-03T10:00:00.000Z".to_string(),
-                blocks: vec![AgentMessageBlock::Text { text: "字".repeat(5_000) }],
+                blocks: vec![AgentMessageBlock::Text {
+                    text: "字".repeat(5_000),
+                }],
                 metadata: None,
                 client_message_id: None,
                 content: None,
@@ -84,7 +86,9 @@ fn user(id: &str) -> AgentMessage {
         id: id.to_string(),
         role: AgentMessageRole::User,
         created_at: "2026-08-03T10:00:00.000Z".to_string(),
-        blocks: vec![AgentMessageBlock::Text { text: "消息".to_string() }],
+        blocks: vec![AgentMessageBlock::Text {
+            text: "消息".to_string(),
+        }],
         metadata: None,
         client_message_id: None,
         content: None,
@@ -108,7 +112,9 @@ async fn i1_compaction_is_the_only_prefix_rewrite_point() {
             id: "sys".to_string(),
             role: AgentMessageRole::System,
             created_at: "2026-08-03T10:00:00.000Z".to_string(),
-            blocks: vec![AgentMessageBlock::Text { text: "你是助手".to_string() }],
+            blocks: vec![AgentMessageBlock::Text {
+                text: "你是助手".to_string(),
+            }],
             metadata: None,
             client_message_id: None,
             content: None,
@@ -172,7 +178,10 @@ fn i1_non_compact_path_appends_only() {
     record_message(&mut state, user("m1"));
     record_message(&mut state, user("m2"));
     assert_eq!(state.conversation.len(), 3, "只追加不重写");
-    assert!(Arc::ptr_eq(&state.conversation[0], &initial[0]), "既有消息 Arc 不变");
+    assert!(
+        Arc::ptr_eq(&state.conversation[0], &initial[0]),
+        "既有消息 Arc 不变"
+    );
     assert_eq!(state.conversation[1].id, "m1");
     assert_eq!(state.conversation[2].id, "m2");
 }
@@ -189,7 +198,9 @@ fn i2_steering_injection_appends_to_tail() {
             id: "steer-1".to_string(),
             role: AgentMessageRole::System,
             created_at: "2026-08-03T10:00:00.000Z".to_string(),
-            blocks: vec![AgentMessageBlock::Text { text: "纠偏注入".to_string() }],
+            blocks: vec![AgentMessageBlock::Text {
+                text: "纠偏注入".to_string(),
+            }],
             metadata: None,
             client_message_id: None,
             content: None,
@@ -200,10 +211,17 @@ fn i2_steering_injection_appends_to_tail() {
         .steering
         .apply(&[action], "s1", &mut state.conversation);
     assert_eq!(state.conversation.len(), 2, "注入只追加一条");
-    assert!(Arc::ptr_eq(&state.conversation[0], &initial[0]), "既有消息原样（不插进前缀）");
+    assert!(
+        Arc::ptr_eq(&state.conversation[0], &initial[0]),
+        "既有消息原样（不插进前缀）"
+    );
     let injected = state.conversation.last().unwrap();
     assert_eq!(injected.id, "steer-1");
-    assert_eq!(injected.role, AgentMessageRole::System, "动态注入消息为 System 角色");
+    assert_eq!(
+        injected.role,
+        AgentMessageRole::System,
+        "动态注入消息为 System 角色"
+    );
 }
 
 /// I3：水合不改写——`with_initial_conversation_arc` 只做初始填充，
@@ -224,8 +242,14 @@ async fn i3_hydrate_then_append_preserves_initial_arcs() {
     assert_eq!(outcome.reason, AgentEndReason::Stop);
     // 纯追加：初始两条（同一 Arc）+ 本轮 user + assistant 回复
     assert_eq!(outcome.messages.len(), 4);
-    assert!(Arc::ptr_eq(&outcome.messages[0], &initial[0]), "水合首条同一 Arc");
-    assert!(Arc::ptr_eq(&outcome.messages[1], &initial[1]), "水合次条同一 Arc");
+    assert!(
+        Arc::ptr_eq(&outcome.messages[0], &initial[0]),
+        "水合首条同一 Arc"
+    );
+    assert!(
+        Arc::ptr_eq(&outcome.messages[1], &initial[1]),
+        "水合次条同一 Arc"
+    );
     assert_eq!(outcome.messages[2].id, "h2", "本轮用户消息追加在尾部");
     assert_eq!(outcome.messages[3].role, AgentMessageRole::Assistant);
 }
@@ -261,7 +285,9 @@ async fn i5_compaction_resets_usage_baseline_via_real_path() {
         id: "a-usage".to_string(),
         role: AgentMessageRole::Assistant,
         created_at: "2020-01-01T00:00:00.000Z".to_string(),
-        blocks: vec![AgentMessageBlock::Text { text: "回复".to_string() }],
+        blocks: vec![AgentMessageBlock::Text {
+            text: "回复".to_string(),
+        }],
         metadata: Some(serde_json::json!({
             "stopReason": "stop",
             "usage": { "promptTokens": 9000 },
@@ -277,7 +303,10 @@ async fn i5_compaction_resets_usage_baseline_via_real_path() {
     assert_eq!(before.tokens, 9000);
     assert_eq!(before.usage_message_id.as_deref(), Some("a-usage"));
     // 真实压缩（预检路径）：对话替换 + 时间戳护栏重置
-    assert!(maybe_compact_preflight(&mut state).await, "usage 估算超阈值必须压缩");
+    assert!(
+        maybe_compact_preflight(&mut state).await,
+        "usage 估算超阈值必须压缩"
+    );
     assert!(state.last_compaction_at.is_some(), "压缩后必须写时间戳护栏");
     assert!(
         state.conversation.iter().any(|m| m.id == "a-usage"),
@@ -300,7 +329,9 @@ fn i6_estimate_consumes_input_total_without_redouble() {
         id: "a1".to_string(),
         role: AgentMessageRole::Assistant,
         created_at: "2026-08-03T10:00:00.000Z".to_string(),
-        blocks: vec![AgentMessageBlock::Text { text: "回复".to_string() }],
+        blocks: vec![AgentMessageBlock::Text {
+            text: "回复".to_string(),
+        }],
         metadata: Some(serde_json::json!({
             "stopReason": "stop",
             "usage": { "promptTokens": 1200 },

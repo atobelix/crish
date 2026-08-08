@@ -1415,7 +1415,7 @@ mod tests {
     // 经 on_subagent_terminal 回传推进。
 
     use orchestrator::flow_graph::{
-        FlowDeclaration, FlowNode, FlowNodeState, FlowScheduler,
+        FlowDeclaration, FlowNode, FlowNodeState, FlowReportKind, FlowScheduler, FLOW_STATE_KEY,
     };
 
     #[tokio::test]
@@ -1543,5 +1543,101 @@ mod tests {
             reports = advance_fail.reports
         );
         assert_eq!(scheduler.node_state("node-b"), Some(FlowNodeState::Blocked));
+    }
+
+    // ── F-013 接线（生产 spawner 落库 flow_node_id，双防线②数据源）──
+
+    /// F-013 红测试（生产 spawner 形态）：flow 调度请求 description=None +
+    /// flow_node_id 存在 → 落库行 description 必须承载 flow_node_id，使
+    /// load() 反向校验（双防线②，flow_graph.rs:1409-1442 读 row.description
+    /// 定位节点）在生产域可命中。修复前：row_for 写 description =
+    /// req.description（flow 请求恒 None → 空串），反向校验不命中，崩溃
+    /// 窗口形态节点保持 Pending → 重启 advance 会重复 spawn（孤儿双跑）。
+    #[tokio::test]
+    async fn flow_spawn_row_carries_flow_node_id_for_load_reverse_check() {
+        let (spawner, _, db, _, _) = test_rig();
+        setup_main_run(&spawner);
+        let mut scheduler = FlowScheduler::new(
+            "sess-main",
+            Arc::clone(&spawner) as Arc<dyn SubagentSpawner>,
+            Arc::new(db.clone()),
+        )
+        .expect("调度器创建");
+        let decl = FlowDeclaration {
+            tasks: vec![FlowNode {
+                id: "node-a".to_string(),
+                task: "调研模块 A".to_string(),
+                depends_on: Vec::new(),
+                parallel: true,
+                on_failed: None,
+                is_composite: false,
+            }],
+            planner_run_id: Some("run-main".to_string()),
+        };
+        let advance = scheduler.declare_flow(&decl).await.expect("声明编排成功");
+        assert_eq!(advance.started.len(), 1, "a 应启动");
+        let run_a = advance.started[0].subagent_run_id.clone();
+
+        // 断言 1（数据源落库）：run 行 description 承载 flow_node_id
+        // （load 反向校验以 row.description 为节点定位载体）
+        let rows = db.load_session_agents("sess-main").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0].description, "node-a",
+            "flow 路径行 description 应承载 flow_node_id（修复前为空串）"
+        );
+
+        // 崩溃窗口模拟（T3.4 形态 B）：run 已落库、flow_state 置空 →
+        // 重启 load 反向校验须命中并置 Failed（防重复 spawn）
+        db.set_session_meta(FLOW_STATE_KEY, "[]").unwrap();
+        drop(scheduler);
+
+        let rows = db.load_session_agents("sess-main").unwrap();
+        let mut restored = FlowScheduler::load(
+            "sess-main",
+            Arc::clone(&spawner) as Arc<dyn SubagentSpawner>,
+            Arc::new(db.clone()),
+            &rows,
+        )
+        .expect("load 应成功");
+
+        // 断言 2（反向校验命中）：a = Failed（修复前保持 Pending）
+        assert_eq!(
+            restored.node_state("node-a"),
+            Some(FlowNodeState::Failed),
+            "反向校验：生产 spawner 落库后 flow_state 无映射 → a = Failed"
+        );
+        // 断言 3（防双跑核心）：advance 不再 spawn a（DataInconsistent
+        // 上报带出 + started 为空）
+        let adv = restored.advance().await.expect("advance 应成功");
+        assert!(
+            adv.reports
+                .iter()
+                .any(|r| r.kind == FlowReportKind::DataInconsistent && r.node_id == "node-a"),
+            "restart_reports 应含 DataInconsistent：{:?}",
+            adv.reports
+        );
+        assert!(adv.started.is_empty(), "a 已按 Failed 处理，不得重复 spawn");
+        // 防双跑：run 行数量不变（load + advance 未新增 spawn）
+        assert_eq!(db.load_session_agents("sess-main").unwrap().len(), 1);
+        let _ = run_a;
+    }
+
+    /// F-013 接线回归：非 flow 路径（工具直调）description 语义不受影响
+    /// ——row_for 仅当 flow_node_id 存在时承载之，普通描述文本原样落库
+    #[tokio::test]
+    async fn non_flow_spawn_preserves_user_description() {
+        let (spawner, _, db, _, _) = test_rig();
+        setup_main_run(&spawner);
+        let result = spawner
+            .spawn(&request("调研", None))
+            .await
+            .expect("spawn 应成功");
+        let _ = result;
+        let rows = db.load_session_agents("sess-main").unwrap();
+        assert_eq!(
+            rows[0].description, "调研",
+            "非 flow 路径 description 原样保留（接线不破坏既有语义）"
+        );
     }
 }

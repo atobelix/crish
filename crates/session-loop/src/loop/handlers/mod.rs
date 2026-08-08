@@ -26,14 +26,13 @@ use conex_types::events::AgentEvent;
 use conex_types::message::{AgentMessage, AgentMessageRole};
 use conex_types::session::{AgentSessionEvent as E, AgentSessionState as S};
 use conex_types::tool::{
-    ContextCompressionPolicyAction, ContextCompressionPolicyMetadata,
-    ContextCompressionPolicyTier, ContextCompressionReason, ContextCompressionRecord,
-    ContextCompressionTrigger,
+    ContextCompressionPolicyAction, ContextCompressionPolicyMetadata, ContextCompressionPolicyTier,
+    ContextCompressionReason, ContextCompressionRecord, ContextCompressionTrigger,
 };
 
 use crate::control::ControlBus;
 use crate::input::AgentInputQueue;
-use crate::safe_point::{AbortSignal, apply_safe_point_control};
+use crate::safe_point::{apply_safe_point_control, AbortSignal};
 use crate::state::AgentSessionMachine;
 use crate::steering::{SteeringContext, SteeringCoordinator};
 
@@ -428,7 +427,8 @@ fn policy_tier_for(trigger: ContextCompressionTrigger) -> ContextCompressionPoli
 #[derive(Debug, Clone)]
 pub(crate) struct HandlerOutcome {
     pub(crate) end: Option<EndDecision>,
-}impl HandlerOutcome {
+}
+impl HandlerOutcome {
     /// 继续循环
     pub(crate) fn continue_run() -> Self {
         Self { end: None }
@@ -436,7 +436,9 @@ pub(crate) struct HandlerOutcome {
 
     /// 收敛 run
     pub(crate) fn end(decision: EndDecision) -> Self {
-        Self { end: Some(decision) }
+        Self {
+            end: Some(decision),
+        }
     }
 }
 
@@ -448,7 +450,10 @@ pub(crate) fn dispatch(state: &mut LoopState, event: E) -> Result<(), LoopError>
         // T06.5.1：显式码构造（runtime.transition_failed），TransitionError
         // 上下文保留在 message（不再丢原始结构化信息，AA-01 Q29）
         .map_err(|e| {
-            LoopError::with_code(codes::RUNTIME_TRANSITION_FAILED, format!("状态机转移失败：{e}"))
+            LoopError::with_code(
+                codes::RUNTIME_TRANSITION_FAILED,
+                format!("状态机转移失败：{e}"),
+            )
         })
 }
 
@@ -465,11 +470,15 @@ pub(crate) fn dispatch(state: &mut LoopState, event: E) -> Result<(), LoopError>
 pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
     let session_id = state.machine.context().session_id.clone();
     let message = Arc::new(message);
-    state
-        .events
-        .push(AgentEvent::MessageStart { session_id: session_id.clone(), message: message.clone() });
+    state.events.push(AgentEvent::MessageStart {
+        session_id: session_id.clone(),
+        message: message.clone(),
+    });
     state.conversation.push(message.clone());
-    state.events.push(AgentEvent::MessageEnd { session_id, message });
+    state.events.push(AgentEvent::MessageEnd {
+        session_id,
+        message,
+    });
 }
 
 /// 构建 steering 评估上下文（计数取 coordinator 单一计数源，01 §3.3 / D10）
@@ -528,7 +537,9 @@ pub(crate) fn check_control(state: &mut LoopState) -> Result<Option<EndDecision>
             dispatch(state, E::Abort)?;
             Ok(Some(EndDecision::aborted_with_diagnostic(state, reason)))
         }
-        crate::safe_point::ControlAction::CooperativeStop { pending_messages, .. } => {
+        crate::safe_point::ControlAction::CooperativeStop {
+            pending_messages, ..
+        } => {
             // L2 协作停止：不 abort，D1 驱动状态机到 done（stopped 收场）
             for message in pending_messages {
                 state.input_queue.enqueue_steer(message);
@@ -536,7 +547,10 @@ pub(crate) fn check_control(state: &mut LoopState) -> Result<Option<EndDecision>
             drive_machine_to_stop(state)?;
             Ok(Some(EndDecision::stopped(state)))
         }
-        crate::safe_point::ControlAction::SoftInject { steer_messages, follow_up_messages } => {
+        crate::safe_point::ControlAction::SoftInject {
+            steer_messages,
+            follow_up_messages,
+        } => {
             // L1 软注入：只读消费，消息落环（不打断流）
             for message in steer_messages {
                 state.input_queue.enqueue_steer(message);
@@ -553,9 +567,11 @@ pub(crate) fn check_control(state: &mut LoopState) -> Result<Option<EndDecision>
 pub(crate) fn last_assistant_with_tool_calls(
     state: &LoopState,
 ) -> Option<&Arc<conex_types::message::AgentMessage>> {
-    state.conversation.iter().rev().find(|m| {
-        m.role == AgentMessageRole::Assistant && m.tool_calls().next().is_some()
-    })
+    state
+        .conversation
+        .iter()
+        .rev()
+        .find(|m| m.role == AgentMessageRole::Assistant && m.tool_calls().next().is_some())
 }
 
 // ── T-33 单测（P4 阶段 2-2/2-3/2-4、阶段 3-2/3-3）：钳制/预检/护栏/事件 ──
@@ -611,7 +627,9 @@ mod tests {
                         AgentMessageRole::Assistant
                     },
                     created_at: "2026-08-03T10:00:00.000Z".to_string(),
-                    blocks: vec![AgentMessageBlock::Text { text: "字".repeat(5_000) }],
+                    blocks: vec![AgentMessageBlock::Text {
+                        text: "字".repeat(5_000),
+                    }],
                     metadata: None,
                     client_message_id: None,
                     content: None,
@@ -623,7 +641,10 @@ mod tests {
     /// 从事件列表取压缩记录（断言辅助）
     fn compression_record(state: &LoopState) -> Option<ContextCompressionRecord> {
         state.events.iter().find_map(|e| match e {
-            AgentEvent::ContextCompressionEnd { result: Some(record), .. } => Some(record.clone()),
+            AgentEvent::ContextCompressionEnd {
+                result: Some(record),
+                ..
+            } => Some(record.clone()),
             _ => None,
         })
     }
@@ -659,7 +680,9 @@ mod tests {
             id: "a1".to_string(),
             role: AgentMessageRole::Assistant,
             created_at: "2026-08-03T10:00:00.000Z".to_string(),
-            blocks: vec![AgentMessageBlock::Text { text: "回复".to_string() }],
+            blocks: vec![AgentMessageBlock::Text {
+                text: "回复".to_string(),
+            }],
             metadata: Some(serde_json::json!({
                 "stopReason": "stop",
                 "usage": { "promptTokens": 900 },
@@ -686,10 +709,16 @@ mod tests {
     async fn preflight_compacts_once_and_guard_blocks_second() {
         let mut state = test_state(budgeted_options());
         state.conversation = big_conversation();
-        assert!(maybe_compact_preflight(&mut state).await, "超阈值必须触发预检压缩");
+        assert!(
+            maybe_compact_preflight(&mut state).await,
+            "超阈值必须触发预检压缩"
+        );
         // 护栏：压缩计数 + 时间戳护栏重置
         assert_eq!(state.compactions_this_run, 1);
-        assert!(state.last_compaction_at.is_some(), "压缩后时间戳护栏必须重置");
+        assert!(
+            state.last_compaction_at.is_some(),
+            "压缩后时间戳护栏必须重置"
+        );
         // 事件成对广播
         let starts = state
             .events
@@ -705,7 +734,10 @@ mod tests {
         assert_eq!(ends, 1);
         // 对话替换：摘要占位 + 保留段（system 保持——本对话无 system）
         assert!(
-            state.conversation.iter().any(|m| m.id.starts_with("compacted-summary")),
+            state
+                .conversation
+                .iter()
+                .any(|m| m.id.starts_with("compacted-summary")),
             "压缩后对话必须含摘要占位消息"
         );
         assert!(state.conversation.len() < 10, "压缩后消息数必须减少");
@@ -756,7 +788,9 @@ mod tests {
             id: "m0".to_string(),
             role: AgentMessageRole::User,
             created_at: "2026-08-03T10:00:00.000Z".to_string(),
-            blocks: vec![AgentMessageBlock::Text { text: "短消息".to_string() }],
+            blocks: vec![AgentMessageBlock::Text {
+                text: "短消息".to_string(),
+            }],
             metadata: None,
             client_message_id: None,
             content: None,
@@ -775,7 +809,11 @@ mod tests {
         let plan = CompactionPlan {
             messages: msgs,
             dropped_ids: vec!["m0".to_string(), "m1".to_string()],
-            kept_ids: vec!["compacted-summary-2".to_string(), "m8".to_string(), "m9".to_string()],
+            kept_ids: vec![
+                "compacted-summary-2".to_string(),
+                "m8".to_string(),
+                "m9".to_string(),
+            ],
             first_kept_message_id: Some("m8".to_string()),
             tokens_before: 10_000,
             tokens_after: 2_100,
@@ -797,9 +835,11 @@ mod tests {
             .events
             .iter()
             .find_map(|e| match e {
-                AgentEvent::ContextCompressionStart { reason, tokens_before, .. } => {
-                    Some((reason.clone(), *tokens_before))
-                }
+                AgentEvent::ContextCompressionStart {
+                    reason,
+                    tokens_before,
+                    ..
+                } => Some((reason.clone(), *tokens_before)),
                 _ => None,
             })
             .expect("必须有压缩开始事件");
@@ -846,16 +886,19 @@ mod tests {
             }),
             ..budgeted_options()
         });
-        let usage =
-            |prompt: u64, read: u64, write: u64| CacheUsageScalars {
-                prompt,
-                read,
-                write,
-                miss: None,
-                accounting: CacheAccountingKind::Included,
-            };
+        let usage = |prompt: u64, read: u64, write: u64| CacheUsageScalars {
+            prompt,
+            read,
+            write,
+            miss: None,
+            accounting: CacheAccountingKind::Included,
+        };
         // 首轮：捕获签名 + 消费 usage（read > 0 → reported_cache 粘性置位）
-        state.cache_tracker.as_mut().unwrap().capture_signature(Some("sys"), &[], &[]);
+        state
+            .cache_tracker
+            .as_mut()
+            .unwrap()
+            .capture_signature(Some("sys"), &[], &[]);
         assert!(
             state
                 .cache_tracker
@@ -891,7 +934,11 @@ mod tests {
             "压缩后基线必须作废"
         );
         // 压缩后首轮：无基线 → 不计 miss
-        state.cache_tracker.as_mut().unwrap().capture_signature(Some("sys"), &[], &[]);
+        state
+            .cache_tracker
+            .as_mut()
+            .unwrap()
+            .capture_signature(Some("sys"), &[], &[]);
         assert!(
             state
                 .cache_tracker
@@ -937,19 +984,28 @@ mod tests {
         // 成功路径：摘要器收到全部丢弃消息（C14：独立前缀域——不携带任何
         // session_id / 缓存键 / 工具 / system 参数，隔离由 trait 边界保证）
         let calls = Arc::new(Mutex::new(Vec::new()));
-        let summarizer = Arc::new(RecordingSummarizer { calls: calls.clone(), fail: false });
+        let summarizer = Arc::new(RecordingSummarizer {
+            calls: calls.clone(),
+            fail: false,
+        });
         let mut state = test_state(SessionLoopOptions {
             summarizer: Some(summarizer.clone()),
             ..budgeted_options()
         });
         state.conversation = big_conversation();
-        assert!(maybe_compact_preflight(&mut state).await, "L2 摘要路径压缩必须完成");
+        assert!(
+            maybe_compact_preflight(&mut state).await,
+            "L2 摘要路径压缩必须完成"
+        );
         let recorded = calls.lock().unwrap().clone();
         assert_eq!(recorded.len(), 1, "摘要器只调用一次");
         let (dropped_ids, existing) = &recorded[0];
         assert!(existing.is_none(), "首次压缩无既有摘要");
         assert_eq!(dropped_ids.len(), 8, "丢弃 8 条消息全部交给摘要器");
-        assert!(dropped_ids.iter().all(|id| id.starts_with('m')), "摘要器只收到消息 id");
+        assert!(
+            dropped_ids.iter().all(|id| id.starts_with('m')),
+            "摘要器只收到消息 id"
+        );
         // 事件载荷摘要 = L2 返回文本
         assert_eq!(
             compression_record(&state).map(|r| r.summary),
@@ -967,10 +1023,15 @@ mod tests {
                 ..budgeted_options()
             });
             state.conversation = big_conversation();
-            assert!(maybe_compact_preflight(&mut state).await, "摘要失败也必须完成压缩");
+            assert!(
+                maybe_compact_preflight(&mut state).await,
+                "摘要失败也必须完成压缩"
+            );
             state
         };
-        let summary = compression_record(&fail_state).map(|r| r.summary).expect("必须有记录");
+        let summary = compression_record(&fail_state)
+            .map(|r| r.summary)
+            .expect("必须有记录");
         assert!(
             summary.contains("[Compacted"),
             "失败降级 L1 占位符：{summary}"

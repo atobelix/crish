@@ -37,7 +37,9 @@ export type InlineType =
     | 'comment'
     | 'string'
     | 'keyword'
-    | 'html_element';
+    | 'html_element'
+    | 'table_pipe'
+    | 'table_cell';
 
 export interface InlineNode {
     type: InlineType;

@@ -1,4 +1,5 @@
 import type { LineNode, InlineNode, MarkdownDocument } from './ast';
+import { LRUCache } from './LRUCache';
 
 export type CodeState =
   | 'none'
@@ -75,7 +76,7 @@ export class MarkdownParser {
     return { offsets, codeBlockState };
   }
 
-  private static astCache = new Map<string, LineNode>();
+  private static astCache = new LRUCache<string, LineNode>(50_000);
   public static cacheHits = 0;
   public static cacheMisses = 0;
 
@@ -214,10 +215,6 @@ export class MarkdownParser {
 
     let node = this.parseNormalLine(lineText, localOffset);
 
-    if (this.astCache.size > 20000) {
-      const keys = Array.from(this.astCache.keys()).slice(0, 5000);
-      for (const k of keys) this.astCache.delete(k);
-    }
     this.astCache.set(cacheKey, node);
     return node;
   }
@@ -347,11 +344,17 @@ export class MarkdownParser {
     let listIndent = 0;
     let listPrefix = '';
 
-    const hrMatch = lineText.match(/^(\s*[-*+_]){3,}\s*$/);
-    if (hrMatch) {
-      lineType = 'hr';
-      pos = lineText.length;
-    } else {
+    let isHr = false;
+    if (lineText.length <= 10000) {
+      const hrMatch = lineText.match(/^(\s*[-*+_]){3,}\s*$/);
+      if (hrMatch) {
+        lineType = 'hr';
+        pos = lineText.length;
+        isHr = true;
+      }
+    }
+
+    if (!isHr) {
       const blockquoteMatch = lineText.match(/^(>\s?)+/);
       if (blockquoteMatch) {
         lineType = 'blockquote';
@@ -376,18 +379,20 @@ export class MarkdownParser {
         });
         pos += prefixLen;
       } else {
-        const tableSeparatorMatch = nestedText.match(
-          /^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/
-        );
-        if (tableSeparatorMatch) {
-          if (lineType !== 'blockquote') lineType = 'table_separator';
-        } else {
-          const pipeCount = (nestedText.match(/\|/g) || []).length;
-          if (
-            (pipeCount >= 1 && nestedText.trim().startsWith('|')) ||
-            pipeCount >= 2
-          ) {
-            if (lineType !== 'blockquote') lineType = 'table_row';
+        if (nestedText.length <= 10000) {
+          const tableSeparatorMatch = nestedText.match(
+            /^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/
+          );
+          if (tableSeparatorMatch) {
+            if (lineType !== 'blockquote') lineType = 'table_separator';
+          } else {
+            const pipeCount = (nestedText.match(/\|/g) || []).length;
+            if (
+              (pipeCount >= 1 && nestedText.trim().startsWith('|')) ||
+              pipeCount >= 2
+            ) {
+              if (lineType !== 'blockquote') lineType = 'table_row';
+            }
           }
         }
 
@@ -446,12 +451,33 @@ export class MarkdownParser {
       }
     }
 
-    const parsedTokens = this.parseInlineTokens(
-      lineText.substring(pos),
-      pos,
-      true
-    );
-    tokens.push(...parsedTokens);
+    const remainingText = lineText.substring(pos);
+    const MAX_PARSE_CHARS = 10_000;
+
+    if (remainingText.length > MAX_PARSE_CHARS) {
+      const parsedTokens = this.parseInlineTokens(
+        remainingText.substring(0, MAX_PARSE_CHARS),
+        pos,
+        true
+      );
+      tokens.push(...parsedTokens);
+
+      const unparsed = remainingText.substring(MAX_PARSE_CHARS);
+      tokens.push({
+        type: 'text',
+        raw: unparsed,
+        content: unparsed,
+        localOffset: pos + MAX_PARSE_CHARS,
+        length: unparsed.length,
+      });
+    } else {
+      const parsedTokens = this.parseInlineTokens(remainingText, pos, true);
+      tokens.push(...parsedTokens);
+    }
+
+    const finalTokens = (lineType === 'table_row' || lineType === 'table_separator')
+      ? this.groupTableCells(tokens)
+      : tokens;
 
     return {
       id: this.generateId(),
@@ -460,10 +486,55 @@ export class MarkdownParser {
       headingLevel,
       listIndent: listPrefix !== undefined ? listIndent : undefined,
       listPrefix: listPrefix ? listPrefix : undefined,
-      inlineTokens: tokens,
+      inlineTokens: finalTokens,
       localOffset,
       length: lineText.length,
     };
+  }
+
+  private static groupTableCells(tokens: InlineNode[]): InlineNode[] {
+    const result: InlineNode[] = [];
+    let currentCellTokens: InlineNode[] = [];
+    
+    const flushCell = (pipeToken?: InlineNode) => {
+      const startOffset = currentCellTokens.length > 0 ? currentCellTokens[0].localOffset : (pipeToken ? pipeToken.localOffset + pipeToken.length : 0);
+      const length = currentCellTokens.length > 0 
+        ? currentCellTokens[currentCellTokens.length - 1].localOffset + currentCellTokens[currentCellTokens.length - 1].length - startOffset
+        : 0;
+
+      result.push({
+        type: 'table_cell',
+        raw: currentCellTokens.map(t => t.raw).join(''),
+        content: '',
+        children: currentCellTokens,
+        localOffset: startOffset,
+        length: length,
+      });
+      currentCellTokens = [];
+    };
+
+    let foundFirstPipe = false;
+
+    for (const token of tokens) {
+      if (token.type === 'table_pipe') {
+        if (!foundFirstPipe) {
+          if (currentCellTokens.length > 0) flushCell();
+          foundFirstPipe = true;
+        } else {
+          flushCell(token);
+        }
+        result.push(token);
+      } else {
+        currentCellTokens.push(token);
+      }
+    }
+
+    if (currentCellTokens.length > 0) {
+      const isJustEmptySpace = currentCellTokens.length === 1 && currentCellTokens[0].type === 'text' && currentCellTokens[0].raw.trim() === '';
+      if (!isJustEmptySpace) flushCell();
+    }
+
+    return result;
   }
 
   private static INLINE_RULES = [
@@ -505,6 +576,7 @@ export class MarkdownParser {
     { type: 'sub', regex: /^~([^\s~]{1,500})~/ },
     { type: 'spoiler', start: '||', close: '||' },
     { type: 'html_tag', regex: /^<\/?[a-zA-Z][a-zA-Z0-9]*(?:\s+[^>]*)?\/?>/ },
+    { type: 'table_pipe', regex: /^\|/ },
   ];
 
   private static parseInlineTokens(

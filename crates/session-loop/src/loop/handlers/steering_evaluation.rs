@@ -42,10 +42,15 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     }
 
     // 2-3. 评估并执行（budget / intervention 由 coordinator 与策略掌管）
-    let actions = state.steering.evaluate(SteeringPhase::EmptyResponse, &steering_context(state));
+    let actions = state
+        .steering
+        .evaluate(SteeringPhase::EmptyResponse, &steering_context(state));
     if actions.is_empty() {
         // 预算耗尽且无任何动作（含 intervention）：D9 → stop 收场，不 error
-        tracing::info!(steering_count = state.steering.get_steering_count(), "steering 预算耗尽");
+        tracing::info!(
+            steering_count = state.steering.get_steering_count(),
+            "steering 预算耗尽"
+        );
         dispatch(state, E::SteeringBudgetExhausted)?;
         return Ok(HandlerOutcome::end(EndDecision::stop_with_diagnostic(
             state,
@@ -55,7 +60,9 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
 
     let session_id = state.machine.context().session_id.clone();
     tracing::info!(action_count = actions.len(), "steering 注入");
-    let applied = state.steering.apply(&actions, &session_id, &mut state.conversation);
+    let applied = state
+        .steering
+        .apply(&actions, &session_id, &mut state.conversation);
     state.events.extend(applied.events);
 
     if applied.intervention_required {

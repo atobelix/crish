@@ -1,0 +1,955 @@
+@charset "UTF-8";
+/* 
+=============================================================================
+  Premium Markdown Renderer (HLS ONLY - ZERO BLUE)
+  Palette: Sandstone, Amber, Warm Ash
+============================================================================= 
+*/
+
+:root {
+  /* ==================== 
+     1. COLOR SYSTEM (HLS)
+     ==================== */
+  /* Neutral / Backgrounds (Hue 40 - Warm Parchment) */
+  --pm-bg-primary: hsl(40, 20%, 98%);
+  --pm-bg-secondary: hsl(35, 15%, 95%);
+  --pm-bg-tertiary: hsl(30, 15%, 92%);
+  --pm-bg-elevated: hsl(0, 0%, 100%);
+  --pm-bg-overlay: hsla(40, 20%, 98%, 0.85);
+
+  /* Typography (Hue 0-20 - Warm Ash / Deep Charcoal) */
+  --pm-text-primary: hsl(0, 0%, 15%);
+  --pm-text-secondary: hsl(20, 10%, 45%);
+  --pm-text-tertiary: hsl(25, 15%, 60%);
+  --pm-text-disabled: hsl(30, 20%, 75%);
+  --pm-text-inverse: hsl(0, 0%, 100%);
+
+  /* Borders (Hue 30) */
+  --pm-border-light: hsl(30, 20%, 92%);
+  --pm-border-medium: hsl(30, 15%, 85%);
+  --pm-border-strong: hsl(25, 10%, 70%);
+  --pm-border-focus: hsl(25, 85%, 65%);
+
+  /* Accents (Hue 25 - Amber / Warm Orange) */
+  --pm-accent-base: hsl(25, 85%, 55%);
+  --pm-accent-hover: hsl(25, 90%, 50%);
+  --pm-accent-active: hsl(25, 95%, 45%);
+  --pm-accent-muted: hsl(25, 70%, 92%);
+  --pm-accent-glow: hsla(25, 85%, 55%, 0.15);
+
+  /* Semantic Colors */
+  --pm-success-base: hsl(140, 40%, 45%); /* Sage Green */
+  --pm-success-muted: hsl(140, 30%, 92%);
+  --pm-success-border: hsl(140, 35%, 80%);
+
+  --pm-warning-base: hsl(45, 90%, 45%); /* Golden */
+  --pm-warning-muted: hsl(45, 80%, 92%);
+  --pm-warning-border: hsl(45, 80%, 80%);
+
+  --pm-error-base: hsl(0, 70%, 55%); /* Crimson */
+  --pm-error-muted: hsl(0, 60%, 94%);
+  --pm-error-border: hsl(0, 60%, 85%);
+
+  --pm-info-base: hsl(160, 30%, 45%); /* Mint/Teal - strictly no blue */
+  --pm-info-muted: hsl(160, 25%, 92%);
+  --pm-info-border: hsl(160, 25%, 80%);
+
+  /* ==================== 
+     2. TYPOGRAPHY
+     ==================== */
+  --pm-font-base: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --pm-font-serif: "Noto Serif CJK SC", "Songti SC", "SimSun", Georgia, serif;
+  --pm-font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, Monaco, monospace;
+  
+  --pm-font-size-base: 14px;
+  --pm-font-size-sm: 12.5px;
+  --pm-font-size-xs: 11px;
+  
+  --pm-line-height-base: 1.7;
+  --pm-line-height-heading: 1.35;
+  --pm-line-height-code: 1.55;
+  
+  /* Modular Scale for Headings */
+  --pm-h1-size: 2.25rem;  /* 31.5px */
+  --pm-h2-size: 1.75rem;  /* 24.5px */
+  --pm-h3-size: 1.5rem;   /* 21.0px */
+  --pm-h4-size: 1.25rem;  /* 17.5px */
+  --pm-h5-size: 1.1rem;   /* 15.4px */
+  --pm-h6-size: 1rem;     /* 14.0px */
+
+  /* ==================== 
+     3. SPACING & LAYOUT
+     ==================== */
+  --pm-gap-xs: 0.25rem;
+  --pm-gap-sm: 0.5rem;
+  --pm-gap-md: 1rem;
+  --pm-gap-lg: 1.5rem;
+  --pm-gap-xl: 2.5rem;
+  
+  --pm-paragraph-spacing: 1.35em;
+  --pm-list-indent: 1.6em;
+  --pm-container-padding: 2.5rem;
+  --pm-max-width: 860px;
+  
+  /* Radius */
+  --pm-radius-sm: 4px;
+  --pm-radius-md: 8px;
+  --pm-radius-lg: 12px;
+  --pm-radius-round: 9999px;
+
+  /* ==================== 
+     4. SHADOWS & EFFECTS
+     ==================== */
+  --pm-shadow-sm: 0 1px 2px hsla(0, 0%, 15%, 0.05);
+  --pm-shadow-md: 0 4px 6px hsla(0, 0%, 15%, 0.05), 0 1px 3px hsla(0, 0%, 15%, 0.08);
+  --pm-shadow-lg: 0 10px 15px hsla(0, 0%, 15%, 0.05), 0 4px 6px hsla(0, 0%, 15%, 0.05);
+  --pm-shadow-float: 0 20px 25px hsla(0, 0%, 15%, 0.08), 0 10px 10px hsla(0, 0%, 15%, 0.04);
+  
+  --pm-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --pm-transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --pm-transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 
+=============================================================================
+  BASE RESET & SETUP
+============================================================================= 
+*/
+
+.premium-markdown {
+  font-family: var(--pm-font-base);
+  font-size: var(--pm-font-size-base);
+  line-height: var(--pm-line-height-base);
+  color: var(--pm-text-primary);
+  background-color: var(--pm-bg-primary);
+  max-width: var(--pm-max-width);
+  margin: 0 auto;
+  padding: var(--pm-container-padding);
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  word-wrap: break-word;
+  word-break: normal;
+  overflow-wrap: break-word;
+  position: relative;
+  /* Rendering optimizations for long documents */
+  content-visibility: auto;
+  contain-intrinsic-size: 1000px;
+}
+
+.premium-markdown *,
+.premium-markdown *::before,
+.premium-markdown *::after {
+  box-sizing: inherit;
+}
+
+.premium-markdown > *:first-child {
+  margin-top: 0 !important;
+}
+
+.premium-markdown > *:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* 
+=============================================================================
+  TYPOGRAPHY: HEADINGS
+============================================================================= 
+*/
+
+.premium-markdown h1,
+.premium-markdown h2,
+.premium-markdown h3,
+.premium-markdown h4,
+.premium-markdown h5,
+.premium-markdown h6 {
+  color: var(--pm-text-primary);
+  line-height: var(--pm-line-height-heading);
+  font-weight: 600;
+  margin-top: 1.8em;
+  margin-bottom: 0.8em;
+  position: relative;
+  scroll-margin-top: 80px; /* For anchor links */
+  letter-spacing: -0.015em;
+}
+
+.premium-markdown h1 {
+  font-size: var(--pm-h1-size);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin-top: 2em;
+  margin-bottom: 1em;
+  padding-bottom: 0.3em;
+  border-bottom: 2px solid var(--pm-border-light);
+}
+
+.premium-markdown h2 {
+  font-size: var(--pm-h2-size);
+  font-weight: 700;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--pm-border-light);
+}
+
+.premium-markdown h3 {
+  font-size: var(--pm-h3-size);
+}
+
+.premium-markdown h4 {
+  font-size: var(--pm-h4-size);
+}
+
+.premium-markdown h5 {
+  font-size: var(--pm-h5-size);
+  color: var(--pm-text-secondary);
+}
+
+.premium-markdown h6 {
+  font-size: var(--pm-h6-size);
+  color: var(--pm-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Heading Anchor Links (GitHub style hover) */
+.premium-markdown h1:hover .anchor,
+.premium-markdown h2:hover .anchor,
+.premium-markdown h3:hover .anchor,
+.premium-markdown h4:hover .anchor,
+.premium-markdown h5:hover .anchor,
+.premium-markdown h6:hover .anchor {
+  opacity: 1;
+}
+
+.premium-markdown .anchor {
+  float: left;
+  padding-right: 4px;
+  margin-left: -20px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity var(--pm-transition-fast);
+  color: var(--pm-text-disabled);
+  text-decoration: none;
+}
+.premium-markdown .anchor:hover {
+  color: var(--pm-accent-base);
+}
+
+/* 
+=============================================================================
+  TYPOGRAPHY: PARAGRAPHS & INLINE STYLES
+============================================================================= 
+*/
+
+.premium-markdown p {
+  margin-top: 0;
+  margin-bottom: var(--pm-paragraph-spacing);
+}
+
+.premium-markdown strong,
+.premium-markdown b {
+  font-weight: 600;
+  color: var(--pm-text-primary);
+}
+
+.premium-markdown em,
+.premium-markdown i {
+  font-style: italic;
+}
+
+.premium-markdown del,
+.premium-markdown s {
+  text-decoration: line-through;
+  color: var(--pm-text-disabled);
+}
+
+.premium-markdown u {
+  text-decoration: underline;
+  text-decoration-color: var(--pm-border-strong);
+  text-underline-offset: 3px;
+}
+
+.premium-markdown mark {
+  background-color: var(--pm-warning-muted);
+  color: var(--pm-text-primary);
+  padding: 0.1em 0.3em;
+  border-radius: var(--pm-radius-sm);
+  font-weight: 500;
+}
+
+/* Inline Code */
+.premium-markdown code:not([class*="language-"]) {
+  font-family: var(--pm-font-mono);
+  font-size: 0.85em;
+  background-color: var(--pm-bg-secondary);
+  color: var(--pm-accent-active);
+  padding: 0.2em 0.4em;
+  border-radius: var(--pm-radius-sm);
+  border: 1px solid var(--pm-border-light);
+  white-space: break-spaces;
+}
+
+/* Keyboard Tag */
+.premium-markdown kbd {
+  display: inline-block;
+  padding: 0.2em 0.5em;
+  font-family: var(--pm-font-mono);
+  font-size: 0.85em;
+  color: var(--pm-text-secondary);
+  background-color: var(--pm-bg-elevated);
+  border: 1px solid var(--pm-border-medium);
+  border-bottom-color: var(--pm-border-strong);
+  border-radius: var(--pm-radius-sm);
+  box-shadow: inset 0 -1px 0 var(--pm-border-strong);
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.premium-markdown sub,
+.premium-markdown sup {
+  font-size: 0.75em;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+.premium-markdown sub { bottom: -0.25em; }
+.premium-markdown sup { top: -0.5em; }
+
+/* Links */
+.premium-markdown a {
+  color: var(--pm-accent-base);
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--pm-transition-fast), color var(--pm-transition-fast);
+}
+
+.premium-markdown a:hover {
+  color: var(--pm-accent-hover);
+  border-bottom-color: var(--pm-accent-hover);
+}
+
+.premium-markdown a:active {
+  color: var(--pm-accent-active);
+}
+
+/* 
+=============================================================================
+  LISTS
+============================================================================= 
+*/
+
+.premium-markdown ul,
+.premium-markdown ol {
+  margin-top: 0;
+  margin-bottom: var(--pm-paragraph-spacing);
+  padding-left: var(--pm-list-indent);
+}
+
+.premium-markdown li {
+  margin-top: 0.25em;
+}
+
+/* Nested lists */
+.premium-markdown li > ul,
+.premium-markdown li > ol {
+  margin-top: 0.25em;
+  margin-bottom: 0;
+}
+
+/* Custom bullet points for unordered lists */
+.premium-markdown ul {
+  list-style-type: none;
+}
+
+.premium-markdown ul > li {
+  position: relative;
+}
+
+.premium-markdown ul > li::before {
+  content: "";
+  position: absolute;
+  left: -1em;
+  top: 0.65em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--pm-border-strong);
+  transition: background-color var(--pm-transition-fast), transform var(--pm-transition-fast);
+}
+
+.premium-markdown ul > li:hover::before {
+  background-color: var(--pm-accent-base);
+  transform: scale(1.2);
+}
+
+/* Nested list bullets */
+.premium-markdown ul ul > li::before {
+  background-color: transparent;
+  border: 1px solid var(--pm-border-strong);
+  width: 4px;
+  height: 4px;
+}
+.premium-markdown ul ul > li:hover::before {
+  border-color: var(--pm-accent-base);
+  background-color: transparent;
+}
+
+.premium-markdown ul ul ul > li::before {
+  border-radius: 0; /* Square for level 3 */
+  background-color: var(--pm-border-strong);
+  border: none;
+}
+
+/* Ordered Lists */
+.premium-markdown ol {
+  counter-reset: pm-ol-counter;
+  list-style-type: none;
+}
+.premium-markdown ol > li {
+  position: relative;
+  counter-increment: pm-ol-counter;
+}
+.premium-markdown ol > li::before {
+  content: counter(pm-ol-counter) ".";
+  position: absolute;
+  left: -1.75em;
+  width: 1.5em;
+  text-align: right;
+  color: var(--pm-text-tertiary);
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  font-size: 0.9em;
+}
+
+/* Task Lists */
+.premium-markdown .contains-task-list {
+  padding-left: 0;
+  list-style: none;
+}
+
+.premium-markdown .task-list-item {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 0.5em;
+}
+
+.premium-markdown .task-list-item::before {
+  display: none; /* Hide default bullets */
+}
+
+.premium-markdown .task-list-item-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.1em;
+  height: 1.1em;
+  margin: 0.25em 0.6em 0 0;
+  border: 2px solid var(--pm-border-strong);
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+  transition: all var(--pm-transition-fast);
+  background-color: var(--pm-bg-elevated);
+  flex-shrink: 0;
+}
+
+.premium-markdown .task-list-item-checkbox:checked {
+  background-color: var(--pm-success-base);
+  border-color: var(--pm-success-base);
+}
+
+.premium-markdown .task-list-item-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  left: 30%;
+  top: 10%;
+  width: 25%;
+  height: 50%;
+  border: solid var(--pm-bg-elevated);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.premium-markdown .task-list-item-checkbox:focus-visible {
+  outline: 2px solid var(--pm-accent-glow);
+  outline-offset: 2px;
+}
+
+.premium-markdown .task-list-item.checked {
+  color: var(--pm-text-disabled);
+}
+
+/* Definition Lists */
+.premium-markdown dl {
+  margin-bottom: var(--pm-paragraph-spacing);
+}
+.premium-markdown dt {
+  font-weight: 600;
+  margin-top: 1em;
+}
+.premium-markdown dd {
+  margin-left: 1.5em;
+  color: var(--pm-text-secondary);
+  margin-bottom: 0.5em;
+}
+
+/* 
+=============================================================================
+  BLOCKQUOTES
+============================================================================= 
+*/
+
+.premium-markdown blockquote {
+  margin: 1.5em 0;
+  padding: 1em 1.5em;
+  color: var(--pm-text-secondary);
+  background-color: var(--pm-bg-secondary);
+  border-left: 4px solid var(--pm-border-strong);
+  border-radius: 0 var(--pm-radius-md) var(--pm-radius-md) 0;
+  position: relative;
+  transition: border-color var(--pm-transition-normal), background-color var(--pm-transition-normal);
+}
+
+.premium-markdown blockquote:hover {
+  border-left-color: var(--pm-accent-base);
+  background-color: var(--pm-accent-muted);
+}
+
+.premium-markdown blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Nested Blockquotes */
+.premium-markdown blockquote blockquote {
+  margin-top: 1em;
+  margin-bottom: 0;
+  background-color: var(--pm-bg-tertiary);
+}
+
+/* 
+=============================================================================
+  TABLES
+============================================================================= 
+*/
+
+.premium-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+  margin: 2em 0;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 1px var(--pm-border-light);
+  border-radius: var(--pm-radius-md);
+  overflow: hidden; /* For border radius */
+}
+
+.premium-markdown th,
+.premium-markdown td {
+  padding: 0.75em 1em;
+  text-align: left;
+  border-bottom: 1px solid var(--pm-border-light);
+}
+
+.premium-markdown th {
+  font-weight: 600;
+  background-color: var(--pm-bg-secondary);
+  color: var(--pm-text-primary);
+  border-bottom: 2px solid var(--pm-border-medium);
+}
+
+.premium-markdown tr:last-child td {
+  border-bottom: none;
+}
+
+.premium-markdown tbody tr {
+  background-color: var(--pm-bg-elevated);
+  transition: background-color var(--pm-transition-fast);
+}
+
+.premium-markdown tbody tr:hover {
+  background-color: var(--pm-bg-secondary);
+}
+
+.premium-markdown tbody tr:nth-child(even) {
+  background-color: var(--pm-bg-primary);
+}
+
+/* 
+=============================================================================
+  HORIZONTAL RULE
+============================================================================= 
+*/
+
+.premium-markdown hr {
+  height: 0;
+  margin: 3em 0;
+  border: none;
+  border-bottom: 1px solid var(--pm-border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.premium-markdown hr::after {
+  content: "•••";
+  display: inline-block;
+  padding: 0 1em;
+  color: var(--pm-border-strong);
+  font-size: 1.2em;
+  letter-spacing: 0.5em;
+  background-color: var(--pm-bg-primary);
+  position: relative;
+  top: 1px; /* Align with border */
+}
+
+/* 
+=============================================================================
+  MEDIA (IMAGES & VIDEO)
+============================================================================= 
+*/
+
+.premium-markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--pm-radius-md);
+  box-shadow: var(--pm-shadow-sm);
+  display: block;
+  margin: 1.5em auto;
+  transition: box-shadow var(--pm-transition-normal), transform var(--pm-transition-normal);
+}
+
+.premium-markdown img:hover {
+  box-shadow: var(--pm-shadow-md);
+  transform: translateY(-2px);
+}
+
+/* Linked images */
+.premium-markdown a > img {
+  border: 2px solid transparent;
+}
+.premium-markdown a:hover > img {
+  border-color: var(--pm-accent-base);
+}
+
+/* Figure & Captions */
+.premium-markdown figure {
+  margin: 2em 0;
+  text-align: center;
+}
+.premium-markdown figure img {
+  margin-bottom: 0.5em;
+}
+.premium-markdown figcaption {
+  font-size: 0.85em;
+  color: var(--pm-text-secondary);
+  font-style: italic;
+}
+
+/* 
+=============================================================================
+  CODE BLOCKS (FENCED CODE & PRISM.JS THEME ADAPTATION)
+============================================================================= 
+*/
+
+.premium-markdown pre {
+  margin: 1.5em 0;
+  padding: 1.2em 1.5em;
+  background-color: #272522; /* Very dark warm gray (almost black) for contrast */
+  color: #E6E1D8; /* Off-white warm */
+  border-radius: var(--pm-radius-lg);
+  overflow: auto;
+  font-family: var(--pm-font-mono);
+  font-size: 0.9em;
+  line-height: var(--pm-line-height-code);
+  box-shadow: inset 0 0 0 1px hsla(0,0%,100%,0.1), var(--pm-shadow-md);
+  position: relative;
+}
+
+/* Language label */
+.premium-markdown pre[class*="language-"]::before {
+  content: attr(data-language);
+  position: absolute;
+  top: 0;
+  right: 1em;
+  font-size: 0.75em;
+  font-weight: 600;
+  color: #8C867D;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.25em 0.5em;
+  background: #3B3833;
+  border-radius: 0 0 var(--pm-radius-sm) var(--pm-radius-sm);
+}
+
+.premium-markdown pre code {
+  display: block;
+  background: transparent;
+  padding: 0;
+  border: none;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  tab-size: 4;
+  hyphens: none;
+}
+
+/* Custom Prism Theme (Amber/Warm Ash palette) */
+.premium-markdown .token.comment,
+.premium-markdown .token.prolog,
+.premium-markdown .token.doctype,
+.premium-markdown .token.cdata {
+  color: #8C867D;
+  font-style: italic;
+}
+.premium-markdown .token.punctuation { color: #B3ADA3; }
+.premium-markdown .token.namespace { opacity: .7; }
+.premium-markdown .token.property,
+.premium-markdown .token.tag,
+.premium-markdown .token.boolean,
+.premium-markdown .token.number,
+.premium-markdown .token.constant,
+.premium-markdown .token.symbol,
+.premium-markdown .token.deleted {
+  color: #D66D55; /* Warm Coral */
+}
+.premium-markdown .token.selector,
+.premium-markdown .token.attr-name,
+.premium-markdown .token.string,
+.premium-markdown .token.char,
+.premium-markdown .token.builtin,
+.premium-markdown .token.inserted {
+  color: #A3B566; /* Warm Olive */
+}
+.premium-markdown .token.operator,
+.premium-markdown .token.entity,
+.premium-markdown .token.url,
+.premium-markdown .language-css .token.string,
+.premium-markdown .style .token.string {
+  color: #D19A66; /* Golden Amber */
+}
+.premium-markdown .token.atrule,
+.premium-markdown .token.attr-value,
+.premium-markdown .token.keyword {
+  color: #C678DD; /* Warm Purple (No blue) */
+}
+.premium-markdown .token.function,
+.premium-markdown .token.class-name {
+  color: #E5C07B; /* Bright Amber */
+}
+.premium-markdown .token.regex,
+.premium-markdown .token.important,
+.premium-markdown .token.variable {
+  color: #E06C75; /* Rose */
+}
+
+/* 
+=============================================================================
+  DETAILS / SUMMARY (INTERACTIVE FOLDING)
+============================================================================= 
+*/
+
+.premium-markdown details {
+  background-color: var(--pm-bg-secondary);
+  border: 1px solid var(--pm-border-light);
+  border-radius: var(--pm-radius-md);
+  margin: 1.5em 0;
+  padding: 0.5em 1em;
+  transition: box-shadow var(--pm-transition-normal);
+}
+
+.premium-markdown details:hover {
+  box-shadow: var(--pm-shadow-sm);
+}
+
+.premium-markdown details[open] {
+  padding-bottom: 1em;
+  border-color: var(--pm-border-medium);
+}
+
+.premium-markdown summary {
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.5em 0;
+  outline: none;
+  list-style: none; /* Hide default arrow */
+  display: flex;
+  align-items: center;
+  user-select: none;
+}
+
+/* Custom animated arrow */
+.premium-markdown summary::before {
+  content: "";
+  display: inline-block;
+  width: 0.4em;
+  height: 0.4em;
+  border-right: 2px solid var(--pm-text-secondary);
+  border-bottom: 2px solid var(--pm-text-secondary);
+  transform: rotate(-45deg);
+  margin-right: 0.8em;
+  transition: transform var(--pm-transition-normal);
+}
+
+.premium-markdown details[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.premium-markdown details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.premium-markdown details > *:not(summary) {
+  margin-top: 1em;
+  animation: pm-fade-in var(--pm-transition-slow);
+}
+
+@keyframes pm-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 
+=============================================================================
+  FOOTNOTES
+============================================================================= 
+*/
+
+.premium-markdown .footnotes {
+  margin-top: 4em;
+  padding-top: 1em;
+  border-top: 1px solid var(--pm-border-light);
+  font-size: 0.9em;
+  color: var(--pm-text-secondary);
+}
+
+.premium-markdown .footnotes h2 {
+  display: none; /* Hide generic 'Footnotes' title, standard in MD */
+}
+
+.premium-markdown .footnote-ref {
+  text-decoration: none;
+  color: var(--pm-accent-base);
+  padding: 0 0.1em;
+}
+
+.premium-markdown .footnote-ref::before { content: "["; color: var(--pm-text-disabled); }
+.premium-markdown .footnote-ref::after { content: "]"; color: var(--pm-text-disabled); }
+
+.premium-markdown .footnote-item {
+  margin-bottom: 0.5em;
+}
+
+.premium-markdown .footnote-item p {
+  display: inline;
+}
+
+.premium-markdown .footnote-backref {
+  margin-left: 0.5em;
+  text-decoration: none;
+  color: var(--pm-text-disabled);
+  transition: color var(--pm-transition-fast);
+  font-family: var(--pm-font-mono);
+}
+.premium-markdown .footnote-backref:hover {
+  color: var(--pm-accent-base);
+}
+
+/* 
+=============================================================================
+  MATH (KaTeX SUPPORT OVERRIDES) & MERMAID
+============================================================================= 
+*/
+
+.premium-markdown .math {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.2em 0;
+}
+
+.premium-markdown .math-display {
+  display: block;
+  margin: 1.5em 0;
+  text-align: center;
+}
+
+.premium-markdown .mermaid {
+  background-color: var(--pm-bg-elevated);
+  border: 1px solid var(--pm-border-light);
+  border-radius: var(--pm-radius-md);
+  padding: 1.5em;
+  margin: 2em 0;
+  display: flex;
+  justify-content: center;
+  box-shadow: var(--pm-shadow-sm);
+  overflow-x: auto;
+}
+
+/* 
+=============================================================================
+  TOC (TABLE OF CONTENTS)
+============================================================================= 
+*/
+
+.premium-markdown .toc {
+  background-color: var(--pm-bg-secondary);
+  border: 1px solid var(--pm-border-light);
+  border-radius: var(--pm-radius-md);
+  padding: 1.5em;
+  margin-bottom: 2em;
+}
+
+.premium-markdown .toc ul {
+  list-style: none;
+  padding-left: 0;
+  margin-bottom: 0;
+}
+
+.premium-markdown .toc ul ul {
+  padding-left: 1.5em;
+  margin-top: 0.25em;
+}
+
+.premium-markdown .toc li::before {
+  display: none; /* No bullets for TOC */
+}
+
+.premium-markdown .toc a {
+  color: var(--pm-text-secondary);
+  font-weight: 400;
+  border-bottom: none;
+  display: block;
+  padding: 0.2em 0;
+}
+
+.premium-markdown .toc a:hover {
+  color: var(--pm-accent-base);
+  padding-left: 4px;
+}
+
+/* 
+=============================================================================
+  UTILITIES & PRINT
+============================================================================= 
+*/
+
+.premium-markdown .text-center { text-align: center; }
+.premium-markdown .text-right { text-align: right; }
+.premium-markdown .hidden { display: none; }
+
+@media print {
+  .premium-markdown {
+    background: transparent;
+    color: #000;
+    max-width: 100%;
+    padding: 0;
+  }
+  .premium-markdown a { text-decoration: underline; color: #000; }
+  .premium-markdown pre, .premium-markdown blockquote {
+    page-break-inside: avoid;
+    border-left-color: #999;
+  }
+  .premium-markdown h1, .premium-markdown h2, .premium-markdown h3 {
+    page-break-after: avoid;
+  }
+}

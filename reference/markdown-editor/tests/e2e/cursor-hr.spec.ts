@@ -6,13 +6,14 @@ test('click on hr and measure cursor', async ({ page }) => {
 
   // Set markdown with HR
   await page.evaluate(() => {
-    window.useEditorStore.setState({ rawText: 'abc\n---\ndef' });
+    (window as any).__CRISH_SESSION_STORE__.getState().setText('hello\n---\nworld');
   });
 
   // Wait for the HR to be rendered
   await page.waitForSelector('.line-hr .hr-rendered');
 
   // Get the HR bounding box
+  page.on('console', msg => console.log('BROWSER:', msg.text()));
   const hr = page.locator('.line-hr .hr-rendered');
   const hrBox = await hr.boundingBox();
   console.log('HR box:', hrBox);
@@ -23,11 +24,16 @@ test('click on hr and measure cursor', async ({ page }) => {
   // Wait for cursor to update
   await page.waitForTimeout(500); // Give it some time for React to render cursor
 
-  const cursorBox = await page.locator('.cursor').boundingBox();
+  const html = await page.evaluate(() => document.querySelector('.editor-container')?.innerHTML);
+  console.log('BROWSER HTML:', typeof html === 'string' ? html.substring(0, 1000) + '...' : html);
+
+  const cursorBox = await page.locator('.cursor-caret').boundingBox();
   console.log('Cursor box:', cursorBox);
 
   const storeState = await page.evaluate(() =>
-    window.useEditorStore.getState()
+    (window as any).__CRISH_SESSION_STORE__.getState()
   );
-  console.log('cursorPos:', storeState.cursorPos);
+  
+  // The cursor should be moved to the beginning of the hr line (index 6)
+  expect(storeState.cursorPos).toBe(6);
 });

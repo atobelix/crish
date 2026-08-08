@@ -9,7 +9,6 @@ import {
   getCoordinatesFromIndex,
   getGlobalIndexFromDOMNode,
   getArrowNavigationIndex,
-  updateActiveElements,
 } from '../core/measure';
 
 interface HiddenInputProps {
@@ -23,6 +22,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
   const deleteText = useEditorStore((state) => state.deleteText);
   const setCursorPos = useEditorStore((state) => state.setCursorPos);
   const setSelection = useEditorStore((state) => state.setSelection);
+  const lines = useEditorStore((state) => state.lines);
   const selectionStart = useEditorStore((state) => state.selectionStart);
   const selectionEnd = useEditorStore((state) => state.selectionEnd);
   const [coords, setCoords] = useState<{
@@ -31,37 +31,45 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     height: number;
   } | null>(null);
   const [isComposing, setIsComposing] = useState(false);
+  const prevDeps = useRef<any>(null);
 
   // Sync input value with current line text
   useLayoutEffect(() => {
-    if (!textareaRef.current) return;
-
     // Sync physical coordinates whenever cursor or text changes
     if (!containerRef.current) return;
-    updateActiveElements(
-      containerRef.current,
-      cursorPos,
-      selectionStart,
-      selectionEnd
-    );
 
-    const rect = getCoordinatesFromIndex(cursorPos, containerRef.current);
-    if (rect) {
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const top = rect.top - containerRect.top + containerRef.current.scrollTop;
-      const left =
-        rect.left - containerRect.left + containerRef.current.scrollLeft;
-      setCoords({ top, left, height: rect.height });
+    let rAF: number;
+    let retries = 0;
+    const updateCoords = () => {
+      const rect = getCoordinatesFromIndex(cursorPos, containerRef.current);
+      if (rect) {
+        const containerRect = containerRef.current!.getBoundingClientRect();
+        const top = rect.top - containerRect.top + containerRef.current!.scrollTop;
+        const left =
+          rect.left - containerRect.left + containerRef.current!.scrollLeft;
 
-      const cTop = containerRef.current.scrollTop;
-      const cHeight = containerRef.current.clientHeight;
-      if (top < cTop) {
-        containerRef.current.scrollTop = Math.max(0, top - 40);
-      } else if (top + rect.height > cTop + cHeight) {
-        containerRef.current.scrollTop = top + rect.height - cHeight + 40;
+        setCoords({ top, left, height: rect.height });
+
+        const cTop = containerRef.current!.scrollTop;
+        const cHeight = containerRef.current!.clientHeight;
+        if (top < cTop) {
+          containerRef.current!.scrollTop = Math.max(0, top - 40);
+        } else if (top + rect.height > cTop + cHeight) {
+          containerRef.current!.scrollTop = top + rect.height - cHeight + 40;
+        }
+      } else if (retries < 10) {
+        retries++;
+        rAF = requestAnimationFrame(updateCoords);
+      } else {
+        setCoords(null);
       }
-    }
-  }, [cursorPos, selectionStart, selectionEnd, containerRef]);
+    };
+    updateCoords();
+
+    return () => {
+      if (rAF) cancelAnimationFrame(rAF);
+    };
+  }, [cursorPos, selectionStart, selectionEnd, containerRef, lines]);
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -152,6 +160,110 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     // We don't need manual dom manipulation here anymore, since useEffect handles it on cursorPos change
   };
 
+  
+  const handleTableNav = (e: React.KeyboardEvent, direction: 'left' | 'right' | 'up' | 'down', text: string, cursorPos: number): boolean => {
+      let lineStart = text.lastIndexOf('\n', cursorPos - 1) + 1;
+      let lineEnd = text.indexOf('\n', cursorPos);
+      if (lineEnd === -1) lineEnd = text.length;
+      const lineStr = text.substring(lineStart, lineEnd);
+
+      if (lineStr.trim().startsWith('|')) {
+        const pipes: number[] = [];
+        for (let i = lineStart; i <= lineEnd; i++) {
+          if (text[i] === '|' && (i === 0 || text[i-1] !== '\\')) pipes.push(i);
+        }
+
+        if (pipes.length >= 2) {
+          let currentCellIdx = -1;
+          for (let i = 0; i < pipes.length - 1; i++) {
+            if (cursorPos >= pipes[i] && cursorPos <= pipes[i+1]) {
+              currentCellIdx = i;
+              break;
+            }
+          }
+
+          if (currentCellIdx !== -1) {
+            e.preventDefault();
+            let nextCellIdx = currentCellIdx;
+            if (direction === 'left') nextCellIdx--;
+            if (direction === 'right') nextCellIdx++;
+            
+            let targetLineStart = lineStart;
+            let targetLineEnd = lineEnd;
+            let targetPipes = pipes;
+
+            if (nextCellIdx < 0 || direction === 'up') {
+              if (lineStart > 0) {
+                let prevLineEnd = lineStart - 1;
+                let prevLineStart = text.lastIndexOf('\n', prevLineEnd - 1) + 1;
+                let prevLineStr = text.substring(prevLineStart, prevLineEnd);
+                
+                if (prevLineStr.replace(/[-:| ]/g, '').length === 0 && prevLineStart > 0) {
+                  prevLineEnd = prevLineStart - 1;
+                  prevLineStart = text.lastIndexOf('\n', prevLineEnd - 1) + 1;
+                  prevLineStr = text.substring(prevLineStart, prevLineEnd);
+                }
+
+                if (prevLineStr.trim().startsWith('|')) {
+                  targetLineStart = prevLineStart;
+                  targetLineEnd = prevLineEnd;
+                  targetPipes = [];
+                  for (let i = targetLineStart; i <= targetLineEnd; i++) {
+                    if (text[i] === '|' && (i === 0 || text[i-1] !== '\\')) targetPipes.push(i);
+                  }
+                  if (direction === 'left') nextCellIdx = Math.max(0, targetPipes.length - 2);
+                  if (direction === 'up') nextCellIdx = Math.min(nextCellIdx, targetPipes.length - 2);
+                } else if (direction === 'left' || direction === 'right') {
+                    return true;
+                }
+              }
+            } else if (nextCellIdx >= pipes.length - 1 || direction === 'down') {
+              if (lineEnd < text.length) {
+                let nextLineStart = lineEnd + 1;
+                let nextLineEnd = text.indexOf('\n', nextLineStart);
+                if (nextLineEnd === -1) nextLineEnd = text.length;
+                let nextLineStr = text.substring(nextLineStart, nextLineEnd);
+
+                if (nextLineStr.replace(/[-:| ]/g, '').length === 0 && nextLineEnd < text.length) {
+                  nextLineStart = nextLineEnd + 1;
+                  nextLineEnd = text.indexOf('\n', nextLineStart);
+                  if (nextLineEnd === -1) nextLineEnd = text.length;
+                  nextLineStr = text.substring(nextLineStart, nextLineEnd);
+                }
+
+                if (nextLineStr.trim().startsWith('|')) {
+                  targetLineStart = nextLineStart;
+                  targetLineEnd = nextLineEnd;
+                  targetPipes = [];
+                  for (let i = targetLineStart; i <= targetLineEnd; i++) {
+                    if (text[i] === '|' && (i === 0 || text[i-1] !== '\\')) targetPipes.push(i);
+                  }
+                  if (direction === 'right') nextCellIdx = 0;
+                  if (direction === 'down') nextCellIdx = Math.min(nextCellIdx, targetPipes.length - 2);
+                } else if (direction === 'left' || direction === 'right') {
+                    return true;
+                }
+              }
+            }
+
+            if (nextCellIdx >= 0 && nextCellIdx < targetPipes.length - 1) {
+              const cellStart = targetPipes[nextCellIdx] + 1;
+              const cellEnd = targetPipes[nextCellIdx + 1];
+              let selStart = cellStart;
+              let selEnd = cellEnd;
+              while (selStart < selEnd && text[selStart] === ' ') selStart++;
+              while (selEnd > selStart && text[selEnd - 1] === ' ') selEnd--;
+              
+              const store = useEditorStore.getState();
+              store.setSelection(selStart, selEnd);
+            }
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const text = useEditorStore.getState().getText();
     const { selectionStart, selectionEnd } = useEditorStore.getState();
@@ -208,11 +320,22 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (isComposing) return;
-      insertText('\n');
+      let lineStart = text.lastIndexOf('\n', cursorPos - 1) + 1;
+      let lineEnd = text.indexOf('\n', cursorPos);
+      if (lineEnd === -1) lineEnd = text.length;
+      const lineStr = text.substring(lineStart, lineEnd);
+      if (lineStr.trim().startsWith('|')) {
+        insertText('<br>');
+      } else {
+        insertText('\n');
+      }
     } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       setSelection(0, text.length);
+    } else if (e.key === 'Tab') {
+      if (handleTableNav(e, e.shiftKey ? 'left' : 'right', text, cursorPos)) return;
     } else if (e.key === 'ArrowUp') {
+      if (!e.shiftKey && handleTableNav(e, 'up', text, cursorPos)) return;
       e.preventDefault();
       if (containerRef.current) {
         const targetIdx = getArrowNavigationIndex(
@@ -232,6 +355,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         }
       }
     } else if (e.key === 'ArrowDown') {
+      if (!e.shiftKey && handleTableNav(e, 'down', text, cursorPos)) return;
       e.preventDefault();
       if (containerRef.current) {
         const targetIdx = getArrowNavigationIndex(

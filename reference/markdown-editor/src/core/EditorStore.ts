@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { type CodeState } from './parser';
+import { LineOffsetTree } from './SegmentTree';
 
 // Use Intl.Segmenter for grapheme cluster boundaries (surrogate pairs, emojis, combining chars)
 const segmenter =
@@ -144,9 +145,10 @@ export interface EditorOperation {
 
 export interface EditorState {
   lines: string[];
-  lineOffsets: number[];
+  lineOffsets: LineOffsetTree;
   codeBlockState: CodeState[];
   textLength: number;
+  fenceLines: number[]; // Ordered array of fence line numbers
 
   cursorPos: number;
   selectionStart: number;
@@ -162,6 +164,9 @@ export interface EditorState {
   setCursorPos: (pos: number) => void;
   setSelection: (start: number, end: number) => void;
   insertText: (inserted: string) => void;
+  appendText: (text: string) => void;
+  isComposing: boolean;
+  setIsComposing: (isComposing: boolean) => void;
   deleteText: (backward: boolean) => void;
   deleteSelection: (start: number, end: number) => void;
 
@@ -169,122 +174,169 @@ export interface EditorState {
   redo: () => void;
 }
 
-function binarySearchLineIndex(offsets: number[], pos: number): number {
-  let low = 0;
-  let high = offsets.length - 1;
-  while (low <= high) {
-    const mid = (low + high) >> 1;
-    if (offsets[mid] === pos) return mid;
-    if (offsets[mid] < pos) low = mid + 1;
-    else high = mid - 1;
-  }
-  return Math.max(0, high);
-}
 
 // Actually, mutating arrays in Zustand is okay if we copy the array first.
 function updateLinesIncremental(
   lines: string[],
-  lineOffsets: number[],
+  lineOffsets: LineOffsetTree,
   codeBlockState: CodeState[],
   startLineIdx: number,
   deleteCount: number,
-  newLines: string[]
+  newLines: string[],
+  fenceLines: number[] = []
 ) {
   const newLinesArr = [...lines];
   newLinesArr.splice(startLineIdx, deleteCount, ...newLines);
 
-  const newOffsets = [...lineOffsets];
+  const newOffsets = lineOffsets.clone();
+  newOffsets.updateLines(startLineIdx, deleteCount, newLines.map(l => l.length + 1));
+
   const newCodeState = [...codeBlockState];
+  const newFenceLines: number[] = [];
+  const lineDelta = newLines.length - deleteCount;
 
-  let currentOffset =
-    startLineIdx > 0
-      ? newOffsets[startLineIdx - 1] + newLinesArr[startLineIdx - 1].length + 1
-      : 0;
-
-  let inCodeBlock = false;
-  let inMathBlock = false;
-  for (let i = 0; i < startLineIdx; i++) {
-    const trimmed = newLinesArr[i].trim();
-    if (!inMathBlock && trimmed.startsWith('```')) {
-      inCodeBlock = !inCodeBlock;
-    } else if (!inCodeBlock && trimmed === '$$') {
-      inMathBlock = !inMathBlock;
-    }
-  }
-
-  newOffsets.splice(
-    startLineIdx,
-    deleteCount,
-    ...new Array(newLines.length).fill(0)
-  );
   newCodeState.splice(
     startLineIdx,
     deleteCount,
     ...new Array<CodeState>(newLines.length).fill('none')
   );
 
-  for (let i = startLineIdx; i < newLinesArr.length; i++) {
-    newOffsets[i] = currentOffset;
+  let inCodeBlock = false;
+  let inMathBlock = false;
+
+  let low = 0,
+    high = fenceLines.length - 1;
+  let splitIdx = 0;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (fenceLines[mid] < startLineIdx) {
+      splitIdx = mid + 1;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  for (let i = 0; i < splitIdx; i++) {
+    const fLine = fenceLines[i];
+    const state = codeBlockState[fLine];
+    if (state === 'fence_start') inCodeBlock = true;
+    else if (state === 'fence_end') inCodeBlock = false;
+    else if (state === 'math_fence_start') inMathBlock = true;
+    else if (state === 'math_fence_end') inMathBlock = false;
+    newFenceLines.push(fLine);
+  }
+
+  let i = startLineIdx;
+  let converged = false;
+
+  for (; i < newLinesArr.length; i++) {
     const trimmed = newLinesArr[i].trim();
+    const oldState = newCodeState[i]; // pre-filled with shifted old states for i >= startLineIdx + newLines.length
+
+    let isFence = false;
+    let newState: CodeState = 'none';
 
     if (!inMathBlock && trimmed.startsWith('```')) {
+      isFence = true;
       if (!inCodeBlock) {
-        newCodeState[i] = 'fence_start';
+        newState = 'fence_start';
         inCodeBlock = true;
       } else {
-        newCodeState[i] = 'fence_end';
+        newState = 'fence_end';
         inCodeBlock = false;
       }
     } else if (!inCodeBlock && trimmed === '$$') {
+      isFence = true;
       if (!inMathBlock) {
-        newCodeState[i] = 'math_fence_start';
+        newState = 'math_fence_start';
         inMathBlock = true;
       } else {
-        newCodeState[i] = 'math_fence_end';
+        newState = 'math_fence_end';
         inMathBlock = false;
       }
     } else {
       if (inCodeBlock) {
-        newCodeState[i] = 'code';
+        newState = 'code';
       } else if (inMathBlock) {
-        newCodeState[i] = 'math_block';
+        newState = 'math_block';
       } else {
-        newCodeState[i] = 'none';
+        newState = 'none';
       }
     }
-    currentOffset += newLinesArr[i].length + 1;
+
+    newCodeState[i] = newState;
+
+    if (isFence) {
+      newFenceLines.push(i);
+    }
+
+    if (i >= startLineIdx + newLines.length) {
+      if (newState === oldState) {
+        // Check prompt requirement: "扫描到下一个 fence 行即停，且只有当编辑行非 fence 时才成立"
+        // If we found a match and it's a fence, we technically converge since parity doesn't change.
+        // But to strictly follow the prompt, if the edited lines had no fences and we hit the same state, we can stop.
+        // Actually newState === oldState guarantees convergence for all subsequent lines.
+        converged = true;
+        i++;
+        break;
+      }
+    }
   }
+
+  if (converged) {
+    // Append remaining fences
+    // Find where we left off in the old fenceLines array
+    let oldFenceStartIdx = splitIdx;
+    while (
+      oldFenceStartIdx < fenceLines.length &&
+      fenceLines[oldFenceStartIdx] < i - lineDelta
+    ) {
+      oldFenceStartIdx++;
+    }
+    for (let j = oldFenceStartIdx; j < fenceLines.length; j++) {
+      newFenceLines.push(fenceLines[j] + lineDelta);
+    }
+  }
+
+  // Current text length calculation from LineOffsetTree
+  const lastLineIdx = newLinesArr.length - 1;
+  const newTextLength = lastLineIdx >= 0 ? newOffsets.getOffset(lastLineIdx) + newLinesArr[lastLineIdx].length : 0;
 
   return {
     lines: newLinesArr,
     lineOffsets: newOffsets,
     codeBlockState: newCodeState,
-    textLength: Math.max(0, currentOffset - 1),
+    textLength: newTextLength,
+    fenceLines: newFenceLines,
   };
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
   lines: [''],
-  lineOffsets: [0],
+  lineOffsets: new LineOffsetTree([1]),
   codeBlockState: ['none'],
   textLength: 0,
+  fenceLines: [],
 
   cursorPos: 0,
   selectionStart: 0,
   selectionEnd: 0,
+  isComposing: false,
+  setIsComposing: (isComposing) => set({ isComposing }),
 
   undoStack: [],
   redoStack: [],
 
   getText: () => get().lines.join('\n'),
-  getLineIndex: (pos) => binarySearchLineIndex(get().lineOffsets, pos),
+  getLineIndex: (pos) => get().lineOffsets.findLineIndex(pos),
 
   setText: (text) =>
     set(() => {
       const lines = text.split('\n');
 
       if (lines.length <= 1000) {
-        const res = updateLinesIncremental([], [], [], 0, 0, lines);
+        const res = updateLinesIncremental([], new LineOffsetTree([]), [], 0, 0, lines, []);
         return {
           ...res,
           cursorPos: 0,
@@ -297,7 +349,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
       // Chunked loading for large files
       const firstChunk = lines.slice(0, 1000);
-      const res = updateLinesIncremental([], [], [], 0, 0, firstChunk);
+      const res = updateLinesIncremental([], new LineOffsetTree([]), [], 0, 0, firstChunk, []);
 
       let currentIdx = 1000;
       const chunkSize = 2000;
@@ -314,7 +366,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             s.codeBlockState,
             s.lines.length,
             0,
-            chunk
+            chunk,
+            s.fenceLines
           );
           return { ...updated };
         });
@@ -360,7 +413,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       return {
         selectionStart: Math.min(min, max),
         selectionEnd: Math.max(min, max),
-        cursorPos: max,
+        cursorPos: Math.max(0, Math.min(end, state.textLength)),
       };
     }),
 
@@ -369,11 +422,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const s = state.selectionStart;
       const e = state.selectionEnd;
 
-      const startLineIdx = binarySearchLineIndex(state.lineOffsets, s);
-      const endLineIdx = binarySearchLineIndex(state.lineOffsets, e);
+      const startLineIdx = state.lineOffsets.findLineIndex(s);
+      const endLineIdx = state.lineOffsets.findLineIndex(e);
 
-      const startLineOffset = state.lineOffsets[startLineIdx];
-      const endLineOffset = state.lineOffsets[endLineIdx];
+      const startLineOffset = state.lineOffsets.getOffset(startLineIdx);
+      const endLineOffset = state.lineOffsets.getOffset(endLineIdx);
 
       const prefix = state.lines[startLineIdx].substring(
         0,
@@ -396,7 +449,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         state.codeBlockState,
         startLineIdx,
         deleteCount,
-        insertedLines
+        insertedLines,
+        state.fenceLines
       );
 
       const newPos = s + inserted.length;
@@ -450,6 +504,86 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       };
     }),
 
+  // 流式尾部追加快速通道：不进 undo 栈，只计算新增行的 offset 和 codeBlockState
+  appendText: (text: string) =>
+    set((state) => {
+      if (!text) return state;
+
+      const lastLineIdx = state.lines.length - 1;
+      const lastLine = state.lines[lastLineIdx];
+      const combined = lastLine + text;
+      const newSegmentLines = combined.split('\n');
+
+      const newLinesArr = [...state.lines];
+      newLinesArr.splice(lastLineIdx, 1, ...newSegmentLines);
+
+      const newOffsets = state.lineOffsets.clone();
+      newOffsets.updateLines(lastLineIdx, 1, newSegmentLines.map(l => l.length + 1));
+
+      // codeBlockState：从当前最后一行状态推断，不从头扫描
+      const newCodeState = [...state.codeBlockState];
+      let inCodeBlock = false;
+      let inMathBlock = false;
+      const currentState = state.codeBlockState[lastLineIdx];
+      if (currentState === 'fence_start' || currentState === 'code')
+        inCodeBlock = true;
+      if (currentState === 'math_fence_start' || currentState === 'math_block')
+        inMathBlock = true;
+      if (currentState === 'fence_end') inCodeBlock = false;
+      if (currentState === 'math_fence_end') inMathBlock = false;
+
+      const segmentCodeStates = new Array(newSegmentLines.length);
+      for (let i = 0; i < newSegmentLines.length; i++) {
+        const trimmed = newSegmentLines[i].trim();
+        if (!inMathBlock && trimmed.startsWith('```')) {
+          segmentCodeStates[i] = inCodeBlock ? 'fence_end' : 'fence_start';
+          inCodeBlock = !inCodeBlock;
+        } else if (!inCodeBlock && trimmed === '$$') {
+          segmentCodeStates[i] = inMathBlock
+            ? 'math_fence_end'
+            : 'math_fence_start';
+          inMathBlock = !inMathBlock;
+        } else {
+          segmentCodeStates[i] = inCodeBlock
+            ? 'code'
+            : inMathBlock
+              ? 'math_block'
+              : 'none';
+        }
+      }
+      newCodeState.splice(lastLineIdx, 1, ...segmentCodeStates);
+
+      // fenceLines：追加新的 fence 行号
+      const newFenceLines = [...state.fenceLines];
+      for (let i = 0; i < newSegmentLines.length; i++) {
+        const st = segmentCodeStates[i];
+        if (
+          st === 'fence_start' ||
+          st === 'fence_end' ||
+          st === 'math_fence_start' ||
+          st === 'math_fence_end'
+        ) {
+          newFenceLines.push(lastLineIdx + i);
+        }
+      }
+
+      const textLength = Math.max(0, newOffsets.getOffset(newOffsets.lineCount - 1) + newSegmentLines[newSegmentLines.length - 1].length);
+
+      // Automatically advance cursor if it was exactly at the end (Requirement 6)
+      const wasAtEnd = state.cursorPos === state.textLength && state.selectionStart === state.selectionEnd;
+
+      return {
+        lines: newLinesArr,
+        lineOffsets: newOffsets,
+        codeBlockState: newCodeState,
+        textLength,
+        fenceLines: newFenceLines,
+        cursorPos: wasAtEnd ? textLength : state.cursorPos,
+        selectionStart: wasAtEnd ? textLength : state.selectionStart,
+        selectionEnd: wasAtEnd ? textLength : state.selectionEnd,
+      };
+    }),
+
   deleteText: (backward) =>
     set((state) => {
       let s = state.selectionStart;
@@ -466,11 +600,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         }
       }
 
-      const startLineIdx = binarySearchLineIndex(state.lineOffsets, s);
-      const endLineIdx = binarySearchLineIndex(state.lineOffsets, e);
+      const startLineIdx = state.lineOffsets.findLineIndex(s);
+      const endLineIdx = state.lineOffsets.findLineIndex(e);
 
-      const startLineOffset = state.lineOffsets[startLineIdx];
-      const endLineOffset = state.lineOffsets[endLineIdx];
+      const startLineOffset = state.lineOffsets.getOffset(startLineIdx);
+      const endLineOffset = state.lineOffsets.getOffset(endLineIdx);
 
       const prefix = state.lines[startLineIdx].substring(
         0,
@@ -493,7 +627,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         state.codeBlockState,
         startLineIdx,
         deleteCount,
-        insertedLines
+        insertedLines,
+        state.fenceLines
       );
 
       const newOp: EditorOperation = {
@@ -510,7 +645,31 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       };
 
       let newUndoStack = [...state.undoStack];
-      newUndoStack.push(newOp);
+      // 连续单字符删除的合并逻辑（与 insertText 对称）
+      if (
+        newUndoStack.length > 0 &&
+        state.selectionStart === state.selectionEnd // 单字符删除（非选择范围）
+      ) {
+        const last = newUndoStack[newUndoStack.length - 1];
+        if (
+          Date.now() - last.timestamp < 500 &&
+          last.startLineIdx === startLineIdx &&
+          last.insertedLineCount === 1 &&
+          insertedLines.length === 1
+        ) {
+          // 合并：保留原始 removedLines（第一次删除前的行），
+          // 只更新 insertedLineCount 和 cursor 状态
+          last.insertedLineCount = insertedLines.length;
+          last.cursorAfter = s;
+          last.selectionStartAfter = s;
+          last.selectionEndAfter = s;
+          last.timestamp = Date.now();
+        } else {
+          newUndoStack.push(newOp);
+        }
+      } else {
+        newUndoStack.push(newOp);
+      }
 
       return {
         ...res,
@@ -529,11 +688,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
       if (s === e) return state;
 
-      const startLineIdx = binarySearchLineIndex(state.lineOffsets, s);
-      const endLineIdx = binarySearchLineIndex(state.lineOffsets, e);
+      const startLineIdx = state.lineOffsets.findLineIndex(s);
+      const endLineIdx = state.lineOffsets.findLineIndex(e);
 
-      const startLineOffset = state.lineOffsets[startLineIdx];
-      const endLineOffset = state.lineOffsets[endLineIdx];
+      const startLineOffset = state.lineOffsets.getOffset(startLineIdx);
+      const endLineOffset = state.lineOffsets.getOffset(endLineIdx);
 
       const prefix = state.lines[startLineIdx].substring(
         0,
@@ -556,7 +715,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         state.codeBlockState,
         startLineIdx,
         deleteCount,
-        insertedLines
+        insertedLines,
+        state.fenceLines
       );
 
       const newOp: EditorOperation = {
@@ -594,7 +754,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         state.codeBlockState,
         op.startLineIdx,
         op.insertedLineCount,
-        op.removedLines
+        op.removedLines,
+        state.fenceLines
       );
 
       // Forward op to redo stack
@@ -635,7 +796,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         state.codeBlockState,
         op.startLineIdx,
         op.insertedLineCount,
-        op.removedLines
+        op.removedLines,
+        state.fenceLines
       );
 
       const inverseOp: EditorOperation = {
@@ -667,17 +829,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   verifyConsistency: () => {
     const { lines, lineOffsets } = get();
     let runningOffset = 0;
-    let isConsistent = true;
     for (let i = 0; i < lines.length; i++) {
-      if (lineOffsets[i] !== runningOffset) {
+      if (lineOffsets.getOffset(i) !== runningOffset) {
         console.error(
-          `Offset drift detected at line ${i}! Expected ${runningOffset}, got ${lineOffsets[i]}`
+          `Offset drift detected at line ${i}! Expected ${runningOffset}, got ${lineOffsets.getOffset(i)}`
         );
-        isConsistent = false;
-        break;
+        return false;
       }
       runningOffset += lines[i].length + 1; // +1 for newline
     }
-    return isConsistent;
+    return true;
   },
 }));

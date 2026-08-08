@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useState, useEffect } from 'react';
 import { useEditorStore } from '../core/EditorStore';
-import { getCoordinatesFromIndex, updateActiveElements } from '../core/measure';
+import { getCoordinatesFromIndex } from '../core/measure';
 
 interface CursorLayerProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -11,7 +11,11 @@ export const CursorLayer: React.FC<CursorLayerProps> = ({
   containerRef,
   layoutDeps,
 }) => {
-  const { cursorPos, selectionStart, selectionEnd } = useEditorStore();
+  const cursorPos = useEditorStore(state => state.cursorPos);
+  const selectionStart = useEditorStore(state => state.selectionStart);
+  const selectionEnd = useEditorStore(state => state.selectionEnd);
+  const isComposing = useEditorStore(state => state.isComposing);
+
   const [coords, setCoords] = useState<{
     top: number;
     left: number;
@@ -34,28 +38,40 @@ export const CursorLayer: React.FC<CursorLayerProps> = ({
   useLayoutEffect(() => {
     if (!containerRef.current) return;
 
-    // Force synchronous DOM update before we measure!
-    updateActiveElements(
-      containerRef.current,
-      cursorPos,
-      selectionStart,
-      selectionEnd
-    );
+    let rAF: number;
+    let retries = 0;
+    const updateCoords = () => {
+      const rect = getCoordinatesFromIndex(cursorPos, containerRef.current);
+      if (rect && containerRef.current) {
+        const containerRect = containerRef.current.getBoundingClientRect();
+        setCoords({
+          top: rect.top - containerRect.top + containerRef.current.scrollTop,
+          left: rect.left - containerRect.left + containerRef.current.scrollLeft,
+          height: rect.height,
+          bottom:
+            rect.bottom - containerRect.top + containerRef.current.scrollTop,
+        });
+      } else if (retries < 10) {
+        retries++;
+        rAF = requestAnimationFrame(updateCoords);
+      } else {
+        // If we still can't find it after 10 frames, just clear the cursor
+        // It might be outside the virtualized viewport.
+        setCoords(null);
+      }
+    };
+    updateCoords();
 
-    const rect = getCoordinatesFromIndex(cursorPos, containerRef.current);
-    if (rect && containerRef.current) {
-      const containerRect = containerRef.current.getBoundingClientRect();
-      setCoords({
-        top: rect.top - containerRect.top + containerRef.current.scrollTop,
-        left: rect.left - containerRect.left + containerRef.current.scrollLeft,
-        height: rect.height,
-        bottom:
-          rect.bottom - containerRect.top + containerRef.current.scrollTop,
-      });
-    }
+    return () => {
+      if (rAF) cancelAnimationFrame(rAF);
+    };
   }, [cursorPos, selectionStart, selectionEnd, containerRef, layoutDeps]);
 
-  if (!coords || hasSelection) return null;
+  // Do not show the cursor if there is a selection or if we are composing IME
+  if (!coords || hasSelection || isComposing) {
+    console.log('Cursor hidden:', { coords, hasSelection, isComposing });
+    return null;
+  }
 
   return (
     <div

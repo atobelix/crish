@@ -6,14 +6,97 @@ import { CursorLayer } from './CursorLayer';
 import { useEditorStore } from '../core/EditorStore';
 import { MarkdownParser } from '../core/parser';
 
+import { type CodeState } from '../core/parser';
+
+const LineItem = React.memo(({
+  virtualRow,
+  lineText,
+  offset,
+  isCode,
+  measureElement
+}: {
+  virtualRow: any;
+  lineText: string;
+  offset: number;
+  isCode: CodeState;
+  measureElement: (el: HTMLElement | null) => void;
+}) => {
+  const activeStateStr = useEditorStore(state => {
+    const { cursorPos, selectionStart, selectionEnd } = state;
+    const lineStart = offset;
+    const lineEnd = offset + lineText.length;
+
+    const hasRange = selectionStart !== selectionEnd;
+    const s = Math.min(selectionStart, selectionEnd);
+    const e = Math.max(selectionStart, selectionEnd);
+
+    const isLineActive = hasRange
+      ? (lineStart < e && lineEnd >= s)
+      : (cursorPos >= lineStart && cursorPos <= lineEnd);
+
+    if (!isLineActive) return null;
+
+    return `${cursorPos},${hasRange ? s : ''},${hasRange ? e : ''}`;
+  });
+
+  const activeState = React.useMemo(() => {
+    if (!activeStateStr) return null;
+    const [cursorStr, selStartStr, selEndStr] = activeStateStr.split(',');
+    return {
+      cursor: Number(cursorStr),
+      selStart: selStartStr ? Number(selStartStr) : undefined,
+      selEnd: selEndStr ? Number(selEndStr) : undefined,
+    };
+  }, [activeStateStr]);
+
+  const tableId = useEditorStore(state => {
+    if (!lineText.trim().startsWith('|')) return undefined;
+    let firstTableIndex = virtualRow.index;
+    while (firstTableIndex > 0) {
+       const prevLine = state.lines[firstTableIndex - 1];
+       if (prevLine && prevLine.trim().startsWith('|')) {
+          firstTableIndex--;
+       } else {
+          break;
+       }
+    }
+    return `table-${firstTableIndex}`;
+  });
+
+  const lineNode = MarkdownParser.parseLine(lineText, offset, isCode);
+
+  return (
+    <div
+      data-index={virtualRow.index}
+      data-line-start={offset}
+      data-line-length={lineText.length}
+      ref={measureElement}
+      className={activeState ? 'is-active-line' : ''}
+      style={{
+        position: 'absolute',
+        top: `${virtualRow.start}px`,
+        left: 0,
+        width: '100%',
+        minHeight: '28px',
+      }}
+    >
+      <BlockRenderer
+        block={lineNode}
+        index={virtualRow.index}
+        lineOffset={offset}
+        activeState={activeState}
+        tableId={tableId}
+      />
+    </div>
+  );
+});
+
 export const MarkdownEngine: React.FC = () => {
   const parentRef = useRef<HTMLDivElement>(null);
-  const {
-    lines,
-    lineOffsets: offsets,
-    codeBlockState,
-    setCursorPos,
-  } = useEditorStore();
+  const lines = useEditorStore(state => state.lines);
+  const offsets = useEditorStore(state => state.lineOffsets);
+  const codeBlockState = useEditorStore(state => state.codeBlockState);
+  const setCursorPos = useEditorStore(state => state.setCursorPos);
 
   // Virtualization setup: fixed size = 28px perfectly aligns with grid paper CSS
   const virtualizer = useVirtualizer({
@@ -30,18 +113,44 @@ export const MarkdownEngine: React.FC = () => {
       return;
     }
 
-    // 1. Find the line index the user actually clicked on
-    let clickedLineIndex = -1;
-    let target = e.target as HTMLElement;
-    while (target && target !== parentRef.current) {
-      if (target.hasAttribute('data-index')) {
-        clickedLineIndex = parseInt(
-          target.getAttribute('data-index') || '-1',
-          10
-        );
-        break;
+    const target = e.target as HTMLElement;
+
+    // 1. Try to find if we clicked on a rendered line wrapper
+    let clickedLineIndex = parseInt(
+      target.closest('[data-index]')?.getAttribute('data-index') || '-1',
+      10
+    );
+
+    // 1.5 If clicked on padding/margins, try to resolve the line using vertical coordinates
+    let clickedPadding = false;
+    if (clickedLineIndex === -1 && parentRef.current) {
+      const containerRect = parentRef.current.getBoundingClientRect();
+      const contentY = e.clientY - containerRect.top + parentRef.current.scrollTop;
+      
+      const virtualItems = virtualizer.getVirtualItems();
+      for (const item of virtualItems) {
+        // Find the line that occupies this vertical space
+        if (contentY >= item.start && contentY < item.start + item.size) {
+          clickedLineIndex = item.index;
+          clickedPadding = true;
+          break;
+        }
       }
-      target = target.parentElement as HTMLElement;
+    }
+
+    if (clickedPadding && clickedLineIndex !== -1 && parentRef.current) {
+       const lineStart = offsets.getOffset(clickedLineIndex);
+       const lineLen = lines[clickedLineIndex].length;
+       const containerRect = parentRef.current.getBoundingClientRect();
+       
+       if (e.clientX < containerRect.left + 50) {
+         // Clicked left padding/margin
+         setCursorPos(lineStart);
+       } else {
+         // Clicked right padding/margin
+         setCursorPos(lineStart + lineLen);
+       }
+       return;
     }
 
     // 2. Find the closest text offset using browser API
@@ -60,7 +169,20 @@ export const MarkdownEngine: React.FC = () => {
       }
     }
 
-    // 3. Try to use the exact token offset, BUT ONLY if it belongs to the clicked line!
+    // 3. Check if we clicked directly on an HR (thematic break)
+    if (target.tagName === 'HR' || target.classList.contains('hr-rendered')) {
+      const lineStart = offsets.getOffset(clickedLineIndex);
+      const lineLen = lines[clickedLineIndex].length;
+      const rect = target.getBoundingClientRect();
+      if (e.clientX - rect.left < rect.width / 2) {
+        setCursorPos(lineStart);
+      } else {
+        setCursorPos(lineStart + lineLen);
+      }
+      return;
+    }
+
+    // 4. Try to use the exact token offset, BUT ONLY if it belongs to the clicked line!
     if (range && range.startContainer) {
       let el: HTMLElement | null =
         range.startContainer.nodeType === Node.TEXT_NODE
@@ -85,58 +207,51 @@ export const MarkdownEngine: React.FC = () => {
       }
 
       // Only use the precise offset if the browser snapped to the SAME line we clicked
-      if (foundTokenStart !== -1 && foundLineIndex === clickedLineIndex) {
-        let subOffset = 0;
+      if (foundLineIndex === clickedLineIndex) {
+        console.log('Step 2 match found for clickedLineIndex:', clickedLineIndex, 'pos:', Math.min(offsets.getOffset(clickedLineIndex) + lines[clickedLineIndex].length, foundTokenStart + (range.startOffset || 0)));
+        if (foundTokenStart !== -1) {
+          // It's inside a specific token (like a word)
+          // Find if there's an exact sub-offset element
+          let subOffset = 0;
+          let currentEl: HTMLElement | null =
+            range.startContainer.nodeType === Node.TEXT_NODE
+              ? range.startContainer.parentElement
+              : (range.startContainer as HTMLElement);
 
-        let targetNode = range.startContainer;
-        let isText = targetNode.nodeType === Node.TEXT_NODE;
-        if (
-          !isText &&
-          range.startOffset >= 0 &&
-          range.startOffset < targetNode.childNodes.length
-        ) {
-          targetNode = targetNode.childNodes[range.startOffset];
-        }
-
-        let currentEl: HTMLElement | null =
-          targetNode.nodeType === Node.TEXT_NODE
-            ? targetNode.parentElement
-            : (targetNode as HTMLElement);
-
-        while (currentEl && currentEl !== parentRef.current) {
-          if (currentEl.hasAttribute('data-sub-offset')) {
-            subOffset = parseInt(
-              currentEl.getAttribute('data-sub-offset') || '0',
-              10
-            );
-            break;
+          while (currentEl && currentEl !== parentRef.current) {
+            if (currentEl.hasAttribute('data-sub-offset')) {
+              subOffset = parseInt(
+                currentEl.getAttribute('data-sub-offset') || '0',
+                10
+              );
+              break;
+            }
+            if (currentEl.hasAttribute('data-token-start')) {
+              break; // Stop at token boundary
+            }
+            currentEl = currentEl.parentElement;
           }
-          if (currentEl.hasAttribute('data-token-start')) {
-            break;
-          }
-          currentEl = currentEl.parentElement;
+
+          const rawPos =
+            foundTokenStart + subOffset + (range.startOffset || 0);
+          const lineStart = offsets.getOffset(clickedLineIndex);
+          const lineLen = lines[clickedLineIndex].length;
+          setCursorPos(Math.min(lineStart + lineLen, rawPos));
+        } else {
+          // Fallback to line start + offset
+          const lineStart = offsets.getOffset(clickedLineIndex);
+          const lineLen = lines[clickedLineIndex].length;
+          setCursorPos(
+            Math.min(lineStart + lineLen, lineStart + (range.startOffset || 0))
+          );
         }
-
-        const offset = isText ? range.startOffset : 0;
-
-        // Check if user clicked far to the left of the actual text (e.g., in the padding of a heading with hidden prefix)
-        if (currentEl) {
-          const rect = currentEl.getBoundingClientRect();
-          if (e.clientX < rect.left - 10) {
-            const lineStart = offsets[clickedLineIndex];
-            setCursorPos(lineStart);
-            return;
-          }
-        }
-
-        setCursorPos(foundTokenStart + subOffset + offset);
         return;
       }
     }
 
     // 4. Fallback: User clicked an empty line, or empty space far away from text, or a preview element (HR, Math)
     if (clickedLineIndex !== -1) {
-      const lineStart = offsets[clickedLineIndex];
+      const lineStart = offsets.getOffset(clickedLineIndex);
       const lineLen = lines[clickedLineIndex].length;
 
       // Use token-mapping from closest rendered element
@@ -153,14 +268,16 @@ export const MarkdownEngine: React.FC = () => {
       }
 
       // Final fallback to end of the line
+      console.log('Fallback to end of line:', lineStart + lineLen);
       setCursorPos(lineStart + lineLen);
     } else {
       // Clicked in the container but outside any specific line (e.g. bottom empty space)
       // Put cursor at the very end of the document
       const lastLineIdx = lines.length - 1;
       if (lastLineIdx >= 0) {
-        const lineStart = offsets[lastLineIdx];
+        const lineStart = offsets.getOffset(lastLineIdx);
         const lineLen = lines[lastLineIdx].length;
+        console.log('Fallback to end of doc:', lineStart + lineLen);
         setCursorPos(lineStart + lineLen);
       }
     }
@@ -192,40 +309,21 @@ export const MarkdownEngine: React.FC = () => {
         >
           {virtualizer.getVirtualItems().map((virtualRow) => {
             const lineText = lines[virtualRow.index];
-            const offset = offsets[virtualRow.index];
+            const offset = offsets.getOffset(virtualRow.index);
             const isCode = codeBlockState[virtualRow.index];
-            // 2. Synchronously parse ONLY visible lines (cached)
-            const lineOffset = offsets[virtualRow.index] ?? 0;
-            const lineNode = MarkdownParser.parseLine(
-              lineText,
-              lineOffset,
-              isCode
-            );
-
             return (
-              <div
+              <LineItem
                 key={virtualRow.index}
-                data-index={virtualRow.index}
-                data-line-start={offset}
-                data-line-length={lineText.length}
-                ref={virtualizer.measureElement}
-                style={{
-                  position: 'absolute',
-                  top: `${virtualRow.start}px`,
-                  left: 0,
-                  width: '100%',
-                  minHeight: '28px', // Allows wrapping to 56px, 84px etc.
-                }}
-              >
-                <BlockRenderer
-                  block={lineNode}
-                  index={virtualRow.index}
-                  lineOffset={offset}
-                />
-              </div>
+                virtualRow={virtualRow}
+                lineText={lineText}
+                offset={offset}
+                isCode={isCode}
+                measureElement={virtualizer.measureElement}
+              />
             );
           })}
         </div>
+
 
         <CursorLayer
           containerRef={parentRef}

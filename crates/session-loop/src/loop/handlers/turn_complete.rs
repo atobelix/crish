@@ -76,11 +76,13 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
         .options
         .turn_end_hook
         .as_ref()
-        .map(|hook| hook.on_turn_end(&TurnEndContext {
-            session_id: ctx.session_id.clone(),
-            turn_index: ctx.turn_index,
-            tool_call_count: ctx.tool_call_count,
-        }))
+        .map(|hook| {
+            hook.on_turn_end(&TurnEndContext {
+                session_id: ctx.session_id.clone(),
+                turn_index: ctx.turn_index,
+                tool_call_count: ctx.tool_call_count,
+            })
+        })
         .unwrap_or(false);
     if stop_suggested {
         dispatch(state, E::ShouldStop)?;
@@ -156,11 +158,13 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
         .options
         .should_stop_after_turn
         .as_ref()
-        .map(|hook| hook.on_turn_end(&TurnEndContext {
-            session_id: ctx.session_id.clone(),
-            turn_index: ctx.turn_index,
-            tool_call_count: ctx.tool_call_count,
-        }))
+        .map(|hook| {
+            hook.on_turn_end(&TurnEndContext {
+                session_id: ctx.session_id.clone(),
+                turn_index: ctx.turn_index,
+                tool_call_count: ctx.tool_call_count,
+            })
+        })
         .unwrap_or(false);
     if should_stop {
         dispatch(state, E::ShouldStop)?;

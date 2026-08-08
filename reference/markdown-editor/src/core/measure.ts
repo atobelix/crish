@@ -22,16 +22,21 @@ export function getCoordinatesFromIndex(
 
     // If index is within this token
     if (index >= start && index < start + length) {
-      targetElement = el;
-      offsetInToken = index - start;
-      break;
+      // Ignore elements that are hidden via CSS (e.g. display: none for rendered blocks when active)
+      if (el.getBoundingClientRect().height > 0) {
+        targetElement = el;
+        offsetInToken = index - start;
+        break;
+      }
     }
 
     // If index is exactly at the end of the line/document
     if (index === start + length) {
-      targetElement = el;
-      offsetInToken = length;
-      // Don't break, if there's a subsequent token starting at this index, we'll prefer it.
+      if (el.getBoundingClientRect().height > 0) {
+        targetElement = el;
+        offsetInToken = length;
+        // Don't break, if there's a subsequent token starting at this index, we'll prefer it.
+      }
     }
   }
 
@@ -250,6 +255,22 @@ export function getGlobalIndexFromDOMNode(
   return null;
 }
 
+export interface ActiveState {
+  cursor: number;
+  selStart?: number;
+  selEnd?: number;
+}
+
+export function checkIsActive(start: number, len: number, activeState: ActiveState | null): boolean {
+  if (!activeState) return false;
+  const end = start + len;
+  if (activeState.selStart !== undefined && activeState.selEnd !== undefined) {
+    return start < activeState.selEnd && end > activeState.selStart;
+  } else {
+    return activeState.cursor >= start && activeState.cursor <= end;
+  }
+}
+
 export function getArrowNavigationIndex(
   cursorPos: number,
   direction: 'up' | 'down',
@@ -268,7 +289,7 @@ export function getArrowNavigationIndex(
     if (cursorPos >= start && cursorPos <= start + len) {
       currentLineEl = lines[i];
       currentLineIdx = parseInt(
-        lines[i].getAttribute('data-line-index') || '-1',
+        lines[i].getAttribute('data-index') || '-1',
         10
       );
       break;
@@ -277,36 +298,42 @@ export function getArrowNavigationIndex(
 
   if (!currentLineEl || currentLineIdx === -1) return null;
 
-  const targetIdx =
-    direction === 'up' ? currentLineIdx - 1 : currentLineIdx + 1;
-  const targetLineEl = container.querySelector(
-    `[data-line-index="${targetIdx}"]`
-  );
+  const targetIdx = direction === 'up' ? currentLineIdx - 1 : currentLineIdx + 1;
+  const targetLineEl = container.querySelector(`[data-index="${targetIdx}"]`);
 
   if (!targetLineEl) {
     if (direction === 'up') {
       return parseInt(currentLineEl.getAttribute('data-line-start') || '0', 10);
     } else {
-      const start = parseInt(
-        currentLineEl.getAttribute('data-line-start') || '0',
-        10
-      );
-      const len = parseInt(
-        currentLineEl.getAttribute('data-line-length') || '0',
-        10
-      );
+      const start = parseInt(currentLineEl.getAttribute('data-line-start') || '0', 10);
+      const len = parseInt(currentLineEl.getAttribute('data-line-length') || '0', 10);
       return start + len;
     }
   }
 
-  const targetStart = parseInt(
-    targetLineEl.getAttribute('data-line-start') || '0',
-    10
-  );
-  const targetLen = parseInt(
-    targetLineEl.getAttribute('data-line-length') || '0',
-    10
-  );
+  const targetRect = targetLineEl.getBoundingClientRect();
+
+  // Requirement 2: Use document.caretRangeFromPoint if available and within viewport
+  const targetY = direction === 'up'
+    ? targetRect.bottom - targetRect.height / 2
+    : targetRect.top + targetRect.height / 2;
+
+  if (typeof document.caretRangeFromPoint === 'function') {
+    // Check if the target Y is within viewport
+    if (targetY >= 0 && targetY <= window.innerHeight) {
+      const range = document.caretRangeFromPoint(currentRect.left, targetY);
+      if (range) {
+        const index = getGlobalIndexFromDOMNode(range.startContainer, range.startOffset, container);
+        if (index !== null) {
+          return index;
+        }
+      }
+    }
+  }
+
+  // Fallback geometric search for out of viewport or if caretRangeFromPoint fails
+  const targetStart = parseInt(targetLineEl.getAttribute('data-line-start') || '0', 10);
+  const targetLen = parseInt(targetLineEl.getAttribute('data-line-length') || '0', 10);
 
   let bestDist = Infinity;
   let bestIndex = targetStart;
@@ -355,75 +382,4 @@ export function getArrowNavigationIndex(
   return bestIndex;
 }
 
-export function updateActiveElements(
-  container: HTMLElement,
-  cursor: number,
-  selStart?: number,
-  selEnd?: number
-) {
-  const hasRange =
-    selStart !== undefined && selEnd !== undefined && selStart < selEnd;
-  if (hasRange) {
-    console.log('updateActiveElements CALLED WITH RANGE', {
-      cursor,
-      selStart,
-      selEnd,
-    });
-  }
-
-  // Update active tokens
-  const tokens = container.querySelectorAll('[data-token-start]');
-  for (let i = 0; i < tokens.length; i++) {
-    const start = parseInt(
-      tokens[i].getAttribute('data-token-start') || '0',
-      10
-    );
-    const len = parseInt(
-      tokens[i].getAttribute('data-token-length') || '0',
-      10
-    );
-    const end = start + len;
-
-    let isActive = false;
-    if (hasRange) {
-      if (start < selEnd! && end > selStart!) {
-        isActive = true;
-      }
-    } else {
-      if (cursor >= start && cursor <= end) {
-        isActive = true;
-      }
-    }
-
-    if (isActive) {
-      tokens[i].classList.add('is-active-token');
-    } else {
-      tokens[i].classList.remove('is-active-token');
-    }
-  }
-
-  // Update active lines
-  const lines = container.querySelectorAll('[data-line-start]');
-  for (let i = 0; i < lines.length; i++) {
-    const start = parseInt(lines[i].getAttribute('data-line-start') || '0', 10);
-    const len = parseInt(lines[i].getAttribute('data-line-length') || '0', 10);
-    const end = start + len;
-
-    let isActive = false;
-    if (hasRange) {
-      if (start < selEnd! && end >= selStart!) {
-        isActive = true;
-      }
-    } else {
-      if (cursor >= start && cursor <= end) {
-        isActive = true;
-      }
-    }
-
-    if (isActive) {
-      lines[i].classList.add('is-active-line');
-    } else {
-      lines[i].classList.remove('is-active-line');
-    }
-  }
-}
+// Removed updateActiveElements per Requirement 4

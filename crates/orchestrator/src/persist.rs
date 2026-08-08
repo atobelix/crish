@@ -73,14 +73,13 @@ impl StoreError {
         crish
     }
 }
-
 /// StoreError kind → 77 码映射表（T06.5.8；未知 kind 返回 None 由调用方兜底）
 fn store_error_code(kind: &str) -> Option<&'static str> {
     match kind {
         // 锁竞争 / 锁中毒 → store.write_failed（Transient, retryable）
         "lock" => Some(codes::STORE_WRITE_FAILED),
         // run 记录写路径 → event_store.append_failed
-        "append_event" | "insert_run" | "update_run_status" | "serialize_event" | "reserve_sequence" | "seed_sequence" => {
+        "append_event" | "insert_run" | "update_run_status" | "touch_session" | "serialize_event" | "reserve_sequence" | "seed_sequence" => {
             Some(codes::EVENT_STORE_APPEND_FAILED)
         }
         // 读路径 → event_store.read_failed
@@ -195,6 +194,20 @@ pub trait Store: Send + Sync {
     /// 连接；[LocalDbStore] 覆写为克隆连接（Arc +1）。
     fn as_local_db(&self) -> Option<LocalDb> {
         None
+    }
+
+    /// 刷新会话 `updated_at`（F-005 touch 接线，R2 §3 结构性缺位修复）。
+    ///
+    /// 由 run 生命周期落库点（启动 / 非终态状态迁移）调用，使孤儿清理
+    /// 宽限期（`updated_at < grace_cutoff`）随 run 活动重新起算——引擎侧
+    /// 会话不再依赖前端 350ms persist 顺带刷新，宽限期语义在生产域生效。
+    ///
+    /// 默认 no-op（对齐 [Self::as_local_db] 的「可选能力默认空实现」
+    /// 模式）：[InMemoryStore] 等测试替身无 sessions 表，无需刷新；
+    /// [LocalDbStore] 覆写为真实单语句 UPDATE（sessions.rs touch_session）。
+    async fn touch_session(&self, session_id: &str) -> StoreResult<()> {
+        let _ = session_id;
+        Ok(())
     }
 }
 
@@ -733,6 +746,14 @@ impl Store for LocalDbStore {
         let id = id.to_string();
         blocking_db_call("delete_pending_input", move || db.delete_pending_input(&id)).await
     }
+
+    async fn touch_session(&self, session_id: &str) -> StoreResult<()> {
+        let db = self.db.clone();
+        let session_id = session_id.to_string();
+        // F-005：单语句 UPDATE sessions SET updated_at=… WHERE id=?（最小面，
+        // 无事务、无读改写——与前端 350ms persist 的 upsert 无竞态面）
+        blocking_db_call("touch_session", move || db.touch_session(&session_id)).await
+    }
 }
 
 #[cfg(test)]
@@ -992,6 +1013,7 @@ mod tests {
             ("append_event", codes::EVENT_STORE_APPEND_FAILED),
             ("insert_run", codes::EVENT_STORE_APPEND_FAILED),
             ("update_run_status", codes::EVENT_STORE_APPEND_FAILED),
+            ("touch_session", codes::EVENT_STORE_APPEND_FAILED),
             ("serialize_event", codes::EVENT_STORE_APPEND_FAILED),
             ("reserve_sequence", codes::EVENT_STORE_APPEND_FAILED),
             ("seed_sequence", codes::EVENT_STORE_APPEND_FAILED),

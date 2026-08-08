@@ -332,6 +332,11 @@ impl RunHandle {
 
     /// 状态机转移并落库（终态拒绝再转移；中间转移不覆盖 end_reason，
     /// 也不写 cursor——游标仅在终态写点落库，T08.4）
+    ///
+    /// F-005 touch 接线：非终态转移落库后刷新会话 `updated_at`（孤儿清理
+    /// 宽限期随 run 活动重新起算——引擎侧会话不依赖前端 persist 顺带）。
+    /// 刷新窗口 = 「启动 → 终态」活跃期：终态转移（含 finalize 链最后一
+    /// 跳与终态记录改写）不 touch，终态落库后停止刷新。
     pub async fn transition(
         &mut self,
         store: &dyn Store,
@@ -347,6 +352,14 @@ impl RunHandle {
             .map_err(RunError::Store)?;
         self.status = next;
         self.updated_at = now_ms();
+        // F-005：活跃期（非终态）转移落库后 touch 会话；终态转移不 touch
+        // （machine 已推进到新状态，is_terminal 即新状态判据）
+        if !self.machine.is_terminal() {
+            store
+                .touch_session(&self.session_id)
+                .await
+                .map_err(RunError::Store)?;
+        }
         Ok(())
     }
 
@@ -524,9 +537,16 @@ impl RunManager {
     /// 注册并启动 run（B4.1：注册 + 落库，queued → running）
     ///
     /// 落库路径：insert_run(queued) → update(initializing) → update(running)。
+    /// F-005 touch 接线：run 记录一落库（queued）即进入活跃期，立即刷新
+    /// 会话 `updated_at`（宽限期从 run 启动时刻起算；后续状态迁移由
+    /// [RunHandle::transition] 通用 touch 持续推进）。
     pub async fn start_run(&self, session_id: &str, run_id: &str) -> Result<RunHandle, RunError> {
         self.store
             .insert_run(run_id, session_id, RunStatus::Queued, None, 0)
+            .await
+            .map_err(RunError::Store)?;
+        self.store
+            .touch_session(session_id)
             .await
             .map_err(RunError::Store)?;
         let mut handle = RunHandle::new(run_id, session_id, RunStatus::Queued);

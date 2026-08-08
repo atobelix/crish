@@ -1,3 +1,4 @@
+import { LineOffsetTree } from '../../src/core/SegmentTree';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useEditorStore } from '../../src/core/EditorStore';
 
@@ -5,7 +6,7 @@ describe('Clipboard (Paste) Logic', () => {
     beforeEach(() => {
         useEditorStore.setState({
             lines: [''],
-            lineOffsets: [0],
+            lineOffsets: new LineOffsetTree([0]),
             codeBlockState: [],
             textLength: 0,
             cursorPos: 0,
@@ -23,7 +24,7 @@ describe('Clipboard (Paste) Logic', () => {
         
         let state = useEditorStore.getState();
         expect(state.lines).toEqual(['Line 1', 'Line 2', 'Line 3']);
-        expect(state.lineOffsets.length).toBe(3);
+        expect(state.lineOffsets.lineCount).toBe(3);
     });
 
     it('pastes multi-line text over a selection', () => {

@@ -51,8 +51,6 @@ export const DEFAULT_RECENT_MESSAGE_COUNT = 80;
 export const EXPAND_OLDER_STEP = 40;
 /** 跳转/必显下标时，目标前额外挂载的上下文条数（轻量 overscan） */
 export const MESSAGE_JUMP_CONTEXT = 4;
-/** 隐藏量大于一步时，UI 额外提供「全部展开」 */
-export const SHOW_ALL_OLDER_THRESHOLD = EXPAND_OLDER_STEP;
 
 /** 思考块写入 DOM 的字符上限（折叠时不挂载 body） */
 export const THINKING_DOM_CHAR_CAP = 4000;

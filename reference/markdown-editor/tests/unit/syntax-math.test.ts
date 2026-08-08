@@ -1,3 +1,4 @@
+import { LineOffsetTree } from '../../src/core/SegmentTree';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useEditorStore } from '../../src/core/EditorStore';
 import { MarkdownParser } from '../../src/core/parser';
@@ -6,7 +7,7 @@ describe('Math Syntax State Cross-Test', () => {
   beforeEach(() => {
     useEditorStore.setState({
       lines: [''],
-      lineOffsets: [0],
+      lineOffsets: new LineOffsetTree([0]),
       codeBlockState: [],
       textLength: 0,
       cursorPos: 0,
@@ -29,7 +30,7 @@ describe('Math Syntax State Cross-Test', () => {
     // Parse it using the engine's exact call
     const lineNode = MarkdownParser.parseLine(
       state.lines[1],
-      state.lineOffsets[1],
+      state.lineOffsets.getOffset(1),
       isCode
     );
 

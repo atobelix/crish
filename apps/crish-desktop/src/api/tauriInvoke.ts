@@ -225,6 +225,3 @@ export async function invokeCmdStrict<T = unknown>(
   // error
   throw new Error(`${res.kind}: ${res.message}`);
 }
-
-/** 与 daemonClient 历史命名一致 */
-export const tryInvokeTauri = invokeCmd;

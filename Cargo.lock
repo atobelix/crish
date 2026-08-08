@@ -39,6 +39,7 @@ dependencies = [
  "conex-search",
  "conex-test-utils",
  "conex-types",
+ "futures-util",
  "ignore",
  "regex",
  "serde",

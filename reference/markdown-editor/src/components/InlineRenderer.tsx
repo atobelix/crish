@@ -1,5 +1,6 @@
 import * as React from 'react';
 import type { InlineNode } from '../core/ast';
+import { checkIsActive, type ActiveState } from '../core/measure';
 import katex from 'katex';
 
 function renderMathToHtml(
@@ -17,13 +18,20 @@ function renderMathToHtml(
   }
 }
 
+import { useTableStore } from '../core/TableStore';
+
 interface InlineRendererProps {
   tokens: InlineNode[];
   lineOffset: number;
+  activeState?: ActiveState | null;
+  tableId?: string;
 }
 
 export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
-  ({ tokens, lineOffset }) => {
+  ({ tokens, lineOffset, activeState, tableId }) => {
+    const tableWidths = useTableStore(state => tableId ? state.tableWidths[tableId] : null);
+    let colIndexCounter = 0;
+
     return (
       <>
         {tokens.map((token, index) => {
@@ -116,6 +124,12 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
               break;
             }
 
+            case 'table_cell':
+              className = 'token-table-cell';
+              break;
+            case 'table_pipe':
+              className = 'token-table-pipe syntax-delimiter';
+              break;
             case 'text':
             default:
               break;
@@ -144,9 +158,9 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             isStyleToken &&
             hasNoChildren &&
             (!token.content || token.content.trim() === '');
-          const finalClassName = isEmpty
-            ? `${className} is-empty-token`
-            : className;
+          const isActive = checkIsActive(start, len, activeState ?? null);
+          const baseClassName = isEmpty ? `${className} is-empty-token` : className;
+          const finalClassName = isActive ? `${baseClassName} is-active-token` : baseClassName;
 
           // Specialized KaTeX rendering for math formulas
           if (token.type === 'math') {
@@ -187,6 +201,32 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             );
           }
 
+          if (token.type === 'table_cell') {
+            const colIndex = colIndexCounter++;
+            const cellWidth = tableWidths?.[colIndex];
+            const cellStyle = cellWidth ? { ...token.style, flex: `0 0 ${cellWidth}px` } : { ...token.style, flex: '1 1 0%' };
+            
+            return (
+              <span
+                key={key}
+                data-token-start={start}
+                data-token-length={len}
+                data-col-index={colIndex}
+                className={finalClassName}
+                style={cellStyle}
+              >
+                {token.children && (
+                  <InlineRenderer
+                    tokens={token.children}
+                    lineOffset={lineOffset}
+                    activeState={activeState}
+                    tableId={tableId}
+                  />
+                )}
+              </span>
+            );
+          }
+
           // If it's a token with `content` different from `raw`
           if (token.content !== undefined && token.content !== token.raw) {
             const prefixLen = token.raw.indexOf(token.content);
@@ -214,6 +254,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                       <InlineRenderer
                         tokens={token.children}
                         lineOffset={lineOffset}
+                        activeState={activeState}
                       />
                     ) : (
                       token.content

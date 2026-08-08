@@ -1,3 +1,4 @@
+import { LineOffsetTree } from '../../src/core/SegmentTree';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useEditorStore } from '../../src/core/EditorStore';
 
@@ -6,7 +7,7 @@ describe('Selection & Clipboard Core Logic', () => {
         // Reset the store before each test
         useEditorStore.setState({
             lines: [''],
-            lineOffsets: [0],
+            lineOffsets: new LineOffsetTree([0]),
             codeBlockState: [],
             textLength: 0,
             cursorPos: 0,
