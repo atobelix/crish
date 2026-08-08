@@ -56,6 +56,7 @@ export interface EngineMessageDeltaEvent {
 export interface EngineMessageEndEvent {
   type: "message-end";
   sessionId: string;
+  turnIndex?: number;
   message: AgentMessage;
 }
 

@@ -17,7 +17,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { BackgroundTaskInfo } from '../api/backgroundTasksApi';
 import { useEngineState } from './useEngineState';
-import { resetDataPlaneRouterForTests } from '../api/chat-bridge/dataPlaneRouter';
+import {
+  resetDataPlaneRouterForTests,
+  resetSubagentPlaneRouterForTests,
+} from '../api/chat-bridge/dataPlaneRouter';
 import { clearDataPlaneStateForTests } from '../api/chat-bridge/handlers/taskEventHandlers';
 
 // ── mock 面：仅替换出站边界（transport / 状态与任务轮询 / workflow 列表） ──
@@ -108,6 +111,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const unmount of mounted.splice(0)) unmount();
   resetDataPlaneRouterForTests();
+  resetSubagentPlaneRouterForTests();
   clearDataPlaneStateForTests();
   vi.useRealTimers();
 });
@@ -183,8 +187,9 @@ describe('L1 数据面路由生产激活（轮询层持有 ensureDataPlaneRouter
     const { unmount } = renderHook(() => useEngineState());
     await flushTicks(0);
 
-    // 装配判据：轮询层持有引用 → transport.onMessage 注册数据面监听
-    expect(mocks.dataPlaneListeners.size).toBe(1);
+    // 装配判据：轮询层持有引用 → transport.onMessage 注册监听
+    // （数据面 1 + 子代理面 1，T-6 全局路由同模式共存）
+    expect(mocks.dataPlaneListeners.size).toBe(2);
     unmount();
   });
 
@@ -230,11 +235,12 @@ describe('L1 数据面路由生产激活（轮询层持有 ensureDataPlaneRouter
   it('最后一个订阅者卸载 → 数据面路由退订（refcount 归零，事件不再被消费）', async () => {
     const { unmount } = renderHook(() => useEngineState());
     await flushTicks(4000);
-    expect(mocks.dataPlaneListeners.size).toBe(1);
+    // 数据面 + 子代理面两条监听（T-6 同模式共存）
+    expect(mocks.dataPlaneListeners.size).toBe(2);
 
     unmount();
     await flushTicks(0);
-    // 归零退订：transport.onMessage 监听器集合清空
+    // 归零退订：transport.onMessage 监听器集合清空（两路由均退订）
     expect(mocks.dataPlaneListeners.size).toBe(0);
 
     const baseline = mocks.listBackgroundTasks.mock.calls.length;
@@ -244,5 +250,15 @@ describe('L1 数据面路由生产激活（轮询层持有 ensureDataPlaneRouter
     await flushTicks(0);
     // 退订后事件无人消费：不触发任何拉取
     expect(mocks.listBackgroundTasks.mock.calls.length).toBe(baseline);
+  });
+
+  it('T-6 子代理面全局路由同模式装配：监听注册 + 归零退订', async () => {
+    const { unmount } = renderHook(() => useEngineState());
+    await flushTicks(0);
+    expect(mocks.dataPlaneListeners.size).toBe(2);
+
+    unmount();
+    await flushTicks(0);
+    expect(mocks.dataPlaneListeners.size).toBe(0);
   });
 });

@@ -457,6 +457,8 @@ const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
     return {
       type: 'message-end',
       sessionId: str(raw.sessionId),
+      // G4：多轮 run 分段合并键；旧载荷缺省按 0（单段路径向后兼容）
+      turnIndex: num(raw.turnIndex) ?? 0,
       message: raw.message as unknown as AgentMessage,
     };
   },

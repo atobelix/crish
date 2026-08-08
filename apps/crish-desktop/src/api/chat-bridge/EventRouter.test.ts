@@ -5,12 +5,13 @@
  * （03 §5.2-1/2）。C2.4：四源失败全部收敛到 surfaceStreamFailure + finish（03 §2.4 表）。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EventRouter } from './EventRouter';
+import { EventRouter, buildEventDedupeKey } from './EventRouter';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
 import type { StreamState } from './handlers/streamState';
 import type { StreamCallbacks } from '../chatApi';
 import * as userFacingErrors from '../userFacingErrors';
 import * as eventParserModule from './handlers/eventParser';
+import * as streamDiagModule from '../streamDiag';
 
 function makeState(): StreamState {
   return {
@@ -493,5 +494,262 @@ describe('EventRouter 消费侧 parser 异常兜底（T3.7 D7，F8-01 消费面�
         },
       })
     ).not.toThrow();
+  });
+});
+
+describe('EventRouter 消费侧 per-run 幂等去重（04 §5.1-1 / G1/G2）', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('重复 message-end（同 sequence）只消费一次', () => {
+    const finish = vi.fn();
+    const { router, callbacks } = makeRouter(finish);
+    const msg = {
+      type: 'message-end',
+      runId: 'run-test',
+      sequence: 7,
+      message: {
+        id: 'm1',
+        role: 'assistant',
+        blocks: [{ type: 'text', text: 'hi' }],
+      },
+    };
+    router.onMsg(msg);
+    router.onMsg(msg);
+    expect(callbacks.onChunk).toHaveBeenCalledTimes(1);
+    expect(callbacks.onChunk).toHaveBeenCalledWith('hi');
+  });
+
+  it('重复 message-delta（同 messageId 同 sequence）只消费一次', () => {
+    const finish = vi.fn();
+    const { router, callbacks, state } = makeRouter(finish);
+    const delta = {
+      type: 'message-delta',
+      runId: 'run-test',
+      sequence: 1,
+      messageId: 'm1',
+      block: { type: 'text', text: 'hi' },
+    };
+    router.onMsg(delta);
+    router.onMsg(delta);
+    expect(callbacks.onChunk).toHaveBeenCalledTimes(1);
+    expect(state.assistantText).toBe('hi');
+  });
+
+  it('实时轨 delta（sequence=None）按 messageId+type 键控只消费一次', () => {
+    const finish = vi.fn();
+    const { router, callbacks, state } = makeRouter(finish);
+    const delta = {
+      type: 'message-delta',
+      runId: 'run-test',
+      messageId: 'm1',
+      block: { type: 'text', text: 'hi' },
+    };
+    router.onMsg(delta);
+    router.onMsg(delta);
+    expect(callbacks.onChunk).toHaveBeenCalledTimes(1);
+    expect(state.assistantText).toBe('hi');
+  });
+
+  it('乱序回放不重复：先到高 sequence 后回放同键跳过，迟到的新 sequence 正常消费', () => {
+    const finish = vi.fn();
+    const { router, callbacks, state } = makeRouter(finish);
+    router.onMsg({
+      type: 'message-delta',
+      runId: 'run-test',
+      sequence: 10,
+      messageId: 'm1',
+      block: { type: 'text', text: 'hi' },
+    });
+    // 引擎重放同一事件（同键）
+    router.onMsg({
+      type: 'message-delta',
+      runId: 'run-test',
+      sequence: 10,
+      messageId: 'm1',
+      block: { type: 'text', text: 'hi' },
+    });
+    // 迟到的新增量（不同键）
+    router.onMsg({
+      type: 'message-delta',
+      runId: 'run-test',
+      sequence: 9,
+      messageId: 'm1',
+      block: { type: 'text', text: ' world' },
+    });
+    expect(callbacks.onChunk).toHaveBeenCalledTimes(2);
+    expect(state.assistantText).toBe('hi world');
+  });
+
+  it('去重不误伤：不同 messageId 与同 messageId 不同 sequence（跨 turn 增量）各自消费', () => {
+    const finish = vi.fn();
+    const { router, callbacks, state } = makeRouter(finish);
+    router.onMsg({
+      type: 'message-delta',
+      runId: 'run-test',
+      sequence: 1,
+      messageId: 'm1',
+      block: { type: 'text', text: 'hi' },
+    });
+    router.onMsg({
+      type: 'message-delta',
+      runId: 'run-test',
+      sequence: 2,
+      messageId: 'm1',
+      block: { type: 'text', text: ' world' },
+    });
+    router.onMsg({
+      type: 'message-delta',
+      runId: 'run-test',
+      sequence: 3,
+      messageId: 'm2',
+      block: { type: 'text', text: '!' },
+    });
+    expect(callbacks.onChunk).toHaveBeenCalledTimes(3);
+    expect(state.assistantText).toBe('hi world!');
+  });
+
+  it('无 messageId 无 sequence 的事件不参与去重（legacy 信封透传）', () => {
+    const finish = vi.fn();
+    const onSubagentStarted = vi.fn();
+    const { router, callbacks } = makeRouter(finish);
+    callbacks.onSubagentStarted = onSubagentStarted;
+    const subagentEvent = {
+      type: 'subagent-started',
+      runId: 'run-test',
+      subagentId: 'sa-1',
+      subagentRunId: 'sr-1',
+      description: '协作 agent',
+      mode: 'research',
+    };
+    router.onMsg(subagentEvent);
+    router.onMsg({ ...subagentEvent, subagentId: 'sa-2' });
+    expect(onSubagentStarted).toHaveBeenCalledTimes(2);
+  });
+
+  it('重复事件跳过时记录 streamDiag（event-dedupe 可观测，不阻断事件流）', () => {
+    const finish = vi.fn();
+    const { router, callbacks } = makeRouter(finish);
+    const diagSpy = vi.spyOn(streamDiagModule, 'recordStreamDiag');
+    const delta = {
+      type: 'message-delta',
+      runId: 'run-test',
+      sequence: 1,
+      messageId: 'm1',
+      block: { type: 'text', text: 'hi' },
+    };
+    router.onMsg(delta);
+    router.onMsg(delta);
+    expect(diagSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-test',
+        scope: 'event-dedupe',
+        kind: 'duplicate',
+      })
+    );
+    expect(callbacks.onChunk).toHaveBeenCalledTimes(1);
+  });
+
+  it('失败双源（runtime-error + run-terminal-failed 同错误）只 surface 一次（G6/R5）', () => {
+    const finish = vi.fn();
+    const onRunError = vi.fn();
+    const { router, callbacks } = makeRouter(finish);
+    callbacks.onRunError = onRunError;
+    router.onMsg({
+      type: 'runtime-error',
+      runId: 'run-test',
+      error: 'dup-boom',
+      retryable: false,
+    });
+    router.onMsg({
+      type: 'run-terminal',
+      runId: 'run-test',
+      terminal: 'failed',
+      error: 'dup-boom',
+    });
+    expect(onRunError).toHaveBeenCalledTimes(1);
+    expect(finish).toHaveBeenCalledWith(true);
+  });
+});
+
+describe('buildEventDedupeKey 键生成规则（04 §5.1-1）', () => {
+  it('收口轨：messageId + sequence → type:messageId:sequence', () => {
+    const key = buildEventDedupeKey({
+      kind: 'engine',
+      type: 'message-delta',
+      originalType: 'message-delta',
+      event: {
+        type: 'message-delta',
+        sessionId: 's1',
+        timestamp: 't1',
+        messageId: 'm1',
+        block: { type: 'text', text: 'x' },
+      },
+      raw: { type: 'message-delta', sequence: 5, messageId: 'm1' },
+    });
+    expect(key).toBe('message-delta:m1:5');
+  });
+
+  it('实时轨：sequence=None → type:messageId', () => {
+    const key = buildEventDedupeKey({
+      kind: 'engine',
+      type: 'message-delta',
+      originalType: 'message-delta',
+      event: {
+        type: 'message-delta',
+        sessionId: 's1',
+        timestamp: 't1',
+        messageId: 'm1',
+        block: { type: 'text', text: 'x' },
+      },
+      raw: { type: 'message-delta', messageId: 'm1' },
+    });
+    expect(key).toBe('message-delta:m1');
+  });
+
+  it('message-end 取 message.id；无 messageId 时退化 type:sequence', () => {
+    const key = buildEventDedupeKey({
+      kind: 'engine',
+      type: 'message-end',
+      originalType: 'message-end',
+      event: {
+        type: 'message-end',
+        sessionId: 's1',
+        message: { id: 'm9', role: 'assistant', createdAt: 'c', blocks: [] },
+      },
+      raw: { type: 'message-end', sequence: 9 },
+    });
+    expect(key).toBe('message-end:m9:9');
+    const seqOnly = buildEventDedupeKey({
+      kind: 'engine',
+      type: 'run-terminal',
+      originalType: 'run-terminal',
+      event: {
+        type: 'run-terminal',
+        sessionId: 's1',
+        runId: 'r1',
+        terminal: 'completed',
+      },
+      raw: { type: 'run-terminal', sequence: 3 },
+    });
+    expect(seqOnly).toBe('run-terminal:3');
+  });
+
+  it('legacy 信封与无 id 无 sequence 事件返回 null（透传）', () => {
+    const legacy = buildEventDedupeKey({
+      kind: 'legacy',
+      type: 'subagent-started',
+      raw: { type: 'subagent-started' },
+    });
+    expect(legacy).toBeNull();
+    const noKey = buildEventDedupeKey({
+      kind: 'engine',
+      type: 'agent-start',
+      originalType: 'agent-start',
+      event: { type: 'agent-start', sessionId: 's1' },
+      raw: { type: 'agent-start' },
+    });
+    expect(noKey).toBeNull();
   });
 });

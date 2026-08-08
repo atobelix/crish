@@ -667,6 +667,10 @@ pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
     state.events.push(AgentEvent::MessageEnd {
         session_id,
         message,
+        // G4 / 04 §5.2-5：消息带当前轮次上下文（user 消息在 turn-start 前
+        // 消费，携带递增前值；assistant 收口在 streaming.rs 递增后，同值
+        // turn-start/turn-end）。前端仅对 assistant 消息按 turnIndex 分段。
+        turn_index: Some(state.machine.context().turn_index),
     });
     // T-35 注入卫生（debug 面）：时间线/时间戳注入只允许落在对话末尾
     // user 消息——本函数是 user 消息入队消费的追加点（prepare_turn /

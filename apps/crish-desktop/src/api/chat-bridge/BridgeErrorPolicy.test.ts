@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { surfaceStreamFailure } from './BridgeErrorPolicy';
 import type { StreamCallbacks } from '../chatApi';
+import * as streamDiagModule from '../streamDiag';
 
 describe('BridgeErrorPolicy', () => {
   it('surfaces stream failures to onRunError callback', () => {
@@ -139,5 +140,53 @@ describe('BridgeErrorPolicy', () => {
     const [msg, kind] = onRunError.mock.calls[0];
     expect(msg).toBe('正在恢复上次的会话数据，稍后即可发送。');
     expect(kind).toBe('network');
+  });
+});
+
+describe('BridgeErrorPolicy per-run 失败去重（04 §5.1-4 / G6/R5）', () => {
+  function makeCallbacks(onRunError = vi.fn()): StreamCallbacks {
+    return {
+      onChunk: vi.fn(),
+      onThought: vi.fn(),
+      onToolStart: vi.fn(),
+      onToolError: vi.fn(),
+      onToolSuccess: vi.fn(),
+      onComplete: vi.fn(),
+      onRunError,
+    };
+  }
+
+  it('同 run 同错误指纹（双源不同 scope）只 surface 一次', () => {
+    const onRunError = vi.fn();
+    const callbacks = makeCallbacks(onRunError);
+    surfaceStreamFailure('dup-boom', 'run-terminal-failed', callbacks, 'run-dedup-1');
+    surfaceStreamFailure('dup-boom', 'agent-end-error', callbacks, 'run-dedup-1');
+    expect(onRunError).toHaveBeenCalledTimes(1);
+  });
+
+  it('不同 run 同错误互不污染（各自 surface 一次）', () => {
+    const onRunError = vi.fn();
+    const callbacks = makeCallbacks(onRunError);
+    surfaceStreamFailure('boom', 'runtime-error', callbacks, 'run-dedup-2a');
+    surfaceStreamFailure('boom', 'runtime-error', callbacks, 'run-dedup-2b');
+    expect(onRunError).toHaveBeenCalledTimes(2);
+  });
+
+  it('同 run 不同错误指纹各自 surface（不误伤不同失败）', () => {
+    const onRunError = vi.fn();
+    const callbacks = makeCallbacks(onRunError);
+    surfaceStreamFailure('boom-a', 'runtime-error', callbacks, 'run-dedup-3');
+    surfaceStreamFailure('boom-b', 'runtime-error', callbacks, 'run-dedup-3');
+    expect(onRunError).toHaveBeenCalledTimes(2);
+  });
+
+  it('重复失败仅保留 logInternalError，不再 recordStreamDiag / onRunError', () => {
+    const onRunError = vi.fn();
+    const callbacks = makeCallbacks(onRunError);
+    const diagSpy = vi.spyOn(streamDiagModule, 'recordStreamDiag');
+    surfaceStreamFailure('dup-boom-4', 'runtime-error', callbacks, 'run-dedup-4');
+    surfaceStreamFailure('dup-boom-4', 'runtime-error', callbacks, 'run-dedup-4');
+    expect(onRunError).toHaveBeenCalledTimes(1);
+    expect(diagSpy).toHaveBeenCalledTimes(1);
   });
 });

@@ -19,11 +19,16 @@ import { EventRouter } from './EventRouter';
 import type { StreamState } from './handlers/streamState';
 import * as userFacingErrors from '../userFacingErrors';
 import * as eventParserModule from './handlers/eventParser';
+import { useLayoutStore } from '../../store/layoutStore';
 import {
   ensureDataPlaneRouter,
   resetDataPlaneRouterForTests,
   DATA_PLANE_EVENT_TYPES,
   isDataPlaneEventType,
+  ensureSubagentPlaneRouter,
+  resetSubagentPlaneRouterForTests,
+  SUBAGENT_PLANE_EVENT_TYPES,
+  isSubagentPlaneEventType,
 } from './dataPlaneRouter';
 import {
   setDataPlanePullForTests,
@@ -268,5 +273,244 @@ describe('数据面路由 parser 异常兜底（T3.7 D7，F8-01 消费面）', (
     } finally {
       unsub();
     }
+  });
+});
+
+describe('子代理面全局路由（父 run 收口后兜底，T-6 / 04 M1）', () => {
+  const createdSessions: string[] = [];
+
+  /** 构造测试会话（id 显式指定，测试结束统一清理） */
+  function createTestSession(): string {
+    const sid = `sess-subagent-plane-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+    useLayoutStore.getState().createSession({
+      title: 'subagent-plane-test',
+      id: sid,
+      activate: false,
+    });
+    createdSessions.push(sid);
+    return sid;
+  }
+
+  function agentsOf(sid: string) {
+    return useLayoutStore.getState().sessionsById[sid]?.agents;
+  }
+
+  beforeEach(() => {
+    transportListeners.clear();
+    getTransportMock.mockClear();
+  });
+  afterEach(() => {
+    for (const sid of createdSessions.splice(0)) {
+      useLayoutStore.getState().deleteSession(sid);
+    }
+    resetSubagentPlaneRouterForTests();
+    resetDataPlaneRouterForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('父 run 收口后子代理事件仍被消费：started/event/ended 落入 agents store', () => {
+    const sid = createTestSession();
+    const unsub = ensureSubagentPlaneRouter();
+    try {
+      // 生命周期：run 启动 → 收口（agent-end），此后子代理事件为迟到事件
+      fire({ type: 'agent-start', runId: 'run-parent' });
+      fire({ type: 'agent-end', runId: 'run-parent' });
+
+      fire({
+        type: 'subagent-started',
+        runId: 'run-parent',
+        sessionId: sid,
+        subagentId: 'sa-1',
+        subagentRunId: 'sr-1',
+        description: '调研模块 A',
+        mode: 'research',
+        parentToolCallId: 'tc-9',
+      });
+      fire({
+        type: 'subagent-event',
+        runId: 'run-parent',
+        sessionId: sid,
+        subagentId: 'sa-1',
+        subagentRunId: 'sr-1',
+        event: {
+          type: 'message-delta',
+          block: { type: 'text', text: '调研结果：' },
+        },
+      });
+      fire({
+        type: 'subagent-ended',
+        runId: 'run-parent',
+        sessionId: sid,
+        subagentId: 'sa-1',
+        subagentRunId: 'sr-1',
+        status: 'completed',
+        summary: '完成调研',
+      });
+
+      const agents = agentsOf(sid);
+      expect(agents).toHaveLength(1);
+      const ag = agents![0];
+      expect(ag.id).toBe('sa-1');
+      expect(ag.parentRunId).toBe('run-parent');
+      expect(ag.status).toBe('completed');
+      expect(ag.summary).toBe('完成调研');
+      expect(ag.messages[0]?.text).toBe('调研结果：');
+    } finally {
+      unsub();
+    }
+  });
+
+  it('run-terminal 收口同样解除活跃（不只 agent-end）', () => {
+    const sid = createTestSession();
+    const unsub = ensureSubagentPlaneRouter();
+    try {
+      fire({ type: 'agent-start', runId: 'run-parent' });
+      fire({ type: 'run-terminal', runId: 'run-parent', terminal: 'completed' });
+      fire({
+        type: 'subagent-started',
+        runId: 'run-parent',
+        sessionId: sid,
+        subagentId: 'sa-2',
+        subagentRunId: 'sr-2',
+      });
+      expect(agentsOf(sid)).toHaveLength(1);
+    } finally {
+      unsub();
+    }
+  });
+
+  it('父 run 仍活跃时全局面跳过（per-run 路由优先，防双面双写）', () => {
+    const sid = createTestSession();
+    const unsub = ensureSubagentPlaneRouter();
+    try {
+      // 只发 agent-start（run 仍活跃）：per-run 路由正在消费，全局面不得动 store
+      fire({ type: 'agent-start', runId: 'run-parent' });
+      fire({
+        type: 'subagent-started',
+        runId: 'run-parent',
+        sessionId: sid,
+        subagentId: 'sa-3',
+        subagentRunId: 'sr-3',
+      });
+      fire({
+        type: 'subagent-event',
+        runId: 'run-parent',
+        sessionId: sid,
+        subagentId: 'sa-3',
+        subagentRunId: 'sr-3',
+        event: { type: 'message-delta', block: { type: 'text', text: 'x' } },
+      });
+      expect(agentsOf(sid)).toBeUndefined();
+      // 数据面 / run 内事件不被子代理面路由拦截（各自消费面分治）
+      fire({ type: 'task-started', taskId: 't1', command: 'x' });
+      fire({
+        type: 'message-delta',
+        runId: 'run-parent',
+        messageId: 'm1',
+        block: { type: 'text', text: 'hi' },
+      });
+      expect(agentsOf(sid)).toBeUndefined();
+    } finally {
+      unsub();
+    }
+  });
+
+  it('父 run 缺失（宽容形态）的子代理事件被跳过（防双写兜底）', () => {
+    const sid = createTestSession();
+    const unsub = ensureSubagentPlaneRouter();
+    try {
+      fire({
+        type: 'subagent-started',
+        sessionId: sid,
+        subagentId: 'sa-4',
+        subagentRunId: 'sr-4',
+      });
+      expect(agentsOf(sid)).toBeUndefined();
+    } finally {
+      unsub();
+    }
+  });
+
+  it('refcount 生命周期：首个订阅启动监听、复用、归零退订；复位清空活跃集合', () => {
+    expect(getTransportMock).not.toHaveBeenCalled();
+    const unsub1 = ensureSubagentPlaneRouter();
+    expect(getTransportMock).toHaveBeenCalledTimes(1);
+    const unsub2 = ensureSubagentPlaneRouter();
+    expect(getTransportMock).toHaveBeenCalledTimes(1); // 复用既有监听
+
+    unsub1();
+    unsub2();
+    expect(transportListeners.size).toBe(0); // 归零退订
+
+    // 复位后重新订阅：活跃集合已清空（上一用例的 run 生命周期不残留）
+    const unsub3 = ensureSubagentPlaneRouter();
+    try {
+      expect(transportListeners.size).toBe(1);
+      fire({ type: 'agent-end', runId: 'run-parent' }); // 无 agent-start，无影响
+    } finally {
+      unsub3();
+    }
+  });
+
+  it('解析异常兜底：登记日志 + 不中断后续子代理事件消费', () => {
+    const sid = createTestSession();
+    const unsub = ensureSubagentPlaneRouter();
+    try {
+      fire({ type: 'agent-start', runId: 'run-parent' });
+      fire({ type: 'agent-end', runId: 'run-parent' });
+      const logSpy = vi.spyOn(userFacingErrors, 'logInternalError');
+      const parserSpy = vi.spyOn(eventParserModule, 'parseBridgeEvent');
+      parserSpy.mockImplementation(() => {
+        throw new Error('parser threw: boom');
+      });
+      expect(() =>
+        fire({
+          type: 'subagent-started',
+          runId: 'run-parent',
+          sessionId: sid,
+          subagentId: 'sa-5',
+          subagentRunId: 'sr-5',
+        })
+      ).not.toThrow();
+      expect(logSpy).toHaveBeenCalledWith(
+        'subagent-plane-parse-failed',
+        expect.objectContaining({
+          error: expect.stringContaining('parser threw'),
+        })
+      );
+
+      // 消息循环不中断：后续子代理事件照常消费（先 started 再 ended）
+      parserSpy.mockRestore();
+      fire({
+        type: 'subagent-started',
+        runId: 'run-parent',
+        sessionId: sid,
+        subagentId: 'sa-5',
+        subagentRunId: 'sr-5',
+      });
+      fire({
+        type: 'subagent-ended',
+        runId: 'run-parent',
+        sessionId: sid,
+        subagentId: 'sa-5',
+        subagentRunId: 'sr-5',
+        status: 'failed',
+      });
+      expect(agentsOf(sid)?.[0]?.status).toBe('failed');
+    } finally {
+      unsub();
+    }
+  });
+
+  it('isSubagentPlaneEventType 覆盖 3 类，不含 run 内/数据面类型', () => {
+    expect(SUBAGENT_PLANE_EVENT_TYPES).toHaveLength(3);
+    for (const t of SUBAGENT_PLANE_EVENT_TYPES) {
+      expect(isSubagentPlaneEventType(t)).toBe(true);
+    }
+    expect(isSubagentPlaneEventType('message-delta')).toBe(false);
+    expect(isSubagentPlaneEventType('task-started')).toBe(false);
+    expect(isSubagentPlaneEventType('error')).toBe(false);
   });
 });

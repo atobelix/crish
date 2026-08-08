@@ -501,6 +501,9 @@ fn commit_message_with_deltas(state: &mut LoopState, message: AgentMessage) {
     state.events.push(AgentEvent::MessageEnd {
         session_id,
         message,
+        // G4 / 04 §5.2-5：assistant 收口消息带当前轮次（与 turn-start/turn-end
+        // 同值——TURN_PREPARED 递增后），前端据此按 turn 分段合并
+        turn_index: Some(state.machine.context().turn_index),
     });
 }
 

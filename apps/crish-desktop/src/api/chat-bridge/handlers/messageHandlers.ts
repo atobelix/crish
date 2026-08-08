@@ -3,7 +3,8 @@
  *
  * message-delta 同时承接 text-delta 别名（解析层已归一为 message-delta 信封），
  * 时序重组语义与原 16 分支实现完全等价：delta 增量拼接、thought 单独累积、
- * message-end 终态整段合并（mergeAssistantTextPiece）。
+ * message-end 终态整段合并（mergeAssistantTextPiece，终态权威语义 G3）；
+ * 多轮 run 按 turnIndex 分段（G4 / 04 §5.2-5：同 turn 幂等覆盖、跨 turn 追加）。
  */
 import { blockText, mergeAssistantTextPiece } from './eventUtils';
 import type { EngineEnvelope } from './eventParser';
@@ -135,8 +136,21 @@ export function onMessageEnd(
   }
   if (text.trim()) {
     const piece = text.trim();
+    // G4 / 04 §5.2-5：按 turnIndex 分段合并——同 turn 的 message-end 为
+    // 终态权威（mergeAssistantTextPiece 幂等/修订合并），跨 turn 追加新段。
+    // 旧载荷（无 turnIndex）按 0 处理，保持单段路径向后兼容。
+    const turnIndex =
+      typeof envelope.event.turnIndex === 'number'
+        ? envelope.event.turnIndex
+        : 0;
+    if (!state.messageEndTurnSegments) state.messageEndTurnSegments = [];
+    const segs = state.messageEndTurnSegments;
+    while (segs.length <= turnIndex) segs.push('');
+    segs[turnIndex] = mergeAssistantTextPiece(segs[turnIndex] ?? '', piece);
+    // 过滤空占位段（turnIndex 1-based，索引 0 及无正文轮次不产生分隔符）
+    const joined = segs.filter(Boolean).join('\n\n');
     const prevLen = state.assistantText.length;
-    state.assistantText = mergeAssistantTextPiece(state.assistantText, piece);
+    state.assistantText = joined;
     if (state.assistantText.length > prevLen) {
       const addedDelta = state.assistantText.slice(prevLen);
       callbacks.onChunk(addedDelta);

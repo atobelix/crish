@@ -48,7 +48,13 @@ export type MessageDomainEvent =
       messageId: string;
       block: AgentMessageBlock;
     }
-  | { type: 'message-end'; sessionId: string; message: AgentMessage };
+  | {
+      type: 'message-end';
+      sessionId: string;
+      /** 轮次序号（G4：多轮 run 按 turnIndex 分段合并；旧载荷缺省按 0） */
+      turnIndex?: number;
+      message: AgentMessage;
+    };
 
 export type ToolDomainEvent =
   | {

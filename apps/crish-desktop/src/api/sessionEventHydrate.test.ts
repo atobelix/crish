@@ -394,6 +394,115 @@ describe('projectEventsToMessages id 稳定 / 幂等', () => {
     expect(messages[1]?.status).toBe('completed');
   });
 
+  it('多轮 run：同 clientMessageId 按 turnIndex 分段追加（reload 后不再只剩末轮）', () => {
+    const events = [
+      {
+        sequence: 1,
+        type: 'runtime-event',
+        payload: {
+          event: {
+            type: 'message-end',
+            timestamp: 1000,
+            turnIndex: 1,
+            message: { role: 'user', content: 'ping' },
+          },
+        },
+      },
+      {
+        sequence: 2,
+        type: 'runtime-event',
+        payload: {
+          event: {
+            type: 'message-end',
+            timestamp: 2000,
+            turnIndex: 1,
+            message: { role: 'assistant', clientMessageId: 'asst-client-1', content: '第一轮' },
+          },
+        },
+      },
+      {
+        sequence: 3,
+        type: 'runtime-event',
+        payload: {
+          event: {
+            type: 'message-end',
+            timestamp: 3000,
+            turnIndex: 2,
+            message: { role: 'assistant', clientMessageId: 'asst-client-1', content: '第二轮' },
+          },
+        },
+      },
+    ];
+    const { messages } = projectEventsToMessages(events);
+    expect(messages).toHaveLength(2);
+    expect(messages[1]?.id).toBe('asst-client-1');
+    expect(messages[1]?.text).toBe('第一轮\n\n第二轮');
+    expect(messages[1]?.status).toBe('completed');
+  });
+
+  it('同 turnIndex 重复/修订 message-end：终态权威覆盖，不追加', () => {
+    const events = [
+      {
+        sequence: 1,
+        type: 'runtime-event',
+        payload: {
+          event: {
+            type: 'message-end',
+            timestamp: 2000,
+            turnIndex: 1,
+            message: { role: 'assistant', clientMessageId: 'asst-client-1', content: '第一轮' },
+          },
+        },
+      },
+      {
+        sequence: 2,
+        type: 'runtime-event',
+        payload: {
+          event: {
+            type: 'message-end',
+            timestamp: 2001,
+            turnIndex: 1,
+            message: { role: 'assistant', clientMessageId: 'asst-client-1', content: '第一轮（修订）' },
+          },
+        },
+      },
+    ];
+    const { messages } = projectEventsToMessages(events);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.text).toBe('第一轮（修订）');
+  });
+
+  it('旧载荷（无 turnIndex 的多轮事件）：按 0 处理，覆盖语义保持旧行为（向前兼容）', () => {
+    const events = [
+      {
+        sequence: 1,
+        type: 'runtime-event',
+        payload: {
+          event: {
+            type: 'message-end',
+            timestamp: 2000,
+            message: { role: 'assistant', clientMessageId: 'asst-client-1', content: '第一轮' },
+          },
+        },
+      },
+      {
+        sequence: 2,
+        type: 'runtime-event',
+        payload: {
+          event: {
+            type: 'message-end',
+            timestamp: 3000,
+            message: { role: 'assistant', clientMessageId: 'asst-client-1', content: '第二轮' },
+          },
+        },
+      },
+    ];
+    const { messages } = projectEventsToMessages(events);
+    expect(messages).toHaveLength(1);
+    // 旧引擎无 turn 维度，无从分段——锁定「覆盖」旧行为不改变（不产生拼接噪声）
+    expect(messages[0]?.text).toBe('第二轮');
+  });
+
   it('delta hyd-* 后 message-end 带 clientMessageId 时重键到稳定 id', () => {
     const events = [
       {

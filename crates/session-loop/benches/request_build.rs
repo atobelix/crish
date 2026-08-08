@@ -61,6 +61,7 @@ fn record_message_sim(conversation: &mut Vec<Arc<AgentMessage>>, text: &str) {
     let event = AgentEvent::MessageEnd {
         session_id: "s1".to_string(),
         message: message.clone(),
+        turn_index: None,
     };
     criterion::black_box(event);
 }

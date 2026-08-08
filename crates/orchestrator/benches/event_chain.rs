@@ -107,6 +107,7 @@ fn build_outcome(text_size: usize) -> RunOutcome {
     events.push(AgentEvent::MessageEnd {
         session_id: session_id.to_string(),
         message,
+        turn_index: None,
     });
     events.push(AgentEvent::TurnEnd {
         session_id: session_id.to_string(),
@@ -180,6 +181,7 @@ fn bench_event_chain(c: &mut Criterion) {
                 let event = AgentEvent::MessageEnd {
                     session_id: "s1".to_string(),
                     message: Arc::new(message("assistant-1", &body)),
+                    turn_index: None,
                 };
                 (store, event)
             },

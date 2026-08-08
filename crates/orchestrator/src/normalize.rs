@@ -350,6 +350,7 @@ mod tests {
             AgentEvent::MessageEnd {
                 session_id: "s".into(),
                 message: std::sync::Arc::new(message()),
+                turn_index: None,
             },
             AgentEvent::ToolStart {
                 session_id: "s".into(),

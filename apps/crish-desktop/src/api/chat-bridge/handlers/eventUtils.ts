@@ -38,6 +38,14 @@ export function messageBelongsToRun(
   return rid === localRunId;
 }
 
+/**
+ * message-end 终态全文与增量累积合并（G3 / 04 §5.1-2 终态权威语义）。
+ *
+ * - 快速路径：`prior` 完整包含于 `p`（丢尾/丢头/修订补全形态）→ 返回更长者
+ *   （终稿全文），维持渲染增量最小化的差额补发；
+ * - 其余不一致（丢中段/真修订）：**以 message-end 终稿 p 为准**，不做 `\n\n`
+ *   拼接——消灭 R1「增量版 + 终稿版」两段共存。
+ */
 export function mergeAssistantTextPiece(prior: string, piece: string): string {
   const p = typeof piece === 'string' ? piece.trim() : '';
   if (!p) return prior;
@@ -50,5 +58,6 @@ export function mergeAssistantTextPiece(prior: string, piece: string): string {
   ) {
     return p.length >= prior.length ? p : prior;
   }
-  return `${prior}\n\n${p}`;
+  // 终态权威：增量累积与终稿不一致时以 p 为准（不做 \n\n 拼接）
+  return p;
 }

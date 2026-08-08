@@ -162,6 +162,15 @@ export function projectEventsToMessages(events: unknown[]): {
   let lastRunId: string | undefined;
   let maxSequence = 0;
   let msgSeq = 0;
+  /**
+   * 每消息的 turn 分段账本（G4 / 04 §5.2-5）：messageId → 已固化轮次与该轮
+   * 终态文本。同 turn message-end 幂等覆盖（终态权威），跨 turn 追加新段——
+   * 消灭 M2「多轮 run reload 后只剩末轮文本」；旧载荷（无 turnIndex）按 0。
+   */
+  const turnTextByMessage = new Map<
+    string,
+    { turnIndex: number; text: string }
+  >();
 
   const pushUser = (text: string, ts: number, stableId?: string) => {
     currentAssistant = null;
@@ -265,7 +274,21 @@ export function projectEventsToMessages(events: unknown[]): {
         a.status = 'completed';
         if (thought) a.thinking = thought;
         if (text) {
-          a.text = text;
+          // G4 / 04 §5.2-5：按 turnIndex 分段——同 turn 幂等覆盖（终态权威，
+          // 亦覆盖 delta 累积碎片），跨 turn 追加新段（reload 后多轮文本
+          // 完整）；旧载荷（无 turnIndex）按 0 处理，单段路径与旧行为一致
+          const turnIndex =
+            typeof agent.turnIndex === 'number' ? agent.turnIndex : 0;
+          const st = turnTextByMessage.get(a.id) ?? { turnIndex: -1, text: '' };
+          if (turnIndex === st.turnIndex) {
+            st.text = text;
+            a.text = text;
+          } else {
+            st.turnIndex = turnIndex;
+            st.text = st.text ? `${st.text}\n\n${text}` : text;
+            a.text = st.text;
+          }
+          turnTextByMessage.set(a.id, st);
           // 合并正文，绝不抹掉已有 tool_call 块
           if (!a.blocks) a.blocks = [];
           const hasTools = a.blocks.some((b) => b.type === 'tool_call');

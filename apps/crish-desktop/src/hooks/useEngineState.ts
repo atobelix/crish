@@ -19,7 +19,7 @@ import {
   listBackgroundTasks,
   type BackgroundTaskInfo,
 } from '../api/backgroundTasksApi';
-import { ensureDataPlaneRouter } from '../api/chat-bridge/dataPlaneRouter';
+import { ensureDataPlaneRouter, ensureSubagentPlaneRouter } from '../api/chat-bridge/dataPlaneRouter';
 import { onDataPlaneRefresh } from '../api/chat-bridge/handlers/taskEventHandlers';
 
 export interface WorkflowRunInfo {
@@ -89,6 +89,7 @@ let _refCount = 0;
 let _intervalId: ReturnType<typeof setInterval> | null = null;
 let _unsubState: (() => void) | null = null;
 let _unsubDataPlane: (() => void) | null = null;
+let _unsubSubagentPlane: (() => void) | null = null;
 let _unsubDataPlaneRefresh: (() => void) | null = null;
 let _workflowsLoaded = false;
 
@@ -175,6 +176,11 @@ function _startSingleton(): void {
   // task/timer/cron 十类事件经 dataPlaneRouter 消费（刷新信号 + 展示面数据源）。
   // 归零时随单例一起退订（refcount 对齐，防常驻监听泄漏）。
   _unsubDataPlane = ensureDataPlaneRouter();
+  // T-6 子代理面全局路由生产激活（00 结论 5 / 04 M1 装配点）：应用生命周期
+  // 常驻持有 ensureSubagentPlaneRouter() → 父 run 收口后跨 run 存活的
+  // subagent-* 事件仍被消费并落入 agents store（父 run 路由优先，全局兜底，
+  // 双面共存不双写）。归零时随单例一起退订。
+  _unsubSubagentPlane = ensureSubagentPlaneRouter();
   // 数据面刷新信号接线：终态/timer/cron 事件到达 → 提前拉取本域快照，
   // 不等下一个 4s 轮询周期（事件 → 拉取 闭环；节流由数据面 1s 窗口合并）。
   _unsubDataPlaneRefresh = onDataPlaneRefresh(() => {
@@ -201,6 +207,10 @@ function _stopSingleton(): void {
   if (_unsubDataPlane !== null) {
     _unsubDataPlane();
     _unsubDataPlane = null;
+  }
+  if (_unsubSubagentPlane !== null) {
+    _unsubSubagentPlane();
+    _unsubSubagentPlane = null;
   }
   _workflowsLoaded = false;
   _state = { ..._state, loading: true };

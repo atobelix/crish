@@ -1045,11 +1045,14 @@ export function parseEngineMessageEndEvent(v: unknown): ParseResult<EngineMessag
   if (v["type"] !== "message-end") return parseErr("EngineMessageEndEvent: type mismatch");
   const sessionId = reqField(v, "sessionId", checkString);
   if (!sessionId.ok) return sessionId;
+  const turnIndex = optField(v, "turnIndex", checkInteger);
+  if (!turnIndex.ok) return turnIndex;
   const message = reqField(v, "message", parseAgentMessage);
   if (!message.ok) return message;
   return parseOk({
     type: "message-end",
     sessionId: sessionId.data,
+    ...(turnIndex.data !== undefined ? { turnIndex: turnIndex.data } : {}),
     message: message.data,
   });
 }

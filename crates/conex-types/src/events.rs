@@ -360,6 +360,10 @@ pub enum AgentEvent {
     MessageEnd {
         session_id: String,
         message: Arc<AgentMessage>,
+        /// 轮次序号（G4 / 04 §5.2-5：多轮 run 前端按 turnIndex 分段合并，
+        /// 消灭 hydrate「只剩末轮文本」；与 turn-start/turn-end 同值）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        turn_index: Option<u32>,
     },
 
     // ── Tool 域（03 §1.4，前端强依赖）──

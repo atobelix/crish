@@ -157,6 +157,7 @@ pub fn message_end(session: &str) -> AgentEvent {
             client_message_id: None,
             content: None,
         }),
+        turn_index: None,
     }
 }
 

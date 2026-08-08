@@ -277,6 +277,7 @@ fn all_events() -> Vec<AgentEvent> {
         AgentEvent::MessageEnd {
             session_id: s.clone(),
             message: Arc::new(assistant_message()),
+            turn_index: None,
         },
         AgentEvent::ToolStart {
             session_id: s.clone(),
@@ -613,6 +614,7 @@ fn message_end_hard_dependency_role_content_blocks_client_message_id() {
     let event = AgentEvent::MessageEnd {
         session_id: "s1".into(),
         message: Arc::new(assistant_message()),
+        turn_index: Some(1),
     };
     let json = serde_json::to_value(&event).unwrap();
     let msg = &json["message"];
@@ -622,7 +624,53 @@ fn message_end_hard_dependency_role_content_blocks_client_message_id() {
     assert_eq!(msg["blocks"][0]["type"], "text");
     assert_eq!(msg["blocks"][0]["text"], "hello");
     assert_eq!(msg["blocks"][1]["type"], "thought");
+    assert_eq!(msg["blocks"][1]["text"], "thinking...");
     assert_eq!(msg["id"], "m1");
+}
+
+#[test]
+fn message_end_turn_index_roundtrip_and_forward_compat() {
+    // G4 / 04 §5.2-5：message-end 载荷 turnIndex（与 turn-start/turn-end 同值），
+    // 前端据此按 turn 分段合并（hydrate 不再只剩末轮文本）
+    let with_turn = AgentEvent::MessageEnd {
+        session_id: "s1".into(),
+        message: Arc::new(assistant_message()),
+        turn_index: Some(2),
+    };
+    let json = serde_json::to_value(&with_turn).unwrap();
+    assert_eq!(json["turnIndex"], 2);
+    let back: AgentEvent = serde_json::from_value(json).unwrap();
+    assert_eq!(back, with_turn);
+
+    // 向前兼容：turn_index=None 时序列化省略该键（旧形态载荷逐字节不变）
+    let without_turn = AgentEvent::MessageEnd {
+        session_id: "s1".into(),
+        message: Arc::new(assistant_message()),
+        turn_index: None,
+    };
+    let json_without = serde_json::to_value(&without_turn).unwrap();
+    assert!(
+        json_without.get("turnIndex").is_none(),
+        "turn_index=None 不得序列化 turnIndex 键（保持旧 wire 形态）"
+    );
+    // 旧载荷（无 turnIndex 键）反序列化 → None（前端按 0 处理）
+    let old_payload = json!({
+        "type": "message-end",
+        "sessionId": "s1",
+        "message": {
+            "id": "m1",
+            "role": "assistant",
+            "createdAt": TS,
+            "blocks": [{"type": "text", "text": "hello"}]
+        }
+    });
+    let parsed: AgentEvent = serde_json::from_value(old_payload).unwrap();
+    match parsed {
+        AgentEvent::MessageEnd { turn_index, .. } => {
+            assert_eq!(turn_index, None, "旧载荷缺 turnIndex → None")
+        }
+        other => panic!("期望 message-end，实际 {other:?}"),
+    }
 }
 
 #[test]

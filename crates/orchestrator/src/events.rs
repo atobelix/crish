@@ -602,6 +602,7 @@ mod tests {
                 client_message_id: None,
                 content: None,
             }),
+            turn_index: None,
         }
     }
 

@@ -290,9 +290,12 @@ describe('mergeAssistantTextPiece', () => {
     expect(mergeAssistantTextPiece('same', 'same')).toBe('same');
   });
 
-  it('joins distinct multi-turn pieces with blank line', () => {
+  it('distinct non-overlapping pieces: final-text authoritative (no blank-line join, G3)', () => {
+    // 终态权威语义（04 §5.1-2）：增量累积与终稿不一致时以终稿 p 为准，
+    // 不再 `\n\n` 拼接（消灭 R1「增量版+终稿版」两段共存）；
+    // 多轮（跨 turn）分段由 onMessageEnd 按 turnIndex 段数组 join 负责
     expect(mergeAssistantTextPiece('first turn', 'second turn')).toBe(
-      'first turn\n\nsecond turn',
+      'second turn',
     );
   });
 });

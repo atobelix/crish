@@ -195,6 +195,13 @@
           "description": "会话 id"
         },
         {
+          "name": "turnIndex",
+          "type": "number",
+          "required": false,
+          "description": "轮次序号（G4：多轮 run 前端按 turnIndex 分段合并；旧载荷缺省按 0）",
+          "integer": true
+        },
+        {
           "name": "message",
           "type": "AgentMessage",
           "required": true,

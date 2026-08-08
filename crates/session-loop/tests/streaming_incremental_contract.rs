@@ -495,6 +495,32 @@ async fn realtime_sink_receives_deltas_and_collected_sequence_stays_intact() {
         .expect("应 commit assistant 消息");
     assert_message_delta_concatenation(&sink_events, &message.text());
     assert_eq!(message.text(), "你好");
+
+    // G4 / 04 §5.2-5：message-end 载荷 turnIndex（前端按 turn 分段合并）——
+    // user 消息在 TURN_PREPARED 递增前消费（0），assistant 收口在递增后
+    // （1，与 turn-start/turn-end 同值）
+    let mut end_turns: Vec<u32> = Vec::new();
+    for event in &outcome.events {
+        if let AgentEvent::MessageEnd { turn_index, .. } = event {
+            end_turns.push(
+                turn_index.expect("收口 message-end 必须携带 turnIndex（G4）"),
+            );
+        }
+    }
+    assert_eq!(
+        end_turns,
+        vec![0, 1],
+        "user=递增前 0 / assistant=TURN_PREPARED 后 1"
+    );
+    let start_turn = outcome
+        .events
+        .iter()
+        .find_map(|e| match e {
+            AgentEvent::TurnStart { turn_index, .. } => Some(*turn_index),
+            _ => None,
+        })
+        .expect("首轮应有 turn-start");
+    assert_eq!(start_turn, 1, "assistant message-end turnIndex 与 turn-start 同值");
 }
 
 /// T09.1 双轨：未注入 DeltaSink 时收口序列仍完整（message-end 必达——

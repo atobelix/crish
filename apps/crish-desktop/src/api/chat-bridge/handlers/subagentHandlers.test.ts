@@ -9,8 +9,17 @@
  * - subagent-ended：status 规范值 completed/failed/cancelled（前端正则映射
  *   stopped/failed/completed）+ summary（可选）/endedAt。
  */
-import { describe, expect, it } from 'vitest';
-import { onSubagentEnded, onSubagentEvent, onSubagentStarted } from './subagentHandlers';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  onSubagentEnded,
+  onSubagentEvent,
+  onSubagentStarted,
+  onSubagentEndedGlobal,
+  onSubagentEventGlobal,
+  onSubagentStartedGlobal,
+} from './subagentHandlers';
+import { useLayoutStore } from '../../../store/layoutStore';
+import type { SessionAgent } from '../../../store/types';
 import type { LegacyEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 
@@ -209,5 +218,286 @@ describe('onSubagentEnded（I5-M7：status 正则映射 + summary/endedAt 透传
       status: 'completed',
       summary: undefined,
     });
+  });
+});
+
+describe('子代理面全局消费者（父 run 收口后兜底 → agents store，T-6）', () => {
+  const created: string[] = [];
+  let sid = '';
+
+  beforeEach(() => {
+    sid = `sess-sub-global-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    useLayoutStore.getState().createSession({
+      title: 'sub-global-test',
+      id: sid,
+      activate: false,
+    });
+    created.push(sid);
+  });
+  afterEach(() => {
+    for (const s of created.splice(0)) {
+      useLayoutStore.getState().deleteSession(s);
+    }
+  });
+
+  function agentById(id: string): SessionAgent | undefined {
+    return useLayoutStore
+      .getState()
+      .sessionsById[sid]?.agents?.find((a) => a.id === id);
+  }
+
+  function toolCall(messageId: string, toolId: string) {
+    return useLayoutStore
+      .getState()
+      .sessionsById[sid]?.messages?.find((m) => m.id === messageId)
+      ?.toolCalls?.find((t) => t.id === toolId);
+  }
+
+  it('started 全局消费：agent 落 store（upsert 语义，字段对齐 per-run）', () => {
+    onSubagentStartedGlobal({
+      type: 'subagent-started',
+      runId: 'run-parent',
+      sessionId: sid,
+      subagentId: 'sa-1',
+      subagentRunId: 'sr-1',
+      description: '调研模块 A',
+      mode: 'research',
+      parentToolCallId: 'tc-9',
+    });
+    const ag = agentById('sa-1');
+    expect(ag).toBeDefined();
+    expect(ag!.parentRunId).toBe('run-parent');
+    expect(ag!.parentSessionId).toBe(sid);
+    expect(ag!.description).toBe('调研模块 A');
+    expect(ag!.mode).toBe('research');
+    expect(ag!.status).toBe('running');
+    expect(ag!.parentToolCallId).toBe('tc-9');
+  });
+
+  it('started 全局消费防双写：同 id agent 已存在（per-run 已建）→ 跳过不覆盖', () => {
+    useLayoutStore.getState().upsertSessionAgent(sid, {
+      id: 'sa-1',
+      subagentRunId: 'sr-1',
+      parentSessionId: sid,
+      parentRunId: 'run-parent',
+      description: 'per-run 已建标签',
+      mode: 'research',
+      status: 'running',
+      messages: [],
+      startedAt: 1,
+    });
+    onSubagentStartedGlobal({
+      type: 'subagent-started',
+      runId: 'run-parent',
+      sessionId: sid,
+      subagentId: 'sa-1',
+      subagentRunId: 'sr-1',
+      description: '迟到覆盖标签',
+      mode: 'research',
+    });
+    expect(agentById('sa-1')!.description).toBe('per-run 已建标签');
+  });
+
+  it('started 全局消费：父工具卡置 running（running 态才更新）', () => {
+    useLayoutStore.getState().addMessage(
+      useLayoutStore.getState().workspaces[0].id,
+      sid,
+      {
+        id: 'm1',
+        sender: 'assistant',
+        text: '',
+        timestamp: Date.now(),
+        toolCalls: [
+          { id: 'tc-running', name: 'run_subagent', arguments: '', status: 'running' },
+        ],
+      }
+    );
+    onSubagentStartedGlobal({
+      type: 'subagent-started',
+      runId: 'run-parent',
+      sessionId: sid,
+      subagentId: 'sa-1',
+      subagentRunId: 'sr-1',
+      parentToolCallId: 'tc-running',
+    });
+    const tc = toolCall('m1', 'tc-running');
+    expect(tc!.status).toBe('running');
+    expect(tc!.output).toBe('协作进行中…');
+  });
+
+  it('started 全局消费：终态父工具卡不回退为 running', () => {
+    useLayoutStore.getState().addMessage(
+      useLayoutStore.getState().workspaces[0].id,
+      sid,
+      {
+        id: 'm1',
+        sender: 'assistant',
+        text: '',
+        timestamp: Date.now(),
+        toolCalls: [
+          {
+            id: 'tc-done',
+            name: 'run_subagent',
+            arguments: '',
+            status: 'success',
+            output: '旧输出',
+          },
+        ],
+      }
+    );
+    onSubagentStartedGlobal({
+      type: 'subagent-started',
+      runId: 'run-parent',
+      sessionId: sid,
+      subagentId: 'sa-1',
+      subagentRunId: 'sr-1',
+      parentToolCallId: 'tc-done',
+    });
+    const tc = toolCall('m1', 'tc-done');
+    expect(tc!.status).toBe('success');
+    expect(tc!.output).toBe('旧输出');
+  });
+
+  it('event 全局消费：message-delta 投影到 agent 时间线（applySubagentEventToMessages 同源）', () => {
+    useLayoutStore.getState().upsertSessionAgent(sid, {
+      id: 'sa-1',
+      subagentRunId: 'sr-1',
+      parentSessionId: sid,
+      parentRunId: 'run-parent',
+      description: '调研',
+      mode: 'research',
+      status: 'running',
+      messages: [],
+      startedAt: Date.now(),
+    });
+    onSubagentEventGlobal({
+      type: 'subagent-event',
+      runId: 'run-parent',
+      sessionId: sid,
+      subagentId: 'sa-1',
+      subagentRunId: 'sr-1',
+      event: {
+        type: 'message-delta',
+        block: { type: 'text', text: '调研结果：' },
+      },
+    });
+    expect(agentById('sa-1')!.messages[0]?.text).toBe('调研结果：');
+  });
+
+  it('event 全局消费：agent 不存在 / 缺 sessionId → 静默跳过（不抛错）', () => {
+    expect(() =>
+      onSubagentEventGlobal({
+        type: 'subagent-event',
+        runId: 'run-parent',
+        sessionId: sid,
+        subagentId: 'sa-missing',
+        subagentRunId: 'sr-1',
+        event: { type: 'message-delta', block: { type: 'text', text: 'x' } },
+      })
+    ).not.toThrow();
+    expect(() =>
+      onSubagentEventGlobal({
+        type: 'subagent-event',
+        runId: 'run-parent',
+        subagentId: 'sa-1',
+        subagentRunId: 'sr-1',
+        event: { type: 'message-delta', block: { type: 'text', text: 'x' } },
+      })
+    ).not.toThrow();
+  });
+
+  it('ended 全局消费：status/summary/endedAt + 时间线消息收口 + 父工具卡终态', () => {
+    useLayoutStore.getState().addMessage(
+      useLayoutStore.getState().workspaces[0].id,
+      sid,
+      {
+        id: 'm1',
+        sender: 'assistant',
+        text: '',
+        timestamp: Date.now(),
+        toolCalls: [
+          { id: 'tc-spawn', name: 'run_subagent', arguments: '', status: 'running' },
+        ],
+      }
+    );
+    useLayoutStore.getState().upsertSessionAgent(sid, {
+      id: 'sa-1',
+      subagentRunId: 'sr-1',
+      parentSessionId: sid,
+      parentRunId: 'run-parent',
+      parentToolCallId: 'tc-spawn',
+      description: '调研',
+      mode: 'research',
+      status: 'running',
+      messages: [
+        {
+          id: 'agent-asst-1',
+          sender: 'assistant',
+          text: '部分正文',
+          timestamp: Date.now(),
+          status: 'processing',
+          toolCalls: [],
+          blocks: [],
+        },
+      ],
+      startedAt: Date.now(),
+    });
+    onSubagentEndedGlobal({
+      type: 'subagent-ended',
+      runId: 'run-parent',
+      sessionId: sid,
+      subagentId: 'sa-1',
+      subagentRunId: 'sr-1',
+      status: 'completed',
+      summary: '完成调研',
+    });
+    const ag = agentById('sa-1')!;
+    expect(ag.status).toBe('completed');
+    expect(ag.summary).toBe('完成调研');
+    expect(ag.endedAt).toBeTypeOf('number');
+    expect(ag.messages[0]?.status).toBe('completed');
+    const tc = toolCall('m1', 'tc-spawn');
+    expect(tc!.status).toBe('success');
+    expect(tc!.output).toBe('完成调研');
+  });
+
+  it('ended 全局消费：failed → 父工具卡 error + 兜底文案', () => {
+    useLayoutStore.getState().addMessage(
+      useLayoutStore.getState().workspaces[0].id,
+      sid,
+      {
+        id: 'm1',
+        sender: 'assistant',
+        text: '',
+        timestamp: Date.now(),
+        toolCalls: [
+          { id: 'tc-spawn', name: 'run_subagent', arguments: '', status: 'running' },
+        ],
+      }
+    );
+    useLayoutStore.getState().upsertSessionAgent(sid, {
+      id: 'sa-1',
+      subagentRunId: 'sr-1',
+      parentSessionId: sid,
+      parentRunId: 'run-parent',
+      parentToolCallId: 'tc-spawn',
+      description: '调研',
+      mode: 'research',
+      status: 'running',
+      messages: [],
+      startedAt: Date.now(),
+    });
+    onSubagentEndedGlobal({
+      type: 'subagent-ended',
+      runId: 'run-parent',
+      sessionId: sid,
+      subagentId: 'sa-1',
+      subagentRunId: 'sr-1',
+      status: 'failed',
+    });
+    expect(agentById('sa-1')!.status).toBe('failed');
+    const tc = toolCall('m1', 'tc-spawn');
+    expect(tc!.status).toBe('error');
+    expect(tc!.output).toBe('协作未完成');
   });
 });

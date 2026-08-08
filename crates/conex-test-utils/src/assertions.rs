@@ -262,6 +262,7 @@ mod tests {
             AgentEvent::MessageEnd {
                 session_id: "s1".into(),
                 message,
+                turn_index: None,
             },
         ];
         assert_event_sequence(&events, &["message-start", "message-end"]);

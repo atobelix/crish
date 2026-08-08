@@ -189,8 +189,7 @@ describe('显式空实现 handler 无副作用锁定（审计行为级补位）'
   });
 });
 
-describe('provider-diagnostic 行为：记可观测日志，不触碰状态与回调', () => {
-  it('宽容形态 diagnostic 载荷经分派只触发 console.warn（scope=provider-diagnostic）', () => {
+describe('provider-diagnostic 行为：记可观测日志，不触碰状态与回调', () => {  it('宽容形态 diagnostic 载荷经分派只触发 console.warn（scope=provider-diagnostic）', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const { env } = makeEnv();
@@ -227,5 +226,86 @@ describe('provider-diagnostic 行为：记可观测日志，不触碰状态与�
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe('onMessageEnd 终态权威 + turnIndex 分段（G3/G4 / 04 §5.1-2、§5.2-5）', () => {
+  function dispatchMessageEnd(
+    env: HandlerEnv,
+    payload: Record<string, unknown>
+  ): void {
+    const parsed = parseBridgeEvent({ type: 'message-end', ...payload });
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok !== true) throw new Error(`测试载荷未解析：${parsed.error}`);
+    dispatchEvent(env, parsed.data);
+  }
+
+  function assistantMessage(content: string): Record<string, unknown> {
+    return { role: 'assistant', content };
+  }
+
+  it('丢中段/修订：终稿全文权威覆盖增量累积（不做 \\n\\n 追加，消灭两段共存）', () => {
+    const { env, state, callbacks } = makeEnv();
+    // 模拟增量丢帧后的累积文本（缺中段）
+    state.assistantText = 'Helloworld';
+    dispatchMessageEnd(env, {
+      message: assistantMessage('Hello brave new world'),
+    });
+    expect(state.assistantText).toBe('Hello brave new world');
+    // onChunk 只补差额（slice(prevLen)）：'Helloworld' 长 10，终稿 21 → 差 11 字符
+    expect(callbacks.onChunk).toHaveBeenCalledWith('e new world');
+  });
+
+  it('多轮 run：同 clientMessageId 按 turnIndex 分段追加（live 单气泡全文）', () => {
+    const { env, state, callbacks } = makeEnv();
+    dispatchMessageEnd(env, {
+      turnIndex: 1,
+      message: assistantMessage('第一轮'),
+    });
+    expect(state.assistantText).toBe('第一轮');
+    dispatchMessageEnd(env, {
+      turnIndex: 2,
+      message: assistantMessage('第二轮'),
+    });
+    expect(state.assistantText).toBe('第一轮\n\n第二轮');
+    expect(callbacks.onChunk).toHaveBeenNthCalledWith(1, '第一轮');
+    // 第二段差额含段间分隔符（\n\n 前缀，由 join 产出）
+    expect(callbacks.onChunk).toHaveBeenNthCalledWith(2, '\n\n第二轮');
+  });
+
+  it('同 turn 重复 message-end（重发）：幂等覆盖，不重复追加', () => {
+    const { env, state, callbacks } = makeEnv();
+    dispatchMessageEnd(env, { turnIndex: 1, message: assistantMessage('第一轮') });
+    dispatchMessageEnd(env, { turnIndex: 1, message: assistantMessage('第一轮') });
+    expect(state.assistantText).toBe('第一轮');
+    expect(callbacks.onChunk).toHaveBeenCalledTimes(1);
+  });
+
+  it('同 turn 修订 message-end：终态权威覆盖该段，不追加', () => {
+    const { env, state, callbacks } = makeEnv();
+    dispatchMessageEnd(env, { turnIndex: 1, message: assistantMessage('第一轮') });
+    dispatchMessageEnd(env, {
+      turnIndex: 1,
+      message: assistantMessage('第一轮（修订）'),
+    });
+    expect(state.assistantText).toBe('第一轮（修订）');
+    // 修订段更长 → 补差额；同 turn 不产生第二段
+    expect(callbacks.onChunk).toHaveBeenCalledTimes(2);
+    expect(callbacks.onChunk).toHaveBeenNthCalledWith(2, '（修订）');
+  });
+
+  it('旧载荷（无 turnIndex）：按 0 处理，重复 message-end 幂等（向前兼容）', () => {
+    const { env, state, callbacks } = makeEnv();
+    dispatchMessageEnd(env, { message: assistantMessage('正文') });
+    dispatchMessageEnd(env, { message: assistantMessage('正文') });
+    expect(state.assistantText).toBe('正文');
+    expect(callbacks.onChunk).toHaveBeenCalledTimes(1);
+  });
+
+  it('message-end 缺正文（content/blocks 全空）：不产生 onChunk，状态不变', () => {
+    const { env, state, callbacks } = makeEnv();
+    dispatchMessageEnd(env, { turnIndex: 1, message: { role: 'assistant' } });
+    expect(state.assistantText).toBe('');
+    expect(callbacks.onChunk).not.toHaveBeenCalled();
   });
 });

@@ -88,10 +88,10 @@ const approvalRequestedEvent = (id: string, command: string) => ({
   },
 });
 
-const approvalResolvedEvent = (id: string, decision: string) => ({
+const approvalResolvedEvent = (id: string, decision: string, sequence = 3) => ({
   type: 'approval-resolved',
   runId: RUN_ID,
-  sequence: 3,
+  sequence,
   toolCallId: id,
   decision,
 });
@@ -211,7 +211,14 @@ describe('审批链路契约：工具 requires_approval → 挂起 → 用户裁
     router.onMsg(approvalResolvedEvent('tc-5', 'approved'));
     expect(approvalFlow.lastTransition()?.outcome).toBe('applied');
     expect(approvalFlow.snapshot().pendingCount).toBe(0);
+    // 同 sequence 重复 = 同事件重放：消费侧 per-run 去重拦截（04 §5.1-1，
+    // EventRouter.buildEventDedupeKey），状态机不重复触达（防御前移到事件层）
     router.onMsg(approvalResolvedEvent('tc-5', 'approved'));
+    expect(approvalFlow.lastTransition()?.outcome).toBe('applied');
+    expect(approvalFlow.snapshot().pendingCount).toBe(0);
+    // 不同 sequence 的重复 resolve（引擎对同一 toolCallId 重新 emit）：
+    // 事件层键不同不拦截，状态机 double_resolve 幂等防御仍生效
+    router.onMsg(approvalResolvedEvent('tc-5', 'approved', 5));
     expect(approvalFlow.lastTransition()?.outcome).toBe('noop');
     expect(approvalFlow.lastTransition()?.reason).toBe('double_resolve');
     expect(approvalFlow.snapshot().pendingCount).toBe(0);
