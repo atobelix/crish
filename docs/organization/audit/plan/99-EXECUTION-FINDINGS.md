@@ -208,3 +208,25 @@
 - **处置**：登记不修（B9 范围纪律）。
 - **建议**：并行会话收尾提交后重跑 
 pm run typecheck 恢复 EXIT=0；验收方注意快层门禁以并行会话清理后为准。
+
+## F-026：F7-F16（MessageVirtualizer memo）无法构造可观测红测试——契约层修复登记（P2 批4 执行期）
+
+- **发现日期**：2026-08-08（P2 批4——UI 交互与无障碍修复，执行期）
+- **位置**：`apps/crish-desktop/src/components/chat-message-list/MessageVirtualizer.tsx:434-437`（`messageVirtualizerPropsEqual`）
+- **描述**：审计 F7-F16 断言「messages 换引用但长度相同（撤回/编辑）时 memo 拦截，行内容展示 stale」。逐项核对：**渲染输出完全由 visibleMessages/messageWindow/pinnedItems 等独立比较的 props 决定，`messages` 在组件体内零引用**（仅存在于 memo 比较器）；当前唯一消费方 ChatMessageList 每次 messages 变化都重建 visibleMessages/messageWindow（引用随动），memo 不会拦截内容可见的变更——该缺陷在当前架构下**不可复现**（渲染内容不变时拦截无可见影响；可见内容变化时引用必变、必然放行）。尝试的两种红构造均失败：同长度换引用 + visibleMessages 同引用 → 输出本就相同；in-place 变异 → 引用未变，身份比较同样无法感知。
+- **处置**：比较器按审计意图修复为「messages 身份变化即放行」（删除 length 条件，与注释「身份变化即换 visibleMessages」的防御语义自洽，零行为副作用）；红测试改为契约固化测试（MessageVirtualizer.memo.test.tsx，两用例在旧代码下同样通过，已在报告中如实标注非红）。防"修复后防御面退化"：若未来消费方让行内容直接依赖 messages（如 in-place 变异 store），比较器已具备正确契约。
+- **建议**：验收方对 F7-F16 按「契约修复 + 非红测试」口径复核，勿要求伪造红证据。
+
+## F-027：LeafToolTabStrip.module.css:171 裸数字 z-index（.menuBackdrop: 999）——审计清单外的同类残留（P2 批4 执行期）
+
+- **发现日期**：2026-08-08（P2 批4 执行期）
+- **位置**：`apps/crish-desktop/src/components/binary-tree/LeafToolTabStrip.module.css:171`（`.menuBackdrop` `z-index: 999`）
+- **描述**：F7-F14 清单列了 4 处硬编码（tabDragGhost:10000 / useSessionListDrag:9999 / LeafToolTabStrip.addDropdownMenu:1000 / FileViewerCard:100,100），但同文件 `.menuBackdrop` 的 `z-index: 999` 未被审计点名。本批的 F14 契约测试（style-contract.test.ts）按「4 个文件无裸数字 z-index」整文件断言，该行必然命中——为满足整文件契约而**顺手将其 token 化**（`var(--z-dropdown-menu)`，值 400，语义 = 下拉菜单背板：仍高于侧栏档位 100-150、低于浮层面板 1000，原 999 与 1000 的相邻关系由 DOM 顺序保证不变），与 B9「不顺手改」的边界有轻微出入（同文件同缺陷类，契约测试强制），特此登记。
+- **建议**：审计文档 F7-F14 修订时把该行并入清单；后续新增 z-index 一律走 tokens。
+
+## F-028：F-025 已随 P2 批4 绿提交解决（typecheck 恢复 EXIT=0）
+
+- **发现日期**：2026-08-08（P2 批4 收尾期）
+- **位置**：`SidebarContextMenus.tsx:194,207`（TS2538）+ `Tooltip.tsx:302`（TS2353）——F-025 登记的"并行会话在途未提交文件"
+- **描述**：F-025 所指并行会话即 P2 批4 本批（同一批文件的实现阶段未提交窗口）。本批绿提交（01ef652b）已修复：SidebarContextMenus 行/flyout 键盘回调签名收窄为 `NonNullable<FlyKey>`；Tooltip 样式对象补 `React.CSSProperties & Record<string, string>` 类型断言。收尾实测 `npm run typecheck` EXIT=0。
+- **建议**：无后续动作（F-025 的"重跑 typecheck 恢复 EXIT=0"已在 01ef652b 后达成）。
