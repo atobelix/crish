@@ -14,7 +14,7 @@
 | 数据           | 迁移内容                                   | 触发时机                      | 失败后果                   | 章节 |
 | -------------- | ------------------------------------------ | ----------------------------- | -------------------------- | ---- |
 | API 密钥       | localStorage 明文 → Rust DPAPI 凭据槽      | 应用启动（loadProfiles 前置） | 明文保留，可重试，可见报错 | §2   |
-| 会话数据库     | sessions.db schema v1→v4                   | LocalDb::open 自动            | 自动重试 + 备份可回滚      | §3   |
+| 会话数据库     | sessions.db schema v1→v7                   | LocalDb::open 自动            | 自动重试 + 备份可回滚      | §3   |
 | 配置目录       | 旧 `%APPDATA%\Crish\AgentWorkbench` → 新根 | 首启                          | 旧文件保留不删             | §4   |
 | workspace 授权 | 旧 `crish_workspace` 不再自动授权          | 升级后首次使用                | 需重新授权（弹窗）         | §5   |
 
@@ -59,14 +59,14 @@
 
 ---
 
-## 3. 会话数据库 schema 迁移：v1 → v4
+## 3. 会话数据库 schema 迁移：v1 → v7
 
 ### 3.1 触发与机制
 
 - 位置：`<app_data_dir>/sessions.db`（config 与 DB 同根，见 §4）。
-- 机制：`LocalDb::open` → `PRAGMA user_version` 驱动，从当前版本逐级迁移到 v4；
+- 机制：`LocalDb::open` → `PRAGMA user_version` 驱动，从当前版本逐级迁移到 v7；
   **每个版本独立事务**，迁移中断后下次 open 从已提交版本继续（幂等可重试）。
-- 新库直接走 v1..v4 全链建 v4 结构。
+- 新库直接走 v1..v7 全链建 v7 结构。
 
 ### 3.2 各版本变化一览
 
@@ -76,6 +76,9 @@
 | v2   | sessions 增列：folder / is_pinned / is_archived / branch_parent_id / timestamp_source / pinned_message_ids / engine_cursor / engine_last_run_id / hydrated_from_engine                                                                     |
 | v3   | session_agent_messages 重建补 `CHECK (status IN ...)` 约束（数据拷贝）；生产形态含 message_count 触发器、session_sequence 计数器表                                                                                                         |
 | v4   | events 重建为组合主键 `(session_id, sequence)` + FK（删除 AUTOINCREMENT id）；metadata 死表删除；runs / pending_inputs 加 FK（孤儿行过滤）；session_messages 加 `updated_at`；session_sequence 对齐为 `next_sequence`；schema_version 登记 |
+| v5   | runs 增列 9 项缓存计量（prompt/completion/total/cache_read/cache_write/cache_miss tokens、sample_count、missed_tokens、warm_until_ms）；session_messages 增列 `usage_json`（P5 缓存测量域）                                                |
+| v6   | session_agents 增列 3 项定义扩展：task_type / display_label / allowed_write_paths_json（T-D-07，REQ-D04 收敛参数落库）                                                                                                                      |
+| v7   | 新建 `compression_blocks` 压缩块单表（记忆韧性专项 T-15，R-A 合列）：**PRIMARY KEY (session_id, block_id)**（块 id 仅会话内唯一）+ 索引 (session_id, generation DESC)；纯新建表零既有列改动（不触发备份-DROP） |
 
 ### 3.3 备份机制（回滚保险）
 
@@ -91,9 +94,10 @@
 ### 3.5 验证
 
 - 启动日志无 `migrate_v{n} failed`；
-- `PRAGMA user_version` 应为 4；
+- `PRAGMA user_version` 应为 7；
 - 侧栏会话/消息回灌完整（升级后会话树、正文、子代理均可见）；
-- 数据目录存在 `sessions.db.bak-v4`（至多 2 份备份）。
+- 数据目录存在 `sessions.db.bak-v4`（至多 2 份备份；v5/v6/v7 为纯 ADD COLUMN/新建表，
+  不触发备份-DROP，不额外产生备份）。
 
 ---
 
