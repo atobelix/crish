@@ -631,6 +631,12 @@ export interface SessionState {
   engineLastRunId?: string;
   /** 已从引擎补全过正文 */
   hydratedFromEngine?: boolean;
+  /**
+   * 引擎懒水合「未完整」标记（P1-D2）：hydrate 分页拉全超限/异常截断时置位。
+   * 置位期间持久化熔断——禁止截断态正文经 save_session_body 先删后插回写 SQLite
+   * （不可逆）；分页拉全成功（truncated=false）时自然清除。
+   */
+  hydrateTruncated?: boolean;
   /** /goal 目标模式状态（会话级） */
   goalMode?: SessionGoalMode;
   /** 已被截断的工具链 id 列表 */

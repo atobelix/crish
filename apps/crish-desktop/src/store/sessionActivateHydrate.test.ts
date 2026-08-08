@@ -215,6 +215,83 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
     expect(hydrateMock).not.toHaveBeenCalled();
   });
 
+  it('truncated hydrate（分页超限截断）：会话置 hydrateTruncated=true，persist 熔断防截断态固化', async () => {
+    const remote = emptyRemoteShell({
+      id: 'engine-sess-trunc',
+      title: '截断远程会话',
+    });
+    const h = makeHarness({
+      sessions: [remote],
+      sessionsById: buildSessionsById([remote]),
+      folderOrder: [GENERAL_FOLDER],
+      activeSessionId: remote.id,
+      draftFolder: '',
+      activeAgentId: null,
+      panelAgentId: null,
+      composerDrafts: {},
+    });
+
+    hydrateMock.mockResolvedValue({
+      ok: true,
+      messages: [
+        { id: 'm1', sender: 'user', text: 'partial', timestamp: 100 },
+      ],
+      nextAfterSequence: 800,
+      hasMore: true,
+      truncated: true,
+    });
+
+    h.actions.setActiveSessionId(remote.id);
+
+    // 修复前：hydrate 结果消费处不读 truncated → 标记不写入 → 本断言红
+    await vi.waitFor(() => {
+      expect(
+        h.getState().sessionsById['engine-sess-trunc']?.hydrateTruncated
+      ).toBe(true);
+    });
+    expect(h.getState().sessionsById['engine-sess-trunc']?.engineCursor).toBe(
+      800
+    );
+  });
+
+  it('完整 hydrate（分页拉全）：无截断标记 → 既有 hydrateTruncated 标记被清除', async () => {
+    const remote = emptyRemoteShell({
+      id: 'engine-sess-full',
+      title: '完整远程会话',
+      hydratedFromEngine: false,
+      hydrateTruncated: true,
+    });
+    const h = makeHarness({
+      sessions: [remote],
+      sessionsById: buildSessionsById([remote]),
+      folderOrder: [GENERAL_FOLDER],
+      activeSessionId: remote.id,
+      draftFolder: '',
+      activeAgentId: null,
+      panelAgentId: null,
+      composerDrafts: {},
+    });
+
+    hydrateMock.mockResolvedValue({
+      ok: true,
+      messages: [
+        { id: 'm1', sender: 'user', text: 'full', timestamp: 100 },
+        { id: 'm2', sender: 'assistant', text: 'done', timestamp: 101 },
+      ],
+      nextAfterSequence: 1000,
+      hasMore: false,
+    });
+
+    h.actions.setActiveSessionId(remote.id);
+
+    // 修复前：hydrateTruncated 不被触碰 → 保持 true → 本断言红
+    await vi.waitFor(() => {
+      expect(
+        h.getState().sessionsById['engine-sess-full']?.hydrateTruncated
+      ).toBeUndefined();
+    });
+  });
+
   it('does not fetch when local messages already present', async () => {
     const sess: SessionState = {
       id: 'local-full',
