@@ -48,7 +48,15 @@ pub enum SseFrameError {
         /// 解析失败的 data 原文
         raw: String,
     },
+    /// 单帧/单批 pending 超过上限（F3 #5：服务端持续灌无分隔符数据 → 无界内存增长）
+    #[error("SSE 帧超长（超过 {0} 字节上限，疑似无界/恶意流）")]
+    FrameTooLarge(usize),
 }
+
+/// 单帧字节上限（pending 未分帧缓冲的上限，防恶意/故障服务端
+/// 不出现 `\n\n` 持续灌数据导致无界内存增长，F3 #5）。
+/// 正常 SSE 帧（工具调用参数/增量块）远小于此值；超限即按损坏流上抛。
+const MAX_PENDING_BYTES: usize = 4 * 1024 * 1024;
 
 /// 增量 SSE 分帧器（跨 push 调用保持状态）
 #[derive(Debug, Default)]
@@ -82,6 +90,12 @@ impl SseParser {
         }
         self.buffer.extend_from_slice(bytes);
         let decoded = self.decode_utf8()?;
+        if self.pending.len() + decoded.len() > MAX_PENDING_BYTES {
+            // F3 #5：无分隔符的数据持续累积 → pending 无界增长（OOM 面）。
+            // 清空残留并按损坏流上抛（fail-closed，读取侧以错误终止流）。
+            self.pending.clear();
+            return Err(SseFrameError::FrameTooLarge(MAX_PENDING_BYTES));
+        }
         self.pending.push_str(&decoded);
         self.split_frames()
     }
@@ -139,35 +153,70 @@ impl SseParser {
     }
 
     /// 从 pending 中切出尽可能多的完整帧；命中 `[DONE]` 立即终结并丢弃其后内容
+    ///
+    /// F3 #5 性能修复：**单遍扫描**——先定位全部帧边界并切出帧体，最后一次性
+    /// drain 已消费前缀。旧实现每帧 `find_separator` 从头重扫 + `drain(..n)`
+    /// 前移剩余，单次 push 内含 N 个小帧时总代价 O(N²)（30k 帧 debug 实测
+    /// >11s）；单遍后为 O(总字节)。
     fn split_frames(&mut self) -> Result<Vec<SseFrame>, SseFrameError> {
         let mut frames = Vec::new();
-        while !self.done {
-            let Some(index) = find_separator(&self.pending) else {
+        if self.done {
+            return Ok(frames);
+        }
+        let mut consumed = 0usize;
+        let text = &self.pending;
+        while consumed < text.len() {
+            let Some(rel) = find_separator(&text[consumed..]) else {
                 break;
             };
-            let sep_len = separator_len(&self.pending, index);
-            let body = self.pending[..index].to_owned();
-            self.pending.drain(..index + sep_len);
+            let index = consumed + rel;
+            let sep_len = separator_len(text, index);
+            let body = text[consumed..index].to_owned();
             if let Some(frame) = parse_frame_body(&body)? {
                 if frame.is_done() {
                     self.done = true;
+                    frames.push(frame);
+                    break;
                 }
                 frames.push(frame);
             }
+            consumed = index + sep_len;
+        }
+        if self.done {
+            // [DONE] 之后的内容一律丢弃（对齐旧语义：done 置位后不再消费），
+            // 并清空残留避免无界残留
+            self.pending.clear();
+        } else if consumed > 0 {
+            self.pending.drain(..consumed);
         }
         Ok(frames)
     }
 }
 
 /// 定位更早出现的合法帧边界（对齐 TS findSseSeparator，02 §二.1:297-307）
+///
+/// F3 #5 性能修复：**单遍扫描**——旧实现分别 `find("\n\n")` 与
+/// `find("\r\n\r\n")`：对不含 `\r\n\r\n` 的缓冲（常规流形态），每次
+/// find 都是整段失败扫描，单次 push 含 N 个小帧时 find 总代价 O(N²)
+/// （60k 帧 debug 实测 ~25s）。
 fn find_separator(text: &str) -> Option<usize> {
-    let lf = text.find("\n\n");
-    let crlf = text.find("\r\n\r\n");
-    match (lf, crlf) {
-        (None, None) => None,
-        (Some(i), None) | (None, Some(i)) => Some(i),
-        (Some(a), Some(b)) => Some(a.min(b)),
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\n' {
+            if bytes.get(i + 1) == Some(&b'\n') {
+                return Some(i);
+            }
+        } else if bytes[i] == b'\r'
+            && bytes.get(i + 1) == Some(&b'\n')
+            && bytes.get(i + 2) == Some(&b'\r')
+            && bytes.get(i + 3) == Some(&b'\n')
+        {
+            return Some(i);
+        }
+        i += 1;
     }
+    None
 }
 
 /// 帧边界字节长度：`\r\n\r\n` 为 4，`\n\n` 为 2
@@ -520,37 +569,58 @@ mod tests {
 
     #[test]
     fn oversized_pending_without_separator_is_rejected() {
-        // F3 #5 红：服务端持续灌无分隔符数据 → pending 无界增长（OOM 面）。
-        // 现实现静默缓冲不报错 → 本用例失败；修复后必须上抛 FrameTooLarge。
-        // 注：4MB 为修复引入的单帧上限（MAX_PENDING_BYTES），此处用字面量
-        // 保持红测试在旧实现上可编译、以断言形态复现缺陷。
+        // F3 #5：服务端持续灌无分隔符数据 → pending 无界增长（OOM 面），
+        // 修复后必须上抛 FrameTooLarge（fail-closed，读取侧以错误终止流）。
         let mut parser = SseParser::new();
-        let big = "a".repeat(4 * 1024 * 1024 + 1);
-        let result = parser.push(big.as_bytes());
+        let big = "a".repeat(MAX_PENDING_BYTES + 1);
+        let err = parser.push(big.as_bytes()).unwrap_err();
         assert!(
-            result.is_err(),
-            "超限 pending（>4MB 无分隔符）应上抛错误，而非静默缓冲"
+            matches!(err, SseFrameError::FrameTooLarge(_)),
+            "超限 pending（>4MB 无分隔符）应上抛 FrameTooLarge，而非静默缓冲"
         );
     }
 
     #[test]
     fn many_frames_in_one_push_parse_in_single_pass() {
-        // F3 #5 性能红：单次 push 内大量小帧必须单遍分帧（O(n)）。
-        // 旧实现 split_frames 每帧 find_separator 重扫 + drain 前移 →
-        // O(n²)，30k 帧（420KB）debug 下需数十秒；单遍应 < 10s（宽裕阈值）。
-        let frame = "data: {\"a\":1}\n\n";
-        let mut input = String::with_capacity(frame.len() * 30_000);
-        for _ in 0..30_000 {
+        // F3 #5 性能回归：单次 push 内大量小帧必须单遍分帧（O(n)）。
+        // 旧实现 split_frames 每帧 find_separator 从头重扫 + drain 前移剩余
+        // → O(n²)。帧体用无 data 行的 `id:` 帧（parse_frame_body 无 JSON
+        // 解析开销），计时只反映扫描/移动成本：60k 帧（420KB）旧实现需
+        // 数十秒，单遍应在毫秒级（阈值 10s 宽裕）。
+        let frame = "id: 1\n\n";
+        let mut input = String::with_capacity(frame.len() * 60_000);
+        for _ in 0..60_000 {
             input.push_str(frame);
         }
         let mut parser = SseParser::new();
         let started = std::time::Instant::now();
         let frames = parser.push(input.as_bytes()).expect("合法帧不应报错");
         let elapsed = started.elapsed();
-        assert_eq!(frames.len(), 30_000, "全部帧都应产出");
+        assert!(frames.is_empty(), "无 data 行的帧不产出");
         assert!(
             elapsed.as_secs() < 10,
-            "解析 30k 帧耗时 {elapsed:?}，疑似 O(n²) 逐帧重扫（期望单遍 <10s）"
+            "解析 60k 帧耗时 {elapsed:?}，疑似 O(n²) 逐帧重扫（期望单遍 <10s）"
         );
+    }
+
+    #[test]
+    fn many_json_frames_in_one_push_all_emitted() {
+        // 单遍分帧的正确性回归：JSON 帧全部产出、顺序保持（F5/F3 单遍
+        // 重构不改变帧产出契约；帧数取 5k 兼顾 debug 下 serde 解析开销）
+        let frame = "data: {\"a\":1}\n\n";
+        let mut input = String::with_capacity(frame.len() * 5_000);
+        for i in 0..5_000 {
+            input.push_str(&format!("data: {{\"n\":{i}}}\n\n"));
+        }
+        let mut parser = SseParser::new();
+        let frames = parser.push(input.as_bytes()).expect("合法帧不应报错");
+        assert_eq!(frames.len(), 5_000, "全部 JSON 帧都应产出");
+        for (i, f) in frames.iter().enumerate() {
+            assert_eq!(f.data.as_deref(), Some(format!(r#"{{"n":{i}}}"#).as_str()));
+        }
+        // 帧全部消费后解析器未终结：后续完整帧仍正常产出
+        let tail = parser.push(b"data: {\"b\":2}\n\n").unwrap();
+        assert_eq!(tail.len(), 1);
+        assert_eq!(tail[0].data.as_deref(), Some(r#"{"b":2}"#));
     }
 }

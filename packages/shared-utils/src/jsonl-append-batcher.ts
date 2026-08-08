@@ -217,38 +217,70 @@ export class JsonlAppendBatcher {
 
     try {
       if (!this.handle) {
-        // 已关闭但仍有 pending，无法写入
-        return;
+        // F8-03 根因修复：无句柄却仍有 pending = 数据无法落盘。
+        // 旧实现静默 return（数据永久丢失且调用方无感知）；必须显式抛错。
+        throw new Error(
+          "[JsonlAppendBatcher] flush 时无可用文件句柄（已关闭？），pending 数据无法落盘"
+        );
       }
 
       try {
-        if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] writeFile start', this.options.filePath);
-        await this.handle.writeFile(data, "utf8");
-        if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] writeFile done');
-
-        if (this.options.fsyncOnFlush) {
-          if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] fsync file start');
-          await this.handle.sync();
-          if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] fsync file done');
-        }
-
-        if (this.options.fsyncDirectoryOnFlush) {
-          // best-effort：tmpfs/网络文件系统等可能不支持目录 fsync
-          if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] fsync dir start', dirname(this.options.filePath));
-          await fsyncDirectoryPathAsync(dirname(this.options.filePath), "best-effort");
-          if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] fsync dir done');
-        }
+        await this.writeAndSync(data);
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code;
-        if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] error:', code, (error as Error).message);
+        // F8-03 根因修复：ENOENT（文件被外部删除）/ EBADF（句柄失效）
+        // 时重建句柄重试一次（文件重建后追加仍有效）；重试仍失败则抛错，
+        // 让 flush() 拒绝——旧实现静默吞掉写失败并 return，调用方
+        // 永远不知道数据已丢失。
         if (code === "ENOENT" || code === "EBADF") {
-          // Ignore if directory/file was deleted/closed during async background flush
-          return;
+          console.warn(
+            `[JsonlAppendBatcher] 写入失败(${code})，重建句柄后重试一次:`,
+            error
+          );
+          await this.reopenHandle();
+          await this.writeAndSync(data);
+        } else {
+          throw error;
         }
-        throw error;
       }
     } finally {
       this.flushPromise = undefined;
     }
+  }
+
+  /** 写数据 + 按配置 fsync（文件与目录）。失败原样上抛。 */
+  private async writeAndSync(data: string): Promise<void> {
+    if (!this.handle) {
+      throw new Error("[JsonlAppendBatcher] 无可用文件句柄，无法写入");
+    }
+    if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] writeFile start', this.options.filePath);
+    await this.handle.writeFile(data, "utf8");
+    if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] writeFile done');
+
+    if (this.options.fsyncOnFlush) {
+      if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] fsync file start');
+      await this.handle.sync();
+      if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] fsync file done');
+    }
+
+    if (this.options.fsyncDirectoryOnFlush) {
+      // best-effort：tmpfs/网络文件系统等可能不支持目录 fsync
+      if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] fsync dir start', dirname(this.options.filePath));
+      await fsyncDirectoryPathAsync(dirname(this.options.filePath), "best-effort");
+      if (process.env.DEBUG_BATCHER === '1') console.error('[Batcher] fsync dir done');
+    }
+  }
+
+  /** 关闭陈旧句柄并重新打开（追加模式；文件缺失时创建）。 */
+  private async reopenHandle(): Promise<void> {
+    if (this.handle) {
+      try {
+        await this.handle.close();
+      } catch {
+        // 陈旧句柄关闭失败不阻塞重建
+      }
+      this.handle = undefined;
+    }
+    this.handle = await open(this.options.filePath, "a");
   }
 }

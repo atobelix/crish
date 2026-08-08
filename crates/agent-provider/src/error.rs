@@ -335,6 +335,10 @@ impl From<&SseFrameError> for ProviderSourceError {
             SseFrameError::InvalidUtf8 => {
                 ProviderSourceError::StreamProtocol(StreamErrorKind::InvalidUtf8)
             }
+            // F3 #5：超限帧与损坏帧同属协议错误（fail-closed 终止流）
+            SseFrameError::FrameTooLarge(_) => {
+                ProviderSourceError::StreamProtocol(StreamErrorKind::MalformedFrame)
+            }
         }
     }
 }

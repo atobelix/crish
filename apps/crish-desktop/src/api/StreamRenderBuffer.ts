@@ -160,6 +160,11 @@ export class StreamRenderBuffer {
   /**
    * 单帧 flush：在 budget 内拼接 delta 并回调。
    * force 时无视 maxBytesPerFrame/frameBudgetMs 全部输出。
+   *
+   * F5-06 根因修复：委托纯函数版 [flushFrame]（同文件 275 行）——旧实现是
+   * 独立副本，两版行为漂移（类方法版「batch.length===0 拆块」分支不可达，
+   * 单块超限整块单帧输出，maxBytesPerFrame/frameBudgetMs 全部失效 → 长任务
+   * 阻塞掉帧，F5-05）；单实现后行为由纯函数测试锁定。
    */
   private flushFrame(force: boolean): void {
     if (this.pending.length === 0) {
@@ -167,52 +172,13 @@ export class StreamRenderBuffer {
       return;
     }
 
-    const batch: string[] = [];
-    let bytesInBatch = 0;
-    const deadline = performance.now() + this.frameBudgetMs;
-    let consumed = 0;
-
-    for (let i = 0; i < this.pending.length; i++) {
-      const chunk = this.pending[i]!;
-      const wouldExceed = bytesInBatch + chunk.length > this.maxBytesPerFrame;
-
-      if (!force && wouldExceed && batch.length > 0) {
-        // 已攒了一批且超上限：剩余留到下一帧
-        break;
-      }
-
-      batch.push(chunk);
-      bytesInBatch += chunk.length;
-      consumed = i + 1;
-
-      if (!force && performance.now() >= deadline) {
-        break;
-      }
-    }
-
-    // 总是移除已消费项；force 模式下消费全部 pending
-    if (force || consumed >= this.pending.length) {
-      this.pending = [];
-    } else {
-      this.pending = this.pending.slice(consumed);
-    }
-
-    if (batch.length === 0) {
-      // 单块超 maxBytesPerFrame：拆分成多帧
-      if (this.pending.length > 0) {
-        const chunk = this.pending.shift()!;
-        if (chunk.length > this.maxBytesPerFrame) {
-          for (let offset = 0; offset < chunk.length; offset += this.maxBytesPerFrame) {
-            const end = offset + this.maxBytesPerFrame;
-            batch.push(chunk.slice(offset, end));
-            bytesInBatch += end - offset;
-          }
-        } else {
-          batch.push(chunk);
-          bytesInBatch = chunk.length;
-        }
-      }
-    }
+    const { batch, remaining } = flushFrame(
+      this.pending,
+      this.maxBytesPerFrame,
+      performance.now() + this.frameBudgetMs,
+      force
+    );
+    this.pending = remaining;
 
     if (batch.length > 0) {
       const delta = batch.join('');

@@ -29,8 +29,8 @@ import { buildGoalRunTaskFields } from '../../api/goalModeController';
 import {
   addTerminalLine,
   addTerminalLines,
+  accumulateTokenUsage,
   patchSession,
-  syncTelemetryData,
 } from '../../api/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { getSettingsState } from '../../store/storeAccess';
@@ -841,7 +841,17 @@ export function useStreamCallbacks(
                     0,
                     (next.savedCost || 0) - (cur.savedCost || 0)
                   );
-                  syncTelemetryData({ tokenUsage: next });
+                  // F5 P2 修复：并发增量不丢失——delta 走串行化合并入口，
+                  // 不再「读陈旧快照 → 整体替换」（多 run 同刻收尾时后写者
+                  // 覆盖先写者、增量丢失）
+                  accumulateTokenUsage({
+                    input: dIn,
+                    output: dOut,
+                    cost: dCost,
+                    ...(dCacheRead > 0 ? { cacheRead: dCacheRead } : {}),
+                    ...(dCacheWrite > 0 ? { cacheWrite: dCacheWrite } : {}),
+                    ...(dSavedCost > 0 ? { savedCost: dSavedCost } : {}),
+                  });
                   try {
                     const { recordUsageDelta } =
                       await import('../../api/usageStore');
@@ -872,15 +882,12 @@ export function useStreamCallbacks(
                 const approxIn = Math.max(1, Math.ceil(userText.length / 4));
                 const approxOut = Math.max(0, Math.ceil(asstText.length / 4));
                 const model = getActiveModelId() || 'unknown';
-                const cur = getSettingsState().tokenUsage;
                 const dCost = estimateCostUsd(model, approxIn, approxOut);
-                syncTelemetryData({
-                  tokenUsage: {
-                    ...cur,
-                    input: cur.input + approxIn,
-                    output: cur.output + approxOut,
-                    cost: cur.cost + dCost,
-                  },
+                // F5 P2 修复：估算兜底路径同样走串行化合并（并发不丢增量）
+                accumulateTokenUsage({
+                  input: approxIn,
+                  output: approxOut,
+                  cost: dCost,
                 });
                 try {
                   const { recordUsageDelta } =
@@ -1006,15 +1013,12 @@ export function useStreamCallbacks(
         const approxIn = Math.max(1, Math.ceil(userTxt.length / 4));
         const approxOut = Math.max(0, Math.ceil(asstTxt.length / 4));
         const model = getActiveModelId() || 'unknown';
-        const curUsage = getSettingsState().tokenUsage;
         const dCost = estimateCostUsd(model, approxIn, approxOut);
-        syncTelemetryData({
-          tokenUsage: {
-            ...curUsage,
-            input: (curUsage.input || 0) + approxIn,
-            output: (curUsage.output || 0) + approxOut,
-            cost: (curUsage.cost || 0) + dCost,
-          },
+        // F5 P2 修复：stop 兜底路径走串行化合并（并发不丢增量）
+        accumulateTokenUsage({
+          input: approxIn,
+          output: approxOut,
+          cost: dCost,
         });
         try {
           const { recordUsageDelta } = await import('../../api/usageStore');
