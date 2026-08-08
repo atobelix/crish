@@ -114,5 +114,3 @@ export const DevHealthOverlay: React.FC = () => {
     </div>
   );
 };
-
-export default DevHealthOverlay;

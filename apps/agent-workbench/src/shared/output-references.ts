@@ -65,7 +65,7 @@ export function extractOutputReferencesFromMarkdown(
   return dedupeOutputReferences(references);
 }
 
-export function createOutputReference(
+function createOutputReference(
   candidate: ReferenceCandidate,
   index: number,
   now: string,
@@ -98,7 +98,7 @@ export function createOutputReference(
   };
 }
 
-export function defaultRenderForReference(
+function defaultRenderForReference(
   kind: WorkbenchOutputReferenceKind,
   source: WorkbenchOutputReferenceSource
 ): WorkbenchOutputReferenceRender {

@@ -10,7 +10,7 @@
  */
 
 import { getWorkspacePath } from './projectStore';
-import { tryInvokeTauri } from './tauriInvoke';
+import { invokeCmd as tryInvokeTauri } from './tauriInvoke';
 import { skillStableId } from './skillId';
 import { openDirectoryDialogSafe } from './openDirectoryDialog';
 import {

@@ -31,6 +31,3 @@ export const OverviewStats: React.FC<OverviewStatsProps> = React.memo(
     );
   }
 );
-
-export const OverviewMetrics = OverviewStats;
-export type { OverviewStatsProps as OverviewMetricsProps };

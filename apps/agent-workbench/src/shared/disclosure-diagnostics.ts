@@ -105,7 +105,7 @@ export async function applyDisclosureDiagnosticsToSnapshot(
   };
 }
 
-export function buildDisclosureMessage(issues: WorkbenchDisclosureIssue[]): string {
+function buildDisclosureMessage(issues: WorkbenchDisclosureIssue[]): string {
   if (issues.length === 0) return "";
   return [
     "运行时发现一些可修正的问题，请先按这些提示调整后再继续：",

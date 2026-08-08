@@ -67,6 +67,3 @@ export const OverviewQuickActions: React.FC<OverviewQuickActionsProps> = ({
     </div>
   );
 };
-
-export const OverviewQuickPrompts = OverviewQuickActions;
-export type { OverviewQuickActionsProps as OverviewQuickPromptsProps };

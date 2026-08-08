@@ -190,7 +190,7 @@ export function createBackgroundTaskContinuationDecision(
   };
 }
 
-export function buildBackgroundTaskResumePrompt(snapshot: WorkbenchTaskSnapshot, task: WorkbenchBackgroundTask): string {
+function buildBackgroundTaskResumePrompt(snapshot: WorkbenchTaskSnapshot, task: WorkbenchBackgroundTask): string {
   return [
     "后台处理已经结束，请根据结果继续当前任务。",
     "",
@@ -210,7 +210,7 @@ export function buildBackgroundTaskResumePrompt(snapshot: WorkbenchTaskSnapshot,
   ].join("\n");
 }
 
-export function summarizeBackgroundTaskState(state: WorkbenchBackgroundTaskState): string {
+function summarizeBackgroundTaskState(state: WorkbenchBackgroundTaskState): string {
   switch (state) {
     case "queued":
       return "等待开始";

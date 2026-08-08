@@ -1,12 +1,5 @@
 import type { DaemonTaskSnapshot } from "./task-snapshot";
 import type {
-  DaemonPendingInputRecord,
-  DaemonPendingInputQueuedResponse,
-  DaemonPendingInputCancelledResponse,
-  DaemonPendingInputDispatchedResponse,
-  DaemonPendingInputsListedResponse,
-} from "./daemon-session";
-import type {
   WorkbenchSessionActionReceipt,
   WorkbenchSessionActionKind,
   WorkbenchSessionActionStatus,
@@ -53,7 +46,7 @@ export function firstStringValue(...values: unknown[]): string | undefined {
 
 // --- Workbench session action guards ---
 
-export function isWorkbenchSessionActionKind(value: unknown): value is WorkbenchSessionActionKind {
+function isWorkbenchSessionActionKind(value: unknown): value is WorkbenchSessionActionKind {
   return (
     value === "pin" ||
     value === "unpin" ||
@@ -67,7 +60,7 @@ export function isWorkbenchSessionActionKind(value: unknown): value is Workbench
   );
 }
 
-export function isWorkbenchSessionActionStatus(value: unknown): value is WorkbenchSessionActionStatus {
+function isWorkbenchSessionActionStatus(value: unknown): value is WorkbenchSessionActionStatus {
   return value === "pending" || value === "committed" || value === "rejected" || value === "failed";
 }
 
@@ -109,78 +102,15 @@ export function isDaemonTaskSnapshot(value: unknown): value is DaemonTaskSnapsho
   );
 }
 
-// --- Daemon pending input guards ---
-
-export function isDaemonPendingInputRecord(value: unknown): value is DaemonPendingInputRecord {
-  if (!isWorkbenchRecord(value)) return false;
-  return (
-    typeof value.id === "string" &&
-    typeof value.sessionId === "string" &&
-    (value.runId === undefined || typeof value.runId === "string") &&
-    typeof value.text === "string" &&
-    (value.mode === "after-current-run" || value.mode === "steer") &&
-    (value.status === "pending" || value.status === "cancelled" || value.status === "dispatched") &&
-    typeof value.createdAt === "string" &&
-    typeof value.updatedAt === "string" &&
-    (value.source === undefined ||
-      value.source === "workbench" ||
-      value.source === "daemon" ||
-      value.source === "automation") &&
-    (value.metadata === undefined || isWorkbenchRecord(value.metadata))
-  );
-}
-
-export function isDaemonPendingInputQueuedResponse(
-  value: unknown
-): value is DaemonPendingInputQueuedResponse {
-  return (
-    isWorkbenchRecord(value) &&
-    (value.type === undefined || value.type === "pending-input-queued") &&
-    isDaemonPendingInputRecord(value.input)
-  );
-}
-
-export function isDaemonPendingInputCancelledResponse(
-  value: unknown
-): value is DaemonPendingInputCancelledResponse {
-  return (
-    isWorkbenchRecord(value) &&
-    (value.type === undefined || value.type === "pending-input-cancelled") &&
-    isDaemonPendingInputRecord(value.input)
-  );
-}
-
-export function isDaemonPendingInputDispatchedResponse(
-  value: unknown
-): value is DaemonPendingInputDispatchedResponse {
-  return (
-    isWorkbenchRecord(value) &&
-    (value.type === undefined || value.type === "pending-input-dispatched") &&
-    isDaemonPendingInputRecord(value.input)
-  );
-}
-
-export function isDaemonPendingInputsListedResponse(
-  value: unknown
-): value is DaemonPendingInputsListedResponse {
-  return (
-    isWorkbenchRecord(value) &&
-    (value.type === undefined || value.type === "pending-inputs-listed") &&
-    Array.isArray(value.inputs) &&
-    value.inputs.every(isDaemonPendingInputRecord) &&
-    (value.sessionId === undefined || typeof value.sessionId === "string")
-  );
-}
-
 // --- Conversation rewind guards ---
 
-export function isWorkbenchConversationRewindBoundaryTargetMode(
+function isWorkbenchConversationRewindBoundaryTargetMode(
   value: unknown
 ): value is WorkbenchConversationRewindBoundaryTargetMode {
   return value === "keep-user-message" || value === "remove-user-message";
 }
 
-export function isWorkbenchSessionTreeEntry(value: unknown): value is WorkbenchSessionTreeEntry {
+function isWorkbenchSessionTreeEntry(value: unknown): value is WorkbenchSessionTreeEntry {
   if (!isWorkbenchRecord(value)) return false;
   if (
     typeof value.id !== "string" ||
@@ -200,7 +130,7 @@ export function isWorkbenchSessionTreeEntry(value: unknown): value is WorkbenchS
   );
 }
 
-export function isWorkbenchConversationRewindPlan(value: unknown): value is WorkbenchConversationRewindPlan {
+function isWorkbenchConversationRewindPlan(value: unknown): value is WorkbenchConversationRewindPlan {
   if (!isWorkbenchRecord(value)) return false;
   return (
     typeof value.sessionId === "string" &&
@@ -216,7 +146,7 @@ export function isWorkbenchConversationRewindPlan(value: unknown): value is Work
   );
 }
 
-export function isWorkbenchConversationRewindBoundaryMissingFact(
+function isWorkbenchConversationRewindBoundaryMissingFact(
   value: unknown
 ): value is WorkbenchConversationRewindBoundaryMissingFact {
   return (
@@ -230,7 +160,7 @@ export function isWorkbenchConversationRewindBoundaryMissingFact(
   );
 }
 
-export function isWorkbenchConversationRewindBoundaryDiagnostic(
+function isWorkbenchConversationRewindBoundaryDiagnostic(
   value: unknown
 ): value is WorkbenchConversationRewindBoundaryDiagnostic {
   return (
@@ -243,7 +173,7 @@ export function isWorkbenchConversationRewindBoundaryDiagnostic(
   );
 }
 
-export function isWorkbenchConversationRewindApplyStepResult(
+function isWorkbenchConversationRewindApplyStepResult(
   value: unknown
 ): value is WorkbenchConversationRewindApplyStepResult {
   return (
@@ -262,7 +192,7 @@ export function isWorkbenchConversationRewindApplyStepResult(
 
 // --- Daemon status guards ---
 
-export function isDaemonProviderReadiness(value: unknown): value is DaemonProviderReadiness {
+function isDaemonProviderReadiness(value: unknown): value is DaemonProviderReadiness {
   return (
     value === "ready" ||
     value === "missing" ||
@@ -275,7 +205,7 @@ export function isDaemonProviderReadiness(value: unknown): value is DaemonProvid
   );
 }
 
-export function isDaemonMcpReadiness(value: unknown): value is DaemonMcpReadiness {
+function isDaemonMcpReadiness(value: unknown): value is DaemonMcpReadiness {
   return (
     value === "ready" ||
     value === "degraded" ||
@@ -285,7 +215,7 @@ export function isDaemonMcpReadiness(value: unknown): value is DaemonMcpReadines
   );
 }
 
-export function isDaemonLifecycleState(value: unknown): value is DaemonLifecycleState {
+function isDaemonLifecycleState(value: unknown): value is DaemonLifecycleState {
   return (
     value === "starting" ||
     value === "ready" ||
@@ -295,7 +225,7 @@ export function isDaemonLifecycleState(value: unknown): value is DaemonLifecycle
   );
 }
 
-export function isDaemonLifecycleDiagnosticSource(value: unknown): value is DaemonLifecycleDiagnosticSource {
+function isDaemonLifecycleDiagnosticSource(value: unknown): value is DaemonLifecycleDiagnosticSource {
   return (
     value === "daemon" ||
     value === "websocket" ||
@@ -306,7 +236,7 @@ export function isDaemonLifecycleDiagnosticSource(value: unknown): value is Daem
   );
 }
 
-export function isDaemonLifecycleDiagnostic(value: unknown): value is DaemonLifecycleDiagnostic {
+function isDaemonLifecycleDiagnostic(value: unknown): value is DaemonLifecycleDiagnostic {
   if (!isWorkbenchRecord(value)) return false;
   return (
     typeof value.code === "string" &&
@@ -317,7 +247,7 @@ export function isDaemonLifecycleDiagnostic(value: unknown): value is DaemonLife
   );
 }
 
-export function isDaemonClientDisconnectSnapshot(value: unknown): value is DaemonClientDisconnectSnapshot {
+function isDaemonClientDisconnectSnapshot(value: unknown): value is DaemonClientDisconnectSnapshot {
   if (!isWorkbenchRecord(value)) return false;
   return (
     typeof value.clientId === "string" &&
@@ -329,7 +259,7 @@ export function isDaemonClientDisconnectSnapshot(value: unknown): value is Daemo
   );
 }
 
-export function isDaemonEventStoreStatusSnapshot(value: unknown): value is DaemonEventStoreStatusSnapshot {
+function isDaemonEventStoreStatusSnapshot(value: unknown): value is DaemonEventStoreStatusSnapshot {
   if (!isWorkbenchRecord(value)) return false;
   return (
     (value.status === "ok" || value.status === "failed") &&

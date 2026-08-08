@@ -1,13 +1,10 @@
 import { isWorkbenchRecord, firstStringValue } from "./guards";
 import type {
-  WorkbenchMode,
-  WorkbenchRunState,
   WorkbenchRunLifecycleStatus,
   WorkbenchPlanItem,
   WorkbenchAcceptanceItem,
   WorkbenchTaskSnapshot,
   WorkbenchLongRunPolicy,
-  WorkbenchRuntimeCapability,
 } from "./workbench-ui";
 
 function projectNameFromPath(cwd: string): string {
@@ -105,37 +102,6 @@ export function buildInitialTaskSnapshot(cwd: string, now = Date.now()): Workben
   };
 }
 
-export function applyUserGoal(snapshot: WorkbenchTaskSnapshot, prompt: string): WorkbenchTaskSnapshot {
-  const now = Date.now();
-  return {
-    ...snapshot,
-    state: "planning",
-    title: "正在整理计划",
-    userGoal: prompt,
-    progressLabel: "已收到目标，下一步会先确认范围和验收方式",
-    completionPercent: Math.max(snapshot.completionPercent, 5),
-    project: {
-      ...snapshot.project,
-      updatedAt: now
-    },
-    plan: snapshot.plan.map((item, index) =>
-      index === 0
-        ? {
-            ...item,
-            state: "doing",
-            note: "正在确认目标、路径和风险"
-          }
-        : item
-    ),
-    nextActions: ["确认执行计划", "补充约束", "切换到执行模式"],
-    health: {
-      ...snapshot.health,
-      state: "busy",
-      summary: "正在规划"
-    }
-  };
-}
-
 export function calculateCompletion(snapshot: Pick<WorkbenchTaskSnapshot, "plan" | "acceptance">): number {
   const planScore =
     snapshot.plan.length === 0
@@ -149,50 +115,7 @@ export function calculateCompletion(snapshot: Pick<WorkbenchTaskSnapshot, "plan"
   return Math.round((planScore * 0.45 + acceptanceScore * 0.55) * 100);
 }
 
-export function summarizeState(state: WorkbenchRunState): string {
-  switch (state) {
-    case "planning":
-      return "正在规划";
-    case "running":
-      return "正在处理";
-    case "waiting":
-      return "等待确认";
-    case "blocked":
-      return "遇到阻碍";
-    case "done":
-      return "已完成";
-    case "idle":
-    default:
-      return "空闲";
-  }
-}
-
-export function summarizeMode(mode: WorkbenchMode): string {
-  switch (mode) {
-    case "execute":
-      return "执行模式";
-    case "review":
-      return "审查模式";
-    case "discuss":
-      return "讨论模式";
-    case "plan":
-    default:
-      return "计划模式";
-  }
-}
-
-export function createRuntimeCapabilities(): WorkbenchRuntimeCapability[] {
-  return [
-    { id: "command", title: "命令执行", ready: true },
-    { id: "filesystem", title: "文件读写", ready: true },
-    { id: "checkpoint", title: "变更回退", ready: true },
-    { id: "planning", title: "计划进度", ready: true },
-    { id: "longrun", title: "长程续跑", ready: true },
-    { id: "provider", title: "模型调用", ready: false }
-  ];
-}
-
-export function createDefaultLongRunPolicy(): WorkbenchLongRunPolicy {
+function createDefaultLongRunPolicy(): WorkbenchLongRunPolicy {
   return {
     enabled: true,
     targetMinutes: 15,

@@ -4,7 +4,6 @@ import {
   type WorkbenchBackgroundTask,
   type WorkbenchContinuationDecision,
   type WorkbenchEvidenceItem,
-  type WorkbenchHealth,
   type WorkbenchPlanItem,
   type WorkbenchTaskSnapshot
 } from "./workbench-contract";
@@ -21,13 +20,6 @@ export interface WorkbenchTaskAssessment {
   activePlanItems: WorkbenchPlanItem[];
   runningBackgroundTasks: WorkbenchBackgroundTask[];
   evidence: WorkbenchEvidenceItem[];
-}
-
-export interface WorkbenchHeartbeatInput {
-  now: number | undefined;
-  lastEventAt: string | undefined;
-  memoryMb: number | undefined;
-  cpuPercent: number | undefined;
 }
 
 export interface WorkbenchContinuationOptions {
@@ -74,31 +66,6 @@ export function assessTask(snapshot: WorkbenchTaskSnapshot): WorkbenchTaskAssess
     activePlanItems,
     runningBackgroundTasks,
     evidence: snapshot.evidence
-  };
-}
-
-export function updateTaskHealth(snapshot: WorkbenchTaskSnapshot, input: WorkbenchHeartbeatInput): WorkbenchTaskSnapshot {
-  const now = input.now ?? Date.now();
-  const lastEventAt = input.lastEventAt ?? snapshot.health.lastEventAt;
-  const stalledForMs = lastEventAt ? Math.max(0, now - Date.parse(lastEventAt)) : snapshot.health.stalledForMs;
-  const maxSilentMs = snapshot.longRun.maxSilentMinutes * 60_000;
-  const overloaded =
-    (input.memoryMb !== undefined && input.memoryMb >= 3_000) ||
-    (input.cpuPercent !== undefined && input.cpuPercent >= 90);
-  const stalled = stalledForMs !== undefined && stalledForMs >= maxSilentMs;
-
-  const health: WorkbenchHealth = {
-    state: overloaded || stalled ? "degraded" : snapshot.state === "running" || snapshot.state === "planning" ? "busy" : "good",
-    summary: healthSummary({ overloaded, stalled, running: snapshot.state === "running" || snapshot.state === "planning" }),
-    memoryMb: input.memoryMb ?? snapshot.health.memoryMb,
-    cpuPercent: input.cpuPercent ?? snapshot.health.cpuPercent,
-    lastEventAt,
-    stalledForMs
-  } as WorkbenchHealth;
-
-  return {
-    ...snapshot,
-    health
   };
 }
 
@@ -165,14 +132,6 @@ export function buildContinuationPrompt(
     "- 如果缺少证据，优先运行检查或读取相关文件。",
     "- 如果需要用户判断，暂停并说明原因。"
   ].join("\n");
-}
-
-function healthSummary(input: { overloaded: boolean; stalled: boolean; running: boolean }): string {
-  if (input.overloaded && input.stalled) return "资源占用偏高，且长时间没有新进展";
-  if (input.overloaded) return "资源占用偏高";
-  if (input.stalled) return "长时间没有新进展";
-  if (input.running) return "正在处理";
-  return "底座空闲";
 }
 
 function listOrFallback(items: string[], fallback: string): string[] {
