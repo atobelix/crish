@@ -596,6 +596,46 @@ mod tests {
         assert_eq!(result.metadata["providerError"], "boom");
     }
 
+    /// F3-05（红→绿）：正文聚合无界内存——文本 delta 累计超过聚合上限
+    /// （64 MiB，与 [MAX_AGGREGATE_TEXT_BYTES] 对齐）时显式错误收场
+    /// （StreamError，不静默截断也不无界增长；修复前全量聚合为 Message，红）
+    #[test]
+    fn aggregate_text_over_cap_yields_explicit_stream_error() {
+        let chunk = "a".repeat(1024 * 1024);
+        // 65 MiB > 64 MiB 上限（字面量构造，红阶段不依赖尚未实现的常量）
+        let events = (0..65)
+            .map(|_| text_delta(&chunk))
+            .collect::<Vec<_>>();
+        let result = consume(events, false);
+        let ProviderOutput::StreamError { classified } = &result.response else {
+            panic!("超限应显式错误收场，得到 {:?}", result.response);
+        };
+        assert_eq!(classified.kind, ProviderErrorKind::Unknown);
+        assert!(!classified.retryable, "聚合超限不可重试");
+        assert!(
+            classified.message.contains("聚合正文"),
+            "错误文案应说明聚合上限：{}",
+            classified.message
+        );
+    }
+
+    /// F3-05 边界锚定：聚合在上限内（63 MiB < 64 MiB）仍正常产出 Message
+    /// （上限不误伤合法输出）
+    #[test]
+    fn aggregate_text_at_cap_still_yields_message() {
+        let chunk = "a".repeat(1024 * 1024);
+        let events = (0..63)
+            .map(|_| text_delta(&chunk))
+            .chain(std::iter::once(stop(StopReason::Stop)))
+            .collect::<Vec<_>>();
+        let result = consume(events, false);
+        assert!(
+            result.response.is_message(),
+            "未超上限必须正常产出 Message"
+        );
+        assert_eq!(result.response.text().len(), 63 * chunk.len());
+    }
+
     /// stopReason wire 取值与解析
     #[test]
     fn stop_reason_wire_values() {

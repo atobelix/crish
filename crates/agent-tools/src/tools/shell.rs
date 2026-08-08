@@ -3220,4 +3220,23 @@ mod tests {
         }
         assert!(out.get("taskId").is_none(), "窗口内完成不得产生 taskId");
     }
+
+    /// F3-16：maxOutputBytes u64→usize 钳制——32 位平台裸 `as usize` 截断
+    /// 失真防护（win32 x64 平台截断不可复现，恒等路径；32 位分支编译期
+    /// 锁定：4GiB+1 不得截断为 1，钳到 usize::MAX）
+    #[test]
+    fn max_output_bytes_clamped_to_usize_range() {
+        assert_eq!(clamp_u64_to_usize(0), 0);
+        assert_eq!(clamp_u64_to_usize(123), 123);
+        assert_eq!(clamp_u64_to_usize(u64::MAX), usize::MAX);
+        #[cfg(target_pointer_width = "32")]
+        {
+            assert_eq!(
+                clamp_u64_to_usize(0x1_0000_0000),
+                usize::MAX,
+                "32 位：4GiB+1 必须钳到 usize::MAX（裸截断为 1 会静默截断输出）"
+            );
+            assert_ne!(clamp_u64_to_usize(0x1_0000_0000), 1);
+        }
+    }
 }

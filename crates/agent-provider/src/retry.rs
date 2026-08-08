@@ -726,6 +726,41 @@ mod tests {
         );
     }
 
+    /// F3-11（红→绿）：HTTP-date 极端年份溢出防护——year 接近 i64 极值时
+    /// `days * 86_400`（days_from_civil 的 era * 146_097）不得溢出 panic
+    /// （修复前 debug 构建算术溢出 panic，红）；解析结果按未来时刻钳到
+    /// 5 分钟上限（[MAX_RETRY_AFTER_MS] 语义不回归）
+    #[test]
+    fn retry_after_extreme_http_date_year_does_not_overflow() {
+        let now = SystemTime::now();
+        // IMF-fixdate：year = i64::MAX（provider 可控头部，审计样本）
+        let imf = parse_retry_after_ms(
+            Some("Sun, 06 Nov 9223372036854775807 08:49:37 GMT"),
+            now,
+        );
+        assert_eq!(
+            imf,
+            Some(Duration::from_millis(MAX_RETRY_AFTER_MS)),
+            "极端年份必须钳到 5 分钟上限且不 panic（修复前溢出 panic，红）"
+        );
+        // asctime 变体同样防护
+        let asctime = parse_retry_after_ms(
+            Some("Sun Nov  6 08:49:37 9223372036854775807"),
+            now,
+        );
+        assert_eq!(
+            asctime,
+            Some(Duration::from_millis(MAX_RETRY_AFTER_MS)),
+            "asctime 极端年份同样不 panic 且钳到上限"
+        );
+        // 负向极端年份（远早于 1970）→ 已过时间 → 0，不 panic
+        let past = parse_retry_after_ms(
+            Some("Sun, 06 Nov -9223372036854775808 08:49:37 GMT"),
+            now,
+        );
+        assert_eq!(past, Some(Duration::ZERO), "负向极端年份视为已过 → 0");
+    }
+
     /// 总预算耗尽后不再重试（对齐 withinRetryBudget：elapsed < total_budget 才继续）
     #[tokio::test(start_paused = true)]
     async fn total_budget_exhaustion_stops_retry() {
