@@ -15,7 +15,7 @@ export function isUpdateAvailable(): boolean {
   }
 }
 
-export function setUpdateAvailable(v: boolean): void {
+function setUpdateAvailable(v: boolean): void {
   try {
     if (v) localStorage.setItem(KEY, '1');
     else localStorage.removeItem(KEY);
@@ -30,7 +30,7 @@ export function setUpdateAvailable(v: boolean): void {
 }
 
 /** 是否有运行中任务（流/后台）— 有则不宜立刻装更新 */
-export async function hasBlockingTasks(): Promise<boolean> {
+async function hasBlockingTasks(): Promise<boolean> {
   try {
     const tasks = await listBackgroundTasks();
     if (Array.isArray(tasks) && tasks.some((t) => {

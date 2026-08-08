@@ -26,10 +26,7 @@ if (typeof window !== 'undefined') {
 }
 
 /** 浏览器标签 / 任务栏标题 */
-export const APP_DOCUMENT_TITLE = 'Crish · AI 工作台';
-
-/** 兼容旧 import：实现见 api/pickWorkspaceFolder */
-export { pickWorkspaceFolder };
+const APP_DOCUMENT_TITLE = 'Crish · AI 工作台';
 
 export async function winCtl(
   action: 'minimize' | 'toggleMaximize' | 'close'

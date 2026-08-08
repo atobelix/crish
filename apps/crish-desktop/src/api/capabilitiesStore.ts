@@ -36,14 +36,6 @@ export function getCachedCapabilities(): CachedCapabilities | null {
 }
 
 /**
- * 刷新并缓存 list-capabilities + MCP control probe。
- * 60s 内默认命中缓存；force 时强制重探。
- */
-export async function refreshCapabilities(force = false): Promise<void> {
-  await refreshProductCapabilities(force);
-}
-
-/**
  * 设置页 / MCP 用：probeMcpControl + list-capabilities（经 mcpApi 60s 缓存）。
  */
 export async function refreshProductCapabilities(
@@ -86,10 +78,4 @@ export async function refreshProductCapabilities(
   } finally {
     inflight = null;
   }
-}
-
-/** 测试/调试：清空 product 与 list-capabilities 缓存 */
-export function resetCapabilitiesCache(): void {
-  cache = null;
-  invalidateListCapabilitiesCache();
 }

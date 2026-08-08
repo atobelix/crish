@@ -1,15 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./mcpClient', () => {
-  return {
-    mcpClientManager: {
-      getServers: vi.fn(() => []),
-      startServer: vi.fn(),
-      stopServer: vi.fn(),
-    },
-  };
-});
-
 import {
   listMcpServers,
   startMcpServer,

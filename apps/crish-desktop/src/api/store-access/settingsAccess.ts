@@ -9,7 +9,6 @@ import {
   setSettingsActiveTab as setSettingsActiveTabUi,
   setPermissionMode as setPermissionModeUi,
   setPlanModeEnabled as setPlanModeEnabledUi,
-  setPlanApproved as setPlanApprovedUi,
 } from '../../store/settingsUiStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePermissionStore } from '../../store/permissionStore';
@@ -28,10 +27,6 @@ export function setPermissionMode(mode: PermissionMode): void {
 
 export function setPlanModeEnabled(enabled: boolean): void {
   setPlanModeEnabledUi(enabled);
-}
-
-export function setPlanApproved(approved: boolean): void {
-  setPlanApprovedUi(approved);
 }
 
 export function setAppSettings(settings: Settings | null): void {

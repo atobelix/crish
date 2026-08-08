@@ -62,11 +62,11 @@ export function recordStreamDiag(entry: Omit<StreamDiagEntry, 'at'> & { at?: num
   return full;
 }
 
-export function getRecentStreamDiags(): StreamDiagEntry[] {
+function getRecentStreamDiags(): StreamDiagEntry[] {
   return ring.slice();
 }
 
-export function getLastStreamDiag(): StreamDiagEntry | null {
+function getLastStreamDiag(): StreamDiagEntry | null {
   return ring.length ? ring[ring.length - 1]! : null;
 }
 

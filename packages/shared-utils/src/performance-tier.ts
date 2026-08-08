@@ -353,7 +353,7 @@ export function assignTier(profile: HardwareProfile): TierAssignment {
  * 相邻等级之间的分数边界。
  * 用于动态自适应时的等级切换判断。
  */
-export const TIER_TRANSITION_THRESHOLDS: Record<PerformanceLevel, number> = {
+const TIER_TRANSITION_THRESHOLDS: Record<PerformanceLevel, number> = {
   [PerformanceLevel.Level0]: 0,
   [PerformanceLevel.Level1]: 20,
   [PerformanceLevel.Level2]: 55,

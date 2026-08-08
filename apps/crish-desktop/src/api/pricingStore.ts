@@ -1191,7 +1191,7 @@ export const CATALOG_CACHE_RATES: Record<string, CatalogModelEntry4d> = {
  * 精确优先；模糊支持「带版本后缀」（deepseek-v4-flash-0731 含目录键）与
  * 「旧键/别名前缀」（gemini-3-1-pro 命中 gemini-3.1-pro-preview）。
  */
-export function resolveCatalogEntry(model: string): CatalogModelEntry4d | null {
+function resolveCatalogEntry(model: string): CatalogModelEntry4d | null {
   const exact = CATALOG_CACHE_RATES[model];
   if (exact) return exact;
   for (const key of Object.keys(CATALOG_CACHE_RATES)) {

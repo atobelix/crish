@@ -1,7 +1,7 @@
 /**
  * 统一 Tauri invoke 封装。
  *
- * 三套 API 对应三种使用场景：
+ * 两套 API 对应两种使用场景：
  *
  * 1. `invokeResult<T>`（旧 / 宽松）— 返回 `{ ok | missing | error }` 三态，
  *    missing 与 error 都不带详细信息。适合不需要区分错误类型的旧调用方。
@@ -10,12 +10,9 @@
  *    InvokeError 携带 `kind` / `message` / `raw`，对齐 Rust 侧 CoreError 协议。
  *    新代码应优先使用此 API。
  *
- * 3. `invokeCmdStrict<T>`（新 / 严格抛错）— 直接返回 `T`，失败时 throw。
- *    适合必须成功的命令（命令缺失即视为运行时错误，调用方需 try/catch 或外层兜底）。
- *
  * 旧 `invokeCmd<T>` 返回 `T | null`（missing 与 error 都返回 null），
- * 已 `@deprecated`，新代码用 `invokeTyped` 或 `invokeCmdStrict` 替代。
- * @see invokeTyped / invokeCmdStrict
+ * 已 `@deprecated`，新代码用 `invokeTyped` 替代。
+ * @see invokeTyped
  */
 
 export type InvokeOk<T> = { status: 'ok'; data: T };
@@ -187,9 +184,9 @@ export async function invokeTyped<T = unknown>(
 /**
  * 宽松 invoke：失败或非 Tauri 返回 null（兼容 git/fs/background 旧调用方）。
  *
- * @deprecated 新代码应使用 `invokeTyped`（区分错误类型）或 `invokeCmdStrict`（失败抛错）。
+ * @deprecated 新代码应使用 `invokeTyped`（区分错误类型）。
  * 此 API 把 missing 与 error 都吞为 null，丢失错误信息，不利于排错。
- * @see invokeTyped / invokeCmdStrict
+ * @see invokeTyped
  */
 export async function invokeCmd<T = unknown>(
   cmd: string,
@@ -198,30 +195,4 @@ export async function invokeCmd<T = unknown>(
   const res = await invokeResult<T>(cmd, args);
   if (res.status === 'ok') return res.data;
   return null;
-}
-
-/**
- * 严格 invoke：失败直接 throw，不返回 null。
- *
- * 适合「必须成功」的命令：命令缺失或报错都视为运行时错误，
- * 由调用方 try/catch 或外层 ErrorBoundary 兜底。
- *
- * @example
- *   try {
- *     const hash = await invokeCmdStrict<string>('core_hash_compute', { data });
- *   } catch (e) {
- *     // missing 或 error 都会抛错
- *   }
- */
-export async function invokeCmdStrict<T = unknown>(
-  cmd: string,
-  args?: Record<string, unknown>,
-): Promise<T> {
-  const res = await invokeTyped<T>(cmd, args);
-  if (res.status === 'ok') return res.data;
-  if (res.status === 'missing') {
-    throw new Error(`Tauri command not available: ${cmd}`);
-  }
-  // error
-  throw new Error(`${res.kind}: ${res.message}`);
 }

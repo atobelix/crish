@@ -28,19 +28,19 @@ export type SessionListWindowRange = {
 
 export type HeightGetter = (index: number) => number;
 
-export function uniformHeight(h: number): HeightGetter {
+function uniformHeight(h: number): HeightGetter {
   return () => h;
 }
 
 /** 对 [from, to) 范围内各行高度求和 */
-export function sumHeights(getHeight: HeightGetter, from: number, to: number): number {
+function sumHeights(getHeight: HeightGetter, from: number, to: number): number {
   let total = 0;
   for (let i = from; i < to; i++) total += getHeight(i);
   return total;
 }
 
 /** 查找累积高度首次超过 offset 的行下标；offset≤0 返回 0；count≤0 返回 -1 */
-export function indexAtOffset(getHeight: HeightGetter, offset: number, count: number): number {
+function indexAtOffset(getHeight: HeightGetter, offset: number, count: number): number {
   if (count <= 0) return -1;
   if (offset <= 0) return 0;
   let acc = 0;

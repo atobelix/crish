@@ -43,7 +43,7 @@ export function unregisterStreamBatcher(
 /**
  * 遍历所有活跃 stream 的 batcher，调用 flushNow。
  */
-export function flushAllStreamBatchers(): void {
+function flushAllStreamBatchers(): void {
   for (const batcher of activeBatchers) {
     batcher.flushNow();
   }
@@ -54,7 +54,7 @@ const COMPOSER_DRAFTS_KEY = 'crish_composer_drafts_v1';
 /**
  * 同步持久化 composer 草稿。
  */
-export function persistComposerDraftsSync(drafts: Record<string, string>): void {
+function persistComposerDraftsSync(drafts: Record<string, string>): void {
   try {
     localStorage.setItem(COMPOSER_DRAFTS_KEY, JSON.stringify(drafts ?? {}));
   } catch {
@@ -67,7 +67,7 @@ const ERROR_QUEUE_KEY = 'crish_error_queue_v1';
 /**
  * 将 ErrorStore 中未发送的错误队列写入 localStorage。
  */
-export function flushErrorQueue(): void {
+function flushErrorQueue(): void {
   const errors = errorStore.getActiveErrors();
   if (errors.length === 0) return;
   try {

@@ -26,14 +26,14 @@ const refreshPromises = new Map<string, Promise<OAuthTokenData | null>>();
 const refreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** 检查 Token 是否已过期或即将在 5 分钟内过期 */
-export function isTokenExpiringSoon(token?: OAuthTokenData): boolean {
+function isTokenExpiringSoon(token?: OAuthTokenData): boolean {
   if (!token || !token.accessToken) return true;
   const now = Date.now();
   return token.expiresAt - now <= REFRESH_BUFFER_MS;
 }
 
 /** 执行 OAuth Refresh Token 刷新（带单飞锁与引擎同步） */
-export async function refreshOAuthToken(profileId: string): Promise<OAuthTokenData | null> {
+async function refreshOAuthToken(profileId: string): Promise<OAuthTokenData | null> {
   // 单飞锁检查：若当前已有针对该 Profile 的刷新在进行中，直接复用 Promise
   if (refreshPromises.has(profileId)) {
     return refreshPromises.get(profileId)!;
@@ -117,7 +117,7 @@ export async function refreshOAuthToken(profileId: string): Promise<OAuthTokenDa
 }
 
 /** 调度动态刷新定时器 */
-export function scheduleTokenRefresh(profileId: string, token: OAuthTokenData): void {
+function scheduleTokenRefresh(profileId: string, token: OAuthTokenData): void {
   if (refreshTimers.has(profileId)) {
     clearTimeout(refreshTimers.get(profileId)!);
     refreshTimers.delete(profileId);

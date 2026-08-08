@@ -9,7 +9,7 @@ export type AppMode = 'normal' | 'demo';
 
 const STORAGE_KEY = 'crish_app_mode';
 
-export function isProductionBuild(): boolean {
+function isProductionBuild(): boolean {
   return Boolean(import.meta.env.PROD);
 }
 
@@ -55,11 +55,7 @@ export function isDemoMode(): boolean {
   return false;
 }
 
-export function isNormalMode(): boolean {
-  return getAppMode() === 'normal';
-}
-
-export function setAppMode(mode: AppMode): void {
+function setAppMode(mode: AppMode): void {
   if (mode === 'demo' && !canUseDemoMode()) return;
   try {
     localStorage.setItem(STORAGE_KEY, mode);

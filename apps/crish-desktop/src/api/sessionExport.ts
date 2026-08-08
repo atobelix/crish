@@ -13,9 +13,9 @@ export const EXPORT_TOOL_OUTPUT_MAX = 4000;
 /** 单条消息正文上限 */
 export const EXPORT_MESSAGE_TEXT_MAX = 50_000;
 /** 工具 arguments 导出上限 */
-export const EXPORT_TOOL_ARGS_MAX = 2000;
+const EXPORT_TOOL_ARGS_MAX = 2000;
 /** 判定为「巨大 base64 / 二进制」的最短连续 payload */
-export const EXPORT_HEAVY_B64_MIN = 120;
+const EXPORT_HEAVY_B64_MIN = 120;
 /** JSON 导出契约版本 */
 export const SESSION_EXPORT_JSON_VERSION = 1 as const;
 /** JSON 导出 format 标识 */
@@ -607,7 +607,7 @@ export function exportSessionToJson(
  * 一键：生成 MD + 下载；返回文件名。
  * 调用方：成功不 toast；失败 catch 后 toast。
  */
-export function downloadSessionMarkdown(
+function downloadSessionMarkdown(
   session: SessionState,
   date = new Date(),
   options: ExportSessionOptions = {},
@@ -624,7 +624,7 @@ export function downloadSessionMarkdown(
 /**
  * 一键：生成 JSON + 下载；返回文件名。
  */
-export function downloadSessionJson(
+function downloadSessionJson(
   session: SessionState,
   date = new Date(),
   options: ExportSessionOptions = {},

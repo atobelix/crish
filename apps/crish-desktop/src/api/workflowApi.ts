@@ -15,7 +15,6 @@ export {
   WORKFLOW_INTERVAL_MINUTES_MIN,
   WORKFLOW_INTERVAL_MINUTES_MAX,
   isValidDailyTime,
-  tryNormalizeDailyTime,
   normalizeDailyTime,
   isValidIanaTimezone,
   parseIntervalMinutes,
@@ -25,7 +24,6 @@ export {
   validateWorkflowSchedule,
   normalizeWorkflowSchedule,
   scheduleLabel,
-  defaultTimezone,
 } from './workflow-api/workflowScheduler';
 
 // 草稿、预设模板与空态文案来自 workflowDraft（UI 契约层）
@@ -39,8 +37,6 @@ export type {
 export {
   WORKFLOW_SCHEDULE_TYPES,
   WORKFLOW_SCHEDULE_PRESETS,
-  WORKFLOW_SCHEDULE_CAPABILITY_NOTE,
-  WORKFLOW_SCHEDULE_PLANNED_TYPES,
   WORKFLOW_JOBS_EMPTY_LABELS,
   watchTriggerHint,
   workflowJobsEmptyLabel,

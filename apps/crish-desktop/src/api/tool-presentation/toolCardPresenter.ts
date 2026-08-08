@@ -15,6 +15,7 @@ import type { ToolRowTone } from './toolPresentationTypes';
 /** 仅真正会话中断才隐藏，勿匹配「工具未完成」等收口文案 */
 const HIDE_TOOL_RE = /上次会话中断|会话中断|interrupted|cancelled by user/i;
 
+/** 仅真正会话中断才隐藏（timelineNormalizer 过滤用） */
 export function isInterruptedTool(tc: MessageToolCall): boolean {
   if (tc.status !== 'error') return false;
   return HIDE_TOOL_RE.test(tc.output || '');
@@ -85,7 +86,7 @@ export function isTrivialToolOutput(output: string | undefined | null): boolean 
 }
 
 /** 折叠行预览可截断；展开区请用 fullToolOutput */
-export function truncateToolOutput(output: string, maxLines = 16, maxChars = 1600): string {
+function truncateToolOutput(output: string, maxLines = 16, maxChars = 1600): string {
   if (!output) return '';
   // 运行中占位不展示；纯终态词也不作预览噪音
   if (isPlaceholderToolOutput(output) || isTrivialToolOutput(output)) return '';
@@ -353,6 +354,7 @@ export function toolHasExpandableBody(tc: MessageToolCall): boolean {
   return Boolean(sanitizeToolDisplayOutput(raw).trim());
 }
 
+/** 只读/查询类工具（timelineNormalizer 折叠展示用） */
 export function isInspectTool(tc: MessageToolCall): boolean {
   if (tc.status === 'pending_approval') return false;
   const n = (tc.name || '').toLowerCase();

@@ -594,7 +594,7 @@ function lsSaveFolderOrder(order: string[]): void {
 // hydrate 据此以 LS 正文为真源回灌并回写 SQLite（单向修复路径），消除分叉。
 
 /** 降级戳 key 前缀（任务书 T5.1 约定 crish_degraded_） */
-export const DEGRADED_MARKER_PREFIX = 'crish_degraded_';
+const DEGRADED_MARKER_PREFIX = 'crish_degraded_';
 
 function degradedMarkerKey(sessionId: string): string {
   return DEGRADED_MARKER_PREFIX + sessionId;
@@ -604,7 +604,7 @@ function degradedMarkerKey(sessionId: string): string {
  * 标记会话已降级（值 = 降级时间戳）。
  * 写入自身 try/catch：quota/隐私模式下戳写不进也不阻塞降级路径（AU-03:127 残余细节）。
  */
-export function markDegradedSession(sessionId: string): void {
+function markDegradedSession(sessionId: string): void {
   try {
     localStorage.setItem(degradedMarkerKey(sessionId), String(Date.now()));
   } catch {
@@ -613,7 +613,7 @@ export function markDegradedSession(sessionId: string): void {
 }
 
 /** 会话是否存在未修复的降级戳。 */
-export function hasDegradedSession(sessionId: string): boolean {
+function hasDegradedSession(sessionId: string): boolean {
   try {
     return localStorage.getItem(degradedMarkerKey(sessionId)) != null;
   } catch {
@@ -626,7 +626,7 @@ export function hasDegradedSession(sessionId: string): boolean {
  * 调用时机约束（AU-03:127）：仅在「修复回写 SQLite 成功」后调用——回写失败时
  * 保持戳，下次 hydrate 重试单向修复，避免分叉在无痕状态下复发。
  */
-export function clearDegradedSession(sessionId: string): void {
+function clearDegradedSession(sessionId: string): void {
   try {
     localStorage.removeItem(degradedMarkerKey(sessionId));
   } catch {

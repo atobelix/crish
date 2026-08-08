@@ -54,7 +54,7 @@ export interface BenchmarkSuiteResult {
   };
 }
 
-export async function runBenchmark(benchmark: PerfBenchmark): Promise<BenchmarkResult> {
+async function runBenchmark(benchmark: PerfBenchmark): Promise<BenchmarkResult> {
   const warmupSamples: BenchmarkSample[] = [];
   const samples: BenchmarkSample[] = [];
 

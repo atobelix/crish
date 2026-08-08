@@ -58,7 +58,7 @@ export const APPROVAL_TRUST_ZONE_LABELS: Readonly<Record<ApprovalTrustZone, stri
   });
 
 /** 信任域说明（中文副文案） */
-export const APPROVAL_TRUST_ZONE_HINTS: Readonly<Record<ApprovalTrustZone, string>> =
+const APPROVAL_TRUST_ZONE_HINTS: Readonly<Record<ApprovalTrustZone, string>> =
   Object.freeze({
     T0: '只读类操作，风险较低',
     T1: '可能修改工作区文件',
@@ -78,7 +78,7 @@ export const APPROVAL_RISK_LEVEL_LABELS: Readonly<Record<ApprovalRiskLevel, stri
   });
 
 /** 风险等级说明（中文） */
-export const APPROVAL_RISK_LEVEL_HINTS: Readonly<Record<ApprovalRiskLevel, string>> =
+const APPROVAL_RISK_LEVEL_HINTS: Readonly<Record<ApprovalRiskLevel, string>> =
   Object.freeze({
     low: '风险较低，仍建议确认后再执行',
     medium: '中等风险，请确认意图后继续',

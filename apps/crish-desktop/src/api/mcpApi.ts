@@ -5,14 +5,10 @@
  * - T03.7 裁决后：list-capabilities 回补 core_get_status.mcpStatus；
  *   list-mcp-servers / start-mcp-server / stop-mcp-server 为幽灵命令（Rust 侧无），
  *   界面启停显式不可用（错误码 'unavailable'），不再走 transport 请求。
- * - 真实 MCP 管理经 mcpClientManager（R4-A2 SDK 直连）与 mcpClient 集成。
- *
- * R4-A2 (2026-07)：MCP SDK 直连客户端（mcpClientManager），用于直接管理 stdio MCP 服务器。
  */
 
 import { getTransport } from './transport';
 import { logInternalError } from './userFacingErrors';
-import { mcpClientManager } from './mcpClient';
 import { eventBus } from '../services/EventBus';
 
 export type McpServerState =
@@ -253,108 +249,4 @@ export function mcpStateKind(
 /** 测试/重置用：清除「启停不支持」记忆（状态已移除，保留签名兼容） */
 export function resetMcpControlProbeMemory(): void {
   /* 记忆状态已随 T03.7 移除，无操作 */
-}
-
-// ── R4-A2: MCP SDK 直连集成 ──────────────────────────────────────────
-
-export { mcpClientManager };
-
-export type DirectMcpServerConfig = {
-  command: string;
-  args: string[];
-  env?: Record<string, string>;
-};
-
-export type DirectMcpToolInfo = {
-  name: string;
-  description?: string;
-  inputSchema: Record<string, unknown>;
-};
-
-export type DirectMcpConnectResult = {
-  ok: boolean;
-  serverId: string;
-  error?: string;
-};
-
-export type DirectMcpListToolsResult = {
-  ok: boolean;
-  tools: DirectMcpToolInfo[];
-  error?: string;
-};
-
-export type DirectMcpCallToolResult = {
-  ok: boolean;
-  result: unknown;
-  error?: string;
-};
-
-export type DirectMcpDisconnectResult = {
-  ok: boolean;
-  serverId: string;
-  error?: string;
-};
-
-export async function connectDirectMcpServer(
-  serverId: string,
-  config: DirectMcpServerConfig
-): Promise<DirectMcpConnectResult> {
-  try {
-    await mcpClientManager.connect(serverId, config);
-    return { ok: true, serverId };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, serverId, error: msg };
-  }
-}
-
-export async function disconnectDirectMcpServer(
-  serverId: string
-): Promise<DirectMcpDisconnectResult> {
-  try {
-    await mcpClientManager.disconnect(serverId);
-    eventBus.emit('mcp:tools:changed', { serverId });
-    return { ok: true, serverId };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, serverId, error: msg };
-  }
-}
-
-export async function disconnectAllDirectMcpServers(): Promise<void> {
-  await mcpClientManager.disconnectAll();
-}
-
-export async function getDirectMcpTools(
-  serverId: string
-): Promise<DirectMcpListToolsResult> {
-  try {
-    const tools = await mcpClientManager.listTools(serverId);
-    return { ok: true, tools };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, tools: [], error: msg };
-  }
-}
-
-export async function callDirectMcpTool(
-  serverId: string,
-  toolName: string,
-  args: Record<string, unknown>
-): Promise<DirectMcpCallToolResult> {
-  try {
-    const result = await mcpClientManager.callTool(serverId, toolName, args);
-    return { ok: true, result };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, result: undefined, error: msg };
-  }
-}
-
-export function getConnectedDirectMcpServers(): string[] {
-  return mcpClientManager.getConnectedServers();
-}
-
-export function invalidateDirectMcpToolCache(serverId: string): void {
-  mcpClientManager.invalidateToolCache(serverId);
 }

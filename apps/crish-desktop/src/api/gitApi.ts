@@ -51,7 +51,7 @@ export type GitStatusResult = {
 };
 
 /** 把引擎/系统原文归一成稳定 reason */
-export function classifyGitReason(raw?: string | null): GitStatusReason {
+function classifyGitReason(raw?: string | null): GitStatusReason {
   const s = (raw || '').trim();
   if (!s) return 'unavailable';
   const lower = s.toLowerCase();
@@ -127,7 +127,7 @@ export function gitStatusUserMessage(result: Pick<GitStatusResult, 'found' | 're
   }
 }
 
-export const GIT_DOWNLOAD_URL = 'https://git-scm.com/download/win';
+const GIT_DOWNLOAD_URL = 'https://git-scm.com/download/win';
 
 /**
  * 打开系统浏览器下载 Git。
@@ -138,9 +138,9 @@ export async function openGitDownloadPage(): Promise<void> {
 }
 
 /** 防止本机 git 挂死导致 UI 永久「加载中」 */
-export const GIT_STATUS_TIMEOUT_MS = 12_000;
+const GIT_STATUS_TIMEOUT_MS = 12_000;
 /** 本机 shell git 超时（优先快路径；大仓可稍长，仍短于总超时） */
-export const GIT_LOCAL_TIMEOUT_MS = 8_000;
+const GIT_LOCAL_TIMEOUT_MS = 8_000;
 
 /** 导出供单测；生产路径 fetchGitStatus 经此包裹 */
 export function withTimeout<T>(
@@ -169,7 +169,7 @@ export function withTimeout<T>(
  * 解析 `git status --porcelain=v1 -b` 输出。
  * 导出供单测；不发明路径。
  */
-export function parseGitPorcelainStatus(
+function parseGitPorcelainStatus(
   stdout: string,
   cwd?: string,
 ): GitStatusResult {
@@ -464,21 +464,6 @@ export function gitStatusLabel(code: GitFileStatusCode): string {
       return '混合';
     default:
       return String(code || '变更');
-  }
-}
-
-export function gitStatusBadgeClass(code: GitFileStatusCode): string {
-  switch (code) {
-    case 'A':
-      return 'git-badge add';
-    case 'D':
-      return 'git-badge del';
-    case 'U':
-      return 'git-badge conflict';
-    case '?':
-      return 'git-badge untracked';
-    default:
-      return 'git-badge mod';
   }
 }
 

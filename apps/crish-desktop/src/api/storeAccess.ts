@@ -40,7 +40,6 @@ import {
   getActiveWorkspace,
   getDropPreview as getDropPreviewFromFacade,
   getWorkspaceStoreState,
-  setDraggedTab as setDraggedTabWs,
   setDropPreview as setDropPreviewWs,
   setGroupActiveCard as setGroupActiveCardWs,
   togglePanel as togglePanelWs,
@@ -63,7 +62,6 @@ export {
   getActiveWorkspace,
   getDropPreviewFromFacade as getDropPreview,
   setDropPreviewWs as setDropPreview,
-  setDraggedTabWs as setDraggedTab,
   setGroupActiveCardWs as setGroupActiveCard,
   togglePanelWs as togglePanel,
 };
@@ -81,7 +79,7 @@ export type {
 
 export { getLayoutState } from './store-access/storeAccessCore';
 export { unarchiveSession, setActiveAgentId, addMessageToolCall, updateMessageToolCall, updateMessageThinking, createSession, archiveSession } from './store-access/sessionAccess';
-export { setAppSettings, getAppSettings, getCommandPermissions, addCommandPermission, setPlanApproved } from './store-access/settingsAccess';
+export { setAppSettings, getAppSettings, getCommandPermissions, addCommandPermission } from './store-access/settingsAccess';
 export { setScheduledTasks, syncTelemetryData, pushDiffFile } from './store-access/telemetryAccess';
 
 export * from './store-access/storeAccessCore';
@@ -147,10 +145,6 @@ export function getWorkspaceById(
   wsId: string | null | undefined
 ): WorkspaceState | undefined {
   return findWorkspaceById(getWorkspaceStoreState().workspaces, wsId);
-}
-
-export function getWorkspaceState() {
-  return getWorkspaceStoreState();
 }
 
 export function focusOrOpenPanel(wsId: string, cardId: string): void {

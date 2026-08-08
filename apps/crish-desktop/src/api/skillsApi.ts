@@ -181,7 +181,7 @@ export function getExtraSkillDirs(): string[] {
   }
 }
 
-export function setExtraSkillDirs(dirs: string[]) {
+function setExtraSkillDirs(dirs: string[]) {
   localStorage.setItem(EXTRA_DIRS_KEY, JSON.stringify(dirs.filter(Boolean)));
 }
 
@@ -570,7 +570,7 @@ export async function syncSkillsToDaemon(_skills: DesktopSkill[]): Promise<{ ok:
   return { ok: 0, fail: 0 };
 }
 
-export async function readSkillRaw(filePath: string): Promise<string | null> {
+async function readSkillRaw(filePath: string): Promise<string | null> {
   return readTextAny(filePath);
 }
 

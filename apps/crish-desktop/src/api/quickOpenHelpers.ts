@@ -4,7 +4,7 @@
  */
 
 export const QUICK_OPEN_RESULT_LIMIT = 20;
-export const QUICK_OPEN_DEBOUNCE_MS = 160;
+
 
 export type QuickOpenHit = {
   path: string;

@@ -23,7 +23,7 @@ export function isTauriShell(): boolean {
 }
 
 /** True when running as the consumer desktop product (not loose browser). */
-export function isProductShell(): boolean {
+function isProductShell(): boolean {
   if (isTauriShell()) return true;
   try {
     // Explicit opt-in for packaged webview tests

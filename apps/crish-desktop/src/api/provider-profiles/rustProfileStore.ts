@@ -103,15 +103,3 @@ export function configProfileApply(
     ...(rest.model !== undefined ? { model: rest.model } : {}),
   });
 }
-
-/** config_get：引擎配置快照（脱敏形状：apiKey 恒为空串 + apiKeyLast4） */
-export function configGet(): Promise<InvokeTypedResult<Record<string, unknown>>> {
-  return invokeTyped<Record<string, unknown>>('config_get', {});
-}
-
-/** config_update：引擎非敏感配置更新（K-05：载荷不得含 apiKey） */
-export function configUpdate(
-  update: Record<string, unknown>
-): Promise<InvokeTypedResult<Record<string, unknown>>> {
-  return invokeTyped<Record<string, unknown>>('config_update', update);
-}

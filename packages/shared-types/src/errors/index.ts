@@ -4,4 +4,3 @@ export * from './info';
 export * from './classes';
 export * from './result';
 export * from './serialize';
-export * from './normalize';

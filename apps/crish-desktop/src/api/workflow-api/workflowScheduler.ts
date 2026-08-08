@@ -29,8 +29,8 @@ export function isValidDailyTime(value: unknown): boolean {
 }
 
 /**
- * 尝试将输入收成 HH:mm；无法规范化时返回 null（不悄悄改成 09:00）。
- */
+  * 尝试将输入收成 HH:mm；无法规范化时返回 null（不悄悄改成 09:00）。
+  */
 export function tryNormalizeDailyTime(value: unknown): string | null {
   const t = String(value ?? '').trim();
   if (!t) return null;

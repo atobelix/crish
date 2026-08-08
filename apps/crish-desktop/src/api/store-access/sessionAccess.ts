@@ -3,9 +3,7 @@
  */
 import type {
   MessageToolCall,
-  MessageToolCallApprovalDecision,
   SessionAgent,
-  SessionAgentPatch,
   SessionGoalMode,
   SessionMessage,
   SessionState,
@@ -16,7 +14,6 @@ import {
   getSessionById,
   getSessionStoreState,
 } from '../../store/sessionStore';
-import { sessionRuntimeRegistry } from '../SessionRuntimeRegistry';
 import { useTerminalStore } from '../../store/terminalStore';
 import {
   resolveSessionState,
@@ -132,34 +129,6 @@ export function createSessionAndOpenChat(folder?: string): string {
   return PENDING_DRAFT_SESSION_ID;
 }
 
-export function deleteSessionWithCleanup(sessionId: string): boolean {
-  const removed = resolveSessionState().deleteSession(sessionId);
-  if (removed) {
-    sessionRuntimeRegistry.remove(sessionId);
-  }
-  return removed;
-}
-
-export function deleteSessionAndSwitch(sessionId: string): boolean {
-  const state = resolveSessionState();
-  const removed = state.deleteSession(sessionId);
-  if (removed) {
-    sessionRuntimeRegistry.remove(sessionId);
-    const sessions: SessionState[] = state.sessions ?? [];
-    if (sessions.length > 0 && state.activeSessionId === sessionId) {
-      const nextIdx = Math.min(
-        sessions.findIndex((s: SessionState) => s.id === sessionId) + 1,
-        sessions.length - 1
-      );
-      const fallback = sessions[nextIdx] ?? sessions[sessions.length - 1];
-      if (fallback) {
-        state.setActiveSessionId(fallback.id);
-      }
-    }
-  }
-  return removed;
-}
-
 /**
  * 创建 / 附加真会话（写入 sessions[]）。
  *
@@ -186,10 +155,6 @@ export function enterDraftMode(folder?: string): void {
 
 export function setDraftFolder(folder: string): void {
   getSessionStoreState().setDraftFolder(folder);
-}
-
-export function clearDraft(): void {
-  getSessionStoreState().clearDraft();
 }
 
 export function commitDraftIfNeeded(opts?: {
@@ -265,10 +230,6 @@ export function renameSession(sessionId: string, title: string): void {
   getSessionStoreState().renameSession(sid, title);
 }
 
-export function setSessions(sessions: SessionState[]): void {
-  getSessionStoreState().setSessions(sessions);
-}
-
 export function addMessage(
   wsId: string,
   sessionId: string,
@@ -277,16 +238,6 @@ export function addMessage(
   const sid = requireExistingSessionId(sessionId);
   if (!sid) return;
   getSessionStoreState().addMessage(wsId, sid, message);
-}
-
-export function withdrawMessage(
-  wsId: string,
-  sessionId: string,
-  messageId: string
-): void {
-  const sid = requireExistingSessionId(sessionId);
-  if (!sid) return;
-  getSessionStoreState().withdrawMessage(wsId, sid, messageId);
 }
 
 export function updateMessageText(
@@ -341,69 +292,6 @@ export function updateMessageToolCall(
   );
 }
 
-export function setSessionMessageStatus(
-  sessionId: string,
-  messageId: string,
-  status: 'queued' | 'processing' | 'completed',
-  thinkingTime?: number
-): void {
-  const sid = requireExistingSessionId(sessionId);
-  if (!sid) return;
-  getSessionStoreState().setSessionMessageStatus(
-    sid,
-    messageId,
-    status,
-    thinkingTime
-  );
-}
-
-export function respondToApproval(
-  sessionId: string,
-  messageId: string,
-  toolCallId: string,
-  decision: MessageToolCallApprovalDecision
-): void {
-  const sid = requireExistingSessionId(sessionId);
-  if (!sid) return;
-  getSessionStoreState().respondToApproval(
-    sid,
-    messageId,
-    toolCallId,
-    decision
-  );
-}
-
-export function pinMessage(sessionId: string, messageId: string): void {
-  const sid = requireExistingSessionId(sessionId);
-  if (!sid) return;
-  getSessionStoreState().pinMessage(sid, messageId);
-}
-
-export function unpinMessage(sessionId: string, messageId: string): void {
-  const sid = requireExistingSessionId(sessionId);
-  if (!sid) return;
-  getSessionStoreState().unpinMessage(sid, messageId);
-}
-
-export function upsertSessionAgent(
-  sessionId: string,
-  agent: SessionAgent
-): void {
-  const sid = requireExistingSessionId(sessionId);
-  if (!sid) return;
-  getSessionStoreState().upsertSessionAgent(sid, agent);
-}
-
-export function patchSessionAgent(
-  sessionId: string,
-  agentId: string,
-  patch: SessionAgentPatch
-): void {
-  const sid = requireExistingSessionId(sessionId);
-  if (!sid) return;
-  getSessionStoreState().patchSessionAgent(sid, agentId, patch);
-}
-
 export function patchAgentTool(
   sessionId: string,
   agentId: string,
@@ -413,16 +301,6 @@ export function patchAgentTool(
   const sid = requireExistingSessionId(sessionId);
   if (!sid) return;
   getSessionStoreState().patchAgentTool(sid, agentId, toolCallId, patch);
-}
-
-export function appendSessionAgentMessage(
-  sessionId: string,
-  agentId: string,
-  message: SessionMessage
-): void {
-  const sid = requireExistingSessionId(sessionId);
-  if (!sid) return;
-  getSessionStoreState().appendSessionAgentMessage(sid, agentId, message);
 }
 
 export function addTerminalLine(line: string, sessionId?: string): void {

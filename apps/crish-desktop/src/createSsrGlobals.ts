@@ -1,4 +1,4 @@
-export const SSR_GLOBALS = {
+const SSR_GLOBALS = {
   isTauri: false as boolean,
   isProduct: false as boolean,
   appMode: 'normal' as 'normal' | 'demo',

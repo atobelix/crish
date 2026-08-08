@@ -779,8 +779,7 @@ export function summarizeUserViewProjection(
 /** JSON 导出契约标识 */
 export const USER_VIEW_PROJECTION_EXPORT_FORMAT =
   'crish-user-view-projection' as const;
-export const USER_VIEW_PROJECTION_EXPORT_VERSION = 1 as const;
-
+const USER_VIEW_PROJECTION_EXPORT_VERSION = 1 as const;
 /**
  * 序列化投影调试 JSON（含摘要 + UserView DTO）。
  * 仅导出 UserView 侧；不回流 ModelView。

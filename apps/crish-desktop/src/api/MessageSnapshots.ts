@@ -285,6 +285,3 @@ export class MessageSnapshots {
     }
   }
 }
-
-/** 全局单例 */
-export const messageSnapshots = new MessageSnapshots();

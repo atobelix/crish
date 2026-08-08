@@ -15,8 +15,6 @@ export type {
 
 export {
   buildAssistantTimeline,
-  buildToolRenderItems,
-  dedupeToolCalls,
   normalizeAssistantTimeline,
 } from './tool-presentation/timelineNormalizer';
 
@@ -28,8 +26,6 @@ export {
   fullToolOutput,
   humanizeAgentSummary,
   humanizeShellCommand,
-  isInspectTool,
-  isInterruptedTool,
   isPlaceholderToolOutput,
   isShellToolName,
   isToolRowDefaultOpen,
@@ -40,11 +36,9 @@ export {
   toolCommandPreview,
   toolDiffLineStats,
   toolHasDiffStat,
-  toolHasDisplayableResult,
   toolHasExpandableBody,
   toolHumanLabel,
   toolPathDisplayName,
   toolResultPreview,
   toolRowTone,
-  truncateToolOutput,
 } from './tool-presentation/toolCardPresenter';

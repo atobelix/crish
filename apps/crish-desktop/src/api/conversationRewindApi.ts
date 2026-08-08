@@ -10,12 +10,6 @@ export interface ConversationRewindPreview {
   error?: string;
 }
 
-export interface ConversationRewindApplyResult {
-  ok: boolean;
-  raw: Record<string, unknown>;
-  error?: string;
-}
-
 /**
  * Preview rewind to a target leaf / message boundary.
  * T03.7：显式不可用。
@@ -30,22 +24,5 @@ export async function previewConversationRewind(_input: {
     ok: false,
     raw: {},
     error: '引擎不支持对话回退预览（preview-conversation-rewind 不可用）',
-  };
-}
-
-/**
- * Apply a previously previewed rewind.
- * T03.7：显式不可用。
- */
-export async function applyConversationRewind(_input: {
-  sessionId: string;
-  targetLeafId?: string;
-  targetEventId?: string;
-  targetMessageId?: string;
-}): Promise<ConversationRewindApplyResult> {
-  return {
-    ok: false,
-    raw: {},
-    error: '引擎不支持对话回退（apply-conversation-rewind 不可用）',
   };
 }

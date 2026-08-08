@@ -9,18 +9,13 @@
  */
 
 /** Full lowercase hex digest of UTF-8(value), same as Node createHash('sha256').update(value).digest('hex'). */
-export function hashTextSha256Hex(value: string): string {
+function hashTextSha256Hex(value: string): string {
   return sha256Hex(utf8Bytes(value));
 }
 
 /** Runtime-compatible: skill_<12 hex chars of sha256(`${name}:${filePath}`)>. */
 export function skillStableId(name: string, filePath: string): string {
   return stableId('skill', `${name}:${filePath}`);
-}
-
-/** Runtime-compatible rule id helper (optional; same algorithm). */
-export function ruleStableId(value: string): string {
-  return stableId('rule', value);
 }
 
 function stableId(prefix: string, value: string): string {

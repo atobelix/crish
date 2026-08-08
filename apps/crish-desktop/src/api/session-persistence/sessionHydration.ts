@@ -26,7 +26,7 @@ import {
 } from './sessionPersistenceTypes';
 
 /** 规范化索引侧 importMeta；非法则 undefined */
-export function parseSessionIndexImportMeta(
+function parseSessionIndexImportMeta(
   raw: unknown,
 ): SessionIndexImportMeta | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;

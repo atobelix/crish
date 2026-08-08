@@ -3,8 +3,6 @@
  * 经 Tauri workbench_run_shell，不经 daemon 审批。
  */
 
-import { invokeResult } from './tauriInvoke';
-
 export type TerminalShellResult = {
   ok: boolean;
   stdout: string;
@@ -17,70 +15,6 @@ export type TerminalShellResult = {
   durationMs: number;
   truncated: boolean;
 };
-
-type RawShellResult = {
-  ok?: boolean;
-  stdout?: string;
-  stderr?: string;
-  exitCode?: number | null;
-  timedOut?: boolean;
-  cancelled?: boolean;
-  shell?: string;
-  cwd?: string;
-  durationMs?: number;
-  truncated?: boolean;
-};
-
-export type RunTerminalShellOptions = {
-  command: string;
-  cwd?: string;
-  timeoutMs?: number;
-};
-
-/**
- * 在工作区 cwd 下用系统 shell 执行一行命令。
- * missing = 非桌面壳 / 命令未注册；error = 执行失败。
- */
-export async function runTerminalShell(
-  opts: RunTerminalShellOptions,
-): Promise<
-  | { status: 'ok'; data: TerminalShellResult }
-  | { status: 'missing' }
-  | { status: 'error'; message: string }
-> {
-  const command = (opts.command || '').trim();
-  if (!command) {
-    return { status: 'error', message: 'command is empty' };
-  }
-
-  const res = await invokeResult<RawShellResult>('workbench_run_shell', {
-    request: {
-      command,
-      cwd: opts.cwd || undefined,
-      timeoutMs: opts.timeoutMs,
-    },
-  });
-
-  if (res.status === 'missing') return { status: 'missing' };
-  if (res.status === 'error') return { status: 'error', message: res.message };
-
-  const raw = res.data || {};
-  return {
-    status: 'ok',
-    data: {
-      ok: Boolean(raw.ok),
-      stdout: String(raw.stdout ?? ''),
-      stderr: String(raw.stderr ?? ''),
-      exitCode: raw.exitCode == null ? null : Number(raw.exitCode),
-      timedOut: Boolean(raw.timedOut),
-      cancelled: Boolean(raw.cancelled),
-      shell: String(raw.shell ?? 'powershell.exe'),
-      cwd: String(raw.cwd ?? ''),
-      durationMs: Number(raw.durationMs ?? 0),
-      truncated: Boolean(raw.truncated),
-    },
-  };
-}
 
 /**
  * 是否应走系统 shell 执行（非 clear 内建、非空）。

@@ -46,7 +46,7 @@ export type InstalledExtension = {
  */
 const MCP_TOOL_DISABLED_CACHE = 'crish_mcp_tool_disabled_cache_v1';
 
-export function loadMcpToolDisabled(): Record<string, string[]> {
+function loadMcpToolDisabled(): Record<string, string[]> {
   try {
     const raw = sessionStorage.getItem(MCP_TOOL_DISABLED_CACHE);
     if (raw) {
@@ -200,12 +200,6 @@ export function kindLabel(kind: ExtensionKind): string {
   return '技能';
 }
 
-export function sourceLabel(source: ExtensionSource): string {
-  if (source === 'official') return '官方';
-  if (source === 'community') return '三方';
-  return '本机';
-}
-
 export function loadCatalogInstalledIds(): Set<string> {
   try {
     const raw = localStorage.getItem(INSTALLED_CATALOG_KEY);
@@ -218,7 +212,7 @@ export function loadCatalogInstalledIds(): Set<string> {
   }
 }
 
-export function saveCatalogInstalledIds(ids: Set<string>): void {
+function saveCatalogInstalledIds(ids: Set<string>): void {
   try {
     localStorage.setItem(INSTALLED_CATALOG_KEY, JSON.stringify([...ids]));
   } catch {
@@ -236,8 +230,4 @@ export function unmarkCatalogInstalled(id: string): void {
   const s = loadCatalogInstalledIds();
   s.delete(id);
   saveCatalogInstalledIds(s);
-}
-
-export function isCatalogInstalled(id: string): boolean {
-  return loadCatalogInstalledIds().has(id);
 }

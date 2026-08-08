@@ -64,7 +64,7 @@ function countEventListeners(): number {
   return count;
 }
 
-export async function runMemBenchmark(benchmark: MemBenchmark, iterations = 3): Promise<MemBenchmarkResult> {
+async function runMemBenchmark(benchmark: MemBenchmark, iterations = 3): Promise<MemBenchmarkResult> {
   const samples: MemBenchmarkSample[] = [];
 
   try {

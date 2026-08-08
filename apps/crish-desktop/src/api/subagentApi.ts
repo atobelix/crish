@@ -10,7 +10,7 @@ import { streamViaEngine } from './chatBridge';
 
 export type CollaboratorMode = 'research' | 'implement' | 'verify';
 
-export const COLLABORATOR_MODES: {
+const COLLABORATOR_MODES: {
   id: CollaboratorMode;
   label: string;
   hint: string;
@@ -56,7 +56,7 @@ export function streamCollaboratorRun(
 }
 
 /** 组装手动拉起协作者的任务卡 */
-export function buildCollaboratorPrompt(input: {
+function buildCollaboratorPrompt(input: {
   mode: CollaboratorMode;
   description: string;
   task: string;

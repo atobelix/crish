@@ -5,9 +5,6 @@
  * - rule:desktop:project
  */
 
-export const RULE_ID_GLOBAL = 'rule:desktop:global';
-export const RULE_ID_PROJECT = 'rule:desktop:project';
-
 const MAX_RULE_CHARS = 12_000;
 
 export type SyncRulesResult = {

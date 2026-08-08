@@ -20,9 +20,9 @@ import {
 import { parseMarkdownToHtmlUncached } from './markdown-render/markdownPlugins';
 
 // Cache API re-export (stable path for tests / callers)
-export { clearMarkdownHtmlCache, markdownHtmlCacheSize };
+export { clearMarkdownHtmlCache };
 // Lite helpers re-export (compat; chat row should import markdownRenderLite)
-export { escapeHtml, stripThoughtPlaceholders } from './markdownRenderLite';
+export { stripThoughtPlaceholders } from './markdownRenderLite';
 
 /**
  * Markdown → safe HTML. Identical raw reuses LRU cache.

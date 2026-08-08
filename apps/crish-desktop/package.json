@@ -23,7 +23,6 @@
     "@fontsource/ibm-plex-sans": "^5.2.8",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "@radix-ui/react-popover": "^1.1.23",
     "@tauri-apps/api": "^2.8.0",
     "@tiptap/core": "^3.29.2",

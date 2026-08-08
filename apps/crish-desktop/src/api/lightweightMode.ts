@@ -22,11 +22,7 @@ let config: LightweightConfig = {
   disableTelemetry: false,
 };
 
-export function getLightweightConfig(): LightweightConfig {
-  return config;
-}
-
-export function computeLightweightConfig(platformLevel: PlatformLevel): LightweightConfig {
+function computeLightweightConfig(platformLevel: PlatformLevel): LightweightConfig {
   if (platformLevel === 0) {
     config = {
       enabled: true,

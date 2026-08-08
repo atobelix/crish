@@ -714,10 +714,3 @@ export const CRISH_ERROR_REGISTRY: Readonly<
 export function getErrorInfo(code: CrishErrorCode): CrishErrorInfo {
   return CRISH_ERROR_REGISTRY[code] ?? CRISH_ERROR_REGISTRY['common.unknown'];
 }
-
-/** 按域聚合错误码（用于分组展示与路由） */
-export function codesByDomain(domain: string): CrishErrorCode[] {
-  return (Object.keys(CRISH_ERROR_REGISTRY) as CrishErrorCode[]).filter((c) =>
-    c.startsWith(domain + '.')
-  );
-}

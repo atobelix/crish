@@ -601,7 +601,7 @@ export type MessageViewportSlice = {
 };
 
 export const MESSAGE_VIEWPORT_OVERSCAN = 6;
-export const MESSAGE_VIEWPORT_THRESHOLD = 60;
+const MESSAGE_VIEWPORT_THRESHOLD = 60;
 export const MESSAGE_ESTIMATED_ROW_HEIGHT = 120;
 
 /**
@@ -609,21 +609,6 @@ export const MESSAGE_ESTIMATED_ROW_HEIGHT = 120;
  * 渐进精确：actual > estimated > 120。
  * 首次加载 cache 空 → fallback=120，行为不变。
  */
-export function computeAverageRowHeight(
-  getHeight: (msgId: string) => number,
-  messageIds: readonly string[],
-  fallback = MESSAGE_ESTIMATED_ROW_HEIGHT,
-): number {
-  if (messageIds.length === 0) return fallback;
-  let total = 0;
-  let count = 0;
-  for (const id of messageIds) {
-    const h = getHeight(id);
-    total += h;
-    count++;
-  }
-  return count > 0 ? total / count : fallback;
-}
 
 export function computeMessageViewportSlice(opts: {
   count: number;

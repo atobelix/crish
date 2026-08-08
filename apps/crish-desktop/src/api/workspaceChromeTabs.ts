@@ -85,7 +85,7 @@ export function activeWorkspaceTabId(
   return currentWorkspaceFolderKey(activeProjectId);
 }
 
-export function isWorkspaceTabActive(
+function isWorkspaceTabActive(
   tab: WorkspaceTab,
   activeProjectId: string | null = getActiveProjectId(),
 ): boolean {
@@ -143,7 +143,7 @@ function uniquePreserveOrder(ids: string[]): string[] {
 }
 
 /** 读取某工作区已打开会话 id（稳定顺序，打开先后） */
-export function getOpenSessionTabIds(workspaceKey: string): string[] {
+function getOpenSessionTabIds(workspaceKey: string): string[] {
   const key = (workspaceKey || GENERAL_FOLDER).trim() || GENERAL_FOLDER;
   return [...(loadOpenTabsMap()[key] || [])];
 }

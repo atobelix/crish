@@ -155,7 +155,7 @@ export function deleteMarkdownHtmlCache(raw: string, scope?: string): boolean {
   return deleteMarkdownHtmlCacheByKey(markdownCacheKey(raw, scope));
 }
 
-export function deleteMarkdownHtmlCacheByKey(key: string): boolean {
+function deleteMarkdownHtmlCacheByKey(key: string): boolean {
   return MARKDOWN_HTML_CACHE.delete(key);
 }
 
@@ -174,7 +174,7 @@ export function invalidateMarkdownStreamCache(streamId: string): number {
   return n;
 }
 
-export function invalidateMarkdownHtmlCacheByKeyPrefix(prefix: string): number {
+function invalidateMarkdownHtmlCacheByKeyPrefix(prefix: string): number {
   if (!prefix) return 0;
   let removed = 0;
   for (const key of MARKDOWN_HTML_CACHE.keys()) {

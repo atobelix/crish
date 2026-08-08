@@ -72,7 +72,7 @@ export async function listHostOpeners(): Promise<HostOpener[]> {
  * 按扩展名再扫一轮「推荐应用」：Start Menu 快捷方式（非硬编码名单）。
  * 壳层未实现时回落空数组。
  */
-export async function listFileOpenHandlers(filePath: string): Promise<HostOpener[]> {
+async function listFileOpenHandlers(filePath: string): Promise<HostOpener[]> {
   const path = (filePath || '').trim();
   if (!path) return [];
   const raw = await invokeCmd<RawHostOpener[]>('workbench_list_file_openers', {

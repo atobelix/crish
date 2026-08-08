@@ -99,16 +99,6 @@ export function normalizeModelIds(raw: unknown): string[] {
   return [];
 }
 
-export function mergeModelIds(...lists: unknown[]): string[] {
-  const set = new Set<string>();
-  for (const list of lists) {
-    for (const id of normalizeModelIds(list)) {
-      set.add(id);
-    }
-  }
-  return Array.from(set);
-}
-
 /** 目录项去重键：profileId::model（与 meta 存储键同形） */
 export function catalogEntryKey(
   entry: Pick<CatalogModelEntry, 'profileId' | 'model'> | null | undefined
@@ -395,7 +385,7 @@ export function guessContextLength(model: string): number | undefined {
   return undefined;
 }
 
-export function guessModelCapabilities(model: string): ModelCapabilities {
+function guessModelCapabilities(model: string): ModelCapabilities {
   if (!model) return { tools: true };
   const m = model.toLowerCase();
   const reasoning =
@@ -436,7 +426,7 @@ export function getModelMeta(profileId: string, model: string): ModelMeta {
   };
 }
 
-export function upsertModelMeta(
+function upsertModelMeta(
   profileId: string,
   model: string,
   patch: Partial<
@@ -508,22 +498,6 @@ export function setModelCapability(
 }
 
 /** 模型 id 变更时迁移元数据键 */
-export function moveModelMeta(
-  profileId: string,
-  fromModel: string,
-  toModel: string
-): ModelMeta | null {
-  const from = normalizeModelIdText(fromModel);
-  const to = normalizeModelIdText(toModel);
-  if (!from || !to || from === to) return getModelMeta(profileId, to || from);
-  const map = loadMap();
-  const prev = map[metaKey(profileId, from)] || getModelMeta(profileId, from);
-  const next: ModelMeta = { ...prev, profileId, model: to };
-  delete map[metaKey(profileId, from)];
-  map[metaKey(profileId, to)] = next;
-  saveMap(map);
-  return next;
-}
 
 /** 展示名：优先 displayName，否则 model id */
 export function formatModelDisplayName(
@@ -537,16 +511,6 @@ export function formatModelDisplayName(
 }
 
 /** 能力摘要，如「工具 · 视觉」；全关/无 → 空串 */
-export function formatCapabilitiesLabel(
-  caps?: ModelCapabilities | null
-): string {
-  if (!caps) return '';
-  const parts: string[] = [];
-  for (const opt of MODEL_CAPABILITY_OPTIONS) {
-    if (caps[opt.key]) parts.push(opt.label);
-  }
-  return parts.join(' · ');
-}
 
 /**
  * 上下文长度展示（纯）：空/非法 → 中文破折号「—」。

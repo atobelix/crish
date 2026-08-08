@@ -26,7 +26,7 @@ export function validatePreparedText(prepared: unknown): boolean {
 /**
  * 封装 prepare，针对超长文本与极端字符(Emoji/CJK)引发的引擎崩溃进行防御
  */
-export function safePrepareText(text: string, font: string): PreparedText | null {
+function safePrepareText(text: string, font: string): PreparedText | null {
   try {
     const safeText = text.length > 50000 ? text.slice(0, 50000) : text;
     const prepared = prepare(safeText, font, { whiteSpace: 'pre-wrap' });

@@ -386,7 +386,7 @@ export function parseBackgroundTask(raw: unknown): BackgroundTaskInfo | null {
  * 解析资源采样快照：字段名容错 camelCase / snake_case，非数值忽略。
  * 空对象 / 畸形 → 空快照（永不抛）。
  */
-export function parseBgTaskResourceSample(raw: unknown): BackgroundTaskResourceSample {
+function parseBgTaskResourceSample(raw: unknown): BackgroundTaskResourceSample {
   const o = asRec(raw);
   if (!o) return {};
   const out: BackgroundTaskResourceSample = {};
@@ -755,7 +755,7 @@ export type KillBackgroundTaskResult =
  * `{ killed: { taskId, viaForce } }` / `{ alreadyExited: { taskId, exitCode } }`
  * / `{ failed: { taskId, reason } }`；畸形 / 缺 id → null（永不抛）。
  */
-export function parseKillResultPayload(data: unknown): KillBackgroundTaskResult | null {
+function parseKillResultPayload(data: unknown): KillBackgroundTaskResult | null {
   const root = asRec(data);
   if (!root) return null;
 
@@ -822,7 +822,7 @@ export type SendBackgroundTaskInputResult =
  * 纯 send_input 决策：缺 id / 空文本 / 非活跃任务 → 失败（不 invoke）。
  * 无任务上下文时仅校验 id 与文本（调用方自行负责任务态）。
  */
-export function decideSendBackgroundTaskInput(
+function decideSendBackgroundTaskInput(
   taskId: unknown,
   text: unknown,
   task?: Pick<BackgroundTaskInfo, 'id' | 'state'> | null,

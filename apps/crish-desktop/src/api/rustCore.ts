@@ -51,17 +51,6 @@ export async function searchFilesDetailed(
   return { status: 'ok', hits: normalizeFileHits(res.data, limit) };
 }
 
-/** Rebuild resident fuzzy index for a workspace root (gitignored walk). */
-export async function rebuildSearchIndex(root: string): Promise<{ fileCount: number } | null> {
-  const res = await invokeResult<{ fileCount?: number; file_count?: number }>(
-    'core_rebuild_search_index',
-    { root },
-  );
-  if (res.status !== 'ok' || !res.data) return null;
-  const n = res.data.fileCount ?? res.data.file_count ?? 0;
-  return { fileCount: typeof n === 'number' ? n : 0 };
-}
-
 // ===== Compaction API =====
 
 export interface Message {
@@ -185,33 +174,6 @@ export async function renderMarkdown(text: string): Promise<string | null> {
 }
 
 /**
- * 批量 markdown → HTML。一次 IPC 多条文本，减少往返开销。
- * Rust 侧返回数组顺序与入参一一对应。
- * 命令缺失或失败时返回 null。
- */
-export async function renderMarkdownBatch(texts: string[]): Promise<string[] | null> {
-  const res = await invokeResult<string[]>('md_render_batch', { texts });
-  if (res.status === 'ok') return res.data;
-  return null;
-}
-
-/**
- * 流式 markdown 渲染（Rust 侧，stream_mode=true 跳过 syntect 高亮）。
- * 用于完成态渲染的流式 fallback，或 Rust 侧测试。
- * 注意：流式期主路径是 JS IncrementalMarkdownParser，零 IPC。
- */
-export async function renderMarkdownStream(
-  text: string,
-  streamMode: boolean,
-): Promise<string | null> {
-  const res = await invokeResult<string>('md_render_stream', {
-    text,
-    streamMode,
-  });
-  return res.status === 'ok' ? res.data : null;
-}
-
-/**
  * 单段代码 → 高亮 HTML（class style，含 hljs-* token class）。
  * 命令缺失或失败时返回 null，调用方回退到 highlight.js。
  */
@@ -224,14 +186,6 @@ export async function highlightCode(
   const res = await invokeResult<string>('highlight_code', args);
   if (res.status === 'ok') return res.data;
   return null;
-}
-
-/**
- * 清空 Rust 侧 markdown HTML LRU 缓存（moka）。
- * 命令缺失或失败时静默忽略（JS 侧缓存独立管理）。
- */
-export async function clearMarkdownCache(): Promise<void> {
-  await invokeResult<void>('md_clear_cache', {});
 }
 
 // ===== Worker 池下沉 API (Stream E) =====
@@ -418,25 +372,6 @@ export async function coreJsonlToMessages(
 ): Promise<unknown[] | null> {
   const res = await invokeResult<unknown[]>('core_jsonl_to_messages', { text });
   if (res.status === 'ok') return res.data || [];
-  return null;
-}
-
-/**
- * 把 UTF-8 字符串编码为目标编码的 bytes。
- * - encoding 缺省：UTF-8（与 TextEncoder 等价）
- * - encoding 提供：用 encoding_rs 编码（如 "gb18030" / "shift_jis"）
- *
- * 替代 io-worker 的 text.encode case（原 case 忽略 encoding 参数，是 bug）。
- * 命令缺失或失败时返回 null。
- */
-export async function coreTextEncode(
-  text: string,
-  encoding?: string,
-): Promise<Uint8Array | null> {
-  const args: Record<string, unknown> = { text };
-  if (encoding != null && encoding !== '') args.encoding = encoding;
-  const res = await invokeResult<number[]>('core_text_encode', args);
-  if (res.status === 'ok') return new Uint8Array(res.data || []);
   return null;
 }
 
