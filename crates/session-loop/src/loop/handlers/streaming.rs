@@ -24,7 +24,9 @@ use futures::StreamExt;
 use std::sync::Arc;
 
 use crate::provider::{DeltaSink, ProviderCall, ProviderRequest, ToolSchema};
-use crate::stream::{ConsumeBuilder, ConsumeResult, ConsumeStopReason, ProviderStreamEvent, StopReason};
+use crate::stream::{
+    ConsumeBuilder, ConsumeResult, ConsumeStopReason, ProviderStreamEvent, StopReason,
+};
 
 use super::super::end::EndDecision;
 use super::super::handlers::{
@@ -196,7 +198,12 @@ pub(crate) async fn handle(
             if tool_calls.is_empty() {
                 no_tool_calls::handle(state, consumed.stop_reason()).await
             } else {
-                dispatch(state, E::HasToolCalls { count: tool_calls.len() as u32 })?;
+                dispatch(
+                    state,
+                    E::HasToolCalls {
+                        count: tool_calls.len() as u32,
+                    },
+                )?;
                 Ok(HandlerOutcome::continue_run())
             }
         }
@@ -208,6 +215,13 @@ pub(crate) async fn handle(
                     state,
                     "steering 已禁用，空响应无法恢复",
                 )));
+            }
+            // F2-04（P2 批 6）：分类后、steering 注入前复查 abort（对齐
+            // StreamError 分支 :219）——abort 在 Q33 复查（:151）之后、本
+            // 分支分派之前到达时，不得执行策略评估并把 steering 注入消息
+            // 写入对话（abort 后副作用）；命中直接 aborted 收场
+            if aborted || state.abort_signal.is_aborted() {
+                return streaming_aborted(state);
             }
             // 空响应 → STEERING_NEEDED（01 §2.4 步骤 5）
             dispatch(state, E::SteeringNeeded)?;
@@ -243,11 +257,12 @@ pub(crate) fn streaming_aborted(state: &mut LoopState) -> Result<HandlerOutcome,
             // （不再写 state.abort_reason，该字段已删除）
             dispatch(state, E::Abort)?;
             Ok(HandlerOutcome::end(EndDecision::aborted_with_diagnostic(
-                state,
-                reason,
+                state, reason,
             )))
         }
-        Some(crate::safe_point::ControlAction::CooperativeStop { pending_messages, .. }) => {
+        Some(crate::safe_point::ControlAction::CooperativeStop {
+            pending_messages, ..
+        }) => {
             for message in pending_messages {
                 state.input_queue.enqueue_steer(message);
             }
@@ -354,7 +369,9 @@ fn emit_diagnostics(state: &mut LoopState, consumed: &ConsumeResult) {
 /// `tracker.record_usage`；产出的 [CacheMiss] 只做日志观测——cache-waste-alert
 /// 事件发射（阈值 + DeltaSink 实时轨）归 T-40 engine 接线。
 fn consume_cache_usage(state: &mut LoopState, consumed: &ConsumeResult) {
-    let Some(tracker) = &mut state.cache_tracker else { return };
+    let Some(tracker) = &mut state.cache_tracker else {
+        return;
+    };
     let Some(usage) = consumed.metadata.get("usage").and_then(|v| v.as_object()) else {
         return;
     };
@@ -420,7 +437,11 @@ fn build_assistant_message(
 ) -> AgentMessage {
     let mut blocks: Vec<AgentMessageBlock> = Vec::new();
     // thought 块（metadata.thoughtBlocks，redacted 透传，02 §一.4）
-    if let Some(blocks_value) = consumed.metadata.get("thoughtBlocks").and_then(|v| v.as_array()) {
+    if let Some(blocks_value) = consumed
+        .metadata
+        .get("thoughtBlocks")
+        .and_then(|v| v.as_array())
+    {
         for block in blocks_value {
             if let (Some(text), Some(redacted)) = (
                 block.get("text").and_then(|v| v.as_str()),
@@ -471,12 +492,16 @@ fn build_assistant_message(
 fn commit_message_with_deltas(state: &mut LoopState, message: AgentMessage) {
     let session_id = state.machine.context().session_id.clone();
     let message = Arc::new(message);
-    state
-        .events
-        .push(AgentEvent::MessageStart { session_id: session_id.clone(), message: message.clone() });
+    state.events.push(AgentEvent::MessageStart {
+        session_id: session_id.clone(),
+        message: message.clone(),
+    });
     emit_message_deltas(state, &message);
     state.conversation.push(message.clone());
-    state.events.push(AgentEvent::MessageEnd { session_id, message });
+    state.events.push(AgentEvent::MessageEnd {
+        session_id,
+        message,
+    });
 }
 
 /// 实时轨 delta 事件构造（T09.1 双轨）：text-delta / thought-delta →
@@ -489,9 +514,7 @@ fn delta_to_message_event(
     event: &ProviderStreamEvent,
 ) -> Option<AgentEvent> {
     let block = match event {
-        ProviderStreamEvent::TextDelta { text } => AgentMessageBlock::Text {
-            text: text.clone(),
-        },
+        ProviderStreamEvent::TextDelta { text } => AgentMessageBlock::Text { text: text.clone() },
         ProviderStreamEvent::ThoughtDelta { text, redacted } => AgentMessageBlock::Thought {
             text: text.clone(),
             redacted: *redacted,
@@ -511,7 +534,10 @@ fn delta_to_message_event(
 fn emit_message_deltas(state: &mut LoopState, message: &AgentMessage) {
     let session_id = state.machine.context().session_id.clone();
     for block in &message.blocks {
-        if matches!(block, AgentMessageBlock::Text { .. } | AgentMessageBlock::Thought { .. }) {
+        if matches!(
+            block,
+            AgentMessageBlock::Text { .. } | AgentMessageBlock::Thought { .. }
+        ) {
             state.events.push(AgentEvent::MessageDelta {
                 session_id: session_id.clone(),
                 timestamp: crate::steering::now_iso_utc(),

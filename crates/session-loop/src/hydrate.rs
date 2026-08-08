@@ -536,6 +536,37 @@ mod tests {
         assert_eq!(ids(&hydrate_history(history)), ["u1", "a1", "u2"]);
     }
 
+    /// F1 盲区 10 / F2-06：连续同角色形态的水合行为锚定——当前实现为
+    /// 「宽容水合」：连续 user 原样保留、assistant 开头（尾部 user 前）
+    /// 合法保留，不做交替归并（ProviderCall 实现方当前未拒绝连续同角色；
+    /// 若未来 Anthropic 系协议收紧，此为演进点——测试钉住现状契约）
+    #[test]
+    fn consecutive_user_and_assistant_first_shapes_pass_through() {
+        // 形态一：[assistant, user, user] 连续 user——尾部 user 满足截断
+        // 约束，中间连续 user 原样保留（不合并）
+        let consecutive_user = vec![
+            msg("a1", "assistant", Some("r1"), None),
+            msg("u2", "user", Some("q2"), None),
+            msg("u3", "user", Some("q3"), None),
+        ];
+        assert_eq!(ids(&hydrate_history(consecutive_user)), ["a1", "u2", "u3"]);
+
+        // 形态二：assistant 开头 + 尾部 user——头部 assistant 合法保留
+        // （assistant 开头的历史在尾部 user 前合法）
+        let assistant_first = vec![
+            msg("a1", "assistant", Some("r1"), None),
+            msg("u2", "user", Some("q2"), None),
+        ];
+        assert_eq!(ids(&hydrate_history(assistant_first)), ["a1", "u2"]);
+
+        // 形态三：纯连续 user 无 assistant——原样保留
+        let all_user = vec![
+            msg("u1", "user", Some("q1"), None),
+            msg("u2", "user", Some("q2"), None),
+        ];
+        assert_eq!(ids(&hydrate_history(all_user)), ["u1", "u2"]);
+    }
+
     #[test]
     fn all_assistant_history_truncates_to_empty() {
         let history = vec![

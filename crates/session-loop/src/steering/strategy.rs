@@ -255,7 +255,13 @@ fn exit_code_from_text(text: &str) -> Option<i64> {
         }
         let digits: String = rest.take_while(|c| c.is_ascii_digit()).collect();
         if !digits.is_empty() {
-            let magnitude: i64 = digits.parse().ok()?;
+            // F3-01（P2 批 6）：非法数字段不得提前终止扫描——`?` 会把
+            // "exit code: unknown\nexit code: 1" 误判为非失败；continue
+            // 继续找后续合法段
+            let Ok(magnitude) = digits.parse::<i64>() else {
+                from = start;
+                continue;
+            };
             return Some(if negative { -magnitude } else { magnitude });
         }
         from = start;
@@ -499,6 +505,33 @@ mod tests {
         assert!(strategy
             .evaluate(SteeringPhase::AfterTools, &context(&zero, 0))
             .is_none());
+    }
+
+    /// F1 盲区 9 / F3-01：非法数字段（`exit code: unknown`）之后跟合法段
+    /// （`exit code: 1`）——扫描必须继续，不得提前 `?` 返回 None 误判为
+    /// 成功（修复前：`digits.parse().ok()?` 遇非法段提前终止，漏判失败）
+    #[test]
+    fn exit_code_invalid_segment_continues_scanning() {
+        let strategy = RecoverySteeringStrategy::default();
+        // 连续失败阈值 2：两条消息均为「非法段 + 合法非零段」形态
+        let invalid_then_valid = arc_messages(vec![
+            tool_result("exit code: unknown\nexit code: 1", false),
+            tool_result("exit code: n/a\nexit code: 127", false),
+        ]);
+        let (_, reason) = inject_of(
+            strategy
+                .evaluate(SteeringPhase::AfterTools, &context(&invalid_then_valid, 0))
+                .expect("非法段后的合法非零退出码必须触发"),
+        );
+        assert_eq!(reason, SteeringReason::ToolErrors);
+
+        // 反向：非法段后跟合法零 → 不触发（continue 后正确归零）
+        let invalid_then_zero = arc_messages(vec![
+            tool_result("exit code: unknown\nexit code: 0", false),
+        ]);
+        assert!(strategy
+            .evaluate(SteeringPhase::AfterTools, &context(&invalid_then_zero, 0))
+            .is_none(), "非法段后合法零退出码不触发");
     }
 
     /// 重复调用环边界 N-1/N：同签名 2 次不触发、3 次触发（默认阈值 3）

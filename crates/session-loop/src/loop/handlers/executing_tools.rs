@@ -18,12 +18,12 @@ use conex_types::error::codes;
 use conex_types::events::AgentEvent;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::session::AgentSessionEvent as E;
-use conex_types::tool::{ToolBatchCall, ToolBatchResult, ToolCategory, ToolConcurrency, ToolOutput};
+use conex_types::tool::{
+    ToolBatchCall, ToolBatchResult, ToolCategory, ToolConcurrency, ToolOutput,
+};
 
 use crate::safe_point::AbortSignal;
-use crate::tool_events::{
-    ApprovalGate, ClassifiedToolResult, ToolBatchOptions, ToolEvent,
-};
+use crate::tool_events::{ApprovalGate, ClassifiedToolResult, ToolBatchOptions, ToolEvent};
 use crate::tool_exec::{ToolExecCtx, ToolExecutor};
 use std::sync::Arc;
 
@@ -166,7 +166,9 @@ fn tool_output_from_result(result: &ClassifiedToolResult) -> ToolOutput {
         } else if let Some(obj) = result.output.as_object() {
             // 对象形态：仅当含 text/json/artifacts 已知键时按 ToolOutput
             // 结构解析，否则整体作为 json 输出承载（避免未知键被吞）
-            let has_known = ["text", "json", "artifacts"].iter().any(|k| obj.contains_key(*k));
+            let has_known = ["text", "json", "artifacts"]
+                .iter()
+                .any(|k| obj.contains_key(*k));
             if has_known {
                 serde_json::from_value(result.output.clone()).unwrap_or_default()
             } else {
@@ -201,7 +203,10 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
     let mut batch_id = String::new();
     for event in events {
         match event {
-            ToolEvent::BatchStart { batch_id: id, count } => {
+            ToolEvent::BatchStart {
+                batch_id: id,
+                count,
+            } => {
                 batch_id = id.clone();
                 state.events.push(AgentEvent::ToolBatchStart {
                     session_id: session_id.clone(),
@@ -291,7 +296,12 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                     result: ToolBatchResult {
                         id: call_id.clone(),
                         tool_name: tool_name.clone(),
-                        output: tool_output_from_parts(output, *is_error, error_code.as_deref(), error_message),
+                        output: tool_output_from_parts(
+                            output,
+                            *is_error,
+                            error_code.as_deref(),
+                            error_message,
+                        ),
                         is_error: *is_error,
                         duration_ms: *duration_ms,
                     },
@@ -334,7 +344,9 @@ fn tool_output_from_parts(
         return ToolOutput::text(text.to_string());
     }
     if let Some(obj) = output.as_object() {
-        let has_known = ["text", "json", "artifacts"].iter().any(|k| obj.contains_key(*k));
+        let has_known = ["text", "json", "artifacts"]
+            .iter()
+            .any(|k| obj.contains_key(*k));
         if has_known {
             return serde_json::from_value(output.clone()).unwrap_or_default();
         }
@@ -354,12 +366,12 @@ fn tool_output_from_parts(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_tools::registry::ToolRegistry;
-    use conex_types::tool::ToolProgressUpdate;
     use crate::r#loop::SessionLoopOptions;
     use crate::steering::{
         RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions,
     };
+    use agent_tools::registry::ToolRegistry;
+    use conex_types::tool::ToolProgressUpdate;
 
     /// 构造最小 LoopState（emit_tool_events 单测驱动）
     fn state() -> LoopState {
@@ -494,5 +506,55 @@ mod tests {
             }
             _ => panic!("ToolProgress 应映射为 AgentEvent::ToolUpdate"),
         }
+    }
+
+    /// F1 盲区 8 / F3-10：tool-result 消息 id 派生契约——不同 tool-call id
+    /// 产出不同消息 id；**同一 tool-call id 复用（模型跨轮重发同 id 调用）
+    /// 时消息 id 相同（已知冲突，F3-10 观察项）**——本测试钉住现状形态，
+    /// 未来去重修复（按出现序消歧）时以此为回归锚点。
+    #[test]
+    fn tool_result_message_id_derivation_documented() {
+        let ok = ClassifiedToolResult {
+            id: "call_x".into(),
+            tool_name: "echo".into(),
+            error_kind: None,
+            error_message: None,
+            output: serde_json::json!({"ok": true}),
+            duration_ms: 1,
+        };
+        let message = tool_result_message(&ok);
+        assert_eq!(message.id, "tool-result-call_x");
+        assert_eq!(message.role, AgentMessageRole::Tool);
+        // tool_call_id 回指原调用 id（回放侧配对语义）
+        let AgentMessageBlock::ToolResult { tool_call_id, .. } = &message.blocks[0] else {
+            panic!("tool 角色消息应含 ToolResult 块");
+        };
+        assert_eq!(tool_call_id, "call_x");
+
+        // 不同调用 id → 消息 id 互异
+        let other = ClassifiedToolResult {
+            id: "call_y".into(),
+            tool_name: "echo".into(),
+            error_kind: None,
+            error_message: None,
+            output: serde_json::json!({"ok": true}),
+            duration_ms: 1,
+        };
+        assert_ne!(
+            tool_result_message(&ok).id,
+            tool_result_message(&other).id,
+            "不同 tool-call id 不得共享消息 id"
+        );
+        // 同 id 复用（模型重发）→ 消息 id 相同（F3-10 已知形态：跨轮
+        // 复用同 id 时消息 id 冲突，事件侧无重复检查）
+        assert_eq!(
+            tool_result_message(&ok).id,
+            tool_result_message(&ClassifiedToolResult {
+                id: "call_x".into(),
+                ..ok
+            })
+            .id,
+            "同 tool-call id 派生相同消息 id（F3-10 现状契约：冲突形态已知）"
+        );
     }
 }

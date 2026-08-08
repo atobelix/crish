@@ -1196,3 +1196,157 @@ async fn control_bus_levels_and_kinds() {
     );
     assert_eq!(session_loop::level_for_kind(ControlKind::SoftInject), ControlLevel::L1);
 }
+
+/// F1 盲区 7 / F2-04：空响应 + abort 竞速——abort 到达后不得执行策略
+/// 评估、不得把 steering 注入消息写入对话（abort 后副作用）；直接
+/// aborted 收场。
+///
+/// 注（诚实边界）：外部触发的 abort 在流消费期即被 Q33 复查（streaming.rs
+/// :135/:151）捕获（finish_after_abort → StreamError(Aborted) 分支），
+/// Empty 分支的复查（F2-04 修复）覆盖「分类后、注入前」的理论竞速窗口
+/// （内部分类期触发 abort 的形态，当前外部时序不可达）——本测试钉住
+/// 用户可见语义（abort → aborted 收场 + 零 steering 副作用），修复与
+/// 早捕获路径共同保障该语义。
+#[tokio::test]
+async fn abort_during_empty_response_skips_steering_injection() {
+    // Q41（T11.7.2）：虚拟时间护栏
+    let _time = TimePauseGuard::new();
+    let provider = TestProvider::new(vec![ProviderStreamEvent::stop(StopReason::Stop)])
+        .with_pause(0, 300);
+    let mut loop_ = loop_with(provider, vec![]);
+    let abort = loop_.abort_signal();
+
+    let handle = tokio::spawn(async move { loop_.run(user("回答")).await });
+    // 栅栏停顿期间 L3 强停（分类完成后、steering 注入前窗口）
+    tokio::time::advance(Duration::from_millis(80)).await;
+    abort.abort();
+    tokio::time::advance(Duration::from_millis(300)).await;
+    let outcome = handle.await.expect("run 不应 panic");
+
+    assert_eq!(outcome.reason, AgentEndReason::Aborted);
+    // abort 后不得注入 steering 消息（system 角色 runtime-steering）
+    assert!(
+        !outcome.messages.iter().any(|m| {
+            m.role == AgentMessageRole::System
+                && m.metadata
+                    .as_ref()
+                    .and_then(|meta| meta.get("kind"))
+                    .and_then(|k| k.as_str())
+                    == Some("runtime-steering")
+        }),
+        "abort 后不得执行 steering 注入（F2-04：abort 后副作用）"
+    );
+    // 无 runtime-steering / intervention 事件
+    assert!(!outcome.events.iter().any(|e| matches!(
+        e,
+        conex_types::events::AgentEvent::RuntimeSteering { .. }
+    )));
+}
+
+/// F1 盲区 5：空工具注册表 + 模型产出工具调用 → NotFound 非致命喂回 →
+/// 续轮（整链路 streaming → executing-tools → 喂回，tool_exec 单测之外
+/// 的端到端锚定）
+#[tokio::test]
+async fn empty_tool_registry_unknown_call_fed_back_and_continues() {
+    let provider = TestProvider::with_scripts(vec![
+        // 第 1 次：调用不存在的工具
+        vec![
+            ProviderStreamEvent::tool_call(Some("call_ghost".into()), "ghost_tool", serde_json::json!({})),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ],
+        // 第 2 次：喂回 NotFound 后模型正常回复
+        vec![
+            ProviderStreamEvent::text("没有这个工具，我换个方式"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ],
+    ]);
+    // 空注册表（loop_with 无工具）
+    let mut loop_ = loop_with(provider, vec![]);
+
+    let outcome = loop_.run(user("用工具")).await;
+
+    // 未知工具非致命：run 以 stop 收场（不 error）
+    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert!(outcome.error.is_none());
+    // 工具结果消息（Tool 角色）为错误形态（NotFound 喂回模型）
+    let tool_msg = outcome
+        .messages
+        .iter()
+        .find(|m| m.role == AgentMessageRole::Tool)
+        .expect("未知工具也应产出 tool-result 消息");
+    let AgentMessageBlock::ToolResult { is_error, output, .. } = &tool_msg.blocks[0] else {
+        panic!("工具消息应有 tool-result 块");
+    };
+    assert!(*is_error, "未知工具结果应为错误形态");
+    let text = output.text.as_deref().expect("NotFound 应有文本文案");
+    assert!(text.contains("unknown tool"), "文案应含 unknown tool：{text}");
+    // 续轮：最终助手消息存在（模型对喂回结果正常收尾）
+    let final_text = outcome
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.role == AgentMessageRole::Assistant)
+        .expect("喂回后应有最终助手消息");
+    assert_eq!(final_text.text(), "没有这个工具，我换个方式");
+    // provider 调用 2 次（第 1 轮工具 + 喂回续轮；两轮 turn-start）
+    let turn_starts = outcome
+        .events
+        .iter()
+        .filter(|e| matches!(e, conex_types::events::AgentEvent::TurnStart { .. }))
+        .count();
+    assert_eq!(turn_starts, 2, "未知工具喂回后应续轮重进 provider");
+}
+
+/// F1 盲区 4：`transient_retry_limit = 0` 边界——首次瞬态错误即 error
+/// 收场（不升级重试；0 = 不允许任何重试）
+#[tokio::test]
+async fn transient_retry_limit_zero_fails_immediately() {
+    let provider_handle = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("不应到达"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ])
+    .with_error(classified(ProviderErrorKind::RateLimit)));
+    let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]);
+    loop_ = loop_.with_options(SessionLoopOptions {
+        transient_retry_limit: 0,
+        ..Default::default()
+    });
+
+    let outcome = loop_.run(user("你好")).await;
+
+    assert_eq!(
+        outcome.reason,
+        AgentEndReason::Error,
+        "transient_retry_limit=0 时首次瞬态错误必须直接 error 收场"
+    );
+    assert!(outcome.error.is_some());
+    // 无任何重试（provider 仅调用 1 次）
+    assert_eq!(provider_handle.call_count(), 1, "retry limit 0 不得发起任何重试");
+}
+
+/// F1 盲区 4：`length_upgrade_limit = 0` 边界——首次 ContextLengthExceeded
+/// 即 error 收场（长度阶梯不允许任何升级；默认无压缩预算 → 无恢复路径）
+#[tokio::test]
+async fn length_upgrade_limit_zero_fails_immediately() {
+    let provider_handle = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("不应到达"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ])
+    .with_error(classified(ProviderErrorKind::ContextLengthExceeded)));
+    let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]);
+    loop_ = loop_.with_options(SessionLoopOptions {
+        length_upgrade_limit: 0,
+        ..Default::default()
+    });
+
+    let outcome = loop_.run(user("你好")).await;
+
+    assert_eq!(
+        outcome.reason,
+        AgentEndReason::Error,
+        "length_upgrade_limit=0 时首次上下文超限必须直接 error 收场"
+    );
+    assert!(outcome.error.is_some());
+    // 无升级重试（provider 仅调用 1 次）
+    assert_eq!(provider_handle.call_count(), 1, "length limit 0 不得发起任何升级重试");
+}
