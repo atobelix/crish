@@ -30,11 +30,6 @@ export type MessageSnapshotsOps = {
 
 let _ops: MessageSnapshotsOps | null = null;
 
-/** 由 bootstrapStores（或测试 setup）注入真实 MessageSnapshots 实例方法 */
-export function bindMessageSnapshotsOps(ops: MessageSnapshotsOps): void {
-  _ops = ops;
-}
-
 export function saveMessageSnapshot(
   sessionId: string,
   entry: SnapshotSaveEntry,

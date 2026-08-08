@@ -73,31 +73,9 @@ export function openToolInActiveTab(panelId: string): void {
   openToolInSession(tab?.sessionId ?? '', panelId);
 }
 
-export function toggleActiveTabRightDock(): void {
-  const store = useWorkspaceShellStore.getState();
-  const tab = store.getActiveTab();
-  if (!tab) return;
-  const collapsed = !tab.rightDock.collapsed;
-  const dock = {
-    ...tab.rightDock,
-    collapsed,
-    // 展开且无 active 时默认 overview
-    activePanelId:
-      !collapsed && !tab.rightDock.activePanelId
-        ? 'overview'
-        : tab.rightDock.activePanelId,
-    openPanelIds:
-      !collapsed && !tab.rightDock.openPanelIds.length
-        ? ['overview']
-        : tab.rightDock.openPanelIds,
-  };
-  store.updateRightDock(tab.tabId, dock);
-  applyDockToTree(dock, tab.sessionId);
-}
-
 export const fileViewerInitialModeMap = new Map<string, 'plain' | 'diff'>();
 
-export function openFileViewerInSession(filePath: string, initialMode: 'plain' | 'diff' = 'plain'): void {
+function openFileViewerInSession(filePath: string, initialMode: 'plain' | 'diff' = 'plain'): void {
   const store = useWorkspaceShellStore.getState();
   const tab = store.getActiveTab();
   if (!tab) return;

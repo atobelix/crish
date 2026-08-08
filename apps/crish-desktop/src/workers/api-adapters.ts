@@ -28,7 +28,7 @@
  *   - session.search / text.encode（在 worker 中删除 case）
  */
 
-import { getWorkerPool, Priority } from './index';
+import { Priority } from './index';
 import {
   coreHashCompute,
   coreBase64Encode,
@@ -41,22 +41,6 @@ import {
   type CoreDiffParseResult,
   type CoreEncodingDetectResult,
 } from '../api/rustCore';
-
-// ===== Render 通道（保留，作为 Rust md_render 的 fallback） =====
-
-export async function parseMarkdownToHtmlWorker(raw: string, priority: Priority = Priority.High): Promise<string> {
-  if (!raw || !raw.trim()) return '';
-  return getWorkerPool().schedule<string>('render', 'markdown.render', { raw }, priority);
-}
-
-export async function highlightCodeWorker(code: string, language?: string, priority: Priority = Priority.Normal): Promise<{ html: string; language: string }> {
-  return getWorkerPool().schedule<{ html: string; language: string }>('render', 'highlight.code', { code, language }, priority);
-}
-
-export async function highlightBatchWorker(items: Array<{ id: string; code: string; language?: string }>, priority: Priority = Priority.Normal): Promise<Array<{ id: string; html: string }>> {
-  const result = await getWorkerPool().schedule<{ results: Array<{ id: string; html: string }> }>('render', 'highlight.batch', { items }, priority);
-  return result.results;
-}
 
 // ===== 主线程 JS fallback 实现 =====
 //
@@ -384,15 +368,3 @@ export const __HYBRID_THRESHOLDS = {
 //   - budget.text：纯字符串切片，开销极小
 //   - json.stringify / json.parse：JSON 引擎原生，V8 比 Rust serde_json 更快
 //   - externalize.blobs 已删除（死代码）
-
-export async function budgetTextWorker(text: string, maxChars: number, priority: Priority = Priority.High): Promise<{ text: string; truncated: boolean; originalChars: number }> {
-  return getWorkerPool().schedule('compute', 'budget.text', { text, maxChars }, priority);
-}
-
-export async function jsonStringifyWorker(obj: unknown, priority: Priority = Priority.Normal): Promise<string> {
-  return getWorkerPool().schedule<string>('compute', 'json.stringify', { obj }, priority);
-}
-
-export async function jsonParseWorker<T>(json: string, priority: Priority = Priority.Normal): Promise<T> {
-  return getWorkerPool().schedule<T>('compute', 'json.parse', { json }, priority);
-}

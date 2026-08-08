@@ -15,7 +15,7 @@ const KEYS = {
 
 let cached: MinimalConfig | null = null;
 
-export function getMinimalConfig(): MinimalConfig {
+function getMinimalConfig(): MinimalConfig {
   if (cached) return cached;
   try {
     const sidebar = localStorage.getItem(KEYS.sidebar) === '1';

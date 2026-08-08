@@ -27,15 +27,3 @@ export function scaleUpPool(): void {
 
 export { WorkerPool, Priority };
 export type { WorkerType };
-
-export function withPool<T>(fn: (pool: WorkerPool) => Promise<T>): Promise<T> {
-  return fn(getWorkerPool());
-}
-
-export function createAbortSignal(timeoutMs?: number): { signal: AbortSignal; abort: () => void } {
-  const controller = new AbortController();
-  if (timeoutMs && timeoutMs > 0) {
-    setTimeout(() => controller.abort(), timeoutMs);
-  }
-  return { signal: controller.signal, abort: () => controller.abort() };
-}

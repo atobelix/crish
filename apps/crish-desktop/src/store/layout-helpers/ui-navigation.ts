@@ -45,7 +45,7 @@ export function extractCardFromGroup(ws: WorkspaceState, groupId: string, cardId
   return { card, sourceGroup: loc.group, sourceCol: loc.col, removedIndex: idx };
 }
 
-export function removeEmptyGroup(ws: WorkspaceState, groupId: string): void {
+function removeEmptyGroup(ws: WorkspaceState, groupId: string): void {
   for (const col of ws.columns) {
     const before = col.groups.length;
     col.groups = col.groups.filter((g) => g.id !== groupId);

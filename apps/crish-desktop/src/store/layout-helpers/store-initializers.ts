@@ -60,7 +60,7 @@ export function parseUiSize(raw: unknown): UiSize {
   return DEFAULT_UI_SIZE;
 }
 
-export function readStoredShellChromeMode(): ShellChromeMode {
+function readStoredShellChromeMode(): ShellChromeMode {
   try {
     return parseShellChromeMode(localStorage.getItem(SHELL_CHROME_STORAGE_KEY));
   } catch {
@@ -137,7 +137,7 @@ export function sanitizeActiveWorkers(list: unknown): ActiveWorkerState[] {
   return out;
 }
 
-export function readStoredUiSize(): UiSize {
+function readStoredUiSize(): UiSize {
   try {
     return parseUiSize(localStorage.getItem(UI_SIZE_STORAGE_KEY));
   } catch {
@@ -150,7 +150,7 @@ export function readStoredUiSize(): UiSize {
  * - 无键 / 非法 → true（产品默认右侧工具并入同列标签）
  * - 仅显式 '0' / 'false' → false
  */
-export function readStoredTabModeEnabled(): boolean {
+function readStoredTabModeEnabled(): boolean {
   try {
     const raw = localStorage.getItem(TAB_MODE_STORAGE_KEY);
     if (raw == null || raw === '') return true;

@@ -33,7 +33,7 @@ export interface WorkspaceShellState {
   shellReady: boolean;
 }
 
-export const DEFAULT_RIGHT_DOCK: RightToolDockState = {
+const DEFAULT_RIGHT_DOCK: RightToolDockState = {
   collapsed: true,
   openPanelIds: [],
   activePanelId: null,

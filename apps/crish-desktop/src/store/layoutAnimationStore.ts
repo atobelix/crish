@@ -345,11 +345,6 @@ export function endLayoutInteraction(
   removeExtraBodyClasses(options?.extraBodyClasses);
 }
 
-/** 只读：当前是否冻结（非 hook，供事件回调使用） */
-export function isLayoutFrozenNow(): boolean {
-  return useLayoutAnimationStore.getState().isLayoutFrozen;
-}
-
 // 核心连接点：自动将 isLayoutFrozen 桥接至 ResizeObserverManager。
 // T06.9.1：原模块级永久订阅（AA-03 Q06，永不退订）改为显式生命周期——
 // bootstrapServices 调用 registerLayoutAnimationBridge() 注册，cleanup 退订；

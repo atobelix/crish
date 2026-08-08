@@ -27,16 +27,7 @@ import type {
 } from './types';
 import type { SessionActions } from './sessionActions';
 import { getSessionById as getSessionByIdFromIndex } from './sessionIndex';
-import {
-  resolveSessionProgressItems,
-  computeChecklistProgress,
-  findCurrentLiveTool,
-  type ProgressSummary,
-  type LiveToolInfo,
-} from '../api/sessionProgressApi';
 import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
-
-const EMPTY_AGENTS_ARRAY: SessionAgent[] = [];
 
 /** 与 layout 同引用：切片式 facade，禁止第二份 sessions 真相源 */
 export const useSessionStore = useLayoutStore;
@@ -78,27 +69,6 @@ export const selectPanelAgentId = (
 export const selectActiveSession = (
   s: Pick<SessionFacadeState, 'sessions' | 'sessionsById' | 'activeSessionId'>
 ): SessionState | undefined => getSessionByIdFromIndex(s, s.activeSessionId);
-
-/**
- * 按会话 id + 消息 id 选择单条消息。
- *
- * 返回的是一个选择器函数（curried），便于配合 useShallow 在 hooks 中使用：
- *   ```ts
- *   const msg = useSessionField(useShallow(selectMessageById(sid, mid)));
- *   ```
- *
- * 找不到会话或消息时返回 undefined。返回 undefined 时 useShallow 不会触发重渲染。
- */
-export function selectMessageById(
-  sessionId: string,
-  messageId: string
-): (s: SessionFacade) => SessionMessage | undefined {
-  return (s: SessionFacade): SessionMessage | undefined => {
-    const session = getSessionByIdFromIndex(s, sessionId);
-    if (!session) return undefined;
-    return session.messages.find((m) => m.id === messageId);
-  };
-}
 
 export function useSessionField<T>(selector: (state: SessionFacade) => T): T {
   return useSessionStore(
@@ -151,58 +121,6 @@ export function useActiveAgentId(): string | null {
 
 export function usePanelAgentId(): string | null {
   return useSessionStore((s) => s.panelAgentId);
-}
-
-export function useSessionAgents(sessionId?: string | null): SessionAgent[] {
-  return useSessionStore(
-    useShallow((s) => {
-      const id = sessionId || s.activeSessionId;
-      return s.sessionsById[id]?.agents || EMPTY_AGENTS_ARRAY;
-    })
-  );
-}
-
-export function useSessionAgentById(
-  agentId: string | null | undefined,
-  sessionId?: string | null
-): SessionAgent | undefined {
-  return useSessionStore(
-    useShallow((s) => {
-      if (!agentId) return undefined;
-      const parentId = sessionId || s.activeSessionId;
-      const parentSess = parentId ? s.sessionsById[parentId] : undefined;
-      const agentInParent = parentSess?.agents?.find((a: SessionAgent) => a.id === agentId);
-      if (agentInParent) return agentInParent;
-      for (const sess of Object.values(s.sessionsById)) {
-        const a = sess.agents?.find((item: SessionAgent) => item.id === agentId);
-        if (a) return a;
-      }
-      return undefined;
-    })
-  );
-}
-
-export function useActiveSessionProgress(): {
-  items: SessionGoalTask[];
-  progress: ProgressSummary;
-  goalMode: SessionGoalMode | null;
-  liveTool: LiveToolInfo | null;
-} {
-  const activeSession = useActiveSession();
-  return useMemo(() => {
-    const items = resolveSessionProgressItems(activeSession);
-    const progress = computeChecklistProgress(items);
-    const goalMode = activeSession?.goalMode?.active
-      ? activeSession.goalMode
-      : null;
-    const liveTool = findCurrentLiveTool(activeSession);
-    return {
-      items,
-      progress,
-      goalMode,
-      liveTool,
-    };
-  }, [activeSession]);
 }
 
 /**

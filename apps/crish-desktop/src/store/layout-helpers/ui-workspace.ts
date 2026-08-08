@@ -2,7 +2,7 @@ import type { CardState, ColumnState, WorkspaceState } from '../types';
 import { isDemoMode } from '../../api/appMode';
 import { makePanelCard } from './ui-panel';
 
-export function isChatColumnId(colId: string): boolean { return colId.includes('chat'); }
+function isChatColumnId(colId: string): boolean { return colId.includes('chat'); }
 export function isChatColumn(col: ColumnState): boolean { return isChatColumnId(col.id); }
 
 export function normalizeColumnWidths(ws: WorkspaceState): void {

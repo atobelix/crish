@@ -76,17 +76,3 @@ export function checkSnap(
   }
   return null;
 }
-
-export function fromColumnState(columns: Array<{ widthRatio: number }>): ISplitViewState {
-  return {
-    direction: 'horizontal',
-    items: columns.map((col) => ({
-      ratio: col.widthRatio,
-      constraint: {
-        minimumSize: 0.1,
-        maximumSize: 0.9,
-        priority: 'normal',
-      },
-    })),
-  };
-}

@@ -57,7 +57,7 @@ function isToolDomainSubtree(node: LayoutNode): boolean {
  * Infer per-session RightToolDock from a restored Conversation Unit tree.
  * Used so restore does not stomp expanded docks with default collapsed shell state.
  */
-export function inferDockFromSessionUnit(
+function inferDockFromSessionUnit(
   root: LayoutNode,
   sessionId: string
 ): RightToolDockState {
@@ -165,11 +165,6 @@ export function listBoundSessionIdsFromTree(tree: LayoutTree): string[] {
     if (sid && !ids.includes(sid)) ids.push(sid);
   }
   return ids;
-}
-
-/** Count tool leaves (test / diagnostics helper). */
-export function countRestoredToolLeaves(tree: LayoutTree): number {
-  return listToolLeaves(tree.root).length;
 }
 
 /**

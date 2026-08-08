@@ -379,7 +379,7 @@ function mergeLeafInto(
  * 单次树重建（removeTabFromLeaf）+ 单次 replaceNode（合并），O(tree size)。
  */
 /** 重排/移动叶子内部的 tab 顺序 */
-export function reorderTabInLeaf(
+function reorderTabInLeaf(
   tree: LayoutTree,
   leafId: string,
   fromTabId: string,
@@ -985,49 +985,11 @@ function flattenRecursive(
  * 3. 若过滤后 tabs 为空，回退到 [panelId]。
  * 4. 修正 activeTab，使其一定在 tabs 中。
  * 5. 若 leaf.panelId 与剩余 tabs 的域不一致（如 panelId='chat' 但只剩 tool tab），
- *    把 panelId 也修正为第一个剩余 tab 的 id。
- *
- * 该函数在 store 从 localStorage 恢复时调用，避免旧数据/迁移产生的混合 leaf
- * 继续污染 UI。
- */
-export function normalizeTree(tree: LayoutTree): LayoutTree {
-  const newRoot = normalizeNode(tree.root);
-  if (newRoot === tree.root) return tree;
-  return { ...tree, root: newRoot };
-}
-
-function normalizeNode(node: LayoutNode): LayoutNode {
-  if (isBranch(node)) {
-    const first = normalizeNode(node.children[0]);
-    const second = normalizeNode(node.children[1]);
-    if (first === node.children[0] && second === node.children[1]) return node;
-    return { ...node, children: [first, second] };
-  }
-
-  const leafDomainChat = isChatDomain(node.panelId);
-  const filteredTabs = node.tabs.filter(
-    (tab) => isChatDomain(tab) === leafDomainChat
-  );
-
-  const tabs = filteredTabs.length > 0 ? filteredTabs : [node.panelId];
-  const panelId =
-    filteredTabs.length > 0 && isChatDomain(node.panelId) !== isChatDomain(tabs[0]!)
-      ? tabs[0]!
-      : node.panelId;
-  const activeTab = tabs.includes(node.activeTab)
-    ? node.activeTab
-    : tabs[0]!;
-
-  if (
-    tabs.length === node.tabs.length &&
-    panelId === node.panelId &&
-    activeTab === node.activeTab
-  ) {
-    return node;
-  }
-
-  return { ...node, panelId, tabs, activeTab };
-}
+  *    把 panelId 也修正为第一个剩余 tab 的 id。
+  *
+  * 该函数在 store 从 localStorage 恢复时调用，避免旧数据/迁移产生的混合 leaf
+  * 继续污染 UI。
+  */
 
 // ── 迁移 ──────────────────────────────────────────────────────────
 

@@ -359,25 +359,6 @@ export function setStreamTool(
   useStreamingStore.getState().setStreamTool(sessionId, messageId, toolId, patch);
 }
 
-export function setStreamImages(
-  sessionId: string,
-  messageId: string,
-  images: MessageImageRef[]
-): void {
-  useStreamingStore.getState().setStreamImages(sessionId, messageId, images);
-}
-
-export function updateStreamImage(
-  sessionId: string,
-  messageId: string,
-  imageId: string,
-  patch: Partial<MessageImageRef>
-): void {
-  useStreamingStore
-    .getState()
-    .updateStreamImage(sessionId, messageId, imageId, patch);
-}
-
 export function clearStreamTool(
   sessionId: string,
   messageId: string,
@@ -425,13 +406,6 @@ export function getStreamTool(
   toolId: string
 ): StreamToolLive | undefined {
   return useStreamingStore.getState().getStreamTool(sessionId, messageId, toolId);
-}
-
-export function getStreamImages(
-  sessionId: string,
-  messageId: string
-): MessageImageRef[] | undefined {
-  return useStreamingStore.getState().getStreamImages(sessionId, messageId);
 }
 
 export function getStreamEntry(

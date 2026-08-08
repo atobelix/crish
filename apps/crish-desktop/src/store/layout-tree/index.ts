@@ -84,10 +84,9 @@ export {
   useLayoutTreeStore,
   waitLayoutTreeHydration,
   layoutTreeStorageKey,
-  LAYOUT_TREE_STORAGE_KEY_BASE,
 } from './layoutTreeStore';
 
-// ── Cold-start restore policy（pure validation） ────────────────────
+// ── Cold-start restore policy（pure validation）────────────────────
 export {
   validateRestorableLayoutTree,
   isLayoutNodeStructurallyValid,

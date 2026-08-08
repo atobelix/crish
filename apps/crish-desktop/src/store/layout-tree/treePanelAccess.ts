@@ -68,16 +68,3 @@ export function focusOrOpenTreePanel(
     openToolInActiveTab(panelId);
   }
 }
-
-/**
- * 判断当前是否处于二叉树布局。
- * 规则：layoutTreeStore 中存在非空的 tree.root 即认为已启用二叉树布局。
- */
-export function isTreeLayoutActive(): boolean {
-  try {
-    const state = useLayoutTreeStore.getState();
-    return Boolean(state?.tree?.root);
-  } catch {
-    return false;
-  }
-}

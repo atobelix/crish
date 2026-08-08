@@ -119,7 +119,7 @@ export function clampSplitRatio(ratio: number): number {
 let idCounter = 0;
 
 /** 生成唯一节点 id */
-export function generateNodeId(prefix = 'node'): string {
+function generateNodeId(prefix = 'node'): string {
   return `${prefix}-${Date.now().toString(36)}-${(idCounter++).toString(36)}`;
 }
 

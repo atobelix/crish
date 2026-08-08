@@ -24,7 +24,7 @@ import type { SessionStoreSlice } from './sessionActions';
 import { useTerminalStore } from './terminalStore';
 
 /** 手动 rename / 分叉标题码点上限（略宽于侧栏自动标题 28） */
-export const MANUAL_SESSION_TITLE_MAX_LEN = 48;
+const MANUAL_SESSION_TITLE_MAX_LEN = 48;
 
 export function getMessageById(
   messages: SessionMessage[] | undefined,

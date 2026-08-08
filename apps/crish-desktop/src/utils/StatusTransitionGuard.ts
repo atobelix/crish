@@ -34,7 +34,7 @@ const FORCE_TRANSITIONS: Record<string, ReadonlySet<string>> = {
  * @param force 是否强制模式（regenerate / retry 路径）
  * @returns true 当转换合法
  */
-export function isValidTransition(from: string, to: string, force: boolean = false): boolean {
+function isValidTransition(from: string, to: string, force: boolean = false): boolean {
   const normalAllowed = VALID_TRANSITIONS[from];
   if (normalAllowed?.has(to)) {
     return true;

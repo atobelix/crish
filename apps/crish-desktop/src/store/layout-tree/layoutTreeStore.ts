@@ -70,7 +70,7 @@ const MAX_HISTORY = 50;
  * 运行时实际使用 window-scoped 形式：`${base}::${windowId}`
  * （见 layoutTreeStorageKey() / api/shellWindowScope.ts）
  */
-export const LAYOUT_TREE_STORAGE_KEY_BASE = 'crish-layout-tree-v1';
+const LAYOUT_TREE_STORAGE_KEY_BASE = 'crish-layout-tree-v1';
 
 /**
  * 返回当前窗口的 layout-tree 持久化 key。

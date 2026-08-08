@@ -37,7 +37,7 @@ function writeToolColState(wsId: string, state: ToolColRememberedState): void {
   } catch { /* ignore */ }
 }
 
-export function isToolColumnCollapsed(ws: WorkspaceState): boolean {
+function isToolColumnCollapsed(ws: WorkspaceState): boolean {
   const tool = ws.columns.find((c) => !isChatColumn(c));
   if (!tool) return true;
   if (tool.groups.every((g) => g.cards.length === 0)) return true;

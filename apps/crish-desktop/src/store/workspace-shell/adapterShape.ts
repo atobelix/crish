@@ -803,14 +803,3 @@ export function ensureAdapterShape(): void {
     }
   });
 }
-
-export function findChatLeafId(): string | null {
-  const root = useLayoutTreeStore.getState().tree.root;
-  const chat = collectLeaves(root).find((l) => isChatDomain(l.panelId));
-  return chat?.id ?? null;
-}
-
-export function getLeafById(leafId: string): LayoutLeaf | null {
-  const node = findNodeById(useLayoutTreeStore.getState().tree.root, leafId);
-  return node && isLeaf(node) ? node : null;
-}

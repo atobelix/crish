@@ -33,8 +33,3 @@ export function registerShellReadApi(api: ShellReadApi): void {
 export function getShellReadApi(): ShellReadApi | null {
   return shellReadApi;
 }
-
-/** 测试用：清空注册。 */
-export function resetShellReadApiForTests(): void {
-  shellReadApi = null;
-}

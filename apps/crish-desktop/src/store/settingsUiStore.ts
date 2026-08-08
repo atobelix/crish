@@ -38,8 +38,6 @@ export type SettingsUiActions = {
  */
 export type SettingsUiFacade = SettingsUiSlice & SettingsUiActions;
 
-export { DEFAULT_SETTINGS_TAB } from './layoutStore';
-
 export const selectShowSettingsOverlay = (
   s: Pick<SettingsUiSlice, 'showSettingsOverlay'>,
 ) => s.showSettingsOverlay;
@@ -151,16 +149,4 @@ export function setPlanModeEnabled(enabled: boolean): void {
 
 export function setPlanApproved(approved: boolean): void {
   usePermissionStore.getState().setPlanApproved(approved);
-}
-
-export function addCommandPermission(cmd: string): void {
-  usePermissionStore.getState().addCommandPermission(cmd);
-}
-
-export function removeCommandPermission(cmd: string): void {
-  usePermissionStore.getState().removeCommandPermission(cmd);
-}
-
-export function setCommandPermissions(list: string[]): void {
-  usePermissionStore.getState().setCommandPermissions(list);
 }

@@ -10,8 +10,8 @@ export function upsertDiffFile(diffFiles: FileDiff[], diff: FileDiff, max = DIFF
   if (diffFiles.length > max) diffFiles.length = max;
 }
 
-export const TERMINAL_HARD_MAX = 800;
-export const TERMINAL_TRIM_TO = 600;
+const TERMINAL_HARD_MAX = 800;
+const TERMINAL_TRIM_TO = 600;
 
 export function appendTerminalLine(buf: string[], line: string, hardMax = TERMINAL_HARD_MAX, trimTo = TERMINAL_TRIM_TO): boolean {
   buf.push(line);

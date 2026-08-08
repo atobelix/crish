@@ -1,15 +1,15 @@
 export {
-  PANEL_TITLE_MAP, getPanelTitle, resolveWorkspacePanelKey,
+  getPanelTitle, resolveWorkspacePanelKey,
   makePanelCard, makePanelGroup,
-  isChatColumnId, isChatColumn, normalizeColumnWidths,
+  isChatColumn, normalizeColumnWidths,
   rebalanceGroupHeights, filterEmptyColumnsKeepingChat, pruneEmptyGroupsInColumn,
   pruneEmptyWorkspaceLayout, isChatOnlyWorkspace, countWorkspaceCards,
   type GroupLocation, type CardLocation,
   findGroupInWorkspace, findCardInWorkspace, focusCardInWorkspace,
-  extractCardFromGroup, removeEmptyGroup,
+  extractCardFromGroup,
   pickActiveCardIndexAfterRemove, afterCardRemovedFromGroup,
   type PlacePanelResult,
-  ensureToolColumn, isToolColumnCollapsed,
+  ensureToolColumn,
   collapseToolColumnPreserve, expandToolColumnIfCollapsed,
   collapseToolColumnToTabs, placePanelCard, removePanelCard,
   adjustSameGroupReorderIndex, insertCardIntoGroup,
@@ -23,12 +23,8 @@ export {
 } from './ui-selectors';
 
 export {
-  DEFAULT_SESSIONS, populateBlocksForSessions, seedSessions,
-} from './session-selectors';
-
-export {
   DIFF_LIST_MAX, upsertDiffFile,
-  TERMINAL_HARD_MAX, TERMINAL_TRIM_TO, appendTerminalLine,
+  appendTerminalLine,
 } from './diff-selectors';
 
 export * from './store-types';

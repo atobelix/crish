@@ -66,28 +66,6 @@ export function flattenGrid(node: GridNode, path: number[] = []): GridFlattenInf
   return { order: [], leaves, branches };
 }
 
-/**
- * 在指定路径插入节点。
- */
-export function insertNode(
-  root: GridNode,
-  path: number[],
-  newNode: GridNode,
-  _insertBefore = true,
-): GridNode {
-  // TODO: 实现路径查找和插入
-  // 路径示例：[] → 替换根，[0] → 第一个子节点，[0, 1] → 第一个子节点的第二个子节点
-  return root;
-}
-
-/**
- * 移除指定路径的节点。
- */
-export function removeNode(root: GridNode, _path: number[]): { root: GridNode; removed: GridNode | null } {
-  // TODO: 实现路径查找和移除
-  return { root, removed: null };
-}
-
 type GridCardLike = { id?: string; type?: string };
 
 /**
