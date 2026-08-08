@@ -38,9 +38,10 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
         record_message(state, message);
     }
 
-    // 3. turn-start 事件（turn_index 以 TURN_PREPARED 递增后的值展示）
+    // 3. turn-start 事件（turn_index 以 TURN_PREPARED 递增后的值展示；
+    //    F1-03：饱和加——u32::MAX 时事件载荷保持上限，不得溢出 panic）
     let session_id = state.machine.context().session_id.clone();
-    let turn_index = state.machine.context().turn_index + 1;
+    let turn_index = state.machine.context().turn_index.saturating_add(1);
     state.events.push(AgentEvent::TurnStart {
         session_id: session_id.clone(),
         turn_index,

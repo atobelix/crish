@@ -598,6 +598,29 @@ impl AgentSessionLoop {
             self.session_id.clone(),
             self.max_turns,
         );
+        // F2-02：max_turns=0 边界——预算不允许任何轮次，run 起始显式收场
+        // （修复前首轮完整执行后 turn_index(1) >= 0 恒真才收场：用户消息已
+        // 消费、provider 已调用，「max_turns=0 = 不允许任何轮次」语义失效）。
+        // 收场原因与观测对齐 turn_complete 的 max-turns 路径（独立预算 reason
+        // + runtime-error 观测事件 + error.occurred 钩子广播）
+        if self.max_turns == 0 {
+            self.state.events.push(AgentEvent::RuntimeError {
+                session_id: self.session_id.clone(),
+                timestamp: crate::steering::now_iso_utc(),
+                error: "maxTurns 预算用尽（turnIndex=0，maxTurns=0）".to_string(),
+                retryable: Some(true),
+            });
+            if let Some(hooks) = &self.state.options.hooks {
+                let _ = hooks
+                    .dispatch(&crate::hooks::HookEvent::ErrorOccurred {
+                        session_id: self.session_id.clone(),
+                        error: "maxTurns 预算用尽（turnIndex=0，maxTurns=0）".to_string(),
+                        retryable: true,
+                    })
+                    .await;
+            }
+            return self.converge(EndDecision::max_turns(&self.state)).await;
+        }
         // 恢复阶梯计数归零（fresh run）
         self.state.length_upgrades = 0;
         self.state.transient_retries = 0;

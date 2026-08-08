@@ -25,11 +25,17 @@ pub(crate) async fn handle(
     stop_reason: Option<ConsumeStopReason>,
 ) -> Result<HandlerOutcome, LoopError> {
     if stop_reason == Some(ConsumeStopReason::Length) {
-        // length 恢复阶梯（01 §2.6 步骤 1）
-        let upgrade_limit = state.options.length_upgrade_limit;
+        // length 恢复阶梯（01 §2.6 步骤 1；F2-01：配置超上限按
+        // [super::stream_error::MAX_LENGTH_UPGRADES] 计——阶梯封顶 32768，
+        // 配置放大不得触发翻倍溢出）
+        let upgrade_limit = state
+            .options
+            .length_upgrade_limit
+            .min(super::stream_error::MAX_LENGTH_UPGRADES);
         if state.length_upgrades < upgrade_limit {
             state.length_upgrades += 1;
-            state.max_tokens *= 2;
+            // F2-01：saturating 翻倍（防御纵深，常规路径封顶 32768）
+            state.max_tokens = state.max_tokens.saturating_mul(2);
             // 01 §3.3 ②：length 升级时重置 steering 计数
             state.steering.reset();
             // 重进 provider 循环（更高 max_tokens）

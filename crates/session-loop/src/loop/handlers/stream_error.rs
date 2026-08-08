@@ -36,6 +36,12 @@ use super::streaming::streaming_aborted;
 /// pi-cache-analysis.md:225）
 pub(crate) const MAX_OVERFLOW_COMPRESSION_RETRIES: u32 = 1;
 
+/// length 阶梯升级次数上限（01 §2.6 步骤 1：8192→16384→32768，上限 2 次；
+/// 配置 [SessionLoopOptions::length_upgrade_limit] 超过本上限按上限计——
+/// F2-01：配置放大（如 30）不得让 max_tokens 继续翻倍，19 次后
+/// 8192×2^19 溢出 u32::MAX（debug panic / release 回绕成小值退化））
+pub(crate) const MAX_LENGTH_UPGRADES: u32 = 2;
+
 /// stream error handler（01 §2.5）
 pub(crate) async fn handle(
     state: &mut LoopState,
@@ -95,10 +101,12 @@ async fn length_ladder(state: &mut LoopState, classified: &ClassifiedStreamError
     if state.abort_signal.is_aborted() {
         return streaming_aborted(state);
     }
-    let limit = state.options.length_upgrade_limit;
+    let limit = state.options.length_upgrade_limit.min(MAX_LENGTH_UPGRADES);
     if state.length_upgrades < limit {
         state.length_upgrades += 1;
-        state.max_tokens *= 2;
+        // F2-01：saturating 翻倍（阶梯上限 2 使常规路径封顶 32768；
+        // saturating 为防御纵深——内部计数异常时永不溢出回绕）
+        state.max_tokens = state.max_tokens.saturating_mul(2);
         // 01 §3.3 ②：length 升级时重置 steering 计数
         state.steering.reset();
         emit_retry_diagnostic(state, classified, state.length_upgrades, limit);

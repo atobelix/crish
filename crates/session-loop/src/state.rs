@@ -76,7 +76,10 @@ impl AgentSessionMachine {
         // 上下文 effect（01 §1.4「上下文 effect」列）
         let effect = transition.effect;
         if effect.turn_index_increment {
-            self.context.turn_index += 1;
+            // F1-03：saturating 递增——u32::MAX 时不得溢出（debug panic /
+            // release 回绕归零 → max-turns 预算失效）；饱和后
+            // `turn_index >= max_turns` 判定照常收敛
+            self.context.turn_index = self.context.turn_index.saturating_add(1);
         }
         if effect.reset_tool_call_count {
             self.context.tool_call_count = 0;
