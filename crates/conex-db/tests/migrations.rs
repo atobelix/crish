@@ -466,6 +466,112 @@ fn build_v3_fixture(db: &TempDb) {
     .unwrap();
 }
 
+/// 历史遗留形态（2026-08-08 现场还原）：v3 版本号但**缺 runs / pending_inputs /
+/// session_sequence 表**——早期 v1 形态创建后一路 v1→v3 迁移成功（它们不依赖
+/// 这几张表），v3→v4 却无条件查询 runs 导致 `no such table: runs` 迁移崩溃、
+/// DB 打不开（apps/agent-workbench/sessions.db 真实事故：19 会话不可见）。
+/// 本 fixture 与真实库表集合一致：sessions/events(含 AUTOINCREMENT id)/
+/// metadata/session_messages/session_agents/session_agent_messages/session_meta。
+fn build_legacy_v3_without_runs_fixture(db: &TempDb) {
+    let conn = Connection::open(db.path()).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE sessions (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL DEFAULT '',
+            folder TEXT NOT NULL DEFAULT '常规会话',
+            is_pinned INTEGER NOT NULL DEFAULT 0,
+            is_archived INTEGER NOT NULL DEFAULT 0,
+            branch_parent_id TEXT,
+            timestamp TEXT NOT NULL DEFAULT '',
+            timestamp_source TEXT,
+            updated_at INTEGER NOT NULL DEFAULT 0,
+            message_count INTEGER NOT NULL DEFAULT 0,
+            pinned_message_ids TEXT,
+            engine_cursor INTEGER,
+            engine_last_run_id TEXT,
+            hydrated_from_engine INTEGER,
+            created_at INTEGER NOT NULL DEFAULT 0
+        ) WITHOUT ROWID;
+        CREATE TABLE events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            event_type TEXT NOT NULL,
+            payload TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(session_id, sequence)
+        );
+        CREATE INDEX IF NOT EXISTS idx_events_session_seq ON events(session_id, sequence);
+        CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE session_messages (
+            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            seq INTEGER NOT NULL,
+            id TEXT NOT NULL,
+            sender TEXT NOT NULL CHECK (sender IN ('user','assistant')),
+            text TEXT,
+            thinking TEXT,
+            timestamp INTEGER NOT NULL,
+            status TEXT CHECK (status IN ('queued','processing','completed','error')),
+            stream_text_offset INTEGER,
+            thinking_time INTEGER,
+            tool_calls_json TEXT,
+            blocks_json TEXT,
+            tool_call_results_json TEXT,
+            PRIMARY KEY (session_id, seq)
+        ) WITHOUT ROWID;
+        CREATE INDEX IF NOT EXISTS idx_session_messages_id ON session_messages(session_id, id);
+        CREATE TABLE session_agents (
+            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            agent_id TEXT NOT NULL,
+            subagent_run_id TEXT NOT NULL,
+            parent_session_id TEXT NOT NULL,
+            parent_run_id TEXT NOT NULL,
+            parent_tool_call_id TEXT,
+            description TEXT NOT NULL DEFAULT '',
+            mode TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL CHECK (status IN ('running','completed','failed','stopped')),
+            summary TEXT,
+            started_at INTEGER NOT NULL,
+            ended_at INTEGER,
+            depth INTEGER DEFAULT 0,
+            subagent_path_json TEXT,
+            PRIMARY KEY (session_id, agent_id)
+        ) WITHOUT ROWID;
+        CREATE TABLE session_agent_messages (
+            session_id TEXT NOT NULL,
+            agent_id TEXT NOT NULL,
+            seq INTEGER NOT NULL,
+            id TEXT NOT NULL,
+            sender TEXT NOT NULL CHECK (sender IN ('user','assistant')),
+            text TEXT,
+            thinking TEXT,
+            timestamp INTEGER NOT NULL,
+            status TEXT CHECK (status IN ('queued','processing','completed','error')),
+            stream_text_offset INTEGER,
+            thinking_time INTEGER,
+            tool_calls_json TEXT,
+            blocks_json TEXT,
+            tool_call_results_json TEXT,
+            PRIMARY KEY (session_id, agent_id, seq),
+            FOREIGN KEY (session_id, agent_id) REFERENCES session_agents(session_id, agent_id) ON DELETE CASCADE
+        ) WITHOUT ROWID;
+        CREATE TABLE session_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
+        INSERT INTO sessions (id, title, folder, updated_at, created_at)
+            VALUES ('s1', '遗留会话', '生产', 2000, 3000);
+        INSERT INTO session_messages (session_id, seq, id, sender, text, timestamp, status)
+            VALUES ('s1', 0, 'm1', 'user', '遗留消息', 1000, 'completed');
+        INSERT INTO session_agents (session_id, agent_id, subagent_run_id, parent_session_id,
+            parent_run_id, description, mode, status, started_at)
+            VALUES ('s1', 'a1', 'r-a1', 's1', 'p1', '探索', 'explore', 'completed', 1100);
+        INSERT INTO session_agent_messages (session_id, agent_id, seq, id, sender, text, timestamp, status)
+            VALUES ('s1', 'a1', 0, 'am1', 'assistant', '遗留子代理', 1150, 'completed');
+        INSERT INTO events (session_id, sequence, event_type, payload) VALUES ('s1', 1, 'agent-start', '{}');
+        INSERT INTO metadata (key, value) VALUES ('legacy', 'dead');
+        PRAGMA user_version = 3;",
+    )
+    .unwrap();
+}
+
 /// 生产真实路径：v3 生产形态但 user_version = 0（旧代码从不写 user_version，
 /// 靠检测迁移——v1..v4 全链必须幂等跳过已满足版本）。
 fn build_production_shape_v0_fixture(db: &TempDb) {
@@ -592,6 +698,40 @@ fn v3_fixture_production_shape_upgrades_to_v4() {
     // FK 级联：删除会话 → 事件级联清理（P03）
     db.delete_session("s1").unwrap();
     assert_eq!(count_rows(&conn, "events"), 0, "events FK 级联删除生效");
+}
+
+#[test]
+fn legacy_v3_without_runs_tables_upgrades_and_preserves_data() {
+    // 2026-08-08 真实事故回归：历史库缺 runs/pending_inputs/session_sequence，
+    // v3→v4 无条件查询 runs 曾致 `no such table: runs` 迁移崩溃、DB 降级内存库。
+    let temp = TempDb::new("legacy3");
+    build_legacy_v3_without_runs_fixture(&temp);
+
+    // 修复前：LocalDb::open 返回 Err（migrate_v4 failed: no such table: runs）；
+    // 修复后：正常打开并升级到最新版本
+    let db = LocalDb::open(temp.path()).unwrap();
+    assert_eq!(db.user_version().unwrap(), LATEST_VERSION);
+    assert_eq!(
+        db.get_session_meta("schema_version").unwrap().as_deref(),
+        Some(SCHEMA_VERSION_STRING)
+    );
+
+    // 数据保留：会话/消息/子代理/事件全部不丢
+    let conn = Connection::open(temp.path()).unwrap();
+    assert_eq!(count_rows(&conn, "sessions"), 1);
+    assert_eq!(count_rows(&conn, "session_messages"), 1);
+    assert_eq!(count_rows(&conn, "session_agents"), 1);
+    assert_eq!(count_rows(&conn, "session_agent_messages"), 1);
+    assert_eq!(count_rows(&conn, "events"), 1, "历史事件保留");
+    let title: String = conn
+        .query_row("SELECT title FROM sessions WHERE id='s1'", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(title, "遗留会话", "会话标题保留");
+
+    // 缺失表被补齐为 v4/v5 终态（runs/pending_inputs 带 FK）
+    assert!(has_fk(&conn, "runs"), "runs 补齐且带 sessions FK");
+    assert!(has_fk(&conn, "pending_inputs"), "pending_inputs 补齐且带 sessions FK");
+    assert!(table_columns(&conn, "session_sequence").contains(&"session_id".to_string()));
 }
 
 #[test]

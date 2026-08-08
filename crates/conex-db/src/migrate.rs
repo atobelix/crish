@@ -1,5 +1,6 @@
-//! 迁移链域：`PRAGMA user_version` 驱动的版本化迁移（v1→v6，PE-08 T08.7 + P5 §3.1.4
-//! 及 T-D-07 v6 新列）。逐版本独立事务、幂等可重试；DROP 前备份采用
+//! 迁移链域：`PRAGMA user_version` 驱动的版本化迁移（v1→v7，PE-08 T08.7 + P5 §3.1.4
+//! 及 T-D-07 v6 新列 + T-15 v7 compression_blocks 单表）。逐版本独立事务、
+//! 幂等可重试；DROP 前备份采用
 //! 「事务前 checkpoint + 备份」时序（[backup_before_drop]，见 [migrate]）：
 //! 版本升级事务 commit 之前先 `PRAGMA wal_checkpoint(TRUNCATE)` 固化旧库到
 //! 主文件再拷贝，备份内容确定 = 本版本迁移前完整旧库（11-T2 时序确定化）；
@@ -139,18 +140,21 @@ impl LocalDb {
         let path: Option<std::path::PathBuf> = conn
             .path()
             .map(std::path::PathBuf::from)
-            .filter(|p| p != Path::new(":memory:"));
+            .filter(|p| {
+                p != Path::new(":memory:") && !p.as_os_str().is_empty()
+            });
         let start_version = if current == 0 { 1 } else { current };
 
         for version in (start_version + 1)..=LATEST_VERSION {
             // 备份时序（11-T2 确定化）：版本事务 commit 之前执行
             // 「checkpoint(TRUNCATE) → 拷贝备份」。TRUNCATE 后 WAL 清空、
             // 主文件 = 完整旧库态，拷贝内容确定（与 autocheckpoint 偶然时机无关）。
-            // v5/v6 纯 ADD COLUMN 无 DROP：跳过备份，保持「DROP 前备份」语义。
+            // v5/v6 纯 ADD COLUMN、v7 纯新建表（均无 DROP）：跳过备份，
+            // 保持「DROP 前备份」语义。
             // （backup_file_contains_pre_migration_data / upgrade_e2e_backup_*
-            // 锚定 v3→v4 只产 .bak-v4，v5/v6 不额外产生备份）
+            // 锚定 v3→v4 只产 .bak-v4，v5/v6/v7 不额外产生备份）
             if let Some(p) = &path {
-                if version != 5 && version != 6 {
+                if !(5..=7).contains(&version) {
                     // checkpoint 失败 → 备份内容不确定，按备份失败处理：
                     // 告警 + 跳过本次备份，不阻断迁移（裁定案）
                     if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);") {
@@ -174,6 +178,7 @@ impl LocalDb {
                 4 => migrate_v3_to_v4(&tx),
                 5 => migrate_v4_to_v5(&tx),
                 6 => migrate_v5_to_v6(&tx),
+                7 => migrate_v6_to_v7(&tx),
                 _ => unreachable!(),
             };
             if let Err(e) = step_result {
@@ -281,6 +286,44 @@ fn migrate_v2_to_v3(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Erro
 /// runs/pending_inputs 加 FK（孤儿行过滤）、session_messages 加 updated_at、
 /// session_sequence 建表/对齐。
 fn migrate_v3_to_v4(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
+    // 历史早期形态库可能缺 runs / pending_inputs 表（2026-08-08 现场：
+    // apps/agent-workbench/sessions.db user_version=3 无这两张表——早期
+    // v1 形态不含它们，后续版本才引入；v1→v3 迁移链不创建，v3→v4 却
+    // 无条件查询 → `no such table: runs` 迁移崩溃、DB 打不开降级内存库）。
+    // 缺失时按 v3 老 DDL 创建（无 FK 形态），再走下方重建逻辑幂等推进；
+    // 已有表时跳过（对齐 session_sequence 的 col-check 幂等模式）。
+    let table_exists = |tx: &rusqlite::Transaction<'_>, name: &str| -> Result<bool, rusqlite::Error> {
+        let n: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+            [name],
+            |r| r.get(0),
+        )?;
+        Ok(n > 0)
+    };
+    if !table_exists(tx, "runs")? {
+        tx.execute_batch(
+            "CREATE TABLE runs (
+                run_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                end_reason TEXT,
+                cursor INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL DEFAULT 0
+            ) WITHOUT ROWID;",
+        )?;
+    }
+    if !table_exists(tx, "pending_inputs")? {
+        tx.execute_batch(
+            "CREATE TABLE pending_inputs (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                run_id TEXT,
+                payload TEXT NOT NULL DEFAULT '{}',
+                created_at INTEGER NOT NULL DEFAULT 0
+            ) WITHOUT ROWID;",
+        )?;
+    }
     // 孤儿计数（会话不存在的 events/runs/pending 行）→ 写入 session_meta 可观测
     let orphan_events: i64 = tx.query_row(
         "SELECT COUNT(*) FROM events WHERE session_id NOT IN (SELECT id FROM sessions)",
@@ -476,4 +519,45 @@ fn migrate_v5_to_v6(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Erro
         "allowed_write_paths_json TEXT",
     )?;
     Ok(())
+}
+
+/// v6 → v7：新增 compression_blocks 压缩块单表（T-15，R-A 复合主键）。
+///
+/// 零既有列改动（只建新表 + 索引），不触发全表重写（P5 §3.1.4 备份-DROP
+/// 风险不适用）；`CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`
+/// 天然幂等（崩溃中间态重跑自愈，对齐既有「每版本独立事务」约定）。
+///
+/// 列语义（00-plan §4.4 CompactionBlockMeta + 04 summary_documents 合列）：
+/// - 复合主键 (session_id, block_id)——R-B 块 id 仅会话内唯一，全局主键
+///   会让跨会话同序块行被 INSERT OR IGNORE 静默吞掉（评审 01 P0-3）；
+/// - dropped_message_ids 为 JSON 数组字符串；state 状态机 awaiting →
+///   committed | retired；summary_json 可空（stub 期为 NULL）。
+fn migrate_v6_to_v7(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS compression_blocks (
+            session_id          TEXT NOT NULL,
+            block_id            TEXT NOT NULL,
+            sequence            INTEGER NOT NULL,
+            generation          INTEGER NOT NULL,
+            prev_block_id       TEXT,
+            dropped_message_ids TEXT NOT NULL,
+            first_kept_message_id TEXT,
+            summary             TEXT NOT NULL,
+            summary_is_llm      INTEGER NOT NULL DEFAULT 0,
+            tokens_before       INTEGER NOT NULL DEFAULT 0,
+            tokens_after        INTEGER NOT NULL DEFAULT 0,
+            dropped_at_ms       INTEGER NOT NULL,
+            state               TEXT NOT NULL DEFAULT 'awaiting',
+            summary_json        TEXT,
+            schema_version      INTEGER NOT NULL DEFAULT 1,
+            height              INTEGER NOT NULL DEFAULT 1,
+            tier                TEXT,
+            attempts            INTEGER NOT NULL DEFAULT 0,
+            created_at          INTEGER NOT NULL,
+            updated_at          INTEGER NOT NULL,
+            PRIMARY KEY (session_id, block_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_compression_blocks_session_gen
+            ON compression_blocks (session_id, generation DESC);",
+    )
 }

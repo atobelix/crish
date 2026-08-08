@@ -11,11 +11,13 @@
 //! - [`runs`]：run 生命周期 / pending_inputs / RunStatus / run 级 usage 落库
 //! - [`import`]：localStorage 历史数据一次性导入
 //! - [`explore_docs_quota_store`]：探索类文档配额 session_meta 存储（C5 后端）
+//! - [`blocks`]：compression_blocks 压缩块表读写（v7 迁移，T-15/T-16）
 //!
 //! 对外公共面由本文件原样 re-export，签名与既有调用方（orchestrator /
 //! agent-workbench / 迁移测试 / upgrade_e2e）保持兼容。
 
 mod agents;
+mod blocks;
 mod error;
 mod events;
 mod explore_docs_quota_store;
@@ -26,6 +28,7 @@ mod runs;
 mod schema;
 mod sessions;
 
+pub use blocks::{BlockState, CompactionBlockRow, BLOCK_SCHEMA_VERSION};
 pub use error::{DbFailure, DbFailureKind};
 pub use events::StoredEvent;
 pub use explore_docs_quota_store::SessionMetaExploreDocsQuotaStore;
@@ -41,14 +44,18 @@ use std::sync::{Arc, Mutex};
 pub struct LocalDb {
     conn: Arc<Mutex<Connection>>,
     failure: Arc<Mutex<Option<DbFailure>>>,
+    /// compression_blocks 表存在性缓存（R12/P2-1 缺表降级用；
+    /// None = 尚未探测，首次访问时查询 sqlite_master 并缓存——每连接一次）。
+    compression_blocks_present: Arc<Mutex<Option<bool>>>,
 }
 
 /// 当前 schema 版本（PE-08 T08.7：PRAGMA user_version 驱动的版本化迁移）。
 /// v6：session_agents 新列 task_type / display_label / allowed_write_paths_json
-/// （T-D-07 定义扩展落库，纯 ADD COLUMN）。
-pub const LATEST_VERSION: u32 = 6;
+/// （T-D-07 定义扩展落库，纯 ADD COLUMN）；
+/// v7：新增 compression_blocks 压缩块单表（T-15，R-A 复合主键，零既有列改动）。
+pub const LATEST_VERSION: u32 = 7;
 /// session_meta 中登记的 schema 版本字符串（与 PRAGMA user_version 保持一致）。
-pub const SCHEMA_VERSION_STRING: &str = "6";
+pub const SCHEMA_VERSION_STRING: &str = "7";
 /// 孤儿会话宽限期（毫秒）：updated_at 距今小于该值的会话不被清理（PE-08 T08.2）。
 pub const ORPHAN_GRACE_MS: i64 = 300_000;
 /// session_meta 中可配宽限期的键。
@@ -68,6 +75,7 @@ impl LocalDb {
         let db = Self {
             conn: Arc::new(Mutex::new(conn)),
             failure: Arc::new(Mutex::new(None)),
+            compression_blocks_present: Arc::new(Mutex::new(None)),
         };
         db.migrate()?;
         Ok(db)
@@ -83,6 +91,7 @@ impl LocalDb {
         let db = Self {
             conn: Arc::new(Mutex::new(conn)),
             failure: Arc::new(Mutex::new(None)),
+            compression_blocks_present: Arc::new(Mutex::new(None)),
         };
         db.migrate()?;
         Ok(db)

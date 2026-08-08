@@ -14,6 +14,8 @@ workspace = true
 rusqlite = { workspace = true }
 # G5 清理（2026-08-03）：serde 本体无引用（仅 serde_json 使用，cargo machete 实证）
 serde_json = { workspace = true }
+# T-16：blocks 模块缺表降级告警（R12/P2-1，tracing::warn!；workspace 既有依赖）
+tracing = { workspace = true }
 conex-types = { path = "../conex-types" }
 # I6-M11 C5：探索类文档配额存储实现 agent-tools 的 ExploreDocsQuotaStore
 # 契约（explore_quota.rs:96-106）。环说明：agent-tools 在 dev-dependencies
