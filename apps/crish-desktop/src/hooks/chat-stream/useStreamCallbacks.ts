@@ -127,12 +127,59 @@ function pickUsageCostEstimators(
   };
 }
 
+/**
+ * 可行动错误 kind（需用户处理：补密钥/改地址/选工作区等）→ 横幅 + 一次性 toast。
+ * 对齐 userFacingErrors.SoftFailureKind 分类；network/ended 不在此列。
+ */
+const ACTIONABLE_ERROR_KINDS: ReadonlySet<string> = new Set([
+  'blocked',
+  'auth',
+  'no_key',
+  'no_project',
+]);
+
+export type RunErrorSurface =
+  /** network/恢复类：仅输入框上方持久条（无 TTL、恢复即消失），不进 toast、不写气泡 */
+  | 'persistent'
+  /** 有正文的失败：仅气泡错误卡（不弹横幅、不弹 toast） */
+  | 'bubble'
+  /** 无正文的失败：仅横幅（14s TTL），无 toast */
+  | 'banner'
+  /** 可行动错误：横幅 + 一次性 toast */
+  | 'banner-toast';
+
+/** 是否可行动错误 kind（blocked / auth / no_key / no_project）。 */
+export function isActionableErrorKind(
+  kind: string | undefined | null
+): boolean {
+  return kind != null && ACTIONABLE_ERROR_KINDS.has(kind);
+}
+
+/**
+ * onRunError 分级分发裁决（展示唯一性，通道 E-B）：
+ * - network/恢复类 → 持久条（无论是否有正文，错误不写气泡）；
+ * - 可行动错误 → 横幅 + toast（有正文时气泡 errorDetail 一并保留，由调用方处理）；
+ * - 其余有正文 → 仅气泡错误卡；
+ * - 其余无正文 → 仅横幅。
+ */
+export function resolveRunErrorSurface(
+  kind: string | undefined | null,
+  hadText: boolean
+): RunErrorSurface {
+  if (kind === 'network') return 'persistent';
+  if (isActionableErrorKind(kind)) return 'banner-toast';
+  if (hadText) return 'bubble';
+  return 'banner';
+}
+
 export function useStreamCallbacks(
   options: UseChatStreamOptions,
   refs: StreamBatcherRefs,
   noticeHelpers: {
     pushRunNotice: (notice: RunNotice, ttlMs?: number) => void;
     dismissRunNotice: () => void;
+    /** 仅清 TTL 横幅，持久条保持显示（发送 / onChunk / onComplete 路径） */
+    dismissTransientRunNotice: () => void;
   },
   queryHelpers: {
     wsId: string;
@@ -153,7 +200,7 @@ export function useStreamCallbacks(
 } {
   const { onShowToast } = options;
   const { wsId, setActiveDiffSource, upsertSessionAgent } = queryHelpers;
-  const { pushRunNotice, dismissRunNotice } = noticeHelpers;
+  const { pushRunNotice, dismissTransientRunNotice } = noticeHelpers;
   const {
     streamManagerRef,
     textBatcherRef,
@@ -212,8 +259,10 @@ export function useStreamCallbacks(
     const store = getCompositionRoot().layout.getState();
     const toolNames: Record<string, string> = {};
     const startTime = Date.now();
-    dismissRunNotice();
+    dismissTransientRunNotice();
     let gotRealText = false;
+    /** network 错误收口标志：onComplete 空回复分支守卫（持久条已承载错误，不重复弹横幅） */
+    let runEndedWithNetworkError = false;
     let localRunId: string | null = null;
     let runClosed = false;
     let streamedFullText = '';
@@ -555,7 +604,7 @@ export function useStreamCallbacks(
         onChunk: (chunk) => {
           if (!assertLive()) return;
           gotRealText = true;
-          dismissRunNotice();
+          dismissTransientRunNotice();
           streamedFullText += chunk;
           if (renderBufferRef.current) {
             renderBufferRef.current.push(chunk);
@@ -594,21 +643,39 @@ export function useStreamCallbacks(
               toolCount: asstErr?.toolCalls?.length ?? 0,
             },
           });
-          // 错误只走横幅/toast，禁止写入 assistant 气泡（用户要求：勿把错误当 AI 输出）
-          pushRunNotice(
-            {
-              text: message,
-              kind: kind || 'error',
-              detail: detail || undefined,
-            },
-            14000
+          const hadText = !!(
+            (asstErr?.text || '').trim() ||
+            getStreamText(sid, assistantMsgId)?.trim()
           );
-          onShowToast(message);
+          // 分级分发（通道 E-B）：按错误分类选展示面，一次错误只占一个瞬时面；
+          // 持久条与横幅/toast 互斥（persistent 无 TTL，恢复驱动消失）。
+          const surface = resolveRunErrorSurface(kind, hadText);
+          const notice: RunNotice = {
+            text: message,
+            kind: kind || 'error',
+            detail: detail || undefined,
+          };
+          if (surface === 'persistent') {
+            // network/恢复类：仅输入框上方持久条；不进 toast、不写气泡
+            runEndedWithNetworkError = true;
+            pushRunNotice({ ...notice, persistent: true });
+          } else if (surface === 'banner-toast') {
+            // 可行动错误（blocked/auth/no_key/no_project）：横幅 + 一次性 toast
+            pushRunNotice(notice, 14000);
+            onShowToast(message);
+          } else if (surface === 'banner') {
+            // 无正文的失败：仅横幅（14s TTL），无 toast
+            pushRunNotice(notice, 14000);
+          }
+          // bubble：有正文的失败仅气泡错误卡（不弹横幅、不弹 toast）
           if (asstErr) {
-            const hadText =
-              !!(asstErr.text || '').trim() ||
-              !!getStreamText(sid, assistantMsgId)?.trim();
-            if (!hadText) {
+            if (surface === 'persistent') {
+              // network 类不写气泡错误卡；无正文时 withdraw 占位（保持现状）
+              if (!hadText) {
+                store.withdrawMessage(wsId, sid, assistantMsgId);
+                clearStream(sid, assistantMsgId);
+              }
+            } else if (!hadText) {
               store.withdrawMessage(wsId, sid, assistantMsgId);
               clearStream(sid, assistantMsgId);
             } else {
@@ -682,33 +749,36 @@ export function useStreamCallbacks(
               elapsedSec: elapsed,
             },
           });
-          if (
-            asst &&
-            !gotRealText &&
-            !(asst.text || committedText || '').trim()
-          ) {
-            const hasTools = (asst.toolCalls || []).some(
-              (t: MessageToolCall) =>
-                t.status === 'success' ||
-                t.status === 'error' ||
-                t.status === 'running'
-            );
-            if (!hasTools) {
-              pushRunNotice(
-                {
-                  text: '这一轮没有文字回复。若刚改过配置，请检查模型与网络。',
-                  kind: 'empty',
-                },
-                6000
+          // network 错误收口：不弹空回复横幅（持久条已承载错误），也不清持久条
+          if (!runEndedWithNetworkError) {
+            if (
+              asst &&
+              !gotRealText &&
+              !(asst.text || committedText || '').trim()
+            ) {
+              const hasTools = (asst.toolCalls || []).some(
+                (t: MessageToolCall) =>
+                  t.status === 'success' ||
+                  t.status === 'error' ||
+                  t.status === 'running'
               );
-            } else {
-              dismissRunNotice();
+              if (!hasTools) {
+                pushRunNotice(
+                  {
+                    text: '这一轮没有文字回复。若刚改过配置，请检查模型与网络。',
+                    kind: 'empty',
+                  },
+                  6000
+                );
+              } else {
+                dismissTransientRunNotice();
+              }
+            } else if (
+              gotRealText ||
+              (asst?.text || committedText || '').trim()
+            ) {
+              dismissTransientRunNotice();
             }
-          } else if (
-            gotRealText ||
-            (asst?.text || committedText || '').trim()
-          ) {
-            dismissRunNotice();
           }
           const toolPatches = buildTerminalToolPatches(
             asst?.toolCalls,

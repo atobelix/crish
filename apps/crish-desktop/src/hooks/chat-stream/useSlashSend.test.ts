@@ -14,8 +14,27 @@ import { SessionStreamManager } from '../../api/sessionStreamManager';
 import type { UseChatStreamOptions } from './types';
 import type { StreamBatcherRefs } from './useStreamBatchers';
 import { PENDING_DRAFT_SESSION_ID } from '../../store/draftSession';
+import type { ErrorDomain } from '../../api/userFacingErrors';
 
 const requestFollowUp = vi.fn(async () => true);
+
+// R7 发送前就绪检查：mock 掉 ConnectionLifecycle 的实时查询（默认就绪放行），
+// 就绪拦截用例单独覆盖 S1/S2/S3 域（vi.hoisted：mock 工厂在执行期可安全引用）
+const { checkEngineReadyRealtime } = vi.hoisted(() => ({
+  checkEngineReadyRealtime: vi.fn<[], Promise<{ ok: boolean; domain: ErrorDomain | null }>>(
+    async () => ({ ok: true, domain: null })
+  ),
+}));
+
+vi.mock('../../api/chat-bridge/ConnectionLifecycle', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../../api/chat-bridge/ConnectionLifecycle')
+  >();
+  return {
+    ...actual,
+    checkEngineReadyRealtime,
+  };
+});
 
 vi.mock('../../api/runControlClient', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/runControlClient')>();
@@ -108,6 +127,8 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
   beforeEach(() => {
     resetCompositionRoot();
     requestFollowUp.mockClear();
+    checkEngineReadyRealtime.mockClear();
+    checkEngineReadyRealtime.mockResolvedValue({ ok: true, domain: null });
     seedSession();
   });
 
@@ -212,5 +233,65 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
     expect(sidArg.startsWith('__pending')).toBe(false);
 
     createSessionSpy.mockRestore();
+  });
+
+  it('R7 引擎未就绪（S1：initialized=false）→ 输入框单次提示，不产生 run', async () => {
+    checkEngineReadyRealtime.mockResolvedValue({ ok: false, domain: 'S1' });
+    const runStreamingAssistant = vi.fn();
+    const options = makeOptions({ chatInput: 'engine starting' });
+    const refs = makeRefs();
+
+    const { result } = renderHook(() =>
+      useSlashSend(options, refs, runStreamingAssistant)
+    );
+
+    await act(async () => {
+      await result.current.handleSendChat(false, 'engine starting');
+    });
+
+    expect(options.setPickerInlineError).toHaveBeenCalledWith('软件服务正在启动，请稍候片刻。');
+    expect(runStreamingAssistant).not.toHaveBeenCalled();
+    // 不产生失败 run：无 runControl 派发、无 follow-up
+    expect(requestFollowUp).not.toHaveBeenCalled();
+  });
+
+  it('R7 配置缺失（S2：engineReady=false）→ S2 文案单次提示', async () => {
+    checkEngineReadyRealtime.mockResolvedValue({ ok: false, domain: 'S2' });
+    const runStreamingAssistant = vi.fn();
+    const options = makeOptions({ chatInput: 'no provider' });
+    const refs = makeRefs();
+
+    const { result } = renderHook(() =>
+      useSlashSend(options, refs, runStreamingAssistant)
+    );
+
+    await act(async () => {
+      await result.current.handleSendChat(false, 'no provider');
+    });
+
+    expect(options.setPickerInlineError).toHaveBeenCalledWith(
+      '模型服务尚未配置，请打开 设置 → 模型 完成配置后再发送。',
+    );
+    expect(runStreamingAssistant).not.toHaveBeenCalled();
+  });
+
+  it('R7 restore 进行中（S3）→ S3 文案单次提示', async () => {
+    checkEngineReadyRealtime.mockResolvedValue({ ok: false, domain: 'S3' });
+    const runStreamingAssistant = vi.fn();
+    const options = makeOptions({ chatInput: 'restoring' });
+    const refs = makeRefs();
+
+    const { result } = renderHook(() =>
+      useSlashSend(options, refs, runStreamingAssistant)
+    );
+
+    await act(async () => {
+      await result.current.handleSendChat(false, 'restoring');
+    });
+
+    expect(options.setPickerInlineError).toHaveBeenCalledWith(
+      '正在恢复上次的会话数据，稍后即可发送。',
+    );
+    expect(runStreamingAssistant).not.toHaveBeenCalled();
   });
 });

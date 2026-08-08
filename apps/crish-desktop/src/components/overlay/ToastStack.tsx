@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { AppToast } from '../../services/ToastBus';
+import type { AppToast } from '../../hooks/useToastQueue';
 import styles from './ToastStack.module.css';
 
 type Props = {

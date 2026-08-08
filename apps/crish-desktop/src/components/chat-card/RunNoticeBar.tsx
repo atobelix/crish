@@ -30,6 +30,7 @@ export const RunNoticeBar: React.FC<RunNoticeBarProps> = ({
       className={styles.runNotice}
       role="status"
       data-testid="run-notice"
+      data-persistent={runNotice?.persistent ? 'true' : undefined}
       aria-live={resolveRunNoticeAriaLive(runNotice?.kind)}
       aria-atomic="true"
       aria-label={resolveRunNoticeAriaLabel(text)}

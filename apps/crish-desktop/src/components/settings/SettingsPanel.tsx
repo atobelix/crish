@@ -54,6 +54,9 @@ const SettingsPersonalizeTab = lazy(() =>
 const SettingsExtensionsTab = lazy(() =>
   import('../settings-extensions/SettingsExtensionsTab').then((m) => ({ default: m.SettingsExtensionsTab })),
 );
+const StatusDiagnosticsPanel = lazy(() =>
+  import('./StatusDiagnosticsPanel').then((m) => ({ default: m.StatusDiagnosticsPanel })),
+);
 
 /** tab 懒加载占位：与设置页骨架样式一致，避免加载抖动 */
 const SettingsTabSuspenseFallback: React.FC<{ tabName: string }> = ({ tabName }) => (
@@ -76,7 +79,7 @@ interface SettingsPanelProps {
 }
 
 /**
- * 设置壳组件：顶栏窗口控制 + 侧栏导航（SettingsTablist）+ 内容区（10 个懒加载
+ * 设置壳组件：顶栏窗口控制 + 侧栏导航（SettingsTablist）+ 内容区（11 个懒加载
  * Suspense 分支）。tab 元数据见 settingsTabsMeta；搜索/roving/Esc/快捷键见
  * useSettingsNav；窗口控制见 SettingsWindowControls。
  */
@@ -328,6 +331,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <Suspense key="tab-security-suspense" fallback={<SettingsTabSuspenseFallback tabName="安全" />}>
               <AppErrorBoundary key="tab-security" compact title="设置页面出错">
                 <SettingsSecurityTab onShowToast={onShowToast} />
+              </AppErrorBoundary>
+            </Suspense>
+          )}
+
+          {safeActiveTab === 'diagnostics' && (
+            <Suspense key="tab-diagnostics-suspense" fallback={<SettingsTabSuspenseFallback tabName="状态诊断" />}>
+              <AppErrorBoundary key="tab-diagnostics" compact title="设置页面出错">
+                <StatusDiagnosticsPanel onShowToast={onShowToast} />
               </AppErrorBoundary>
             </Suspense>
           )}

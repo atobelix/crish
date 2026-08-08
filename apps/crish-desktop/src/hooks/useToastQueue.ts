@@ -1,5 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AppToast } from '../services/ToastBus';
+
+/**
+ * Toast 展示类型。源自已删除的旧 ToastBus.ts 死通道（发射即不可见）；
+ * ToastBus 移除后本文件成为 AppToast 类型的唯一所有者（ToastStack / App 层复用）。
+ */
+export type ToastType = 'info' | 'success' | 'warning' | 'error' | 'recovery';
+export type ToastPriority = 'polite' | 'assertive';
+
+export interface AppToast {
+  id: string;
+  type: ToastType;
+  title?: string;
+  message: string;
+  duration: number;
+  ariaLive: ToastPriority;
+  action?: { label: string; onClick: () => void };
+  onDismiss?: () => void;
+  onUndo?: () => void;
+  group?: string;
+  timestamp: number;
+}
 
 /** 统一 toast 回调：仅错误，或可撤销操作（第二参 onUndo）。 */
 export type ShowToastFn = (message: string, onUndo?: () => void) => void;

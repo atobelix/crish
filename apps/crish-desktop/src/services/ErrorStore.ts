@@ -9,7 +9,6 @@
  * - 导出单例 errorStore，供全应用共享
  */
 
-import { eventBus } from './EventBus';
 import { classifyError } from './FailoverReason';
 import { telemetry } from './TelemetryService';
 import type { FailoverReason, ClassifiedError } from './FailoverReason';
@@ -119,9 +118,6 @@ class ErrorStore {
       existing.reason = classified.reason;
       existing.classified = classified;
       this.notifyIfActiveChanged();
-      if (this.isToastableSeverity(error.severity)) {
-        eventBus.emit('toast:show', existing);
-      }
       return existing.id;
     }
 
@@ -152,10 +148,6 @@ class ErrorStore {
 
     this.notifyIfActiveChanged();
     this.notifyAll();
-
-    if (this.isToastableSeverity(error.severity)) {
-      eventBus.emit('toast:show', entry);
-    }
     return id;
   }
 
@@ -251,10 +243,6 @@ class ErrorStore {
         console.error('[ErrorStore] subscriber error:', err);
       }
     }
-  }
-
-  private isToastableSeverity(severity: UiError['severity']): boolean {
-    return severity === 'warning' || severity === 'error' || severity === 'critical';
   }
 
   private notifyIfActiveChanged(): void {

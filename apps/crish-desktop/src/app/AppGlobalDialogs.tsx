@@ -4,7 +4,7 @@ import { TelemetryDialog } from '../components/overlay/TelemetryDialog';
 import { openSettings } from '../api/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
 import { getActiveModelId, getActiveProfileId } from '../api/providerProfiles';
-import type { AppToast as Toast } from '../services/ToastBus';
+import type { AppToast as Toast } from '../hooks/useToastQueue';
 import type { SettingsTabType } from '../store/types';
 
 // Lazy loaded components

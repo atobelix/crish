@@ -9,6 +9,7 @@ import {
   createStreamCancel,
   createStreamSession,
   ensureEngineConnected,
+  checkEngineReadyRealtime,
   composeSystemPrompt,
   buildHistoryMessages,
   resolveContextWindow,
@@ -323,6 +324,7 @@ describe('ConnectionLifecycle（Tauri IPC 版）', () => {
     vi.mocked(fakeTransport.waitUntilConnected).mockResolvedValue(true);
     vi.mocked(fakeTransport.isReady).mockReturnValue(true);
     fakeTransport.request.mockClear();
+    fakeTransport.request.mockImplementation(async () => ({ ok: true }));
     fakeTransport.send.mockClear();
     resetControlMetrics();
   });
@@ -334,11 +336,62 @@ describe('ConnectionLifecycle（Tauri IPC 版）', () => {
       expect(fakeTransport.waitUntilConnected).toHaveBeenCalledWith(20_000);
     });
 
-    it('核心未就绪 → ok:false + network 文案', async () => {
+    it('核心未就绪 → ok:false + S1 域文案（差异化：不再是恒 network 文案）', async () => {
       vi.mocked(fakeTransport.waitUntilConnected).mockResolvedValue(false);
       const res = await ensureEngineConnected();
       expect(res.ok).toBe(false);
-      expect(res.error).toBeTruthy();
+      expect(res.error).toBe('软件服务正在启动，请稍候片刻。');
+    });
+  });
+
+  describe('checkEngineReadyRealtime（R7：发送前真实就绪检查）', () => {
+    it('实时 core_get_status 就绪 → ok:true', async () => {
+      fakeTransport.request.mockResolvedValue({
+        initialized: true,
+        engineReady: true,
+        restore: { state: 'done' },
+      });
+      const res = await checkEngineReadyRealtime();
+      expect(res).toEqual({ ok: true, domain: null });
+      expect(fakeTransport.request).toHaveBeenCalledWith(
+        'core_get_status',
+        {},
+        { timeoutMs: 3_000 },
+      );
+    });
+
+    it('initialized=false → S1（本地核心未就绪）', async () => {
+      fakeTransport.request.mockResolvedValue({ initialized: false });
+      const res = await checkEngineReadyRealtime();
+      expect(res).toEqual({ ok: false, domain: 'S1' });
+    });
+
+    it('restore.state=pending → S3（恢复会话数据中）', async () => {
+      fakeTransport.request.mockResolvedValue({
+        initialized: true,
+        engineReady: true,
+        restore: { state: 'pending' },
+      });
+      const res = await checkEngineReadyRealtime();
+      expect(res).toEqual({ ok: false, domain: 'S3' });
+    });
+
+    it('engineReady=false → S2（provider 配置缺失）', async () => {
+      fakeTransport.request.mockResolvedValue({
+        initialized: true,
+        restore: { state: 'done' },
+        engineReady: false,
+      });
+      const res = await checkEngineReadyRealtime();
+      expect(res).toEqual({ ok: false, domain: 'S2' });
+    });
+
+    it('查询失败 → 放行（ok:true，不阻塞发送；真实错误由 createStreamSession 兜底）', async () => {
+      fakeTransport.request.mockRejectedValue(
+        new Error('Tauri command not available: core_get_status'),
+      );
+      const res = await checkEngineReadyRealtime();
+      expect(res).toEqual({ ok: true, domain: null });
     });
   });
 
@@ -535,5 +588,113 @@ describe('取消与启动竞态（P1-F2：waitUntilConnected 挂起期间 stop�
     expect(params.runId).toBe('run-norm-1');
     expect(params.prompt).toBe('normal start');
     expect(params.sessionId).toBe('sess-norm-1');
+  });
+
+  it('waitUntilConnected 未就绪 → S1 域文案（不恒报 network 一刀切）', async () => {
+    vi.mocked(fakeTransport.waitUntilConnected).mockResolvedValue(false);
+    vi.mocked(fakeTransport.isReady).mockReturnValue(false);
+    const onRunError = vi.fn();
+    const callbacks: StreamCallbacks = {
+      onChunk: vi.fn(),
+      onThought: vi.fn(),
+      onToolStart: vi.fn(),
+      onToolError: vi.fn(),
+      onToolSuccess: vi.fn(),
+      onComplete: vi.fn(),
+      onRunError,
+    };
+    const state = makeState();
+    const finish = vi.fn();
+
+    await createStreamSession(
+      'not ready',
+      'sess-notready-1',
+      'run-notready-1',
+      callbacks,
+      undefined,
+      state,
+      () => undefined,
+      finish
+    );
+
+    expect(onRunError).toHaveBeenCalledTimes(1);
+    const [msg, kind] = onRunError.mock.calls[0];
+    expect(msg).toBe('软件服务正在启动，请稍候片刻。');
+    // kind 保持 network（T-1 分级分发：持久条面）
+    expect(kind).toBe('network');
+    expect(startRunTask).not.toHaveBeenCalled();
+    expect(finish).toHaveBeenCalledTimes(1);
+  });
+
+  it('startRunTask invoke 失败 catch 分支 → 传真实错误 e 做分域（S2 配置缺失文案）', async () => {
+    vi.mocked(fakeTransport.waitUntilConnected).mockResolvedValue(true);
+    vi.mocked(fakeTransport.isReady).mockReturnValue(true);
+    startRunTask.mockRejectedValueOnce(
+      new Error('internal: provider 配置缺失（baseUrl/model/apiKey 三件套）')
+    );
+    const onRunError = vi.fn();
+    const callbacks: StreamCallbacks = {
+      onChunk: vi.fn(),
+      onThought: vi.fn(),
+      onToolStart: vi.fn(),
+      onToolError: vi.fn(),
+      onToolSuccess: vi.fn(),
+      onComplete: vi.fn(),
+      onRunError,
+    };
+    const state = makeState();
+    const finish = vi.fn();
+
+    await createStreamSession(
+      'gate reject',
+      'sess-gate-1',
+      'run-gate-1',
+      callbacks,
+      undefined,
+      state,
+      () => undefined,
+      finish
+    );
+
+    expect(onRunError).toHaveBeenCalledTimes(1);
+    const [msg, kind] = onRunError.mock.calls[0];
+    expect(msg).toBe('模型服务尚未配置，请打开 设置 → 模型 完成配置后再发送。');
+    expect(kind).toBe('network');
+    expect(finish).toHaveBeenCalledTimes(1);
+  });
+
+  it('catch 分支：非 S1-S5 的 CoreError（串行守卫）→ S6 内部错误文案', async () => {
+    vi.mocked(fakeTransport.waitUntilConnected).mockResolvedValue(true);
+    vi.mocked(fakeTransport.isReady).mockReturnValue(true);
+    startRunTask.mockRejectedValueOnce(
+      new Error('InvalidInput: 会话 sess-gate-2 已有活动 run（串行守卫）')
+    );
+    const onRunError = vi.fn();
+    const callbacks: StreamCallbacks = {
+      onChunk: vi.fn(),
+      onThought: vi.fn(),
+      onToolStart: vi.fn(),
+      onToolError: vi.fn(),
+      onToolSuccess: vi.fn(),
+      onComplete: vi.fn(),
+      onRunError,
+    };
+    const state = makeState();
+    const finish = vi.fn();
+
+    await createStreamSession(
+      'gate reject',
+      'sess-gate-2',
+      'run-gate-2',
+      callbacks,
+      undefined,
+      state,
+      () => undefined,
+      finish
+    );
+
+    expect(onRunError).toHaveBeenCalledTimes(1);
+    const [msg] = onRunError.mock.calls[0];
+    expect(msg).toBe('软件内部错误，请稍后重试；若反复出现请重启应用。');
   });
 });

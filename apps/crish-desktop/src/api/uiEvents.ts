@@ -14,6 +14,11 @@
 export type UiEventMap = {
   'project-changed': void;
   'open-project-picker': void;
+  /**
+   * 原生目录对话框不可用（ToastBus 死通道迁移后的事件桥）。
+   * pickWorkspaceFolder 失败时派发；App.tsx useToastQueue 宿主订阅弹可见 toast。
+   */
+  'workspace-picker-unavailable': void;
   'open-scheduled': void;
   'open-chat': void;
   'open-overview': void;
@@ -70,6 +75,7 @@ export const UI_EVENT_PREFIX = 'crish-' as const;
 export const UI_EVENT_NAMES = [
   'project-changed',
   'open-project-picker',
+  'workspace-picker-unavailable',
   'open-scheduled',
   'open-chat',
   'open-overview',

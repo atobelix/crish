@@ -3,7 +3,7 @@
  * undo shape / error-only filters. No React render required.
  */
 import { describe, expect, it } from 'vitest';
-import type { AppToast } from '../services/ToastBus';
+import type { AppToast } from './useToastQueue';
 import {
   TOAST_MAX_QUEUE,
   TOAST_TTL_MS,

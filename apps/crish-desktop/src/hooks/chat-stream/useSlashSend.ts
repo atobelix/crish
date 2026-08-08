@@ -30,6 +30,8 @@ import {
   isSessionAiBusy,
 } from './helpers';
 import { getCompositionRoot } from '../../app/compositionRoot';
+import { checkEngineReadyRealtime } from '../../api/chat-bridge/ConnectionLifecycle';
+import { domainUserMessage } from '../../api/userFacingErrors';
 import type { UseChatStreamOptions, ChatAttachment } from './types';
 import type { StreamBatcherRefs } from './useStreamBatchers';
 import type { SessionMessage } from '../../store/layoutStore';
@@ -90,6 +92,14 @@ export function useSlashSend(
     if (needsModelSetup) {
       setPickerInlineError('请手填或选择模型 id 后再发送');
       onOpenModelPicker?.();
+      return;
+    }
+    // R7：发送前真实就绪检查——实时 core_get_status（不信 transport.ready 陈旧
+    // latch）。未就绪（S1 启动中 / S2 配置缺失 / S3 restore 中）→ 输入框单次
+    // 提示，不产生失败 run、不秒弹 toast（文案按域差异化，见 domainUserMessage）
+    const readiness = await checkEngineReadyRealtime();
+    if (!readiness.ok && readiness.domain) {
+      setPickerInlineError(domainUserMessage(readiness.domain));
       return;
     }
 

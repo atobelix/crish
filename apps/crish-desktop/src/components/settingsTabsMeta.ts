@@ -34,6 +34,7 @@ const FORMAL_TAB_IDS: TabType[] = [
   'plugins',
   'shortcuts',
   'security',
+  'diagnostics',
 ];
 
 export function allowedTabIds(_mcpAvailable: boolean): TabType[] {
@@ -151,6 +152,28 @@ export const TAB_META: TabMeta[] = [
     icon: Lucide.Lock,
     group: '安全',
     keywords: ['安全', '权限', '白名单', '信任', 'security', 'permission', 'allowlist'],
+  },
+  {
+    id: 'diagnostics',
+    label: '状态诊断',
+    icon: Lucide.Activity,
+    group: '工作',
+    keywords: [
+      '状态诊断',
+      '诊断',
+      '状态',
+      '日志',
+      '日志目录',
+      '日志级别',
+      '健康',
+      '健康检查',
+      '子系统',
+      'status',
+      'diagnostics',
+      'diag',
+      'log',
+      'health',
+    ],
   },
 ];
 

@@ -4,16 +4,16 @@
  * 流程：原生目录对话框 → addProjectFromPath → 返回路径。
  * - 成功：写入项目 store，返回路径
  * - 用户取消：no-op，返回 null（不打开应用内选择器）
- * - 原生对话框不可用：中文 toast + emitUiEvent('open-project-picker')
+ * - 原生对话框不可用：emitUiEvent('workspace-picker-unavailable')（App 层桥接为可见
+ *   toast）+ emitUiEvent('open-project-picker')（打开应用内选择器）
+ *
+ * ToastBus 死通道迁移（2026-08-09）：旧 toastBus 无渲染器、发射即不可见；
+ * 改为 uiEvents 事件桥，由 App.tsx useToastQueue 宿主订阅弹可见 toast。
  */
 
-import {
-  DirectoryDialogUnavailableError,
-  openDirectoryDialog,
-} from './openDirectoryDialog';
+import { openDirectoryDialog } from './openDirectoryDialog';
 import { addProjectFromPath } from './projectStore';
 import { emitUiEvent } from './uiEvents';
-import { toastBus } from '../services/ToastBus';
 
 /**
  * 选择工作区目录并注册为项目。
@@ -29,16 +29,8 @@ export async function pickWorkspaceFolder(): Promise<string | null> {
     addProjectFromPath(path);
     return path;
   } catch (err) {
-    // 原生对话框不可用 → 中文提示 + 应用内项目选择器
-    if (
-      err instanceof DirectoryDialogUnavailableError ||
-      (err instanceof Error && err.message.includes('DIRECTORY_DIALOG'))
-    ) {
-      toastBus.warning('无法打开系统文件夹选择器，请使用应用内项目列表');
-      emitUiEvent('open-project-picker');
-      return null;
-    }
-    toastBus.warning('无法打开系统文件夹选择器，请使用应用内项目列表');
+    // 原生对话框不可用 → 事件桥（App 层 toast）+ 应用内项目选择器
+    emitUiEvent('workspace-picker-unavailable');
     emitUiEvent('open-project-picker');
     return null;
   }

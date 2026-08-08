@@ -14,6 +14,7 @@ import {
   usePlatformAdaptation,
 } from '@crish/shared-utils/browser';
 import { createDebounced } from './api/debouncedValue';
+import { onUiEvent } from './api/uiEvents';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { useToastQueue } from './hooks/useToastQueue';
 import { shouldShowFirstRunWizard } from './components/firstRunWizardLib';
@@ -142,6 +143,14 @@ function App() {
     setShowTelemetry,
     setSidebarCollapsed,
   });
+
+  // ToastBus 死通道迁移（2026-08-09）：pickWorkspaceFolder 原生对话框不可用时
+  // 经 uiEvents 事件桥转发，此处挂到 useToastQueue 宿主弹可见 toast
+  useEffect(() => {
+    return onUiEvent('workspace-picker-unavailable', () => {
+      handleShowToast('无法打开系统文件夹选择器，请使用应用内项目列表');
+    });
+  }, [handleShowToast]);
 
   const handleHoverTriggerEnter = () => {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);

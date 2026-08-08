@@ -19,7 +19,12 @@ import { getTransport, startRunTask } from '../transport';
 import type { StreamCallbacks, StreamRequestOptions } from '../chatApi';
 import { toEnginePermissionMode } from '../permissionModes';
 import { getPermissionMode } from '../storeAccess';
-import { logInternalError, networkUserMessage } from '../userFacingErrors';
+import {
+  classifyErrorDomain,
+  logInternalError,
+  networkUserMessage,
+} from '../userFacingErrors';
+import type { ErrorDomain } from '../userFacingErrors';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
 import { normalizeStreamSessionId } from './handlers/eventUtils';
 import { type StreamState, cleanupStreamState } from './handlers/streamState';
@@ -55,8 +60,73 @@ export interface HistoryMessage {
   timestamp: number;
 }
 
-/** 历史回流长度上限：最近 N 条（T-31；窗口内预算兜底在引擎侧，前端只截尾部） */
-export const HISTORY_CAP = 100;
+/**
+ * DEEPCHECK-01 P0（历史回流前缀漂移修复）：历史回流 token 预算。
+ * - 语义从「最近 N 条」改为「token 预算 + 稳定锚点」：预算内全量回传
+ *   （append-only 请求前缀天然字节稳定，服务端自动前缀缓存全量命中）；
+ * - 超预算：锚点（会话首条 user 消息，含其前的稳定头部）恒在 + 尾部按
+ *   预算从旧到新尽量多带，中间段才允许丢弃——请求前缀跨 run 恒以同一
+ *   锚点字节开头，失配点收敛到尾部增量（不再逐轮整体漂移）；
+ * - 估算对齐 conex-compaction `count_tokens` 启发式（4 字符/token 量级）。
+ */
+export const HISTORY_TOKEN_BUDGET = 200_000;
+
+/** 单条历史消息的固定线缆开销估算（role/id/timestamp/status + JSON 信封，
+ * 与 Rust SessionHistoryCache 的 SESSION_HISTORY_MESSAGE_TOKEN_OVERHEAD 对齐） */
+export const HISTORY_MESSAGE_TOKEN_OVERHEAD = 8;
+
+/**
+ * 文本 token 估算（对齐 conex-compaction `compaction::count_tokens` 启发式：
+ * ASCII 单词约 4 字符折 1 token（向上取整）、空白/标点每字符 1 token、
+ * 非 ASCII（CJK 等）每字符 1 token；非空文本至少 1 token）。
+ */
+export function estimateTextTokens(text: string | undefined): number {
+  if (!text || text.length === 0) return 0;
+  let tokens = 0;
+  let wordChars = 0;
+  for (const ch of text) {
+    const code = ch.charCodeAt(0);
+    if (code < 0x80) {
+      // ASCII：空白（0x20 及以下）或标点（0x21-2F / 3A-40 / 5B-60 / 7B-7E）
+      // 为分隔符（自身 1 token）；其余字符计入单词
+      const isSeparator =
+        code <= 0x20 ||
+        (code >= 0x21 && code <= 0x2f) ||
+        (code >= 0x3a && code <= 0x40) ||
+        (code >= 0x5b && code <= 0x60) ||
+        (code >= 0x7b && code <= 0x7e);
+      if (isSeparator) {
+        if (wordChars > 0) {
+          tokens += Math.ceil(wordChars / 4);
+          wordChars = 0;
+        }
+        tokens += 1;
+      } else {
+        wordChars += 1;
+      }
+    } else {
+      // 非 ASCII（CJK 等）：每字符约 1 token
+      if (wordChars > 0) {
+        tokens += Math.ceil(wordChars / 4);
+        wordChars = 0;
+      }
+      tokens += 1;
+    }
+  }
+  if (wordChars > 0) tokens += Math.ceil(wordChars / 4);
+  return Math.max(tokens, 1);
+}
+
+/** 单条历史消息 token 估算：正文/思考/工具调用/工具结果 JSON + 固定消息开销 */
+export function estimateHistoryMessageTokens(msg: HistoryMessage): number {
+  return (
+    estimateTextTokens(msg.text) +
+    estimateTextTokens(msg.thinking) +
+    estimateTextTokens(msg.tool_calls_json) +
+    estimateTextTokens(msg.tool_call_results_json) +
+    HISTORY_MESSAGE_TOKEN_OVERHEAD
+  );
+}
 
 /**
  * 完成态过滤（对齐引擎 hydrate.rs 规则 1）：`completed` 或无 status（旧数据）
@@ -77,24 +147,62 @@ function jsonFieldOrUndefined<T>(value: T[] | undefined): string | undefined {
 }
 
 /**
+ * DEEPCHECK-01 P0：稳定锚点 + token 预算截断（纯函数，跨 run 请求前缀稳定；
+ * 与 Rust SessionHistoryCache 的 truncate_history_with_anchor / hydrate
+ * 尾部 user 截断三层同语义）。
+ * - 预算内 → 原样返回：会话在预算内时全量回传，append-only 前缀字节稳定，
+ *   服务端自动前缀缓存全量命中（不再固定条数尾部滑窗）；
+ * - 超预算 → 锚点恒在：首条 user 消息（含其前的稳定头部）永不因截断消失，
+ *   其余从最老消息起逐条让位，直到尾部窗口装入预算——中间段才允许丢弃，
+ *   请求前缀跨 run 恒以同一锚点字节开头，失配点收敛到尾部增量；
+ * - 前端载荷仅 user/assistant 且单条自包含（工具调用与结果同消息），
+ *   截断边界无需孤儿工具配对防护（引擎缓存路径另有 ensure_safe_prefix 系）。
+ */
+export function truncateHistoryWithAnchor(
+  history: HistoryMessage[],
+  budget: number
+): HistoryMessage[] {
+  const perMessageTokens = history.map(estimateHistoryMessageTokens);
+  const total = perMessageTokens.reduce((sum, n) => sum + n, 0);
+  if (total <= budget) return history;
+  // 锚点 = 首条 user 消息；无 user → 以首条为锚（退化形态仍保证前缀稳定）
+  const anchorIdx = history.findIndex((m) => m.sender === 'user');
+  const anchorEnd = anchorIdx === -1 ? 0 : anchorIdx;
+  const headTokens = perMessageTokens
+    .slice(0, anchorEnd + 1)
+    .reduce((sum, n) => sum + n, 0);
+  // 尾部窗口：从旧到新尽量多带（tailStart 尽可能小，预算内）
+  let tailStart = anchorEnd + 1;
+  let tailTokens = total - headTokens;
+  while (tailStart < history.length && headTokens + tailTokens > budget) {
+    tailTokens -= perMessageTokens[tailStart];
+    tailStart += 1;
+  }
+  return [...history.slice(0, anchorEnd + 1), ...history.slice(tailStart)];
+}
+
+/**
  * P4 T-31：会话存储消息 → `history` 载荷组装（纯函数）。
  * - 仅 user/assistant 且完成态消息进上下文（System/Tool 是 run 内瞬态角色，跨 run 不回传）；
  * - 字段按 HistoryMessage 组装：sender/text/thinking/tool_calls_json/
  *   tool_call_results_json/status/timestamp（camelCase）；
- * - 上限截断：取最近 `cap` 条（缺省 HISTORY_CAP；超长会话只回传尾部窗口）；
+ * - 上限截断（DEEPCHECK-01 P0）：token 预算 + 稳定锚点——预算内全量回传；
+ *   超预算保留首条 user 锚点 + 预算内尾部窗口（见 truncateHistoryWithAnchor）；
  * - `excludeId`：排除当前 run 的 user 消息 id（避免历史与 prompt 重复下发）；
  * - 空会话 / 全被过滤 → `undefined`（不传 = 引擎现状单消息 run，向后兼容）。
  */
 export function buildHistoryMessages(
   messages: readonly SessionMessage[] | undefined | null,
-  opts?: { cap?: number; excludeId?: string }
+  opts?: { tokenBudget?: number; excludeId?: string }
 ): HistoryMessage[] | undefined {
   const source = messages ?? [];
-  const rawCap = opts?.cap;
-  const cap =
-    typeof rawCap === 'number' && Number.isFinite(rawCap) && rawCap > 0
-      ? Math.floor(rawCap)
-      : HISTORY_CAP;
+  const rawBudget = opts?.tokenBudget;
+  const budget =
+    typeof rawBudget === 'number' &&
+    Number.isFinite(rawBudget) &&
+    rawBudget > 0
+      ? Math.floor(rawBudget)
+      : HISTORY_TOKEN_BUDGET;
   const excludeId = opts?.excludeId;
   const history: HistoryMessage[] = [];
   for (const msg of source) {
@@ -118,7 +226,7 @@ export function buildHistoryMessages(
     history.push(entry);
   }
   return history.length > 0
-    ? history.slice(Math.max(0, history.length - cap))
+    ? truncateHistoryWithAnchor(history, budget)
     : undefined;
 }
 
@@ -156,6 +264,39 @@ export function resolveContextWindow(
 }
 
 /**
+ * 发送前真实就绪检查（03 §⑤ R7）：实时 core_get_status 查询，不信 transport.ready
+ * 陈旧 latch（latch 置位后永不刷新，配置变更后引擎降级仍报就绪）。
+ *
+ * - initialized=false → S1（本地核心未就绪）
+ * - restore.state=pending → S3（恢复会话数据中）
+ * - engineReady=false → S2（provider 配置缺失）
+ * - 查询失败 → 放行（不阻塞发送；真实错误由 createStreamSession 兜底分域文案）
+ *
+ * 返回 ok=false 时携带命中域（S1/S2/S3），调用方按 domainUserMessage 给单次提示。
+ */
+export async function checkEngineReadyRealtime(
+  timeoutMs = 3_000
+): Promise<{ ok: boolean; domain: ErrorDomain | null }> {
+  const transport = getTransport();
+  let status: unknown;
+  try {
+    status = await transport.request<unknown>(
+      'core_get_status',
+      {},
+      { timeoutMs }
+    );
+  } catch {
+    // 查询失败（命令缺失/IPC 异常）：放行，避免双重报错
+    return { ok: true, domain: null };
+  }
+  const domain = classifyErrorDomain(status);
+  if (domain === 'S1' || domain === 'S2' || domain === 'S3') {
+    return { ok: false, domain };
+  }
+  return { ok: true, domain: null };
+}
+
+/**
  * 等待核心就绪并探测 get-status（AppBootstrap 启动门闩用）。
  * IPC 模式：waitUntilConnected 内部即 core_get_status 轮询，无需二次 request。
  */
@@ -167,7 +308,11 @@ export async function ensureEngineConnected(): Promise<{
   try {
     const ready = await transport.waitUntilConnected(20_000);
     if (!ready) {
-      return { ok: false, error: networkUserMessage() };
+      // S1：未就绪（waitUntilConnected 超时）→ 传 detail 供分域文案
+      return {
+        ok: false,
+        error: networkUserMessage(new Error('核心未就绪（等待连接超时）')),
+      };
     }
     return { ok: true };
   } catch (e) {
@@ -328,15 +473,18 @@ export async function createStreamSession(
     // 不启动 run，静默返回（cancel 已自行收口 onComplete）。
     if (isRunDead(state)) return;
     if (!ready || !transport.isReady()) {
-      // C3.4：核心未就绪 → 拒绝启动（无 directFetch 降级）
+      // C3.4：核心未就绪 → 拒绝启动（无 directFetch 降级）；S1 域差异化文案
       logInternalError(
         'stream-start-refuse-direct',
         new Error('engine not ready; no degraded fallback (C3.4)')
       );
+      const msg = networkUserMessage(
+        new Error('核心未就绪（waitUntilConnected 超时）')
+      );
       if (callbacks.onRunError) {
-        callbacks.onRunError(networkUserMessage(), 'network');
+        callbacks.onRunError(msg, 'network');
       } else {
-        callbacks.onChunk(networkUserMessage());
+        callbacks.onChunk(msg);
       }
       finish();
       return;
@@ -493,9 +641,11 @@ export async function createStreamSession(
     });
   } catch (e) {
     logInternalError('stream-start', e);
-    if (callbacks.onRunError)
-      callbacks.onRunError(networkUserMessage(), 'network');
-    else callbacks.onChunk(networkUserMessage());
+    // 传真实错误 e（含 detail）做分域判定（S2/S3/S4/S5/S6），不再恒报 network 文案；
+    // kind 保持 'network'（T-1 分级分发：network 类走输入框上方持久条面）
+    const msg = networkUserMessage(e);
+    if (callbacks.onRunError) callbacks.onRunError(msg, 'network');
+    else callbacks.onChunk(msg);
     finish();
   }
 }
