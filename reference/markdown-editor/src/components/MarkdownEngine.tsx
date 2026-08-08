@@ -117,7 +117,7 @@ export const MarkdownEngine: React.FC = () => {
 
   const handleContainerClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    if (!target.closest('.token-table')) {
+    if (!target.closest('.line-table-row')) {
       useTableStore.getState().clearCellSelection();
     }
 

@@ -347,15 +347,17 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   window.dispatchEvent(event);
                 }}
               >
-                {token.children && (
-                  <InlineRenderer
-                    tokens={token.children}
-                    lineOffset={lineOffset}
-                    activeState={isCellEditing ? activeState : undefined}
-                    tableId={tableId}
-                    lineIndex={lineIndex}
-                  />
-                )}
+                <span className="cell-content-wrapper" style={{ width: '100%' }}>
+                  {token.children && (
+                    <InlineRenderer
+                      tokens={token.children}
+                      lineOffset={lineOffset}
+                      activeState={isCellEditing ? activeState : undefined}
+                      tableId={tableId}
+                      lineIndex={lineIndex}
+                    />
+                  )}
+                </span>
               </span>
             );
           }
