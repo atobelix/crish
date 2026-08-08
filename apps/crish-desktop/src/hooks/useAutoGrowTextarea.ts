@@ -34,7 +34,7 @@ export function resolveComposerLineHeightPx(
  * Pure DOM auto-grow: measure scrollHeight after collapsing height to 0.
  * No @chenglou/pretext — keeps keystroke path free of layout prep work.
  */
-export function applyAutoGrowHeight(
+function applyAutoGrowHeight(
   el: HTMLTextAreaElement,
   maxLines: number = COMPOSER_MAX_LINES,
   minLines: number = COMPOSER_MIN_LINES,

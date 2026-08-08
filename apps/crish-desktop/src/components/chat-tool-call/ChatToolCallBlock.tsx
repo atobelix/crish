@@ -13,13 +13,6 @@ import type {
 import type { ToolRenderItem } from '../../api/toolPresentation';
 import { CompactToolRow } from './CompactToolRow';
 
-export type { ToolCallHeaderProps } from './ToolCallHeader';
-export { ToolCallHeader } from './ToolCallHeader';
-export type { ToolCallOutputProps } from './ToolCallOutput';
-export { ToolCallOutput } from './ToolCallOutput';
-export type { ToolCallDiffPreviewProps } from './ToolCallDiffPreview';
-export { ToolCallDiffPreview } from './ToolCallDiffPreview';
-
 export interface ChatToolStackProps {
   items: ToolRenderItem[];
   msgId?: string;

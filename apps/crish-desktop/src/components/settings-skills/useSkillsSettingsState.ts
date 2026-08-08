@@ -47,12 +47,12 @@ export type SkillScope = string;
 export type CreateMode = 'global' | 'project';
 export type BatchConfirm = { action: 'enable' | 'disable' | 'delete'; count: number } | null;
 export type DiscoverPick = { dir: string; name: string } | null;
-export { formatEngineDegradeToast } from '../../hooks/useToastQueue';
+
 export function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
-export const SCOPE_ALL = 'all';
-export const SCOPE_GLOBAL = 'global';
+const SCOPE_ALL = 'all';
+const SCOPE_GLOBAL = 'global';
 
 export function scopeGroupLabel(scope: string, projectName: string): string {
   if (scope === 'global') return '全局';

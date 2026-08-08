@@ -14,7 +14,7 @@ export const SIDEBAR_RESIZE_STEP_LARGE = 24;
 
 export const SIDEBAR_LIST_PREFS_KEY = 'crish_sidebar_list_prefs';
 /** 侧栏分区折叠状态（pinned / general / projects / 各 projectId） */
-export const SIDEBAR_SECTIONS_KEY = 'crish_sidebar_sections_v1';
+const SIDEBAR_SECTIONS_KEY = 'crish_sidebar_sections_v1';
 
 export type SortType = 'active' | 'name';
 export type GroupType = 'folder' | 'none';
@@ -33,13 +33,13 @@ export interface SidebarSectionsState {
   projectIds: Record<string, boolean>;
 }
 
-export const DEFAULT_LIST_PREFS: SidebarListPrefs = {
+const DEFAULT_LIST_PREFS: SidebarListPrefs = {
   sortType: 'active',
   groupType: 'folder',
   filterType: 'all',
 };
 
-export const DEFAULT_SECTIONS_STATE: SidebarSectionsState = {
+const DEFAULT_SECTIONS_STATE: SidebarSectionsState = {
   pinned: false,
   general: false,
   projects: false,

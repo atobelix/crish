@@ -78,7 +78,7 @@ import { useGoalMode } from './useGoalMode';
  * 估算器实现由调用方注入（pricingStore 动态 import），本函数不依赖
  * localStorage / 定价数据，保持可单测。
  */
-export function pickUsageCostEstimators(
+function pickUsageCostEstimators(
   usage: { cacheReadTokens?: number; cacheWriteTokens?: number },
   estimators: {
     estimateCostUsd: (model: string, input: number, output: number) => number;

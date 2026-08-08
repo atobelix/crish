@@ -72,7 +72,7 @@ function deriveActiveErrors(errors: UiError[]): UiError[] {
   return errors.filter((e) => !e.resolved && e.severity !== 'silent');
 }
 
-export class ErrorStore {
+class ErrorStore {
   private errorHistory: UiError[] = [];
   private activeErrors: UiError[] = [];
   private connectionStatus: ConnectionStatus = 'disconnected';

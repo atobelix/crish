@@ -23,7 +23,7 @@ export type TabMeta = {
  * 侧栏可见 formal tabs。
  * 技能 / MCP / 插件仅在「扩展」一页；旧 id skills|mcp 仍合法，解析时归入 plugins。
  */
-export const FORMAL_TAB_IDS: TabType[] = [
+const FORMAL_TAB_IDS: TabType[] = [
   'profile',
   'appearance',
   'personalize',

@@ -52,7 +52,7 @@ export function resolveToastTtlMs(ttlMs?: number): number {
  * 与 useToastQueue.policy.test 同源，防止成功刷屏回流。
  * 再扫：设置/模型/定时/字体/账户 页内 hint·setOk 成功与进度文案全覆盖。
  */
-export const FORBIDDEN_SUCCESS_TOAST_PATTERNS: readonly RegExp[] = [
+const FORBIDDEN_SUCCESS_TOAST_PATTERNS: readonly RegExp[] = [
   /^已打开/,
   /^已导出/,
   /^已复制/,
@@ -124,7 +124,7 @@ export const FORBIDDEN_SUCCESS_TOAST_PATTERNS: readonly RegExp[] = [
 ];
 
 /** 允许：错误、用法、降级、可撤销操作前缀 */
-export const ALLOWED_TOAST_PATTERNS: readonly RegExp[] = [
+const ALLOWED_TOAST_PATTERNS: readonly RegExp[] = [
   /失败/,
   /错误/,
   /用法：/,

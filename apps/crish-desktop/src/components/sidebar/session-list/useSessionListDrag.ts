@@ -113,7 +113,7 @@ export function isPreviewTargetSection(
 }
 
 /** Convert preview place into moveSessionRealtime insert-before target. */
-export function previewToInsertBeforeId(
+function previewToInsertBeforeId(
   sectionIds: string[],
   overSessionId: string | null,
   place: DropPlace

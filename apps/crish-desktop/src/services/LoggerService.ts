@@ -61,7 +61,7 @@ function redactMeta(meta?: Partial<Omit<LogEntry, "level" | "time" | "msg">>): P
   return redactDeep(meta) as Partial<Omit<LogEntry, "level" | "time" | "msg">>;
 }
 
-export class LoggerService {
+class LoggerService {
   static getInstance(): LoggerService {
     return logger;
   }

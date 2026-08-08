@@ -30,19 +30,19 @@ import type { Page } from '@playwright/test';
 import { BUILTIN_COMMAND_MANIFEST } from '../../apps/crish-desktop/src/api/transport/commandManifest';
 
 /** 事件通道名（与 TauriTransport.RUN_EVENT_CHANNEL 一致） */
-export const MOCK_EVENT_CHANNEL = 'workbench-run-event';
+const MOCK_EVENT_CHANNEL = 'workbench-run-event';
 
 /** 引擎持久化 key（localStorage；config 写入、reload 保留） */
-export const MOCK_STORE_LS_KEY = '__crish_mock_store_v1';
+const MOCK_STORE_LS_KEY = '__crish_mock_store_v1';
 
 /** 单页会话内「已种子化」标记（sessionStorage；reload 不重复种子） */
-export const MOCK_SEED_FLAG = '__crish_mock_seeded_v1';
+const MOCK_SEED_FLAG = '__crish_mock_seeded_v1';
 
 /** 引擎暴露给测试的 window 句柄名 */
 export const MOCK_HANDLE = '__CRISH_E2E__';
 
 /** mock 引擎注入配置的 window 全局名（先于引擎脚本执行） */
-export const MOCK_CONFIG_GLOBAL = '__CRISH_MOCK_CONFIG__';
+const MOCK_CONFIG_GLOBAL = '__CRISH_MOCK_CONFIG__';
 
 /** 引擎事件载荷（IPC 顶层平铺 { type, runId, sessionId, sequence, ... }） */
 export type MockEvent = Record<string, unknown> & { type: string };
@@ -94,7 +94,7 @@ export interface MockEngineConfig {
  * 构建引擎注入脚本（自包含 IIFE 字符串）。
  * 运行时读取 `window.__CRISH_MOCK_CONFIG__`（须先注册 config 脚本）。
  */
-export function buildMockEngineInitScript(): string {
+function buildMockEngineInitScript(): string {
   const manifestJson = JSON.stringify(BUILTIN_COMMAND_MANIFEST);
   return `(function () {
     'use strict';
@@ -446,7 +446,7 @@ export async function installMockEngine(
 }
 
 /** 测试句柄：手动推送一条引擎事件（流式编排补充用） */
-export async function emitEngineEvent(
+async function emitEngineEvent(
   page: Page,
   payload: MockEvent
 ): Promise<void> {
@@ -842,7 +842,7 @@ export function zeroCacheReadRunEvents(): MockEvent[] {
  * runId/sessionId/sequence 由引擎自动补齐）。
  * 供 T-48 cache-telemetry.spec.ts 组合多 run 命中率上升等场景复用。
  */
-export function cacheStatsUpdatedEvent(
+function cacheStatsUpdatedEvent(
   stats: Record<string, unknown>
 ): MockEvent {
   return {
@@ -865,7 +865,7 @@ export function cacheStatsUpdatedEvent(
  * 构造 tool-update 事件（契约形状；缺 timestamp/sessionId 即宽容形态，
  * 走 eventParser 宽容归一器兜底）。供工具流式 spec 组合逐块进度序列复用。
  */
-export function toolUpdateEvent(
+function toolUpdateEvent(
   update: Record<string, unknown>,
   opts: { batchId?: string; toolCallId?: string; timestamp?: string } = {}
 ): MockEvent {

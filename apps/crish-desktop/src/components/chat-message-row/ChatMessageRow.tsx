@@ -69,12 +69,6 @@ export {
   type ChatUserMessageRowProps,
   ChatAssistantMessageRow,
   type ChatAssistantMessageRowProps,
-  MessageContent,
-  type MessageContentProps,
-  MessageActions,
-  type MessageActionsProps,
-  MessageThinkingBlock,
-  type MessageThinkingBlockProps,
 };
 
 export type ChatToolStackProps = ChatToolStackSharedProps;

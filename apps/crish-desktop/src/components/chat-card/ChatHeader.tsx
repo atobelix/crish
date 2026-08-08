@@ -11,7 +11,7 @@ import { resolveUnitChromeLabel } from './unitChromeLabel';
 import { UnitChromeActions } from './UnitChromeActions';
 import styles from './ChatHeader.module.css';
 
-export { resolveUnitChromeLabel } from './unitChromeLabel';
+
 
 export interface ChatHeaderProps {
   mainSurface: string;

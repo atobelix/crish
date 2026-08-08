@@ -14,10 +14,6 @@ import { PanelBodyEmpty } from './PanelBodyEmpty';
 import { KNOWN_BODY_IDS, getDockOverlayStyle } from './cardPanelHelpers';
 
 export {
-  PanelLazyFallback,
-  SettingsLegacyRedirect,
-  PlanLegacyRedirect,
-  PanelBodyEmpty,
   KNOWN_BODY_IDS,
   getDockOverlayStyle,
 };

@@ -88,7 +88,7 @@ export function findChatLeafAt(
 }
 
 /** split zone → DropDirection */
-export function splitZoneToDirection(zoneType: DropZone['type']): DropDirection | null {
+function splitZoneToDirection(zoneType: DropZone['type']): DropDirection | null {
   switch (zoneType) {
     case 'split-left':
       return 'left';
@@ -107,7 +107,7 @@ export function splitZoneToDirection(zoneType: DropZone['type']): DropDirection 
  * 源 leaf 是否已在目标 leaf 的指定侧（直接兄弟 + 方向匹配）。
  * 已在正确侧时再 drop 只应 focus，避免无意义 move。
  */
-export function isAlreadyAdjacentOnSide(
+function isAlreadyAdjacentOnSide(
   root: LayoutNode,
   sourceLeafId: string,
   targetLeafId: string,
@@ -161,7 +161,7 @@ export type SessionCanvasDropPlan =
  * 会话落点锚点 = Conversation Unit root（H(chat|tools) 或 chat-only），
  * 禁止锚到 unit 内部的 chat leaf（会把 tools 拆成全局孤儿列）。
  */
-export function resolveSessionUnitAnchorId(
+function resolveSessionUnitAnchorId(
   root: LayoutNode,
   chatLeafId: string,
   sessionId?: string | null

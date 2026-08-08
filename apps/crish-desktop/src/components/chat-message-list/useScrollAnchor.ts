@@ -8,11 +8,11 @@ import type { SessionMessage } from '../../store/layoutStore';
 
 export type IdleHandle = number;
 
-export const HAS_NATIVE_REQUEST_IDLE =
+const HAS_NATIVE_REQUEST_IDLE =
   typeof requestIdleCallback === 'function' &&
   typeof cancelIdleCallback === 'function';
 
-export function scheduleIdle(
+function scheduleIdle(
   task: (deadline?: IdleDeadline) => void,
   options?: { timeout?: number }
 ): { handle: IdleHandle; cancel: () => void } {
@@ -44,7 +44,7 @@ export function pinSnippet(text?: string, max = 72): string {
   return t.length > max ? `${t.slice(0, max)}…` : t;
 }
 
-export function findMessageElement(messageId: string): HTMLElement | null {
+function findMessageElement(messageId: string): HTMLElement | null {
   const el = document.querySelector(
     `[data-msg-id="${CSS.escape(messageId)}"]`
   );
@@ -65,7 +65,7 @@ export function scrollToMessage(messageId: string): boolean {
   return true;
 }
 
-export function scrollToMessageAfterPaint(
+function scrollToMessageAfterPaint(
   messageId: string,
   onMiss?: () => void
 ): void {

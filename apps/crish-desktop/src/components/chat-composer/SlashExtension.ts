@@ -17,7 +17,7 @@ import { ReactRenderer } from '@tiptap/react';
 import { TiptapSlashMenu } from './TiptapSlashMenu';
 import type { SlashCommandItem, MentionCandidate } from './composerTypes';
 
-export const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
+const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
   {
     id: 'heading-1',
     title: 'Heading 1',
@@ -132,7 +132,7 @@ export const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
   },
 ];
 
-export const getSuggestionItems = (
+const getSuggestionItems = (
   query: string,
   extraItems: SlashCommandItem[] = []
 ): SlashCommandItem[] => {
@@ -149,7 +149,7 @@ export const getSuggestionItems = (
 };
 
 /** 提及候选人 → 菜单项（选中后插入 mention 节点 + 尾随空格，序列化 @[label](id:kind)） */
-export const getMentionItems = (
+const getMentionItems = (
   query: string,
   candidates: MentionCandidate[] = []
 ): SlashCommandItem[] => {

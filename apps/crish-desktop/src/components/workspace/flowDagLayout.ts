@@ -13,7 +13,7 @@
 export type DagNodeState = 'pending' | 'running' | 'completed' | 'failed' | 'blocked';
 
 /** 五态常量集合（洗白时校验非法状态兜底） */
-export const DAG_NODE_STATES: readonly DagNodeState[] = [
+const DAG_NODE_STATES: readonly DagNodeState[] = [
   'pending',
   'running',
   'completed',

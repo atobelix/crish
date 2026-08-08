@@ -61,8 +61,6 @@ export {
   findChatLeafBySessionId,
   listChatLeaves,
   listToolLeaves,
-  findDuplicateSessionChatLeaves,
-  hasChatLeafForSession,
   findUnitRootId,
   removeUnitBySessionId,
   dedupeDuplicateSessionChatLeaves,
@@ -85,19 +83,3 @@ export {
   waitLayoutTreeHydration,
   layoutTreeStorageKey,
 } from './layoutTreeStore';
-
-// ── Cold-start restore policy（pure validation）────────────────────
-export {
-  validateRestorableLayoutTree,
-  isLayoutNodeStructurallyValid,
-  RESTORE_LAST_WORKSPACE_LS_KEY,
-  RESTORE_LAST_WORKSPACE_SETTING_KEY,
-  type LayoutRestoreVerdict,
-  type LayoutRestoreFailReason,
-} from './layoutRestorePolicy';
-
-// ── 迁移 ───────────────────────────────────────────────────────────
-export {
-  migrateLayoutIfNeeded,
-  __resetMigrationFlagForTests,
-} from './migration';

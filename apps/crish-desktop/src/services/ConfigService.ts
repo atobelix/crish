@@ -10,7 +10,7 @@ interface ConfigSchemaEntry<T> {
   storage: StorageBackend;
 }
 
-export class ConfigService {
+class ConfigService {
   private schemas = new Map<string, ConfigSchemaEntry<unknown>>();
   private listeners = new Map<string, Set<(value: unknown) => void>>();
   private memoryStore = new Map<string, unknown>();

@@ -14,7 +14,7 @@ export interface TelemetryEntry {
 const MAX_BUFFER = 1000;
 const STORAGE_KEY = 'crish_telemetry_log';
 
-export class TelemetryService {
+class TelemetryService {
   private buffer: TelemetryEntry[] = [];
   private sessionId: string;
   private enabled = true;

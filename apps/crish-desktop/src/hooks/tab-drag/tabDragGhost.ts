@@ -3,7 +3,7 @@ import type { TabBarTabRect } from './tabDragTypes';
 import { getPanelTitle } from '../../store/layoutHelpers';
 
 /** 拖拽结束动画：优先 data-group-id / data-card-id，避免 textContent 误匹配 */
-export function findDropTargetCardEl(
+function findDropTargetCardEl(
   cardId: string,
   preferredGroupId?: string | null
 ): HTMLElement | null {
@@ -136,7 +136,7 @@ export function removeInsertLine(insertLineEl?: HTMLDivElement | null): void {
     .forEach((el) => el.remove());
 }
 
-export function getDropIndicator(wsId: string): HTMLDivElement | null {
+function getDropIndicator(wsId: string): HTMLDivElement | null {
   const el = document.getElementById(`drop-indicator-${wsId}`);
   return el instanceof HTMLDivElement ? el : null;
 }

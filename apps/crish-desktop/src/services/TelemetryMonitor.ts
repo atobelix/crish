@@ -10,7 +10,7 @@ export interface TelemetryLog {
   context?: unknown;
 }
 
-export class TelemetryMonitor {
+class TelemetryMonitor {
   private static instance: TelemetryMonitor;
   private buffer: string[] = [];
   private flushInterval: number | null = null;

@@ -47,7 +47,7 @@ export function isClosableTab(cardId: string): boolean {
   return cardId !== 'chat' && cardId !== 'overview';
 }
 
-export function getPanelHint(cardId: string): string {
+function getPanelHint(cardId: string): string {
   switch (cardId) {
     case 'diff':
       return '变更 · Git 与 AI 改动';
@@ -76,14 +76,14 @@ export function getPanelHint(cardId: string): string {
   }
 }
 
-export function getCloseAriaLabel(cardId: string): string {
+function getCloseAriaLabel(cardId: string): string {
   return `关闭「${getPanelTitle(cardId)}」`;
 }
 
 const TAB_ICON_SIZE = 16;
 const TAB_ICON_STROKE = 1.75;
 
-export function renderCardIcon(id: string) {
+function renderCardIcon(id: string) {
   const props = {
     size: TAB_ICON_SIZE,
     strokeWidth: TAB_ICON_STROKE,
@@ -117,7 +117,7 @@ export function renderCardIcon(id: string) {
   }
 }
 
-export const PANEL_ADD_IDS = [
+const PANEL_ADD_IDS = [
   'overview',
   'agent',
   'files',

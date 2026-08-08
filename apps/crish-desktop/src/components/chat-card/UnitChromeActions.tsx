@@ -23,7 +23,7 @@ import { pinSession, unpinSession } from '../../api/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import styles from './ChatHeader.module.css';
 
-export const UNIT_TOOL_PANELS = [
+const UNIT_TOOL_PANELS = [
   {
     id: 'overview',
     label: '打开总览',

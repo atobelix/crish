@@ -7,7 +7,7 @@ export interface CrishService {
   health?(): { status: 'ok' | 'degraded' | 'down'; latency: number };
 }
 
-export class ServiceRegistry {
+class ServiceRegistry {
   private services = new Map<string, CrishService>();
 
   register(service: CrishService): void {

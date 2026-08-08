@@ -91,14 +91,6 @@ export function normalizeModelIdText(raw: unknown): string {
   return s.replace(/^[\s\u3000]+|[\s\u3000]+$/g, '');
 }
 
-export function normalizeModelIds(raw: unknown): string[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return raw.map(normalizeModelIdText).filter(Boolean);
-  if (typeof raw === 'string')
-    return raw.split(',').map(normalizeModelIdText).filter(Boolean);
-  return [];
-}
-
 /** 目录项去重键：profileId::model（与 meta 存储键同形） */
 export function catalogEntryKey(
   entry: Pick<CatalogModelEntry, 'profileId' | 'model'> | null | undefined

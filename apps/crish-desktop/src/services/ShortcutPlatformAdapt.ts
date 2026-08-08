@@ -18,7 +18,7 @@ const SHIFTED_TO_UNSHIFTED: Record<string, string> = {
 };
 
 /** 将键盘事件转为平台感知的标准化字符串 */
-export function eventToShortcutLabel(e: KeyboardEvent): string {
+function eventToShortcutLabel(e: KeyboardEvent): string {
   if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return '';
 
   let keyName = e.key;

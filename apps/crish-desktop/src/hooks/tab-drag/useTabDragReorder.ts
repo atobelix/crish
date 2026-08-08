@@ -42,7 +42,7 @@ export interface CardSnapshot {
   barRight?: number;
 }
 
-export function safeSetDropPreview(nextPreview: DropPreviewState | null): void {
+function safeSetDropPreview(nextPreview: DropPreviewState | null): void {
   const currentPreview = getWorkspaceStoreState().dropPreview;
   if (!nextPreview) {
     if (currentPreview !== null) {

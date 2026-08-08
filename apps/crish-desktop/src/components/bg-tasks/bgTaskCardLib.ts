@@ -208,6 +208,6 @@ export function formatLogTailLines(
 }
 
 /** 空输出占位（与终端面板口径一致） */
-export function bgTaskLogEmptyPlaceholder(): string {
+function bgTaskLogEmptyPlaceholder(): string {
   return BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER;
 }

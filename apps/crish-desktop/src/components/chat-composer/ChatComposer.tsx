@@ -26,9 +26,6 @@ export type { ComposerFieldProps } from './ComposerField';
 export {
   ComposerField,
   STOP_TOOLTIP,
-  STOP_ARIA_LABEL,
-  FORCE_CANCEL_CONFIRM,
-  FORCE_STOP_LONG_PRESS_MS,
 } from './ComposerField';
 
 export type ChatComposerProps = {

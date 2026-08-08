@@ -1,7 +1,7 @@
 export type SortMode = 'name' | 'state';
 export type DemoTransport = 'stdio' | 'sse';
 
-export const DEMO_TRANSPORTS: ReadonlySet<DemoTransport> = new Set<DemoTransport>([
+const DEMO_TRANSPORTS: ReadonlySet<DemoTransport> = new Set<DemoTransport>([
   'stdio',
   'sse',
 ]);

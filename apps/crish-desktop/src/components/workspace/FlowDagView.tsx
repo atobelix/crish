@@ -30,7 +30,7 @@ import { invokeTyped } from '../../api/tauriInvoke';
 import { getActiveSessionId } from '../../api/storeAccess';
 
 /** 快照轻量轮询间隔（≥2s；首查立即执行，此后按此周期刷新） */
-export const FLOW_SNAPSHOT_POLL_MS = 3000;
+const FLOW_SNAPSHOT_POLL_MS = 3000;
 
 /** 引擎只读查询命令（DAG-1 在 session_commands.rs 实现，载荷形状已冻结） */
 const FLOW_SNAPSHOT_CMD = 'get_flow_snapshot';

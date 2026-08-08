@@ -28,8 +28,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 /** 拖拽触发阈值（px）：移动超过此距离才认定为拖拽，避免误触 */
 export const DRAG_THRESHOLD_PX = 5;
 /** 拖拽 ghost 偏移：让 ghost 略低于指针，避免遮挡指针 */
-export const GHOST_OFFSET_X = 16;
-export const GHOST_OFFSET_Y = 16;
+const GHOST_OFFSET_X = 16;
+const GHOST_OFFSET_Y = 16;
 /** drop zone 检测节流间隔（ms） */
 export const DROP_DETECT_INTERVAL_MS = 16; // ~1 frame
 

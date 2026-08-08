@@ -13,12 +13,6 @@ import type {
   SessionState,
   WorkspaceState,
 } from '../store/types';
-import {
-  PENDING_DRAFT_SESSION_ID,
-  isPendingDraft,
-} from '../store/draftSession';
-
-export { PENDING_DRAFT_SESSION_ID, isPendingDraft };
 
 import type { CronJob } from './clientApi';
 import {

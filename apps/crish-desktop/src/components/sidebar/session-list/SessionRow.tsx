@@ -32,7 +32,7 @@ export type SessionRowDropPlace = 'before' | 'after';
 export const NowTickContext = createContext<number>(Date.now());
 
 /** 专门给时间显示的小组件，订阅 NowTickContext，更新不会拖带整行重渲染 */
-export const SessionRowTime = memo(function SessionRowTime({
+const SessionRowTime = memo(function SessionRowTime({
   s,
   className,
 }: {
@@ -62,7 +62,7 @@ export const SessionRowTime = memo(function SessionRowTime({
 });
 
 /** 从行元素合成右键坐标（键盘菜单 / 更多按钮） */
-export function syntheticContextMenuEvent(
+function syntheticContextMenuEvent(
   el: HTMLElement | null,
   base?: React.MouseEvent | React.KeyboardEvent,
   opts?: { anchor?: 'bottom-left' | 'right-center' }

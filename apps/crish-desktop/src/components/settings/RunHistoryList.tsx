@@ -9,7 +9,7 @@ import { workflowRunStatusLabel, type WorkflowDefinition, type WorkflowRunEntry 
 import { Tooltip } from '../ui';
 
 /** 最近运行条数上限（对话内紧凑） */
-export const RECENT_RUNS_LIMIT = 10;
+const RECENT_RUNS_LIMIT = 10;
 
 export type RunHistoryListProps = {
   runs: WorkflowRunEntry[];

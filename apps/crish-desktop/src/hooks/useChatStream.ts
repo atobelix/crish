@@ -23,20 +23,6 @@
 import { useChatStream } from './chat-stream';
 
 export { useChatStream };
-export default useChatStream;
-
-export {
-  scheduleFinalMarkdownHtml,
-  resolveStreamSessionId,
-  isLiveStreamRun,
-  isSessionAiBusy,
-  decideSendWhileRunning,
-  safeCancelStream,
-  canStreamLocalSession,
-  stopAssistantPlaceholderText,
-  buildTerminalToolPatches,
-  ensureSessionMessages,
-} from './chat-stream/helpers';
 
 export type { SendWhileRunningAction } from './chat-stream/helpers';
 

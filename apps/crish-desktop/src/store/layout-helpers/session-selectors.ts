@@ -5,7 +5,7 @@ import { normalizeAssistantTimeline } from '../../api/toolPresentation';
 import { fillDefaultSessionTitles, pruneEmptyShellSessions } from '../../api/sessionTitle';
 import type { SessionState } from '../types';
 
-export const DEFAULT_SESSIONS: SessionState[] = [
+const DEFAULT_SESSIONS: SessionState[] = [
   {
     id: 'sess-1', title: '分析酒馆对话主界面问题', folder: '审计与代码分析',
     isPinned: false, isArchived: false, timestamp: '10分钟前',
@@ -40,7 +40,7 @@ export const DEFAULT_SESSIONS: SessionState[] = [
   },
 ];
 
-export function populateBlocksForSessions(sessions: SessionState[], opts?: { keepSessionIds?: Iterable<string> | null }): SessionState[] {
+function populateBlocksForSessions(sessions: SessionState[], opts?: { keepSessionIds?: Iterable<string> | null }): SessionState[] {
   const normalized = sessions.map((sess) => ({
     ...sess, messages: (sess.messages || []).map((msg) => msg.sender === 'assistant' ? normalizeAssistantTimeline(msg) : msg),
   }));

@@ -32,9 +32,6 @@ import {
   resetCompositionRoot,
 } from './app/compositionRoot';
 
-// Re-export for callers/tests that keyed off bootstrap
-export { killAllPtysOnAppExit } from './app/compositionRoot';
-
 export function bootstrapServices(): () => void {
   const cleanups: Array<() => void> = [];
 

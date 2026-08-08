@@ -10,7 +10,7 @@ import {
 } from '../../api/backgroundTasksApi';
 
 /** 轮询间隔：与抽出前保持一致（3s）。 */
-export const BACKGROUND_TASK_POLL_MS = 3000;
+const BACKGROUND_TASK_POLL_MS = 3000;
 
 /**
  * 返回全部后台任务列表，并每 3s 刷新一次。

@@ -52,25 +52,3 @@ export async function expectComposerText(page: Page, expected: string) {
   const input = page.locator('[data-testid="chat-input"]');
   await expect(input).toHaveText(expected);
 }
-
-/**
- * 条件等待 store 更新循环收敛（替代固定 sleep）：
- * 连续两次读数一致即视为响应式更新稳定；若更新循环持续（死循环回归），
- * 轮询超时失败 —— 保持 ui-store-invariants 的频次断言语义。
- */
-export async function waitForStoreSettled(page: Page, timeoutMs = 4000) {
-  await expect
-    .poll(
-      () =>
-        page.evaluate(async () => {
-          const read = () => (window as any).__storeUpdateCount || 0;
-          const first = read();
-          // 两次读数间隔 80ms，用于区分「稳定」与「仍在更新」
-          await new Promise((resolve) => setTimeout(resolve, 80));
-          const second = read();
-          return first === second ? second : -1;
-        }),
-      { timeout: timeoutMs }
-    )
-    .not.toBe(-1);
-}

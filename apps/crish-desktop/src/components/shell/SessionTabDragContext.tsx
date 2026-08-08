@@ -68,6 +68,6 @@ export function useSessionTabDrag(): UseTopBarDragResult {
 }
 
 /** 当前是否多 chat 分屏（>1 chat leaf）— 决定全局条 vs per-unit 条 */
-export function useIsMultiChatUnit(): boolean {
+function useIsMultiChatUnit(): boolean {
   return useLayoutTreeStore((s) => listChatLeaves(s.tree.root).length > 1);
 }

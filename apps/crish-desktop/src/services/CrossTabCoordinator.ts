@@ -24,7 +24,7 @@ export interface CrossTabMessage {
   tabId: string;
 }
 
-export class CrossTabCoordinator {
+class CrossTabCoordinator {
   private tabId: string;
   private channel: BroadcastChannel | null = null;
   private isLeader = false;

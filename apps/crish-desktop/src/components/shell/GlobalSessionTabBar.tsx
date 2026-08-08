@@ -47,11 +47,8 @@ import {
 } from '../binary-tree/UnitSessionTabStrip';
 import styles from './GlobalSessionTabBar.module.css';
 
-/** Re-export for shell barrel / tests（与 UnitSessionTabStrip 同形窄相等） */
-export { openTabsStripRelevantEqual };
-
 /** 读 scroll 容器溢出边（别名：index 与历史 API 名） */
-export function readStripOverflow(el: HTMLElement): {
+function readStripOverflow(el: HTMLElement): {
   start: boolean;
   end: boolean;
 } {

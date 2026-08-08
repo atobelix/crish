@@ -136,11 +136,3 @@ export async function waitStreamFinal(page: Page): Promise<void> {
 export function screenshotOptions() {
   return { maxDiffPixelRatio: 0.01 } as const;
 }
-
-// 复用 mock 引擎 fixture（避免重复声明）
-export {
-  installMockEngine,
-  fullJourneyRunEvents,
-  fenceRunEvents,
-  tableRunEvents,
-};
