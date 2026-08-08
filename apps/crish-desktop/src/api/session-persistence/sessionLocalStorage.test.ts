@@ -15,7 +15,7 @@
  *    logInternalError('ls-quota-truncated') 且数据面暴露截断标志——当前无 → 红。
  *
  * 防作弊约束（T5.3 条款）：不 mock slice(-100)、不绕过 catch——经真实
- * Storage.prototype.setItem 抛错触发截断分支；logInternalError 仅 spy 观测。
+ * localStorage.setItem 抛错触发截断分支；logInternalError 仅 spy 观测。
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -45,21 +45,54 @@ function msgs(n: number, start = 0): SessionMessage[] {
   return out;
 }
 
-/** 仅第一次 setItem 抛 QuotaExceededError，后续调用走原始实现（fallback 与标志写入可落盘）。 */
-function installFirstWriteThrowsQuota(): void {
-  const original = Storage.prototype.setItem;
+/**
+ * 用可释放的假 localStorage 模拟 quota：仅第一次 setItem 抛 QuotaExceededError，
+ * 后续写入落盘（fallback 与标志写入可走）；release() 后完全不再抛（quota 释放）。
+ *
+ * 为何整体替换全局 localStorage（vi.stubGlobal）而非在 setItem 上安 spy：两种测试
+ * 环境对 localStorage 的实现各不相同，任何单一 spy 目标都无法两边同时命中——
+ *   - 根 unit 项目：vitest.setup.ts 用普通对象覆盖 globalThis.localStorage（方法为
+ *     自身属性），spyOn(Storage.prototype) 永远不触发（原回归根因，截断分支走不到）；
+ *   - app-dir jsdom：localStorage 是 Proxy 形态的 Storage 实例（setItem 在原型上），
+ *     实例级 vi.spyOn 与 Object.defineProperty 均静默不生效（不产生 own property），
+ *     只有 Storage.prototype 拦截才命中。
+ * vi.stubGlobal 从全局替换整个存储对象：生产代码每次调用都是全局属性查找，两种环境
+ * 都命中；afterEach 用 unstubAllGlobals 还原环境原生存储，不污染后续文件。
+ */
+type QuotaHarness = {
+  /** quota 释放：此后 setItem 不再抛错（同存储对象继续使用，恢复语义真实）。 */
+  release: () => void;
+};
+
+function installFirstWriteThrowsQuota(): QuotaHarness {
+  const store = new Map<string, string>();
+  let throws = true;
   let callCount = 0;
-  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-    this: Storage,
-    key: string,
-    value: string
-  ) {
-    callCount++;
-    if (callCount === 1) {
-      throw new DOMException('QuotaExceededError', 'QuotaExceededError');
-    }
-    return original.call(this, key, value);
-  });
+  const storage: Storage = {
+    getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+    setItem: (k: string, v: string) => {
+      if (throws && callCount++ === 0) {
+        throw new DOMException('QuotaExceededError', 'QuotaExceededError');
+      }
+      store.set(k, String(v));
+    },
+    removeItem: (k: string) => {
+      store.delete(k);
+    },
+    clear: () => {
+      store.clear();
+    },
+    key: (i: number) => [...store.keys()][i] ?? null,
+    get length() {
+      return store.size;
+    },
+  };
+  vi.stubGlobal('localStorage', storage);
+  return {
+    release: () => {
+      throws = false;
+    },
+  };
 }
 
 describe('P1-F3：LS quota 截断标志与恢复（T5.3）', () => {
@@ -68,6 +101,7 @@ describe('P1-F3：LS quota 截断标志与恢复（T5.3）', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -93,12 +127,12 @@ describe('P1-F3：LS quota 截断标志与恢复（T5.3）', () => {
 
   it('3. quota 释放后全量写成功 → 截断标志清除（先红：当前无恢复清除）', () => {
     // 前置：制造一次截断（标志置位）
-    installFirstWriteThrowsQuota();
+    const harness = installFirstWriteThrowsQuota();
     saveSessionBody('s3', msgs(120));
     expect(hasQuotaTruncation('s3')).toBe(true);
-    vi.restoreAllMocks();
+    // 恢复：存储不再抛错，再次全量写成功（同一存储对象，非换底）
+    harness.release();
 
-    // 恢复：存储不再抛错，再次全量写成功
     saveSessionBody('s3', msgs(120));
 
     // 修复前：主 setItem 成功路径无 clearQuotaTruncation → 标志残留，用例红

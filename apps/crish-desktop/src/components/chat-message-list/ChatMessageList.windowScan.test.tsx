@@ -28,7 +28,21 @@ vi.mock('../../api/sessionSearch', () => ({
   messageMatchesSearch: () => false,
 }));
 
-vi.mock('../../api/messageWindow', { spy: true });
+// 不能再用 `{ spy: true }`：根 vitest.setup.ts 的 afterEach 无条件
+// restoreAllMocks，会把 spy:true 的模块级 spy 还原为原始函数，第二个用例
+// 读取 .mock.calls 即 undefined（原回归根因）。改为显式工厂 mock：
+// 全部导出走真实实现（行为不被 mock 掉），仅 collectMustIncludeIndices 包一层
+// vi.fn 供调用计数——vi.fn 不受 restoreAllMocks 影响，跨用例稳定。
+vi.mock('../../api/messageWindow', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../api/messageWindow')>(
+      '../../api/messageWindow'
+    );
+  return {
+    ...actual,
+    collectMustIncludeIndices: vi.fn(actual.collectMustIncludeIndices),
+  };
+});
 
 vi.mock('../../store/storeAccess', () => ({
   usePermissionField: (sel: (s: unknown) => unknown) =>
@@ -101,8 +115,8 @@ function renderList(messages: SessionMessage[]) {
 
 afterEach(() => {
   cleanup();
-  // 注意：不能用 restoreAllMocks——会把 vi.mock(spy:true) 的模块级
-  // spy 还原为原始函数，下一个用例读取 .mock.calls 报 undefined
+  // 工厂 mock 用 vi.fn 包裹真实实现，restoreAllMocks 不影响其 .mock 结构；
+  // 这里只需清空调用计数（根 vitest.setup.ts 的 afterEach 仍会 restoreAllMocks）。
   vi.clearAllMocks();
 });
 
