@@ -26,6 +26,11 @@ pub mod context;
 pub mod audit;
 pub mod background;
 pub mod backup;
+// T-40（记忆韧性轮次 5）：压缩块只读访问契约（CompressionContextStore
+// trait + BlockHit/BlockContent）——agent-tools 定义、引擎侧（conex-db /
+// orchestrator）实现注入；search_context / decompress_context 消费本契约，
+// 生产代码保持叶子依赖（不引入 conex-db）
+pub mod compression_store;
 pub mod definition;
 pub mod explore_quota;
 pub mod executor;

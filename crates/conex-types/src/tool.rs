@@ -488,3 +488,96 @@ pub struct ContextCompressionRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub details: Option<serde_json::Value>,
 }
+
+/// 压缩块 details 扩展载荷构造（T-17，00-plan §10 轮次 2）。
+///
+/// 语义：`ContextCompressionRecord.details` 为自由 JSON（既有 coversUpToTurn /
+/// degraded / summaryAttempts 键，ai_summary.rs 构造），本函数补「块语义」
+/// 五键（camelCase，对齐 01 §4.3）：blockId / generation / prevBlockId /
+/// droppedAtMs / summaryState。调用方（session-loop 轮次 4 织入面 /
+/// orchestrator 轮次 2 读面）把本载荷与既有键合并后写入 details——
+/// 字段级扩展不动事件类型枚举与注册表（R-H：不新增事件类型）。
+///
+/// `summary_state` 字面量对齐块表 state 列：awaiting | committed | retired。
+pub fn compaction_block_details(
+    block_id: &str,
+    generation: u32,
+    prev_block_id: Option<&str>,
+    dropped_at_ms: i64,
+    summary_state: &str,
+) -> serde_json::Value {
+    serde_json::json!({
+        "blockId": block_id,
+        "generation": generation,
+        "prevBlockId": prev_block_id,
+        "droppedAtMs": dropped_at_ms,
+        "summaryState": summary_state,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{compaction_block_details, ContextCompressionRecord};
+
+    /// T-17 shape 回环：details 扩展键 camelCase 齐全、可并入既有 details
+    /// 合并面、record 序列化不破坏（details 为 None 时缺省兼容）。
+    #[test]
+    fn compaction_block_details_shape_camel_case_roundtrip() {
+        let value = compaction_block_details(
+            "compacted-summary-1-2",
+            1,
+            Some("compacted-summary-1-1"),
+            1_752_000_000_000,
+            "awaiting",
+        );
+        assert_eq!(value.get("blockId"), Some(&serde_json::json!("compacted-summary-1-2")));
+        assert_eq!(value.get("generation"), Some(&serde_json::json!(1)));
+        assert_eq!(value.get("prevBlockId"), Some(&serde_json::json!("compacted-summary-1-1")));
+        assert_eq!(value.get("droppedAtMs"), Some(&serde_json::json!(1_752_000_000_000i64)));
+        assert_eq!(value.get("summaryState"), Some(&serde_json::json!("awaiting")));
+        // camelCase 断言：snake_case 键不得出现
+        assert!(value.get("block_id").is_none());
+        assert!(value.get("prev_block_id").is_none());
+        assert!(value.get("summary_state").is_none());
+
+        // 与既有 details 键（coversUpToTurn 等）合并回环
+        let merged = serde_json::json!({
+            "coversUpToTurn": 3,
+            "degraded": false,
+            "summaryAttempts": 1,
+            "droppedCount": 2,
+        });
+        let combined = {
+            let mut m = merged.clone();
+            for (k, v) in value.as_object().unwrap() {
+                m[k] = v.clone();
+            }
+            m
+        };
+        assert_eq!(combined.get("blockId").unwrap(), &serde_json::json!("compacted-summary-1-2"));
+        assert_eq!(combined.get("coversUpToTurn").unwrap(), &serde_json::json!(3));
+        // 序列化回环：details 可随 record 落 JSON 且读回一致
+        let json = serde_json::to_string(&serde_json::json!({ "details": combined })).unwrap();
+        let back: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(back["details"]["summaryState"], "awaiting");
+        assert_eq!(back["details"]["prevBlockId"], "compacted-summary-1-1");
+    }
+
+    /// 既有构造点默认 details: None 保持兼容（events_schema_version 基线
+    /// 41 变体 fixture 依赖该形状；本测试钉死 None 缺省可序列化）。
+    #[test]
+    fn record_details_none_default_remains_compatible() {
+        let record = serde_json::from_str::<ContextCompressionRecord>(r#"{
+            "id": "c-1",
+            "trigger": "threshold",
+            "summary": "摘要",
+            "compressedMessageIds": ["m1"],
+            "keptMessageIds": ["m2"],
+            "tokensBefore": 100,
+            "tokensAfter": 10,
+            "createdAt": "2026-08-08T00:00:00.000Z"
+        }"#)
+        .unwrap();
+        assert!(record.details.is_none(), "旧载荷缺省 details 可读且为 None");
+    }
+}

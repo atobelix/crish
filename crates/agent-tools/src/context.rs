@@ -127,6 +127,15 @@ pub struct ToolContext {
     /// `<log_root>/sessions/<session_id>/<ts>-<seq>.log`；None = 截断不落盘，
     /// 仅返回截断结果无 logPath，不失败）
     pub log_root: Option<PathBuf>,
+    /// 压缩块只读访问服务（T-40 / 00-plan §7：None = 未接线，
+    /// search_context / decompress_context 返回 common.unsupported 结构化
+    /// 错误；引擎侧以 conex-db compression_blocks 实现
+    /// [crate::compression_store::CompressionContextStore] 后注入——
+    /// 对齐 output_dir 的 Option + dyn trait 执行期装配模式，生产代码
+    /// 保持叶子依赖，会话作用域由实现方绑定）
+    pub compression_store: Option<
+        Arc<dyn crate::compression_store::CompressionContextStore>,
+    >,
 }
 
 /// 探索类文档配额检查上下文（C5，I6-M11）
@@ -163,6 +172,7 @@ impl ToolContext {
             background: None,
             output_dir: None,
             log_root: None,
+            compression_store: None,
         }
     }
 }
@@ -186,6 +196,7 @@ pub fn create_mock_tool_context() -> ToolContext {
         background: None,
         output_dir: None,
         log_root: None,
+        compression_store: None,
     }
 }
 

@@ -282,6 +282,8 @@ mod tests {
             // 中间件执行路径不接线产出目录解析服务（None，对齐 T-EG-08）
             output_dir: None,
             log_root: None,
+            // T-40（记忆韧性轮次 5）：中间件执行路径不接线压缩块服务
+            compression_store: None,
         };
         let mut current = input;
         for m in chain {

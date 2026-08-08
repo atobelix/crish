@@ -36,13 +36,22 @@ pub const WRITE_TOOL_NAMES: [&str; 5] = [
 ];
 
 /// 只读工具白名单（仅保留这些工具）
-pub const READONLY_TOOL_NAMES: [&str; 6] = [
+///
+/// T-38/T-40/T-41（记忆韧性轮次 5）：project_tree / search_context /
+/// decompress_context 三只读工具入列（dangerous=false，00-plan §7.3）——
+/// search/decompress 只读视图经 ToolContext.compression_store trait 注入
+/// （引擎侧实现，不携带会话外数据）；decompress 落文件面仅主 agent
+/// 生效，子代理上下文（write_claim_holder 注入）恒回退 inline。
+pub const READONLY_TOOL_NAMES: [&str; 9] = [
     "read_file",
     "list_dir",
     "file_stat",
     "grep_search",
     "fuzzy_find",
     "diff_text",
+    "project_tree",
+    "search_context",
+    "decompress_context",
 ];
 
 /// commit 类型默认工具集（仅 shell_command；命令前缀过滤 git 见命令策略）
@@ -246,7 +255,7 @@ mod tests {
         }
         assert!(!out.has("run_subagent"), "名单外的 run_subagent 必须剔除");
         // 原注册表不受影响（非破坏性裁剪）
-        assert_eq!(reg.len(), 17);
+        assert_eq!(reg.len(), 20);
         assert!(reg.has("run_subagent"));
     }
 
@@ -267,7 +276,7 @@ mod tests {
         let empty = filter_registry(&reg, |_| false).unwrap();
         assert!(empty.is_empty());
         // 原注册表不受影响
-        assert_eq!(reg.len(), 17);
+        assert_eq!(reg.len(), 20);
     }
 
     /// 六类型各自工具面：analysis/organization 只读、design/review 只读 +
@@ -326,7 +335,7 @@ mod tests {
             assert!(!out.has("write_file"));
         }
         // 原注册表不受影响（非破坏性裁剪）
-        assert_eq!(reg.len(), 17);
+        assert_eq!(reg.len(), 20);
         assert!(reg.has("write_file"));
     }
 

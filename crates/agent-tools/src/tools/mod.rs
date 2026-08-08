@@ -29,16 +29,26 @@
 //! （R3 T9：BuiltinToolConfig 仅承载构造期默认配置，不再注入 workspace_root）。
 
 pub mod background_task;
+// T-41：decompress_context 工具模块声明（注册面 18→20 由本文件下方
+// register_builtin_tools_with_config 负责；压缩块原文服务经
+// ctx.compression_store 注入，None = common.unsupported）
+pub mod decompress_context;
 pub mod delete;
 pub mod diff;
 pub mod fs;
 // T-EG-08：resolve_output_dir 工具模块声明（注册面 16→17 由本文件下方
 // register_builtin_tools_with_config 负责；会话数据经 ctx.output_dir 注入）
 pub mod output_dir;
+// T-38：project_tree 工具模块声明（注册面 17→18 由本文件下方
+// register_builtin_tools_with_config 负责；懒构建缓存进程级共享）
+pub mod project_tree;
 // T-EG-01：multi_replace 工具模块声明（注册入注册表由 T-EG-02 负责，
 // 本行仅使新文件进入编译与测试面）
 pub mod replace;
 pub mod search;
+// T-40：search_context 工具模块声明（注册面 18→19；压缩块检索服务经
+// ctx.compression_store 注入，None = common.unsupported）
+pub mod search_context;
 pub mod set_timer;
 pub mod shell;
 pub mod subagent;
@@ -161,6 +171,16 @@ pub fn register_builtin_tools_with_config(
     // ToolContext.output_dir 注入（None = 未接线，工具返回 common.unsupported）；
     // 只读类不写盘，按任务书定稿不加入 WRITE_TOOL_NAMES
     registry.register(Arc::new(output_dir::ResolveOutputDirTool::new()))?;
+    // project_tree（T-38/39）：目录树工具（懒构建 + mtime 指纹缓存），
+    // 只读（dangerous=false）进子 agent 只读集；注册面 17→18
+    registry.register(Arc::new(project_tree::ProjectTreeTool::new()))?;
+    // search_context（T-40）：已压缩块检索（只搜 compression_blocks），
+    // 只读进子 agent 只读集；服务经 ToolContext.compression_store 注入
+    // （None = 未接线，工具返回 common.unsupported——引擎侧轮次 6 注入）
+    registry.register(Arc::new(search_context::SearchContextTool::new()))?;
+    // decompress_context（T-41）：压缩块原文取回（读操作，原始字节），
+    // 只读进子 agent 只读集；落文件仅主 agent + output_dir 注入面
+    registry.register(Arc::new(decompress_context::DecompressContextTool::new()))?;
     Ok(())
 }
 
@@ -698,7 +718,8 @@ mod tests {
     fn register_builtin_tools_registers_all() {
         let mut registry = ToolRegistry::new();
         register_builtin_tools(&mut registry).unwrap();
-        assert_eq!(registry.len(), 17);
+        // 注册面 17→18（project_tree）→20（search_context/decompress_context）
+        assert_eq!(registry.len(), 20);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -709,6 +730,7 @@ mod tests {
             [
                 "background_task",
                 "cancel_timer",
+                "decompress_context",
                 "delete_dir",
                 "delete_file",
                 "diff_text",
@@ -717,9 +739,11 @@ mod tests {
                 "grep_search",
                 "list_dir",
                 "multi_replace_file_content",
+                "project_tree",
                 "read_file",
                 "resolve_output_dir",
                 "run_subagent",
+                "search_context",
                 "set_timer",
                 "shell_command",
                 "wait_subagents",

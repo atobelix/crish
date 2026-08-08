@@ -20,10 +20,13 @@ const DEFAULT_MAX_MATCHES: u64 = 200;
 const DEFAULT_MAX_FILES: u64 = 2_000;
 const DEFAULT_MAX_FILE_BYTES: u64 = 512_000;
 /// 递归深度上限
-const MAX_WALK_DEPTH: usize = 16;
+pub(crate) const MAX_WALK_DEPTH: usize = 16;
 
 /// 默认排除的非源码目录（与 conex-search walker 的 SKIP_DIRS 一致）
-const SKIP_DIRS: &[&str] = &[
+///
+/// `pub(crate)` 供 project_tree 复用（T-37：禁重复定义，共享一份清单）。
+/// 语义：命中即**整枝剪除**（目录自身与其子树都不进入遍历/树输出）。
+pub(crate) const SKIP_DIRS: &[&str] = &[
     ".git",
     "node_modules",
     "dist",
@@ -313,6 +316,40 @@ fn char_boundary_column(line: &str, byte_offset: usize) -> usize {
     safe.chars().count() + 1
 }
 
+/// 递归遍历器（T-37 抽提，grep 与 project_tree 共用）：
+/// gitignore 感知（hidden+git_ignore+git_global+git_exclude）+ max_depth 钳制
+/// + skip 清单逐组件过滤。
+///
+/// `skip` 经 `filter_entry` 在**目录级**剪枝：命中即整枝不进入（比逐文件
+/// 组件检查更省 IO，输出等价）。depth 0 恒放行——根目录名即使命中 skip
+/// 清单（如工作区恰命名 `target`）也不剪除，避免整树为空。
+///
+/// 生命周期约束：`Walk` 迭代器持有 `filter_entry` 闭包，`skip` 必须
+/// 'static——既有调用点（grep / project_tree）均传静态 [SKIP_DIRS]。
+pub(crate) fn walker_for_root(
+    root: &Path,
+    depth: usize,
+    skip: &'static [&'static str],
+) -> ignore::Walk {
+    WalkBuilder::new(root)
+        .hidden(true)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .max_depth(Some(depth))
+        .filter_entry(move |entry| {
+            if entry.depth() == 0 {
+                return true;
+            }
+            !entry
+                .file_name()
+                .to_str()
+                .map(|name| skip.contains(&name))
+                .unwrap_or(false)
+        })
+        .build()
+}
+
 /// 递归遍历目录：gitignore 感知 + 排除式 glob + 跳过非源码目录 + 正例 glob 过滤
 ///
 /// 判定优先级：excludeGlobs（排除式 glob）→ SKIP_DIRS（内置目录）→ 正例 glob
@@ -323,13 +360,7 @@ fn walk_files(
     max_files: u64,
 ) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    let walker = WalkBuilder::new(root)
-        .hidden(true)
-        .git_ignore(true)
-        .git_global(true)
-        .git_exclude(true)
-        .max_depth(Some(MAX_WALK_DEPTH))
-        .build();
+    let walker = walker_for_root(root, MAX_WALK_DEPTH, SKIP_DIRS);
     for entry in walker.flatten() {
         if files.len() as u64 >= max_files {
             break;
@@ -354,15 +385,8 @@ fn walk_files(
         }) {
             continue;
         }
-        let skip = path.components().any(|comp| {
-            comp.as_os_str()
-                .to_str()
-                .map(|s| SKIP_DIRS.contains(&s))
-                .unwrap_or(false)
-        });
-        if skip {
-            continue;
-        }
+        // SKIP_DIRS 剪枝已由 walker_for_root 的 filter_entry 完成
+        // （原逐文件组件检查下沉到目录级，行为等价且更省 IO）
         if let Some(pattern) = glob {
             let matched = if pattern.contains('/') {
                 glob_match(pattern, &rel_str)
