@@ -25,6 +25,7 @@ use conex_types::tool::ProviderDiagnostic;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::error::classify_provider_error;
 use crate::events::{ProviderStreamEvent, ProviderUsage, StopReason};
 
 /// 消费终止原因（metadata.stopReason 的取值域）
@@ -355,17 +356,18 @@ fn finish_reason_str(reason: StopReason) -> &'static str {
     }
 }
 
-/// 流错误兜底分类（B2.7 分类管线接入前的最小实现）
-///
-/// 输入为解析层 error stop 的原始文案（02 §六.9：空流保护、服务端错误帧等）；
-/// 传输/HTTP 层错误由 retry::provider_stream 上抛、不经本层。此处恒按
-/// 02 §4.2 第 13 行兜底 Unknown（不可重试）；abort 路径单独归 Aborted 类。
+/// 流错误兜底分类（F3 #4 根因修复）：接入 [classify_provider_error] 统一
+/// 分类管线（消息模式兜底）——上游/网关以 error 事件帧返回瞬时 429/5xx
+/// 文案时（HTTP 200 + SSE error 帧的常见形态），「未产出内容」可走
+/// 重试阶梯；修复前恒按 Unknown（retryable=false）分类 → 流内错误
+/// 永不重试（02 §6.7「无内容可重试」语义未落位）。
 fn classify_stream_error(message: &str) -> ClassifiedStreamError {
+    let classified = classify_provider_error(None, Some(message), None, None);
     ClassifiedStreamError {
-        kind: ProviderErrorKind::Unknown,
+        kind: classified.kind(),
         message: message.to_string(),
-        retryable: false,
-        retry_after_ms: None,
+        retryable: classified.is_retryable(),
+        retry_after_ms: classified.retry_after().map(|d| d.as_millis() as u64),
     }
 }
 
@@ -466,6 +468,70 @@ mod tests {
         assert!(!classified.retryable);
         assert_eq!(classified.message, "服务端错误");
         assert!(result.stop_reason().is_none());
+    }
+
+    /// F3 盲区 #4：流内 error 帧携带瞬时限流文案（HTTP 200 + SSE error
+    /// 帧形态）→ 消息模式兜底分类为 RateLimit 且可重试（修复前恒
+    /// Unknown/retryable=false → 流内错误永不重试）
+    #[test]
+    fn in_stream_rate_limit_message_is_retryable() {
+        let result = consume(
+            vec![stop_with(
+                StopReason::Error,
+                Some("Rate limit exceeded: please retry after 5 seconds"),
+                None,
+            )],
+            false,
+        );
+        let ProviderOutput::StreamError { classified } = &result.response else {
+            panic!("应为 StreamError，得到 {:?}", result.response);
+        };
+        assert_eq!(
+            classified.kind, ProviderErrorKind::RateLimit,
+            "流内限流文案必须分类为 RateLimit（F3 #4）"
+        );
+        assert!(classified.retryable, "流内限流未产出内容应可重试（02 §6.7）");
+    }
+
+    /// F3 盲区 #4：流内 error 帧携带 5xx 文案（overloaded_error 等网关形态）
+    /// → ServerError 可重试
+    #[test]
+    fn in_stream_server_error_message_is_retryable() {
+        let result = consume(
+            vec![stop_with(
+                StopReason::Error,
+                Some("overloaded_error: the server is experiencing high load"),
+                None,
+            )],
+            false,
+        );
+        let ProviderOutput::StreamError { classified } = &result.response else {
+            panic!("应为 StreamError，得到 {:?}", result.response);
+        };
+        assert_eq!(
+            classified.kind, ProviderErrorKind::ServerError,
+            "流内 5xx 文案必须分类为 ServerError（F3 #4）"
+        );
+        assert!(classified.retryable);
+    }
+
+    /// F3 盲区 #4 反向：流内 error 帧为不可重试文案（如认证失败）→ 仍
+    /// 分类为 Auth 不可重试（分类管线全量生效，不只放行重试类）
+    #[test]
+    fn in_stream_auth_message_stays_not_retryable() {
+        let result = consume(
+            vec![stop_with(
+                StopReason::Error,
+                Some("invalid api key: authentication failed"),
+                None,
+            )],
+            false,
+        );
+        let ProviderOutput::StreamError { classified } = &result.response else {
+            panic!("应为 StreamError，得到 {:?}", result.response);
+        };
+        assert_eq!(classified.kind, ProviderErrorKind::Auth);
+        assert!(!classified.retryable, "认证失败不得重试");
     }
 
     /// abort 有内容 → 保留部分，stopReason=aborted（partial salvage）
