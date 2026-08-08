@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.tsx';
 import { useEditorStore } from './core/EditorStore';
+import { useTableStore } from './core/TableStore';
 import { MarkdownParser } from './core/parser';
 import { MarkdownFormatChecker } from './core/validator';
 
@@ -10,6 +11,7 @@ declare global {
   interface Window {
     MarkdownFormatChecker: typeof MarkdownFormatChecker;
     __CRISH_SESSION_STORE__: typeof useEditorStore;
+    __CRISH_TABLE_STORE__: typeof useTableStore;
     __CRISH_METRICS__: {
       getCacheStats: () => { hits: number; misses: number; size: number };
       getLineCount: () => number;
@@ -20,6 +22,7 @@ declare global {
 
 window.MarkdownFormatChecker = MarkdownFormatChecker;
 window.__CRISH_SESSION_STORE__ = useEditorStore;
+window.__CRISH_TABLE_STORE__ = useTableStore;
 window.__CRISH_METRICS__ = {
   getCacheStats: () => MarkdownParser.getCacheStats(),
   getLineCount: () => useEditorStore.getState().lines.length,

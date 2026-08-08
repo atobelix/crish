@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Excel-like Table Matrix Testing', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:5173');
+    await page.goto('http://localhost:5174');
   });
 
   test('table AST rendering and basic styles', async ({ page }) => {
@@ -10,15 +10,15 @@ test.describe('Excel-like Table Matrix Testing', () => {
       (window as any).__CRISH_SESSION_STORE__.getState().setText('| Col1 | Col2 |\n|---|---|\n| A | B |\n| C | D |');
     });
 
-    await page.waitForSelector('.line-table-row');
+    await page.waitForSelector('.rendered-table-row');
 
     // Check row container is flex
-    const row = page.locator('.line-table-row').first();
+    const row = page.locator('.rendered-table-row').first();
     await expect(row).toHaveCSS('display', 'flex');
 
     // Check table cells are rendered
-    const cells = page.locator('.token-table-cell');
-    await expect(cells).toHaveCount(8); // 2 in row1, 2 in sep, 2 in row2, 2 in row3 -> 8 total
+    const cells = page.locator('.rendered-table-cell');
+    await expect(cells).toHaveCount(6); // 2 header + 4 data cells
 
     // Verify cell contents
     const text1 = await cells.nth(0).innerText();
@@ -27,33 +27,41 @@ test.describe('Excel-like Table Matrix Testing', () => {
     expect(text2.trim()).toBe('Col2');
   });
 
+  test('cell selection and 2-click editing mode', async ({ page }) => {
+    await page.evaluate(() => {
+      const store = (window as any).__CRISH_SESSION_STORE__.getState();
+      store.setText('| Col1 | Col2 |\n|---|---|\n| A | B |\n| C | D |');
+    });
+
+    await page.waitForSelector('.rendered-table-row');
+    const cellA = page.locator('.rendered-table-cell:has-text("A")');
+    await cellA.waitFor();
+
+    // 1-click: Select cell
+    await cellA.click();
+    await expect(cellA).toHaveClass(/is-cell-selected/);
+
+    // 2-click: Edit cell
+    await cellA.dblclick();
+    await expect(cellA).toHaveClass(/is-cell-editing/);
+  });
+
   test('tab navigation inside table', async ({ page }) => {
     await page.evaluate(() => {
       const store = (window as any).__CRISH_SESSION_STORE__.getState();
       store.setText('| Col1 | Col2 |\n|---|---|\n| A | B |\n| C | D |');
-      store.setCursorPos(2);
     });
 
-    await page.waitForSelector('.line-table-row');
-    await page.waitForSelector('textarea', { state: 'attached' });
-    await page.locator('textarea').focus();
+    await page.waitForSelector('.rendered-table-row');
+    const cellA = page.locator('.rendered-table-cell:has-text("A")');
+    await cellA.waitFor();
+    await cellA.click();
 
     // Simulate Tab keypress
     await page.keyboard.press('Tab');
 
-    // After Tab, cursor should jump to next cell and select its text
-    // The text ' Col2 ' goes from index 8 to 14. Wait, the exact coordinates depend on the raw text.
-    // '| Col1 | Col2 |' -> Col2 starts at index 9, ends at 13.
-    const state = await page.evaluate(() => {
-      return {
-        start: (window as any).__CRISH_SESSION_STORE__.getState().selectionStart,
-        end: (window as any).__CRISH_SESSION_STORE__.getState().selectionEnd,
-        cursor: (window as any).__CRISH_SESSION_STORE__.getState().cursorPos,
-      };
-    });
-
-    // Check if selection is around 'Col2'
-    expect(state.start).toBeGreaterThan(0);
-    expect(state.end).toBeGreaterThan(state.start);
+    // Cell B should be selected
+    const cellB = page.locator('.rendered-table-cell:has-text("B")');
+    await expect(cellB).toHaveClass(/is-cell-selected/);
   });
 });
