@@ -211,9 +211,23 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
                     } else if (s.messages && s.messages.length > 0) {
                       maybeAutoTitleSession(state, s);
                     }
-                    s.engineCursor = res.nextAfterSequence;
+                    // P1-D2：游标取 max 保护——分页拉全后 nextAfterSequence 必然
+                    // 前进；任何异常路径（如截断态）也不允许回拨既有游标
+                    // （对齐 R2 §6 修复建议 1）
+                    s.engineCursor = Math.max(
+                      s.engineCursor ?? 0,
+                      res.nextAfterSequence
+                    );
                     if (res.lastRunId) s.engineLastRunId = res.lastRunId;
                     s.hydratedFromEngine = true;
+                    // P1-D2：截断态标记。分页拉全成功（无 truncated）时清除——
+                    // 拉全后标记自然清除，persist 熔断随之解除（见
+                    // sessionRustDb.isHydrateTruncated）
+                    if (res.truncated === true) {
+                      s.hydrateTruncated = true;
+                    } else {
+                      delete s.hydrateTruncated;
+                    }
                     // 再绑一次：保证 finalize 后 map 与数组同引用
                     state.sessionsById[nextId] = s;
                   });

@@ -1080,6 +1080,23 @@ function enqueuePersist(task: () => Promise<void>): Promise<void> {
   return run;
 }
 
+/**
+ * P1-D2（T3.6）persist 熔断判定：引擎懒水合「未完整」的会话禁止回写正文。
+ *
+ * 根因（R2 §6）：hydrate 单页截断 → hydratedFromEngine=true 封死重试 → 350ms
+ * debounce → save_session_body 先删后插 → 截断正文不可逆覆盖 SQLite。
+ * 修复后 hydrate 已分页拉全；但引擎异常（超页数上限/游标停滞）仍可能产生
+ * 截断态，store 以 hydrateTruncated 标记刻画，此处为兜底防线：任何 persist
+ * 周期（主路径 / LS 降级镜像 / beforeunload 同步）对未完整会话一律跳过
+ * 正文回写——截断态永不固化；分页拉全后标记清除，熔断自然解除。
+ */
+function isHydrateTruncated(s: {
+  hydratedFromEngine?: boolean;
+  hydrateTruncated?: boolean;
+}): boolean {
+  return s.hydratedFromEngine === true && s.hydrateTruncated === true;
+}
+
 // ── 复合 API：persistAllSessionsRust ────────────────────────────────────────
 
 /**
@@ -1156,7 +1173,7 @@ export async function persistAllSessionsRust(
       const msgs = (s.messages || []).map((m) =>
         m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
       );
-      if (msgs.length > 0) {
+      if (msgs.length > 0 && !isHydrateTruncated(s)) {
         bodyJobs.push(saveSessionBody(s.id, msgs, batchVersion));
       }
       bodyJobs.push(saveSessionAgents(s.id, s.agents || []));
@@ -1201,7 +1218,7 @@ function persistAllSessionsLocalFallback(
     const msgs = (s.messages || []).map((m) =>
       m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
     );
-    if (msgs.length > 0) {
+    if (msgs.length > 0 && !isHydrateTruncated(s)) {
       lsSaveSessionBody(s.id, msgs);
       // P1-F1：本次降级落 LS 的正文是 SQLite 缺失的最新快照，打戳供 hydrate
       // 单向修复（以 LS 为真源回灌回写 SQLite）
@@ -1273,8 +1290,9 @@ export function persistAllSessionsSyncViaLocalStorage(
     const msgs = (s.messages || []).map((m) =>
       m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
     );
-    // beforeunload 同步路径：仅镜像非空正文，避免把未 hydrate 懒壳写成 []
-    if (msgs.length > 0) {
+    // beforeunload 同步路径：仅镜像非空正文，避免把未 hydrate 懒壳写成 [];
+    // P1-D2 熔断：未完整（截断）会话同样跳过，防截断态固化 LS 镜像
+    if (msgs.length > 0 && !isHydrateTruncated(s)) {
       lsSaveSessionBody(s.id, msgs);
     }
     lsSaveSessionAgents(s.id, s.agents || []);
