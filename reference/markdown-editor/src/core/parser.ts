@@ -10,6 +10,23 @@ export type CodeState =
   | 'math_fence_end'
   | 'math_block';
 
+/** scanTokens 返回：ok 携带 token 列表与消费长度；失败时由调用方按失败签名记忆 */
+type ScanOutcome =
+  | { ok: true; tokens: InlineNode[]; length: number }
+  | { ok: false };
+
+/**
+ * 失败规则位图记忆（跨递归层共享）：
+ * - failedAt：位置级失败签名 `ruleKey@position`——「从该位置起该规则无法成功闭合」已确认失败，
+ *   再次遇到同位置同规则的尝试直接跳过（2^n 爆炸的根治：每个位置每规则只尝试一次）。
+ * - noClose：规则级闭包缺失表——indexOf 确认「位置 p 之后不存在闭合标记」是文本事实（与解析上下文无关），
+ *   因此任何 q >= p 的尝试窗口 (q, EOF) 都不含闭合标记，可直接跳过；p 取已确认的最小值。
+ */
+type ScanFailureMemo = {
+  failedAt: Set<string>;
+  noClose: Map<string, number>;
+};
+
 export class MarkdownParser {
   private static idCounter = 0;
   private static generateId(): string {
@@ -95,31 +112,22 @@ export class MarkdownParser {
     };
   }
 
-  private static shiftInlineOffsets(
-    tokens: InlineNode[],
-    diff: number
-  ): InlineNode[] {
-    if (diff === 0) return tokens;
-    return tokens.map((t) => ({
-      ...t,
-      localOffset: t.localOffset + diff,
-      children: t.children
-        ? this.shiftInlineOffsets(t.children, diff)
-        : undefined,
-    }));
-  }
-
   public static parseLine(
     lineText: string,
     localOffset: number,
     codeState: CodeState | boolean
   ): LineNode {
+    // 缓存键 = codeState + 完整行文本：blockquote 前缀、fence/math 跨行状态均已编码在键内，
+    // token 偏移为行内相对值（与文档偏移解耦），因此命中节点可直接复用结构。
     const cacheKey = codeState + ':' + lineText;
     const cached = this.astCache.get(cacheKey);
     if (cached) {
       this.cacheHits++;
+      // 命中节点仅复用结构：id 必须每行唯一（同文本多行不允许共享 id），
+      // 故命中时重新生成 id，localOffset 亦按当前行覆盖。
       return {
         ...cached,
+        id: this.generateId(),
         localOffset,
       };
     }
@@ -331,12 +339,14 @@ export class MarkdownParser {
     }
 
     if (tokens.length === 0) {
+      // 空代码行（lineText 为空串）不产出占位符 token——覆盖必须落在 [0, raw.length) = [0, 0) 内，
+      // 用 `lineText || ' '` 会把长度 1 的 token 塞进零长行，突破行界（token-bounds-integrity 违例）。
       tokens.push({
         type: 'text',
-        raw: lineText || ' ',
-        content: lineText || ' ',
+        raw: lineText,
+        content: lineText,
         localOffset: 0,
-        length: (lineText || ' ').length,
+        length: lineText.length,
       });
     }
 
@@ -411,6 +421,15 @@ export class MarkdownParser {
         lineType = 'hr';
         pos += nestedText.length;
         isHr = true;
+        // hr 行其余代码不再产出 token，这里补一个覆盖整段的文本 token，
+        // 保证 inlineTokens 的 [localOffset, localOffset+length] 拼接恰好覆盖 [0, raw.length]（覆盖守恒）。
+        tokens.push({
+          type: 'text',
+          raw: nestedText,
+          content: nestedText,
+          localOffset: nestedLocalOffset,
+          length: nestedText.length,
+        });
       }
     }
 
@@ -641,8 +660,13 @@ export class MarkdownParser {
     localOffset: number,
     isTopLevel: boolean = false
   ): InlineNode[] {
-    const res = this.scanTokens(text, 0, localOffset, null, 0);
-    if (!res) {
+    // 每行一次失败记忆：行内所有递归调用共享同一份（跨递归层共享），行与行之间由行缓存隔离。
+    const memo: ScanFailureMemo = {
+      failedAt: new Set(),
+      noClose: new Map(),
+    };
+    const res = this.scanTokens(text, 0, localOffset, null, 0, memo);
+    if (!res.ok) {
       return isTopLevel
         ? [
             {
@@ -715,9 +739,12 @@ export class MarkdownParser {
     startIndex: number,
     localOffset: number,
     rule: any | null,
-    depth: number
-  ): { tokens: InlineNode[]; length: number } | null {
-    if (depth > 20) return null; // Bailout heuristic to prevent O(N^2) / O(2^N) nesting bomb
+    depth: number,
+    memo: ScanFailureMemo
+  ): ScanOutcome {
+    // 深度剪枝兜底：超过 20 层直接放弃。此处的 null 是「未扫描」而非「确认失败」——
+    // 合法深嵌套可能在剪枝点之后闭合，因此**不得写入失败记忆**（写记忆会误杀合法深嵌套）。
+    if (depth > 20) return { ok: false };
 
     const start = rule ? rule.start : '';
     const close = rule ? rule.close : null;
@@ -823,7 +850,11 @@ export class MarkdownParser {
 
         if (validClose) {
           flushText();
-          return { tokens: innerTokens, length: i + close.length - startIndex };
+          return {
+            ok: true,
+            tokens: innerTokens,
+            length: i + close.length - startIndex,
+          };
         }
       }
 
@@ -859,45 +890,66 @@ export class MarkdownParser {
           );
 
           if (!isSelfClosing && !isSpecialTag) {
-            const closeTag = `</${tagName}>`;
-            const closeIdx = text
-              .toLowerCase()
-              .indexOf(closeTag.toLowerCase(), i + openTag.length);
-            if (closeIdx !== -1) {
-              const { attributes, style } = this.parseHtmlAttributes(attrStr);
-              const htmlRule = {
-                type: 'html_element',
-                start: openTag,
-                close: closeTag,
-                tagName,
-                attributes,
-                style,
-              };
-              const res = this.scanTokens(
-                text,
-                i,
-                localOffset,
-                htmlRule,
-                depth + 1
-              );
-              if (res) {
-                flushText();
-                innerTokens.push({
+            // 失败签名键：与 INLINE_RULES 中同名起止规则（如 '<b>'）共用同一键——
+            // 二者闭合语义一致（闭合标记都是 `</tagName>`），记忆可互查互写。
+            const tagKey = '<' + tagName + '>';
+            const posKey = tagKey + '@' + i;
+            const noCloseAt = memo.noClose.get(tagKey);
+            if (
+              !memo.failedAt.has(posKey) &&
+              (noCloseAt === undefined || noCloseAt > i)
+            ) {
+              const closeTag = `</${tagName}>`;
+              const closeIdx = text
+                .toLowerCase()
+                .indexOf(closeTag.toLowerCase(), i + openTag.length);
+              if (closeIdx !== -1) {
+                const { attributes, style } = this.parseHtmlAttributes(attrStr);
+                const htmlRule = {
                   type: 'html_element',
-                  raw: text.substring(i, i + res.length),
-                  content: text.substring(
-                    i + openTag.length,
-                    i + res.length - closeTag.length
-                  ),
-                  children: res.tokens,
-                  localOffset: localOffset + i,
-                  length: res.length,
+                  start: openTag,
+                  close: closeTag,
                   tagName,
                   attributes,
                   style,
-                });
-                i += res.length;
-                matched = true;
+                };
+                const res = this.scanTokens(
+                  text,
+                  i,
+                  localOffset,
+                  htmlRule,
+                  depth + 1,
+                  memo
+                );
+                if (res.ok) {
+                  flushText();
+                  innerTokens.push({
+                    type: 'html_element',
+                    raw: text.substring(i, i + res.length),
+                    content: text.substring(
+                      i + openTag.length,
+                      i + res.length - closeTag.length
+                    ),
+                    children: res.tokens,
+                    localOffset: localOffset + i,
+                    length: res.length,
+                    tagName,
+                    attributes,
+                    style,
+                  });
+                  i += res.length;
+                  matched = true;
+                } else {
+                  // 闭合标记存在但被内层嵌套消费（或剪枝挡路）：位置级失败记忆，只封禁本位置。
+                  memo.failedAt.add(posKey);
+                }
+              } else {
+                // indexOf 确认位置 i 之后不存在闭合标记：文本事实，位置无关——
+                // 任何 q >= i 的尝试窗口 (q, EOF) 都不可能闭合，按规则级记录最小确认位置。
+                const current = memo.noClose.get(tagKey);
+                if (current === undefined || i < current) {
+                  memo.noClose.set(tagKey, i);
+                }
               }
             }
           }
@@ -985,24 +1037,44 @@ export class MarkdownParser {
             }
 
             if (validStart) {
-              const res = this.scanTokens(text, i, localOffset, r, depth + 1);
-              if (res) {
-                // successfully parsed the block
-                flushText();
-                innerTokens.push({
-                  type: r.type as InlineNode['type'],
-                  raw: text.substring(i, i + res.length),
-                  content: text.substring(
-                    i + r.start.length,
-                    i + res.length - r.close.length
-                  ),
-                  children: res.tokens,
-                  localOffset: localOffset + i,
-                  length: res.length,
-                });
-                i += res.length;
-                matched = true;
-                break;
+              // 失败记忆短路：同位置同规则已确认失败（或位置 i 之后已确认无闭合标记）→ 直接放弃递归。
+              // 递归返回值只在「完整扫描后确认失败」时才可记忆（位置级）——
+              // 深度剪枝的直接 null 由调用链上层位置承担记忆，绝不允许在此处被当作已确认失败。
+              const posKey = r.start + '@' + i;
+              const noCloseAt = memo.noClose.get(r.start);
+              if (
+                !memo.failedAt.has(posKey) &&
+                (noCloseAt === undefined || noCloseAt > i)
+              ) {
+                const res = this.scanTokens(
+                  text,
+                  i,
+                  localOffset,
+                  r,
+                  depth + 1,
+                  memo
+                );
+                if (res.ok) {
+                  // successfully parsed the block
+                  flushText();
+                  innerTokens.push({
+                    type: r.type as InlineNode['type'],
+                    raw: text.substring(i, i + res.length),
+                    content: text.substring(
+                      i + r.start.length,
+                      i + res.length - r.close.length
+                    ),
+                    children: res.tokens,
+                    localOffset: localOffset + i,
+                    length: res.length,
+                  });
+                  i += res.length;
+                  matched = true;
+                  break;
+                }
+                // 规则失败：位置级记忆（跨递归层共享）——后续同位置尝试直接跳过，
+                // 未闭合 HTML 起止标记链（'<b>x' 等）的指数递归树由此坍缩为每位置一次尝试。
+                memo.failedAt.add(posKey);
               }
             }
           }
@@ -1029,10 +1101,10 @@ export class MarkdownParser {
 
     // If we were looking for a closing tag and reached EOF, parsing failed.
     if (close) {
-      return null;
+      return { ok: false };
     }
 
-    return { tokens: innerTokens, length: i - startIndex };
+    return { ok: true, tokens: innerTokens, length: i - startIndex };
   }
 }
 
