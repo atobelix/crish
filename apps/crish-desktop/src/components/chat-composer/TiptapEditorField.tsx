@@ -143,6 +143,9 @@ export const TiptapEditorField = React.forwardRef<
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
         codeBlock: {},
+        // 内置 link 禁用（tiptap v3 StarterKit 默认含 link），
+        // 避免与下方显式 Link 配置重复注册（Duplicate extension 'link'）
+        link: false,
       }),
       Placeholder.configure({
         // 动态占位符：函数形式每次装饰时读取最新值（processing 双态）

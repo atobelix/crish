@@ -27,6 +27,15 @@ export const LEGACY_PROFILES_KEY = 'crish_provider_profiles_v1';
 /** 活动 profile id 键（排序用：活动 profile 最后 apply，引擎最终持有其密钥） */
 const ACTIVE_PROFILE_ID_KEY = 'crish_active_profile_id';
 
+/**
+ * 历史无主明文键：更早版本遗留的 profile 存储键，当前代码已无任何读写点
+ * （2026-08-08 全仓 grep 确认）——含 apiKey 明文但迁移链只处理
+ * LEGACY_PROFILES_KEY，导致每次启动全键扫描报残留、幂等标记永不置位、
+ * 每次启动重复告警（用户噪音）。迁移时统一剥离这些键的明文字段
+ * （保留 hasKey 标记），消除残留告警与 localStorage 明文暴露面。
+ */
+const ORPHAN_LEGACY_KEYS = ['crish_providers', 'conex_pi_providers'] as const;
+
 export type LegacyMigrationResult = {
   /** 是否因幂等标记 / 无存量数据而跳过 */
   skipped: boolean;
@@ -176,6 +185,12 @@ async function runMigrationPass(): Promise<LegacyMigrationResult> {
     residualKeys: [],
   };
 
+  // 历史无主键明文剥离（死键含 apiKey → 剥离后扫描无残留，
+  // 消除每次启动重复告警噪音；hasKey 标记保留）。置于最前：
+  // 无论主键是否存在（含 skipped 提前返回路径）都要剥离，否则
+  // 死键残留导致幂等标记永不置位、每次启动重复告警。
+  stripOrphanKeys();
+
   let profiles: LegacyProfile[] = [];
   try {
     const raw = localStorage.getItem(LEGACY_PROFILES_KEY);
@@ -248,6 +263,51 @@ async function runMigrationPass(): Promise<LegacyMigrationResult> {
   // 全 LS 键扫描断言（迁移后不得残留含 apiKey 的 profile JSON）
   outcome.residualKeys = scanLocalStorageForPlaintextKeys();
   return outcome;
+}
+
+/**
+ * 剥离历史无主键中的 apiKey 明文字段（递归，保留 hasKey 标记）。
+ * 返回是否发生过剥离（供调用方判断是否需要写回）。
+ */
+function stripOrphanKeys(): boolean {
+  let changed = false;
+  for (const key of ORPHAN_LEGACY_KEYS) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw || !raw.includes('apiKey')) continue;
+      const parsed: unknown = JSON.parse(raw);
+      const cleaned = stripApiKeyDeep(parsed);
+      if (cleaned !== parsed) {
+        localStorage.setItem(key, JSON.stringify(cleaned));
+        changed = true;
+      }
+    } catch {
+      // JSON 损坏等：保持原样（下次启动重试；不静默吞掉，扫描仍会报残留）
+    }
+  }
+  return changed;
+}
+
+/** 递归剥离对象/数组中的 apiKey 字段（保留 hasKey 标记） */
+function stripApiKeyDeep(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stripApiKeyDeep);
+  }
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const out: Record<string, unknown> = { ...obj };
+    if (typeof out.apiKey === 'string' && out.apiKey.trim()) {
+      delete out.apiKey;
+      out.hasKey = true;
+    }
+    for (const k of Object.keys(out)) {
+      if (typeof out[k] === 'object' && out[k] !== null) {
+        out[k] = stripApiKeyDeep(out[k]);
+      }
+    }
+    return out;
+  }
+  return value;
 }
 
 function readActiveProfileId(): string | null {

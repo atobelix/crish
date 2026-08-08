@@ -12,6 +12,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockTauriCommand } from '../../test-setup';
+import { logger } from '../../services/LoggerService';
 import {
   LEGACY_PROFILES_KEY,
   isLegacyMigrationDone,
@@ -223,5 +224,38 @@ describe('migrateLegacyProfiles（PE-07 T07.4-B）', () => {
     expect(result.skipped).toBe(true);
     expect(apply).not.toHaveBeenCalled();
     expect(isLegacyMigrationDone()).toBe(true);
+  });
+
+  it('历史无主键（crish_providers / conex_pi_providers）明文剥离 → 无残留、置标记、无重复告警', async () => {
+    // 2026-08-08 真实噪音回归：这两个死键含 apiKey → 迁移每次启动报残留告警、
+    // 幂等标记永不置位。修复后剥离明文（保留 hasKey），一次完成、二次静默。
+    localStorage.setItem(
+      'crish_providers',
+      JSON.stringify([{ id: 'flowbit', apiKey: 'sk-orphan-1', hasKey: false }])
+    );
+    localStorage.setItem(
+      'conex_pi_providers',
+      JSON.stringify({ profile: { id: 'pi', apiKey: 'sk-orphan-2' } })
+    );
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    const first = await migrateLegacyProfiles();
+
+    expect(first.residualKeys).toEqual([]);
+    expect(isLegacyMigrationDone()).toBe(true);
+    // 明文已剥离、hasKey 保留
+    expect(localStorage.getItem('crish_providers')).not.toContain('sk-orphan-1');
+    expect(localStorage.getItem('conex_pi_providers')).not.toContain('sk-orphan-2');
+    expect(JSON.parse(localStorage.getItem('crish_providers') || '[]')[0]).toMatchObject({
+      id: 'flowbit',
+      hasKey: true,
+    });
+
+    // 二次启动：标记跳过、无告警（噪音消除）
+    const second = await migrateLegacyProfiles();
+    expect(second.skipped).toBe(true);
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('migrateLegacyProfiles 未完成'), expect.anything());
+
+    warnSpy.mockRestore();
   });
 });
