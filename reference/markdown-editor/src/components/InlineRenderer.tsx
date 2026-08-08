@@ -25,11 +25,14 @@ interface InlineRendererProps {
   lineOffset: number;
   activeState?: ActiveState | null;
   tableId?: string;
+  lineIndex?: number;
 }
 
 export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
-  ({ tokens, lineOffset, activeState, tableId }) => {
+  ({ tokens, lineOffset, activeState, tableId, lineIndex }) => {
     const tableWidths = useTableStore(state => tableId ? state.tableWidths[tableId] : null);
+    const selectedCell = useTableStore(state => state.selectedCell);
+    const setSelectedCell = useTableStore(state => state.setSelectedCell);
     let colIndexCounter = 0;
 
     return (
@@ -74,7 +77,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             case 'strike':
               className = 'style-strike';
               break;
-            case 'code':
+            case 'inline_code':
               className = 'style-inline-code';
               break;
             case 'mark':
@@ -138,29 +141,26 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
           // If a styling token is completely empty of visible content (e.g. **** or ** **),
           // we want to ensure it remains physically clickable/visible so the user can type inside it.
           const isStyleToken = [
-            'bold',
-            'italic',
-            'bold_italic',
-            'strike',
-            'code',
-            'mark',
-            'sub',
-            'sup',
-            'kbd',
-            'spoiler',
-            'math',
-            'link',
-            'image',
-            'html_element',
-          ].includes(token.type);
-          const hasNoChildren = !token.children || token.children.length === 0;
+            'style-bold',
+            'style-italic',
+            'style-bold-italic',
+            'style-strike',
+            'style-inline-code',
+            'style-mark',
+            'style-sub',
+            'style-sup',
+            'style-kbd',
+            'style-spoiler',
+            'style-footnote',
+            'style-math',
+          ].some(c => className.includes(c));
+
           const isEmpty =
             isStyleToken &&
-            hasNoChildren &&
             (!token.content || token.content.trim() === '');
           const isActive = checkIsActive(start, len, activeState ?? null);
           const baseClassName = isEmpty ? `${className} is-empty-token` : className;
-          const finalClassName = isActive ? `${baseClassName} is-active-token` : baseClassName;
+          let finalClassName = isActive ? `${baseClassName} is-active-token` : baseClassName;
 
           // Specialized KaTeX rendering for math formulas
           if (token.type === 'math') {
@@ -206,14 +206,46 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             const cellWidth = tableWidths?.[colIndex];
             const cellStyle = cellWidth ? { ...token.style, flex: `0 0 ${cellWidth}px` } : { ...token.style, flex: '1 1 0%' };
             
+            const isCellSelected = selectedCell?.lineIndex === lineIndex && selectedCell?.colIndex === colIndex;
+            const isCellEditing = isCellSelected && selectedCell?.isEditing;
+
+            if (isCellSelected) {
+              finalClassName += isCellEditing ? ' is-cell-editing' : ' is-cell-selected';
+            }
+
             return (
               <span
                 key={key}
                 data-token-start={start}
                 data-token-length={len}
                 data-col-index={colIndex}
+                data-line-index={lineIndex}
                 className={finalClassName}
                 style={cellStyle}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedCell({
+                    tableId: tableId || '',
+                    lineIndex: lineIndex ?? -1,
+                    colIndex,
+                    isEditing: false, // 1-click selects cell
+                  });
+                  if (start !== undefined && lineOffset !== undefined) {
+                    useEditorStore.getState().setCursorPos(lineOffset + start + 1);
+                  }
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedCell({
+                    tableId: tableId || '',
+                    lineIndex: lineIndex ?? -1,
+                    colIndex,
+                    isEditing: true, // 2-click edits cell
+                  });
+                  if (start !== undefined && lineOffset !== undefined) {
+                    useEditorStore.getState().setCursorPos(lineOffset + start + 1);
+                  }
+                }}
               >
                 {token.children && (
                   <InlineRenderer
@@ -221,6 +253,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                     lineOffset={lineOffset}
                     activeState={activeState}
                     tableId={tableId}
+                    lineIndex={lineIndex}
                   />
                 )}
               </span>

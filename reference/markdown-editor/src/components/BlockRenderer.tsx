@@ -253,6 +253,7 @@ export const BlockRenderer = memo(
                 lineOffset={lineOffset}
                 activeState={activeState}
                 tableId={tableId}
+                lineIndex={index}
               />
             ) : (
               <span
@@ -280,6 +281,7 @@ export const BlockRenderer = memo(
                 lineOffset={lineOffset}
                 activeState={activeState}
                 tableId={tableId}
+                lineIndex={index}
               />
             ) : (
               <br />

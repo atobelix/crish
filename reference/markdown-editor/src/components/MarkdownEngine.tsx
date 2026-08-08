@@ -4,6 +4,7 @@ import { BlockRenderer } from './BlockRenderer';
 import { HiddenInput } from './HiddenInput';
 import { CursorLayer } from './CursorLayer';
 import { useEditorStore } from '../core/EditorStore';
+import { useTableStore } from '../core/TableStore';
 import { MarkdownParser } from '../core/parser';
 
 import { type CodeState } from '../core/parser';
@@ -107,13 +108,16 @@ export const MarkdownEngine: React.FC = () => {
   });
 
   const handleContainerClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (!target.closest('.rendered-table-cell')) {
+      useTableStore.getState().setSelectedCell(null);
+    }
+
     // If the user selected text, do NOT clear the selection and do NOT move the custom cursor
     const selection = window.getSelection();
     if (selection && selection.toString().length > 0) {
       return;
     }
-
-    const target = e.target as HTMLElement;
 
     // 1. Try to find if we clicked on a rendered line wrapper
     let clickedLineIndex = parseInt(

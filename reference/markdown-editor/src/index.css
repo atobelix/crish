@@ -163,26 +163,69 @@ body {
   font-size: 14px;
 }
 
-.table-wrapper {
-  overflow-x: auto;
-  margin: 8px 0;
-}
-
-.line-table {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: 14px;
-}
-
-.line-table td,
-.line-table th {
-  border: 1px solid var(--gray-90);
-  padding: 4px 8px;
+/* 现代化 Markdown 表格与 Excel 式单元格交互样式 */
+.line-table-row {
+  display: flex;
+  align-items: center;
+  position: relative;
+  border-bottom: 1px solid hsl(220 13% 91%);
+  background-color: transparent;
+  min-height: 28px;
 }
 
 .table-header-row {
-  background-color: var(--gray-90);
-  font-weight: bold;
+  background-color: hsl(220 14% 97%);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.token-table-cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  box-sizing: border-box;
+  min-height: 28px;
+  border-right: 1px solid hsl(220 13% 91%);
+  cursor: cell;
+  user-select: text;
+  transition: background-color 0.12s ease;
+}
+
+.token-table-cell:last-child {
+  border-right: none;
+}
+
+/* 单元格单选态 (Single Click: Cell Selected Mode) */
+.token-table-cell.is-cell-selected {
+  background-color: hsl(215 100% 50% / 0.06) !important;
+  outline: 2px solid hsl(215 90% 56%) !important;
+  outline-offset: -1px;
+  z-index: 2;
+  border-radius: 2px;
+}
+
+.token-table-cell.is-cell-selected::after {
+  content: '';
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 6px;
+  height: 6px;
+  background-color: hsl(215 90% 56%);
+  border: 1px solid #ffffff;
+  border-radius: 1px;
+  z-index: 3;
+}
+
+/* 单元格双击编辑态 (Double Click: Text In-place Edit Mode) */
+.token-table-cell.is-cell-editing {
+  background-color: #ffffff !important;
+  outline: 2px solid hsl(215 90% 56%) !important;
+  outline-offset: -1px;
+  z-index: 4;
+  border-radius: 2px;
+  cursor: text;
 }
 
 .thematic-break {

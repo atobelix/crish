@@ -10,6 +10,13 @@ import {
   getGlobalIndexFromDOMNode,
   getArrowNavigationIndex,
 } from '../core/measure';
+import { useTableStore } from '../core/TableStore';
+import {
+  navigateTable,
+  findTableRange,
+  clearCell,
+  setCellContent,
+} from '../core/TableOperations';
 
 interface HiddenInputProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -161,113 +168,11 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
   };
 
   
-  const handleTableNav = (e: React.KeyboardEvent, direction: 'left' | 'right' | 'up' | 'down', text: string, cursorPos: number): boolean => {
-      let lineStart = text.lastIndexOf('\n', cursorPos - 1) + 1;
-      let lineEnd = text.indexOf('\n', cursorPos);
-      if (lineEnd === -1) lineEnd = text.length;
-      const lineStr = text.substring(lineStart, lineEnd);
-
-      if (lineStr.trim().startsWith('|')) {
-        const pipes: number[] = [];
-        for (let i = lineStart; i <= lineEnd; i++) {
-          if (text[i] === '|' && (i === 0 || text[i-1] !== '\\')) pipes.push(i);
-        }
-
-        if (pipes.length >= 2) {
-          let currentCellIdx = -1;
-          for (let i = 0; i < pipes.length - 1; i++) {
-            if (cursorPos >= pipes[i] && cursorPos <= pipes[i+1]) {
-              currentCellIdx = i;
-              break;
-            }
-          }
-
-          if (currentCellIdx !== -1) {
-            e.preventDefault();
-            let nextCellIdx = currentCellIdx;
-            if (direction === 'left') nextCellIdx--;
-            if (direction === 'right') nextCellIdx++;
-            
-            let targetLineStart = lineStart;
-            let targetLineEnd = lineEnd;
-            let targetPipes = pipes;
-
-            if (nextCellIdx < 0 || direction === 'up') {
-              if (lineStart > 0) {
-                let prevLineEnd = lineStart - 1;
-                let prevLineStart = text.lastIndexOf('\n', prevLineEnd - 1) + 1;
-                let prevLineStr = text.substring(prevLineStart, prevLineEnd);
-                
-                if (prevLineStr.replace(/[-:| ]/g, '').length === 0 && prevLineStart > 0) {
-                  prevLineEnd = prevLineStart - 1;
-                  prevLineStart = text.lastIndexOf('\n', prevLineEnd - 1) + 1;
-                  prevLineStr = text.substring(prevLineStart, prevLineEnd);
-                }
-
-                if (prevLineStr.trim().startsWith('|')) {
-                  targetLineStart = prevLineStart;
-                  targetLineEnd = prevLineEnd;
-                  targetPipes = [];
-                  for (let i = targetLineStart; i <= targetLineEnd; i++) {
-                    if (text[i] === '|' && (i === 0 || text[i-1] !== '\\')) targetPipes.push(i);
-                  }
-                  if (direction === 'left') nextCellIdx = Math.max(0, targetPipes.length - 2);
-                  if (direction === 'up') nextCellIdx = Math.min(nextCellIdx, targetPipes.length - 2);
-                } else if (direction === 'left' || direction === 'right') {
-                    return true;
-                }
-              }
-            } else if (nextCellIdx >= pipes.length - 1 || direction === 'down') {
-              if (lineEnd < text.length) {
-                let nextLineStart = lineEnd + 1;
-                let nextLineEnd = text.indexOf('\n', nextLineStart);
-                if (nextLineEnd === -1) nextLineEnd = text.length;
-                let nextLineStr = text.substring(nextLineStart, nextLineEnd);
-
-                if (nextLineStr.replace(/[-:| ]/g, '').length === 0 && nextLineEnd < text.length) {
-                  nextLineStart = nextLineEnd + 1;
-                  nextLineEnd = text.indexOf('\n', nextLineStart);
-                  if (nextLineEnd === -1) nextLineEnd = text.length;
-                  nextLineStr = text.substring(nextLineStart, nextLineEnd);
-                }
-
-                if (nextLineStr.trim().startsWith('|')) {
-                  targetLineStart = nextLineStart;
-                  targetLineEnd = nextLineEnd;
-                  targetPipes = [];
-                  for (let i = targetLineStart; i <= targetLineEnd; i++) {
-                    if (text[i] === '|' && (i === 0 || text[i-1] !== '\\')) targetPipes.push(i);
-                  }
-                  if (direction === 'right') nextCellIdx = 0;
-                  if (direction === 'down') nextCellIdx = Math.min(nextCellIdx, targetPipes.length - 2);
-                } else if (direction === 'left' || direction === 'right') {
-                    return true;
-                }
-              }
-            }
-
-            if (nextCellIdx >= 0 && nextCellIdx < targetPipes.length - 1) {
-              const cellStart = targetPipes[nextCellIdx] + 1;
-              const cellEnd = targetPipes[nextCellIdx + 1];
-              let selStart = cellStart;
-              let selEnd = cellEnd;
-              while (selStart < selEnd && text[selStart] === ' ') selStart++;
-              while (selEnd > selStart && text[selEnd - 1] === ' ') selEnd--;
-              
-              const store = useEditorStore.getState();
-              store.setSelection(selStart, selEnd);
-            }
-            return true;
-          }
-        }
-      }
-      return false;
-    };
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const text = useEditorStore.getState().getText();
     const { selectionStart, selectionEnd } = useEditorStore.getState();
     const cursorPos = useEditorStore.getState().cursorPos;
+    const selectedCell = useTableStore.getState().selectedCell;
 
     // Undo / Redo
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -283,6 +188,131 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       e.preventDefault();
       useEditorStore.getState().redo();
       return;
+    }
+
+    // --- 表格单元格交互状态机 (Excel Mode) ---
+    if (selectedCell && !selectedCell.isEditing) {
+      // 1. 单选态 (Cell Selected Mode)
+      if (e.key === 'F2') {
+        e.preventDefault();
+        useTableStore.getState().setCellEditing(true);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        useTableStore.getState().setSelectedCell(null);
+        return;
+      }
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault();
+        const res = clearCell(text, cursorPos);
+        if (res.newText !== text) {
+          useEditorStore.setState({ lines: res.newText.split('\n') });
+        }
+        useEditorStore.getState().setCursorPos(res.newCursorPos);
+        return;
+      }
+
+      // 导航键（Tab, Shift+Tab, Enter, Shift+Enter, 方向键）
+      let action: 'tab' | 'shift-tab' | 'enter' | 'shift-enter' | null = null;
+      if (e.key === 'Tab') {
+        action = e.shiftKey ? 'shift-tab' : 'tab';
+      } else if (e.key === 'Enter') {
+        action = e.shiftKey ? 'shift-enter' : 'enter';
+      } else if (e.key === 'ArrowLeft' && !e.shiftKey) {
+        action = 'shift-tab';
+      } else if (e.key === 'ArrowRight' && !e.shiftKey) {
+        action = 'tab';
+      } else if (e.key === 'ArrowUp' && !e.shiftKey) {
+        action = 'shift-enter';
+      } else if (e.key === 'ArrowDown' && !e.shiftKey) {
+        action = 'enter';
+      }
+
+      if (action) {
+        e.preventDefault();
+        const res = navigateTable(text, cursorPos, action);
+        if (res) {
+          if (res.newText !== text) {
+            useEditorStore.setState({ lines: res.newText.split('\n') });
+          }
+          useEditorStore.getState().setCursorPos(res.newCursorPos);
+          const newTable = findTableRange(res.newText, res.newCursorPos);
+          if (newTable) {
+            useTableStore.getState().setSelectedCell({
+              tableId: selectedCell.tableId,
+              lineIndex: newTable.activeLineIndex,
+              colIndex: newTable.activeCellIndex,
+              isEditing: false,
+            });
+          }
+        }
+        return;
+      }
+
+      // 如果按普通字符键（单字符输入），清空当前单元格并直接输入该字符并转为编辑态
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1) {
+        e.preventDefault();
+        const res = setCellContent(text, cursorPos, e.key);
+        if (res.newText !== text) {
+          useEditorStore.setState({ lines: res.newText.split('\n') });
+        }
+        useEditorStore.getState().setCursorPos(res.newCursorPos);
+        useTableStore.getState().setCellEditing(true);
+        return;
+      }
+    } else if (selectedCell && selectedCell.isEditing) {
+      // 2. 双击编辑态 (Cell In-place Editing Mode)
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        useTableStore.getState().setCellEditing(false);
+        return;
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const res = navigateTable(text, cursorPos, e.shiftKey ? 'shift-tab' : 'tab');
+        if (res) {
+          if (res.newText !== text) {
+            useEditorStore.setState({ lines: res.newText.split('\n') });
+          }
+          useEditorStore.getState().setCursorPos(res.newCursorPos);
+          const newTable = findTableRange(res.newText, res.newCursorPos);
+          if (newTable) {
+            useTableStore.getState().setSelectedCell({
+              tableId: selectedCell.tableId,
+              lineIndex: newTable.activeLineIndex,
+              colIndex: newTable.activeCellIndex,
+              isEditing: false, // commit and exit edit mode to select mode
+            });
+          }
+        }
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        const res = navigateTable(text, cursorPos, 'enter');
+        if (res) {
+          if (res.newText !== text) {
+            useEditorStore.setState({ lines: res.newText.split('\n') });
+          }
+          useEditorStore.getState().setCursorPos(res.newCursorPos);
+          const newTable = findTableRange(res.newText, res.newCursorPos);
+          if (newTable) {
+            useTableStore.getState().setSelectedCell({
+              tableId: selectedCell.tableId,
+              lineIndex: newTable.activeLineIndex,
+              colIndex: newTable.activeCellIndex,
+              isEditing: false,
+            });
+          }
+        }
+        return;
+      }
+      if (e.key === 'Enter' && (e.shiftKey || e.altKey)) {
+        e.preventDefault();
+        insertText('<br>');
+        return;
+      }
     }
 
     if (e.key === 'ArrowLeft') {
@@ -320,22 +350,20 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (isComposing) return;
-      let lineStart = text.lastIndexOf('\n', cursorPos - 1) + 1;
-      let lineEnd = text.indexOf('\n', cursorPos);
-      if (lineEnd === -1) lineEnd = text.length;
-      const lineStr = text.substring(lineStart, lineEnd);
-      if (lineStr.trim().startsWith('|')) {
-        insertText('<br>');
-      } else {
-        insertText('\n');
-      }
+      insertText('\n');
     } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       setSelection(0, text.length);
     } else if (e.key === 'Tab') {
-      if (handleTableNav(e, e.shiftKey ? 'left' : 'right', text, cursorPos)) return;
+      e.preventDefault();
+      const res = navigateTable(text, cursorPos, e.shiftKey ? 'shift-tab' : 'tab');
+      if (res) {
+        if (res.newText !== text) {
+          useEditorStore.setState({ lines: res.newText.split('\n') });
+        }
+        useEditorStore.getState().setCursorPos(res.newCursorPos);
+      }
     } else if (e.key === 'ArrowUp') {
-      if (!e.shiftKey && handleTableNav(e, 'up', text, cursorPos)) return;
       e.preventDefault();
       if (containerRef.current) {
         const targetIdx = getArrowNavigationIndex(
@@ -355,7 +383,6 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         }
       }
     } else if (e.key === 'ArrowDown') {
-      if (!e.shiftKey && handleTableNav(e, 'down', text, cursorPos)) return;
       e.preventDefault();
       if (containerRef.current) {
         const targetIdx = getArrowNavigationIndex(
