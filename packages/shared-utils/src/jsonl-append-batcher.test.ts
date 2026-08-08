@@ -157,4 +157,31 @@ describe("JsonlAppendBatcher", () => {
     const content = await readFile(filePath, "utf8");
     expect(content).toBe("ok\n");
   });
+
+  it("signal abort triggers flush and close (F8-23)", async () => {
+    // F8-23 红测试：signal 存储后从未使用——abort 不得触发任何动作，
+    // pending 数据不落盘（修复前：无 abort 监听，数据滞留内存）。
+    const dir = await tempDir();
+    const filePath = join(dir, "log.jsonl");
+    const controller = new AbortController();
+    const batcher = new JsonlAppendBatcher({
+      filePath,
+      flushIntervalMs: 60_000,
+      flushCount: 100,
+      fsyncOnFlush: false,
+      fsyncDirectoryOnFlush: false,
+      signal: controller.signal,
+    });
+    await batcher.append("abort-me");
+    controller.abort();
+    // 轮询等待 abort 触发的 flush+close 完成（8s 上限，避免固定 sleep）
+    const deadline = Date.now() + 8_000;
+    while (batcher.pendingRecords > 0) {
+      if (Date.now() > deadline) break;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    const content = await readFile(filePath, "utf8");
+    expect(content).toContain("abort-me");
+    expect(batcher.pendingRecords).toBe(0);
+  });
 });
