@@ -1,6 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { useTableStore } from '../core/TableStore';
-import { useEditorStore } from '../core/EditorStore';
 
 interface ContextMenuState {
   x: number;
@@ -40,7 +38,7 @@ export const ContextMenu: React.FC = () => {
 
   const { isEditing } = menuState;
 
-  const handleAction = (action: string) => {
+  const handleAction = (_action: string) => {
     setMenuState(null);
     // In this basic version, we just log or focus. 
     // Real implementation would call TableOperations mutating functions here.

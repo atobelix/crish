@@ -1,6 +1,6 @@
 import * as React from 'react';
 import type { InlineNode } from '../core/ast';
-import { checkIsActive, type ActiveState } from '../core/measure';
+import { type ActiveState } from '../core/measure';
 import katex from 'katex';
 
 function renderMathToHtml(
@@ -229,7 +229,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
           if (token.type === 'table_cell') {
             const colIndex = colIndexCounter++;
             const cellWidth = tableWidths?.[colIndex];
-            const cellStyle = cellWidth ? { ...token.style, flex: `0 0 ${cellWidth}px` } : { ...token.style, flex: '1 1 0%' };
+            const cellStyle: React.CSSProperties = cellWidth ? { ...token.style, flex: `0 0 ${cellWidth}px` } : { ...token.style, flex: '1 1 0%' };
             
             const isCellSelected = selectedCell &&
               lineIndex !== undefined &&
@@ -279,7 +279,6 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 style={cellStyle}
                 onMouseDown={(e) => {
                   if (e.button === 2) return; // Ignore right click
-                  e.stopPropagation();
                   // Avoid breaking edit mode if we click on the already editing cell
                   if (isCellEditing) return;
                   
@@ -290,10 +289,13 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   if (start !== undefined) {
                     useEditorStore.getState().setCursorPos(start + 1);
                   }
-                  const input = document.querySelector('.hidden-input') as HTMLTextAreaElement;
-                  if (input) input.focus();
+                  // Ensure HiddenInput gets focus so keyboard navigation works immediately
+                  setTimeout(() => {
+                    const input = document.querySelector('.hidden-input') as HTMLTextAreaElement;
+                    if (input) input.focus();
+                  }, 0);
                 }}
-                onMouseEnter={(e) => {
+                onMouseEnter={() => {
                   const tableStore = useTableStore.getState();
                   if (tableStore.isDraggingCell) {
                     tableStore.updateCellSelectionEnd(lineIndex ?? -1, colIndex);
@@ -303,15 +305,13 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 }}
                 onMouseUp={(e) => {
                   if (e.button === 2) return;
-                  e.stopPropagation();
                   const tableStore = useTableStore.getState();
                   if (tableStore.isDraggingCell) {
                     tableStore.setDraggingCell(false);
                     tableStore.updateCellSelectionEnd(lineIndex ?? -1, colIndex);
                   }
                 }}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
+                onDoubleClick={() => {
                   window.getSelection()?.removeAllRanges();
                   useTableStore.getState().enterCellEdit(
                     tableId || '',
