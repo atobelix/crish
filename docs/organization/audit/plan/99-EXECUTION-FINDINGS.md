@@ -130,6 +130,52 @@
 - **处置**：仅本地环境处置（kill 陈旧进程、清缓存、预热），无代码改动；P1-F4 的 e2e 红绿证据均在稳定环境采集。
 - **建议**：CI 环境不受影响（全新 checkout + npm ci）；本地跑 `npm run test:e2e` 前先确认 5174 归属 crish-desktop（`Invoke-WebRequest` 看 title），并预留首个页面冷编译时间（首次可达 60-90s，playwright webServer 180s 预算内）。
 
+## F-017：C7 恢复阶梯生产未接线（F2-08）——本批无法接线，登记待接（P2 批 1 执行期）
+
+- **发现日期**：2026-08-08（P2 批 1——死代码与未接线面清理，执行期）
+- **位置**：`crates/orchestrator/src/recovery.rs`（RecoveryCoordinator 模块头，已补「待接」标注）+ `apps/agent-workbench/src-tauri/src/`（无任何 RecoveryCoordinator 构造/调用点）
+- **描述**：`on_subagent_run_failure`（阶梯 1 重试）/`escalate`（阶梯 2 steering）/`fork_and_reassign`（阶梯 3）在生产二进制零调用（grep 全壳无 RecoveryCoordinator 引用；仅 recovery.rs 自身 tests 与 lifecycle resume 命令面消费）。接线需要引擎侧基础设施：① 每会话 RecoveryCoordinator 生命周期（RecoveryStore 适配到 workbench 会话库 + SessionTree 装配 + SubagentSpawnerImpl 复用）；② provider 流错误分类钩子（子代理 run 失败判定）；③ F2-27 要求的 spawn_blocking 包裹（RecoveryStore 为同步 SQLite trait）。属 I6 遗留 L1–L3 大件，本批不硬接（规则：依赖未来功能/大件 → 注释「待接」+ 登记）。
+- **处置**：recovery.rs 模块头补「**待接（F2 审计 F2-08）**」标注；本登记作为接线任务书依据。
+- **建议**：单独立任务接线，验收锚点 = 子代理 run 网络类失败 → 阶梯 1 自动重试事件/阶梯 2 steering 条目入队（端到端测试）。
+
+## F-018：死锁防护 detector 生产未接线（F9-05）——依赖子代理跟踪器信号源，登记待接（P2 批 1 执行期）
+
+- **发现日期**：2026-08-08（P2 批 1 执行期）
+- **位置**：`apps/agent-workbench/src-tauri/src/core_run_commands.rs:2806`（生产 ApprovalGateImpl 构造点，已补「待接」注释）+ `crates/session-loop/src/approval_router.rs:41-45`（自述 F11 T-D-13 未落地）
+- **描述**：`with_deadlock_detector`（core_run_commands.rs:210-216，`#[cfg_attr(not(test), allow(dead_code))]`）的 detector 需要「主 agent 正在 wait 该子代理」信号源 = orchestrator 子代理跟踪器的 await 态标记（wait_subagents 工具执行期间）。引擎侧无该跟踪器（全仓 grep：无 wait_subagents await 态登记面）；subagent_wait_channel（agent-tools tools/mod.rs:77）None = 未接线。缺信号源则 detector 注入无数据可查——本批判定「无法接线」（依赖未来功能 F11 T-D-13），不硬接；生产缺省 None 恒走 120s 超时兜底（行为与现状一致，非致命）。
+- **处置**：core_run_commands.rs 生产构造点补「F9-05 待接」注释（含信号源说明）；本登记作为接线任务书依据。
+- **建议**：接线方案 = wait_subagents 工具执行期间在共享注册表登记（subagent_run_id → waiting），gate 构造注入 `|id| tracker.is_waiting(id)`；验收锚点 = 主 agent wait 期间子代理申请 → 路由转用户而非 120s 空等。
+
+## F-019：logger 脱敏钩子 setLogRedactor 零接线（F8-17）——依赖产品级脱敏规则决策，登记待接（P2 批 1 执行期）
+
+- **发现日期**：2026-08-08（P2 批 1 执行期）
+- **位置**：`packages/shared-utils/src/logger.ts:30-36`（setLogRedactor/redactSensitive）+ `packages/shared-utils/src/index.ts:87-88`（barrel re-export）
+- **描述**：`setLogRedactor` 全仓零调用（仅 barrel re-export，knip 未标因为 barrel 引用）；默认恒等输出 = 日志明文。接线需产品级脱敏规则决策（API key 模式、URL query、JSON 嵌套键名的默认规则集），且 `log()` 当前只对 msg 脱敏、meta 原样透传——需 meta 逐字段脱敏。属「设计的接线点 + 规则未定」，本批不硬接（与 F3-03 set_ttl 同类：预留接口标注）。
+- **处置**：登记待接；logger.ts 不改（预留面保持）。
+- **建议**：接线任务 = 内置默认脱敏器（sk-*/Bearer/URL query/嵌套键名）+ meta 逐字段脱敏 + apps 启动处 setLogRedactor；配套脱敏单测。
+
+## F-020：knip 未用导出长尾（P2 批 1 执行期实测 597 项 + 5 duplicates）
+
+- **描述**：2026-08-08 实测 `npx knip`：Unused exports 597（warn 级，exit 0）、Duplicate exports 5（messageWindow/tauriInvoke/OverviewQuickActions/OverviewStats/DevHealthOverlay）。P2 批 1 本批只清理与审计项直接相关的导出（chatApi fetchSessionsApi/saveMessageToDb/withdrawMessageFromDb、EventRouter 死游标等，见批报告）；**剩余 590+ 项（agent-workbench/src/shared/* 约 40 项、crish-desktop/src/api/* 约 200 项、store-access/sessionAccess.ts 约 15 项、shared 包类型导出等）登记为长尾**——逐项删除需 grep/typecheck/knip 三重复核，属独立收敛批次（F9-16 G14 收口面），单批消化不可行且风险高（含 barrel 透传、类型导出、字符串动态引用盲区）。
+- **建议**：按域分批收敛（每域一批：导出即消费或删除）；收敛后 `rules.exports` 收紧为 error 接入 CI（P1-C4 收口）。
+- **更新**：覆盖既有「P2 长尾收敛清单」表（595 → 597 项，2026-08-08 实测漂移）。
+
+## F-021：F3-02 with_idempotency 审计断言过时——存在测试消费，判定「存疑」保留（P2 批 1 执行期）
+
+- **发现日期**：2026-08-08（P2 批 1 执行期）
+- **位置**：`crates/session-loop/src/tool_exec.rs:212`（with_idempotency，pub 方法）+ `crates/session-loop/tests/e01_multi_replace_integration.rs:308`（`ToolExecutor::new(...).with_idempotency(guard)` 测试消费）
+- **描述**：F1 报告 F3-02 断言「pub 但全 crate 零消费……grep 确认无任何测试调用」。实测存在测试调用（e01_multi_replace_integration.rs:308），审计断言已过时——非死代码，按规则「不能确证 → 存疑跳过」保留。生产路径用 with_idempotency_opt（:451 唯一装配点），两个构造器语义等价（Some 包装 vs Option 直传），保留 with_idempotency 供测试/外部装配使用无害。
+- **处置**：不改代码；报告列为「存疑（审计断言与现状不符）」。
+- **建议**：审计文档后续修订时更正 F3-02 描述。
+
+## F-022：P2 批 1 与并行 P2 批 5 任务重叠登记（StreamRenderBuffer / session-loop 溢出项）
+
+- **发现日期**：2026-08-08（P2 批 1 执行期）
+- **位置**：`apps/crish-desktop/src/api/StreamRenderBuffer.ts`（F5-05/06 单块超限拆帧）、`crates/session-loop/src/loop/handlers/{no_tool_calls,stream_error,prepare_turn}.rs` + `state.rs`（F1-03 turn_index 溢出 / F2-01 max_tokens×2 溢出 / F2-02 max_turns=0）、`packages/shared-utils/src/jsonl-append-batcher.ts`（F8-03）、`packages/shared-types/src/errors/{codes,info}.ts` + `crates/conex-types/src/error.rs` + `crates/agent-tools/src/{write_paths,fs}.rs`（F8-02 码注册）
+- **描述**：执行期发现并行任务（P2 批 5，提交 c943353f 红测试已入库）正在同一批文件上工作（StreamRenderBuffer.ts 修复中、session-loop 溢出修复中、batcher/错误码域在飞）。重叠项（F5-05/06 拆帧、F1-03/F2-01/F2-02）按「同文件冲突由对方承担、不重复修改」原则让渡给对方批次（红测试已在 git 历史，我方不再提交）；本批报告如实记录重叠与让渡。
+- **处置**：P2 批 1 不含上述重叠文件改动；StreamRenderBuffer 红测试（framing.test.ts:88-110）实测红（expected 1 > 1）证据已采集，绿修复归属 P2 批 5。
+- **建议**：验收方注意 P2 批 5 提交中的对应绿测试；若对方未修 StreamRenderBuffer，后续批次补绿。
+
 ## F-016：matrix-navigation.spec.ts 2 用例既存失败（与 P1-F4 无关，stash 隔离证实）
 
 - **发现日期**：2026-08-08（P1-F4 T5.4 执行期）
@@ -137,3 +183,19 @@
 - **描述**：P1-F4 回归 e2e 时 2 失败。经 `git stash push`（仅 P1-F4 三个源码文件）在**无本次改动**的干净树重跑，同样 2 失败 1 通过——与 P1-F4 无关的既存失败（编辑/光标域，疑似依赖编辑器时序/虚拟化边界，F-005 同类编辑器域问题）。
 - **处置**：登记不修（B9 范围纪律，编辑器域）。
 - **建议**：编辑器域适配任务（F-005 同批）回归该 spec；e2e 提升 PR 门禁（T5.6）前确认其基线。
+
+## F-023：sessionLocalStorage.test.ts 3 失败——并行任务 store/types.ts 在途改动破坏（P2 批5 执行期）
+
+- **发现日期**：2026-08-08（P2 批5 执行期）
+- **位置**：pps/crish-desktop/src/api/session-persistence/sessionLocalStorage.test.ts（P1-F3 截断标志 3 用例：hasQuotaTruncation 恒 false、截断后仍 120 条、恢复清除缺失）
+- **描述**：api/store/hooks 目录回归（3343/3346 通过）唯一失败文件。经 git stash push（仅本批 4 个 TS 源文件）在无本批改动下重跑，同样 3 失败——与本批无关。失败形态 = P1-F3 修复（588b9f23，绿 4/4）的断言全部回到"先红"态，疑似并行任务在途修改 pps/crish-desktop/src/store/types.ts（SessionMessage 形态/序列化尺寸变化）使 quota 模拟不再触顶。
+- **处置**：登记不修（B9 范围纪律，store/types.ts 属并行任务在途文件）。
+- **建议**：并行任务收尾后重跑 sessionLocalStorage.test.ts 回归；若仍红则核查 quota 模拟与 types.ts 尺寸的关系。
+
+## F-024：cargo test --workspace 被并行 session-loop 重构在途改动阻塞（P2 批5 执行期）
+
+- **发现日期**：2026-08-08（P2 批5 执行期）
+- **位置**：crates/session-loop/src/loop/mod.rs:1127（测试代码 E0308：AgentSessionLoop::new 期望 Box<dyn ProviderCall>，实传 Arc<TestProvider>）
+- **描述**：cargo test --workspace 编译失败于 session-loop 测试代码（并行任务在途重构：crates/session-loop/{lib.rs,mod.rs,provider.rs,state.rs,...} 工作区未提交）。cargo build --workspace 全绿（库代码可编译）；cargo test -p agent-provider（lib 503 + 集成 25）全绿。E0308 与本批改动（仅 agent-provider frame.rs/error.rs）无关，亦经文件面确认非本批引入。
+- **处置**：登记不修（B9 范围纪律）；本批验证以 agent-provider 全量 + 受影响 crate 为准。
+- **建议**：session-loop 重构任务收尾提交后，验收方补跑 cargo test --workspace 全量回归（对齐 AGENTS.md 73 套件基线）。
