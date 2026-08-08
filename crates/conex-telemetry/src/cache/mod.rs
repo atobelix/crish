@@ -34,4 +34,6 @@ pub use miss::{
     classify, MissDetector, MissReason, BREAK_MIN_TOKENS, BREAK_PCT,
     LOW_HIT_RATIO_PCT, NOISE_FLOOR_TOKENS, WARN_MISSED_COST_USD, WARN_MISSED_TOKENS,
 };
-pub use signature::{CacheBaseline, RequestSignature};
+pub use signature::{
+    prefix_diff_index, CacheBaseline, PrefixDiff, PrefixDiffKind, RequestSignature,
+};

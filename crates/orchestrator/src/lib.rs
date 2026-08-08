@@ -42,6 +42,7 @@
 //! pending_inputs 表落库；conex-types 的 [conex_types::events::RunTerminalStatus]
 //! 与 [conex_types::events::AgentEvent] 作为事件唯一真源。
 
+pub mod blocks;
 pub mod events;
 pub mod flow_graph;
 pub mod lifecycle;

@@ -201,6 +201,12 @@ impl SessionRecord {
     /// `last_compaction_generation` +1（C13：压缩重置 P5 审计基线）、
     /// `compression_retries` 归零（溢出压缩已消费，fresh 起点）。
     ///
+    /// R-K（00-plan §3）：`last_compaction_generation` 为**会话级代数唯一源**
+    /// ——重放 N 个压缩事件最终值 = N，与块行写入面的事件计数取数
+    /// （blocks.rs `count_compression_events`，含本次）严格一致（同一事实源：
+    /// events 表），代数不漂移。cache_tracker 消费面在轮次 3/4（T-30/T-31）
+    /// 接线，本域不自增第二套代数。
+    ///
     /// 返回是否成功更新（事件时间戳不可解析时返回 false，不破坏既有状态；
     /// 不变量：非法输入绝不把护栏写坏）。
     pub fn apply_compression_end(&mut self, sequence: u64, timestamp_iso: &str) -> bool {

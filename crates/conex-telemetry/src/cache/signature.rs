@@ -37,6 +37,69 @@ impl RequestSignature {
     }
 }
 
+/// 前缀差异类型（T-25：压缩后签名比对的判定三态，不动 `classify` 枚举）。
+///
+/// - [`PrefixDiffKind::Identical`]：两哈希数组完全一致（正常路径）；
+/// - [`PrefixDiffKind::TailAppend`]：cur 是 prev 的严格超集（纯追加，
+///   append-only 正常路径——追加区豁免，不构成 harness 改写）；
+/// - [`PrefixDiffKind::HeadRewrite`]：首个差异出现在 prev 范围之内或
+///   cur 为 prev 截断（历史被改写——压缩后二次改写的诊断信号）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrefixDiffKind {
+    /// 完全一致（index = 公共长度）
+    Identical,
+    /// cur 在 prev 之后纯追加（index = prev.len()，首个新增位）
+    TailAppend,
+    /// 差异点在历史区（index = 首个差异位置；cur 为 prev 截断时 index = cur.len()）
+    HeadRewrite,
+}
+
+/// 前缀差异定位结果（T-25）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PrefixDiff {
+    /// 差异类型
+    pub kind: PrefixDiffKind,
+    /// 首个差异位置（Identical = 公共长度；TailAppend = prev.len()；
+    /// HeadRewrite = 首个不等下标 / 截断处）
+    pub index: usize,
+}
+
+/// 前缀差异定位（纯函数，v1.1 §5.1 T-30 / 02 分析 §五 E4 / 评审 02 P1-4）：
+/// 逐位比较两签名哈希数组（消息前缀逐条哈希），返回首个差异位置与差异类型。
+///
+/// 语义：
+/// - `prev == cur` → [`PrefixDiffKind::Identical`]（index = 公共长度）；
+/// - cur 是 prev 的严格超集且公共前缀一致 → [`PrefixDiffKind::TailAppend`]
+///   （index = prev.len()——追加区豁免：压缩后首请求前被追加的新消息
+///   不构成 harness 改写）；
+/// - 首个差异出现在 prev 范围内（或 cur 为 prev 的截断，即 prev 更长）→
+///   [`PrefixDiffKind::HeadRewrite`]（index = 首个差异位置）。
+pub fn prefix_diff_index(prev: &[u64], cur: &[u64]) -> PrefixDiff {
+    let n = prev.len().min(cur.len());
+    for i in 0..n {
+        if prev[i] != cur[i] {
+            return PrefixDiff {
+                kind: PrefixDiffKind::HeadRewrite,
+                index: i,
+            };
+        }
+    }
+    match prev.len().cmp(&cur.len()) {
+        std::cmp::Ordering::Equal => PrefixDiff {
+            kind: PrefixDiffKind::Identical,
+            index: prev.len(),
+        },
+        std::cmp::Ordering::Less => PrefixDiff {
+            kind: PrefixDiffKind::TailAppend,
+            index: prev.len(),
+        },
+        std::cmp::Ordering::Greater => PrefixDiff {
+            kind: PrefixDiffKind::HeadRewrite,
+            index: cur.len(),
+        },
+    }
+}
+
 /// 缓存基线（上次请求的前快照，跨 run 由 engine 层维护）。
 ///
 /// 双保险（对齐 jcode `KvCacheBaseline`）：跨会话 / 跨压缩代数（`generation`
@@ -114,5 +177,55 @@ mod tests {
         let a = RequestSignature::default();
         let b = RequestSignature::default();
         assert!(!a.messages_prefix_changed(&b));
+    }
+
+    // ── prefix_diff_index（T-25：三态 + 边界）──
+
+    /// 完全一致 → Identical，index = 公共长度
+    #[test]
+    fn prefix_diff_index_identical() {
+        let d = prefix_diff_index(&[1, 2, 3], &[1, 2, 3]);
+        assert_eq!(d.kind, PrefixDiffKind::Identical);
+        assert_eq!(d.index, 3);
+    }
+
+    /// 纯追加（cur 是 prev 严格超集）→ TailAppend，index = prev.len()
+    #[test]
+    fn prefix_diff_index_tail_append() {
+        let d = prefix_diff_index(&[1, 2, 3], &[1, 2, 3, 4, 5]);
+        assert_eq!(d.kind, PrefixDiffKind::TailAppend);
+        assert_eq!(d.index, 3);
+    }
+
+    /// 首个差异出现在历史区 → HeadRewrite，index = 首个不等下标
+    #[test]
+    fn prefix_diff_index_head_rewrite() {
+        let d = prefix_diff_index(&[1, 2, 3], &[1, 99, 3]);
+        assert_eq!(d.kind, PrefixDiffKind::HeadRewrite);
+        assert_eq!(d.index, 1);
+    }
+
+    /// 空数组边界：两者皆空 → Identical，index = 0
+    #[test]
+    fn prefix_diff_index_both_empty() {
+        let d = prefix_diff_index(&[], &[]);
+        assert_eq!(d.kind, PrefixDiffKind::Identical);
+        assert_eq!(d.index, 0);
+    }
+
+    /// prev 更长（cur 为 prev 截断）→ HeadRewrite，index = cur.len()
+    #[test]
+    fn prefix_diff_index_prev_longer_is_rewrite() {
+        let d = prefix_diff_index(&[1, 2, 3], &[1, 2]);
+        assert_eq!(d.kind, PrefixDiffKind::HeadRewrite);
+        assert_eq!(d.index, 2);
+    }
+
+    /// 长度不同且首个差异在公共区内 → HeadRewrite 定位首个不等处
+    #[test]
+    fn prefix_diff_index_len_diff_with_inner_diff() {
+        let d = prefix_diff_index(&[1, 2, 3], &[1, 99, 3, 4]);
+        assert_eq!(d.kind, PrefixDiffKind::HeadRewrite);
+        assert_eq!(d.index, 1);
     }
 }

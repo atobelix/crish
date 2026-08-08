@@ -23,6 +23,7 @@ use conex_types::events::{AgentEvent, RunTerminalStatus};
 use conex_types::session::AgentEndReason;
 use session_loop::RunOutcome;
 
+use crate::blocks::persist_compression_block;
 use crate::persist::{SessionSequencer, Store, StoreError};
 use crate::run::{
     EVENT_STORE_WRITE_FAILED_REASON, RunError, RunHandle, map_outcome_to_terminal,
@@ -338,6 +339,26 @@ pub async fn drive_outcome(
         match queue.push(&run.session_id, event).await {
             Ok(sequenced) => {
                 run.cursor = sequenced.sequence;
+                // T-18（轮次 2 持久层）：压缩事件落库成功后写块行——
+                // INSERT OR IGNORE 幂等（同 (session_id, block_id) 重放不重复行）；
+                // 失败仅告警不阻断 drive（块表是索引面，原文仍在事件流可回放）
+                if matches!(&sequenced.event, AgentEvent::ContextCompressionEnd { .. }) {
+                    if let Err(error) = persist_compression_block(
+                        queue.store(),
+                        &run.session_id,
+                        &sequenced.event,
+                        sequenced.sequence,
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            session_id = %run.session_id,
+                            sequence = sequenced.sequence,
+                            error = %error,
+                            "压缩块行写入失败（块表索引面降级，原文仍可经事件流回放）"
+                        );
+                    }
+                }
                 pushed.push(sequenced);
             }
             Err(err) => {
@@ -485,7 +506,7 @@ mod tests {
     use session_loop::RunOutcome;
 
     use super::*;
-    use crate::persist::InMemoryStore;
+    use crate::persist::{InMemoryStore, LocalDbStore};
     use crate::run::{CancelMode, CancelPath, RunEngine, RunManager};
 
     // ── 测试替身 ──
@@ -1191,5 +1212,141 @@ mod tests {
         assert!(!is_non_persistent(&soft), "message/tool 类为 Soft：尽力落库");
         assert!(!is_non_persistent(&agent_start()), "agent-start 必达落库");
         assert!(is_non_persistent(&message_delta(0)), "message-delta 保持既有语义");
+    }
+
+    // ── T-18（轮次 2 持久层）：压缩事件 → 块行入库（drive 端到端）──
+
+    /// 压缩事件经 drive_outcome 落库 → compression_blocks 同步写入块行：
+    /// block_id = record.id、sequence = 事件序列号、generation = 事件计数
+    /// （首次 = 1）、dropped 清单、state = awaiting（details 未织入时缺省）。
+    #[tokio::test]
+    async fn drive_outcome_writes_compression_block_row() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+        let manager = RunManager::new(store.clone());
+        let mut run = manager.start_run("s1", "r_compact").await.unwrap();
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+
+        let record = conex_types::tool::ContextCompressionRecord {
+            id: "compacted-summary-1-1".to_string(),
+            trigger: conex_types::tool::ContextCompressionTrigger::Threshold,
+            reason: None,
+            policy: None,
+            summary: "摘要文本".to_string(),
+            first_kept_message_id: Some("u2".to_string()),
+            compressed_message_ids: vec!["u1".to_string(), "a1".to_string()],
+            kept_message_ids: vec!["u2".to_string(), "a2".to_string()],
+            tokens_before: 10_000,
+            tokens_after: 2_000,
+            threshold_tokens: None,
+            created_at: ts(),
+            handoff: None,
+            cache_boundary: None,
+            details: None,
+        };
+        let events = vec![
+            agent_start(),
+            AgentEvent::ContextCompressionEnd {
+                session_id: "s1".to_string(),
+                timestamp: ts(),
+                result: Some(record),
+                aborted: false,
+                error: None,
+            },
+            agent_end(AgentEndReason::Stop),
+        ];
+
+        let result = drive_outcome(
+            &mut run,
+            &mut queue,
+            outcome(AgentEndReason::Stop, events),
+        )
+        .await
+        .unwrap();
+        assert!(result.persist_failure.is_none(), "压缩事件应落库成功");
+
+        // 压缩事件序列号（agent-start=1 → compression=2）
+        let compression_seq = result
+            .events
+            .iter()
+            .find(|e| matches!(e.event, AgentEvent::ContextCompressionEnd { .. }))
+            .expect("压缩事件在流中")
+            .sequence;
+        assert_eq!(compression_seq, 2);
+
+        // 块行已写入（sequence 与事件一致；generation = 会话压缩事件计数）
+        let block = db
+            .get_block("s1", "compacted-summary-1-1")
+            .unwrap()
+            .expect("块行应已入库");
+        assert_eq!(block.sequence, 2, "块行 sequence = 压缩事件序列号");
+        assert_eq!(block.generation, 1, "首次压缩代数 = 1");
+        assert_eq!(
+            block.dropped_message_ids,
+            vec!["u1".to_string(), "a1".to_string()]
+        );
+        assert_eq!(block.state, conex_db::BlockState::Awaiting);
+        assert_eq!(db.count_blocks("s1").unwrap(), 1);
+        // 落库事件原文与块行同源（原文回放面不受块表影响）
+        let stored = db.query_events("s1", 0, None).unwrap();
+        assert!(stored.iter().any(|e| e.event_type == "context-compression-end"));
+    }
+
+    /// 块行幂等：drive 重放（同事件再次驱动）不产生重复行——INSERT OR
+    /// IGNORE 语义在 drive 面成立。
+    #[tokio::test]
+    async fn drive_outcome_compression_block_replay_idempotent() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        let store: Arc<dyn Store> = Arc::new(LocalDbStore::new(db.clone()));
+        let manager = RunManager::new(store.clone());
+
+        let compression = |id: &str| AgentEvent::ContextCompressionEnd {
+            session_id: "s1".to_string(),
+            timestamp: ts(),
+            result: Some(conex_types::tool::ContextCompressionRecord {
+                id: id.to_string(),
+                trigger: conex_types::tool::ContextCompressionTrigger::Threshold,
+                reason: None,
+                policy: None,
+                summary: "摘要".to_string(),
+                first_kept_message_id: Some("u2".to_string()),
+                compressed_message_ids: vec!["u1".to_string()],
+                kept_message_ids: vec!["u2".to_string()],
+                tokens_before: 100,
+                tokens_after: 10,
+                threshold_tokens: None,
+                created_at: ts(),
+                handoff: None,
+                cache_boundary: None,
+                details: None,
+            }),
+            aborted: false,
+            error: None,
+        };
+
+        let mut run = manager.start_run("s1", "r_c1").await.unwrap();
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1);
+        drive_outcome(
+            &mut run,
+            &mut queue,
+            outcome(AgentEndReason::Stop, vec![agent_start(), compression("b1"), agent_end(AgentEndReason::Stop)]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(db.count_blocks("s1").unwrap(), 1);
+
+        // 再次驱动同内容事件（模拟重放）：同 block_id 不产生第二行
+        let mut run2 = manager.start_run("s1", "r_c2").await.unwrap();
+        let mut queue2 = EventQueue::new(store.clone(), run2.cursor + 1);
+        drive_outcome(
+            &mut run2,
+            &mut queue2,
+            outcome(AgentEndReason::Stop, vec![agent_start(), compression("b1"), agent_end(AgentEndReason::Stop)]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(db.count_blocks("s1").unwrap(), 1, "同 block_id 重放不重复行");
     }
 }

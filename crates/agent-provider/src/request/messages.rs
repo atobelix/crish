@@ -4,6 +4,12 @@
 //! - system → `{role:'system'}`；wireMode=user-prefix 时改 `role:'user'` +
 //!   `System instructions for this run:\n\n` 前缀（02 §六.11）
 //! - tool → 每个 tool-result block 一个 `{role:'tool', tool_call_id, content}`
+//!   ——**T-34（R-J）**：文本在 wire 投影面统一经
+//!   [conex_compaction::clean_output::clean_output]（默认
+//!   [CleanupOptions]）清洗（R1-R6：ANSI 剥离 / 行尾空白 / 空行合并 /
+//!   重复行折叠 / 超长行截断 / JSON 压缩）；落库/事件/工具返回保持 raw，
+//!   清洗只发生在请求构造面（可重复计算、确定性、幂等——历史回放与
+//!   新增消息同路径，不产生前缀漂移，评审 02 §3.4 P1-3）
 //! - assistant → 文本 join + `tool_calls[]`（arguments 为 canonical JSON 序列化，P1 C2）+ 可选 `reasoning_content`
 //! - user → 纯文本或 metadata.contentParts 多模态 parts（02 §二.6:138）
 //!
@@ -11,6 +17,7 @@
 
 use std::borrow::Borrow;
 
+use conex_compaction::clean_output::{clean_output, CleanupOptions};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::tool::{SystemPromptWireMode, ToolOutput};
 use serde_json::{json, Map, Value};
@@ -397,9 +404,13 @@ pub fn to_chat_messages<M: Borrow<AgentMessage>>(
             AgentMessageRole::Tool => {
                 for block in &message.blocks {
                     if let AgentMessageBlock::ToolResult { tool_call_id, output, .. } = block {
+                        // T-34（R-J）：wire 投影面统一清洗（默认 CleanupOptions；
+                        // 确定性 + 幂等——历史回放与新增同路径；消息本体 raw 不变，
+                        // 落库/事件/工具返回不受影响，评审 02 §3.4 / 00-plan §8.2）
+                        let cleaned = clean_output(&stringify_tool_output(output), &CleanupOptions::default());
                         result.push(ChatMessage {
                             role: "tool".to_string(),
-                            content: Some(ChatContent::Text(stringify_tool_output(output))),
+                            content: Some(ChatContent::Text(cleaned.cleaned)),
                             tool_call_id: Some(sanitize_tool_call_id(tool_call_id)),
                             reasoning_content: None,
                             tool_calls: Vec::new(),
@@ -677,6 +688,92 @@ mod tests {
         };
         assert!(stringify_tool_output(&artifacts).contains("file:///a"));
         assert_eq!(stringify_tool_output(&ToolOutput::empty()), "");
+    }
+
+    /// T-34（R-J）：wire 投影面统一清洗——ToolResult 文本经 clean_output
+    /// 管线（R1 ANSI 剥离 / R3 空行合并 / R4 重复行折叠 / R5 超长行截断），
+    /// wire content 为清洗后字节
+    #[test]
+    fn wire_tool_output_is_cleaned() {
+        let raw = "\x1b[31merror: build failed\x1b[0m\n\n\nwarning: unused\nwarning: unused\nwarning: unused\n这条行非常非常长";
+        let messages = to_chat_messages(
+            None,
+            &[message(
+                AgentMessageRole::Tool,
+                vec![tool_result_block("call_1", ToolOutput::text(raw))],
+            )],
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        let Some(ChatContent::Text(wire)) = &messages[0].content else {
+            panic!("tool wire content 必须为文本");
+        };
+        // R1：ANSI 剥离（正文保留）
+        assert!(!wire.contains('\x1b'), "ANSI 序列必须剥离：{wire}");
+        assert!(wire.contains("error: build failed"), "ANSI 包裹的正文剥离后保留");
+        // R3：连续空行合并
+        assert!(!wire.contains("\n\n\n"), "连续空行必须合并：{wire}");
+        // R4：重复行折叠（3+ 连续相等行 → 标记）
+        assert!(!wire.contains("warning: unused\nwarning: unused\nwarning: unused"), "重复行必须折叠");
+        assert!(wire.contains("… 重复 2 行 …"), "重复行折叠标记必须出现：{wire}");
+        // R5：超长行截断（默认 120 字符 + 省略号）
+        assert!(
+            wire.lines().all(|l| l.chars().count() <= 120),
+            "超长行必须截断到 120 字符：{wire}"
+        );
+    }
+
+    /// T-34（R-J）：清洗确定性 + 幂等——同输入两次 to_chat_messages 的
+    /// wire 字节完全一致（历史回放与新增消息同路径，无前缀漂移）
+    #[test]
+    fn wire_cleaning_is_deterministic_and_byte_stable() {
+        let raw = "\x1b[90mline1\x1b[0m\n\n\nline2\nline2\nline2\n".repeat(2);
+        let msg = message(
+            AgentMessageRole::Tool,
+            vec![tool_result_block("call_1", ToolOutput::text(&raw))],
+        );
+        let first = to_chat_messages(
+            None,
+            std::slice::from_ref(&msg),
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        let second = to_chat_messages(
+            None,
+            &[msg],
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(first, second, "同输入两次 wire 投影必须字节一致（确定性 + 幂等）");
+        let ser_first = serde_json::to_string(&first[0].to_value()).expect("序列化");
+        let ser_second = serde_json::to_string(&second[0].to_value()).expect("序列化");
+        assert_eq!(ser_first, ser_second, "序列化字节必须一致（历史回放与新增同路径）");
+    }
+
+    /// T-34（R-J）：消息本体保持 raw——清洗只发生在 wire 投影面，落库/
+    /// 事件/工具返回的 AgentMessage 原文不被修改（不污染共享 Arc）
+    #[test]
+    fn wire_cleaning_keeps_message_body_raw() {
+        let raw = "\x1b[31mraw\x1b[0m\n\n\nx\nx\nx\n".repeat(3);
+        let msg = message(
+            AgentMessageRole::Tool,
+            vec![tool_result_block("call_1", ToolOutput::text(&raw))],
+        );
+        let _ = to_chat_messages(
+            None,
+            std::slice::from_ref(&msg),
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        // 消息本体逐字节不变（清洗不落到记录面）
+        let AgentMessageBlock::ToolResult { output, .. } = &msg.blocks[0] else {
+            panic!("必须为 ToolResult 块");
+        };
+        assert_eq!(
+            output.text.as_deref(),
+            Some(raw.as_str()),
+            "消息本体必须保持 raw（清洗只发生在 wire 投影面，R-J）"
+        );
     }
 
     #[test]

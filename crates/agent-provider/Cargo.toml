@@ -12,6 +12,10 @@ workspace = true
 
 [dependencies]
 conex-types = { path = "../conex-types" }
+# T-34（00-plan §8.2 / R-J）：clean_output 清洗管线在 wire 序列化面统一
+# 应用（to_chat_messages 投影）；conex-compaction 仅依赖 conex-types +
+# serde_json（均已在依赖树），无环（agent-provider 不被其反向依赖）
+conex-compaction = { path = "../conex-compaction" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 # test-util：重试器测试用 tokio::time::pause/advance 推进时钟（B2.7）
