@@ -6,7 +6,7 @@ const path = require('path');
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
   
   await page.goto('http://localhost:5173/');
-  await page.waitForSelector('.markdown-engine');
+  await page.waitForSelector('.editor-container');
   
   console.log('[1/5] Injecting test table Markdown into editor...');
   await page.evaluate(() => {
