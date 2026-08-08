@@ -517,4 +517,40 @@ mod tests {
         assert!(parser.push(b"\n\n").unwrap().is_empty(), "空帧体不产出帧");
         assert!(parser.finish().unwrap().is_empty());
     }
+
+    #[test]
+    fn oversized_pending_without_separator_is_rejected() {
+        // F3 #5 红：服务端持续灌无分隔符数据 → pending 无界增长（OOM 面）。
+        // 现实现静默缓冲不报错 → 本用例失败；修复后必须上抛 FrameTooLarge。
+        // 注：4MB 为修复引入的单帧上限（MAX_PENDING_BYTES），此处用字面量
+        // 保持红测试在旧实现上可编译、以断言形态复现缺陷。
+        let mut parser = SseParser::new();
+        let big = "a".repeat(4 * 1024 * 1024 + 1);
+        let result = parser.push(big.as_bytes());
+        assert!(
+            result.is_err(),
+            "超限 pending（>4MB 无分隔符）应上抛错误，而非静默缓冲"
+        );
+    }
+
+    #[test]
+    fn many_frames_in_one_push_parse_in_single_pass() {
+        // F3 #5 性能红：单次 push 内大量小帧必须单遍分帧（O(n)）。
+        // 旧实现 split_frames 每帧 find_separator 重扫 + drain 前移 →
+        // O(n²)，30k 帧（420KB）debug 下需数十秒；单遍应 < 10s（宽裕阈值）。
+        let frame = "data: {\"a\":1}\n\n";
+        let mut input = String::with_capacity(frame.len() * 30_000);
+        for _ in 0..30_000 {
+            input.push_str(frame);
+        }
+        let mut parser = SseParser::new();
+        let started = std::time::Instant::now();
+        let frames = parser.push(input.as_bytes()).expect("合法帧不应报错");
+        let elapsed = started.elapsed();
+        assert_eq!(frames.len(), 30_000, "全部帧都应产出");
+        assert!(
+            elapsed.as_secs() < 10,
+            "解析 30k 帧耗时 {elapsed:?}，疑似 O(n²) 逐帧重扫（期望单遍 <10s）"
+        );
+    }
 }

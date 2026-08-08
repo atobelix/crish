@@ -85,6 +85,31 @@ describe('正常分帧', () => {
 });
 
 // ──────────────────────────────────────────────
+describe('F5-05/F5-06：单块超限拆帧（死代码回归）', () => {
+  it('超大单 delta（> maxBytesPerFrame）不得整块单帧输出，须按上限拆帧', async () => {
+    // 旧实现 flushFrame 中「batch.length === 0 拆块」分支不可达：
+    // 首块无条件 push（wouldExceed 仅对非空 batch 拦截）→ 10MB 级单 delta
+    // 整块单帧输出，maxBytesPerFrame/frameBudgetMs 全部失效、长任务阻塞。
+    const buf = new StreamRenderBuffer({ maxBytesPerFrame: 100 });
+    const frames: RenderFrame[] = [];
+    buf.onFrame = (f) => frames.push(f);
+
+    buf.push('a'.repeat(5000));
+    // 非 force 逐帧刷完（rAF 在测试环境为 stub，手动循环 flush）
+    while (buf.bufferedLength() > 0) {
+      await buf.flush(false);
+    }
+
+    const allDelta = frames.map((f) => f.delta).join('');
+    expect(allDelta).toBe('a'.repeat(5000));
+    expect(frames.length).toBeGreaterThan(1);
+    for (const f of frames) {
+      expect(f.delta.length).toBeLessThanOrEqual(100);
+    }
+  });
+});
+
+// ──────────────────────────────────────────────
 describe('maxBacklogBytes 降级跳帧', () => {
   it('积压超过 maxBacklogBytes 时 degraded=true', async () => {
     const buf = new StreamRenderBuffer({
