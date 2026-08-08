@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useState, useEffect } from 'react';
 import { useEditorStore } from '../core/EditorStore';
+import { useTableStore } from '../core/TableStore';
 import { getCoordinatesFromIndex } from '../core/measure';
 
 interface CursorLayerProps {
@@ -15,6 +16,7 @@ export const CursorLayer: React.FC<CursorLayerProps> = ({
   const selectionStart = useEditorStore(state => state.selectionStart);
   const selectionEnd = useEditorStore(state => state.selectionEnd);
   const isComposing = useEditorStore(state => state.isComposing);
+  const selectedCell = useTableStore(state => state.selectedCell);
 
   const [coords, setCoords] = useState<{
     top: number;
@@ -67,9 +69,9 @@ export const CursorLayer: React.FC<CursorLayerProps> = ({
     };
   }, [cursorPos, selectionStart, selectionEnd, containerRef, layoutDeps]);
 
-  // Do not show the cursor if there is a selection or if we are composing IME
-  if (!coords || hasSelection || isComposing) {
-    console.log('Cursor hidden:', { coords, hasSelection, isComposing });
+  // Do not show the cursor if there is a text selection, or IME composing, or if in cell selection mode (not editing)
+  const isCellSelectionMode = Boolean(selectedCell && !selectedCell.isEditing);
+  if (!coords || hasSelection || isComposing || isCellSelectionMode) {
     return null;
   }
 

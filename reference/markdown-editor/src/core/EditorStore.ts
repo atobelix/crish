@@ -312,6 +312,8 @@ function updateLinesIncremental(
   };
 }
 
+let currentLoadGeneration = 0;
+
 export const useEditorStore = create<EditorState>((set, get) => ({
   lines: [''],
   lineOffsets: new LineOffsetTree([1]),
@@ -331,7 +333,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   getText: () => get().lines.join('\n'),
   getLineIndex: (pos) => get().lineOffsets.findLineIndex(pos),
 
-  setText: (text) =>
+  setText: (text) => {
+    const generation = ++currentLoadGeneration;
     set(() => {
       const lines = text.split('\n');
 
@@ -355,11 +358,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const chunkSize = 2000;
 
       const processNextChunk = () => {
+        if (generation !== currentLoadGeneration) return;
         if (currentIdx >= lines.length) return;
         const endIdx = Math.min(currentIdx + chunkSize, lines.length);
         const chunk = lines.slice(currentIdx, endIdx);
 
         useEditorStore.setState((s) => {
+          if (generation !== currentLoadGeneration) return s;
           const updated = updateLinesIncremental(
             s.lines,
             s.lineOffsets,
@@ -373,6 +378,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         });
 
         currentIdx = endIdx;
+        if (generation !== currentLoadGeneration) return;
         if (typeof window !== 'undefined' && window.requestIdleCallback) {
           window.requestIdleCallback(processNextChunk);
         } else {
@@ -394,7 +400,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         undoStack: [],
         redoStack: [],
       };
-    }),
+    });
+  },
 
   setCursorPos: (pos) =>
     set((state) => {

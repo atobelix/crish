@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run tests/unit",
+    "test:color": "vitest run tests/unit/color-gate.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

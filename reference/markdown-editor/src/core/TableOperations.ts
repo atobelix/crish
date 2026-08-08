@@ -7,6 +7,8 @@
 export interface TableRange {
   startOffset: number;
   endOffset: number;
+  startLineIndex?: number;
+  absoluteLineIndex?: number;
   lines: string[];
   lineOffsets: number[];
   activeLineIndex: number;
@@ -101,11 +103,10 @@ export function findTableRange(text: string, cursorPos: number): TableRange | nu
   }
 
   // 找到当前光标所在行索引
-  let activeLineIdx = 0;
+  let activeLineIdx = lineStartOffsets.length - 1;
   for (let i = 0; i < lineStartOffsets.length; i++) {
-    const lineStart = lineStartOffsets[i];
-    const lineEnd = lineStart + allLines[i].length;
-    if (cursorPos >= lineStart && cursorPos <= lineEnd + 1) {
+    const nextStart = i + 1 < lineStartOffsets.length ? lineStartOffsets[i + 1] : Infinity;
+    if (cursorPos >= lineStartOffsets[i] && cursorPos < nextStart) {
       activeLineIdx = i;
       break;
     }
@@ -164,6 +165,8 @@ export function findTableRange(text: string, cursorPos: number): TableRange | nu
   return {
     startOffset,
     endOffset,
+    startLineIndex: startLineIdx,
+    absoluteLineIndex: activeLineIdx,
     lines: tableLines,
     lineOffsets: tableLineOffsets,
     activeLineIndex: relativeActiveLine,

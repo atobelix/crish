@@ -38,7 +38,6 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     height: number;
   } | null>(null);
   const [isComposing, setIsComposing] = useState(false);
-  const prevDeps = useRef<any>(null);
 
   // Sync input value with current line text
   useLayoutEffect(() => {
@@ -141,6 +140,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     };
 
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (handleTableInteraction(e)) {
+        return;
+      }
       if (e.key === 'Backspace' || e.key === 'Delete') {
         const state = useEditorStore.getState();
         if (state.selectionStart !== state.selectionEnd) {
@@ -162,46 +164,23 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     };
   }, [containerRef]);
 
-  const fastCursorMove = (newPos: number) => {
-    setCursorPos(newPos);
-    // We don't need manual dom manipulation here anymore, since useEffect handles it on cursorPos change
-  };
-
-  
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const text = useEditorStore.getState().getText();
-    const { selectionStart, selectionEnd } = useEditorStore.getState();
-    const cursorPos = useEditorStore.getState().cursorPos;
+  const handleTableInteraction = (e: KeyboardEvent | React.KeyboardEvent) => {
     const selectedCell = useTableStore.getState().selectedCell;
+    if (!selectedCell) return false;
+    const text = useEditorStore.getState().getText();
+    const cursorPos = useEditorStore.getState().cursorPos;
 
-    // Undo / Redo
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-      e.preventDefault();
-      if (e.shiftKey) {
-        useEditorStore.getState().redo();
-      } else {
-        useEditorStore.getState().undo();
-      }
-      return;
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
-      e.preventDefault();
-      useEditorStore.getState().redo();
-      return;
-    }
-
-    // --- 表格单元格交互状态机 (Excel Mode) ---
-    if (selectedCell && !selectedCell.isEditing) {
-      // 1. 单选态 (Cell Selected Mode)
+    if (!selectedCell.isEditing) {
+      // 1. 单元格模式 (Cell Selection Mode - 仅限单元格级别操作)
       if (e.key === 'F2') {
         e.preventDefault();
-        useTableStore.getState().setCellEditing(true);
-        return;
+        useTableStore.getState().enterCellEdit();
+        return true;
       }
       if (e.key === 'Escape') {
         e.preventDefault();
-        useTableStore.getState().setSelectedCell(null);
-        return;
+        useTableStore.getState().clearCellSelection();
+        return true;
       }
       if (e.key === 'Backspace' || e.key === 'Delete') {
         e.preventDefault();
@@ -210,10 +189,10 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
           useEditorStore.setState({ lines: res.newText.split('\n') });
         }
         useEditorStore.getState().setCursorPos(res.newCursorPos);
-        return;
+        return true;
       }
 
-      // 导航键（Tab, Shift+Tab, Enter, Shift+Enter, 方向键）
+      // 单元格网格导航键（Tab, Shift+Tab, Enter, Shift+Enter, 方向键）
       let action: 'tab' | 'shift-tab' | 'enter' | 'shift-enter' | null = null;
       if (e.key === 'Tab') {
         action = e.shiftKey ? 'shift-tab' : 'tab';
@@ -239,15 +218,14 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
           useEditorStore.getState().setCursorPos(res.newCursorPos);
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
-            useTableStore.getState().setSelectedCell({
-              tableId: selectedCell.tableId,
-              lineIndex: newTable.activeLineIndex,
-              colIndex: newTable.activeCellIndex,
-              isEditing: false,
-            });
+            useTableStore.getState().enterCellSelection(
+              selectedCell.tableId,
+              newTable.absoluteLineIndex ?? newTable.activeLineIndex,
+              newTable.activeCellIndex
+            );
           }
         }
-        return;
+        return true;
       }
 
       // 如果按普通字符键（单字符输入），清空当前单元格并直接输入该字符并转为编辑态
@@ -258,15 +236,15 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
           useEditorStore.setState({ lines: res.newText.split('\n') });
         }
         useEditorStore.getState().setCursorPos(res.newCursorPos);
-        useTableStore.getState().setCellEditing(true);
-        return;
+        useTableStore.getState().enterCellEdit();
+        return true;
       }
-    } else if (selectedCell && selectedCell.isEditing) {
-      // 2. 双击编辑态 (Cell In-place Editing Mode)
+    } else {
+      // 2. 单元格就地编辑模式 (Cell In-place Text Edit Mode)
       if (e.key === 'Escape') {
         e.preventDefault();
-        useTableStore.getState().setCellEditing(false);
-        return;
+        useTableStore.getState().exitCellEdit();
+        return true;
       }
       if (e.key === 'Tab') {
         e.preventDefault();
@@ -278,15 +256,14 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
           useEditorStore.getState().setCursorPos(res.newCursorPos);
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
-            useTableStore.getState().setSelectedCell({
-              tableId: selectedCell.tableId,
-              lineIndex: newTable.activeLineIndex,
-              colIndex: newTable.activeCellIndex,
-              isEditing: false, // commit and exit edit mode to select mode
-            });
+            useTableStore.getState().enterCellSelection(
+              selectedCell.tableId,
+              newTable.absoluteLineIndex ?? newTable.activeLineIndex,
+              newTable.activeCellIndex
+            );
           }
         }
-        return;
+        return true;
       }
       if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
@@ -298,21 +275,49 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
           useEditorStore.getState().setCursorPos(res.newCursorPos);
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
-            useTableStore.getState().setSelectedCell({
-              tableId: selectedCell.tableId,
-              lineIndex: newTable.activeLineIndex,
-              colIndex: newTable.activeCellIndex,
-              isEditing: false,
-            });
+            useTableStore.getState().enterCellSelection(
+              selectedCell.tableId,
+              newTable.absoluteLineIndex ?? newTable.activeLineIndex,
+              newTable.activeCellIndex
+            );
           }
         }
-        return;
+        return true;
       }
-      if (e.key === 'Enter' && (e.shiftKey || e.altKey)) {
-        e.preventDefault();
-        insertText('<br>');
-        return;
+    }
+    return false;
+  };
+
+  const fastCursorMove = (newPos: number) => {
+    setCursorPos(newPos);
+    // We don't need manual dom manipulation here anymore, since useEffect handles it on cursorPos change
+  };
+
+  
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const text = useEditorStore.getState().getText();
+    const { selectionStart, selectionEnd } = useEditorStore.getState();
+    const cursorPos = useEditorStore.getState().cursorPos;
+
+    // Undo / Redo
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        useEditorStore.getState().redo();
+      } else {
+        useEditorStore.getState().undo();
       }
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+      e.preventDefault();
+      useEditorStore.getState().redo();
+      return;
+    }
+
+    // --- 表格单元格交互状态机 (Excel Mode) ---
+    if (handleTableInteraction(e)) {
+      return;
     }
 
     if (e.key === 'ArrowLeft') {

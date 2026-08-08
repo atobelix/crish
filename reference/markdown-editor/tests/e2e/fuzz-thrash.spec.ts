@@ -18,7 +18,8 @@ test.describe('Fuzz thrash testing', () => {
         }
       });
 
-      await page.goto('http://localhost:5173');
+      await page.goto('http://localhost:5174');
+      await page.waitForFunction(() => !!(window as any).__CRISH_SESSION_STORE__);
 
       // Inject the fuzz content
       await page.evaluate((content) => {

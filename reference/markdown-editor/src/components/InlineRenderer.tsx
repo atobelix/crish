@@ -19,6 +19,7 @@ function renderMathToHtml(
 }
 
 import { useTableStore } from '../core/TableStore';
+import { useEditorStore } from '../core/EditorStore';
 
 interface InlineRendererProps {
   tokens: InlineNode[];
@@ -77,7 +78,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             case 'strike':
               className = 'style-strike';
               break;
-            case 'inline_code':
+            case 'code':
               className = 'style-inline-code';
               break;
             case 'mark':
@@ -224,27 +225,30 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 style={cellStyle}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedCell({
-                    tableId: tableId || '',
-                    lineIndex: lineIndex ?? -1,
-                    colIndex,
-                    isEditing: false, // 1-click selects cell
-                  });
-                  if (start !== undefined && lineOffset !== undefined) {
-                    useEditorStore.getState().setCursorPos(lineOffset + start + 1);
+                  useTableStore.getState().enterCellSelection(
+                    tableId || '',
+                    lineIndex ?? -1,
+                    colIndex
+                  );
+                  if (start !== undefined) {
+                    useEditorStore.getState().setCursorPos(start + 1);
                   }
+                  const input = document.querySelector('.hidden-input') as HTMLTextAreaElement;
+                  if (input) input.focus();
                 }}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
-                  setSelectedCell({
-                    tableId: tableId || '',
-                    lineIndex: lineIndex ?? -1,
-                    colIndex,
-                    isEditing: true, // 2-click edits cell
-                  });
-                  if (start !== undefined && lineOffset !== undefined) {
-                    useEditorStore.getState().setCursorPos(lineOffset + start + 1);
+                  window.getSelection()?.removeAllRanges();
+                  useTableStore.getState().enterCellEdit(
+                    tableId || '',
+                    lineIndex ?? -1,
+                    colIndex
+                  );
+                  if (start !== undefined) {
+                    useEditorStore.getState().setCursorPos(start + 1);
                   }
+                  const input = document.querySelector('.hidden-input') as HTMLTextAreaElement;
+                  if (input) input.focus();
                 }}
               >
                 {token.children && (

@@ -72,7 +72,7 @@ const LineItem = React.memo(({
       data-line-start={offset}
       data-line-length={lineText.length}
       ref={measureElement}
-      className={activeState ? 'is-active-line' : ''}
+      className={`virtual-row ${activeState ? 'is-active-line' : ''}`.trim()}
       style={{
         position: 'absolute',
         top: `${virtualRow.start}px`,
@@ -109,8 +109,8 @@ export const MarkdownEngine: React.FC = () => {
 
   const handleContainerClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    if (!target.closest('.rendered-table-cell')) {
-      useTableStore.getState().setSelectedCell(null);
+    if (!target.closest('.token-table-cell')) {
+      useTableStore.getState().clearCellSelection();
     }
 
     // If the user selected text, do NOT clear the selection and do NOT move the custom cursor
@@ -294,7 +294,7 @@ export const MarkdownEngine: React.FC = () => {
     >
       <div
         ref={parentRef}
-        className="editor-container"
+        className="editor-container editor-scroll-container"
         onClick={handleContainerClick}
         style={{
           height: '100%',

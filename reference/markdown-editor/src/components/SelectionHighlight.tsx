@@ -92,7 +92,7 @@ export const SelectionHighlight: React.FC = () => {
             left: rect.left,
             width: rect.width,
             height: rect.height,
-            backgroundColor: 'rgba(0, 120, 255, 0.2)',
+            backgroundColor: 'var(--blue-selection)',
           }}
         />
       ))}

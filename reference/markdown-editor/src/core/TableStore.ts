@@ -4,7 +4,7 @@ export interface SelectedCell {
   tableId: string;
   lineIndex: number;
   colIndex: number;
-  isEditing: boolean; // false = cell focus (1-click), true = in-cell text edit (2-click)
+  isEditing: boolean; // false = cell selection mode (1-click), true = cell in-place text edit mode (2-click)
 }
 
 interface TableState {
@@ -14,6 +14,10 @@ interface TableState {
   setTableWidths: (tableId: string, widths: number[]) => void;
   setSelectedCell: (cell: SelectedCell | null) => void;
   setCellEditing: (isEditing: boolean) => void;
+  enterCellSelection: (tableId: string, lineIndex: number, colIndex: number) => void;
+  enterCellEdit: (tableId?: string, lineIndex?: number, colIndex?: number) => void;
+  exitCellEdit: () => void;
+  clearCellSelection: () => void;
 }
 
 export const useTableStore = create<TableState>((set) => ({
@@ -47,6 +51,47 @@ export const useTableStore = create<TableState>((set) => ({
       selectedCell: state.selectedCell
         ? { ...state.selectedCell, isEditing }
         : null,
+    })),
+  enterCellSelection: (tableId, lineIndex, colIndex) =>
+    set(() => ({
+      selectedCell: {
+        tableId,
+        lineIndex,
+        colIndex,
+        isEditing: false,
+      },
+    })),
+  enterCellEdit: (tableId, lineIndex, colIndex) =>
+    set((state) => {
+      if (tableId !== undefined && lineIndex !== undefined && colIndex !== undefined) {
+        return {
+          selectedCell: {
+            tableId,
+            lineIndex,
+            colIndex,
+            isEditing: true,
+          },
+        };
+      }
+      if (state.selectedCell) {
+        return {
+          selectedCell: {
+            ...state.selectedCell,
+            isEditing: true,
+          },
+        };
+      }
+      return state;
+    }),
+  exitCellEdit: () =>
+    set((state) => ({
+      selectedCell: state.selectedCell
+        ? { ...state.selectedCell, isEditing: false }
+        : null,
+    })),
+  clearCellSelection: () =>
+    set(() => ({
+      selectedCell: null,
     })),
 }));
 

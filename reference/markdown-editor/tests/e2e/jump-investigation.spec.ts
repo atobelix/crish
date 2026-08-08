@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 test('click on empty space in hr line', async ({ page }) => {
-  await page.goto('http://localhost:5173');
+  await page.goto('http://localhost:5174');
+  await page.waitForFunction(() => !!(window as any).__CRISH_SESSION_STORE__);
 
   await page.evaluate(() => {
     (window as any).__CRISH_SESSION_STORE__.getState().setText('hello\n---\nworld\n');

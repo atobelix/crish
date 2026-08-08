@@ -56,7 +56,7 @@ function renderMathToHtml(
 }
 
 export const BlockRenderer = memo(
-  ({ block, lineOffset, activeState, tableId }: BlockRendererProps) => {
+  ({ block, index, lineOffset, activeState, tableId }: BlockRendererProps) => {
     switch (block.type) {
       case 'empty':
         return (
@@ -245,7 +245,6 @@ export const BlockRenderer = memo(
         return (
           <div
             className="line-block line-table-separator"
-            style={{ display: 'flex', opacity: 0.5 }}
           >
             {block.inlineTokens && block.inlineTokens.length > 0 ? (
               <InlineRenderer
@@ -266,14 +265,11 @@ export const BlockRenderer = memo(
           </div>
         );
 
-      case 'table_row':
+      case 'table_row': {
+        const isHeaderRow = tableId === `table-${index}`;
         return (
           <div
-            className="line-block line-table-row"
-            style={{
-              display: 'flex',
-              borderBottom: '1px solid var(--border-color)',
-            }}
+            className={`line-block line-table-row ${isHeaderRow ? 'table-header-row' : ''}`}
           >
             {block.inlineTokens && block.inlineTokens.length > 0 ? (
               <InlineRenderer
@@ -288,6 +284,7 @@ export const BlockRenderer = memo(
             )}
           </div>
         );
+      }
 
       case 'body':
       default: {
