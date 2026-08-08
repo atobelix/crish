@@ -997,6 +997,61 @@ fn assemble_context_budget(context_window: u32) -> ContextBudget {
     }
 }
 
+// ── COMPACTION-01 P0-1：压缩策略装配（session_meta 键面）────────────
+
+/// session_meta 键（预留）：保留最近 token 预算覆盖
+/// （conex-compaction 缺省 [conex_compaction::KEEP_RECENT_TOKENS_DEFAULT]）
+const META_KEY_COMPACT_KEEP_RECENT_TOKENS: &str = "compact_keep_recent_tokens";
+/// session_meta 键（预留）：保留最近完整回合数下限覆盖
+/// （conex-compaction 缺省 [conex_compaction::MIN_RECENT_TURNS_DEFAULT]）
+const META_KEY_COMPACT_MIN_RECENT_TURNS: &str = "compact_min_recent_turns";
+
+/// session_meta 键 → [conex_compaction::compaction::CompactionPolicy]
+/// （COMPACTION-01 P0-1 装配 helper：缺省 = 常量默认；键缺失 / 坏值回退
+/// 默认 + warn，不 panic）。
+///
+/// `meta`：键 → 值读取面（生产经 `LocalDb::get_session_meta` 注入；
+/// 测试注入内存表）。
+fn compaction_policy_from_session_meta(
+    meta: impl Fn(&str) -> Option<String>,
+) -> conex_compaction::compaction::CompactionPolicy {
+    let mut policy = conex_compaction::compaction::CompactionPolicy::default();
+    if let Some(raw) = meta(conex_compaction::SESSION_META_KEY_COMPACT_SUMMARY_MAX_TOKENS) {
+        match raw.trim().parse::<usize>() {
+            Ok(value) if value > 0 => policy.max_summary_tokens = value,
+            _ => tracing::warn!(
+                key = conex_compaction::SESSION_META_KEY_COMPACT_SUMMARY_MAX_TOKENS,
+                raw = %raw,
+                default = conex_compaction::MAX_SUMMARY_TOKENS_DEFAULT,
+                "压缩策略键值非法 → 回退缺省 max_summary_tokens"
+            ),
+        }
+    }
+    if let Some(raw) = meta(META_KEY_COMPACT_KEEP_RECENT_TOKENS) {
+        match raw.trim().parse::<usize>() {
+            Ok(value) if value > 0 => policy.keep_recent_tokens = value,
+            _ => tracing::warn!(
+                key = META_KEY_COMPACT_KEEP_RECENT_TOKENS,
+                raw = %raw,
+                default = conex_compaction::KEEP_RECENT_TOKENS_DEFAULT,
+                "压缩策略键值非法 → 回退缺省 keep_recent_tokens"
+            ),
+        }
+    }
+    if let Some(raw) = meta(META_KEY_COMPACT_MIN_RECENT_TURNS) {
+        match raw.trim().parse::<u32>() {
+            Ok(value) if value > 0 => policy.min_recent_turns = value,
+            _ => tracing::warn!(
+                key = META_KEY_COMPACT_MIN_RECENT_TURNS,
+                raw = %raw,
+                default = conex_compaction::MIN_RECENT_TURNS_DEFAULT,
+                "压缩策略键值非法 → 回退缺省 min_recent_turns"
+            ),
+        }
+    }
+    policy
+}
+
 // ── T-AB-19：run 感知后台任务管理器（owner_run_id 注入装饰器）────
 
 /// run 感知后台任务管理器（T-AB-19 装饰器，包壳 [BackgroundTaskManager]）
@@ -1298,8 +1353,9 @@ pub struct CoreRunState {
     store: Arc<dyn Store>,
     /// run 管理器（注册 + 生命周期）
     run_manager: RunManager,
-    /// 引擎句柄（provider 配置 + 工具注册表 + engineReady）
-    engine: EngineHandle,
+    /// 引擎句柄（provider 配置 + 工具注册表 + engineReady；Arc 包装——
+    /// 生产 Summarizer 工厂闭包需 'static 捕获以按会话读取当前生效配置）
+    engine: Arc<EngineHandle>,
     /// 全局事件桥（Tauri 通道；每 run 经 BufferedRunEventBridge 组装缓冲）
     bridge: EventBridge,
     /// 活动 run 注册表（终态移出；会话内串行守卫依据）
@@ -1424,7 +1480,7 @@ impl CoreRunState {
         // 活跃判定经 EngineHandle 访问器取得（engine.rs:775-783，R-CF3
         // 装配收口预留）；SchedulerRegistry enabled 判定在下方经
         // engine.scheduler_registry() 直接装配（30 方案 P7）。
-        let engine = EngineHandle::new_with_spawner(
+        let engine = Arc::new(EngineHandle::new_with_spawner(
             // 引擎侧注入包装实例（保持 Option 语义：未接线 = 引擎无
             // 后台任务通道，与接线前行为一致）
             background
@@ -1435,7 +1491,16 @@ impl CoreRunState {
             // run_subagent 返回 common.unsupported 降级）
             Some(Arc::clone(&subagent_spawner)
                 as Arc<dyn agent_tools::tools::subagent::SubagentSpawner>),
-        );
+        ));
+        // COMPACTION-01 P0-3（生产闭环）：真实 LLM 摘要器工厂装配——会话级
+        // SummarizerFactory = production_summarizer_factory（返回
+        // ProviderSummarizer：经 chat-completions 通道 + 当前 provider
+        // 配置；provider 未就绪 → None → 纯 stub awaiting 语义保持）。
+        // 工厂每次解析读取引擎当前生效配置——config_profile_apply 热更新后
+        // 下一次 run 立即生效。T-43 通道生产注入点（session.start /
+        // 配置加载 = CoreRunState::new，与 SessionHistoryCache 同生命周期）。
+        let summarizer_factory =
+            Some(crate::engine::production_summarizer_factory(Arc::clone(&engine)));
         let pending_queue = engine.timer_steering_queue();
         // 30 方案 P3：任务事件消费器（与 pending_queue 同实例；bridge 为
         // 本状态持有实例的克隆——security-audit 直发不经 engine audit_sink，
@@ -1534,7 +1599,7 @@ impl CoreRunState {
             resume_launcher: Mutex::new(Some(resume_launcher)),
             subagent_spawner,
             summary_coordinators,
-            summarizer_factory: Mutex::new(None),
+            summarizer_factory: Mutex::new(summarizer_factory),
         }
     }
 
@@ -1691,9 +1756,11 @@ impl CoreRunState {
 
     /// T-43：注入会话级 Summarizer 工厂（壳层注入通道；None = 无注入——
     /// 不 spawn 后台摘要任务，纯 stub awaiting 永驻，与接线前行为一致）。
-    /// 生产装配点：session.start / provider 配置加载（真实 provider 调用
-    /// 实现属产品功能，通道本轮打通）。
-    #[cfg_attr(not(test), allow(dead_code))] // T-43 生产装配点 V2 接线；当前仅测试面消费
+    /// **生产装配点已闭环（COMPACTION-01 P0-3）**：[Self::new] 直接装配
+    /// [crate::engine::production_summarizer_factory]（真实 LLM 实现
+    /// ProviderSummarizer，经 chat-completions 通道）；本 setter 保留为
+    /// 测试替换槽 / 显式降级面。
+    #[cfg_attr(not(test), allow(dead_code))] // 生产在 new() 内直接装配；测试替换槽
     pub(crate) fn set_summarizer_factory(&self, factory: Option<crate::engine::SummarizerFactory>) {
         *self
             .summarizer_factory
@@ -1759,6 +1826,39 @@ impl CoreRunState {
             |key| db.get_session_meta(key).ok().flatten(),
             session_loop::MAX_SUMMARY_ATTEMPTS,
         ))
+    }
+
+    /// COMPACTION-01 P0-1（生产闭环）：压缩策略装配——生产恒装配（LocalDb
+    /// store 存在即 Some），默认 [conex_compaction::CompactionPolicy::default]
+    /// （keep_recent_tokens=20000 / min_recent_turns=2 / max_summary_tokens=
+    /// 1024 / tool_pair_protection=true，常量同源），并经 session_meta 键
+    /// 覆盖（读取键不实现 UI；坏值回退默认 + warn，不 panic）：
+    /// - `compact_summary_max_tokens`（[conex_compaction::SESSION_META_KEY_COMPACT_SUMMARY_MAX_TOKENS]）
+    ///   → max_summary_tokens；
+    /// - `compact_keep_recent_tokens` → keep_recent_tokens（预留键）；
+    /// - `compact_min_recent_turns` → min_recent_turns（预留键）。
+    ///
+    /// 阈值键（compact_threshold_ratio / compact_critical_ratio）属双阈值
+    /// 触发面（DEEPCHECK-11 P1-6 挂账），本策略面不消费。装配后预检
+    /// （maybe_compact_preflight）与溢出阶梯（compression_ladder）在生产
+    /// 可触发——总闸门解除焊死。
+    pub(crate) fn compaction_policy_for(
+        &self,
+        session_id: &str,
+    ) -> Option<conex_compaction::compaction::CompactionPolicy> {
+        let db = self.local_db()?;
+        let policy = compaction_policy_from_session_meta(|key| {
+            db.get_session_meta(key).ok().flatten()
+        });
+        tracing::debug!(
+            target: "run",
+            session_id = session_id,
+            keep_recent_tokens = policy.keep_recent_tokens,
+            min_recent_turns = policy.min_recent_turns,
+            max_summary_tokens = policy.max_summary_tokens,
+            "压缩策略装配完成（P0-1：session_meta 键覆盖 / 常量默认）"
+        );
+        Some(policy)
     }
 
     /// T-42：会话级摘要协调器（跨 run 单飞容器；注册表持有——同会话
@@ -3306,9 +3406,15 @@ pub(crate) async fn run_task_impl(
         // T-D-13：子代理 run 的配额上下文（design/review 凭证；None =
         // 主 agent 不受配额约束，现状行为）
         explore_docs_quota: subagent_quota.clone(),
+        // COMPACTION-01 P0-1（生产闭环）：压缩策略装配——默认 20000/2/1024
+        // （conex-compaction 常量）经 session_meta 键覆盖（compact_summary_
+        // max_tokens 等，读取键不实现 UI）；装配后预检压缩在生产可触发
+        // （此前走 ..Default::default() 回落到 None，预检/溢出恒不触发）
+        compaction_policy: state.compaction_policy_for(&session_id),
         // T-42/T-43/T-44（记忆韧性轮次 6）：摘要后台面三线装配——
-        // - summarizer：会话级 Summarizer 工厂解析（无注入 → None → 不
-        //   spawn，纯 stub awaiting 永驻，与接线前行为一致）；
+        // - summarizer：会话级 Summarizer 工厂解析（生产工厂 = 真实 LLM
+        //   实现 ProviderSummarizer，COMPACTION-01 P0-3 闭环；无注入 →
+        //   None → 不 spawn，纯 stub awaiting 永驻，与接线前行为一致）；
         // - summary_dispatch：session_meta 配置面（compact_summary_backoff_ms
         //   / compact_summary_wall_ms；无键 = None = 生产缺省退避参数）；
         // - summary_coordinator：会话级协调器（跨 run 单飞 + 全局并发
@@ -4661,7 +4767,10 @@ mod tests {
         let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
         let state = core_state_with_store(store);
 
-        // 未注入 → None（无注入不 spawn 语义，00-plan §6.4）
+        // 生产装配（COMPACTION-01 P0-3）：CoreRunState::new 已装配真实
+        // 工厂——测试显式清空回到「无注入」基线（provider 未就绪时工厂
+        // 本身也解析 None，此处显式清空保证断言与机器配置无关）
+        state.set_summarizer_factory(None);
         assert!(state.summarizer_for("s1").is_none(), "无工厂 = 无注入");
 
         // 注入工厂：per-session 实例（04 §7.1 隔离决议——按会话创建）
@@ -4744,6 +4853,236 @@ mod tests {
         assert!(!Arc::ptr_eq(&c1, &c2), "跨会话各自成实例（会话隔离）");
         assert_eq!(c1.session_id(), "s1");
         assert_eq!(c2.session_id(), "s2");
+    }
+
+    // ── COMPACTION-01 P0-1：压缩策略装配（session_meta 键面 + 触发验收）──
+
+    /// P0-1 装配：无 session_meta 键 → 常量默认 policy（keep_recent_tokens
+    /// 20000 / min_recent_turns 2 / max_summary_tokens 1024 / tool_pair
+    /// protection true）；生产恒装配（LocalDb store 存在即 Some——预检与
+    /// 溢出触发链解除焊死）
+    #[test]
+    fn compaction_policy_assembled_with_defaults() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+        let state = core_state_with_store(store);
+
+        let policy = state
+            .compaction_policy_for("s1")
+            .expect("生产必须装配压缩策略（预检可触发）");
+        assert_eq!(
+            policy.keep_recent_tokens,
+            conex_compaction::KEEP_RECENT_TOKENS_DEFAULT,
+            "keep_recent_tokens 默认 20000（常量同源）"
+        );
+        assert_eq!(
+            policy.min_recent_turns,
+            conex_compaction::MIN_RECENT_TURNS_DEFAULT,
+            "min_recent_turns 默认 2"
+        );
+        assert_eq!(
+            policy.max_summary_tokens,
+            conex_compaction::MAX_SUMMARY_TOKENS_DEFAULT,
+            "max_summary_tokens 默认 1024"
+        );
+        assert!(policy.tool_pair_protection, "tool 配对保护默认开启");
+    }
+
+    /// P0-1 覆盖：session_meta 键覆盖生效（compact_summary_max_tokens /
+    /// compact_keep_recent_tokens / compact_min_recent_turns）；坏值 / 0 值
+    /// 回退默认 + 不 panic
+    #[test]
+    fn compaction_policy_overrides_and_malformed_fall_back() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        db.set_session_meta(
+            conex_compaction::SESSION_META_KEY_COMPACT_SUMMARY_MAX_TOKENS,
+            "2048",
+        )
+        .unwrap();
+        db.set_session_meta("compact_keep_recent_tokens", "8000").unwrap();
+        db.set_session_meta("compact_min_recent_turns", "4").unwrap();
+        let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+        let state = core_state_with_store(store);
+
+        let policy = state
+            .compaction_policy_for("s1")
+            .expect("装配 policy");
+        assert_eq!(policy.max_summary_tokens, 2048, "compact_summary_max_tokens 覆盖");
+        assert_eq!(policy.keep_recent_tokens, 8000, "compact_keep_recent_tokens 覆盖");
+        assert_eq!(policy.min_recent_turns, 4, "compact_min_recent_turns 覆盖");
+
+        // 坏值 → 回退默认（不 panic）
+        db.set_session_meta(
+            conex_compaction::SESSION_META_KEY_COMPACT_SUMMARY_MAX_TOKENS,
+            "oops",
+        )
+        .unwrap();
+        db.set_session_meta("compact_keep_recent_tokens", "-1").unwrap();
+        db.set_session_meta("compact_min_recent_turns", "0").unwrap();
+        let policy = state
+            .compaction_policy_for("s1")
+            .expect("坏值兜底后仍装配");
+        assert_eq!(
+            policy.max_summary_tokens,
+            conex_compaction::MAX_SUMMARY_TOKENS_DEFAULT,
+            "坏值回退默认 max_summary_tokens"
+        );
+        assert_eq!(
+            policy.keep_recent_tokens,
+            conex_compaction::KEEP_RECENT_TOKENS_DEFAULT,
+            "坏值回退默认 keep_recent_tokens"
+        );
+        assert_eq!(
+            policy.min_recent_turns,
+            conex_compaction::MIN_RECENT_TURNS_DEFAULT,
+            "0 值回退默认 min_recent_turns"
+        );
+    }
+
+    /// P0-1 触发验收（完整 run 链路，mock provider 场景）：历史水合超大
+    /// 对话 → 首个 prepare_turn 估算超窗（estimate ≥ window - reserve）→
+    /// 预检压缩真实触发 → context-compression-start / end 事件广播落库 →
+    /// 压缩后（中性 stub 进链）继续请求并正常收口。Summarizer 显式关闭
+    /// 保证确定性（不走真实 HTTP；压缩产物 = 中性 stub，awaiting 语义）。
+    #[tokio::test]
+    async fn compaction_policy_preflight_triggers_compaction_in_full_run() {
+        let huge = "x".repeat(160_000);
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("压缩后收口回复。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _emitter) = run_control_test_state(provider);
+        // P0-1 确定性：显式关闭真实 LLM 摘要器（测试不走 HTTP；压缩走中性
+        // stub——预检触发链本身不依赖 summarizer）
+        state.set_summarizer_factory(None);
+        state.run_restore().await;
+
+        // 历史水合：u1,a1,u2,a2,u3,a3,u4(超大)——水合尾部约束要求以 user
+        // 收尾（assistant 收尾被截断）；尾部倒推 cut 落在 u4（超大），
+        // 保留段首条 = user（T-36 形状护栏：无 system 会话链后首条必须
+        // 为 user）→ dropped=[u1..a3] 六条
+        let history = vec![
+            HistoryMessage {
+                id: "h-u1".to_string(),
+                sender: "user".to_string(),
+                text: Some("第一轮提问".to_string()),
+                thinking: None,
+                blocks_json: None,
+                tool_calls_json: None,
+                tool_call_results_json: None,
+                status: Some("completed".to_string()),
+                timestamp: 1_700_000_000_000,
+            },
+            HistoryMessage {
+                id: "h-a1".to_string(),
+                sender: "assistant".to_string(),
+                text: Some("第一轮回复".to_string()),
+                thinking: None,
+                blocks_json: None,
+                tool_calls_json: None,
+                tool_call_results_json: None,
+                status: Some("completed".to_string()),
+                timestamp: 1_700_000_000_001,
+            },
+            HistoryMessage {
+                id: "h-u2".to_string(),
+                sender: "user".to_string(),
+                text: Some("第二轮提问".to_string()),
+                thinking: None,
+                blocks_json: None,
+                tool_calls_json: None,
+                tool_call_results_json: None,
+                status: Some("completed".to_string()),
+                timestamp: 1_700_000_000_002,
+            },
+            HistoryMessage {
+                id: "h-a2".to_string(),
+                sender: "assistant".to_string(),
+                text: Some("第二轮回复".to_string()),
+                thinking: None,
+                blocks_json: None,
+                tool_calls_json: None,
+                tool_call_results_json: None,
+                status: Some("completed".to_string()),
+                timestamp: 1_700_000_000_003,
+            },
+            HistoryMessage {
+                id: "h-u3".to_string(),
+                sender: "user".to_string(),
+                text: Some("第三轮提问".to_string()),
+                thinking: None,
+                blocks_json: None,
+                tool_calls_json: None,
+                tool_call_results_json: None,
+                status: Some("completed".to_string()),
+                timestamp: 1_700_000_000_004,
+            },
+            HistoryMessage {
+                id: "h-a3".to_string(),
+                sender: "assistant".to_string(),
+                text: Some("第三轮回复".to_string()),
+                thinking: None,
+                blocks_json: None,
+                tool_calls_json: None,
+                tool_call_results_json: None,
+                status: Some("completed".to_string()),
+                timestamp: 1_700_000_000_005,
+            },
+            HistoryMessage {
+                id: "h-u4".to_string(),
+                sender: "user".to_string(),
+                text: Some(huge.clone()),
+                thinking: None,
+                blocks_json: None,
+                tool_calls_json: None,
+                tool_call_results_json: None,
+                status: Some("completed".to_string()),
+                timestamp: 1_700_000_000_006,
+            },
+        ];
+        let options = RunTaskOptions {
+            history: Some(history),
+            // 窗口 40000：reserve 16384 → 预算 23616；估算 ≈ 42K+ ≥ 预算
+            // → 预检触发（此前 compaction_policy=None 恒不触发）
+            context_window: Some(40_000),
+            ..test_options("run-compact", "s1", "发起长会话")
+        };
+        run_task_impl(Arc::clone(&state), options)
+            .await
+            .expect("run 发起成功");
+        wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
+
+        // 压缩事件：start + end 各一条（预检触发链真实走通）
+        let events = db.query_events("s1", 0, Some(500)).expect("事件查询");
+        let starts = events
+            .iter()
+            .filter(|e| e.event_type == "context-compression-start")
+            .count();
+        let ends = events
+            .iter()
+            .filter(|e| e.event_type == "context-compression-end")
+            .count();
+        assert_eq!(starts, 1, "预检压缩应广播 context-compression-start");
+        assert_eq!(ends, 1, "预检压缩应广播 context-compression-end");
+        // 压缩记录载荷：stub 摘要（summarizer 关闭 → awaiting），丢弃消息
+        // = 前两轮（u1,a1），保留段从第二轮提问起
+        let end = events
+            .iter()
+            .find(|e| e.event_type == "context-compression-end")
+            .expect("end 事件存在");
+        let payload: serde_json::Value =
+            serde_json::from_str(&end.payload).expect("压缩载荷为合法 JSON");
+        let dropped = payload["result"]["compressedMessageIds"]
+            .as_array()
+            .map(|arr| arr.len())
+            .unwrap_or(0);
+        assert!(dropped >= 1, "压缩必须丢弃历史消息（dropped={dropped}）");
+        assert!(
+            payload["result"]["summary"].as_str().is_some(),
+            "压缩载荷须携带摘要文本"
+        );
     }
 
     // ── PS-04 T4.3（F4 F1-01）：config_profile_apply 后 provider 重载 ──

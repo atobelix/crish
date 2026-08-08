@@ -712,6 +712,198 @@ impl crate::watchdog::DispatchStore for MemoryWaitStore {
 pub type SummarizerFactory =
     Box<dyn Fn(&str) -> Option<Arc<dyn conex_compaction::Summarizer>> + Send + Sync>;
 
+/// 摘要请求超时（秒；单次摘要调用总预算，对齐后台墙钟
+/// [session_loop::LOOP_SUMMARY_MAX_WALL_MS] ≈ 60s 的同步面口径）
+const SUMMARY_HTTP_TIMEOUT: Duration = Duration::from_secs(60);
+/// 摘要请求线程存活兜底（recv 等待预算 = 请求超时 + 30s 余量，
+/// 线程内 reqwest 自带超时保证 ≤60s 终止，不会悬挂）
+const SUMMARY_HTTP_RECV_TIMEOUT: Duration = Duration::from_secs(90);
+
+/// 生产 LLM 摘要器（COMPACTION-01 P0-3 闭环：真实 provider 调用，
+/// 经 chat-completions 通道，模型用当前 provider 配置）。
+///
+/// ## C14 缓存隔离（摘要请求独立前缀域）
+///
+/// - **单条 user 消息**：摘要提示词（含既有摘要 + 丢弃消息渲染）整体作为
+///   唯一 user 消息发出，无 system 消息——不继承主对话任何前缀；
+/// - **无 tools**：请求体不含 `tools` / `tool_choice` 字段；
+/// - **无缓存断点**：`cache: None`——请求体不含 `prompt_cache_key` /
+///   `prompt_cache_retention` / `prompt_cache_options`，消息上无
+///   `cache_control` 断点（build_chat_completions_request_body 的
+///   compactObject 语义：None 一律省略）；
+/// - **无会话亲和键**：不携带 session_id，HTTP 头仅 Authorization——
+///   无 x-grok-conv-id 等粘性路由头（affinity_http_headers 依赖
+///   CachePolicy，本实现恒 None → 零追加头）。
+///
+/// ## 同步 trait 面内的异步执行
+///
+/// [conex_compaction::Summarizer] 为同步签名；真实调用需异步 HTTP。
+/// 实现经「专用 std 线程 + 独立 current_thread runtime」承接：在全新线程
+/// 内构建独立 tokio runtime 并 block_on 异步 reqwest 调用——不嵌套在
+/// 调用方 runtime 上（同步预检路径在 tokio 主循环线程内调用也不 panic、
+/// 不占用主 runtime worker；后台路径原样经 spawn_blocking 承接）。线程
+/// 内 reqwest 自带 [SUMMARY_HTTP_TIMEOUT] 兜底，最坏 ≤60s 自终止。
+///
+/// 失败降级：任何错误（传输 / 非 2xx / 响应缺 content）返回 Err——调用方
+/// （引擎同步面 / 后台调度）按契约回退 L1 占位符（中性 stub），不阻塞
+/// 主对话。
+pub(crate) struct ProviderSummarizer {
+    /// 共享 reqwest 客户端（与引擎同实例，连接池复用——AA-02 S-7）
+    client: reqwest::Client,
+    /// 生效 provider 配置快照（工厂解析时刻的当前配置；reload 后下一次
+    /// run 经 factory 重新解析获得新快照）
+    config: EngineProviderConfig,
+    /// 摘要输出 token 预算（默认 [conex_compaction::MAX_SUMMARY_TOKENS_DEFAULT]）
+    max_summary_tokens: usize,
+}
+
+impl ProviderSummarizer {
+    pub(crate) fn new(
+        client: reqwest::Client,
+        config: EngineProviderConfig,
+        max_summary_tokens: usize,
+    ) -> Self {
+        Self {
+            client,
+            config,
+            max_summary_tokens,
+        }
+    }
+
+    /// 构建摘要请求体（纯函数，测试断言 C14 隔离面：单条 user 消息 /
+    /// 无 tools / 无缓存参数）
+    fn build_request_body(&self, prompt: &str) -> serde_json::Value {
+        let options = ChatCompletionsRequestOptions {
+            model: Some(self.config.model.clone()),
+            // 非流式：一次收全响应，同步面逐字节解析
+            stream: Some(false),
+            max_tokens: Some(self.max_summary_tokens as u64),
+            max_tokens_field: Some(MaxTokensField::MaxTokens),
+            // C14：None = 完全不参与缓存（无 prompt_cache_key / 断点 /
+            // 会话亲和键），请求体不含任何 cache 键
+            cache: None,
+            ..ChatCompletionsRequestOptions::default()
+        };
+        let message = user_message(prompt, None);
+        let message_arc = Arc::new(message);
+        let context = RequestBuildContext {
+            system_prompt: None,
+            messages: std::slice::from_ref(&message_arc),
+            tools: Vec::new(),
+            wire_mode: SystemPromptWireMode::NativeSystemRole,
+        };
+        build_chat_completions_request_body(&options, &context)
+    }
+}
+
+impl conex_compaction::Summarizer for ProviderSummarizer {
+    fn summarize(
+        &self,
+        dropped: &[conex_types::message::AgentMessage],
+        existing: Option<&str>,
+    ) -> Result<String, String> {
+        // 提示词 = 引擎侧单源（ai_summary::build_summarize_prompt，Schema V1
+        // JSON 输出契约，P1-C 对齐后不再是五字段孤儿）
+        let prompt = conex_compaction::ai_summary::build_summarize_prompt(dropped, existing);
+        let body = self.build_request_body(&prompt);
+        let url = provider_url(&self.config);
+        let api_key = self.config.api_key.clone();
+        let client = self.client.clone();
+        // 专用线程 + 独立 current_thread runtime（见类型注释：不嵌套调用方
+        // runtime；线程内 reqwest 超时兜底，最坏 ≤60s 自终止）
+        let (tx, rx) = std::sync::mpsc::channel();
+        let thread = std::thread::Builder::new()
+            .name("conex-summary-http".to_string())
+            .spawn(move || {
+                let runtime = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(runtime) => runtime,
+                    Err(error) => {
+                        let _ = tx.send(Err(format!("摘要运行时构建失败：{error}")));
+                        return;
+                    }
+                };
+                let result = runtime.block_on(async move {
+                    let response = client
+                        .post(&url)
+                        .header("Authorization", format!("Bearer {api_key}"))
+                        .timeout(SUMMARY_HTTP_TIMEOUT)
+                        .json(&body)
+                        .send()
+                        .await
+                        .map_err(|error| format!("摘要请求失败：{error}"))?;
+                    let status = response.status();
+                    let text = response
+                        .text()
+                        .await
+                        .map_err(|error| format!("摘要响应读取失败：{error}"))?;
+                    if !status.is_success() {
+                        let excerpt: String = text.chars().take(200).collect();
+                        return Err(format!("摘要 HTTP {status}：{excerpt}"));
+                    }
+                    summary_content_from_response(&text).ok_or_else(|| {
+                        "摘要响应缺少 choices[0].message.content（非空文本）".to_string()
+                    })
+                });
+                let _ = tx.send(result);
+            })
+            .map_err(|error| format!("摘要请求线程启动失败：{error}"))?;
+        // recv 超时兜底（线程内 reqwest 超时保证 ≤60s 自终止；超时返回后
+        // 句柄 drop 分离线程，不 join 阻塞）
+        let inner = rx
+            .recv_timeout(SUMMARY_HTTP_RECV_TIMEOUT)
+            .map_err(|_| format!("摘要 HTTP 调用超时（>{:?} 无响应）", SUMMARY_HTTP_RECV_TIMEOUT))?;
+        let _ = thread;
+        inner
+    }
+}
+
+/// 从 chat-completions 非流响应提取正文（`choices[0].message.content`；
+/// 缺失 / 空串 / 非法 JSON → None → 调用方降级 L1 占位符）
+fn summary_content_from_response(text: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    let content = value
+        .get("choices")?
+        .as_array()?
+        .first()?
+        .get("message")?
+        .get("content")?
+        .as_str()?;
+    let content = content.trim();
+    if content.is_empty() {
+        None
+    } else {
+        Some(content.to_string())
+    }
+}
+
+/// 生产 Summarizer 工厂（COMPACTION-01 P0-3 闭环：factory 返回真实 LLM
+/// 实现 [ProviderSummarizer]——替代测试面 fake 注入）。
+///
+/// - 按会话解析（per-session 实例边界，04 §7.1 隔离决议）：每次解析读取
+///   引擎**当前**生效 provider 配置 + 共享连接池客户端——`config_profile_apply`
+///   热更新后下一次 run 立即生效（与 [EngineHandle::reload_provider] 同源）；
+/// - provider 未就绪（三件套缺失）→ None（不注入，纯 stub awaiting 语义
+///   保持，与接线前一致）；
+/// - 摘要输出预算默认 [conex_compaction::MAX_SUMMARY_TOKENS_DEFAULT]（1024，
+///   与 CompactionPolicy 默认同源；session_meta 覆盖经 policy 面生效，引擎
+///   侧字节预算校验兜底）。
+pub(crate) fn production_summarizer_factory(
+    engine: Arc<EngineHandle>,
+) -> SummarizerFactory {
+    Box::new(move |_session_id: &str| {
+        let config = engine.provider_config()?;
+        let client = engine.http_client();
+        Some(Arc::new(ProviderSummarizer::new(
+            client,
+            config,
+            conex_compaction::MAX_SUMMARY_TOKENS_DEFAULT,
+        )) as Arc<dyn conex_compaction::Summarizer>)
+    })
+}
+
 /// 引擎句柄（B6.4：provider 生效配置 + 工具注册表 + engineReady）
 ///
 /// - `ready()`：provider 配置三件套（baseUrl/model/apiKey）齐备即可发起
@@ -1018,6 +1210,12 @@ impl EngineHandle {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
+    }
+
+    /// 共享 reqwest 客户端克隆（ProviderSummarizer 复用连接池——AA-02 S-7；
+    /// provider 重载重建适配层但复用同一客户端，摘要面同源）
+    pub(crate) fn http_client(&self) -> reqwest::Client {
+        self.http_client.clone()
     }
 
     /// 重建 provider 适配层并原子交换（F4 F1-01 修复，PS-04 T4.3 接线点：
@@ -2135,9 +2333,11 @@ impl SessionLoopProducer {
 mod tests {
     use super::*;
     use agent_provider::request::cache::{CacheKey, CacheMechanism};
+    use conex_compaction::Summarizer;
     use conex_types::ContextBudget;
     use session_loop::provider::ProviderStreamItem;
     use session_loop::TestProvider;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     /// ISO8601 时间戳形状（毫秒精度 + Z 后缀）
     #[test]
@@ -2767,6 +2967,312 @@ mod tests {
             "预算钳制应把 max_tokens 收到默认 8192 之下（实际 {max_tokens}）"
         );
         assert!(max_tokens >= 1, "钳制下限 MIN_MAX_TOKENS = 1");
+    }
+
+    // ── COMPACTION-01 P0-3：生产 Summarizer（ProviderSummarizer）──────
+
+    fn summary_config(base_url: String, model: &str) -> EngineProviderConfig {
+        EngineProviderConfig {
+            base_url,
+            api_key: "sk-summary".to_string(),
+            model: model.to_string(),
+            endpoint: Endpoint::ChatCompletions,
+            stream: false,
+            extra: BTreeMap::new(),
+        }
+    }
+
+    fn dropped_summary_messages() -> Vec<conex_types::message::AgentMessage> {
+        vec![
+            AgentMessage {
+                id: "u-drop".to_string(),
+                role: AgentMessageRole::User,
+                created_at: "2026-08-09T10:00:00.000Z".to_string(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: "实现压缩模块".to_string(),
+                }],
+                metadata: None,
+                client_message_id: None,
+                content: None,
+            },
+            AgentMessage {
+                id: "a-drop".to_string(),
+                role: AgentMessageRole::Assistant,
+                created_at: "2026-08-09T10:00:01.000Z".to_string(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: "已完成（read_file src/lib.rs）".to_string(),
+                }],
+                metadata: None,
+                client_message_id: None,
+                content: None,
+            },
+        ]
+    }
+
+    /// C14 隔离面（请求体纯函数断言）：摘要请求 = 单条 user 消息、
+    /// 无 system、无 tools、无任何缓存键 / 断点（prompt_cache_key /
+    /// prompt_cache_retention / prompt_cache_options / cache_control）、
+    /// 无会话亲和参数；模型 / 非流式 / max_tokens 预算正确透传。
+    #[test]
+    fn provider_summarizer_request_body_is_c14_isolated() {
+        let summarizer = ProviderSummarizer::new(
+            reqwest::Client::new(),
+            summary_config("https://x.example/v1".to_string(), "model-a"),
+            conex_compaction::MAX_SUMMARY_TOKENS_DEFAULT,
+        );
+        let body = summarizer.build_request_body("摘要提示词内容");
+        let messages = body["messages"].as_array().expect("messages 必须为数组");
+        assert_eq!(messages.len(), 1, "摘要请求必须是单条消息（独立前缀域）");
+        assert_eq!(
+            messages[0]["role"], "user",
+            "唯一消息必须是 user（无 system 注入）"
+        );
+        assert!(
+            messages[0]["content"]
+                .as_str()
+                .map(|s| s.contains("摘要提示词内容"))
+                .unwrap_or(false),
+            "提示词经单条 user 消息 content 发出"
+        );
+        assert!(body.get("tools").is_none(), "摘要请求不得携带 tools");
+        assert!(body.get("tool_choice").is_none(), "摘要请求不得携带 tool_choice");
+        assert!(body.get("system").is_none(), "摘要请求不得携带 system 消息");
+        // C14：无缓存断点 / 无会话亲和键（cache: None → 整个 cache 参数组不出现）
+        for key in [
+            "prompt_cache_key",
+            "prompt_cache_retention",
+            "prompt_cache_options",
+        ] {
+            assert!(body.get(key).is_none(), "请求体不得含缓存键 {key}");
+        }
+        assert!(
+            messages[0].get("cache_control").is_none(),
+            "消息不得含 cache_control 断点"
+        );
+        // 模型 / 预算 / 非流式
+        assert_eq!(body["model"], "model-a");
+        assert_eq!(body["stream"], false);
+        assert_eq!(body["max_tokens"], 1024);
+    }
+
+    /// 本地 mock 服务器（COMPACTION-01 P0-3 测试）：捕获请求体 JSON +
+    /// 按脚本逐连接返回 canned HTTP 响应
+    struct SummaryMockServer {
+        addr: std::net::SocketAddr,
+        captured: Arc<Mutex<Vec<serde_json::Value>>>,
+    }
+
+    impl SummaryMockServer {
+        async fn start(respond: Vec<(u16, String)>) -> Arc<Self> {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind summary mock server");
+            let addr = listener.local_addr().expect("local addr");
+            let captured: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
+            let server = Arc::new(Self {
+                addr,
+                captured: Arc::clone(&captured),
+            });
+            tokio::spawn(async move {
+                for (status, body) in respond {
+                    let Ok((mut socket, _)) = listener.accept().await else {
+                        break;
+                    };
+                    let captured = Arc::clone(&captured);
+                    tokio::spawn(async move {
+                        // 读请求（头 + Content-Length 体）
+                        let mut buf = Vec::new();
+                        let mut chunk = [0u8; 4096];
+                        let head_end = loop {
+                            if let Some(pos) =
+                                buf.windows(4).position(|window| window == b"\r\n\r\n")
+                            {
+                                break pos + 4;
+                            }
+                            let n = socket.read(&mut chunk).await.unwrap_or(0);
+                            if n == 0 {
+                                return;
+                            }
+                            buf.extend_from_slice(&chunk[..n]);
+                        };
+                        let head = String::from_utf8_lossy(&buf[..head_end]).into_owned();
+                        let content_length = head
+                            .lines()
+                            .find_map(|line| line.split_once(':'))
+                            .filter(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+                            .and_then(|(_, value)| value.trim().parse::<usize>().ok())
+                            .unwrap_or(0);
+                        let mut req_body = buf[head_end..].to_vec();
+                        while req_body.len() < content_length {
+                            let n = socket.read(&mut chunk).await.unwrap_or(0);
+                            if n == 0 {
+                                break;
+                            }
+                            req_body.extend_from_slice(&chunk[..n]);
+                        }
+                        if let Ok(json) =
+                            serde_json::from_slice::<serde_json::Value>(&req_body)
+                        {
+                            captured
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .push(json);
+                        }
+                        let response = format!(
+                            "HTTP/1.1 {status} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                            body.len()
+                        );
+                        let _ = socket.write_all(response.as_bytes()).await;
+                    });
+                }
+            });
+            server
+        }
+
+        fn base_url(&self) -> String {
+            format!("http://{}/v1", self.addr)
+        }
+
+        fn captured(&self) -> Vec<serde_json::Value> {
+            self.captured
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone()
+        }
+    }
+
+    /// 真实调用形状（wire 断言）：成功路径——单 user 消息 / 无 tools /
+    /// 无缓存参数 / 无会话亲和头；响应 content 原样返回（Schema V1 JSON
+    /// 字符串），供引擎校验渲染。
+    ///
+    /// 注：summarize 为同步阻塞调用（专用线程 + 独立 runtime），测试用
+    /// multi_thread 运行时保证 listener 与调用并发。
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn provider_summarizer_success_extracts_content_via_chat_completions() {
+        let summary_json = serde_json::json!({
+            "schemaVersion": 1,
+            "blockId": "summary",
+            "generation": 1,
+            "droppedIds": ["u-drop", "a-drop"],
+            "height": 1,
+            "tier": "chunk",
+            "goal": "实现压缩模块",
+            "constraints": [],
+            "progress": ["完成切割点保护"],
+            "decisions": [],
+            "nextSteps": ["补充测试"],
+            "criticalContext": ["src/lib.rs"],
+        })
+        .to_string();
+        let server = SummaryMockServer::start(vec![(
+            200,
+            serde_json::json!({
+                "choices": [{"message": {"role": "assistant", "content": summary_json}}]
+            })
+            .to_string(),
+        )])
+        .await;
+        let summarizer = ProviderSummarizer::new(
+            reqwest::Client::new(),
+            summary_config(server.base_url(), "model-a"),
+            conex_compaction::MAX_SUMMARY_TOKENS_DEFAULT,
+        );
+        let result = summarizer.summarize(&dropped_summary_messages(), None);
+        assert_eq!(result.as_deref(), Ok(summary_json.as_str()), "成功路径返回 content");
+        // wire 断言（C14 隔离面）
+        let captured = server.captured();
+        assert_eq!(captured.len(), 1, "应恰好捕获 1 个摘要请求");
+        let req = &captured[0];
+        assert_eq!(req["model"], "model-a", "摘要请求用当前 provider 模型");
+        assert_eq!(req["stream"], false, "摘要请求非流式");
+        assert_eq!(req["max_tokens"], 1024, "摘要输出预算 = 1024");
+        let messages = req["messages"].as_array().expect("messages 数组");
+        assert_eq!(messages.len(), 1, "单条 user 消息（独立前缀域）");
+        assert_eq!(messages[0]["role"], "user");
+        let content = messages[0]["content"].as_str().expect("content 为字符串");
+        assert!(content.contains("实现压缩模块"), "丢弃消息渲染进提示词");
+        assert!(content.contains("src/lib.rs"), "工具调用细节进提示词");
+        assert!(req.get("tools").is_none(), "无 tools");
+        assert!(req.get("prompt_cache_key").is_none(), "无会话亲和缓存键");
+        assert!(req.get("prompt_cache_retention").is_none(), "无缓存保留键");
+        assert!(req.get("prompt_cache_options").is_none(), "无缓存选项键");
+        assert!(messages[0].get("cache_control").is_none(), "无消息级断点");
+    }
+
+    /// 失败降级 L1：非 2xx → Err（调用方按契约回退中性 stub，不阻塞主对话）
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn provider_summarizer_http_error_degrades_to_err() {
+        let server = SummaryMockServer::start(vec![(500, "{\"error\":\"boom\"}".to_string())])
+            .await;
+        let summarizer = ProviderSummarizer::new(
+            reqwest::Client::new(),
+            summary_config(server.base_url(), "model-a"),
+            1024,
+        );
+        let result = summarizer.summarize(&dropped_summary_messages(), None);
+        let err = result.expect_err("HTTP 500 必须返回 Err（降级 L1 占位符）");
+        assert!(err.contains("500"), "错误文案应携带状态码：{err}");
+    }
+
+    /// 失败降级 L1：2xx 但响应缺 content（空 / 缺字段）→ Err
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn provider_summarizer_missing_content_degrades_to_err() {
+        let server = SummaryMockServer::start(vec![(
+            200,
+            serde_json::json!({ "choices": [{"message": {"role": "assistant", "content": null}}] })
+                .to_string(),
+        )])
+        .await;
+        let summarizer = ProviderSummarizer::new(
+            reqwest::Client::new(),
+            summary_config(server.base_url(), "model-a"),
+            1024,
+        );
+        let result = summarizer.summarize(&dropped_summary_messages(), None);
+        assert!(
+            result.is_err(),
+            "响应缺 content 必须返回 Err（降级 L1 占位符）"
+        );
+    }
+
+    /// 生产工厂：provider 未就绪 → None（不注入，纯 stub awaiting 语义）；
+    /// 就绪 → 返回真实 ProviderSummarizer（模型 = 当前生效配置）
+    #[test]
+    fn production_factory_returns_real_summarizer_from_engine_config() {
+        use crate::core_run_commands::{isolate_config_store, CONFIG_TEST_LOCK};
+        let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "conex-config-test-{}-{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("create config dir");
+        isolate_config_store(&dir);
+
+        let engine = Arc::new(EngineHandle::new(None));
+        let factory = production_summarizer_factory(Arc::clone(&engine));
+        assert!(
+            factory("s1").is_none(),
+            "provider 未就绪（无配置）→ 不注入，保持 stub 语义"
+        );
+        let provider: Arc<dyn ProviderCall> = Arc::new(HttpProviderCall::new(
+            reqwest::Client::new(),
+            summary_config("https://x.example/v1".to_string(), "model-prod"),
+        ));
+        engine.inject_provider_for_test(provider, summary_config(
+            "https://x.example/v1".to_string(),
+            "model-prod",
+        ));
+        let summarizer = factory("s1").expect("配置就绪后工厂必须返回真实实现");
+        // 实例边界：同工厂两次解析为独立实例（per-session 隔离决议）
+        let second = factory("s2").expect("再次解析成功");
+        assert!(
+            !Arc::ptr_eq(&summarizer, &second),
+            "每会话独立实例（04 §7.1 隔离决议）"
+        );
     }
 
     // ── P5 S5 / T-40：缓存测量装配与事件（engine 接线段）────────────

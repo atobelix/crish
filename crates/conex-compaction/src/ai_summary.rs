@@ -4,8 +4,10 @@
 //!
 //! - **五字段模板**：固定压缩文档结构（任务目标/已完成/待办/关键决策/
 //!   文件清单），模板常量 + 生成函数 + 结构校验（04 C9 第 3 条，
-//!   字段不得省略）；
-//! - **摘要提示词**：把被丢弃消息渲染为模型输入，提示输出五字段模板；
+//!   字段不得省略）。**COMPACTION-01 P1-C 后为保留兼容面**：引擎契约
+//!   已单轨 Schema V1 JSON，本模板不再作为摘要输出格式要求（见下）；
+//! - **摘要提示词**：把被丢弃消息渲染为模型输入，提示输出 **Schema V1
+//!   JSON 文档**（12 required 字段，[crate::summary_document]）；
 //!   存在既有摘要时传入做迭代合并（P4 §3.4.3 / 02 Top 9
 //!   「Previous Summary + New Conversation」）；
 //! - **退化重试护栏**：空/过短摘要（< 500 字符，对齐 grok
@@ -19,7 +21,8 @@
 //!
 //! provider 调用通道：真实模型调用由调用方（session-loop 壳层）实现
 //! [crate::compaction::Summarizer] 注入（经 agent-provider 通道，
-//! Q5 暂定引擎内部调用、独立小预算）；本模块只提供重试护栏与模板协议。
+//! Q5 暂定引擎内部调用、独立小预算；生产实现 ProviderSummarizer 直接
+//! 消费 [build_summarize_prompt]）；本模块只提供重试护栏与模板协议。
 
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
@@ -27,6 +30,7 @@ use std::time::{Duration, SystemTime};
 use conex_types::{AgentMessage, AgentMessageBlock};
 
 use crate::compaction::Summarizer;
+use crate::summary_document::validate_summary_document;
 
 // ── 五字段模板（04 C9 第 3 条：固定结构，不得省略字段）──
 
@@ -137,23 +141,38 @@ fn render_message_text(message: &AgentMessage) -> String {
     out
 }
 
-/// 构建摘要提示词（被丢弃消息 + 既有摘要迭代合并；输出要求为五字段
-/// 固定模板，调用方把结果经 [validate_structured_summary] 校验后
-/// 用 [format_structured_summary] 语义落库）
+/// 构建摘要提示词（被丢弃消息 + 既有摘要迭代合并；输出要求为
+/// **Schema V1 JSON 文档**（[crate::summary_document::SUMMARY_REQUIRED_FIELDS]
+/// 12 字段），与引擎同步路径 / 后台调度的 JSON 契约单轨对齐
+/// （COMPACTION-01 P1-C：原五字段中文模板与 R-G 引擎校验互斥——忠实按
+/// 旧提示输出的 LLM 结果必被 validate_summary_document 拒绝而降级 stub；
+/// 对齐后实现方（ProviderSummarizer）可直接消费本函数）。
+/// 调用方把结果经 [crate::summary_document::validate_summary_document]
+/// 校验后渲染落库。
+///
+/// 引导纪律（对齐 opencode SUMMARY_TEMPLATE 与 DEEPCHECK-11 §1）：
+/// 不提及「上下文被压缩」；保留精确路径 / 符号 / 命令 / 错误串，不可改写。
 pub fn build_summarize_prompt(dropped: &[AgentMessage], existing: Option<&str>) -> String {
     let mut out = String::new();
     out.push_str(
         "你负责为对话中被压缩的历史消息生成结构化压缩摘要。\
-         输出必须使用下面的固定模板（五字段，不得省略任何字段；\
-         某字段无内容时写 (none)）：\n\n",
+         输出必须是**单个合法 JSON 对象**（Schema V1），不得输出其他任何内容\
+         （不要使用代码块围栏，不要附加说明文字）。\
+         以下 12 个字段全部必须出现（字符串字段无内容写空字符串，数组字段无内容写空数组）：\n\n",
     );
-    out.push_str(SUMMARY_TEMPLATE_HEADER);
-    out.push_str("\n- 任务目标：<本轮/子任务目标一句话>\n");
-    out.push_str("- 已完成：<要点列表，每条 ≤ 30 字>\n");
-    out.push_str("- 待办：<要点列表>\n");
-    out.push_str("- 关键决策：<决策点与理由，每条 ≤ 50 字>\n");
-    out.push_str("- 文件清单：<涉及文件路径列表>\n\n");
-    out.push_str("只输出压缩摘要文档本身，不附加其他说明；条目保持精炼。\n\n");
+    out.push_str("- schemaVersion：1（整数）\n");
+    out.push_str("- blockId：占位字符串（写 \"summary\" 即可）\n");
+    out.push_str("- generation：1（整数）\n");
+    out.push_str("- droppedIds：被压缩消息 id 数组（可空）\n");
+    out.push_str("- height：1（整数）\n");
+    out.push_str("- tier：\"chunk\"（固定值）\n");
+    out.push_str("- goal：目标一句话（字符串）\n");
+    out.push_str("- constraints：约束数组（可空）\n");
+    out.push_str("- progress：已完成要点数组（每条 ≤ 30 字）\n");
+    out.push_str("- decisions：关键决策数组（每条 ≤ 50 字）\n");
+    out.push_str("- nextSteps：待办 / 下一步数组（可空）\n");
+    out.push_str("- criticalContext：关键上下文数组——精确路径 / 符号 / 命令 / 错误串必须逐字保留，不可改写（可空）\n\n");
+    out.push_str("只输出压缩摘要 JSON 文档本身，不附加其他说明；条目保持精炼；不要提及“上下文被压缩”这件事。\n\n");
     if let Some(existing) = existing {
         if !existing.trim().is_empty() {
             out.push_str("## 既有摘要（合并进新摘要，不要重复既有内容）\n");
@@ -189,13 +208,17 @@ pub fn is_degenerate_summary(text: &str, min_chars: usize) -> bool {
     text.trim().chars().count() < min_chars
 }
 
-/// 摘要可接受性判定：非退化（字符数达标）**或**符合五字段模板结构。
+/// 摘要可接受性判定：非退化（字符数达标）**或**符合五字段模板结构
+/// **或**为合法 Schema V1 JSON 文档（COMPACTION-01 P1-C：引擎契约单轨
+/// JSON 后，短而完整的 JSON 文档（如超短会话）不得被字符下限误杀）。
 ///
 /// 五字段模板文档可合法地短于 500 字符（「任务目标一句话」设计），
 /// 结构完整即视为有效；字符下限针对非模板输出的空/垃圾文本
 /// （对齐 grok MIN_SUMMARY_SEED_CHARS 的退化检测意图）。
 pub fn is_acceptable_summary(text: &str, min_chars: usize) -> bool {
-    !is_degenerate_summary(text, min_chars) || validate_structured_summary(text).is_ok()
+    !is_degenerate_summary(text, min_chars)
+        || validate_structured_summary(text).is_ok()
+        || validate_summary_document(text, usize::MAX).is_ok()
 }
 
 // ── 退化重试护栏（02 Top 3：空/过短 = 瞬态，重试 N 次后降级）──
@@ -591,8 +614,11 @@ mod tests {
 
     // ── 摘要提示词 ──
 
+    /// COMPACTION-01 P1-C：提示词已对齐 Schema V1 JSON 契约——12 个
+    /// required 字段点名在场（引擎校验单轨 JSON，忠实输出不再被拒）；
+    /// 丢弃消息上下文 + 迭代合并 + thought 不入提示保持原语义
     #[test]
-    fn summarize_prompt_contains_template_and_dropped_context() {
+    fn summarize_prompt_contains_schema_json_instruction_and_dropped_context() {
         let dropped = vec![
             amsg(
                 "u1",
@@ -615,9 +641,16 @@ mod tests {
             ),
         ];
         let prompt = build_summarize_prompt(&flat(&dropped), Some("OLD SUMMARY"));
-        // 模板五字段在场
+        // Schema V1 12 required 字段点名在场（与引擎校验单轨一致）
+        for field in crate::summary_document::SUMMARY_REQUIRED_FIELDS {
+            assert!(prompt.contains(field), "提示词须点名 required 字段 {field}");
+        }
+        // 五字段模板字段不再作为输出要求出现（孤儿面清除）
         for field in SUMMARY_TEMPLATE_FIELDS {
-            assert!(prompt.contains(field), "提示词须含字段 {field}");
+            assert!(
+                !prompt.contains(&format!("- {field}：")),
+                "提示词不应再要求五字段模板输出（{field}）"
+            );
         }
         // 丢弃消息上下文 + 迭代合并
         assert!(prompt.contains("实现压缩模块"));
@@ -652,12 +685,38 @@ mod tests {
     }
 
     /// 可接受性：字符达标的任意文本可用；模板结构完整的短文档也可用
-    /// （五字段模板文档合法短于 500 字符）
+    /// （五字段模板文档合法短于 500 字符）；合法 Schema V1 JSON 文档
+    /// 同样可用（COMPACTION-01 P1-C：引擎契约单轨 JSON 后不得被字符
+    /// 下限误杀）
     #[test]
-    fn acceptable_summary_accepts_valid_template() {
+    fn acceptable_summary_accepts_valid_template_and_schema_json() {
         let summary = five_field_summary();
         assert!(is_degenerate_summary(&summary, 500), "模板文档通常短于 500 字符");
         assert!(is_acceptable_summary(&summary, 500), "结构完整即视为有效");
+        // Schema V1 JSON：短而完整（12 required 字段）不得被字符下限拒绝
+        let json = serde_json::json!({
+            "schemaVersion": 1,
+            "blockId": "summary",
+            "generation": 1,
+            "droppedIds": [],
+            "height": 1,
+            "tier": "chunk",
+            "goal": "短会话",
+            "constraints": [],
+            "progress": [],
+            "decisions": [],
+            "nextSteps": [],
+            "criticalContext": [],
+        })
+        .to_string();
+        assert!(
+            is_degenerate_summary(&json, 500),
+            "极短 JSON 文档应被判退化（字符口径）"
+        );
+        assert!(
+            is_acceptable_summary(&json, 500),
+            "合法 Schema V1 JSON 文档必须可接受"
+        );
         assert!(!is_acceptable_summary("", 500));
         assert!(!is_acceptable_summary("退化", 500));
         assert!(is_acceptable_summary(&"长".repeat(500), 500));
