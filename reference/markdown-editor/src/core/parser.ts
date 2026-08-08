@@ -34,11 +34,20 @@ export class MarkdownParser {
   }
 
   public static parse(text: string): MarkdownDocument {
-    const { offsets, codeBlockState } = this.computeLineOffsets(text);
+    const { offsets, codeBlockState, setextLevels } =
+      this.computeLineOffsets(text);
     const lines = text.split('\n');
     const lineNodes: LineNode[] = new Array(lines.length);
     for (let i = 0; i < lines.length; i++) {
-      lineNodes[i] = this.parseLine(lines[i], offsets[i], codeBlockState[i]);
+      // Setext 上下文标志（0=普通行 / 1|2=Setext 标题内容行 / -1=Setext 下划线行）
+      // 由预扫描 computeSetextContexts 产出，随 parseLine 传入——
+      // 「标题身份由上下文决定、而非解析后回写」是 review-02 §7.1 的修正要求。
+      lineNodes[i] = this.parseLine(
+        lines[i],
+        offsets[i],
+        codeBlockState[i],
+        setextLevels[i]
+      );
     }
     return {
       lines: lineNodes,
@@ -48,6 +57,7 @@ export class MarkdownParser {
   public static computeLineOffsets(text: string): {
     offsets: number[];
     codeBlockState: CodeState[];
+    setextLevels: number[];
   } {
     const lines = text.split('\n');
     const offsets = new Array(lines.length);
@@ -97,7 +107,95 @@ export class MarkdownParser {
       currentOffset += lines[i].length + 1; // +1 for \n
     }
 
-    return { offsets, codeBlockState };
+    // Setext 预扫描（紧随 computeLineOffsets 状态机，单趟 O(n)）：
+    // 产出每行的 Setext 上下文标志，供 parseLine 消费（见 §2.1 与 review-02 §7.1）。
+    const setextLevels = this.computeSetextContexts(lines, codeBlockState);
+
+    return { offsets, codeBlockState, setextLevels };
+  }
+
+  /**
+   * 剥离块引用前缀（与 parseNormalLine 同一正则 `^\s*>\s?`），
+   * 返回前缀层级与剥离后的内容——Setext 判定必须发生在前缀剥离之后
+   * （02-解析器正确性.md §2.1 冲突点）。
+   */
+  private static stripBlockquoteContext(
+    line: string
+  ): { level: number; content: string } {
+    let level = 0;
+    let content = line;
+    let m: RegExpMatchArray | null;
+    while ((m = content.match(/^\s*>\s?/))) {
+      level++;
+      content = content.substring(m[0].length);
+    }
+    return { level, content };
+  }
+
+  /**
+   * 判断「剥离块引用前缀后的内容行」是否可解释为段落（Setext 标题内容行候选）：
+   * CommonMark 要求标题文本行不得被解释为 code fence / ATX 标题 / 块引用 /
+   * 主题分隔线 / 列表项 / HTML 块，且首行缩进不得超过 3 个空格。
+   * 行级模型的镜像判定：逐项排除 hr / ATX / 表格 / 列表形态。
+   */
+  private static isSetextContentLine(content: string): boolean {
+    // 空行 / 纯空白行不是段落
+    if (!content || !content.trim()) return false;
+    // >3 空格（或制表符）缩进行是缩进代码候选，不是段落
+    if (/^ {4,}/.test(content) || content.startsWith('\t')) return false;
+    // 主题分隔线（hr）不是段落
+    if (/^(\s*[-*+_]){3,}\s*$/.test(content)) return false;
+    // ATX 标题不是段落
+    if (/^#{1,6}\s+/.test(content)) return false;
+    // 表格（行级启发式：表格分隔行 / 含管道行）——表格上下文不受 Setext 影响
+    if (/^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/.test(content)) return false;
+    const pipeCount = (content.match(/\|/g) || []).length;
+    if (
+      (pipeCount >= 1 && content.trim().startsWith('|')) ||
+      pipeCount >= 2
+    ) {
+      return false;
+    }
+    // 列表项（任务 / 项目符号 / 有序）是独立容器，不允许被 Setext 下划线升级
+    if (/^(\s*)([-*+]\s*\[[xX\s]\])\s+/.test(content)) return false;
+    if (/^(\s*)([-*+])\s+/.test(content)) return false;
+    if (/^(\s*)(\d+\.)\s+/.test(content)) return false;
+    return true;
+  }
+
+  /**
+   * Setext 上下文预扫描（02 §2.1 方案 + review-02 §7.1 修正）：
+   * 第 i 行是标题内容（其下一行是 `===`/`---` 下划线且本行可解释为段落）
+   * → setextLevels[i] = 1|2（标题层级由下划线字符决定）；
+   * 下划线行本身 → setextLevels[i] = -1（零输出行）。
+   * 优先级：hr 在「上一行非段落」时成立、Setext 在「上一行是段落」时成立、
+   * 表格分隔线必含 `|` 天然避让——三者由本预扫描按 02 §2.1 顺序裁决。
+   * 块引用懒延续（`> foo` 后裸 `---`）不构成 Setext（02 登记偏差）。
+   */
+  private static computeSetextContexts(
+    lines: string[],
+    codeBlockState: CodeState[]
+  ): number[] {
+    const n = lines.length;
+    const setextLevels: number[] = new Array(n).fill(0);
+    // CommonMark setext heading underline：≤3 前导空格 + 全 = 或全 - + 任意尾随空白
+    const underlineRe = /^ {0,3}(=+|-+)[ \t]*$/;
+    for (let i = 0; i + 1 < n; i++) {
+      // 围栏 / 数学 / 代码块内的行不参与 Setext
+      if (codeBlockState[i] !== 'none' || codeBlockState[i + 1] !== 'none') {
+        continue;
+      }
+      const prev = this.stripBlockquoteContext(lines[i]);
+      const next = this.stripBlockquoteContext(lines[i + 1]);
+      // 块引用层级必须一致：裸下划线接 `> 段落` 是懒延续，不算（02 已知偏差）
+      if (prev.level !== next.level) continue;
+      const u = next.content.match(underlineRe);
+      if (!u) continue;
+      if (!this.isSetextContentLine(prev.content)) continue;
+      setextLevels[i] = u[1][0] === '=' ? 1 : 2;
+      setextLevels[i + 1] = -1;
+    }
+    return setextLevels;
   }
 
   private static astCache = new LRUCache<string, LineNode>(50_000);
@@ -115,11 +213,15 @@ export class MarkdownParser {
   public static parseLine(
     lineText: string,
     localOffset: number,
-    codeState: CodeState | boolean
+    codeState: CodeState | boolean,
+    // Setext 上下文标志（预扫描产物）：0=普通行 / 1|2=Setext 标题内容行 / -1=Setext 下划线行。
+    // 渲染路径（MarkdownEngine.tsx）等外部调用不传该参数时按 0 处理，行为与现状一致。
+    setextLevel: number = 0
   ): LineNode {
-    // 缓存键 = codeState + 完整行文本：blockquote 前缀、fence/math 跨行状态均已编码在键内，
+    // 缓存键 = codeState + Setext 上下文 + 完整行文本：blockquote 前缀、fence/math 跨行状态、
+    // Setext 上下文均已编码在键内（review-02 §7.1：Setext 关系必须进键，禁止回写缓存行），
     // token 偏移为行内相对值（与文档偏移解耦），因此命中节点可直接复用结构。
-    const cacheKey = codeState + ':' + lineText;
+    const cacheKey = codeState + ':' + setextLevel + ':' + lineText;
     const cached = this.astCache.get(cacheKey);
     if (cached) {
       this.cacheHits++;
@@ -141,6 +243,30 @@ export class MarkdownParser {
       trimmed = trimmed.substring(bMatch[0].length);
     }
     const bqLevelVal = blockquoteLevel > 0 ? blockquoteLevel : undefined;
+
+    // Setext 下划线行（预扫描已确认其上一行是段落）：零输出行——复用 'empty' 类型
+    // （投影器与渲染器对 'empty' 均为跳过/空行），raw 保留原文供守恒校验与编辑回写。
+    if (setextLevel === -1) {
+      const node: LineNode = {
+        id: this.generateId(),
+        type: 'empty',
+        raw: lineText,
+        blockquoteLevel: bqLevelVal,
+        inlineTokens: [
+          {
+            type: 'text',
+            raw: lineText,
+            content: '',
+            localOffset: 0,
+            length: lineText.length,
+          },
+        ],
+        length: lineText.length,
+        localOffset,
+      };
+      this.astCache.set(cacheKey, node);
+      return node;
+    }
 
     if (codeState === 'fence_start') {
       return {
@@ -245,7 +371,7 @@ export class MarkdownParser {
       return node;
     }
 
-    let node = this.parseNormalLine(lineText, localOffset);
+    let node = this.parseNormalLine(lineText, localOffset, setextLevel);
 
     this.astCache.set(cacheKey, node);
     return node;
@@ -362,7 +488,11 @@ export class MarkdownParser {
 
   private static parseNormalLine(
     lineText: string,
-    localOffset: number
+    localOffset: number,
+    // Setext 上下文标志（预扫描产物）：0=普通行 / 1|2=Setext 标题内容行。
+    // 标题身份由预扫描（computeSetextContexts）决定而非解析后回写——
+    // review-02 §7.1：回写会使「同键缓存」与回写结果不一致（缓存污染）。
+    setextLevel: number = 0
   ): LineNode {
     const tokens: InlineNode[] = [];
     let pos = 0;
@@ -392,6 +522,14 @@ export class MarkdownParser {
     let listPrefix = '';
     let blockquoteLevel = 0;
 
+    // Setext 标题内容行：预扫描已确认「下一行是 ===/--- 且本行是段落」，
+    // 直接按 heading 解析，headingLevel 由下划线字符（= 或 -）决定。
+    const isSetextHeading = setextLevel >= 1;
+    if (isSetextHeading) {
+      lineType = 'heading';
+      headingLevel = setextLevel;
+    }
+
     // Parse blockquote prefixes first
     let remainingTextForPrefix = lineText;
     let blockquoteMatch;
@@ -411,114 +549,118 @@ export class MarkdownParser {
       });
     }
 
-    let isHr = false;
-    const nestedText = lineText.slice(pos);
-    const nestedLocalOffset = pos;
+    // Setext 标题内容行跳过全部块级判定（hr/ATX/表格/列表），直接进入行内解析；
+    // 普通行维持原有判定顺序：hr → ATX → 表格 → 列表（02 §2.1 第 3 点）。
+    if (!isSetextHeading) {
+        let isHr = false;
+        const nestedText = lineText.slice(pos);
+        const nestedLocalOffset = pos;
 
-    if (nestedText.length <= 10000) {
-      const hrMatch = nestedText.match(/^(\s*[-*+_]){3,}\s*$/);
-      if (hrMatch) {
-        lineType = 'hr';
-        pos += nestedText.length;
-        isHr = true;
-        // hr 行其余代码不再产出 token，这里补一个覆盖整段的文本 token，
-        // 保证 inlineTokens 的 [localOffset, localOffset+length] 拼接恰好覆盖 [0, raw.length]（覆盖守恒）。
-        tokens.push({
-          type: 'text',
-          raw: nestedText,
-          content: nestedText,
-          localOffset: nestedLocalOffset,
-          length: nestedText.length,
-        });
+      if (nestedText.length <= 10000) {
+        const hrMatch = nestedText.match(/^(\s*[-*+_]){3,}\s*$/);
+        if (hrMatch) {
+          lineType = 'hr';
+          pos += nestedText.length;
+          isHr = true;
+          // hr 行其余代码不再产出 token，这里补一个覆盖整段的文本 token，
+          // 保证 inlineTokens 的 [localOffset, localOffset+length] 拼接恰好覆盖 [0, raw.length]（覆盖守恒）。
+          tokens.push({
+            type: 'text',
+            raw: nestedText,
+            content: nestedText,
+            localOffset: nestedLocalOffset,
+            length: nestedText.length,
+          });
+        }
       }
-    }
 
-    if (!isHr) {
-      const headingMatch = nestedText.match(/^(#{1,6})\s+/);
-      if (headingMatch) {
-        lineType = 'heading';
-        headingLevel = headingMatch[1].length;
-        const prefixLen = headingMatch[0].length;
-        tokens.push({
-          type: 'heading_prefix',
-          raw: headingMatch[0],
-          content: '',
-          localOffset: nestedLocalOffset,
-          length: prefixLen,
-        });
-        pos += prefixLen;
-      } else {
-        if (nestedText.length <= 10000) {
-          const tableSeparatorMatch = nestedText.match(
-            /^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/
-          );
-          if (tableSeparatorMatch) {
-            lineType = 'table_separator';
-          } else {
-            const pipeCount = (nestedText.match(/\|/g) || []).length;
-            if (
-              (pipeCount >= 1 && nestedText.trim().startsWith('|')) ||
-              pipeCount >= 2
-            ) {
-              lineType = 'table_row';
+      if (!isHr) {
+        const headingMatch = nestedText.match(/^(#{1,6})\s+/);
+        if (headingMatch) {
+          lineType = 'heading';
+          headingLevel = headingMatch[1].length;
+          const prefixLen = headingMatch[0].length;
+          tokens.push({
+            type: 'heading_prefix',
+            raw: headingMatch[0],
+            content: '',
+            localOffset: nestedLocalOffset,
+            length: prefixLen,
+          });
+          pos += prefixLen;
+        } else {
+          if (nestedText.length <= 10000) {
+            const tableSeparatorMatch = nestedText.match(
+              /^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/
+            );
+            if (tableSeparatorMatch) {
+              lineType = 'table_separator';
+            } else {
+              const pipeCount = (nestedText.match(/\|/g) || []).length;
+              if (
+                (pipeCount >= 1 && nestedText.trim().startsWith('|')) ||
+                pipeCount >= 2
+              ) {
+                lineType = 'table_row';
+              }
             }
           }
-        }
 
-        if (lineType !== 'table_row' && lineType !== 'table_separator') {
-            const taskMatch = nestedText.match(/^(\s*)([-*+]\s*\[[xX\s]\])\s+/);
-            if (taskMatch) {
-              const prefixLen = taskMatch[0].length;
-              const indent = taskMatch[1];
-              const checkRaw = taskMatch[2];
-              const isChecked = checkRaw.includes('x') || checkRaw.includes('X');
-              listIndent = indent.length;
-              listPrefix = checkRaw;
-              tokens.push({
-                type: 'list_task',
-                raw: taskMatch[0],
-                content: isChecked ? '☑' : '☐',
-                indent: indent,
-                marker: checkRaw + ' ',
-                isChecked,
-                localOffset: nestedLocalOffset,
-                length: prefixLen,
-              });
-              pos += prefixLen;
-            } else {
-              const bulletMatch = nestedText.match(/^(\s*)([-*+])\s+/);
-              if (bulletMatch) {
-                const prefixLen = bulletMatch[0].length;
-                const indent = bulletMatch[1];
+          if (lineType !== 'table_row' && lineType !== 'table_separator') {
+              const taskMatch = nestedText.match(/^(\s*)([-*+]\s*\[[xX\s]\])\s+/);
+              if (taskMatch) {
+                const prefixLen = taskMatch[0].length;
+                const indent = taskMatch[1];
+                const checkRaw = taskMatch[2];
+                const isChecked = checkRaw.includes('x') || checkRaw.includes('X');
                 listIndent = indent.length;
-                listPrefix = bulletMatch[2];
+                listPrefix = checkRaw;
                 tokens.push({
-                  type: 'list_bullet',
-                  raw: bulletMatch[0],
-                  content: '•',
+                  type: 'list_task',
+                  raw: taskMatch[0],
+                  content: isChecked ? '☑' : '☐',
                   indent: indent,
-                  marker: bulletMatch[2] + ' ',
+                  marker: checkRaw + ' ',
+                  isChecked,
                   localOffset: nestedLocalOffset,
                   length: prefixLen,
                 });
                 pos += prefixLen;
               } else {
-                const numberMatch = nestedText.match(/^(\s*)(\d+\.)\s+/);
-                if (numberMatch) {
-                  const prefixLen = numberMatch[0].length;
-                  const indent = numberMatch[1];
+                const bulletMatch = nestedText.match(/^(\s*)([-*+])\s+/);
+                if (bulletMatch) {
+                  const prefixLen = bulletMatch[0].length;
+                  const indent = bulletMatch[1];
                   listIndent = indent.length;
-                  listPrefix = numberMatch[2];
+                  listPrefix = bulletMatch[2];
                   tokens.push({
-                  type: 'list_number',
-                  raw: numberMatch[0],
-                  content: numberMatch[2] + ' ',
-                  indent: indent,
-                  marker: numberMatch[2] + ' ',
-                  localOffset: nestedLocalOffset,
-                  length: prefixLen,
-                });
-                pos += prefixLen;
+                    type: 'list_bullet',
+                    raw: bulletMatch[0],
+                    content: '•',
+                    indent: indent,
+                    marker: bulletMatch[2] + ' ',
+                    localOffset: nestedLocalOffset,
+                    length: prefixLen,
+                  });
+                  pos += prefixLen;
+                } else {
+                  const numberMatch = nestedText.match(/^(\s*)(\d+\.)\s+/);
+                  if (numberMatch) {
+                    const prefixLen = numberMatch[0].length;
+                    const indent = numberMatch[1];
+                    listIndent = indent.length;
+                    listPrefix = numberMatch[2];
+                    tokens.push({
+                    type: 'list_number',
+                    raw: numberMatch[0],
+                    content: numberMatch[2] + ' ',
+                    indent: indent,
+                    marker: numberMatch[2] + ' ',
+                    localOffset: nestedLocalOffset,
+                    length: prefixLen,
+                  });
+                  pos += prefixLen;
+                }
               }
             }
           }
