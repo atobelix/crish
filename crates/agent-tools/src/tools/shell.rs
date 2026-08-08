@@ -168,6 +168,13 @@ enum Prepared {
     Done(Result<serde_json::Value, ToolError>),
 }
 
+/// u64 → usize 钳制转换（F3-16）：32 位平台裸 `as usize` 截断会把超大值
+/// 变形成小值（如 maxOutputBytes=4GiB+1 → 1，输出预算从「宽松」变「极紧」
+/// 并静默截断输出）；钳到 usize::MAX 保「大 = 预算宽松」语义。64 位恒等。
+fn clamp_u64_to_usize(value: u64) -> usize {
+    value.min(usize::MAX as u64) as usize
+}
+
 /// 通过预检的可执行命令参数（execute / execute_stream 消费）
 struct PreparedCommand {
     command: String,
@@ -218,8 +225,10 @@ impl ShellCommandTool {
         let timeout_ms = optional_u64(args, "timeoutMs")
             .unwrap_or(self.default_timeout_ms)
             .clamp(1, MAX_TIMEOUT_MS);
-        let max_output_bytes =
-            optional_u64(args, "maxOutputBytes").unwrap_or(self.max_output_bytes as u64) as usize;
+        // F3-16：u64→usize 钳制（32 位平台截断失真防护；64 位恒等）
+        let max_output_bytes = clamp_u64_to_usize(
+            optional_u64(args, "maxOutputBytes").unwrap_or(self.max_output_bytes as u64),
+        );
         // T-AB-02：三模式入参（mode / waitMsBeforeAsync / isDaemon / resourceMonitor）
         let mode = match parse_mode(args) {
             Ok(m) => m,

@@ -129,9 +129,18 @@ struct Aggregate {
     finish_reason: Option<StopReason>,
 }
 
+/// 正文/思考聚合单流上限（F3-05）：慢速但持续发送的流使 text/thought 无界
+/// 增长（idle 超时兜不住「数据缓慢不停」）；超过上限显式错误收场——
+/// 不静默截断（丢内容不可感知）也不无界驻留（OOM 面）。64 MiB 远高于
+/// 任何正常模型输出（上层输出预算另有 output_budget_bytes 处理）。
+pub const MAX_AGGREGATE_TEXT_BYTES: usize = 64 * 1024 * 1024;
+
 impl Aggregate {
     /// 聚合单个事件（事件序列合法性已由 events::StreamParser 保证）
-    fn push(&mut self, event: ProviderStreamEvent) {
+    ///
+    /// 返回 true = 聚合正文/思考超过 [MAX_AGGREGATE_TEXT_BYTES]（调用方
+    /// 必须立即以显式 StreamError 收场，不得继续聚合）。
+    fn push(&mut self, event: ProviderStreamEvent) -> bool {
         match event {
             ProviderStreamEvent::TextDelta { text } => {
                 self.text.push_str(&text);
@@ -168,6 +177,9 @@ impl Aggregate {
                 }
             }
         }
+        // F3-05：正文/思考任一超限即标记（不静默截断）
+        self.text.len() > MAX_AGGREGATE_TEXT_BYTES
+            || self.thought.len() > MAX_AGGREGATE_TEXT_BYTES
     }
 }
 
@@ -184,9 +196,31 @@ where
 {
     let mut aggregate = Aggregate::default();
     for event in events {
-        aggregate.push(event);
+        // F3-05：聚合超限 → 立即显式错误收场（不静默截断、不无界驻留）
+        if aggregate.push(event) {
+            return aggregate_overflow_result(aggregate);
+        }
     }
     finish(aggregate, aborted)
+}
+
+/// F3-05：正文/思考聚合超过 [MAX_AGGREGATE_TEXT_BYTES] 的显式收场——
+/// StreamError（Unknown 类不可重试；错误文案含上限便于排障），
+/// 已收集诊断仍透出
+fn aggregate_overflow_result(aggregate: Aggregate) -> ConsumeResult {
+    ConsumeResult {
+        response: ProviderOutput::stream_error(ClassifiedStreamError {
+            kind: ProviderErrorKind::Unknown,
+            message: format!(
+                "流聚合正文超过上限（{} 字节），拒绝无界增长",
+                MAX_AGGREGATE_TEXT_BYTES
+            ),
+            retryable: false,
+            retry_after_ms: None,
+        }),
+        diagnostics: aggregate.diagnostics,
+        metadata: Value::Null,
+    }
 }
 
 /// 终止聚合：按 01 D6 裁决生成 stopReason 并分类响应

@@ -250,6 +250,12 @@ fn parse_http_date(value: &str) -> Option<i64> {
         _ => return None,
     };
     let (hour, minute, second) = parse_time(time)?;
+    // F3-11：year 先钳到合理区间 [1970, 9999] 再算天数——极端年份
+    // （provider 可控头部，如 year=i64::MAX）会在 days_from_civil 的
+    // `era * 146_097` 与 `days * 86_400` 溢出（debug panic / release
+    // 回绕为负）。钳制后远超 1970 的时刻仍远超 5 分钟上限，由
+    // clamp_retry_after 收敛；远早于 1970 的时刻视为已过 → 0，语义不变。
+    let year = year.clamp(1970, 9999);
     let days = days_from_civil(year, month, day);
     Some(days * 86_400 + hour as i64 * 3_600 + minute as i64 * 60 + second as i64)
 }
