@@ -45,6 +45,13 @@ impl AgentSessionMachine {
         &self.context
     }
 
+    /// 测试注入点（F1-03 溢出/边界单测构造 u32::MAX 等极值用；
+    /// 生产路径无改写面——仅测试构建编译）
+    #[cfg(test)]
+    pub(crate) fn context_mut(&mut self) -> &mut AgentSessionContext {
+        &mut self.context
+    }
+
     /// 是否到达终态 done
     pub fn is_done(&self) -> bool {
         self.state == AgentSessionState::Done
@@ -485,6 +492,24 @@ mod tests {
         // 01 §1.4 表：33 条已定义转移
         assert_eq!(defined, 33);
         assert_eq!(undefined, 8 * 20 - 33);
+    }
+
+    /// F1-03（红→绿）：turn_index u32 溢出防护——u32::MAX 时 TURN_PREPARED
+    /// 不得 panic（修复前 debug 构建 `+= 1` 溢出 panic；release 回绕归零 →
+    /// should_stop_for_max_turns 失效 → max-turns 预算被绕过）。
+    /// 饱和保持后 `turn_index >= max_turns` 判定照常收敛（F1-03 修复契约）。
+    #[test]
+    fn turn_index_saturates_at_u32_max() {
+        let mut m = machine();
+        goto(&mut m, S::PreparingTurn);
+        m.context.turn_index = u32::MAX;
+        m.dispatch(E::TurnPrepared).unwrap();
+        assert_eq!(
+            m.context().turn_index,
+            u32::MAX,
+            "turn_index 必须饱和保持，不得回绕归零（max-turns 预算失效）"
+        );
+        assert_eq!(m.state(), S::Streaming, "饱和不改变转移语义");
     }
 
     /// effect 测试：TURN_PREPARED 递增 turnIndex 并重置 toolCallCount

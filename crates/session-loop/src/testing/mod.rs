@@ -209,6 +209,17 @@ impl ProviderCall for TestProvider {
     }
 }
 
+/// Arc 共享形态替身（F2-02 run 级测试用：run 后仍需持有句柄断言调用数）
+#[async_trait]
+impl ProviderCall for Arc<TestProvider> {
+    async fn stream<'a>(
+        &self,
+        request: &ProviderRequest<'a>,
+    ) -> Result<ProviderEventStream, ClassifiedStreamError> {
+        self.as_ref().stream(request).await
+    }
+}
+
 impl TestProvider {
     /// 便捷构造：纯文字回复脚本
     pub fn text_reply(text: &str) -> Self {

@@ -56,3 +56,80 @@ pub(crate) async fn handle(
     dispatch(state, E::NoToolCalls)?;
     Ok(HandlerOutcome::continue_run())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::r#loop::handlers::LoopState;
+    use crate::r#loop::{DEFAULT_MAX_TOKENS, SessionLoopOptions};
+    use crate::steering::{
+        RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions,
+    };
+    use agent_tools::registry::ToolRegistry;
+    use conex_types::session::{AgentSessionEvent as E, AgentSessionState as S};
+    use std::sync::Arc;
+
+    /// 构造处于 streaming 状态的 LoopState（length 阶梯单测驱动）
+    fn streaming_state() -> LoopState {
+        let steering = SteeringCoordinator::new(
+            vec![Box::new(RecoverySteeringStrategy::default())],
+            SteeringCoordinatorOptions::default(),
+        );
+        let mut state = LoopState::new(
+            "sess-1",
+            16,
+            steering,
+            SessionLoopOptions::default(),
+            Arc::new(ToolRegistry::new()),
+        );
+        state.machine.dispatch(E::Initialized).unwrap();
+        state.machine.dispatch(E::InputReady).unwrap();
+        state.machine.dispatch(E::TurnPrepared).unwrap();
+        assert_eq!(state.machine.state(), S::Streaming);
+        state
+    }
+
+    /// 模拟 NO_PROGRESS_CONTINUE 后循环重进 streaming（生产路径由
+    /// prepare_turn 的 TURN_PREPARED 转移完成；测试驱动多次 handle 调用前
+    /// 必须回到 Streaming 状态——NoProgressContinue 仅 Streaming 态已定义）
+    fn re_enter_streaming(state: &mut LoopState) {
+        state.machine.dispatch(E::TurnPrepared).unwrap();
+        assert_eq!(state.machine.state(), S::Streaming);
+    }
+
+    /// F2-01（红→绿）：stopReason=length 路径同样受阶梯上限 2 约束——
+    /// length_upgrade_limit 配置放大（30）不得触发第 3 次升级
+    /// （修复前 8192→16384→32768→65536 继续翻倍，红；第 19 次升级
+    /// 8192×2^19 溢出 u32::MAX——debug panic / release 回绕成小值退化）
+    #[tokio::test]
+    async fn length_stop_caps_upgrades_even_with_huge_limit() {
+        let mut state = streaming_state();
+        state.options.length_upgrade_limit = 30;
+        // 第一次：升级（1/2）
+        let o1 = handle(&mut state, Some(ConsumeStopReason::Length)).await.unwrap();
+        assert!(o1.end.is_none());
+        assert_eq!(state.length_upgrades, 1);
+        assert_eq!(state.max_tokens, DEFAULT_MAX_TOKENS * 2);
+        re_enter_streaming(&mut state);
+        // 第二次：升级（2/2）
+        let o2 = handle(&mut state, Some(ConsumeStopReason::Length)).await.unwrap();
+        assert!(o2.end.is_none());
+        assert_eq!(state.length_upgrades, 2);
+        assert_eq!(state.max_tokens, DEFAULT_MAX_TOKENS * 4);
+        re_enter_streaming(&mut state);
+        // 第三次：配置 30 也按阶梯上限 2 计——不翻倍，走 continue-nudge 上限
+        // （默认 1）再试一次后正常收场（length 截断不视为错误）
+        let o3 = handle(&mut state, Some(ConsumeStopReason::Length)).await.unwrap();
+        assert!(
+            o3.end.is_none(),
+            "第 3 次应进入 continue-nudge 重试（非第 3 次 length 升级，红）"
+        );
+        assert_eq!(state.continue_nudges, 1, "nudge 消耗一次");
+        assert_eq!(state.length_upgrades, 2, "升级计数必须停在 2");
+        assert_eq!(
+            state.max_tokens,
+            DEFAULT_MAX_TOKENS * 4,
+            "max_tokens 不得超出 32768 阶梯上限"
+        );
+    }
+}

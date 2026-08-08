@@ -95,3 +95,68 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     dispatch(state, E::TurnPrepared)?;
     Ok(HandlerOutcome::continue_run())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::r#loop::handlers::LoopState;
+    use crate::r#loop::SessionLoopOptions;
+    use crate::steering::{
+        RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions,
+    };
+    use agent_tools::registry::ToolRegistry;
+    use conex_types::events::AgentEvent;
+    use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+    use conex_types::session::{AgentSessionEvent as E, AgentSessionState as S};
+    use std::sync::Arc;
+
+    /// 构造处于 preparing-turn 状态的 LoopState（F1-03 单测驱动）
+    fn preparing_state() -> LoopState {
+        let steering = SteeringCoordinator::new(
+            vec![Box::new(RecoverySteeringStrategy::default())],
+            SteeringCoordinatorOptions::default(),
+        );
+        let mut state = LoopState::new(
+            "sess-1",
+            16,
+            steering,
+            SessionLoopOptions::default(),
+            Arc::new(ToolRegistry::new()),
+        );
+        state.machine.dispatch(E::Initialized).unwrap();
+        state.machine.dispatch(E::InputReady).unwrap();
+        assert_eq!(state.machine.state(), S::PreparingTurn);
+        state.input_queue.enqueue_force(AgentMessage {
+            id: "user-1".to_string(),
+            role: AgentMessageRole::User,
+            created_at: "2026-08-03T10:00:00.000Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "hello".to_string(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        });
+        state
+    }
+
+    /// F1-03（红→绿）：turn-start 事件在 turn_index=u32::MAX 时不得溢出
+    /// panic（修复前 prepare_turn.rs:43 `turn_index + 1` debug panic）；
+    /// 饱和后事件载荷保持 u32::MAX，不产生回绕显示值
+    #[tokio::test]
+    async fn turn_start_event_saturates_at_u32_max() {
+        let mut state = preparing_state();
+        state.machine.context_mut().turn_index = u32::MAX;
+        let outcome = handle(&mut state).await.expect("handler 不得 panic");
+        assert!(outcome.end.is_none(), "正常轮次不应收场");
+        let turn_index = state.events.iter().find_map(|e| match e {
+            AgentEvent::TurnStart { turn_index, .. } => Some(*turn_index),
+            _ => None,
+        });
+        assert_eq!(
+            turn_index,
+            Some(u32::MAX),
+            "turn-start 事件必须饱和保持（修复前 `+1` 溢出 panic，红）"
+        );
+    }
+}

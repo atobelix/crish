@@ -661,6 +661,62 @@ mod tests {
         assert_eq!(state.compression_retries, 0);
     }
 
+    /// F2-01（红→绿）：length 阶梯配置放大溢出防护——length_upgrade_limit
+    /// 配置为 30 时有效上限仍为 2 次（8192→16384→32768，01 §2.6 上限 2），
+    /// 第三次 ContextLengthExceeded 不得继续翻倍（修复前按配置 30 翻倍：
+    /// 第 3 次升级 max_tokens=65536 且无收场，红；19 次后 8192×2^19 溢出
+    /// u32::MAX——debug panic / release 回绕成小值退化）
+    #[tokio::test]
+    async fn length_ladder_caps_upgrades_even_with_huge_limit() {
+        let mut state = streaming_state();
+        state.options.length_upgrade_limit = 30;
+        // 第一次：升级（1/2）
+        let o1 = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
+            .await
+            .unwrap();
+        assert!(o1.end.is_none());
+        assert_eq!(state.length_upgrades, 1);
+        assert_eq!(state.max_tokens, DEFAULT_MAX_TOKENS * 2);
+        re_enter_streaming(&mut state);
+        // 第二次：升级（2/2）
+        let o2 = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
+            .await
+            .unwrap();
+        assert!(o2.end.is_none());
+        assert_eq!(state.length_upgrades, 2);
+        assert_eq!(state.max_tokens, DEFAULT_MAX_TOKENS * 4);
+        re_enter_streaming(&mut state);
+        // 第三次：配置 30 也按阶梯上限 2 计——不再翻倍（进入压缩阶梯，
+        // 无预算配置 → fatal 收场）
+        let o3 = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
+            .await
+            .unwrap();
+        assert!(
+            o3.end.is_some(),
+            "length_upgrade_limit=30 不得触发第 3 次 length 升级（阶梯上限 2，红）"
+        );
+        assert_eq!(state.length_upgrades, 2, "升级计数必须停在 2");
+        assert_eq!(
+            state.max_tokens,
+            DEFAULT_MAX_TOKENS * 4,
+            "max_tokens 不得超出 32768 阶梯上限"
+        );
+    }
+
+    /// F2-01 防御性饱和（绿锚点）：即便绕过上限（内部计数异常），
+    /// max_tokens 翻倍也永不溢出——saturating_mul 保语义
+    #[tokio::test]
+    async fn max_tokens_doubling_saturates_never_overflow() {
+        let mut state = streaming_state();
+        state.max_tokens = u32::MAX - 1;
+        state.options.length_upgrade_limit = 1;
+        let outcome = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
+            .await
+            .unwrap();
+        assert!(outcome.end.is_none());
+        assert_eq!(state.max_tokens, u32::MAX, "saturating_mul 后必须饱和保持");
+    }
+
     /// I4 补充（C14）：溢出压缩阶梯同样经 Summarizer trait 边界——
     /// 摘要器只收到丢弃消息（无 session_id / 无缓存键 / 无 tools / 无
     /// system 参数；trait 签名即隔离保证），L2 文本进入事件载荷

@@ -1100,6 +1100,56 @@ mod tests {
         assert_eq!(end.error.as_deref(), Some("模拟内部错误"));
     }
 
+    /// F2-02（红→绿）：max_turns=0 边界——run 起始显式拦截，不得执行
+    /// 任何轮次后才以 max-turns 收场。修复前：首轮完整执行（provider 已
+    /// 调用、回复已 commit、turn-start 已发）后 turn_index(1) >= 0 恒真
+    /// 才收场——「max_turns=0 = 不允许任何轮次」语义失效，红
+    #[tokio::test]
+    async fn run_with_max_turns_zero_stops_before_any_turn() {
+        use conex_types::session::AgentEndReason;
+        let provider = Arc::new(TestProvider::text_reply("hi"));
+        let mut loop_ = AgentSessionLoop::new("s1", "r1", 0, Box::new(provider.clone()), registry());
+        let outcome = loop_.run(user_input("hello")).await;
+        assert_eq!(
+            outcome.reason,
+            AgentEndReason::MaxTurns,
+            "max_turns=0 必须立即以 max-turns 收场（修复前执行完整轮次后 stop 类收场，红）"
+        );
+        assert_eq!(outcome.turn_index, 0, "max_turns=0 不得执行任何轮次");
+        assert_eq!(provider.call_count(), 0, "max_turns=0 不得调用 provider");
+        assert!(
+            outcome
+                .events
+                .iter()
+                .all(|e| !matches!(e, AgentEvent::TurnStart { .. })),
+            "max_turns=0 不得产生 turn-start 事件"
+        );
+        assert!(
+            outcome.messages.is_empty(),
+            "max_turns=0 时输入不得被消费为对话消息"
+        );
+    }
+
+    /// F2-02 边界锚定：max_turns=1 首轮完整执行后以 max-turns 收场
+    /// （「max_turns=N = 允许 N 轮」语义不回归）
+    #[tokio::test]
+    async fn run_with_max_turns_one_stops_after_first_turn() {
+        use conex_types::session::AgentEndReason;
+        let provider = Arc::new(TestProvider::text_reply("hi"));
+        let mut loop_ = AgentSessionLoop::new("s1", "r1", 1, Box::new(provider.clone()), registry());
+        let outcome = loop_.run(user_input("hello")).await;
+        assert_eq!(outcome.reason, AgentEndReason::MaxTurns);
+        assert_eq!(outcome.turn_index, 1, "max_turns=1 允许首轮执行");
+        assert_eq!(provider.call_count(), 1, "max_turns=1 恰好调用一次 provider");
+        assert!(
+            outcome
+                .events
+                .iter()
+                .any(|e| matches!(e, AgentEvent::TurnStart { turn_index: 1, .. })),
+            "max_turns=1 必须产生第 1 轮 turn-start 事件"
+        );
+    }
+
     /// 构造用户消息（run 输入）
     fn user_input(text: &str) -> AgentMessage {
         AgentMessage {
