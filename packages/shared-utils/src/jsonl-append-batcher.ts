@@ -79,6 +79,19 @@ export class JsonlAppendBatcher {
       ensureLeadingNewline: options.ensureLeadingNewline ?? true,
       signal: options.signal,
     };
+    // F8-23 接线：signal 中止 = 调用方要求立即收口——flush 剩余 pending
+    // 并关闭句柄（once 监听，中止后自动移除；与 close() 幂等叠加）。
+    if (options.signal) {
+      options.signal.addEventListener(
+        "abort",
+        () => {
+          this.doFlush()
+            .then(() => this.close())
+            .catch((err) => console.warn("[JsonlAppendBatcher] abort flush failed:", err));
+        },
+        { once: true },
+      );
+    }
   }
 
   /**
