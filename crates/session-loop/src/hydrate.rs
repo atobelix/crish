@@ -286,6 +286,11 @@ fn joined_text(blocks: &[AgentMessageBlock]) -> String {
 /// 合法性，避免以 assistant 收尾被拒）。最后一条非 user 时向前截断到
 /// 最后一个 user 消息；无 user 消息 → 空序列（宁缺毋滥，交还壳层现状
 /// 单消息路径）。
+///
+/// DEEPCHECK-01 P0 对齐（锚点保留）：截断只发生在尾部（`truncate`），
+/// 序列首条永不因本约束被移除——若首条是 user（前端 buildHistoryMessages
+/// 的稳定锚点恒为会话首条 user 消息），锚点永不因截断消失，跨 run 请求
+/// 前缀保持字节稳定。
 fn truncate_to_last_user(messages: &mut Vec<Arc<AgentMessage>>) {
     match messages.iter().rposition(|message| message.role == AgentMessageRole::User) {
         Some(last_user) => messages.truncate(last_user + 1),
@@ -523,6 +528,38 @@ mod tests {
             msg("a2", "assistant", Some("r2"), None),
         ];
         assert_eq!(ids(&hydrate_history(history)), ["u1"]);
+    }
+
+    /// DEEPCHECK-01 P0：稳定锚点与尾部 user 截断对齐——首条 user 锚点
+    /// 永不因尾部截断消失（前端 buildHistoryMessages 锚点恒在语义在水合
+    /// 层的守卫：尾部截断只动尾部，不动头部）
+    #[test]
+    fn first_user_anchor_survives_tail_truncation() {
+        // 形态一：首条 user 锚点 + 大量尾部 assistant → 截断后锚点仍在
+        let mut long_tail = vec![msg("u1", "user", Some("锚点"), None)];
+        for i in 0..50 {
+            long_tail.push(msg(&format!("a{i}"), "assistant", Some("尾部"), None));
+        }
+        assert_eq!(ids(&hydrate_history(long_tail)), ["u1"]);
+        // 形态二：锚点 + 中间 user + 尾部 assistant——截断到最后一个 user，
+        // 首条锚点仍保留
+        let mixed = vec![
+            msg("u1", "user", Some("锚点"), None),
+            msg("a1", "assistant", Some("r1"), None),
+            msg("u2", "user", Some("q2"), None),
+            msg("a2", "assistant", Some("r2"), None),
+            msg("a3", "assistant", Some("r3"), None),
+        ];
+        assert_eq!(ids(&hydrate_history(mixed)), ["u1", "a1", "u2"]);
+        // 形态三：前端锚点截断载荷（锚点 + 预算尾部窗口，尾随 assistant）
+        // 水合后锚点与窗口内 user 全部保留
+        let anchored = vec![
+            msg("u1", "user", Some("锚点"), None),
+            msg("a40", "assistant", Some("r40"), None),
+            msg("u41", "user", Some("q41"), None),
+            msg("a42", "assistant", Some("r42"), None),
+        ];
+        assert_eq!(ids(&hydrate_history(anchored)), ["u1", "a40", "u41"]);
     }
 
     #[test]

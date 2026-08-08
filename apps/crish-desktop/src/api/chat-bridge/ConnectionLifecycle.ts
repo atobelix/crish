@@ -175,7 +175,7 @@ export function truncateHistoryWithAnchor(
   let tailStart = anchorEnd + 1;
   let tailTokens = total - headTokens;
   while (tailStart < history.length && headTokens + tailTokens > budget) {
-    tailTokens -= perMessageTokens[tailStart];
+    tailTokens -= perMessageTokens[tailStart] ?? 0;
     tailStart += 1;
   }
   return [...history.slice(0, anchorEnd + 1), ...history.slice(tailStart)];

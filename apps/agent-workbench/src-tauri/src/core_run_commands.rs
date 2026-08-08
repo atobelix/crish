@@ -43,6 +43,9 @@ use agent_tools::definition::ToolError;
 use agent_tools::tools::subagent::SubagentState;
 use agent_tools::write_paths::{WritePathPolicy, WritePathRegistry};
 use conex_db::LocalDb;
+// DEEPCHECK-01 P0：历史 token 估算复用 conex-compaction count_tokens 启发式
+// （ASCII 单词约 4 字符/token，与前端 estimateTextTokens 对齐）
+use conex_compaction::count_tokens;
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision as WireApprovalDecision, PermissionRequest,
     RunCacheStats, RunTerminalStatus, SecurityAuditDecision, SecurityAuditOperation,
@@ -86,9 +89,14 @@ const APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
 /// 快照周期默认值（T08.6 触发点 B：默认 60s，session_meta
 /// `snapshot_interval_ms` 可配）
 const DEFAULT_SNAPSHOT_INTERVAL_MS: u64 = 60_000;
-/// T-29：SessionHistoryCache 每会话消息条数上限（防膨胀；超出时保留
-/// 最近 N 条并对齐安全前缀，P4 阶段 1-3）
-const SESSION_HISTORY_MAX_MESSAGES: usize = 200;
+/// DEEPCHECK-01 P0：SessionHistoryCache 每会话 token 预算（防膨胀；超出时
+/// 按「稳定锚点 + 预算尾部」截断，跨 run 请求前缀字节稳定，见
+/// [truncate_history_with_anchor]；估算对齐 conex-compaction count_tokens，
+/// 与前端 HISTORY_TOKEN_BUDGET 同语义）
+const SESSION_HISTORY_TOKEN_BUDGET: usize = 200_000;
+/// 单条历史消息的固定线缆开销估算（role/id/timestamp/status + JSON 信封，
+/// 与前端 HISTORY_MESSAGE_TOKEN_OVERHEAD 对齐）
+const SESSION_HISTORY_MESSAGE_TOKEN_OVERHEAD: usize = 8;
 /// T-29：SessionHistoryCache 会话数上限（防膨胀；超出时 FIFO 淘汰
 /// 最久未更新的会话）
 const SESSION_HISTORY_MAX_SESSIONS: usize = 32;
@@ -555,8 +563,8 @@ impl EscapeWatchInjector for ControlBusInjector {
 /// - 容量护栏：每会话消息条数上限 + 会话数上限（防膨胀）。
 pub(crate) struct SessionHistoryCache {
     inner: Mutex<CacheInner>,
-    /// 每会话消息条数上限
-    max_messages: usize,
+    /// 每会话 token 预算（DEEPCHECK-01 P0 起替代消息条数上限）
+    max_tokens: usize,
     /// 会话数上限
     max_sessions: usize,
 }
@@ -568,20 +576,21 @@ struct CacheInner {
 }
 
 impl SessionHistoryCache {
-    /// 新建缓存（默认容量：每会话 `SESSION_HISTORY_MAX_MESSAGES` 条、
+    /// 新建缓存（默认容量：每会话 `SESSION_HISTORY_TOKEN_BUDGET` token、
     /// 最多 `SESSION_HISTORY_MAX_SESSIONS` 个会话）
     pub(crate) fn new() -> Self {
-        Self::with_limits(SESSION_HISTORY_MAX_MESSAGES, SESSION_HISTORY_MAX_SESSIONS)
+        Self::with_limits(SESSION_HISTORY_TOKEN_BUDGET, SESSION_HISTORY_MAX_SESSIONS)
     }
 
     /// 新建缓存（显式容量；测试用小容量验证上限语义）
-    pub(crate) fn with_limits(max_messages: usize, max_sessions: usize) -> Self {
+    /// `max_tokens`：每会话 token 预算（DEEPCHECK-01 P0 起替代消息条数上限）
+    pub(crate) fn with_limits(max_tokens: usize, max_sessions: usize) -> Self {
         Self {
             inner: Mutex::new(CacheInner {
                 sessions: HashMap::new(),
                 order: VecDeque::new(),
             }),
-            max_messages,
+            max_tokens,
             max_sessions,
         }
     }
@@ -598,17 +607,15 @@ impl SessionHistoryCache {
 
     /// 写入会话历史（run 收口原子替换）
     ///
-    /// 写入前执行两级护栏：
-    /// 1. 条数上限：保留最近 `max_messages` 条（截掉最旧）；
+    /// 写入前执行两级护栏（DEEPCHECK-01 P0：锚点 + 预算，跨 run 前缀稳定）：
+    /// 1. token 预算：超预算按 [truncate_history_with_anchor] 截断——首条
+    ///    user 锚点恒在 + 尾部预算窗口（不再固定条数尾部滑窗）；
     /// 2. 安全前缀：逐条前移直到首条为 user（不保留孤儿 tool/system
     ///    首条与带未配对 ToolCall 的 assistant 首条——wire 400 风险）。
     ///
     /// 会话数超限：FIFO 淘汰最久未更新的会话。
     pub(crate) fn store(&self, session_id: &str, mut messages: Vec<HistoryMessage>) {
-        if messages.len() > self.max_messages {
-            let keep = self.max_messages;
-            messages.drain(..messages.len() - keep);
-        }
+        truncate_history_with_anchor(&mut messages, self.max_tokens);
         ensure_safe_prefix(&mut messages);
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(pos) = inner.order.iter().position(|id| id == session_id) {
@@ -644,6 +651,87 @@ impl SessionHistoryCache {
             .map(|messages| messages.len())
             .unwrap_or(0)
     }
+}
+
+/// DEEPCHECK-01 P0：历史截断统一语义——「稳定锚点 + token 预算」（前端
+/// buildHistoryMessages / 引擎缓存读写三层同语义，跨 run 请求前缀稳定）。
+///
+/// 语义：
+/// 1. 预算内 → 原样保留（append-only，请求前缀天然字节稳定，服务端自动
+///    前缀缓存全量命中——不再逐轮尾部滑窗整体漂移）；
+/// 2. 超预算 → 锚点恒在：保留「首条 user 消息及其前的稳定头部」，其余从
+///    最老消息起逐条让位直到尾部窗口装入预算（预算内尾部截断而非固定
+///    条数截断）——锚点 = 会话首条 user，永不因截断消失，失配点收敛到
+///    尾部增量；
+/// 3. 尾部边界 wire 安全：截断点不落在孤儿 tool 消息（其 ToolCall 已被
+///    截掉，结果在截断区必然紧随其调用，故只可能落在窗口起点）或携带
+///    孤儿 ToolCall 的 assistant 上（wire 400 风险，与 [ensure_safe_prefix]
+///    同语义；前端载荷仅 user/assistant 且单条自包含，无此步骤）。
+pub(crate) fn truncate_history_with_anchor(
+    messages: &mut Vec<HistoryMessage>,
+    max_tokens: usize,
+) {
+    let total: usize = messages.iter().map(estimate_history_tokens).sum();
+    if messages.is_empty() || total <= max_tokens {
+        return;
+    }
+    // 锚点 = 首条 user 消息；无 user → 以首条为锚（退化形态仍保证前缀稳定）
+    let anchor_end = messages
+        .iter()
+        .position(|m| m.sender == "user")
+        .unwrap_or(0);
+    let head_tokens: usize = messages[..=anchor_end]
+        .iter()
+        .map(estimate_history_tokens)
+        .sum();
+    // 尾部窗口：从旧到新尽量多带（tail_start 尽可能小，预算内）
+    let mut tail_start = anchor_end + 1;
+    let mut tail_tokens = total - head_tokens;
+    while tail_start < messages.len() && head_tokens + tail_tokens > max_tokens {
+        tail_tokens -= estimate_history_tokens(&messages[tail_start]);
+        tail_start += 1;
+    }
+    // 尾部边界 wire 安全：跳过孤儿 tool 首条与携带孤儿 ToolCall 的
+    // assistant（结果消息的调用恒在其前，孤儿只可能落在窗口起点）
+    while tail_start < messages.len() {
+        let must_drop = match messages[tail_start].sender.as_str() {
+            "tool" | "system" => true,
+            "assistant" => first_has_orphan_tool_call(&messages[tail_start..]),
+            _ => false,
+        };
+        if !must_drop {
+            break;
+        }
+        tail_start += 1;
+    }
+    // 移除锚点后到尾部窗口起点之间的中间段（锚点与尾部恒在）
+    if tail_start > anchor_end + 1 {
+        messages.drain(anchor_end + 1..tail_start);
+    }
+}
+
+/// 单条 HistoryMessage 的 token 估算（对齐前端 estimateHistoryMessageTokens：
+/// 复用 conex-compaction count_tokens 启发式——ASCII 单词约 4 字符/token、
+/// 分隔符与 CJK 每字符 1 token；固定消息开销 8 token）。
+///
+/// 字段口径：缓存路径消息带完整 `blocks_json`（收口保真）→ 直接估算其
+/// JSON 序列（覆盖 text/thinking/tool-call/tool-result 全部块与输出正文）；
+/// 缺块（前端载荷形态）→ 按 text/thinking/tool_calls_json/
+/// tool_call_results_json 合成字段估算。
+fn estimate_history_tokens(entry: &HistoryMessage) -> usize {
+    let content_tokens = if let Some(blocks) = entry.blocks_json.as_deref() {
+        count_tokens(blocks)
+    } else {
+        entry.text.as_deref().map(count_tokens).unwrap_or(0)
+            + entry.thinking.as_deref().map(count_tokens).unwrap_or(0)
+            + entry.tool_calls_json.as_deref().map(count_tokens).unwrap_or(0)
+            + entry
+                .tool_call_results_json
+                .as_deref()
+                .map(count_tokens)
+                .unwrap_or(0)
+    };
+    content_tokens + SESSION_HISTORY_MESSAGE_TOKEN_OVERHEAD
 }
 
 /// 缓存安全前缀化：首条不得为 tool/system（孤儿——需要前置上下文），
@@ -845,7 +933,12 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 /// 过滤规则互补——缓存是引擎权威增量，tool/system 角色与完整 blocks
 /// 原样续接，工具结果配对不拆散；单条不可用（角色未知 / blocks 不可
 /// 解析）宽容跳过，不中断整体）
+///
+/// DEEPCHECK-01 P0：读回前同样按「锚点 + token 预算」截断（与 store 写入
+/// 语义对齐的防御性一致性；正常路径 store 已截断，此处幂等）。
 fn cached_history_to_conversation(entries: Vec<HistoryMessage>) -> Vec<Arc<AgentMessage>> {
+    let mut entries = entries;
+    truncate_history_with_anchor(&mut entries, SESSION_HISTORY_TOKEN_BUDGET);
     entries
         .iter()
         .filter_map(|entry| {
@@ -4169,26 +4262,121 @@ mod tests {
         ));
     }
 
-    // ── T-29：SessionHistoryCache ──────────────────────────────────
+    // ── T-29 / DEEPCHECK-01 P0：SessionHistoryCache ────────────────
 
-    /// 缓存容量上限（每会话消息条数）：超出保留最近 N 条，最旧截掉
+    /// 缓存容量上限（每会话 token 预算）：超预算按「稳定锚点 + 预算尾部」
+    /// 截断——首条 user 锚点恒在 + 最近消息按预算保留，中间段丢弃
     #[test]
-    fn session_history_cache_caps_messages_per_session() {
-        let cache = SessionHistoryCache::with_limits(3, 8);
+    fn session_history_cache_keeps_anchor_with_budget_tail() {
+        let cache = SessionHistoryCache::with_limits(27, 8);
         let many: Vec<HistoryMessage> =
             (0..7).map(|i| hmsg(&format!("m{i}"), "user", Some("x"))).collect();
         cache.store("s1", many);
         let stored = cache.get("s1").unwrap();
         assert_eq!(cache.message_count("s1"), 3);
-        // 保留最近 3 条（m4/m5/m6），最旧 4 条截掉
+        // 预算 27 token：锚点 m0（9）+ 尾部窗口 m5/m6（18）——m4 起超出预算
         let ids: Vec<&str> = stored.iter().map(|m| m.id.as_str()).collect();
-        assert_eq!(ids, ["m4", "m5", "m6"]);
+        assert_eq!(ids, ["m0", "m5", "m6"]);
+    }
+
+    /// DEEPCHECK-01 P0：极端预算（低于单条消息）时锚点仍恒在——
+    /// 首条 user 永不因截断消失（跨 run 请求前缀的最小稳定单位）
+    #[test]
+    fn session_history_cache_keeps_first_user_anchor_over_budget() {
+        let cache = SessionHistoryCache::with_limits(5, 4);
+        let many: Vec<HistoryMessage> =
+            (0..3).map(|i| hmsg(&format!("m{i}"), "user", Some("x"))).collect();
+        cache.store("s1", many);
+        let stored = cache.get("s1").unwrap();
+        let ids: Vec<&str> = stored.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["m0"]);
+        assert_eq!(stored[0].sender, "user");
+    }
+
+    /// DEEPCHECK-01 P0 集成形态：120 条消息会话——第 1 条锚点与最近尾部
+    /// 恒在，中间段按预算截断（不再固定条数尾部滑窗整体漂移）
+    #[test]
+    fn session_history_cache_truncates_middle_keeps_head_and_tail() {
+        let cache = SessionHistoryCache::with_limits(270, 4);
+        let many: Vec<HistoryMessage> = (0..120)
+            .map(|i| hmsg(&format!("m{i}"), "user", Some("x")))
+            .collect();
+        cache.store("s1", many);
+        let stored = cache.get("s1").unwrap();
+        assert_eq!(cache.message_count("s1"), 30);
+        let ids: Vec<&str> = stored.iter().map(|m| m.id.as_str()).collect();
+        // 锚点 m0 恒在 + 尾部窗口 [m91..m119]（29 条 × 9 token 装下预算），
+        // m1..m90 中间段全部丢弃
+        assert_eq!(ids[0], "m0");
+        assert_eq!(ids[ids.len() - 1], "m119");
+        assert_eq!(ids[1], "m91");
+    }
+
+    /// DEEPCHECK-01 P0：截断边界 wire 安全——孤儿 tool 首条（其 ToolCall
+    /// 已被截掉）不得成为窗口起点，逐条让位直到边界安全
+    #[test]
+    fn truncation_boundary_drops_orphan_tool_message() {
+        let cache = SessionHistoryCache::with_limits(40, 4);
+        let mut m1 = hmsg("m1", "assistant", None);
+        m1.blocks_json = Some(
+            serde_json::to_string(&vec![text_block("工具轮（11 token 估算）")]).unwrap(),
+        );
+        let stored_before = {
+            let mut msgs = vec![
+                hmsg("m0", "user", Some("x")),
+                m1.clone(),
+                hmsg("m2", "tool", Some("x")),
+                hmsg("m3", "user", Some("x")),
+                hmsg("m4", "user", Some("x")),
+            ];
+            truncate_history_with_anchor(&mut msgs, 40);
+            msgs
+        };
+        assert_eq!(stored_before[0].id, "m0");
+        // 预算 40：窗口起点恰好落在 m2（tool，孤儿结果）→ 边界让位到 m3
+        let ids: Vec<&str> = stored_before.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["m0", "m3", "m4"]);
+        // 与 store 写入路径同语义（store 内部同样先锚点预算截断再安全前缀）
+        cache.store("s1", stored_before);
+        let stored = cache.get("s1").unwrap();
+        let ids: Vec<&str> = stored.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["m0", "m3", "m4"]);
+    }
+
+    /// DEEPCHECK-01 P0：读回路径同样按预算截断（cached_history_to_conversation
+    /// 对超预算历史自包含截断——锚点 + 尾部，中间丢弃；正常路径 store 已截断，
+    /// 此处幂等）
+    #[test]
+    fn cached_history_read_path_truncates_with_budget() {
+        let long_text = "x".repeat(8_000);
+        let entries: Vec<HistoryMessage> = (0..100)
+            .map(|i| {
+                let mut entry = hmsg(&format!("m{i}"), "user", None);
+                entry.blocks_json = Some(
+                    serde_json::to_string(&vec![text_block(&long_text)]).unwrap(),
+                );
+                entry
+            })
+            .collect();
+        let restored = cached_history_to_conversation(entries);
+        // 期望值由同一估算函数自洽推导（不硬编码 count_tokens 细节）
+        let mut probe = hmsg("probe", "user", None);
+        probe.blocks_json =
+            Some(serde_json::to_string(&vec![text_block(&long_text)]).unwrap());
+        let per_message = estimate_history_tokens(&probe);
+        let expected_tail = (SESSION_HISTORY_TOKEN_BUDGET - per_message) / per_message;
+        assert!(restored.len() >= 50 && restored.len() < 100);
+        assert_eq!(restored.len(), 1 + expected_tail);
+        // 锚点恒在（首条 user）+ 尾部最近消息恒在 + 中间被截断
+        assert_eq!(restored[0].id, "m0");
+        assert_eq!(restored.last().unwrap().id, "m99");
+        assert_ne!(restored[1].id, "m1");
     }
 
     /// 缓存容量上限（会话数）：超出 FIFO 淘汰最久未更新的会话
     #[test]
     fn session_history_cache_evicts_oldest_session() {
-        let cache = SessionHistoryCache::with_limits(8, 2);
+        let cache = SessionHistoryCache::with_limits(64, 2);
         cache.store("s1", vec![hmsg("a", "user", Some("1"))]);
         cache.store("s2", vec![hmsg("b", "user", Some("2"))]);
         cache.store("s3", vec![hmsg("c", "user", Some("3"))]);
@@ -4295,7 +4483,7 @@ mod tests {
     /// 缓存往返保真：收口 → store → get → 读回水合，tool 配对不拆散
     #[test]
     fn cached_history_roundtrip_preserves_tool_pairs() {
-        let cache = SessionHistoryCache::with_limits(16, 4);
+        let cache = SessionHistoryCache::with_limits(100_000, 4);
         let outcome = RunOutcome {
             reason: AgentEndReason::Stop,
             error: None,
@@ -4354,7 +4542,7 @@ mod tests {
     /// assistant 首条被前移掉，缓存序列以 user 开头（wire 合法）
     #[test]
     fn store_truncates_orphan_prefix() {
-        let cache = SessionHistoryCache::with_limits(16, 4);
+        let cache = SessionHistoryCache::with_limits(100_000, 4);
         // 场景 A：assistant(带 ToolCall，结果已不在保留段) 首条 → 前移掉
         let mut orphan_calls = hmsg("a1", "assistant", Some("调用了工具"));
         orphan_calls.blocks_json = Some(

@@ -13,13 +13,15 @@ import {
   composeSystemPrompt,
   buildHistoryMessages,
   resolveContextWindow,
-  HISTORY_CAP,
+  HISTORY_TOKEN_BUDGET,
+  estimateTextTokens,
 } from './ConnectionLifecycle';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
 import type { StreamCallbacks } from '../chatApi';
 import type { StreamState } from './handlers/streamState';
 import type { SessionMessage } from '../../store/types';
 import type { Settings } from '../clientApi';
+import type { HistoryMessage } from './ConnectionLifecycle';
 import { getControlMetrics, resetControlMetrics } from '../controlMetrics';
 
 const { fakeTransport, startRunTask, loadSessionBodyMock } = vi.hoisted(() => {
@@ -211,30 +213,121 @@ describe('buildHistoryMessages（P4 T-31：store 消息 → history 载荷）', 
     ).toBeUndefined();
   });
 
-  it(`上限截断：超过 ${HISTORY_CAP} 条只保留最近 ${HISTORY_CAP} 条`, () => {
+  it(`默认预算内全量回传：120 条小消息（${estimateTextTokens('m0')} token/条估算）不触发截断`, () => {
+    // DEEPCHECK-01 P0：预算语义取代固定条数——预算内全量 append-only，
+    // 请求前缀字节稳定（旧语义 100 条尾部滑窗已废除）
     const messages = Array.from({ length: 120 }, (_, i) =>
       makeMsg({
         id: `m${i}`,
         sender: i % 2 === 0 ? 'user' : 'assistant',
-        text: `消息${i}`,
+        text: `m${i}`,
         timestamp: i,
       })
     );
     const history = buildHistoryMessages(messages)!;
-    expect(history).toHaveLength(HISTORY_CAP);
-    expect(history[0]?.id).toBe('m20');
-    expect(history[HISTORY_CAP - 1]?.id).toBe('m119');
+    expect(history).toHaveLength(120);
+    expect(history[0]?.id).toBe('m0');
+    expect(history[119]?.id).toBe('m119');
   });
 
-  it('自定义 cap 生效（超长会话只回传尾部窗口）', () => {
+  it('自定义 tokenBudget 生效（预算截断 + 首条 user 锚点恒在）', () => {
+    // 10 条 × 9 token（"m{i}" 1 token + 开销 8）= 90 > 40：锚点 m0（9 token）
+    // + 尾部窗口 [m7..m9]（27 token）装下预算，中间段丢弃
     const messages = Array.from({ length: 10 }, (_, i) =>
-      makeMsg({ id: `m${i}`, sender: 'user', text: `q${i}`, timestamp: i })
+      makeMsg({ id: `m${i}`, sender: 'user', text: `m${i}`, timestamp: i })
     );
-    expect(buildHistoryMessages(messages, { cap: 3 })).toEqual([
-      { id: 'm7', sender: 'user', text: 'q7', timestamp: 7 },
-      { id: 'm8', sender: 'user', text: 'q8', timestamp: 8 },
-      { id: 'm9', sender: 'user', text: 'q9', timestamp: 9 },
+    expect(
+      buildHistoryMessages(messages, { tokenBudget: 40 })
+    ).toEqual([
+      { id: 'm0', sender: 'user', text: 'm0', timestamp: 0 },
+      { id: 'm7', sender: 'user', text: 'm7', timestamp: 7 },
+      { id: 'm8', sender: 'user', text: 'm8', timestamp: 8 },
+      { id: 'm9', sender: 'user', text: 'm9', timestamp: 9 },
     ]);
+  });
+
+  it('极端预算（低于单条消息）锚点仍恒在', () => {
+    const messages = Array.from({ length: 10 }, (_, i) =>
+      makeMsg({ id: `m${i}`, sender: 'user', text: `m${i}`, timestamp: i })
+    );
+    // 预算 5 < 单条 9 token：截断到只剩锚点（首条 user 永不因截断消失）
+    const history = buildHistoryMessages(messages, { tokenBudget: 5 })!;
+    expect(history).toEqual([
+      { id: 'm0', sender: 'user', text: 'm0', timestamp: 0 },
+    ]);
+  });
+
+  it('超长会话前缀稳定：同一会话两次调用（新增消息），重叠部分字节一致', () => {
+    // 预算 300：call1（60 条 = 540 token）与 call2（66 条 = 594 token）
+    // 都超预算 → 锚点 m0 恒在 + 尾部窗口按预算截断
+    const call1 = buildHistoryMessages(
+      Array.from({ length: 60 }, (_, i) =>
+        makeMsg({ id: `m${i}`, sender: 'user', text: `m${i}`, timestamp: i })
+      ),
+      { tokenBudget: 300 }
+    )!;
+    const call2 = buildHistoryMessages(
+      Array.from({ length: 66 }, (_, i) =>
+        makeMsg({ id: `m${i}`, sender: 'user', text: `m${i}`, timestamp: i })
+      ),
+      { tokenBudget: 300 }
+    )!;
+    // 两次调用的首条字节一致 = 锚点恒在（跨 run 请求前缀以同一锚点开头）
+    expect(call1[0]?.id).toBe('m0');
+    expect(call2[0]?.id).toBe('m0');
+    expect(JSON.stringify(call1[0])).toBe(JSON.stringify(call2[0]));
+    // 重叠部分（两次调用都保留的消息，含锚点 m0 与 m34..m59）字节一致
+    const overlap = (a: HistoryMessage[], b: HistoryMessage[]) =>
+      a.filter((x) => b.some((y) => y.id === x.id));
+    const shared1 = overlap(call1, call2);
+    const shared2 = overlap(call2, call1);
+    expect(shared1.length).toBeGreaterThan(0);
+    expect(shared1).toEqual(shared2);
+    expect(JSON.stringify(shared1)).toBe(JSON.stringify(shared2));
+    // 锚点 m0 恒在两次调用中；共享窗口从 m34 起
+    expect(shared1[0]?.id).toBe('m0');
+    expect(shared1[1]?.id).toBe('m34');
+    // 尾部窗口：最近的 m59 / m65 恒在
+    expect(call1[call1.length - 1]?.id).toBe('m59');
+    expect(call2[call2.length - 1]?.id).toBe('m65');
+  });
+
+  it('预算内会话两次调用：前次结果字节为后次结果前缀（append-only 全量命中）', () => {
+    const mk = (n: number) =>
+      Array.from({ length: n }, (_, i) =>
+        makeMsg({ id: `m${i}`, sender: 'user', text: `m${i}`, timestamp: i })
+      );
+    const call1 = buildHistoryMessages(mk(30), { tokenBudget: 500 })!;
+    const call2 = buildHistoryMessages(mk(36), { tokenBudget: 500 })!;
+    // 预算内无截断 → call2 以 call1 的消息序列开头（字节级前缀 =
+    // 服务端前缀缓存全量命中；数组 JSON 前缀含前一个序列的完整字节）
+    expect(call2.slice(0, call1.length)).toEqual(call1);
+    expect(JSON.stringify(call2.slice(0, call1.length))).toBe(
+      JSON.stringify(call1)
+    );
+  });
+
+  it('集成：120 条超预算会话——第 1 条锚点与最近 N 条恒在、中间按预算截断', () => {
+    const messages = Array.from({ length: 120 }, (_, i) =>
+      makeMsg({
+        id: `m${i}`,
+        sender: i % 2 === 0 ? 'user' : 'assistant',
+        text: `m${i}`,
+        timestamp: i,
+      })
+    );
+    const history = buildHistoryMessages(messages, { tokenBudget: 270 })!;
+    expect(history).toHaveLength(30);
+    expect(history[0]?.id).toBe('m0');
+    expect(history[1]?.id).toBe('m91');
+    expect(history[29]?.id).toBe('m119');
+    // 中间段（m1..m90）全部丢弃
+    const dropped = messages
+      .map((m) => m.id)
+      .filter((id) => !history.some((h) => h.id === id));
+    expect(dropped).toEqual(
+      Array.from({ length: 90 }, (_, i) => `m${i + 1}`)
+    );
   });
 
   it('excludeId 排除当前 run 的 user 消息（历史与 prompt 不重复）', () => {
