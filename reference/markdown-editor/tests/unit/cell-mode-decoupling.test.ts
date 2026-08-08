@@ -20,8 +20,8 @@ describe('Table Cell Mode Decoupling (Selection Mode vs Edit Mode)', () => {
     const selected = useTableStore.getState().selectedCell;
     expect(selected).not.toBeNull();
     expect(selected?.tableId).toBe('table-1');
-    expect(selected?.lineIndex).toBe(2);
-    expect(selected?.colIndex).toBe(0);
+    expect(selected?.startLine).toBe(2);
+    expect(selected?.startCol).toBe(0);
     expect(selected?.isEditing).toBe(false);
   });
 
@@ -31,8 +31,8 @@ describe('Table Cell Mode Decoupling (Selection Mode vs Edit Mode)', () => {
     const selected = useTableStore.getState().selectedCell;
     expect(selected).not.toBeNull();
     expect(selected?.tableId).toBe('table-1');
-    expect(selected?.lineIndex).toBe(2);
-    expect(selected?.colIndex).toBe(1);
+    expect(selected?.startLine).toBe(2);
+    expect(selected?.startCol).toBe(1);
     expect(selected?.isEditing).toBe(true);
   });
 
@@ -42,8 +42,8 @@ describe('Table Cell Mode Decoupling (Selection Mode vs Edit Mode)', () => {
 
     useTableStore.getState().exitCellEdit();
     const selected = useTableStore.getState().selectedCell;
-    expect(selected?.lineIndex).toBe(2);
-    expect(selected?.colIndex).toBe(1);
+    expect(selected?.startLine).toBe(2);
+    expect(selected?.startCol).toBe(1);
     expect(selected?.isEditing).toBe(false);
   });
 
@@ -71,7 +71,7 @@ describe('Table Cell Mode Decoupling (Selection Mode vs Edit Mode)', () => {
       tableInfo!.absoluteLineIndex ?? tableInfo!.activeLineIndex,
       tableInfo!.activeCellIndex
     );
-    expect(useTableStore.getState().selectedCell?.colIndex).toBe(1);
+    expect(useTableStore.getState().selectedCell?.startCol).toBe(1);
     expect(useTableStore.getState().selectedCell?.isEditing).toBe(false);
   });
 

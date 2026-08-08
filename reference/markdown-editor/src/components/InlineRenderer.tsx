@@ -231,11 +231,41 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             const cellWidth = tableWidths?.[colIndex];
             const cellStyle = cellWidth ? { ...token.style, flex: `0 0 ${cellWidth}px` } : { ...token.style, flex: '1 1 0%' };
             
-            const isCellSelected = selectedCell?.lineIndex === lineIndex && selectedCell?.colIndex === colIndex;
-            const isCellEditing = isCellSelected && selectedCell?.isEditing;
+            const isCellSelected = selectedCell &&
+              lineIndex !== undefined &&
+              tableId === selectedCell.tableId &&
+              lineIndex >= Math.min(selectedCell.startLine, selectedCell.endLine) &&
+              lineIndex <= Math.max(selectedCell.startLine, selectedCell.endLine) &&
+              colIndex >= Math.min(selectedCell.startCol, selectedCell.endCol) &&
+              colIndex <= Math.max(selectedCell.startCol, selectedCell.endCol);
+              
+            const isCellEditing = isCellSelected && selectedCell?.isEditing && selectedCell.startLine === selectedCell.endLine && selectedCell.startCol === selectedCell.endCol;
 
+            let selectionShadow = '';
             if (isCellSelected) {
-              finalClassName += isCellEditing ? ' is-cell-editing' : ' is-cell-selected';
+              if (isCellEditing) {
+                finalClassName += ' is-cell-editing';
+              } else {
+                finalClassName += ' is-cell-selected';
+                const shadows = [];
+                const minLine = Math.min(selectedCell.startLine, selectedCell.endLine);
+                const maxLine = Math.max(selectedCell.startLine, selectedCell.endLine);
+                const minCol = Math.min(selectedCell.startCol, selectedCell.endCol);
+                const maxCol = Math.max(selectedCell.startCol, selectedCell.endCol);
+                
+                if (lineIndex === minLine) shadows.push('inset 0 1.5px 0 0 var(--border-focus)');
+                if (lineIndex === maxLine) shadows.push('inset 0 -1.5px 0 0 var(--border-focus)');
+                if (colIndex === minCol) shadows.push('inset 1.5px 0 0 0 var(--border-focus)');
+                if (colIndex === maxCol) shadows.push('inset -1.5px 0 0 0 var(--border-focus)');
+                
+                selectionShadow = shadows.join(', ');
+                if (lineIndex === maxLine && colIndex === maxCol) {
+                  finalClassName += ' is-selection-bottom-right';
+                }
+              }
+            }
+            if (selectionShadow) {
+              cellStyle.boxShadow = selectionShadow;
             }
 
             return (
@@ -247,18 +277,39 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 data-line-index={lineIndex}
                 className={finalClassName}
                 style={cellStyle}
-                onClick={(e) => {
+                onClick={(e) => e.stopPropagation()} // Prevent bubbling to MarkdownEngine and clearing selection
+                onMouseDown={(e) => {
+                  if (e.button === 2) return; // Ignore right click
                   e.stopPropagation();
-                  useTableStore.getState().enterCellSelection(
-                    tableId || '',
-                    lineIndex ?? -1,
-                    colIndex
-                  );
+                  // Avoid breaking edit mode if we click on the already editing cell
+                  if (isCellEditing) return;
+                  
+                  const tableStore = useTableStore.getState();
+                  tableStore.enterCellSelection(tableId || '', lineIndex ?? -1, colIndex);
+                  tableStore.setDraggingCell(true);
+                  
                   if (start !== undefined) {
                     useEditorStore.getState().setCursorPos(start + 1);
                   }
                   const input = document.querySelector('.hidden-input') as HTMLTextAreaElement;
                   if (input) input.focus();
+                }}
+                onMouseEnter={(e) => {
+                  const tableStore = useTableStore.getState();
+                  if (tableStore.isDraggingCell) {
+                    tableStore.updateCellSelectionEnd(lineIndex ?? -1, colIndex);
+                    // Clear native selection so text isn't highlighted while dragging cells
+                    window.getSelection()?.removeAllRanges();
+                  }
+                }}
+                onMouseUp={(e) => {
+                  if (e.button === 2) return;
+                  e.stopPropagation();
+                  const tableStore = useTableStore.getState();
+                  if (tableStore.isDraggingCell) {
+                    tableStore.setDraggingCell(false);
+                    tableStore.updateCellSelectionEnd(lineIndex ?? -1, colIndex);
+                  }
                 }}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
@@ -274,12 +325,34 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   const input = document.querySelector('.hidden-input') as HTMLTextAreaElement;
                   if (input) input.focus();
                 }}
+                onContextMenu={(e) => {
+                  // Prevent default context menu and trigger our custom one
+                  e.preventDefault();
+                  e.stopPropagation();
+                  
+                  const tableStore = useTableStore.getState();
+                  // If cell is not selected, select it first
+                  if (!isCellSelected) {
+                    tableStore.enterCellSelection(tableId || '', lineIndex ?? -1, colIndex);
+                  }
+                  
+                  // Dispatch custom event to ContextMenu component
+                  const event = new CustomEvent('open-table-context-menu', {
+                    detail: {
+                      x: e.clientX,
+                      y: e.clientY,
+                      isEditing: isCellEditing,
+                      tableId: tableId,
+                    }
+                  });
+                  window.dispatchEvent(event);
+                }}
               >
                 {token.children && (
                   <InlineRenderer
                     tokens={token.children}
                     lineOffset={lineOffset}
-                    activeState={activeState}
+                    activeState={isCellEditing ? activeState : undefined}
                     tableId={tableId}
                     lineIndex={lineIndex}
                   />

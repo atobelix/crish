@@ -78,7 +78,7 @@ const LineItem = React.memo(({
         top: `${virtualRow.start}px`,
         left: 0,
         width: '100%',
-        minHeight: '28px',
+        minHeight: lineNode.type === 'table_separator' ? '0px' : '28px',
       }}
     >
       <BlockRenderer
@@ -109,6 +109,7 @@ export const MarkdownEngine: React.FC = () => {
       if (line.startsWith('## ')) return 40;
       if (line.startsWith('### ')) return 36;
       if (line.startsWith('#### ')) return 32;
+      if (line.trim().match(/^\|?[\s:-]*[-]+[\s:-]*\|/)) return 0; // table separator
       return 28;
     },
     overscan: 40, // Buffer for smooth scrolling
@@ -116,7 +117,7 @@ export const MarkdownEngine: React.FC = () => {
 
   const handleContainerClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    if (!target.closest('.token-table-cell')) {
+    if (!target.closest('.token-table')) {
       useTableStore.getState().clearCellSelection();
     }
 

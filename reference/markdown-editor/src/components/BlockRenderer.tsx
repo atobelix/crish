@@ -255,45 +255,40 @@ export const BlockRenderer = memo(
 
       case 'table_separator':
         return (
-          <div
-            className="line-block line-table-separator"
-          >
-            {block.inlineTokens && block.inlineTokens.length > 0 ? (
-              <InlineRenderer
-                tokens={block.inlineTokens}
-                lineOffset={lineOffset}
-                activeState={activeState}
-                tableId={tableId}
-                lineIndex={index}
-              />
-            ) : (
-              <span
-                data-token-start={lineOffset}
-                data-token-length={block.length}
-              >
-                {block.raw}
-              </span>
-            )}
+          <div className="line-table">
+            <div
+              className="line-table-separator"
+              data-token-start={lineOffset}
+              data-token-length={block.length}
+            >
+              {block.inlineTokens && (
+                <InlineRenderer
+                  tokens={block.inlineTokens}
+                  lineOffset={lineOffset}
+                  activeState={activeState}
+                />
+              )}
+            </div>
           </div>
         );
 
       case 'table_row': {
         const isHeaderRow = tableId === `table-${index}`;
         return (
-          <div
-            className={`line-block line-table-row ${isHeaderRow ? 'table-header-row' : ''}`}
-          >
-            {block.inlineTokens && block.inlineTokens.length > 0 ? (
-              <InlineRenderer
-                tokens={block.inlineTokens}
-                lineOffset={lineOffset}
-                activeState={activeState}
-                tableId={tableId}
-                lineIndex={index}
-              />
-            ) : (
-              <br />
-            )}
+          <div className="line-table">
+            <div
+              className={`line-table-row ${isHeaderRow ? 'table-header-row' : ''}`}
+            >
+              {block.inlineTokens && (
+                <InlineRenderer
+                  tokens={block.inlineTokens}
+                  lineOffset={lineOffset}
+                  activeState={activeState}
+                  tableId={tableId}
+                  lineIndex={index}
+                />
+              )}
+            </div>
           </div>
         );
       }

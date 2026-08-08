@@ -1,20 +1,25 @@
 import { create } from 'zustand';
 
-export interface SelectedCell {
+export interface CellSelection {
   tableId: string;
-  lineIndex: number;
-  colIndex: number;
-  isEditing: boolean; // false = cell selection mode (1-click), true = cell in-place text edit mode (2-click)
+  startLine: number;
+  endLine: number;
+  startCol: number;
+  endCol: number;
+  isEditing: boolean; // false = cell selection mode (range), true = cell in-place text edit mode (single)
 }
 
 interface TableState {
   tableWidths: Record<string, number[]>; // key: table block ID, value: column widths in px
-  selectedCell: SelectedCell | null;
+  selectedCell: CellSelection | null;
+  isDraggingCell: boolean;
   setColumnWidth: (tableId: string, colIndex: number, width: number) => void;
   setTableWidths: (tableId: string, widths: number[]) => void;
-  setSelectedCell: (cell: SelectedCell | null) => void;
+  setSelectedCell: (cell: CellSelection | null) => void;
   setCellEditing: (isEditing: boolean) => void;
-  enterCellSelection: (tableId: string, lineIndex: number, colIndex: number) => void;
+  setDraggingCell: (isDragging: boolean) => void;
+  enterCellSelection: (tableId: string, startLine: number, startCol: number, endLine?: number, endCol?: number) => void;
+  updateCellSelectionEnd: (endLine: number, endCol: number) => void;
   enterCellEdit: (tableId?: string, lineIndex?: number, colIndex?: number) => void;
   exitCellEdit: () => void;
   clearCellSelection: () => void;
@@ -23,6 +28,7 @@ interface TableState {
 export const useTableStore = create<TableState>((set) => ({
   tableWidths: {},
   selectedCell: null,
+  isDraggingCell: false,
   setColumnWidth: (tableId, colIndex, width) =>
     set((state) => {
       const currentWidths = state.tableWidths[tableId] || [];
@@ -46,20 +52,32 @@ export const useTableStore = create<TableState>((set) => ({
     set(() => ({
       selectedCell: cell,
     })),
+  setDraggingCell: (isDragging) =>
+    set(() => ({
+      isDraggingCell: isDragging,
+    })),
   setCellEditing: (isEditing) =>
     set((state) => ({
       selectedCell: state.selectedCell
         ? { ...state.selectedCell, isEditing }
         : null,
     })),
-  enterCellSelection: (tableId, lineIndex, colIndex) =>
+  enterCellSelection: (tableId, startLine, startCol, endLine, endCol) =>
     set(() => ({
       selectedCell: {
         tableId,
-        lineIndex,
-        colIndex,
+        startLine,
+        startCol,
+        endLine: endLine ?? startLine,
+        endCol: endCol ?? startCol,
         isEditing: false,
       },
+    })),
+  updateCellSelectionEnd: (endLine, endCol) =>
+    set((state) => ({
+      selectedCell: state.selectedCell
+        ? { ...state.selectedCell, endLine, endCol }
+        : null,
     })),
   enterCellEdit: (tableId, lineIndex, colIndex) =>
     set((state) => {
@@ -67,8 +85,10 @@ export const useTableStore = create<TableState>((set) => ({
         return {
           selectedCell: {
             tableId,
-            lineIndex,
-            colIndex,
+            startLine: lineIndex,
+            endLine: lineIndex,
+            startCol: colIndex,
+            endCol: colIndex,
             isEditing: true,
           },
         };
@@ -94,4 +114,5 @@ export const useTableStore = create<TableState>((set) => ({
       selectedCell: null,
     })),
 }));
+
 

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useEditorStore } from './core/EditorStore';
 import { MarkdownEngine } from './components/MarkdownEngine';
+import { ContextMenu } from './components/ContextMenu';
 import testDoc from './assets/test-document.md?raw';
 import './index.css';
 
@@ -23,7 +24,10 @@ function App() {
   return (
     <div className="grid-paper">
       {textLength > 0 ? (
-        <MarkdownEngine />
+        <>
+          <MarkdownEngine />
+          <ContextMenu />
+        </>
       ) : (
         <div style={{ display: 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
           <h2>生成万行超大文档...</h2>

@@ -298,13 +298,12 @@ body {
 /* 单元格单选态 (Single Click: Cell Selected Mode - 柔和暖色高亮，去蓝调) */
 .token-table-cell.is-cell-selected {
   background-color: hsl(80 25% 92% / 0.7) !important;
-  outline: 1.5px solid var(--border-focus) !important;
-  outline-offset: -1px;
   z-index: 2;
-  border-radius: 2px;
+  border-radius: 0;
+  outline: none !important;
 }
 
-.token-table-cell.is-cell-selected::after {
+.token-table-cell.is-selection-bottom-right::after {
   content: '';
   position: absolute;
   right: -3px;
@@ -698,4 +697,31 @@ body {
   resize: none !important;
   padding: 0 !important;
   margin: 0 !important;
+}
+
+/* Enforce Strict Rendering for Table Cells Not in Edit Mode */
+/* Prevent global .is-active-line or .is-active-token from leaking into unedited cells */
+.token-table-cell:not(.is-cell-editing) .syntax-hidden,
+.token-table-cell:not(.is-cell-editing) .syntax-source,
+.token-table-cell:not(.is-cell-editing) .math-source,
+.token-table-cell:not(.is-cell-editing) .math-block-source,
+.token-table-cell:not(.is-cell-editing) .code-fence-source,
+.token-table-cell:not(.is-cell-editing) .blockquote-guide,
+.token-table-cell:not(.is-cell-editing) .hr-source {
+  display: none !important;
+}
+
+.token-table-cell:not(.is-cell-editing) .syntax-content,
+.token-table-cell:not(.is-cell-editing) .math-block-rendered,
+.token-table-cell:not(.is-cell-editing) .code-fence-rendered,
+.token-table-cell:not(.is-cell-editing) .hr-rendered {
+  display: block !important;
+}
+
+.token-table-cell:not(.is-cell-editing) .math-preview {
+  display: inline-block !important;
+}
+
+.token-table-cell:not(.is-cell-editing) .syntax-content {
+  display: inline !important;
 }
