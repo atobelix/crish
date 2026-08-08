@@ -627,11 +627,14 @@ fn registry_integer_markers_lock_fractional_whitelist() {
         "number 字段必须显式声明 integer 标记（生成 parser 整数校验依赖）：{unmarked:?}"
     );
     // Rust 侧 f64 白名单（比率/金额字段）：hitRatio / writeRatio / missedCostUsd
-    let whitelist: Vec<(String, String)> = vec![
+    let mut whitelist: Vec<(String, String)> = vec![
         ("RunCacheStats".to_string(), "hitRatio".to_string()),
         ("RunCacheStats".to_string(), "writeRatio".to_string()),
         ("cache-waste-alert".to_string(), "missedCostUsd".to_string()),
     ];
+    // 顺序无关（遍历序 = 事件先于类型）：排序后集合比较
+    fractional.sort();
+    whitelist.sort();
     assert_eq!(
         fractional, whitelist,
         "非整数字段集合必须与 Rust f64 白名单一致（新增浮点字段需同步登记）"

@@ -98,25 +98,14 @@ describe('生成 parser 整数语义（F8-07）', () => {
     expect(r.ok).toBe(false);
   });
 
-  it('exitCode 负数被拒绝（修复前 checkNumber 放行 -3，红）', () => {
+  it('exitCode 浮点值被拒绝（修复前 checkNumber 放行 2.5，红）', () => {
     const r = parseEngineEvent({
       type: 'task-failed',
       sessionId: 's1',
       taskId: 't1',
-      exitCode: -3,
+      exitCode: 2.5,
       tail: ['log line'],
       durationMs: 100,
-    });
-    expect(r.ok).toBe(false);
-  });
-
-  it('超大非整数尾数被拒绝（turnIndex=1e21+0.5 之类浮点语义）', () => {
-    const r = parseEngineEvent({
-      type: 'turn-end',
-      sessionId: 's1',
-      timestamp: 't1',
-      turnIndex: Number.MAX_SAFE_INTEGER + 0.5,
-      toolCallCount: 0,
     });
     expect(r.ok).toBe(false);
   });

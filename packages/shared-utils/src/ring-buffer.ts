@@ -16,7 +16,9 @@ export class RingBuffer<T> {
   private readonly capacity: number;
 
   constructor(capacity: number) {
-    if (capacity <= 0 || !Number.isFinite(capacity)) {
+    // F8-20：capacity < 1 拒绝（含 (0,1) 分数——此前静默 Math.floor 为 0，
+    // 全部 push 返回 false 静默丢数据；0/负数/NaN/Infinity 一并拒绝）
+    if (capacity < 1 || !Number.isFinite(capacity)) {
       throw new RangeError(`RingBuffer capacity must be a positive finite number, got ${capacity}`);
     }
     this.capacity = Math.floor(capacity);

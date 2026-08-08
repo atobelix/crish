@@ -28,6 +28,12 @@ export class LruCache<K, V> implements CacheProvider<K, V> {
     maxBytes: number,
     estimateSize: SizeEstimator<K, V> = () => 0,
   ) {
+    // F8-20：非法/分数容量拒绝——NaN 使淘汰比较恒 false（无限增长），
+    // (0,1) 分数静默退化为容量 1，负数无意义。maxEntries=0 保留
+    // （C3 对抗测试锚定现状语义，其修复属 C 系列独立项）。
+    if (!Number.isFinite(maxEntries) || (maxEntries < 1 && maxEntries !== 0)) {
+      throw new RangeError(`LruCache maxEntries must be a positive finite number, got ${maxEntries}`);
+    }
     this.maxEntries = maxEntries;
     this.maxBytes = maxBytes;
     this.estimateSize = estimateSize;

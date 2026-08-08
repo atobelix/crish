@@ -105,5 +105,5 @@ describe("LruMap", () => {
     expect(() => new LruMap<number, number>(0.5)).toThrow(RangeError);
   });
 });
-});
+
 

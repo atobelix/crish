@@ -16,7 +16,9 @@ export class BoundedMap<K, V> {
   private readonly onEvict: ((key: K, value: V) => void) | undefined;
 
   constructor(capacity: number, onEvict: ((key: K, value: V) => void) | undefined) {
-    if (capacity <= 0 || !Number.isFinite(capacity)) {
+    // F8-20：capacity < 1 拒绝（含 (0,1) 分数——此前静默 Math.floor 为 0，
+    // 首条 set 无淘汰直存、容量上限形同虚设）
+    if (capacity < 1 || !Number.isFinite(capacity)) {
       throw new RangeError(`BoundedMap capacity must be a positive finite number, got ${capacity}`);
     }
     this.capacity = Math.floor(capacity);
@@ -113,7 +115,8 @@ export class LruMap<K, V> {
   private readonly capacity: number;
 
   constructor(capacity: number) {
-    if (capacity <= 0 || !Number.isFinite(capacity)) {
+    // F8-20：同 BoundedMap——(0,1) 分数容量静默取整为 0，淘汰逻辑失效
+    if (capacity < 1 || !Number.isFinite(capacity)) {
       throw new RangeError(`LruMap capacity must be a positive finite number, got ${capacity}`);
     }
     this.capacity = Math.floor(capacity);

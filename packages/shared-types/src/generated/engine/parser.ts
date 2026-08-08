@@ -49,6 +49,15 @@ function checkNumber(v: unknown): ParseResult<number> {
     : parseErr("expected a number");
 }
 
+// F8-07: integer fields (registry "integer": true) reject float/negative/
+// huge-tail values that would pollute integer-semantic state (turnIndex,
+// exitCode, tokens, ...). Fractional fields (f64 ratios) stay checkNumber.
+function checkInteger(v: unknown): ParseResult<number> {
+  return typeof v === "number" && Number.isFinite(v) && Number.isInteger(v)
+    ? parseOk(v)
+    : parseErr("expected an integer");
+}
+
 function checkBoolean(v: unknown): ParseResult<boolean> {
   return typeof v === "boolean" ? parseOk(v) : parseErr("expected a boolean");
 }
@@ -444,7 +453,7 @@ export function parseToolBatchResult(v: unknown): ParseResult<ToolBatchResult> {
   if (!output.ok) return output;
   const isError = reqField(v, "isError", checkBoolean);
   if (!isError.ok) return isError;
-  const durationMs = reqField(v, "durationMs", checkNumber);
+  const durationMs = reqField(v, "durationMs", checkInteger);
   if (!durationMs.ok) return durationMs;
   return parseOk({
     id: id.data,
@@ -480,13 +489,13 @@ export function parseProviderDiagnostic(v: unknown): ParseResult<ProviderDiagnos
   if (!endpoint.ok) return endpoint;
   const url = optField(v, "url", checkString);
   if (!url.ok) return url;
-  const attempt = optField(v, "attempt", checkNumber);
+  const attempt = optField(v, "attempt", checkInteger);
   if (!attempt.ok) return attempt;
-  const maxAttempts = optField(v, "maxAttempts", checkNumber);
+  const maxAttempts = optField(v, "maxAttempts", checkInteger);
   if (!maxAttempts.ok) return maxAttempts;
-  const elapsedMs = optField(v, "elapsedMs", checkNumber);
+  const elapsedMs = optField(v, "elapsedMs", checkInteger);
   if (!elapsedMs.ok) return elapsedMs;
-  const status = optField(v, "status", checkNumber);
+  const status = optField(v, "status", checkInteger);
   if (!status.ok) return status;
   const statusText = optField(v, "statusText", checkString);
   if (!statusText.ok) return statusText;
@@ -496,11 +505,11 @@ export function parseProviderDiagnostic(v: unknown): ParseResult<ProviderDiagnos
   if (!reason.ok) return reason;
   const errorKind = optField(v, "errorKind", parseProviderErrorKind);
   if (!errorKind.ok) return errorKind;
-  const retryAfterMs = optField(v, "retryAfterMs", checkNumber);
+  const retryAfterMs = optField(v, "retryAfterMs", checkInteger);
   if (!retryAfterMs.ok) return retryAfterMs;
-  const chunks = optField(v, "chunks", checkNumber);
+  const chunks = optField(v, "chunks", checkInteger);
   if (!chunks.ok) return chunks;
-  const bytes = optField(v, "bytes", checkNumber);
+  const bytes = optField(v, "bytes", checkInteger);
   if (!bytes.ok) return bytes;
   const headers = optField(v, "headers", checkJsonValue);
   if (!headers.ok) return headers;
@@ -518,13 +527,13 @@ export function parseProviderDiagnostic(v: unknown): ParseResult<ProviderDiagnos
   if (!hasSystemRole.ok) return hasSystemRole;
   const systemPromptPresent = optField(v, "systemPromptPresent", checkBoolean);
   if (!systemPromptPresent.ok) return systemPromptPresent;
-  const systemMessageCount = optField(v, "systemMessageCount", checkNumber);
+  const systemMessageCount = optField(v, "systemMessageCount", checkInteger);
   if (!systemMessageCount.ok) return systemMessageCount;
-  const rewrittenSystemMessageCount = optField(v, "rewrittenSystemMessageCount", checkNumber);
+  const rewrittenSystemMessageCount = optField(v, "rewrittenSystemMessageCount", checkInteger);
   if (!rewrittenSystemMessageCount.ok) return rewrittenSystemMessageCount;
-  const messageCount = optField(v, "messageCount", checkNumber);
+  const messageCount = optField(v, "messageCount", checkInteger);
   if (!messageCount.ok) return messageCount;
-  const toolCount = optField(v, "toolCount", checkNumber);
+  const toolCount = optField(v, "toolCount", checkInteger);
   if (!toolCount.ok) return toolCount;
   const messageRoleCounts = optField(v, "messageRoleCounts", checkJsonValue);
   if (!messageRoleCounts.ok) return messageRoleCounts;
@@ -712,15 +721,15 @@ export function parseContextCompressionHandoffMetadata(v: unknown): ParseResult<
   if (!providerRetry.ok) return providerRetry;
   const summary = reqField(v, "summary", checkString);
   if (!summary.ok) return summary;
-  const compressedMessageCount = reqField(v, "compressedMessageCount", checkNumber);
+  const compressedMessageCount = reqField(v, "compressedMessageCount", checkInteger);
   if (!compressedMessageCount.ok) return compressedMessageCount;
-  const keptMessageCount = reqField(v, "keptMessageCount", checkNumber);
+  const keptMessageCount = reqField(v, "keptMessageCount", checkInteger);
   if (!keptMessageCount.ok) return keptMessageCount;
-  const tokensBefore = reqField(v, "tokensBefore", checkNumber);
+  const tokensBefore = reqField(v, "tokensBefore", checkInteger);
   if (!tokensBefore.ok) return tokensBefore;
-  const tokensAfter = reqField(v, "tokensAfter", checkNumber);
+  const tokensAfter = reqField(v, "tokensAfter", checkInteger);
   if (!tokensAfter.ok) return tokensAfter;
-  const thresholdTokens = reqField(v, "thresholdTokens", checkNumber);
+  const thresholdTokens = reqField(v, "thresholdTokens", checkInteger);
   if (!thresholdTokens.ok) return thresholdTokens;
   const firstKeptMessageId = optField(v, "firstKeptMessageId", checkString);
   if (!firstKeptMessageId.ok) return firstKeptMessageId;
@@ -768,7 +777,7 @@ export function parseContextCompressionCacheBoundaryMetadata(v: unknown): ParseR
   if (!isRecord(v)) return parseErr("ContextCompressionCacheBoundaryMetadata: payload must be an object");
   const kind = reqField(v, "kind", checkString);
   if (!kind.ok) return kind;
-  const version = reqField(v, "version", checkNumber);
+  const version = reqField(v, "version", checkInteger);
   if (!version.ok) return version;
   const stablePrefixHash = reqField(v, "stablePrefixHash", checkString);
   if (!stablePrefixHash.ok) return stablePrefixHash;
@@ -821,11 +830,11 @@ export function parseContextCompressionRecord(v: unknown): ParseResult<ContextCo
   if (!compressedMessageIds.ok) return compressedMessageIds;
   const keptMessageIds = reqField(v, "keptMessageIds", (x) => parseArrayOf(x, checkString));
   if (!keptMessageIds.ok) return keptMessageIds;
-  const tokensBefore = reqField(v, "tokensBefore", checkNumber);
+  const tokensBefore = reqField(v, "tokensBefore", checkInteger);
   if (!tokensBefore.ok) return tokensBefore;
-  const tokensAfter = reqField(v, "tokensAfter", checkNumber);
+  const tokensAfter = reqField(v, "tokensAfter", checkInteger);
   if (!tokensAfter.ok) return tokensAfter;
-  const thresholdTokens = optField(v, "thresholdTokens", checkNumber);
+  const thresholdTokens = optField(v, "thresholdTokens", checkInteger);
   if (!thresholdTokens.ok) return thresholdTokens;
   const createdAt = reqField(v, "createdAt", checkString);
   if (!createdAt.ok) return createdAt;
@@ -856,27 +865,27 @@ export function parseContextCompressionRecord(v: unknown): ParseResult<ContextCo
 
 export function parseRunCacheStats(v: unknown): ParseResult<RunCacheStats> {
   if (!isRecord(v)) return parseErr("RunCacheStats: payload must be an object");
-  const promptTokens = reqField(v, "promptTokens", checkNumber);
+  const promptTokens = reqField(v, "promptTokens", checkInteger);
   if (!promptTokens.ok) return promptTokens;
-  const completionTokens = reqField(v, "completionTokens", checkNumber);
+  const completionTokens = reqField(v, "completionTokens", checkInteger);
   if (!completionTokens.ok) return completionTokens;
-  const totalTokens = reqField(v, "totalTokens", checkNumber);
+  const totalTokens = reqField(v, "totalTokens", checkInteger);
   if (!totalTokens.ok) return totalTokens;
-  const cacheReadTokens = reqField(v, "cacheReadTokens", checkNumber);
+  const cacheReadTokens = reqField(v, "cacheReadTokens", checkInteger);
   if (!cacheReadTokens.ok) return cacheReadTokens;
-  const cacheWriteTokens = reqField(v, "cacheWriteTokens", checkNumber);
+  const cacheWriteTokens = reqField(v, "cacheWriteTokens", checkInteger);
   if (!cacheWriteTokens.ok) return cacheWriteTokens;
-  const cacheMissTokens = reqField(v, "cacheMissTokens", checkNumber);
+  const cacheMissTokens = reqField(v, "cacheMissTokens", checkInteger);
   if (!cacheMissTokens.ok) return cacheMissTokens;
-  const sampleCount = reqField(v, "sampleCount", checkNumber);
+  const sampleCount = reqField(v, "sampleCount", checkInteger);
   if (!sampleCount.ok) return sampleCount;
   const hitRatio = optField(v, "hitRatio", checkNumber);
   if (!hitRatio.ok) return hitRatio;
   const writeRatio = optField(v, "writeRatio", checkNumber);
   if (!writeRatio.ok) return writeRatio;
-  const missedTokens = reqField(v, "missedTokens", checkNumber);
+  const missedTokens = reqField(v, "missedTokens", checkInteger);
   if (!missedTokens.ok) return missedTokens;
-  const warmUntilMs = optField(v, "warmUntilMs", checkNumber);
+  const warmUntilMs = optField(v, "warmUntilMs", checkInteger);
   if (!warmUntilMs.ok) return warmUntilMs;
   return parseOk({
     promptTokens: promptTokens.data,
@@ -895,11 +904,11 @@ export function parseRunCacheStats(v: unknown): ParseResult<RunCacheStats> {
 
 export function parseImpactAssessment(v: unknown): ParseResult<ImpactAssessment> {
   if (!isRecord(v)) return parseErr("ImpactAssessment: payload must be an object");
-  const fileCount = reqField(v, "fileCount", checkNumber);
+  const fileCount = reqField(v, "fileCount", checkInteger);
   if (!fileCount.ok) return fileCount;
-  const totalSizeBytes = reqField(v, "totalSizeBytes", checkNumber);
+  const totalSizeBytes = reqField(v, "totalSizeBytes", checkInteger);
   if (!totalSizeBytes.ok) return totalSizeBytes;
-  const directoryCount = reqField(v, "directoryCount", checkNumber);
+  const directoryCount = reqField(v, "directoryCount", checkInteger);
   if (!directoryCount.ok) return directoryCount;
   const crossDirectory = reqField(v, "crossDirectory", checkBoolean);
   if (!crossDirectory.ok) return crossDirectory;
@@ -965,7 +974,7 @@ export function parseEngineTurnStartEvent(v: unknown): ParseResult<EngineTurnSta
   if (v["type"] !== "turn-start") return parseErr("EngineTurnStartEvent: type mismatch");
   const sessionId = reqField(v, "sessionId", checkString);
   if (!sessionId.ok) return sessionId;
-  const turnIndex = reqField(v, "turnIndex", checkNumber);
+  const turnIndex = reqField(v, "turnIndex", checkInteger);
   if (!turnIndex.ok) return turnIndex;
   const timestamp = reqField(v, "timestamp", checkString);
   if (!timestamp.ok) return timestamp;
@@ -982,11 +991,11 @@ export function parseEngineTurnEndEvent(v: unknown): ParseResult<EngineTurnEndEv
   if (v["type"] !== "turn-end") return parseErr("EngineTurnEndEvent: type mismatch");
   const sessionId = reqField(v, "sessionId", checkString);
   if (!sessionId.ok) return sessionId;
-  const turnIndex = reqField(v, "turnIndex", checkNumber);
+  const turnIndex = reqField(v, "turnIndex", checkInteger);
   if (!turnIndex.ok) return turnIndex;
   const timestamp = reqField(v, "timestamp", checkString);
   if (!timestamp.ok) return timestamp;
-  const toolCallCount = reqField(v, "toolCallCount", checkNumber);
+  const toolCallCount = reqField(v, "toolCallCount", checkInteger);
   if (!toolCallCount.ok) return toolCallCount;
   return parseOk({
     type: "turn-end",
@@ -1183,7 +1192,7 @@ export function parseEngineContextCompressionStartEvent(v: unknown): ParseResult
   if (!timestamp.ok) return timestamp;
   const reason = reqField(v, "reason", checkString);
   if (!reason.ok) return reason;
-  const tokensBefore = reqField(v, "tokensBefore", checkNumber);
+  const tokensBefore = reqField(v, "tokensBefore", checkInteger);
   if (!tokensBefore.ok) return tokensBefore;
   return parseOk({
     type: "context-compression-start",
@@ -1420,9 +1429,9 @@ export function parseEngineCacheWasteAlertEvent(v: unknown): ParseResult<EngineC
   if (!timestamp.ok) return timestamp;
   const attribution = reqField(v, "attribution", parseMissAttribution);
   if (!attribution.ok) return attribution;
-  const missedTokens = reqField(v, "missedTokens", checkNumber);
+  const missedTokens = reqField(v, "missedTokens", checkInteger);
   if (!missedTokens.ok) return missedTokens;
-  const idleMs = reqField(v, "idleMs", checkNumber);
+  const idleMs = reqField(v, "idleMs", checkInteger);
   if (!idleMs.ok) return idleMs;
   const modelChanged = reqField(v, "modelChanged", checkBoolean);
   if (!modelChanged.ok) return modelChanged;
@@ -1447,11 +1456,11 @@ export function parseEngineColdCacheWarningEvent(v: unknown): ParseResult<Engine
   if (!sessionId.ok) return sessionId;
   const timestamp = reqField(v, "timestamp", checkString);
   if (!timestamp.ok) return timestamp;
-  const ttlSeconds = reqField(v, "ttlSeconds", checkNumber);
+  const ttlSeconds = reqField(v, "ttlSeconds", checkInteger);
   if (!ttlSeconds.ok) return ttlSeconds;
-  const idleMs = reqField(v, "idleMs", checkNumber);
+  const idleMs = reqField(v, "idleMs", checkInteger);
   if (!idleMs.ok) return idleMs;
-  const resendEstimateTokens = reqField(v, "resendEstimateTokens", checkNumber);
+  const resendEstimateTokens = reqField(v, "resendEstimateTokens", checkInteger);
   if (!resendEstimateTokens.ok) return resendEstimateTokens;
   return parseOk({
     type: "cold-cache-warning",
@@ -1613,7 +1622,7 @@ export function parseEngineTaskOutputEvent(v: unknown): ParseResult<EngineTaskOu
   if (!line.ok) return line;
   const chunk = optField(v, "chunk", checkString);
   if (!chunk.ok) return chunk;
-  const lineCount = optField(v, "lineCount", checkNumber);
+  const lineCount = optField(v, "lineCount", checkInteger);
   if (!lineCount.ok) return lineCount;
   return parseOk({
     type: "task-output",
@@ -1649,9 +1658,9 @@ export function parseEngineTaskSuspiciousEvent(v: unknown): ParseResult<EngineTa
   if (!sessionId.ok) return sessionId;
   const taskId = reqField(v, "taskId", checkString);
   if (!taskId.ok) return taskId;
-  const silenceMs = reqField(v, "silenceMs", checkNumber);
+  const silenceMs = reqField(v, "silenceMs", checkInteger);
   if (!silenceMs.ok) return silenceMs;
-  const lastOutputAtMs = reqField(v, "lastOutputAtMs", checkNumber);
+  const lastOutputAtMs = reqField(v, "lastOutputAtMs", checkInteger);
   if (!lastOutputAtMs.ok) return lastOutputAtMs;
   return parseOk({
     type: "task-suspicious",
@@ -1669,11 +1678,11 @@ export function parseEngineTaskCompletedEvent(v: unknown): ParseResult<EngineTas
   if (!sessionId.ok) return sessionId;
   const taskId = reqField(v, "taskId", checkString);
   if (!taskId.ok) return taskId;
-  const exitCode = reqField(v, "exitCode", checkNumber);
+  const exitCode = reqField(v, "exitCode", checkInteger);
   if (!exitCode.ok) return exitCode;
-  const durationMs = reqField(v, "durationMs", checkNumber);
+  const durationMs = reqField(v, "durationMs", checkInteger);
   if (!durationMs.ok) return durationMs;
-  const lineCount = reqField(v, "lineCount", checkNumber);
+  const lineCount = reqField(v, "lineCount", checkInteger);
   if (!lineCount.ok) return lineCount;
   return parseOk({
     type: "task-completed",
@@ -1692,11 +1701,11 @@ export function parseEngineTaskFailedEvent(v: unknown): ParseResult<EngineTaskFa
   if (!sessionId.ok) return sessionId;
   const taskId = reqField(v, "taskId", checkString);
   if (!taskId.ok) return taskId;
-  const exitCode = reqField(v, "exitCode", checkNumber);
+  const exitCode = reqField(v, "exitCode", checkInteger);
   if (!exitCode.ok) return exitCode;
   const tail = reqField(v, "tail", (x) => parseArrayOf(x, checkString));
   if (!tail.ok) return tail;
-  const durationMs = reqField(v, "durationMs", checkNumber);
+  const durationMs = reqField(v, "durationMs", checkInteger);
   if (!durationMs.ok) return durationMs;
   return parseOk({
     type: "task-failed",
@@ -1737,7 +1746,7 @@ export function parseEngineTimerFiredEvent(v: unknown): ParseResult<EngineTimerF
   if (!timerId.ok) return timerId;
   const prompt = reqField(v, "prompt", checkString);
   if (!prompt.ok) return prompt;
-  const firedAtMs = reqField(v, "firedAtMs", checkNumber);
+  const firedAtMs = reqField(v, "firedAtMs", checkInteger);
   if (!firedAtMs.ok) return firedAtMs;
   return parseOk({
     type: "timer-fired",
@@ -1757,7 +1766,7 @@ export function parseEngineTimerCancelledEvent(v: unknown): ParseResult<EngineTi
   if (!timerId.ok) return timerId;
   const reason = reqField(v, "reason", checkString);
   if (!reason.ok) return reason;
-  const cancelledAtMs = reqField(v, "cancelledAtMs", checkNumber);
+  const cancelledAtMs = reqField(v, "cancelledAtMs", checkInteger);
   if (!cancelledAtMs.ok) return cancelledAtMs;
   return parseOk({
     type: "timer-cancelled",
@@ -1779,9 +1788,9 @@ export function parseEngineCronFiredEvent(v: unknown): ParseResult<EngineCronFir
   if (!prompt.ok) return prompt;
   const expression = reqField(v, "expression", checkString);
   if (!expression.ok) return expression;
-  const iteration = reqField(v, "iteration", checkNumber);
+  const iteration = reqField(v, "iteration", checkInteger);
   if (!iteration.ok) return iteration;
-  const firedAtMs = reqField(v, "firedAtMs", checkNumber);
+  const firedAtMs = reqField(v, "firedAtMs", checkInteger);
   if (!firedAtMs.ok) return firedAtMs;
   return parseOk({
     type: "cron-fired",

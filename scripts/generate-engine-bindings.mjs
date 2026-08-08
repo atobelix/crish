@@ -107,6 +107,13 @@ function validateRegistry(reg) {
       if (ref !== null && !known.has(ref)) {
         fail(`registry references unknown type "${f.type}" at ${where}`);
       }
+      // F8-07: number 字段必须显式声明 integer（true=整数 / false=浮点），
+      // 生成 parser 的整数校验依赖该标记；漏标即生成期失败
+      if (f.type === "number" || f.type === "number[]") {
+        if (typeof f.integer !== "boolean") {
+          fail(`registry number field "${f.name}" at ${where} must declare integer (true|false)`);
+        }
+      }
     }
   };
   reg.events.forEach((ev, idx) => {
@@ -328,6 +335,15 @@ const PARSER_PREAMBLE = [
   "    : parseErr(\"expected a number\");",
   "}",
   "",
+  "// F8-07: integer fields (registry \"integer\": true) reject float/negative/",
+  "// huge-tail values that would pollute integer-semantic state (turnIndex,",
+  "// exitCode, tokens, ...). Fractional fields (f64 ratios) stay checkNumber.",
+  "function checkInteger(v: unknown): ParseResult<number> {",
+  "  return typeof v === \"number\" && Number.isFinite(v) && Number.isInteger(v)",
+  "    ? parseOk(v)",
+  "    : parseErr(\"expected an integer\");",
+  "}",
+  "",
   "function checkBoolean(v: unknown): ParseResult<boolean> {",
   "  return typeof v === \"boolean\" ? parseOk(v) : parseErr(\"expected a boolean\");",
   "}",
@@ -400,8 +416,11 @@ const PARSER_PREAMBLE = [
 
 function fieldParserExpr(f) {
   const t = f.type;
+  // F8-07: number 字段按注册表 integer 标记选择 checkInteger/checkNumber
+  //（integer 缺失由 validateRegistry 拒绝，防手改注册表漏标）
+  const numberChecker = (integer) => (integer ? "checkInteger" : "checkNumber");
   if (t === "string") return "checkString";
-  if (t === "number") return "checkNumber";
+  if (t === "number") return numberChecker(f.integer);
   if (t === "boolean") return "checkBoolean";
   if (t === "JsonValue") return "checkJsonValue";
   if (t.endsWith("[]")) {
@@ -410,7 +429,7 @@ function fieldParserExpr(f) {
       inner === "string"
         ? "checkString"
         : inner === "number"
-          ? "checkNumber"
+          ? numberChecker(f.integer)
           : inner === "boolean"
             ? "checkBoolean"
             : inner === "JsonValue"

@@ -77,7 +77,8 @@
           "name": "turnIndex",
           "type": "number",
           "required": true,
-          "description": "轮次序号"
+          "description": "轮次序号",
+          "integer": true
         },
         {
           "name": "timestamp",
@@ -105,7 +106,8 @@
           "name": "turnIndex",
           "type": "number",
           "required": true,
-          "description": "轮次序号"
+          "description": "轮次序号",
+          "integer": true
         },
         {
           "name": "timestamp",
@@ -117,7 +119,8 @@
           "name": "toolCallCount",
           "type": "number",
           "required": true,
-          "description": "本轮工具调用数"
+          "description": "本轮工具调用数",
+          "integer": true
         }
       ],
       "backpressure": "critical"
@@ -468,7 +471,8 @@
           "name": "tokensBefore",
           "type": "number",
           "required": true,
-          "description": "压缩前 token 数"
+          "description": "压缩前 token 数",
+          "integer": true
         }
       ],
       "backpressure": "critical"
@@ -870,13 +874,15 @@
           "name": "missedTokens",
           "type": "number",
           "required": true,
-          "description": "浪费 token 数"
+          "description": "浪费 token 数",
+          "integer": true
         },
         {
           "name": "idleMs",
           "type": "number",
           "required": true,
-          "description": "距上次请求空闲毫秒数"
+          "description": "距上次请求空闲毫秒数",
+          "integer": true
         },
         {
           "name": "modelChanged",
@@ -888,7 +894,8 @@
           "name": "missedCostUsd",
           "type": "number",
           "required": false,
-          "description": "预估浪费金额（USD；无价格数据时省略）"
+          "description": "预估浪费金额（USD；无价格数据时省略）",
+          "integer": false
         }
       ],
       "backpressure": "critical"
@@ -916,19 +923,22 @@
           "name": "ttlSeconds",
           "type": "number",
           "required": true,
-          "description": "TTL 秒数（P3 路由表）"
+          "description": "TTL 秒数（P3 路由表）",
+          "integer": true
         },
         {
           "name": "idleMs",
           "type": "number",
           "required": true,
-          "description": "空闲毫秒数"
+          "description": "空闲毫秒数",
+          "integer": true
         },
         {
           "name": "resendEstimateTokens",
           "type": "number",
           "required": true,
-          "description": "预估重发 token（上次请求 input_total）"
+          "description": "预估重发 token（上次请求 input_total）",
+          "integer": true
         }
       ],
       "backpressure": "critical"
@@ -1222,7 +1232,8 @@
           "name": "lineCount",
           "type": "number",
           "required": false,
-          "description": "累计行数（转发器行数索引，供前端进度展示）"
+          "description": "累计行数（转发器行数索引，供前端进度展示）",
+          "integer": true
         }
       ]
     },
@@ -1278,13 +1289,15 @@
           "name": "silenceMs",
           "type": "number",
           "required": true,
-          "description": "静默时长（毫秒）"
+          "description": "静默时长（毫秒）",
+          "integer": true
         },
         {
           "name": "lastOutputAtMs",
           "type": "number",
           "required": true,
-          "description": "最近一次输出时间（epoch 毫秒）"
+          "description": "最近一次输出时间（epoch 毫秒）",
+          "integer": true
         }
       ]
     },
@@ -1312,19 +1325,22 @@
           "name": "exitCode",
           "type": "number",
           "required": true,
-          "description": "退出码（0 = 成功）"
+          "description": "退出码（0 = 成功）",
+          "integer": true
         },
         {
           "name": "durationMs",
           "type": "number",
           "required": true,
-          "description": "运行时长（毫秒）"
+          "description": "运行时长（毫秒）",
+          "integer": true
         },
         {
           "name": "lineCount",
           "type": "number",
           "required": true,
-          "description": "累计行数"
+          "description": "累计行数",
+          "integer": true
         }
       ]
     },
@@ -1352,7 +1368,8 @@
           "name": "exitCode",
           "type": "number",
           "required": true,
-          "description": "退出码（非 0）"
+          "description": "退出码（非 0）",
+          "integer": true
         },
         {
           "name": "tail",
@@ -1364,7 +1381,8 @@
           "name": "durationMs",
           "type": "number",
           "required": true,
-          "description": "运行时长（毫秒）"
+          "description": "运行时长（毫秒）",
+          "integer": true
         }
       ]
     },
@@ -1432,7 +1450,8 @@
           "name": "firedAtMs",
           "type": "number",
           "required": true,
-          "description": "触发时刻（epoch 毫秒）"
+          "description": "触发时刻（epoch 毫秒）",
+          "integer": true
         }
       ]
     },
@@ -1466,7 +1485,8 @@
           "name": "cancelledAtMs",
           "type": "number",
           "required": true,
-          "description": "取消时刻（epoch 毫秒）"
+          "description": "取消时刻（epoch 毫秒）",
+          "integer": true
         }
       ]
     },
@@ -1506,13 +1526,15 @@
           "name": "iteration",
           "type": "number",
           "required": true,
-          "description": "触发次数（从 1 起计）"
+          "description": "触发次数（从 1 起计）",
+          "integer": true
         },
         {
           "name": "firedAtMs",
           "type": "number",
           "required": true,
-          "description": "触发时刻（epoch 毫秒）"
+          "description": "触发时刻（epoch 毫秒）",
+          "integer": true
         }
       ]
     }
@@ -1791,7 +1813,8 @@
           "name": "durationMs",
           "type": "number",
           "required": true,
-          "description": "执行耗时（毫秒）"
+          "description": "执行耗时（毫秒）",
+          "integer": true
         }
       ]
     },
@@ -1851,25 +1874,29 @@
           "name": "attempt",
           "type": "number",
           "required": false,
-          "description": "尝试次数"
+          "description": "尝试次数",
+          "integer": true
         },
         {
           "name": "maxAttempts",
           "type": "number",
           "required": false,
-          "description": "最大尝试次数"
+          "description": "最大尝试次数",
+          "integer": true
         },
         {
           "name": "elapsedMs",
           "type": "number",
           "required": false,
-          "description": "耗时（毫秒）"
+          "description": "耗时（毫秒）",
+          "integer": true
         },
         {
           "name": "status",
           "type": "number",
           "required": false,
-          "description": "HTTP 状态码"
+          "description": "HTTP 状态码",
+          "integer": true
         },
         {
           "name": "statusText",
@@ -1899,19 +1926,22 @@
           "name": "retryAfterMs",
           "type": "number",
           "required": false,
-          "description": "建议重试间隔（毫秒）"
+          "description": "建议重试间隔（毫秒）",
+          "integer": true
         },
         {
           "name": "chunks",
           "type": "number",
           "required": false,
-          "description": "流块数"
+          "description": "流块数",
+          "integer": true
         },
         {
           "name": "bytes",
           "type": "number",
           "required": false,
-          "description": "字节数"
+          "description": "字节数",
+          "integer": true
         },
         {
           "name": "headers",
@@ -1965,25 +1995,29 @@
           "name": "systemMessageCount",
           "type": "number",
           "required": false,
-          "description": "system 消息数"
+          "description": "system 消息数",
+          "integer": true
         },
         {
           "name": "rewrittenSystemMessageCount",
           "type": "number",
           "required": false,
-          "description": "重写后的 system 消息数"
+          "description": "重写后的 system 消息数",
+          "integer": true
         },
         {
           "name": "messageCount",
           "type": "number",
           "required": false,
-          "description": "消息数"
+          "description": "消息数",
+          "integer": true
         },
         {
           "name": "toolCount",
           "type": "number",
           "required": false,
-          "description": "工具数"
+          "description": "工具数",
+          "integer": true
         },
         {
           "name": "messageRoleCounts",
@@ -2283,31 +2317,36 @@
           "name": "compressedMessageCount",
           "type": "number",
           "required": true,
-          "description": "压缩消息数"
+          "description": "压缩消息数",
+          "integer": true
         },
         {
           "name": "keptMessageCount",
           "type": "number",
           "required": true,
-          "description": "保留消息数"
+          "description": "保留消息数",
+          "integer": true
         },
         {
           "name": "tokensBefore",
           "type": "number",
           "required": true,
-          "description": "压缩前 token 数"
+          "description": "压缩前 token 数",
+          "integer": true
         },
         {
           "name": "tokensAfter",
           "type": "number",
           "required": true,
-          "description": "压缩后 token 数"
+          "description": "压缩后 token 数",
+          "integer": true
         },
         {
           "name": "thresholdTokens",
           "type": "number",
           "required": true,
-          "description": "阈值 token 数"
+          "description": "阈值 token 数",
+          "integer": true
         },
         {
           "name": "firstKeptMessageId",
@@ -2379,7 +2418,8 @@
           "name": "version",
           "type": "number",
           "required": true,
-          "description": "恒定版本 1"
+          "description": "恒定版本 1",
+          "integer": true
         },
         {
           "name": "stablePrefixHash",
@@ -2493,19 +2533,22 @@
           "name": "tokensBefore",
           "type": "number",
           "required": true,
-          "description": "压缩前 token 数"
+          "description": "压缩前 token 数",
+          "integer": true
         },
         {
           "name": "tokensAfter",
           "type": "number",
           "required": true,
-          "description": "压缩后 token 数"
+          "description": "压缩后 token 数",
+          "integer": true
         },
         {
           "name": "thresholdTokens",
           "type": "number",
           "required": false,
-          "description": "阈值 token 数（可选）"
+          "description": "阈值 token 数（可选）",
+          "integer": true
         },
         {
           "name": "createdAt",
@@ -2541,67 +2584,78 @@
           "name": "promptTokens",
           "type": "number",
           "required": true,
-          "description": "输入 token"
+          "description": "输入 token",
+          "integer": true
         },
         {
           "name": "completionTokens",
           "type": "number",
           "required": true,
-          "description": "输出 token"
+          "description": "输出 token",
+          "integer": true
         },
         {
           "name": "totalTokens",
           "type": "number",
           "required": true,
-          "description": "总 token"
+          "description": "总 token",
+          "integer": true
         },
         {
           "name": "cacheReadTokens",
           "type": "number",
           "required": true,
-          "description": "缓存命中读取 token"
+          "description": "缓存命中读取 token",
+          "integer": true
         },
         {
           "name": "cacheWriteTokens",
           "type": "number",
           "required": true,
-          "description": "缓存写入 token"
+          "description": "缓存写入 token",
+          "integer": true
         },
         {
           "name": "cacheMissTokens",
           "type": "number",
           "required": true,
-          "description": "未命中输入 token"
+          "description": "未命中输入 token",
+          "integer": true
         },
         {
           "name": "sampleCount",
           "type": "number",
           "required": true,
-          "description": "有真实 usage 的 turn 数"
+          "description": "有真实 usage 的 turn 数",
+          "integer": true
         },
         {
           "name": "hitRatio",
           "type": "number",
           "required": false,
-          "description": "命中率（read/input_total；无样本时省略）"
+          "description": "命中率（read/input_total；无样本时省略）",
+          "integer": false
         },
         {
           "name": "writeRatio",
           "type": "number",
           "required": false,
-          "description": "写入占比（write/input_total）"
+          "description": "写入占比（write/input_total）",
+          "integer": false
         },
         {
           "name": "missedTokens",
           "type": "number",
           "required": true,
-          "description": "审计出的浪费量"
+          "description": "审计出的浪费量",
+          "integer": true
         },
         {
           "name": "warmUntilMs",
           "type": "number",
           "required": false,
-          "description": "缓存温暖截止（epoch ms；无 TTL 数据时省略）"
+          "description": "缓存温暖截止（epoch ms；无 TTL 数据时省略）",
+          "integer": true
         }
       ]
     },
@@ -2613,19 +2667,22 @@
           "name": "fileCount",
           "type": "number",
           "required": true,
-          "description": "目标文件数"
+          "description": "目标文件数",
+          "integer": true
         },
         {
           "name": "totalSizeBytes",
           "type": "number",
           "required": true,
-          "description": "总大小（字节）"
+          "description": "总大小（字节）",
+          "integer": true
         },
         {
           "name": "directoryCount",
           "type": "number",
           "required": true,
-          "description": "目录目标数"
+          "description": "目录目标数",
+          "integer": true
         },
         {
           "name": "crossDirectory",
