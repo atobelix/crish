@@ -179,6 +179,39 @@ impl LocalDb {
         Ok(())
     }
 
+    /// 会话级元数据原子更新（单次锁内读改写；F3 #9 配额 try_consume 用）——
+    /// 并发调用序列化于连接互斥，compare-and-consume 原子生效。
+    /// 返回写入的新值；`update` 返回 None = 更新被拒绝（未写入）。
+    pub fn update_session_meta<F>(&self, key: &str, update: F) -> Result<Option<String>, DbFailure>
+    where
+        F: FnOnce(Option<&str>) -> Option<String>,
+    {
+        let conn = self.conn.lock().map_err(|e| DbFailure {
+            message: format!("lock poisoned: {e}"),
+            kind: DbFailureKind::Lock,
+        })?;
+
+        let current = conn
+            .query_row(
+                "SELECT value FROM session_meta WHERE key = ?1",
+                rusqlite::params![key],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|e| self.latch_error("get_session_meta_row", e))?;
+
+        let Some(new_value) = update(current.as_deref()) else {
+            return Ok(None);
+        };
+        conn.execute(
+            "INSERT INTO session_meta (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            rusqlite::params![key, new_value],
+        )
+        .map_err(|e| self.latch_error("update_session_meta", e))?;
+        Ok(Some(new_value))
+    }
+
     /// 清理不在 `active_ids` 中的会话（孤儿清理）。
     /// 返回被删除的会话数。
     ///

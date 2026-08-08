@@ -103,6 +103,30 @@ pub trait ExploreDocsQuotaStore: Send + Sync + std::fmt::Debug {
         session_id: &str,
         run_id: &str,
     ) -> Result<ExploreDocsQuotaSnapshot, String>;
+
+    /// 原子「检查 + 消耗」（F3 #9 TOCTOU 根因修复）：上限内原子占用一份
+    /// 配额——并发调用只放行恰好 `quota` 份，超限返回错误文案。
+    ///
+    /// 实现方须在自身互斥下完成读改写（[InMemoryExploreDocsQuotaStore] 与
+    /// [crate::explore_quota] 的 session_meta 后端均覆写为原子形态）；
+    /// 缺省实现为「快照检查 + consume」的非原子回退（仅向后兼容未升级的
+    /// 外部实现，存在 check-then-consume 竞态）。
+    fn try_consume(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        quota: u32,
+    ) -> Result<ExploreDocsQuotaSnapshot, String> {
+        let snapshot = self.snapshot(session_id);
+        if snapshot.consumed >= quota {
+            return Err(format!("配额已用尽（consumed={}，quota={quota}）", snapshot.consumed));
+        }
+        self.consume(session_id, run_id)
+    }
+
+    /// 释放一份配额（reserve 后写盘失败的补偿，防止配额泄漏）。
+    /// best-effort：实现方可忽略；缺省为空实现。
+    fn release(&self, _session_id: &str, _run_id: &str) {}
 }
 
 /// 内存版存储（测试 / 未接线兜底：进程内计数，跨进程重启不恢复——
@@ -139,6 +163,35 @@ impl ExploreDocsQuotaStore for InMemoryExploreDocsQuotaStore {
         entry.consumed = entry.consumed.saturating_add(1);
         entry.last_consumer_run_id = Some(run_id.to_string());
         Ok(entry.clone())
+    }
+
+    fn try_consume(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        quota: u32,
+    ) -> Result<ExploreDocsQuotaSnapshot, String> {
+        // F3 #9：互斥内读改写——检查与占用原子（并发调用只放行恰好
+        // quota 份，无 check-then-consume 竞态窗口）
+        let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let entry = map.entry(session_id.to_string()).or_default();
+        if entry.consumed >= quota {
+            return Err(format!(
+                "配额已用尽（consumed={}，quota={quota}）",
+                entry.consumed
+            ));
+        }
+        entry.consumed = entry.consumed.saturating_add(1);
+        entry.last_consumer_run_id = Some(run_id.to_string());
+        Ok(entry.clone())
+    }
+
+    fn release(&self, session_id: &str, _run_id: &str) {
+        // 补偿：reserve 后写盘失败回滚占用（下限 0，不产生负计数）
+        let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(entry) = map.get_mut(session_id) {
+            entry.consumed = entry.consumed.saturating_sub(1);
+        }
     }
 }
 
@@ -277,12 +330,83 @@ pub fn guard_explore_docs_write(
 
 /// 配额消耗（写盘成功后调用；配额上下文存在时计数 +1 并记录最近消耗者；
 /// 后端未接线（store=None）时不计数不报错——fail-open 兜底）
+///
+/// 遗留入口：F3 #9 根因修复后写路径改走「reserve 前置 + 失败 release」
+/// （[reserve_explore_docs_quota]），本函数保留供既有调用方/测试使用
+/// （check-then-consume 非原子语义，新代码勿用）。
 pub fn consume_explore_docs_quota(ctx: &ToolContext) {
     let Some(quota) = &ctx.explore_docs_quota else {
         return;
     };
     if let Some(store) = &quota.store {
         let _ = store.consume(&quota.session_id, &quota.run_id);
+    }
+}
+
+/// 配额占用（reserve）：F3 #9 根因修复的原子占用点——写盘**前**经
+/// store 的原子 compare-and-consume 占用一份配额（并发写文档只放行
+/// 恰好 quota 份）；写盘失败时调用方 drop 守卫触发 [QuotaReservation]
+/// 的 [QuotaReservation::release] 补偿回滚。
+///
+/// 未装配（非探索类 / 主 agent）→ 返回 None（不占用）。
+pub fn reserve_explore_docs_quota(ctx: &ToolContext) -> Result<Option<QuotaReservation>, ToolError> {
+    let Some(quota) = &ctx.explore_docs_quota else {
+        return Ok(None);
+    };
+    if !quota.granted {
+        return Err(ToolError::new(
+            ExploreDocsQuotaError::NotGranted.code(),
+            ExploreDocsQuotaError::NotGranted.message(),
+        ));
+    }
+    let Some(store) = &quota.store else {
+        // 无后端：按零消耗放行（不占用不计数——持久化语义由引擎侧
+        // 后端承担，见模块文档）
+        return Ok(None);
+    };
+    store
+        .try_consume(&quota.session_id, &quota.run_id, quota.quota)
+        .map_err(|e| {
+            // 错误码复用 Exhausted 语义（code=TOOL_EXECUTION_FAILED）；
+            // 文案由 store 原子返回（含真实 consumed 值）
+            ToolError::new(ExploreDocsQuotaError::Exhausted { consumed: 0, quota: quota.quota }.code(), e)
+        })?;
+    Ok(Some(QuotaReservation {
+        quota: Some(ExploreDocsQuotaContextRef {
+            session_id: quota.session_id.clone(),
+            run_id: quota.run_id.clone(),
+            store: Arc::clone(store),
+        }),
+    }))
+}
+
+/// 配额占用守卫（RAII）：Drop 时若未 [QuotaReservation::commit] 则
+/// release 回滚占用（写盘失败补偿，F3 #9）；写盘成功后显式 commit
+/// 使 Drop 不再回滚。
+#[derive(Debug)]
+pub struct QuotaReservation {
+    quota: Option<ExploreDocsQuotaContextRef>,
+}
+
+#[derive(Debug)]
+struct ExploreDocsQuotaContextRef {
+    session_id: String,
+    run_id: String,
+    store: Arc<dyn ExploreDocsQuotaStore>,
+}
+
+impl QuotaReservation {
+    /// 提交占用（写盘成功）：Drop 不再回滚
+    pub fn commit(&mut self) {
+        self.quota = None;
+    }
+}
+
+impl Drop for QuotaReservation {
+    fn drop(&mut self) {
+        if let Some(q) = &self.quota {
+            q.store.release(&q.session_id, &q.run_id);
+        }
     }
 }
 
@@ -546,6 +670,103 @@ mod tests {
             .unwrap_err();
         assert_eq!(err.code(), "tool.path_escape");
         assert!(store.consumed_runs.lock().unwrap().is_empty(), "失败不得计数");
+    }
+
+    /// F3 盲区 #8：并行写文档配额竞争（wait_subagents 同轮多写形态）——
+    /// 两路并发 write_file（quota=1）必须恰好一份成功。
+    /// 根因（F3 #9 修复）：旧实现 guard 检查（consumed=0<1 双双通过）与
+    /// consume 分离 → 双写 + 计数超限 1；修复后 reserve 前置原子占用，
+    /// 第二路在占用点被拒。
+    #[tokio::test]
+    async fn parallel_writes_respect_quota_atomically() {
+        let ws = TempWorkspace::new("quota_parallel");
+        let store = Arc::new(InMemoryExploreDocsQuotaStore::new());
+        let ctx = Arc::new(quota_ctx(
+            ws.path(),
+            true,
+            1,
+            Arc::clone(&store) as Arc<dyn ExploreDocsQuotaStore>,
+        ));
+        let tool = Arc::new(crate::tools::fs::WriteFileTool::new());
+
+        // 同轮两路并发写（真实并发：两个 OS 线程各自驱动生产写路径 +
+        // 阻塞文件 IO，与 wait_subagents 同轮多写形态一致）
+        let t1 = std::thread::spawn({
+            let ctx = Arc::clone(&ctx);
+            let tool = Arc::clone(&tool);
+            move || {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("runtime")
+                    .block_on(tool.execute(
+                        &ctx,
+                        serde_json::json!({ "path": "doc1.md", "content": "A" }),
+                    ))
+            }
+        });
+        let t2 = std::thread::spawn({
+            let ctx = Arc::clone(&ctx);
+            let tool = Arc::clone(&tool);
+            move || {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("runtime")
+                    .block_on(tool.execute(
+                        &ctx,
+                        serde_json::json!({ "path": "doc2.md", "content": "B" }),
+                    ))
+            }
+        });
+        let r1 = t1.join().expect("线程 1 不应 panic");
+        let r2 = t2.join().expect("线程 2 不应 panic");
+        let ok_count = [r1.is_ok(), r2.is_ok()].iter().filter(|o| **o).count();
+        assert_eq!(ok_count, 1, "quota=1 并发双写必须恰好一份成功（修复前双写：红）");
+        let err = r1.err().or(r2.err()).expect("并发双写应有失败侧");
+        assert!(err.to_string().contains("配额"), "失败侧应为配额拒绝：{err}");
+        // 仅一份文档落盘 + 计数恰为 1（配额不超限）
+        let files = ["doc1.md", "doc2.md"]
+            .iter()
+            .filter(|f| ws.path().join(f).exists())
+            .count();
+        assert_eq!(files, 1, "并发双写只允许一份落盘");
+        assert_eq!(store.snapshot("sess-q").consumed, 1, "配额计数不得超限");
+    }
+
+    /// F3 #9 补偿语义：reserve 后写盘失败（目标为目录）→ Drop 自动 release
+    /// 回滚占用——配额不泄漏，后续合法写仍可执行
+    #[tokio::test]
+    async fn failed_write_after_reserve_releases_quota() {
+        let ws = TempWorkspace::new("quota_release");
+        std::fs::create_dir_all(ws.path().join("subdir")).expect("建目录");
+        let store = Arc::new(InMemoryExploreDocsQuotaStore::new());
+        let ctx = quota_ctx(
+            ws.path(),
+            true,
+            1,
+            Arc::clone(&store) as Arc<dyn ExploreDocsQuotaStore>,
+        );
+        let tool = crate::tools::fs::WriteFileTool::new();
+
+        // 写向目录 → reserve 已占用、std::fs::write 失败 → Drop release
+        let err = tool
+            .execute(&ctx, serde_json::json!({ "path": "subdir", "content": "x" }))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("write_file"), "写盘失败：{err}");
+        assert_eq!(
+            store.snapshot("sess-q").consumed,
+            0,
+            "reserve 后写盘失败必须回滚占用（配额不泄漏）"
+        );
+
+        // 回滚后合法写仍可执行（quota=1 仍可用）
+        tool.execute(&ctx, serde_json::json!({ "path": "doc.md", "content": "ok" }))
+            .await
+            .unwrap();
+        assert!(ws.path().join("doc.md").is_file());
+        assert_eq!(store.snapshot("sess-q").consumed, 1);
     }
 
     // ── 持久化格式与键编码 ──

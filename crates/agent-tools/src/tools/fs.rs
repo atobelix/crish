@@ -253,9 +253,9 @@ pub(crate) struct WriteFileTool {
 /// 写文件支持编码枚举（对齐 TS write_file 的 encoding 参数）
 const WRITE_ENCODINGS: &[&str] = &["utf-8", "utf-8-bom", "utf-16le", "utf-16be"];
 
-/// 覆盖拒绝错误码（REQ-E02 本地域码；对齐 write_paths.rs:37 的
-/// tool.write_path_conflict 先例——不入 conex-types 注册表，执行器按错误码
-/// 分类路由：文件已存在为确定拒绝，需显式 overwrite=true 才可放行）
+/// 覆盖拒绝错误码（REQ-E02 本地域码；互斥冲突 tool.write_path_conflict 已
+/// 并入 conex-types 注册表（F8-02），本码仍为局部码——文件已存在为确定拒绝，
+/// 需显式 overwrite=true 才可放行）
 pub(crate) const TOOL_FILE_EXISTS: &str = "tool.file_exists";
 
 impl WriteFileTool {
@@ -330,6 +330,10 @@ impl Tool for WriteFileTool {
         }
         // I6-M11 C5：探索类子代理写文档配额检查（未装配 = 非探索类，放行）
         crate::explore_quota::guard_explore_docs_write(ctx)?;
+        // F3 #9：原子占用（reserve 前置）——并发写文档只放行恰好 quota
+        // 份（check-then-consume 竞态：旧实现双双通过检查 → 配额超限）；
+        // 写盘失败时守卫 Drop 自动 release 回滚
+        let reservation = crate::explore_quota::reserve_explore_docs_quota(ctx)?;
 
         // 幂等守卫标记：B5.3 提供 ToolIdempotencyGuard（按 tool_call_id 去重已执行写盘），
         // 此处仅执行文件写入，不做去重。
@@ -342,8 +346,10 @@ impl Tool for WriteFileTool {
         std::fs::write(&file_path, &bytes).map_err(|e| {
             ToolError::execution_failed("write_file", format!("{display}: {e}"))
         })?;
-        // I6-M11 C5：写盘成功后消耗配额（探索类子代理文档计数）
-        crate::explore_quota::consume_explore_docs_quota(ctx);
+        // 写盘成功：提交占用（Drop 不再回滚）
+        if let Some(mut r) = reservation {
+            r.commit();
+        }
 
         let tag = snapshot_tag(&file_path).unwrap_or_default();
         let text = format!(

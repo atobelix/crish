@@ -101,6 +101,10 @@ impl Tool for MultiReplaceFileTool {
         let _claim = claim_write_guard(ctx, &path_str, ClaimMode::Write)?;
         // 3. 探索类子代理写文档配额检查（未装配 = 放行，与 write_file 同款）
         crate::explore_quota::guard_explore_docs_write(ctx)?;
+        // F3 #9：原子占用（reserve 前置，与 write_file 同款）——并发写文档
+        // 只放行恰好 quota 份；本工具成功路径多（读入/匹配/落盘），中途
+        // 失败经守卫 Drop 自动 release 回滚
+        let reservation = crate::explore_quota::reserve_explore_docs_quota(ctx)?;
 
         // 4. 读入 + 解码（BOM 探测；二进制拒绝——对齐 diff.rs:111-116 语义）
         let bytes = std::fs::read(&file_path).map_err(|e| {
@@ -177,9 +181,12 @@ impl Tool for MultiReplaceFileTool {
         let encoding = crate::tools::fs::resolve_write_encoding(&file_path, None)?;
         let out_bytes = crate::tools::fs::encode_text(&new_text, &encoding)?;
         atomic_write(&file_path, &out_bytes)?;
+        // 写盘成功：提交占用（Drop 不再回滚）
+        if let Some(mut r) = reservation {
+            r.commit();
+        }
 
-        // 10. 配额消耗 + 输出（对齐 write_file 输出形状 fs.rs:210-217）
-        crate::explore_quota::consume_explore_docs_quota(ctx);
+        // 10. 配额输出（对齐 write_file 输出形状 fs.rs:210-217）
         let tag = snapshot_tag(&file_path).unwrap_or_default();
         // 变更行数 = 各 chunk 目标行数与替换行数的较大者之和（text 摘要用）
         let lines_changed: usize = chunks

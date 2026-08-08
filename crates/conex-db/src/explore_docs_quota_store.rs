@@ -75,6 +75,50 @@ impl ExploreDocsQuotaStore for SessionMetaExploreDocsQuotaStore {
             .map_err(|e| format!("探索类文档配额计数落库失败：{e}"))?;
         Ok(next)
     }
+
+    fn try_consume(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        quota: u32,
+    ) -> Result<ExploreDocsQuotaSnapshot, String> {
+        let key = session_meta_key_of(session_id, SESSION_META_KEY_EXPLORE_DOCS_CONSUMED);
+        // F3 #9：单次锁内读改写（update_session_meta）——检查与占用原子，
+        // 并发调用序列化于连接互斥，无 check-then-consume 竞态窗口
+        let written = self
+            .db
+            .update_session_meta(&key, |current| {
+                let cur = parse_explore_docs_consumed(current);
+                if cur.consumed >= quota {
+                    // 拒绝更新：配额已用尽
+                    return None;
+                }
+                Some(explore_docs_consumed_value(&ExploreDocsQuotaSnapshot {
+                    consumed: cur.consumed.saturating_add(1),
+                    last_consumer_run_id: Some(run_id.to_string()),
+                }))
+            })
+            .map_err(|e| format!("探索类文档配额原子占用失败：{e}"))?;
+        match written {
+            Some(_) => Ok(self.snapshot(session_id)),
+            None => Err(format!(
+                "配额已用尽（consumed={}，quota={quota}）",
+                self.snapshot(session_id).consumed
+            )),
+        }
+    }
+
+    fn release(&self, session_id: &str, _run_id: &str) {
+        let key = session_meta_key_of(session_id, SESSION_META_KEY_EXPLORE_DOCS_CONSUMED);
+        // 补偿：reserve 后写盘失败回滚占用（下限 0，不产生负计数）
+        let _ = self.db.update_session_meta(&key, |current| {
+            let cur = parse_explore_docs_consumed(current);
+            Some(explore_docs_consumed_value(&ExploreDocsQuotaSnapshot {
+                consumed: cur.consumed.saturating_sub(1),
+                last_consumer_run_id: cur.last_consumer_run_id,
+            }))
+        });
+    }
 }
 
 #[cfg(test)]
