@@ -133,7 +133,7 @@ pub mod gatekeeper {
             // If cwd is outside workspace, escalate to approval
             let cwd_normalized = cwd.replace('\\', "/");
             let root_normalized = workspace_root.replace('\\', "/");
-            if !cwd_normalized.starts_with(&root_normalized)
+            if !path_within_workspace(&cwd_normalized, &root_normalized)
                 && base_result == GatekeeperResult::Allowed
             {
                 return GatekeeperResult::RequiresApproval;
@@ -141,6 +141,20 @@ pub mod gatekeeper {
 
             base_result
         }
+    }
+
+    /// 路径成分级包含判定（F3 #6 根因修复）：`starts_with` 字符串前缀会把
+    /// `C:/project_evil` 误判为在 `C:/project` 内（审计 #6：前缀同根目录名时
+    /// 工作区外 cwd 命令跳过审批升级）。改为按路径成分比较 + 大小写归一
+    /// （Windows 驱动盘/目录不敏感）。
+    fn path_within_workspace(cwd: &str, root: &str) -> bool {
+        let cwd_lower = cwd.to_lowercase();
+        let root_lower = root.to_lowercase();
+        let cwd_parts: Vec<&str> = cwd_lower.split('/').filter(|p| !p.is_empty()).collect();
+        let root_parts: Vec<&str> = root_lower.split('/').filter(|p| !p.is_empty()).collect();
+        // 根自身或根下任意层级 = 在界内；根前缀（如 project vs project_evil）
+        // 在成分级比较下不成立
+        cwd_parts.len() >= root_parts.len() && cwd_parts[..root_parts.len()] == root_parts
     }
 
     impl Default for CommandGatekeeper {
@@ -230,6 +244,43 @@ mod tests {
         assert_eq!(
             gk.check_command_with_context("rm", &["-rf", "/"], "/home/user/project", "/home/user/project"),
             GatekeeperResult::Blocked
+        );
+    }
+
+    /// F3 盲区 #6：前缀混淆——`C:/project_evil` 不得被字符串前缀误判为
+    /// 在 `C:/project` 内（修复前 starts_with 判定 → Allowed，工作区外
+    /// cwd 命令跳过审批升级）；成分级包含 + 大小写归一
+    #[test]
+    fn context_prefix_sibling_root_is_escalated() {
+        let gk = CommandGatekeeper::new();
+        // 同根目录名前缀的兄弟目录 → 界外 → 升级审批（修复前：Allowed）
+        assert_eq!(
+            gk.check_command_with_context(
+                "ls",
+                &["-la"],
+                "C:/project_evil",
+                "C:/project",
+            ),
+            GatekeeperResult::RequiresApproval,
+            "C:/project_evil 必须按界外升级（F3 #6 前缀混淆）"
+        );
+        assert_eq!(
+            gk.check_command_with_context("ls", &["-la"], "/home/user/project_extra", "/home/user/project"),
+            GatekeeperResult::RequiresApproval
+        );
+        // 根自身 / 根下任意层级 → 界内放行
+        assert_eq!(
+            gk.check_command_with_context("ls", &["-la"], "C:/project", "C:/project"),
+            GatekeeperResult::Allowed
+        );
+        assert_eq!(
+            gk.check_command_with_context("ls", &["-la"], "C:/project/src/deep", "C:/project"),
+            GatekeeperResult::Allowed
+        );
+        // 大小写归一（Windows 驱动盘/目录不敏感）：大小写混写仍判界内
+        assert_eq!(
+            gk.check_command_with_context("ls", &["-la"], "c:/Project/src", "C:/project"),
+            GatekeeperResult::Allowed
         );
     }
 
