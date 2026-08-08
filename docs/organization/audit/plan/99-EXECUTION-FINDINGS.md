@@ -258,3 +258,11 @@ pm run typecheck 恢复 EXIT=0；验收方注意快层门禁以并行会话清�
 - **位置**：`crates/agent-tools/src/explore_quota.rs`（F3 #9 TOCTOU，他人 WIP）、`crates/session-loop/src/{steering/strategy.rs,hydrate.rs,lib.rs,provider.rs,steering/mod.rs,loop/handlers/*}`（F3-01 等，他人 WIP）
 - **描述**：① 本批红测试运行期间 `steering::strategy::tests::exit_code_invalid_segment_continues_scanning` 失败——他人 F3-01 修复的未提交中间态（其后随对方推进转绿，非本批改动）；② `cargo test -p agent-tools` 一度编译失败于 explore_quota.rs（他人 TOCTOU 重构中间态，随后对方推进修复，本批收尾验证时已可编译）；③ 本批提交全程只 stage 自己的文件，与并行批次（P2 批1/批4 等）互不触碰，git log 可核。
 - **建议**：验收方以本批收尾时刻的实测为准；并行批次全部收尾后按 AGENTS.md 基线跑全量回归。
+
+## F-033：F-013 红测试被并行 markdown-editor 批次整文件暂存吸收（两段提交替代证据链）
+
+- **发现日期**：2026-08-08（F-013 接线执行期）
+- **位置**：`apps/agent-workbench/src-tauri/src/subagent_spawner.rs`（37153189 提交，标称 markdown-editor 批次）
+- **描述**：F-013 红测试（`flow_spawn_row_carries_flow_node_id_for_load_reverse_check` + `non_flow_spawn_preserves_user_description`，约 100 行）写好后，红证据已实测采集（`left: ""` vs `right: "node-a"`，flow 路径行 description 落库空串）。提交前并行 markdown-editor 批次的 37153189 整文件暂存把 subagent_spawner.rs（98 行，含全部红测试）一并吸收入库——与 F-004/F-008/F-011 完全同型事故（git add 前未核对他人未提交文件）。红测试内容完整入库无损。
+- **处置**：绿修复（row_for description = flow_node_id.or(description)）单独提交 3b3f4805（1 文件 14+/1-）；验收以「红证据实测 + 红测试在 37153189 + 绿提交 3b3f4805」为替代证据链（F-004 先例口径）。
+- **建议**：同 F-004/F-008/F-011——「同文件族提交归属」约束（谁 commit、何时 commit）再次落空；并行批次 `git add` 前核对 `git status` 无他人未提交改动；钩子 `git diff --check` 收窄为 `--cached`（F-007 已提，四度复现仍未落实）。
