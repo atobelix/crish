@@ -196,23 +196,21 @@ describe('ui/Menu', () => {
   });
 
   it('受控模式无内部写回：打开后不产生额外渲染（F7-F3）', async () => {
-    const renderItem = vi.fn((option: { id: string; label: string }) => (
-      <button key={option.id} type="button" role="menuitem">
-        {option.label}
-      </button>
-    ));
+    // children 模式（无 options → 不受 F2 初始聚焦二次渲染干扰），
+    // 直接观测「外部受控 + useEffect 写回 internalOpen」的额外渲染
+    const childrenSpy = vi.fn(() => <div>面板内容</div>);
     render(
       <Menu
         trigger={<button type="button">{TRIGGER_TEXT}</button>}
         open={true}
         onOpenChange={() => {}}
-        renderItem={renderItem}
-        options={[{ id: 'a', label: '选项甲' }]}
-      />
+      >
+        {childrenSpy()}
+      </Menu>
     );
-    await screen.findByRole('menuitem', { name: /选项甲/ });
+    await screen.findByText('面板内容');
     // 外部受控时内部状态不得再被 useEffect 写回（双模 OR + 同步链 = 多一次渲染）
-    expect(renderItem).toHaveBeenCalledTimes(1);
+    expect(childrenSpy).toHaveBeenCalledTimes(1);
   });
 
   it('受控模式关闭信号不被内部状态重开（F7-F3）', async () => {
@@ -240,23 +238,30 @@ describe('ui/Menu', () => {
 
   it('漫游焦点滚动跟随：scrollIntoView({block: nearest})（F7-F4）', async () => {
     const scrollIntoView = vi.fn();
-    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(
-      scrollIntoView
-    );
-    render(
-      <Menu
-        trigger={<button type="button">{TRIGGER_TEXT}</button>}
-        options={[{ id: 'a', label: '选项甲' }, { id: 'b', label: '选项乙' }]}
-      />
-    );
-    fireEvent.click(screen.getByText(TRIGGER_TEXT));
-    const content = await screen.findByRole('menu');
-    scrollIntoView.mockClear();
-    fireEvent.keyDown(content, { key: 'ArrowDown' });
-    await waitFor(() =>
-      expect(screen.getByRole('menuitem', { name: /选项乙/ })).toHaveFocus()
-    );
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(scrollIntoView.mock.calls[0]?.[0]).toEqual({ block: 'nearest' });
+    // jsdom 未实现 scrollIntoView（spyOn 会抛错），先定义再验证
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      writable: true,
+      value: scrollIntoView,
+    });
+    try {
+      render(
+        <Menu
+          trigger={<button type="button">{TRIGGER_TEXT}</button>}
+          options={[{ id: 'a', label: '选项甲' }, { id: 'b', label: '选项乙' }]}
+        />
+      );
+      fireEvent.click(screen.getByText(TRIGGER_TEXT));
+      const content = await screen.findByRole('menu');
+      scrollIntoView.mockClear();
+      fireEvent.keyDown(content, { key: 'ArrowDown' });
+      await waitFor(() =>
+        expect(screen.getByRole('menuitem', { name: /选项乙/ })).toHaveFocus()
+      );
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollIntoView.mock.calls[0]?.[0]).toEqual({ block: 'nearest' });
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
   });
 });

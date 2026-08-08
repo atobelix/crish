@@ -45,12 +45,15 @@ function FocusTrap({ children, active, initialFocusRef }: FocusTrapProps) {
     const parent = container.parentElement;
     if (parent) {
       for (const child of Array.from(parent.children)) {
-        if (child !== container) {
-          originalValues.current.set(child, child.getAttribute('aria-hidden'));
-          child.setAttribute('aria-hidden', 'true');
-          if ('inert' in HTMLElement.prototype && 'inert' in child) {
-            (child as HTMLElement & { inert: boolean }).inert = true;
-          }
+        if (child === container) continue;
+        // F7 F5：跳过其他已开 Dialog 的 FocusTrap 容器——嵌套/并发弹窗
+        // 的 portal 是 body 兄弟节点，若被外层旁路 inert/aria-hidden，
+        // 内层弹窗将完全不可交互（时序错位风险）
+        if (child.hasAttribute('data-focus-trap')) continue;
+        originalValues.current.set(child, child.getAttribute('aria-hidden'));
+        child.setAttribute('aria-hidden', 'true');
+        if ('inert' in HTMLElement.prototype && 'inert' in child) {
+          (child as HTMLElement & { inert: boolean }).inert = true;
         }
       }
     }
@@ -75,8 +78,13 @@ function FocusTrap({ children, active, initialFocusRef }: FocusTrapProps) {
     const container = containerRef.current;
     if (!container) return;
 
+    // F7 F6：initialFocusRef 指向容器外/已卸载元素时不聚焦（焦点会逃逸出
+    // trap，Tab 循环与 inert 旁路全部失效）——回退到容器内首个可交互元素
     const target =
-      initialFocusRef?.current ?? getFocusableElements(container)[0];
+      initialFocusRef?.current &&
+      container.contains(initialFocusRef.current)
+        ? initialFocusRef.current
+        : getFocusableElements(container)[0];
     target?.focus();
 
     activate();
@@ -107,7 +115,8 @@ function FocusTrap({ children, active, initialFocusRef }: FocusTrapProps) {
     };
   }, [active, initialFocusRef, activate, deactivate]);
 
-  return <div ref={containerRef}>{children}</div>;
+  // data-focus-trap 标记：供同级 FocusTrap 的 inert 旁路识别（F7 F5）
+  return <div ref={containerRef} data-focus-trap>{children}</div>;
 }
 
 export { FocusTrap };

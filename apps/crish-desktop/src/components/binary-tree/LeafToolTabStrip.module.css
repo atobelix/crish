@@ -168,14 +168,16 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 999;
+  /* F7-F14：z-index 走 token 档位，禁裸数字 */
+  z-index: var(--z-dropdown-menu);
 }
 
 .addDropdownMenu {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  z-index: 1000;
+  /* F7-F14：z-index 走 token 档位（--z-floating-panel），禁裸数字 */
+  z-index: var(--z-floating-panel);
   display: flex;
   flex-direction: column;
   padding: 4px;

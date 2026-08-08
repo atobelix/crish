@@ -74,10 +74,14 @@ describe('ui/Select', () => {
     render(<Select options={OPTIONS} onChange={onChange} />);
     fireEvent.click(screen.getByRole('combobox'));
     const listbox = await screen.findByRole('listbox');
+    // F7-F2 契约：ARIA menu/listbox 模式打开即聚焦首项（GPT-4）
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'GPT-4' })).toHaveFocus()
+    );
     fireEvent.keyDown(listbox, { key: 'ArrowDown' });
-    expect(screen.getByRole('option', { name: 'GPT-4' })).toHaveFocus();
+    expect(screen.getByRole('option', { name: 'Claude' })).toHaveFocus();
     fireEvent.keyDown(listbox, { key: 'Enter' });
-    expect(onChange).toHaveBeenCalledWith('gpt4');
+    expect(onChange).toHaveBeenCalledWith('claude');
   });
 
   it('禁用项不可选中', async () => {

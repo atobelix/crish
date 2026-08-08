@@ -90,28 +90,40 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
 }: MenuProps) {
   const [internalOpen, setInternalOpen] = useState(false);
 
-  // 智能双模：外部为 true 或内部为 true 均展示
-  const isOpen = externalOpen === true || internalOpen;
+  // F7 F3：受控/非受控双模互斥——外部受控时内部状态完全旁路（不写回、
+  // 不参与 OR），消除「onOpenChange(false) 后父级仍传 true → 菜单立即重开」
+  // 的同步链竞态与每次打开多一次渲染的写回开销。
+  const isControlled = externalOpen !== undefined;
+  const isOpen = isControlled ? externalOpen : internalOpen;
 
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
-      setInternalOpen(nextOpen);
+      if (!isControlled) {
+        setInternalOpen(nextOpen);
+      }
       externalOnOpenChange?.(nextOpen);
       if (!nextOpen) {
         setFocusedIndex(-1);
       }
     },
-    [externalOnOpenChange]
+    [isControlled, externalOnOpenChange]
   );
 
+  // F7 F2：ARIA menu 模式——打开时初始焦点落首个未禁用项。
+  // 用 ref 缓存首项索引，effect 只在 open 转变时触发（避免父级重渲染
+  // 传入新 options 引用时劫持用户漫游位置）
+  const firstEnabledIndexRef = useRef(-1);
+  firstEnabledIndexRef.current = options.findIndex((o) => !o.disabled);
+
   useEffect(() => {
-    if (externalOpen !== undefined) {
-      setInternalOpen(externalOpen);
+    if (!isOpen) return;
+    if (firstEnabledIndexRef.current >= 0) {
+      setFocusedIndex(firstEnabledIndexRef.current);
     }
-  }, [externalOpen]);
+  }, [isOpen]);
 
   // 键盘 ↑ ↓ 漫游与 Enter / Esc 支持
   const handleKeyDown = useCallback(
@@ -158,7 +170,8 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     [isOpen, options, focusedIndex, onSelect, handleOpenChange]
   );
 
-  // 漫游索引变化时把焦点移动到对应项
+  // 漫游索引变化时把焦点移动到对应项并滚动跟随（F7 F4：
+  // max-height 滚动容器内漫游到视口外项时焦点不可见 → 键盘盲走）
   useEffect(() => {
     if (focusedIndex >= 0 && contentRef.current) {
       const items = contentRef.current.querySelectorAll<HTMLButtonElement>(
@@ -166,6 +179,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
       );
       const target = items[focusedIndex];
       target?.focus();
+      target?.scrollIntoView?.({ block: 'nearest' });
     }
   }, [focusedIndex]);
 
@@ -218,7 +232,8 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
       <Popover.Portal>
         <Popover.Content
           ref={contentRef}
-          aria-modal="true"
+          // F7 F2：非模态菜单不得声明 aria-modal——aria-modal=true 会
+          // 让屏幕阅读器切断后台内容（菜单语义是轻量浮层，非模态框）
           align={align}
           side={side}
           sideOffset={sideOffset}

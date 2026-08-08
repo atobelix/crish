@@ -44,13 +44,15 @@ describe('PermissionModeMenu（ui/Menu 基座）', () => {
 
   it('键盘漫游：ArrowDown 聚焦下一项，Enter 选中并关闭', async () => {
     const onChange = vi.fn();
-    // 当前模式取列表末位（full），ArrowDown 落在首项（ask）→ 必然触发变更
+    // 当前模式取列表末位（full），打开即聚焦首项（ask）→ 必然触发变更
     render(<PermissionModeMenu mode="full" onChange={onChange} />);
     fireEvent.click(screen.getByRole('button', { name: /当前权限模式/ }));
     const menu = await screen.findByRole('menu');
-    fireEvent.keyDown(menu, { key: 'ArrowDown' });
     const items = screen.getAllByRole('menuitem');
-    expect(items[0]).toHaveFocus();
+    // F7-F2 契约：打开即聚焦首项（ask）
+    await waitFor(() => expect(items[0]).toHaveFocus());
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(items[1]).toHaveFocus();
     fireEvent.keyDown(menu, { key: 'Enter' });
     expect(onChange).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());

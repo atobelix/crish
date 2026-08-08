@@ -94,8 +94,9 @@ describe('SkillsMoreMenu（ui/Menu 基座）', () => {
     render(<Wrapper onSync={onSync} />);
     fireEvent.click(screen.getByRole('button', { name: '更多操作' }));
     const menu = await screen.findByRole('menu');
-    fireEvent.keyDown(menu, { key: 'ArrowDown' });
-    expect(screen.getAllByRole('menuitem')[0]).toHaveFocus();
+    // F7-F2 契约：打开即聚焦首项（原 ArrowDown 从 -1 落到首项的语义
+    // 由打开即聚焦接管）
+    await waitFor(() => expect(screen.getAllByRole('menuitem')[0]).toHaveFocus());
     fireEvent.keyDown(menu, { key: 'Enter' });
     expect(onSync).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());

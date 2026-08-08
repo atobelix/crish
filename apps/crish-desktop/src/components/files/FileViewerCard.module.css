@@ -185,7 +185,8 @@
   border-radius: 8px;
   box-shadow: var(--shadow-lg, 0 4px 12px rgba(0,0,0,0.1));
   padding: 4px;
-  z-index: 100;
+  /* F7-F14：z-index 走 token 档位（--z-sidebar），禁裸数字 */
+  z-index: var(--z-sidebar);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -299,7 +300,8 @@
   border-radius: 8px;
   box-shadow: var(--shadow-lg, 0 4px 12px rgba(0,0,0,0.1));
   padding: 4px;
-  z-index: 100;
+  /* F7-F14：z-index 走 token 档位（--z-sidebar），禁裸数字 */
+  z-index: var(--z-sidebar);
   display: flex;
   flex-direction: column;
   gap: 2px;

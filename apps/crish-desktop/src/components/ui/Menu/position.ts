@@ -96,5 +96,10 @@ export function measureMenu(
   viewport?: ViewportSize
 ): ClampedPosition {
   const rect = el.getBoundingClientRect();
-  return clampPosition(x, y, rect.width, rect.height, viewport);
+  // F7-F11：display:none / 未挂载元素 getBoundingClientRect 全 0——
+  // 按 0 尺寸钳位等于不钳位（坐标原样放行 → 菜单溢出视口），
+  // 回退预估尺寸保证钳位仍生效
+  const w = rect.width > 0 ? rect.width : MENU_EST_WIDTH;
+  const h = rect.height > 0 ? rect.height : MENU_EST_HEIGHT;
+  return clampPosition(x, y, w, h, viewport);
 }

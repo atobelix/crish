@@ -69,11 +69,66 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(function Fil
     return flatTree.slice(startIndex, endIndex + 1);
   }, [flatTree, startIndex, endIndex]);
 
+  // F7-F35：ARIA tree pattern 键盘漫游——焦点在可见行间移动；
+  // 目标行未渲染（虚拟窗口外）时 no-op（与 Tab 行为一致，等待滚动后可达）
+  const focusTreeRow = React.useCallback(
+    (targetIndex: number) => {
+      containerRef.current
+        ?.querySelector<HTMLElement>(`[data-tree-index="${targetIndex}"]`)
+        ?.focus();
+    },
+    [containerRef]
+  );
+
+  // F7-F35：行级键盘处理——↑↓ 漫游、Home/End 跳首尾、
+  // → 展开目录、← 折叠目录、Enter 选中（原语义保持）
+  const handleRowKeyDown = React.useCallback(
+    (e: React.KeyboardEvent, idx: number, node: TreeNode) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        onSelect(node.path, node.isDir);
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (idx < flatTree.length - 1) focusTreeRow(idx + 1);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (idx > 0) focusTreeRow(idx - 1);
+        return;
+      }
+      if (e.key === 'Home') {
+        e.preventDefault();
+        focusTreeRow(0);
+        return;
+      }
+      if (e.key === 'End') {
+        e.preventDefault();
+        focusTreeRow(flatTree.length - 1);
+        return;
+      }
+      if (e.key === 'ArrowRight' && node.isDir && !expanded[node.path]) {
+        e.preventDefault();
+        onToggleExpand(node.path, e as unknown as React.MouseEvent);
+        return;
+      }
+      if (e.key === 'ArrowLeft' && node.isDir && expanded[node.path]) {
+        e.preventDefault();
+        onToggleExpand(node.path, e as unknown as React.MouseEvent);
+      }
+    },
+    [flatTree.length, expanded, onSelect, onToggleExpand, focusTreeRow]
+  );
+
   return (
     <div
       className={`${styles.filesList} ${styles.filesListPane}`}
       ref={containerRef}
       onScroll={onScroll}
+      role="tree"
+      aria-label="文件树"
       style={{ overflowY: 'auto', position: 'relative' }}
     >
       {loading ? (
@@ -106,6 +161,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(function Fil
               return (
                 <div
                   key={e.path}
+                  data-tree-index={globalIdx}
                   className={`${styles.filesRow} ${selected === e.path ? styles.isSelected : ''}`}
                   style={{
                     position: 'absolute',
@@ -119,11 +175,13 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(function Fil
                   }}
                   onClick={() => onSelect(e.path, e.isDir)}
                   onDoubleClick={() => onDoubleClick(e.path, e.isDir)}
-                  role="button"
+                  // F7-F35：树形语义——treeitem + 层级/展开态/选中态
+                  role="treeitem"
+                  aria-level={e.depth + 1}
+                  aria-selected={selected === e.path}
+                  aria-expanded={e.isDir ? expanded[e.path] ? 'true' : 'false' : undefined}
                   tabIndex={0}
-                  onKeyDown={(ev) => {
-                    if (ev.key === 'Enter') onSelect(e.path, e.isDir);
-                  }}
+                  onKeyDown={(ev) => handleRowKeyDown(ev, globalIdx, e)}
                 >
                   <button
                     type="button"

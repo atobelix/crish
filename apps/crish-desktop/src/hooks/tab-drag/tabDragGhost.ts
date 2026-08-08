@@ -59,7 +59,8 @@ function baseOverlayFixedStyle(width: number, height: number): string {
     height: ${height}px;
     overflow: hidden;
     pointer-events: none;
-    z-index: 10000;
+    /* F7-F14：z-index 走 token 档位（值等价 --z-toast），禁裸数字 */
+    z-index: var(--z-toast);
     box-sizing: border-box;
     will-change: transform;
     transform: translate3d(0, 0, 0);

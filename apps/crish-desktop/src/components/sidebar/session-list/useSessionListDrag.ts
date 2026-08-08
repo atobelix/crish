@@ -232,7 +232,8 @@ function buildGhostFromRow(
     'left:0',
     'top:0',
     'pointer-events:none',
-    'z-index:9999',
+    // F7-F14：z-index 走 token 档位（值等价 --z-tooltip），禁裸数字
+    'z-index:var(--z-tooltip)',
     'opacity:0.92',
     'margin:0',
     'list-style:none',

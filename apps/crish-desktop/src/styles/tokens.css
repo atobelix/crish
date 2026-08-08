@@ -489,6 +489,16 @@ html[data-theme="dark"] {
   --terminal-prompt: #4ade80;
   --terminal-bar-fill: color-mix(in srgb, var(--text-primary) 4%, transparent);
 
+  /* F7-F27：状态诊断面板文本色 dark 覆盖——light 值（#868e96/#e8590c 等）
+   * 在暗色背景下对比度不足（muted 约 4.6:1），语义上 dark 不得引用 light 值；
+   * 取各语义色的暗色可读浅调，与 --text-secondary 等既有暗色契约一致 */
+  --ui-text-success: #69db7c;
+  --ui-text-danger: #ff8787;
+  --ui-text-muted: #a3a3a3;
+  --ui-text-info: #74c0fc;
+  --ui-text-warning: #ffa94d;
+  --ui-text-primary: inherit;
+
   --bg-glass: rgba(10, 10, 10, 0.75);
 
   /* syntax highlighting dark */

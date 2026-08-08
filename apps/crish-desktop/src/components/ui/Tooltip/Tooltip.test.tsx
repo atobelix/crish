@@ -203,7 +203,11 @@ describe('ui/Tooltip', () => {
     fireEvent.scroll(window);
     expect(rectMock).toHaveBeenCalled();
     expect(tip.style.left).not.toBe(before);
-    // 新位置 = 300 + 25 - 60 = 265
-    expect(tip.style.left).toBe('265px');
+    // 新 base left = 300 + 25 = 325（translate(-50%,-100%) 由 CSS 施加，
+    // 盒实际落于 325 - 60 = 265）；提示盒须完整留在视口内
+    expect(tip.style.left).toBe('325px');
+    const boxLeft = 325 - 120 / 2;
+    expect(boxLeft).toBeGreaterThanOrEqual(8);
+    expect(boxLeft + 120).toBeLessThanOrEqual(800 - 8);
   });
 });

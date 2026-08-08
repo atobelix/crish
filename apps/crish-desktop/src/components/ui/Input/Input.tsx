@@ -76,9 +76,11 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
   const inputType =
     variant === 'password' ? (showPassword ? 'text' : 'password') : variant === 'search' ? 'search' : 'text';
 
-  // clearable 需要受控 value 才能判断是否显示清空按钮
+  // clearable 清空依赖受控 value（经 onChange 合成 ChangeEvent 清空）。
+  // F7 F7：非受控（仅 defaultValue）模式没有 onChange 通道，清空按钮
+  // 点击无效果——显示状态与行为矛盾，直接隐藏
   const isControlled = value !== undefined;
-  const hasValue = isControlled ? String(value).length > 0 : defaultValue !== undefined && String(defaultValue).length > 0;
+  const hasValue = isControlled && String(value).length > 0;
 
   const describedBy = [error ? errorId : null, hint ? hintId : null, ariaDescribedBy ?? null]
     .filter(Boolean)

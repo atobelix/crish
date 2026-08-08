@@ -431,8 +431,9 @@ function messageVirtualizerPropsEqual(
       return false;
     }
   }
-  // messages 全量仅用于少数路径；身份变化时父级通常会换 visibleMessages
-  if (prev.messages !== next.messages && prev.messages.length !== next.messages.length) {
+  // messages 全量仅用于少数路径；F7-F16：身份变化（含同长度替换——
+  // 撤回/编辑）即放行重渲染，不得以长度不变为由拦截
+  if (prev.messages !== next.messages) {
     return false;
   }
   return (

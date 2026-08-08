@@ -52,6 +52,15 @@ export function useChatAutoScroll(
           const dh = scrollHeight - prevHeight;
           if (dh > 0) {
             el.scrollTop = Math.min(el.scrollTop + dh, scrollHeight);
+          } else if (dh < 0) {
+            // F7-F17：内容收缩（新行实际高度 < 估算高度 → scrollHeight
+            // 缩小，dh ≤ 0 不滚动）时，若当前贴底则重新吸附到真实底部，
+            // 避免长代码块消息渲染后底部残留空白
+            const atBottom =
+              scrollHeight - el.scrollTop - el.clientHeight < 60;
+            if (atBottom) {
+              el.scrollTop = Math.max(0, scrollHeight - el.clientHeight);
+            }
           }
         } else {
           // Idle / first sample: snap to real bottom (also calibrates after stream)

@@ -156,6 +156,60 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
     }, 80);
   }, []);
 
+  // F7-F12：flyout 关闭语义——鼠标移出行/飞层后经宽限期关闭；
+  // 宽限期内移入飞层内部（onMouseEnter 取消）不误关
+  const handleFlyLeave = useCallback((type: FlyKey) => {
+    clearTimeout(flyTimerRef.current.enter);
+    flyTimerRef.current.leave = window.setTimeout(() => {
+      setFly((prev) => (prev === type ? null : prev));
+    }, 150);
+  }, []);
+
+  const cancelFlyLeave = useCallback(() => {
+    clearTimeout(flyTimerRef.current.leave);
+  }, []);
+
+  // F7-F12：flyout/入口行 DOM 引用（键盘导航焦点落点；sortMenuRef 由
+  // 外部持有但未挂载到元素，不可依赖）
+  const flyoutRefs = useRef<Record<NonNullable<FlyKey>, HTMLDivElement | null>>({
+    sort: null,
+    group: null,
+    filter: null,
+  });
+  const rowRefs = useRef<Record<NonNullable<FlyKey>, HTMLDivElement | null>>({
+    sort: null,
+    group: null,
+    filter: null,
+  });
+
+  // F7-F12：ArrowRight 打开 flyout 并聚焦首项；ArrowLeft/Esc 关闭
+  // flyout 并聚焦回入口行（行 role=menuitem + tabIndex=0，键盘可达）
+  const handleRowKeyDown = useCallback(
+    (type: NonNullable<FlyKey>, e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      e.stopPropagation();
+      setFly(type);
+      requestAnimationFrame(() => {
+        const first =
+          flyoutRefs.current[type]?.querySelector<HTMLElement>(
+            '[role="menuitemradio"]'
+          );
+        first?.focus();
+      });
+    }
+  }, []);
+
+  const handleFlyoutKeyDown = useCallback(
+    (type: NonNullable<FlyKey>, e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowLeft' || e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      setFly(null);
+      rowRefs.current[type]?.focus();
+    }
+  }, []);
+
   const target = contextMenu
     ? (() => {
         const s =
@@ -247,6 +301,14 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
+        // F7-F12：flyout 展开时 Esc 只关 flyout（不关整个排序菜单），
+        // 并聚焦回入口行
+        if (fly !== null) {
+          e.stopImmediatePropagation();
+          setFly(null);
+          rowRefs.current[fly]?.focus();
+          return;
+        }
         e.stopPropagation();
         onCloseSortDropdown();
         const target =
@@ -256,7 +318,7 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [sortDropdownOpen, onCloseSortDropdown, sortTriggerRef]);
+  }, [sortDropdownOpen, onCloseSortDropdown, sortTriggerRef, sortMenuRef, fly]);
 
   return (
     <>
@@ -425,7 +487,17 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
 
           <div
             className={`${styles.sortFilterRow} ${fly === 'sort' ? styles.isOpen : ''}`}
+            role="menuitem"
+            tabIndex={0}
+            data-fly-row="sort"
+            ref={(el) => {
+              rowRefs.current.sort = el;
+            }}
+            aria-haspopup="true"
+            aria-expanded={fly === 'sort'}
             onMouseEnter={() => handleFlyEnter('sort')}
+            onMouseLeave={() => handleFlyLeave('sort')}
+            onKeyDown={(e) => handleRowKeyDown('sort', e)}
           >
             <span className={styles.sortFilterRowLabel}>排序方式</span>
             <ChevronRight
@@ -436,9 +508,15 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
             />
             {fly === 'sort' ? (
               <div
+                ref={(el) => {
+                  flyoutRefs.current.sort = el;
+                }}
                 className={styles.sortFilterFlyout}
                 role="group"
                 aria-label="排序方式"
+                onMouseEnter={cancelFlyLeave}
+                onMouseLeave={() => handleFlyLeave('sort')}
+                onKeyDown={(e) => handleFlyoutKeyDown('sort', e)}
               >
                 <button
                   type="button"
@@ -486,7 +564,17 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
 
           <div
             className={`${styles.sortFilterRow} ${fly === 'group' ? styles.isOpen : ''}`}
+            role="menuitem"
+            tabIndex={0}
+            data-fly-row="group"
+            ref={(el) => {
+              rowRefs.current.group = el;
+            }}
+            aria-haspopup="true"
+            aria-expanded={fly === 'group'}
             onMouseEnter={() => handleFlyEnter('group')}
+            onMouseLeave={() => handleFlyLeave('group')}
+            onKeyDown={(e) => handleRowKeyDown('group', e)}
           >
             <span className={styles.sortFilterRowLabel}>分组方式</span>
             <ChevronRight
@@ -497,9 +585,15 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
             />
             {fly === 'group' ? (
               <div
+                ref={(el) => {
+                  flyoutRefs.current.group = el;
+                }}
                 className={styles.sortFilterFlyout}
                 role="group"
                 aria-label="分组方式"
+                onMouseEnter={cancelFlyLeave}
+                onMouseLeave={() => handleFlyLeave('group')}
+                onKeyDown={(e) => handleFlyoutKeyDown('group', e)}
               >
                 <button
                   type="button"
@@ -547,7 +641,17 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
 
           <div
             className={`${styles.sortFilterRow} ${fly === 'filter' ? styles.isOpen : ''}`}
+            role="menuitem"
+            tabIndex={0}
+            data-fly-row="filter"
+            ref={(el) => {
+              rowRefs.current.filter = el;
+            }}
+            aria-haspopup="true"
+            aria-expanded={fly === 'filter'}
             onMouseEnter={() => handleFlyEnter('filter')}
+            onMouseLeave={() => handleFlyLeave('filter')}
+            onKeyDown={(e) => handleRowKeyDown('filter', e)}
           >
             <span className={styles.sortFilterRowLabel}>列表范围</span>
             <ChevronRight
@@ -558,9 +662,15 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
             />
             {fly === 'filter' ? (
               <div
+                ref={(el) => {
+                  flyoutRefs.current.filter = el;
+                }}
                 className={styles.sortFilterFlyout}
                 role="group"
                 aria-label="列表范围"
+                onMouseEnter={cancelFlyLeave}
+                onMouseLeave={() => handleFlyLeave('filter')}
+                onKeyDown={(e) => handleFlyoutKeyDown('filter', e)}
               >
                 <button
                   type="button"

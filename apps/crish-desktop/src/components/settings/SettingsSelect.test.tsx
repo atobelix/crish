@@ -82,8 +82,8 @@ describe('SettingsSelect（ui/Menu 基座）', () => {
     render(<Wrapper onSelect={onSelect} />);
     fireEvent.click(trigger());
     const listbox = await screen.findByRole('listbox');
-    fireEvent.keyDown(listbox, { key: 'ArrowDown' });
-    expect(screen.getByRole('option', { name: /选项甲/ })).toHaveFocus();
+    // F7-F2 契约：打开即聚焦首项（选项甲）
+    await waitFor(() => expect(screen.getByRole('option', { name: /选项甲/ })).toHaveFocus());
     fireEvent.keyDown(listbox, { key: 'ArrowDown' });
     expect(screen.getByRole('option', { name: /选项乙/ })).toHaveFocus();
     fireEvent.keyDown(listbox, { key: 'Enter' });

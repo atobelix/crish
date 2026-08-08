@@ -104,6 +104,8 @@ describe('SidebarContextMenus flyout 关闭语义（F7-F12）', () => {
     renderSortMenu();
     const row = screen.getByText('排序方式').closest('div')!;
     fireEvent.keyDown(row, { key: 'ArrowRight' });
+    // 聚焦经 rAF 派发（fake timers 下显式推进）
+    act(() => vi.advanceTimersByTime(20));
     const flyout = screen.getByRole('group', { name: '排序方式' });
     const firstOption = screen.getByRole('menuitemradio', { name: /按最近活跃/ });
     expect(flyout).toBeInTheDocument();

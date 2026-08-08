@@ -150,6 +150,16 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     return (m: SessionMessage) => messageMatchesSearch(m, q);
   }, [searchHighlightQuery]);
 
+  // F7-F20：窗口扫描 memo 键 = 消息 id 签名——流式期间每 token 换
+  // messages 引用但 id 序列不变，mustInclude/keep-alive 的 O(n) 全量扫描
+  // 不再每帧重跑；搜索激活时匹配结果依赖消息内容，必须按引用重扫
+  const messagesIdsKey = useMemo(
+    () => messages.map((m) => m.id).join('\u0000'),
+    [messages]
+  );
+  const windowScanKey: string | SessionMessage[] =
+    searchMatch !== undefined ? messages : messagesIdsKey;
+
   const mustIncludeIndices = useMemo(() => {
     if (showAllMessages || messages.length === 0) return EMPTY_MUST_INDICES;
     return collectMustIncludeIndices(messages, {
@@ -157,7 +167,8 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       ...(searchMatch !== undefined ? { match: searchMatch } : {}),
       matchOnlyFirst: true,
     });
-  }, [messages, showAllMessages, searchMatch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowScanKey, showAllMessages, searchMatch]);
 
   useEffect(() => {
     if (showAllMessages) return;
@@ -171,7 +182,8 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
       });
       return next === prev ? prev : next;
     });
-  }, [messages, mustIncludeIndices, showAllMessages, searchMatch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowScanKey, mustIncludeIndices, showAllMessages, searchMatch]);
 
   const messageWindow = useMemo(
     () =>

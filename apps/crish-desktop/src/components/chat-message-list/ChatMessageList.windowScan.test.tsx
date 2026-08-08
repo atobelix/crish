@@ -101,7 +101,9 @@ function renderList(messages: SessionMessage[]) {
 
 afterEach(() => {
   cleanup();
-  vi.restoreAllMocks();
+  // 注意：不能用 restoreAllMocks——会把 vi.mock(spy:true) 的模块级
+  // spy 还原为原始函数，下一个用例读取 .mock.calls 报 undefined
+  vi.clearAllMocks();
 });
 
 describe('ChatMessageList 窗口扫描 memo 化（F7-F20）', () => {

@@ -24,6 +24,11 @@ export type DialogSize = 'sm' | 'md' | 'lg';
 export type DialogRole = 'dialog' | 'alertdialog';
 export type DialogVariant = 'modal' | 'fullscreen';
 
+// 嵌套 Dialog Esc 竞态（F7 F5）：打开中的 Dialog 按挂载顺序登记进栈，
+// document 层 Esc 监听只允许栈顶响应——一次 Esc 只关最顶层，
+// 不会两层同时关闭；退出动画期间已从栈中移除，外层立即恢复响应。
+const dialogStack: string[] = [];
+
 export interface DialogProps {
   /** 受控开关 */
   open: boolean;
@@ -86,24 +91,39 @@ export function Dialog({
 }: DialogProps) {
   const titleId = useId();
   const descriptionId = useId();
+  const dialogId = useId();
   const isFullscreen = variant === 'fullscreen';
 
   // 三件套：进出场动画 + 焦点归还 + 焦点圈定
-  const { state, isMounted } = useAnimatedPresence({ visible: open, exitDurationMs: 200 });
+  // exitDurationMs 与 CSS --duration-exit（150ms）对齐（F7 F5），
+  // 退出动画结束即卸载，不留 50ms 空窗
+  const { state, isMounted } = useAnimatedPresence({ visible: open, exitDurationMs: 150 });
   useRestoreFocus(open);
 
+  // 登记/退栈：打开且已挂载时入栈，关闭/卸载时出栈（F7 F5）
+  useEffect(() => {
+    if (!open || !isMounted) return;
+    dialogStack.push(dialogId);
+    return () => {
+      const idx = dialogStack.indexOf(dialogId);
+      if (idx >= 0) dialogStack.splice(idx, 1);
+    };
+  }, [open, isMounted, dialogId]);
+
   // Esc 关闭：挂在 document 层（与 FocusTrap 的 Tab 循环互不干扰）；
+  // 仅最顶层响应（F7 F5：嵌套 Dialog 一次 Esc 只关顶层）；
   // 消费方自定义 Esc 三层级（SettingsPanel/FirstRunWizard）时置 dismissible=false
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      if (dialogStack[dialogStack.length - 1] !== dialogId) return;
       e.preventDefault();
       if (dismissible) onClose();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, dismissible, onClose]);
+  }, [open, dismissible, onClose, dialogId]);
 
   if (!isMounted) return null;
 
