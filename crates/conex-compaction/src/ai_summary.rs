@@ -833,13 +833,34 @@ mod tests {
         assert_eq!(outcome.attempts, 1);
     }
 
+    /// Schema V1 合法摘要文档（Summarizer 成功路径返回；T-13 R-G 场景 A）。
+    /// 正文 > 500 字符以通过护栏退化判定（grok MIN_SUMMARY_SEED_CHARS）
+    fn summary_doc_json(goal: &str) -> String {
+        serde_json::json!({
+            "schemaVersion": 1,
+            "blockId": "unused",
+            "generation": 1,
+            "droppedIds": [],
+            "height": 1,
+            "tier": "chunk",
+            "goal": goal,
+            "constraints": [],
+            "progress": [],
+            "decisions": [],
+            "nextSteps": [],
+            "criticalContext": "折叠链冻结 + 中性 stub（R-C）+ Schema V1 文档 md 渲染投影（R-G）：链消息逐字节稳定，可追溯可恢复；同步单次尝试（R-F）；摘要就绪以块表为准，对话 stub 永不改写。".repeat(5),
+        })
+        .to_string()
+    }
+
     // ── RetryGuardSummarizer（Summarizer 包装，可注入引擎）──
 
-    /// 包装成功路径：引擎产出 LLM 摘要（五字段），last_outcome 留痕
+    /// 包装成功路径：引擎产出 LLM 摘要（Schema V1 文档 md 渲染），
+    /// last_outcome 留痕
     #[test]
     fn retry_guard_wrapper_success_into_engine() {
         let guard = RetryGuardSummarizer::new(
-            Box::new(ScriptedSummarizer::new(vec![Ok(five_field_summary())])),
+            Box::new(ScriptedSummarizer::new(vec![Ok(summary_doc_json("实现双阈值压缩"))])),
             SummaryRetryPolicy::default(),
             empty_wait(),
         );
@@ -858,18 +879,25 @@ mod tests {
         };
         let plan = engine.compact_agent_messages(&messages, 5, &policy, Some(&guard));
         assert!(plan.summary_is_llm);
-        assert!(plan.summary.contains("任务目标"));
-        // 五字段校验通过
-        assert!(validate_structured_summary(&plan.summary).is_ok());
+        // md 渲染投影进链（T-13：合法 JSON 文档 → summary_to_markdown）
+        assert!(plan.summary.contains("## Goal"));
+        assert!(plan.summary.contains("实现双阈值压缩"));
         // 摘要消息入对话（system 后、保留段前）
         assert!(plan.messages.iter().any(|m| m.id.starts_with("compacted-summary")));
+        // metadata 快照：LLM 成功 → committed
+        let summary_msg = plan
+            .messages
+            .iter()
+            .find(|m| m.id.starts_with("compacted-summary"))
+            .expect("摘要消息须入对话");
+        assert_eq!(summary_msg.metadata.as_ref().unwrap()["summary"]["state"], "committed");
         // last_outcome 留痕（成功、无降级）
         let outcome = guard.last_outcome().expect("护栏须记录最近一次结果");
         assert!(!outcome.degraded);
         assert_eq!(outcome.attempts, 1);
     }
 
-    /// 包装失败路径：连续失败 → Err → 引擎回退 L1 占位符（不阻塞 run），
+    /// 包装失败路径：连续失败 → Err → 引擎回退中性 stub（不阻塞 run），
     /// last_outcome 记录降级事实
     #[test]
     fn retry_guard_wrapper_degrades_into_engine_placeholder() {
@@ -896,9 +924,15 @@ mod tests {
             ..CompactionPolicy::default()
         };
         let plan = engine.compact_agent_messages(&messages, 5, &policy, Some(&guard));
-        // 既有 [Compacted N...] 占位符语义，LLM 标志为 false
+        // 中性 stub 语义（T-13：R-C 永不改写；块 id + 丢弃数，无"生成中"措辞）
         assert!(!plan.summary_is_llm);
-        assert!(plan.summary.contains("[Compacted 2 earlier message(s)"));
+        assert!(
+            plan.summary.contains("[Compacted(compacted-summary-1-1)"),
+            "stub 须携带块 id：{}",
+            plan.summary
+        );
+        assert!(plan.summary.contains("2 条消息"));
+        assert!(!plan.summary.contains("生成中"));
         // 降级事实可读
         let outcome = guard.last_outcome().expect("护栏须记录最近一次结果");
         assert!(outcome.degraded);

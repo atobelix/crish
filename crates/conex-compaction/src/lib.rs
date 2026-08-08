@@ -17,7 +17,9 @@
 //!   （ASCII 4 字符/token、CJK 逐字符、图片固定 1600 token，jcode IMAGE_TOKEN_COST）；
 //! - 切割点：从尾部倒推累计预算（keepRecentTokens=20000，pi compaction.ts:135）
 //!   与合法切割点限制（不拆散 tool use/result 对，jcode safe_compaction_cutoff）；
-//! - 摘要：L1 静态占位符（既有模板）+ 可选 LLM 摘要器（L2，迭代合并）。
+//!   折叠链（compacted-summary 前缀，紧邻 system）为切割下界（B1/B2，00-plan §4）；
+//! - 摘要：中性句柄 stub（T-13，R-C 永不改写）+ 可选 LLM 摘要器（L2 迭代合并，
+//!   同步成功且输出为 Schema V1 JSON 文档时以 md 渲染进链，R-G 语源唯一）。
 
 use conex_types::{AgentMessage, AgentMessageBlock, ToolOutput};
 
@@ -26,6 +28,15 @@ pub mod ai_summary;
 
 /// 工具输出截断（G8 核销：head + 标记 + tail 计数截断 + 预算水位联动）
 pub mod tool_output;
+
+/// 压缩块元数据与块引用行（T-11；可追溯 / 可恢复索引面，00-plan §4.4）
+pub mod recovery;
+
+/// 摘要文档 Schema V1 规范面（T-12；校验 / markdown 渲染投影 / 兼容解析）
+pub mod summary_document;
+
+/// 工具输出清洗管线（T-14；R1-R6 纯函数，接线在轮次 4 wire 面）
+pub mod clean_output;
 
 pub mod compaction {
     use std::collections::HashSet;
@@ -158,10 +169,19 @@ pub mod compaction {
         pub tokens_before: u64,
         /// 压缩后 token 数（启发式口径）
         pub tokens_after: u64,
-        /// 摘要文本（L1 静态占位符或 L2 LLM 摘要；未压缩时为空串）
+        /// 摘要文本（stub 中性句柄或 Schema V1 文档的 md 渲染；未压缩时为空串）
         pub summary: String,
-        /// 摘要是否来自 LLM（L2 路径；L1 静态占位符为 false）
+        /// 摘要是否来自 LLM（同步成功且输出为合法 JSON 文档；stub 为 false）
         pub summary_is_llm: bool,
+        /// 折叠链：压缩前链消息数（原链条数；noop 时为 0）
+        pub fold_chain_prev: usize,
+        /// 折叠链：压缩后链消息数（含本条；noop 时为 0）
+        pub fold_chain_after: usize,
+        /// 本条摘要消息在链中的序号（= 链长 + 1；noop 时为 0）
+        pub fold_index: usize,
+        /// 压缩代数（R-K 单源；本轮引擎侧以 1 占位，V2 由会话代数
+        /// SessionContextMeta.last_compaction_generation 注入）
+        pub generation: u32,
     }
 
     /// LLM 摘要器（可选注入；None = L1 静态占位符，P4 §3.4.4）
@@ -183,6 +203,23 @@ pub mod compaction {
         max_tokens: usize,
     }
 
+    /// 折叠链起始下标（T-01；B1 冻结 / B2 单调下界）
+    ///
+    /// 链 = 紧邻 system 段之后的连续 `compacted-summary` 前缀消息段；
+    /// 返回链段之后的首个下标。无 system 时从开头直接跳过链消息；
+    /// 链为空时返回 system 段长度。链消息永不进保留区/丢弃区，
+    /// 故切割点恒须 `> fold_start`。
+    fn fold_start_of(messages: &[Arc<AgentMessage>]) -> usize {
+        let mut idx = 0;
+        while idx < messages.len() && messages[idx].role == AgentMessageRole::System {
+            idx += 1;
+        }
+        while idx < messages.len() && messages[idx].id.starts_with("compacted-summary") {
+            idx += 1;
+        }
+        idx
+    }
+
     /// 无压缩动作的计划（预算内不动 / 无合法切割点 / 无可丢内容）
     fn noop_plan(messages: &[Arc<AgentMessage>]) -> CompactionPlan {
         let tokens: u64 = messages
@@ -198,6 +235,10 @@ pub mod compaction {
             tokens_after: tokens,
             summary: String::new(),
             summary_is_llm: false,
+            fold_chain_prev: 0,
+            fold_chain_after: 0,
+            fold_index: 0,
+            generation: 1,
         }
     }
 
@@ -293,10 +334,7 @@ pub mod compaction {
             // If we dropped some middle messages, add a summary placeholder
             let dropped_count = middle_indices.len() - middle_kept.len();
             if dropped_count > 0 {
-                let summary = format!(
-                    "[Compacted {} earlier message(s) to fit context window]",
-                    dropped_count
-                );
+                let summary = summary_placeholder(dropped_count);
                 let summary_tokens = super::count_tokens(&summary);
                 result_messages.push(Message {
                     id: format!("compacted-summary-{dropped_count}"),
@@ -379,7 +417,8 @@ pub mod compaction {
         /// 策略（P4 §3.4.2，对齐 pi findCutPoint / jcode safe_compaction_cutoff）：
         ///
         /// 1. **尾部倒推预算**：从末尾向前累计 token 至 `keep_recent_tokens`，
-        ///    累计达标处的消息纳入保留段；
+        ///    累计达标处的消息纳入保留段；扫描区间自折叠链后起算（链 token
+        ///    不计入预算，T-02）；
         /// 2. **完整回合下限**：保留段内 user 消息数不得少于 `min_recent_turns`
         ///    （不足时向前扩展保留段；回合 = 一个 user 消息及其后的
         ///    assistant/tool 消息组）；
@@ -387,6 +426,10 @@ pub mod compaction {
         ///    能在保留段内找到对应 `ToolCall`；存在孤儿 id 时向前扩展保留段
         ///    直到全部配对；仍无法配对（数据异常）或保留段覆盖全部消息
         ///    （无可丢内容）时返回 None——宁可暂不压缩也不破坏语义。
+        ///
+        /// **折叠链下界（T-01~T-05）**：切割点恒 `> fold_start`（system 段后
+        /// 首个非链下标）——链消息（compacted-summary 前缀）永不进保留区/丢弃区
+        /// （B1 冻结、B2 单调），cut ≤ fold_start 一律 None。
         pub fn find_cut_point(
             &self,
             messages: &[Arc<AgentMessage>],
@@ -406,15 +449,21 @@ pub mod compaction {
         ///    放弃压缩，原样返回（宁可暂不压缩也不破坏语义，jcode
         ///    safe_compaction_cutoff:289-290）；
         /// 3. 保留尾部：[find_cut_point] 计算保留段；保留段之前的 **system
-        ///    消息恒保留**（置于输出头部），其余中间段合并为摘要占位符；
-        /// 4. 摘要：注入 [Summarizer] 时走 LLM 摘要（失败降级 L1 静态占位符，
-        ///    P4 §3.4.4），无注入时用 L1 静态占位符
-        ///    `"[Compacted N earlier message(s) to fit context window]"`
-        ///    （对齐既有 Message 面模板）；检测到既有摘要消息
-        ///    （`compacted-summary` 前缀 id）时作为 `existing` 传入摘要器
-        ///    走迭代合并路径（P4 §3.4.3）；摘要受 `max_summary_tokens` 钳制；
-        /// 5. 摘要占位消息以 `assistant` 角色插入 system 之后、保留段之前
-        ///    （保持"system → 摘要 → 保留尾部"的对话形态）。
+        ///    消息恒保留**（置于输出头部），**折叠链（compacted-summary
+        ///    前缀，T-06/T-08）恒保留**（B1 冻结：链永不改写/丢失/折叠），
+        ///    其余中间段合并为摘要；
+        /// 4. 摘要：注入 [Summarizer] 时同步单次尝试（R-F）；成功且输出为
+        ///    Schema V1 JSON 文档（[super::summary_document::validate_summary_document]）
+        ///    时以 markdown 渲染进链（R-G 语源唯一，summary_is_llm=true），
+        ///    否则（非 JSON / 超预算 / 失败 / 无注入）降级中性 stub
+        ///    （R-C 永不改写，state=awaiting）；摘要受 `max_summary_tokens`
+        ///    钳制；检测到既有链消息时取**链尾**文本（T-07）作为 `existing`
+        ///    传入摘要器走迭代合并（P4 §3.4.3）；
+        /// 5. 摘要消息以 `assistant` 角色插入 system + 链之后、保留段之前
+        ///    （保持"system → 链 → 新摘要 → 保留尾部"的对话形态，B4）；
+        ///    id = `compacted-summary-{generation}-{fold_index}`（R-B，
+        ///    fold_index = 链长 + 1，B3 只增），metadata 携带
+        ///    `{summary: {blockId, state, droppedIds, height, generation}}` 快照。
         ///
         /// `budget_tokens` 为目标预算（window - reserve，由调用方换算）。
         pub fn compact_agent_messages(
@@ -444,63 +493,95 @@ pub mod compaction {
                 return noop_plan(messages);
             };
 
-            // 中间段 = 保留段之前的非 system 消息（system 恒保留）
+            // 中间段 = 保留段之前的非 system 消息（system 恒保留；
+            // T-06：链消息（compacted-summary 前缀）永不入 dropped——B1 冻结）
             let dropped_arcs: Vec<Arc<AgentMessage>> = messages[..cut]
                 .iter()
-                .filter(|m| m.role != AgentMessageRole::System)
+                .filter(|m| {
+                    m.role != AgentMessageRole::System && !m.id.starts_with("compacted-summary")
+                })
                 .cloned()
                 .collect();
             if dropped_arcs.is_empty() {
-                // 可切但无可丢消息（如保留段前仅有 system）：无意义，放弃压缩
+                // 可切但无可丢消息（如保留段前仅有 system/链）：无意义，放弃压缩
                 return noop_plan(messages);
             }
             let dropped_ids: Vec<String> = dropped_arcs.iter().map(|m| m.id.clone()).collect();
 
-            // 迭代合并：既有摘要（compacted-summary 前缀 id）作为 existing 传入
+            // 迭代合并：T-07 取链尾最后一条非空摘要文本（stub 或 md 渲染
+            // 皆可）作为 existing 传入摘要器（R-G：链文本 = 该块文档的
+            // md 渲染 / stub 中性文本；existing 由调用方按表优先仲裁）
             let existing = messages[..cut]
                 .iter()
                 .filter(|m| m.id.starts_with("compacted-summary"))
-                .map(|m| m.text())
-                .find(|text| !text.is_empty());
+                .filter_map(|m| {
+                    let text = m.text();
+                    if text.is_empty() {
+                        None
+                    } else {
+                        Some(text)
+                    }
+                })
+                .next_back();
 
-            // 摘要生成：L2 注入（失败降级 L1）→ L1 静态占位符
-            // Summarizer 接收按值切片（对齐 P4 §3.4.4 签名）；丢弃消息
-            // 即将被替换，此处一次性克隆可接受
+            // T-09：折叠推导——fold_index = 链长 + 1（B3 只增）；块 id 与
+            // 摘要消息 id 同名（R-B：`compacted-summary-{gen}-{fold}`）；
+            // generation 本轮以 1 占位（R-K：V2 由会话代数
+            // SessionContextMeta.last_compaction_generation 注入）
+            let chain_count = messages[..cut]
+                .iter()
+                .filter(|m| m.id.starts_with("compacted-summary"))
+                .count();
+            let generation: u32 = 1;
+            let fold_index = chain_count + 1;
+            let block_id = format!("compacted-summary-{generation}-{fold_index}");
+
+            // 摘要生成（T-13）：同步单次尝试（R-F）；成功且输出为 Schema V1
+            // JSON 文档 → md 渲染进链（summary_is_llm=true，state=committed）；
+            // 其余（非 JSON / 超预算 / Err / 无注入）→ 中性 stub
+            // （R-C 永不改写，state=awaiting；原文不保留，保守语义）
             let dropped_slice: Vec<AgentMessage> = dropped_arcs.iter().map(|m| (**m).clone()).collect();
+            let stub = || {
+                truncate_summary(
+                    &stub_placeholder(&block_id, dropped_ids.len(), generation),
+                    policy.max_summary_tokens,
+                )
+            };
             let (summary, summary_is_llm) = if let Some(summarizer) = summarizer {
                 match summarizer.summarize(&dropped_slice, existing.as_deref()) {
                     Ok(text) => {
-                        (truncate_summary(&text, policy.max_summary_tokens), true)
-                    }
-                    Err(_) => {
-                        // 摘要失败降级 L1（P4 §3.4.4：不阻塞主对话）
-                        (
-                            truncate_summary(
-                                &summary_placeholder(dropped_ids.len()),
-                                policy.max_summary_tokens,
+                        // 字节预算 = max_summary_tokens × 4（ASCII 4 字符/token、
+                        // CJK 3 字节/字符 ≤ 4 字节/token 的保守上界）
+                        match super::summary_document::validate_summary_document(
+                            &text,
+                            policy.max_summary_tokens.saturating_mul(4),
+                        ) {
+                            Ok(doc) => (
+                                truncate_summary(
+                                    &super::summary_document::summary_to_markdown(&doc),
+                                    policy.max_summary_tokens,
+                                ),
+                                true,
                             ),
-                            false,
-                        )
+                            Err(_) => (stub(), false),
+                        }
                     }
+                    Err(_) => (stub(), false),
                 }
             } else {
-                (
-                    truncate_summary(
-                        &summary_placeholder(dropped_ids.len()),
-                        policy.max_summary_tokens,
-                    ),
-                    false,
-                )
+                (stub(), false)
             };
 
-            // 组装：保留 system（保留段前的）+ 摘要占位（assistant）+ 保留段
+            // 组装：system + 链全查（按原始顺序）+ 新摘要 + 保留段（T-08）
             let mut result: Vec<Arc<AgentMessage>> = messages[..cut]
                 .iter()
-                .filter(|m| m.role == AgentMessageRole::System)
+                .filter(|m| {
+                    m.role == AgentMessageRole::System || m.id.starts_with("compacted-summary")
+                })
                 .cloned()
                 .collect();
             result.push(Arc::new(AgentMessage {
-                id: format!("compacted-summary-{}", dropped_ids.len()),
+                id: block_id.clone(),
                 role: AgentMessageRole::Assistant,
                 // 时间戳沿用对话末条消息：护栏按"晚于压缩边界"语义不会被作废
                 created_at: messages
@@ -508,7 +589,17 @@ pub mod compaction {
                     .map(|m| m.created_at.clone())
                     .unwrap_or_default(),
                 blocks: vec![AgentMessageBlock::Text { text: summary.clone() }],
-                metadata: None,
+                // metadata 快照（机器可读优先；正文只放人读线索；R-C：
+                // stub 永驻 awaiting——摘要就绪以块表为准，不误导模型）
+                metadata: Some(serde_json::json!({
+                    "summary": {
+                        "blockId": block_id,
+                        "state": if summary_is_llm { "committed" } else { "awaiting" },
+                        "droppedIds": &dropped_ids,
+                        "height": 1,
+                        "generation": generation,
+                    }
+                })),
                 client_message_id: None,
                 // 正文兜底字段（前端 content 回退，emit 时建议填充）
                 content: Some(summary.clone()),
@@ -530,6 +621,10 @@ pub mod compaction {
                 tokens_after,
                 summary,
                 summary_is_llm,
+                fold_chain_prev: chain_count,
+                fold_chain_after: fold_index,
+                fold_index,
+                generation,
             }
         }
 
@@ -541,6 +636,12 @@ pub mod compaction {
 
         /// 切割点核心（`tool_pair_protection` 由调用方按策略控制；
         /// 公开入口 [Self::find_cut_point] 恒开启保护）
+        ///
+        /// 折叠链钳制（00-plan §4.2 T-01~T-05，B1/B2 不变量）：
+        /// 链消息（compacted-summary 前缀，紧邻 system 之后）永不进保留区，
+        /// 切割点下界 = `fold_start`（链段之后首个下标）；budget 扫描区间
+        /// 为 `[fold_start, len)`，min_recent_turns 与 tool 配对回扫同样
+        /// 以 fold_start 为下界——cut ≤ fold_start 一律放弃压缩。
         fn find_cut_point_inner(
             &self,
             messages: &[Arc<AgentMessage>],
@@ -551,26 +652,30 @@ pub mod compaction {
             if messages.is_empty() {
                 return None;
             }
+            // T-01：折叠链起始（system 段后首个非链下标）
+            let fold_start = fold_start_of(messages);
             let counts: Vec<usize> = messages
                 .iter()
                 .map(|m| super::count_agent_message_tokens(m))
                 .collect();
 
-            // 1) 尾部倒推累计预算（达标处的消息纳入保留段）
+            // 1) 尾部倒推累计预算（达标处的消息纳入保留段；T-02：
+            //    扫描区间 [fold_start, len)——链 token 不计入预算）
             let mut cut = messages.len();
             let mut acc = 0usize;
-            for i in (0..messages.len()).rev() {
+            for i in (fold_start..messages.len()).rev() {
                 acc += counts[i];
                 if acc >= keep_recent_tokens {
                     cut = i;
                     break;
                 }
             }
-            // 全部消息未达预算 → 保留全部；无可丢内容 → 放弃压缩
+            // 全部消息未达预算 → 保留全部；无可丢内容（cut 落在链上/链前）
+            // → 放弃压缩（T-03：`cut == 0` 改为 `cut <= fold_start`）
             if cut == messages.len() {
                 cut = 0;
             }
-            if cut == 0 {
+            if cut <= fold_start {
                 return None;
             }
 
@@ -580,19 +685,21 @@ pub mod compaction {
                     .iter()
                     .filter(|m| m.role == AgentMessageRole::User)
                     .count();
-                while user_count < min_recent_turns as usize && cut > 0 {
+                while user_count < min_recent_turns as usize && cut > fold_start {
                     cut -= 1;
                     if messages[cut].role == AgentMessageRole::User {
                         user_count += 1;
                     }
                 }
-                if cut == 0 {
+                if cut <= fold_start {
                     return None;
                 }
             }
 
             // 3) 合法切割点（tool 配对保护）：保留段内每个 ToolResult 必须有
-            //    对应 ToolCall；孤儿 id 时向前扩展保留段直到配对
+            //    对应 ToolCall；孤儿 id 时向前扩展保留段直到配对。
+            //    T-04/T-05：回扫区间下界 = fold_start——孤儿 call 位于链内
+            //    （fold_start 处）视为数据异常，保守放弃压缩（链永不进保留区）
             if tool_pair_protection {
                 loop {
                     let mut calls: HashSet<&str> = HashSet::new();
@@ -617,20 +724,20 @@ pub mod compaction {
                     }
                     // 向前找最靠近保留段的含孤儿 id 的 ToolCall 消息并纳入保留段
                     let mut needed: Option<usize> = None;
-                    for j in (0..cut).rev() {
+                    for j in (fold_start..cut).rev() {
                         if messages[j].tool_calls().any(|c| orphans.contains(&c.id.as_str())) {
                             needed = Some(j);
                             break;
                         }
                     }
                     match needed {
-                        Some(j) => cut = j,
-                        // 数据异常：孤儿 result 无对应 ToolCall → 放弃压缩
-                        None => return None,
+                        Some(j) if j > fold_start => cut = j,
+                        // 孤儿 call 位于链内 / 缺失：数据异常 → 放弃压缩
+                        _ => return None,
                     }
                 }
-                // 扩展后保留段覆盖全部消息 → 无可丢内容，放弃压缩
-                if cut == 0 {
+                // 扩展后保留段覆盖链尾全部内容 → 无可丢内容，放弃压缩
+                if cut <= fold_start {
                     return None;
                 }
             }
@@ -746,9 +853,19 @@ pub mod compaction {
         }
     }
 
-    /// L1 静态摘要占位符（对齐既有 Message 面模板与 T-32 任务书）
+    /// L1 静态摘要占位符（旧 Message 面 / 兼容测试仍使用；AgentMessage
+    /// 面已由 [stub_placeholder] 取代——R-E：旧面保留，新面中性句柄）
     fn summary_placeholder(dropped_count: usize) -> String {
         format!("[Compacted {dropped_count} earlier message(s) to fit context window]")
+    }
+
+    /// 中性句柄 stub（T-13；R-C：永不改写；无"生成中/失败"措辞——
+    /// 文本是压缩时刻状态快照，摘要就绪以块表/工具为准，不误导模型）
+    ///
+    /// `generation` 入参保留（签名对齐）；代数已编码进 `block_id`
+    /// （R-B：`compacted-summary-{gen}-{fold}`），正文不重复出现。
+    fn stub_placeholder(block_id: &str, count: usize, _generation: u32) -> String {
+        format!("[Compacted({block_id}) {count} 条消息 · 摘要见块表]")
     }
 
     /// 摘要文本按 token 上限钳制（保证 count_tokens(结果) ≤ max_tokens）
@@ -1574,18 +1691,22 @@ mod tests {
             ..CompactionPolicy::default()
         };
         let plan = engine.compact_agent_messages(&messages, 30, &policy, None);
-        // 输出 = system + 摘要占位 + 保留段（u2/a2）
+        // 输出 = system + 摘要 stub（id = compacted-summary-{gen}-{fold}）+ 保留段（u2/a2）
         assert_eq!(
             plan.messages.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
-            vec!["s1", "compacted-summary-2", "u2", "a2"]
+            vec!["s1", "compacted-summary-1-1", "u2", "a2"]
         );
-        // 占位符格式（T-32 任务书既有模板）
-        assert_eq!(plan.summary, "[Compacted 2 earlier message(s) to fit context window]");
+        // stub 格式（T-13 中性句柄：块 id + 丢弃数，无"生成中"措辞）
+        assert_eq!(
+            plan.summary,
+            "[Compacted(compacted-summary-1-1) 2 条消息 · 摘要见块表]"
+        );
+        assert!(!plan.summary.contains("生成中"), "stub 不得含「生成中」措辞（R-C）");
         assert_eq!(plan.dropped_ids, vec!["u1", "a1"]);
         assert_eq!(plan.first_kept_message_id.as_deref(), Some("u2"));
-        // kept_ids = system + 摘要占位 + 保留段
-        assert_eq!(plan.kept_ids, vec!["s1", "compacted-summary-2", "u2", "a2"]);
-        // 压缩后 token 显著下降且占位符计入
+        // kept_ids = system + 摘要 stub + 保留段
+        assert_eq!(plan.kept_ids, vec!["s1", "compacted-summary-1-1", "u2", "a2"]);
+        // 压缩后 token 显著下降且 stub 计入
         assert!(plan.tokens_after < plan.tokens_before);
         assert!(!plan.summary_is_llm);
     }
@@ -1608,7 +1729,12 @@ mod tests {
             ..CompactionPolicy::default()
         };
         let plan = engine.compact_agent_messages(&messages, 5, &policy, None);
-        assert_eq!(plan.summary, "[Compacted 3 earlier message(s) to fit context window]");
+        // stub 携带丢弃数（块 id 与 dropped 数解耦，R-B：不再以数量为 id）
+        assert_eq!(
+            plan.summary,
+            "[Compacted(compacted-summary-1-1) 3 条消息 · 摘要见块表]"
+        );
+        assert_eq!(plan.dropped_ids, vec!["u1", "a1", "a2"]);
     }
 
     #[test]
@@ -1695,7 +1821,7 @@ mod tests {
     #[test]
     fn compact_uses_summarizer_and_iterative_merge() {
         let engine = CompactionEngine::new(0);
-        // 已存在旧摘要消息（compacted-summary 前缀）在中间段 → 迭代合并传入 existing
+        // 已存在旧摘要消息（compacted-summary 前缀）在链内 → 链尾文本进 existing
         let messages = vec![
             amsg("compacted-summary-1", AgentMessageRole::Assistant, "2026-08-03T10:00:00.000Z", vec![text_block("OLD SUMMARY")], None),
             amsg("u1", AgentMessageRole::User, "2026-08-03T10:00:01.000Z", vec![text_block(&"long user".repeat(60))], None),
@@ -1710,15 +1836,12 @@ mod tests {
                 dropped: &[AgentMessage],
                 existing: Option<&str>,
             ) -> Result<String, String> {
-                assert_eq!(existing, Some("OLD SUMMARY"), "迭代合并须携带既有摘要");
-                assert_eq!(dropped.len(), 3, "旧摘要 + 本轮丢弃回合一并进入摘要");
-                Ok(format!(
-                    "## Goal\n(合并 {} 条丢弃消息)",
-                    dropped.len()
-                ))
+                assert_eq!(existing, Some("OLD SUMMARY"), "迭代合并须携带链尾既有摘要");
+                assert_eq!(dropped.len(), 2, "链消息不进入摘要器（T-06）");
+                Ok(summary_doc_json("合并 2 条丢弃消息"))
             }
         }
-        // keep 恰好覆盖尾部两条 → 切割点 = 3，丢弃 summary-old/u1/a1 共 3 条
+        // keep 恰好覆盖尾部两条 → 切割点 = 3，丢弃 u1/a1（链在折叠链中保留）
         let keep = count_agent_message_tokens(&messages[3]) + count_agent_message_tokens(&messages[4]);
         let policy = CompactionPolicy {
             keep_recent_tokens: keep,
@@ -1731,14 +1854,39 @@ mod tests {
             &policy,
             Some(&RecordingSummarizer),
         );
+        // LLM 成功 + 合法 JSON 文档 → md 渲染进链（R-G 场景 A）
         assert!(plan.summary_is_llm);
-        assert!(plan.summary.contains("合并 3 条丢弃消息"));
-        // 摘要消息 id 仍走 compacted-summary 前缀（迭代合并链）
-        assert!(plan.messages.iter().any(|m| m.id.starts_with("compacted-summary")));
+        assert!(plan.summary.contains("## Goal"), "md 渲染进链：{}", plan.summary);
+        assert!(plan.summary.contains("合并 2 条丢弃消息"));
+        // 链全查 + 新摘要（T-08）：fold = 链长 + 1 = 2
+        let chain_ids: Vec<&str> = plan
+            .messages
+            .iter()
+            .filter(|m| m.id.starts_with("compacted-summary"))
+            .map(|m| m.id.as_str())
+            .collect();
+        assert_eq!(
+            chain_ids,
+            vec!["compacted-summary-1", "compacted-summary-1-2"],
+            "既有链全保留 + 新摘要追加（T-08）"
+        );
+        // metadata 快照：LLM 成功 → committed
+        let new_msg = plan
+            .messages
+            .iter()
+            .find(|m| m.id == "compacted-summary-1-2")
+            .expect("新摘要消息在场");
+        assert_eq!(new_msg.metadata.as_ref().unwrap()["summary"]["state"], "committed");
+        // 折叠字段
+        assert_eq!(plan.fold_chain_prev, 1);
+        assert_eq!(plan.fold_chain_after, 2);
+        assert_eq!(plan.fold_index, 2);
+        assert_eq!(plan.generation, 1);
+        assert_eq!(plan.dropped_ids, vec!["u1", "a1"]);
     }
 
     #[test]
-    fn compact_summarizer_error_falls_back_to_l1() {
+    fn compact_summarizer_error_falls_back_to_stub() {
         let engine = CompactionEngine::new(0);
         let messages = vec![
             amsg("u1", AgentMessageRole::User, "2026-08-03T10:00:00.000Z", vec![text_block(&"long".repeat(100))], None),
@@ -1768,9 +1916,19 @@ mod tests {
             &policy,
             Some(&FailingSummarizer),
         );
-        // 失败降级 L1（P4 §3.4.4：摘要失败不阻塞主对话）
+        // 失败降级中性 stub（T-13：R-C 永不改写；摘要失败不阻塞主对话）
         assert!(!plan.summary_is_llm);
-        assert_eq!(plan.summary, "[Compacted 2 earlier message(s) to fit context window]");
+        assert_eq!(
+            plan.summary,
+            "[Compacted(compacted-summary-1-1) 2 条消息 · 摘要见块表]"
+        );
+        // metadata 快照：awaiting
+        let summary_msg = plan
+            .messages
+            .iter()
+            .find(|m| m.id.starts_with("compacted-summary"))
+            .expect("stub 消息须入对话");
+        assert_eq!(summary_msg.metadata.as_ref().unwrap()["summary"]["state"], "awaiting");
     }
 
     #[test]
@@ -1931,20 +2089,21 @@ mod tests {
             CompactionThresholds::default().classify(estimate, window),
             ThresholdDecision::Critical
         );
-        // 临界线路径 = 确定性压缩（summarizer=None → L1 占位符，不依赖 AI）
+        // 临界线路径 = 确定性压缩（summarizer=None → 中性 stub，不依赖 AI）
         let plan = engine.compact_agent_messages(&messages, 5, &policy, None);
         assert!(!plan.summary_is_llm);
-        assert_eq!(plan.summary, "[Compacted 2 earlier message(s) to fit context window]");
+        assert_eq!(
+            plan.summary,
+            "[Compacted(compacted-summary-1-1) 2 条消息 · 摘要见块表]"
+        );
         assert!(plan.tokens_after < plan.tokens_before);
     }
 
-    /// 常规线 = AI 摘要路径：mock 摘要器（provider 通道）产出五字段
-    /// 压缩文档入对话；被压缩段落不删除（原消息仍在 dropped_ids 可查）
+    /// 常规线 = AI 摘要路径：mock 摘要器（provider 通道）产出 Schema V1
+    /// JSON 文档 → md 渲染进链（R-G 场景 A）；被压缩段落不删除
+    /// （原消息仍在 dropped_ids 可查）
     #[test]
-    fn regular_line_ai_summary_five_fields_into_conversation() {
-        use super::ai_summary::{
-            format_structured_summary, validate_structured_summary, StructuredSummaryFields,
-        };
+    fn regular_line_ai_summary_document_into_conversation() {
         use super::compaction::{CompactionThresholds, ThresholdDecision};
         let engine = CompactionEngine::new(0);
         let messages = vec![
@@ -1971,24 +2130,14 @@ mod tests {
                 _dropped: &[AgentMessage],
                 _existing: Option<&str>,
             ) -> Result<String, String> {
-                Ok(format_structured_summary(&StructuredSummaryFields {
-                    task_goal: "压缩升级".to_string(),
-                    completed: "双阈值已实现".to_string(),
-                    pending: "联测".to_string(),
-                    key_decisions: "常规线 AI、临界线占位".to_string(),
-                    file_list: "crates/conex-compaction/src/lib.rs".to_string(),
-                }))
+                Ok(summary_doc_json("压缩升级"))
             }
         }
         let plan = engine.compact_agent_messages(&messages, 5, &policy, Some(&AiSummarizer));
-        // AI 摘要标志 + 五字段结构校验
+        // AI 摘要标志 + Schema V1 文档 md 渲染进链
         assert!(plan.summary_is_llm);
-        assert!(validate_structured_summary(&plan.summary).is_ok());
-        for field in [
-            "任务目标", "已完成", "待办", "关键决策", "文件清单",
-        ] {
-            assert!(plan.summary.contains(field), "摘要须含字段 {field}");
-        }
+        assert!(plan.summary.contains("## Goal"));
+        assert!(plan.summary.contains("压缩升级"));
         // 压缩文档入对话（摘要消息在保留段前）
         let summary_msg = plan
             .messages
@@ -1996,6 +2145,8 @@ mod tests {
             .find(|m| m.id.starts_with("compacted-summary"))
             .expect("摘要消息须入对话");
         assert_eq!(summary_msg.text(), plan.summary);
+        // metadata 快照：LLM 成功 → committed
+        assert_eq!(summary_msg.metadata.as_ref().unwrap()["summary"]["state"], "committed");
         // 被压缩段落可查（不删除数据：dropped_ids 保留原消息 id）
         assert_eq!(plan.dropped_ids, vec!["u1", "a1"]);
         assert!(plan.tokens_after < plan.tokens_before);
@@ -2005,9 +2156,6 @@ mod tests {
     /// 不进摘要文本、恒在输出最前（04 C9 第 5 条 + M1 注入段保留语义）
     #[test]
     fn system_never_compressed_on_ai_path() {
-        use super::ai_summary::{
-            format_structured_summary, StructuredSummaryFields,
-        };
         let engine = CompactionEngine::new(0);
         let injected = "## Agent 定义\nagent-body";
         let messages = vec![
@@ -2030,13 +2178,7 @@ mod tests {
                 _dropped: &[AgentMessage],
                 _existing: Option<&str>,
             ) -> Result<String, String> {
-                Ok(format_structured_summary(&StructuredSummaryFields {
-                    task_goal: "x".to_string(),
-                    completed: "x".to_string(),
-                    pending: "x".to_string(),
-                    key_decisions: "x".to_string(),
-                    file_list: "x".to_string(),
-                }))
+                Ok(summary_doc_json("x"))
             }
         }
         let plan = engine.compact_agent_messages(&messages, 5, &policy, Some(&AiSummarizer));
@@ -2054,5 +2196,337 @@ mod tests {
         assert_eq!(thresholds.critical_ratio, super::COMPACT_CRITICAL_RATIO_DEFAULT);
         assert_eq!(super::COMPACT_THRESHOLD_RATIO_DEFAULT, 0.85);
         assert_eq!(super::COMPACT_CRITICAL_RATIO_DEFAULT, 0.95);
+    }
+
+    // ── 折叠链（00-plan §4：B1-B4 不变量钉死；T-01~T-10 / T-13）──
+
+    /// Schema V1 合法摘要文档（Summarizer 成功路径返回；R-G 场景 A）
+    fn summary_doc_json(goal: &str) -> String {
+        serde_json::json!({
+            "schemaVersion": 1,
+            "blockId": "unused",
+            "generation": 1,
+            "droppedIds": [],
+            "height": 1,
+            "tier": "chunk",
+            "goal": goal,
+            "constraints": [],
+            "progress": [],
+            "decisions": [],
+            "nextSteps": [],
+            "criticalContext": "",
+        })
+        .to_string()
+    }
+
+    /// 首压会话（system + 两个长回合；尾部 u2/a2 恰好可作保留段）
+    fn first_compaction_fixture() -> (CompactionEngine, Vec<Arc<AgentMessage>>) {
+        let engine = CompactionEngine::new(0);
+        let messages = vec![
+            amsg("s1", AgentMessageRole::System, "2026-08-03T10:00:00.000Z", vec![text_block("system prompt")], None),
+            amsg("u1", AgentMessageRole::User, "2026-08-03T10:00:01.000Z", vec![text_block(&"long user one".repeat(50))], None),
+            amsg("a1", AgentMessageRole::Assistant, "2026-08-03T10:00:02.000Z", vec![text_block(&"long asst one".repeat(50))], None),
+            amsg("u2", AgentMessageRole::User, "2026-08-03T10:00:03.000Z", vec![text_block("recent user")], None),
+            amsg("a2", AgentMessageRole::Assistant, "2026-08-03T10:00:04.000Z", vec![text_block("recent asst")], None),
+        ];
+        (engine, messages)
+    }
+
+    /// 预算策略：保留尾部两条的 token 量（切割点 = len - 2）
+    fn tail_keep_policy(conversation: &[Arc<AgentMessage>], turns: u32) -> CompactionPolicy {
+        let len = conversation.len();
+        let keep = count_agent_message_tokens(&conversation[len - 2])
+            + count_agent_message_tokens(&conversation[len - 1]);
+        CompactionPolicy {
+            keep_recent_tokens: keep,
+            min_recent_turns: turns,
+            ..CompactionPolicy::default()
+        }
+    }
+
+    /// 追加一个长回合（保证二次压缩超预算）
+    fn push_long_turn(conversation: &mut Vec<Arc<AgentMessage>>, id: &str) {
+        conversation.push(amsg(
+            &format!("u{id}"),
+            AgentMessageRole::User,
+            "2026-08-03T11:00:00.000Z",
+            vec![text_block(&"long appended user".repeat(50))],
+            None,
+        ));
+        conversation.push(amsg(
+            &format!("a{id}"),
+            AgentMessageRole::Assistant,
+            "2026-08-03T11:00:01.000Z",
+            vec![text_block(&"long appended asst".repeat(50))],
+            None,
+        ));
+    }
+
+    /// B1 冻结（测试 1）：二次压缩后链消息逐字节相同（id/正文/metadata）
+    #[test]
+    fn fold_chain_is_frozen_across_compactions() {
+        let (engine, messages) = first_compaction_fixture();
+        let policy = tail_keep_policy(&messages, 1);
+        let first = engine.compact_agent_messages(&messages, 30, &policy, None);
+        let chain_msg = first
+            .messages
+            .iter()
+            .find(|m| m.id.starts_with("compacted-summary"))
+            .expect("首压必须产出链消息");
+        let chain_bytes = serde_json::to_string(&**chain_msg).expect("链消息可序列化");
+        // 追加新回合 → 二次压缩
+        let mut conversation = first.messages.clone();
+        push_long_turn(&mut conversation, "3");
+        let policy = tail_keep_policy(&conversation, 1);
+        let second = engine.compact_agent_messages(&conversation, 30, &policy, None);
+        // 链只增：2 条链消息，id 随 fold 递增
+        let chain_ids: Vec<&str> = second
+            .messages
+            .iter()
+            .filter(|m| m.id.starts_with("compacted-summary"))
+            .map(|m| m.id.as_str())
+            .collect();
+        assert_eq!(chain_ids, vec!["compacted-summary-1-1", "compacted-summary-1-2"]);
+        // B1：旧链消息逐字节相同（序列化全量 = wire 面字节语义）
+        let preserved = second
+            .messages
+            .iter()
+            .find(|m| m.id == chain_msg.id)
+            .expect("旧链消息必须保留");
+        assert_eq!(
+            serde_json::to_string(&**preserved).expect("链消息可序列化"),
+            chain_bytes,
+            "B1 冻结：链消息逐字节相同"
+        );
+        // 形状：system → 链全查 → 新摘要 → 保留段
+        assert_eq!(second.messages[0].id, "s1");
+        assert_eq!(second.first_kept_message_id.as_deref(), Some("u3"));
+        // 二次压缩丢弃的只是链尾新增区（u2/a2），链不动
+        assert_eq!(second.dropped_ids, vec!["u2", "a2"]);
+    }
+
+    /// B2 单调（测试 2）：多轮压缩 first_kept 单调前进，cut 永不越过链尾
+    #[test]
+    fn cut_never_below_fold_start() {
+        let (engine, messages) = first_compaction_fixture();
+        let mut conversation = messages;
+        let mut prev_first_kept: Option<String> = None;
+        for round in 0..3 {
+            let policy = tail_keep_policy(&conversation, 1);
+            let plan = engine.compact_agent_messages(&conversation, 30, &policy, None);
+            let Some(first_kept) = &plan.first_kept_message_id else {
+                panic!("第 {round} 轮压缩必须产生切割点");
+            };
+            if let Some(prev) = &prev_first_kept {
+                let prev_idx = conversation
+                    .iter()
+                    .position(|m| m.id == *prev)
+                    .expect("旧保留点仍在对话");
+                let new_idx = conversation
+                    .iter()
+                    .position(|m| m.id == *first_kept)
+                    .expect("新保留点在对话");
+                assert!(
+                    new_idx >= prev_idx,
+                    "B2 单调：cut 不后退（{prev} @ {prev_idx} → {first_kept} @ {new_idx}）"
+                );
+            }
+            prev_first_kept = Some(first_kept.clone());
+            // 保留点恒位于链后（链 = system 后连续 compacted-summary 段）
+            let chain_count = plan
+                .messages
+                .iter()
+                .filter(|m| m.id.starts_with("compacted-summary"))
+                .count();
+            let fk_idx = plan
+                .messages
+                .iter()
+                .position(|m| m.id == *first_kept)
+                .expect("first_kept 在结果中");
+            assert!(fk_idx >= chain_count, "first_kept 必须位于链后");
+            // 追加新回合进入下一轮
+            conversation = plan.messages.clone();
+            push_long_turn(&mut conversation, &round.to_string());
+        }
+    }
+
+    /// B2 预算扫描自链后起算（测试 3）：链 token 不计入预算扫描，
+    /// 链永不进保留区（切割点恒 > fold_start）
+    #[test]
+    fn budget_scan_starts_after_chain() {
+        let engine = CompactionEngine::new(0);
+        // 链消息本身远超预算 → 切割点仍必须落在链后（fold_start = 2）
+        let messages = vec![
+            amsg("s1", AgentMessageRole::System, "2026-08-03T10:00:00.000Z", vec![text_block("system")], None),
+            amsg("compacted-summary-1-1", AgentMessageRole::Assistant, "2026-08-03T10:00:01.000Z", vec![text_block(&"chain token".repeat(4000))], None),
+            amsg("u1", AgentMessageRole::User, "2026-08-03T10:00:02.000Z", vec![text_block(&"long".repeat(200))], None),
+            amsg("u2", AgentMessageRole::User, "2026-08-03T10:00:03.000Z", vec![text_block(&"long".repeat(200))], None),
+        ];
+        let policy = CompactionPolicy {
+            keep_recent_tokens: 10,
+            min_recent_turns: 1,
+            ..CompactionPolicy::default()
+        };
+        let plan = engine.compact_agent_messages(&messages, 5, &policy, None);
+        assert_eq!(plan.first_kept_message_id.as_deref(), Some("u2"));
+        assert_eq!(plan.dropped_ids, vec!["u1"], "链永不入 dropped");
+        // 链 + system 原样保留在头部，新摘要接在链尾
+        let ids: Vec<&str> = plan.messages.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, vec!["s1", "compacted-summary-1-1", "compacted-summary-1-2", "u2"]);
+    }
+
+    /// B2 tool 配对回扫钳制到链（测试 4）：孤儿 call 位于链内 → 保守放弃；
+    /// 链后正常回扫仍生效且链不进保留区
+    #[test]
+    fn tool_pair_protection_clamps_to_chain() {
+        let engine = CompactionEngine::new(0);
+        // 场景 A：孤儿 result(t1) 的 call 位于链内（fold_start 处）→ 放弃压缩
+        let messages_a = vec![
+            amsg("s1", AgentMessageRole::System, "2026-08-03T10:00:00.000Z", vec![text_block("system")], None),
+            amsg("compacted-summary-1-1", AgentMessageRole::Assistant, "2026-08-03T10:00:01.000Z", vec![tool_call_block("t1", "read_file", serde_json::json!({}))], None),
+            amsg("u1", AgentMessageRole::User, "2026-08-03T10:00:02.000Z", vec![text_block(&"long".repeat(100))], None),
+            amsg("u2", AgentMessageRole::User, "2026-08-03T10:00:03.000Z", vec![tool_result_block("t1", "read_file", "orphan")], None),
+            amsg("u3", AgentMessageRole::User, "2026-08-03T10:00:04.000Z", vec![text_block("keep")], None),
+            amsg("a2", AgentMessageRole::Assistant, "2026-08-03T10:00:05.000Z", vec![text_block("keep")], None),
+        ];
+        let keep = count_agent_message_tokens(&messages_a[3])
+            + count_agent_message_tokens(&messages_a[4])
+            + count_agent_message_tokens(&messages_a[5]);
+        let policy = CompactionPolicy {
+            keep_recent_tokens: keep,
+            min_recent_turns: 1,
+            ..CompactionPolicy::default()
+        };
+        let plan = engine.compact_agent_messages(&messages_a, 5, &policy, None);
+        assert!(plan.dropped_ids.is_empty(), "孤儿 call 在链内 → 保守放弃压缩");
+        assert_eq!(plan.messages.len(), messages_a.len(), "原样返回");
+        // 场景 B：call 位于链后（u1）→ 回扫正常扩展，链不进保留区
+        let messages_b = vec![
+            amsg("s1", AgentMessageRole::System, "2026-08-03T10:00:00.000Z", vec![text_block("system")], None),
+            amsg("compacted-summary-1-1", AgentMessageRole::Assistant, "2026-08-03T10:00:01.000Z", vec![text_block("chain stub")], None),
+            amsg("u0", AgentMessageRole::User, "2026-08-03T10:00:02.000Z", vec![text_block(&"long".repeat(100))], None),
+            amsg("u1", AgentMessageRole::User, "2026-08-03T10:00:03.000Z", vec![tool_call_block("t1", "read_file", serde_json::json!({}))], None),
+            amsg("u2", AgentMessageRole::User, "2026-08-03T10:00:04.000Z", vec![tool_result_block("t1", "read_file", "result")], None),
+            amsg("u3", AgentMessageRole::User, "2026-08-03T10:00:05.000Z", vec![text_block("keep")], None),
+            amsg("a2", AgentMessageRole::Assistant, "2026-08-03T10:00:06.000Z", vec![text_block("keep")], None),
+        ];
+        let keep = count_agent_message_tokens(&messages_b[4])
+            + count_agent_message_tokens(&messages_b[5])
+            + count_agent_message_tokens(&messages_b[6]);
+        let policy = CompactionPolicy {
+            keep_recent_tokens: keep,
+            min_recent_turns: 1,
+            ..CompactionPolicy::default()
+        };
+        let plan = engine.compact_agent_messages(&messages_b, 5, &policy, None);
+        assert_eq!(plan.dropped_ids, vec!["u0"], "仅 u0 被丢弃");
+        let ids: Vec<&str> = plan.messages.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            vec!["s1", "compacted-summary-1-1", "compacted-summary-1-2", "u1", "u2", "u3", "a2"],
+            "链恒在头部，tool 对一起保留，新摘要接链尾"
+        );
+        assert_eq!(plan.first_kept_message_id.as_deref(), Some("u1"));
+    }
+
+    /// B3 只增（测试 5）：摘要 id 随 fold 递增且 generation 段格式正确
+    #[test]
+    fn summary_ids_increase_with_fold() {
+        let (engine, messages) = first_compaction_fixture();
+        let mut conversation = messages;
+        for round in 1..=3 {
+            let policy = tail_keep_policy(&conversation, 1);
+            let plan = engine.compact_agent_messages(&conversation, 30, &policy, None);
+            // 折叠字段与链长一致
+            assert_eq!(plan.fold_chain_prev, round - 1);
+            assert_eq!(plan.fold_chain_after, round);
+            assert_eq!(plan.fold_index, round);
+            assert_eq!(plan.generation, 1, "本轮引擎侧占位代数");
+            // 新链消息 id = compacted-summary-{generation}-{fold_index}（R-B）
+            let new_summary = plan
+                .messages
+                .iter()
+                .rfind(|m| m.id.starts_with("compacted-summary"))
+                .expect("链须新增一条");
+            assert_eq!(new_summary.id, format!("compacted-summary-1-{round}"));
+            assert_eq!(
+                plan.messages
+                    .iter()
+                    .filter(|m| m.id.starts_with("compacted-summary"))
+                    .count(),
+                round,
+                "链只增（B3）"
+            );
+            // 进入下一轮
+            conversation = plan.messages.clone();
+            push_long_turn(&mut conversation, &round.to_string());
+        }
+    }
+
+    /// B1（测试 6）：链消息永不进 dropped_ids（T-06）
+    #[test]
+    fn chain_never_in_dropped_ids() {
+        let (engine, messages) = first_compaction_fixture();
+        let policy = tail_keep_policy(&messages, 1);
+        let first = engine.compact_agent_messages(&messages, 30, &policy, None);
+        assert!(
+            first.dropped_ids.iter().all(|id| !id.starts_with("compacted-summary")),
+            "首压 dropped 不得含链消息"
+        );
+        // 二次压缩：链作为前缀存在
+        let mut conversation = first.messages.clone();
+        push_long_turn(&mut conversation, "3");
+        let policy = tail_keep_policy(&conversation, 1);
+        let second = engine.compact_agent_messages(&conversation, 30, &policy, None);
+        assert!(
+            second.dropped_ids.iter().all(|id| !id.starts_with("compacted-summary")),
+            "二次压缩 dropped 不得含链消息"
+        );
+        assert_eq!(second.dropped_ids, vec!["u2", "a2"]);
+        assert_eq!(
+            second.messages.iter().filter(|m| m.id.starts_with("compacted-summary")).count(),
+            2,
+            "链全保留"
+        );
+    }
+
+    /// T-13 stub 确定性 + 中性（测试 9）：同输入同输出；无"生成中"措辞；
+    /// metadata awaiting 快照；预算截断确定性
+    #[test]
+    fn stub_is_deterministic_and_neutral() {
+        let (engine, messages) = first_compaction_fixture();
+        let policy = tail_keep_policy(&messages, 1);
+        let first = engine.compact_agent_messages(&messages, 30, &policy, None);
+        let second = engine.compact_agent_messages(&messages, 30, &policy, None);
+        assert_eq!(first.summary, second.summary, "stub 确定性：同输入同输出");
+        let stub = &first.summary;
+        assert!(stub.starts_with("[Compacted("), "stub 前缀：{stub}");
+        assert!(!stub.contains("生成中"), "中性措辞：无「生成中」");
+        assert!(!stub.contains("generating"), "中性措辞：无 generating");
+        assert!(!stub.contains("失败"), "中性措辞：无失败");
+        // metadata 快照（机器可读优先，R-C：awaiting 永驻）
+        let summary_msg = first
+            .messages
+            .iter()
+            .find(|m| m.id.starts_with("compacted-summary"))
+            .expect("stub 消息须入对话");
+        let meta = summary_msg.metadata.as_ref().expect("stub 消息须带 metadata 快照");
+        assert_eq!(meta["summary"]["blockId"], "compacted-summary-1-1");
+        assert_eq!(meta["summary"]["state"], "awaiting");
+        assert_eq!(meta["summary"]["height"], 1);
+        assert_eq!(meta["summary"]["generation"], 1);
+        assert_eq!(meta["summary"]["droppedIds"], serde_json::json!(["u1", "a1"]));
+        // 预算截断仍确定性（max_summary_tokens=1 → 省略号）
+        let tiny = CompactionPolicy {
+            max_summary_tokens: 1,
+            ..policy
+        };
+        let plan = engine.compact_agent_messages(&messages, 30, &tiny, None);
+        assert_eq!(plan.summary, "…");
+        assert_eq!(
+            plan.summary,
+            engine.compact_agent_messages(&messages, 30, &tiny, None).summary,
+            "截断后依然确定性"
+        );
     }
 }
