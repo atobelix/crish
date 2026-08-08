@@ -80,7 +80,7 @@ describe('ui/Menu', () => {
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
   });
 
-  it('键盘漫游：ArrowDown 跳过 disabled、Enter 选中', async () => {
+  it('键盘漫游：初始落首项、ArrowDown 跳过 disabled、Enter 选中', async () => {
     const onSelect = vi.fn();
     render(
       <Menu
@@ -95,10 +95,11 @@ describe('ui/Menu', () => {
     );
     fireEvent.click(screen.getByText(TRIGGER_TEXT));
     const content = await screen.findByRole('menu');
-    // 初始：focusedIndex=-1；一次 ArrowDown 落在索引 0
-    fireEvent.keyDown(content, { key: 'ArrowDown' });
-    expect(screen.getByRole('menuitem', { name: /选项甲/ })).toHaveFocus();
-    // 再 ArrowDown：跳过 disabled 的索引 1，落在索引 2
+    // F7-F2：打开后初始焦点落首个未禁用项（ARIA menu 模式）
+    await waitFor(() =>
+      expect(screen.getByRole('menuitem', { name: /选项甲/ })).toHaveFocus()
+    );
+    // ArrowDown：跳过 disabled 的索引 1，落在索引 2
     fireEvent.keyDown(content, { key: 'ArrowDown' });
     expect(screen.getByRole('menuitem', { name: /选项丙/ })).toHaveFocus();
     // Enter 选中
@@ -144,7 +145,7 @@ describe('ui/Menu', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('面板带 aria-modal 与标题', async () => {
+  it('非模态菜单不声明 aria-modal，面板标题正常渲染（F7-F2）', async () => {
     render(
       <Menu
         trigger={<button type="button">{TRIGGER_TEXT}</button>}
@@ -154,7 +155,9 @@ describe('ui/Menu', () => {
     );
     fireEvent.click(screen.getByText(TRIGGER_TEXT));
     const content = await screen.findByText('菜单标题');
-    expect(content.parentElement).toHaveAttribute('aria-modal', 'true');
+    // 非模态菜单声明 aria-modal 会切断后台内容的 SR 读取（F7-F2）
+    expect(content.parentElement).not.toHaveAttribute('aria-modal');
+    expect(content.parentElement).toHaveClass(styles.menuContent);
   });
 
   it('trigger 事件保留：原 onClick 与防冒泡同时生效', async () => {
@@ -172,5 +175,88 @@ describe('ui/Menu', () => {
     expect(originalOnClick).toHaveBeenCalledTimes(1);
     expect(onOuterClick).not.toHaveBeenCalled();
     await screen.findByRole('menuitem', { name: /选项甲/ });
+  });
+
+  it('打开即聚焦首项：无需按键即可直接 Enter 选中（F7-F2）', async () => {
+    const onSelect = vi.fn();
+    render(
+      <Menu
+        trigger={<button type="button">{TRIGGER_TEXT}</button>}
+        onSelect={onSelect}
+        options={[{ id: 'a', label: '选项甲' }, { id: 'b', label: '选项乙' }]}
+      />
+    );
+    fireEvent.click(screen.getByText(TRIGGER_TEXT));
+    const content = await screen.findByRole('menu');
+    await waitFor(() =>
+      expect(screen.getByRole('menuitem', { name: /选项甲/ })).toHaveFocus()
+    );
+    fireEvent.keyDown(content, { key: 'Enter' });
+    expect(onSelect).toHaveBeenCalledWith('a', expect.objectContaining({ id: 'a' }));
+  });
+
+  it('受控模式无内部写回：打开后不产生额外渲染（F7-F3）', async () => {
+    const renderItem = vi.fn((option: { id: string; label: string }) => (
+      <button key={option.id} type="button" role="menuitem">
+        {option.label}
+      </button>
+    ));
+    render(
+      <Menu
+        trigger={<button type="button">{TRIGGER_TEXT}</button>}
+        open={true}
+        onOpenChange={() => {}}
+        renderItem={renderItem}
+        options={[{ id: 'a', label: '选项甲' }]}
+      />
+    );
+    await screen.findByRole('menuitem', { name: /选项甲/ });
+    // 外部受控时内部状态不得再被 useEffect 写回（双模 OR + 同步链 = 多一次渲染）
+    expect(renderItem).toHaveBeenCalledTimes(1);
+  });
+
+  it('受控模式关闭信号不被内部状态重开（F7-F3）', async () => {
+    function ControlledWithLateClose() {
+      const [open, setOpen] = useState(false);
+      return (
+        <Menu
+          trigger={<button type="button">{TRIGGER_TEXT}</button>}
+          open={open}
+          onOpenChange={setOpen}
+          options={[{ id: 'a', label: '选项甲' }]}
+        />
+      );
+    }
+    render(<ControlledWithLateClose />);
+    fireEvent.click(screen.getByText(TRIGGER_TEXT));
+    await screen.findByRole('menuitem', { name: /选项甲/ });
+    // 模拟父级延迟关闭：onOpenChange(false) 后父级仍持 true 一段时间
+    // 受控模式下菜单是否关闭只由父级 open 决定，内部不得悄悄重开
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    );
+  });
+
+  it('漫游焦点滚动跟随：scrollIntoView({block: nearest})（F7-F4）', async () => {
+    const scrollIntoView = vi.fn();
+    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(
+      scrollIntoView
+    );
+    render(
+      <Menu
+        trigger={<button type="button">{TRIGGER_TEXT}</button>}
+        options={[{ id: 'a', label: '选项甲' }, { id: 'b', label: '选项乙' }]}
+      />
+    );
+    fireEvent.click(screen.getByText(TRIGGER_TEXT));
+    const content = await screen.findByRole('menu');
+    scrollIntoView.mockClear();
+    fireEvent.keyDown(content, { key: 'ArrowDown' });
+    await waitFor(() =>
+      expect(screen.getByRole('menuitem', { name: /选项乙/ })).toHaveFocus()
+    );
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.calls[0]?.[0]).toEqual({ block: 'nearest' });
   });
 });

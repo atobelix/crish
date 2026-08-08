@@ -3,7 +3,13 @@
  * T05.3.1 补充：measureMenu（真实尺寸再钳位）、折叠侧栏窄视口、预估高度溢出
  */
 import { describe, expect, it } from 'vitest';
-import { clampPosition, measureMenu, MENU_EDGE_PAD } from './position';
+import {
+  clampPosition,
+  measureMenu,
+  MENU_EDGE_PAD,
+  MENU_EST_WIDTH,
+  MENU_EST_HEIGHT,
+} from './position';
 
 /** 固定视口：160×200 菜单在 1280×800 视口下的期望 */
 const VW = 1280;
@@ -100,5 +106,15 @@ describe('ui/Menu measureMenu（真实尺寸再钳位）', () => {
     const pos = measureMenu(el, 250, 500, { width: 280, height: 600 });
     // 先水平左翻（250-240=10），落在留白内
     expect(pos.x).toBe(10);
+  });
+
+  it('元素未渲染（零矩形）时回退预估尺寸钳位，不按 0 尺寸原样放行（F7-F11）', () => {
+    // display:none / 未挂载时 getBoundingClientRect 全 0：
+    // 按 0 尺寸钳位等于不钳位（坐标原样放行 → 菜单溢出视口）
+    const zeroEl = fakeEl(0, 0);
+    const pos = measureMenu(zeroEl, 99999, 99999, { width: 1280, height: 800 });
+    expect(pos.x).toBe(1280 - MENU_EST_WIDTH - MENU_EDGE_PAD);
+    expect(pos.y).toBe(800 - MENU_EST_HEIGHT - MENU_EDGE_PAD);
+    expect(pos.transformOrigin).toBe('bottom right');
   });
 });

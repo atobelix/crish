@@ -113,4 +113,97 @@ describe('ui/Tooltip', () => {
     fireEvent.mouseEnter(screen.getByText('右侧目标'));
     expect(screen.getByRole('tooltip')).toHaveClass(styles.right);
   });
+
+  it('键盘 focus/blur 触发与隐藏提示（F7-F8）', () => {
+    vi.useFakeTimers();
+    render(
+      <Tooltip content="键盘提示">
+        <button type="button">焦点目标</button>
+      </Tooltip>
+    );
+    fireEvent.focus(screen.getByText('焦点目标'));
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+    fireEvent.blur(screen.getByText('焦点目标'));
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('提示经 aria-describedby 关联触发元素（F7-F8）', () => {
+    render(
+      <Tooltip content="关联描述">
+        <button type="button">关联目标</button>
+      </Tooltip>
+    );
+    fireEvent.focus(screen.getByText('关联目标'));
+    const tip = screen.getByRole('tooltip');
+    const tipId = tip.getAttribute('id');
+    expect(tipId).toBeTruthy();
+    expect(screen.getByText('关联目标')).toHaveAttribute('aria-describedby', tipId);
+  });
+
+  it('视口右缘钳位：提示不溢出视口（F7-F8）', () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(800);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(200);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(40);
+    const childRect = {
+      top: 100,
+      left: 700,
+      right: 800,
+      bottom: 130,
+      width: 100,
+      height: 30,
+      x: 700,
+      y: 100,
+      toJSON: () => ({}),
+    } as DOMRect;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(
+      childRect
+    );
+    render(
+      <Tooltip content="边缘提示" side="top">
+        <button type="button">边缘目标</button>
+      </Tooltip>
+    );
+    fireEvent.mouseEnter(screen.getByText('边缘目标'));
+    const tip = screen.getByRole('tooltip');
+    // top 定位：left = rect.center - tipW/2 = 750 - 100 = 650，
+    // 右缘 650 + 200 = 850 > 800 → 钳回 800 - 8，left 应为 692
+    expect(tip.style.left).toBe('692px');
+    expect(tip.style.top).toBe('92px');
+  });
+
+  it('滚动/视口变化后提示跟随目标重定位（F7-F8）', () => {
+    let rect = { left: 100, top: 100, width: 50, height: 30 } as DOMRect;
+    const rectMock = vi
+      .spyOn(Element.prototype, 'getBoundingClientRect')
+      .mockImplementation(() => rect);
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(120);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(40);
+    render(
+      <Tooltip content="跟随提示" side="top">
+        <button type="button">跟随目标</button>
+      </Tooltip>
+    );
+    fireEvent.mouseEnter(screen.getByText('跟随目标'));
+    const tip = screen.getByRole('tooltip');
+    const before = tip.style.left;
+    // 滚动后目标位移：重定位应以新 rect 计算
+    rect = {
+      left: 300,
+      top: 400,
+      width: 50,
+      height: 30,
+      right: 350,
+      bottom: 430,
+      x: 300,
+      y: 400,
+      toJSON: () => ({}),
+    } as DOMRect;
+    fireEvent.scroll(window);
+    expect(rectMock).toHaveBeenCalled();
+    expect(tip.style.left).not.toBe(before);
+    // 新位置 = 300 + 25 - 60 = 265
+    expect(tip.style.left).toBe('265px');
+  });
 });

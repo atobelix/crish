@@ -93,4 +93,11 @@ describe('ui/Input', () => {
     render(<Input suffix={<span>单位</span>} aria-label="数值" />);
     expect(screen.getByText('单位')).toBeInTheDocument();
   });
+
+  it('clearable 非受控（仅 defaultValue）不显示无效清空按钮（F7-F7）', () => {
+    render(<Input clearable defaultValue="预填" aria-label="非受控" />);
+    // 非受控模式下没有 onChange 通道，清空按钮点击无效果——
+    // 显示状态与行为矛盾（F7-F7），应直接隐藏
+    expect(screen.queryByRole('button', { name: '清空输入' })).not.toBeInTheDocument();
+  });
 });

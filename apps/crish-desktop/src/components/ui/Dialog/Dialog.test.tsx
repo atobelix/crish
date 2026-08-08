@@ -3,7 +3,7 @@
  * ui/Dialog 基座测试：Esc 关闭、焦点归还、Tab 循环、inert 旁路还原、aria
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React, { useState } from 'react';
 import { Dialog } from './Dialog';
 
@@ -227,5 +227,100 @@ describe('ui/Dialog', () => {
     render(<DialogHarness title="层级" overlayClassName="custom-overlay" />);
     const overlay = screen.getByRole('dialog').parentElement!;
     expect(overlay.classList.contains('custom-overlay')).toBe(true);
+  });
+
+  it('嵌套 Dialog：一次 Esc 只关闭最顶层（F7-F5）', () => {
+    const onCloseOuter = vi.fn();
+    const onCloseInner = vi.fn();
+    render(
+      <>
+        <DialogHarness title="外层" onClose={onCloseOuter}>
+          <button type="button">外层内容</button>
+        </DialogHarness>
+        <DialogHarness title="内层" onClose={onCloseInner} />
+      </>
+    );
+    expect(screen.getAllByRole('dialog')).toHaveLength(2);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    // 仅最顶层（后挂载的内层）响应 Esc，外层不得同时关闭
+    expect(onCloseInner).toHaveBeenCalledTimes(1);
+    expect(onCloseOuter).not.toHaveBeenCalled();
+  });
+
+  it('嵌套 Dialog：Esc 关闭最顶层后，再按 Esc 才轮到外层（F7-F5）', async () => {
+    const onCloseOuter = vi.fn();
+    const onCloseInner = vi.fn();
+    function NestedHarness() {
+      const [outerOpen, setOuterOpen] = useState(true);
+      const [innerOpen, setInnerOpen] = useState(true);
+      return (
+        <>
+          <Dialog
+            title="外层"
+            open={outerOpen}
+            onClose={() => {
+              onCloseOuter();
+              setOuterOpen(false);
+            }}
+          >
+            <button type="button">外层内容</button>
+          </Dialog>
+          <Dialog
+            title="内层"
+            open={innerOpen}
+            onClose={() => {
+              onCloseInner();
+              setInnerOpen(false);
+            }}
+          />
+        </>
+      );
+    }
+    render(<NestedHarness />);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onCloseInner).toHaveBeenCalledTimes(1);
+    expect(onCloseOuter).not.toHaveBeenCalled();
+    // 等内层退出动画卸载后，外层恢复为最顶层
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onCloseOuter).toHaveBeenCalledTimes(1);
+  });
+
+  it('initialFocusRef 指向容器外元素时回退到弹窗内首个可交互元素（F7-F6）', () => {
+    function Harness() {
+      const outsideRef = React.useRef<HTMLButtonElement>(null);
+      return (
+        <>
+          <button ref={outsideRef} type="button">
+            容器外按钮
+          </button>
+          <DialogHarness
+            title="圈定"
+            initialFocusRef={outsideRef as React.RefObject<HTMLElement>}
+          />
+        </>
+      );
+    }
+    render(<Harness />);
+    // 焦点不得逃逸到 trap 容器外
+    expect(document.activeElement).not.toBe(screen.getByText('容器外按钮'));
+    expect(screen.getByRole('button', { name: '关闭弹窗' })).toHaveFocus();
+  });
+
+  it('退出动画时长与 CSS --duration-exit（150ms）对齐（F7-F5）', async () => {
+    vi.useFakeTimers();
+    try {
+      const onClose = vi.fn();
+      render(<DialogHarness title="时长" onClose={onClose} />);
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(onClose).toHaveBeenCalledTimes(1);
+      // CSS --duration-exit = 150ms：动画结束后即应卸载，不留 50ms 空窗
+      act(() => vi.advanceTimersByTime(150));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
