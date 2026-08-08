@@ -44,7 +44,7 @@ export function urlSafetyVariants(url: string): string[] {
   return out;
 }
 
-export function hasEmbeddedUrlWhitespace(t: string): boolean {
+function hasEmbeddedUrlWhitespace(t: string): boolean {
   return /[\s\u00a0\u3000]/.test(t);
 }
 

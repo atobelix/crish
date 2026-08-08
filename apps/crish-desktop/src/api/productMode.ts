@@ -7,7 +7,7 @@
 
 let cachedTauri: boolean | null = null;
 
-export function isTauriShell(): boolean {
+function isTauriShell(): boolean {
   if (cachedTauri != null) return cachedTauri;
   try {
     const w = window as unknown as {

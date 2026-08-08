@@ -37,7 +37,7 @@ export const SCHEMA_VERSION_V3 = '3';
 export const SCHEMA_VERSION_KEY = 'schema_version';
 
 /** 30 天回滚保险期（ms） */
-export const LOCALSTORAGE_ROLLBACK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const LOCALSTORAGE_ROLLBACK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * 收集 localStorage 中所有会话相关数据，组装为 importFromLocalStorage 入参。
@@ -101,7 +101,7 @@ function collectLocalStorageSessionData(): {
  *
  * @returns 迁移统计；invoke 不可用 / 无数据 / 失败 → null
  */
-export async function migrateFromLocalStorage(): Promise<{
+async function migrateFromLocalStorage(): Promise<{
   sessions: number;
   messages: number;
   agents: number;

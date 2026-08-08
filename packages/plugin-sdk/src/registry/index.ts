@@ -26,7 +26,6 @@ export type {
   PluginValidationError,
   RecordedRegistrations,
 } from './plugin-validator';
-export { createEmptyRecordings } from './plugin-validator';
 
 // ─── 加载器 ───
 export { PluginLoader } from './plugin-loader';

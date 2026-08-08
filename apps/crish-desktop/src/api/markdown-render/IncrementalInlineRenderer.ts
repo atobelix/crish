@@ -27,7 +27,7 @@ import {
 
 /** 行级高亮缓存：键 `${lang}:${line}`，避免全文键导致的 O(n²) 重高亮。
  *  导出以供性能基准测试（perfBenchmark）读取缓存大小。 */
-export const LINE_CACHE = new Map<string, string>();
+const LINE_CACHE = new Map<string, string>();
 const LINE_CACHE_MAX = 10000;
 
 /**
@@ -41,7 +41,7 @@ const LINE_CACHE_MAX = 10000;
  * 注意：scheme 判定前先排除 Windows 盘符（`C:\…`）与 Unix 路径，
  * 否则单字母盘符会被 `^[a-z][a-z0-9+.-]*:` 误判为 scheme=unsafe。
  */
-export function classifyImageSrc(
+function classifyImageSrc(
   src: string
 ): 'local' | 'http' | 'data' | 'svg' | 'unsafe' {
   const s = String(src ?? '').trim();
@@ -170,7 +170,7 @@ export function renderInline(text: string): string {
  * 此处的行级缓存是对单行命中场景的补充——流式每帧仅新增行会真正调用 hljs，
  * 已渲染行直接命中行级缓存。
  */
-export function highlightCodeLine(lang: string, line: string): string {
+function highlightCodeLine(lang: string, line: string): string {
   // 空行短路：避免缓存无意义条目，并与 StreamingCodeHighlighter.highlightLine 对齐
   if (!line) return '';
   const key = `${lang}:${line}`;

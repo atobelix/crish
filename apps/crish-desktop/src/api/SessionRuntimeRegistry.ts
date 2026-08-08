@@ -36,7 +36,7 @@ export interface SessionRuntimeState {
   lastActivePanelTab: string | null;
 }
 
-export class SessionRuntimeRegistry {
+class SessionRuntimeRegistry {
   private readonly MAX_SESSIONS = 50;
   private readonly GC_INTERVAL_MS = 120_000;
   private readonly GC_MAX_AGE_MS = 600_000;

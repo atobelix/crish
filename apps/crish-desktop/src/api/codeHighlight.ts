@@ -162,11 +162,11 @@ export function highlightCode(code: string, langHint?: string): string {
  *
  * LRU 命中策略：缓存命中时直接返回，**不再调任何 IPC**，避免无意义往返。
  *
- * @param code     原始代码
- * @param langHint 语言标识（js / ts / rust / ...）；空串走 Plain Text
- * @returns 高亮后的 HTML 字符串（不含 `<pre>` 包装，仅 token span）
- */
-export async function highlightCodeAsync(
+  * @param code     原始代码
+  * @param langHint 语言标识（js / ts / rust / ...）；空串走 Plain Text
+  * @returns 高亮后的 HTML 字符串（不含 `<pre>` 包装，仅 token span）
+  */
+async function highlightCodeAsync(
   code: string,
   langHint?: string,
 ): Promise<string> {

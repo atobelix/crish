@@ -24,7 +24,6 @@ export {
   SESSION_BODY_PREFIX,
   SESSION_FOLDER_KEY,
   SESSION_INDEX_KEY,
-  WORKER_BATCH_THRESHOLD,
   type SessionIndexEntry,
 } from './session-persistence/sessionPersistenceTypes';
 
@@ -53,7 +52,6 @@ export {
   loadSessionIndex,
   persistAllSessions,
   persistAllSessionsSync,
-  resetOrphanScanCache,
   saveActiveSessionId,
   saveFolderOrder,
   saveSessionAgents,
@@ -68,22 +66,11 @@ export {
 // deleteSession / touchSession / toRustSessionIndexEntry 在重构中移除且无消费方，
 // 门面仅转发公开 API，保留并行域重构方向。
 export {
-  getSessionMeta,
   hydrateSessionsFromRust,
-  importFromLocalStorage,
-  loadSessionBody as loadSessionBodyRust,
-  persistAllSessionsRust,
-  persistAllSessionsSyncViaLocalStorage,
-  setSessionMeta,
   type ImportFromLocalStorageData,
 } from './session-persistence/sessionRustDb';
 
 export {
-  cleanupLegacyLocalStorageSessions,
   ensureMigrated,
-  migrateFromLocalStorage,
   runMigrationCleanupIfNeeded,
-  LOCALSTORAGE_ROLLBACK_TTL_MS,
-  SCHEMA_VERSION_KEY,
-  SCHEMA_VERSION_V3,
 } from './session-persistence/migrateFromLocalStorage';

@@ -22,7 +22,7 @@ const CHECKLIST_REGEX = /^\s*[-*]\s*\[([ xX])\]\s+(.+)$/;
 /**
  * 从文本中提取 Markdown checklist 任务项
  */
-export function parseMarkdownChecklist(text: string): SessionGoalTask[] {
+function parseMarkdownChecklist(text: string): SessionGoalTask[] {
   if (!text || !text.includes('[')) return [];
   const lines = text.split(/\r?\n/);
   const tasks: SessionGoalTask[] = [];

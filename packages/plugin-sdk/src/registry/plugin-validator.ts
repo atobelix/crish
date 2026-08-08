@@ -44,13 +44,6 @@ export interface RecordedRegistrations {
 }
 
 /**
- * 空注册记录（供 Loader 初始化）。
- */
-export function createEmptyRecordings(): RecordedRegistrations {
-  return { hooks: [], tools: [], mcpServers: [] };
-}
-
-/**
  * 插件校验器（禁令 15/16/17 能力清单比对）。
  *
  * 校验规则：

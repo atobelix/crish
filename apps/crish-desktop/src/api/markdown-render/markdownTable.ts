@@ -72,7 +72,7 @@ export function parseTableAlignments(
   });
 }
 
-export function tableCellAlignAttr(
+function tableCellAlignAttr(
   align: 'left' | 'center' | 'right' | undefined
 ): string {
   // 白名单：禁止把任意字符串写入 style
@@ -83,7 +83,7 @@ export function tableCellAlignAttr(
 }
 
 /** 对齐数组对齐到 colCount（缺列补 left，多余截断） */
-export function normalizeAlignments(
+function normalizeAlignments(
   aligns: Array<'left' | 'center' | 'right'>,
   colCount: number
 ): Array<'left' | 'center' | 'right'> {

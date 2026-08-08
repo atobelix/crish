@@ -14,18 +14,8 @@ import {
 } from './markdownSanitizer';
 import { extractTables } from './markdownTable';
 
-export {
-  isTableSepLine,
-  isTableRowLine,
-  splitTableCells,
-  parseTableAlignments,
-  tableCellAlignAttr,
-  normalizeAlignments,
-  extractTables,
-} from './markdownTable';
-
 /** 列表缩进视觉宽度：Tab → 对齐到 4 列，避免 \t 嵌套错位 */
-export function visualIndent(ws: string): number {
+function visualIndent(ws: string): number {
   let n = 0;
   for (let i = 0; i < ws.length; i++) {
     if (ws[i] === '\t') n += 4 - (n % 4);
@@ -38,7 +28,7 @@ export function visualIndent(ws: string): number {
  * 纯文本段行内格式：code 占位保护后再 bold/italic，最后 CJK wbr。
  * 不处理 HTML 标签；由 applyInline 按标签外文本切分调用。
  */
-export function formatMarkdownTextSegment(text: string): string {
+function formatMarkdownTextSegment(text: string): string {
   if (!text) return '';
   const codes: string[] = [];
   let s = text.replace(/`([^`\n]+)`/g, (_, code: string) => {
@@ -83,9 +73,9 @@ export function applyInline(html: string): string {
  * 无序列表 / 任务列表行（- * +；任务列表 [ ] / [x]）。
  * 允许 `- ` / `-` 空项（内容可空），避免 trim 后空 li 丢失。
  */
-export const RE_UL_ITEM = /^(\s*)([-*+])(?:\s+(?:\[([ xX])\]\s+)?(.*))?$/;
+const RE_UL_ITEM = /^(\s*)([-*+])(?:\s+(?:\[([ xX])\]\s+)?(.*))?$/;
 /** 有序列表行（捕获起始序号，供 start= 使用；允许 `1.` 空项） */
-export const RE_OL_ITEM = /^(\s*)(\d+)\.(?:\s+(.*))?$/;
+const RE_OL_ITEM = /^(\s*)(\d+)\.(?:\s+(.*))?$/;
 
 export type ListKind = 'ul' | 'ol' | 'task';
 
@@ -153,7 +143,7 @@ export function renderListItemHtml(
 /**
  * 行级列表块解析：松散列表、缩进续行、一级嵌套列表收进同一结构
  */
-export function processListBlocks(html: string): string {
+function processListBlocks(html: string): string {
   const lines = html.split('\n');
   const out: string[] = [];
   let i = 0;
@@ -376,7 +366,7 @@ export function extractFilePathFromFenceInfo(info: string): string {
   return m ? (m[1] ?? m[2] ?? '') : '';
 }
 
-export function buildCodeFenceHtml(
+function buildCodeFenceHtml(
   bodyRaw: string,
   langClean: string,
   filePath?: string
@@ -410,7 +400,7 @@ export function buildCodeFenceHtml(
 /**
  * 抽出 fenced code：闭合 ```…```，以及文末未闭合 fence（流式输出中间态）。
  */
-export function extractCodeFences(text: string): {
+function extractCodeFences(text: string): {
   text: string;
   fences: string[];
 } {

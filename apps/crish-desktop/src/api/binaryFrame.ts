@@ -20,7 +20,7 @@
 /** Magic bytes: ASCII 'C' 'R' */
 export const BINARY_FRAME_MAGIC_0 = 0x43 as const;
 export const BINARY_FRAME_MAGIC_1 = 0x52 as const;
-export const BINARY_FRAME_MAGIC = (BINARY_FRAME_MAGIC_0 << 8) | BINARY_FRAME_MAGIC_1;
+const BINARY_FRAME_MAGIC = (BINARY_FRAME_MAGIC_0 << 8) | BINARY_FRAME_MAGIC_1;
 
 export const BINARY_FRAME_VERSION = 1 as const;
 export const BINARY_FRAME_HEADER_SIZE = 8 as const;

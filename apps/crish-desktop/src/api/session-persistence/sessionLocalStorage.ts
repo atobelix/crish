@@ -109,7 +109,7 @@ export function hasQuotaTruncation(sessionId: string): boolean {
 }
 
 /** 清除会话级 quota 截断标志（全量写成功即恢复）。 */
-export function clearQuotaTruncation(sessionId: string): void {
+function clearQuotaTruncation(sessionId: string): void {
   const id = asNonEmptyString(sessionId);
   if (!id) return;
   try {
@@ -443,6 +443,6 @@ export function persistAllSessionsSync(
   );
 }
 
-export function resetOrphanScanCache(): void {
+function resetOrphanScanCache(): void {
   /* no-op — Stream D 后孤儿清理走 SQLite，无 JS 侧缓存 */
 }
