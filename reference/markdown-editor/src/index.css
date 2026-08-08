@@ -289,6 +289,15 @@ body {
   transition: background-color 0.12s ease;
   font-size: 14px;
   line-height: 1.5;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.cell-content-wrapper {
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .token-table-cell:last-child {

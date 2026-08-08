@@ -309,6 +309,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   if (tableStore.isDraggingCell) {
                     tableStore.setDraggingCell(false);
                     tableStore.updateCellSelectionEnd(lineIndex ?? -1, colIndex);
+                    (window as any).__CRISH_LAST_DRAG_END_TIME = Date.now();
                   }
                 }}
                 onDoubleClick={() => {
@@ -318,9 +319,6 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                     lineIndex ?? -1,
                     colIndex
                   );
-                  if (start !== undefined) {
-                    useEditorStore.getState().setCursorPos(start + 1);
-                  }
                   const input = document.querySelector('.hidden-input') as HTMLTextAreaElement;
                   if (input) input.focus();
                 }}

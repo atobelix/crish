@@ -116,6 +116,9 @@ export const MarkdownEngine: React.FC = () => {
   });
 
   const handleContainerClick = (e: React.MouseEvent) => {
+    // If we just finished a drag selection, ignore the synthetic click
+    if (Date.now() - ((window as any).__CRISH_LAST_DRAG_END_TIME || 0) < 50) return;
+
     const target = e.target as HTMLElement;
     if (!target.closest('.line-table-row')) {
       useTableStore.getState().clearCellSelection();
@@ -165,7 +168,6 @@ export const MarkdownEngine: React.FC = () => {
        return;
     }
 
-    // 2. Find the closest text offset using browser API
     let range: Range | null = null;
     if (document.caretRangeFromPoint) {
       range = document.caretRangeFromPoint(e.clientX, e.clientY);
@@ -178,6 +180,30 @@ export const MarkdownEngine: React.FC = () => {
         range = document.createRange();
         range.setStart(pos.offsetNode, pos.offset);
         range.collapse(true);
+      }
+    }
+
+    // Clamp the range to the cell we actually clicked on (to prevent clicking padding and jumping to next cell)
+    const clickedCell = target.closest('.token-table-cell') as HTMLElement;
+    if (clickedCell && range && range.startContainer) {
+      const resolvedNode = range.startContainer.nodeType === Node.TEXT_NODE
+          ? range.startContainer.parentElement
+          : (range.startContainer as HTMLElement);
+      
+      const resolvedCell = resolvedNode?.closest('.token-table-cell');
+      if (resolvedCell !== clickedCell) {
+        const cellStart = parseInt(clickedCell.getAttribute('data-token-start') || '-1', 10);
+        const cellLen = parseInt(clickedCell.getAttribute('data-token-length') || '0', 10);
+        if (cellStart !== -1) {
+          const rect = clickedCell.getBoundingClientRect();
+          // If we clicked left half, go to start of cell. Otherwise go to end.
+          if (e.clientX < rect.left + rect.width / 2) {
+            setCursorPos(cellStart + 1); // +1 because start is the table_cell token itself? Actually start is localOffset.
+          } else {
+            setCursorPos(cellStart + cellLen);
+          }
+          return;
+        }
       }
     }
 
