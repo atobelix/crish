@@ -230,3 +230,31 @@ pm run typecheck 恢复 EXIT=0；验收方注意快层门禁以并行会话清�
 - **位置**：`SidebarContextMenus.tsx:194,207`（TS2538）+ `Tooltip.tsx:302`（TS2353）——F-025 登记的"并行会话在途未提交文件"
 - **描述**：F-025 所指并行会话即 P2 批4 本批（同一批文件的实现阶段未提交窗口）。本批绿提交（01ef652b）已修复：SidebarContextMenus 行/flyout 键盘回调签名收窄为 `NonNullable<FlyKey>`；Tooltip 样式对象补 `React.CSSProperties & Record<string, string>` 类型断言。收尾实测 `npm run typecheck` EXIT=0。
 - **建议**：无后续动作（F-025 的"重跑 typecheck 恢复 EXIT=0"已在 01ef652b 后达成）。
+
+## F-029：F3 #5 帧上限已在 HEAD 提交——本批只承接聚合上限（P2 批2 执行期）
+
+- **发现日期**：2026-08-08（P2 批2 执行期）
+- **位置**：`crates/agent-provider/src/sse/frame.rs:53,59,93-97`（`SseFrameError::FrameTooLarge(usize)` + `MAX_PENDING_BYTES=4MiB`）+ `error.rs:339` 映射 + frame.rs 测试（`oversized_pending_without_separator_is_rejected` 等）
+- **描述**：F3 #5 的两半（分帧层单帧上限 + 消费层正文聚合上限）审计列为一项；执行时发现**分帧层已在 HEAD 提交**（P2 批1 或更早批次，含红→绿测试）。本批仅承接消费层 `Aggregate.text/thought` 聚合上限（`MAX_AGGREGATE_TEXT_BYTES=64MiB`，超限显式 StreamError 收场，consume/mod.rs）。期间误 `git checkout` 回滚 frame.rs 工作区——经核对该文件无他人未提交改动（工作区版本 = 我的临时测试 + HEAD 已提交实现），未损他人工作；已复盘确认。
+- **建议**：验收方对 F3 #5 按「分帧层已修 + 聚合层本批修」双半口径核对。
+
+## F-030：vitest `rejects.toThrow` 对 `undefined` 拒绝值不报错——红测试写法教训（P2 批2 执行期）
+
+- **发现日期**：2026-08-08（P2 批2 执行期）
+- **位置**：`packages/shared-utils/src/retry.adversarial.test.ts` R2（maxAttempts=0 → throw undefined，F8-16）
+- **描述**：初版红测试用 `await expect(retryWithBackoff(fn, { maxAttempts: 0 })).rejects.toThrow('real error')` 复现「throw undefined」缺陷，实测**预修复即通过**（rejects.toThrow 对 undefined 拒绝值不判定失败，vitest 3.x 行为）。经探针测试确认拒绝值确为 undefined。改用显式 `try/catch` + `expect(e).toBeInstanceOf(Error)` 后真实红（4 failed）。教训：断言「抛出的是非 Error 值」类缺陷时不得依赖 toThrow 系匹配器。
+- **建议**：后续批次复现「throw undefined / 非 Error 拒绝」类缺陷时直接用 instanceof 断言。
+
+## F-031：F8-07 exitCode 负数断言修正——-3 是合法整数（P2 批2 执行期）
+
+- **发现日期**：2026-08-08（P2 批2 执行期）
+- **位置**：`packages/shared-types/src/generated/engine/parser.adversarial.test.ts`（F8-07 整数语义用例）
+- **描述**：初版红测试断言 `exitCode: -3` 应被拒绝（沿用审计文案「接受浮点/负数/超大值」）。实现 checkInteger 后实测 `Number.isInteger(-3) === true`——-3 本就是整数，整数校验契约下**应放行**（Rust serde i64 亦接受负数）。审计文案的「负数」属整数语义外的宽松表述，修正为 `exitCode: 2.5`（浮点形态）作红用例；另删除「MAX_SAFE_INTEGER + 0.5」用例（IEEE754 在该量级精度为 1，0.5 进位成整数 2^53，前提不成立）。
+- **建议**：审计文档 F8-07 若修订，把「负数」从整数校验目标中移除（非负性校验属另一契约，当前未实施）。
+
+## F-032：并行任务在途改动与本批验证的相互干扰记录（P2 批2 执行期）
+
+- **发现日期**：2026-08-08（P2 批2 执行期）
+- **位置**：`crates/agent-tools/src/explore_quota.rs`（F3 #9 TOCTOU，他人 WIP）、`crates/session-loop/src/{steering/strategy.rs,hydrate.rs,lib.rs,provider.rs,steering/mod.rs,loop/handlers/*}`（F3-01 等，他人 WIP）
+- **描述**：① 本批红测试运行期间 `steering::strategy::tests::exit_code_invalid_segment_continues_scanning` 失败——他人 F3-01 修复的未提交中间态（其后随对方推进转绿，非本批改动）；② `cargo test -p agent-tools` 一度编译失败于 explore_quota.rs（他人 TOCTOU 重构中间态，随后对方推进修复，本批收尾验证时已可编译）；③ 本批提交全程只 stage 自己的文件，与并行批次（P2 批1/批4 等）互不触碰，git log 可核。
+- **建议**：验收方以本批收尾时刻的实测为准；并行批次全部收尾后按 AGENTS.md 基线跑全量回归。
