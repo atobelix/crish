@@ -16,10 +16,6 @@ import {
   type UseTopBarDragResult,
 } from '../binary-tree/useTopBarDrag';
 import stripStyles from '../binary-tree/UnitSessionTabStrip.module.css';
-import {
-  useLayoutTreeStore,
-  listChatLeaves,
-} from '../../api/store-access/componentAccess';
 
 const SessionTabDragContext = createContext<UseTopBarDragResult | null>(null);
 
@@ -65,9 +61,4 @@ export function SessionTabDragProvider({ children }: { children: ReactNode }) {
 
 export function useSessionTabDrag(): UseTopBarDragResult {
   return useContext(SessionTabDragContext) ?? NOOP_DRAG;
-}
-
-/** 当前是否多 chat 分屏（>1 chat leaf）— 决定全局条 vs per-unit 条 */
-function useIsMultiChatUnit(): boolean {
-  return useLayoutTreeStore((s) => listChatLeaves(s.tree.root).length > 1);
 }

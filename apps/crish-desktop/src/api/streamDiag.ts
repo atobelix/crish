@@ -66,10 +66,6 @@ function getRecentStreamDiags(): StreamDiagEntry[] {
   return ring.slice();
 }
 
-function getLastStreamDiag(): StreamDiagEntry | null {
-  return ring.length ? ring[ring.length - 1]! : null;
-}
-
 function clip(s: string, n: number): string {
   const t = String(s).replace(/\s+/g, ' ').trim();
   return t.length <= n ? t : t.slice(0, n - 1) + '…';

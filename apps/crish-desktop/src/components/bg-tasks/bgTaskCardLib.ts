@@ -4,7 +4,6 @@
  * 零副作用，可独立单测（T-AB-20）。
  */
 import {
-  BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
   buildBackgroundTaskTerminalLines,
   isBackgroundTaskActive,
   type BackgroundTaskInfo,
@@ -205,9 +204,4 @@ export function formatLogTailLines(
   const all = buildBackgroundTaskTerminalLines(output);
   if (all.length <= cap) return all;
   return all.slice(-cap);
-}
-
-/** 空输出占位（与终端面板口径一致） */
-function bgTaskLogEmptyPlaceholder(): string {
-  return BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER;
 }

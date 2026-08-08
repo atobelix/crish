@@ -41,6 +41,7 @@ export const SETTINGS_TAB_IDS = [
   'mcp',
   'plugins',
   'security',
+  'diagnostics',
 ] as const satisfies readonly SettingsTabType[];
 
 export const DEFAULT_SETTINGS_TAB: SettingsTabType = 'profile';

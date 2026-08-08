@@ -85,13 +85,6 @@ export function activeWorkspaceTabId(
   return currentWorkspaceFolderKey(activeProjectId);
 }
 
-function isWorkspaceTabActive(
-  tab: WorkspaceTab,
-  activeProjectId: string | null = getActiveProjectId(),
-): boolean {
-  return tab.id === activeWorkspaceTabId(activeProjectId);
-}
-
 /** 会话是否属于某工作区 folder（含历史 proj-* 别名 → 现项目 id） */
 export function sessionBelongsToWorkspace(
   sessionFolder: string | undefined | null,

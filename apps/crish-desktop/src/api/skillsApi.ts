@@ -570,10 +570,6 @@ export async function syncSkillsToDaemon(_skills: DesktopSkill[]): Promise<{ ok:
   return { ok: 0, fail: 0 };
 }
 
-async function readSkillRaw(filePath: string): Promise<string | null> {
-  return readTextAny(filePath);
-}
-
 /** 开发时探测：是否具备本机文件读取能力 */
 export async function skillsFsAvailable(): Promise<boolean> {
   const fs = await tryPluginFs();

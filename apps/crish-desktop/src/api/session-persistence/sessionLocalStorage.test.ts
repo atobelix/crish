@@ -22,11 +22,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionMessage } from '../../store/layoutStore';
 import * as userFacingErrors from '../userFacingErrors';
 import {
-  hasQuotaTruncation,
   loadSessionBody,
-  markQuotaTruncated,
   saveSessionBody,
 } from './sessionLocalStorage';
+import { hasQuotaTruncation, markQuotaTruncated } from './sessionQuota';
 import { loadSessionBody as loadSessionBodyRust } from './sessionRustDb';
 
 const SESSION_BODY_PREFIX = 'crish_session_body_v1:';

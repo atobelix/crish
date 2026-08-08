@@ -1,6 +1,8 @@
 /**
  * 工具行渲染：每工具独立一行；默认折叠；点击展开仅该工具结果。
- * InlineAgentPanel 懒加载，避免与其互相 import ChatToolStack 形成环。
+ * 关联子 agent 行（CompactToolRow 内嵌 InlineAgentPanel）由组合根经
+ * renderLinkedAgentPanel 注入，避免 chat-tool-call → agent-card 反向依赖
+ * （InlineAgentPanel 渲染 ChatToolStack 形成的环形依赖）。
  */
 import React from 'react';
 import { Check, X } from 'lucide-react';
@@ -31,6 +33,12 @@ export interface ChatToolStackProps {
   /** 批量批准：msgIds 与 toolIds 等长，按 bar 内相邻 pending 组 */
   onBatchApprove?: ((msgIds: string[], toolIds: string[]) => void) | undefined;
   onBatchDeny?: ((msgIds: string[], toolIds: string[]) => void) | undefined;
+  /** 关联子 agent 面板渲染器（组合根注入；切断 chat-tool-call → agent-card 依赖） */
+  renderLinkedAgentPanel?: ((
+    agent: SessionAgent,
+    parentSessionId: string,
+    tc: MessageToolCall
+  ) => React.ReactNode) | undefined;
 }
 
 /**

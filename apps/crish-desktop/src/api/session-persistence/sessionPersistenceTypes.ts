@@ -14,9 +14,6 @@ export const DEFAULT_SESSION_FOLDER = '常规会话';
 /** 协作 agent 落盘上限 */
 export const SESSION_AGENTS_SAVE_CAP = 40;
 
-/** 使用 Worker 序列化的阈值（消息条数） */
-const WORKER_BATCH_THRESHOLD = 200;
-
 /** 索引侧外部导入溯源（与 SessionState.importMeta 对齐，可选） */
 export type SessionIndexImportMeta = {
   source: 'claude-code' | 'codex';

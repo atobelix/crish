@@ -14,16 +14,13 @@
  * @see ./storeOwnership.ts (`SESSION_OWNERSHIP`)
  * @see ./layoutStore.ts package header
  */
-import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useRef, useSyncExternalStore } from 'react';
 import { useShallow } from '../store/useShallowSelector';
 import { useLayoutStore } from './layoutStore';
 import { sidebarSessionsEqual } from './sessionListEqual';
 import type {
   SessionState,
   SessionAgent,
-  SessionMessage,
-  SessionGoalTask,
-  SessionGoalMode,
 } from './types';
 import type { SessionActions } from './sessionActions';
 import { getSessionById as getSessionByIdFromIndex } from './sessionIndex';

@@ -134,7 +134,7 @@ describe('BgTaskActions — kill 二次确认流程', () => {
 
 describe('BgTaskActions — send_input 调用契约', () => {
   it('默认 appendNewline=true；发送成功清空输入并反馈「已发送」', async () => {
-    const onSendInput = vi.fn<typeof sendStub>(async () => okSend());
+    const onSendInput = vi.fn<SendStub>(async () => okSend());
     render(<BgTaskActions task={task({ id: 't1' })} onSendInput={onSendInput} />);
     const input = screen.getByRole('textbox', { name: '向任务 t1 发送输入' });
     fireEvent.change(input, { target: { value: 'y' } });
@@ -147,7 +147,7 @@ describe('BgTaskActions — send_input 调用契约', () => {
   });
 
   it('取消勾选「追加换行」→ appendNewline=false 透传', async () => {
-    const onSendInput = vi.fn<typeof sendStub>(async () => okSend());
+    const onSendInput = vi.fn<SendStub>(async () => okSend());
     render(<BgTaskActions task={task({ id: 't1' })} onSendInput={onSendInput} />);
     fireEvent.click(screen.getByLabelText('追加换行'));
     const input = screen.getByRole('textbox', { name: '向任务 t1 发送输入' });
@@ -159,7 +159,7 @@ describe('BgTaskActions — send_input 调用契约', () => {
   });
 
   it('空输入不调用 onSendInput，发送按钮禁用', () => {
-    const onSendInput = vi.fn<typeof sendStub>(async () => okSend());
+    const onSendInput = vi.fn<SendStub>(async () => okSend());
     render(<BgTaskActions task={task({ id: 't1' })} onSendInput={onSendInput} />);
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -167,7 +167,7 @@ describe('BgTaskActions — send_input 调用契约', () => {
   });
 
   it('Enter 键提交；发送失败反馈「发送失败」', async () => {
-    const onSendInput = vi.fn<typeof sendStub>(async () => failSend());
+    const onSendInput = vi.fn<SendStub>(async () => failSend());
     render(<BgTaskActions task={task({ id: 't1' })} onSendInput={onSendInput} />);
     const input = screen.getByRole('textbox', { name: '向任务 t1 发送输入' });
     fireEvent.change(input, { target: { value: 'x' } });
@@ -209,4 +209,3 @@ type SendStub = (
   text: string,
   appendNewline: boolean,
 ) => Promise<SendBackgroundTaskInputResult>;
-const sendStub: SendStub = async () => okSend();

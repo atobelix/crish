@@ -32,7 +32,6 @@ sha2 = "0.10"
 base64 = "0.22"
 chardetng = "0.1"
 encoding_rs = "0.8"
-notify = { version = "8", features = [] }
 memmap2 = "0.9"
 tracing.workspace = true
 async-trait.workspace = true

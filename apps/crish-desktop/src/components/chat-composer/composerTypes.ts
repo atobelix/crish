@@ -8,8 +8,6 @@
  * CI Guardrail: Max 800 lines of effective code
  */
 
-import type React from 'react';
-
 export type { PermissionMode } from '../../api/permissionModes';
 
 /** 提及候选人（@ 触发；宿主接入候选人源后注入，未接入时为空列表兜底不弹面板） */

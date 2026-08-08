@@ -35,7 +35,8 @@ export type SettingsTabType =
   | 'skills'
   | 'mcp'
   | 'plugins'
-  | 'security';
+  | 'security'
+  | 'diagnostics';
 
 /** 工作区单卡：id 为面板 key，title 为展示名 */
 export interface CardState {
@@ -118,16 +119,6 @@ export interface FileDiff {
 
 // ── CronJob 形态（layout scheduledTasks / RuntimePanel；与 clientApi 结构兼容）──
 
-/**
- * 定时任务目标会话策略。
- * - current-session：在触发时的活动会话执行
- * - new-session：新建会话执行
- */
-type CronTargetSession = 'current-session' | 'new-session';
-
-/** 定时任务启停状态（demo / RuntimePanel；非引擎 workflow 状态机） */
-type CronJobStatus = 'active' | 'paused';
-
 // ── 消息 / 工具 / 审批 ─────────────────────────────────────────────────────
 
 /**
@@ -203,22 +194,6 @@ export type MessageToolApprovalPayload =
   | { kind: 'revert-gate'; revertGate: RevertGatePayload }
   | { kind: 'delete'; deleteImpact: DeleteApprovalPayload }
   | { kind: 'unknown' };
-
-/**
- * 审批 meta 的「显式可空」形态：所有字段都允许 undefined，
- * 适用于从原始事件水合时部分字段未提供的场景。
- * 转入 store 时应使用 compactObj 剔除 undefined 字段，得到 MessageToolApprovalMeta。
- */
-type MessageToolApprovalMetaInput = {
-  trustZone?: string | undefined;
-  risk?: string | undefined;
-  riskReason?: string | undefined;
-  riskLevel?: MessageApprovalRiskLevel | undefined;
-  requiresDoubleConfirm?: boolean | undefined;
-  recommendSnapshot?: boolean | undefined;
-  source?: MessageApprovalRiskSource | undefined;
-  payload?: MessageToolApprovalPayload | undefined;
-};
 
 // ── 图片引用 ───────────────────────────────────────────────────────────────
 
@@ -336,26 +311,6 @@ export interface MessageToolCall {
   images?: MessageImageRef[] | undefined;
 }
 
-/**
- * MessageToolCall 的「输入形态」：所有可选字段允许显式 undefined。
- * 适用于从原始事件流构造 toolCall 时部分字段尚未提供的场景。
- * 转入 store 前应使用 compactObj 剔除 undefined 字段，得到 MessageToolCall。
- */
-interface MessageToolCallInput {
-  id: string;
-  name: string;
-  arguments: string;
-  status: MessageToolCallStatus;
-  output?: string | undefined;
-  diffs?: FileDiff[] | undefined;
-  explanation?: string | undefined;
-  approvalMeta?: MessageToolApprovalMetaInput | undefined;
-  approvalDecision?: MessageToolCallApprovalDecision | undefined;
-  startedAt?: number | undefined;
-  completedAt?: number | undefined;
-  turnId?: string | undefined;
-}
-
 /** 消息发送方 */
 export type MessageSender = 'user' | 'assistant';
 
@@ -405,28 +360,6 @@ export interface MessageTimelineBlock {
   content?: string;
   /** type === 'image' 时承载结构化图片引用 */
   images?: MessageImageRef[];
-}
-
-/**
- * SessionMessage 的「输入形态」：从原始事件流构造消息时，
- * 字段值可能为 undefined（事件未携带）。转入 store 前应使用 compactObj
- * 剔除 undefined 字段，得到结构干净的 SessionMessage。
- *
- * 字段语义与 SessionMessage 一一对应，仅是允许显式 undefined。
- */
-interface SessionMessageInput {
-  id: string;
-  sender: MessageSender;
-  text?: string | undefined;
-  thinking?: string | undefined;
-  timestamp: number;
-  toolCalls?: MessageToolCallInput[] | undefined;
-  status?: SessionMessageStatus | undefined;
-  blocks?: MessageTimelineBlock[] | undefined;
-  streamTextOffset?: number | undefined;
-  thinkingTime?: number | undefined;
-  toolCallResults?: SessionMessageToolCallResult[] | undefined;
-  cacheMetrics?: MessageCacheState | null;
 }
 
 /** 会话内一条用户或助手消息 */

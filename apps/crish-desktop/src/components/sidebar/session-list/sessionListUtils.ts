@@ -10,9 +10,6 @@ import {
 /** 会话列表里 GENERAL_FOLDER / 无项目 的展示文案 */
 export const SESSION_LIST_GENERAL_LABEL = '通用';
 
-/** 标题下项目副行占用高度（与 CSS .sessionProjectLabel 一致） */
-const SESSION_PROJECT_LABEL_EXTRA = 14;
-
 /** 去重：同 id 只保留首次出现，避免 store 抖动产生幽灵双行 */
 export function dedupeSessionsById(list: SessionState[]): SessionState[] {
   if (list.length <= 1) return list;

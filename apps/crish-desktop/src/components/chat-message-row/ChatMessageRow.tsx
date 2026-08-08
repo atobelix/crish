@@ -33,21 +33,6 @@ import {
   type ChatAssistantMessageRowProps,
 } from './ChatAssistantMessageRow';
 
-import {
-  MessageContent,
-  type MessageContentProps,
-} from '../chat-message/MessageContent';
-
-import {
-  MessageActions,
-  type MessageActionsProps,
-} from '../chat-message/MessageActions';
-
-import {
-  MessageThinkingBlock,
-  type MessageThinkingBlockProps,
-} from '../chat-message/MessageThinkingBlock';
-
 export {
   USER_BUBBLE_LONG_CHARS,
   USER_BUBBLE_PREVIEW_CHARS,

@@ -9,7 +9,6 @@
 
 import { getTransport } from './transport';
 import { logInternalError } from './userFacingErrors';
-import { eventBus } from '../services/EventBus';
 
 export type McpServerState =
   | 'ready'

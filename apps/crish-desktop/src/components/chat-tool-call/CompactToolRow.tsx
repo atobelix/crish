@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState, useMemo, useEffect } from 'react';
+import React, { Suspense, useState, useMemo, useEffect } from 'react';
 import styles from './ChatToolCallBlock.module.css';
 import type { MessageToolCall } from '../../store/layoutStore';
 import { ApprovalAskCard } from '../agent-card/ApprovalAskCard';
@@ -21,10 +21,6 @@ import type { ChatToolStackProps } from './ChatToolCallBlock';
 import { ToolCallHeader } from './ToolCallHeader';
 import { ToolCallOutput } from './ToolCallOutput';
 import { toolStatusZh, toolResultBodyId, findAgentForTool } from './chatToolCallUtils';
-
-const InlineAgentPanel = lazy(() =>
-  import('../agent-card/InlineAgentPanel').then((m) => ({ default: m.InlineAgentPanel }))
-);
 
 export interface CompactToolRowProps {
   tc: MessageToolCall;
@@ -107,38 +103,41 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
 
   const linkedAgent = findAgentForTool(tc, agents);
   if (linkedAgent && activeSessionId) {
-    return (
-      <Suspense
-        key={String(rowKey)}
-        fallback={
-          <div
-            className={`${styles.toolRow} ${styles.isRunning} tool-row is-running`}
-          >
-            <div
-              className={`${styles.toolRowHead} ${styles.toolRowHeadStatic}`}
-            >
-              <span className={styles.toolRowIcoSlot} aria-hidden>
-                <span className={styles.toolRowLive}>
-                  <span
-                    className="loading-spinner"
-                    style={{ width: 8, height: 8, borderWidth: 1.5 }}
-                  />
-                </span>
-              </span>
-              <span className={styles.toolRowSummary}>协作子任务…</span>
-            </div>
-          </div>
-        }
-      >
-        <InlineAgentPanel
-          agent={linkedAgent}
-          parentSessionId={activeSessionId}
-          defaultOpen={
-            tc.status === 'running' || linkedAgent.status === 'running'
-          }
-        />
-      </Suspense>
+    // 关联子 agent 行：由组合根注入的渲染器（ChatToolStackProps.renderLinkedAgentPanel）
+    // 渲染内嵌 InlineAgentPanel；未注入（无子 agent 上下文）时回退普通工具行。
+    const linkedPanel = props.renderLinkedAgentPanel?.(
+      linkedAgent,
+      activeSessionId,
+      tc,
     );
+    if (linkedPanel) {
+      return (
+        <Suspense
+          key={String(rowKey)}
+          fallback={
+            <div
+              className={`${styles.toolRow} ${styles.isRunning} tool-row is-running`}
+            >
+              <div
+                className={`${styles.toolRowHead} ${styles.toolRowHeadStatic}`}
+              >
+                <span className={styles.toolRowIcoSlot} aria-hidden>
+                  <span className={styles.toolRowLive}>
+                    <span
+                      className="loading-spinner"
+                      style={{ width: 8, height: 8, borderWidth: 1.5 }}
+                    />
+                  </span>
+                </span>
+                <span className={styles.toolRowSummary}>协作子任务…</span>
+              </div>
+            </div>
+          }
+        >
+          {linkedPanel}
+        </Suspense>
+      );
+    }
   }
 
   const expandable = toolHasExpandableBody(tc);

@@ -56,7 +56,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx eslint .
-      - run: npx depcruise --config .dependency-cruiser.cjs packages apps --ignore "dist/"
+      # depcruise 无 --ignore 参数（dependency-cruiser 16.x 仅 -x/--exclude 与
+      # --ignore-known）；dist 排除已由 .dependency-cruiser.cjs options.exclude
+      # 覆盖（node_modules|dist|build|target），与仓库脚本 lint:depcruise 同口径
+      - run: npx depcruise --config .dependency-cruiser.cjs packages apps
 
   vitest-fast:
     runs-on: ubuntu-latest

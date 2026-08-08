@@ -18,7 +18,6 @@
  * no cross-store gain.
  */
 
-import { useLayoutTreeStore } from './layoutTreeStore';
 import { isChatDomain } from './types';
 import {
   openToolInActiveTab,

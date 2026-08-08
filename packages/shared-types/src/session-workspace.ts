@@ -14,7 +14,7 @@ export const SESSION_ACTION_KINDS = [
 
 export const SESSION_OPEN_TARGETS = ["split-view"] as const;
 
-const SESSION_PANE_ROLES = ["primary", "secondary", "reference", "diff"] as const;
+type SESSION_PANE_ROLES = ["primary", "secondary", "reference", "diff"];
 
 export const SPLIT_LAYOUT_MAX_PANES = 6;
 
@@ -22,7 +22,7 @@ export type SessionActionKind = (typeof SESSION_ACTION_KINDS)[number];
 
 export type SessionOpenTarget = (typeof SESSION_OPEN_TARGETS)[number];
 
-export type SessionPaneRole = (typeof SESSION_PANE_ROLES)[number];
+export type SessionPaneRole = SESSION_PANE_ROLES[number];
 
 export const SESSION_ACTION_STATUSES = ["pending", "committed", "rejected", "failed"] as const;
 

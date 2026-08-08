@@ -110,7 +110,6 @@ async function accessPath(path: string): Promise<void> {
 /** node:fs/promises 动态加载（webview 无 node 模块时抛清晰错误） */
 async function loadNodeFs(): Promise<typeof import('node:fs/promises')> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return await import('node:fs/promises');
   } catch (err) {
     throw new Error(

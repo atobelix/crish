@@ -12,7 +12,7 @@
  * 必须修复为「messages 引用变化即放行」，并固化为契约测试。
  */
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MessageVirtualizer } from './MessageVirtualizer';
 import type { SessionMessage } from '../../store/types';

@@ -14,7 +14,6 @@
 import {
   clearMarkdownHtmlCache,
   getMarkdownHtmlCache,
-  markdownHtmlCacheSize,
   setMarkdownHtmlCache,
 } from './markdownCache';
 import { parseMarkdownToHtmlUncached } from './markdown-render/markdownPlugins';

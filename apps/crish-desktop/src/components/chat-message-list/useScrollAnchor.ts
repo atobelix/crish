@@ -6,38 +6,6 @@ import {
 } from '../../api/messageWindow';
 import type { SessionMessage } from '../../store/layoutStore';
 
-export type IdleHandle = number;
-
-const HAS_NATIVE_REQUEST_IDLE =
-  typeof requestIdleCallback === 'function' &&
-  typeof cancelIdleCallback === 'function';
-
-function scheduleIdle(
-  task: (deadline?: IdleDeadline) => void,
-  options?: { timeout?: number }
-): { handle: IdleHandle; cancel: () => void } {
-  if (HAS_NATIVE_REQUEST_IDLE) {
-    const handle = requestIdleCallback(task, options) as IdleHandle;
-    return {
-      handle,
-      cancel: () => {
-        if (typeof cancelIdleCallback === 'function') {
-          cancelIdleCallback(handle);
-        }
-      },
-    };
-  }
-  const timeout = options?.timeout ?? 16;
-  const handle = window.setTimeout(
-    () => task(undefined),
-    timeout
-  ) as unknown as IdleHandle;
-  return {
-    handle,
-    cancel: () => window.clearTimeout(handle),
-  };
-}
-
 export function pinSnippet(text?: string, max = 72): string {
   const t = (text || '').replace(/\s+/g, ' ').trim();
   if (!t) return '（无文本）';

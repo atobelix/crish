@@ -27,6 +27,12 @@ import { coerceSessionTimestamp } from '../sessionTime';
 import { prepareSessionsForUi } from '../sessionTitle';
 
 import {
+  asNonEmptyString,
+  clearQuotaTruncation,
+  markQuotaTruncated,
+} from './sessionQuota';
+
+import {
   SESSION_ACTIVE_KEY,
   SESSION_AGENTS_PREFIX,
   SESSION_AGENTS_SAVE_CAP,
@@ -51,12 +57,6 @@ import {
   persistAllSessionsRust,
   persistAllSessionsSyncViaLocalStorage,
 } from './sessionRustDb';
-
-function asNonEmptyString(v: unknown): string | null {
-  if (typeof v !== 'string') return null;
-  const t = v.trim();
-  return t ? t : null;
-}
 
 export function loadSessionIndex(): SessionIndexEntry[] {
   const raw = localStorage.getItem(SESSION_INDEX_KEY);
@@ -83,41 +83,8 @@ export function saveSessionIndex(entries: SessionIndexEntry[]): void {
 // + logInternalError 日志；后续全量写成功（quota 已释放）时清除标志（恢复策略）。
 // 标志自身的读写也 try/catch：quota 耗尽时标志可能写不进，但绝不允许抛错污染
 // 保存主流程。
-
-const QUOTA_TRUNCATED_PREFIX = 'crish_quota_truncated_';
-
-/** 置位会话级 quota 截断标志（截断落盘后调用）。 */
-export function markQuotaTruncated(sessionId: string): void {
-  const id = asNonEmptyString(sessionId);
-  if (!id) return;
-  try {
-    localStorage.setItem(QUOTA_TRUNCATED_PREFIX + id, '1');
-  } catch {
-    /* quota / private mode */
-  }
-}
-
-/** 会话是否存在 quota 截断标志（hydrate / UI 数据面读取）。 */
-export function hasQuotaTruncation(sessionId: string): boolean {
-  const id = asNonEmptyString(sessionId);
-  if (!id) return false;
-  try {
-    return localStorage.getItem(QUOTA_TRUNCATED_PREFIX + id) !== null;
-  } catch {
-    return false;
-  }
-}
-
-/** 清除会话级 quota 截断标志（全量写成功即恢复）。 */
-function clearQuotaTruncation(sessionId: string): void {
-  const id = asNonEmptyString(sessionId);
-  if (!id) return;
-  try {
-    localStorage.removeItem(QUOTA_TRUNCATED_PREFIX + id);
-  } catch {
-    /* ignore */
-  }
-}
+// 实现已下沉至 sessionQuota.ts（sessionRustDb hydrate 链共用，避免互相 import
+// 环形依赖）；本文件仅 import 使用，不再重复定义。
 
 export function loadSessionBody(sessionId: string): SessionMessage[] {
   const id = asNonEmptyString(sessionId);
@@ -441,8 +408,4 @@ export function persistAllSessionsSync(
       sessionsToIndex,
     }
   );
-}
-
-function resetOrphanScanCache(): void {
-  /* no-op — Stream D 后孤儿清理走 SQLite，无 JS 侧缓存 */
 }

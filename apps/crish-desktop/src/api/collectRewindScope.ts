@@ -11,7 +11,7 @@
  * @see withdrawMessage 截断消息
  */
 
-import type { FileDiff, SessionMessage, SessionState } from '../store/types';
+import type { FileDiff, SessionState } from '../store/types';
 import { collectMessageDiffs } from '../components/diff/ChangeOverviewCard';
 import { filterPublishableDiffs } from './publishToolDiffs';
 

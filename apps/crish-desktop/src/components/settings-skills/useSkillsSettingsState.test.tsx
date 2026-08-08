@@ -1,9 +1,6 @@
 // @vitest-environment jsdom
-import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import React from 'react';
 import { renderHook, act } from '@testing-library/react';
-import React from 'react';
 import { useSkillsSettingsState, skillSlashCmd, scopeGroupLabel } from './useSkillsSettingsState';
 
 vi.mock('../../api/skillsApi', () => ({

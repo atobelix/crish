@@ -39,16 +39,3 @@ export function resolveWorkspaceState(): LayoutStore {
   if (_workspaceStore) return _workspaceStore.getState() as LayoutStore;
   return getLayoutState();
 }
-
-function resolveSettingsUiState(): LayoutStore {
-  if (_settingsUiStore) return _settingsUiStore.getState() as LayoutStore;
-  return getLayoutState();
-}
-
-function cloneArray<T>(arr: T[]): T[] {
-  return arr
-    ? arr.map((item) =>
-        typeof item === 'object' && item !== null ? ({ ...item } as T) : item
-      )
-    : [];
-}
