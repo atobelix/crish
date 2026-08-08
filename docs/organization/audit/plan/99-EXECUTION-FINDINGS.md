@@ -199,3 +199,12 @@
 - **描述**：cargo test --workspace 编译失败于 session-loop 测试代码（并行任务在途重构：crates/session-loop/{lib.rs,mod.rs,provider.rs,state.rs,...} 工作区未提交）。cargo build --workspace 全绿（库代码可编译）；cargo test -p agent-provider（lib 503 + 集成 25）全绿。E0308 与本批改动（仅 agent-provider frame.rs/error.rs）无关，亦经文件面确认非本批引入。
 - **处置**：登记不修（B9 范围纪律）；本批验证以 agent-provider 全量 + 受影响 crate 为准。
 - **建议**：session-loop 重构任务收尾提交后，验收方补跑 cargo test --workspace 全量回归（对齐 AGENTS.md 73 套件基线）。
+
+## F-025：typecheck 被并行会话在途 TS 改动破坏（P2 批5 收尾期）
+
+- **发现日期**：2026-08-08（P2 批5 收尾期）
+- **位置**：pps/crish-desktop/src/components/sidebar/SidebarContextMenus.tsx:194,207（TS2538 null 作索引）、pps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx:302（TS2353 未知属性 '--tooltip-translate'）
+- **描述**：本批 typecheck 于 14:21 实测 EXIT=0（含全部本批改动）。收尾复核时 EXIT=2，报错全部位于并行会话在途未提交文件（git status M，本批提交未触碰）。属并行会话 WIP 破坏门禁，非本批引入。
+- **处置**：登记不修（B9 范围纪律）。
+- **建议**：并行会话收尾提交后重跑 
+pm run typecheck 恢复 EXIT=0；验收方注意快层门禁以并行会话清理后为准。
