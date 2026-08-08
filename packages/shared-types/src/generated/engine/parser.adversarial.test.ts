@@ -130,3 +130,44 @@ describe('生成 parser 整数语义（F8-07）', () => {
     expect(r.ok).toBe(true);
   });
 });
+
+describe('F8-45：信封 schemaVersion 消费契约（旧前端遇新 schemaVersion 的行为锚定）', () => {
+  it('新 schemaVersion（如 2）不阻塞事件解析——信封字段不进事件体校验（fail-open 于 schema 版本）', () => {
+    const r = parseEngineEvent({
+      type: 'message-delta',
+      schemaVersion: 2,
+      runId: 'r1',
+      sequence: 7,
+      sessionId: 's1',
+      timestamp: 't1',
+      messageId: 'm1',
+      block: { type: 'text', text: '你好' },
+    });
+    expect(r.ok).toBe(true);
+    // 信封字段不进入解析结果（事件体只含本事件字段）
+    const e = r as unknown as { ok: true; data: Record<string, unknown> };
+    expect(e.data['schemaVersion']).toBeUndefined();
+    expect(e.data['sequence']).toBeUndefined();
+  });
+
+  it('无 schemaVersion 的旧帧照常解析（emit 层缺省注入前兼容）', () => {
+    const r = parseEngineEvent({
+      type: 'message-delta',
+      sessionId: 's1',
+      timestamp: 't1',
+      messageId: 'm1',
+      block: { type: 'text', text: '旧帧' },
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('schema 升级的真正防护在事件类型层：新 schemaVersion + 未知事件类型 → fail-closed 解析失败', () => {
+    const r = parseEngineEvent({
+      type: 'future-event-type-v9',
+      schemaVersion: 9,
+      sessionId: 's1',
+    });
+    expect(r.ok).toBe(false);
+  });
+});
+
