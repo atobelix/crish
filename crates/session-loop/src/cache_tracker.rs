@@ -142,6 +142,9 @@ impl CacheStatsTracker {
     }
 
     /// 覆盖缓存 TTL（秒；0 = 未知 / 无缓存；T-40 在 P3 查询结果可及后调用）
+    ///
+    /// 待接（F1 审计 F3-03）：当前全 crate 零消费（预留接口）——T-40 引擎
+    /// 接线点（跨 run 缓存基线持久化）落地后由 engine 侧调用。
     pub fn set_ttl(&mut self, ttl_seconds: u64) {
         self.ttl_seconds = ttl_seconds;
     }

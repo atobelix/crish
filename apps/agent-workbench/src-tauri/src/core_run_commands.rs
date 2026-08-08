@@ -2803,6 +2803,11 @@ pub(crate) async fn run_task_impl(
         broadcast_bridge.emit(&envelope);
         broadcast_bridge.flush();
     });
+    // 死锁检测器（F9-05）待接：with_deadlock_detector 的 detector 需要
+    // 「主 agent 正在 wait 该子代理」信号源——引擎侧尚无 orchestrator 子
+    // 代理跟踪器的 await 态标记（approval_router.rs:41-45 自述的 F11
+    // T-D-13 引擎接线未落地）。缺省 None = 恒走纯超时兜底（120s Expired），
+    // 行为与现状一致；信号源落地后在此注入。
     let approval_gate = Arc::new(ApprovalGateImpl::new(
         run_id.clone(),
         session_id.clone(),

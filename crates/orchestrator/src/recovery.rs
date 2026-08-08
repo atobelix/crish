@@ -53,6 +53,13 @@
 //! 经 [RecoveryCoordinator::restore_steering_notifications] 把未处理
 //! 通知重新排入队列。conex-db 只读：session_meta 与事件/run/session_agents
 //! 均经既有接口（[RecoveryStore] 抽象，无一行 conex-db 改动）。
+//!
+//! **待接（F2 审计 F2-08，C7 生产未接线）**：上述引擎侧接线点当前无调用
+//! 方——子代理 run 失败时生产二进制不触发阶梯 1/2（仅 tests 与 lifecycle
+//! resume 命令面消费）。接线需引擎侧基础设施：每会话 RecoveryCoordinator
+//! 生命周期（RecoveryStore 适配 + SessionTree 装配 + SubagentSpawner 复用）
+//! 与 provider 流错误分类钩子，且按 F2-27 要求走 spawn_blocking（RecoveryStore
+//! 为同步 SQLite trait）。属 I6 遗留 L1–L3 大件，另行排期，不硬接。
 
 use std::collections::HashMap;
 use std::fmt;

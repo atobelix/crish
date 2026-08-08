@@ -278,6 +278,7 @@ pub(crate) fn streaming_aborted(state: &mut LoopState) -> Result<HandlerOutcome,
 /// 同生命周期（`'a` 借用期，实现方在返回流前完成序列化）。
 /// session_id 暂填 None（P2 步骤 4a 契约字段，C5 合并登记）；会话 ID 的注入
 /// 接线（engine.rs 适配层 / SessionLoopOptions 透传）归 T-17（P2 步骤 4b）。
+/// 待接（F1 审计 F3-08）：T-17 落地前该字段恒 None，缓存键不含会话维度。
 ///
 /// P4（预算钳制）：max_tokens 发请求前经 [clamp_max_tokens] 钳制
 /// （window - estimate - safety，估算 = [estimate_context] 双源，
