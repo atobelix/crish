@@ -77,6 +77,10 @@ struct FieldSpec {
     #[serde(rename = "type")]
     ts_type: String,
     required: bool,
+    /// F8-07：整数字段标记（number 字段必须显式声明 true/false；
+    /// 注册表当前全部未声明 → 漂移测试红，待引擎登记）
+    #[serde(default)]
+    integer: Option<bool>,
 }
 
 #[derive(serde::Deserialize)]
@@ -583,6 +587,55 @@ fn registry_entries_are_reachable_from_events() {
             );
         }
     }
+}
+
+// ── 5.5 F8-07：整数字段元数据锁——number 字段必须显式声明 integer，
+//      非整数字段（Rust f64：比率/金额）白名单锁定，防「浮点→整数」
+//      语义漂移（生成 parser 依赖此标记引入整数校验）──
+
+#[test]
+fn registry_integer_markers_lock_fractional_whitelist() {
+    let reg = registry();
+    let mut unmarked: Vec<(String, String)> = Vec::new();
+    let mut fractional: Vec<(String, String)> = Vec::new();
+    let mut check_fields = |where_: &str, fields: &[FieldSpec]| {
+        for f in fields {
+            if f.ts_type == "number" || f.ts_type == "number[]" {
+                match f.integer {
+                    Some(true) => {}
+                    Some(false) => fractional.push((where_.to_string(), f.name.clone())),
+                    None => unmarked.push((where_.to_string(), f.name.clone())),
+                }
+            }
+        }
+    };
+    for ev in &reg.events {
+        check_fields(&ev.wire, &ev.fields);
+    }
+    for (name, spec) in &reg.types {
+        match spec {
+            TypeSpec::Struct { fields } => check_fields(name, fields),
+            TypeSpec::Tagged { variants, .. } => {
+                for v in variants {
+                    check_fields(&format!("{name}.{}", v.name), &v.fields);
+                }
+            }
+        }
+    }
+    assert!(
+        unmarked.is_empty(),
+        "number 字段必须显式声明 integer 标记（生成 parser 整数校验依赖）：{unmarked:?}"
+    );
+    // Rust 侧 f64 白名单（比率/金额字段）：hitRatio / writeRatio / missedCostUsd
+    let whitelist: Vec<(String, String)> = vec![
+        ("RunCacheStats".to_string(), "hitRatio".to_string()),
+        ("RunCacheStats".to_string(), "writeRatio".to_string()),
+        ("cache-waste-alert".to_string(), "missedCostUsd".to_string()),
+    ];
+    assert_eq!(
+        fractional, whitelist,
+        "非整数字段集合必须与 Rust f64 白名单一致（新增浮点字段需同步登记）"
+    );
 }
 
 // ── 6. 信封帧（emit 层注入 runId/sequence/schemaVersion）与事件体并存 ──

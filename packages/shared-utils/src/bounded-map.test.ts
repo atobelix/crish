@@ -64,8 +64,8 @@ describe("LruMap", () => {
     const m = new LruMap<string, number>(2);
     m.set("a", 1);
     m.set("b", 2);
-    m.get("a"); // a 变成最近使用
-    m.set("c", 3); // 应淘汰 b（最久未使用）
+    m.get("a"); // a 鍙樻垚鏈€杩戜娇鐢?
+    m.set("c", 3); // 搴旀窐姹?b锛堟渶涔呮湭浣跨敤锛?
     expect(m.size).toBe(2);
     expect(m.has("b")).toBe(false);
     expect(m.get("a")).toBe(1);
@@ -78,8 +78,8 @@ describe("LruMap", () => {
     m.set("b", 2);
     m.get("a");
     m.get("b");
-    m.get("a"); // a 是最近
-    m.set("c", 3); // 淘汰 b
+    m.get("a"); // a 鏄渶杩?
+    m.set("c", 3); // 娣樻卑 b
     expect(m.has("b")).toBe(false);
     expect(m.get("a")).toBe(1);
   });
@@ -88,9 +88,22 @@ describe("LruMap", () => {
     const m = new LruMap<string, number>(2);
     m.set("a", 1);
     m.set("b", 2);
-    m.set("a", 100); // a 变成最近
+    m.set("a", 100); // a 变成最新
     m.set("c", 3); // 淘汰 b
     expect(m.has("b")).toBe(false);
     expect(m.get("a")).toBe(100);
   });
+
+  it("throws on fractional capacity in (0,1)（F8-20：BoundedMap 静默取整为 0 → 容量语义失效）", () => {
+    // 修复前 0.5 通过校验并 Math.floor 为 0：容量 0 的 BoundedMap
+    // 首条 set 无淘汰直接存入（map.size>=0 恒真但无 key 可淘汰），
+    // 容量上限形同虚设——静默退化，此断言红
+    expect(() => new BoundedMap<number, number>(0.5, undefined)).toThrow(RangeError);
+  });
+
+  it("throws on fractional capacity in (0,1)（F8-20：LruMap 静默取整为 0）", () => {
+    expect(() => new LruMap<number, number>(0.5)).toThrow(RangeError);
+  });
 });
+});
+

@@ -393,4 +393,18 @@ describe('BoundedMap — 对抗性测试（cache 依赖）', () => {
       expect(evicted).toEqual([['a', 10]]);
     });
   });
+
+  describe('F8-20: LruCache 非法/分数容量拒绝', () => {
+    it('分数容量 (0,1) 抛 RangeError（修复前无校验：0.5 时容量形同 1，静默退化）', () => {
+      expect(() => new LruCache<string, string>(0.5, 1000)).toThrow(RangeError);
+    });
+
+    it('NaN 容量抛 RangeError（修复前无校验：NaN 比较恒 false → 永不淘汰 → 无限增长）', () => {
+      expect(() => new LruCache<string, string>(NaN, 1000)).toThrow(RangeError);
+    });
+
+    it('负数容量抛 RangeError', () => {
+      expect(() => new LruCache<string, string>(-1, 1000)).toThrow(RangeError);
+    });
+  });
 });

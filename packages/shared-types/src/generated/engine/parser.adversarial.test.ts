@@ -84,3 +84,60 @@ describe('生成 parser 深度守卫（T3.7 D7）', () => {
     expect(r.ok).toBe(true);
   });
 });
+
+describe('生成 parser 整数语义（F8-07）', () => {
+  it('turnIndex 浮点值被拒绝（修复前 checkNumber 放行 1.5，红）', () => {
+    const r = parseEngineEvent({
+      type: 'turn-end',
+      sessionId: 's1',
+      timestamp: 't1',
+      turnIndex: 1.5,
+      toolCallCount: 0,
+    });
+    // 修复前：ok=true（浮点污染前端轮次进度）；修复后：parseErr
+    expect(r.ok).toBe(false);
+  });
+
+  it('exitCode 负数被拒绝（修复前 checkNumber 放行 -3，红）', () => {
+    const r = parseEngineEvent({
+      type: 'task-failed',
+      sessionId: 's1',
+      taskId: 't1',
+      exitCode: -3,
+      tail: ['log line'],
+      durationMs: 100,
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it('超大非整数尾数被拒绝（turnIndex=1e21+0.5 之类浮点语义）', () => {
+    const r = parseEngineEvent({
+      type: 'turn-end',
+      sessionId: 's1',
+      timestamp: 't1',
+      turnIndex: Number.MAX_SAFE_INTEGER + 0.5,
+      toolCallCount: 0,
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it('分数比率字段仍接受浮点（hitRatio=0.75 是 f64 字段，不误伤）', () => {
+    const r = parseEngineEvent({
+      type: 'cache-stats-updated',
+      sessionId: 's1',
+      timestamp: 't1',
+      stats: {
+        promptTokens: 10,
+        completionTokens: 5,
+        totalTokens: 15,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        cacheMissTokens: 5,
+        sampleCount: 1,
+        hitRatio: 0.75,
+        missedTokens: 0,
+      },
+    });
+    expect(r.ok).toBe(true);
+  });
+});

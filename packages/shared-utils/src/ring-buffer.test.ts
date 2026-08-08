@@ -87,4 +87,11 @@ describe("RingBuffer", () => {
     expect(() => new RingBuffer(-1)).toThrow(RangeError);
     expect(() => new RingBuffer(Infinity)).toThrow(RangeError);
   });
+
+  it("throws on fractional capacity in (0,1)（F8-20：静默取整为 0 → 全部 push 丢弃）", () => {
+    // 修复前 0.5 通过校验并 Math.floor 为 0：容量 0 的环形缓冲所有
+    // push 返回 false（静默丢弃数据），此断言红
+    expect(() => new RingBuffer(0.5)).toThrow(RangeError);
+    expect(() => new RingBuffer(0.99)).toThrow(RangeError);
+  });
 });

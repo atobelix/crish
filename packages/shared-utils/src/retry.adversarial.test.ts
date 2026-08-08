@@ -1,17 +1,18 @@
 /**
  * retry (retryWithBackoff / calculateBackoff) 对抗性测试
  *
- * 已暴露的 bug 清单：
+ * 已暴露的 bug 清单（P2 批2 F8-16 已修复项 → 改为修复契约断言）：
  *  R1. 【误报已排除】jitterFactor 未传入时 calculateBackoff 的默认参数 0.2 生效，无 NaN
  *      但 retryWithBackoff 中 const jitterFactor = options.jitterFactor 读取为 undefined，
  *      依赖 calculateBackoff 的默认参数兜底——如果 calculateBackoff 签名变更去掉默认值就会触发
- *  R2. maxAttempts=0 → throw undefined（非 Error 对象）
- *  R3. calculateBackoff 的 jitter 可使 delay 超过 maxMs（乘性 jitter 突破上限）
+ *  R2. 【F8-16 已修复】maxAttempts=0 → throw undefined（入参钳制到 ≥1，抛真实 Error）
+ *  R3. 【F8-16 已修复】calculateBackoff 的 jitter 可使 delay 超过 maxMs（钳制在 jitter 后施加，
+ *      maxMs 为硬上限）
  *  R4. shouldRetry 抛异常时，错误不是 lastError 而是 shouldRetry 的错误
  *  R5. calculateBackoff 负数 attempt 产生 < baseMs 的 delay（语义模糊）
  *  R6. retryWithBackoff 不传 options 时使用 baseMs=200，但 calculateBackoff 默认 baseMs=1000（默认值不一致）
  *  R7. jitterFactor 为负数时 jitter < 1，delay 小于 exponential（反向退避）
- *  R8. jitterFactor 为极大值时 delay 远超 maxMs
+ *  R8. 【F8-16 已修复】jitterFactor 为极大值时 delay 远超 maxMs（钳制为硬上限）
  */
 
 import { describe, it, expect } from 'vitest';
@@ -57,63 +58,55 @@ describe('retry — 对抗性测试', () => {
     });
   });
 
-  describe('R2: maxAttempts=0 → throw undefined', () => {
-    it('暴露 bug: maxAttempts=0 时 throw undefined（非 Error 对象）', async () => {
+  describe('R2: maxAttempts=0 → throw undefined（F8-16 修复契约）', () => {
+    it('修复契约: maxAttempts=0 时入参钳制到 ≥1，抛出的必须是真实 Error 而非 undefined', async () => {
+      // 修复前：for 循环不执行，lastError 是 undefined，throw undefined
+      // （破坏错误处理链）；修复后：maxAttempts 钳制到 1，至少执行一次。
+      // 注：`rejects.toThrow` 对 undefined 拒绝值不报错（vitest 怪癖），
+      // 必须用显式 catch + instanceof 断言（修复前 e===undefined 红）
       const fn = async () => {
         throw new Error('real error');
       };
 
-      // Bug: for 循环不执行，lastError 是 undefined
-      // throw undefined 而非 throw new Error('real error')
       try {
         await retryWithBackoff(fn, { maxAttempts: 0 });
-        expect.unreachable('应该抛异常');
+        expect.unreachable('必须抛出错误');
       } catch (e) {
-        // Bug: 抛出的是 undefined，不是 Error
-        expect(e).toBeUndefined();
+        expect(e).toBeInstanceOf(Error);
+        expect((e as Error).message).toBe('real error');
       }
     });
 
-    it('暴露 bug: maxAttempts 为负数时同样 throw undefined', async () => {
+    it('修复契约: maxAttempts 为负数时同样抛出真实 Error', async () => {
       const fn = async () => {
         throw new Error('real error');
       };
 
       try {
         await retryWithBackoff(fn, { maxAttempts: -5 });
-        expect.unreachable('应该抛异常');
+        expect.unreachable('必须抛出错误');
       } catch (e) {
-        expect(e).toBeUndefined();
+        expect(e).toBeInstanceOf(Error);
+        expect((e as Error).message).toBe('real error');
       }
     });
   });
 
-  describe('R3: jitter 可使 delay 超过 maxMs', () => {
-    it('暴露 bug: exponential=maxMs 时，乘性 jitter 使 delay > maxMs', () => {
-      // calculateBackoff: exponential = Math.min(maxMs, baseMs * 2^attempt)
-      // 当 baseMs * 2^attempt >= maxMs 时，exponential = maxMs
-      // jitter = 1 + Math.random() * jitterFactor
-      // delay = Math.round(exponential * jitter) = Math.round(maxMs * (1 + ~0.2))
-      // 所以 delay 可达 maxMs * 1.2
-
+  describe('R3: jitter 可使 delay 超过 maxMs（F8-16 修复契约）', () => {
+    it('修复契约: maxMs 为硬上限——jitter 在钳制内施加，delay 恒 ≤ maxMs', () => {
+      // 修复前：exponential 钳到 maxMs 后乘 jitter（≤1.2×maxMs），
+      // 1000 次采样必有 delay > maxMs（红）；修复后恒 ≤ maxMs
       const baseMs = 1000;
       const maxMs = 5000;
       const jitterFactor = 0.2;
 
-      // attempt 足够大使 exponential 被 clamp 到 maxMs
-      // baseMs * 2^10 = 1024000 > maxMs
       let maxObserved = 0;
       for (let i = 0; i < 1000; i++) {
         const delay = calculateBackoff(10, baseMs, maxMs, jitterFactor);
         if (delay > maxObserved) maxObserved = delay;
       }
 
-      // Bug: maxObserved 应该 > maxMs（jitter 突破上限）
-      expect(maxObserved).toBeGreaterThan(maxMs);
-      // 理论上限: maxMs * 1.2 = 6000
-      expect(maxObserved).toBeLessThanOrEqual(
-        Math.ceil(maxMs * (1 + jitterFactor))
-      );
+      expect(maxObserved).toBeLessThanOrEqual(maxMs);
     });
   });
 
@@ -207,8 +200,8 @@ describe('retry — 对抗性测试', () => {
     });
   });
 
-  describe('R8: 极大 jitterFactor 使 delay 远超 maxMs', () => {
-    it('暴露 bug: jitterFactor=100 时 delay 可达 maxMs * 101', () => {
+  describe('R8: 极大 jitterFactor 使 delay 远超 maxMs（F8-16 修复契约）', () => {
+    it('修复契约: 极大 jitterFactor 时 delay 仍 ≤ maxMs（钳制为硬上限）', () => {
       const maxMs = 5000;
       const jitterFactor = 100;
 
@@ -218,10 +211,8 @@ describe('retry — 对抗性测试', () => {
         if (delay > maxObserved) maxObserved = delay;
       }
 
-      // Bug: delay 可远超 maxMs
-      // jitter = 1 + random * 100 → [1, 101]
-      // delay = maxMs * jitter → 最多 maxMs * 101 = 505000
-      expect(maxObserved).toBeGreaterThan(maxMs * 10);
+      // 修复前 delay 可达 maxMs * 101 = 505000（红）；修复后恒 ≤ maxMs
+      expect(maxObserved).toBeLessThanOrEqual(maxMs);
     });
   });
 
