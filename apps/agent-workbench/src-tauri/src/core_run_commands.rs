@@ -66,7 +66,7 @@ use tauri::Manager as _;
 use session_loop::{
     AbortSignal, ApprovalGate, ControlBus, DeltaSink, EscapeWatchConfig, EscapeWatchHandle,
     EscapeWatchInjector, PermissionMode, RegistryBackedDetector, RunOutcome, SessionLoopOptions,
-    ToolBatchOptions, spawn_escape_watch,
+    SummaryDispatchConfig, ToolBatchOptions, spawn_escape_watch,
 };
 
 use crate::core_error::CoreError;
@@ -1295,6 +1295,17 @@ pub struct CoreRunState {
     /// 注入面（launcher / db / wait 广播 / steering 队列）经
     /// [Self::finalize_subagent_spawner] 装配）
     subagent_spawner: Arc<crate::subagent_spawner::SubagentSpawnerImpl>,
+    /// T-42：会话级摘要协调器注册表（00-plan §6.5 R-I / 评审 02 P0-2）——
+    /// 与 [Self::session_history] 同生命周期（进程级单例）：摘要任务状态
+    /// （JoinHandle/退避/attempts/last_outcome）挂会话级容器，run 收口不
+    /// 摧毁任务，跨 run 单飞成立；完成回调经默认回调落 compression_blocks
+    /// 表（两阶段写协议阶段二，orchestrator::blocks 面）。
+    summary_coordinators: Arc<session_loop::SessionSummaryCoordinatorRegistry>,
+    /// T-43：会话级 Summarizer 工厂（壳层注入通道；None = 无注入——不
+    /// spawn 后台摘要任务，纯 stub awaiting 永驻）。生产经
+    /// [Self::set_summarizer_factory] 由 session.start / 配置加载注入；
+    /// 真实 provider 调用实现属产品功能（通道本轮打通，实现挂 V2/产品面）。
+    summarizer_factory: Mutex<Option<crate::engine::SummarizerFactory>>,
 }
 
 impl CoreRunState {
@@ -1365,6 +1376,37 @@ impl CoreRunState {
         // 的 opaque future，避免 auto-trait 检查递归限制；测试经
         // set_resume_launcher 覆盖替身）
         let resume_launcher = production_resume_launcher();
+        // T-42：会话级摘要协调器注册表（与 session_history 同生命周期）——
+        // 默认完成回调 = 落 compression_blocks 表（两阶段写协议阶段二：
+        // 调度器成功后推进 summary_json/state/attempts；orchestrator
+        // 同步面，回调为 FnOnce 语义直接调用；失败仅告警不阻断——块表
+        // 是索引面，原文仍在事件流可回放）
+        let persist_store = Arc::clone(&store);
+        let summary_coordinators = Arc::new(session_loop::SessionSummaryCoordinatorRegistry::new(
+            Some(Arc::new(move |outcome: session_loop::SummaryDispatchOutcome| {
+                let outcome_state = match outcome.state.as_str() {
+                    "committed" => conex_db::BlockState::Committed,
+                    "retired" => conex_db::BlockState::Retired,
+                    _ => conex_db::BlockState::Awaiting,
+                };
+                if let Err(error) = orchestrator::blocks::update_compression_block_summary(
+                    persist_store.as_ref(),
+                    &outcome.session_id,
+                    &outcome.block_id,
+                    outcome_state,
+                    outcome.summary_json.as_deref(),
+                    outcome.attempts,
+                ) {
+                    tracing::warn!(
+                        target: "run",
+                        session_id = %outcome.session_id,
+                        block_id = %outcome.block_id,
+                        error = %error,
+                        "摘要任务完成回调落库失败（块表是索引面，原文在事件流可回放）"
+                    );
+                }
+            }) as Arc<dyn Fn(session_loop::SummaryDispatchOutcome) + Send + Sync>),
+        ));
         Self {
             store: Arc::clone(&store),
             run_manager: RunManager::new(store),
@@ -1398,6 +1440,8 @@ impl CoreRunState {
             resume_empty_streak: Mutex::new(HashMap::new()),
             resume_launcher: Mutex::new(Some(resume_launcher)),
             subagent_spawner,
+            summary_coordinators,
+            summarizer_factory: Mutex::new(None),
         }
     }
 
@@ -1550,6 +1594,91 @@ impl CoreRunState {
     /// 默认 None——usage 查询回退前端估算，不阻塞其他功能。
     pub fn local_db(&self) -> Option<LocalDb> {
         self.store.as_local_db()
+    }
+
+    /// T-43：注入会话级 Summarizer 工厂（壳层注入通道；None = 无注入——
+    /// 不 spawn 后台摘要任务，纯 stub awaiting 永驻，与接线前行为一致）。
+    /// 生产装配点：session.start / provider 配置加载（真实 provider 调用
+    /// 实现属产品功能，通道本轮打通）。
+    #[cfg_attr(not(test), allow(dead_code))] // T-43 生产装配点 V2 接线；当前仅测试面消费
+    pub(crate) fn set_summarizer_factory(&self, factory: Option<crate::engine::SummarizerFactory>) {
+        *self
+            .summarizer_factory
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = factory;
+    }
+
+    /// T-43：按会话解析 Summarizer（工厂注入面；无工厂 / 工厂返回 None →
+    /// None——不 spawn）。per-session 实例边界（04 §7.1 隔离决议：
+    /// 每会话独立 Summarizer 实例，共享 provider 客户端但无共享可变状态）。
+    pub(crate) fn summarizer_for(
+        &self,
+        session_id: &str,
+    ) -> Option<Arc<dyn conex_compaction::Summarizer>> {
+        self.summarizer_factory
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .and_then(|factory| factory(session_id))
+    }
+
+    /// T-44：session_meta 配置面 → [SummaryDispatchConfig]（读取 helper；
+    /// 键缺失 / 解析失败回退生产缺省——None = 生产缺省参数，与轮次 4
+    /// `summary_dispatch: None` 语义一致）。
+    ///
+    /// 可配键（对齐 04 §9.4 T17 / 00-plan §10 轮次 6）：
+    /// - `compact_summary_backoff_ms`：退避基数（JSON 数组或单数值，缺省
+    ///   [1000,3000,9000]）；
+    /// - `compact_summary_wall_ms`：单次调用墙钟（缺省 60000ms，P1-10）。
+    /// - `compact_l1_placeholder`：L1 回退开关——**V1 启动级配置**：引擎
+    ///   侧（轮次 1）已删 AgentMessage 面 L1 改 stub，运行时双态切换需
+    ///   引擎支持；V1 仅读取面（[session_loop::summary_l1_placeholder]）
+    ///   文档化、不改变行为，预留给 V2。
+    pub(crate) fn summary_dispatch_config(&self, session_id: &str) -> Option<SummaryDispatchConfig> {
+        let db = self.local_db()?;
+        // 仅当任一配置键存在时构造（无键 = 生产缺省 None，行为不变）
+        let has_key = [
+            session_loop::META_KEY_SUMMARY_BACKOFF_MS,
+            session_loop::META_KEY_SUMMARY_WALL_MS,
+        ]
+        .iter()
+        .any(|key| {
+            db.get_session_meta(key)
+                .ok()
+                .flatten()
+                .is_some()
+        });
+        if !has_key {
+            return None;
+        }
+        // L1 回退开关读取（V1 启动级：不改变行为，仅登记读取；引擎动态
+        // 双态支持见 V2 挂账）
+        if session_loop::summary_l1_placeholder(|key| {
+            db.get_session_meta(key).ok().flatten()
+        }) {
+            tracing::warn!(
+                target: "run",
+                session_id = session_id,
+                "compact_l1_placeholder=true：旧 L1 占位符回退开关为启动级配置，V1 未接线（引擎已改中性 stub），预留给 V2"
+            );
+        }
+        Some(SummaryDispatchConfig::from_session_meta(
+            |key| db.get_session_meta(key).ok().flatten(),
+            session_loop::MAX_SUMMARY_ATTEMPTS,
+        ))
+    }
+
+    /// T-42：会话级摘要协调器（跨 run 单飞容器；注册表持有——同会话
+    /// 返回同一 Arc，run 收口不摧毁任务）。config 缺省 = 生产缺省退避
+    /// 参数（T-44 配置面未启用时与轮次 4 语义一致）。
+    pub(crate) fn summary_coordinator_for(
+        &self,
+        session_id: &str,
+    ) -> Arc<session_loop::SessionSummaryCoordinator> {
+        let config = self
+            .summary_dispatch_config(session_id)
+            .unwrap_or_default();
+        self.summary_coordinators.get_or_create(session_id, config)
     }
 
     /// T-AB-19：后台任务汇总（core_get_status.backgroundTasks 数据源；
@@ -3084,6 +3213,16 @@ pub(crate) async fn run_task_impl(
         // T-D-13：子代理 run 的配额上下文（design/review 凭证；None =
         // 主 agent 不受配额约束，现状行为）
         explore_docs_quota: subagent_quota.clone(),
+        // T-42/T-43/T-44（记忆韧性轮次 6）：摘要后台面三线装配——
+        // - summarizer：会话级 Summarizer 工厂解析（无注入 → None → 不
+        //   spawn，纯 stub awaiting 永驻，与接线前行为一致）；
+        // - summary_dispatch：session_meta 配置面（compact_summary_backoff_ms
+        //   / compact_summary_wall_ms；无键 = None = 生产缺省退避参数）；
+        // - summary_coordinator：会话级协调器（跨 run 单飞 + 全局并发
+        //   上限 ≤2 + 任务跨 run 存活；默认回调落 compression_blocks 表）
+        summarizer: state.summarizer_for(&session_id),
+        summary_dispatch: state.summary_dispatch_config(&session_id),
+        summary_coordinator: Some(state.summary_coordinator_for(&session_id)),
         ..SessionLoopOptions::default()
     };
     let tool_options = ToolBatchOptions {
@@ -4311,6 +4450,112 @@ mod tests {
             Arc::new(StatusDiagnostics::new()),
             None,
         ))
+    }
+
+    // ── T-43/T-44（记忆韧性轮次 6）：Summarizer 注入通道 + 配置面 ────
+
+    /// T-43：壳层 Summarizer 注入通道——无工厂 → None（不 spawn，纯 stub
+    /// awaiting 永驻）；注入 fake 工厂 → 按会话解析实例；会话参数透传
+    #[test]
+    fn summarizer_factory_injection_channel() {
+        struct FakeSummarizer;
+        impl conex_compaction::Summarizer for FakeSummarizer {
+            fn summarize(
+                &self,
+                _dropped: &[conex_types::message::AgentMessage],
+                _existing: Option<&str>,
+            ) -> Result<String, String> {
+                Ok(r#"{"schemaVersion":1}"#.to_string())
+            }
+        }
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+        let state = core_state_with_store(store);
+
+        // 未注入 → None（无注入不 spawn 语义，00-plan §6.4）
+        assert!(state.summarizer_for("s1").is_none(), "无工厂 = 无注入");
+
+        // 注入工厂：per-session 实例（04 §7.1 隔离决议——按会话创建）
+        let sessions_seen: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
+        {
+            let sessions_seen = Arc::clone(&sessions_seen);
+            state.set_summarizer_factory(Some(Box::new(move |session_id: &str| {
+                sessions_seen.lock().unwrap().push(session_id.to_string());
+                Some(Arc::new(FakeSummarizer) as Arc<dyn conex_compaction::Summarizer>)
+            })));
+        }
+        let s = state.summarizer_for("s1").expect("注入后必须解析出实例");
+        let s2 = state.summarizer_for("s2");
+        // 工厂被调用的会话参数正确透传
+        assert_eq!(
+            *sessions_seen.lock().unwrap(),
+            vec!["s1".to_string(), "s2".to_string()]
+        );
+        assert!(s2.is_some(), "工厂返回 Some → 通道解析成功");
+        drop(s);
+
+        // 清空工厂（None 语义恢复）
+        state.set_summarizer_factory(None);
+        assert!(state.summarizer_for("s1").is_none());
+    }
+
+    /// T-44：session_meta 配置面——无键 → None（生产缺省参数语义）；
+    /// 有键 → 从 session_meta 构造（自定义退避 + 墙钟）
+    #[test]
+    fn summary_dispatch_config_reads_session_meta() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+        let state = core_state_with_store(store);
+
+        // 无任何配置键 → None（与轮次 4 summary_dispatch: None 语义一致）
+        assert!(state.summary_dispatch_config("s1").is_none());
+
+        // 自定义退避数组 + 墙钟
+        db.set_session_meta("compact_summary_backoff_ms", "[2000,6000]")
+            .unwrap();
+        db.set_session_meta("compact_summary_wall_ms", "45000")
+            .unwrap();
+        let config = state
+            .summary_dispatch_config("s1")
+            .expect("有键时构造配置");
+        assert_eq!(config.backoff_ms, vec![2000, 6000]);
+        assert_eq!(config.max_wall_ms, 45_000);
+        assert_eq!(config.max_attempts, session_loop::MAX_SUMMARY_ATTEMPTS);
+    }
+
+    /// T-44：坏值兜底——配置键存在但值非法 → 回退生产缺省（不 panic）
+    #[test]
+    fn summary_dispatch_config_malformed_falls_back_to_defaults() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        db.set_session_meta("compact_summary_backoff_ms", "oops").unwrap();
+        let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+        let state = core_state_with_store(store);
+        let config = state
+            .summary_dispatch_config("s1")
+            .expect("有键即构造（解析失败兜底缺省）");
+        assert_eq!(config.backoff_ms, session_loop::SUMMARY_BACKOFF_MS.to_vec());
+        assert_eq!(config.max_wall_ms, session_loop::LOOP_SUMMARY_MAX_WALL_MS);
+    }
+
+    /// T-42：会话级协调器注册表挂载——同会话 get 幂等同 Arc（跨 run 单飞
+    /// 状态延续）；跨会话各自成实例（会话隔离）
+    #[test]
+    fn summary_coordinator_registry_is_session_scoped() {
+        let db = conex_db::LocalDb::open_in_memory().unwrap();
+        db.insert_session("s1", "s1").unwrap();
+        let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
+        let state = core_state_with_store(store);
+
+        let c1 = state.summary_coordinator_for("s1");
+        let c1_again = state.summary_coordinator_for("s1");
+        let c2 = state.summary_coordinator_for("s2");
+        assert!(Arc::ptr_eq(&c1, &c1_again), "同会话必须同一协调器（跨 run 单飞）");
+        assert!(!Arc::ptr_eq(&c1, &c2), "跨会话各自成实例（会话隔离）");
+        assert_eq!(c1.session_id(), "s1");
+        assert_eq!(c2.session_id(), "s2");
     }
 
     // ── PS-04 T4.3（F4 F1-01）：config_profile_apply 后 provider 重载 ──

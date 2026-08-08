@@ -697,6 +697,21 @@ impl crate::watchdog::DispatchStore for MemoryWaitStore {
     }
 }
 
+/// 会话级 Summarizer 工厂（T-43，00-plan §10 轮次 6 / 04 §9.4 T16；评审
+/// 01 P1-2「补壳层/接线任务」）
+///
+/// - **注入通道**：按会话创建 [conex_compaction::Summarizer] 实例——每
+///   会话独立实例边界（04 §7.1 隔离决议：per-session 实例，共享 provider
+///   客户端但无共享可变状态；RetryGuardSummarizer 内部互斥仅存在
+///   per-session 形态，杜绝并发摘要串行化与 last 串扰）；
+/// - **无注入 → None**：不 spawn 后台摘要任务（纯 stub awaiting 永驻，
+///   00-plan §6.4「无注入不 spawn」），与接线前行为一致；
+/// - **真实 provider 实现属产品功能**：本轮只打通通道（CoreRunState 持
+///   有 + run 装配消费），不强制真实 provider 调用实现——生产侧由壳层
+///   在 session.start / 配置加载时经 set_summarizer_factory 注入。
+pub type SummarizerFactory =
+    Box<dyn Fn(&str) -> Option<Arc<dyn conex_compaction::Summarizer>> + Send + Sync>;
+
 /// 引擎句柄（B6.4：provider 生效配置 + 工具注册表 + engineReady）
 ///
 /// - `ready()`：provider 配置三件套（baseUrl/model/apiKey）齐备即可发起
@@ -2654,15 +2669,18 @@ mod tests {
     /// T-30：produce 水合分支——预置对话经 with_initial_conversation_arc
     /// 零拷贝续接（Arc 身份不变），run 追加新用户消息与助手回复；
     /// 收口 outcome.messages 携带完整续接序列（SessionHistoryCache 的
-    /// 原子替换数据源，P4 阶段 1-4）
+    /// 原子替换数据源，P4 阶段 1-4）。
+    /// 载荷注记（T-36 对齐）：预置首条为 user（水合协议形状——跳过
+    /// system 后的首条必须为 user，assistant/tool 开头 provider 400
+    /// 风险；assert_conversation_head_tail 调试断言强制）
     #[tokio::test]
     async fn produce_hydrates_initial_conversation() {
         let initial_text = AgentMessage {
-            id: "assistant-1".to_string(),
-            role: AgentMessageRole::Assistant,
+            id: "user-1".to_string(),
+            role: AgentMessageRole::User,
             created_at: "2026-08-03T00:00:00.000Z".to_string(),
             blocks: vec![AgentMessageBlock::Text {
-                text: "首轮回复".to_string(),
+                text: "首轮提问".to_string(),
             }],
             metadata: None,
             client_message_id: None,
@@ -2685,7 +2703,7 @@ mod tests {
             Arc::ptr_eq(&initial[0], &sent[0]),
             "预置消息零拷贝续接（Arc 身份不变）"
         );
-        assert_eq!(sent[0].role, AgentMessageRole::Assistant);
+        assert_eq!(sent[0].role, AgentMessageRole::User);
         let last = sent.last().expect("至少一条消息");
         assert_eq!(last.role, AgentMessageRole::User, "尾部应为新用户消息");
         let text = last
