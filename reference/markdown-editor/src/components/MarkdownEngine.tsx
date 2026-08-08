@@ -153,6 +153,16 @@ export const MarkdownEngine: React.FC = () => {
       }
     }
 
+    // Prevent table separator from being clicked. Redirect to previous row (table header)
+    if (clickedLineIndex !== -1 && lines[clickedLineIndex]?.trim().match(/^\|?[\s:-]*[-]+[\s:-]*\|/)) {
+      if (clickedLineIndex > 0) {
+        const prevLineStart = offsets.getOffset(clickedLineIndex - 1);
+        const prevLineLen = lines[clickedLineIndex - 1].length;
+        setCursorPos(prevLineStart + prevLineLen);
+        return;
+      }
+    }
+
     if (clickedPadding && clickedLineIndex !== -1 && parentRef.current) {
        const lineStart = offsets.getOffset(clickedLineIndex);
        const lineLen = lines[clickedLineIndex].length;
@@ -246,7 +256,6 @@ export const MarkdownEngine: React.FC = () => {
 
       // Only use the precise offset if the browser snapped to the SAME line we clicked
       if (foundLineIndex === clickedLineIndex) {
-        console.log('Step 2 match found for clickedLineIndex:', clickedLineIndex, 'pos:', Math.min(offsets.getOffset(clickedLineIndex) + lines[clickedLineIndex].length, foundTokenStart + (range.startOffset || 0)));
         if (foundTokenStart !== -1) {
           // It's inside a specific token (like a word)
           // Find if there's an exact sub-offset element
@@ -289,6 +298,15 @@ export const MarkdownEngine: React.FC = () => {
 
     // 4. Fallback: User clicked an empty line, or empty space far away from text, or a preview element (HR, Math)
     if (clickedLineIndex !== -1) {
+      // If user clicked the table separator empty space, redirect to the header row above it
+      if (lines[clickedLineIndex]?.trim().match(/^\|?[\s:-]*[-]+[\s:-]*\|/)) {
+        if (clickedLineIndex > 0) {
+          const prevLineStart = offsets.getOffset(clickedLineIndex - 1);
+          const prevLineLen = lines[clickedLineIndex - 1].length;
+          setCursorPos(prevLineStart + prevLineLen);
+          return;
+        }
+      }
       const lineStart = offsets.getOffset(clickedLineIndex);
       const lineLen = lines[clickedLineIndex].length;
 

@@ -152,6 +152,11 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     };
     const handleGlobalMouseUp = () => {
       (window as any).__CRISH_IS_MOUSE_DOWN = false;
+      const tableStore = useTableStore.getState();
+      if (tableStore.isDraggingCell) {
+        tableStore.setDraggingCell(false);
+        (window as any).__CRISH_LAST_DRAG_END_TIME = Date.now();
+      }
     };
 
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -606,7 +611,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         top: `${coords.top}px`,
         left: `${coords.left}px`,
         width: isComposing ? '300px' : '1px',
-        height: `${coords.height}px`,
+        height: `${coords.height + 15}px`,
         opacity: isComposing ? 1 : 0,
         color: 'var(--text-primary)',
         caretColor: 'var(--black)',
