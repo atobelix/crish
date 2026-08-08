@@ -6,7 +6,7 @@
 //! - 03-ERROR-MIGRATION.md §2.2（码表）/ §6（IPC 序列化）
 //!
 //! 设计要点：
-//! - CrishError 用 struct 而非 enum（79 码跨 20 域，enum 不可维护）
+//! - CrishError 用 struct 而非 enum（83 码跨 20 域，enum 不可维护）
 //! - 错误码通过 codes 模块常量 + CRISH_ERROR_REGISTRY 静态注册表表达
 //! - CrishErrorPayload 是 IPC 序列化类型，字段与 TS 端 CrishErrorPayload 一一对应
 //! - cause 链递归深度上限 8（CRISH_ERROR_CAUSE_MAX_DEPTH）
@@ -46,7 +46,7 @@ pub struct CrishErrorInfo {
     pub action: &'static str,
 }
 
-/// 错误码常量集（TS 端 CrishErrorCode 同构，79 码 / 20 域）
+/// 错误码常量集（TS 端 CrishErrorCode 同构，83 码 / 20 域）
 ///
 /// 来源：packages/shared-types/src/errors/codes.ts
 /// 权威：03-ERROR-MIGRATION.md §2.2
@@ -93,7 +93,7 @@ pub mod codes {
     pub const CONTEXT_LENGTH_EXCEEDED: &str = "context.length_exceeded";
     pub const CONTEXT_COMPACTION_FAILED: &str = "context.compaction_failed";
     pub const CONTEXT_HEAL_FAILED: &str = "context.heal_failed";
-    // ── tool 域（6 正式码）──
+    // ── tool 域（7 正式码）──
     pub const TOOL_NOT_FOUND: &str = "tool.not_found";
     pub const TOOL_INVALID_INPUT: &str = "tool.invalid_input";
     pub const TOOL_EXECUTION_FAILED: &str = "tool.execution_failed";
@@ -103,6 +103,10 @@ pub mod codes {
     /// `WritePathPolicy::Allowed` 白名单前缀之外——权限沙箱拒绝，与互斥冲突
     /// `tool.write_path_conflict` 语义独立，一先一后串行叠加）
     pub const TOOL_WRITE_NOT_ALLOWED: &str = "tool.write_not_allowed";
+    /// 写路径互斥冲突（I4-M3 写路径互斥：同一路径被其他持有者声明，
+    /// 与越权拒绝 tool.write_not_allowed 语义独立——白名单放行但被占用
+    /// 仍返回本码。F8-02：由 agent-tools 局部码并入注册表）
+    pub const TOOL_WRITE_PATH_CONFLICT: &str = "tool.write_path_conflict";
     // ── mcp 域（3 正式码）──
     pub const MCP_CONNECTION_FAILED: &str = "mcp.connection_failed";
     pub const MCP_PROTOCOL_VIOLATION: &str = "mcp.protocol_violation";
@@ -162,9 +166,9 @@ pub mod codes {
     pub const GOAL_MAX_ROUNDS: &str = "goal.max_rounds";
 }
 
-/// 错误码元信息注册表（TS 端 CRISH_ERROR_REGISTRY 同构，79 条）
+/// 错误码元信息注册表（TS 端 CRISH_ERROR_REGISTRY 同构，83 条）
 static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy::new(|| {
-    let mut m = HashMap::with_capacity(82);
+    let mut m = HashMap::with_capacity(83);
     // ── config 域 ──
     m.insert(codes::CONFIG_INVALID, CrishErrorInfo {
         code: codes::CONFIG_INVALID, title: "配置项非法",
@@ -383,6 +387,14 @@ static CRISH_ERROR_REGISTRY: Lazy<HashMap<&'static str, CrishErrorInfo>> = Lazy:
         code: codes::TOOL_WRITE_NOT_ALLOWED, title: "写入路径不在允许范围内",
         category: CrishErrorCategory::Permanent, retryable: false,
         is_public: true, action: "action.tool.request_path_allowance",
+    });
+    // F8-02（I4-M3 写路径互斥）：并发互斥冲突——Permanent/不可重试（确定拒绝，
+    // 等待占用者释放后由主 agent 编排串行重试；错误消息载荷含占用者/时间/有效期）。
+    // 与 write_not_allowed 语义独立：白名单放行但被占用仍返回本码
+    m.insert(codes::TOOL_WRITE_PATH_CONFLICT, CrishErrorInfo {
+        code: codes::TOOL_WRITE_PATH_CONFLICT, title: "写入路径互斥冲突",
+        category: CrishErrorCategory::Permanent, retryable: false,
+        is_public: true, action: "action.tool.wait_retry",
     });
     // ── mcp 域 ──
     m.insert(codes::MCP_CONNECTION_FAILED, CrishErrorInfo {
@@ -622,7 +634,7 @@ fn now_millis() -> i64 {
 /// Crish 错误类型（struct，非 enum）
 ///
 /// Crish 错误类型（struct，非 enum），与 TS 端 CrishError class 同构。
-/// 79 码通过 code: String 表达，
+/// 83 码通过 code: String 表达，
 /// category/retryable 由 info(code) 在构造时决定，可通过 with_* 覆盖。
 /// cause 链在 to_error_payload 时按 depth 截断。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1249,9 +1261,26 @@ mod tests {
         assert!(!err.is_retryable());
     }
 
-    // ── PE-03 T03.3：core_error_code 显式映射（6 kind × 主码表 + 注册存在性）──
+    // ── F8-02：tool.write_path_conflict 登记断言（写路径互斥，agent-tools 局部码并入注册表）──
 
-    /// 6 个 kind 全部映射到 78 码体系主码（§2.4.2 映射表逐行断言）。
+    /// 写路径互斥冲突码已登记：Permanent / 不可重试（确定拒绝，
+    /// 等待占用者释放后由主 agent 编排重试），且对前端可见。
+    #[test]
+    fn write_path_conflict_registered() {
+        let info_val = info(codes::TOOL_WRITE_PATH_CONFLICT);
+        assert_eq!(info_val.code, codes::TOOL_WRITE_PATH_CONFLICT);
+        assert_eq!(info_val.category, CrishErrorCategory::Permanent);
+        assert!(!info_val.retryable, "互斥冲突为确定拒绝，不可自动重试");
+        assert!(info_val.is_public, "冲突须对前端可见（编排串行需要）");
+        assert!(info_val.title.contains("互斥"), "文案应含「互斥」");
+        // 构造错误：category/retryable 由注册表派生，payload 出站正确
+        let err = CrishError::new(codes::TOOL_WRITE_PATH_CONFLICT, "目标已被占用");
+        assert_eq!(err.code, codes::TOOL_WRITE_PATH_CONFLICT);
+        assert_eq!(err.category, CrishErrorCategory::Permanent);
+        assert!(!err.is_retryable());
+    }
+
+    // ── PE-03 T03.3：core_error_code 显式映射（6 kind × 主码表 + 注册存在性）──    /// 6 个 kind 全部映射到 78 码体系主码（§2.4.2 映射表逐行断言）。
     #[test]
     fn core_error_code_maps_all_kinds() {
         assert_eq!(core_error_code(&CoreError::InvalidInput("x".into())), codes::COMMON_INVALID_INPUT);

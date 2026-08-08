@@ -1,8 +1,9 @@
 // packages/shared-types/src/errors/codes.ts
 // 错误码权威定义，来源：./03-ERROR-MIGRATION.md §2.2
-// 实测码数：72 正式码 + 10 reserved 码 = 82 码 / 20 域
+// 实测码数：73 正式码 + 10 reserved 码 = 83 码 / 20 域
 // （R6 扩展：新增 goal 域 3 码，event_store.read_failed 已在 R1 注册；
-//  PE-03 T03.3 补 store.io / common.invalid_input / common.encoding）
+//  PE-03 T03.3 补 store.io / common.invalid_input / common.encoding；
+//  F8-02：tool.write_path_conflict 并入（写路径互斥，agent-tools 局部码注册））
 
 export type CrishErrorCode =
   // ── config 域（3 正式码）──
@@ -47,13 +48,16 @@ export type CrishErrorCode =
   | 'context.length_exceeded'
   | 'context.compaction_failed'
   | 'context.heal_failed'
-  // ── tool 域（6 正式码）──
+  // ── tool 域（7 正式码）──
   | 'tool.not_found'
   | 'tool.invalid_input'
   | 'tool.execution_failed'
   | 'tool.path_escape'
   | 'tool.version_conflict'
   | 'tool.write_not_allowed'
+  // F8-02：写路径互斥冲突（I4-M3：同路径被其他持有者声明，与
+  // write_not_allowed 越权语义独立——白名单放行但被占用仍返回本码）
+  | 'tool.write_path_conflict'
   // ── mcp 域（3 正式码）──
   | 'mcp.connection_failed'
   | 'mcp.protocol_violation'

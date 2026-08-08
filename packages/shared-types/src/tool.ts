@@ -1,4 +1,13 @@
 import type { JsonObject, JsonValue } from './primitive-types';
+// F8-11/F8-12：ProviderDiagnostic 的 phase/errorKind 枚举收敛到生成 schema
+// （杜绝双源漂移：生成枚举由 Rust serde + registry_drift.rs 锁定——
+// phase 11 值含 invalid-tool-call，errorKind 13 值 kebab-case）
+import type {
+  ProviderDiagnosticPhase,
+  ProviderErrorKind,
+} from './generated/engine/types';
+
+export type { ProviderErrorKind } from './generated/engine/types';
 
 export type ToolCategory =
   | 'terminal'
@@ -89,32 +98,8 @@ export interface ToolBatchResult {
 
 export type ToolBatchFailurePolicy = 'continue-drain' | 'cancel-siblings';
 
-export type ProviderErrorKind =
-  | 'network'
-  | 'gateway-challenge'
-  | 'rate-limit'
-  | 'auth'
-  | 'quota'
-  | 'endpoint-unavailable'
-  | 'schema'
-  | 'server'
-  | 'timeout'
-  | 'cancelled'
-  | 'invalid-stream'
-  | 'unknown';
-
 export interface ProviderDiagnostic {
-  phase:
-    | 'request-start'
-    | 'response-start'
-    | 'sse-first-byte'
-    | 'retry'
-    | 'request-error'
-    | 'stream-end'
-    | 'endpoint-fallback'
-    | 'transport-fallback'
-    | 'model-selected'
-    | 'model-mismatch';
+  phase: ProviderDiagnosticPhase;
   providerId?: string;
   endpoint?: string;
   url?: string;
@@ -190,7 +175,8 @@ export interface ContextCompressionPolicyMetadata {
   action: ContextCompressionPolicyAction;
   forced: boolean;
   thresholdExceeded: boolean;
-  providerRetry: false;
+  // F8-13：Rust 侧为必填 boolean（可重试压缩时发 true），不再固化为 false 字面量
+  providerRetry: boolean;
 }
 
 export interface ContextCompressionHandoffMetadata {
@@ -198,7 +184,8 @@ export interface ContextCompressionHandoffMetadata {
   reason: ContextCompressionReason;
   tier: ContextCompressionPolicyTier;
   action: ContextCompressionPolicyAction;
-  providerRetry: false;
+  // F8-13：与 PolicyMetadata 同源，Rust 侧为 boolean
+  providerRetry: boolean;
   summary: string;
   compressedMessageCount: number;
   keptMessageCount: number;

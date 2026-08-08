@@ -8,7 +8,11 @@ import type {
   RuntimeCheckpointRecord,
   RuntimeCheckpointRestoreRecord,
 } from './tool';
-import type { PermissionRequest, PermissionDecision } from './permissions';
+import type { PermissionRequest } from './permissions';
+// F8-09/F8-10：手写类型收敛到生成 schema（杜绝双源漂移）——
+// AgentEndReason 含 stopped（Rust AgentEndReason::Stopped 已存在）、
+// ApprovalDecision 三值（approved/denied/expired）
+import type { AgentEndReason, ApprovalDecision } from './generated/engine/types';
 
 export type AgentDomainEvent =
   | { type: 'agent-start'; sessionId: string; timestamp: string }
@@ -16,7 +20,7 @@ export type AgentDomainEvent =
       type: 'agent-end';
       sessionId: string;
       timestamp: string;
-      reason: 'stop' | 'max-turns' | 'aborted' | 'error';
+      reason: AgentEndReason;
       error?: string;
     };
 
@@ -148,8 +152,11 @@ export type DiagnosticDomainEvent =
   | {
       type: 'approval-resolved';
       sessionId: string;
-      requestId: string;
-      decision: PermissionDecision;
+      // F8-10：wire 契约以生成 schema 为准——toolCallId 必填（审批键控），
+      // requestId 可选（历史帧别名）；decision 为字符串三值而非对象形态
+      toolCallId: string;
+      requestId?: string;
+      decision: ApprovalDecision;
       timestamp: string;
     }
   | {

@@ -45,9 +45,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-/// 写路径互斥冲突错误码（本域局部码，对齐 shell.rs 的 tool.requires_approval 模式；
-/// 不入 conex-types 注册表——执行器按错误码分类路由，冲突为确定拒绝、不可重试）
-pub(crate) const TOOL_WRITE_PATH_CONFLICT: &str = "tool.write_path_conflict";
+/// 写路径互斥冲突错误码（F8-02：由局部码并入 conex-types 注册表，
+/// 与 TS 共享码表同步；本处引用注册表常量保证单一真源。
+/// 冲突为确定拒绝、不可重试——等待占用者释放后由主 agent 编排串行重试）
+pub(crate) const TOOL_WRITE_PATH_CONFLICT: &str = codes::TOOL_WRITE_PATH_CONFLICT;
 
 /// 声明默认有效期（毫秒）：60s 无活动自动释放，防悬挂（I4-M3 内容 4）
 pub const DEFAULT_CLAIM_TTL_MS: u64 = 60_000;

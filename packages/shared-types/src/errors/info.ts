@@ -1,7 +1,8 @@
 // packages/shared-types/src/errors/info.ts
 // 错误码元信息注册表，来源：./03-ERROR-MIGRATION.md §2.2
-// 实测条目数：72 正式码 + 10 reserved 码 = 82 条
-// （R6 扩展：新增 goal 域 3 码；PE-03 T03.3 补 store.io / common.invalid_input / common.encoding）
+// 实测条目数：73 正式码 + 10 reserved 码 = 83 条
+// （R6 扩展：新增 goal 域 3 码；PE-03 T03.3 补 store.io / common.invalid_input / common.encoding；
+//  F8-02：tool.write_path_conflict 并入——写路径互斥，原 agent-tools 局部码）
 
 import type { CrishErrorCode, CrishErrorCategory } from './codes';
 
@@ -359,6 +360,18 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     retryable: false,
     public: true,
     action: 'action.tool.request_path_allowance',
+  },
+  // F8-02：写路径互斥冲突（I4-M3：同路径被其他持有者声明）——
+  // Permanent/不可重试（确定拒绝，等待占用者释放后由主 agent 编排串行重试；
+  // 错误消息载荷含占用者/时间/有效期）。与 write_not_allowed 语义独立：
+  // 白名单放行但被占用仍返回本码
+  'tool.write_path_conflict': {
+    code: 'tool.write_path_conflict',
+    title: '写入路径互斥冲突',
+    category: 'permanent',
+    retryable: false,
+    public: true,
+    action: 'action.tool.wait_retry',
   },
   // ── mcp 域（3 正式码）──
   'mcp.connection_failed': {
