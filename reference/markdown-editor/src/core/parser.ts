@@ -8,7 +8,24 @@ export type CodeState =
   | 'fence_end'
   | 'math_fence_start'
   | 'math_fence_end'
-  | 'math_block';
+  | 'math_block'
+  | 'indent_code';
+
+/**
+ * computeLineOffsets 缩进代码判定的「上一非空白行块级形态」记忆
+ * （02 §2.2 冲突点：段落打断 / 列表延续 / 表格优先都需要前一行上下文）：
+ * - body/table/list → 缩进 4 空格的下一行是延续内容，不是代码；
+ * - 其余（blank/heading/hr/code/other）→ 允许缩进代码块开始。
+ */
+type BlockKind =
+  | 'blank'
+  | 'body'
+  | 'list'
+  | 'table'
+  | 'heading'
+  | 'hr'
+  | 'code'
+  | 'other';
 
 /** scanTokens 返回：ok 携带 token 列表与消费长度；失败时由调用方按失败签名记忆 */
 type ScanOutcome =
@@ -66,17 +83,21 @@ export class MarkdownParser {
     let currentOffset = 0;
     let inCodeBlock = false;
     let inMathBlock = false;
+    // 缩进代码块状态（02 §2.2）：连续 ≥4 空格缩进行合并为一个代码块，
+    // 块内空行保持状态（CommonMark：空行仍是代码块的一部分）。
+    let inIndentCode = false;
+    // 上一非空白行的块级形态记忆（见 BlockKind 注释）——行级模型无容器状态，
+    // 用轻量行首形态分类近似「上一行是什么」，不依赖 parseLine（避免递归依赖）。
+    let prevBlockKind: BlockKind = 'blank';
 
     for (let i = 0; i < lines.length; i++) {
       offsets[i] = currentOffset;
-      let trimmed = lines[i];
-      let bMatch;
-      let blockquoteLevel = 0;
-      while ((bMatch = trimmed.match(/^\s*>\s?/))) {
-        blockquoteLevel++;
-        trimmed = trimmed.substring(bMatch[0].length);
-      }
-      trimmed = trimmed.trim();
+      // 块引用前缀剥离（与 parseNormalLine 同一正则 `^\s*>\s?`）：缩进判定发生
+      // 在前缀剥离之后（`>     code` → 块引用内缩进代码）。注：该正则的 `\s*`
+      // 会吞掉前导缩进（如 `    > foo` 被当作块引用前缀），与 parseNormalLine
+      // 判定一致，属既有偏差，此处不另行修正（0 回归）。
+      const { content: bqContent } = this.stripBlockquoteContext(lines[i]);
+      const trimmed = bqContent.trim();
 
       if (!inMathBlock && trimmed.startsWith('```')) {
         if (!inCodeBlock) {
@@ -86,6 +107,10 @@ export class MarkdownParser {
           codeBlockState[i] = 'fence_end';
           inCodeBlock = false;
         }
+        // 围栏代码块内缩进不生效（CommonMark）；fence 判定先于缩进代码，
+        // 且 `    ```（4 空格）仍按 fence 处理——trim 后判定的既有行为，登记偏差。
+        inIndentCode = false;
+        prevBlockKind = 'code';
       } else if (!inCodeBlock && trimmed === '$$') {
         if (!inMathBlock) {
           codeBlockState[i] = 'math_fence_start';
@@ -94,13 +119,62 @@ export class MarkdownParser {
           codeBlockState[i] = 'math_fence_end';
           inMathBlock = false;
         }
+        inIndentCode = false;
+        prevBlockKind = 'code';
+      } else if (inCodeBlock) {
+        codeBlockState[i] = 'code';
+        inIndentCode = false;
+        prevBlockKind = 'code';
+      } else if (inMathBlock) {
+        codeBlockState[i] = 'math_block';
+        inIndentCode = false;
+        prevBlockKind = 'code';
       } else {
-        if (inCodeBlock) {
-          codeBlockState[i] = 'code';
-        } else if (inMathBlock) {
-          codeBlockState[i] = 'math_block';
+        // —— 缩进代码块判定（02 §2.2）——
+        const indent = this.leadingIndentColumns(bqContent);
+        if (inIndentCode) {
+          // 块内：空行与 ≥4 空格缩进行保持状态；非缩进行结束代码块。
+          if (trimmed === '' || indent >= 4) {
+            codeBlockState[i] = 'indent_code';
+          } else {
+            codeBlockState[i] = 'none';
+            inIndentCode = false;
+            prevBlockKind = this.guessBlockKind(bqContent, prevBlockKind);
+          }
+        } else if (trimmed === '') {
+          // 空行：不进入缩进代码；段落/表格上下文重置（段落打断规则失效，
+          // `para\n\n    code` 是代码块），列表上下文保持
+          // （`- item\n\n    bar` 仍是松散列表延续）。
+          codeBlockState[i] = 'none';
+          if (prevBlockKind !== 'list') prevBlockKind = 'blank';
+        } else if (indent >= 4) {
+          const afterIndent = this.stripFourColumns(bqContent);
+          if (this.isListMarkerStart(afterIndent)) {
+            // 去缩进后以列表标记开头 → 嵌套列表/列表延续，按 body 解析。
+            // 任务书简化：无条件列表优先（登记偏差——CommonMark 中文档级
+            // `    - foo` 期望缩进代码，行级模型无列表容器状态无法区分）。
+            codeBlockState[i] = 'none';
+            inIndentCode = false;
+            prevBlockKind = 'list';
+          } else if (
+            prevBlockKind === 'body' ||
+            prevBlockKind === 'list' ||
+            prevBlockKind === 'table'
+          ) {
+            // 段落打断规则（`Foo\n    bar` → 段落延续）、列表延续
+            // （`- item\n    cont`）、表格优先（GFM 允许缩进表格）→ 均不进代码；
+            // prevBlockKind 保持不变（延续可能有多行）。
+            codeBlockState[i] = 'none';
+            inIndentCode = false;
+          } else {
+            // 进入缩进代码块（上一行是空行 / 标题 / 分隔线 / 代码 / 块引用等）。
+            codeBlockState[i] = 'indent_code';
+            inIndentCode = true;
+            prevBlockKind = 'code';
+          }
         } else {
           codeBlockState[i] = 'none';
+          prevBlockKind = this.guessBlockKind(bqContent, prevBlockKind);
         }
       }
 
@@ -130,6 +204,87 @@ export class MarkdownParser {
       content = content.substring(m[0].length);
     }
     return { level, content };
+  }
+
+  /**
+   * 计算行首缩进列宽（spec §Tabs：tab 按停靠 4 展开——`  →foo` = 2+4 = 6 列 ≥4 → 代码；
+   * ` →foo` = 1+4 = 5 列 ≥4 → 代码；`  foo` = 2 列 <4 → 普通行）。
+   * 只扫描行首连续空格/tab，遇到首个非空白字符即停。
+   */
+  private static leadingIndentColumns(s: string): number {
+    let col = 0;
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === ' ') {
+        col++;
+      } else if (s[i] === '\t') {
+        col += 4 - (col % 4);
+      } else {
+        break;
+      }
+    }
+    return col;
+  }
+
+  /**
+   * 剥离 4 列缩进（CommonMark：缩进代码块内容 = 行内容减去 4 空格缩进；
+   * 超过 4 列的缩进保留进内容，如 8 空格 → 内容 `    foo`）。
+   * 供「去缩进后行首是否为列表标记」判定使用。
+   */
+  private static stripFourColumns(s: string): string {
+    let col = 0;
+    let i = 0;
+    while (i < s.length && col < 4) {
+      if (s[i] === ' ') {
+        col++;
+        i++;
+      } else if (s[i] === '\t') {
+        col += 4 - (col % 4);
+        i++;
+      } else {
+        break;
+      }
+    }
+    return s.substring(i);
+  }
+
+  /**
+   * 去缩进后行首是否为列表标记（task / 项目符号 / 有序，与 parseNormalLine 的
+   * 列表判定正则一致）。行首必须是标记本身（无 `\s*` 前缀）——剥 4 列后
+   * 仍以空格开头的内容（如 6 空格缩进）不算列表标记，文档级进入缩进代码。
+   */
+  private static isListMarkerStart(s: string): boolean {
+    return (
+      /^([-*+]\s*\[[xX\s]\])\s+/.test(s) ||
+      /^([-*+])\s+/.test(s) ||
+      /^(\d+\.)\s+/.test(s)
+    );
+  }
+
+  /**
+   * 轻量行首形态分类（computeLineOffsets 专用，供缩进代码判定的「上一行」上下文）：
+   * 与 parseNormalLine 的块级判定顺序一致（hr → ATX → 表格 → 列表），
+   * 只做行首前缀匹配、不解析内容——避免 computeLineOffsets 依赖 parseLine（递归）。
+   * prev 为上一非空白行的形态，用于 Setext 下划线形态（`====`）的两行级判定：
+   * 上一行是段落 → 该行为 Setext 标题（heading），否则只是普通段落（body）。
+   */
+  private static guessBlockKind(line: string, prev: BlockKind): BlockKind {
+    const s = line.replace(/^ {0,3}/, '');
+    if (!s.trim()) return 'blank';
+    if (/^([-*+_]){3,}\s*$/.test(s)) return 'hr';
+    if (/^=+[ \t]*$/.test(s)) return prev === 'body' ? 'heading' : 'body';
+    if (/^#{1,6}\s/.test(s)) return 'heading';
+    const pipeCount = (s.match(/\|/g) || []).length;
+    if (
+      /^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/.test(s) ||
+      (pipeCount >= 1 && s.trim().startsWith('|')) ||
+      pipeCount >= 2
+    ) {
+      return 'table';
+    }
+    if (/^([-*+]\s*\[[xX\s]\])\s+/.test(s)) return 'list';
+    if (/^([-*+])\s+/.test(s)) return 'list';
+    if (/^(\d+\.)\s+/.test(s)) return 'list';
+    return 'body';
   }
 
   /**
@@ -362,6 +517,15 @@ export class MarkdownParser {
         length: lineText.length,
         localOffset,
       };
+    }
+
+    // 缩进代码块内容行：与围栏代码行同类型 'code'，行内不解析 markdown
+    // （parseCodeLine 复用；raw 保留完整原文含缩进，覆盖守恒与编辑回写不受影响）。
+    if (codeState === 'indent_code') {
+      const node = this.parseCodeLine(lineText, localOffset);
+      node.blockquoteLevel = bqLevelVal;
+      this.astCache.set(cacheKey, node);
+      return node;
     }
 
     if (codeState === 'code' || codeState === true) {
