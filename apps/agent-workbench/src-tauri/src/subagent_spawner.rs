@@ -679,7 +679,20 @@ impl SubagentSpawnerImpl {
                 .clone()
                 .unwrap_or_else(|| self.resolve_parent_run(req).unwrap_or_default()),
             parent_tool_call_id: req.parent_tool_call_id.clone(),
-            description: req.description.clone().unwrap_or_default(),
+            // F-013 接线（双防线②数据源）：flow 调度请求 description 恒
+            // None（flow_graph.rs:1028 唯一构造点），description 字段在
+            // flow 路径下本就空闲——load() 反向校验（flow_graph.rs:1417
+            // -1442）以 row.description 为 flow_node_id 载体定位「有 run
+            // 行、flow_state 无映射」的节点，生产 spawner 必须把
+            // flow_node_id 落库，否则崩溃窗口兜底在生产域退化为不命中
+            // （description 空串）。flow_node_id 优先（机器可定位 id）；
+            // 非 flow 路径无 flow_node_id → 普通描述文本原样承载，语义
+            // 不变。
+            description: req
+                .flow_node_id
+                .clone()
+                .or_else(|| req.description.clone())
+                .unwrap_or_default(),
             mode: req.mode.clone().unwrap_or_default(),
             status: SubagentState::Pending.to_db_status().to_string(),
             summary: None,
