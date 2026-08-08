@@ -27,6 +27,11 @@
   --border-medium: hsl(80 10% 82%);
   --border-focus: hsl(80 20% 68%);
 
+  /* 滚动条背景 (F6F6F5 -> hsl(60 5.3% 96.3%)) 与滑块配色 */
+  --scrollbar-track: hsl(60 5.3% 96.3%);
+  --scrollbar-thumb: hsl(60 5% 82%);
+  --scrollbar-thumb-hover: hsl(60 6% 70%);
+
   --font-mono:
     Consolas, 'Fira Code', 'Courier New', 'Microsoft YaHei', -apple-system,
     sans-serif;
@@ -40,6 +45,29 @@
   border: none;
   outline: none;
   -webkit-tap-highlight-color: transparent;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* 现代 WebKit 滚动条样式定制 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 4px;
+  border: 2px solid var(--scrollbar-track);
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
 }
 
 html,
@@ -180,7 +208,22 @@ body {
 
 .line-list {
   padding-left: 1.5rem;
-  margin: 0;
+  margin: 2px 0;
+}
+
+.blockquote-wrapper {
+  display: flex;
+  align-items: stretch;
+}
+
+.blockquote-guide {
+  width: 12px;
+  border-left: 3px solid hsl(80 20% 75%);
+  margin-right: 4px;
+}
+
+.blockquote-content {
+  flex: 1;
 }
 
 .line-list-item {
@@ -294,7 +337,7 @@ body {
 .interactive-checkbox {
   user-select: none;
   display: inline-block;
-  padding: 0 2px;
+  padding: 0;
   color: var(--gray-45);
   font-weight: bold;
 }
@@ -414,12 +457,38 @@ body {
   background-color: hsl(80 15% 95.5% / 0.5);
   border-radius: 0 4px 4px 0;
 }
-.line-blockquote .blockquote-source {
+.editor-scroll-container {
+  overflow-anchor: none;
+}
+
+.is-active-line .token-blockquote-prefix .syntax-content,
+.is-active-line .blockquote-guide {
   display: none;
 }
-.is-active-line .line-blockquote .blockquote-source {
+
+.is-active-line .token-blockquote-prefix .syntax-hidden {
   display: inline;
   color: var(--text-muted);
+}
+
+.is-selected-token.token-list-task .syntax-hidden,
+.is-selected-token.token-list-bullet .syntax-hidden,
+.is-selected-token.token-list-number .syntax-hidden {
+  display: inline;
+  color: var(--text-muted);
+}
+
+.is-selected-token.token-list-task .syntax-content,
+.is-selected-token.token-list-bullet .syntax-content,
+.is-selected-token.token-list-number .syntax-content {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.is-active-token .syntax-hidden .syntax-indent,
+.is-selected-token .syntax-hidden .syntax-indent {
+  display: none;
 }
 .style-sup {
   font-size: 0.8em;
@@ -505,20 +574,31 @@ body {
 .token-heading-prefix {
   color: var(--text-muted);
   font-weight: 600;
-  margin-right: 4px;
 }
 .token-list-bullet {
   color: var(--text-muted);
   font-weight: 600;
-  margin-right: 4px;
+  margin-right: 8px;
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
+  white-space: pre;
 }
 .token-list-number {
   color: var(--text-muted);
   font-weight: 600;
-  margin-right: 4px;
+  margin-right: 8px;
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
+  white-space: pre;
 }
 .token-list-task {
-  margin-right: 4px;
+  margin-right: 8px;
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
+  white-space: pre;
 }
 .token-comment {
   color: var(--text-muted);

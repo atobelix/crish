@@ -19,6 +19,7 @@ const x = 10;
 \`\`\`
 `.trim();
     const result = MarkdownFormatChecker.validate(validDoc);
+    console.log("ERRORS:", JSON.stringify(result.errors, null, 2));
     expect(result.isValid).toBe(true);
     expect(result.errors).toHaveLength(0);
     expect(result.stats.headingsCount).toBe(1);

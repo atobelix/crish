@@ -57,6 +57,7 @@ function renderMathToHtml(
 
 export const BlockRenderer = memo(
   ({ block, index, lineOffset, activeState, tableId }: BlockRendererProps) => {
+    const content = (() => {
     switch (block.type) {
       case 'empty':
         return (
@@ -66,7 +67,13 @@ export const BlockRenderer = memo(
         );
 
       case 'code_fence_start': {
-        const lang = block.raw.trim().replace(/^```+/, '').trim() || 'code';
+        let rawCodeText = block.raw.trim();
+        let bMatch;
+        while ((bMatch = rawCodeText.match(/^\s*>\s?/))) {
+          rawCodeText = rawCodeText.substring(bMatch[0].length);
+        }
+        rawCodeText = rawCodeText.trim();
+        const lang = rawCodeText.replace(/^```+/, '').trim() || 'code';
         return (
           <div className="line-block line-code-fence line-code-fence-start">
             <span
@@ -144,7 +151,12 @@ export const BlockRenderer = memo(
         );
 
       case 'math_block': {
-        const formula = block.raw.trim();
+        let formula = block.raw.trim();
+        let bMatch;
+        while ((bMatch = formula.match(/^\s*>\s?/))) {
+          formula = formula.substring(bMatch[0].length);
+        }
+        formula = formula.trim();
         const katexHtml = renderMathToHtml(formula, true);
         return (
           <div className="line-block line-math-block">
@@ -288,10 +300,18 @@ export const BlockRenderer = memo(
 
       case 'body':
       default: {
-        // 列表缩进接线：listIndent 以 padding-left 语义渲染（wrap 续行正确对齐）
+        // 列表缩进接线：统一使用每空格 8px 的缩进率（4空格=32px）。这样既更深，也确保对齐。
+        const baseIndentPx = Math.min(block.listIndent || 0, 12) * 8;
         const indentStyle: React.CSSProperties | undefined = block.listIndent
-          ? { paddingLeft: `${Math.min(block.listIndent, 8) * 6}px` }
+          ? { paddingLeft: `${baseIndentPx}px` }
           : undefined;
+
+        if (block.listIndent && block.listIndent >= 2 && indentStyle) {
+          // 符号 min-width 是 16px，因此中心在 8px 处。周期设为 32px (对应4空格缩进)。
+          indentStyle.backgroundImage = `repeating-linear-gradient(to right, transparent 0, transparent 7px, hsl(0 0% 70% / 0.3) 7px, hsl(0 0% 70% / 0.3) 9px, transparent 9px, transparent 32px)`;
+          indentStyle.backgroundSize = `${baseIndentPx}px 100%`;
+          indentStyle.backgroundRepeat = 'no-repeat';
+        }
 
         let tokensToRender = block.inlineTokens || [];
         let isTruncated = false;
@@ -328,5 +348,35 @@ export const BlockRenderer = memo(
         );
       }
     }
+    })();
+
+    const isListItem = block.listPrefix !== undefined;
+    const indentStyle = {
+      '--logical-indent': block.listIndent ? `${block.listIndent * 1}ch` : '0ch',
+      ...(isListItem ? {
+        '--hanging-indent': block.listPrefix?.includes('[') ? '3.5ch' : '2.5ch'
+      } : {})
+    } as React.CSSProperties;
+
+    const wrapperClass = `typography-wrapper ${isListItem ? 'is-list-item' : ''}`;
+
+    if (block.blockquoteLevel && block.blockquoteLevel > 0) {
+      return (
+        <div className={`${wrapperClass} blockquote-wrapper`} style={indentStyle}>
+          {Array.from({ length: block.blockquoteLevel }).map((_, i) => (
+            <div key={i} className="blockquote-guide"></div>
+          ))}
+          <div className="blockquote-content">
+            {content}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className={wrapperClass} style={indentStyle}>
+        {content}
+      </div>
+    );
   }
 );

@@ -60,7 +60,12 @@ export class MarkdownFormatChecker {
       if (lineNode.type === 'math_block') {
         mathCount++;
         // Validate KaTeX formula syntax
-        const formula = lineNode.raw.trim();
+        let formula = lineNode.raw.trim();
+        let bMatch;
+        while ((bMatch = formula.match(/^\s*>\s?/))) {
+          formula = formula.substring(bMatch[0].length);
+        }
+        formula = formula.trim();
         if (formula) {
           try {
             katex.renderToString(formula, {

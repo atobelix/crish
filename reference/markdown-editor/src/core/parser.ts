@@ -42,7 +42,14 @@ export class MarkdownParser {
 
     for (let i = 0; i < lines.length; i++) {
       offsets[i] = currentOffset;
-      const trimmed = lines[i].trim();
+      let trimmed = lines[i];
+      let bMatch;
+      let blockquoteLevel = 0;
+      while ((bMatch = trimmed.match(/^\s*>\s?/))) {
+        blockquoteLevel++;
+        trimmed = trimmed.substring(bMatch[0].length);
+      }
+      trimmed = trimmed.trim();
 
       if (!inMathBlock && trimmed.startsWith('```')) {
         if (!inCodeBlock) {
@@ -118,11 +125,21 @@ export class MarkdownParser {
     }
     this.cacheMisses++;
 
+    let blockquoteLevel = 0;
+    let trimmed = lineText;
+    let bMatch;
+    while ((bMatch = trimmed.match(/^\s*>\s?/))) {
+      blockquoteLevel++;
+      trimmed = trimmed.substring(bMatch[0].length);
+    }
+    const bqLevelVal = blockquoteLevel > 0 ? blockquoteLevel : undefined;
+
     if (codeState === 'fence_start') {
       return {
         id: this.generateId(),
         type: 'code_fence_start',
         raw: lineText,
+        blockquoteLevel: bqLevelVal,
         inlineTokens: [
           {
             type: 'code',
@@ -141,6 +158,7 @@ export class MarkdownParser {
         id: this.generateId(),
         type: 'code_fence_end',
         raw: lineText,
+        blockquoteLevel: bqLevelVal,
         inlineTokens: [
           {
             type: 'code',
@@ -159,6 +177,7 @@ export class MarkdownParser {
         id: this.generateId(),
         type: 'math_fence_start',
         raw: lineText,
+        blockquoteLevel: bqLevelVal,
         inlineTokens: [
           {
             type: 'math',
@@ -177,6 +196,7 @@ export class MarkdownParser {
         id: this.generateId(),
         type: 'math_block',
         raw: lineText,
+        blockquoteLevel: bqLevelVal,
         inlineTokens: [
           {
             type: 'math',
@@ -195,6 +215,7 @@ export class MarkdownParser {
         id: this.generateId(),
         type: 'math_fence_end',
         raw: lineText,
+        blockquoteLevel: bqLevelVal,
         inlineTokens: [
           {
             type: 'math',
@@ -210,7 +231,10 @@ export class MarkdownParser {
     }
 
     if (codeState === 'code' || codeState === true) {
-      return this.parseCodeLine(lineText, localOffset);
+      const node = this.parseCodeLine(lineText, localOffset);
+      node.blockquoteLevel = bqLevelVal;
+      this.astCache.set(cacheKey, node);
+      return node;
     }
 
     let node = this.parseNormalLine(lineText, localOffset);
@@ -224,22 +248,42 @@ export class MarkdownParser {
     localOffset: number
   ): LineNode {
     const tokens: InlineNode[] = [];
+    let pos = 0;
+    let remainingTextForPrefix = lineText;
+    let blockquoteMatch;
+    
+    while ((blockquoteMatch = remainingTextForPrefix.match(/^\s*>\s?/))) {
+      pos += blockquoteMatch[0].length;
+      remainingTextForPrefix = remainingTextForPrefix.substring(blockquoteMatch[0].length);
+    }
+
+    if (pos > 0) {
+      tokens.push({
+        type: 'blockquote_prefix',
+        raw: lineText.substring(0, pos),
+        content: '',
+        localOffset: 0,
+        length: pos,
+      });
+    }
+
+    const codeText = lineText.substring(pos);
 
     // Simple heuristic tokenizer for code
     const regex =
       /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|(["'`])(?:(?=(\\?))\3.)*?\2|\b(function|const|let|var|if|else|for|while|return|class|import|export|from|yield|await|async|switch|case|break|continue|default|typeof|instanceof|new|delete|try|catch|finally|throw|void|with)\b/g;
     let match;
-    let pos = 0;
+    let currentPos = 0;
 
-    while ((match = regex.exec(lineText)) !== null) {
+    while ((match = regex.exec(codeText)) !== null) {
       const matchIndex = match.index;
-      if (matchIndex > pos) {
-        const plain = lineText.substring(pos, matchIndex);
+      if (matchIndex > currentPos) {
+        const plain = codeText.substring(currentPos, matchIndex);
         tokens.push({
           type: 'text',
           raw: plain,
           content: plain,
-          localOffset: pos,
+          localOffset: pos + currentPos,
           length: plain.length,
         });
       }
@@ -250,45 +294,38 @@ export class MarkdownParser {
           type: 'comment',
           raw: match[0],
           content: match[0],
-          localOffset: matchIndex,
+          localOffset: pos + matchIndex,
           length: match[0].length,
         });
       } else if (match[2]) {
+        // string
         tokens.push({
           type: 'string',
           raw: match[0],
           content: match[0],
-          localOffset: matchIndex,
+          localOffset: pos + matchIndex,
           length: match[0].length,
         });
-      } else if (match[3]) {
+      } else {
+        // keyword
         tokens.push({
           type: 'keyword',
           raw: match[0],
           content: match[0],
-          localOffset: matchIndex,
-          length: match[0].length,
-        });
-      } else {
-        tokens.push({
-          type: 'text',
-          raw: match[0],
-          content: match[0],
-          localOffset: matchIndex,
+          localOffset: pos + matchIndex,
           length: match[0].length,
         });
       }
-
-      pos = matchIndex + match[0].length;
+      currentPos = regex.lastIndex;
     }
 
-    if (pos < lineText.length) {
-      const plain = lineText.substring(pos);
+    if (currentPos < codeText.length) {
+      const plain = codeText.substring(currentPos);
       tokens.push({
         type: 'text',
         raw: plain,
         content: plain,
-        localOffset: pos,
+        localOffset: pos + currentPos,
         length: plain.length,
       });
     }
@@ -343,31 +380,44 @@ export class MarkdownParser {
     let headingLevel = 0;
     let listIndent = 0;
     let listPrefix = '';
+    let blockquoteLevel = 0;
+
+    // Parse blockquote prefixes first
+    let remainingTextForPrefix = lineText;
+    let blockquoteMatch;
+    while ((blockquoteMatch = remainingTextForPrefix.match(/^\s*>\s?/))) {
+      blockquoteLevel++;
+      pos += blockquoteMatch[0].length;
+      remainingTextForPrefix = remainingTextForPrefix.substring(blockquoteMatch[0].length);
+    }
+
+    if (pos > 0) {
+      tokens.push({
+        type: 'blockquote_prefix',
+        raw: lineText.substring(0, pos),
+        content: '',
+        localOffset: 0,
+        length: pos,
+      });
+    }
 
     let isHr = false;
-    if (lineText.length <= 10000) {
-      const hrMatch = lineText.match(/^(\s*[-*+_]){3,}\s*$/);
+    const nestedText = lineText.slice(pos);
+    const nestedLocalOffset = pos;
+
+    if (nestedText.length <= 10000) {
+      const hrMatch = nestedText.match(/^(\s*[-*+_]){3,}\s*$/);
       if (hrMatch) {
         lineType = 'hr';
-        pos = lineText.length;
+        pos += nestedText.length;
         isHr = true;
       }
     }
 
     if (!isHr) {
-      const blockquoteMatch = lineText.match(/^(>\s?)+/);
-      if (blockquoteMatch) {
-        lineType = 'blockquote';
-        pos = blockquoteMatch[0].length;
-      }
-
-      // Now parse block prefixes on the remaining text (either full line or inside blockquote)
-      const nestedText = lineText.slice(pos);
-      const nestedLocalOffset = pos;
-
       const headingMatch = nestedText.match(/^(#{1,6})\s+/);
       if (headingMatch) {
-        if (lineType !== 'blockquote') lineType = 'heading';
+        lineType = 'heading';
         headingLevel = headingMatch[1].length;
         const prefixLen = headingMatch[0].length;
         tokens.push({
@@ -384,62 +434,68 @@ export class MarkdownParser {
             /^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/
           );
           if (tableSeparatorMatch) {
-            if (lineType !== 'blockquote') lineType = 'table_separator';
+            lineType = 'table_separator';
           } else {
             const pipeCount = (nestedText.match(/\|/g) || []).length;
             if (
               (pipeCount >= 1 && nestedText.trim().startsWith('|')) ||
               pipeCount >= 2
             ) {
-              if (lineType !== 'blockquote') lineType = 'table_row';
+              lineType = 'table_row';
             }
           }
         }
 
         if (lineType !== 'table_row' && lineType !== 'table_separator') {
-          const taskMatch = nestedText.match(/^(\s*)([-*+]\s*\[[xX\s]\])\s+/);
-          if (taskMatch) {
-            const prefixLen = taskMatch[0].length;
-            const indent = taskMatch[1];
-            const checkRaw = taskMatch[2];
-            const isChecked = checkRaw.includes('x') || checkRaw.includes('X');
-            listIndent = indent.length;
-            listPrefix = checkRaw;
-            tokens.push({
-              type: 'list_task',
-              raw: taskMatch[0],
-              content: isChecked ? '☑ ' : '☐ ',
-              isChecked,
-              localOffset: nestedLocalOffset,
-              length: prefixLen,
-            });
-            pos += prefixLen;
-          } else {
-            const bulletMatch = nestedText.match(/^(\s*)([-*+])\s+/);
-            if (bulletMatch) {
-              const prefixLen = bulletMatch[0].length;
-              const indent = bulletMatch[1];
+            const taskMatch = nestedText.match(/^(\s*)([-*+]\s*\[[xX\s]\])\s+/);
+            if (taskMatch) {
+              const prefixLen = taskMatch[0].length;
+              const indent = taskMatch[1];
+              const checkRaw = taskMatch[2];
+              const isChecked = checkRaw.includes('x') || checkRaw.includes('X');
               listIndent = indent.length;
-              listPrefix = bulletMatch[2];
+              listPrefix = checkRaw;
               tokens.push({
-                type: 'list_bullet',
-                raw: bulletMatch[0],
-                content: '• ',
+                type: 'list_task',
+                raw: taskMatch[0],
+                content: isChecked ? '☑' : '☐',
+                indent: indent,
+                marker: checkRaw + ' ',
+                isChecked,
                 localOffset: nestedLocalOffset,
                 length: prefixLen,
               });
               pos += prefixLen;
             } else {
-              const numberMatch = nestedText.match(/^(\s*)(\d+\.)\s+/);
-              if (numberMatch) {
-                const prefixLen = numberMatch[0].length;
-                const indent = numberMatch[1];
+              const bulletMatch = nestedText.match(/^(\s*)([-*+])\s+/);
+              if (bulletMatch) {
+                const prefixLen = bulletMatch[0].length;
+                const indent = bulletMatch[1];
                 listIndent = indent.length;
-                listPrefix = numberMatch[2];
+                listPrefix = bulletMatch[2];
                 tokens.push({
+                  type: 'list_bullet',
+                  raw: bulletMatch[0],
+                  content: '•',
+                  indent: indent,
+                  marker: bulletMatch[2] + ' ',
+                  localOffset: nestedLocalOffset,
+                  length: prefixLen,
+                });
+                pos += prefixLen;
+              } else {
+                const numberMatch = nestedText.match(/^(\s*)(\d+\.)\s+/);
+                if (numberMatch) {
+                  const prefixLen = numberMatch[0].length;
+                  const indent = numberMatch[1];
+                  listIndent = indent.length;
+                  listPrefix = numberMatch[2];
+                  tokens.push({
                   type: 'list_number',
                   raw: numberMatch[0],
                   content: numberMatch[2] + ' ',
+                  indent: indent,
+                  marker: numberMatch[2] + ' ',
                   localOffset: nestedLocalOffset,
                   length: prefixLen,
                 });
@@ -484,6 +540,7 @@ export class MarkdownParser {
       type: lineType,
       raw: lineText,
       headingLevel,
+      blockquoteLevel: blockquoteLevel > 0 ? blockquoteLevel : undefined,
       listIndent: listPrefix !== undefined ? listIndent : undefined,
       listPrefix: listPrefix ? listPrefix : undefined,
       inlineTokens: finalTokens,

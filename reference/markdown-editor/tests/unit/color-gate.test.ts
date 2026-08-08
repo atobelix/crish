@@ -29,6 +29,16 @@ describe('1. Color Adaptor & Mathematical Backup Conversion Engine', () => {
     expect(hex).toBe('#FAFBF8');
   });
 
+  it('accurately converts #F6F6F5 scrollbar background HSL definition back to RGB and HEX', () => {
+    const hslScrollbar = 'hsl(60 5.3% 96.3%)';
+    const rgb = hslToRgbString(hslScrollbar);
+    const hex = hslToHexString(hslScrollbar);
+
+    // RGB should evaluate to 246, 246, 245
+    expect(rgb).toBe('rgb(246, 246, 245)');
+    expect(hex).toBe('#F6F6F5');
+  });
+
   it('accurately computes RGBA fallback string with alpha channel', () => {
     const selectionHsl = 'hsl(80 30% 86% / 0.65)';
     const fallback = generateColorFallback(selectionHsl);

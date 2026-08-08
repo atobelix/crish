@@ -78,7 +78,7 @@ export const CursorLayer: React.FC<CursorLayerProps> = ({
   return (
     <div
       key={cursorPos}
-      className="cursor-caret"
+      className="cursor-caret custom-cursor-blink"
       style={{
         position: 'absolute',
         top: `${coords.top}px`,
@@ -86,7 +86,6 @@ export const CursorLayer: React.FC<CursorLayerProps> = ({
         height: `${coords.height}px`,
         width: '1px',
         backgroundColor: 'var(--black)',
-        animation: 'blink 1s step-end infinite',
         zIndex: 50,
         pointerEvents: 'none',
       }}

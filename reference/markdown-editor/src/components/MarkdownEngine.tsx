@@ -103,7 +103,14 @@ export const MarkdownEngine: React.FC = () => {
   const virtualizer = useVirtualizer({
     count: lines.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 28, // Strict grid size
+    estimateSize: (i) => {
+      const line = lines[i] || '';
+      if (line.startsWith('# ')) return 46;
+      if (line.startsWith('## ')) return 40;
+      if (line.startsWith('### ')) return 36;
+      if (line.startsWith('#### ')) return 32;
+      return 28;
+    },
     overscan: 40, // Buffer for smooth scrolling
   });
 
@@ -296,6 +303,37 @@ export const MarkdownEngine: React.FC = () => {
         ref={parentRef}
         className="editor-container editor-scroll-container"
         onClick={handleContainerClick}
+        onCopy={(e) => {
+          const selection = window.getSelection();
+          if (!selection || selection.isCollapsed) return;
+
+          const state = useEditorStore.getState();
+          const start = Math.min(state.selectionStart, state.selectionEnd);
+          const end = Math.max(state.selectionStart, state.selectionEnd);
+          
+          if (start !== end) {
+            const rawText = state.getText().substring(start, end);
+            e.clipboardData.setData('text/plain', rawText);
+            e.preventDefault();
+          }
+        }}
+        onCut={(e) => {
+          const selection = window.getSelection();
+          if (!selection || selection.isCollapsed) return;
+
+          const state = useEditorStore.getState();
+          const start = Math.min(state.selectionStart, state.selectionEnd);
+          const end = Math.max(state.selectionStart, state.selectionEnd);
+          
+          if (start !== end) {
+            const rawText = state.getText().substring(start, end);
+            e.clipboardData.setData('text/plain', rawText);
+            state.deleteSelection(start, end);
+            window.getSelection()?.removeAllRanges();
+            e.preventDefault();
+            // Optional: return focus to textarea if possible, though it's hidden
+          }
+        }}
         style={{
           height: '100%',
           overflow: 'auto',

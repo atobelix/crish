@@ -58,10 +58,18 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
 
         const cTop = containerRef.current!.scrollTop;
         const cHeight = containerRef.current!.clientHeight;
-        if (top < cTop) {
-          containerRef.current!.scrollTop = Math.max(0, top - 40);
-        } else if (top + rect.height > cTop + cHeight) {
-          containerRef.current!.scrollTop = top + rect.height - cHeight + 40;
+        
+        // Fix for "反反复复刷屏" (Repeated bouncing during native mouse drag)
+        // If the user is physically dragging the mouse outside the viewport, 
+        // the browser natively triggers an OS-level drag-scroll loop.
+        // We MUST NOT fight the browser by setting scrollTop manually here, 
+        // otherwise react-virtual and the browser scroll will fight each other causing a bounce loop.
+        if (!(window as any).__CRISH_IS_MOUSE_DOWN) {
+          if (top < cTop) {
+            containerRef.current!.scrollTop = Math.max(0, top - 40);
+          } else if (top + rect.height > cTop + cHeight) {
+            containerRef.current!.scrollTop = top + rect.height - cHeight + 40;
+          }
         }
       } else if (retries < 10) {
         retries++;
@@ -138,6 +146,13 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       }
       textareaRef.current?.focus();
     };
+    
+    const handleGlobalMouseDown = () => {
+      (window as any).__CRISH_IS_MOUSE_DOWN = true;
+    };
+    const handleGlobalMouseUp = () => {
+      (window as any).__CRISH_IS_MOUSE_DOWN = false;
+    };
 
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (handleTableInteraction(e)) {
@@ -155,10 +170,14 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     };
 
     document.addEventListener('selectionchange', handleSelectionChange);
+    window.addEventListener('mousedown', handleGlobalMouseDown);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
     window.addEventListener('click', handleGlobalClick);
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => {
       document.removeEventListener('selectionchange', handleSelectionChange);
+      window.removeEventListener('mousedown', handleGlobalMouseDown);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
       window.removeEventListener('click', handleGlobalClick);
       window.removeEventListener('keydown', handleGlobalKeyDown);
     };
@@ -355,18 +374,119 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (isComposing) return;
-      insertText('\n');
+
+      if (!e.shiftKey) {
+        const state = useEditorStore.getState();
+        const text = state.getText();
+        const pos = state.cursorPos;
+
+        let lineStart = 0;
+        for (let i = pos - 1; i >= 0; i--) {
+          if (text[i] === '\n') {
+            lineStart = i + 1;
+            break;
+          }
+        }
+
+        let lineEnd = text.length;
+        for (let i = pos; i < text.length; i++) {
+          if (text[i] === '\n') {
+            lineEnd = i;
+            break;
+          }
+        }
+
+        const textBeforeCursor = text.substring(lineStart, pos);
+        const textAfterCursor = text.substring(pos, lineEnd);
+        const listMatch = textBeforeCursor.match(/^(\s*)([-*+]|\d+\.)\s+(\[[ xX]\]\s+)?/);
+
+        if (listMatch) {
+          if (textBeforeCursor === listMatch[0] && textAfterCursor.trim() === '') {
+            // Empty list item: break out of the list
+            state.deleteSelection(lineStart, lineEnd);
+          } else {
+            // Continue the list
+            let newPrefix = listMatch[0];
+            const numberMatch = newPrefix.match(/(\d+)\./);
+            if (numberMatch) {
+              const nextNum = parseInt(numberMatch[1], 10) + 1;
+              newPrefix = newPrefix.replace(/\d+\./, `${nextNum}.`);
+            }
+            // Reset task list to unchecked
+            newPrefix = newPrefix.replace(/\[[xX]\]/, '[ ]');
+            
+            insertText('\n' + newPrefix);
+          }
+        } else {
+          insertText('\n');
+        }
+      } else {
+        // Shift+Enter
+        insertText('\n');
+      }
     } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       setSelection(0, text.length);
     } else if (e.key === 'Tab') {
       e.preventDefault();
+      const state = useEditorStore.getState();
+      const text = state.getText();
+      const cursorPos = state.cursorPos;
+
       const res = navigateTable(text, cursorPos, e.shiftKey ? 'shift-tab' : 'tab');
       if (res) {
         if (res.newText !== text) {
           useEditorStore.setState({ lines: res.newText.split('\n') });
         }
         useEditorStore.getState().setCursorPos(res.newCursorPos);
+      } else {
+        const selStart = state.selectionStart;
+        const selEnd = state.selectionEnd;
+        const startLineIdx = state.lineOffsets.findLineIndex(Math.min(selStart, selEnd));
+        const endLineIdx = state.lineOffsets.findLineIndex(Math.max(selStart, selEnd));
+
+        const startLineOffset = state.lineOffsets.getOffset(startLineIdx);
+        const endLineOffset = state.lineOffsets.getOffset(endLineIdx);
+        const endLineLength = state.lines[endLineIdx].length;
+
+        const blockStart = startLineOffset;
+        const blockEnd = endLineOffset + endLineLength;
+        const blockText = text.substring(blockStart, blockEnd);
+
+        let cursorDelta = 0;
+        let newBlockText = '';
+
+        if (e.shiftKey) {
+          newBlockText = blockText.split('\n').map(line => {
+            const match = line.match(/^ {1,2}/);
+            if (match && selStart === selEnd) cursorDelta = -match[0].length;
+            return line.replace(/^ {1,2}/, '');
+          }).join('\n');
+        } else {
+          if (selStart !== selEnd) {
+             newBlockText = blockText.split('\n').map(line => '  ' + line).join('\n');
+          } else {
+             const currentLine = state.lines[startLineIdx];
+             if (/^(\s*)([-*+]|\d+\.)\s+/.test(currentLine)) {
+               newBlockText = '  ' + currentLine;
+               cursorDelta = 2;
+             } else {
+               state.insertText('  ');
+               return;
+             }
+          }
+        }
+
+        if (newBlockText !== blockText) {
+          state.setSelection(blockStart, blockEnd);
+          state.insertText(newBlockText);
+          if (selStart !== selEnd) {
+            useEditorStore.getState().setSelection(blockStart, blockStart + newBlockText.length);
+          } else {
+            const newPos = Math.max(blockStart, selStart + cursorDelta);
+            useEditorStore.getState().setSelection(newPos, newPos);
+          }
+        }
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -443,12 +563,14 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
 
   const handleCompositionStart = () => {
     setIsComposing(true);
+    useEditorStore.getState().setIsComposing(true);
   };
 
   const handleCompositionEnd = (
     e: React.CompositionEvent<HTMLTextAreaElement>
   ) => {
     setIsComposing(false);
+    useEditorStore.getState().setIsComposing(false);
     if (e.data) {
       insertText(e.data);
     }
@@ -470,24 +592,36 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
   return (
     <textarea
       ref={textareaRef}
-      value=""
+      defaultValue=""
       onKeyDown={handleKeyDown}
       onChange={handleInput}
       onCompositionStart={handleCompositionStart}
       onCompositionEnd={handleCompositionEnd}
+      onBlur={() => {
+        setIsComposing(false);
+        useEditorStore.getState().setIsComposing(false);
+      }}
       style={{
         position: 'absolute',
         top: `${coords.top}px`,
         left: `${coords.left}px`,
-        width: '1px',
+        width: isComposing ? '300px' : '1px',
         height: `${coords.height}px`,
-        opacity: 0,
+        opacity: isComposing ? 1 : 0,
+        color: 'var(--text-primary)',
+        caretColor: 'var(--black)',
+        background: 'transparent',
         padding: 0,
         border: 'none',
         overflow: 'hidden',
         resize: 'none',
         outline: 'none',
         pointerEvents: 'none',
+        fontFamily: 'inherit',
+        fontSize: 'inherit',
+        lineHeight: 'inherit',
+        whiteSpace: 'nowrap',
+        zIndex: 100,
       }}
       spellCheck="false"
       autoCapitalize="off"

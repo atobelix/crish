@@ -231,7 +231,13 @@ function updateLinesIncremental(
   let converged = false;
 
   for (; i < newLinesArr.length; i++) {
-    const trimmed = newLinesArr[i].trim();
+    let trimmed = newLinesArr[i];
+    let bMatch;
+    while ((bMatch = trimmed.match(/^\s*>\s?/))) {
+      trimmed = trimmed.substring(bMatch[0].length);
+    }
+    trimmed = trimmed.trim();
+
     const oldState = newCodeState[i]; // pre-filled with shifted old states for i >= startLineIdx + newLines.length
 
     let isFence = false;

@@ -33,7 +33,6 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
   ({ tokens, lineOffset, activeState, tableId, lineIndex }) => {
     const tableWidths = useTableStore(state => tableId ? state.tableWidths[tableId] : null);
     const selectedCell = useTableStore(state => state.selectedCell);
-    const setSelectedCell = useTableStore(state => state.setSelectedCell);
     let colIndexCounter = 0;
 
     return (
@@ -56,6 +55,9 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
               break;
             case 'list_task':
               className = 'interactive-checkbox token-list-task';
+              break;
+            case 'blockquote_prefix':
+              className = 'token-blockquote-prefix';
               break;
             case 'comment':
               className = 'token-comment';
@@ -159,9 +161,31 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
           const isEmpty =
             isStyleToken &&
             (!token.content || token.content.trim() === '');
-          const isActive = checkIsActive(start, len, activeState ?? null);
+            
+          const isListPrefix = ['list_bullet', 'list_number', 'list_task', 'blockquote_prefix'].includes(token.type);
+          let isActive = false;
+          if (activeState) {
+            if (activeState.selStart !== undefined && activeState.selEnd !== undefined && activeState.selStart !== activeState.selEnd) {
+              isActive = start < activeState.selEnd && (start + len) > activeState.selStart;
+            } else {
+              // For list prefixes, cursor at the very end of the prefix belongs to the following text, not the prefix itself.
+              if (isListPrefix) {
+                isActive = activeState.cursor >= start && activeState.cursor < start + len;
+              } else {
+                isActive = activeState.cursor >= start && activeState.cursor <= start + len;
+              }
+            }
+          }
+          
+          const isSelected = activeState && activeState.selStart !== undefined && activeState.selEnd !== undefined 
+                             && activeState.selStart !== activeState.selEnd
+                             && start < activeState.selEnd && (start + len) > activeState.selStart;
+
           const baseClassName = isEmpty ? `${className} is-empty-token` : className;
           let finalClassName = isActive ? `${baseClassName} is-active-token` : baseClassName;
+          if (isSelected) {
+            finalClassName += ' is-selected-token';
+          }
 
           // Specialized KaTeX rendering for math formulas
           if (token.type === 'math') {
@@ -266,8 +290,9 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
 
           // If it's a token with `content` different from `raw`
           if (token.content !== undefined && token.content !== token.raw) {
+            const isListPrefix = ['list_bullet', 'list_number', 'list_task', 'blockquote_prefix'].includes(token.type);
             const prefixLen = token.raw.indexOf(token.content);
-            if (prefixLen >= 0 && token.content !== '') {
+            if (!isListPrefix && prefixLen >= 0 && token.content !== '') {
               // Substring case (e.g. **bold**)
               const prefix = token.raw.substring(0, prefixLen);
               const suffix = token.raw.substring(
@@ -309,6 +334,22 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
               );
             } else {
               // Complete replacement case (e.g. list_bullet "- " -> "• ", or heading_prefix "## " -> "")
+              const isTask = token.type === 'list_task';
+              const handleTaskClick = (e: React.MouseEvent) => {
+                if (isTask && start !== undefined) {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  const state = useEditorStore.getState();
+                  const oldRaw = token.raw;
+                  const newRaw = token.isChecked 
+                    ? oldRaw.replace(/\[[xX]\]/, '[ ]') 
+                    : oldRaw.replace(/\[ \]/, '[x]');
+                  
+                  state.setSelection(start, start + len);
+                  state.insertText(newRaw);
+                }
+              };
+
               return (
                 <span
                   key={key}
@@ -318,9 +359,43 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   style={token.style}
                 >
                   <span data-sub-offset={0} className="syntax-hidden">
-                    {token.raw}
+                    {token.indent !== undefined ? (
+                      <>
+                        <span className="syntax-indent">{token.indent}</span>
+                        <span className="syntax-marker">{token.marker}</span>
+                      </>
+                    ) : (
+                      token.raw
+                    )}
                   </span>
-                  <span className="syntax-content">{token.content}</span>
+                  <span 
+                    className="syntax-content"
+                    onClick={isTask ? handleTaskClick : undefined}
+                    style={isTask ? { cursor: 'pointer' } : undefined}
+                  >
+                    {isTask ? (
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{
+                          verticalAlign: 'text-bottom',
+                          transform: 'translateY(-2px)',
+                          color: token.isChecked ? 'var(--text-primary)' : 'var(--text-muted)',
+                        }}
+                      >
+                        <rect x="3" y="3" width="18" height="18" rx="6" ry="6" />
+                        {token.isChecked && <polyline points="9 12 12 15 16 9" />}
+                      </svg>
+                    ) : (
+                      token.content
+                    )}
+                  </span>
                 </span>
               );
             }

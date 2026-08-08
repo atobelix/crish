@@ -39,12 +39,15 @@ export type InlineType =
     | 'keyword'
     | 'html_element'
     | 'table_pipe'
-    | 'table_cell';
+    | 'table_cell'
+    | 'blockquote_prefix';
 
 export interface InlineNode {
     type: InlineType;
     raw: string;
     content: string;
+    indent?: string;
+    marker?: string;
     url?: string;
     isChecked?: boolean;
     children?: InlineNode[];
@@ -61,6 +64,7 @@ export interface LineNode {
     raw: string;
     content?: string;
     headingLevel?: number;
+    blockquoteLevel?: number;
     listIndent?: number;
     listPrefix?: string;
     inlineTokens: InlineNode[];
