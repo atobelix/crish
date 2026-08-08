@@ -26,6 +26,7 @@ use conex_types::events::AgentEvent;
 use conex_types::message::{AgentMessage, AgentMessageRole};
 use conex_types::session::{AgentSessionEvent as E, AgentSessionState as S};
 use conex_types::tool::{
+    compaction_block_details, ContextCompressionCacheBoundaryMetadata,
     ContextCompressionPolicyAction, ContextCompressionPolicyMetadata, ContextCompressionPolicyTier,
     ContextCompressionReason, ContextCompressionRecord, ContextCompressionTrigger,
 };
@@ -116,6 +117,16 @@ pub(crate) struct LoopState {
     /// run 内跨 turn 维护签名基线并聚合 RunCacheStats；压缩事件（
     /// [apply_compaction] 单一广播点）触发代数 +1 / 基线作废（C13）。
     pub(crate) cache_tracker: Option<crate::cache_tracker::CacheStatsTracker>,
+    /// 摘要后台调度器（T-33，00-plan §6.4）：run 内单飞面——压缩产出
+    /// stub 且 Summarizer 注入存在时 spawn 后台退避重试任务；任务不绑定
+    /// LoopState 生命周期（tokio::spawn 独立任务，run 收口不摧毁，R-I）；
+    /// 跨 run 会话级容器（CoreRunState）由轮次 6 壳层承接。
+    pub(crate) summary_dispatch: Arc<crate::r#loop::summary_dispatch::SummaryDispatch>,
+    /// 会话级摘要协调器（T-42，00-plan §6.5 R-I）：壳层经注册表装配注入
+    /// ——跨 run 单飞 + 全局并发上限 + 任务跨 run 存活（run 收口不摧毁）。
+    /// None = 回退 run 级 [Self::summary_dispatch]（轮次 4 语义）。
+    pub(crate) summary_coordinator:
+        Option<Arc<crate::r#loop::summary_coordinator::SessionSummaryCoordinator>>,
 }
 
 impl LoopState {
@@ -135,6 +146,19 @@ impl LoopState {
         // 缓存测量面（P5 S2 / T-36）：构造期从 options 派生一次
         // （with_options / run() 起始由 loop/mod.rs 同步刷新与复位）
         let cache_tracker = crate::cache_tracker::build_tracker(options.cache_tracking.as_ref());
+        // 摘要后台调度（T-33）：构造期从 options 派生（None = 生产缺省
+        // 退避参数；测试注入快速序列）；run 起始不复位（单飞句柄跨 run
+        // 保留——存活任务阻塞新 spawn，会话级单飞语义在 loop 实例内成立）
+        let summary_dispatch = Arc::new(crate::r#loop::summary_dispatch::SummaryDispatch::new(
+            options
+                .summary_dispatch
+                .clone()
+                .unwrap_or_default(),
+        ));
+        // 会话级协调器（T-42）：构造期从 options 派生（壳层装配；None =
+        // 回退 run 级 dispatch）——协调器由注册表持有，LoopState 只借用
+        // Arc 引用，run 收口 drop 后任务仍由注册表支撑存活
+        let summary_coordinator = options.summary_coordinator.clone();
         Self {
             machine: AgentSessionMachine::new(session_id, max_turns),
             input_queue: AgentInputQueue::new(),
@@ -159,6 +183,8 @@ impl LoopState {
             compactions_this_run: 0,
             compression_retries: 0,
             cache_tracker,
+            summary_dispatch,
+            summary_coordinator,
         }
     }
 }
@@ -292,6 +318,16 @@ pub(crate) async fn maybe_compact_preflight(state: &mut LoopState) -> bool {
         // 放弃压缩（无合法切割点 / 无可丢内容）：不广播、不计数
         return false;
     }
+    // T-36 引擎兜底（评审 02 P1-7）：压缩产物的协议形状护栏——无 system
+    // 且链后首条非 user → 跳过压缩 + warn（压缩后 wire 首条 = assistant/
+    // tool → provider 400 风险；轮次 1 cut<=fold_start 不覆盖本形状）
+    if !compaction_shape_ok(&plan.messages) {
+        tracing::warn!(
+            session_id = %state.machine.context().session_id,
+            "压缩产物协议形状违规（无 system 且链后首条非 user）→ 跳过压缩（T-36 护栏）"
+        );
+        return false;
+    }
     let info = CompactionTriggerInfo {
         trigger: ContextCompressionTrigger::Threshold,
         reason: ContextCompressionReason::Threshold,
@@ -331,6 +367,19 @@ pub(crate) async fn apply_compaction(
     }
     // 时间戳护栏边界（epoch ms；与 usage 源消息时间戳同精度）
     let boundary_ms = crate::steering::unix_millis() as i64;
+    // 摘要后台重试的丢弃消息（**对话替换前**捕获——plan 只携带 dropped
+    // id，消息正文须取自压缩前对话，与同步尝试同源；T-32 任务入参）
+    let dropped_for_retry: Vec<conex_types::message::AgentMessage> = plan
+        .dropped_ids
+        .iter()
+        .filter_map(|id| {
+            state
+                .conversation
+                .iter()
+                .find(|m| &m.id == id)
+                .map(|m| (**m).clone())
+        })
+        .collect();
     tracing::info!(
         tokens_before = plan.tokens_before,
         tokens_after = plan.tokens_after,
@@ -352,11 +401,130 @@ pub(crate) async fn apply_compaction(
     state.last_compaction_at = Some(boundary_ms);
     // 缓存审计基线重置（P5 S2 / T-36，C13）：压缩是唯一前缀重写点——
     // tracker 代数 +1、签名基线作废（压缩后是新内容非重放，不计 miss；
-    // jcode KvCacheBaseline 双保险 / pi prev=undefined）
+    // jcode KvCacheBaseline 双保险 / pi prev=undefined）。
+    // T-31（00-plan §5.1 / 评审 02 P0-5、§3.3）追加两件事：
+    // 1) R-K 单源：apply_external_generation(plan.generation) 用引擎/会话
+    //    代数校准 tracker 内部自增（V2 由 SessionContextMeta 注入引擎）；
+    // 2) capture_post_compaction：对话替换后捕获「压缩后真实请求前缀」
+    //    预测签名（system + tools + 链全查 + tail 原文），供压缩后首请求
+    //    前缀比对（record_usage 消费，T-29 追加区豁免）。
     if let Some(tracker) = &mut state.cache_tracker {
         tracker.on_compaction();
+        tracker.apply_external_generation(plan.generation);
+        let system = plan
+            .messages
+            .iter()
+            .find(|m| m.role == AgentMessageRole::System)
+            .map(|m| m.text());
+        let tools: &[crate::provider::ToolSchema] =
+            state.tools_snapshot.as_deref().unwrap_or_default();
+        tracker.capture_post_compaction(system.as_deref(), tools, &plan.messages);
     }
-    // End 事件（record 载荷 = CompactionPlan 字段，供 P5 消费展示）
+    // T-31 块元数据推导（R-B：块 id = `compacted-summary-{gen}-{fold}`，
+    // 与链内摘要消息 id 同名；prevBlockId = 链尾块——fold_chain_prev 为
+    // 0（无既有链）时 None）
+    let block_id = if plan.fold_index > 0 {
+        format!("compacted-summary-{}-{}", plan.generation, plan.fold_index)
+    } else {
+        // 手动构造计划（测试/外围触发）无 fold 语义：回退取链内末条摘要
+        // 消息 id；仍无 → 空串（正常路径不可达）
+        plan.messages
+            .iter()
+            .rev()
+            .find(|m| m.id.starts_with("compacted-summary"))
+            .map(|m| m.id.clone())
+            .unwrap_or_default()
+    };
+    let prev_block_id = if plan.fold_chain_prev > 0 {
+        Some(format!(
+            "compacted-summary-{}-{}",
+            plan.generation,
+            plan.fold_chain_prev
+        ))
+    } else {
+        None
+    };
+    let summary_state = if plan.summary_is_llm { "committed" } else { "awaiting" };
+    // 压缩后签名（system + 链哈希；链 = 链消息的投影签名——稳定前缀
+    // 身份，评审 02 §3.1「链是前缀内的稳定区段」）
+    let boundary_hash = {
+        let system = plan
+            .messages
+            .iter()
+            .find(|m| m.role == AgentMessageRole::System)
+            .map(|m| m.text());
+        let chain: Vec<Arc<AgentMessage>> = plan
+            .messages
+            .iter()
+            .filter(|m| m.id.starts_with("compacted-summary"))
+            .cloned()
+            .collect();
+        let sig = crate::cache_tracker::build_request_signature(system.as_deref(), &[], &chain);
+        format!("{:016x}-{:016x}", sig.system_hash, sig.messages_hash)
+    };
+    // T-32 摘要后台触发登记（00-plan §6.4）：同步已失败（stub 产出）且
+    // Summarizer 注入存在 → 登记后台退避重试任务（单飞；任务结果经回调
+    // 移交壳层写库，V1 未接线回调时只落日志——见 summary_dispatch.rs
+    // 架构决策）。丢弃消息已在对话替换前捕获（dropped_for_retry），
+    // existing 取链尾文本（与同步尝试同源）。
+    if !plan.summary_is_llm && !block_id.is_empty() && !dropped_for_retry.is_empty() {
+        if let Some(summarizer) = &state.summarizer {
+            let existing = plan
+                .messages
+                .iter()
+                .filter(|m| m.id.starts_with("compacted-summary"))
+                .filter_map(|m| {
+                    let text = m.text();
+                    if text.is_empty() { None } else { Some(text) }
+                })
+                .next_back();
+            let max_bytes = state
+                .compaction_policy
+                .as_ref()
+                .map(|p| p.max_summary_tokens.saturating_mul(4))
+                .unwrap_or(4096);
+            let spawned = match &state.summary_coordinator {
+                // T-42：会话级协调器（壳层注入）——跨 run 单飞 + 全局
+                // 并发上限 + 任务跨 run 存活；默认回调（壳层装配：落
+                // compression_blocks 表）随协调器携带
+                Some(coordinator) => coordinator.try_trigger(
+                    crate::r#loop::summary_dispatch::SummaryDispatchTask {
+                        session_id: session_id.clone(),
+                        block_id: block_id.clone(),
+                        generation: plan.generation,
+                        dropped: dropped_for_retry,
+                        existing,
+                        max_bytes,
+                        summarizer: summarizer.clone(),
+                    },
+                    None,
+                ),
+                // 轮次 4 兜底：run 级 dispatch（未注入会话级容器时）
+                None => state.summary_dispatch.try_spawn(
+                    crate::r#loop::summary_dispatch::SummaryDispatchTask {
+                        session_id: session_id.clone(),
+                        block_id: block_id.clone(),
+                        generation: plan.generation,
+                        dropped: dropped_for_retry,
+                        existing,
+                        max_bytes,
+                        summarizer: summarizer.clone(),
+                    },
+                    None,
+                ),
+            };
+            if spawned {
+                tracing::info!(
+                    block_id = %block_id,
+                    generation = plan.generation,
+                    "摘要同步失败 → 后台退避重试任务已登记（单飞）"
+                );
+            }
+        }
+    }
+    // End 事件（record 载荷 = CompactionPlan 字段，供 P5 消费展示；
+    // cache_boundary / details 为 T-31 块元数据织入面——R-H：字段级
+    // 扩展不新增事件类型）
     let record = ContextCompressionRecord {
         id: new_message_id("compaction"),
         trigger: info.trigger,
@@ -377,8 +545,29 @@ pub(crate) async fn apply_compaction(
         threshold_tokens,
         created_at: crate::steering::now_iso_utc(),
         handoff: None,
-        cache_boundary: None,
-        details: None,
+        // 缓存边界（对齐 ContextCompressionCacheBoundaryMetadata；
+        // structured_summary_* 为 V2 结构化摘要缓存域预留）
+        cache_boundary: Some(ContextCompressionCacheBoundaryMetadata {
+            kind: "context-compression-cache-boundary".to_string(),
+            version: 1,
+            stable_prefix_hash: boundary_hash,
+            cache_key: String::new(),
+            structured_summary_cache_key: String::new(),
+            structured_summary_stable_hash: String::new(),
+            invalidates: Vec::new(),
+            invalidation_reason: info.reason,
+            compressed_message_ids: plan.dropped_ids.clone(),
+            kept_message_ids: plan.kept_ids.clone(),
+            first_kept_message_id: plan.first_kept_message_id.clone(),
+        }),
+        // 块元数据 details（camelCase 五键；T-17 载荷构造 + T-31 织入）
+        details: Some(compaction_block_details(
+            &block_id,
+            plan.generation,
+            prev_block_id.as_deref(),
+            boundary_ms,
+            summary_state,
+        )),
     };
     let compaction_id = record.id.clone();
     state.events.push(AgentEvent::ContextCompressionEnd {
@@ -479,6 +668,107 @@ pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
         session_id,
         message,
     });
+    // T-35 注入卫生（debug 面）：时间线/时间戳注入只允许落在对话末尾
+    // user 消息——本函数是 user 消息入队消费的追加点（prepare_turn /
+    // awaiting_input 共用），在此统一断言
+    assert_timeline_injection_hygiene(&state.conversation);
+}
+
+/// 时间线/时间戳注入卫生断言（T-35，00-plan §9 / 评审 02 N8；debug 面）
+///
+/// 不变量（00-plan §9 注入卫生表）：时间戳/时间线注入只允许出现在
+/// 「对话末尾的 user 消息」——绝不进 system 段、绝不改写既有消息、绝不
+/// 落在链（compacted-summary 前缀）内、绝不落在保留区中部。
+///
+/// 识别面：注入消息 metadata 携带 `{kind: "timeline"}` 标记，或正文含
+/// 时间戳注入前缀「当前时间：」；两类标记都不存在时本断言为无操作
+/// （零开销、向后兼容既有消息形态——现状时间线注入在壳层/前端，内核
+/// 只兜底运行期注入面）。
+///
+/// debug_assert 仅在 debug 构建生效（cargo test / dev）；release 构建
+/// 经 `cfg!(debug_assertions)` 分支整体编译剔除（零成本）。
+pub(crate) fn assert_timeline_injection_hygiene(conversation: &[Arc<AgentMessage>]) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+    let Some(last) = conversation.last() else {
+        return;
+    };
+    let is_timeline = last
+        .metadata
+        .as_ref()
+        .and_then(|m| m.get("kind").and_then(|v| v.as_str()))
+        .is_some_and(|kind| kind == "timeline")
+        || last.text().contains("当前时间：");
+    if is_timeline {
+        debug_assert_eq!(
+            last.role,
+            AgentMessageRole::User,
+            "时间线注入只允许落在对话末尾 user 消息（T-35 注入卫生；注入点越界 → 前缀漂移）"
+        );
+    }
+}
+
+/// 压缩产物协议形状护栏（T-36，评审 02 P1-7 / 00-plan §12 风险 4）
+///
+/// 规则：**无 system 会话**的链后首条必须为 user——assistant/tool 开头
+/// 违反协议形状（DeepSeek/OpenAI 首条 400 风险）；有 system 的会话由
+/// system 充当首条，形状天然安全。空/全链会话 → false（无合法可压缩
+/// 内容，由调用方跳过压缩）。
+///
+/// 覆盖说明：轮次 1 的 `cut <= fold_start` 只钳制切割点下界（B2 单调），
+/// 不覆盖「tail 首条角色」形状问题——本条护栏在 session-loop 压缩触发
+/// 点（预检 / 溢出阶梯）对压缩产物（plan.messages）检查，违规即跳过
+/// 压缩 + warn（引擎层保持纯算法不感知 wire 协议形状）。
+pub(crate) fn compaction_shape_ok(conversation: &[Arc<AgentMessage>]) -> bool {
+    if conversation.iter().any(|m| m.role == AgentMessageRole::System) {
+        return true;
+    }
+    match conversation
+        .iter()
+        .find(|m| !m.id.starts_with("compacted-summary"))
+    {
+        None => false,
+        Some(first) => first.role == AgentMessageRole::User,
+    }
+}
+
+/// 水合首尾双约束断言（T-36，00-plan §3.1 / 评审 02 P1-7；debug 面）
+///
+/// - 首条约束：跳过开头 system + 链消息后，剩余首条必须为 User——
+///   assistant/tool 开头违反协议形状（provider 400 风险）；
+/// - 尾部约束（**仅含水合链的对话**）：链后保留区必须以 user 收尾
+///   （B4 形状 / P4 §3.2.2 水合截断保证）；无链对话不约束尾部——
+///   兼容 run outcome 直接续接形态（跨 run 续接以 assistant 收尾）。
+///
+/// 调用点：`with_initial_conversation[_arc]`（水合/首条消息构造路径）；
+/// `hydrate_history` 已按规则 5 截断到末条 user（尾部约束天然满足）。
+/// release 构建经 `cfg!(debug_assertions)` 分支整体编译剔除（零成本）。
+pub(crate) fn assert_conversation_head_tail(conversation: &[Arc<AgentMessage>]) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+    // 首条约束：跳过 system + 链后的首条必须为 user
+    if let Some(idx) = conversation.iter().position(|m| {
+        m.role != AgentMessageRole::System && !m.id.starts_with("compacted-summary")
+    }) {
+        debug_assert_eq!(
+            conversation[idx].role,
+            AgentMessageRole::User,
+            "无 system 会话首条（跳过链后）必须为 user（T-36 首条约束；assistant/tool 开头 provider 400 风险）"
+        );
+    }
+    // 尾部约束（仅链会话）：链后保留区以 user 收尾（B4）
+    let has_chain = conversation
+        .iter()
+        .any(|m| m.id.starts_with("compacted-summary"));
+    if has_chain {
+        debug_assert_eq!(
+            conversation.last().map(|m| m.role),
+            Some(AgentMessageRole::User),
+            "含水合链的对话必须以 user 收尾（B4 尾部约束，T-36）"
+        );
+    }
 }
 
 /// 构建 steering 评估上下文（计数取 coordinator 单一计数源，01 §3.3 / D10）
@@ -819,6 +1109,10 @@ mod tests {
             tokens_after: 2_100,
             summary: "[Compacted 2 earlier message(s) to fit context window]".to_string(),
             summary_is_llm: false,
+            fold_chain_prev: 0,
+            fold_chain_after: 0,
+            fold_index: 0,
+            generation: 1,
         };
         let info = CompactionTriggerInfo {
             trigger: ContextCompressionTrigger::Threshold,
@@ -922,6 +1216,10 @@ mod tests {
             tokens_after: 5_000,
             summary: "[Compacted 1 earlier message(s)]".to_string(),
             summary_is_llm: false,
+            fold_chain_prev: 0,
+            fold_chain_after: 0,
+            fold_index: 0,
+            generation: 1,
         };
         let info = CompactionTriggerInfo {
             trigger: ContextCompressionTrigger::Threshold,
@@ -933,12 +1231,20 @@ mod tests {
             state.cache_tracker.as_ref().unwrap().baseline().is_none(),
             "压缩后基线必须作废"
         );
-        // 压缩后首轮：无基线 → 不计 miss
+        // T-31：压缩后重建签名已捕获（capture_post_compaction 接线）——
+        // 与压缩后对话同输入投影（system=None、tools 空、messages=对话）
+        let post_compaction = state.conversation.clone();
+        assert!(
+            state.cache_tracker.as_ref().unwrap().rebuild_signature().is_some(),
+            "apply_compaction 必须捕获压缩后重建签名（T-31）"
+        );
+        // 压缩后首轮：重建签名与捕获签名同输入 → Identical（追加区豁免）；
+        // 无基线 → detect 不计 miss
         state
             .cache_tracker
             .as_mut()
             .unwrap()
-            .capture_signature(Some("sys"), &[], &[]);
+            .capture_signature(None, &[], &post_compaction);
         assert!(
             state
                 .cache_tracker
@@ -946,12 +1252,13 @@ mod tests {
                 .unwrap()
                 .record_usage(usage(5_000, 0, 0), 50, 5_050, 2_000)
                 .is_none(),
-            "压缩后无基线 → 不计 miss"
+            "压缩后无基线 → 不计 miss（重建签名与捕获签名一致 → 正常路径）"
         );
     }
 
     /// 摘要隔离（C14）：摘要器只收到丢弃消息（trait 边界不携带会话/
-    /// 缓存亲和参数——无缓存键断言）；Err → 降级 L1 占位符，压缩仍完成
+    /// 缓存亲和参数——无缓存键断言）；Err → 降级 stub（R-G 新契约：
+    /// 合法 Schema V1 JSON 才进链，其余一律中性 stub），压缩仍完成
     // G2 允许理由（clippy::type_complexity）：测试局部嵌套类型
     // （RecordingSummarizer 回调签名含 Arc<Mutex<Vec<(Vec<String>,
     // Option<String>)>>>），类型由被测接口依赖链自然形成，定义别名可缓解
@@ -959,6 +1266,24 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::type_complexity)]
     async fn summarizer_receives_dropped_only_and_err_falls_back_to_l1() {
+        /// 合法 Schema V1 JSON 文档（R-G 契约：非 JSON 一律降级 stub）
+        fn valid_summary_json(block_id: &str) -> String {
+            serde_json::json!({
+                "schemaVersion": 1,
+                "blockId": block_id,
+                "generation": 1,
+                "droppedIds": [],
+                "height": 1,
+                "tier": "chunk",
+                "goal": "修复构建流程",
+                "constraints": [],
+                "progress": ["已定位编译错误"],
+                "decisions": [],
+                "nextSteps": ["运行全量测试"],
+                "criticalContext": ["cargo build --workspace"],
+            })
+            .to_string()
+        }
         struct RecordingSummarizer {
             calls: Arc<Mutex<Vec<(Vec<String>, Option<String>)>>>,
             fail: bool,
@@ -976,7 +1301,7 @@ mod tests {
                 if self.fail {
                     Err("摘要请求失败（模拟 L2 降级）".to_string())
                 } else {
-                    Ok("## Goal\n(none)\n## Progress\n(全部完成)".to_string())
+                    Ok(valid_summary_json("compacted-summary-1-1"))
                 }
             }
         }
@@ -1006,14 +1331,21 @@ mod tests {
             dropped_ids.iter().all(|id| id.starts_with('m')),
             "摘要器只收到消息 id"
         );
-        // 事件载荷摘要 = L2 返回文本
-        assert_eq!(
-            compression_record(&state).map(|r| r.summary),
-            Some("## Goal\n(none)\n## Progress\n(全部完成)".to_string()),
-            "L2 摘要文本必须进入事件载荷"
+        // 事件载荷摘要 = Schema V1 JSON 文档的 md 渲染（R-G 语源唯一：
+        // 链文本 = 文档的确定性渲染投影）
+        let summary = compression_record(&state)
+            .map(|r| r.summary)
+            .expect("必须有记录");
+        assert!(
+            summary.contains("## Goal") && summary.contains("修复构建流程"),
+            "事件摘要 = JSON 文档的 markdown 渲染：{summary}"
+        );
+        assert!(
+            !summary.starts_with("[Compacted"),
+            "同步成功路径不得降级 stub：{summary}"
         );
 
-        // 失败路径：Err → 降级 L1 静态占位符（§3.4.4：不阻塞主对话）
+        // 失败路径：Err → 降级中性 stub（R-C：永不改写；§3.4.4 不阻塞主对话）
         let fail_state = {
             let mut state = test_state(SessionLoopOptions {
                 summarizer: Some(Arc::new(RecordingSummarizer {
@@ -1033,8 +1365,276 @@ mod tests {
             .map(|r| r.summary)
             .expect("必须有记录");
         assert!(
-            summary.contains("[Compacted"),
-            "失败降级 L1 占位符：{summary}"
+            summary.starts_with("[Compacted(") && summary.contains("摘要见块表"),
+            "失败降级中性 stub（R-G 契约，非 JSON/Err 一律 stub）：{summary}"
         );
+    }
+
+    /// T-35 注入卫生（正例）：时间线标记落在对话末尾 user 消息 → 通过
+    #[test]
+    fn timeline_injection_at_tail_user_passes_hygiene() {
+        fn msg(role: AgentMessageRole, kind: Option<&str>, text: &str) -> Arc<AgentMessage> {
+            Arc::new(AgentMessage {
+                id: "m".to_string(),
+                role,
+                created_at: "2026-08-03T10:00:00.000Z".to_string(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: text.to_string(),
+                }],
+                metadata: kind.map(|k| serde_json::json!({ "kind": k })),
+                client_message_id: None,
+                content: None,
+            })
+        }
+        // 时间线注入 = 对话末尾 user 消息（合法形态）
+        let conv = vec![
+            msg(AgentMessageRole::User, None, "之前的对话"),
+            msg(AgentMessageRole::Assistant, None, "回复"),
+            msg(AgentMessageRole::User, Some("timeline"), "当前时间：2026-08-03 18:00:00\n继续"),
+        ];
+        assert_timeline_injection_hygiene(&conv);
+    }
+
+    /// T-35 注入卫生（反例）：时间线标记出现在对话末尾但角色非 user →
+    /// debug 断言拒绝（注入点越界 = 前缀漂移源）
+    #[test]
+    #[should_panic(expected = "时间线注入只允许")]
+    fn timeline_marker_on_non_user_tail_rejected() {
+        fn msg(role: AgentMessageRole, kind: Option<&str>, text: &str) -> Arc<AgentMessage> {
+            Arc::new(AgentMessage {
+                id: "m".to_string(),
+                role,
+                created_at: "2026-08-03T10:00:00.000Z".to_string(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: text.to_string(),
+                }],
+                metadata: kind.map(|k| serde_json::json!({ "kind": k })),
+                client_message_id: None,
+                content: None,
+            })
+        }
+        // 时间线标记落在对话末尾 system 角色（越界注入）→ 拒绝
+        let conv = vec![
+            msg(AgentMessageRole::User, None, "对话"),
+            msg(AgentMessageRole::System, Some("timeline"), "时间线注入进 system"),
+        ];
+        assert_timeline_injection_hygiene(&conv);
+    }
+
+    /// T-36 协议形状护栏（纯函数三态）：有 system → 恒放行；
+    /// 无 system + 链后首条 user → 放行；无 system + 链后首条 assistant /
+    /// tool / 全链 → 拒绝
+    #[test]
+    fn compaction_shape_guard_classifies_shapes() {
+        fn msg(id: &str, role: AgentMessageRole) -> Arc<AgentMessage> {
+            Arc::new(AgentMessage {
+                id: id.to_string(),
+                role,
+                created_at: "2026-08-03T10:00:00.000Z".to_string(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: "字".repeat(100),
+                }],
+                metadata: None,
+                client_message_id: None,
+                content: None,
+            })
+        }
+        // 有 system → 放行（wire 首条 = system，形状安全）
+        assert!(compaction_shape_ok(&[
+            msg("sys", AgentMessageRole::System),
+            msg("compacted-summary-1-1", AgentMessageRole::Assistant), // 链
+            msg("a1", AgentMessageRole::Assistant),
+        ]));
+        // 无 system + 链后首条 user → 放行
+        assert!(compaction_shape_ok(&[
+            msg("compacted-summary-1-1", AgentMessageRole::Assistant), // 链
+            msg("u1", AgentMessageRole::User),
+            msg("a1", AgentMessageRole::Assistant),
+        ]));
+        // 无 system + 链后首条 assistant → 拒绝（wire 首条 = assistant，
+        // provider 400 风险，评审 02 P1-7）
+        assert!(!compaction_shape_ok(&[
+            msg("compacted-summary-1-1", AgentMessageRole::Assistant), // 链
+            msg("a1", AgentMessageRole::Assistant),
+            msg("u1", AgentMessageRole::User),
+        ]));
+        // 无 system + 无链 + 首条 assistant → 拒绝
+        assert!(!compaction_shape_ok(&[
+            msg("a1", AgentMessageRole::Assistant),
+            msg("u1", AgentMessageRole::User),
+        ]));
+        // 无 system + 无链 + 首条 tool → 拒绝
+        assert!(!compaction_shape_ok(&[
+            msg("t1", AgentMessageRole::Tool),
+            msg("u1", AgentMessageRole::User),
+        ]));
+        // 空 / 全链 → 拒绝（无可压缩内容，调用方跳过压缩）
+        assert!(!compaction_shape_ok(&[]));
+        assert!(!compaction_shape_ok(&[msg("s1", AgentMessageRole::Assistant)]));
+    }
+
+    /// T-36 引擎兜底（预检路径）：无 system 会话中压缩产物链后首条为
+    /// assistant → 跳过压缩 + 不广播事件 + 不计数（护栏防 provider 400）
+    ///
+    /// 构造：user(500) assistant(5000) user(500) assistant(5000) user(500)
+    /// ——尾部倒推 keep_recent_tokens=2000 在 assistant(3) 处越过预算，
+    /// min_recent_turns=1 已被 idx4 user 满足 → cut 停在 assistant(3) →
+    /// 压缩产物 [链][assistant][user] 形状违规 → 护栏拦下。
+    #[tokio::test]
+    async fn compaction_shape_guard_skips_assistant_head_without_system() {
+        let mut state = test_state(budgeted_options());
+        let sizes = [500usize, 5_000, 500, 5_000, 500];
+        state.conversation = sizes
+            .iter()
+            .enumerate()
+            .map(|(i, &n)| {
+                Arc::new(AgentMessage {
+                    id: format!("m{i}"),
+                    role: if i % 2 == 0 {
+                        AgentMessageRole::User
+                    } else {
+                        AgentMessageRole::Assistant
+                    },
+                    created_at: "2026-08-03T10:00:00.000Z".to_string(),
+                    blocks: vec![AgentMessageBlock::Text {
+                        text: "字".repeat(n),
+                    }],
+                    metadata: None,
+                    client_message_id: None,
+                    content: None,
+                })
+            })
+            .collect();
+        assert!(
+            !maybe_compact_preflight(&mut state).await,
+            "压缩产物协议形状违规（无 system 且链后首条非 user）→ 必须跳过压缩"
+        );
+        assert_eq!(state.compactions_this_run, 0, "护栏拦下不得计数");
+        assert!(
+            state
+                .events
+                .iter()
+                .all(|e| !matches!(e, AgentEvent::ContextCompressionEnd { .. })),
+            "护栏拦下不得广播压缩事件"
+        );
+    }
+
+    /// T-31/T-32 织入集成（真实预检压缩 stub 路径）：
+    /// 1) record.details 含 camelCase 五键（blockId/generation/prevBlockId/
+    ///    droppedAtMs/summaryState）；
+    /// 2) record.cache_boundary 非 None 且 stable_prefix_hash 非空
+    ///    （system+链签名，T-31）；
+    /// 3) tracker.rebuild_signature 已捕获（capture_post_compaction 接线）；
+    /// 4) 后台退避任务经单飞 spawn——重试时摘要器收到与同步尝试同源的
+    ///    丢弃消息（dropped_for_retry 对话替换前捕获）
+    #[tokio::test]
+    async fn compaction_wires_block_details_boundary_and_background_retry() {
+        use std::sync::Mutex;
+        /// 首次同步失败（降级 stub）→ 后台重试成功；记录每次收到的
+        /// 丢弃消息 id 清单（验证重试与同步同源）
+        struct FailsThenSucceeds {
+            calls: Arc<Mutex<Vec<Vec<String>>>>,
+        }
+        impl Summarizer for FailsThenSucceeds {
+            fn summarize(
+                &self,
+                dropped: &[AgentMessage],
+                _existing: Option<&str>,
+            ) -> Result<String, String> {
+                let ids: Vec<String> = dropped.iter().map(|m| m.id.clone()).collect();
+                let mut calls = self.calls.lock().unwrap();
+                calls.push(ids);
+                if calls.len() == 1 {
+                    return Err("首次同步失败（模拟 L2 降级）".to_string());
+                }
+                Ok(serde_json::json!({
+                    "schemaVersion": 1,
+                    "blockId": "compacted-summary-1-1",
+                    "generation": 1,
+                    "droppedIds": [],
+                    "height": 1,
+                    "tier": "chunk",
+                    "goal": "后台重试成功",
+                    "constraints": [],
+                    "progress": [],
+                    "decisions": [],
+                    "nextSteps": [],
+                    "criticalContext": [],
+                })
+                .to_string())
+            }
+        }
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let summarizer = Arc::new(FailsThenSucceeds { calls: calls.clone() });
+        let mut state = test_state(SessionLoopOptions {
+            summarizer: Some(summarizer.clone()),
+            // 快速退避注入（单飞任务 1ms 后即重试，测试等 300ms 收口）
+            summary_dispatch: Some(crate::r#loop::summary_dispatch::SummaryDispatchConfig {
+                backoff_ms: vec![1, 1, 1],
+                jitter: 0.0,
+                max_wall_ms: 5_000,
+                max_attempts: 4,
+            }),
+            cache_tracking: Some(crate::cache_tracker::CacheTrackingConfig {
+                provider: "deepseek".into(),
+                model: "deepseek-v4-flash".into(),
+                ttl_seconds: 60,
+            }),
+            ..budgeted_options()
+        });
+        state.conversation = big_conversation();
+        assert!(
+            maybe_compact_preflight(&mut state).await,
+            "stub 路径压缩必须完成"
+        );
+        // 1) details camelCase 五键（T-17 载荷 + T-31 织入）
+        let record = compression_record(&state).expect("必须有压缩记录");
+        let details = record.details.as_ref().expect("details 必须织入（T-31）");
+        assert_eq!(
+            details.get("blockId"),
+            Some(&serde_json::json!("compacted-summary-1-1")),
+            "blockId 必须为 R-B 格式 compacted-summary-gen-fold"
+        );
+        assert_eq!(details.get("generation"), Some(&serde_json::json!(1)));
+        assert_eq!(
+            details.get("prevBlockId"),
+            Some(&serde_json::Value::Null),
+            "首块 prevBlockId = None（fold_chain_prev=0）"
+        );
+        assert!(
+            details.get("droppedAtMs").and_then(|v| v.as_i64()).is_some(),
+            "droppedAtMs 必须为 epoch 毫秒"
+        );
+        assert_eq!(details.get("summaryState"), Some(&serde_json::json!("awaiting")));
+        // 2) cache_boundary 非 None + stable_prefix_hash（system+链签名）
+        let boundary = record
+            .cache_boundary
+            .as_ref()
+            .expect("cache_boundary 必须填充（T-31）");
+        assert_eq!(boundary.kind, "context-compression-cache-boundary");
+        assert_eq!(boundary.version, 1);
+        assert!(
+            !boundary.stable_prefix_hash.is_empty(),
+            "stable_prefix_hash = system+链哈希（稳定前缀身份）"
+        );
+        // 3) rebuild_signature 已捕获（capture_post_compaction 接线）
+        assert!(
+            state
+                .cache_tracker
+                .as_ref()
+                .expect("已配置 tracker")
+                .rebuild_signature()
+                .is_some(),
+            "压缩后重建签名必须已捕获（T-31）"
+        );
+        // 4) 后台单飞任务 spawn 且重试收到同源丢弃消息（T-32）
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let recorded = calls.lock().unwrap().clone();
+        assert_eq!(recorded.len(), 2, "同步 1 次 + 后台退避重试 1 次");
+        assert_eq!(
+            recorded[1], recorded[0],
+            "后台重试必须收到与同步尝试同源的丢弃消息（dropped_for_retry 对话替换前捕获）"
+        );
+        assert_eq!(recorded[0].len(), 8, "丢弃 8 条消息全部进入重试任务");
     }
 }

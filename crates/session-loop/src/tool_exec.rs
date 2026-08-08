@@ -852,10 +852,15 @@ impl ToolExecutor {
             //（loop 装配面默认注入 OutputWorkspace；None = 未接线，
             // resolve_output_dir 返回 common.unsupported）
             output_dir: ctx.output_dir.clone(),
-            // 后台任务管理器/日志落盘根未接线（A1 域新字段占位：None =
+            // 后台任务管理器 / 日志落盘根未接线（A1 域新字段占位：None =
             // 无后台任务能力、截断不落盘；真实接线由引擎装配面注入）
             background: None,
             log_root: None,
+            // T-40（记忆韧性轮次 5）：压缩块只读访问服务——本轮仅占位
+            // None（search_context/decompress_context 返回
+            // common.unsupported）；轮次 6 由引擎侧注入
+            // CompressionContextStore 实现（conex-db compression_blocks）
+            compression_store: None,
         };
         // ── 中间件链 + 插件钩子（审批已通过，进入执行面；优先级语义
         //    见模块头注：审批优先于中间件，中间件 Block 不绕过审批）──

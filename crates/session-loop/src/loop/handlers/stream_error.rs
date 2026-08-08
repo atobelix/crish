@@ -26,7 +26,8 @@ use conex_types::tool::{
 
 use super::super::end::EndDecision;
 use super::super::handlers::{
-    apply_compaction, dispatch, CompactionTriggerInfo, HandlerOutcome, LoopState,
+    apply_compaction, compaction_shape_ok, dispatch, CompactionTriggerInfo, HandlerOutcome,
+    LoopState,
 };
 use super::super::LoopError;
 use super::streaming::streaming_aborted;
@@ -174,6 +175,17 @@ async fn compression_ladder(
         // 无合法切割点 / 无可丢内容：不重试（请求体未变，重试必再超）
         return fatal_provider_error(state, classified);
     }
+    // T-36 引擎兜底（评审 02 P1-7）：压缩产物的协议形状护栏——无 system
+    // 且链后首条非 user → 跳过压缩 + warn（压缩后 wire 首条非 user →
+    // provider 400；保持原请求体重试必再超 → 直接 fatal，语义与
+    // dropped 为空路径一致）
+    if !compaction_shape_ok(&plan.messages) {
+        tracing::warn!(
+            session_id = %state.machine.context().session_id,
+            "溢出压缩产物协议形状违规（无 system 且链后首条非 user）→ 跳过压缩（T-36 护栏）"
+        );
+        return fatal_provider_error(state, classified);
+    }
     // 应用压缩（Overflow 触发；压缩是唯一前缀重写点 I1，事件广播 +
     // 时间戳护栏 + 单 run 计数在 apply_compaction 内完成）
     let info = CompactionTriggerInfo {
@@ -182,6 +194,10 @@ async fn compression_ladder(
     };
     apply_compaction(state, &plan, &info, Some(u64::from(budget_tokens))).await;
     state.compression_retries += 1;
+    // T-35 注入卫生（debug 面）：压缩替换对话后复检——压缩是唯一前缀
+    // 重写点，链消息与保留区不得携带时间线注入（注入只允许在对话末尾
+    // user 消息）
+    crate::r#loop::handlers::assert_timeline_injection_hygiene(&state.conversation);
     // 重试一次：NO_PROGRESS_CONTINUE 重进 provider 循环（对话已替换，
     // 下一次 build_request 携带压缩后序列 = 真实恢复）
     dispatch(state, E::NoProgressContinue)?;
@@ -727,7 +743,8 @@ mod tests {
 
     /// I4 补充（C14）：溢出压缩阶梯同样经 Summarizer trait 边界——
     /// 摘要器只收到丢弃消息（无 session_id / 无缓存键 / 无 tools / 无
-    /// system 参数；trait 签名即隔离保证），L2 文本进入事件载荷
+    /// system 参数；trait 签名即隔离保证），Schema V1 JSON 文档的 md
+    /// 渲染进入事件载荷（R-G 新契约：非 JSON 输出一律降级 stub）
     // G2 允许理由（clippy::type_complexity）：测试局部嵌套类型
     // （RecordingSummarizer 回调签名含 Arc<Mutex<Vec<(Vec<String>,
     // Option<String>)>>>），类型由被测接口依赖链自然形成，定义别名可缓解
@@ -749,7 +766,22 @@ mod tests {
                     dropped.iter().map(|m| m.id.clone()).collect(),
                     existing.map(str::to_string),
                 ));
-                Ok("## Goal\n(none)\n## Progress\n(全部完成)".to_string())
+                // 合法 Schema V1 JSON 文档（R-G 契约）
+                Ok(serde_json::json!({
+                    "schemaVersion": 1,
+                    "blockId": "compacted-summary-1-1",
+                    "generation": 1,
+                    "droppedIds": [],
+                    "height": 1,
+                    "tier": "chunk",
+                    "goal": "溢出恢复",
+                    "constraints": [],
+                    "progress": ["已压缩上下文"],
+                    "decisions": [],
+                    "nextSteps": ["重试请求"],
+                    "criticalContext": ["context length exceeded"],
+                })
+                .to_string())
             }
         }
         let calls = Arc::new(Mutex::new(Vec::new()));
@@ -769,10 +801,17 @@ mod tests {
             dropped_ids.iter().all(|id| id.starts_with('m')),
             "摘要器只收到消息 id（无会话/缓存亲和参数）"
         );
-        assert_eq!(
-            compression_record(&state).map(|r| r.summary),
-            Some("## Goal\n(none)\n## Progress\n(全部完成)".to_string()),
-            "L2 摘要文本必须进入事件载荷"
+        // 事件载荷摘要 = Schema V1 JSON 文档的 md 渲染（R-G 语源唯一）
+        let summary = compression_record(&state)
+            .map(|r| r.summary)
+            .expect("必须有记录");
+        assert!(
+            summary.contains("## Goal") && summary.contains("溢出恢复"),
+            "事件摘要 = JSON 文档的 markdown 渲染：{summary}"
+        );
+        assert!(
+            !summary.starts_with("[Compacted"),
+            "同步成功路径不得降级 stub：{summary}"
         );
     }
 }

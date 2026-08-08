@@ -21,8 +21,8 @@ use crate::steering::SteeringPhase;
 
 use super::super::end::EndDecision;
 use super::super::handlers::{
-    check_control, dispatch, maybe_compact_preflight, record_message, steering_context,
-    HandlerOutcome, LoopState,
+    assert_timeline_injection_hygiene, check_control, dispatch, maybe_compact_preflight,
+    record_message, steering_context, HandlerOutcome, LoopState,
 };
 use super::super::LoopError;
 
@@ -91,6 +91,10 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     //    （conex-compaction AgentMessage 面）已接线，CompressionHook
     //    死配置由阈值预检替代。
     maybe_compact_preflight(state).await;
+    // T-35 注入卫生（debug 面）：本 handler 是 steering 注入（InjectMessage
+    // 直写对话）与 user 消息消费（record_message）的汇聚点——预检压缩
+    // 后再做一次尾部卫生断言，覆盖 steering 注入路径
+    assert_timeline_injection_hygiene(&state.conversation);
 
     // 6. TURN_PREPARED → streaming（turnIndex+1，toolCallCount 归零）
     dispatch(state, E::TurnPrepared)?;

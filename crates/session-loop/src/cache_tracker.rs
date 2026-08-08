@@ -28,9 +28,9 @@
 use std::sync::Arc;
 
 use conex_telemetry::cache::{
-    classify, cold_cache_check, is_cold, warm_until, CacheBaseline, CacheBreakdownMath,
-    CacheUsageScalars, ColdCacheWarning, MissDetector, MissReason, RequestSignature,
-    LOW_HIT_RATIO_PCT,
+    classify, cold_cache_check, is_cold, prefix_diff_index, warm_until, CacheBaseline,
+    CacheBreakdownMath, CacheUsageScalars, ColdCacheWarning, MissDetector, MissReason,
+    PrefixDiffKind, RequestSignature, LOW_HIT_RATIO_PCT,
 };
 use conex_types::events::{MissAttribution, RunCacheStats};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
@@ -92,6 +92,14 @@ pub struct CacheStatsTracker {
     /// 请求发送前捕获的最新签名（`capture_signature` 写入；`record_usage`
     /// 刷新基线时消费）
     pending_signature: Option<RequestSignature>,
+    /// 压缩后首请求待消费标记（`on_compaction` 置位、`record_usage` 消费
+    /// 后清除；run 内生命周期——run 收口未消费时下个 run tracker 新建
+    /// 自然丢失，无挂起残留，v1.1 §5.2）
+    pending_compaction: bool,
+    /// 压缩后重建签名（`capture_post_compaction` 写入——apply_compaction
+    /// 对话替换后捕获的"压缩后真实请求前缀"预测；`record_usage` 前缀
+    /// 比对消费后清空防陈旧）
+    rebuild_signature: Option<RequestSignature>,
     /// 模型切换待归因标记（`on_model_switch` 置位；下一次 `record_usage`
     /// 归因 ModelSwitch，之后随基线刷新清除——「签名基线作废」语义，P5 §3.4.5）
     model_switch_pending: bool,
@@ -120,6 +128,8 @@ impl CacheStatsTracker {
             ttl_seconds: 0,
             generation: 0,
             pending_signature: None,
+            pending_compaction: false,
+            rebuild_signature: None,
             model_switch_pending: false,
             prompt_tokens: 0,
             completion_tokens: 0,
@@ -164,6 +174,25 @@ impl CacheStatsTracker {
         self.pending_signature = Some(build_request_signature(system, tools, messages));
     }
 
+    /// 压缩后重建签名（v1.1 §5.1 T-28 / 02 分析 §五 E1）：在 apply_compaction
+    /// 把对话替换为压缩产物（`state.conversation = plan.messages.clone()`）
+    /// 之后调用，捕获"压缩后真实请求前缀"的预测签名——system / tools /
+    /// messages 投影与 [Self::capture_signature] 同一构造路径（`build_request_signature`），
+    /// 因此正常路径（无中途改写）下两者相等（评审 02 §3.3 时序已核实）。
+    ///
+    /// 签名型基线，不携带 token 数。轮次 4（T-31）在 handlers/mod.rs
+    /// `apply_compaction` 中接线；本轮仅提供能力——未接线时
+    /// `rebuild_signature` 保持 None，[Self::record_usage] 走回退（直接清
+    /// pending 不比对，行为与现状一致）。
+    pub fn capture_post_compaction(
+        &mut self,
+        system: Option<&str>,
+        tools: &[ToolSchema],
+        messages: &[Arc<AgentMessage>],
+    ) {
+        self.rebuild_signature = Some(build_request_signature(system, tools, messages));
+    }
+
     /// turn 结束后消费 usage（标量面 + completion / total），产出可选的
     /// [CacheMiss]（审计命中）；内部完成：
     ///
@@ -198,19 +227,70 @@ impl CacheStatsTracker {
         self.reported_cache = self.reported_cache || usage.read > 0 || usage.write > 0;
         // 4. miss 检测（无基线 / 未报告缓存 → None）与归因组合
         let baseline = self.baseline.clone();
-        let miss = MissDetector::detect(baseline.as_ref(), &breakdown, self.reported_cache)
-            .map(|missed_tokens| {
-                let idle_ms = baseline
-                    .as_ref()
-                    .map_or(0, |b| completed_at_ms.saturating_sub(b.completed_at_ms));
-                CacheMiss {
-                    missed_tokens,
-                    idle_ms,
-                    attribution: self.classify_miss(&breakdown, completed_at_ms),
-                    model_changed: self.model_switch_pending
-                        || baseline.as_ref().map_or(false, |b| b.model != self.model),
+        // 4.1 压缩后首请求前缀比对（v1.1 §5.1 T-29 / 评审 02 P1-4）：
+        //     pending_compaction 且无基线（on_compaction 已作废基线）时，
+        //     拿重建签名与本次捕获的 cur 做前缀比对——差异点仅在追加区
+        //     （Identical / TailAppend）→ 正常（追加区豁免，不误报 harness
+        //     改写）；差异点在历史区（HeadRewrite）→ warn 诊断 + 归因
+        //     PrefixChanged。无论结果如何，消费后清 pending / 清空重建
+        //     签名（防陈旧）。
+        let mut post_compaction_rewritten = false;
+        if self.pending_compaction && self.baseline.is_none() {
+            let rebuild = self.rebuild_signature.take();
+            let cur = self.pending_signature.clone().unwrap_or_default();
+            if let Some(rebuild) = rebuild {
+                let diff = prefix_diff_index(&rebuild.message_hashes, &cur.message_hashes);
+                match diff.kind {
+                    PrefixDiffKind::Identical | PrefixDiffKind::TailAppend => {
+                        // 正常：压缩后首请求 = 重建前缀（或在其上纯追加）
+                        tracing::debug!(
+                            index = diff.index,
+                            "压缩后首请求前缀与重建签名一致（或纯追加，追加区豁免）"
+                        );
+                    }
+                    PrefixDiffKind::HeadRewrite => {
+                        tracing::warn!(
+                            index = diff.index,
+                            "压缩后首请求前缀被改写（疑似 harness 二次改写）"
+                        );
+                        post_compaction_rewritten = true;
+                    }
                 }
-            });
+            } else {
+                // 轮次 4 未接线（capture_post_compaction 未调用）→ 回退：
+                // 直接清 pending 不比对，行为与现状一致
+                tracing::debug!(
+                    "压缩后重建签名缺失（capture_post_compaction 未接线），跳过前缀比对"
+                );
+            }
+            self.pending_compaction = false;
+        }
+        let miss = if post_compaction_rewritten {
+            // 无基线时 detect 恒 None；HeadRewrite 是诊断信号——产出零浪费
+            // 的 PrefixChanged 审计记录（attribution 供日志 / 告警消费，
+            // missed_tokens 累计 +0 不影响 token 面）
+            Some(CacheMiss {
+                missed_tokens: 0,
+                idle_ms: 0,
+                attribution: MissAttribution::PrefixChanged,
+                model_changed: false,
+            })
+        } else {
+            MissDetector::detect(baseline.as_ref(), &breakdown, self.reported_cache).map(
+                |missed_tokens| {
+                    let idle_ms = baseline
+                        .as_ref()
+                        .map_or(0, |b| completed_at_ms.saturating_sub(b.completed_at_ms));
+                    CacheMiss {
+                        missed_tokens,
+                        idle_ms,
+                        attribution: self.classify_miss(&breakdown, completed_at_ms),
+                        model_changed: self.model_switch_pending
+                            || baseline.as_ref().map_or(false, |b| b.model != self.model),
+                    }
+                },
+            )
+        };
         if let Some(miss) = &miss {
             // 5. 浪费量审计累计（本 run 的 detectMiss 总和）
             self.missed_tokens = self.missed_tokens.saturating_add(miss.missed_tokens);
@@ -235,10 +315,29 @@ impl CacheStatsTracker {
     }
 
     /// 压缩事件（P4 接线，C13）：代数 +1、签名基线作废（压缩是唯一前缀
-    /// 重写点——压缩后是新内容非重放，不计 miss，pi prev=undefined 语义）
+    /// 重写点——压缩后是新内容非重放，不计 miss，pi prev=undefined 语义）。
+    ///
+    /// v1.1 §5.1 T-27 扩展：置 `pending_compaction`（压缩后首请求需与重建
+    /// 签名做前缀比对，见 [Self::record_usage]）；`rebuild_signature` 清空，
+    /// 待 `capture_post_compaction`（apply_compaction 之后）填充。
     pub fn on_compaction(&mut self) {
         self.generation = self.generation.saturating_add(1);
         self.baseline = None;
+        self.pending_compaction = true;
+        self.rebuild_signature = None;
+    }
+
+    /// 外部代数注入（R-K 单源能力面，v1.1 §5.1 T-30 / 评审 02 P0-5）：
+    /// 用会话级权威代数（`SessionContextMeta.last_compaction_generation` /
+    /// `LoopState.compact_generation`，u32）校准内部 `generation`——覆盖
+    /// 内部自增值，基线代数戳随注入值对齐，消除双计数源漂移。
+    ///
+    /// 轮次 4（T-31）将在 `apply_compaction` 中接线：压缩事件发生时用
+    /// 会话级代数注入本字段，替代内部自增成为唯一消费源；本轮仅提供
+    /// API——`on_compaction` 的内部自增保留为回退（外部未注入时语义
+    /// 不变，双源场景下注入值随时可校准覆盖）。
+    pub fn apply_external_generation(&mut self, gen: u32) {
+        self.generation = u64::from(gen);
     }
 
     /// 模型切换（engine 层 run 启动时比对会话上一 run 的 model）：
@@ -279,6 +378,14 @@ impl CacheStatsTracker {
     /// 当前基线（只读；run 收口后 engine 层据此持久化跨 run 基线，T-40）
     pub fn baseline(&self) -> Option<&CacheBaseline> {
         self.baseline.as_ref()
+    }
+
+    /// 压缩后重建签名（只读；T-31 断言面——apply_compaction 接线后可查。
+    /// 仅测试消费（handlers/mod.rs 断言接线发生），生产面由 record_usage
+    /// 内部消费私有字段）
+    #[cfg(test)]
+    pub(crate) fn rebuild_signature(&self) -> Option<&RequestSignature> {
+        self.rebuild_signature.as_ref()
     }
 
     /// run 收口：产出 run 级缓存统计（`RunOutcome.cache_stats` 载荷；
@@ -722,7 +829,10 @@ mod tests {
 
     // ── 基线重置（压缩）──
 
-    /// C13：on_compaction 代数 +1、基线作废；压缩后首轮 usage 无基线 → 不计 miss
+    /// C13：on_compaction 代数 +1、基线作废；压缩后首轮 usage 无基线 → 不计 miss。
+    /// v1.1 T-27 扩展断言：pending_compaction 置位、rebuild_signature 初始为空
+    /// （待 capture_post_compaction 填充）——压缩后首轮 usage 回退路径（重建
+    /// 签名缺失）与既有行为一致。
     #[test]
     fn on_compaction_invalidates_baseline_and_bumps_generation() {
         let mut t = tracker(60);
@@ -731,13 +841,158 @@ mod tests {
         assert!(t.baseline().is_some(), "首轮后基线必须建立");
         t.on_compaction();
         assert!(t.baseline().is_none(), "压缩后基线必须作废");
+        assert!(t.pending_compaction, "压缩后必须置 pending 标记");
+        assert!(
+            t.rebuild_signature.is_none(),
+            "重建签名初始为空，待 capture_post_compaction 填充"
+        );
         t.capture_signature(Some("sys"), &tools(), &[]);
         let miss = t.record_usage(scalars(5_000, 0, 0, None), 50, 5_050, 2_000);
         assert!(miss.is_none(), "压缩后新内容非重放 → 不计 miss");
+        assert!(
+            !t.pending_compaction,
+            "压缩后首轮 usage 后 pending 必须清除"
+        );
         let stats = t.finish();
         // 压缩前的浪费量不因重置而丢失（run 聚合只累计真实 detectMiss）
         assert_eq!(stats.cache_read_tokens, 8_000);
         assert_eq!(stats.prompt_tokens, 15_000);
+    }
+
+    // ── 压缩后重建签名与首请求比对（v1.1 §5.1 T-28 / T-29）──
+
+    /// T-28：压缩后重建签名与相同输入上的 capture_signature 相等（同一构造
+    /// 路径，评审 02 §3.3：正常路径下两签名一致，前缀比对不误报）
+    #[test]
+    fn capture_post_compaction_matches_capture_signature_on_same_input() {
+        let m1 = msg("m1", AgentMessageRole::User, "你好", "2026-01-01T00:00:00Z");
+        let m2 = msg(
+            "m2",
+            AgentMessageRole::Assistant,
+            "回复",
+            "2026-01-01T00:00:00Z",
+        );
+        let msgs = [m1, m2];
+        let mut t = tracker(0);
+        t.capture_post_compaction(Some("sys"), &tools(), &msgs);
+        t.capture_signature(Some("sys"), &tools(), &msgs);
+        assert_eq!(
+            t.rebuild_signature.as_ref(),
+            t.pending_signature.as_ref(),
+            "同一输入上重建签名与请求签名必须相等"
+        );
+    }
+
+    /// T-29 四态之 Identical：pending + 重建一致 → 无额外记录、pending 清理、
+    /// 重建签名清空防陈旧
+    #[test]
+    fn post_compaction_first_request_identical_clears_pending() {
+        let m1 = msg("m1", AgentMessageRole::User, "你好", "2026-01-01T00:00:00Z");
+        let m2 = msg(
+            "m2",
+            AgentMessageRole::Assistant,
+            "回复",
+            "2026-01-01T00:00:00Z",
+        );
+        let msgs = vec![m1, m2];
+        let mut t = tracker(60);
+        t.on_compaction();
+        t.capture_post_compaction(Some("sys"), &tools(), &msgs);
+        t.capture_signature(Some("sys"), &tools(), &msgs);
+        let miss = t.record_usage(scalars(5_000, 0, 0, None), 50, 5_050, 2_000);
+        assert!(miss.is_none(), "压缩后首请求前缀一致 → 无额外记录");
+        assert!(!t.pending_compaction, "pending 必须消费清除");
+        assert!(t.rebuild_signature.is_none(), "重建签名必须清空防陈旧");
+    }
+
+    /// T-29 四态之 TailAppend：压缩后首请求前对话被追加（steering 注入 /
+    /// overflow 阶梯）→ 追加区豁免，不计 harness 改写
+    #[test]
+    fn post_compaction_first_request_tail_append_is_exempt() {
+        let m1 = msg("m1", AgentMessageRole::User, "你好", "2026-01-01T00:00:00Z");
+        let m2 = msg(
+            "m2",
+            AgentMessageRole::Assistant,
+            "回复",
+            "2026-01-01T00:00:00Z",
+        );
+        let m3 = msg("m3", AgentMessageRole::User, "追加", "2026-01-01T00:00:00Z");
+        let mut t = tracker(60);
+        t.on_compaction();
+        t.capture_post_compaction(Some("sys"), &tools(), &[m1.clone(), m2.clone()]);
+        // 压缩后、record_usage 前被追加 → pending 签名含新消息、重建不含
+        t.capture_signature(Some("sys"), &tools(), &[m1, m2, m3]);
+        let miss = t.record_usage(scalars(5_000, 0, 0, None), 50, 5_050, 2_000);
+        assert!(
+            miss.is_none(),
+            "追加区豁免 → 不计 miss、不误报 harness 改写"
+        );
+        assert!(!t.pending_compaction, "pending 必须消费清除");
+        assert!(t.rebuild_signature.is_none(), "重建签名必须清空防陈旧");
+    }
+
+    /// T-29 四态之 HeadRewrite：压缩后历史区被改写（harness 二次改写）→
+    /// warn 诊断 + 归因 PrefixChanged（零浪费审计记录）
+    #[test]
+    fn post_compaction_first_request_head_rewrite_detected() {
+        let m1 = msg("m1", AgentMessageRole::User, "你好", "2026-01-01T00:00:00Z");
+        let m2 = msg(
+            "m2",
+            AgentMessageRole::Assistant,
+            "回复",
+            "2026-01-01T00:00:00Z",
+        );
+        let mut t = tracker(60);
+        t.on_compaction();
+        t.capture_post_compaction(Some("sys"), &tools(), &[m1.clone(), m2.clone()]);
+        // 历史第一条被改写（异常 / harness 二次改写）
+        let m1_rewritten = msg("m1", AgentMessageRole::User, "改写", "2026-01-01T00:00:00Z");
+        t.capture_signature(Some("sys"), &tools(), &[m1_rewritten, m2]);
+        let miss = t.record_usage(scalars(5_000, 0, 0, None), 50, 5_050, 2_000);
+        let miss = miss.expect("历史区改写必须产出诊断审计记录");
+        assert_eq!(miss.attribution, MissAttribution::PrefixChanged);
+        assert_eq!(miss.missed_tokens, 0, "诊断记录零浪费，不影响 token 累计");
+        assert!(!t.pending_compaction, "pending 必须消费清除");
+        assert!(t.rebuild_signature.is_none(), "重建签名必须清空防陈旧");
+    }
+
+    /// T-29 回归：无 pending（常规路径）行为不变
+    #[test]
+    fn record_usage_without_pending_compaction_unaffected() {
+        let mut t = tracker(60);
+        t.capture_signature(Some("sys"), &tools(), &[]);
+        assert!(!t.pending_compaction, "常规路径不得置 pending");
+        assert!(t.rebuild_signature.is_none());
+        assert!(t
+            .record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000)
+            .is_none());
+        assert!(!t.pending_compaction, "常规路径不得置 pending");
+        assert!(t.rebuild_signature.is_none(), "常规路径不得产生重建签名");
+    }
+
+    // ── generation 消费单源（R-K 能力面，T-30）──
+
+    /// T-30：外部代数注入后基线代数戳使用注入值；校准语义（先自增再注入
+    /// → 以注入值为准）；on_compaction 自增保留为回退（轮次 4 改单源消费）
+    #[test]
+    fn apply_external_generation_calibrates_baseline_generation() {
+        let mut t = tracker(0);
+        t.apply_external_generation(5);
+        t.capture_signature(Some("sys"), &tools(), &[]);
+        assert!(t
+            .record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000)
+            .is_none());
+        let baseline = t.baseline().expect("首轮后基线必须建立");
+        assert_eq!(baseline.generation, 5, "外部注入代数应覆盖内部自增");
+        // 校准语义：on_compaction 自增后注入外部值 → 以注入值为准
+        let mut t2 = tracker(0);
+        t2.on_compaction();
+        t2.apply_external_generation(3);
+        t2.capture_signature(Some("sys"), &tools(), &[]);
+        assert!(t2
+            .record_usage(scalars(10_000, 8_000, 500, None), 100, 10_100, 1_000)
+            .is_none());
+        assert_eq!(t2.baseline().unwrap().generation, 3, "注入值应校准自增值");
     }
 
     // ── 冷缓存 ──

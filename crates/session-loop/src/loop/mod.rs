@@ -50,6 +50,13 @@ use crate::undeclared_detector::RegistryBackedDetector;
 
 mod end;
 mod handlers;
+/// 摘要后台调度（T-33，轮次 4）：run 内单飞面。pub 导出——会话级协调器
+/// （T-42）与壳层回调接线（orchestrator 块表推进）消费同一任务类型面。
+pub mod summary_dispatch;
+/// 会话级摘要协调器（T-42，00-plan §6.5 R-I）：跨 run 单飞容器 +
+/// 全局并发上限；注册表由壳层 CoreRunState 持有（与 SessionHistoryCache
+/// 同生命周期）。pub 导出——壳层装配面（T-43/T-44）消费。
+pub mod summary_coordinator;
 
 #[cfg(test)]
 mod invariants;
@@ -247,6 +254,25 @@ pub struct SessionLoopOptions {
     /// 事件；LoopState 不消费本字段（消费循环由壳层 spawn，见
     /// REQ-逃逸追踪分析 §3.5.1）。
     pub escape_watch: Option<EscapeWatchConfig>,
+    /// 摘要后台调度配置（T-33，00-plan §6.4 R-F 异步面）：None = 生产缺省
+    /// （退避 1s/3s/9s ±20% jitter、单次墙钟 [LOOP_SUMMARY_MAX_WALL_MS]、
+    /// attempts 上限 4 含同步）；测试可注入快速退避序列 + jitter=0.0
+    /// （确定性断言）。session_meta 可配键（compact_summary_backoff_ms 等）
+    /// 属轮次 6 配置面（T-44），本层只消费结构体配置。
+    pub summary_dispatch: Option<crate::r#loop::summary_dispatch::SummaryDispatchConfig>,
+    /// 会话级摘要协调器（T-42，00-plan §6.5 R-I）：由壳层经注册表
+    /// （[crate::r#loop::summary_coordinator::SessionSummaryCoordinatorRegistry]）
+    /// 按会话装配注入——跨 run 单飞 + 全局并发上限（≤2）+ 任务跨 run
+    /// 存活（run 收口不摧毁）。None = 回退 run 级 [SummaryDispatch]
+    /// （轮次 4 语义，向后兼容测试 / 纯 session-loop 用法）。
+    pub summary_coordinator:
+        Option<Arc<crate::r#loop::summary_coordinator::SessionSummaryCoordinator>>,
+    /// L1 占位符回退开关（T-44，session_meta 键 `compact_l1_placeholder`）：
+    /// true = 保留旧 L1 占位符语义；false / None = 新中性 stub（默认）。
+    /// **V1 决策（启动级配置）**：引擎侧（conex-compaction 轮次 1）已删除
+    /// AgentMessage 面 L1 改为 stub（R-E），运行时双态切换需引擎支持；
+    /// 本字段 V1 只透传文档化、不改变行为，预留给 V2（见 T-44 决策注释）。
+    pub compact_l1_placeholder: Option<bool>,
 }
 
 impl Default for SessionLoopOptions {
@@ -291,6 +317,15 @@ impl Default for SessionLoopOptions {
             parent_run_id: None,
             // T-ESC-03：逃逸监视缺省关闭（未配置即现状行为）
             escape_watch: None,
+            // T-33：摘要后台调度缺省生产参数（退避 1s/3s/9s、墙钟 60s、
+            // attempts 4 含同步；测试经 options 注入快速参数）
+            summary_dispatch: None,
+            // T-42：会话级协调器缺省 None = 回退 run 级 dispatch（轮次 4
+            // 语义；壳层装配面经注册表注入）
+            summary_coordinator: None,
+            // T-44：L1 回退开关缺省 None = 新中性 stub（默认；V1 启动级
+            // 配置，引擎不支持动态双态 → 仅文档化预留 V2）
+            compact_l1_placeholder: None,
         }
     }
 }
@@ -447,6 +482,9 @@ impl AgentSessionLoop {
         self.state.budget = options.context_budget;
         self.state.compaction_policy = options.compaction_policy.clone();
         self.state.summarizer = options.summarizer.clone();
+        // 会话级摘要协调器派生状态同步（T-42）：与 options 同源（壳层
+        // 装配；None = 回退 run 级 dispatch）
+        self.state.summary_coordinator = options.summary_coordinator.clone();
         // 缓存测量派生状态同步（P5 S2 / T-36）：cache_tracker 与 options
         // 同源（构造期定，run 起始再复位）
         self.state.cache_tracker = build_tracker(self.state.options.cache_tracking.as_ref());
@@ -497,7 +535,11 @@ impl AgentSessionLoop {
     /// `run()` 时，因收口已 `mem::take` 清空对话（R4 行为变化登记），可用
     /// 上一轮 [RunOutcome::messages] 续接下一轮（owned 便捷形态，内部包 Arc）。
     pub fn with_initial_conversation(mut self, messages: Vec<AgentMessage>) -> Self {
-        self.state.conversation = messages.into_iter().map(Arc::new).collect();
+        let conversation: Vec<Arc<AgentMessage>> = messages.into_iter().map(Arc::new).collect();
+        // T-36 首尾双约束（debug 面）：水合/首条消息构造路径的协议形状
+        // 断言——无 system 时首条必须为 user；含水合链时必须以 user 收尾
+        crate::r#loop::handlers::assert_conversation_head_tail(&conversation);
+        self.state.conversation = conversation;
         self
     }
 
@@ -509,6 +551,10 @@ impl AgentSessionLoop {
     /// 只增不改；改写既有消息破坏请求前缀字节稳定性；压缩是唯一例外
     /// （P4 闸门）。
     pub fn with_initial_conversation_arc(mut self, messages: Vec<Arc<AgentMessage>>) -> Self {
+        // T-36 首尾双约束（debug 面）：水合/首条消息构造路径的协议形状
+        // 断言（与 with_initial_conversation 同口径；测试续接以 assistant
+        // 收尾的无链对话不触发尾部约束）
+        crate::r#loop::handlers::assert_conversation_head_tail(&messages);
         self.state.conversation = messages;
         self
     }
@@ -934,6 +980,124 @@ mod tests {
             options.explore_docs_quota.is_none(),
             "explore_docs_quota 缺省 None = 主 agent 不受配额约束"
         );
+        // T-33：摘要后台调度缺省 None = 生产退避参数（1s/3s/9s）
+        assert!(
+            options.summary_dispatch.is_none(),
+            "summary_dispatch 缺省 None = 生产缺省退避参数（T-33）"
+        );
+    }
+
+    /// T-33：摘要调度配置缺省值 = 生产参数（退避 1s/3s/9s ±20% jitter、
+    /// 单次墙钟 60s、attempts 上限 4 含同步）
+    #[test]
+    fn summary_dispatch_config_defaults_match_plan() {
+        let config = summary_dispatch::SummaryDispatchConfig::default();
+        assert_eq!(
+            config.backoff_ms,
+            summary_dispatch::SUMMARY_BACKOFF_MS.to_vec(),
+            "退避序列必须为 1s/3s/9s（00-plan §6.4）"
+        );
+        assert!(
+            (config.jitter - summary_dispatch::SUMMARY_JITTER_RATIO).abs() < 1e-9,
+            "jitter 默认 ±20%"
+        );
+        assert_eq!(
+            config.max_wall_ms,
+            summary_dispatch::LOOP_SUMMARY_MAX_WALL_MS,
+            "单次调用墙钟 ≈60s（04 §5.2 / 评审 02 P1-10）"
+        );
+        assert_eq!(
+            config.max_attempts,
+            summary_dispatch::MAX_SUMMARY_ATTEMPTS,
+            "attempts 上限 4（含同步那次）"
+        );
+    }
+
+    /// T-36 首尾双约束（正例）：user 开头 + 无链对话水合通过；
+    /// 含水合链 + user 收尾通过
+    #[test]
+    fn hydration_head_tail_accepts_valid_shapes() {
+        fn msg(id: &str, role: AgentMessageRole, text: &str) -> Arc<AgentMessage> {
+            Arc::new(AgentMessage {
+                id: id.to_string(),
+                role,
+                created_at: "2026-08-03T10:00:00.000Z".to_string(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: text.to_string(),
+                }],
+                metadata: None,
+                client_message_id: None,
+                content: None,
+            })
+        }
+        // 无 system + user 首条 → 通过（长会话历史 / run outcome 续接）
+        let conversation = vec![
+            msg("h0", AgentMessageRole::User, "历史"),
+            msg("h1", AgentMessageRole::Assistant, "回复"),
+        ];
+        handlers::assert_conversation_head_tail(&conversation);
+        // 含水合链 + user 收尾 → 通过（B4 形状）
+        let with_chain = vec![
+            msg("compacted-summary-1-1", AgentMessageRole::Assistant, "链摘要"),
+            msg("u1", AgentMessageRole::User, "继续"),
+        ];
+        handlers::assert_conversation_head_tail(&with_chain);
+        // system 首条 → 通过（wire 首条 = system）
+        let with_system = vec![
+            msg("sys", AgentMessageRole::System, "系统提示"),
+            msg("u1", AgentMessageRole::User, "你好"),
+        ];
+        handlers::assert_conversation_head_tail(&with_system);
+    }
+
+    /// T-36 首尾双约束（反例）：无 system + assistant 首条 → debug 断言
+    /// 拒绝（provider 400 风险，评审 02 P1-7）
+    #[test]
+    #[should_panic(expected = "首条（跳过链后）必须为 user")]
+    fn hydration_rejects_assistant_head_without_system() {
+        fn msg(role: AgentMessageRole) -> Arc<AgentMessage> {
+            Arc::new(AgentMessage {
+                id: "m".to_string(),
+                role,
+                created_at: "2026-08-03T10:00:00.000Z".to_string(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: "正文".to_string(),
+                }],
+                metadata: None,
+                client_message_id: None,
+                content: None,
+            })
+        }
+        let conversation = vec![msg(AgentMessageRole::Assistant), msg(AgentMessageRole::User)];
+        handlers::assert_conversation_head_tail(&conversation);
+    }
+
+    /// T-36 首尾双约束（反例）：含水合链 + 非 user 收尾 → debug 断言拒绝
+    /// （B4 形状：链后保留区必须以 user 收尾）
+    #[test]
+    #[should_panic(expected = "必须以 user 收尾")]
+    fn hydration_rejects_chain_with_non_user_tail() {
+        fn msg(id: &str, role: AgentMessageRole) -> Arc<AgentMessage> {
+            Arc::new(AgentMessage {
+                id: id.to_string(),
+                role,
+                created_at: "2026-08-03T10:00:00.000Z".to_string(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: "正文".to_string(),
+                }],
+                metadata: None,
+                client_message_id: None,
+                content: None,
+            })
+        }
+        // 链（assistant）+ 保留区收尾 assistant → 尾部约束拒绝（首条
+        // 约束已通过：链后首条 = u1 user）
+        let conversation = vec![
+            msg("compacted-summary-1-1", AgentMessageRole::Assistant),
+            msg("u1", AgentMessageRole::User),
+            msg("a1", AgentMessageRole::Assistant),
+        ];
+        handlers::assert_conversation_head_tail(&conversation);
     }
 
     /// T06.4.4：with_options 派生状态同步——cwd 联动到工具执行上下文

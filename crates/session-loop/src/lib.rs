@@ -84,6 +84,18 @@ pub use r#loop::{
     AgentSessionLoop, EndDecision, RecoveryDecision, RecoveryHook, RunOutcome, SessionLoopOptions,
     TurnEndContext, TurnEndHook,
 };
+// T-33/T-42：摘要后台调度类型面（run 级 dispatch + 会话级协调器/注册表 +
+// 配置面键）——壳层装配（T-43/T-44）与 orchestrator 回调落库消费
+pub use r#loop::summary_coordinator::{
+    MAX_CONCURRENT_SUMMARY_TASKS, SessionSummaryCoordinator,
+    SessionSummaryCoordinatorRegistry,
+};
+pub use r#loop::summary_dispatch::{
+    LOOP_SUMMARY_MAX_WALL_MS, MAX_SUMMARY_ATTEMPTS, META_KEY_SUMMARY_BACKOFF_MS,
+    META_KEY_SUMMARY_L1_PLACEHOLDER, META_KEY_SUMMARY_WALL_MS, SUMMARY_BACKOFF_MS,
+    SUMMARY_JITTER_RATIO, SummaryDispatch, SummaryDispatchConfig, SummaryDispatchOutcome,
+    SummaryDispatchTask, SummaryOutcomeCallback, summary_l1_placeholder,
+};
 pub use safe_point::{AbortSignal, ControlAction, apply_safe_point_control};
 pub use state::AgentSessionMachine;
 pub use steering::{
