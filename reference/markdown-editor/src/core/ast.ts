@@ -73,6 +73,10 @@ export interface LineNode {
     blockquoteLevel?: number;
     listIndent?: number;
     listPrefix?: string;
+    // 列表项延续（R1.5-B）：空行后缩进 ≥ 列表项内容缩进列的 body 行——
+    // 与普通 body 行区分：属于同一列表项的新段落（例 256/258），
+    // 投影器据此并入同一 <li> 的第二个 <p>（普通 body 行为 undefined）。
+    listContinuation?: boolean;
     inlineTokens: InlineNode[];
     length: number;
     localOffset: number;

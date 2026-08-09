@@ -30,6 +30,25 @@ type BlockKind =
   | 'code'
   | 'other';
 
+/**
+ * 列表上下文（R1.5-B 正确性回补）：computeLineOffsets 在列表标记行记忆的
+ * 「列表项内容缩进列」（markerWidth）——CommonMark §5.2：列表项后续块必须
+ * 缩进到「标记后首个内容字符所在列」（例 256/258 实证：`- one` 需 2 列、
+ * ` -    one` 需 6 列、`1.  foo` 需 4 列）。空行后首行与之比较：
+ * - 缩进 ≥ markerWidth → 列表项延续（新段落，例 256/258/262/277）；
+ * - 缩进 ≥ markerWidth + 4 → li 内缩进代码块（例 264/270/271）；
+ * - 缩进 < markerWidth → 出列表（例 255/257）。
+ * listContexts 数组逐行携带延续标志（indent 供 parseNormalLine 输出
+ * listIndent 与 listContinuation）；行级缓存键包含上下文，防同文本行
+ * 跨文档串扰。
+ */
+export interface ListContext {
+  /** 列表标记行的前导缩进列（延续行 listIndent 的输出值） */
+  indent: number;
+  /** 列表项内容缩进列（出列表判定的基准列） */
+  markerWidth: number;
+}
+
 /** scanTokens 返回：ok 携带 token 列表与消费长度；失败时由调用方按失败签名记忆 */
 type ScanOutcome =
   | { ok: true; tokens: InlineNode[]; length: number }
@@ -285,7 +304,7 @@ export class MarkdownParser {
   }
 
   public static parse(text: string): MarkdownDocument {
-    const { offsets, codeBlockState, setextLevels } =
+    const { offsets, codeBlockState, setextLevels, listContexts } =
       this.computeLineOffsets(text);
     const lines = text.split('\n');
     const lineNodes: LineNode[] = new Array(lines.length);
@@ -311,7 +330,11 @@ export class MarkdownParser {
         codeBlockState[i],
         setextLevels[i],
         refs,
-        flags[i]
+        flags[i],
+        // 列表项延续上下文（R1.5-B）：computeLineOffsets 判定为「空行后
+        // 列表项延续」的行携带列表缩进，parseLine 据此标记 listIndent/
+        // listContinuation（普通行为 null）。
+        listContexts[i]
       );
     }
     return {
@@ -575,10 +598,15 @@ export class MarkdownParser {
     offsets: number[];
     codeBlockState: CodeState[];
     setextLevels: number[];
+    listContexts: (ListContext | null)[];
   } {
     const lines = text.split('\n');
     const offsets = new Array(lines.length);
     const codeBlockState: CodeState[] = new Array(lines.length);
+    // R1.5-B：逐行列表延续上下文（仅「空行后列表项延续」行非 null）
+    const listContexts: (ListContext | null)[] = new Array(lines.length).fill(
+      null
+    );
 
     let currentOffset = 0;
     let inCodeBlock = false;
@@ -600,6 +628,13 @@ export class MarkdownParser {
     // type 6/7 遇空行退出（空行本身不是块，标记 'none'，CommonMark 4.6）。
     let inHtmlBlock = false;
     let htmlType = 0;
+    // R1.5-B 列表上下文记忆：最近列表标记行的内容缩进列（markerWidth）——
+    // 空行后首行缩进与之比较，判定「列表项延续 / li 内代码块 / 出列表」。
+    let listCtx: ListContext | null = null;
+    // 上一行是否为空白行：列表延续与 li 内代码块的判定只作用于
+    // 「空行后首行」（紧邻延续由 prevBlockKind === 'list' 单独接管，
+    // 代码块不能打断段落——spec §5.2 例 264 语义）。
+    let justBlank = false;
 
     for (let i = 0; i < lines.length; i++) {
       offsets[i] = currentOffset;
@@ -629,6 +664,7 @@ export class MarkdownParser {
             // （`<hr>\n\nok` 的中间空行是 'none'，spec：end condition 是
             // 「line is followed by a blank line」——块止于空行之前）。
             codeBlockState[i] = 'none';
+            justBlank = true;
             if (prevBlockKind !== 'list') prevBlockKind = 'blank';
           } else {
             // type 1-5 结束行（行内含闭合标记）：该行仍是块的最后一行。
@@ -723,6 +759,7 @@ export class MarkdownParser {
           // `para\n\n    code` 是代码块），列表上下文保持
           // （`- item\n\n    bar` 仍是松散列表延续）。
           codeBlockState[i] = 'none';
+          justBlank = true;
           if (prevBlockKind !== 'list') prevBlockKind = 'blank';
         } else if (indent >= 4) {
           const afterIndent = this.stripFourColumns(bqContent);
@@ -733,6 +770,48 @@ export class MarkdownParser {
             codeBlockState[i] = 'none';
             inIndentCode = false;
             prevBlockKind = 'list';
+            // R1.5-B：嵌套列表标记 → 列表上下文更新为嵌套列表（空行后
+            // 延续以嵌套列表的内容缩进列为基准，而非外层列表）。
+            const nestedInfo = this.listMarkerInfo(afterIndent);
+            if (nestedInfo) {
+              const ctxIndent = this.leadingIndentColumns(bqContent);
+              listCtx = {
+                indent: ctxIndent,
+                markerWidth: ctxIndent + nestedInfo.markerWidth,
+              };
+            }
+          } else if (
+            prevBlockKind === 'list' &&
+            justBlank &&
+            listCtx
+          ) {
+            // —— R1.5-B：空行后的列表上下文（spec 例 255-258/264 语义）——
+            if (indent >= listCtx.markerWidth + 4) {
+              // 缩进 ≥ 内容缩进 + 4：li 内缩进代码块（例 264：`- Foo\n\n
+              //       bar` → 6 列 = 内容缩进 2 + 4）。空行分隔是必要条件——
+              // 紧邻缩进行（R1-A2b）按段落延续处理，代码块不能打断段落。
+              codeBlockState[i] = 'indent_code';
+              inIndentCode = true;
+              prevBlockKind = 'code';
+            } else if (indent >= listCtx.markerWidth) {
+              // 内容缩进 ≤ 缩进 < 内容缩进 + 4：列表项延续（例 256/258）——
+              // 行按 body 解析并携带列表上下文（listIndent + listContinuation）。
+              codeBlockState[i] = 'none';
+              inIndentCode = false;
+              listContexts[i] = {
+                indent: listCtx.indent,
+                markerWidth: listCtx.markerWidth,
+              };
+              prevBlockKind = 'list';
+            } else {
+              // 缩进 < 内容缩进：出列表（例 255/257）。≥4 缩进的出列行按
+              // 缩进代码块处理（例 257：`     two` → `<pre><code> two`）。
+              listCtx = null;
+              inIndentCode = false;
+              codeBlockState[i] = 'indent_code';
+              inIndentCode = true;
+              prevBlockKind = 'code';
+            }
           } else if (
             prevBlockKind === 'body' ||
             prevBlockKind === 'list' ||
@@ -768,11 +847,59 @@ export class MarkdownParser {
             }
             prevBlockKind = 'code';
           } else {
-            codeBlockState[i] = 'none';
-            prevBlockKind = this.guessBlockKind(bqContent, prevBlockKind);
+            // 先做轻量块级形态分类：列表标记行记录列表上下文（R1.5-B）；
+            // 「段落形态」行在空行后且缩进 ≥ 内容缩进时是列表项延续
+            // （例 256/258/262/277）——hr/ATX/表格等形态让路（保持既有语义）。
+            const g = this.guessBlockKind(bqContent, prevBlockKind);
+            if (g === 'list') {
+              const info = this.listMarkerInfo(
+                this.stripFourColumns(bqContent)
+              );
+              if (info) {
+                // 内容缩进列 = 前导缩进 + 标记段列宽（spec §5.2 例 257/258）
+                listCtx = {
+                  indent,
+                  markerWidth: indent + info.markerWidth,
+                };
+              }
+              codeBlockState[i] = 'none';
+              prevBlockKind = 'list';
+            } else if (
+              g === 'body' &&
+              prevBlockKind === 'list' &&
+              justBlank &&
+              listCtx &&
+              indent >= listCtx.markerWidth
+            ) {
+              // 空行后首行缩进 ≥ 内容缩进：列表项延续（新段落）——
+              // 行按 body 解析并携带列表上下文（listIndent + listContinuation）。
+              codeBlockState[i] = 'none';
+              listContexts[i] = {
+                indent: listCtx.indent,
+                markerWidth: listCtx.markerWidth,
+              };
+              prevBlockKind = 'list';
+            } else {
+              if (
+                prevBlockKind === 'list' &&
+                justBlank &&
+                listCtx &&
+                indent < listCtx.markerWidth
+              ) {
+                // 缩进 < 内容缩进：出列表（例 255），记忆清除防后续误续
+                listCtx = null;
+              }
+              codeBlockState[i] = 'none';
+              prevBlockKind = g;
+            }
           }
         }
       }
+
+      // R1.5-B：非空行在迭代末尾重置「上一行空白」记忆——justBlank 语义是
+      // 「上一行（i-1）为空白行」，必须在下一行迭代开始时保持有效，
+      // 因此重置放在迭代末尾而非开头。
+      if (trimmed !== '') justBlank = false;
 
       currentOffset += lines[i].length + 1; // +1 for \n
     }
@@ -781,7 +908,7 @@ export class MarkdownParser {
     // 产出每行的 Setext 上下文标志，供 parseLine 消费（见 §2.1 与 review-02 §7.1）。
     const setextLevels = this.computeSetextContexts(lines, codeBlockState);
 
-    return { offsets, codeBlockState, setextLevels };
+    return { offsets, codeBlockState, setextLevels, listContexts };
   }
 
   /**
@@ -854,6 +981,51 @@ export class MarkdownParser {
       /^([-*+])\s+/.test(s) ||
       /^(\d+\.)\s+/.test(s)
     );
+  }
+
+  /**
+   * 列表标记信息（R1.5-B）：行首为列表标记（task / 项目符号 / 有序，与
+   * parseNormalLine / guessBlockKind 同一正则族——task 优先于项目符号、
+   * 项目符号优先于有序）时，返回标记前缀与「标记段列宽」（标记字符 +
+   * 标记后空白，tab 按停靠 4 展开）。列表项内容缩进列 = 前导缩进 +
+   * 标记段列宽（CommonMark §5.2 例 257/258 实证：`-    one` 的延续块需
+   * 缩进 5 列、` -    one` 需 6 列、`1.  foo` 需 4 列）。
+   * 特例（规范规则 #2/#3）：标记后无内容（空项，`-   `）或标记后空白
+   * ≥5 列（首块为缩进代码，`1.     x`）时，内容缩进列 = 标记宽 W + 1
+   * （例 273/274/279 语义）。
+   */
+  private static listMarkerInfo(
+    content: string
+  ): { prefix: string; markerWidth: number } | null {
+    const m = /^([-*+]\s*\[[xX\s]\])[ \t]+|^([-*+])[ \t]+|^(\d+\.)[ \t]+/.exec(
+      content
+    );
+    if (!m) return null;
+    const prefix = m[1] ?? m[2] ?? m[3];
+    // 标记段 = 标记字符 + 标记后空白（W + N 列）
+    const markerSeg = m[0];
+    const wPlusN = this.textColumns(markerSeg);
+    const n = wPlusN - prefix.length;
+    // 标记后无内容（空项）或空白 ≥5 列（首块为缩进代码）→ 内容缩进 = W + 1
+    if (n >= 5 || content.slice(markerSeg.length) === '') {
+      return { prefix, markerWidth: prefix.length + 1 };
+    }
+    return { prefix, markerWidth: wPlusN };
+  }
+
+  /** 字符串的渲染列宽（tab 按停靠 4 展开，与 leadingIndentColumns 同语义） */
+  private static textColumns(s: string): number {
+    let col = 0;
+    for (const ch of s) {
+      if (ch === ' ') {
+        col++;
+      } else if (ch === '\t') {
+        col += 4 - (col % 4);
+      } else {
+        col++;
+      }
+    }
+    return col;
   }
 
   /**
@@ -1067,9 +1239,14 @@ export class MarkdownParser {
     // 引用形式回退文本（review-02 §7.3：缓存键隔离，不跨文档互串）。
     refDefs: RefDefTable | null = null,
     // 本行是否为引用定义行（零输出）
-    isRefDefLine: boolean = false
+    isRefDefLine: boolean = false,
+    // 列表项延续上下文（R1.5-B）：computeLineOffsets 判定为「空行后列表项
+    // 延续」的行携带列表缩进；null = 非延续行。必须进缓存键——同文本行
+    // 在有无列表上下文下产出不同节点（listIndent/listContinuation），
+    // 不进键会导致跨文档缓存串扰（例 256 的 `  two` 与普通 `  two`）。
+    listContext: ListContext | null = null
   ): LineNode {
-    // 缓存键 = codeState + Setext 上下文 + 定义行标志 + 定义表 id + 完整行文本：
+    // 缓存键 = codeState + Setext 上下文 + 定义行标志 + 定义表 id + 列表上下文 + 完整行文本：
     // blockquote 前缀、fence/math 跨行状态、Setext 上下文均已编码在键内
     // （review-02 §7.1/§7.3：上下文必须进键，禁止回写缓存行），
     // token 偏移为行内相对值（与文档偏移解耦），因此命中节点可直接复用结构。
@@ -1081,6 +1258,8 @@ export class MarkdownParser {
       (isRefDefLine ? 1 : 0) +
       ':' +
       (refDefs ? refDefs.id : 0) +
+      ':' +
+      (listContext ? 'L' + listContext.indent + ',' + listContext.markerWidth : 'Lx') +
       ':' +
       lineText;
     const cached = this.astCache.get(cacheKey);
@@ -1251,7 +1430,13 @@ export class MarkdownParser {
       return node;
     }
 
-    let node = this.parseNormalLine(lineText, localOffset, setextLevel, refDefs);
+    let node = this.parseNormalLine(
+      lineText,
+      localOffset,
+      setextLevel,
+      refDefs,
+      listContext
+    );
 
     this.astCache.set(cacheKey, node);
     return node;
@@ -1401,7 +1586,10 @@ export class MarkdownParser {
     // review-02 §7.1：回写会使「同键缓存」与回写结果不一致（缓存污染）。
     setextLevel: number = 0,
     // 引用链接定义表（文档级隔离，见 parseLine 注释）
-    refDefs: RefDefTable | null = null
+    refDefs: RefDefTable | null = null,
+    // 列表项延续上下文（R1.5-B）：computeLineOffsets 判定为「空行后列表项
+    // 延续」的行携带列表缩进——输出 listIndent + listContinuation 标志。
+    listContext: ListContext | null = null
   ): LineNode {
     const tokens: InlineNode[] = [];
     let pos = 0;
@@ -1606,6 +1794,17 @@ export class MarkdownParser {
       ? this.groupTableCells(tokens)
       : tokens;
 
+    // R1.5-B：空行后列表项延续（例 256/258/262/277）——行仍是普通段落
+    // （body），但携带列表容器上下文：listIndent = 列表缩进 + listContinuation
+    // 标志，投影器据此把该行并入同一 <li> 的第二个 <p>（AST 层与普通
+    // body 行区分，例 255 的 `<markerWidth` 行无标志即出列表）。
+    // Setext 标题 / hr / 表格等块级形态优先（保持既有语义，0 回归）。
+    const isListContinuation =
+      listContext !== null && lineType === 'body' && !isSetextHeading;
+    if (isListContinuation) {
+      listIndent = listContext.indent;
+    }
+
     return {
       id: this.generateId(),
       type: lineType,
@@ -1614,6 +1813,7 @@ export class MarkdownParser {
       blockquoteLevel: blockquoteLevel > 0 ? blockquoteLevel : undefined,
       listIndent: listPrefix !== undefined ? listIndent : undefined,
       listPrefix: listPrefix ? listPrefix : undefined,
+      listContinuation: isListContinuation ? true : undefined,
       inlineTokens: finalTokens,
       localOffset,
       length: lineText.length,
