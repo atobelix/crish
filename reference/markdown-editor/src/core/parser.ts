@@ -580,6 +580,12 @@ export class MarkdownParser {
     let currentOffset = 0;
     let inCodeBlock = false;
     let inMathBlock = false;
+    // 围栏状态（02 §7.3/§7.4 修复）：记录开围栏的标记字符与长度——
+    // CommonMark 关闭围栏必须同字符（反引号/波浪线不可混用）且长度 ≥ 开栏长度
+    // （```` 开栏不能被 ``` 关闭，spec Fenced code "at least as long as"）；
+    // 取代旧的 `startsWith('```')` 布尔切换（3 反引号会错误关闭 4 反引号、
+    // ` ``` js` 信息串行被错误当作关闭行，02 §7.2 实证 FENCE34/FENCEINFO）。
+    let fenceState: { marker: string; length: number } | null = null;
     // 缩进代码块状态（02 §2.2）：连续 ≥4 空格缩进行合并为一个代码块，
     // 块内空行保持状态（CommonMark：空行仍是代码块的一部分）。
     let inIndentCode = false;
@@ -596,13 +602,40 @@ export class MarkdownParser {
       const { content: bqContent } = this.stripBlockquoteContext(lines[i]);
       const trimmed = bqContent.trim();
 
-      if (!inMathBlock && trimmed.startsWith('```')) {
+      // 围栏形态判定（开/关共用，trim 后行）：反引号 run ≥3（info 串不允许
+      // 含反引号——spec 原文：backtick fences 的 info string 不能含 backtick，
+      // ` ``` aa `` ` 整行不是围栏，退化为段落）或波浪线 run ≥3（info 串无限制，
+      // `~~~ aa ``` ~~~` 合法）。trim 后判定的既有行为保留（`    ``` 四空格
+      // 缩进仍按围栏处理，02 §7.2 登记偏差，不动）。
+      const fenceOpen = /^(```+)([^`]*)$|^(~~~+).*$/.exec(trimmed);
+      if (!inMathBlock && fenceOpen) {
         if (!inCodeBlock) {
+          // 开围栏：记录标记字符与 run 长度（后续关闭判定的依据）
           codeBlockState[i] = 'fence_start';
+          fenceState = {
+            marker: fenceOpen[1] !== undefined ? '`' : '~',
+            length: (fenceOpen[1] ?? fenceOpen[3]).length,
+          };
           inCodeBlock = true;
+        } else if (fenceState) {
+          // 代码块内：仅「同字符 + run 长度 ≥ 开栏长度 + 行内除尾随空白
+          // 无信息串」才关闭；` ``` js`（信息串）与 3 反引号关 4 反引号
+          // 均保持 code（spec：closing fence 不能有 info string）。
+          const close = /^(`+|~+)[ \t]*$/.exec(trimmed);
+          if (
+            close &&
+            close[1][0] === fenceState.marker &&
+            close[1].length >= fenceState.length
+          ) {
+            codeBlockState[i] = 'fence_end';
+            fenceState = null;
+            inCodeBlock = false;
+          } else {
+            codeBlockState[i] = 'code';
+          }
         } else {
-          codeBlockState[i] = 'fence_end';
-          inCodeBlock = false;
+          // 防御：理论上不会出现「inCodeBlock 但无状态」的中间态
+          codeBlockState[i] = 'code';
         }
         // 围栏代码块内缩进不生效（CommonMark）；fence 判定先于缩进代码，
         // 且 `    ```（4 空格）仍按 fence 处理——trim 后判定的既有行为，登记偏差。
@@ -1619,7 +1652,9 @@ export class MarkdownParser {
     { type: 'strike', start: '<s>', close: '</s>' },
     { type: 'strike', start: '<del>', close: '</del>' },
     { type: 'mark', start: '<mark>', close: '</mark>' },
-    { type: 'sub', start: '<u>', close: '</u>' },
+    // `<u>` 不在此注册（02 §4.3 实证修复）：CommonMark 中 `<u>` 是 raw HTML
+    // 语义——在 HTML 分支按 html_element 原样透传（tagName 白名单已放开），
+    // 不得再映射为 sub（`<u>x</u>` 曾错误产出下标语义，语义错位）。
     { type: 'sub', start: '<ins>', close: '</ins>' },
     { type: 'kbd', start: '<kbd>', close: '</kbd>' },
     { type: 'sub', start: '<sub>', close: '</sub>' },
@@ -2035,7 +2070,10 @@ export class MarkdownParser {
             openTag.endsWith('/>') ||
             ['br', 'hr', 'img', 'input', 'meta', 'link'].includes(tagName);
 
-          const isSpecialTag = ['u', 'ins', 'sub', 'sup', 'kbd'].includes(
+          // isSpecialTag 豁免名单：这些标签由 INLINE_RULES 起止规则接管语义
+          // （sub/sup/kbd/ins 是编辑器扩展语义）。`<u>` 已移出名单与规则表
+          // （02 §4.3 修复）——CommonMark raw HTML 语义，走 html_element 分支。
+          const isSpecialTag = ['ins', 'sub', 'sup', 'kbd'].includes(
             tagName
           );
 
