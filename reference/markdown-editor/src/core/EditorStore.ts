@@ -425,10 +425,15 @@ export interface EditorOperation {
   selectionEndAfter: number;
   timestamp: number;
   /**
-   * 操作类型标记（R3-A 流式合并 undo）：
+   * 操作类型标记（R3-A 流式合并 undo / R4 顺序语义）：
    * - 'stream'：流式会话结束（stop-flush）时合并生成的单步 op——
    *   append 本身不进 undo 栈（09 归一表），流式内容由该 op 一次性撤销/重做；
    * - 缺省：普通用户编辑 op。
+   * R4 顺序语义（R3 遗留 2）：meta 是「独立一步」的契约——流式 op 与
+   * 用户 op 同栈交替 undo 均精确。insert/delete 的 500ms 合并条件必须
+   * 排除 meta:'stream' 的栈顶 op（否则用户击键会并进流式 op，undo 时
+   * removedLines 不含击键内容 → 丢字），合并只允许发生在无 meta 的
+   * 用户 op 之间（undo/redo 逆 op 重建已按当前状态为基准，见 undo/redo）。
    */
   meta?: 'stream';
 }
@@ -517,8 +522,47 @@ export interface EditorState {
   deleteText: (backward: boolean) => void;
   deleteSelection: (start: number, end: number) => void;
 
+  /**
+   * 位置级变更统一入口（R4 事务层，04 §4.3 方案 1 / 09 归一表）：
+   * 把 [from, to) 字符区间替换为 insert 的变更收敛为单步事务——内部复用
+   * updateLinesIncremental 行区间语义 + EditorOperation 记录 + 光标平移，
+   * 保证 lineOffsets/textLength/codeBlockState/undo 全链路一致。
+   * insertText/deleteText/deleteSelection 均为此入口的薄封装（行为零变化，
+   * 289 门禁验证）；表格操作经「纯内容替换声明」（setState({lines}) diff
+   * 分支）与 applyTableChange 统一走本入口。
+   */
+  applyChange: (
+    from: number,
+    to: number,
+    insert: string,
+    opts?: ApplyChangeOptions
+  ) => void;
+  /** 表格专用事务入口：替换 [from, to) 并精确落点光标（表格 API 结果），
+   *  单步进 undo（R4：表格操作恢复 undo/redo/lineOffsets/textLength 一致性）。 */
+  applyTableChange: (
+    from: number,
+    to: number,
+    insert: string,
+    cursorAfter: number
+  ) => void;
+
   undo: () => void;
   redo: () => void;
+}
+
+/**
+ * applyChange 事务选项（R4）：
+ * - meta：与 EditorOperation.meta 对齐——'stream' 标记流式合并 op；
+ * - cursorAfter：光标/选区落点（默认 from + insert.length，与旧
+ *   insertText 的光标平移语义一致；表格操作传精确落点）；
+ * - merge：500ms 合并模式——'typing'（insertText 旧合并条件）、'delete'
+ *   （deleteText 旧合并条件）、'none'（事务一步一记，applyChange 公开
+ *   入口与表格操作默认，不做猜测性合并）。合并均排除 meta:'stream' 栈顶。
+ */
+export interface ApplyChangeOptions {
+  meta?: 'stream';
+  cursorAfter?: number;
+  merge?: 'typing' | 'delete' | 'none';
 }
 
 
@@ -960,6 +1004,173 @@ function mergeTailInto(state: EditorState): EditorState {
 }
 
 /**
+ * —— 事务核心：位置级变更计划（R4，04 §4.3 方案 1）——
+ * 把 [from, to) 字符区间的替换推导为行区间 splice 计划：行区间语义与
+ * 旧 insertText/deleteText/deleteSelection 逐分支一致（prefix/suffix 拼接
+ * → split('\n') → deleteCount = endLineIdx - startLineIdx + 1），使三个
+ * 旧入口重构为 applyChange 薄封装后行为零变化（289 门禁验证）。
+ * newCursor：默认光标落点（from + insert.length，与旧 insertText 一致）。
+ */
+interface ChangePlan {
+  startLineIdx: number;
+  deleteCount: number;
+  insertedLines: string[];
+  removedLines: string[];
+  newCursor: number;
+}
+
+function planChange(
+  state: EditorState,
+  from: number,
+  to: number,
+  insert: string
+): ChangePlan {
+  const startLineIdx = state.lineOffsets.findLineIndex(from);
+  const endLineIdx = state.lineOffsets.findLineIndex(to);
+
+  const startLineOffset = state.lineOffsets.getOffset(startLineIdx);
+  const endLineOffset = state.lineOffsets.getOffset(endLineIdx);
+
+  const prefix = state.mainLines[startLineIdx].substring(
+    0,
+    from - startLineOffset
+  );
+  const suffix = state.mainLines[endLineIdx].substring(to - endLineOffset);
+
+  const insertedLines = (prefix + insert + suffix).split('\n');
+
+  const deleteCount = endLineIdx - startLineIdx + 1;
+  const removedLines = state.mainLines.slice(
+    startLineIdx,
+    startLineIdx + deleteCount
+  );
+
+  return {
+    startLineIdx,
+    deleteCount,
+    insertedLines,
+    removedLines,
+    newCursor: from + insert.length,
+  };
+}
+
+/**
+ * —— 两级最小变更区间定位（R4：setState({lines}) 纯内容替换 → diff 事务）——
+ * 行级公共前缀/后缀（表格区域外的行零扫描、引用比较）框定差异区，再按
+ * 差异形态做字符级细分：
+ * - 行级前缀：逐行全同；行级后缀：逐行全同且**后缀起点行不得侵入前缀区**
+ *   （比较行索引 ≥ 前缀终点索引——插入/删除会把「平移行」与旧行对齐，
+ *   若允许后缀侵入前缀区，字符细分会落在相似表格行上错位）；
+ * - 字符级细分仅限「行数相同 + 单行差异」（编辑行 = 行 linePrefix）——
+ *   此时旧行/新行是同一逻辑行的局部修改，公共前缀/后缀精确；
+ * - 行数变化（插入/删除行）→ 整行替换（表格行共享 '| ' 前缀，字符细分
+ *   会把相似前缀算进去导致区间错位，禁止）。
+ * 无法界定局部区间（区间交叉/全文重写）时返回 null，调用方回落权威
+ * 整档重置路径。
+ */
+function findContentDiffRange(
+  getOldLine: (i: number) => string,
+  oldCount: number,
+  newLines: string[]
+): { from: number; to: number; insert: string } | null {
+  const common = Math.min(oldCount, newLines.length);
+
+  // —— 行级公共前缀（表格区域外行零扫描）——
+  let linePrefix = 0;
+  while (
+    linePrefix < common &&
+    getOldLine(linePrefix) === newLines[linePrefix]
+  ) {
+    linePrefix++;
+  }
+  // —— 行级公共后缀（比较行索引 ≥ 前缀终点，后缀不侵入前缀区）——
+  let lineSuffix = 0;
+  while (
+    lineSuffix < common - linePrefix &&
+    oldCount - 1 - lineSuffix >= linePrefix &&
+    getOldLine(oldCount - 1 - lineSuffix) ===
+      newLines[newLines.length - 1 - lineSuffix]
+  ) {
+    lineSuffix++;
+  }
+  // 后缀起点行索引（length - lineSuffix：后缀行 = [起点, 末尾) 共 lineSuffix 行）
+  const lastOld = oldCount - lineSuffix;
+  const lastNew = newLines.length - lineSuffix;
+
+  // —— 前缀偏移（前缀行新旧完全相同 → 新旧偏移一致）——
+  let prefixOffset = 0;
+  for (let i = 0; i < linePrefix; i++) prefixOffset += getOldLine(i).length + 1;
+  // —— 差异区终点 = 后缀起点行行首（旧/新）——
+  let oldDiffEnd = prefixOffset;
+  for (let i = linePrefix; i < lastOld; i++) oldDiffEnd += getOldLine(i).length + 1;
+  let newDiffEnd = prefixOffset;
+  for (let i = linePrefix; i < lastNew; i++) newDiffEnd += newLines[i].length + 1;
+
+  // —— 差异形态细分：行数相同 + 单行差异 → 行内字符级公共前缀/后缀 ——
+  let from = prefixOffset;
+  let to = oldDiffEnd;
+  let insertEnd = newDiffEnd;
+  if (
+    oldCount === newLines.length &&
+    lastOld === linePrefix + 1 &&
+    lastNew === linePrefix + 1
+  ) {
+    const oldLine = getOldLine(linePrefix);
+    const newLine = newLines[linePrefix];
+    let charPrefix = 0;
+    const charPreMax = Math.min(oldLine.length, newLine.length);
+    while (
+      charPrefix < charPreMax &&
+      oldLine[charPrefix] === newLine[charPrefix]
+    ) {
+      charPrefix++;
+    }
+    let charSuffix = 0;
+    const charSufMax = Math.min(oldLine.length, newLine.length);
+    while (
+      charSuffix < charSufMax &&
+      oldLine[oldLine.length - 1 - charSuffix] ===
+        newLine[newLine.length - 1 - charSuffix]
+    ) {
+      charSuffix++;
+    }
+    from += charPrefix;
+    to -= charSuffix;
+    insertEnd -= charSuffix;
+  }
+
+  const insert = newLines.join('\n').slice(from, insertEnd);
+  // 防御：区间交叉（前缀/后缀无法框定局部差异 = 全文重写）→ 回落整档重置
+  if (from > to) return null;
+  return { from, to, insert };
+}
+
+/**
+ * —— 纯内容替换声明判定（R4 diff 事务前置条件）——
+ * partial 含 lines 且不含 mainLines/codeBlockState/fenceLines/
+ * undoStack/redoStack：调用方只声明「内容替换」（表格操作等），未显式
+ * 控制存储/栈键 → 收敛为 applyChange 事务。显式携带存储或栈键的调用
+ * （测试 resetStore、加载路径等）仍走权威整档重置路径（语义不变）。
+ */
+function isPlainContentReplace(
+  partial: unknown
+): partial is { lines: string[] } {
+  if (!partial || typeof partial !== 'object' || Array.isArray(partial)) {
+    return false;
+  }
+  const p = partial as Record<string, unknown>;
+  return (
+    'lines' in p &&
+    Array.isArray(p.lines) &&
+    !('mainLines' in p) &&
+    !('codeBlockState' in p) &&
+    !('fenceLines' in p) &&
+    !('undoStack' in p) &&
+    !('redoStack' in p)
+  );
+}
+
+/**
  * 编辑路径对流式合并记账的修正（R3-A 流式合并 undo）：
  * 用户编辑（insertText/deleteText/undo/redo）会改变主数组行号布局，
  * 若发生在流式追加区间之前/边界行内，追加区间整体平移 lineDelta，
@@ -1224,50 +1435,40 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
       };
     }),
 
-  insertText: (inserted) =>
+  // —— 事务统一入口（R4，04 §4.3 方案 1 / 09 归一表）——
+  // 位置级变更唯一入口：mergeTailInto（编辑触达合并尾段）→ planChange
+  // 行区间计划 → updateLinesIncremental → EditorOperation 记录（含 meta
+  // 与光标落点）→ undo/redo 互推 → 用户编辑标记 + 流式记账修正。
+  // insertText/deleteText/deleteSelection 均为本入口的薄封装（行为零
+  // 变化，289 门禁验证）；表格操作（diff 事务分支 / applyTableChange）
+  // 同样收敛于此。空操作（from===to 且 insert===''）不记录事务。
+  applyChange: (from, to, insert, opts) =>
     dispatchSet((state) => {
+      const fromB = Math.max(0, Math.min(from, state.textLength));
+      const toB = Math.max(0, Math.min(to, state.textLength));
+      if (fromB === toB && insert === '') return state;
+
       // 用户编辑触达 → 尾段先并入主数组（C4 合并时机；坐标在合并前后不变）
       const s = mergeTailInto(state);
-      const sel = s.selectionStart;
-      const e = s.selectionEnd;
 
-      const startLineIdx = s.lineOffsets.findLineIndex(sel);
-      const endLineIdx = s.lineOffsets.findLineIndex(e);
-
-      const startLineOffset = s.lineOffsets.getOffset(startLineIdx);
-      const endLineOffset = s.lineOffsets.getOffset(endLineIdx);
-
-      const prefix = s.mainLines[startLineIdx].substring(
-        0,
-        sel - startLineOffset
-      );
-      const suffix = s.mainLines[endLineIdx].substring(e - endLineOffset);
-
-      const newSegment = prefix + inserted + suffix;
-      const insertedLines = newSegment.split('\n');
-
-      const deleteCount = endLineIdx - startLineIdx + 1;
-      const removedLines = s.mainLines.slice(
-        startLineIdx,
-        startLineIdx + deleteCount
-      );
+      const plan = planChange(s, fromB, toB, insert);
 
       const res = updateLinesIncremental(
         s.mainLines,
         s.lineOffsets,
         s.mainCodeState,
-        startLineIdx,
-        deleteCount,
-        insertedLines,
+        plan.startLineIdx,
+        plan.deleteCount,
+        plan.insertedLines,
         s.mainFenceLines
       );
 
-      const newPos = sel + inserted.length;
+      const newPos = opts?.cursorAfter ?? plan.newCursor;
 
       const newOp: EditorOperation = {
-        startLineIdx,
-        removedLines,
-        insertedLineCount: insertedLines.length,
+        startLineIdx: plan.startLineIdx,
+        removedLines: plan.removedLines,
+        insertedLineCount: plan.insertedLines.length,
         cursorBefore: s.cursorPos,
         selectionStartBefore: s.selectionStart,
         selectionEndBefore: s.selectionEnd,
@@ -1275,27 +1476,63 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         selectionStartAfter: newPos,
         selectionEndAfter: newPos,
         timestamp: Date.now(),
+        meta: opts?.meta,
       };
 
       let newUndoStack = [...s.undoStack];
-      // Basic debounce: if typing continuously in the same line without selections
-      if (
-        newUndoStack.length > 0 &&
-        sel === e &&
-        inserted.length === 1 &&
-        inserted !== '\n'
-      ) {
-        const last = newUndoStack[newUndoStack.length - 1];
+      const mergeMode = opts?.merge ?? 'none';
+      if (mergeMode === 'typing') {
+        // 连续打字合并（原 insertText 合并条件，行为零变化）：
+        // 500ms + 同行 + cursorAfter === from + 单字符 + 非换行。
+        // R4 顺序语义：!last.meta——流式合并 op 是独立一步，不与用户
+        // 击键合并（否则用户击键并进流式 op，undo 时 removedLines 不含
+        // 击键内容 → 丢字；R3 遗留 2）。
         if (
-          Date.now() - last.timestamp < 500 &&
-          last.startLineIdx === startLineIdx &&
-          last.cursorAfter === sel &&
-          last.insertedLineCount === 1
+          newUndoStack.length > 0 &&
+          fromB === toB &&
+          insert.length === 1 &&
+          insert !== '\n'
         ) {
-          // Merge typing
-          last.insertedLineCount = insertedLines.length;
-          last.cursorAfter = newPos;
-          last.timestamp = Date.now();
+          const last = newUndoStack[newUndoStack.length - 1];
+          if (
+            !last.meta &&
+            Date.now() - last.timestamp < 500 &&
+            last.startLineIdx === plan.startLineIdx &&
+            last.cursorAfter === fromB &&
+            last.insertedLineCount === 1
+          ) {
+            last.insertedLineCount = plan.insertedLines.length;
+            last.cursorAfter = newPos;
+            last.timestamp = Date.now();
+          } else {
+            newUndoStack.push(newOp);
+          }
+        } else {
+          newUndoStack.push(newOp);
+        }
+      } else if (mergeMode === 'delete') {
+        // 连续单字符删除合并（原 deleteText 合并条件，行为零变化）；
+        // 同样排除 meta:'stream' 栈顶（R3 遗留 2）。
+        if (
+          newUndoStack.length > 0 &&
+          s.selectionStart === s.selectionEnd // 单字符删除（非选择范围）
+        ) {
+          const last = newUndoStack[newUndoStack.length - 1];
+          if (
+            !last.meta &&
+            Date.now() - last.timestamp < 500 &&
+            last.startLineIdx === plan.startLineIdx &&
+            last.insertedLineCount === 1 &&
+            plan.insertedLines.length === 1
+          ) {
+            last.insertedLineCount = plan.insertedLines.length;
+            last.cursorAfter = newPos;
+            last.selectionStartAfter = newPos;
+            last.selectionEndAfter = newPos;
+            last.timestamp = Date.now();
+          } else {
+            newUndoStack.push(newOp);
+          }
         } else {
           newUndoStack.push(newOp);
         }
@@ -1312,13 +1549,13 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         streamTail: EMPTY_TAIL,
         streamTailCodeState: EMPTY_STATE_TAIL,
         streamTailFenceLines: EMPTY_FENCE_TAIL,
-        // 用户编辑标记（R3-A 追加点前移判定）+ 流式合并记账修正
-        // （编辑点 ≤ 追加区间起点 → 区间行号整体平移；深入区间内 → 作废）
+        // 用户编辑标记 + 流式合并记账修正（编辑点 ≤ 追加区间起点 → 区间
+        // 行号整体平移；深入区间内 → 作废重记账）
         lastUserEditTime: Date.now(),
         streamOp: adjustStreamOpForEdit(
           s.streamOp,
-          startLineIdx,
-          insertedLines.length - deleteCount
+          plan.startLineIdx,
+          plan.insertedLines.length - plan.deleteCount
         ),
         cursorPos: newPos,
         selectionStart: newPos,
@@ -1327,6 +1564,21 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         redoStack: [],
       };
     }),
+
+  // 表格专用事务入口（R4：表格操作收敛）：替换 [from, to) 并精确落点
+  // 光标（表格 API 计算的结果位置，而非默认的 from + insert.length），
+  // 单步进 undo——恢复 undo/redo/lineOffsets/textLength 一致性。
+  applyTableChange: (from, to, insert, cursorAfter) => {
+    useEditorStore.getState().applyChange(from, to, insert, { cursorAfter });
+  },
+
+  insertText: (inserted) => {
+    // 薄封装：以当前选区为区间，委托 applyChange（合并模式 = 连续打字）
+    const s = useEditorStore.getState();
+    s.applyChange(s.selectionStart, s.selectionEnd, inserted, {
+      merge: 'typing',
+    });
+  },
 
   // 流式尾部追加快速通道（R2-A 尾段零拷贝 / 08 招 2 / 09 §4 C4 契约）：
   // - 追加文本落在独立 streamTail，主数组不重建（零拷贝，O(尾段)）；
@@ -1617,190 +1869,39 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
       };
     }),
 
-  deleteText: (backward) =>
-    dispatchSet((state) => {
-      // 用户编辑触达 → 尾段先并入主数组（C4 合并时机）
-      const base = mergeTailInto(state);
-      let s = base.selectionStart;
-      let e = base.selectionEnd;
+  deleteText: (backward) => {
+    // 薄封装：先按 grapheme 边界扩展删除区间（原逻辑），再委托
+    // applyChange——无选区（单字符删除）走 'delete' 合并模式（原合并
+    // 条件），有选区（整选区删除）不合并（与旧行为一致）。
+    const base = mergeTailInto(useEditorStore.getState());
+    let s = base.selectionStart;
+    let e = base.selectionEnd;
+    const hadSelection = s !== e;
 
-      if (s === e) {
-        const text = base.mainLines.join('\n');
-        if (backward && s > 0) {
-          s = findPrevGraphemeBoundary(text, s);
-        } else if (!backward && e < base.textLength) {
-          e = findNextGraphemeBoundary(text, e);
-        } else {
-          return state;
-        }
-      }
-
-      const startLineIdx = base.lineOffsets.findLineIndex(s);
-      const endLineIdx = base.lineOffsets.findLineIndex(e);
-
-      const startLineOffset = base.lineOffsets.getOffset(startLineIdx);
-      const endLineOffset = base.lineOffsets.getOffset(endLineIdx);
-
-      const prefix = base.mainLines[startLineIdx].substring(
-        0,
-        s - startLineOffset
-      );
-      const suffix = base.mainLines[endLineIdx].substring(e - endLineOffset);
-
-      const newSegment = prefix + suffix;
-      const insertedLines = newSegment.split('\n'); // usually length 1
-
-      const deleteCount = endLineIdx - startLineIdx + 1;
-      const removedLines = base.mainLines.slice(
-        startLineIdx,
-        startLineIdx + deleteCount
-      );
-
-      const res = updateLinesIncremental(
-        base.mainLines,
-        base.lineOffsets,
-        base.mainCodeState,
-        startLineIdx,
-        deleteCount,
-        insertedLines,
-        base.mainFenceLines
-      );
-
-      const newOp: EditorOperation = {
-        startLineIdx,
-        removedLines,
-        insertedLineCount: insertedLines.length,
-        cursorBefore: base.cursorPos,
-        selectionStartBefore: base.selectionStart,
-        selectionEndBefore: base.selectionEnd,
-        cursorAfter: s,
-        selectionStartAfter: s,
-        selectionEndAfter: s,
-        timestamp: Date.now(),
-      };
-
-      let newUndoStack = [...base.undoStack];
-      // 连续单字符删除的合并逻辑（与 insertText 对称）
-      if (
-        newUndoStack.length > 0 &&
-        base.selectionStart === base.selectionEnd // 单字符删除（非选择范围）
-      ) {
-        const last = newUndoStack[newUndoStack.length - 1];
-        if (
-          Date.now() - last.timestamp < 500 &&
-          last.startLineIdx === startLineIdx &&
-          last.insertedLineCount === 1 &&
-          insertedLines.length === 1
-        ) {
-          // 合并：保留原始 removedLines（第一次删除前的行），
-          // 只更新 insertedLineCount 和 cursor 状态
-          last.insertedLineCount = insertedLines.length;
-          last.cursorAfter = s;
-          last.selectionStartAfter = s;
-          last.selectionEndAfter = s;
-          last.timestamp = Date.now();
-        } else {
-          newUndoStack.push(newOp);
-        }
+    if (!hadSelection) {
+      const text = base.mainLines.join('\n');
+      if (backward && s > 0) {
+        s = findPrevGraphemeBoundary(text, s);
+      } else if (!backward && e < base.textLength) {
+        e = findNextGraphemeBoundary(text, e);
       } else {
-        newUndoStack.push(newOp);
+        return;
       }
+    }
 
-      return {
-        ...res,
-        // 编辑触达 → 尾段已并入主数组，显式清空三个尾段键（同 insertText，
-        // 见该处注释；缺失时 zustand 合并后 streamTail 残留 → 视图分叉）。
-        streamTail: EMPTY_TAIL,
-        streamTailCodeState: EMPTY_STATE_TAIL,
-        streamTailFenceLines: EMPTY_FENCE_TAIL,
-        // 用户编辑标记 + 流式合并记账修正（同 insertText）
-        lastUserEditTime: Date.now(),
-        streamOp: adjustStreamOpForEdit(
-          base.streamOp,
-          startLineIdx,
-          insertedLines.length - deleteCount
-        ),
-        cursorPos: s,
-        selectionStart: s,
-        selectionEnd: s,
-        undoStack: newUndoStack,
-        redoStack: [],
-      };
-    }),
+    useEditorStore.getState().applyChange(s, e, '', {
+      merge: hadSelection ? 'none' : 'delete',
+    });
+  },
 
-  deleteSelection: (start, end) =>
-    dispatchSet((state) => {
-      // 用户编辑触达 → 尾段先并入主数组（C4 合并时机）
-      const base = mergeTailInto(state);
-      const s = Math.max(0, Math.min(start, end));
-      const e = Math.min(base.textLength, Math.max(start, end));
-
-      if (s === e) return state;
-
-      const startLineIdx = base.lineOffsets.findLineIndex(s);
-      const endLineIdx = base.lineOffsets.findLineIndex(e);
-
-      const startLineOffset = base.lineOffsets.getOffset(startLineIdx);
-      const endLineOffset = base.lineOffsets.getOffset(endLineIdx);
-
-      const prefix = base.mainLines[startLineIdx].substring(
-        0,
-        s - startLineOffset
-      );
-      const suffix = base.mainLines[endLineIdx].substring(e - endLineOffset);
-
-      const newSegment = prefix + suffix;
-      const insertedLines = newSegment.split('\n'); // usually length 1
-
-      const deleteCount = endLineIdx - startLineIdx + 1;
-      const removedLines = base.mainLines.slice(
-        startLineIdx,
-        startLineIdx + deleteCount
-      );
-
-      const res = updateLinesIncremental(
-        base.mainLines,
-        base.lineOffsets,
-        base.mainCodeState,
-        startLineIdx,
-        deleteCount,
-        insertedLines,
-        base.mainFenceLines
-      );
-
-      const newOp: EditorOperation = {
-        startLineIdx,
-        removedLines,
-        insertedLineCount: insertedLines.length,
-        cursorBefore: base.cursorPos,
-        selectionStartBefore: base.selectionStart,
-        selectionEndBefore: base.selectionEnd,
-        cursorAfter: s,
-        selectionStartAfter: s,
-        selectionEndAfter: s,
-        timestamp: Date.now(),
-      };
-
-      return {
-        ...res,
-        // 编辑触达 → 尾段已并入主数组，显式清空三个尾段键（同 insertText）。
-        streamTail: EMPTY_TAIL,
-        streamTailCodeState: EMPTY_STATE_TAIL,
-        streamTailFenceLines: EMPTY_FENCE_TAIL,
-        // 用户编辑标记 + 流式合并记账修正（同 insertText）
-        lastUserEditTime: Date.now(),
-        streamOp: adjustStreamOpForEdit(
-          base.streamOp,
-          startLineIdx,
-          insertedLines.length - deleteCount
-        ),
-        cursorPos: s,
-        selectionStart: s,
-        selectionEnd: s,
-        undoStack: [...base.undoStack, newOp],
-        redoStack: [],
-      };
-    }),
+  deleteSelection: (start, end) => {
+    // 薄封装：归一化区间后委托 applyChange（单步事务，不参与 500ms 合并）
+    const base = useEditorStore.getState();
+    const s = Math.max(0, Math.min(start, end));
+    const e = Math.min(base.textLength, Math.max(start, end));
+    if (s === e) return;
+    base.applyChange(s, e, '', { merge: 'none' });
+  },
 
   undo: () =>
     dispatchSet((state) => {
@@ -1808,57 +1909,100 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
       // 用户操作触达 → 尾段先并入主数组（C4 合并时机；undo 针对的
       // 是主数组编辑 op，行号坐标在合并前后不变）
       const base = mergeTailInto(state);
-      const op = base.undoStack[base.undoStack.length - 1];
+      const stack = base.undoStack;
+      const top = stack[stack.length - 1];
 
-      // Reverse splice: remove `insertedLineCount` lines at `startLineIdx` and insert `removedLines`
-      const res = updateLinesIncremental(
-        base.mainLines,
-        base.lineOffsets,
-        base.mainCodeState,
-        op.startLineIdx,
-        op.insertedLineCount,
-        op.removedLines,
-        base.mainFenceLines
-      );
+      // —— 撤销组收集（R4 / R3 遗留 2：流式 op + 用户 op 同栈交替 undo 精确）——
+      // 行级 splice 模型下，meta:'stream' 合并 op 的快照取自流式会话开始
+      // （早于其后入栈的同区间用户 op）。若独立撤销流式 op，整行恢复会
+      // 吞掉区间内的用户击键内容，用户 op 快照随即失效（undo 流式后再
+      // undo 用户 → 恢复到含流式内容行的错误状态）。修复：撤销流式 op
+      // 时，把「区间与之重叠」的更早 op 一并组成撤销组，按生效序（最早
+      // 先撤）逐 op 撤销——链条每步都精确恢复到该 op 生效前，最终回到
+      // 组前状态（3d/3f 场景：一次 undo 精确回到流式会话开始）。普通 op
+      // （组内无流式 op）保持单步撤销（行为零变化）。
+      let groupStart = stack.length - 1;
+      if (top.meta === 'stream') {
+        const topStart = top.startLineIdx;
+        const topEnd = top.startLineIdx + top.insertedLineCount;
+        let i = stack.length - 2;
+        while (i >= 0) {
+          const op = stack[i];
+          const opStart = op.startLineIdx;
+          const opEnd = op.startLineIdx + op.insertedLineCount;
+          if (opStart >= topEnd || opEnd <= topStart) break;
+          groupStart = i;
+          i--;
+        }
+      }
 
-      // Forward op to redo stack
-      const inverseOp: EditorOperation = {
-        startLineIdx: op.startLineIdx,
-        removedLines: base.mainLines.slice(
+      // —— 撤销组执行（生效序：最早先撤，链式精确）——
+      // 逐 op：Reverse splice——remove `insertedLineCount` lines at
+      // `startLineIdx` and insert `removedLines`；逆 op 推入 redo 栈。
+      let cur = base;
+      const newRedo: EditorOperation[] = [...base.redoStack];
+      for (let gi = groupStart; gi < stack.length; gi++) {
+        const op = stack[gi];
+        const res = updateLinesIncremental(
+          cur.mainLines,
+          cur.lineOffsets,
+          cur.mainCodeState,
           op.startLineIdx,
-          op.startLineIdx + op.insertedLineCount
-        ),
-        insertedLineCount: op.removedLines.length,
-        cursorBefore: op.cursorAfter,
-        selectionStartBefore: op.selectionStartAfter,
-        selectionEndBefore: op.selectionEndAfter,
-        cursorAfter: op.cursorBefore,
-        selectionStartAfter: op.selectionStartBefore,
-        selectionEndAfter: op.selectionEndBefore,
-        timestamp: Date.now(),
-        // 流式合并 op 的类型标记随逆 op 传递（redo 后仍为 meta:'stream'）
-        meta: op.meta,
-      };
+          op.insertedLineCount,
+          op.removedLines,
+          cur.mainFenceLines
+        );
+
+        // Forward op to redo stack（以「撤销时刻的当前状态」为基准重建
+        // 逆 op，不依赖快照——组撤销下每步当前状态就是链式精确的中间态）
+        const inverseOp: EditorOperation = {
+          startLineIdx: op.startLineIdx,
+          removedLines: cur.mainLines.slice(
+            op.startLineIdx,
+            op.startLineIdx + op.insertedLineCount
+          ),
+          insertedLineCount: op.removedLines.length,
+          cursorBefore: op.cursorAfter,
+          selectionStartBefore: op.selectionStartAfter,
+          selectionEndBefore: op.selectionEndAfter,
+          cursorAfter: op.cursorBefore,
+          selectionStartAfter: op.selectionStartBefore,
+          selectionEndAfter: op.selectionEndBefore,
+          timestamp: Date.now(),
+          // 流式合并 op 的类型标记随逆 op 传递（redo 后仍为 meta:'stream'）
+          meta: op.meta,
+        };
+
+        newRedo.push(inverseOp);
+        cur = { ...cur, ...res };
+      }
+
+      // 光标/选区回退到组内最早 op 的 before（组前状态的光标快照）
+      const firstOp = stack[groupStart];
 
       return {
-        ...res,
+        mainLines: cur.mainLines,
+        lineOffsets: cur.lineOffsets,
+        mainCodeState: cur.mainCodeState,
+        mainFenceLines: cur.mainFenceLines,
+        textLength: cur.textLength,
         // 操作触达 → 尾段已并入主数组，显式清空三个尾段键（同 insertText）。
         streamTail: EMPTY_TAIL,
         streamTailCodeState: EMPTY_STATE_TAIL,
         streamTailFenceLines: EMPTY_FENCE_TAIL,
         // 用户操作标记 + 流式合并记账修正（同 insertText；undo 的编辑点
-        // = 被撤销 op 的 startLineIdx，行数净变化 = removed - inserted）
+        // = 组内最早 op 的 startLineIdx，行数净变化 = 组撤销总行差）
         lastUserEditTime: Date.now(),
         streamOp: adjustStreamOpForEdit(
           base.streamOp,
-          op.startLineIdx,
-          op.removedLines.length - op.insertedLineCount
+          firstOp.startLineIdx,
+          cur.mainLines.length - base.mainLines.length
         ),
-        cursorPos: op.cursorBefore,
-        selectionStart: op.selectionStartBefore,
-        selectionEnd: op.selectionEndBefore,
-        undoStack: base.undoStack.slice(0, -1),
-        redoStack: [...base.redoStack, inverseOp],
+        cursorPos: firstOp.cursorBefore,
+        selectionStart: firstOp.selectionStartBefore,
+        selectionEnd: firstOp.selectionEndBefore,
+        undoStack: stack.slice(0, groupStart),
+        redoStack: newRedo,
       };
     }),
 
@@ -1951,6 +2095,34 @@ const dispatchSet = ((partial: unknown, replace?: boolean) => {
   const current = useEditorStore.getState();
   const resolved =
     typeof partial === 'function' ? partial(current) : partial;
+  // —— 纯内容替换声明 → diff 事务（R4：表格操作收敛，04 §4.3 方案 1）——
+  // 外部消费方只传 { lines } 整行数组（表格操作旧路径直改 setState 的点）
+  // 时，旧路径整档重置会绕过 updateLinesIncremental：不进 undo、不更新
+  // lineOffsets/textLength/codeBlockState——一致性漂移（04 §4.1 U1）。
+  // 本分支把该声明收敛为 applyChange 事务：公共前缀/后缀定位最小变更
+  // 区间 → 单步事务（undo 一步回退、树/行长/textLength/块状态全量一致）。
+  // 仅当文本实际变化时才生成事务；无法定位局部区间（全文重写）或文本
+  // 未变时回落权威整档重置路径（语义与旧路径一致）。
+  if (!replace && isPlainContentReplace(resolved)) {
+    const newLines = resolved.lines;
+    const currentCount = current.getLineCount();
+    const oldText = current.getText();
+    const newText = newLines.join('\n');
+    if (oldText !== newText) {
+      const range = findContentDiffRange(
+        (i) => current.getLine(i),
+        currentCount,
+        newLines
+      );
+      if (range) {
+        // 委托事务核心（其内部 dispatchSet 携带 main* 键，不会再命中本分支，
+        // 无递归）；光标落点由调用方后续 setCursorPos 精确设置（表格操作
+        // 的既有调用模式：setState 后紧跟 setCursorPos）。
+        current.applyChange(range.from, range.to, range.insert);
+        return;
+      }
+    }
+  }
   const normalized = normalizeSetStatePartial(resolved);
   if (normalized && typeof normalized === 'object' && !Array.isArray(normalized)) {
     const materialized = materializeViews(
