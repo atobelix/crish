@@ -11,7 +11,10 @@ export type LineType =
     | 'math_fence_end'
     | 'math_block'
     | 'table_row'
-    | 'table_separator';
+    | 'table_separator'
+    // HTML 块（02 §2.5 / R1-D）：CommonMark 7 类 HTML 块（type 1-7）的行——
+    // 块内行按 raw 原样透传、不解析 markdown，与代码行同构的跨行块状态。
+    | 'html_block';
 
 export type InlineType = 
     | 'text' 
@@ -38,6 +41,9 @@ export type InlineType =
     | 'string'
     | 'keyword'
     | 'html_element'
+    // HTML 块内容行内 token（R1-D）：raw = 行原文，渲染层原样透传——
+    // 与 html_element/html_tag 的行内语义同族，但属于块级早退产物（不解析）。
+    | 'html'
     | 'table_pipe'
     | 'table_cell'
     | 'blockquote_prefix';

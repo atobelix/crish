@@ -126,6 +126,11 @@ function renderInline(t: InlineNode): string {
   if (t.type === 'html_element' || t.type === ('html_tag' as InlineNode['type'])) {
     return t.raw;
   }
+  // HTML 块内容行内 token（R1-D）：行级 html_block 早退产物，raw 即行原文，
+  // 原样透传（html_block 行由行级 case 直接投影，此处兜底内联渲染路径）。
+  if (t.type === 'html') {
+    return t.raw;
+  }
   switch (t.type) {
     case 'text':
       return escapeText(t.content);
@@ -370,6 +375,15 @@ export function astToHtml(doc: MarkdownDocument): string {
 
     switch (line.type) {
       case 'empty':
+        break;
+      // HTML 块行（R1-D）：原样透传（剥离块引用前缀——`> <div>` 的块引用
+      // 容器由行级 blockquoteLevel 开合，块内容行本身按 CommonMark 语义
+      // 不含引用标记）。缩进保留（`  <div>` 的 2 空格原样输出，spec 例 183）。
+      // 行间以 \n 连接（HTML 块行是 raw 文本行，换行是原文的一部分——
+      // spec 期望每行以换行结尾；normalizeHtml 会把非标签段的换行折叠为
+      // 空格，与期望文本段折叠后的形态等价）。
+      case 'html_block':
+        out.push(stripBlockquotePrefix(line.raw) + '\n');
         break;
       case 'body':
         if (line.listIndent !== undefined && listKind(line) !== null) {

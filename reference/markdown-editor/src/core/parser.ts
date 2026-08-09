@@ -9,7 +9,10 @@ export type CodeState =
   | 'math_fence_start'
   | 'math_fence_end'
   | 'math_block'
-  | 'indent_code';
+  | 'indent_code'
+  // HTML 块（02 §2.5）：CommonMark 7 类 HTML 块（type 1-7）的跨行状态——
+  // type 1-6 块内行与结束行均标记 'html_block'；type 7 单行块同理。
+  | 'html_block';
 
 /**
  * computeLineOffsets 缩进代码判定的「上一非空白行块级形态」记忆
@@ -592,6 +595,11 @@ export class MarkdownParser {
     // 上一非空白行的块级形态记忆（见 BlockKind 注释）——行级模型无容器状态，
     // 用轻量行首形态分类近似「上一行是什么」，不依赖 parseLine（避免递归依赖）。
     let prevBlockKind: BlockKind = 'blank';
+    // HTML 块状态（02 §2.5 / R1-D）：inHtmlBlock 为块内标记，htmlType 记录
+    // 当前块类型（1-7，决定结束条件）——type 1-5 遇匹配闭合行退出、
+    // type 6/7 遇空行退出（空行本身不是块，标记 'none'，CommonMark 4.6）。
+    let inHtmlBlock = false;
+    let htmlType = 0;
 
     for (let i = 0; i < lines.length; i++) {
       offsets[i] = currentOffset;
@@ -608,7 +616,32 @@ export class MarkdownParser {
       // `~~~ aa ``` ~~~` 合法）。trim 后判定的既有行为保留（`    ``` 四空格
       // 缩进仍按围栏处理，02 §7.2 登记偏差，不动）。
       const fenceOpen = /^(```+)([^`]*)$|^(~~~+).*$/.exec(trimmed);
-      if (!inMathBlock && fenceOpen) {
+      // HTML 块内行：优先级最高——fence/math/缩进代码判定全部让路
+      // （spec 4.6：「HTML 块内的 HTML 若可被识别为 start condition 将
+      // 原样透传、不改变解析器状态」——`<div>` 块内的 ``` 围栏行、`<pre>`
+      // 形态行均按 html 原样处理，spec 例 161/148）。
+      if (inHtmlBlock) {
+        if (this.htmlBlockEndCondition(htmlType, bqContent)) {
+          inHtmlBlock = false;
+          htmlType = 0;
+          if (bqContent.trim() === '') {
+            // type 6/7 空行结束块：空行本身不是块内容，按普通空行处理
+            // （`<hr>\n\nok` 的中间空行是 'none'，spec：end condition 是
+            // 「line is followed by a blank line」——块止于空行之前）。
+            codeBlockState[i] = 'none';
+            if (prevBlockKind !== 'list') prevBlockKind = 'blank';
+          } else {
+            // type 1-5 结束行（行内含闭合标记）：该行仍是块的最后一行。
+            codeBlockState[i] = 'html_block';
+            prevBlockKind = 'code';
+          }
+        } else {
+          codeBlockState[i] = 'html_block';
+          // 块形态记作 code 类：块后 ≥4 空格行允许开始缩进代码
+          // （type 7 单行块后 `    foo` → 缩进代码，与 CommonMark 一致）。
+          prevBlockKind = 'code';
+        }
+      } else if (!inMathBlock && fenceOpen) {
         if (!inCodeBlock) {
           // 开围栏：记录标记字符与 run 长度（后续关闭判定的依据）
           codeBlockState[i] = 'fence_start';
@@ -667,9 +700,23 @@ export class MarkdownParser {
           if (trimmed === '' || indent >= 4) {
             codeBlockState[i] = 'indent_code';
           } else {
-            codeBlockState[i] = 'none';
+            // 非缩进行结束代码块：该行按普通行处理（可能开启 HTML 块——
+            // CommonMark 中缩进代码块后的 `</div>` 行是 type 6 块）。
             inIndentCode = false;
-            prevBlockKind = this.guessBlockKind(bqContent, prevBlockKind);
+            const htmlStart = this.matchHtmlBlockStart(bqContent, prevBlockKind);
+            if (htmlStart) {
+              codeBlockState[i] = 'html_block';
+              inHtmlBlock = true;
+              htmlType = htmlStart.type;
+              if (this.htmlBlockEndCondition(htmlStart.type, bqContent)) {
+                inHtmlBlock = false;
+                htmlType = 0;
+              }
+              prevBlockKind = 'code';
+            } else {
+              codeBlockState[i] = 'none';
+              prevBlockKind = this.guessBlockKind(bqContent, prevBlockKind);
+            }
           }
         } else if (trimmed === '') {
           // 空行：不进入缩进代码；段落/表格上下文重置（段落打断规则失效，
@@ -703,8 +750,27 @@ export class MarkdownParser {
             prevBlockKind = 'code';
           }
         } else {
-          codeBlockState[i] = 'none';
-          prevBlockKind = this.guessBlockKind(bqContent, prevBlockKind);
+          // HTML 块 start 判定（缩进 <4、非空行）：type 1-6 可打断段落，
+          // 判定独立于 prevBlockKind（`Foo\n<div>` 中 div 是新块，spec 例 185）；
+          // type 7 段落保护在 matchHtmlBlockStart 内部（prevBlockKind 为
+          // body/list 时禁用——`Foo\n<a href="bar">` 中 a 行是段落延续，
+          // spec 例 187；列表延续同理由行级模型无容器状态登记为偏差）。
+          const htmlStart = this.matchHtmlBlockStart(bqContent, prevBlockKind);
+          if (htmlStart) {
+            codeBlockState[i] = 'html_block';
+            inHtmlBlock = true;
+            htmlType = htmlStart.type;
+            // 首行同时满足 end condition → 单行块（`<!-- c -->`、
+            // `<!DOCTYPE html>`、`<style>p{color:red;}</style>` 等）。
+            if (this.htmlBlockEndCondition(htmlStart.type, bqContent)) {
+              inHtmlBlock = false;
+              htmlType = 0;
+            }
+            prevBlockKind = 'code';
+          } else {
+            codeBlockState[i] = 'none';
+            prevBlockKind = this.guessBlockKind(bqContent, prevBlockKind);
+          }
         }
       }
 
@@ -815,6 +881,101 @@ export class MarkdownParser {
     if (/^([-*+])\s+/.test(s)) return 'list';
     if (/^(\d+\.)\s+/.test(s)) return 'list';
     return 'body';
+  }
+
+  // —— HTML 块判定（02 §2.5 / R1-D，CommonMark 4.6 spec 0.31.2）——
+  // type 1-5 的 start condition（下标 + 1 = 类型号）：
+  // 1. <script|<pre|<style|<textarea + 空白/>/行尾（大小写不敏感，
+  //    `<scripting>` 的 `<script` 后跟 `i` 不匹配，spec 例 170）；
+  // 2. <!--；3. <?；4. <! + ASCII 大写字母（`<!doctype>` 小写不匹配）；
+  // 5. <![CDATA[（`<!` 后是 `[`，与 type 4 的 `[A-Z]` 天然互斥）。
+  private static HTML_BLOCK_START_RE: RegExp[] = [
+    /^ {0,3}<(script|pre|style|textarea)(?=[ \t]|>|$)/i,
+    /^ {0,3}<!--/,
+    /^ {0,3}<\?/,
+    /^ {0,3}<![A-Z]/,
+    /^ {0,3}<!\[CDATA\[/,
+  ];
+  // type 6：< 或 </ + 块级标签名单 + 空白/`>`/`/>`/行尾（大小写不敏感）。
+  // lookahead `(?=[ \t]|/?>|$)` 精确表达 spec 的「a space, a tab, the end
+  // of the line, the string >, or the string />」——`<div>`（后跟 `>`）、
+  // `<div id="foo"`（后跟空白，行尾无 `>` 也可开始块，spec 例 153）、
+  // `<hr/>`（后跟 `/>`）均匹配；`<div><a`（后跟 `<`）不匹配（spec 例 159
+  // 是 `<div>` 形式——`<div` 后是 `>`，故仍命中，块吞掉整行）。
+  private static HTML_BLOCK_TYPE6_RE = new RegExp(
+    '^ {0,3}<\\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?=[ \\t]|/?>|$)',
+    'i'
+  );
+  // type 7：完整开/闭标签行（tag name 排除 pre/script/style/textarea——
+  // 它们由 type 1 接管，`</script>` 单独成行既非 type 1 start 也非 type 7，
+  // 按普通段落处理，与 spec 一致）。
+  private static HTML_BLOCK_TYPE7_RE =
+    /^ {0,3}<(\/?)([a-zA-Z][a-zA-Z0-9-]*)(?:[ \t]+[^>]*)?[ \t]*\/?>[ \t]*$/i;
+
+  /**
+   * HTML 块 start condition 判定（CommonMark 4.6）：
+   * - type 1-6 可打断段落，判定独立于 prevBlockKind（`Foo\n<div>` 中
+   *   div 是新块，spec 例 185）；
+   * - type 7 不可打断段落（spec 4.6 末尾：`Foo\n<a href="bar">` 中
+   *   a 行是段落延续，spec 例 187）；列表延续（`- foo\n<div>`）同理由
+   *   行级模型无列表容器状态登记为偏差，一并保护；
+   * - 列表标记行（`- <div>`、`1. <div>`）不进 HTML 块——行级模型无
+   *   容器状态，若判块会丢失 `<li>` 容器投影（spec 例 175 的列表渲染
+   *   依赖列表行内 html 原样透传，登记偏差）。
+   * 入参约定：content 已剥离块引用前缀、缩进 <4 列、非空行。
+   */
+  private static matchHtmlBlockStart(
+    content: string,
+    prevBlockKind: BlockKind
+  ): { type: number } | null {
+    if (this.isListMarkerStart(content)) return null;
+    for (let t = 0; t < this.HTML_BLOCK_START_RE.length; t++) {
+      if (this.HTML_BLOCK_START_RE[t].test(content)) return { type: t + 1 };
+    }
+    if (this.HTML_BLOCK_TYPE6_RE.test(content)) return { type: 6 };
+    if (prevBlockKind === 'body' || prevBlockKind === 'list') return null;
+    const t7 = this.HTML_BLOCK_TYPE7_RE.exec(content);
+    if (t7) {
+      const name = t7[2].toLowerCase();
+      if (
+        name === 'script' ||
+        name === 'pre' ||
+        name === 'style' ||
+        name === 'textarea'
+      ) {
+        return null;
+      }
+      return { type: 7 };
+    }
+    return null;
+  }
+
+  /**
+   * HTML 块 end condition（CommonMark 4.6）：
+   * type 1 行内含四者任一闭合标签即结束（大小写不敏感；不需要与开始标签
+   * 同名——`</div>` 也能结束 `<table>` 开始的 type 6 块？不——type 1 只认
+   * script/pre/style/textarea 的闭合标签；type 6 的结束条件是空行）；
+   * type 2/3/4/5 行内含对应闭合串即结束；type 6/7 遇空行结束
+   * （空行本身不是块内容，由调用方标记 'none'）。
+   */
+  private static htmlBlockEndCondition(type: number, content: string): boolean {
+    switch (type) {
+      case 1:
+        return /<\/script>|<\/pre>|<\/style>|<\/textarea>/i.test(content);
+      case 2:
+        return content.includes('-->');
+      case 3:
+        return content.includes('?>');
+      case 4:
+        return content.includes('>');
+      case 5:
+        return content.includes(']]>');
+      case 6:
+      case 7:
+        return content.trim() === '';
+      default:
+        return true;
+    }
   }
 
   /**
@@ -1073,6 +1234,16 @@ export class MarkdownParser {
       return node;
     }
 
+    // HTML 块内容行（02 §2.5 / R1-D）：整行按 raw 原样透传、不做行内
+    // 解析（与代码行同构——HTML 块内 CommonMark 不做任何行内处理）；
+    // 块引用前缀保留在 raw 中，由投影器剥离（与缩进代码行同构）。
+    if (codeState === 'html_block') {
+      const node = this.parseHtmlBlockLine(lineText, localOffset);
+      node.blockquoteLevel = bqLevelVal;
+      this.astCache.set(cacheKey, node);
+      return node;
+    }
+
     if (codeState === 'code' || codeState === true) {
       const node = this.parseCodeLine(lineText, localOffset);
       node.blockquoteLevel = bqLevelVal;
@@ -1084,6 +1255,33 @@ export class MarkdownParser {
 
     this.astCache.set(cacheKey, node);
     return node;
+  }
+
+  /**
+   * HTML 块行（02 §2.5 / R1-D）：整行作为单个 'html' token（raw = 行原文、
+   * content = 行原文），不做行内解析——HTML 块内 CommonMark 不做任何
+   * 行内处理（与代码块一致，`<div>` 块内的 `*foo*` 保持字面）。
+   */
+  private static parseHtmlBlockLine(
+    lineText: string,
+    localOffset: number
+  ): LineNode {
+    return {
+      id: this.generateId(),
+      type: 'html_block',
+      raw: lineText,
+      inlineTokens: [
+        {
+          type: 'html',
+          raw: lineText,
+          content: lineText,
+          localOffset: 0,
+          length: lineText.length,
+        },
+      ],
+      length: lineText.length,
+      localOffset,
+    };
   }
 
   private static parseCodeLine(
