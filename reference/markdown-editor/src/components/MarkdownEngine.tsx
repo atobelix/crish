@@ -8,6 +8,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { BlockRenderer } from './BlockRenderer';
 import { HiddenInput } from './HiddenInput';
 import { CursorLayer } from './CursorLayer';
+import { SelectionHighlight } from './SelectionHighlight';
 import { useEditorStore, type EditorState } from '../core/EditorStore';
 import { useTableStore } from '../core/TableStore';
 import { MarkdownParser } from '../core/parser';
@@ -861,6 +862,7 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, Record<stri
           })()}
         />
         <HiddenInput containerRef={parentRef} />
+        <SelectionHighlight />
       </div>
     </div>
   );
