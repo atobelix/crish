@@ -15,6 +15,11 @@
 // - 增量维护：add 只写新区间跨行 bucket、remove 只清该 kind 涉及的
 //   行（kindLines 索引）——光标/选区/搜索变化 O(受影响行)，不触碰全文
 //   （06 §2「光标/选区变化只更新 DecorationSet（O(受影响行)）」）；
+// - 行级版本（R6-C）：行号 → 该行装饰内容版本，add/remove 影响行时
+//   递增——LineItem 的 memo 依赖从「全局 decorationVersion」降为
+//   「本行行版本」：append 每帧平移光标只 bump 光标行，其他行版本
+//   不变 → 全窗口 memo 不再失效（R6-B 定位的回归根因：R5-D 全局版本
+//   每帧递增 → 可见 math 块每帧重跑 KaTeX）。
 // - 行边界解析：字符偏移 → 行号经宿主注入的 findLineIndex 解析器
 //   （store 的 LineOffsetTree 是权威增量行边界，本类不复制行边界状态）。
 //
@@ -60,6 +65,11 @@ export class DecorationSet {
   private readonly kindLines = new Map<DecorationKind, Set<number>>();
   /** 种类 → 装饰列表（插入序）：getKind O(1)（选区单例读取 / 搜索区间枚举） */
   private readonly byKind = new Map<DecorationKind, Decoration[]>();
+  /** 行级版本（R6-C）：行号 → 该行装饰内容版本。add/remove/clear 影响
+   *  行时递增；无装饰行版本为 0。消费方（LineItem memo）按本行版本
+   *  判定「该行装饰是否变化」——光标平移只 bump 光标行，其他行版本
+   *  不变 → memo 命中，消除 R5-D 全局版本号导致的每帧全窗口失效。 */
+  private readonly rowVersions = new Map<number, number>();
 
   /** 行索引解析器（构造注入，只读） */
   private readonly resolver: DecorationLineResolver;
@@ -71,6 +81,20 @@ export class DecorationSet {
   /** 已装饰行 bucket 数（增量维护的规模上界，调试/巡检口径） */
   get bucketCount(): number {
     return this.buckets.size;
+  }
+
+  /**
+   * 行装饰版本（R6-C）：该行装饰内容变化的单调版本号（未装饰行 = 0）。
+   * LineItem 渲染时读取并作为 memo 依赖——版本不变即该行装饰内容
+   * 未变（光标/选区/搜索的区间变化只影响其覆盖行，其他行版本不变）。
+   */
+  getRowVersion(lineIndex: number): number {
+    return this.rowVersions.get(lineIndex) ?? 0;
+  }
+
+  /** 行版本递增（add/remove 影响行时调用；O(1)） */
+  private bumpRow(lineIndex: number): void {
+    this.rowVersions.set(lineIndex, (this.rowVersions.get(lineIndex) ?? 0) + 1);
   }
 
   /**
@@ -116,6 +140,8 @@ export class DecorationSet {
       }
       bucket.push(dec);
       lines.add(li);
+      // R6-C：区间覆盖行的行级版本递增（LineItem memo 的粒度判定依据）
+      this.bumpRow(li);
     }
     kindList.push(dec);
   }
@@ -131,12 +157,16 @@ export class DecorationSet {
       const bucket = this.buckets.get(li);
       if (!bucket) continue;
       // 原地过滤：仅剔除该种类装饰，保留其他种类（选区/搜索互不干扰）
+      const before = bucket.length;
       let w = 0;
       for (let i = 0; i < bucket.length; i++) {
         if (bucket[i].kind !== kind) bucket[w++] = bucket[i];
       }
       bucket.length = w;
       if (bucket.length === 0) this.buckets.delete(li);
+      // R6-C：实际移除了该种类装饰的行才递增行级版本（remove 幂等
+      // 空操作 / 该行无此种类装饰时不 bump——内容未变不触发重渲染）
+      if (w < before) this.bumpRow(li);
     }
     lines.clear();
     const kindList = this.byKind.get(kind);
@@ -203,6 +233,9 @@ export class DecorationSet {
     this.buckets.clear();
     this.kindLines.clear();
     this.byKind.clear();
+    // R6-C：行级版本一并清空（所有行装饰内容归零，版本归 0——
+    // 曾有装饰的行版本回到 0 触发其重渲染，未装饰行版本恒 0 不扰动）
+    this.rowVersions.clear();
   }
 }
 

@@ -11,10 +11,17 @@
  * 组件，主题 token 只在渲染时读取，不需要 React Context 的订阅/重渲染
  * 机制；宿主（Conex）在挂载前调用 setRenderTheme / setMathRenderer 即可。
  *
+ * 公式渲染缓存（R6-C）：renderMathToHtml 对「formula + displayMode」
+ * 做 LRU 结果缓存（上限 500 条）——KaTeX renderToString 是 CPU 重负载
+ * （R3 遗留 1 / R6-B 场景 C 回归根因之二），流式场景中已闭合公式的
+ * 内容稳定，跨帧复用结果避免重复渲染；setMathRenderer 替换渲染器时
+ * 清空缓存（旧渲染器的输出对新渲染器无效）。
+ *
  * 默认主题 = 现有 CSS 变量值（var(--xxx) 引用）：CSS 变量仍是唯一
  * 定义源，token 只是其具名别名，默认状态行为零变化。
  */
 import katex from 'katex';
+import { LRUCache } from './LRUCache';
 
 /** 主题颜色 token（均引用现有 CSS 变量，见 src/index.css :root） */
 export interface RenderThemeColors {
@@ -126,9 +133,19 @@ const defaultMathRenderer: MathRenderer = (formula, displayMode) => {
 // 模块级当前数学渲染器（KaTeX 默认；可换 MathJax/自研）
 let currentMathRenderer: MathRenderer = defaultMathRenderer;
 
-/** 注入数学渲染器（KaTeX 默认；传空恢复默认） */
+// ── R6-C 公式渲染缓存 ──
+// 缓存键 = displayMode 前缀 + formula（displayMode 影响输出，必须入键）。
+// LRU 上限 500 条：流式文档公式数量有限（固定公式段反复渲染），
+// 500 足以覆盖稳态窗口；超限按最久未用淘汰，缓存峰值有界。
+export const MATH_RENDER_CACHE_CAPACITY = 500;
+const mathRenderCache = new LRUCache<string, string>(MATH_RENDER_CACHE_CAPACITY);
+
+/** 注入数学渲染器（KaTeX 默认；传空恢复默认）。替换渲染器时清空
+ *  结果缓存——缓存输出与渲染器绑定，旧渲染器的结果不得复用到新
+ *  渲染器下（宿主换 MathJax/自研引擎后公式 HTML 必须全新生成）。 */
 export function setMathRenderer(renderer: MathRenderer | null): void {
   currentMathRenderer = renderer ?? defaultMathRenderer;
+  mathRenderCache.clear();
 }
 
 /** 读取当前数学渲染器（测试/宿主自检用） */
@@ -136,14 +153,27 @@ export function getMathRenderer(): MathRenderer {
   return currentMathRenderer;
 }
 
+/** 清空公式渲染缓存（测试清理 / 宿主主动失效场景）。 */
+export function clearMathRenderCache(): void {
+  mathRenderCache.clear();
+}
+
 /**
  * 数学渲染统一入口：BlockRenderer/InlineRenderer 的 renderMathToHtml
  * 全部改走本注入点。空公式早退语义与历史实现一致（不触发渲染器）。
+ * R6-C：先查 LRU 结果缓存——同 formula + displayMode 命中时 O(1)
+ * 取回已渲染 HTML，KaTeX renderToString 只执行一次（流式场景中
+ * 已闭合公式跨帧复用；渲染器内部输出确定性，可安全缓存）。
  */
 export function renderMathToHtml(
   formula: string,
   displayMode: boolean = false
 ): string {
   if (!formula) return '';
-  return currentMathRenderer(formula, displayMode);
+  const key = (displayMode ? 'block:' : 'inline:') + formula;
+  const cached = mathRenderCache.get(key);
+  if (cached !== undefined) return cached;
+  const html = currentMathRenderer(formula, displayMode);
+  mathRenderCache.set(key, html);
+  return html;
 }

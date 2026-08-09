@@ -124,10 +124,16 @@ const LineItem = React.memo(({
   store,
   // R5-D：共享装饰集 + 版本号——active/选区/搜索统一数据源（LineItem
   // 不再订阅 cursorPos/selection*，改经装饰集行级 query 派生；光标/
-  // 选区/搜索变化 → 版本递增 → 本行查询刷新；无变化帧（滚动/内容
-  // 未变）props 全等 → memo 命中，零重渲染）
+  // 选区/搜索变化 → 行版本递增 → 本行查询刷新；无变化帧（滚动/内容
+  // 未变）props 全等 → memo 命中，零重渲染）。
+  // R6-C 粒度修正：memo 依赖从「全局 decorationVersion」降为「本行
+  // 行版本 rowDecorationVersion」（decorationVersion 每帧递增的回归
+  // 根因：append 平移光标 → 全窗口 memo 失效 → 可见 math 块每帧重跑
+  // KaTeX）。行版本只在「该行装饰内容变化」时递增（DecorationSet
+  // add/remove 影响行 bump）——光标平移只 bump 光标行，其他行版本
+  // 不变 → memo 命中。
   decorations,
-  decorationVersion,
+  rowDecorationVersion,
 }: {
   index: number;
   lineText: string;
@@ -137,9 +143,11 @@ const LineItem = React.memo(({
   // R5：行渲染单元的 store 绑定（内容/activeState 经实例读取；多实例
   // 场景缺省传全局单例——LineItem 是模块级 memo 组件，store 引用稳定）。
   store: EditorStore;
-  // R5-D：装饰集与版本号（由引擎维护并注入，见 MarkdownEngine 接线）
+  // R5-D：共享装饰集（由引擎维护并注入，见 MarkdownEngine 接线）；
+  // R6-C：行级装饰版本（引擎渲染时读 decorations.getRowVersion(index)
+  // 注入——本行装饰内容变化的单调版本，非全局版本）
   decorations: DecorationSet;
-  decorationVersion: number;
+  rowDecorationVersion: number;
   // C3 dirty 协议：直刷期间本行 props 行文本滞后于 DOM（直刷文本尚未
   // 提交 store）。为 true 时本行进入冻结渲染（见 frozenContentRef），
   // 并打上 data-streaming-dirty 标记（调试/巡检可见）。
@@ -158,11 +166,12 @@ const LineItem = React.memo(({
   // active/选区判定逐分支等价迁移，行为零变化）
   const lineDecorations = React.useMemo(
     () => decorations.query(offset, offset + lineText.length),
-    // decorationVersion 是装饰集内容变更的语义信号（decorations 为可变
-    // 结构，行内变更不可见，必须经版本号驱动重查；与下方批量测量 effect
-    // 的语义依赖注释同款）
+    // R6-C：依赖从全局 decorationVersion 降为本行行版本——本行装饰
+    // 内容变化（行版本递增）时重查，其他行装饰变化不触发本行重查；
+    // decorations 为可变结构，行内变更不可见，必须经行版本驱动重查
+    // （与下方批量测量 effect 的语义依赖注释同款）
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-    [decorations, decorationVersion, offset, lineText.length]);
+    [decorations, rowDecorationVersion, offset, lineText.length]);
 
   // R5-D：activeState 派生（props 结构兼容旧 selector 输出）：
   // - selection 装饰 → { cursor, selStart, selEnd }——cursor 取选区
@@ -286,8 +295,14 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
       }),
     [engineStore]
   );
-  // 版本号：光标/选区/搜索任一变化递增，驱动行级查询刷新（LineItem /
-  // SelectionHighlight 以 props 消费；无变化帧 props 全等 → memo 命中）
+  // 全局版本号：光标/选区/搜索维护后递增（R6-C 语义保留）——两个作用：
+  // 1) 装饰集是可变结构，apply 发生在 commit 后（useLayoutEffect），
+  //    本版本 state 变化驱动「apply 后的第二轮渲染」，使 LineItem 按
+  //    最新行版本重查（光标行 class 跟随光标）；
+  // 2) SelectionHighlight 以 props 消费，驱动选区矩形重测。
+  // LineItem 的 memo 粒度已降为行级（rowDecorationVersion，见渲染
+  // 处注入）——全局版本递增只触发主组件重渲染 + 各行浅比较，不再
+  // 全窗口失效（R6-C 回归修复）。
   const [decorationVersion, setDecorationVersion] = React.useState(0);
   // 宿主搜索区间（addSearchRange 接入）：与光标/选区同一维护链路
   const [searchRanges, setSearchRanges] = React.useState<readonly SearchRange[]>(
@@ -302,6 +317,9 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
   useLayoutEffect(() => {
     // 增量维护：remove 只清受影响行 bucket、add 只写新区间跨行 bucket
     // ——光标/选区/搜索变化 O(受影响行)，不触碰全文（06 §2）。
+    // 行级版本同步：apply 内部对受影响行 bump（DecorationSet.add/
+    // remove）——append 平移光标只 bump 光标行，其他行版本不变，
+    // LineItem memo 命中（R6-C 回归修复的核心）。
     // 行结构变化不直接触发本 effect：store 全编辑路径必伴随光标/选区
     // 落点变化；append 例外（只追加文末，既有装饰字符区间保持有效）。
     applyCursorSelectionDecorations(decorations, cursorPos, selectionStart, selectionEnd);
@@ -955,7 +973,11 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEng
                   rowRef={registerRowRef}
                   store={engineStore}
                   decorations={decorations}
-                  decorationVersion={decorationVersion}
+                  // R6-C：行级装饰版本（非全局版本）——渲染时从装饰集
+                  // 即时读取本行版本；append 平移光标只 bump 光标行，
+                  // 其他行版本不变 → memo 命中（不重跑 BlockRenderer/
+                  // InlineRenderer/KaTeX）
+                  rowDecorationVersion={decorations.getRowVersion(index)}
                 />
               );
             });
