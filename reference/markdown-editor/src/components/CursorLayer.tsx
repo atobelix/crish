@@ -1,21 +1,31 @@
 import React, { useLayoutEffect, useState, useEffect } from 'react';
-import { useEditorStore } from '../core/EditorStore';
+import { useEditorStore, type EditorStore } from '../core/EditorStore';
 import { useTableStore } from '../core/TableStore';
 import { getCoordinatesFromIndex, toContainerCoords } from '../core/measure';
 
 interface CursorLayerProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   layoutDeps?: string;
+  /**
+   * 显式 store 实例（R5 实例工厂）：缺省 = 全局默认单例（向后兼容）。
+   * 多实例场景（文档工作区）下光标层必须绑定与内容同一实例，否则光标
+   * 坐标读的是全局单例的光标位，与实例内容错位。
+   */
+  store?: EditorStore;
 }
 
 export const CursorLayer: React.FC<CursorLayerProps> = ({
   containerRef,
   layoutDeps,
+  store,
 }) => {
-  const cursorPos = useEditorStore(state => state.cursorPos);
-  const selectionStart = useEditorStore(state => state.selectionStart);
-  const selectionEnd = useEditorStore(state => state.selectionEnd);
-  const isComposing = useEditorStore(state => state.isComposing);
+  // R5：绑定实例 store（缺省回退全局单例）；zustand 的 useStore 在
+  // store 引用变化时自动切换订阅（useSyncExternalStore 重订阅语义）
+  const editorStore = store ?? useEditorStore;
+  const cursorPos = editorStore(state => state.cursorPos);
+  const selectionStart = editorStore(state => state.selectionStart);
+  const selectionEnd = editorStore(state => state.selectionEnd);
+  const isComposing = editorStore(state => state.isComposing);
   const selectedCell = useTableStore(state => state.selectedCell);
 
   const [coords, setCoords] = useState<{

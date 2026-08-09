@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import { type CodeState } from './parser';
 import { LineOffsetTree } from './SegmentTree';
 
@@ -967,8 +967,6 @@ function updateLinesIncremental(
   };
 }
 
-let currentLoadGeneration = 0;
-
 // —— 尾段零拷贝辅助设施（R2-A / 08 招 2 / 09 §4 C4 契约）——
 // streamTail 上界：超过强制合并，防长流式 O(尾段) 退化（C4）。
 const STREAM_TAIL_MAX_LINES = 4096;
@@ -1339,7 +1337,22 @@ function normalizeSetStatePartial(
 
 // 注意：create 的 set 参数弃用——状态更新统一走 dispatchSet
 // （zustand 原生 set 不会生成兼容视图字段，见 materializeViews 说明）。
-export const useEditorStore = create<EditorState>((_set, get) => ({
+/**
+ * 构建一个独立的编辑器 store 实例（R5 实例工厂内部实现，06 §8 宿主集成接口）：
+ * - 每次调用创建全新的 zustand store（独立 state / 独立订阅 / 独立 dispatchSet
+ *   闭包），多实例并行互不干扰——setText/appendText/光标/undo 等全链隔离；
+ * - 分块加载代际计数（currentLoadGeneration）为实例内局部：setText 的竞态
+ *   保护只对同实例的加载序列生效，跨实例互不取消；
+ * - store body 内的方法经闭包捕获本实例的 dispatchSet 与 get()，绝不引用
+ *   全局单例（旧代码 applyTableChange/insertText 等薄封装引用全局
+ *   useEditorStore.getState() 的缺陷在实例化重构中一并根除）。
+ * 全局单例 useEditorStore = buildEditorStore() 的一次实例化（向后兼容）。
+ */
+function buildEditorStore(): UseBoundStore<StoreApi<EditorState>> {
+  // 分块加载代际计数（实例内局部，见上方注释）
+  let currentLoadGeneration = 0;
+
+  const store = create<EditorState>((_set, get) => ({
   mainLines: [''],
   streamTail: EMPTY_TAIL,
   mainCodeState: ['none'],
@@ -1761,13 +1774,14 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
   // 表格专用事务入口（R4：表格操作收敛）：替换 [from, to) 并精确落点
   // 光标（表格 API 计算的结果位置，而非默认的 from + insert.length），
   // 单步进 undo——恢复 undo/redo/lineOffsets/textLength 一致性。
+  // R5 实例化：改经本实例 get() 委托（旧实现引用全局单例，多实例会串台）。
   applyTableChange: (from, to, insert, cursorAfter) => {
-    useEditorStore.getState().applyChange(from, to, insert, { cursorAfter });
+    get().applyChange(from, to, insert, { cursorAfter });
   },
 
   insertText: (inserted) => {
     // 薄封装：以当前选区为区间，委托 applyChange（合并模式 = 连续打字）
-    const s = useEditorStore.getState();
+    const s = get();
     s.applyChange(s.selectionStart, s.selectionEnd, inserted, {
       merge: 'typing',
     });
@@ -2079,7 +2093,8 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
     // 薄封装：先按 grapheme 边界扩展删除区间（原逻辑），再委托
     // applyChange——无选区（单字符删除）走 'delete' 合并模式（原合并
     // 条件），有选区（整选区删除）不合并（与旧行为一致）。
-    const base = mergeTailInto(useEditorStore.getState());
+    // R5 实例化：改经本实例 get()（旧实现引用全局单例）。
+    const base = mergeTailInto(get());
     let s = base.selectionStart;
     let e = base.selectionEnd;
     const hadSelection = s !== e;
@@ -2095,14 +2110,14 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
       }
     }
 
-    useEditorStore.getState().applyChange(s, e, '', {
+    get().applyChange(s, e, '', {
       merge: hadSelection ? 'none' : 'delete',
     });
   },
 
   deleteSelection: (start, end) => {
     // 薄封装：归一化区间后委托 applyChange（单步事务，不参与 500ms 合并）
-    const base = useEditorStore.getState();
+    const base = get();
     const s = Math.max(0, Math.min(start, end));
     const e = Math.min(base.textLength, Math.max(start, end));
     if (s === e) return;
@@ -2317,58 +2332,85 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
   },
 }));
 
-// —— setState 归一 + 视图物化包装（R2-A）——
-// 统一分发入口：store 内部方法与外部消费方全部经此更新状态。
-// 1) 归一：外部按旧字段名 lines/codeBlockState/fenceLines 传整档重置时
-//    映射到主数组字段并清空尾段（视图字段由物化步骤生成，防止 stale）；
-// 2) 物化：按 main* + streamTail* 双段结构生成兼容视图字段
-//    （lines/codeBlockState/fenceLines），保证未切换访问器的消费方与
-//    既有测试读到全量视图（见 materializeViews 的零拷贝/过渡成本说明）。
-// store 内部 set 也必须经此分发（zustand 原生 set 不会生成视图字段，
-// 且其 Object.assign({}, state, next) 会破坏 getter——已弃用 getter）。
-const rawSetState = useEditorStore.setState.bind(useEditorStore);
-const dispatchSet = ((partial: unknown, replace?: boolean) => {
-  const current = useEditorStore.getState();
-  const resolved =
-    typeof partial === 'function' ? partial(current) : partial;
-  // —— 纯内容替换声明 → diff 事务（R4：表格操作收敛，04 §4.3 方案 1）——
-  // 外部消费方只传 { lines } 整行数组（表格操作旧路径直改 setState 的点）
-  // 时，旧路径整档重置会绕过 updateLinesIncremental：不进 undo、不更新
-  // lineOffsets/textLength/codeBlockState——一致性漂移（04 §4.1 U1）。
-  // 本分支把该声明收敛为 applyChange 事务：公共前缀/后缀定位最小变更
-  // 区间 → 单步事务（undo 一步回退、树/行长/textLength/块状态全量一致）。
-  // 仅当文本实际变化时才生成事务；无法定位局部区间（全文重写）或文本
-  // 未变时回落权威整档重置路径（语义与旧路径一致）。
-  if (!replace && isPlainContentReplace(resolved)) {
-    const newLines = resolved.lines;
-    const currentCount = current.getLineCount();
-    const oldText = current.getText();
-    const newText = newLines.join('\n');
-    if (oldText !== newText) {
-      const range = findContentDiffRange(
-        (i) => current.getLine(i),
-        currentCount,
-        newLines
-      );
-      if (range) {
-        // 委托事务核心（其内部 dispatchSet 携带 main* 键，不会再命中本分支，
-        // 无递归）；光标落点由调用方后续 setCursorPos 精确设置（表格操作
-        // 的既有调用模式：setState 后紧跟 setCursorPos）。
-        current.applyChange(range.from, range.to, range.insert);
-        return;
+  // —— setState 归一 + 视图物化包装（R2-A）——
+  // 统一分发入口：store 内部方法与外部消费方全部经此更新状态。
+  // 1) 归一：外部按旧字段名 lines/codeBlockState/fenceLines 传整档重置时
+  //    映射到主数组字段并清空尾段（视图字段由物化步骤生成，防止 stale）；
+  // 2) 物化：按 main* + streamTail* 双段结构生成兼容视图字段
+  //    （lines/codeBlockState/fenceLines），保证未切换访问器的消费方与
+  //    既有测试读到全量视图（见 materializeViews 的零拷贝/过渡成本说明）。
+  // store 内部 set 也必须经此分发（zustand 原生 set 不会生成视图字段，
+  // 且其 Object.assign({}, state, next) 会破坏 getter——已弃用 getter）。
+  // R5 实例化：dispatchSet 闭包绑定本实例（store.getState / store.setState），
+  // 实例之间天然隔离；纯内容替换 → diff 事务分支委托本实例的 applyChange。
+  const rawSetState = store.setState.bind(store);
+  const dispatchSet = ((partial: unknown, replace?: boolean) => {
+    const current = store.getState();
+    const resolved =
+      typeof partial === 'function' ? partial(current) : partial;
+    // —— 纯内容替换声明 → diff 事务（R4：表格操作收敛，04 §4.3 方案 1）——
+    // 外部消费方只传 { lines } 整行数组（表格操作旧路径直改 setState 的点）
+    // 时，旧路径整档重置会绕过 updateLinesIncremental：不进 undo、不更新
+    // lineOffsets/textLength/codeBlockState——一致性漂移（04 §4.1 U1）。
+    // 本分支把该声明收敛为 applyChange 事务：公共前缀/后缀定位最小变更
+    // 区间 → 单步事务（undo 一步回退、树/行长/textLength/块状态全量一致）。
+    // 仅当文本实际变化时才生成事务；无法定位局部区间（全文重写）或文本
+    // 未变时回落权威整档重置路径（语义与旧路径一致）。
+    if (!replace && isPlainContentReplace(resolved)) {
+      const newLines = resolved.lines;
+      const currentCount = current.getLineCount();
+      const oldText = current.getText();
+      const newText = newLines.join('\n');
+      if (oldText !== newText) {
+        const range = findContentDiffRange(
+          (i) => current.getLine(i),
+          currentCount,
+          newLines
+        );
+        if (range) {
+          // 委托事务核心（其内部 dispatchSet 携带 main* 键，不会再命中本分支，
+          // 无递归）；光标落点由调用方后续 setCursorPos 精确设置（表格操作
+          // 的既有调用模式：setState 后紧跟 setCursorPos）。
+          current.applyChange(range.from, range.to, range.insert);
+          return;
+        }
       }
     }
-  }
-  const normalized = normalizeSetStatePartial(resolved);
-  if (normalized && typeof normalized === 'object' && !Array.isArray(normalized)) {
-    const materialized = materializeViews(
-      normalized as Record<string, unknown>,
-      current
-    );
-    rawSetState(materialized as never, replace as never);
-  } else {
-    rawSetState(normalized as never, replace as never);
-  }
-}) as typeof useEditorStore.setState;
+    const normalized = normalizeSetStatePartial(resolved);
+    if (normalized && typeof normalized === 'object' && !Array.isArray(normalized)) {
+      const materialized = materializeViews(
+        normalized as Record<string, unknown>,
+        current
+      );
+      rawSetState(materialized as never, replace as never);
+    } else {
+      rawSetState(normalized as never, replace as never);
+    }
+  }) as typeof store.setState;
 
-useEditorStore.setState = dispatchSet;
+  store.setState = dispatchSet;
+  return store;
+}
+
+/**
+ * —— R5 实例工厂（06 §8 宿主集成接口 / 05 场景四文档工作区前置）——
+ * 全局单例保留为默认导出（向后兼容：组件缺省 store prop / 既有测试 /
+ * main.tsx 的 __CRISH_SESSION_STORE__ 均继续使用默认实例）；
+ * 宿主多实例场景（文档工作区/多面板/会话历史多块渲染）经
+ * createEditorStore() 创建独立实例——state、订阅、dispatchSet 全链隔离，
+ * 实例可并行（R5 验收：两个实例互不干扰）。
+ */
+export const useEditorStore = buildEditorStore();
+
+/**
+ * 创建独立编辑器 store 实例（R5 实例工厂）：
+ * 与全局单例完全同构（同一套方法/访问器/增量状态机），但 state 独立——
+ * setText/appendText/光标/选区/undo 等全链互不干扰，可多实例并行。
+ * 典型用法：`const store = createEditorStore(); <MarkdownEngine store={store} />`。
+ */
+export function createEditorStore(): UseBoundStore<StoreApi<EditorState>> {
+  return buildEditorStore();
+}
+
+/** 编辑器 store 实例类型（MarkdownEngine 的 store prop / 工厂返回值的类型面） */
+export type EditorStore = UseBoundStore<StoreApi<EditorState>>;

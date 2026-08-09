@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useEditorStore } from '../core/EditorStore';
+import { useEditorStore, type EditorStore } from '../core/EditorStore';
 import { getCoordinatesFromIndex } from '../core/measure';
 
 interface Rect {
@@ -9,9 +9,21 @@ interface Rect {
   height: number;
 }
 
-export const SelectionHighlight: React.FC = () => {
-  const selectionStart = useEditorStore(state => state.selectionStart);
-  const selectionEnd = useEditorStore(state => state.selectionEnd);
+interface SelectionHighlightProps {
+  /**
+   * 显式 store 实例（R5 实例工厂）：缺省 = 全局默认单例（向后兼容）。
+   * 多实例场景下选区高亮必须绑定与内容同一实例。
+   */
+  store?: EditorStore;
+}
+
+export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
+  store,
+}) => {
+  // R5：绑定实例 store（缺省回退全局单例）
+  const editorStore = store ?? useEditorStore;
+  const selectionStart = editorStore(state => state.selectionStart);
+  const selectionEnd = editorStore(state => state.selectionEnd);
   
   const [rects, setRects] = useState<Rect[]>([]);
 

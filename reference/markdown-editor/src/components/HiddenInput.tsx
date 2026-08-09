@@ -4,6 +4,7 @@ import {
   findNextGraphemeBoundary,
   findPrevGraphemeBoundary,
   snapToGraphemeBoundary,
+  type EditorStore,
 } from '../core/EditorStore';
 import {
   getCoordinatesFromIndex,
@@ -23,6 +24,12 @@ import type { LineOffsetTree } from '../core/SegmentTree';
 
 interface HiddenInputProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
+  /**
+   * 显式 store 实例（R5 实例工厂）：缺省 = 全局默认单例（向后兼容）。
+   * 多实例场景下输入层必须绑定与内容同一实例——本组件全部状态读写
+   * （光标/选区/文本/组合/拖选）经 editorStore 闭包路由，实例隔离。
+   */
+  store?: EditorStore;
 }
 
 // ============================================================
@@ -355,16 +362,19 @@ export function formatAnnouncement(
 // 继续累积 value，窗口到期后以 textarea.value 为准一次性提交。
 const FLUSH_DELAY_MS = 50;
 
-export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
+export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef, store }) => {
+  // R5：绑定实例 store（缺省回退全局单例）；组件内所有 store 读写
+  // （订阅 / getState / setState）统一经本变量，多实例输入互不串台
+  const editorStore = store ?? useEditorStore;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const cursorPos = useEditorStore((state) => state.cursorPos);
-  const insertText = useEditorStore((state) => state.insertText);
-  const deleteText = useEditorStore((state) => state.deleteText);
-  const setCursorPos = useEditorStore((state) => state.setCursorPos);
-  const setSelection = useEditorStore((state) => state.setSelection);
-  const lines = useEditorStore((state) => state.lines);
-  const selectionStart = useEditorStore((state) => state.selectionStart);
-  const selectionEnd = useEditorStore((state) => state.selectionEnd);
+  const cursorPos = editorStore((state) => state.cursorPos);
+  const insertText = editorStore((state) => state.insertText);
+  const deleteText = editorStore((state) => state.deleteText);
+  const setCursorPos = editorStore((state) => state.setCursorPos);
+  const setSelection = editorStore((state) => state.setSelection);
+  const lines = editorStore((state) => state.lines);
+  const selectionStart = editorStore((state) => state.selectionStart);
+  const selectionEnd = editorStore((state) => state.selectionEnd);
   const [coords, setCoords] = useState<{
     top: number;
     left: number;
@@ -486,7 +496,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     // 组合缓冲载体（R4-C 状态机），同步/播报一律跳过，绝不覆盖缓冲
     if (isComposingRef.current || activeCompositionGroup.current) return;
     if (pendingFlushTimer.current !== null) return;
-    const s = useEditorStore.getState();
+    const s = editorStore.getState();
     const lineIdx = s.getLineIndex(cursorPos);
     const lineText = s.getLine(lineIdx) ?? '';
     // 光标行 value 同步：屏幕阅读器可读当前行内容（getLine 统一行访问器，
@@ -556,7 +566,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         // will handle it using caretRangeFromPoint, which is more precise.
         // This prevents the "two cursor changes" jitter on mousedown -> click.
         if (s !== e) {
-          useEditorStore.setState({
+          editorStore.setState({
             cursorPos: e,
             selectionStart: s,
             selectionEnd: e,
@@ -593,7 +603,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         return;
       }
       if (e.key === 'Backspace' || e.key === 'Delete') {
-        const state = useEditorStore.getState();
+        const state = editorStore.getState();
         if (state.selectionStart !== state.selectionEnd) {
           e.preventDefault();
           state.deleteSelection(state.selectionStart, state.selectionEnd);
@@ -661,7 +671,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
           d.startX,
           d.startY,
           container,
-          useEditorStore.getState()
+          editorStore.getState()
         );
         d.active = true;
         // 抑制原生选区：userSelect none 防止后续 mousemove 创建原生选区
@@ -669,7 +679,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         d.suppressed = true;
         container.style.userSelect = 'none';
         window.getSelection()?.removeAllRanges();
-        useEditorStore.getState().setCursorPos(d.anchor);
+        editorStore.getState().setCursorPos(d.anchor);
       }
       // 边缘滚动（视口外断选处理）：鼠标越出/压入容器边缘时步进滚动
       // （滚动跟随），目标行未挂载期间由行几何估算兜底
@@ -689,11 +699,11 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         e.clientX,
         e.clientY,
         container,
-        useEditorStore.getState()
+        editorStore.getState()
       );
       if (index !== d.lastIndex) {
         d.lastIndex = index;
-        useEditorStore.getState().moveHead(index);
+        editorStore.getState().moveHead(index);
       }
     };
 
@@ -707,10 +717,10 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
           e.clientX,
           e.clientY,
           containerRef.current,
-          useEditorStore.getState()
+          editorStore.getState()
         );
         if (index !== d.lastIndex) {
-          useEditorStore.getState().moveHead(index);
+          editorStore.getState().moveHead(index);
         }
         // 拖选结束的合成 click 抑制（MarkdownEngine handleContainerClick
         // 检查 __CRISH_LAST_DRAG_END_TIME 跳过，防光标回跳）
@@ -755,8 +765,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
   const handleTableInteraction = (e: KeyboardEvent | React.KeyboardEvent) => {
     const selectedCell = useTableStore.getState().selectedCell;
     if (!selectedCell) return false;
-    const text = useEditorStore.getState().getText();
-    const cursorPos = useEditorStore.getState().cursorPos;
+    const text = editorStore.getState().getText();
+    const cursorPos = editorStore.getState().cursorPos;
 
     if (!selectedCell.isEditing) {
       // 1. 单元格模式 (Cell Selection Mode - 仅限单元格级别操作)
@@ -774,9 +784,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         e.preventDefault();
         const res = clearCell(text, cursorPos);
         if (res.newText !== text) {
-          useEditorStore.setState({ lines: res.newText.split('\n') });
+          editorStore.setState({ lines: res.newText.split('\n') });
         }
-        useEditorStore.getState().setCursorPos(res.newCursorPos);
+        editorStore.getState().setCursorPos(res.newCursorPos);
         return true;
       }
 
@@ -801,9 +811,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         const res = navigateTable(text, cursorPos, action);
         if (res) {
           if (res.newText !== text) {
-            useEditorStore.setState({ lines: res.newText.split('\n') });
+            editorStore.setState({ lines: res.newText.split('\n') });
           }
-          useEditorStore.getState().setCursorPos(res.newCursorPos);
+          editorStore.getState().setCursorPos(res.newCursorPos);
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
             useTableStore.getState().enterCellSelection(
@@ -821,9 +831,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         e.preventDefault();
         const res = setCellContent(text, cursorPos, e.key);
         if (res.newText !== text) {
-          useEditorStore.setState({ lines: res.newText.split('\n') });
+          editorStore.setState({ lines: res.newText.split('\n') });
         }
-        useEditorStore.getState().setCursorPos(res.newCursorPos);
+        editorStore.getState().setCursorPos(res.newCursorPos);
         useTableStore.getState().enterCellEdit();
         return true;
       }
@@ -839,9 +849,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         const res = navigateTable(text, cursorPos, e.shiftKey ? 'shift-tab' : 'tab');
         if (res) {
           if (res.newText !== text) {
-            useEditorStore.setState({ lines: res.newText.split('\n') });
+            editorStore.setState({ lines: res.newText.split('\n') });
           }
-          useEditorStore.getState().setCursorPos(res.newCursorPos);
+          editorStore.getState().setCursorPos(res.newCursorPos);
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
             useTableStore.getState().enterCellSelection(
@@ -858,9 +868,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         const res = navigateTable(text, cursorPos, 'enter');
         if (res) {
           if (res.newText !== text) {
-            useEditorStore.setState({ lines: res.newText.split('\n') });
+            editorStore.setState({ lines: res.newText.split('\n') });
           }
-          useEditorStore.getState().setCursorPos(res.newCursorPos);
+          editorStore.getState().setCursorPos(res.newCursorPos);
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
             useTableStore.getState().enterCellSelection(
@@ -883,23 +893,23 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
 
   
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const text = useEditorStore.getState().getText();
-    const { selectionStart, selectionEnd } = useEditorStore.getState();
-    const cursorPos = useEditorStore.getState().cursorPos;
+    const text = editorStore.getState().getText();
+    const { selectionStart, selectionEnd } = editorStore.getState();
+    const cursorPos = editorStore.getState().cursorPos;
 
     // Undo / Redo
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
       e.preventDefault();
       if (e.shiftKey) {
-        useEditorStore.getState().redo();
+        editorStore.getState().redo();
       } else {
-        useEditorStore.getState().undo();
+        editorStore.getState().undo();
       }
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
       e.preventDefault();
-      useEditorStore.getState().redo();
+      editorStore.getState().redo();
       return;
     }
 
@@ -928,7 +938,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         // 删除旧启发式 selectionStart === cursorPos（光标离开选区端后即失效，
         // 反向扩展第二次方向错误——04 §3.2 S1）；extendSelectionByDirection
         // 以 headPos 为基点，方向由 anchor/head 相对位置判定，天然正确。
-        useEditorStore.getState().extendSelectionByDirection('left');
+        editorStore.getState().extendSelectionByDirection('left');
       } else {
         if (selectionStart !== selectionEnd) fastCursorMove(selectionStart);
         else fastCursorMove(newPos);
@@ -938,7 +948,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       const newPos = findNextGraphemeBoundary(text, cursorPos);
       if (e.shiftKey) {
         // R4-B 接线：Shift+Right 扩展（anchor 不动、head 右移），语义同上
-        useEditorStore.getState().extendSelectionByDirection('right');
+        editorStore.getState().extendSelectionByDirection('right');
       } else {
         if (selectionStart !== selectionEnd) fastCursorMove(selectionEnd);
         else fastCursorMove(newPos);
@@ -958,7 +968,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       if (isComposing) return;
 
       if (!e.shiftKey) {
-        const state = useEditorStore.getState();
+        const state = editorStore.getState();
         const text = state.getText();
         const pos = state.cursorPos;
 
@@ -1011,16 +1021,16 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       setSelection(0, text.length);
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      const state = useEditorStore.getState();
+      const state = editorStore.getState();
       const text = state.getText();
       const cursorPos = state.cursorPos;
 
       const res = navigateTable(text, cursorPos, e.shiftKey ? 'shift-tab' : 'tab');
       if (res) {
         if (res.newText !== text) {
-          useEditorStore.setState({ lines: res.newText.split('\n') });
+          editorStore.setState({ lines: res.newText.split('\n') });
         }
-        useEditorStore.getState().setCursorPos(res.newCursorPos);
+        editorStore.getState().setCursorPos(res.newCursorPos);
       } else {
         const selStart = state.selectionStart;
         const selEnd = state.selectionEnd;
@@ -1063,10 +1073,10 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
           state.setSelection(blockStart, blockEnd);
           state.insertText(newBlockText);
           if (selStart !== selEnd) {
-            useEditorStore.getState().setSelection(blockStart, blockStart + newBlockText.length);
+            editorStore.getState().setSelection(blockStart, blockStart + newBlockText.length);
           } else {
             const newPos = Math.max(blockStart, selStart + cursorDelta);
-            useEditorStore.getState().setSelection(newPos, newPos);
+            editorStore.getState().setSelection(newPos, newPos);
           }
         }
       }
@@ -1084,7 +1094,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
             // R4-B 垂直扩展登记：行级——head 移到目标行（列保持由
             // getArrowNavigationIndex 完成），anchor 保持不动（moveHead）；
             // 删除旧启发式 selectionStart === cursorPos（同 04 §3.2 S1）
-            useEditorStore.getState().moveHead(newPos);
+            editorStore.getState().moveHead(newPos);
           } else {
             fastCursorMove(newPos);
           }
@@ -1102,7 +1112,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
           const newPos = snapToGraphemeBoundary(text, targetIdx);
           if (e.shiftKey) {
             // R4-B 垂直扩展登记：行级——head 移到目标行，anchor 保持不动
-            useEditorStore.getState().moveHead(newPos);
+            editorStore.getState().moveHead(newPos);
           } else {
             fastCursorMove(newPos);
           }
@@ -1160,7 +1170,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       // merge:'typing' 与 insertText 同合并语义：单字符组合并入连续打字
       // 步（连续输入直觉）、多字符组合独立一步（合并条件含单字符约束，
       // 天然满足「整段组合 = 一个 undo 步」的撤销粒度）。
-      useEditorStore.getState().applyChange(group.from, group.to, value, {
+      editorStore.getState().applyChange(group.from, group.to, value, {
         merge: 'typing',
       });
     }
@@ -1184,7 +1194,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     if (prev) {
       flushComposition();
     }
-    const s = useEditorStore.getState();
+    const s = editorStore.getState();
     compositionGroupSeq.current += 1;
     activeCompositionGroup.current = {
       id: compositionGroupSeq.current,
@@ -1198,7 +1208,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     openCompositionGroup();
     isComposingRef.current = true;
     setIsComposing(true);
-    useEditorStore.getState().setIsComposing(true);
+    editorStore.getState().setIsComposing(true);
   };
 
   const handleCompositionEnd = (
@@ -1207,7 +1217,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     isComposingRef.current = false;
     lastCompositionEndAt.current = Date.now();
     setIsComposing(false);
-    useEditorStore.getState().setIsComposing(false);
+    editorStore.getState().setIsComposing(false);
     const ta = textareaRef.current;
 
     if (!activeCompositionGroup.current) {
@@ -1215,10 +1225,10 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       // 兜底提交，不丢字（正常路径组必已开）。
       const fallback = ta ? ta.value : '';
       if (fallback) {
-        useEditorStore.getState().insertText(fallback);
+        editorStore.getState().insertText(fallback);
         if (ta) ta.value = '';
       } else if (e.data) {
-        useEditorStore.getState().insertText(e.data);
+        editorStore.getState().insertText(e.data);
       }
       return;
     }
@@ -1251,7 +1261,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     if (isComposingRef.current || activeCompositionGroup.current) return;
     const inputType = native.inputType;
     if (!inputType) return;
-    const s = useEditorStore.getState();
+    const s = editorStore.getState();
     const ta = native.target as HTMLTextAreaElement | null;
     if (inputType === 'insertReplacementText') {
       native.preventDefault();
@@ -1295,7 +1305,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     if (isComposingRef.current || activeCompositionGroup.current) return;
     const cd = native.clipboardData;
     if (!cd) return;
-    const s = useEditorStore.getState();
+    const s = editorStore.getState();
     const plain = cd.getData('text/plain') ?? '';
     const html = cd.getData('text/html') ?? '';
     const selectionText = s.getText().substring(
@@ -1346,7 +1356,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     const ta = e.target as HTMLTextAreaElement;
     const value = ta.value;
     if (value) {
-      useEditorStore.getState().insertText(value);
+      editorStore.getState().insertText(value);
       // reset textarea so we can catch next input cleanly
       ta.value = '';
     }
@@ -1413,7 +1423,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       onBlur={() => {
         setIsComposing(false);
         isComposingRef.current = false;
-        useEditorStore.getState().setIsComposing(false);
+        editorStore.getState().setIsComposing(false);
         // 失焦 = 组合被浏览器强制结束：立即 flush 防丢字（组合取消时
         // value 为空，flush 为空操作），并清掉延迟定时器防双写
         if (pendingFlushTimer.current !== null) {

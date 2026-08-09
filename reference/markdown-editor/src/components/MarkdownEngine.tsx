@@ -9,7 +9,7 @@ import { BlockRenderer } from './BlockRenderer';
 import { HiddenInput } from './HiddenInput';
 import { CursorLayer } from './CursorLayer';
 import { SelectionHighlight } from './SelectionHighlight';
-import { useEditorStore, type EditorState } from '../core/EditorStore';
+import { useEditorStore, type EditorState, type EditorStore } from '../core/EditorStore';
 import { useTableStore } from '../core/TableStore';
 import { MarkdownParser } from '../core/parser';
 import { HeightMap, HeightOracle, classifyLine } from '../core/HeightMap';
@@ -103,13 +103,17 @@ const LineItem = React.memo(({
   offset,
   isCode,
   rowRef,
-  streamingDirty
+  streamingDirty,
+  store
 }: {
   index: number;
   lineText: string;
   offset: number;
   isCode: CodeState;
   rowRef: (el: HTMLElement | null) => void;
+  // R5：行渲染单元的 store 绑定（内容/activeState 经实例读取；多实例
+  // 场景缺省传全局单例——LineItem 是模块级 memo 组件，store 引用稳定）。
+  store: EditorStore;
   // C3 dirty 协议：直刷期间本行 props 行文本滞后于 DOM（直刷文本尚未
   // 提交 store）。为 true 时本行进入冻结渲染（见 frozenContentRef），
   // 并打上 data-streaming-dirty 标记（调试/巡检可见）。
@@ -123,7 +127,7 @@ const LineItem = React.memo(({
   // flush 后 dirty 清除 → 按最新 lineText 全新渲染，DOM 与 store 收敛。
   const frozenContentRef = useRef<React.ReactElement | null>(null);
 
-  const activeStateStr = useEditorStore(state => {
+  const activeStateStr = store(state => {
     const { cursorPos, selectionStart, selectionEnd } = state;
     const lineStart = offset;
     const lineEnd = offset + lineText.length;
@@ -151,7 +155,7 @@ const LineItem = React.memo(({
     };
   }, [activeStateStr]);
 
-  const tableId = useEditorStore(state => {
+  const tableId = store(state => {
     if (!lineText.trim().startsWith('|')) return undefined;
     let firstTableIndex = index;
     while (firstTableIndex > 0) {
@@ -205,23 +209,41 @@ const LineItem = React.memo(({
   );
 });
 
-export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, Record<string, never>>(
-  function MarkdownEngine(_props, ref) {
+/**
+ * MarkdownEngine props（R5 实例工厂 + readOnly 只读模式，06 §8 宿主集成接口）：
+ * - store：显式编辑器 store 实例（createEditorStore() 工厂产出），缺省 =
+ *   全局默认单例 useEditorStore（向后兼容，App.tsx 等既有消费方零改动）；
+ * - readOnly：只读渲染模式（05 §2.2 消息历史渲染器定位）——隐藏输入层
+ *   （HiddenInput/CursorLayer/SelectionHighlight）、点击不移动光标、输入
+ *   捕获（键盘/拖选/粘贴）零生效；滚动/虚拟化/行高模型/token 映射全保留；
+ *   原生 DOM 选区可用（选择复制走浏览器默认通道）；流式追加仍可用——
+ *   streamAppend/appendText 经 store 驱动，readOnly 渲染 + 流式增量更新兼容。
+ */
+export interface MarkdownEngineProps {
+  store?: EditorStore;
+  readOnly?: boolean;
+}
+
+export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, MarkdownEngineProps>(
+  function MarkdownEngine({ store, readOnly }, ref) {
   const parentRef = useRef<HTMLDivElement>(null);
+  // R5 实例绑定：所有订阅/命令式读取统一经 engineStore（缺省回退全局
+  // 单例）；zustand 的 useStore 在 store 引用变化时自动切换订阅。
+  const engineStore = store ?? useEditorStore;
   // —— R3-B1 访问器切换：触发信号订阅（不订阅物化视图 state.lines /
   // state.codeBlockState——尾段非空时物化会执行 O(全文) concat 过渡成本，
   // 渲染热路径已完全移除该依赖）——
   // 双段存储引用（main* + streamTail*）：任何内容变更（编辑/append/undo/
   // flush 等）都至少换其一新引用，作为主组件重渲染的触发信号；
   // 行内容/行状态在渲染时经 store.getState().getLine(i)/getLineState 惰性读取。
-  const mainLines = useEditorStore(state => state.mainLines);
-  const streamTail = useEditorStore(state => state.streamTail);
-  const mainCodeState = useEditorStore(state => state.mainCodeState);
-  const streamTailCodeState = useEditorStore(state => state.streamTailCodeState);
+  const mainLines = engineStore(state => state.mainLines);
+  const streamTail = engineStore(state => state.streamTail);
+  const mainCodeState = engineStore(state => state.mainCodeState);
+  const streamTailCodeState = engineStore(state => state.streamTailCodeState);
   // 行数信号：count 变化触发重渲染是必要行为（virtualizer count 同步）；
   // 选择器每次 set 都执行（O(1)，纯 length 读取），返回值按值比较。
-  const lineCount = useEditorStore(state => state.getLineCount());
-  const setCursorPos = useEditorStore(state => state.setCursorPos);
+  const lineCount = engineStore(state => state.getLineCount());
+  const setCursorPos = engineStore(state => state.setCursorPos);
 
   // ── 行高模型（R2-B 定位层）：HeightOracle 预测 + HeightMap 回填（01 问题 1/8，09 §4 C2）──
   const rowRefs = useRef(new Map<number, HTMLElement>());
@@ -254,7 +276,7 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, Record<stri
       // R3-B1：行内容/状态经访问器惰性读取（estimateSize 可能在渲染期间
       // 被库调用，直接 getState() 读最新——同一同步 tick 内与订阅状态一致；
       // 不读物化 lines/codeBlockState 视图）
-      const s = useEditorStore.getState();
+      const s = engineStore.getState();
       const raw = s.getLine(i) ?? '';
       const st = getLineState(s, i);
       const oracle = oracleRef.current;
@@ -298,7 +320,7 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, Record<stri
     pendingStreamRef.current = '';
     dirtyRefs.current.clear();
     dirtyRowOutOfViewRef.current = false;
-    useEditorStore.getState().appendText(pending);
+    engineStore.getState().appendText(pending);
   }, []);
 
   // 直刷行可见性判定（O(1)：HeightMap.indexAt 二分像素→行）：
@@ -321,7 +343,7 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, Record<stri
   // （含换行的 chunk 由 store 完成行边界切分）。
   const streamAppend = useCallback((chunk: string) => {
     if (!chunk) return;
-    const s = useEditorStore.getState();
+    const s = engineStore.getState();
     const lastIdx = s.getLineCount() - 1;
 
     // DOM 视角末行 = store 末行 + 未提交直刷累积（直刷会话中 store 滞后）
@@ -366,7 +388,7 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, Record<stri
     // 先 flush 累积（"若含 \n 先 flush"推广到一切回落情形——保证直刷文本
     // 永远先于后续内容提交，顺序不颠倒），再 appendText 交给 store。
     flushStreamInternal();
-    useEditorStore.getState().appendText(chunk);
+    engineStore.getState().appendText(chunk);
   }, [flushStreamInternal, isRowInVisibleViewport]);
 
   // 流式结束（宿主调用）：flush 直刷累积（appendText 一次提交），并
@@ -374,7 +396,7 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, Record<stri
   // undo 步（09 归一表 §5「append 不进 undo 栈；流式结束后合并单步」）。
   const streamEnd = useCallback(() => {
     flushStreamInternal();
-    const s = useEditorStore.getState();
+    const s = engineStore.getState();
     if (s.streamTail.length > 0 || s.streamOp) s.flushStreamTail();
   }, [flushStreamInternal]);
 
@@ -491,7 +513,7 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, Record<stri
     // R3-B1：快照经 store.getState() 取一次，后续行/状态读取走访问器
     // （getLine / getLineState），不读物化视图；effect 由双段引用触发
     // 信号 + lineCount 驱动（见依赖数组——任何内容变更必换其一新引用）
-    const s = useEditorStore.getState();
+    const s = engineStore.getState();
     hm.syncTo(s.getLineCount(), (i) => {
       const raw = s.getLine(i) ?? '';
       const st = getLineState(s, i);
@@ -524,10 +546,13 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, Record<stri
   }, [mainLines, streamTail, mainCodeState, streamTailCodeState, lineCount, windowKey, flushStreamInternal]);
 
   const handleContainerClick = (e: React.MouseEvent) => {
+    // R5 readOnly：只读模式点击不移动光标（光标定位链路整体短路）——
+    // 原生 DOM 文本选区/选择复制不受影响（浏览器默认行为，不 preventDefault）。
+    if (readOnly) return;
     // R3-B1：事件处理器统一取一次最新 store 快照，行内容/偏移经访问器
     // （getLine / getLineCount / lineOffsets）读取——同一快照下与物化
     // 视图语义完全一致，且不依赖闭包捕获的旧数组引用。
-    const st = useEditorStore.getState();
+    const st = engineStore.getState();
 
     // If we just finished a drag selection, ignore the synthetic click
     if (Date.now() - ((window as any).__CRISH_LAST_DRAG_END_TIME || 0) < 50) return;
@@ -767,37 +792,50 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, Record<stri
         className="editor-container editor-scroll-container"
         onClick={handleContainerClick}
         onScroll={handleScrollFlush}
-        onCopy={(e) => {
-          const selection = window.getSelection();
-          if (!selection || selection.isCollapsed) return;
+        onCopy={
+          // R5 readOnly：不拦截复制——浏览器默认通道复制原生选区
+          // （渲染文本），不依赖 store 选区同步；编辑态保持既有源码复制。
+          readOnly
+            ? undefined
+            : (e) => {
+                const selection = window.getSelection();
+                if (!selection || selection.isCollapsed) return;
 
-          const state = useEditorStore.getState();
-          const start = Math.min(state.selectionStart, state.selectionEnd);
-          const end = Math.max(state.selectionStart, state.selectionEnd);
-          
-          if (start !== end) {
-            const rawText = state.getText().substring(start, end);
-            e.clipboardData.setData('text/plain', rawText);
-            e.preventDefault();
-          }
-        }}
-        onCut={(e) => {
-          const selection = window.getSelection();
-          if (!selection || selection.isCollapsed) return;
+                const state = engineStore.getState();
+                const start = Math.min(state.selectionStart, state.selectionEnd);
+                const end = Math.max(state.selectionStart, state.selectionEnd);
 
-          const state = useEditorStore.getState();
-          const start = Math.min(state.selectionStart, state.selectionEnd);
-          const end = Math.max(state.selectionStart, state.selectionEnd);
-          
-          if (start !== end) {
-            const rawText = state.getText().substring(start, end);
-            e.clipboardData.setData('text/plain', rawText);
-            state.deleteSelection(start, end);
-            window.getSelection()?.removeAllRanges();
-            e.preventDefault();
-            // Optional: return focus to textarea if possible, though it's hidden
-          }
-        }}
+                if (start !== end) {
+                  const rawText = state.getText().substring(start, end);
+                  e.clipboardData.setData('text/plain', rawText);
+                  e.preventDefault();
+                }
+              }
+        }
+        onCut={
+          // R5 readOnly：只读模式无剪切（禁用删除语义）——不绑定处理器，
+          // 交给浏览器默认（只读容器下用户无可编辑内容，无副作用）。
+          readOnly
+            ? undefined
+            : (e) => {
+                const selection = window.getSelection();
+                if (!selection || selection.isCollapsed) return;
+
+                const state = engineStore.getState();
+                const start = Math.min(state.selectionStart, state.selectionEnd);
+                const end = Math.max(state.selectionStart, state.selectionEnd);
+
+                if (start !== end) {
+                  const rawText = state.getText().substring(start, end);
+                  e.clipboardData.setData('text/plain', rawText);
+                  state.deleteSelection(start, end);
+                  window.getSelection()?.removeAllRanges();
+                  e.preventDefault();
+                  // Optional: return focus to textarea if possible, though it's hidden
+                }
+              }
+        }
+        data-readonly={readOnly ? 'true' : undefined}
         style={{
           height: '100%',
           overflow: 'auto',
@@ -823,7 +861,7 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, Record<stri
             // 双段引用信号 + lineCount 驱动（count 变化/行内容变化
             // 均换新引用），与物化视图语义一致。同一渲染帧内 store
             // 不会变更（React 同步渲染），快照取一次即可。
-            const s = useEditorStore.getState();
+            const s = engineStore.getState();
             return virtualizer.getVirtualItems().map((virtualRow) => {
               const index = virtualRow.index;
               const lineText = s.getLine(index);
@@ -838,6 +876,7 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, Record<stri
                   isCode={isCode}
                   streamingDirty={dirtyRefs.current.has(index)}
                   rowRef={registerRowRef}
+                  store={engineStore}
                 />
               );
             });
@@ -845,24 +884,32 @@ export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, Record<stri
         </div>
 
 
-        <CursorLayer
-          containerRef={parentRef}
-          // layoutDeps 紧凑化（01 问题 2 §2.2-C 的布局陷阱消除）：不再每帧生成
-          // 「全部虚拟项 start 的巨型字符串」，改为「窗口首尾 index + 行数 + 总高」
-          // 稳定签名——纯滚动位置帧该签名不变 → CursorLayer 零重测零全扫；
-          // 窗口变化/行高回填（总高变化）时才重测。光标坐标是容器内容坐标
-          // （与行 top 同空间），滚动时内容坐标不变，视觉天然跟随，无需逐帧重测。
-          layoutDeps={(() => {
-            const items = virtualizer.getVirtualItems();
-            const hm = heightMapRef.current;
-            const first = items.length ? items[0].index : -1;
-            const last = items.length ? items[items.length - 1].index : -1;
-            const totalH = hm ? Math.round(hm.totalHeight * 10) : 0;
-            return `${first}-${last}-${lineCount}-${totalH}`;
-          })()}
-        />
-        <HiddenInput containerRef={parentRef} />
-        <SelectionHighlight />
+        {/* R5 readOnly：只读渲染模式不渲染输入层（光标/选区高亮/隐藏
+            输入框）——原生 DOM 选区替代引擎自绘选区，点击/键盘/拖选/
+            粘贴全部不生效；滚动/虚拟化/token 映射不受影响 */}
+        {!readOnly && (
+          <>
+            <CursorLayer
+              containerRef={parentRef}
+              // layoutDeps 紧凑化（01 问题 2 §2.2-C 的布局陷阱消除）：不再每帧生成
+              // 「全部虚拟项 start 的巨型字符串」，改为「窗口首尾 index + 行数 + 总高」
+              // 稳定签名——纯滚动位置帧该签名不变 → CursorLayer 零重测零全扫；
+              // 窗口变化/行高回填（总高变化）时才重测。光标坐标是容器内容坐标
+              // （与行 top 同空间），滚动时内容坐标不变，视觉天然跟随，无需逐帧重测。
+              layoutDeps={(() => {
+                const items = virtualizer.getVirtualItems();
+                const hm = heightMapRef.current;
+                const first = items.length ? items[0].index : -1;
+                const last = items.length ? items[items.length - 1].index : -1;
+                const totalH = hm ? Math.round(hm.totalHeight * 10) : 0;
+                return `${first}-${last}-${lineCount}-${totalH}`;
+              })()}
+              store={engineStore}
+            />
+            <HiddenInput containerRef={parentRef} store={engineStore} />
+            <SelectionHighlight store={engineStore} />
+          </>
+        )}
       </div>
     </div>
   );
