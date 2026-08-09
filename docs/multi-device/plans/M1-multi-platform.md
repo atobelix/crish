@@ -388,7 +388,7 @@ packages/                   ← 共享包（三端共同消费，不新增双源
 | 工程 | `apps/crish-mobile`（Expo 57） | 同左（同工程） | `apps/crish-mobile-harmony`（bare RN 0.82 + RNOH） |
 | UI 运行时 | RN 0.86（Fabric） | RN 0.86（Fabric） | RN 0.82（RNOH Fabric/CAPI） |
 | 语言 | TypeScript strict | TypeScript strict | TypeScript（JS 侧）+ ArkTS（宿主壳侧） |
-| 状态管理 | zustand v5 + immer（共享） | 同左 | 同左（共享） |
+| 状态管理 | zustand v5 + immer（共享） | 同左 | 同左（共享）；【裁决修正 8】范式统一为「领域层 createStore + 表现层 vanilla 绑定」（M4 §2.5），React 绑定收敛适配层 hooks |
 | 导航 | expo-router v6 | expo-router v6 | react-navigation（或轻量自研路由，compat 层定） |
 | 本地存储 | expo-sqlite | expo-sqlite | 鸿蒙 relationalStore/SQLite（compat wrapper） |
 | 安全存储 | expo-secure-store（Keychain） | expo-secure-store（Keystore） | 鸿蒙 KeyStore（CAPI 桥） |
@@ -490,6 +490,12 @@ packages/                   ← 共享包（三端共同消费，不新增双源
 接口只定义"业务层需要的语义"（如 `getToken(): Promise<string>`、`upsertEvent(ev)`），实现差异（通道、权限、生命周期）完全隔离在平台层——这是三端共享代码能够成立的**结构性保证**。
 
 ### 4.5 共享代码目录级映射（实施落地）
+
+> 【裁决修正 7/8】共享基线 = **M4 §2.3 目录**（AU1 P1-8 裁决：以 M4 三层结构为
+> 唯一基线，M5 按工程细化、D4 §4.3 为旧结构）——本表的「D4 §4.3 目录树」映射
+> 按下述基线对齐：领域层 store 用 vanilla `createStore`（裁决 8「领域层
+> createStore + 表现层 vanilla 绑定」）；移动端导航以 M4 五 Tab 为准（裁决 7）。
+> 下表其余搬运机制不变。
 
 > 目标：`apps/crish-mobile/src` 的业务代码与鸿蒙工程 `src` 尽量同构；实施时以"目录级复用清单"驱动，而非逐文件搬运。以下为 D4 §4.3 目录树（移动端）在鸿蒙工程的映射裁决。
 
@@ -958,6 +964,10 @@ crish 场景：桌面 run 在跑、手机要能收到审批推送；手机与桌
 | 推送网关/厂商通道问题 | 降级为"打开 App 拉取"（§6.3 统一降级） | 体验降级，功能不损 |
 
 ### 9.3 分阶段建议（鸿蒙生态不确定性的投资纪律）
+
+> 【裁决修正 9】阶段映射：P1（iOS+Android 首发）→ R2/R3（移动端基础 + 推送）；
+> P2（鸿蒙 NEXT MVP）→ **R5 鸿蒙**（O5 裁决立项后）；P3（鸿蒙追平）→ R5 收尾。
+> 任务书引用一律使用 R 阶段号（AU3 阶段命名裁决）。
 
 ```
 P1（iOS + Android 首发）                    P2（鸿蒙 NEXT MVP）                P3（鸿蒙完备 + 增强）

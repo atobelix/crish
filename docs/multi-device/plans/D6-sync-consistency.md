@@ -71,7 +71,7 @@
 
 **非目标**（明确不做，防止范围蔓延）：
 
-- 移动端写消息 / 发起 run / 取消 run（后续版本可经同类命令通道扩展，但本文不设计）；
+- 移动端写消息 / 发起 run / 取消 run（后续版本可经同类命令通道扩展，但本文不设计）【裁决修正】AU1 P2-11：此非目标已被 M6 §4.4/§4.5 扩展为 P2 能力位预留（C24 runTask / C25 runControl / C26 cancelRun，默认关），演进登记完毕；
 - 移动端本地编辑任何业务表（sessions / runs / messages / agents）；
 - 双端双向合并（不引入 CRDT、向量时钟、三路合并）；
 - 移动端替代桌面运行引擎或恢复机制；
@@ -871,7 +871,7 @@ pending ──离线超 TTL──▶ expired
 | --- | --- |
 | agent-start / agent-end | run 生命周期时间线 |
 | run-terminal | run 终态（待办即时失效的关键事件） |
-| run-interrupted | 桌面重启打断审计（`crates/orchestrator/src/restore.rs:55`） |
+| run-interrupted | 桌面重启打断审计（`crates/orchestrator/src/restore.rs:55`）；【裁决修正】AU1 P2-8 复核结论：`RUN_INTERRUPTED_EVENT` 真实存在于 restore.rs:55，但**不在 41 AgentEvent 变体表内**（独立审计事件），保留在白名单不触发 registry_drift |
 | approval-requested / approval-resolved | 审批待办与决策收敛 |
 | security-audit | 审计摘要 |
 | task-started / task-completed / task-failed / task-killed | 任务状态（推送通知源） |
@@ -882,12 +882,17 @@ pending ──离线超 TTL──▶ expired
 | 事件 | 用途 |
 | --- | --- |
 | turn-start / turn-end | 轮次时间线 |
-| tool-start / tool-end / tool-batch-start / tool-batch-end / tool-input-repaired | 工具活动时间线（负载裁剪后） |
-| message-start / message-end | 消息开始/结束 + 摘要 |
+| tool-start / tool-end | 工具活动时间线（负载裁剪后） |
+| message-end | 消息终态 + 摘要 |
 | context-compression-start / context-compression-end | 压缩事件（`SessionContextMeta` 派生展示） |
-| checkpoint-created / checkpoint-restored | 检查点时间线 |
 
-**不同步（Delta/Soft 或与移动端职责无关）**：message-delta、subagent-event（progress/message/tool）、task-output、task-heartbeat、task-suspicious、timer-fired、timer-cancelled、cron-fired、provider-diagnostic、runtime-error、runtime-steering、runtime-intervention-required、cache-stats-updated、cache-waste-alert、cold-cache-warning。
+> 【裁决修正 2】AU1 P1-2 已按 M6 §5.0/§5.1（消息真源）收缩本表：
+> **message-start / tool-batch-start / tool-batch-end / tool-input-repaired /
+> checkpoint-created / checkpoint-restored 移出可选同步**（M6 不同步清单），
+> 原「可选 13 类」现为 8 类；必须 13 类 + 可选 8 类 = 21 类，其中
+> run-interrupted 为非 41 变体的独立审计事件，其余 20 类与 M6 同步面逐一对应。
+
+**不同步（Delta/Soft 或与移动端职责无关）**：message-delta、subagent-event（progress/message/tool）、task-output、task-heartbeat、task-suspicious、timer-fired、timer-cancelled、cron-fired、provider-diagnostic、runtime-error、runtime-steering、runtime-intervention-required、cache-stats-updated、cache-waste-alert、cold-cache-warning、message-start、tool-batch-start、tool-batch-end、tool-input-repaired、checkpoint-created、checkpoint-restored（与 M6 §5.0 不同步清单一致）。
 
 > 白名单在**同步服务端**配置（单一位置），移动端不按类型二次过滤（只按 `event_type` 字符串转发）；白名单变更通过版本化配置下发（见 9.6）。
 

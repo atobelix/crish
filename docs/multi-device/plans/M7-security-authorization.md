@@ -49,6 +49,10 @@
 
 ---
 
+> 【裁决修正 9】阶段映射：本方案无独立阶段（随 D5 落地）——授权矩阵/四类令牌
+> 冻结于 **R0 协议冻结**（认证方案裁决 10 在此关闭）；验证分层实现随 R1 桌面
+> 服务端（D2 网关）+ R2 移动端基础；合规面随 R3 推送。
+
 ## 0 执行摘要
 
 ### 0.1 结论先行
@@ -329,7 +333,7 @@ F1 矩阵结论：**监控域 = observe + L0/L1 两级**；操作面零开放。
 |------|------|--------|----------|--------|--------|--------|------|
 | F2-01 待办列表 | 查询待审批集合（mobile_list_pending_approvals 对账） | approve | verify | 敏感 | 否 | 固定 | 列表含工具名/参数摘要，L1 解锁后可读；系统通知只带摘要（F2 §6.2） |
 | F2-02 审批详情 | 查询单条请求全量参数 | approve | verify | 敏感 | 否 | 固定 | 参数含命令行/路径，L1 门（推送 data 只带摘要，全量参数对账后拉取，F2 R3） |
-| F2-03 决策：允许（危险度 1） | 发送 core_approve_tool | approve | confirm | 危险 | 否 | 固定 | 单点决策 + 300ms 防抖（F2 §9.3）；验证证据 = 解锁态 + 单击 |
+| F2-03 决策：允许（危险度 1） | 发送 core_approve_tool | approve | verify | 危险 | 否 | 固定 | 【裁决修正】AU1 P2-9：默认授权改标 verify（L1）——「单点决策 + 300ms 防抖」是 L1 强度（解锁态），滑动仅用于危险度 2（F2 §5.3）；原标 confirm（L2）与备注矛盾 |
 | F2-03 决策：允许（危险度 2） | 发送 core_approve_tool | approve | confirm | 危险 | 可配（默认关） | 可升 | 滑动 ≥70% 触发（F2 §5.3）；双因素「桌面在场」开启后升级为 L3（F2 §9.2） |
 | F2-03 决策：拒绝 | 发送 core_deny_tool（可带理由） | approve | confirm | 危险 | 否 | 固定 | 拒绝是安全方向，不设双因素（F2 §9.2：拒绝不应被拦截） |
 | F2-03 决策：记住此命令 | 写桌面白名单 addCommandPermission | approve | confirm | 危险 | 否 | 固定 | 继承极危硬拒绝门禁（F2 §10.2）；批量模式不提供记住（F2 §5.4） |
@@ -472,6 +476,11 @@ F6 矩阵结论：
 
 ### 2.8 跨功能横切汇总矩阵（全部远程命令面一览）
 
+> 【裁决修正 5】路由命名统一 `remote.*` 前缀（跨端命令唯一前缀，`cmd.*` 仅桌面
+> 内部）；本节 snake_case 路由名（remote.get_status）与 M6 §4 的 camelCase kind
+> 名（remote.getStatus）经 §2.9 映射表对齐（AU1 P1-3 关闭），由 remote_manifest
+> 注册表 + 生成器锁定，实现时以 M6 kind 名为 wire 真源。
+
 把 §2.2-§2.7 的命令面汇总为一张「网关路由表」，供 `remote_manifest.rs` 注册与
 §8 测试直接引用（对齐 D5 §4.5 的远程白名单表格并扩展「验证等级」列）：
 
@@ -532,6 +541,21 @@ struct RemoteCommandEntry {
    任何降级必须改代码 + 改测试，禁止只改配置面静默放权；
 3. 矩阵与文档的一致性用生成器断言（脚本扫文档表格 ↔ 注册表，漂移即 CI 失败）——
    对齐 `scripts/generate-engine-bindings.mjs` 的生成纪律（D3 §2.7）。
+
+**【裁决修正 5】三列映射表（wire kind ↔ 网关路由 ↔ manifest 命令名，部分示例）**：
+
+| M6 wire kind（真源，camelCase） | 网关路由名（本表 snake_case） | manifest 命令名 |
+|---|---|---|
+| remote.getStatus | remote.get_status | core_get_status |
+| remote.readSessionEvents | remote.read_session_events | core_read_session_events |
+| remote.approve / remote.deny | remote.approve / remote.deny | core_approve_tool / core_deny_tool |
+| remote.runTask | remote.run_task | core_run_task |
+| remote.writeFile | remote.write_file | workbench_write_file_content |
+| remote.getPairState | remote.pair_start / pair_cancel | workbench_pairing_status |
+
+> 实现要求：路由名与 kind 名在 `remote_manifest.rs` 同源登记（生成器产出），
+> 不允许两套名单漂移；移动端网关做 kind → route → risk_class 三层映射时
+> 以 wire kind 为键。
 
 ---
 
@@ -694,6 +718,11 @@ struct RemoteCommandEntry {
 
 ### 4.2 令牌关系与职责边界（为什么四个而不是一个）
 
+> 【裁决修正 10】**本节四类令牌分治为认证方案唯一真源**（配对令牌本地 /
+> 账号 token 云端不共享 / 中继凭据 HMAC / 推送注册加密）；AU3 C-1 的「认证
+> 三选一」已按此裁决：Bearer 面与 WsEnvelope 第三套帧作废，统一
+> DeviceEnvelope + 消息级 HMAC（M6 §10）；配对码规格以 D3 §4.1 为准（裁决 1）。
+
 | 问题 | 单一令牌方案的失败方式 | 四类分治的答案 |
 |------|----------------------|----------------|
 | 局域网直连 | 依赖云端 → 断网不能配对/控制 | 配对令牌完全本地（D3 派生，云端无关），离线可用 |
@@ -709,9 +738,8 @@ D5 §0.4「中继面由移动端侧另行设计」+ AC §5.4「本地配对体�
 ### 4.3 配对令牌（本地直连）
 
 - 签发：桌面端配对流程（D3 §4.4：X25519 ECDH + 配对码 PAKE 派生 master →
-  token_key/refresh_key；D5 §3.3 的 256bit 随机令牌形态与 D3 的派生形态按实现取舍
-  ——本方案不改变 D3/D5 各自的冻结契约，工程实现时二选一或对齐，**两套协议文本的
-  差异是 M7 遗留协调项**，见 §10 开放问题 O-01）。
+  token_key/refresh_key；【裁决修正 1/10】AU1 P1-10 已裁决：以 D3 §4.4 派生形态
+  为准，D5 §3.3 的 256bit 随机令牌形态由派生形态取代，本节 O-01 关闭）。
 - 验证：桌面端 device_registry（D3 §4.5）或 multi-device.json 注册表（D5 §3.4）——
   哈希/派生值校验，常数时间比较。
 - 过期：30 天默认；到期认证失败 → 重新配对（D5 §3.3）。
@@ -937,7 +965,7 @@ F4 §5.1 已冻结「桌面端是文件系统唯一访问者」，M7 补强三�
 | 锚点 | 断言 | 对应 |
 |------|------|------|
 | KB-1 | 远程白名单注册表扫描：无任何 config_secret_* / fs_delete / pty / shell 直连命令 | D5 T-07 |
-| KB-2 | 事件流 + 推送载荷快照扫描：零 `sk-` 前缀 / 零 43 字符 base64url 令牌形态 / 零 8 字符 base32 码形态 | D5 T-06/T-09 扩展（推送链路） |
+| KB-2 | 事件流 + 推送载荷快照扫描：零 `sk-` 前缀 / 零 43 字符 base64url 令牌形态 / 零 CXN 12 字符 base32 配对码形态【裁决修正 1：原「8 字符 base32 码形态」随 D3 §4.1 更新】 | D5 T-06/T-09 扩展（推送链路） |
 | KB-3 | config_get 远程响应中 apiKey 恒空串 | 脱敏快照契约 |
 | KB-4 | 写文件越权（../ 或绝对路径）在桌面端返回 outside_workspace | F4 T4-10 |
 | KB-5 | 资源代理 URL 令牌过期 → 401/403 + 前端兜底图 | F4 T4-23 |

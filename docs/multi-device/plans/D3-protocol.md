@@ -14,6 +14,9 @@
 > 目标：为桌面（Tauri 主机，引擎所在端）与移动端（crish-mobile）之间的
 > **配对 / 认证 / 消息信封 / 事件 / 命令 / 流 / 版本化**定义可落地的精确协议，
 > 所有消息类型给出 JSON schema（draft 2020-12 风格）。
+>
+> 【裁决修正 9】阶段映射：本方案交付物全部归属 **R0 协议冻结**（配对协议 §4、
+> 信封 §5、命令面 §8 为 R0 冻结物；验收锚点 T-D3-01~10 即 R0 出口）。
 
 ---
 
@@ -132,7 +135,9 @@
 
 ### 2.4 桌面命令面（command_manifest.rs）
 
-- 92 条命令（注册面 88 + 登记先行 4），`contractVersion = "1.0.0"`；
+- 95 条命令（注册面 91 + 登记先行 4；【裁决修正 2】92 为过期快照，以 M6 §2.3
+  勘误为准，`command_manifest.rs:68-191` + 测试锁定 95=91+4），
+  `contractVersion = "1.0.0"`；
   family ∈ {core, config, session, md, perf, workbench, workflow}，
   surface ∈ {engine, gui}（engine = 三端共用契约面，**移动端只允许调用
   surface=engine 的命令**，见 8.3）。
@@ -231,9 +236,11 @@
 - **传输**：WebSocket（RFC 6455）+ JSON 文本帧，一帧一消息。与 Tauri 事件通道
   「字符串 JSON 载荷」形态一致，移动端解析器可复用生成器产出的
   `parseEngineEvent`（第 12 章）。
-- **监听**：桌面默认监听回环 + 局域网（0.0.0.0，用户可配置仅回环）；TLS 首选
-  （自签证书 + 配对期证书指纹交换，见 4.6 证书固定）；无 TLS 的降级模式必须
-  显式开启（仅限同一可信局域网，日志告警）。
+- **监听**：桌面默认恒监听 `127.0.0.1:8765`（loopback-only，随应用启动）；
+  配对模式显式开启 `0.0.0.0` 重绑（D2 §5.1 语义）；【裁决修正 6】端口统一
+  8765（18461 废弃）。TLS 首选（自签证书 + 配对期证书指纹交换，见 4.6 证书固定）；
+  【裁决修正 11】传输协议 = **wss 强制 + 自签 CA pinning（配对时建立信任）**，
+  无 TLS 的降级模式必须显式开启（仅限同一可信局域网，日志告警）。
 - **中继**：本协议为未来中继留位（第 4 章配对消息含 `relay` 可选字段），本期
   不实现。桌面绑定本地端口后经 UPnP/手动端口转发可被公网访问（鉴权由令牌保证，
   见第 5 章）。
@@ -273,9 +280,9 @@
   │<─────────────────────────────│
   │  events.ack {msgId}          │
   │─────────────────────────────>│
-  │  cmd.approve {toolCallId...} │
+  │  remote.approve {toolCallId...} │
   │─────────────────────────────>│
-  │  cmd.result {ok, decision}   │
+  │  result.approve {ok, decision} │
   │<─────────────────────────────│
   │  （断线）                    │
   │  hello（重连 + 令牌）         │
@@ -288,6 +295,12 @@
 ## 4. 配对协议（Pairing）
 
 ### 4.1 配对码格式
+
+> 【裁决修正 1】**本节为配对协议的唯一真源**（主控裁决 1）：CXN-XXXX-XXXX-XXXX
+> 12 字符 base32、10 分钟 TTL、60bit、单码 5 次失败上限、X25519+HKDF 密码学链
+> （§4.4）。D2 §7.2（8 字符 120s）、D5 §3.2（8 字符 base32）、D7 §4.5a
+> （6 位 5min）、D4 §5.1（IP+6 位 PIN）、F6 §6.1/§12.3（6 位 10 分钟）的配对
+> 规格**全部对齐本节**，相关文档已回写或加注。
 
 - **格式**：`CXN-XXXX-XXXX-XXXX`（3 组 × 4 字符，大写字母 + 数字，
   去除易混淆字符集 `0/O/1/I/L` 后的 base32 子集 30 字母数字
@@ -369,7 +382,9 @@ Device Registry（落库字段见 4.5）。配对失败的尝试记入安全审�
      PDU 也无法派生出 master（需要私钥）。
 5. 从 `master` 派生三把子密钥（HKDF-SHA256 一次展开，info 区分）：
    - `token_key`（会话令牌的 HMAC 密钥材料，桌面与移动各持**同一份派生值**）
-   - `enc_key`（预留：载荷加密 AES-256-GCM，本期 TLS 承载，密钥预派生留位）
+   - `enc_key`（【裁决修正 2】已转正为正式密钥，非「预留」：用于中继链路
+     AEAD（M2 §5.6 端到端 AES-256-GCM）与 P2P 直连链路密钥（M3 §10.1
+     k_ab/k_ba）；局域网 TLS 承载期仍预派生留位）
    - `refresh_key`（重连令牌签名密钥）
    - 另派生 `verify_token = HMAC(token_key, "pair-verify" ∥ 挑战)` 用于
      `pair.verify` 消息。
@@ -522,16 +537,21 @@ CREATE INDEX IF NOT EXISTS idx_device_registry_status ON device_registry(status)
 ```
 
 - `kind` 命名空间：`pair.*`（配对）、`auth.*`（认证/轮换）、`device.*`（设备
-  管理）、`events.*`（订阅/推送/续传）、`cmd.*`（命令请求）、`result.*`
-  （命令响应）、`stream.*`（流控制）、`file.*`（文件浏览，可并入 cmd）、
+  管理）、`events.*`（订阅/推送/续传）、`remote.*`（跨端命令请求，【裁决修正 5】
+  原 `cmd.*` 更名；`cmd.*` 仅保留桌面内部命名）、`result.*`
+  （命令响应）、`stream.*`（流控制）、`file.*`（文件浏览，可并入 remote）、
   `heartbeat`（心跳）、`error`（错误通知）。
+- 【裁决修正 2】**帧格式唯一真源 = M6 DeviceEnvelope**：本节的 L3 信封骨架与
+  M6 §10.1 同源，WS 帧（协议面）与 M3 的轻量可靠 UDP 帧统一由 M6 §10 定义
+  （UDP 帧复用同一 DeviceEnvelope 的 v/kind/from/to 字段子集）；本协议与 M6
+  不一致处以 M6 为准。
 - `msgId`：请求-响应关联键（`result.*` 与 `error` 必带 `reqMsgId`）；发送方
   保证唯一；响应侧回显。
 - `from/to`：`desktop` / `mobile` 字面量 + 信封不依赖它做鉴权（鉴权靠 sig）。
 
 ### 5.4 请求-响应与错误
 
-- **响应**：`cmd.result {reqMsgId, ok, result?, error?}`；result 为对应 Tauri
+- **响应**：`result.<name> {reqMsgId, ok, result?, error?}`；result 为对应 Tauri
   命令的返回 JSON（camelCase），error 为跨端错误对象（第 6 章）。
 - **推送类消息无响应**（events.push / heartbeat / device.* 广播）。
 - **命令超时**：移动端默认 30s（可配）；超时后移动端可重发（`idempotencyKey`
@@ -756,22 +776,28 @@ CREATE INDEX IF NOT EXISTS idx_device_registry_status ON device_registry(status)
 
 ### 8.2 移动端动作 → 命令映射（审批 / 终端 / 暂停恢复 / 查看文件）
 
+> 【裁决修正 5】跨端命令 kind 前缀统一为 `remote.*`（本节为早期 13 条映射，
+> 已按裁决改名；完整 37 条清单与 schema 以 **M6 §4** 为消息真源——裁决 2 帧格式
+> 唯一真源 = M6 DeviceEnvelope，本表逐步并入 M6 的 `remote.<name>` 命名）；
+> `cmd.*` 仅保留桌面内部命名（错误码 `cmd.denied` / `cmd.approval_mismatch` 等
+> 不属命令路由，保持原名）。
+
 | 移动端动作 | 命令消息 kind | 对应 Tauri 命令 | 参数（camelCase） | 响应 |
 |---|---|---|---|---|
-| 审批通过 | `cmd.approve` | core_approve_tool | {toolCallId} | {ok, toolCallId, decision} |
-| 审批拒绝 | `cmd.deny` | core_deny_tool | {toolCallId, reason?} | {ok, toolCallId, decision} |
-| 终端输入（后台任务） | `cmd.sendInput` | workbench_send_input | {taskId, input, enter?} | {ok} |
-| 暂停 run（L2 协作停） | `cmd.runControl` | core_run_control | {level: cooperative_stop, runId, sessionId, reason?} | {ok} |
-| 恢复 run（L0 继续） | `cmd.runControl` | core_run_control | {level: continue, runId, sessionId, payload?} | {ok} |
-| 软注入消息（L1） | `cmd.runControl` | core_run_control | {level: soft_inject, runId, sessionId, payload: {text}} | {ok} |
-| 强制停止（L3） | `cmd.cancelRun` | core_cancel_run | {runId, reason?} | {ok, runId} |
-| 发送消息（发起 run） | `cmd.runTask` | core_run_task | {runId?, sessionId, prompt, mode?, cwd?, permissionMode?, history?, clientMessageId?} | {runId, sessionId} |
-| 查看文件 | `cmd.readFile` | workbench_read_file_content | {path, maxBytes?, workspaceRoot?} | {content, truncated} |
-| 列目录 | `cmd.listDir` | workbench_list_directory | {path, workspaceRoot?} | {entries} |
-| 查看 run 状态 | `cmd.getRunSnapshot` | core_get_run_snapshot | {runId, sessionId?} | {snapshot} |
-| 拉历史事件 | `cmd.readSessionEvents` | core_read_session_events | {sessionId, afterSequence?, maxEvents?} | {events, nextAfterSequence, hasMore} |
-| 任务列表 | `cmd.listTasks` | workbench_list_background_tasks | {} | {tasks} |
-| 任务输出 | `cmd.getTaskOutput` | workbench_get_background_task_output | {taskId, maxLines?} | {lines} |
+| 审批通过 | `remote.approve` | core_approve_tool | {toolCallId} | {ok, toolCallId, decision} |
+| 审批拒绝 | `remote.deny` | core_deny_tool | {toolCallId, reason?} | {ok, toolCallId, decision} |
+| 终端输入（后台任务） | `remote.sendInput` | workbench_send_input | {taskId, input, enter?} | {ok} |
+| 暂停 run（L2 协作停） | `remote.runControl` | core_run_control | {level: cooperative_stop, runId, sessionId, reason?} | {ok} |
+| 恢复 run（L0 继续） | `remote.runControl` | core_run_control | {level: continue, runId, sessionId, payload?} | {ok} |
+| 软注入消息（L1） | `remote.runControl` | core_run_control | {level: soft_inject, runId, sessionId, payload: {text}} | {ok} |
+| 强制停止（L3） | `remote.cancelRun` | core_cancel_run | {runId, reason?} | {ok, runId} |
+| 发送消息（发起 run） | `remote.runTask` | core_run_task | {runId?, sessionId, prompt, mode?, cwd?, permissionMode?, history?, clientMessageId?} | {runId, sessionId} |
+| 查看文件 | `remote.readFile` | workbench_read_file_content | {path, maxBytes?, workspaceRoot?} | {content, truncated} |
+| 列目录 | `remote.listDir` | workbench_list_directory | {path, workspaceRoot?} | {entries} |
+| 查看 run 状态 | `remote.getRunSnapshot` | core_get_run_snapshot | {runId, sessionId?} | {snapshot} |
+| 拉历史事件 | `remote.readSessionEvents` | core_read_session_events | {sessionId, afterSequence?, maxEvents?} | {events, nextAfterSequence, hasMore} |
+| 任务列表 | `remote.listTasks` | workbench_list_background_tasks | {} | {tasks} |
+| 任务输出 | `remote.getTaskOutput` | workbench_get_background_task_output | {taskId, maxLines?} | {lines} |
 
 > 说明：
 > - 审批入口语义与桌面完全一致（core_run_commands.rs:226-258）：tool_call_id
@@ -780,7 +806,7 @@ CREATE INDEX IF NOT EXISTS idx_device_registry_status ON device_registry(status)
 > - `core_run_control` 的 L0-L3 语义对齐 run-control.ts 的
 >   `RunControlIntent`（level/reason/runId/sessionId/payload）——跨端参数
 >   直接复用该 TS 类型（12.3 复用清单）。
-> - `cmd.runTask` 参数 ⊆ `RunTaskOptions` 的公开子集（runId 可选：移动端
+> - `remote.runTask` 参数 ⊆ `RunTaskOptions` 的公开子集（runId 可选：移动端
 >   省略时桌面生成；`history` 移动端一般省略——桌面 SessionHistoryCache
 >   兜底，core_run_commands.rs:564-654）。
 > - `permissionMode` 缺省 ask（审批启用）；full-access 由桌面侧用户设置，
@@ -800,7 +826,7 @@ CREATE INDEX IF NOT EXISTS idx_device_registry_status ON device_registry(status)
 ### 8.4 命令执行路径（桌面侧）
 
 ```
-cmd.approve ──> Device Relay 鉴权（签名/白名单）──> Command Adapter
+remote.approve ──> Device Relay 鉴权（签名/白名单）──> Command Adapter
    └─> 解析为 Tauri 命令调用（tokio::spawn + async）
         └─> Result 序列化（CoreError → 跨端错误码，6.3）
    └─> result.approve {reqMsgId, ok, ...}
@@ -818,7 +844,7 @@ cmd.approve ──> Device Relay 鉴权（签名/白名单）──> Command Ada
 | 移动端超时重发 | 同 `reqMsgId` 重发；桌面以 `reqMsgId` 键控（TTL 5min 结果缓存），已处理回显缓存响应 |
 | 命令天然幂等 | core_approve_tool/deny：第二次命中 → `cmd.approval_mismatch`（I-02 语义，不改状态机） |
 | run 控制幂等 | `cooperative_stop` 重复 = 无副作用（ControlBus 幂等）；L3 重复 abort = 无副作用 |
-| 会话串行 | `cmd.runTask` 同会话并发 → `cmd.session_busy`（桌面串行守卫，core_run_commands.rs:3082-3090） |
+| 会话串行 | `remote.runTask` 同会话并发 → `cmd.session_busy`（桌面串行守卫，core_run_commands.rs:3082-3090） |
 | 断线重试 | 移动端仅在 `auth.*` 错误后自动重试；业务错误不自动重发（防双执行） |
 
 ---
@@ -869,13 +895,13 @@ cmd.approve ──> Device Relay 鉴权（签名/白名单）──> Command Ada
   - Critical（其余）：窗口只进不出时暂停推流，反压引擎 emit 链
     （BufferedRunEventBridge 已具背压缓冲，DeviceEmitter 侧加「下游慢」信号
     回传丢帧报告，桌面日志记录 EmitReport）。
-- 移动端 → 桌面：命令请求天然低频；`cmd.sendInput` 连续输入节流
+- 移动端 → 桌面：命令请求天然低频；`remote.sendInput` 连续输入节流
   （≥100ms/次），超频返回 `cmd.invalid`。
 
 ### 9.5 终端会话映射（pty 与任务的差异）
 
 - 桌面 `workbench_pty_*`（gui 面）**不跨端暴露**；移动端终端 = 后台任务
-  （task-* 事件族）+ `cmd.sendInput`（8.2）。任务无活动 pty 时移动端渲染
+  （task-* 事件族）+ `remote.sendInput`（8.2）。任务无活动 pty 时移动端渲染
   task-output 追加视图；有 pty（桌面侧打开的交互进程）时移动端只读。
 - `workbench_get_background_task_output` 的 `tail` 语义与 task-failed 的
   `tail`（最后 20 行，events.rs:706-712）对齐，移动端断线补取一致性有保证。
@@ -1517,7 +1543,7 @@ cmd.approve ──> Device Relay 鉴权（签名/白名单）──> Command Ada
 | `CoreError`（tagged kind） | conex-types/src/lib.rs:278-293 | 跨端错误映射基底 |
 | `IpcEnvelope` / `IpcResponse`（Round 2） | lib.rs:124-141 | 端间请求-响应形态先例（本协议弃用，改用 DeviceEnvelope，避免与 Tauri IPC 混淆） |
 | `EventPage` 契约 | core_query_commands.rs:326-338 | 续传分页（`{events, nextAfterSequence, hasMore}`） |
-| `CommandManifest` / 92 命令 | command_manifest.rs | 能力真源 |
+| `CommandManifest` / 95 命令 | command_manifest.rs | 能力真源（95=91+4，M6 §2.3 勘误口径） |
 | `RunTaskOptions` / `RunTaskResponse` | core_run_commands.rs | runTask 参数/响应 |
 | `CancelRunResponse` / `ApproveResponse` | core_run_commands.rs:107-129 | 取消/审批响应 |
 | `RunSnapshot` | core_query_commands.rs:422-442 | run 状态 |
@@ -1636,7 +1662,7 @@ device_emitter.rs      -- Emitter 实现（core_event_bridge.rs:51-54 trait）�
 | events.subscribe / events.subscribe.ok / events.subscribeAll | M→D / D→M | 11.5 | 订阅 |
 | events.push / events.ack | D→M / M→D | 11.5 | 推流 |
 | events.resume / events.resume.page / events.resume.done | M→D / D→M | 11.5 | 续传 |
-| cmd.approve / cmd.deny / cmd.runControl / cmd.cancelRun / cmd.runTask / cmd.readFile / cmd.listDir / cmd.getRunSnapshot / cmd.readSessionEvents / cmd.listTasks / cmd.getTaskOutput / cmd.sendInput | M→D | 11.6 | 命令请求 |
+| remote.approve / remote.deny / remote.runControl / remote.cancelRun / remote.runTask / remote.readFile / remote.listDir / remote.getRunSnapshot / remote.readSessionEvents / remote.listTasks / remote.getTaskOutput / remote.sendInput | M→D | 11.6 | 命令请求（【裁决修正 5】前缀统一 remote.*） |
 | result.<名> | D→M | 11.6 | 命令响应 |
 | stream.open / stream.chunk / stream.resume / stream.close | 双向 | 11.7 | 大载荷分块 |
 | error | 双向 | 11.2 | 错误通知 |
@@ -1652,6 +1678,7 @@ device_emitter.rs      -- Emitter 实现（core_event_bridge.rs:51-54 trait）�
 | MAX_SUBSCRIPTIONS | 32 | 订阅会话上限 |
 | MAX_STREAMS | 8 | 并发流上限 |
 | STREAM_CHUNK_MAX | 65_536 | 块上限 |
+| TOKEN_TTL_MS | 2_592_000_000 | 令牌 TTL 30 天（【裁决修正 1】D5 §3.3 口径补登记，M7 T-1 引用；默认 30 天可配 10~365 天） |
 | PAIR_CODE_TTL_MS | 600_000 | 配对码有效期 |
 | PAIR_MAX_ATTEMPTS | 5 | 单码失败上限 |
 | PAIR_MAX_ACTIVE | 3 | 并发码上限 |
@@ -1678,7 +1705,7 @@ device_emitter.rs      -- Emitter 实现（core_event_bridge.rs:51-54 trait）�
 3. 多桌面配对（一台移动端连多台桌面）：Device Registry 支持多 desktop_id
    行；本期协议已按 `desktopId` 隔离设计，UI 切换桌面 = 换连接 + 换令牌
    上下文，无需协议变更。
-4. `events.resume` 与 `cmd.readSessionEvents` 的关系：两者同契约；建议
+4. `events.resume` 与 `remote.readSessionEvents` 的关系：两者同契约；建议
    resume 走专用消息（带会话上下文），cmd 版留给 UI 手动刷新——不合并，
    语义清晰。
 5. 事件 `preview` 帧的客户端渲染策略：建议直接渲染（实时性优先），
@@ -1696,7 +1723,7 @@ device_emitter.rs      -- Emitter 实现（core_event_bridge.rs:51-54 trait）�
 | events 表 DDL | crates/conex-db/src/schema.rs:17-27, 184-188 |
 | EventQueue 分流/终态 | crates/orchestrator/src/events.rs:101-261, 323-496 |
 | 事件桥 / Emitter | apps/agent-workbench/src-tauri/src/core_event_bridge.rs:47-145 |
-| 命令清单 92 条 | apps/agent-workbench/src-tauri/src/command_manifest.rs:63-186 |
+| 命令清单 95 条 | apps/agent-workbench/src-tauri/src/command_manifest.rs:68-191 |
 | 事件分页契约 EventPage | apps/agent-workbench/src-tauri/src/core_query_commands.rs:326-338, 507-588 |
 | run 命令面（runTask/control/cancel/approve/deny） | apps/agent-workbench/src-tauri/src/core_run_commands.rs:3033-3780 |
 | 审批门（先发后等/待审批集合） | apps/agent-workbench/src-tauri/src/core_run_commands.rs:151-344 |

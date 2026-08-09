@@ -498,7 +498,7 @@ Hub 提供设备管理命令（服务面 + 桌面设置 UI 双入口）：
 ### 5.2 会话状态权威
 
 - 会话索引变更（新建/改名/归档/pin）由桌面产生（现有 `upsert_session_entry`，`crates/conex-db/src/sessions.rs:37-83`）；
-- 移动端如何知道"会话列表变了"？——**事件面**：现有事件流里没有"会话索引变更"事件；**新增一个轻量机制**：会话索引的 `updated_at` 由 `touch_session` 维护（`crates/conex-db/src/sessions.rs:322-335`），服务网关可提供 `session_index_snapshot(version)` 带版本号拉取；或复用 `session_meta` 写一个 `index_version` 键。子方案 D2 定夺：倾向**新增 `session-index-changed` 事件**（走事件面，天然与现有 EventBridge 同构；不新增事件变体而是复用 `runtime-steering` 类通用载体则违背"零语义污染"，故建议正规登记新事件变体，按 `events.rs:789-852` 的登记机制走——这本身就是可扩展点）。
+- 移动端如何知道"会话列表变了"？——**事件面**：现有事件流里没有"会话索引变更"事件；**新增一个轻量机制**：会话索引的 `updated_at` 由 `touch_session` 维护（`crates/conex-db/src/sessions.rs:322-335`），服务网关可提供 `session_index_snapshot(version)` 带版本号拉取；或复用 `session_meta` 写一个 `index_version` 键。【裁决修正 5】**41 变体冻结为基线，不新增 `session-index-changed` 事件变体**：会话索引变更走 M6 `events.session.updated` 会话面消息（D3 信封，不动 41 变体注册表）；F5 会话列表增量刷新 = `events.session.updated` 事件 + `session_index_snapshot` 版本对账兜底（D2 §7.4 / M6 §13 T-M6-12 对齐）。
 
 ### 5.3 事件流跨端传播（核心机制）
 
@@ -575,7 +575,7 @@ Hub 提供设备管理命令（服务面 + 桌面设置 UI 双入口）：
 
 | 本地数据 | 生命周期 | 失效与重建 |
 |----------|----------|------------|
-| 会话索引列表 | 会话级缓存（LRU ≤ 200 会话）| 收到 `session-index-changed`（或版本号变化）→ 全量重拉；离线期间只读 |
+| 会话索引列表 | 会话级缓存（LRU ≤ 200 会话）| 收到 `events.session.updated`（【裁决修正 5】原 `session-index-changed` 更名/不新增变体）或 `events.session.updatedAll` → 全量重拉；离线期间只读 |
 | 每会话事件游标 `lastSeq` | 断连期间持久保留（本地存储）| 重连后 `afterSequence=lastSeq` 追平；追平结果覆盖本地增量渲染区 |
 | 消息正文（已水合）| 缓存正文 | 追平窗口内以落库事件为准（message-end 全文覆盖增量区，`events.rs:342-367` 兜底语义）；不做双向 merge |
 | 挂起命令队列 | 断连期间暂存（≤ 20 条，逐条幂等键）| 重连后按序发送；成功/失败逐条清理；应用退出即丢弃（不承诺送达——命令语义以桌面确认为准）|
@@ -626,7 +626,10 @@ disconnected ──配对成功──▶ idle（已配对未连接）
 #### 6.1.2 多端改造
 
 1. **跨端事件基 = `AgentEventEnvelope` 序列化 JSON**，不做任何二次包装（`payload` 与 `core_event_bridge.rs:107-120` 的 `serialize` 产物逐字节一致）。移动端解析 = 复用生成的 TS 类型 + 解析器（`packages/shared-types/src/generated/engine/parser.ts`），不再发明事件 schema；
-2. **新增事件变体走既有登记流程**：如 §5.2 提到的 `session-index-changed`，按 `events.rs:789-852` 宏登记 + 注册表 + 生成脚本三件套；
+2. **新增事件变体走既有登记流程**：【裁决修正 5】41 变体冻结为基线，新增变体
+   必须走三件套登记（`events.rs:789-808` 宏登记 + `contracts/engine-events.json`
+   注册表 + 生成脚本）；§5.2 的 `session-index-changed` 已按裁决改为
+   M6 `events.session.updated` 会话面消息，不再登记新变体；
 3. **事件语义不变量（不得破坏）**：
    - `message-end` 必达、携带全文（message-delta 可丢的兜底，`events.rs:342-367`、`buffer.rs:7-11`）——跨端转发同样遵守；
    - `run-terminal` 事件体内 runId 与信封注入一致（`events.rs:918-920` serde flatten 合并逻辑）——跨端解析器直接用现成的反序列化实现；
@@ -682,10 +685,12 @@ BufferedRunEventBridge（每 run 一个：入队即序列化 + 背压缓冲 + fl
 
 实现落点：
 - core_event_bridge.rs 新增 FanoutEmitter（保持"零 crate:: 内部引用"风格）；
-- main.rs:344-348 的 EventBridge::new 处，把 TauriEmitter 换为 FanoutEmitter
+- main.rs:353-356 的 EventBridge::new 处，把 TauriEmitter 换为 FanoutEmitter
   （内部仍含 TauriEmitter）；或保持原桥不动，新增第二个 EventBridge
-  （channel 语义不同），由网关消费——**倾向后者**：跨端通道与 GUI 通道
-  物理解耦，GUI 链路不感知多端存在，风险最小。
+  （channel 语义不同），由网关消费——**【裁决修正】**AU2 F-6 统一为 D2 方案：
+  **构造点替换 emitter（FanoutEmitter 内部分路 Tauri + WS）**，不再采用
+  「新增第二个 EventBridge 物理解耦」倾向；channel 语义：WS 侧按订阅过滤，
+  不区分 channel（D2 §4.2 架构图）。
 ```
 
 **为什么不动 BufferedRunEventBridge 内部**：run 级缓冲的丢帧语义（Delta 可丢、Critical 必达）是桌面与现有前端契约的一部分，改它会波及 03 §5.3-6 契约；跨端转发在**桥之外**再做一层"按端"的缓冲（借用 `EventBuffer` 语义但按 deviceId 分桶，或独立轻量实现）。`EventBuffer` 本身可按 deviceId 复用（`runs: HashMap<String, RunQueue>` 换成 `devices: HashMap<String, RunQueue>` 的同构结构）。
@@ -733,7 +738,7 @@ BufferedRunEventBridge（每 run 一个：入队即序列化 + 背压缓冲 + fl
 
 #### 6.4.1 现状（关键事实）
 
-- 命令面真源：`main.rs:90-209` 的 `command_registry!`（92 条注册，含登记先行 4 条）+ `command_manifest.rs:68+` 的 `COMMAND_MANIFEST`（带 `family`/`surface`/`registered` 字段，`command_manifest.rs:29-38`）；
+- 命令面真源：`main.rs:90-209` 的 `command_registry!`（**95 条注册，含登记先行 4 条**——【裁决修正 2】原「92 条」为过期快照，以 M6 §2.3 勘误 + `command_manifest.rs:68-191` 为准）+ `command_manifest.rs:68+` 的 `COMMAND_MANIFEST`（带 `family`/`surface`/`registered` 字段，`command_manifest.rs:29-38`）；
 - **`surface` 字段已区分 `engine`（"引擎契约面（三端共用）"）与 `gui`（"GUI 专属面"）**（`command_manifest.rs:33-38`）——"三端共用"的表述说明设计者早已预见多端；`core_run_task`/`config_get` 等是 `engine`，`workbench_*`（shell/pty/git/fs 操作）是 `gui`；
 - 前端有 manifest 快照镜像与一致性检查（`apps/crish-desktop/src/api/transport/commandManifest.ts`，`main.rs:482-499` 的测试锁定双端一致）；
 - 服务化可行性证据：`run_task_impl` 与 Tauri 解耦可直调（`core_run_commands.rs:3040-3043`）；`catalog_get`/`catalog_refresh` 是纯函数式命令（`catalog_commands.rs:42-71`）；`core_get_status` 数据源全部来自 State/静态存储（`core_query_commands.rs:265-275`）。
@@ -823,7 +828,7 @@ BufferedRunEventBridge（每 run 一个：入队即序列化 + 背压缓冲 + fl
 | `Link`（链路抽象）| LocalLink / RelayLink 统一接口 | `md/link.rs` | — |
 | `RelayClient`（中继客户端）| 桌面出站连接中继 | `md/relay.rs` | `Link` |
 | `md_api`（服务接口定义）| 协议帧/命令映射/错误映射 | `md/api.rs`（或 `conex-types` 扩展）| `CoreError`、serde camelCase |
-| 移动端应用 | Companion UI | `apps/crish-mobile/`（现有目录）| `Transport`/`EventRouter`/handlers 复用 |
+| 移动端应用 | Companion UI | `apps/crish-mobile/`（【修正动作 4 / AU2 F-2】**待新建目录**——原 `apps/crish-mobile` 已按 R2A 裁决删除，legacy 原型在 `reference/mobile-companion*`）| `Transport`/`EventRouter`/handlers 复用 |
 
 **装配顺序（进 `main.rs` setup 链，参照 `main.rs:290-456` 现有 setup 序列）**：LocalDb → DeviceRegistry（读配对）→ CoreRunState（现状）→ EventBridge（改造为含扇出）→ md_gateway（依赖前述全部）→ RelayClient（可选，配置开启）。网关启动失败 = 仅关多端服务，`core_get_status` 的 diagnostics 如实上报（复用 `StatusDiagnostics`，`apps/agent-workbench/src-tauri/src/status_diagnostics.rs`）。
 
@@ -877,7 +882,7 @@ F12 文件浏览只读 / 终端输出                             —— 依赖�
 | 变更 | 路径 | 旧端行为 |
 |------|------|----------|
 | 新增命令 `md.session.export` | manifest 增加 + 网关映射表加行 | 不感知（命令面按 manifest 协商，旧端不调用）|
-| 新增事件变体 `session-index-changed` | 事件三件套登记 | 旧端按未知 type 跳过（前端 parser 对未知 type 的处理，`packages/shared-types/src/generated/engine/parser.ts`）|
+| 新增事件变体 `session-index-changed`（示例；【裁决修正 5】实际已改走 `events.session.updated` 会话面消息，不新增变体）| 事件三件套登记 | 旧端按未知 type 跳过（前端 parser 对未知 type 的处理，`packages/shared-types/src/generated/engine/parser.ts`）|
 | 帧协议不兼容变更（如帧结构改动）| `protocolVersions` bump（1 → 2），服务端同时支持 1 和 2 | 握手时协商到旧版本，行为不变 |
 
 ### 7.4 插件/扩展面（远期）
@@ -907,6 +912,11 @@ F12 文件浏览只读 / 终端输出                             —— 依赖�
 | R11 | 网关 + 引擎同进程导致网关故障影响引擎 | 高 | 网关全部组件化、可独立关闭；setup 失败降级（§3.4 铁律）；tracing 目标隔离（`target: "md"`）|
 
 ### 8.2 阶段划分与验收
+
+> 【裁决修正 9】阶段命名统一为 AU3 R0-R5，本方案 P0-P4 映射如下：P0 原型 →
+> R0（协议冻结）收尾/R1 前；P1 局域网直连 → **R1 桌面服务端**（桌面侧）+ **R2
+> 移动端基础**（移动侧）；P2 云中继 + 通知 → **R3 推送** + **R4 中继+P2P**；
+> P3 多端扩展 → R4 末/远期；P4+ 远期不变。任务书引用一律使用 R 阶段号。
 
 #### P0 原型（本机验证，约 1 周）
 
@@ -1081,7 +1091,7 @@ P4+ 远期：WebRTC P2P / 多 Hub 代理 / 第二桌面观察端
 
 | # | 问题 | 裁决建议（本方案倾向）| 归口 |
 |---|------|----------------------|------|
-| O1 | `session-index-changed` 是否新增事件变体（vs index 版本号拉取）| 新增事件变体（走登记三件套），保持"一切变更走事件面"一致 | D2/D4 |
+| O1 | `session-index-changed` 是否新增事件变体（vs index 版本号拉取）| 【裁决修正 5】**不新增变体（41 变体冻结）**：走 M6 `events.session.updated` 会话面消息 + `session_index_snapshot` 版本对账兜底；本项关闭 | D2/D4/M6 |
 | O2 | 审批决策帧走专用帧还是通用 command | 通用 command（`md.approval.decide`），帧面最小 | D2 |
 | O3 | 移动端事件渲染是复用桌面 handler 还是独立实现 | 复用 handler 模块化（§6.6.2），抽共享包 | D7 |
 | O4 | 端级缓冲是复用 `EventBuffer` 按 deviceId 分桶还是新实现 | 复用 `EventBuffer` 数据结构（同构换 key）| D4 |

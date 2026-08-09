@@ -378,6 +378,13 @@ apps/crish-mobile/
 
 ### 2.5 关键设计：vanilla zustand 与 React 绑定的分离
 
+> 【裁决修正 8】store 分层裁决（主控裁决 8）：**领域层 createStore + 表现层
+> vanilla 绑定**——本节为「领域层 createStore（zustand/vanilla）」的表述真源；
+> 表现层绑定（`useStore`/`create` 的 React 入口）收敛在适配层 hooks。M5 §3.1
+> 的 store 实现同属该分层（领域层抽象），其 React 绑定写法仅是表现层导出形态；
+> 两文档表述统一为「领域层 createStore + 表现层 vanilla 绑定」，M4 的 vanilla
+> 表述与 M5 的实现不再视为冲突（AU1 P1-7 关闭）。
+
 桌面端 `permissionStore.ts` 用 `create<T>()(...)`（zustand 的 React 绑定入口）；移动端换 UI 框架需求下，M4 规定：
 
 ```ts
@@ -1450,6 +1457,11 @@ E2E 基建：maestro（免费、YAML 流程、与 EAS dev client 兼容）；测
 | 测试资产入库 | 新增测试/调试脚本立即 `git add` 提交（AGENTS.md 铁律）| 每次提交 |
 
 ## 11. 里程碑建议（与 D4 §11.1 对齐）
+
+> 【裁决修正 9】阶段映射（统一 R0-R5）：M0 骨架 → R2；M1 连接与配对 → R2；
+> M2 审批中心 → **R2 首批交付（裁决 12：审批中心 = P0 功能）**；M3 观测面 →
+> R2；M4 文件与设置 → R2；M5 推送完备 → R3；M6/M7 对齐 D4 同段映射。任务书
+> 引用一律使用 R 阶段号。
 
 M4 是 UI 架构方案，落地随 D4 里程碑推进；本表给出 UI 侧在各里程碑的交付物与出口标准：
 

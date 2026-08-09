@@ -483,6 +483,10 @@ WS 事件到达顺序：`WsGateway` → 事件解析器（复用 `@crish/shared-
   Stack push：approval/[toolCallId]（推送深链直达）
 ```
 
+> 【裁决修正 7】Tab 结构已被 **M4 §0.2 裁决**（首页/会话/审批/文件/设置 五 Tab；
+> 事件流并入会话详情，`(tabs)/events.tsx` 取消）：本节「events Tab」形态是
+> 旧建议，实施以 M4 §2.3 目录为准（AU1 P1-4 关闭）。
+
 路由守卫实现要点（`app/_layout.tsx`）：
 
 ```tsx
@@ -502,9 +506,9 @@ function AuthGuard({ children }: PropsWithChildren) {
 
 | 项 | 说明 |
 | --- | --- |
-| 输入 | ① 扫码：摄像头读取桌面「配对二维码」；② 手动：输入主机 IP/主机名 + 6 位 PIN |
+| 输入 | ① 扫码：摄像头读取桌面「配对二维码」；② 手动：输入主机 IP/主机名 + CXN 配对码【裁决修正 1：配对码以 D3 §4.1 为准（CXN-XXXX-XXXX-XXXX 12 字符 base32、10 分钟、5 次失败上限）；原「6 位 PIN」作废】 |
 | 输出 | 配对成功 → 存入 secure-store（长时令牌 + 主机指纹）→ 进入主界面 |
-| 安全 | 配对码一次性（桌面端 5 分钟过期，TOTP 风格）；令牌绑定 deviceId + 平台指纹 |
+| 安全 | 配对码一次性（D3 §4.1：10 分钟过期 + 单码 5 次失败上限；X25519+HKDF 密码学链见 D3 §4.4）【裁决修正 1】；令牌绑定 deviceId + 平台指纹 |
 | 重试 | 失败给出可读错误（错误码：`common.invalid_input` / `network.unreachable` / 401 → 配对码过期） |
 | 附加 | 配对成功后提示开启推送（引导权限弹窗，Android 13+ 与 iOS 首次时机不同） |
 
@@ -778,7 +782,7 @@ async function stopRun(runId: string, level: 'cooperative' | 'force') {
 
 | 职责 | 说明 |
 | --- | --- |
-| 连接管理 | 监听端口（默认 7821，可配置）；WSS 首选（自签证书 + 移动端指纹固定，见 6.1.5） |
+| 连接管理 | 监听端口（默认 **8765**【裁决修正 6：原 7821 作废】，可配置）；WSS 首选（自签证书 + 移动端指纹固定，见 6.1.5） |
 | 认证 | 移动端连接时携带访问令牌 → 校验 deviceId 绑定 → 建立会话 |
 | 命令透传 | WS 消息 `{ type: 'invoke', id, command, params }` → Rust 命令处理（复用引擎命令注册面）→ `{ type: 'invoke-result', id, ok, data \| error }` |
 | 事件推送 | 引擎事件信封原样转发（带 `seq` 游标，供移动端断线追平，见 6.5.3） |
@@ -901,7 +905,7 @@ reconnecting         recovering                横幅「重连中…第 N 次」
 | 超时 | `AbortController` + `setTimeout`（默认 10s，配对握手 15s） |
 | 重试 | 幂等请求（GET/令牌刷新）自动重试 2 次（指数退避）；POST 决策类不自动重试（走 outbox） |
 | 错误归一化 | 复用 `@crish/shared-types` 的 `errors/` 工具：网络层错误 → `network.unreachable`；HTTP 状态 → 对应码映射表（401 → `provider.reauth_required` 语义 → 触发令牌刷新） |
-| Base URL | `EndpointResolver`：`wss://host:7821` ↔ `https://host:7821` 同端口协议映射 |
+| Base URL | `EndpointResolver`：`wss://host:8765` ↔ `https://host:8765` 同端口协议映射【裁决修正 6：原 7821 作废】 |
 
 ### 6.4 配对流程客户端实现（详见 5.1，此处补协议细节）
 
@@ -1379,7 +1383,7 @@ jobs:
 ```
 场景矩阵：真机类型（iOS 模拟器 / 安卓模拟器 / 真机）× 桌面环境（本机 / LAN 远程 / Tailscale）
 
-S1 本机联调：桌面起 daemon（网关端口 7821）→ 手机连同一 Wi-Fi → 手动输入
+S1 本机联调：桌面起 daemon（网关端口 8765【裁决修正 6】）→ 手机连同一 Wi-Fi → 手动输入
    桌面局域网 IP + PIN → 验证配对/审批/事件流/终端流全链路。
    证书：开发期用「开发自签 CA」，手机导入 CA 描述文件（iOS）或信任用户证书（Android）；
    指纹固定开关在 dev build 自动放宽（production 强制）。
@@ -1405,6 +1409,11 @@ S4 回归联动：每次 shared-types 或命令清单变更 → 双端 CI 同步
 ## 11. 里程碑与验收
 
 ### 11.1 里程碑
+
+> 【裁决修正 9】阶段映射（统一 R0-R5）：M0 骨架 → **R2 移动端基础**；M1 连接与
+> 配对 → R2；M2 审批中心 → **R2 首批交付（裁决 12：审批中心 = P0 功能）**；
+> M3 观测面 → R2；M4 文件与设置 → R2；M5 推送完备 → **R3 推送**；M6 国内通道 →
+> R3；M7 发布 → R3 收尾。任务书引用一律使用 R 阶段号。
 
 | 阶段 | 内容 | 出口标准 |
 | --- | --- | --- |
@@ -1480,6 +1489,11 @@ S4 回归联动：每次 shared-types 或命令清单变更 → 双端 CI 同步
 4. **国内厂商推送 P1**：资源投入 4 周，是否进入 v1 范围由主控裁决；不影响国际版先行。
 
 ### 12.5 WS 网关帧格式规范（WsEnvelope）
+
+> 【裁决修正 2/10】**本节作废**：WsEnvelope 是 D3 冻结前的早期草案第三套帧格式
+> （AU3 C-1 已裁决作废；M5 §4.2 已声明信封并入 D3 体系）。帧格式唯一真源 =
+> **M6 DeviceEnvelope**（v/kind/msgId/ts/from/to/auth/body，M6 §10.1），
+> 认证 = 消息级 HMAC（token_key，M7 四类令牌分治）；本节内容仅作为历史对照保留。
 
 统一帧：`{ "v": 1, "type": <帧类型>, "seq": <单调递增>, "payload": {…} }`。
 

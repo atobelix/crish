@@ -43,9 +43,13 @@
 
 ### 1.1 消息数量总览
 
+> 【裁决修正 9】阶段映射：本方案全部交付物归属 **R0 协议冻结**（kind 注册表 +
+> 生成器泛化 + 对拍门禁 = R0 出口；验收锚点 T-M6-01~14 即 R0 出口标准）；
+> 37 命令实现按 F 系列域拆批在 R1/R2 落地。
+
 | 消息族 | 数量 | 说明 |
 |---|---|---|
-| `cmd.*` 命令请求 | **37** | 覆盖 F1-F6 六域 + 设备域；响应为同名录 `result.*` |
+| `remote.*` 命令请求 | **37** | 覆盖 F1-F6 六域 + 设备域；响应为同名录 `result.*`。【裁决修正 5】跨端命令前缀统一 `remote.*`（原 `cmd.*` 更名，`cmd.*` 仅保留桌面内部命名） |
 | `result.*` 命令响应 | 37 | 与命令一一对应（请求-响应关联键 `reqMsgId`） |
 | `events.*` 会话面 | **11** | subscribe / subscribeAll / subscribe.ok / push / ack / resume / resume.page / resume.done / session.updated / session.removed / session.updatedAll |
 | `stream.*` 流控制 | 4 | open / chunk / resume / close |
@@ -71,13 +75,13 @@
 ### 1.3 幂等结论
 
 - **读命令全部天然幂等**（游标分页语义天然去重）。
-- **写命令五条走 outbox + at-least-once**：`cmd.approve` / `cmd.deny` /
-  `cmd.writeFile` / `cmd.setSettings` / `cmd.pauseAutomation`。
+- **写命令五条走 outbox + at-least-once**：`remote.approve` / `remote.deny` /
+  `remote.writeFile` / `remote.setSettings` / `remote.pauseAutomation`。
 - 幂等键 = 请求 `msgId`（即 `reqMsgId`）或业务幂等键（`toolCallId` /
   `clientMessageId` / 设置键 / 请求 id）；桌面按幂等键记录「已处理命令」，
   重发回显首次结果、不重复执行（TTL 30 天防重放窗口 > 离线 TTL 上限）。
 - 审批天然幂等（I-02 校验：重复决策命中 `cmd.approval_mismatch`，不改状态机）；
-  run 控制（L2/L3）重复无副作用；`cmd.runTask` 以 `clientMessageId` 幂等。
+  run 控制（L2/L3）重复无副作用；`remote.runTask` 以 `clientMessageId` 幂等。
 
 ### 1.4 流与背压结论
 
@@ -93,7 +97,7 @@
 ### 1.5 尺寸预算结论
 
 - 单帧 ≤ 1 MiB（`MAX_FRAME_BYTES`）；事件 push 单事件 ≤ 64 KiB（超限先摘要化）；
-  命令请求默认 ≤ 64 KiB（`cmd.runTask.prompt` 跨端上限 256 KiB，超限走流上传）；
+  命令请求默认 ≤ 64 KiB（`remote.runTask.prompt` 跨端上限 256 KiB，超限走流上传）；
   推送通知 payload ≤ 4 KiB（厂商通道限制，只含摘要级字段）。
 - 分页协议：游标 + limit + 方向（forward 默认 / backward 供会话首屏尾部倒序拉取）；
   pageSize 默认 200、上限 1000；`hasMore` 续拉。
@@ -195,7 +199,7 @@ M6 命令映射表」三重约束为准，不写死命令总数（版本演进�
 | `session.updated` | D→M | `SessionUpdated` | 会话索引变更广播（F5 列表增量刷新） |
 | `session.removed` | D→M | `SessionRemoved` | 会话删除广播（本地清理投影与游标） |
 | `session.updatedAll` | D→M | `SessionUpdatedAll` | 会话索引全量刷新信号（对账兜底） |
-| `cmd.<name>` | M→D | 见 §4 各命令 | 命令请求（37 条，参数 = Tauri 命令入参） |
+| `remote.<name>` | M→D | 见 §4 各命令 | 命令请求（37 条，参数 = Tauri 命令入参；裁决修正 5：原 `cmd.*` 前缀） |
 | `result.<name>` | D→M | `CommandResult` | 命令响应（ok / result / error） |
 | `stream.open` | D→M | `StreamOpen` | 大载荷流开启（服务端发起） |
 | `stream.chunk` | D→M | `StreamChunk` | 流数据块（≤ 64 KiB） |
@@ -205,7 +209,7 @@ M6 命令映射表」三重约束为准，不写死命令总数（版本演进�
 | `heartbeat.ok` | D→M | `HeartbeatOk` | 心跳回执（60s）+ serverTime |
 | `error` | 双向 | `ErrorBody` | 错误通知（可带 reqMsgId 关联请求） |
 
-> 说明 1：`cmd.runTask` 等大载荷上行（prompt）与 `stream.open`（服务端发起下行）
+> 说明 1：`remote.runTask` 等大载荷上行（prompt）与 `stream.open`（服务端发起下行）
 > 方向相反——上行大载荷走「分块提交」专用流（第 7.4 节），上行流方向
 > `M→D`，`stream.*` 的 kind 不变、方向由 `from/to` 信封字段区分。
 > 说明 2：`session.updated*` 三消息为 M6 新增（D3 仅在 7.3 提及「新会话通知
@@ -218,7 +222,7 @@ M6 命令映射表」三重约束为准，不写死命令总数（版本演进�
   │  ① 配对期 pair.hello/challenge/verify/ok
   │  ② 握手期 auth.hello → auth.hello.ok（协议协商 + manifest）
   │  ③ 会话期：
-  │     - 上行 cmd.*（请求-响应 result.*）
+  │     - 上行 remote.*（请求-响应 result.*）
   │     - 下行 events.push / events.resume.page / session.* / stream.chunk
   │     - 双向 heartbeat / error
   │  ④ 断线：auth.refresh → events.subscribe(带 lastSequences) → events.resume*
@@ -236,6 +240,11 @@ M6 命令映射表」三重约束为准，不写死命令总数（版本演进�
 ## 4. 命令消息清单（按功能域）
 
 ### 4.0 读前须知
+
+> 【裁决修正 5】本章全部命令 kind 已统一为 `remote.<name>`（原 `cmd.<name>`）；
+> `cmd.*` 仅保留桌面内部命名（错误码 `cmd.invalid` / `cmd.denied` 等不属命令
+> 路由，保持原名）。网关路由名（M7 §2.8 remote.*）、协议 kind（本章）、manifest
+> 命令名三者的映射由 `remote_manifest.rs` 注册表 + 生成器锁定（AU1 P1-3 关闭）。
 
 - 每域小节先给「域总表」（命令 / 方向 / 对应 Tauri 命令 / 参数要点 / 响应要点 /
   幂等性），随后对关键命令逐条展开（参数 schema 摘要 + 错误码 + 幂等语义）。
@@ -256,18 +265,18 @@ M6 命令映射表」三重约束为准，不写死命令总数（版本演进�
 
 | # | 命令 kind | 方向 | 对应 Tauri 命令 | 参数要点 | 响应要点 | 幂等 |
 |---|---|---|---|---|---|---|
-| C01 | `cmd.getStatus` | M→D | `core_get_status` | `{include?}` | 核心状态裁剪子集 | 天然 |
-| C02 | `cmd.getRunSnapshot` | M→D | `core_get_run_snapshot` | `{runId, sessionId?}` | `{snapshot}` | 天然 |
-| C03 | `cmd.readSessionEvents` | M→D | `core_read_session_events` | `{sessionId, afterSequence?, maxEvents?, direction?}` | EventPage + latestSequence | 天然 |
-| C04 | `cmd.readRunEvents` | M→D | `core_read_run_events` | `{runId, sessionId?, afterSequence?, maxEvents?}` | EventPage | 天然 |
-| C05 | `cmd.listSessions` | M→D | `list_sessions` | `{}` | `{sessions}` | 天然 |
-| C06 | `cmd.listBackgroundTasks` | M→D | `workbench_list_background_tasks` | `{}` | `{tasks}` | 天然 |
-| C07 | `cmd.getTaskOutput` | M→D | `workbench_get_background_task_output` | `{taskId, maxLines?, afterLine?}` | `{lines, truncated, lineCount}` | 天然 |
-| C08 | `cmd.getFlowSnapshot` | M→D | `get_flow_snapshot` | `{sessionId}` | `{flow}` | 天然 |
-| C09 | `cmd.listCommands` | M→D | `core_list_commands` | `{}` | `{contractVersion, commands}` | 天然 |
-| C10 | `cmd.getSearchIndex` | M→D | `core_search_files` | `{}` | `{ready, state?}` | 天然 |
+| C01 | `remote.getStatus` | M→D | `core_get_status` | `{include?}` | 核心状态裁剪子集 | 天然 |
+| C02 | `remote.getRunSnapshot` | M→D | `core_get_run_snapshot` | `{runId, sessionId?}` | `{snapshot}` | 天然 |
+| C03 | `remote.readSessionEvents` | M→D | `core_read_session_events` | `{sessionId, afterSequence?, maxEvents?, direction?}` | EventPage + latestSequence | 天然 |
+| C04 | `remote.readRunEvents` | M→D | `core_read_run_events` | `{runId, sessionId?, afterSequence?, maxEvents?}` | EventPage | 天然 |
+| C05 | `remote.listSessions` | M→D | `list_sessions` | `{}` | `{sessions}` | 天然 |
+| C06 | `remote.listBackgroundTasks` | M→D | `workbench_list_background_tasks` | `{}` | `{tasks}` | 天然 |
+| C07 | `remote.getTaskOutput` | M→D | `workbench_get_background_task_output` | `{taskId, maxLines?, afterLine?}` | `{lines, truncated, lineCount}` | 天然 |
+| C08 | `remote.getFlowSnapshot` | M→D | `get_flow_snapshot` | `{sessionId}` | `{flow}` | 天然 |
+| C09 | `remote.listCommands` | M→D | `core_list_commands` | `{}` | `{contractVersion, commands}` | 天然 |
+| C10 | `remote.getSearchIndex` | M→D | `core_search_files` | `{}` | `{ready, state?}` | 天然 |
 
-#### 4.1.1 C01 `cmd.getStatus`（连接与核心状态卡，F1 F01/F02）
+#### 4.1.1 C01 `remote.getStatus`（连接与核心状态卡，F1 F01/F02）
 
 - **方向**：M→D；响应 `result.getStatus`。
 - **参数 schema**（`StatusQuery`，全可选）：
@@ -304,7 +313,7 @@ M6 命令映射表」三重约束为准，不写死命令总数（版本演进�
 - **幂等性**：天然幂等；无副作用；可用作连通性探测（F1 §5.4 在线判定）。
 - **桌面 mapping**：`core_get_status`（command_manifest.rs:119，registered）。
 
-#### 4.1.2 C02 `cmd.getRunSnapshot`（run 详情状态条 + 用量卡，F1 F04/F07）
+#### 4.1.2 C02 `remote.getRunSnapshot`（run 详情状态条 + 用量卡，F1 F04/F07）
 
 - **方向**：M→D。
 - **参数**：`{ "runId": "r-01JQ...", "sessionId": "s-abc" }`（sessionId 可选，供校验）。
@@ -327,7 +336,7 @@ M6 命令映射表」三重约束为准，不写死命令总数（版本演进�
 - **幂等性**：天然幂等。
 - **桌面 mapping**：`core_get_run_snapshot`（command_manifest.rs:120）。
 
-#### 4.1.3 C03 `cmd.readSessionEvents`（事件游标分页 = 同步面主查询）
+#### 4.1.3 C03 `remote.readSessionEvents`（事件游标分页 = 同步面主查询）
 
 > 本命令是 D6 通道 B 与 D3 `events.resume` 的**共用底层契约**
 > （D3 §13.4 开放问题 4：resume 走专用消息、cmd 版留给 UI 手动刷新，两者同契约）。
@@ -384,7 +393,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
   零改动既有 forward 面）；
 - 同步面 resume 恒 forward（游标单调推进，backward 仅 UI 历史浏览使用）。
 
-#### 4.1.4 C04 `cmd.readRunEvents`（run 详情时间线，F1 F04）
+#### 4.1.4 C04 `remote.readRunEvents`（run 详情时间线，F1 F04）
 
 - **方向**：M→D。
 - **参数**：`{ "runId": "r-01", "afterSequence": 0, "maxEvents": 200 }`。
@@ -395,7 +404,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：天然幂等。
 - **桌面 mapping**：`core_read_run_events`（command_manifest.rs:121）。
 
-#### 4.1.5 C05 `cmd.listSessions`（会话列表，F1 F05 / F5 2.1）
+#### 4.1.5 C05 `remote.listSessions`（会话列表，F1 F05 / F5 2.1）
 
 - **方向**：M→D。
 - **参数**：`{}`（可选 `includeLastMessage: true` 时列表携带 ≤80 字符最后消息预览）。
@@ -415,7 +424,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：天然幂等。
 - **桌面 mapping**：`list_sessions`（command_manifest.rs:129，session 族 engine 面）。
 
-#### 4.1.6 C06 `cmd.listBackgroundTasks`（任务列表，F1 F09）
+#### 4.1.6 C06 `remote.listBackgroundTasks`（任务列表，F1 F09）
 
 - **方向**：M→D。
 - **参数**：`{}`。
@@ -433,7 +442,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 > **白名单特批**（读命令，无副作用；D3 §8.3 的「仅 surface=engine」规则为本命令
 > 开例外，白名单表显式登记，见 §4.8）。
 
-#### 4.1.7 C07 `cmd.getTaskOutput`（任务输出补取，F1 F16 / F3 §4 断线兜底）
+#### 4.1.7 C07 `remote.getTaskOutput`（任务输出补取，F1 F16 / F3 §4 断线兜底）
 
 - **方向**：M→D。
 - **参数**：`{ "taskId": "t-7", "maxLines": 200, "afterLine": 0 }`
@@ -451,7 +460,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：天然幂等（offset 分页）。
 - **桌面 mapping**：`workbench_get_background_task_output`（command_manifest.rs:86，白名单特批）。
 
-#### 4.1.8 C08 `cmd.getFlowSnapshot`（子代理 DAG 概览，F1 F13 P2）
+#### 4.1.8 C08 `remote.getFlowSnapshot`（子代理 DAG 概览，F1 F13 P2）
 
 - **方向**：M→D。
 - **参数**：`{ "sessionId": "s-abc" }`。
@@ -464,7 +473,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：天然幂等。
 - **桌面 mapping**：`get_flow_snapshot`（command_manifest.rs:143）。
 
-#### 4.1.9 C09 `cmd.listCommands`（能力发现，D3 §8.1）
+#### 4.1.9 C09 `remote.listCommands`（能力发现，D3 §8.1）
 
 - **方向**：M→D。
 - **参数**：`{}`。
@@ -476,14 +485,15 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：天然幂等；启动即可用、无状态（command_manifest.rs:196-199）。
 - **桌面 mapping**：`core_list_commands`（command_manifest.rs:164）。
 
-#### 4.1.10 C10 `cmd.getSearchIndex`（搜索索引就绪状态，F1 F02 诊断）
+#### 4.1.10 C10 `remote.getSearchIndex`（搜索索引就绪状态，F1 F02 诊断）
 
 - **方向**：M→D。
 - **参数**：`{}`。
 - **响应**：`{ "ready": true, "state": { "totalFiles": 1200, "lastBuiltAt": 1754600000000 } }`
   （字段裁剪自 `core_search_files` 返回）。
 - **裁剪要点**：只读状态；`core_rebuild_search_index`（写）不在白名单
-  （F1 §6.3 拒绝清单）。
+  （F1 §6.3 拒绝清单）。【裁决修正 2】AU1 P2-12：本命令仅开放「索引就绪状态
+  查询」（core_search_files 的 ready/state 子集），**全文搜索仍按 D2 T3 不暴露**；
 - **错误码**：`cmd.engine_not_ready`。
 - **幂等性**：天然幂等。
 - **桌面 mapping**：`core_search_files`（command_manifest.rs:113）。
@@ -498,21 +508,21 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 
 | # | 命令 kind | 方向 | 对应 Tauri 命令 | 参数要点 | 响应要点 | 幂等 |
 |---|---|---|---|---|---|---|
-| C11 | `cmd.approve` | M→D | `core_approve_tool` | `{toolCallId, runId?}` | `{ok, toolCallId, decision}` | 天然（I-02）+ msgId |
-| C12 | `cmd.deny` | M→D | `core_deny_tool` | `{toolCallId, runId?, reason?}` | `{ok, toolCallId, decision}` | 天然（I-02）+ msgId |
-| C13 | `cmd.listPendingApprovals` | M→D | `[新增] mobile_list_pending_approvals` | `{afterSequence?}` | `{approvals, latestSequence}` | 天然 |
-| C14 | `cmd.approvalHistory` | M→D | `[新增] mobile_approval_sync_state` | `{sessionId?, afterSequence?, limit?}` | `{items}` | 天然 |
-| C15 | `cmd.checkCommand` | M→D | `core_check_command` | `{command, params?}` | `{decision, reason?}` | 天然 |
+| C11 | `remote.approve` | M→D | `core_approve_tool` | `{toolCallId, runId?}` | `{ok, toolCallId, decision}` | 天然（I-02）+ msgId |
+| C12 | `remote.deny` | M→D | `core_deny_tool` | `{toolCallId, runId?, reason?}` | `{ok, toolCallId, decision}` | 天然（I-02）+ msgId |
+| C13 | `remote.listPendingApprovals` | M→D | `[新增] mobile_list_pending_approvals` | `{afterSequence?}` | `{approvals, latestSequence}` | 天然 |
+| C14 | `remote.approvalHistory` | M→D | `[新增] mobile_approval_sync_state` | `{sessionId?, afterSequence?, limit?}` | `{items}` | 天然 |
+| C15 | `remote.checkCommand` | M→D | `core_check_command` | `{command, params?}` | `{decision, reason?}` | 天然 |
 
-#### 4.2.1 C11 `cmd.approve` / C12 `cmd.deny`（决策命令，F2 §5.2）
+#### 4.2.1 C11 `remote.approve` / C12 `remote.deny`（决策命令，F2 §5.2）
 
 - **方向**：M→D；响应 `result.approve` / `result.deny`。
 - **参数**：
 
 ```jsonc
-// cmd.approve
+// remote.approve
 { "toolCallId": "tc-9", "runId": "r-01" }                    // decision 恒 approved
-// cmd.deny
+// remote.deny
 { "toolCallId": "tc-9", "runId": "r-01", "reason": "风险过高" }   // reason ≤ 256 字符，缺省 "user denied"
 ```
 
@@ -540,7 +550,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **桌面 mapping**：`core_approve_tool` / `core_deny_tool`
   （command_manifest.rs:126-127）。
 
-#### 4.2.2 C13 `cmd.listPendingApprovals`（启动对账，F2 §4.1）
+#### 4.2.2 C13 `remote.listPendingApprovals`（启动对账，F2 §4.1）
 
 > F2 §12.2 建议的新增命令；对账是待办列表真值的兜底通道
 > （实时事件可能错过 / 推送可能不到，F2 §6.4）。
@@ -569,7 +579,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **桌面 mapping**：`[新增] mobile_list_pending_approvals`
   （引擎侧从 events 表派生，见 §12.4 落点）。
 
-#### 4.2.3 C14 `cmd.approvalHistory`（审批历史补拉，F2 §7）
+#### 4.2.3 C14 `remote.approvalHistory`（审批历史补拉，F2 §7）
 
 - **方向**：M→D。
 - **参数**：`{ "sessionId": "s-abc", "afterSequence": 100, "limit": 100 }`。
@@ -589,7 +599,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：天然幂等。
 - **桌面 mapping**：`[新增] mobile_approval_sync_state`（可并入 C13 实现，见 §12.4）。
 
-#### 4.2.4 C15 `cmd.checkCommand`（审批前置预览，D3 §8.3）
+#### 4.2.4 C15 `remote.checkCommand`（审批前置预览，D3 §8.3）
 
 - **方向**：M→D。
 - **参数**：`{ "command": "shell:write", "params": { "script": "npm test" } }`。
@@ -612,16 +622,16 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 
 | # | 命令 kind | 方向 | 对应 Tauri 命令 | 参数要点 | 响应要点 | 幂等 |
 |---|---|---|---|---|---|---|
-| C16 | `cmd.listDir` | M→D | `workbench_list_directory` | `{path?, workspaceRoot?}` | `{entries}` | 天然 |
-| C17 | `cmd.readFile` | M→D | `workbench_read_file_content` | `{path, workspaceRoot?, maxLines?, startLine?}` | `{content, lineCount, truncated}` | 天然 |
-| C18 | `cmd.writeFile` | M→D | `workbench_write_file_content` | `{path, content, overwrite?}` | `{ok, path}` | **msgId 幂等键** |
-| C19 | `cmd.listWorkspaces` | M→D | `workbench_list_workspaces` + `[新增] mobile_get_workspace_state` | `{}` | `{workspaces}` | 天然 |
-| C20 | `cmd.switchWorkspace` | M→D | `workbench_open_workspace`（M4-1 接线） | `{path}` | `{ok, activeRoot}` | 天然 |
-| C21 | `cmd.searchFiles` | M→D | `[新增] mobile_search_files`（→ fuzzy_find） | `{query, root?, maxResults?}` | `{results}` | 天然 |
-| C22 | `cmd.assetUrl` | M→D | `[新增] mobile_asset_url`（→ convertFileSrc） | `{path, kind}` | `{url, expiresAt}` | 天然（每次新令牌） |
-| C23 | `cmd.fileStat` | M→D | `file_stat` 代理 | `{path, workspaceRoot?}` | `{size, modified, readonly, kind}` | 天然 |
+| C16 | `remote.listDir` | M→D | `workbench_list_directory` | `{path?, workspaceRoot?}` | `{entries}` | 天然 |
+| C17 | `remote.readFile` | M→D | `workbench_read_file_content` | `{path, workspaceRoot?, maxLines?, startLine?}` | `{content, lineCount, truncated}` | 天然 |
+| C18 | `remote.writeFile` | M→D | `workbench_write_file_content` | `{path, content, overwrite?}` | `{ok, path}` | **msgId 幂等键** |
+| C19 | `remote.listWorkspaces` | M→D | `workbench_list_workspaces` + `[新增] mobile_get_workspace_state` | `{}` | `{workspaces}` | 天然 |
+| C20 | `remote.switchWorkspace` | M→D | `workbench_open_workspace`（M4-1 接线） | `{path}` | `{ok, activeRoot}` | 天然 |
+| C21 | `remote.searchFiles` | M→D | `[新增] mobile_search_files`（→ fuzzy_find） | `{query, root?, maxResults?}` | `{results}` | 天然 |
+| C22 | `remote.assetUrl` | M→D | `[新增] mobile_asset_url`（→ convertFileSrc） | `{path, kind}` | `{url, expiresAt}` | 天然（每次新令牌） |
+| C23 | `remote.fileStat` | M→D | `file_stat` 代理 | `{path, workspaceRoot?}` | `{size, modified, readonly, kind}` | 天然 |
 
-#### 4.3.1 C16 `cmd.listDir`（目录列表，F4 F4-F10）
+#### 4.3.1 C16 `remote.listDir`（目录列表，F4 F4-F10）
 
 - **方向**：M→D。
 - **参数**：`{ "path": "src/components", "workspaceRoot": null }`
@@ -641,7 +651,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：天然幂等。
 - **桌面 mapping**：`workbench_list_directory`（command_manifest.rs:92，gui 面，白名单特批）。
 
-#### 4.3.2 C17 `cmd.readFile`（分块读文件，F4 §4.1）
+#### 4.3.2 C17 `remote.readFile`（分块读文件，F4 §4.1）
 
 - **方向**：M→D。
 - **参数**：`{ "path": "src/FilesCard.tsx", "maxLines": 400, "startLine": 0 }`
@@ -660,7 +670,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：天然幂等（offset 分页）。
 - **桌面 mapping**：`workbench_read_file_content`（command_manifest.rs:93，白名单特批）。
 
-#### 4.3.3 C18 `cmd.writeFile`（受控写文件，F4 §4.3）
+#### 4.3.3 C18 `remote.writeFile`（受控写文件，F4 §4.3）
 
 - **方向**：M→D；**本域唯一写命令**。
 - **参数**：
@@ -681,7 +691,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
   移动端本地草稿保留（断线不静默重发，F4 §5.3）。
 - **桌面 mapping**：`workbench_write_file_content`（command_manifest.rs:94，白名单特批）。
 
-#### 4.3.4 C19 `cmd.listWorkspaces`（工作区列表，F4 F4-F01）
+#### 4.3.4 C19 `remote.listWorkspaces`（工作区列表，F4 F4-F01）
 
 - **方向**：M→D。
 - **参数**：`{}`。
@@ -699,7 +709,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **桌面 mapping**：`workbench_list_workspaces`（command_manifest.rs:188，登记先行）+
   `[新增] mobile_get_workspace_state`。
 
-#### 4.3.5 C20 `cmd.switchWorkspace`（切换活动根，F4 F4-F02）
+#### 4.3.5 C20 `remote.switchWorkspace`（切换活动根，F4 F4-F02）
 
 - **方向**：M→D。
 - **参数**：`{ "path": "C:\\Software\\conex" }`。
@@ -711,7 +721,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **桌面 mapping**：`workbench_open_workspace`（command_manifest.rs:187，登记先行；
   M4-1 接线后 registered=true，见 §12.4）。
 
-#### 4.3.6 C21 `cmd.searchFiles`（递归文件名搜索，F4 F4-F41）
+#### 4.3.6 C21 `remote.searchFiles`（递归文件名搜索，F4 F4-F41）
 
 - **方向**：M→D。
 - **参数**：`{ "query": "FileTree", "root": "src", "maxResults": 100 }`
@@ -729,7 +739,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：天然幂等。
 - **桌面 mapping**：`[新增] mobile_search_files`（薄壳封装 `fuzzy_find`，见 §12.4）。
 
-#### 4.3.7 C22 `cmd.assetUrl`（图片/PDF 资源 URL，F4 §5.4）
+#### 4.3.7 C22 `remote.assetUrl`（图片/PDF 资源 URL，F4 §5.4）
 
 - **方向**：M→D。
 - **参数**：`{ "path": "docs/logo.png", "kind": "image" }`
@@ -742,7 +752,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：读语义幂等；每次调用返回新令牌 URL（旧 URL 过期即失效）。
 - **桌面 mapping**：`[新增] mobile_asset_url`（convertFileSrc 代理，见 §12.4）。
 
-#### 4.3.8 C23 `cmd.fileStat`（文件元数据，F4 F4-F29）
+#### 4.3.8 C23 `remote.fileStat`（文件元数据，F4 F4-F29）
 
 - **方向**：M→D。
 - **参数**：`{ "path": "src/a.ts", "workspaceRoot": null }`。
@@ -755,21 +765,21 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 ### 4.4 功能域 F5：会话与消息域（sessions）
 
 > 数据需求来源：F5 §2.1-2.6（会话列表 / 详情 / 实时 / 历史 / 发起 / 搜索）、
-> F5 §5（分层同步模型）。**P1 冻结只读**：`cmd.runTask` 等写命令按 P2 预留
+> F5 §5（分层同步模型）。**P1 冻结只读**：`remote.runTask` 等写命令按 P2 预留
 > （F5 §2.5 结论），本期白名单默认关闭、能力位 `runTask` 控制（§11.2）。
 
 #### 4.4.0 F5 域命令总表（4 条 + 2 条复用）
 
 | # | 命令 kind | 方向 | 对应 Tauri 命令 | 参数要点 | 响应要点 | 幂等 |
 |---|---|---|---|---|---|---|
-| C24 | `cmd.runTask` | M→D | `core_run_task` | `{sessionId?, prompt, mode?, cwd?, permissionMode?, history?, clientMessageId?}` | `{runId, sessionId}` | clientMessageId |
-| C25 | `cmd.runControl` | M→D | `core_run_control` | `{level, runId, sessionId, reason?, payload?}` | `{ok}` | 天然（幂等控制） |
-| C26 | `cmd.cancelRun` | M→D | `core_cancel_run` | `{runId, reason?}` | `{ok, runId}` | 天然 |
-| C27 | `cmd.searchSessions` | M→D | `[新增] mobile_search_sessions` | `{query, limit?}` | `{results}` | 天然 |
-| （复用）C05 | `cmd.listSessions` | M→D | `list_sessions` | 见 4.1.5 | 会话列表 | 天然 |
-| （复用）C03 | `cmd.readSessionEvents` | M→D | `core_read_session_events` | 见 4.1.3 | 历史分页 | 天然 |
+| C24 | `remote.runTask` | M→D | `core_run_task` | `{sessionId?, prompt, mode?, cwd?, permissionMode?, history?, clientMessageId?}` | `{runId, sessionId}` | clientMessageId |
+| C25 | `remote.runControl` | M→D | `core_run_control` | `{level, runId, sessionId, reason?, payload?}` | `{ok}` | 天然（幂等控制） |
+| C26 | `remote.cancelRun` | M→D | `core_cancel_run` | `{runId, reason?}` | `{ok, runId}` | 天然 |
+| C27 | `remote.searchSessions` | M→D | `[新增] mobile_search_sessions` | `{query, limit?}` | `{results}` | 天然 |
+| （复用）C05 | `remote.listSessions` | M→D | `list_sessions` | 见 4.1.5 | 会话列表 | 天然 |
+| （复用）C03 | `remote.readSessionEvents` | M→D | `core_read_session_events` | 见 4.1.3 | 历史分页 | 天然 |
 
-#### 4.4.1 C24 `cmd.runTask`（发起 run，P2 委托执行，F5 §2.5）
+#### 4.4.1 C24 `remote.runTask`（发起 run，P2 委托执行，F5 §2.5）
 
 - **方向**：M→D；**P2 能力位 `runTask` 默认关闭**，本命令为协议预留。
 - **参数**：
@@ -792,7 +802,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
   返回首次创建的 runId，不重复开 run（F5 §1.8：clientMessageId 为稳定幂等键）。
 - **桌面 mapping**：`core_run_task`（command_manifest.rs:123）。
 
-#### 4.4.2 C25 `cmd.runControl`（L0-L3 run 控制，D3 §8.2）
+#### 4.4.2 C25 `remote.runControl`（L0-L3 run 控制，D3 §8.2）
 
 - **方向**：M→D。
 - **参数**：
@@ -811,9 +821,9 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
   D3 §8.5）；`continue` 重复无害；`soft_inject` 以 payload 内消息 id 幂等。
 - **桌面 mapping**：`core_run_control`（command_manifest.rs:124）。
 - **归属说明**：F2 §6.2 建议 run 控制归审批域「run 控制子页」承载——协议层
-  命令归属不变（`cmd.runControl`），UI 归属由功能域定。
+  命令归属不变（`remote.runControl`），UI 归属由功能域定。
 
-#### 4.4.3 C26 `cmd.cancelRun`（取消 run，D3 §8.2）
+#### 4.4.3 C26 `remote.cancelRun`（取消 run，D3 §8.2）
 
 - **方向**：M→D。
 - **参数**：`{ "runId": "r-01", "reason": "用户远程取消" }`。
@@ -822,7 +832,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：重复 cancel 无副作用（终态拒绝，TerminalImmutable，run.rs:345-347）。
 - **桌面 mapping**：`core_cancel_run`（command_manifest.rs:125）。
 
-#### 4.4.4 C27 `cmd.searchSessions`（服务端会话搜索，P2 预留，F5 §2.6）
+#### 4.4.4 C27 `remote.searchSessions`（服务端会话搜索，P2 预留，F5 §2.6）
 
 - **方向**：M→D。
 - **参数**：`{ "query": "markdown", "limit": 50 }`。
@@ -850,13 +860,13 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 
 | # | 命令 kind | 方向 | 对应 Tauri 命令 | 参数要点 | 响应要点 | 幂等 |
 |---|---|---|---|---|---|---|
-| C28 | `cmd.getSettings` | M→D | `config_get`（脱敏快照） | `{keys?}` | `{settings}` | 天然 |
-| C29 | `cmd.setSettings` | M→D | `config_update` | `{key, value}` | `{ok}` 或 `{pending, confirmRequestId}` | 设置键幂等 |
-| C30 | `cmd.settingsConfirm` | M→D | `[新增] mobile_settings_confirm` | `{confirmRequestId, action}` | `{status}` | confirmRequestId |
-| C31 | `cmd.pauseAutomation` | M→D | `[新增] mobile_pause_automation` | `{durationSec?}` | `{ok, pausedUntil}` | 天然 |
-| C32 | `cmd.queryPresence` | M→D | `[新增] device_presence_query` | `{}` | `{desktopOnline, lastInteractionAt}` | 天然 |
+| C28 | `remote.getSettings` | M→D | `config_get`（脱敏快照） | `{keys?}` | `{settings}` | 天然 |
+| C29 | `remote.setSettings` | M→D | `config_update` | `{key, value}` | `{ok}` 或 `{pending, confirmRequestId}` | 设置键幂等 |
+| C30 | `remote.settingsConfirm` | M→D | `[新增] mobile_settings_confirm` | `{confirmRequestId, action}` | `{status}` | confirmRequestId |
+| C31 | `remote.pauseAutomation` | M→D | `[新增] mobile_pause_automation` | `{durationSec?}` | `{ok, pausedUntil}` | 天然 |
+| C32 | `remote.queryPresence` | M→D | `[新增] device_presence_query` | `{}` | `{desktopOnline, lastInteractionAt}` | 天然 |
 
-#### 4.5.1 C28 `cmd.getSettings`（设置镜像拉取，F6 §4.2 mirror 分片）
+#### 4.5.1 C28 `remote.getSettings`（设置镜像拉取，F6 §4.2 mirror 分片）
 
 - **方向**：M→D。
 - **参数**：`{}`（可选 `keys` 白名单子集：responseStyle / enableAnalytics /
@@ -879,7 +889,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：天然幂等。
 - **桌面 mapping**：`config_get`（command_manifest.rs:100）。
 
-#### 4.5.2 C29 `cmd.setSettings`（非安全设置变更，F6 §8.3 桌面确认通道）
+#### 4.5.2 C29 `remote.setSettings`（非安全设置变更，F6 §8.3 桌面确认通道）
 
 - **方向**：M→D。
 - **参数**：`{ "key": "responseStyle", "value": "high" }`
@@ -900,7 +910,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
   去重（同请求不重复弹桌面确认条）。
 - **桌面 mapping**：`config_update`（command_manifest.rs:101）+ `[新增]` 确认回调面。
 
-#### 4.5.3 C30 `cmd.settingsConfirm`（桌面确认请求管理）
+#### 4.5.3 C30 `remote.settingsConfirm`（桌面确认请求管理）
 
 - **方向**：M→D。桌面确认条的裁决由桌面 UI 完成（F6 §8.3「接受/忽略」）；
   本命令用于移动端**撤回**待确认请求与查询状态。
@@ -910,7 +920,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：天然（撤回已撤回 = 成功）。
 - **桌面 mapping**：`[新增] mobile_settings_confirm`。
 
-#### 4.5.4 C31 `cmd.pauseAutomation`（临时暂停自动执行，F6 §8.2 受限触发）
+#### 4.5.4 C31 `remote.pauseAutomation`（临时暂停自动执行，F6 §8.2 受限触发）
 
 - **方向**：M→D。
 - **参数**：`{ "durationSec": 3600 }`（默认 3600，上限 86400）。
@@ -921,7 +931,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：天然幂等（重复暂停刷新 pausedUntil）。
 - **桌面 mapping**：`[新增] mobile_pause_automation`。
 
-#### 4.5.5 C32 `cmd.queryPresence`（桌面在场查询，F2 §9.2 双因素衔接）
+#### 4.5.5 C32 `remote.queryPresence`（桌面在场查询，F2 §9.2 双因素衔接）
 
 - **方向**：M→D。
 - **参数**：`{}`。
@@ -942,13 +952,13 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 
 | # | 命令 kind | 方向 | 对应实现 | 参数要点 | 响应要点 | 幂等 |
 |---|---|---|---|---|---|---|
-| C33 | `cmd.listDevices` | M→D | Device Registry 查询 | `{}` | `{devices}` | 天然 |
-| C34 | `cmd.renameDevice` | M→D | Device Registry 更新 | `{deviceId, name}` | `{ok}` | 天然 |
-| C35 | `cmd.revokeDevice` | M→D | Device Registry 删除 + 广播 | `{deviceId}` | `{ok}` | 天然 |
-| C36 | `cmd.getPairState` | M→D | Pairing Service 状态 | `{}` | `{state, desktopId?}` | 天然 |
-| C37 | `cmd.unlink` | M→D | 设备解除 | `{}` | `{ok}` | 天然 |
+| C33 | `remote.listDevices` | M→D | Device Registry 查询 | `{}` | `{devices}` | 天然 |
+| C34 | `remote.renameDevice` | M→D | Device Registry 更新 | `{deviceId, name}` | `{ok}` | 天然 |
+| C35 | `remote.revokeDevice` | M→D | Device Registry 删除 + 广播 | `{deviceId}` | `{ok}` | 天然 |
+| C36 | `remote.getPairState` | M→D | Pairing Service 状态 | `{}` | `{state, desktopId?}` | 天然 |
+| C37 | `remote.unlink` | M→D | 设备解除 | `{}` | `{ok}` | 天然 |
 
-#### 4.6.1 C33 `cmd.listDevices`（设备列表，F6 §6.2）
+#### 4.6.1 C33 `remote.listDevices`（设备列表，F6 §6.2）
 
 - **方向**：M→D。
 - **参数**：`{}`。
@@ -967,7 +977,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - **幂等性**：天然幂等。
 - **桌面 mapping**：Device Registry 查询（§12.4 新增面）。
 
-#### 4.6.2 C34 `cmd.renameDevice` / C35 `cmd.revokeDevice` / C37 `cmd.unlink`
+#### 4.6.2 C34 `remote.renameDevice` / C35 `remote.revokeDevice` / C37 `remote.unlink`
 
 - **C34 参数**：`{ "deviceId": "7f0a...", "name": "备用机" }`（name ≤ 64）；
   响应 `{ok}`；幂等天然；错误码 `cmd.not_found`（设备不存在）。
@@ -978,7 +988,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
   广播；幂等天然；错误码 `cmd.not_found`。
 - **桌面 mapping**：Pairing Service / Device Registry（§12.4）。
 
-#### 4.6.3 C36 `cmd.getPairState`（配对状态查询）
+#### 4.6.3 C36 `remote.getPairState`（配对状态查询）
 
 - **方向**：M→D（本地状态为主，此命令用于配对页多端一致性核对）。
 - **参数**：`{}`。
@@ -1022,7 +1032,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 | 面 | 载体 | 用途 | 可靠性 | 裁剪强度 |
 |---|---|---|---|---|
 | **实时面** | `events.push`（WS 在线推流） | F1/F3/F5 的实时观察（流式正文、终端输出、状态变化） | Delta 可丢 / Soft 尽力 / Critical 必达（背压分级） | 中等（移动端不落盘，但仍不出网敏感全量） |
-| **同步面** | `events.resume.page` / `cmd.readSessionEvents` | 断线续传、历史回放、D6 通道 B 增量 | 只含已落库事件（Critical + Soft） | 严格（D6 白名单 + 摘要化） |
+| **同步面** | `events.resume.page` / `remote.readSessionEvents` | 断线续传、历史回放、D6 通道 B 增量 | 只含已落库事件（Critical + Soft） | 严格（D6 白名单 + 摘要化） |
 
 规则：
 
@@ -1033,19 +1043,28 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
    provider-diagnostic / runtime-error / runtime-steering /
    runtime-intervention-required / cache-stats-updated / cache-waste-alert /
    cold-cache-warning / tool-batch-start / tool-batch-end / tool-input-repaired /
-   checkpoint-created / checkpoint-restored）；
+   checkpoint-created / checkpoint-restored）【裁决修正 2】本节即同步面唯一真源
+   （AU1 P1-2：D6 §7.3 可选清单已按本节收缩，message-start / tool-batch-* /
+   tool-input-repaired / checkpoint-* 移出可选同步）；
 3. **裁剪强度**：同步面执行 §5.2 全规则；实时面对 message-delta / tool-update /
    task-output 的**增量片段**放行（本身是增量文本），但终态事件（message-end /
    tool-end）与审批、审计执行全规则。
 
 ### 5.1 41 变体映射总表
 
+> 【裁决修正 5】**41 变体为当前基线（冻结）**：新增事件变体一律走注册表登记
+> （events.rs:789-808 三件套：Rust enum arm + contracts/engine-events.json +
+> registry_drift.rs + 前端生成产物），未登记变体在同步面按 §5.2.3 fail-closed
+> 元组兜底；会话索引变更类需求走 `events.session.updated` 会话面消息，不新增
+> 变体（D1 O1 / D2 §7.4 已对齐本裁决）。
+
 列定义：
 
 - **策略**（跨端）：`T`=透明透传 / `R`=摘要化 / `U`=元组下发（fail-closed）；
 - **实时面**：推/不推（`✓`/`–`）+ 可丢性（继承背压：D=Delta 可丢、S=Soft 尽力、C=Critical 必达）；
 - **同步面**：`✓`=参与白名单 / `–`=不参与；
-- **推送级别**（与 D7 §3 场景清单衔接）：p0=必达推送 / p1=重要推送 / p2=可选推送 / `–`=不推送；
+- **推送级别**（【裁决修正 4】以 M8 S1-S12 场景表为唯一真源；原「与 D7 §3 场景清单
+  衔接」表述已更新）：p0=必达推送 / p1=重要推送 / p2=可选推送 / `–`=不推送；
 - **消费功能**：F1/F2/F3 各域编号（F3 的 S/N/I 分类 + F1 矩阵动作）。
 
 | # | type | 策略 | 实时面 | 同步面 | 推送级别 | 消费功能 |
@@ -1070,7 +1089,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 | 18 | runtime-steering | U | ✓ C | – | – | F3 已判 I 类；元组 |
 | 19 | runtime-intervention-required | R | ✓ C | – | p0 | F3 N（干预横幅） |
 | 20 | approval-requested | R | ✓ C | ✓ | **p0（必达）** | F2 待办 +1、F3 S+N、F1 F10 |
-| 21 | approval-resolved | R | ✓ C | ✓ | – | F2 待办 −1/收敛、F3 S |
+| 21 | approval-resolved | R | ✓ C | ✓ | p0（decision=Expired 时；M8 S2 审批过期） | F2 待办 −1/收敛、F3 S |
 | 22 | checkpoint-created | U | ✓ C | – | – | F3 已判 I 类；元组 |
 | 23 | checkpoint-restored | U | ✓ C | – | – | 同上 |
 | 24 | run-terminal | T | ✓ C | ✓ | **p0（failed）** / p1（completed） | F1 F03/F07、F3 收口、F2 待办失效 |
@@ -1084,7 +1103,7 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 | 32 | task-started | T | ✓ C | ✓ | – | F3 S（任务卡）、F1 F09 |
 | 33 | task-output | R | ✓ D（可丢） | – | – | F3 S（输出流，实时面增量放行） |
 | 34 | task-heartbeat | U | ✓ D | – | – | F3 已判 I 类；元组（不渲染） |
-| 35 | task-suspicious | T | ✓ S | – | p1 | F1 F09 疑似卡死 |
+| 35 | task-suspicious | T | ✓ S | – | **p0**（M8 S8c；原 p1 已修正） | F1 F09 疑似卡死 |
 | 36 | task-completed | T | ✓ C | ✓ | p1 | F1 F09、F3 S |
 | 37 | task-failed | R | ✓ C | ✓ | **p0** | F1 F09 失败 + tail 摘要、F3 S |
 | 38 | task-killed | T | ✓ C | ✓ | p1 | F1 F09、F3 S |
@@ -1096,7 +1115,8 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 > 摘要化 R = 18（6,7,8,9,10,17,19,20,21,25,26,27,28,30,33,37,39,41）；
 > 元组下发 U = 10（5,11,12,13,16,18,22,23,34,40；未来未登记变体走同规则兜底）；
 > 同步面参与 = 20（1,2,3,4,7,8,9,10,14,15,20,21,24,28,29,31,32,36,37,38）；
-> 推送场景 = D7 的 13 个（p0 6 + p1 4 + p2 3，逐事件标注如上表）。
+> 推送场景【裁决修正 4】= **M8 S1-S12 共 18 行（p0 9 + p1 7 + p2 2）**，逐事件
+> 标注如上表；原「D7 13 个（p0 6 + p1 4 + p2 3）」为按事件类合并的旧口径。
 
 ### 5.2 字段级裁剪规则（RedactSpec 草案）
 
@@ -1150,25 +1170,34 @@ F5 §2.4 结论：会话详情首屏「从尾部向前拉」最近 1-2 页，再
 - 移动端渲染为「未知/已抑制事件」摘要卡（不崩溃、不猜测，D6 §9.2 保真原则）；
 - 实时面同规则（出网处统一裁剪，实时面元组同样只发信封 + redacted 标记）。
 
-### 5.3 事件推送级别（与 D7 §3 衔接）
+### 5.3 事件推送级别（与 M8 S1-S12 衔接）
 
-D7 场景清单 13 个（p0 6 / p1 4 / p2 3）在本协议中的落地：
+【裁决修正 4】推送场景级别以 **M8 S1-S12 场景表**为唯一真源（18 行：p0 9 / p1 7 /
+p2 2）。原「D7 场景清单 13 个」表述作废；下表逐场景对齐 M8：
 
-| D7 场景 | 触发事件 | 跨端推送消息 | 推送 payload（≤4 KiB） |
+| M8 场景 | 触发事件 | 跨端推送消息 | 推送 payload（≤4 KiB） |
 |---|---|---|---|
-| P0-1 审批请求 | approval-requested | push（D7 组合消息） | 标题「需要你确认：{toolName}」+ 正文摘要 ≤2 行 + 深链 `conex://approval?toolCallId=...` + dangerLevel + expiresAt |
-| P0-2 审批过期 | （本地倒计时 / 对账） | 应用内状态页 | 无推送（F2 §8.3：引擎不广播 expired，移动端本地置灰） |
-| P0-3 run 失败 | run-terminal(failed) + agent-end(error) | push | 标题「运行失败」+ error 摘要 + 深链 run 详情 |
-| P0-4 子代理失败 | subagent-ended(failed) | push | 标题「子任务失败」+ summary + 深链 |
-| P0-5 任务失败 | task-failed | push | 标题「任务异常退出（exit N）」+ tail 前 3 行摘要 |
-| P0-6 安全拦截 | security-audit(blocked) | push | 标题「安全拦截」+ operation + targets 前 2 条 |
-| P1-1 run 完成 | run-terminal(completed) | push（低优先级） | 「任务完成」+ 时长摘要 |
-| P1-2 子代理完成 | subagent-ended(completed) | push（低优先级） | 摘要 |
-| P1-3 任务完成 | task-completed | push（低优先级） | 摘要 |
-| P1-4 定时器/cron 到期 | timer-fired / cron-fired | push（低优先级） | prompt 摘要 |
-| P2-1 任务疑似卡死 | task-suspicious | push（可折） | 「任务疑似卡死（N 秒无输出）」 |
-| P2-2 缓存浪费告警 | cache-waste-alert | push（可折） | 归因 + 金额 |
-| P2-3 冷缓存提示 | cold-cache-warning | push（可折） | 重发预估 token |
+| S1 审批请求（P0） | approval-requested | push（D3/M6 协议面组合消息） | 标题「需要你确认：{toolName}」+ 正文摘要 ≤2 行 + 深链 `conex://approval?toolCallId=...` + dangerLevel + expiresAt |
+| S2 审批过期（P0） | approval-resolved(decision=Expired) | push | 【裁决修正 4】**P0 推送「审批已过期」+ 停止重推阶梯**（M8 S2 / D7 S2；依赖引擎补发 expired 事件落地——F2 §8.3 R1 提案，落地前移动端本地置灰） |
+| S4 run 失败（P0） | run-terminal(failed) + agent-end(error) | push | 标题「运行失败」+ error 摘要 + 深链 run 详情 |
+| S7 子代理失败（P0） | subagent-ended(failed) | push | 标题「子任务失败」+ summary + 深链 |
+| S8c 任务疑似卡死（P0） | task-suspicious | push | 【裁决修正 4】原 P2-1 行改标 **P0（M8 S8c）**：「任务疑似卡死（N 秒无输出）」 |
+| S8d 任务失败（P0） | task-failed | push | 标题「任务异常退出（exit N）」+ tail 前 3 行摘要 |
+| S10a 运行时异常（P0） | runtime-error | push | 【裁决修正 4】新增行（M8 S10a）：错误摘要 + run-failed 优先提示 |
+| S10b 运行时干预（P0） | runtime-intervention-required | push | 【裁决修正 4】新增行（M8 S10b）：choices 摘要 |
+| S11 安全拦截（P0） | security-audit(blocked/purged) | push | 标题「安全拦截」+ operation + targets 前 2 条 |
+| S3 run 完成（P1） | run-terminal(completed) | push（低优先级） | 「任务完成」+ 时长摘要 |
+| S5 run 取消（P1） | run-terminal(cancelled) | push（低优先级） | 「任务已取消」 |
+| S6 子代理完成（P1） | subagent-ended(completed) | push（低优先级） | 摘要 |
+| S8b 任务完成（P1） | task-completed | push（低优先级） | 摘要 |
+| S8e 任务终止（P1） | task-killed（用户触发） | push（低优先级） | 摘要 |
+| S9a 定时器到期（P1） | timer-fired | push（低优先级） | prompt 摘要 |
+| S9b cron 触发（P1） | cron-fired | push（低优先级） | prompt 摘要 |
+| S8a 后台任务启动（P2） | task-started(is_daemon) | push（可折） | command 摘要 |
+| S12 缓存浪费告警（P2） | cache-waste-alert | push（可折） | 归因 + 金额 |
+
+> 注：cold-cache-warning 未进 M8 S1-S12（P2-3 冷缓存提示为 M6 自身登记，保持 p2
+> 不冲突）；原 P0-1~P0-6/P1-1~P1-4 编号已按 M8 场景编号重排。
 
 **推送红线**（D7 §7.2 / F2 §6.2）：通知正文只含「工具名 + 会话标题」级摘要；
 敏感参数/输出绝不进推送负载（系统推送通道不可控）；`expiresAt` 已过期的
@@ -1378,13 +1407,13 @@ D7 场景清单 13 个（p0 6 / p1 4 / p2 3）在本协议中的落地：
 ack）；Critical 帧不丢——桌面侧窗口反压是唯一节流阀（D3 §9.4），移动端
 **不发送**背压信号（协议保持简单，客户端唯一动作是「读快点」）。
 
-### 7.4 上行大载荷流（cmd.runTask.prompt 超限场景）
+### 7.4 上行大载荷流（remote.runTask.prompt 超限场景）
 
 上行大载荷（prompt > 256 KiB）走「分块提交」专用流：
 
 ```
 移动端                                   桌面
-  │  cmd.runTask { promptRef: "up-01HZ", promptSize: 500000 }   // 先登记元数据
+  │  remote.runTask { promptRef: "up-01HZ", promptSize: 500000 }   // 先登记元数据
   │ ────────────────────────────────────────>
   │  stream.open { streamId: "up-01HZ", kind: "prompt", totalBytes: 500000 }
   │ <────────────────────────────────────────
@@ -1412,7 +1441,7 @@ ack）；Critical 帧不丢——桌面侧窗口反压是唯一节流阀（D3 §
 | DeviceEnvelope 帧（全部消息） | 双向 | **1 MiB**（MAX_FRAME_BYTES） | 接收端 `frame_too_large` + 断链（防内存放大） |
 | events.push（单事件帧） | D→M | **64 KiB** | 先摘要化（§5.2）；仍超 → 降级元组 + 移动端走 C03 拉取 |
 | cmd.* 请求（默认） | M→D | **64 KiB** | 超限 → cmd.invalid 或走流上传（7.4） |
-| cmd.runTask.prompt | M→D | **256 KiB** | 超限 → 流上传（7.4） |
+| remote.runTask.prompt | M→D | **256 KiB** | 超限 → 流上传（7.4） |
 | result.* 响应（默认） | D→M | **1 MiB** | 大响应（readFile 全文等）→ stream 分块 |
 | stream.chunk | D→M | **64 KiB**（STREAM_CHUNK_MAX） | 固定块大小，无超限概念 |
 | 推送通知 payload | 通知面 | **4 KiB**（FCM 上限） | 摘要化 + 截断（D7 §6） |
@@ -1483,7 +1512,7 @@ ack）；Critical 帧不丢——桌面侧窗口反压是唯一节流阀（D3 §
 ```jsonc
 {
   "commandId": "m-iph-001-12",          // = 请求 msgId（幂等键）
-  "kind": "cmd.approve",                // 写命令 kind
+  "kind": "remote.approve",                // 写命令 kind
   "params": { "toolCallId": "tc-9" },   // 命令参数
   "businessKey": "tc-9",                // 业务幂等键（toolCallId / clientMessageId / key / ...）
   "queuedAt": 1754700000000,
@@ -1497,11 +1526,11 @@ ack）；Critical 帧不丢——桌面侧窗口反压是唯一节流阀（D3 §
 
 | 命令 | 主幂等键 | 次幂等键 | 桌面去重实现 |
 |---|---|---|---|
-| cmd.approve / cmd.deny | `toolCallId`（业务级，I-02 天然） | `msgId`（请求级） | 待审批集合移除原子性 + reqMsgId 缓存（TTL 5min） |
-| cmd.writeFile | `msgId` | （path+content 哈希可作审计） | sync_commands 表（command_id 主键，保留 30 天） |
-| cmd.setSettings | `key` + `value` | `confirmRequestId` | 设置键幂等写 + 确认请求去重 |
-| cmd.pauseAutomation | `msgId` | — | 幂等写（刷新 pausedUntil） |
-| cmd.runTask | `clientMessageId` | `msgId` | 同 clientMessageId 返回同一 runId |
+| remote.approve / remote.deny | `toolCallId`（业务级，I-02 天然） | `msgId`（请求级） | 待审批集合移除原子性 + reqMsgId 缓存（TTL 5min） |
+| remote.writeFile | `msgId` | （path+content 哈希可作审计） | sync_commands 表（command_id 主键，保留 30 天） |
+| remote.setSettings | `key` + `value` | `confirmRequestId` | 设置键幂等写 + 确认请求去重 |
+| remote.pauseAutomation | `msgId` | — | 幂等写（刷新 pausedUntil） |
+| remote.runTask | `clientMessageId` | `msgId` | 同 clientMessageId 返回同一 runId |
 
 **桌面端去重存储**（D6 §9.6 决策：专用表）：
 
@@ -1950,7 +1979,7 @@ CREATE TABLE IF NOT EXISTS sync_commands (
 }
 ```
 
-### 10.6 命令消息（cmd.* / result.*）
+### 10.6 命令消息（remote.* / result.*）
 
 #### 10.6.1 通用命令信封
 
@@ -1999,7 +2028,7 @@ CREATE TABLE IF NOT EXISTS sync_commands (
 {
   "$id": "conex.device.commands.params.v1",
   "title": "CommandParamsAndResults",
-  "description": "37 条命令的参数（...Params）与响应（...Result）schema；kind = cmd.<suffix>，result 为 CommandResult 包装",
+  "description": "37 条命令的参数（...Params）与响应（...Result）schema；kind = remote.<suffix>（裁决修正 5），result 为 CommandResult 包装",
   "$defs": {
     "StatusQuery": { "type": "object", "additionalProperties": false,
       "properties": { "include": { "type": "array", "items": { "enum": ["coreStatus", "activeRuns", "pendingApprovals", "bgTaskSummary"] } } } },
@@ -2603,7 +2632,7 @@ crate 依赖矩阵开销；生成器单一输入面。
         { "name": "deviceName", "type": "string", "required": true },
         { "name": "platform", "type": "string", "required": false }
       ] }
-    // ... 其余 102 条同构（cmd.* 的 params/result 分开登记为两消息或引用命令表）
+    // ... 其余 102 条同构（remote.* 的 params/result 分开登记为两消息或引用命令表）
   ],
   "commands": [                                     // 命令元数据（生成白名单）
     { "name": "getStatus", "tauriCommand": "core_get_status", "surface": "engine",
@@ -2659,7 +2688,7 @@ crate 依赖矩阵开销；生成器单一输入面。
 | 模块 | 职责 | 对应协议面 |
 |---|---|---|
 | `device_relay.rs` | WS 监听 + 连接管理 + DeviceEnvelope 解包/验签/路由（扇出 1:2） | 全部 |
-| `command_adapter.rs` | 跨端命令 → Tauri 命令调用（白名单 + CoreError 映射 §6.2.3） | cmd.* |
+| `command_adapter.rs` | 跨端命令 → Tauri 命令调用（白名单 + CoreError 映射 §6.2.3） | remote.*（裁决修正 5） |
 | `pairing_service.rs` | 配对状态机（码生成/哈希/有效期/并发限制）+ Device Registry 读写 | pair.* / device.* |
 | `device_emitter.rs` | `Emitter` trait 实现（core_event_bridge.rs:51-54），下游慢信号回传 | events.push |
 | `redact.rs` | 事件裁剪规则表（§5.2 RedactSpec）+ 白名单 + 三档摘要 | events.push / resume |
@@ -2684,7 +2713,7 @@ crate 依赖矩阵开销；生成器单一输入面。
 **Device Registry 落库**（conex-db v6 迁移，D3 §4.5 DDL）：`device_registry` 表 +
 `sync_commands` 表（§9.2）+ `pair_codes`（码哈希，可选）。
 
-### 12.5 移动端消费面（crish-mobile，本期只定协议不实现）
+### 12.5 移动端消费面（crish-mobile【修正动作 4 / AU2 F-2：目录待新建，原 apps/crish-mobile 已按 R2A 裁决删除】，本期只定协议不实现）
 
 - 连接层：WS 客户端 + 证书固定（D3 §4.6）+ DeviceEnvelope 编解码
   （generated/device/parser.ts）；
@@ -2733,7 +2762,7 @@ crate 依赖矩阵开销；生成器单一输入面。
 | STREAM_CHUNK_MAX | 65_536 | 块上限 |
 | STREAM_MAX_BYTES | 268_435_456 | 单流总量上限（256 MiB） |
 | STREAM_TTL_MS | 300_000 | 断线流上下文保留（5min） |
-| PROMPT_MAX_BYTES | 262_144 | cmd.runTask.prompt 跨端上限（256 KiB） |
+| PROMPT_MAX_BYTES | 262_144 | remote.runTask.prompt 跨端上限（256 KiB） |
 | PAGE_SIZE_DEFAULT | 200 | 分页默认页大小 |
 | PAGE_SIZE_MAX | 1000 | 分页上限 |
 | PAIR_CODE_TTL_MS | 600_000 | 配对码有效期 |
@@ -2783,12 +2812,12 @@ crate 依赖矩阵开销；生成器单一输入面。
 1. **backward 分页的接线**：`query_events_backward` 需要 conex-db 新增查询面；
    若评审否决，F5 首屏降级为「forward 拉最新 N 页再内存倒序」（游标大时低效，
    建议保留 backward）。
-2. **批量审批协议形态**：v1 批量 = 移动端并发多个 cmd.approve（F2 §5.4 串行 +
+2. **批量审批协议形态**：v1 批量 = 移动端并发多个 remote.approve（F2 §5.4 串行 +
    小并发 2），`partial` 响应形态仅为协议预留；若后续需要服务端批量原子性，
-   再新增 `cmd.approveBatch`（新 kind，能力协商引入）。
+   再新增 `remote.approveBatch`（新 kind，能力协商引入）。
 3. **五条 gui 面命令的 surface 迁移**（§4.8）：迁移为 engine 面需双端 manifest
    同步 + 前端 BUILTIN_COMMAND_MANIFEST 镜像更新，列实现排期项。
-4. **资源代理（cmd.assetUrl）**：依赖桌面 HTTP 通道（F4 §10 R4-1），需网络域
+4. **资源代理（remote.assetUrl）**：依赖桌面 HTTP 通道（F4 §10 R4-1），需网络域
    联合评审；否决则图片预览降级为「仅元数据 + 桌面端打开」。
 5. **推送的厂商通道密钥**与移动端 token 注册（D7 §8）为独立排期；本协议
    push 面只定义载荷语义（§5.3），不承载通道实现。

@@ -21,7 +21,7 @@
 | 上游文档 | 本方案承接方式 |
 | --- | --- |
 | D4（技术选型） | 技术栈、分层、存储选型、性能预算全部采纳；目录结构在其 4.3 基础上**按工程实现细化**（新增 store 拆分、网络层文件、测试目录等） |
-| D3（协议） | **协议真源以 D3 为准**：信封用 `DeviceEnvelope`（v/kind/msgId/ts/from/to/auth/body），鉴权用消息级 HMAC（token_key），配对走 `pair.*` WS 消息序列；D4 第 12.5 节的 WsEnvelope 帧表在 4.2 节中做了等价映射，供实现对照 |
+| D3（协议） | **协议真源以 D3 为准**：信封用 `DeviceEnvelope`（v/kind/msgId/ts/from/to/auth/body），鉴权用消息级 HMAC（token_key），配对走 `pair.*` WS 消息序列；D4 第 12.5 节的 WsEnvelope 帧表在 4.2 节中做了等价映射，供实现对照。【裁决修正 2/5】帧格式唯一真源 = **M6 DeviceEnvelope**（WS 帧与 M3 轻量可靠 UDP 帧统一由 M6 §10 定义）；跨端命令 kind 统一 `remote.*`；D4 §12.5 的 WsEnvelope 第三套帧已作废，本节仅为 TS 实现文件名 |
 | F1/F2/F3/F5/F6 | 各功能域的状态模型、事件消费规则、UI 交互全部落入对应 store/repository/组件；冲突与离线语义以 F2 第 11 章为准 |
 | D8 | 门禁分层、本地开发流、共享包策略直接采用；本方案第 11 章给出移动端 job 的落地 yaml 与脚本 |
 | events.rs + 生成器 | 事件解析一律走 `packages/shared-types/src/generated/engine/` 的 `parseEngineEvent`；不复制任何事件类型 |
@@ -160,6 +160,10 @@ ReconnectingWsClient.onEnvelope（帧）
 
 ### 2.1 完整目录树（工程实现级）
 
+> 【裁决修正 7】导航以 **M4 五 Tab 为准**（首页/会话/审批/文件/设置）：本树
+> `(tabs)/` 增加 `files.tsx`，原根级 `files.tsx`（Stack 页形态）并入 Tab；
+> `usage/diagnostics/tasks` 仍为 Stack 二级页（M4 §2.3 归置）。
+
 ```
 apps/crish-mobile/
 ├── app.json                          # Expo 配置 + config plugins（sqlite/notifications/secure-store）
@@ -182,16 +186,17 @@ apps/crish-mobile/
 │   │   ├── scan.tsx                  # 扫码（P2；v1 隐藏入口）
 │   │   └── manual.tsx                # 手动输入配对码（CXN-XXXX-XXXX-XXXX）
 │   ├── (tabs)/
-│   │   ├── _layout.tsx               # 底部 Tab：首页/会话/审批/设置
+│   │   ├── _layout.tsx               # 底部 Tab：首页/会话/审批/文件/设置（M4 §0.2 五 Tab）
 │   │   ├── dashboard.tsx             # 仪表盘（F1 首页：连接条/核心卡/活动任务）
 │   │   ├── sessions.tsx              # 会话列表（F5 2.1）
 │   │   ├── approvals.tsx             # 审批中心（F2 待办列表）
+│   │   ├── files.tsx                 # 文件浏览（F4；裁决修正 7：文件进 Tab）
 │   │   └── settings.tsx              # 设置（F6 信息架构）
 │   ├── session/[sessionId].tsx       # 会话详情（事件流 feed，F3 主形态）
 │   ├── approval/[toolCallId].tsx     # 审批详情（推送深链目标，F2 5.1）
 │   ├── run/[runId].tsx               # run 详情（状态条 + 事件时间线 + 用量卡，F1 4.3）
 │   ├── terminal/[runId].tsx          # 终端流回放（只读，F3 第 4 章）
-│   ├── files.tsx                     # 文件浏览（F4）
+│   ├── usage.tsx                     # 用量与缓存页（F1 4.5）
 │   ├── usage.tsx                     # 用量与缓存页（F1 4.5）
 │   ├── diagnostics.tsx               # 诊断页（F1 4.6）
 │   ├── tasks.tsx                     # 后台任务页（F1 F09）
@@ -357,6 +362,12 @@ apps/crish-mobile/
 ## 3. 状态架构
 
 ### 3.1 store 拆分清单（8 个 store 全量明细）
+
+> 【裁决修正 8】store 分层（主控裁决 8）：**领域层 createStore + 表现层 vanilla
+> 绑定**。本节 src/store/ 的 8 个 store 是领域层抽象（zustand vanilla `createStore`
+> 范式，M4 §2.5）；下文的 `create`（React 绑定）写法收敛为表现层导出形态——组件
+> 经适配层 `useStore(store, selector)` 订阅（M4 §2.5 的 useAppStore 模式），
+> 领域层保持零 React 依赖（M4 门禁 G2）。AU1 P1-7 冲突按此分层关闭。
 
 统一创建范式（对齐桌面 `permissionStore.ts:54-120`）：
 
@@ -570,7 +581,7 @@ useFeedViewModel 内部：
 | `ReconnectingWsClient` | `src/network/ReconnectingWsClient.ts` | WS 连接生命周期：建立/断开/重连退避/心跳/AppState 联动 | 无（纯传输） |
 | `WsEnvelope` | `src/network/WsEnvelope.ts` | `DeviceEnvelope` 编解码 + 类型守卫（D3 5.3） | `@crish/shared-types` 类型 |
 | `signer` | `src/network/signer.ts` | HMAC-SHA256 签名、nonce 生成、时间窗预判 | `expo-crypto` |
-| `WsGateway` | `src/network/WsGateway.ts` | 应用层分发：invoke（cmd.*）/ 事件订阅 / result 匹配 / 错误归一 | `ReconnectingWsClient` + `WsEnvelope` |
+| `WsGateway` | `src/network/WsGateway.ts` | 应用层分发：invoke（`remote.*` 命令）/ 事件订阅 / result 匹配 / 错误归一 | `ReconnectingWsClient` + `WsEnvelope` |
 | `HttpClient` | `src/network/HttpClient.ts` | fetch 封装（超时/重试/错误归一） | `AbortController` |
 | `EndpointResolver` | `src/network/EndpointResolver.ts` | URL 构造（wss/https 映射、平台默认、env 覆盖） | — |
 
@@ -862,7 +873,7 @@ class SubscriptionManager {
 | `approval-resolved` 事件先到 | 同 toolCallId 的 outbox 条目置 superseded（本地清理） |
 | 用户撤销 | 删除条目 + 本地标记拒绝（F2 8.2 语义） |
 | 审批已过期（本地倒计时到期） | 发送仍可（必然 mismatch）；提示「已过期，决策未生效」（F2 8.3） |
-| 网络失败（非 mismatch） | 回滚 deciding → pending + 入重试队列（指数退避 2→4→8→30s 封顶，F2 8.1） |
+| 网络失败（非 mismatch） | 回滚 deciding → pending + 入重试队列（指数退避 1s→4s→16s→60s 封顶，以 D6 §6.3 / M6 §9.2 为准——【裁决修正】AU1 P2-7：原 2/4/8/30 序列与 F2 §8.1 一并收敛到 D6/M6 口径；连续 5 次失败转人工提示但保留队列元素，无硬上限靠 TTL 兜底） |
 
 **重放触发点**：`connection-restored` 事件、`heartbeat.ok` 首个回执、App 回前台、手动「立即重连」按钮。
 
@@ -873,7 +884,7 @@ class SubscriptionManager {
 | 超时 | `AbortController` + `setTimeout`（默认 10s；配对握手 15s） |
 | 重试 | 幂等请求（GET / healthz / 令牌查询）自动重试 2 次（指数退避）；写类请求不自动重试 |
 | 错误归一 | 网络错误 → `network.unreachable`；HTTP 状态 → `codeFromHttpStatus` 映射（复用 `@crish/shared-types/errors/serialize`） |
-| Base URL | `EndpointResolver`：`https://host:7821`（WSS 同端口协议映射）；env 覆盖（`EXPO_PUBLIC_ENGINE_URL`） |
+| Base URL | `EndpointResolver`：`https://host:8765`（WSS 同端口协议映射；【裁决修正 6】端口统一 8765，原 7821 作废）；env 覆盖（`EXPO_PUBLIC_ENGINE_URL`） |
 
 **移动端 HTTP 面职责边界（v1）**：
 
@@ -893,7 +904,7 @@ class SubscriptionManager {
 | 事件入栈 | 50ms 批量窗口落库（`ingest.ts` 批处理器），避免逐条 `runAsync` 写放大 | `ingest.ts` |
 | Delta 合并 | message-delta 48ms / task-output 60ms 节流合并（F3 3.0） | `ingest.ts` + `StreamValueBatcher` 移植 |
 | 渲染 | 事件窗口上限 5000 条/session（超限卸载 SQLite）；FlashList 虚拟化 + 行 memo | `eventStore` |
-| 发送侧 | 命令天然低频；`cmd.sendInput` 节流 ≥100ms/次（D3 9.4，超频返回 `cmd.invalid`） | `WsGateway` |
+| 发送侧 | 命令天然低频；`remote.sendInput` 节流 ≥100ms/次（D3 9.4，超频返回 `cmd.invalid`） | `WsGateway` |
 | 窗口溢出 | Critical 暂停推流（桌面反压）；移动端本地以游标续拉兜底 | 网络层被动 |
 | 心跳频率 | 前台 30s；后台（Android）60s；iOS 后台断开 | `ReconnectingWsClient` |
 
@@ -1043,7 +1054,7 @@ CREATE TABLE device_meta (
   desktop_id     TEXT NOT NULL,
   device_name    TEXT,
   paired_at      INTEGER NOT NULL,
-  host_url       TEXT,                  -- wss://host:7821
+  host_url       TEXT,                  -- wss://host:8765（裁决修正 6：原 7821 作废）
   cert_fingerprint TEXT,                -- 指纹尾 8 位（诊断展示用；完整指纹在 secure-store）
   contract_version TEXT                -- 握手时记录的契约版本
 );
@@ -1630,14 +1641,14 @@ jobs:
 **拓扑二：真机（局域网）**：
 
 ```
-引擎（--listen 0.0.0.0:7821，防火墙放行）
+引擎（--listen 0.0.0.0:8765，防火墙放行；【裁决修正 6】端口统一 8765，原 7821 作废）
   └─ WSS ── crish-mobile（真机，同一 Wi-Fi，填局域网 IP）
 ```
 
 **连接地址解析优先级**（D8 6.2）：
 
 1. `EXPO_PUBLIC_ENGINE_URL`（`.env`，不入库；仓库只放 `.env.example`）；
-2. 平台默认：Android 模拟器 `ws://10.0.2.2:7821`、iOS 模拟器 `ws://127.0.0.1:7821`；
+2. 平台默认：Android 模拟器 `ws://10.0.2.2:8765`、iOS 模拟器 `ws://127.0.0.1:8765`（裁决修正 6）；
 3. 设置页运行时覆盖（存 kv-store，免改 env 重打包）。
 
 **开发期证书**（D4 10.2 S1）：dev build 用开发自签 CA + 指纹固定放宽（`__DEV__` 分支豁免）；production 强制 pinning。
@@ -1650,7 +1661,7 @@ jobs:
 | --- | --- |
 | Metro 缓存滞后 | `npx expo start --clear`；依赖变更重启 Metro |
 | Android 9+ cleartext | dev 构建自带豁免；生产强制 wss:// |
-| 引擎只监听回环 | `--listen 0.0.0.0` + Windows 防火墙放行 7821 |
+| 引擎只监听回环 | `--listen 0.0.0.0` + Windows 防火墙放行 8765 |
 | 连接串写死 | 全部走 env/运行时设置，代码零硬编码 |
 | 双端协议漂移 | `check:protocol` + CI protocol-drift 兜底 |
 | 真机连不上 | 先 `GET /healthz` 探测（HttpClient 诊断工具） |
@@ -1717,20 +1728,27 @@ jobs:
 
 ### 13.2 命令面速查（移动端使用子集，D3 8.2 映射）
 
-| cmd.kind | 对应 Tauri 命令 | 移动端角色 | 参数要点 |
+> 【裁决修正 5】跨端命令 kind 统一 `remote.*`（`cmd.*` 仅桌面内部）。
+
+| remote.<name>（命令 kind） | 对应 Tauri 命令 | 移动端角色 | 参数要点 |
 | --- | --- | --- | --- |
-| `cmd.approve` / `cmd.deny` | core_approve_tool / core_deny_tool | 审批核心 | toolCallId + scope/reason |
-| `cmd.runControl` | core_run_control | L0/L1/L2 | level + runId + sessionId |
-| `cmd.cancelRun` | core_cancel_run | L3 | runId + reason |
-| `cmd.runTask` | core_run_task | P2 委托执行 | clientMessageId 幂等 |
-| `cmd.readFile` / `cmd.listDir` | workbench_read_file_content / workbench_list_directory | 文件浏览（只读） | path + workspaceRoot |
-| `cmd.getRunSnapshot` | core_get_run_snapshot | run 详情 | runId |
-| `cmd.readSessionEvents` | core_read_session_events | 事件回放/续传 | afterSequence 分页 |
-| `cmd.listTasks` / `cmd.getTaskOutput` | workbench_list_background_tasks / workbench_get_background_task_output | 任务页 | — |
-| `cmd.getStatus` | core_get_status | 仪表盘轮询 | — |
-| `cmd.listSessions` | list_sessions | 会话列表 | — |
+| `remote.approve` / `remote.deny` | core_approve_tool / core_deny_tool | 审批核心 | toolCallId + scope/reason |
+| `remote.runControl` | core_run_control | L0/L1/L2 | level + runId + sessionId |
+| `remote.cancelRun` | core_cancel_run | L3 | runId + reason |
+| `remote.runTask` | core_run_task | P2 委托执行 | clientMessageId 幂等 |
+| `remote.readFile` / `remote.listDir` | workbench_read_file_content / workbench_list_directory | 文件浏览（只读） | path + workspaceRoot |
+| `remote.getRunSnapshot` | core_get_run_snapshot | run 详情 | runId |
+| `remote.readSessionEvents` | core_read_session_events | 事件回放/续传 | afterSequence 分页 |
+| `remote.listTasks` / `remote.getTaskOutput` | workbench_list_background_tasks / workbench_get_background_task_output | 任务页 | — |
+| `remote.getStatus` | core_get_status | 仪表盘轮询 | — |
+| `remote.listSessions` | list_sessions | 会话列表 | — |
 
 ### 13.3 实施分期（对齐 D4 11.1 里程碑的工程任务切片）
+
+> 【裁决修正 9】阶段映射：M0 骨架 → R2（移动端基础）；M1 连接与配对 → R2；
+> M2 审批中心 → **R2 首批交付（裁决 12：审批中心 = P0 功能）**；M3 观测面、
+> M4 文件/设置 → R2；M5 推送完备 → R3；M6 国内通道 → R3；M7 发布 → R3 收尾。
+> 任务书引用一律使用 R 阶段号。
 
 | 阶段 | 工程内容 | 本方案章节落点 | 出口标准 |
 | --- | --- | --- | --- |

@@ -417,7 +417,7 @@ onRunTerminal(terminal, error) → {
 
 - 主 feed 用虚拟化长列表（FlashList 类）：窗口化渲染，只渲染视口附近条目。
 - **条目上限**：feed 内存上限 500 条（有界环形，超出淘汰最早条目并在顶部显示「已收起 N 条早期事件」，点击展开历史页）；单条消息正文渲染上限（如 20 万字符，超出显示「内容过长，请回桌面端查看」）。
-- 消息正文/工具输出体渲染截断：折叠态只渲染前 4 行 + 行数标记（对齐 `truncateToolOutput` 16 行/1600 字符上限的桌面先例，`toolCardPresenter.ts:89-101`），展开态全量（仍受条目上限约束）。
+- 消息正文/工具输出体渲染截断：折叠态只渲染前 4 行 + 行数标记（对齐桌面 16 行/1600 字符预览上限的本地 helper——【裁决修正】AU2 F-5：`toolCardPresenter.ts` 导出面无 `truncateToolOutput`，实际为同文件本地 helper `ln(output, maxLines=16, maxChars=1600)`，移植时改用现有导出 `toolResultPreview` 或自带同语义函数），展开态全量（仍受条目上限约束）。
 
 #### 3.4.3 渲染卸载与合并写入
 
@@ -485,7 +485,7 @@ ToolProgress::Content { .. }  → 不发射（None）
 | 能力 | 设计 |
 |---|---|
 | 自动滚动 | 默认跟随底部（sticky bottom）；用户上滚后暂停跟随，底部浮出「回到底部」按钮 |
-| 行缓冲上限 | 内存行缓冲默认 200 行（与桌面 `truncateToolOutput` 16 行预览不同——手机端给更多但仍有界）；超出后淘汰最早行并显示「已截断 N 行」标记 + 「查看全部」按钮（从 tool-end 终值/task-failed tail 或同步域全量接口拉取） |
+| 行缓冲上限 | 内存行缓冲默认 200 行（与桌面 16 行预览 helper 语义不同——手机端给更多但仍有界）；超出后淘汰最早行并显示「已截断 N 行」标记 + 「查看全部」按钮（从 tool-end 终值/task-failed tail 或同步域全量接口拉取） |
 | 单行上限 | 单行 5000 字符截断（超长单行 JSON 日志），尾部省略号 + 点击展开该行 |
 | 搜索 | 客户端行内搜索（行缓冲 200 行内线性匹配，高亮 + 命中计数 + 上下跳转）；行缓冲超限时降级为「搜索当前已缓冲 + 提示结果可能不完整」 |
 | 复制 | 长按选择复制（原生文本选择）；「复制全部」按钮（≤200 行时直接复制缓冲，超限复制尾部 200 行 + 截断提示）；分享（系统分享面板，文本方式） |
@@ -494,7 +494,7 @@ ToolProgress::Content { .. }  → 不发射（None）
 
 | 层 | 截断策略 | 对齐依据 |
 |---|---|---|
-| 折叠预览 | 4 行预览 + 「共 N 行」 | 桌面 `truncateToolOutput`（16 行/1600 字符）的缩水版 |
+| 折叠预览 | 4 行预览 + 「共 N 行」 | 桌面 16 行/1600 字符预览 helper（`toolCardPresenter.ts` 本地 `ln`，【裁决修正】AU2 F-5）的缩水版 |
 | 流式行缓冲 | 200 行内存有界（环形） | 与桌面 feed 内存有界原则一致（`buffer.rs` 水位思想） |
 | 渲染层 | 单条消息正文 20 万字符渲染上限 | 防虚拟列表单条目巨高 |
 | 全量获取 | 终态后可由同步域提供全量输出（tool-end output / task 全量日志拉取），手机端按需分页 | 桌面端桌面本地全量 vs 手机按需，语义对齐 |
@@ -574,7 +574,7 @@ feed 顶部固定过滤条（随 feed 滚动吸顶），三个维度可组合：
 
 手机端复用桌面端已验证的纯函数（**抽到 packages/ 共享包**，与 D1 总体架构的共享包策略一致）：
 
-- `toolCardPresenter.ts`：`extractToolCommand`、`toolHumanLabel`、`toolCommandPreview`、`toolResultPreview`、`truncateToolOutput`、`toolDiffLineStats`（+N/−N 角标）、`humanizeShellCommand`、`isInterruptedTool` 等——纯函数无 DOM 依赖，直接移植。
+- `toolCardPresenter.ts`：`extractToolCommand`、`toolHumanLabel`、`toolCommandPreview`、`toolResultPreview`、`toolDiffLineStats`（+N/−N 角标）、`humanizeShellCommand`、`isInterruptedTool` 等——纯函数无 DOM 依赖，直接移植。【裁决修正】AU2 F-5：`truncateToolOutput` 不在导出面（同文件本地 helper `ln`，16 行/1600 字符语义），如需截断预览移植本地 helper 或改引 `toolResultPreview`。
 - `eventUtils.ts`：`blockText`、`mergeAssistantTextPiece`、`messageBelongsToRun`。
 - `streamTextBatcher.ts`：批合并器整体复用。
 - `partialToolArgs.ts`：`parseToolArgsDeltaEvent`、`truncateToolArgsPreview`。

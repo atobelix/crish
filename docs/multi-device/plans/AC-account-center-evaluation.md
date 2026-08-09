@@ -492,6 +492,12 @@ CREATE INDEX IF NOT EXISTS idx_relay_creds_account ON relay_credentials(account_
 
 ## 8. 里程碑与工作量
 
+> 【裁决修正 9】阶段映射（统一 R0-R5）：M0 白名单 env 化 → R0 并行（P-0.3）；
+> M1 限流/安全 → R0/R1；M2 push_tokens → **R3 推送**（前置）；M3
+> relay_credentials → **R4 中继+P2P**（前置）；M4 中继服务 → R4；
+> M5 联动 → R3/R4；M6 集成 → R3/R4 收尾。任务书引用一律使用 R 阶段号
+> （AU3 阶段命名裁决）。
+
 | 阶段 | 内容 | 工作量（人日，估算） | 依赖 |
 |------|------|----------------------|------|
 | M0（1-2 天） | 应用白名单 env 化（A1/A2/A10）、CORS 收敛（A7） | 1 | 无 |

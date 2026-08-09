@@ -398,10 +398,15 @@ tailscale 默认走 DERP 中继（打洞不成功时），与我们的 L2 中继
   D1 §3.1.2）；
 - 两端连上后各自 `relay.hello`（携带 deviceId + desktopId + HMAC 签名，
   复用 D3 §5.1 信封），中继据此建立「设备对」路由映射；
-- 消息格式：复用 D3 DeviceEnvelope（`from`/`to` 字段已有设备语义），中继
-  读信封头（deviceId / kind）做路由，**不读 body**；
+- 消息格式：【裁决修正 2】**帧格式唯一真源 = M6 DeviceEnvelope**（WS 帧与
+  轻量可靠 UDP 帧统一由 M6 §10 定义）；中继只解析自身控制帧头（M2 RelayFrame
+  to/from 路由），**不读 D3/M6 信封的 kind/body**（AU1 P0-2 按 M2 §6.1 帧级
+  透传裁决；本条原「中继读信封头（deviceId/kind）做路由」表述作废）；
 - 在线状态：中继维护 `deviceId → {connId, lastSeen}`；某端断线通知对端
-  （`link.peer-offline`），供移动端快速切换（不等心跳超时）。
+  （`link.peer-offline`），供移动端快速切换（不等心跳超时）。【裁决修正 2】
+  `relay.*`/`link.*` 消息族中的**中继控制面**（hello/hello-ack/bye/
+  peer-offline/backpressure）并入 M2 RelayFrame 控制帧枚举；`link.*` 打洞
+  信令保持为**业务层消息**（经 data.frame 透传，中继只转发不解析）。
 
 ### 5.3 M2 服务端 API 契约（预留接口面）
 
@@ -988,7 +993,9 @@ pub struct LinkMetrics {
 - D2 §10.5 规定「每令牌最多 2 条并发连接；全局上限 8」——make-before-break
   窗口内同一设备需要短时共存 2 条链路，**连接上限语义升级为「连接族」**：
   同一 `deviceId` 的 N 条链路（不同 kind）属一族，族内上限 3 条（旧链 +
-  新链 + 缓冲），族外（不同 deviceId）总数上限仍 8；
+  新链 + 缓冲），族外（不同 deviceId）总数上限仍 8；【裁决修正 3】本段即
+  **连接模型唯一真源**（每设备一主连接 + 会话级多流）：M2 §4.6 与 D2 §10.5
+  已按此语义回写（同 kind 重复连接踢旧、不同 kind 同设备共存 ≤3）；
 - 桌面侧按「hello 中的 deviceId + deviceLinkId（本方案新增的链路实例
   标识）」识别连接族；族内新链路就绪后，旧链路由移动端主动关闭（5s
   收尾），桌面侧惰性清理（30s 无帧回收）；
@@ -1308,6 +1315,10 @@ k_link = HKDF-SHA256(
 ## 12. 工作量与分阶段计划
 
 ### 12.1 阶段总览
+
+> 【裁决修正 9】阶段映射（统一 R0-R5）：L1 深化 → **R1 桌面服务端**（与 D2
+> 收尾并行）；L2 中继 → **R4 中继+P2P**（R4 前半）；L3-a/b/c P2P → R4 后半。
+> 任务书引用一律使用 R 阶段号（AU3 §2.3）。
 
 | 阶段 | 内容 | 规模 | 依赖 |
 |------|------|------|------|

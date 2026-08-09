@@ -43,15 +43,19 @@
 - **API 面**：REST 路由 `/v1/**` 直接调用既有命令**契约体**（`run_task_impl` /
   `run_control_impl` / `core_read_session_events` 等，全部为「测试直调、不依赖 Tauri
   runtime」的实现函数），不经 Tauri invoke；错误协议复用 `CoreError {kind, detail}`。
-  WS 端点 `/v1/events` 推送 AgentEvent 信封 JSON（与 Tauri 事件通道同载荷）。
-  92 条命令按 T1 核心 / T2 增强 / T3 不暴露三级映射，见 §9。
-- **认证方案**：配对码（8 字符、120 秒 TTL、失败锁定）换取 32 字节随机令牌；
-  令牌哈希落盘 `config_dir()/pairing.json`（0600），客户端持令牌访问全部 `/v1/**`；
-  桌面 UI 可随时撤销；配对期间自动开放 0.0.0.0 绑定。
+   WS 端点 `/v1/events` 推送 AgentEvent 信封 JSON（与 Tauri 事件通道同载荷）。
+   95 条命令（注册面 91 + 登记先行 4，M6 §2.3 勘误转正）按 T1 核心 / T2 增强 /
+   T3 不暴露三级映射，见 §9。
+- **认证方案**：【裁决修正 1/10】配对码规格对齐 D3 §4.1 唯一真源（CXN-XXXX-XXXX-XXXX
+   12 字符 base32、10 分钟、5 次失败上限、X25519+HKDF 密码学链）；令牌形态按 M7 §4.2
+   四类令牌分治（配对令牌为桌面本地形态），本方案的 Bearer 令牌表述收敛为
+   「配对期签发的会话令牌（D3 §5.1 token_key 派生体系）」；令牌哈希落盘
+   `config_dir()/pairing.json`（0600），客户端持令牌访问全部 `/v1/**`；
+   桌面 UI 可随时撤销；配对期间自动开放 0.0.0.0 绑定。
 - **关键融合点**：新增 `FanOutEmitter` 实现既有 `Emitter` trait
   （`core_event_bridge.rs:51-54`），挂在 `EventBridge` 构造点
-  （`main.rs:345-348`）之后，事件桥 / 缓冲桥 / delta 实时轨 / timer/cron drain **全部
-  零改动**自动进入 WS 广播；REST handler 复用 `core_run_commands.rs` 各 `*_impl`
+   （`main.rs:353-356`）之后，事件桥 / 缓冲桥 / delta 实时轨 / timer/cron drain **全部
+   零改动**自动进入 WS 广播；REST handler 复用 `core_run_commands.rs` 各 `*_impl`
   契约体；服务状态不进 `app.manage`，由 `ServerState` 自持；退出钩子
   （`main.rs:467-473`）先优雅关服再存快照。
 
@@ -69,17 +73,17 @@
 - 结论：移动端要连的是**桌面壳自身**，不是另一个后台进程。服务化 = 壳内嵌服务，而非
   拆分出 daemon。
 
-### 2.2 命令注册面（88 条 registered + 4 条登记先行）
+### 2.2 命令注册面（91 条 registered + 4 条登记先行）
 
 - 注册面唯一真源在 `main.rs:79-209` 的 `command_registry!` 宏：
   - `main.rs:81` 同源生成 `COMMAND_REGISTRY_NAMES`（注册面清单）；
   - `main.rs:84-86` 同源生成 `build_invoke_handler()`（Tauri invoke 分发）；
-  - `main.rs:90-209` 列出 92 项二元组（命令名, 实现路径）。
-- 契约清单唯一真源 `command_manifest.rs:68-186`：`COMMAND_MANIFEST` = 92 条
-  （注册面 88 + 登记先行 4：`append_session_messages` / `workbench_open_workspace` /
+  - `main.rs:90-209` 列出 95 项二元组（命令名, 实现路径）。
+- 契约清单唯一真源 `command_manifest.rs:68-191`：`COMMAND_MANIFEST` = 95 条
+  （注册面 91 + 登记先行 4：`append_session_messages` / `workbench_open_workspace` /
   `workbench_list_workspaces` / `workbench_dev_mcp_enabled`）。
-  - 一致性由测试锁定：`main.rs:485-499`（注册面 == manifest registered=true）、
-    `command_manifest.rs:200-380`（条数公式化 92=88+4、唯一性、幽灵命令排除）。
+  - 一致性由测试锁定：`main.rs:500-514`（注册面 == manifest registered=true）、
+    `command_manifest.rs:209-210`（条数公式化 95=91+4、唯一性、幽灵命令排除）。
 - 命令按 family 分组（`command_manifest.rs:70-186`）：workbench（GUI 专属 24 条）/
   config（10）／core（约 30）／session（13）／workflow（6）。
 - 关键点：**实现函数与 Tauri 强绑定的是「薄壳」**（`#[tauri::command]` + `State` 解包），
@@ -223,7 +227,10 @@
 - 不做移动端 UI / 移动端 SDK（属 D4/D3 其他任务书）；
 - 不做桌面端与移动端的双向文件同步；
 - 不暴露 T3 级命令（GUI 专属 / 本地 shell / 文件写面 / pty，见 §9）；
-- 不做 TLS 加密（v1 假设局域网可信模型，威胁模型与演进见 §12.8）；
+- 不做 TLS 加密（v1 假设局域网可信模型，威胁模型与演进见 §12.8）；【裁决修正 11】
+  本项已被主控裁决作废：传输协议 = **wss 强制 + 自签 CA pinning（配对时建立信任）**
+  （D1 §8.2 P1 验收 5 / D3 §3.1 / D5 §10.1 ADR），R1 即生效；「免 TLS」最多作为
+  中继路径加密前的过渡选项，且必须显式开启；
 - 不修改引擎侧事件语义（不新增事件变体，不改变 sequence 语义）；
 - 不迁移 `reference/markdown-editor` 与主仓库任何测试资产。
 
@@ -453,8 +460,10 @@ contract.rs:30`）。
 ```
 移动端                          桌面端（ServerState 配对状态机）
   │  1. 用户开启「配对模式」         → pair_enable()：生成 code + 二维码
-  │                                 (code: 8 字符，字符集 23456789ACDEFGHJKLMNPQRSTUVWXYZ，
-  │                                  排除易混淆 0/O/1/I，120s TTL)
+  │                                 【裁决修正 1】code = D3 §4.1 CXN-XXXX-XXXX-XXXX
+  │                                 （12 字符 base32、10 分钟 TTL、60bit、单码 5 次
+  │                                 失败上限；字符集与密码学链全部以 D3 §4.1 为准，
+  │                                 原 8 字符/31 字符集/120s 规格作废）
   │  2. 用户扫码/手工输入 code
   │ ── POST /v1/pair {code} ─────────► pair_verify(code)
   │                                     ├─ 状态非 awaiting → 403 pair.idle
@@ -467,6 +476,11 @@ contract.rs:30`）。
   │  3. 移动端保存 token；后续全部请求带 Authorization: Bearer <token>
   │  4. 配对状态机回 idle；同一次配对窗口只签一枚 token（防并行窃取）
 ```
+
+> 【裁决修正 1】配对全流程的密码学链（X25519 ECDH + HKDF 派生 master/token_key/
+> enc_key/refresh_key）以 D3 §4.4 为唯一真源；本节的「码换 Bearer 令牌」仅为
+> 桌面服务网关的接入形态，与 D3 配对协议并存不冲突（裁决 10：M7 四类令牌分治，
+> 配对令牌为本地形态）。
 
 ### 7.3 令牌生命周期与存储（桌面侧）
 
@@ -514,8 +528,11 @@ contract.rs:30`）。
 - 事件面：服务状态变化（配对开启/关闭、连接建立/断开、令牌撤销）发射
   **既有事件通道**（复用 `EventBridge`）或经 `StatusDiagnostics.record("pairing", …)`
   ——设计选前者（桌面前端实时刷新二维码区），载荷为新增服务侧事件
-  `server-status-changed`？——**不新增事件变体**（41 变体冻结，`events.rs:290-782`；
-  新增需走事件注册表 + 前端生成产物，成本高）。v1 决策：配对状态变化经
+   `server-status-changed`？——**不新增事件变体**（41 变体冻结为基线，`events.rs:290-782`；
+   新增需走事件注册表 + 前端生成产物，成本高）。【裁决修正 5】主控裁决确认：
+   **41 变体为当前基线，新增事件变体一律走注册表登记**（events.rs:789-808 三件套：
+   Rust enum arm + contracts/engine-events.json + registry_drift.rs；会话索引变更类
+   走 M6 `events.session.updated` 会话面消息，不新增变体）。v1 决策：配对状态变化经
   `StatusDiagnostics.record`（core_get_status 可见）+ 桌面前端轮询配对状态命令
   （3s 轻量轮询），**不碰事件契约**。
 
@@ -644,7 +661,9 @@ WS   /v1/events?token=…
     `core_search_files` / `core_rebuild_search_index` / `core_compact_messages`）——
     纯桌面工具面，移动端无消费场景；
   - `workbench_list_directory` / `workbench_read_file_content`：**列为 T4 演进**
-    （显式授权 + 只读），v1 不暴露；
+    （显式授权 + 只读），v1 不暴露；【裁决修正 2】文件面暴露口径以 M6 §4.7/§4.8
+    白名单特批清单为 v1 冻结真源（C16 listDir / C17 readFile / C18 writeFile 已按
+    surface=gui 特批开放，受 F4 四闸门防护；AU2 F-3 冲突以 M6 为准）；
   - `import_from_localstorage`：桌面迁移专用。
 
 ### 8.4 请求/响应示例（run 发起 + 审批裁决）
@@ -683,7 +702,7 @@ Content-Type: application/json
 
 ---
 
-## 9. 命令 → 服务 API 映射表（全量 92 条）
+## 9. 命令 → 服务 API 映射表（全量 95 条）
 
 映射表以 `COMMAND_MANIFEST`（`command_manifest.rs:68-186`）为准逐条登记；
 `registered=false` 的登记先行命令标注「待接线」。T3 条目给出**不暴露理由**，
@@ -749,8 +768,8 @@ Content-Type: application/json
 
 | manifest 命令 | 服务 API | 分级 | 说明 |
 |---|---|---|---|
-| core_check_command | — | T3 | 桌面工具面 |
-| core_search_files | — | T3（T4 候选） | 全文搜索需索引面，v1 不暴露 |
+| core_check_command | — | T3（M6 C15 可用） | 【裁决修正 2】AU2 F-4 冲突以 M6 白名单为准：C15 checkCommand 映射 core_check_command 为 v1 可用（审批前置预览），D2 的 T3 表述降为「默认分级」 |
+| core_search_files | — | T3（M6 C10 状态查询） | 【裁决修正 2】同 F-4：M6 C10 getSearchIndex 仅开放索引就绪状态查询（core_search_files 的 ready/state 子集），**全文搜索仍按 T3 不暴露**（AU1 P2-12） |
 | core_rebuild_search_index | — | T3 | 索引维护桌面专属 |
 | core_compact_messages | — | T3 | 压缩操作桌面专属 |
 | core_count_tokens | — | T3 | 桌面工具 |
@@ -804,7 +823,9 @@ Content-Type: application/json
 ### 9.7 映射表汇总
 
 - T1 = 22 条（run 闭环 9 + 会话读写 7 + 状态/配置/任务/工作流查询 6）；T2 = 16 条；
-  T3 = 54 条（含 T4 预留 2）；合计 92 = 注册面 88 + 登记先行 4（后 4 条全部 T3）。
+  T3 = 57 条（含 T4 预留 2，browser 三条已注册计入 T3）；合计 **95 = 注册面 91 +
+  登记先行 4**（后 4 条全部 T3）。【裁决修正 2】95 条为当前代码事实
+  （`command_manifest.rs:68-191` + 测试锁定 95=91+4），本表以 M6 §2.3 勘误口径为准。
 - 路由总表与 manifest 的一致性测试：`server/router.rs` 维护
   `ROUTE_COMMAND_INDEX: &[(method, path, manifest_name)]` 常量表，测试断言
   每条已登记路由的 manifest 名 ∈ 允许暴露集（T1∪T2），**T3 集合逐条反向断言
@@ -912,8 +933,11 @@ WS /v1/events?token=<token>
 
 - 连接注册表：`ServerState.connections: Mutex<HashMap<conn_id, ConnInfo>>`
   （conn_id、token hash、label、subscribed sessions、connectedAt、lastFrameAt）。
-- 上限：全局 8（`MAX_WS_CONNECTIONS`）、单令牌 2；超限拒绝新连接（
-  `{"type":"error","code":"conn.limit"}`）。
+- 上限：全局 8（`MAX_WS_CONNECTIONS`）；【裁决修正 3】连接模型 = **每设备一主连接 +
+  会话级多流**（M3 §7.5.4 连接族语义）：同 kind 重复连接踢旧（`kicked:
+  duplicate-connection`），不同 kind 同设备连接族 ≤3（旧链+新链+缓冲），族外
+  （不同设备）总数仍 8；原「单令牌 2」表述更新为兼容该语义；超限拒绝新连接
+  （`{"type":"error","code":"conn.limit"}`）。
 - 惰性清理：连接关闭即移除（drop 守卫）；drain task 退出即广播 `Closed`。
 - 桌面 UI 可见：`workbench_pairing_status.connections`（label + 最近活动时间）。
 
@@ -1040,7 +1064,7 @@ PE-10 在注释登记理由；建议先壳级直引（本壳是唯一消费者�
   - 注册进 `command_registry!`（main.rs:90-209 追加条目）；
   - 登记进 `COMMAND_MANIFEST`（command_manifest.rs:68-186）；
   - 同步前端 `commandManifest.ts` 内置镜像（command_manifest.rs:3-8 的双端同步
-    机制；条数测试 `command_manifest.rs:203-215` 的公式化断言需同步更新 92 → 96）；
+     机制；条数测试 `command_manifest.rs:209-210` 的公式化断言需同步更新 95 → 99）；
   - 镜像测试链：`main.rs:485-499`（注册面一致性）自动覆盖注册正确性。
 - 服务暴露面（REST 路由）**不进 manifest**：路由表是 `server/router.rs` 的真源
   （§9.7 的 ROUTE_COMMAND_INDEX + 幽灵路由测试），避免双端清单同步成本蔓延。
@@ -1097,8 +1121,9 @@ PE-10 在注释登记理由；建议先壳级直引（本壳是唯一消费者�
 
 ### 12.4 配对握手防护
 
-- 配对码 8 字符 / 字符集 31 位（排除易混淆）≈ 40 比特熵；120s TTL；
-  连续 5 次失败锁定 60s；`/v1/pair` 按连接源 IP 限速（10 次/分钟）。
+- 配对码规格【裁决修正 1】：以 D3 §4.1 为准——CXN-XXXX-XXXX-XXXX 12 字符 base32、
+  10 分钟 TTL、60bit、单码 5 次失败上限（锁定 60s）；原「8 字符 / 31 字符集 / 120s」
+  作废；`/v1/pair` 按连接源 IP 限速（10 次/分钟）。
 - 配对窗口只签发**一枚**令牌（并发配对请求互斥：状态机 awaiting 期间拒绝
   重复 pair_verify，§7.2）。
 - 配对码**永不落盘**（内存态，进程退出即失效）；二维码内容不含令牌。
@@ -1131,7 +1156,7 @@ PE-10 在注释登记理由；建议先壳级直引（本壳是唯一消费者�
 | # | 威胁 | v1 对策 | 演进 |
 |---|---|---|---|
 | 1 | 浏览器 CSRF（loopback） | 预检 + Origin 校验 + token 不可读（§12.3） | CORS 严格白名单 |
-| 2 | 局域网窃听（配对模式） | 信任模型声明：配对视作同可信网络 | mTLS / 自签证书 + 指纹 |
+| 2 | 局域网窃听（配对模式） | 信任模型声明：配对视作同可信网络 | 【裁决修正 11】**wss 强制 + 自签 CA pinning（配对时建立信任，D3 §4.6 tlsFingerprint）**，R1 即生效；「免 TLS 信任模型」不再作为 v1 基线 |
 | 3 | 令牌文件泄露 | 哈希存储 + ACL | DPAPI / keychain |
 | 4 | 暴力猜测配对码 | 40bit 熵 + TTL + 锁定 + 限速 | 增加二次确认码 |
 | 5 | 恶意本地进程 | token 鉴权（进程无法读取令牌文件时不可用；可读则与用户同等权限——声明为威胁面） | 按会话最小令牌作用域 |
@@ -1253,12 +1278,17 @@ PE-10 在注释登记理由；建议先壳级直引（本壳是唯一消费者�
 
 ## 15. 分阶段实施计划
 
+> 【裁决修正 9】阶段命名统一为 AU3 R0-R5：本方案的 P0-P5 与 R 阶段映射如下——
+> P0 评审 → R0（协议冻结期评审）；P1 服务骨架 → **R1 桌面服务端**；
+> P2 REST T1 全量 → R1；P3 WS 续传 + 配对 UI → R1；P4 配对模式 → R1；
+> P5 加固演进 → R1 收尾 / R3 前（推送依赖常驻接线）。任务书引用一律使用 R 阶段号。
+
 | 阶段 | 内容 | 验收 | 依赖 |
 |---|---|---|---|
 | P0 | 本文档评审定稿 | 评审通过；文件:行号全部复核 | 无 |
 | P1 | 服务骨架：server 模块 + FanOutEmitter + loopback 监听 + /v1/info + /v1/hello + 令牌存储（auth.rs/pair.rs 基础）+ L1/L2 测试基建 | loopback 服务随应用启停；/v1/info 可达；401 正确；单测全绿 | 壳 Cargo.toml（axum/tokio-tungstenite dev） |
 | P2 | REST T1 全量（§9.3/9.5/9.6 核心）+ core_backend + router 全 handler + WS 基础（订阅/广播/心跳） | 移动端可完成「查状态 → 列表会话 → 发起 run → 收事件 → 审批」闭环；server_integration 全绿 | P1 |
-| P3 | WS 续传（replay/catchup/resume 游标/断线重连）+ 踢出 + 连接管理上限 + 配对 UI 命令四件套（§11-G） | §13.1 L4 清单 1-9 手测通过；manifest 条数同步 92→96 | P2 |
+| P3 | WS 续传（replay/catchup/resume 游标/断线重连）+ 踢出 + 连接管理上限 + 配对 UI 命令四件套（§11-G） | §13.1 L4 清单 1-9 手测通过；manifest 条数同步 95→99 | P2 |
 | P4 | 配对模式（0.0.0.0 重绑 + 二维码 + 防火墙提示 + 撤销全链）+ T2 子集（任务操作/工作流管理/trash/catalog/md） | 局域网手机实测完整闭环；安全评审（§12 核对表） | P3 |
 | P5 | 加固与演进：限速/拉黑、CORS 白名单、DPAPI 密钥槽、delta 节流、T4 只读文件面（显式授权）、性能压测（复刻 buffer stress 规模） | 压测报告 + 安全评审结论 | P4 |
 
@@ -1274,10 +1304,10 @@ PE-10 在注释登记理由；建议先壳级直引（本壳是唯一消费者�
 |---|---|---|
 | 默认端口 | 8765 | CSP 预留（`tauri.conf.json:29`） |
 | 端口探测范围 | 8765-8775 | §5.1 |
-| 配对码长度/字符集 | 8 位 / 31 字符（23456789ACDEFGHJKLMNPQRSTUVWXYZ） | §7.2 |
-| 配对码 TTL | 120s | §7.2 |
-| 配对失败锁定 | 连续 5 次 / 锁定 60s | §7.2 |
-| 令牌 | 32 字节 CSPRNG → hex 64 | §7.3 |
+| 配对码长度/字符集 | CXN-XXXX-XXXX-XXXX 12 字符 base32（D3 §4.1） | §7.2；【裁决修正 1】原 8 位/31 字符作废 |
+| 配对码 TTL | 10 分钟（D3 §4.1） | §7.2；原 120s 作废 |
+| 配对失败锁定 | 单码连续 5 次 / 锁定 60s（D3 §4.1） | §7.2 |
+| 令牌 | 32 字节 CSPRNG → hex 64；会话令牌语义收敛为 D3 §5.1 token_key 派生体系 | §7.3 |
 | 广播容量 | 1024 | §10.4 |
 | 连接级缓冲 | 512（丢 Delta 保 Critical） | §10.4 |
 | WS 连接上限 | 全局 8 / 单令牌 2 | §10.5 |
@@ -1318,7 +1348,7 @@ PE-10 在注释登记理由；建议先壳级直引（本壳是唯一消费者�
 | 文件:行号 | 用途 |
 |---|---|
 | `apps/agent-workbench/src-tauri/src/main.rs:90-209` | 命令注册面真源 |
-| `apps/agent-workbench/src-tauri/src/main.rs:345-348` | EventBridge 构造点（fan-out 接入点） |
+| `apps/agent-workbench/src-tauri/src/main.rs:353-356` | EventBridge 构造点（fan-out 接入点） |
 | `apps/agent-workbench/src-tauri/src/main.rs:381` | restore 异步 spawn 先例 |
 | `apps/agent-workbench/src-tauri/src/main.rs:388-391` | app.manage 状态注入 |
 | `apps/agent-workbench/src-tauri/src/main.rs:430-441` | timer/cron drain 任务（tauri runtime 内循环先例） |
