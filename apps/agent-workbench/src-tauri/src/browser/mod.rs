@@ -50,7 +50,7 @@ use conex_browser::cdp::sender::CancellationToken;
 use conex_browser::cdp::transport::ExpectedBrowser;
 use conex_browser::snapshot::budget::BudgetConfig;
 use conex_browser::{
-    BrowserManager, LaunchConfig, ProcessEvent, SessionRef, StopReason,
+    BrowserManager, CrashReason, LaunchConfig, ProcessEvent, SessionRef, StopReason,
 };
 use conex_browser_tools::codes::TOOL_BROWSER_NOT_READY;
 use conex_browser_tools::gate::MvpDomainGate;
@@ -60,16 +60,28 @@ use serde::Serialize;
 use session_loop::AbortSignal;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use tokio::sync::broadcast;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::MutexGuard as AsyncMutexGuard;
 
+/// 停止硬超时（评审 F4）：stop 总超时后强制杀树兜底（可配，默认 15s）。
+const DEFAULT_STOP_HARD_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// 启动失败冷却期（评审 F9）：启动失败后冷却期内直接 not_ready，防每次工具
+/// 调用重走完整启动链（可配，默认 5s）。
+const DEFAULT_START_FAIL_COOLDOWN: Duration = Duration::from_secs(5);
+
 /// 面板状态载荷（browser_status 返回 + `browser://state-changed` 事件负载；
-/// 27 方案 S6 契约定死：`{ state, url? }`）。
+/// 27 方案 S6 契约定死：`{ state, url? }`；评审 F7 扩展 `reason?`——崩溃
+/// 事件携带原因，前端兼容解析）。
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct StatusPayload {
     pub state: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 /// 启动命令返回载荷（契约定死：`{ state: "running"|"starting"|"error", reason? }`）。
@@ -142,6 +154,12 @@ pub(crate) struct BrowserSlot {
     forwarder_started: AtomicBool,
     /// 当前连接的端点（崩溃重启端点漂移检测 → 会话重建判定）。
     connected_endpoint: Mutex<Option<String>>,
+    /// 停止硬超时（评审 F4：超时后强制杀树兜底；可配注入）。
+    stop_hard_timeout: Duration,
+    /// 启动失败冷却期（评审 F9：失败后冷却期内直接 not_ready；可配注入）。
+    start_fail_cooldown: Duration,
+    /// 上次启动失败时间戳（冷却期 gating 判定）。
+    last_start_failure: Mutex<Option<Instant>>,
 }
 
 impl BrowserSlot {
@@ -193,6 +211,45 @@ impl BrowserSlot {
             emitter: Mutex::new(None),
             forwarder_started: AtomicBool::new(false),
             connected_endpoint: Mutex::new(None),
+            stop_hard_timeout: DEFAULT_STOP_HARD_TIMEOUT,
+            start_fail_cooldown: DEFAULT_START_FAIL_COOLDOWN,
+            last_start_failure: Mutex::new(None),
+        }
+    }
+
+    /// 注入停止硬超时（测试用短窗；生产保持默认 15s）。
+    #[cfg(test)]
+    fn with_stop_hard_timeout(mut self, timeout: Duration) -> Self {
+        self.stop_hard_timeout = timeout;
+        self
+    }
+
+    /// 注入启动失败冷却期（测试用短窗/消除；生产保持默认 5s）。
+    #[cfg(test)]
+    fn with_start_fail_cooldown(mut self, cooldown: Duration) -> Self {
+        self.start_fail_cooldown = cooldown;
+        self
+    }
+
+    /// 记录一次启动失败（冷却期 gating 起点；评审 F9）。
+    fn record_start_failure(&self) {
+        *self
+            .last_start_failure
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
+    }
+
+    /// 冷却期剩余（启动失败后冷却期内 → Some(remaining)；否则 None）。
+    fn start_cooldown_remaining(&self) -> Option<Duration> {
+        let last = *self
+            .last_start_failure
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let elapsed = last?.elapsed();
+        if elapsed < self.start_fail_cooldown {
+            Some(self.start_fail_cooldown - elapsed)
+        } else {
+            None
         }
     }
 
@@ -224,6 +281,7 @@ impl BrowserSlot {
 
     /// 面板启动命令入口（27 方案 S6）：非惰性启动——立即拉起并连接。
     /// 返回状态串（"running"/"starting"）；失败 Err（调用方映射为 error 载荷）。
+    /// 启动失败后冷却期内（评审 F9）直接 Err，不重走完整启动链。
     pub(crate) async fn start(&self) -> Result<&'static str, String> {
         let Some(manager) = self.manager.clone() else {
             return Err("浏览器未注入（数据根解析失败降级，browser_* 工具不可用）".to_string());
@@ -234,11 +292,20 @@ impl BrowserSlot {
                 Ok("running")
             }
             BrowserState::Stopped => {
+                if let Some(remaining) = self.start_cooldown_remaining() {
+                    return Err(format!(
+                        "浏览器上次启动失败，冷却中（{:.1} 秒后可重试）",
+                        remaining.as_secs_f32()
+                    ));
+                }
                 let mut guard = self.session.lock().await;
                 if guard.is_some() && self.endpoint_matches(&manager) {
                     return Ok("running");
                 }
-                self.start_and_connect_locked(&manager, &mut guard).await?;
+                if let Err(e) = self.start_and_connect_locked(&manager, &mut guard).await {
+                    self.record_start_failure();
+                    return Err(e);
+                }
                 Ok("running")
             }
             // 启动/停止在途：返回 starting（状态迁移经事件流推送面板）
@@ -249,16 +316,66 @@ impl BrowserSlot {
         }
     }
 
-    /// 面板停止命令入口（27 方案 S6）：丢弃会话 + Graceful 停止进程。
-    pub(crate) async fn stop(&self) -> Result<(), String> {
+    /// 面板停止命令入口（27 方案 S6）：丢弃会话 + 停止进程。
+    ///
+    /// - `force=false`（正常停止）：Graceful——等待会话锁（并发启动/重连持锁
+    ///   至多首启超时），等优雅收口（wait_or_kill 超时内部转杀树）；
+    /// - `force=true`（急停，评审 F3）：**不等会话锁**（try_lock 尽力丢弃会话，
+    ///   launching 中不被会话锁阻塞至首启超时），直接走强制杀树路径。
+    ///
+    /// 总硬超时（评审 F4）：`stop_hard_timeout`（默认 15s，可配）内未收敛 →
+    /// 再次强制杀树兜底；仍超时返回错误（进程由退出钩子/管理器 Drop 兜底杀树）。
+    pub(crate) async fn stop(&self, force: bool) -> Result<(), String> {
         let Some(manager) = self.manager.clone() else {
             return Err("浏览器未注入（数据根解析失败降级）".to_string());
         };
-        let mut guard = self.session.lock().await;
-        // 丢弃会话（Transport 断开）；进程收口由 manager.stop 承担
-        *guard = None;
+        let hard = self.stop_hard_timeout;
+        match tokio::time::timeout(hard, self.stop_inner(&manager, force)).await {
+            Ok(result) => result,
+            Err(_) => {
+                tracing::warn!(
+                    target: "browser",
+                    timeout_ms = hard.as_millis() as u64,
+                    "停止超时（{:.0}s），转入强制杀树兜底",
+                    hard.as_secs_f64()
+                );
+                // 超时兜底：尽力丢弃会话 + 强制杀（kill_tree 路径）
+                if let Ok(mut guard) = self.session.try_lock() {
+                    *guard = None;
+                }
+                match tokio::time::timeout(hard, manager.stop(StopReason::Force)).await {
+                    Ok(result) => result
+                        .map(|_| ())
+                        .map_err(|e| format!("浏览器停止失败：{e}")),
+                    Err(_) => Err(format!(
+                        "浏览器停止超时（{:.0}s 内未能收敛，进程由退出钩子兜底杀树）",
+                        hard.as_secs_f64()
+                    )),
+                }
+            }
+        }
+    }
+
+    /// 停止主路径（被 [Self::stop] 硬超时包裹）。
+    async fn stop_inner(
+        &self,
+        manager: &Arc<BrowserManager>,
+        force: bool,
+    ) -> Result<(), String> {
+        if force {
+            // 急停：不等会话锁（launching 中连接/启动持锁至多首启超时 ~40s），
+            // try_lock 尽力丢弃会话后立即走强制杀树路径
+            if let Ok(mut guard) = self.session.try_lock() {
+                *guard = None;
+            }
+        } else {
+            let mut guard = self.session.lock().await;
+            // 丢弃会话（Transport 断开）；进程收口由 manager.stop 承担
+            *guard = None;
+        }
+        let reason = if force { StopReason::Force } else { StopReason::Graceful };
         manager
-            .stop(StopReason::Graceful)
+            .stop(reason)
             .await
             .map(|_| ())
             .map_err(|e| format!("浏览器停止失败：{e}"))
@@ -275,6 +392,7 @@ impl BrowserSlot {
         StatusPayload {
             state,
             url: self.current_url(),
+            reason: None,
         }
     }
 
@@ -311,6 +429,12 @@ impl BrowserSlot {
                 Ok(Arc::clone(rs))
             }
             BrowserState::Stopped => {
+                if let Some(remaining) = self.start_cooldown_remaining() {
+                    return Err(format!(
+                        "浏览器上次启动失败，冷却中（{:.1} 秒后可重试）",
+                        remaining.as_secs_f32()
+                    ));
+                }
                 let mut guard = self.session.lock().await;
                 if guard.is_some() && self.endpoint_matches(&manager) {
                     let Some(rs) = guard.as_ref() else {
@@ -318,7 +442,10 @@ impl BrowserSlot {
                     };
                     return Ok(Arc::clone(rs));
                 }
-                self.start_and_connect_locked(&manager, &mut guard).await?;
+                if let Err(e) = self.start_and_connect_locked(&manager, &mut guard).await {
+                    self.record_start_failure();
+                    return Err(e);
+                }
                 let Some(rs) = guard.as_ref() else {
                     return Err("浏览器会话不可用（异常状态）".to_string());
                 };
@@ -330,6 +457,13 @@ impl BrowserSlot {
 
     /// 挂接事件发射器并启动状态转发任务（惰性单飞：manager 事件 →
     /// `browser://state-changed`；main.rs setup 与命令面均可调用，幂等）。
+    ///
+    /// 转发语义（评审 F5/F7）：
+    /// - `StateChanged` → 发射状态迁移（payload 携带当前 url）；
+    /// - `NavStackChanged` → 重发当前状态（URL 随导航推送，防面板 URL 陈旧）；
+    /// - `CrashRestarting` → 发射 `{ state: "crashed", reason }`（崩溃带原因）；
+    /// - 订阅掉队（`Lagged`）**不终止转发**——重订阅续传 + 以当前状态快照补发
+    ///   （旧实现 `Err(_) => break` 导致永久停发）；通道关闭才退出。
     pub(crate) fn attach_emitter(self: &Arc<Self>, emitter: Arc<dyn Emitter>) {
         *self.emitter.lock().unwrap_or_else(|p| p.into_inner()) = Some(emitter);
         if self.forwarder_started.swap(true, Ordering::SeqCst) {
@@ -346,8 +480,22 @@ impl BrowserSlot {
                     Ok(ProcessEvent::StateChanged { state, .. }) => {
                         slot.emit_state_changed(&state);
                     }
-                    Ok(_) => {}
-                    Err(_) => break,
+                    Ok(ProcessEvent::NavStackChanged { .. }) => {
+                        // F7：导航变更 → 重发当前状态（URL 随导航推送）
+                        slot.emit_state_changed(&manager.status().state);
+                    }
+                    Ok(ProcessEvent::CrashRestarting { reason, .. }) => {
+                        // F7：崩溃事件补原因（前端兼容解析 reason 字段）
+                        slot.emit_crash(&reason);
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        // F5：掉队 ≠ 通道关闭——重订阅续传；掉队期间状态以
+                        // 当前快照补发一次，面板不陈旧
+                        tracing::warn!(target: "browser", "状态事件转发掉队（Lagged），重订阅续传");
+                        rx = manager.subscribe();
+                        slot.emit_state_changed(&manager.status().state);
+                    }
+                    Err(broadcast::error::RecvError::Closed) => break,
                 }
             }
         });
@@ -466,11 +614,38 @@ impl BrowserSlot {
                 self.manager.is_none(),
             ),
             url: self.current_url(),
+            reason: None,
         };
         let json = match serde_json::to_string(&payload) {
             Ok(json) => json,
             Err(error) => {
                 tracing::error!(target: "browser", error = %error, "状态载荷序列化失败（跳过发射）");
+                return;
+            }
+        };
+        emitter.emit("browser://state-changed", &json);
+    }
+
+    /// 崩溃事件发射（`browser://state-changed`，payload `{ state: "crashed",
+    /// reason }`；评审 F7：面板崩溃态带原因，前端兼容解析）。
+    fn emit_crash(&self, reason: &CrashReason) {
+        let Some(emitter) = self
+            .emitter
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
+        else {
+            return;
+        };
+        let payload = StatusPayload {
+            state: "crashed",
+            url: self.current_url(),
+            reason: Some(format!("{reason:?}")),
+        };
+        let json = match serde_json::to_string(&payload) {
+            Ok(json) => json,
+            Err(error) => {
+                tracing::error!(target: "browser", error = %error, "崩溃载荷序列化失败（跳过发射）");
                 return;
             }
         };
@@ -683,8 +858,20 @@ pub(crate) fn spawn_browser_estop_watcher(slot: Arc<BrowserSlot>, signal: AbortS
 #[cfg(test)]
 mod tests {
     use super::*;
-    use conex_browser::CrashReason;
+    use conex_browser::{CrashReason, NavStack};
     use serde_json::json;
+
+    /// 测试发射器（转发任务断言：记录 channel:payload）。
+    struct TestEmitter(Arc<Mutex<Vec<String>>>);
+
+    impl Emitter for TestEmitter {
+        fn emit(&self, channel: &str, payload: &str) {
+            self.0
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(format!("{channel}:{payload}"));
+        }
+    }
 
     /// 面板状态映射全表（契约口径：idle/launching/running/stopping/stopped/
     /// crashed/error；降级槽恒 error）。
@@ -732,7 +919,9 @@ mod tests {
             Ok(_) => panic!("降级槽 ensure_ready 必须失败"),
             Err(err) => assert!(err.contains("未注入"), "降级文案：{err}"),
         }
-        let err = slot.stop().await.unwrap_err();
+        let err = slot.stop(false).await.unwrap_err();
+        assert!(err.contains("未注入"), "降级文案：{err}");
+        let err = slot.stop(true).await.unwrap_err();
         assert!(err.contains("未注入"), "降级文案：{err}");
 
         let ops = LazySessionOps::new(slot);
@@ -766,13 +955,15 @@ mod tests {
         assert!(!slot.estop_flag.load(Ordering::SeqCst));
     }
 
-    /// 载荷契约形状（27 方案 S6）：url/reason 缺省时不落键（skip_serializing_if），
-    /// 携带时按 `{ state, url? }` / `{ state, reason? }` 序列化。
+    /// 载荷契约形状（27 方案 S6 + 评审 F7）：url/reason 缺省时不落键
+    /// （skip_serializing_if），携带时按 `{ state, url? }` / `{ state, reason? }`
+    /// 序列化。
     #[test]
     fn payload_contract_shapes() {
         let idle = StatusPayload {
             state: "idle",
             url: None,
+            reason: None,
         };
         assert_eq!(
             serde_json::to_value(&idle).unwrap(),
@@ -781,10 +972,20 @@ mod tests {
         let running = StatusPayload {
             state: "running",
             url: Some("https://e.com/".to_string()),
+            reason: None,
         };
         assert_eq!(
             serde_json::to_value(&running).unwrap(),
             json!({ "state": "running", "url": "https://e.com/" })
+        );
+        let crashed = StatusPayload {
+            state: "crashed",
+            url: None,
+            reason: Some("ProcessExit(1)".to_string()),
+        };
+        assert_eq!(
+            serde_json::to_value(&crashed).unwrap(),
+            json!({ "state": "crashed", "reason": "ProcessExit(1)" })
         );
         let start_ok = StartPayload {
             state: "running",
@@ -801,6 +1002,125 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&start_err).unwrap(),
             json!({ "state": "error", "reason": "原因" })
+        );
+    }
+
+    /// 评审 F3：急停（force=true）不等待会话锁——预占锁（模拟 launching 中
+    /// start_and_connect_locked 持锁挂起）后 force stop 仍立即收敛（manager
+    /// 未启动路径幂等）；正常停止（force=false）会被锁阻塞至硬超时兜底。
+    #[tokio::test]
+    async fn force_stop_skips_session_lock() {
+        let manager = Arc::new(BrowserManager::new(
+            std::env::temp_dir().join("browser-slot-force-stop-test"),
+        ));
+        let slot = Arc::new(BrowserSlot::from_parts(
+            Some(manager),
+            LaunchConfig::default(),
+        ));
+        // 预占会话锁（并发启动/重连持锁窗口）
+        let _guard = slot.session.lock().await;
+        // 急停：不等锁，直接收敛（未启动 manager 停止幂等）
+        slot.stop(true).await.expect("force stop 不得被会话锁阻塞");
+    }
+
+    /// 评审 F4：stop 硬超时——优雅停止被会话锁阻塞超时后，走强制杀树兜底
+    /// （未启动 manager 强制停止幂等收敛，不永久挂死）。
+    #[tokio::test]
+    async fn stop_hard_timeout_falls_back_to_force() {
+        let manager = Arc::new(BrowserManager::new(
+            std::env::temp_dir().join("browser-slot-stop-timeout-test"),
+        ));
+        let slot = Arc::new(
+            BrowserSlot::from_parts(Some(manager), LaunchConfig::default())
+                .with_stop_hard_timeout(Duration::from_millis(50)),
+        );
+        // 预占会话锁：优雅停止在 lock().await 阻塞 → 50ms 硬超时 → 强制兜底
+        let _guard = slot.session.lock().await;
+        let started = Instant::now();
+        slot.stop(false).await.expect("超时兜底应收敛");
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "硬超时兜底不得长期挂起：{:?}",
+            started.elapsed()
+        );
+    }
+
+    /// 评审 F9：启动失败冷却期——record_start_failure 后冷却期内 start /
+    /// ensure_ready 直接返回冷却错误（不触发真实启动链）；冷却期过后恢复。
+    #[tokio::test]
+    async fn start_failure_cooldown_gates() {
+        let manager = Arc::new(BrowserManager::new(
+            std::env::temp_dir().join("browser-slot-cooldown-test"),
+        ));
+        let slot = Arc::new(BrowserSlot::from_parts(
+            Some(manager),
+            LaunchConfig::default(),
+        ));
+        assert_eq!(slot.start_cooldown_remaining(), None, "初始无冷却");
+        slot.record_start_failure();
+        let err = slot.start().await.unwrap_err();
+        assert!(err.contains("冷却"), "start 冷却 gating：{err}");
+        match slot.ensure_ready().await {
+            Ok(_) => panic!("冷却期内 ensure_ready 必须失败"),
+            Err(err) => assert!(err.contains("冷却"), "ensure_ready 冷却 gating：{err}"),
+        }
+        // 冷却期过后恢复：注入 0 冷却 = 冷却门禁关闭（记录失败后亦不 gating，
+        // 未启动语义可重新走启动链；不触发真实启动）
+        let manager = Arc::new(BrowserManager::new(
+            std::env::temp_dir().join("browser-slot-cooldown-expired-test"),
+        ));
+        let slot = Arc::new(
+            BrowserSlot::from_parts(Some(manager), LaunchConfig::default())
+                .with_start_fail_cooldown(Duration::ZERO),
+        );
+        slot.record_start_failure();
+        assert_eq!(slot.start_cooldown_remaining(), None, "0 冷却 = 门禁关闭");
+    }
+
+    /// 评审 F7：导航栈变更经转发任务重发状态事件（URL 随导航推送，面板不陈旧）。
+    #[tokio::test]
+    async fn nav_change_forwards_state_event() {
+        let manager = Arc::new(BrowserManager::new(
+            std::env::temp_dir().join("browser-slot-nav-forward-test"),
+        ));
+        let slot = Arc::new(BrowserSlot::from_parts(
+            Some(manager.clone()),
+            LaunchConfig::default(),
+        ));
+        let logs = Arc::new(Mutex::new(Vec::new()));
+        slot.attach_emitter(Arc::new(TestEmitter(Arc::clone(&logs))));
+        // 注入导航栈变更（set_nav 发射 NavStackChanged）→ 转发任务重发状态
+        let mut nav = NavStack::new();
+        nav.push(
+            url::Url::parse("https://a.example").expect("URL 解析"),
+            true,
+        );
+        manager.set_nav(nav);
+        // 等待转发任务异步处理
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let logs = logs.lock().unwrap_or_else(|p| p.into_inner());
+        assert!(
+            logs.iter()
+                .any(|s| s.contains("browser://state-changed") && s.contains("a.example")),
+            "导航变更必须推送含 url 的状态事件：{logs:?}"
+        );
+    }
+
+    /// 评审 F7：崩溃事件携带原因（`{ state: "crashed", reason }`）。
+    #[test]
+    fn crash_event_carries_reason() {
+        let slot = Arc::new(BrowserSlot::from_parts(None, LaunchConfig::default()));
+        let logs = Arc::new(Mutex::new(Vec::new()));
+        slot.attach_emitter(Arc::new(TestEmitter(Arc::clone(&logs))));
+        slot.emit_crash(&CrashReason::ProcessExit(1));
+        let logs = logs.lock().unwrap_or_else(|p| p.into_inner());
+        assert_eq!(logs.len(), 1, "崩溃事件应发射一次：{logs:?}");
+        assert!(
+            logs[0].contains("browser://state-changed")
+                && logs[0].contains("\"state\":\"crashed\"")
+                && logs[0].contains("ProcessExit(1)"),
+            "崩溃载荷含 state+reason：{}",
+            logs[0]
         );
     }
 

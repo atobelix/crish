@@ -3,13 +3,15 @@
 //!
 //! ## 接口契约（契约定死，前端消费面）
 //! - `browser_start` → `{ state: "running"|"starting"|"error", reason?: string }`；
-//! - `browser_stop` → `{ state: "stopped" }`；
+//! - `browser_stop` → `{ state: "stopped" }`；`force?: boolean` 参数（评审 F3）：
+//!   `true` = 急停——不等会话锁，直接走强制杀树路径（launching 中不被会话锁
+//!   阻塞至首启超时）；缺省/`false` = 正常停止（Graceful）；
 //! - `browser_status` → `{ state: "idle"|"launching"|"running"|"stopping"|
 //!   "stopped"|"crashed"|"error", url?: string }`。
 //!
-//! 状态迁移经 `browser://state-changed`（payload `{ state, url? }`）Tauri
-//! 事件发射（事件来源 = BrowserManager 状态机；发射接线见
-//! [crate::browser::BrowserSlot::attach_emitter]）。
+//! 状态迁移经 `browser://state-changed`（payload `{ state, url?, reason? }`）Tauri
+//! 事件发射（事件来源 = BrowserManager 状态机；评审 F7：崩溃事件携带 reason 原因；
+//! 发射接线见 [crate::browser::BrowserSlot::attach_emitter]）。
 //!
 //! 命令均代理到引擎持有的 [BrowserSlot]（进程级单例，经
 //! [CoreRunState::engine] 访问器取用）——不持有独立状态，与工具面
@@ -53,12 +55,16 @@ pub(crate) async fn browser_start<R: tauri::Runtime>(
 
 #[tauri::command]
 pub(crate) async fn browser_stop(
+    force: Option<bool>,
     core: tauri::State<'_, Arc<CoreRunState>>,
 ) -> Result<StatusPayload, String> {
-    slot(core.inner()).stop().await?;
+    // 评审 F3：force=true（急停）→ 强制杀树路径（不等会话锁，launching 中
+    // 不被阻塞至首启超时）；缺省 = 正常停止（Graceful）
+    slot(core.inner()).stop(force.unwrap_or(false)).await?;
     Ok(StatusPayload {
         state: "stopped",
         url: None,
+        reason: None,
     })
 }
 
@@ -131,7 +137,7 @@ mod tests {
 
     /// browser_status 契约：从未启动 → `{ state: "idle" }`（无 url 键）；
     /// 未启动的 browser_stop 幂等返回 `{ state: "stopped" }`（manager.stop
-    /// 无驱动路径直接收敛，安全面）。
+    /// 无驱动路径直接收敛，安全面）；force 参数缺省/显式均收敛。
     #[tokio::test]
     async fn status_and_stop_contract_on_idle_state() {
         use tauri::Manager as _;
@@ -151,7 +157,14 @@ mod tests {
             "url 缺省不落键（契约形状）"
         );
 
-        let stopped = browser_stop(state_ref).await.expect("未启动 stop 应幂等");
+        let stopped = browser_stop(None, state_ref.clone()).await.expect("未启动 stop 应幂等");
+        assert_eq!(
+            serde_json::to_value(&stopped).unwrap(),
+            json!({ "state": "stopped" })
+        );
+
+        // 评审 F3：force 急停参数显式传递亦收敛（未启动幂等安全面）
+        let stopped = browser_stop(Some(true), state_ref).await.expect("force stop 应幂等");
         assert_eq!(
             serde_json::to_value(&stopped).unwrap(),
             json!({ "state": "stopped" })

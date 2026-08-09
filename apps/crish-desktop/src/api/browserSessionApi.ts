@@ -3,13 +3,17 @@
  *
  * 契约（与引擎接线约定，定死）：
  *   invoke('browser_start')   -> { state: 'running'|'starting'|'error', reason?: string }
- *   invoke('browser_stop')    -> { state: 'stopped' }
+ *   invoke('browser_stop')    -> { state: 'stopped' }（可选参数 force?: boolean——
+ *                                  true = 急停，引擎走强制杀树路径，评审 F3）
  *   invoke('browser_status')  -> { state: 'idle'|'launching'|'running'|'stopping'|'stopped'|'crashed'|'error', url?: string }
- *   事件 'browser://state-changed' payload { state, url? }
+ *   事件 'browser://state-changed' payload { state, url?, reason? }（评审 F7：
+ *   crashed 事件携带 reason 原因字段，本桥透传解析）
  *
  * 错误处理对齐 tauriInvoke 三态：missing = 引擎未接线（非 Tauri / 命令未注册），
- * error = 命令报错（携带 kind/message）。不经过 transport 清单校验
- * （browser_* 为独立命令域，未纳入 core_list_commands）。
+ * error = 命令报错（携带 kind/message）。browser_* 三条命令已在
+ * core_list_commands 清单登记（Rust command_manifest.rs:182-184 与前端
+ * transport/commandManifest.ts:168-170 双端同步），此处不重复经 transport
+ * 清单校验，直接走 tauriInvoke（missing 语义兜底未接线场景）。
  */
 
 import { invokeTyped } from './tauriInvoke';
@@ -35,12 +39,28 @@ export type BrowserStatusResult = {
   url?: string;
 };
 
+/** 状态事件/查询载荷（评审 F7：reason 为崩溃事件扩展字段，兼容解析）。 */
+export type BrowserStateEventPayload = {
+  state: BrowserSessionState | 'starting';
+  url?: string;
+  reason?: string;
+};
+
 export function startBrowserSession(): Promise<InvokeTypedResult<BrowserStartResult>> {
   return invokeTyped<BrowserStartResult>(BROWSER_START_CMD);
 }
 
-export function stopBrowserSession(): Promise<InvokeTypedResult<BrowserStopResult>> {
-  return invokeTyped<BrowserStopResult>(BROWSER_STOP_CMD);
+/**
+ * 停止浏览器会话。`force=true`（急停）→ 引擎走强制杀树路径（不等会话锁，
+ * launching 中不被阻塞至首启超时）；缺省/`false` = 正常停止（Graceful）。
+ */
+export function stopBrowserSession(
+  force = false,
+): Promise<InvokeTypedResult<BrowserStopResult>> {
+  return invokeTyped<BrowserStopResult>(
+    BROWSER_STOP_CMD,
+    force ? { force: true } : undefined,
+  );
 }
 
 export function fetchBrowserStatus(): Promise<InvokeTypedResult<BrowserStatusResult>> {
