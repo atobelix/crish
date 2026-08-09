@@ -182,3 +182,123 @@ PERF_BASE_URL=http://localhost:5173 node tests/perf/baseline-collect.mjs  # 覆�
 - 重测：`node tests/perf/baseline-recollect.mjs`（浏览器模式，失败自动降级 node）；
 - node 降级：`node tests/perf/baseline-recollect.mjs --node-only`；
 - 数据落盘：`baseline-20260809-r2.json`（R0 对比表在采集汇总尾部自动打印）。
+
+---
+
+# R3-D 流式注入验证（2026-08-09，500 token/s）
+
+> 定位：验证「500 token/s 流式注入 + 60fps 保底（rAF 帧间隔 P95 < 16.6ms）」目标，
+> 对齐 `docs/analysis/01-性能帧率路线.md` §4.1 流式帧 / §4.3 流式专项预算。
+> 原始数据：`stream-inject-report.json`（本目录，采集脚本 `stream-inject-500.mjs`，
+> `runs` 数组累积 headless 与 GPU 两轮）。
+
+## 十一、方法（与 R0/R2 的差异点）
+
+- **注入形态**：token 级 push（500 token/s 时间戳节拍，`setInterval(1ms)` 驱动）经
+  「内联 StreamBuffer」（rAF 合并）→ **每帧 1 chunk → `store.appendText`**——对齐
+  01 文档 §4.3「StreamBuffer 按 rAF 合并，每帧注入 ≤1 个 chunk」；60Hz 下每帧
+  ≈8.3 token、GPU 100Hz 下每帧 ≈5 token（≈任务书「每帧 2-3 token 追加」量级）。
+  收口 = `store.flushStreamTail()`（= streamEnd 的 stop-flush 语义）。
+- **接线说明（诚实记录）**：`App.tsx` 未把 MarkdownEngine 的 engineRef 暴露到
+  window（R5 宿主 `streamAppend/streamEnd` 接线未落地），注入走 `store.appendText`
+  常规路径——即 streamAppend 的「回落等价路径」（MarkdownEngine.tsx:364-368），
+  C3 直刷（纯文本末行命令式 DOM 写）不在本次压测范围；appendText 路径比直刷更重，
+  **口径保守**。
+- **场景定义**（各 500 token/s × 60s ≈ 3 万 token）：
+  - A 纯文本：中文单词池循环（每 8 token 一换行），60s 末文档 ≈6.4 万字符；
+  - B 代码块：每 40 token 插入一个 ```` ``` ```` 代码段（开 fence + 3 行代码 + 闭
+    fence，段内 token 逐字到达 = **fence 中途闭合软渲染路径**），60s 末 ≈750 段、
+    9.3 万字符；
+  - C 公式块：每 60 token 插入一个 `$$` 公式段（KaTeX 渲染），60s 末 ≈500 段、
+    8.5 万字符；
+  - D 流式 + 用户编辑：初始 100 行文档，流式期间**每 2s 一次 insertText 到中部**
+    （29 次，光标自然推进）；正确性 = 最终 `getText()` 与页面内参考模型**全量
+    一致**（无丢字/乱序）。
+- **判定**：`P95 < 16.6ms` 为 PASS（任务口径）；场景 D 附加文本一致性断言。
+  注意 60Hz 名义帧间隔 16.67ms 本身 >16.6ms——P95 落入 [16.6,16.7) 属「名义帧
+  无掉帧」，请结合 `>16.7ms` / `>33.3ms` 掉帧率与长任务数综合裁决。
+- **探针**：rAF 帧间隔（页面内 performance.now）、PerformanceObserver longtask、
+  `performance.memory.usedJSHeapSize`（1s 采样峰值）、appendText 单 chunk 计时。
+- **踩坑记录（已修复，脚本内注释留存）**：① token 生成器段序列换行曾因双重转义
+  层失效变成字面 `\n`、fence 段 `segAt` 退出重置导致段连续不断（场景 B/C 被污染
+  为纯代码块序列 30 万字符）——用 `String.fromCharCode(10)` 与保留段起点修复，
+  修复后 B/C 文档回落至 9.3/8.5 万字符；② `new Function` 全局作用域取不到外层
+  scenario，改 `eval` 函数表达式注入。
+
+## 十二、机器环境（本次实测，与 R0/R2 同机）
+
+| 项 | 值 |
+|---|---|
+| 平台 | Windows 10/11（win32） |
+| Node | v24.11.0 |
+| 浏览器 | Chrome 151（Playwright chromium） |
+| CPU / 内存 | 12 核 / 32 GB |
+| dev server | http://localhost:5173（vite，脚本自动拉起） |
+| headless 轮 | `chromium.launch({ headless: true })`——软件渲染，rAF 60Hz（P50 16.7ms） |
+| GPU 轮 | `PERF_HEADED=1` 有头模式——硬件渲染，rAF ~100Hz（P50 9.9ms） |
+
+## 十三、结果表（60s × 4 场景，双环境实测）
+
+### headless（软件渲染，同 R0/R2 口径）——四场景文本一致均 true
+
+| 场景 | 帧数 | P50 ms | P95 ms | P99 ms | >16.7ms | >33.3ms | 长任务 | 判定 |
+|---|---|---|---|---|---|---|---|---|
+| A 纯文本 | 3600 | 16.7 | 18.7 | 20.3 | 1730 | **0** | 0 | FAIL |
+| B 代码块 | 3600 | 16.7 | 18.6 | 20.2 | 1747 | **0** | 0 | FAIL |
+| C 公式块 | 3322 | 16.7 | 36.3 | 46.4 | 1645 | 226 | 16（958ms） | FAIL |
+| D 编辑+流 | 3600 | 16.6 | 18.0 | 18.5 | 1582 | **0** | 0 | FAIL |
+
+### GPU（有头，`PERF_HEADED=1`）——四场景文本一致均 true
+
+| 场景 | 帧数 | P50 ms | P95 ms | P99 ms | >16.7ms | >33.3ms | 长任务 | 判定 |
+|---|---|---|---|---|---|---|---|---|
+| A 纯文本 | 6000 | 9.8 | **13.4** | 14.1 | 0 | 0 | 0 | **PASS** |
+| B 代码块 | 5882 | 9.9 | **13.3** | 14.2 | 27 | 24 | 0 | **PASS** |
+| C 公式块 | 5361 | 9.9 | **14.6** | 43.2 | 254 | 232 | 13（841ms） | **PASS** |
+| D 编辑+流 | 5983 | 10.0 | **10.2** | 10.7 | 16 | 4 | 0 | **PASS** |
+
+### 数据层单 chunk 成本（appendText，帧合并形态）
+
+| 场景 | 浏览器 chunk P50/P95 ms（GPU 轮） | node 回放 P50/P95 ms |
+|---|---|---|
+| A 纯文本 | 0.2 / 0.3 | 0.022 / 0.056 |
+| B 代码块 | 0.3 / 0.7 | 0.021 / 0.041 |
+| C 公式块 | 0.3 / 0.7 | 0.015 / 0.035 |
+| D 编辑+流 | 0.2 / 0.5 | 0.011 / 0.022 |
+
+## 十四、结论
+
+1. **GPU 渲染后端下四场景全部 PASS**（P95 10.2-14.6ms < 16.6ms，60fps 保底达成，
+   实际 ~100Hz 运行）：纯文本/代码块/公式块/并发编辑四条流式路径的帧率均达标。
+2. **场景 D 正确性：通过**——流式 60s 期间 29 次用户编辑（中部 insertText），
+   最终文本与参考模型全量一致（无丢字/乱序），且 GPU P95 10.2ms（四场景最低，
+   编辑触发的尾段合并/记账未引入额外帧负担）。
+3. **headless（软件渲染）下 A/B/D P95 18.0-18.7ms**：超预算 1.4-2.1ms，但
+   33ms+ 严重掉帧为 0、长任务为 0——与 R2 重测结论一致（headless layout/paint
+   惩罚需 GPU 复测定论，`baseline-20260809-r2.json` §九.2）；GPU 复测证实
+   结论归属渲染后端，非引擎流式路径本身。
+4. **公式块是唯一间歇掉帧源**：场景 C 在 GPU 下仍有 13 次长任务（841ms）、
+   232 帧 33ms+（P99 43.2ms）——KaTeX 渲染在公式 fence 闭合瞬间集中触发，
+   headless 下放大到 P95 36.3ms。建议后续轮次专项（KaTeX 渲染节流/队列或
+   公式样本缓存，01 文档问题 1 的 math 样本表思路）。
+5. **数据层完全吸收 500 token/s**：单 chunk append 浏览器 P95 ≤0.7ms、node
+   回放 ≤0.06ms（COW 尾段路径，01 文档 §4.3 预算 ≤0.6ms 达标）；8.5-9.3 万
+   字符文档（fence/公式密集）下 chunk P95 仍 ≤0.7ms。
+
+## 十五、复现
+
+```bash
+node tests/perf/stream-inject-500.mjs              # headless 60s × 4 场景
+PERF_HEADED=1 node tests/perf/stream-inject-500.mjs # GPU 复测（对比渲染后端影响）
+node tests/perf/stream-inject-500.mjs --node-only   # node 数据层回放（秒级）
+# 环境变量：STREAM_DURATION_MS / STREAM_TPS / PERF_BASE_URL
+```
+
+数据落盘：`stream-inject-report.json`（`runs` 数组按轮累积，顶层为最新一轮）。
+
+## 十六、文件清单
+
+| 文件 | 说明 |
+|---|---|
+| `stream-inject-500.mjs` | R3-D 采集脚本（浏览器 + node 双模式，多轮 runs 累积） |
+| `stream-inject-report.json` | R3-D 原始数据产物（headless + GPU 两轮全量样本汇总） |

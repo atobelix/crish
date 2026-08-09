@@ -1,0 +1,574 @@
+{
+  "schema": "conex-r3d-stream-inject/v1",
+  "collectedAt": "2026-08-09T08:05:10.447Z",
+  "mode": "browser",
+  "headed": true,
+  "params": {
+    "tokensPerSecond": 500,
+    "durationMs": 60000,
+    "expectedTokens": 30000,
+    "frameBudgetMs": 16.6,
+    "editIntervalMs": 2000
+  },
+  "environment": {
+    "platform": "win32",
+    "nodeVersion": "v24.11.0",
+    "serverBase": "http://localhost:5173",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "hardwareConcurrency": 12,
+    "deviceMemory": 32,
+    "language": "zh-CN"
+  },
+  "scenarios": {
+    "A-plain": {
+      "scenario": "plain",
+      "injectedTokens": 30000,
+      "edits": 0,
+      "textLength": 63750,
+      "finalTextChars": 63750,
+      "expectedChars": 63750,
+      "textMatch": true,
+      "consistency": true,
+      "storeRunMs": null,
+      "frames": {
+        "count": 6000,
+        "p50": 9.800000011920929,
+        "p95": 13.400000035762787,
+        "p99": 14.100000023841858,
+        "mean": 10.000933333327373,
+        "over16_7": 0,
+        "over33_3": 0
+      },
+      "longTasks": {
+        "count": 0,
+        "totalMs": 0,
+        "maxMs": 0
+      },
+      "heap": {
+        "startMB": 25.3,
+        "peakMB": 69.6,
+        "endMB": 60.5
+      },
+      "chunkMs": {
+        "count": 5984,
+        "p50": 0.10000002384185791,
+        "p95": 0.30000001192092896
+      },
+      "verdict": {
+        "p95UnderBudget": true,
+        "textMatch": true,
+        "pass": true
+      }
+    },
+    "B-code-fence": {
+      "scenario": "code",
+      "injectedTokens": 30001,
+      "edits": 0,
+      "textLength": 93298,
+      "finalTextChars": 93298,
+      "expectedChars": 93298,
+      "textMatch": true,
+      "consistency": true,
+      "storeRunMs": null,
+      "frames": {
+        "count": 5882,
+        "p50": 9.899999976158142,
+        "p95": 13.300000011920929,
+        "p99": 14.199999988079071,
+        "mean": 10.201904114240774,
+        "over16_7": 27,
+        "over33_3": 24
+      },
+      "longTasks": {
+        "count": 0,
+        "totalMs": 0,
+        "maxMs": 0
+      },
+      "heap": {
+        "startMB": 60.5,
+        "peakMB": 81.7,
+        "endMB": 43.8
+      },
+      "chunkMs": {
+        "count": 5844,
+        "p50": 0.10000002384185791,
+        "p95": 0.20000004768371582
+      },
+      "verdict": {
+        "p95UnderBudget": true,
+        "textMatch": true,
+        "pass": true
+      }
+    },
+    "C-math-fence": {
+      "scenario": "math",
+      "injectedTokens": 30002,
+      "edits": 0,
+      "textLength": 85546,
+      "finalTextChars": 85546,
+      "expectedChars": 85546,
+      "textMatch": true,
+      "consistency": true,
+      "storeRunMs": null,
+      "frames": {
+        "count": 5361,
+        "p50": 9.899999976158142,
+        "p95": 14.600000023841858,
+        "p99": 43.19999998807907,
+        "mean": 11.206845737731049,
+        "over16_7": 254,
+        "over33_3": 232
+      },
+      "longTasks": {
+        "count": 13,
+        "totalMs": 841,
+        "maxMs": 94
+      },
+      "heap": {
+        "startMB": 43.8,
+        "peakMB": 101.7,
+        "endMB": 85.4
+      },
+      "chunkMs": {
+        "count": 5186,
+        "p50": 0.10000002384185791,
+        "p95": 0.30000001192092896
+      },
+      "verdict": {
+        "p95UnderBudget": true,
+        "textMatch": true,
+        "pass": true
+      }
+    },
+    "D-edit-during-stream": {
+      "scenario": "edit",
+      "injectedTokens": 30002,
+      "edits": 29,
+      "textLength": 67350,
+      "finalTextChars": 67350,
+      "expectedChars": 67350,
+      "textMatch": true,
+      "consistency": true,
+      "storeRunMs": null,
+      "frames": {
+        "count": 5983,
+        "p50": 10,
+        "p95": 10.199999988079071,
+        "p99": 10.699999988079071,
+        "mean": 10.030252381748287,
+        "over16_7": 16,
+        "over33_3": 4
+      },
+      "longTasks": {
+        "count": 0,
+        "totalMs": 0,
+        "maxMs": 0
+      },
+      "heap": {
+        "startMB": 85.4,
+        "peakMB": 102.2,
+        "endMB": 55.3
+      },
+      "chunkMs": {
+        "count": 5983,
+        "p50": 0.19999998807907104,
+        "p95": 0.30000001192092896
+      },
+      "verdict": {
+        "p95UnderBudget": true,
+        "textMatch": true,
+        "pass": true
+      }
+    }
+  },
+  "verdict": {
+    "framesAllP95UnderBudget": true,
+    "scenarioDTextCorrect": true,
+    "pass": true
+  },
+  "runs": [
+    {
+      "collectedAt": "2026-08-09T08:00:32.715Z",
+      "mode": "browser",
+      "headed": false,
+      "params": {
+        "tokensPerSecond": 500,
+        "durationMs": 60000,
+        "expectedTokens": 30000,
+        "frameBudgetMs": 16.6,
+        "editIntervalMs": 2000
+      },
+      "environment": {
+        "platform": "win32",
+        "nodeVersion": "v24.11.0",
+        "serverBase": "http://localhost:5173",
+        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+        "hardwareConcurrency": 12,
+        "deviceMemory": 32,
+        "language": "zh-CN"
+      },
+      "scenarios": {
+        "A-plain": {
+          "scenario": "plain",
+          "injectedTokens": 30000,
+          "edits": 0,
+          "textLength": 63750,
+          "finalTextChars": 63750,
+          "expectedChars": 63750,
+          "textMatch": true,
+          "consistency": true,
+          "storeRunMs": null,
+          "frames": {
+            "count": 3600,
+            "p50": 16.69999998807907,
+            "p95": 18.700000047683716,
+            "p99": 20.30000001192093,
+            "mean": 16.667722222225535,
+            "over16_7": 1730,
+            "over33_3": 0
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0
+          },
+          "heap": {
+            "startMB": 23.4,
+            "peakMB": 23.4,
+            "endMB": 23.4
+          },
+          "chunkMs": {
+            "count": 3601,
+            "p50": 0.10000002384185791,
+            "p95": 0.20000004768371582
+          },
+          "verdict": {
+            "p95UnderBudget": false,
+            "textMatch": true,
+            "pass": false
+          }
+        },
+        "B-code-fence": {
+          "scenario": "code",
+          "injectedTokens": 30000,
+          "edits": 0,
+          "textLength": 93285,
+          "finalTextChars": 93285,
+          "expectedChars": 93285,
+          "textMatch": true,
+          "consistency": true,
+          "storeRunMs": null,
+          "frames": {
+            "count": 3600,
+            "p50": 16.69999998807907,
+            "p95": 18.599999964237213,
+            "p99": 20.19999998807907,
+            "mean": 16.66861111111111,
+            "over16_7": 1747,
+            "over33_3": 0
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0
+          },
+          "heap": {
+            "startMB": 23.4,
+            "peakMB": 23.4,
+            "endMB": 23.4
+          },
+          "chunkMs": {
+            "count": 3592,
+            "p50": 0.10000002384185791,
+            "p95": 0.20000004768371582
+          },
+          "verdict": {
+            "p95UnderBudget": false,
+            "textMatch": true,
+            "pass": false
+          }
+        },
+        "C-math-fence": {
+          "scenario": "math",
+          "injectedTokens": 30001,
+          "edits": 0,
+          "textLength": 85520,
+          "finalTextChars": 85520,
+          "expectedChars": 85520,
+          "textMatch": true,
+          "consistency": true,
+          "storeRunMs": null,
+          "frames": {
+            "count": 3322,
+            "p50": 16.69999998807907,
+            "p95": 36.299999952316284,
+            "p99": 46.39999997615814,
+            "mean": 18.082630945213726,
+            "over16_7": 1645,
+            "over33_3": 226
+          },
+          "longTasks": {
+            "count": 16,
+            "totalMs": 958,
+            "maxMs": 77
+          },
+          "heap": {
+            "startMB": 23.4,
+            "peakMB": 23.4,
+            "endMB": 23.4
+          },
+          "chunkMs": {
+            "count": 3168,
+            "p50": 0.10000002384185791,
+            "p95": 0.19999998807907104
+          },
+          "verdict": {
+            "p95UnderBudget": false,
+            "textMatch": true,
+            "pass": false
+          }
+        },
+        "D-edit-during-stream": {
+          "scenario": "edit",
+          "injectedTokens": 30000,
+          "edits": 29,
+          "textLength": 67346,
+          "finalTextChars": 67346,
+          "expectedChars": 67346,
+          "textMatch": true,
+          "consistency": true,
+          "storeRunMs": null,
+          "frames": {
+            "count": 3600,
+            "p50": 16.600000023841858,
+            "p95": 18,
+            "p99": 18.5,
+            "mean": 16.665694444444444,
+            "over16_7": 1582,
+            "over33_3": 0
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0
+          },
+          "heap": {
+            "startMB": 23.4,
+            "peakMB": 23.4,
+            "endMB": 23.4
+          },
+          "chunkMs": {
+            "count": 3601,
+            "p50": 0.10000002384185791,
+            "p95": 0.20000004768371582
+          },
+          "verdict": {
+            "p95UnderBudget": false,
+            "textMatch": true,
+            "pass": false
+          }
+        }
+      },
+      "verdict": {
+        "framesAllP95UnderBudget": false,
+        "scenarioDTextCorrect": true,
+        "pass": false
+      }
+    },
+    {
+      "collectedAt": "2026-08-09T08:05:10.447Z",
+      "mode": "browser",
+      "headed": true,
+      "params": {
+        "tokensPerSecond": 500,
+        "durationMs": 60000,
+        "expectedTokens": 30000,
+        "frameBudgetMs": 16.6,
+        "editIntervalMs": 2000
+      },
+      "environment": {
+        "platform": "win32",
+        "nodeVersion": "v24.11.0",
+        "serverBase": "http://localhost:5173",
+        "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+        "hardwareConcurrency": 12,
+        "deviceMemory": 32,
+        "language": "zh-CN"
+      },
+      "scenarios": {
+        "A-plain": {
+          "scenario": "plain",
+          "injectedTokens": 30000,
+          "edits": 0,
+          "textLength": 63750,
+          "finalTextChars": 63750,
+          "expectedChars": 63750,
+          "textMatch": true,
+          "consistency": true,
+          "storeRunMs": null,
+          "frames": {
+            "count": 6000,
+            "p50": 9.800000011920929,
+            "p95": 13.400000035762787,
+            "p99": 14.100000023841858,
+            "mean": 10.000933333327373,
+            "over16_7": 0,
+            "over33_3": 0
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0
+          },
+          "heap": {
+            "startMB": 25.3,
+            "peakMB": 69.6,
+            "endMB": 60.5
+          },
+          "chunkMs": {
+            "count": 5984,
+            "p50": 0.10000002384185791,
+            "p95": 0.30000001192092896
+          },
+          "verdict": {
+            "p95UnderBudget": true,
+            "textMatch": true,
+            "pass": true
+          }
+        },
+        "B-code-fence": {
+          "scenario": "code",
+          "injectedTokens": 30001,
+          "edits": 0,
+          "textLength": 93298,
+          "finalTextChars": 93298,
+          "expectedChars": 93298,
+          "textMatch": true,
+          "consistency": true,
+          "storeRunMs": null,
+          "frames": {
+            "count": 5882,
+            "p50": 9.899999976158142,
+            "p95": 13.300000011920929,
+            "p99": 14.199999988079071,
+            "mean": 10.201904114240774,
+            "over16_7": 27,
+            "over33_3": 24
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0
+          },
+          "heap": {
+            "startMB": 60.5,
+            "peakMB": 81.7,
+            "endMB": 43.8
+          },
+          "chunkMs": {
+            "count": 5844,
+            "p50": 0.10000002384185791,
+            "p95": 0.20000004768371582
+          },
+          "verdict": {
+            "p95UnderBudget": true,
+            "textMatch": true,
+            "pass": true
+          }
+        },
+        "C-math-fence": {
+          "scenario": "math",
+          "injectedTokens": 30002,
+          "edits": 0,
+          "textLength": 85546,
+          "finalTextChars": 85546,
+          "expectedChars": 85546,
+          "textMatch": true,
+          "consistency": true,
+          "storeRunMs": null,
+          "frames": {
+            "count": 5361,
+            "p50": 9.899999976158142,
+            "p95": 14.600000023841858,
+            "p99": 43.19999998807907,
+            "mean": 11.206845737731049,
+            "over16_7": 254,
+            "over33_3": 232
+          },
+          "longTasks": {
+            "count": 13,
+            "totalMs": 841,
+            "maxMs": 94
+          },
+          "heap": {
+            "startMB": 43.8,
+            "peakMB": 101.7,
+            "endMB": 85.4
+          },
+          "chunkMs": {
+            "count": 5186,
+            "p50": 0.10000002384185791,
+            "p95": 0.30000001192092896
+          },
+          "verdict": {
+            "p95UnderBudget": true,
+            "textMatch": true,
+            "pass": true
+          }
+        },
+        "D-edit-during-stream": {
+          "scenario": "edit",
+          "injectedTokens": 30002,
+          "edits": 29,
+          "textLength": 67350,
+          "finalTextChars": 67350,
+          "expectedChars": 67350,
+          "textMatch": true,
+          "consistency": true,
+          "storeRunMs": null,
+          "frames": {
+            "count": 5983,
+            "p50": 10,
+            "p95": 10.199999988079071,
+            "p99": 10.699999988079071,
+            "mean": 10.030252381748287,
+            "over16_7": 16,
+            "over33_3": 4
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0
+          },
+          "heap": {
+            "startMB": 85.4,
+            "peakMB": 102.2,
+            "endMB": 55.3
+          },
+          "chunkMs": {
+            "count": 5983,
+            "p50": 0.19999998807907104,
+            "p95": 0.30000001192092896
+          },
+          "verdict": {
+            "p95UnderBudget": true,
+            "textMatch": true,
+            "pass": true
+          }
+        }
+      },
+      "verdict": {
+        "framesAllP95UnderBudget": true,
+        "scenarioDTextCorrect": true,
+        "pass": true
+      }
+    }
+  ],
+  "notes": [
+    "计时全部在页面内 performance.now() 完成，规避 Playwright 外部计时污染",
+    "注入形态：token 级 push（500 token/s 时间戳节拍）经 rAF 合并为每帧 1 chunk → appendText，对齐 StreamBuffer 帧预算（01 文档 §4.3）",
+    "接线说明：App.tsx 未暴露 engineRef（R5 宿主接线未落地），注入走 store.appendText 常规路径（streamAppend 回落等价路径），C3 直刷路径不在本次压测范围，口径保守",
+    "判定口径：P95 < 16.6ms（60fps 保底）为 PASS；注意 60Hz 名义帧间隔 16.67ms，P95 落入 [16.6,16.7) 属名义帧无掉帧，请结合 >16.7ms/>33.3ms 掉帧率综合裁决",
+    "注入参数：500 token/s × 60000ms ≈ 30000 token；场景 D 用户编辑间隔 2000ms"
+  ]
+}
