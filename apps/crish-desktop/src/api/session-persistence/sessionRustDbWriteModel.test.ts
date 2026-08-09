@@ -472,14 +472,14 @@ describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契
     expect(res.sessions[0]?.messages ?? []).toEqual([]);
   });
 
-  it('30 天清理：LS 会话镜像全量清除（SQLite 唯一真相源），SQLite 数据不受影响', async () => {
+  it('30 天清理护栏（N0-1）：SQLite 确认持有的会话镜像清除，SQLite 缺失的保留', async () => {
     const { db, call } = makeFakeDb();
     db.sessions.set('in-sqlite', {
       entry: { ...indexEntry('in-sqlite'), messageCount: 1 },
       messages: [msg('m1', 'user')],
       agents: [],
     });
-    // LS 镜像：in-sqlite（已落库）+ ls-only（仅 LS 存在）
+    // LS 镜像：in-sqlite（已落库）+ ls-only（仅 LS 存在——降级窗口期唯一副本）
     localStorage.setItem(
       SESSION_BODY_PREFIX + 'in-sqlite',
       JSON.stringify([msg('m1', 'user')])
@@ -500,36 +500,31 @@ describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契
 
     await cleanupLegacyLocalStorageSessions();
 
-    // Stream D 契约：30 天清理不区分是否已落库，LS 会话镜像全量清除。
-    // 安全前提：清理仅在迁移完成（migration_completed_at 置位）满 30 天后触发，
-    // 此时 SQLite 已持有全部会话（含原 ls-only），LS 仅回滚保险。
+    // 新契约（P0-1）：SQLite 确认持有的会话镜像删除
     expect(localStorage.getItem(SESSION_BODY_PREFIX + 'in-sqlite')).toBeNull();
-    expect(
-      localStorage.getItem(SESSION_AGENTS_PREFIX + 'in-sqlite')
-    ).toBeNull();
-    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'ls-only')).toBeNull();
-    expect(localStorage.getItem(SESSION_INDEX_KEY)).toBeNull();
+    expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 'in-sqlite')).toBeNull();
+    // SQLite 无对应会话 → LS 唯一副本保留（可经 hydrate 回迁），索引随之保留
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'ls-only')).not.toBeNull();
+    expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
     // SQLite 真相源不受清理影响
     expect(db.sessions.has('in-sqlite')).toBe(true);
     expect(db.sessions.get('in-sqlite')?.messages).toHaveLength(1);
   });
 
-  it('30 天清理：索引 key 删除（LS 全量清除）', async () => {
+  it('30 天清理：全部会话确认后索引 key 删除（LS 全量清除）', async () => {
     const { db, call } = makeFakeDb();
+    // SQLite 持有全部会话数据（正文非空）→ 全部确认，元数据 key 可删
     db.sessions.set('a', {
-      entry: { ...indexEntry('a') },
-      messages: [],
+      entry: { ...indexEntry('a'), messageCount: 1 },
+      messages: [msg('m1', 'user')],
       agents: [],
     });
     db.sessions.set('b', {
-      entry: { ...indexEntry('b') },
-      messages: [],
+      entry: { ...indexEntry('b'), messageCount: 1 },
+      messages: [msg('m2', 'user')],
       agents: [],
     });
-    localStorage.setItem(
-      SESSION_BODY_PREFIX + 'a',
-      JSON.stringify([msg('m1', 'user')])
-    );
+    localStorage.setItem(SESSION_BODY_PREFIX + 'a', JSON.stringify([msg('m1', 'user')]));
     localStorage.setItem(
       SESSION_INDEX_KEY,
       JSON.stringify([{ ...indexEntry('a') }, { ...indexEntry('b') }])
@@ -542,6 +537,8 @@ describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契
 
     expect(localStorage.getItem(SESSION_INDEX_KEY)).toBeNull();
     expect(localStorage.getItem(SESSION_BODY_PREFIX + 'a')).toBeNull();
+    expect(localStorage.getItem(SESSION_ACTIVE_KEY)).toBeNull();
+    expect(localStorage.getItem(SESSION_FOLDER_KEY)).toBeNull();
   });
 
   it('清理置位后 persist 仍写 LS 镜像（P17 单写路径未实施：镜像供 seedSessions 同步路径与 MCP 观测）', async () => {
@@ -583,6 +580,138 @@ describe('真相源切换：LS 索引优先 / SQLite 提供正文（过渡期契
     });
     expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
     expect(localStorage.getItem(SESSION_BODY_PREFIX + 's1')).not.toBeNull();
+  });
+});
+
+describe('P0-1 降级窗口 30 天清理防护（N0-1 回归）', () => {
+  it('SQLite 缺会话时 LS 唯一副本保留且不置位 cleaned；磁盘恢复后重试成功', async () => {
+    const { db, call } = makeFakeDb();
+    installFakeTransport(call);
+    // 降级窗口：磁盘 SQLite 无任何会话数据（假库为空），LS 持有唯一副本
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 'degraded-only',
+      JSON.stringify([msg('m1', 'user')]),
+    );
+    localStorage.setItem(
+      SESSION_INDEX_KEY,
+      JSON.stringify([{ ...indexEntry('degraded-only', '降级期会话') }]),
+    );
+    db.meta.set('migration_completed_at', String(Date.now() - 31 * 24 * 60 * 60 * 1000));
+
+    await runMigrationCleanupIfNeeded();
+
+    // LS 唯一副本保留，且不置位清理完成标记（下次启动重试）
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'degraded-only')).not.toBeNull();
+    expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
+    expect(db.meta.get('legacy_localstorage_cleaned')).toBeUndefined();
+
+    // 磁盘恢复：SQLite 重新持有数据（假库补入会话）→ 重试成功
+    db.sessions.set('degraded-only', {
+      entry: { ...indexEntry('degraded-only', '降级期会话'), messageCount: 1 },
+      messages: [msg('m1', 'user')],
+      agents: [],
+    });
+    await runMigrationCleanupIfNeeded();
+
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'degraded-only')).toBeNull();
+    expect(localStorage.getItem(SESSION_INDEX_KEY)).toBeNull();
+    expect(db.meta.get('legacy_localstorage_cleaned')).toBe('1');
+  });
+
+  it('SQLite 有会话但正文为空、LS 正文非空 → 保留（降级期正文唯一副本）', async () => {
+    const { db, call } = makeFakeDb();
+    // SQLite 会话行存在但正文为空（磁盘旧镜像），LS 正文非空（降级期新数据）
+    db.sessions.set('sq-empty', {
+      entry: { ...indexEntry('sq-empty'), messageCount: 0 },
+      messages: [],
+      agents: [],
+    });
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 'sq-empty',
+      JSON.stringify([msg('m1', 'user', 'only-copy')]),
+    );
+    localStorage.setItem(SESSION_INDEX_KEY, JSON.stringify([{ ...indexEntry('sq-empty') }]));
+    installFakeTransport(call);
+    db.meta.set('migration_completed_at', String(Date.now() - 31 * 24 * 60 * 60 * 1000));
+
+    await runMigrationCleanupIfNeeded();
+
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'sq-empty')).not.toBeNull();
+    expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
+    expect(db.meta.get('legacy_localstorage_cleaned')).toBeUndefined();
+  });
+
+  it('SQLite invoke 不可用（missing）→ 30 天清理全保留（无法校验不删）', async () => {
+    // 不安装 transport：list_sessions 为 missing → 无法校验 → 全保留
+    localStorage.setItem(SESSION_BODY_PREFIX + 'any', JSON.stringify([msg('m1', 'user')]));
+    localStorage.setItem(SESSION_INDEX_KEY, JSON.stringify([{ ...indexEntry('any') }]));
+    const meta = new Map<string, string>();
+    mockTauriCommand('get_session_meta', async (args: unknown) => {
+      const { key } = args as { key: string };
+      return meta.get(key) ?? null;
+    });
+    mockTauriCommand('set_session_meta', async (args: unknown) => {
+      const { key, value } = args as { key: string; value: string };
+      meta.set(key, value);
+      return undefined;
+    });
+    meta.set('migration_completed_at', String(Date.now() - 31 * 24 * 60 * 60 * 1000));
+
+    await runMigrationCleanupIfNeeded();
+
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'any')).not.toBeNull();
+    expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
+    expect(meta.get('legacy_localstorage_cleaned')).toBeUndefined();
+  });
+});
+
+describe('P0-2 boot 窗口清理防护（N0-2 回归）', () => {
+  it('persist 空会话列表跳过孤儿清理（不 invoke cleanup，不清 LS 镜像）', async () => {
+    const { db, call } = makeFakeDb();
+    installFakeTransport(call);
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 'ghost',
+      JSON.stringify([msg('m1', 'user')]),
+    );
+
+    await persistAllSessionsRust([], '', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+
+    const cleanups = call.mock.calls.filter((c) => c[0] === 'cleanup_orphan_sessions');
+    expect(cleanups).toHaveLength(0);
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'ghost')).not.toBeNull();
+  });
+
+  it('localStorage 回退路径空 keep 不清除 LS（N1-2 与 Rust 空 keep 守卫对齐）', async () => {
+    // 不安装 transport → probe missing → persistAllSessionsLocalFallback（keep=∅）
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 'ghost',
+      JSON.stringify([msg('m1', 'user')]),
+    );
+
+    await persistAllSessionsRust([], '', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'ghost')).not.toBeNull();
+  });
+
+  it('清理回退分支：非空 keep 删除 LS 孤儿、保留 keep 会话（N1-2 语义保持）', async () => {
+    const { db, call } = makeFakeDb();
+    installFakeTransport(call);
+    // cleanup_orphan_sessions 失败 → JS 回退分支（keep 非空 → 正常清理）
+    mockTauriError('cleanup_orphan_sessions', new Error('boom'));
+    localStorage.setItem(SESSION_BODY_PREFIX + 'ghost', JSON.stringify([msg('m1', 'user')]));
+    localStorage.setItem(SESSION_BODY_PREFIX + 'keep1', JSON.stringify([msg('m2', 'user')]));
+
+    const s = sess('keep1', [msg('m2', 'user')]);
+    await persistAllSessionsRust([s], 'keep1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'ghost')).toBeNull();
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'keep1')).not.toBeNull();
   });
 });
 

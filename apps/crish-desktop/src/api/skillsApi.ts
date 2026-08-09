@@ -10,7 +10,8 @@
  */
 
 import { getWorkspacePath } from './projectStore';
-import { invokeCmd as tryInvokeTauri } from './tauriInvoke';
+import { invokeTyped } from './tauriInvoke';
+import { logInternalError } from './userFacingErrors';
 import { skillStableId } from './skillId';
 import { openDirectoryDialogSafe } from './openDirectoryDialog';
 import {
@@ -414,10 +415,19 @@ export async function discoverSkills(opts?: {
   disableModelInvocation?: unknown;
 };
 
-const rustSkills = await tryInvokeTauri<RustSkillRow[]>('workbench_discover_skills', {
+// T-F 06 T6.1：invokeCmd（tryInvokeTauri 别名）→ invokeTyped 三态化——
+// missing/error → logInternalError 后走 legacy JS 发现 fallback
+// （错误不再被吞为 null，可观测性保留；fallback 语义与旧行为等价）
+const res = await invokeTyped<RustSkillRow[]>('workbench_discover_skills', {
     workspacePath: workspace || null,
     extraDirs,
   });
+  let rustSkills: unknown = null;
+  if (res.status === 'error') {
+    logInternalError('discoverSkills', res.message);
+  } else if (res.status === 'ok') {
+    rustSkills = res.data;
+  }
 
   if (Array.isArray(rustSkills)) {
     const skills: DesktopSkill[] = [];

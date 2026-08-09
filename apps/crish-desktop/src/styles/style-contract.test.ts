@@ -369,3 +369,28 @@ describe('批次 2 · ⑧ 悬空引用清零 + 静态兜底存在', () => {
     expect(decls).toEqual(['.card-tab.active {']);
   });
 });
+
+describe('批次 6 · T4 hover-only 键盘闭环契约（08-步5）', () => {
+  it('DiffCard.hoverActions 不以 display:none 阻断 Tab 序，且 :hover/:focus-within 双揭示', () => {
+    // 规范化行尾：`\s*` 会吞 CRLF 的 \r，导致匹配串含换行
+    const css = readFile('src/components/diff/DiffCard.module.css').replace(
+      /\r\n/g,
+      '\n'
+    );
+    const block = css.match(/\.hoverActions\s*\{[\s\S]*?\}/)?.[0] ?? '';
+    expect(block, '.hoverActions 应存在').toContain('opacity: 0');
+    expect(block).toContain('visibility: hidden');
+    expect(block).not.toContain('display: none');
+    expect(css).toContain('.accordionHeaderRow:hover .hoverActions');
+    expect(css).toContain('.accordionHeaderRow:focus-within .hoverActions');
+    expect(css).toContain('.accordionHeaderRow:focus-within .fileStat');
+  });
+
+  it('DiffCardFileList 列表语义已降级为 role="list"（无 listbox/option 滥用）', () => {
+    const src = readFile('src/components/diff/DiffCardFileList.tsx');
+    expect(src).toContain('role="list" aria-label="变更文件列表"');
+    expect(src).not.toContain('role="listbox"');
+    expect(src).not.toContain('role="option"');
+    expect(src).not.toContain('aria-selected={active}');
+  });
+});

@@ -113,4 +113,77 @@ describe('ModelBadgePickerMenu（ui/Menu 基座）', () => {
     render(<Wrapper />);
     expect(screen.getByText('暂无可用服务商')).toBeInTheDocument();
   });
+
+  it('行按钮点击展开子菜单，aria-expanded 绑定真实打开态（08-步5 T4-3）', () => {
+    seedProfiles();
+    render(<Wrapper />);
+    const row = screen.getByTestId('profile-item-p1');
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(row);
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('menu', { name: '测试服务商 模型列表' })).toBeInTheDocument();
+    // 再点收起
+    fireEvent.click(row);
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('展开后焦点移入子菜单首项（键盘漫游起点）', async () => {
+    seedProfiles();
+    render(<Wrapper />);
+    fireEvent.click(screen.getByTestId('profile-item-p1'));
+    await waitFor(() =>
+      expect(screen.getByTestId('model-option-model-a')).toHaveFocus()
+    );
+  });
+
+  it('子菜单内 ↑↓/End 漫游（T4-3）', async () => {
+    seedProfiles();
+    render(<Wrapper />);
+    fireEvent.click(screen.getByTestId('profile-item-p1'));
+    const submenu = screen.getByRole('menu', { name: '测试服务商 模型列表' });
+    await waitFor(() =>
+      expect(screen.getByTestId('model-option-model-a')).toHaveFocus()
+    );
+    fireEvent.keyDown(submenu, { key: 'ArrowDown' });
+    expect(screen.getByTestId('model-option-model-b')).toHaveFocus();
+    fireEvent.keyDown(submenu, { key: 'ArrowUp' });
+    expect(screen.getByTestId('model-option-model-a')).toHaveFocus();
+    fireEvent.keyDown(submenu, { key: 'End' });
+    expect(screen.getByTestId('model-option-model-b')).toHaveFocus();
+  });
+
+  it('Esc 逐级关闭：先关子菜单并归还行按钮焦点，再 Esc 关整体（T4-3）', async () => {
+    seedProfiles();
+    const onClose = vi.fn();
+    render(<Wrapper onClose={onClose} />);
+    fireEvent.click(screen.getByTestId('profile-item-p1'));
+    const submenu = screen.getByRole('menu', { name: '测试服务商 模型列表' });
+    // 第一击 Esc：子菜单关闭 + 焦点归还行按钮
+    fireEvent.keyDown(submenu, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId('profile-item-p1')).toHaveFocus()
+    );
+    expect(onClose).not.toHaveBeenCalled();
+    // 第二击 Esc：基座关闭整体菜单 → onClose
+    fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape' });
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it('hover 保留为增强路径：悬停行仍展开子菜单（80ms 定时器）', async () => {
+    seedProfiles();
+    render(<Wrapper />);
+    fireEvent.mouseEnter(screen.getByTestId('profile-item-p1'));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menu', { name: '测试服务商 模型列表' })
+      ).toBeInTheDocument()
+    );
+    // 移出后经 150ms 宽限期关闭
+    fireEvent.mouseLeave(screen.getByTestId('profile-item-p1'));
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument(), {
+      timeout: 1000,
+    });
+  });
 });

@@ -366,12 +366,12 @@ fn tool_output_from_parts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_tools::registry::ToolRegistry;
+    use conex_types::tool::ToolProgressUpdate;
     use crate::r#loop::SessionLoopOptions;
     use crate::steering::{
         RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions,
     };
-    use agent_tools::registry::ToolRegistry;
-    use conex_types::tool::ToolProgressUpdate;
 
     /// 构造最小 LoopState（emit_tool_events 单测驱动）
     fn state() -> LoopState {

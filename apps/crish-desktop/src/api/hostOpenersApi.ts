@@ -3,7 +3,8 @@
  * 经 Tauri workbench_list_host_openers / workbench_open_host_target。
  */
 
-import { invokeCmd, invokeResult } from './tauriInvoke';
+import { invokeResult, invokeTyped } from './tauriInvoke';
+import { logInternalError } from './userFacingErrors';
 
 export type HostOpenerKind = 'file-manager' | 'editor' | string;
 
@@ -61,9 +62,11 @@ function normalizeOpener(raw: RawHostOpener): HostOpener | null {
 
 /** 扫描本机可用打开器（编辑器 / 资源管理器等，由壳层发现） */
 export async function listHostOpeners(): Promise<HostOpener[]> {
-  const raw = await invokeCmd<RawHostOpener[]>('workbench_list_host_openers');
-  if (!Array.isArray(raw)) return [];
-  return raw
+  // T-F 06 T6.1：invokeCmd → invokeTyped 三态化（missing → []，error → 日志 + []）
+  const res = await invokeTyped<RawHostOpener[]>('workbench_list_host_openers');
+  if (res.status === 'error') logInternalError('listHostOpeners', res.message);
+  if (res.status !== 'ok') return [];
+  return (Array.isArray(res.data) ? res.data : [])
     .map(normalizeOpener)
     .filter((o): o is HostOpener => Boolean(o && o.available));
 }
@@ -75,11 +78,12 @@ export async function listHostOpeners(): Promise<HostOpener[]> {
 async function listFileOpenHandlers(filePath: string): Promise<HostOpener[]> {
   const path = (filePath || '').trim();
   if (!path) return [];
-  const raw = await invokeCmd<RawHostOpener[]>('workbench_list_file_openers', {
+  const res = await invokeTyped<RawHostOpener[]>('workbench_list_file_openers', {
     path,
   });
-  if (!Array.isArray(raw)) return [];
-  return raw
+  if (res.status === 'error') logInternalError('listFileOpenHandlers', res.message);
+  if (res.status !== 'ok') return [];
+  return (Array.isArray(res.data) ? res.data : [])
     .map(normalizeOpener)
     .filter((o): o is HostOpener => Boolean(o && o.available));
 }

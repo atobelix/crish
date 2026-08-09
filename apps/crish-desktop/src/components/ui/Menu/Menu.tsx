@@ -64,6 +64,13 @@ export interface MenuProps {
    * 消费方据此区分「外点关闭」与「Esc/键盘关闭」。
    */
   onInteractOutside?: (event: Event) => void;
+  /**
+   * Esc 键拦截回调（08-步5 T4-3 嵌套子菜单逐级关闭需要）：
+   * 透传给 Radix Popover.Content 的 onEscapeKeyDown——Radix 在 document
+   * 捕获阶段处理 Escape，preventDefault() 可阻止整层关闭；
+   * 基座自身的 Esc 分支尊重 defaultPrevented（消费方已处理则不重复关闭）。
+   */
+  onEscapeKeyDown?: (event: KeyboardEvent) => void;
 }
 
 /**
@@ -87,6 +94,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
   maxHeight,
   anchor,
   onInteractOutside,
+  onEscapeKeyDown,
 }: MenuProps) {
   const [internalOpen, setInternalOpen] = useState(false);
 
@@ -125,10 +133,19 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     }
   }, [isOpen]);
 
-  // 键盘 ↑ ↓ 漫游与 Enter / Esc 支持
+  // 键盘 ↑ ↓ 漫游与 Enter / Esc 支持（08-步5 T4-4：children 模式双通道漫游）
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (!isOpen) return;
+
+      if (e.key === 'Escape') {
+        // 消费方 onEscapeKeyDown（Radix document 捕获）已 preventDefault 时，
+        // 表示逐级关闭语义由消费方接管（如嵌套子菜单先关子层），基座不重复关闭
+        if (e.defaultPrevented) return;
+        e.preventDefault();
+        handleOpenChange(false);
+        return;
+      }
 
       if (options.length > 0) {
         if (e.key === 'ArrowDown') {
@@ -149,6 +166,12 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
             }
             return next < 0 ? options.length - 1 : next;
           });
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          setFocusedIndex(0);
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          setFocusedIndex(options.length - 1);
         } else if (e.key === 'Enter' || e.key === ' ') {
           if (focusedIndex >= 0 && focusedIndex < options.length) {
             const opt = options[focusedIndex];
@@ -160,11 +183,48 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
             }
           }
         }
+        return;
       }
 
-      if (e.key === 'Escape') {
+      // children 模式：对 content 内可聚焦菜单项（role=menuitem/option）轮询漫游。
+      // Enter/Space 不劫持——交给聚焦的原生 button 激活（native click）。
+      const items = Array.from(
+        contentRef.current?.querySelectorAll<HTMLButtonElement>(
+          '[role="menuitem"], [role="option"]'
+        ) ?? []
+      );
+      if (items.length === 0) return;
+      // 焦点不在漫游项上时不劫持方向键（搜索框输入 / 嵌套 flyout 选项等场景）；
+      // 焦点处于嵌套 role="menu" 内（消费方自管漫游，如 SettingsQuickMenu）同样放行
+      const active = document.activeElement;
+      if (
+        !(active instanceof HTMLElement) ||
+        !active.matches('[role="menuitem"], [role="option"]') ||
+        active.closest('[role="menu"]')
+      ) {
+        return;
+      }
+      if (e.key === 'ArrowDown') {
         e.preventDefault();
-        handleOpenChange(false);
+        setFocusedIndex((prev) => {
+          if (prev >= 0) return prev >= items.length - 1 ? 0 : prev + 1;
+          // 首次漫游：从当前聚焦项出发（子菜单/搜索框先聚焦场景不跳回首项）
+          const start = items.indexOf(active as HTMLButtonElement);
+          return start < 0 ? 0 : (start + 1) % items.length;
+        });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setFocusedIndex((prev) => {
+          if (prev >= 0) return prev <= 0 ? items.length - 1 : prev - 1;
+          const start = items.indexOf(active as HTMLButtonElement);
+          return start < 0 ? items.length - 1 : (start - 1 + items.length) % items.length;
+        });
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        setFocusedIndex(0);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        setFocusedIndex(items.length - 1);
       }
     },
     [isOpen, options, focusedIndex, onSelect, handleOpenChange]
@@ -245,6 +305,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
           onMouseDown={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
           onInteractOutside={onInteractOutside}
+          onEscapeKeyDown={onEscapeKeyDown}
         >
           {title != null ? (
             <div className={styles.menuTitle}>{title}</div>

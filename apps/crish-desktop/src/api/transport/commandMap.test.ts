@@ -44,7 +44,8 @@ describe('commandMap', () => {
       // 查询类
       expect(resolveTauriCommand('core_get_status')).toBe('core_get_status');
       expect(resolveTauriCommand('core_get_run_snapshot')).toBe('core_get_run_snapshot');
-      expect(resolveTauriCommand('core_read_run_events')).toBe('core_read_run_events');
+      // T-F 06 退役：core_read_run_events 已随命令退役（被 core_read_session_events 取代）
+      expect(resolveTauriCommand('core_read_run_events')).toBeNull();
       expect(resolveTauriCommand('core_read_session_events')).toBe('core_read_session_events');
       // 审批类
       expect(resolveTauriCommand('core_approve_tool')).toBe('core_approve_tool');

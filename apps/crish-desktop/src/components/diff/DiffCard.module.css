@@ -836,19 +836,30 @@
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  display: none;
+  /* 批次 6.1（08-步5 T4-1）：display:none 阻断 Tab 序 → opacity/visibility 隐藏，
+   * 键盘焦点（:focus-within）与鼠标 hover 双通道揭示；
+   * 对照 GlobalSessionTabBar.module.css:258 成熟模式 */
+  display: flex;
   align-items: center;
   gap: var(--space-1_5);
   background: transparent;
   padding: 0;
   border: none;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--transition-micro);
 }
 
-.accordionHeaderRow:hover .hoverActions {
-  display: flex;
+.accordionHeaderRow:hover .hoverActions,
+.accordionHeaderRow:focus-within .hoverActions {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 
-.accordionHeaderRow:hover .fileStat {
+.accordionHeaderRow:hover .fileStat,
+.accordionHeaderRow:focus-within .fileStat {
   opacity: 0;
 }
 

@@ -579,8 +579,7 @@ export function pushRecentModel(model: string): string[] {
  * - 就绪后 request('core_get_status') 取引擎状态原始 JSON。
  * 不再有 WS keep-alive / hasEverConnected 语义：未就绪 → ok:false（显式离线）。
  */
-export async function fetchEngineStatus(): Promise<EngineStatus> {
-  const transport = getTransport();
+export async function fetchEngineStatus(): Promise<EngineStatus> {  const transport = getTransport();
   try {
     const ready = await transport.waitUntilConnected(12_000);
     if (!ready) {
@@ -613,10 +612,34 @@ export async function fetchEngineStatus(): Promise<EngineStatus> {
   }
 }
 
+/**
+ * 读取引擎配置脱敏快照（config_get，T-F 06 T2.6 接线：配置族只写不读的
+ * P2-8 补读面）。经 transport.request('config_get') 同一通道（与 config_update
+ * 对称）；命令缺失 / 报错 → logInternalError + null（不抛，只补读不重建状态流）。
+ */
+export async function loadEngineConfig(): Promise<Record<string, unknown> | null> {
+  const transport = getTransport();
+  try {
+    const ready = await transport.waitUntilConnected(12_000);
+    if (!ready) {
+      logInternalError('loadEngineConfig', 'not_connected');
+      return null;
+    }
+    const res = (await transport.request<Record<string, unknown>>(
+      'config_get',
+      {},
+      { timeoutMs: 8_000 },
+    )) as Record<string, unknown>;
+    return res && typeof res === 'object' ? res : null;
+  } catch (e) {
+    logInternalError('loadEngineConfig', e);
+    return null;
+  }
+}
+
 export async function updateEngineConfig(
   update: EngineConfigUpdate,
-): Promise<{ ok: boolean; error?: string }> {
-  const transport = getTransport();
+): Promise<{ ok: boolean; error?: string }> {  const transport = getTransport();
   try {
     const ready = await transport.waitUntilConnected(12_000);
     if (!ready) return { ok: false, error: 'not_connected' };

@@ -265,3 +265,79 @@ describe('ui/Menu', () => {
     }
   });
 });
+
+describe('ui/Menu children 模式键盘漫游（08-步5 T4-4，P2-8）', () => {
+  function ChildrenMenu() {
+    return (
+      <Menu trigger={<button type="button">{TRIGGER_TEXT}</button>}>
+        <button type="button" role="menuitem">子项甲</button>
+        <button type="button" role="menuitem">子项乙</button>
+        <button type="button" role="menuitem">子项丙</button>
+      </Menu>
+    );
+  }
+
+  async function openAndFocusFirst(): Promise<HTMLElement> {
+    fireEvent.click(screen.getByText(TRIGGER_TEXT));
+    const first = await screen.findByRole('menuitem', { name: /子项甲/ });
+    first.focus();
+    // children 模式内容本身为 Radix Popover.Content（role=dialog）
+    return first.closest('[role="dialog"]') as HTMLElement;
+  }
+
+  it('ArrowDown/ArrowUp 循环漫游 + Home/End', async () => {
+    render(<ChildrenMenu />);
+    const content = await openAndFocusFirst();
+    fireEvent.keyDown(content, { key: 'ArrowDown' });
+    expect(screen.getByRole('menuitem', { name: /子项乙/ })).toHaveFocus();
+    fireEvent.keyDown(content, { key: 'ArrowDown' });
+    expect(screen.getByRole('menuitem', { name: /子项丙/ })).toHaveFocus();
+    // 回绕到首项
+    fireEvent.keyDown(content, { key: 'ArrowDown' });
+    expect(screen.getByRole('menuitem', { name: /子项甲/ })).toHaveFocus();
+    // 上翻回绕
+    fireEvent.keyDown(content, { key: 'ArrowUp' });
+    expect(screen.getByRole('menuitem', { name: /子项丙/ })).toHaveFocus();
+    fireEvent.keyDown(content, { key: 'Home' });
+    expect(screen.getByRole('menuitem', { name: /子项甲/ })).toHaveFocus();
+    fireEvent.keyDown(content, { key: 'End' });
+    expect(screen.getByRole('menuitem', { name: /子项丙/ })).toHaveFocus();
+  });
+
+  it('首次漫游从当前聚焦项出发（不强制跳回首项）', async () => {
+    render(<ChildrenMenu />);
+    const content = await openAndFocusFirst();
+    // 焦点已在首项：ArrowDown 应到次项而非原地不动
+    fireEvent.keyDown(content, { key: 'ArrowDown' });
+    expect(screen.getByRole('menuitem', { name: /子项乙/ })).toHaveFocus();
+  });
+
+  it('Enter 不劫持：交给原生 button 激活（菜单保持打开、不触发基座选中）', async () => {
+    const onPick = vi.fn();
+    render(
+      <Menu trigger={<button type="button">{TRIGGER_TEXT}</button>}>
+        <button type="button" role="menuitem" onClick={onPick}>子项甲</button>
+      </Menu>
+    );
+    const content = await openAndFocusFirst();
+    fireEvent.keyDown(content, { key: 'Enter' });
+    // 基座不拦截 Enter（不 preventDefault、不自行关闭/回调）
+    expect(onPick).not.toHaveBeenCalled();
+    expect(screen.getByRole('menuitem', { name: /子项甲/ })).toBeInTheDocument();
+  });
+
+  it('焦点不在漫游项上时不劫持方向键（搜索框输入场景）', async () => {
+    render(
+      <Menu trigger={<button type="button">{TRIGGER_TEXT}</button>}>
+        <input aria-label="搜索项目" />
+        <button type="button" role="menuitem">子项甲</button>
+      </Menu>
+    );
+    fireEvent.click(screen.getByText(TRIGGER_TEXT));
+    const input = await screen.findByLabelText('搜索项目');
+    input.focus();
+    const content = input.closest('[role="dialog"]') as HTMLElement;
+    fireEvent.keyDown(content, { key: 'ArrowDown' });
+    expect(input).toHaveFocus();
+  });
+});

@@ -1,4 +1,5 @@
-import { invokeCmd, invokeResult } from './tauriInvoke';
+import { invokeResult, invokeTyped } from './tauriInvoke';
+import { logInternalError } from './userFacingErrors';
 import {
   normalizeFileHits,
   QUICK_OPEN_RESULT_LIMIT,
@@ -70,13 +71,19 @@ export async function compactMessages(
   messages: Message[],
   maxTokens: number
 ): Promise<CompactionResult> {
-  const res = await invokeCmd<CompactionResult>('core_compact_messages', { messages, maxTokens });
-  return res ?? { messages, tokensConsumed: 0, cacheHitRateOptimized: false };
+  // T-F 06 T6.1：invokeCmd → invokeTyped 三态化（worker 回退路径纪律：
+  // missing → 回退兜底；error → logInternalError 再回退）
+  const res = await invokeTyped<CompactionResult>('core_compact_messages', { messages, maxTokens });
+  if (res.status === 'ok') return res.data;
+  if (res.status === 'error') logInternalError('compactMessages', res.message);
+  return { messages, tokensConsumed: 0, cacheHitRateOptimized: false };
 }
 
 export async function countTokens(text: string): Promise<number> {
-  const count = await invokeCmd<number>('core_count_tokens', { text });
-  return count ?? text.length;
+  const res = await invokeTyped<number>('core_count_tokens', { text });
+  if (res.status === 'ok') return res.data;
+  if (res.status === 'error') logInternalError('countTokens', res.message);
+  return text.length;
 }
 
 // ===== Sandbox API =====
@@ -87,8 +94,10 @@ export async function checkCommand(
   cmd: string,
   args: string[]
 ): Promise<GatekeeperResult> {
-  const res = await invokeCmd<GatekeeperResult>('core_check_command', { cmd, args });
-  return res ?? 'Allowed';
+  const res = await invokeTyped<GatekeeperResult>('core_check_command', { cmd, args });
+  if (res.status === 'ok') return res.data;
+  if (res.status === 'error') logInternalError('checkCommand', res.message);
+  return 'Allowed';
 }
 
 // ===== Diff API =====
@@ -116,8 +125,10 @@ export async function computeDiff(
   oldText: string,
   newText: string
 ): Promise<DiffResult> {
-  const res = await invokeCmd<DiffResult>('core_compute_diff', { oldText, newText });
-  return res ?? { hunks: [], addedLines: 0, removedLines: 0 };
+  const res = await invokeTyped<DiffResult>('core_compute_diff', { oldText, newText });
+  if (res.status === 'ok') return res.data;
+  if (res.status === 'error') logInternalError('computeDiff', res.message);
+  return { hunks: [], addedLines: 0, removedLines: 0 };
 }
 
 // ===== Health API =====
@@ -151,8 +162,28 @@ export async function getRustCoreStatus(): Promise<RustCoreStatus | null> {
   };
 }
 
+/**
+ * 重建搜索索引（core_rebuild_search_index，T-F 06 T2.5 接线）。
+ * 成功 → true；命令缺失 / 报错 → false + logInternalError（不抛，
+ * 调用方按「重建未生效」诚实呈现，不伪造成功）。
+ */
+export async function rebuildSearchIndex(): Promise<boolean> {
+  try {
+    const res = await invokeResult<unknown>('core_rebuild_search_index', {});
+    if (res.status === 'ok') return true;
+    if (res.status === 'missing') {
+      logInternalError('rebuildSearchIndex', 'core_rebuild_search_index missing — 搜索索引重建不可用');
+      return false;
+    }
+    logInternalError('rebuildSearchIndex', res.message);
+    return false;
+  } catch (e) {
+    logInternalError('rebuildSearchIndex', e);
+    return false;
+  }
+}
+
 // ===== Markdown API =====
-//
 // Stream A 在 Rust 侧已注册 5 个 Tauri command：
 //   core_md_render / core_md_render_batch / core_md_render_stream / core_highlight_code / core_md_clear_cache
 // 全部走 tokio::task::spawn_blocking，HTML 输出 byte-for-byte 兼容现有 CSS 选择器，
@@ -174,18 +205,23 @@ export async function renderMarkdown(text: string): Promise<string | null> {
 }
 
 /**
- * 单段代码 → 高亮 HTML（class style，含 hljs-* token class）。
- * 命令缺失或失败时返回 null，调用方回退到 highlight.js。
+ * 批量渲染 markdown → HTML 数组（core_md_render_batch，对齐 markdown_commands.rs
+ * md_render_batch 签名 `{ texts }`）。命令缺失或失败时返回 null 数组
+ * （逐条语义与 renderMarkdown 一致），调用方逐条回退 worker。
  */
-export async function highlightCode(
-  code: string,
-  lang?: string,
-): Promise<string | null> {
-  const args: Record<string, unknown> = { code };
-  if (lang != null && lang !== '') args.lang = lang;
-  const res = await invokeResult<string>('core_highlight_code', args);
-  if (res.status === 'ok') return res.data;
-  return null;
+export async function renderMarkdownBatch(
+  texts: string[],
+): Promise<(string | null)[]> {
+  const items = Array.isArray(texts) ? texts.filter((t): t is string => typeof t === 'string') : [];
+  if (items.length === 0) return [];
+  const res = await invokeResult<string[]>('core_md_render_batch', { texts: items });
+  if (res.status !== 'ok' || !Array.isArray(res.data)) {
+    return items.map(() => null);
+  }
+  return items.map((_, i) => {
+    const html = res.data?.[i];
+    return typeof html === 'string' ? html : null;
+  });
 }
 
 // ===== Worker 池下沉 API (Stream E) =====

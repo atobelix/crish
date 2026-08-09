@@ -1,7 +1,8 @@
 /**
  * 设置 · 状态诊断（PE-04 T04.5-2：core_get_status 诊断段前端面板）。
  *
- * 只读面板，消费 fetchEngineStatus 已解析字段：
+ * 只读面板（T-F 06 T2.5 例外：搜索索引行在未就绪时提供「重建索引」按钮，
+ * 经 rustCore.rebuildSearchIndex 调 core_rebuild_search_index，M7 入口）：
  * - 子系统就绪：engineReady / dbReady / searchIndexReady
  * - 日志配置：logLevel / logDir
  * - 最近错误：lastError（{kind, detail, ts}，醒目提示 + 复制）
@@ -11,13 +12,14 @@
  * 不写 store、不重构设置面板整体（P3 分层前沿用 SettingsUI 现有样式）。
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Activity, AlertTriangle, CheckCircle2, ClipboardCopy, RefreshCw } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, ClipboardCopy, RefreshCw, SearchCheck } from 'lucide-react';
 import {
   fetchEngineStatus,
   type EngineDiagnosticEntry,
   type EngineLastErrorEntry,
   type EngineStatus,
 } from '../../api/engineConfig';
+import { rebuildSearchIndex } from '../../api/rustCore';
 import { SettingsCard, SettingsPage, SettingsRow, SettingsSection } from './SettingsUI';
 import { Button, Tooltip } from '../ui';
 import styles from './StatusDiagnosticsPanel.module.css';
@@ -114,6 +116,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
   const mountedRef = useRef(true);
 
   const load = useCallback(async () => {
@@ -152,6 +155,31 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
     },
     [onShowToast],
   );
+
+  /**
+   * 重建搜索索引（T-F 06 T2.5 / M7 入口）：调 rustCore.rebuildSearchIndex
+   * （core_rebuild_search_index），成功后刷新状态（诚实等待 searchIndexReady
+   * 反映重建结果）；失败保留原状态，按钮可重试。组件本地状态，不依赖
+   * DEAD 的 rustCoreStore。
+   */
+  const handleRebuild = useCallback(async () => {
+    if (rebuilding) return;
+    setRebuilding(true);
+    try {
+      const ok = await rebuildSearchIndex();
+      if (!mountedRef.current) return;
+      if (ok) {
+        onShowToast?.('已触发搜索索引重建');
+        await load();
+      } else {
+        onShowToast?.('重建失败：索引命令不可用或报错');
+      }
+    } catch {
+      if (mountedRef.current) onShowToast?.('重建失败');
+    } finally {
+      if (mountedRef.current) setRebuilding(false);
+    }
+  }, [rebuilding, onShowToast, load]);
 
   const lastError = status?.lastError ?? null;
   const diagnostics: EngineDiagnosticEntry[] = status?.diagnostics ?? [];
@@ -208,7 +236,44 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
         <SettingsCard>
           <SubsystemRow label="引擎（session-loop）" ready={status?.engineReady} readyLabel="engineReady" />
           <SubsystemRow label="会话数据库" ready={status?.dbReady} readyLabel="dbReady" />
-          <SubsystemRow label="搜索索引" ready={status?.searchIndexReady} readyLabel="searchIndexReady" />
+          <SettingsRow
+            title="搜索索引"
+            desc={
+              status?.searchIndexReady
+                ? '已就绪'
+                : typeof status?.searchIndexReady === 'boolean'
+                  ? '未就绪（可能影响功能）'
+                  : '状态未知'
+            }
+            control={
+              <span
+                className={status?.searchIndexReady ? styles.badgeOk : styles.badgeBad}
+                role="status"
+                data-testid="diag-searchIndexReady"
+              >
+                {status?.searchIndexReady ? 'OK' : typeof status?.searchIndexReady === 'boolean' ? '异常' : '未知'}
+              </span>
+            }
+          />
+          {status?.searchIndexReady === false ? (
+            <SettingsRow
+              title="重建索引"
+              desc="索引未就绪时触发重建（core_rebuild_search_index）"
+              control={
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={rebuilding}
+                  onClick={() => void handleRebuild()}
+                  data-testid="diag-rebuild-search-index"
+                  icon={<SearchCheck size={14} strokeWidth={1.75} />}
+                >
+                  {rebuilding ? '重建中…' : '重建索引'}
+                </Button>
+              }
+            />
+          ) : null}
         </SettingsCard>
       </SettingsSection>
 

@@ -27,6 +27,7 @@ export type SoftFailureKind =
   | 'no_project'
   | 'blocked'
   | 'provider_fault'
+  | 'context'
   | 'ended'
   | null;
 
@@ -72,6 +73,16 @@ const KEBAB_KIND_TO_SOFT: Record<string, SoftFailureKind> = {
   'server-error': 'provider_fault',
   'rate-limit': 'provider_fault',
   'gateway-challenge': 'provider_fault',
+  // T-F 06（T3.2）补码：13 码全覆盖
+  // context-length-exceeded：专属 context 分类（高频路径，此前回落文本正则误判）
+  'context-length-exceeded': 'context',
+  // aborted：用户取消/中断语义（S6 域）
+  aborted: 'ended',
+  // payload-too-large / invalid-request：provider 侧故障（S5 域，沿用文案）
+  'payload-too-large': 'provider_fault',
+  'invalid-request': 'provider_fault',
+  // unknown 故意不登记：兜底码，classifySoftFailure 兜底路径处理
+  // （kebab-codes-drift.test.ts 豁免断言 + 兜底断言锁定）
 };
 
 function classifyByKebabCode(text: string): SoftFailureKind | null {
@@ -125,6 +136,12 @@ const KEBAB_TO_DOMAIN: Record<string, ErrorDomain> = {
   'server-error': 'S5',
   'rate-limit': 'S5',
   'gateway-challenge': 'S5',
+  // T-F 06（T3.2）补码：context-length-exceeded / payload-too-large /
+  // invalid-request → S5（provider 侧故障）；aborted → S6（用户取消/中断）
+  'context-length-exceeded': 'S5',
+  'payload-too-large': 'S5',
+  'invalid-request': 'S5',
+  aborted: 'S6',
 };
 
 const PROVIDER_CONFIG_MISSING_RE = /provider\s*配置缺失|provider config.*missing/i;
@@ -222,6 +239,10 @@ export function softFailureMessage(kind: SoftFailureKind): string | null {
     case 'provider_fault':
       // S5 域：provider 侧故障（server-error/rate-limit/gateway-challenge）
       return DOMAIN_MESSAGES.S5;
+    case 'context':
+      // T-F 06（T3.2）：context-length-exceeded 专属文案
+      // （文案细化为 error-notification-governance 轮次 T-2 的差异化文案表轮次）
+      return '上下文已超限：本轮对话过长，系统已自动压缩或需新建会话。';
     case 'ended':
       return '这一轮任务中断了：可能是引擎繁忙、模型无响应，或运行被取消。请稍后重试；若刚改过密钥或地址，请到设置确认。';
     default:

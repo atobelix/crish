@@ -20,7 +20,8 @@
  *   成功与否经 invokeResult 的 ok/missing/error 三态区分，不用 null 判断。
  */
 
-import { invokeCmd, invokeResult } from './tauriInvoke';
+import { invokeResult, invokeTyped } from './tauriInvoke';
+import { logInternalError } from './userFacingErrors';
 
 // ── 状态契约（与 workbench BackgroundTaskState 对齐 + unknown） ─────────
 
@@ -696,8 +697,11 @@ function projectionFromKillResult(
 
 /** 列表：`{ tasks: [...] }`（Rust camelCase wire，无 label / summary 字段）。 */
 export async function listBackgroundTasks(): Promise<BackgroundTaskInfo[]> {
-  const data = await invokeCmd<unknown>('workbench_list_background_tasks');
-  return parseBackgroundTaskList(data);
+  // T-F 06 T6.1：invokeCmd → invokeTyped 三态化（missing → []，error → 日志 + []）
+  const res = await invokeTyped<unknown>('workbench_list_background_tasks');
+  if (res.status === 'error') logInternalError('listBackgroundTasks', res.message);
+  if (res.status !== 'ok') return [];
+  return parseBackgroundTaskList(res.data);
 }
 
 /**
@@ -709,10 +713,12 @@ export async function getBackgroundTaskOutput(taskId: string): Promise<string> {
   const id = normalizeBackgroundTaskId(taskId);
   if (!id) return '';
   try {
-    const data = await invokeCmd<unknown>('workbench_get_background_task_output', {
+    const res = await invokeTyped<unknown>('workbench_get_background_task_output', {
       taskId: id,
     });
-    return parseBackgroundTaskOutput(data);
+    if (res.status === 'error') logInternalError('getBackgroundTaskOutput', res.message);
+    if (res.status !== 'ok') return '';
+    return parseBackgroundTaskOutput(res.data);
   } catch {
     return '';
   }
@@ -732,11 +738,12 @@ export async function cancelBackgroundTask(
 ): Promise<BackgroundTaskInfo | null> {
   const decision = decideCancelBackgroundTask(taskId, knownTasks);
   if (!decision.ok) return null;
-  const data = await invokeCmd<unknown>('workbench_cancel_background_task', {
+  const res = await invokeTyped<unknown>('workbench_cancel_background_task', {
     taskId: decision.taskId,
   });
-  if (data == null) return null;
-  return parseCancelBackgroundTaskResult(data);
+  if (res.status === 'error') logInternalError('cancelBackgroundTask', res.message);
+  if (res.status !== 'ok') return null;
+  return parseCancelBackgroundTaskResult(res.data);
 }
 
 // ── T-AB-20：KillResult 三态（操作面反馈保留变体语义） ──────────────
@@ -804,11 +811,12 @@ export async function killBackgroundTask(
 ): Promise<KillBackgroundTaskResult | null> {
   const decision = decideCancelBackgroundTask(taskId, knownTasks);
   if (!decision.ok) return null;
-  const data = await invokeCmd<unknown>('workbench_cancel_background_task', {
+  const res = await invokeTyped<unknown>('workbench_cancel_background_task', {
     taskId: decision.taskId,
   });
-  if (data == null) return null;
-  return parseKillResultPayload(data);
+  if (res.status === 'error') logInternalError('killBackgroundTask', res.message);
+  if (res.status !== 'ok') return null;
+  return parseKillResultPayload(res.data);
 }
 
 // ── T-AB-20：send_input（stdin 注入，默认追加换行） ─────────────────

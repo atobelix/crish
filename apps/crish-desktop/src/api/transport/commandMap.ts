@@ -30,7 +30,6 @@ export const COMMAND_NAME_ALLOWLIST: ReadonlySet<string> = new Set([
   // ── 查询类（core_*）──
   'core_get_status',
   'core_get_run_snapshot',
-  'core_read_run_events',
   'core_read_session_events',
   // ── 审批类（core_*）──
   'core_approve_tool',

@@ -15,7 +15,9 @@ pub(crate) use types::{FileCommandError, WorkspaceFsGuard};
 ///
 /// `R: tauri::Runtime` 泛型：测试注入 MockRuntime 可直接调用（先例
 /// core_commands.rs:170-177），生产走 Wry。
-#[tauri::command]
+/// wire 名 = `workbench_select_folder`（T-F 06：分裂标签统一——函数名与 wire 键
+/// 不一致必须显式 rename，禁止函数名隐式成为 wire 键）。
+#[tauri::command(rename = "workbench_select_folder")]
 pub(crate) async fn select_folder<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<types::SelectFolderResult, CoreError> {
@@ -23,7 +25,9 @@ pub(crate) async fn select_folder<R: tauri::Runtime>(
 }
 
 /// 列出目录（PE-07 T07.2：无 workspace_root 参数，根由 WorkspaceRegistry 解析）。
-#[tauri::command]
+///
+/// wire 名 = `workbench_list_directory`（T-F 06：分裂标签统一，显式 rename）。
+#[tauri::command(rename = "workbench_list_directory")]
 pub(crate) fn list_directory(
     app: tauri::AppHandle,
     path: String,
@@ -32,7 +36,9 @@ pub(crate) fn list_directory(
 }
 
 /// 读取文件内容（PE-07 T07.2：无 workspace_root 参数，根由 WorkspaceRegistry 解析）。
-#[tauri::command]
+///
+/// wire 名 = `workbench_read_file_content`（T-F 06：分裂标签统一，显式 rename）。
+#[tauri::command(rename = "workbench_read_file_content")]
 pub(crate) fn read_file_content(
     app: tauri::AppHandle,
     path: String,
@@ -46,7 +52,8 @@ pub(crate) fn read_file_content(
 /// T-EG-05（F7）：overwrite 语义与工具侧 write_file 对齐——默认拒绝覆盖
 /// （已存在且未显式 overwrite=true → file_exists 错误）；Option<bool> 让
 /// 未传参调用方保持「默认拒绝覆盖」语义（与前端 workspaceFsApi 同步）。
-#[tauri::command]
+/// wire 名 = `workbench_write_file_content`（T-F 06：分裂标签统一，显式 rename）。
+#[tauri::command(rename = "workbench_write_file_content")]
 pub(crate) fn write_file_content(
     app: tauri::AppHandle,
     path: String,

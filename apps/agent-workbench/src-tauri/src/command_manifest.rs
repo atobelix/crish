@@ -4,8 +4,8 @@
 //! `BUILTIN_COMMAND_MANIFEST` 是本文件的**内置快照镜像**（启动拉取失败 / 非 Tauri
 //! 环境回退面），双端手工同步，条数由双端测试锁定：
 //! - Rust 侧：本文件 `manifest_*` 测试（条数公式化 / 幽灵命令排除 / 新增命令登记）；
-//! - 前端侧：`commandManifest.test.ts`（88 = 注册面 84 + 登记先行 4，
-//!   F11b 后待镜像同步为 89 = 85 + 4）。
+//! - 前端侧：`commandManifest.test.ts`（90 = 注册面 86 + 登记先行 4，
+//!   T-F 06 退役 5 条后同步为 90 = 86 + 4）。
 //!
 //! 维护规则：
 //! - `registered = true` 子集 = main.rs `make_handlers!` 当前注册面（integration agent
@@ -60,7 +60,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（92 条 = 注册面 88 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（90 条 = 注册面 86 + 登记先行 4；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：append_session_messages /
@@ -118,7 +118,6 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // ── 查询与运行（A/B，§2.2）──
         entry("core_get_status", "core", "engine", true),
         entry("core_get_run_snapshot", "core", "engine", true),
-        entry("core_read_run_events", "core", "engine", true),
         entry("core_read_session_events", "core", "engine", true),
         entry("core_run_task", "core", "engine", true),
         entry("core_run_control", "core", "engine", true),
@@ -129,14 +128,12 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("list_sessions", "session", "engine", true),
         entry("load_session_body", "session", "engine", true),
         entry("save_session_body", "session", "engine", true),
-        entry("delete_session", "session", "engine", true),
         entry("load_session_agents", "session", "engine", true),
         entry("save_session_agents", "session", "engine", true),
         entry("get_session_meta", "session", "engine", true),
         entry("set_session_meta", "session", "engine", true),
         entry("cleanup_orphan_sessions", "session", "engine", true),
         entry("import_from_localstorage", "session", "engine", true),
-        entry("touch_session", "session", "engine", true),
         entry("upsert_session_entry", "session", "engine", true),
         // F11b（T-D-12）：DAG 只读快照查询（flow_dag_visible 开关关闭时
         // 前端不调用本命令，只读通用面保留无害）
@@ -146,9 +143,7 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
         entry("core_md_render", "core", "engine", true),
         entry("core_md_render_batch", "core", "engine", true),
-        entry("core_md_render_stream", "core", "engine", true),
         entry("core_highlight_code", "core", "engine", true),
-        entry("core_md_clear_cache", "core", "engine", true),
         // ── 工具 Worker 组（E，§2.2；core_jsonl_append 自 perf 迁移）──
         entry("core_hash_compute", "core", "engine", true),
         entry("core_base64_encode", "core", "engine", true),
@@ -203,8 +198,9 @@ mod tests {
     use super::*;
 
     /// 条数公式化：总数 = 注册面 + 登记先行（镜像前端 commandManifest.test.ts：
-    /// 95 = 注册面 91 + 登记先行 4；变更时双端同步——27 方案 S6 新增
-    /// browser_start/browser_stop/browser_status 三条已在本侧登记）。
+    /// 90 = 注册面 86 + 登记先行 4；变更时双端同步——T-F 06 退役 5 条
+    /// （core_read_run_events / delete_session / touch_session /
+    /// core_md_render_stream / core_md_clear_cache）后 95 → 90）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -215,8 +211,8 @@ mod tests {
             .count();
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
-        assert_eq!(total, 95, "总数 95（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
-        assert_eq!(registered, 91, "注册面 91");
+        assert_eq!(total, 90, "总数 90（与前端 BUILTIN_COMMAND_MANIFEST 同步）");
+        assert_eq!(registered, 86, "注册面 86");
         assert_eq!(pending, 4, "登记先行 4");
     }
 
@@ -363,7 +359,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 95);
+        assert_eq!(manifest.commands.len(), 90);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 

@@ -45,11 +45,13 @@ function entry(
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（95 = 注册面 91 + 登记先行 4；与
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（90 = 注册面 86 + 登记先行 4；与
  * command_manifest.rs:63 行注释及 manifest_count_matches_registered_surface 测试对齐）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
  * commandManifest.test.ts 的条数/登记断言 + 动态对照测试（直读 Rust 真源）拦截。
+ * T-F 06 退役登记：core_read_run_events / delete_session / touch_session /
+ * core_md_render_stream / core_md_clear_cache 已随本快照退役（changelog 33 可查）。
  */
 export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
   contractVersion: COMMAND_MANIFEST_CONTRACT_VERSION,
@@ -104,7 +106,6 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     // ── 查询与运行（A/B，§2.2）──
     entry('core_get_status', 'core', 'engine'),
     entry('core_get_run_snapshot', 'core', 'engine'),
-    entry('core_read_run_events', 'core', 'engine'),
     entry('core_read_session_events', 'core', 'engine'),
     entry('core_run_task', 'core', 'engine'),
     entry('core_run_control', 'core', 'engine'),
@@ -115,7 +116,6 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('list_sessions', 'session', 'engine'),
     entry('load_session_body', 'session', 'engine'),
     entry('save_session_body', 'session', 'engine'),
-    entry('delete_session', 'session', 'engine'),
     entry('load_session_agents', 'session', 'engine'),
     entry('save_session_agents', 'session', 'engine'),
     entry('get_session_meta', 'session', 'engine'),
@@ -126,14 +126,11 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('set_session_output_root', 'session', 'engine'),
     entry('cleanup_orphan_sessions', 'session', 'engine'),
     entry('import_from_localstorage', 'session', 'engine'),
-    entry('touch_session', 'session', 'engine'),
     entry('upsert_session_entry', 'session', 'engine'),
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
     entry('core_md_render', 'core', 'engine'),
     entry('core_md_render_batch', 'core', 'engine'),
-    entry('core_md_render_stream', 'core', 'engine'),
     entry('core_highlight_code', 'core', 'engine'),
-    entry('core_md_clear_cache', 'core', 'engine'),
     // ── 工具 Worker 组（E，§2.2；core_jsonl_append 自 perf 迁移）──
     entry('core_hash_compute', 'core', 'engine'),
     entry('core_base64_encode', 'core', 'engine'),

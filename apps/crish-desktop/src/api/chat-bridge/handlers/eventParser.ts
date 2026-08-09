@@ -110,6 +110,31 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
+/**
+ * 宽容路径深度守卫（T-F 06 T4.4）：对齐生成 parser 的 256 层常量语义
+ * （packages/shared-types/src/generated/engine/parser.ts:65-100，`depth > 256`
+ * 拒绝）——宽容归一器透传自由 JSON（tool-call input / tool-result output /
+ * message block）前先做深度检查，超限返回 true（调用方记可观测日志并回退），
+ * 不依赖 EventRouter 顶层 try/catch 兜底（EventRouter.ts:109-115）。
+ */
+const MAX_JSON_DEPTH = 256;
+
+function jsonDepthExceeds(v: unknown, budget: number = MAX_JSON_DEPTH): boolean {
+  if (budget < 0) return true;
+  if (v === null || typeof v !== 'object') return false;
+  if (Array.isArray(v)) {
+    for (const item of v) {
+      if (jsonDepthExceeds(item, budget - 1)) return true;
+    }
+    return false;
+  }
+  const o = v as Record<string, unknown>;
+  for (const key of Object.keys(o)) {
+    if (jsonDepthExceeds(o[key], budget - 1)) return true;
+  }
+  return false;
+}
+
 function str(v: unknown): string {
   return typeof v === 'string' ? v : '';
 }
@@ -149,6 +174,20 @@ function isToolConcurrency(v: unknown): v is ToolConcurrency {
   );
 }
 
+/**
+ * 工具分类宽容取值（T-F 06 T4.3 显式化）：合法值直通；未知/缺失 → 登记日志
+ * 后回退 'terminal'（不再静默降级——Rust 新枚举值进兜底可观测）。
+ * 非安全向：此处仅影响 UI 分类图标/分组，回退不改变安全语义。
+ */
+function toolCategoryOr(v: unknown): ToolCategory {
+  if (isToolCategory(v)) return v;
+  logInternalError(
+    'engine-protocol',
+    `未知 tool category '${String(v)}'，回退 terminal`
+  );
+  return 'terminal';
+}
+
 function emptyAgentMessage(): AgentMessage {
   return { id: '', role: 'assistant', createdAt: '', blocks: [] };
 }
@@ -177,6 +216,15 @@ function emptyCheckpointRestoreRecord(): RuntimeCheckpointRestoreRecord {
 /** message-delta 的宽容 block 归一：text/thought 直读，tool-call/tool-result 原样透传，未知按 text 取 text/content */
 function normalizeDeltaBlock(b: unknown): AgentMessageBlock {
   if (!isRecord(b)) return { type: 'text', text: '' };
+  // T-F 06 T4.4：宽容路径深度守卫（对齐生成 parser 256 层语义）——
+  // 超限返回可识别失败（空 text 块 + 日志），不依赖 EventRouter 顶层 catch。
+  if (jsonDepthExceeds(b)) {
+    logInternalError(
+      'engine-protocol',
+      'normalizeDeltaBlock 载荷超 256 层深度，回退空 text 块'
+    );
+    return { type: 'text', text: '' };
+  }
   const kind = String(b.type ?? b.kind ?? '').trim();
   if (kind === 'thought') {
     const block: AgentMessageBlock = {
@@ -221,7 +269,17 @@ function normalizeRunTerminal(
   else if (rawTerm === 'completed') terminal = 'completed';
   else if (sourceType === 'run-failed') terminal = 'failed';
   else if (sourceType === 'run-cancelled') terminal = 'cancelled';
-  else terminal = 'completed';
+  else {
+    // T-F 06 T4.3：非安全向静默默认显式化——未知 terminal 不再静默降级
+    // completed（Rust 新枚举值会被吞掉且不可观测），登记日志后回退。
+    // 消费方宽容度：run-terminal 是前端硬依赖（terminal 字段必须为规范值），
+    // 保留原始值会破坏生成类型消费，故回退 completed + 显式登记。
+    logInternalError(
+      'engine-protocol',
+      `normalizeRunTerminal 未知 terminal '${rawTerm}'（来源 ${sourceType}），回退 completed`
+    );
+    terminal = 'completed';
+  }
   const error =
     typeof raw.error === 'string'
       ? raw.error
@@ -254,6 +312,15 @@ type Normalizer = (
  */
 function normalizeBatchCalls(rawCalls: unknown): ToolBatchCall[] | null {
   if (!Array.isArray(rawCalls)) return null;
+  // T-F 06 T4.4：宽容路径深度守卫（对齐生成 parser 256 层语义）——
+  // 超限返回 null（调用方记可观测日志后回退空数组），不依赖顶层 catch。
+  if (jsonDepthExceeds(rawCalls)) {
+    logInternalError(
+      'engine-protocol',
+      'normalizeBatchCalls 载荷超 256 层深度，回退空批'
+    );
+    return null;
+  }
   return rawCalls.map((c) => {
     const r = isRecord(c) ? c : {};
     return {
@@ -261,7 +328,7 @@ function normalizeBatchCalls(rawCalls: unknown): ToolBatchCall[] | null {
       toolName: str(r.toolName ?? r.name),
       summary: str(r.summary),
       input: (r.input ?? r.parameters ?? {}) as ToolBatchCall['input'],
-      category: isToolCategory(r.category) ? r.category : 'terminal',
+      category: toolCategoryOr(r.category),
       concurrency: isToolConcurrency(r.concurrency)
         ? r.concurrency
         : 'sequential',
@@ -396,7 +463,11 @@ function normalizeImpact(rawImpact: unknown): ImpactAssessment {
   };
 }
 
-const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
+/**
+ * 宽容归一器表（T-F 06 T4.1：键集与生成类型由
+ * eventParser.normalizer-drift.test.ts 双向锁定——新增事件类型缺归一器即红）。
+ */
+export const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
   'agent-start': (raw) => ({
     type: 'agent-start',
     sessionId: str(raw.sessionId),
@@ -478,7 +549,7 @@ const ENGINE_NORMALIZERS: Record<string, Normalizer> = {
           call.parameters ??
           raw.parameters ??
           {}) as ToolBatchCall['input'],
-        category: isToolCategory(call.category) ? call.category : 'terminal',
+        category: toolCategoryOr(call.category),
         concurrency: isToolConcurrency(call.concurrency)
           ? call.concurrency
           : 'sequential',

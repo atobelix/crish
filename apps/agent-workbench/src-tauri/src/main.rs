@@ -78,6 +78,12 @@ use tauri::Manager;
 /// 函数。宏同源生成：
 /// - [COMMAND_REGISTRY_NAMES]：注册面清单（壳测试与 manifest 对照的编译期依据）；
 /// - [build_invoke_handler]：`generate_handler!` 分发（Tauri invoke 路由）。
+///
+/// **铁律（T-F 06，通信契约）**：wire 键 = manifest 登记名；函数名与 wire 键
+/// 不一致必须显式 `#[tauri::command(rename = "...")]`；禁止函数名隐式成为
+/// wire 键。改动本注册面（新增/退役/改名）必须同步 command_manifest.rs 条目 +
+/// 前端 commandManifest.ts 快照 + 双端条数公式，并由 command-contract-drift
+/// 测试（前端契约总门禁）与注册面一致性测试守护。
 macro_rules! command_registry {
     ($(($name:literal, $path:path)),* $(,)?) => {
         pub(crate) const COMMAND_REGISTRY_NAMES: &[&str] = &[$($name),*];
@@ -111,13 +117,8 @@ command_registry![
     ("workbench_open_host_target", host_openers::workbench_open_host_target),
     ("workbench_open_path_default", host_openers::workbench_open_path_default),
     ("workbench_list_file_openers", host_openers::workbench_list_file_openers),
-    // Tauri rename 语义核对（F7 遗留 4）：generate_handler! 以 Rust 函数名为
-    // invoke 键，除非函数带 #[tauri::command(rename = "...")]（先例：
-    // markdown_commands.rs / workflow_commands.rs）——本族四命令未加 rename，
-    // 函数名即前端实际 invoke 名（write_file_content / read_file_content /
-    // list_directory / select_folder，workspaceFsApi.ts 以函数名调用），元组名
-    // workbench_* 仅作 manifest / 注册面对照标签；改名对齐需前端 invoke 同步
-    // （crish-desktop 域），登记为已知分裂、待前后端同轮推进，不强行单侧修复
+    // T-F 06：fs 四命令经 `#[tauri::command(rename = "workbench_*")]` 对齐
+    // wire 键（元组名 = manifest 登记名 = wire 键逐字一致，分裂已消除）
     ("workbench_select_folder", fs_commands::select_folder),
     ("workbench_list_directory", fs_commands::list_directory),
     ("workbench_read_file_content", fs_commands::read_file_content),
@@ -147,7 +148,6 @@ command_registry![
     // ── 查询与运行（A/B，§2.2）──
     ("core_get_status", core_query_commands::core_get_status),
     ("core_get_run_snapshot", core_query_commands::core_get_run_snapshot),
-    ("core_read_run_events", core_query_commands::core_read_run_events),
     ("core_read_session_events", core_query_commands::core_read_session_events),
     ("core_run_task", core_run_commands::core_run_task),
     ("core_run_control", core_run_commands::core_run_control),
@@ -158,14 +158,12 @@ command_registry![
     ("list_sessions", session_commands::list_sessions),
     ("load_session_body", session_commands::load_session_body),
     ("save_session_body", session_commands::save_session_body),
-    ("delete_session", session_commands::delete_session),
     ("load_session_agents", session_commands::load_session_agents),
     ("save_session_agents", session_commands::save_session_agents),
     ("get_session_meta", session_commands::get_session_meta),
     ("set_session_meta", session_commands::set_session_meta),
     ("cleanup_orphan_sessions", session_commands::cleanup_orphan_sessions),
     ("import_from_localstorage", session_commands::import_from_localstorage),
-    ("touch_session", session_commands::touch_session),
     ("upsert_session_entry", session_commands::upsert_session_entry),
     // F11b（T-D-12）：DAG 只读快照查询（flow_dag_visible 开关关闭时不调用，
     // 只读通用面保留无害）
@@ -176,9 +174,7 @@ command_registry![
     //    markdown_commands.rs，经 `#[tauri::command(rename = ...)]` 对齐 wire 名）──
     ("core_md_render", markdown_commands::md_render),
     ("core_md_render_batch", markdown_commands::md_render_batch),
-    ("core_md_render_stream", markdown_commands::md_render_stream),
     ("core_highlight_code", markdown_commands::highlight_code),
-    ("core_md_clear_cache", markdown_commands::md_clear_cache),
     // ── 工具 Worker 组（E，§2.2；core_jsonl_append 自 perf 迁移）──
     ("core_hash_compute", core_commands::core_hash_compute),
     ("core_base64_encode", core_commands::core_base64_encode),

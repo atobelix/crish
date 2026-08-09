@@ -19,7 +19,10 @@ html[data-theme="light"] {
   --bg-subtle: var(--bg-secondary);
   --text-primary: #111111;
   --text-secondary: #555555;
-  --text-tertiary: color-mix(in srgb, var(--text-secondary) 70%, transparent);
+  /* 批次 6.1 对比度修复（08 ③表行 1/2）：#888888 档仅 3.06:1 → #696969 档
+   * 在 light 主背景 4.78:1、侧栏背景 4.53:1（WCAG AA 正文 ≥4.5:1）；
+   * 固定 hex 取代 color-mix，避免不同底面上的混合结果不可控 */
+  --text-tertiary: #696969;
   --text-muted: var(--text-tertiary);
 
   /* 淡染档位 token（tint 族）：text-primary 基底 + transparent 混合；
@@ -33,6 +36,10 @@ html[data-theme="light"] {
   --tint-scrollbar-thumb: color-mix(in srgb, var(--text-primary) 18%, transparent);
   --tint-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
   --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
+
+  /* T-C 批次 5.2 · T11：ui/Switch 轨道与拇指阴影（对齐旧 settings-switch 观感） */
+  --switch-track-bg: color-mix(in srgb, var(--text-primary) 5%, var(--bg-tertiary));
+  --switch-thumb-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 12%, transparent);
   
   --border-color: hsl(35, 10%, 86.0%);
   --border-subtle: hsl(35, 8%, 91.0%);
@@ -74,7 +81,10 @@ html[data-theme="light"] {
   /* 运行时注入（themeStore applyTheme）的默认皮肤等价静态定义——注入缺失路径的兜底 */
   --accent-green-light-adaptive: color-mix(in srgb, var(--accent-green, #16a34a) 15.5%, #ffffff);
   --accent-red-light-adaptive: color-mix(in srgb, var(--accent-red, #dc2626) 12.5%, #ffffff);
-  --accent-blue: hsl(217, 91%, 60%);
+  /* 批次 6.1 对比度修复（08 ③表行 4）：accent-blue 作链接/强调文字用时
+   * #2f81f7 档仅 3.23:1 → #1d4ed8 档 5.89:1（WCAG AA 正文 ≥4.5:1）；
+   * 图标/装饰仍可走 --color-info（dark 分支值不变，暗底 5.35:1 已达标） */
+  --accent-blue: #1d4ed8;
   --accent-blue-light: hsl(217, 70%, 96%);
   --accent-violet: hsl(258, 90%, 66%);
   --accent-violet-light: hsl(258, 40%, 97%);
@@ -108,14 +118,22 @@ html[data-theme="light"] {
   /* 文本语义色：--text-danger/--text-success 供模块文本/图标使用（映射 --color-* 语义值） */
   --text-danger: var(--color-error);
   --text-success: var(--color-success);
+  /* 文字专用强调色（08 ③表行 3/5，WCAG AA 文字 ≥4.5:1）：
+   * 装饰/图标用 --accent-orange/--accent-green，文字一律走本族——
+   * --text-warning-strong #c2410c：light 底 4.55:1（accent-orange 仅 1.85:1）
+   * --text-success-strong #46724c：light 底 4.92:1（ChangesSection +N 同档） */
+  --text-warning-strong: #c2410c;
+  --text-success-strong: #46724c;
   /* 危险按钮前景色（红底白字；--text-on-accent 在深色主题解析为深色，不适用） */
   --text-on-danger: #ffffff;
   /* 状态诊断面板文本色（值保持与历史 fallback 一致，避免渲染漂移） */
   --ui-text-success: #2f9e44;
   --ui-text-danger: #e03131;
-  --ui-text-muted: #868e96;
+  /* 批次 6.1 对比度修复：ui-text-muted 作状态诊断小字，#868e96 档仅 2.94:1 → #757d85 档 3.69:1 */
+  --ui-text-muted: #757d85;
   --ui-text-info: #1971c2;
-  --ui-text-warning: #e8590c;
+  /* 批次 6.1 对比度修复（08 ③表行 6）：WARN 文字 #e8590c 档仅 3.09:1 → 收敛入 --text-warning-strong（4.55:1） */
+  --ui-text-warning: var(--text-warning-strong);
   --ui-text-primary: inherit;
 
   /* Windows caption close (shared by app top bar + inset chrome) */
@@ -128,7 +146,9 @@ html[data-theme="light"] {
   --bg-overlay: var(--shadow-color);
 
   /* model/active status color (9 uses of #16a34a) */
-  --color-active: #16a34a;
+  /* 批次 6.1 对比度修复（08 ③表行 5）：状态点 #16a34a 档 2.91:1 → #15803d 档 4.41:1（WCAG AA UI ≥3:1）；
+   * 状态文字请走 --text-success-strong（≥4.5:1） */
+  --color-active: #15803d;
 
   /* syntax highlighting light */
   --syntax-keyword: #7c6fdb;
@@ -418,7 +438,9 @@ html[data-theme="dark"] {
   --bg-workspace: var(--bg-primary);
   --text-primary: #f0f0f0;
   --text-secondary: #a3a3a3;
-  --text-tertiary: color-mix(in srgb, var(--text-secondary) 62%, transparent);
+  /* 批次 6.1 对比度修复（08 ③表行 7）：dark text-tertiary 62% 混色约 3.59:1
+   * → #8f8f8f 档 6.0:1（WCAG AA 正文 ≥4.5:1） */
+  --text-tertiary: #8f8f8f;
   --text-muted: var(--text-tertiary);
 
   /* 淡染档位 token（tint 族）：dark 复用同一 text-primary 基底定义，淡染强度双主题一致 */
@@ -430,7 +452,11 @@ html[data-theme="dark"] {
   --tint-scrollbar-thumb: color-mix(in srgb, var(--text-primary) 18%, transparent);
   --tint-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
   --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
-  
+
+  /* T-C 批次 5.2 · T11：ui/Switch 轨道与拇指阴影（dark 轨道对齐旧 theme-dark.css 覆盖） */
+  --switch-track-bg: var(--tint-active);
+  --switch-thumb-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 12%, transparent);
+
   --border-color: hsl(0, 0%, 18%);
   --border-subtle: hsl(0, 0%, 14%);
   --composer-bg: var(--bg-secondary);
@@ -483,6 +509,9 @@ html[data-theme="dark"] {
   --accent-danger: var(--color-error);
   --text-danger: var(--color-error);
   --text-success: var(--color-success);
+  /* 文字专用强调色 dark 分支：暗底需亮调才达 4.5:1——与 --ui-text-* dark 值同档（各 ≥10:1） */
+  --text-warning-strong: var(--ui-text-warning);
+  --text-success-strong: var(--ui-text-success);
   --text-on-danger: #ffffff;
   --color-active: #16a34a;
 

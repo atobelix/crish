@@ -14,7 +14,8 @@
  * 区分成败（已示范模式，本任务核对其语义后保持不变）。
  */
 
-import { invokeCmd, invokeResult, invokeTyped } from '../tauriInvoke';
+import { invokeResult, invokeTyped } from '../tauriInvoke';
+import { logInternalError } from '../userFacingErrors';
 import type { WorkflowSchedule } from './workflowScheduler';
 
 export type WorkflowDefinition = {
@@ -79,8 +80,12 @@ function parseWorkflowList(raw: unknown): WorkflowDefinition[] {
 
 /** 列表：真实读 list-workflows（缺失/失败降级空表，与旧恒空语义兼容） */
 export async function listWorkflows(): Promise<WorkflowDefinition[]> {
-  const data = await invokeCmd<WorkflowWire[]>('list-workflows');
-  return parseWorkflowList(data);
+  // T-F 06 T6.1：invokeCmd → invokeTyped 三态化（missing → []，
+  // error → logInternalError + []；不再把成功 null 与失败 null 混为一谈）
+  const res = await invokeTyped<WorkflowWire[]>('list-workflows');
+  if (res.status === 'error') logInternalError('listWorkflows', res.message);
+  if (res.status !== 'ok') return [];
+  return parseWorkflowList(res.data);
 }
 
 /** 创建：真实走 create-workflow 命令（三态：missing 未就绪 / error 透传消息与错误码） */
@@ -202,11 +207,12 @@ export type WorkflowRunEntry = {
 export async function listWorkflowRuns(
   workflowId?: string
 ): Promise<WorkflowRunEntry[]> {
-  const data = await invokeCmd<WorkflowRunEntry[]>('list-workflow-runs', {
+  const res = await invokeTyped<WorkflowRunEntry[]>('list-workflow-runs', {
     ...(workflowId !== undefined && { workflowId }),
   });
-  if (!Array.isArray(data)) return [];
-  return data;
+  if (res.status === 'error') logInternalError('listWorkflowRuns', res.message);
+  if (res.status !== 'ok') return [];
+  return Array.isArray(res.data) ? res.data : [];
 }
 
 export function workflowRunStatusLabel(status?: string): string {

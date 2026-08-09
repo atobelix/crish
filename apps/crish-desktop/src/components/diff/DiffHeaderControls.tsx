@@ -1,7 +1,6 @@
 import React from 'react';
 import { Columns2, GitBranch, GitCommit, List, Search, Trash2 } from 'lucide-react';
-import { Tooltip } from '../ui';
-import { SettingsSelect } from '../settings/SettingsSelect';
+import { Select, Tooltip } from '../ui';
 import styles from './DiffCard.module.css';
 import type { FileDiff } from '../../store/types';
 
@@ -142,21 +141,25 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
 
         <div className={styles.toolbarRow2}>
           {sourceMode === 'session' ? (
-            <SettingsSelect
+            <Select
               className={styles.turnSettingsSelect}
               disabled={busy}
               value={turnKey}
-              options={turnOptions}
+              options={turnOptions.map((o) => ({
+                id: o.value,
+                label: o.label,
+                ...(o.hint !== undefined ? { hint: o.hint } : {}),
+              }))}
               onChange={onTurnSelect}
             />
           ) : sourceMode === 'git' ? (
             <div className={styles.branchSelectWrap}>
               <GitBranch size={13} className={styles.branchIcon} aria-hidden />
-              <SettingsSelect
+              <Select
                 className={styles.turnSettingsSelect}
                 disabled={busy}
                 value={currentBranch}
-                options={branches.map((b) => ({ value: b, label: b }))}
+                options={branches.map((b) => ({ id: b, label: b }))}
                 onChange={(val) => onBranchChange(val)}
               />
             </div>

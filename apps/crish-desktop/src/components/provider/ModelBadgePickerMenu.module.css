@@ -44,7 +44,7 @@
 }
 
 .mbRow:hover,
-.mbRow.isHovered {
+.mbRow.isExpanded {
   background: var(--bg-hover);
 }
 

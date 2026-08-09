@@ -1,8 +1,7 @@
 import React, { useMemo } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
-import { Tooltip } from '../ui';
-import { SettingsSelect } from '../settings/SettingsSelect';
+import { Select, Tooltip } from '../ui';
 import { classifyFileDiff } from '../../api/applyFileDiff';
 import { openPathDefault } from '../../api/hostOpenersApi';
 import { getWorkspacePath } from '../../api/projectStore';
@@ -120,8 +119,6 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
             <button
               id={itemId}
               type="button"
-              role="option"
-              aria-selected={active}
               className={`${styles.fileItem} ${active ? styles.isActive : ''}`}
               onClick={() => onSetActiveDiffSource(active ? null : f)}
               aria-label={`${basename(f.filePath)} +${f.additions} −${f.deletions}`}
@@ -215,9 +212,13 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
             <div className={styles.inlineHeader}>
               <div className={styles.compareSelectorWrap}>
                 <span className={styles.selectLabel}>对比维度:</span>
-                <SettingsSelect
+                <Select
                   value={getFileCompareMode(f.filePath)}
-                  options={compareOptions}
+                  options={compareOptions.map((o) => ({
+                    id: o.value,
+                    label: o.label,
+                    ...(o.hint !== undefined ? { hint: o.hint } : {}),
+                  }))}
                   onChange={(val) => {
                     if (isCompareMode(val)) {
                       onChangeCompareMode(f.filePath, val);
@@ -306,7 +307,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
   };
 
   return (
-    <div className={`${styles.fileList} ${styles.isFullWidth}`} role="listbox" aria-label="变更文件列表">
+    <div className={`${styles.fileList} ${styles.isFullWidth}`} role="list" aria-label="变更文件列表">
       {sourceMode === 'git' ? (
         <div className={styles.gitGroupList}>
           <div className={styles.gitGroupSection}>
