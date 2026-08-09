@@ -81,7 +81,13 @@ export const SelectionHighlight: React.FC = () => {
   if (rects.length === 0) return null;
 
   return (
-    <div className="selection-layer" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 0 }}>
+    // 选区层是纯装饰性高亮（光标/选区语义由 textarea 承担，R4-H）：
+    // aria-hidden 对屏幕阅读器隐藏，避免朗读无意义的矩形几何信息
+    <div
+      className="selection-layer"
+      aria-hidden="true"
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 0 }}
+    >
       {rects.map((rect, i) => (
         <div
           key={i}

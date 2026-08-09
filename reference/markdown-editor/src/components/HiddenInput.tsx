@@ -314,6 +314,40 @@ export function linewiseCopyContent(text: string, pos: number): string {
   return text.substring(start, end) + '\n';
 }
 
+// ============================================================
+// a11y 无障碍（R4-H，04 编辑深度扩展 §6.3 短程方案 1）
+// ============================================================
+// 设计：隐藏 textarea 的 value 恒为 '' 时屏幕阅读器（SR）读不到任何文档
+// 内容（A1）。短程三项：
+// 1. textarea 语义：aria-label（含占位符/行同步说明）+ role="textbox" +
+//    aria-multiline——SR 焦点进入编辑器即听到「Markdown 编辑器」；
+// 2. 光标行 value 同步：只把光标所在行文本同步进 value（不做全文同步——
+//    大文档性能不可接受，对齐 VS Code 屏幕阅读器思路）。与 R4-C IME
+//    value 缓冲的协调（三条门）：合成期（isComposingRef + 活跃组合组 +
+//    pending flush 窗口）value 是组合缓冲载体，绝不覆盖；编辑直刷（行
+//    视图变化）后保持 handleInput 的「提交后清空」空缓冲不变量——防同步
+//    行文本被浏览器当作输入内容二次插入（handleBeforeInput 兜底清空）；
+// 3. aria-live 播报：光标/选区变化时以 polite 轻量播报「第 N 行，第 M 列」
+//    （有选区附选中字符数）；同位置不重复 + 时间节流双保险防刷屏。
+/** aria-live 播报时间节流（ms）：同一窗口内不重复推送（拖选/快速按键） */
+export const ANNOUNCE_THROTTLE_MS = 250;
+
+/**
+ * 播报文案格式化（纯函数，供单测）：「第 N 行，第 M 列」（1 起）——
+ * 有选区（selectedCount > 0）时附加「已选中 X 个字符」。
+ */
+// oxlint-disable-next-line react/only-export-components
+export function formatAnnouncement(
+  line: number,
+  col: number,
+  selectedCount: number | null
+): string {
+  const base = `第 ${line + 1} 行，第 ${col} 列`;
+  return selectedCount !== null && selectedCount > 0
+    ? `${base}，已选中 ${selectedCount} 个字符`
+    : base;
+}
+
 // 组合结束后的提交延迟窗口（对齐 04 §2.3 方案 2 / CM6 input.ts:843-847
 // 的 50ms 清理策略）：compositionend 后浏览器可能延迟写入最终文本
 // （Safari dead-key）或在窗口内开启新一轮合成（Android 预测、候选替换的
@@ -424,6 +458,61 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       if (rAF) cancelAnimationFrame(rAF);
     };
   }, [cursorPos, selectionStart, selectionEnd, containerRef, lines]);
+
+  // —— a11y 光标行 value 同步 + aria-live 播报（R4-H，04 §6.3 短程）——
+  // prevLinesRef：本次渲染「行视图是否变化」判据（导航 = 行未变光标动；
+  // 编辑 = 行已变）。行变化（打字/粘贴/撤销等直刷）时同步与播报都跳过：
+  // 同步保持「提交后 value 清空」的空缓冲不变量（浏览器在空缓冲上插入
+  // 本次输入，input 整体提交）；播报避免逐字轰炸（SR 对字符输入有自身
+  // 朗读通道）。
+  const prevLinesRef = useRef<string[] | null>(null);
+  /** 播报去重键：上一次播报的「行:列」（同位置不重复） */
+  const lastAnnouncePosRef = useRef('');
+  /** 播报节流：上一次播报时间戳（ANNOUNCE_THROTTLE_MS 窗口内不推送） */
+  const lastAnnounceAtRef = useRef(-Infinity);
+  /** 播报文案（aria-live polite 节点承载，SR 朗读） */
+  const [announcement, setAnnouncement] = useState('');
+  /** textarea 挂载态（coords 是否已定位）：首帧 coords null → 无 textarea，
+   *  挂载后置 true 补一次同步（见下方依赖注释） */
+  const textareaMounted = coords !== null;
+
+  useLayoutEffect(() => {
+    const ta = textareaRef.current;
+    const linesChanged =
+      prevLinesRef.current !== null && prevLinesRef.current !== lines;
+    prevLinesRef.current = lines;
+    if (linesChanged) return;
+    // 合成期（含 compositionend 后 50ms pending flush 窗口）：value 是
+    // 组合缓冲载体（R4-C 状态机），同步/播报一律跳过，绝不覆盖缓冲
+    if (isComposingRef.current || activeCompositionGroup.current) return;
+    if (pendingFlushTimer.current !== null) return;
+    const s = useEditorStore.getState();
+    const lineIdx = s.getLineIndex(cursorPos);
+    const lineText = s.getLine(lineIdx) ?? '';
+    // 光标行 value 同步：屏幕阅读器可读当前行内容（getLine 统一行访问器，
+    // 与 R4-C 提交后的清空语义无冲突——见 handleBeforeInput 兜底清空）
+    if (ta && ta.value !== lineText) {
+      ta.value = lineText;
+    }
+    // 光标位置/选区变化轻量播报（polite）：「第 N 行，第 M 列」+ 选中数
+    const lineStart = s.lineOffsets.getOffset(lineIdx);
+    const col = Math.min(lineText.length + 1, cursorPos - lineStart + 1);
+    const selectedCount =
+      s.selectionStart !== s.selectionEnd
+        ? s.selectionEnd - s.selectionStart
+        : null;
+    const posKey = `${lineIdx}:${col}`;
+    if (posKey === lastAnnouncePosRef.current) return; // 同位置不重复
+    const now = Date.now();
+    if (now - lastAnnounceAtRef.current < ANNOUNCE_THROTTLE_MS) return; // 时间节流
+    lastAnnouncePosRef.current = posKey;
+    lastAnnounceAtRef.current = now;
+    setAnnouncement(formatAnnouncement(lineIdx, col, selectedCount));
+    // 依赖取布尔 textareaMounted 而非 coords 对象：coords 每次 setCoords 都
+    // 是新对象（光标移动重测），若直接依赖会导致本 effect 在坐标重渲染时
+    // 重复执行、linesChanged 判据失效（编辑提交后被误同步）；布尔切换只在
+    // textarea 挂载/卸载时变化（首帧 coords null → 挂载后补一次同步）
+  }, [cursorPos, selectionStart, selectionEnd, lines, textareaMounted]);
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -1184,6 +1273,13 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       native.preventDefault();
       s.insertText('\n');
       if (ta) ta.value = '';
+    } else {
+      // R4-H a11y 兜底清空：函数入口已放行（非合成、无活跃组），此时 value
+      // 非空只可能是 a11y 光标行同步写入的行文本——在浏览器真正插入前清
+      // 空，恢复「空缓冲 → 浏览器插入 → input 整体提交」不变量（普通打字
+      // keydown 之后、Android 无 keydown 的 insertText 提交等一律覆盖，
+      // 防同步行文本被当作输入内容二次插入）。
+      if (ta && ta.value !== '') ta.value = '';
     }
   };
 
@@ -1282,10 +1378,36 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
   if (!coords) return null;
 
   return (
-    <textarea
-      ref={textareaRef}
-      defaultValue=""
-      onKeyDown={handleKeyDown}
+    <>
+      {/* a11y 播报节点（R4-H）：aria-live polite 静默区——光标位置/选区
+          变化播报承载，SR 朗读；clip 视觉隐藏（不占布局、不进 Tab 序），
+          aria-live 区域须常驻 DOM 才能播报 */}
+      <div
+        className="a11y-live-region"
+        role="status"
+        aria-live="polite"
+        style={{
+          position: 'absolute',
+          width: '1px',
+          height: '1px',
+          margin: '-1px',
+          padding: 0,
+          border: 0,
+          overflow: 'hidden',
+          clip: 'rect(0 0 0 0)',
+          clipPath: 'inset(50%)',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {announcement}
+      </div>
+      <textarea
+        ref={textareaRef}
+        defaultValue=""
+        aria-label="Markdown 编辑器，输入文本；光标所在行内容会同步到输入框，可用方向键逐行阅读与编辑"
+        role="textbox"
+        aria-multiline="true"
+        onKeyDown={handleKeyDown}
       onCompositionStart={handleCompositionStart}
       onCompositionEnd={handleCompositionEnd}
       onBlur={() => {
@@ -1328,6 +1450,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       autoCapitalize="off"
       autoComplete="off"
       autoCorrect="off"
-    />
+      />
+    </>
   );
 };
