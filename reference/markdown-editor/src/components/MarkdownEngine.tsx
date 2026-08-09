@@ -1,4 +1,9 @@
-import React, { useCallback, useLayoutEffect, useRef } from 'react';
+import React, {
+  useCallback,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+} from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { BlockRenderer } from './BlockRenderer';
 import { HiddenInput } from './HiddenInput';
@@ -29,6 +34,60 @@ function getLineState(s: EditorState, i: number): CodeState {
   return i < boundary ? s.mainCodeState[i] : s.streamTailCodeState[i - boundary];
 }
 
+// ── C3 流式直刷 DOM（08 方案优化补充 §1 招 1 限定版 / 09 方案修订终版 §4 C3）──
+// 直刷仅限「纯文本末行」：行内无任何可构成 CommonMark 语法的字符，
+// 渲染结果必然是单个 text token 的正文行。判定字符集刻意保守——
+// `* # ` [ $ | > - _ ~ < \ = + . 0-9 ! ^ ) ( { }`（外加与 [ 配对的 ]）全部
+// 列为禁入字符，宁可少直刷不可误刷：任何禁入字符出现即拒绝直刷，该行走
+// store.appendText 常规路径，渲染结果由解析器权威决定（直刷只碰「无论怎么
+// 解析都必然是纯文本」的行，从根上杜绝「直刷内容与解析渲染分叉」）。
+const DIRECT_STREAM_FORBIDDEN_CHARS = new Set(
+  "*#`[$|>-_~<\\=+.0123456789!^)({}]"
+);
+
+// 直刷行文本长度上限：镜像 BlockRenderer.MAX_VISIBLE_LINE_CHARS（5000）——
+// 渲染层对超长行执行截断折叠（⋯ 已折叠 N 字符），直刷若越过该阈值，DOM
+// 展示的文本将多于渲染折叠视图（flush 后视觉跳变）。保守起见直刷绝不越过。
+const DIRECT_STREAM_MAX_LINE_CHARS = 5_000;
+
+/**
+ * 纯文本行保守判定（C3 限定版：直刷前置条件之一）：
+ * - 非空行（空行/纯空白行渲染为 <br/> 结构，无 text token 可直写）；
+ * - 不以空白开头（≥4 空格缩进 = 缩进代码块，1-3 空格缩进也一并回避）；
+ * - 全文不含 DIRECT_STREAM_FORBIDDEN_CHARS 中任一字符（含行首语法
+ *   标记：标题/列表/引用/表格/围栏/数学/分隔线/HTML 块，以及行中
+ *   行内语法：强调/链接/脚注/行内代码/转义等）。
+ * 判定对象是「末行 + 待追加 chunk」的合并结果（调用方负责拼接）——
+ * 直刷过程中 DOM 文本逐 chunk 增长，只有合并后仍为纯文本行才直写。
+ */
+// oxlint-disable-next-line react/only-export-components -- 任务规定导出纯函数供 R5/测试复用
+export function isPlainTextLine(lineText: string): boolean {
+  if (lineText.length === 0) return false;
+  const first = lineText[0];
+  if (first === ' ' || first === '\t') return false;
+  for (let i = 0; i < lineText.length; i++) {
+    if (DIRECT_STREAM_FORBIDDEN_CHARS.has(lineText[i])) return false;
+  }
+  return true;
+}
+
+/**
+ * MarkdownEngine 命令式流式接口（R5 集成轮宿主接线）：
+ * 宿主流式路径 = streamAppend(chunk)（直刷优先）→ streamEnd()（flush 收口）。
+ * 直刷的 flush 提交走 store.appendText（R3-A stop-flush 语义自动生效：
+ * 光标平移/流式合并 undo meta:'stream' 均由 store 统一处理）。
+ */
+export interface MarkdownEngineHandle {
+  /** 流式追加：纯文本末行且 chunk 无换行 → 命令式直写 DOM（store 延迟提交）；
+   *  否则（含换行/末行非纯文本/超长/行未挂载）→ 先 flush 累积再走 appendText。 */
+  streamAppend: (chunk: string) => void;
+  /** 流式结束：flush 直刷累积（appendText 一次提交）并 stop-flush 尾段
+   *  （合并为单个 meta:'stream' undo 步）。幂等。 */
+  streamEnd: () => void;
+  /** 主动 flush（宿主可提前提交直刷累积；无累积时为空操作，幂等）。 */
+  flushStream: () => void;
+}
+
 // 行渲染单元（09 §4 C1 滚动契约）：
 // - 位置由命令式通道独占：tanstack directDomUpdates 模式把行 top 直接写 DOM
 //   （applyDirectStyles 写 el.style.top），本组件不读 virtualRow.start、
@@ -42,14 +101,27 @@ const LineItem = React.memo(({
   lineText,
   offset,
   isCode,
-  rowRef
+  rowRef,
+  streamingDirty
 }: {
   index: number;
   lineText: string;
   offset: number;
   isCode: CodeState;
   rowRef: (el: HTMLElement | null) => void;
+  // C3 dirty 协议：直刷期间本行 props 行文本滞后于 DOM（直刷文本尚未
+  // 提交 store）。为 true 时本行进入冻结渲染（见 frozenContentRef），
+  // 并打上 data-streaming-dirty 标记（调试/巡检可见）。
+  streamingDirty?: boolean;
 }) => {
+  // C3 直刷冻结快照（dirty 覆盖渲染路径，09 §4 C3 代码级落实）：
+  // 干净渲染时把「本次 BlockRenderer 元素」存入 ref；dirty 渲染时返回
+  // 该同引用元素——React 对同一元素引用（props 对象 Object.is 相等）
+  // 直接跳过子树协调，BlockRenderer/InlineRenderer 不再重跑，DOM 上
+  // 已直刷的文本原样保留，杜绝「React 用旧 lineText 覆盖直刷文本」。
+  // flush 后 dirty 清除 → 按最新 lineText 全新渲染，DOM 与 store 收敛。
+  const frozenContentRef = useRef<React.ReactElement | null>(null);
+
   const activeStateStr = useEditorStore(state => {
     const { cursorPos, selectionStart, selectionEnd } = state;
     const lineStart = offset;
@@ -96,11 +168,28 @@ const LineItem = React.memo(({
 
   const lineNode = MarkdownParser.parseLine(lineText, offset, isCode);
 
+  const freshContent = (
+    <BlockRenderer
+      block={lineNode}
+      index={index}
+      lineOffset={offset}
+      activeState={activeState}
+      tableId={tableId}
+    />
+  );
+  if (!streamingDirty) {
+    frozenContentRef.current = freshContent;
+  }
+  const rowContent = streamingDirty
+    ? (frozenContentRef.current ?? freshContent)
+    : freshContent;
+
   return (
     <div
       data-index={index}
       data-line-start={offset}
       data-line-length={lineText.length}
+      data-streaming-dirty={streamingDirty ? 'true' : undefined}
       ref={rowRef}
       className={`virtual-row ${activeState ? 'is-active-line' : ''}`.trim()}
       style={{
@@ -110,18 +199,13 @@ const LineItem = React.memo(({
         minHeight: lineNode.type === 'table_separator' ? '0px' : '28px',
       }}
     >
-      <BlockRenderer
-        block={lineNode}
-        index={index}
-        lineOffset={offset}
-        activeState={activeState}
-        tableId={tableId}
-      />
+      {rowContent}
     </div>
   );
 });
 
-export const MarkdownEngine: React.FC = () => {
+export const MarkdownEngine = React.forwardRef<MarkdownEngineHandle, Record<string, never>>(
+  function MarkdownEngine(_props, ref) {
   const parentRef = useRef<HTMLDivElement>(null);
   // —— R3-B1 访问器切换：触发信号订阅（不订阅物化视图 state.lines /
   // state.codeBlockState——尾段非空时物化会执行 O(全文) concat 过渡成本，
@@ -190,6 +274,172 @@ export const MarkdownEngine: React.FC = () => {
     useCachedMeasurements: true,
   });
 
+  // ── C3 流式直刷状态（ref 级，不触发渲染）──
+  // pendingStreamRef：已直写 DOM、尚未提交 store 的累积文本（直刷会话
+  // 的延迟提交缓冲，与 C4 尾段互为镜像——直刷 flush 一次性 appendText）；
+  // dirtyRefs：直刷行 index 集合（直刷恒作用于末行，故实际至多一个元素，
+  // 用 Set 保持协议约定形态）；dirtyRowOutOfViewRef：直刷行当前是否在
+  // 可见视口之外（决定「滚动到尾部触达 dirty 行 → flush」的判定）。
+  const dirtyRefs = useRef<Set<number>>(new Set());
+  const pendingStreamRef = useRef('');
+  const dirtyRowOutOfViewRef = useRef(false);
+
+  // flush 实现（C3）：累积直刷文本经 store.appendText 一次提交 →
+  // dirty 清除 → 恢复常规路径。R3-A 语义自动生效：appendText 内部的
+  // 追加点锚定/光标平移/流式合并记账（meta:'stream'）统一接管，
+  // stop-flush（flushStreamTail）由宿主 streamEnd 收口为单 undo 步。
+  const flushStreamInternal = useCallback(() => {
+    const pending = pendingStreamRef.current;
+    if (!pending) return;
+    // 先清 dirty 再提交：appendText 触发的 React 重渲染发生在本次同步
+    // 调用栈之外，届时 dirty 已清除 → LineItem 按最新 lineText 全新
+    // 渲染（不再使用冻结快照），DOM 与 store 收敛一致。
+    pendingStreamRef.current = '';
+    dirtyRefs.current.clear();
+    dirtyRowOutOfViewRef.current = false;
+    useEditorStore.getState().appendText(pending);
+  }, []);
+
+  // 直刷行可见性判定（O(1)：HeightMap.indexAt 二分像素→行）：
+  // 用于「滚动到尾部触达 dirty 行 → flush」与直刷会话起点初值。
+  const isRowInVisibleViewport = useCallback((rowIdx: number): boolean => {
+    const el = parentRef.current;
+    const hm = heightMapRef.current;
+    // 容器/行高模型未就绪时保守视为可见（不误触发触达 flush）
+    if (!el || !hm) return true;
+    const first = hm.indexAt(el.scrollTop, 0);
+    const last = hm.indexAt(el.scrollTop + el.clientHeight, 0);
+    if (first < 0 || last < 0) return true;
+    return rowIdx >= first && rowIdx <= last;
+  }, []);
+
+  // 直刷通道（C3，宿主 streamAppend 优先路径）：chunk 落在「当前纯文本
+  // 末行」（末行 DOM 已挂载、合并后仍是纯文本行、无换行、未超截断阈值）
+  // 时命令式直写 DOM（textContent += chunk），store 延迟提交；否则先
+  // flush 累积直刷文本（保证提交顺序），再走 store.appendText 常规路径
+  // （含换行的 chunk 由 store 完成行边界切分）。
+  const streamAppend = useCallback((chunk: string) => {
+    if (!chunk) return;
+    const s = useEditorStore.getState();
+    const lastIdx = s.getLineCount() - 1;
+
+    // DOM 视角末行 = store 末行 + 未提交直刷累积（直刷会话中 store 滞后）
+    const domLast = lastIdx >= 0 ? (s.getLine(lastIdx) ?? '') + pendingStreamRef.current : '';
+    const merged = domLast + chunk;
+
+    // 末行 row 与纯文本 token span：直刷只写「渲染为单个 text token span」
+    // 的行——空行/无 token 结构（<br/> 行块）直接 textContent 追加会落到
+    // 行块之外形成独立视觉行，绝不允许（宁可少直刷不可误刷）。
+    let tokenEl: HTMLElement | null = null;
+    if (lastIdx >= 0) {
+      const rowEl = rowRefs.current.get(lastIdx);
+      tokenEl = rowEl && rowEl.isConnected
+        ? rowEl.querySelector<HTMLElement>('[data-token-start]')
+        : null;
+    }
+
+    const canDirect =
+      lastIdx >= 0 &&
+      !chunk.includes('\n') &&
+      merged.length <= DIRECT_STREAM_MAX_LINE_CHARS &&
+      isPlainTextLine(merged) &&
+      // 「LineNode 仅 text token」的块级保证：围栏内/缩进代码/数学块/
+      // HTML 块内的"看似纯文本"行不算纯文本行（CodeState 权威判定）
+      getLineState(s, lastIdx) === 'none' &&
+      tokenEl !== null;
+
+    if (canDirect) {
+      // 直写 DOM（命令式，绕过 React）：向纯文本 token span 追加；
+      // 光标跟随节流（08 §1 招 1 风险修正）属 R5 宿主侧，本层不越权。
+      tokenEl!.textContent = (tokenEl!.textContent ?? '') + chunk;
+      pendingStreamRef.current += chunk;
+      dirtyRefs.current.add(lastIdx);
+      // 会话起点记录直刷行可见性：用户本就在尾部（可见）时，滚动事件
+      // 不触发「触达 flush」；用户远离尾部（不可见）时，滚动回尾部
+      // 即 flush（保证 DOM 直刷文本先行提交，测量/选区/复制语义正确）。
+      dirtyRowOutOfViewRef.current = !isRowInVisibleViewport(lastIdx);
+      return;
+    }
+
+    // 常规路径（含 \n / 合并后非纯文本 / 超长 / 行未挂载 / dirty 行卸载）：
+    // 先 flush 累积（"若含 \n 先 flush"推广到一切回落情形——保证直刷文本
+    // 永远先于后续内容提交，顺序不颠倒），再 appendText 交给 store。
+    flushStreamInternal();
+    useEditorStore.getState().appendText(chunk);
+  }, [flushStreamInternal, isRowInVisibleViewport]);
+
+  // 流式结束（宿主调用）：flush 直刷累积（appendText 一次提交），并
+  // stop-flush 尾段——R3-A 将本次流式会话合并为单个 meta:'stream'
+  // undo 步（09 归一表 §5「append 不进 undo 栈；流式结束后合并单步」）。
+  const streamEnd = useCallback(() => {
+    flushStreamInternal();
+    const s = useEditorStore.getState();
+    if (s.streamTail.length > 0 || s.streamOp) s.flushStreamTail();
+  }, [flushStreamInternal]);
+
+  // 命令式接口暴露（R5 宿主：engineRef.current.streamAppend / streamEnd）
+  useImperativeHandle(
+    ref,
+    () => ({
+      streamAppend,
+      streamEnd,
+      flushStream: flushStreamInternal,
+    }),
+    [streamAppend, streamEnd, flushStreamInternal]
+  );
+
+  // 用户操作监听（C3 flush 时机 2）：keydown/pointerdown/mousedown/
+  // compositionstart 到达 → 直刷累积先 flush——08 §1 招 1「测量/选区/复制
+  // 操作触达时先 flush」：保证用户编辑/选区/点击测量作用在 store 与 DOM
+  // 一致的状态上。关键：capture 相位监听（先于容器内子组件冒泡处理，如
+  // HiddenInput 的 keydown→insertText），否则用户击键会先落到滞后 store。
+  // flushStreamInternal 空转无开销（无累积即返回），事件期间任意触发安全。
+  useLayoutEffect(() => {
+    const el = parentRef.current;
+    if (!el) return;
+    const flush = () => flushStreamInternal();
+    el.addEventListener('keydown', flush, true);
+    el.addEventListener('compositionstart', flush, true);
+    el.addEventListener('pointerdown', flush, true);
+    el.addEventListener('mousedown', flush, true);
+    return () => {
+      el.removeEventListener('keydown', flush, true);
+      el.removeEventListener('compositionstart', flush, true);
+      el.removeEventListener('pointerdown', flush, true);
+      el.removeEventListener('mousedown', flush, true);
+    };
+  }, [flushStreamInternal]);
+
+  // 滚动监听（C3 flush 时机 4：滚动到尾部/离开窗口）：
+  // - dirty 行离开虚拟窗口范围（超出 overscan，DOM 即将随窗口变化卸载）
+  //   → 立即 flush，防直刷文本随 DOM 卸载丢失；
+  // - dirty 行从视口外回到可见视口（用户滚动到尾部触达直刷行）→ flush，
+  //   保证随后可见行的测量/交互基于已提交状态。
+  const handleScrollFlush = useCallback(() => {
+    if (dirtyRefs.current.size === 0) {
+      dirtyRowOutOfViewRef.current = false;
+      return;
+    }
+    const items = virtualizer.getVirtualItems();
+    if (items.length === 0) return;
+    const first = items[0].index;
+    const last = items[items.length - 1].index;
+    for (const idx of dirtyRefs.current) {
+      if (idx < first || idx > last) {
+        flushStreamInternal();
+        return;
+      }
+    }
+    const dirtyIdx = dirtyRefs.current.values().next().value as number;
+    const nowVisible = isRowInVisibleViewport(dirtyIdx);
+    if (nowVisible && dirtyRowOutOfViewRef.current) {
+      flushStreamInternal();
+      return;
+    }
+    dirtyRowOutOfViewRef.current = !nowVisible;
+  }, [virtualizer, flushStreamInternal, isRowInVisibleViewport]);
+
+
   // 行 ref 注册表（稳定回调，空依赖不破坏 LineItem memo）：
   // 挂载时登记到 rowRefs（index 从 data-index 属性读，不依赖闭包），同时调用
   // virtualizer.measureElement 注册 elementsCache（directDomUpdates 位置写入通道）；
@@ -222,6 +472,21 @@ export const MarkdownEngine: React.FC = () => {
     const hm = heightMapRef.current;
     const oracle = oracleRef.current;
     if (!hm || !oracle) return;
+    // C3 直刷安全网（dirty 协议兜底）：dirty 行 DOM 已断开（窗口/布局
+    // 变化导致卸载，如 resize 触发的窗口重排、异常路径提前卸载）→ 立即
+    // flush 提交累积文本，防直刷文本随 DOM 丢失（store 权威，随窗口重挂载
+    // 即恢复完整内容）。
+    if (dirtyRefs.current.size > 0) {
+      let dirtyDisconnected = false;
+      for (const idx of dirtyRefs.current) {
+        const el = rowRefs.current.get(idx);
+        if (!el || !el.isConnected) {
+          dirtyDisconnected = true;
+          break;
+        }
+      }
+      if (dirtyDisconnected) flushStreamInternal();
+    }
     // R3-B1：快照经 store.getState() 取一次，后续行/状态读取走访问器
     // （getLine / getLineState），不读物化视图；effect 由双段引用触发
     // 信号 + lineCount 驱动（见依赖数组——任何内容变更必换其一新引用）
@@ -255,7 +520,7 @@ export const MarkdownEngine: React.FC = () => {
     }
     hm.flush();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mainLines, streamTail, mainCodeState, streamTailCodeState, lineCount, windowKey]);
+  }, [mainLines, streamTail, mainCodeState, streamTailCodeState, lineCount, windowKey, flushStreamInternal]);
 
   const handleContainerClick = (e: React.MouseEvent) => {
     // R3-B1：事件处理器统一取一次最新 store 快照，行内容/偏移经访问器
@@ -500,6 +765,7 @@ export const MarkdownEngine: React.FC = () => {
         ref={parentRef}
         className="editor-container editor-scroll-container"
         onClick={handleContainerClick}
+        onScroll={handleScrollFlush}
         onCopy={(e) => {
           const selection = window.getSelection();
           if (!selection || selection.isCollapsed) return;
@@ -569,6 +835,7 @@ export const MarkdownEngine: React.FC = () => {
                   lineText={lineText}
                   offset={offset}
                   isCode={isCode}
+                  streamingDirty={dirtyRefs.current.has(index)}
                   rowRef={registerRowRef}
                 />
               );
@@ -597,4 +864,4 @@ export const MarkdownEngine: React.FC = () => {
       </div>
     </div>
   );
-};
+});
