@@ -149,8 +149,9 @@ packages/agent-provider-http/target/
 target-tauri-dev/
 target-tauri-smoke/
 
-# Tauri generated schemas
-apps/agent-workbench/src-tauri/gen/
+# Tauri generated schemas（schemas/*.json 白名单需逐级放行父目录，不能用目录整体忽略——否则 !schemas/*.json 不生效）
+apps/agent-workbench/src-tauri/gen/*
+!apps/agent-workbench/src-tauri/gen/schemas/
 
 # local junk
 *.orig
@@ -343,8 +344,9 @@ packages/agent-provider-http/target/
 target-tauri-dev/
 target-tauri-smoke/
 
-# Tauri generated schemas
-apps/agent-workbench/src-tauri/gen/
+# Tauri generated schemas（schemas/*.json 白名单需逐级放行父目录，不能用目录整体忽略——否则 !schemas/*.json 不生效）
+apps/agent-workbench/src-tauri/gen/*
+!apps/agent-workbench/src-tauri/gen/schemas/
 
 # local junk
 *.orig
@@ -364,6 +366,10 @@ apps/agent-workbench/src-tauri/gen/
 !scripts/check-no-raw-setstate.mjs
 !scripts/check-store-facade.mjs
 !scripts/components-store-direct-imports.json
+# T-E 批次 7.3 门禁脚本入库放行（吞错基线 / 行数三级门禁——门禁脚本是资产，
+# 必须可被 git 跟踪，否则 CI checkout 后门禁缺失）
+!scripts/check-swallowed-errors-frontend.mjs
+!scripts/check-line-counts.mjs
 # markdown-editor 测试资产放行（本区 *.txt/*.json/*.mjs 忽略规则在 267 行白名单之后，须在此显式放行）
 !reference/markdown-editor/tests/cmspec/spec.txt
 !reference/markdown-editor/tests/cmspec/examples.json
@@ -409,7 +415,7 @@ reference/ui-replica/package-lock.json
 
 
 
-# turbo cache (opencode/agent Ự)
+# turbo cache（opencode/agent 缓存目录）
 .turbo/
 
 # 另一会话工作区（codex 会话 scratch 工具 / agent 会话记录）
@@ -418,3 +424,15 @@ fix-unused.py
 # 运行期备份
 *.bak-*
 orchestrator-snapshot.json.prev
+
+# 多端互通：Expo/EAS/协议注册表 文件白名单（全局 *.json/*.mjs 忽略的例外，对齐 D8 §10.5）
+!apps/crish-mobile/app.json
+!apps/crish-mobile/eas.json
+!apps/crish-mobile/**/tsconfig*.json
+!**/package.json
+!**/tsconfig*.json
+!crates/conex-types/contracts/*.json
+!packages/protocol-core/contracts/*.json
+!scripts/generate-protocol-bindings.mjs
+!apps/crish-mobile/jest.config.*
+!apps/crish-mobile/babel.config.*
