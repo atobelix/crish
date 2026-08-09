@@ -33,6 +33,7 @@ import {
   catalogEntryDisplayLabel,
   catalogEntryKey,
   dedupeCatalogEntries,
+  fetchCatalogSnapshot,
   filterUsableCatalogEntries,
   formatContextLabel,
   formatContextLabelZh,
@@ -51,11 +52,17 @@ import {
   pickDefaultFromLocalCatalog,
   scanProviderModels,
   setModelEnabled,
+  toCatalogCacheSnapshot,
   uploadScannedModels,
   type CatalogModelEntry,
+  type CatalogSnapshotWire,
 } from './modelCatalog';
 import { saveProfiles, setProfileKey } from './providerProfiles';
 import { invokeResult } from './tauriInvoke';
+import {
+  clearCatalogCacheSnapshot,
+  resolve4dPrices,
+} from './pricingStore';
 
 function entry(
   partial: Partial<CatalogModelEntry> &
@@ -552,6 +559,119 @@ describe('modelCatalog', () => {
         });
         expect(res).toEqual({ ok: true, models: ['ok-m'] });
         expect(warn).toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+  });
+
+  describe('catalog_get 快照注入（DEEPCHECK-02 P0 断链修复）', () => {
+    const invoke = vi.mocked(invokeResult);
+
+    beforeEach(() => {
+      invoke.mockReset();
+      invoke.mockImplementation(async () => ({ status: 'missing' as const }));
+      clearCatalogCacheSnapshot();
+    });
+
+    afterEach(() => {
+      invoke.mockReset();
+      invoke.mockImplementation(async () => ({ status: 'missing' as const }));
+      clearCatalogCacheSnapshot();
+    });
+
+    const wire: CatalogSnapshotWire = {
+      version: 7,
+      entries: [
+        {
+          model: 'deepseek-v4-flash',
+          inputPrice: 0.14,
+          outputPrice: 0.28,
+          cacheReadPrice: 0.0028,
+          cacheWritePrice: 0.0,
+        },
+        {
+          model: 'gemini-3-1-pro',
+          apiModel: 'gemini-3.1-pro-preview',
+          inputPrice: 2.0,
+          outputPrice: 12.0,
+          cacheReadPrice: 0.2,
+          cacheWritePrice: 0.0,
+          tieredPricing: [
+            { minTokens: 200_000, inputPrice: 4.0, outputPrice: 18.0, cacheReadPrice: 0.4 },
+          ],
+        },
+        // null 价 = 未收录（禁 0 占位）
+        { model: 'gpt-5.5-pro', inputPrice: 30.0, outputPrice: 180.0, cacheReadPrice: null, cacheWritePrice: 0.0 },
+      ],
+    };
+
+    it('toCatalogCacheSnapshot：四价 + apiModel 别名 + tiered + null 价语义', () => {
+      const snap = toCatalogCacheSnapshot(wire);
+      expect(snap.version).toBe(7);
+      // 主键与 apiModel 别名同价索引
+      expect(snap.prices['deepseek-v4-flash']).toMatchObject({
+        inputPerMTok: 0.14,
+        readPerMTok: 0.0028,
+        writePerMTok: 0.0,
+      });
+      expect(snap.prices['gemini-3-1-pro']).toMatchObject({
+        inputPerMTok: 2,
+        tiered: [{ minTokens: 200_000, inputPerMTok: 4 }],
+      });
+      expect(snap.prices['gemini-3.1-pro-preview']).toBe(
+        snap.prices['gemini-3-1-pro']
+      );
+      // null 价 → 字段缺失（回退下级解析链）
+      expect(snap.prices['gpt-5.5-pro']).not.toHaveProperty('readPerMTok');
+      expect(snap.prices['gpt-5.5-pro']).toMatchObject({
+        inputPerMTok: 30,
+        writePerMTok: 0,
+      });
+      // 非法载荷防御
+      expect(toCatalogCacheSnapshot(null)).toEqual({ version: 0, prices: {} });
+      expect(
+        toCatalogCacheSnapshot({ version: 1, entries: [] as never[] })
+      ).toEqual({ version: 1, prices: {} });
+    });
+
+    it('fetchCatalogSnapshot 成功：invoke(catalog_get) → pricingStore 快照生效', async () => {
+      invoke.mockImplementation(async (cmd: string) => {
+        if (cmd === 'catalog_get') return { status: 'ok' as const, data: wire };
+        return { status: 'missing' as const };
+      });
+      const ok = await fetchCatalogSnapshot();
+      expect(ok).toBe(true);
+      // 快照注入后：四价取快照真源（source=snapshot）
+      expect(resolve4dPrices('deepseek-v4-flash')).toMatchObject({
+        inputPerMTok: 0.14,
+        cacheReadPerMTok: 0.0028,
+        source: 'snapshot',
+      });
+      const call = invoke.mock.calls.find(([cmd]) => cmd === 'catalog_get');
+      expect(call).toBeDefined();
+    });
+
+    it('fetchCatalogSnapshot 失败降级：missing / error / 非法载荷 → false，静态表兜底不崩', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        // missing（非 Tauri 环境 / 命令未注册）
+        expect(await fetchCatalogSnapshot()).toBe(false);
+        // error：命令报错
+        invoke.mockImplementation(async () => ({
+          status: 'error' as const,
+          message: 'catalog 内部错误',
+        }));
+        expect(await fetchCatalogSnapshot()).toBe(false);
+        // 非法载荷（entries 缺失）
+        invoke.mockImplementation(async () => ({
+          status: 'ok' as const,
+          data: { version: 1 } as CatalogSnapshotWire,
+        }));
+        expect(await fetchCatalogSnapshot()).toBe(false);
+        expect(warn).toHaveBeenCalled();
+        // 全程未注入 → 定价仍走静态表
+        expect(resolve4dPrices('deepseek-v4-flash')?.source).toBe('catalog');
       } finally {
         warn.mockRestore();
       }

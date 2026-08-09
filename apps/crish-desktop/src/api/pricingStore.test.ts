@@ -14,8 +14,10 @@ import {
   loadCachePriceOpts,
   loadCacheTtlMode,
   resolve4dPrices,
+  resolve4dPricesForTokens,
   resolveCatalogCachePrices,
   resolveModelPrice,
+  resolveTierForTokens,
   saveCachePriceOpts,
   saveCacheTtlMode,
   savePrices,
@@ -507,5 +509,151 @@ describe('v4 1h 档（Anthropic 双档写价）与运行时快照', () => {
       resolveCatalogCachePrices('deepseek-v4-flash')?.readPerMTok
     ).toBeCloseTo(0.0028, 10);
     expect(resolve4dPrices('deepseek-v4-flash')?.source).toBe('catalog');
+  });
+
+  describe('长度分档消费（P1B / DEEPCHECK-05 #8：tieredPricing 落档）', () => {
+    it('静态表 tier：gemini-3-1-pro ≥200K 档覆盖四价，半开区间边界正确', () => {
+      // 首档（<200K）：基础价 2.0/12.0/0.2
+      expect(resolve4dPricesForTokens('gemini-3-1-pro', 199_999)).toMatchObject({
+        inputPerMTok: 2,
+        outputPerMTok: 12,
+        cacheReadPerMTok: 0.2,
+      });
+      // ≥200K：档价 4.0/18.0/0.4（cacheWrite 未覆盖沿用 0）
+      const tiered = resolve4dPricesForTokens('gemini-3-1-pro', 200_000);
+      expect(tiered).toMatchObject({
+        inputPerMTok: 4,
+        outputPerMTok: 18,
+        cacheReadPerMTok: 0.4,
+        cacheWritePerMTok: 0,
+      });
+      expect(resolveTierForTokens('gemini-3-1-pro', 500_000)?.minTokens).toBe(
+        200_000
+      );
+      // 估算函数按 input 长度落档（DEEPCHECK-05 §8 场景：500K in + 50K out
+      // 基础档 $1.60 vs 长档 $2.90，低估 ≈45% 修复）
+      const baseCost = estimateCostUsd4d('gemini-3-1-pro', 500_000, 50_000, 0, 0);
+      expect(baseCost).toBeCloseTo(500_000 / 1e6 * 4 + 50_000 / 1e6 * 18, 10);
+      expect(baseCost).toBeGreaterThan(1.6);
+      // 2D 估算同样落档
+      expect(estimateCostUsd('gemini-3-1-pro', 200_000, 0)).toBeCloseTo(0.8, 10);
+      expect(estimateCostUsd('gemini-3-1-pro', 199_999, 0)).toBeCloseTo(
+        0.399998,
+        8
+      );
+    });
+
+    it('grok-4-5 ≥200K 档（点号/横线双键同源）；档内 cacheRead 覆盖', () => {
+      for (const key of ['grok-4-5', 'grok-4.5']) {
+        expect(resolve4dPricesForTokens(key, 199_999)).toMatchObject({
+          inputPerMTok: 2,
+          cacheReadPerMTok: 0.3,
+        });
+        expect(resolve4dPricesForTokens(key, 200_000)).toMatchObject({
+          inputPerMTok: 4,
+          outputPerMTok: 12,
+          cacheReadPerMTok: 0.6,
+        });
+      }
+    });
+
+    it('qwen3-6-plus ≥256K 档覆盖写价（档内 cacheWrite 10 vs 基础 2.5）', () => {
+      expect(
+        resolve4dPricesForTokens('qwen3-6-plus', 255_999)?.cacheWritePerMTok
+      ).toBe(2.5);
+      expect(
+        resolve4dPricesForTokens('qwen3-6-plus', 256_000)?.cacheWritePerMTok
+      ).toBe(10);
+      expect(
+        resolve4dPricesForTokens('qwen3-6-plus', 256_000)?.inputPerMTok
+      ).toBe(8);
+    });
+
+    it('用户显式保存价表后：用户价优先，整条不落档（用户接管目录语义）', () => {
+      savePrices([
+        { model: 'gemini-3-1-pro', inputPerMTok: 1, outputPerMTok: 5 },
+      ]);
+      expect(resolve4dPricesForTokens('gemini-3-1-pro', 500_000)).toMatchObject({
+        inputPerMTok: 1,
+        outputPerMTok: 5,
+      });
+      // 缓存价同样不落档：走基础回退链（用户无缓存字段 → 目录基础档）
+      expect(
+        resolve4dPricesForTokens('gemini-3-1-pro', 500_000)?.cacheReadPerMTok
+      ).toBe(0.2);
+    });
+
+    it('无 tier 模型：任意长度恒基础价（deepseek-v4-flash / 未知模型）', () => {
+      expect(
+        resolve4dPricesForTokens('deepseek-v4-flash', 1_000_000)?.inputPerMTok
+      ).toBe(0.14);
+      expect(resolveTierForTokens('deepseek-v4-flash', 1_000_000)).toBeNull();
+      expect(resolve4dPricesForTokens('zzz-unknown', 10)).toBeNull();
+    });
+  });
+
+  describe('快照四价 + tiered（P1B：Rust 目录真源全量传导）', () => {
+    it('快照带 input/output/tiered：resolve4dPrices 全指标取快照，分档消费快照档', () => {
+      applyCatalogCacheSnapshot({
+        version: 3,
+        prices: {
+          'gemini-3-1-pro': {
+            inputPerMTok: 3,
+            outputPerMTok: 13,
+            readPerMTok: 0.3,
+            writePerMTok: 0,
+            tiered: [
+              {
+                minTokens: 200_000,
+                inputPerMTok: 6,
+                outputPerMTok: 26,
+                cacheReadPerMTok: 0.6,
+              },
+            ],
+          },
+        },
+      });
+      try {
+        // 基础四价取快照（Rust 真源优先于静态表）
+        expect(resolve4dPrices('gemini-3-1-pro')).toMatchObject({
+          inputPerMTok: 3,
+          outputPerMTok: 13,
+          cacheReadPerMTok: 0.3,
+          source: 'snapshot',
+        });
+        // 分档消费快照档
+        expect(
+          resolve4dPricesForTokens('gemini-3-1-pro', 250_000)
+        ).toMatchObject({
+          inputPerMTok: 6,
+          outputPerMTok: 26,
+          cacheReadPerMTok: 0.6,
+        });
+        expect(estimateCostUsd4d('gemini-3-1-pro', 250_000, 10_000, 0, 0)).toBeCloseTo(
+          250_000 / 1e6 * 6 + 10_000 / 1e6 * 26,
+          10
+        );
+      } finally {
+        clearCatalogCacheSnapshot();
+      }
+    });
+
+    it('快照缺失指标逐项回退：只带缓存价时 input/output 回退静态表', () => {
+      applyCatalogCacheSnapshot({
+        version: 1,
+        prices: {
+          'gemini-3-1-pro': { readPerMTok: 0.5, writePerMTok: 0 },
+        },
+      });
+      try {
+        expect(resolve4dPrices('gemini-3-1-pro')).toMatchObject({
+          inputPerMTok: 2, // 回退静态表基础价
+          cacheReadPerMTok: 0.5, // 快照优先
+          source: 'snapshot',
+        });
+      } finally {
+        clearCatalogCacheSnapshot();
+      }
+    });
   });
 });

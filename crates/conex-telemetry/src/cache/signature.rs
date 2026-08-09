@@ -110,6 +110,10 @@ pub struct CacheBaseline {
     pub signature: RequestSignature,
     /// 上次请求的真实提示体积（冷缓存预警"重发 ~N tok"用）
     pub input_total: u64,
+    /// 上次请求的缓存命中读取量（断裂判定 [`MissDetector::is_break`] 的
+    /// `prev_read` 输入——cacheRead 骤降 >5% 且 >2000 token 是缓存条目
+    /// 被驱逐 / 断裂的强信号，P5 §3.4.2）
+    pub read: u64,
     /// 供应商标识（归因 ProviderSwitch 用）
     pub provider: String,
     /// 模型标识（归因 ModelSwitch 用）

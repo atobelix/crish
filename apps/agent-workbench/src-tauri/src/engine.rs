@@ -34,14 +34,15 @@ use agent_provider::models::{
 };
 use agent_provider::events::{ProviderStreamEvent as WireEvent, StreamParseError};
 use agent_provider::parse::chat::ChatCompletionsParser;
+use agent_provider::parse::responses::ResponsesParser;
 use agent_provider::request::cache::{build_cache_policy, CachePolicy};
 use agent_provider::request::build::affinity_http_headers;
 use agent_provider::request::{
-    build_chat_completions_request_body, infer_reasoning_vendor, ChatCompletionsRequestOptions,
-    MaxTokensField, ReasoningContentMode, ReasoningVendor, RequestBuildContext,
-    ToolDefinition as WireToolDefinition,
+    build_chat_completions_request_body, build_responses_request_body, infer_reasoning_vendor,
+    ChatCompletionsRequestOptions, MaxTokensField, ReasoningContentMode, ReasoningVendor,
+    RequestBuildContext, ToolDefinition as WireToolDefinition,
 };
-use agent_provider::sse::{AbortFlag, StreamDiagnosticContext, StreamReadOptions};
+use agent_provider::sse::{AbortFlag, SseFrame, StreamDiagnosticContext, StreamReadOptions};
 use agent_provider::transport::{stream_frames, StreamFrameEvent};
 use agent_tools::audit::{AuditSink, SecurityAuditSink};
 use agent_tools::background::BackgroundTaskManager;
@@ -65,7 +66,10 @@ use conex_types::events::{
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::response::ClassifiedStreamError;
 use conex_types::tool::SystemPromptWireMode;
-use conex_telemetry::cache::WARN_MISSED_TOKENS;
+use conex_telemetry::cache::{
+    cold_cache_check, is_cold, CacheBaseline, RequestSignature, WARN_MISSED_COST_USD,
+    WARN_MISSED_TOKENS,
+};
 use futures_util::{Stream, StreamExt};
 use orchestrator::PendingMessageQueue;
 use session_loop::provider::{
@@ -201,12 +205,12 @@ pub(crate) fn load_provider_endpoint() -> Option<EngineProviderConfig> {
 
 // ── HttpProviderCall：真实 provider 适配层 ─────────────────────────
 
-/// chat-completions 请求的端点路径（endpoint 缺省恒 chat-completions，00 D3）
+/// provider 请求端点路径（endpoint 缺省恒 chat-completions，00 D3）
 ///
 /// P3 步骤 4b（T-23）：endpoint=Responses 时经模型目录判定该模型是否支持
 /// Responses API（P3 §3.4.2）。DeepSeek 现状仅 v4-flash 支持 Responses、
 /// v4-pro 官方计划 2026 年 8 月初加入（vendor-cache-gaps.md:95；加入后刷新
-/// catalog.json 条目即可，无代码改动）。判定 = `supports_responses_for`：
+/// catalog.json 条目即可，无代码改动）。判定 = `responses_endpoint_active`：
 /// - 支持 → 保持 /responses；
 /// - 不支持 → 拒绝 responses 并降级回 chat-completions（P3 §3.4.2 降级策略由
 ///   引擎裁决：本引擎无 per-request 端点重试/诊断面，静默回退 chat-completions
@@ -214,15 +218,36 @@ pub(crate) fn load_provider_endpoint() -> Option<EngineProviderConfig> {
 /// - 厂商未识别（baseUrl/model 均无关键字 → Auto）→ 目录无该厂商数据，
 ///   保留现状不降级（避免对自定义网关臆断降级）；DeepSeek 经 model 前缀
 ///   仍可命中判定（自建网关转发 deepseek-* 模型名同样受判）。
+///
+/// DEEPCHECK-05 #10 修复：URL / 请求体 / 解析器三件套必须同轨——URL 走
+/// /responses 时 body 必须是 responses wire 形状（[build_responses_request_body]）、
+/// 解析器必须是 [ResponsesParser]；三处判定统一收敛于 [responses_endpoint_active]，
+/// 防止"URL 改了协议没改"的断层再现。
 fn provider_url(config: &EngineProviderConfig) -> String {
     let base = config.base_url.trim_end_matches('/');
-    match config.endpoint {
-        Endpoint::Responses if !responses_supported(config) => {
-            format!("{base}/chat/completions")
-        }
-        Endpoint::Responses => format!("{base}/responses"),
-        _ => format!("{base}/chat/completions"),
+    if responses_endpoint_active(config) {
+        format!("{base}/responses")
+    } else {
+        format!("{base}/chat/completions")
     }
+}
+
+/// Responses 轨是否生效（URL / body / parser 三件套的统一判定点）
+///
+/// endpoint=Responses 且模型目录确认支持时返回 true；其余（chat 端点 / 不支持
+/// 的模型）一律 false → 整条请求链回落 chat-completions 轨。
+fn responses_endpoint_active(config: &EngineProviderConfig) -> bool {
+    config.endpoint == Endpoint::Responses && responses_supported(config)
+}
+
+/// 摘要专用端点路径：恒 chat-completions（DEEPCHECK-05 #10 修复）
+///
+/// 摘要请求体恒为 chat 形状（[ProviderSummarizer::build_request_body]），URL
+/// 必须与 body 匹配——若配置了 responses 端点就走 /responses，等于把 chat body
+/// 发往 responses URL，正是 DEEPCHECK-05 判定的协议断层。摘要面无 Responses
+/// 解析/构造面，显式钉死 chat URL。
+fn chat_provider_url(config: &EngineProviderConfig) -> String {
+    format!("{}/chat/completions", config.base_url.trim_end_matches('/'))
 }
 
 /// 内置模型目录单例（T-23：Responses 支持判定用）
@@ -263,6 +288,21 @@ fn responses_vendor(config: &EngineProviderConfig) -> Option<&'static str> {
         ReasoningVendor::Kimi => Some("kimi"),
         ReasoningVendor::Auto => None,
     }
+}
+
+/// 生效模型上下文窗口（DEEPCHECK-06 P0：子代理预算入站数据源）
+///
+/// engine provider 生效模型 → 内置模型目录 [ModelCatalog::context_window_for]
+/// （vendor 判定复用 [infer_vendor] 双通道——baseUrl 关键字 → model 前缀，
+/// 覆盖 grok / minimax / dashscope 等目录厂商，与 cache.rs 的目录键路由
+/// 同源）；目录缺失（未知模型 / Auto 厂商）或窗口超出 u32 承载 → None =
+/// 不钳制（与主会话前端 resolveContextWindow 的 catalog 兜底失败行为
+/// 一致，不臆造窗口）。
+pub(crate) fn effective_context_window(config: &EngineProviderConfig) -> Option<u32> {
+    let vendor = infer_vendor(&config.base_url, &config.model);
+    bundled_catalog()
+        .context_window_for(vendor.as_str(), &config.model)
+        .and_then(|window| u32::try_from(window).ok())
 }
 
 /// provider 调用适配层（B6.4：ProviderCall 的真实实现，T09.1 增量流）
@@ -333,6 +373,23 @@ impl HttpProviderCall {
         }
     }
 
+    /// 请求体构建（DEEPCHECK-05 #10 修复：body 与 endpoint 同轨分流）
+    ///
+    /// responses 轨生效（[responses_endpoint_active]）→ responses wire 形状
+    /// （input / instructions / max_output_tokens，无 chat 缓存字段）；否则 →
+    /// chat-completions 形状（既有路径，字节与 P2 前逐字节一致）。
+    fn request_body(
+        &self,
+        options: &ChatCompletionsRequestOptions,
+        context: &RequestBuildContext<'_>,
+    ) -> serde_json::Value {
+        if responses_endpoint_active(&self.config) {
+            build_responses_request_body(options, context)
+        } else {
+            build_chat_completions_request_body(options, context)
+        }
+    }
+
     /// 请求构建上下文（消息 0 深拷贝借用，PE-09 T09.3 阶段 1）
     fn build_context<'a>(&self, request: &ProviderRequest<'a>) -> RequestBuildContext<'a> {
         RequestBuildContext {
@@ -381,9 +438,11 @@ impl ProviderCall for HttpProviderCall {
     ) -> Result<ProviderEventStream, ClassifiedStreamError> {
         // 1. 同步构建请求体（返回流 'static：请求体必须在此处序列化完毕，
         //    PE-02 §3.1.1；连接池 / endpoint 构建不变，T09.1.2 步骤 2）
+        //    DEEPCHECK-05 #10 修复：body 与 URL 同轨（responses 轨 → responses wire
+        //    形状；chat 轨 → chat 形状逐字节不变，回归护栏见 tests）
         let options = self.request_options(request);
         let context = self.build_context(request);
-        let body = build_chat_completions_request_body(&options, &context);
+        let body = self.request_body(&options, &context);
         let url = provider_url(&self.config);
 
         // 2. HTTP 请求（共享连接池；传输层错误分类后上抛）
@@ -444,7 +503,11 @@ impl ProviderCall for HttpProviderCall {
         let frames = stream_frames(response, read_options, abort_handle);
         let state = HttpStreamState {
             frames,
-            parser: ChatCompletionsParser::new(),
+            parser: if responses_endpoint_active(&self.config) {
+                HttpStreamParser::Responses(ResponsesParser::new())
+            } else {
+                HttpStreamParser::Chat(ChatCompletionsParser::new())
+            },
             pending: VecDeque::new(),
             finished: false,
         };
@@ -459,12 +522,38 @@ impl ProviderCall for HttpProviderCall {
 struct HttpStreamState {
     /// 底层帧流（帧 / 诊断 / 读取错误；错误后流立即结束）
     frames: Pin<Box<dyn Stream<Item = Result<StreamFrameEvent, agent_provider::sse::SseReadError<reqwest::Error>>> + Send>>,
-    /// chat-completions 逐帧解析器
-    parser: ChatCompletionsParser,
+    /// 端点解析器（DEEPCHECK-05 #10 修复：responses 轨 → ResponsesParser，
+    /// 否则 ChatCompletionsParser——URL 与解析器必须同轨，防止"URL 走
+    /// /responses 但按 chat 形状解析"的断层）
+    parser: HttpStreamParser,
     /// 待发事件（一次读取可产出多帧事件，逐条流出）
     pending: VecDeque<ProviderStreamEvent>,
     /// 帧流已收尾（EOF 后 finish 事件已入队 / 错误终止）
     finished: bool,
+}
+
+/// 端点解析器二态（chat-completions / Responses，同一帧处理接口）
+enum HttpStreamParser {
+    Chat(ChatCompletionsParser),
+    Responses(ResponsesParser),
+}
+
+impl HttpStreamParser {
+    /// 逐帧解析（委派给当前轨解析器；错误语义一致：解析错误 Unknown 不可重试）
+    fn push_frame(&mut self, frame: &SseFrame) -> Result<Vec<WireEvent>, StreamParseError> {
+        match self {
+            HttpStreamParser::Chat(parser) => parser.push_frame(frame),
+            HttpStreamParser::Responses(parser) => parser.push_frame(frame),
+        }
+    }
+
+    /// 流结束收尾（委派；每流恰好一个 stop，由解析器保证）
+    fn finish(&mut self) -> Result<Vec<WireEvent>, StreamParseError> {
+        match self {
+            HttpStreamParser::Chat(parser) => parser.finish(),
+            HttpStreamParser::Responses(parser) => parser.finish(),
+        }
+    }
 }
 
 /// 产出下一条流条目（Ok 事件 / Err 已分类错误；None = 流结束）
@@ -806,7 +895,9 @@ impl conex_compaction::Summarizer for ProviderSummarizer {
         // JSON 输出契约，P1-C 对齐后不再是五字段孤儿）
         let prompt = conex_compaction::ai_summary::build_summarize_prompt(dropped, existing);
         let body = self.build_request_body(&prompt);
-        let url = provider_url(&self.config);
+        // DEEPCHECK-05 #10 修复：摘要请求体恒 chat 形状 → URL 恒 chat-completions
+        // （responses 端点配置下也禁止把 chat body 发往 /responses）
+        let url = chat_provider_url(&self.config);
         let api_key = self.config.api_key.clone();
         let client = self.client.clone();
         // 专用线程 + 独立 current_thread runtime（见类型注释：不嵌套调用方
@@ -1695,12 +1786,16 @@ fn unix_millis_now() -> u64 {
 }
 
 /// 冷缓存预警事件（P5 §3.4.4 请求启动路径，辅助路径）：上一 run 温暖截止
-/// 已过期 → Some（等价 tracker.cold_cache_check 的可观测面）。
+/// 已过期 → Some。
 ///
-/// 实现说明：跨 run 签名基线续接在 session-loop 侧尚未接线（T-36 只做
-/// run 内跨 turn 基线），本层以 `RunCacheStats.warm_until_ms`（= 完成时刻 +
-/// TTL × 1000，tracker.finish 口径）过期判定——与前端 warmUntilMs tick
-/// 路径同口径，TTL 未知（0）或无温暖截止 → None（P5 §3.4.4 不提示）。
+/// 实现说明（2026-08-09 零消费清理，DEEPCHECK-05 #5）：本函数统一消费
+/// `conex-telemetry::cache` 纯函数底座（[`cold_cache_check`] / [`is_cold`]，
+/// cold.rs），不再自实现"过期判定 + idle 反解 + 重发量累加"口径——跨 run
+/// 数据面只有 `RunCacheStats.warm_until_ms`（= 完成时刻 + TTL × 1000，
+/// tracker.finish 口径），因此先按 `warm = completed_at + ttl × 1000` 反解
+/// 出完成时刻、以 C9 恒等式（miss + read + write）重建 input_total，构造
+/// 临时 [CacheBaseline] 后交由纯函数判定；TTL 未知（0）或无温暖截止 →
+/// None（P5 §3.4.4 不提示）。
 fn cold_cache_warning_event(
     session_id: &str,
     config: &CacheTrackingConfig,
@@ -1711,41 +1806,72 @@ fn cold_cache_warning_event(
         return None;
     }
     let warm_until_ms = last.warm_until_ms?;
-    if now_ms <= warm_until_ms {
-        // 尚未过期（恰好等于截止仍温暖，与 tracker.is_cold 同语义）
+    let warm_until_i64 = i64::try_from(warm_until_ms).unwrap_or(i64::MAX);
+    if !is_cold(now_ms, warm_until_i64) {
+        // 尚未过期（恰好等于截止仍温暖，cold.rs is_cold 严格大于口径）
         return None;
     }
     // 完成时刻 = 温暖截止 - TTL（warm = completed_at + ttl × 1000 反解）
     let completed_at_ms = warm_until_ms.saturating_sub(config.ttl_seconds.saturating_mul(1000));
-    let idle_ms = now_ms.saturating_sub(completed_at_ms);
     // 预估重发量 = 上次请求 input_total（C9 恒等式：miss + read + write）
-    let resend_estimate_tokens = last
+    let input_total = last
         .cache_miss_tokens
         .saturating_add(last.cache_read_tokens)
         .saturating_add(last.cache_write_tokens);
-    Some(AgentEvent::ColdCacheWarning {
-        session_id: session_id.to_string(),
-        timestamp: now_iso_utc(),
-        ttl_seconds: config.ttl_seconds,
-        idle_ms,
-        resend_estimate_tokens,
+    let baseline = CacheBaseline {
+        signature: RequestSignature::default(),
+        input_total,
+        read: last.cache_read_tokens,
+        provider: config.provider.clone(),
+        model: config.model.clone(),
+        completed_at_ms,
+        generation: 0,
+    };
+    cold_cache_check(Some(&baseline), now_ms, config.ttl_seconds).map(|warning| {
+        AgentEvent::ColdCacheWarning {
+            session_id: session_id.to_string(),
+            timestamp: now_iso_utc(),
+            ttl_seconds: warning.ttl_seconds,
+            idle_ms: warning.idle_ms,
+            resend_estimate_tokens: warning.resend_estimate,
+        }
     })
 }
 
-/// 缓存浪费预警事件（P5 §3.4.2 阈值：`missed_tokens ≥ 20_000` 才打扰；
-/// cost 阈值需 P3 价格数据 → None，不估算）。
+/// 缓存浪费预警事件（P5 §3.4.2 阈值：`missed_tokens ≥ 20_000` **或**
+/// `missed_cost ≥ $0.1` 才打扰——`WARN_MISSED_COST_USD` 与 token 阈值
+/// 并列为触发条件，pi interactive-mode.ts:3499 口径）。
 ///
-/// 实现说明：run 级聚合无法还原逐 miss 归因与空闲时长 → attribution
-/// Unknown / idle_ms 0 / missed_cost_usd None（诚实兜底，宁缺勿误报——
-/// 浪费量本身是实测值非估算）；逐 miss 归因的 in-loop 发射（streaming.rs
-/// `consume_cache_usage` 处，T-36 注释「发射归 T-40」但该文件不在本任务
-/// 文件域）见轮末汇总物声明，合并后本函数降级为兜底路径。
+/// 实现说明：
+/// - 浪费金额 `missed_cost_usd = missed_tokens × (inputPrice - cacheReadPrice) / 1M`
+///   （pi cache-stats.ts:73-89 口径），价格取 bundled_catalog 基础四价
+///   （2026-08-09 接线：P3 价格已入库，DEEPCHECK-05 #5 消除"数据齐备但
+///   零消费"；tieredPricing 长档匹配归演进项 P1，不在此计算）；
+/// - 价格缺失（未知厂商 / 未收录模型）或 input ≤ cacheRead → 金额 None，
+///   仅 token 阈值判定（诚实兜底，不估算）；
+/// - run 级聚合无法还原逐 miss 归因与空闲时长 → attribution Unknown /
+///   idle_ms 0（诚实兜底，宁缺勿误报——浪费量本身是实测值非估算）；
+///   逐 miss 归因的 in-loop 发射（streaming.rs `consume_cache_usage` 处）
+///   见轮末汇总物声明，合并后本函数降级为兜底路径。
 fn waste_alert_event(
     session_id: &str,
     stats: &RunCacheStats,
     model_changed: bool,
+    vendor: &str,
+    model: &str,
 ) -> Option<AgentEvent> {
-    if stats.missed_tokens < WARN_MISSED_TOKENS {
+    let catalog = bundled_catalog();
+    let input_price = catalog.input_price_for(vendor, model);
+    let cache_read_price = catalog.cache_read_price_for(vendor, model);
+    let missed_cost_usd = match (input_price, cache_read_price) {
+        (Some(input), Some(read)) if input > read => {
+            Some(stats.missed_tokens as f64 * (input - read) / 1_000_000.0)
+        }
+        _ => None,
+    };
+    let over_token_threshold = stats.missed_tokens >= WARN_MISSED_TOKENS;
+    let over_cost_threshold = missed_cost_usd.map_or(false, |c| c >= WARN_MISSED_COST_USD);
+    if !over_token_threshold && !over_cost_threshold {
         return None;
     }
     Some(AgentEvent::CacheWasteAlert {
@@ -1755,7 +1881,7 @@ fn waste_alert_event(
         missed_tokens: stats.missed_tokens,
         idle_ms: 0,
         model_changed,
-        missed_cost_usd: None,
+        missed_cost_usd,
     })
 }
 
@@ -2295,9 +2421,14 @@ impl SessionLoopProducer {
         }
         // cache-waste-alert（实时轨，P5 §3.4.2 阈值）：run 级累计浪费
         // 超阈值才打扰（低于阈值只计入 run 聚合）；归因在 run 级聚合不可
-        // 还原 → Unknown（诚实兜底，逐 miss 归因发射见轮末汇总物声明）
+        // 还原 → Unknown（诚实兜底，逐 miss 归因发射见轮末汇总物声明）；
+        // 金额阈值经 bundled_catalog 四价计算（价格缺失 → None 不估算）
         if let Some(stats) = &outcome.cache_stats {
-            if let Some(alert) = waste_alert_event(&self.session_id, stats, model_switched) {
+            let (vendor, model) = self
+                .cache_tracking
+                .as_ref()
+                .map_or(("auto", ""), |c| (c.provider.as_str(), c.model.as_str()));
+            if let Some(alert) = waste_alert_event(&self.session_id, stats, model_switched, vendor, model) {
                 if let Some(sink) = &self.delta_sink {
                     sink.push(alert);
                 }
@@ -2558,6 +2689,36 @@ mod tests {
         config.model = "custom-model".to_string();
         let call = HttpProviderCall::new(reqwest::Client::new(), config);
         assert_eq!(call.reasoning_content_mode(), ReasoningContentMode::Omit);
+    }
+
+    // ── DEEPCHECK-06 P0：生效模型窗口解析（子代理预算入站数据源）──────
+
+    /// 生效模型窗口：catalog 条目命中 → 窗口值透传（vendor 经
+    /// [infer_vendor] 双通道——model 前缀判定，覆盖目录厂商）；版本后缀
+    /// 逐级剥离命中基础条目；目录缺失（未知模型 / Auto 厂商）→ None
+    /// （不臆造窗口，与主会话 catalog 兜底失败行为一致）
+    #[test]
+    fn effective_context_window_resolves_from_bundled_catalog() {
+        // 产品默认模型 deepseek-v4-flash：目录条目窗口 1M
+        let deepseek = test_provider_call("deepseek-v4-flash");
+        assert_eq!(
+            effective_context_window(&deepseek.config),
+            Some(1_000_000),
+            "deepseek-v4-flash 应命中 catalog 窗口"
+        );
+        // 版本后缀模型（strip_version_suffix 路径）：deepseek-v4-flash-0731
+        let dated = test_provider_call("deepseek-v4-flash-0731");
+        assert_eq!(
+            effective_context_window(&dated.config),
+            Some(1_000_000),
+            "版本后缀应逐级剥离命中基础条目"
+        );
+        // Grok（目录厂商，模型前缀判定）：窗口 500K
+        let grok = test_provider_call("grok-4.5");
+        assert_eq!(effective_context_window(&grok.config), Some(500_000));
+        // 未知模型（Auto 厂商）→ None（不臆造窗口）
+        let unknown = test_provider_call("llama-3.1");
+        assert_eq!(effective_context_window(&unknown.config), None);
     }
 
     // ── P2：build_cache_policy 接线 + session_id 注入（T-17，P2 步骤 4b）────
@@ -2839,6 +3000,330 @@ mod tests {
         };
         assert!(responses_supported(&gateway));
     }
+
+    // ── DEEPCHECK-05 #10：Responses 轨三件套同轨（URL / body / parser）──
+
+    /// responses_endpoint_active = endpoint=Responses && 目录支持（三件套统一判定点）
+    #[test]
+    fn responses_endpoint_active_follows_catalog_and_endpoint() {
+        // v4-flash + responses 端点 → 生效
+        assert!(responses_endpoint_active(&responses_config(
+            "deepseek-v4-flash",
+            Endpoint::Responses
+        )));
+        // v4-pro + responses 端点 → 不生效（降级 chat 轨）
+        assert!(!responses_endpoint_active(&responses_config(
+            "deepseek-v4-pro",
+            Endpoint::Responses
+        )));
+        // v4-flash + chat 端点 → 不生效（chat 轨恒走 chat）
+        assert!(!responses_endpoint_active(&responses_config(
+            "deepseek-v4-flash",
+            Endpoint::ChatCompletions
+        )));
+        // 未知厂商 + responses 端点 → 生效（保留现状不降级）
+        let gateway = EngineProviderConfig {
+            base_url: "https://gw.example.com/v1/".to_string(),
+            api_key: "k".to_string(),
+            model: "m".to_string(),
+            endpoint: Endpoint::Responses,
+            stream: true,
+            extra: BTreeMap::new(),
+        };
+        assert!(responses_endpoint_active(&gateway));
+    }
+
+    /// request_body 按轨分流（DEEPCHECK-05 #10 核心修复）：responses 轨 →
+    /// responses wire 形状（input/instructions/max_output_tokens，无 chat 缓存字段）；
+    /// chat 轨 → chat 形状（既有字节路径回归护栏）
+    #[test]
+    fn request_body_dispatches_by_rail() {
+        let user = AgentMessage {
+            id: "user-1".to_string(),
+            role: AgentMessageRole::User,
+            created_at: "2026-08-03T00:00:00.000Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "你好".to_string(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        };
+        let messages = vec![Arc::new(user)];
+        let request = ProviderRequest {
+            messages: &messages,
+            tools: Vec::new(),
+            max_tokens: Some(4096),
+            system_prompt: Some("你是助手，使用中文回答。"),
+            session_id: None,
+        };
+
+        // responses 轨：body 为 responses 形状
+        let responses_call = HttpProviderCall::new(
+            reqwest::Client::new(),
+            responses_config("deepseek-v4-flash", Endpoint::Responses),
+        );
+        let options = responses_call.request_options(&request);
+        let context = responses_call.build_context(&request);
+        let body = responses_call.request_body(&options, &context);
+        assert_eq!(body["model"], "deepseek-v4-flash");
+        assert_eq!(body["instructions"], "你是助手，使用中文回答。");
+        assert_eq!(
+            body["input"][0],
+            serde_json::json!({ "type": "message", "role": "user", "content": "你好" })
+        );
+        assert_eq!(body["max_output_tokens"], 4096);
+        assert!(body.get("messages").is_none(), "responses 轨不得出现 messages");
+        for key in [
+            "prompt_cache_key",
+            "prompt_cache_retention",
+            "prompt_cache_options",
+            "stream_options",
+        ] {
+            assert!(body.get(key).is_none(), "responses 轨不得注入 {key}");
+        }
+
+        // chat 轨：body 保持 chat 形状（既有路径字节不变）
+        let chat_call = test_provider_call("deepseek-v4-flash");
+        let options = chat_call.request_options(&request);
+        let context = chat_call.build_context(&request);
+        let body = chat_call.request_body(&options, &context);
+        assert_eq!(body["model"], "deepseek-v4-flash");
+        assert!(body.get("messages").is_some(), "chat 轨必须携带 messages");
+        assert!(body.get("input").is_none(), "chat 轨不得出现 input");
+        assert!(body.get("instructions").is_none(), "chat 轨不得出现 instructions");
+        assert_eq!(body["max_tokens"], 4096, "chat 轨保持 max_tokens 字段名");
+        assert_eq!(body["messages"][0]["role"], "system");
+        assert_eq!(body["messages"][0]["content"], "你是助手，使用中文回答。");
+    }
+
+    /// HttpStreamParser 二态解析器：responses 轨 → ResponsesParser 消费
+    /// responses 事件帧（text delta + 终态 + usage）；与 chat 轨解析器行为隔离
+    #[test]
+    fn http_stream_parser_dispatch_responses_frames() {
+        let mut parser = HttpStreamParser::Responses(ResponsesParser::new());
+        let frames = [
+            r#"{"type":"response.output_text.delta","delta":"你好"}"#,
+            r#"{"type":"response.output_text.delta","delta":"，世界"}"#,
+            r#"{"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120,"input_tokens_details":{"cached_tokens":50}}}}"#,
+        ];
+        let mut events = Vec::new();
+        for data in frames {
+            events.extend(
+                parser
+                    .push_frame(&SseFrame {
+                        event: None,
+                        data: Some(data.to_string()),
+                        id: None,
+                        retry: None,
+                    })
+                    .expect("帧处理"),
+            );
+        }
+        events.extend(parser.finish().expect("流结束"));
+        let texts: Vec<&str> = events
+            .iter()
+            .filter_map(|event| match event {
+                WireEvent::TextDelta { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(texts, vec!["你好", "，世界"]);
+        let stop = events
+            .iter()
+            .find(|event| matches!(event, WireEvent::Stop { .. }))
+            .expect("流内应有 stop");
+        match stop {
+            WireEvent::Stop { reason: agent_provider::events::StopReason::Stop, usage: Some(usage), .. } => {
+                assert_eq!(usage.prompt_tokens, Some(100));
+                assert_eq!(usage.cache_read_tokens, Some(50), "cached_tokens → cache_read");
+            }
+            other => panic!("期望携带 usage 的 stop，得到：{other:?}"),
+        }
+    }
+
+    /// 端到端（DEEPCHECK-05 #10 验收）：v4-flash responses 配置下，真实 HTTP 链路
+    /// 三件套一致——URL=/responses + body=input 形状 + ResponsesParser 解析事件流
+    #[tokio::test]
+    async fn responses_stream_end_to_end_over_mock_sse() {
+        let frames = vec![
+            r#"data: {"type":"response.output_text.delta","delta":"你好"}"#,
+            r#"data: {"type":"response.output_text.delta","delta":"，世界"}"#,
+            r#"data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120,"input_tokens_details":{"cached_tokens":50}}}}"#,
+        ];
+        let server = ResponsesMockServer::start(frames).await;
+        let config = EngineProviderConfig {
+            base_url: server.base_url(),
+            api_key: "k".to_string(),
+            model: "deepseek-v4-flash".to_string(),
+            endpoint: Endpoint::Responses,
+            stream: true,
+            extra: BTreeMap::new(),
+        };
+        // 未知主机判定：base_url 无关键字 → Auto → responses 保留（不依赖 catalog 命中）
+        assert!(responses_endpoint_active(&config), "mock 网关应走 responses 轨");
+        let call = HttpProviderCall::new(reqwest::Client::new(), config);
+
+        let user = AgentMessage {
+            id: "user-1".to_string(),
+            role: AgentMessageRole::User,
+            created_at: "2026-08-03T00:00:00.000Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "你好".to_string(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        };
+        let messages = vec![Arc::new(user)];
+        let request = session_request(&messages, None);
+        let mut stream = call
+            .stream(&request)
+            .await
+            .expect("stream 应成功");
+
+        let mut texts = Vec::new();
+        let mut stop: Option<ProviderStreamEvent> = None;
+        while let Some(item) = stream.next().await {
+            match item {
+                Ok(ProviderStreamEvent::TextDelta { text }) => texts.push(text),
+                Ok(event @ ProviderStreamEvent::Stop { .. }) => stop = Some(event),
+                Ok(_) => {}
+                Err(error) => panic!("流错误：{error:?}"),
+            }
+        }
+        assert_eq!(texts, vec!["你好", "，世界"], "responses 帧应经 ResponsesParser 产出文本增量");
+        match stop.expect("流内应有 stop") {
+            ProviderStreamEvent::Stop { usage: Some(usage), .. } => {
+                assert_eq!(usage.prompt_tokens, Some(100));
+                assert_eq!(usage.cache_read_tokens, Some(50), "终态 usage 覆盖式生效");
+            }
+            other => panic!("期望携带 usage 的 stop，得到：{other:?}"),
+        }
+
+        // URL 与 body 同轨：/responses + input 形状（不是 chat body 发往 /responses）
+        let (path, body) = server.captured().await;
+        assert_eq!(path, "/v1/responses", "responses 轨 URL 必须为 /responses");
+        assert_eq!(body["model"], "deepseek-v4-flash");
+        assert!(body.get("input").is_some(), "responses 轨 body 必须为 input 形状");
+        assert!(body.get("messages").is_none(), "不得把 chat body 发往 /responses");
+        for key in ["prompt_cache_key", "prompt_cache_retention", "prompt_cache_options", "stream_options"] {
+            assert!(body.get(key).is_none(), "responses 轨不得注入 {key}");
+        }
+    }
+
+    /// 本地 SSE mock 服务器（Responses 端到端测试）：捕获请求路径 + body JSON，
+    /// 回 chunked SSE 帧（text/event-stream，无 [DONE]——DeepSeek Responses 语义）
+    struct ResponsesMockServer {
+        addr: std::net::SocketAddr,
+        captured_path: Arc<Mutex<Option<String>>>,
+        captured_body: Arc<Mutex<Option<serde_json::Value>>>,
+    }
+
+    impl ResponsesMockServer {
+        async fn start(frames: Vec<&'static str>) -> Arc<Self> {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind mock sse server");
+            let addr = listener.local_addr().expect("local addr");
+            let captured_path: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+            let captured_body: Arc<Mutex<Option<serde_json::Value>>> = Arc::new(Mutex::new(None));
+            let server = Arc::new(Self {
+                addr,
+                captured_path: Arc::clone(&captured_path),
+                captured_body: Arc::clone(&captured_body),
+            });
+            tokio::spawn(async move {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    return;
+                };
+                let captured_path = Arc::clone(&captured_path);
+                let captured_body = Arc::clone(&captured_body);
+                tokio::spawn(async move {
+                    let mut buf = Vec::new();
+                    let mut chunk = [0u8; 4096];
+                    let head_end = loop {
+                        if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                            break pos + 4;
+                        }
+                        let n = socket.read(&mut chunk).await.unwrap_or(0);
+                        if n == 0 {
+                            return;
+                        }
+                        buf.extend_from_slice(&chunk[..n]);
+                    };
+                    let head = String::from_utf8_lossy(&buf[..head_end]).into_owned();
+                    let request_line = head.lines().next().unwrap_or_default();
+                    let path = request_line
+                        .split_whitespace()
+                        .nth(1)
+                        .unwrap_or_default()
+                        .to_string();
+                    let content_length = head
+                        .lines()
+                        .find_map(|line| line.split_once(':'))
+                        .filter(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+                        .and_then(|(_, value)| value.trim().parse::<usize>().ok())
+                        .unwrap_or(0);
+                    let mut req_body = buf[head_end..].to_vec();
+                    while req_body.len() < content_length {
+                        let n = socket.read(&mut chunk).await.unwrap_or(0);
+                        if n == 0 {
+                            break;
+                        }
+                        req_body.extend_from_slice(&chunk[..n]);
+                    }
+                    *captured_path
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner()) = Some(path);
+                    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&req_body) {
+                        *captured_body
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner()) = Some(json);
+                    }
+                    let mut response = String::from(
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n",
+                    );
+                    for frame in frames {
+                        let wire = format!("{frame}\n\n");
+                        response.push_str(&format!("{:x}\r\n{wire}\r\n", wire.len()));
+                    }
+                    response.push_str("0\r\n\r\n");
+                    let _ = socket.write_all(response.as_bytes()).await;
+                });
+            });
+            server
+        }
+
+        fn base_url(&self) -> String {
+            format!("http://{}/v1", self.addr)
+        }
+
+        /// 等待捕获请求（5s 超时兜底，防测试悬挂）
+        async fn captured(&self) -> (String, serde_json::Value) {
+            let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(5);
+            loop {
+                let path = self
+                    .captured_path
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone();
+                let body = self
+                    .captured_body
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone();
+                if let (Some(path), Some(body)) = (path, body) {
+                    return (path, body);
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    panic!("mock 服务器未捕获到请求");
+                }
+                tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+            }
+        }
+    }
+
 
     // ── T-30：produce 水合分支 + 预算透传（P4 阶段 1-3/1-4，§3.2.1/§3.2.3）──
 
@@ -3407,17 +3892,19 @@ mod tests {
         assert!(cold_cache_warning_event("s1", &config, &no_warm, 121_001).is_none());
     }
 
-    /// T-40：浪费预警阈值（≥ 20_000 才打扰，pi 口径）——低于阈值只计入
-    /// run 聚合；触发时 attribution 诚实兜底 Unknown + wire 形状
+    /// T-40：浪费预警阈值（≥ 20_000 token 才打扰，pi 口径；2026-08-09 接线
+    /// WARN_MISSED_COST_USD 后 token / 金额双阈值 or 判定）——低于阈值只计入
+    /// run 聚合；触发时 attribution 诚实兜底 Unknown + wire 形状 + 金额实测
     #[test]
     fn waste_alert_emitted_above_threshold_with_honest_attribution() {
         let below = sample_stats(Some(61_000), WARN_MISSED_TOKENS - 1);
         assert!(
-            waste_alert_event("s1", &below, false).is_none(),
+            waste_alert_event("s1", &below, false, "deepseek", "deepseek-v4-flash").is_none(),
             "低于阈值不打扰"
         );
         let over = sample_stats(Some(61_000), WARN_MISSED_TOKENS);
-        let event = waste_alert_event("s1", &over, true).expect("达到阈值必须预警");
+        let event = waste_alert_event("s1", &over, true, "deepseek", "deepseek-v4-flash")
+            .expect("达到阈值必须预警");
         match event {
             AgentEvent::CacheWasteAlert {
                 ref session_id,
@@ -3431,7 +3918,10 @@ mod tests {
                 assert_eq!(attribution, MissAttribution::Unknown);
                 assert_eq!(missed_tokens, WARN_MISSED_TOKENS);
                 assert!(model_changed);
-                assert!(missed_cost_usd.is_none(), "无 P3 价格数据 → None");
+                // 金额 = 20_000 × (0.14 - 0.0028)/1M = 0.002744（deepseek-v4-flash
+                // 官方四价，catalog.json）
+                let cost = missed_cost_usd.expect("价格已入库必须给出金额");
+                assert!((cost - 0.002744).abs() < 1e-9, "金额口径偏差：{cost}");
             }
             other => panic!("期望 CacheWasteAlert，得到 {other:?}"),
         }
@@ -3441,6 +3931,43 @@ mod tests {
         assert_eq!(value["attribution"], "unknown");
         assert_eq!(value["missedTokens"], WARN_MISSED_TOKENS);
         assert!(value.get("missed_tokens").is_none(), "不得出现 snake_case");
+        // 价格缺失（未知厂商）→ 金额 None，仅 token 阈值判定（诚实兜底不估算）
+        let unknown = sample_stats(Some(61_000), WARN_MISSED_TOKENS);
+        let event = waste_alert_event("s1", &unknown, false, "auto", "custom-model")
+            .expect("token 阈值已超，未知厂商也应预警");
+        match event {
+            AgentEvent::CacheWasteAlert { missed_cost_usd, .. } => {
+                assert!(missed_cost_usd.is_none(), "无价格数据 → 金额 None");
+            }
+            other => panic!("期望 CacheWasteAlert，得到 {other:?}"),
+        }
+    }
+
+    /// 金额阈值独立触发（2026-08-09 接线 WARN_MISSED_COST_USD）：token 低于
+    /// 20_000 但估算金额 ≥ $0.1 → 仍预警（pi 双阈值 or 语义）。用高差价
+    /// USD 模型 gpt-5.5-cyber（input 12.5 - cacheRead 1.25 = 11.25/1M）：
+    /// 10_000 token → $0.1125 ≥ $0.1
+    #[test]
+    fn waste_alert_fires_on_cost_threshold_alone() {
+        // token 阈值以下（10_000 < 20_000）但金额超 $0.1 → 必须预警
+        let stats = sample_stats(Some(61_000), 10_000);
+        let event = waste_alert_event("s1", &stats, false, "openai", "gpt-5.5-cyber")
+            .expect("金额阈值单独触发");
+        match event {
+            AgentEvent::CacheWasteAlert {
+                missed_tokens,
+                missed_cost_usd,
+                ..
+            } => {
+                assert_eq!(missed_tokens, 10_000);
+                let cost = missed_cost_usd.expect("价格已入库必须给出金额");
+                assert!((cost - 0.1125).abs() < 1e-9, "金额口径偏差：{cost}");
+            }
+            other => panic!("期望 CacheWasteAlert，得到 {other:?}"),
+        }
+        // 对照：同模型 token 更低且金额不足（如 1_000 token → $0.01125）→ 不预警
+        let low = sample_stats(Some(61_000), 1_000);
+        assert!(waste_alert_event("s1", &low, false, "openai", "gpt-5.5-cyber").is_none());
     }
 
     /// T-40：模型切换检测——上一 run model ≠ 当前 model；无上一 run

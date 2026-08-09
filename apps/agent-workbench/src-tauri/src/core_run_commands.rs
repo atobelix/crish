@@ -997,6 +997,28 @@ fn assemble_context_budget(context_window: u32) -> ContextBudget {
     }
 }
 
+/// DEEPCHECK-06 P0（子代理预算接线）：run 装配时的预算入站解析——
+/// 显式 context_window（前端/调用方下发）优先；子代理 run（spawner 路径
+/// 前端参数不可达，RunTaskOptions.context_window 恒 None）按生效模型
+/// catalog 窗口兜底（[crate::engine::effective_context_window]，与主会话
+/// 前端 resolveContextWindow 的 catalog 兜底同源）；目录缺失 → None =
+/// 不钳制（与主会话 catalog 兜底失败行为一致）。两者皆缺 → None
+/// （向后兼容现状，普通 run 无窗口不钳制）。
+fn resolve_context_budget(
+    context_window: Option<u32>,
+    subagent_config: &Option<crate::subagent_spawner::SubagentRunConfig>,
+    engine: &EngineHandle,
+) -> Option<ContextBudget> {
+    match context_window {
+        Some(window) => Some(assemble_context_budget(window)),
+        None if subagent_config.is_some() => engine
+            .provider_config()
+            .and_then(|config| crate::engine::effective_context_window(&config))
+            .map(assemble_context_budget),
+        None => None,
+    }
+}
+
 // ── COMPACTION-01 P0-1：压缩策略装配（session_meta 键面）────────────
 
 /// session_meta 键（预留）：保留最近 token 预算覆盖
@@ -3159,8 +3181,11 @@ pub(crate) async fn run_task_impl(
     // ── T-29 context_window 入站（P4 §3.3.2）──────────────────────
     // 生效模型窗口 → ContextBudget（reserve/safety 取默认）；经
     // SessionLoopOptions.context_budget 透传（T-30 装配，T-33 预算层
-    // 消费钳制与预检）。
-    let context_budget = context_window.map(assemble_context_budget);
+    // 消费钳制与预检）。DEEPCHECK-06 P0：子代理 run 的窗口入站由引擎
+    // 按生效模型 catalog 解析（spawner 路径前端参数不可达，context_window
+    // 恒 None——resolve_context_budget 的 subagent 兜底臂，与主会话前端
+    // resolveContextWindow 的 catalog 兜底同源）。
+    let context_budget = resolve_context_budget(context_window, &subagent_config, &state.engine);
     if let Some(budget) = context_budget {
         tracing::debug!(
             target: "run",
@@ -4690,6 +4715,43 @@ mod tests {
         assert_eq!(budget.safety_tokens, 4_096);
     }
 
+    /// DEEPCHECK-06 P0：预算入站解析（resolve_context_budget 装配分支）——
+    /// 显式窗口优先；子代理 run（context_window 恒 None）按生效模型 catalog
+    /// 窗口兜底；普通 run 无窗口 → None（向后兼容不钳制）
+    #[test]
+    fn resolve_context_budget_subagent_arm_uses_engine_catalog_window() {
+        // 生效模型 qwen2-5-omni-7b（catalog 窗口 32000）——小窗口模型保证
+        // 兜底臂窗口值可断言（deepseek-v4-flash 窗口 1M 亦可，选小窗口
+        // 便于与预检集成测试共用同一模型口径）
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("收口。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, _, _) = run_control_test_state_with_model(provider, "qwen2-5-omni-7b");
+        let cfg = Some(crate::subagent_spawner::SubagentRunConfig {
+            subagent_id: "sa-1".to_string(),
+            subagent_run_id: "run-sa-1".to_string(),
+            parent_session_id: "s1".to_string(),
+            task_type: None,
+            allowed_write_paths: None,
+            output_dir: None,
+            started_at_ms: 1_000,
+        });
+        // 子代理 + 无显式窗口 → catalog 窗口（qwen2-5-omni-7b → 32000，
+        // reserve/safety 取默认）
+        let budget = resolve_context_budget(None, &cfg, &state.engine)
+            .expect("子代理 run 必须装配预算（此前恒 None 裸跑）");
+        assert_eq!(budget.context_window, 32_000);
+        assert_eq!(budget.reserve_tokens, 16_384);
+        assert_eq!(budget.safety_tokens, 4_096);
+        // 显式窗口优先（调用方下发 > catalog 兜底）
+        let budget = resolve_context_budget(Some(64_000), &cfg, &state.engine)
+            .expect("显式窗口优先");
+        assert_eq!(budget.context_window, 64_000);
+        // 普通 run（无子代理配置 + 无窗口）→ None（向后兼容不钳制）
+        assert!(resolve_context_budget(None, &None, &state.engine).is_none());
+    }
+
     /// 时间戳互逆：ISO8601 ↔ epoch ms 往返一致（锚点 2026-07-31）
     #[test]
     fn iso8601_epoch_millis_roundtrip() {
@@ -5083,6 +5145,117 @@ mod tests {
             payload["result"]["summary"].as_str().is_some(),
             "压缩载荷须携带摘要文本"
         );
+    }
+
+    // ── DEEPCHECK-06 P0：子代理 run 预算装配全链路验收 ────────────
+
+    /// DEEPCHECK-06 P0（子代理预算接线验收）：子代理 run 经 run_task_impl
+    /// 装配——spawner 路径 context_window 恒 None（前端参数不可达）→ 引擎
+    /// 按生效模型 catalog 解析窗口（qwen2-5-omni-7b → 32000）→
+    /// context_budget + compaction_policy 双装配（此前子代理 run 预算恒
+    /// None，预检/溢出压缩三级全裸）→ 超大历史水合估算超窗 → 预检压缩
+    /// 真实触发（context-compression-start/end 事件落库到子代理会话）。
+    #[tokio::test]
+    async fn subagent_run_assembles_catalog_window_budget_and_preflight_compaction() {
+        let subagent_session = "sub-sess-budget";
+        // 子代理脚本：单轮文本收口（无工具调用）
+        let provider = Arc::new(TestProvider::new(vec![
+            ProviderStreamEvent::text("子代理收口回复。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]));
+        let (state, db, _emitter) =
+            run_control_test_state_with_model(provider, "qwen2-5-omni-7b");
+        db.upsert_session_entry(&subagent_test_session_entry(subagent_session))
+            .expect("子代理会话条目");
+        // P0-1 确定性：显式关闭真实 LLM 摘要器（压缩走中性 stub，测试不
+        // 走 HTTP——预检触发链本身不依赖 summarizer）
+        state.set_summarizer_factory(None);
+        state.run_restore().await;
+
+        // 子代理会话历史预置（spawner 场景 history=None → 走缓存回退；
+        // 超大消息 → 水合估算超窗（≈42K tokens ≥ 32000-16384=15616））
+        // blocks_json 必须携带：缓存路径水合（cached_history_to_conversation
+        // → parse_blocks）只消费 blocks_json（text-only 合成兜底属前端路径
+        // hydrate.rs 的规则，缓存路径与收口写入 to_history_message 的形状
+        // 契约 = 块保真形态；text-only 条目会被宽容跳过，导致水合为空对话、
+        // 预检无从触发）
+        let huge = "x".repeat(160_000);
+        let history = vec![
+            HistoryMessage {
+                id: "h-u1".to_string(),
+                sender: "user".to_string(),
+                text: Some("第一轮提问".to_string()),
+                thinking: None,
+                blocks_json: Some(serde_json::to_string(&vec![text_block("第一轮提问")]).unwrap()),
+                tool_calls_json: None,
+                tool_call_results_json: None,
+                status: Some("completed".to_string()),
+                timestamp: 1_700_000_000_000,
+            },
+            HistoryMessage {
+                id: "h-a1".to_string(),
+                sender: "assistant".to_string(),
+                text: Some("第一轮回复".to_string()),
+                thinking: None,
+                blocks_json: Some(serde_json::to_string(&vec![text_block("第一轮回复")]).unwrap()),
+                tool_calls_json: None,
+                tool_call_results_json: None,
+                status: Some("completed".to_string()),
+                timestamp: 1_700_000_000_001,
+            },
+            HistoryMessage {
+                id: "h-u2".to_string(),
+                sender: "user".to_string(),
+                text: Some(huge.clone()),
+                thinking: None,
+                blocks_json: Some(serde_json::to_string(&vec![text_block(&huge)]).unwrap()),
+                tool_calls_json: None,
+                tool_call_results_json: None,
+                status: Some("completed".to_string()),
+                timestamp: 1_700_000_000_002,
+            },
+        ];
+        state.session_history.store(subagent_session, history);
+
+        // 子代理 run：context_window 恒 None（spawner 路径真实装配形状）+
+        // history None（缓存回退）+ subagent_config 装配
+        let options = RunTaskOptions {
+            mode: Some("research".to_string()),
+            history: None,
+            context_window: None,
+            subagent_config: Some(crate::subagent_spawner::SubagentRunConfig {
+                subagent_id: "sub-1-0".to_string(),
+                subagent_run_id: "sub-run-budget".to_string(),
+                parent_session_id: "s1".to_string(),
+                task_type: Some("analysis".to_string()),
+                allowed_write_paths: None,
+                output_dir: None,
+                started_at_ms: 1_700_000_000_000,
+            }),
+            ..test_options("sub-run-budget", subagent_session, "调研模块 A")
+        };
+        run_task_impl(Arc::clone(&state), options)
+            .await
+            .expect("子代理 run 发起成功");
+        wait_run_agent_end_reason(&db, subagent_session, Duration::from_secs(30)).await;
+
+        // 预检压缩真实触发：context-compression-start/end 事件落库到子代理
+        // 会话（证据链：context_window None + subagent_config Some →
+        // catalog 窗口 32000 → budget+policy 双装配 → 预检触发。此前子代理
+        // run 预算 None，本事件恒不出现，超窗直接 fatal）
+        let events = db
+            .query_events(subagent_session, 0, Some(500))
+            .expect("事件查询");
+        let starts = events
+            .iter()
+            .filter(|e| e.event_type == "context-compression-start")
+            .count();
+        let ends = events
+            .iter()
+            .filter(|e| e.event_type == "context-compression-end")
+            .count();
+        assert_eq!(starts, 1, "子代理预检压缩应广播 context-compression-start");
+        assert_eq!(ends, 1, "子代理预检压缩应广播 context-compression-end");
     }
 
     // ── PS-04 T4.3（F4 F1-01）：config_profile_apply 后 provider 重载 ──
@@ -7981,6 +8154,17 @@ mod tests {
     fn run_control_test_state(
         provider: Arc<TestProvider>,
     ) -> (Arc<CoreRunState>, LocalDb, Arc<RecordingEmitter>) {
+        // 产品默认模型（catalog 窗口 1M；DEEPCHECK-06 预算测试需小窗口模型
+        // 时走 run_control_test_state_with_model）
+        run_control_test_state_with_model(provider, "deepseek-v4-flash")
+    }
+
+    /// 已建——start_run 外键前置；显式生效模型（预算测试按 catalog 窗口
+    /// 选模型：qwen2-5-omni-7b → 32000，用于触发预检压缩的确定性小窗口）
+    fn run_control_test_state_with_model(
+        provider: Arc<TestProvider>,
+        model: &str,
+    ) -> (Arc<CoreRunState>, LocalDb, Arc<RecordingEmitter>) {
         let (bridge, emitter) = recording_bridge();
         let db = LocalDb::open_in_memory().expect("内存库");
         db.upsert_session_entry(&subagent_test_session_entry("s1"))
@@ -8003,7 +8187,7 @@ mod tests {
         let config = EngineProviderConfig {
             base_url: "http://test.local/v1".to_string(),
             api_key: "test-key".to_string(),
-            model: "deepseek-v4-flash".to_string(),
+            model: model.to_string(),
             endpoint: Endpoint::ChatCompletions,
             stream: true,
             extra: BTreeMap::new(),

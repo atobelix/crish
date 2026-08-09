@@ -12,6 +12,12 @@ import {
   type ProviderProfile,
 } from './providerProfiles';
 import { invokeResult } from './tauriInvoke';
+import {
+  applyCatalogCacheSnapshot,
+  type CatalogCacheSnapshot,
+  type CatalogSnapshotPrice,
+  type CatalogTier,
+} from './pricingStore';
 
 const META_KEY = 'crish_model_meta_v1';
 
@@ -848,6 +854,130 @@ export async function uploadScannedModels(
     }
   } catch (e) {
     console.warn('模型目录上送合并失败，不阻塞扫描：', e);
+  }
+}
+
+// ─── P3 步骤 5a：catalog_get 快照拉取（DEEPCHECK-02 P0 断链修复）────────────
+//
+// 此前 `catalog_get` 仅 manifest 登记、前端零调用：catalogSnapshot 恒 null，
+// resolve4dPrices 永远取不到 source='snapshot'，Rust 目录真源与前端定价完全
+// 脱钩（两端双份价格无同步）。本面接线：启动 / 设置页加载时拉取一次快照 →
+// applyCatalogCacheSnapshot（版本号幂等，天然安全）；invoke 失败降级静态表。
+
+/** catalog_get wire 条目（Rust ModelCatalogEntry camelCase 子集：定价面字段） */
+export interface CatalogSnapshotEntryWire {
+  model?: string;
+  apiModel?: string;
+  inputPrice?: number | null;
+  outputPrice?: number | null;
+  cacheReadPrice?: number | null;
+  cacheWritePrice?: number | null;
+  tieredPricing?: Array<{
+    minTokens?: number;
+    maxTokens?: number | null;
+    inputPrice?: number | null;
+    outputPrice?: number | null;
+    cacheReadPrice?: number | null;
+    cacheWritePrice?: number | null;
+  }> | null;
+}
+
+/** catalog_get wire 快照（Rust CatalogSnapshot camelCase） */
+export interface CatalogSnapshotWire {
+  version?: number;
+  entries?: CatalogSnapshotEntryWire[];
+}
+
+/** 条目 tiered 档映射（Rust TieredPriceTier camelCase → 前端 CatalogTier） */
+function toCatalogTierWire(tiers: CatalogSnapshotEntryWire['tieredPricing']): CatalogTier[] | undefined {
+  if (!Array.isArray(tiers) || tiers.length === 0) return undefined;
+  const out: CatalogTier[] = [];
+  for (const t of tiers) {
+    if (typeof t?.minTokens !== 'number' || t.minTokens < 0) continue;
+    out.push({
+      minTokens: t.minTokens,
+      ...(typeof t.maxTokens === 'number' ? { maxTokens: t.maxTokens } : {}),
+      ...(typeof t.inputPrice === 'number' ? { inputPerMTok: t.inputPrice } : {}),
+      ...(typeof t.outputPrice === 'number' ? { outputPerMTok: t.outputPrice } : {}),
+      ...(typeof t.cacheReadPrice === 'number' ? { cacheReadPerMTok: t.cacheReadPrice } : {}),
+      ...(typeof t.cacheWritePrice === 'number' ? { cacheWritePerMTok: t.cacheWritePrice } : {}),
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+/**
+ * catalog_get wire → pricingStore 快照（纯转换，可单测）。
+ * 索引键：model 主键 + apiModel 别名（点号异形兼容）；null 价 = 未收录 → 缺失
+ * （回退下级解析链）；tieredPricing 映射为分档消费结构。
+ */
+export function toCatalogCacheSnapshot(
+  wire: CatalogSnapshotWire | null | undefined
+): CatalogCacheSnapshot {
+  const prices: Record<string, CatalogSnapshotPrice> = {};
+  if (!wire || !Array.isArray(wire.entries)) {
+    return { version: typeof wire?.version === 'number' ? wire.version : 0, prices };
+  }
+  for (const entry of wire.entries) {
+    const model = normalizeModelIdText(entry?.model);
+    if (!model) continue;
+    const price: CatalogSnapshotPrice = {
+      ...(typeof entry.inputPrice === 'number'
+        ? { inputPerMTok: entry.inputPrice }
+        : {}),
+      ...(typeof entry.outputPrice === 'number'
+        ? { outputPerMTok: entry.outputPrice }
+        : {}),
+      ...(typeof entry.cacheReadPrice === 'number'
+        ? { readPerMTok: entry.cacheReadPrice }
+        : {}),
+      ...(typeof entry.cacheWritePrice === 'number'
+        ? { writePerMTok: entry.cacheWritePrice }
+        : {}),
+      ...(toCatalogTierWire(entry.tieredPricing)
+        ? { tiered: toCatalogTierWire(entry.tieredPricing) }
+        : {}),
+    };
+    prices[model] = price;
+    // apiModel 别名（点号异形，如 gemini-3.1-pro-preview）→ 同一价格索引
+    const apiModel = normalizeModelIdText(entry.apiModel);
+    if (apiModel && apiModel !== model && !prices[apiModel]) {
+      prices[apiModel] = price;
+    }
+  }
+  return {
+    version: typeof wire.version === 'number' ? wire.version : 0,
+    prices,
+  };
+}
+
+/**
+ * 拉取运行时模型目录快照（catalog_get → applyCatalogCacheSnapshot）。
+ *
+ * - 成功：快照注入 pricingStore（版本号幂等，重复调用安全）；
+ * - 命令缺失 / invoke 失败 / 载荷非法：console.warn 降级（静态表兜底），
+ *   恒不抛（invokeResult 不抛 + 外层 try/catch 兜底）。
+ *
+ * @returns 是否成功注入（false = 降级静态表）
+ */
+export async function fetchCatalogSnapshot(): Promise<boolean> {
+  try {
+    const res = await invokeResult<CatalogSnapshotWire>('catalog_get', {});
+    if (res.status !== 'ok') {
+      console.warn(
+        `模型目录快照拉取跳过（${res.status}）${res.status === 'error' ? `：${res.message}` : ''}，定价回退静态表`
+      );
+      return false;
+    }
+    if (!Array.isArray(res.data?.entries) || res.data.entries.length === 0) {
+      console.warn('模型目录快照载荷非法（entries 缺失），定价回退静态表');
+      return false;
+    }
+    applyCatalogCacheSnapshot(toCatalogCacheSnapshot(res.data));
+    return true;
+  } catch (e) {
+    console.warn('模型目录快照拉取失败，定价回退静态表：', e);
+    return false;
   }
 }
 

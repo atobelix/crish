@@ -411,6 +411,108 @@ impl ModelCatalog {
             .and_then(|entry| entry.price_status.as_deref())
     }
 
+    // ===== 长度分档与峰谷定价消费（DEEPCHECK-05 #8：tieredPricing/peakPricing 双端消费）=====
+    //
+    // 此前 tieredPricing / peakPricingSchedule 仅解析与测试消费，长上下文档
+    // （≥32K/≥128K/≥200K/≥256K/≥272K/≥512K，catalog.json 43 条档位）无计价查询，
+    // 长上下文成本系统性低估约 45%（DEEPCHECK-05 §8 量化）。本区提供：
+    // - `tiered_tier_for`：输入长度分档命中（litellm `[min, max)` 半开区间）；
+    // - `input_price_for_tokens` 等四价变体：档内覆盖价 ?? 基础四价；
+    // - `is_long_context_for`：长上下文档判定（无上界档，即 v1 longContextThreshold
+    //   迁移语义——Gemini/Grok/OpenAI ≥200K 全 token 2x 计费档）；
+    // - `peak_pricing_2x_for`：DeepSeek 峰谷判定（北京时间 9-12 / 14-18 2x）。
+    // 全部为纯查询，不改变既有 `*_for` 签名（基础价语义保持，调用方零迁移）。
+
+    /// 输入长度分档命中（对齐 litellm `tiered_pricing` 的 `range: [min, max)`
+    /// 半开区间：`minTokens` 含下界、`maxTokens` 不含上界、`maxTokens = None`
+    /// 为无上界长上下文档档）。未收录 / 无档 / 长度不落任何档 → None
+    /// （调用方沿用基础四价）。
+    pub fn tiered_tier_for(
+        &self,
+        vendor: &str,
+        model: &str,
+        input_tokens: u64,
+    ) -> Option<&TieredPriceTier> {
+        let entry = self.lookup(vendor, model)?;
+        tier_for_tokens(entry.tiered_pricing.as_deref(), input_tokens)
+    }
+
+    /// 长上下文档判定：输入长度命中**无上界档**（只写 `minTokens` 的 2x 档，
+    /// v1 `longContextThreshold`/`longContextInputPrice` 迁移语义；如 Gemini 3.1
+    /// Pro / Grok 4.5 / GPT-5.5 pro ≥200K 全量 2x 计费）。无档模型恒 false。
+    pub fn is_long_context_for(&self, vendor: &str, model: &str, input_tokens: u64) -> bool {
+        self.tiered_tier_for(vendor, model, input_tokens)
+            .is_some_and(|tier| tier.max_tokens.is_none())
+    }
+
+    /// 分档未缓存输入价（per_1M）：档内覆盖价 ?? 基础四价；未收录 → None
+    pub fn input_price_for_tokens(
+        &self,
+        vendor: &str,
+        model: &str,
+        input_tokens: u64,
+    ) -> Option<f64> {
+        let entry = self.lookup(vendor, model)?;
+        tier_for_tokens(entry.tiered_pricing.as_deref(), input_tokens)
+            .and_then(|tier| tier.input_price)
+            .or(entry.input_price)
+    }
+
+    /// 分档输出价（per_1M）：档内覆盖价 ?? 基础四价；未收录 → None
+    pub fn output_price_for_tokens(
+        &self,
+        vendor: &str,
+        model: &str,
+        input_tokens: u64,
+    ) -> Option<f64> {
+        let entry = self.lookup(vendor, model)?;
+        tier_for_tokens(entry.tiered_pricing.as_deref(), input_tokens)
+            .and_then(|tier| tier.output_price)
+            .or(entry.output_price)
+    }
+
+    /// 分档缓存命中价（per_1M）：档内覆盖价 ?? 基础四价；未收录 → None
+    pub fn cache_read_price_for_tokens(
+        &self,
+        vendor: &str,
+        model: &str,
+        input_tokens: u64,
+    ) -> Option<f64> {
+        let entry = self.lookup(vendor, model)?;
+        tier_for_tokens(entry.tiered_pricing.as_deref(), input_tokens)
+            .and_then(|tier| tier.cache_read_price)
+            .or(entry.cache_read_price)
+    }
+
+    /// 分档通用写价（per_1M）：档内覆盖价 ?? [Self::cache_write_price_for]
+    /// （基础通用写价含 Anthropic `cacheWritePrice5m` 兜底语义）；未收录 → None
+    pub fn cache_write_price_for_tokens(
+        &self,
+        vendor: &str,
+        model: &str,
+        input_tokens: u64,
+    ) -> Option<f64> {
+        self.tiered_tier_for(vendor, model, input_tokens)
+            .and_then(|tier| tier.cache_write_price)
+            .or_else(|| self.cache_write_price_for(vendor, model))
+    }
+
+    /// 峰谷定价判定（DeepSeek `peakPricing2x` 消费面）：当前 UTC 时刻
+    /// （epoch 秒）是否落在 [PeakPricingSchedule] 的北京时间窗口内。
+    ///
+    /// 规则（保守不高估成本）：
+    /// - `peak_pricing_2x = false` / 无 schedule / `tz` 非 `Asia/Shanghai`
+    ///   （仅支持 UTC+8，其余时区无法换算 → false）；
+    /// - `effectiveFrom`（YYYY-MM-DD）未到（北京当日 0 点起生效）→ false；
+    /// - 窗口 `"HH:MM-HH:MM"` 左闭右开（09:00 入峰、12:00 出峰）；
+    /// - 任何解析失败 → false。
+    pub fn peak_pricing_2x_for(&self, vendor: &str, model: &str, now_utc_secs: u64) -> bool {
+        let Some(entry) = self.lookup(vendor, model) else {
+            return false;
+        };
+        peak_pricing_2x_at(entry, now_utc_secs)
+    }
+
     // ===== T-24：运行时合并与覆盖（P3 §3.1.3 优先级 2/3，任何变更 version +1）=====
 
     /// 全量条目快照（按 vendor::model 字典序；`catalog_get` 下发面）
@@ -652,6 +754,101 @@ fn strip_version_suffix(probe: &str) -> Option<String> {
         return None;
     }
     Some(base.to_owned())
+}
+
+/// 输入长度分档命中（`[min, max)` 半开区间；`maxTokens = None` = 无上界档）。
+/// 无档 / 长度不落任何档 → None。
+fn tier_for_tokens(tiers: Option<&[TieredPriceTier]>, input_tokens: u64) -> Option<&TieredPriceTier> {
+    tiers?.iter().find(|tier| {
+        input_tokens >= tier.min_tokens
+            && tier.max_tokens.is_none_or(|max| input_tokens < max)
+    })
+}
+
+/// 峰谷定价判定（[ModelCatalog::peak_pricing_2x_for] 的纯函数底，供测试与未来
+/// P5 成本域复用）：规则见方法文档，全部失败路径保守 false（不高估成本）。
+fn peak_pricing_2x_at(entry: &ModelCatalogEntry, now_utc_secs: u64) -> bool {
+    if !entry.peak_pricing_2x {
+        return false;
+    }
+    let Some(schedule) = entry.peak_pricing_schedule.as_ref() else {
+        return false;
+    };
+    // 时区仅支持 Asia/Shanghai（UTC+8）；其余时区无换算表 → 保守 false
+    if schedule.tz != "Asia/Shanghai" {
+        return false;
+    }
+    // effectiveFrom = 北京当日 0 点生效（UTC 前一日 16:00）；未到 → 未生效
+    if let Some(from_utc) = schedule
+        .effective_from
+        .as_deref()
+        .and_then(parse_date_utc_epoch)
+    {
+        if now_utc_secs < from_utc.saturating_sub(28_800) {
+            return false;
+        }
+    }
+    let beijing_minutes = beijing_minutes_of(now_utc_secs);
+    schedule
+        .windows
+        .iter()
+        .any(|window| window_contains(window, beijing_minutes))
+}
+
+/// UTC epoch 秒 → 北京（UTC+8）当日分钟数（0..=1439）。
+fn beijing_minutes_of(now_utc_secs: u64) -> u64 {
+    ((now_utc_secs + 28_800) % 86_400) / 60
+}
+
+/// 窗口字符串 `"HH:MM-HH:MM"` 左闭右开包含判定；解析失败 → false。
+fn window_contains(window: &str, beijing_minutes: u64) -> bool {
+    let Some((start, end)) = window.split_once('-') else {
+        return false;
+    };
+    let (Some(start_hhmm), Some(end_hhmm)) = (parse_hhmm(start), parse_hhmm(end)) else {
+        return false;
+    };
+    beijing_minutes >= start_hhmm && beijing_minutes < end_hhmm
+}
+
+/// 解析 `"HH:MM"` → 分钟数；非法（非两位数字 / 越界）→ None。
+fn parse_hhmm(hhmm: &str) -> Option<u64> {
+    let (h, m) = hhmm.split_once(':')?;
+    if h.len() != 2 || m.len() != 2 {
+        return None;
+    }
+    let hour: u64 = h.parse().ok()?;
+    let minute: u64 = m.parse().ok()?;
+    if hour > 23 || minute > 59 {
+        return None;
+    }
+    Some(hour * 60 + minute)
+}
+
+/// 解析 `"YYYY-MM-DD"` → 该日 UTC 0 点 epoch 秒；非法 → None。
+fn parse_date_utc_epoch(date: &str) -> Option<u64> {
+    let mut parts = date.split('-');
+    let year: i64 = parts.next()?.parse().ok()?;
+    let month: i64 = parts.next()?.parse().ok()?;
+    let day: i64 = parts.next()?.parse().ok()?;
+    if parts.next().is_some() || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    let days = days_from_civil(year, month, day);
+    u64::try_from(days.checked_mul(86_400)?).ok()
+}
+
+/// 公历日期（年/月/日）→ 自 Unix 纪元（1970-01-01）的天数（Howard Hinnant
+/// civil 算法；1970-01-01 返回 0，负值为纪元前）。无 chrono 依赖（本 crate
+/// 仅 std），峰值时段判定不引入时间库。
+fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = if year >= 0 { year } else { year - 399 } / 400;
+    let year_of_era = year - era * 400;
+    let month_adj = (month + 9) % 12;
+    let day_of_year = (153 * month_adj + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
 }
 
 #[cfg(test)]
@@ -1396,5 +1593,227 @@ mod tests {
         assert!(!catalog.cache_write_free_for("nobody", "whatever"));
         // 非写免费模型（有写价 n>0）显式 false
         assert!(!catalog.cache_write_free_for("qwen", "qwen3-max"));
+    }
+
+    // ===== DEEPCHECK-05 #8：tieredPricing 分档消费 =====
+
+    /// 档位命中：半开区间 [min, max) 边界（qwen3-max 32K/128K 双档：
+    /// [0,32K) 基础档 / [32K,128K) / [128K,∞)）
+    #[test]
+    fn tiered_tier_for_hits_half_open_ranges() {
+        let catalog = ModelCatalog::bundled();
+        // 首档（基础四价）：32K 以下无档命中
+        assert!(catalog.tiered_tier_for("qwen", "qwen3-max", 31_999).is_none());
+        // 档 1：[32K, 128K)
+        let tier1 = catalog
+            .tiered_tier_for("qwen", "qwen3-max", 32_000)
+            .expect("32K 必须命中档 1");
+        assert_eq!(tier1.min_tokens, 32_000);
+        assert_eq!(tier1.max_tokens, Some(128_000));
+        assert!(catalog.tiered_tier_for("qwen", "qwen3-max", 127_999).is_some());
+        // 档 2：[128K, ∞) 无上界
+        let tier2 = catalog
+            .tiered_tier_for("qwen", "qwen3-max", 128_000)
+            .expect("128K 必须命中档 2");
+        assert_eq!(tier2.max_tokens, None);
+        assert!(catalog.tiered_tier_for("qwen", "qwen3-max", 1_000_000).is_some());
+    }
+
+    /// 分档四价：档内覆盖价生效，未覆盖字段沿用基础价（Gemini ≥200K 2x 档）
+    #[test]
+    fn tiered_price_queries_apply_tier_overrides() {
+        let catalog = ModelCatalog::bundled();
+        // Gemini 3.1 pro preview：基础 2.0/12.0/0.2；≥200K 档 4.0/18.0/0.4
+        let (vendor, model) = ("gemini", "gemini-3-1-pro-preview");
+        assert_eq!(catalog.input_price_for(vendor, model), Some(2.0));
+        assert_eq!(
+            catalog.input_price_for_tokens(vendor, model, 199_999),
+            Some(2.0),
+            "200K 前仍为基础档"
+        );
+        assert_eq!(
+            catalog.input_price_for_tokens(vendor, model, 200_000),
+            Some(4.0),
+            "200K 起进入 2x 档"
+        );
+        assert_eq!(
+            catalog.output_price_for_tokens(vendor, model, 200_000),
+            Some(18.0)
+        );
+        assert_eq!(
+            catalog.cache_read_price_for_tokens(vendor, model, 200_000),
+            Some(0.4)
+        );
+        // 长上下文判定：≥200K 为长上下文档（无上界档）
+        assert!(!catalog.is_long_context_for(vendor, model, 199_999));
+        assert!(catalog.is_long_context_for(vendor, model, 200_000));
+        // 档内未覆盖字段沿用基础价：gemini 档无 cacheWritePrice 覆盖
+        assert_eq!(
+            catalog.cache_write_price_for_tokens(vendor, model, 200_000),
+            Some(0.0)
+        );
+    }
+
+    /// 分档写价：档内 cacheWritePrice 覆盖（qwen3-max 档 3 覆盖写价 8.75）
+    #[test]
+    fn tiered_write_price_tier_override() {
+        let catalog = ModelCatalog::bundled();
+        // qwen3-max 基础写价 3.125；档 [128K,∞) 覆盖 8.75
+        assert_eq!(catalog.cache_write_price_for("qwen", "qwen3-max"), Some(3.125));
+        assert_eq!(
+            catalog.cache_write_price_for_tokens("qwen", "qwen3-max", 31_999),
+            Some(3.125),
+            "基础档沿用基础写价"
+        );
+        assert_eq!(
+            catalog.cache_write_price_for_tokens("qwen", "qwen3-max", 200_000),
+            Some(8.75)
+        );
+    }
+
+    /// 无档模型：分档查询恒回退基础四价（deepseek-v4-flash 无 tieredPricing）
+    #[test]
+    fn tiered_queries_fallback_to_base_prices_when_no_tiers() {
+        let catalog = ModelCatalog::bundled();
+        let (vendor, model) = ("deepseek", "deepseek-v4-flash");
+        assert_eq!(
+            catalog.input_price_for_tokens(vendor, model, 1_000_000),
+            Some(0.14)
+        );
+        assert_eq!(
+            catalog.output_price_for_tokens(vendor, model, 1_000_000),
+            Some(0.28)
+        );
+        assert_eq!(
+            catalog.cache_read_price_for_tokens(vendor, model, 1_000_000),
+            Some(0.0028)
+        );
+        assert!(!catalog.is_long_context_for(vendor, model, 1_000_000));
+        // 未知模型 → None / false
+        assert_eq!(catalog.input_price_for_tokens("nobody", "whatever", 10), None);
+        assert!(!catalog.is_long_context_for("nobody", "whatever", 10));
+    }
+
+    // ===== DEEPCHECK-05 #8：peakPricing 峰谷消费 =====
+
+    /// 基准时刻：2026-01-01 UTC 00:00 = 北京 08:00（epoch 1_767_225_600，
+    /// Node Date.UTC(2026,0,1)/1000 实测钉死）
+    const BASE_UTC_2026_01_01: u64 = 1_767_225_600;
+
+    /// 峰谷判定：deepseek-v4-flash 北京 9-12 / 14-18（左闭右开）
+    #[test]
+    fn peak_pricing_2x_detects_beijing_windows() {
+        let catalog = ModelCatalog::bundled();
+        // 北京时间当日分钟 → epoch：BASE 为北京 08:00，相对偏移
+        // (min + 1440 - 480) % 1440（08:00 偏移 0，跨日取模）
+        let at_beijing = |beijing_min: u64| {
+            let offset_min = (beijing_min + 960) % 1440;
+            catalog.peak_pricing_2x_for(
+                "deepseek",
+                "deepseek-v4-flash",
+                BASE_UTC_2026_01_01 + offset_min * 60,
+            )
+        };
+        // 峰内：09:00（入峰含）~ 11:59
+        assert!(at_beijing(9 * 60));
+        assert!(at_beijing(10 * 60 + 30));
+        assert!(at_beijing(11 * 60 + 59));
+        // 出峰：12:00（左闭右开）
+        assert!(!at_beijing(12 * 60));
+        assert!(!at_beijing(13 * 60));
+        // 第二窗口：14:00 入峰 ~ 17:59；18:00 出峰
+        assert!(at_beijing(14 * 60));
+        assert!(at_beijing(17 * 60 + 59));
+        assert!(!at_beijing(18 * 60));
+        // 夜间谷（0 点 / 凌晨 2 点）
+        assert!(!at_beijing(2 * 60));
+        assert!(!at_beijing(0));
+        // 08:59 出峰
+        assert!(!at_beijing(8 * 60 + 59));
+    }
+
+    /// 非峰谷模型 / 未知模型 → false（gpt-5.5 无 peakPricing2x）
+    #[test]
+    fn peak_pricing_2x_false_for_others() {
+        let catalog = ModelCatalog::bundled();
+        assert!(!catalog.peak_pricing_2x_for("openai", "gpt-5.5", BASE_UTC_2026_01_01 + 9 * 3600));
+        assert!(!catalog.peak_pricing_2x_for("nobody", "whatever", BASE_UTC_2026_01_01 + 9 * 3600));
+    }
+
+    /// 窗口解析失败 / 越界值 → false（防御坏数据）
+    #[test]
+    fn peak_pricing_window_parse_defensive() {
+        assert!(!window_contains("09:00-12:00", 8 * 60));
+        assert!(window_contains("09:00-12:00", 9 * 60));
+        // 非法窗口
+        assert!(!window_contains("9:00-12:00", 9 * 60));
+        assert!(!window_contains("09:00-12:61", 9 * 60));
+        assert!(!window_contains("bogus", 9 * 60));
+        assert!(!window_contains("", 9 * 60));
+        // 分钟越界判定
+        assert_eq!(beijing_minutes_of(BASE_UTC_2026_01_01), 8 * 60);
+        assert_eq!(beijing_minutes_of(BASE_UTC_2026_01_01 + 3600), 9 * 60);
+    }
+
+    /// effectiveFrom 未到 → 未生效（构造带 future effectiveFrom 的条目）
+    #[test]
+    fn peak_pricing_2x_honors_effective_from() {
+        let mut entry = ModelCatalogEntry {
+            model: "deepseek-v4-flash".to_string(),
+            provider: "deepseek".to_string(),
+            vendor: "deepseek".to_string(),
+            peak_pricing_2x: true,
+            peak_pricing_schedule: Some(PeakPricingSchedule {
+                windows: vec!["09:00-12:00".to_string(), "14:00-18:00".to_string()],
+                tz: "Asia/Shanghai".to_string(),
+                // 2026-09-01 生效：2026-01-01（北京 08:00）远早于生效日 → false
+                effective_from: Some("2026-09-01".to_string()),
+                note: None,
+            }),
+            ..Default::default()
+        };
+        // 生效前：峰时段也不计 2x
+        assert!(!peak_pricing_2x_at(&entry, BASE_UTC_2026_01_01 + 9 * 3600));
+        // 生效后（北京 2026-09-01 09:00 = UTC 08-31 18:00 后 9h）→ true
+        let sep1_utc = parse_date_utc_epoch("2026-09-01").expect("日期可解析") - 28_800;
+        assert!(peak_pricing_2x_at(&entry, sep1_utc + 9 * 3600));
+        // effectiveFrom 移除（null = 已生效）→ 峰时段 true
+        entry.peak_pricing_schedule.as_mut().unwrap().effective_from = None;
+        assert!(peak_pricing_2x_at(&entry, BASE_UTC_2026_01_01 + 9 * 3600));
+    }
+
+    /// effectiveFrom 解析与日期算术（2026-09-01 北京 0 点 = UTC 08-31 16:00）
+    #[test]
+    fn parse_date_utc_epoch_arithmetic() {
+        // 2026-01-01 = 20454 天（Node Date.UTC(2026,0,1)/86400 实测）
+        assert_eq!(parse_date_utc_epoch("2026-01-01"), Some(20_454 * 86_400));
+        // 2026-09-01 = 2026-01-01 + 243 天（1月31+2月28+3月31+4月30+5月31+6月30+7月31+8月31）
+        assert_eq!(
+            parse_date_utc_epoch("2026-09-01"),
+            Some((20_454 + 243) * 86_400)
+        );
+        // 非法输入 → None
+        assert_eq!(parse_date_utc_epoch("2026-13-01"), None);
+        assert_eq!(parse_date_utc_epoch("2026-01-32"), None);
+        assert_eq!(parse_date_utc_epoch("2026/01/01"), None);
+        assert_eq!(parse_date_utc_epoch("2026-01"), None);
+        assert_eq!(parse_date_utc_epoch("bogus"), None);
+        // 窗口解析失败不 panic
+        assert!(!peak_pricing_2x_at(
+            &ModelCatalogEntry {
+                model: "x".to_string(),
+                provider: "p".to_string(),
+                vendor: "v".to_string(),
+                peak_pricing_2x: true,
+                peak_pricing_schedule: Some(PeakPricingSchedule {
+                    windows: vec!["bogus".to_string()],
+                    tz: "Asia/Shanghai".to_string(),
+                    effective_from: None,
+                    note: None,
+                }),
+                ..Default::default()
+            },
+            BASE_UTC_2026_01_01
+        ));
     }
 }

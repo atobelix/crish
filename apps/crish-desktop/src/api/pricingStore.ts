@@ -37,8 +37,12 @@
  *      → 用户编辑价表扩展字段（cacheReadPerMTok/cacheWritePerMTok）
  *      → 全局乘数兜底（cacheReadMultiplier/cacheWriteMultiplier × 输入价）
  *      → 无价 → resolver 返回 null，估算函数返回 0（不估算）。
- *   7. 长度分档（tieredPricing）不入前端：估算统一按基础四价（首档），
- *      档位匹配归 P5/服务端 catalog 层。
+ *   7. 长度分档（tieredPricing）消费（P1B 修复，DEEPCHECK-05 #8）：
+ *      **不再"不入前端"**——Rust catalog 快照与静态表条目均携带 tiered 档，
+ *      `resolve4dPricesForTokens` / 估算函数按估算 input 长度（promptTokens）
+ *      落档：命中档位时档内价覆盖（未覆盖字段沿用基础四价），档位边界
+ *      半开区间 [minTokens, maxTokens)，无上界档即长上下文档 2x 档。
+ *      用户价表命中时用户价优先、不受档位影响（用户显式覆盖目录语义）。
  */
 
 export type ModelPrice = {
@@ -84,6 +88,25 @@ export const DEFAULT_CACHE_WRITE_MULTIPLIER = 1.25;
 export const DEFAULT_CACHE_TTL_MODE: CacheTtlMode = '5m';
 
 /**
+ * 长度分档（v4 目录条目扩展；对齐 litellm `tiered_pricing` 的
+ * `range: [min, max)` 半开区间；只写 `minTokens` 的档 = 长上下文档 2x 档）。
+ */
+export interface CatalogTier {
+  /** 输入长度下界（半开区间下界，含） */
+  minTokens: number;
+  /** 输入长度上界（半开区间上界，不含）；缺省 = 无上界（长上下文档档） */
+  maxTokens?: number;
+  /** 档内输入价（缺省 = 沿用基础四价） */
+  inputPerMTok?: number;
+  /** 档内输出价 */
+  outputPerMTok?: number;
+  /** 档内缓存命中价 */
+  cacheReadPerMTok?: number;
+  /** 档内通用写价 */
+  cacheWritePerMTok?: number;
+}
+
+/**
  * per-model 目录条目（四指标绝对价，per_1M tokens，模型自身币种）。
  *
  * 字段语义对齐 catalog v2 schema §2 C 组：
@@ -93,6 +116,7 @@ export const DEFAULT_CACHE_TTL_MODE: CacheTtlMode = '5m';
  *   写免费 = 0 + cacheWriteFree:true 双字段齐出（schema §1.3 三态）。
  * - `cacheWritePerMTok1h`：Anthropic 1h 档写价（schema cacheWritePrice1h）。
  * - `currency`：必填（schema §1.2），目录内不换算。
+ * - `tiered`：长度分档（P1B 起随目录下发/静态表收录；估算按 input 长度落档）。
  */
 export interface CatalogModelEntry4d {
   /** 未缓存输入价（USD/CNY per 1M tokens） */
@@ -109,6 +133,8 @@ export interface CatalogModelEntry4d {
   cacheWritePerMTok1h?: number;
   /** 币种（USD / CNY） */
   currency: Currency;
+  /** 长度分档（DEEPCHECK-05 #8：估算落档消费；缺省 = 无档） */
+  tiered?: CatalogTier[];
 }
 
 /**
@@ -118,7 +144,8 @@ export interface CatalogModelEntry4d {
  * （R2 汇总 2026-08-03，唯一数据源；R3 不得越过本表）。数据日期 2026-08-03。
  * 转录范围：四指标完整且非「明确不转录」（§13.4：已下线/非对话/未获取）条目；
  * 双币种厂商每模型单条（v1 catalog.json 默认直连口径），CNY/USD 双条目归服务端。
- * 长度分档统一取基础四价（首档）；tieredPricing 档位匹配不在前端做。
+ * 基础四价 = 首档；tieredPricing 档位 P1B 起随条目收录（估算按 input 长度落档，
+ * 见 resolve4dPricesForTokens）。
  * 别名/旧键条目（v1 catalog.json 或旧费率表形态）与官方 ID 同价，注释标注。
  * 键名规则：官方 API ID 直抄；GLM/MiniMax/Qwen 等点号异形按 schema §1.4
  * 保留目录横线形态的旧键作为别名。
@@ -175,6 +202,10 @@ export const CATALOG_CACHE_RATES: Record<string, CatalogModelEntry4d> = {
     cacheWritePerMTok: 0,
     cacheWriteFree: true,
     currency: 'USD',
+    // ≥272K 长上下文 2x 档（DEEPCHECK-05 §8：gpt-5.5-pro 输入 30→60）
+    tiered: [
+      { minTokens: 272_000, inputPerMTok: 60, outputPerMTok: 270 },
+    ],
   },
   'gpt-5.4': {
     inputPerMTok: 2.5,
@@ -704,7 +735,8 @@ export const CATALOG_CACHE_RATES: Record<string, CatalogModelEntry4d> = {
   // ── 5. Qwen 阿里百炼（§5.1 表 A；CNY）─────────────────────────────────────
   // 全系推导价（priceStatus: derived）：cacheRead = 输入 × 10%、
   // cacheWrite = 输入 × 125%（官方只给比例）；有写价概念 → free:false。
-  // 阶梯档取基础价（首档）；多档「/」分隔时取 [0,32K)/[0,128K) 档。
+  // 阶梯档已收录（估算落档消费；如 qwen3-8-max ≥128K 档 15/90）；多档「/」分隔时
+  // 取 [0,32K)/[0,128K) 档为基础价。
   // 点号官方名（qwen3.7-max）目录横线形态；保留 v1 旧键 qwen3-7-max 作别名。
   'qwen3-8-max': {
     inputPerMTok: 12,
@@ -761,6 +793,10 @@ export const CATALOG_CACHE_RATES: Record<string, CatalogModelEntry4d> = {
     cacheWritePerMTok: 2.5,
     cacheWriteFree: false,
     currency: 'CNY',
+    // ≥256K 档（DEEPCHECK-05 §8：qwen3-6-plus 输入 2→8，低估 75%）
+    tiered: [
+      { minTokens: 256_000, inputPerMTok: 8, outputPerMTok: 48, cacheReadPerMTok: 0.8, cacheWritePerMTok: 10 },
+    ],
   },
   'qwen3-5-plus': {
     inputPerMTok: 0.8,
@@ -886,7 +922,7 @@ export const CATALOG_CACHE_RATES: Record<string, CatalogModelEntry4d> = {
   },
 
   // ── 6. Grok xAI（§6.1 表 A；USD）──────────────────────────────────────────
-  // 写免费（官方定价结构无写价列，推断）；长档 ≥200K 不入前端（取基础档）。
+  // 写免费（官方定价结构无写价列，推断）；长档 ≥200K 档已收录（估算落档消费）。
   // 官方 ID 点号；保留 v1 旧键 grok-4-5 / grok-4-3 作别名。
   'grok-4-5': {
     inputPerMTok: 2,
@@ -895,6 +931,10 @@ export const CATALOG_CACHE_RATES: Record<string, CatalogModelEntry4d> = {
     cacheWritePerMTok: 0,
     cacheWriteFree: true,
     currency: 'USD',
+    // ≥200K 整请求全量 2x 计费（含缓存命中部分；DEEPCHECK-05 §8）
+    tiered: [
+      { minTokens: 200_000, inputPerMTok: 4, outputPerMTok: 12, cacheReadPerMTok: 0.6 },
+    ],
   },
   'grok-4.5': {
     inputPerMTok: 2,
@@ -903,6 +943,10 @@ export const CATALOG_CACHE_RATES: Record<string, CatalogModelEntry4d> = {
     cacheWritePerMTok: 0,
     cacheWriteFree: true,
     currency: 'USD',
+    // ≥200K 档（与横线键条目同源转录）
+    tiered: [
+      { minTokens: 200_000, inputPerMTok: 4, outputPerMTok: 12, cacheReadPerMTok: 0.6 },
+    ],
   },
   'grok-4-3': {
     inputPerMTok: 1.25,
@@ -964,6 +1008,10 @@ export const CATALOG_CACHE_RATES: Record<string, CatalogModelEntry4d> = {
     cacheWritePerMTok: 0,
     cacheWriteFree: true,
     currency: 'CNY',
+    // >512K 长上下文 2x 且含缓存命中部分全量计费（DEEPCHECK-05 §8）
+    tiered: [
+      { minTokens: 512_000, inputPerMTok: 4.2, outputPerMTok: 16.8, cacheReadPerMTok: 0.84 },
+    ],
   },
   'minimax-m2-7': {
     inputPerMTok: 2.1,
@@ -1025,7 +1073,7 @@ export const CATALOG_CACHE_RATES: Record<string, CatalogModelEntry4d> = {
 
   // ── 8. Gemini Google（§8.1 表 A；USD）────────────────────────────────────
   // 命中价恒 = 输入 10%；写免费三件套；显式缓存存储费（Pro 4.50 / flash 1.00，
-  // 3.5/3.6 flash 未获取）不入前端成本（服务端核算）。长档 2x 仅 Pro，不入前端。
+  // 3.5/3.6 flash 未获取）不入前端成本（服务端核算）。长档 2x 仅 Pro 系已收录。
   // 官方 ID 点号；保留 v1 旧键（gemini-3-6-flash 等横线形态）作别名。
   'gemini-3-6-flash': {
     inputPerMTok: 1.5,
@@ -1082,6 +1130,10 @@ export const CATALOG_CACHE_RATES: Record<string, CatalogModelEntry4d> = {
     cacheWritePerMTok: 0,
     cacheWriteFree: true,
     currency: 'USD',
+    // >200K 长上下文全 token 2x/1.5x 计费（DEEPCHECK-05 §8：输入 2→4、输出 12→18）
+    tiered: [
+      { minTokens: 200_000, inputPerMTok: 4, outputPerMTok: 18, cacheReadPerMTok: 0.4 },
+    ],
   },
   'gemini-3.1-pro-preview': {
     inputPerMTok: 2,
@@ -1090,6 +1142,10 @@ export const CATALOG_CACHE_RATES: Record<string, CatalogModelEntry4d> = {
     cacheWritePerMTok: 0,
     cacheWriteFree: true,
     currency: 'USD',
+    // ≥200K 档（与 gemini-3-1-pro 同源转录）
+    tiered: [
+      { minTokens: 200_000, inputPerMTok: 4, outputPerMTok: 18, cacheReadPerMTok: 0.4 },
+    ],
   },
   'gemini-3.1-pro-preview-customtools': {
     inputPerMTok: 2,
@@ -1098,6 +1154,10 @@ export const CATALOG_CACHE_RATES: Record<string, CatalogModelEntry4d> = {
     cacheWritePerMTok: 0,
     cacheWriteFree: true,
     currency: 'USD',
+    // ≥200K 档（自定义工具变体，价格同 3.1-pro-preview）
+    tiered: [
+      { minTokens: 200_000, inputPerMTok: 4, outputPerMTok: 18, cacheReadPerMTok: 0.4 },
+    ],
   },
   'gemini-3-pro-preview': {
     inputPerMTok: 2,
@@ -1106,6 +1166,10 @@ export const CATALOG_CACHE_RATES: Record<string, CatalogModelEntry4d> = {
     cacheWritePerMTok: 0,
     cacheWriteFree: true,
     currency: 'USD',
+    // ≥200K 档（3.x pro 系同价）
+    tiered: [
+      { minTokens: 200_000, inputPerMTok: 4, outputPerMTok: 18, cacheReadPerMTok: 0.4 },
+    ],
   },
   'gemini-3-flash-preview': {
     inputPerMTok: 0.5,
@@ -1203,11 +1267,25 @@ function resolveCatalogEntry(model: string): CatalogModelEntry4d | null {
   return null;
 }
 
+/** 运行时快照单模型价格（catalog_get 下发条目映射；可选字段缺失 = 回退下级） */
+export interface CatalogSnapshotPrice {
+  /** 未缓存输入价（缺省 = 回退静态表/用户价表） */
+  inputPerMTok?: number;
+  /** 输出价 */
+  outputPerMTok?: number;
+  /** 缓存命中单价（null = 未收录；缺失 = 回退下级） */
+  readPerMTok?: number;
+  /** 缓存写价（写免费条目 = 0；缺失 = 回退下级） */
+  writePerMTok?: number;
+  /** 长度分档（P1B：估算按 input 长度落档） */
+  tiered?: CatalogTier[];
+}
+
 /** 运行时目录快照（P3 `catalog_get` 下发；版本号失效语义） */
 export interface CatalogCacheSnapshot {
   version: number;
-  /** model → 缓存单价（USD/1M tokens；绝对值优先于静态费率表） */
-  prices: Record<string, { readPerMTok: number; writePerMTok: number }>;
+  /** model → 四价（绝对值优先于静态费率表） */
+  prices: Record<string, CatalogSnapshotPrice>;
 }
 
 let catalogSnapshot: CatalogCacheSnapshot | null = null;
@@ -1236,6 +1314,23 @@ export function clearCatalogCacheSnapshot(): void {
 }
 
 /**
+ * 快照条目查找：精确 + 模糊匹配（与 resolveCatalogEntry 同规则，
+ * 兼容版本后缀与 apiModel 点号异形）。命中键 → 条目，否则 null。
+ */
+function resolveSnapshotPrice(model: string): CatalogSnapshotPrice | null {
+  if (!catalogSnapshot) return null;
+  const exact = catalogSnapshot.prices[model];
+  if (exact) return exact;
+  for (const key of Object.keys(catalogSnapshot.prices)) {
+    if (model.includes(key) || key.includes(model)) {
+      const entry = catalogSnapshot.prices[key];
+      if (entry) return entry;
+    }
+  }
+  return null;
+}
+
+/**
  * 三级费率第 1 级：per-model 目录缓存价（绝对价，模型自身币种）。
  * 优先运行时快照（catalog_get 下发绝对值），否则静态表绝对价；
  * 两者都取不到 → null（回退下级）。写免费条目 write = 0。
@@ -1243,11 +1338,11 @@ export function clearCatalogCacheSnapshot(): void {
 export function resolveCatalogCachePrices(
   model: string
 ): { readPerMTok?: number; writePerMTok?: number } | null {
-  const snap = catalogSnapshot?.prices[model];
-  if (snap) {
+  const snap = resolveSnapshotPrice(model);
+  if (snap && (snap.readPerMTok != null || snap.writePerMTok != null)) {
     return {
-      readPerMTok: snap.readPerMTok,
-      writePerMTok: snap.writePerMTok,
+      readPerMTok: snap.readPerMTok ?? undefined,
+      writePerMTok: snap.writePerMTok ?? undefined,
     };
   }
   const entry = resolveCatalogEntry(model);
@@ -1328,29 +1423,9 @@ export function resolveModelPrice(model: string): ModelPrice | null {
 }
 
 /**
- * 2D 基础价解析（v4 升级：目录兜底）。
- * 优先级：用户编辑价表（可覆盖）→ 目录静态表绝对价 → null（无价）。
- */
-function resolveBasePrices(
-  model: string
-): { inputPerMTok: number; outputPerMTok: number } | null {
-  const hit = resolveModelPrice(model);
-  if (hit) {
-    return { inputPerMTok: hit.inputPerMTok, outputPerMTok: hit.outputPerMTok };
-  }
-  const entry = resolveCatalogEntry(model);
-  if (entry) {
-    return {
-      inputPerMTok: entry.inputPerMTok,
-      outputPerMTok: entry.outputPerMTok,
-    };
-  }
-  return null;
-}
-
-/**
  * 2D 估算：不考虑 cache（向下兼容）。
  * v4：目录模型未在用户价表时由目录绝对价兜底（如 kimi-k3/qwen3-8-max）；
+ * P1B：按估算 input 长度落档（tieredPricing，超档用高档价）；
  * 返回值 = 模型自身币种金额（CNY 模型为人民币），展示层用 getModelCurrency 标注。
  */
 export function estimateCostUsd(
@@ -1358,7 +1433,7 @@ export function estimateCostUsd(
   inputTokens: number,
   outputTokens: number
 ): number {
-  const p = resolveBasePrices(model);
+  const p = resolve4dPricesForTokens(model, inputTokens);
   if (!p) return 0;
   return (
     (inputTokens / 1e6) * p.inputPerMTok +
@@ -1388,21 +1463,24 @@ export interface Resolved4dPrices {
 
 /**
  * 四指标价格解析（v4 回退链，任务书裁决）：
- *   输入/输出价：用户编辑价表（覆盖）→ 目录绝对价 → null（不估算）。
+ *   输入/输出价：用户编辑价表（覆盖）→ 运行时快照（Rust 目录真源）→
+ *     目录绝对价 → null（不估算）。
  *   缓存读价：运行时快照 → 目录绝对价（null = 未获取）→ 用户扩展字段 → 全局乘数。
  *   缓存写价：运行时快照（无免费位语义，绝对值直用）→ 目录条目
  *     （cacheWriteFree → 0；TTL=1h 且有条目 1h 档 → 用 1h 写价）
  *     → 用户扩展字段 → 全局乘数。
- * 存储费不入前端（服务端核算）；tieredPricing 档位匹配不在前端（基础价）。
+ * 存储费不入前端（服务端核算）；tieredPricing 档位匹配见 [resolve4dPricesForTokens]。
  */
 export function resolve4dPrices(model: string): Resolved4dPrices | null {
   const hit = resolveModelPrice(model);
   const entry = resolveCatalogEntry(model);
-  const snap = catalogSnapshot?.prices[model];
+  const snap = resolveSnapshotPrice(model);
   const opts = loadCachePriceOpts();
 
-  const inputPerMTok = hit?.inputPerMTok ?? entry?.inputPerMTok;
-  const outputPerMTok = hit?.outputPerMTok ?? entry?.outputPerMTok;
+  const inputPerMTok =
+    hit?.inputPerMTok ?? snap?.inputPerMTok ?? entry?.inputPerMTok;
+  const outputPerMTok =
+    hit?.outputPerMTok ?? snap?.outputPerMTok ?? entry?.outputPerMTok;
   if (inputPerMTok == null || outputPerMTok == null) return null;
 
   const currency: Currency = hit?.currency ?? entry?.currency ?? 'USD';
@@ -1412,7 +1490,7 @@ export function resolve4dPrices(model: string): Resolved4dPrices | null {
 
   // 缓存读价回退链
   let cacheReadPerMTok: number;
-  if (snap) {
+  if (snap?.readPerMTok != null) {
     cacheReadPerMTok = snap.readPerMTok;
     source = 'snapshot';
   } else if (entry && entry.cacheReadPerMTok != null) {
@@ -1429,7 +1507,7 @@ export function resolve4dPrices(model: string): Resolved4dPrices | null {
   let cacheWritePerMTok: number;
   let cacheWriteFree = false;
   let hasWrite1hTier = false;
-  if (snap) {
+  if (snap?.writePerMTok != null) {
     cacheWritePerMTok = snap.writePerMTok;
     source = 'snapshot';
   } else if (entry) {
@@ -1462,6 +1540,70 @@ export function resolve4dPrices(model: string): Resolved4dPrices | null {
 }
 
 /**
+ * 输入长度分档命中（P1B / DEEPCHECK-05 #8 前端消费面）：
+ * 快照 tiered 优先于静态表 tiered；半开区间 [minTokens, maxTokens)，
+ * maxTokens 缺省 = 无上界。无档 / 不落档 → null（沿用基础四价）。
+ */
+export function resolveTierForTokens(
+  model: string,
+  inputTokens: number
+): CatalogTier | null {
+  const tiers =
+    resolveSnapshotPrice(model)?.tiered ??
+    resolveCatalogEntry(model)?.tiered;
+  if (!tiers || tiers.length === 0) return null;
+  return (
+    tiers.find(
+      (t) =>
+        inputTokens >= t.minTokens &&
+        (t.maxTokens === undefined || inputTokens < t.maxTokens)
+    ) ?? null
+  );
+}
+
+/**
+ * 用户是否显式保存过价表（PRICES_KEY 有记录）。
+ *
+ * LS 为空时 `loadPrices` 返回 [DEFAULT_PRICES] 仅作展示兜底——默认价表是
+ * 目录基础价的镜像（grok-4.5 2/6 等），**不构成用户覆盖**：目录分档语义
+ * （tieredPricing）照常生效。用户显式保存（设置页编辑 / upsertPrice）后
+ * 才视为接管：整表（含默认行）覆盖目录，含分档。
+ */
+function hasUserSavedPrices(): boolean {
+  try {
+    return localStorage.getItem(PRICES_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 分档四价解析：基础 [resolve4dPrices] 结果上按估算 input 长度落档，
+ * 档内覆盖价替换（未覆盖字段沿用基础价）。
+ *
+ * 用户**显式保存**价表后，命中的模型整条不落档（用户显式定价覆盖目录
+ * 全部语义，含分档）；纯默认价表（未编辑）下目录档位照常生效。
+ */
+export function resolve4dPricesForTokens(
+  model: string,
+  inputTokens: number
+): Resolved4dPrices | null {
+  const base = resolve4dPrices(model);
+  if (!base) return null;
+  // 用户显式保存的价表命中 → 用户覆盖，跳过档位匹配
+  if (resolveModelPrice(model) && hasUserSavedPrices()) return base;
+  const tier = resolveTierForTokens(model, inputTokens);
+  if (!tier) return base;
+  return {
+    ...base,
+    inputPerMTok: tier.inputPerMTok ?? base.inputPerMTok,
+    outputPerMTok: tier.outputPerMTok ?? base.outputPerMTok,
+    cacheReadPerMTok: tier.cacheReadPerMTok ?? base.cacheReadPerMTok,
+    cacheWritePerMTok: tier.cacheWritePerMTok ?? base.cacheWritePerMTok,
+  };
+}
+
+/**
  * 4D 估算：区分 cache hit/write 与普通 input 的不同费率。
  *
  * 公式（v4 四指标，任务书 §3）：
@@ -1472,6 +1614,8 @@ export function resolve4dPrices(model: string): Resolved4dPrices | null {
  * Pcr/Pcw 由 resolve4dPrices 按 v4 回退链解析：
  *   运行时快照 → 目录静态表绝对四价（写免费 → 0；TTL=1h 时用 Anthropic 1h 档）
  *   → 用户编辑价表扩展字段 → 全局乘数兜底（× Pin）→ 无价 → 返回 0（不估算）。
+ * P1B：按估算 input 长度（promptTokens）落 tieredPricing 档，超档用高档价
+ * （DEEPCHECK-05 #8：长上下文成本低估 ≈45% 修复）。
  * 返回值 = 模型自身币种金额（CNY 模型为人民币；函数名 Usd 为历史遗留，
  * 展示层用 getModelCurrency() 标注币种）。
  */
@@ -1482,7 +1626,7 @@ export function estimateCostUsd4d(
   cacheReadTokens: number,
   cacheWriteTokens: number
 ): number {
-  const p = resolve4dPrices(model);
+  const p = resolve4dPricesForTokens(model, promptTokens);
   if (!p) return 0;
 
   const nonCached = Math.max(

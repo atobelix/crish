@@ -19,6 +19,13 @@ export async function bootstrapFull(): Promise<void> {
         }
       } catch { /* 主题读取失败时保持默认主题 */ }
     })(),
+
+    // 3. 运行时模型目录快照（DEEPCHECK-02 P0：catalog_get 接线；Rust 目录真源
+    //    → 前端四指标定价；invoke 失败内部降级静态表，恒不抛）
+    (async () => {
+      const { fetchCatalogSnapshot } = await import('./api/modelCatalog');
+      await fetchCatalogSnapshot();
+    })(),
   ]);
 
   // 扩容 Worker 池至完整数量

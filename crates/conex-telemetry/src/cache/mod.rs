@@ -18,7 +18,7 @@
 //!   （pi-cache-analysis.md:269-278）；
 //! - 断裂判定：Claude Code 两阶段 `cacheRead 下降 >5% 且 >2000 token`
 //!   （claude-code-cache-analysis.md:395-410）；
-//! - 归因分类：jcode `KvCacheMissReason` 收缩为 8 类
+//! - 归因分类：jcode `KvCacheMissReason` 收缩为 7 类
 //!   （jcode-cache-analysis.md:102-117）；
 //! - 冷缓存预警：jcode TTL 表 + 空闲检测 + 预估重发量
 //!   （jcode-cache-analysis.md:138-149）。

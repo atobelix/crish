@@ -473,6 +473,145 @@ pub fn to_chat_messages<M: Borrow<AgentMessage>>(
     result
 }
 
+/// toResponsesInputItems（DEEPCHECK-05 #10：Responses 轨协议补全）
+///
+/// AgentMessage → Responses API input items（OpenAI Responses 形状；对齐
+/// DeepSeek Responses API 官方兼容矩阵，api-docs.deepseek.com/guides/responses_api）：
+/// - user → `{"type":"message","role":"user","content": <string|parts>}`（单文本 →
+///   content 字符串；多模态 → input_text / input_image parts，DeepSeek 对 input_image
+///   以占位符替换不报错）；
+/// - system → message item（role=system；wire_mode=user-prefix 时改写 user + 前缀文案，
+///   与 chat 轨 [system_prompt_message] 同语义）；
+/// - assistant → reasoning item（Require/Include 且**有思考内容**时才发，plain-text
+///   content 由服务端合并进相邻 assistant 消息）+ message item（有文本时）+
+///   function_call item（每条 ToolCall；call_id 消毒 + arguments canonical 序列化，
+///   与 chat 轨 tool_calls 同口径）；
+/// - tool → function_call_output item（每条 ToolResult；output 经 T-34 清洗，
+///   与 chat 轨 tool 消息同口径）。
+///
+/// 顺序保持对话时序（reasoning → message → function_call items，对齐 OpenAI
+/// response.output 顺序）。`system_prompt` 不进 input：Responses 轨由 build.rs
+/// 走顶层 `instructions` 字段（Responses 原生首 system 语义）。
+pub fn to_responses_input_items<M: Borrow<AgentMessage>>(
+    messages: &[M],
+    reasoning_content_mode: ReasoningContentMode,
+    wire_mode: SystemPromptWireMode,
+) -> Vec<Value> {
+    let mut result: Vec<Value> = Vec::new();
+    for message_ref in messages {
+        let message = message_ref.borrow();
+        match message.role {
+            AgentMessageRole::Tool => {
+                for block in &message.blocks {
+                    if let AgentMessageBlock::ToolResult { tool_call_id, output, .. } = block {
+                        // T-34（R-J）：与 chat 轨 tool 消息同口径清洗（确定性 + 幂等）
+                        let cleaned =
+                            clean_output(&stringify_tool_output(output), &CleanupOptions::default());
+                        result.push(json!({
+                            "type": "function_call_output",
+                            "call_id": sanitize_tool_call_id(tool_call_id),
+                            "output": cleaned.cleaned,
+                        }));
+                    }
+                }
+            }
+            AgentMessageRole::Assistant => {
+                let content = message.text();
+                let has_tool_call = message
+                    .blocks
+                    .iter()
+                    .any(|b| matches!(b, AgentMessageBlock::ToolCall(_)));
+                // Responses 轨思考回传：仅非空思考才发 reasoning item——DeepSeek
+                // 官方矩阵 plain-text content 合并进相邻 assistant 消息，空内容无
+                // 意义；与 chat 轨 Require 模式的"空串键存在性"有意分歧（那是
+                // chat-completions 缺 reasoning_content 键 400 的兼容措施，
+                // Responses 无此需求，ReasoningContentMode::Require 的键语义
+                // 不随轨传递）
+                let reasoning = reasoning_content_object(message, reasoning_content_mode)
+                    .filter(|thought| !thought.is_empty());
+                if content.is_empty() && !has_tool_call && reasoning.is_none() {
+                    continue;
+                }
+                // reasoning item 先于 message item（对齐 OpenAI response.output 顺序）
+                if let Some(thought) = reasoning {
+                    result.push(json!({ "type": "reasoning", "content": thought }));
+                }
+                if !content.is_empty() {
+                    result.push(json!({
+                        "type": "message",
+                        "role": "assistant",
+                        "content": content,
+                    }));
+                }
+                for block in &message.blocks {
+                    if let AgentMessageBlock::ToolCall(call) = block {
+                        result.push(json!({
+                            "type": "function_call",
+                            "call_id": sanitize_tool_call_id(&call.id),
+                            "name": call.tool_name,
+                            "arguments": canonical_json_string(&call.input),
+                        }));
+                    }
+                }
+            }
+            AgentMessageRole::System => {
+                result.push(json!({
+                    "type": "message",
+                    "role": match wire_mode {
+                        SystemPromptWireMode::NativeSystemRole => "system",
+                        SystemPromptWireMode::UserPrefix => "user",
+                    },
+                    "content": match wire_mode {
+                        SystemPromptWireMode::NativeSystemRole => json!(message.text()),
+                        SystemPromptWireMode::UserPrefix => {
+                            json!(system_prompt_as_user_prefix(&message.text()))
+                        }
+                    },
+                }));
+            }
+            AgentMessageRole::User => {
+                result.push(json!({
+                    "type": "message",
+                    "role": "user",
+                    "content": responses_input_content(&user_message_content(message)),
+                }));
+            }
+        }
+    }
+    result
+}
+
+/// ChatContent → Responses input item content（单文本 → 字符串；多模态 → parts 数组）
+fn responses_input_content(content: &ChatContent) -> Value {
+    match content {
+        ChatContent::Text(text) => json!(text),
+        ChatContent::Parts(parts) => json!(
+            parts
+                .iter()
+                .map(responses_input_part)
+                .collect::<Vec<_>>()
+        ),
+    }
+}
+
+/// ChatContentPart → Responses content part（text → input_text；image → input_image）
+fn responses_input_part(part: &ChatContentPart) -> Value {
+    match part {
+        ChatContentPart::Text { text, .. } => {
+            json!({ "type": "input_text", "text": text })
+        }
+        ChatContentPart::ImageUrl { url, detail } => {
+            let mut part = Map::new();
+            part.insert("type".to_string(), json!("input_image"));
+            part.insert("image_url".to_string(), json!(url));
+            if let Some(detail) = detail {
+                part.insert("detail".to_string(), json!(detail));
+            }
+            Value::Object(part)
+        }
+    }
+}
+
 /// system 提示词 wire 化：user-prefix 模式改写 role 与文案（02 §六.11）
 fn system_prompt_message(prompt: &str, wire_mode: SystemPromptWireMode) -> ChatMessage {
     match wire_mode {
@@ -1219,5 +1358,186 @@ mod tests {
         // 消息级：设置 cache_control 字段
         let message = wire_user("hi").with_cache_control(CacheControl::Ephemeral1h);
         assert_eq!(message.cache_control, Some(CacheControl::Ephemeral1h));
+    }
+
+    // ── to_responses_input_items（DEEPCHECK-05 #10：Responses 轨 input items）──
+
+    /// 构造带思考的 assistant 消息（Require 模式回传断言用）
+    fn assistant_with_thought(text: &str, thought: &str) -> AgentMessage {
+        let mut message = assistant_msg(vec![text_block(text)]);
+        message.metadata = Some(serde_json::json!({ "thought": thought }));
+        message
+    }
+
+    #[test]
+    fn responses_input_basic_message_items() {
+        // user → message item（content 字符串）；system → message item（role=system）
+        let items = to_responses_input_items(
+            &[
+                user_msg(vec![text_block("你好")]),
+                message(AgentMessageRole::System, vec![text_block("系统指令")]),
+            ],
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(items.len(), 2);
+        assert_eq!(
+            items[0],
+            json!({ "type": "message", "role": "user", "content": "你好" })
+        );
+        assert_eq!(
+            items[1],
+            json!({ "type": "message", "role": "system", "content": "系统指令" })
+        );
+    }
+
+    #[test]
+    fn responses_input_tool_loop_items() {
+        // 工具循环：assistant（文本 + tool_call）→ tool 结果 → function_call 与
+        // function_call_output items 分开（Responses 形状；arguments canonical 序列化）
+        let assistant = assistant_msg(vec![
+            text_block("我来查"),
+            tool_call_block("call_1", "read_file", json!({ "zeta": 1, "alpha": 2 })),
+        ]);
+        let tool = message(
+            AgentMessageRole::Tool,
+            vec![tool_result_block("call_1", ToolOutput::text("文件内容"))],
+        );
+        let items = to_responses_input_items(
+            &[assistant, tool],
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(items.len(), 3);
+        assert_eq!(
+            items[0],
+            json!({ "type": "message", "role": "assistant", "content": "我来查" })
+        );
+        assert_eq!(
+            items[1],
+            json!({
+                "type": "function_call",
+                "call_id": "call_1",
+                "name": "read_file",
+                "arguments": r#"{"alpha":2,"zeta":1}"#,
+            })
+        );
+        assert_eq!(
+            items[2],
+            json!({
+                "type": "function_call_output",
+                "call_id": "call_1",
+                "output": "文件内容",
+            })
+        );
+    }
+
+    #[test]
+    fn responses_input_assistant_only_tool_calls_skips_message_item() {
+        // 无文本纯工具调用 → 不发空 message item，只发 function_call items
+        let assistant = assistant_msg(vec![tool_call_block("c1", "search", json!({}))]);
+        let items = to_responses_input_items(
+            &[assistant],
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["type"], "function_call");
+        assert_eq!(items[0]["call_id"], "c1");
+    }
+
+    #[test]
+    fn responses_input_reasoning_item_before_message() {
+        // Require 模式 + 有思考内容 → reasoning item 先于 message item（对齐
+        // OpenAI response.output 顺序）；Omit 模式 → 无 reasoning item
+        let assistant = assistant_with_thought("正文", "思考摘要");
+        let items = to_responses_input_items(
+            &[assistant],
+            ReasoningContentMode::Require,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(items.len(), 2);
+        assert_eq!(
+            items[0],
+            json!({ "type": "reasoning", "content": "思考摘要" })
+        );
+        assert_eq!(items[1]["type"], "message");
+        assert_eq!(items[1]["role"], "assistant");
+
+        let items = to_responses_input_items(
+            &[assistant_with_thought("正文", "思考摘要")],
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(items.len(), 1, "Omit 模式不得发 reasoning item");
+        assert_eq!(items[0]["type"], "message");
+    }
+
+    #[test]
+    fn responses_input_empty_assistant_skipped() {
+        // 无文本 / 无工具调用 / 无思考 → 整条跳过（与 chat 轨 continue 同语义）
+        let assistant = assistant_msg(Vec::new());
+        let items = to_responses_input_items(
+            &[assistant],
+            ReasoningContentMode::Require,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert!(items.is_empty(), "空 assistant 消息不得产出 items");
+    }
+
+    #[test]
+    fn responses_input_user_prefix_rewrites_system_role() {
+        // wire_mode=user-prefix: system message rewritten to user + prefix (same as chat rail)
+        let items = to_responses_input_items(
+            &[message(AgentMessageRole::System, vec![text_block("指令")])],
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::UserPrefix,
+        );
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["type"], "message");
+        assert_eq!(items[0]["role"], "user");
+        assert_eq!(
+            items[0]["content"],
+            "System instructions for this run:\n\n指令"
+        );
+    }
+
+    #[test]
+    fn responses_input_multimodal_parts() {
+        // metadata.contentParts 含 image_url → parts 数组（input_text / input_image）
+        let mut user = user_msg(vec![text_block("看图")]);
+        user.metadata = Some(serde_json::json!({
+            "contentParts": [
+                { "type": "text", "text": "看图" },
+                { "type": "image_url", "image_url": { "url": "https://example.com/a.png", "detail": "high" } },
+            ],
+        }));
+        let items = to_responses_input_items(
+            &[user],
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["type"], "message");
+        assert_eq!(items[0]["role"], "user");
+        assert_eq!(
+            items[0]["content"],
+            json!([
+                { "type": "input_text", "text": "看图" },
+                { "type": "input_image", "image_url": "https://example.com/a.png", "detail": "high" },
+            ])
+        );
+    }
+
+    #[test]
+    fn responses_input_tool_call_id_sanitized() {
+        // 非法 id 字符消毒（与 chat 轨 tool_calls 同口径，P1）
+        let assistant = assistant_msg(vec![tool_call_block("a/b:c", "read_file", json!({}))]);
+        let items = to_responses_input_items(
+            &[assistant],
+            ReasoningContentMode::Omit,
+            SystemPromptWireMode::NativeSystemRole,
+        );
+        assert_eq!(items[0]["call_id"], "a_b_c");
     }
 }

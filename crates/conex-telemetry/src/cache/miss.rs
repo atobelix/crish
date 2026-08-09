@@ -6,7 +6,7 @@
 //!   （pi-cache-analysis.md:269-278）；
 //! - 断裂判定：Claude Code 两阶段 `cacheRead 下降 >5% 且 >2000 token`
 //!   （claude-code-cache-analysis.md:395-410）；
-//! - 归因分类：jcode `KvCacheMissReason` 收缩为 8 类
+//! - 归因分类：jcode `KvCacheMissReason` 收缩为 7 类
 //!   （jcode-cache-analysis.md:102-117）。
 
 use crate::cache::math::CacheBreakdownMath;
@@ -27,7 +27,7 @@ pub const WARN_MISSED_COST_USD: f64 = 0.10;
 /// 命中率合理下限（jcode 85% 阈值，LowRead 判定用）
 pub const LOW_HIT_RATIO_PCT: f64 = 0.85;
 
-/// miss 归因分类（8 类，对齐 jcode `KvCacheMissReason` 收缩版；
+/// miss 归因分类（7 类，对齐 jcode `KvCacheMissReason` 收缩版；
 /// jcode-cache-analysis.md:104-116）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MissReason {
@@ -35,8 +35,6 @@ pub enum MissReason {
     ProviderSwitch,
     /// 更换模型（pi：模型切换不豁免，miss 仍计数）
     ModelSwitch,
-    /// 上游通道更换（本模块 classify 无对应输入，由上层直判直构）
-    UpstreamSwitch,
     /// 缓存 TTL 过期（空闲超时）
     Expired,
     /// system prompt 中途变化（harness 自伤）
@@ -185,21 +183,21 @@ mod tests {
     }
 
     #[test]
-    fn miss_reason_has_exactly_eight_variants() {
-        // 钉死 8 类枚举完整性（防未来缩减）；UpstreamSwitch 由上层直构，
-        // 其余 7 类均可由 classify 产生（见各分类测试）
+    fn miss_reason_has_exactly_seven_variants() {
+        // 钉死 7 类枚举完整性（防未来缩减）；2026-08-09 遥测零消费清理
+        // 删除 UpstreamSwitch（classify 无对应输入、上层无直构方、wire 层
+        // MissAttribution 无对应类——纯冗余），其余 7 类均可由 classify 产生
+        // （见各分类测试）
         let reasons = [
             MissReason::ProviderSwitch,
             MissReason::ModelSwitch,
-            MissReason::UpstreamSwitch,
             MissReason::Expired,
             MissReason::HarnessSystemChanged,
             MissReason::HarnessToolsChanged,
             MissReason::HarnessPrefixChanged,
             MissReason::Unknown,
         ];
-        assert_eq!(reasons.len(), 8);
-        assert_eq!(reasons[2], MissReason::UpstreamSwitch);
+        assert_eq!(reasons.len(), 7);
     }
 
     // ── detect_miss 各分支 ──
@@ -411,6 +409,7 @@ mod tests {
         crate::cache::signature::CacheBaseline {
             signature: sig(1, 1, vec![1, 2, 3]),
             input_total,
+            read: 0,
             provider: "deepseek".to_string(),
             model: "deepseek-v4-flash".to_string(),
             completed_at_ms: 1000,

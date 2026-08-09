@@ -24,16 +24,16 @@ pub mod vendor;
 mod deepseek_invariants;
 
 pub use build::{
-    build_chat_completions_request_body, build_system_prompt, resolve_endpoint,
-    ChatCompletionsRequestOptions, MaxTokensField, RequestBuildContext,
+    build_chat_completions_request_body, build_responses_request_body, build_system_prompt,
+    resolve_endpoint, ChatCompletionsRequestOptions, MaxTokensField, RequestBuildContext,
 };
 pub use cache::{
     CacheCapability, CacheControl, CacheKey, CacheMechanism, CacheRetention, TtlBucket,
     OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH,
 };
 pub use messages::{
-    stringify_tool_output, system_prompt_as_user_prefix, to_chat_messages, ChatContent,
-    ChatContentPart, ChatMessage, ReasoningContentMode,
+    stringify_tool_output, system_prompt_as_user_prefix, to_chat_messages,
+    to_responses_input_items, ChatContent, ChatContentPart, ChatMessage, ReasoningContentMode,
 };
 pub use schema::{canonical_json_string, canonicalize_schema};
 pub use tools::{

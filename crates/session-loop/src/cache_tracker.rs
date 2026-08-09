@@ -151,10 +151,14 @@ impl CacheStatsTracker {
         self
     }
 
-    /// 覆盖缓存 TTL（秒；0 = 未知 / 无缓存；T-40 在 P3 查询结果可及后调用）
+    /// 覆盖缓存 TTL（秒；0 = 未知 / 无缓存）
     ///
-    /// 待接（F1 审计 F3-03）：当前全 crate 零消费（预留接口）——T-40 引擎
-    /// 接线点（跨 run 缓存基线持久化）落地后由 engine 侧调用。
+    /// 演进用途登记（2026-08-09 遥测零消费清理，DEEPCHECK-05 #5）：运行期
+    /// 调整 TTL 的预留接口——当前生产路径统一走 [`Self::from_config`] 经
+    /// [CacheTrackingConfig] 构造注入（engine 层 P3 查询结果装配），本方法
+    /// 为未来"运行中刷新 TTL 路由表"接线点（如 P3 表热更新 / 用户手动改
+    /// TTL 后会话内生效）；尚无消费方，按项目惯例以 allow 登记挂起。
+    #[allow(dead_code)]
     pub fn set_ttl(&mut self, ttl_seconds: u64) {
         self.ttl_seconds = ttl_seconds;
     }
@@ -305,6 +309,7 @@ impl CacheStatsTracker {
         self.baseline = Some(CacheBaseline {
             signature,
             input_total: breakdown.input_total,
+            read: breakdown.read,
             provider: self.provider.clone(),
             model: self.model.clone(),
             completed_at_ms,
@@ -353,6 +358,13 @@ impl CacheStatsTracker {
     /// 冷缓存预警判定（请求启动路径，P5 §3.4.4）：无基线 / 未超 TTL /
     /// TTL 未知（调用方传 0 时按 ttl_seconds == 0 不判定——P5 约定 TTL
     /// 查询失败不提示，见函数注释）→ None
+    ///
+    /// 口径登记（2026-08-09 遥测零消费清理，DEEPCHECK-05 #5）：本方法是
+    /// **run 内**路径（消费当前 run 的基线），生产侧冷缓存预警现由 engine
+    /// 跨 run 路径承担——engine 已统一直接消费 telemetry 纯函数
+    /// [`cold_cache_check`] / [`is_cold`]（engine.rs `cold_cache_warning_event`），
+    /// 本方法与之一体（同一纯函数底座），待跨 run 基线续接（session-loop
+    /// 侧）接线后成为 run 启动路径消费点。
     pub fn cold_cache_check(&self, now_ms: u64) -> Option<ColdCacheWarning> {
         if self.ttl_seconds == 0 {
             return None;
@@ -417,10 +429,11 @@ impl CacheStatsTracker {
     /// 1. 压缩代数变化 → `Compaction`（C13 防御路径：`on_compaction` 已作废
     ///    基线，正常不可达；此归因用于历史事件解释）；
     /// 2. `classify`（TTL 超时优先 → 供应商 / 模型切换 → 前缀哈希变化，
-    ///    任务书 T-35 口径）映射为 8 类；
-    /// 3. `Unknown` / `UpstreamSwitch` 兜底细化：read == 0 且报告过缓存 →
-    ///    `ZeroRead`；命中率低于 85% → `LowRead`；其余 `Unknown`
-    ///    （`Cold` 只在无基线时出现——此时 detect 不计 miss，故不产出）。
+    ///    任务书 T-35 口径）映射为 7 类；
+    /// 3. `Unknown` 兜底细化：read == 0 且报告过缓存 → `ZeroRead`；
+    ///    断裂判定（cacheRead 骤降 >5% 且 >2000 token）或命中率低于 85%
+    ///    → `LowRead`；其余 `Unknown`（`Cold` 只在无基线时出现——此时
+    ///    detect 不计 miss，故不产出）。
     fn classify_miss(&self, breakdown: &CacheBreakdownMath, completed_at_ms: u64) -> MissAttribution {
         let baseline = self.baseline.as_ref();
         // 1. 压缩代数变化（正常不可达的防御分支）
@@ -455,17 +468,36 @@ impl CacheStatsTracker {
             MissReason::HarnessSystemChanged
             | MissReason::HarnessToolsChanged
             | MissReason::HarnessPrefixChanged => MissAttribution::PrefixChanged,
-            MissReason::UpstreamSwitch | MissReason::Unknown => {
+            MissReason::Unknown => {
                 // 兜底细化（P5 §3.4.3 第 7-8 类；detect 已保证 reported_cache）
                 if breakdown.read == 0 {
                     MissAttribution::ZeroRead
-                } else if breakdown.hit_ratio.map_or(true, |r| r < LOW_HIT_RATIO_PCT) {
+                } else if self.is_break_signal(baseline, breakdown)
+                    || breakdown.hit_ratio.map_or(true, |r| r < LOW_HIT_RATIO_PCT)
+                {
                     MissAttribution::LowRead
                 } else {
                     MissAttribution::Unknown
                 }
             }
         }
+    }
+
+    /// 断裂判定信号（P5 §3.4.2 / DEEPCHECK-05 #5 接线点）：`cacheRead` 较
+    /// 上次骤降 >5% 且绝对下降 >2000 token → 缓存条目被驱逐 / 断裂的强
+    /// 信号，兜底归因 LowRead（签名未变、未过期、未切换时仍低命中的最
+    /// 可能解释；Claude Code 两阶段口径，[`MissDetector::is_break`]）。
+    ///
+    /// 无基线（首轮 / 压缩后）→ false（无 prev_read 可比较）。
+    fn is_break_signal(
+        &self,
+        baseline: Option<&CacheBaseline>,
+        cur: &CacheBreakdownMath,
+    ) -> bool {
+        let Some(b) = baseline else {
+            return false;
+        };
+        MissDetector::is_break(b.read, cur.read, b.input_total)
     }
 }
 
@@ -804,6 +836,37 @@ mod tests {
             .record_usage(scalars(10_000, 1_000, 500, None), 100, 10_100, 2_000)
             .expect("低命中率必须计 miss");
         assert_eq!(low_read.attribution, MissAttribution::LowRead);
+    }
+
+    /// 断裂判定接线（2026-08-09 零消费清理，DEEPCHECK-05 #5）：cacheRead
+    /// 骤降 >5% 且 >2000 token → 兜底归因 LowRead（即使命中率仍在 85% 以上
+    /// ——断裂是缓存条目被驱逐的强信号，P5 §3.4.2）；未达断裂阈值且命中率
+    /// 正常 → Unknown（不强判）
+    #[test]
+    fn record_usage_break_signal_forces_low_read() {
+        let mut t = tracker(60);
+        t.capture_signature(Some("sys"), &tools(), &[]);
+        assert!(t
+            .record_usage(scalars(40_000, 40_000, 0, None), 100, 40_100, 1_000)
+            .is_none());
+        // 第二轮：read 骤降 2100 token（5.25% > 5% 且 > 2000）→ 断裂信号
+        t.capture_signature(Some("sys"), &tools(), &[]);
+        let miss = t
+            .record_usage(scalars(40_000, 37_900, 0, None), 100, 40_100, 2_000)
+            .expect("超过噪声地板必须计 miss");
+        assert_eq!(miss.attribution, MissAttribution::LowRead, "断裂信号强制 LowRead");
+        assert_eq!(miss.missed_tokens, 2_100);
+        // 对照：下降 1500 token（3.75% < 5%）且命中率 96.25% ≥ 85% → 不强判
+        let mut t2 = tracker(60);
+        t2.capture_signature(Some("sys"), &tools(), &[]);
+        assert!(t2
+            .record_usage(scalars(40_000, 40_000, 0, None), 100, 40_100, 1_000)
+            .is_none());
+        t2.capture_signature(Some("sys"), &tools(), &[]);
+        let miss = t2
+            .record_usage(scalars(40_000, 38_500, 0, None), 100, 40_100, 2_000)
+            .expect("超过噪声地板必须计 miss");
+        assert_eq!(miss.attribution, MissAttribution::Unknown, "未达断裂阈值不强判");
     }
 
     /// 噪声地板与 reportedCache 粘性：missed ≤ 1024 不计；从未报告过缓存活动不计

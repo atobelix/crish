@@ -61,6 +61,7 @@ mod tests {
         CacheBaseline {
             signature: RequestSignature::default(),
             input_total,
+            read: 0,
             provider: "deepseek".to_string(),
             model: "deepseek-v4-flash".to_string(),
             completed_at_ms,

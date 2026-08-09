@@ -128,6 +128,18 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
     reloadPrices(true);
   }, [reloadPrices]);
 
+  // DEEPCHECK-02 P0：设置页加载时拉取运行时模型目录快照（catalog_get →
+  // pricingStore 快照注入；版本号幂等 + 失败内部降级静态表，无需通知用户）
+  useEffect(() => {
+    let cancelled = false;
+    void import('../../api/modelCatalog').then(({ fetchCatalogSnapshot }) => {
+      if (!cancelled) void fetchCatalogSnapshot();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     setHistory(loadUsageSnapshot());
   }, []);
