@@ -3,12 +3,31 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { BlockRenderer } from './BlockRenderer';
 import { HiddenInput } from './HiddenInput';
 import { CursorLayer } from './CursorLayer';
-import { useEditorStore } from '../core/EditorStore';
+import { useEditorStore, type EditorState } from '../core/EditorStore';
 import { useTableStore } from '../core/TableStore';
 import { MarkdownParser } from '../core/parser';
 import { HeightMap, HeightOracle, classifyLine } from '../core/HeightMap';
 
 import { type CodeState } from '../core/parser';
+
+/**
+ * 行状态惰性访问器（R3-B1 访问器切换）：store 目前只暴露了
+ * getLine/getLineCount/getLineIndex，未暴露行状态访问器——此处镜像
+ * getLine 的「主数组 + 流式尾段」双段边界语义（EditorStore.getLine 的
+ * 实现：尾段为空 → 直接读主数组；非空 → 尾段「接管」主数组末行，
+ * i ≥ boundary = main.length - 1 时从尾段相对下标 i - boundary 取）：
+ * - 尾段为空（常规编辑/加载路径）：直接读主状态数组（全量，零额外开销）；
+ * - 尾段非空（append 流式期间）：按边界取尾段状态，全程不触读物化
+ *   codeBlockState 视图（尾段非空时物化会执行 concat 过渡成本）。
+ * 渲染热路径（LineItem 取行/主组件 estimateSize/批量测量）统一经
+ * store.getState().getLine(i) + 本访问器取行内容与状态，绝不读
+ * state.lines / state.codeBlockState 物化数组（R3-B1 验收）。
+ */
+function getLineState(s: EditorState, i: number): CodeState {
+  if (s.streamTailCodeState.length === 0) return s.mainCodeState[i];
+  const boundary = s.mainLines.length - 1;
+  return i < boundary ? s.mainCodeState[i] : s.streamTailCodeState[i - boundary];
+}
 
 // 行渲染单元（09 §4 C1 滚动契约）：
 // - 位置由命令式通道独占：tanstack directDomUpdates 模式把行 top 直接写 DOM
@@ -63,12 +82,14 @@ const LineItem = React.memo(({
     if (!lineText.trim().startsWith('|')) return undefined;
     let firstTableIndex = index;
     while (firstTableIndex > 0) {
-       const prevLine = state.lines[firstTableIndex - 1];
-       if (prevLine && prevLine.trim().startsWith('|')) {
-          firstTableIndex--;
-       } else {
-          break;
-       }
+      // 经访问器读上一行（R3-B1：不读物化 state.lines——尾段非空时
+      // 物化会执行 concat；getLine 是双段惰性视图，语义与物化视图一致）
+      const prevLine = state.getLine(firstTableIndex - 1);
+      if (prevLine && prevLine.trim().startsWith('|')) {
+        firstTableIndex--;
+      } else {
+        break;
+      }
     }
     return `table-${firstTableIndex}`;
   });
@@ -102,9 +123,19 @@ const LineItem = React.memo(({
 
 export const MarkdownEngine: React.FC = () => {
   const parentRef = useRef<HTMLDivElement>(null);
-  const lines = useEditorStore(state => state.lines);
-  const offsets = useEditorStore(state => state.lineOffsets);
-  const codeBlockState = useEditorStore(state => state.codeBlockState);
+  // —— R3-B1 访问器切换：触发信号订阅（不订阅物化视图 state.lines /
+  // state.codeBlockState——尾段非空时物化会执行 O(全文) concat 过渡成本，
+  // 渲染热路径已完全移除该依赖）——
+  // 双段存储引用（main* + streamTail*）：任何内容变更（编辑/append/undo/
+  // flush 等）都至少换其一新引用，作为主组件重渲染的触发信号；
+  // 行内容/行状态在渲染时经 store.getState().getLine(i)/getLineState 惰性读取。
+  const mainLines = useEditorStore(state => state.mainLines);
+  const streamTail = useEditorStore(state => state.streamTail);
+  const mainCodeState = useEditorStore(state => state.mainCodeState);
+  const streamTailCodeState = useEditorStore(state => state.streamTailCodeState);
+  // 行数信号：count 变化触发重渲染是必要行为（virtualizer count 同步）；
+  // 选择器每次 set 都执行（O(1)，纯 length 读取），返回值按值比较。
+  const lineCount = useEditorStore(state => state.getLineCount());
   const setCursorPos = useEditorStore(state => state.setCursorPos);
 
   // ── 行高模型（R2-B 定位层）：HeightOracle 预测 + HeightMap 回填（01 问题 1/8，09 §4 C2）──
@@ -122,7 +153,7 @@ export const MarkdownEngine: React.FC = () => {
 
   // Virtualization setup: fixed size = 28px perfectly aligns with grid paper CSS
   const virtualizer = useVirtualizer({
-    count: lines.length,
+    count: lineCount,
     getScrollElement: () => parentRef.current,
     estimateSize: (i) => {
       // 行高来源优先级：HeightMap 存储值（实测回填 / 插入时预测）→ oracle 即时预测。
@@ -135,8 +166,12 @@ export const MarkdownEngine: React.FC = () => {
         const h = hm.getHeight(i);
         if (h !== undefined) return h;
       }
-      const raw = lines[i] ?? '';
-      const st = codeBlockState[i];
+      // R3-B1：行内容/状态经访问器惰性读取（estimateSize 可能在渲染期间
+      // 被库调用，直接 getState() 读最新——同一同步 tick 内与订阅状态一致；
+      // 不读物化 lines/codeBlockState 视图）
+      const s = useEditorStore.getState();
+      const raw = s.getLine(i) ?? '';
+      const st = getLineState(s, i);
       const oracle = oracleRef.current;
       if (oracle) return oracle.predict(classifyLine(raw, st), raw, st);
       return 28;
@@ -187,9 +222,13 @@ export const MarkdownEngine: React.FC = () => {
     const hm = heightMapRef.current;
     const oracle = oracleRef.current;
     if (!hm || !oracle) return;
-    hm.syncTo(lines.length, (i) => {
-      const raw = lines[i] ?? '';
-      const st = codeBlockState[i];
+    // R3-B1：快照经 store.getState() 取一次，后续行/状态读取走访问器
+    // （getLine / getLineState），不读物化视图；effect 由双段引用触发
+    // 信号 + lineCount 驱动（见依赖数组——任何内容变更必换其一新引用）
+    const s = useEditorStore.getState();
+    hm.syncTo(s.getLineCount(), (i) => {
+      const raw = s.getLine(i) ?? '';
+      const st = getLineState(s, i);
       return oracle.predict(classifyLine(raw, st), raw, st);
     });
     for (const item of virtualizer.getVirtualItems()) {
@@ -199,9 +238,9 @@ export const MarkdownEngine: React.FC = () => {
         rowRefs.current.delete(item.index);
         continue;
       }
-      const raw = lines[item.index];
+      const raw = s.getLine(item.index);
       if (raw === undefined) continue;
-      const st = codeBlockState[item.index];
+      const st = getLineState(s, item.index);
       const kind = classifyLine(raw, st);
       const predicted = oracle.predict(kind, raw, st);
       const measured = el.offsetHeight;
@@ -216,9 +255,14 @@ export const MarkdownEngine: React.FC = () => {
     }
     hm.flush();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lines, codeBlockState, windowKey]);
+  }, [mainLines, streamTail, mainCodeState, streamTailCodeState, lineCount, windowKey]);
 
   const handleContainerClick = (e: React.MouseEvent) => {
+    // R3-B1：事件处理器统一取一次最新 store 快照，行内容/偏移经访问器
+    // （getLine / getLineCount / lineOffsets）读取——同一快照下与物化
+    // 视图语义完全一致，且不依赖闭包捕获的旧数组引用。
+    const st = useEditorStore.getState();
+
     // If we just finished a drag selection, ignore the synthetic click
     if (Date.now() - ((window as any).__CRISH_LAST_DRAG_END_TIME || 0) < 50) return;
 
@@ -262,18 +306,18 @@ export const MarkdownEngine: React.FC = () => {
     }
 
     // Prevent table separator from being clicked. Redirect to previous row (table header)
-    if (clickedLineIndex !== -1 && lines[clickedLineIndex]?.trim().match(/^\|?[\s:-]*[-]+[\s:-]*\|/)) {
+    if (clickedLineIndex !== -1 && st.getLine(clickedLineIndex)?.trim().match(/^\|?[\s:-]*[-]+[\s:-]*\|/)) {
       if (clickedLineIndex > 0) {
-        const prevLineStart = offsets.getOffset(clickedLineIndex - 1);
-        const prevLineLen = lines[clickedLineIndex - 1].length;
+        const prevLineStart = st.lineOffsets.getOffset(clickedLineIndex - 1);
+        const prevLineLen = st.getLine(clickedLineIndex - 1).length;
         setCursorPos(prevLineStart + prevLineLen);
         return;
       }
     }
 
     if (clickedPadding && clickedLineIndex !== -1 && parentRef.current) {
-       const lineStart = offsets.getOffset(clickedLineIndex);
-       const lineLen = lines[clickedLineIndex].length;
+       const lineStart = st.lineOffsets.getOffset(clickedLineIndex);
+       const lineLen = st.getLine(clickedLineIndex).length;
        const containerRect = parentRef.current.getBoundingClientRect();
        
        if (e.clientX < containerRect.left + 50) {
@@ -327,8 +371,8 @@ export const MarkdownEngine: React.FC = () => {
 
     // 3. Check if we clicked directly on an HR (thematic break)
     if (target.tagName === 'HR' || target.classList.contains('hr-rendered')) {
-      const lineStart = offsets.getOffset(clickedLineIndex);
-      const lineLen = lines[clickedLineIndex].length;
+      const lineStart = st.lineOffsets.getOffset(clickedLineIndex);
+      const lineLen = st.getLine(clickedLineIndex).length;
       const rect = target.getBoundingClientRect();
       if (e.clientX - rect.left < rect.width / 2) {
         setCursorPos(lineStart);
@@ -389,13 +433,13 @@ export const MarkdownEngine: React.FC = () => {
 
           const rawPos =
             foundTokenStart + subOffset + (range.startOffset || 0);
-          const lineStart = offsets.getOffset(clickedLineIndex);
-          const lineLen = lines[clickedLineIndex].length;
+          const lineStart = st.lineOffsets.getOffset(clickedLineIndex);
+          const lineLen = st.getLine(clickedLineIndex).length;
           setCursorPos(Math.min(lineStart + lineLen, rawPos));
         } else {
           // Fallback to line start + offset
-          const lineStart = offsets.getOffset(clickedLineIndex);
-          const lineLen = lines[clickedLineIndex].length;
+          const lineStart = st.lineOffsets.getOffset(clickedLineIndex);
+          const lineLen = st.getLine(clickedLineIndex).length;
           setCursorPos(
             Math.min(lineStart + lineLen, lineStart + (range.startOffset || 0))
           );
@@ -407,16 +451,16 @@ export const MarkdownEngine: React.FC = () => {
     // 4. Fallback: User clicked an empty line, or empty space far away from text, or a preview element (HR, Math)
     if (clickedLineIndex !== -1) {
       // If user clicked the table separator empty space, redirect to the header row above it
-      if (lines[clickedLineIndex]?.trim().match(/^\|?[\s:-]*[-]+[\s:-]*\|/)) {
+      if (st.getLine(clickedLineIndex)?.trim().match(/^\|?[\s:-]*[-]+[\s:-]*\|/)) {
         if (clickedLineIndex > 0) {
-          const prevLineStart = offsets.getOffset(clickedLineIndex - 1);
-          const prevLineLen = lines[clickedLineIndex - 1].length;
+          const prevLineStart = st.lineOffsets.getOffset(clickedLineIndex - 1);
+          const prevLineLen = st.getLine(clickedLineIndex - 1).length;
           setCursorPos(prevLineStart + prevLineLen);
           return;
         }
       }
-      const lineStart = offsets.getOffset(clickedLineIndex);
-      const lineLen = lines[clickedLineIndex].length;
+      const lineStart = st.lineOffsets.getOffset(clickedLineIndex);
+      const lineLen = st.getLine(clickedLineIndex).length;
 
       // Use token-mapping from closest rendered element
       const tokenEl = (e.target as HTMLElement).closest('[data-token-start]');
@@ -437,10 +481,10 @@ export const MarkdownEngine: React.FC = () => {
     } else {
       // Clicked in the container but outside any specific line (e.g. bottom empty space)
       // Put cursor at the very end of the document
-      const lastLineIdx = lines.length - 1;
+      const lastLineIdx = st.getLineCount() - 1;
       if (lastLineIdx >= 0) {
-        const lineStart = offsets.getOffset(lastLineIdx);
-        const lineLen = lines[lastLineIdx].length;
+        const lineStart = st.lineOffsets.getOffset(lastLineIdx);
+        const lineLen = st.getLine(lastLineIdx).length;
         console.log('Fallback to end of doc:', lineStart + lineLen);
         setCursorPos(lineStart + lineLen);
       }
@@ -505,22 +549,31 @@ export const MarkdownEngine: React.FC = () => {
             marginTop: '14px',
           }}
         >
-          {virtualizer.getVirtualItems().map((virtualRow) => {
-            const index = virtualRow.index;
-            const lineText = lines[index];
-            const offset = offsets.getOffset(index);
-            const isCode = codeBlockState[index];
-            return (
-              <LineItem
-                key={index}
-                index={index}
-                lineText={lineText}
-                offset={offset}
-                isCode={isCode}
-                rowRef={registerRowRef}
-              />
-            );
-          })}
+          {(() => {
+            // R3-B1：渲染取行经 store 访问器（方案 A：渲染时经
+            // store.getState().getLine(i) 读最新）——双段惰性读取，
+            // 尾段非空时零 concat 物化；重渲染触发由主组件订阅的
+            // 双段引用信号 + lineCount 驱动（count 变化/行内容变化
+            // 均换新引用），与物化视图语义一致。同一渲染帧内 store
+            // 不会变更（React 同步渲染），快照取一次即可。
+            const s = useEditorStore.getState();
+            return virtualizer.getVirtualItems().map((virtualRow) => {
+              const index = virtualRow.index;
+              const lineText = s.getLine(index);
+              const offset = s.lineOffsets.getOffset(index);
+              const isCode = getLineState(s, index);
+              return (
+                <LineItem
+                  key={index}
+                  index={index}
+                  lineText={lineText}
+                  offset={offset}
+                  isCode={isCode}
+                  rowRef={registerRowRef}
+                />
+              );
+            });
+          })()}
         </div>
 
 
@@ -537,7 +590,7 @@ export const MarkdownEngine: React.FC = () => {
             const first = items.length ? items[0].index : -1;
             const last = items.length ? items[items.length - 1].index : -1;
             const totalH = hm ? Math.round(hm.totalHeight * 10) : 0;
-            return `${first}-${last}-${lines.length}-${totalH}`;
+            return `${first}-${last}-${lineCount}-${totalH}`;
           })()}
         />
         <HiddenInput containerRef={parentRef} />
