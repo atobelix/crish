@@ -1,0 +1,191 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--bg-primary);
+  padding: var(--panel-pad-y, 10px) var(--panel-pad-x, 12px);
+  overflow-y: auto;
+}
+
+.status {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.statusIco {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+}
+.state-launching {
+  color: var(--accent-color);
+}
+.state-running {
+  color: var(--color-success);
+}
+.state-stopping {
+  color: var(--text-secondary);
+}
+.state-crashed {
+  color: var(--color-warning);
+}
+.state-error {
+  color: var(--color-error);
+}
+
+.statusText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+}
+
+.statusTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+}
+
+.statusDesc {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  line-height: var(--line-height-compact);
+}
+
+.urlLine {
+  display: block;
+  margin-top: var(--space-0_5);
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+}
+
+.urlCode {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: inherit;
+  color: var(--text-secondary);
+  padding: 1px 6px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.aiReady {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--text-success);
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
+  background: color-mix(in srgb, var(--color-success) 8%, transparent);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-1) var(--space-1_5);
+}
+
+.readyDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-success);
+  animation: readyPulse 1.6s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes readyPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .readyDot {
+    animation: none;
+  }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-0_5);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0_5);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  background: var(--bg-primary);
+  border-radius: var(--radius-md, 8px);
+  padding: 5px 10px;
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  color: var(--text-secondary);
+  line-height: var(--line-height-compact);
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--border-color);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+.btn:disabled {
+  opacity: var(--opacity-disabled, 0.4);
+  cursor: default;
+}
+
+.btnPrimary {
+  border-color: color-mix(in srgb, var(--accent-color) 45%, transparent);
+  color: var(--accent-color);
+}
+.btnPrimary:hover:not(:disabled) {
+  border-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 6%, transparent);
+}
+
+.btnDanger {
+  border-color: color-mix(in srgb, var(--color-error) 45%, transparent);
+  color: var(--color-error);
+}
+.btnDanger:hover:not(:disabled) {
+  border-color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 6%, transparent);
+}
+
+.spin {
+  animation: spinKeyframe 0.8s linear infinite;
+}
+@keyframes spinKeyframe {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

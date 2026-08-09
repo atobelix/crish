@@ -20,6 +20,8 @@ export type PreviewToolbarProps = {
   bookmarked: boolean;
   showHist: boolean;
   canExternal: boolean;
+  /** AI 受管浏览器模式（BrowserPanel）；true 时工具栏地址栏等仍可见但内容区切换 */
+  aiBrowser: boolean;
   onBack: () => void;
   onForward: () => void;
   onHome: () => void;
@@ -30,6 +32,7 @@ export type PreviewToolbarProps = {
   onBookmark: () => void;
   onToggleHist: () => void;
   onOpenExternal: () => void;
+  onToggleAiBrowser: () => void;
 };
 
 export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
@@ -43,6 +46,7 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
   bookmarked,
   showHist,
   canExternal,
+  aiBrowser,
   onBack,
   onForward,
   onHome,
@@ -53,6 +57,7 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
   onBookmark,
   onToggleHist,
   onOpenExternal,
+  onToggleAiBrowser,
 }) => {
   const iconSz = 14;
   return (
@@ -188,6 +193,20 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
           aria-haspopup="dialog"
         >
           <Lucide.History size={iconSz} strokeWidth={1.75} />
+        </button>
+      </Tooltip>
+      <Tooltip
+        content={aiBrowser ? '返回内嵌预览' : 'AI 浏览器（受管窗口）'}
+      >
+        <button
+          type="button"
+          className={`${styles.navBtn} ${aiBrowser ? styles.isOn : ''}`}
+          data-ai-browser-toggle=""
+          onClick={onToggleAiBrowser}
+          aria-label={aiBrowser ? '返回内嵌预览' : 'AI 浏览器（受管窗口）'}
+          aria-pressed={aiBrowser}
+        >
+          <Lucide.Monitor size={iconSz} strokeWidth={1.75} />
         </button>
       </Tooltip>
       <Tooltip content={canExternal ? '系统浏览器打开' : '当前地址无法外部打开'}>
