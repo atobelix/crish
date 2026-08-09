@@ -501,8 +501,15 @@ function updateLinesIncremental(
   newOffsets.updateLines(startLineIdx, deleteCount, newLines.map(l => l.length + 1));
 
   const newCodeState = [...codeBlockState];
-  const newFenceLines: number[] = [];
   const lineDelta = newLines.length - deleteCount;
+  // newFenceLines 惰性构建（R2-E）：快速路径（编辑未触及任何 fence 行）
+  // 零拷贝复用旧引用，见收敛段注释；非快速路径在函数尾部一次性组装
+  // （原生 slice 拷贝前缀 + 扫描区新 fence + 收敛段平移后缀）。
+  let newFenceLines: number[];
+  // 扫描区（编辑点起至收敛/文档尾）内新 fence 行收集器：同样惰性分配，
+  // 量级 = 扫描区长度（常规击键为 0~1 行），永不触碰前缀 fence。
+  let scannedFences: number[] | null = null;
+  let scannedFencePushed = false;
 
   newCodeState.splice(
     startLineIdx,
@@ -510,8 +517,38 @@ function updateLinesIncremental(
     ...new Array<CodeState>(newLines.length).fill('none')
   );
 
+  // —— 二分定位编辑点前最后一个 fence（fenceLines 升序）——
+  let low = 0,
+    high = fenceLines.length - 1;
+  let splitIdx = 0;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (fenceLines[mid] < startLineIdx) {
+      splitIdx = mid + 1;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  // —— O(1) 前缀状态恢复（R2-E：替代原 O(splitIdx) 线性重放）——
+  // fenceLines 严格交替（证明：inCodeBlock/inMathBlock 只会在 fence 行
+  // 翻转；code 围栏与 math 围栏互斥识别——parser 语义「code 块内 $$ 按
+  // code 处理、math 块内 ``` 按 math_block 处理」，且 html 块内 fence
+  // 判定让路，故 fenceLines 内相邻 fence 必然分属一开一闭）。因此
+  // 「处理完 fenceLines[splitIdx-1] 后的累计状态」= 该行类型隐含状态
+  // （fence_start→code、fence_end→none、math_fence_start→math、
+  // math_fence_end→none），编辑点入状态 = 处理完最后一个前缀 fence 的
+  // 状态——读最后一个前缀 fence 的类型即得，无需 parity 数组。
+  // splitIdx = 0（编辑点前无 fence）时入状态恒为双 false。
   let inCodeBlock = false;
   let inMathBlock = false;
+  if (splitIdx > 0) {
+    const lastPrefixFenceState = codeBlockState[fenceLines[splitIdx - 1]];
+    if (lastPrefixFenceState === 'fence_start') inCodeBlock = true;
+    else if (lastPrefixFenceState === 'math_fence_start') inMathBlock = true;
+    // fence_end / math_fence_end → 围栏已闭合，两状态保持 false
+  }
   // 缩进代码块状态（镜像 parser.computeLineOffsets）：行首 ≥4 列缩进（tab
   // 停靠 4 展开）且非空 → 'indent_code'；块内空行保持；非缩进行退出。
   let inIndentCode = inferInIndentCode(
@@ -535,29 +572,6 @@ function updateLinesIncremental(
     (i) => codeBlockState[i],
     startLineIdx
   );
-
-  let low = 0,
-    high = fenceLines.length - 1;
-  let splitIdx = 0;
-  while (low <= high) {
-    const mid = (low + high) >> 1;
-    if (fenceLines[mid] < startLineIdx) {
-      splitIdx = mid + 1;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-
-  for (let i = 0; i < splitIdx; i++) {
-    const fLine = fenceLines[i];
-    const state = codeBlockState[fLine];
-    if (state === 'fence_start') inCodeBlock = true;
-    else if (state === 'fence_end') inCodeBlock = false;
-    else if (state === 'math_fence_start') inMathBlock = true;
-    else if (state === 'math_fence_end') inMathBlock = false;
-    newFenceLines.push(fLine);
-  }
 
   let i = startLineIdx;
   let converged = false;
@@ -709,7 +723,10 @@ function updateLinesIncremental(
     newCodeState[i] = newState;
 
     if (isFence) {
-      newFenceLines.push(i);
+      scannedFencePushed = true;
+      // 惰性创建：常规击键（无 fence 行被触及）不分配
+      if (!scannedFences) scannedFences = [];
+      scannedFences.push(i);
     }
 
     if (i >= startLineIdx + newLines.length) {
@@ -725,6 +742,7 @@ function updateLinesIncremental(
     }
   }
 
+  // —— newFenceLines 组装（R2-E：前缀 O(log) / 快速路径 O(1)）——
   if (converged) {
     // Append remaining fences
     // Find where we left off in the old fenceLines array
@@ -735,9 +753,36 @@ function updateLinesIncremental(
     ) {
       oldFenceStartIdx++;
     }
-    for (let j = oldFenceStartIdx; j < fenceLines.length; j++) {
-      newFenceLines.push(fenceLines[j] + lineDelta);
+    if (lineDelta === 0 && !scannedFencePushed && oldFenceStartIdx === splitIdx) {
+      // —— 零拷贝快速路径（R2-E，每击键主路径）——
+      // 三个条件逐项对应「fence 内容不变」的证明：
+      // 1) lineDelta === 0：行数未变，新旧行号一一对齐；
+      // 2) !scannedFencePushed：扫描区（编辑点至收敛点）无任何 fence 行
+      //    （新行 fence 或旧行 fence 被重放均会置位）；
+      // 3) oldFenceStartIdx === splitIdx：收敛点之前无旧 fence（若有，
+      //    无论被重放（类型未变）还是被丢弃（类型已变，如编辑点开启
+      //    html 块吞掉其后 fence），都不能共享引用）。
+      // 三者齐备时新旧数组逐项一致（前缀原样 + 后缀 +0 平移原样），
+      // 直接复用旧引用零拷贝——fenceLines 全链路只整体替换、绝不就地
+      // 变更（appendText/flushStreamTail/本函数均遵守），共享引用安全；
+      // zustand 订阅语义：引用未变即视为无变更，fence 确实未变，正确。
+      newFenceLines = fenceLines;
+    } else {
+      // 常规路径：原生 slice 一次拷贝前缀（O(splitIdx) 单次内存拷贝，
+      // 仅在 fence 行被编辑触及时发生，量级 = 受影响 fence 数）+ 扫描区
+      // 新 fence + 收敛段剩余 fence +lineDelta 平移（保持原收敛处理不变）
+      const nfl = fenceLines.slice(0, splitIdx);
+      if (scannedFences) nfl.push(...scannedFences);
+      for (let j = oldFenceStartIdx; j < fenceLines.length; j++) {
+        nfl.push(fenceLines[j] + lineDelta);
+      }
+      newFenceLines = nfl;
     }
+  } else {
+    // 未收敛（扫描到文档尾）：前缀 + 扫描区全部 fence（无平移段）
+    const nfl = fenceLines.slice(0, splitIdx);
+    if (scannedFences) nfl.push(...scannedFences);
+    newFenceLines = nfl;
   }
 
   // Current text length calculation from LineOffsetTree
