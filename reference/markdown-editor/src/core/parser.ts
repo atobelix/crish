@@ -33,6 +33,237 @@ type ScanOutcome =
   | { ok: false };
 
 /**
+ * 命名实体表（02 §2.6）：HTML5 常用命名实体的子集，覆盖 CommonMark 0.31.2
+ * 官方套件全部用例（nbsp/amp/copy/AElig/Dcaron/frac34/HilbertSpace/
+ * DifferentialD/ClockwiseContourIntegral/ngE/ouml/quot 等）与常用 Latin-1、
+ * 希腊字母、标点符号实体。值统一用 Unicode 转义序列，规避源码编码风险。
+ */
+const NAMED_ENTITIES: Record<string, string> = {
+  // 基础
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: '\u00A0',
+  // Latin-1 常用
+  copy: '\u00A9',
+  reg: '\u00AE',
+  trade: '\u2122',
+  cent: '\u00A2',
+  pound: '\u00A3',
+  yen: '\u00A5',
+  euro: '\u20AC',
+  curren: '\u00A4',
+  sect: '\u00A7',
+  para: '\u00B6',
+  micro: '\u00B5',
+  middot: '\u00B7',
+  times: '\u00D7',
+  divide: '\u00F7',
+  deg: '\u00B0',
+  plusmn: '\u00B1',
+  sup1: '\u00B9',
+  sup2: '\u00B2',
+  sup3: '\u00B3',
+  frac12: '\u00BD',
+  frac14: '\u00BC',
+  frac34: '\u00BE',
+  iexcl: '\u00A1',
+  iquest: '\u00BF',
+  laquo: '\u00AB',
+  raquo: '\u00BB',
+  ordf: '\u00AA',
+  ordm: '\u00BA',
+  not: '\u00AC',
+  shy: '\u00AD',
+  macr: '\u00AF',
+  acute: '\u00B4',
+  cedil: '\u00B8',
+  uml: '\u00A8',
+  circ: '\u02C6',
+  tilde: '\u02DC',
+  szlig: '\u00DF',
+  // Latin-1 字母
+  AElig: '\u00C6',
+  Aacute: '\u00C1',
+  Acirc: '\u00C2',
+  Agrave: '\u00C0',
+  Aring: '\u00C5',
+  Atilde: '\u00C3',
+  Auml: '\u00C4',
+  Ccedil: '\u00C7',
+  ETH: '\u00D0',
+  Eacute: '\u00C9',
+  Ecirc: '\u00CA',
+  Egrave: '\u00C8',
+  Euml: '\u00CB',
+  Iacute: '\u00CD',
+  Icirc: '\u00CE',
+  Igrave: '\u00CC',
+  Iuml: '\u00CF',
+  Ntilde: '\u00D1',
+  Oacute: '\u00D3',
+  Ocirc: '\u00D4',
+  Ograve: '\u00D2',
+  Oslash: '\u00D8',
+  Otilde: '\u00D5',
+  Ouml: '\u00D6',
+  THORN: '\u00DE',
+  Uacute: '\u00DA',
+  Ucirc: '\u00DB',
+  Ugrave: '\u00D9',
+  Uuml: '\u00DC',
+  Yacute: '\u00DD',
+  aacute: '\u00E1',
+  acirc: '\u00E2',
+  agrave: '\u00E0',
+  aring: '\u00E5',
+  atilde: '\u00E3',
+  auml: '\u00E4',
+  ccedil: '\u00E7',
+  eth: '\u00F0',
+  eacute: '\u00E9',
+  ecirc: '\u00EA',
+  egrave: '\u00E8',
+  euml: '\u00EB',
+  iacute: '\u00ED',
+  icirc: '\u00EE',
+  igrave: '\u00EC',
+  iuml: '\u00EF',
+  ntilde: '\u00F1',
+  oacute: '\u00F3',
+  ocirc: '\u00F4',
+  ograve: '\u00F2',
+  oslash: '\u00F8',
+  otilde: '\u00F5',
+  ouml: '\u00F6',
+  thorn: '\u00FE',
+  uacute: '\u00FA',
+  ucirc: '\u00FB',
+  ugrave: '\u00F9',
+  uuml: '\u00FC',
+  yacute: '\u00FD',
+  yuml: '\u00FF',
+  // 希腊字母
+  Alpha: '\u0391',
+  Beta: '\u0392',
+  Gamma: '\u0393',
+  Delta: '\u0394',
+  Epsilon: '\u0395',
+  Zeta: '\u0396',
+  Eta: '\u0397',
+  Theta: '\u0398',
+  Iota: '\u0399',
+  Kappa: '\u039A',
+  Lambda: '\u039B',
+  Mu: '\u039C',
+  Nu: '\u039D',
+  Xi: '\u039E',
+  Omicron: '\u039F',
+  Pi: '\u03A0',
+  Rho: '\u03A1',
+  Sigma: '\u03A3',
+  Tau: '\u03A4',
+  Upsilon: '\u03A5',
+  Phi: '\u03A6',
+  Chi: '\u03A7',
+  Psi: '\u03A8',
+  Omega: '\u03A9',
+  alpha: '\u03B1',
+  beta: '\u03B2',
+  gamma: '\u03B3',
+  delta: '\u03B4',
+  epsilon: '\u03B5',
+  zeta: '\u03B6',
+  eta: '\u03B7',
+  theta: '\u03B8',
+  iota: '\u03B9',
+  kappa: '\u03BA',
+  lambda: '\u03BB',
+  mu: '\u03BC',
+  nu: '\u03BD',
+  xi: '\u03BE',
+  omicron: '\u03BF',
+  pi: '\u03C0',
+  rho: '\u03C1',
+  sigmaf: '\u03C2',
+  sigma: '\u03C3',
+  tau: '\u03C4',
+  upsilon: '\u03C5',
+  phi: '\u03C6',
+  chi: '\u03C7',
+  psi: '\u03C8',
+  omega: '\u03C9',
+  // 常用符号
+  hellip: '\u2026',
+  mdash: '\u2014',
+  ndash: '\u2013',
+  lsquo: '\u2018',
+  rsquo: '\u2019',
+  ldquo: '\u201C',
+  rdquo: '\u201D',
+  bull: '\u2022',
+  dagger: '\u2020',
+  Dagger: '\u2021',
+  permil: '\u2030',
+  larr: '\u2190',
+  uarr: '\u2191',
+  rarr: '\u2192',
+  darr: '\u2193',
+  harr: '\u2194',
+  ne: '\u2260',
+  le: '\u2264',
+  ge: '\u2265',
+  infin: '\u221E',
+  sum: '\u2211',
+  prod: '\u220F',
+  radic: '\u221A',
+  int: '\u222B',
+  part: '\u2202',
+  nabla: '\u2207',
+  isin: '\u2208',
+  notin: '\u2209',
+  ni: '\u220B',
+  forall: '\u2200',
+  exist: '\u2203',
+  empty: '\u2205',
+  and: '\u2227',
+  or: '\u2228',
+  equiv: '\u2261',
+  cong: '\u2245',
+  sim: '\u223C',
+  asymp: '\u2248',
+  prop: '\u221D',
+  lowast: '\u2217',
+  minus: '\u2212',
+  lowbar: '\u005F',
+  prime: '\u2032',
+  Prime: '\u2033',
+  // 套件特殊实体（0.31.2 用例所需）
+  HilbertSpace: '\u210B',
+  DifferentialD: '\u2146',
+  ClockwiseContourIntegral: '\u2232',
+  ngE: '\u2267\u0338',
+  Dcaron: '\u010E',
+};
+
+/**
+ * 引用链接定义表（02 §2.3）：label 归一化（3.1.4：去首尾空白、内部空白折叠
+ * 为单空格、ASCII/Unicode 大小写折叠、实体解码；反斜杠转义不折叠）后的键 →
+ * 目标与可选标题。定义表随 parse 调用创建（文档级隔离，review-02 §7.3）。
+ */
+export interface RefDefinition {
+  url: string;
+  title?: string;
+}
+export interface RefDefTable {
+  /** 定义表快照 id：进 parseLine 缓存键（review-02 §7.3 缓存污染修复） */
+  id: number;
+  table: Map<string, RefDefinition>;
+}
+
+/**
  * 失败规则位图记忆（跨递归层共享）：
  * - failedAt：位置级失败签名 `ruleKey@position`——「从该位置起该规则无法成功闭合」已确认失败，
  *   再次遇到同位置同规则的尝试直接跳过（2^n 爆炸的根治：每个位置每规则只尝试一次）。
@@ -55,7 +286,19 @@ export class MarkdownParser {
       this.computeLineOffsets(text);
     const lines = text.split('\n');
     const lineNodes: LineNode[] = new Array(lines.length);
+    // 引用链接定义预扫描（02 §2.3）：定义表随 parse 调用创建（文档级隔离——
+    // 多文档各 parse 各建，不跨文档共享）；返回每行「是否为定义行」标志。
+    const { refs, flags } = this.collectReferenceDefinitions(
+      lines,
+      codeBlockState
+    );
     for (let i = 0; i < lines.length; i++) {
+      // 定义行不是段落：修正 Setext 预扫描的误判
+      // （`[foo]: /url\n===` → `===` 是正文而非 Setext 下划线，spec 例 25）。
+      if (flags[i] && setextLevels[i] > 0) {
+        setextLevels[i] = 0;
+        if (i + 1 < setextLevels.length) setextLevels[i + 1] = 0;
+      }
       // Setext 上下文标志（0=普通行 / 1|2=Setext 标题内容行 / -1=Setext 下划线行）
       // 由预扫描 computeSetextContexts 产出，随 parseLine 传入——
       // 「标题身份由上下文决定、而非解析后回写」是 review-02 §7.1 的修正要求。
@@ -63,12 +306,266 @@ export class MarkdownParser {
         lines[i],
         offsets[i],
         codeBlockState[i],
-        setextLevels[i]
+        setextLevels[i],
+        refs,
+        flags[i]
       );
     }
     return {
       lines: lineNodes,
     };
+  }
+
+  /** 引用定义表快照 id 计数器（文档级隔离 + 缓存键区分） */
+  private static refTableCounter = 0;
+
+  /**
+   * 引用链接定义预扫描（02 §2.3 / review-02 §7.3）：
+   * - 收集 `[label]: destination "title"`（≤3 前导空格；label 不含未转义 `]`），
+   *   label 归一化（3.1.4：空白折叠 + 大小写折叠 + 实体解码，转义不折叠）后入表；
+   * - 定义行与参与行标记 flags（parseLine 零输出为 'empty' 行）；
+   * - 支持 destination/title 跨行（`[foo]:\n/url`、`[foo]:\n<url>\n'title'`、
+   *   title 跨行到闭合引号）与「首次定义优先」（重复 label 只记第一处）；
+   * - 不支持 label 跨行（`[\nfoo\n]:`，02 登记偏差）；
+   * - 定义不能打断段落（`Foo\n[bar]: /baz` → 段落延续，spec 例 22）；
+   * - 代码块（fence/indent）内不收集。
+   * 返回值：refs（无定义时为 null，渲染路径 parseLine 不传表即按文本回退）。
+   */
+  private static collectReferenceDefinitions(
+    lines: string[],
+    codeBlockState: CodeState[]
+  ): { refs: RefDefTable | null; flags: boolean[] } {
+    const n = lines.length;
+    const flags: boolean[] = new Array(n).fill(false);
+    const table = new Map<string, RefDefinition>();
+    let anyDef = false;
+    // 多行定义状态机：needDest（`[foo]:` 后等 destination 行）/
+    // needTitle（dest 行后等 title 行）/ inTitle（title 跨行收集）
+    let mode: 'none' | 'needDest' | 'needTitle' | 'inTitle' = 'none';
+    let defLabel = '';
+    let defUrl = '';
+    let defStart = -1;
+    let titleQuote = '';
+    let titleContent = '';
+    // title 跨行收集时，开引号后紧跟行尾换行（例 5）→ 首个续行前补 `\n`
+    let titleLeadNewline = false;
+    // 上一非代码行是否为「段落形态」（定义不能打断段落）
+    let prevParagraphish = false;
+
+    const register = (label: string, url: string, title?: string) => {
+      const key = this.normalizeRefLabel(label);
+      if (!table.has(key)) {
+        table.set(key, {
+          // 目标/标题：实体解码（跳过 \&）→ 转义还原（\* → *、\b 保留）
+          url: this.unescapePunctuation(this.decodeEntitiesInString(url)),
+          ...(title !== undefined
+            ? {
+                title: this.unescapePunctuation(
+                  this.decodeEntitiesInString(title)
+                ),
+              }
+            : {}),
+        });
+        anyDef = true;
+      }
+    };
+
+    for (let i = 0; i < n; i++) {
+      const inCode = codeBlockState[i] !== 'none';
+      const stripped = this.stripBlockquoteContext(lines[i]);
+      const content = stripped.content;
+      const isBlank = content.trim() === '';
+
+      if (inCode) {
+        mode = 'none';
+        prevParagraphish = false;
+        continue;
+      }
+
+      if (mode === 'inTitle') {
+        // title 跨行：当前行找闭合引号（例 5：`'title\nline1\nline2\n'`）
+        const closeIdx = content.indexOf(titleQuote);
+        if (closeIdx !== -1) {
+          titleContent += content.slice(0, closeIdx);
+          register(defLabel, defUrl, titleContent);
+          flags[i] = true;
+          mode = 'none';
+          prevParagraphish = false;
+          titleLeadNewline = false;
+        } else {
+          // 开引号在行尾（例 5）：首个续行前补 `\n`
+          titleContent += (titleLeadNewline ? '\n' : '') + content + '\n';
+          titleLeadNewline = false;
+          flags[i] = true;
+        }
+        continue;
+      }
+
+      if (mode === 'needTitle') {
+        // dest 行之后：可选 title 行（引号形式，可跨行）
+        const t = content.match(
+          /^ {0,3}("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\))[ \t]*$/
+        );
+        if (t) {
+          const q = t[1][0];
+          const inner = t[1].slice(1, -1);
+          if (t[1].endsWith(q)) {
+            register(defLabel, defUrl, inner);
+            mode = 'none';
+            prevParagraphish = false;
+          } else {
+            // 未闭合（行尾是开引号）：进入跨行收集
+            titleQuote = q;
+            titleContent = inner;
+            mode = 'inTitle';
+            prevParagraphish = false;
+          }
+          flags[i] = true;
+        } else if (isBlank) {
+          // 空行：定义无 title 结束（空行本身不是定义行）
+          register(defLabel, defUrl);
+          mode = 'none';
+          prevParagraphish = false;
+        } else {
+          // 非法续行：整条定义作废，撤销已标行
+          for (let j = defStart; j < i; j++) flags[j] = false;
+          mode = 'none';
+          prevParagraphish = true;
+        }
+        continue;
+      }
+
+      if (mode === 'needDest') {
+        // `[foo]:` 之后：当前行必须是 destination（`<...>` 或裸 URL 单段）
+        const d = content.match(
+          /^ {0,3}(<[^<>\n\x00-\x1F]*>|[^ \t\n\r\f<>]+)[ \t]*$/
+        );
+        if (d && !isBlank) {
+          defUrl = d[1];
+          if (defUrl.startsWith('<')) defUrl = defUrl.slice(1, -1);
+          flags[i] = true;
+          mode = 'needTitle';
+          prevParagraphish = false;
+        } else {
+          // 空行或非法行：定义作废（例 8：`[foo]:` + 空行 → 正文）
+          flags[defStart] = false;
+          mode = 'none';
+          prevParagraphish = !isBlank;
+        }
+        continue;
+      }
+
+      // —— 普通行：尝试单行定义 / 进入 pending ——
+      // label 支持转义 `\]`（`[Foo*bar\]]:...`，spec 例 3）
+      const single = content.match(/^ {0,3}\[((?:[^\]\\]|\\.)+)\]:[ \t]*(.*)$/);
+      if (single && !prevParagraphish) {
+        const label = single[1];
+        const rest = single[2].trim();
+        if (rest === '') {
+          // `[foo]:` 空目标：等待下一行 destination（例 2/4/7）
+          defLabel = label;
+          defStart = i;
+          flags[i] = true;
+          mode = 'needDest';
+          prevParagraphish = false;
+          continue;
+        }
+        const full = rest.match(
+          /^(<[^<>\n\x00-\x1F]*>|[^ \t\n\r\f<>]+)(?:[ \t]+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\)))?[ \t]*$/
+        );
+        if (full) {
+          let url = full[1];
+          if (url.startsWith('<')) url = url.slice(1, -1);
+          const titleRaw = full[2];
+          if (titleRaw) {
+            const q = titleRaw[0];
+            if (titleRaw.endsWith(q)) {
+              register(label, url, titleRaw.slice(1, -1));
+            } else {
+              // 行尾未闭合开引号：跨行收集（例 5 `[foo]: /url '`）
+              defLabel = label;
+              defUrl = url;
+              defStart = i;
+              titleQuote = q;
+              // 开引号后紧跟行尾换行：续行前需补 `\n`（title 以换行开头）
+              titleContent = titleRaw.length > 1 ? titleRaw.slice(1) : '';
+              titleLeadNewline = true;
+              mode = 'inTitle';
+              flags[i] = true;
+              prevParagraphish = false;
+              continue;
+            }
+          } else {
+            register(label, url);
+          }
+          flags[i] = true;
+          prevParagraphish = false;
+          continue;
+        }
+        // 非法（例 10 `<bar>(baz)`、例 18 多余内容）：按正文。
+        // 例外：dest 后跟单个未闭合开引号 → title 跨行收集（例 5 `[foo]: /url '`）
+        const openTitle = rest.match(
+          /^(<[^<>\n\x00-\x1F]*>|[^ \t\n\r\f<>]+)[ \t]+('|")$/
+        );
+        if (openTitle) {
+          let url = openTitle[1];
+          if (url.startsWith('<')) url = url.slice(1, -1);
+          defLabel = label;
+          defUrl = url;
+          defStart = i;
+          titleQuote = openTitle[2];
+          titleContent = '';
+          titleLeadNewline = true;
+          mode = 'inTitle';
+          flags[i] = true;
+          prevParagraphish = false;
+          continue;
+        }
+        prevParagraphish = true;
+        continue;
+      }
+      mode = 'none';
+      prevParagraphish = !isBlank && this.isParagraphishLine(content);
+    }
+
+    return {
+      refs: anyDef ? { id: ++this.refTableCounter, table } : null,
+      flags,
+    };
+  }
+
+  /**
+   * 行首形态是否为「段落」（引用定义打断判定 + 定义行/标题等排除）：
+   * 空行、hr、Setext 下划线形态（`===`/`---`）、ATX 标题、列表、表格、
+   * 已标记的定义行都不是段落。
+   */
+  private static isParagraphishLine(content: string): boolean {
+    const s = content.replace(/^ {0,3}/, '');
+    if (!s.trim()) return false;
+    if (/^([-*+_]){3,}[ \t]*$/.test(s)) return false;
+    if (/^(=+|-+)[ \t]*$/.test(s)) return false;
+    if (/^#{1,6}(?:[ \t]|$)/.test(s)) return false;
+    if (/^([-*+]\s*\[[xX\s]\])\s+/.test(s)) return false;
+    if (/^([-*+])\s+/.test(s)) return false;
+    if (/^(\d+\.)\s+/.test(s)) return false;
+    if (/^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/.test(s)) return false;
+    const pipeCount = (s.match(/\|/g) || []).length;
+    if (
+      (pipeCount >= 1 && s.trim().startsWith('|')) ||
+      pipeCount >= 2
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * label 归一化（CommonMark 3.1.4）：去首尾空白、内部空白折叠为单空格、
+   * 大小写折叠（toLowerCase）、实体解码；反斜杠转义不折叠（例 64：
+   * `[foo\!]` 不匹配 `[foo!]` 定义）。
+   */
+  private static normalizeRefLabel(s: string): string {
+    return this.decodeEntitiesInString(s.replace(/\s+/g, ' ').trim().toLowerCase());
   }
 
   public static computeLineOffsets(text: string): {
@@ -371,12 +868,27 @@ export class MarkdownParser {
     codeState: CodeState | boolean,
     // Setext 上下文标志（预扫描产物）：0=普通行 / 1|2=Setext 标题内容行 / -1=Setext 下划线行。
     // 渲染路径（MarkdownEngine.tsx）等外部调用不传该参数时按 0 处理，行为与现状一致。
-    setextLevel: number = 0
+    setextLevel: number = 0,
+    // 引用链接定义表（parse 预扫描产物）：渲染路径不传时按 null 处理，
+    // 引用形式回退文本（review-02 §7.3：缓存键隔离，不跨文档互串）。
+    refDefs: RefDefTable | null = null,
+    // 本行是否为引用定义行（零输出）
+    isRefDefLine: boolean = false
   ): LineNode {
-    // 缓存键 = codeState + Setext 上下文 + 完整行文本：blockquote 前缀、fence/math 跨行状态、
-    // Setext 上下文均已编码在键内（review-02 §7.1：Setext 关系必须进键，禁止回写缓存行），
+    // 缓存键 = codeState + Setext 上下文 + 定义行标志 + 定义表 id + 完整行文本：
+    // blockquote 前缀、fence/math 跨行状态、Setext 上下文均已编码在键内
+    // （review-02 §7.1/§7.3：上下文必须进键，禁止回写缓存行），
     // token 偏移为行内相对值（与文档偏移解耦），因此命中节点可直接复用结构。
-    const cacheKey = codeState + ':' + setextLevel + ':' + lineText;
+    const cacheKey =
+      codeState +
+      ':' +
+      setextLevel +
+      ':' +
+      (isRefDefLine ? 1 : 0) +
+      ':' +
+      (refDefs ? refDefs.id : 0) +
+      ':' +
+      lineText;
     const cached = this.astCache.get(cacheKey);
     if (cached) {
       this.cacheHits++;
@@ -399,9 +911,9 @@ export class MarkdownParser {
     }
     const bqLevelVal = blockquoteLevel > 0 ? blockquoteLevel : undefined;
 
-    // Setext 下划线行（预扫描已确认其上一行是段落）：零输出行——复用 'empty' 类型
+    // Setext 下划线行 / 引用定义行（预扫描已确认）：零输出行——复用 'empty' 类型
     // （投影器与渲染器对 'empty' 均为跳过/空行），raw 保留原文供守恒校验与编辑回写。
-    if (setextLevel === -1) {
+    if (setextLevel === -1 || isRefDefLine) {
       const node: LineNode = {
         id: this.generateId(),
         type: 'empty',
@@ -535,7 +1047,7 @@ export class MarkdownParser {
       return node;
     }
 
-    let node = this.parseNormalLine(lineText, localOffset, setextLevel);
+    let node = this.parseNormalLine(lineText, localOffset, setextLevel, refDefs);
 
     this.astCache.set(cacheKey, node);
     return node;
@@ -656,7 +1168,9 @@ export class MarkdownParser {
     // Setext 上下文标志（预扫描产物）：0=普通行 / 1|2=Setext 标题内容行。
     // 标题身份由预扫描（computeSetextContexts）决定而非解析后回写——
     // review-02 §7.1：回写会使「同键缓存」与回写结果不一致（缓存污染）。
-    setextLevel: number = 0
+    setextLevel: number = 0,
+    // 引用链接定义表（文档级隔离，见 parseLine 注释）
+    refDefs: RefDefTable | null = null
   ): LineNode {
     const tokens: InlineNode[] = [];
     let pos = 0;
@@ -839,7 +1353,8 @@ export class MarkdownParser {
       const parsedTokens = this.parseInlineTokens(
         remainingText.substring(0, MAX_PARSE_CHARS),
         pos,
-        true
+        true,
+        refDefs
       );
       tokens.push(...parsedTokens);
 
@@ -852,7 +1367,7 @@ export class MarkdownParser {
         length: unparsed.length,
       });
     } else {
-      const parsedTokens = this.parseInlineTokens(remainingText, pos, true);
+      const parsedTokens = this.parseInlineTokens(remainingText, pos, true, refDefs);
       tokens.push(...parsedTokens);
     }
 
@@ -919,23 +1434,184 @@ export class MarkdownParser {
     return result;
   }
 
+  /**
+   * 链接目标/标题尾段正则（任务 5：目标校验）：
+   * - 目标：尖括号 `<...>`（允许空白，不含 `<>`/换行/控制字符）或裸目标；
+   * - 裸目标：不含空白/尖括号/反斜杠，括号嵌套平衡（三层深度，覆盖
+   *   `foo(and(bar))`），允许转义标点（`\(`、`\)`、`\:` 等）；
+   * - 可选标题：`"..."` / `'...'` / `(...)`（转义引号允许），标题前须有空白；
+   * - 目标与标题前后允许空白/换行（`[link](   /uri\n  "title"  )`）。
+   * 正则用字符串拼接构造，避免超长字面量。
+   */
+  private static LINK_TAIL_RE = (() => {
+    const ws = '[ \\t\\n\\r\\f]';
+    // 转义标点单元：正则字面量 `\\(?:...)` —— .source 保证「字面反斜杠 + 非捕获组」
+    // 的源码形态（字符串模板手写反斜杠极易数错层数，一律改用字面量）。
+    const esc = /\\(?:[!"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~])/.source;
+    // 裸目标单元：普通字符（非空白/尖括号/括号，**允许反斜杠**——`\b` 中 b 非
+    // 可转义标点时反斜杠按字面保留，CommonMark destination 逐字符语义）、
+    // 转义标点（`\(` 等，与结构括号区分）、平衡括号组（三层深度）。
+    const plain = '[^ \\t\\n\\r\\f<>()]';
+    const nested1 = `(?:${esc}|${plain}|\\((?:${esc}|${plain})*\\))`;
+    const nested2 = `(?:${nested1}|\\((?:${nested1})*\\))`;
+    const nested3 = `(?:${nested2}|\\((?:${nested2})*\\))`;
+    const bare = `(?:${nested3}){0,2000}`;
+    // 尖括号目标：不允许 <>、换行、控制字符（\x00-\x1F），但允许空格（\x20）
+    const dest = `(?:<[^<>\\n\\x00-\\x1F]*>|${bare})`;
+    const title = `(?:\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'|\\((?:[^)\\\\]|\\\\.)*\\))`;
+    return new RegExp(`^${ws}*(${dest})(?:${ws}+(${title}))?${ws}*\\)`);
+  })();
+
+  /**
+   * 栈式 label 匹配（CommonMark 6.5 / markdown-it parseLinkLabel）：
+   * 从 `[` 位置开始，`[` 深度 +1、未转义 `]` 深度 -1，深度归 0 即 label 结束。
+   * `[link [foo [bar]]]` 与 `[ref[]`（未平衡）由此正确区分——
+   * 后者扫描到行尾深度未归 0 → 匹配失败（不解析，spec 例 65/66）。
+   * 长度上限 2000（现状偏差，CommonMark 为 999）。
+   */
+  private static matchLinkLabel(
+    text: string,
+    i: number
+  ): { end: number } | null {
+    if (text[i] !== '[') return null;
+    let depth = 0;
+    const max = Math.min(text.length, i + 2000);
+    let j = i;
+    while (j < max) {
+      const c = text[j];
+      if (c === '\\' && j + 1 < text.length) {
+        j += 2;
+        continue;
+      }
+      if (c === '[') {
+        depth++;
+      } else if (c === ']') {
+        depth--;
+        if (depth === 0) return { end: j };
+      }
+      j++;
+    }
+    return null;
+  }
+
+  /**
+   * 内联链接匹配 `[label](dest "title")`（custom 'link' 规则）：
+   * `]` 必须紧跟 `(`（`[link] (/uri)` 是引用/文本，spec 例 30）；
+   * 目标非法（含空白未加尖括号等）→ null（回退文本，spec 例 7）。
+   */
+  private static tryMatchInlineLink(
+    text: string,
+    i: number
+  ): { raw: string; content: string; url: string; end: number } | null {
+    if (text[i] !== '[') return null;
+    const label = this.matchLinkLabel(text, i);
+    if (!label) return null;
+    if (text[label.end + 1] !== '(') return null;
+    const tail = text.slice(label.end + 2);
+    const m = this.LINK_TAIL_RE.exec(tail);
+    if (!m) return null;
+    let url = m[1];
+    if (url.startsWith('<')) url = url.slice(1, -1);
+    // 目标/标题：实体解码（跳过 \&）→ 转义还原（\* → *、\b 保留）
+    url = this.unescapePunctuation(this.decodeEntitiesInString(url));
+    let title: string | undefined;
+    if (m[2]) {
+      title = this.unescapePunctuation(
+        this.decodeEntitiesInString(m[2].slice(1, -1))
+      );
+    }
+    // url 字段 = 目标 + 可选标题（投影器 splitLinkTarget 拆 href/title）
+    const urlField = url + (title !== undefined ? ' "' + title + '"' : '');
+    const end = label.end + 2 + m[0].length;
+    return {
+      raw: text.slice(i, end),
+      content: text.slice(i + 1, label.end),
+      url: urlField,
+      end,
+    };
+  }
+
+  /**
+   * 引用链接匹配（custom 'reference' 规则，02 §2.3）：
+   * - `[label]`：label 查定义表；
+   * - `[label][]`：折叠式，ref = label；
+   * - `[label][ref]`：ref 查表；
+   * 完整形式（`[` 紧邻）查表失败 → 整体回退文本（不回落直接形式）；
+   * `]` 后紧跟 `(` 属内联形态（即使失败也不走引用，spec 例 7 语义）。
+   */
+  private static tryMatchReferenceLink(
+    text: string,
+    i: number,
+    refDefs: RefDefTable | null
+  ): { raw: string; content: string; url: string; end: number } | null {
+    if (text[i] !== '[') return null;
+    const label = this.matchLinkLabel(text, i);
+    if (!label) return null;
+    if (text[label.end + 1] === '(') return null;
+    const labelRaw = text.slice(i + 1, label.end);
+    let key = labelRaw;
+    let end = label.end + 1;
+    if (text[label.end + 1] === '[') {
+      const ref = this.matchLinkLabel(text, label.end + 1);
+      if (!ref) return null;
+      const refRaw = text.slice(label.end + 2, ref.end);
+      key = refRaw.trim() === '' ? labelRaw : refRaw;
+      end = ref.end + 1;
+    }
+    if (!refDefs) return null;
+    const def = refDefs.table.get(this.normalizeRefLabel(key));
+    if (!def) return null;
+    const urlField =
+      def.url + (def.title !== undefined ? ' "' + def.title + '"' : '');
+    return {
+      raw: text.slice(i, end),
+      // 渲染文本：label 原文经转义还原（`[Foo*bar\]]` → `Foo*bar]`）
+      content: this.unescapePunctuation(labelRaw),
+      url: urlField,
+      end,
+    };
+  }
+
   private static INLINE_RULES = [
     {
       type: 'image',
       regex: /^!\[((?:[^\]\\]|\\.){0,2000})\]\(((?:[^)\\]|\\.){0,2000})\)/,
     },
-    {
-      type: 'link',
-      regex: /^\[((?:[^\]\\]|\\.){1,2000})\]\(((?:[^)\\]|\\.){0,2000})\)/,
-    },
+    // 内联链接（手写匹配，见 tryMatchInlineLink）：栈式 label（含嵌套 `[bar]`）+ 
+    // 目标/标题正则（任务 5：裸目标禁空白、括号嵌套平衡、title 引号/括号边界）。
+    { type: 'link', custom: 'link' },
     { type: 'checkbox', regex: /^\[\s*[xX\s]\s*\]/ },
     { type: 'footnote', regex: /^\[\^([0-9a-zA-Z]{1,100})\]/ },
+    // 引用链接（02 §2.3）：footnote 之后、code 之前——链接优先级：内联 > 引用 > 脚注。
+    // 查表失败（未定义）回退文本；`[label][ref]` 完整形式失败不回退直接形式。
+    { type: 'link', custom: 'reference' },
     { type: 'code', regex: /^(`+)(.*?)\1/ },
     { type: 'bold_italic', start: '***', close: '***' },
     { type: 'bold', start: '**', close: '**' },
     { type: 'italic', start: '*', close: '*' },
+    // `_` 下划线强调族（02 §2.7 / review-02 §7.7 修正）：
+    // 与 `*` 族对称的三规则；围挡校验（Rule 9/10/11/12）只施加于 `_` 族——
+    // `foo*bar*baz` 保持解析（intraword 限制仅属于 `_`），`foo_bar_baz` 不解析。
+    { type: 'bold_italic', start: '___', close: '___' },
+    { type: 'bold', start: '__', close: '__' },
+    { type: 'italic', start: '_', close: '_' },
     { type: 'strike', start: '~~', close: '~~' },
     { type: 'mark', start: '==', close: '==' },
+    // 自动链接（02 §2.4）：URI / 邮件正则插在 HTML 起止规则（`<b>` 等）之前——
+    // tagName 白名单修复后 `<http://x>` 不再被 HTML 分支吞掉，此处按 link 语义接管。
+    // URI scheme 必须 2~32 字符（`<m:abc>` 不匹配）；内容不含空白/`<>`（CommonMark 6.9）。
+    {
+      type: 'link',
+      autolink: 'uri',
+      regex: /^<([a-zA-Z][a-zA-Z0-9+.-]{1,31}:[^<>\x00-\x20]*)>/,
+    },
+    // 邮件自动链接：url 语义带 mailto: 前缀（href 语义），content 为原文（渲染文本）。
+    {
+      type: 'link',
+      autolink: 'email',
+      regex:
+        /^<([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>/,
+    },
     { type: 'bold', start: '<b>', close: '</b>' },
     { type: 'bold', start: '<strong>', close: '</strong>' },
     { type: 'italic', start: '<i>', close: '</i>' },
@@ -964,14 +1640,15 @@ export class MarkdownParser {
   private static parseInlineTokens(
     text: string,
     localOffset: number,
-    isTopLevel: boolean = false
+    isTopLevel: boolean = false,
+    refDefs: RefDefTable | null = null
   ): InlineNode[] {
     // 每行一次失败记忆：行内所有递归调用共享同一份（跨递归层共享），行与行之间由行缓存隔离。
     const memo: ScanFailureMemo = {
       failedAt: new Set(),
       noClose: new Map(),
     };
-    const res = this.scanTokens(text, 0, localOffset, null, 0, memo);
+    const res = this.scanTokens(text, 0, localOffset, null, 0, memo, refDefs);
     if (!res.ok) {
       return isTopLevel
         ? [
@@ -1040,13 +1717,156 @@ export class MarkdownParser {
     return { attributes, style };
   }
 
+  /**
+   * 在字符串 s 的 i 位置尝试匹配实体引用（02 §2.6）：
+   * 命名实体 `&name;`（名字 2~32 字符，查 NAMED_ENTITIES）与数值实体
+   * `&#d;`（十进制 1~7 位）/ `&#xH;`（十六进制 1~6 位，x 大小写均可）。
+   * 未定义命名实体 / 缺分号 / 数字超长 → 返回 null（保持字面）。
+   */
+  private static matchEntityAt(
+    s: string,
+    i: number
+  ): { value: string; length: number } | null {
+    const slice = s.slice(i);
+    const named = /^&([A-Za-z][A-Za-z0-9]{1,31});/.exec(slice);
+    if (named) {
+      const v = NAMED_ENTITIES[named[1]];
+      return v !== undefined ? { value: v, length: named[0].length } : null;
+    }
+    const dec = /^&#([0-9]{1,7});/.exec(slice);
+    if (dec) {
+      return {
+        value: this.codePointToChar(Number(dec[1])),
+        length: dec[0].length,
+      };
+    }
+    const hex = /^&#[xX]([0-9A-Fa-f]{1,6});/.exec(slice);
+    if (hex) {
+      return {
+        value: this.codePointToChar(parseInt(hex[1], 16)),
+        length: hex[0].length,
+      };
+    }
+    return null;
+  }
+
+  /**
+   * 数值实体码点 → 字符（CommonMark：0、代理区、>0x10FFFF 一律替换为 U+FFFD）。
+   */
+  private static codePointToChar(cp: number): string {
+    if (cp === 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
+      return '\uFFFD';
+    }
+    return String.fromCodePoint(cp);
+  }
+
+  /**
+   * 通用实体解码（用于链接目标/标题、引用定义等扫描期原文）：
+   * `\&` 位置不解码（保留原文，后续 unescapePunctuation 再还原 `\&` → `&`，
+   * 从而 `\&amp;` 语义为「转义 & + 字面 amp;」，与 CommonMark 一致）。
+   */
+  private static decodeEntitiesInString(s: string): string {
+    let out = '';
+    let i = 0;
+    while (i < s.length) {
+      const c = s[i];
+      if (c === '\\' && s[i + 1] === '&') {
+        out += '\\&';
+        i += 2;
+        continue;
+      }
+      if (c === '&') {
+        const r = this.matchEntityAt(s, i);
+        if (r) {
+          out += r.value;
+          i += r.length;
+          continue;
+        }
+      }
+      out += c;
+      i++;
+    }
+    return out;
+  }
+
+  /**
+   * flushText 专用解码（review-02 §7.6 修正）：content 与 raw 并行推进。
+   * 转义边界在扫描期已消费（`\&` → content 中的 `&`），flush 时只能对照
+   * raw 识别：raw 中 `\&` 位置的 & 跳过解码；raw 中裸 & 位置尝试实体匹配。
+   */
+  private static decodeTextEntities(raw: string, content: string): string {
+    let out = '';
+    let ri = 0;
+    let ci = 0;
+    while (ci < content.length) {
+      if (
+        ri < raw.length &&
+        raw[ri] === '\\' &&
+        raw[ri + 1] === '&'
+      ) {
+        // 转义 &：content 对应字符原样保留（不解码）
+        out += content[ci];
+        ri += 2;
+        ci += 1;
+        continue;
+      }
+      if (content[ci] === '&') {
+        const r = this.matchEntityAt(content, ci);
+        if (r) {
+          out += r.value;
+          ri += r.length;
+          ci += r.length;
+          continue;
+        }
+      }
+      out += content[ci];
+      ri += 1;
+      ci += 1;
+    }
+    return out;
+  }
+
+  /**
+   * 反斜杠转义还原（CommonMark 可转义标点）：`\x`（x 为可转义标点）→ x；
+   * 其余 `\x`（x 非标点，如 `\b`）原样保留。
+   */
+  private static unescapePunctuation(s: string): string {
+    return s.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g, '$1');
+  }
+
+  // —— `_` 强调围挡校验（CommonMark 0.31.2 Rule 9/10/11/12）——
+  // Unicode 空白：Zs 类别 + tab/LF/FF/CR（JS `\s` 与之近似，覆盖 U+00A0 等）。
+  // Unicode 标点：P 类别 + S 类别（符号也算标点，如 `$`/`£`——spec 例 5）。
+  private static IS_UNICODE_WS = /\s/;
+  private static IS_UNICODE_PUNCT = /[\p{P}\p{S}]/u;
+
+  /**
+   * `_` 族 delimiter run 围挡判定（CommonMark Rule 9/10）：
+   * 左围挡：后非空白 且（后非标点 或 前空白/标点）；
+   * 右围挡：前非空白 且（前非标点 或 后空白/标点）。
+   * 行首/行尾视为空白。仅 `_` 族使用（`*` 族无 intraword 限制，review-02 §7.7）。
+   */
+  private static underscoreFlanking(
+    prevChar: string,
+    nextChar: string
+  ): { left: boolean; right: boolean } {
+    const lastWs = this.IS_UNICODE_WS.test(prevChar);
+    const nextWs = this.IS_UNICODE_WS.test(nextChar);
+    const lastPunct = this.IS_UNICODE_PUNCT.test(prevChar);
+    const nextPunct = this.IS_UNICODE_PUNCT.test(nextChar);
+    const left = !nextWs && (!nextPunct || lastWs || lastPunct);
+    const right = !lastWs && (!lastPunct || nextWs || nextPunct);
+    return { left, right };
+  }
+
   private static scanTokens(
     text: string,
     startIndex: number,
     localOffset: number,
     rule: any | null,
     depth: number,
-    memo: ScanFailureMemo
+    memo: ScanFailureMemo,
+    refDefs: RefDefTable | null = null
   ): ScanOutcome {
     // 深度剪枝兜底：超过 20 层直接放弃。此处的 null 是「未扫描」而非「确认失败」——
     // 合法深嵌套可能在剪枝点之后闭合，因此**不得写入失败记忆**（写记忆会误杀合法深嵌套）。
@@ -1064,7 +1884,11 @@ export class MarkdownParser {
         innerTokens.push({
           type: 'text',
           raw: currentRawText,
-          content: currentContentText,
+          // 实体解码（02 §2.6）：仅解码 content、raw 保留原文（覆盖守恒不受影响）；
+          // code/math 原子上下文内不解码（CommonMark：code span 内实体保持字面）。
+          content: isAtomicContext
+            ? currentContentText
+            : this.decodeTextEntities(currentRawText, currentContentText),
           localOffset: localOffset + i - currentRawText.length,
           length: currentRawText.length,
         });
@@ -1143,6 +1967,21 @@ export class MarkdownParser {
         if (close === '$' && text.substring(i, i + 2) === '$$')
           validClose = false;
 
+        // `_` 族闭围挡校验（Rule 4：RF 且（非 LF 或后字符是标点））：
+        // 独立于 `*` 族实现（review-02 §7.7——不得给 `*` 族加词内限制）。
+        if (validClose && close && close[0] === '_') {
+          const prevChar = i > 0 ? text[i - 1] : ' ';
+          const nextChar =
+            i + close.length < text.length ? text[i + close.length] : ' ';
+          const { left, right } = this.underscoreFlanking(
+            prevChar,
+            nextChar
+          );
+          if (!right || (left && !this.IS_UNICODE_PUNCT.test(nextChar))) {
+            validClose = false;
+          }
+        }
+
         // Prevent unclosed tags like **未闭合 from being parsed as empty * tags
         if (validClose && i === startIndex + start.length) {
           const combined = start + close;
@@ -1182,10 +2021,15 @@ export class MarkdownParser {
 
       // Check for HTML open tag with possible closing tag on the line
       if (sub.startsWith('<')) {
-        const htmlMatch = /^<([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/.exec(sub);
+        // tagName 白名单校验（02 §4.3 根因修复）：HTML 标签名后必须紧跟
+        // 空白（属性）或 `/>` 或 `>`——`<http://x>` 中 `http` 后直接是 `://`，
+        // 不再被当作标签名，避免无谓的全行 `</http>` 闭合查找；自动链接由此让路。
+        const htmlMatch = /^<([a-zA-Z][a-zA-Z0-9-]*)(?:\s+([^>]*?))?(\/?)>/.exec(
+          sub
+        );
         if (htmlMatch) {
           const tagName = htmlMatch[1].toLowerCase();
-          const attrStr = htmlMatch[2];
+          const attrStr = htmlMatch[2] ?? '';
           const openTag = htmlMatch[0];
           const isSelfClosing =
             openTag.endsWith('/>') ||
@@ -1225,7 +2069,8 @@ export class MarkdownParser {
                   localOffset,
                   htmlRule,
                   depth + 1,
-                  memo
+                  memo,
+                  refDefs
                 );
                 if (res.ok) {
                   flushText();
@@ -1264,7 +2109,41 @@ export class MarkdownParser {
 
       if (!matched) {
         for (const r of this.INLINE_RULES) {
-          if (r.regex) {
+          if (r.custom === 'link') {
+            // 内联链接（栈式 label + 目标/标题校验，见 tryMatchInlineLink）
+            const link = this.tryMatchInlineLink(text, i);
+            if (link) {
+              flushText();
+              innerTokens.push({
+                type: 'link',
+                raw: link.raw,
+                content: link.content,
+                url: link.url,
+                localOffset: localOffset + i,
+                length: link.raw.length,
+              });
+              i += link.raw.length;
+              matched = true;
+              break;
+            }
+          } else if (r.custom === 'reference') {
+            // 引用链接（定义表查表，见 tryMatchReferenceLink）
+            const link = this.tryMatchReferenceLink(text, i, refDefs);
+            if (link) {
+              flushText();
+              innerTokens.push({
+                type: 'link',
+                raw: link.raw,
+                content: link.content,
+                url: link.url,
+                localOffset: localOffset + i,
+                length: link.raw.length,
+              });
+              i += link.raw.length;
+              matched = true;
+              break;
+            }
+          } else if (r.regex) {
             const m = r.regex.exec(sub);
             if (m && m.index === 0) {
               flushText();
@@ -1276,11 +2155,19 @@ export class MarkdownParser {
 
               if (r.type === 'image') {
                 imageAlt = m[1];
-                url = m[2];
+                // 链接目标内实体解码（02 §2.6 冲突点：`[a](url?x=1&amp;y=2)` → href 含 &）
+                url = this.decodeEntitiesInString(m[2]);
                 content = '🖼️ ' + (imageAlt || '图片');
               } else if (r.type === 'link') {
                 content = m[1];
-                url = m[2];
+                // 自动链接：url 即捕获的地址原文；邮件自动链接的 href 语义带 mailto: 前缀。
+                // 内联链接：目标内实体解码。
+                url =
+                  r.autolink === 'email'
+                    ? 'mailto:' + m[1]
+                    : r.autolink
+                      ? m[1]
+                      : this.decodeEntitiesInString(m[2]);
               } else if (r.type === 'checkbox') {
                 isChecked = raw.includes('x') || raw.includes('X');
                 content = isChecked ? '☑' : '☐';
@@ -1342,6 +2229,24 @@ export class MarkdownParser {
               }
             }
 
+            // `_` 族开围挡校验（Rule 2：LF 且（非 RF 或前字符是标点））：
+            // 独立于 `*` 族（review-02 §7.7）——`foo_bar_baz` 词内不强调、
+            // `a_"foo"_` 前字母数字后标点不能开，而 `foo-_(bar)_` 标点围挡可开。
+            if (validStart && r.start[0] === '_') {
+              const prevChar = i > 0 ? text[i - 1] : ' ';
+              const nextChar =
+                i + r.start.length < text.length
+                  ? text[i + r.start.length]
+                  : ' ';
+              const { left, right } = this.underscoreFlanking(
+                prevChar,
+                nextChar
+              );
+              if (!left || (right && !this.IS_UNICODE_PUNCT.test(prevChar))) {
+                validStart = false;
+              }
+            }
+
             if (validStart) {
               // 失败记忆短路：同位置同规则已确认失败（或位置 i 之后已确认无闭合标记）→ 直接放弃递归。
               // 递归返回值只在「完整扫描后确认失败」时才可记忆（位置级）——
@@ -1358,7 +2263,8 @@ export class MarkdownParser {
                   localOffset,
                   r,
                   depth + 1,
-                  memo
+                  memo,
+                  refDefs
                 );
                 if (res.ok) {
                   // successfully parsed the block

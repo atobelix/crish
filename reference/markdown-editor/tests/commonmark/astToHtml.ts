@@ -3,17 +3,18 @@
  *
  * 契约（防作弊条款，详见同目录 README.md）：
  * 1. 零语义修复——不补语法、不改语义，只做结构映射。
- * 2. 引擎不支持的 CommonMark 语法（Setext 标题 / 缩进代码块 / 引用链接 /
- *    自动链接 / 实体 / ~~~ 围栏 / HTML 块 / 下划线强调等）在 AST 中已退化为
+ * 2. 引擎不支持的 CommonMark 语法（引用链接 / 自动链接 / 实体 /
+ *    ~~~ 围栏 / HTML 块 / 下划线强调等）在 AST 中已退化为
  *    普通 text 节点，投影器按 text 规则原样转义输出；期望 <h2> 而投影
  *    <p>title</p> 即记 FAIL——这是符合度统计的正确行为，不得补偿。
+ *    （Setext 标题 / 缩进代码块已由 R1 轮引擎原生支持，见 README。）
  * 3. 引擎扩展语法（math / mark / spoiler / footnote / checkbox）在 CommonMark
  *    中无对应 HTML，投影为占位标签（如 <span class="math">），显式暴露与
  *    CommonMark 文本渲染的差异（计 FAIL），不得折叠为纯文本掩盖差异。
  * 4. 行内原始 HTML（html_element / html_tag）按 CommonMark 语义原样透传
  *    （不转义、不重组），与 Raw HTML 章节的期望一致。
- * 5. 行级块结构全部为确定性映射；唯一登记偏差点是「列表行按 listIndent
- *    启发式分组」（见 README「偏差点登记」）。
+ * 5. 行级块结构全部为确定性映射；登记偏差点有「列表行按 listIndent
+ *    启发式分组」与「缩进代码块合并」（见 README「偏差点登记」）。
  */
 import type {
   MarkdownDocument,
@@ -53,6 +54,29 @@ function fenceInfo(raw: string): string {
   const s = stripBlockquotePrefix(raw);
   const m = /^```+(.*)$/.exec(s);
   return m ? m[1].trim() : '';
+}
+
+/**
+ * 剥离 up to 4 列前导空白（CommonMark 缩进代码块内容规则）：
+ * tab 按停靠 4 展开（与引擎 computeLineOffsets 的 leadingIndentColumns
+ * 列宽语义一致，spec §Tabs）。不足 4 列或行尾残留的空白原样保留
+ * （如 6 空格空白行 → 剥 4 列 → 内容保留 2 空格，对齐 spec 例 112）。
+ */
+function stripIndentColumns(s: string): string {
+  let col = 0;
+  let i = 0;
+  while (i < s.length && col < 4) {
+    if (s[i] === ' ') {
+      col++;
+      i++;
+    } else if (s[i] === '\t') {
+      col += 4 - (col % 4);
+      i++;
+    } else {
+      break;
+    }
+  }
+  return s.substring(i);
 }
 
 /**
@@ -197,7 +221,7 @@ function olStartNumber(line: LineNode): number {
 }
 
 /**
- * 列表行启发式分组（唯一登记偏差点）：
+ * 列表行启发式分组（登记偏差点一，详见 README「偏差点登记」）：
  * 连续、同种类（ul/ol）、同 listIndent、同引用层级的列表行归入一个列表容器，
  * 每行一个 <li>。引擎 AST 无列表容器节点，这是投影器侧的结构近似；
  * 嵌套列表 / 松散列表（loose/tight <p> 包裹）/ 多行列表项等语义
@@ -274,10 +298,46 @@ function renderFencedBlock(
 }
 
 /**
+ * 缩进代码块投影（登记偏差点，详见 README「偏差点登记」）：
+ * 引擎 AST 无 codeBlockState 字段（围栏内内容行与缩进代码行同为
+ * type==='code'），但围栏内行已由 renderFencedBlock 消费，主循环遇到的
+ * 连续 type==='code' 行必然来自缩进代码块（含块内空白行，引擎状态机
+ * inIndentCode 保持语义）——以此作为区分启发式，不误合并围栏代码。
+ * CommonMark 缩进代码块是整块语义：合并为单个 <pre><code>，每行剥离
+ * blockquote 前缀后剥 up to 4 列缩进（stripIndentColumns），按 \n 连接
+ * 并以 \n 结尾；块尾空白行（trim 后为空）不属于块内容，剔除（spec 例 117）。
+ */
+function renderIndentCodeBlock(
+  lines: LineNode[],
+  start: number,
+  out: string[]
+): number {
+  const contentLines: string[] = [];
+  let j = start;
+  while (j < lines.length && lines[j].type === 'code') {
+    // 缩进判定发生在 blockquote 前缀剥离之后（与引擎 computeLineOffsets 一致）
+    contentLines.push(stripIndentColumns(stripBlockquotePrefix(lines[j].raw)));
+    j++;
+  }
+  // 块尾空白行剔除（CommonMark：块尾空行不属于代码块内容）
+  while (
+    contentLines.length > 0 &&
+    contentLines[contentLines.length - 1].trim() === ''
+  ) {
+    contentLines.pop();
+  }
+  const content =
+    contentLines.join('\n') + (contentLines.length > 0 ? '\n' : '');
+  out.push('<pre><code>' + escapeText(content) + '</code></pre>');
+  return j;
+}
+
+/**
  * 主入口：MarkdownDocument → 近似 HTML 字符串。
  * 行级映射：body→<p>、heading→<h{n}>、hr→<hr />、blockquote 按行级
- * blockquoteLevel 开合容器、围栏代码→<pre><code>、table_row→<tr><td>、
- * 列表行→<ul>/<ol><li>（listIndent 启发式分组）。
+ * blockquoteLevel 开合容器、围栏代码→<pre><code>（renderFencedBlock）、
+ * 缩进代码→连续 code 行合并为单个 <pre><code>（renderIndentCodeBlock）、
+ * table_row→<tr><td>、列表行→<ul>/<ol><li>（listIndent 启发式分组）。
  */
 export function astToHtml(doc: MarkdownDocument): string {
   const out: string[] = [];
@@ -329,13 +389,11 @@ export function astToHtml(doc: MarkdownDocument): string {
         out.push('<hr />');
         break;
       case 'code':
-        // 围栏外出现的裸代码行（引擎异常态）：按代码内容投影
-        out.push(
-          '<pre><code>' +
-            escapeText(stripBlockquotePrefix(line.raw)) +
-            '\n</code></pre>'
-        );
-        break;
+        // 缩进代码块（R1-A2d）：连续 code 行合并为单个 <pre><code>，
+        // 每行剥 up to 4 列缩进；围栏内 code 行已被 renderFencedBlock
+        // 消费，不会在此出现（不误合并围栏代码）。
+        i = renderIndentCodeBlock(lines, i, out);
+        continue;
       case 'table_row':
         out.push(renderTableRow(line));
         break;

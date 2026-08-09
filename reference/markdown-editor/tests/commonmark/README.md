@@ -30,11 +30,14 @@ node tests/commonmark/run-compliance.mjs --summary   # 仅打印摘要
 
 1. **零语义修复**：投影器不补语法、不改语义，只做结构映射。所有映射均为
    AST 字段 → HTML 的确定性翻译，不参考期望 HTML 调整输出。
-2. **不支持语法不补偿**：引擎不支持的 CommonMark 语法——Setext 标题、
-   缩进代码块、引用链接、自动链接、实体引用、`~~~` 围栏、HTML 块、
-   下划线强调（`_x_`）、`3)` 列表序号等——在 AST 中已退化为普通 text
-   节点，投影器按文本规则原样转义输出。期望 `<h2>` 而投影 `<p>title</p>`
-   即记 FAIL。**这是符合度统计的正确行为**，任何补偿都视为作弊。
+2. **不支持语法不补偿**：引擎不支持的 CommonMark 语法——引用链接、
+   自动链接、实体引用、`~~~` 围栏、HTML 块、下划线强调（`_x_`）、
+   `3)` 列表序号等——在 AST 中已退化为普通 text 节点，投影器按文本规则
+   原样转义输出。期望 `<h2>` 而投影 `<p>title</p>` 即记 FAIL。
+   **这是符合度统计的正确行为**，任何补偿都视为作弊。
+   （注：Setext 标题与缩进代码块原属该列举，R1 轮引擎已原生支持——
+   缩进代码产出 `code` 类型行，投影器按 CommonMark 块语义合并投影，
+   见「投影规则表」与「偏差点登记」。）
 3. **扩展语法显式暴露**：引擎扩展语法（行内数学 `$x$`、`==mark==`、
    `||spoiler||`、`[^footnote]`、任务复选框）在 CommonMark 中无对应 HTML，
    投影为占位标签（`<span class="math">` / `<mark>` / `<span class="spoiler">`
@@ -58,6 +61,7 @@ node tests/commonmark/run-compliance.mjs --summary   # 仅打印摘要
 | `hr` | `<hr />` |
 | `blockquote`（行级 blockquoteLevel） | 按层级连续行合并开合 `<blockquote>` 容器 |
 | `code`（围栏内） | `<pre><code>内容\n</code></pre>`；围栏信息串取首个词 → `class="language-…"`；内容行按行原文投影（剥离引用前缀），`\n` 连接并以 `\n` 结尾（空块除外） |
+| `code`（缩进代码块，R1-A2d） | 连续 `code` 行合并为单个 `<pre><code>内容\n</code></pre>`；每行剥离引用前缀后剥 up to 4 列缩进（tab 按停靠 4 展开），`\n` 连接并以 `\n` 结尾；块尾空白行（trim 后为空）剔除，块内空白行保留（剥缩进后可能残留空白，如 spec 例 112） |
 | `table_row` | `<tr><td>…</td></tr>`（table_separator 跳过；CommonMark 无表格语义，仅为完整映射） |
 | `empty` | 无输出 |
 | `math_fence_*` / `math_block` | `<span class="math">…</span>`（扩展语法占位） |
@@ -80,7 +84,7 @@ node tests/commonmark/run-compliance.mjs --summary   # 仅打印摘要
 
 ## 偏差点登记
 
-### 唯一登记偏差点：列表行启发式分组（`astToHtml.ts` 的 `renderListGroup`）
+### 偏差点一：列表行启发式分组（`astToHtml.ts` 的 `renderListGroup`）
 
 引擎 AST 无列表容器节点，只有带 `listIndent` / `listPrefix` 的行。投影器把
 **连续、同种类（ul/ol）、同 listIndent、同引用层级**的列表行归入一个
@@ -95,6 +99,36 @@ node tests/commonmark/run-compliance.mjs --summary   # 仅打印摘要
 
 其余投影均为确定性结构映射，无第二处偏差点。ordered 列表 `listPrefix`
 序号 > 1 时投影 `start="N"` 属性（AST 存储的序号，非补造）。
+
+### 偏差点二：缩进代码块合并投影（`astToHtml.ts` 的 `renderIndentCodeBlock`，R1-A2d）
+
+引擎 R1-A2b 起缩进代码产出 `type === 'code'` 行（`codeBlockState='indent_code'`，
+raw 保留完整原文含缩进），但 **AST 的 LineNode 不携带 codeBlockState 字段**，
+围栏内内容行与缩进代码行在 AST 中不可区分。投影器采用如下启发式：
+
+- 围栏内 `code` 行已被 `renderFencedBlock` 从 `code_fence_start` 消费到
+  `code_fence_end`（含），**主循环遇到的连续 `type === 'code'` 行必然来自
+  缩进代码块**——以此区分，不误合并围栏代码；
+- 块内空白行（trim 后为空）属于代码块（引擎 `inIndentCode` 状态机保持语义，
+  CommonMark：块中空行仍是代码块一部分），随块合并；
+- 每行剥离 blockquote 前缀后按列剥 up to 4 列缩进（tab 停靠 4，与引擎
+  `leadingIndentColumns` 一致），不足 4 列或超过部分原样保留（spec 例 112：
+  6 空格空白行剥 4 列后残留 2 空格进入内容）；
+- 块尾空白行（trim 后为空）不属于块内容，剔除（spec 例 117）——块首不会
+  出现空白行（引擎仅在 ≥4 空格非空行处进入代码块）。
+
+投影器把 R1-A2b 语义层已确定的 code 行按 CommonMark 块语义**忠实合并**为
+单个 `<pre><code>`（合并 + 剥缩进是 CommonMark 期望输出的结构映射，非
+语义修复——引擎 AST 层已正确识别缩进代码，投影器不补语法、不改内容）。
+由此产生的与 CommonMark 的结构差异（如实计 FAIL，属引擎偏差非投影器缺陷）：
+
+- 列表内缩进代码（`- foo\n\n    bar`）：引擎按列表延续解析为 body 行，
+  投影 `<p>` 而非列表项内 `<pre><code>`；
+- 段落打断（`Foo\n    bar`）：引擎按段落延续解析为 body 行，投影两个
+  `<p>` 而非段落内折行；
+- 块外空白行：引擎解析为 body 行（含缩进），投影 `<p>    </p>` 而非忽略。
+
+其余投影均为确定性结构映射，无第三处偏差点。
 
 ## 归一化说明（对比前的渲染等价化）
 
