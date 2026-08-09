@@ -229,8 +229,8 @@ function attachObserver(idx: ContainerIndex): void {
     let structural = true;
     for (const m of mutations) {
       if (m.type === 'childList') {
-        for (const node of m.addedNodes) collectAdded(node);
-        for (const node of m.removedNodes) collectRemoved(node);
+        for (const node of Array.from(m.addedNodes)) collectAdded(node);
+        for (const node of Array.from(m.removedNodes)) collectRemoved(node);
       } else {
         // 定位属性变化（编辑/流式/行插入导致的偏移平移）→ 整体失效
         structural = false;

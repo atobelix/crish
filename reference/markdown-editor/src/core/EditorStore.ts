@@ -424,6 +424,40 @@ export interface EditorOperation {
   selectionStartAfter: number;
   selectionEndAfter: number;
   timestamp: number;
+  /**
+   * 操作类型标记（R3-A 流式合并 undo）：
+   * - 'stream'：流式会话结束（stop-flush）时合并生成的单步 op——
+   *   append 本身不进 undo 栈（09 归一表），流式内容由该 op 一次性撤销/重做；
+   * - 缺省：普通用户编辑 op。
+   */
+  meta?: 'stream';
+}
+
+/**
+ * 流式会话合并记账（R3-A 流式合并 undo）：
+ * append 期间逐 chunk 累计「追加区间」，stop-flush 时据此生成单个
+ * meta:'stream' op。记账起点 = 会话首次 append 时的文档末尾行：
+ * - startLineIdx：追加区间起始行号（= 会话开始时主数组末行索引）；
+ * - removedLines：[追加前末行内容]（undo 时恢复该行，即回到流式前文档）；
+ * - insertedLineCount：追加区间总行数（= 1 + 各 chunk 行增量累计；
+ *   undo 时从 startLineIdx 起删除该数量的行——追加点前移场景同样适用，
+ *   因为该数恒等于「追加后文档在 startLineIdx 之后的行数」）；
+ * - cursorBefore/selection*Before：会话开始时的光标/选区快照
+ *   （undo 流式 op 后光标回退到该位置）。
+ * - shiftedLen：前移路径（追加点前移至光标处）累计插入的流内容字符数。
+ *   追加点 = 光标位置 + shiftedLen——用户击键使光标右移后，后续 append
+ *   仍接在「已插入流内容段」末尾，保证流内容按到达顺序连续有序，且
+ *   用户击键始终落在流内容之前（不落入流内容中段）。
+ */
+export interface StreamOp {
+  startLineIdx: number;
+  removedLines: string[];
+  insertedLineCount: number;
+  cursorBefore: number;
+  selectionStartBefore: number;
+  selectionEndBefore: number;
+  timestamp: number;
+  shiftedLen: number;
 }
 
 export interface EditorState {
@@ -457,6 +491,15 @@ export interface EditorState {
 
   undoStack: EditorOperation[];
   redoStack: EditorOperation[];
+
+  /**
+   * 流式会话合并记账（R3-A）：append 期间非 null，stop-flush 时置 null
+   * 并生成单个 meta:'stream' op 入 undo 栈。
+   */
+  streamOp: StreamOp | null;
+  /** 最近一次用户编辑时间戳（insertText/deleteText 等更新）；0 = 从未编辑。
+   *  appendText 用它判定「用户活跃编辑末尾行」→ 追加点前移（01 问题 5）。 */
+  lastUserEditTime: number;
 
   getText: () => string;
   getLine: (i: number) => string;
@@ -804,6 +847,9 @@ let currentLoadGeneration = 0;
 // —— 尾段零拷贝辅助设施（R2-A / 08 招 2 / 09 §4 C4 契约）——
 // streamTail 上界：超过强制合并，防长流式 O(尾段) 退化（C4）。
 const STREAM_TAIL_MAX_LINES = 4096;
+// 用户活跃编辑窗口（01 问题 5 方案 5.2）：该窗口内光标落在末尾行
+// 视为「用户正在编辑末尾行」，append 追加点前移至光标处，不打断输入。
+const STREAM_USER_EDIT_WINDOW_MS = 1000;
 // 空尾段共享引用（不可变约定：尾段数组只在 set 时整体替换，绝不就地修改）
 const EMPTY_TAIL: string[] = [];
 const EMPTY_STATE_TAIL: CodeState[] = [];
@@ -914,6 +960,30 @@ function mergeTailInto(state: EditorState): EditorState {
 }
 
 /**
+ * 编辑路径对流式合并记账的修正（R3-A 流式合并 undo）：
+ * 用户编辑（insertText/deleteText/undo/redo）会改变主数组行号布局，
+ * 若发生在流式追加区间之前/边界行内，追加区间整体平移 lineDelta，
+ * startLineIdx 同步修正，stop-flush 生成的合并 op 仍能精确删除追加区间；
+ * 若编辑点深入追加区间内部（用户把光标移入流内容编辑），单步撤销已
+ * 无法干净界定区间 → 记账作废（返回 null），下次 append 重新记账，
+ * 「流式 op 作为独立一步」的登记约定不变（09 归一表 §5）。
+ * lineDelta：本次编辑造成的行数净变化（inserted - removed）。
+ */
+function adjustStreamOpForEdit(
+  streamOp: StreamOp | null,
+  editStartLineIdx: number,
+  lineDelta: number
+): StreamOp | null {
+  if (!streamOp) return null;
+  if (editStartLineIdx <= streamOp.startLineIdx) {
+    const next = streamOp.startLineIdx + lineDelta;
+    return next >= 0 ? { ...streamOp, startLineIdx: next } : null;
+  }
+  // 编辑点位于追加区间内部：作废重记账（被编辑切开的流内容绑定用户 op）
+  return null;
+}
+
+/**
  * setState 兼容归一（R2-A）：外部消费方（既有测试等）仍按旧字段名
  * lines / codeBlockState / fenceLines 传「整文档重置」——映射到主数组
  * 字段并清空尾段；视图字段由 materializeViews 在物化步骤生成。
@@ -946,6 +1016,11 @@ function normalizeSetStatePartial(
     out.streamTail = EMPTY_TAIL;
     out.streamTailCodeState = EMPTY_STATE_TAIL;
     out.streamTailFenceLines = EMPTY_FENCE_TAIL;
+    // 整文档重置（R3-A）：流式会话记账与用户活跃标记一并清零，
+    // 防止 setState({lines}) 重置后的残留状态影响后续 append 语义
+    // （append-cursor 测试与既有测试的 resetStore 均走此路径）。
+    out.streamOp = null;
+    out.lastUserEditTime = 0;
   }
   return out;
 }
@@ -971,6 +1046,8 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
 
   undoStack: [],
   redoStack: [],
+  streamOp: null,
+  lastUserEditTime: 0,
   textLength: 0,
 
   cursorPos: 0,
@@ -1005,8 +1082,41 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
   getLineIndex: (pos) => get().lineOffsets.findLineIndex(pos),
 
   flushStreamTail: () => {
-    const patch = flushStreamTail(get());
-    if (patch) dispatchSet(patch);
+    // stop-flush（R3-A）：宿主在流式结束时调用——强制合并尾段，并把本次
+    // 流式会话合并为单个 meta:'stream' op 入 undo 栈（09 归一表 §5：
+    // append 不进 undo 栈；流式结束后合并为单 undo 步）。
+    // 无尾段且无流式会话记账时为空操作（幂等）。
+    const s = get();
+    if (s.streamTail.length === 0 && !s.streamOp) return;
+    dispatchSet((state) => {
+      const patch = flushStreamTail(state);
+      const base = patch ? { ...state, ...patch } : state;
+      // 无记账（异常残留尾段）：仅合并，不登记 op、不动 undo/redo 栈
+      if (!base.streamOp) return patch ? { ...patch, streamOp: null } : state;
+      // 合并 op 独立一步入栈（若栈中已有流式期间的用户编辑 op，流式 op
+      // 直接追加、不折叠不排序——「流式 op 作为独立一步」登记约定）；
+      // redo 栈清空（新一步产生后不可重做）。
+      const op: EditorOperation = {
+        startLineIdx: base.streamOp.startLineIdx,
+        removedLines: base.streamOp.removedLines,
+        insertedLineCount: base.streamOp.insertedLineCount,
+        cursorBefore: base.streamOp.cursorBefore,
+        selectionStartBefore: base.streamOp.selectionStartBefore,
+        selectionEndBefore: base.streamOp.selectionEndBefore,
+        // 合并前后光标/选区不变（合并只并入尾段行，不改变任何内容与顺序）
+        cursorAfter: base.cursorPos,
+        selectionStartAfter: base.selectionStart,
+        selectionEndAfter: base.selectionEnd,
+        timestamp: Date.now(),
+        meta: 'stream',
+      };
+      return {
+        ...(patch ?? {}),
+        streamOp: null,
+        undoStack: [...base.undoStack, op],
+        redoStack: [],
+      };
+    });
   },
 
   setText: (text) => {
@@ -1022,6 +1132,9 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
           streamTail: EMPTY_TAIL,
           streamTailCodeState: EMPTY_STATE_TAIL,
           streamTailFenceLines: EMPTY_FENCE_TAIL,
+          // 整文档重置（R3-A）：流式会话记账与用户活跃标记清零
+          streamOp: null,
+          lastUserEditTime: 0,
           cursorPos: 0,
           selectionStart: 0,
           selectionEnd: 0,
@@ -1078,6 +1191,9 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         streamTail: EMPTY_TAIL,
         streamTailCodeState: EMPTY_STATE_TAIL,
         streamTailFenceLines: EMPTY_FENCE_TAIL,
+        // 整文档重置（R3-A）：流式会话记账与用户活跃标记清零
+        streamOp: null,
+        lastUserEditTime: 0,
         cursorPos: 0,
         selectionStart: 0,
         selectionEnd: 0,
@@ -1196,6 +1312,14 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         streamTail: EMPTY_TAIL,
         streamTailCodeState: EMPTY_STATE_TAIL,
         streamTailFenceLines: EMPTY_FENCE_TAIL,
+        // 用户编辑标记（R3-A 追加点前移判定）+ 流式合并记账修正
+        // （编辑点 ≤ 追加区间起点 → 区间行号整体平移；深入区间内 → 作废）
+        lastUserEditTime: Date.now(),
+        streamOp: adjustStreamOpForEdit(
+          s.streamOp,
+          startLineIdx,
+          insertedLines.length - deleteCount
+        ),
         cursorPos: newPos,
         selectionStart: newPos,
         selectionEnd: newPos,
@@ -1210,9 +1334,19 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
   //   树始终与逻辑全量一致（既有测试断言 lineOffsets.toArray 全量）；
   // - textLength O(1) 增量（append 即在末尾插入 text.length 个字符，
   //   与换行分割无关，经与树重算口径交叉验证一致）；
-  // - 不进 undo 栈（流式语义；「流式结束合并 1 步」登记延后，本轮先保证
-  //   存储正确）；
+  // - 不进 undo 栈（流式语义）；stop-flush（flushStreamTail）时生成单个
+  //   合并 op（meta:'stream'），undo 一次回退整段流式（R3-A / 09 归一表）；
   // - 尾段超上界强制合并（C4：STREAM_TAIL_MAX_LINES，防长流式退化）。
+  //
+  // append 光标冲突语义（R3-A / 01 问题 5 / 09 归一表）：
+  // - 追加点锚定：默认全文末尾（anchor = textLength）；用户「活跃编辑末尾
+  //   行」（光标在逻辑末行内、且最近一次用户编辑在 1s 窗口内）时追加点
+  //   前移至光标处——流内容插入到光标前，用户打字区不被流「塞字符」；
+  // - 光标平移：光标/选区位于追加点之后（≥ anchor）则整体 +text.length
+  //   （wasAtEnd 语义保留：光标恰在全文末尾时随追加推进；追加点前移时
+  //   光标恰在锚点处 → 不移动，后续击键仍插在流内容之前）；
+  // - 流式合并记账（streamOp）：会话首次 append 快照追加前末行与光标，
+  //   逐 chunk 累计追加区间行数，stop-flush 据此生成单步合并 op。
   appendText: (text: string) =>
     dispatchSet((state) => {
       if (!text) return state;
@@ -1244,9 +1378,34 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
           : (i) =>
               i < boundary ? s.mainCodeState[i] : s.streamTailCodeState[i - boundary];
 
-      // 拼接逻辑末行 + 追加文本（与旧实现一致：combined 后 split）
+      // —— 追加点锚定（01 问题 5 方案 5.2 / R3-A）——
+      // userEditingTail：光标落在逻辑末行内（非全文末尾）+ 用户有活跃编辑。
+      // 满足时追加点前移至光标处；否则锚定全文末尾（保持现状语义）。
+      // 追加点 = 光标 + 会话内前移累计流长（shiftedLen）：用户击键后光标
+      // 右移，追加点同步右移，流内容始终按到达顺序接在已插入流段末尾。
+      const userActive =
+        s.lastUserEditTime > 0 &&
+        Date.now() - s.lastUserEditTime < STREAM_USER_EDIT_WINDOW_MS;
+      const cursorInLastLine =
+        s.cursorPos < s.textLength &&
+        s.lineOffsets.findLineIndex(s.cursorPos) === lastLineIdx;
+      const shiftAnchorToCursor = cursorInLastLine && userActive;
+      const anchor = shiftAnchorToCursor
+        ? s.cursorPos + (s.streamOp?.shiftedLen ?? 0)
+        : s.textLength;
+
+      // 拼接逻辑末行 + 追加文本：追加点前移时在光标处拆行插入
+      // （prefix + text + suffix；插入到光标前，光标位置不变）；
+      // 追加点平移后的整行拆分与旧路径一致（combined 后 split）。
       const lastLine = getLineAt(lastLineIdx);
-      const combined = lastLine + text;
+      let combined: string;
+      if (shiftAnchorToCursor) {
+        const lineOffset = s.lineOffsets.getOffset(lastLineIdx);
+        const inLine = Math.max(0, Math.min(anchor - lineOffset, lastLine.length));
+        combined = lastLine.slice(0, inLine) + text + lastLine.slice(inLine);
+      } else {
+        combined = lastLine + text;
+      }
       const newSegmentLines = combined.split('\n');
 
       // —— 状态机基线（与旧 appendText 一致，访问器化后兼容尾段视图）——
@@ -1401,11 +1560,46 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
       const newOffsets = s.lineOffsets.clone();
       newOffsets.updateLines(lastLineIdx, 1, newSegmentLines.map(l => l.length + 1));
 
-      // textLength O(1) 增量（append 即在全文末尾插入 text.length 个字符）
+      // textLength O(1) 增量（append 即在末尾插入 text.length 个字符；
+      // 追加点前移同样 +delta——插入发生在光标处，全文长度增量不变）
       const textLength = state.textLength + text.length;
 
-      // Automatically advance cursor if it was exactly at the end (Requirement 6)
-      const wasAtEnd = state.cursorPos === state.textLength && state.selectionStart === state.selectionEnd;
+      // —— 光标/选区平移（01 问题 5 方案 5.2：位于追加点之后 → +delta）——
+      // 普通路径（追加点 = 全文末尾）：光标/选区 ≥ 锚点 → +delta——光标恰在
+      // 末尾（wasAtEnd）随追加推进（Requirement 6 保留），选区尾跨末尾平移；
+      // 前移路径（追加点 = 光标 + 累计流长）：光标恒不动（光标在追加点
+      // 之前），选区 > 锚点 → +delta（选区尾跨流段末尾平移）；选区 == 锚点
+      // 不动——插入发生在锚点处，锚点左边界的内容与选区不受影响，
+      // 光标与选区不产生无谓分叉（后续击键仍落在流内容之前）。
+      const delta = text.length;
+      const shiftGE = (p: number) => (p >= anchor ? p + delta : p);
+      const shiftGT = (p: number) => (p > anchor ? p + delta : p);
+
+      // —— 流式合并记账（R3-A：append 不进 undo 栈；stop-flush 合并单步）——
+      // 会话首次 append（streamOp 为空）时快照追加前状态；此时尾段必为空
+      // （stop-flush 已清空记账），lastLineIdx = 主数组末行、lastLine 即
+      // 追加前末行全文。insertedLineCount 记账 = 追加区间总行数：
+      // 会话起始 1（末行本身）+ 各 chunk 行增量累计（替换 1 行 → 净增 len-1），
+      // undo 时从 startLineIdx 起删除该数量的行即恢复流式前文档。
+      const streamOp = s.streamOp ?? {
+        startLineIdx: lastLineIdx,
+        removedLines: [lastLine],
+        insertedLineCount: 1,
+        cursorBefore: state.cursorPos,
+        selectionStartBefore: state.selectionStart,
+        selectionEndBefore: state.selectionEnd,
+        timestamp: Date.now(),
+        shiftedLen: 0,
+      };
+      const nextStreamOp: StreamOp = {
+        ...streamOp,
+        insertedLineCount: streamOp.insertedLineCount + newSegmentLines.length - 1,
+        // 前移路径插入的流内容字符数累计（追加点随之前移的里程）；
+        // 普通路径（追加点 = 全文末尾）不累计
+        shiftedLen: shiftAnchorToCursor
+          ? streamOp.shiftedLen + text.length
+          : streamOp.shiftedLen,
+      };
 
       return {
         mainLines,
@@ -1416,9 +1610,10 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         streamTailFenceLines: newTailFence,
         lineOffsets: newOffsets,
         textLength,
-        cursorPos: wasAtEnd ? textLength : state.cursorPos,
-        selectionStart: wasAtEnd ? textLength : state.selectionStart,
-        selectionEnd: wasAtEnd ? textLength : state.selectionEnd,
+        streamOp: nextStreamOp,
+        cursorPos: shiftAnchorToCursor ? s.cursorPos : shiftGE(s.cursorPos),
+        selectionStart: shiftAnchorToCursor ? shiftGT(s.selectionStart) : shiftGE(s.selectionStart),
+        selectionEnd: shiftAnchorToCursor ? shiftGT(s.selectionEnd) : shiftGE(s.selectionEnd),
       };
     }),
 
@@ -1518,6 +1713,13 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         streamTail: EMPTY_TAIL,
         streamTailCodeState: EMPTY_STATE_TAIL,
         streamTailFenceLines: EMPTY_FENCE_TAIL,
+        // 用户编辑标记 + 流式合并记账修正（同 insertText）
+        lastUserEditTime: Date.now(),
+        streamOp: adjustStreamOpForEdit(
+          base.streamOp,
+          startLineIdx,
+          insertedLines.length - deleteCount
+        ),
         cursorPos: s,
         selectionStart: s,
         selectionEnd: s,
@@ -1585,6 +1787,13 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         streamTail: EMPTY_TAIL,
         streamTailCodeState: EMPTY_STATE_TAIL,
         streamTailFenceLines: EMPTY_FENCE_TAIL,
+        // 用户编辑标记 + 流式合并记账修正（同 insertText）
+        lastUserEditTime: Date.now(),
+        streamOp: adjustStreamOpForEdit(
+          base.streamOp,
+          startLineIdx,
+          insertedLines.length - deleteCount
+        ),
         cursorPos: s,
         selectionStart: s,
         selectionEnd: s,
@@ -1627,6 +1836,8 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         selectionStartAfter: op.selectionStartBefore,
         selectionEndAfter: op.selectionEndBefore,
         timestamp: Date.now(),
+        // 流式合并 op 的类型标记随逆 op 传递（redo 后仍为 meta:'stream'）
+        meta: op.meta,
       };
 
       return {
@@ -1635,6 +1846,14 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         streamTail: EMPTY_TAIL,
         streamTailCodeState: EMPTY_STATE_TAIL,
         streamTailFenceLines: EMPTY_FENCE_TAIL,
+        // 用户操作标记 + 流式合并记账修正（同 insertText；undo 的编辑点
+        // = 被撤销 op 的 startLineIdx，行数净变化 = removed - inserted）
+        lastUserEditTime: Date.now(),
+        streamOp: adjustStreamOpForEdit(
+          base.streamOp,
+          op.startLineIdx,
+          op.removedLines.length - op.insertedLineCount
+        ),
         cursorPos: op.cursorBefore,
         selectionStart: op.selectionStartBefore,
         selectionEnd: op.selectionEndBefore,
@@ -1674,6 +1893,8 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         selectionStartAfter: op.selectionStartBefore,
         selectionEndAfter: op.selectionEndBefore,
         timestamp: Date.now(),
+        // 流式合并 op 的类型标记随逆 op 传递（redo 后仍为 meta:'stream'）
+        meta: op.meta,
       };
 
       return {
@@ -1682,6 +1903,14 @@ export const useEditorStore = create<EditorState>((_set, get) => ({
         streamTail: EMPTY_TAIL,
         streamTailCodeState: EMPTY_STATE_TAIL,
         streamTailFenceLines: EMPTY_FENCE_TAIL,
+        // 用户操作标记 + 流式合并记账修正（同 insertText；redo 的编辑点
+        // = 被重做 op 的 startLineIdx，行数净变化 = inserted - removed）
+        lastUserEditTime: Date.now(),
+        streamOp: adjustStreamOpForEdit(
+          base.streamOp,
+          op.startLineIdx,
+          op.insertedLineCount - op.removedLines.length
+        ),
         cursorPos: op.cursorBefore,
         selectionStart: op.selectionStartBefore,
         selectionEnd: op.selectionEndBefore,

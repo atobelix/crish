@@ -1,8 +1,10 @@
 import { memo } from 'react';
 import katex from 'katex';
 import type { LineNode, InlineNode } from '../core/ast';
+import type { CodeState } from '../core/parser';
 import { checkIsActive, type ActiveState } from '../core/measure';
 import { InlineRenderer } from './InlineRenderer';
+import { useEditorStore } from '../core/EditorStore';
 
 const MAX_VISIBLE_LINE_CHARS = 5_000;
 
@@ -55,8 +57,48 @@ function renderMathToHtml(
   }
 }
 
+/**
+ * 流式软渲染判定（05 分析 §2.1 场景一）：判定第 lineIndex 行是否位于
+ * 「未闭合的围栏区间」内——
+ * - 已闭合区间：返回 false，走常规硬渲染（代码启发式高亮 / KaTeX 渲染）；
+ * - 未闭合区间：返回 true，走软渲染（等宽原文，跳过启发式高亮与 KaTeX，
+ *   避免半块突然变色的视觉跳变）。
+ * 判定语义（O(1)，利用 fenceLines 严格交替——开闭边界必然成对出现，
+ * 见 EditorStore.updateLinesIncremental 前缀状态恢复注释）：
+ * 文档最多存在一个未闭合围栏区间，且必然从「最后一个围栏边界」开始——
+ * 若最后一个围栏边界是起始围栏（fence_start / math_fence_start，其后
+ * 尚无配对闭合行），则它之后的所有 code / math_block 行都属于未闭合
+ * 区间；否则全文档围栏均已闭合。只对围栏内行判定：缩进代码块
+ * （indent_code）无闭合语义，不参与。
+ */
+function isInUnclosedFence(
+  lineIndex: number,
+  codeBlockState: CodeState[],
+  fenceLines: number[]
+): boolean {
+  const st = codeBlockState[lineIndex];
+  if (st !== 'code' && st !== 'math_block') return false;
+  const n = fenceLines.length;
+  if (n === 0) return false;
+  // 最后一个围栏边界的行状态：起始围栏 → 未闭合区间（从该行起至文档尾）
+  const lastFenceState = codeBlockState[fenceLines[n - 1]];
+  if (lastFenceState !== 'fence_start' && lastFenceState !== 'math_fence_start') {
+    return false;
+  }
+  // 本行位于未闭合区间起点之后 → 属于未闭合区间（已闭合块内的行在此
+  // 起点之前，不受影响——05 分析「fence_start 后无 fence_end 的区间」）
+  return lineIndex > fenceLines[n - 1];
+}
+
 export const BlockRenderer = memo(
   ({ block, index, lineOffset, activeState, tableId }: BlockRendererProps) => {
+    // 流式软渲染判定（R3-C）：订阅「本行是否位于未闭合围栏区间」。选择器
+    // 返回布尔值——codeBlockState/fenceLines 引用变化但判定结果不变时，
+    // zustand 按 Object.is 比较跳过重渲染，仅在软/硬渲染翻转时更新本行。
+    const softRender = useEditorStore(state =>
+      isInUnclosedFence(index, state.codeBlockState, state.fenceLines)
+    );
+
     const content = (() => {
     switch (block.type) {
       case 'empty':
@@ -151,6 +193,23 @@ export const BlockRenderer = memo(
         );
 
       case 'math_block': {
+        // R3-C 流式软渲染：math fence 未闭合期间不调用 KaTeX renderToString
+        //（CPU 重，流式每帧重渲染会积压开销），显示源文本 + 等宽样式；
+        // 闭合后 codeBlockState 尾部出现 math_fence_end，本分支自然切回
+        // KaTeX 硬渲染（同一 AST 软/硬开关，05 分析「同一 AST 软/硬渲染」）。
+        if (softRender) {
+          return (
+            <div className="line-block line-math-block line-code is-soft-render">
+              <span
+                className="math-soft-text"
+                data-token-start={lineOffset}
+                data-token-length={block.length}
+              >
+                {block.raw}
+              </span>
+            </div>
+          );
+        }
         let formula = block.raw.trim();
         let bMatch;
         while ((bMatch = formula.match(/^\s*>\s?/))) {
@@ -178,6 +237,24 @@ export const BlockRenderer = memo(
       }
 
       case 'code':
+        // R3-C 流式软渲染：fence 未闭合期间代码行不跑启发式 token 高亮
+        //（parseCodeLine 的 keyword/comment/string），渲染等宽原文 + 轻
+        // 高亮（line-code 等宽样式），避免「半块突然变色」的视觉跳变；
+        // 闭合后 fence_end 出现，本分支自然走常规路径（无需显式切换，
+        // 状态由 codeBlockState 驱动）。
+        if (softRender) {
+          return (
+            <div className="line-block line-code is-soft-render">
+              <span
+                className="code-soft-text"
+                data-token-start={lineOffset}
+                data-token-length={block.length}
+              >
+                {block.raw}
+              </span>
+            </div>
+          );
+        }
         return (
           <div className="line-block line-code">
             {block.inlineTokens && block.inlineTokens.length > 0 ? (
