@@ -3,6 +3,8 @@ members = [
     "apps/agent-workbench/src-tauri",
     "crates/agent-provider",
     "crates/agent-tools",
+    "crates/conex-browser",
+    "crates/conex-browser-tools",
     "crates/conex-compaction",
     "crates/conex-db",
     "crates/conex-diff",

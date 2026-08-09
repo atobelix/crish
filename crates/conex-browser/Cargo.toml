@@ -1,0 +1,76 @@
+[package]
+name = "conex-browser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# —— 连接层（维度 11 §2：WS 长连接 + 心跳 + TCP keepalive）——
+# tokio-tungstenite 0.30：CDP 单通道唯一传输面（D-3/D-4）。
+# PE-10 依赖评审引入理由：
+#   · workspace 无此依赖（C4.5 曾清理旧 WS 链路，见 docs/rust-rewrite/20-phase-c-tasks.md:235，
+#     清理理由为「仅 WS 链路使用」——本 crate 即该 WS 链路的唯一回归消费者）；
+#   · 仅启用 default（connect+handshake）：loopback-only CDP 场景无 TLS 需求（10 文档 §3.4
+#     不引 --remote-allow-origins，握手无 Origin 头），依赖面最小；
+#   · 版本取 0.30（2026 当前稳定线），与参考实现 agent-browser 的 0.24 同族，API 对齐。
+tokio-tungstenite = "0.30"
+# 收发分离（SplitSink/SplitStream）与并发聚合（join_all）：workspace 既有依赖
+futures-util = { workspace = true }
+# TCP keepalive（30s/10s，best-effort）：socket2 0.6 已在 workspace 锁内（tauri 链传递），
+# 声明版本与锁内 0.6.5 一致，零新增版本面
+socket2 = "0.6"
+# tokio 补 fs（DevToolsActivePort 轮询 / nav_stack 落盘 / profile 删除重试）：
+# workspace 仅缺 fs，按 feature 并集语义补开，其余沿用 workspace 最小集
+tokio = { workspace = true, features = ["fs"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+# 帧解码（screencastFrame JPEG base64 → 原始字节，§5.2 帧专用通道）：
+# 仅本 crate 消费，0.22 为当前稳定线；workspace 无 base64 声明，直接版本引入
+base64 = "0.22"
+# 异步 trait（CommandPolicyHooks / CommandChannel / RestoreHook）：workspace 既有依赖
+async-trait = { workspace = true }
+# 重连/会话标识（仅诊断日志，不进事件面/前端）+ profile_id（persist.rs，
+# uuid v7 时间有序生成）：workspace 既有声明，补 v7 feature
+uuid = { workspace = true, features = ["v4", "v7"] }
+# cookie 库只读回读统计（import/verify.rs，SQLITE_OPEN_READ_ONLY）：
+# workspace 已有声明（features = bundled 已含 SQLite 编译），零新增版本面
+rusqlite = { workspace = true }
+
+# —— 进程管理（维度 10，browser/ 子模块）——
+# 数据根定位（10 文档 §4.1）：Windows %LOCALAPPDATA% / macOS Application Support /
+# Linux $XDG_DATA_HOME；dirs 6.0 已在锁内（tauri 链传递），零新增版本面
+dirs = "6"
+# 导航栈 URL 规范表示（10 文档 §6.4 nav_stack.rs）：url 2.5 已在锁内，
+# serde feature 用于 nav_stack.json 落盘往返
+url = { version = "2", features = ["serde"] }
+# CfT 下载（10 文档 §2.2）：workspace 0.13（json/rustls/stream），仅本模块消费
+reqwest = { workspace = true }
+# CfT zip 流式解压（10 文档 §2.2：enclosed_name 路径穿越防护 + 前缀剥离）：
+# zip 2.4 为稳定 API 线；default-features 关闭仅留 deflate 编解码器（Chrome 包只用 deflate）
+zip = { version = "2", default-features = false, features = ["deflate"] }
+# 受管 profile 删除走 conex-fs trash（R-2 裁决：用户资产不直接 remove，trash.rs 铁律）
+conex-fs = { path = "../conex-fs" }
+# Windows 平台侧（10 文档 §8 差异表）：Job Object 杀树 + SingletonLock 存活探测；
+# windows-sys 0.61 已在锁内（agent-provider 同款用法），feature 按使用面补齐
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+# rt-multi-thread：mock WS 服务端并发 accept 与部分并发单测（orchestrator 同款用法）
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+# 测试临时目录 fixture（discover/profile/cft/manager 测试）：tempfile 3.27 已在锁内
+tempfile = "3"
