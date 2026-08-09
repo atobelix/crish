@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatComposer.module.css';
-import { Tooltip } from '../ui';
+import { ConfirmDialog, Tooltip } from '../ui';
+import { useConfirmGate } from '../../hooks/useConfirmGate';
 import {
   COMPOSER_DENSE_LINE_HEIGHT,
   COMPOSER_LINE_HEIGHT,
@@ -119,6 +120,8 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
   // 长按 Stop → L3 force（与 Shift+点击同源）
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFiredRef = useRef(false);
+  // window.confirm → ConfirmDialog Promise 桥（批次 4.1，04-detail §2.1.1）
+  const [confirmGate, renderConfirmGate] = useConfirmGate();
 
   const clearLongPress = useCallback(() => {
     if (longPressTimerRef.current != null) {
@@ -130,15 +133,19 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
   useEffect(() => () => clearLongPress(), [clearLongPress]);
 
   /** @returns 是否已真正执行 force（用户确认后） */
-  const invokeForceStop = useCallback((): boolean => {
+  const invokeForceStop = useCallback(async (): Promise<boolean> => {
     const run = onForceStop ?? onStop;
     if (!run) return false;
-    if (typeof window !== 'undefined' && !window.confirm(FORCE_CANCEL_CONFIRM)) {
-      return false;
-    }
+    const ok = await confirmGate({
+      title: '强制取消',
+      description: FORCE_CANCEL_CONFIRM,
+      confirmLabel: '确认强制取消',
+      danger: true,
+    });
+    if (!ok) return false;
     run();
     return true;
-  }, [onForceStop, onStop]);
+  }, [onForceStop, onStop, confirmGate]);
 
   const handleStopClick = useCallback(
     (e: React.MouseEvent) => {
@@ -149,10 +156,10 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
         e.preventDefault();
         return;
       }
-      // Shift+点击 = L3 force_cancel（二次确认）
+      // Shift+点击 = L3 force_cancel（二次确认，异步弹窗）
       if (e.shiftKey) {
         e.preventDefault();
-        invokeForceStop();
+        void invokeForceStop();
         return;
       }
       // 默认单击 = L2 cooperative_stop
@@ -168,9 +175,9 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
     longPressTimerRef.current = setTimeout(() => {
       longPressTimerRef.current = null;
       // 仅确认后吞掉后续 click；用户取消确认仍可单击 L2
-      if (invokeForceStop()) {
-        longPressFiredRef.current = true;
-      }
+      void invokeForceStop().then((fired) => {
+        if (fired) longPressFiredRef.current = true;
+      });
     }, FORCE_STOP_LONG_PRESS_MS);
   }, [onStop, clearLongPress, invokeForceStop]);
 
@@ -228,6 +235,8 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(({
       }
     >
       {leading}
+      {/* 强制取消二次确认（Promise 桥渲染点：request 已带标题/文案，元素 props 兜底） */}
+      {renderConfirmGate(<ConfirmDialog />)}
       <textarea
         id={textAreaId}
         ref={taRef}

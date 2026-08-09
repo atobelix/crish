@@ -90,6 +90,12 @@ export function useSidebarContextMenu({
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(
     null
   );
+  // 删除会话确认（04-detail §2.1.3 宿主迁移）：hook 只登记待删目标与回调，
+  // 不渲染 Dialog——由宿主（Sidebar.tsx）装配 ConfirmDialog 渲染
+  const [pendingDelete, setPendingDelete] = useState<{
+    sessionId: string;
+    title: string;
+  } | null>(null);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
@@ -212,11 +218,8 @@ export function useSidebarContextMenu({
         break;
       case 'delete': {
         const title = targetSession.title || '未命名会话';
-        if (window.confirm(`确定要彻底删除对话“${title}”吗？删除后数据将永久丢失。`)) {
-          // 删除走 sessionStore 命令式入口（SessionFacade 无 deleteSession）
-          root.session.getState().deleteSession(sessionId);
-          onShowToast(`已删除对话: ${title}`);
-        }
+        // 弹窗确认由宿主装配：确认后走 confirmDelete → deleteSession + toast
+        setPendingDelete({ sessionId, title });
         break;
       }
       default:
@@ -224,11 +227,27 @@ export function useSidebarContextMenu({
     }
   };
 
+  const confirmDelete = React.useCallback(() => {
+    if (!pendingDelete) return;
+    const root = getCompositionRoot();
+    // 删除走 sessionStore 命令式入口（SessionFacade 无 deleteSession）
+    root.session.getState().deleteSession(pendingDelete.sessionId);
+    onShowToast(`已删除对话: ${pendingDelete.title}`);
+    setPendingDelete(null);
+  }, [pendingDelete, onShowToast]);
+
+  const cancelDelete = React.useCallback(() => {
+    setPendingDelete(null);
+  }, []);
+
   return {
     contextMenu,
     setContextMenu,
     renamingSessionId,
     setRenamingSessionId,
+    pendingDelete,
+    confirmDelete,
+    cancelDelete,
     menuRef,
     sortMenuRef,
     handleContextMenu,

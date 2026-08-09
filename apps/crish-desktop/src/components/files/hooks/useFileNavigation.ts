@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getWorkspacePath } from '../../../api/projectStore';
 import {
   listDirectory,
@@ -7,6 +7,8 @@ import {
   type FsDirEntry,
 } from '../../../api/workspaceFsApi';
 import { fetchGitStatus, type GitStatusFile } from '../../../api/gitApi';
+import { ConfirmDialog } from '../../ui';
+import { useConfirmGate } from '../../../hooks/useConfirmGate';
 
 export type TreeNode = FsDirEntry & { depth: number };
 
@@ -22,6 +24,9 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
   const [gitStatusMap, setGitStatusMap] = useState<Record<string, string>>({});
   const getIsDirtyRef = useRef(getIsDirty);
   getIsDirtyRef.current = getIsDirty;
+  // window.confirm → ConfirmDialog Promise 桥（批次 4.1，04-detail §2.1.1）；
+  // hook 不直接渲染，渲染物经返回值交给宿主（FilesCard）挂载
+  const [confirmGate, renderConfirmGate] = useConfirmGate();
 
   const loadDir = useCallback(async (path: string) => listDirectory(resolveWorkspacePath(path)), []);
 
@@ -118,15 +123,20 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
 
   const confirmNavigation = useCallback(async (): Promise<boolean> => {
     if (isDirty()) {
-      return window.confirm('当前文件未保存，切换将丢失修改，是否继续？');
+      return confirmGate({
+        title: '未保存的修改',
+        description: '当前文件未保存，切换将丢失修改，是否继续？',
+        confirmLabel: '继续切换',
+      });
     }
     return true;
-  }, [isDirty]);
+  }, [isDirty, confirmGate]);
 
   return {
     root, cwd, entries, expanded, loading, error, filter, filterMode, gitStatusMap,
     loadDir, refresh, toggleExpand, goUp,
     setFilter, setFilterMode, setError, setCwd, setExpanded, setEntries, setLoading, flatTree,
     isDirty, confirmNavigation,
+    confirmGateView: renderConfirmGate(createElement(ConfirmDialog)),
   };
 }

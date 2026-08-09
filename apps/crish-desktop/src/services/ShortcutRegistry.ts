@@ -15,21 +15,29 @@ export interface ShortcutMeta {
   priority?: number;            // higher = wins when multiple bindings match (default 0)
 }
 
-/** 全部内置快捷键注册表 */
+/**
+ * 全部内置快捷键注册表（快捷键的唯一默认真源）。
+ *
+ * 消费方约定：
+ * - AppShortcuts.ts 的 onMatch 执行面必须与本表一一对应（T2-5 有 fs 契约断言双向覆盖）；
+ * - 设置页 SettingsShortcutsTab 的展示数据从此表派生，禁止静态副本；
+ * - 退役登记：本表无『注册但无执行面』的键——曾有的 toggle_runtime（无 handler）
+ *   与 command_palette（无 handler）已按 U-6 原则从本表移除；恢复前必须先在 AppShortcuts 接线。
+ */
 export const BUILTIN_SHORTCUTS: ShortcutMeta[] = [
   { id: 'toggle_settings',   defaultBinding: 'Ctrl + ,',          category: 'navigation', label: '打开设置',        keywords: ['设置', '偏好'] },
-  { id: 'new_session',       defaultBinding: 'Ctrl + N',          category: 'session',    label: '新建会话',        keywords: ['新会话', '新建'] },
+  { id: 'new_session',       defaultBinding: 'Ctrl + N',          category: 'session',    label: '新建对话',        keywords: ['新对话', '新建'] },
   { id: 'focus_composer',    defaultBinding: 'Ctrl + L',          category: 'editor',     label: '聚焦输入框',      keywords: ['输入', '聚焦'] },
   { id: 'stop_generation',   defaultBinding: 'Ctrl + Shift + Backspace', category: 'editor', label: '停止生成',   keywords: ['停止', '中断'] },
-  { id: 'branch_session',    defaultBinding: 'Escape Escape',     category: 'session',    label: '分叉会话',        keywords: ['分叉', '分支'] },
+  { id: 'branch_session',    defaultBinding: 'Ctrl + Shift + F',  category: 'session',    label: '分支对话',        keywords: ['分叉', '分支'] },
   { id: 'toggle_sidebar',    defaultBinding: 'Ctrl + B',          category: 'navigation', label: '切换侧栏',        keywords: ['侧栏', '侧边栏'] },
   { id: 'cheatsheet',        defaultBinding: 'Ctrl + Shift + /',  category: 'navigation', label: '快捷键帮助',      keywords: ['帮助', '快捷键'] },
   { id: 'open_models',       defaultBinding: 'Ctrl + Shift + M',  category: 'panel',      label: '模型设置',        keywords: ['模型', 'AI'] },
   { id: 'open_usage',        defaultBinding: 'Ctrl + Shift + U',  category: 'panel',      label: '用量统计',        keywords: ['用量', '统计'] },
   { id: 'open_security',     defaultBinding: 'Ctrl + Shift + S',  category: 'panel',      label: '安全设置',        keywords: ['安全', '权限'] },
   { id: 'open_shortcuts',    defaultBinding: 'Ctrl + Shift + K',  category: 'panel',      label: '快捷键设置',      keywords: ['快捷键', '键盘'] },
-  { id: 'command_palette',   defaultBinding: '/',                 category: 'editor',     label: '命令面板',        keywords: ['命令', '命令行'] },
+  { id: 'open_extensions',   defaultBinding: 'Ctrl + Shift + X',  category: 'panel',      label: '扩展设置',        keywords: ['扩展', '插件', 'MCP', '技能'] },
+  { id: 'open_schedule',     defaultBinding: 'Ctrl + Shift + J',  category: 'panel',      label: '定时任务',        keywords: ['定时', '计划', 'cron'] },
   { id: 'toggle_plan_mode',  defaultBinding: 'Ctrl + Shift + P',  category: 'system',     label: '切换计划模式',    keywords: ['计划', '规划'] },
   { id: 'export_logs',       defaultBinding: 'Ctrl + Shift + L',  category: 'system',     label: '导出诊断日志',    keywords: ['日志', '诊断', '导出', 'telemetry'] },
-  { id: 'toggle_runtime',    defaultBinding: 'Ctrl + Shift + R',  category: 'panel',      label: '运行面板',        keywords: ['运行', '状态'] },
 ];

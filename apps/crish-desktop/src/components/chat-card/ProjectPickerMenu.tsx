@@ -14,7 +14,8 @@ import { openDirectoryDialogSafe } from '../../api/openDirectoryDialog';
 import { getSessionStoreState, setDraftFolder } from '../../api/storeAccess';
 import { isPendingDraft } from '../../api/store-access/componentAccess';
 import { Check, ChevronRight, Folder, Plus, Search, Trash2 } from 'lucide-react';
-import { Menu, Tooltip } from '../ui';
+import { ConfirmDialog, Menu, Tooltip } from '../ui';
+import { useConfirmGate } from '../../hooks/useConfirmGate';
 
 /** 草稿态切项目：同步 draftFolder，不 mint 真会话 */
 function syncDraftFolderOnProjectChange(folder: string): void {
@@ -49,6 +50,8 @@ export const ProjectPickerMenu: React.FC<Props> = ({
   const [showAddCascade, setShowAddCascade] = useState(false);
   const [busy, setBusy] = useState(false);
   const activeId = getActiveProjectId();
+  // window.confirm → ConfirmDialog Promise 桥（批次 4.1，04-detail §2.1.1）
+  const [confirmGate, renderConfirmGate] = useConfirmGate();
 
   const refresh = () => setProjects(listProjects());
 
@@ -106,15 +109,23 @@ export const ProjectPickerMenu: React.FC<Props> = ({
     }
   };
 
-  const handleRemoveProject = (p: ProjectEntry) => {
-    if (!window.confirm(`确定从列表移除项目「${p.name}」？`)) return;
+  const handleRemoveProject = async (p: ProjectEntry) => {
+    const ok = await confirmGate({
+      title: '移除项目',
+      description: `确定从列表移除项目「${p.name}」？`,
+      confirmLabel: '移除项目',
+    });
+    if (!ok) return;
     removeProject(p.id);
     refresh();
     onChanged?.();
   };
 
   return (
-    <Menu
+    <>
+      {/* 移除项目确认（Promise 桥渲染点） */}
+      {renderConfirmGate(<ConfirmDialog />)}
+      <Menu
       open={open}
       onOpenChange={handleOpenChange}
       trigger={children}
@@ -199,7 +210,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({
                       aria-label={`从列表移除项目 ${p.name}`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleRemoveProject(p);
+                        void handleRemoveProject(p);
                       }}
                     >
                       <Trash2 size={12} />
@@ -276,8 +287,9 @@ export const ProjectPickerMenu: React.FC<Props> = ({
               </button>
             </div>
           )}
+          </div>
         </div>
-      </div>
-    </Menu>
+      </Menu>
+    </>
   );
 };

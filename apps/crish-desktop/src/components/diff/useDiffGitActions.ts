@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { createElement, useCallback, useEffect, useState } from 'react';
 import {
   fetchGitDiff,
   fetchGitStatus,
@@ -16,6 +16,8 @@ import {
 import { compactObj } from '../../utils/compactObj';
 import type { FileDiff } from '../../store/types';
 import type { DiffSourceMode } from '../../api/diffPanelHelpers';
+import { ConfirmDialog } from '../ui';
+import { useConfirmGate } from '../../hooks/useConfirmGate';
 
 interface UseDiffGitActionsOptions {
   sessionWorkspacePath?: string;
@@ -53,6 +55,9 @@ export function useDiffGitActions({
   const [commitLoading, setCommitLoading] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
   const [stagingPaths, setStagingPaths] = useState<Record<string, boolean>>({});
+  // window.confirm → ConfirmDialog Promise 桥（批次 4.1，04-detail §2.1.1）；
+  // hook 不直接渲染，渲染物经返回值交给宿主（DiffCard）挂载
+  const [confirmGate, renderConfirmGate] = useConfirmGate();
 
   const loadBranches = useCallback(async () => {
     try {
@@ -261,7 +266,13 @@ export function useDiffGitActions({
 
   const handleDiscardChanges = async (filePath: string) => {
     const name = filePath.replace(/^.*[\\/]/, '') || filePath;
-    if (!window.confirm(`确定要放弃对 "${name}" 的所有本地未暂存修改吗？此操作不可逆。`)) return;
+    const ok = await confirmGate({
+      title: '放弃修改',
+      description: `确定要放弃对 "${name}" 的所有本地未暂存修改吗？此操作不可逆。`,
+      confirmLabel: '确认放弃',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await discardGitPath(sessionWorkspacePath ?? '', filePath);
       if (!res.ok) toastFail(res.error || '放弃修改失败');
@@ -321,5 +332,6 @@ export function useDiffGitActions({
     handleDiscardChanges,
     handleStageAll,
     handleUnstageAll,
+    confirmGateView: renderConfirmGate(createElement(ConfirmDialog)),
   };
 }

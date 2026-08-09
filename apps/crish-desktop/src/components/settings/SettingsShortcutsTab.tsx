@@ -12,41 +12,63 @@ import {
   SettingsRow,
 } from './SettingsUI';
 import { Tooltip } from '../ui';
+import { BUILTIN_SHORTCUTS } from '../../services/ShortcutRegistry';
 
 type Props = {
   onShowToast: (msg: string) => void;
 };
 
-const DEFAULT_SHORTCUTS: Record<string, string> = {
-  toggle_settings: 'Ctrl + ,', new_session: 'Ctrl + N', focus_composer: 'Ctrl + L',
-  branch_session: 'Escape Escape', command_palette: '/', stop_generation: 'Ctrl + Shift + Backspace',
-  open_models: 'Ctrl + Shift + M', open_usage: 'Ctrl + Shift + U', open_security: 'Ctrl + Shift + E',
-  open_shortcuts: 'Ctrl + Shift + K', open_extensions: 'Ctrl + Shift + X', open_schedule: 'Ctrl + Shift + J',
-  toggle_sidebar: 'Ctrl + B', toggle_runtime: 'Ctrl + `', toggle_plan_mode: 'Ctrl + Shift + P',
-  close_tab: 'MiddleClick', cheatsheet: 'Ctrl + Shift + /',
+/**
+ * 展示元表：id → { group, desc }。
+ * 仅承载设置页独有的展示维度（分组/说明），label 与 defaultBinding 一律取自
+ * ShortcutRegistry（单一真源）——本表不参与执行，防止绑定/文案双源漂移。
+ */
+const SHORTCUT_DISPLAY: Record<string, { group: string; desc: string }> = {
+  toggle_settings: { group: '系统', desc: '打开或关闭' },
+  open_models: { group: '系统', desc: '打开模型设置' },
+  open_usage: { group: '系统', desc: '打开用量' },
+  open_security: { group: '系统', desc: '权限与白名单' },
+  open_shortcuts: { group: '系统', desc: '打开本页' },
+  open_extensions: { group: '系统', desc: '插件、MCP、技能' },
+  open_schedule: { group: '系统', desc: '打开定时任务' },
+  export_logs: { group: '系统', desc: '导出诊断日志' },
+  cheatsheet: { group: '系统', desc: '快捷键一览' },
+  new_session: { group: '会话', desc: '开始新会话' },
+  focus_composer: { group: '会话', desc: '定位到输入框' },
+  branch_session: { group: '会话', desc: '从当前对话分出一支' },
+  stop_generation: { group: '会话', desc: '中断输出' },
+  toggle_plan_mode: { group: '会话', desc: '切换计划权限' },
+  toggle_sidebar: { group: '工作区', desc: '展开或收起' },
 };
 
-const SHORTCUT_ITEMS = [
-  { id: 'toggle_settings', label: '设置', desc: '打开或关闭', group: '系统' },
-  { id: 'open_models', label: '模型', desc: '打开模型设置', group: '系统' },
-  { id: 'open_usage', label: '用量', desc: '打开用量', group: '系统' },
-  { id: 'open_security', label: '安全', desc: '权限与白名单', group: '系统' },
-  { id: 'open_shortcuts', label: '快捷键', desc: '打开本页', group: '系统' },
-  { id: 'open_extensions', label: '扩展', desc: '插件、MCP、技能', group: '系统' },
-  { id: 'open_schedule', label: '定时任务', desc: '打开定时任务', group: '系统' },
-  { id: 'cheatsheet', label: '速查', desc: '快捷键一览', group: '系统' },
-  { id: 'new_session', label: '新建对话', desc: '开始新会话', group: '会话' },
-  { id: 'focus_composer', label: '聚焦输入', desc: '定位到输入框', group: '会话' },
-  { id: 'branch_session', label: '分支对话', desc: '从当前对话分出一支', group: '会话' },
-  { id: 'command_palette', label: '命令', desc: '输入框快捷指令', group: '会话' },
-  { id: 'stop_generation', label: '停止生成', desc: '中断输出', group: '会话' },
-  { id: 'toggle_plan_mode', label: '计划模式', desc: '切换计划权限', group: '会话' },
-  { id: 'toggle_sidebar', label: '侧栏', desc: '展开或收起', group: '工作区' },
-  { id: 'toggle_runtime', label: '运行状态', desc: '显示或隐藏', group: '工作区' },
-  { id: 'close_tab', label: '关闭面板', desc: '关闭当前面板', group: '工作区' },
-] as const;
+export type ShortcutItem = {
+  id: string;
+  label: string;
+  desc: string;
+  group: string;
+  binding: string;
+};
 
-type ShortcutItem = (typeof SHORTCUT_ITEMS)[number];
+/** 从注册表派生展示行：行顺序 = 注册表顺序，label/binding 单一真源（T2-3） */
+export function buildShortcutItems(): ShortcutItem[] {
+  return BUILTIN_SHORTCUTS.map((meta) => {
+    const display = SHORTCUT_DISPLAY[meta.id] ?? { group: '其他', desc: '' };
+    return {
+      id: meta.id,
+      label: meta.label,
+      desc: display.desc,
+      group: display.group,
+      binding: meta.defaultBinding,
+    };
+  });
+}
+
+const SHORTCUT_ITEMS = buildShortcutItems();
+
+/** 默认绑定真源 = 注册表 defaultBinding（无该 id 时返回空串，上游调用方以空值兜底） */
+function defaultBindingOf(id: string): string {
+  return BUILTIN_SHORTCUTS.find((m) => m.id === id)?.defaultBinding ?? '';
+}
 
 
 /** 键名片段 → 中文展示（存储仍为英文 token，仅 UI 本地化） */
@@ -88,16 +110,18 @@ function isValidShortcutValue(v: unknown): v is string {
 }
 
 function loadShortcuts(): Record<string, string> {
+  const defaults: Record<string, string> = {};
+  for (const item of SHORTCUT_ITEMS) defaults[item.id] = item.binding;
   try {
     const saved = configService.get<Record<string, string>>('shortcuts.overrides');
-    const merged: Record<string, string> = { ...DEFAULT_SHORTCUTS };
+    const merged: Record<string, string> = { ...defaults };
     for (const item of SHORTCUT_ITEMS) {
       const v = saved[item.id];
       if (isValidShortcutValue(v)) merged[item.id] = v.trim();
     }
     return merged;
   } catch {
-    return { ...DEFAULT_SHORTCUTS };
+    return defaults;
   }
 }
 
@@ -114,7 +138,7 @@ function findConflict(
 
 function isCustomized(map: Record<string, string>, id: string): boolean {
   const cur = (map[id] || '').trim();
-  const def = (DEFAULT_SHORTCUTS[id] || '').trim();
+  const def = defaultBindingOf(id).trim();
   return Boolean(cur) && cur !== def;
 }
 
@@ -131,7 +155,7 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return SHORTCUT_ITEMS.slice() as ShortcutItem[];
+    if (!q) return SHORTCUT_ITEMS.slice();
     return SHORTCUT_ITEMS.filter((sh) => {
       const keyRaw = customShortcuts[sh.id] || '';
       const keyZh = formatShortcutLabel(keyRaw);
@@ -143,7 +167,7 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
         keyRaw.toLowerCase().includes(q) ||
         keyZh.toLowerCase().includes(q)
       );
-    }) as ShortcutItem[];
+    });
   }, [query, customShortcuts]);
 
   const grouped = useMemo(() => {
@@ -188,7 +212,7 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
 
   const restoreDefault = useCallback(
     (id: string) => {
-      const def = DEFAULT_SHORTCUTS[id];
+      const def = defaultBindingOf(id);
       if (!def) return;
       if ((customShortcuts[id] || '') === def) return;
       const conflict = findConflict(customShortcuts, id, def);
@@ -428,12 +452,12 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
                         control={
                           <div className={`settings-list-control settings-list-control--shortcuts ${styles.controlGroup}`}>
                             {customized && !isRecording ? (
-                              <Tooltip content={`恢复默认：${formatShortcutLabel(DEFAULT_SHORTCUTS[sh.id])}`}>
+                              <Tooltip content={`恢复默认：${formatShortcutLabel(defaultBindingOf(sh.id))}`}>
                                 <button
                                   type="button"
                                   className="settings-shortcuts-filter-clear"
                                   onClick={() => restoreDefault(sh.id)}
-                                  aria-label={`恢复「${sh.label}」为默认 ${formatShortcutLabel(DEFAULT_SHORTCUTS[sh.id])}`}
+                                  aria-label={`恢复「${sh.label}」为默认 ${formatShortcutLabel(defaultBindingOf(sh.id))}`}
                                 >
                                   还原
                                 </button>

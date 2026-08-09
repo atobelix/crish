@@ -74,12 +74,9 @@ export function useAppShortcuts({
 
       if (
         inEditable &&
-        ![
-          'toggle_settings',
-          'toggle_sidebar',
-          'toggle_runtime',
-          'cheatsheet',
-        ].includes(actionId)
+        !['toggle_settings', 'toggle_sidebar', 'cheatsheet'].includes(
+          actionId
+        )
       ) {
         return;
       }
@@ -146,7 +143,7 @@ export function useAppShortcuts({
           const oldSessionId = session.getActiveSessionId();
           const activeSess = getSessionById(oldSessionId);
           if (activeSess) {
-            const forkTitle = `${activeSess.title} - 双击ESC分叉`;
+            const forkTitle = `${activeSess.title} - Ctrl+Shift+F 分叉`;
             branchSession(activeSess.id, forkTitle);
             const newBranchId = session.getActiveSessionId();
             handleShowToast(formatBranchUndoToast(activeSess.title), () => {
@@ -190,10 +187,20 @@ export function useAppShortcuts({
   ]);
 
   useEffect(() => {
-    if (import.meta.env.DEV) {
-      const conflicts = ShortcutService.getInstance().detectConflicts();
-      if (conflicts.length > 0) {
-        console.warn('[crish] 快捷键绑定冲突:', conflicts);
+    // 冲突检测生产接线（T2-2）：改键/注册表变更后任何环境都兜底告警，防绑定漂移静默生效
+    const conflicts = ShortcutService.getInstance().detectConflicts();
+    if (conflicts.length > 0) {
+      console.warn('[crish] 快捷键绑定冲突:', conflicts);
+      if (import.meta.env.DEV) {
+        console.warn(
+          '[crish] 冲突明细：',
+          conflicts
+            .map(
+              (c) =>
+                `${c.actionId}（${c.binding}）与 ${c.conflictsWith} 同绑定`
+            )
+            .join('；')
+        );
       }
     }
   }, []);

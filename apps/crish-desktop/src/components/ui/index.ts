@@ -23,3 +23,6 @@ export type { SelectOptionItem } from './Menu/types';
 
 export { Select } from './Select/Select';
 export type { SelectProps, SelectOption } from './Select/Select';
+
+export { ConfirmDialog } from './ConfirmDialog/ConfirmDialog';
+export type { ConfirmDialogProps } from './ConfirmDialog/ConfirmDialog';

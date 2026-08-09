@@ -4,7 +4,8 @@
  */
 import React, { useCallback, useDeferredValue, useState } from 'react';
 import styles from './DiffCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, ConfirmDialog, Tooltip } from '../ui';
+import { useConfirmGate } from '../../hooks/useConfirmGate';
 import { selectActiveSession, useSessionField } from '../../api/store-access/componentAccess';
 import type { FileDiff } from '../../store/types';
 import {
@@ -52,6 +53,8 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   const [panelErr, setPanelErr] = useState('');
   const [softHint, setSoftHint] = useState('');
   const [commitPanelOpen, setCommitPanelOpen] = useState(false);
+  // window.confirm → ConfirmDialog Promise 桥（批次 4.1，04-detail §2.1.1）
+  const [confirmGate, renderConfirmGate] = useConfirmGate();
 
   const {
     aiTurns, hasAiTurns, mergedSessionFiles, fileList, computedChangesByFile, turnOptions,
@@ -83,6 +86,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     gitLoading, branches, currentBranch, commitMsg, commitLoading, pushLoading, stagingPaths,
     setCommitMsg, loadFromGit, handleSwitchBranch, handleCommit, handlePush,
     handleStageFile, handleUnstageFile, handleDiscardChanges, handleStageAll, handleUnstageAll,
+    confirmGateView,
   } = useDiffGitActions({
     sessionWorkspacePath: getWorkspacePath(), sourceMode, stagedCount,
     setDiffFiles, setActiveDiffSource, setSourceMode, setPanelErr, showSoftHint, dismissSoftHint, toastFail, applyFiles, setTurnKey,
@@ -110,7 +114,14 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     try {
       const res = await readTextFile(filePath);
       if (res.content) {
-        if (res.content.length > 3 * 1024 * 1024 && !window.confirm(`文件庞大 (${(res.content.length / 1024 / 1024).toFixed(2)} MB)，确定复制？`)) return;
+        if (res.content.length > 3 * 1024 * 1024) {
+          const ok = await confirmGate({
+            title: '复制大文件',
+            description: `文件庞大 (${(res.content.length / 1024 / 1024).toFixed(2)} MB)，确定复制？`,
+            confirmLabel: '确定复制',
+          });
+          if (!ok) return;
+        }
         await navigator.clipboard.writeText(res.content);
         onShowToast('最新源码已复制到剪贴板');
       }
@@ -232,6 +243,10 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
           onCommitMsgChange={setCommitMsg} onCommit={handleCommit} onPush={handlePush}
         />
       )}
+
+      {/* 确认对话框渲染点：useDiffGitActions（放弃修改）+ 本组件（大文件复制） */}
+      {confirmGateView}
+      {renderConfirmGate(<ConfirmDialog />)}
     </div>
   );
 };

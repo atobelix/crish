@@ -1,7 +1,10 @@
 /**
  * W7-5: Composer stop UX — Stop = L2, Force Cancel = L3.
- * Click → onStop; Shift+click / long-press → confirm → onForceStop.
+ * Click → onStop; Shift+click / long-press → ConfirmDialog 二次确认 → onForceStop.
  * No native title= (Tooltip only). After isProcessing clears, send is usable.
+ *
+ * 批次 4.1（04-detail §2.1.2 行为变更清单）：window.confirm → ConfirmDialog
+ * Promise 桥——确认路径语义不变；长按「确认→吞 click / 取消→单击仍走 L2」保持。
  */
 // @vitest-environment jsdom
 import React, { useState } from 'react';
@@ -49,6 +52,16 @@ function renderProcessingField(opts: {
   return { ...utils, onStop, onForceStop, onSend };
 }
 
+/** 在挂起确认弹窗中点击确认/取消按钮（等待 Promise 桥微任务结算） */
+async function settleConfirmDialog(action: 'confirm' | 'cancel') {
+  const btn =
+    action === 'confirm'
+      ? screen.getByRole('button', { name: '确认强制取消' })
+      : screen.getByRole('button', { name: '取消' });
+  fireEvent.click(btn);
+  await act(async () => {});
+}
+
 describe('ComposerField stop UX (L2 / L3)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -85,40 +98,57 @@ describe('ComposerField stop UX (L2 / L3)', () => {
     expect(onForceStop).not.toHaveBeenCalled();
   });
 
-  it('Shift+click → L3 onForceStop after confirm', () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('Shift+click → 弹出 alertdialog 确认；确认后 L3 onForceStop', async () => {
     const { onStop, onForceStop } = renderProcessingField({});
     fireEvent.click(screen.getByTestId('composer-stop'), { shiftKey: true });
-    expect(confirm).toHaveBeenCalledWith(FORCE_CANCEL_CONFIRM);
+    // 弹窗语义：alertdialog + 危险变体确认文案（原 confirm 全文入 description）
+    const dialog = screen.getByRole('alertdialog');
+    expect(
+      document.getElementById(dialog.getAttribute('aria-describedby')!)
+    ).toHaveTextContent(FORCE_CANCEL_CONFIRM);
+    await settleConfirmDialog('confirm');
     expect(onForceStop).toHaveBeenCalledTimes(1);
     expect(onStop).not.toHaveBeenCalled();
   });
 
-  it('Shift+click cancel confirm does not force-stop', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('Shift+click 取消确认 → 不 force 也不 L2', async () => {
     const { onStop, onForceStop } = renderProcessingField({});
     fireEvent.click(screen.getByTestId('composer-stop'), { shiftKey: true });
+    await settleConfirmDialog('cancel');
     expect(onForceStop).not.toHaveBeenCalled();
     expect(onStop).not.toHaveBeenCalled();
   });
 
-  it('long-press → L3 onForceStop after confirm', () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('long-press → 弹出确认；确认后 L3 onForceStop，后续 click 不触发 L2', async () => {
     const { onStop, onForceStop } = renderProcessingField({});
     const stop = screen.getByTestId('composer-stop');
     fireEvent.pointerDown(stop);
     act(() => {
       vi.advanceTimersByTime(FORCE_STOP_LONG_PRESS_MS);
     });
-    expect(confirm).toHaveBeenCalledWith(FORCE_CANCEL_CONFIRM);
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    await settleConfirmDialog('confirm');
     expect(onForceStop).toHaveBeenCalledTimes(1);
     // subsequent click after confirmed long-press must not also fire L2
     fireEvent.click(stop);
     expect(onStop).not.toHaveBeenCalled();
   });
 
+  it('long-press 取消确认 → 不 force；后续单击仍走 L2 协作停止', async () => {
+    const { onStop, onForceStop } = renderProcessingField({});
+    const stop = screen.getByTestId('composer-stop');
+    fireEvent.pointerDown(stop);
+    act(() => {
+      vi.advanceTimersByTime(FORCE_STOP_LONG_PRESS_MS);
+    });
+    await settleConfirmDialog('cancel');
+    expect(onForceStop).not.toHaveBeenCalled();
+    // 取消后单击 = L2 cooperative_stop（04 §2.1.2 行为清单：语义必须保持）
+    fireEvent.click(stop);
+    expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
   it('long-press shorter than threshold does not force', () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { onForceStop } = renderProcessingField({});
     const stop = screen.getByTestId('composer-stop');
     fireEvent.pointerDown(stop);
@@ -126,7 +156,7 @@ describe('ComposerField stop UX (L2 / L3)', () => {
       vi.advanceTimersByTime(FORCE_STOP_LONG_PRESS_MS - 100);
     });
     fireEvent.pointerUp(stop);
-    expect(confirm).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(onForceStop).not.toHaveBeenCalled();
   });
 
@@ -166,8 +196,7 @@ describe('ComposerField stop UX (L2 / L3)', () => {
     expect(onSend).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to onStop when onForceStop omitted (transition)', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('falls back to onStop when onForceStop omitted (transition)', async () => {
     const onStop = vi.fn();
     function Harness() {
       const [value, setValue] = useState('');
@@ -187,6 +216,8 @@ describe('ComposerField stop UX (L2 / L3)', () => {
     }
     render(<Harness />);
     fireEvent.click(screen.getByTestId('composer-stop'), { shiftKey: true });
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    await settleConfirmDialog('confirm');
     expect(onStop).toHaveBeenCalledTimes(1);
   });
 });

@@ -48,6 +48,7 @@ components/
 | Menu | `ui/Menu/` | 菜单基座锚点：从 UnifiedSelectPopover 提炼；坐标计算单源 `position.ts`；后续 12 套菜单收敛于此 |
 | Tooltip | `ui/Tooltip/` | 从旧 Tooltip 提炼的单实现，API 保持 {content, side, disabled, delayHide} 不变 |
 | Select | `ui/Select/` | 基于 ui/Menu 的受控 Select（listbox 语义），供 SettingsSelect 等迁移 |
+| ConfirmDialog | `ui/ConfirmDialog/` | 确认对话框基座（02-E3/C-7，03-detail T15）：基于 ui/Dialog 封装 alertdialog 语义；契约见 04-detail §2.1.1——初始焦点取消钮（danger 不默认聚焦确认）、Esc 取消+焦点归还、无关闭按钮；配合 `hooks/useConfirmGate` Promise 桥消费（批次 4.1 的 9 文件 window.confirm 替换落点） |
 
 ## 四、内部共享约定
 

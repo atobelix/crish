@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { createElement, useCallback, useEffect, useRef, useState } from 'react';
 import { countPendingFileAnnotations, detectFileKind, FILE_PREVIEW_CHUNK_LINES, FILE_PREVIEW_MAX_LINES, isMarkdownFilename, nextFilePreviewLineBudget, pathBasename, readTextFile, resolveWorkspacePath, toAssetUrl, writeTextFile } from '../../../api/workspaceFsApi';
 import { listOpenOptionsForFile, type HostOpener } from '../../../api/hostOpenersApi';
 import { pathRelativeToRoot } from '../../../api/workspaceFsApi';
+import { ConfirmDialog } from '../../ui';
+import { useConfirmGate } from '../../../hooks/useConfirmGate';
 
 export type ViewMode = 'browse' | 'detail';
 
@@ -82,6 +84,9 @@ export function useFilePreview() {
   const openedContentRef = useRef<string>('');
   const actionHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onDirtyChangeRef = useRef<((dirty: boolean) => void) | undefined>(undefined);
+  // window.confirm → ConfirmDialog Promise 桥（批次 4.1，04-detail §2.1.1）；
+  // hook 不直接渲染，渲染物经返回值交给宿主（FilesCard）挂载
+  const [confirmGate, renderConfirmGate] = useConfirmGate();
 
   const showActionHint = useCallback((msg: string) => {
     setActionHint(msg);
@@ -132,10 +137,17 @@ export function useFilePreview() {
     if (!selected || !editing) return; clearActionHint();
     try {
       const cc = await readTextFile(selected, FILE_PREVIEW_MAX_LINES);
-      if (cc.content !== openedContentRef.current) { const ok = window.confirm('文件已被外部修改，是否覆盖？'); if (!ok) return; }
+      if (cc.content !== openedContentRef.current) {
+        const ok = await confirmGate({
+          title: '覆盖外部修改',
+          description: '文件已被外部修改，是否覆盖？',
+          confirmLabel: '确认覆盖',
+        });
+        if (!ok) return;
+      }
       await writeTextFile(selected, editBuf); setContent(editBuf); openedContentRef.current = editBuf; setDirty(false); setEditing(false);
     } catch (e) { showActionHint(e instanceof Error ? e.message : '保存失败'); }
-  }, [selected, editing, editBuf, clearActionHint, showActionHint]);
+  }, [selected, editing, editBuf, clearActionHint, showActionHint, confirmGate]);
 
   const copyPath = useCallback((p: string | null, root: string, mode: 'abs' | 'rel' = 'rel') => {
     if (!p || !root) return;
@@ -154,6 +166,7 @@ export function useFilePreview() {
     fileOpeners, openDefaultLabel, actionHint, pendingCount, kind, isMd, canEdit, canLoadMore, openedContentRef,
     openFile, loadMoreLines, saveFile, copyPath, setView, setMdMode, setEditing, setEditBuf, setDirty,
     setSelected, clearActionHint, showActionHint, resetPreview, defaultEditor, actionHintTimerRef, setPendingCount,
+    confirmGateView: renderConfirmGate(createElement(ConfirmDialog)),
   };
   Object.defineProperty(ret, 'onDirtyChange', {
     get() { return onDirtyChangeRef.current; },

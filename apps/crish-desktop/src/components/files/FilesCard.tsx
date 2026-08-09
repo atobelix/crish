@@ -146,6 +146,9 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(({ initialPath }) 
 
   return (
     <AppErrorBoundary variant="compact" title="文件面板出错">
+      {/* 确认对话框渲染点：useFileNavigation（未保存切换）+ useFilePreview（外部修改覆盖） */}
+      {nav.confirmGateView}
+      {preview.confirmGateView}
       <div className={styles.filesCard}>
         <div className={styles.filesBar} role="toolbar" aria-label="文件导航">
           <Tooltip content={PARENT_DIR_LABEL}>

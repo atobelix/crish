@@ -18,7 +18,8 @@ import {
   type UsageSnapshot,
 } from '../../api/usageStore';
 import { SettingsPage, SettingsSection, SettingsCard } from './SettingsUI';
-import { Button, Tooltip } from '../ui';
+import { Button, ConfirmDialog, Tooltip } from '../ui';
+import { useConfirmGate } from '../../hooks/useConfirmGate';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -111,6 +112,19 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
   const [priceFilter, setPriceFilter] = useState('');
   const [history, setHistory] = useState<UsageSnapshot | null>(null);
   const [chartDays, setChartDays] = useState<7 | 14>(7);
+  // window.confirm → ConfirmDialog Promise 桥（批次 4.1，04-detail §2.1.1）
+  const [confirmGate, renderConfirmGate] = useConfirmGate();
+
+  const handleClearHistory = useCallback(async () => {
+    const ok = await confirmGate({
+      title: '清空用量',
+      description: '确定清空本机用量历史？不可撤销！',
+      confirmLabel: '确认清空',
+      danger: true,
+    });
+    if (!ok) return;
+    setHistory(clearUsageHistory());
+  }, [confirmGate]);
 
   const reloadPrices = useCallback(
     (announceToast: boolean) => {
@@ -531,16 +545,7 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
                     size="sm"
                     className={styles.actionBtn}
                     icon={<Lucide.Trash2 size={12} />}
-                    onClick={() => {
-                      if (
-                        typeof window !== 'undefined' &&
-                        window.confirm &&
-                        !window.confirm('确定清空本机用量历史？不可撤销！')
-                      ) {
-                        return;
-                      }
-                      setHistory(clearUsageHistory());
-                    }}
+                    onClick={() => void handleClearHistory()}
                   >
                     清空历史
                   </Button>
@@ -551,6 +556,8 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
         </SettingsCard>
       </SettingsSection>
       {pricingModal}
+      {/* 清空用量确认（Promise 桥渲染点） */}
+      {renderConfirmGate(<ConfirmDialog />)}
     </SettingsPage>
   );
 };

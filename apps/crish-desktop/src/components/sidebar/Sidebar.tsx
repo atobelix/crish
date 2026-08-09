@@ -23,6 +23,7 @@ import { SidebarFooter } from './SidebarFooter';
 import { useSidebarResize } from './useSidebarResize';
 import { useSidebarContextMenu } from './useSidebarContextMenu';
 import { useSidebarHandlers } from './useSidebarHandlers';
+import { ConfirmDialog } from '../ui';
 
 interface SidebarProps {
   onShowToast: ShowToastFn;
@@ -119,6 +120,9 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
       setContextMenu,
       renamingSessionId,
       setRenamingSessionId,
+      pendingDelete,
+      confirmDelete,
+      cancelDelete,
       menuRef,
       sortMenuRef,
       handleContextMenu,
@@ -311,6 +315,21 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
           onSetFilterType={setFilterType}
           onCloseSortDropdown={() => setSortDropdownOpen(false)}
           onCloseContextMenu={() => setContextMenu(null)}
+        />
+
+        {/* 删除会话确认（04-detail §2.1.3 宿主迁移：hook 登记 pendingDelete，本处装配渲染） */}
+        <ConfirmDialog
+          open={pendingDelete !== null}
+          title="删除对话"
+          description={
+            pendingDelete
+              ? `确定要彻底删除对话“${pendingDelete.title}”吗？删除后数据将永久丢失。`
+              : undefined
+          }
+          confirmLabel="确认删除"
+          danger
+          onConfirm={confirmDelete}
+          onCancel={cancelDelete}
         />
       </aside>
     );
