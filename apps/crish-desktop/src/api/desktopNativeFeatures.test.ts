@@ -17,7 +17,7 @@ import {
   openPathDefault,
   listOpenOptionsForFile,
 } from './hostOpenersApi';
-import { invokeCmd, invokeResult } from './tauriInvoke';
+import { invokeCmd, invokeResult, invokeTyped } from './tauriInvoke';
 import capabilitiesManifest from '../../../agent-workbench/src-tauri/capabilities/default.json';
 
 // Mock tauriInvoke dependencies for unit tests
@@ -27,6 +27,7 @@ vi.mock('./tauriInvoke', async (importOriginal) => {
     ...actual,
     invokeResult: vi.fn(),
     invokeCmd: vi.fn(),
+    invokeTyped: vi.fn(),
   };
 });
 
@@ -43,11 +44,13 @@ import { getWorkspacePath } from './projectStore';
 
 const mockedInvokeResult = vi.mocked(invokeResult);
 const mockedInvokeCmd = vi.mocked(invokeCmd);
+const mockedInvokeTyped = vi.mocked(invokeTyped);
 const mockedGetWorkspacePath = vi.mocked(getWorkspacePath);
 
 beforeEach(() => {
   mockedInvokeResult.mockReset();
   mockedInvokeCmd.mockReset();
+  mockedInvokeTyped.mockReset();
   mockedGetWorkspacePath.mockReturnValue('C:\\Users\\dev\\project');
 });
 
@@ -168,17 +171,20 @@ describe('Desktop Native Features - Path Normalization & Security Safeguards', (
 describe('Desktop Native Features - Tauri Native Commands Suite', () => {
   describe('workbench_open_host_target & Host Openers', () => {
     it('lists available host openers via workbench_list_host_openers', async () => {
-      mockedInvokeCmd.mockResolvedValueOnce([
-        { id: 'system-file-manager', displayName: 'File Manager', kind: 'file-manager', available: true },
-        { id: 'vscode', displayName: 'VS Code', kind: 'editor', available: true, path: 'C:\\Program Files\\VSCode\\Code.exe' },
-        { id: 'cursor', displayName: 'Cursor', kind: 'editor', available: false, reason: 'Not installed' },
-      ]);
+      mockedInvokeTyped.mockResolvedValueOnce({
+        status: 'ok',
+        data: [
+          { id: 'system-file-manager', displayName: 'File Manager', kind: 'file-manager', available: true },
+          { id: 'vscode', displayName: 'VS Code', kind: 'editor', available: true, path: 'C:\\Program Files\\VSCode\\Code.exe' },
+          { id: 'cursor', displayName: 'Cursor', kind: 'editor', available: false, reason: 'Not installed' },
+        ],
+      });
 
       const openers = await listHostOpeners();
       expect(openers).toHaveLength(2);
       expect(openers[0]).toMatchObject({ id: 'system-file-manager', available: true });
       expect(openers[1]).toMatchObject({ id: 'vscode', available: true, path: 'C:\\Program Files\\VSCode\\Code.exe' });
-      expect(mockedInvokeCmd).toHaveBeenCalledWith('workbench_list_host_openers');
+      expect(mockedInvokeTyped).toHaveBeenCalledWith('workbench_list_host_openers');
     });
 
     it('opens file target with specified opener using workbench_open_host_target', async () => {
@@ -222,11 +228,17 @@ describe('Desktop Native Features - Tauri Native Commands Suite', () => {
     });
 
     it('sorts host opener options dynamically based on file type', async () => {
-      mockedInvokeCmd.mockResolvedValueOnce([
-        { id: 'system-file-manager', displayName: 'File Manager', kind: 'file-manager', available: true },
-        { id: 'vscode', displayName: 'VS Code', kind: 'editor', available: true },
-      ]);
-      mockedInvokeCmd.mockResolvedValueOnce([]);
+      mockedInvokeTyped.mockResolvedValueOnce({
+        status: 'ok',
+        data: [
+          { id: 'system-file-manager', displayName: 'File Manager', kind: 'file-manager', available: true },
+          { id: 'vscode', displayName: 'VS Code', kind: 'editor', available: true },
+        ],
+      });
+      mockedInvokeTyped.mockResolvedValueOnce({
+        status: 'ok',
+        data: [],
+      });
 
       const options = await listOpenOptionsForFile('C:\\Users\\dev\\project\\src\\index.ts');
       expect(options.defaultLabel).toBe('编辑');
@@ -234,15 +246,15 @@ describe('Desktop Native Features - Tauri Native Commands Suite', () => {
     });
   });
 
-  describe('Native Dialogs - select_folder', () => {
-    it('invokes select_folder command and handles folder selection result', async () => {
+  describe('Native Dialogs - workbench_select_folder', () => {
+    it('invokes workbench_select_folder command and handles folder selection result', async () => {
       mockedInvokeResult.mockResolvedValueOnce({
         status: 'ok',
         data: { path: 'C:\\Users\\dev\\new_project' },
       });
 
-      // Import listDirectory or direct invoke test for select_folder payload structure
-      const res = await invokeResult<{ path: string | null }>('select_folder');
+      // Import listDirectory or direct invoke test for workbench_select_folder payload structure
+      const res = await invokeResult<{ path: string | null }>('workbench_select_folder');
       expect(res).toEqual({
         status: 'ok',
         data: { path: 'C:\\Users\\dev\\new_project' },
@@ -255,7 +267,7 @@ describe('Desktop Native Features - Tauri Native Commands Suite', () => {
         data: { path: null },
       });
 
-      const res = await invokeResult<{ path: string | null }>('select_folder');
+      const res = await invokeResult<{ path: string | null }>('workbench_select_folder');
       expect(res).toEqual({
         status: 'ok',
         data: { path: null },
@@ -331,14 +343,14 @@ describe('Desktop Native Features - HMR Hot-Reload Race Protection', () => {
   it('normalizes missing command / destroyed webview callback errors into structured missing status', async () => {
     // Simulate HMR refresh / webview reload where callback is invalidated
     mockedInvokeResult.mockImplementation(async (cmd) => {
-      if (cmd === 'read_file_content') {
+      if (cmd === 'workbench_read_file_content') {
         // Return structured error as formatted by tauriInvoke on callback invalidation / missing command
         return { status: 'missing' };
       }
       return { status: 'missing' };
     });
 
-    const res = await invokeResult('read_file_content', { path: 'C:\\Users\\dev\\project\\file.txt' });
+    const res = await invokeResult('workbench_read_file_content', { path: 'C:\\Users\\dev\\project\\file.txt' });
     expect(res.status).toBe('missing');
   });
 

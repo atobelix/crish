@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 import {
   runStressTest,
   SeededRandom,
@@ -11,10 +12,18 @@ import {
   StreamTextBatcher,
   streamBatchKey,
 } from '../../apps/crish-desktop/src/api/streamTextBatcher';
+=======
+import { runStressTest, SeededRandom, type StressScenario, type InvariantCheck } from "./stress-runner";
+// 真实生产模块（PS-02 T2.3 重写：原实现仅 TextEncoder 自嗨，零产品接触）
+import { parseBridgeEvent } from "../../apps/crish-desktop/src/api/chat-bridge/handlers/eventParser";
+import { StreamRenderBuffer } from "../../apps/crish-desktop/src/api/StreamRenderBuffer";
+import { StreamTextBatcher, streamBatchKey } from "../../apps/crish-desktop/src/api/streamTextBatcher";
+>>>>>>> Stashed changes
 
 // Node 无 rAF（StreamRenderBuffer 的 flush 调度依赖）：setTimeout 兜底 stub
 // （对齐 vitest.setup.ts 的 node 环境补齐）
 declare global {
+<<<<<<< Updated upstream
   var requestAnimationFrame: ((cb: (t: number) => void) => number) | undefined;
 
   var cancelAnimationFrame: ((id: number) => void) | undefined;
@@ -30,6 +39,22 @@ if (typeof globalThis.cancelAnimationFrame === 'undefined') {
 /** 混合字符集：ASCII + CJK + emoji + 组合字符，全为合法 UTF-16（无孤立代理对） */
 const CHARS =
   'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 中文测试。！？😀🚀éüñ';
+=======
+  // eslint-disable-next-line no-var
+  var requestAnimationFrame: ((cb: (t: number) => void) => number) | undefined;
+  // eslint-disable-next-line no-var
+  var cancelAnimationFrame: ((id: number) => void) | undefined;
+}
+if (typeof globalThis.requestAnimationFrame === "undefined") {
+  globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0) as unknown as number;
+}
+if (typeof globalThis.cancelAnimationFrame === "undefined") {
+  globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
+}
+
+/** 混合字符集：ASCII + CJK + emoji + 组合字符，全为合法 UTF-16（无孤立代理对） */
+const CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 中文测试。！？😀🚀éüñ";
+>>>>>>> Stashed changes
 
 /** 注入 bug 开关（R7 红测试临时置 true：丢弃 5% chunk 模拟丢帧，真实缺陷形态） */
 const SIMULATE_CHUNK_DROP = false;
@@ -71,16 +96,24 @@ interface AiStreamState {
 function makeRunState(rng: SeededRandom): RunState {
   const sessionId = `sess-${rng.nextIntRange(1, 1000000)}`;
   const messageId = `msg-${rng.nextIntRange(1, 100000000)}`;
+<<<<<<< Updated upstream
   const buffer = new StreamRenderBuffer({
     maxBytesPerFrame: 2048,
     frameBudgetMs: 2,
   });
+=======
+  const buffer = new StreamRenderBuffer({ maxBytesPerFrame: 2048, frameBudgetMs: 2 });
+>>>>>>> Stashed changes
   const state: RunState = {
     sessionId,
     messageId,
     injectedChunks: 0,
     injectedChars: 0,
+<<<<<<< Updated upstream
     injectedText: '',
+=======
+    injectedText: "",
+>>>>>>> Stashed changes
     buffer,
     frameDeltas: [],
     sawFinalFrame: false,
@@ -96,6 +129,7 @@ function makeRunState(rng: SeededRandom): RunState {
 
 /** 生成下一个事件：text-delta（历史别名）/ message-delta（严格形态）/ run-terminal（终态）。
  *  至少产出 1 个文本 chunk 后才允许终态（避免 0-chunk 空 run 使 isFinal 帧不变式失去意义）。 */
+<<<<<<< Updated upstream
 function nextEvent(
   rng: SeededRandom,
   run: RunState
@@ -106,6 +140,15 @@ function nextEvent(
     return { type: 'run-terminal', terminal: 'completed' };
   }
   let text = '';
+=======
+function nextEvent(rng: SeededRandom, run: RunState): Record<string, unknown> | null {
+  if (run.terminalCount > 0) return null; // 已终态，不再产出
+  const kind = rng.nextInt(10);
+  if (kind === 9 && run.injectedChunks > 0) {
+    return { type: "run-terminal", terminal: "completed" };
+  }
+  let text = "";
+>>>>>>> Stashed changes
   const len = rng.nextIntRange(6, 24);
   for (let i = 0; i < len; i++) {
     text += CHARS[rng.nextInt(CHARS.length)];
@@ -115,6 +158,7 @@ function nextEvent(
   run.injectedChunks++;
   if (kind < 5) {
     // 历史别名形态（宽容归一路径）
+<<<<<<< Updated upstream
     return { type: 'text-delta', text };
   }
   // 严格信封形态（生成解析器直出路径）
@@ -124,6 +168,17 @@ function nextEvent(
     timestamp: `t-${rng.nextIntRange(1, 1e9)}`,
     messageId: run.messageId,
     block: { type: 'text', text },
+=======
+    return { type: "text-delta", text };
+  }
+  // 严格信封形态（生成解析器直出路径）
+  return {
+    type: "message-delta",
+    sessionId: run.sessionId,
+    timestamp: `t-${rng.nextIntRange(1, 1e9)}`,
+    messageId: run.messageId,
+    block: { type: "text", text },
+>>>>>>> Stashed changes
   };
 }
 
@@ -131,6 +186,7 @@ function nextEvent(
  * 单个 run 的 8 项正确性不变式（输出字符=输入、帧序列不丢、无 U+FFFD、
  * 消费 chunk 数=注入数、run-terminal 恰一次、batcher 终态 flush、isFinal 帧、parse 零失败）。
  */
+<<<<<<< Updated upstream
 function checkRun(
   run: RunState,
   state: AiStreamState,
@@ -144,6 +200,15 @@ function checkRun(
   const batched = checkBatcher
     ? (state.flushedTexts.get(key) ?? '')
     : run.injectedText;
+=======
+function checkRun(run: RunState, state: AiStreamState, checkBatcher: boolean): InvariantCheck[] {
+  const fullText = run.buffer.currentText();
+  const frameJoined = run.frameDeltas.join("");
+  const key = streamBatchKey(run.sessionId, run.messageId);
+  // op 执行期 checkBatcher=true（key 刚被 flushNow 写入）；深检环重检时为 false
+  // （key 已在 op 期比对后释放，避免二次读空串误报）
+  const batched = checkBatcher ? state.flushedTexts.get(key) ?? "" : run.injectedText;
+>>>>>>> Stashed changes
   if (checkBatcher) state.flushedTexts.delete(key); // 内存有界：比对后即释放
 
   return [
@@ -160,7 +225,11 @@ function checkRun(
       message: `帧序列不丢（帧 delta 拼接 = 注入文本, ${frameJoined.length} chars）`,
     },
     {
+<<<<<<< Updated upstream
       ok: !fullText.includes('\uFFFD'),
+=======
+      ok: !fullText.includes("\uFFFD"),
+>>>>>>> Stashed changes
       message: `无 U+FFFD 替换字符`,
     },
     {
@@ -188,9 +257,13 @@ function checkRun(
  * 链路：parseBridgeEvent → 文本块 → StreamRenderBuffer.push（rAF 分帧 flush）
  * + StreamTextBatcher.push（定时批合并）；run-terminal → push("",isFinal) + flush(true) + flushNow()。
  */
+<<<<<<< Updated upstream
 function* aiStreamScenario(
   state: AiStreamState
 ): Generator<() => Promise<unknown>> {
+=======
+function* aiStreamScenario(state: AiStreamState): Generator<() => Promise<unknown>> {
+>>>>>>> Stashed changes
   const { rng, batcher } = state;
   while (true) {
     yield async () => {
@@ -203,9 +276,15 @@ function* aiStreamScenario(
         const event = nextEvent(rng, run);
         if (event === null) break;
         const text =
+<<<<<<< Updated upstream
           event.type === 'text-delta'
             ? String(event.text ?? '')
             : ((event.block as { text?: string } | undefined)?.text ?? '');
+=======
+          event.type === "text-delta"
+            ? String(event.text ?? "")
+            : (event.block as { text?: string } | undefined)?.text ?? "";
+>>>>>>> Stashed changes
 
         if (SIMULATE_CHUNK_DROP && run.injectedChunks % 20 === 0) {
           continue; // 注入缺陷：丢弃 5% chunk（R7 红测试用）
@@ -217,6 +296,7 @@ function* aiStreamScenario(
           run.parseErrors++;
           continue;
         }
+<<<<<<< Updated upstream
         if (r.data.kind !== 'engine') {
           run.parseErrors++;
           continue;
@@ -225,14 +305,28 @@ function* aiStreamScenario(
           run.terminalCount++;
           // 终态标记（push 空串 + isFinal，onComplete 路径语义）
           run.buffer.push('', true);
+=======
+        if (r.data.kind !== "engine") {
+          run.parseErrors++;
+          continue;
+        }
+        if (r.data.type === "run-terminal") {
+          run.terminalCount++;
+          // 终态标记（push 空串 + isFinal，onComplete 路径语义）
+          run.buffer.push("", true);
+>>>>>>> Stashed changes
           run.buffer.flush(true);
           batcher.flushNow();
           continue;
         }
+<<<<<<< Updated upstream
         if (
           r.data.type === 'message-delta' &&
           r.data.event.block.type === 'text'
         ) {
+=======
+        if (r.data.type === "message-delta" && r.data.event.block.type === "text") {
+>>>>>>> Stashed changes
           run.buffer.push(text);
           batcher.push(key, snapshotAtPush);
         } else {
@@ -241,7 +335,11 @@ function* aiStreamScenario(
       }
 
       // 收口（时间窗截断的 run 也在此排空；幂等——已终态 run 的 push 被 finalMarked 拦截）
+<<<<<<< Updated upstream
       run.buffer.push('', true);
+=======
+      run.buffer.push("", true);
+>>>>>>> Stashed changes
       run.buffer.flush(true);
       batcher.flushNow();
 
@@ -266,7 +364,11 @@ function* aiStreamScenario(
 function verifyAiStream(state: AiStreamState): InvariantCheck[] {
   const checks: InvariantCheck[] = [];
   if (state.totalRuns === 0) {
+<<<<<<< Updated upstream
     return [{ ok: false, message: '0 个 run 被执行（空跑）' }];
+=======
+    return [{ ok: false, message: "0 个 run 被执行（空跑）" }];
+>>>>>>> Stashed changes
   }
   checks.push({
     ok: state.failures === 0,
@@ -290,12 +392,18 @@ function verifyAiStream(state: AiStreamState): InvariantCheck[] {
 function createAiStreamState(): AiStreamState {
   const state: AiStreamState = {
     rng: new SeededRandom(42),
+<<<<<<< Updated upstream
     batcher: new StreamTextBatcher(
       (key, text) => {
         state.flushedTexts.set(key, text);
       },
       { intervalMs: 10 }
     ),
+=======
+    batcher: new StreamTextBatcher((key, text) => {
+      state.flushedTexts.set(key, text);
+    }, { intervalMs: 10 }),
+>>>>>>> Stashed changes
     flushedTexts: new Map(),
     totalRuns: 0,
     totalChunks: 0,
@@ -310,14 +418,24 @@ function createAiStreamState(): AiStreamState {
 const aiStreamState = createAiStreamState();
 
 export const AI_STREAM_STRESS: StressScenario = {
+<<<<<<< Updated upstream
   name: 'ai.streaming.real.pipeline',
+=======
+  name: "ai.streaming.real.pipeline",
+>>>>>>> Stashed changes
   duration: 30_000,
   concurrency: 3,
   seed: 42,
   modules: [
+<<<<<<< Updated upstream
     'chat-bridge/handlers/eventParser.parseBridgeEvent',
     'api/StreamRenderBuffer',
     'api/streamTextBatcher.StreamTextBatcher',
+=======
+    "chat-bridge/handlers/eventParser.parseBridgeEvent",
+    "api/StreamRenderBuffer",
+    "api/streamTextBatcher.StreamTextBatcher",
+>>>>>>> Stashed changes
   ],
   scenario: () => aiStreamScenario(aiStreamState),
   verify: () => verifyAiStream(aiStreamState),

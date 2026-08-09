@@ -10,6 +10,15 @@ import { writeFileSync, mkdirSync } from 'node:fs';
  * - 新增 `modules` 字段：输出真实生产模块清单，证明场景非 Node 内置自嗨。
  */
 
+/**
+ * 压力测试框架（PS-02 T2.3 纠偏版）。
+ *
+ * - `fps` 指标重命名为 `ops`（ops/sec）：Node 下无浏览器帧概念，原命名误导。
+ * - 新增 `verify` 不变式钩子：场景在计时循环结束后执行正确性校验，
+ *   全部通过才判 PASS（防"性能阈值 trivially 通过但行为已坏"的空转）。
+ * - 新增 `modules` 字段：输出真实生产模块清单，证明场景非 Node 内置自嗨。
+ */
+
 export class SeededRandom {
   private state: number;
 
@@ -147,9 +156,13 @@ export async function runStressTest(
 
         const now = performance.now();
         if (now - lastSample >= sampleInterval) {
+<<<<<<< Updated upstream
           const opsPerSec = Math.round(
             (opCountInWindow / (now - lastSample)) * 1000
           );
+=======
+          const opsPerSec = Math.round((opCountInWindow / (now - lastSample)) * 1000);
+>>>>>>> Stashed changes
           metrics.ops.samples.push(opsPerSec);
           if (opsPerSec < metrics.ops.min) metrics.ops.min = opsPerSec;
           metrics.ops.current = opsPerSec;
@@ -173,12 +186,16 @@ export async function runStressTest(
       duration: scenario.duration,
       concurrency: scenario.concurrency,
       metrics,
+<<<<<<< Updated upstream
       invariants: [
         {
           ok: false,
           message: `运行异常: ${err instanceof Error ? err.message : String(err)}`,
         },
       ],
+=======
+      invariants: [{ ok: false, message: `运行异常: ${err instanceof Error ? err.message : String(err)}` }],
+>>>>>>> Stashed changes
       passed: false,
       error: err instanceof Error ? err.message : String(err),
     };
@@ -193,12 +210,17 @@ export async function runStressTest(
   const invariants: InvariantCheck[] = scenario.verify ? scenario.verify() : [];
   const invariantsOk = invariants.every((i) => i.ok);
 
+<<<<<<< Updated upstream
   const errorRate =
     metrics.totalOps > 0 ? metrics.errors / metrics.totalOps : 0;
+=======
+  const errorRate = metrics.totalOps > 0 ? metrics.errors / metrics.totalOps : 0;
+>>>>>>> Stashed changes
   // ops 门禁用全程平均吞吐（totalOps/duration）：min 窗口对长耗时 op 噪声大
   // （窗口内可能只完成 1-2 个 op），平均吞吐是更稳定的回归探测器
   const avgOpsPerSec = metrics.totalOps / (scenario.duration / 1000);
   const checkedOps = avgOpsPerSec >= scenario.expected.ops.min;
+<<<<<<< Updated upstream
   const checkedMemory =
     metrics.memory.maxHeap - metrics.memory.startHeap <=
     scenario.expected.memory.maxHeap;
@@ -231,6 +253,23 @@ export async function runStressTest(
   console.log(`  总操作: ${metrics.totalOps}`);
   for (const inv of invariants) {
     console.log(`  不变式 [${inv.ok ? 'OK' : 'VIOLATED'}] ${inv.message}`);
+=======
+  const checkedMemory = metrics.memory.maxHeap - metrics.memory.startHeap <= scenario.expected.memory.maxHeap;
+  const checkedLatency = p95 <= scenario.expected.latency.p95 && p99 <= scenario.expected.latency.p99;
+  const checkedErrorRate = errorRate <= scenario.expectedErrorRate;
+
+  const passed = checkedOps && checkedMemory && checkedLatency && checkedErrorRate && invariantsOk;
+
+  console.log(`[${passed ? "PASS" : "FAIL"}] ${scenario.name}`);
+  console.log(`  生产模块: ${scenario.modules.join(" / ")}`);
+  console.log(`  ops/sec: avg=${avgOpsPerSec.toFixed(1)} (要求 >= ${scenario.expected.ops.min}) min窗口=${metrics.ops.min}`);
+  console.log(`  内存: ${Math.round((metrics.memory.maxHeap - metrics.memory.startHeap) / 1024 / 1024)}MB (要求 <= ${Math.round(scenario.expected.memory.maxHeap / 1024 / 1024)}MB)`);
+  console.log(`  延迟: p95=${Math.round(p95)}ms p99=${Math.round(p99)}ms (要求 p95<=${scenario.expected.latency.p95} p99<=${scenario.expected.latency.p99})`);
+  console.log(`  错误率: ${(errorRate * 100).toFixed(1)}% (要求 <= ${(scenario.expectedErrorRate * 100).toFixed(0)}%)`);
+  console.log(`  总操作: ${metrics.totalOps}`);
+  for (const inv of invariants) {
+    console.log(`  不变式 [${inv.ok ? "OK" : "VIOLATED"}] ${inv.message}`);
+>>>>>>> Stashed changes
   }
 
   return {
