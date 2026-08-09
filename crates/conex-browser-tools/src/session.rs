@@ -267,8 +267,8 @@ impl SessionOps for RealSession {
         };
         Ok(doc.selector_map.get(&index).map(|r| ElementMeta {
             backend_node_id: r.backend_node_id,
-            // 密码标记需快照序列化面携带，MVP 恒 false（遗留：13 文档元数据接线）
-            is_password: false,
+            // M2：密码输入目标判定——快照文档敏感输入集合（redact 同源判定）
+            is_password: is_password_element(&doc, r.backend_node_id),
         }))
     }
 
@@ -369,13 +369,19 @@ impl SnapshotStore for ToolSnapshotStore {
         let node_ref = doc.selector_map.get(&(index as u32))?;
         Some(ElementMeta {
             backend_node_id: node_ref.backend_node_id,
-            is_password: false,
+            is_password: is_password_element(&doc, node_ref.backend_node_id),
         })
     }
 
     fn note_action_done(&self, tab_id: &TabId) {
         self.session.bump(tab_id, VersionReason::ActionDone);
     }
+}
+
+/// 密码输入目标判定（M2）：快照文档携带敏感输入集合（redact 同源判定），
+/// 单点封装——`element_meta` 与 `element_by_index` 消费同一口径。
+fn is_password_element(doc: &SnapshotDocument, backend_node_id: i64) -> bool {
+    doc.password_backend_ids.contains(&backend_node_id)
 }
 
 /// 重快照错误 → ActionError（14 §5.1 分类：超时/版本竞态/采集失败）。
@@ -570,5 +576,32 @@ mod tests {
         let after = buffer.entries_since(1);
         assert_eq!(after.len(), 1);
         assert_eq!(after[0].text, "b");
+    }
+
+    /// M2：密码输入目标判定——快照文档敏感输入集合（redact 同源）消费面。
+    /// 构造含密码标记的文档（集合成员命中、非成员排除），验证 is_password 口径。
+    #[test]
+    fn password_flag_consumed_from_document() {
+        use conex_browser::snapshot::{BlindZoneStats, SnapshotMeta};
+        let doc = SnapshotDocument {
+            serialized_text: String::new(),
+            selector_map: std::collections::HashMap::new(),
+            password_backend_ids: std::collections::HashSet::from([7]),
+            meta: SnapshotMeta {
+                snapshot_version: 1,
+                epoch: 0,
+                captured_at_ms: 0,
+                url: String::new(),
+                title: String::new(),
+                tab_id: "t1".to_string(),
+                element_count: 0,
+                selector_count: 0,
+                truncation: None,
+                blind_zone: BlindZoneStats::default(),
+            },
+        };
+        assert!(is_password_element(&doc, 7), "集合成员必须判定为密码输入目标");
+        assert!(!is_password_element(&doc, 8), "非集合成员不得误判");
+        assert!(!is_password_element(&doc, 0), "backend=0（不存在）不得误判");
     }
 }

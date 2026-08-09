@@ -8,6 +8,9 @@
 //! - 断线判定唯一可信信号：reader 循环退出（Close 帧/Err/EOF）→ 清空 pending +
 //!   置 lost watch（ping 无 pong 不判定，WS 标准允许对端不答 pong）
 //! - reader 永不 panic 退出（宽容解析 + 事件解析失败记 warning 丢弃），防断连死循环
+//! - 帧/消息级上限（M1）：ConnectConfig.max_frame_size（默认 16MB）/max_message_size
+//!   （默认 64MB）——对抗性超大载荷在传输层即拒（reader 报错断开），防整包缓冲内存尖峰
+//! - Drop 收尾（M3）：abort reader/keepalive 任务，弃置客户端不留常驻任务
 
 use crate::cdp::error::{BrowserError, CdpError};
 use crate::cdp::types::{CdpCommand, CdpEvent, CdpMessage};
@@ -29,6 +32,11 @@ pub const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// 默认心跳间隔（WS Ping，§2.2）。
 pub const WS_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
+/// 默认 WS 单帧大小上限（16MB：远超 150KB 采集护栏的合法面，防对抗性超大载荷
+/// 整包缓冲导致内存尖峰，M1）。
+pub const DEFAULT_MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
+/// 默认 WS 单消息累计上限（64MB：多帧合成的单条消息累计，M1）。
+pub const DEFAULT_MAX_MESSAGE_SIZE: usize = 64 * 1024 * 1024;
 
 type PendingMap = Arc<Mutex<HashMap<u64, oneshot::Sender<CdpMessage>>>>;
 
@@ -37,6 +45,10 @@ type PendingMap = Arc<Mutex<HashMap<u64, oneshot::Sender<CdpMessage>>>>;
 pub struct ConnectConfig {
     pub heartbeat: Duration,
     pub handshake_timeout: Duration,
+    /// WS 单帧大小上限（超限帧读取报错 → reader 断开连接，M1；None = 不设限）
+    pub max_frame_size: Option<usize>,
+    /// WS 单消息累计大小上限（多帧累计超限同样报错断开，M1；None = 不设限）
+    pub max_message_size: Option<usize>,
 }
 
 impl Default for ConnectConfig {
@@ -44,6 +56,8 @@ impl Default for ConnectConfig {
         ConnectConfig {
             heartbeat: WS_KEEPALIVE_INTERVAL,
             handshake_timeout: HANDSHAKE_TIMEOUT,
+            max_frame_size: Some(DEFAULT_MAX_FRAME_SIZE),
+            max_message_size: Some(DEFAULT_MAX_MESSAGE_SIZE),
         }
     }
 }
@@ -88,8 +102,18 @@ pub struct CdpClient {
     pending: PendingMap,
     event_tx: broadcast::Sender<CdpEvent>,
     lost_tx: watch::Sender<bool>,
-    _reader_handle: tokio::task::JoinHandle<()>,
-    _keepalive_handle: tokio::task::JoinHandle<()>,
+    reader_handle: tokio::task::JoinHandle<()>,
+    keepalive_handle: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for CdpClient {
+    /// 收尾（M3）：abort reader/keepalive 任务——Drop 不可 await；任务终止即
+    /// 释放 WS 流句柄（读半随 reader future drop 关闭，写半随本结构 drop 关闭），
+    /// 杜绝「客户端被弃置但任务与连接残留」的任务泄漏。
+    fn drop(&mut self) {
+        self.reader_handle.abort();
+        self.keepalive_handle.abort();
+    }
 }
 
 impl CdpClient {
@@ -138,11 +162,13 @@ impl CdpClient {
             }
         }
 
-        // 不携带 Origin 头（Chromium 对 loopback + 无 Origin 放行）；大消息不被截断
-        // （max_message_size/frame = None；快照/帧可能超大）
+        // 不携带 Origin 头（Chromium 对 loopback + 无 Origin 放行）；大消息不被
+        // 截断 → 帧/消息级上限折中（M1：16MB 单帧 / 64MB 消息累计，可配；远超
+        // 150KB 采集护栏的合法面，对抗性超大响应在传输层即被拒，杜绝整包缓冲
+        // 后的内存尖峰；超限帧读取报错 → reader 退出 → 连接按断线路径收敛）
         let ws_config = WebSocketConfig::default()
-            .max_message_size(None)
-            .max_frame_size(None);
+            .max_frame_size(config.max_frame_size)
+            .max_message_size(config.max_message_size);
 
         // 握手（10s 超时）；不携带 Origin 头（Chromium 对 loopback + 无 Origin 放行）
         let (ws_stream, _) = tokio::time::timeout(config.handshake_timeout, {
@@ -242,8 +268,8 @@ impl CdpClient {
             pending,
             event_tx,
             lost_tx,
-            _reader_handle: reader_handle,
-            _keepalive_handle: keepalive_handle,
+            reader_handle,
+            keepalive_handle,
         })
     }
 
@@ -561,5 +587,103 @@ mod tests {
         }
         assert!(tokio::time::Instant::now() < deadline, "断线必须即刻返回，不等超时");
         assert_eq!(client.pending_len().await, 0);
+    }
+
+    /// 超限帧拒绝（M1）：超过 max_frame_size 的对抗性超大帧 → reader 报错断开
+    /// → lost 信号置位（传输层即拒，不做整包缓冲）。
+    #[tokio::test]
+    async fn client_rejects_oversized_frame() {
+        let mock = MockServer::spawn().await;
+        let client = CdpClient::connect_with_config(
+            &mock.url("/devtools/browser/oversize-frame"),
+            ConnectConfig {
+                max_frame_size: Some(1024),
+                max_message_size: Some(16 * 1024 * 1024),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("建连失败");
+        let mut lost = client.lost();
+        // 对抗性超大载荷：4096B 单帧超出 1024B 帧上限
+        mock.send_event("Page.oversized", json!({ "payload": "x".repeat(4096) }), None);
+        wait_lost(&mut lost, "超大帧应触发连接断开（超限报错）").await;
+    }
+
+    /// 超限消息拒绝（M1）：帧不设限、消息累计超 max_message_size（多帧合成大
+    /// 消息场景）→ reader 报错断开。
+    #[tokio::test]
+    async fn client_rejects_oversized_message() {
+        let mock = MockServer::spawn().await;
+        let client = CdpClient::connect_with_config(
+            &mock.url("/devtools/browser/oversize-msg"),
+            ConnectConfig {
+                max_frame_size: None,
+                max_message_size: Some(1024),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("建连失败");
+        let mut lost = client.lost();
+        mock.send_event("Page.oversized", json!({ "payload": "x".repeat(4096) }), None);
+        wait_lost(&mut lost, "累计消息超限应触发连接断开").await;
+    }
+
+    /// 正常消息不受影响（M1 否定面）：限内大消息仍正常解析路由。
+    #[tokio::test]
+    async fn client_accepts_message_within_limits() {
+        let (mut mock, client) = connect_pair().await;
+        mock.set_auto_reply("Runtime.evaluate", MockReply::Ok(json!({ "result": {} })));
+        // 限内消息（8KB）正常处理：命令仍可成功往返
+        let c = client.clone();
+        let t = tokio::spawn(async move {
+            c.send_command(
+                "Runtime.evaluate",
+                Some(json!({ "expression": "x".repeat(4096) })),
+                None,
+            )
+            .await
+        });
+        let cmd = mock.next_command().await;
+        let id = cmd["id"].as_u64().unwrap();
+        mock.reply(id, json!({ "result": { "value": 1 } }));
+        assert!(t.await.expect("任务失败").is_ok(), "限内消息不得被误拒");
+    }
+
+    /// 等待 lost 信号置位（超限断开断言）。
+    async fn wait_lost(lost: &mut watch::Receiver<bool>, why: &str) {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            if *lost.borrow() {
+                return;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "{why}（lost 信号未置位）"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    /// M3：Drop 后 reader/keepalive 任务终止（任务不再泄漏到连接关闭）。
+    #[tokio::test]
+    async fn client_drop_aborts_background_tasks() {
+        let (mock, client) = connect_pair().await;
+        let _ = mock;
+        let reader = client.reader_handle.abort_handle();
+        let keepalive = client.keepalive_handle.abort_handle();
+        drop(client);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            if reader.is_finished() && keepalive.is_finished() {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "Drop 后 reader/keepalive 任务必须终止"
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
     }
 }

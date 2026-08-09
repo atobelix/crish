@@ -288,6 +288,11 @@ pub struct BrowserManager {
     tuning: LaunchTuning,
     events: broadcast::Sender<ProcessEvent>,
     inner: Arc<Mutex<Inner>>,
+    /// 启动临界区互斥（评审 H6）：`start()` 的「already_running 检查」与
+    /// 「状态置位」之间含多个 await 点（孤儿清扫/后端解析/建 profile），
+    /// 并发 start() 必须串行化——检查与置位在同一临界区内原子完成，
+    /// 第二个调用方在置位后看到非 Stopped 直接走幂等分支，杜绝双启进程。
+    start_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl BrowserManager {
@@ -309,6 +314,7 @@ impl BrowserManager {
             tuning,
             events,
             inner: Arc::new(Mutex::new(Inner::new())),
+            start_lock: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
@@ -331,7 +337,15 @@ impl BrowserManager {
     }
 
     /// 启动（§2/§5/§6.2）：幂等——非 Stopped 直接返回当前快照报告（§4.5）。
+    ///
+    /// 评审 H6（29-评审-代码质量与安全）：旧实现的 already_running 检查与状态
+    /// 置位之间隔着 `sweep_orphans`/`resolve_backend(...).await`/`prepare_profile`
+    /// 等非原子窗口，两个并发 start() 可各自通过检查 → 双启浏览器进程、双建
+    /// profile、第二个驱动句柄覆盖第一个。现实现：整个「检查-置位」临界区由
+    /// `start_lock` 互斥串行化——状态置位完成后释放，此后并发 start() 看到
+    /// 非 Stopped 直接返回当前报告（幂等语义不变，等待首启结果不阻塞）。
     pub async fn start(&self, config: LaunchConfig) -> Result<LaunchReport, ProcessError> {
+        let critical = self.start_lock.lock().await;
         let already_running = {
             let g = self.lock();
             !matches!(g.machine.state(), BrowserState::Stopped)
@@ -354,7 +368,7 @@ impl BrowserManager {
         .await?;
         // 2. 建 profile 目录（§4）
         let (profile_dir, token) = self.prepare_profile(&config)?;
-        // 3. 状态机入 Launching + 派发驱动任务
+        // 3. 状态机入 Launching + 派发驱动任务（临界区尾：状态置位即释放互斥）
         let (first_tx, first_rx) = oneshot::channel();
         {
             let mut g = self.lock();
@@ -376,6 +390,7 @@ impl BrowserManager {
                 mgr.drive_session(config, first_tx).await;
             }));
         }
+        drop(critical);
         self.emit(ProcessEvent::StateChanged {
             state: BrowserState::Launching { attempt: 1 },
             restarts: 0,
@@ -639,6 +654,16 @@ impl BrowserManager {
             let (mut wait_task, mut process) = process.wait_task();
             let (stop_tx, mut stop_rx) = watch::channel(false);
             self.lock().stop_tx = Some(stop_tx);
+            // 停止信号竞态窗口（回归：F6 Drop 杀树测试暴露）：stop() 若落在
+            // 「上一轮 select 结束（进程退出）→ 本轮新 stop_tx 挂接」之间的
+            // relaunch 窗口（崩溃退避/重试/启动轮询），watch 信号发往旧通道
+            // （无接收者）即丢失——pending_stop 是持久信号，此处复查兜住；
+            // 复查与 select 之间无 await 且新 stop_tx 已挂接，该窗口内到达的
+            // stop() 经新 stop_rx 的 watch 语义在 select 建立时立即可见。
+            if self.lock().pending_stop.is_some() {
+                self.stop_path(&mut wait_task, &mut process, false).await;
+                break;
+            }
             let exit_status = tokio::select! {
                 status = &mut wait_task => {
                     // 进程退出（可能是我杀的，也可能是它崩的）
@@ -1071,12 +1096,33 @@ impl BrowserManager {
 
 impl Drop for BrowserManager {
     /// Drop 兜底（§6.2）：同步杀树（不依赖 async 运行时）。
+    ///
+    /// 评审 F6（31-评审-接线与集成）：旧实现 `try_lock` 失败即静默跳过杀树，
+    /// 应用退出时浏览器进程泄漏。锁纪律（B8）保证 std Mutex 持锁区间仅同步
+    /// 操作（微秒级），`try_lock` 失败仅发生在极端竞争短窗——短窗重试仍失败
+    /// 则 spawn 阻塞兜底线程收尸（锁释放后立即 kill_sync），绝不放任泄漏。
+    /// 评审 F1 加固：两条路径均在**锁内仅取 pid**、释放锁后再 kill_sync——
+    /// kill_sync 含子进程调用（taskkill）与 2s 回收等待，不得持锁执行
+    /// （极端下 taskkill 挂起会冻结全管理器/驱动）。
     fn drop(&mut self) {
+        let kill = |pid: u32| {
+            new_killer().kill_sync(pid);
+        };
         if let Ok(g) = self.inner.try_lock() {
             if let Some(pid) = g.last_pid {
-                new_killer().kill_sync(pid);
+                drop(g);
+                kill(pid);
             }
+            return;
         }
+        let inner = Arc::clone(&self.inner);
+        std::thread::spawn(move || {
+            // 锁纪律 B8：持锁区间仅同步操作（取 pid），杀树在锁外执行
+            let pid = inner.lock().unwrap_or_else(|p| p.into_inner()).last_pid;
+            if let Some(pid) = pid {
+                kill(pid);
+            }
+        });
     }
 }
 
@@ -1093,10 +1139,50 @@ fn classify_exit(status: &std::process::ExitStatus) -> CrashReason {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::browser::profile::browser_root;
 
-    /// 快速 tuning（测试用）。
-    fn fast_tuning() -> LaunchTuning {
+    /// 事件面零端点：StateChanged Debug 不含端口/路径片段（§7.3 回归）。
+    #[test]
+    fn endpoint_never_in_events() {
+        let ev = ProcessEvent::StateChanged {
+            state: BrowserState::Running,
+            restarts: 0,
+            backend: Some(BackendResolution {
+                backend: crate::browser::discover::Backend::SystemChrome {
+                    path: PathBuf::from("C:\\secret\\chrome.exe"),
+                },
+                probes: vec![],
+            }),
+            error: None,
+        };
+        let debug = format!("{ev:?}");
+        assert!(!debug.contains("38689"));
+        assert!(!debug.contains("/devtools/"));
+        assert!(!debug.contains("secret"));
+        // status 也不含端点
+        let status = BrowserStatus {
+            state: BrowserState::Running,
+            restarts: 0,
+            backend: Some("SystemChrome".into()),
+            last_error: None,
+            nav_tabs: 1,
+        };
+        assert!(!format!("{status:?}").contains("ws://"));
+    }
+
+    /// 假浏览器 .bat harness 生命周期测试（32 评审 P1-1 修复）：
+    /// 全部用例依赖 `.bat`/cmd 语义假浏览器脚本（写 DevToolsActivePort、
+    /// `ping -n 2` 计时循环），ubuntu 中层 CI（`cargo test --workspace`）的
+    /// unix spawn 直接 exec 无 shebang 文件必失败——整组 `#[cfg(windows)]`
+    /// 门控（ubuntu 不编译不收集）。与 platform/windows.rs 已门控的
+    /// `job_kill_tree_terminates`（杀树原语层，windows.rs:284-286）不重复：
+    /// 本组覆盖 BrowserManager 生命周期调度面（start/stop/崩溃自愈/双启竞态）。
+    #[cfg(windows)]
+    mod harness {
+        use super::*;
+        use crate::browser::profile::browser_root;
+
+        /// 快速 tuning（测试用）。
+        fn fast_tuning() -> LaunchTuning {
         LaunchTuning {
             poll_interval: Duration::from_millis(20),
             poll_timeout: Duration::from_secs(3),
@@ -1118,7 +1204,13 @@ mod tests {
         fn new() -> Option<Self> {
             let dir = tempfile::tempdir().expect("临时目录");
             if dir.path().to_string_lossy().contains(' ') {
-                return None; // .bat 假浏览器参数解析不兼容空格路径，跳过
+                // 32 评审 F6（P2-7）：%TEMP% 含空格（如用户名含空格）时 .bat 假
+                // 浏览器参数解析不兼容——显式报告跳过原因，避免覆盖静默丢失
+                eprintln!(
+                    "跳过 .bat harness 测试：临时目录路径含空格（{}）",
+                    dir.path().display()
+                );
+                return None;
             }
             Some(Harness {
                 manager: BrowserManager::with_tuning(dir.path().to_path_buf(), fast_tuning()),
@@ -1425,35 +1517,6 @@ mod tests {
         mgr.stop(StopReason::Force).await.expect("停止");
     }
 
-    /// 事件面零端点：StateChanged Debug 不含端口/路径片段（§7.3 回归）。
-    #[test]
-    fn endpoint_never_in_events() {
-        let ev = ProcessEvent::StateChanged {
-            state: BrowserState::Running,
-            restarts: 0,
-            backend: Some(BackendResolution {
-                backend: crate::browser::discover::Backend::SystemChrome {
-                    path: PathBuf::from("C:\\secret\\chrome.exe"),
-                },
-                probes: vec![],
-            }),
-            error: None,
-        };
-        let debug = format!("{ev:?}");
-        assert!(!debug.contains("38689"));
-        assert!(!debug.contains("/devtools/"));
-        assert!(!debug.contains("secret"));
-        // status 也不含端点
-        let status = BrowserStatus {
-            state: BrowserState::Running,
-            restarts: 0,
-            backend: Some("SystemChrome".into()),
-            last_error: None,
-            nav_tabs: 1,
-        };
-        assert!(!format!("{status:?}").contains("ws://"));
-    }
-
     /// 停止报告与状态一致性。
     #[tokio::test]
     async fn stop_report_consistent() {
@@ -1498,4 +1561,213 @@ mod tests {
         crate::browser::profile::trash_managed(&managed, &trash).expect("入回收站");
         assert!(!managed.exists());
     }
+
+    /// 评审 F1 加固（32 评审 F1 高 flake 清单）：进程存活探测以「PID + 创建
+    /// 时间 + 退出码」三因子判定——taskkill 成功后进程对象可能因句柄未关而
+    /// 短暂存留（OpenProcess 仍可成功），退出码区分「仍在运行（STILL_ACTIVE）」
+    /// 与「已终止待回收」；创建时间排除 PID 复用误判（驱动自愈不断派生新进程）。
+    #[allow(unsafe_code)]
+    fn process_creation_time(pid: u32) -> Option<u64> {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Threading::{
+            GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+        };
+        // SAFETY：OpenProcess/GetProcessTimes/CloseHandle 标准 API；句柄用完
+        // 即关；取不到（进程已消失/权限拒绝）一律返回 None，错误路径不 panic
+        unsafe {
+            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if handle.is_null() {
+                return None;
+            }
+            let mut created = std::mem::zeroed::<windows_sys::Win32::Foundation::FILETIME>();
+            let mut exit = std::mem::zeroed::<windows_sys::Win32::Foundation::FILETIME>();
+            let mut kernel = std::mem::zeroed::<windows_sys::Win32::Foundation::FILETIME>();
+            let mut user = std::mem::zeroed::<windows_sys::Win32::Foundation::FILETIME>();
+            let ok = GetProcessTimes(handle, &mut created, &mut exit, &mut kernel, &mut user) != 0;
+            CloseHandle(handle);
+            if !ok {
+                return None;
+            }
+            Some(((created.dwHighDateTime as u64) << 32) | created.dwLowDateTime as u64)
+        }
+    }
+
+    /// 进程状态探测：None = 进程对象已消失；Some(StillRunning) = 正在运行；
+    /// Some(Terminated(code)) = 已终止但对象未回收（句柄存留）。
+    #[allow(unsafe_code)]
+    fn process_state(pid: u32) -> Option<Result<u32, ()>> {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Threading::{
+            GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+        };
+        // SAFETY：标准 API；句柄用完即关；错误路径不 panic
+        unsafe {
+            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if handle.is_null() {
+                return None;
+            }
+            let mut code: u32 = 0;
+            let ok = GetExitCodeProcess(handle, &mut code) != 0;
+            CloseHandle(handle);
+            if !ok {
+                return None;
+            }
+            if code == 259 {
+                Some(Err(())) // STILL_ACTIVE
+            } else {
+                Some(Ok(code))
+            }
+        }
+    }
+
+    /// 评审 F6 回归（31-评审-接线与集成）：Drop 时 inner 锁被其他线程持有
+    /// （try_lock 失败短窗）——旧实现静默跳过杀树导致浏览器进程泄漏；现实现
+    /// spawn 阻塞兜底线程收尸（锁释放后立即 kill_sync）。预占锁后 Drop 管理器，
+    /// 释放锁 → 兜底线程收尸 → 进程必须终结。
+    ///
+    /// 评审 F1 加固：并行 harness 负载下（驱动崩溃自愈持续派生新进程，Windows
+    /// PID 分配器复用模式下新进程可能复用刚释放的 PID）纯 PID 存活探测会把
+    /// 复用进程误判为原进程仍存活（窗口放大反而提高误判率）——改用「创建
+    /// 时间 + 退出码」三因子判定：创建时间不一致 = PID 已复用（原进程已死）；
+    /// GetExitCodeProcess 区分 STILL_ACTIVE（仍在运行）与已终止待回收对象。
+    #[tokio::test]
+    async fn drop_kills_via_fallback_when_inner_locked() {
+        let Some(h) = Harness::new() else { return };
+        let cfg = h.config(&script_ok());
+        let mgr = h.manager.clone();
+        let _ = mgr.start(cfg).await.expect("启动");
+        let pid = mgr
+            .inner
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .last_pid
+            .expect("启动后必有 pid");
+        // 记录原进程创建时间（PID 复用判定基准）
+        let creation = process_creation_time(pid).expect("启动后进程必存在");
+        // 预占锁：模拟极端竞争窗口（其他线程持锁期间 Drop 发生）
+        let held = Arc::clone(&mgr.inner);
+        let guard = held.lock().unwrap_or_else(|p| p.into_inner());
+        drop(mgr); // try_lock 失败 → spawn 兜底线程
+        drop(guard); // 释放锁 → 兜底线程收尸
+        // 轮询等待进程终结（kill_sync 内部已带 2s 回收等待；轮询兜底调度竞态；
+        // 窗口 25s：并行 harness 负载下 taskkill 排队可致单点等待超时，32 评审
+        // F1/F2 窗口放大建议）。判定：仅当「创建时间一致且 STILL_ACTIVE」
+        // 才视为原进程仍在——排除 PID 复用与已终止对象存留两种误判。
+        let deadline = std::time::Instant::now() + Duration::from_secs(25);
+        while std::time::Instant::now() < deadline {
+            let alive = process_creation_time(pid).is_some_and(|t| t == creation)
+                && process_state(pid) == Some(Err(()));
+            if !alive {
+                // 收尾：显式停止（driver 可能已把被杀判定为崩溃并重启新进程，
+                // stop(Force) 置意图让驱动收敛，防测试残留僵尸进程）
+                let _ = h.manager.stop(StopReason::Force).await;
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        panic!("Drop 兜底杀树未生效（PID {pid} 仍存活）");
+    }
+
+    /// 回归（F6 修复暴露的停止信号竞态）：崩溃自愈的 relaunch 窗口内调用
+    /// stop() 必须收敛——旧实现 watch 信号发往无接收者的旧通道即丢失（驱动
+    /// 处于退避/重启/启动轮询中，新 stop_rx 未挂接），驱动永不收敛、
+    /// stop() 永久挂死（drop_kills 测试实测 90s+）；现实现 PortReady 后
+    /// 复查 pending_stop，stop() 有界返回（本用例任意交错时序均收敛，
+    /// 未修复实现下 10s 超时即失败）。
+    #[tokio::test]
+    async fn stop_during_crash_relaunch_converges() {
+        let Some(h) = Harness::new() else { return };
+        let cfg = h.config(&script_crash());
+        let mgr = h.manager.clone();
+        let mut rx = mgr.subscribe();
+        let _ = mgr.start(cfg).await.expect("启动");
+        // 等首个 CrashRestarting 事件（崩溃已检测，驱动进入退避/重启窗口）
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            let ev = tokio::time::timeout(remaining, rx.recv())
+                .await
+                .expect("等待崩溃事件超时")
+                .expect("通道关闭");
+            if matches!(ev, ProcessEvent::CrashRestarting { .. }) {
+                break;
+            }
+        }
+        // 略过退避（60ms），让 stop() 落在 launch_with_retries 的 relaunch 窗口
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        // 修复语义：stop() 有界收敛（旧实现此窗口内停止信号丢失 → 永久挂死）
+        let stop = tokio::time::timeout(Duration::from_secs(10), mgr.stop(StopReason::Force))
+            .await
+            .expect("stop() 必须在 relaunch 窗口内有界收敛（停止信号不得丢失）")
+            .expect("停止失败");
+        assert!(matches!(stop.state, BrowserState::Stopped));
+        assert_eq!(mgr.status().state, BrowserState::Stopped);
+    }
+
+    /// 评审 H6 回归（29-评审-代码质量与安全）：并发 start() 只启动一个浏览器
+    /// 进程。假浏览器脚本每次被 spawn 向 profile 内追加一行计数（spawn 次数
+    /// 可证）；双启竞态（旧实现无临界区互斥）下两个 start() 各自建 profile、
+    /// 各自 spawn 驱动 → 计数 2 且 profile 目录不一致，本用例必失败。
+    #[tokio::test]
+    async fn concurrent_start_spawns_single_process() {
+        let Some(h) = Harness::new() else { return };
+        let script = "\
+@echo off\r\n\
+setlocal enabledelayedexpansion\r\n\
+set PROFILE=\r\n\
+set NEXT=0\r\n\
+for %%a in (%*) do (\r\n\
+\x20 set \"A=%%~a\"\r\n\
+\x20 if \"!NEXT!\"==\"1\" (\r\n\
+\x20\x20 if not \"!A!\"==\"--user-data-dir\" set \"PROFILE=!A!\"\r\n\
+\x20\x20 set \"NEXT=0\"\r\n\
+\x20 )\r\n\
+\x20 if \"!A:~0,16!\"==\"--user-data-dir=\" set \"PROFILE=!A:~16!\"\r\n\
+\x20 if \"!A!\"==\"--user-data-dir\" set \"NEXT=1\"\r\n\
+)\r\n\
+if not defined PROFILE exit /b 9\r\n\
+> \"!PROFILE!\\DevToolsActivePort\" echo 38689\r\n\
+>> \"!PROFILE!\\DevToolsActivePort\" echo /devtools/browser/fake-session-uuid\r\n\
+>> \"!PROFILE!\\spawn-count.txt\" echo 1\r\n\
+:loop\r\n\
+ping -n 2 127.0.0.1 >nul\r\n\
+goto loop\r\n";
+        let cfg = h.config(script);
+        let mgr = h.manager.clone();
+        // 两个 start() 并发（tokio::join! 同帧启动，强制竞争临界区）
+        let (a, b) = tokio::join!(mgr.start(cfg.clone()), mgr.start(cfg));
+        let a = a.expect("并发启动 A 应成功");
+        let b = b.expect("并发启动 B 应成功（幂等分支返回当前报告）");
+        assert!(
+            matches!(b.state, BrowserState::Running | BrowserState::Launching { .. }),
+            "幂等报告状态应为运行中/启动中：{:?}",
+            b.state
+        );
+        assert_eq!(
+            a.profile_dir, b.profile_dir,
+            "并发 start 只允许建一个 profile（双启会各建各的目录）"
+        );
+        // 计数文件写入晚于 DevToolsActivePort（.bat 顺序写），wait_active_port
+        // 在端口文件可见后即返回——并行负载下 .bat 可能被调度打断，计数文件
+        // 尚不可读；A3 模式：轮询等待就绪，替代单点断言。
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let count = loop {
+            match std::fs::read_to_string(a.profile_dir.join("spawn-count.txt")) {
+                Ok(s) => break s.lines().count(),
+                Err(_) => {
+                    assert!(
+                        std::time::Instant::now() < deadline,
+                        "spawn-count.txt 未就绪（启动是否成功？）"
+                    );
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+            }
+        };
+        assert_eq!(
+            count, 1,
+            "并发 start 只允许启动一个浏览器进程（计数 {count}）"
+        );
+        mgr.stop(StopReason::Force).await.expect("停止");
+    }
+    } // mod harness（`#[cfg(windows)]` 门控，32 评审 P1-1）
 }

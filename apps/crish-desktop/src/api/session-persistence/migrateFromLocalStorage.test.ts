@@ -63,6 +63,31 @@ function makeFakeSqlite() {
     }
     return { sessions: entries.length, messages: 0, agents: 0 };
   });
+  // P0-1（N0-1）修复：30 天清理需逐 key 校验 SQLite 存在性——
+  // 假库补 list_sessions / load_session_body / load_session_agents 读面
+  mockTauriCommand('list_sessions', async () =>
+    [...sessions.keys()].map((id) => {
+      const s = sessions.get(id)!;
+      return {
+        id,
+        title: s.title,
+        folder: '常规会话',
+        isPinned: false,
+        isArchived: false,
+        timestamp: '2026-01-01T00:00:00Z',
+        updatedAt: 1500,
+        messageCount: (s.body ?? []).length,
+      };
+    }),
+  );
+  mockTauriCommand('load_session_body', async (args: unknown) => {
+    const { sessionId } = args as { sessionId: string };
+    return sessions.get(sessionId)?.body ?? [];
+  });
+  mockTauriCommand('load_session_agents', async (args: unknown) => {
+    const { sessionId } = args as { sessionId: string };
+    return sessions.get(sessionId)?.agents ?? [];
+  });
 
   return { sessions, meta, importCalls };
 }
@@ -236,5 +261,42 @@ describe('T11.5.3 localStorage → SQLite 迁移 e2e', () => {
     nowSpy.mockReturnValue(baseTime + 1000);
     await runMigrationCleanupIfNeeded();
     expect(fake.importCalls).toHaveLength(1);
+  });
+
+  it('P0-1 回归（N0-1）：SQLite 缺失的 LS-only 会话保留、不置位 cleaned；回迁后重试成功', async () => {
+    seedLegacyLocalStorage();
+    const fake = makeFakeSqlite();
+    const baseTime = 1_752_500_000_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(baseTime);
+
+    // 迁移完成（时间戳 = baseTime）
+    await ensureMigrated();
+    expect(fake.meta.get('migration_completed_at')).toBe(String(baseTime));
+
+    // 降级窗口模拟：LS 新增一个 SQLite 未持有的会话（磁盘恢复前写入的唯一副本）
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 'ls-only-new',
+      JSON.stringify([
+        { id: 'm9', sender: 'user', text: '降级期消息', timestamp: 999, status: 'completed' },
+      ]),
+    );
+
+    // 满 30 天后：只删 SQLite 确认持有的会话；ls-only-new 保留、不置位 cleaned
+    nowSpy.mockReturnValue(baseTime + 31 * 24 * 60 * 60 * 1000);
+    await runMigrationCleanupIfNeeded();
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 's1')).toBeNull();
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'ls-only-new')).not.toBeNull();
+    expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
+    expect(fake.meta.get('legacy_localstorage_cleaned')).toBeUndefined();
+
+    // SQLite 补入该会话（磁盘恢复后 hydrate/persist 回迁）→ 重试成功
+    fake.sessions.set('ls-only-new', {
+      title: 'LS-only',
+      body: [{ id: 'm9', sender: 'user', text: '降级期消息', timestamp: 999 }],
+      agents: [],
+    });
+    await runMigrationCleanupIfNeeded();
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'ls-only-new')).toBeNull();
+    expect(fake.meta.get('legacy_localstorage_cleaned')).toBe('1');
   });
 });

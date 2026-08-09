@@ -201,9 +201,12 @@ pub fn resolve_workspace_path(root: &Path, input: &str) -> Result<PathBuf, ToolE
 }
 
 /// URL 脱敏（17 §6.2）：query/片段中敏感参数值只留参数名（值替换为 `<redacted>`）。
+///
+/// M6-3：解析失败按保守策略整体替换为占位——不原样回吐可能含敏感参数的原始串
+/// （旧实现 `Url::parse` 失败直接返回原始 URL，query 段凭据随之入日志/模型输入）。
 pub fn redact_url_query(url: &str) -> String {
     let Ok(mut parsed) = Url::parse(url) else {
-        return url.to_string();
+        return "<redacted>".to_string();
     };
     // 键名模式：小写包含匹配（过度脱敏安全优先）
     const SENSITIVE_KEYS: [&str; 11] = [
@@ -412,7 +415,9 @@ mod tests {
             redact_url_query("https://a.example/plain"),
             "https://a.example/plain"
         );
-        // 非法 URL 原样返回（不落 panic）
-        assert_eq!(redact_url_query("://broken"), "://broken");
+        // M6-3：非法 URL 保守占位（不原样回吐可能含敏感参数的原始串）
+        assert_eq!(redact_url_query("://broken?token=abc"), "<redacted>");
+        assert_eq!(redact_url_query("not a url"), "<redacted>");
+        assert_eq!(redact_url_query(""), "<redacted>");
     }
 }

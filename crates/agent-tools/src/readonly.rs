@@ -13,7 +13,8 @@
 //! - [filter_registry]：通用注册表过滤（按名字谓词，fail-closed）；
 //! - [filter_registry_for_task_type]：按任务类型派生默认工具集
 //!   （analysis/organization → 只读白名单；design/review → 只读 + write_file；
-//!   commit → 仅 shell_command；implementation → 全工具集；未知 → 只读回退）；
+//!   commit → 仅 shell_command；implementation → 全工具集剔除 browser_*
+//!   （27 接线方案 §3，子代理永不获得浏览器操作权）；未知 → 只读回退）；
 //! - [command_allowed_for_task_type]：命令级白名单判定（shell 执行门禁兜底
 //!   ——commit 仅 git 前缀、implementation 复用语义层 CommandClass 分类，
 //!   其余类型无命令）；供引擎侧 T-D-13 在 spawn 装配时消费。
@@ -103,11 +104,20 @@ pub fn filter_readonly_registry(registry: &ToolRegistry) -> Result<ToolRegistry,
 /// - `analysis` / `organization` → 只读白名单（fail-closed，无写工具无命令）；
 /// - `design` / `review` → 只读白名单 + `write_file`（文档产出）；
 /// - `commit` → 仅 `shell_command`（命令前缀过滤 git，无写文件工具）；
-/// - `implementation` → 全工具集（写路径沙箱与命令策略另行装配）；
+/// - `implementation` → 全工具集剔除 `browser_*` 前缀（27 接线方案 §3：
+///   子代理永不获得浏览器共享会话操作权，fail-closed；写路径沙箱与
+///   命令策略另行装配）；
 /// - 未知 / 空 → 回退 `analysis` 语义（只读白名单，最安全）。
 ///
 /// 说明：run_subagent 的发起者身份剔除（工具面防护，T-D-02）不在本函数内，
 /// 由装配方叠加；MCP 工具无独立开关，默认继承父代理面。
+///
+/// browser_* 剔除依据（27 接线方案 §3 冲突矩阵 / §5 风险表 S5；30 评审
+/// H-2 / 31 评审 F1）：子代理注册面经本函数派生（主 run 不经此路径，引擎侧
+/// 直用共享注册表），`browser_*` 前缀工具对子代理一律 fail-closed 剔除——
+/// 子代理若获得浏览器工具即拿到共享浏览器会话操作权（读取主 run 登录态
+/// 页面内容 / 改写主 run 正在操作的页面），且面板无可见性提示。白名单分支
+/// 结构上不含 browser_ 工具，仅 implementation 全量分支需显式剔除。
 pub fn filter_registry_for_task_type(
     registry: &ToolRegistry,
     task_type: &str,
@@ -118,7 +128,9 @@ pub fn filter_registry_for_task_type(
             READONLY_TOOL_NAMES.contains(&name) || name == "write_file"
         }),
         "commit" => filter_registry_by_names(registry, &COMMIT_TOOL_NAMES),
-        "implementation" => filter_registry(registry, |_| true),
+        // implementation → 全工具集剔除 browser_* 前缀（27 §3 / 31 评审 F1，
+        // fail-closed：子代理永不获得浏览器共享会话操作权；注释见函数头）
+        "implementation" => filter_registry(registry, |name| !name.starts_with("browser_")),
         // 未知/缺省：最安全回退（对齐缺省 task_type = analysis 的口径）
         _ => filter_registry_by_names(registry, &READONLY_TOOL_NAMES),
     }
@@ -337,6 +349,58 @@ mod tests {
         // 原注册表不受影响（非破坏性裁剪）
         assert_eq!(reg.len(), 20);
         assert!(reg.has("write_file"));
+    }
+
+    /// 27 接线方案 §3（fail-closed）/ 30 评审 H-2 / 31 评审 F1：子代理
+    /// implementation 型 run 的注册面剔除 browser_* 前缀工具——子代理
+    /// 永不获得浏览器共享会话操作权（读取主 run 登录态页面 / 改写主 run
+    /// 正在操作的页面）；主 run 不经 [filter_registry_for_task_type]
+    /// （引擎侧直用共享注册表），不受影响。
+    #[test]
+    fn filter_registry_for_task_type_drops_browser_tools() {
+        let mut reg = ToolRegistry::new();
+        register_builtin_tools(&mut reg).unwrap();
+        // 模拟引擎后置注册的 browser_* 工具（conex-browser-tools 侧 23 工具
+        // 全 browser_ 前缀；agent-tools 不依赖该 crate，以同名假工具代表）
+        for name in [
+            "browser_navigate",
+            "browser_snapshot",
+            "browser_type_text",
+            "browser_console_list",
+        ] {
+            reg.register(Arc::new(EchoTool::new(name))).unwrap();
+        }
+        // 全部 task_type（含 implementation 全量分支与未知回退）：browser_*
+        // 一律剔除（fail-closed）
+        for tt in ["implementation", "analysis", "design", "review", "commit", "", "bogus"] {
+            let out = filter_registry_for_task_type(&reg, tt).unwrap();
+            for name in ["browser_navigate", "browser_snapshot", "browser_type_text", "browser_console_list"] {
+                assert!(!out.has(name), "{tt:?} 注册面不得含 {name}");
+            }
+            // 27 §5 验收口径：list_definitions 面同样无 browser_*
+            let names: Vec<String> = out
+                .list_definitions()
+                .iter()
+                .map(|d| d.name.clone())
+                .collect();
+            assert!(
+                names.iter().all(|n| !n.starts_with("browser_")),
+                "{tt:?} list_definitions 不得含 browser_*：{names:?}"
+            );
+        }
+        // implementation 仅剔除 browser_*（其余全量保留）
+        let impl_reg = filter_registry_for_task_type(&reg, "implementation").unwrap();
+        assert_eq!(
+            impl_reg.len(),
+            reg.len() - 4,
+            "implementation 应仅剔除 4 个 browser_*（其余全量保留）"
+        );
+        assert!(impl_reg.has("write_file"));
+        assert!(impl_reg.has("shell_command"));
+        assert!(impl_reg.has("run_subagent"));
+        // 原注册表不受影响（非破坏性裁剪）
+        assert_eq!(reg.len(), 24);
+        assert!(reg.has("browser_navigate"));
     }
 
     // ===== T-D-08：命令级白名单（command_allowed_for_task_type）=====

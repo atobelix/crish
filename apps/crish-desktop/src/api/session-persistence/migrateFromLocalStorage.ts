@@ -27,9 +27,11 @@ import {
 } from './sessionPersistenceTypes';
 import { safeParseJson, parseFolderOrder } from './sessionHydration';
 import {
+  cleanupLegacyLocalStorageSessionsGuarded,
   getSessionMeta,
   setSessionMeta,
   importFromLocalStorage,
+  type LegacyCleanupGuardResult,
 } from './sessionRustDb';
 
 /** SQLite schema 版本：'3' = 已从 localStorage 迁移到 SQLite（含 session_agent_messages CHECK 约束） */
@@ -181,7 +183,8 @@ export async function ensureMigrated(): Promise<void> {
  * 启动时检测：若迁移完成已超过 30 天，清理 localStorage 中的会话数据。
  *
  * 调用时机：app boot 阶段，ensureMigrated 之后。
- * 幂等：清理完成后写入 'legacy_localstorage_cleaned' = '1'，下次启动跳过。
+ * 幂等：清理完成后写入 'legacy_localstorage_cleaned' = '1'，下次启动跳过；
+ * 有保留（SQLite 未持有对应数据的会话）时不置位，下次启动重试。
  * 保留非会话数据：UI 偏好 / composer drafts / error queue 等。
  */
 export async function runMigrationCleanupIfNeeded(): Promise<void> {
@@ -197,37 +200,29 @@ export async function runMigrationCleanupIfNeeded(): Promise<void> {
   const elapsed = Date.now() - completedAt;
   if (elapsed < LOCALSTORAGE_ROLLBACK_TTL_MS) return; // 未满 30 天
 
-  cleanupLegacyLocalStorageSessions();
-  await setSessionMeta('legacy_localstorage_cleaned', '1');
+  // P0-1（N0-1）：清理前逐 key 校验 SQLite 存在性——SQLite 未持有的
+  // LS 会话保留（降级内存库窗口期的唯一副本，可经 hydrate 回迁）。
+  // 全部确认后才置位 cleaned；有保留则下次启动重试。
+  const result = await cleanupLegacyLocalStorageSessions();
+  if (result.preserved.length === 0) {
+    await setSessionMeta('legacy_localstorage_cleaned', '1');
+  } else {
+    console.warn(
+      `[migrate] 30 天清理保留 ${result.preserved.length} 个会话的 LS 数据` +
+        `（SQLite 无对应数据，降级期唯一副本保留待回迁）`,
+    );
+  }
 }
 
 /**
  * 30 天后清理 localStorage 中的会话数据（回滚保险到期）。
  *
+ * P0-1（N0-1）修复后统一入口：清理必须经 SQLite 存在性校验
+ * （见 sessionRustDb.cleanupLegacyLocalStorageSessionsGuarded 的安全护栏）。
  * 由 runMigrationCleanupIfNeeded 在 app boot 阶段调用。
- * 仅当 schema_version === '2' 且距迁移已过 30 天时执行。
  *
  * 保留非会话数据（UI 偏好 / composer drafts / error queue 等）。
  */
-export function cleanupLegacyLocalStorageSessions(): void {
-  try {
-    const keys: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k) keys.push(k);
-    }
-    for (const k of keys) {
-      if (
-        k === SESSION_INDEX_KEY ||
-        k === SESSION_ACTIVE_KEY ||
-        k === SESSION_FOLDER_KEY ||
-        k.startsWith(SESSION_BODY_PREFIX) ||
-        k.startsWith(SESSION_AGENTS_PREFIX)
-      ) {
-        localStorage.removeItem(k);
-      }
-    }
-  } catch {
-    /* ignore */
-  }
+export async function cleanupLegacyLocalStorageSessions(): Promise<LegacyCleanupGuardResult> {
+  return cleanupLegacyLocalStorageSessionsGuarded();
 }

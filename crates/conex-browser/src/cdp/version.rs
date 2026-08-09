@@ -58,7 +58,10 @@ struct PendingBump {
 struct Inner {
     tabs: HashMap<TabId, u64>,
     session_to_tab: HashMap<String, TabId>,
-    pending: Option<PendingBump>,
+    /// 合并窗口槽位（H2 修复：单槽 → 按 tab 分槽）。
+    /// 单槽时同窗口内不同标签的 DOM 变更互相顶替（陈旧 flush 取走新条目后
+    /// 丢弃 → 版本推进丢失）；分槽后每标签独立窗口，互不干扰。
+    pending: HashMap<TabId, PendingBump>,
 }
 
 /// per-tab 版本跟踪器（Arc 共享；锁纪律 B8：全部恢复式，不 panic）。
@@ -78,7 +81,7 @@ impl VersionTracker {
             inner: Arc::new(Mutex::new(Inner {
                 tabs: HashMap::new(),
                 session_to_tab: HashMap::new(),
-                pending: None,
+                pending: HashMap::new(),
             })),
             epoch: Arc::new(AtomicU64::new(0)),
             gen: AtomicU64::new(0),
@@ -115,36 +118,28 @@ impl VersionTracker {
         };
 
         if spec.coalesce {
-            // —— 合并窗口：同 tab 已有 pending 则合并（不重复计数）——
+            // —— 合并窗口：同 tab 已有 pending 则合并（不重复计数）；
+            //    不同 tab 各占独立槽位（H2：互不顶替）——
             let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
-            if let Some(p) = inner.pending.as_ref() {
-                if p.tab == tab {
-                    return;
-                }
+            if inner.pending.contains_key(&tab) {
+                return;
             }
             let gen = self.gen.fetch_add(1, Ordering::SeqCst) + 1;
-            inner.pending = Some(PendingBump {
-                tab,
-                reason: spec.reason,
-                gen,
-            });
-            self.spawn_flush(gen);
+            inner.pending.insert(
+                tab.clone(),
+                PendingBump {
+                    tab: tab.clone(),
+                    reason: spec.reason,
+                    gen,
+                },
+            );
+            self.spawn_flush(tab, gen);
         } else {
-            // —— 即时推进：若有同 tab pending 窗口 → 先提交（导航优先于内容合并）——
+            // —— 即时推进：若有同 tab pending 窗口 → 先提交（导航优先于内容合并）；
+            //    其他标签的窗口留在各自槽位，不影响——
             let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
-            if let Some(p) = inner.pending.take() {
-                if p.tab == tab {
-                    commit_bump_locked(
-                        &mut inner,
-                        &self.watch_tx,
-                        &self.bus_tx,
-                        &p.tab,
-                        p.reason,
-                    );
-                } else {
-                    // 其他标签的窗口不受影响，放回等 flush
-                    inner.pending = Some(p);
-                }
+            if let Some(p) = inner.pending.remove(&tab) {
+                commit_bump_locked(&mut inner, &self.watch_tx, &self.bus_tx, &p.tab, p.reason);
             }
             commit_bump_locked(&mut inner, &self.watch_tx, &self.bus_tx, &tab, spec.reason);
         }
@@ -159,7 +154,7 @@ impl VersionTracker {
     /// 重连恢复 / 崩溃重启：全部标签 +1000 + global_epoch+1 + 广播 VersionReset。
     pub fn reset(&self, reason: VersionReason) {
         let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
-        inner.pending = None; // 清窗口
+        inner.pending.clear(); // 清全部窗口槽位
         for v in inner.tabs.values_mut() {
             *v += VERSION_RESET_DELTA;
         }
@@ -244,30 +239,35 @@ impl VersionTracker {
             .cloned()
     }
 
-    /// 启动合并窗口 flush 任务（代数校验防陈旧提交）。
-    fn spawn_flush(&self, gen: u64) {
+    /// 启动合并窗口 flush 任务（代数校验防陈旧提交；按 tab 绑定各自槽位）。
+    fn spawn_flush(&self, tab: TabId, gen: u64) {
         let inner = self.inner.clone();
         let watch_tx = self.watch_tx.clone();
         let bus_tx = self.bus_tx.clone();
         let coalesce = self.coalesce;
         tokio::spawn(async move {
             tokio::time::sleep(coalesce).await;
-            commit_pending(&inner, &watch_tx, &bus_tx, gen);
+            commit_pending(&inner, &watch_tx, &bus_tx, &tab, gen);
         });
     }
 }
 
-/// flush 任务：窗口到期提交（仅同代条目）。
+/// flush 任务：窗口到期提交（仅提交本任务所属标签槽位的同代条目；
+/// H2：先 remove 再校验代次，不匹配放回——陈旧任务不得吞掉新窗口）。
 fn commit_pending(
     inner: &Mutex<Inner>,
     watch_tx: &watch::Sender<HashMap<TabId, u64>>,
     bus_tx: &broadcast::Sender<BrowserEvent>,
+    tab: &str,
     gen: u64,
 ) {
     let mut guard = inner.lock().unwrap_or_else(|p| p.into_inner());
-    if let Some(p) = guard.pending.take() {
+    if let Some(p) = guard.pending.remove(tab) {
         if p.gen == gen {
             commit_bump_locked(&mut guard, watch_tx, bus_tx, &p.tab, p.reason);
+        } else {
+            // 该标签窗口已被更新代次顶替：放回，等新代次任务提交
+            guard.pending.insert(tab.to_string(), p);
         }
     }
 }
@@ -775,5 +775,72 @@ mod tests {
         // tab-2 当前 1：tab-1 的推进不影响它
         assert!(tracker.validate_snapshot("tab-2", 1).is_ok(), "tab-1 推进不得失效 tab-2");
         assert!(tracker.validate_snapshot("tab-2", 0).is_err());
+    }
+
+    // ---------- H2 回归（合并窗口 per-tab 分槽，评审 29-H2 + F3 同源补强） ----------
+
+    /// H2 主回归：同一 200ms 窗口内两个标签先后 DOM 变更 → 窗口到期后**各自 +1**。
+    /// 修复前 pending 为单槽：tab-2 的变更顶替 tab-1 的 pending，且陈旧 flush
+    /// 取走新条目后直接丢弃 → tab-1 推进永久丢失。
+    #[tokio::test]
+    async fn version_dual_tab_window_both_advance() {
+        let (tracker, bus) = test_tracker(Duration::from_millis(50));
+        let mut rx = bus.subscribe();
+        tracker.track_session("s1", "tab-1");
+        tracker.track_session("s2", "tab-2");
+
+        tracker.on_event(&dom_event("s1")); // tab-1 开窗口
+        tracker.on_event(&dom_event("s2")); // tab-2 开窗口（分槽，不得顶替 tab-1）
+        assert_eq!(tracker.snapshot_version("tab-1"), 0, "窗口期内不得提交");
+        assert_eq!(tracker.snapshot_version("tab-2"), 0, "窗口期内不得提交");
+
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        assert_eq!(tracker.snapshot_version("tab-1"), 1, "tab-1 窗口独立提交");
+        assert_eq!(tracker.snapshot_version("tab-2"), 1, "tab-2 窗口独立提交（H2：不得被吞掉）");
+
+        // 恰好两个 VersionAdvanced，各自携带正确的 tab_id
+        let mut advanced = 0;
+        for _ in 0..2 {
+            match rx.recv().await {
+                Ok(BrowserEvent::VersionAdvanced { tab_id, .. }) => {
+                    assert!(tab_id == "tab-1" || tab_id == "tab-2", "tab_id 必须正确：{tab_id}");
+                    advanced += 1;
+                }
+                other => panic!("应收到 VersionAdvanced：{other:?}"),
+            }
+        }
+        assert_eq!(advanced, 2, "双标签各推进一次，不得丢失/重复");
+    }
+
+    /// H2 次级回归：同标签窗口被导航抢占后重开新窗口——陈旧 flush 醒来时
+    /// 不得吞掉新窗口条目（修复前：取走 gen 不匹配条目后直接丢弃）。
+    #[tokio::test]
+    async fn version_stale_flush_does_not_consume_new_window() {
+        let (tracker, bus) = test_tracker(Duration::from_millis(30));
+        let mut rx = bus.subscribe();
+        tracker.track_session("s1", "tab-1");
+
+        tracker.on_event(&dom_event("s1")); // 窗口1（gen=1，flush1 启动）
+        tracker.on_event(&nav_event("s1", true)); // 导航抢占：窗口1 提交 + 导航 +1 → v=2
+        assert_eq!(tracker.snapshot_version("tab-1"), 2);
+        tracker.on_event(&dom_event("s1")); // 新窗口2（gen=2，flush2 启动）
+
+        // flush1（陈旧）与 flush2 都已醒来：新窗口必须由 flush2 提交
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        assert_eq!(
+            tracker.snapshot_version("tab-1"),
+            3,
+            "陈旧 flush 不得吞掉新窗口（H2）"
+        );
+
+        // 恰好 3 次推进（窗口1 + 导航 + 窗口2），无多余提交
+        let mut advanced = 0;
+        for _ in 0..3 {
+            match rx.recv().await {
+                Ok(BrowserEvent::VersionAdvanced { .. }) => advanced += 1,
+                other => panic!("应收到 VersionAdvanced：{other:?}"),
+            }
+        }
+        assert_eq!(advanced, 3);
     }
 }

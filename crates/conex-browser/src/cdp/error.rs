@@ -114,7 +114,7 @@ pub enum CdpError {
 
 impl CdpError {
     /// 线格式错误 → 引擎错误映射（§3.2 全表）。
-    /// `-32000` 的 "Target closed"/"Cannot find context" 特判为 ContextGone。
+    /// `-32000` 的上下文消失特判为 ContextGone（关键字集见 `GONE_KEYWORDS`）。
     pub fn from_wire(method: &str, wire: &WireCdpError) -> CdpError {
         let code = wire.code.unwrap_or(-32000);
         match CdpErrorCode::from_i64(code) {
@@ -134,10 +134,12 @@ impl CdpError {
                 message: wire.message.clone(),
             },
             CdpErrorCode::ServerError => {
-                // 上下文消失特判：导航竞态 / 页面销毁语义（维度 14 消费）
-                if wire.message.contains("Target closed")
-                    || wire.message.contains("Cannot find context")
-                {
+                // 上下文消失特判：导航竞态 / 页面销毁语义（维度 14 消费）。
+                // 评审 G2（32 评审 P2-1 补强）：关键字匹配扩展——真实 Chrome 的
+                // "Target with specified id is closed" 形态不命中旧精确子串
+                // "Target closed"（此前归 Server，误伤导航竞态重试面）；现统一
+                // 小写归一后匹配关键字集（收集自 CDP 协议文档与 S0/e2e 实测）。
+                if is_context_gone_message(&wire.message) {
                     CdpError::ContextGone {
                         method: method.to_string(),
                         message: wire.message.clone(),
@@ -160,6 +162,29 @@ impl CdpError {
     pub fn is_connection_level(&self) -> bool {
         matches!(self, CdpError::ConnectionLost | CdpError::Timeout { .. })
     }
+}
+
+/// 上下文/目标消失消息关键字集（小写归一后匹配）：
+/// - "target closed"：跨浏览器旧形态；
+/// - "target with specified id is closed"：真实 Chrome 对已关闭目标调用方法的报错；
+/// - "no target with given id found"：Target 域目标已不存在；
+/// - "cannot find context"：Runtime 上下文不存在（含 "Cannot find context with
+///   specified id" 等派生形态）；
+/// - "inspected target navigated or closed"：导航竞态（Runtime.evaluate 等）；
+/// - "execution context was destroyed"：执行上下文销毁。
+const GONE_KEYWORDS: [&str; 6] = [
+    "target closed",
+    "target with specified id is closed",
+    "no target with given id found",
+    "cannot find context",
+    "inspected target navigated or closed",
+    "execution context was destroyed",
+];
+
+/// -32000 消息是否命中上下文消失语义（小写归一，避免大小写变体漏判）。
+fn is_context_gone_message(message: &str) -> bool {
+    let msg = message.to_ascii_lowercase();
+    GONE_KEYWORDS.iter().any(|k| msg.contains(k))
 }
 
 impl std::fmt::Display for CdpError {
@@ -264,13 +289,19 @@ mod tests {
         }
     }
 
-    /// -32000 特判：Target closed / Cannot find context → ContextGone（维度 14 消费面）。
+    /// -32000 特判：上下文消失关键字集 → ContextGone（维度 14 消费面）。
+    /// 评审 G2（32 评审 P2-1）：关键字匹配扩展——真实 Chrome 变体逐一锁定，
+    /// 含旧实现漏判的 "Target with specified id is closed"（此前归 Server）。
     #[test]
     fn from_wire_context_gone_special_cases() {
         for msg in [
             "Target closed",
+            "Target with specified id is closed",
+            "No target with given id found",
             "Cannot find context with specified id",
             "Cannot find context: context not found",
+            "Inspected target navigated or closed",
+            "Execution context was destroyed",
             "Runtime execution context was destroyed：Target closed",
         ] {
             let got = CdpError::from_wire("Page.navigate", &wire(Some(-32000), msg));
@@ -282,9 +313,6 @@ mod tests {
     }
 
     /// -32000 特判的否定面：普通服务器消息不进 ContextGone。
-    /// 注：真实 Chrome 的 "Target with specified id is closed" 形态不命中
-    /// "Target closed" 关键字（精确子串匹配局限），当前语义归 Server——
-    /// 该局限已在此断言中锁定，交由主控裁决是否补全关键字。
     #[test]
     fn from_wire_32000_generic_is_server() {
         let got = CdpError::from_wire("Page.navigate", &wire(Some(-32000), "browser process crashed"));
@@ -295,11 +323,14 @@ mod tests {
             }
             other => panic!("普通 -32000 消息应为 Server，实际：{other:?}"),
         }
-        // 真实 Chrome 变体（精确匹配局限的诚实记录）
-        let variant = CdpError::from_wire("Page.navigate", &wire(Some(-32000), "Target with specified id is closed"));
+        // 大小写变体：关键字小写归一后仍命中（真实 Chrome 消息大小写不固定）
+        let variant = CdpError::from_wire(
+            "Page.navigate",
+            &wire(Some(-32000), "target WITH specified ID is closed"),
+        );
         assert!(
-            matches!(variant, CdpError::Server { .. }),
-            "当前实现仅按精确关键字特判，该变体归 Server（局限锁定）"
+            matches!(variant, CdpError::ContextGone { .. }),
+            "关键字匹配必须大小写不敏感（实际 {variant:?}）"
         );
     }
 

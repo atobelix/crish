@@ -394,10 +394,13 @@ pub async fn ensure_downloaded(root: &Path, opts: &DownloadOpts) -> Result<CftCa
 }
 
 /// 内部流程（URL 注入，测试用 mock 服务端全量覆盖下载/解压/清理路径）。
+/// `pub(crate)`（评审 G2 修复）：下载失败回退链（discover::resolve_inner 的
+/// CftDownload 探测项 → 回退系统浏览器）以本函数的失败信号为输入，跨模块
+/// 可见性使 mock 下载失败可在回退链测试中注入（不真实联网）。
 /// 豁免 clippy 删除禁令：版本目录/zip 是自家缓存生成物，失败即清半成品
 /// （§2.2 残留清理），与「自管文件轮转」同豁免面。
 #[allow(clippy::disallowed_methods)]
-async fn ensure_downloaded_from(
+pub(crate) async fn ensure_downloaded_from(
     client: &reqwest::Client,
     version: &str,
     url: &str,
@@ -662,6 +665,39 @@ mod tests {
         assert!(
             !cft_root(&root).join("chrome-9.9.9.9").exists(),
             "失败后版本目录必须清理（残留清理，§2.2）"
+        );
+    }
+
+    /// 评审 G2（32 评审 G8 补强）：HTTP 下载失败路径（4xx 立即失败）——
+    /// 返回 `DownloadFailed` 且版本目录零残留。该失败信号即 discover 回退链
+    /// 的输入：Auto 链将 CftDownload 探测项 + 原因汇入 probes 后继续回退
+    /// 系统浏览器（不阻塞启动）；零残留保证回退链无需处理半成品状态。
+    #[tokio::test]
+    async fn ensure_downloaded_http_failure_clean_for_fallback() {
+        let (_server, url) = mock_server(move |_req| 404, 1).await;
+        let client = reqwest::Client::new();
+        let dir = tempfile::tempdir().expect("临时目录");
+        let root = dir.path().join("browser");
+        let err = ensure_downloaded_from(
+            &client,
+            "9.9.9.8",
+            &url,
+            &root,
+            &DownloadOpts {
+                retries: 1,
+                backoff: vec![],
+                progress: None,
+            },
+        )
+        .await
+        .expect_err("4xx 下载必须失败");
+        assert!(
+            matches!(err, CftError::DownloadFailed { retries: 1, .. }),
+            "4xx 应立即失败（不重试）：{err}"
+        );
+        assert!(
+            !cft_root(&root).join("chrome-9.9.9.8").exists(),
+            "下载失败后版本目录必须清理（回退链前置条件：零残留）"
         );
     }
 

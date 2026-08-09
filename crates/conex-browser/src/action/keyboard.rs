@@ -839,6 +839,27 @@ mod tests {
         assert_eq!(ops.count(MockOp::InsertText), 0, "密码路径不补明文");
     }
 
+    /// M2：password 输入目标 + CJK 文本走整块 insertText（IME 路径），回读仅
+    /// 长度比对（页面掩码态不回读明文比对）——密码框输入在工具面可用。
+    #[tokio::test]
+    async fn type_password_cjk_insert_text_length_only() {
+        let ops = MockOps::new();
+        // 页面掩码态：回读值恒为掩码字符（"x"×100）——若走明文前缀比对，
+        // 两次回读必失配 → NotInteractive 中断；成功即证明仅长度比对（M2）
+        ops.state.lock().unwrap().active_value = "x".repeat(100);
+        let snapshot = MockSnapshotStore::with_elements(1, &[ElementMeta {
+            backend_node_id: 11,
+            is_password: true,
+        }]);
+        let (exec, ops, _delay) = executor(ops, snapshot);
+        let text = "密码输入测试".repeat(10); // 100 个中文字符 → 2 整块
+        exec.type_text(&"t1".to_string(), 1, ElementRef { index: 0, backend_node_id: 11 }, &text, None)
+            .await
+            .expect("密码框中文输入应成功（insertText + 长度比对）");
+        assert_eq!(ops.count(MockOp::KeyEvent), 0, "CJK 不走逐字符三事件");
+        assert_eq!(ops.count(MockOp::InsertText), 2, "两整块 insertText（IME 路径）");
+    }
+
     /// CJK 整块 insertText（IME 路径，§4.4）：中文 60 字符 → 2 块 insertText + 1 次补差。
     #[tokio::test]
     async fn type_cjk_uses_insert_text() {

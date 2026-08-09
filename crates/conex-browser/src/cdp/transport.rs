@@ -115,6 +115,16 @@ pub struct Transport {
     _supervisor: tokio::task::JoinHandle<()>,
 }
 
+impl Drop for Transport {
+    /// 收尾（M3）：停止 supervisor（watch send 同步）+ abort 任务句柄——
+    /// 调用方遗漏 `shutdown` 时不留常驻重连任务；连接按 Drop 自然收敛
+    /// （supervisor 释放 Arc<Shared> → 客户端 Drop → 任务/流句柄收尾）。
+    fn drop(&mut self) {
+        let _ = self.stop_tx.send(true);
+        self._supervisor.abort();
+    }
+}
+
 impl Transport {
     /// 建连（握手 + 身份校验），**不执行恢复流程**——恢复由调用方在全部
     /// 订阅就绪后经 `restore_now` 触发（订阅时序铁律：tokio broadcast
@@ -556,6 +566,47 @@ mod tests {
             mock.ping_count()
         );
         client.close().await;
+    }
+
+    /// M3：Transport Drop 后 supervisor 任务终止——调用方遗漏 shutdown 时
+    /// 重连任务不得常驻泄漏（stop 通知 + abort 双路径收尾）。
+    #[tokio::test]
+    async fn transport_drop_stops_supervisor() {
+        let mock = MockServer::spawn().await;
+        mock.set_auto_reply("Browser.getVersion", mock_version_reply());
+        let bus = BusHandle::new(64, 8);
+        let tracker = Arc::new(VersionTracker::new(
+            bus.event_tx(),
+            Duration::from_millis(50),
+        ));
+        let runs = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let endpoint = CdpEndpoint {
+            port: mock.addr.port(),
+            ws_path: "/devtools/browser/drop-supervisor".to_string(),
+        };
+        let transport = Transport::connect(
+            endpoint,
+            ExpectedBrowser::default(),
+            bus.event_tx(),
+            tracker.epoch_handle(),
+            Arc::new(RecordingRestoreHook::new(runs.clone())),
+        )
+        .await
+        .expect("建连失败");
+        assert_eq!(runs.load(Ordering::SeqCst), 0, "connect 不执行恢复（订阅时序铁律）");
+        let handle = transport._supervisor.abort_handle();
+        drop(transport);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            if handle.is_finished() {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "Drop 后 supervisor 任务必须终止"
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
     }
 
     /// 验收 9.1-11：断线重连 → 恢复流程重跑 → VersionReset 广播 →

@@ -9,6 +9,14 @@
 //! cargo test -p conex-browser --test e2e_browser -- --ignored --test-threads=1
 //! ```
 //!
+//! CI 执行约定（32 评审 P1-2）：本文件依赖本机真实浏览器，**不进常规门禁**，
+//! 仅在具备浏览器的环境按上述命令显式执行：
+//! - Windows 本地：串行跑通全部用例（本机应有 Chrome/Edge）；
+//! - ubuntu 慢层（`--ignored` 全量命令）：无 DISPLAY / 未安装浏览器 →
+//!   各用例经 [browser_available] 探测（discover 回退链）失败后打印
+//!   `[SKIP]` 说明并以 OK（skip 语义）结束，不 panic 不红；
+//!   真实跑通需专用 job 提供 xvfb-run + chromium 安装（32 评审 §四）。
+//!
 //! 浏览器发现：经 `BrowserManager.start` 内部 `resolve_backend` 的 Auto 回退链
 //! （CfT 缓存 → 系统 Chrome → 系统 Edge），无需测试侧自建候选逻辑。
 //! 测试页：data: URL（本地内联 HTML，无 fixture server、无临时文件）。
@@ -23,7 +31,8 @@ use conex_browser::action::gate::{DomainGate, GateDenial};
 use conex_browser::action::ops::{
     BrowserPageOps, BrowserSnapshotStore, session_for_active,
 };
-use conex_browser::browser::{BrowserManager, LaunchConfig, StopReason};
+use conex_browser::browser::discover::{resolve_backend, BackendOverride, ResolveOptions};
+use conex_browser::browser::{BrowserManager, LaunchConfig, ProcessError, StopReason};
 use conex_browser::snapshot::{BudgetConfig, SnapshotDocument, SnapshotError, SnapshotManager};
 use conex_browser::{BrowserSession, BrowserState, CdpError};
 use serde_json::{json, Value};
@@ -177,6 +186,40 @@ impl E2eEnv {
     }
 }
 
+/// 环境守卫（32 评审 P1-2）：真实浏览器可用性探测——经 discover 回退链
+/// （CfT 缓存 → 系统 Chrome → 系统 Edge，不联网下载）判定本机是否可用；
+/// 不可用（NoBrowser 或探测异常）→ 打印明确跳过说明并返回 `false`，
+/// 调用方以 skip 语义提前结束（**不 panic**）。ubuntu CI 无 DISPLAY /
+/// 无浏览器安装时全部用例走该跳过路径（见文件头 CI 执行约定）。
+async fn browser_available() -> bool {
+    let root = tempfile::tempdir().expect("创建临时数据根失败");
+    match resolve_backend(
+        root.path(),
+        BackendOverride::Auto,
+        &ResolveOptions {
+            allow_cft_download: false,
+            ..ResolveOptions::default()
+        },
+    )
+    .await
+    {
+        Ok(_) => true,
+        Err(ProcessError::NoBrowser(_)) => {
+            println!(
+                "[SKIP] 未探测到可用浏览器（discover 回退链：CfT 缓存/系统 Chrome/系统 \
+                 Edge 全失败）；本用例跳过（CI 无浏览器安装或无 DISPLAY 时属预期）。\
+                 安装浏览器后重跑：cargo test -p conex-browser --test e2e_browser \
+                 -- --ignored --test-threads=1"
+            );
+            false
+        }
+        Err(error) => {
+            println!("[SKIP] 浏览器可用性探测异常：{error}；本用例跳过（不 panic）");
+            false
+        }
+    }
+}
+
 /// 等待订阅事件满足条件（先订阅后动作的时序铁律；事件通道关闭即失败）。
 async fn wait_event(
     rx: &mut tokio::sync::broadcast::Receiver<BrowserEvent>,
@@ -296,6 +339,10 @@ async fn eval_dom(env: &E2eEnv, expression: &str) -> Value {
 #[ignore]
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_launch_and_connect() {
+    // 环境守卫（P1-2）：无可用浏览器 → 打印 [SKIP] 说明并以 OK 结束
+    if !browser_available().await {
+        return;
+    }
     let env = E2eEnv::launch().await;
     // 状态机：Running；端点经私有通道就绪
     assert!(
@@ -335,6 +382,10 @@ async fn e2e_launch_and_connect() {
 #[ignore]
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_navigate_and_snapshot() {
+    // 环境守卫（P1-2）：无可用浏览器 → 打印 [SKIP] 说明并以 OK 结束
+    if !browser_available().await {
+        return;
+    }
     let env = E2eEnv::launch().await;
     let url = data_url(TEST_HTML);
     navigate_and_wait(&env, &url).await;
@@ -379,6 +430,10 @@ async fn e2e_navigate_and_snapshot() {
 #[ignore]
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_click_and_type() {
+    // 环境守卫（P1-2）：无可用浏览器 → 打印 [SKIP] 说明并以 OK 结束
+    if !browser_available().await {
+        return;
+    }
     let env = E2eEnv::launch().await;
     let url = data_url(TEST_HTML);
     navigate_and_wait(&env, &url).await;
@@ -418,6 +473,10 @@ async fn e2e_click_and_type() {
 #[ignore]
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_version_advance_on_action() {
+    // 环境守卫（P1-2）：无可用浏览器 → 打印 [SKIP] 说明并以 OK 结束
+    if !browser_available().await {
+        return;
+    }
     let env = E2eEnv::launch().await;
     let url = data_url(TEST_HTML);
     navigate_and_wait(&env, &url).await;
@@ -462,6 +521,10 @@ async fn e2e_version_advance_on_action() {
 #[ignore]
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_clean_stop() {
+    // 环境守卫（P1-2）：无可用浏览器 → 打印 [SKIP] 说明并以 OK 结束
+    if !browser_available().await {
+        return;
+    }
     let env = E2eEnv::launch().await;
     let url = data_url(TEST_HTML);
     navigate_and_wait(&env, &url).await;

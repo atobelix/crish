@@ -217,6 +217,13 @@ pub struct ImportReport {
     pub skipped: usize,
 }
 
+/// 复制递归深度上限（H5 加固：防御恶意构造的超深目录树 → 栈溢出；
+/// 正常 Chrome profile 深度远低于此值）。
+const MAX_COPY_DEPTH: u32 = 64;
+/// 复制节点总数上限（H5 加固：防御异常构造的超大目录树/链接网；
+/// 正常 profile 节点数远低于此值）。
+const MAX_COPY_NODES: u64 = 100_000;
+
 /// 导入复制（§4.3）：「来源只读」——复制过程绝不写源目录。
 ///
 /// - 复制 `Local State` + `<source_profile>/` 到 dest（best-effort 逐文件）；
@@ -275,27 +282,57 @@ fn copy_profile(
 ) -> Result<ImportReport, String> {
     std::fs::create_dir_all(dest).map_err(|e| format!("创建目标失败：{e}"))?;
     let mut report = ImportReport::default();
-    // Local State（复制表第 1 项）
+    // Local State（复制表第 1 项；symlink_metadata 不跟随链接——H5：符号链接跳过）
     let local_state = source_user_data.join("Local State");
-    if local_state.is_file() {
-        match std::fs::copy(&local_state, dest.join("Local State")) {
+    match std::fs::symlink_metadata(&local_state) {
+        Ok(meta) if meta.is_file() => match std::fs::copy(&local_state, dest.join("Local State")) {
             Ok(_) => report.copied += 1,
             Err(e) => {
                 tracing::warn!("复制 Local State 失败（跳过）：{e}");
                 report.skipped += 1;
             }
+        },
+        Ok(meta) if meta.is_symlink() => {
+            tracing::warn!("复制跳过符号链接：{}", local_state.display());
+            report.skipped += 1;
         }
+        _ => {}
     }
-    copy_tree(src_profile_dir, dest, &mut report)?;
+    let mut nodes = 0;
+    copy_tree(src_profile_dir, dest, &mut report, 0, &mut nodes)?;
     Ok(report)
 }
 
 /// 递归复制（相对路径 + 排除表）。
-fn copy_tree(src: &Path, dest: &Path, report: &mut ImportReport) -> Result<(), String> {
+///
+/// H5 加固：目录枚举用 `DirEntry::file_type`（**不跟随符号链接**）判定——
+/// 修复前 `is_dir()/is_file()` 跟随链接：自环/互环链接导致无限递归栈溢出，
+/// 指向源树外的链接把外部整目录复制进受管 profile；符号链接条目一律跳过并
+/// 计入 skipped。另加深度上限与节点总数上限（防御剩余环状/超深结构的兜底）。
+fn copy_tree(
+    src: &Path,
+    dest: &Path,
+    report: &mut ImportReport,
+    depth: u32,
+    nodes: &mut u64,
+) -> Result<(), String> {
+    if depth > MAX_COPY_DEPTH {
+        return Err(format!(
+            "复制目录深度超过上限 {MAX_COPY_DEPTH}（可能为异常构造的目录树）：{}",
+            src.display()
+        ));
+    }
     for entry in std::fs::read_dir(src)
         .map_err(|e| format!("读源目录 {} 失败：{e}", src.display()))?
     {
         let entry = entry.map_err(|e| format!("读条目失败：{e}"))?;
+        *nodes += 1;
+        if *nodes > MAX_COPY_NODES {
+            return Err(format!(
+                "复制节点数超过上限 {MAX_COPY_NODES}（可能为异常构造的目录树）：{}",
+                src.display()
+            ));
+        }
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
         // 瞬态文件跳过（§4.3 表）
@@ -304,7 +341,17 @@ fn copy_tree(src: &Path, dest: &Path, report: &mut ImportReport) -> Result<(), S
             continue;
         }
         let src_path = entry.path();
-        if src_path.is_dir() {
+        // H5：不跟随符号链接的条目类型判定（DirEntry::file_type 语义）——
+        // 自环/指向源外的链接直接跳过，杜绝递归逃逸
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("读条目类型失败 {}：{e}", src_path.display()))?;
+        if file_type.is_symlink() {
+            tracing::warn!("复制跳过符号链接：{}", src_path.display());
+            report.skipped += 1;
+            continue;
+        }
+        if file_type.is_dir() {
             if IMPORT_EXCLUDE_COMPONENTS.contains(&name_str.as_ref()) {
                 report.skipped += 1;
                 continue;
@@ -312,8 +359,8 @@ fn copy_tree(src: &Path, dest: &Path, report: &mut ImportReport) -> Result<(), S
             let dest_dir = dest.join(&name);
             std::fs::create_dir_all(&dest_dir)
                 .map_err(|e| format!("创建目标子目录失败：{e}"))?;
-            copy_tree(&src_path, &dest_dir, report)?;
-        } else if src_path.is_file() {
+            copy_tree(&src_path, &dest_dir, report, depth + 1, nodes)?;
+        } else if file_type.is_file() {
             if IMPORT_EXCLUDE_COMPONENTS.contains(&name_str.as_ref()) {
                 report.skipped += 1;
                 continue;
@@ -354,6 +401,10 @@ pub fn sanitize_profile_name(name: &str) -> String {
 /// 孤儿清扫（§4.4）：`sessions/` 下目录 mtime 超阈值 → 删除（best-effort）。
 /// 豁免 clippy 删除禁令：孤儿目录为自家运行期残留（非用户资产），
 /// 与「自管文件轮转」同豁免面；受管 profile 不在此清扫范围。
+///
+/// M10 加固：删除前校验「会话活跃标记」——运行中的浏览器实例在 profile 根
+/// （= 该目录自身）持有存活 SingletonLock，mtime 语义不足（长驻会话空闲期
+/// mtime 可陈旧超阈值、时钟回拨场景新目录 mtime 亦可超阈值），存活即跳过。
 #[allow(clippy::disallowed_methods)]
 pub fn sweep_orphans(sessions_root: &Path, older_than: Duration) -> Vec<PathBuf> {
     let mut removed = Vec::new();
@@ -364,6 +415,10 @@ pub fn sweep_orphans(sessions_root: &Path, older_than: Duration) -> Vec<PathBuf>
     for entry in entries.flatten() {
         let path = entry.path();
         if !path.is_dir() {
+            continue;
+        }
+        // M10：活跃会话保护（SingletonLock 存活 = 浏览器正在使用该 profile）
+        if matches!(detect_singleton_lock(&path), LockState::Alive { .. }) {
             continue;
         }
         let Ok(meta) = std::fs::metadata(&path) else { continue };
@@ -616,6 +671,95 @@ mod tests {
         assert!(removed.contains(&old), "旧目录应被清扫：{removed:?}");
         assert!(!removed.contains(&fresh), "新目录应保留");
         assert!(fresh.exists());
+    }
+
+    /// M10 回归：活跃会话目录（SingletonLock 携带存活 PID + mtime 陈旧超阈值）
+    /// 不被清扫——mtime 阈值语义不足（长驻会话空闲期/时钟回拨场景），
+    /// 以会话活跃标记为最终防线。
+    #[test]
+    fn sweep_orphans_skips_live_session_lock() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let root = sessions_root(browser_root(dir.path()).as_path());
+        std::fs::create_dir_all(&root).expect("根");
+        // 活跃会话：SingletonLock = 当前进程 PID（必然存活），mtime 故意回拨超阈值
+        let live = root.join("live-session");
+        std::fs::create_dir_all(&live).expect("目录");
+        std::fs::write(live.join("SingletonLock"), std::process::id().to_string()).expect("锁");
+        set_dir_mtime_old(&live);
+        // 对照孤儿：无锁 + mtime 陈旧
+        let orphan = root.join("orphan-session");
+        std::fs::create_dir_all(&orphan).expect("目录");
+        set_dir_mtime_old(&orphan);
+
+        let removed = sweep_orphans(&root, Duration::from_secs(2 * 24 * 3600));
+        assert!(!removed.contains(&live), "活跃会话不得被清扫（M10）：{removed:?}");
+        assert!(removed.contains(&orphan), "无锁孤儿应照常清扫：{removed:?}");
+        assert!(live.exists(), "活跃会话目录必须保留");
+        assert!(!orphan.exists(), "孤儿应被删除");
+    }
+
+    /// H5 回归（unix；Windows 建链接需特权，CI 为 ubuntu 覆盖该面）：
+    /// 源 profile 含「指向自身的符号链接」（自环）与「指向源树外的目录/文件
+    /// 链接」→ 全部跳过不复制、不崩溃。修复前 `is_dir/is_file` 跟随链接：
+    /// 自环 → 无限递归栈溢出；外部目录链接 → 外部整目录被复制进受管 profile。
+    #[cfg(unix)]
+    #[test]
+    fn copy_tree_skips_symlinks_without_following() {
+        use std::os::unix::fs::symlink;
+        let dir = tempfile::tempdir().expect("临时目录");
+        let src_root = dir.path().join("src-user-data");
+        let src_profile = src_root.join("Default");
+        std::fs::create_dir_all(&src_profile).expect("目录");
+        std::fs::write(src_profile.join("Preferences"), b"p").expect("写入");
+
+        // 自环链接：Default/self -> Default（修复前：无限递归 → 栈溢出崩溃）
+        symlink(&src_profile, src_profile.join("self")).expect("自环链接");
+        // 指向源外的目录链接 + 外部秘密文件
+        let outside = dir.path().join("outside-secret");
+        std::fs::create_dir_all(&outside).expect("外部目录");
+        std::fs::write(outside.join("secret.txt"), b"s").expect("外部文件");
+        symlink(&outside, src_profile.join("outside")).expect("外部目录链接");
+        // 指向源外的文件链接
+        symlink(
+            outside.join("secret.txt"),
+            src_profile.join("secret-link"),
+        )
+        .expect("外部文件链接");
+
+        let dest = dir.path().join("managed-out");
+        let report = import_copy(&src_root, "Default", &dest, true).expect("复制不得崩溃");
+        // 正常文件照常复制
+        assert!(dest.join("Preferences").is_file());
+        // 三类链接一律未复制（不跟随）
+        assert!(!dest.join("self").exists(), "自环链接不得复制");
+        assert!(!dest.join("outside").exists(), "外部目录链接不得复制");
+        assert!(!dest.join("outside").join("secret.txt").exists(), "外部目录内容不得进入副本");
+        assert!(!dest.join("secret-link").exists(), "外部文件链接不得复制");
+        // 链接计入 skipped
+        assert!(report.skipped >= 3, "3 个链接应计入 skipped：{report:?}");
+        // 源完好性：只读来源未受影响
+        assert!(src_profile.join("self").exists());
+        assert!(outside.join("secret.txt").is_file());
+    }
+
+    /// H5 加固回归：超深目录树（> MAX_COPY_DEPTH 层）→ 复制中止报错而非栈溢出。
+    #[test]
+    fn copy_tree_depth_cap_aborts() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let src_root = dir.path().join("src-user-data");
+        let src_profile = src_root.join("Default");
+        // 构造 MAX_COPY_DEPTH + 2 层嵌套目录 + 叶文件
+        let mut deep = src_profile.clone();
+        for _ in 0..=MAX_COPY_DEPTH + 1 {
+            deep = deep.join("d");
+            std::fs::create_dir_all(&deep).expect("目录");
+        }
+        std::fs::write(deep.join("leaf.txt"), b"x").expect("写入");
+
+        let dest = dir.path().join("out");
+        let err = import_copy(&src_root, "Default", &dest, true).expect_err("超深应中止");
+        assert!(err.to_string().contains("深度"), "应说明深度上限：{err}");
+        assert!(!dest.exists(), "失败不得留下半成品");
     }
 
     /// 目录 mtime 回拨到过去（Windows：CreateFileW(FILE_WRITE_ATTRIBUTES |

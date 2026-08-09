@@ -8,9 +8,23 @@ mod common;
 
 use agent_tools::context::{create_mock_tool_context, ToolContext};
 use common::{mock_config, MockSession};
+use conex_browser_tools::gate::{HostResolver, MvpDomainGate};
 use conex_browser_tools::register_browser_tools;
 use serde_json::{json, Value};
+use std::net::IpAddr;
 use std::sync::Arc;
+
+/// 确定性解析器（评审 F10 接线后注入测试 harness）：任何主机名解析到公网
+/// 地址——测试面不依赖 CI 真实 DNS（假域名 a.example/x.example 在真实
+/// resolver 下解析失败，会因 fail-closed 被阻断，与门禁正确性无关）。
+/// 门禁判定本身（scheme 门禁/IP 保留段/解析到内网段）在用例内全部生效。
+struct AlwaysPublicResolver;
+
+impl HostResolver for AlwaysPublicResolver {
+    fn resolve(&self, _host: &str) -> Result<Vec<IpAddr>, String> {
+        Ok(vec!["93.184.216.34".parse().expect("字面量 IP")])
+    }
+}
 
 struct Harness {
     mock: Arc<MockSession>,
@@ -21,7 +35,14 @@ struct Harness {
 fn harness(upload_enabled: bool) -> Harness {
     let mock = MockSession::new();
     let mut registry = agent_tools::registry::ToolRegistry::new();
-    register_browser_tools(&mut registry, mock_config(&mock, upload_enabled)).expect("注册成功");
+    let mut config = mock_config(&mock, upload_enabled);
+    // 门禁注入确定性解析器（注入位：BrowserToolsConfig.gate，lib.rs:91）；
+    // 空白名单 + 解析到公网 = 公共域名放行，保留段 IP 字面量仍阻断
+    config.gate = Some(Arc::new(
+        MvpDomainGate::with_resolver(&[], &[], Arc::new(AlwaysPublicResolver))
+            .expect("门禁构造"),
+    ));
+    register_browser_tools(&mut registry, config).expect("注册成功");
     Harness {
         mock,
         ctx: create_mock_tool_context(),
@@ -377,18 +398,25 @@ async fn invalid_inputs_are_structured() {
         let err = h.run_err("browser_navigate", args).await;
         assert_eq!(err.code(), "tool.invalid_input", "navigate 非法入参");
     }
-    // 门禁拦截：内网 IP 字面量 → gate_blocked（非 invalid_input）
+    // 门禁拦截：内网 IP 字面量 → gate_blocked（非 invalid_input）；
+    // 本机回环默认放行（§4.3 口径：127.0.0.0/8 本地测试页场景，评审 F10 修复
+    // 后语义——旧断言「127.0.0.1 默认 gate_blocked」与放行语义冲突，已更新）
     let err = h
-        .run_err(
-            "browser_navigate",
-            json!({ "url": "http://127.0.0.1:8080/" }),
-        )
+        .run_err("browser_navigate", json!({ "url": "http://10.0.0.5/" }))
         .await;
     assert_eq!(err.code(), "tool.browser.gate_blocked");
     let err = h
         .run_err("browser_new_tab", json!({ "url": "http://10.0.0.5/" }))
         .await;
     assert_eq!(err.code(), "tool.browser.gate_blocked");
+    // 回环字面量默认放行：导航照常发出（与「内网 IP 阻断」形成行为对照）
+    h.run_ok(
+        "browser_navigate",
+        json!({ "url": "http://127.0.0.1:8080/" }),
+    )
+    .await;
+    h.mock
+        .assert_recorded("page:Page.navigate {\"url\":\"http://127.0.0.1:8080/\"}");
 
     // 点击：缺 ref/负数/非法按钮/非法修饰键/类型错
     for args in [

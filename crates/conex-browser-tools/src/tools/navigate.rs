@@ -18,6 +18,20 @@ use agent_tools::definition::{Tool, ToolDefinition, ToolError};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::sync::Arc;
+use std::time::Duration;
+
+/// 导航后最终 URL 收敛轮询参数（H4：createTarget 返回时新页导航仍在途，
+/// 302 重定向未落地时 URL 与请求一致——短轮询至多等待收敛后复核）。
+const REDIRECT_POLLS: u32 = 5;
+const REDIRECT_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+/// 动作后复核的违例回退动作（navigate 回退历史；new_tab 关闭新标签）。
+enum AfterRollback<'a> {
+    /// 回退到上一页面（Page.goBack，会话面）
+    GoBack { session: &'a str },
+    /// 关闭新标签（Target.closeTarget，浏览器面；建页即违例无历史可回退）
+    CloseTab { target_id: &'a str },
+}
 
 /// 导航后动作复核（14 §7.1 ③）：URL 变化后重新过门禁，拒绝则回退并报 gate_blocked。
 async fn verify_after_navigation(
@@ -41,6 +55,63 @@ async fn verify_after_navigation(
         }
     }
     Ok(())
+}
+
+/// H4 动作后门禁复核（browser_navigate / browser_new_tab 接入面）：
+/// 导航动作完成后重新读取目标最终 URL 并过门禁——302 重定向可把白名单内请求
+/// 带往内网/保留段，前置检查无法覆盖。
+///
+/// - `requested`：门禁已放行的请求 URL；最终 URL 与其不同时才触发复核
+///   （相同 = 已前置校验，无需重复判定）；
+/// - `poll`：new_tab 用（createTarget 返回时新页导航仍在途，URL 未变化时短轮询
+///   等待 302 收敛）；navigate 的导航提交语义已携带最终 URL，传 false；
+/// - 违例：执行 `rollback` 回退后返回 `tool.browser.gate_blocked`；
+/// - 返回最终 (title, url) 供调用方组织输出（含 302 后的真实落地 URL）。
+async fn verify_navigate_after(
+    ctx: &Ctx,
+    ops: &dyn SessionOps,
+    target_id: &str,
+    requested: &str,
+    poll: bool,
+    rollback: AfterRollback<'_>,
+) -> Result<(Option<String>, Option<String>), ToolError> {
+    let mut info = super::target_info(ops, target_id).await?;
+    if poll {
+        for _ in 0..REDIRECT_POLLS {
+            if info.1.as_deref() == Some(requested) {
+                tokio::time::sleep(REDIRECT_POLL_INTERVAL).await;
+                info = super::target_info(ops, target_id).await?;
+            } else {
+                break;
+            }
+        }
+    }
+    let Some(after_url) = info.1.as_deref() else {
+        return Ok(info);
+    };
+    if after_url != requested {
+        if let Err(denial) = ctx.gate.check(after_url) {
+            let rollback_note = match rollback {
+                AfterRollback::GoBack { session } => {
+                    let _ = ops
+                        .send_page(session, CDP_PAGE_GO_BACK, json!({}))
+                        .await;
+                    "已回退到上一页面"
+                }
+                AfterRollback::CloseTab { target_id } => {
+                    let _ = ops
+                        .send_browser(CDP_TARGET_CLOSE_TARGET, json!({ "targetId": target_id }))
+                        .await;
+                    "已关闭新标签页"
+                }
+            };
+            return Err(error::gate_blocked(
+                after_url,
+                &format!("{}（{rollback_note}）", denial.reason),
+            ));
+        }
+    }
+    Ok(info)
 }
 
 /// browser_navigate：导航当前标签页（导航检查点先行，17 §4.4）。
@@ -111,7 +182,18 @@ impl Tool for NavigateTool {
                 ));
             }
         }
-        let (title, actual) = super::target_info(ops, &tab.target_id).await?;
+        // H4 动作后门禁复核：302 重定向可能把白名单内 URL 带往内网/保留段——
+        // 导航提交已携带最终 URL（服务端跳转在提交前完成），读取后复核，
+        // 违例回退上一页并返回 gate_blocked
+        let (title, actual) = verify_navigate_after(
+            &self.ctx,
+            ops,
+            &tab.target_id,
+            url.as_str(),
+            false,
+            AfterRollback::GoBack { session: &tab.session },
+        )
+        .await?;
         Ok(json!({
             "ok": true,
             "url": actual.unwrap_or_else(|| url.to_string()),
@@ -410,10 +492,23 @@ impl Tool for NewTabTool {
             .ok_or_else(|| {
                 ToolError::execution_failed("browser_new_tab", "createTarget 未返回 targetId")
             })?;
+        // H4 动作后门禁复核：createTarget 返回时新页导航仍在途，302 重定向
+        // 可能把白名单内 URL 带往内网/保留段——轮询收敛最终 URL 后复核，
+        // 违例关闭新标签并返回 gate_blocked
+        let (_, actual) = verify_navigate_after(
+            &self.ctx,
+            ops,
+            tab_id,
+            url.as_str(),
+            true,
+            AfterRollback::CloseTab { target_id: tab_id },
+        )
+        .await?;
         Ok(json!({
             "ok": true,
             "tabId": tab_id,
             "url": url.to_string(),
+            "finalUrl": actual.unwrap_or_else(|| url.to_string()),
         }))
     }
 }
@@ -557,5 +652,240 @@ impl Tool for SwitchTabTool {
             "url": url.unwrap_or_default(),
             "title": title.unwrap_or_default(),
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::session::{ConsoleEntry, NetworkEntry, SnapshotView};
+    use agent_tools::context::create_mock_tool_context;
+    use conex_browser::action::gate::{DomainGate, GateDenial};
+    use conex_browser::action::{
+        ActionError, ActionRequest, ActionSuccess, ElementMeta, WaitCondition, WaitOptions,
+    };
+    use conex_browser::snapshot::budget::BudgetConfig;
+    use conex_browser::SessionRef;
+    use std::sync::Mutex;
+
+    /// 确定性门禁替身：host 命中 denied_host 一律拒绝（零 DNS 依赖，CI 稳定）。
+    struct StubGate {
+        denied_host: &'static str,
+    }
+
+    impl DomainGate for StubGate {
+        fn check(&self, url: &str) -> Result<(), GateDenial> {
+            let host = url::Url::parse(url)
+                .expect("测试 URL 应合法")
+                .host_str()
+                .map(str::to_string);
+            if host.as_deref() == Some(self.denied_host) {
+                return Err(GateDenial {
+                    url: url.to_string(),
+                    reason: format!("测试拒绝：{url}"),
+                });
+            }
+            Ok(())
+        }
+    }
+
+    /// 记录型会话替身：记录全部命令 + 可配 Target.getTargetInfo 最终 URL
+    /// （模拟 302 重定向后的落地 URL）。
+    struct NavigateOps {
+        log: Mutex<Vec<String>>,
+        info_url: String,
+    }
+
+    impl NavigateOps {
+        fn new(info_url: &str) -> Arc<Self> {
+            Arc::new(NavigateOps {
+                log: Mutex::new(Vec::new()),
+                info_url: info_url.to_string(),
+            })
+        }
+        fn calls(&self) -> Vec<String> {
+            self.log.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        }
+        fn assert_called(&self, needle: &str) {
+            assert!(
+                self.calls().iter().any(|c| c.contains(needle)),
+                "应调用 {needle}：{:?}",
+                self.calls()
+            );
+        }
+        fn assert_not_called(&self, needle: &str) {
+            assert!(
+                !self.calls().iter().any(|c| c.contains(needle)),
+                "不应调用 {needle}：{:?}",
+                self.calls()
+            );
+        }
+    }
+
+    #[async_trait]
+    impl SessionOps for NavigateOps {
+        fn readiness(&self) -> Result<(), String> {
+            Ok(())
+        }
+        fn current_tab(&self) -> Result<SessionRef, ToolError> {
+            Ok(SessionRef {
+                target_id: "T1".to_string(),
+                session: "S1".to_string(),
+            })
+        }
+        async fn send_page(
+            &self,
+            session: &str,
+            method: &str,
+            params: Value,
+        ) -> Result<Value, ToolError> {
+            self.log
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(format!("page:{session}:{method} {params}"));
+            Ok(json!({ "frameId": "F1" }))
+        }
+        async fn send_browser(&self, method: &str, params: Value) -> Result<Value, ToolError> {
+            self.log
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(format!("browser:{method} {params}"));
+            match method {
+                "Target.createTarget" => Ok(json!({ "targetId": "T9" })),
+                "Target.getTargets" => Ok(json!({ "targetInfos": [] })),
+                "Target.getTargetInfo" => Ok(json!({
+                    "targetInfo": {
+                        "targetId": "T1",
+                        "type": "page",
+                        "title": "标题",
+                        "url": self.info_url
+                    }
+                })),
+                _ => Ok(json!({})),
+            }
+        }
+        fn snapshot_version(&self, _tab_id: &str) -> u64 {
+            7
+        }
+        async fn capture_snapshot(
+            &self,
+            _tab_id: &str,
+            _session: &str,
+            _budgets: BudgetConfig,
+        ) -> Result<SnapshotView, ToolError> {
+            Ok(SnapshotView {
+                snapshot_version: 7,
+                tree: String::new(),
+                warnings: vec![],
+            })
+        }
+        fn element_meta(
+            &self,
+            _tab_id: &str,
+            _version: u64,
+            _index: u32,
+        ) -> Result<Option<ElementMeta>, ToolError> {
+            Ok(Some(ElementMeta {
+                backend_node_id: 1,
+                is_password: false,
+            }))
+        }
+        async fn execute_action(&self, _req: ActionRequest) -> Result<ActionSuccess, ActionError> {
+            Ok(ActionSuccess {
+                navigated: false,
+                url_after: None,
+                page_changed: false,
+                payload: None,
+            })
+        }
+        async fn wait_for(
+            &self,
+            _cond: WaitCondition,
+            _opts: WaitOptions,
+        ) -> Result<ActionSuccess, ActionError> {
+            Ok(ActionSuccess {
+                navigated: false,
+                url_after: None,
+                page_changed: false,
+                payload: None,
+            })
+        }
+        async fn console_entries(&self, _since_seq: u64) -> Vec<ConsoleEntry> {
+            vec![]
+        }
+        async fn network_entries(&self, _since_seq: u64) -> Vec<NetworkEntry> {
+            vec![]
+        }
+    }
+
+    /// 组装工具上下文（注入记录型会话 + 拒绝指定 host 的门禁替身）。
+    fn tool_ctx(ops: Arc<NavigateOps>, denied_host: &'static str) -> Arc<Ctx> {
+        Arc::new(Ctx {
+            session: Some(ops),
+            gate: Arc::new(StubGate { denied_host }),
+            sensitive: crate::SensitiveCapabilities::default(),
+            budgets: BudgetConfig::active(),
+        })
+    }
+
+    /// H4 主回归：navigate 到白名单内 URL，服务端 302 重定向到被禁域
+    /// （内网地址）→ 动作后复核拦截：gate_blocked + 回退上一页，不返回成功结果。
+    #[tokio::test]
+    async fn navigate_302_to_blocked_domain_intercepted() {
+        let ops = NavigateOps::new("http://192.168.1.1/admin");
+        let ctx = tool_ctx(ops.clone(), "192.168.1.1");
+        let tool = NavigateTool::new(ctx);
+        let err = tool
+            .execute(
+                &create_mock_tool_context(),
+                json!({ "url": "https://example.com/redir" }),
+            )
+            .await
+            .expect_err("302 到被禁域应被拦截（H4）");
+        assert_eq!(err.code(), "tool.browser.gate_blocked", "错误码：{err}");
+        assert!(
+            err.to_string().contains("192.168.1.1"),
+            "错误应携带最终落地 URL：{err}"
+        );
+        ops.assert_called("page:S1:Page.navigate");
+        ops.assert_called("page:S1:Page.goBack");
+    }
+
+    /// H4 主回归（new_tab）：createTarget 后新页 302 到被禁域 → gate_blocked +
+    /// 关闭新标签（无历史可回退）。
+    #[tokio::test]
+    async fn new_tab_302_to_blocked_domain_intercepted() {
+        let ops = NavigateOps::new("http://192.168.1.1/admin");
+        let ctx = tool_ctx(ops.clone(), "192.168.1.1");
+        let tool = NewTabTool::new(ctx);
+        let err = tool
+            .execute(
+                &create_mock_tool_context(),
+                json!({ "url": "https://example.com/redir" }),
+            )
+            .await
+            .expect_err("新标签 302 到被禁域应被拦截（H4）");
+        assert_eq!(err.code(), "tool.browser.gate_blocked", "错误码：{err}");
+        ops.assert_called("browser:Target.createTarget");
+        ops.assert_called("browser:Target.closeTarget");
+        ops.assert_not_called("Page.goBack");
+    }
+
+    /// 正路径：最终 URL 仍在允许面 → 成功返回真实落地 URL（302 到允许域），无回退。
+    #[tokio::test]
+    async fn navigate_allowed_redirect_succeeds() {
+        let ops = NavigateOps::new("https://a.example/after");
+        let ctx = tool_ctx(ops.clone(), "192.168.1.1");
+        let tool = NavigateTool::new(ctx);
+        let out = tool
+            .execute(
+                &create_mock_tool_context(),
+                json!({ "url": "https://example.com/page" }),
+            )
+            .await
+            .expect("允许面导航应成功");
+        assert_eq!(out["url"], "https://a.example/after", "返回真实落地 URL");
+        assert_eq!(out["snapshotVersion"], 7);
+        ops.assert_not_called("Page.goBack");
     }
 }

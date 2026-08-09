@@ -9,7 +9,8 @@
 //! - `Delay`：延迟注入抽象（真实 tokio sleep / 测试记录型），重试延迟与 type 节流共用。
 //!
 //! 错误映射：`CdpError` → `ActionError` 按维度 14 §5.1 表（TargetClosed/ContextGone/
-//! NodeStale/ConnectionLost/Aborted/Timeout/NotReady 各归其类，R-9）。
+//! NodeStale/ConnectionLost/Aborted/Timeout/NotReady 各归其类，R-9）；M4 修正：
+//! Internal/Serialize 归 Unsupported（Fatal 不重试）——内部错误重试不会自愈。
 
 use crate::action::locate::ViewportSize;
 use crate::action::{ActionError, ActionErrorKind, ElementMeta, SnapshotStore};
@@ -123,24 +124,24 @@ pub trait PageOps: Send + Sync {
 
 /// 在途请求计数（wait_for NetworkIdle 消费，维度 11 事件总线订阅维护）。
 pub struct NetworkCounter {
-    in_flight: AtomicUsize,
+    in_flight: Arc<AtomicUsize>,
+    /// 订阅任务句柄（Drop 时 abort 终止——M3：任务不再持有 Arc<Self> 自保活，
+    /// 计数 Arc 归零即收尸，杜绝每实例常驻订阅任务泄漏）
+    handle: tokio::task::JoinHandle<()>,
 }
 
 impl NetworkCounter {
     pub fn new(mut rx: tokio::sync::broadcast::Receiver<BrowserEvent>) -> Arc<Self> {
-        let counter = Arc::new(NetworkCounter {
-            in_flight: AtomicUsize::new(0),
-        });
-        let counter_clone = counter.clone();
-        tokio::spawn(async move {
+        let in_flight = Arc::new(AtomicUsize::new(0));
+        let task_in_flight = in_flight.clone();
+        let handle = tokio::spawn(async move {
             loop {
                 match rx.recv().await {
                     Ok(BrowserEvent::NetworkRequest { .. }) => {
-                        counter_clone.in_flight.fetch_add(1, Ordering::Relaxed);
+                        task_in_flight.fetch_add(1, Ordering::Relaxed);
                     }
                     Ok(BrowserEvent::NetworkDone { .. }) => {
-                        counter_clone
-                            .in_flight
+                        task_in_flight
                             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
                                 Some(n.saturating_sub(1))
                             })
@@ -152,11 +153,18 @@ impl NetworkCounter {
                 }
             }
         });
-        counter
+        Arc::new(NetworkCounter { in_flight, handle })
     }
 
     pub fn in_flight(&self) -> usize {
         self.in_flight.load(Ordering::Relaxed)
+    }
+}
+
+impl Drop for NetworkCounter {
+    /// 终止常驻订阅任务（M3：Arc 归零即收尸，任务不得活到总线关闭）。
+    fn drop(&mut self) {
+        self.handle.abort();
     }
 }
 
@@ -194,7 +202,9 @@ fn map_cdp_error(err: CdpError, method: &str) -> ActionError {
             }
         }
         CdpError::BadParams { .. } | CdpError::Protocol { .. } => ActionErrorKind::InvalidInput,
-        CdpError::Internal { .. } | CdpError::Serialize { .. } => ActionErrorKind::ContextGone,
+        // M4：内部/序列化错误非导航竞态——重试不会自愈，归 Fatal 类（Unsupported
+        // 策略不重试）；旧实现误归 ContextGone 白白延迟重试 3 次并掩盖真实错误
+        CdpError::Internal { .. } | CdpError::Serialize { .. } => ActionErrorKind::Unsupported,
         CdpError::DomainUnavailable { .. } => ActionErrorKind::Unsupported,
     };
     ActionError::new(kind, format!("CDP 命令失败[{method}]：{raw}")).with_cdp_raw(raw)
@@ -544,7 +554,8 @@ pub type SessionResolver = Arc<dyn Fn(&TabId) -> Option<String> + Send + Sync>;
 /// 快照存储真实实现（维度 11/13 门面包装；R-1 per-tab 签名）。
 ///
 /// 会话解析经注入闭包 `session_for`（引擎侧维度 15 标签管理提供）；
-/// 密码标记（is_password）需快照序列化面携带，MVP 恒 false，接线项见遗留事项。
+/// 密码标记（is_password）由快照文档携带（M2：redact 同源判定），
+/// 密码输入目标在工具面走 insertText/长度比对路径（§4.4）。
 /// **内部持单一 `SnapshotManager` 实例**：`take_snapshot` 的提交与
 /// `element_by_index` 的读取必须共享同一缓存——每次调用新建 manager 会
 /// 让重快照后的索引解析永远落空（联调 E3 根因，mock 面未暴露）。
@@ -616,7 +627,8 @@ impl SnapshotStore for BrowserSnapshotStore {
         let node_ref = doc.selector_map.get(&(index as u32))?;
         Some(ElementMeta {
             backend_node_id: node_ref.backend_node_id,
-            is_password: false,
+            // M2：快照文档敏感输入集合（redact 同源判定）
+            is_password: doc.password_backend_ids.contains(&node_ref.backend_node_id),
         })
     }
 
@@ -716,6 +728,21 @@ mod tests {
                 },
                 ActionErrorKind::InvalidInput,
             ),
+            // M4：内部/序列化错误不得归 ContextGone（重试不会自愈，Fatal 不重试）
+            (
+                CdpError::Internal {
+                    method: Some("m".to_string()),
+                    message: "锁中毒恢复".to_string(),
+                },
+                ActionErrorKind::Unsupported,
+            ),
+            (
+                CdpError::Serialize {
+                    method: "m".to_string(),
+                    message: "信封编码失败".to_string(),
+                },
+                ActionErrorKind::Unsupported,
+            ),
             (
                 CdpError::DomainUnavailable {
                     method: "m".to_string(),
@@ -760,6 +787,34 @@ mod tests {
         assert_eq!(counter.in_flight(), 1, "loadingFinished 应减一");
     }
 
+    /// M3：Drop 后订阅任务终止——不再泄漏常驻任务（任务不持有 Arc<Self> 自保活）。
+    #[tokio::test]
+    async fn network_counter_task_terminates_on_drop() {
+        let bus = crate::cdp::bus::BusHandle::new(64, 4);
+        let counter = NetworkCounter::new(bus.subscribe());
+        let abort = counter.handle.abort_handle();
+        bus.publish(BrowserEvent::NetworkRequest {
+            request_id: "r1".to_string(),
+            url: "https://e.com".to_string(),
+            method: "GET".to_string(),
+        });
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert_eq!(counter.in_flight(), 1, "Drop 前计数正常");
+        assert!(!abort.is_finished(), "Drop 前任务存活");
+        drop(counter);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            if abort.is_finished() {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "Drop 后订阅任务必须终止"
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    }
+
     /// 会话恢复所需 mock 自动应答全表（与 lib.rs 会话面集成测试同源）。
     fn restore_reply_map() -> Vec<(&'static str, MockReply)> {
         vec![
@@ -789,7 +844,8 @@ mod tests {
     }
 
     /// 采集四路应答（Chrome 151 实测形态 fixture：backendNodeId / Rare*Data 映射 /
-    /// 无 nodeCount / documentURL 池下标 / layoutViewport 新字段）。
+    /// 无 nodeCount / documentURL 池下标 / layoutViewport 新字段；
+    /// M2：INPUT 节点带 type=password 属性，用于密码标记断言）。
     fn collector_reply_map() -> Vec<(&'static str, MockReply)> {
         vec![
             ("DOMSnapshot.captureSnapshot", MockReply::Ok(json!({
@@ -797,13 +853,14 @@ mod tests {
                     "data:text/html;charset=utf-8,page",
                     "联调测试页",
                     "#document", "HTML", "HEAD", "BODY", "INPUT",
-                    "id", "name", "BUTTON", "中文按钮", "#text", "DIV", "out", "初始文本"
+                    "id", "name", "BUTTON", "中文按钮", "#text", "DIV", "out", "初始文本",
+                    "type", "password"
                 ],
                 "documents": [{
                     "documentURL": 0,
                     "title": 1,
                     "nodes": {
-                        "attributes": [[], [], [], [7, 8], [], [7, 13], []],
+                        "attributes": [[], [], [], [7, 8, 15, 16], [], [7, 13], []],
                         "backendNodeId": [2, 3, 4, 1, 6, 5, 7],
                         "contentDocumentIndex": { "index": [], "value": [] },
                         "currentSourceURL": { "index": [], "value": [] },
@@ -926,10 +983,13 @@ mod tests {
             .element_by_index(&"T1".to_string(), version, 1)
             .expect("take_snapshot 提交的快照应可被索引解析（共享缓存回归）");
         assert_eq!(meta.backend_node_id, 1, "input(backend=1) 索引解析");
+        // M2：type=password 输入必须携带 is_password 标记（redact 同源判定）
+        assert!(meta.is_password, "type=password 输入必须标记为密码输入目标");
         let btn = store
             .element_by_index(&"T1".to_string(), version, 6)
             .expect("按钮索引解析");
         assert_eq!(btn.backend_node_id, 6);
+        assert!(!btn.is_password, "普通按钮不得误标为密码输入");
     }
 }
 

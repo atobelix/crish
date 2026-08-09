@@ -276,6 +276,12 @@ fn wait_pid_gone(
     }
 }
 
+// Windows 平台语义测试（32 评审 P1-1）：fake_browser .bat harness 与 Job
+// Object / taskkill 杀树依赖 Windows 语义——除模块级 `#[cfg(windows)]`
+// 编译门控（platform/mod.rs）外，测试面显式追加 `#[cfg(windows)]` 自包含
+// 门控（ubuntu CI 不编译不运行；防止模块级门控被误删后 .bat 脚本在 unix
+// spawn 下必失败）。
+#[cfg(windows)]
 #[cfg(test)]
 mod tests {
     use crate::browser::platform::{new_killer, spawn_command};

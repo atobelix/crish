@@ -15,6 +15,8 @@
 //!
 //! 采集状态机：`Idle → Collecting{...} → Committed`；提交是唯一写入点，
 //! 中断/崩溃无半成品缓存条目，状态回 Idle 后下次从头采集。
+//! 并发（M9）：采集经信号量限流（默认同时 1 个，可配），超限调用排队等待
+//! 而非 Busy 失败；状态机按 tab 键位互斥，跨 tab 并行由限流额度决定。
 //!
 //! ## 版本校验（R-1 per-tab + U-2 VersionReset）
 //! `validate_snapshot(tab_id, version)` 对版本不匹配/epoch 变化/+1000 跳变
@@ -86,6 +88,9 @@ pub struct SnapshotDocument {
     pub serialized_text: String,
     /// 模型索引 → 执行定位引用（backendNodeId 为主）
     pub selector_map: HashMap<u32, NodeRef>,
+    /// 敏感输入（type=password / 敏感 autocomplete）backendNodeId 集合（M2：
+    /// 工具面 is_password 输入目标判定；与 redact.rs 同一敏感判定出口，不泄值）
+    pub password_backend_ids: HashSet<i64>,
     pub meta: SnapshotMeta,
 }
 
@@ -264,7 +269,10 @@ pub struct SnapshotManager {
     /// 绘制序过滤开关（§3.1 步骤 3）
     paint_filter: bool,
     cache: Mutex<SnapshotCache>,
-    state: Mutex<Option<CaptureEntry>>,
+    /// 采集状态机（per-tab 键位；M9：同 tab 并发互斥，跨 tab 并行由限流额度决定）
+    state: Mutex<HashMap<TabId, CaptureEntry>>,
+    /// 采集并发限流（M9：默认同时 1 个采集，可配；并发采集排队等待而非 Busy 失败）
+    limit: tokio::sync::Semaphore,
 }
 
 impl SnapshotManager {
@@ -281,7 +289,8 @@ impl SnapshotManager {
             listener_channel: false,
             paint_filter: false,
             cache: Mutex::new(SnapshotCache::new(SNAPSHOT_CACHE_TOTAL_BYTES)),
-            state: Mutex::new(None),
+            state: Mutex::new(HashMap::new()),
+            limit: tokio::sync::Semaphore::new(1),
         }
     }
 
@@ -297,41 +306,60 @@ impl SnapshotManager {
         self
     }
 
+    /// 配置采集并发度（M9：默认 1；超过限额的采集排队等待信号量，不 Busy 失败）。
+    pub fn with_capture_concurrency(mut self, n: usize) -> Self {
+        self.limit = tokio::sync::Semaphore::new(n.max(1));
+        self
+    }
+
     /// 当前采集状态（状态机观测/审计）。
     pub fn state_kind(&self) -> CaptureStateKind {
-        match self
+        if self
             .state
             .lock()
             .unwrap_or_else(|p| p.into_inner())
-            .as_ref()
+            .is_empty()
         {
-            Some(_) => CaptureStateKind::Collecting,
-            None => CaptureStateKind::Idle,
+            CaptureStateKind::Idle
+        } else {
+            CaptureStateKind::Collecting
         }
     }
 
     /// 采集事务化入口（M-5 四步：版本读-采集-校验-提交）。
     ///
     /// `active`：标签活跃度（T-6：非活跃标签按 0.25 系数惰性快照）。
+    /// 并发语义（M9）：采集经信号量限流（默认同时 1 个，可配）——超限调用排队
+    /// 等待而非 Busy 失败；同 tab 并发由状态机（per-tab 键位）互斥。
     pub async fn capture(
         &self,
         tab_id: &TabId,
         session: &str,
         active: bool,
     ) -> Result<Arc<SnapshotDocument>, SnapshotError> {
-        // —— 状态机：Idle → Collecting（并发互斥）——
+        // —— 限流：并发采集排队（M9；信号量不关闭，acquire 不失败）——
+        let _permit = self
+            .limit
+            .acquire()
+            .await
+            .map_err(|_| SnapshotError::Collect("采集限流信号量异常（关闭）".to_string()))?;
+
+        // —— 状态机：同 tab 并发互斥（per-tab 键位）——
         {
             let mut guard = self.state.lock().unwrap_or_else(|p| p.into_inner());
-            if guard.is_some() {
+            if guard.contains_key(tab_id) {
                 return Err(SnapshotError::Busy);
             }
             let start_version = self.version.snapshot_version(tab_id);
             let start_epoch = self.version.epoch();
-            *guard = Some(CaptureEntry {
-                start_version,
-                start_epoch,
-                started_at: Instant::now(),
-            });
+            guard.insert(
+                tab_id.clone(),
+                CaptureEntry {
+                    start_version,
+                    start_epoch,
+                    started_at: Instant::now(),
+                },
+            );
         }
 
         // —— 采集（12s 硬超时，T-1）——
@@ -345,11 +373,11 @@ impl SnapshotManager {
         {
             Ok(Ok(data)) => data,
             Ok(Err(e)) => {
-                self.state.lock().unwrap_or_else(|p| p.into_inner()).take();
+                self.state.lock().unwrap_or_else(|p| p.into_inner()).remove(tab_id);
                 return Err(e);
             }
             Err(_) => {
-                self.state.lock().unwrap_or_else(|p| p.into_inner()).take();
+                self.state.lock().unwrap_or_else(|p| p.into_inner()).remove(tab_id);
                 return Err(SnapshotError::Timeout(HARD_TIMEOUT));
             }
         };
@@ -359,7 +387,7 @@ impl SnapshotManager {
             .state
             .lock()
             .unwrap_or_else(|p| p.into_inner())
-            .take();
+            .remove(tab_id);
         let Some(entry) = entry else {
             return Err(SnapshotError::Busy);
         };
@@ -373,6 +401,9 @@ impl SnapshotManager {
                 epoch: end_epoch,
             }));
         }
+
+        // —— 密码标记（M2）：敏感输入集合与脱敏同源（redact.rs）——
+        let password_backend_ids = redact::sensitive_input_backend_ids(&collected.roots);
 
         // —— 序列化（简化树 + 判定 + 脱敏 + 预算截断）——
         let mut previous = self
@@ -399,6 +430,7 @@ impl SnapshotManager {
         let doc = SnapshotDocument {
             serialized_text: out.text,
             selector_map: out.selector_map,
+            password_backend_ids,
             meta: SnapshotMeta {
                 snapshot_version: entry.start_version,
                 epoch: entry.start_epoch,
@@ -518,6 +550,7 @@ pub fn snapshot_from_roots(
     SnapshotDocument {
         serialized_text: out.text,
         selector_map: out.selector_map,
+        password_backend_ids: redact::sensitive_input_backend_ids(&roots),
         meta: SnapshotMeta {
             snapshot_version: version,
             epoch,
@@ -641,31 +674,129 @@ mod tests {
         assert!(mgr.get_cached(&"t1".to_string(), 0).is_none(), "超时不产生缓存条目");
     }
 
-    /// 采集中断恢复：状态机互斥（Collecting 期间并发采集返回 Busy；中断后回 Idle 可重拍）。
+    /// M2：采集文档携带密码标记——type=password 输入 backendNodeId 入集合，
+    /// 普通输入/容器/文本节点排除（redact.rs 同源判定）。
     #[tokio::test]
-    async fn capture_interrupt_recovers_to_idle() {
-        // 挂起 200ms 的采集占用窗口：并发第二次采集应 Busy
-        let slow = Arc::new(FixtureCollector::new(page_fixture()).hang_for(Duration::from_millis(200)));
-        let (mgr, _v, _b) = test_manager(slow);
-        let mgr = Arc::new(mgr);
+    async fn capture_marks_password_backend_ids() {
+        let roots = vec![
+            EnhancedNode::element("input", 1)
+                .attr("type", "password")
+                .bounds(0.0, 0.0, 300.0, 36.0),
+            EnhancedNode::element("input", 2)
+                .attr("type", "text")
+                .attr("autocomplete", "current-password")
+                .bounds(0.0, 40.0, 300.0, 36.0),
+            EnhancedNode::element("button", 3)
+                .push(EnhancedNode::text_node("登录", 4))
+                .bounds(0.0, 80.0, 80.0, 36.0),
+        ];
+        let (mgr, version, _bus) = test_manager(Arc::new(FixtureCollector::new(roots)));
+        version.bump("t1", crate::cdp::bus::VersionReason::Navigation);
+        let doc = mgr.capture(&"t1".to_string(), "s1", true).await.expect("采集应成功");
+        assert!(doc.password_backend_ids.contains(&1), "type=password 输入必须入标记集合");
+        assert!(doc.password_backend_ids.contains(&2), "敏感 autocomplete 输入必须入标记集合");
+        assert!(!doc.password_backend_ids.contains(&3), "普通按钮不敏感");
+        assert!(!doc.password_backend_ids.contains(&4), "文本节点不敏感");
+    }
+
+    /// M9：并发采集排队串行（默认限流 1）——不同标签同时采集不再 Busy 失败，
+    /// 而是等待信号量依次执行；探针断言同时活跃采集数恒为 1。
+    #[tokio::test]
+    async fn capture_concurrent_queues_serially() {
+        let probe = ProbeCollector::new(Duration::from_millis(150));
+        let bus = BusHandle::new(64, 4);
+        let version = Arc::new(VersionTracker::new(bus.event_tx(), Duration::from_millis(200)));
+        let mgr = Arc::new(SnapshotManager::new(
+            version.clone(),
+            probe.clone(),
+            BudgetConfig::active(),
+        ));
+        version.bump("t1", crate::cdp::bus::VersionReason::Navigation);
+        version.bump("t2", crate::cdp::bus::VersionReason::Navigation);
+
         let mgr_a = mgr.clone();
         let mgr_b = mgr.clone();
         let a = tokio::spawn(async move { mgr_a.capture(&"t1".to_string(), "s1", true).await });
-        let b = tokio::spawn(async move { mgr_b.capture(&"t1".to_string(), "s1", true).await });
+        let b = tokio::spawn(async move { mgr_b.capture(&"t2".to_string(), "s1", true).await });
         let ra = a.await.expect("任务应完成");
         let rb = b.await.expect("任务应完成");
-        let oks = [&ra, &rb].iter().filter(|r| r.is_ok()).count();
-        let busys = [&ra, &rb]
-            .iter()
-            .filter(|r| matches!(r, Err(SnapshotError::Busy)))
-            .count();
-        assert_eq!(oks, 1, "并发采集恰好一个成功（Collecting 互斥）");
-        assert_eq!(busys, 1, "并发采集恰好一个 Busy");
-        assert_eq!(mgr.state_kind(), CaptureStateKind::Idle, "窗口结束后回 Idle");
-        assert!(
-            mgr.get_cached(&"t1".to_string(), 0).is_some(),
-            "成功采集已提交（挂起窗口结束无半成品残留）"
+        assert!(ra.is_ok(), "排队后首拍应成功：{ra:?}");
+        assert!(rb.is_ok(), "排队后次拍应成功：{rb:?}");
+        assert_eq!(probe.max_active(), 1, "默认限流 1：同时最多 1 个采集在跑");
+        assert_eq!(mgr.state_kind(), CaptureStateKind::Idle, "全部结束后回 Idle");
+        assert!(mgr.get_cached(&"t1".to_string(), 1).is_some(), "t1 快照已提交");
+        assert!(mgr.get_cached(&"t2".to_string(), 1).is_some(), "t2 快照已提交");
+    }
+
+    /// M9：限流可配——并发度 2 时不同标签采集并行执行（同时活跃数到 2）。
+    #[tokio::test]
+    async fn capture_concurrency_limit_configurable() {
+        let probe = ProbeCollector::new(Duration::from_millis(150));
+        let bus = BusHandle::new(64, 4);
+        let version = Arc::new(VersionTracker::new(bus.event_tx(), Duration::from_millis(200)));
+        let mgr = Arc::new(
+            SnapshotManager::new(version.clone(), probe.clone(), BudgetConfig::active())
+                .with_capture_concurrency(2),
         );
+        version.bump("t1", crate::cdp::bus::VersionReason::Navigation);
+        version.bump("t2", crate::cdp::bus::VersionReason::Navigation);
+
+        let mgr_a = mgr.clone();
+        let mgr_b = mgr.clone();
+        let a = tokio::spawn(async move { mgr_a.capture(&"t1".to_string(), "s1", true).await });
+        let b = tokio::spawn(async move { mgr_b.capture(&"t2".to_string(), "s1", true).await });
+        let ra = a.await.expect("任务应完成");
+        let rb = b.await.expect("任务应完成");
+        assert!(ra.is_ok(), "并行采集应成功：{ra:?}");
+        assert!(rb.is_ok(), "并行采集应成功：{rb:?}");
+        assert_eq!(probe.max_active(), 2, "并发度 2：两个采集并行执行");
+        assert_eq!(mgr.state_kind(), CaptureStateKind::Idle, "全部结束后回 Idle");
+    }
+
+    /// 并发探针采集器（M9）：统计同时活跃的采集数（确定性并发度断言）。
+    struct ProbeCollector {
+        roots: Vec<EnhancedNode>,
+        hang: Duration,
+        active: std::sync::atomic::AtomicUsize,
+        max_active: std::sync::atomic::AtomicUsize,
+    }
+
+    impl ProbeCollector {
+        fn new(hang: Duration) -> Arc<Self> {
+            Arc::new(ProbeCollector {
+                roots: page_fixture(),
+                hang,
+                active: std::sync::atomic::AtomicUsize::new(0),
+                max_active: std::sync::atomic::AtomicUsize::new(0),
+            })
+        }
+
+        fn max_active(&self) -> usize {
+            self.max_active.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait]
+    impl SnapshotCollector for ProbeCollector {
+        async fn collect(
+            &self,
+            _tab_id: &str,
+            _session: &str,
+        ) -> Result<CollectedData, SnapshotError> {
+            let now = self.active.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            self.max_active
+                .fetch_max(now, std::sync::atomic::Ordering::SeqCst);
+            tokio::time::sleep(self.hang).await;
+            self.active.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(CollectedData {
+                roots: self.roots.clone(),
+                url: String::new(),
+                title: String::new(),
+                layout: LayoutMetrics::default(),
+                raw_payload_bytes: 0,
+                collect_ms: 0,
+            })
+        }
     }
 
     /// U-2：epoch 变化（VersionReset）→ Stale。

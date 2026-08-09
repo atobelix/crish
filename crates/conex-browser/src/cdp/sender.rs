@@ -352,6 +352,12 @@ impl CommandSender {
         // —— ①' 幂等：工具层短路（已完成命令缓存，agent-tools idempotency 语义）——
         if let Some(key) = &cmd.idempotency_key {
             if let Some(result) = self.hooks.idempotent(key).await {
+                // H3 修复：命中时先把结果发布给在途合并等待方，再返回——
+                // 否则 guard Drop（armed=true）会向共享 broadcast 发布 Cancelled，
+                // 并发同键调用方拿到错误的取消语义而非正确缓存结果。
+                if let Some(g) = guard.as_mut() {
+                    g.publish(result.clone());
+                }
                 return result;
             }
         }
@@ -447,7 +453,10 @@ mod tests {
         stop: Arc<AtomicBool>,
         token: CancellationToken,
         approve_ok: bool,
-        idempotent_cached: Option<Result<Value, CdpError>>,
+        idempotent_cached: Mutex<Option<Result<Value, CdpError>>>,
+        /// 幂等钩子返回前的延迟（H3 测试用：让并发合并方先订阅在途通道，
+        /// 确定性复现「缓存命中 + 在途等待方」时序）
+        cache_delay: Mutex<Option<Duration>>,
     }
 
     impl RecordingHooks {
@@ -457,7 +466,8 @@ mod tests {
                 stop: Arc::new(AtomicBool::new(false)),
                 token: CancellationToken::new(),
                 approve_ok,
-                idempotent_cached: None,
+                idempotent_cached: Mutex::new(None),
+                cache_delay: Mutex::new(None),
             }
         }
         fn record(&self, step: &str) {
@@ -475,7 +485,17 @@ mod tests {
     impl CommandPolicyHooks for RecordingHooks {
         async fn idempotent(&self, _key: &IdKey) -> Option<Result<Value, CdpError>> {
             self.record("idempotent");
-            self.idempotent_cached.clone()
+            let delay = *self
+                .cache_delay
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            if let Some(d) = delay {
+                tokio::time::sleep(d).await;
+            }
+            self.idempotent_cached
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .clone()
         }
         async fn approve(&self, _cmd: &CdpCommandView) -> Result<(), ApprovalDenied> {
             self.record("approve");
@@ -643,5 +663,53 @@ mod tests {
         let r2 = t2.await.expect("任务 2 失败").expect("命令 2 失败");
         assert_eq!(r1, r2);
         assert_eq!(r1["frameId"], "F1");
+    }
+
+    /// H3 回归（评审 29-H3）：幂等缓存命中时，在途合并等待方应收到**正确缓存结果**
+    /// 而非 Cancelled。修复前 guard Drop 向共享 broadcast 发布 Cancelled。
+    #[tokio::test]
+    async fn sender_cache_hit_merger_gets_result_not_cancelled() {
+        let (mock, client, hooks) = setup(true).await;
+        let _ = mock; // 缓存命中不应有任何命令到达
+        *hooks
+            .idempotent_cached
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = Some(Ok(json!({ "cached": true })));
+        *hooks
+            .cache_delay
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = Some(Duration::from_millis(80));
+        let channel: Arc<dyn CommandChannel> = client;
+        let sender = Arc::new(CommandSender::new(channel, hooks.clone()));
+
+        let key = IdKey::new(None, "Page.navigate", &json!({ "url": "https://e.com" }));
+        let make_cmd = |key: IdKey| {
+            Command::new("Page.navigate")
+                .params(json!({ "url": "https://e.com" }))
+                .idempotent(key)
+        };
+
+        // A 先插入在途表并进入幂等钩子（延迟 80ms 返回缓存命中）
+        let s1 = sender.clone();
+        let key1 = key.clone();
+        let t1 = tokio::spawn(async move { s1.execute(make_cmd(key1)).await });
+        // B 稍后进入：命中在途合并分支，等待 A 发布共享结果
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let s2 = sender.clone();
+        let key2 = key.clone();
+        let t2 = tokio::spawn(async move { s2.execute(make_cmd(key2)).await });
+
+        let r1 = t1.await.expect("任务 A 失败");
+        let r2 = t2.await.expect("任务 B 失败");
+        assert_eq!(
+            r1.as_ref().expect("A 应收到缓存结果")["cached"],
+            true
+        );
+        assert_eq!(
+            r2.as_ref().expect("B 应收到缓存结果而非 Cancelled（H3）")["cached"],
+            true,
+            "合并等待方应共享正确结果"
+        );
+        assert_eq!(mock.commands_seen(), 0, "缓存命中不得发送命令到线上");
     }
 }

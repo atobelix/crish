@@ -43,9 +43,10 @@ pub fn is_sensitive_input(tag: &str, attributes: &[(String, String)]) -> bool {
     if !tag.eq_ignore_ascii_case("input") {
         return false;
     }
-    // D1：type=password
+    // D1：type=password（属性值先 trim——`type="password "` 尾随空白不得绕过，
+    // M6-1；与下方 autocomplete 分支的 trim 口径一致）
     if attr_value(attributes, "type")
-        .is_some_and(|v| v.eq_ignore_ascii_case("password"))
+        .is_some_and(|v| v.trim().eq_ignore_ascii_case("password"))
     {
         return true;
     }
@@ -108,10 +109,19 @@ pub fn redact_ax_property(name: &str) -> bool {
 /// D6：日志片段脱敏——快照片段若含敏感输入语义（type=password 或敏感
 /// autocomplete 且带 value=），整体打占位，杜绝凭据入日志。
 /// 序列化路径已由 `redact_attributes` 过滤；本函数是审计日志的兜底防线。
+///
+/// 覆盖形态（M6-2）：文本形态 `value=…` 与 JSON 形态 `"value":…`（日志/
+/// 调试输出两类）；type=password 的裸/引号/JSON 引号变体与 autocomplete 敏感项。
 pub fn redact_fragment(text: &str) -> String {
     let lower = text.to_ascii_lowercase();
-    if lower.contains("value=") {
-        let password_semantics = lower.contains("type=password")
+    // 文本形态 value=… 或 JSON 形态 "value":… / "value" :…
+    let has_value = lower.contains("value=")
+        || lower.contains("\"value\":")
+        || lower.contains("\"value\" :");
+    if has_value {
+        let password_semantics = PASSWORD_TYPE_PATTERNS
+            .iter()
+            .any(|p| lower.contains(p))
             || (lower.contains("autocomplete")
                 && SENSITIVE_AUTOCOMPLETE
                     .iter()
@@ -121,6 +131,42 @@ pub fn redact_fragment(text: &str) -> String {
         }
     }
     text.to_string()
+}
+
+/// type=password 语义的常见序列化形态（小写匹配；引号/无引号/JSON）。
+const PASSWORD_TYPE_PATTERNS: [&str; 5] = [
+    "type=password",
+    "type=\"password",
+    "type='password",
+    "\"type\":\"password",
+    "\"type\": \"password",
+];
+
+/// M2：遍历增强树收集敏感输入 backendNodeId（D1/D2 同源判定）。
+///
+/// 供快照文档携带密码标记（`SnapshotDocument.password_backend_ids`），工具面
+/// `is_password` 输入目标判定（密码框走 insertText/只比对长度不回读明文）与
+/// 脱敏共用同一敏感判定出口，杜绝两处判定口径漂移。
+pub fn sensitive_input_backend_ids(roots: &[crate::snapshot::collect::EnhancedNode])
+    -> std::collections::HashSet<i64> {
+    fn walk(
+        node: &crate::snapshot::collect::EnhancedNode,
+        out: &mut std::collections::HashSet<i64>,
+    ) {
+        if let Some(tag) = node.tag.as_deref() {
+            if is_sensitive_input(tag, &node.attributes) {
+                out.insert(node.backend_node_id);
+            }
+        }
+        for child in &node.children {
+            walk(child, out);
+        }
+    }
+    let mut out = std::collections::HashSet::new();
+    for root in roots {
+        walk(root, &mut out);
+    }
+    out
 }
 
 #[cfg(test)]
@@ -276,5 +322,75 @@ mod tests {
             r.iter().find(|(k, _)| k == "value").map(|(_, v)| v.as_str()),
             Some(REDACTED)
         );
+    }
+
+    /// M6-1：type 值尾随空白（`type="password "`）不得绕过敏感判定
+    /// （trim 口径与 autocomplete 分支一致）。
+    #[test]
+    fn redact_password_type_trailing_space_sensitive() {
+        let a = attrs(&[("type", "password "), ("value", "s3cret")]);
+        assert!(
+            is_sensitive_input("input", &a),
+            "type=\"password \"（尾随空白）必须命中敏感判定"
+        );
+        assert_eq!(safe_value("input", &a).as_deref(), Some(REDACTED));
+        let leading = attrs(&[("type", " password"), ("value", "s3cret")]);
+        assert!(is_sensitive_input("input", &leading), "前导空白同样命中");
+        let mixed = attrs(&[("type", "  PaSsWoRd  "), ("value", "s3cret")]);
+        assert!(is_sensitive_input("input", &mixed), "大小写+空白组合命中");
+    }
+
+    /// M6-2：JSON 形态日志片段（`{"value":"…","type":"password"}`）整体脱敏——
+    /// 旧实现仅匹配文本形态 `value=`，JSON 日志直接泄漏明文。
+    #[test]
+    fn redact_fragment_json_form_guard() {
+        // type 在前 / value 在前 / 冒号后带空格 / 引号内尾随空白
+        let cases = [
+            r#"{"value":"s3cret","type":"password"}"#,
+            r#"{"type":"password","value":"s3cret"}"#,
+            r#"{"type": "password", "value": "s3cret"}"#,
+            r#"{"value":"s3cret","type":"password "}"#,
+            r#"<input type="password" value="s3cret">"#,
+            r#"<input type='password' value='s3cret'>"#,
+        ];
+        for c in cases {
+            assert_eq!(
+                redact_fragment(c),
+                REDACTED,
+                "JSON/引号形态敏感片段必须整体占位：{c}"
+            );
+        }
+        // 否定面：无敏感语义的 JSON 不得误伤
+        assert_eq!(
+            redact_fragment(r#"{"value":"hello","type":"text"}"#),
+            r#"{"value":"hello","type":"text"}"#,
+            "非敏感 JSON 不得误伤"
+        );
+        assert_eq!(
+            redact_fragment(r#"{"type":"text","value":"search"}"#),
+            r#"{"type":"text","value":"search"}"#
+        );
+    }
+
+    /// M2：增强树敏感输入收集——password/敏感 autocomplete 命中、嵌套子树遍历、
+    /// 非敏感与文本节点排除。
+    #[test]
+    fn sensitive_input_backend_ids_walk() {
+        use crate::snapshot::collect::EnhancedNode;
+        let roots = vec![
+            EnhancedNode::element("input", 1).attr("type", "password"),
+            EnhancedNode::element("input", 2)
+                .attr("type", "text")
+                .attr("autocomplete", "current-password"),
+            EnhancedNode::element("form", 3).push(EnhancedNode::element("input", 4)
+                .attr("type", "password ")
+                .push(EnhancedNode::text_node("掩码文本", 5))),
+            EnhancedNode::element("input", 6).attr("type", "text"),
+        ];
+        let sensitive = sensitive_input_backend_ids(&roots);
+        assert_eq!(sensitive, [1, 2, 4].into_iter().collect(), "敏感集合应含 password/autocomplete 输入");
+        assert!(!sensitive.contains(&3), "容器不敏感");
+        assert!(!sensitive.contains(&5), "文本节点不敏感");
+        assert!(!sensitive.contains(&6), "普通 text 输入不敏感");
     }
 }
