@@ -28,7 +28,7 @@ export async function pickWorkspaceFolder(): Promise<string | null> {
     }
     addProjectFromPath(path);
     return path;
-  } catch (err) {
+  } catch {
     // 原生对话框不可用 → 事件桥（App 层 toast）+ 应用内项目选择器
     emitUiEvent('workspace-picker-unavailable');
     emitUiEvent('open-project-picker');

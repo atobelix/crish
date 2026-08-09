@@ -13,7 +13,6 @@ import {
   composeSystemPrompt,
   buildHistoryMessages,
   resolveContextWindow,
-  HISTORY_TOKEN_BUDGET,
   estimateTextTokens,
 } from './ConnectionLifecycle';
 import { ApprovalFlowMachine } from '../approvalFlowMachine';
