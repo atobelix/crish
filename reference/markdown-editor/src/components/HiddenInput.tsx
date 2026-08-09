@@ -9,6 +9,7 @@ import {
   getCoordinatesFromIndex,
   getGlobalIndexFromDOMNode,
   getArrowNavigationIndex,
+  toContainerCoords,
 } from '../core/measure';
 import { useTableStore } from '../core/TableStore';
 import {
@@ -49,12 +50,14 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
     const updateCoords = () => {
       const rect = getCoordinatesFromIndex(cursorPos, containerRef.current);
       if (rect) {
-        const containerRect = containerRef.current!.getBoundingClientRect();
-        const top = rect.top - containerRect.top + containerRef.current!.scrollTop;
-        const left =
-          rect.left - containerRect.left + containerRef.current!.scrollLeft;
+        // 视口坐标 → 容器内容坐标（与 CursorLayer 共用换算；测量结果由
+        // measure 模块的同帧缓存共享，两组件同帧仅一次全量测量）
+        const { top, left, height } = toContainerCoords(
+          rect,
+          containerRef.current!
+        );
 
-        setCoords({ top, left, height: rect.height });
+        setCoords({ top, left, height });
 
         const cTop = containerRef.current!.scrollTop;
         const cHeight = containerRef.current!.clientHeight;
@@ -67,8 +70,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         if (!(window as any).__CRISH_IS_MOUSE_DOWN) {
           if (top < cTop) {
             containerRef.current!.scrollTop = Math.max(0, top - 40);
-          } else if (top + rect.height > cTop + cHeight) {
-            containerRef.current!.scrollTop = top + rect.height - cHeight + 40;
+          } else if (top + height > cTop + cHeight) {
+            containerRef.current!.scrollTop = top + height - cHeight + 40;
           }
         }
       } else if (retries < 10) {

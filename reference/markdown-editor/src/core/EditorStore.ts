@@ -226,26 +226,36 @@ function guessBlockKind(line: string, prev: BlockKind): BlockKind {
 }
 
 /**
+ * 逻辑行 / 行状态访问器：支持「主数组 + 流式尾段」双段逻辑视图的惰性读取
+ * （append 尾段零拷贝方案，R2-A P5/08 招 2：getLine(i) = i < 主数组边界
+ * ? mainLines[i] : streamTail[i - 边界]）。编辑路径的增量推断函数全部
+ * 访问器化，从而在尾段存在时也能用同一套推断逻辑（无需物化全量数组）。
+ */
+type LineAccessor = (i: number) => string;
+type StateAccessor = (i: number) => CodeState;
+
+/**
  * 从编辑点之前的旧行推断「上一非空白行形态」（增量起点上下文）：
  * 从 before-1 向前扫描，跳过空行（空行把非列表上下文重置为 blank——
  * 与 parser 空行分支 `if (prevBlockKind !== 'list') prevBlockKind = 'blank'`
  * 语义一致），首个非空行按旧状态归类（code 类状态 → 'code'，'none' →
  * guessBlockKind）。文档开头无前置行时按 'blank' 处理。
+ * 访问器化：lines/codeBlockState 数组改由 getLine/getState 提供（R2-A 尾段）。
  */
 function inferPrevBlockKind(
-  lines: string[],
-  codeBlockState: CodeState[],
+  getLine: LineAccessor,
+  getState: StateAccessor,
   before: number
 ): BlockKind {
   let sawBlank = false;
   for (let j = before - 1; j >= 0; j--) {
-    const content = stripBlockquoteContext(lines[j]);
+    const content = stripBlockquoteContext(getLine(j));
     if (content.trim() === '') {
       sawBlank = true;
       continue;
     }
     let kind: BlockKind;
-    if (codeBlockState[j] !== 'none') {
+    if (getState(j) !== 'none') {
       kind = 'code';
     } else {
       kind = guessBlockKind(content, 'blank');
@@ -264,15 +274,15 @@ function inferPrevBlockKind(
  * （空行保持记忆，可能越过空行链命中代码块）；其他情况一律视为块外。
  */
 function inferInIndentCode(
-  lines: string[],
-  codeBlockState: CodeState[],
+  getLine: LineAccessor,
+  getState: StateAccessor,
   before: number
 ): boolean {
   for (let j = before - 1; j >= 0; j--) {
-    const st = codeBlockState[j];
+    const st = getState(j);
     if (st === 'indent_code') return true;
     if (st !== 'none') return false;
-    if (stripBlockquoteContext(lines[j]).trim() !== '') return false;
+    if (stripBlockquoteContext(getLine(j)).trim() !== '') return false;
   }
   return false;
 }
@@ -368,21 +378,21 @@ function htmlBlockEndCondition(type: number, content: string): boolean {
  * 仿真逐行推进可正确定位「编辑点所属块」的类型。
  */
 function inferHtmlBlockState(
-  lines: string[],
-  codeBlockState: CodeState[],
+  getLine: LineAccessor,
+  getState: StateAccessor,
   before: number
 ): { inHtmlBlock: boolean; htmlType: number } {
   let runStart = before - 1;
-  if (runStart < 0 || codeBlockState[runStart] !== 'html_block') {
+  if (runStart < 0 || getState(runStart) !== 'html_block') {
     return { inHtmlBlock: false, htmlType: 0 };
   }
-  while (runStart > 0 && codeBlockState[runStart - 1] === 'html_block') {
+  while (runStart > 0 && getState(runStart - 1) === 'html_block') {
     runStart--;
   }
   let inHtml = false;
   let htmlType = 0;
   for (let j = runStart; j < before; j++) {
-    const content = stripBlockquoteContext(lines[j]);
+    const content = stripBlockquoteContext(getLine(j));
     if (inHtml) {
       if (htmlBlockEndCondition(htmlType, content)) {
         inHtml = false;
@@ -417,11 +427,29 @@ export interface EditorOperation {
 }
 
 export interface EditorState {
-  lines: string[];
+  // —— 双段存储（R2-A 尾段零拷贝 / 08 招 2）——
+  // 主数组：常规编辑/加载的权威行存储；LineOffsetTree 始终与之保持
+  // 逻辑全量一致（append 时增量更新触及块，见 appendText）。
+  mainLines: string[];
+  // 流式尾段：appendText 追加的行落在独立尾段，主数组不重建（零拷贝），
+  // 由 getLine/getLineCount 统一访问；超过上界或用户编辑/滚动触达时
+  // 经 flushStreamTail 一次性并入主数组。
+  streamTail: string[];
+  mainCodeState: CodeState[];
+  streamTailCodeState: CodeState[];
+  mainFenceLines: number[]; // 主数组 fence 行号（有序）
+  streamTailFenceLines: number[]; // 尾段内 fence 相对行号
+
   lineOffsets: LineOffsetTree;
+  // 兼容视图（数据字段，set 时经 dispatchSet 显式物化）：未切换访问器的
+  // 消费方（LineItem 渲染 / virtualizer count / 既有测试）仍可读 lines
+  // 全量。尾段为空时视图 = 主数组引用（零拷贝）；尾段非空时一次性
+  // concat 物化（过渡期成本，R2-BD 切换访问器后从热路径移除）。
+  lines: string[];
   codeBlockState: CodeState[];
+  fenceLines: number[];
+
   textLength: number;
-  fenceLines: number[]; // Ordered array of fence line numbers
 
   cursorPos: number;
   selectionStart: number;
@@ -431,7 +459,10 @@ export interface EditorState {
   redoStack: EditorOperation[];
 
   getText: () => string;
+  getLine: (i: number) => string;
+  getLineCount: () => number;
   getLineIndex: (pos: number) => number;
+  flushStreamTail: () => void;
 
   setText: (text: string) => void;
   setCursorPos: (pos: number) => void;
@@ -449,6 +480,11 @@ export interface EditorState {
 
 
 // Actually, mutating arrays in Zustand is okay if we copy the array first.
+// 注意：`[...lines]` / `[...codeBlockState]` 两个浅拷贝保留（zustand 订阅
+// 语义需要新数组引用触发渲染，不得移除）；R2-A 消的是 clone 的 O(全文)
+// 深拷贝（LineOffsetTree.clone 已改 COW 浅拷贝，见 SegmentTree.ts）。
+// 本函数返回的数组均为「主数组形态」（编辑路径前置 flushStreamTail，
+// 调用时尾段恒为空，见各编辑方法）。
 function updateLinesIncremental(
   lines: string[],
   lineOffsets: LineOffsetTree,
@@ -479,18 +515,26 @@ function updateLinesIncremental(
   // 缩进代码块状态（镜像 parser.computeLineOffsets）：行首 ≥4 列缩进（tab
   // 停靠 4 展开）且非空 → 'indent_code'；块内空行保持；非缩进行退出。
   let inIndentCode = inferInIndentCode(
-    lines,
-    codeBlockState,
+    (i) => lines[i],
+    (i) => codeBlockState[i],
     startLineIdx
   );
   // HTML 块状态（镜像 parser）：inHtmlBlock 为块内标记，htmlType 记录
   // 块类型（1-7，决定结束条件）——CodeState 不记录类型，从编辑点之前
   // 连续 html_block 运行段回推（inferHtmlBlockState）。
-  const inferredHtml = inferHtmlBlockState(lines, codeBlockState, startLineIdx);
+  const inferredHtml = inferHtmlBlockState(
+    (i) => lines[i],
+    (i) => codeBlockState[i],
+    startLineIdx
+  );
   let inHtmlBlock = inferredHtml.inHtmlBlock;
   let htmlType = inferredHtml.htmlType;
   // 上一非空白行形态记忆（段落打断 / 列表延续 / 表格优先判定所需）
-  let prevBlockKind = inferPrevBlockKind(lines, codeBlockState, startLineIdx);
+  let prevBlockKind = inferPrevBlockKind(
+    (i) => lines[i],
+    (i) => codeBlockState[i],
+    startLineIdx
+  );
 
   let low = 0,
     high = fenceLines.length - 1;
@@ -700,45 +744,239 @@ function updateLinesIncremental(
   const lastLineIdx = newLinesArr.length - 1;
   const newTextLength = lastLineIdx >= 0 ? newOffsets.getOffset(lastLineIdx) + newLinesArr[lastLineIdx].length : 0;
 
+  // 返回主数组形态（调用方 spread 进 set 的 partial，不含视图键）
   return {
-    lines: newLinesArr,
+    mainLines: newLinesArr,
     lineOffsets: newOffsets,
-    codeBlockState: newCodeState,
+    mainCodeState: newCodeState,
     textLength: newTextLength,
-    fenceLines: newFenceLines,
+    mainFenceLines: newFenceLines,
   };
 }
 
 let currentLoadGeneration = 0;
 
-export const useEditorStore = create<EditorState>((set, get) => ({
-  lines: [''],
+// —— 尾段零拷贝辅助设施（R2-A / 08 招 2 / 09 §4 C4 契约）——
+// streamTail 上界：超过强制合并，防长流式 O(尾段) 退化（C4）。
+const STREAM_TAIL_MAX_LINES = 4096;
+// 空尾段共享引用（不可变约定：尾段数组只在 set 时整体替换，绝不就地修改）
+const EMPTY_TAIL: string[] = [];
+const EMPTY_STATE_TAIL: CodeState[] = [];
+const EMPTY_FENCE_TAIL: number[] = [];
+
+// 触发存储变更的键：命中任一键时需要在 set 时重物化兼容视图
+const STORAGE_KEYS = [
+  'mainLines',
+  'streamTail',
+  'mainCodeState',
+  'streamTailCodeState',
+  'mainFenceLines',
+  'streamTailFenceLines',
+] as const;
+
+/**
+ * 兼容视图物化（R2-A 尾段）：在 setState 时把 main* + streamTail* 双段
+ * 结构合并为旧字段语义的视图数组（lines / codeBlockState / fenceLines），
+ * 保证未切换访问器的消费方与既有测试读到全量视图。
+ * - 尾段为空（常规编辑 / 加载路径）：视图 = 主数组引用，零拷贝；
+ * - 尾段非空（流式期间）：一次性 concat 物化——过渡期成本，R2-BD
+ *   切换 getLine/getLineCount 访问器后从 set 热路径移除；
+ * - partial 未触及存储键（如 isComposing）：视图字段不更新（值未变，
+ *   保持旧引用，订阅者不会误渲染）。
+ * 注意：不能依赖 zustand getter——zustand set 内部 Object.assign({}, state,
+ * next) 会把 getter 物化固化为数据属性，视图从此 stale（已踩坑记录）。
+ */
+function materializeViews(
+  resolved: Record<string, unknown>,
+  prev: EditorState
+): Record<string, unknown> {
+  const touchesStorage = STORAGE_KEYS.some((k) => k in resolved);
+  if (!touchesStorage) return resolved;
+  const out: Record<string, unknown> = { ...resolved };
+  const main = ('mainLines' in out ? out.mainLines : prev.mainLines) as string[];
+  const tail = ('streamTail' in out ? out.streamTail : prev.streamTail) as string[];
+  const mainState = ('mainCodeState' in out ? out.mainCodeState : prev.mainCodeState) as CodeState[];
+  const tailState = ('streamTailCodeState' in out
+    ? out.streamTailCodeState
+    : prev.streamTailCodeState) as CodeState[];
+  const mainFence = ('mainFenceLines' in out ? out.mainFenceLines : prev.mainFenceLines) as number[];
+  const tailFence = ('streamTailFenceLines' in out
+    ? out.streamTailFenceLines
+    : prev.streamTailFenceLines) as number[];
+  if (tail.length === 0) {
+    // 零拷贝：视图直接引用主数组（编辑/加载路径，zustand 订阅需要新引用
+    // 触发渲染——主数组引用随每次编辑更新，语义与旧 lines 字段一致）
+    out.lines = main;
+    out.codeBlockState = mainState;
+    out.fenceLines = mainFence;
+  } else {
+    // 流式期间一次性物化合并视图（过渡期成本，见上方注释）。
+    // 尾段「接管」了主数组最后一行（append 语义：追加到全文末尾，
+    // 被接管行并入尾段首行）——视图中主数组末行被隐藏（slice 掉），
+    // 由尾段全行接续，避免重复。
+    out.lines = main.slice(0, -1).concat(tail);
+    out.codeBlockState = mainState.slice(0, -1).concat(tailState);
+    out.fenceLines = mainFence.concat(
+      tailFence.map((r) => main.length - 1 + r)
+    );
+  }
+  return out;
+}
+
+/**
+ * 尾段并入主数组（流式合并，09 归一 §5：append 不进 undo 栈；流式合并
+ * undo 步登记延后，本轮保证存储正确）。树无需改动——LineOffsetTree
+ * 始终与逻辑全量一致（append 已增量更新）；本函数只合并行/状态/fence
+ * 数组并清空尾段。返回变更 partial（不含视图键，视图由 set 时物化），
+ * 尾段为空时返回 null（无变更）。
+ */
+function flushStreamTail(state: EditorState): Partial<EditorState> | null {
+  if (state.streamTail.length === 0) return null;
+  // 尾段接管了主数组最后一行（append 语义：追加到全文末尾）：
+  // 弹出被接管行，再并入尾段全行。
+  const boundary = state.mainLines.length - 1;
+  const newMain = state.mainLines.slice(0, boundary).concat(state.streamTail);
+  const newState = state.mainCodeState
+    .slice(0, boundary)
+    .concat(state.streamTailCodeState);
+  // 尾段 fence 相对行号平移为全局行号（追加在文档末尾，顺序保持有序）
+  const newFence =
+    state.mainFenceLines.length === 0 && state.streamTailFenceLines.length === 0
+      ? state.mainFenceLines
+      : state.mainFenceLines.concat(
+          state.streamTailFenceLines.map((r) => boundary + r)
+        );
+  return {
+    mainLines: newMain,
+    mainCodeState: newState,
+    mainFenceLines: newFence,
+    streamTail: EMPTY_TAIL,
+    streamTailCodeState: EMPTY_STATE_TAIL,
+    streamTailFenceLines: EMPTY_FENCE_TAIL,
+  };
+}
+
+/**
+ * 编辑入口的「编辑触达 → 合并尾段」归一（C4 合并时机之一）：
+ * 返回逻辑全量视图（尾段已并入主数组的局部对象），编辑路径后续
+ * 全部按主数组形态处理（行号/偏移坐标在合并前后不变——合并只是
+ * 把尾段行并入主数组，不改变任何行内容与顺序）。
+ */
+function mergeTailInto(state: EditorState): EditorState {
+  const patch = flushStreamTail(state);
+  if (!patch) return state;
+  return { ...state, ...patch };
+}
+
+/**
+ * setState 兼容归一（R2-A）：外部消费方（既有测试等）仍按旧字段名
+ * lines / codeBlockState / fenceLines 传「整文档重置」——映射到主数组
+ * 字段并清空尾段；视图字段由 materializeViews 在物化步骤生成。
+ * store 内部 set 一律使用 main* / streamTail* 字段，视图键由物化生成。
+ */
+function normalizeSetStatePartial(
+  partial: unknown
+): unknown {
+  if (!partial || typeof partial !== 'object' || Array.isArray(partial)) {
+    return partial;
+  }
+  const out: Record<string, unknown> = { ...(partial as object) };
+  let resetTail = false;
+  if ('lines' in out && !('mainLines' in out)) {
+    out.mainLines = out.lines;
+    delete out.lines;
+    resetTail = true;
+  }
+  if ('codeBlockState' in out && !('mainCodeState' in out)) {
+    out.mainCodeState = out.codeBlockState;
+    delete out.codeBlockState;
+    resetTail = true;
+  }
+  if ('fenceLines' in out && !('mainFenceLines' in out)) {
+    out.mainFenceLines = out.fenceLines;
+    delete out.fenceLines;
+    resetTail = true;
+  }
+  if (resetTail) {
+    out.streamTail = EMPTY_TAIL;
+    out.streamTailCodeState = EMPTY_STATE_TAIL;
+    out.streamTailFenceLines = EMPTY_FENCE_TAIL;
+  }
+  return out;
+}
+
+// 注意：create 的 set 参数弃用——状态更新统一走 dispatchSet
+// （zustand 原生 set 不会生成兼容视图字段，见 materializeViews 说明）。
+export const useEditorStore = create<EditorState>((_set, get) => ({
+  mainLines: [''],
+  streamTail: EMPTY_TAIL,
+  mainCodeState: ['none'],
+  streamTailCodeState: EMPTY_STATE_TAIL,
+  mainFenceLines: [],
+  streamTailFenceLines: EMPTY_FENCE_TAIL,
+
   lineOffsets: new LineOffsetTree([1]),
+
+  // 兼容视图字段（初始与主数组一致；此后由 dispatchSet 在每次 set 时
+  // 显式物化，见 materializeViews——不能做成 getter：zustand 的
+  // Object.assign({}, state, next) 会把它固化为数据属性导致 stale）
+  lines: [''],
   codeBlockState: ['none'],
-  textLength: 0,
   fenceLines: [],
+
+  undoStack: [],
+  redoStack: [],
+  textLength: 0,
 
   cursorPos: 0,
   selectionStart: 0,
   selectionEnd: 0,
   isComposing: false,
-  setIsComposing: (isComposing) => set({ isComposing }),
+  setIsComposing: (isComposing) => dispatchSet({ isComposing }),
 
-  undoStack: [],
-  redoStack: [],
+  getText: () => {
+    const s = get();
+    // 尾段为空时直接 join 主数组（零物化）；否则走已物化的合并视图
+    if (s.streamTail.length === 0) return s.mainLines.join('\n');
+    return s.lines.join('\n');
+  },
 
-  getText: () => get().lines.join('\n'),
+  // —— 统一行访问器（C4 访问器先行；渲染/virtualizer count 切换点登记）——
+  // 逻辑行视图：i < 主数组边界 → 主数组行；否则 → 尾段行（被接管行由
+  // 尾段首行替代——append 把文本拼在全文末尾，被接管行并入尾段首行）。
+  getLine: (i) => {
+    const s = get();
+    const main = s.mainLines;
+    if (s.streamTail.length === 0) return main[i];
+    const boundary = main.length - 1;
+    return i < boundary ? main[i] : s.streamTail[i - boundary];
+  },
+  getLineCount: () => {
+    const s = get();
+    return s.streamTail.length === 0
+      ? s.mainLines.length
+      : s.mainLines.length - 1 + s.streamTail.length;
+  },
   getLineIndex: (pos) => get().lineOffsets.findLineIndex(pos),
+
+  flushStreamTail: () => {
+    const patch = flushStreamTail(get());
+    if (patch) dispatchSet(patch);
+  },
 
   setText: (text) => {
     const generation = ++currentLoadGeneration;
-    set(() => {
+    dispatchSet(() => {
       const lines = text.split('\n');
 
       if (lines.length <= 1000) {
         const res = updateLinesIncremental([], new LineOffsetTree([]), [], 0, 0, lines, []);
         return {
           ...res,
+          // 整文档重置：清空流式尾段
+          streamTail: EMPTY_TAIL,
+          streamTailCodeState: EMPTY_STATE_TAIL,
+          streamTailFenceLines: EMPTY_FENCE_TAIL,
           cursorPos: 0,
           selectionStart: 0,
           selectionEnd: 0,
@@ -760,16 +998,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const endIdx = Math.min(currentIdx + chunkSize, lines.length);
         const chunk = lines.slice(currentIdx, endIdx);
 
-        useEditorStore.setState((s) => {
+        dispatchSet((s) => {
           if (generation !== currentLoadGeneration) return s;
+          // 大文件分块加载路径：主数组形态（setText 期间尾段恒为空）
           const updated = updateLinesIncremental(
-            s.lines,
+            s.mainLines,
             s.lineOffsets,
-            s.codeBlockState,
-            s.lines.length,
+            s.mainCodeState,
+            s.mainLines.length,
             0,
             chunk,
-            s.fenceLines
+            s.mainFenceLines
           );
           return { ...updated };
         });
@@ -791,6 +1030,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
       return {
         ...res,
+        streamTail: EMPTY_TAIL,
+        streamTailCodeState: EMPTY_STATE_TAIL,
+        streamTailFenceLines: EMPTY_FENCE_TAIL,
         cursorPos: 0,
         selectionStart: 0,
         selectionEnd: 0,
@@ -801,7 +1043,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   setCursorPos: (pos) =>
-    set((state) => {
+    dispatchSet((state) => {
       const bounded = Math.max(0, Math.min(pos, state.textLength));
       return {
         cursorPos: bounded,
@@ -811,7 +1053,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }),
 
   setSelection: (start, end) =>
-    set((state) => {
+    dispatchSet((state) => {
       const min = Math.max(0, Math.min(start, state.textLength));
       const max = Math.max(0, Math.min(end, state.textLength));
       return {
@@ -822,61 +1064,63 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }),
 
   insertText: (inserted) =>
-    set((state) => {
-      const s = state.selectionStart;
-      const e = state.selectionEnd;
+    dispatchSet((state) => {
+      // 用户编辑触达 → 尾段先并入主数组（C4 合并时机；坐标在合并前后不变）
+      const s = mergeTailInto(state);
+      const sel = s.selectionStart;
+      const e = s.selectionEnd;
 
-      const startLineIdx = state.lineOffsets.findLineIndex(s);
-      const endLineIdx = state.lineOffsets.findLineIndex(e);
+      const startLineIdx = s.lineOffsets.findLineIndex(sel);
+      const endLineIdx = s.lineOffsets.findLineIndex(e);
 
-      const startLineOffset = state.lineOffsets.getOffset(startLineIdx);
-      const endLineOffset = state.lineOffsets.getOffset(endLineIdx);
+      const startLineOffset = s.lineOffsets.getOffset(startLineIdx);
+      const endLineOffset = s.lineOffsets.getOffset(endLineIdx);
 
-      const prefix = state.lines[startLineIdx].substring(
+      const prefix = s.mainLines[startLineIdx].substring(
         0,
-        s - startLineOffset
+        sel - startLineOffset
       );
-      const suffix = state.lines[endLineIdx].substring(e - endLineOffset);
+      const suffix = s.mainLines[endLineIdx].substring(e - endLineOffset);
 
       const newSegment = prefix + inserted + suffix;
       const insertedLines = newSegment.split('\n');
 
       const deleteCount = endLineIdx - startLineIdx + 1;
-      const removedLines = state.lines.slice(
+      const removedLines = s.mainLines.slice(
         startLineIdx,
         startLineIdx + deleteCount
       );
 
       const res = updateLinesIncremental(
-        state.lines,
-        state.lineOffsets,
-        state.codeBlockState,
+        s.mainLines,
+        s.lineOffsets,
+        s.mainCodeState,
         startLineIdx,
         deleteCount,
         insertedLines,
-        state.fenceLines
+        s.mainFenceLines
       );
 
-      const newPos = s + inserted.length;
+      const newPos = sel + inserted.length;
 
       const newOp: EditorOperation = {
         startLineIdx,
         removedLines,
         insertedLineCount: insertedLines.length,
-        cursorBefore: state.cursorPos,
-        selectionStartBefore: state.selectionStart,
-        selectionEndBefore: state.selectionEnd,
+        cursorBefore: s.cursorPos,
+        selectionStartBefore: s.selectionStart,
+        selectionEndBefore: s.selectionEnd,
         cursorAfter: newPos,
         selectionStartAfter: newPos,
         selectionEndAfter: newPos,
         timestamp: Date.now(),
       };
 
-      let newUndoStack = [...state.undoStack];
+      let newUndoStack = [...s.undoStack];
       // Basic debounce: if typing continuously in the same line without selections
       if (
         newUndoStack.length > 0 &&
-        s === e &&
+        sel === e &&
         inserted.length === 1 &&
         inserted !== '\n'
       ) {
@@ -884,7 +1128,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         if (
           Date.now() - last.timestamp < 500 &&
           last.startLineIdx === startLineIdx &&
-          last.cursorAfter === s &&
+          last.cursorAfter === sel &&
           last.insertedLineCount === 1
         ) {
           // Merge typing
@@ -908,47 +1152,67 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       };
     }),
 
-  // 流式尾部追加快速通道：不进 undo 栈，只计算新增行的 offset 和 codeBlockState
+  // 流式尾部追加快速通道（R2-A 尾段零拷贝 / 08 招 2 / 09 §4 C4 契约）：
+  // - 追加文本落在独立 streamTail，主数组不重建（零拷贝，O(尾段)）；
+  // - LineOffsetTree 以 COW 增量更新触及块（clone 浅拷贝 + 末块 O(256)），
+  //   树始终与逻辑全量一致（既有测试断言 lineOffsets.toArray 全量）；
+  // - textLength O(1) 增量（append 即在末尾插入 text.length 个字符，
+  //   与换行分割无关，经与树重算口径交叉验证一致）；
+  // - 不进 undo 栈（流式语义；「流式结束合并 1 步」登记延后，本轮先保证
+  //   存储正确）；
+  // - 尾段超上界强制合并（C4：STREAM_TAIL_MAX_LINES，防长流式退化）。
   appendText: (text: string) =>
-    set((state) => {
+    dispatchSet((state) => {
       if (!text) return state;
 
-      const lastLineIdx = state.lines.length - 1;
-      const lastLine = state.lines[lastLineIdx];
+      let s = state;
+      // 尾段超限强制合并（C4 契约：streamTail 上界 4096 行）
+      if (s.streamTail.length >= STREAM_TAIL_MAX_LINES) {
+        s = mergeTailInto(s);
+      }
+
+      const mainLines = s.mainLines;
+      const streamTail = s.streamTail;
+      // 尾段「接管」了主数组最后一行（append 语义：追加到全文末尾，被接管
+      // 行并入尾段首行）；尾段为空时逻辑末行 = 主数组末行，否则 = 尾段末行。
+      const tailLen = streamTail.length;
+      const boundary = mainLines.length - 1;
+      const lastLineIdx = tailLen === 0 ? boundary : boundary + tailLen - 1;
+
+      // 逻辑行/状态访问器（infer* 的尾段双段视图，无需物化全量数组）：
+      // 尾段为空时 = 主数组全量；非空时尾段「接管」主数组末行（tail[0]
+      // 替代 main[boundary]），i ≥ boundary 从尾段取。
+      const getLineAt: LineAccessor =
+        tailLen === 0
+          ? (i) => mainLines[i]
+          : (i) => (i < boundary ? mainLines[i] : streamTail[i - boundary]);
+      const getStateAt: StateAccessor =
+        tailLen === 0
+          ? (i) => s.mainCodeState[i]
+          : (i) =>
+              i < boundary ? s.mainCodeState[i] : s.streamTailCodeState[i - boundary];
+
+      // 拼接逻辑末行 + 追加文本（与旧实现一致：combined 后 split）
+      const lastLine = getLineAt(lastLineIdx);
       const combined = lastLine + text;
       const newSegmentLines = combined.split('\n');
 
-      const newLinesArr = [...state.lines];
-      newLinesArr.splice(lastLineIdx, 1, ...newSegmentLines);
-
-      const newOffsets = state.lineOffsets.clone();
-      newOffsets.updateLines(lastLineIdx, 1, newSegmentLines.map(l => l.length + 1));
-
-      // codeBlockState：从当前最后一行状态推断，不从头扫描
-      const newCodeState = [...state.codeBlockState];
-      let inCodeBlock = false;
-      let inMathBlock = false;
-      // 缩进代码块状态：末行状态为 'indent_code' 时视为块内（块内空行保持）
-      let inIndentCode = false;
-      // HTML 块状态：从旧行回推——增量语义与 updateLinesIncremental 一致，
+      // —— 状态机基线（与旧 appendText 一致，访问器化后兼容尾段视图）——
       // 「进入合并行的状态」由旧行 [0, lastLineIdx) 决定（末行本身将被
       // 合并内容替换——若末行是结束块的空行，该空行在合并后可能消失，
       // 不能把它当作块已退出的依据）；块类型由连续 html_block 运行段
       // 仿真得出（CodeState 不记录类型，见 inferHtmlBlockState）。
-      const inferredHtml = inferHtmlBlockState(
-        state.lines,
-        state.codeBlockState,
-        lastLineIdx
-      );
+      let inCodeBlock = false;
+      let inMathBlock = false;
+      // 缩进代码块状态：末行状态为 'indent_code' 时视为块内（块内空行保持）
+      let inIndentCode = false;
+      // HTML 块状态：从旧行回推——增量语义与 updateLinesIncremental 一致
+      const inferredHtml = inferHtmlBlockState(getLineAt, getStateAt, lastLineIdx);
       let inHtmlBlock = inferredHtml.inHtmlBlock;
       let htmlType = inferredHtml.htmlType;
       // HTML 块 start（type 7 段落保护）所需的「上一非空白行形态」记忆
-      let prevBlockKind = inferPrevBlockKind(
-        state.lines,
-        state.codeBlockState,
-        lastLineIdx
-      );
-      const currentState = state.codeBlockState[lastLineIdx];
+      let prevBlockKind = inferPrevBlockKind(getLineAt, getStateAt, lastLineIdx);
+      const currentState = getStateAt(lastLineIdx);
       if (currentState === 'fence_start' || currentState === 'code')
         inCodeBlock = true;
       if (currentState === 'math_fence_start' || currentState === 'math_block')
@@ -1052,10 +1316,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           }
         }
       }
-      newCodeState.splice(lastLineIdx, 1, ...segmentCodeStates);
 
-      // fenceLines：追加新的 fence 行号
-      const newFenceLines = [...state.fenceLines];
+      // —— 新尾段（主数组不动，零拷贝）——
+      // 尾段为空：新尾段 = 拼接段；非空：替换尾段末行（旧尾段末行已被
+      // 拼接进 newSegmentLines[0]，前 tailLen-1 行原样保留）。
+      const newTail =
+        tailLen === 0
+          ? newSegmentLines
+          : streamTail.slice(0, -1).concat(newSegmentLines);
+      const newTailCode =
+        tailLen === 0
+          ? segmentCodeStates
+          : s.streamTailCodeState.slice(0, -1).concat(segmentCodeStates);
+
+      // 尾段内 fence 相对行号：旧相对行号不变（尾段起点仍为 boundary），
+      // 新段行相对行号 = (tailLen - 1) + i（尾段非空）/ i（尾段为空）。
+      const newTailFence = s.streamTailFenceLines.slice();
       for (let i = 0; i < newSegmentLines.length; i++) {
         const st = segmentCodeStates[i];
         if (
@@ -1064,21 +1340,30 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           st === 'math_fence_start' ||
           st === 'math_fence_end'
         ) {
-          newFenceLines.push(lastLineIdx + i);
+          newTailFence.push(tailLen === 0 ? i : tailLen - 1 + i);
         }
       }
 
-      const textLength = Math.max(0, newOffsets.getOffset(newOffsets.lineCount - 1) + newSegmentLines[newSegmentLines.length - 1].length);
+      // —— 树更新（COW：clone 浅拷贝 + 触及末块；树始终与逻辑全量一致，
+      // 既有测试断言 lineOffsets.toArray 全量）——
+      const newOffsets = s.lineOffsets.clone();
+      newOffsets.updateLines(lastLineIdx, 1, newSegmentLines.map(l => l.length + 1));
+
+      // textLength O(1) 增量（append 即在全文末尾插入 text.length 个字符）
+      const textLength = state.textLength + text.length;
 
       // Automatically advance cursor if it was exactly at the end (Requirement 6)
       const wasAtEnd = state.cursorPos === state.textLength && state.selectionStart === state.selectionEnd;
 
       return {
-        lines: newLinesArr,
+        mainLines,
+        streamTail: newTail,
+        mainCodeState: s.mainCodeState,
+        streamTailCodeState: newTailCode,
+        mainFenceLines: s.mainFenceLines,
+        streamTailFenceLines: newTailFence,
         lineOffsets: newOffsets,
-        codeBlockState: newCodeState,
         textLength,
-        fenceLines: newFenceLines,
         cursorPos: wasAtEnd ? textLength : state.cursorPos,
         selectionStart: wasAtEnd ? textLength : state.selectionStart,
         selectionEnd: wasAtEnd ? textLength : state.selectionEnd,
@@ -1086,70 +1371,72 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }),
 
   deleteText: (backward) =>
-    set((state) => {
-      let s = state.selectionStart;
-      let e = state.selectionEnd;
+    dispatchSet((state) => {
+      // 用户编辑触达 → 尾段先并入主数组（C4 合并时机）
+      const base = mergeTailInto(state);
+      let s = base.selectionStart;
+      let e = base.selectionEnd;
 
       if (s === e) {
-        const text = state.lines.join('\n');
+        const text = base.mainLines.join('\n');
         if (backward && s > 0) {
           s = findPrevGraphemeBoundary(text, s);
-        } else if (!backward && e < state.textLength) {
+        } else if (!backward && e < base.textLength) {
           e = findNextGraphemeBoundary(text, e);
         } else {
           return state;
         }
       }
 
-      const startLineIdx = state.lineOffsets.findLineIndex(s);
-      const endLineIdx = state.lineOffsets.findLineIndex(e);
+      const startLineIdx = base.lineOffsets.findLineIndex(s);
+      const endLineIdx = base.lineOffsets.findLineIndex(e);
 
-      const startLineOffset = state.lineOffsets.getOffset(startLineIdx);
-      const endLineOffset = state.lineOffsets.getOffset(endLineIdx);
+      const startLineOffset = base.lineOffsets.getOffset(startLineIdx);
+      const endLineOffset = base.lineOffsets.getOffset(endLineIdx);
 
-      const prefix = state.lines[startLineIdx].substring(
+      const prefix = base.mainLines[startLineIdx].substring(
         0,
         s - startLineOffset
       );
-      const suffix = state.lines[endLineIdx].substring(e - endLineOffset);
+      const suffix = base.mainLines[endLineIdx].substring(e - endLineOffset);
 
       const newSegment = prefix + suffix;
       const insertedLines = newSegment.split('\n'); // usually length 1
 
       const deleteCount = endLineIdx - startLineIdx + 1;
-      const removedLines = state.lines.slice(
+      const removedLines = base.mainLines.slice(
         startLineIdx,
         startLineIdx + deleteCount
       );
 
       const res = updateLinesIncremental(
-        state.lines,
-        state.lineOffsets,
-        state.codeBlockState,
+        base.mainLines,
+        base.lineOffsets,
+        base.mainCodeState,
         startLineIdx,
         deleteCount,
         insertedLines,
-        state.fenceLines
+        base.mainFenceLines
       );
 
       const newOp: EditorOperation = {
         startLineIdx,
         removedLines,
         insertedLineCount: insertedLines.length,
-        cursorBefore: state.cursorPos,
-        selectionStartBefore: state.selectionStart,
-        selectionEndBefore: state.selectionEnd,
+        cursorBefore: base.cursorPos,
+        selectionStartBefore: base.selectionStart,
+        selectionEndBefore: base.selectionEnd,
         cursorAfter: s,
         selectionStartAfter: s,
         selectionEndAfter: s,
         timestamp: Date.now(),
       };
 
-      let newUndoStack = [...state.undoStack];
+      let newUndoStack = [...base.undoStack];
       // 连续单字符删除的合并逻辑（与 insertText 对称）
       if (
         newUndoStack.length > 0 &&
-        state.selectionStart === state.selectionEnd // 单字符删除（非选择范围）
+        base.selectionStart === base.selectionEnd // 单字符删除（非选择范围）
       ) {
         const last = newUndoStack[newUndoStack.length - 1];
         if (
@@ -1183,50 +1470,52 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }),
 
   deleteSelection: (start, end) =>
-    set((state) => {
+    dispatchSet((state) => {
+      // 用户编辑触达 → 尾段先并入主数组（C4 合并时机）
+      const base = mergeTailInto(state);
       const s = Math.max(0, Math.min(start, end));
-      const e = Math.min(state.textLength, Math.max(start, end));
+      const e = Math.min(base.textLength, Math.max(start, end));
 
       if (s === e) return state;
 
-      const startLineIdx = state.lineOffsets.findLineIndex(s);
-      const endLineIdx = state.lineOffsets.findLineIndex(e);
+      const startLineIdx = base.lineOffsets.findLineIndex(s);
+      const endLineIdx = base.lineOffsets.findLineIndex(e);
 
-      const startLineOffset = state.lineOffsets.getOffset(startLineIdx);
-      const endLineOffset = state.lineOffsets.getOffset(endLineIdx);
+      const startLineOffset = base.lineOffsets.getOffset(startLineIdx);
+      const endLineOffset = base.lineOffsets.getOffset(endLineIdx);
 
-      const prefix = state.lines[startLineIdx].substring(
+      const prefix = base.mainLines[startLineIdx].substring(
         0,
         s - startLineOffset
       );
-      const suffix = state.lines[endLineIdx].substring(e - endLineOffset);
+      const suffix = base.mainLines[endLineIdx].substring(e - endLineOffset);
 
       const newSegment = prefix + suffix;
       const insertedLines = newSegment.split('\n'); // usually length 1
 
       const deleteCount = endLineIdx - startLineIdx + 1;
-      const removedLines = state.lines.slice(
+      const removedLines = base.mainLines.slice(
         startLineIdx,
         startLineIdx + deleteCount
       );
 
       const res = updateLinesIncremental(
-        state.lines,
-        state.lineOffsets,
-        state.codeBlockState,
+        base.mainLines,
+        base.lineOffsets,
+        base.mainCodeState,
         startLineIdx,
         deleteCount,
         insertedLines,
-        state.fenceLines
+        base.mainFenceLines
       );
 
       const newOp: EditorOperation = {
         startLineIdx,
         removedLines,
         insertedLineCount: insertedLines.length,
-        cursorBefore: state.cursorPos,
-        selectionStartBefore: state.selectionStart,
-        selectionEndBefore: state.selectionEnd,
+        cursorBefore: base.cursorPos,
+        selectionStartBefore: base.selectionStart,
+        selectionEndBefore: base.selectionEnd,
         cursorAfter: s,
         selectionStartAfter: s,
         selectionEndAfter: s,
@@ -1238,31 +1527,34 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         cursorPos: s,
         selectionStart: s,
         selectionEnd: s,
-        undoStack: [...state.undoStack, newOp],
+        undoStack: [...base.undoStack, newOp],
         redoStack: [],
       };
     }),
 
   undo: () =>
-    set((state) => {
+    dispatchSet((state) => {
       if (state.undoStack.length === 0) return state;
-      const op = state.undoStack[state.undoStack.length - 1];
+      // 用户操作触达 → 尾段先并入主数组（C4 合并时机；undo 针对的
+      // 是主数组编辑 op，行号坐标在合并前后不变）
+      const base = mergeTailInto(state);
+      const op = base.undoStack[base.undoStack.length - 1];
 
       // Reverse splice: remove `insertedLineCount` lines at `startLineIdx` and insert `removedLines`
       const res = updateLinesIncremental(
-        state.lines,
-        state.lineOffsets,
-        state.codeBlockState,
+        base.mainLines,
+        base.lineOffsets,
+        base.mainCodeState,
         op.startLineIdx,
         op.insertedLineCount,
         op.removedLines,
-        state.fenceLines
+        base.mainFenceLines
       );
 
       // Forward op to redo stack
       const inverseOp: EditorOperation = {
         startLineIdx: op.startLineIdx,
-        removedLines: state.lines.slice(
+        removedLines: base.mainLines.slice(
           op.startLineIdx,
           op.startLineIdx + op.insertedLineCount
         ),
@@ -1281,29 +1573,31 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         cursorPos: op.cursorBefore,
         selectionStart: op.selectionStartBefore,
         selectionEnd: op.selectionEndBefore,
-        undoStack: state.undoStack.slice(0, -1),
-        redoStack: [...state.redoStack, inverseOp],
+        undoStack: base.undoStack.slice(0, -1),
+        redoStack: [...base.redoStack, inverseOp],
       };
     }),
 
   redo: () =>
-    set((state) => {
+    dispatchSet((state) => {
       if (state.redoStack.length === 0) return state;
-      const op = state.redoStack[state.redoStack.length - 1];
+      // 用户操作触达 → 尾段先并入主数组（C4 合并时机）
+      const base = mergeTailInto(state);
+      const op = base.redoStack[base.redoStack.length - 1];
 
       const res = updateLinesIncremental(
-        state.lines,
-        state.lineOffsets,
-        state.codeBlockState,
+        base.mainLines,
+        base.lineOffsets,
+        base.mainCodeState,
         op.startLineIdx,
         op.insertedLineCount,
         op.removedLines,
-        state.fenceLines
+        base.mainFenceLines
       );
 
       const inverseOp: EditorOperation = {
         startLineIdx: op.startLineIdx,
-        removedLines: state.lines.slice(
+        removedLines: base.mainLines.slice(
           op.startLineIdx,
           op.startLineIdx + op.insertedLineCount
         ),
@@ -1322,23 +1616,53 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         cursorPos: op.cursorBefore,
         selectionStart: op.selectionStartBefore,
         selectionEnd: op.selectionEndBefore,
-        redoStack: state.redoStack.slice(0, -1),
-        undoStack: [...state.undoStack, inverseOp],
+        redoStack: base.redoStack.slice(0, -1),
+        undoStack: [...base.undoStack, inverseOp],
       };
     }),
 
   verifyConsistency: () => {
-    const { lines, lineOffsets } = get();
+    // 逻辑视图一致性校验：树偏移 vs 逻辑行（主数组 + 尾段）逐行对齐
+    const s = get();
     let runningOffset = 0;
-    for (let i = 0; i < lines.length; i++) {
-      if (lineOffsets.getOffset(i) !== runningOffset) {
+    const count = s.getLineCount();
+    for (let i = 0; i < count; i++) {
+      if (s.lineOffsets.getOffset(i) !== runningOffset) {
         console.error(
-          `Offset drift detected at line ${i}! Expected ${runningOffset}, got ${lineOffsets.getOffset(i)}`
+          `Offset drift detected at line ${i}! Expected ${runningOffset}, got ${s.lineOffsets.getOffset(i)}`
         );
         return false;
       }
-      runningOffset += lines[i].length + 1; // +1 for newline
+      runningOffset += s.getLine(i).length + 1; // +1 for newline
     }
     return true;
   },
 }));
+
+// —— setState 归一 + 视图物化包装（R2-A）——
+// 统一分发入口：store 内部方法与外部消费方全部经此更新状态。
+// 1) 归一：外部按旧字段名 lines/codeBlockState/fenceLines 传整档重置时
+//    映射到主数组字段并清空尾段（视图字段由物化步骤生成，防止 stale）；
+// 2) 物化：按 main* + streamTail* 双段结构生成兼容视图字段
+//    （lines/codeBlockState/fenceLines），保证未切换访问器的消费方与
+//    既有测试读到全量视图（见 materializeViews 的零拷贝/过渡成本说明）。
+// store 内部 set 也必须经此分发（zustand 原生 set 不会生成视图字段，
+// 且其 Object.assign({}, state, next) 会破坏 getter——已弃用 getter）。
+const rawSetState = useEditorStore.setState.bind(useEditorStore);
+const dispatchSet = ((partial: unknown, replace?: boolean) => {
+  const current = useEditorStore.getState();
+  const resolved =
+    typeof partial === 'function' ? partial(current) : partial;
+  const normalized = normalizeSetStatePartial(resolved);
+  if (normalized && typeof normalized === 'object' && !Array.isArray(normalized)) {
+    const materialized = materializeViews(
+      normalized as Record<string, unknown>,
+      current
+    );
+    rawSetState(materialized as never, replace as never);
+  } else {
+    rawSetState(normalized as never, replace as never);
+  }
+}) as typeof useEditorStore.setState;
+
+useEditorStore.setState = dispatchSet;
