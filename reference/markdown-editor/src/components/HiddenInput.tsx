@@ -19,9 +19,262 @@ import {
   setCellContent,
 } from '../core/TableOperations';
 import { buildPasteText } from '../core/htmlToMarkdown';
+import type { LineOffsetTree } from '../core/SegmentTree';
 
 interface HiddenInputProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
+}
+
+// ============================================================
+// 拖选坐标驱动（R4-G，04 编辑深度扩展 §3.3 方案 3：CM6 MouseSelection 简化版）
+// ============================================================
+// 设计：拖选 = 坐标驱动状态机——mousedown 记起点坐标，mousemove 超移动阈值
+// （DRAG_THRESHOLD_PX）后进入拖选态：锚点 = 按下位置定位的光标位，head 由
+// 「坐标 → 索引」持续更新（store.moveHead，anchor 不动——反向拖选天然正确，
+// 04 §3.2 S1 修复），mouseup 结算。
+// 「坐标 → 索引」单一真源 indexFromClientPoint：
+// - 精确路径：caretRangeFromPoint → getGlobalIndexFromDOMNode（视口内命中，
+//   token 级精确——与 MarkdownEngine handleContainerClick 同款链路）；
+// - 几何路径（视口空白 / 目标行未挂载 / 无布局环境）：行几何估算——已挂载
+//   行区间内定位或边界行 + 行高近似推算行号（虚拟化视口外断选修复，
+//   04 §3.2 S2），列用字符宽度 Oracle 累加逼近（R2-F 列保持思路复用，
+//   measure.ts predictColumn 同款算法）；
+// - 视口外拖选：mousemove 压入/越出容器边缘时按距离步进滚动（CM6
+//   dragScrollSpeed 简化版），滚动后目标行挂载即被精确路径接管。
+// 拖选期间以引擎自绘高亮（SelectionHighlight）替代原生 DOM 选区：
+// userSelect none + removeAllRanges 抑制浏览器原生选区（原生选区依赖 DOM
+// 存在，虚拟化视口外必然断选）。纯几何函数（predictColumn /
+// estimateLineIndexFromContentY）导出供单测。
+// 与点击定位（MarkdownEngine handleContainerClick）的协调：mousedown 无
+// 副作用（不移动光标不清选区），mousemove 超阈值才进拖选态——纯点击场景
+// 零干预，click 定位独占；拖选结束以 __CRISH_LAST_DRAG_END_TIME 抑制合成
+// click（既有机制，MarkdownEngine.tsx:532 检查）。
+
+/** 拖选激活移动阈值（px）：mousedown 后 mousemove 超过该距离才进入拖选态，
+ *  区分「点击定位」（click 由 MarkdownEngine handleContainerClick 处理）与
+ *  「拖选」（引擎状态机接管）——纯点击场景 mousedown/mousemove 零副作用。 */
+export const DRAG_THRESHOLD_PX = 3;
+/** 视口边缘滚动触发带（px）：鼠标距容器可见区边缘小于该值即开始滚动 */
+const EDGE_SCROLL_MARGIN = 16;
+/** 单次 mousemove 最大滚动步长（px）：随距离线性增减（CM6 dragScrollSpeed） */
+const EDGE_SCROLL_MAX_STEP = 12;
+/** 已挂载行几何快照（视口内 + overscan；按 DOM 序 = 行号升序） */
+export interface MountedLineGeom {
+  /** 逻辑行号（data-index） */
+  index: number;
+  /** 行首全局偏移（data-line-start） */
+  start: number;
+  /** 行文本长度（data-line-length，不含换行符） */
+  length: number;
+  /** 行左缘（视口坐标，列预测基准） */
+  left: number;
+  /** 行顶 / 行底（容器内容坐标，与滚动解耦） */
+  top: number;
+  bottom: number;
+  height: number;
+}
+
+/** 宽字符判定（全角按 2 倍等宽近似；镜像 measure.ts:753-763 列保持口径） */
+function isWideChar(code: number): boolean {
+  return (
+    (code >= 0x1100 && code <= 0x11ff) ||
+    (code >= 0x2e80 && code <= 0x9fff) ||
+    (code >= 0xac00 && code <= 0xd7a3) ||
+    (code >= 0xf900 && code <= 0xff60) ||
+    (code >= 0x20000 && code <= 0x3fffd)
+  );
+}
+
+/** 单字符预测宽度：Tab 按 4 倍等宽近似（源码中极少见，仅用于列估计） */
+function charAdvance(code: number, w: { ascii: number; cjk: number }): number {
+  if (code === 9) return w.ascii * 4;
+  return isWideChar(code) ? w.cjk : w.ascii;
+}
+
+/**
+ * 目标行列预测（R2-F 列保持思路复用，镜像 measure.ts:816-830 predictColumn）：
+ * 以鼠标 X（相对行左缘）为参照，沿目标行文本按等宽/全角字宽累加，返回与
+ * relX 最接近的字符位置——等宽/全角混排行中累加比「relX / 字宽」直接除法
+ * 误差更小（全角占 2 倍宽但计 1 列）。relX ≤ 0 回行首；超出行宽回行尾。
+ */
+// oxlint-disable-next-line react/only-export-components
+export function predictColumn(
+  lineText: string,
+  relX: number,
+  widths: { ascii: number; cjk: number }
+): number {
+  if (relX <= 0) return 0;
+  let best = 0;
+  let bestDist = Infinity;
+  let acc = 0;
+  for (let p = 0; p <= lineText.length; p++) {
+    if (p > 0) acc += charAdvance(lineText.charCodeAt(p - 1), widths);
+    const dist = Math.abs(acc - relX);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = p;
+    }
+  }
+  return best;
+}
+
+/**
+ * 内容坐标 Y → 行号（纯函数：视口内命中 + 视口外估算，04 §3.3 方案 3）：
+ * - 落在已挂载行覆盖区间内：行内定位（第一个 bottom ≥ Y 的行）；
+ * - 视口上方：首行几何向上推算（above = ceil(ΔY / 首行高)）；
+ * - 视口下方：末行几何向下推算（below = floor(ΔY / 末行高)）；
+ * - 无已挂载行：回退第 0 行。
+ * 多行块（代码/表格）行高差异引入的估算误差由「滚动后行挂载 →
+ * caretRangeFromPoint 精确命中」接管（R2-F scrollTargetLineIntoView 同款
+ * 思路）；行号收敛到 [0, lineCount-1]。mounted 按 top 升序（DOM 序 = 视觉序）。
+ */
+// oxlint-disable-next-line react/only-export-components
+export function estimateLineIndexFromContentY(
+  contentY: number,
+  lineCount: number,
+  mounted: MountedLineGeom[]
+): number {
+  if (lineCount <= 0) return 0;
+  if (mounted.length === 0) return 0;
+  const first = mounted[0];
+  const last = mounted[mounted.length - 1];
+  if (contentY < first.top) {
+    const above = Math.ceil((first.top - contentY) / Math.max(1, first.height));
+    return Math.max(0, first.index - above);
+  }
+  if (contentY > last.bottom) {
+    const below = Math.floor(
+      (contentY - last.bottom) / Math.max(1, last.height)
+    );
+    return Math.min(lineCount - 1, last.index + below);
+  }
+  // 已挂载区间内：二分定位「第一个 bottom ≥ contentY」的行
+  let lo = 0;
+  let hi = mounted.length - 1;
+  let ans = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (mounted[mid].bottom >= contentY) {
+      ans = mid;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  return mounted[ans].index;
+}
+
+/** 拖选坐标 → 索引所需的数据层（store 快照的结构化子集，便于单测注入） */
+export interface IndexDataLayer {
+  getLine: (i: number) => string;
+  getLineCount: () => number;
+  lineOffsets: LineOffsetTree;
+}
+
+// 已挂载行几何收集（视口内行元素 → 几何快照；仅几何回退路径调用，
+// 视口内正常拖选走 caretRangeFromPoint 精确命中，零额外扫描）
+function collectMountedLines(
+  container: HTMLElement,
+  cr: DOMRect
+): MountedLineGeom[] {
+  const rows = container.querySelectorAll('[data-line-start]');
+  const out: MountedLineGeom[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const el = rows[i] as HTMLElement;
+    const index = parseInt(el.getAttribute('data-index') || '-1', 10);
+    if (index < 0) continue;
+    const r = el.getBoundingClientRect();
+    out.push({
+      index,
+      start: parseInt(el.getAttribute('data-line-start') || '0', 10),
+      length: parseInt(el.getAttribute('data-line-length') || '0', 10),
+      left: r.left,
+      top: r.top - cr.top + container.scrollTop,
+      bottom: r.bottom - cr.top + container.scrollTop,
+      height: r.height,
+    });
+  }
+  return out;
+}
+
+// 容器内容左缘（视口坐标）：目标行未挂载（视口外）时用作列预测基准
+function contentLeftOf(container: HTMLElement, cr: DOMRect): number {
+  const cs = window.getComputedStyle(container);
+  return cr.left + container.scrollLeft + (parseFloat(cs.paddingLeft) || 0);
+}
+
+// 字符宽度 Oracle 回退（无布局环境/未挂载时）：0.6 × 字号等宽 + 2 倍全角
+// （与 measure.ts:794-796 回退同口径；等宽栈下与实测误差 ≤ 1 字符）
+function fallbackCharWidths(
+  container: HTMLElement
+): { ascii: number; cjk: number } {
+  const fs = parseFloat(window.getComputedStyle(container).fontSize) || 14;
+  const ascii = fs * 0.6;
+  return { ascii, cjk: ascii * 2 };
+}
+
+/**
+ * 坐标 → 索引（拖选状态机单一真源）：
+ * 1. 精确路径：caretRangeFromPoint 浏览器命中测试（视口内 token 级）；
+ * 2. 几何回退：行几何估算（视口空白 / 目标行未挂载 / 无布局环境）。
+ * 返回文档索引（几何回退保证非空；行号收敛 [0, lineCount-1]）。
+ */
+// oxlint-disable-next-line react/only-export-components
+export function indexFromClientPoint(
+  clientX: number,
+  clientY: number,
+  container: HTMLElement,
+  data: IndexDataLayer
+): number {
+  if (typeof document.caretRangeFromPoint === 'function') {
+    try {
+      const range = document.caretRangeFromPoint(clientX, clientY);
+      if (range && range.startContainer) {
+        const idx = getGlobalIndexFromDOMNode(
+          range.startContainer,
+          range.startOffset,
+          container
+        );
+        if (idx !== null) return idx;
+      }
+    } catch {
+      // 命中测试失败（无布局环境/异常）→ 几何回退
+    }
+  }
+  const cr = container.getBoundingClientRect();
+  const contentY = clientY - cr.top + container.scrollTop;
+  const mounted = collectMountedLines(container, cr);
+  const lineIdx = estimateLineIndexFromContentY(
+    contentY,
+    data.getLineCount(),
+    mounted
+  );
+  const lineText = data.getLine(lineIdx) ?? '';
+  const lineStart = data.lineOffsets.getOffset(lineIdx);
+  const lineGeom = mounted.find((m) => m.index === lineIdx);
+  const relX = lineGeom
+    ? clientX - lineGeom.left
+    : clientX - contentLeftOf(container, cr);
+  const col = predictColumn(lineText, relX, fallbackCharWidths(container));
+  return lineStart + Math.min(col, lineText.length);
+}
+
+/**
+ * 视口边缘滚动步长（CM6 dragScrollSpeed 简化版）：鼠标越出容器可见区或压入
+ * 边缘 EDGE_SCROLL_MARGIN 内时返回滚动量（越近越大，封顶
+ * EDGE_SCROLL_MAX_STEP）；否则 0。正数 = 内容向下滚动（scrollTop 增大）。
+ */
+function edgeScrollStep(clientY: number, container: HTMLElement): number {
+  const cr = container.getBoundingClientRect();
+  const above = cr.top - clientY;
+  const below = clientY - cr.bottom;
+  if (above > 0) return -Math.min(EDGE_SCROLL_MAX_STEP, Math.max(4, above));
+  if (below > 0) return Math.min(EDGE_SCROLL_MAX_STEP, Math.max(4, below));
+  const fromTop = clientY - cr.top;
+  const fromBottom = cr.bottom - clientY;
+  if (fromTop < EDGE_SCROLL_MARGIN) return -(EDGE_SCROLL_MARGIN - fromTop);
+  if (fromBottom < EDGE_SCROLL_MARGIN) return EDGE_SCROLL_MARGIN - fromBottom;
+  return 0;
 }
 
 /**
@@ -108,6 +361,21 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
   const lastCompositionEndAt = useRef(0);
   /** 50ms pending flush 定时器句柄（null = 无待提交组合） */
   const pendingFlushTimer = useRef<number | null>(null);
+
+  // —— 拖选状态机（R4-G，04 §3.3 方案 3 / CM6 MouseSelection 简化版）——
+  // ref 级状态（不触发渲染；拖选期间 store 选区驱动引擎自绘高亮）：
+  // startX/Y：mousedown 坐标（阈值判定 + 锚点定位用）；
+  // anchor：拖选锚点（激活时 = mousedown 位置定位的光标位，此后固定）；
+  // lastIndex：上次 head 索引（同索引跳过 moveHead——mousemove 高频去抖）；
+  // active：是否已进入拖选态（mousemove 超阈值）；suppressed：原生选区抑制中。
+  const dragSelectRef = useRef<{
+    startX: number;
+    startY: number;
+    anchor: number;
+    lastIndex: number;
+    active: boolean;
+    suppressed: boolean;
+  } | null>(null);
 
   // Sync input value with current line text
   useLayoutEffect(() => {
@@ -246,6 +514,134 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       }
     };
 
+    // —— R4-G 拖选状态机（坐标驱动，04 §3.3 方案 3 / CM6 MouseSelection 简化版）——
+    // mousedown：仅记录起点坐标与跳过条件（不移动光标、不清选区——纯点击
+    // 场景零副作用，click 定位由 MarkdownEngine handleContainerClick 独占）；
+    // mousemove 超阈值（DRAG_THRESHOLD_PX）后激活：锚点 = 按下位置定位的
+    // 光标位（此时 click 尚未触发，故在激活瞬间以 mousedown 坐标定位），
+    // 此后 head 由「坐标 → 索引」持续更新（store.moveHead，anchor 不动——
+    // 反向拖选天然正确），mouseup 结算。
+    // 拖选期间抑制原生 DOM 选区（userSelect none + removeAllRanges）：原生
+    // 选区依赖 DOM 存在，虚拟化视口外必断选（04 §3.2 S2），引擎自绘高亮
+    // （SelectionHighlight）替代；视口外拖选由边缘滚动 + 行几何估算兜底
+    // （目标行未挂载时用边界行几何推算行号，滚动后行挂载即被精确
+    // caretRangeFromPoint 命中接管——R2-F 列保持思路复用）。
+    const handleDragMouseDown = (e: MouseEvent) => {
+      const container = containerRef.current;
+      if (!container || e.button !== 0) return;
+      // 组合中不干预（R4-C IME 状态机：composition 期间鼠标交互一律跳过）
+      if (isComposingRef.current) return;
+      // 表格 Excel 交互区不接管（单元格拖拽/选区由 TableStore 状态机独占）
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.closest('.line-table-row') ||
+          target.closest('.token-table-cell'))
+      ) {
+        return;
+      }
+      // 已有 DOM 文本选区（双击选词/外部拖选结果）：不干预——原生选区路径
+      // （selectionchange → getGlobalIndexFromDOMNode）继续接管，避免引擎
+      // 状态机与浏览器原生选择打架
+      const selection = window.getSelection();
+      if (selection && selection.toString().length > 0) return;
+      dragSelectRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        anchor: -1,
+        lastIndex: -1,
+        active: false,
+        suppressed: false,
+      };
+    };
+
+    const handleDragMouseMove = (e: MouseEvent) => {
+      const d = dragSelectRef.current;
+      const container = containerRef.current;
+      if (!d || !container) return;
+      if (!d.active) {
+        // 移动阈值：未超阈值视为点击（mouseup 后由 click 定位，本状态机
+        // 不干预——「mousedown 后 mousemove 才进拖选态」与点击定位协调）
+        const dx = e.clientX - d.startX;
+        const dy = e.clientY - d.startY;
+        if (dx * dx + dy * dy <= DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) {
+          return;
+        }
+        // 进入拖选态：锚点 = 按下位置定位的光标位（拖选起点 = 点击后光标位）
+        d.anchor = indexFromClientPoint(
+          d.startX,
+          d.startY,
+          container,
+          useEditorStore.getState()
+        );
+        d.active = true;
+        // 抑制原生选区：userSelect none 防止后续 mousemove 创建原生选区
+        // （引擎自绘高亮替代），并清空可能残留的 DOM 选区
+        d.suppressed = true;
+        container.style.userSelect = 'none';
+        window.getSelection()?.removeAllRanges();
+        useEditorStore.getState().setCursorPos(d.anchor);
+      }
+      // 边缘滚动（视口外断选处理）：鼠标越出/压入容器边缘时步进滚动
+      // （滚动跟随），目标行未挂载期间由行几何估算兜底
+      const edgeStep = edgeScrollStep(e.clientY, container);
+      if (edgeStep !== 0) {
+        const maxTop = Math.max(
+          0,
+          (container.scrollHeight || 0) - container.clientHeight
+        );
+        container.scrollTop = Math.min(
+          maxTop,
+          Math.max(0, container.scrollTop + edgeStep)
+        );
+      }
+      // 坐标驱动：head 持续更新（anchor 不动；同索引跳过——高频去抖）
+      const index = indexFromClientPoint(
+        e.clientX,
+        e.clientY,
+        container,
+        useEditorStore.getState()
+      );
+      if (index !== d.lastIndex) {
+        d.lastIndex = index;
+        useEditorStore.getState().moveHead(index);
+      }
+    };
+
+    const handleDragMouseUp = (e: MouseEvent) => {
+      const d = dragSelectRef.current;
+      if (!d) return;
+      if (d.active && containerRef.current) {
+        // 结算：mouseup 位置可能是最后一次 mousemove 之后的新坐标，
+        // 补一次 head 更新（幂等）
+        const index = indexFromClientPoint(
+          e.clientX,
+          e.clientY,
+          containerRef.current,
+          useEditorStore.getState()
+        );
+        if (index !== d.lastIndex) {
+          useEditorStore.getState().moveHead(index);
+        }
+        // 拖选结束的合成 click 抑制（MarkdownEngine handleContainerClick
+        // 检查 __CRISH_LAST_DRAG_END_TIME 跳过，防光标回跳）
+        (window as any).__CRISH_LAST_DRAG_END_TIME = Date.now();
+      }
+      if (d.suppressed) {
+        const container = containerRef.current;
+        if (container) container.style.userSelect = '';
+        window.getSelection()?.removeAllRanges();
+      }
+      dragSelectRef.current = null;
+    };
+
+    const containerEl = containerRef.current;
+    if (containerEl) {
+      containerEl.addEventListener('mousedown', handleDragMouseDown);
+    }
+    window.addEventListener('mousemove', handleDragMouseMove);
+    window.addEventListener('mouseup', handleDragMouseUp);
+
     document.addEventListener('selectionchange', handleSelectionChange);
     window.addEventListener('mousedown', handleGlobalMouseDown);
     window.addEventListener('mouseup', handleGlobalMouseUp);
@@ -257,6 +653,13 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       window.removeEventListener('mouseup', handleGlobalMouseUp);
       window.removeEventListener('click', handleGlobalClick);
       window.removeEventListener('keydown', handleGlobalKeyDown);
+      if (containerEl) {
+        containerEl.removeEventListener('mousedown', handleDragMouseDown);
+        // 异常卸载兜底：恢复 userSelect（拖选中卸载时防样式残留）
+        containerEl.style.userSelect = '';
+      }
+      window.removeEventListener('mousemove', handleDragMouseMove);
+      window.removeEventListener('mouseup', handleDragMouseUp);
     };
   }, [containerRef]);
 
@@ -432,11 +835,11 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       e.preventDefault();
       const newPos = findPrevGraphemeBoundary(text, cursorPos);
       if (e.shiftKey) {
-        setSelection(
-          selectionStart === cursorPos ? newPos : selectionStart,
-          newPos
-        );
-        fastCursorMove(newPos);
+        // R4-B 接线：Shift+Left 扩展 = anchor 不动、head 左移（grapheme 粒度）。
+        // 删除旧启发式 selectionStart === cursorPos（光标离开选区端后即失效，
+        // 反向扩展第二次方向错误——04 §3.2 S1）；extendSelectionByDirection
+        // 以 headPos 为基点，方向由 anchor/head 相对位置判定，天然正确。
+        useEditorStore.getState().extendSelectionByDirection('left');
       } else {
         if (selectionStart !== selectionEnd) fastCursorMove(selectionStart);
         else fastCursorMove(newPos);
@@ -445,11 +848,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
       e.preventDefault();
       const newPos = findNextGraphemeBoundary(text, cursorPos);
       if (e.shiftKey) {
-        setSelection(
-          selectionStart === cursorPos ? newPos : selectionStart,
-          newPos
-        );
-        fastCursorMove(newPos);
+        // R4-B 接线：Shift+Right 扩展（anchor 不动、head 右移），语义同上
+        useEditorStore.getState().extendSelectionByDirection('right');
       } else {
         if (selectionStart !== selectionEnd) fastCursorMove(selectionEnd);
         else fastCursorMove(newPos);
@@ -592,12 +992,13 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         if (targetIdx !== null) {
           const newPos = snapToGraphemeBoundary(text, targetIdx);
           if (e.shiftKey) {
-            setSelection(
-              selectionStart === cursorPos ? newPos : selectionStart,
-              newPos
-            );
+            // R4-B 垂直扩展登记：行级——head 移到目标行（列保持由
+            // getArrowNavigationIndex 完成），anchor 保持不动（moveHead）；
+            // 删除旧启发式 selectionStart === cursorPos（同 04 §3.2 S1）
+            useEditorStore.getState().moveHead(newPos);
+          } else {
+            fastCursorMove(newPos);
           }
-          fastCursorMove(newPos);
         }
       }
     } else if (e.key === 'ArrowDown') {
@@ -611,12 +1012,11 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({ containerRef }) => {
         if (targetIdx !== null) {
           const newPos = snapToGraphemeBoundary(text, targetIdx);
           if (e.shiftKey) {
-            setSelection(
-              selectionStart === cursorPos ? newPos : selectionStart,
-              newPos
-            );
+            // R4-B 垂直扩展登记：行级——head 移到目标行，anchor 保持不动
+            useEditorStore.getState().moveHead(newPos);
+          } else {
+            fastCursorMove(newPos);
           }
-          fastCursorMove(newPos);
         }
       }
     } else if (e.key === 'Home') {
